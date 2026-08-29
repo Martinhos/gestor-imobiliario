@@ -26,6 +26,11 @@ variable "app_name" {
 resource "cloudflare_d1_database" "db" {
   account_id = var.cloudflare_account_id
   name       = var.app_name
+
+  # sem isto o provider tenta enviar null no segundo apply e a API rejeita
+  read_replication = {
+    mode = "disabled"
+  }
 }
 
 # KV para sessões de utilizadores (plano gratuito: 100k leituras por dia).
