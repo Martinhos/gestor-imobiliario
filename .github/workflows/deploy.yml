@@ -1,0 +1,62 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: write # para commitar o terraform.tfstate atualizado
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      # Infra: cria/atualiza a base D1 e o KV. O estado vive no repositório
+      # (só contém ids de recursos, nenhum segredo).
+      - name: Terraform apply
+        working-directory: terraform
+        run: |
+          terraform init -input=false
+          terraform apply -auto-approve -input=false
+
+      - name: Commit terraform state (se mudou)
+        run: |
+          if ! git diff --quiet -- terraform/terraform.tfstate 2>/dev/null || [ -n "$(git status --porcelain terraform/)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add terraform/terraform.tfstate terraform/.terraform.lock.hcl
+            git commit -m "ci: atualizar estado do terraform [skip ci]" || true
+            git push
+          fi
+
+      # Preenche os ids reais no wrangler.toml a partir dos outputs do Terraform.
+      - name: Configurar wrangler.toml
+        run: |
+          D1_ID=$(terraform -chdir=terraform output -raw d1_database_id)
+          KV_ID=$(terraform -chdir=terraform output -raw kv_sessions_id)
+          sed -i "s/PLACEHOLDER_D1_ID/$D1_ID/" wrangler.toml
+          sed -i "s/PLACEHOLDER_KV_ID/$KV_ID/" wrangler.toml
+
+      - name: Aplicar migrações D1
+        run: npx wrangler@4 d1 migrations apply gestor-imobiliario --remote
+
+      - name: Deploy do worker
+        run: npx wrangler@4 deploy

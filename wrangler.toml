@@ -1,0 +1,22 @@
+# Configuração do worker. Os ids de D1/KV são preenchidos a partir dos
+# outputs do Terraform (terraform/) — ver .github/workflows/deploy.yml.
+
+name = "gestor-imobiliario"
+main = "worker/src/index.js"
+compatibility_date = "2026-08-01"
+
+[assets]
+directory = "web"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "gestor-imobiliario"
+database_id = "PLACEHOLDER_D1_ID"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "PLACEHOLDER_KV_ID"
+
+[observability]
+enabled = true
