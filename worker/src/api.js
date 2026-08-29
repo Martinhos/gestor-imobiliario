@@ -148,7 +148,7 @@ export async function handleApi(request, env) {
     if (!b || !b.email || !b.password) return err(400, 'Email e palavra-passe são obrigatórios.');
     const email = String(b.email).trim().toLowerCase();
     const user = await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
-    if (user && !user.pass_hash) return err(401, 'Esta conta entra com Google ou Apple — usa esse botão.');
+    if (user && !user.pass_hash) return err(401, 'Esta conta entra com Google — usa esse botão.');
     if (!user || !(await verifyPassword(String(b.password), user.pass_salt, user.pass_hash))) {
       return err(401, 'Email ou palavra-passe errados.');
     }
@@ -160,15 +160,15 @@ export async function handleApi(request, env) {
 
   // Que fornecedores de entrada social estão configurados (ids públicos).
   if (path === '/api/auth/config' && method === 'GET') {
-    return json({ google: env.GOOGLE_CLIENT_ID || null, apple: env.APPLE_CLIENT_ID || null });
+    return json({ google: env.GOOGLE_CLIENT_ID || null });
   }
 
-  // Entrada com Google / Apple: o cliente envia o ID token do fornecedor;
+  // Entrada com Google: o cliente envia o ID token do fornecedor;
   // verificamos a assinatura e criamos/ligamos a conta pelo email.
-  if ((path === '/api/auth/google' || path === '/api/auth/apple') && method === 'POST') {
-    const provider = path.endsWith('google') ? 'google' : 'apple';
-    const clientId = provider === 'google' ? env.GOOGLE_CLIENT_ID : env.APPLE_CLIENT_ID;
-    if (!clientId) return err(400, 'Entrada com ' + (provider === 'google' ? 'Google' : 'Apple') + ' não está configurada.');
+  if (path === '/api/auth/google' && method === 'POST') {
+    const provider = 'google';
+    const clientId = env.GOOGLE_CLIENT_ID;
+    if (!clientId) return err(400, 'Entrada com Google não está configurada.');
     const b = await body(request);
     const token = b && (b.credential || b.id_token);
     if (!token) return err(400, 'Falta o token do fornecedor.');
@@ -178,7 +178,7 @@ export async function handleApi(request, env) {
     } catch (e) {
       return err(401, 'Token rejeitado: ' + e.message);
     }
-    const col = provider === 'google' ? 'google_sub' : 'apple_sub';
+    const col = 'google_sub';
     const email = String(payload.email || '').trim().toLowerCase();
     let user = await env.DB.prepare(`SELECT * FROM users WHERE ${col} = ?`).bind(payload.sub).first();
     if (!user && email) {

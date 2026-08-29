@@ -399,6 +399,14 @@
     inp.click();
   };
 
+  // Mudar de página no menu deve fechar qualquer modal aberto (imóvel,
+  // movimento, ...) em vez de o deixar por cima da página nova.
+  var _go = go;
+  go = function (id) {
+    try { if (modalStack.length) closeAllModals(); } catch (e) {}
+    _go(id);
+  };
+
   var _delProp = delProp;
   delProp = function (id) {
     var p = (db.properties || []).find(function (x) { return x.id === id; });
@@ -747,7 +755,6 @@
       '<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="flex:1;height:1px;background:var(--line)"></span>' +
       '<span class="small">ou</span><span style="flex:1;height:1px;background:var(--line)"></span></div>' +
       '<div id="cwa_gbtn" style="display:flex;justify-content:center;margin-bottom:8px"></div>' +
-      '<button id="cwa_abtn" class="btn" style="display:none;width:100%;justify-content:center;background:#000;color:#fff;border-color:#000" onclick="CW.appleLogin()">&#63743; Continuar com a Apple</button>' +
       '</div></div></div>';
     var last = document.getElementById(login ? 'cwa_pass' : 'cwa_pass2');
     if (last) last.addEventListener('keydown', function (e) { if (e.key === 'Enter') CW.submitAuth(); });
@@ -813,29 +820,18 @@
       ? Promise.resolve(authCfg)
       : api('GET', '/api/auth/config').then(function (c) { authCfg = c; return c; }).catch(function () { return null; })
     ).then(function (cfg) {
-      if (!cfg || (!cfg.google && !cfg.apple)) return;
+      if (!cfg || !cfg.google) return;
       mount.style.display = '';
-      if (cfg.google) {
-        loadScript('https://accounts.google.com/gsi/client', function () {
-          try {
-            google.accounts.id.initialize({
-              client_id: cfg.google,
-              callback: function (resp) { socialLogin('google', { credential: resp.credential }); },
-            });
-            var g = document.getElementById('cwa_gbtn');
-            if (g) google.accounts.id.renderButton(g, { theme: 'outline', size: 'large', width: 320, text: 'continue_with' });
-          } catch (e) {}
-        });
-      }
-      if (cfg.apple) {
-        loadScript('https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/pt_PT/appleid.auth.js', function () {
-          try {
-            AppleID.auth.init({ clientId: cfg.apple, scope: 'name email', redirectURI: location.origin + '/', usePopup: true });
-            var a = document.getElementById('cwa_abtn');
-            if (a) a.style.display = '';
-          } catch (e) {}
-        });
-      }
+      loadScript('https://accounts.google.com/gsi/client', function () {
+        try {
+          google.accounts.id.initialize({
+            client_id: cfg.google,
+            callback: function (resp) { socialLogin('google', { credential: resp.credential }); },
+          });
+          var g = document.getElementById('cwa_gbtn');
+          if (g) google.accounts.id.renderButton(g, { theme: 'outline', size: 'large', width: 320, text: 'continue_with' });
+        } catch (e) {}
+      });
     });
   }
 
@@ -846,17 +842,6 @@
       .catch(function (e) { if (errEl) errEl.textContent = e.message || 'Não foi possível entrar.'; });
   }
 
-  CW.appleLogin = function () {
-    try {
-      AppleID.auth.signIn().then(function (res) {
-        var name = '';
-        try {
-          if (res.user && res.user.name) name = (res.user.name.firstName + ' ' + (res.user.name.lastName || '')).trim();
-        } catch (e) {}
-        socialLogin('apple', { id_token: res.authorization.id_token, name: name });
-      }).catch(function () {});
-    } catch (e) { toast('Entrada com Apple indisponível.'); }
-  };
 
   function hideAuth() {
     if (authEl) authEl.style.display = 'none';

@@ -49,23 +49,20 @@ npx wrangler dev
 3. Push para `main` — o workflow trata do resto. O estado do Terraform fica versionado no
    repositório (contém apenas ids de recursos, nenhum segredo).
 
-## Entrada com Google / Apple
+## Entrada com Google
 
-Os botões "Continuar com Google/Apple" aparecem automaticamente quando o
-respetivo client ID estiver preenchido em [`wrangler.toml`](wrangler.toml) (`[vars]`):
+O botão "Continuar com Google" aparece automaticamente quando `GOOGLE_CLIENT_ID`
+estiver preenchido em [`wrangler.toml`](wrangler.toml): em
+[console.cloud.google.com](https://console.cloud.google.com) → APIs & Services →
+Credentials → *Create OAuth client ID* (tipo **Web application**), adiciona
+`https://gestor-imobiliario.martinhos.workers.dev` às *Authorized JavaScript
+origins* e copia o Client ID.
 
-- **Google** (grátis): em [console.cloud.google.com](https://console.cloud.google.com)
-  → APIs & Services → Credentials → *Create OAuth client ID* (tipo **Web application**),
-  adiciona `https://gestor-imobiliario.martinhos.workers.dev` às *Authorized JavaScript
-  origins* e copia o Client ID para `GOOGLE_CLIENT_ID`.
-- **Apple** (exige conta Apple Developer paga): cria um *Services ID* com
-  *Sign in with Apple* ativo, domínio `gestor-imobiliario.martinhos.workers.dev` e
-  return URL `https://gestor-imobiliario.martinhos.workers.dev/`, e copia o
-  identificador para `APPLE_CLIENT_ID`.
-
-O worker valida os ID tokens (assinatura JWKS, emissor, audiência) e cria ou liga a
-conta pelo email — quem já tinha conta por palavra-passe pode passar a entrar com o
-mesmo email pelo Google/Apple.
+**Não é preciso client secret**: usa-se o fluxo de ID token do Google Identity
+Services — o browser recebe um JWT assinado pelo Google e o worker valida a
+assinatura contra as chaves públicas (JWKS), o emissor e a audiência. O secret só
+seria necessário no fluxo de *authorization code* feito no servidor. Quem já tinha
+conta por palavra-passe pode passar a entrar com o mesmo email pelo Google.
 
 ## Migrar dados da app Android
 
