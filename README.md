@@ -11,6 +11,12 @@ inquilinos, proprietários, movimentos, créditos à habitação, projeções e 
    Uma casa partilhada leva consigo os contratos, movimentos, recorrentes e pessoas associadas,
    e o outro utilizador pode ver e editar; apagar a casa e gerir a partilha é só do dono.
 
+**Os proprietários são os utilizadores.** Cada um preenche os seus dados (nome, NIF, CC,
+contactos — usados nos contratos em PDF) em **Definições → O meu perfil**. Uma casa não
+partilhada pertence 100% ao dono e não mostra divisão; numa casa partilhada, os utilizadores
+com acesso são comproprietários (partes iguais por omissão) e qualquer um pode **propor uma
+nova divisão de percentagens — que só entra em vigor quando todos os outros a confirmarem**.
+
 ## Arquitetura
 
 | Peça | Tecnologia |

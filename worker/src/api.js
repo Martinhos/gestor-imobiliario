@@ -58,6 +58,43 @@ async function canAccessHouse(env, userId, houseId) {
   return { ok: !!shared, owner: false };
 }
 
+// Comproprietários de uma casa: o dono + todos os utilizadores com quem a
+// casa está partilhada através de conexões aceites.
+async function participantsOf(env, houseId) {
+  const house = await env.DB.prepare('SELECT owner_id FROM houses WHERE id = ? AND deleted = 0')
+    .bind(houseId)
+    .first();
+  if (!house) return null;
+  const rows = (
+    await env.DB.prepare(
+      `SELECT s.owner_id, c.requester_id, c.target_id
+         FROM shares s JOIN connections c ON c.id = s.connection_id
+        WHERE c.status = 'accepted' AND s.house_id = ?`
+    )
+      .bind(houseId)
+      .all()
+  ).results;
+  const parts = [house.owner_id];
+  rows.forEach((r) => {
+    const other = r.requester_id === r.owner_id ? r.target_id : r.requester_id;
+    if (!parts.includes(other)) parts.push(other);
+  });
+  return parts;
+}
+
+// As quotas (ownerIds/ownerShares) são geridas pelo servidor através das
+// propostas de divisão: um cliente a gravar a casa nunca as pode alterar.
+function preserveOwnership(existingDataStr, incoming) {
+  try {
+    const ex = JSON.parse(existingDataStr);
+    if (ex && typeof ex === 'object') {
+      if (ex.ownerShares !== undefined) incoming.ownerShares = ex.ownerShares;
+      if (ex.ownerIds !== undefined) incoming.ownerIds = ex.ownerIds;
+    }
+  } catch (e) {}
+  return incoming;
+}
+
 async function connectionForUser(env, connId, userId) {
   return env.DB.prepare(
     'SELECT * FROM connections WHERE id = ? AND (requester_id = ? OR target_id = ?)'
@@ -194,13 +231,80 @@ export async function handleApi(request, env) {
         .all()
     ).results;
 
+    // comproprietários por casa (dono primeiro)
+    const houseParts = {};
+    houses.forEach((h) => { houseParts[h.id] = [h.owner_id]; });
+    if (houseIds.length) {
+      const ph = houseIds.map(() => '?').join(',');
+      const rows = (
+        await env.DB.prepare(
+          `SELECT s.house_id, s.owner_id, c.requester_id, c.target_id
+             FROM shares s JOIN connections c ON c.id = s.connection_id
+            WHERE c.status = 'accepted' AND s.house_id IN (${ph})`
+        )
+          .bind(...houseIds)
+          .all()
+      ).results;
+      rows.forEach((r) => {
+        const other = r.requester_id === r.owner_id ? r.target_id : r.requester_id;
+        const list = houseParts[r.house_id];
+        if (list && !list.includes(other)) list.push(other);
+      });
+    }
+
+    // perfis (dados pessoais) de todos os utilizadores relevantes
+    const userIdSet = new Set([me.id]);
+    Object.keys(houseParts).forEach((hid) => houseParts[hid].forEach((u) => userIdSet.add(u)));
+    connections.forEach((c) => { userIdSet.add(c.requester_id); userIdSet.add(c.target_id); });
+    const uidArr = [...userIdSet];
+    const pu = uidArr.map(() => '?').join(',');
+    const userRows = (
+      await env.DB.prepare(`SELECT id, name FROM users WHERE id IN (${pu})`).bind(...uidArr).all()
+    ).results;
+    const profRecs = (
+      await env.DB.prepare(
+        `SELECT user_id, data FROM user_records
+          WHERE kind = 'profile' AND id = 'main' AND deleted = 0 AND user_id IN (${pu})`
+      )
+        .bind(...uidArr)
+        .all()
+    ).results;
+    const profByUser = {};
+    profRecs.forEach((r) => { try { profByUser[r.user_id] = JSON.parse(r.data); } catch (e) {} });
+    const profiles = userRows.map((u) => ({ userId: u.id, name: u.name, data: profByUser[u.id] || null }));
+
+    // propostas de divisão pendentes nas casas visíveis
+    let proposals = [];
+    if (houseIds.length) {
+      const ph2 = houseIds.map(() => '?').join(',');
+      proposals = (
+        await env.DB.prepare(
+          `SELECT p.house_id, p.proposed_by, p.shares, p.approvals, p.created_at, u.name AS proposer_name
+             FROM share_proposals p JOIN users u ON u.id = p.proposed_by
+            WHERE p.house_id IN (${ph2})`
+        )
+          .bind(...houseIds)
+          .all()
+      ).results.map((p) => ({
+        houseId: p.house_id,
+        proposedBy: p.proposed_by,
+        proposedByName: p.proposer_name,
+        shares: JSON.parse(p.shares),
+        approvals: JSON.parse(p.approvals),
+        createdAt: p.created_at,
+      }));
+    }
+
     return json({
       me: { id: me.id, email: me.email, name: me.name },
+      profiles,
+      proposals,
       houses: houses.map((h) => ({
         id: h.id,
         ownerId: h.owner_id,
         ownerName: h.owner_name,
         mine: h.owner_id === me.id,
+        participants: houseParts[h.id] || [h.owner_id],
         updatedAt: h.updated_at,
         data: JSON.parse(h.data),
       })),
@@ -255,13 +359,13 @@ export async function handleApi(request, env) {
         if (put && typeof op.data !== 'object') { results.push({ ok: false, status: 400 }); continue; }
         if (op.scope === 'house') {
           const houseId = String(op.houseId || '');
-          const existing = await env.DB.prepare('SELECT owner_id, deleted FROM houses WHERE id = ?')
+          const existing = await env.DB.prepare('SELECT owner_id, deleted, data FROM houses WHERE id = ?')
             .bind(houseId).first();
           if (put) {
             if (existing && !existing.deleted) {
               if (!(await access(houseId))) { results.push({ ok: false, status: 403 }); continue; }
               await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
-                .bind(JSON.stringify(op.data), now(), houseId).run();
+                .bind(JSON.stringify(preserveOwnership(existing.data, op.data)), now(), houseId).run();
             } else if (existing) {
               if (existing.owner_id !== me.id) { results.push({ ok: false, status: 403 }); continue; }
               await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ?, deleted = 0 WHERE id = ?')
@@ -279,6 +383,7 @@ export async function handleApi(request, env) {
               env.DB.prepare('UPDATE houses SET deleted = 1, updated_at = ? WHERE id = ?').bind(now(), houseId),
               env.DB.prepare('UPDATE records SET deleted = 1, updated_at = ? WHERE house_id = ?').bind(now(), houseId),
               env.DB.prepare('DELETE FROM shares WHERE house_id = ?').bind(houseId),
+              env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(houseId),
             ]);
             accessCache.delete(houseId);
           }
@@ -334,14 +439,14 @@ export async function handleApi(request, env) {
     const houseId = seg[2];
     const b = await body(request);
     if (!b || typeof b.data !== 'object') return err(400, 'Corpo inválido.');
-    const existing = await env.DB.prepare('SELECT owner_id, deleted FROM houses WHERE id = ?')
+    const existing = await env.DB.prepare('SELECT owner_id, deleted, data FROM houses WHERE id = ?')
       .bind(houseId)
       .first();
     if (existing && !existing.deleted) {
       const access = await canAccessHouse(env, me.id, houseId);
       if (!access.ok) return err(403, 'Sem acesso a esta casa.');
       await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
-        .bind(JSON.stringify(b.data), now(), houseId)
+        .bind(JSON.stringify(preserveOwnership(existing.data, b.data)), now(), houseId)
         .run();
     } else if (existing && existing.deleted) {
       if (existing.owner_id !== me.id) return err(403, 'Sem acesso a esta casa.');
@@ -369,8 +474,76 @@ export async function handleApi(request, env) {
       env.DB.prepare('UPDATE houses SET deleted = 1, updated_at = ? WHERE id = ?').bind(now(), houseId),
       env.DB.prepare('UPDATE records SET deleted = 1, updated_at = ? WHERE house_id = ?').bind(now(), houseId),
       env.DB.prepare('DELETE FROM shares WHERE house_id = ?').bind(houseId),
+      env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(houseId),
     ]);
     return json({ ok: true });
+  }
+
+  // ---- Divisão de percentagens (com confirmação dos comproprietários) -----
+
+  if (seg[1] === 'houses' && seg[3] === 'proposal' && method === 'POST') {
+    const houseId = seg[2];
+    const parts = await participantsOf(env, houseId);
+    if (!parts || !parts.includes(me.id)) return err(403, 'Sem acesso a esta casa.');
+
+    if (seg.length === 4) {
+      if (parts.length < 2) return err(400, 'A casa não está partilhada — és o único proprietário.');
+      const b = await body(request);
+      const shares = b && typeof b.shares === 'object' && b.shares ? b.shares : null;
+      if (!shares) return err(400, 'Corpo inválido — envia { shares: { utilizador: percentagem } }.');
+      const keys = Object.keys(shares);
+      if (!keys.length || keys.some((k) => !parts.includes(k))) {
+        return err(400, 'A divisão só pode incluir os comproprietários da casa.');
+      }
+      let total = 0;
+      for (const k of keys) {
+        const v = Number(shares[k]);
+        if (!isFinite(v) || v < 0) return err(400, 'Percentagens inválidas.');
+        total += v;
+      }
+      if (Math.abs(total - 100) > 0.5) return err(400, 'As percentagens têm de somar 100.');
+      await env.DB.prepare(
+        `INSERT INTO share_proposals (house_id, proposed_by, shares, approvals, created_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (house_id) DO UPDATE SET proposed_by = excluded.proposed_by,
+           shares = excluded.shares, approvals = excluded.approvals, created_at = excluded.created_at`
+      )
+        .bind(houseId, me.id, JSON.stringify(shares), JSON.stringify([me.id]), now())
+        .run();
+      return json({ ok: true, applied: false }, 201);
+    }
+
+    const row = await env.DB.prepare('SELECT * FROM share_proposals WHERE house_id = ?')
+      .bind(houseId)
+      .first();
+    if (!row) return err(404, 'Não há nenhuma proposta pendente para esta casa.');
+
+    if (seg[4] === 'accept' && seg.length === 5) {
+      const approvals = new Set(JSON.parse(row.approvals));
+      approvals.add(me.id);
+      if (parts.every((u) => approvals.has(u))) {
+        const house = await env.DB.prepare('SELECT data FROM houses WHERE id = ?').bind(houseId).first();
+        let data = {};
+        try { data = JSON.parse(house.data); } catch (e) {}
+        data.ownerShares = JSON.parse(row.shares);
+        data.ownerIds = parts;
+        await env.DB.batch([
+          env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
+            .bind(JSON.stringify(data), now(), houseId),
+          env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(houseId),
+        ]);
+        return json({ ok: true, applied: true });
+      }
+      await env.DB.prepare('UPDATE share_proposals SET approvals = ? WHERE house_id = ?')
+        .bind(JSON.stringify([...approvals]), houseId)
+        .run();
+      return json({ ok: true, applied: false });
+    }
+
+    if (seg[4] === 'reject' && seg.length === 5) {
+      await env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(houseId).run();
+      return json({ ok: true });
+    }
   }
 
   // ---- Registos de uma casa ----------------------------------------------

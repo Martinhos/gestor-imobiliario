@@ -68,18 +68,23 @@
     return c;
   }
 
+  // As quotas são geridas pelo servidor (propostas com confirmação): a casa
+  // exportada nunca as leva, para um cliente desatualizado não as reverter.
+  function stripHouse(p) {
+    var c = strip(p);
+    delete c.ownerIds;
+    delete c.ownerShares;
+    return c;
+  }
+
   // Mapa completo do que este utilizador deve ter no servidor.
   // chave -> {scope, houseId?, kind?, id?, data}
   function exportEntities() {
     var map = {};
     var owners = db.owners || [], tenants = db.tenants || [];
     (db.properties || []).forEach(function (p) {
-      map['h:' + p.id] = { scope: 'house', houseId: p.id, data: strip(p) };
+      map['h:' + p.id] = { scope: 'house', houseId: p.id, data: stripHouse(p) };
       var persons = {};
-      (p.ownerIds || []).forEach(function (oid) {
-        var o = owners.find(function (x) { return x.id === oid; });
-        if (o) persons['owner:' + oid] = o;
-      });
       (db.contracts || []).forEach(function (c) {
         if (c.propertyId !== p.id) return;
         map['r:' + p.id + ':contract:' + c.id] = { scope: 'record', houseId: p.id, kind: 'contract', id: c.id, data: strip(c) };
@@ -111,7 +116,9 @@
     });
     (db.templates || []).forEach(function (x) { map['u:tpl:' + x.id] = { scope: 'user', kind: 'tpl', id: x.id, data: strip(x) }; });
     (db.groups || []).forEach(function (x) { map['u:group:' + x.id] = { scope: 'user', kind: 'group', id: x.id, data: strip(x) }; });
-    owners.forEach(function (o) { if (!o._sharedFrom) map['u:owner:' + o.id] = { scope: 'user', kind: 'owner', id: o.id, data: strip(o) }; });
+    // os "proprietários" são os utilizadores: só o meu perfil é exportado
+    var meOwner = CW.user && owners.find(function (o) { return o.id === CW.user.id; });
+    if (meOwner) map['u:profile:main'] = { scope: 'user', kind: 'profile', id: 'main', data: strip(meOwner) };
     tenants.forEach(function (t) { if (!t._sharedFrom) map['u:tenant:' + t.id] = { scope: 'user', kind: 'tenant', id: t.id, data: strip(t) }; });
     map['u:settings:main'] = { scope: 'user', kind: 'settings', id: 'main', data: strip(db.settings) };
     return map;
@@ -149,8 +156,18 @@
       var w = function (o) { return o.scope === 'house' ? 0 : 1; };
       return w(a) - w(b);
     });
+    var sharedHouses = {};
+    (CW.state.houses || []).forEach(function (h) { if (!h.mine) sharedHouses[h.id] = 1; });
     Object.keys(snap).forEach(function (k) {
-      if (!(k in map)) ops.push(Object.assign({ _key: k, op: 'del' }, parseKey(k)));
+      if (k in map) return;
+      // o perfil nunca é apagado por diff (um restauro de cópia local não o traz)
+      if (k === 'u:profile:main') { delete snap[k]; return; }
+      var pk = parseKey(k);
+      // proteção contra "Recomeçar"/restauros: não apagar em bloco os dados de
+      // casas dos outros — só remoções pontuais (a casa continua presente)
+      var houseGone = pk.houseId && !('h:' + pk.houseId in map);
+      if (sharedHouses[pk.houseId] && houseGone) { delete snap[k]; return; }
+      ops.push(Object.assign({ _key: k, op: 'del' }, pk));
     });
     if (!ops.length) { pushing = false; return Promise.resolve(); }
 
@@ -188,16 +205,19 @@
 
   function rebuildDb(st) {
     var d = JSON.parse(JSON.stringify(blank));
-    var persons = { owner: {}, tenant: {} };
+    var myId = CW.user ? CW.user.id : '';
+    var tenants = {};
+    var myProfile = null;
     (st.userRecords || []).forEach(function (r) {
       try {
         if (r.kind === 'settings') d.settings = Object.assign({}, blank.settings, r.data);
+        else if (r.kind === 'profile') myProfile = r.data;
         else if (r.kind === 'tx') d.transactions.push(normTx(r.data));
         else if (r.kind === 'rec') d.recurring.push(normRec(r.data));
         else if (r.kind === 'tpl') d.templates.push(normTpl(r.data));
         else if (r.kind === 'group') d.groups.push(normGroup(r.data));
-        else if (r.kind === 'owner') persons.owner[r.id] = normPerson(r.data);
-        else if (r.kind === 'tenant') persons.tenant[r.id] = normPerson(r.data);
+        else if (r.kind === 'tenant') tenants[r.id] = normPerson(r.data);
+        // kind 'owner' (modelo antigo) é ignorado: os proprietários são os utilizadores
       } catch (e) {}
     });
     var houseOwner = {};
@@ -205,6 +225,14 @@
       try {
         var p = normProp(h.data);
         if (!h.mine) { p._ownerUserId = h.ownerId; p._sharedFrom = h.ownerName || h.ownerId; }
+        // os donos do imóvel são os utilizadores com acesso (dono + partilhas);
+        // as quotas vêm do servidor e só mudam por proposta confirmada
+        var parts = h.participants || [h.ownerId];
+        p.ownerIds = parts.slice();
+        var rawSh = (h.data && h.data.ownerShares) || {};
+        var shr = {};
+        parts.forEach(function (u) { var v = Number(rawSh[u]); if (isFinite(v) && v >= 0) shr[u] = v; });
+        p.ownerShares = shr;
         houseOwner[h.id] = h;
         d.properties.push(p);
       } catch (e) {}
@@ -215,17 +243,31 @@
         if (r.kind === 'contract') d.contracts.push(normContract(r.data));
         else if (r.kind === 'tx') d.transactions.push(normTx(r.data));
         else if (r.kind === 'rec') d.recurring.push(normRec(r.data));
-        else if (r.kind === 'owner' || r.kind === 'tenant') {
-          if (!persons[r.kind][r.id]) {
+        else if (r.kind === 'tenant') {
+          if (!tenants[r.id]) {
             var per = normPerson(r.data);
             if (!mine) per._sharedFrom = h ? h.ownerName : '';
-            persons[r.kind][r.id] = per;
+            tenants[r.id] = per;
           }
         }
       } catch (e) {}
     });
-    d.owners = Object.keys(persons.owner).map(function (k) { return persons.owner[k]; });
-    d.tenants = Object.keys(persons.tenant).map(function (k) { return persons.tenant[k]; });
+    // proprietários = utilizadores: eu (com o meu perfil) + os outros com perfil visível
+    var ownersOut = {};
+    var minePer = normPerson(myProfile || {});
+    minePer.id = myId;
+    if (!minePer.name) minePer.name = (CW.user && (CW.user.name || CW.user.email)) || '';
+    ownersOut[myId] = minePer;
+    (st.profiles || []).forEach(function (pr) {
+      if (pr.userId === myId) return;
+      var per = normPerson(pr.data || {});
+      per.id = pr.userId;
+      per._userId = pr.userId;
+      if (!per.name) per.name = pr.name || pr.userId;
+      ownersOut[pr.userId] = per;
+    });
+    d.owners = Object.keys(ownersOut).map(function (k) { return ownersOut[k]; });
+    d.tenants = Object.keys(tenants).map(function (k) { return tenants[k]; });
     fillCats(d.settings);
     if (!Array.isArray(d.settings.tags)) d.settings.tags = TAGS0.slice();
     return d;
@@ -244,6 +286,11 @@
     var map = exportEntities();
     Object.keys(map).forEach(function (k) {
       if (serverKeys[k]) snap[k] = JSON.stringify(map[k].data);
+    });
+    // o que o servidor tem mas o cliente já não exporta (ex.: proprietários do
+    // modelo antigo) fica marcado para o próximo push apagar
+    Object.keys(serverKeys).forEach(function (k) {
+      if (!(k in map)) snap[k] = '__obsoleto__';
     });
     saveSnap();
     try { localStorage.setItem(LS_OWNER, CW.user.id); } catch (e) {}
@@ -348,6 +395,134 @@
     _delProp(id);
   };
 
+  /* ---------------- proprietários = utilizadores ---------------- */
+
+  // a página "Proprietários" desaparece: cada utilizador gere o seu perfil
+  NAV_GROUPS.forEach(function (g) { g.ids = g.ids.filter(function (id) { return id !== 'owners'; }); });
+  if (tab === 'owners') tab = 'dashboard';
+  buildNav();
+
+  var _delPerson = delPerson;
+  delPerson = function (kind, id) {
+    if (kind === 'owner') {
+      if (CW.user && id === CW.user.id) return toast('Este perfil és tu — podes editá-lo, não apagá-lo.');
+      var per = (db.owners || []).find(function (x) { return x.id === id; });
+      if (per && per._userId) return toast('Este proprietário é um utilizador ligado — para o remover, desfaz a partilha em Conta e partilha.');
+    }
+    _delPerson(kind, id);
+  };
+
+  CW.editProfile = function () {
+    if (!CW.user) return showAuth();
+    var meP = (db.owners || []).find(function (o) { return o.id === CW.user.id; });
+    if (!meP) {
+      meP = normPerson({ name: CW.user.name || '' });
+      meP.id = CW.user.id;
+      db.owners.push(meP);
+    }
+    personModal('owner', CW.user.id);
+    try { modalTop().el.querySelector('.head h2').textContent = 'O meu perfil'; } catch (e) {}
+  };
+
+  /* ---- divisão de quotas nos imóveis partilhados (com confirmação) ---- */
+
+  // substitui a secção editável de proprietários do formulário do imóvel
+  var OWN_SECT_RE = /<div><div class="flabel">Proprietários e quota-parte<\/div>[\s\S]*?id="shareHint"[\s\S]*?<\/div><\/div>/;
+  var _propBody = propBody;
+  propBody = function () {
+    var h = _propBody();
+    try {
+      var blk = cwOwnersBlock();
+      if (OWN_SECT_RE.test(h)) h = h.replace(OWN_SECT_RE, blk);
+    } catch (e) {}
+    return h;
+  };
+
+  function cwOwnersBlock() {
+    var p = pForm;
+    var live = (db.properties || []).find(function (x) { return x.id === p.id; }) || p;
+    var parts = live.ownerIds || [];
+    var myId = CW.user ? CW.user.id : '';
+    if (parts.length < 2) {
+      return '<div><div class="flabel">Proprietários</div><div class="hint">Este imóvel é só teu (100%). ' +
+        'Para o teres em compropriedade, partilha-o com outro utilizador em <b>Definições → Conta e partilha</b>.</div></div>';
+    }
+    var shares = sharesOf(live);
+    var prp = (CW.state.proposals || []).filter(function (x) { return x.houseId === p.id; })[0];
+    var rows = parts.map(function (u) {
+      var o = owner(u) || { name: u };
+      var cur = pct(shares[u] || 0, 0);
+      var nxt = prp ? dec(Math.round((Number(prp.shares[u]) || 0) * 100) / 100) + '%' : '';
+      return '<div class="stat"><span>' + esc(o.name) + (u === myId ? ' (tu)' : '') + '</span>' +
+        '<b>' + cur + (prp ? ' <span style="color:var(--warn)">→ ' + nxt + '</span>' : '') + '</b></div>';
+    }).join('');
+    var foot;
+    if (prp) {
+      var meOk = prp.approvals.indexOf(myId) > -1;
+      var waiting = parts.filter(function (u) { return prp.approvals.indexOf(u) < 0; })
+        .map(function (u) { return esc((owner(u) || { name: u }).name); });
+      if (!meOk) {
+        foot = '<div class="hint" style="margin-top:8px"><b>' + esc(prp.proposedByName) + '</b> propôs esta nova divisão. Só entra em vigor quando todos os comproprietários confirmarem.</div>' +
+          '<div class="toolbar" style="margin-top:8px">' +
+          '<button type="button" class="btn primary sm" onclick="CW.answerProposal(\'' + p.id + '\',1)">Confirmar nova divisão</button>' +
+          '<button type="button" class="btn sm danger" onclick="CW.answerProposal(\'' + p.id + '\',0)">Rejeitar</button></div>';
+      } else {
+        foot = '<div class="hint" style="margin-top:8px">Nova divisão proposta — à espera de: <b>' + waiting.join(', ') + '</b>.</div>' +
+          '<div class="toolbar" style="margin-top:8px"><button type="button" class="btn sm danger" onclick="CW.answerProposal(\'' + p.id + '\',0)">Cancelar proposta</button></div>';
+      }
+    } else {
+      foot = '<div class="toolbar" style="margin-top:8px"><button type="button" class="btn sm" onclick="CW.proposeShares(\'' + p.id + '\')">Propor nova divisão</button></div>' +
+        '<div class="hint" style="margin-top:6px">Mudar as percentagens só entra em vigor depois de todos os comproprietários confirmarem.</div>';
+    }
+    return '<div><div class="flabel">Proprietários e quota-parte</div>' + rows + foot + '</div>';
+  }
+
+  function refreshPropModal(hid) {
+    try {
+      if (modalStack.length && pForm && pForm.id === hid) { collectProp(); repaintProp(); }
+    } catch (e) {}
+  }
+
+  CW.proposeShares = function (hid) {
+    var live = (db.properties || []).find(function (x) { return x.id === hid; });
+    if (!live) return;
+    var parts = live.ownerIds || [];
+    var cur = sharesOf(live);
+    var body = '<div class="form"><div class="hint">Define a percentagem de cada comproprietário. A nova divisão só entra em vigor depois de todos confirmarem.</div>' +
+      parts.map(function (u) {
+        var o = owner(u) || { name: u };
+        return '<label>' + esc(o.name) + (CW.user && u === CW.user.id ? ' (tu)' : '') + ' (%)' +
+          '<input id="cw_pp_' + u + '" type="text" inputmode="decimal" value="' + dec(Math.round((cur[u] || 0) * 1000) / 10) + '"></label>';
+      }).join('') + '</div>';
+    openModal('Propor nova divisão', body);
+    onSave = function () {
+      var shares = {}, total = 0;
+      for (var i = 0; i < parts.length; i++) {
+        var v = num(val('cw_pp_' + parts[i]));
+        if (!isFinite(v) || v < 0) return toast('Percentagens inválidas.');
+        shares[parts[i]] = v;
+        total += v;
+      }
+      if (Math.abs(total - 100) > 0.5) return toast('As percentagens têm de somar 100 (agora somam ' + dec(Math.round(total * 100) / 100) + ').');
+      api('POST', '/api/houses/' + hid + '/proposal', { shares: shares })
+        .then(function () { closeModal(); toast('Proposta enviada — falta a confirmação dos outros comproprietários.'); return pullNow(true); })
+        .then(function () { refreshPropModal(hid); })
+        .catch(function (e) { toast(e.message); });
+    };
+  };
+
+  CW.answerProposal = function (hid, accept) {
+    api('POST', '/api/houses/' + hid + '/proposal/' + (accept ? 'accept' : 'reject'))
+      .then(function (r) {
+        toast(accept
+          ? (r.applied ? 'Confirmado por todos — a nova divisão já está em vigor.' : 'Confirmado — falta a resposta dos outros.')
+          : 'Proposta rejeitada.');
+        return pullNow(true);
+      })
+      .then(function () { refreshPropModal(hid); })
+      .catch(function (e) { toast(e.message); });
+  };
+
   /* ---------------- página "Conta e partilha" ---------------- */
 
   var _vSettings = vSettings;
@@ -356,7 +531,14 @@
     var h = _vSettings();
     if (!setPage) {
       var sub = CW.user ? (CW.user.name || CW.user.email) + ' · id ' + CW.user.id : 'Inicia sessão para sincronizar';
-      h = navRow('Conta e partilha', sub, 'users', 'cloud') + '<div style="height:14px"></div>' + h;
+      var meP = CW.user && (db.owners || []).find(function (o) { return o.id === CW.user.id; });
+      var psub = meP && meP.nif ? esc(meP.name) + ' · NIF preenchido' : 'Nome, NIF e contactos — usados nos contratos';
+      var profRow = '<div class="card tap" onclick="CW.editProfile()" style="display:flex;align-items:center;gap:13px">' +
+        '<span class="avatar">' + ic('crown', 18) + '</span>' +
+        '<span style="flex:1;min-width:0"><b style="display:block">O meu perfil</b><span class="small">' + psub + '</span></span>' +
+        '<span style="color:var(--muted);transform:rotate(180deg)">' + ic('chev', 18) + '</span></div>';
+      h = profRow + '<div style="height:14px"></div>' +
+        navRow('Conta e partilha', sub, 'users', 'cloud') + '<div style="height:14px"></div>' + h;
     }
     return h;
   };
