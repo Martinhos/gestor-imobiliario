@@ -701,6 +701,18 @@
   /* ---------------- ecrã de entrada ---------------- */
 
   var authEl = null;
+  var authCfg; // /api/auth/config (ids públicos do Google/Apple), em cache
+
+  // forte: 8+ caracteres com maiúsculas, minúsculas, números e um símbolo
+  function passProblem(p) {
+    p = String(p || '');
+    if (p.length < 8) return 'A palavra-passe precisa de pelo menos 8 caracteres.';
+    if (!/[A-Z]/.test(p)) return 'A palavra-passe precisa de uma letra maiúscula.';
+    if (!/[a-z]/.test(p)) return 'A palavra-passe precisa de uma letra minúscula.';
+    if (!/[0-9]/.test(p)) return 'A palavra-passe precisa de um número.';
+    if (!/[^A-Za-z0-9]/.test(p)) return 'A palavra-passe precisa de um símbolo (ex.: ! ? € .).';
+    return '';
+  }
 
   function showAuth(msg) {
     CW.showAuthMode = CW.showAuthMode || 'login';
@@ -723,13 +735,23 @@
       '<div class="form" style="margin-top:12px;display:grid;gap:10px">' +
       (login ? '' : '<input id="cwa_name" placeholder="Nome" autocomplete="name">') +
       '<input id="cwa_email" type="email" placeholder="Email" autocomplete="email">' +
-      '<input id="cwa_pass" type="password" placeholder="Palavra-passe' + (login ? '' : ' (mín. 8 caracteres)') + '" autocomplete="' + (login ? 'current-password' : 'new-password') + '">' +
+      '<input id="cwa_pass" type="password" placeholder="Palavra-passe" autocomplete="' + (login ? 'current-password' : 'new-password') + '">' +
+      (login ? '' :
+        '<input id="cwa_pass2" type="password" placeholder="Confirmar palavra-passe" autocomplete="new-password">' +
+        '<div class="hint" style="margin:0">Pelo menos 8 caracteres, com maiúsculas, minúsculas, números e um símbolo.</div>') +
       '<div id="cwa_err" class="small" style="color:var(--danger)"></div>' +
       '<button class="btn primary" style="width:100%;justify-content:center" onclick="CW.submitAuth()">' + (login ? 'Entrar' : 'Criar conta') + '</button>' +
       '<button class="btn" style="width:100%;justify-content:center" onclick="CW.toggleAuth()">' +
-      (login ? 'Ainda não tenho conta' : 'Já tenho conta') + '</button></div></div>';
-    var pass = document.getElementById('cwa_pass');
-    if (pass) pass.addEventListener('keydown', function (e) { if (e.key === 'Enter') CW.submitAuth(); });
+      (login ? 'Ainda não tenho conta' : 'Já tenho conta') + '</button>' +
+      '<div id="cwa_social" style="display:none">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="flex:1;height:1px;background:var(--line)"></span>' +
+      '<span class="small">ou</span><span style="flex:1;height:1px;background:var(--line)"></span></div>' +
+      '<div id="cwa_gbtn" style="display:flex;justify-content:center;margin-bottom:8px"></div>' +
+      '<button id="cwa_abtn" class="btn" style="display:none;width:100%;justify-content:center;background:#000;color:#fff;border-color:#000" onclick="CW.appleLogin()">&#63743; Continuar com a Apple</button>' +
+      '</div></div></div>';
+    var last = document.getElementById(login ? 'cwa_pass' : 'cwa_pass2');
+    if (last) last.addEventListener('keydown', function (e) { if (e.key === 'Enter') CW.submitAuth(); });
+    loadSocial();
   }
   CW.showAuth = function () { showAuth(); };
 
@@ -738,28 +760,102 @@
     showAuth();
   };
 
+  function finishLogin(u) {
+    CW.user = { id: u.id, name: u.name, email: u.email, token: u.token };
+    try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
+    var prevOwner = null;
+    try { prevOwner = localStorage.getItem(LS_OWNER); } catch (e) {}
+    if (prevOwner && prevOwner !== u.id) {
+      // dados locais de outra conta: não misturar
+      db = JSON.parse(JSON.stringify(blank));
+      rawSet(KEY, JSON.stringify(db));
+    }
+    hideAuth();
+    buildNav(); render();
+    startSync();
+  }
+
   CW.submitAuth = function () {
     var login = CW.showAuthMode !== 'register';
     var payload = { email: val('cwa_email'), password: val('cwa_pass') };
-    if (!login) payload.name = val('cwa_name');
     var errEl = document.getElementById('cwa_err');
     errEl.textContent = '';
+    if (!login) {
+      payload.name = val('cwa_name');
+      var prob = passProblem(payload.password);
+      if (prob) { errEl.textContent = prob; return; }
+      if (payload.password !== val('cwa_pass2')) {
+        errEl.textContent = 'As palavras-passe não coincidem.';
+        return;
+      }
+    }
     api('POST', login ? '/api/auth/login' : '/api/auth/register', payload)
-      .then(function (u) {
-        CW.user = { id: u.id, name: u.name, email: u.email, token: u.token };
-        try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
-        var prevOwner = null;
-        try { prevOwner = localStorage.getItem(LS_OWNER); } catch (e) {}
-        if (prevOwner && prevOwner !== u.id) {
-          // dados locais de outra conta: não misturar
-          db = JSON.parse(JSON.stringify(blank));
-          rawSet(KEY, JSON.stringify(db));
-        }
-        hideAuth();
-        buildNav(); render();
-        startSync();
-      })
+      .then(finishLogin)
       .catch(function (e) { errEl.textContent = e.message || 'Não foi possível entrar.'; });
+  };
+
+  /* ---- entrada com Google / Apple (aparece quando configurada) ---- */
+
+  function loadScript(src, cb) {
+    var s = document.querySelector('script[src="' + src + '"]');
+    if (s) { if (s._loaded) cb(); else s.addEventListener('load', cb); return; }
+    s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = function () { s._loaded = 1; cb(); };
+    document.head.appendChild(s);
+  }
+
+  function loadSocial() {
+    var mount = document.getElementById('cwa_social');
+    if (!mount) return;
+    (authCfg !== undefined
+      ? Promise.resolve(authCfg)
+      : api('GET', '/api/auth/config').then(function (c) { authCfg = c; return c; }).catch(function () { return null; })
+    ).then(function (cfg) {
+      if (!cfg || (!cfg.google && !cfg.apple)) return;
+      mount.style.display = '';
+      if (cfg.google) {
+        loadScript('https://accounts.google.com/gsi/client', function () {
+          try {
+            google.accounts.id.initialize({
+              client_id: cfg.google,
+              callback: function (resp) { socialLogin('google', { credential: resp.credential }); },
+            });
+            var g = document.getElementById('cwa_gbtn');
+            if (g) google.accounts.id.renderButton(g, { theme: 'outline', size: 'large', width: 320, text: 'continue_with' });
+          } catch (e) {}
+        });
+      }
+      if (cfg.apple) {
+        loadScript('https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/pt_PT/appleid.auth.js', function () {
+          try {
+            AppleID.auth.init({ clientId: cfg.apple, scope: 'name email', redirectURI: location.origin + '/', usePopup: true });
+            var a = document.getElementById('cwa_abtn');
+            if (a) a.style.display = '';
+          } catch (e) {}
+        });
+      }
+    });
+  }
+
+  function socialLogin(provider, body) {
+    var errEl = document.getElementById('cwa_err');
+    api('POST', '/api/auth/' + provider, body)
+      .then(finishLogin)
+      .catch(function (e) { if (errEl) errEl.textContent = e.message || 'Não foi possível entrar.'; });
+  }
+
+  CW.appleLogin = function () {
+    try {
+      AppleID.auth.signIn().then(function (res) {
+        var name = '';
+        try {
+          if (res.user && res.user.name) name = (res.user.name.firstName + ' ' + (res.user.name.lastName || '')).trim();
+        } catch (e) {}
+        socialLogin('apple', { id_token: res.authorization.id_token, name: name });
+      }).catch(function () {});
+    } catch (e) { toast('Entrada com Apple indisponível.'); }
   };
 
   function hideAuth() {

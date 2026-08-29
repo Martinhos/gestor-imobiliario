@@ -16,6 +16,13 @@ import {
   readSessionToken,
   getSessionUser,
 } from './auth.js';
+import { verifyIdToken } from './oauth.js';
+
+// forte: 8+ caracteres com maiúsculas, minúsculas, números e um símbolo
+function weakPassword(p) {
+  p = String(p);
+  return p.length < 8 || !/[a-z]/.test(p) || !/[A-Z]/.test(p) || !/[0-9]/.test(p) || !/[^A-Za-z0-9]/.test(p);
+}
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -114,7 +121,9 @@ export async function handleApi(request, env) {
   if (path === '/api/auth/register' && method === 'POST') {
     const b = await body(request);
     if (!b || !b.email || !b.password) return err(400, 'Email e palavra-passe são obrigatórios.');
-    if (String(b.password).length < 8) return err(400, 'A palavra-passe precisa de pelo menos 8 caracteres.');
+    if (weakPassword(b.password)) {
+      return err(400, 'A palavra-passe precisa de pelo menos 8 caracteres, com maiúsculas, minúsculas, números e um símbolo.');
+    }
     const email = String(b.email).trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return err(400, 'Email inválido.');
     const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
@@ -139,12 +148,58 @@ export async function handleApi(request, env) {
     if (!b || !b.email || !b.password) return err(400, 'Email e palavra-passe são obrigatórios.');
     const email = String(b.email).trim().toLowerCase();
     const user = await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
+    if (user && !user.pass_hash) return err(401, 'Esta conta entra com Google ou Apple — usa esse botão.');
     if (!user || !(await verifyPassword(String(b.password), user.pass_salt, user.pass_hash))) {
       return err(401, 'Email ou palavra-passe errados.');
     }
     const token = await createSession(env, user.id);
     return json({ id: user.id, email: user.email, name: user.name, token }, 200, {
       'Set-Cookie': sessionCookie(token),
+    });
+  }
+
+  // Que fornecedores de entrada social estão configurados (ids públicos).
+  if (path === '/api/auth/config' && method === 'GET') {
+    return json({ google: env.GOOGLE_CLIENT_ID || null, apple: env.APPLE_CLIENT_ID || null });
+  }
+
+  // Entrada com Google / Apple: o cliente envia o ID token do fornecedor;
+  // verificamos a assinatura e criamos/ligamos a conta pelo email.
+  if ((path === '/api/auth/google' || path === '/api/auth/apple') && method === 'POST') {
+    const provider = path.endsWith('google') ? 'google' : 'apple';
+    const clientId = provider === 'google' ? env.GOOGLE_CLIENT_ID : env.APPLE_CLIENT_ID;
+    if (!clientId) return err(400, 'Entrada com ' + (provider === 'google' ? 'Google' : 'Apple') + ' não está configurada.');
+    const b = await body(request);
+    const token = b && (b.credential || b.id_token);
+    if (!token) return err(400, 'Falta o token do fornecedor.');
+    let payload;
+    try {
+      payload = await verifyIdToken(provider, token, clientId);
+    } catch (e) {
+      return err(401, 'Token rejeitado: ' + e.message);
+    }
+    const col = provider === 'google' ? 'google_sub' : 'apple_sub';
+    const email = String(payload.email || '').trim().toLowerCase();
+    let user = await env.DB.prepare(`SELECT * FROM users WHERE ${col} = ?`).bind(payload.sub).first();
+    if (!user && email) {
+      user = await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
+      if (user) await env.DB.prepare(`UPDATE users SET ${col} = ? WHERE id = ?`).bind(payload.sub, user.id).run();
+    }
+    if (!user) {
+      if (!email) return err(400, 'O fornecedor não devolveu um email.');
+      const name = String((b && b.name) || payload.name || '').trim();
+      let id = newUserId();
+      while (await env.DB.prepare('SELECT 1 FROM users WHERE id = ?').bind(id).first()) id = newUserId();
+      await env.DB.prepare(
+        `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, ${col}) VALUES (?, ?, ?, '', '', ?, ?)`
+      )
+        .bind(id, email, name, now(), payload.sub)
+        .run();
+      user = { id, email, name };
+    }
+    const token2 = await createSession(env, user.id);
+    return json({ id: user.id, email: user.email, name: user.name, token: token2 }, 200, {
+      'Set-Cookie': sessionCookie(token2),
     });
   }
 

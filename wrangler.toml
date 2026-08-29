@@ -20,3 +20,11 @@ id = "PLACEHOLDER_KV_ID"
 
 [observability]
 enabled = true
+
+# Entrada social (ids públicos; vazio = botão escondido).
+# Google: cria um OAuth Client ID (Web) em console.cloud.google.com e autoriza
+# a origem https://gestor-imobiliario.martinhos.workers.dev.
+# Apple: exige conta Apple Developer paga (Services ID + Sign in with Apple).
+[vars]
+GOOGLE_CLIENT_ID = ""
+APPLE_CLIENT_ID = ""

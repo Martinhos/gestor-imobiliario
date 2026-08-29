@@ -49,6 +49,24 @@ npx wrangler dev
 3. Push para `main` — o workflow trata do resto. O estado do Terraform fica versionado no
    repositório (contém apenas ids de recursos, nenhum segredo).
 
+## Entrada com Google / Apple
+
+Os botões "Continuar com Google/Apple" aparecem automaticamente quando o
+respetivo client ID estiver preenchido em [`wrangler.toml`](wrangler.toml) (`[vars]`):
+
+- **Google** (grátis): em [console.cloud.google.com](https://console.cloud.google.com)
+  → APIs & Services → Credentials → *Create OAuth client ID* (tipo **Web application**),
+  adiciona `https://gestor-imobiliario.martinhos.workers.dev` às *Authorized JavaScript
+  origins* e copia o Client ID para `GOOGLE_CLIENT_ID`.
+- **Apple** (exige conta Apple Developer paga): cria um *Services ID* com
+  *Sign in with Apple* ativo, domínio `gestor-imobiliario.martinhos.workers.dev` e
+  return URL `https://gestor-imobiliario.martinhos.workers.dev/`, e copia o
+  identificador para `APPLE_CLIENT_ID`.
+
+O worker valida os ID tokens (assinatura JWKS, emissor, audiência) e cria ou liga a
+conta pelo email — quem já tinha conta por palavra-passe pode passar a entrar com o
+mesmo email pelo Google/Apple.
+
 ## Migrar dados da app Android
 
 Na app Android: **Definições → Dados → Guardar cópia** (exporta um `.json`).
