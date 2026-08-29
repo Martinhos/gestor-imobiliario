@@ -29,6 +29,17 @@
 
   try { CW.user = JSON.parse(localStorage.getItem(LS_USER) || 'null'); } catch (e) {}
 
+  // Fora do wrapper Android, o browser já desconta a barra de estado — o
+  // palpite de 28px do fitInsets() (pensado para o WebView antigo em ecrã
+  // inteiro) criava um espaço a mais no topo. Travamo-lo e repomos o env().
+  if (!window.Android) {
+    window.__nativeInsets = 1; // fitInsets() passa a não fazer nada
+    var rs = document.documentElement.style;
+    ['--inset-top', '--inset-bottom', '--inset-left', '--inset-right'].forEach(function (k) {
+      rs.removeProperty(k); // volta ao env(safe-area-inset-*) puro do CSS
+    });
+  }
+
   var snap = {};
   var snapKey = function () { return 'gi_cloud_snap_' + (CW.user ? CW.user.id : ''); };
   function loadSnap() { try { snap = JSON.parse(localStorage.getItem(snapKey()) || '{}'); } catch (e) { snap = {}; } }
