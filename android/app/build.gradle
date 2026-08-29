@@ -1,0 +1,48 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'pt.gestorimobiliario.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "pt.gestorimobiliario.app"
+        minSdk 29          // Android 10+
+        targetSdk 35
+        versionCode 19
+        versionName "23.0"
+    }
+
+    // Chave fixa, versionada de proposito: sem ela cada compilacao usaria uma
+    // chave de debug diferente e o Android recusaria instalar a atualizacao por
+    // cima da anterior, obrigando a desinstalar e a perder os dados.
+    // Serve para uso pessoal / sideload, nao para a Play Store.
+    signingConfigs {
+        fixa {
+            storeFile file('gestor.keystore')
+            storePassword 'gestor2026'
+            keyAlias 'gestor'
+            keyPassword 'gestor2026'
+        }
+    }
+
+    buildTypes {
+        debug   { signingConfig signingConfigs.fixa }
+        release {
+            signingConfig signingConfigs.fixa
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.core:core:1.13.1'   // insets da barra de estado
+}

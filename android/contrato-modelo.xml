@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Modelo de contrato de arrendamento urbano para habitação com prazo certo.
+  Derivado do documento Word fornecido.
+
+  Marcadores {{...}} são substituídos pelos dados da aplicação.
+  Se um marcador não tiver valor, a frase que o contém é omitida (opcional="1")
+  ou o parágrafo inteiro desaparece (quando todo o parágrafo é opcional).
+
+  Marcadores disponíveis:
+    imovel.nome, imovel.morada, imovel.freguesia
+    imovel.registo, imovel.matriz, imovel.licenca
+    imovel.certificado, imovel.classe, imovel.validadeCert
+    senhorios.identificacao   inquilinos.identificacao
+    senhorios.representante   senhorios.morada
+    contacto.email            contacto.telefone
+    contrato.renda            contrato.rendaLetras
+    contrato.caucao           contrato.caucaoLetras
+    contrato.total            contrato.totalLetras
+    contrato.iban             contrato.diaPagamento
+    contrato.inicio           contrato.fim            contrato.prazo
+    data.hoje                 local
+-->
+<contrato tipo="arrendamento-habitacao-prazo-certo">
+
+  <titulo>CONTRATO DE ARRENDAMENTO URBANO PARA HABITAÇÃO COM PRAZO CERTO</titulo>
+  <subtitulo>{{imovel.nome}} · {{imovel.morada}}</subtitulo>
+
+  <secao titulo="IDENTIFICAÇÃO DAS PARTES">
+    <p>SENHORIOS — {{senhorios.identificacao}}, adiante designados conjuntamente por SENHORIOS.</p>
+    <p>INQUILINOS — {{inquilinos.identificacao}}, adiante designados conjuntamente por INQUILINOS.</p>
+    <p>É celebrado o presente contrato de arrendamento urbano para habitação com prazo certo, regido pelo Código Civil, pelo Novo Regime do Arrendamento Urbano (NRAU) e pelas cláusulas seguintes.</p>
+  </secao>
+
+  <clausula titulo="OBJETO">
+    <n>Os SENHORIOS dão de arrendamento aos INQUILINOS, que aceitam, o imóvel destinado a habitação sito em {{imovel.morada}}{{#imovel.freguesia}}, {{imovel.freguesia}}{{/}}.</n>
+    <n opcional="imovel.registo">O imóvel encontra-se descrito na Conservatória do Registo Predial sob o n.º {{imovel.registo}}{{#imovel.matriz}} e inscrito na matriz predial urbana sob o artigo {{imovel.matriz}}{{/}}.</n>
+    <n opcional="imovel.licenca">A utilização para habitação encontra-se titulada por {{imovel.licenca}}.</n>
+    <n opcional="imovel.certificado">O imóvel dispõe do Certificado Energético n.º {{imovel.certificado}}{{#imovel.validadeCert}}, válido até {{imovel.validadeCert}}{{/}}{{#imovel.classe}}, com classe energética {{imovel.classe}}{{/}}.</n>
+    <n>O arrendamento inclui o imóvel, os bens e equipamentos identificados no Inventário e as chaves registadas no Auto de Entrega, anexos ao presente contrato.</n>
+  </clausula>
+
+  <clausula titulo="FINALIDADE E OCUPAÇÃO">
+    <n>O imóvel destina-se exclusivamente à habitação permanente dos INQUILINOS.</n>
+    <n>É proibida a utilização para alojamento local, hospedagem, atividade profissional aberta ao público ou outra finalidade distinta da habitação, salvo autorização prévia e escrita dos SENHORIOS e desde que legalmente admissível.</n>
+    <n>Os INQUILINOS não poderão subarrendar, ceder, emprestar ou dar em comodato, total ou parcialmente, o imóvel, nem permitir a sua ocupação habitual por terceiros não identificados no contrato, sem autorização prévia e escrita dos SENHORIOS.</n>
+  </clausula>
+
+  <clausula titulo="PRAZO, RENOVAÇÃO E CESSAÇÃO">
+    <n>O contrato é celebrado pelo prazo certo de {{contrato.prazo}}, com início em {{contrato.inicio}} e termo em {{contrato.fim}}.</n>
+    <n>No termo do prazo inicial, o contrato renova-se automaticamente pelo período legalmente aplicável. À data da celebração deste contrato, tratando-se de prazo inicial inferior a três anos, a renovação automática opera por períodos de três anos, sem prejuízo de alteração legislativa imperativa que venha a ser aplicável.</n>
+    <n>Os SENHORIOS podem opor-se à renovação mediante comunicação aos INQUILINOS com a antecedência legalmente exigida. Num contrato com prazo inicial de um ano, a antecedência é, à data da celebração, de 120 dias; a oposição à primeira renovação pelo senhorio apenas produz efeitos após decorridos três anos da celebração, salvo as exceções previstas na lei.</n>
+    <n>Os INQUILINOS podem opor-se à renovação do contrato de um ano mediante comunicação aos SENHORIOS com a antecedência legalmente exigida, que à data da celebração é de 90 dias.</n>
+    <n>Decorrido um terço do prazo de duração inicial ou da renovação, os INQUILINOS podem denunciar o contrato a todo o tempo, mediante o pré-aviso legal aplicável. Para prazo igual ou superior a um ano, o pré-aviso é, à data da celebração, de 120 dias.</n>
+    <n>A simples saída ou desocupação do imóvel não faz cessar o contrato nem extingue a obrigação de pagamento de renda. As rendas mantêm-se devidas até à data em que a cessação produza legalmente efeitos. A falta do pré-aviso devido obriga ao pagamento das rendas correspondentes ao período de pré-aviso em falta, sem prejuízo das exceções legalmente previstas.</n>
+  </clausula>
+
+  <clausula titulo="RENDA, PAGAMENTO E ATUALIZAÇÃO">
+    <n>A renda mensal é de {{contrato.renda}} ({{contrato.rendaLetras}}).</n>
+    <n>A renda é paga por transferência bancária para o IBAN {{contrato.iban}}, devendo o montante estar disponível na conta dos SENHORIOS até ao dia {{contrato.diaPagamento}} do mês a que respeita.</n>
+    <n>Na assinatura, os INQUILINOS pagam antecipadamente {{contrato.renda}} ({{contrato.rendaLetras}}), correspondentes à renda do primeiro mês do arrendamento.</n>
+    <n>Após o mês abrangido pelo pagamento antecipado, o pagamento mensal da renda retoma-se nos termos do número anterior.</n>
+    <n>O comprovativo bancário constitui prova do pagamento, sem prejuízo da emissão do respetivo recibo de renda pelos SENHORIOS.</n>
+    <n>A renda pode ser atualizada anualmente nos termos legais. A primeira atualização só pode ser exigida decorrido um ano de vigência e será comunicada por escrito com a antecedência legalmente exigida.</n>
+  </clausula>
+
+  <clausula titulo="CAUÇÃO" opcional="contrato.caucao">
+    <n>Na assinatura, os INQUILINOS entregam aos SENHORIOS {{contrato.caucao}} ({{contrato.caucaoLetras}}), a título de caução destinada a garantir o cumprimento das obrigações emergentes do contrato.</n>
+    <n>A caução pode ser aplicada a rendas, consumos ou encargos em dívida, indemnizações, despesas de limpeza, substituição de chaves ou fechaduras e reparação de danos imputáveis aos INQUILINOS, sem prejuízo do direito dos SENHORIOS a exigir o remanescente quando a caução seja insuficiente.</n>
+    <n>A caução não substitui o pagamento das últimas rendas, salvo acordo escrito e expresso dos SENHORIOS.</n>
+    <n>Após a restituição do imóvel e das chaves, os SENHORIOS verificarão o estado do imóvel e as obrigações pendentes. O saldo da caução será devolvido depois dessa verificação, deduzidas apenas as quantias identificadas e justificadas.</n>
+    <n>Se existirem faturas de consumos ainda não emitidas, orçamentos pendentes ou danos cujo custo não possa ser apurado de imediato, os SENHORIOS podem reter provisoriamente a quantia razoavelmente necessária, comunicando por escrito a respetiva fundamentação.</n>
+  </clausula>
+
+  <destaque opcional="contrato.total">VALOR TOTAL A ENTREGAR NA ASSINATURA: {{contrato.total}} — {{contrato.renda}} de renda antecipada + {{contrato.caucao}} de caução</destaque>
+
+  <clausula titulo="ENCARGOS E SERVIÇOS">
+    <n>São da responsabilidade dos INQUILINOS os consumos e contratos de água, eletricidade, gás, telecomunicações e demais serviços utilizados no imóvel durante o arrendamento.</n>
+    <n>Sempre que possível, os contratos de fornecimento serão colocados em nome dos INQUILINOS no prazo de 10 dias após a entrega das chaves.</n>
+    <n>No final do arrendamento, os INQUILINOS apresentarão, quando solicitado, comprovativos de pagamento e de cessação ou transferência dos contratos de fornecimento.</n>
+    <n>O IMI e os encargos relativos à propriedade e à administração, conservação e fruição das partes comuns são suportados pelos SENHORIOS, sem prejuízo dos encargos que a lei ou o presente contrato atribuam ao utilizador.</n>
+  </clausula>
+
+  <clausula titulo="ESTADO, INVENTÁRIO E ENTREGA INICIAL">
+    <n>O imóvel é entregue em condições de habitabilidade e conservação, no estado descrito no Inventário, no Auto de Entrega e no registo fotográfico anexos, que fazem parte integrante do contrato.</n>
+    <n>Os INQUILINOS dispõem de 10 dias após a entrega das chaves para comunicar por escrito anomalias preexistentes não registadas nos anexos, juntando fotografias sempre que possível.</n>
+    <n>A ausência dessa comunicação não impede a invocação de defeitos ocultos, mas presume-se que os elementos visíveis foram recebidos no estado documentado no inventário e nas fotografias.</n>
+    <n>No Auto de Entrega serão registadas as chaves entregues aos INQUILINOS.</n>
+  </clausula>
+
+  <clausula titulo="UTILIZAÇÃO, CONSERVAÇÃO E AVARIAS">
+    <n>Os INQUILINOS obrigam-se a utilizar o imóvel e os equipamentos de forma prudente, diligente e de acordo com a respetiva finalidade.</n>
+    <n>Os INQUILINOS comunicarão de imediato qualquer infiltração, fuga de água, avaria elétrica, risco estrutural ou outra situação suscetível de agravar danos, respondendo pelo prejuízo adicional causado por atraso injustificado nessa comunicação.</n>
+    <n>São da responsabilidade dos INQUILINOS as pequenas reparações decorrentes do uso corrente e a reparação de danos causados por si, pelos visitantes e prestadores por si contratados ou animais autorizados.</n>
+    <n>São da responsabilidade dos SENHORIOS as obras de conservação legalmente a seu cargo e as reparações de avarias não imputáveis aos INQUILINOS.</n>
+  </clausula>
+
+  <clausula titulo="OBRAS, FUROS, PINTURA E ALTERAÇÕES">
+    <n>É expressamente proibido fazer furos nas paredes, azulejos, pedra, caixilharias ou quaisquer outros elementos do imóvel sem autorização prévia e escrita dos SENHORIOS.</n>
+    <n>É igualmente proibido pintar, repintar, aplicar papel de parede ou alterar a cor, acabamento ou revestimento das paredes sem autorização prévia e escrita dos SENHORIOS.</n>
+    <n>Os INQUILINOS não podem realizar obras, instalar equipamentos fixos, alterar fechaduras, redes técnicas, fachadas ou a disposição permanente do imóvel sem autorização prévia e escrita dos SENHORIOS.</n>
+    <n>As benfeitorias autorizadas que não possam ser retiradas sem dano ficam integradas no imóvel, sem direito a indemnização ou retenção, salvo acordo escrito em contrário.</n>
+    <n>Em situação urgente destinada a evitar dano iminente, os INQUILINOS deverão contactar os SENHORIOS e atuar apenas na medida estritamente necessária, conservando comprovativos e documentação da ocorrência.</n>
+  </clausula>
+
+  <clausula titulo="FUMO E ANIMAIS">
+    <n>É proibido fumar no interior da habitação, incluindo cigarros eletrónicos, dispositivos de tabaco aquecido e produtos semelhantes.</n>
+    <n>Os custos de limpeza, desodorização, pintura ou reparação decorrentes do incumprimento são suportados pelos INQUILINOS.</n>
+    <n>A permanência de animais no imóvel depende de autorização prévia e escrita dos SENHORIOS, sem prejuízo das situações legalmente protegidas.</n>
+    <n>Os INQUILINOS respondem pelos danos, ruídos, odores, falta de higiene ou prejuízos causados pelos animais.</n>
+  </clausula>
+
+  <clausula titulo="BOA VIZINHANÇA E SEGURANÇA">
+    <n>Os INQUILINOS comprometem-se a respeitar as regras de boa vizinhança, o descanso dos moradores, as normas de segurança e, quando aplicável, o regulamento do condomínio.</n>
+    <n>É proibido armazenar no imóvel substâncias perigosas ou inflamáveis em quantidade incompatível com o uso doméstico normal.</n>
+    <n>Os INQUILINOS não podem alterar ou inutilizar detetores, ventilação ou equipamentos de segurança existentes.</n>
+  </clausula>
+
+  <clausula titulo="ACESSO, INSPEÇÕES E VISITAS">
+    <n>Mediante marcação prévia, motivo legítimo e horário razoável, os INQUILINOS permitirão o acesso dos SENHORIOS ou de técnicos por estes indicados para verificar o estado do imóvel, executar obras ou realizar reparações necessárias.</n>
+    <n>Em caso de emergência, risco para pessoas ou bens, fuga de água, incêndio ou situação semelhante, deverá ser facultado acesso tão rapidamente quanto razoavelmente possível.</n>
+    <n>Nos três meses anteriores à cessação do contrato, os INQUILINOS permitirão visitas de potenciais arrendatários ou adquirentes, mediante marcação prévia e conciliação razoável de horários.</n>
+    <n>As visitas e inspeções não podem ser utilizadas de forma abusiva nem perturbar injustificadamente a vida privada dos INQUILINOS.</n>
+  </clausula>
+
+  <clausula titulo="RESTITUIÇÃO DO IMÓVEL">
+    <n>Na cessação do contrato, o imóvel será entregue livre de pessoas e bens, limpo, com todos os equipamentos e chaves, e em estado equivalente ao da entrega inicial, ressalvado o desgaste normal de uma utilização prudente.</n>
+    <n>Caso o imóvel não seja entregue com nível de limpeza equivalente ao documentado no início, os SENHORIOS podem contratar a limpeza necessária e imputar o respetivo custo aos INQUILINOS.</n>
+    <n>A entrega será formalizada, sempre que possível, por Auto de Restituição, com registo fotográfico, identificação de danos e entrega das chaves.</n>
+    <n>A perda ou não devolução de chaves obriga ao pagamento da respetiva substituição e, quando razoavelmente necessário por razões de segurança, da substituição das fechaduras.</n>
+    <n>A não restituição atempada do imóvel produz as consequências indemnizatórias previstas na lei.</n>
+  </clausula>
+
+  <clausula titulo="INCUMPRIMENTO E MORA">
+    <n>A falta de pagamento pontual da renda ou de outros valores devidos constitui mora e confere aos SENHORIOS os direitos e indemnizações previstos na lei.</n>
+    <n>O incumprimento grave ou reiterado das obrigações contratuais pode fundamentar a resolução do contrato nos termos legais.</n>
+    <n>A aceitação de pagamentos posteriores não constitui, por si só, renúncia aos direitos relativos a incumprimentos anteriores.</n>
+    <n>Os INQUILINOS suportarão os custos razoáveis e comprovados diretamente causados pelo seu incumprimento, dentro dos limites legalmente admissíveis.</n>
+  </clausula>
+
+  <clausula titulo="COMUNICAÇÕES, DOMICÍLIO E ALTERAÇÕES">
+    <n>Para receção de comunicações dirigidas aos SENHORIOS, estes designam {{senhorios.representante}} como representante comum{{#senhorios.morada}}, no endereço {{senhorios.morada}}{{/}}{{#contacto.email}}, e no e-mail {{contacto.email}}{{/}}{{#contacto.telefone}}. Contacto telefónico: {{contacto.telefone}}{{/}}.</n>
+    <n>Para efeitos de comunicações formais, os INQUILINOS indicam como domicílio o imóvel arrendado, salvo se comunicarem por escrito outro endereço.</n>
+    <n>As comunicações legalmente exigíveis relativas à cessação do arrendamento, atualização da renda e obras serão efetuadas pela forma legalmente prevista, designadamente por escrito assinado e carta registada com aviso de receção quando essa seja a forma exigida pelo NRAU.</n>
+    <n>As comunicações correntes podem ser efetuadas por correio eletrónico. Qualquer alteração ou aditamento ao presente contrato só será válido se reduzido a escrito e expressamente aceite por todas as partes, podendo a aceitação ser comprovada por correio registado ou por correio eletrónico com prova de envio e receção, sem prejuízo de formalidade legal imperativa.</n>
+    <n>Cada parte comunicará por escrito qualquer alteração de morada ou endereço eletrónico. Até essa comunicação, serão utilizados os contactos constantes do contrato.</n>
+  </clausula>
+
+  <clausula titulo="DISPOSIÇÕES FINAIS">
+    <n>A invalidade ou ineficácia de uma disposição não determina a invalidade das restantes, aplicando-se em sua substituição a solução legalmente admissível que mais se aproxime da finalidade pretendida.</n>
+    <n>Em tudo o que esteja omisso aplicam-se o Código Civil, o NRAU e a demais legislação portuguesa em vigor.</n>
+    <n>Os litígios serão submetidos aos tribunais e demais meios legalmente competentes, sem prejuízo de resolução por acordo entre as partes.</n>
+    <n>Os SENHORIOS comunicarão o contrato e os factos legalmente relevantes à Autoridade Tributária e emitirão os recibos de renda nos termos aplicáveis.</n>
+  </clausula>
+
+  <secao titulo="ANEXOS">
+    <lista>
+      <item>Anexo I — Inventário e estado de conservação</item>
+      <item>Anexo II — Registo fotográfico</item>
+      <item>Anexo III — Auto de entrega de chaves</item>
+    </lista>
+  </secao>
+
+  <secao titulo="ASSINATURA E FORMALIZAÇÃO">
+    <p>Celebrado em {{local}}, no dia {{data.hoje}}, em exemplares destinados a cada uma das partes.</p>
+    <assinaturas parte="senhorios"/>
+    <assinaturas parte="inquilinos"/>
+  </secao>
+
+  <anexo titulo="ANEXO I — INVENTÁRIO E ESTADO DE CONSERVAÇÃO">
+    <p>O inventário identifica os bens, equipamentos e principais elementos fixos entregues com o imóvel. O estado deverá ser confirmado na entrega e complementado pelo registo fotográfico anexo. A indicação “Novo” significa que o elemento é entregue sem uso anterior; “Usado” identifica um elemento já utilizado, prevalecendo sempre o estado efetivamente documentado na data da entrega.</p>
+    <tabela fonte="inventario" colunas="N.º|Elemento / equipamento|Qt.|Estado"/>
+  </anexo>
+
+  <anexo titulo="ANEXO II — REGISTO FOTOGRÁFICO" opcional="fotos">
+    <p>As fotografias seguintes integram o presente contrato e documentam o estado geral do imóvel na data da entrega.</p>
+    <tabela fonte="fotos" colunas="N.º|Fotografia"/>
+  </anexo>
+
+  <anexo titulo="ANEXO III — AUTO DE ENTREGA DE CHAVES">
+    <p>Na data de início do contrato, os INQUILINOS declaram receber as seguintes chaves:</p>
+    <tabela fonte="chaves" colunas="Tipo|Quantidade"/>
+    <p opcional="contrato.inicio">Entregue em {{contrato.inicio}}.</p>
+    <assinaturas parte="senhorios"/>
+    <assinaturas parte="inquilinos"/>
+  </anexo>
+
+</contrato>

@@ -539,6 +539,12 @@
         '<span style="color:var(--muted);transform:rotate(180deg)">' + ic('chev', 18) + '</span></div>';
       h = profRow + '<div style="height:14px"></div>' +
         navRow('Conta e partilha', sub, 'users', 'cloud') + '<div style="height:14px"></div>' + h;
+      if (!window.Android) {
+        h += '<div style="height:14px"></div>' +
+          card('App para Android', 'A mesma app no telemóvel',
+            '<div class="hint">Instala a app nativa: é o mesmo gestor, com notificações dos movimentos por confirmar e o seletor de ficheiros do Android (Google Drive incluído). Ao abrir o APK, o Android pede para autorizares a instalação de apps fora da Play Store — é normal.</div>' +
+            '<div class="toolbar" style="margin-top:11px"><a class="btn primary" href="/gestor-imobiliario.apk" download style="text-decoration:none">' + ic('down', 16) + ' Descarregar APK</a></div>');
+      }
     }
     return h;
   };

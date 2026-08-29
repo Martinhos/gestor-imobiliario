@@ -3,3 +3,8 @@ node_modules/
 .dev.vars
 terraform/.terraform/
 *.tfvars
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+web/gestor-imobiliario.apk
