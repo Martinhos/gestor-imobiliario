@@ -55,6 +55,25 @@ jobs:
           sed -i "s/PLACEHOLDER_D1_ID/$D1_ID/" wrangler.toml
           sed -i "s/PLACEHOLDER_KV_ID/$KV_ID/" wrangler.toml
 
+      # Sem subdomínio workers.dev registado o deploy falha; regista um se faltar.
+      - name: Garantir subdomínio workers.dev
+        run: |
+          ACC="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+          AUTH="Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}"
+          SUB=$(curl -s -H "$AUTH" "https://api.cloudflare.com/client/v4/accounts/$ACC/workers/subdomain" | jq -r '.result.subdomain // empty')
+          if [ -n "$SUB" ]; then echo "Subdomínio existente: $SUB.workers.dev"; exit 0; fi
+          for NAME in martinhos martinhos-gestor gestor-imob-${ACC:0:8}; do
+            RES=$(curl -s -X PUT -H "$AUTH" -H "Content-Type: application/json" \
+              -d "{\"subdomain\":\"$NAME\"}" \
+              "https://api.cloudflare.com/client/v4/accounts/$ACC/workers/subdomain")
+            if [ "$(echo "$RES" | jq -r '.success')" = "true" ]; then
+              echo "Registado: $NAME.workers.dev"; exit 0
+            fi
+            echo "\"$NAME\" indisponível: $(echo "$RES" | jq -r '.errors[0].message // "?"')"
+          done
+          echo "Não foi possível registar um subdomínio workers.dev — regista um no dashboard (Workers & Pages) e relança o workflow."
+          exit 1
+
       - name: Aplicar migrações D1
         run: npx wrangler@4 d1 migrations apply gestor-imobiliario --remote
 
