@@ -319,6 +319,28 @@
     });
   }
 
+  // Na web "Abrir cópia" deve abrir o seletor de ficheiros (o original só
+  // tinha o picker nativo do Android e caía para "colar texto" no browser).
+  var _driveOpen = driveOpen;
+  driveOpen = function () {
+    if (window.Android && window.Android.openFile) return _driveOpen();
+    var inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.json,.csv,application/json,text/csv';
+    inp.style.display = 'none';
+    document.body.appendChild(inp);
+    inp.onchange = function () {
+      var f = inp.files && inp.files[0];
+      inp.remove();
+      if (!f) return;
+      var r = new FileReader();
+      r.onload = function () { window.__fileLoaded(f.name, String(r.result)); };
+      r.onerror = function () { toast('Não foi possível ler o ficheiro.'); };
+      r.readAsText(f, 'utf-8');
+    };
+    inp.click();
+  };
+
   var _delProp = delProp;
   delProp = function (id) {
     var p = (db.properties || []).find(function (x) { return x.id === id; });
