@@ -26,4 +26,4 @@ enabled = true
 # a origem https://gestor-imobiliario.martinhos.workers.dev.
 # Não é preciso client secret: o fluxo usa o ID token, verificado no worker.
 [vars]
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "34372660209-our5uhdtk77vnfo34nf64u1m9o2c3erl.apps.googleusercontent.com"

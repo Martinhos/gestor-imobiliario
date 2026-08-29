@@ -431,6 +431,43 @@
     _delPerson(kind, id);
   };
 
+  // indicativos telefónicos para o seletor de país do perfil
+  var DIAL_CODES = [
+    ['+351', 'Portugal'], ['+34', 'Espanha'], ['+33', 'França'], ['+49', 'Alemanha'],
+    ['+44', 'Reino Unido'], ['+41', 'Suíça'], ['+352', 'Luxemburgo'], ['+32', 'Bélgica'],
+    ['+31', 'Países Baixos'], ['+353', 'Irlanda'], ['+39', 'Itália'], ['+1', 'EUA / Canadá'],
+    ['+55', 'Brasil'], ['+244', 'Angola'], ['+258', 'Moçambique'], ['+238', 'Cabo Verde'],
+    ['+245', 'Guiné-Bissau'], ['+239', 'São Tomé e Príncipe'], ['+670', 'Timor-Leste'], ['+853', 'Macau'],
+  ];
+
+  function injectPhoneCountry() {
+    var inp = document.getElementById('pe_phone');
+    if (!inp || document.getElementById('cw_cc')) return;
+    var cur = String(inp.value || '').trim(), code = '+351', rest = cur;
+    var byLen = DIAL_CODES.map(function (d) { return d[0]; }).sort(function (a, b) { return b.length - a.length; });
+    for (var i = 0; i < byLen.length; i++) {
+      if (cur.indexOf(byLen[i]) === 0) { code = byLen[i]; rest = cur.slice(byLen[i].length).trim(); break; }
+    }
+    var sel = document.createElement('select');
+    sel.id = 'cw_cc';
+    sel.style.cssText = 'flex:0 0 132px;min-width:0';
+    DIAL_CODES.forEach(function (d) {
+      var o = document.createElement('option');
+      o.value = d[0];
+      o.textContent = d[0] + ' ' + d[1];
+      sel.appendChild(o);
+    });
+    sel.value = code;
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px';
+    inp.parentNode.insertBefore(row, inp);
+    row.appendChild(sel);
+    row.appendChild(inp);
+    inp.value = rest;
+    inp.placeholder = '912 345 678';
+    inp.style.flex = '1';
+  }
+
   CW.editProfile = function () {
     if (!CW.user) return showAuth();
     var meP = (db.owners || []).find(function (o) { return o.id === CW.user.id; });
@@ -441,6 +478,18 @@
     }
     personModal('owner', CW.user.id);
     try { modalTop().el.querySelector('.head h2').textContent = 'O meu perfil'; } catch (e) {}
+    injectPhoneCountry();
+    // junta indicativo + número antes de o formulário recolher o campo
+    var orig = onSave;
+    onSave = function () {
+      var inp = document.getElementById('pe_phone'), cc = document.getElementById('cw_cc');
+      var n = inp ? String(inp.value || '').trim() : '';
+      if (inp && cc) inp.value = n ? cc.value + ' ' + n : '';
+      orig();
+      // se a validação travou o fecho, repõe só o número (sem duplicar o indicativo)
+      var still = document.getElementById('pe_phone');
+      if (still) still.value = n;
+    };
   };
 
   /* ---- divisão de quotas nos imóveis partilhados (com confirmação) ---- */
@@ -502,18 +551,22 @@
     } catch (e) {}
   }
 
-  CW.proposeShares = function (hid) {
+  CW.proposeShares = function (hid, fromShare) {
     var live = (db.properties || []).find(function (x) { return x.id === hid; });
-    if (!live) return;
+    if (!live) return nextShareProposal();
     var parts = live.ownerIds || [];
+    if (parts.length < 2) return nextShareProposal();
     var cur = sharesOf(live);
-    var body = '<div class="form"><div class="hint">Define a percentagem de cada comproprietário. A nova divisão só entra em vigor depois de todos confirmarem.</div>' +
+    var intro = fromShare
+      ? 'Acabaste de partilhar <b>' + esc(live.name || 'esta casa') + '</b> — indica a divisão de quotas entre os comproprietários. Fica em partes iguais enquanto os outros não confirmarem a tua proposta.'
+      : 'Define a percentagem de cada comproprietário. A nova divisão só entra em vigor depois de todos confirmarem.';
+    var body = '<div class="form"><div class="hint">' + intro + '</div>' +
       parts.map(function (u) {
         var o = owner(u) || { name: u };
         return '<label>' + esc(o.name) + (CW.user && u === CW.user.id ? ' (tu)' : '') + ' (%)' +
           '<input id="cw_pp_' + u + '" type="text" inputmode="decimal" value="' + dec(Math.round((cur[u] || 0) * 1000) / 10) + '"></label>';
       }).join('') + '</div>';
-    openModal('Propor nova divisão', body);
+    openModal(fromShare ? 'Divisão de quotas · ' + (live.name || '') : 'Propor nova divisão', body);
     onSave = function () {
       var shares = {}, total = 0;
       for (var i = 0; i < parts.length; i++) {
@@ -523,9 +576,16 @@
         total += v;
       }
       if (Math.abs(total - 100) > 0.5) return toast('As percentagens têm de somar 100 (agora somam ' + dec(Math.round(total * 100) / 100) + ').');
+      // igual à divisão atual: não há nada para os outros confirmarem
+      var unchanged = parts.every(function (u) { return Math.abs(shares[u] - (cur[u] || 0) * 100) < 0.1; });
+      if (unchanged) {
+        closeModal();
+        toast('A divisão fica como está.');
+        return nextShareProposal();
+      }
       api('POST', '/api/houses/' + hid + '/proposal', { shares: shares })
         .then(function () { closeModal(); toast('Proposta enviada — falta a confirmação dos outros comproprietários.'); return pullNow(true); })
-        .then(function () { refreshPropModal(hid); })
+        .then(function () { refreshPropModal(hid); nextShareProposal(); })
         .catch(function (e) { toast(e.message); });
     };
   };
@@ -663,16 +723,30 @@
       : '<div class="hint">Ainda não tens casas para partilhar.</div>';
     openModal('Partilhar casas', body);
     onSave = function () {
+      var before = (c.myShares || []).slice();
       var ids = myHouses.filter(function (p) {
         var e = document.getElementById('cw_sh_' + p.id);
         return e && e.checked;
       }).map(function (p) { return p.id; });
       api('PUT', '/api/connections/' + connId + '/shares', { houseIds: ids })
         .then(function () { closeModal(); toast('Partilha atualizada.'); return pullNow(true); })
-        .then(function () { render(); })
+        .then(function () {
+          render();
+          // casas partilhadas agora pela primeira vez: pede logo a divisão de quotas
+          var added = ids.filter(function (id) { return before.indexOf(id) < 0; });
+          if (added.length) {
+            CW._shareQueue = added.slice(1);
+            CW.proposeShares(added[0], true);
+          }
+        })
         .catch(function (e) { toast(e.message); });
     };
   };
+
+  function nextShareProposal() {
+    var nxt = (CW._shareQueue || []).shift();
+    if (nxt) CW.proposeShares(nxt, true);
+  }
 
   CW.logout = function () {
     confirmModal('Terminar sessão', 'Os dados continuam guardados na tua conta e voltam quando iniciares sessão.', function () {
@@ -745,8 +819,8 @@
       '<input id="cwa_email" type="email" placeholder="Email" autocomplete="email">' +
       '<input id="cwa_pass" type="password" placeholder="Palavra-passe" autocomplete="' + (login ? 'current-password' : 'new-password') + '">' +
       (login ? '' :
-        '<input id="cwa_pass2" type="password" placeholder="Confirmar palavra-passe" autocomplete="new-password">' +
-        '<div class="hint" style="margin:0">Pelo menos 8 caracteres, com maiúsculas, minúsculas, números e um símbolo.</div>') +
+        '<div id="cwa_passreq" class="small" style="margin:-4px 0 0;display:flex;flex-wrap:wrap;gap:3px 12px"></div>' +
+        '<input id="cwa_pass2" type="password" placeholder="Confirmar palavra-passe" autocomplete="new-password">') +
       '<div id="cwa_err" class="small" style="color:var(--danger)"></div>' +
       '<button class="btn primary" style="width:100%;justify-content:center" onclick="CW.submitAuth()">' + (login ? 'Entrar' : 'Criar conta') + '</button>' +
       '<button class="btn" style="width:100%;justify-content:center" onclick="CW.toggleAuth()">' +
@@ -758,6 +832,42 @@
       '</div></div></div>';
     var last = document.getElementById(login ? 'cwa_pass' : 'cwa_pass2');
     if (last) last.addEventListener('keydown', function (e) { if (e.key === 'Enter') CW.submitAuth(); });
+    if (!login) {
+      // email: valida o formato ao sair do campo
+      var em = document.getElementById('cwa_email'), errEl = document.getElementById('cwa_err');
+      em.addEventListener('blur', function () {
+        var v = em.value.trim();
+        if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) errEl.textContent = 'Email inválido — confirma o formato (ex.: nome@exemplo.pt).';
+        else if (errEl.textContent.indexOf('Email inválido') === 0) errEl.textContent = '';
+      });
+      em.addEventListener('input', function () {
+        if (errEl.textContent.indexOf('Email inválido') === 0) errEl.textContent = '';
+      });
+      // palavra-passe: requisitos verificados enquanto escreve
+      var reqs = [
+        ['len', '8+ caracteres', function (p) { return p.length >= 8; }],
+        ['up', 'maiúscula', function (p) { return /[A-Z]/.test(p); }],
+        ['low', 'minúscula', function (p) { return /[a-z]/.test(p); }],
+        ['num', 'número', function (p) { return /[0-9]/.test(p); }],
+        ['sym', 'símbolo', function (p) { return /[^A-Za-z0-9]/.test(p); }],
+      ];
+      var reqBox = document.getElementById('cwa_passreq');
+      reqBox.innerHTML = reqs.map(function (r) { return '<span id="cwa_rq_' + r[0] + '">• ' + r[1] + '</span>'; }).join('');
+      var pw = document.getElementById('cwa_pass');
+      var paintReqs = function () {
+        var p = pw.value;
+        reqs.forEach(function (r) {
+          var el = document.getElementById('cwa_rq_' + r[0]);
+          if (!el) return;
+          var ok = r[2](p);
+          el.textContent = (ok ? '✓ ' : '• ') + r[1];
+          el.style.color = ok ? 'var(--accent)' : 'var(--muted)';
+          el.style.fontWeight = ok ? '650' : '400';
+        });
+      };
+      paintReqs();
+      pw.addEventListener('input', paintReqs);
+    }
     loadSocial();
   }
   CW.showAuth = function () { showAuth(); };
