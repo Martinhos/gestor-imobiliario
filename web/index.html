@@ -17,7 +17,7 @@
 :root{
   color-scheme:light;
   --bg:#f7f8fa; --card:#fff; --field:#fff; --chip:#f2f4f3; --tint:#f6faf8;
-  --ink:#17221d; --muted:#6d7771; --line:#e7ebe8; --line2:#cfd8d3;
+  --ink:#17221d; --muted:#5a635e; --line:#e7ebe8; --line2:#cfd8d3;
   --accent:#244c3b; --accent-ink:#fff; --accent-soft:#dfece6; --accent-press:#1c3d2f;
   --danger:#b94a48; --danger-soft:#f7e8e7; --warn:#9a6400; --warn-soft:#f6eeda;
   --side:#1a3a2c; --side-ink:#dfece6; --side-muted:#9dbdae; --side-hover:rgba(255,255,255,.07); --side-on:rgba(255,255,255,.13);
@@ -97,9 +97,12 @@ header.top .sub{color:var(--muted);font-size:12px;margin-top:2px}
 
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;min-width:0;max-width:100%}
 .cols>*{min-width:0}
-.card.tap{cursor:pointer;transition:border-color .12s,transform .06s}
-.card.tap:hover{border-color:var(--line2)}
-.card.tap:active{transform:scale(.995)}
+/* clicavel: risco de acento a esquerda + reacao ao toque; informativo fica liso */
+.card.tap{cursor:pointer;position:relative;overflow:hidden;transition:border-color .12s,transform .06s,background .12s}
+.card.tap::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);opacity:.5}
+.card.tap:hover{border-color:var(--line2);background:var(--tint)}
+.card.tap:active{transform:scale(.99);background:var(--chip)}
+.card.tap.pend::before,.card.kpi::before{display:none}
 [data-lp]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 *{-webkit-tap-highlight-color:transparent}
 button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}

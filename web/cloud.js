@@ -693,19 +693,54 @@
   vSettings = function () {
     if (setPage === 'cloud') return backRow + vCloud();
     if (setPage === 'legal') return backRow + vLegal();
+    if (setPage === 'tema') {
+      var t = db.settings.theme;
+      return backRow + card('Tema', 'Como a app se apresenta',
+        '<div class="seg c3">' +
+        [['auto', 'auto', 'Automático', 'segue o telemóvel'], ['light', 'sun', 'Claro', ''], ['dark', 'moon', 'Escuro', '']]
+          .map(function (o) {
+            return '<button type="button" class="opt ' + (t === o[0] ? 'on' : '') + '" onclick="setTheme(\'' + o[0] + '\')">' +
+              '<span class="ic">' + ic(o[1], 18) + '</span><b>' + o[2] + '</b>' +
+              (o[3] ? '<small>' + o[3] + '</small>' : '') + '</button>';
+          }).join('') + '</div>' +
+        '<div class="hint" style="margin-top:11px">Vale só neste aparelho.</div>');
+    }
     var h = _vSettings();
     if (!setPage) {
-      var sub = CW.user ? (CW.user.name || CW.user.email) + ' · id ' + CW.user.id : 'Inicia sessão para sincronizar';
+      // raiz reorganizada: conta, aplicação, dados e sobre — em vez de uma
+      // lista corrida de dez entradas sem hierarquia
       var meP = CW.user && (db.owners || []).find(function (o) { return o.id === CW.user.id; });
-      var psub = meP && meP.nif ? esc(meP.name) + ' · NIF preenchido' : 'Nome, NIF e contactos — usados nos contratos';
-      var profRow = '<div class="card tap" onclick="CW.editProfile()" style="display:flex;align-items:center;gap:13px">' +
+      var psub = meP && meP.nif ? esc(meP.name) + ' · NIF preenchido' : 'Nome, NIF e contactos para os contratos';
+      var conta = CW.user ? (CW.user.name || CW.user.email) + ' · id ' + CW.user.id : 'Inicia sessão';
+      var cs = cats(), csIn = catsIn();
+      var nCats = Object.keys(cs).length + Object.keys(csIn).length;
+      var sect = function (t) { return '<div class="section-title">' + t + '</div>'; };
+      var gap = '<div style="height:10px"></div>';
+      var tema = { auto: 'Automático', light: 'Claro', dark: 'Escuro' }[db.settings.theme] || 'Automático';
+
+      h = sect('Conta') +
+        '<div class="card tap" onclick="CW.editProfile()" style="display:flex;align-items:center;gap:13px">' +
         '<span class="avatar">' + ic('crown', 18) + '</span>' +
         '<span style="flex:1;min-width:0"><b style="display:block">O meu perfil</b><span class="small">' + psub + '</span></span>' +
-        '<span style="color:var(--muted);transform:rotate(180deg)">' + ic('chev', 18) + '</span></div>';
-      h = profRow + '<div style="height:14px"></div>' +
-        navRow('Conta e partilha', sub, 'users', 'cloud') + '<div style="height:14px"></div>' + h +
-        '<div style="height:14px"></div>' +
-        navRow('Aviso legal', 'Versão de demonstração · sem garantias', 'info', 'legal');
+        '<span style="color:var(--muted);transform:rotate(180deg)">' + ic('chev', 18) + '</span></div>' + gap +
+        navRow('Conta e partilha', conta, 'users', 'cloud') +
+
+        sect('Aplicação') +
+        navRow('Tema', tema, 'sun', 'tema') + gap +
+        navRow('Valores por omissão', 'Aumentos, inflação e imposto do selo', 'trend', 'defaults') +
+
+        sect('Dados') +
+        navRow('Tipos de movimento', nCats + ' categorias', 'swap', 'cats') + gap +
+        navRow('Etiquetas', (db.settings.tags || []).length + ' etiquetas', 'tag', 'tags') + gap +
+        navRow('Grupos', (db.groups || []).length + ' grupos', 'users', 'groups') + gap +
+        navRow('Importar e cópias', 'Splitwise, cópias de segurança e recomeçar', 'down', 'dados') +
+
+        sect('Sobre') +
+        navRow('Aviso legal', 'Versão de demonstração', 'info', 'legal') + gap +
+        card('Gestor Imobiliário', 'Versão 23 · demonstração',
+          '<div class="stat"><span>Imóveis · contratos</span><b>' + db.properties.length + ' · ' + db.contracts.length + '</b></div>' +
+          '<div class="stat"><span>Inquilinos</span><b>' + db.tenants.length + '</b></div>' +
+          '<div class="stat" style="border:0"><span>Movimentos</span><b>' + db.transactions.length + '</b></div>');
       var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       var standalone = false;
       try { standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches; } catch (e) {}
@@ -793,6 +828,7 @@
 
   SUBPAGE.cloud = { label: 'Conta e partilha', sub: 'O teu id, ligações e casas partilhadas' };
   SUBPAGE.legal = { label: 'Aviso legal', sub: 'Versão de demonstração · condições de utilização' };
+  SUBPAGE.tema = { label: 'Tema', sub: 'Claro, escuro ou o do telemóvel' };
 
   var LEGAL_UPDATED = '31 de agosto de 2026';
 
@@ -1254,23 +1290,51 @@
   };
 
   // ... e à lista de opções do toque longo numa recorrência
-  var _lpMenu = lpMenu;
-  lpMenu = function (v) {
-    if (String(v).indexOf('dash:') === 0) return CW.enterEdit(String(v).slice(5));
-    _lpMenu(v);
-    if (String(v).indexOf('rec:') !== 0) return;
-    var id = String(v).slice(4), top = modalTop();
+  // acrescenta uma opção ao menu de toque longo que acabou de abrir
+  function menuOption(opts) {
+    var top = modalTop();
     var list = top && top.el.querySelector('.body .list');
     if (!list) return;
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'card tap';
     b.style.cssText = 'padding:12px 14px;display:flex;align-items:center;gap:11px';
-    b.innerHTML = '<span class="ic" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--danger-soft);color:var(--danger);flex:0 0 34px">' + ic('x', 18) + '</span>' +
-      '<span style="flex:1;min-width:0;text-align:left"><b style="display:block;font-size:14px">Recusar desta vez</b>' +
-      '<span class="small">não cria o movimento e passa à data seguinte</span></span>';
-    b.onclick = function () { closeAllModals(); CW.rejectRec(id); };
-    list.appendChild(b);
+    b.innerHTML = '<span class="ic" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;' +
+      'background:' + (opts.danger ? 'var(--danger-soft);color:var(--danger)' : 'var(--accent-soft);color:var(--accent)') +
+      ';flex:0 0 34px">' + ic(opts.icon, 18) + '</span>' +
+      '<span style="flex:1;min-width:0;text-align:left"><b style="display:block;font-size:14px">' + esc(opts.label) + '</b>' +
+      (opts.sub ? '<span class="small">' + esc(opts.sub) + '</span>' : '') + '</span>';
+    b.onclick = function () { closeAllModals(); opts.act(); };
+    if (opts.first && list.firstChild) list.insertBefore(b, list.firstChild.nextSibling);
+    else list.appendChild(b);
+  }
+
+  // salta para os Movimentos já filtrados por um imóvel
+  CW.txOfProp = function (pid) {
+    txFilter = ''; txProp = pid; txCat = ''; txSub = ''; txPaid = ''; txNoPayer = true; txSearch = '';
+    CW._fromKpi = null;
+    go('transactions');
+  };
+
+  var _lpMenu = lpMenu;
+  lpMenu = function (v) {
+    var s = String(v);
+    if (s.indexOf('dash:') === 0) return CW.enterEdit(s.slice(5));
+    _lpMenu(v);
+    var a = s.split(':');
+    if (a[0] === 'rec') {
+      menuOption({ icon: 'x', danger: true, label: 'Recusar desta vez',
+        sub: 'não cria o movimento e passa à data seguinte', act: function () { CW.rejectRec(a[1]); } });
+    } else if (a[0] === 'prop') {
+      menuOption({ icon: 'swap', label: 'Ver movimentos', sub: 'lista filtrada por este imóvel', first: true,
+        act: function () { CW.txOfProp(a[1]); } });
+    } else if (a[0] === 'ct') {
+      var c = contract(a[1]);
+      if (c && c.propertyId) {
+        menuOption({ icon: 'swap', label: 'Ver movimentos', sub: 'lista filtrada pelo imóvel do contrato', first: true,
+          act: function () { CW.txOfProp(c.propertyId); } });
+      }
+    }
   };
 
   /* ------- pendentes dentro de cada imóvel e de cada contrato ------- */
