@@ -104,8 +104,9 @@ jobs:
           sed -i "s/PLACEHOLDER_D1_DEV_ID/$(terraform -chdir=terraform output -raw d1_dev_id)/" wrangler.toml
           sed -i "s/PLACEHOLDER_KV_DEV_ID/$(terraform -chdir=terraform output -raw kv_dev_id)/" wrangler.toml
 
+      # sem --env, o wrangler não vê a base declarada dentro do ambiente
       - name: Aplicar migrações D1
-        run: npx wrangler@4 d1 migrations apply "$DB_NAME" --remote
+        run: npx wrangler@4 d1 migrations apply "$DB_NAME" --remote $ENV_FLAG
 
       - name: Deploy do worker
         run: npx wrangler@4 deploy $ENV_FLAG
