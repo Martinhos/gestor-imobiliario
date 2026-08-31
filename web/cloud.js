@@ -363,7 +363,6 @@
     _render();
     try { decorateShared(); } catch (e) {}
     try { decoratePending(); } catch (e) {}
-    try { demoBanner(); } catch (e) {}
     try {
       if (CW.editMode && tab === 'dashboard') { view().classList.add('cw-edit'); editBar(); }
       patchHdr();
@@ -793,31 +792,43 @@
       '<div class="hint" style="text-align:center;margin-top:16px">Última atualização: ' + LEGAL_UPDATED + '.</div>';
   }
 
-  // faixa discreta na primeira utilização, para não haver dúvidas de que é uma demo
-  var LS_LEGAL = 'gi_legal_ok';
-  function demoBanner() {
-    if (!CW.user || tab === 'settings') return;
-    var seen = null;
-    try { seen = localStorage.getItem(LS_LEGAL); } catch (e) {}
-    if (seen) return;
-    var v = view();
-    if (!v || document.getElementById('cwDemo')) return;
+  /* Ecrã de entrada: sempre que a app abre (depois da sessão iniciada),
+     mostra-se o aviso e nada mais, até o utilizador continuar. */
+
+  function showLegalGate() {
+    if (!CW.user || CW._legalShown) return;
+    CW._legalShown = true;
     var el = document.createElement('div');
-    el.id = 'cwDemo';
-    el.className = 'card';
-    el.style.cssText = 'margin-bottom:12px;padding:11px 13px;border-color:var(--warn);background:var(--warn-soft)';
-    el.innerHTML = '<div class="row-between" style="align-items:center;gap:11px;flex-wrap:wrap">' +
-      '<span class="small" style="flex:1;min-width:150px;color:var(--warn)"><b>Versão de demonstração.</b> ' +
-      'Os dados podem ser apagados sem aviso — guarda cópias de segurança.</span>' +
-      '<span style="display:flex;gap:6px;flex:0 0 auto">' +
-      '<button class="btn sm" onclick="go(\'settings\');goSet(\'legal\')">Aviso legal</button>' +
-      '<button class="btn sm primary" onclick="CW.hideDemo()">Entendi</button></span></div>';
-    v.insertBefore(el, v.firstChild);
+    el.id = 'cwLegal';
+    el.style.cssText = 'position:fixed;inset:0;z-index:195;background:var(--bg);overflow:auto;' +
+      'display:flex;align-items:center;justify-content:center;padding:22px';
+    var li = function (t) { return '<li style="margin-bottom:7px">' + t + '</li>'; };
+    el.innerHTML =
+      '<div class="card" style="max-width:460px;width:100%;padding:24px">' +
+      '<div style="display:flex;gap:12px;align-items:center">' +
+      '<span class="avatar" style="background:var(--warn-soft);color:var(--warn)">' + ic('info', 20) + '</span>' +
+      '<div><div class="title" style="font-size:18px">Versão de demonstração</div>' +
+      '<div class="small">Lê antes de continuares</div></div></div>' +
+      '<div class="hint" style="font-size:14px;line-height:1.6;margin-top:14px">' +
+      '<p style="margin:0 0 10px">Esta aplicação é uma <b>demonstração em desenvolvimento</b>, fornecida tal como ' +
+      'está, sem garantias de funcionamento, exatidão ou disponibilidade.</p>' +
+      '<ul style="margin:0 0 4px;padding-left:18px">' +
+      li('<b>Os dados podem ser apagados ou repostos sem aviso.</b> Guarda cópias de segurança com regularidade.') +
+      li('Os valores e projeções são estimativas: <b>não são aconselhamento fiscal, jurídico ou financeiro</b>.') +
+      li('O contrato em PDF é um modelo genérico, <b>não validado por advogado</b> — revê-o antes de assinar.') +
+      li('Ao guardares dados de inquilinos, <b>és tu o responsável por esses dados</b> perante o RGPD.') +
+      '</ul></div>' +
+      '<div class="toolbar" style="margin-top:16px;flex-direction:column;gap:8px">' +
+      '<button class="btn primary" style="width:100%;justify-content:center" onclick="CW.acceptLegal()">Continuar</button>' +
+      '<button class="btn" style="width:100%;justify-content:center" onclick="CW.acceptLegal(1)">Ler o aviso legal completo</button>' +
+      '</div></div>';
+    document.body.appendChild(el);
   }
-  CW.hideDemo = function () {
-    try { localStorage.setItem(LS_LEGAL, '1'); } catch (e) {}
-    var el = document.getElementById('cwDemo');
+
+  CW.acceptLegal = function (full) {
+    var el = document.getElementById('cwLegal');
     if (el) el.remove();
+    if (full) { go('settings'); goSet('legal'); }
   };
 
   CW.copyId = function () {
@@ -1529,6 +1540,7 @@
     }
     hideAuth();
     buildNav(); render();
+    showLegalGate();
     startSync();
   }
 
@@ -1608,6 +1620,7 @@
   if (CW.user) {
     // sessão em cache: volta à página onde estava e sincroniza em fundo
     try { restorePage(); } catch (e) {}
+    showLegalGate();
     api('GET', '/api/me').then(function (u) {
       CW.user = Object.assign({}, CW.user, { id: u.id, name: u.name, email: u.email });
       try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
