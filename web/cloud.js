@@ -411,7 +411,14 @@
   dropUnsafe(db);
 
   var _save = save;
-  save = function () { dropUnsafe(db); _save(); schedulePush(); };
+  save = function () {
+    dropUnsafe(db);
+    _save();
+    schedulePush();
+    // um contrato ou hipoteca que já vem de trás deixa meses por registar
+    clearTimeout(save._est);
+    save._est = setTimeout(function () { try { offerFill(); } catch (e) {} }, 700);
+  };
 
   var _render = render;
   render = function () {
@@ -782,11 +789,12 @@
       btns = '<button class="btn primary sm" onclick="CW.sharesModal(\'' + c.id + '\')">Escolher casas</button>' +
         '<button class="btn sm danger" onclick="CW.delConn(\'' + c.id + '\')">Remover</button>';
     }
+    // os botões ficam numa linha própria: encostados ao texto, tapavam-no em ecrãs estreitos
     return '<div class="card" style="padding:13px 14px">' +
-      '<div class="row-between" style="align-items:center;gap:11px">' +
       '<div style="min-width:0"><div class="title">' + peer + '</div>' +
-      '<div class="small">id ' + esc(c.peer.id) + (c.peer.email ? ' · ' + esc(c.peer.email) : '') + '</div></div>' +
-      '<div style="display:flex;gap:6px;flex:0 0 auto">' + btns + '</div></div>' + lines + '</div>';
+      '<div class="small">id ' + esc(c.peer.id) + '</div></div>' +
+      lines +
+      '<div class="toolbar" style="margin-top:10px">' + btns + '</div></div>';
   }
 
   function vCloud() {
@@ -1277,6 +1285,141 @@
       });
   };
 
+  /* ---------- preencher por estimativa os períodos já passados ----------
+     Quem regista um contrato ou uma hipoteca que já vem de trás não vai
+     confirmar dezenas de meses um a um. Oferecemos criá-los de uma vez,
+     deixando claro que são estimativas. */
+
+  // De onde vem a história: o início do contrato ou da hipoteca. A
+  // recorrência criada por eles arranca no mês corrente, por isso os meses
+  // anteriores não aparecem em lado nenhum.
+  function originOf(r) {
+    var c = r.tx.contractId ? contract(r.tx.contractId) : null;
+    if (c && c.start) return c.start;
+    if (r.tx.loanId) {
+      var found = '';
+      (db.properties || []).forEach(function (p) {
+        (p.loans || []).forEach(function (l) { if (l.id === r.tx.loanId && l.start) found = l.start; });
+      });
+      if (found) return found;
+    }
+    return r.next;
+  }
+
+  // já existe um movimento deste contrato/hipoteca nesse mês?
+  function already(r, d) {
+    var mo = String(d).slice(0, 7);
+    return (db.transactions || []).some(function (t) {
+      if (String(t.date || '').indexOf(mo) !== 0) return false;
+      if (r.tx.contractId) return t.contractId === r.tx.contractId;
+      if (r.tx.loanId) return t.loanId === r.tx.loanId;
+      return t.propertyId === r.tx.propertyId && t.label === r.tx.label;
+    });
+  }
+
+  function missedDates(r) {
+    if (!r || !r.next) return [];
+    var t = today(), day = Number(String(r.next).slice(8, 10)) || 1;
+    var origin = originOf(r), d;
+    if (['month', 'quarter', 'year'].indexOf(r.every) > -1) {
+      var o = new Date(origin + 'T00:00:00');
+      d = dayInMonth(o.getFullYear(), o.getMonth(), day);
+      if (d < origin) d = nextDate(d, r.every);
+    } else {
+      d = origin;
+    }
+    var out = [], guard = 0;
+    while (d && d <= t && guard++ < 600) {
+      if (!already(r, d)) out.push(d);
+      if (r.every === 'once') break;
+      d = nextDate(d, r.every);
+      if (r.end && d > r.end) break;
+    }
+    return out;
+  }
+
+  var EVERY_WORD = { once: 'ocorrência', week: 'semana', month: 'mês', quarter: 'trimestre', year: 'ano' };
+
+  CW.fillMissed = function (id) {
+    var r = (db.recurring || []).find(function (x) { return x.id === id; });
+    if (!r) return;
+    var dates = missedDates(r);
+    if (!dates.length) return toast('Não há períodos por preencher.');
+    var val0 = Number(r.tx.amount) || 0;
+    var per = EVERY_WORD[r.every] || 'período';
+    var isLoan = r.tx.kind === 'loan';
+    var body = '<div class="form">' +
+      '<div class="hint">Vais registar <b>' + dates.length + '</b> movimento' + (dates.length === 1 ? '' : 's') +
+      ' de <b>' + esc(r.name) + '</b>, de <b>' + dates[0] + '</b> a <b>' + dates[dates.length - 1] + '</b>, ' +
+      'todos com o valor atual de <b>' + euro2(val0) + '</b> por ' + per + '.</div>' +
+      '<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px">' +
+      '<b>Isto é uma estimativa.</b> O valor de cada período pode não corresponder ao que foi realmente pago: ' +
+      'não entra em conta com aumentos de renda, meses em falta, atrasos nem valores diferentes. ' +
+      'Confere e corrige depois o que não bater certo.' +
+      (isLoan ? ' Como são prestações, o capital em dívida da hipoteca desce com cada uma, tal como se as confirmasses uma a uma.' : '') +
+      '</div>' +
+      '<div class="hint">Ficam marcados com a etiqueta <b>Estimativa</b> — procura por “estimativa” nos Movimentos para os veres todos.</div>' +
+      '<div class="stat" style="margin-top:6px"><span>Total a registar</span><b>' + euro2(val0 * dates.length) + '</b></div></div>';
+    openModal('Preencher ' + dates.length + ' ' + (dates.length === 1 ? 'período' : 'períodos'), body,
+      '<button class="btn" onclick="closeModal()">Cancelar</button>' +
+      '<button class="btn primary" onclick="CW.doFillMissed(\'' + id + '\')">Registar estimativa</button>');
+  };
+
+  CW.doFillMissed = function (id) {
+    var r = (db.recurring || []).find(function (x) { return x.id === id; });
+    if (!r) return closeModal();
+    var dates = missedDates(r), n = 0;
+    var tags = db.settings.tags || (db.settings.tags = []);
+    if (tags.indexOf('Estimativa') < 0) tags.push('Estimativa');
+    for (var i = 0; i < dates.length; i++) {
+      var t = recTx(r, dates[i]);
+      t.label = (t.label || r.name) + ' (estimativa)';
+      t.tags = (t.tags || []).concat(['Estimativa']);
+      if (t.kind === 'loan') applyLoan(t);
+      db.transactions.push(t);
+      n++;
+    }
+    // as ocorrências já vencidas ficam saldadas: empurra o plano para a frente
+    var live = r, guard = 0;
+    while (live && live.next && live.next <= today() && guard++ < 600) {
+      recAdvance(live);
+      live = (db.recurring || []).find(function (x) { return x.id === id; });
+    }
+    save(); buildNav(); render(); closeAllModals();
+    toast(n + ' movimento' + (n === 1 ? '' : 's') + ' registado' + (n === 1 ? '' : 's') + ' por estimativa.');
+  };
+
+  // Depois de gravar um contrato ou uma hipoteca antiga, perguntar uma vez.
+  var LS_ASKED = 'gi_est_asked';
+  function asked() {
+    try { return JSON.parse(localStorage.getItem(LS_ASKED) || '[]'); } catch (e) { return []; }
+  }
+  function markAsked(ids) {
+    try { localStorage.setItem(LS_ASKED, JSON.stringify(asked().concat(ids).slice(-200))); } catch (e) {}
+  }
+
+  // Só se pergunta por planos acabados de criar: nada de abordar o
+  // utilizador por causa de recorrências que já lá estavam.
+  var knownRecs = null;
+  function refreshKnown() {
+    knownRecs = {};
+    (db.recurring || []).forEach(function (r) { knownRecs[r.id] = 1; });
+  }
+
+  function offerFill() {
+    if (!CW.user) return;
+    if (knownRecs === null) return refreshKnown();
+    var seen = asked(), novos = (db.recurring || []).filter(function (r) { return !knownRecs[r.id]; });
+    refreshKnown();
+    if (modalStack.length) return;
+    var cand = novos.filter(function (r) {
+      return seen.indexOf(r.id) < 0 && missedDates(r).length >= 2;
+    });
+    if (!cand.length) return;
+    markAsked(cand.map(function (r) { return r.id; }));
+    CW.fillMissed(cand[0].id);
+  }
+
   var REJECT_BTN = function (id) {
     return '<button class="btn sm danger" onclick="event.stopPropagation();CW.rejectRec(\'' + id + '\')">Recusar</button>';
   };
@@ -1285,7 +1428,14 @@
   var _pendingCard = pendingCard;
   pendingCard = function (all) {
     return _pendingCard(all).replace(/skipRec\('([^']+)'\)"[^>]*>[^<]*<\/button>/g, function (m, id) {
-      return m + REJECT_BTN(id);
+      var r = (db.recurring || []).find(function (x) { return x.id === id; });
+      var n = r ? missedDates(r).length : 0;
+      // com vários períodos em atraso, confirmar um a um não é opção
+      var fill = n >= 2
+        ? '<button class="btn sm" onclick="event.stopPropagation();CW.fillMissed(\'' + id + '\')">' +
+          'Preencher ' + n + ' em falta</button>'
+        : '';
+      return m + REJECT_BTN(id) + fill;
     });
   };
 
@@ -1323,6 +1473,12 @@
     _lpMenu(v);
     var a = s.split(':');
     if (a[0] === 'rec') {
+      var r = (db.recurring || []).find(function (x) { return x.id === a[1]; });
+      var n = r ? missedDates(r).length : 0;
+      if (n >= 2) {
+        menuOption({ icon: 'clock', label: 'Preencher ' + n + ' períodos em falta', first: true,
+          sub: 'de uma vez, por estimativa', act: function () { CW.fillMissed(a[1]); } });
+      }
       menuOption({ icon: 'x', danger: true, label: 'Recusar desta vez',
         sub: 'não cria o movimento e passa à data seguinte', act: function () { CW.rejectRec(a[1]); } });
     } else if (a[0] === 'prop') {

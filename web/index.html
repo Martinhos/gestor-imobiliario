@@ -2133,10 +2133,7 @@ function vContracts(){
         <div class="row-between">
           <div style="min-width:0">
             <div class="title">${esc(ctName(c))} ${on?'':'<span class="badge grey">terminado</span>'}</div>
-            <div class="small">${c.roomId?esc(roomName(p,c.roomId)):'Imóvel inteiro'} · ${c.start?'De '+c.start:'Sem data de início'}${c.end?' a '+c.end:''}${c.deposit?' · caução '+euro(c.deposit):''}${c.payDay?' · dia '+c.payDay+(c.payDayTo&&c.payDayTo!==c.payDay?'–'+c.payDayTo:''):''}</div>
-            ${c.iban?`<div class="small">IBAN ${esc(fmtIBAN(c.iban))}</div>`:''}
-            ${(c.tenantEmail||c.tenantPhone)?`<div class="small">Inquilino: ${[c.tenantPhone?fmtPhone(c.tenantPhone):'',c.tenantEmail].filter(Boolean).map(esc).join(' · ')}</div>`:''}
-            ${(c.ownerEmail||c.ownerPhone)?`<div class="small">Senhorio: ${[c.ownerPhone?fmtPhone(c.ownerPhone):'',c.ownerEmail].filter(Boolean).map(esc).join(' · ')}</div>`:''}
+            <div class="small">${c.roomId?esc(roomName(p,c.roomId)):'Imóvel inteiro'} · ${c.start?'De '+c.start:'Sem data de início'}${c.end?' a '+c.end:''}</div>
           </div>
           <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
             <div style="text-align:right"><div style="font-weight:750;font-size:16px">${euro(c.rent)}</div>
@@ -2144,11 +2141,11 @@ function vContracts(){
             ${kebab('ct:'+c.id)}</div></div>
         ${ts.length?`<div style="margin-top:9px">${ts.map(t=>`<div class="small" style="display:flex;align-items:center;gap:7px;padding:2px 0">
           ${ic('users',13)}<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.name)}</span>
-          ${t.phone?`<span>${esc(fmtPhone(t.phone))}</span>`:''}</div>`).join('')}</div>`:''}
+</div>`).join('')}</div>`:''}
         <div class="chips">
           ${(c.files||[]).length?`<span class="badge grey">${ic('clip',12)} ${c.files.length}</span>`:''}
           ${(c.inventory||[]).length?`<span class="badge grey">${ic('box',12)} ${c.inventory.length} artigos</span>`:''}</div>
-        ${c.notes?`<div class="small rich" style="margin-top:10px">${rich(c.notes)}</div>`:''}</div>`}).join('')}</div>`}).join('');
+</div>`}).join('')}</div>`}).join('');
   return head+(any?body:`<div class="empty"><b>Nada neste filtro</b></div>`);
 }
 function ctFMatch(c,s){
