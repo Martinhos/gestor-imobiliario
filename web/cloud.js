@@ -300,7 +300,7 @@
     d.tenants = Object.keys(tenants).map(function (k) { return tenants[k]; });
     fillCats(d.settings);
     if (!Array.isArray(d.settings.tags)) d.settings.tags = TAGS0.slice();
-    return d;
+    return dropUnsafe(d);
   }
 
   function applyState(st) {
@@ -374,8 +374,44 @@
 
   /* ---------------- embrulhos sobre a app ---------------- */
 
+  /* Rede de segurança contra dados envenenados: a app escreve ids em dezenas
+     de atributos e handlers, por isso qualquer registo cujo id não seja o
+     formato que a app gera é deitado fora à entrada — venha ele do servidor,
+     de uma cópia de segurança ou de um ficheiro importado. */
+  var SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+  var SAFE_DATE = /^\d{4}-\d{2}-\d{2}$/;
+  var safe = function (o) { return !!o && SAFE_ID.test(String(o.id == null ? '' : o.id)); };
+
+  function dropUnsafe(d) {
+    if (!d) return d;
+    ['contracts', 'transactions', 'recurring', 'templates', 'groups', 'owners', 'tenants'].forEach(function (k) {
+      if (Array.isArray(d[k])) d[k] = d[k].filter(safe);
+    });
+    if (Array.isArray(d.properties)) {
+      d.properties = d.properties.filter(safe);
+      d.properties.forEach(function (p) {
+        ['rooms', 'loans', 'photos'].forEach(function (k) {
+          if (Array.isArray(p[k])) p[k] = p[k].filter(safe);
+        });
+        (p.loans || []).forEach(function (l) {
+          if (Array.isArray(l.files)) l.files = l.files.filter(safe);
+        });
+      });
+    }
+    // datas entram cruas em texto: fora do formato ISO, não são datas
+    (d.transactions || []).forEach(function (t) { if (t.date && !SAFE_DATE.test(t.date)) t.date = ''; });
+    (d.recurring || []).forEach(function (r) {
+      ['next', 'until', 'end'].forEach(function (k) { if (r[k] && !SAFE_DATE.test(r[k])) r[k] = ''; });
+    });
+    (d.contracts || []).forEach(function (c) {
+      ['start', 'end'].forEach(function (k) { if (c[k] && !SAFE_DATE.test(c[k])) c[k] = ''; });
+    });
+    return d;
+  }
+  dropUnsafe(db);
+
   var _save = save;
-  save = function () { _save(); schedulePush(); };
+  save = function () { dropUnsafe(db); _save(); schedulePush(); };
 
   var _render = render;
   render = function () {

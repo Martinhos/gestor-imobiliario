@@ -2081,7 +2081,7 @@ function vProperties(){
   return head+`<div class="list">${list.map(p=>{
     const st=propStatus(p),ls=liveLoans(p),ac=activeContracts(p.id),rent=rentOf(p);
     const y=rent&&p.value?rent*12/p.value:NaN,own=ownerNames(p);
-    return `<div class="card tap" data-lp="prop:${p.id}" onclick="propModal('${p.id}')">
+    return `<div class="card tap" data-lp="prop:${esc(p.id)}" onclick="propModal('${jsq(p.id)}')">
       <div class="row-between">
         <div style="min-width:0"><div class="title">${esc(p.name)}</div>
           <div class="small">${esc(p.address||'Sem morada')}${own?' · '+esc(own):''}${ownerFilter&&sh(p)<1?' · <b>'+shareText(p)+'</b>':''}</div></div>
@@ -2126,7 +2126,7 @@ function vContracts(){
       <span>${esc(p.name)}</span><span>${euro(rentOf(p))}/mês</span></div>
       <div class="list">${cs.map(c=>{
         const on=isActive(c),ts=ctTenants(c);
-        return `<div class="card tap" data-lp="ct:${c.id}" onclick="ctModal('${c.id}')">
+        return `<div class="card tap" data-lp="ct:${esc(c.id)}" onclick="ctModal('${jsq(c.id)}')">
         <div class="row-between">
           <div style="min-width:0">
             <div class="title">${esc(ctName(c))} ${on?'':'<span class="badge grey">terminado</span>'}</div>
@@ -2160,7 +2160,7 @@ function ctFMatch(c,s){
 
 function personCard(pp,kind){
   const cs=kind==='tenant'?contractsOfTenant(pp.id).filter(isActive):propsOf(pp.id);
-  return `<div class="card tap" data-lp="per:${kind}:${pp.id}" onclick="personModal('${kind}','${pp.id}')"><div class="row-between">
+  return `<div class="card tap" data-lp="per:${esc(kind)}:${esc(pp.id)}" onclick="personModal('${jsq(kind)}','${jsq(pp.id)}')"><div class="row-between">
     <div style="display:flex;gap:12px;min-width:0">
       <div class="avatar">${esc(initials(pp.name))}</div>
       <div style="min-width:0"><div class="title">${esc(pp.name)}</div>
@@ -2465,9 +2465,9 @@ function vTransactions(){
     return `<div class="section-title" style="display:flex;justify-content:space-between;text-transform:none">
       <span>${mo}</span><span class="${net>=0?'pos':'neg'}">${euro(net)}</span></div>
       <div class="list">${rows.map(t=>{const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null;
-      return `<div class="card tap txrow" data-lp="tx:${t.id}" style="padding:13px 15px" onclick="txModal('${t.id}')"><div class="row-between">
+      return `<div class="card tap txrow" data-lp="tx:${esc(t.id)}" style="padding:13px 15px" onclick="txModal('${jsq(t.id)}')"><div class="row-between">
         <div style="min-width:0"><div class="title" style="font-size:14.5px">${esc(t.label)}</div>
-          <div class="small">${t.date} · ${k.short}${t.category?' · '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' · '+esc(propName(t.propertyId)):''}${t.creditor?' · '+esc(t.creditor):''}</div>
+          <div class="small">${esc(t.date)} · ${k.short}${t.category?' · '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' · '+esc(propName(t.propertyId)):''}${t.creditor?' · '+esc(t.creditor):''}</div>
           ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}
           ${who(t)}
           ${t.kind==='loan'&&(t.principal||t.interest||t.fee)?`<div class="small">${t.payType==='amortizacao'?`Amortização · capital ${euro2(t.principal||0)} · comissão ${euro2(t.fee||0)}`:`Capital ${euro2(t.principal||0)} · juros ${euro2(t.interest||0)} · selo ${euro2(t.stamp||0)}`}</div>`:''}
@@ -3390,7 +3390,7 @@ function pendingCard(all){
   const row=(r)=>{const late=recIsLate(r);return `<div class="card tap pend ${late?'late':''}" style="padding:11px 13px" onclick="confirmRec('${r.id}')">
     <div class="row-between" style="align-items:center">
       <div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</b>
-        <span class="small">${r.next}${r.until&&r.until!==r.next?' – '+r.until:''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':' · por confirmar'} · ${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}</span></div>
+        <span class="small">${esc(r.next)}${r.until&&r.until!==r.next?' – '+esc(r.until):''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':' · por confirmar'} · ${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}</span></div>
       <b style="flex:0 0 auto">${r.tx.amount?euro2(r.tx.amount):''}</b></div>
     <div class="toolbar" style="margin:9px 0 0">
         <button class="btn sm primary" onclick="${stop}quickConfirmRec('${r.id}')">${ic('check',14)} Confirmar</button>
@@ -3426,15 +3426,15 @@ function vRecurring(){
       rc.length+tp.length,
       {defLabel:'Ordenar pela próxima data',opts:[{v:'data',label:'Ordenar por data'},{v:'valor',label:'Ordenar por valor'},{v:'nome',label:'Ordenar por nome'}]})
     +fab([{label:'Novo mov. recorrente',icon:'clock',act:'newRec()'},{label:'Novo modelo',icon:'file',act:'newTpl()'}]);
-  const recs=rcS.length?`<div class="list" style="gap:8px">${rcS.map(r=>{const late=recIsLate(r),pend=r.next<=today();return `<div class="card tap ${pend?'pend':''} ${late?'late':''}" data-lp="rec:${r.id}" onclick="editRec('${r.id}')">
+  const recs=rcS.length?`<div class="list" style="gap:8px">${rcS.map(r=>{const late=recIsLate(r),pend=r.next<=today();return `<div class="card tap ${pend?'pend':''} ${late?'late':''}" data-lp="rec:${esc(r.id)}" onclick="editRec('${jsq(r.id)}')">
       <div class="row-between" style="align-items:center">
         <div style="min-width:0"><div class="title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</div>
-          <div class="small">${r.auto?'<span class="badge grey" style="margin-right:4px">'+((r.tx||{}).loanId?'da hipoteca':'do contrato')+'</span>':''}${EVERY[r.every]||r.every} · ${r.next}${r.until&&r.until!==r.next?' – '+r.until:''} · ${pend?(r.muted?'silenciada · por confirmar':late?'<b class="neg">em atraso</b>':'<b class="amber">por confirmar</b>'):'em dia'}${r.end?' · termina '+r.end:''}</div>
+          <div class="small">${r.auto?'<span class="badge grey" style="margin-right:4px">'+((r.tx||{}).loanId?'da hipoteca':'do contrato')+'</span>':''}${esc(EVERY[r.every]||r.every)} · ${esc(r.next)}${r.until&&r.until!==r.next?' – '+esc(r.until):''} · ${pend?(r.muted?'silenciada · por confirmar':late?'<b class="neg">em atraso</b>':'<b class="amber">por confirmar</b>'):'em dia'}${r.end?' · termina '+esc(r.end):''}</div>
           <div class="small">${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}${r.tx.category?' · '+esc(r.tx.category):''}</div></div>
         <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
           <b style="font-size:16px">${r.tx.amount?euro2(r.tx.amount):'—'}</b>${kebab('rec:'+r.id)}</div></div></div>`}).join('')}</div>`
     :`<div class="empty" style="padding:24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem movimentos recorrentes'}</b>${lfCount('lrec')?'Não há movimentos recorrentes que correspondam.':'Um movimento recorrente repete-se sozinho (renda, prestação, condomínio) e em cada ocorrência pede-te confirmação. As rendas dos contratos e as prestações das hipotecas criam um automaticamente.'}</div>`;
-  const tpls=tp.length?`<div class="list" style="gap:8px">${tp.map(x=>`<div class="card tap" data-lp="tpl:${x.id}" onclick="editTpl('${x.id}')">
+  const tpls=tp.length?`<div class="list" style="gap:8px">${tp.map(x=>`<div class="card tap" data-lp="tpl:${esc(x.id)}" onclick="editTpl('${jsq(x.id)}')">
       <div class="row-between" style="align-items:center">
         <div style="min-width:0"><div class="title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.name)}</div>
           <div class="small">${(KIND[x.tx.kind]||{}).short}${x.tx.propertyId?' · '+esc(propName(x.tx.propertyId)):''}${x.tx.category?' · '+esc(x.tx.category):''}</div></div>
@@ -3449,7 +3449,7 @@ function recSect(){
   const body=`
     <label>Repetir${sel('t_every',every,Object.keys(EVERY).map(k=>({v:k,label:EVERY[k]})))}</label>
     <div class="row">
-      <label>Entre<input id="t_date" type="date" value="${t.date}"></label>
+      <label>Entre<input id="t_date" type="date" value="${esc(t.date)}"></label>
       <label>e<input id="t_until" type="date" value="${t._until||''}"></label></div>
     <label>Até (deixa de se repetir; opcional)<input id="t_recEnd" type="date" value="${t._recEnd||''}"></label>
     <div class="hint">No primeiro dia entra para os movimentos por confirmar; passado o segundo sem confirmação, fica em atraso e a app avisa. Com repetição, a janela repete-se com o mesmo intervalo; “uma só vez” desaparece depois de confirmado.</div>`;
@@ -3573,7 +3573,7 @@ function txBody(){
       <label>Montante (€)<div style="display:flex;gap:7px;align-items:center">
         <input id="t_amount" type="text" inputmode="decimal" style="flex:1;min-width:0" value="${t.amount||''}" placeholder="900" oninput="tForm.amount=num(this.value);refreshLoanHint();refreshSplit();amtResetSync()">
         <button type="button" class="btn sm primary" id="amt_reset" style="flex:0 0 auto;padding:9px 12px;display:${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':'none'}" title="Repor a prestação calculada" onclick="onAmtReset()">Repor</button></div></label>
-      ${(t._recId||t._recNew)?'<span></span>':`<label>Data<input id="t_date" type="date" value="${t.date}"></label>`}</div>
+      ${(t._recId||t._recNew)?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}"></label>`}</div>
     <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p2=>({v:p2.id,label:p2.name}))).concat(gdiv(gOpts('prop'))),'onPropChange')}</label>
     ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)}))),'onCtChange')}</label>`:''}
     ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange')}</label>`:''}
@@ -3981,7 +3981,7 @@ function vCredits(){
   if(!rows.length)return head+`<div class="empty"><b>Sem hipotecas</b>Uma hipoteca está sempre associada a um imóvel. Cria a primeira aqui ou na ficha do imóvel.</div>`;
   if(!shown.length)return head+kpis+`<div class="empty"><b>Nada neste filtro</b>Não há hipotecas que correspondam.</div>`;
   const mortCard=({p,l})=>{const live2=Number(l.outstanding)>0,c=live2?loanCalc(l):null;
-    return `<div class="card tap" data-lp="mort:${p.id}:${l.id}" onclick="mortModal('${p.id}','${l.id}')">
+    return `<div class="card tap" data-lp="mort:${esc(p.id)}:${esc(l.id)}" onclick="mortModal('${jsq(p.id)}','${jsq(l.id)}')">
       <div class="row-between"><div style="min-width:0"><div class="title">${esc(loanName(l))} ${live2?'':'<span class="badge grey">liquidada</span>'}</div>
         <div class="small">${esc(p.name)} · ${RATE[l.type]} · ${rateLabel(l)}${(l.files||[]).length?' · '+l.files.length+' doc.':''}</div></div>
         <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">

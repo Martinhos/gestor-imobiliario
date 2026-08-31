@@ -61,6 +61,10 @@ export async function verifyIdToken(provider, token, audience) {
   if (!ISSUERS[provider].includes(payload.iss)) throw new Error('emissor inválido');
   const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
   if (!audience || !aud.includes(audience)) throw new Error('audiência inválida');
-  if (payload.exp && payload.exp * 1000 < Date.now() - 60e3) throw new Error('token expirado');
+  // a expiração é obrigatória: um token sem exp seria eterno
+  if (!payload.exp || payload.exp * 1000 < Date.now() - 60e3) throw new Error('token expirado');
+  if (payload.iat && payload.iat * 1000 > Date.now() + 300e3) throw new Error('token do futuro');
+  // sem email confirmado, qualquer pessoa poderia reclamar o email de outra
+  if (payload.email && payload.email_verified !== true) throw new Error('email não confirmado no fornecedor');
   return payload;
 }

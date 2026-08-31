@@ -54,6 +54,23 @@ const tooBig = (data) => {
   try { return JSON.stringify(data).length > MAX_RECORD; } catch (e) { return true; }
 };
 
+// Identificadores: só o que a app gera (uuid, ids curtos, nomes de tipo).
+// Sem isto, um id com aspas ou < > escapava para o HTML de quem recebe a
+// casa partilhada — era o caminho para roubar a sessão de outro utilizador.
+const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const badId = (v) => !ID_RE.test(String(v == null ? '' : v));
+
+// O corpo de um registo tem de ser um objeto simples, sem tentativas de
+// poluir o protótipo, e o seu id nunca pode contradizer o id da linha.
+function cleanData(data, id) {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return null;
+  if (Object.prototype.hasOwnProperty.call(data, '__proto__')) delete data['__proto__'];
+  delete data.constructor;
+  delete data.prototype;
+  if (id !== undefined && 'id' in data) data.id = id;   // o id manda é o da linha
+  return data;
+}
+
 // Travão simples contra força bruta e abuso, com contadores em KV.
 // A consistência eventual do KV chega para o efeito: trava a repetição.
 async function rateLimit(env, key, limit, windowSec) {
@@ -120,6 +137,10 @@ async function participantsOf(env, houseId) {
 // As quotas (ownerIds/ownerShares) são geridas pelo servidor através das
 // propostas de divisão: um cliente a gravar a casa nunca as pode alterar.
 function preserveOwnership(existingDataStr, incoming) {
+  // sem casa anterior (criação, ou ressurreição de uma apagada) as quotas
+  // partem do zero: só o caminho das propostas as pode escrever
+  delete incoming.ownerShares;
+  delete incoming.ownerIds;
   try {
     const ex = JSON.parse(existingDataStr);
     if (ex && typeof ex === 'object') {
@@ -162,7 +183,8 @@ export async function handleApi(request, env) {
       return err(400, 'A palavra-passe precisa de pelo menos 8 caracteres, com maiúsculas, minúsculas, números e um símbolo.');
     }
     const email = String(b.email).trim().toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return err(400, 'Email inválido.');
+    if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return err(400, 'Email inválido.');
+    if (String(b.name || '').length > 120) return err(400, 'Nome demasiado longo.');
     const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
     if (existing) return err(409, 'Já existe uma conta com este email.');
     const { hash, salt } = await hashPassword(String(b.password));
@@ -190,7 +212,13 @@ export async function handleApi(request, env) {
       return err(429, 'Demasiadas tentativas nesta conta. Espera uns minutos.');
     }
     if (user && !user.pass_hash) return err(401, 'Esta conta entra com Google — usa esse botão.');
-    if (!user || !(await verifyPassword(String(b.password), user.pass_salt, user.pass_hash))) {
+    if (!user) {
+      // gasta o mesmo tempo de um utilizador real: sem isto, a diferença de
+      // resposta dizia a um atacante que emails existem
+      await hashPassword(String(b.password));
+      return err(401, 'Email ou palavra-passe errados.');
+    }
+    if (!(await verifyPassword(String(b.password), user.pass_salt, user.pass_hash))) {
       return err(401, 'Email ou palavra-passe errados.');
     }
     const token = await createSession(env, user.id);
@@ -352,18 +380,27 @@ export async function handleApi(request, env) {
     ).results;
 
     const houseIds = houses.map((h) => h.id);
-    let records = [];
-    if (houseIds.length) {
-      const placeholders = houseIds.map(() => '?').join(',');
-      records = (
-        await env.DB.prepare(
+    // a D1 limita o número de parâmetros por consulta: em blocos, muitas casas
+    // partilhadas deixam de conseguir partir a página de quem as recebe
+    const chunk = (arr, n) => {
+      const out = [];
+      for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+      return out;
+    };
+    const inChunks = async (ids, sql) => {
+      let out = [];
+      for (const part of chunk(ids, 50)) {
+        const ph = part.map(() => '?').join(',');
+        out = out.concat((await env.DB.prepare(sql.replace('{IN}', ph)).bind(...part).all()).results);
+      }
+      return out;
+    };
+
+    const records = houseIds.length
+      ? await inChunks(houseIds,
           `SELECT house_id, kind, id, data, updated_at FROM records
-            WHERE deleted = 0 AND house_id IN (${placeholders})`
-        )
-          .bind(...houseIds)
-          .all()
-      ).results;
-    }
+            WHERE deleted = 0 AND house_id IN ({IN})`)
+      : [];
 
     const userRecords = (
       await env.DB.prepare(
@@ -402,16 +439,10 @@ export async function handleApi(request, env) {
     const houseParts = {};
     houses.forEach((h) => { houseParts[h.id] = [h.owner_id]; });
     if (houseIds.length) {
-      const ph = houseIds.map(() => '?').join(',');
-      const rows = (
-        await env.DB.prepare(
-          `SELECT s.house_id, s.owner_id, c.requester_id, c.target_id
-             FROM shares s JOIN connections c ON c.id = s.connection_id
-            WHERE c.status = 'accepted' AND s.house_id IN (${ph})`
-        )
-          .bind(...houseIds)
-          .all()
-      ).results;
+      const rows = await inChunks(houseIds,
+        `SELECT s.house_id, s.owner_id, c.requester_id, c.target_id
+           FROM shares s JOIN connections c ON c.id = s.connection_id
+          WHERE c.status = 'accepted' AND s.house_id IN ({IN})`);
       rows.forEach((r) => {
         const other = r.requester_id === r.owner_id ? r.target_id : r.requester_id;
         const list = houseParts[r.house_id];
@@ -444,20 +475,11 @@ export async function handleApi(request, env) {
     });
 
     const uidArr = [...new Set([...userIdSet, ...pendingPeers, ...referenced])];
-    const pu = uidArr.map(() => '?').join(',');
-    const userRows = (
-      await env.DB.prepare(`SELECT id, name FROM users WHERE id IN (${pu})`).bind(...uidArr).all()
-    ).results;
+    const userRows = await inChunks(uidArr, 'SELECT id, name FROM users WHERE id IN ({IN})');
     const fullArr = [...userIdSet];
-    const pf = fullArr.map(() => '?').join(',');
-    const profRecs = (
-      await env.DB.prepare(
-        `SELECT user_id, data FROM user_records
-          WHERE kind = 'profile' AND id = 'main' AND deleted = 0 AND user_id IN (${pf})`
-      )
-        .bind(...fullArr)
-        .all()
-    ).results;
+    const profRecs = await inChunks(fullArr,
+      `SELECT user_id, data FROM user_records
+        WHERE kind = 'profile' AND id = 'main' AND deleted = 0 AND user_id IN ({IN})`);
     const profByUser = {};
     profRecs.forEach((r) => { try { profByUser[r.user_id] = JSON.parse(r.data); } catch (e) {} });
     const profiles = userRows.map((u) => ({
@@ -469,16 +491,10 @@ export async function handleApi(request, env) {
     // propostas de divisão pendentes nas casas visíveis
     let proposals = [];
     if (houseIds.length) {
-      const ph2 = houseIds.map(() => '?').join(',');
-      proposals = (
-        await env.DB.prepare(
-          `SELECT p.house_id, p.proposed_by, p.shares, p.approvals, p.created_at, u.name AS proposer_name
-             FROM share_proposals p JOIN users u ON u.id = p.proposed_by
-            WHERE p.house_id IN (${ph2})`
-        )
-          .bind(...houseIds)
-          .all()
-      ).results.map((p) => ({
+      proposals = (await inChunks(houseIds,
+        `SELECT p.house_id, p.proposed_by, p.shares, p.approvals, p.created_at, u.name AS proposer_name
+           FROM share_proposals p JOIN users u ON u.id = p.proposed_by
+          WHERE p.house_id IN ({IN})`)).map((p) => ({
         houseId: p.house_id,
         proposedBy: p.proposed_by,
         proposedByName: p.proposer_name,
@@ -542,7 +558,11 @@ export async function handleApi(request, env) {
     const b = await body(request);
     const ops = Array.isArray(b && b.ops) ? b.ops : null;
     if (!ops) return err(400, 'Corpo inválido — envia { ops: [...] }.');
-    if (ops.length > 500) return err(400, 'Máximo de 500 operações por pedido.');
+    if (ops.length > 200) return err(400, 'Máximo de 200 operações por pedido.');
+    // travão à quota diária de escritas da base: uma conta não pode gastá-la sozinha
+    if (!(await rateLimit(env, 'w:' + me.id, 60, 900))) {
+      return err(429, 'Demasiadas gravações seguidas. Espera um pouco — os dados não se perdem.');
+    }
     const accessCache = new Map();
     const access = async (hid) => {
       if (!accessCache.has(hid)) accessCache.set(hid, (await canAccessHouse(env, me.id, hid)).ok);
@@ -551,9 +571,16 @@ export async function handleApi(request, env) {
     const results = [];
     for (const op of ops) {
       try {
+        if (op.op !== 'put' && op.op !== 'del') { results.push({ ok: false, status: 400 }); continue; }
         const put = op.op === 'put';
-        if (put && (typeof op.data !== 'object' || !op.data)) { results.push({ ok: false, status: 400 }); continue; }
-        if (put && tooBig(op.data)) { results.push({ ok: false, status: 413 }); continue; }
+        if (op.scope !== 'user' && badId(op.houseId)) { results.push({ ok: false, status: 400 }); continue; }
+        if (op.scope !== 'house' && (badId(op.kind) || badId(op.id))) { results.push({ ok: false, status: 400 }); continue; }
+        if (put) {
+          const rowId = op.scope === 'house' ? String(op.houseId) : String(op.id);
+          op.data = cleanData(op.data, rowId);
+          if (!op.data) { results.push({ ok: false, status: 400 }); continue; }
+          if (tooBig(op.data)) { results.push({ ok: false, status: 413 }); continue; }
+        }
         if (op.scope === 'house') {
           const houseId = String(op.houseId || '');
           const existing = await env.DB.prepare('SELECT owner_id, deleted, data FROM houses WHERE id = ?')
@@ -566,11 +593,11 @@ export async function handleApi(request, env) {
             } else if (existing) {
               if (existing.owner_id !== me.id) { results.push({ ok: false, status: 403 }); continue; }
               await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ?, deleted = 0 WHERE id = ?')
-                .bind(JSON.stringify(op.data), now(), houseId).run();
+                .bind(JSON.stringify(preserveOwnership('', op.data)), now(), houseId).run();
               accessCache.set(houseId, true);
             } else {
               await env.DB.prepare('INSERT INTO houses (id, owner_id, data, updated_at, deleted) VALUES (?, ?, ?, ?, 0)')
-                .bind(houseId, me.id, JSON.stringify(op.data), now()).run();
+                .bind(houseId, me.id, JSON.stringify(preserveOwnership('', op.data)), now()).run();
               accessCache.set(houseId, true);
             }
           } else {
@@ -634,8 +661,11 @@ export async function handleApi(request, env) {
 
   if (seg[1] === 'houses' && seg.length === 3 && method === 'PUT') {
     const houseId = seg[2];
+    if (badId(houseId)) return err(400, 'Identificador inválido.');
     const b = await body(request);
-    if (!b || typeof b.data !== 'object' || !b.data) return err(400, 'Corpo inválido.');
+    if (!b) return err(400, 'Corpo inválido.');
+    b.data = cleanData(b.data, houseId);
+    if (!b.data) return err(400, 'Corpo inválido.');
     if (tooBig(b.data)) return err(413, 'Registo demasiado grande.');
     const existing = await env.DB.prepare('SELECT owner_id, deleted, data FROM houses WHERE id = ?')
       .bind(houseId)
@@ -649,13 +679,13 @@ export async function handleApi(request, env) {
     } else if (existing && existing.deleted) {
       if (existing.owner_id !== me.id) return err(403, 'Sem acesso a esta casa.');
       await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ?, deleted = 0 WHERE id = ?')
-        .bind(JSON.stringify(b.data), now(), houseId)
+        .bind(JSON.stringify(preserveOwnership('', b.data)), now(), houseId)
         .run();
     } else {
       await env.DB.prepare(
         'INSERT INTO houses (id, owner_id, data, updated_at, deleted) VALUES (?, ?, ?, ?, 0)'
       )
-        .bind(houseId, me.id, JSON.stringify(b.data), now())
+        .bind(houseId, me.id, JSON.stringify(preserveOwnership('', b.data)), now())
         .run();
     }
     return json({ ok: true });
@@ -748,11 +778,14 @@ export async function handleApi(request, env) {
 
   if (seg[1] === 'houses' && seg[3] === 'records' && seg.length === 6) {
     const [, , houseId, , kind, recordId] = seg;
+    if (badId(houseId) || badId(kind) || badId(recordId)) return err(400, 'Identificador inválido.');
     const access = await canAccessHouse(env, me.id, houseId);
     if (!access.ok) return err(403, 'Sem acesso a esta casa.');
     if (method === 'PUT') {
       const b = await body(request);
-      if (!b || typeof b.data !== 'object' || !b.data) return err(400, 'Corpo inválido.');
+      if (!b) return err(400, 'Corpo inválido.');
+      b.data = cleanData(b.data, recordId);
+      if (!b.data) return err(400, 'Corpo inválido.');
       if (tooBig(b.data)) return err(413, 'Registo demasiado grande.');
       await env.DB.prepare(
         `INSERT INTO records (house_id, kind, id, data, updated_at, deleted)
@@ -778,9 +811,12 @@ export async function handleApi(request, env) {
 
   if (seg[1] === 'user-records' && seg.length === 4) {
     const [, , kind, recordId] = seg;
+    if (badId(kind) || badId(recordId)) return err(400, 'Identificador inválido.');
     if (method === 'PUT') {
       const b = await body(request);
-      if (!b || typeof b.data !== 'object' || !b.data) return err(400, 'Corpo inválido.');
+      if (!b) return err(400, 'Corpo inválido.');
+      b.data = cleanData(b.data, recordId);
+      if (!b.data) return err(400, 'Corpo inválido.');
       if (tooBig(b.data)) return err(413, 'Registo demasiado grande.');
       await env.DB.prepare(
         `INSERT INTO user_records (user_id, kind, id, data, updated_at, deleted)

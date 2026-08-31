@@ -59,11 +59,16 @@ export function sessionCookie(token, expire = false) {
   return `gi_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
+const TOKEN_RE = /^[a-f0-9]{64}$/;
+
 export function readSessionToken(request) {
   const auth = request.headers.get('Authorization');
-  if (auth && auth.startsWith('Bearer ')) return auth.slice(7).trim();
+  if (auth && auth.startsWith('Bearer ')) {
+    const t = auth.slice(7).trim();
+    return TOKEN_RE.test(t) ? t : null;   // nada de chaves KV arbitrárias
+  }
   const cookie = request.headers.get('Cookie') || '';
-  const m = cookie.match(/(?:^|;\s*)gi_session=([a-f0-9]+)/);
+  const m = cookie.match(/(?:^|;\s*)gi_session=([a-f0-9]{64})/);
   return m ? m[1] : null;
 }
 
