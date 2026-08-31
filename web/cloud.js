@@ -950,6 +950,8 @@
         if (!h.classList.contains('noscroll')) return;
         if (modalStack.length || document.body.classList.contains('open')) return;
         if (document.getElementById('cwLegal')) return;
+        if (document.getElementById('cwTerms')) return;
+        if (document.getElementById('cwDoc')) return;
         if (authEl && authEl.style.display !== 'none') return;
         h.classList.remove('noscroll');
         document.body.style.top = '';
@@ -961,12 +963,35 @@
   /* Contas anteriores aos termos: pedir aceitação antes de deixar usar a app.
      Quem recusar tem a conta apagada, depois de avisado e de confirmar. */
 
+  // Os ecrãs de entrada (sessão, aviso, termos) vivem acima dos modais, por
+  // isso o documento tem de abrir numa camada própria, por cima de tudo.
   CW.readDoc = function (e, page) {
-    if (e) e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     var doc = page === 'termos' ? L.termos : L.privacidade;
     var t = page === 'termos' ? 'Termos e Condições' : 'Política de Privacidade';
-    openModal(t, '<div class="lg">' + doc + '</div>',
-      '<button class="btn" onclick="closeModal()">Fechar</button>');
+    var old = document.getElementById('cwDoc');
+    if (old) old.remove();
+    var el = document.createElement('div');
+    el.id = 'cwDoc';
+    el.style.cssText = 'position:fixed;inset:0;z-index:210;background:var(--bg);overflow:auto;' +
+      'padding:calc(var(--inset-top,0px) + 16px) 16px calc(var(--inset-bottom,0px) + 24px)';
+    el.innerHTML =
+      '<div style="max-width:720px;margin:0 auto">' +
+      '<div style="position:sticky;top:0;background:var(--bg);padding:6px 0 12px;z-index:1;' +
+      'display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line)">' +
+      '<button class="btn" onclick="CW.closeDoc()">' + ic('chev', 15) + ' Voltar</button>' +
+      '<b style="flex:1;min-width:0;font-size:15px">' + t + '</b></div>' +
+      '<div class="lg" style="margin-top:16px">' + doc + '</div>' +
+      '<div class="toolbar" style="margin:20px 0 0">' +
+      '<button class="btn primary" onclick="CW.closeDoc()">Voltar</button></div></div>';
+    document.body.appendChild(el);
+    lockScroll(true);
+  };
+
+  CW.closeDoc = function () {
+    var el = document.getElementById('cwDoc');
+    if (el) el.remove();
+    lockScroll(false);
   };
 
   function showTermsGate() {
