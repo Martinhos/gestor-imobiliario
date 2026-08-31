@@ -1030,7 +1030,7 @@ function balancesDetail(pid){
   const nm=o=>esc(((owner(o)||{}).name||'?').split(' ')[0]);
   const run={};ids.forEach(o=>run[o]=0);
   openModal('Como se chega aos saldos',`<div class="form">
-    <div class="hint">Quem paga uma despesa ou prestação fica a crédito do que os outros lhe devem; quem recebe uma receita fica a dever a parte dos outros. Dívidas a terceiros não entram. Valores positivos: a receber; negativos: a pagar.</div>
+    <div class="hint">Quem paga fica a crédito; quem recebe fica a dever a parte dos outros. Positivo: a receber. Negativo: a pagar.</div>
     <div class="list" style="gap:7px">${lines.map(l=>{ids.forEach(o=>run[o]+=(l.eff[o]||0));return `<div class="card tap" style="padding:10px 12px" onclick="txModal('${l.t.id}')">
       <div class="row-between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.t.label)}</b><span class="small" style="flex:0 0 auto">${l.t.date}</span></div>
       <div class="small">${l.t.kind==='settle'?nm(l.t.paidBy)+' → '+nm(l.t.toId):(KIND[l.t.kind]||{}).short+' · '+(isIn(l.t.kind)?'recebeu ':'pagou ')+nm(l.t.paidBy)+(splitLabel(l.t)?' · '+splitLabel(l.t):' · quotas')}${!pid?' · '+esc(l.p.name):''} · <b>${euro2(l.t.amount)}</b></div>
@@ -1363,7 +1363,7 @@ function cDonut(items,o){
   o=o||{};const S=150,th=26,r=(S-th)/2,c=S/2;
   items=items.filter(i=>i.value>0);
   const tot=sum(items.map(i=>i.value));
-  if(!tot)return `<div class="hint">Sem dados para mostrar.</div>`;
+  if(!tot)return `<div class="hint">Sem dados.</div>`;
   let a=-Math.PI/2,g='';
   items.forEach((it,idx)=>{
     const col=it.color||PAL[idx%PAL.length],ang=it.value/tot*Math.PI*2;
@@ -1382,7 +1382,7 @@ function cDonut(items,o){
       act:o.onPick?`${o.onPick}('${jsq(it.label)}')`:''})),true)}</div></div>`;
 }
 function cHBars(items,o){
-  o=o||{};if(!items.length)return `<div class="hint">Sem dados para mostrar.</div>`;
+  o=o||{};if(!items.length)return `<div class="hint">Sem dados.</div>`;
   const max=Math.max(...items.map(i=>Math.abs(i.value)))||1;
   return `<div class="legend" style="gap:11px">${items.map((it,i)=>{
     const neg=it.value<0,col=it.color||(neg?'var(--danger)':PAL[i%PAL.length]);
@@ -1752,13 +1752,13 @@ const TABS=[
   {id:'owners',icon:'crown',label:'Proprietários',sub:'Quem é dono de quê'},
   {id:'transactions',icon:'swap',label:'Movimentos',sub:'Rendas, despesas e prestações'},
   {id:'recurring',icon:'clock',label:'Planeados',sub:'Movimentos recorrentes e modelos'},
-  {id:'credits',icon:'bank',label:'Créditos',sub:'Todas as hipotecas'},
+  {id:'credits',icon:'bank',label:'Créditos',sub:'Hipotecas de todos os imóveis'},
   {id:'projections',icon:'trend',label:'Projeções',sub:'Rendas futuras e aumentos anuais'},
   {id:'reports',icon:'file',label:'Avaliação',sub:'Análise imóvel a imóvel'},
   {id:'settings',icon:'gear',label:'Definições',sub:'Tema, categorias e etiquetas'}
 ];
 let tab='dashboard',txFilter='',txProp='',txPaid='',txCat='',txSub='',txNoPayer=true,txSearch='',txSort='date',txDir='desc',repProp='',setPage='';
-const SUBPAGE={cats:{label:'Tipos de movimento',sub:'Categorias e subcategorias de receitas e pagamentos'},
+const SUBPAGE={cats:{label:'Tipos de movimento',sub:'Como classificas o que entra e sai'},
                tags:{label:'Etiquetas',sub:'Para marcar movimentos'},
                groups:{label:'Grupos',sub:'Conjuntos de imóveis, proprietários e contratos'},
                dados:{label:'Dados',sub:'Splitwise e cópias de segurança'}};
@@ -1885,17 +1885,17 @@ function evoRatio(field,pid){
     note:field==='grossYield'?'Renda projetada com o aumento anual de cada contrato, sobre o valor de mercado atual.':'Dívida no fim de cada ano segundo o plano de cada hipoteca, sobre o valor de mercado atual.'};
 }
 const WHY={
-  receita:'Tudo o que entrou este ano: rendas recebidas e outras receitas registadas como movimento. Não é a renda contratada — é o que foi efetivamente lançado.',
+  receita:'O que entrou este ano. Não é a renda contratada — é o que foi mesmo lançado.',
   despesas:'Soma dos movimentos de despesa do ano: impostos, condomínio, seguros, obras, manutenção. Não inclui prestações do crédito.',
-  prestacoes:'O que saiu para o banco: capital, juros e imposto do selo das hipotecas. Aparece separado das despesas porque parte disto é poupança, não custo.',
+  prestacoes:'Capital, juros e selo. Separado das despesas porque parte é poupança, não custo.',
   cashflow:'Receita menos despesas menos prestações. É o dinheiro que sobrou (ou faltou) na carteira.',
-  yieldBruto:'Renda anual contratada a dividir pelo valor de mercado dos imóveis arrendados. Ignora despesas — serve para comparar com anúncios do mercado.',
-  cap:'Resultado líquido do ano (receitas menos despesas, sem prestações) a dividir pelo valor do portefólio. É o retorno do imóvel independentemente de como foi financiado.',
+  yieldBruto:'Renda anual sobre o valor de mercado dos arrendados. Ignora despesas — serve para comparar com anúncios.',
+  cap:'Resultado líquido a dividir pelo valor do portefólio. Mede o imóvel, não o financiamento.',
   aquisicao:'Cashflow do ano a dividir pelo valor de aquisição. Mostra quanto rende o dinheiro que investiste, já depois de pagar o banco.',
   ltv:'Dívida total a dividir pelo valor de mercado. Quanto mais baixo, menos alavancado está o portefólio.',
   valorIntro:'O valor de mercado que introduziste na ficha do imóvel. É a tua estimativa, não um cálculo.',
   valorRend:'Quanto valeria o imóvel se o comprasses hoje exigindo o yield que definiste: resultado líquido anual dividido por esse yield.',
-  diferenca:'Comparação entre a avaliação por rendimento e o valor que introduziste. Positivo significa que as rendas justificam mais do que aquilo por que o avalias.',
+  diferenca:'Positivo: as rendas justificam mais do que o valor que puseste.',
   equity:'Valor de mercado menos o que ainda está em dívida. É o que sobraria se vendesses e liquidasses as hipotecas hoje.',
   rendaHoje:'Soma das rendas anuais dos contratos ativos, aos valores de hoje.',
   rendaFim:'A mesma soma no último ano do horizonte, já com os aumentos anuais aplicados.',
@@ -1960,7 +1960,7 @@ function vDashboard(){
     ${kpi('LTV',pct(m.ltv),'',euro(m.debt)+' em dívida',WHY.ltv,()=>evoRatio('ltv',pid))}</div>
   <div class="cols">
     ${card('Entradas e saídas','Mês a mês em '+YEAR,cBars(groups,MES,{h:200}))}
-    ${card('Cashflow acumulado','Saldo do ano ao longo dos meses',cLine([{name:'Acumulado',values:cum,color:PAL[0]}],MES,{h:200}))}</div>
+    ${card('Cashflow acumulado','',cLine([{name:'Acumulado',values:cum,color:PAL[0]}],MES,{h:200}))}</div>
   <div class="cols">
     ${donutCard()}
     ${(!pid||String(pid).startsWith('g:'))&&perProp.length>1?card('Cashflow por imóvel','Quem paga e quem pesa',cHBars(perProp)):''}</div>
@@ -2006,7 +2006,7 @@ function orphanCard(){
   return `<div class="cols"><div class="card">
     <div class="row-between"><div><div class="title">Despesas sem imóvel</div>
       <div class="small">${o.length} movimento${o.length===1?'':'s'} · ${euro(sum(o.map(x=>x.amount)))}</div></div>${ic('swap',22)}</div>
-    <div class="hint" style="margin-top:12px">Entram nos totais desta página mas não aparecem na avaliação de nenhum imóvel, porque não estão atribuídas a nenhum. É a razão mais comum para os números das duas páginas não coincidirem.</div>
+    <div class="hint" style="margin-top:12px">Entram aqui mas não na Avaliação — não estão atribuídas a nenhum imóvel. É por isto que os totais divergem.</div>
     <div class="toolbar" style="margin:13px 0 0"><button class="btn" onclick="go('transactions');setTimeout(()=>{txProp='__none__';render()},0)">Ver esses movimentos</button></div>
   </div></div>`;
 }
@@ -2080,7 +2080,7 @@ function vProperties(){
     +(db.properties.length?'':`<div class="toolbar"><button class="btn" onclick="seed()">Carregar exemplo</button></div>`)
     +fab([{label:'Adicionar imóvel',act:'propModal()'}]);
   list=lfSort(K,list,{nome:p=>p.name,valor:p=>p.value,renda:p=>rentOf(p),divida:p=>debtOf(p),yield:p=>{const r=rentOf(p);return r&&p.value?r*12/p.value:0}});
-  if(!list.length)return head+`<div class="empty"><b>${lfCount(K)?'Nada neste filtro':'Sem imóveis'}</b>${lfCount(K)?'Não há imóveis que correspondam.':(db.properties.length?'Nenhum imóvel deste proprietário.':'Adiciona o primeiro para começares a acompanhar o investimento.')}</div>`;
+  if(!list.length)return head+`<div class="empty"><b>${lfCount(K)?'Nada neste filtro':'Sem imóveis'}</b>${lfCount(K)?'':(db.properties.length?'Nenhum imóvel deste proprietário.':'Adiciona o primeiro para começares a acompanhar o investimento.')}</div>`;
   return head+`<div class="list">${list.map(p=>{
     const st=propStatus(p),ls=liveLoans(p),ac=activeContracts(p.id),rent=rentOf(p);
     const y=rent&&p.value?rent*12/p.value:NaN,own=ownerNames(p);
@@ -2149,7 +2149,7 @@ function vContracts(){
           ${(c.files||[]).length?`<span class="badge grey">${ic('clip',12)} ${c.files.length}</span>`:''}
           ${(c.inventory||[]).length?`<span class="badge grey">${ic('box',12)} ${c.inventory.length} artigos</span>`:''}</div>
         ${c.notes?`<div class="small rich" style="margin-top:10px">${rich(c.notes)}</div>`:''}</div>`}).join('')}</div>`}).join('');
-  return head+(any?body:`<div class="empty"><b>Nada neste filtro</b>Não há contratos que correspondam.</div>`);
+  return head+(any?body:`<div class="empty"><b>Nada neste filtro</b></div>`);
 }
 function ctFMatch(c,s){
   if(s.p&&c.propertyId!==s.p)return false;
@@ -2191,7 +2191,7 @@ function vTenants(){
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'contratos',label:'Ordenar por nº de contratos'},{v:'renda',label:'Ordenar por renda'}]})
     +fab([{label:'Adicionar inquilino',act:"personModal('tenant')"}]);
   if(!db.tenants.length)return head+`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.</div>`;
-  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b>Não há inquilinos que correspondam.</div>`;
+  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b></div>`;
   return head+`<div class="list">${list.map(t=>personCard(t,'tenant')).join('')}</div>`;
 }
 function vOwners(){
@@ -2209,7 +2209,7 @@ function vOwners(){
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'imoveis',label:'Ordenar por nº de imóveis'}]})
     +fab([{label:'Adicionar proprietário',act:"personModal('owner')"}]);
   if(!db.owners.length)return head+`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.</div>`;
-  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b>Não há proprietários que correspondam.</div>`;
+  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b></div>`;
   return head+`<div class="list">${list.map(o=>personCard(o,'owner')).join('')}</div>`;
 }
 
@@ -2440,7 +2440,7 @@ function vTransactions(){
   const list=db.transactions.filter(txMatch).sort((a,b)=>{const d=txDir==='desc'?-1:1;
     if(txSort==='amount')return d*((a.amount||0)-(b.amount||0))||String(a.date).localeCompare(String(b.date));
     return d*String(a.date).localeCompare(String(b.date))});
-  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b>Não há movimentos que correspondam.</div>`
+  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b></div>`
     +balancesCard(txProp||null);   /* pode não haver movimentos e haver contas por acertar */
   const tot={income:0,expense:0,loan:0,owed:0,repay:0,settle:0};list.forEach(t=>{if(countsInTotals(t))tot[t.kind]=(tot[t.kind]||0)+t.amount});
   const saldo=tot.income+tot.owed-tot.expense-tot.loan-tot.repay;
@@ -2494,7 +2494,7 @@ function vProjections(){
     <label>Horizonte (anos)<input type="text" inputmode="numeric" value="${s.years}" onchange="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label>
     <label>Aumento anual (%)<input type="text" inputmode="decimal" value="${dec(s.growth)}" onchange="setSet('growth',num(this.value))"></label>
     <label>Inflação das despesas (%)<input type="text" inputmode="decimal" value="${dec(s.inflation)}" onchange="setSet('inflation',num(this.value))"></label></div>
-    <div class="hint" style="margin-top:9px">Cada contrato pode ter o seu próprio aumento anual. Em Portugal a atualização está limitada por um coeficiente publicado todos os anos — usa o que se aplicar a cada contrato.</div>`);
+    <div class="hint" style="margin-top:9px">Cada contrato tem o seu aumento. Em Portugal há um coeficiente máximo publicado todos os anos.</div>`);
   if(!act.length)return head+`<div class="empty" style="margin-top:14px"><b>Nenhum contrato ativo</b>As projeções partem das rendas contratadas.</div>`;
   const m=metrics(YEAR,projProp||null,{share:true}),n=Math.round(s.years),rows=[];
   /* prestações previstas: vêm do plano de cada hipoteca e param quando o crédito acaba */
@@ -2760,7 +2760,7 @@ function liveLoanAll(){collectProp();(pForm.loans||[]).forEach(l=>{
   const b=document.getElementById('loanBox_'+l.id);if(b)b.innerHTML=loanBox(l)})}
 function loanBox(l){
   if(!l)return '';
-  if(!l.outstanding||!l.years)return `<div class="hint">Preenche o capital em dívida e o prazo para calcular a prestação.</div>`;
+  if(!l.outstanding||!l.years)return `<div class="hint">Falta o capital em dívida e o prazo.</div>`;
   const c=loanCalc(l),a=amort(l);
   let extra='';
   if(l.type==='mista'){const k=Math.round((Number(l.fixedYears)||0)*12),r=a.rows[k];
@@ -2993,7 +2993,7 @@ function ctBody(){
       <label>Aumento anual (%)<input id="c_inc" type="text" inputmode="decimal" value="${c.increase==null?'':dec(c.increase)}" placeholder="${dec(db.settings.growth)}"></label></div>
     <div class="row"><label>Caução (€)<input id="c_dep" type="text" inputmode="decimal" value="${c.deposit||''}" placeholder="Opcional"></label>
       <label>Rendas antecipadas (meses)<input id="c_adv" type="text" inputmode="numeric" value="${c.advance||''}" placeholder="0"></label></div>
-    <div class="hint" style="margin-top:-6px">A renda cria um movimento recorrente: entra para confirmar no primeiro dia e fica em atraso passado o segundo. Com rendas antecipadas, só começa depois desses meses (pagos à cabeça).</div>
+    <div class="hint" style="margin-top:-6px">A renda cria um movimento recorrente todos os meses. Com rendas antecipadas, arranca depois dos meses pagos à cabeça.</div>
     <label>IBAN para pagamento das rendas<input id="c_iban" value="${esc(c.iban)}" placeholder="PT50 0000 0000 0000 0000 0000 0" autocomplete="off"></label>`,
       {icon:'contract',open:!c.id||!db.contracts.some(x=>x.id===c.id),summary:[c.start?'de '+c.start:'',c.end?'a '+c.end:'',c.deposit?'caução '+euro(c.deposit):''].filter(Boolean).join(' ')})}
     ${fold('contacts','Contactos',contactSect('owner',c,p)+contactSect('tenant',c,p),{icon:'users',summary:[c.ownerPhone||c.ownerEmail?'senhorio':'',c.tenantPhone||c.tenantEmail?'inquilino':''].filter(Boolean).join(' · ')})}
@@ -3007,7 +3007,7 @@ function ctBody(){
           <span class="i-s">${sel('invs_'+it.id,it.state,[{v:'novo',label:'Novo'},{v:'usado',label:'Usado'}])}</span>
           <button type="button" class="btn sm danger" onclick="delInv('${it.id}')">${ic('trash',14)}</button></div>`).join('')}
         <div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn sm danger" onclick="delInvSelected()">Remover selecionados</button></div>
-      </div>`:`<div class="hint">Ainda não há artigos.</div>`}
+      </div>`:`<div class="hint"></div>`}
       <div class="toolbar" style="margin:0">
         <button type="button" class="btn sm" onclick="addInv()">${ic('plus',14)} Adicionar artigo</button>
         <button type="button" class="btn sm" onclick="addInvBulk()">Adicionar vários</button></div>`,
@@ -3033,7 +3033,7 @@ function ctBody(){
           <input class="i-q" id="keyq_${k.id}" type="text" inputmode="numeric" value="${k.qty}" placeholder="1">
           <button type="button" class="btn sm danger" onclick="delKey('${k.id}')">${ic('trash',14)}</button></div>`).join('')}
         <div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn sm danger" onclick="delKeySelected()">Remover selecionadas</button></div>
-      </div>`:`<div class="hint">Ainda não há chaves registadas.</div>`}
+      </div>`:`<div class="hint"></div>`}
       <div class="toolbar" style="margin:0">
         <button type="button" class="btn sm" onclick="addKey()">${ic('plus',14)} Adicionar tipo de chave</button>
         <button type="button" class="btn sm" onclick="addKeyBulk()">Adicionar várias</button></div>`,
@@ -3048,7 +3048,7 @@ function ctBody(){
 }
 function netBox(){
   const r=num(val('c_rent'))||cForm.rent,tx=num(val('c_tax'))||cForm.taxRate||0;
-  if(!r)return `<div class="hint">Indica a renda para veres o valor líquido.</div>`;
+  if(!r)return `<div class="hint">Falta a renda.</div>`;
   const imposto=r*tx/100;
   return `<div class="stat" style="padding-top:0"><span>Renda bruta</span><b>${euro2(r)}</b></div>
     <div class="stat"><span>Imposto (${dec(tx)}%)</span><b class="neg">−${euro2(imposto)}</b></div>
@@ -3404,7 +3404,7 @@ function pendingCard(all){
     <div class="row-between"><div><div class="title">Movimentos por confirmar</div>
       <div class="small">${pend.length} à espera${nl?' · <b class="neg">'+nl+' em atraso</b>':''}</div></div>${ic('swap',22)}</div>
     <div class="list" style="gap:8px;margin-top:12px">${pend.map(row).join('')}</div>
-    <div class="hint" style="margin-top:9px">Toca num movimento para o rever antes de confirmar. Confirmar cria o movimento na data prevista e agenda o seguinte. Silenciar deixa-o à espera em Planeados, sem avisos.</div></div>`;
+    <div class="hint" style="margin-top:9px">Confirmar regista o movimento e agenda o seguinte. Silenciar deixa-o à espera, sem avisos.</div></div>`;
 }
 /* página das recorrências e modelos */
 function vRecurring(){
@@ -3436,14 +3436,14 @@ function vRecurring(){
           <div class="small">${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}${r.tx.category?' · '+esc(r.tx.category):''}</div></div>
         <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
           <b style="font-size:16px">${r.tx.amount?euro2(r.tx.amount):'—'}</b>${kebab('rec:'+r.id)}</div></div></div>`}).join('')}</div>`
-    :`<div class="empty" style="padding:24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem movimentos recorrentes'}</b>${lfCount('lrec')?'Não há movimentos recorrentes que correspondam.':'Um movimento recorrente repete-se sozinho (renda, prestação, condomínio) e em cada ocorrência pede-te confirmação. As rendas dos contratos e as prestações das hipotecas criam um automaticamente.'}</div>`;
+    :`<div class="empty" style="padding:24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem movimentos recorrentes'}</b>${lfCount('lrec')?'':'Repete-se sozinho e pede confirmação todos os meses. As rendas e as prestações criam um sem tu fazeres nada.'}</div>`;
   const tpls=tp.length?`<div class="list" style="gap:8px">${tp.map(x=>`<div class="card tap" data-lp="tpl:${esc(x.id)}" onclick="editTpl('${jsq(x.id)}')">
       <div class="row-between" style="align-items:center">
         <div style="min-width:0"><div class="title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.name)}</div>
           <div class="small">${(KIND[x.tx.kind]||{}).short}${x.tx.propertyId?' · '+esc(propName(x.tx.propertyId)):''}${x.tx.category?' · '+esc(x.tx.category):''}</div></div>
         <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
           <b style="font-size:16px">${x.tx.amount?euro2(x.tx.amount):'—'}</b>${kebab('tpl:'+x.id)}</div></div></div>`).join('')}</div>`
-    :`<div class="empty" style="padding:24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem modelos'}</b>${lfCount('lrec')?'Não há modelos que correspondam.':'Um modelo é um movimento guardado para copiar à mão quando precisares.'}</div>`;
+    :`<div class="empty" style="padding:24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem modelos'}</b>${lfCount('lrec')?'':'Um modelo é um movimento guardado para copiar à mão quando precisares.'}</div>`;
   return head+pendingCard(true)+`<div class="section-title">Movimentos recorrentes</div>${recs}<div class="section-title" style="margin-top:18px">Modelos</div>${tpls}`;
 }
 /* secção do formulário: guardar como modelo e repetir */
@@ -3455,7 +3455,7 @@ function recSect(){
       <label>Entre<input id="t_date" type="date" value="${esc(t.date)}"></label>
       <label>e<input id="t_until" type="date" value="${t._until||''}"></label></div>
     <label>Até (deixa de se repetir; opcional)<input id="t_recEnd" type="date" value="${t._recEnd||''}"></label>
-    <div class="hint">No primeiro dia entra para os movimentos por confirmar; passado o segundo sem confirmação, fica em atraso e a app avisa. Com repetição, a janela repete-se com o mesmo intervalo; “uma só vez” desaparece depois de confirmado.</div>`;
+    <div class="hint">Entra por confirmar no primeiro dia; passado o segundo sem confirmares, fica em atraso.</div>`;
   return fold('rec','Datas e repetição',body,{icon:'clock',open:true,summary:EVERY[every]});
 }
 
@@ -3982,7 +3982,7 @@ function vCredits(){
     ${kpi('Prestações',euro2(pay),'neg','por mês, no total')}
     ${kpi('Juros até ao fim',euro(sum(live.map(x=>{const a=amort(x.l);return a.totInt+a.totStamp}))),'neg','com imposto do selo')}</div>`;
   if(!rows.length)return head+`<div class="empty"><b>Sem hipotecas</b>Uma hipoteca está sempre associada a um imóvel. Cria a primeira aqui ou na ficha do imóvel.</div>`;
-  if(!shown.length)return head+kpis+`<div class="empty"><b>Nada neste filtro</b>Não há hipotecas que correspondam.</div>`;
+  if(!shown.length)return head+kpis+`<div class="empty"><b>Nada neste filtro</b></div>`;
   const mortCard=({p,l})=>{const live2=Number(l.outstanding)>0,c=live2?loanCalc(l):null;
     return `<div class="card tap" data-lp="mort:${esc(p.id)}:${esc(l.id)}" onclick="mortModal('${jsq(p.id)}','${jsq(l.id)}')">
       <div class="row-between"><div style="min-width:0"><div class="title">${esc(loanName(l))} ${live2?'':'<span class="badge grey">liquidada</span>'}</div>
@@ -3994,8 +3994,8 @@ function vCredits(){
   const list=(act.length?`<div class="list">${act.map(mortCard).join('')}</div>`:'')
     +(paid.length?`<div class="section-title" style="margin-top:${act.length?18:0}px">Créditos antigos já pagos</div>
       <div class="list">${paid.map(mortCard).join('')}</div>
-      <div class="hint" style="margin-top:10px">As prestações registadas mantêm a ligação a estes créditos. Se editares um pagamento e a dívida voltar a ser maior que zero, o crédito regressa à lista de cima.</div>`:'');
-  return head+kpis+list+`<div class="hint" style="margin-top:12px">Tocar numa hipoteca abre-a para edição. Também podem ser geridas na ficha de cada imóvel.</div>`;
+      <div class="hint" style="margin-top:10px">Se editares um pagamento e a dívida voltar a subir, o crédito volta para a lista de cima.</div>`:'');
+  return head+kpis+list+`<div class="hint" style="margin-top:12px">Também podes geri-las na ficha de cada imóvel.</div>`;
 }
 /* nova hipoteca: escolhe-se primeiro o imóvel (uma hipoteca tem sempre um) */
 function newMort(){
@@ -4895,7 +4895,7 @@ function vImport(){
     <div class="hint" style="margin-top:11px">Se o botão de escolher ficheiro não abrir nada, estás a ver a app fora do telemóvel — usa a opção de colar o texto.</div>
     ${db.transactions.some(t=>t.batch)?`<div class="divider"></div><button class="btn sm danger" onclick="undoImport()">Anular a última importação</button>`:''}`)}
   <div style="height:14px"></div>
-  ${card('Guardar ficheiros','Exportações avulsas',`
+  ${card('Guardar ficheiros','',`
     <div class="toolbar" style="margin:0">
       <button class="btn" onclick="driveSave()">Guardar cópia</button>
       <button class="btn" onclick="driveOpen()">Abrir cópia</button>
@@ -4982,7 +4982,7 @@ function vCats(){
     ${fold('catsIn','Receitas',catTree('catsIn','','Rendas, reembolsos e dinheiro recebido de terceiros'),{icon:'up',open:true,summary:n('catsIn')})}
     ${fold('cats','Pagamentos',catTree('cats','','Despesas, prestações e dívidas pagas a terceiros'),{icon:'dn',summary:n('cats')})}</div>`
     +`<div class="toolbar" style="margin:13px 0 0"><button class="btn" onclick="resetCats()">Repor as de origem</button></div>
-  <div class="hint" style="margin-top:14px">O número ao lado de cada categoria é quantos movimentos a usam. Apagar uma categoria não apaga movimentos: eles ficam sem categoria. Tocar no nome de uma subcategoria muda-lhe o nome. O botão € tira a categoria ou subcategoria dos totais de receitas/despesas — os movimentos continuam na lista e nas contas entre proprietários.</div>`;
+  <div class="hint" style="margin-top:14px">O número é quantos movimentos usam a categoria. Apagá-la não apaga movimentos — ficam sem categoria. O botão € tira-a dos totais, sem sair da lista.</div>`;
 }
 function vTags(){
   const tg=db.settings.tags||[];
@@ -4994,7 +4994,7 @@ function vTags(){
         <span class="spacer"></span>
         <span class="small">${usage(g)} movimento${usage(g)===1?'':'s'}</span>
         <button class="btn sm danger" onclick="delTag('${jsq(g)}')">${ic('trash',14)}</button></div>`).join('')}</div>`
-    :`<div class="hint">Ainda não há etiquetas.</div>`)}
+    :`<div class="hint"></div>`)}
   <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" onclick="addTag()">${ic('plus',15)} Nova etiqueta</button></div>`;
 }
 /* ===== grupos ===== */
@@ -5017,7 +5017,7 @@ function vGroups(){
       :`<div class="hint">Ainda não há grupos de ${GKIND[kind].label.toLowerCase()}.</div>`}
       <div class="toolbar" style="margin:11px 0 0"><button class="btn sm" onclick="groupModal('${kind}')">${ic('plus',14)} Novo grupo de ${GKIND[kind].label.toLowerCase()}</button></div>`;
   }).join('');
-  return secs+`<div class="hint" style="margin-top:16px">Grupos de imóveis podem receber movimentos (divididos pelos imóveis) e servir de filtro. Grupos de proprietários aparecem nos filtros de proprietário. Grupos de contratos filtram a página de contratos.</div>`;
+  return secs+`<div class="hint" style="margin-top:16px">Servem de filtro em toda a app. Um movimento atribuído a um grupo de imóveis divide-se por eles.</div>`;
 }
 let gForm=null;
 function groupModal(kind,id){
@@ -5141,7 +5141,7 @@ window.__fileLoaded=function(name,text){
   bkLoad(text);
 };
 function bkPasteBox(){
-  openModal('Colar cópia de segurança',`<div class="form"><div class="hint">Cola aqui o conteúdo do ficheiro exportado.</div>
+  openModal('Colar cópia de segurança',`<div class="form">
     <textarea id="bkText" style="min-height:130px;font:13px/1.5 ui-monospace,Menlo,monospace" placeholder='{"properties":[…]}'></textarea></div>`,
     `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="bkLoad(val('bkText'))">Repor</button>`);
 }
