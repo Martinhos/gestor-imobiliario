@@ -990,9 +990,11 @@
   function dashKey(el) {
     var kl = el.querySelector('.kpi .label');
     if (kl) return 'kpi:' + kl.textContent.trim();
-    if (el.querySelector('#donutCard')) return 'despesas';
+    if (el.id === 'donutCard' || el.querySelector('#donutCard')) return 'despesas';
     var titles = [].slice.call(el.querySelectorAll('.title')).map(function (x) { return x.textContent.trim(); });
     for (var i = 0; i < titles.length; i++) if (DASH_TITLES.indexOf(titles[i]) > -1) return 'card:' + titles[i];
+    // o cartão do portefólio muda de título com o filtro: identifica-se pelas linhas de estatística
+    if (el.querySelector('.stat')) return 'portefolio';
     return titles.length ? 'card:' + titles[0] : '';
   }
 
@@ -1006,14 +1008,23 @@
     if (first < 0) return html; // estado vazio: nada para ordenar
 
     var fixed = kids.slice(0, first).map(function (n) { return n.outerHTML; }).join('');
-    var items = [], j = first;
-    while (j < kids.length) {
-      var h = kids[j].outerHTML;
-      // um título de secção viaja com o bloco que anuncia
-      if (kids[j].classList.contains('section-title') && kids[j + 1]) { h += kids[j + 1].outerHTML; j++; }
+    var items = [], j = first, pending = '';
+    var push = function (html, full) {
       var d = document.createElement('div');
-      d.innerHTML = h;
-      items.push({ h: h, k: dashKey(d) || 'bloco' });
+      d.innerHTML = html;
+      items.push({ h: pending + html, k: dashKey(d.firstElementChild || d) || 'bloco', full: !!full });
+      pending = '';
+    };
+    while (j < kids.length) {
+      var n = kids[j];
+      // um título de secção viaja com o bloco que anuncia
+      if (n.classList.contains('section-title')) { pending = n.outerHTML; j++; continue; }
+      if (n.classList.contains('cols')) {
+        // cada cartão de um par é independente: move-se sozinho
+        [].slice.call(n.children).forEach(function (c) { push(c.outerHTML); });
+      } else {
+        push(n.outerHTML, n.classList.contains('grid'));   // a fila de indicadores ocupa a largura toda
+      }
       j++;
     }
     var seen = {};
@@ -1027,10 +1038,10 @@
     });
     items.sort(function (a, b) { return a._r - b._r; });
 
-    return fixed + items.map(function (it) {
-      return '<div class="cw-blk" data-k="' + esc(it.k) + '" data-lp="dash:' + esc(it.k) + '">' + it.h +
-        '<span class="cw-h">' + ic('grip', 15) + '</span></div>';
-    }).join('');
+    return fixed + '<div class="cw-dash">' + items.map(function (it) {
+      return '<div class="cw-blk' + (it.full ? ' cw-full' : '') + '" data-k="' + esc(it.k) + '" data-lp="dash:' + esc(it.k) + '">' +
+        it.h + '<span class="cw-h">' + ic('grip', 15) + '</span></div>';
+    }).join('') + '</div>';
   };
 
   function blkByKey(k) {
@@ -1062,8 +1073,8 @@
     el.innerHTML = '<span class="small" style="flex:1;min-width:140px">Arrasta os cartões para mudar a ordem.</span>' +
       '<button class="btn sm" onclick="CW.resetDashOrder()">Repor ordem</button>' +
       '<button class="btn sm primary" onclick="CW.exitEdit()">' + ic('check', 14) + ' Concluir</button>';
-    var firstBlk = v.querySelector('.cw-blk');
-    if (firstBlk) v.insertBefore(el, firstBlk); else v.insertBefore(el, v.firstChild);
+    var grid = v.querySelector('.cw-dash');
+    v.insertBefore(el, grid || v.firstChild);
   }
 
   function patchHdr() {
@@ -1111,57 +1122,56 @@
     _hdrFiltToggle();
   };
 
-  var drag = null, lastY = 0, pointerDown = false;
+  var drag = null, lastY = 0, lastX = 0, pointerDown = false;
 
-  function startDrag(el, clientY) {
+  function startDrag(el, clientY, clientX) {
     if (!el || drag) return;
-    drag = { el: el, cont: el.parentNode, startY: clientY };
+    drag = { el: el, cont: el.parentNode, startY: clientY, startX: clientX == null ? lastX : clientX };
     el.classList.add('cw-drag');
     document.body.style.userSelect = 'none';
   }
 
-  function sibling(el, dir) {
-    var n = dir > 0 ? el.nextElementSibling : el.previousElementSibling;
-    while (n && !n.classList.contains('cw-blk')) n = dir > 0 ? n.nextElementSibling : n.previousElementSibling;
-    return n;
+  function blocks() {
+    return [].slice.call(drag.cont.children).filter(function (x) { return x.classList.contains('cw-blk'); });
   }
 
-  // troca só quando o cartão arrastado passa de metade do vizinho
-  function shuffle(sib, after, clientY) {
-    var visual = drag.el.getBoundingClientRect().top;
-    if (after) drag.cont.insertBefore(sib, drag.el);
-    else drag.cont.insertBefore(drag.el, sib);
+  // troca só quando o centro do cartão segurado entra no espaço do outro
+  // (ou seja, quando está maioritariamente já na nova posição)
+  function shuffle(target, e) {
+    var vr = drag.el.getBoundingClientRect();
+    var after = !!(drag.el.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (after) drag.cont.insertBefore(drag.el, target.nextElementSibling);
+    else drag.cont.insertBefore(drag.el, target);
     drag.el.style.transform = '';
-    var off = visual - drag.el.getBoundingClientRect().top;
-    drag.el.style.transform = 'translateY(' + off + 'px)';
-    drag.startY = clientY - off;   // o cartão continua colado ao dedo
+    var nr = drag.el.getBoundingClientRect();
+    var offY = vr.top - nr.top, offX = vr.left - nr.left;
+    drag.el.style.transform = 'translate(' + offX + 'px,' + offY + 'px)';
+    drag.startY = e.clientY - offY;   // o cartão continua colado ao dedo
+    drag.startX = e.clientX - offX;
   }
 
   document.addEventListener('pointermove', function (e) {
-    lastY = e.clientY;
+    lastY = e.clientY; lastX = e.clientX;
     if (!drag) return;
     e.preventDefault();
-    drag.el.style.transform = 'translateY(' + (e.clientY - drag.startY) + 'px)';
-    var r = drag.el.getBoundingClientRect(), mid = r.top + r.height / 2;
-    var nx = sibling(drag.el, 1);
-    if (nx) {
-      var nr = nx.getBoundingClientRect();
-      if (mid > nr.top + nr.height / 2) return shuffle(nx, true, e.clientY);
-    }
-    var pv = sibling(drag.el, -1);
-    if (pv) {
-      var pr = pv.getBoundingClientRect();
-      if (mid < pr.top + pr.height / 2) return shuffle(pv, false, e.clientY);
+    drag.el.style.transform = 'translate(' + (e.clientX - drag.startX) + 'px,' + (e.clientY - drag.startY) + 'px)';
+    var r = drag.el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    var list = blocks();
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i];
+      if (s === drag.el) continue;
+      var sr = s.getBoundingClientRect();
+      if (cx >= sr.left && cx <= sr.right && cy >= sr.top && cy <= sr.bottom) return shuffle(s, e);
     }
   }, { passive: false, capture: true });
 
   // já em modo de edição, o arrasto começa ao primeiro toque (sem esperar)
   document.addEventListener('pointerdown', function (e) {
-    lastY = e.clientY;
+    lastY = e.clientY; lastX = e.clientX;
     pointerDown = true;
     if (!CW.editMode || tab !== 'dashboard') return;
     var blk = e.target && e.target.closest ? e.target.closest('.cw-blk') : null;
-    if (blk) startDrag(blk, e.clientY);
+    if (blk) startDrag(blk, e.clientY, e.clientX);
   }, true);
 
   function endDrag() {
@@ -1178,9 +1188,12 @@
 
   var css = document.createElement('style');
   css.textContent =
-    '.cw-blk{position:relative}' +
+    // cada cartão é um item independente da grelha (duas colunas em ecrã largo)
+    '.cw-dash{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px;margin-top:14px;align-items:start}' +
+    '.cw-dash>.cw-full{grid-column:1/-1}' +
+    '.cw-blk{position:relative;min-width:0}' +
     '.cw-blk .cw-h{display:none}' +
-    '#view.cw-edit .cw-blk{border:1.5px dashed var(--line2);border-radius:18px;padding:9px;margin-top:10px;' +
+    '#view.cw-edit .cw-blk{border:1.5px dashed var(--line2);border-radius:18px;padding:9px;' +
       'background:var(--tint);touch-action:none;cursor:grab}' +
     '#view.cw-edit .cw-blk>*{pointer-events:none}' +
     '#view.cw-edit .cw-blk .cw-h{display:grid;place-items:center;position:absolute;top:6px;right:8px;width:26px;height:26px;' +
@@ -1188,6 +1201,79 @@
     '#view.cw-edit .cw-blk.cw-drag{cursor:grabbing;box-shadow:var(--shadow);border-color:var(--accent);' +
       'position:relative;z-index:70;opacity:.97}';
   document.head.appendChild(css);
+
+  /* ---------------------------------------------------------------
+     Os painéis de filtros têm scroll próprio (.fpanel>.card), que
+     cortava a lista de imóveis/proprietários. Dentro deles, a lista
+     passa a flutuar por cima (position:fixed), ancorada ao botão.
+     --------------------------------------------------------------- */
+
+  function popAnchor(pop) {
+    var btn = pop.parentNode && pop.parentNode.querySelector('.selbtn');
+    if (!btn) return;
+    var r = btn.getBoundingClientRect();
+    var below = window.innerHeight - r.bottom - 14, above = r.top - 14;
+    var up = below < 190 && above > below;
+    pop.style.position = 'fixed';
+    pop.style.left = r.left + 'px';
+    pop.style.width = r.width + 'px';
+    pop.style.right = 'auto';
+    pop.style.zIndex = '120';
+    pop.style.maxHeight = Math.max(150, Math.min(340, up ? above : below)) + 'px';
+    if (up) { pop.style.top = 'auto'; pop.style.bottom = (window.innerHeight - r.top + 5) + 'px'; }
+    else { pop.style.top = (r.bottom + 5) + 'px'; pop.style.bottom = 'auto'; }
+    pop.setAttribute('data-float', '1');
+  }
+
+  function popRelease(pop) {
+    if (!pop.getAttribute('data-float')) return;
+    ['position', 'left', 'width', 'right', 'top', 'bottom', 'maxHeight', 'zIndex'].forEach(function (k) {
+      pop.style[k] = '';
+    });
+    pop.removeAttribute('data-float');
+  }
+
+  function releaseAll() {
+    [].slice.call(document.querySelectorAll('.selpop[data-float]')).forEach(function (p) {
+      if (!p.classList.contains('on')) popRelease(p);
+    });
+  }
+
+  var _selOpen = selOpen;
+  selOpen = function (e, id) {
+    _selOpen(e, id);
+    releaseAll();
+    var pop = document.getElementById('pop_' + id);
+    if (!pop) return;
+    if (!pop.classList.contains('on')) return popRelease(pop);
+    var panel = pop.closest ? pop.closest('.fpanel') : null;
+    if (!panel) return;                 // fora dos painéis de filtro nada muda
+    popAnchor(pop);
+    var scroller = panel.querySelector('.card');
+    if (scroller && !scroller._cwHooked) {
+      scroller._cwHooked = 1;
+      scroller.addEventListener('scroll', function () {
+        [].slice.call(panel.querySelectorAll('.selpop.on[data-float]')).forEach(popAnchor);
+      });
+    }
+  };
+
+  var _selPick = selPick;
+  selPick = function (e, id, i) {
+    var pop = document.getElementById('pop_' + id);
+    _selPick(e, id, i);
+    if (pop) popRelease(pop);
+  };
+
+  var _closePops = closePops;
+  closePops = function (keep) {
+    _closePops(keep);
+    releaseAll();
+  };
+
+  window.addEventListener('resize', function () {
+    [].slice.call(document.querySelectorAll('.selpop.on[data-float]')).forEach(popAnchor);
+  });
 
   CW.pushNow = pushNow;
   CW.pullNow = pullNow;

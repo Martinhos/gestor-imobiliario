@@ -3429,7 +3429,7 @@ function vRecurring(){
   const recs=rcS.length?`<div class="list" style="gap:8px">${rcS.map(r=>{const late=recIsLate(r),pend=r.next<=today();return `<div class="card tap ${pend?'pend':''} ${late?'late':''}" data-lp="rec:${r.id}" onclick="editRec('${r.id}')">
       <div class="row-between" style="align-items:center">
         <div style="min-width:0"><div class="title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</div>
-          <div class="small">${r.auto?'<span class="badge grey" style="margin-right:4px">do contrato</span>':''}${EVERY[r.every]||r.every} · ${pend?(r.muted?'silenciada · por confirmar':late?'<b class="neg">em atraso desde '+(r.until||r.next)+'</b>':'<b class="amber">por confirmar</b>'):'próxima '+r.next}${r.until&&r.until!==r.next?' · janela até dia '+r.until.slice(8):''}${r.end?' · termina '+r.end:''}</div>
+          <div class="small">${r.auto?'<span class="badge grey" style="margin-right:4px">'+((r.tx||{}).loanId?'da hipoteca':'do contrato')+'</span>':''}${EVERY[r.every]||r.every} · ${pend?(r.muted?'silenciada · por confirmar':late?'<b class="neg">em atraso desde '+(r.until||r.next)+'</b>':'<b class="amber">por confirmar</b>'):'próxima '+r.next}${r.until&&r.until!==r.next?' · janela até dia '+r.until.slice(8):''}${r.end?' · termina '+r.end:''}</div>
           <div class="small">${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}${r.tx.category?' · '+esc(r.tx.category):''}</div></div>
         <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
           <b style="font-size:16px">${r.tx.amount?euro2(r.tx.amount):'—'}</b>${kebab('rec:'+r.id)}</div></div></div>`}).join('')}</div>`
