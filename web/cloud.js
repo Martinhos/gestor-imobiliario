@@ -21,7 +21,9 @@
 
   var LS_USER = 'gi_cloud_user';   // sessão {id,name,email,token}
   var LS_OWNER = 'gi_cloud_owner'; // id do utilizador dono da cache local
-  var PULL_MS = 90000;
+  // 3 minutos entre leituras: com 90 segundos, uma app aberta o dia todo
+  // sozinha consumia uma fatia enorme do plano gratuito da base de dados.
+  var PULL_MS = 180000;
 
   var CW = (window.CW = {});
   CW.user = null;
@@ -700,6 +702,8 @@
   vSettings = function () {
     if (setPage === 'cloud') return backRow + vCloud();
     if (setPage === 'legal') return backRow + vLegal();
+    if (setPage === 'termos') return backRow + vDoc(L.termos);
+    if (setPage === 'privacidade') return backRow + vDoc(L.privacidade);
     if (setPage === 'tema') {
       var t = db.settings.theme;
       return backRow + card('Tema', 'Como a app se apresenta',
@@ -837,12 +841,37 @@
   SUBPAGE.cloud = { label: 'Conta e partilha', sub: 'O teu id, ligações e casas partilhadas' };
   SUBPAGE.legal = { label: 'Aviso legal', sub: 'Versão de demonstração · condições de utilização' };
   SUBPAGE.tema = { label: 'Tema', sub: 'Claro, escuro ou o do telemóvel' };
+  SUBPAGE.termos = { label: 'Termos e Condições', sub: 'O acordo entre ti e quem opera o serviço' };
+  SUBPAGE.privacidade = { label: 'Política de Privacidade', sub: 'Que dados tratamos, porquê e por quanto tempo' };
+
+  var L = window.LEGAL || { version: '', termos: '', privacidade: '' };
+
+  // folha de estilo dos documentos legais: texto corrido, legível, sem cartões
+  var lgCss = document.createElement('style');
+  lgCss.textContent =
+    '.lg{max-width:70ch;line-height:1.68;font-size:14.5px;color:var(--ink)}' +
+    '.lg p{margin:0 0 12px}' +
+    '.lg ul{margin:0 0 14px;padding-left:20px}' +
+    '.lg li{margin:0 0 7px}' +
+    '.lg .lg-h{font-size:15.5px;font-weight:650;margin:26px 0 10px;letter-spacing:-.01em}' +
+    '.lg b{font-weight:650}';
+  document.head.appendChild(lgCss);
+
+  function vDoc(html) {
+    return '<div class="card"><div class="lg">' + html + '</div></div>' +
+      '<div class="toolbar" style="margin-top:14px">' +
+      '<button class="btn" onclick="goSet(\'legal\')">' + ic('chev', 15) + ' Voltar</button></div>';
+  }
 
   var LEGAL_UPDATED = '31 de agosto de 2026';
 
   function vLegal() {
     var p = function (t) { return '<p style="margin:0 0 10px">' + t + '</p>'; };
-    return card('Versão de demonstração', 'Lê antes de usares com dados reais',
+    return navRow('Termos e Condições', 'Em vigor desde ' + L.version, 'contract', 'termos') +
+      '<div style="height:10px"></div>' +
+      navRow('Política de Privacidade', 'Dados, direitos e subcontratação', 'lock', 'privacidade') +
+      '<div style="height:16px"></div>' +
+      card('Versão de demonstração', 'Lê antes de usares com dados reais',
       '<div class="hint" style="font-size:14px;line-height:1.65">' +
       p('<b>Esta aplicação é uma versão de demonstração, em desenvolvimento.</b> É um projeto pessoal, ' +
         'disponibilizado tal como está, sem qualquer garantia de funcionamento, exatidão, disponibilidade ou ' +
@@ -928,6 +957,95 @@
       }
     } catch (e) {}
   }
+
+  /* Contas anteriores aos termos: pedir aceitação antes de deixar usar a app.
+     Quem recusar tem a conta apagada, depois de avisado e de confirmar. */
+
+  CW.readDoc = function (e, page) {
+    if (e) e.preventDefault();
+    var doc = page === 'termos' ? L.termos : L.privacidade;
+    var t = page === 'termos' ? 'Termos e Condições' : 'Política de Privacidade';
+    openModal(t, '<div class="lg">' + doc + '</div>',
+      '<button class="btn" onclick="closeModal()">Fechar</button>');
+  };
+
+  function showTermsGate() {
+    if (document.getElementById('cwTerms')) return;
+    var el = document.createElement('div');
+    el.id = 'cwTerms';
+    el.style.cssText = 'position:fixed;inset:0;z-index:196;background:var(--bg);overflow:auto;' +
+      'display:flex;align-items:center;justify-content:center;padding:22px';
+    el.innerHTML =
+      '<div class="card" style="max-width:460px;width:100%;padding:24px">' +
+      '<div style="display:flex;gap:12px;align-items:center">' +
+      '<span class="avatar" style="background:var(--accent-soft);color:var(--accent)">' + ic('contract', 20) + '</span>' +
+      '<div><div class="title" style="font-size:18px">Termos atualizados</div>' +
+      '<div class="small">Precisamos da tua aceitação para continuar</div></div></div>' +
+      '<div class="hint" style="font-size:14px;line-height:1.6;margin-top:14px">' +
+      '<p style="margin:0 0 10px">A app passou a ter <b>Termos e Condições</b> e <b>Política de Privacidade</b> ' +
+      'próprios. Explicam o que o serviço é e não é, os planos que vão existir, e como tratamos os teus dados ' +
+      'e os das pessoas que registas.</p>' +
+      '<p style="margin:0">Sem a tua aceitação não podemos continuar a guardar os teus dados. Se recusares, ' +
+      '<b>a conta e tudo o que lá está serão apagados</b>.</p></div>' +
+      '<div class="toolbar" style="margin-top:14px;flex-direction:column;gap:8px">' +
+      '<button class="btn" style="width:100%;justify-content:center" onclick="CW.readDoc(event,\'termos\')">Ler os Termos e Condições</button>' +
+      '<button class="btn" style="width:100%;justify-content:center" onclick="CW.readDoc(event,\'privacidade\')">Ler a Política de Privacidade</button>' +
+      '<button class="btn primary" style="width:100%;justify-content:center" onclick="CW.acceptTerms()">Aceito</button>' +
+      '<button class="btn danger" style="width:100%;justify-content:center" onclick="CW.refuseTerms()">Não aceito — apagar a conta</button>' +
+      '</div><div id="cwt_err" class="small" style="color:var(--danger);margin-top:8px"></div></div>';
+    document.body.appendChild(el);
+    lockScroll(true);
+  }
+
+  CW.acceptTerms = function () {
+    api('POST', '/api/me/terms', { accept: true })
+      .then(function () {
+        CW.termsOk = true;
+        var el = document.getElementById('cwTerms');
+        if (el) el.remove();
+        lockScroll(false);
+        toast('Obrigado. Bom trabalho.');
+      })
+      .catch(function (e) {
+        var x = document.getElementById('cwt_err');
+        if (x) x.textContent = e.message || 'Não foi possível registar a aceitação.';
+      });
+  };
+
+  CW.refuseTerms = function () {
+    var body = '<div class="form">' +
+      '<div class="hint" style="color:var(--danger)"><b>A conta e todos os teus dados serão apagados.</b> ' +
+      'Imóveis, contratos, movimentos, pessoas e ligações a outros utilizadores. Não há volta atrás.</div>' +
+      '<div class="hint">Se quiseres ficar com os teus registos, cancela e exporta-os primeiro em ' +
+      'Definições → Importar e cópias → Guardar cópia.</div>' +
+      '<label>Escreve <b>APAGAR</b> para confirmar<input id="cw_ref_c" placeholder="APAGAR" autocomplete="off" style="text-transform:uppercase"></label>' +
+      '<div id="cw_ref_e" class="small" style="color:var(--danger)"></div></div>';
+    openModal('Recusar e apagar a conta', body,
+      '<button class="btn" onclick="closeModal()">Cancelar</button>' +
+      '<button class="btn danger" onclick="CW.doRefuseTerms()">Apagar definitivamente</button>');
+  };
+
+  CW.doRefuseTerms = function () {
+    var e = document.getElementById('cw_ref_e');
+    e.textContent = '';
+    api('POST', '/api/me/terms', { accept: false, confirm: val('cw_ref_c') })
+      .then(function () {
+        CW.user = null;
+        db = JSON.parse(JSON.stringify(blank));
+        rawSet(KEY, JSON.stringify(db));
+        ['gi_cloud_user', 'gi_cloud_owner', 'gi_page'].forEach(function (k) {
+          try { localStorage.removeItem(k); } catch (x) {}
+        });
+        snap = {};
+        closeAllModals();
+        var g = document.getElementById('cwTerms');
+        if (g) g.remove();
+        buildNav(); render();
+        CW.showAuthMode = 'login';
+        showAuth('Conta apagada. Os termos não foram aceites.');
+      })
+      .catch(function (err) { e.textContent = err.message || 'Não foi possível apagar a conta.'; });
+  };
 
   function showLegalGate() {
     if (!CW.user || CW._legalShown) return;
@@ -1886,7 +2004,11 @@
       '<input id="cwa_pass" type="password" placeholder="Palavra-passe" autocomplete="' + (login ? 'current-password' : 'new-password') + '">' +
       (login ? '' :
         '<div id="cwa_passreq" class="small" style="margin:-4px 0 0;display:flex;flex-wrap:wrap;gap:3px 12px"></div>' +
-        '<input id="cwa_pass2" type="password" placeholder="Confirmar palavra-passe" autocomplete="new-password">') +
+        '<input id="cwa_pass2" type="password" placeholder="Confirmar palavra-passe" autocomplete="new-password">' +
+        '<label class="check" style="align-items:flex-start;gap:9px;margin-top:2px">' +
+        '<input type="checkbox" id="cwa_terms" style="margin-top:2px">' +
+        '<span class="small">Li e aceito os <a href="#" onclick="CW.readDoc(event,\'termos\')" style="color:var(--accent)">Termos e Condições</a> ' +
+        'e a <a href="#" onclick="CW.readDoc(event,\'privacidade\')" style="color:var(--accent)">Política de Privacidade</a>.</span></label>') +
       '<div id="cwa_err" class="small" style="color:var(--danger)"></div>' +
       '<button class="btn primary" style="width:100%;justify-content:center" onclick="CW.submitAuth()">' + (login ? 'Entrar' : 'Criar conta') + '</button>' +
       '<button class="btn" style="width:100%;justify-content:center" onclick="CW.toggleAuth()">' +
@@ -1957,6 +2079,10 @@
     hideAuth();
     buildNav(); render();
     showLegalGate();
+    // quem entra com Google numa conta antiga também tem de aceitar
+    api('GET', '/api/me').then(function (m) {
+      if (m.termsCurrent && m.terms !== m.termsCurrent) showTermsGate();
+    }).catch(function () {});
     startSync();
   }
 
@@ -1973,6 +2099,12 @@
         errEl.textContent = 'As palavras-passe não coincidem.';
         return;
       }
+      var chk = document.getElementById('cwa_terms');
+      if (!chk || !chk.checked) {
+        errEl.textContent = 'Tens de aceitar os Termos e a Política de Privacidade para criar a conta.';
+        return;
+      }
+      payload.terms = L.version;
     }
     api('POST', login ? '/api/auth/login' : '/api/auth/register', payload)
       .then(finishLogin)
@@ -2039,8 +2171,10 @@
     try { restorePage(); } catch (e) {}
     showLegalGate();
     api('GET', '/api/me').then(function (u) {
-      CW.user = Object.assign({}, CW.user, { id: u.id, name: u.name, email: u.email });
+      CW.user = Object.assign({}, CW.user, { id: u.id, name: u.name, email: u.email, plan: u.plan });
       try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
+      // conta anterior a estes documentos: pedir a aceitação antes de continuar
+      if (u.termsCurrent && u.terms !== u.termsCurrent) showTermsGate();
       startSync();
     }).catch(function (e) {
       if (e && e.status === 401) sessionLost();

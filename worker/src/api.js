@@ -38,6 +38,10 @@ function err(status, message) {
 const MAX_BODY = 2 * 1024 * 1024;   // 2 MB por pedido
 const MAX_RECORD = 256 * 1024;      // 256 KB por registo guardado
 
+// Versão dos termos e da política em vigor. Mudá-la faz a app pedir de novo
+// a aceitação a toda a gente, na próxima vez que abrirem.
+const TERMS_VERSION = '2026-08-31';
+
 async function body(request) {
   const len = Number(request.headers.get('Content-Length') || 0);
   if (len > MAX_BODY) return null;
@@ -71,17 +75,27 @@ function cleanData(data, id) {
   return data;
 }
 
-// Travão simples contra força bruta e abuso, com contadores em KV.
-// A consistência eventual do KV chega para o efeito: trava a repetição.
+// Travão simples contra força bruta e abuso. Os contadores vivem na D1: o KV
+// gratuito só aceita mil escritas por dia e cada gravação de dados gastava uma.
 async function rateLimit(env, key, limit, windowSec) {
-  const k = 'rl:' + key;
-  let n = 0;
+  const t = now();
   try {
-    n = Number((await env.SESSIONS.get(k)) || 0);
-    if (n >= limit) return false;
-    await env.SESSIONS.put(k, String(n + 1), { expirationTtl: Math.max(60, windowSec) });
+    const row = await env.DB.prepare('SELECT n, expires_at FROM rate_limits WHERE k = ?').bind(key).first();
+    if (!row || row.expires_at < t) {
+      await env.DB.prepare(
+        `INSERT INTO rate_limits (k, n, expires_at) VALUES (?, 1, ?)
+         ON CONFLICT (k) DO UPDATE SET n = 1, expires_at = excluded.expires_at`
+      ).bind(key, t + windowSec * 1000).run();
+      return true;
+    }
+    if (row.n >= limit) return false;
+    await env.DB.prepare('UPDATE rate_limits SET n = n + 1 WHERE k = ?').bind(key).run();
+    // limpeza preguiçosa: de vez em quando, leva o lixo à frente
+    if (row.n % 25 === 0) {
+      await env.DB.prepare('DELETE FROM rate_limits WHERE expires_at < ?').bind(t).run();
+    }
   } catch (e) {
-    return true;   // sem KV disponível, não bloqueia o serviço
+    return true;   // um contador em baixo não pode deitar o serviço abaixo
   }
   return true;
 }
@@ -159,6 +173,61 @@ async function connectionForUser(env, connId, userId) {
     .first();
 }
 
+// Apaga tudo o que e do utilizador e deixa a identidade como lapide, para as
+// referencias noutras contas continuarem legiveis sem revelar quem era.
+async function purgeAccount(env, uid) {
+    // casas de outros onde este utilizador constava como comproprietário
+    const foreign = (
+      await env.DB.prepare(
+        `SELECT DISTINCT s.house_id FROM shares s
+           JOIN connections c ON c.id = s.connection_id
+          WHERE (c.requester_id = ?1 OR c.target_id = ?1) AND s.owner_id <> ?1`
+      )
+        .bind(uid)
+        .all()
+    ).results;
+
+    const stmts = [];
+    for (const row of foreign) {
+      const h = await env.DB.prepare('SELECT data FROM houses WHERE id = ?').bind(row.house_id).first();
+      if (!h) continue;
+      let data;
+      try { data = JSON.parse(h.data); } catch (e) { continue; }
+      let touched = false;
+      if (data.ownerShares && data.ownerShares[uid] !== undefined) { delete data.ownerShares[uid]; touched = true; }
+      if (Array.isArray(data.ownerIds) && data.ownerIds.includes(uid)) {
+        data.ownerIds = data.ownerIds.filter((x) => x !== uid);
+        touched = true;
+      }
+      if (touched) {
+        stmts.push(env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
+          .bind(JSON.stringify(data), now(), row.house_id));
+      }
+    }
+
+    stmts.push(
+      // dados próprios
+      env.DB.prepare('DELETE FROM records WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(uid),
+      env.DB.prepare('DELETE FROM shares WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(uid),
+      env.DB.prepare('DELETE FROM share_proposals WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(uid),
+      env.DB.prepare('DELETE FROM houses WHERE owner_id = ?').bind(uid),
+      env.DB.prepare('DELETE FROM user_records WHERE user_id = ?').bind(uid),
+      // ligações a outras pessoas
+      env.DB.prepare('DELETE FROM shares WHERE owner_id = ?').bind(uid),
+      env.DB.prepare('DELETE FROM share_proposals WHERE proposed_by = ?').bind(uid),
+      env.DB.prepare('DELETE FROM shares WHERE connection_id IN (SELECT id FROM connections WHERE requester_id = ?1 OR target_id = ?1)').bind(uid),
+      env.DB.prepare('DELETE FROM connections WHERE requester_id = ?1 OR target_id = ?1').bind(uid),
+      // lápide: a identidade some, as referências ficam legíveis
+      env.DB.prepare(
+        `UPDATE users SET name = '[deleted]', email = 'apagado-' || id || '@invalido.local',
+           pass_hash = '', pass_salt = '', google_sub = NULL, apple_sub = NULL, deleted_at = ?
+         WHERE id = ?`
+      ).bind(now(), uid)
+    );
+    await env.DB.batch(stmts);
+  await env.DB.batch(stmts);
+}
+
 export async function handleApi(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, '');
@@ -179,6 +248,17 @@ export async function handleApi(request, env) {
   if (path === '/api/auth/register' && method === 'POST') {
     const b = await body(request);
     if (!b || !b.email || !b.password) return err(400, 'Email e palavra-passe são obrigatórios.');
+    if (b.terms !== TERMS_VERSION) {
+      return err(400, 'Tens de aceitar os termos e a política de privacidade.');
+    }
+    // enquanto o serviço vive do plano gratuito, o número de contas é limitado
+    const max = Number(env.MAX_USERS || 0);
+    if (max > 0) {
+      const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM users WHERE deleted_at IS NULL').first();
+      if ((c && c.n) >= max) {
+        return err(503, 'A app atingiu o limite de contas desta fase. Tenta mais tarde ou pede acesso.');
+      }
+    }
     if (weakPassword(b.password)) {
       return err(400, 'A palavra-passe precisa de pelo menos 8 caracteres, com maiúsculas, minúsculas, números e um símbolo.');
     }
@@ -192,9 +272,10 @@ export async function handleApi(request, env) {
     // colisão de id curto é improvável mas barata de evitar
     while (await env.DB.prepare('SELECT 1 FROM users WHERE id = ?').bind(id).first()) id = newUserId();
     await env.DB.prepare(
-      'INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, terms_version, terms_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
-      .bind(id, email, String(b.name || '').trim(), hash, salt, now())
+      .bind(id, email, String(b.name || '').trim(), hash, salt, now(), TERMS_VERSION, now())
       .run();
     const token = await createSession(env, id);
     return json({ id, email, name: String(b.name || '').trim(), token }, 201, {
@@ -285,7 +366,33 @@ export async function handleApi(request, env) {
   if (!me) return err(401, 'Sessão inválida — inicia sessão de novo.');
 
   if (path === '/api/me' && method === 'GET') {
-    return json({ id: me.id, email: me.email, name: me.name });
+    return json({
+      id: me.id, email: me.email, name: me.name,
+      plan: me.plan || 'free',
+      terms: me.terms_version || null,
+      termsCurrent: TERMS_VERSION,
+    });
+  }
+
+  // Aceitar os termos em vigor. Recusar apaga a conta — está explicado no
+  // ecrã que faz o pedido, e exige a mesma confirmação escrita.
+  if (path === '/api/me/terms' && method === 'POST') {
+    const b = await body(request);
+    if (b && b.accept === true) {
+      await env.DB.prepare('UPDATE users SET terms_version = ?, terms_at = ? WHERE id = ?')
+        .bind(TERMS_VERSION, now(), me.id)
+        .run();
+      return json({ ok: true, terms: TERMS_VERSION });
+    }
+    if (b && b.accept === false) {
+      if (String(b.confirm || '').trim().toUpperCase() !== 'APAGAR') {
+        return err(400, 'Escreve APAGAR para confirmar que queres apagar a conta.');
+      }
+      await purgeAccount(env, me.id);
+      await destroySession(env, me.token);
+      return json({ ok: true, deleted: true }, 200, { 'Set-Cookie': sessionCookie('', true) });
+    }
+    return err(400, 'Corpo inválido.');
   }
 
   // Mudar a palavra-passe (ou definir uma, numa conta que entra com Google).
@@ -332,62 +439,13 @@ export async function handleApi(request, env) {
       return err(400, 'Escreve APAGAR para confirmar.');
     }
     const full = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(me.id).first();
-    // quem tem palavra-passe confirma com ela; contas Google confirmam só com a palavra
+    // quem tem palavra-passe confirma com ela; contas Google confirmam so com a palavra
     if (full && full.pass_hash) {
       if (!b.password || !(await verifyPassword(String(b.password), full.pass_salt, full.pass_hash))) {
         return err(401, 'Palavra-passe errada.');
       }
     }
-
-    // casas de outros onde este utilizador constava como comproprietário
-    const foreign = (
-      await env.DB.prepare(
-        `SELECT DISTINCT s.house_id FROM shares s
-           JOIN connections c ON c.id = s.connection_id
-          WHERE (c.requester_id = ?1 OR c.target_id = ?1) AND s.owner_id <> ?1`
-      )
-        .bind(me.id)
-        .all()
-    ).results;
-
-    const stmts = [];
-    for (const row of foreign) {
-      const h = await env.DB.prepare('SELECT data FROM houses WHERE id = ?').bind(row.house_id).first();
-      if (!h) continue;
-      let data;
-      try { data = JSON.parse(h.data); } catch (e) { continue; }
-      let touched = false;
-      if (data.ownerShares && data.ownerShares[me.id] !== undefined) { delete data.ownerShares[me.id]; touched = true; }
-      if (Array.isArray(data.ownerIds) && data.ownerIds.includes(me.id)) {
-        data.ownerIds = data.ownerIds.filter((x) => x !== me.id);
-        touched = true;
-      }
-      if (touched) {
-        stmts.push(env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
-          .bind(JSON.stringify(data), now(), row.house_id));
-      }
-    }
-
-    stmts.push(
-      // dados próprios
-      env.DB.prepare('DELETE FROM records WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(me.id),
-      env.DB.prepare('DELETE FROM shares WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(me.id),
-      env.DB.prepare('DELETE FROM share_proposals WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(me.id),
-      env.DB.prepare('DELETE FROM houses WHERE owner_id = ?').bind(me.id),
-      env.DB.prepare('DELETE FROM user_records WHERE user_id = ?').bind(me.id),
-      // ligações a outras pessoas
-      env.DB.prepare('DELETE FROM shares WHERE owner_id = ?').bind(me.id),
-      env.DB.prepare('DELETE FROM share_proposals WHERE proposed_by = ?').bind(me.id),
-      env.DB.prepare('DELETE FROM shares WHERE connection_id IN (SELECT id FROM connections WHERE requester_id = ?1 OR target_id = ?1)').bind(me.id),
-      env.DB.prepare('DELETE FROM connections WHERE requester_id = ?1 OR target_id = ?1').bind(me.id),
-      // lápide: a identidade some, as referências ficam legíveis
-      env.DB.prepare(
-        `UPDATE users SET name = '[deleted]', email = 'apagado-' || id || '@invalido.local',
-           pass_hash = '', pass_salt = '', google_sub = NULL, apple_sub = NULL, deleted_at = ?
-         WHERE id = ?`
-      ).bind(now(), me.id)
-    );
-    await env.DB.batch(stmts);
+    await purgeAccount(env, me.id);
     await destroySession(env, me.token);
     return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', true) });
   }

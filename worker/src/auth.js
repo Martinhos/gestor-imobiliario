@@ -80,7 +80,7 @@ export async function getSessionUser(env, request) {
   const { userId, epoch } = JSON.parse(raw);
   // contas apagadas deixam de ter sessão válida, mesmo com o token na mão
   const user = await env.DB.prepare(
-    'SELECT id, email, name, sess_epoch FROM users WHERE id = ? AND deleted_at IS NULL'
+    'SELECT id, email, name, sess_epoch, plan, terms_version FROM users WHERE id = ? AND deleted_at IS NULL'
   )
     .bind(userId)
     .first();

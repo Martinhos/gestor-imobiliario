@@ -27,3 +27,7 @@ enabled = true
 # Não é preciso client secret: o fluxo usa o ID token, verificado no worker.
 [vars]
 GOOGLE_CLIENT_ID = "34372660209-our5uhdtk77vnfo34nf64u1m9o2c3erl.apps.googleusercontent.com"
+# Tecto de contas enquanto o serviço vive do plano gratuito da Cloudflare.
+# O limite real é a D1: 5M linhas lidas e 100k escritas por dia. Com o
+# consumo medido por utilizador ativo, ~2200 contas esgotam-no; ficamos a 90%.
+MAX_USERS = "2000"
