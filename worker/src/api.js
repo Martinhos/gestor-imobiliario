@@ -17,6 +17,7 @@ import {
   getSessionUser,
 } from './auth.js';
 import { verifyIdToken } from './oauth.js';
+import { notifyDev, ticketEmbed, errorEmbed } from './notify.js';
 
 // forte: 8+ caracteres com maiúsculas, minúsculas, números e um símbolo
 function weakPassword(p) {
@@ -228,7 +229,38 @@ async function purgeAccount(env, uid) {
   await env.DB.batch(stmts);
 }
 
-export async function handleApi(request, env) {
+// Guarda um erro e avisa quem programa. Erros repetidos agrupam-se, para o
+// canal não encher com a mesma linha vezes sem conta.
+export async function recordReport(env, ctx, kind, message, detail, userId) {
+  const msg = String(message || '').slice(0, 2000);
+  const fp = kind + ':' + msg.slice(0, 120);
+  const t = now();
+  try {
+    const ex = await env.DB.prepare('SELECT * FROM reports WHERE fingerprint = ?').bind(fp).first();
+    if (ex) {
+      await env.DB.prepare('UPDATE reports SET n = n + 1, updated_at = ? WHERE id = ?').bind(t, ex.id).run();
+      // só volta a avisar de hora a hora, e sempre nas primeiras vezes
+      if (ex.n < 3 || t - ex.updated_at > 3600000) {
+        notifyDev(env, ctx, errorEmbed({ ...ex, n: ex.n + 1, created_at: t }));
+      }
+      return;
+    }
+    const id = crypto.randomUUID();
+    const row = {
+      id, user_id: userId || null, kind, message: msg,
+      detail: String(detail || '').slice(0, 2000), n: 1, created_at: t,
+    };
+    await env.DB.prepare(
+      `INSERT INTO reports (id, user_id, kind, message, detail, fingerprint, n, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`
+    ).bind(id, row.user_id, kind, msg, row.detail, fp, t, t).run();
+    notifyDev(env, ctx, errorEmbed(row));
+  } catch (e) {
+    // um relatório que falha não pode piorar o problema que estava a relatar
+  }
+}
+
+export async function handleApi(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, '');
   const method = request.method;
@@ -748,6 +780,49 @@ export async function handleApi(request, env) {
       }
     }
     return json({ results });
+  }
+
+  // ---- Pedidos de ajuda e relatórios de erro ------------------------------
+
+  if (path === '/api/tickets' && method === 'POST') {
+    if (!(await rateLimit(env, 'tk:' + me.id, 10, 3600))) {
+      return err(429, 'Já enviaste vários pedidos seguidos. Espera um pouco.');
+    }
+    const b = await body(request);
+    const kind = b && b.kind === 'sugestao' ? 'sugestao' : 'problema';
+    const subject = String((b && b.subject) || '').trim().slice(0, 140);
+    const text = String((b && b.body) || '').trim().slice(0, 4000);
+    if (!subject || !text) return err(400, 'Escreve um assunto e a descrição.');
+    const id = crypto.randomUUID(), t = now();
+    const row = {
+      id, kind, subject, body: text, status: 'criado', created_at: t,
+      context: String((b && b.context) || '').slice(0, 300),
+    };
+    await env.DB.prepare(
+      `INSERT INTO tickets (id, user_id, kind, subject, body, status, context, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'criado', ?, ?, ?)`
+    ).bind(id, me.id, kind, subject, text, row.context, t, t).run();
+    notifyDev(env, ctx, ticketEmbed(row, me));
+    return json({ ok: true, id }, 201);
+  }
+
+  if (path === '/api/tickets' && method === 'GET') {
+    const rows = (
+      await env.DB.prepare(
+        `SELECT id, kind, subject, body, status, reply, created_at, updated_at
+           FROM tickets WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`
+      ).bind(me.id).all()
+    ).results;
+    return json({ tickets: rows });
+  }
+
+  // erros apanhados no browser de quem usa a app
+  if (path === '/api/reports' && method === 'POST') {
+    if (!(await rateLimit(env, 'rp:' + me.id, 20, 3600))) return json({ ok: true });
+    const b = await body(request);
+    if (!b || !b.message) return err(400, 'Corpo inválido.');
+    await recordReport(env, ctx, 'cliente', b.message, b.detail, me.id);
+    return json({ ok: true });
   }
 
   // ---- Casas --------------------------------------------------------------

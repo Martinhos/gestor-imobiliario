@@ -1,0 +1,159 @@
+// Avisos para o Discord: um canal para quem programa (pedidos e erros) e
+// outro para quem opera (consumo da infraestrutura). Sem webhook configurado,
+// tudo isto não faz nada — a app funciona à mesma.
+
+const LIMITS = {
+  'D1 · linhas lidas': 5000000,
+  'D1 · linhas escritas': 100000,
+  'Workers · pedidos': 100000,
+  'KV · leituras': 100000,
+  'KV · escritas': 1000,
+};
+
+async function post(url, payload) {
+  if (!url) return false;
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return r.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+const cut = (s, n) => {
+  const t = String(s == null ? '' : s);
+  return t.length > n ? t.slice(0, n - 1) + '…' : t;
+};
+
+export function notifyDev(env, ctx, embed) {
+  const p = post(env.DISCORD_DEV_WEBHOOK, { embeds: [embed] });
+  if (ctx && ctx.waitUntil) ctx.waitUntil(p);
+  return p;
+}
+
+export function ticketEmbed(t, user) {
+  return {
+    title: (t.kind === 'problema' ? '🐞 Problema' : '💡 Sugestão') + ' · ' + cut(t.subject, 80),
+    description: cut(t.body, 1200),
+    color: t.kind === 'problema' ? 0xb94a48 : 0x2f7d5b,
+    fields: [
+      { name: 'De', value: cut((user.name || 'sem nome') + ' · ' + user.id, 100), inline: true },
+      { name: 'Estado', value: 'criado', inline: true },
+      { name: 'Contexto', value: cut(t.context || '—', 200), inline: false },
+    ],
+    footer: { text: 'ticket ' + t.id },
+    timestamp: new Date(t.created_at).toISOString(),
+  };
+}
+
+export function errorEmbed(r) {
+  return {
+    title: '⚠️ Erro ' + (r.kind === 'servidor' ? 'no servidor' : 'na app') +
+      (r.n > 1 ? ' (×' + r.n + ')' : ''),
+    description: '```\n' + cut(r.message, 900) + '\n```',
+    color: 0xd6a34a,
+    fields: [
+      { name: 'Quem', value: r.user_id || 'sem sessão', inline: true },
+      { name: 'Onde', value: cut(r.detail || '—', 300), inline: false },
+    ],
+    footer: { text: 'report ' + r.id },
+    timestamp: new Date(r.created_at).toISOString(),
+  };
+}
+
+// Consumo do dia, contra os limites do plano gratuito. Os números da
+// Cloudflare vêm da API de análise; se ela não responder, vai o que
+// conseguimos contar por dentro, que chega para perceber a tendência.
+export async function dailyReport(env, ctx) {
+  const url = env.DISCORD_ADMIN_WEBHOOK;
+  if (!url) return;
+
+  const q = async (sql) => {
+    try { return (await env.DB.prepare(sql).first()) || {}; } catch (e) { return {}; }
+  };
+  const dia = Date.now() - 86400000;
+  const contas = await q('SELECT COUNT(*) AS n FROM users WHERE deleted_at IS NULL');
+  const ativos = await q(`SELECT COUNT(DISTINCT owner_id) AS n FROM houses WHERE updated_at > ${dia}`);
+  const casas = await q('SELECT COUNT(*) AS n FROM houses WHERE deleted = 0');
+  const registos = await q('SELECT COUNT(*) AS n FROM records WHERE deleted = 0');
+  const abertos = await q("SELECT COUNT(*) AS n FROM tickets WHERE status <> 'concluido'");
+  const erros = await q(`SELECT COUNT(*) AS n FROM reports WHERE created_at > ${dia}`);
+
+  const fields = [
+    { name: 'Contas', value: String(contas.n || 0) + ' / ' + (env.MAX_USERS || '∞'), inline: true },
+    { name: 'Ativos (24h)', value: String(ativos.n || 0), inline: true },
+    { name: 'Casas · registos', value: (casas.n || 0) + ' · ' + (registos.n || 0), inline: true },
+    { name: 'Pedidos abertos', value: String(abertos.n || 0), inline: true },
+    { name: 'Erros (24h)', value: String(erros.n || 0), inline: true },
+  ];
+
+  let cor = 0x2f7d5b;
+  const uso = await cloudflareUsage(env);
+  if (uso) {
+    Object.keys(LIMITS).forEach((k) => {
+      const v = uso[k];
+      if (v == null) return;
+      const pct = Math.round((v / LIMITS[k]) * 100);
+      if (pct >= 70) cor = pct >= 90 ? 0xb94a48 : 0xd6a34a;
+      fields.push({
+        name: k,
+        value: v.toLocaleString('pt-PT') + ' / ' + LIMITS[k].toLocaleString('pt-PT') +
+          '  (' + pct + '%)' + (pct >= 70 ? '  ⚠️' : ''),
+        inline: false,
+      });
+    });
+  } else {
+    fields.push({
+      name: 'Consumo da Cloudflare',
+      value: 'Indisponível. Confirma que o token tem permissão *Account Analytics · Read* ' +
+        'e que `CF_ACCOUNT_ID` está definido.',
+      inline: false,
+    });
+  }
+
+  await post(url, {
+    embeds: [{
+      title: '📊 Gestor Imobiliário · consumo diário',
+      color: cor,
+      fields,
+      timestamp: new Date().toISOString(),
+    }],
+  });
+}
+
+// API de análise da Cloudflare (GraphQL). Devolve null se não der.
+async function cloudflareUsage(env) {
+  const token = env.CF_ANALYTICS_TOKEN, acc = env.CF_ACCOUNT_ID;
+  if (!token || !acc) return null;
+  const desde = new Date(Date.now() - 86400000).toISOString();
+  const query = `query($acc:String!,$desde:Time!){
+    viewer{ accounts(filter:{accountTag:$acc}){
+      d1AnalyticsAdaptiveGroups(limit:1000, filter:{datetime_geq:$desde}){
+        sum{ readQueries writeQueries rowsRead rowsWritten } }
+      workersInvocationsAdaptive(limit:1000, filter:{datetime_geq:$desde}){
+        sum{ requests errors } }
+    } } }`;
+  try {
+    const r = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables: { acc, desde } }),
+    });
+    const j = await r.json();
+    const a = j && j.data && j.data.viewer && j.data.viewer.accounts && j.data.viewer.accounts[0];
+    if (!a) return null;
+    const soma = (arr, campo) =>
+      (arr || []).reduce((t, x) => t + ((x.sum && x.sum[campo]) || 0), 0);
+    return {
+      'D1 · linhas lidas': soma(a.d1AnalyticsAdaptiveGroups, 'rowsRead'),
+      'D1 · linhas escritas': soma(a.d1AnalyticsAdaptiveGroups, 'rowsWritten'),
+      'Workers · pedidos': soma(a.workersInvocationsAdaptive, 'requests'),
+    };
+  } catch (e) {
+    return null;
+  }
+}

@@ -702,6 +702,7 @@
   vSettings = function () {
     if (setPage === 'cloud') return backRow + vCloud();
     if (setPage === 'legal') return backRow + vLegal();
+    if (setPage === 'ajuda') return backRow + vAjuda();
     if (setPage === 'termos') return backRow + vDoc(L.termos);
     if (setPage === 'privacidade') return backRow + vDoc(L.privacidade);
     if (setPage === 'tema') {
@@ -746,8 +747,11 @@
         navRow('Grupos', (db.groups || []).length + ' grupos', 'users', 'groups') + gap +
         navRow('Importar e cópias', 'Splitwise, cópias de segurança e recomeçar', 'down', 'dados') +
 
+        sect('Ajuda') +
+        navRow('Ajuda e sugestões', 'Contar um problema ou pedir uma melhoria', 'info', 'ajuda') +
+
         sect('Sobre') +
-        navRow('Aviso legal', 'Versão de demonstração', 'info', 'legal') + gap +
+        navRow('Aviso legal', 'Termos, privacidade e demonstração', 'contract', 'legal') + gap +
         card('Gestor Imobiliário', 'Versão 23 · demonstração',
           '<div class="stat"><span>Imóveis · contratos</span><b>' + db.properties.length + ' · ' + db.contracts.length + '</b></div>' +
           '<div class="stat"><span>Inquilinos</span><b>' + db.tenants.length + '</b></div>' +
@@ -841,6 +845,7 @@
   SUBPAGE.cloud = { label: 'Conta e partilha', sub: 'O teu id, ligações e casas partilhadas' };
   SUBPAGE.legal = { label: 'Aviso legal', sub: 'Versão de demonstração · condições de utilização' };
   SUBPAGE.tema = { label: 'Tema', sub: 'Claro, escuro ou o do telemóvel' };
+  SUBPAGE.ajuda = { label: 'Ajuda e sugestões', sub: 'Contar um problema ou pedir uma melhoria' };
   SUBPAGE.termos = { label: 'Termos e Condições', sub: 'O acordo entre ti e quem opera o serviço' };
   SUBPAGE.privacidade = { label: 'Política de Privacidade', sub: 'Que dados tratamos, porquê e por quanto tempo' };
 
@@ -857,6 +862,104 @@
     '.lg b{font-weight:650}';
   document.head.appendChild(lgCss);
 
+  /* ---------------- pedidos de ajuda e sugestões ---------------- */
+
+  var TK_STATUS = {
+    criado: { label: 'Recebido', cor: 'amber', nota: 'à espera de ser visto' },
+    resolucao: { label: 'Em resolução', cor: '', nota: 'já estamos a tratar disto' },
+    concluido: { label: 'Concluído', cor: 'grey', nota: '' },
+  };
+  CW.tickets = null;
+
+  function loadTickets() {
+    api('GET', '/api/tickets')
+      .then(function (r) { CW.tickets = r.tickets || []; if (tab === 'settings' && setPage === 'ajuda') render(); })
+      .catch(function () { CW.tickets = []; });
+  }
+
+  function vAjuda() {
+    if (CW.tickets === null) { loadTickets(); }
+    var t = CW.tickets || [];
+    var abertos = t.filter(function (x) { return x.status !== 'concluido'; });
+    var fechados = t.filter(function (x) { return x.status === 'concluido'; });
+
+    var linha = function (x) {
+      var st = TK_STATUS[x.status] || TK_STATUS.criado;
+      var d = new Date(x.created_at);
+      var data = d.toISOString().slice(0, 10);
+      return '<div class="card" style="padding:12px 13px">' +
+        '<div class="row-between" style="align-items:flex-start;gap:10px">' +
+        '<div style="min-width:0"><b style="display:block">' + esc(x.subject) + '</b>' +
+        '<span class="small">' + (x.kind === 'sugestao' ? 'Sugestão' : 'Problema') + ' · ' + data + '</span></div>' +
+        '<span class="badge ' + st.cor + '" style="flex:0 0 auto">' + st.label + '</span></div>' +
+        (st.nota ? '<div class="small" style="margin-top:6px">' + st.nota + '</div>' : '') +
+        (x.reply ? '<div class="hint" style="margin-top:9px"><b>Resposta:</b> ' + esc(x.reply) + '</div>' : '') +
+        '</div>';
+    };
+
+    return card('Contar um problema ou dar uma ideia',
+      'Respondemos dentro da app, aqui mesmo',
+      '<div class="hint">Se algo correu mal, diz o que estavas a fazer quando aconteceu — ajuda a perceber o problema.</div>' +
+      '<div class="toolbar" style="margin-top:12px">' +
+      '<button class="btn primary" onclick="CW.newTicket(\'problema\')">' + ic('info', 15) + ' Reportar problema</button>' +
+      '<button class="btn" onclick="CW.newTicket(\'sugestao\')">' + ic('plus', 15) + ' Sugerir melhoria</button></div>') +
+      (abertos.length
+        ? '<div class="section-title">Em curso</div><div class="list" style="gap:9px">' + abertos.map(linha).join('') + '</div>'
+        : (CW.tickets === null ? '' : '<div class="hint" style="margin-top:16px">Ainda não enviaste nenhum pedido.</div>')) +
+      (fechados.length
+        ? '<div class="section-title">Concluídos</div><div class="list" style="gap:9px">' + fechados.slice(0, 10).map(linha).join('') + '</div>'
+        : '');
+  }
+
+  CW.newTicket = function (kind) {
+    var problema = kind === 'problema';
+    var body = '<div class="form">' +
+      '<label>Assunto<input id="tk_s" maxlength="140" placeholder="' +
+      (problema ? 'Ex.: o gráfico não aparece' : 'Ex.: poder marcar rendas em atraso') + '" autocomplete="off"></label>' +
+      '<label>' + (problema ? 'O que aconteceu' : 'A tua ideia') +
+      '<textarea id="tk_b" style="min-height:130px" maxlength="4000" placeholder="' +
+      (problema ? 'O que estavas a fazer, o que esperavas e o que aconteceu.' : 'O que gostavas de conseguir fazer, e porquê.') +
+      '"></textarea></label>' +
+      '<div class="hint">Enviamos com a página onde estás e a versão da app. Não enviamos os teus dados.</div>' +
+      '<div id="tk_e" class="small" style="color:var(--danger)"></div></div>';
+    openModal(problema ? 'Reportar problema' : 'Sugerir melhoria', body,
+      '<button class="btn" onclick="closeModal()">Cancelar</button>' +
+      '<button class="btn primary" onclick="CW.sendTicket(\'' + kind + '\')">Enviar</button>');
+  };
+
+  CW.sendTicket = function (kind) {
+    var e = document.getElementById('tk_e');
+    e.textContent = '';
+    var subject = val('tk_s').trim(), text = val('tk_b').trim();
+    if (!subject || !text) { e.textContent = 'Escreve o assunto e a descrição.'; return; }
+    var ctx = 'v' + L.version + ' · ' + (navigator.userAgent || '').slice(0, 120);
+    api('POST', '/api/tickets', { kind: kind, subject: subject, body: text, context: ctx })
+      .then(function () {
+        closeModal();
+        CW.tickets = null;
+        loadTickets();
+        toast('Enviado. Podes acompanhar aqui em Ajuda e sugestões.');
+      })
+      .catch(function (err) { e.textContent = err.message || 'Não foi possível enviar.'; });
+  };
+
+  // erros na app chegam a quem programa sem o utilizador ter de os contar
+  var errCount = 0;
+  function reportErr(msg, detail) {
+    if (!CW.user || errCount >= 5) return;
+    errCount++;
+    api('POST', '/api/reports', { message: String(msg).slice(0, 500), detail: String(detail || '').slice(0, 800) })
+      .catch(function () {});
+  }
+  window.addEventListener('error', function (e) {
+    reportErr(e.message, (e.filename || '') + ':' + (e.lineno || '') + ' · ' + tab +
+      '\n' + String((e.error && e.error.stack) || '').slice(0, 500));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    reportErr('Promessa rejeitada: ' + ((r && r.message) || r), String((r && r.stack) || '').slice(0, 500) + ' · ' + tab);
+  });
+
   function vDoc(html) {
     return '<div class="card"><div class="lg">' + html + '</div></div>' +
       '<div class="toolbar" style="margin-top:14px">' +
@@ -865,13 +968,29 @@
 
   var LEGAL_UPDATED = '31 de agosto de 2026';
 
+  // O aviso de demonstração deixou de repetir os documentos: os Termos e a
+  // Política dizem-no com valor legal, aqui fica só o essencial prático.
   function vLegal() {
-    var p = function (t) { return '<p style="margin:0 0 10px">' + t + '</p>'; };
     return navRow('Termos e Condições', 'Em vigor desde ' + L.version, 'contract', 'termos') +
       '<div style="height:10px"></div>' +
       navRow('Política de Privacidade', 'Dados, direitos e subcontratação', 'lock', 'privacidade') +
       '<div style="height:16px"></div>' +
-      card('Versão de demonstração', 'Lê antes de usares com dados reais',
+      card('Versão de demonstração', 'O que convém saberes',
+        '<div class="hint" style="font-size:14px;line-height:1.6">' +
+        '<p style="margin:0 0 8px">A app está em desenvolvimento e é fornecida tal como está.</p>' +
+        '<ul style="margin:0;padding-left:18px">' +
+        '<li style="margin-bottom:5px"><b>Os dados podem ser apagados sem aviso.</b> Guarda cópias em Definições → Importar e cópias.</li>' +
+        '<li style="margin-bottom:5px">Anexos e fotos ficam só neste aparelho — não sincronizam nem entram nas cópias.</li>' +
+        '<li style="margin-bottom:5px">Os valores e projeções são estimativas, não aconselhamento fiscal ou jurídico.</li>' +
+        '<li style="margin-bottom:5px">O contrato em PDF é um modelo genérico: revê-o antes de assinar.</li>' +
+        '<li>Ao guardares dados de inquilinos, és tu o responsável por eles.</li>' +
+        '</ul></div>') +
+      '<div class="hint" style="text-align:center;margin-top:16px">Versão ' + L.version + '</div>';
+  }
+
+  function vLegalAntigo() {
+    var p = function (t) { return '<p style="margin:0 0 10px">' + t + '</p>'; };
+    return card('Versão de demonstração', 'Lê antes de usares com dados reais',
       '<div class="hint" style="font-size:14px;line-height:1.65">' +
       p('<b>Esta aplicação é uma versão de demonstração, em desenvolvimento.</b> É um projeto pessoal, ' +
         'disponibilizado tal como está, sem qualquer garantia de funcionamento, exatidão, disponibilidade ou ' +
@@ -1072,32 +1191,34 @@
       .catch(function (err) { e.textContent = err.message || 'Não foi possível apagar a conta.'; });
   };
 
+  /* O aviso de demonstração aparecia a cada abertura e repetia o que os
+     Termos já dizem com valor legal. Passa a aparecer uma vez por aparelho,
+     curto, com o detalhe a um toque de distância. */
+  var LS_GATE = 'gi_demo_visto';
+
   function showLegalGate() {
     if (!CW.user || CW._legalShown) return;
+    var visto = null;
+    try { visto = localStorage.getItem(LS_GATE); } catch (e) {}
+    if (visto === L.version) return;
     CW._legalShown = true;
     var el = document.createElement('div');
     el.id = 'cwLegal';
     el.style.cssText = 'position:fixed;inset:0;z-index:195;background:var(--bg);overflow:auto;' +
       'display:flex;align-items:center;justify-content:center;padding:22px';
-    var li = function (t) { return '<li style="margin-bottom:7px">' + t + '</li>'; };
     el.innerHTML =
-      '<div class="card" style="max-width:460px;width:100%;padding:24px">' +
+      '<div class="card" style="max-width:400px;width:100%;padding:24px">' +
       '<div style="display:flex;gap:12px;align-items:center">' +
       '<span class="avatar" style="background:var(--warn-soft);color:var(--warn)">' + ic('info', 20) + '</span>' +
-      '<div><div class="title" style="font-size:18px">Versão de demonstração</div>' +
-      '<div class="small">Lê antes de continuares</div></div></div>' +
-      '<div class="hint" style="font-size:14px;line-height:1.6;margin-top:14px">' +
-      '<p style="margin:0 0 10px">Esta aplicação é uma <b>demonstração em desenvolvimento</b>, fornecida tal como ' +
-      'está, sem garantias de funcionamento, exatidão ou disponibilidade.</p>' +
-      '<ul style="margin:0 0 4px;padding-left:18px">' +
-      li('<b>Os dados podem ser apagados ou repostos sem aviso.</b> Guarda cópias de segurança com regularidade.') +
-      li('Os valores e projeções são estimativas: <b>não são aconselhamento fiscal, jurídico ou financeiro</b>.') +
-      li('O contrato em PDF é um modelo genérico, <b>não validado por advogado</b> — revê-o antes de assinar.') +
-      li('Ao guardares dados de inquilinos, <b>és tu o responsável por esses dados</b> perante o RGPD.') +
-      '</ul></div>' +
+      '<div><div class="title" style="font-size:18px">Isto é uma demonstração</div>' +
+      '<div class="small">Aparece só desta vez</div></div></div>' +
+      '<div class="hint" style="font-size:14.5px;line-height:1.6;margin-top:14px">' +
+      '<b>Os dados podem ser apagados sem aviso</b> — guarda cópias de vez em quando. ' +
+      'Os números que a app mostra são estimativas, não aconselhamento.' +
+      '</div>' +
       '<div class="toolbar" style="margin-top:16px;flex-direction:column;gap:8px">' +
-      '<button class="btn primary" style="width:100%;justify-content:center" onclick="CW.acceptLegal()">Continuar</button>' +
-      '<button class="btn" style="width:100%;justify-content:center" onclick="CW.acceptLegal(1)">Ler o aviso legal completo</button>' +
+      '<button class="btn primary" style="width:100%;justify-content:center" onclick="CW.acceptLegal()">Começar</button>' +
+      '<button class="btn" style="width:100%;justify-content:center" onclick="CW.acceptLegal(1)">Ver o aviso completo</button>' +
       '</div></div>';
     document.body.appendChild(el);
     lockScroll(true);
@@ -1106,6 +1227,7 @@
   CW.acceptLegal = function (full) {
     var el = document.getElementById('cwLegal');
     if (el) el.remove();
+    try { localStorage.setItem(LS_GATE, L.version); } catch (e) {}
     lockScroll(false);
     if (full) { go('settings'); goSet('legal'); }
   };
@@ -1291,7 +1413,11 @@
     confirmModal('Terminar sessão', 'Os dados continuam guardados na tua conta e voltam quando iniciares sessão.', function () {
       api('POST', '/api/auth/logout').catch(function () {});
       CW.user = null;
-      try { localStorage.removeItem(LS_USER); } catch (e) {}
+      CW.tickets = null;
+      try { localStorage.removeItem(LS_USER); localStorage.removeItem(LS_PAGE); } catch (e) {}
+      // a próxima entrada começa na visão geral, não onde se saiu
+      tab = 'dashboard'; setPage = '';
+      buildNav(); render();
       showAuth();
     });
   };
@@ -2102,6 +2228,7 @@
       rawSet(KEY, JSON.stringify(db));
     }
     hideAuth();
+    tab = 'dashboard'; setPage = '';   // entrar leva sempre à visão geral
     buildNav(); render();
     showLegalGate();
     // quem entra com Google numa conta antiga também tem de aceitar

@@ -1,7 +1,8 @@
 // Worker do Gestor Imobiliário: /api/* vai para a API (D1 + KV);
 // tudo o resto é servido pelos assets estáticos (a PWA em web/).
 
-import { handleApi } from './api.js';
+import { handleApi, recordReport } from './api.js';
+import { dailyReport } from './notify.js';
 
 // A app não carrega nada de fora, tirando o botão de entrada com Google.
 const CSP = [
@@ -35,7 +36,12 @@ function harden(res) {
 }
 
 export default {
-  async fetch(request, env) {
+  // resumo diário do consumo para o canal de administração
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(dailyReport(env, ctx));
+  },
+
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) {
       // a API é de uso próprio: nada de a chamar a partir de outro site
@@ -47,11 +53,14 @@ export default {
         });
       }
       try {
-        const res = await handleApi(request, env);
+        const res = await handleApi(request, env, ctx);
         res.headers.set('Cache-Control', 'no-store');
         return harden(res);
       } catch (e) {
         console.error('API error', e);
+        // quem programa fica a saber, sem o utilizador ter de reportar
+        ctx.waitUntil(recordReport(env, ctx, 'servidor', e && e.message,
+          request.method + ' ' + url.pathname + '\n' + String((e && e.stack) || '').slice(0, 800)));
         return new Response(JSON.stringify({ error: 'Erro interno do servidor.' }), {
           status: 500,
           headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },

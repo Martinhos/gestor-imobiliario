@@ -21,6 +21,10 @@ id = "PLACEHOLDER_KV_ID"
 [observability]
 enabled = true
 
+# Resumo diário do consumo para o canal de administração (09:00 UTC).
+[triggers]
+crons = ["0 9 * * *"]
+
 # Entrada com Google (id público; vazio = botão escondido).
 # Cria um OAuth Client ID (Web) em console.cloud.google.com e autoriza
 # a origem https://gestor-imobiliario.martinhos.workers.dev.
@@ -31,3 +35,10 @@ GOOGLE_CLIENT_ID = "34372660209-our5uhdtk77vnfo34nf64u1m9o2c3erl.apps.googleuser
 # O limite real é a D1: 5M linhas lidas e 100k escritas por dia. Com o
 # consumo medido por utilizador ativo, ~2200 contas esgotam-no; ficamos a 90%.
 MAX_USERS = "2000"
+
+# Os avisos para o Discord e o token de análise são segredos, definidos com
+# `wrangler secret put` ou pelo CI:
+#   DISCORD_DEV_WEBHOOK    · canal de quem programa: pedidos e erros
+#   DISCORD_ADMIN_WEBHOOK  · canal de quem opera: consumo diário
+#   CF_ANALYTICS_TOKEN     · token com Account Analytics · Read
+#   CF_ACCOUNT_ID          · id da conta Cloudflare

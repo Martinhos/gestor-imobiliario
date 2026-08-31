@@ -4,17 +4,35 @@
    que não o código. Ao alterá-los, muda também TERMS_VERSION no worker
    (worker/src/api.js) para a app voltar a pedir a aceitação a toda a gente.
 
-   ATENÇÃO: os campos entre [ ] têm de ser preenchidos com a identificação
-   real de quem opera o serviço. É obrigatório por lei num serviço online.
+   ATENÇÃO: preenche a identificação de quem opera o serviço.
+
+   Sobre a MORADA: não tens de publicar a tua morada de casa. O que a lei
+   pede é um endereço de contacto onde possas ser alcançado. Alternativas,
+   da mais simples à mais formal:
+     · um apartado dos CTT (poucos euros por ano);
+     · um serviço de domiciliação / escritório virtual (dá-te uma morada
+       comercial real, tipicamente 10–30 €/mês);
+     · a sede de uma sociedade unipessoal, se e quando criares uma.
+   Enquanto o serviço for gratuito e pessoal, podes deixar MORADA e NIF
+   vazios: os documentos escondem essas linhas sozinhos. A partir do
+   momento em que cobrares, precisas de morada e NIF publicados.
    ===================================================================== */
 window.LEGAL = (function () {
   'use strict';
 
   var VERSION = '2026-08-31';
-  var OPERADOR = '[NOME COMPLETO OU EMPRESA]';
-  var MORADA = '[MORADA COMPLETA]';
-  var NIF = '[NIF]';
+  var OPERADOR = '[O TEU NOME OU O DA EMPRESA]';
+  var MORADA = '';                       // apartado, escritório virtual ou sede
+  var NIF = '';                          // obrigatório quando houver cobrança
   var EMAIL = '[EMAIL DE CONTACTO]';
+
+  // monta a identificação com o que estiver preenchido, sem linhas vazias
+  var ident = function () {
+    var s = OPERADOR;
+    if (MORADA) s += ', com morada de contacto em ' + MORADA;
+    if (NIF) s += ', NIF ' + NIF;
+    return s;
+  };
 
   var h = function (t) { return '<h3 class="lg-h">' + t + '</h3>'; };
   var p = function (t) { return '<p>' + t + '</p>'; };
@@ -29,9 +47,8 @@ window.LEGAL = (function () {
       '(“a aplicação”), um serviço acessível em gestor-imobiliario.martinhos.workers.dev.') +
 
     h('1. Quem opera o serviço') +
-    p('O serviço é operado por ' + OPERADOR + ', com morada em ' + MORADA + ' e NIF ' + NIF + '. ' +
-      'Para qualquer questão relacionada com estes termos, com a tua conta ou com os teus dados, ' +
-      'escreve para ' + EMAIL + '.') +
+    p('O serviço é operado por ' + ident() + '. Para qualquer questão relacionada com estes termos, ' +
+      'com a tua conta ou com os teus dados, escreve para <b>' + EMAIL + '</b> — respondemos por essa via.') +
 
     h('2. O que a aplicação é — e o que não é') +
     p('A aplicação é uma <b>ferramenta de gestão</b> para quem tem imóveis arrendados: permite registar ' +
@@ -160,7 +177,7 @@ window.LEGAL = (function () {
       'durante quanto tempo e que direitos tens.') +
 
     h('1. Responsável pelo tratamento') +
-    p(OPERADOR + ', ' + MORADA + ', NIF ' + NIF + '. Contacto para assuntos de dados pessoais: ' + EMAIL + '.') +
+    p(ident() + '. Contacto para assuntos de dados pessoais: <b>' + EMAIL + '</b>.') +
 
     h('2. Dois papéis diferentes — é importante') +
     p('Nesta aplicação há dois tipos de dados pessoais, com regimes distintos:') +

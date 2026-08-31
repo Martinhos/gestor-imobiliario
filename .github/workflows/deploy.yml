@@ -95,3 +95,25 @@ jobs:
 
       - name: Deploy do worker
         run: npx wrangler@4 deploy
+
+      # Segredos dos avisos. Só se define o que existir — quem não tiver
+      # Discord configurado fica sem avisos, e a app funciona à mesma.
+      - name: Publicar segredos
+        env:
+          DISCORD_DEV_WEBHOOK: ${{ secrets.DISCORD_DEV_WEBHOOK }}
+          DISCORD_ADMIN_WEBHOOK: ${{ secrets.DISCORD_ADMIN_WEBHOOK }}
+          CF_ANALYTICS_TOKEN: ${{ secrets.CF_ANALYTICS_TOKEN }}
+        run: |
+          set -e
+          put () {
+            if [ -n "$2" ]; then
+              printf '%s' "$2" | npx wrangler@4 secret put "$1"
+              echo "definido: $1"
+            else
+              echo "sem valor: $1 (ignorado)"
+            fi
+          }
+          put DISCORD_DEV_WEBHOOK "$DISCORD_DEV_WEBHOOK"
+          put DISCORD_ADMIN_WEBHOOK "$DISCORD_ADMIN_WEBHOOK"
+          put CF_ANALYTICS_TOKEN "${CF_ANALYTICS_TOKEN:-$CLOUDFLARE_API_TOKEN}"
+          put CF_ACCOUNT_ID "$TF_VAR_cloudflare_account_id"
