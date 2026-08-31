@@ -359,7 +359,15 @@
   save = function () { _save(); schedulePush(); };
 
   var _render = render;
-  render = function () { _render(); try { decorateShared(); } catch (e) {} };
+  render = function () {
+    _render();
+    try { decorateShared(); } catch (e) {}
+    try { decoratePending(); } catch (e) {}
+    try {
+      if (CW.editMode && tab === 'dashboard') { view().classList.add('cw-edit'); editBar(); }
+      patchHdr();
+    } catch (e) {}
+  };
 
   function decorateShared() {
     (db.properties || []).forEach(function (p) {
@@ -404,6 +412,9 @@
   var _go = go;
   go = function (id) {
     try { if (modalStack.length) closeAllModals(); } catch (e) {}
+    try { if (CW.editMode && id !== 'dashboard') CW.exitEdit(true); } catch (e) {}
+    // a barra de regresso só faz sentido enquanto se está nos Movimentos
+    if (id !== 'transactions') CW._fromKpi = null;
     _go(id);
   };
 
@@ -769,6 +780,414 @@
       showAuth();
     });
   };
+
+  /* =====================================================================
+     Painel: movimentos por trás de cada indicador, pendentes nas vistas de
+     imóveis e contratos, recusa de planeados e ordem dos cartões da visão
+     geral (modo de edição por toque longo).
+     ===================================================================== */
+
+  var KPI_KINDS = { income: ['income'], op: ['expense'], loan: ['loan'], cf: ['income', 'expense', 'loan'] };
+
+  // os indicadores em euros passam a dizer que movimentos os compõem
+  var _evoMoney = evoMoney;
+  evoMoney = function (field, pid, fmt) {
+    var d = _evoMoney(field, pid, fmt);
+    if (d && KPI_KINDS[field]) d.txq = { field: field, pid: pid || null, year: YEAR };
+    return d;
+  };
+
+  // mesma regra do metrics(): ano, tipo, fora-dos-totais e peso do imóvel/quota
+  function kpiTxs(q) {
+    var kinds = KPI_KINDS[q.field] || [];
+    return (db.transactions || [])
+      .filter(function (t) {
+        if (String(t.date || '').indexOf(String(q.year)) !== 0) return false;
+        if (kinds.indexOf(t.kind) < 0) return false;
+        if ((t.kind === 'income' || t.kind === 'expense') && !countsInTotals(t)) return false;
+        return txW(t, q.pid) !== 0;
+      })
+      .map(function (t) { return { t: t, v: t.amount * txShare(t, true) * txW(t, q.pid) }; })
+      .sort(function (a, b) { return String(b.t.date).localeCompare(String(a.t.date)); });
+  }
+
+  var _kpiModal = kpiModal;
+  kpiModal = function (id) {
+    if (CW.editMode) return;   // a arrastar cartões, não se abrem indicadores
+    var k = KPI_REG[id];
+    if (!k) return;
+    _kpiModal(id);
+    var top = modalTop();
+    if (!top) return;
+    var d;
+    try { d = k.evo(); } catch (e) { d = null; }
+    if (!d || !d.txq) return;
+
+    var q = d.txq, rows = kpiTxs(q), show = rows.slice(0, 50);
+    var total = rows.reduce(function (a, r) { return a + r.v; }, 0);
+    var html = '<div><div class="flabel">Movimentos que somam este valor</div>' +
+      (rows.length
+        ? '<div class="list" style="gap:7px">' + show.map(function (r) {
+            var t = r.t, col = t.kind === 'income' ? 'pos' : (t.kind === 'loan' ? 'amber' : 'neg');
+            return '<div class="card tap" style="padding:10px 12px" onclick="CW.openTx(\'' + t.id + '\')">' +
+              '<div class="row-between" style="align-items:center;gap:10px">' +
+              '<div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.label) + '</b>' +
+              '<span class="small">' + esc(t.date) + ' · ' + esc((KIND[t.kind] || {}).short || '') +
+              (t.category ? ' · ' + esc(t.category) : '') +
+              (t.propertyId ? ' · ' + esc(propName(t.propertyId)) : '') + '</span></div>' +
+              '<b class="' + col + '" style="flex:0 0 auto">' + euro2(r.v) + '</b></div></div>';
+          }).join('') + '</div>' +
+          (rows.length > show.length
+            ? '<div class="hint" style="margin-top:8px">A mostrar os ' + show.length + ' mais recentes de ' + rows.length + '. Vê todos em Movimentos.</div>'
+            : '') +
+          '<div class="stat" style="margin-top:8px"><span>Total</span><b>' + euro2(total) + '</b></div>'
+        : '<div class="hint">Nenhum movimento registado em ' + q.year + '.</div>') +
+      '</div>';
+
+    var body = top.el.querySelector('.body');
+    if (body) { var w = document.createElement('div'); w.innerHTML = html; body.appendChild(w.firstChild); }
+    var foot = top.el.querySelector('.foot');
+    if (foot) {
+      foot.innerHTML =
+        '<button class="btn" onclick="CW.backToDash(1)">' + ic('chev', 15) + ' Visão geral</button>' +
+        '<button class="btn primary" onclick="CW.kpiToTx()">' + ic('swap', 15) + ' Ver nos movimentos</button>';
+    }
+    CW._kpiQ = { field: q.field, pid: q.pid, year: q.year, title: k.title };
+  };
+
+  CW.openTx = function (id) {
+    if ((db.transactions || []).some(function (x) { return x.id === id; })) txModal(id);
+  };
+
+  // salta para os Movimentos já com os filtros do indicador aplicados
+  CW.kpiToTx = function () {
+    var q = CW._kpiQ;
+    if (!q) return;
+    CW._fromKpi = {
+      title: q.title, year: q.year,
+      prev: { f: txFilter, p: txProp, c: txCat, s: txSub, pd: txPaid, np: txNoPayer, q: txSearch },
+    };
+    txFilter = q.field === 'income' ? 'income' : q.field === 'op' ? 'expense' : q.field === 'loan' ? 'loan' : '';
+    txProp = q.pid || '';
+    txCat = ''; txSub = ''; txPaid = ''; txNoPayer = true;
+    txSearch = String(q.year) + '-';   // o ano vive na data de cada movimento
+    closeAllModals();
+    go('transactions');
+  };
+
+  CW.backToDash = function (fromModal) {
+    var f = CW._fromKpi;
+    if (f && f.prev) {
+      txFilter = f.prev.f; txProp = f.prev.p; txCat = f.prev.c; txSub = f.prev.s;
+      txPaid = f.prev.pd; txNoPayer = f.prev.np; txSearch = f.prev.q;
+    }
+    CW._fromKpi = null;
+    if (fromModal) closeAllModals();
+    go('dashboard');
+  };
+
+  // barra de regresso quando se chega aos Movimentos vindo de um indicador
+  var _vTransactions = vTransactions;
+  vTransactions = function () {
+    var h = _vTransactions();
+    var f = CW._fromKpi;
+    if (!f) return h;
+    return '<div class="card" style="margin-bottom:12px;padding:11px 13px;display:flex;align-items:center;gap:11px">' +
+      '<span class="small" style="flex:1;min-width:0">Movimentos de <b>' + esc(f.title) + '</b> em ' + f.year + ', vindos da visão geral.</span>' +
+      '<button class="btn sm" style="flex:0 0 auto" onclick="CW.backToDash()">' + ic('chev', 14) + ' Visão geral</button></div>' + h;
+  };
+
+  /* ---------------- recusar um movimento planeado ---------------- */
+
+  CW.rejectRec = function (id) {
+    var r = (db.recurring || []).find(function (x) { return x.id === id; });
+    if (!r) return;
+    var once = r.every === 'once';
+    confirmModal('Recusar movimento',
+      'Salta “' + esc(r.name) + '” desta vez: não cria nenhum movimento' +
+      (once ? ' e, como só acontecia uma vez, deixa de ser pedido.' : ' e passa à data seguinte. O plano continua ativo.'),
+      function () {
+        recAdvance(r);
+        save(); buildNav(); render();
+        toast(once ? 'Movimento recusado.' : 'Recusado — segue para a próxima data.');
+      });
+  };
+
+  var REJECT_BTN = function (id) {
+    return '<button class="btn sm danger" onclick="event.stopPropagation();CW.rejectRec(\'' + id + '\')">Recusar</button>';
+  };
+
+  // acrescenta "Recusar" a cada linha do cartão de pendentes
+  var _pendingCard = pendingCard;
+  pendingCard = function (all) {
+    return _pendingCard(all).replace(/skipRec\('([^']+)'\)"[^>]*>[^<]*<\/button>/g, function (m, id) {
+      return m + REJECT_BTN(id);
+    });
+  };
+
+  // ... e à lista de opções do toque longo numa recorrência
+  var _lpMenu = lpMenu;
+  lpMenu = function (v) {
+    if (String(v).indexOf('dash:') === 0) return CW.enterEdit(String(v).slice(5));
+    _lpMenu(v);
+    if (String(v).indexOf('rec:') !== 0) return;
+    var id = String(v).slice(4), top = modalTop();
+    var list = top && top.el.querySelector('.body .list');
+    if (!list) return;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'card tap';
+    b.style.cssText = 'padding:12px 14px;display:flex;align-items:center;gap:11px';
+    b.innerHTML = '<span class="ic" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--danger-soft);color:var(--danger);flex:0 0 34px">' + ic('x', 18) + '</span>' +
+      '<span style="flex:1;min-width:0;text-align:left"><b style="display:block;font-size:14px">Recusar desta vez</b>' +
+      '<span class="small">não cria o movimento e passa à data seguinte</span></span>';
+    b.onclick = function () { closeAllModals(); CW.rejectRec(id); };
+    list.appendChild(b);
+  };
+
+  /* ------- pendentes dentro de cada imóvel e de cada contrato ------- */
+
+  function pendBlock(list) {
+    return '<div class="cw-pend" style="margin-top:11px;border-top:1px solid var(--line);padding-top:10px">' +
+      '<div class="small" style="font-weight:650;margin-bottom:7px">' +
+      list.length + ' movimento' + (list.length === 1 ? '' : 's') + ' por confirmar</div>' +
+      list.map(function (r) {
+        var late = recIsLate(r);
+        return '<div class="card pend ' + (late ? 'late' : '') + '" style="padding:9px 11px;margin-bottom:6px">' +
+          '<div class="row-between" style="align-items:center;gap:9px">' +
+          '<div style="min-width:0"><b style="display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.name) + '</b>' +
+          '<span class="small">' + r.next + (late ? ' · <b class="neg">em atraso</b>' : ' · por confirmar') + '</span></div>' +
+          '<b style="flex:0 0 auto">' + (r.tx.amount ? euro2(r.tx.amount) : '') + '</b></div>' +
+          '<div class="toolbar" style="margin:8px 0 0">' +
+          '<button class="btn sm primary" onclick="event.stopPropagation();quickConfirmRec(\'' + r.id + '\')">' + ic('check', 13) + ' Confirmar</button>' +
+          '<button class="btn sm" onclick="event.stopPropagation();skipRec(\'' + r.id + '\')">Silenciar</button>' +
+          REJECT_BTN(r.id) + '</div></div>';
+      }).join('') + '</div>';
+  }
+
+  function decoratePending() {
+    if (tab !== 'properties' && tab !== 'contracts') return;
+    var pend = recActive();
+    if (!pend.length) return;
+    var pref = tab === 'properties' ? 'prop:' : 'ct:';
+    [].slice.call(document.querySelectorAll('[data-lp^="' + pref + '"]')).forEach(function (cardEl) {
+      var id = cardEl.getAttribute('data-lp').slice(pref.length);
+      var mine = pend.filter(function (r) {
+        return tab === 'properties' ? r.tx.propertyId === id : r.tx.contractId === id;
+      });
+      if (!mine.length || cardEl.querySelector('.cw-pend')) return;
+      var w = document.createElement('div');
+      w.innerHTML = pendBlock(mine);
+      cardEl.appendChild(w.firstChild);
+    });
+  }
+
+  /* ---------- ordem dos cartões da visão geral (modo de edição) ---------- */
+
+  var DASH_TITLES = ['Entradas e saídas', 'Cashflow acumulado', 'Renda por contrato',
+    'Cashflow por imóvel', 'Despesas sem imóvel', 'Contas entre proprietários'];
+
+  function dashKey(el) {
+    var kl = el.querySelector('.kpi .label');
+    if (kl) return 'kpi:' + kl.textContent.trim();
+    if (el.querySelector('#donutCard')) return 'despesas';
+    var titles = [].slice.call(el.querySelectorAll('.title')).map(function (x) { return x.textContent.trim(); });
+    for (var i = 0; i < titles.length; i++) if (DASH_TITLES.indexOf(titles[i]) > -1) return 'card:' + titles[i];
+    return titles.length ? 'card:' + titles[0] : '';
+  }
+
+  var _vDashboard = vDashboard;
+  vDashboard = function () {
+    var html = _vDashboard();
+    var tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    var kids = [].slice.call(tmp.children), first = -1;
+    for (var i = 0; i < kids.length; i++) if (kids[i].classList.contains('grid')) { first = i; break; }
+    if (first < 0) return html; // estado vazio: nada para ordenar
+
+    var fixed = kids.slice(0, first).map(function (n) { return n.outerHTML; }).join('');
+    var items = [], j = first;
+    while (j < kids.length) {
+      var h = kids[j].outerHTML;
+      // um título de secção viaja com o bloco que anuncia
+      if (kids[j].classList.contains('section-title') && kids[j + 1]) { h += kids[j + 1].outerHTML; j++; }
+      var d = document.createElement('div');
+      d.innerHTML = h;
+      items.push({ h: h, k: dashKey(d) || 'bloco' });
+      j++;
+    }
+    var seen = {};
+    items.forEach(function (it) {
+      if (seen[it.k]) it.k += '#' + (++seen[it.k]); else seen[it.k] = 1;
+    });
+    var order = (db.settings || {}).dashOrder || [];
+    items.forEach(function (it, ix) {
+      var at = order.indexOf(it.k);
+      it._r = at < 0 ? 1000 + ix : at;   // cartões novos ficam no fim, pela ordem de origem
+    });
+    items.sort(function (a, b) { return a._r - b._r; });
+
+    return fixed + items.map(function (it) {
+      return '<div class="cw-blk" data-k="' + esc(it.k) + '" data-lp="dash:' + esc(it.k) + '">' + it.h +
+        '<span class="cw-h">' + ic('grip', 15) + '</span></div>';
+    }).join('');
+  };
+
+  function blkByKey(k) {
+    return [].slice.call(document.querySelectorAll('.cw-blk')).filter(function (x) {
+      return x.getAttribute('data-k') === k;
+    })[0];
+  }
+
+  function saveDashOrder() {
+    var keys = [].slice.call(document.querySelectorAll('#view .cw-blk')).map(function (x) { return x.getAttribute('data-k'); });
+    if (!keys.length) return;
+    db.settings.dashOrder = keys;
+    save();
+  }
+
+  CW.resetDashOrder = function () {
+    delete db.settings.dashOrder;
+    save(); render();
+    toast('Ordem reposta.');
+  };
+
+  function editBar() {
+    var v = view();
+    if (!v || document.getElementById('cwEditBar')) return;
+    var el = document.createElement('div');
+    el.id = 'cwEditBar';
+    el.className = 'card';
+    el.style.cssText = 'margin-bottom:12px;padding:11px 13px;display:flex;align-items:center;gap:11px;flex-wrap:wrap';
+    el.innerHTML = '<span class="small" style="flex:1;min-width:140px">Arrasta os cartões para mudar a ordem.</span>' +
+      '<button class="btn sm" onclick="CW.resetDashOrder()">Repor ordem</button>' +
+      '<button class="btn sm primary" onclick="CW.exitEdit()">' + ic('check', 14) + ' Concluir</button>';
+    var firstBlk = v.querySelector('.cw-blk');
+    if (firstBlk) v.insertBefore(el, firstBlk); else v.insertBefore(el, v.firstChild);
+  }
+
+  function patchHdr() {
+    var hb = document.getElementById('hdrFilt');
+    if (!hb) return;
+    if (CW.editMode && tab === 'dashboard') {
+      hb.style.display = '';
+      hb.innerHTML = ic('check', 16) + ' Concluir';
+      hb.classList.add('primary');
+      hb.title = 'Terminar a edição dos cartões';
+    } else {
+      hb.title = 'Filtros e parâmetros';
+    }
+  }
+
+  CW.enterEdit = function (key) {
+    if (tab !== 'dashboard' || CW.editMode) return;
+    CW.editMode = true;
+    var v = view();
+    if (v) v.classList.add('cw-edit');
+    editBar(); patchHdr();
+    // se o dedo ainda está em cima do cartão, o arrasto começa já
+    if (key && pointerDown) {
+      var el = blkByKey(key);
+      if (el) startDrag(el, lastY);
+    }
+  };
+
+  CW.exitEdit = function (silent) {
+    if (!CW.editMode) return;
+    endDrag();
+    CW.editMode = false;
+    var v = view();
+    if (v) v.classList.remove('cw-edit');
+    var b = document.getElementById('cwEditBar');
+    if (b) b.remove();
+    render();   // devolve o botão de filtros ao cabeçalho
+    if (!silent) toast('Ordem guardada.');
+  };
+
+  // o botão do cabeçalho fecha o modo de edição em vez de abrir os filtros
+  var _hdrFiltToggle = hdrFiltToggle;
+  hdrFiltToggle = function () {
+    if (CW.editMode && tab === 'dashboard') return CW.exitEdit();
+    _hdrFiltToggle();
+  };
+
+  var drag = null, lastY = 0, pointerDown = false;
+
+  function startDrag(el, clientY) {
+    if (!el || drag) return;
+    drag = { el: el, cont: el.parentNode, startY: clientY };
+    el.classList.add('cw-drag');
+    document.body.style.userSelect = 'none';
+  }
+
+  function sibling(el, dir) {
+    var n = dir > 0 ? el.nextElementSibling : el.previousElementSibling;
+    while (n && !n.classList.contains('cw-blk')) n = dir > 0 ? n.nextElementSibling : n.previousElementSibling;
+    return n;
+  }
+
+  // troca só quando o cartão arrastado passa de metade do vizinho
+  function shuffle(sib, after, clientY) {
+    var visual = drag.el.getBoundingClientRect().top;
+    if (after) drag.cont.insertBefore(sib, drag.el);
+    else drag.cont.insertBefore(drag.el, sib);
+    drag.el.style.transform = '';
+    var off = visual - drag.el.getBoundingClientRect().top;
+    drag.el.style.transform = 'translateY(' + off + 'px)';
+    drag.startY = clientY - off;   // o cartão continua colado ao dedo
+  }
+
+  document.addEventListener('pointermove', function (e) {
+    lastY = e.clientY;
+    if (!drag) return;
+    e.preventDefault();
+    drag.el.style.transform = 'translateY(' + (e.clientY - drag.startY) + 'px)';
+    var r = drag.el.getBoundingClientRect(), mid = r.top + r.height / 2;
+    var nx = sibling(drag.el, 1);
+    if (nx) {
+      var nr = nx.getBoundingClientRect();
+      if (mid > nr.top + nr.height / 2) return shuffle(nx, true, e.clientY);
+    }
+    var pv = sibling(drag.el, -1);
+    if (pv) {
+      var pr = pv.getBoundingClientRect();
+      if (mid < pr.top + pr.height / 2) return shuffle(pv, false, e.clientY);
+    }
+  }, { passive: false, capture: true });
+
+  // já em modo de edição, o arrasto começa ao primeiro toque (sem esperar)
+  document.addEventListener('pointerdown', function (e) {
+    lastY = e.clientY;
+    pointerDown = true;
+    if (!CW.editMode || tab !== 'dashboard') return;
+    var blk = e.target && e.target.closest ? e.target.closest('.cw-blk') : null;
+    if (blk) startDrag(blk, e.clientY);
+  }, true);
+
+  function endDrag() {
+    if (!drag) return;
+    drag.el.classList.remove('cw-drag');
+    drag.el.style.transform = '';
+    drag = null;
+    document.body.style.userSelect = '';
+    saveDashOrder();
+  }
+  ['pointerup', 'pointercancel'].forEach(function (t) {
+    document.addEventListener(t, function () { pointerDown = false; endDrag(); }, true);
+  });
+
+  var css = document.createElement('style');
+  css.textContent =
+    '.cw-blk{position:relative}' +
+    '.cw-blk .cw-h{display:none}' +
+    '#view.cw-edit .cw-blk{border:1.5px dashed var(--line2);border-radius:18px;padding:9px;margin-top:10px;' +
+      'background:var(--tint);touch-action:none;cursor:grab}' +
+    '#view.cw-edit .cw-blk>*{pointer-events:none}' +
+    '#view.cw-edit .cw-blk .cw-h{display:grid;place-items:center;position:absolute;top:6px;right:8px;width:26px;height:26px;' +
+      'border-radius:9px;background:var(--chip);color:var(--muted)}' +
+    '#view.cw-edit .cw-blk.cw-drag{cursor:grabbing;box-shadow:var(--shadow);border-color:var(--accent);' +
+      'position:relative;z-index:70;opacity:.97}';
+  document.head.appendChild(css);
 
   CW.pushNow = pushNow;
   CW.pullNow = pullNow;
