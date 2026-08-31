@@ -82,3 +82,6 @@ for (const s of [192, 512]) {
   fs.writeFileSync(path.join(out, `icon-${s}.png`), makeIcon(s));
   console.log(`icon-${s}.png`);
 }
+// iOS procura especificamente um apple-touch-icon de 180x180
+fs.writeFileSync(path.join(out, 'apple-touch-icon.png'), makeIcon(180));
+console.log('apple-touch-icon.png');

@@ -618,7 +618,20 @@
         '<span style="color:var(--muted);transform:rotate(180deg)">' + ic('chev', 18) + '</span></div>';
       h = profRow + '<div style="height:14px"></div>' +
         navRow('Conta e partilha', sub, 'users', 'cloud') + '<div style="height:14px"></div>' + h;
-      if (!window.Android) {
+      var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      var standalone = false;
+      try { standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches; } catch (e) {}
+      if (isIOS) {
+        h += '<div style="height:14px"></div>' +
+          card('App no iPhone', 'Adicionar ao ecrã principal', standalone
+            ? '<div class="hint">Já estás a usar a app instalada no ecrã principal. 👍</div>'
+            : '<div class="hint">No iPhone a instalação faz-se pelo Safari (não aparece nenhum aviso automático):</div>' +
+              '<div class="list" style="gap:7px;margin-top:9px">' +
+              '<div class="small"><b>1.</b> Abre este site no <b>Safari</b> — se estiveres dentro de outra app (WhatsApp, Gmail, Instagram…), toca no ícone do browser para abrir no Safari a sério.</div>' +
+              '<div class="small"><b>2.</b> Toca no botão <b>Partilhar</b> (quadrado com seta para cima, na barra de baixo).</div>' +
+              '<div class="small"><b>3.</b> Desliza e escolhe <b>“Adicionar ao ecrã principal”</b> e confirma.</div></div>' +
+              '<div class="hint" style="margin-top:9px">No Chrome do iPhone: menu <b>⋯</b> → “Adicionar ao ecrã inicial”. A opção não existe em janelas privadas.</div>');
+      } else if (!window.Android) {
         h += '<div style="height:14px"></div>' +
           card('App para Android', 'A mesma app no telemóvel',
             '<div class="hint">Instala a app nativa: é o mesmo gestor, com notificações dos movimentos por confirmar e o seletor de ficheiros do Android (Google Drive incluído). Ao abrir o APK, o Android pede para autorizares a instalação de apps fora da Play Store — é normal.</div>' +

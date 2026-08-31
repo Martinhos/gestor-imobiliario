@@ -1,6 +1,6 @@
 /* Service worker: a app abre offline (a API sincroniza quando voltar a rede). */
-const CACHE = 'gi-shell-v1';
-const SHELL = ['/', '/index.html', '/cloud.js', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
+const CACHE = 'gi-shell-v2';
+const SHELL = ['/', '/index.html', '/cloud.js', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
