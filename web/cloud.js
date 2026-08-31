@@ -40,6 +40,23 @@
     });
   }
 
+  /* O tema é uma preferência do aparelho, não da conta: sincronizá-lo fazia
+     um telemóvel em modo escuro herdar o "claro" escolhido noutro sítio. */
+  var LS_THEME = 'gi_theme';
+  function localTheme() {
+    try { return localStorage.getItem(LS_THEME) || 'auto'; } catch (e) { return 'auto'; }
+  }
+  function applyLocalTheme() {
+    db.settings.theme = localTheme();
+    applyTheme();
+  }
+  var _setTheme = setTheme;
+  setTheme = function (t) {
+    try { localStorage.setItem(LS_THEME, t); } catch (e) {}
+    _setTheme(t);
+  };
+  applyLocalTheme();
+
   var snap = {};
   var snapKey = function () { return 'gi_cloud_snap_' + (CW.user ? CW.user.id : ''); };
   function loadSnap() { try { snap = JSON.parse(localStorage.getItem(snapKey()) || '{}'); } catch (e) { snap = {}; } }
@@ -131,7 +148,9 @@
     var meOwner = CW.user && owners.find(function (o) { return o.id === CW.user.id; });
     if (meOwner) map['u:profile:main'] = { scope: 'user', kind: 'profile', id: 'main', data: strip(meOwner) };
     tenants.forEach(function (t) { if (!t._sharedFrom) map['u:tenant:' + t.id] = { scope: 'user', kind: 'tenant', id: t.id, data: strip(t) }; });
-    map['u:settings:main'] = { scope: 'user', kind: 'settings', id: 'main', data: strip(db.settings) };
+    var st = strip(db.settings);
+    delete st.theme;   // preferência do aparelho: fica de fora da sincronização
+    map['u:settings:main'] = { scope: 'user', kind: 'settings', id: 'main', data: st };
     return map;
   }
 
@@ -221,7 +240,7 @@
     var myProfile = null;
     (st.userRecords || []).forEach(function (r) {
       try {
-        if (r.kind === 'settings') d.settings = Object.assign({}, blank.settings, r.data);
+        if (r.kind === 'settings') d.settings = Object.assign({}, blank.settings, r.data, { theme: localTheme() });
         else if (r.kind === 'profile') myProfile = r.data;
         else if (r.kind === 'tx') d.transactions.push(normTx(r.data));
         else if (r.kind === 'rec') d.recurring.push(normRec(r.data));
@@ -306,7 +325,7 @@
     saveSnap();
     try { localStorage.setItem(LS_OWNER, CW.user.id); } catch (e) {}
     rawSet(KEY, JSON.stringify(db));
-    applyTheme(); buildNav(); render();
+    applyLocalTheme(); buildNav(); render();
     setSyncBadge('ok');
     schedulePush(); // envia o que ainda faltar no servidor
   }
@@ -708,7 +727,7 @@
       '<div class="stat" style="border:0"><span>O meu id</span><b style="font-family:monospace;letter-spacing:2px;font-size:16px">' + esc(CW.user.id) + '</b></div>' +
       '<div class="toolbar" style="margin-top:11px">' +
       '<button class="btn" onclick="CW.copyId()">Copiar id</button>' +
-      '<button class="btn danger" onclick="CW.logout()">Terminar sessão</button></div>' +
+      '<button class="btn" onclick="CW.logout()">Terminar sessão</button></div>' +
       '<div class="hint" style="margin-top:11px">Dá este id a outro utilizador para ele te adicionar — ou adiciona tu o id dele em baixo. Depois de aceite, cada um escolhe que casas quer partilhar.</div>');
     var add = card('Ligar a outro utilizador', 'Escreve o id que ele te deu',
       '<div style="display:flex;gap:9px">' +
@@ -717,7 +736,14 @@
     var list = conns.length
       ? '<div class="section-title">Utilizadores ligados</div><div class="list" style="gap:10px">' + conns.map(connCard).join('') + '</div>'
       : '<div class="hint">Ainda não estás ligado a ninguém.</div>';
-    return acc + '<div style="height:14px"></div>' + add + '<div style="height:14px"></div>' + list;
+    var danger = card('Apagar a conta', 'Não há volta atrás',
+      '<div class="hint">Apaga a tua conta e <b>todos os teus dados</b>: imóveis, contratos, movimentos, pessoas e ligações. ' +
+      'Nas casas de outras pessoas onde tenhas ficado registado (num movimento pago por ti, por exemplo), o teu nome passa a ' +
+      'aparecer como <b>[deleted]</b>. As casas que os outros partilharam contigo deixam de estar ligadas a ti — os dados deles não são apagados.</div>' +
+      '<div class="toolbar" style="margin-top:11px"><button class="btn danger" onclick="CW.deleteAccount()">' +
+      ic('trash', 15) + ' Apagar a minha conta</button></div>');
+    return acc + '<div style="height:14px"></div>' + add + '<div style="height:14px"></div>' + list +
+      '<div style="height:18px"></div>' + danger;
   }
 
   /* ---------------- aviso legal ---------------- */
@@ -795,6 +821,27 @@
   /* Ecrã de entrada: sempre que a app abre (depois da sessão iniciada),
      mostra-se o aviso e nada mais, até o utilizador continuar. */
 
+  // trava a página por baixo enquanto um ecrã de entrada estiver aberto
+  function lockScroll(on) {
+    try {
+      var h = document.documentElement;
+      if (on) {
+        if (h.classList.contains('noscroll')) return;
+        CW._lockY = window.scrollY || 0;
+        h.classList.add('noscroll');
+        document.body.style.top = -CW._lockY + 'px';
+      } else {
+        if (!h.classList.contains('noscroll')) return;
+        if (modalStack.length || document.body.classList.contains('open')) return;
+        if (document.getElementById('cwLegal')) return;
+        if (authEl && authEl.style.display !== 'none') return;
+        h.classList.remove('noscroll');
+        document.body.style.top = '';
+        window.scrollTo(0, CW._lockY || 0);
+      }
+    } catch (e) {}
+  }
+
   function showLegalGate() {
     if (!CW.user || CW._legalShown) return;
     CW._legalShown = true;
@@ -823,11 +870,13 @@
       '<button class="btn" style="width:100%;justify-content:center" onclick="CW.acceptLegal(1)">Ler o aviso legal completo</button>' +
       '</div></div>';
     document.body.appendChild(el);
+    lockScroll(true);
   }
 
   CW.acceptLegal = function (full) {
     var el = document.getElementById('cwLegal');
     if (el) el.remove();
+    lockScroll(false);
     if (full) { go('settings'); goSet('legal'); }
   };
 
@@ -904,6 +953,44 @@
     var nxt = (CW._shareQueue || []).shift();
     if (nxt) CW.proposeShares(nxt, true);
   }
+
+  CW.deleteAccount = function () {
+    var mine = (db.properties || []).filter(function (p) { return !p._sharedFrom; }).length;
+    var body = '<div class="form">' +
+      '<div class="hint" style="color:var(--danger)"><b>Isto não se pode desfazer.</b> Vais apagar ' + mine +
+      ' imóvel' + (mine === 1 ? '' : 'is') + ', com os contratos, movimentos e pessoas que lhes pertencem, ' +
+      'e todas as tuas ligações a outros utilizadores.</div>' +
+      '<div class="hint">Se quiseres guardar os teus registos, cancela e faz primeiro uma cópia de segurança ' +
+      'em Definições → Dados → Guardar cópia.</div>' +
+      '<label>Escreve <b>APAGAR</b> para confirmar<input id="cw_del_c" placeholder="APAGAR" autocomplete="off" style="text-transform:uppercase"></label>' +
+      '<label>Palavra-passe<input id="cw_del_p" type="password" placeholder="deixa vazio se entras com Google" autocomplete="current-password"></label>' +
+      '<div id="cw_del_e" class="small" style="color:var(--danger)"></div></div>';
+    openModal('Apagar a minha conta', body,
+      '<button class="btn" onclick="closeModal()">Cancelar</button>' +
+      '<button class="btn danger" onclick="CW.doDeleteAccount()">Apagar definitivamente</button>');
+  };
+
+  CW.doDeleteAccount = function () {
+    var e = document.getElementById('cw_del_e');
+    e.textContent = '';
+    api('DELETE', '/api/me', { confirm: val('cw_del_c'), password: val('cw_del_p') })
+      .then(function () {
+        // limpa tudo o que ficou neste aparelho
+        CW.user = null;
+        db = JSON.parse(JSON.stringify(blank));
+        rawSet(KEY, JSON.stringify(db));
+        ['gi_cloud_user', 'gi_cloud_owner', 'gi_page'].forEach(function (k) {
+          try { localStorage.removeItem(k); } catch (x) {}
+        });
+        try { localStorage.removeItem(snapKey()); } catch (x) {}
+        snap = {};
+        closeAllModals();
+        buildNav(); render();
+        CW.showAuthMode = 'login';
+        showAuth('Conta apagada. Obrigado por teres experimentado.');
+      })
+      .catch(function (err) { e.textContent = err.message || 'Não foi possível apagar a conta.'; });
+  };
 
   CW.logout = function () {
     confirmModal('Terminar sessão', 'Os dados continuam guardados na tua conta e voltam quando iniciares sessão.', function () {
@@ -1481,6 +1568,7 @@
       '<span class="small">ou</span><span style="flex:1;height:1px;background:var(--line)"></span></div>' +
       '<div id="cwa_gbtn" style="display:flex;justify-content:center;margin-bottom:8px"></div>' +
       '</div></div></div>';
+    lockScroll(true);
     var last = document.getElementById(login ? 'cwa_pass' : 'cwa_pass2');
     if (last) last.addEventListener('keydown', function (e) { if (e.key === 'Enter') CW.submitAuth(); });
     if (!login) {
@@ -1607,6 +1695,7 @@
 
   function hideAuth() {
     if (authEl) authEl.style.display = 'none';
+    lockScroll(false);
   }
 
   /* ---------------- PWA ---------------- */

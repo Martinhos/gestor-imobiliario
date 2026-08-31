@@ -73,7 +73,10 @@ export async function getSessionUser(env, request) {
   const raw = await env.SESSIONS.get(`sess:${token}`);
   if (!raw) return null;
   const { userId } = JSON.parse(raw);
-  const user = await env.DB.prepare('SELECT id, email, name FROM users WHERE id = ?').bind(userId).first();
+  // contas apagadas deixam de ter sessão válida, mesmo com o token na mão
+  const user = await env.DB.prepare('SELECT id, email, name FROM users WHERE id = ? AND deleted_at IS NULL')
+    .bind(userId)
+    .first();
   if (!user) return null;
   return { ...user, token };
 }

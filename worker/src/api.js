@@ -147,7 +147,7 @@ export async function handleApi(request, env) {
     const b = await body(request);
     if (!b || !b.email || !b.password) return err(400, 'Email e palavra-passe são obrigatórios.');
     const email = String(b.email).trim().toLowerCase();
-    const user = await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
+    const user = await env.DB.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').bind(email).first();
     if (user && !user.pass_hash) return err(401, 'Esta conta entra com Google — usa esse botão.');
     if (!user || !(await verifyPassword(String(b.password), user.pass_salt, user.pass_hash))) {
       return err(401, 'Email ou palavra-passe errados.');
@@ -180,9 +180,11 @@ export async function handleApi(request, env) {
     }
     const col = 'google_sub';
     const email = String(payload.email || '').trim().toLowerCase();
-    let user = await env.DB.prepare(`SELECT * FROM users WHERE ${col} = ?`).bind(payload.sub).first();
+    let user = await env.DB.prepare(`SELECT * FROM users WHERE ${col} = ? AND deleted_at IS NULL`)
+      .bind(payload.sub)
+      .first();
     if (!user && email) {
-      user = await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
+      user = await env.DB.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').bind(email).first();
       if (user) await env.DB.prepare(`UPDATE users SET ${col} = ? WHERE id = ?`).bind(payload.sub, user.id).run();
     }
     if (!user) {
@@ -215,6 +217,75 @@ export async function handleApi(request, env) {
 
   if (path === '/api/me' && method === 'GET') {
     return json({ id: me.id, email: me.email, name: me.name });
+  }
+
+  // Apagar a conta: os dados próprios desaparecem e a identidade fica como
+  // "[deleted]", para as referências noutras contas continuarem a fazer
+  // sentido sem revelar quem era.
+  if (path === '/api/me' && method === 'DELETE') {
+    const b = await body(request);
+    if (!b || String(b.confirm || '').trim().toUpperCase() !== 'APAGAR') {
+      return err(400, 'Escreve APAGAR para confirmar.');
+    }
+    const full = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(me.id).first();
+    // quem tem palavra-passe confirma com ela; contas Google confirmam só com a palavra
+    if (full && full.pass_hash) {
+      if (!b.password || !(await verifyPassword(String(b.password), full.pass_salt, full.pass_hash))) {
+        return err(401, 'Palavra-passe errada.');
+      }
+    }
+
+    // casas de outros onde este utilizador constava como comproprietário
+    const foreign = (
+      await env.DB.prepare(
+        `SELECT DISTINCT s.house_id FROM shares s
+           JOIN connections c ON c.id = s.connection_id
+          WHERE (c.requester_id = ?1 OR c.target_id = ?1) AND s.owner_id <> ?1`
+      )
+        .bind(me.id)
+        .all()
+    ).results;
+
+    const stmts = [];
+    for (const row of foreign) {
+      const h = await env.DB.prepare('SELECT data FROM houses WHERE id = ?').bind(row.house_id).first();
+      if (!h) continue;
+      let data;
+      try { data = JSON.parse(h.data); } catch (e) { continue; }
+      let touched = false;
+      if (data.ownerShares && data.ownerShares[me.id] !== undefined) { delete data.ownerShares[me.id]; touched = true; }
+      if (Array.isArray(data.ownerIds) && data.ownerIds.includes(me.id)) {
+        data.ownerIds = data.ownerIds.filter((x) => x !== me.id);
+        touched = true;
+      }
+      if (touched) {
+        stmts.push(env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
+          .bind(JSON.stringify(data), now(), row.house_id));
+      }
+    }
+
+    stmts.push(
+      // dados próprios
+      env.DB.prepare('DELETE FROM records WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(me.id),
+      env.DB.prepare('DELETE FROM shares WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(me.id),
+      env.DB.prepare('DELETE FROM share_proposals WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(me.id),
+      env.DB.prepare('DELETE FROM houses WHERE owner_id = ?').bind(me.id),
+      env.DB.prepare('DELETE FROM user_records WHERE user_id = ?').bind(me.id),
+      // ligações a outras pessoas
+      env.DB.prepare('DELETE FROM shares WHERE owner_id = ?').bind(me.id),
+      env.DB.prepare('DELETE FROM share_proposals WHERE proposed_by = ?').bind(me.id),
+      env.DB.prepare('DELETE FROM shares WHERE connection_id IN (SELECT id FROM connections WHERE requester_id = ?1 OR target_id = ?1)').bind(me.id),
+      env.DB.prepare('DELETE FROM connections WHERE requester_id = ?1 OR target_id = ?1').bind(me.id),
+      // lápide: a identidade some, as referências ficam legíveis
+      env.DB.prepare(
+        `UPDATE users SET name = '[deleted]', email = 'apagado-' || id || '@invalido.local',
+           pass_hash = '', pass_salt = '', google_sub = NULL, apple_sub = NULL, deleted_at = ?
+         WHERE id = ?`
+      ).bind(now(), me.id)
+    );
+    await env.DB.batch(stmts);
+    await destroySession(env, me.token);
+    return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', true) });
   }
 
   // Estado completo visível por este utilizador: casas próprias + partilhadas
@@ -307,26 +378,44 @@ export async function handleApi(request, env) {
       });
     }
 
-    // perfis (dados pessoais) de todos os utilizadores relevantes
+    // perfis: comproprietários e pessoas ligadas levam a ficha completa
     const userIdSet = new Set([me.id]);
     Object.keys(houseParts).forEach((hid) => houseParts[hid].forEach((u) => userIdSet.add(u)));
     connections.forEach((c) => { userIdSet.add(c.requester_id); userIdSet.add(c.target_id); });
-    const uidArr = [...userIdSet];
+
+    // ids apenas referidos em movimentos das casas visíveis (quem pagou ou
+    // recebeu, incluindo contas já apagadas): entram só com o nome, para as
+    // referências continuarem legíveis — "[deleted]" quando a conta se foi.
+    const referenced = new Set();
+    records.forEach((r) => {
+      try {
+        const d = JSON.parse(r.data);
+        [d.paidBy, d.toId].forEach((u) => { if (u && !userIdSet.has(u)) referenced.add(u); });
+      } catch (e) {}
+    });
+
+    const uidArr = [...new Set([...userIdSet, ...referenced])];
     const pu = uidArr.map(() => '?').join(',');
     const userRows = (
       await env.DB.prepare(`SELECT id, name FROM users WHERE id IN (${pu})`).bind(...uidArr).all()
     ).results;
+    const fullArr = [...userIdSet];
+    const pf = fullArr.map(() => '?').join(',');
     const profRecs = (
       await env.DB.prepare(
         `SELECT user_id, data FROM user_records
-          WHERE kind = 'profile' AND id = 'main' AND deleted = 0 AND user_id IN (${pu})`
+          WHERE kind = 'profile' AND id = 'main' AND deleted = 0 AND user_id IN (${pf})`
       )
-        .bind(...uidArr)
+        .bind(...fullArr)
         .all()
     ).results;
     const profByUser = {};
     profRecs.forEach((r) => { try { profByUser[r.user_id] = JSON.parse(r.data); } catch (e) {} });
-    const profiles = userRows.map((u) => ({ userId: u.id, name: u.name, data: profByUser[u.id] || null }));
+    const profiles = userRows.map((u) => ({
+      userId: u.id,
+      name: u.name,
+      data: userIdSet.has(u.id) ? profByUser[u.id] || null : null,
+    }));
 
     // propostas de divisão pendentes nas casas visíveis
     let proposals = [];
@@ -664,7 +753,9 @@ export async function handleApi(request, env) {
     const peerId = String((b && b.peerId) || '').trim().toUpperCase();
     if (!peerId) return err(400, 'Indica o id do outro utilizador.');
     if (peerId === me.id) return err(400, 'Não te podes ligar a ti próprio.');
-    const peer = await env.DB.prepare('SELECT id, name FROM users WHERE id = ?').bind(peerId).first();
+    const peer = await env.DB.prepare('SELECT id, name FROM users WHERE id = ? AND deleted_at IS NULL')
+      .bind(peerId)
+      .first();
     if (!peer) return err(404, 'Não existe nenhum utilizador com esse id.');
     const dup = await env.DB.prepare(
       `SELECT id FROM connections
