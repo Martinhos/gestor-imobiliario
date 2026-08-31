@@ -363,6 +363,7 @@
     _render();
     try { decorateShared(); } catch (e) {}
     try { decoratePending(); } catch (e) {}
+    try { demoBanner(); } catch (e) {}
     try {
       if (CW.editMode && tab === 'dashboard') { view().classList.add('cw-edit'); editBar(); }
       patchHdr();
@@ -416,7 +417,26 @@
     // a barra de regresso só faz sentido enquanto se está nos Movimentos
     if (id !== 'transactions') CW._fromKpi = null;
     _go(id);
+    rememberPage();
   };
+
+  // recarregar a página devolve o utilizador ao sítio onde estava
+  var LS_PAGE = 'gi_page';
+  function rememberPage() {
+    try { localStorage.setItem(LS_PAGE, JSON.stringify({ tab: tab, set: setPage || '' })); } catch (e) {}
+  }
+  var _goSet = goSet;
+  goSet = function (p) { _goSet(p); rememberPage(); };
+
+  function restorePage() {
+    var s = null;
+    try { s = JSON.parse(localStorage.getItem(LS_PAGE) || 'null'); } catch (e) {}
+    if (!s || !s.tab || s.tab === 'dashboard' && !s.set) return;
+    if (!TABS.some(function (t) { return t.id === s.tab; })) return;
+    tab = s.tab;
+    setPage = s.tab === 'settings' ? (s.set || '') : '';
+    buildNav(); render();
+  }
 
   var _delProp = delProp;
   delProp = function (id) {
@@ -618,6 +638,7 @@
   var _vSettings = vSettings;
   vSettings = function () {
     if (setPage === 'cloud') return backRow + vCloud();
+    if (setPage === 'legal') return backRow + vLegal();
     var h = _vSettings();
     if (!setPage) {
       var sub = CW.user ? (CW.user.name || CW.user.email) + ' · id ' + CW.user.id : 'Inicia sessão para sincronizar';
@@ -628,7 +649,9 @@
         '<span style="flex:1;min-width:0"><b style="display:block">O meu perfil</b><span class="small">' + psub + '</span></span>' +
         '<span style="color:var(--muted);transform:rotate(180deg)">' + ic('chev', 18) + '</span></div>';
       h = profRow + '<div style="height:14px"></div>' +
-        navRow('Conta e partilha', sub, 'users', 'cloud') + '<div style="height:14px"></div>' + h;
+        navRow('Conta e partilha', sub, 'users', 'cloud') + '<div style="height:14px"></div>' + h +
+        '<div style="height:14px"></div>' +
+        navRow('Aviso legal', 'Versão de demonstração · sem garantias', 'info', 'legal');
       var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       var standalone = false;
       try { standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches; } catch (e) {}
@@ -697,6 +720,105 @@
       : '<div class="hint">Ainda não estás ligado a ninguém.</div>';
     return acc + '<div style="height:14px"></div>' + add + '<div style="height:14px"></div>' + list;
   }
+
+  /* ---------------- aviso legal ---------------- */
+
+  SUBPAGE.cloud = { label: 'Conta e partilha', sub: 'O teu id, ligações e casas partilhadas' };
+  SUBPAGE.legal = { label: 'Aviso legal', sub: 'Versão de demonstração · condições de utilização' };
+
+  var LEGAL_UPDATED = '31 de agosto de 2026';
+
+  function vLegal() {
+    var p = function (t) { return '<p style="margin:0 0 10px">' + t + '</p>'; };
+    return card('Versão de demonstração', 'Lê antes de usares com dados reais',
+      '<div class="hint" style="font-size:14px;line-height:1.65">' +
+      p('<b>Esta aplicação é uma versão de demonstração, em desenvolvimento.</b> É um projeto pessoal, ' +
+        'disponibilizado tal como está, sem qualquer garantia de funcionamento, exatidão, disponibilidade ou ' +
+        'conservação dos dados. Não é um produto comercial nem um serviço contratado.') +
+      p('Funcionalidades podem mudar, deixar de existir ou comportar-se de forma inesperada de um dia para o outro.') +
+      '</div>') +
+      '<div style="height:14px"></div>' +
+      card('Os teus dados', 'Podes perdê-los',
+        '<div class="hint" style="font-size:14px;line-height:1.65">' +
+        p('Os dados são guardados numa base de dados na nuvem e no próprio dispositivo. Sendo uma demonstração, ' +
+          '<b>podem ser apagados, repostos ou corrompidos sem aviso prévio</b>, seja por erro, manutenção ou fim do projeto.') +
+        p('<b>Faz cópias de segurança regulares</b> em Definições → Dados → Guardar cópia. A responsabilidade de ' +
+          'manter uma cópia dos teus registos é tua.') +
+        p('Fotografias e documentos anexados ficam apenas no dispositivo onde foram adicionados: não são ' +
+          'sincronizados nem incluídos nas cópias de segurança em JSON.') +
+        '</div>') +
+      '<div style="height:14px"></div>' +
+      card('Não é aconselhamento profissional', '',
+        '<div class="hint" style="font-size:14px;line-height:1.65">' +
+        p('Os valores, indicadores e projeções (yield, cap rate, LTV, planos de amortização, impostos, ' +
+          'rentabilidades futuras) são <b>estimativas informativas</b>, calculadas a partir do que introduzes e de ' +
+          'pressupostos simplificados. Não constituem aconselhamento fiscal, jurídico, contabilístico ou financeiro ' +
+          'e não substituem um contabilista certificado, um advogado ou um intermediário de crédito.') +
+        p('Confirma sempre os números junto das fontes oficiais (Autoridade Tributária, banco, condomínio) antes de ' +
+          'tomares decisões ou submeteres declarações.') +
+        '</div>') +
+      '<div style="height:14px"></div>' +
+      card('Contratos gerados em PDF', 'Rever antes de assinar',
+        '<div class="hint" style="font-size:14px;line-height:1.65">' +
+        p('O contrato de arrendamento gerado pela aplicação é um <b>modelo genérico, não validado por advogado</b> e ' +
+          'que pode não refletir a legislação em vigor nem as particularidades da tua situação.') +
+        p('Deve ser revisto por um profissional antes de ser assinado. A aplicação não assume qualquer ' +
+          'responsabilidade pelo conteúdo, validade ou consequências dos documentos gerados.') +
+        '</div>') +
+      '<div style="height:14px"></div>' +
+      card('Dados de terceiros e privacidade', 'Inquilinos, proprietários e fiadores',
+        '<div class="hint" style="font-size:14px;line-height:1.65">' +
+        p('Ao introduzires dados de outras pessoas (nome, contactos, NIF, cartão de cidadão, documentos), ' +
+          '<b>és tu o responsável pelo tratamento desses dados</b> à luz do RGPD: deves ter fundamento legítimo para ' +
+          'os guardar, informar os titulares e conservá-los apenas o tempo necessário.') +
+        p('Introduz o mínimo indispensável e evita dados sensíveis. Ao partilhares uma casa com outro utilizador, ' +
+          'dás-lhe acesso a tudo o que essa casa contém — incluindo contratos, movimentos e fichas de pessoas.') +
+        '</div>') +
+      '<div style="height:14px"></div>' +
+      card('Segurança e disponibilidade', '',
+        '<div class="hint" style="font-size:14px;line-height:1.65">' +
+        p('As palavras-passe são guardadas cifradas e a ligação é encriptada, mas <b>nenhuma medida de segurança é ' +
+          'infalível</b> e esta aplicação não foi sujeita a auditoria de segurança. Usa uma palavra-passe única e forte.') +
+        p('O serviço pode ficar indisponível, ser interrompido ou terminar a qualquer momento, sem aviso e sem ' +
+          'direito a indemnização.') +
+        '</div>') +
+      '<div style="height:14px"></div>' +
+      card('Limitação de responsabilidade', '',
+        '<div class="hint" style="font-size:14px;line-height:1.65">' +
+        p('Na medida máxima permitida por lei, o autor não se responsabiliza por quaisquer danos diretos ou ' +
+          'indiretos decorrentes do uso desta aplicação — incluindo perda de dados, prejuízos financeiros, ' +
+          'decisões tomadas com base nos valores apresentados ou incumprimentos legais ou fiscais.') +
+        p('Ao utilizares a aplicação, aceitas estas condições. Se não concordares, não a utilizes.') +
+        '</div>') +
+      '<div class="hint" style="text-align:center;margin-top:16px">Última atualização: ' + LEGAL_UPDATED + '.</div>';
+  }
+
+  // faixa discreta na primeira utilização, para não haver dúvidas de que é uma demo
+  var LS_LEGAL = 'gi_legal_ok';
+  function demoBanner() {
+    if (!CW.user || tab === 'settings') return;
+    var seen = null;
+    try { seen = localStorage.getItem(LS_LEGAL); } catch (e) {}
+    if (seen) return;
+    var v = view();
+    if (!v || document.getElementById('cwDemo')) return;
+    var el = document.createElement('div');
+    el.id = 'cwDemo';
+    el.className = 'card';
+    el.style.cssText = 'margin-bottom:12px;padding:11px 13px;border-color:var(--warn);background:var(--warn-soft)';
+    el.innerHTML = '<div class="row-between" style="align-items:center;gap:11px;flex-wrap:wrap">' +
+      '<span class="small" style="flex:1;min-width:150px;color:var(--warn)"><b>Versão de demonstração.</b> ' +
+      'Os dados podem ser apagados sem aviso — guarda cópias de segurança.</span>' +
+      '<span style="display:flex;gap:6px;flex:0 0 auto">' +
+      '<button class="btn sm" onclick="go(\'settings\');goSet(\'legal\')">Aviso legal</button>' +
+      '<button class="btn sm primary" onclick="CW.hideDemo()">Entendi</button></span></div>';
+    v.insertBefore(el, v.firstChild);
+  }
+  CW.hideDemo = function () {
+    try { localStorage.setItem(LS_LEGAL, '1'); } catch (e) {}
+    var el = document.getElementById('cwDemo');
+    if (el) el.remove();
+  };
 
   CW.copyId = function () {
     var done = function () { toast('Id copiado: partilha-o com o outro utilizador.'); };
@@ -1484,7 +1606,8 @@
   /* ---------------- arranque ---------------- */
 
   if (CW.user) {
-    // sessão em cache: confirma em fundo e começa a sincronizar
+    // sessão em cache: volta à página onde estava e sincroniza em fundo
+    try { restorePage(); } catch (e) {}
     api('GET', '/api/me').then(function (u) {
       CW.user = Object.assign({}, CW.user, { id: u.id, name: u.name, email: u.email });
       try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
