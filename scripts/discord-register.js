@@ -60,21 +60,33 @@ const comandos = [
   { name: 'resumo', description: 'Enviar o resumo diário para o canal de administração' },
 ];
 
-const url = GUILD
-  ? `https://discord.com/api/v10/applications/${APP}/guilds/${GUILD}/commands`
-  : `https://discord.com/api/v10/applications/${APP}/commands`;
+const registar = (url) =>
+  fetch(url, {
+    method: 'PUT',
+    headers: { Authorization: 'Bot ' + TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify(comandos),
+  }).then(async (r) => ({ ok: r.ok, status: r.status, texto: await r.text() }));
 
-fetch(url, {
-  method: 'PUT',
-  headers: { Authorization: 'Bot ' + TOKEN, 'Content-Type': 'application/json' },
-  body: JSON.stringify(comandos),
-})
-  .then(async (r) => {
-    const t = await r.text();
-    if (!r.ok) {
-      console.error('Falhou (' + r.status + '):', t);
-      process.exit(1);
+const global = `https://discord.com/api/v10/applications/${APP}/commands`;
+
+(async () => {
+  if (GUILD) {
+    const r = await registar(`https://discord.com/api/v10/applications/${APP}/guilds/${GUILD}/commands`);
+    if (r.ok) {
+      console.log('Registados ' + comandos.length + ' comandos no servidor ' + GUILD + '.');
+      return;
     }
-    console.log('Registados ' + comandos.length + ' comandos ' + (GUILD ? 'no servidor ' + GUILD : 'globalmente') + '.');
-  })
-  .catch((e) => { console.error(e); process.exit(1); });
+    // 403 aqui quer dizer que o bot não foi convidado com o âmbito
+    // applications.commands. Os comandos globais não dependem disso.
+    console.warn('Não deu para registar no servidor (' + r.status + '): ' + r.texto);
+    console.warn('A tentar registo global — convida o bot com o âmbito applications.commands ' +
+      'para os comandos aparecerem de imediato.');
+  }
+  const g = await registar(global);
+  if (!g.ok) {
+    console.error('Falhou também o registo global (' + g.status + '): ' + g.texto);
+    process.exit(1);
+  }
+  console.log('Registados ' + comandos.length + ' comandos globalmente. ' +
+    'Podem demorar até uma hora a aparecer.');
+})().catch((e) => { console.error(e); process.exit(1); });

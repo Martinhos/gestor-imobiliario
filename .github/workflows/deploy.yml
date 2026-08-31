@@ -131,6 +131,7 @@ jobs:
       # Comandos do bot: registados sempre que a lista mudar. Sem bot
       # configurado, o passo passa ao lado sem falhar.
       - name: Registar comandos do Discord
+        continue-on-error: true   # um bot mal configurado não trava o deploy
         env:
           DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
