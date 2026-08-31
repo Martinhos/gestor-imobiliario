@@ -128,11 +128,16 @@ jobs:
           put CF_ANALYTICS_TOKEN "${CF_ANALYTICS_TOKEN:-$CLOUDFLARE_API_TOKEN}"
           put CF_ACCOUNT_ID "$TF_VAR_cloudflare_account_id"
 
-      # Comandos do bot: registados sempre que a lista mudar.
+      # Comandos do bot: registados sempre que a lista mudar. Sem bot
+      # configurado, o passo passa ao lado sem falhar.
       - name: Registar comandos do Discord
-        if: ${{ secrets.DISCORD_BOT_TOKEN != '' && secrets.DISCORD_APP_ID != '' }}
         env:
           DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
-        run: node scripts/discord-register.js
+        run: |
+          if [ -n "$DISCORD_APP_ID" ] && [ -n "$DISCORD_BOT_TOKEN" ]; then
+            node scripts/discord-register.js
+          else
+            echo "Bot do Discord não configurado — comandos não registados."
+          fi
