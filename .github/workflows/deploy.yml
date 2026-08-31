@@ -102,6 +102,11 @@ jobs:
         env:
           DISCORD_DEV_WEBHOOK: ${{ secrets.DISCORD_DEV_WEBHOOK }}
           DISCORD_ADMIN_WEBHOOK: ${{ secrets.DISCORD_ADMIN_WEBHOOK }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_PUBLIC_KEY: ${{ secrets.DISCORD_PUBLIC_KEY }}
+          DISCORD_DEV_CHANNEL: ${{ secrets.DISCORD_DEV_CHANNEL }}
+          DISCORD_ADMIN_CHANNEL: ${{ secrets.DISCORD_ADMIN_CHANNEL }}
+          DISCORD_ADMINS: ${{ secrets.DISCORD_ADMINS }}
           CF_ANALYTICS_TOKEN: ${{ secrets.CF_ANALYTICS_TOKEN }}
         run: |
           set -e
@@ -115,5 +120,19 @@ jobs:
           }
           put DISCORD_DEV_WEBHOOK "$DISCORD_DEV_WEBHOOK"
           put DISCORD_ADMIN_WEBHOOK "$DISCORD_ADMIN_WEBHOOK"
+          put DISCORD_BOT_TOKEN "$DISCORD_BOT_TOKEN"
+          put DISCORD_PUBLIC_KEY "$DISCORD_PUBLIC_KEY"
+          put DISCORD_DEV_CHANNEL "$DISCORD_DEV_CHANNEL"
+          put DISCORD_ADMIN_CHANNEL "$DISCORD_ADMIN_CHANNEL"
+          put DISCORD_ADMINS "$DISCORD_ADMINS"
           put CF_ANALYTICS_TOKEN "${CF_ANALYTICS_TOKEN:-$CLOUDFLARE_API_TOKEN}"
           put CF_ACCOUNT_ID "$TF_VAR_cloudflare_account_id"
+
+      # Comandos do bot: registados sempre que a lista mudar.
+      - name: Registar comandos do Discord
+        if: ${{ secrets.DISCORD_BOT_TOKEN != '' && secrets.DISCORD_APP_ID != '' }}
+        env:
+          DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+        run: node scripts/discord-register.js

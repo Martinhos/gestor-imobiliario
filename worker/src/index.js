@@ -43,6 +43,13 @@ export default {
 
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // Interações do bot do Discord. A autenticação é a assinatura Ed25519
+    // que o Discord envia — não há sessão nem cookies aqui.
+    if (url.pathname === '/api/discord' && request.method === 'POST') {
+      const { handleInteraction } = await import('./discord.js');
+      return handleInteraction(request, env, ctx);
+    }
     if (url.pathname.startsWith('/api/')) {
       // a API é de uso próprio: nada de a chamar a partir de outro site
       const origin = request.headers.get('Origin');

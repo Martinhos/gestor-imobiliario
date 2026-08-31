@@ -29,8 +29,20 @@ const cut = (s, n) => {
   return t.length > n ? t.slice(0, n - 1) + '…' : t;
 };
 
-export function notifyDev(env, ctx, embed) {
-  const p = post(env.DISCORD_DEV_WEBHOOK, { embeds: [embed] });
+// Com bot configurado, a mensagem leva botões para resolver o pedido sem sair
+// do Discord; sem ele, vai pelo webhook, sem botões.
+export function notifyDev(env, ctx, embed, components) {
+  const p = (async () => {
+    if (env.DISCORD_BOT_TOKEN && env.DISCORD_DEV_CHANNEL) {
+      const { postAsBot } = await import('./discord.js');
+      const ok = await postAsBot(env, env.DISCORD_DEV_CHANNEL, {
+        embeds: [embed],
+        components: components || [],
+      });
+      if (ok) return true;
+    }
+    return post(env.DISCORD_DEV_WEBHOOK, { embeds: [embed] });
+  })();
   if (ctx && ctx.waitUntil) ctx.waitUntil(p);
   return p;
 }
@@ -68,10 +80,8 @@ export function errorEmbed(r) {
 // Consumo do dia, contra os limites do plano gratuito. Os números da
 // Cloudflare vêm da API de análise; se ela não responder, vai o que
 // conseguimos contar por dentro, que chega para perceber a tendência.
-export async function dailyReport(env, ctx) {
-  const url = env.DISCORD_ADMIN_WEBHOOK;
-  if (!url) return;
-
+// Os campos do consumo, partilhados pelo resumo diário e pelo comando /uso.
+export async function usageFields(env) {
   const q = async (sql) => {
     try { return (await env.DB.prepare(sql).first()) || {}; } catch (e) { return {}; }
   };
@@ -81,48 +91,69 @@ export async function dailyReport(env, ctx) {
   const casas = await q('SELECT COUNT(*) AS n FROM houses WHERE deleted = 0');
   const registos = await q('SELECT COUNT(*) AS n FROM records WHERE deleted = 0');
   const abertos = await q("SELECT COUNT(*) AS n FROM tickets WHERE status <> 'concluido'");
-  const erros = await q(`SELECT COUNT(*) AS n FROM reports WHERE created_at > ${dia}`);
+  const erros = await q(`SELECT COUNT(*) AS n FROM reports WHERE updated_at > ${dia}`);
 
+  const max = Number(env.MAX_USERS || 0);
+  const pctContas = max ? Math.round(((contas.n || 0) / max) * 100) : null;
   const fields = [
-    { name: 'Contas', value: String(contas.n || 0) + ' / ' + (env.MAX_USERS || '∞'), inline: true },
+    {
+      name: 'Contas',
+      value: (contas.n || 0) + (max ? ' / ' + max + '  (' + pctContas + '%)' : ''),
+      inline: true,
+    },
     { name: 'Ativos (24h)', value: String(ativos.n || 0), inline: true },
     { name: 'Casas · registos', value: (casas.n || 0) + ' · ' + (registos.n || 0), inline: true },
     { name: 'Pedidos abertos', value: String(abertos.n || 0), inline: true },
     { name: 'Erros (24h)', value: String(erros.n || 0), inline: true },
   ];
 
-  let cor = 0x2f7d5b;
   const uso = await cloudflareUsage(env);
   if (uso) {
     Object.keys(LIMITS).forEach((k) => {
       const v = uso[k];
       if (v == null) return;
       const pct = Math.round((v / LIMITS[k]) * 100);
-      if (pct >= 70) cor = pct >= 90 ? 0xb94a48 : 0xd6a34a;
       fields.push({
         name: k,
         value: v.toLocaleString('pt-PT') + ' / ' + LIMITS[k].toLocaleString('pt-PT') +
-          '  (' + pct + '%)' + (pct >= 70 ? '  ⚠️' : ''),
+          '  (' + pct + '%)' + (pct >= 90 ? '  🔴' : pct >= 70 ? '  ⚠️' : ''),
         inline: false,
       });
     });
   } else {
     fields.push({
       name: 'Consumo da Cloudflare',
-      value: 'Indisponível. Confirma que o token tem permissão *Account Analytics · Read* ' +
-        'e que `CF_ACCOUNT_ID` está definido.',
+      value: 'Indisponível. O token precisa da permissão *Account Analytics · Read*.',
       inline: false,
     });
   }
+  return fields;
+}
 
-  await post(url, {
+export async function dailyReport(env, ctx) {
+  const url = env.DISCORD_ADMIN_WEBHOOK;
+  const canal = env.DISCORD_ADMIN_CHANNEL;
+  if (!url && !canal) return;
+
+  const fields = await usageFields(env);
+  let cor = 0x2f7d5b;
+  fields.forEach((f) => {
+    if (/🔴/.test(f.value)) cor = 0xb94a48;
+    else if (/⚠️/.test(f.value) && cor !== 0xb94a48) cor = 0xd6a34a;
+  });
+  const payload = {
     embeds: [{
       title: '📊 Gestor Imobiliário · consumo diário',
       color: cor,
       fields,
       timestamp: new Date().toISOString(),
     }],
-  });
+  };
+  if (env.DISCORD_BOT_TOKEN && canal) {
+    const { postAsBot } = await import('./discord.js');
+    if (await postAsBot(env, canal, payload)) return;
+  }
+  await post(url, payload);
 }
 
 // API de análise da Cloudflare (GraphQL). Devolve null se não der.

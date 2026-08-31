@@ -802,7 +802,8 @@ export async function handleApi(request, env, ctx) {
       `INSERT INTO tickets (id, user_id, kind, subject, body, status, context, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 'criado', ?, ?, ?)`
     ).bind(id, me.id, kind, subject, text, row.context, t, t).run();
-    notifyDev(env, ctx, ticketEmbed(row, me));
+    const { ticketButtons } = await import('./discord.js');
+    notifyDev(env, ctx, ticketEmbed(row, me), ticketButtons(id));
     return json({ ok: true, id }, 201);
   }
 
