@@ -32,6 +32,10 @@ const cut = (s, n) => {
 // Com bot configurado, a mensagem leva botões para resolver o pedido sem sair
 // do Discord; sem ele, vai pelo webhook, sem botões.
 export function notifyDev(env, ctx, embed, components) {
+  // fora da produção, o aviso vai marcado para não se confundir
+  if (env.ENV_NAME) {
+    embed = Object.assign({}, embed, { title: '[' + env.ENV_NAME + '] ' + embed.title });
+  }
   const p = (async () => {
     if (env.DISCORD_BOT_TOKEN && env.DISCORD_DEV_CHANNEL) {
       const { postAsBot } = await import('./discord.js');

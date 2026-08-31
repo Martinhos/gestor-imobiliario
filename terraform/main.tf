@@ -39,10 +39,34 @@ resource "cloudflare_workers_kv_namespace" "sessions" {
   title      = "${var.app_name}-sessions"
 }
 
+# Ambiente de desenvolvimento: base e sessões próprias, para se poder testar
+# migrações e alterações sem tocar nos dados de quem usa a app a sério.
+resource "cloudflare_d1_database" "db_dev" {
+  account_id = var.cloudflare_account_id
+  name       = "${var.app_name}-dev"
+
+  read_replication = {
+    mode = "disabled"
+  }
+}
+
+resource "cloudflare_workers_kv_namespace" "sessions_dev" {
+  account_id = var.cloudflare_account_id
+  title      = "${var.app_name}-dev-sessions"
+}
+
 output "d1_database_id" {
   value = cloudflare_d1_database.db.id
 }
 
 output "kv_sessions_id" {
   value = cloudflare_workers_kv_namespace.sessions.id
+}
+
+output "d1_dev_id" {
+  value = cloudflare_d1_database.db_dev.id
+}
+
+output "kv_dev_id" {
+  value = cloudflare_workers_kv_namespace.sessions_dev.id
 }

@@ -2,11 +2,17 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Onde publicar
+        type: choice
+        options: [producao, dev]
+        default: producao
 
 concurrency:
-  group: deploy
+  group: deploy-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -25,16 +31,36 @@ jobs:
         with:
           node-version: 22
 
-      # APK da app Android (concha WebView que carrega a versão web).
-      # Fica servido junto com o site, em /gestor-imobiliario.apk.
+      # Produção sai do ramo main; tudo o resto vai para o ambiente de dev.
+      - name: Escolher ambiente
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ] && [ "${{ inputs.ambiente }}" != "dev" ]; then
+            echo "ENV_FLAG=" >> $GITHUB_ENV
+            echo "DB_NAME=gestor-imobiliario" >> $GITHUB_ENV
+            echo "ENV_LABEL=produção" >> $GITHUB_ENV
+            echo "IS_PROD=1" >> $GITHUB_ENV
+          else
+            echo "ENV_FLAG=--env dev" >> $GITHUB_ENV
+            echo "DB_NAME=gestor-imobiliario-dev" >> $GITHUB_ENV
+            echo "ENV_LABEL=dev" >> $GITHUB_ENV
+            echo "IS_PROD=" >> $GITHUB_ENV
+          fi
+
+      - name: Onde vai isto
+        run: echo "A publicar para **$ENV_LABEL**" >> $GITHUB_STEP_SUMMARY
+
+      # APK só na produção: leva o endereço da app lá dentro.
       - uses: actions/setup-java@v4
+        if: github.ref_name == 'main'
         with:
           distribution: temurin
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@v4
+        if: github.ref_name == 'main'
 
       - name: Compilar APK
+        if: github.ref_name == 'main'
         working-directory: android
         run: |
           chmod +x gradlew
@@ -45,17 +71,25 @@ jobs:
         with:
           terraform_wrapper: false
 
-      # Infra: cria/atualiza a base D1 e o KV. O estado vive no repositório
-      # (só contém ids de recursos, nenhum segredo).
-      - name: Terraform apply
+      # A infraestrutura dos dois ambientes é criada a partir do main, que é
+      # quem manda no estado. O ramo dev só lê os ids que já lá estão.
+      - name: Terraform
         working-directory: terraform
         run: |
           terraform init -input=false
-          terraform apply -auto-approve -input=false
+          if [ -n "$IS_PROD" ]; then
+            terraform apply -auto-approve -input=false
+          else
+            terraform output -raw d1_dev_id > /dev/null || {
+              echo "Os recursos de dev ainda não existem. Publica o main uma vez primeiro." >&2
+              exit 1
+            }
+          fi
 
       - name: Commit terraform state (se mudou)
+        if: env.IS_PROD
         run: |
-          if ! git diff --quiet -- terraform/terraform.tfstate 2>/dev/null || [ -n "$(git status --porcelain terraform/)" ]; then
+          if [ -n "$(git status --porcelain terraform/)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add terraform/terraform.tfstate terraform/.terraform.lock.hcl
@@ -63,38 +97,18 @@ jobs:
             git push
           fi
 
-      # Preenche os ids reais no wrangler.toml a partir dos outputs do Terraform.
       - name: Configurar wrangler.toml
         run: |
-          D1_ID=$(terraform -chdir=terraform output -raw d1_database_id)
-          KV_ID=$(terraform -chdir=terraform output -raw kv_sessions_id)
-          sed -i "s/PLACEHOLDER_D1_ID/$D1_ID/" wrangler.toml
-          sed -i "s/PLACEHOLDER_KV_ID/$KV_ID/" wrangler.toml
-
-      # Sem subdomínio workers.dev registado o deploy falha; regista um se faltar.
-      - name: Garantir subdomínio workers.dev
-        run: |
-          ACC="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
-          AUTH="Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}"
-          SUB=$(curl -s -H "$AUTH" "https://api.cloudflare.com/client/v4/accounts/$ACC/workers/subdomain" | jq -r '.result.subdomain // empty')
-          if [ -n "$SUB" ]; then echo "Subdomínio existente: $SUB.workers.dev"; exit 0; fi
-          for NAME in martinhos martinhos-gestor gestor-imob-${ACC:0:8}; do
-            RES=$(curl -s -X PUT -H "$AUTH" -H "Content-Type: application/json" \
-              -d "{\"subdomain\":\"$NAME\"}" \
-              "https://api.cloudflare.com/client/v4/accounts/$ACC/workers/subdomain")
-            if [ "$(echo "$RES" | jq -r '.success')" = "true" ]; then
-              echo "Registado: $NAME.workers.dev"; exit 0
-            fi
-            echo "\"$NAME\" indisponível: $(echo "$RES" | jq -r '.errors[0].message // "?"')"
-          done
-          echo "Não foi possível registar um subdomínio workers.dev — regista um no dashboard (Workers & Pages) e relança o workflow."
-          exit 1
+          sed -i "s/PLACEHOLDER_D1_ID/$(terraform -chdir=terraform output -raw d1_database_id)/" wrangler.toml
+          sed -i "s/PLACEHOLDER_KV_ID/$(terraform -chdir=terraform output -raw kv_sessions_id)/" wrangler.toml
+          sed -i "s/PLACEHOLDER_D1_DEV_ID/$(terraform -chdir=terraform output -raw d1_dev_id)/" wrangler.toml
+          sed -i "s/PLACEHOLDER_KV_DEV_ID/$(terraform -chdir=terraform output -raw kv_dev_id)/" wrangler.toml
 
       - name: Aplicar migrações D1
-        run: npx wrangler@4 d1 migrations apply gestor-imobiliario --remote
+        run: npx wrangler@4 d1 migrations apply "$DB_NAME" --remote
 
       - name: Deploy do worker
-        run: npx wrangler@4 deploy
+        run: npx wrangler@4 deploy $ENV_FLAG
 
       # Segredos dos avisos. Só se define o que existir — quem não tiver
       # Discord configurado fica sem avisos, e a app funciona à mesma.
@@ -112,26 +126,30 @@ jobs:
           set -e
           put () {
             if [ -n "$2" ]; then
-              printf '%s' "$2" | npx wrangler@4 secret put "$1"
+              printf '%s' "$2" | npx wrangler@4 secret put "$1" $ENV_FLAG
               echo "definido: $1"
             else
               echo "sem valor: $1 (ignorado)"
             fi
           }
           put DISCORD_DEV_WEBHOOK "$DISCORD_DEV_WEBHOOK"
-          put DISCORD_ADMIN_WEBHOOK "$DISCORD_ADMIN_WEBHOOK"
           put DISCORD_BOT_TOKEN "$DISCORD_BOT_TOKEN"
           put DISCORD_PUBLIC_KEY "$DISCORD_PUBLIC_KEY"
           put DISCORD_DEV_CHANNEL "$DISCORD_DEV_CHANNEL"
-          put DISCORD_ADMIN_CHANNEL "$DISCORD_ADMIN_CHANNEL"
           put DISCORD_ADMINS "$DISCORD_ADMINS"
-          put CF_ANALYTICS_TOKEN "${CF_ANALYTICS_TOKEN:-$CLOUDFLARE_API_TOKEN}"
-          put CF_ACCOUNT_ID "$TF_VAR_cloudflare_account_id"
+          # o resumo de consumo e os comandos de administração são só da produção
+          if [ -n "$IS_PROD" ]; then
+            put DISCORD_ADMIN_WEBHOOK "$DISCORD_ADMIN_WEBHOOK"
+            put DISCORD_ADMIN_CHANNEL "$DISCORD_ADMIN_CHANNEL"
+            put CF_ANALYTICS_TOKEN "${CF_ANALYTICS_TOKEN:-$CLOUDFLARE_API_TOKEN}"
+            put CF_ACCOUNT_ID "$TF_VAR_cloudflare_account_id"
+          fi
 
-      # Comandos do bot: registados sempre que a lista mudar. Sem bot
-      # configurado, o passo passa ao lado sem falhar.
+      # Comandos do bot: só a produção os regista, para os dois ambientes não
+      # andarem a sobrepor-se no mesmo servidor de Discord.
       - name: Registar comandos do Discord
-        continue-on-error: true   # um bot mal configurado não trava o deploy
+        if: env.IS_PROD
+        continue-on-error: true
         env:
           DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}

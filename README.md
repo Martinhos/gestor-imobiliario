@@ -42,6 +42,40 @@ npx wrangler d1 migrations apply gestor-imobiliario --local
 npx wrangler dev
 ```
 
+## Ambientes
+
+| | Produção | Dev |
+|---|---|---|
+| Ramo | `main` | `dev` |
+| Endereço | gestor-imobiliario.martinhos.workers.dev | gestor-imobiliario-dev.martinhos.workers.dev |
+| Base de dados | `gestor-imobiliario` | `gestor-imobiliario-dev` |
+| Contas | até 2000 | até 50 |
+| Entrada com Google | sim | não (o endereço não está autorizado na Google) |
+| Avisos no Discord | erros e pedidos, mais o resumo diário | erros e pedidos, marcados com `[dev]` |
+
+**O fluxo de uma alteração com migração** — que é onde o ambiente de dev
+ganha o seu sustento:
+
+```bash
+git checkout -b dev            # ou: git checkout dev && git merge main
+# … escrever o código e a migração …
+git push -u origin dev         # publica em dev e aplica lá a migração
+```
+
+Testa na app de dev. Se a migração fizer o que devia e nada partiu, junta a
+produção:
+
+```bash
+git checkout main && git merge dev && git push
+```
+
+Os dados de exemplo criam-se dentro da própria app: entra na app de dev com
+uma conta de teste e usa **Visão geral → Carregar exemplo**.
+
+Nota: a infraestrutura dos dois ambientes é criada pelo Terraform a partir do
+`main`. Um deploy de `dev` só lê os ids que já existem no estado, por isso o
+`main` tem de correr uma vez antes do primeiro deploy de dev.
+
 ## Deploy (uma vez)
 
 1. Criar um API token no Cloudflare (template "Edit Cloudflare Workers" + permissões D1:Edit e Workers KV Storage:Edit).

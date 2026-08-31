@@ -42,3 +42,34 @@ MAX_USERS = "2000"
 #   DISCORD_ADMIN_WEBHOOK  · canal de quem opera: consumo diário
 #   CF_ANALYTICS_TOKEN     · token com Account Analytics · Read
 #   CF_ACCOUNT_ID          · id da conta Cloudflare
+
+# ---------------------------------------------------------------------------
+# Ambiente de desenvolvimento: mesmo código, base e sessões separadas.
+# Publica-se com `wrangler deploy --env dev`, ou por push no ramo dev.
+# Um ambiente não herda os blocos do outro — daí a repetição.
+# ---------------------------------------------------------------------------
+[env.dev]
+name = "gestor-imobiliario-dev"
+
+[env.dev.assets]
+directory = "web"
+binding = "ASSETS"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "gestor-imobiliario-dev"
+database_id = "PLACEHOLDER_D1_DEV_ID"
+
+[[env.dev.kv_namespaces]]
+binding = "SESSIONS"
+id = "PLACEHOLDER_KV_DEV_ID"
+
+[env.dev.observability]
+enabled = true
+
+[env.dev.vars]
+# A entrada com Google fica de fora: o endereço de dev não está autorizado
+# na consola da Google, e um botão que falha é pior do que não existir.
+GOOGLE_CLIENT_ID = ""
+MAX_USERS = "50"
+ENV_NAME = "dev"
