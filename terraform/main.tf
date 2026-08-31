@@ -39,6 +39,17 @@ resource "cloudflare_workers_kv_namespace" "sessions" {
   title      = "${var.app_name}-sessions"
 }
 
+# Anexos: fotos e documentos. Plano gratuito: 10 GB, sem custo de saída.
+resource "cloudflare_r2_bucket" "files" {
+  account_id = var.cloudflare_account_id
+  name       = var.app_name
+}
+
+resource "cloudflare_r2_bucket" "files_dev" {
+  account_id = var.cloudflare_account_id
+  name       = "${var.app_name}-dev"
+}
+
 # Ambiente de desenvolvimento: base e sessões próprias, para se poder testar
 # migrações e alterações sem tocar nos dados de quem usa a app a sério.
 resource "cloudflare_d1_database" "db_dev" {

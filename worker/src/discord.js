@@ -37,6 +37,18 @@ const publico = (content, embeds, components) => ({
 });
 
 const ESTADOS = { criado: 'Recebido', resolucao: 'Em resolução', concluido: 'Concluído' };
+
+// De onde veio o que precisa de atenção. Um pedido contado por uma pessoa e um
+// erro apanhado sozinho vivem na mesma fila, separados pela categoria.
+const CATS = {
+  user: 'contado por alguém',
+  client: 'erro na app',
+  server: 'erro no servidor',
+  infra: 'infraestrutura',
+  seguranca: 'segurança',
+};
+const ICONE = { user: '💬 ', client: '🐞 ', server: '🔥 ', infra: '📊 ', seguranca: '🔒 ' };
+const COR = { user: 0x2f7d5b, client: 0xd6a34a, server: 0xb94a48, infra: 0x7aa9d6, seguranca: 0x8a7bb8 };
 const cut = (s, n) => { const t = String(s == null ? '' : s); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 
 // Só quem estiver na lista pode mexer. Sem lista, qualquer pessoa com acesso
@@ -55,6 +67,7 @@ function ticketEmbedFull(t) {
     color: t.status === 'concluido' ? 0x9aa7a1 : (t.kind === 'problema' ? 0xb94a48 : 0x2f7d5b),
     fields: [
       { name: 'Estado', value: ESTADOS[t.status] || t.status, inline: true },
+      { name: 'Categoria', value: CATS[t.category] || t.category || 'user', inline: true },
       { name: 'De', value: cut(t.user_id, 40), inline: true },
       { name: 'Aberto em', value: new Date(t.created_at).toISOString().slice(0, 16).replace('T', ' '), inline: true },
     ].concat(t.reply ? [{ name: 'Resposta enviada', value: cut(t.reply, 900) }] : []),
@@ -91,18 +104,24 @@ async function mudarEstado(env, ref, estado, resposta) {
 
 async function cmdPedidos(env, opts) {
   const estado = (opts.estado || '').trim();
-  const sql = estado
-    ? 'SELECT * FROM tickets WHERE status = ? ORDER BY created_at DESC LIMIT 10'
-    : "SELECT * FROM tickets WHERE status <> 'concluido' ORDER BY created_at DESC LIMIT 10";
-  const st = env.DB.prepare(sql);
-  const rows = (await (estado ? st.bind(estado) : st).all()).results;
-  if (!rows.length) return reply(estado ? 'Nenhum pedido em “' + estado + '”.' : '✅ Nenhum pedido por tratar.');
+  const cat = (opts.categoria || '').trim();
+  const onde = [], vals = [];
+  if (estado) { onde.push('status = ?'); vals.push(estado); } else onde.push("status <> 'concluido'");
+  if (cat) { onde.push('category = ?'); vals.push(cat); }
+  const st = env.DB.prepare(
+    'SELECT * FROM tickets WHERE ' + onde.join(' AND ') + ' ORDER BY n DESC, created_at DESC LIMIT 10'
+  );
+  const rows = (await (vals.length ? st.bind(...vals) : st).all()).results;
+  if (!rows.length) {
+    return reply('✅ Nada' + (cat ? ' em ' + CATS[cat] : '') +
+      (estado ? ' com esse estado' : ' por tratar') + '.');
+  }
   return reply('', rows.map(function (t) {
     return {
-      title: (t.kind === 'problema' ? '🐞 ' : '💡 ') + cut(t.subject, 90),
+      title: (ICONE[t.category] || '🐞 ') + cut(t.subject, 90) + (t.n > 1 ? '  ×' + t.n : ''),
       description: cut(t.body, 300),
-      color: t.kind === 'problema' ? 0xb94a48 : 0x2f7d5b,
-      footer: { text: ESTADOS[t.status] + ' · ' + t.id.slice(0, 8) + ' · ' + t.user_id },
+      color: COR[t.category] || 0xb94a48,
+      footer: { text: (CATS[t.category] || t.category) + ' · ' + ESTADOS[t.status] + ' · ' + t.id.slice(0, 8) },
     };
   }));
 }

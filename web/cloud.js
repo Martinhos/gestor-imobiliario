@@ -223,7 +223,7 @@
       })(ops.slice(i, i + 200));
     }
     return chain
-      .then(function () { saveSnap(); setSyncBadge('ok'); })
+      .then(function () { saveSnap(); setSyncBadge('ok'); try { subirPendentes(); } catch (e) {} })
       .catch(function () { setSyncBadge('off'); })
       .then(function () {
         pushing = false;
@@ -411,6 +411,104 @@
     return d;
   }
   dropUnsafe(db);
+
+  /* ---------------------------------------------------------------------
+     Anexos na nuvem. O armazenamento local continua a ser a primeira
+     paragem — é o que faz a app abrir depressa e funcionar sem rede — mas
+     tudo o que entra sobe também para o servidor, e o que falta localmente
+     é buscado de lá. É assim que uma foto carregada no telemóvel aparece
+     no computador, e que quem recebe uma casa partilhada vê os documentos.
+     --------------------------------------------------------------------- */
+
+  var subindo = {};      // uploads em curso, para não repetir
+  var baixando = {};     // downloads em curso, para não pedir duas vezes
+
+  // a que casa pertence um anexo, procurando quem o refere
+  function casaDoAnexo(id) {
+    var casa = null;
+    (db.properties || []).some(function (p) {
+      var seu = (p.photos || []).some(function (f) { return f.id === id; }) ||
+        (p.loans || []).some(function (l) { return (l.files || []).some(function (f) { return f.id === id; }); });
+      if (seu) { casa = p.id; return true; }
+      return false;
+    });
+    if (casa) return casa;
+    (db.contracts || []).some(function (c) {
+      if ((c.files || []).some(function (f) { return f.id === id; })) { casa = c.propertyId; return true; }
+      return false;
+    });
+    return casa;
+  }
+
+  function subirAnexo(id, blob) {
+    if (!CW.user || subindo[id] || String(id).indexOf('tn_') === 0) return;
+    subindo[id] = 1;
+    var meta = (typeof allFileMetas === 'function' ? allFileMetas() : [])
+      .find(function (f) { return f.id === id; }) || {};
+    var casa = casaDoAnexo(id);
+    var h = {
+      'X-Ficheiro-Tipo': blob.type || 'application/octet-stream',
+      'X-Ficheiro-Nome': encodeURIComponent(meta.name || ''),
+    };
+    if (CW.user.token) h['Authorization'] = 'Bearer ' + CW.user.token;
+    fetch('/api/files/' + encodeURIComponent(id) + (casa ? '?casa=' + encodeURIComponent(casa) : ''), {
+      method: 'PUT', headers: h, body: blob, credentials: 'same-origin',
+    }).then(function () { delete subindo[id]; })
+      .catch(function () { delete subindo[id]; });   // fica local; sobe na próxima
+  }
+
+  function baixarAnexo(id) {
+    if (!CW.user) return Promise.resolve(null);
+    if (baixando[id]) return baixando[id];
+    var h = {};
+    if (CW.user.token) h['Authorization'] = 'Bearer ' + CW.user.token;
+    baixando[id] = fetch('/api/files/' + encodeURIComponent(id), { headers: h, credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.blob() : null; })
+      .then(function (b) {
+        delete baixando[id];
+        if (b) _idbPut(id, b);   // guarda para a próxima vez
+        return b;
+      })
+      .catch(function () { delete baixando[id]; return null; });
+    return baixando[id];
+  }
+
+  var _idbPut = idbPut, _idbGet = idbGet, _idbDel = idbDel;
+
+  idbPut = function (id, blob) {
+    return _idbPut(id, blob).then(function (r) {
+      try { subirAnexo(id, blob); } catch (e) {}
+      return r;
+    });
+  };
+
+  idbGet = function (id) {
+    return _idbGet(id).then(function (b) {
+      if (b) return b;
+      if (String(id).indexOf('tn_') === 0) return b;   // miniaturas refazem-se
+      return baixarAnexo(id);
+    });
+  };
+
+  idbDel = function (id) {
+    if (CW.user && String(id).indexOf('tn_') !== 0) {
+      var h = {};
+      if (CW.user.token) h['Authorization'] = 'Bearer ' + CW.user.token;
+      fetch('/api/files/' + encodeURIComponent(id), { method: 'DELETE', headers: h, credentials: 'same-origin' })
+        .catch(function () {});
+    }
+    return _idbDel(id);
+  };
+
+  // Depois de sincronizar, sobe o que ainda só existe neste aparelho.
+  function subirPendentes() {
+    if (!CW.user) return;
+    var metas = (typeof allFileMetas === 'function' ? allFileMetas() : []);
+    metas.slice(0, 20).forEach(function (m) {
+      if (subindo[m.id]) return;
+      _idbGet(m.id).then(function (b) { if (b) subirAnexo(m.id, b); });
+    });
+  }
 
   var _save = save;
   save = function () {

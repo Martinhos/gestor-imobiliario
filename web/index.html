@@ -617,13 +617,15 @@ function idb(){
 }
 /* sem IndexedDB (pré-visualização num browser restrito) os ficheiros ficam em memória durante a sessão */
 const memFiles={};
-const idbPut=(id,blob)=>idb().then(d=>new Promise((res,rej)=>{
+/* let, não const: a camada da nuvem envolve-as para os anexos irem também
+   para o armazenamento remoto e voltarem noutro aparelho */
+let idbPut=(id,blob)=>idb().then(d=>new Promise((res,rej)=>{
   const t=d.transaction('files','readwrite');t.objectStore('files').put(blob,id);
   t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})).catch(()=>{memFiles[id]=blob});
-const idbGet=id=>idb().then(d=>new Promise((res,rej)=>{
+let idbGet=id=>idb().then(d=>new Promise((res,rej)=>{
   const r=d.transaction('files','readonly').objectStore('files').get(id);
   r.onsuccess=()=>res(r.result||memFiles[id]);r.onerror=()=>rej(r.error)})).catch(()=>memFiles[id]);
-const idbDel=id=>{delete memFiles[id];return idb().then(d=>new Promise((res,rej)=>{
+let idbDel=id=>{delete memFiles[id];return idb().then(d=>new Promise((res,rej)=>{
   const t=d.transaction('files','readwrite');t.objectStore('files').delete(id);
   t.oncomplete=()=>res();t.onerror=()=>rej(t.error)}))};
 const pendingFiles={},thumbCache={};

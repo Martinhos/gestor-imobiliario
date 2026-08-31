@@ -18,6 +18,11 @@ import {
 } from './auth.js';
 import { verifyIdToken } from './oauth.js';
 import { notifyDev, ticketEmbed, errorEmbed } from './notify.js';
+import { handleFiles, linkFiles } from './files.js';
+
+// Categorias de tudo o que precisa de atenção. Um pedido contado por uma
+// pessoa e um erro apanhado sozinho vivem na mesma fila.
+export const CATEGORIAS = ['user', 'client', 'server', 'infra', 'seguranca'];
 
 // forte: 8+ caracteres com maiúsculas, minúsculas, números e um símbolo
 function weakPassword(p) {
@@ -231,30 +236,41 @@ async function purgeAccount(env, uid) {
 
 // Guarda um erro e avisa quem programa. Erros repetidos agrupam-se, para o
 // canal não encher com a mesma linha vezes sem conta.
-export async function recordReport(env, ctx, kind, message, detail, userId) {
+// Um erro apanhado sozinho abre um pedido na mesma fila dos que as pessoas
+// contam. Erros repetidos somam-se ao pedido que já existe, em vez de abrirem
+// um novo de cada vez.
+export async function recordReport(env, ctx, categoria, message, detail, userId) {
   const msg = String(message || '').slice(0, 2000);
-  const fp = kind + ':' + msg.slice(0, 120);
+  const fp = categoria + ':' + msg.slice(0, 120);
   const t = now();
   try {
-    const ex = await env.DB.prepare('SELECT * FROM reports WHERE fingerprint = ?').bind(fp).first();
+    const ex = await env.DB.prepare('SELECT * FROM tickets WHERE fingerprint = ?').bind(fp).first();
     if (ex) {
-      await env.DB.prepare('UPDATE reports SET n = n + 1, updated_at = ? WHERE id = ?').bind(t, ex.id).run();
-      // só volta a avisar de hora a hora, e sempre nas primeiras vezes
-      if (ex.n < 3 || t - ex.updated_at > 3600000) {
-        notifyDev(env, ctx, errorEmbed({ ...ex, n: ex.n + 1, created_at: t }));
+      // um erro que volta depois de fechado reabre o pedido
+      const estado = ex.status === 'concluido' ? 'criado' : ex.status;
+      await env.DB.prepare('UPDATE tickets SET n = n + 1, status = ?, updated_at = ? WHERE id = ?')
+        .bind(estado, t, ex.id).run();
+      if (ex.n < 3 || t - ex.updated_at > 3600000 || ex.status === 'concluido') {
+        notifyDev(env, ctx, errorEmbed({
+          id: ex.id, kind: categoria, message: ex.subject, detail: ex.body,
+          user_id: ex.user_id, n: ex.n + 1, created_at: t,
+        }));
       }
       return;
     }
     const id = crypto.randomUUID();
-    const row = {
-      id, user_id: userId || null, kind, message: msg,
-      detail: String(detail || '').slice(0, 2000), n: 1, created_at: t,
-    };
+    const dono = userId || (await env.DB.prepare(
+      'SELECT id FROM users WHERE deleted_at IS NULL ORDER BY created_at LIMIT 1'
+    ).first() || {}).id;
+    if (!dono) return;   // sem contas ainda, não há onde pendurar o pedido
+    const detalhe = String(detail || '').slice(0, 4000);
     await env.DB.prepare(
-      `INSERT INTO reports (id, user_id, kind, message, detail, fingerprint, n, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`
-    ).bind(id, row.user_id, kind, msg, row.detail, fp, t, t).run();
-    notifyDev(env, ctx, errorEmbed(row));
+      `INSERT INTO tickets (id, user_id, kind, subject, body, status, category, fingerprint, n, created_at, updated_at)
+       VALUES (?, ?, 'problema', ?, ?, 'criado', ?, ?, 1, ?, ?)`
+    ).bind(id, dono, msg.slice(0, 140), detalhe, categoria, fp, t, t).run();
+    notifyDev(env, ctx, errorEmbed({
+      id, kind: categoria, message: msg, detail: detalhe, user_id: userId, n: 1, created_at: t,
+    }));
   } catch (e) {
     // um relatório que falha não pode piorar o problema que estava a relatar
   }
@@ -725,6 +741,7 @@ export async function handleApi(request, env, ctx) {
                 .bind(houseId, me.id, JSON.stringify(preserveOwnership('', op.data)), now()).run();
               accessCache.set(houseId, true);
             }
+            await linkFiles(env, houseId, op.data);
           } else {
             if (!existing || existing.deleted) { results.push({ ok: true, gone: true }); continue; }
             if (existing.owner_id !== me.id) { results.push({ ok: false, status: 403 }); continue; }
@@ -751,6 +768,7 @@ export async function handleApi(request, env, ctx) {
                ON CONFLICT (house_id, kind, id)
                DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0`
             ).bind(houseId, String(op.kind), String(op.id), JSON.stringify(op.data), now()).run();
+            await linkFiles(env, houseId, op.data);
           } else {
             await env.DB.prepare(
               'UPDATE records SET deleted = 1, updated_at = ? WHERE house_id = ? AND kind = ? AND id = ?'
@@ -799,8 +817,8 @@ export async function handleApi(request, env, ctx) {
       context: String((b && b.context) || '').slice(0, 300),
     };
     await env.DB.prepare(
-      `INSERT INTO tickets (id, user_id, kind, subject, body, status, context, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'criado', ?, ?, ?)`
+      `INSERT INTO tickets (id, user_id, kind, subject, body, status, category, context, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'criado', 'user', ?, ?, ?)`
     ).bind(id, me.id, kind, subject, text, row.context, t, t).run();
     const { ticketButtons } = await import('./discord.js');
     notifyDev(env, ctx, ticketEmbed(row, me), ticketButtons(id));
@@ -808,10 +826,12 @@ export async function handleApi(request, env, ctx) {
   }
 
   if (path === '/api/tickets' && method === 'GET') {
+    // a pessoa vê o que contou, não os erros que a app registou por ela
     const rows = (
       await env.DB.prepare(
         `SELECT id, kind, subject, body, status, reply, created_at, updated_at
-           FROM tickets WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`
+           FROM tickets WHERE user_id = ? AND category = 'user'
+          ORDER BY created_at DESC LIMIT 50`
       ).bind(me.id).all()
     ).results;
     return json({ tickets: rows });
@@ -822,8 +842,14 @@ export async function handleApi(request, env, ctx) {
     if (!(await rateLimit(env, 'rp:' + me.id, 20, 3600))) return json({ ok: true });
     const b = await body(request);
     if (!b || !b.message) return err(400, 'Corpo inválido.');
-    await recordReport(env, ctx, 'cliente', b.message, b.detail, me.id);
+    await recordReport(env, ctx, 'client', b.message, b.detail, me.id);
     return json({ ok: true });
+  }
+
+  // ---- Anexos ------------------------------------------------------------
+
+  if (seg[1] === 'files' && seg.length === 3) {
+    return handleFiles(request, env, me, seg, method, { json, err, canAccessHouse, now });
   }
 
   // ---- Casas --------------------------------------------------------------
@@ -857,6 +883,7 @@ export async function handleApi(request, env, ctx) {
         .bind(houseId, me.id, JSON.stringify(preserveOwnership('', b.data)), now())
         .run();
     }
+    await linkFiles(env, houseId, b.data);
     return json({ ok: true });
   }
 
@@ -964,6 +991,7 @@ export async function handleApi(request, env, ctx) {
       )
         .bind(houseId, kind, recordId, JSON.stringify(b.data), now())
         .run();
+      await linkFiles(env, houseId, b.data);
       return json({ ok: true });
     }
     if (method === 'DELETE') {
