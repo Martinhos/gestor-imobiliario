@@ -221,7 +221,7 @@ export async function handleApi(request, env) {
     if (!(await verifyPassword(String(b.password), user.pass_salt, user.pass_hash))) {
       return err(401, 'Email ou palavra-passe errados.');
     }
-    const token = await createSession(env, user.id);
+    const token = await createSession(env, user.id, user.sess_epoch || 0);
     return json({ id: user.id, email: user.email, name: user.name, token }, 200, {
       'Set-Cookie': sessionCookie(token),
     });
@@ -268,7 +268,7 @@ export async function handleApi(request, env) {
         .run();
       user = { id, email, name };
     }
-    const token2 = await createSession(env, user.id);
+    const token2 = await createSession(env, user.id, user.sess_epoch || 0);
     return json({ id: user.id, email: user.email, name: user.name, token: token2 }, 200, {
       'Set-Cookie': sessionCookie(token2),
     });
@@ -286,6 +286,41 @@ export async function handleApi(request, env) {
 
   if (path === '/api/me' && method === 'GET') {
     return json({ id: me.id, email: me.email, name: me.name });
+  }
+
+  // Mudar a palavra-passe (ou definir uma, numa conta que entra com Google).
+  // Todas as outras sessões caem: é a forma de expulsar quem tenha roubado
+  // um token, já que a sessão continua válida por 30 dias.
+  if (path === '/api/me/password' && method === 'POST') {
+    const b = await body(request);
+    if (!b || !b.next) return err(400, 'Falta a nova palavra-passe.');
+    if (weakPassword(b.next)) {
+      return err(400, 'A palavra-passe precisa de pelo menos 8 caracteres, com maiúsculas, minúsculas, números e um símbolo.');
+    }
+    const full = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(me.id).first();
+    if (full.pass_hash) {
+      if (!(await rateLimit(env, 'pw:' + me.id, 10, 900))) return err(429, 'Demasiadas tentativas. Espera uns minutos.');
+      if (!b.current || !(await verifyPassword(String(b.current), full.pass_salt, full.pass_hash))) {
+        return err(401, 'A palavra-passe atual está errada.');
+      }
+    }
+    const { hash, salt } = await hashPassword(String(b.next));
+    const epoch = (full.sess_epoch || 0) + 1;
+    await env.DB.prepare('UPDATE users SET pass_hash = ?, pass_salt = ?, sess_epoch = ? WHERE id = ?')
+      .bind(hash, salt, epoch, me.id)
+      .run();
+    // este aparelho continua com sessão; os outros ficam de fora
+    const token = await createSession(env, me.id, epoch);
+    return json({ ok: true, token }, 200, { 'Set-Cookie': sessionCookie(token) });
+  }
+
+  // Terminar a sessão em todos os outros aparelhos.
+  if (path === '/api/me/sessions' && method === 'DELETE') {
+    const full = await env.DB.prepare('SELECT sess_epoch FROM users WHERE id = ?').bind(me.id).first();
+    const epoch = ((full && full.sess_epoch) || 0) + 1;
+    await env.DB.prepare('UPDATE users SET sess_epoch = ? WHERE id = ?').bind(epoch, me.id).run();
+    const token = await createSession(env, me.id, epoch);
+    return json({ ok: true, token }, 200, { 'Set-Cookie': sessionCookie(token) });
   }
 
   // Apagar a conta: os dados próprios desaparecem e a identidade fica como

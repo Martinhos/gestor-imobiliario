@@ -44,9 +44,9 @@ export function newUserId() {
   return [...buf].map((b) => alphabet[b % alphabet.length]).join('');
 }
 
-export async function createSession(env, userId) {
+export async function createSession(env, userId, epoch = 0) {
   const token = randomToken();
-  await env.SESSIONS.put(`sess:${token}`, JSON.stringify({ userId }), { expirationTtl: SESSION_TTL });
+  await env.SESSIONS.put(`sess:${token}`, JSON.stringify({ userId, epoch }), { expirationTtl: SESSION_TTL });
   return token;
 }
 
@@ -77,11 +77,15 @@ export async function getSessionUser(env, request) {
   if (!token) return null;
   const raw = await env.SESSIONS.get(`sess:${token}`);
   if (!raw) return null;
-  const { userId } = JSON.parse(raw);
+  const { userId, epoch } = JSON.parse(raw);
   // contas apagadas deixam de ter sessão válida, mesmo com o token na mão
-  const user = await env.DB.prepare('SELECT id, email, name FROM users WHERE id = ? AND deleted_at IS NULL')
+  const user = await env.DB.prepare(
+    'SELECT id, email, name, sess_epoch FROM users WHERE id = ? AND deleted_at IS NULL'
+  )
     .bind(userId)
     .first();
   if (!user) return null;
+  // sessões de antes da última revogação deixam de valer
+  if ((user.sess_epoch || 0) !== (epoch || 0)) return null;
   return { ...user, token };
 }

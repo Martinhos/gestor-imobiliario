@@ -772,6 +772,13 @@
     var list = conns.length
       ? '<div class="section-title">Utilizadores ligados</div><div class="list" style="gap:10px">' + conns.map(connCard).join('') + '</div>'
       : '<div class="hint">Ainda não estás ligado a ninguém.</div>';
+    var seg = card('Segurança', 'Palavra-passe e sessões',
+      '<div class="hint">A sessão dura 30 dias em cada aparelho. Se desconfiares que alguém entrou na tua conta, ' +
+      'muda a palavra-passe ou fecha as outras sessões — em qualquer dos casos, todos os outros aparelhos passam a ' +
+      'ter de entrar de novo.</div>' +
+      '<div class="toolbar" style="margin-top:11px">' +
+      '<button class="btn" onclick="CW.passwordModal()">' + ic('lock', 15) + ' Mudar palavra-passe</button>' +
+      '<button class="btn" onclick="CW.revokeSessions()">Terminar sessão nos outros aparelhos</button></div>');
     var danger = card('Apagar a conta', 'Não há volta atrás',
       '<div class="hint">Apaga a tua conta e <b>todos os teus dados</b>: imóveis, contratos, movimentos, pessoas e ligações. ' +
       'Nas casas de outras pessoas onde tenhas ficado registado (num movimento pago por ti, por exemplo), o teu nome passa a ' +
@@ -779,7 +786,7 @@
       '<div class="toolbar" style="margin-top:11px"><button class="btn danger" onclick="CW.deleteAccount()">' +
       ic('trash', 15) + ' Apagar a minha conta</button></div>');
     return acc + '<div style="height:14px"></div>' + add + '<div style="height:14px"></div>' + list +
-      '<div style="height:18px"></div>' + danger;
+      '<div style="height:18px"></div>' + seg + '<div style="height:14px"></div>' + danger;
   }
 
   /* ---------------- aviso legal ---------------- */
@@ -989,6 +996,71 @@
     var nxt = (CW._shareQueue || []).shift();
     if (nxt) CW.proposeShares(nxt, true);
   }
+
+  CW.passwordModal = function () {
+    var body = '<div class="form">' +
+      '<div class="hint">Ao mudar a palavra-passe, todos os outros aparelhos têm de iniciar sessão de novo. ' +
+      'Este continua ligado.</div>' +
+      '<label>Palavra-passe atual<input id="cw_pw_cur" type="password" autocomplete="current-password" ' +
+      'placeholder="deixa vazio se entras com Google"></label>' +
+      '<label>Nova palavra-passe<input id="cw_pw_new" type="password" autocomplete="new-password"></label>' +
+      '<div id="cw_pw_req" class="small" style="margin:-4px 0 0;display:flex;flex-wrap:wrap;gap:3px 12px"></div>' +
+      '<label>Confirmar nova palavra-passe<input id="cw_pw_new2" type="password" autocomplete="new-password"></label>' +
+      '<div id="cw_pw_err" class="small" style="color:var(--danger)"></div></div>';
+    openModal('Mudar palavra-passe', body,
+      '<button class="btn" onclick="closeModal()">Cancelar</button>' +
+      '<button class="btn primary" onclick="CW.savePassword()">Guardar</button>');
+    var reqs = [['8+ caracteres', function (p) { return p.length >= 8; }],
+      ['maiúscula', function (p) { return /[A-Z]/.test(p); }],
+      ['minúscula', function (p) { return /[a-z]/.test(p); }],
+      ['número', function (p) { return /[0-9]/.test(p); }],
+      ['símbolo', function (p) { return /[^A-Za-z0-9]/.test(p); }]];
+    var box = document.getElementById('cw_pw_req'), inp = document.getElementById('cw_pw_new');
+    var paint = function () {
+      box.innerHTML = reqs.map(function (r) {
+        var ok = r[1](inp.value);
+        return '<span style="color:' + (ok ? 'var(--accent)' : 'var(--muted)') + ';font-weight:' + (ok ? 650 : 400) + '">' +
+          (ok ? '✓ ' : '• ') + r[0] + '</span>';
+      }).join('');
+    };
+    paint();
+    inp.addEventListener('input', paint);
+  };
+
+  CW.savePassword = function () {
+    var e = document.getElementById('cw_pw_err');
+    e.textContent = '';
+    var next = val('cw_pw_new');
+    var prob = passProblem(next);
+    if (prob) { e.textContent = prob; return; }
+    if (next !== val('cw_pw_new2')) { e.textContent = 'As palavras-passe não coincidem.'; return; }
+    api('POST', '/api/me/password', { current: val('cw_pw_cur'), next: next })
+      .then(function (r) {
+        if (r.token) {
+          CW.user.token = r.token;
+          try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (x) {}
+        }
+        closeModal();
+        toast('Palavra-passe alterada. Os outros aparelhos têm de entrar de novo.');
+      })
+      .catch(function (err) { e.textContent = err.message || 'Não foi possível mudar a palavra-passe.'; });
+  };
+
+  CW.revokeSessions = function () {
+    confirmModal('Terminar as outras sessões',
+      'Todos os outros aparelhos onde tenhas a conta aberta passam a pedir início de sessão. Este continua ligado.',
+      function () {
+        api('DELETE', '/api/me/sessions')
+          .then(function (r) {
+            if (r.token) {
+              CW.user.token = r.token;
+              try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (x) {}
+            }
+            toast('Sessões terminadas nos outros aparelhos.');
+          })
+          .catch(function (err) { toast(err.message); });
+      });
+  };
 
   CW.deleteAccount = function () {
     var mine = (db.properties || []).filter(function (p) { return !p._sharedFrom; }).length;
