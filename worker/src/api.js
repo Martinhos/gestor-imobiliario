@@ -35,13 +35,41 @@ function err(status, message) {
   return json({ error: message }, status);
 }
 
+const MAX_BODY = 2 * 1024 * 1024;   // 2 MB por pedido
+const MAX_RECORD = 256 * 1024;      // 256 KB por registo guardado
+
 async function body(request) {
+  const len = Number(request.headers.get('Content-Length') || 0);
+  if (len > MAX_BODY) return null;
   try {
-    return await request.json();
+    const text = await request.text();
+    if (text.length > MAX_BODY) return null;
+    return JSON.parse(text);
   } catch {
     return null;
   }
 }
+
+const tooBig = (data) => {
+  try { return JSON.stringify(data).length > MAX_RECORD; } catch (e) { return true; }
+};
+
+// Travão simples contra força bruta e abuso, com contadores em KV.
+// A consistência eventual do KV chega para o efeito: trava a repetição.
+async function rateLimit(env, key, limit, windowSec) {
+  const k = 'rl:' + key;
+  let n = 0;
+  try {
+    n = Number((await env.SESSIONS.get(k)) || 0);
+    if (n >= limit) return false;
+    await env.SESSIONS.put(k, String(n + 1), { expirationTtl: Math.max(60, windowSec) });
+  } catch (e) {
+    return true;   // sem KV disponível, não bloqueia o serviço
+  }
+  return true;
+}
+
+const clientIp = (request) => request.headers.get('CF-Connecting-IP') || 'desconhecido';
 
 const now = () => Date.now();
 
@@ -118,6 +146,15 @@ export async function handleApi(request, env) {
 
   // ---- Autenticação (sem sessão) -----------------------------------------
 
+  // registo, entrada e entrada com Google: limitados por IP
+  if (path.startsWith('/api/auth/') && method === 'POST' && !path.endsWith('/logout')) {
+    const ip = clientIp(request);
+    const isLogin = path.endsWith('/login');
+    if (!(await rateLimit(env, (isLogin ? 'login:' : 'auth:') + ip, isLogin ? 10 : 5, 900))) {
+      return err(429, 'Demasiadas tentativas. Espera uns minutos e tenta de novo.');
+    }
+  }
+
   if (path === '/api/auth/register' && method === 'POST') {
     const b = await body(request);
     if (!b || !b.email || !b.password) return err(400, 'Email e palavra-passe são obrigatórios.');
@@ -148,6 +185,10 @@ export async function handleApi(request, env) {
     if (!b || !b.email || !b.password) return err(400, 'Email e palavra-passe são obrigatórios.');
     const email = String(b.email).trim().toLowerCase();
     const user = await env.DB.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').bind(email).first();
+    // tentativas por conta, não só por IP (força bruta a partir de vários IP)
+    if (user && !(await rateLimit(env, 'acct:' + user.id, 30, 900))) {
+      return err(429, 'Demasiadas tentativas nesta conta. Espera uns minutos.');
+    }
     if (user && !user.pass_hash) return err(401, 'Esta conta entra com Google — usa esse botão.');
     if (!user || !(await verifyPassword(String(b.password), user.pass_salt, user.pass_hash))) {
       return err(401, 'Email ou palavra-passe errados.');
@@ -378,10 +419,18 @@ export async function handleApi(request, env) {
       });
     }
 
-    // perfis: comproprietários e pessoas ligadas levam a ficha completa
+    // Ficha pessoal completa só para quem já é comproprietário ou aceitou a
+    // ligação: um convite pendente não dá acesso aos dados de ninguém.
     const userIdSet = new Set([me.id]);
     Object.keys(houseParts).forEach((hid) => houseParts[hid].forEach((u) => userIdSet.add(u)));
-    connections.forEach((c) => { userIdSet.add(c.requester_id); userIdSet.add(c.target_id); });
+    connections
+      .filter((c) => c.status === 'accepted')
+      .forEach((c) => { userIdSet.add(c.requester_id); userIdSet.add(c.target_id); });
+    // os convites pendentes entram só com o nome, para se saber quem é
+    const pendingPeers = new Set();
+    connections
+      .filter((c) => c.status !== 'accepted')
+      .forEach((c) => { pendingPeers.add(c.requester_id); pendingPeers.add(c.target_id); });
 
     // ids apenas referidos em movimentos das casas visíveis (quem pagou ou
     // recebeu, incluindo contas já apagadas): entram só com o nome, para as
@@ -394,7 +443,7 @@ export async function handleApi(request, env) {
       } catch (e) {}
     });
 
-    const uidArr = [...new Set([...userIdSet, ...referenced])];
+    const uidArr = [...new Set([...userIdSet, ...pendingPeers, ...referenced])];
     const pu = uidArr.map(() => '?').join(',');
     const userRows = (
       await env.DB.prepare(`SELECT id, name FROM users WHERE id IN (${pu})`).bind(...uidArr).all()
@@ -467,6 +516,9 @@ export async function handleApi(request, env) {
       })),
       connections: connections.map((c) => {
         const iAmRequester = c.requester_id === me.id;
+        // quem convida revela o seu email a quem recebe; o contrário só
+        // acontece depois de o convite ser aceite
+        const showEmail = c.status === 'accepted' || !iAmRequester;
         return {
           id: c.id,
           status: c.status,
@@ -474,7 +526,7 @@ export async function handleApi(request, env) {
           peer: {
             id: iAmRequester ? c.target_id : c.requester_id,
             name: iAmRequester ? c.target_name : c.requester_name,
-            email: iAmRequester ? c.target_email : c.requester_email,
+            email: showEmail ? (iAmRequester ? c.target_email : c.requester_email) : null,
           },
           myShares: shares.filter((s) => s.connection_id === c.id && s.owner_id === me.id).map((s) => s.house_id),
           peerShares: shares.filter((s) => s.connection_id === c.id && s.owner_id !== me.id).map((s) => s.house_id),
@@ -500,7 +552,8 @@ export async function handleApi(request, env) {
     for (const op of ops) {
       try {
         const put = op.op === 'put';
-        if (put && typeof op.data !== 'object') { results.push({ ok: false, status: 400 }); continue; }
+        if (put && (typeof op.data !== 'object' || !op.data)) { results.push({ ok: false, status: 400 }); continue; }
+        if (put && tooBig(op.data)) { results.push({ ok: false, status: 413 }); continue; }
         if (op.scope === 'house') {
           const houseId = String(op.houseId || '');
           const existing = await env.DB.prepare('SELECT owner_id, deleted, data FROM houses WHERE id = ?')
@@ -582,7 +635,8 @@ export async function handleApi(request, env) {
   if (seg[1] === 'houses' && seg.length === 3 && method === 'PUT') {
     const houseId = seg[2];
     const b = await body(request);
-    if (!b || typeof b.data !== 'object') return err(400, 'Corpo inválido.');
+    if (!b || typeof b.data !== 'object' || !b.data) return err(400, 'Corpo inválido.');
+    if (tooBig(b.data)) return err(413, 'Registo demasiado grande.');
     const existing = await env.DB.prepare('SELECT owner_id, deleted, data FROM houses WHERE id = ?')
       .bind(houseId)
       .first();
@@ -698,7 +752,8 @@ export async function handleApi(request, env) {
     if (!access.ok) return err(403, 'Sem acesso a esta casa.');
     if (method === 'PUT') {
       const b = await body(request);
-      if (!b || typeof b.data !== 'object') return err(400, 'Corpo inválido.');
+      if (!b || typeof b.data !== 'object' || !b.data) return err(400, 'Corpo inválido.');
+      if (tooBig(b.data)) return err(413, 'Registo demasiado grande.');
       await env.DB.prepare(
         `INSERT INTO records (house_id, kind, id, data, updated_at, deleted)
          VALUES (?, ?, ?, ?, ?, 0)
@@ -725,7 +780,8 @@ export async function handleApi(request, env) {
     const [, , kind, recordId] = seg;
     if (method === 'PUT') {
       const b = await body(request);
-      if (!b || typeof b.data !== 'object') return err(400, 'Corpo inválido.');
+      if (!b || typeof b.data !== 'object' || !b.data) return err(400, 'Corpo inválido.');
+      if (tooBig(b.data)) return err(413, 'Registo demasiado grande.');
       await env.DB.prepare(
         `INSERT INTO user_records (user_id, kind, id, data, updated_at, deleted)
          VALUES (?, ?, ?, ?, ?, 0)

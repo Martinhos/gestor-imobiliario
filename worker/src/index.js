@@ -3,20 +3,61 @@
 
 import { handleApi } from './api.js';
 
+// A app não carrega nada de fora, tirando o botão de entrada com Google.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://*.googleusercontent.com",
+  "connect-src 'self' https://accounts.google.com",
+  "frame-src https://accounts.google.com",
+  "font-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",   // sem clickjacking
+].join('; ');
+
+const SECURITY_HEADERS = {
+  'Content-Security-Policy': CSP,
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=(), interest-cohort=()',
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',   // o popup do Google precisa
+};
+
+function harden(res) {
+  const out = new Response(res.body, res);
+  Object.keys(SECURITY_HEADERS).forEach((k) => out.headers.set(k, SECURITY_HEADERS[k]));
+  return out;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) {
+      // a API é de uso próprio: nada de a chamar a partir de outro site
+      const origin = request.headers.get('Origin');
+      if (origin && origin !== url.origin) {
+        return new Response(JSON.stringify({ error: 'Origem não autorizada.' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      }
       try {
-        return await handleApi(request, env);
+        const res = await handleApi(request, env);
+        res.headers.set('Cache-Control', 'no-store');
+        return harden(res);
       } catch (e) {
         console.error('API error', e);
         return new Response(JSON.stringify({ error: 'Erro interno do servidor.' }), {
           status: 500,
-          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
         });
       }
     }
-    return env.ASSETS.fetch(request);
+    return harden(await env.ASSETS.fetch(request));
   },
 };
