@@ -578,9 +578,14 @@ function applyTheme(){
   document.documentElement.classList.toggle('dark',d);
   PAL.splice(0,PAL.length,...(d?PAL_DARK:PAL_LIGHT));
   const m=document.getElementById('metaTheme');if(m)m.content=d?'#161a3a':'#1a3a2c';
-  /* diz ao WebView qual é o esquema em vigor, para não escurecer por conta própria */
-  const cs=document.querySelector('meta[name=color-scheme]');if(cs)cs.content=d?'dark':'light';
-  try{document.documentElement.style.colorScheme=d?'dark':'light'}catch(e){}
+  /* No modo automático não se fixa o esquema. Fixá-lo era um ciclo vicioso: o
+     browser dizia "claro", a app escrevia color-scheme:light, e isso confirma
+     ao browser que a página não sabe ser escura — deixando-o sem razão para
+     mudar de ideias. Em automático dizemos que sabemos os dois e quem decide
+     é ele; só uma escolha explícita fixa um deles. */
+  const esq=db.settings.theme==='auto'?'light dark':(d?'dark':'light');
+  const cs=document.querySelector('meta[name=color-scheme]');if(cs)cs.content=esq;
+  try{document.documentElement.style.colorScheme=esq}catch(e){}
 }
 function setTheme(t){db.settings.theme=t;save();applyTheme();render()}
 /* o Safari so ganhou addEventListener em MediaQueryList na versao 14: sem o

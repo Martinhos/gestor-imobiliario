@@ -1,5 +1,5 @@
 /* Service worker: a app abre offline (a API sincroniza quando voltar a rede). */
-const CACHE = 'gi-shell-v4';
+const CACHE = 'gi-shell-v5';
 // A app passou a viver em módulos: guardam-se todos, senão abre offline
 // com metade do código.
 const APP = ['dados', 'anexos', 'auxiliares', 'graficos', 'credito', 'componentes',

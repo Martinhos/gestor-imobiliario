@@ -441,10 +441,10 @@ vDashboard = function () {
   });
   items.sort(function (a, b) { return a._r - b._r; });
 
-  return fixed + '<div class="cw-dash">' + items.map(function (it) {
+  return fixed + '<div class="cw-cont"><div class="cw-dash">' + items.map(function (it) {
     return '<div class="cw-blk' + (it.larg ? ' cw-' + it.larg : '') + '" data-k="' + esc(it.k) + '" data-lp="dash:' + esc(it.k) + '">' +
       it.h + '<span class="cw-h">' + ic('grip', 15) + '</span></div>';
-  }).join('') + '</div>';
+  }).join('') + '</div></div>';
 };
 
 function blkByKey(k) {
@@ -477,7 +477,7 @@ function editBar() {
   el.innerHTML = '<span class="small" style="flex:1;min-width:140px">Arrasta os cartões para mudar a ordem.</span>' +
     '<button class="btn sm" onclick="CW.resetDashOrder()">Repor ordem</button>' +
     '<button class="btn sm primary" onclick="CW.exitEdit()">' + ic('check', 14) + ' Concluir</button>';
-  var grid = v.querySelector('.cw-dash');
+  var grid = v.querySelector('.cw-cont');
   v.insertBefore(el, grid || v.firstChild);
 }
 
@@ -635,10 +635,26 @@ css.textContent =
   // metade da desarrumação da vista
   '.cw-dash{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin-top:14px;align-items:stretch}' +
   '.cw-blk>.card{flex:1}' +
-  // 1000px é onde as quatro colunas ainda dão 158px a cada indicador, que é o
-  // mínimo que a app já usava. Abaixo disso ficam duas: quatro colunas
-  // esmagadas leem-se pior do que duas folgadas.
+
+  // Reserva, para quem não tem container queries: corte pela largura do ecrã.
+  // Erra em paisagem no telemóvel, onde a barra lateral aparece e leva 264px
+  // sem a media query saber.
   '@media(min-width:1000px){.cw-dash{grid-template-columns:repeat(4,1fr);gap:14px}}' +
+
+  // O que vale de verdade: a grelha responde à largura que tem, não à do
+  // ecrã. É a única forma de o telemóvel deitado dar quatro colunas — e
+  // acompanha a rotação sem recarregar, porque é CSS e não uma decisão
+  // tomada no arranque.
+  '@supports (container-type:inline-size){' +
+    '.cw-cont{container-type:inline-size;container-name:vista}' +
+    '@container vista (max-width:559px){.cw-dash{grid-template-columns:repeat(2,1fr);gap:11px}}' +
+    // 560px é o telemóvel deitado: com a barra lateral a ocupar 264px sobram
+    // ~592px de conteúdo, e quatro colunas dão ~137px a cada indicador. É
+    // abaixo dos 158px que a app usava como mínimo — folga trocada de
+    // propósito por ver os oito indicadores de uma vez em paisagem.
+    '@container vista (min-width:560px){.cw-dash{grid-template-columns:repeat(4,1fr);gap:11px}}' +
+    '@container vista (min-width:760px){.cw-dash{gap:14px}}' +
+  '}' +
   // os cartões grandes ocupam duas células: a largura toda no telemóvel,
   // metade no computador
   '.cw-dash>.cw-wide{grid-column:span 2}' +
