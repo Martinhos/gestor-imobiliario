@@ -128,6 +128,10 @@ jobs:
           DISCORD_DEV_CHANNEL: ${{ secrets.DISCORD_DEV_CHANNEL }}
           DISCORD_ADMIN_CHANNEL: ${{ secrets.DISCORD_ADMIN_CHANNEL }}
           DISCORD_ADMINS: ${{ secrets.DISCORD_ADMINS }}
+          DISCORD_DEVS: ${{ secrets.DISCORD_DEVS }}
+          DISCORD_SUPORTE: ${{ secrets.DISCORD_SUPORTE }}
+          DISCORD_SUPORTE_CHANNEL: ${{ secrets.DISCORD_SUPORTE_CHANNEL }}
+          DISCORD_SUPORTE_WEBHOOK: ${{ secrets.DISCORD_SUPORTE_WEBHOOK }}
           CF_ANALYTICS_TOKEN: ${{ secrets.CF_ANALYTICS_TOKEN }}
         run: |
           set -e
@@ -144,6 +148,10 @@ jobs:
           put DISCORD_PUBLIC_KEY "$DISCORD_PUBLIC_KEY"
           put DISCORD_DEV_CHANNEL "$DISCORD_DEV_CHANNEL"
           put DISCORD_ADMINS "$DISCORD_ADMINS"
+          put DISCORD_DEVS "$DISCORD_DEVS"
+          put DISCORD_SUPORTE "$DISCORD_SUPORTE"
+          put DISCORD_SUPORTE_CHANNEL "$DISCORD_SUPORTE_CHANNEL"
+          put DISCORD_SUPORTE_WEBHOOK "$DISCORD_SUPORTE_WEBHOOK"
           # o resumo de consumo e os comandos de administração são só da produção
           if [ -n "$IS_PROD" ]; then
             put DISCORD_ADMIN_WEBHOOK "$DISCORD_ADMIN_WEBHOOK"
@@ -167,3 +175,32 @@ jobs:
           else
             echo "Bot do Discord não configurado — comandos não registados."
           fi
+
+      # Um deploy que falha não pode ficar só no separador do GitHub. Vai para
+      # o canal de quem programa, que é onde os erros do serviço já aparecem.
+      - name: Avisar quem programa se isto falhou
+        if: failure()
+        continue-on-error: true
+        env:
+          DISCORD_DEV_WEBHOOK: ${{ secrets.DISCORD_DEV_WEBHOOK }}
+          COMMIT: ${{ github.event.head_commit.message }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -n "$DISCORD_DEV_WEBHOOK" ] || { echo "sem webhook de dev"; exit 0; }
+          node -e '
+            const corpo = {
+              embeds: [{
+                title: "🔴 Deploy falhou · " + process.env.ENV_LABEL,
+                description: "`" + process.env.GITHUB_REF_NAME + "` — " +
+                  (process.env.COMMIT || "").split("\n")[0].slice(0, 160),
+                color: 0xb94a48,
+                fields: [{ name: "Ver o erro", value: process.env.RUN_URL }],
+                timestamp: new Date().toISOString(),
+              }],
+            };
+            fetch(process.env.DISCORD_DEV_WEBHOOK, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(corpo),
+            }).then((r) => console.log("aviso enviado: " + r.status));
+          '

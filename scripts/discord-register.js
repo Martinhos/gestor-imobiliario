@@ -17,6 +17,16 @@ if (!APP || !TOKEN) {
 
 const TEXTO = 3, INTEIRO = 4, BOOLEANO = 5;
 
+/* Quem vê cada comando.
+   O Discord não conhece os nossos papéis, só as permissões dele. O que se
+   pode fazer daqui é esconder por omissão o que é de operação — quem não
+   gere o servidor deixa de ver /uso, /resumo e /copias. Para afinar por
+   cargo (dar /erros aos devs, /pedidos ao suporte), é no servidor:
+   Definições do servidor → Integrações → o bot → Permissões dos comandos.
+   O bot valida sempre o papel outra vez, mesmo que alguém veja o comando. */
+const GERIR_SERVIDOR = '32';   // MANAGE_GUILD
+const soOperacao = { default_member_permissions: GERIR_SERVIDOR };
+
 const comandos = [
   {
     name: 'pedidos',
@@ -68,15 +78,16 @@ const comandos = [
     description: 'Erros recentes da aplicação',
     options: [{ type: INTEIRO, name: 'horas', description: 'Janela em horas (24 por omissão)', required: false }],
   },
-  { name: 'uso', description: 'Consumo da infraestrutura agora' },
-  {
+  Object.assign({ name: 'uso', description: 'Consumo da infraestrutura agora' }, soOperacao),
+  { name: 'comandos', description: 'O que podes fazer com o teu papel' },
+  Object.assign({
     name: 'copias',
     description: 'Cópias da base de dados no R2',
     options: [{
       type: BOOLEANO, name: 'agora', description: 'Fazer uma cópia já', required: false,
     }],
-  },
-  { name: 'resumo', description: 'Enviar o resumo diário para o canal de administração' },
+  }, soOperacao),
+  Object.assign({ name: 'resumo', description: 'Enviar o resumo diário para o canal de administração' }, soOperacao),
 ];
 
 const registar = (url) =>

@@ -1,5 +1,5 @@
 // Pedidos de ajuda e erros comunicados pela app.
-import { notifyDev, ticketEmbed } from '../notify.js';
+import { notifySuporte, ticketEmbed } from '../notify.js';
 
 export async function rotasTickets(c) {
   const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
@@ -25,7 +25,8 @@ export async function rotasTickets(c) {
        VALUES (?, ?, ?, ?, ?, 'criado', 'user', ?, ?, ?)`
     ).bind(id, me.id, kind, subject, text, row.context, t, t).run();
     const { ticketButtons } = await import('../discord.js');
-    notifyDev(env, ctx, ticketEmbed(row, me), ticketButtons(id));
+    // um pedido contado por alguém é trabalho de suporte, não de quem programa
+    notifySuporte(env, ctx, ticketEmbed(row, me), ticketButtons(id));
     return json({ ok: true, id }, 201);
   }
 
