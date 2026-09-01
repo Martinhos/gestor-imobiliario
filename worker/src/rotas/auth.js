@@ -83,7 +83,9 @@ export async function rotasAuth(c) {
 
   // Que fornecedores de entrada social estão configurados (ids públicos).
   if (path === '/api/auth/config' && method === 'GET') {
-    return json({ google: env.GOOGLE_CLIENT_ID || null });
+    // o ambiente vai junto: é o que permite à app esconder o que só faz
+    // sentido em desenvolvimento, como carregar dados de exemplo
+    return json({ google: env.GOOGLE_CLIENT_ID || null, ambiente: env.ENV_NAME || 'producao' });
   }
 
   // Entrada com Google: o cliente envia o ID token do fornecedor;

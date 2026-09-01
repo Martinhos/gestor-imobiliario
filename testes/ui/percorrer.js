@@ -52,6 +52,11 @@ const CENAS = [
   },
   { nome: 'painel-de-filtros', fazer: `go('properties'); render(); document.getElementById('hdrFilt').click()` },
   { nome: 'novidades', fazer: `CW.verNovidades(AVISOS.slice(0,1))` },
+  { nome: 'tutorial', fazer: `CW.guiaAbrir('imoveis')` },
+  {
+    nome: 'primeiros-passos',
+    fazer: `localStorage.removeItem('gi_passos_fora'); go('dashboard'); render();`,
+  },
   { nome: 'edicao-dos-cartoes', fazer: `go('dashboard'); render(); CW.enterEdit()` },
   {
     nome: 'selecao-de-movimentos',

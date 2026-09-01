@@ -130,8 +130,8 @@ function gateAtualizar(minima) {
   var el = document.createElement('div');
   el.id = 'cwUpd';
   el.style.cssText = 'position:fixed;inset:0;z-index:198;background:var(--bg);overflow:auto;' +
-    'padding:calc(28px + var(--inset-top)) 18px calc(28px + var(--inset-bottom));display:grid;place-items:center';
-  el.innerHTML = '<div style="max-width:420px;width:100%">' +
+    'padding:calc(28px + var(--inset-top)) 18px calc(28px + var(--inset-bottom));display:flex;justify-content:center';
+  el.innerHTML = '<div style="max-width:420px;width:100%;margin:auto">' +
     card('Há uma versão nova', 'Esta já não pode ser usada',
       '<div class="hint">A versão que tens (' + VERSAO + ') deixou de ser aceite; a mais antiga que serve é a ' +
       minima + '. Atualizar demora um instante e não perdes nada — os teus dados estão na tua conta.</div>' +
