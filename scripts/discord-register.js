@@ -15,7 +15,7 @@ if (!APP || !TOKEN) {
   process.exit(1);
 }
 
-const TEXTO = 3, INTEIRO = 4;
+const TEXTO = 3, INTEIRO = 4, BOOLEANO = 5;
 
 const comandos = [
   {
@@ -69,6 +69,13 @@ const comandos = [
     options: [{ type: INTEIRO, name: 'horas', description: 'Janela em horas (24 por omissão)', required: false }],
   },
   { name: 'uso', description: 'Consumo da infraestrutura agora' },
+  {
+    name: 'copias',
+    description: 'Cópias da base de dados no R2',
+    options: [{
+      type: BOOLEANO, name: 'agora', description: 'Fazer uma cópia já', required: false,
+    }],
+  },
   { name: 'resumo', description: 'Enviar o resumo diário para o canal de administração' },
 ];
 

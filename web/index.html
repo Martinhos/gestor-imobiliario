@@ -13,6 +13,45 @@
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <title>Gestor Imobiliário</title>
+<script>
+/* Armadilha de erros, antes de tudo o resto.
+   O relato normal vive em cloud/ajuda.js, que é o 27.º script a carregar: se
+   um módulo anterior rebentar, a app fica em branco e nunca ninguém sabe
+   porquê. Isto apanha esses — guarda-os para o relato normal os levar, e se
+   ele não chegar a existir em três segundos, envia-os por si. */
+(function () {
+  var vistos = {}, fila = [];
+  window.__erros = fila;
+  function apanha(msg, detalhe) {
+    var chave = String(msg).slice(0, 120);
+    if (vistos[chave] || fila.length >= 8) return;
+    vistos[chave] = 1;
+    fila.push({ message: String(msg).slice(0, 500), detail: String(detalhe || '').slice(0, 800) });
+  }
+  window.addEventListener('error', function (e) {
+    apanha(e.message, (e.filename || '') + ':' + (e.lineno || '') + ' · arranque\n' +
+      String((e.error && e.error.stack) || '').slice(0, 500));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    apanha('Promessa rejeitada: ' + ((r && r.message) || r),
+      String((r && r.stack) || '').slice(0, 500) + ' · arranque');
+  });
+  setTimeout(function () {
+    if (window.__errosLevados || !fila.length) return;
+    window.__errosLevados = 1;
+    fila.splice(0).forEach(function (r) {
+      r.detail = (r.detail || '') + '\n\n(a app não chegou a arrancar)';
+      try {
+        fetch('/api/reports', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r),
+        }).catch(function () {});
+      } catch (e) {}
+    });
+  }, 3000);
+})();
+</script>
 <style>
 :root{
   color-scheme:light;

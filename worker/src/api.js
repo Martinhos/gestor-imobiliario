@@ -22,6 +22,7 @@ import {
 import { recordReport } from './lib/relatos.js';
 
 import { rotasAuth } from './rotas/auth.js';
+import { rotasRelatos } from './rotas/relatos.js';
 import { rotasConta } from './rotas/conta.js';
 import { rotasEstado } from './rotas/estado.js';
 import { rotasSync } from './rotas/sync.js';
@@ -59,6 +60,11 @@ export async function handleApi(request, env, ctx) {
   // sem sessão: registo, entrada, saída e entrada com Google
   const semSessao = await rotasAuth(c);
   if (semSessao) return semSessao;
+
+  // relatos de erro não esperam por sessão: os que mais interessam vêm de
+  // quem ficou preso no ecrã de entrada
+  const relato = await rotasRelatos(c);
+  if (relato) return relato;
 
   c.me = await getSessionUser(env, request);
   if (!c.me) return err(401, 'Sessão inválida — inicia sessão de novo.');

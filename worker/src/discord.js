@@ -145,21 +145,55 @@ async function cmdFechar(env, opts) {
   return reply('✅ Concluído.', [ticketEmbedFull(t)]);
 }
 
+// Os erros apanhados sozinhos vivem em `tickets` desde a migração 0008, com
+// a categoria a dizer de onde vieram. A tabela `reports` ficou para trás.
 async function cmdErros(env, opts) {
   const horas = Math.min(Math.max(Number(opts.horas || 24), 1), 720);
   const desde = Date.now() - horas * 3600000;
   const rows = (await env.DB.prepare(
-    'SELECT * FROM reports WHERE updated_at > ? ORDER BY n DESC, updated_at DESC LIMIT 10'
+    `SELECT * FROM tickets WHERE category IN ('client', 'server') AND updated_at > ?
+      ORDER BY n DESC, updated_at DESC LIMIT 10`
   ).bind(desde).all()).results;
   if (!rows.length) return reply('✅ Sem erros nas últimas ' + horas + ' horas.');
   return reply('Erros das últimas ' + horas + ' horas:', rows.map(function (r) {
     return {
-      title: '⚠️ ' + cut(r.message, 90) + (r.n > 1 ? '  ×' + r.n : ''),
-      description: '```' + cut(r.detail || '—', 500) + '```',
-      color: 0xd6a34a,
-      footer: { text: (r.kind === 'servidor' ? 'servidor' : 'app') + ' · ' + (r.user_id || 'sem sessão') },
+      title: '⚠️ ' + cut(r.subject, 90) + (r.n > 1 ? '  ×' + r.n : ''),
+      description: '```' + cut(r.body || '—', 500) + '```',
+      color: r.status === 'concluido' ? 0x2f7d5b : 0xd6a34a,
+      footer: {
+        text: (r.category === 'server' ? 'servidor' : 'app') + ' · ' +
+          (ESTADOS[r.status] || r.status) + ' · ' + cut(r.id, 8),
+      },
     };
   }));
+}
+
+// Ver as cópias que existem, ou forçar uma agora — antes de uma migração
+// arriscada, por exemplo, em vez de esperar pelas 09:00.
+async function cmdCopias(env, opts) {
+  const s = await import('./salvaguarda.js');
+  if (opts.agora) {
+    const r = await s.copiar(env);
+    if (r.erro) return reply('🔴 Não deu: ' + cut(r.erro, 400));
+    return reply('🟢 Cópia feita: `' + r.chave + '` · ' + r.linhas + ' registos de ' +
+      r.tabelas + ' tabelas · ' + s.kb(r.bytes) + ' · ' + r.ms + ' ms' +
+      (r.podadas ? ' · ' + r.podadas + ' antigas apagadas' : '') +
+      (r.modo === 'memoria' ? '\n(escrita em memória: o fluxo não passou)' : ''));
+  }
+  const copias = await s.listar(env);
+  if (!copias.length) return reply('🔴 Nenhuma cópia no R2. Corre `/copias agora:Sim`.');
+  const total = copias.reduce((a, o) => a + o.size, 0);
+  return reply('', [{
+    title: '💾 Cópias da base no R2',
+    color: 0x2f7d5b,
+    description: copias.slice(0, 15).map((o) =>
+      '`' + s.diaDaChave(o.key) + '` · ' + s.kb(o.size)).join('\n'),
+    fields: [
+      { name: 'Total', value: copias.length + ' cópias, ' + s.kb(total), inline: true },
+      { name: 'Retenção', value: s.DIAS + ' dias + dia 1 de cada mês', inline: true },
+      { name: 'Time Travel da D1', value: s.TIME_TRAVEL_DIAS + ' dias (plano gratuito)', inline: true },
+    ],
+  }]);
 }
 
 async function cmdUso(env) {
@@ -221,6 +255,7 @@ export async function handleInteraction(request, env, ctx) {
       if (nome === 'fechar') return json(await cmdFechar(env, opts));
       if (nome === 'erros') return json(await cmdErros(env, opts));
       if (nome === 'uso') return json(await cmdUso(env));
+      if (nome === 'copias') return json(await cmdCopias(env, opts));
       if (nome === 'resumo') return json(await cmdResumo(env, ctx));
     } catch (e) {
       return json(reply('Correu mal: ' + cut(e.message, 300)));
