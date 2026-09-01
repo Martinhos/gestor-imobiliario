@@ -82,22 +82,44 @@ CW.sendTicket = function (kind) {
     .catch(function (err) { e.textContent = err.message || 'Não foi possível enviar.'; });
 };
 
-// erros na app chegam a quem programa sem o utilizador ter de os contar
+// Erros na app chegam a quem programa sem o utilizador ter de os contar.
+// Sem sessão também: um erro no ecrã de entrada é o que mais custa deixar
+// passar, porque quem fica preso lá não tem como o contar de outra maneira.
 var errCount = 0;
+var errVistos = {};
 function reportErr(msg, detail) {
-  if (!CW.user || errCount >= 5) return;
+  if (errCount >= 8) return;
+  // o mesmo erro em ciclo conta uma vez: um requestAnimationFrame partido
+  // dispara centenas de vezes por segundo
+  var chave = String(msg).slice(0, 120);
+  if (errVistos[chave]) return;
+  errVistos[chave] = 1;
   errCount++;
   api('POST', '/api/reports', { message: String(msg).slice(0, 500), detail: String(detail || '').slice(0, 800) })
     .catch(function () {});
 }
+// em que ecrã estava a pessoa: ajuda a reproduzir, e `tab` pode ainda não
+// existir se o erro for cedo
+function ondeEstava() {
+  try { return String(tab); } catch (e) { return 'arranque'; }
+}
 window.addEventListener('error', function (e) {
-  reportErr(e.message, (e.filename || '') + ':' + (e.lineno || '') + ' · ' + tab +
+  reportErr(e.message, (e.filename || '') + ':' + (e.lineno || '') + ' · ' + ondeEstava() +
     '\n' + String((e.error && e.error.stack) || '').slice(0, 500));
 });
 window.addEventListener('unhandledrejection', function (e) {
   var r = e.reason;
-  reportErr('Promessa rejeitada: ' + ((r && r.message) || r), String((r && r.stack) || '').slice(0, 500) + ' · ' + tab);
+  reportErr('Promessa rejeitada: ' + ((r && r.message) || r),
+    String((r && r.stack) || '').slice(0, 500) + ' · ' + ondeEstava());
 });
+
+// leva o que a armadilha do index.html apanhou antes de este ficheiro existir
+(function () {
+  var fila = window.__erros;
+  if (!fila || !fila.length || window.__errosLevados) return;
+  window.__errosLevados = 1;
+  fila.splice(0).forEach(function (r) { reportErr(r.message, r.detail); });
+})();
 
 function vDoc(html) {
   return '<div class="card"><div class="lg">' + html + '</div></div>' +

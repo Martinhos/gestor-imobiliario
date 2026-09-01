@@ -68,7 +68,7 @@ export function ticketEmbed(t, user) {
 
 export function errorEmbed(r) {
   return {
-    title: '⚠️ Erro ' + (r.kind === 'servidor' ? 'no servidor' : 'na app') +
+    title: '⚠️ Erro ' + (r.kind === 'server' ? 'no servidor' : 'na app') +
       (r.n > 1 ? ' (×' + r.n + ')' : ''),
     description: '```\n' + cut(r.message, 900) + '\n```',
     color: 0xd6a34a,
@@ -95,7 +95,8 @@ export async function usageFields(env) {
   const casas = await q('SELECT COUNT(*) AS n FROM houses WHERE deleted = 0');
   const registos = await q('SELECT COUNT(*) AS n FROM records WHERE deleted = 0');
   const abertos = await q("SELECT COUNT(*) AS n FROM tickets WHERE status <> 'concluido'");
-  const erros = await q(`SELECT COUNT(*) AS n FROM reports WHERE updated_at > ${dia}`);
+  const erros = await q(`SELECT COUNT(*) AS n FROM tickets
+     WHERE category IN ('client', 'server') AND updated_at > ${dia}`);
 
   const max = Number(env.MAX_USERS || 0);
   const pctContas = max ? Math.round(((contas.n || 0) / max) * 100) : null;
@@ -110,6 +111,11 @@ export async function usageFields(env) {
     { name: 'Pedidos abertos', value: String(abertos.n || 0), inline: true },
     { name: 'Erros (24h)', value: String(erros.n || 0), inline: true },
   ];
+
+  // Sem isto, uma cópia que deixasse de correr passava despercebida até ao
+  // dia em que fizesse falta.
+  const { estado: estadoCopias } = await import('./salvaguarda.js');
+  fields.push({ name: 'Cópias de segurança', value: (await estadoCopias(env)).texto, inline: false });
 
   const uso = await cloudflareUsage(env);
   if (uso) {

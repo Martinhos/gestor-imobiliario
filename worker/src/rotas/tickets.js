@@ -1,6 +1,5 @@
 // Pedidos de ajuda e erros comunicados pela app.
 import { notifyDev, ticketEmbed } from '../notify.js';
-import { recordReport } from '../lib/relatos.js';
 
 export async function rotasTickets(c) {
   const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
@@ -40,14 +39,5 @@ export async function rotasTickets(c) {
       ).bind(me.id).all()
     ).results;
     return json({ tickets: rows });
-  }
-
-  // erros apanhados no browser de quem usa a app
-  if (path === '/api/reports' && method === 'POST') {
-    if (!(await rateLimit(env, 'rp:' + me.id, 20, 3600))) return json({ ok: true });
-    const b = await body(request);
-    if (!b || !b.message) return err(400, 'Corpo inválido.');
-    await recordReport(env, ctx, 'client', b.message, b.detail, me.id);
-    return json({ ok: true });
   }
 }

@@ -33,6 +33,32 @@ jobs:
           done
           exit $erros
 
+      # O `node --check` acima só vê ficheiros .js. Um script escrito dentro do
+      # index.html — como a armadilha de erros do arranque — passava-lhe ao
+      # lado, e um erro de sintaxe aí não estraga uma função: impede a página
+      # inteira de correr esse bloco, calada.
+      - name: Verificar os scripts escritos dentro do HTML
+        run: |
+          set -e
+          node -e '
+            const fs = require("fs");
+            const html = fs.readFileSync("web/index.html", "utf8");
+            const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+            let m, n = 0, mau = 0;
+            while ((m = re.exec(html))) {
+              n++;
+              const linha = html.slice(0, m.index).split("\n").length;
+              try {
+                new Function(m[1]);
+              } catch (e) {
+                console.error("script embutido na linha " + linha + ": " + e.message);
+                mau = 1;
+              }
+            }
+            console.log(n + " scripts embutidos verificados");
+            process.exit(mau);
+          '
+
       # O index.html tem de carregar todos os módulos que existem, pela ordem
       # certa: um ficheiro novo que ninguém carrega é código morto silencioso.
       - name: Confirmar que a app carrega todos os módulos
