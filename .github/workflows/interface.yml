@@ -1,0 +1,69 @@
+name: Interface
+
+# Corre a app a sério num browser e verifica o interface em todos os estados.
+# Separado dos testes unitários porque é lento (descarrega um browser) e
+# porque falha por razões diferentes: ali é a lógica, aqui é o que se vê.
+on:
+  pull_request:
+    paths: ['web/**', 'testes/ui/**', '.github/workflows/interface.yml']
+  push:
+    branches: [main, dev]
+    paths: ['web/**', 'testes/ui/**']
+  workflow_dispatch:
+    inputs:
+      avaliar:
+        description: Pedir também um parecer do modelo sobre a qualidade
+        type: boolean
+        default: false
+
+jobs:
+  percurso:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Instalar o browser
+        run: npx playwright install --with-deps chromium
+
+      # Base local: o percurso cria a conta e semeia os dados, e não toca em
+      # nada que esteja publicado.
+      - name: Preparar a base local
+        run: npx wrangler@4 d1 migrations apply gestor-imobiliario --local
+
+      - name: Levantar a app
+        run: |
+          npx wrangler@4 dev --port 8788 > /tmp/app.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -sf -o /dev/null http://127.0.0.1:8788/; then echo "a app respondeu"; exit 0; fi
+            sleep 2
+          done
+          echo "a app não arrancou"; tail -40 /tmp/app.log; exit 1
+
+      # É isto que trava o processo: regras duras sobre o que se vê.
+      - name: Percorrer e verificar
+        run: node testes/ui/percorrer.js
+
+      # O parecer do modelo é opinião, não regra: nunca trava o processo.
+      # Sem a chave definida, o próprio script não faz nada e devolve 0.
+      - name: Parecer sobre a qualidade
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.avaliar }}
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node testes/ui/avaliar.js
+
+      # Falhando, as capturas dizem mais do que qualquer mensagem de erro.
+      - name: Guardar as capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: interface-${{ github.run_id }}
+          path: testes/ui/relatorio/
+          retention-days: 14
+          if-no-files-found: warn

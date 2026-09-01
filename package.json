@@ -10,9 +10,12 @@
     "db:remote": "wrangler d1 migrations apply gestor-imobiliario --remote",
     "icons": "node scripts/make-icons.js",
     "test": "node --test \"testes/*.test.js\"",
-    "test:watch": "node --test --watch \"testes/*.test.js\""
+    "test:watch": "node --test --watch \"testes/*.test.js\"",
+    "test:ui": "node testes/ui/percorrer.js",
+    "test:ui:avaliar": "node testes/ui/avaliar.js"
   },
   "devDependencies": {
+    "playwright": "^1.62.1",
     "wrangler": "^4.0.0"
   }
 }
