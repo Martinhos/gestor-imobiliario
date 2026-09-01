@@ -79,15 +79,23 @@ export function ticketEmbed(t, user) {
 }
 
 export function errorEmbed(r) {
+  /* Vermelho quando toca em mais do que uma pessoa. Um erro que só acontece a
+     alguém pode esperar; um que acontece a vários é outra coisa, e a cor
+     poupa a leitura do resto. */
+  const varios = r.pessoas > 1;
+  const campos = [
+    { name: 'Quem', value: r.user_id || 'sem sessão', inline: true },
+  ];
+  if (r.pessoas) campos.push({ name: 'Pessoas', value: String(r.pessoas), inline: true });
+  if (r.versao) campos.push({ name: 'Versão da app', value: String(r.versao), inline: true });
+  if (r.contexto) campos.push({ name: 'Onde', value: cut(r.contexto, 100), inline: true });
+  campos.push({ name: 'Detalhe', value: '```' + cut(r.detail || '—', 700) + '```', inline: false });
   return {
-    title: '⚠️ Erro ' + (r.kind === 'server' ? 'no servidor' : 'na app') +
-      (r.n > 1 ? ' (×' + r.n + ')' : ''),
+    title: (varios ? '🔴' : '⚠️') + ' Erro ' + (r.kind === 'server' ? 'no servidor' : 'na app') +
+      (r.n > 1 ? ' (×' + r.n + ')' : '') + (varios ? ' · ' + r.pessoas + ' pessoas' : ''),
     description: '```\n' + cut(r.message, 900) + '\n```',
-    color: 0xd6a34a,
-    fields: [
-      { name: 'Quem', value: r.user_id || 'sem sessão', inline: true },
-      { name: 'Onde', value: cut(r.detail || '—', 300), inline: false },
-    ],
+    color: varios ? 0xb94a48 : 0xd6a34a,
+    fields: campos,
     footer: { text: 'report ' + r.id },
     timestamp: new Date(r.created_at).toISOString(),
   };
@@ -150,6 +158,65 @@ export async function usageFields(env) {
     });
   }
   return fields;
+}
+
+/* Vigia de hora a hora.
+
+   O resumo diário avisa a 70% e 90%, mas uma vez por dia: um pico às 10:00
+   só aparecia às 09:00 do dia seguinte, quando já não há nada a fazer. Isto
+   olha de hora a hora e avisa quando um limite passa os 80%.
+
+   Uma vez por dia por limite. Sem isso, um limite que fica em 85% durante a
+   tarde toda mandava vinte e quatro avisos e ninguém voltava a ler nenhum.
+   O travão é o mesmo rate_limits que já existe — um contador com prazo é
+   exatamente o que aqui é preciso, e poupa uma tabela. */
+export const LIMIAR_AVISO = 0.8;
+
+export async function watchLimits(env, ctx) {
+  const canal = env.DISCORD_ADMIN_CHANNEL, url = env.DISCORD_ADMIN_WEBHOOK;
+  if (!canal && !url) return { avisados: 0, motivo: 'sem canal de administração' };
+
+  const uso = await cloudflareUsage(env);
+  if (!uso) return { avisados: 0, motivo: 'sem dados de consumo' };
+
+  const { rateLimit } = await import('./lib/limites.js');
+  const apertados = [];
+  for (const k of Object.keys(LIMITS)) {
+    const v = uso[k];
+    if (v == null) continue;
+    const fracao = v / LIMITS[k];
+    if (fracao < LIMIAR_AVISO) continue;
+    // rateLimit devolve true na primeira vez da janela: é o "ainda não avisei hoje"
+    if (!(await rateLimit(env, 'aviso:' + k, 1, 86400))) continue;
+    apertados.push({ nome: k, valor: v, tecto: LIMITS[k], pct: Math.round(fracao * 100) });
+  }
+  if (!apertados.length) return { avisados: 0 };
+
+  const grave = apertados.some((a) => a.pct >= 95);
+  const payload = {
+    content: grave ? '@here' : '',
+    embeds: [{
+      title: (grave ? '🔴' : '⚠️') + ' Limite do plano gratuito a chegar ao fim',
+      description: 'Passado o tecto, a Cloudflare recusa os pedidos — a app deixa de sincronizar.',
+      color: grave ? 0xb94a48 : 0xd6a34a,
+      fields: apertados.map((a) => ({
+        name: a.nome,
+        value: a.valor.toLocaleString('pt-PT') + ' de ' + a.tecto.toLocaleString('pt-PT') + '  (' + a.pct + '%)',
+        inline: false,
+      })),
+      footer: { text: 'avisa-se uma vez por dia por limite' },
+      timestamp: new Date().toISOString(),
+    }],
+  };
+  const enviar = (async () => {
+    if (env.DISCORD_BOT_TOKEN && canal) {
+      const { postAsBot } = await import('./discord.js');
+      if (await postAsBot(env, canal, payload)) return true;
+    }
+    return post(url, payload);
+  })();
+  if (ctx && ctx.waitUntil) ctx.waitUntil(enviar); else await enviar;
+  return { avisados: apertados.length, limites: apertados.map((a) => a.nome) };
 }
 
 export async function dailyReport(env, ctx) {

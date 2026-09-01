@@ -52,7 +52,29 @@ const CENAS = [
   },
   { nome: 'painel-de-filtros', fazer: `go('properties'); render(); document.getElementById('hdrFilt').click()` },
   { nome: 'novidades', fazer: `CW.verNovidades(AVISOS.slice(0,1))` },
+  { nome: 'tutorial', fazer: `CW.guiaAbrir('imoveis')` },
+  {
+    // o caso que estava partido: o cartão ficava por baixo da janela
+    nome: 'tutorial-sobre-janela',
+    fazer: `CW.guiaAbrir('perfil'); propModal();`,
+  },
+  {
+    nome: 'primeiros-passos',
+    fazer: `localStorage.removeItem('gi_passos_fora'); go('dashboard'); render();`,
+  },
   { nome: 'edicao-dos-cartoes', fazer: `go('dashboard'); render(); CW.enterEdit()` },
+  {
+    nome: 'selecao-de-movimentos',
+    fazer: `go('transactions'); render();
+      const l=document.querySelector('#view .txrow');
+      if(l) CW.selEntrar(l.getAttribute('data-lp').replace('tx:',''));`,
+  },
+  {
+    nome: 'selecao-com-tudo-marcado',
+    fazer: `go('transactions'); render();
+      const l=document.querySelector('#view .txrow');
+      if(l){ CW.selEntrar(l.getAttribute('data-lp').replace('tx:','')); CW.selTodos(); }`,
+  },
 ];
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -109,9 +131,19 @@ async function entrar(pagina) {
     }
   }
 
-  const erro = await pagina.evaluate(`(document.getElementById('cwa_err')||{}).textContent || ''`);
   if (!(await pagina.evaluate('!!(window.CW && CW.user)'))) {
-    throw new Error('não deu para entrar' + (erro ? ': ' + erro : ''));
+    /* A mensagem no ecrã é a da última tentativa — normalmente a do registo,
+       que diz "já existe uma conta com este email" e faz parecer que o
+       problema é esse. O que costuma estar por trás é o tecto de tentativas
+       de entrada. Diz-se o que o servidor respondeu de facto. */
+    const diz = await pagina.evaluate(`(async () => {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: '${EMAIL}', password: '${SENHA}' }),
+      });
+      return r.status + ' ' + (await r.text()).slice(0, 120);
+    })()`);
+    throw new Error('não deu para entrar. A entrada responde: ' + diz);
   }
 
   // fechar os avisos de primeira abertura, que não são o objeto deste percurso
@@ -126,6 +158,15 @@ async function entrar(pagina) {
    arranque e pode passar por cima do que se semeou — semear uma vez e seguir
    em frente dava um percurso sobre uma app vazia. */
 async function preparar(pagina) {
+  /* Em producao os dados de exemplo sao recusados de proposito. O percurso
+     precisa deles para ter o que medir, por isso corre contra um ambiente
+     marcado -- e diz-se porque, em vez de falhar mais a frente com um
+     "sem dados" que nao explica nada. */
+  const amb = await pagina.evaluate('(window.CW && CW.ambiente) || "?"');
+  if (amb === 'producao') {
+    throw new Error('a app diz estar em producao, onde os dados de exemplo sao recusados.\n' +
+      'Levanta-a com: npx wrangler dev --port 8788 --var ENV_NAME:percurso');
+  }
   for (let i = 0; i < 6; i++) {
     const n = await pagina.evaluate(`(typeof db !== 'undefined' && db.properties) ? db.properties.length : 0`);
     if (n > 0) break;

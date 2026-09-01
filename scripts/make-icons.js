@@ -1,7 +1,20 @@
-// Gera icon-192.png e icon-512.png (casa branca sobre verde) sem dependências.
+// Gera os ícones da PWA, iguais aos do APK, sem dependências.
+//
+//   node scripts/make-icons.js
+//
+// O desenho é o mesmo que o Android usa em res/drawable/ic_launcher_*.xml:
+// um gradiente diagonal verde e a casa a traço branco, a mesma do menu
+// lateral. Antes a PWA tinha uma casa cheia sobre verde liso — parecia outra
+// app no ecrã inicial de quem tinha as duas.
+//
+// Se algum dia mexeres no ícone do Android, mexe aqui também: são dois
+// desenhos separados que têm de dizer a mesma coisa.
+
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+
+/* ----------------------------------------------------------- PNG à mão */
 
 function crc32(buf) {
   let table = crc32.table;
@@ -45,33 +58,68 @@ function png(width, height, rgba) {
   ]);
 }
 
+/* ------------------------------------------------------------ o desenho */
+
+// Cores e traços copiados de ic_launcher_background.xml e _foreground.xml.
+const VERDE_CLARO = [0x2f, 0x7d, 0x5b];
+const VERDE_ESCURO = [0x16, 0x38, 0x2b];
+const TRACO = 1.9;          // na escala de 24 do vetor original
+const DESLOCA = 12;         // o <group> do Android desloca a casa (48 = 2 × 24)
+const LADO = 48;            // viewport do vetor
+
+// As três linhas da casa, tal como no vetor: telhado, corpo, porta.
+const LINHAS = [
+  [[3, 10.5], [12, 3], [21, 10.5]],
+  [[5, 9.5], [5, 21], [19, 21], [19, 9.5]],
+  [[9.5, 21], [9.5, 16], [14.5, 16], [14.5, 21]],
+].map((l) => l.map(([x, y]) => [x + DESLOCA, y + DESLOCA]));
+
+// Distância de um ponto a um segmento — é o que dá o traço com pontas
+// redondas sem ter de desenhar círculos nas juntas.
+function distSegmento(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+  const qx = ax + t * dx, qy = ay + t * dy;
+  return Math.hypot(px - qx, py - qy);
+}
+
+function distCasa(x, y) {
+  let d = Infinity;
+  for (const linha of LINHAS) {
+    for (let i = 0; i + 1 < linha.length; i++) {
+      d = Math.min(d, distSegmento(x, y, linha[i][0], linha[i][1], linha[i + 1][0], linha[i + 1][1]));
+    }
+  }
+  return d;
+}
+
 function makeIcon(size) {
   const img = Buffer.alloc(size * size * 4);
-  const bg = [0x1a, 0x3a, 0x2c], fg = [0xdf, 0xec, 0xe6];
-  const put = (x, y, c) => {
-    const i = (y * size + x) * 4;
-    img[i] = c[0]; img[i + 1] = c[1]; img[i + 2] = c[2]; img[i + 3] = 255;
-  };
-  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) put(x, y, bg);
+  const meio = TRACO / 2;
+  const AMOSTRAS = 3;   // 3×3 por pixel: chega para o traço não ficar serrado
 
-  // casa: telhado triangular + corpo com porta, em coordenadas normalizadas
-  const inHouse = (u, v) => {
-    // telhado: triângulo de (0.5,0.20) a (0.16,0.50)-(0.84,0.50)
-    if (v >= 0.2 && v <= 0.5) {
-      const half = ((v - 0.2) / 0.3) * 0.34;
-      if (u >= 0.5 - half && u <= 0.5 + half) return true;
-    }
-    // corpo
-    if (v > 0.5 && v <= 0.8 && u >= 0.24 && u <= 0.76) {
-      // porta (recorte)
-      if (v > 0.62 && u >= 0.44 && u <= 0.56) return false;
-      return true;
-    }
-    return false;
-  };
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      if (inHouse((x + 0.5) / size, (y + 0.5) / size)) put(x, y, fg);
+  for (let py = 0; py < size; py++) {
+    for (let px = 0; px < size; px++) {
+      // fundo: gradiente na diagonal, como o do Android
+      const t = Math.min(1, (px + py) / (2 * (size - 1)));
+      const fundo = [0, 1, 2].map((i) => Math.round(VERDE_CLARO[i] + (VERDE_ESCURO[i] - VERDE_CLARO[i]) * t));
+
+      // figura: quanto do pixel cai dentro do traço
+      let dentro = 0;
+      for (let sy = 0; sy < AMOSTRAS; sy++) {
+        for (let sx = 0; sx < AMOSTRAS; sx++) {
+          const u = ((px + (sx + 0.5) / AMOSTRAS) / size) * LADO;
+          const v = ((py + (sy + 0.5) / AMOSTRAS) / size) * LADO;
+          if (distCasa(u, v) <= meio) dentro++;
+        }
+      }
+      const a = dentro / (AMOSTRAS * AMOSTRAS);
+
+      const i = (py * size + px) * 4;
+      img[i] = Math.round(fundo[0] + (255 - fundo[0]) * a);
+      img[i + 1] = Math.round(fundo[1] + (255 - fundo[1]) * a);
+      img[i + 2] = Math.round(fundo[2] + (255 - fundo[2]) * a);
+      img[i + 3] = 255;
     }
   }
   return png(size, size, img);
@@ -82,6 +130,6 @@ for (const s of [192, 512]) {
   fs.writeFileSync(path.join(out, `icon-${s}.png`), makeIcon(s));
   console.log(`icon-${s}.png`);
 }
-// iOS procura especificamente um apple-touch-icon de 180x180
+// o iOS procura especificamente um apple-touch-icon de 180×180
 fs.writeFileSync(path.join(out, 'apple-touch-icon.png'), makeIcon(180));
 console.log('apple-touch-icon.png');

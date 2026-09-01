@@ -26,6 +26,125 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 28,
+    data: '2026-09-01',
+    titulo: 'Tutoriais na ajuda, e a funcionar com janelas abertas',
+    seccoes: [
+      {
+        titulo: 'Os tutoriais estão todos na ajuda',
+        afeta: ['app'],
+        itens: [
+          'Em Definições → Ajuda e sugestões, secção “Como se faz”, com todos listados e o número de passos de cada.',
+          'Deixa de ser preciso esperar que a app to ofereça, ou não ter dispensado o cartão dos primeiros passos.',
+        ],
+      },
+      {
+        titulo: 'Correções nos tutoriais',
+        afeta: ['app'],
+        itens: [
+          'Um passo já não abre janelas por sua conta: aparecia uma a meio do tutorial sem ninguém ter pedido.',
+          'Com uma janela aberta, o cartão do tutorial continua à vista e a funcionar. Antes desaparecia por baixo dela e não havia como continuar.',
+          'Quem não quiser preencher os dados pode continuar o tutorial na mesma.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 27,
+    data: '2026-09-01',
+    titulo: 'Primeiros passos e tutoriais',
+    seccoes: [
+      {
+        titulo: 'Um caminho para quem chega',
+        afeta: ['app'],
+        itens: [
+          'A vista geral passa a mostrar o que falta fazer: preencher o perfil, adicionar imóveis, registar contratos e confirmar movimentos.',
+          'São sugestões, não obrigações — o cartão fecha-se e não volta.',
+          'Cada passo tem um tutorial: um cartão que flutua por cima da app, com o que fazer, e que se pode percorrer para a frente e para trás.',
+        ],
+      },
+      {
+        titulo: 'Correções',
+        afeta: ['app'],
+        itens: [
+          'O painel de filtros passa a acompanhar a página. Ficava preso ao topo e desaparecia ao primeiro deslize.',
+          'Nos telemóveis com as barras do browser à mostra, o topo das janelas deixa de ficar escondido.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 26,
+    data: '2026-09-01',
+    titulo: 'Tratar vários movimentos de uma vez',
+    seccoes: [
+      {
+        titulo: 'Selecionar vários movimentos',
+        afeta: ['movimentos'],
+        itens: [
+          'Toque longo num movimento entra em modo de seleção, já com esse marcado.',
+          'Cada movimento tem a sua caixa, cada mês tem a sua, e há uma para marcar tudo.',
+          'A caixa de marcar tudo e a do mês acompanham a página: numa lista longa já não é preciso voltar ao topo para marcar tudo.',
+          'Com movimentos marcados, o botão do canto abre “Editar seleção” e “Eliminar seleção”, e o X ao lado sai da seleção.',
+        ],
+      },
+      {
+        titulo: 'Editar muitos de uma vez',
+        afeta: ['movimentos'],
+        itens: [
+          'Podes mudar a categoria, a subcategoria e acrescentar etiquetas a todos os movimentos marcados ao mesmo tempo.',
+          'Só se altera o que preencheres: o resto de cada movimento fica como está, e nenhuma etiqueta é removida.',
+          'Eliminar em massa mostra quanto somam os movimentos antes de confirmar.',
+        ],
+      },
+      {
+        titulo: 'As opções de um movimento sozinho',
+        afeta: ['movimentos'],
+        itens: [
+          'Passaram para um botão na própria linha, em vez do toque longo — que agora serve para selecionar.',
+        ],
+      },
+      {
+        titulo: 'Correções',
+        afeta: ['app'],
+        itens: [
+          'Em Definições → Novidades, as secções abrem e fecham logo. Antes era preciso sair e voltar a entrar para ver a diferença.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 25,
+    data: '2026-09-01',
+    titulo: 'A vista geral começa pelos números',
+    seccoes: [
+      {
+        titulo: 'A vista geral volta a ser uma vista geral',
+        afeta: ['app'],
+        itens: [
+          'Os movimentos por confirmar deixam de ocupar o ecrã todo: ficam recolhidos, com a contagem e o total à vista, e abrem-se com um toque.',
+          'Assim a primeira coisa que vês ao abrir são os indicadores do teu património, que é para isso que a vista serve.',
+          'Se preferires a lista sempre aberta, abre-a uma vez — fica assim nesse aparelho.',
+        ],
+      },
+      {
+        titulo: 'Movimentos por confirmar mais fáceis de ler',
+        afeta: ['movimentos'],
+        itens: [
+          'A periodicidade (mensal, anual...) passou para junto da data, em vez de andar sozinha no canto.',
+          'O cabeçalho passa a somar quanto está à espera de confirmação.',
+        ],
+      },
+      {
+        titulo: 'O ícone da app',
+        afeta: ['app'],
+        itens: [
+          'A app instalada pelo browser passa a ter o mesmo ícone da versão Android — antes pareciam duas apps diferentes no ecrã inicial.',
+        ],
+      },
+    ],
+  },
+  {
     v: 24,
     data: '2026-09-01',
     titulo: 'Vista geral arrumada, e a app passa a contar o que muda',

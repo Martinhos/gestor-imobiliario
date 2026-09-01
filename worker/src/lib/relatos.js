@@ -4,24 +4,58 @@
 import { now } from './http.js';
 import { notifyDev, errorEmbed } from '../notify.js';
 
+/* Quantas pessoas distintas apanharam esta assinatura.
+
+   Duzentas ocorrências de uma pessoa e duzentas de duzentas pessoas contavam
+   igual no `n`, e são problemas de gravidade muito diferente. A chave
+   primária da tabela faz a distinção sozinha: a mesma pessoa a repetir o
+   mesmo erro não acrescenta linha. */
+async function marcarPessoa(env, fp, userId, t) {
+  if (!userId) return { total: null, novo: false };
+  try {
+    // o `changes` diz se esta pessoa é nova nesta assinatura, sem precisar de
+    // guardar em lado nenhum quem já foi avisado
+    const r = await env.DB.prepare(
+      'INSERT OR IGNORE INTO ticket_users (fingerprint, user_id, first_at) VALUES (?, ?, ?)'
+    ).bind(fp, userId, t).run();
+    const novo = !!(r && r.meta && r.meta.changes);
+    const c = await env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM ticket_users WHERE fingerprint = ?'
+    ).bind(fp).first();
+    return { total: (c && c.n) || 1, novo };
+  } catch (e) {
+    return { total: null, novo: false };   // a contagem é informação, não pode travar o relato
+  }
+}
+
 // Um erro apanhado sozinho abre um pedido na mesma fila dos que as pessoas
 // contam. Erros repetidos somam-se ao pedido que já existe, em vez de abrirem
 // um novo de cada vez.
-export async function recordReport(env, ctx, categoria, message, detail, userId) {
+export async function recordReport(env, ctx, categoria, message, detail, userId, extra) {
   const msg = String(message || '').slice(0, 2000);
   const fp = categoria + ':' + msg.slice(0, 120);
   const t = now();
+  const versao = extra && extra.versao != null ? String(extra.versao).slice(0, 20) : null;
+  const contexto = extra && extra.contexto ? String(extra.contexto).slice(0, 200) : '';
   try {
     const ex = await env.DB.prepare('SELECT * FROM tickets WHERE fingerprint = ?').bind(fp).first();
     if (ex) {
       // um erro que volta depois de fechado reabre o pedido
       const estado = ex.status === 'concluido' ? 'criado' : ex.status;
-      await env.DB.prepare('UPDATE tickets SET n = n + 1, status = ?, updated_at = ? WHERE id = ?')
-        .bind(estado, t, ex.id).run();
-      if (ex.n < 3 || t - ex.updated_at > 3600000 || ex.status === 'concluido') {
+      await env.DB.prepare(
+        'UPDATE tickets SET n = n + 1, status = ?, updated_at = ?, versao = COALESCE(?, versao) WHERE id = ?'
+      ).bind(estado, t, versao, ex.id).run();
+      const pessoas = await marcarPessoa(env, fp, userId, t);
+      /* Avisa-se nas primeiras vezes, quando volta depois de fechado, quando
+         passou uma hora — e quando aparece alguém que ainda não o tinha
+         apanhado. Um erro que passa de uma pessoa para várias mudou de
+         gravidade, e isso vale um aviso mesmo que já se saiba dele. */
+      const alguemNovo = pessoas.novo && pessoas.total > 1;
+      if (ex.n < 3 || t - ex.updated_at > 3600000 || ex.status === 'concluido' || alguemNovo) {
         notifyDev(env, ctx, errorEmbed({
           id: ex.id, kind: categoria, message: ex.subject, detail: ex.body,
           user_id: ex.user_id, n: ex.n + 1, created_at: t,
+          versao: versao || ex.versao, contexto, pessoas: pessoas.total,
         }));
       }
       return;
@@ -33,11 +67,13 @@ export async function recordReport(env, ctx, categoria, message, detail, userId)
     if (!dono) return;   // sem contas ainda, não há onde pendurar o pedido
     const detalhe = String(detail || '').slice(0, 4000);
     await env.DB.prepare(
-      `INSERT INTO tickets (id, user_id, kind, subject, body, status, category, fingerprint, n, created_at, updated_at)
-       VALUES (?, ?, 'problema', ?, ?, 'criado', ?, ?, 1, ?, ?)`
-    ).bind(id, dono, msg.slice(0, 140), detalhe, categoria, fp, t, t).run();
+      `INSERT INTO tickets (id, user_id, kind, subject, body, status, category, fingerprint, n, versao, context, created_at, updated_at)
+       VALUES (?, ?, 'problema', ?, ?, 'criado', ?, ?, 1, ?, ?, ?, ?)`
+    ).bind(id, dono, msg.slice(0, 140), detalhe, categoria, fp, versao, contexto, t, t).run();
+    const pessoas = await marcarPessoa(env, fp, userId, t);
     notifyDev(env, ctx, errorEmbed({
-      id, kind: categoria, message: msg, detail: detalhe, user_id: userId, n: 1, created_at: t,
+      id, kind: categoria, message: msg, detail: detalhe, user_id: userId,
+      n: 1, created_at: t, versao, contexto, pessoas: pessoas.total,
     }));
   } catch (e) {
     // um relatório que falha não pode piorar o problema que estava a relatar

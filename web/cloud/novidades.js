@@ -65,7 +65,8 @@ function secHtml(sec, chave) {
 }
 
 function novHtml(avisos) {
-  return '<div class="form">' + avisos.map(function (a) {
+  // o id permite redesenhar só esta lista, sem a página saltar para o topo
+  return '<div class="form" id="novLista">' + avisos.map(function (a) {
     return '<div>' +
       '<div class="section-title" style="margin-top:0">' + esc(a.titulo) + '</div>' +
       '<div class="small" style="margin:-6px 0 10px">versão ' + a.v + ' · ' + esc(a.data) + '</div>' +
@@ -75,12 +76,23 @@ function novHtml(avisos) {
   }).join('<div style="height:16px"></div>') + '</div>';
 }
 
+/* Abrir e fechar uma secção.
+
+   Redesenhava só o corpo do modal. Na secção das Definições não há modal
+   nenhum, por isso o toque mudava o estado e não se via nada — era preciso
+   sair do submenu e voltar a entrar. Agora redesenha onde quer que a lista
+   esteja: no modal se houver um, senão na vista. */
 CW.novToggle = function (chave) {
   novAbertas[chave] = novAbertas[chave] === false;
+  if (!CW._novAvisos) return;
   var m = modalTop();
-  if (!m) return;
-  var body = m.el.querySelector('.body');
-  if (body && CW._novAvisos) body.innerHTML = novHtml(CW._novAvisos);
+  var corpo = m && m.el.querySelector('.body');
+  if (corpo && corpo.querySelector('[onclick*="novToggle"]')) {
+    corpo.innerHTML = novHtml(CW._novAvisos);
+    return;
+  }
+  var lista = document.getElementById('novLista');
+  if (lista) lista.outerHTML = novHtml(CW._novAvisos);
 };
 
 CW.verNovidades = function (avisos, aoFechar) {
@@ -118,8 +130,8 @@ function gateAtualizar(minima) {
   var el = document.createElement('div');
   el.id = 'cwUpd';
   el.style.cssText = 'position:fixed;inset:0;z-index:198;background:var(--bg);overflow:auto;' +
-    'padding:calc(28px + var(--inset-top)) 18px calc(28px + var(--inset-bottom));display:grid;place-items:center';
-  el.innerHTML = '<div style="max-width:420px;width:100%">' +
+    'padding:calc(28px + var(--inset-top)) 18px calc(28px + var(--inset-bottom));display:flex;justify-content:center';
+  el.innerHTML = '<div style="max-width:420px;width:100%;margin:auto">' +
     card('Há uma versão nova', 'Esta já não pode ser usada',
       '<div class="hint">A versão que tens (' + VERSAO + ') deixou de ser aceite; a mais antiga que serve é a ' +
       minima + '. Atualizar demora um instante e não perdes nada — os teus dados estão na tua conta.</div>' +

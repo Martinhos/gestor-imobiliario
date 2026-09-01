@@ -53,16 +53,25 @@ const cut = (s, n) => { const t = String(s == null ? '' : s); return t.length > 
 
 /* Papéis
    ------
+   master     dono: pode tudo, hoje e o que vier a existir
    admin      opera o serviço: consumo, cópias, e tudo o que os outros veem
    dev        constrói: erros da app e do servidor, infraestrutura, segurança
    suporte    fala com quem usa: só os pedidos contados por pessoas
 
    dev e suporte são irmãos — nenhum manda no outro — e ambos ficam abaixo de
-   admin. Cada lista aceita ids de pessoa ou ids de cargo do Discord: com
-   cargos, entra e sai gente sem mexer nos segredos. */
-export const PAPEIS = ['admin', 'dev', 'suporte'];
+   admin, que por sua vez fica abaixo de master. Cada lista aceita ids de
+   pessoa ou ids de cargo do Discord: com cargos, entra e sai gente sem mexer
+   nos segredos.
 
-// O que cada papel pode correr. O admin não aparece nas listas porque pode tudo.
+   Hoje master e admin podem o mesmo. A diferença serve para o que vier: um
+   comando que apague dados ou mexa em contas nasce restrito a master, e não
+   é preciso repensar quem é quem nessa altura. */
+export const PAPEIS = ['master', 'admin', 'dev', 'suporte'];
+
+// Papéis que podem tudo, incluindo comandos que ainda não existem.
+const PODEM_TUDO = ['master', 'admin'];
+
+// O que cada papel pode correr. Os de cima não aparecem nas listas.
 export const PERMISSOES = {
   pedidos: ['dev', 'suporte'],
   pedido: ['dev', 'suporte'],
@@ -78,6 +87,7 @@ export const PERMISSOES = {
 // As categorias de pedido que cada papel vê. O suporte não precisa de ver
 // rastreios de erro para responder a quem escreveu — e não deve.
 export const CATS_DO_PAPEL = {
+  master: ['user', 'client', 'server', 'infra', 'seguranca'],
   admin: ['user', 'client', 'server', 'infra', 'seguranca'],
   dev: ['client', 'server', 'infra', 'seguranca'],
   suporte: ['user'],
@@ -96,9 +106,10 @@ function pertence(env, i, chave) {
 // Sem nenhuma lista configurada, quem tiver acesso ao servidor de Discord é
 // admin — é o dono que decide, ao configurar.
 export function papel(env, i) {
-  const configurado = ['DISCORD_ADMINS', 'DISCORD_DEVS', 'DISCORD_SUPORTE']
+  const configurado = ['DISCORD_MASTER', 'DISCORD_ADMINS', 'DISCORD_DEVS', 'DISCORD_SUPORTE']
     .some((k) => lista(env[k]).length);
-  if (!configurado) return 'admin';
+  if (!configurado) return 'master';
+  if (pertence(env, i, 'DISCORD_MASTER')) return 'master';
   if (pertence(env, i, 'DISCORD_ADMINS')) return 'admin';
   if (pertence(env, i, 'DISCORD_DEVS')) return 'dev';
   if (pertence(env, i, 'DISCORD_SUPORTE')) return 'suporte';
@@ -107,7 +118,7 @@ export function papel(env, i) {
 
 export function podeCorrer(pap, comando) {
   if (!pap) return false;
-  if (pap === 'admin') return true;
+  if (PODEM_TUDO.indexOf(pap) > -1) return true;
   return (PERMISSOES[comando] || []).indexOf(pap) > -1;
 }
 
@@ -126,7 +137,11 @@ function ticketEmbedFull(t) {
       { name: 'Categoria', value: CATS[t.category] || t.category || 'user', inline: true },
       { name: 'De', value: cut(t.user_id, 40), inline: true },
       { name: 'Aberto em', value: new Date(t.created_at).toISOString().slice(0, 16).replace('T', ' '), inline: true },
-    ].concat(t.reply ? [{ name: 'Resposta enviada', value: cut(t.reply, 900) }] : []),
+    ].concat(
+      t.versao ? [{ name: 'Versão da app', value: 'v' + t.versao, inline: true }] : [],
+      t.context ? [{ name: 'Onde', value: cut(t.context, 200), inline: true }] : [],
+      t.reply ? [{ name: 'Resposta enviada', value: cut(t.reply, 900) }] : []
+    ),
     footer: { text: 'id ' + t.id },
   };
 }
@@ -192,10 +207,59 @@ async function cmdPedidos(env, opts, pap) {
   }));
 }
 
+/* Quem escreveu, e o que se sabe dele.
+
+   O aviso que chega ao canal traz o nome; o /pedido, aberto mais tarde,
+   trazia só o id. Quem faz suporte estava a responder a uma pessoa de quem
+   não sabia nada — nem o plano, nem há quanto tempo era utilizador, nem se
+   já tinha escrito antes. */
+async function fichaDe(env, userId) {
+  if (!userId) return null;
+  try {
+    const u = await env.DB.prepare(
+      `SELECT id, name, email, plan, created_at, deleted_at, terms_version FROM users WHERE id = ?`
+    ).bind(userId).first();
+    if (!u) return { desconhecido: true };
+    const q = async (sql) => ((await env.DB.prepare(sql).bind(userId).first()) || {}).n || 0;
+    const casas = await q('SELECT COUNT(*) AS n FROM houses WHERE owner_id = ? AND deleted = 0');
+    const registos = await q(
+      'SELECT COUNT(*) AS n FROM records r JOIN houses h ON h.id = r.house_id WHERE h.owner_id = ? AND r.deleted = 0'
+    );
+    const antes = await q("SELECT COUNT(*) AS n FROM tickets WHERE user_id = ? AND category = 'user'");
+    const erros = await q("SELECT COUNT(*) AS n FROM ticket_users WHERE user_id = ?");
+    return { u, casas, registos, antes, erros };
+  } catch (e) {
+    return null;   // saber menos é melhor do que não abrir o pedido
+  }
+}
+
+function campoDaFicha(f) {
+  if (!f) return null;
+  if (f.desconhecido) return { name: 'Quem escreveu', value: 'conta já não existe', inline: false };
+  const u = f.u;
+  const dias = Math.max(0, Math.round((Date.now() - u.created_at) / 86400000));
+  const PLANOS = { free: 'gratuito', plus: 'Plus', pro: 'Pro' };
+  const linhas = [
+    '**' + (u.name || 'sem nome') + '** · `' + u.id + '`',
+    u.email,
+    'Plano ' + (PLANOS[u.plan] || u.plan) + ' · na app há ' + (dias < 1 ? 'menos de um dia' : dias + ' dias'),
+    f.casas + ' casas · ' + f.registos + ' registos',
+  ];
+  // o que faz a diferença ao responder: já escreveu antes? tem apanhado erros?
+  if (f.antes > 1) linhas.push('⚠️ já escreveu ' + (f.antes - 1) + ' vez' + (f.antes - 1 === 1 ? '' : 'es') + ' antes');
+  if (f.erros) linhas.push('⚠️ apanhou ' + f.erros + ' erro' + (f.erros === 1 ? '' : 's') + ' distinto' + (f.erros === 1 ? '' : 's'));
+  if (u.deleted_at) linhas.push('🔴 conta apagada');
+  if (!u.terms_version) linhas.push('não aceitou os termos');
+  return { name: 'Quem escreveu', value: linhas.join('\n'), inline: false };
+}
+
 async function cmdPedido(env, opts, pap) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
-  return { type: MSG, data: { embeds: [ticketEmbedFull(g.t)], components: ticketButtons(g.t.id) } };
+  const embed = ticketEmbedFull(g.t);
+  const ficha = campoDaFicha(await fichaDe(env, g.t.user_id));
+  if (ficha) embed.fields = [ficha].concat(embed.fields.filter((c) => c.name !== 'De'));
+  return { type: MSG, data: { embeds: [embed], components: ticketButtons(g.t.id) } };
 }
 
 async function cmdResponder(env, opts, pap) {
@@ -218,22 +282,41 @@ async function cmdFechar(env, opts, pap) {
 async function cmdErros(env, opts) {
   const horas = Math.min(Math.max(Number(opts.horas || 24), 1), 720);
   const desde = Date.now() - horas * 3600000;
+  /* Ordenado por quantas pessoas apanharam, e só depois por quantas vezes.
+     Um erro que toca em cinco pessoas uma vez cada vale mais atenção do que
+     um que toca numa pessoa cinquenta vezes. */
   const rows = (await env.DB.prepare(
-    `SELECT * FROM tickets WHERE category IN ('client', 'server') AND updated_at > ?
-      ORDER BY n DESC, updated_at DESC LIMIT 10`
+    `SELECT t.*,
+            (SELECT COUNT(*) FROM ticket_users u WHERE u.fingerprint = t.fingerprint) AS pessoas
+       FROM tickets t
+      WHERE t.category IN ('client', 'server') AND t.updated_at > ?
+      ORDER BY pessoas DESC, t.n DESC, t.updated_at DESC LIMIT 10`
   ).bind(desde).all()).results;
   if (!rows.length) return reply('✅ Sem erros nas últimas ' + horas + ' horas.');
-  return reply('Erros das últimas ' + horas + ' horas:', rows.map(function (r) {
-    return {
-      title: '⚠️ ' + cut(r.subject, 90) + (r.n > 1 ? '  ×' + r.n : ''),
-      description: '```' + cut(r.body || '—', 500) + '```',
-      color: r.status === 'concluido' ? 0x2f7d5b : 0xd6a34a,
-      footer: {
-        text: (r.category === 'server' ? 'servidor' : 'app') + ' · ' +
-          (ESTADOS[r.status] || r.status) + ' · ' + cut(r.id, 8),
-      },
-    };
-  }));
+  const desdeQuando = (t) => {
+    const h = Math.round((Date.now() - t) / 3600000);
+    return h < 1 ? 'agora mesmo' : h < 48 ? 'há ' + h + 'h' : 'há ' + Math.round(h / 24) + ' dias';
+  };
+  return reply('Erros das últimas ' + horas + ' horas, do que toca em mais gente para o que toca em menos:',
+    rows.map(function (r) {
+      const varios = r.pessoas > 1;
+      return {
+        title: (varios ? '🔴 ' : '⚠️ ') + cut(r.subject, 88) +
+          (r.n > 1 ? '  ×' + r.n : '') + (varios ? '  · ' + r.pessoas + ' pessoas' : ''),
+        description: '```' + cut(r.body || '—', 400) + '```',
+        color: r.status === 'concluido' ? 0x2f7d5b : (varios ? 0xb94a48 : 0xd6a34a),
+        footer: {
+          text: [
+            r.category === 'server' ? 'servidor' : 'app',
+            r.versao ? 'v' + r.versao : null,
+            r.context || null,
+            'primeira vez ' + desdeQuando(r.created_at),
+            ESTADOS[r.status] || r.status,
+            cut(r.id, 8),
+          ].filter(Boolean).join(' · '),
+        },
+      };
+    }));
 }
 
 // Ver as cópias que existem, ou forçar uma agora — antes de uma migração
@@ -294,7 +377,7 @@ function cmdComandos(pap) {
   const meus = comandosDe(pap);
   return reply('', [{
     title: 'O que podes fazer · papel **' + pap + '**',
-    color: pap === 'admin' ? 0x8a7bb8 : pap === 'dev' ? 0xd6a34a : 0x2f7d5b,
+    color: pap === 'master' ? 0xb94a48 : pap === 'admin' ? 0x8a7bb8 : pap === 'dev' ? 0xd6a34a : 0x2f7d5b,
     description: meus.map((c) => '`/' + c + '` — ' + desc[c]).join('\n'),
     fields: [{
       name: 'Pedidos que vês',

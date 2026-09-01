@@ -25,9 +25,11 @@ bucket_name = "gestor-imobiliario"
 [observability]
 enabled = true
 
-# Resumo diário do consumo para o canal de administração (09:00 UTC).
+# Duas rotinas: a cópia da base e o resumo do consumo às 09:00, e uma vigia
+# dos limites de hora a hora — um pico às 10:00 só aparecia no resumo da
+# manhã seguinte, quando já não havia nada a fazer.
 [triggers]
-crons = ["0 9 * * *"]
+crons = ["0 9 * * *", "0 * * * *"]
 
 # Entrada com Google (id público; vazio = botão escondido).
 # Cria um OAuth Client ID (Web) em console.cloud.google.com e autoriza
@@ -50,6 +52,7 @@ MAX_USERS = "2000"
 # Papéis do bot. Cada um aceita ids de pessoa ou ids de cargo do Discord,
 # separados por vírgulas ou espaços — com cargos, entra e sai gente sem tocar
 # nos segredos. Sem nenhum definido, quem tiver acesso ao servidor é admin.
+#   DISCORD_MASTER   · dono: pode tudo, hoje e o que vier a existir
 #   DISCORD_ADMINS   · opera: consumo, cópias, e tudo o que os outros veem
 #   DISCORD_DEVS     · constrói: erros da app e do servidor, infra, segurança
 #   DISCORD_SUPORTE  · fala com quem usa: só os pedidos contados por pessoas

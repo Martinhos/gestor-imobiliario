@@ -16,7 +16,7 @@ const APP = ['dados', 'anexos', 'auxiliares', 'graficos', 'credito', 'componente
   'movimento', 'creditos', 'splitwise', 'contrato-pdf', 'avaliacao', 'definicoes',
   'copias', 'arranque'].map((n) => '/app/' + n + '.js');
 const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'ajuda', 'painel',
-  'filtros', 'entrada', 'novidades'].map((n) => '/cloud/' + n + '.js');
+  'filtros', 'entrada', 'novidades', 'selecao', 'guia'].map((n) => '/cloud/' + n + '.js');
 const SHELL = ['/', '/index.html', '/avisos.js', '/legal.js', '/manifest.webmanifest',
   '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'].concat(APP, NUVEM);
 
