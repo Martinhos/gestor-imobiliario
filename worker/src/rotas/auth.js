@@ -1,0 +1,135 @@
+// Registo, entrada, saida e entrada com Google. Corre antes da sessao.
+import { hashPassword, verifyPassword, newUserId, createSession, destroySession,
+  sessionCookie, readSessionToken } from '../auth.js';
+import { verifyIdToken } from '../oauth.js';
+import { weakPassword } from '../lib/http.js';
+
+export async function rotasAuth(c) {
+  const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
+
+  // ---- Autenticação (sem sessão) -----------------------------------------
+
+  // registo, entrada e entrada com Google: limitados por IP
+  if (path.startsWith('/api/auth/') && method === 'POST' && !path.endsWith('/logout')) {
+    const ip = clientIp(request);
+    const isLogin = path.endsWith('/login');
+    if (!(await rateLimit(env, (isLogin ? 'login:' : 'auth:') + ip, isLogin ? 10 : 5, 900))) {
+      return err(429, 'Demasiadas tentativas. Espera uns minutos e tenta de novo.');
+    }
+  }
+
+  if (path === '/api/auth/register' && method === 'POST') {
+    const b = await body(request);
+    if (!b || !b.email || !b.password) return err(400, 'Email e palavra-passe são obrigatórios.');
+    if (b.terms !== TERMS_VERSION) {
+      return err(400, 'Tens de aceitar os termos e a política de privacidade.');
+    }
+    // enquanto o serviço vive do plano gratuito, o número de contas é limitado
+    const max = Number(env.MAX_USERS || 0);
+    if (max > 0) {
+      const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM users WHERE deleted_at IS NULL').first();
+      if ((c && c.n) >= max) {
+        return err(503, 'A app atingiu o limite de contas desta fase. Tenta mais tarde ou pede acesso.');
+      }
+    }
+    if (weakPassword(b.password)) {
+      return err(400, 'A palavra-passe precisa de pelo menos 8 caracteres, com maiúsculas, minúsculas, números e um símbolo.');
+    }
+    const email = String(b.email).trim().toLowerCase();
+    if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return err(400, 'Email inválido.');
+    if (String(b.name || '').length > 120) return err(400, 'Nome demasiado longo.');
+    const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+    if (existing) return err(409, 'Já existe uma conta com este email.');
+    const { hash, salt } = await hashPassword(String(b.password));
+    let id = newUserId();
+    // colisão de id curto é improvável mas barata de evitar
+    while (await env.DB.prepare('SELECT 1 FROM users WHERE id = ?').bind(id).first()) id = newUserId();
+    await env.DB.prepare(
+      `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, terms_version, terms_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(id, email, String(b.name || '').trim(), hash, salt, now(), TERMS_VERSION, now())
+      .run();
+    const token = await createSession(env, id);
+    return json({ id, email, name: String(b.name || '').trim(), token }, 201, {
+      'Set-Cookie': sessionCookie(token),
+    });
+  }
+
+  if (path === '/api/auth/login' && method === 'POST') {
+    const b = await body(request);
+    if (!b || !b.email || !b.password) return err(400, 'Email e palavra-passe são obrigatórios.');
+    const email = String(b.email).trim().toLowerCase();
+    const user = await env.DB.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').bind(email).first();
+    // tentativas por conta, não só por IP (força bruta a partir de vários IP)
+    if (user && !(await rateLimit(env, 'acct:' + user.id, 30, 900))) {
+      return err(429, 'Demasiadas tentativas nesta conta. Espera uns minutos.');
+    }
+    if (user && !user.pass_hash) return err(401, 'Esta conta entra com Google — usa esse botão.');
+    if (!user) {
+      // gasta o mesmo tempo de um utilizador real: sem isto, a diferença de
+      // resposta dizia a um atacante que emails existem
+      await hashPassword(String(b.password));
+      return err(401, 'Email ou palavra-passe errados.');
+    }
+    if (!(await verifyPassword(String(b.password), user.pass_salt, user.pass_hash))) {
+      return err(401, 'Email ou palavra-passe errados.');
+    }
+    const token = await createSession(env, user.id, user.sess_epoch || 0);
+    return json({ id: user.id, email: user.email, name: user.name, token }, 200, {
+      'Set-Cookie': sessionCookie(token),
+    });
+  }
+
+  // Que fornecedores de entrada social estão configurados (ids públicos).
+  if (path === '/api/auth/config' && method === 'GET') {
+    return json({ google: env.GOOGLE_CLIENT_ID || null });
+  }
+
+  // Entrada com Google: o cliente envia o ID token do fornecedor;
+  // verificamos a assinatura e criamos/ligamos a conta pelo email.
+  if (path === '/api/auth/google' && method === 'POST') {
+    const provider = 'google';
+    const clientId = env.GOOGLE_CLIENT_ID;
+    if (!clientId) return err(400, 'Entrada com Google não está configurada.');
+    const b = await body(request);
+    const token = b && (b.credential || b.id_token);
+    if (!token) return err(400, 'Falta o token do fornecedor.');
+    let payload;
+    try {
+      payload = await verifyIdToken(provider, token, clientId);
+    } catch (e) {
+      return err(401, 'Token rejeitado: ' + e.message);
+    }
+    const col = 'google_sub';
+    const email = String(payload.email || '').trim().toLowerCase();
+    let user = await env.DB.prepare(`SELECT * FROM users WHERE ${col} = ? AND deleted_at IS NULL`)
+      .bind(payload.sub)
+      .first();
+    if (!user && email) {
+      user = await env.DB.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').bind(email).first();
+      if (user) await env.DB.prepare(`UPDATE users SET ${col} = ? WHERE id = ?`).bind(payload.sub, user.id).run();
+    }
+    if (!user) {
+      if (!email) return err(400, 'O fornecedor não devolveu um email.');
+      const name = String((b && b.name) || payload.name || '').trim();
+      let id = newUserId();
+      while (await env.DB.prepare('SELECT 1 FROM users WHERE id = ?').bind(id).first()) id = newUserId();
+      await env.DB.prepare(
+        `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, ${col}) VALUES (?, ?, ?, '', '', ?, ?)`
+      )
+        .bind(id, email, name, now(), payload.sub)
+        .run();
+      user = { id, email, name };
+    }
+    const token2 = await createSession(env, user.id, user.sess_epoch || 0);
+    return json({ id: user.id, email: user.email, name: user.name, token: token2 }, 200, {
+      'Set-Cookie': sessionCookie(token2),
+    });
+  }
+
+  if (path === '/api/auth/logout' && method === 'POST') {
+    await destroySession(env, readSessionToken(request));
+    return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', true) });
+  }
+}
