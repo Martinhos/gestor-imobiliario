@@ -8,7 +8,7 @@ import { dailyReport } from './notify.js';
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client",
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://accounts.google.com",
   "img-src 'self' data: blob: https://*.googleusercontent.com",
   "connect-src 'self' https://accounts.google.com",
   "frame-src https://accounts.google.com",
