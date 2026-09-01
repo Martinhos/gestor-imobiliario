@@ -54,6 +54,11 @@ const CENAS = [
   { nome: 'novidades', fazer: `CW.verNovidades(AVISOS.slice(0,1))` },
   { nome: 'tutorial', fazer: `CW.guiaAbrir('imoveis')` },
   {
+    // o caso que estava partido: o cartão ficava por baixo da janela
+    nome: 'tutorial-sobre-janela',
+    fazer: `CW.guiaAbrir('perfil'); propModal();`,
+  },
+  {
     nome: 'primeiros-passos',
     fazer: `localStorage.removeItem('gi_passos_fora'); go('dashboard'); render();`,
   },
@@ -126,9 +131,19 @@ async function entrar(pagina) {
     }
   }
 
-  const erro = await pagina.evaluate(`(document.getElementById('cwa_err')||{}).textContent || ''`);
   if (!(await pagina.evaluate('!!(window.CW && CW.user)'))) {
-    throw new Error('não deu para entrar' + (erro ? ': ' + erro : ''));
+    /* A mensagem no ecrã é a da última tentativa — normalmente a do registo,
+       que diz "já existe uma conta com este email" e faz parecer que o
+       problema é esse. O que costuma estar por trás é o tecto de tentativas
+       de entrada. Diz-se o que o servidor respondeu de facto. */
+    const diz = await pagina.evaluate(`(async () => {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: '${EMAIL}', password: '${SENHA}' }),
+      });
+      return r.status + ' ' + (await r.text()).slice(0, 120);
+    })()`);
+    throw new Error('não deu para entrar. A entrada responde: ' + diz);
   }
 
   // fechar os avisos de primeira abertura, que não são o objeto deste percurso

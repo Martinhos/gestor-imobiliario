@@ -26,6 +26,30 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 28,
+    data: '2026-09-01',
+    titulo: 'Tutoriais na ajuda, e a funcionar com janelas abertas',
+    seccoes: [
+      {
+        titulo: 'Os tutoriais estão todos na ajuda',
+        afeta: ['app'],
+        itens: [
+          'Em Definições → Ajuda e sugestões, secção “Como se faz”, com todos listados e o número de passos de cada.',
+          'Deixa de ser preciso esperar que a app to ofereça, ou não ter dispensado o cartão dos primeiros passos.',
+        ],
+      },
+      {
+        titulo: 'Correções nos tutoriais',
+        afeta: ['app'],
+        itens: [
+          'Um passo já não abre janelas por sua conta: aparecia uma a meio do tutorial sem ninguém ter pedido.',
+          'Com uma janela aberta, o cartão do tutorial continua à vista e a funcionar. Antes desaparecia por baixo dela e não havia como continuar.',
+          'Quem não quiser preencher os dados pode continuar o tutorial na mesma.',
+        ],
+      },
+    ],
+  },
+  {
     v: 27,
     data: '2026-09-01',
     titulo: 'Primeiros passos e tutoriais',
