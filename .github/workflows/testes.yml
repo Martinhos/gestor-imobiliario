@@ -1,0 +1,59 @@
+name: Testes
+
+# Corre em cada pull request e em cada push aos ramos principais. É o que
+# impede uma alteração de chegar a produção com as contas erradas.
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Correr os testes
+        run: node --test "testes/*.test.js"
+
+      # Um erro de sintaxe num módulo do cliente só se via ao abrir a app:
+      # aqui aparece no pull request.
+      - name: Verificar a sintaxe de todos os módulos
+        run: |
+          set -e
+          erros=0
+          for f in web/app/*.js web/cloud/*.js web/legal.js web/sw.js \
+                   worker/src/*.js worker/src/lib/*.js worker/src/rotas/*.js \
+                   scripts/*.js; do
+            node --check "$f" || { echo "sintaxe inválida: $f"; erros=1; }
+          done
+          exit $erros
+
+      # O index.html tem de carregar todos os módulos que existem, pela ordem
+      # certa: um ficheiro novo que ninguém carrega é código morto silencioso.
+      - name: Confirmar que a app carrega todos os módulos
+        run: |
+          set -e
+          falta=0
+          for f in web/app/*.js web/cloud/*.js; do
+            ref=$(echo "$f" | sed 's|^web/||')
+            grep -q "src=\"$ref\"" web/index.html || { echo "não é carregado no index.html: $ref"; falta=1; }
+            nome=$(basename "$f" .js)
+            grep -q "'$nome'" web/sw.js || { echo "fora da cache offline: $ref"; falta=1; }
+          done
+          exit $falta
+
+      - name: Validar as migrações da base de dados
+        run: |
+          set -e
+          for f in migrations/*.sql; do
+            test -s "$f" || { echo "migração vazia: $f"; exit 1; }
+          done
+          # os números têm de ser únicos e seguidos
+          ls migrations/*.sql | sed 's|.*/||' | cut -d_ -f1 | sort -c || {
+            echo "as migrações não estão por ordem"; exit 1; }
+          echo "$(ls migrations/*.sql | wc -l) migrações, por ordem"

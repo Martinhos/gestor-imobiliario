@@ -438,6 +438,9 @@ function num(s){
   const lc=t.lastIndexOf(','),ld=t.lastIndexOf('.');
   if(lc>-1&&ld>-1)t=lc>ld?t.replace(/\./g,'').replace(',','.'):t.replace(/,/g,'');
   else if(lc>-1)t=(t.split(',').length===2&&t.split(',')[1].length<=2)?t.replace(',','.'):t.replace(/,/g,'');
+  /* so pontos: um ponto com ate duas casas e decimal (1.5); o resto sao
+     milhares (250.000 sao duzentos e cinquenta mil, nao duzentos e cinquenta) */
+  else if(ld>-1)t=(t.split('.').length===2&&t.split('.')[1].length<=2)?t:t.replace(/\./g,'');
   const n=parseFloat(t);return isFinite(n)?n:0;
 }
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2800)}
