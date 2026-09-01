@@ -36,9 +36,12 @@ jobs:
       - name: Preparar a base local
         run: npx wrangler@4 d1 migrations apply gestor-imobiliario --local
 
+      # ENV_NAME faz a app comportar-se como fora de produção — é o que
+      # permite semear os dados de exemplo. Em produção o seed é recusado de
+      # propósito, e sem isto o percurso corria sobre uma app vazia.
       - name: Levantar a app
         run: |
-          npx wrangler@4 dev --port 8788 > /tmp/app.log 2>&1 &
+          npx wrangler@4 dev --port 8788 --var ENV_NAME:percurso > /tmp/app.log 2>&1 &
           for i in $(seq 1 40); do
             if curl -sf -o /dev/null http://127.0.0.1:8788/; then echo "a app respondeu"; exit 0; fi
             sleep 2

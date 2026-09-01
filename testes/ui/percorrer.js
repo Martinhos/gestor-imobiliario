@@ -143,6 +143,15 @@ async function entrar(pagina) {
    arranque e pode passar por cima do que se semeou — semear uma vez e seguir
    em frente dava um percurso sobre uma app vazia. */
 async function preparar(pagina) {
+  /* Em producao os dados de exemplo sao recusados de proposito. O percurso
+     precisa deles para ter o que medir, por isso corre contra um ambiente
+     marcado -- e diz-se porque, em vez de falhar mais a frente com um
+     "sem dados" que nao explica nada. */
+  const amb = await pagina.evaluate('(window.CW && CW.ambiente) || "?"');
+  if (amb === 'producao') {
+    throw new Error('a app diz estar em producao, onde os dados de exemplo sao recusados.\n' +
+      'Levanta-a com: npx wrangler dev --port 8788 --var ENV_NAME:percurso');
+  }
   for (let i = 0; i < 6; i++) {
     const n = await pagina.evaluate(`(typeof db !== 'undefined' && db.properties) ? db.properties.length : 0`);
     if (n > 0) break;
