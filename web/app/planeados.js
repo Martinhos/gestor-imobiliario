@@ -144,25 +144,32 @@ function pendingCard(all){
   const row=(r)=>{const late=recIsLate(r);return `<div class="card tap pend ${late?'late':''}" style="padding:11px 13px" onclick="confirmRec('${r.id}')">
     <div class="row-between" style="align-items:center">
       <div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</b>
-        <span class="small">${esc(r.next)}${r.until&&r.until!==r.next?' – '+esc(r.until):''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':' · por confirmar'} · ${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}</span></div>
+        <span class="small">${esc(r.next)}${r.until&&r.until!==r.next?' – '+esc(r.until):''}${EVERY[r.every]?' · '+esc(EVERY[r.every]):''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':''} · ${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}</span></div>
       <b style="flex:0 0 auto">${r.tx.amount?euro2(r.tx.amount):''}</b></div>
     <div class="toolbar" style="margin:9px 0 0">
         <button class="btn sm primary" onclick="${stop}quickConfirmRec('${r.id}')">${ic('check',14)} Confirmar</button>
-        <button class="btn sm" onclick="${stop}skipRec('${r.id}')">${r.muted?'Reativar':'Silenciar'}</button>
-        <span class="small" style="margin-left:auto">${EVERY[r.every]||''}</span></div></div>`};
+        <button class="btn sm" onclick="${stop}skipRec('${r.id}')">${r.muted?'Reativar':'Silenciar'}</button></div></div>`};
   const nl=pend.filter(recIsLate).length,open=!pendShut();
   return `<div class="card" id="pendCard" style="margin-bottom:14px">
     <div class="row-between tap" style="align-items:center;cursor:pointer;margin:-16px;padding:16px" onclick="pendToggle()">
-      <div><div class="title">Movimentos por confirmar</div>
-        <div class="small">${pend.length} à espera${nl?' · <b class="neg">'+nl+' em atraso</b>':''}${open?'':' · toca para abrir'}</div></div>
+      <div style="min-width:0"><div class="title">Movimentos por confirmar</div>
+        <div class="small">${pend.length} à espera${nl?' · <b class="neg">'+nl+' em atraso</b>':''} · ${euro(sum(pend.map(r=>r.tx.amount||0)))}${open?'':' · toca para ver'}</div></div>
       <span style="flex:0 0 auto;display:inline-flex;transform:rotate(${open?'90':'-90'}deg);transition:transform .15s">${ic('chev',20)}</span></div>
     ${open?`<div class="list" style="gap:8px;margin-top:12px">${pend.map(row).join('')}</div>
     <div class="hint" style="margin-top:9px">Confirmar regista o movimento e agenda o seguinte. Silenciar deixa-o à espera, sem avisos.</div>`:''}</div>`;
 }
-/* Aberto ou fechado fica no aparelho: num telemóvel a lista empurra o resto da
-   vista geral para baixo, e num ecrã grande não estorva. */
+/* Fechado por omissão, e a escolha fica no aparelho.
+
+   A vista geral existe para se ver o património de relance. Com a lista
+   aberta, quatro movimentos por confirmar ocupavam 600 dos 900px de um
+   ecrã de computador — e o telemóvel inteiro — antes de aparecer um único
+   indicador. O que é preciso saber (quantos esperam, quantos em atraso)
+   cabe no cabeçalho; a lista abre-se com um toque de quem a quer.
+
+   Guarda-se '0' explícito quando se abre, para distinguir "nunca mexeu"
+   de "quis aberto". */
 const PEND_LS='gi_pend_shut';
-function pendShut(){try{return localStorage.getItem(PEND_LS)==='1'}catch(e){return false}}
+function pendShut(){try{return localStorage.getItem(PEND_LS)!=='0'}catch(e){return true}}
 function pendToggle(){
   try{localStorage.setItem(PEND_LS,pendShut()?'0':'1')}catch(e){}
   const e=document.getElementById('pendCard');

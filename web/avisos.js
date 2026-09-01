@@ -26,6 +26,37 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 25,
+    data: '2026-09-01',
+    titulo: 'A vista geral começa pelos números',
+    seccoes: [
+      {
+        titulo: 'A vista geral volta a ser uma vista geral',
+        afeta: ['app'],
+        itens: [
+          'Os movimentos por confirmar deixam de ocupar o ecrã todo: ficam recolhidos, com a contagem e o total à vista, e abrem-se com um toque.',
+          'Assim a primeira coisa que vês ao abrir são os indicadores do teu património, que é para isso que a vista serve.',
+          'Se preferires a lista sempre aberta, abre-a uma vez — fica assim nesse aparelho.',
+        ],
+      },
+      {
+        titulo: 'Movimentos por confirmar mais fáceis de ler',
+        afeta: ['movimentos'],
+        itens: [
+          'A periodicidade (mensal, anual...) passou para junto da data, em vez de andar sozinha no canto.',
+          'O cabeçalho passa a somar quanto está à espera de confirmação.',
+        ],
+      },
+      {
+        titulo: 'O ícone da app',
+        afeta: ['app'],
+        itens: [
+          'A app instalada pelo browser passa a ter o mesmo ícone da versão Android — antes pareciam duas apps diferentes no ecrã inicial.',
+        ],
+      },
+    ],
+  },
+  {
     v: 24,
     data: '2026-09-01',
     titulo: 'Vista geral arrumada, e a app passa a contar o que muda',
