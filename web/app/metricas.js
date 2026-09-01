@@ -17,7 +17,13 @@ function metrics(y,pid,opts){
   const purchase=sum(ps.map(p=>p.purchase*k(p)));
   const debt=sum(ps.map(p=>debtOf(p)*k(p)));
   const noi=income-op,cf=noi-loan;
-  return{t,props:ps,rented,income,op,loan,noi,cf,value,rentedValue,annualRent,purchase,debt,
+  /* Mais-valia potencial: valor de mercado menos o de aquisição. So entram os
+     imoveis que tem os dois — sem aquisicao registada, a diferenca seria o
+     valor inteiro e o total ficava inflacionado sem se dar por isso. */
+  const gp=ps.filter(p=>p.value>0&&p.purchase>0);
+  const gain=sum(gp.map(p=>(p.value-p.purchase)*k(p)));
+  const gainOut=ps.length-gp.length;
+  return{t,props:ps,rented,income,op,loan,noi,cf,value,rentedValue,annualRent,purchase,debt,gain,gainOut,
     grossYield:rentedValue?annualRent/rentedValue:NaN,cap:value?noi/value:NaN,
     coc:purchase?cf/purchase:NaN,ltv:value?debt/value:NaN};
 }

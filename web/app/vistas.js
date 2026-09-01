@@ -190,7 +190,11 @@ function vDashboard(){
       <div class="stat"><span>Valor de mercado</span><b>${euro(m.value)}</b></div>
       <div class="stat"><span>Valor de aquisição</span><b>${euro(m.purchase)}</b></div>
       <div class="stat"><span>Em dívida</span><b class="amber">${euro(m.debt)}</b></div>
-      <div class="stat"><span>Património líquido</span><b class="pos">${euro(m.value-m.debt)}</b></div>`)}
+      <div class="stat"><span>Património líquido</span><b class="pos">${euro(m.value-m.debt)}</b></div>
+      <div class="stat"><span>Possíveis mais-valias${m.gainOut?` <span class="small">(${m.gainOut} sem aquisição)</span>`:''}</span>
+        <b class="${m.gain>=0?'pos':'neg'}">${euro(m.gain)}</b></div>
+      <div class="hint" style="margin-top:10px">Mais-valias em bruto: mercado menos aquisição. Ao vender, o que é tributado desconta ainda
+        o IMT e o selo da compra, as obras dos últimos 12 anos, as despesas da venda, e aplica o coeficiente de desvalorização da moeda.</div>`)}
     ${card('Renda por contrato','Peso de cada arrendamento',cHBars(act.map(c=>({label:ctName(c),value:c.rent*cs(c)})),{fmt:v=>euro(v)+'/mês'}))}</div>
   ${pid?'':orphanCard()}
   ${balancesCard(pid)}`;

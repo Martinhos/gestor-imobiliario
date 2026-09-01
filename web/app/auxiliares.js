@@ -563,7 +563,15 @@ window.__setInsets=function(t,b,l,r){
 };
 
 /* ================= TEMA ================= */
-const mq=()=>{try{return window.matchMedia('(prefers-color-scheme: dark)')}catch(e){return{matches:false,addEventListener(){}}}};
+/* uma so MediaQueryList, guardada: registar o ouvinte numa criada de fresco
+   deixa-a sem referencias, e ha motores que a recolhem e param de avisar */
+let _mq=null;
+const mq=()=>{
+  if(_mq)return _mq;
+  try{_mq=window.matchMedia('(prefers-color-scheme: dark)')}
+  catch(e){_mq={matches:false,addEventListener(){},addListener(){}}}
+  return _mq;
+};
 function isDark(){const t=db.settings.theme;return t==='dark'||(t!=='light'&&mq().matches)}
 function applyTheme(){
   const d=isDark();
@@ -575,4 +583,9 @@ function applyTheme(){
   try{document.documentElement.style.colorScheme=d?'dark':'light'}catch(e){}
 }
 function setTheme(t){db.settings.theme=t;save();applyTheme();render()}
-try{mq().addEventListener('change',()=>{if(db.settings.theme==='auto'){applyTheme();render()}})}catch(e){}
+/* o Safari so ganhou addEventListener em MediaQueryList na versao 14: sem o
+   addListener antigo, os iPhones mais velhos nunca sabiam da mudanca */
+(function(){
+  const q=mq(),ao=()=>{if(db.settings.theme==='auto'){applyTheme();render()}};
+  try{if(q.addEventListener)q.addEventListener('change',ao);else if(q.addListener)q.addListener(ao)}catch(e){}
+})();
