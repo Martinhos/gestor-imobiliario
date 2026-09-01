@@ -421,8 +421,10 @@ vDashboard = function () {
       // cada cartão de um par é independente: move-se sozinho
       [].slice.call(n.children).forEach(function (c) { push(c.outerHTML, 'wide'); });
     } else if (n.classList.contains('grid')) {
-      // a fila de indicadores desfaz-se: cada um passa a ser uma célula
-      [].slice.call(n.children).forEach(function (c) { push(c.outerHTML); });
+      // A fila de indicadores é um bloco só: pertencem uns aos outros e
+      // movem-se juntos. Por dentro reparte-se em duas ou quatro colunas,
+      // conforme o espaço — é o que põe os quatro em linha em paisagem.
+      push(n.outerHTML, 'full');
     } else {
       push(n.outerHTML, 'wide');
     }
@@ -553,21 +555,34 @@ function shuffle(target, cx, cy) {
   drag.el.style.transform = 'translate(' + offX + 'px,' + offY + 'px)';
   drag.startY = cy - offY;   // o cartão continua colado ao dedo
   drag.startX = cx - offX;
+  drag.ultimo = target;      // não se troca outra vez com este sem sair de cima dele
 }
 
 // desenha o cartão onde o dedo está e, se ele já cobre o espaço de outro,
 // troca-os. Chamada pelo movimento do dedo e pelo scroll automático, porque
 // com o dedo parado na margem não chega nenhum pointermove.
+// 'm' encolhe o rectangulo por dentro: para trocar e preciso entrar mesmo,
+// nao basta roçar a borda. Sem isso, um dedo a hesitar em cima da fronteira
+// trocava os cartoes dezenas de vezes por segundo.
+var cobre = function (r, x, y, m) {
+  var dx = (m || 0) * r.width, dy = (m || 0) * r.height;
+  return x >= r.left + dx && x <= r.right - dx && y >= r.top + dy && y <= r.bottom - dy;
+};
+var ENTRADA = 0.18;   // quanto e preciso entrar para a troca contar
+
 function dragTo(cx, cy) {
   if (!drag) return;
   drag.el.style.transform = 'translate(' + (cx - drag.startX) + 'px,' + (cy - drag.startY) + 'px)';
   var r = drag.el.getBoundingClientRect(), mx = r.left + r.width / 2, my = r.top + r.height / 2;
+
+  // solta o bloqueio assim que o centro sai de cima de quem acabámos de trocar
+  if (drag.ultimo && !cobre(drag.ultimo.getBoundingClientRect(), mx, my)) drag.ultimo = null;
+
   var list = blocks();
   for (var i = 0; i < list.length; i++) {
     var t = list[i];
-    if (t === drag.el) continue;
-    var tr = t.getBoundingClientRect();
-    if (mx >= tr.left && mx <= tr.right && my >= tr.top && my <= tr.bottom) return shuffle(t, cx, cy);
+    if (t === drag.el || t === drag.ultimo) continue;
+    if (cobre(t.getBoundingClientRect(), mx, my, ENTRADA)) return shuffle(t, cx, cy);
   }
 }
 
@@ -640,6 +655,8 @@ css.textContent =
   // Erra em paisagem no telemóvel, onde a barra lateral aparece e leva 264px
   // sem a media query saber.
   '@media(min-width:1000px){.cw-dash{grid-template-columns:repeat(4,1fr);gap:14px}}' +
+  '.cw-dash .grid{grid-template-columns:repeat(2,1fr)}' +
+  '@media(min-width:1000px){.cw-dash .grid{grid-template-columns:repeat(4,1fr)}}' +
 
   // O que vale de verdade: a grelha responde à largura que tem, não à do
   // ecrã. É a única forma de o telemóvel deitado dar quatro colunas — e
@@ -648,6 +665,10 @@ css.textContent =
   '@supports (container-type:inline-size){' +
     '.cw-cont{container-type:inline-size;container-name:vista}' +
     '@container vista (max-width:559px){.cw-dash{grid-template-columns:repeat(2,1fr);gap:11px}}' +
+    // a fila de indicadores segue a mesma regra por dentro do seu bloco
+    '@container vista (max-width:559px){.cw-dash .grid{grid-template-columns:repeat(2,1fr);gap:11px}}' +
+    '@container vista (min-width:560px){.cw-dash .grid{grid-template-columns:repeat(4,1fr);gap:11px}}' +
+    '@container vista (min-width:760px){.cw-dash .grid{gap:14px}}' +
     // 560px é o telemóvel deitado: com a barra lateral a ocupar 264px sobram
     // ~592px de conteúdo, e quatro colunas dão ~137px a cada indicador. É
     // abaixo dos 158px que a app usava como mínimo — folga trocada de
