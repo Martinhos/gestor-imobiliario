@@ -21,10 +21,67 @@ function closePops(keep){
   const list=document.querySelectorAll('.selpop.on,.menupop.on');
   [].slice.call(list).forEach(x=>{if(!(keep&&x.contains(keep)))x.classList.remove('on')});
 }
+/* Onde cabe um menu que abre a partir de um botão.
+
+   Decisão separada da medição de propósito: é geometria pura, e é a parte
+   que se pode testar sem um browser. Devolve o lado e, quando não couber
+   inteiro, a altura a que tem de encolher.
+
+   `quer` é a altura que o menu já tem com o tecto do CSS aplicado. Só se
+   encolhe, nunca se cresce: deixar um menu de 16 categorias crescer até ao
+   espaço disponível dava-lhe 488px e tomava conta do ecrã. */
+function posicaoPop(botao, limite, quer, folga){
+  folga = folga == null ? 10 : folga;
+  const abaixo = limite.bottom - botao.bottom - folga;
+  const acima = botao.top - limite.top - folga;
+  /* só se vira para cima se lá couber melhor: um menu virado para cima que
+     também não cabe é mais confuso do que um virado para baixo */
+  const paraCima = quer > abaixo && acima > abaixo;
+  const espaco = paraCima ? acima : abaixo;
+  return {
+    lado: paraCima ? 'cima' : 'baixo',
+    /* nunca abaixo de 60px: um menu de dois pixeis não é um menu, e a essa
+       altura é melhor deixar transbordar do que fingir que cabe */
+    maxHeight: quer > espaco ? Math.max(60, Math.floor(espaco)) : null,
+  };
+}
+
+/* Mede o que rodeia o menu e aplica o que o posicaoPop decidir.
+
+   Sem isto, um menu perto do fundo abria para baixo e ficava cortado pelo
+   corpo do modal — medido: 70% de um dropdown de 16 categorias fora de
+   vista, sem qualquer sinal de que faltava ali alguma coisa. O limite é o
+   primeiro antepassado que corta (o corpo do modal, normalmente), ou o ecrã
+   quando não há nenhum.
+
+   Os menus dentro dos painéis de filtro têm tratamento próprio em
+   cloud/filtros.js, que os solta para position:fixed — esses não passam por
+   aqui com o mesmo efeito, e não há conflito porque esse corre depois. */
+function ajustarPop(p){
+  if(!p)return;
+  const btn=p.parentNode.querySelector('.selbtn,.iconbtn')||p.previousElementSibling;
+  if(!btn)return;
+  /* repor antes de medir: uma medição feita sobre o ajuste anterior herda-o */
+  p.style.top='';p.style.bottom='';p.style.maxHeight='';
+  let limite={top:0,bottom:window.innerHeight};
+  for(let a=p.parentElement;a&&a!==document.body;a=a.parentElement){
+    const cs=getComputedStyle(a);
+    if(/hidden|auto|scroll/.test(cs.overflow+cs.overflowX+cs.overflowY)){
+      const r=a.getBoundingClientRect();
+      limite={top:Math.max(0,r.top),bottom:Math.min(window.innerHeight,r.bottom)};
+      break;
+    }
+  }
+  const d=posicaoPop(btn.getBoundingClientRect(),limite,p.getBoundingClientRect().height);
+  if(d.lado==='cima'){p.style.top='auto';p.style.bottom='calc(100% + 5px)';}
+  if(d.maxHeight)p.style.maxHeight=d.maxHeight+'px';
+}
+
 function selOpen(e,id){
   if(e)e.stopPropagation();
   const p=document.getElementById('pop_'+id),was=p&&p.classList.contains('on');
-  closePops(p?p.parentNode:null);if(p&&!was)p.classList.add('on');
+  closePops(p?p.parentNode:null);
+  if(p&&!was){p.classList.add('on');ajustarPop(p);}
 }
 function selPick(e,id,i){
   if(e)e.stopPropagation();
@@ -43,7 +100,7 @@ function menu(id,items){
 function menuOpen(e,id){
   if(e)e.stopPropagation();
   const p=document.getElementById('menu_'+id),was=p&&p.classList.contains('on');
-  closePops(p?p.parentNode:null);if(p&&!was)p.classList.add('on');
+  closePops(p?p.parentNode:null);if(p&&!was){p.classList.add('on');ajustarPop(p);};
 }
 /* etiquetas removíveis */
 function tagField(items,addLabel,addAct,removeAct,cls){

@@ -167,8 +167,10 @@ function bannerAtualizar(v) {
   if (document.getElementById('cwUpdBar')) return;
   var el = document.createElement('div');
   el.id = 'cwUpdBar';
+  // 59: acima do botão flutuante (58), abaixo dos modais (60) — senão
+  // tapava o rodapé de um modal aberto
   el.className = 'card';
-  el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + var(--inset-bottom));z-index:80;' +
+  el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + var(--inset-bottom));z-index:59;' +
     'display:flex;align-items:center;gap:11px;padding:11px 13px;box-shadow:var(--shadow)';
   el.innerHTML = '<span class="small" style="flex:1;min-width:0">Está disponível a versão ' + v + '.</span>' +
     '<button class="btn sm primary" style="flex:0 0 auto" onclick="CW.atualizarAgora()">Atualizar</button>' +
