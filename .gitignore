@@ -8,3 +8,5 @@ android/build/
 android/app/build/
 android/local.properties
 web/gestor-imobiliario.apk
+# capturas do percurso de interface: pesam e refazem-se a cada corrida
+testes/ui/relatorio/
