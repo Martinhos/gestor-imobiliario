@@ -2,7 +2,7 @@
 // tudo o resto é servido pelos assets estáticos (a PWA em web/).
 
 import { handleApi, recordReport } from './api.js';
-import { dailyReport } from './notify.js';
+import { dailyReport, watchLimits } from './notify.js';
 import { copiar } from './salvaguarda.js';
 
 // A app não carrega nada de fora, tirando o botão de entrada com Google.
@@ -41,7 +41,17 @@ export default {
   // vai primeiro para o resumo do mesmo dia já poder dizer se correu bem —
   // uma cópia que deixa de acontecer só dá nas vistas quando é precisa.
   async scheduled(event, env, ctx) {
+    // Dois horários. À hora certa olha-se só para os limites, que é barato;
+    // a cópia e o resumo são o trabalho pesado e ficam uma vez por dia.
+    const diario = String(event.cron || '').startsWith('0 9 ');
     ctx.waitUntil((async () => {
+      if (!diario) {
+        try { await watchLimits(env, ctx); } catch (e) {
+          await recordReport(env, ctx, 'infra', 'Vigia dos limites falhou',
+            String((e && e.stack) || (e && e.message) || e).slice(0, 800));
+        }
+        return;
+      }
       try {
         const r = await copiar(env);
         if (r.erro) await recordReport(env, ctx, 'infra', 'Cópia de segurança falhou', r.erro);

@@ -95,8 +95,16 @@ function reportErr(msg, detail) {
   if (errVistos[chave]) return;
   errVistos[chave] = 1;
   errCount++;
-  api('POST', '/api/reports', { message: String(msg).slice(0, 500), detail: String(detail || '').slice(0, 800) })
-    .catch(function () {});
+  /* A versão vai sempre. Desde que a app se atualiza sozinha, um relato de
+     quem ainda está numa versão antiga parece um defeito da versão em vigor
+     — e faz perder tempo a procurar o que já foi corrigido. */
+  api('POST', '/api/reports', {
+    message: String(msg).slice(0, 500),
+    detail: String(detail || '').slice(0, 800),
+    versao: typeof VERSAO !== 'undefined' ? VERSAO : null,
+    ecra: ondeEstava(),
+    agente: String(navigator.userAgent || '').slice(0, 180),
+  }).catch(function () {});
 }
 // em que ecrã estava a pessoa: ajuda a reproduzir, e `tab` pode ainda não
 // existir se o erro for cedo
