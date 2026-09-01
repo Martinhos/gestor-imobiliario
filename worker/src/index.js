@@ -3,6 +3,7 @@
 
 import { handleApi, recordReport } from './api.js';
 import { dailyReport } from './notify.js';
+import { copiar } from './salvaguarda.js';
 
 // A app não carrega nada de fora, tirando o botão de entrada com Google.
 const CSP = [
@@ -36,9 +37,20 @@ function harden(res) {
 }
 
 export default {
-  // resumo diário do consumo para o canal de administração
+  // Uma vez por dia: cópia da base para o R2 e resumo do consumo. A cópia
+  // vai primeiro para o resumo do mesmo dia já poder dizer se correu bem —
+  // uma cópia que deixa de acontecer só dá nas vistas quando é precisa.
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(dailyReport(env, ctx));
+    ctx.waitUntil((async () => {
+      try {
+        const r = await copiar(env);
+        if (r.erro) await recordReport(env, ctx, 'infra', 'Cópia de segurança falhou', r.erro);
+      } catch (e) {
+        await recordReport(env, ctx, 'infra', 'Cópia de segurança falhou',
+          String((e && e.stack) || (e && e.message) || e).slice(0, 800));
+      }
+      await dailyReport(env, ctx);
+    })());
   },
 
   async fetch(request, env, ctx) {
@@ -66,7 +78,7 @@ export default {
       } catch (e) {
         console.error('API error', e);
         // quem programa fica a saber, sem o utilizador ter de reportar
-        ctx.waitUntil(recordReport(env, ctx, 'servidor', e && e.message,
+        ctx.waitUntil(recordReport(env, ctx, 'server', e && e.message,
           request.method + ' ' + url.pathname + '\n' + String((e && e.stack) || '').slice(0, 800)));
         return new Response(JSON.stringify({ error: 'Erro interno do servidor.' }), {
           status: 500,

@@ -51,13 +51,69 @@ const ICONE = { user: '💬 ', client: '🐞 ', server: '🔥 ', infra: '📊 ',
 const COR = { user: 0x2f7d5b, client: 0xd6a34a, server: 0xb94a48, infra: 0x7aa9d6, seguranca: 0x8a7bb8 };
 const cut = (s, n) => { const t = String(s == null ? '' : s); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 
-// Só quem estiver na lista pode mexer. Sem lista, qualquer pessoa com acesso
-// ao servidor de Discord pode — é o dono que decide ao configurar.
-function autorizado(env, i) {
-  const lista = String(env.DISCORD_ADMINS || '').split(/[,\s]+/).filter(Boolean);
-  if (!lista.length) return true;
+/* Papéis
+   ------
+   admin      opera o serviço: consumo, cópias, e tudo o que os outros veem
+   dev        constrói: erros da app e do servidor, infraestrutura, segurança
+   suporte    fala com quem usa: só os pedidos contados por pessoas
+
+   dev e suporte são irmãos — nenhum manda no outro — e ambos ficam abaixo de
+   admin. Cada lista aceita ids de pessoa ou ids de cargo do Discord: com
+   cargos, entra e sai gente sem mexer nos segredos. */
+export const PAPEIS = ['admin', 'dev', 'suporte'];
+
+// O que cada papel pode correr. O admin não aparece nas listas porque pode tudo.
+export const PERMISSOES = {
+  pedidos: ['dev', 'suporte'],
+  pedido: ['dev', 'suporte'],
+  responder: ['dev', 'suporte'],
+  fechar: ['dev', 'suporte'],
+  erros: ['dev'],
+  uso: [],
+  resumo: [],
+  copias: [],
+  comandos: ['dev', 'suporte'],
+};
+
+// As categorias de pedido que cada papel vê. O suporte não precisa de ver
+// rastreios de erro para responder a quem escreveu — e não deve.
+export const CATS_DO_PAPEL = {
+  admin: ['user', 'client', 'server', 'infra', 'seguranca'],
+  dev: ['client', 'server', 'infra', 'seguranca'],
+  suporte: ['user'],
+};
+
+const lista = (v) => String(v || '').split(/[,\s]+/).filter(Boolean);
+
+function pertence(env, i, chave) {
+  const l = lista(env[chave]);
+  if (!l.length) return false;
   const uid = (i.member && i.member.user && i.member.user.id) || (i.user && i.user.id);
-  return lista.indexOf(uid) > -1;
+  const cargos = (i.member && i.member.roles) || [];
+  return l.indexOf(uid) > -1 || cargos.some((r) => l.indexOf(r) > -1);
+}
+
+// Sem nenhuma lista configurada, quem tiver acesso ao servidor de Discord é
+// admin — é o dono que decide, ao configurar.
+export function papel(env, i) {
+  const configurado = ['DISCORD_ADMINS', 'DISCORD_DEVS', 'DISCORD_SUPORTE']
+    .some((k) => lista(env[k]).length);
+  if (!configurado) return 'admin';
+  if (pertence(env, i, 'DISCORD_ADMINS')) return 'admin';
+  if (pertence(env, i, 'DISCORD_DEVS')) return 'dev';
+  if (pertence(env, i, 'DISCORD_SUPORTE')) return 'suporte';
+  return null;
+}
+
+export function podeCorrer(pap, comando) {
+  if (!pap) return false;
+  if (pap === 'admin') return true;
+  return (PERMISSOES[comando] || []).indexOf(pap) > -1;
+}
+
+// Os comandos que este papel pode correr, para o /comandos e para as recusas.
+export function comandosDe(pap) {
+  return Object.keys(PERMISSOES).filter((c) => podeCorrer(pap, c));
 }
 
 function ticketEmbedFull(t) {
@@ -102,12 +158,22 @@ async function mudarEstado(env, ref, estado, resposta) {
 
 /* ------------------------------ comandos ------------------------------ */
 
-async function cmdPedidos(env, opts) {
+async function cmdPedidos(env, opts, pap) {
   const estado = (opts.estado || '').trim();
-  const cat = (opts.categoria || '').trim();
+  const permitidas = CATS_DO_PAPEL[pap] || [];
+  let cat = (opts.categoria || '').trim();
+  // pedir uma categoria que o papel não vê não devolve vazio às escondidas
+  if (cat && permitidas.indexOf(cat) < 0) {
+    return reply('O papel **' + pap + '** não vê pedidos de *' + (CATS[cat] || cat) + '*.');
+  }
   const onde = [], vals = [];
   if (estado) { onde.push('status = ?'); vals.push(estado); } else onde.push("status <> 'concluido'");
   if (cat) { onde.push('category = ?'); vals.push(cat); }
+  else {
+    // sem categoria pedida, mostra-se o que o papel vê (para o admin, tudo)
+    onde.push('category IN (' + permitidas.map(() => '?').join(',') + ')');
+    vals.push(...permitidas);
+  }
   const st = env.DB.prepare(
     'SELECT * FROM tickets WHERE ' + onde.join(' AND ') + ' ORDER BY n DESC, created_at DESC LIMIT 10'
   );
@@ -126,40 +192,115 @@ async function cmdPedidos(env, opts) {
   }));
 }
 
-async function cmdPedido(env, opts) {
-  const t = await acharTicket(env, opts.id);
-  if (!t) return reply('Não encontrei nenhum pedido com esse id.');
-  return { type: MSG, data: { embeds: [ticketEmbedFull(t)], components: ticketButtons(t.id) } };
+async function cmdPedido(env, opts, pap) {
+  const g = await guardaDoPedido(env, opts.id, pap);
+  if (g.erro) return g.erro;
+  return { type: MSG, data: { embeds: [ticketEmbedFull(g.t)], components: ticketButtons(g.t.id) } };
 }
 
-async function cmdResponder(env, opts) {
-  const t = await mudarEstado(env, opts.id, 'resolucao', opts.texto);
-  if (!t) return reply('Não encontrei nenhum pedido com esse id.');
+async function cmdResponder(env, opts, pap) {
+  const g = await guardaDoPedido(env, opts.id, pap);
+  if (g.erro) return g.erro;
+  const t = await mudarEstado(env, g.t.id, 'resolucao', opts.texto);
   return reply('✏️ Respondido e marcado como **em resolução**. A pessoa vê a resposta na app.',
     [ticketEmbedFull(t)]);
 }
 
-async function cmdFechar(env, opts) {
-  const t = await mudarEstado(env, opts.id, 'concluido', opts.texto);
-  if (!t) return reply('Não encontrei nenhum pedido com esse id.');
+async function cmdFechar(env, opts, pap) {
+  const g = await guardaDoPedido(env, opts.id, pap);
+  if (g.erro) return g.erro;
+  const t = await mudarEstado(env, g.t.id, 'concluido', opts.texto);
   return reply('✅ Concluído.', [ticketEmbedFull(t)]);
 }
 
+// Os erros apanhados sozinhos vivem em `tickets` desde a migração 0008, com
+// a categoria a dizer de onde vieram. A tabela `reports` ficou para trás.
 async function cmdErros(env, opts) {
   const horas = Math.min(Math.max(Number(opts.horas || 24), 1), 720);
   const desde = Date.now() - horas * 3600000;
   const rows = (await env.DB.prepare(
-    'SELECT * FROM reports WHERE updated_at > ? ORDER BY n DESC, updated_at DESC LIMIT 10'
+    `SELECT * FROM tickets WHERE category IN ('client', 'server') AND updated_at > ?
+      ORDER BY n DESC, updated_at DESC LIMIT 10`
   ).bind(desde).all()).results;
   if (!rows.length) return reply('✅ Sem erros nas últimas ' + horas + ' horas.');
   return reply('Erros das últimas ' + horas + ' horas:', rows.map(function (r) {
     return {
-      title: '⚠️ ' + cut(r.message, 90) + (r.n > 1 ? '  ×' + r.n : ''),
-      description: '```' + cut(r.detail || '—', 500) + '```',
-      color: 0xd6a34a,
-      footer: { text: (r.kind === 'servidor' ? 'servidor' : 'app') + ' · ' + (r.user_id || 'sem sessão') },
+      title: '⚠️ ' + cut(r.subject, 90) + (r.n > 1 ? '  ×' + r.n : ''),
+      description: '```' + cut(r.body || '—', 500) + '```',
+      color: r.status === 'concluido' ? 0x2f7d5b : 0xd6a34a,
+      footer: {
+        text: (r.category === 'server' ? 'servidor' : 'app') + ' · ' +
+          (ESTADOS[r.status] || r.status) + ' · ' + cut(r.id, 8),
+      },
     };
   }));
+}
+
+// Ver as cópias que existem, ou forçar uma agora — antes de uma migração
+// arriscada, por exemplo, em vez de esperar pelas 09:00.
+async function cmdCopias(env, opts) {
+  const s = await import('./salvaguarda.js');
+  if (opts.agora) {
+    const r = await s.copiar(env);
+    if (r.erro) return reply('🔴 Não deu: ' + cut(r.erro, 400));
+    return reply('🟢 Cópia feita: `' + r.chave + '` · ' + r.linhas + ' registos de ' +
+      r.tabelas + ' tabelas · ' + s.kb(r.bytes) + ' · ' + r.ms + ' ms' +
+      (r.podadas ? ' · ' + r.podadas + ' antigas apagadas' : '') +
+      (r.modo === 'memoria' ? '\n(escrita em memória: o fluxo não passou)' : ''));
+  }
+  const copias = await s.listar(env);
+  if (!copias.length) return reply('🔴 Nenhuma cópia no R2. Corre `/copias agora:Sim`.');
+  const total = copias.reduce((a, o) => a + o.size, 0);
+  return reply('', [{
+    title: '💾 Cópias da base no R2',
+    color: 0x2f7d5b,
+    description: copias.slice(0, 15).map((o) =>
+      '`' + s.diaDaChave(o.key) + '` · ' + s.kb(o.size)).join('\n'),
+    fields: [
+      { name: 'Total', value: copias.length + ' cópias, ' + s.kb(total), inline: true },
+      { name: 'Retenção', value: s.DIAS + ' dias + dia 1 de cada mês', inline: true },
+      { name: 'Time Travel da D1', value: s.TIME_TRAVEL_DIAS + ' dias (plano gratuito)', inline: true },
+    ],
+  }]);
+}
+
+// Um pedido só se lê e se responde de dentro do papel a que pertence.
+function podeVer(pap, categoria) {
+  return (CATS_DO_PAPEL[pap] || []).indexOf(categoria || 'user') > -1;
+}
+
+async function guardaDoPedido(env, id, pap) {
+  const t = await acharTicket(env, id);
+  if (!t) return { erro: reply('Não encontrei nenhum pedido com esse id.') };
+  if (!podeVer(pap, t.category)) {
+    return { erro: reply('Esse pedido é de *' + (CATS[t.category] || t.category) +
+      '*, fora do papel **' + pap + '**.') };
+  }
+  return { t };
+}
+
+function cmdComandos(pap) {
+  const desc = {
+    pedidos: 'lista o que está por tratar',
+    pedido: 'abre um pedido pelo id',
+    responder: 'responde a quem escreveu, sem fechar',
+    fechar: 'responde e dá por concluído',
+    erros: 'erros da app e do servidor nas últimas horas',
+    uso: 'consumo da infraestrutura agora',
+    copias: 'cópias da base no R2, ou forçar uma',
+    resumo: 'envia o resumo diário para o canal de administração',
+    comandos: 'esta lista',
+  };
+  const meus = comandosDe(pap);
+  return reply('', [{
+    title: 'O que podes fazer · papel **' + pap + '**',
+    color: pap === 'admin' ? 0x8a7bb8 : pap === 'dev' ? 0xd6a34a : 0x2f7d5b,
+    description: meus.map((c) => '`/' + c + '` — ' + desc[c]).join('\n'),
+    fields: [{
+      name: 'Pedidos que vês',
+      value: (CATS_DO_PAPEL[pap] || []).map((c) => (ICONE[c] || '') + (CATS[c] || c)).join('\n'),
+    }],
+  }]);
 }
 
 async function cmdUso(env) {
@@ -195,12 +336,17 @@ export async function handleInteraction(request, env, ctx) {
 
   if (i.type === 1) return json(PONG);
 
-  if (!autorizado(env, i)) return json(reply('Não tens permissão para usar este bot.'));
+  const pap = papel(env, i);
+  if (!pap) return json(reply('Não tens permissão para usar este bot.'));
 
   // botões
   if (i.type === 3) {
     const [, acao, id] = String(i.data.custom_id || '').split(':');
     const estado = acao === 'fim' ? 'concluido' : 'resolucao';
+    const antes = await env.DB.prepare('SELECT category FROM tickets WHERE id = ?').bind(id).first();
+    if (antes && !podeVer(pap, antes.category)) {
+      return json(reply('Esse pedido é de *' + (CATS[antes.category] || antes.category) + '*, fora do papel **' + pap + '**.'));
+    }
     const t = await mudarEstado(env, id, estado);
     if (!t) return json(reply('Esse pedido já não existe.'));
     return json({
@@ -214,13 +360,21 @@ export async function handleInteraction(request, env, ctx) {
     const nome = i.data.name;
     const opts = {};
     (i.data.options || []).forEach(function (o) { opts[o.name] = o.value; });
+    // A recusa diz o que se pode fazer em vez de só dizer que não: quem
+    // recebe um "não tens permissão" seco vai perguntar a alguém.
+    if (!podeCorrer(pap, nome)) {
+      return json(reply('**/' + nome + '** é de outro papel — tu és **' + pap + '**.\n' +
+        'Podes correr: ' + comandosDe(pap).map((c) => '`/' + c + '`').join(', ') + '.'));
+    }
     try {
-      if (nome === 'pedidos') return json(await cmdPedidos(env, opts));
-      if (nome === 'pedido') return json(await cmdPedido(env, opts));
-      if (nome === 'responder') return json(await cmdResponder(env, opts));
-      if (nome === 'fechar') return json(await cmdFechar(env, opts));
+      if (nome === 'comandos') return json(cmdComandos(pap));
+      if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
+      if (nome === 'pedido') return json(await cmdPedido(env, opts, pap));
+      if (nome === 'responder') return json(await cmdResponder(env, opts, pap));
+      if (nome === 'fechar') return json(await cmdFechar(env, opts, pap));
       if (nome === 'erros') return json(await cmdErros(env, opts));
       if (nome === 'uso') return json(await cmdUso(env));
+      if (nome === 'copias') return json(await cmdCopias(env, opts));
       if (nome === 'resumo') return json(await cmdResumo(env, ctx));
     } catch (e) {
       return json(reply('Correu mal: ' + cut(e.message, 300)));

@@ -438,6 +438,9 @@ function num(s){
   const lc=t.lastIndexOf(','),ld=t.lastIndexOf('.');
   if(lc>-1&&ld>-1)t=lc>ld?t.replace(/\./g,'').replace(',','.'):t.replace(/,/g,'');
   else if(lc>-1)t=(t.split(',').length===2&&t.split(',')[1].length<=2)?t.replace(',','.'):t.replace(/,/g,'');
+  /* so pontos: um ponto com ate duas casas e decimal (1.5); o resto sao
+     milhares (250.000 sao duzentos e cinquenta mil, nao duzentos e cinquenta) */
+  else if(ld>-1)t=(t.split('.').length===2&&t.split('.')[1].length<=2)?t:t.replace(/\./g,'');
   const n=parseFloat(t);return isFinite(n)?n:0;
 }
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2800)}
@@ -560,16 +563,34 @@ window.__setInsets=function(t,b,l,r){
 };
 
 /* ================= TEMA ================= */
-const mq=()=>{try{return window.matchMedia('(prefers-color-scheme: dark)')}catch(e){return{matches:false,addEventListener(){}}}};
+/* uma so MediaQueryList, guardada: registar o ouvinte numa criada de fresco
+   deixa-a sem referencias, e ha motores que a recolhem e param de avisar */
+let _mq=null;
+const mq=()=>{
+  if(_mq)return _mq;
+  try{_mq=window.matchMedia('(prefers-color-scheme: dark)')}
+  catch(e){_mq={matches:false,addEventListener(){},addListener(){}}}
+  return _mq;
+};
 function isDark(){const t=db.settings.theme;return t==='dark'||(t!=='light'&&mq().matches)}
 function applyTheme(){
   const d=isDark();
   document.documentElement.classList.toggle('dark',d);
   PAL.splice(0,PAL.length,...(d?PAL_DARK:PAL_LIGHT));
   const m=document.getElementById('metaTheme');if(m)m.content=d?'#161a3a':'#1a3a2c';
-  /* diz ao WebView qual é o esquema em vigor, para não escurecer por conta própria */
-  const cs=document.querySelector('meta[name=color-scheme]');if(cs)cs.content=d?'dark':'light';
-  try{document.documentElement.style.colorScheme=d?'dark':'light'}catch(e){}
+  /* No modo automático não se fixa o esquema. Fixá-lo era um ciclo vicioso: o
+     browser dizia "claro", a app escrevia color-scheme:light, e isso confirma
+     ao browser que a página não sabe ser escura — deixando-o sem razão para
+     mudar de ideias. Em automático dizemos que sabemos os dois e quem decide
+     é ele; só uma escolha explícita fixa um deles. */
+  const esq=db.settings.theme==='auto'?'light dark':(d?'dark':'light');
+  const cs=document.querySelector('meta[name=color-scheme]');if(cs)cs.content=esq;
+  try{document.documentElement.style.colorScheme=esq}catch(e){}
 }
 function setTheme(t){db.settings.theme=t;save();applyTheme();render()}
-try{mq().addEventListener('change',()=>{if(db.settings.theme==='auto'){applyTheme();render()}})}catch(e){}
+/* o Safari so ganhou addEventListener em MediaQueryList na versao 14: sem o
+   addListener antigo, os iPhones mais velhos nunca sabiam da mudanca */
+(function(){
+  const q=mq(),ao=()=>{if(db.settings.theme==='auto'){applyTheme();render()}};
+  try{if(q.addEventListener)q.addEventListener('change',ao);else if(q.addListener)q.addListener(ao)}catch(e){}
+})();

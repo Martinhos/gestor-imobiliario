@@ -14,13 +14,24 @@ vSettings = function () {
     var t = db.settings.theme;
     return backRow + card('Tema', 'Como a app se apresenta',
       '<div class="seg c3">' +
-      [['auto', 'auto', 'Automático', 'segue o telemóvel'], ['light', 'sun', 'Claro', ''], ['dark', 'moon', 'Escuro', '']]
+      // o subtítulo do automático diz o que ele está a resolver agora: sem
+      // isso, um browser que não passa a preferência do sistema parece um
+      // erro da app
+      [['auto', 'auto', 'Automático', 'agora: ' + (mq().matches ? 'escuro' : 'claro')],
+        ['light', 'sun', 'Claro', ''], ['dark', 'moon', 'Escuro', '']]
         .map(function (o) {
           return '<button type="button" class="opt ' + (t === o[0] ? 'on' : '') + '" onclick="setTheme(\'' + o[0] + '\')">' +
             '<span class="ic">' + ic(o[1], 18) + '</span><b>' + o[2] + '</b>' +
             (o[3] ? '<small>' + o[3] + '</small>' : '') + '</button>';
         }).join('') + '</div>' +
-      '<div class="hint" style="margin-top:11px">Vale só neste aparelho.</div>');
+      '<div class="hint" style="margin-top:11px">Vale só neste aparelho.</div>' +
+      (t === 'auto' && !mq().matches
+        ? '<div class="hint" style="margin-top:9px">O automático segue o que o browser diz preferir, e este está a dizer <b>claro</b>. ' +
+          'Se tens o aparelho em escuro, é o browser que não está a passar a preferência. No browser da Samsung há duas opções, ' +
+          'e o modo escuro sozinho pode não chegar: <b>Definições → Visualização e deslocamento de página → Modo escuro</b>, e ' +
+          '<b>Definições → Labs → Usar tema escuro do site</b>. Se mesmo assim ficar em claro, escolhe <b>Escuro</b> aqui — ' +
+          'essa opção não depende do browser e funciona sempre.</div>'
+        : ''));
   }
   var h = _vSettings();
   if (!setPage) {
@@ -57,7 +68,7 @@ vSettings = function () {
 
       sect('Sobre') +
       navRow('Aviso legal', 'Termos, privacidade e demonstração', 'contract', 'legal') + gap +
-      card('Gestor Imobiliário', 'Versão 23 · demonstração',
+      card('Gestor Imobiliário', 'Versão ' + VERSAO + ' · demonstração',
         '<div class="stat"><span>Imóveis · contratos</span><b>' + db.properties.length + ' · ' + db.contracts.length + '</b></div>' +
         '<div class="stat"><span>Inquilinos</span><b>' + db.tenants.length + '</b></div>' +
         '<div class="stat" style="border:0"><span>Movimentos</span><b>' + db.transactions.length + '</b></div>');

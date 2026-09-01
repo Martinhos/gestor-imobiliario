@@ -384,6 +384,7 @@ var DASH_TITLES = ['Entradas e saídas', 'Cashflow acumulado', 'Renda por contra
   'Cashflow por imóvel', 'Despesas sem imóvel', 'Contas entre proprietários'];
 
 function dashKey(el) {
+  if (el.classList && el.classList.contains('section-title')) return 'titulo:' + el.textContent.trim();
   var kl = el.querySelector('.kpi .label');
   if (kl) return 'kpi:' + kl.textContent.trim();
   if (el.id === 'donutCard' || el.querySelector('#donutCard')) return 'despesas';
@@ -404,22 +405,28 @@ vDashboard = function () {
   if (first < 0) return html; // estado vazio: nada para ordenar
 
   var fixed = kids.slice(0, first).map(function (n) { return n.outerHTML; }).join('');
-  var items = [], j = first, pending = '';
-  var push = function (html, full) {
+  var items = [], j = first;
+  // largura: 'full' atravessa a grelha toda, 'wide' ocupa duas células (no
+  // telemóvel são as duas colunas, no computador metade das quatro), e o resto
+  // ocupa uma. É o que permite um indicador ao lado do outro no telemóvel.
+  var push = function (html, larg) {
     var d = document.createElement('div');
     d.innerHTML = html;
-    items.push({ h: pending + html, k: dashKey(d.firstElementChild || d) || 'bloco', full: !!full });
-    pending = '';
+    items.push({ h: html, k: dashKey(d.firstElementChild || d) || 'bloco', larg: larg || '' });
   };
   while (j < kids.length) {
     var n = kids[j];
-    // um título de secção viaja com o bloco que anuncia
-    if (n.classList.contains('section-title')) { pending = n.outerHTML; j++; continue; }
+    if (n.classList.contains('section-title')) { push(n.outerHTML, 'full'); j++; continue; }
     if (n.classList.contains('cols')) {
       // cada cartão de um par é independente: move-se sozinho
-      [].slice.call(n.children).forEach(function (c) { push(c.outerHTML); });
+      [].slice.call(n.children).forEach(function (c) { push(c.outerHTML, 'wide'); });
+    } else if (n.classList.contains('grid')) {
+      // A fila de indicadores é um bloco só: pertencem uns aos outros e
+      // movem-se juntos. Por dentro reparte-se em duas ou quatro colunas,
+      // conforme o espaço — é o que põe os quatro em linha em paisagem.
+      push(n.outerHTML, 'full');
     } else {
-      push(n.outerHTML, n.classList.contains('grid'));   // a fila de indicadores ocupa a largura toda
+      push(n.outerHTML, 'wide');
     }
     j++;
   }
@@ -427,17 +434,19 @@ vDashboard = function () {
   items.forEach(function (it) {
     if (seen[it.k]) it.k += '#' + (++seen[it.k]); else seen[it.k] = 1;
   });
-  var order = (db.settings || {}).dashOrder || [];
+  // dashOrder2: o conjunto de chaves mudou quando os indicadores passaram a
+  // ser células próprias, e aplicar meia ordem antiga baralhava a vista
+  var order = (db.settings || {}).dashOrder2 || [];
   items.forEach(function (it, ix) {
     var at = order.indexOf(it.k);
     it._r = at < 0 ? 1000 + ix : at;   // cartões novos ficam no fim, pela ordem de origem
   });
   items.sort(function (a, b) { return a._r - b._r; });
 
-  return fixed + '<div class="cw-dash">' + items.map(function (it) {
-    return '<div class="cw-blk' + (it.full ? ' cw-full' : '') + '" data-k="' + esc(it.k) + '" data-lp="dash:' + esc(it.k) + '">' +
+  return fixed + '<div class="cw-cont"><div class="cw-dash">' + items.map(function (it) {
+    return '<div class="cw-blk' + (it.larg ? ' cw-' + it.larg : '') + '" data-k="' + esc(it.k) + '" data-lp="dash:' + esc(it.k) + '">' +
       it.h + '<span class="cw-h">' + ic('grip', 15) + '</span></div>';
-  }).join('') + '</div>';
+  }).join('') + '</div></div>';
 };
 
 function blkByKey(k) {
@@ -449,12 +458,13 @@ function blkByKey(k) {
 function saveDashOrder() {
   var keys = [].slice.call(document.querySelectorAll('#view .cw-blk')).map(function (x) { return x.getAttribute('data-k'); });
   if (!keys.length) return;
-  db.settings.dashOrder = keys;
+  db.settings.dashOrder2 = keys;
   save();
 }
 
 CW.resetDashOrder = function () {
-  delete db.settings.dashOrder;
+  delete db.settings.dashOrder2;
+  delete db.settings.dashOrder;   // limpa também a ordem do esquema antigo
   save(); render();
   toast('Ordem reposta.');
 };
@@ -469,7 +479,7 @@ function editBar() {
   el.innerHTML = '<span class="small" style="flex:1;min-width:140px">Arrasta os cartões para mudar a ordem.</span>' +
     '<button class="btn sm" onclick="CW.resetDashOrder()">Repor ordem</button>' +
     '<button class="btn sm primary" onclick="CW.exitEdit()">' + ic('check', 14) + ' Concluir</button>';
-  var grid = v.querySelector('.cw-dash');
+  var grid = v.querySelector('.cw-cont');
   v.insertBefore(el, grid || v.firstChild);
 }
 
@@ -525,6 +535,7 @@ function startDrag(el, clientY, clientX) {
   drag = { el: el, cont: el.parentNode, startY: clientY, startX: clientX == null ? lastX : clientX };
   el.classList.add('cw-drag');
   document.body.style.userSelect = 'none';
+  comecarAuto();
 }
 
 function blocks() {
@@ -533,7 +544,7 @@ function blocks() {
 
 // troca só quando o centro do cartão segurado entra no espaço do outro
 // (ou seja, quando está maioritariamente já na nova posição)
-function shuffle(target, e) {
+function shuffle(target, cx, cy) {
   var vr = drag.el.getBoundingClientRect();
   var after = !!(drag.el.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING);
   if (after) drag.cont.insertBefore(drag.el, target.nextElementSibling);
@@ -542,23 +553,70 @@ function shuffle(target, e) {
   var nr = drag.el.getBoundingClientRect();
   var offY = vr.top - nr.top, offX = vr.left - nr.left;
   drag.el.style.transform = 'translate(' + offX + 'px,' + offY + 'px)';
-  drag.startY = e.clientY - offY;   // o cartão continua colado ao dedo
-  drag.startX = e.clientX - offX;
+  drag.startY = cy - offY;   // o cartão continua colado ao dedo
+  drag.startX = cx - offX;
+  drag.ultimo = target;      // não se troca outra vez com este sem sair de cima dele
 }
+
+// desenha o cartão onde o dedo está e, se ele já cobre o espaço de outro,
+// troca-os. Chamada pelo movimento do dedo e pelo scroll automático, porque
+// com o dedo parado na margem não chega nenhum pointermove.
+// 'm' encolhe o rectangulo por dentro: para trocar e preciso entrar mesmo,
+// nao basta roçar a borda. Sem isso, um dedo a hesitar em cima da fronteira
+// trocava os cartoes dezenas de vezes por segundo.
+var cobre = function (r, x, y, m) {
+  var dx = (m || 0) * r.width, dy = (m || 0) * r.height;
+  return x >= r.left + dx && x <= r.right - dx && y >= r.top + dy && y <= r.bottom - dy;
+};
+var ENTRADA = 0.18;   // quanto e preciso entrar para a troca contar
+
+function dragTo(cx, cy) {
+  if (!drag) return;
+  drag.el.style.transform = 'translate(' + (cx - drag.startX) + 'px,' + (cy - drag.startY) + 'px)';
+  var r = drag.el.getBoundingClientRect(), mx = r.left + r.width / 2, my = r.top + r.height / 2;
+
+  // solta o bloqueio assim que o centro sai de cima de quem acabámos de trocar
+  if (drag.ultimo && !cobre(drag.ultimo.getBoundingClientRect(), mx, my)) drag.ultimo = null;
+
+  var list = blocks();
+  for (var i = 0; i < list.length; i++) {
+    var t = list[i];
+    if (t === drag.el || t === drag.ultimo) continue;
+    if (cobre(t.getBoundingClientRect(), mx, my, ENTRADA)) return shuffle(t, cx, cy);
+  }
+}
+
+/* Scroll enquanto se arrasta.
+   Num telemóvel a vista geral não cabe no ecrã, e sem isto não havia como
+   levar um cartão do fundo para o topo: o dedo chegava à margem e parava.
+   Perto das margens a página anda sozinha, tanto mais depressa quanto mais
+   perto se está, e o cartão desloca-se com ela — daí o acerto do startY, sem
+   o qual o cartão descolava do dedo a cada pixel de scroll. */
+var MARGEM = 90, VEL_MAX = 18, auto = 0;
+
+function passoAuto() {
+  if (!drag) return pararAuto();
+  var h = window.innerHeight, d = 0;
+  if (lastY < MARGEM) d = -VEL_MAX * (1 - lastY / MARGEM);
+  else if (lastY > h - MARGEM) d = VEL_MAX * (1 - (h - lastY) / MARGEM);
+  if (!d) return;
+  var antes = window.scrollY;
+  window.scrollBy(0, d);
+  var andou = window.scrollY - antes;   // no topo ou no fundo, não anda nada
+  if (andou) { drag.startY -= andou; dragTo(lastX, lastY); }
+}
+
+// Um temporizador e não requestAnimationFrame: o cartão tem de continuar a
+// andar com o dedo parado na margem, e um rAF que não dispare (aba sem pintar)
+// deixaria o arrasto preso sem dar sinal.
+function comecarAuto() { if (!auto) auto = setInterval(passoAuto, 16); }
+function pararAuto() { if (auto) { clearInterval(auto); auto = 0; } }
 
 document.addEventListener('pointermove', function (e) {
   lastY = e.clientY; lastX = e.clientX;
   if (!drag) return;
   e.preventDefault();
-  drag.el.style.transform = 'translate(' + (e.clientX - drag.startX) + 'px,' + (e.clientY - drag.startY) + 'px)';
-  var r = drag.el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-  var list = blocks();
-  for (var i = 0; i < list.length; i++) {
-    var s = list[i];
-    if (s === drag.el) continue;
-    var sr = s.getBoundingClientRect();
-    if (cx >= sr.left && cx <= sr.right && cy >= sr.top && cy <= sr.bottom) return shuffle(s, e);
-  }
+  dragTo(e.clientX, e.clientY);
 }, { passive: false, capture: true });
 
 // já em modo de edição, o arrasto começa ao primeiro toque (sem esperar)
@@ -572,6 +630,7 @@ document.addEventListener('pointerdown', function (e) {
 
 function endDrag() {
   if (!drag) return;
+  pararAuto();
   drag.el.classList.remove('cw-drag');
   drag.el.style.transform = '';
   drag = null;
@@ -584,14 +643,51 @@ function endDrag() {
 
 var css = document.createElement('style');
 css.textContent =
-  // cada cartão é um item independente da grelha (duas colunas em ecrã largo)
-  '.cw-dash{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px;margin-top:14px;align-items:start}' +
+  // Duas colunas no telemóvel, quatro no computador — número fixo, não
+  // auto-fit: com colunas a aparecer e a desaparecer conforme a largura, os
+  // cartões nunca caíam onde se esperava.
+  // stretch, não start: cartões da mesma fila com alturas diferentes eram
+  // metade da desarrumação da vista
+  '.cw-dash{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin-top:14px;align-items:stretch}' +
+  '.cw-blk>.card{flex:1}' +
+
+  // Reserva, para quem não tem container queries: corte pela largura do ecrã.
+  // Erra em paisagem no telemóvel, onde a barra lateral aparece e leva 264px
+  // sem a media query saber.
+  '@media(min-width:1000px){.cw-dash{grid-template-columns:repeat(4,1fr);gap:14px}}' +
+  '.cw-dash .grid{grid-template-columns:repeat(2,1fr)}' +
+  '@media(min-width:1000px){.cw-dash .grid{grid-template-columns:repeat(4,1fr)}}' +
+
+  // O que vale de verdade: a grelha responde à largura que tem, não à do
+  // ecrã. É a única forma de o telemóvel deitado dar quatro colunas — e
+  // acompanha a rotação sem recarregar, porque é CSS e não uma decisão
+  // tomada no arranque.
+  '@supports (container-type:inline-size){' +
+    '.cw-cont{container-type:inline-size;container-name:vista}' +
+    '@container vista (max-width:559px){.cw-dash{grid-template-columns:repeat(2,1fr);gap:11px}}' +
+    // a fila de indicadores segue a mesma regra por dentro do seu bloco
+    '@container vista (max-width:559px){.cw-dash .grid{grid-template-columns:repeat(2,1fr);gap:11px}}' +
+    '@container vista (min-width:560px){.cw-dash .grid{grid-template-columns:repeat(4,1fr);gap:11px}}' +
+    '@container vista (min-width:760px){.cw-dash .grid{gap:14px}}' +
+    // 560px é o telemóvel deitado: com a barra lateral a ocupar 264px sobram
+    // ~592px de conteúdo, e quatro colunas dão ~137px a cada indicador. É
+    // abaixo dos 158px que a app usava como mínimo — folga trocada de
+    // propósito por ver os oito indicadores de uma vez em paisagem.
+    '@container vista (min-width:560px){.cw-dash{grid-template-columns:repeat(4,1fr);gap:11px}}' +
+    '@container vista (min-width:760px){.cw-dash{gap:14px}}' +
+  '}' +
+  // os cartões grandes ocupam duas células: a largura toda no telemóvel,
+  // metade no computador
+  '.cw-dash>.cw-wide{grid-column:span 2}' +
   '.cw-dash>.cw-full{grid-column:1/-1}' +
-  '.cw-blk{position:relative;min-width:0}' +
+  '.cw-dash>.cw-full>.section-title{margin:8px 0 0}' +
+  '.cw-blk{position:relative;min-width:0;display:flex;flex-direction:column}' +
   '.cw-blk .cw-h{display:none}' +
   '#view.cw-edit .cw-blk{border:1.5px dashed var(--line2);border-radius:18px;padding:9px;' +
     'background:var(--tint);touch-action:none;cursor:grab}' +
   '#view.cw-edit .cw-blk>*{pointer-events:none}' +
+  // a seta do indicador vive no mesmo canto que o punho de arrasto
+  '#view.cw-edit .cw-blk .kic{opacity:0}' +
   '#view.cw-edit .cw-blk .cw-h{display:grid;place-items:center;position:absolute;top:6px;right:8px;width:26px;height:26px;' +
     'border-radius:9px;background:var(--chip);color:var(--muted)}' +
   '#view.cw-edit .cw-blk.cw-drag{cursor:grabbing;box-shadow:var(--shadow);border-color:var(--accent);' +

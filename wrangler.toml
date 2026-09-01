@@ -42,8 +42,17 @@ MAX_USERS = "2000"
 
 # Os avisos para o Discord e o token de análise são segredos, definidos com
 # `wrangler secret put` ou pelo CI:
-#   DISCORD_DEV_WEBHOOK    · canal de quem programa: pedidos e erros
-#   DISCORD_ADMIN_WEBHOOK  · canal de quem opera: consumo diário
+#   DISCORD_DEV_WEBHOOK      · canal de quem programa: erros e falhas de deploy
+#   DISCORD_SUPORTE_WEBHOOK  · canal de suporte: pedidos contados por pessoas
+#   DISCORD_SUPORTE_CHANNEL  · o mesmo canal, para o bot poder pôr botões
+#   DISCORD_ADMIN_WEBHOOK    · canal de quem opera: consumo diário
+#
+# Papéis do bot. Cada um aceita ids de pessoa ou ids de cargo do Discord,
+# separados por vírgulas ou espaços — com cargos, entra e sai gente sem tocar
+# nos segredos. Sem nenhum definido, quem tiver acesso ao servidor é admin.
+#   DISCORD_ADMINS   · opera: consumo, cópias, e tudo o que os outros veem
+#   DISCORD_DEVS     · constrói: erros da app e do servidor, infra, segurança
+#   DISCORD_SUPORTE  · fala com quem usa: só os pedidos contados por pessoas
 #   CF_ANALYTICS_TOKEN     · token com Account Analytics · Read
 #   CF_ACCOUNT_ID          · id da conta Cloudflare
 
@@ -76,8 +85,10 @@ bucket_name = "gestor-imobiliario-dev"
 enabled = true
 
 [env.dev.vars]
-# A entrada com Google fica de fora: o endereço de dev não está autorizado
-# na consola da Google, e um botão que falha é pior do que não existir.
-GOOGLE_CLIENT_ID = ""
+# O mesmo cliente OAuth da produção: a consola da Google aceita várias origens
+# autorizadas por cliente. Para isto funcionar, o endereço de dev tem de estar
+# em "Origens JavaScript autorizadas" — sem isso o botão aparece e a Google
+# recusa-o com origin_mismatch.
+GOOGLE_CLIENT_ID = "34372660209-our5uhdtk77vnfo34nf64u1m9o2c3erl.apps.googleusercontent.com"
 MAX_USERS = "50"
 ENV_NAME = "dev"

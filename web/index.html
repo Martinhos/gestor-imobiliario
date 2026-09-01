@@ -3,7 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="color-scheme" content="light">
+<!-- "light dark" = a página sabe apresentar-se das duas maneiras. Declarar só
+     "light" é dizer ao motor que não há tema escuro, e há motores (WebKit, e
+     o WebView do Android) que respondem a isso com prefers-color-scheme:light
+     mesmo com o aparelho em escuro — o modo automático ficava preso no claro.
+     O applyTheme() estreita isto para um dos dois assim que decide. -->
+<meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#1a3a2c" id="metaTheme">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -13,9 +18,51 @@
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <title>Gestor Imobiliário</title>
+<script>
+/* Armadilha de erros, antes de tudo o resto.
+   O relato normal vive em cloud/ajuda.js, que é o 27.º script a carregar: se
+   um módulo anterior rebentar, a app fica em branco e nunca ninguém sabe
+   porquê. Isto apanha esses — guarda-os para o relato normal os levar, e se
+   ele não chegar a existir em três segundos, envia-os por si. */
+(function () {
+  var vistos = {}, fila = [];
+  window.__erros = fila;
+  function apanha(msg, detalhe) {
+    var chave = String(msg).slice(0, 120);
+    if (vistos[chave] || fila.length >= 8) return;
+    vistos[chave] = 1;
+    fila.push({ message: String(msg).slice(0, 500), detail: String(detalhe || '').slice(0, 800) });
+  }
+  window.addEventListener('error', function (e) {
+    apanha(e.message, (e.filename || '') + ':' + (e.lineno || '') + ' · arranque\n' +
+      String((e.error && e.error.stack) || '').slice(0, 500));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    apanha('Promessa rejeitada: ' + ((r && r.message) || r),
+      String((r && r.stack) || '').slice(0, 500) + ' · arranque');
+  });
+  setTimeout(function () {
+    if (window.__errosLevados || !fila.length) return;
+    window.__errosLevados = 1;
+    fila.splice(0).forEach(function (r) {
+      r.detail = (r.detail || '') + '\n\n(a app não chegou a arrancar)';
+      try {
+        fetch('/api/reports', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r),
+        }).catch(function () {});
+      } catch (e) {}
+    });
+  }, 3000);
+})();
+</script>
 <style>
 :root{
-  color-scheme:light;
+  /* A propriedade sobrepõe-se ao <meta>, por isso tem de dizer o mesmo: a
+     página sabe apresentar-se clara e escura. Quem escolhe é o applyTheme(),
+     que estreita isto para um dos dois com um estilo em linha. */
+  color-scheme:light dark;
   --bg:#f7f8fa; --card:#fff; --field:#fff; --chip:#f2f4f3; --tint:#f6faf8;
   --ink:#17221d; --muted:#5a635e; --line:#e7ebe8; --line2:#cfd8d3;
   --accent:#244c3b; --accent-ink:#fff; --accent-soft:#dfece6; --accent-press:#1c3d2f;
@@ -402,6 +449,7 @@ textarea{min-height:90px;resize:vertical}
 <script src="app/definicoes.js"></script>
 <script src="app/copias.js"></script>
 <script src="app/arranque.js"></script>
+<script src="avisos.js"></script>
 <script src="legal.js"></script>
 <script src="cloud/nucleo.js"></script>
 <script src="cloud/anexos.js"></script>
@@ -411,5 +459,6 @@ textarea{min-height:90px;resize:vertical}
 <script src="cloud/painel.js"></script>
 <script src="cloud/filtros.js"></script>
 <script src="cloud/entrada.js"></script>
+<script src="cloud/novidades.js"></script>
 </body>
 </html>
