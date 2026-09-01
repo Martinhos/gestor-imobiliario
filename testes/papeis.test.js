@@ -12,6 +12,7 @@ import { CATEGORIAS } from '../worker/src/lib/http.js';
 const quem = (id, cargos = []) => ({ member: { user: { id }, roles: cargos } });
 
 const ENV = {
+  DISCORD_MASTER: 'm1',
   DISCORD_ADMINS: 'a1',
   DISCORD_DEVS: 'd1 d2',
   DISCORD_SUPORTE: 's1,cargo-suporte',
@@ -19,6 +20,7 @@ const ENV = {
 
 describe('quem é quem', () => {
   test('reconhece cada lista', () => {
+    assert.equal(papel(ENV, quem('m1')), 'master');
     assert.equal(papel(ENV, quem('a1')), 'admin');
     assert.equal(papel(ENV, quem('d2')), 'dev');
     assert.equal(papel(ENV, quem('s1')), 'suporte');
@@ -35,10 +37,11 @@ describe('quem é quem', () => {
 
   test('estar em duas listas dá a mais alta', () => {
     assert.equal(papel(ENV, quem('a1', ['cargo-suporte'])), 'admin');
+    assert.equal(papel(ENV, quem('m1', ['cargo-suporte'])), 'master', 'master fica acima de tudo');
   });
 
-  test('sem nada configurado, quem entra no servidor é admin', () => {
-    assert.equal(papel({}, quem('seja-quem-for')), 'admin');
+  test('sem nada configurado, quem entra no servidor manda', () => {
+    assert.equal(papel({}, quem('seja-quem-for')), 'master');
   });
 
   test('separa vírgulas, espaços e quebras de linha', () => {
@@ -48,8 +51,15 @@ describe('quem é quem', () => {
 });
 
 describe('o que cada papel corre', () => {
-  test('o admin corre tudo', () => {
-    Object.keys(PERMISSOES).forEach((c) => assert.equal(podeCorrer('admin', c), true, c));
+  test('o master e o admin correm tudo', () => {
+    Object.keys(PERMISSOES).forEach((c) => {
+      assert.equal(podeCorrer('master', c), true, 'master · ' + c);
+      assert.equal(podeCorrer('admin', c), true, 'admin · ' + c);
+    });
+  });
+
+  test('o master vê todas as categorias de pedido', () => {
+    assert.deepEqual([...CATS_DO_PAPEL.master].sort(), [...CATS_DO_PAPEL.admin].sort());
   });
 
   test('a operação é só do admin', () => {
@@ -82,7 +92,7 @@ describe('o que cada papel corre', () => {
   });
 
   test('o admin vê pelo menos tudo o que os outros veem', () => {
-    const a = comandosDe('admin');
+    const a = comandosDe('master');
     ['dev', 'suporte'].forEach((p) => {
       comandosDe(p).forEach((c) => assert.ok(a.includes(c), 'admin também corre /' + c));
     });
