@@ -287,9 +287,9 @@ function showTermsGate() {
   var el = document.createElement('div');
   el.id = 'cwTerms';
   el.style.cssText = 'position:fixed;inset:0;z-index:196;background:var(--bg);overflow:auto;' +
-    'display:flex;align-items:center;justify-content:center;padding:22px';
+    'display:flex;justify-content:center;padding:22px';
   el.innerHTML =
-    '<div class="card" style="max-width:460px;width:100%;padding:24px">' +
+    '<div class="card" style="max-width:460px;width:100%;padding:24px;margin:auto">' +
     '<div style="display:flex;gap:12px;align-items:center">' +
     '<span class="avatar" style="background:var(--accent-soft);color:var(--accent)">' + ic('contract', 20) + '</span>' +
     '<div><div class="title" style="font-size:18px">Termos atualizados</div>' +
@@ -374,9 +374,9 @@ function showLegalGate() {
   var el = document.createElement('div');
   el.id = 'cwLegal';
   el.style.cssText = 'position:fixed;inset:0;z-index:195;background:var(--bg);overflow:auto;' +
-    'display:flex;align-items:center;justify-content:center;padding:22px';
+    'display:flex;justify-content:center;padding:22px';
   el.innerHTML =
-    '<div class="card" style="max-width:400px;width:100%;padding:24px">' +
+    '<div class="card" style="max-width:400px;width:100%;padding:24px;margin:auto">' +
     '<div style="display:flex;gap:12px;align-items:center">' +
     '<span class="avatar" style="background:var(--warn-soft);color:var(--warn)">' + ic('info', 20) + '</span>' +
     '<div><div class="title" style="font-size:18px">Isto é uma demonstração</div>' +

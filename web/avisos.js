@@ -26,6 +26,30 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 27,
+    data: '2026-09-01',
+    titulo: 'Primeiros passos e tutoriais',
+    seccoes: [
+      {
+        titulo: 'Um caminho para quem chega',
+        afeta: ['app'],
+        itens: [
+          'A vista geral passa a mostrar o que falta fazer: preencher o perfil, adicionar imóveis, registar contratos e confirmar movimentos.',
+          'São sugestões, não obrigações — o cartão fecha-se e não volta.',
+          'Cada passo tem um tutorial: um cartão que flutua por cima da app, com o que fazer, e que se pode percorrer para a frente e para trás.',
+        ],
+      },
+      {
+        titulo: 'Correções',
+        afeta: ['app'],
+        itens: [
+          'O painel de filtros passa a acompanhar a página. Ficava preso ao topo e desaparecia ao primeiro deslize.',
+          'Nos telemóveis com as barras do browser à mostra, o topo das janelas deixa de ficar escondido.',
+        ],
+      },
+    ],
+  },
+  {
     v: 26,
     data: '2026-09-01',
     titulo: 'Tratar vários movimentos de uma vez',

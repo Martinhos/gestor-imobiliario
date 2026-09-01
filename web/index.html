@@ -344,10 +344,14 @@ textarea{min-height:90px;resize:vertical}
 .fabmenu{position:fixed;right:18px;bottom:calc(86px + var(--inset-bottom));z-index:58;display:none;flex-direction:column;gap:9px;align-items:flex-end}
 .fabmenu.on{display:flex}
 .fabmenu .btn{box-shadow:0 6px 18px rgba(0,0,0,.22)}
-.fwrap{position:relative}
+/* O painel de filtros ancora aqui. Pegajoso, e não só relativo: estava preso
+   ao topo do conteúdo e desaparecia ao primeiro scroll — abria-se o filtro,
+   rolava-se para ver o efeito, e o painel ficava para trás. Assim acompanha,
+   e o painel lá dentro continua a alinhar-se sozinho com o conteúdo. */
+.fwrap{position:relative;position:sticky;top:calc(57px + var(--inset-top));z-index:46}
 .fpanel{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:45;margin:0}
 .fpanel.on{display:block}
-.fpanel>.card{box-shadow:0 16px 38px rgba(0,0,0,.30);max-height:min(72vh,560px);overflow:auto;overscroll-behavior:contain}
+.fpanel>.card{box-shadow:0 16px 38px rgba(0,0,0,.30);max-height:min(72vh,560px);max-height:min(72dvh,560px);overflow:auto;overscroll-behavior:contain}
 .fabpad{height:84px}
 .totop{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + var(--inset-bottom));z-index:57;width:44px;height:44px;
   border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);display:none;align-items:center;justify-content:center;
@@ -394,12 +398,15 @@ textarea{min-height:90px;resize:vertical}
 @media(max-width:520px){.invrow{grid-template-columns:auto 1fr auto;grid-template-areas:"c n x" "c q s"}
   .invrow .i-n{grid-area:n}.invrow .i-q{grid-area:q}.invrow .i-s{grid-area:s}}
 
-.modal{position:fixed;inset:0;z-index:60;display:none}
+/* height em dvh: com as barras do browser à mostra, o inset:0 dava a altura
+   do ecrã SEM elas, e o modal ficava centrado num espaço maior do que o
+   visível — o topo saía por cima e não havia como lá chegar. */
+.modal{position:fixed;inset:0;height:100dvh;z-index:60;display:none}
 .modal.open{display:block}
 .modal.under .sheet{pointer-events:none}
 .modal.under .bg{background:rgba(6,12,9,.35)}
 .modal .bg{position:absolute;inset:0;touch-action:none;background:rgba(6,12,9,.6)}
-.sheet{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(580px,calc(100vw - 28px));max-height:min(88vh,880px);background:var(--card);border-radius:20px;display:flex;flex-direction:column;overflow:hidden;box-shadow:var(--shadow)}
+.sheet{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(580px,calc(100vw - 28px));max-height:min(88vh,880px);max-height:min(88dvh,880px);background:var(--card);border-radius:20px;display:flex;flex-direction:column;overflow:hidden;box-shadow:var(--shadow)}
 .sheet .head{padding:16px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
 .sheet .head h2{margin:0;font-size:17px;letter-spacing:-.02em}
 .sheet .body{overscroll-behavior:contain;padding:16px 18px;overflow:auto;scroll-padding-bottom:180px}
@@ -468,5 +475,6 @@ textarea{min-height:90px;resize:vertical}
 <script src="cloud/entrada.js"></script>
 <script src="cloud/novidades.js"></script>
 <script src="cloud/selecao.js"></script>
+<script src="cloud/guia.js"></script>
 </body>
 </html>

@@ -43,13 +43,13 @@ function showAuth(msg) {
     authEl = document.createElement('div');
     authEl.id = 'cwAuth';
     authEl.style.cssText = 'position:fixed;inset:0;z-index:200;background:var(--bg);overflow:auto;' +
-      'display:flex;align-items:center;justify-content:center;padding:22px';
+      'display:flex;justify-content:center;padding:22px';
     document.body.appendChild(authEl);
   }
   var login = CW.showAuthMode === 'login';
   authEl.style.display = 'flex';
   authEl.innerHTML =
-    '<div class="card" style="max-width:400px;width:100%;padding:24px">' +
+    '<div class="card" style="max-width:400px;width:100%;padding:24px;margin:auto">' +
     '<div style="display:flex;gap:12px;align-items:center;margin-bottom:6px">' +
     '<span class="avatar" style="background:var(--accent);color:var(--accent-ink)">' + (typeof ic === 'function' ? ic('building', 20) : '') + '</span>' +
     '<div><div class="title" style="font-size:18px">Gestor Imobiliário</div>' +
