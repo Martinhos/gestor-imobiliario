@@ -14,13 +14,22 @@ vSettings = function () {
     var t = db.settings.theme;
     return backRow + card('Tema', 'Como a app se apresenta',
       '<div class="seg c3">' +
-      [['auto', 'auto', 'Automático', 'segue o telemóvel'], ['light', 'sun', 'Claro', ''], ['dark', 'moon', 'Escuro', '']]
+      // o subtítulo do automático diz o que ele está a resolver agora: sem
+      // isso, um browser que não passa a preferência do sistema parece um
+      // erro da app
+      [['auto', 'auto', 'Automático', 'agora: ' + (mq().matches ? 'escuro' : 'claro')],
+        ['light', 'sun', 'Claro', ''], ['dark', 'moon', 'Escuro', '']]
         .map(function (o) {
           return '<button type="button" class="opt ' + (t === o[0] ? 'on' : '') + '" onclick="setTheme(\'' + o[0] + '\')">' +
             '<span class="ic">' + ic(o[1], 18) + '</span><b>' + o[2] + '</b>' +
             (o[3] ? '<small>' + o[3] + '</small>' : '') + '</button>';
         }).join('') + '</div>' +
-      '<div class="hint" style="margin-top:11px">Vale só neste aparelho.</div>');
+      '<div class="hint" style="margin-top:11px">Vale só neste aparelho.</div>' +
+      (t === 'auto' && !mq().matches
+        ? '<div class="hint" style="margin-top:9px">O automático segue o que o browser diz preferir, e este está a dizer <b>claro</b>. ' +
+          'Se tens o aparelho em escuro, é o browser que não está a passar a preferência — no browser da Samsung liga-se em ' +
+          '<b>Definições → Labs → Usar tema escuro do site</b>. Escolher <b>Escuro</b> aqui funciona sempre.</div>'
+        : ''));
   }
   var h = _vSettings();
   if (!setPage) {
