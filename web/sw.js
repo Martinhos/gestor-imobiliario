@@ -1,6 +1,15 @@
 /* Service worker: a app abre offline (a API sincroniza quando voltar a rede). */
-const CACHE = 'gi-shell-v3';
-const SHELL = ['/', '/index.html', '/cloud.js', '/legal.js', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'];
+const CACHE = 'gi-shell-v4';
+// A app passou a viver em módulos: guardam-se todos, senão abre offline
+// com metade do código.
+const APP = ['dados', 'anexos', 'auxiliares', 'graficos', 'credito', 'componentes',
+  'metricas', 'navegacao', 'vistas', 'imovel', 'pessoas', 'contrato', 'planeados',
+  'movimento', 'creditos', 'splitwise', 'contrato-pdf', 'avaliacao', 'definicoes',
+  'copias', 'arranque'].map((n) => '/app/' + n + '.js');
+const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'ajuda', 'painel',
+  'filtros', 'entrada'].map((n) => '/cloud/' + n + '.js');
+const SHELL = ['/', '/index.html', '/legal.js', '/manifest.webmanifest',
+  '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'].concat(APP, NUVEM);
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

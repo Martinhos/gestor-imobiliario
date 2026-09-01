@@ -21,14 +21,26 @@ const comandos = [
   {
     name: 'pedidos',
     description: 'Pedidos de ajuda por tratar',
-    options: [{
-      type: TEXTO, name: 'estado', description: 'Filtrar por estado', required: false,
-      choices: [
-        { name: 'recebidos', value: 'criado' },
-        { name: 'em resolução', value: 'resolucao' },
-        { name: 'concluídos', value: 'concluido' },
-      ],
-    }],
+    options: [
+      {
+        type: TEXTO, name: 'categoria', description: 'De onde veio', required: false,
+        choices: [
+          { name: 'contado por alguém', value: 'user' },
+          { name: 'erro na app', value: 'client' },
+          { name: 'erro no servidor', value: 'server' },
+          { name: 'infraestrutura', value: 'infra' },
+          { name: 'segurança', value: 'seguranca' },
+        ],
+      },
+      {
+        type: TEXTO, name: 'estado', description: 'Filtrar por estado', required: false,
+        choices: [
+          { name: 'recebidos', value: 'criado' },
+          { name: 'em resolução', value: 'resolucao' },
+          { name: 'concluídos', value: 'concluido' },
+        ],
+      },
+    ],
   },
   {
     name: 'pedido',
