@@ -31,24 +31,36 @@ const cut = (s, n) => {
 
 // Com bot configurado, a mensagem leva botões para resolver o pedido sem sair
 // do Discord; sem ele, vai pelo webhook, sem botões.
-export function notifyDev(env, ctx, embed, components) {
+function avisar(env, ctx, embed, components, canal, webhook, reserva) {
   // fora da produção, o aviso vai marcado para não se confundir
   if (env.ENV_NAME) {
     embed = Object.assign({}, embed, { title: '[' + env.ENV_NAME + '] ' + embed.title });
   }
   const p = (async () => {
-    if (env.DISCORD_BOT_TOKEN && env.DISCORD_DEV_CHANNEL) {
+    if (env.DISCORD_BOT_TOKEN && canal) {
       const { postAsBot } = await import('./discord.js');
-      const ok = await postAsBot(env, env.DISCORD_DEV_CHANNEL, {
-        embeds: [embed],
-        components: components || [],
-      });
-      if (ok) return true;
+      if (await postAsBot(env, canal, { embeds: [embed], components: components || [] })) return true;
     }
-    return post(env.DISCORD_DEV_WEBHOOK, { embeds: [embed] });
+    if (webhook && await post(webhook, { embeds: [embed] })) return true;
+    // um canal por configurar não pode calar o aviso: cai para o de quem
+    // programa, que é o que existe desde o princípio
+    return reserva ? reserva() : false;
   })();
   if (ctx && ctx.waitUntil) ctx.waitUntil(p);
   return p;
+}
+
+// Erros da app e do servidor, infraestrutura, segurança: quem constrói.
+export function notifyDev(env, ctx, embed, components) {
+  return avisar(env, ctx, embed, components, env.DISCORD_DEV_CHANNEL, env.DISCORD_DEV_WEBHOOK);
+}
+
+// Pedidos contados por pessoas: quem fala com quem usa. Sem canal de suporte
+// configurado, vão para onde iam antes.
+export function notifySuporte(env, ctx, embed, components) {
+  return avisar(env, ctx, embed, components,
+    env.DISCORD_SUPORTE_CHANNEL, env.DISCORD_SUPORTE_WEBHOOK,
+    () => avisar(env, null, embed, components, env.DISCORD_DEV_CHANNEL, env.DISCORD_DEV_WEBHOOK));
 }
 
 export function ticketEmbed(t, user) {
