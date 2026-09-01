@@ -114,6 +114,11 @@ jobs:
       - name: Aplicar migrações D1
         run: npx wrangler@4 d1 migrations apply "$DB_NAME" --remote $ENV_FLAG
 
+      # A versao que a app vai buscar sai das notas de publicacao, e nao de um
+      # numero escrito a mao noutro sitio.
+      - name: Gerar a versao
+        run: node scripts/versao.js
+
       - name: Deploy do worker
         run: npx wrangler@4 deploy $ENV_FLAG
 

@@ -68,7 +68,7 @@ vSettings = function () {
 
       sect('Sobre') +
       navRow('Aviso legal', 'Termos, privacidade e demonstração', 'contract', 'legal') + gap +
-      card('Gestor Imobiliário', 'Versão 23 · demonstração',
+      card('Gestor Imobiliário', 'Versão ' + VERSAO + ' · demonstração',
         '<div class="stat"><span>Imóveis · contratos</span><b>' + db.properties.length + ' · ' + db.contracts.length + '</b></div>' +
         '<div class="stat"><span>Inquilinos</span><b>' + db.tenants.length + '</b></div>' +
         '<div class="stat" style="border:0"><span>Movimentos</span><b>' + db.transactions.length + '</b></div>');

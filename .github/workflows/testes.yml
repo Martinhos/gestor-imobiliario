@@ -74,6 +74,11 @@ jobs:
           done
           exit $falta
 
+      # Subir a versao sem regenerar o ficheiro faria a app pedir-se a si
+      # propria uma atualizacao que nunca chega.
+      - name: Confirmar que a versao publicada esta em dia
+        run: node scripts/versao.js --check
+
       - name: Validar as migrações da base de dados
         run: |
           set -e
