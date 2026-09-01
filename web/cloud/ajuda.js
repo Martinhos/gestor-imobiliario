@@ -47,7 +47,27 @@ function vAjuda() {
       : (CW.tickets === null ? '' : '<div class="hint" style="margin-top:16px">Ainda não enviaste nenhum pedido.</div>')) +
     (fechados.length
       ? '<div class="section-title">Concluídos</div><div class="list" style="gap:9px">' + fechados.slice(0, 10).map(linha).join('') + '</div>'
-      : '');
+      : '') +
+    tutoriaisNaAjuda();
+}
+
+/* Os tutoriais listados um a um: quem precisa de um não devia ter de esperar
+   que a app lho ofereça na vista geral, nem de dispensar o cartão dos
+   primeiros passos para nunca mais lá chegar. */
+function tutoriaisNaAjuda() {
+  if (typeof CW.listaDeTutoriais !== 'function') return '';
+  var ts = CW.listaDeTutoriais();
+  if (!ts.length) return '';
+  return '<div class="section-title">Como se faz</div>' +
+    '<div class="list" style="gap:9px">' + ts.map(function (t) {
+      return '<div class="card tap" style="padding:12px 13px" onclick="CW.guiaAbrir(\'' + t.id + '\')">' +
+        '<div class="row-between" style="align-items:center;gap:10px">' +
+        '<div style="min-width:0"><b style="display:block">' + esc(t.titulo) + '</b>' +
+        '<span class="small">' + t.passos + ' passos' + (t.visto ? ' · já viste' : '') + '</span>' +
+        '<span class="small" style="display:block;margin-top:3px">' + esc(t.resumo) + '</span></div>' +
+        '<span style="flex:0 0 auto;color:var(--muted);transform:rotate(180deg)">' + ic('chev', 18) + '</span>' +
+        '</div></div>';
+    }).join('') + '</div>';
 }
 
 CW.newTicket = function (kind) {

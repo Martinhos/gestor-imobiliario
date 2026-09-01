@@ -109,10 +109,23 @@ function dentroDaPagina() {
       if (cs.display === 'none' || cs.position !== 'fixed') return;
       const z = Number(cs.zIndex) || 0;
       const r = el.getBoundingClientRect();
-      // o toast e as dicas são avisos: podem e devem ficar por cima
-      const avisa = /toast|tip/.test(el.className) || el.id === 'cwDoc' || /^cw(Legal|Terms|Upd|Auth)/.test(el.id || '');
-      if (z > zModal && r.width > 0 && r.height > 0 && !avisa) {
-        falhar('nada tapa um modal', (el.id || el.className || el.tagName) + ' está em z-index ' + z + ', acima de ' + zModal);
+      /* Avisos e guias podem ficar por cima de propósito: um toast, uma dica,
+         um ecrã de aviso, o cartão de um tutorial. Mas quem passa por cima
+         tem de deixar os botões do modal alcançáveis — senão está a tapar
+         precisamente aquilo que se pede à pessoa para carregar. */
+      const avisa = /toast|tip/.test(el.className) || el.id === 'cwDoc' ||
+        /^cw(Legal|Terms|Upd|Auth|Guia)/.test(el.id || '');
+      if (z > zModal && r.width > 0 && r.height > 0) {
+        if (!avisa) {
+          falhar('nada tapa um modal', (el.id || el.className || el.tagName) + ' está em z-index ' + z + ', acima de ' + zModal);
+        } else {
+          const pes = document.querySelector('.modal.open .foot');
+          const pr = pes && pes.getBoundingClientRect();
+          if (pr && pr.height && !(r.bottom < pr.top || r.top > pr.bottom || r.right < pr.left || r.left > pr.right)) {
+            falhar('o que passa por cima não tapa os botões',
+              (el.id || el.className) + ' cobre o rodapé do modal');
+          }
+        }
       }
     });
   }

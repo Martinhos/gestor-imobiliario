@@ -55,12 +55,36 @@ CW.guiaFechar = function () {
   if (el) el.remove();
 };
 
+/* Com uma janela aberta, o cartão encosta ao topo.
+
+   Ficava por baixo da janela e desaparecia: entrava-se nas definições para
+   preencher o perfil e o tutorial sumia, sem forma de continuar. Agora passa
+   por cima — e muda para o topo, senão tapava os botões de guardar e
+   cancelar, que estão em baixo. */
+function guiaAjustar() {
+  var el = document.getElementById('cwGuia');
+  if (!el) return;
+  el.classList.toggle('sobre-janela', !!document.querySelector('.modal.open'));
+}
+
+['openModal', 'closeAllModals', 'closeModal'].forEach(function (nome) {
+  var antes = window[nome];
+  if (typeof antes !== 'function') return;
+  window[nome] = function () {
+    var r = antes.apply(this, arguments);
+    setTimeout(guiaAjustar, 0);
+    return r;
+  };
+});
+
 function guiaPintar() {
   if (!guia) return;
   var p = guia.passos[guia.i], n = guia.passos.length;
-  // um passo pode levar a pessoa ao sítio onde a ação se faz
+  /* Um passo leva ao ecrã certo, e mais nada. Abrir janelas por conta própria
+     era desorientador — a janela aparecia entre um passo e o seguinte, sem
+     ninguém a ter pedido, e tapava o próprio tutorial. Quem quiser preencher
+     abre; quem não quiser continua a ler. */
   if (p.ir && tab !== p.ir) { go(p.ir); }
-  if (p.abrir) { try { p.abrir(); } catch (e) {} }
 
   var el = document.getElementById('cwGuia');
   if (!el) {
@@ -68,6 +92,7 @@ function guiaPintar() {
     el.id = 'cwGuia';
     document.body.appendChild(el);
   }
+  guiaAjustar();
   el.innerHTML =
     '<div class="card guia-cartao">' +
       '<div class="row-between" style="align-items:flex-start;gap:10px">' +
@@ -102,9 +127,9 @@ var TUTORIAIS = {
       },
       {
         titulo: 'Onde se preenche',
-        texto: 'Em <b>Definições → O meu perfil</b>. Abre-se aqui ao lado.',
+        texto: 'Estás nas <b>Definições</b>. Toca em <b>O meu perfil</b>, no topo. ' +
+          'Este cartão fica à vista enquanto preenches.',
         ir: 'settings',
-        abrir: function () { try { CW.editProfile(); } catch (e) {} },
       },
       {
         titulo: 'O que vale a pena preencher já',
@@ -276,6 +301,20 @@ function cartaoPassos() {
     '</div></div>';
 }
 
+/* Todos os tutoriais, para quem os quiser rever. Vive aqui e não na ajuda
+   porque é aqui que estão — a ajuda só os mostra. */
+CW.listaDeTutoriais = function () {
+  var f = feitos();
+  return Object.keys(TUTORIAIS).map(function (id) {
+    var t = TUTORIAIS[id];
+    return {
+      id: id, titulo: t.titulo, passos: t.passos.length,
+      resumo: t.passos[0].texto.replace(/<[^>]+>/g, '').slice(0, 90) + '…',
+      visto: !!f[id],
+    };
+  });
+};
+
 /* --------------------------------------------------------------- ligações */
 
 var _vDashboard_guia = vDashboard;
@@ -316,5 +355,8 @@ css.textContent =
     'pointer-events:none;display:flex;justify-content:center}' +
   '#cwGuia .guia-cartao{pointer-events:auto;width:100%;max-width:420px;padding:14px 16px;' +
     'box-shadow:var(--shadow);border-color:var(--accent)}' +
-  '@media(min-width:900px){#cwGuia{left:auto;right:22px;max-width:420px;bottom:calc(22px + var(--inset-bottom))}}';
+  // por cima de uma janela aberta (60) e encostado ao topo, longe dos botões
+  '#cwGuia.sobre-janela{z-index:61;bottom:auto;top:calc(12px + var(--inset-top))}' +
+  '@media(min-width:900px){#cwGuia{left:auto;right:22px;max-width:420px;bottom:calc(22px + var(--inset-bottom))}' +
+    '#cwGuia.sobre-janela{top:calc(16px + var(--inset-top))}}';
 document.head.appendChild(css);
