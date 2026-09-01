@@ -76,8 +76,10 @@ bucket_name = "gestor-imobiliario-dev"
 enabled = true
 
 [env.dev.vars]
-# A entrada com Google fica de fora: o endereço de dev não está autorizado
-# na consola da Google, e um botão que falha é pior do que não existir.
-GOOGLE_CLIENT_ID = ""
+# O mesmo cliente OAuth da produção: a consola da Google aceita várias origens
+# autorizadas por cliente. Para isto funcionar, o endereço de dev tem de estar
+# em "Origens JavaScript autorizadas" — sem isso o botão aparece e a Google
+# recusa-o com origin_mismatch.
+GOOGLE_CLIENT_ID = "34372660209-our5uhdtk77vnfo34nf64u1m9o2c3erl.apps.googleusercontent.com"
 MAX_USERS = "50"
 ENV_NAME = "dev"
