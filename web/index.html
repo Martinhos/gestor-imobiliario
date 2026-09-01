@@ -3,7 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="color-scheme" content="light">
+<!-- "light dark" = a página sabe apresentar-se das duas maneiras. Declarar só
+     "light" é dizer ao motor que não há tema escuro, e há motores (WebKit, e
+     o WebView do Android) que respondem a isso com prefers-color-scheme:light
+     mesmo com o aparelho em escuro — o modo automático ficava preso no claro.
+     O applyTheme() estreita isto para um dos dois assim que decide. -->
+<meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#1a3a2c" id="metaTheme">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -54,7 +59,10 @@
 </script>
 <style>
 :root{
-  color-scheme:light;
+  /* A propriedade sobrepõe-se ao <meta>, por isso tem de dizer o mesmo: a
+     página sabe apresentar-se clara e escura. Quem escolhe é o applyTheme(),
+     que estreita isto para um dos dois com um estilo em linha. */
+  color-scheme:light dark;
   --bg:#f7f8fa; --card:#fff; --field:#fff; --chip:#f2f4f3; --tint:#f6faf8;
   --ink:#17221d; --muted:#5a635e; --line:#e7ebe8; --line2:#cfd8d3;
   --accent:#244c3b; --accent-ink:#fff; --accent-soft:#dfece6; --accent-press:#1c3d2f;

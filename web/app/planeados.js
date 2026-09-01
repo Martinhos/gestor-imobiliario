@@ -136,7 +136,9 @@ function applyTemplate(x){
 }
 function newFromTemplate(id){const x=(db.templates||[]).find(y=>y.id===id);if(!x)return;closeAllModals();txModal(null,x.tx.kind,x.tx.propertyId,null,x.tx.contractId,JSON.parse(JSON.stringify(x.tx)))}
 /* cartão dos movimentos em atraso / por confirmar */
+let pendAll=false;
 function pendingCard(all){
+  pendAll=!!all;   // para o colapso se redesenhar com a mesma lista
   const pend=all?recPending():recActive();
   if(!pend.length)return '';
   const row=(r)=>{const late=recIsLate(r);return `<div class="card tap pend ${late?'late':''}" style="padding:11px 13px" onclick="confirmRec('${r.id}')">
@@ -148,12 +150,24 @@ function pendingCard(all){
         <button class="btn sm primary" onclick="${stop}quickConfirmRec('${r.id}')">${ic('check',14)} Confirmar</button>
         <button class="btn sm" onclick="${stop}skipRec('${r.id}')">${r.muted?'Reativar':'Silenciar'}</button>
         <span class="small" style="margin-left:auto">${EVERY[r.every]||''}</span></div></div>`};
-  const nl=pend.filter(recIsLate).length;
-  return `<div class="card" style="margin-bottom:14px">
-    <div class="row-between"><div><div class="title">Movimentos por confirmar</div>
-      <div class="small">${pend.length} à espera${nl?' · <b class="neg">'+nl+' em atraso</b>':''}</div></div>${ic('swap',22)}</div>
-    <div class="list" style="gap:8px;margin-top:12px">${pend.map(row).join('')}</div>
-    <div class="hint" style="margin-top:9px">Confirmar regista o movimento e agenda o seguinte. Silenciar deixa-o à espera, sem avisos.</div></div>`;
+  const nl=pend.filter(recIsLate).length,open=!pendShut();
+  return `<div class="card" id="pendCard" style="margin-bottom:14px">
+    <div class="row-between tap" style="align-items:center;cursor:pointer;margin:-16px;padding:16px" onclick="pendToggle()">
+      <div><div class="title">Movimentos por confirmar</div>
+        <div class="small">${pend.length} à espera${nl?' · <b class="neg">'+nl+' em atraso</b>':''}${open?'':' · toca para abrir'}</div></div>
+      <span style="flex:0 0 auto;display:inline-flex;transform:rotate(${open?'90':'-90'}deg);transition:transform .15s">${ic('chev',20)}</span></div>
+    ${open?`<div class="list" style="gap:8px;margin-top:12px">${pend.map(row).join('')}</div>
+    <div class="hint" style="margin-top:9px">Confirmar regista o movimento e agenda o seguinte. Silenciar deixa-o à espera, sem avisos.</div>`:''}</div>`;
+}
+/* Aberto ou fechado fica no aparelho: num telemóvel a lista empurra o resto da
+   vista geral para baixo, e num ecrã grande não estorva. */
+const PEND_LS='gi_pend_shut';
+function pendShut(){try{return localStorage.getItem(PEND_LS)==='1'}catch(e){return false}}
+function pendToggle(){
+  try{localStorage.setItem(PEND_LS,pendShut()?'0':'1')}catch(e){}
+  const e=document.getElementById('pendCard');
+  if(!e)return render();
+  e.outerHTML=pendingCard(pendAll);
 }
 /* página das recorrências e modelos */
 function vRecurring(){
