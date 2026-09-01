@@ -53,6 +53,18 @@ const CENAS = [
   { nome: 'painel-de-filtros', fazer: `go('properties'); render(); document.getElementById('hdrFilt').click()` },
   { nome: 'novidades', fazer: `CW.verNovidades(AVISOS.slice(0,1))` },
   { nome: 'edicao-dos-cartoes', fazer: `go('dashboard'); render(); CW.enterEdit()` },
+  {
+    nome: 'selecao-de-movimentos',
+    fazer: `go('transactions'); render();
+      const l=document.querySelector('#view .txrow');
+      if(l) CW.selEntrar(l.getAttribute('data-lp').replace('tx:',''));`,
+  },
+  {
+    nome: 'selecao-com-tudo-marcado',
+    fazer: `go('transactions'); render();
+      const l=document.querySelector('#view .txrow');
+      if(l){ CW.selEntrar(l.getAttribute('data-lp').replace('tx:','')); CW.selTodos(); }`,
+  },
 ];
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -26,6 +26,46 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 26,
+    data: '2026-09-01',
+    titulo: 'Tratar vários movimentos de uma vez',
+    seccoes: [
+      {
+        titulo: 'Selecionar vários movimentos',
+        afeta: ['movimentos'],
+        itens: [
+          'Toque longo num movimento entra em modo de seleção, já com esse marcado.',
+          'Cada movimento tem a sua caixa, cada mês tem a sua, e há uma para marcar tudo.',
+          'A caixa de marcar tudo e a do mês acompanham a página: numa lista longa já não é preciso voltar ao topo para marcar tudo.',
+          'Com movimentos marcados, o botão do canto abre “Editar seleção” e “Eliminar seleção”, e o X ao lado sai da seleção.',
+        ],
+      },
+      {
+        titulo: 'Editar muitos de uma vez',
+        afeta: ['movimentos'],
+        itens: [
+          'Podes mudar a categoria, a subcategoria e acrescentar etiquetas a todos os movimentos marcados ao mesmo tempo.',
+          'Só se altera o que preencheres: o resto de cada movimento fica como está, e nenhuma etiqueta é removida.',
+          'Eliminar em massa mostra quanto somam os movimentos antes de confirmar.',
+        ],
+      },
+      {
+        titulo: 'As opções de um movimento sozinho',
+        afeta: ['movimentos'],
+        itens: [
+          'Passaram para um botão na própria linha, em vez do toque longo — que agora serve para selecionar.',
+        ],
+      },
+      {
+        titulo: 'Correções',
+        afeta: ['app'],
+        itens: [
+          'Em Definições → Novidades, as secções abrem e fecham logo. Antes era preciso sair e voltar a entrar para ver a diferença.',
+        ],
+      },
+    ],
+  },
+  {
     v: 25,
     data: '2026-09-01',
     titulo: 'A vista geral começa pelos números',

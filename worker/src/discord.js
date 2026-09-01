@@ -53,16 +53,25 @@ const cut = (s, n) => { const t = String(s == null ? '' : s); return t.length > 
 
 /* Papéis
    ------
+   master     dono: pode tudo, hoje e o que vier a existir
    admin      opera o serviço: consumo, cópias, e tudo o que os outros veem
    dev        constrói: erros da app e do servidor, infraestrutura, segurança
    suporte    fala com quem usa: só os pedidos contados por pessoas
 
    dev e suporte são irmãos — nenhum manda no outro — e ambos ficam abaixo de
-   admin. Cada lista aceita ids de pessoa ou ids de cargo do Discord: com
-   cargos, entra e sai gente sem mexer nos segredos. */
-export const PAPEIS = ['admin', 'dev', 'suporte'];
+   admin, que por sua vez fica abaixo de master. Cada lista aceita ids de
+   pessoa ou ids de cargo do Discord: com cargos, entra e sai gente sem mexer
+   nos segredos.
 
-// O que cada papel pode correr. O admin não aparece nas listas porque pode tudo.
+   Hoje master e admin podem o mesmo. A diferença serve para o que vier: um
+   comando que apague dados ou mexa em contas nasce restrito a master, e não
+   é preciso repensar quem é quem nessa altura. */
+export const PAPEIS = ['master', 'admin', 'dev', 'suporte'];
+
+// Papéis que podem tudo, incluindo comandos que ainda não existem.
+const PODEM_TUDO = ['master', 'admin'];
+
+// O que cada papel pode correr. Os de cima não aparecem nas listas.
 export const PERMISSOES = {
   pedidos: ['dev', 'suporte'],
   pedido: ['dev', 'suporte'],
@@ -78,6 +87,7 @@ export const PERMISSOES = {
 // As categorias de pedido que cada papel vê. O suporte não precisa de ver
 // rastreios de erro para responder a quem escreveu — e não deve.
 export const CATS_DO_PAPEL = {
+  master: ['user', 'client', 'server', 'infra', 'seguranca'],
   admin: ['user', 'client', 'server', 'infra', 'seguranca'],
   dev: ['client', 'server', 'infra', 'seguranca'],
   suporte: ['user'],
@@ -96,9 +106,10 @@ function pertence(env, i, chave) {
 // Sem nenhuma lista configurada, quem tiver acesso ao servidor de Discord é
 // admin — é o dono que decide, ao configurar.
 export function papel(env, i) {
-  const configurado = ['DISCORD_ADMINS', 'DISCORD_DEVS', 'DISCORD_SUPORTE']
+  const configurado = ['DISCORD_MASTER', 'DISCORD_ADMINS', 'DISCORD_DEVS', 'DISCORD_SUPORTE']
     .some((k) => lista(env[k]).length);
-  if (!configurado) return 'admin';
+  if (!configurado) return 'master';
+  if (pertence(env, i, 'DISCORD_MASTER')) return 'master';
   if (pertence(env, i, 'DISCORD_ADMINS')) return 'admin';
   if (pertence(env, i, 'DISCORD_DEVS')) return 'dev';
   if (pertence(env, i, 'DISCORD_SUPORTE')) return 'suporte';
@@ -107,7 +118,7 @@ export function papel(env, i) {
 
 export function podeCorrer(pap, comando) {
   if (!pap) return false;
-  if (pap === 'admin') return true;
+  if (PODEM_TUDO.indexOf(pap) > -1) return true;
   return (PERMISSOES[comando] || []).indexOf(pap) > -1;
 }
 
@@ -366,7 +377,7 @@ function cmdComandos(pap) {
   const meus = comandosDe(pap);
   return reply('', [{
     title: 'O que podes fazer · papel **' + pap + '**',
-    color: pap === 'admin' ? 0x8a7bb8 : pap === 'dev' ? 0xd6a34a : 0x2f7d5b,
+    color: pap === 'master' ? 0xb94a48 : pap === 'admin' ? 0x8a7bb8 : pap === 'dev' ? 0xd6a34a : 0x2f7d5b,
     description: meus.map((c) => '`/' + c + '` — ' + desc[c]).join('\n'),
     fields: [{
       name: 'Pedidos que vês',
