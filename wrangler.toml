@@ -25,9 +25,11 @@ bucket_name = "gestor-imobiliario"
 [observability]
 enabled = true
 
-# Resumo diário do consumo para o canal de administração (09:00 UTC).
+# Duas rotinas: a cópia da base e o resumo do consumo às 09:00, e uma vigia
+# dos limites de hora a hora — um pico às 10:00 só aparecia no resumo da
+# manhã seguinte, quando já não havia nada a fazer.
 [triggers]
-crons = ["0 9 * * *"]
+crons = ["0 9 * * *", "0 * * * *"]
 
 # Entrada com Google (id público; vazio = botão escondido).
 # Cria um OAuth Client ID (Web) em console.cloud.google.com e autoriza

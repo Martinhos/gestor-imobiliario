@@ -31,7 +31,14 @@
     var chave = String(msg).slice(0, 120);
     if (vistos[chave] || fila.length >= 8) return;
     vistos[chave] = 1;
-    fila.push({ message: String(msg).slice(0, 500), detail: String(detalhe || '').slice(0, 800) });
+    fila.push({
+      message: String(msg).slice(0, 500),
+      detail: String(detalhe || '').slice(0, 800),
+      // o avisos.js pode nem ter chegado a carregar: daí o typeof
+      versao: typeof VERSAO !== 'undefined' ? VERSAO : null,
+      ecra: 'arranque',
+      agente: String(navigator.userAgent || '').slice(0, 180),
+    });
   }
   window.addEventListener('error', function (e) {
     apanha(e.message, (e.filename || '') + ':' + (e.lineno || '') + ' · arranque\n' +

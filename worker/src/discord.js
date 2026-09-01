@@ -126,7 +126,11 @@ function ticketEmbedFull(t) {
       { name: 'Categoria', value: CATS[t.category] || t.category || 'user', inline: true },
       { name: 'De', value: cut(t.user_id, 40), inline: true },
       { name: 'Aberto em', value: new Date(t.created_at).toISOString().slice(0, 16).replace('T', ' '), inline: true },
-    ].concat(t.reply ? [{ name: 'Resposta enviada', value: cut(t.reply, 900) }] : []),
+    ].concat(
+      t.versao ? [{ name: 'Versão da app', value: 'v' + t.versao, inline: true }] : [],
+      t.context ? [{ name: 'Onde', value: cut(t.context, 200), inline: true }] : [],
+      t.reply ? [{ name: 'Resposta enviada', value: cut(t.reply, 900) }] : []
+    ),
     footer: { text: 'id ' + t.id },
   };
 }
@@ -192,10 +196,59 @@ async function cmdPedidos(env, opts, pap) {
   }));
 }
 
+/* Quem escreveu, e o que se sabe dele.
+
+   O aviso que chega ao canal traz o nome; o /pedido, aberto mais tarde,
+   trazia só o id. Quem faz suporte estava a responder a uma pessoa de quem
+   não sabia nada — nem o plano, nem há quanto tempo era utilizador, nem se
+   já tinha escrito antes. */
+async function fichaDe(env, userId) {
+  if (!userId) return null;
+  try {
+    const u = await env.DB.prepare(
+      `SELECT id, name, email, plan, created_at, deleted_at, terms_version FROM users WHERE id = ?`
+    ).bind(userId).first();
+    if (!u) return { desconhecido: true };
+    const q = async (sql) => ((await env.DB.prepare(sql).bind(userId).first()) || {}).n || 0;
+    const casas = await q('SELECT COUNT(*) AS n FROM houses WHERE owner_id = ? AND deleted = 0');
+    const registos = await q(
+      'SELECT COUNT(*) AS n FROM records r JOIN houses h ON h.id = r.house_id WHERE h.owner_id = ? AND r.deleted = 0'
+    );
+    const antes = await q("SELECT COUNT(*) AS n FROM tickets WHERE user_id = ? AND category = 'user'");
+    const erros = await q("SELECT COUNT(*) AS n FROM ticket_users WHERE user_id = ?");
+    return { u, casas, registos, antes, erros };
+  } catch (e) {
+    return null;   // saber menos é melhor do que não abrir o pedido
+  }
+}
+
+function campoDaFicha(f) {
+  if (!f) return null;
+  if (f.desconhecido) return { name: 'Quem escreveu', value: 'conta já não existe', inline: false };
+  const u = f.u;
+  const dias = Math.max(0, Math.round((Date.now() - u.created_at) / 86400000));
+  const PLANOS = { free: 'gratuito', plus: 'Plus', pro: 'Pro' };
+  const linhas = [
+    '**' + (u.name || 'sem nome') + '** · `' + u.id + '`',
+    u.email,
+    'Plano ' + (PLANOS[u.plan] || u.plan) + ' · na app há ' + (dias < 1 ? 'menos de um dia' : dias + ' dias'),
+    f.casas + ' casas · ' + f.registos + ' registos',
+  ];
+  // o que faz a diferença ao responder: já escreveu antes? tem apanhado erros?
+  if (f.antes > 1) linhas.push('⚠️ já escreveu ' + (f.antes - 1) + ' vez' + (f.antes - 1 === 1 ? '' : 'es') + ' antes');
+  if (f.erros) linhas.push('⚠️ apanhou ' + f.erros + ' erro' + (f.erros === 1 ? '' : 's') + ' distinto' + (f.erros === 1 ? '' : 's'));
+  if (u.deleted_at) linhas.push('🔴 conta apagada');
+  if (!u.terms_version) linhas.push('não aceitou os termos');
+  return { name: 'Quem escreveu', value: linhas.join('\n'), inline: false };
+}
+
 async function cmdPedido(env, opts, pap) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
-  return { type: MSG, data: { embeds: [ticketEmbedFull(g.t)], components: ticketButtons(g.t.id) } };
+  const embed = ticketEmbedFull(g.t);
+  const ficha = campoDaFicha(await fichaDe(env, g.t.user_id));
+  if (ficha) embed.fields = [ficha].concat(embed.fields.filter((c) => c.name !== 'De'));
+  return { type: MSG, data: { embeds: [embed], components: ticketButtons(g.t.id) } };
 }
 
 async function cmdResponder(env, opts, pap) {
@@ -218,22 +271,41 @@ async function cmdFechar(env, opts, pap) {
 async function cmdErros(env, opts) {
   const horas = Math.min(Math.max(Number(opts.horas || 24), 1), 720);
   const desde = Date.now() - horas * 3600000;
+  /* Ordenado por quantas pessoas apanharam, e só depois por quantas vezes.
+     Um erro que toca em cinco pessoas uma vez cada vale mais atenção do que
+     um que toca numa pessoa cinquenta vezes. */
   const rows = (await env.DB.prepare(
-    `SELECT * FROM tickets WHERE category IN ('client', 'server') AND updated_at > ?
-      ORDER BY n DESC, updated_at DESC LIMIT 10`
+    `SELECT t.*,
+            (SELECT COUNT(*) FROM ticket_users u WHERE u.fingerprint = t.fingerprint) AS pessoas
+       FROM tickets t
+      WHERE t.category IN ('client', 'server') AND t.updated_at > ?
+      ORDER BY pessoas DESC, t.n DESC, t.updated_at DESC LIMIT 10`
   ).bind(desde).all()).results;
   if (!rows.length) return reply('✅ Sem erros nas últimas ' + horas + ' horas.');
-  return reply('Erros das últimas ' + horas + ' horas:', rows.map(function (r) {
-    return {
-      title: '⚠️ ' + cut(r.subject, 90) + (r.n > 1 ? '  ×' + r.n : ''),
-      description: '```' + cut(r.body || '—', 500) + '```',
-      color: r.status === 'concluido' ? 0x2f7d5b : 0xd6a34a,
-      footer: {
-        text: (r.category === 'server' ? 'servidor' : 'app') + ' · ' +
-          (ESTADOS[r.status] || r.status) + ' · ' + cut(r.id, 8),
-      },
-    };
-  }));
+  const desdeQuando = (t) => {
+    const h = Math.round((Date.now() - t) / 3600000);
+    return h < 1 ? 'agora mesmo' : h < 48 ? 'há ' + h + 'h' : 'há ' + Math.round(h / 24) + ' dias';
+  };
+  return reply('Erros das últimas ' + horas + ' horas, do que toca em mais gente para o que toca em menos:',
+    rows.map(function (r) {
+      const varios = r.pessoas > 1;
+      return {
+        title: (varios ? '🔴 ' : '⚠️ ') + cut(r.subject, 88) +
+          (r.n > 1 ? '  ×' + r.n : '') + (varios ? '  · ' + r.pessoas + ' pessoas' : ''),
+        description: '```' + cut(r.body || '—', 400) + '```',
+        color: r.status === 'concluido' ? 0x2f7d5b : (varios ? 0xb94a48 : 0xd6a34a),
+        footer: {
+          text: [
+            r.category === 'server' ? 'servidor' : 'app',
+            r.versao ? 'v' + r.versao : null,
+            r.context || null,
+            'primeira vez ' + desdeQuando(r.created_at),
+            ESTADOS[r.status] || r.status,
+            cut(r.id, 8),
+          ].filter(Boolean).join(' · '),
+        },
+      };
+    }));
 }
 
 // Ver as cópias que existem, ou forçar uma agora — antes de uma migração
