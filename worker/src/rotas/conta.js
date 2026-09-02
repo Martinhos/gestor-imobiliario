@@ -12,6 +12,7 @@ export async function rotasConta(c) {
       plan: me.plan || 'free',
       terms: me.terms_version || null,
       termsCurrent: TERMS_VERSION,
+      fimDemo: await (await import('../lib/planos.js')).fimDemo(env),
     });
   }
 

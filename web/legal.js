@@ -119,6 +119,8 @@ window.LEGAL = (function () {
       'novos registos acima do limite enquanto não voltares a subscrever.',
       'Os limites de cada plano aplicam-se à <b>criação de novos registos</b>: nada do que já existe é ' +
       'apagado ou fica inacessível por causa deles.',
+      'A entrada em vigor dos limites é anunciada <b>na própria aplicação com pelo menos 30 dias de ' +
+      'antecedência</b>.',
     ]) +
     p('<b>Direito de livre resolução.</b> Sendo consumidor, tens 14 dias para desistir de uma subscrição ' +
       'sem indicar motivo. Se pedires para começar a usar o serviço pago de imediato, esse direito ' +

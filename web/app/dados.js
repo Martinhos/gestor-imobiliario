@@ -55,7 +55,7 @@ const CATS_IN0={
   'Outras receitas':[]
 };
 const TAGS0=['Urgente','A reembolsar','Recorrente','Dedutível','Em disputa'];
-const blank={v:13,properties:[],owners:[],tenants:[],contracts:[],transactions:[],settlements:[],templates:[],recurring:[],groups:[],
+const blank={v:13,properties:[],owners:[],tenants:[],contracts:[],transactions:[],settlements:[],templates:[],recurring:[],groups:[],insurances:[],
   settings:{growth:2,inflation:2,years:10,theme:'auto',capTarget:5,quota:100,payTax:true,stampPct:4,
             cats:JSON.parse(JSON.stringify(CATS0)),catsIn:JSON.parse(JSON.stringify(CATS_IN0)),tags:TAGS0.slice()}};
 

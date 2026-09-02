@@ -21,7 +21,8 @@ const SUPORTE = { discordId: 's1', nome: 'Sofia', papel: 'suporte', papeis: ['su
 const DEV = { discordId: 'd1', nome: 'Dina', papel: 'dev', papeis: ['dev'] };
 
 function ambiente() {
-  return { DB: baseDeTeste(), SESSIONS: kvFalso(), FILES: r2Falso() };
+  // ENV_NAME marca isto como fora de produção: os testes podem usar dias<30
+  return { DB: baseDeTeste(), SESSIONS: kvFalso(), FILES: r2Falso(), ENV_NAME: 'teste' };
 }
 
 // chama a API como o index.js chama: com o caminho, o método e a sessão
@@ -458,13 +459,26 @@ describe('o interruptor do modo de demonstracao', () => {
       { ligado: false, motivo: 'os planos entram em vigor' })).status, 403);
     assert.equal((await chamar(env, MASTER, 'POST', '/api/equipa/operacao/demo',
       { ligado: false, motivo: 'ok' })).status, 400);
-    const r = await chamar(env, MASTER, 'POST', '/api/equipa/operacao/demo',
-      { ligado: false, motivo: 'os planos entram em vigor' });
+    const r = await corpoDe(await chamar(env, MASTER, 'POST', '/api/equipa/operacao/demo',
+      { ligado: false, motivo: 'os planos entram em vigor' }));
     assert.equal(r.status, 200);
-    assert.equal(env.SESSIONS.m.get('config:demo'), '0');
+    assert.ok(r.fim > Date.now() + 29 * 86400000, 'marca uma data um mês à frente');
+    assert.ok(env.SESSIONS.m.get('config:demo_fim'), 'a data fica no KV');
     const rasto = await auditoria(env);
     assert.equal(rasto[0].acao, 'operacao.demo');
-    assert.match(rasto[0].detalhe, /desligado/);
+    assert.match(rasto[0].detalhe, /30 dias/);
+    esquecerCache();
+  });
+
+  test('fora de produção pode-se encurtar; em produção os 30 dias são lei', async () => {
+    const { esquecerCache } = await import('../worker/src/lib/planos.js');
+    const env = ambiente(); esquecerCache();
+    assert.equal((await chamar(env, MASTER, 'POST', '/api/equipa/operacao/demo',
+      { ligado: false, dias: 0, motivo: 'teste imediato' })).status, 200);
+    const prod = Object.assign({}, ambiente(), { ENV_NAME: '' });
+    assert.equal((await chamar(prod, MASTER, 'POST', '/api/equipa/operacao/demo',
+      { ligado: false, dias: 5, motivo: 'atalho proibido' })).status, 400,
+      'os termos prometem 30 dias e o código cumpre-os');
     esquecerCache();
   });
 

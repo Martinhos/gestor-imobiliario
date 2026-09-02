@@ -348,7 +348,7 @@ document.addEventListener('pointerdown',e=>{
   clearTimeout(_lpT);if(!c)return;
   _lpX=e.clientX;_lpY=e.clientY;
   const v=c.getAttribute('data-lp');
-  _lpT=setTimeout(()=>{_lpFired=true;_lpAt=Date.now();try{navigator.vibrate&&navigator.vibrate(12)}catch(x){}lpMenu(v)},480);
+  _lpT=setTimeout(()=>{_lpFired=true;_lpAt=Date.now();try{navigator.vibrate&&navigator.vibrate(12)}catch(x){}(window.lpLongo||lpMenu)(v)},480);
 },true);
 document.addEventListener('pointermove',e=>{if(_lpT&&(Math.abs(e.clientX-_lpX)>12||Math.abs(e.clientY-_lpY)>12)){clearTimeout(_lpT);_lpT=null}},true);
 ['pointerup','pointercancel'].forEach(t=>document.addEventListener(t,()=>{clearTimeout(_lpT);_lpT=null},true));

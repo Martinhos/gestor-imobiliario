@@ -56,6 +56,29 @@ var AVISOS = [
         ],
       },
       {
+        titulo: 'Seguros, com a subida anual já contada',
+        afeta: ['imoveis', 'creditos'],
+        itens: [
+          'Novo separador Seguros, em Finanças: multirriscos, vida do crédito, recheio — com apólice, seguradora e periodicidade.',
+          'A previsão dos próximos pagamentos entra com o aumento anual de cada apólice: um seguro raramente custa o mesmo dois anos seguidos, e a app passa a mostrar isso.',
+        ],
+      },
+      {
+        titulo: 'O toque longo passou a significar uma coisa só',
+        afeta: ['imoveis', 'contratos', 'movimentos'],
+        itens: [
+          'Segurar num cartão seleciona vários — nos movimentos, nos imóveis e nos contratos. As opções de um cartão vivem no botão ⋮.',
+          'Imóveis e contratos podem apagar-se em massa: a confirmação diz quantos contratos e movimentos vão junto, e o «Anular» repõe tudo.',
+        ],
+      },
+      {
+        titulo: 'O teu perfil preenche-se sozinho',
+        afeta: ['conta'],
+        itens: [
+          'O email da conta (do registo ou da Google) e o nome entram sozinhos nos campos vazios do perfil.',
+        ],
+      },
+      {
         titulo: 'Filtros com um só feitio',
         afeta: ['app'],
         itens: [

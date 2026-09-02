@@ -126,6 +126,7 @@ function exportEntities() {
     if (r.tx && r.tx.propertyId) return;
     map['u:rec:' + r.id] = { scope: 'user', kind: 'rec', id: r.id, data: strip(r) };
   });
+  (db.insurances || []).forEach(function (x) { map['u:seguro:' + x.id] = { scope: 'user', kind: 'seguro', id: x.id, data: strip(x) }; });
   (db.templates || []).forEach(function (x) { map['u:tpl:' + x.id] = { scope: 'user', kind: 'tpl', id: x.id, data: strip(x) }; });
   (db.groups || []).forEach(function (x) { map['u:group:' + x.id] = { scope: 'user', kind: 'group', id: x.id, data: strip(x) }; });
   // os "proprietários" são os utilizadores: só o meu perfil é exportado
@@ -250,6 +251,7 @@ function rebuildDb(st) {
       else if (r.kind === 'profile') myProfile = r.data;
       else if (r.kind === 'tx') d.transactions.push(normTx(r.data));
       else if (r.kind === 'rec') d.recurring.push(normRec(r.data));
+      else if (r.kind === 'seguro') (d.insurances = d.insurances || []).push(r.data);
       else if (r.kind === 'tpl') d.templates.push(normTpl(r.data));
       else if (r.kind === 'group') d.groups.push(normGroup(r.data));
       else if (r.kind === 'tenant') tenants[r.id] = normPerson(r.data);
