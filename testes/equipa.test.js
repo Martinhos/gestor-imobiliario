@@ -146,7 +146,7 @@ describe('o que cada papel vê na ferramenta', () => {
   });
 
   test('entrar na ferramenta é dos papéis todos', () => {
-    assert.deepEqual([...PERMISSOES.entrar].sort(), ['dev', 'suporte']);
+    assert.deepEqual([...PERMISSOES.entrar].sort(), ['admin', 'dev', 'suporte']);
   });
 });
 

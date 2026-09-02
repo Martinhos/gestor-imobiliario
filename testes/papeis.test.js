@@ -5,7 +5,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  papel, podeCorrer, comandosDe, PERMISSOES, CATS_DO_PAPEL, PAPEIS, SO_MASTER,
+  papel, papeisDe, podeCorrer, comandosDe, catsDe,
+  PERMISSOES, CATS_DO_PAPEL, PAPEIS, SO_MASTER,
 } from '../worker/src/discord.js';
 import { CATEGORIAS } from '../worker/src/lib/http.js';
 
@@ -35,9 +36,23 @@ describe('quem é quem', () => {
     assert.equal(papel(ENV, quem('outro', ['cargo-qualquer'])), null);
   });
 
-  test('estar em duas listas dá a mais alta', () => {
+  test('estar em duas listas dá a mais alta como principal', () => {
     assert.equal(papel(ENV, quem('a1', ['cargo-suporte'])), 'admin');
     assert.equal(papel(ENV, quem('m1', ['cargo-suporte'])), 'master', 'master fica acima de tudo');
+  });
+
+  test('mas os papéis somam-se: ter dois cargos dá os dois cantos', () => {
+    // com irmãos, escolher só o mais alto tirava acessos a quem ganhasse
+    // um segundo cargo — o admin já não contém o suporte
+    const dois = quem('a1', ['cargo-suporte']);
+    assert.deepEqual(papeisDe(ENV, dois), ['admin', 'suporte']);
+    assert.equal(podeCorrer(papeisDe(ENV, dois), 'uso'), true, 'o lado de admin');
+    assert.equal(podeCorrer(papeisDe(ENV, dois), 'pedidos'), true, 'o lado de suporte');
+    assert.deepEqual(catsDe(papeisDe(ENV, dois)).sort(), ['infra', 'seguranca', 'user']);
+  });
+
+  test('quem não está em lista nenhuma não tem papéis', () => {
+    assert.deepEqual(papeisDe(ENV, quem('estranho')), []);
   });
 
   test('sem nada configurado, quem entra no servidor manda', () => {
@@ -55,16 +70,36 @@ describe('o que cada papel corre', () => {
     Object.keys(PERMISSOES).forEach((c) => assert.equal(podeCorrer('master', c), true, c));
   });
 
-  test('o admin corre tudo menos o que é só do master', () => {
+  test('só o master corre o que é só do master', () => {
     // quem gere quem pode o quê tem de ser um só: ver testes/acessos.test.js
-    Object.keys(PERMISSOES).forEach((c) => {
-      assert.equal(podeCorrer('admin', c), SO_MASTER.indexOf(c) < 0, 'admin · ' + c);
-    });
     assert.ok(SO_MASTER.length, 'e há mesmo algum comando assim');
+    SO_MASTER.forEach((c) => {
+      ['admin', 'dev', 'suporte'].forEach((p) => assert.equal(podeCorrer(p, c), false, p + ' · ' + c));
+    });
+  });
+
+  test('os três irmãos não se contêm uns aos outros', () => {
+    /* É o que muda com a hierarquia nova: o admin já não é um super-dev.
+
+       O alcance de um papel não são só os comandos — o admin e o suporte
+       correm os mesmos comandos de pedidos, mas sobre pedidos diferentes.
+       Comparar só a lista de comandos dizia que o suporte cabia dentro do
+       admin, e não cabe: o admin não vê um único pedido de uma pessoa. */
+    const alcance = (p) => comandosDe(p).concat(catsDe(p).map((c) => 'pedidos:' + c));
+    const conj = { admin: alcance('admin'), dev: alcance('dev'), suporte: alcance('suporte') };
+    ['admin', 'dev', 'suporte'].forEach((a) => {
+      ['admin', 'dev', 'suporte'].forEach((b) => {
+        if (a === b) return;
+        assert.ok(
+          conj[a].some((c) => conj[b].indexOf(c) < 0),
+          a + ' alcança alguma coisa que o ' + b + ' não alcança'
+        );
+      });
+    });
   });
 
   test('o master vê todas as categorias de pedido', () => {
-    assert.deepEqual([...CATS_DO_PAPEL.master].sort(), [...CATS_DO_PAPEL.admin].sort());
+    assert.deepEqual([...CATS_DO_PAPEL.master].sort(), [...CATEGORIAS].sort());
   });
 
   test('a operação é só do admin', () => {
@@ -96,10 +131,15 @@ describe('o que cada papel corre', () => {
     assert.ok(!d.every((c) => s.includes(c)), 'e não são o mesmo conjunto');
   });
 
-  test('o admin vê pelo menos tudo o que os outros veem', () => {
-    const a = comandosDe('master');
-    ['dev', 'suporte'].forEach((p) => {
-      comandosDe(p).forEach((c) => assert.ok(a.includes(c), 'admin também corre /' + c));
+  test('o consumo é do admin e mais de ninguém', () => {
+    assert.equal(podeCorrer('admin', 'uso'), true);
+    assert.equal(podeCorrer('dev', 'uso'), false);
+  });
+
+  test('o master corre pelo menos tudo o que os irmãos correm', () => {
+    const m = comandosDe('master');
+    ['admin', 'dev', 'suporte'].forEach((p) => {
+      comandosDe(p).forEach((c) => assert.ok(m.includes(c), 'o master também corre /' + c));
     });
   });
 });
@@ -113,14 +153,23 @@ describe('que pedidos cada papel vê', () => {
     assert.equal(CATS_DO_PAPEL.dev.includes('user'), false);
   });
 
-  test('o admin vê todas as categorias que existem', () => {
-    assert.deepEqual([...CATS_DO_PAPEL.admin].sort(), [...CATEGORIAS].sort());
+  test('o admin vê a infraestrutura, não os pedidos das pessoas', () => {
+    assert.ok(CATS_DO_PAPEL.admin.includes('infra'));
+    assert.equal(CATS_DO_PAPEL.admin.includes('user'), false);
   });
 
-  test('juntando dev e suporte cobre-se tudo, sem sobreposição', () => {
-    const juntos = CATS_DO_PAPEL.dev.concat(CATS_DO_PAPEL.suporte);
-    assert.equal(new Set(juntos).size, juntos.length, 'nenhuma categoria em dois papéis');
-    assert.deepEqual(juntos.sort(), [...CATEGORIAS].sort(), 'e nenhuma fica sem dono');
+  test('juntando os três irmãos, nenhuma categoria fica sem dono', () => {
+    const juntos = new Set(
+      CATS_DO_PAPEL.admin.concat(CATS_DO_PAPEL.dev, CATS_DO_PAPEL.suporte)
+    );
+    assert.deepEqual([...juntos].sort(), [...CATEGORIAS].sort());
+  });
+
+  test('a única categoria partilhada é a segurança, de propósito', () => {
+    // um aviso de segurança que ninguém vê é pior do que um visto duas vezes
+    const juntos = CATS_DO_PAPEL.admin.concat(CATS_DO_PAPEL.dev, CATS_DO_PAPEL.suporte);
+    const repetidas = juntos.filter((c, n) => juntos.indexOf(c) !== n);
+    assert.deepEqual(repetidas, ['seguranca']);
   });
 
   test('todo o papel tem categorias definidas', () => {

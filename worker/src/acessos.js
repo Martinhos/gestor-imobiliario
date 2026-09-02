@@ -51,16 +51,36 @@ export async function guardarAcessos(env, discordId, acessos) {
 export function origemDoAcesso(pap, comando, acessos, regras) {
   const { PERMISSOES, PODEM_TUDO, SO_MASTER } = regras;
   const a = acessos || VAZIO;
+  // um papel ou vários: quem tiver dois cargos soma os dois cantos
+  const papeis = Array.isArray(pap) ? pap.filter(Boolean) : pap ? [pap] : [];
 
   /* O master nunca perde acesso por exceção. Um engano a retirar-lhe o
      próprio /access trancava-o fora da única ferramenta que o desfazia. */
-  if (pap === 'master') return 'papel';
-  if (!pap) return 'nao';
+  if (papeis.indexOf('master') > -1) return 'papel';
+  if (!papeis.length) return 'nao';
 
   if (SO_MASTER.indexOf(comando) > -1) return 'nao';   // não se dá por exceção
   if (a.menos.indexOf(comando) > -1) return 'retirado';
 
-  const peloPapel = PODEM_TUDO.indexOf(pap) > -1 || (PERMISSOES[comando] || []).indexOf(pap) > -1;
+  const peloPapel = papeis.some((p) =>
+    PODEM_TUDO.indexOf(p) > -1 || (PERMISSOES[comando] || []).indexOf(p) > -1);
   if (peloPapel) return 'papel';
   return a.mais.indexOf(comando) > -1 ? 'dado' : 'nao';
+}
+
+/* Do que ficou marcado no menu para as exceções a guardar.
+
+   É a única parte do menu de caixas que decide alguma coisa: guarda-se a
+   diferença para o cargo, não a lista marcada. Assim, mudar o cargo de
+   alguém no Discord continua a mudar-lhe os acessos — o que ficou aqui é só
+   aquilo em que esta pessoa difere do cargo dela. */
+export function excecoesDoMenu(marcados, geriveis, vemDoCargo) {
+  const mais = [], menos = [];
+  geriveis.forEach((c) => {
+    const quer = marcados.indexOf(c) > -1;
+    const doCargo = vemDoCargo(c);
+    if (quer && !doCargo) mais.push(c);
+    if (!quer && doCargo) menos.push(c);
+  });
+  return { mais, menos };
 }
