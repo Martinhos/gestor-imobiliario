@@ -301,6 +301,22 @@ function confirmModal(title,text,cb){
     `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn ${verbo?'danger':'primary'}" onclick="_ok()">${verbo||'Confirmar'}</button>`);
   window._ok=()=>{closeModal();cb()};
 }
+/* Desfazer em vez de (ou além de) confirmar. A confirmação trava o engano
+   de quem lê; o Anular salva o engano de quem confirmou por hábito. O
+   apagado sai já do ecrã e dos cálculos — só a ressurreição fica à mão,
+   seis segundos. `aoExpirar` liquida o que não se pode desfazer (blobs no
+   IndexedDB) só quando a janela fecha sem cliques. */
+let _desfazer=null;
+function comDesfazer(msg,restaurar,aoExpirar){
+  if(_desfazer&&_desfazer.expira)_desfazer.expira();   // o anterior liquida-se
+  const eu={expira:aoExpirar||null};_desfazer=eu;
+  toast(msg,{rotulo:'Anular',ms:6000,fn(){
+    if(_desfazer===eu)_desfazer=null;
+    restaurar();save();try{buildNav()}catch(e){}render();toast('Anulado.');
+  }});
+  setTimeout(()=>{if(_desfazer===eu){_desfazer=null;if(eu.expira)eu.expira()}},6400);
+}
+
 /* O toast diz o que falta; isto aponta o campo — realça-o, leva-o ao ecrã
    e larga o realce à primeira tecla. */
 function falhaCampo(id,msg){

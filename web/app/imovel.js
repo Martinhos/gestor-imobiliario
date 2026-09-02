@@ -319,11 +319,22 @@ function propSaver(){
 function delProp(id){
   const p=prop(id),n=contractsOf(id).length;
   confirmModal('Apagar imóvel',`Apagar “${esc(p.name)}”${n?`, os seus ${n} contratos`:''} e todos os movimentos associados?`,()=>{
-    (p.photos||[]).forEach(f=>idbDel(f.id).catch(()=>{}));
-    (p.loans||[]).forEach(l=>(l.files||[]).forEach(f=>idbDel(f.id).catch(()=>{})));
+    /* a cópia primeiro, os blobs só quando o Anular expirar: uma cascata
+       destas confirmada por hábito era irrecuperável */
+    const copia={p:JSON.parse(JSON.stringify(p)),
+      cts:JSON.parse(JSON.stringify(db.contracts.filter(x=>x.propertyId===id))),
+      txs:JSON.parse(JSON.stringify(db.transactions.filter(x=>x.propertyId===id)))};
     db.properties=db.properties.filter(x=>x.id!==id);if(dashProp===id)dashProp='';if(txProp===id)txProp='';
     db.contracts=db.contracts.filter(x=>x.propertyId!==id);
     db.transactions=db.transactions.filter(x=>x.propertyId!==id);
-    save();closeAllModals();render();toast('Imóvel apagado.');
+    save();closeAllModals();render();
+    comDesfazer('Imóvel apagado.',()=>{
+      db.properties.push(copia.p);
+      db.contracts=db.contracts.concat(copia.cts);
+      db.transactions=db.transactions.concat(copia.txs);
+    },()=>{
+      (copia.p.photos||[]).forEach(f=>{idbDel(f.id).catch(()=>{});idbDel('tn_'+f.id).catch(()=>{})});
+      (copia.p.loans||[]).forEach(l=>(l.files||[]).forEach(f=>idbDel(f.id).catch(()=>{})));
+    });
   });
 }

@@ -446,7 +446,14 @@ function num(s){
 /* euro() arredonda; isto mostra os cêntimos quando existem — uma renda de
    512,74 € aparecia «513 €» num cartão e «512,74 €» no movimento ao lado */
 const euroS=v=>Math.round(v*100)%100?euro2(v):euro(v);
-function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2800)}
+/* op: {rotulo, fn, ms} poe um botao no toast — e a peca que faz o Anular
+   possivel. Sem op, comporta-se exatamente como sempre. */
+function toast(m,op){const t=document.getElementById('toast');
+  t.textContent=m;
+  if(op&&op.rotulo&&op.fn){const b=document.createElement('button');b.type='button';b.className='toastbtn';
+    b.textContent=op.rotulo;b.onclick=()=>{clearTimeout(t._h);t.classList.remove('on');op.fn()};t.appendChild(b)}
+  t.classList.add('on');clearTimeout(t._h);
+  t._h=setTimeout(()=>t.classList.remove('on'),(op&&op.ms)||2800)}
 
 const KIND={income:{short:'Receita',sign:'+',color:'pos',flow:'in'},expense:{short:'Despesa',sign:'−',color:'neg',flow:'out'},
   loan:{short:'Pagamento de crédito',sign:'−',color:'amber',flow:'out'},owed:{short:'Dívida recebida',sign:'+',color:'amber',flow:'in'},

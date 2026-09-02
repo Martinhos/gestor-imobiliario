@@ -457,7 +457,8 @@ textarea{min-height:90px;resize:vertical}
 .iconbtn:hover{background:var(--chip);color:var(--ink)}
 @media(max-width:520px){.sheet{top:auto;bottom:0;left:0;transform:none;width:100%;max-height:93vh;border-radius:20px 20px 0 0}}
 .toast{position:fixed;left:50%;bottom:calc(22px + var(--inset-bottom));transform:translateX(-50%) translateY(80px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;z-index:90;font-size:13.5px;font-weight:550;opacity:0;transition:.22s;pointer-events:none;max-width:90vw;text-align:center}
-.toast.on{opacity:1;transform:translateX(-50%)}
+.toast.on{opacity:1;transform:translateX(-50%);pointer-events:auto}
+.toast .toastbtn{margin-left:12px;background:none;border:0;color:var(--accent);font:inherit;font-weight:750;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 </style>
 </head>
 <body>
