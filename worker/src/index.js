@@ -72,6 +72,42 @@ export default {
       const { handleInteraction } = await import('./discord.js');
       return handleInteraction(request, env, ctx);
     }
+
+    /* A ferramenta de equipa. Vive fora da API de quem usa a app e tem a sua
+       própria sessão — quem entra aqui não tem casas nem movimentos, e uma
+       sessão de cliente não abre nada disto. */
+    if (url.pathname.startsWith('/equipa') || url.pathname.startsWith('/api/equipa/')) {
+      const { rotasEquipa, getEquipa } = await import('./equipa.js');
+      const c = { env, request, ctx, url, path: url.pathname.replace(/\/+$/, ''), method: request.method };
+      try {
+        const r = await rotasEquipa(c);
+        if (r) { r.headers.set('Cache-Control', 'no-store'); return harden(r); }
+        if (url.pathname === '/equipa' || url.pathname === '/equipa/') {
+          const { paginaEquipa } = await import('./equipa-vista.js');
+          const eu = await getEquipa(env, request);
+          return harden(paginaEquipa(eu));
+        }
+        const { rotasEquipaApi } = await import('./equipa-api.js');
+        const eu = await getEquipa(env, request);
+        if (!eu) {
+          return new Response(JSON.stringify({ error: 'Sem sessão de equipa.' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+          });
+        }
+        const r2 = await rotasEquipaApi(Object.assign({}, c, { eu }));
+        if (r2) { r2.headers.set('Cache-Control', 'no-store'); return harden(r2); }
+      } catch (e) {
+        console.error('equipa', e);
+        ctx.waitUntil(recordReport(env, ctx, 'server', e && e.message,
+          'equipa ' + url.pathname + '\n' + String((e && e.stack) || '').slice(0, 800)));
+        return new Response(JSON.stringify({ error: 'Erro interno do servidor.' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+        });
+      }
+      return new Response('Não encontrado', { status: 404 });
+    }
     if (url.pathname.startsWith('/api/')) {
       // a API é de uso próprio: nada de a chamar a partir de outro site
       const origin = request.headers.get('Origin');
