@@ -28,17 +28,54 @@ function novoToken() {
 
 /* Um bilhete de uso único, criado a pedido do bot. Guarda quem é e que papel
    tinha no momento — o papel volta a ser verificado quando a sessão é usada,
-   mas isto deixa o registo do que se passou. */
+   mas isto deixa o registo do que se passou.
+
+   Vive na base e não no KV, ao contrário da sessão que dele nasce. É a
+   única coisa aqui que se escreve num sítio e se lê noutro: o bot é
+   atendido perto do Discord e o clique perto de quem clica. O KV leva algum
+   tempo a concordar consigo próprio entre regiões, e nesse intervalo uma
+   ligação acabada de criar não existe para quem a abre. */
 export async function criarBilhete(env, quem) {
   const t = novoToken();
-  await env.SESSIONS.put('bilhete:' + t, JSON.stringify({
+  const agora = Date.now();
+  await env.DB.prepare(
+    'INSERT INTO team_links (token, payload, created_at, expires_at) VALUES (?, ?, ?, ?)'
+  ).bind(t, JSON.stringify({
     discordId: quem.discordId,
     nome: quem.nome,
     papel: quem.papel,
     papeis: quem.papeis || [quem.papel],   // dois cargos somam, como no bot
-    criado: Date.now(),
-  }), { expirationTtl: BILHETE_TTL });
+  }), agora, agora + BILHETE_TTL * 1000).run();
+
+  // as que já não servem a ninguém não têm de ficar cá para sempre
+  await env.DB.prepare('DELETE FROM team_links WHERE expires_at < ?')
+    .bind(agora - 24 * 3600 * 1000).run();
+
   return { token: t, expiraEm: BILHETE_TTL };
+}
+
+/* O que uma ligação é, sem lhe mexer. Mostrar não é usar: a página de
+   entrada precisa de saber a quem pertence, e não pode gastá-la só por
+   alguém — ou alguma coisa — a ter aberto. */
+export async function verBilhete(env, t) {
+  const r = await env.DB.prepare('SELECT * FROM team_links WHERE token = ?').bind(t).first();
+  if (!r) return { estado: 'nao-existe' };
+  if (r.used_at) return { estado: 'usada' };
+  if (r.expires_at < Date.now()) return { estado: 'expirou' };
+  return { estado: 'boa', quem: JSON.parse(r.payload) };
+}
+
+/* Gastar a ligação. Numa só instrução de propósito: com ler-e-depois-apagar,
+   dois pedidos ao mesmo tempo liam ambos a mesma ligação por usar e entravam
+   os dois. Assim, quem marcar a linha primeiro é o único que entra. */
+async function usarBilhete(env, t) {
+  const agora = Date.now();
+  const r = await env.DB.prepare(
+    'UPDATE team_links SET used_at = ? WHERE token = ? AND used_at IS NULL AND expires_at >= ?'
+  ).bind(agora, t, agora).run();
+  if (!r.meta || r.meta.changes !== 1) return null;
+  const linha = await env.DB.prepare('SELECT payload FROM team_links WHERE token = ?').bind(t).first();
+  return linha ? JSON.parse(linha.payload) : null;
 }
 
 export function cookieDaEquipa(token, expirar = false) {
@@ -70,18 +107,34 @@ export async function getEquipa(env, request) {
 export async function rotasEquipa(c) {
   const { env, request, path, method, url } = c;
 
-  /* Trocar o bilhete por uma sessão. É uma navegação, não um pedido de API:
-     responde-se com um redirecionamento para a ferramenta, já com o cookie
-     posto — e o token sai do endereço, para não ficar no histórico nem no
-     referer. */
+  /* Abrir a ligação mostra uma página com um botão; não entra logo.
+
+     Abrir era o que entrava, e isso fazia de um GET uma coisa destrutiva.
+     Quem carregava a ligação primeiro ficava com ela — e quem carrega
+     primeiro não é a pessoa: é o desdobrador de links do Discord, ou o
+     cliente a preparar a pré-visualização, ou o browser a adiantar-se. A
+     pessoa chegava a uma ligação já gasta por outra coisa qualquer.
+
+     Um GET não muda nada; carregar no botão é que muda. Nada disso
+     carrega em botões. */
   if (path === '/equipa/entrar' && method === 'GET') {
     const t = url.searchParams.get('t') || '';
     if (!/^[a-f0-9]{64}$/.test(t)) return err(400, 'Ligação inválida.');
-    const raw = await env.SESSIONS.get('bilhete:' + t);
-    if (!raw) return err(410, 'Esta ligação já foi usada ou expirou. Corre /entrar outra vez no Discord.');
-    await env.SESSIONS.delete('bilhete:' + t);   // uso único, sem margem
+    const { paginaEntrada } = await import('./equipa-vista.js');
+    return paginaEntrada(t, await verBilhete(env, t));
+  }
 
-    const b = JSON.parse(raw);
+  /* Aqui é que se entra mesmo. */
+  if (path === '/equipa/entrar' && method === 'POST') {
+    let t = '';
+    try { t = String((await request.formData()).get('t') || ''); } catch (e) { /* sem formulário */ }
+    if (!/^[a-f0-9]{64}$/.test(t)) return err(400, 'Ligação inválida.');
+
+    const b = await usarBilhete(env, t);
+    if (!b) {
+      const { paginaEntrada } = await import('./equipa-vista.js');
+      return paginaEntrada(t, await verBilhete(env, t));
+    }
     const sessao = novoToken();
     await env.SESSIONS.put('equipa:' + sessao, JSON.stringify({
       discordId: b.discordId, nome: b.nome, papel: b.papel,
@@ -89,7 +142,8 @@ export async function rotasEquipa(c) {
     }), { expirationTtl: SESSAO_TTL });
 
     return new Response(null, {
-      status: 302,
+      // 303 e não 302: depois de um POST, o que se segue é um GET
+      status: 303,
       headers: {
         Location: '/equipa',
         'Set-Cookie': cookieDaEquipa(sessao),

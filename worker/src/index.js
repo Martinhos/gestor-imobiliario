@@ -30,9 +30,24 @@ const SECURITY_HEADERS = {
   'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',   // o popup do Google precisa
 };
 
+/* O que uma resposta pode apertar por sua conta, e só isso.
+
+   A regra continua a ser que os cabeçalhos de segurança se impõem por cima
+   do que veio de baixo. A exceção é para apertar, nunca para afrouxar: a
+   página que troca a ligação da equipa tem um token no endereço e pede
+   'no-referrer', e com um `set` cego ficava com a política geral, que deixa
+   sair a origem. A lista é de valores exactos de propósito — assim uma
+   rota não consegue afrouxar nada, mesmo por engano. */
+const PODE_APERTAR = { 'Referrer-Policy': ['no-referrer'] };
+
 function harden(res) {
   const out = new Response(res.body, res);
-  Object.keys(SECURITY_HEADERS).forEach((k) => out.headers.set(k, SECURITY_HEADERS[k]));
+  Object.keys(SECURITY_HEADERS).forEach((k) => {
+    const posto = out.headers.get(k);
+    const permitidos = PODE_APERTAR[k] || [];
+    if (posto && permitidos.indexOf(posto) > -1) return;   // a resposta apertou; fica
+    out.headers.set(k, SECURITY_HEADERS[k]);
+  });
   return out;
 }
 
