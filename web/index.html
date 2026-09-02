@@ -432,7 +432,7 @@ textarea{min-height:90px;resize:vertical}
   </aside>
   <main>
     <header class="top">
-      <button class="burger" onclick="openDrawer()" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <button class="burger" aria-expanded="false" onclick="openDrawer()" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <div style="min-width:0;flex:1"><h1 id="pageTitle">Visão geral</h1><div class="sub" id="pageSub"></div></div>
       <button class="btn filtbtn" id="hdrFilt" style="display:none;flex:0 0 auto" onclick="hdrFiltToggle()" title="Filtros e parâmetros"></button>
     </header>
@@ -440,7 +440,7 @@ textarea{min-height:90px;resize:vertical}
   </main>
 </div>
 <button class="totop" id="toTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Topo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="tip" id="tip"></div>
 <script src="app/dados.js"></script>
 <script src="app/anexos.js"></script>

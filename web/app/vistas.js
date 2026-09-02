@@ -28,6 +28,17 @@ function anaPanel(inner){return `<div class="fwrap" style="height:0"><div class=
     <button class="btn primary" onclick="anaApply()">${ic('check',15)} Aplicar</button>
     <button class="btn" onclick="anaClear()">${ic('x',15)} Limpar</button>
   </div></div></div></div>`}
+/* Cartões e afins são divs com onclick: sem isto, o teclado não chega a
+   nenhuma lista — nem um leitor de ecrã os anuncia como acionáveis. Corre
+   depois de cada render e de cada fillModal. */
+function tornarFocavel(raiz){
+  if(!raiz)return;
+  [].slice.call(raiz.querySelectorAll('[onclick]')).forEach(e=>{
+    if(/^(A|BUTTON|INPUT|SELECT|TEXTAREA|LABEL)$/.test(e.tagName))return;
+    if(!e.hasAttribute('tabindex'))e.setAttribute('tabindex','0');
+    if(!e.hasAttribute('role'))e.setAttribute('role','button');
+  });
+}
 function render(){
   const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
   document.getElementById('pageTitle').textContent=meta.label;
@@ -41,6 +52,7 @@ function render(){
     transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
   view().innerHTML=html;
+  tornarFocavel(view());
   if(tab==='properties')db.properties.forEach(p=>paintThumbs(p.photos,view()));
 }
 let kpiN=0;const KPI_REG={};

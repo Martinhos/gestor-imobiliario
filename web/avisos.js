@@ -26,6 +26,37 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 29,
+    data: '2026-09-02',
+    titulo: 'Nada se perde sem perguntar',
+    seccoes: [
+      {
+        titulo: 'As janelas protegem o que escreveste',
+        afeta: ['app'],
+        itens: [
+          'Fechar uma janela com alterações por guardar — no fundo escurecido, no X ou com o botão voltar — passa a perguntar primeiro. Um toque acidental deixou de deitar fora um formulário meio preenchido.',
+          'Apagar uma fotografia ou um ficheiro passa a pedir confirmação, e o botão afastou-se do puxador de arrastar.',
+        ],
+      },
+      {
+        titulo: 'A app inteira anda a teclado',
+        afeta: ['app'],
+        itens: [
+          'O menu, os cartões e as listas passaram a ser alcançáveis com Tab e a abrir com Enter.',
+          'Dentro de uma janela, o foco fica na janela — e ao fechar volta para onde estava.',
+          'As confirmações («Guardado», «Apagado») passam a ser anunciadas por leitores de ecrã.',
+        ],
+      },
+      {
+        titulo: 'Apagar tudo diz a verdade',
+        afeta: ['app', 'conta'],
+        itens: [
+          'Com sessão iniciada, «Apagar tudo» apagava também na conta e nos outros aparelhos — dizendo «deste dispositivo». Agora explica as duas opções em vez de arriscar.',
+        ],
+      },
+    ],
+  },
+  {
     v: 28,
     data: '2026-09-01',
     titulo: 'Tutoriais na ajuda, e a funcionar com janelas abertas',
