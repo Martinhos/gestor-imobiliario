@@ -26,7 +26,7 @@ const ANA_N=()=>tab==='dashboard'?((ownerFilter?1:0)+(dashProp?1:0))
 function anaPanel(inner){return `<div class="fwrap" style="height:0"><div class="fpanel ${anaOpen[tab]?'on':''}" style="top:0"><div class="card" style="padding:12px">${inner}
   <div class="toolbar" style="margin:12px 0 0">
     <button class="btn" onclick="anaClear()">${ic('x',15)} Limpar</button>
-    <button class="btn primary" onclick="anaApply()">${ic('check',15)} Aplicar</button>
+    <button class="btn primary" onclick="anaApply()">${ic('check',15)} Fechar</button>
   </div></div></div></div>`}
 /* Cartões e afins são divs com onclick: sem isto, o teclado não chega a
    nenhuma lista — nem um leitor de ecrã os anuncia como acionáveis. Corre
@@ -568,7 +568,7 @@ function txFilterBody(){
 }
 function onTxSort(){txSort=val('txSortF')||'date';txRerender()}
 function onTxDir(){txDir=val('txDirF')||'desc';txRerender()}
-function txFilterFoot(){return `${txFilterCount()?`<button class="btn danger" onclick="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" onclick="closeModal()">Ver movimentos</button>`}
+function txFilterFoot(){return `${txFilterCount()?`<button class="btn" onclick="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" onclick="closeModal()">${ic('check',15)} Fechar</button>`}
 function txFilterModal(){openModal('Filtros',txFilterBody(),txFilterFoot())}
 function onTxProp(){txProp=val('txPropF')||'';txRerender()}
 function onTxOwner(){ownerFilter=val('txOwnerF')||'';txProp='';txRerender()}
@@ -581,7 +581,13 @@ function clearTxFilters(){txFilter='';txProp='';txPaid='';txCat='';txSub='';owne
    Pesquisa por texto + seletores no topo de cada página de registos, ao estilo dos movimentos. */
 let listF={};
 const lf=k=>listF[k]||(listF[k]={});
-function lfSearch(k,v){lfState(k).q=v}
+let _lqT=null;
+function lfSearch(k,v){
+  clearTimeout(_lqT);
+  _lqT=setTimeout(()=>{lf(k).q=v;render();
+    const i=document.getElementById('lq_'+k);
+    if(i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}}},280);
+}
 /* limpa o filtro do separador atual, seja ele qual for — para o botão dos
    estados vazios não ter de saber onde está */
 function limparFiltroAtual(){
@@ -591,7 +597,6 @@ function limparFiltroAtual(){
 }
 function lfClear(k){
   const s=lf(k);listF[k]={_open:s._open};
-  if(lfDraft&&lfDraftK===k)lfDraft={};
   if(k==='lprops')ownerFilter='';
   closePops();render();
 }
@@ -602,25 +607,21 @@ function lfHit(k,hay){const q=String(lf(k).q||'');if(!q.trim())return true;
   const h=deacc(hay),terms=[];
   q.replace(/"([^"]*)"/g,(m,ph)=>{if(ph.trim())terms.push(deacc(ph.trim()));return ' '}).split(/\s+/).forEach(w=>{if(w)terms.push(deacc(w))});
   for(const t of terms)if(h.indexOf(t)<0)return false;return true}
-/* seleções em rascunho: só entram em vigor ao tocar em Aplicar */
-let lfDraft=null,lfDraftK='';
-const lfState=k=>(lf(k)._open&&lfDraft&&lfDraftK===k)?lfDraft:lf(k);
+/* Os três painéis de filtro tinham três feitios: rascunho com Aplicar nas
+   listas, aplicação imediata no modal dos movimentos, imediata com um botão
+   chamado «Aplicar» nas análises. Fica UM modelo mental: mexes, a lista
+   muda logo atrás; «Limpar» à esquerda, «Fechar» primário à direita, em
+   todo o lado. O rascunho foi-se com a razão de ser dele. */
 function lfSel(k,key,opts){
   const id='lfsel_'+k+'_'+key,fn='onlf_'+k+'_'+key;
-  window[fn]=()=>{lfState(k)[key]=val(id)||''};
-  return `<div style="width:100%">${sel(id,lfState(k)[key]||'',opts,fn)}</div>`;
+  window[fn]=()=>{lf(k)[key]=val(id)||'';if(k==='lprops')ownerFilter=lf(k).own||'';render()};
+  return `<div style="width:100%">${sel(id,lf(k)[key]||'',opts,fn)}</div>`;
 }
 function lfToggle(k){
-  const s=lf(k);
-  if(s._open){s._open=false;lfDraft=null}
-  else{s._open=true;lfDraftK=k;lfDraft=Object.assign({},s);delete lfDraft._open}
-  render();
+  const s=lf(k);s._open=!s._open;render();
 }
 function lfApply(k){
-  const d=Object.assign({},lfDraft||{},{_open:false});
-  listF[k]=d;lfDraft=null;
-  if(k==='lprops')ownerFilter=d.own||'';
-  closePops();render();
+  lf(k)._open=false;closePops();render();
 }
 /* o dropdown de filtros (aberto pelo botão do cabeçalho) inclui a pesquisa no topo */
 function lfBar(k,sels,found,sorts){
@@ -629,14 +630,14 @@ function lfBar(k,sels,found,sorts){
       ${lfSel(k,'sb',[{v:'',label:sorts.defLabel||'Ordem original'}].concat(sorts.opts))}
       ${lfSel(k,'sd',[{v:'',label:'Ascendente'},{v:'desc',label:'Descendente'}])}</div>`:'';
   return `<div class="fwrap" style="height:0"><div class="fpanel ${s._open?'on':''}" style="top:0"><div class="card" style="padding:12px">
-    <div class="qwrap"><input id="lq_${k}" class="txq" type="search" value="${esc(lfState(k).q||'')}" placeholder="Pesquisar…" autocomplete="off"
+    <div class="qwrap"><input id="lq_${k}" class="txq" type="search" value="${esc(lf(k).q||'')}" placeholder="Pesquisar…" autocomplete="off"
       oninput="lfSearch('${k}',this.value);this.nextElementSibling.style.display=this.value?'':'none'">
-      <button class="qclear" style="display:${(lfState(k).q||'')?'':'none'}" onclick="const i=this.previousElementSibling;i.value='';lfSearch('${k}','');this.style.display='none';i.focus()">✕</button></div>
+      <button class="qclear" style="display:${(lf(k).q||'')?'':'none'}" onclick="const i=this.previousElementSibling;i.value='';lfSearch('${k}','');this.style.display='none';i.focus()">✕</button></div>
     <div style="display:flex;flex-direction:column;gap:9px;margin-top:9px">${sels.join('')}</div>
     ${sortRow}
     <div class="toolbar" style="margin:12px 0 0">
       <button class="btn" onclick="lfClear('${k}')">${ic('x',15)} Limpar</button>
-      <button class="btn primary" onclick="lfApply('${k}')">${ic('check',15)} Aplicar</button>
+      <button class="btn primary" onclick="lfApply('${k}')">${ic('check',15)} Fechar</button>
     </div>
   </div></div></div>
   ${n?`<div class="small" style="margin:2px 0 10px">${found} resultado${found===1?'':'s'} com os filtros ativos${String(s.q||'').trim()?' · pesquisa: “'+esc(s.q.trim())+'”':''}.</div>`:''}`;

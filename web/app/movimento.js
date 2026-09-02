@@ -453,13 +453,21 @@ function applyLoan(t){
     else ar.tx.amount=Math.round(loanCalc(l).total*100)/100}
 }
 function delTx(id){
-  const t=db.transactions.find(x=>x.id===id);
-  confirmModal('Apagar movimento',`Apagar “${esc(t.label)}”?`,()=>{
-    if(t.kind==='loan'&&t.principal&&t.loanId){
-      const l=findLoan(prop(t.propertyId),t.loanId);
-      if(l){l.outstanding=Math.round((l.outstanding+t.principal)*100)/100;syncLoanRec(prop(t.propertyId),l)}
+  /* sem confirmação, com Anular: é a eliminação mais frequente da app, e a
+     pergunta constante ensinava o dedo a confirmar sem ler */
+  const t=db.transactions.find(x=>x.id===id);if(!t)return;
+  const copia=JSON.parse(JSON.stringify(t));
+  if(t.kind==='loan'&&t.principal&&t.loanId){
+    const l=findLoan(prop(t.propertyId),t.loanId);
+    if(l){l.outstanding=Math.round((l.outstanding+t.principal)*100)/100;syncLoanRec(prop(t.propertyId),l)}
+  }
+  db.transactions=db.transactions.filter(x=>x.id!==id);save();closeAllModals();render();
+  comDesfazer('Movimento apagado.',()=>{
+    db.transactions.push(copia);
+    if(copia.kind==='loan'&&copia.principal&&copia.loanId){
+      const l=findLoan(prop(copia.propertyId),copia.loanId);
+      if(l){l.outstanding=Math.round((l.outstanding-copia.principal)*100)/100;syncLoanRec(prop(copia.propertyId),l)}
     }
-    db.transactions=db.transactions.filter(x=>x.id!==id);save();closeAllModals();render();toast('Movimento apagado.');
   });
 }
 function yearRows(l){

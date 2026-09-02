@@ -48,6 +48,22 @@ var AVISOS = [
         ],
       },
       {
+        titulo: 'Apagar com rede por baixo',
+        afeta: ['movimentos', 'imoveis', 'contratos'],
+        itens: [
+          'Apagar um movimento deixa de perguntar — apaga e dá seis segundos de «Anular». Apagar um imóvel, um contrato ou uma seleção inteira continua a confirmar, mas também ganha o «Anular».',
+          'Ao abrir, se a app estiver a atualizar-se, passa a dizê-lo: versão de destino e passo a passo, em vez de um recarregamento mudo.',
+        ],
+      },
+      {
+        titulo: 'Filtros com um só feitio',
+        afeta: ['app'],
+        itens: [
+          'Todos os painéis de filtro aplicam no momento: mexes, a lista muda logo atrás. «Limpar» à esquerda, «Fechar» à direita, em todo o lado.',
+          'No modo de seleção, as ações desceram para uma barra em baixo, à mão do polegar.',
+        ],
+      },
+      {
         titulo: 'Apagar tudo diz a verdade',
         afeta: ['app', 'conta'],
         itens: [

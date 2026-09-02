@@ -142,7 +142,11 @@ function gateAtualizar(minima) {
 }
 
 CW.atualizarAgora = function () {
-  limparCaches().then(function () { location.reload(); });
+  ecraAtualizar('nova', 'a limpar a versão antiga…');
+  limparCaches().then(function () {
+    ecraAtualizar('nova', 'a reiniciar…');
+    location.reload();
+  });
 };
 
 function limparCaches() {
@@ -190,17 +194,54 @@ function bannerAtualizar(v) {
   document.body.appendChild(el);
 }
 
+/* O ecrã que se vê enquanto a app se atualiza sozinha. Antes era um piscar
+   mudo: a página recarregava sem dizer porquê, e quem visse ficava sem
+   saber se era um erro. Agora diz o que está a fazer, passo a passo. */
+function ecraAtualizar(versao, passo) {
+  var el = document.getElementById('cwUpd2');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'cwUpd2';
+    // acima de tudo, portao de login incluido (z 200): enquanto se atualiza,
+    // atualizar E o estado da app
+    el.style.cssText = 'position:fixed;inset:0;z-index:240;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px;text-align:center';
+    el.innerHTML = '<div style="max-width:320px">' +
+      '<div id="cwUpdRoda" style="width:34px;height:34px;margin:0 auto 14px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:cwgira .8s linear infinite"></div>' +
+      '<b style="font-size:16px">A atualizar para a versão ' + versao + '</b>' +
+      '<div class="small" id="cwUpdPasso" style="margin-top:7px"></div>' +
+      '<div class="small" style="margin-top:14px;opacity:.7">Não perdes nada — os teus dados ficam onde estão.</div></div>';
+    var st = document.createElement('style');
+    st.textContent = '@keyframes cwgira{to{transform:rotate(360deg)}}' +
+      '@media(prefers-reduced-motion:reduce){#cwUpdRoda{animation:none;border-top-color:var(--line)}}';
+    el.appendChild(st);
+    document.body.appendChild(el);
+  }
+  var p = document.getElementById('cwUpdPasso');
+  if (p) p.textContent = passo;
+}
+
 CW.verificarVersao = function () {
+  /* acabada de atualizar? diz-se — é a outra metade de mostrar o estado */
+  try {
+    if (Number(sessionStorage.getItem(SS_RECARGA)) === VERSAO) {
+      sessionStorage.removeItem(SS_RECARGA);
+      setTimeout(function () { toast('App atualizada para a versão ' + VERSAO + '.'); }, 700);
+    }
+  } catch (e) {}
   return fetch('/versao.json', { cache: 'no-store' })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (d) {
       if (!d) return;
       if (Number(d.minima) > VERSAO) { gateAtualizar(Number(d.minima)); return; }
       if (!(Number(d.versao) > VERSAO)) return;
-      // há versão nova: buscar sozinho e recarregar, uma vez
+      // há versão nova: buscar sozinho e recarregar, uma vez — à vista
       if (jaRecarreguei(Number(d.versao))) { bannerAtualizar(Number(d.versao)); return; }
       marcarRecarga(Number(d.versao));
-      return limparCaches().then(function () { location.reload(); });
+      ecraAtualizar(Number(d.versao), 'a descarregar a versão nova…');
+      return limparCaches().then(function () {
+        ecraAtualizar(Number(d.versao), 'a reiniciar…');
+        location.reload();
+      });
     })
     .catch(function () { /* sem rede: fica com o que tem */ });
 };

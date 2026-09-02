@@ -305,10 +305,19 @@ function reactivateContract(id){
 function delContract(id){
   const c=contract(id);
   confirmModal('Apagar contrato',`Apagar o contrato de ${esc(ctNames(c))}? Os movimentos ficam, mas deixam de estar ligados a ele.`,()=>{
-    (c.files||[]).forEach(f=>idbDel(f.id).catch(()=>{}));
+    const copia=JSON.parse(JSON.stringify(c));
+    const recs=JSON.parse(JSON.stringify((db.recurring||[]).filter(r=>r.auto&&r.tx&&r.tx.contractId===id)));
+    const ligados=db.transactions.filter(t=>t.contractId===id).map(t=>t.id);
     db.contracts=db.contracts.filter(x=>x.id!==id);
     db.recurring=(db.recurring||[]).filter(r=>!(r.auto&&r.tx&&r.tx.contractId===id));
     db.transactions.forEach(t=>{if(t.contractId===id)t.contractId=null});
-    save();closeAllModals();buildNav();render();toast('Contrato apagado.');
+    save();closeAllModals();buildNav();render();
+    comDesfazer('Contrato apagado.',()=>{
+      db.contracts.push(copia);
+      db.recurring=(db.recurring||[]).concat(recs);
+      db.transactions.forEach(t=>{if(ligados.indexOf(t.id)>-1)t.contractId=id});
+    },()=>{
+      (copia.files||[]).forEach(f=>idbDel(f.id).catch(()=>{}));
+    });
   });
 }

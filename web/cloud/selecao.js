@@ -165,13 +165,24 @@ vTransactions = function () {
   if (!CW.selMode) return tmp.innerHTML;
 
   // a barra global fica colada ao topo, para se poder marcar tudo a meio da lista
+  /* As ações descem para onde está o polegar: quem acabou de marcar linhas
+     a meio da lista não tem de subir ao canto do ecrã. A barra de baixo
+     substitui a de atalhos enquanto a seleção durar; o cabeçalho mantém o
+     caminho antigo para quem já o conhece. */
+  var fundo =
+    '<div class="sel-fundo">' +
+      '<button type="button" class="btn" onclick="CW.selSair()">' + ic('x', 15) + ' Cancelar</button>' +
+      '<span style="flex:1"></span>' +
+      '<button type="button" class="btn" onclick="CW.selEditar()">' + ic('pen', 15) + ' Editar</button>' +
+      '<button type="button" class="btn danger" onclick="CW.selApagar()">' + ic('trash', 15) + ' Eliminar</button>' +
+    '</div>';
   var barra =
     '<div class="sel-bar">' +
       '<span class="selbox" id="selGlobal" onclick="CW.selTodos(event)">' + caixa(false) + '</span>' +
       '<span style="flex:1;min-width:0;cursor:pointer" onclick="CW.selTodos(event)"><b id="selConta">nenhum movimento</b>' +
       '<span class="small" style="display:block">toca para marcar ou desmarcar tudo</span></span>' +
     '</div>';
-  return barra + tmp.innerHTML;
+  return barra + tmp.innerHTML + fundo;
 };
 
 /* ------------------------------------------ o toque longo e o kebab da linha */
@@ -309,11 +320,14 @@ CW.selApagar = function () {
     return t ? t.amount || 0 : 0;
   }));
   confirmModal('Eliminar ' + ids.length + (ids.length === 1 ? ' movimento' : ' movimentos'),
-    'Somam ' + euro2(total) + '. Isto não se desfaz.',
+    'Somam ' + euro2(total) + '.',
     function () {
+      var copia = JSON.parse(JSON.stringify((db.transactions || []).filter(function (t) { return selIds[t.id]; })));
       db.transactions = (db.transactions || []).filter(function (t) { return !selIds[t.id]; });
       save(); buildNav(); CW.selSair();
-      toast(ids.length + (ids.length === 1 ? ' movimento eliminado.' : ' movimentos eliminados.'));
+      comDesfazer(ids.length + (ids.length === 1 ? ' movimento eliminado.' : ' movimentos eliminados.'), function () {
+        db.transactions = (db.transactions || []).concat(copia);
+      });
     });
 };
 
@@ -330,6 +344,7 @@ var _render_sel = render;
 render = function () {
   var r = _render_sel.apply(this, arguments);
   patchHdrSel();
+  document.body.classList.toggle('sel-on', !!CW.selMode);
   if (CW.selMode) selPintar();
   return r;
 };
@@ -354,5 +369,10 @@ css.textContent =
   '.section-title.sel-mes .selbox{padding-right:9px}' +
   // o kebab de cada linha, discreto até se lhe tocar
   '.txkebab{margin:0 0 0 4px;padding:9px;color:var(--muted)}' +
+  '.sel-fundo{position:fixed;left:0;right:0;bottom:0;z-index:45;display:flex;gap:8px;align-items:center;' +
+    'background:var(--card);border-top:1px solid var(--line);' +
+    'padding:8px calc(10px + var(--inset-right)) calc(8px + var(--inset-bottom)) calc(10px + var(--inset-left))}' +
+  'body.sel-on .tabbar{display:none!important}' +
+  'body.sel-on .wrap{padding-bottom:calc(120px + var(--inset-bottom))}' +
   '.txkebab:hover{color:var(--ink);background:var(--chip)}';
 document.head.appendChild(css);
