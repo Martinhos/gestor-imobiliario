@@ -443,6 +443,9 @@ function num(s){
   else if(ld>-1)t=(t.split('.').length===2&&t.split('.')[1].length<=2)?t:t.replace(/\./g,'');
   const n=parseFloat(t);return isFinite(n)?n:0;
 }
+/* euro() arredonda; isto mostra os cêntimos quando existem — uma renda de
+   512,74 € aparecia «513 €» num cartão e «512,74 €» no movimento ao lado */
+const euroS=v=>Math.round(v*100)%100?euro2(v):euro(v);
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2800)}
 
 const KIND={income:{short:'Receita',sign:'+',color:'pos',flow:'in'},expense:{short:'Despesa',sign:'−',color:'neg',flow:'out'},

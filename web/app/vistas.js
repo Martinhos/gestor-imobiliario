@@ -25,8 +25,8 @@ const ANA_N=()=>tab==='dashboard'?((ownerFilter?1:0)+(dashProp?1:0))
   :tab==='reports'?((ownerFilter?1:0)+(repProp?1:0)):0;
 function anaPanel(inner){return `<div class="fwrap" style="height:0"><div class="fpanel ${anaOpen[tab]?'on':''}" style="top:0"><div class="card" style="padding:12px">${inner}
   <div class="toolbar" style="margin:12px 0 0">
-    <button class="btn primary" onclick="anaApply()">${ic('check',15)} Aplicar</button>
     <button class="btn" onclick="anaClear()">${ic('x',15)} Limpar</button>
+    <button class="btn primary" onclick="anaApply()">${ic('check',15)} Aplicar</button>
   </div></div></div></div>`}
 /* Cartões e afins são divs com onclick: sem isto, o teclado não chega a
    nenhuma lista — nem um leitor de ecrã os anuncia como acionáveis. Corre
@@ -52,6 +52,14 @@ function render(){
     transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
   view().innerHTML=html;
+  /* A visão geral era o único ecrã sem criação rápida: registar uma renda
+     avulsa custava quatro toques de viagem. Entra aqui, depois do painel
+     rearranjar os cartões, para não virar um cartão arrastável. */
+  if(tab==='dashboard'&&!view().querySelector('.fab')){
+    view().insertAdjacentHTML('beforeend',
+      '<div style="text-align:center;margin:2px 0 0"><button type="button" class="btn sm" onclick="window.CW&&CW.enterEdit&&CW.enterEdit()">'+ic('grip',13)+' Personalizar painel</button></div>'+
+      fab([{act:'newTxPick()',label:'Novo movimento'}])+'<div class="fabpad"></div>');
+  }
   tornarFocavel(view());
   if(tab==='properties')db.properties.forEach(p=>paintThumbs(p.photos,view()));
 }
@@ -328,11 +336,11 @@ function vProperties(){
       <div class="chips">
         <span class="badge ${st.badge}">${st.label}</span>
         ${p.use==='investimento'?`<span class="badge grey">${p.rentalMode==='quartos'?'Por quartos':'Imóvel inteiro'}</span>`:''}
-        ${rent?`<span class="badge">${euro(rent)}/mês</span>`:''}
+        ${rent?`<span class="badge">${euroS(rent)}/mês</span>`:''}
         ${isFinite(y)?`<span class="badge">Yield ${pct(y)}</span>`:''}
         <span class="badge grey">Valor ${euro(p.value)}</span>
         ${ls.length?`<span class="badge amber">Dívida ${euro(debtOf(p))}${ls.length>1?' · '+ls.length+' hipotecas':''}</span>`:''}
-        ${propDebt(p.id)>0.005?`<span class="badge red">${ic('users',12)} ${euro(propDebt(p.id))} entre donos</span>`:''}
+        ${propDebt(p.id)>0.005?`<span class="badge red">${ic('users',12)} ${euro(propDebt(p.id))} entre proprietários</span>`:''}
         ${(p.photos||[]).length?`<span class="badge grey">${ic('photo',12)} ${p.photos.length}</span>`:''}</div>
       ${ac.length?`<div class="small" style="margin-top:10px">${ac.map(c2=>`${c2.roomId?esc(roomName(p,c2.roomId))+': ':''}${esc(ctNames(c2))} · ${euro(c2.rent)}`).join('<br>')}</div>`:''}
       ${ls.length?`<div class="small" style="margin-top:9px">${ls.map(l=>`${esc(loanName(l))} · ${RATE[l.type]} · ${euro2(loanCalc(l).total)}/mês${(l.files||[]).length?' · '+l.files.length+' doc.':''}`).join('<br>')}
@@ -359,7 +367,7 @@ function vContracts(){
     const cs=lfSort(K,contractsOf(p.id).filter(c=>ctFMatch(c,s)),{nome:c=>ctName(c),renda:c=>c.rent,inicio:c=>c.start||''});if(!cs.length)return '';
     any=true;
     return `<div class="section-title" style="display:flex;justify-content:space-between;text-transform:none">
-      <span>${esc(p.name)}</span><span>${euro(rentOf(p))}/mês</span></div>
+      <span>${esc(p.name)}</span><span>${euroS(rentOf(p))}/mês</span></div>
       <div class="list">${cs.map(c=>{
         const on=isActive(c),ts=ctTenants(c);
         return `<div class="card tap" data-lp="ct:${esc(c.id)}" onclick="ctModal('${jsq(c.id)}')">
@@ -379,7 +387,7 @@ function vContracts(){
           ${(c.files||[]).length?`<span class="badge grey">${ic('clip',12)} ${c.files.length}</span>`:''}
           ${(c.inventory||[]).length?`<span class="badge grey">${ic('box',12)} ${c.inventory.length} artigos</span>`:''}</div>
 </div>`}).join('')}</div>`}).join('');
-  return head+(any?body:`<div class="empty"><b>Nada neste filtro</b></div>`);
+  return head+(any?body:`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`);
 }
 function ctFMatch(c,s){
   if(s.p&&c.propertyId!==s.p)return false;
@@ -421,7 +429,7 @@ function vTenants(){
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'contratos',label:'Ordenar por nº de contratos'},{v:'renda',label:'Ordenar por renda'}]})
     +fab([{label:'Adicionar inquilino',act:"personModal('tenant')"}]);
   if(!db.tenants.length)return head+`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.</div>`;
-  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b></div>`;
+  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   return head+`<div class="list">${list.map(t=>personCard(t,'tenant')).join('')}</div>`;
 }
 function vOwners(){
@@ -439,7 +447,7 @@ function vOwners(){
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'imoveis',label:'Ordenar por nº de imóveis'}]})
     +fab([{label:'Adicionar proprietário',act:"personModal('owner')"}]);
   if(!db.owners.length)return head+`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.</div>`;
-  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b></div>`;
+  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   return head+`<div class="list">${list.map(o=>personCard(o,'owner')).join('')}</div>`;
 }
 
@@ -538,7 +546,7 @@ function txRerender(){
 function txFilterBody(){
   const kinds=[['','Todos os tipos'],['income','Receitas'],['expense','Despesas'],['loan','Pagamentos de crédito'],['debt','Dívidas'],['settle','Transferências entre proprietários']];
   const props=[{v:'',label:'Todos os imóveis'},{v:'__none__',label:'Sem imóvel atribuído'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
-  const payers=[{v:'',label:'Qualquer pessoa'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
+  const payers=[{v:'',label:'Qualquer proprietário'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
   const owners=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')));
   const tree=allCats(txFilter==='debt'?'expense':txFilter),catOpts=[{v:'',label:'Todas as categorias'},{v:'__none__',label:'Sem categoria'}].concat(Object.keys(tree).map(c=>({v:c,label:c})));
   const subsF=txCat&&txCat!=='__none__'?(tree[txCat]||[]):[];
@@ -574,6 +582,13 @@ function clearTxFilters(){txFilter='';txProp='';txPaid='';txCat='';txSub='';owne
 let listF={};
 const lf=k=>listF[k]||(listF[k]={});
 function lfSearch(k,v){lfState(k).q=v}
+/* limpa o filtro do separador atual, seja ele qual for — para o botão dos
+   estados vazios não ter de saber onde está */
+function limparFiltroAtual(){
+  if(typeof LFK!=='undefined'&&LFK[tab])return lfClear(LFK[tab]);
+  if(tab==='transactions'&&typeof clearTxFilters==='function')return clearTxFilters();
+  if(typeof anaClear==='function')anaClear();
+}
 function lfClear(k){
   const s=lf(k);listF[k]={_open:s._open};
   if(lfDraft&&lfDraftK===k)lfDraft={};
@@ -620,8 +635,8 @@ function lfBar(k,sels,found,sorts){
     <div style="display:flex;flex-direction:column;gap:9px;margin-top:9px">${sels.join('')}</div>
     ${sortRow}
     <div class="toolbar" style="margin:12px 0 0">
-      <button class="btn primary" onclick="lfApply('${k}')">${ic('check',15)} Aplicar</button>
       <button class="btn" onclick="lfClear('${k}')">${ic('x',15)} Limpar</button>
+      <button class="btn primary" onclick="lfApply('${k}')">${ic('check',15)} Aplicar</button>
     </div>
   </div></div></div>
   ${n?`<div class="small" style="margin:2px 0 10px">${found} resultado${found===1?'':'s'} com os filtros ativos${String(s.q||'').trim()?' · pesquisa: “'+esc(s.q.trim())+'”':''}.</div>`:''}`;
@@ -670,7 +685,7 @@ function vTransactions(){
   const list=db.transactions.filter(txMatch).sort((a,b)=>{const d=txDir==='desc'?-1:1;
     if(txSort==='amount')return d*((a.amount||0)-(b.amount||0))||String(a.date).localeCompare(String(b.date));
     return d*String(a.date).localeCompare(String(b.date))});
-  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b></div>`
+  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`
     +balancesCard(txProp||null);   /* pode não haver movimentos e haver contas por acertar */
   const tot={income:0,expense:0,loan:0,owed:0,repay:0,settle:0};list.forEach(t=>{if(countsInTotals(t))tot[t.kind]=(tot[t.kind]||0)+t.amount});
   const saldo=tot.income+tot.owed-tot.expense-tot.loan-tot.repay;
@@ -706,7 +721,7 @@ function vTransactions(){
           ${t.kind==='loan'&&(t.principal||t.interest||t.fee)?`<div class="small">${t.payType==='amortizacao'?`Amortização · capital ${euro2(t.principal||0)} · comissão ${euro2(t.fee||0)}`:`Capital ${euro2(t.principal||0)} · juros ${euro2(t.interest||0)} · selo ${euro2(t.stamp||0)}`}</div>`:''}
           ${(!countsInTotals(t)||(t.tags||[]).length)?`<div class="chips">${countsInTotals(t)?'':'<span class="badge grey">fora dos totais</span>'}${(t.tags||[]).map(g=>`<span class="badge grey">${esc(g)}</span>`).join('')}</div>`:''}</div>
         <div style="text-align:right;flex:0 0 auto"><div class="${k.color}" style="font-weight:750${t.kind==='settle'?';color:var(--muted)':''}">${k.sign}${euro2(t.amount)}</div>
-          ${t.notes?`<div class="small" style="margin-top:3px">${ic('contract',12)}</div>`:''}</div>
+          ${t.notes?`<div class="small" style="margin-top:3px" title="Tem comentários">${ic('pen',12)}</div>`:''}</div>
       </div></div>`}).join('')}</div>`}).join('');
 }
 function onTxFilter(){txFilter=val('txKind')||'';txCat='';txSub='';txRerender()}

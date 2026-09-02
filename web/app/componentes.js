@@ -240,6 +240,10 @@ window.addEventListener('popstate',()=>{
   if(drawer||modalStack.length){
     if(drawer)closeDrawer(true);else closeModal('voltar');
     if(document.body.classList.contains('open')||modalStack.length)pushHist();
+  }else if(typeof setPage!=='undefined'&&setPage){
+    /* dentro de uma subpágina de Definições, voltar sobe a Definições — o
+       sistema e o botão no ecrã deixam de se contradizer */
+    setPage='';render();try{window.scrollTo(0,0)}catch(e){}
   }else{
     try{history.back()}catch(e){}
   }
@@ -288,17 +292,31 @@ function closeModal(origem){
 function closeAllModals(){while(modalStack.length)closeModal()}
 const val=id=>{const e=document.getElementById(id);return e?e.value:''};
 const chk=id=>{const e=document.getElementById(id);return e?!!e.checked:false};
+/* O botão diz o verbo da ação e veste-se de perigo quando destrói: um
+   "Confirmar" primário igual ao Guardar convidava ao reflexo justamente
+   onde não há undo. */
 function confirmModal(title,text,cb){
+  const verbo=(/^(Apagar|Remover|Eliminar|Terminar)\b/.exec(title)||[])[1];
   openModal(title,`<div class="hint" style="font-size:14px">${text}</div>`,
-    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="_ok()">Confirmar</button>`);
+    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn ${verbo?'danger':'primary'}" onclick="_ok()">${verbo||'Confirmar'}</button>`);
   window._ok=()=>{closeModal();cb()};
+}
+/* O toast diz o que falta; isto aponta o campo — realça-o, leva-o ao ecrã
+   e larga o realce à primeira tecla. */
+function falhaCampo(id,msg){
+  toast(msg);
+  const e=document.getElementById(id);if(!e)return;
+  e.classList.add('err');
+  try{e.scrollIntoView({block:'center'})}catch(x){}
+  try{e.focus({preventScroll:true})}catch(x){}
+  e.addEventListener('input',()=>e.classList.remove('err'),{once:true});
 }
 /* escolher de uma lista, no estilo da app */
 function pickModal(title,options,onPick,extra){
   openModal(title,`<div class="form">
     ${options.length?`<div class="list" style="gap:7px">${options.map((o,i)=>
       `<button type="button" class="card tap" style="padding:12px 14px;display:flex;align-items:center;gap:11px" onclick="_pick(${i})">
-        ${o.icon?`<span class="ic" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex:0 0 34px">${ic(o.icon,18)}</span>`:o.avatar?`<span class="avatar">${esc(initials(o.label))}</span>`:''}
+        ${o.icon?`<span class="ic" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:${o.icon==='trash'?'var(--danger-soft)':'var(--accent-soft)'};color:${o.icon==='trash'?'var(--danger)':'var(--accent)'};flex:0 0 34px">${ic(o.icon,18)}</span>`:o.avatar?`<span class="avatar">${esc(initials(o.label))}</span>`:''}
         <span style="flex:1;min-width:0;text-align:left"><b style="display:block;font-size:14px">${esc(o.label)}</b>
         ${o.sub?`<span class="small">${esc(o.sub)}</span>`:''}</span></button>`).join('')}</div>`
       :`<div class="hint">Não há nada para escolher.</div>`}
@@ -324,6 +342,10 @@ window.addEventListener('scroll',()=>{const b=document.getElementById('toTop');i
 function lpShow(title,opts){
   closeAllModals();
   pickModal(title||'Opções',opts.map((o,i)=>({v:i,label:o.label,sub:o.sub||'',icon:o.icon})),o=>{closeAllModals();opts[o.v].act()});
+  // o rótulo do que destrói fica vermelho também aqui, não só no menu do modal
+  [].slice.call(document.querySelectorAll('.modal.open .card.tap b')).forEach(b=>{
+    if(/^(Apagar|Remover|Eliminar|Terminar)/.test(b.textContent))b.style.color='var(--danger)';
+  });
 }
 function lpMenu(v){
   const a=String(v||'').split(':'),k=a[0],id=a[1];

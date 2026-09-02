@@ -164,9 +164,14 @@ CW.submitAuth = function () {
     }
     payload.terms = L.version;
   }
+  /* numa rede lenta não acontecia nada visível: o segundo toque disparava
+     um segundo pedido */
+  var b = document.querySelector('button[onclick="CW.submitAuth()"]');
+  if (b) { b.disabled = true; b._rotulo = b.textContent; b.textContent = login ? 'A entrar…' : 'A criar a conta…'; }
+  var repor = function () { if (b) { b.disabled = false; b.textContent = b._rotulo; } };
   api('POST', login ? '/api/auth/login' : '/api/auth/register', payload)
     .then(finishLogin)
-    .catch(function (e) { errEl.textContent = e.message || 'Não foi possível entrar.'; });
+    .catch(function (e) { repor(); errEl.textContent = e.message || 'Não foi possível entrar.'; });
 };
 
 /* ---- entrada com Google / Apple (aparece quando configurada) ---- */

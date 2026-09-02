@@ -42,8 +42,15 @@ function subirAnexo(id, blob) {
   if (CW.user.token) h['Authorization'] = 'Bearer ' + CW.user.token;
   fetch('/api/files/' + encodeURIComponent(id) + (casa ? '?casa=' + encodeURIComponent(casa) : ''), {
     method: 'PUT', headers: h, body: blob, credentials: 'same-origin',
-  }).then(function () { delete subindo[id]; })
-    .catch(function () { delete subindo[id]; });   // fica local; sobe na próxima
+  }).then(function (r) {
+    delete subindo[id];
+    /* o PUT podia falhar com resposta (grande de mais, sem permissão) e
+       ninguém sabia: parecia anexado, nunca chegava ao outro aparelho */
+    if (r && !r.ok && !subirAnexo._avisado) {
+      subirAnexo._avisado = 1;
+      try { toast('Um anexo não subiu (' + (meta.name || 'ficheiro') + '). Fica neste aparelho; tentamos de novo.'); } catch (e) {}
+    }
+  }).catch(function () { delete subindo[id]; });   // sem rede: fica local; sobe na próxima
 }
 
 function baixarAnexo(id) {

@@ -24,9 +24,18 @@ function buildNav(){
   const late=recActive().length;
   document.getElementById('nav').innerHTML=NAV_GROUPS.map(g=>`<div class="navh">${g.label}</div>`+g.ids.map(id=>{const t=TABS.find(x=>x.id===id);
     return `<a class="${t.id===tab?'on':''}" tabindex="0" ${t.id===tab?'aria-current="page"':''} onclick="go('${t.id}')">${ic(t.icon)}<span class="txt">${t.label}</span>${t.id==='recurring'&&late?`<span class="cnt" ${recLate().length?'':'style="background:var(--warn)"'}>${late}</span>`:''}</a>`}).join('')).join('');
+  buildTabbar(late);
+}
+/* Os quatro destinos quentes, a um toque no telemóvel. A auditoria mediu:
+   com tudo atrás da gaveta, qualquer mudança de ecrã custava dois. */
+const TABBAR=['dashboard','transactions','properties','recurring'];
+function buildTabbar(late){
+  const el=document.getElementById('tabbar');if(!el)return;
+  el.innerHTML=TABBAR.map(id=>{const t=TABS.find(x=>x.id===id);
+    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} onclick="go('${id}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${id==='recurring'&&late?`<span class="cnt">${late}</span>`:''}</a>`}).join('');
 }
 function go(id){tab=id;setPage='';donutCat='';closeDrawer();buildNav();render();try{window.scrollTo(0,0)}catch(e){}}
-function goSet(p){setPage=p;render();try{window.scrollTo(0,0)}catch(e){}}
+function goSet(p){setPage=p;if(p)pushHist();render();try{window.scrollTo(0,0)}catch(e){}}
 function openDrawer(){if(document.body.classList.contains('open'))return;closeFilterPanels();document.body.classList.add('open');pushHist();lockPage();
   const b=document.querySelector('.burger');if(b)b.setAttribute('aria-expanded','true');
   // o foco entra na gaveta: sem isto, o teclado continuava atrás do véu
