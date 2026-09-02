@@ -155,6 +155,18 @@ function schedulePush() {
   pushTimer = setTimeout(function () { pushNow(); }, 1200);
 }
 
+/* O que o plano recusou (402) fica marcado e não se reenvia: sem isto, a
+   mesma operação voltava a cada 30 segundos para sempre, a queimar quota.
+   A marca vive só nesta sessão — mudar de plano ou o master desligar o
+   modo demo e recarregar volta a tentar tudo. */
+var _plano402 = {};
+var _avisosPlano = {};
+function avisoPlano(msg) {
+  if (!msg || _avisosPlano[msg]) return;
+  _avisosPlano[msg] = 1;
+  try { toast(msg, { ms: 6000 }); } catch (e) {}
+}
+
 function pushNow() {
   if (!CW.user) return Promise.resolve();
   if (pushing) { pushAgain = true; return Promise.resolve(); }
@@ -163,6 +175,7 @@ function pushNow() {
   var ops = [];
   // casas primeiro (os registos precisam da casa), remoções no fim
   Object.keys(map).forEach(function (k) {
+    if (_plano402[k]) return;   // o plano já disse que não; não se insiste
     var j = JSON.stringify(map[k].data);
     if (snap[k] !== j) ops.push(Object.assign({ _key: k, _json: j, op: 'put' }, map[k]));
   });
@@ -199,6 +212,7 @@ function pushNow() {
             if (!o) return;
             if (o.op === 'put' && r.ok) snap[o._key] = o._json;
             else if (o.op === 'del' && (r.ok || r.status === 403 || r.status === 404)) delete snap[o._key];
+            else if (r.status === 402) { _plano402[o._key] = 1; avisoPlano(r.error); }
             else pushNow._recusadas = (pushNow._recusadas || 0) + 1;
           });
         });

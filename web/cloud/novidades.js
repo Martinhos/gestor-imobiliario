@@ -263,11 +263,11 @@ vSettings = function () {
     // entra ao lado do aviso legal, que é a outra coisa que se lê e não se mexe
     var novas = avisosDesde(vistoAte()).length;
     h = h.replace(
-      navRow('Aviso legal', 'Termos, privacidade e demonstração', 'contract', 'legal'),
+      navRow('Aviso legal', 'Termos e privacidade', 'contract', 'legal'),
       navRow('Novidades', novas ? novas + ' por ler · versão ' + VERSAO : 'O que mudou · versão ' + VERSAO,
         'info', 'novidades') +
       '<div style="height:10px"></div>' +
-      navRow('Aviso legal', 'Termos, privacidade e demonstração', 'contract', 'legal')
+      navRow('Aviso legal', 'Termos e privacidade', 'contract', 'legal')
     );
   }
   return h;
@@ -276,7 +276,7 @@ vSettings = function () {
 /* ------------------------------------------------------------- o arranque */
 
 /* As novidades entram na fila atrás dos avisos que já existem: primeiro o
-   aviso de demonstração, depois os termos, e só com o ecrã livre é que se
+   aviso inicial, depois os termos, e só com o ecrã livre é que se
    conta o que mudou. Três janelas empilhadas seriam pior do que nenhuma. */
 function ecraLivre() {
   return !!CW.user &&

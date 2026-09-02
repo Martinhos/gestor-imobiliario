@@ -289,7 +289,7 @@ nav a .cnt{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px
 /* quem pediu menos movimento ao sistema recebe menos movimento */
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 /* O FAB respeita o recorte lateral em landscape */
-.fab,.fabmenu{right:calc(18px + var(--inset-right,0px))}
+body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
 /* A barra de baixo: os quatro destinos quentes a um toque, no telemóvel.
    A gaveta fica para o resto — deixou de ser a única porta. */
 .tabbar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--card);border-top:1px solid var(--line);
@@ -298,12 +298,14 @@ nav a .cnt{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px
   font-size:11px;font-weight:600;color:var(--muted);border-radius:10px;position:relative;cursor:pointer}
 .tabbar a.on{color:var(--accent);background:var(--accent-soft)}
 .tabbar a .cnt{position:absolute;top:1px;left:calc(50% + 7px);background:var(--danger);color:#fff;font-size:10px;min-width:15px;height:15px;border-radius:99px;display:grid;place-items:center;padding:0 3px}
+/* body à frente: estas regras vivem ANTES das de base do .fab/.totop na
+   folha, e sem mais especificidade perdiam — o FAB ficava em cima da barra */
 @media(max-width:900px){
   .tabbar{display:grid}
   .wrap{padding-bottom:calc(96px + var(--inset-bottom))}
-  .fab{bottom:calc(76px + var(--inset-bottom))}
-  .fabmenu{bottom:calc(134px + var(--inset-bottom))}
-  .totop{bottom:calc(76px + var(--inset-bottom))}
+  body .fab{bottom:calc(76px + var(--inset-bottom))}
+  body .fabmenu{bottom:calc(134px + var(--inset-bottom))}
+  body .totop{bottom:calc(76px + var(--inset-bottom))}
   body.open .tabbar{display:none}
 }
 .donut{display:flex;gap:14px;align-items:center;flex-wrap:wrap;min-width:0}

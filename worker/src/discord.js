@@ -18,6 +18,11 @@ const hex = (s) => {
 // A assinatura Ed25519 do Discord é a única autenticação deste endpoint.
 export async function verifySignature(env, sig, ts, raw) {
   if (!env.DISCORD_PUBLIC_KEY || !sig || !ts) return false;
+  /* A assinatura prova que foi o Discord a escrever — mas um pedido antigo
+     capturado continuava válido para sempre. O timestamp está dentro do que
+     se assina, por isso rejeitar os velhos fecha o replay sem custo. Dez
+     minutos de margem cobrem qualquer relógio torto. */
+  if (Math.abs(Date.now() / 1000 - Number(ts)) > 600) return false;
   const data = new TextEncoder().encode(ts + raw);
   for (const alg of ['Ed25519', 'NODE-ED25519']) {
     try {

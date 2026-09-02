@@ -450,6 +450,35 @@ describe('a operação', () => {
 
 /* --------------------------- a conta suspensa ---------------------------- */
 
+describe('o interruptor do modo de demonstracao', () => {
+  test('e so do master, pede motivo, e fica no rasto antes de mudar', async () => {
+    const { esquecerCache } = await import('../worker/src/lib/planos.js');
+    const env = ambiente(); esquecerCache();
+    assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/operacao/demo',
+      { ligado: false, motivo: 'os planos entram em vigor' })).status, 403);
+    assert.equal((await chamar(env, MASTER, 'POST', '/api/equipa/operacao/demo',
+      { ligado: false, motivo: 'ok' })).status, 400);
+    const r = await chamar(env, MASTER, 'POST', '/api/equipa/operacao/demo',
+      { ligado: false, motivo: 'os planos entram em vigor' });
+    assert.equal(r.status, 200);
+    assert.equal(env.SESSIONS.m.get('config:demo'), '0');
+    const rasto = await auditoria(env);
+    assert.equal(rasto[0].acao, 'operacao.demo');
+    assert.match(rasto[0].detalhe, /desligado/);
+    esquecerCache();
+  });
+
+  test('o painel de operacao diz o estado', async () => {
+    const { esquecerCache } = await import('../worker/src/lib/planos.js');
+    esquecerCache();
+    const env = ambiente();
+    const r = await corpoDe(await chamar(env, MASTER, 'GET', '/api/equipa/operacao'));
+    assert.equal(r.demo, true);
+    assert.equal(r.master, true);
+    esquecerCache();
+  });
+});
+
 describe('a conta suspensa vista da app', () => {
   test('o login diz que está suspensa — mas só depois da password certa', async () => {
     // a frase está no rotas/auth.js depois do verifyPassword: dizer

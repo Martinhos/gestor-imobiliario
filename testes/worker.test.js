@@ -181,18 +181,27 @@ describe('bot do Discord', () => {
   const env = { DISCORD_PUBLIC_KEY: chavePublica };
   const assinar = (ts, corpo) => sign(null, Buffer.from(ts + corpo), par.privateKey).toString('hex');
 
+  // o timestamp agora tem prazo: os testes assinam com a hora atual
+  const agora = () => String(Math.floor(Date.now() / 1000));
+
   test('aceita um pedido assinado pelo Discord', async () => {
-    const ts = '1756000000', corpo = JSON.stringify({ type: 1 });
+    const ts = agora(), corpo = JSON.stringify({ type: 1 });
     assert.equal(await verifySignature(env, assinar(ts, corpo), ts, corpo), true);
   });
 
+  test('recusa um pedido assinado ha muito — fecha o replay', async () => {
+    // um pedido genuino capturado e reenviado dias depois nao vale
+    const ts = String(Math.floor(Date.now() / 1000) - 7200), corpo = JSON.stringify({ type: 1 });
+    assert.equal(await verifySignature(env, assinar(ts, corpo), ts, corpo), false);
+  });
+
   test('recusa assinaturas forjadas', async () => {
-    const ts = '1756000000', corpo = JSON.stringify({ type: 1 });
+    const ts = agora(), corpo = JSON.stringify({ type: 1 });
     assert.equal(await verifySignature(env, '00'.repeat(64), ts, corpo), false);
   });
 
   test('recusa um corpo trocado depois de assinado', async () => {
-    const ts = '1756000000';
+    const ts = agora();
     const assinatura = assinar(ts, JSON.stringify({ type: 1 }));
     assert.equal(await verifySignature(env, assinatura, ts, JSON.stringify({ type: 2 })), false);
   });
