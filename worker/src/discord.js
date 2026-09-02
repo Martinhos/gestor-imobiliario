@@ -82,6 +82,7 @@ export const PERMISSOES = {
   resumo: [],
   copias: [],
   comandos: ['dev', 'suporte'],
+  entrar: ['dev', 'suporte'],
 };
 
 // As categorias de pedido que cada papel vê. O suporte não precisa de ver
@@ -386,6 +387,29 @@ function cmdComandos(pap) {
   }]);
 }
 
+/* Uma ligação de uso único para a ferramenta de equipa.
+
+   A resposta é sempre privada (flags 64): a ligação vale por uma sessão, e
+   um canal partilhado não é sítio para ela. O endereço sai do próprio pedido,
+   por isso o bot de dev dá uma ligação para o dev e o de produção para
+   produção, sem ninguém ter de configurar nada. */
+async function cmdEntrar(env, i, pap, request) {
+  const u = (i.member && i.member.user) || i.user || {};
+  const { criarBilhete } = await import('./equipa.js');
+  const b = await criarBilhete(env, {
+    discordId: u.id,
+    nome: u.global_name || u.username || u.id,
+    papel: pap,
+  });
+  const base = new URL(request.url).origin;
+  const minutos = Math.round(b.expiraEm / 60);
+  return reply(
+    '🔑 A tua ligação, válida ' + minutos + ' minutos e para uma só utilização:\n' +
+    base + '/equipa/entrar?t=' + b.token + '\n\n' +
+    'Entras como **' + pap + '**. Não a partilhes: quem a abrir entra em teu nome.'
+  );
+}
+
 async function cmdUso(env) {
   const fields = await usageFields(env);
   return reply('', [{
@@ -451,6 +475,7 @@ export async function handleInteraction(request, env, ctx) {
     }
     try {
       if (nome === 'comandos') return json(cmdComandos(pap));
+      if (nome === 'entrar') return json(await cmdEntrar(env, i, pap, request));
       if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
       if (nome === 'pedido') return json(await cmdPedido(env, opts, pap));
       if (nome === 'responder') return json(await cmdResponder(env, opts, pap));
