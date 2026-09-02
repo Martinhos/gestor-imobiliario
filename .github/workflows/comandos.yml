@@ -1,0 +1,37 @@
+name: Comandos do Discord
+
+# Regista os comandos do bot a pedido, a partir do ramo que se escolher.
+#
+# O deploy de produção já o faz sozinho, mas isso só serve o que está no
+# main. Para experimentar um comando novo no ambiente de dev antes de o
+# promover, é preciso poder registá-lo a partir do ramo onde ele existe —
+# e é isto.
+#
+# Os comandos são globais ao bot, não por ambiente: registá-los daqui torna-os
+# visíveis em qualquer servidor onde o bot esteja. O que muda por ambiente é
+# quem responde, que é o worker de cada um.
+on:
+  workflow_dispatch:
+
+jobs:
+  registar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Registar
+        env:
+          DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+        run: |
+          if [ -z "$DISCORD_APP_ID" ] || [ -z "$DISCORD_BOT_TOKEN" ]; then
+            echo "Falta DISCORD_APP_ID ou DISCORD_BOT_TOKEN nos segredos do repositório."
+            exit 1
+          fi
+          echo "A registar a partir de ${{ github.ref_name }}:"
+          node scripts/discord-register.js
