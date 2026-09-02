@@ -222,7 +222,7 @@ export async function watchLimits(env, ctx) {
 export async function dailyReport(env, ctx) {
   const url = env.DISCORD_ADMIN_WEBHOOK;
   const canal = env.DISCORD_ADMIN_CHANNEL;
-  if (!url && !canal) return;
+  if (!url && !canal) return null;   // nada configurado não é uma falha
 
   const fields = await usageFields(env);
   let cor = 0x2f7d5b;
@@ -240,9 +240,9 @@ export async function dailyReport(env, ctx) {
   };
   if (env.DISCORD_BOT_TOKEN && canal) {
     const { postAsBot } = await import('./discord.js');
-    if (await postAsBot(env, canal, payload)) return;
+    if (await postAsBot(env, canal, payload)) return true;
   }
-  await post(url, payload);
+  return post(url, payload);   // diz se chegou: o batimento depende disto
 }
 
 // API de análise da Cloudflare (GraphQL). Devolve null se não der.

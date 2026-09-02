@@ -60,8 +60,16 @@ export default {
     // a cópia e o resumo são o trabalho pesado e ficam uma vez por dia.
     const diario = String(event.cron || '').startsWith('0 9 ');
     ctx.waitUntil((async () => {
+      /* Cada execução deixa uma linha no op_log. O alarme não é uma linha
+         com erro — é a ausência de linhas novas, que era o que ninguém via
+         quando o cron morria de todo. */
+      const { registarOp } = await import('./lib/auditoria.js');
       if (!diario) {
-        try { await watchLimits(env, ctx); } catch (e) {
+        try {
+          await watchLimits(env, ctx);
+          await registarOp(env, 'vigia', true);
+        } catch (e) {
+          await registarOp(env, 'vigia', false, String((e && e.message) || e));
           await recordReport(env, ctx, 'infra', 'Vigia dos limites falhou',
             String((e && e.stack) || (e && e.message) || e).slice(0, 800));
         }
@@ -69,12 +77,19 @@ export default {
       }
       try {
         const r = await copiar(env);
+        await registarOp(env, 'copia', !r.erro, JSON.stringify(r).slice(0, 490));
         if (r.erro) await recordReport(env, ctx, 'infra', 'Cópia de segurança falhou', r.erro);
       } catch (e) {
+        await registarOp(env, 'copia', false, String((e && e.message) || e));
         await recordReport(env, ctx, 'infra', 'Cópia de segurança falhou',
           String((e && e.stack) || (e && e.message) || e).slice(0, 800));
       }
-      await dailyReport(env, ctx);
+      // o resultado é o do envio a sério: um resumo que não chegou a lado
+      // nenhum registado como verde era o batimento a mentir
+      let entregue = null;
+      try { entregue = await dailyReport(env, ctx); } catch (e) { entregue = false; }
+      await registarOp(env, 'resumo', entregue !== false,
+        entregue === null ? 'sem canal configurado' : null);
     })());
   },
 

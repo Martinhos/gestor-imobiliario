@@ -205,12 +205,29 @@ async function acharTicket(env, ref) {
   return env.DB.prepare('SELECT * FROM tickets WHERE id = ? OR id LIKE ? LIMIT 1').bind(r, r + '%').first();
 }
 
-async function mudarEstado(env, ref, estado, resposta) {
+/* Também por aqui se escreve no fio e no rasto: uma resposta dada pelo
+   Discord que só mexesse na coluna reply ficava invisível no back office,
+   e ninguém sabia que caminho a escreveu. */
+async function mudarEstado(env, ref, estado, resposta, quem) {
   const t = await acharTicket(env, ref);
   if (!t) return null;
-  await env.DB.prepare(
+  const agora = Date.now();
+  const ops = [];
+  if (resposta) {
+    ops.push(env.DB.prepare(
+      'INSERT INTO ticket_msgs (id, ticket_id, tipo, texto, autor, nome, papel, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(crypto.randomUUID(), t.id, 'resposta', resposta,
+      (quem && quem.id) || 'discord', (quem && quem.nome) || 'bot', (quem && quem.papel) || '', agora));
+  }
+  ops.push(env.DB.prepare(
     'UPDATE tickets SET status = ?, reply = COALESCE(?, reply), updated_at = ? WHERE id = ?'
-  ).bind(estado, resposta || null, Date.now(), t.id).run();
+  ).bind(estado, resposta || null, agora, t.id));
+  await env.DB.batch(ops);
+  const { auditar } = await import('./lib/auditoria.js');
+  await auditar(env,
+    { discordId: (quem && quem.id) || 'discord', nome: (quem && quem.nome) || '', papeis: [(quem && quem.papel) || 'bot'] },
+    'pedido.' + (estado === 'concluido' ? 'fechar' : resposta ? 'responder' : 'estado'),
+    t.id, resposta ? String(resposta).slice(0, 120) : estado);
   return Object.assign({}, t, { status: estado, reply: resposta || t.reply });
 }
 
@@ -305,18 +322,18 @@ async function cmdPedido(env, opts, pap) {
   return { type: MSG, data: { embeds: [embed], components: ticketButtons(g.t.id) } };
 }
 
-async function cmdResponder(env, opts, pap) {
+async function cmdResponder(env, opts, pap, quem) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
-  const t = await mudarEstado(env, g.t.id, 'resolucao', opts.texto);
+  const t = await mudarEstado(env, g.t.id, 'resolucao', opts.texto, quem);
   return reply('✏️ Respondido e marcado como **em resolução**. A pessoa vê a resposta na app.',
     [ticketEmbedFull(t)]);
 }
 
-async function cmdFechar(env, opts, pap) {
+async function cmdFechar(env, opts, pap, quem) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
-  const t = await mudarEstado(env, g.t.id, 'concluido', opts.texto);
+  const t = await mudarEstado(env, g.t.id, 'concluido', opts.texto, quem);
   return reply('✅ Concluído.', [ticketEmbedFull(t)]);
 }
 
@@ -590,15 +607,21 @@ async function acessoInteracao(env, i, meus, cid) {
   const papeis = await papeisDoAlvo(env, i, alvoId, (partes[2] || '').split(',').filter(Boolean));
   if (!papeis.length) return reply('Essa pessoa já não tem cargo nenhum no servidor.');
 
-  let acessos;
+  let acessos, resumo;
   if (partes[0] === 'acz') {
     acessos = await guardarAcessos(env, alvoId, { mais: [], menos: [] });
+    resumo = 'repôs tudo ao cargo';
   } else {
     const regras = { PERMISSOES, PODEM_TUDO, SO_MASTER };
     const doCargo = (c) => origemDoAcesso(papeis, c, { mais: [], menos: [] }, regras) === 'papel';
     const d = excecoesDoMenu((i.data && i.data.values) || [], GERIVEIS(), doCargo);
     acessos = await guardarAcessos(env, alvoId, d);
+    resumo = 'dado: ' + (d.mais.join(',') || '—') + ' · retirado: ' + (d.menos.join(',') || '—');
   }
+  /* Quem pode o quê é a decisão mais sensível do bot: muda sem rasto e
+     ninguém reconstrói quem abriu que porta a quem. */
+  const { auditar } = await import('./lib/auditoria.js');
+  await auditar(env, quemFala(i, meus), 'acesso.mudar', alvoId, resumo);
   return { type: UPDATE, data: vistaAcesso(alvoId, papeis, acessos) };
 }
 
@@ -615,6 +638,12 @@ async function cmdUso(env) {
 async function cmdResumo(env, ctx) {
   await dailyReport(env, ctx);
   return reply('Resumo enviado para o canal de administração.');
+}
+
+// Quem está a falar, para o fio e para o rasto.
+function quemFala(i, pap) {
+  const u = (i.member && i.member.user) || i.user || {};
+  return { id: u.id, nome: u.global_name || u.username || u.id, papel: nomeDoPapel(pap) };
 }
 
 /* ---------------------------- encaminhamento ---------------------------- */
@@ -654,7 +683,7 @@ export async function handleInteraction(request, env, ctx) {
     if (antes && !podeVer(pap, antes.category)) {
       return json(reply('Esse pedido é de *' + (CATS[antes.category] || antes.category) + '*, fora do papel **' + nomeDoPapel(pap) + '**.'));
     }
-    const t = await mudarEstado(env, id, estado);
+    const t = await mudarEstado(env, id, estado, null, quemFala(i, pap));
     if (!t) return json(reply('Esse pedido já não existe.'));
     return json({
       type: UPDATE,
@@ -681,8 +710,8 @@ export async function handleInteraction(request, env, ctx) {
       if (nome === 'entrar') return json(await cmdEntrar(env, i, papeis, request));
       if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
       if (nome === 'pedido') return json(await cmdPedido(env, opts, pap));
-      if (nome === 'responder') return json(await cmdResponder(env, opts, pap));
-      if (nome === 'fechar') return json(await cmdFechar(env, opts, pap));
+      if (nome === 'responder') return json(await cmdResponder(env, opts, pap, quemFala(i, pap)));
+      if (nome === 'fechar') return json(await cmdFechar(env, opts, pap, quemFala(i, pap)));
       if (nome === 'erros') return json(await cmdErros(env, opts));
       if (nome === 'uso') return json(await cmdUso(env));
       if (nome === 'copias') return json(await cmdCopias(env, opts));
