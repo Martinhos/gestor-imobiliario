@@ -138,6 +138,21 @@ jobs:
           DISCORD_SUPORTE: ${{ secrets.DISCORD_SUPORTE }}
           DISCORD_SUPORTE_CHANNEL: ${{ secrets.DISCORD_SUPORTE_CHANNEL }}
           DISCORD_SUPORTE_WEBHOOK: ${{ secrets.DISCORD_SUPORTE_WEBHOOK }}
+          # O dev pode ter um bot só dele, noutro servidor de Discord. O
+          # endereço das interações é da aplicação e não do servidor: um
+          # segundo servidor com o mesmo bot continuava a falar com a
+          # produção, por isso tem mesmo de ser outra aplicação.
+          # O que não estiver aqui cai no valor partilhado.
+          DISCORD_BOT_TOKEN_DEV: ${{ secrets.DISCORD_BOT_TOKEN_DEV }}
+          DISCORD_PUBLIC_KEY_DEV: ${{ secrets.DISCORD_PUBLIC_KEY_DEV }}
+          DISCORD_DEV_WEBHOOK_DEV: ${{ secrets.DISCORD_DEV_WEBHOOK_DEV }}
+          DISCORD_DEV_CHANNEL_DEV: ${{ secrets.DISCORD_DEV_CHANNEL_DEV }}
+          DISCORD_MASTER_DEV: ${{ secrets.DISCORD_MASTER_DEV }}
+          DISCORD_ADMINS_DEV: ${{ secrets.DISCORD_ADMINS_DEV }}
+          DISCORD_DEVS_DEV: ${{ secrets.DISCORD_DEVS_DEV }}
+          DISCORD_SUPORTE_DEV: ${{ secrets.DISCORD_SUPORTE_DEV }}
+          DISCORD_SUPORTE_CHANNEL_DEV: ${{ secrets.DISCORD_SUPORTE_CHANNEL_DEV }}
+          DISCORD_SUPORTE_WEBHOOK_DEV: ${{ secrets.DISCORD_SUPORTE_WEBHOOK_DEV }}
           CF_ANALYTICS_TOKEN: ${{ secrets.CF_ANALYTICS_TOKEN }}
         run: |
           set -e
@@ -149,16 +164,31 @@ jobs:
               echo "sem valor: $1 (ignorado)"
             fi
           }
-          put DISCORD_DEV_WEBHOOK "$DISCORD_DEV_WEBHOOK"
-          put DISCORD_BOT_TOKEN "$DISCORD_BOT_TOKEN"
-          put DISCORD_PUBLIC_KEY "$DISCORD_PUBLIC_KEY"
-          put DISCORD_DEV_CHANNEL "$DISCORD_DEV_CHANNEL"
-          put DISCORD_MASTER "$DISCORD_MASTER"
-          put DISCORD_ADMINS "$DISCORD_ADMINS"
-          put DISCORD_DEVS "$DISCORD_DEVS"
-          put DISCORD_SUPORTE "$DISCORD_SUPORTE"
-          put DISCORD_SUPORTE_CHANNEL "$DISCORD_SUPORTE_CHANNEL"
-          put DISCORD_SUPORTE_WEBHOOK "$DISCORD_SUPORTE_WEBHOOK"
+          # No dev, o valor com sufixo _DEV ganha ao partilhado. Assim dá
+          # para ter um bot só de dev sem duplicar o resto: define-se o que
+          # difere e o que faltar continua a vir de onde vinha.
+          para () {
+            eval "valor=\${$1}"
+            if [ -z "$IS_PROD" ]; then
+              eval "so_dev=\${${1}_DEV}"
+              if [ -n "$so_dev" ]; then
+                valor="$so_dev"
+                echo "  ($1 vem da variante _DEV)"
+              fi
+            fi
+            put "$1" "$valor"
+          }
+
+          para DISCORD_DEV_WEBHOOK
+          para DISCORD_BOT_TOKEN
+          para DISCORD_PUBLIC_KEY
+          para DISCORD_DEV_CHANNEL
+          para DISCORD_MASTER
+          para DISCORD_ADMINS
+          para DISCORD_DEVS
+          para DISCORD_SUPORTE
+          para DISCORD_SUPORTE_CHANNEL
+          para DISCORD_SUPORTE_WEBHOOK
           # o resumo de consumo e os comandos de administração são só da produção
           if [ -n "$IS_PROD" ]; then
             put DISCORD_ADMIN_WEBHOOK "$DISCORD_ADMIN_WEBHOOK"
@@ -167,20 +197,35 @@ jobs:
             put CF_ACCOUNT_ID "$TF_VAR_cloudflare_account_id"
           fi
 
-      # Comandos do bot: só a produção os regista, para os dois ambientes não
-      # andarem a sobrepor-se no mesmo servidor de Discord.
+      # Comandos do bot, para a aplicação do ambiente que se publicou.
+      #
+      # Enquanto havia uma aplicação só, registar a partir do dev sobrepunha
+      # os comandos da produção no mesmo servidor — daí ser só da produção.
+      # Com uma aplicação de dev à parte não há sobreposição possível: são
+      # bots diferentes, em servidores diferentes. Sem aplicação de dev
+      # configurada, o dev não regista nada, tal como antes.
       - name: Registar comandos do Discord
-        if: env.IS_PROD
         continue-on-error: true
         env:
-          DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
-          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          APP_PROD: ${{ secrets.DISCORD_APP_ID }}
+          TOKEN_PROD: ${{ secrets.DISCORD_BOT_TOKEN }}
+          GUILD_PROD: ${{ secrets.DISCORD_GUILD_ID }}
+          APP_DEV: ${{ secrets.DISCORD_APP_ID_DEV }}
+          TOKEN_DEV: ${{ secrets.DISCORD_BOT_TOKEN_DEV }}
+          GUILD_DEV: ${{ secrets.DISCORD_GUILD_ID_DEV }}
         run: |
-          if [ -n "$DISCORD_APP_ID" ] && [ -n "$DISCORD_BOT_TOKEN" ]; then
-            node scripts/discord-register.js
+          if [ -n "$IS_PROD" ]; then
+            export DISCORD_APP_ID="$APP_PROD" DISCORD_BOT_TOKEN="$TOKEN_PROD" DISCORD_GUILD_ID="$GUILD_PROD"
           else
+            export DISCORD_APP_ID="$APP_DEV" DISCORD_BOT_TOKEN="$TOKEN_DEV" DISCORD_GUILD_ID="$GUILD_DEV"
+          fi
+          if [ -n "$DISCORD_APP_ID" ] && [ -n "$DISCORD_BOT_TOKEN" ]; then
+            echo "A registar os comandos do bot de $ENV_LABEL."
+            node scripts/discord-register.js
+          elif [ -n "$IS_PROD" ]; then
             echo "Bot do Discord não configurado — comandos não registados."
+          else
+            echo "Sem aplicação de Discord só para dev: nada a registar aqui."
           fi
 
       # Um deploy que falha não pode ficar só no separador do GitHub. Vai para

@@ -2,16 +2,22 @@ name: Comandos do Discord
 
 # Regista os comandos do bot a pedido, a partir do ramo que se escolher.
 #
-# O deploy de produção já o faz sozinho, mas isso só serve o que está no
-# main. Para experimentar um comando novo no ambiente de dev antes de o
-# promover, é preciso poder registá-lo a partir do ramo onde ele existe —
-# e é isto.
+# O deploy já o faz sozinho para o ambiente que publica, mas isso obriga a
+# publicar. Para experimentar um comando novo antes disso — ou para repor o
+# registo depois de o estragar — é preciso poder fazê-lo à mão, e é isto.
 #
-# Os comandos são globais ao bot, não por ambiente: registá-los daqui torna-os
-# visíveis em qualquer servidor onde o bot esteja. O que muda por ambiente é
-# quem responde, que é o worker de cada um.
+# Escolhe-se a aplicação, não o ambiente do worker: o endereço das interações
+# pertence à aplicação do Discord, e é ele que decide qual dos workers
+# responde. Registar na aplicação de produção põe os comandos a falar com o
+# worker de produção, venha o código do ramo que vier.
 on:
   workflow_dispatch:
+    inputs:
+      bot:
+        description: Que bot do Discord
+        type: choice
+        options: [producao, dev]
+        default: producao
 
 jobs:
   registar:
@@ -23,25 +29,36 @@ jobs:
         with:
           node-version: 22
 
-      - name: Registar
+      - name: Escolher o bot
         env:
-          DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
-          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          APP_PROD: ${{ secrets.DISCORD_APP_ID }}
+          TOKEN_PROD: ${{ secrets.DISCORD_BOT_TOKEN }}
+          GUILD_PROD: ${{ secrets.DISCORD_GUILD_ID }}
+          APP_DEV: ${{ secrets.DISCORD_APP_ID_DEV }}
+          TOKEN_DEV: ${{ secrets.DISCORD_BOT_TOKEN_DEV }}
+          GUILD_DEV: ${{ secrets.DISCORD_GUILD_ID_DEV }}
         run: |
-          if [ -z "$DISCORD_APP_ID" ] || [ -z "$DISCORD_BOT_TOKEN" ]; then
-            echo "Falta DISCORD_APP_ID ou DISCORD_BOT_TOKEN nos segredos do repositório."
+          if [ "${{ inputs.bot }}" = "dev" ]; then
+            app="$APP_DEV"; token="$TOKEN_DEV"; guild="$GUILD_DEV"
+            falta="DISCORD_APP_ID_DEV / DISCORD_BOT_TOKEN_DEV"
+          else
+            app="$APP_PROD"; token="$TOKEN_PROD"; guild="$GUILD_PROD"
+            falta="DISCORD_APP_ID / DISCORD_BOT_TOKEN"
+          fi
+          if [ -z "$app" ] || [ -z "$token" ]; then
+            echo "Falta $falta nos segredos do repositório."
             exit 1
           fi
-          echo "A registar a partir de ${{ github.ref_name }}:"
-          node scripts/discord-register.js
+          echo "DISCORD_APP_ID=$app" >> $GITHUB_ENV
+          echo "DISCORD_BOT_TOKEN=$token" >> $GITHUB_ENV
+          echo "DISCORD_GUILD_ID=$guild" >> $GITHUB_ENV
+          echo "Bot de **${{ inputs.bot }}**, a partir de \`${{ github.ref_name }}\`." >> $GITHUB_STEP_SUMMARY
+
+      - name: Registar
+        run: node scripts/discord-register.js
 
       # Confirma o que o Discord ficou mesmo a ter. Responder a "o comando
       # não aparece" com um facto em vez de um palpite: ou está registado e é
       # a aplicação que não o mostra, ou nunca lá chegou.
       - name: Confirmar o que o Discord tem
-        env:
-          DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
-          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
         run: node scripts/discord-comandos.js

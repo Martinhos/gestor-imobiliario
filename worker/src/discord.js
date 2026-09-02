@@ -419,9 +419,13 @@ const DESCRICAO = {
   access: 'quem pode o quê',
 };
 
-function cmdComandos(pap, acessos) {
+function cmdComandos(pap, acessos, env) {
   const desc = DESCRICAO;
   const meus = comandosDe(pap, acessos);
+  /* Com um bot de dev ao lado do de produção, os dois respondem igual e a
+     única diferença está em quem responde. Dizer aqui de que lado se está
+     evita mexer num ambiente a pensar que se está no outro. */
+  const ambiente = env && env.ENV_NAME;
   return reply('', [{
     title: 'O que podes fazer · papel ' + nomeDoPapel(pap),
     color: cor(pap),
@@ -433,6 +437,7 @@ function cmdComandos(pap, acessos) {
       name: 'Pedidos que vês',
       value: catsDe(pap).map((c) => (ICONE[c] || '') + (CATS[c] || c)).join('\n') || 'nenhum',
     }],
+    footer: ambiente ? { text: 'Estás a falar com o ambiente ' + ambiente + '.' } : undefined,
   }]);
 }
 
@@ -676,7 +681,7 @@ export async function handleInteraction(request, env, ctx) {
                      : 'Não tens nenhum comando disponível.')));
     }
     try {
-      if (nome === 'comandos') return json(cmdComandos(pap, meusAcessos));
+      if (nome === 'comandos') return json(cmdComandos(pap, meusAcessos, env));
       if (nome === 'access') return json(await cmdAccess(env, i, opts));
       if (nome === 'entrar') return json(await cmdEntrar(env, i, papeis, request));
       if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
