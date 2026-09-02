@@ -423,6 +423,7 @@ export async function rotasEquipaApi(c) {
     if (path === '/api/equipa/operacao' && method === 'GET') {
       const { usageFields } = await import('./notify.js');
       const { listar, estado } = await import('./salvaguarda.js');
+      const { modoDemo } = await import('./lib/planos.js');
       // o batimento: a última execução de cada operação agendada.
       // O alarme é a ausência — a idade calcula-se do lado de quem vê.
       const crons = (await env.DB.prepare(
@@ -446,7 +447,26 @@ export async function rotasEquipaApi(c) {
         estadoCopias,
         crons,
         historico,
+        demo: await modoDemo(env),
+        master: eMaster(eu),
       });
+    }
+
+    /* Ligar ou desligar o modo de demonstração. Desligá-lo é o momento em
+       que os limites dos planos passam a valer para toda a gente — por isso
+       é só do master, pede motivo, e fica no rasto antes de acontecer. */
+    if (path === '/api/equipa/operacao/demo' && method === 'POST') {
+      if (!eMaster(eu)) return err(403, 'O modo de demonstração é só do master.');
+      const b = await body(request);
+      const ligar = !!(b && b.ligado);
+      const motivo = String((b && b.motivo) || '').trim().slice(0, 300);
+      if (motivo.length < 5) return err(400, 'Escreve o motivo — fica no rasto.');
+      const registado = await auditar(env, eu, 'operacao.demo', null,
+        (ligar ? 'ligado' : 'desligado — os limites dos planos passam a valer') + ' · ' + motivo);
+      if (!registado) return err(500, 'A auditoria não está a escrever — sem rasto não se muda isto.');
+      const { definirDemo } = await import('./lib/planos.js');
+      await definirDemo(env, ligar);
+      return json({ demo: ligar });
     }
 
     if (path === '/api/equipa/operacao/copiar' && method === 'POST') {

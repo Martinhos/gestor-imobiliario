@@ -477,6 +477,16 @@ function verOperacao() {
         return '<div class="stat"><span>' + OPS[op] + '</span><b><span class="badge ' + classe + '">' + texto + '</span></b></div>';
       }).join('') + '</div>';
 
+    var demo = '<div class="card"><div class="row"><div><b>Modo de demonstração</b>' +
+      '<div class="small">' + (d.demo
+        ? 'Ligado — os limites dos planos estão suspensos para toda a gente.'
+        : 'Desligado — os planos estão em vigor (free: 3 imóveis, sem contratos nem planeados novos).') + '</div></div>' +
+      (d.master
+        ? '<button class="btn mini' + (d.demo ? ' danger' : ' primary') + '" onclick="mudarDemo(' + (d.demo ? 'false' : 'true') + ')">' +
+          (d.demo ? 'Desligar' : 'Ligar') + '</button>'
+        : '<span class="badge">' + (d.demo ? 'ligado' : 'desligado') + '</span>') +
+      '</div></div>';
+
     var copias = '<div class="card"><div class="row"><b>Cópias no R2</b>' +
       '<button class="btn mini" onclick="copiarAgora()">Copiar agora</button></div>' +
       '<div class="small" style="margin:4px 0 8px">' + esc((d.estadoCopias || {}).texto || '') + '</div>' +
@@ -500,8 +510,17 @@ function verOperacao() {
         }).join('') + '</div>'
       : '';
 
-    el('conteudo').innerHTML = batimento + copias + '<div id="resumoCopia"></div>' + historico + consumo;
+    el('conteudo').innerHTML = demo + batimento + copias + '<div id="resumoCopia"></div>' + historico + consumo;
   }).catch(falha);
+}
+
+function mudarDemo(ligar) {
+  if (!ligar && !confirm('Desligar o modo de demonstração? Os limites dos planos passam a valer JÁ para toda a gente: free fica por 3 imóveis e sem criar contratos nem planeados.')) return;
+  var motivo = prompt('Motivo (fica no rasto):');
+  if (!motivo) return;
+  enviar('/api/equipa/operacao/demo', { ligado: ligar, motivo: motivo })
+    .then(function () { verOperacao(); })
+    .catch(function (e) { alert(e.message); });
 }
 
 function copiarAgora() {

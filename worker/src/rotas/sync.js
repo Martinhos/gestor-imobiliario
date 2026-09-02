@@ -1,5 +1,6 @@
 // Sincronizacao em lote das alteracoes pendentes do cliente.
 import { linkFiles } from '../files.js';
+import { modoDemo, podeCriar } from '../lib/planos.js';
 
 export async function rotasSync(c) {
   const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
@@ -16,6 +17,20 @@ export async function rotasSync(c) {
     if (!(await rateLimit(env, 'w:' + me.id, 60, 900))) {
       return err(429, 'Demasiadas gravações seguidas. Espera um pouco — os dados não se perdem.');
     }
+    /* Os limites do plano aplicam-se à CRIAÇÃO: uma linha nova de imóvel,
+       contrato ou planeado. Atualizar, apagar e reativar o que já existe
+       passa sempre — os termos prometem que nada do que existe fica
+       inacessível. Em modo de demonstração não há limites nenhuns. */
+    const demo = await modoDemo(env);
+    let nImoveis = null;
+    const imoveisDe = async () => {
+      if (nImoveis == null) {
+        nImoveis = ((await env.DB.prepare(
+          'SELECT COUNT(*) AS n FROM houses WHERE owner_id = ? AND deleted = 0'
+        ).bind(me.id).first()) || {}).n || 0;
+      }
+      return nImoveis;
+    };
     const accessCache = new Map();
     const access = async (hid) => {
       if (!accessCache.has(hid)) accessCache.set(hid, (await canAccessHouse(env, me.id, hid)).ok);
@@ -49,8 +64,13 @@ export async function rotasSync(c) {
                 .bind(JSON.stringify(preserveOwnership('', op.data)), now(), houseId).run();
               accessCache.set(houseId, true);
             } else {
+              if (!demo) {
+                const nao = podeCriar(me.plan, 'imovel', await imoveisDe());
+                if (nao) { results.push({ ok: false, status: 402, error: nao }); continue; }
+              }
               await env.DB.prepare('INSERT INTO houses (id, owner_id, data, updated_at, deleted) VALUES (?, ?, ?, ?, 0)')
                 .bind(houseId, me.id, JSON.stringify(preserveOwnership('', op.data)), now()).run();
+              if (nImoveis != null) nImoveis++;
               accessCache.set(houseId, true);
             }
             await linkFiles(env, houseId, op.data);
@@ -74,6 +94,16 @@ export async function rotasSync(c) {
             continue;
           }
           if (put) {
+            const tipo = String(op.kind);
+            if (!demo && (tipo === 'contract' || tipo === 'rec')) {
+              const ja = await env.DB.prepare(
+                'SELECT deleted FROM records WHERE house_id = ? AND kind = ? AND id = ?'
+              ).bind(houseId, tipo, String(op.id)).first();
+              if (!ja) {   // só a criação é travada; o que existe edita-se sempre
+                const nao = podeCriar(me.plan, tipo, 0);
+                if (nao) { results.push({ ok: false, status: 402, error: nao }); continue; }
+              }
+            }
             await env.DB.prepare(
               `INSERT INTO records (house_id, kind, id, data, updated_at, deleted)
                VALUES (?, ?, ?, ?, ?, 0)

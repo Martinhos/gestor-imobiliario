@@ -67,8 +67,8 @@ vSettings = function () {
       navRow('Ajuda e sugestões', 'Contar um problema ou pedir uma melhoria', 'info', 'ajuda') +
 
       sect('Sobre') +
-      navRow('Aviso legal', 'Termos, privacidade e demonstração', 'contract', 'legal') + gap +
-      card('Gestor Imobiliário', 'Versão ' + VERSAO + ' · demonstração',
+      navRow('Aviso legal', 'Termos e privacidade', 'contract', 'legal') + gap +
+      card('Gestor Imobiliário', 'Versão ' + VERSAO,
         '<div class="stat"><span>Imóveis · contratos</span><b>' + db.properties.length + ' · ' + db.contracts.length + '</b></div>' +
         '<div class="stat"><span>Inquilinos</span><b>' + db.tenants.length + '</b></div>' +
         '<div class="stat" style="border:0"><span>Movimentos</span><b>' + db.transactions.length + '</b></div>');
@@ -159,7 +159,7 @@ function vCloud() {
 /* ---------------- aviso legal ---------------- */
 
 SUBPAGE.cloud = { label: 'Conta e partilha', sub: 'O teu id, ligações e casas partilhadas' };
-SUBPAGE.legal = { label: 'Aviso legal', sub: 'Versão de demonstração · condições de utilização' };
+SUBPAGE.legal = { label: 'Aviso legal', sub: 'Condições de utilização e privacidade' };
 SUBPAGE.tema = { label: 'Tema', sub: 'Claro, escuro ou o do telemóvel' };
 SUBPAGE.ajuda = { label: 'Ajuda e sugestões', sub: 'Contar um problema ou pedir uma melhoria' };
 SUBPAGE.termos = { label: 'Termos e Condições', sub: 'O acordo entre ti e quem opera o serviço' };

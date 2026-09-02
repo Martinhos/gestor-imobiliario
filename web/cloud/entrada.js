@@ -1,4 +1,4 @@
-/* Ecras de entrada: sessao, aviso de demonstracao e ligacao com a Google. */
+/* Ecras de entrada: sessao, aviso inicial e ligacao com a Google. */
 'use strict';
 
 /* ---------------- indicador de sincronização ---------------- */

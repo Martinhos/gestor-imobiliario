@@ -20,7 +20,7 @@
 window.LEGAL = (function () {
   'use strict';
 
-  var VERSION = '2026-08-31';
+  var VERSION = '2026-09-02';
   var OPERADOR = '[O TEU NOME OU O DA EMPRESA]';
   var MORADA = '';                       // apartado, escritório virtual ou sede
   var NIF = '';                          // obrigatório quando houver cobrança
@@ -72,10 +72,10 @@ window.LEGAL = (function () {
       'submetê-las a revisão profissional antes de as assinar. Não assumimos responsabilidade pelo ' +
       'conteúdo, validade ou consequências dos documentos gerados.') +
 
-    h('3. Fase de demonstração') +
-    p('A aplicação está em <b>fase de demonstração</b>. É disponibilizada tal como está, pode mudar ou ' +
-      'ser descontinuada, e não há compromisso de disponibilidade, desempenho ou conservação de dados. ' +
-      'Enquanto esta fase durar, o número de contas é limitado e o serviço é gratuito.') +
+    h('3. Estado do serviço') +
+    p('A aplicação é disponibilizada tal como está e evolui continuamente: funcionalidades podem mudar ' +
+      'ou ser descontinuadas. Fazemos cópias de segurança diárias, mas deves manter as tuas próprias ' +
+      'cópias dos dados que te importam (Definições → Importar e cópias).') +
 
     h('4. Conta') +
     ul([
@@ -98,7 +98,7 @@ window.LEGAL = (function () {
       'que essa casa contenha.') +
 
     h('6. Planos e pagamento') +
-    p('Quando a fase de demonstração terminar, a aplicação passa a ter planos de subscrição mensal:') +
+    p('A aplicação tem planos de subscrição mensal:') +
     ul([
       '<b>Gratuito</b> — gestão até 3 imóveis próprios, com movimentos e créditos. Sem criação de ' +
       'contratos nem funcionalidades que envolvam inquilinos, sem movimentos planeados e sem ' +
@@ -117,8 +117,8 @@ window.LEGAL = (function () {
       'Se a subscrição terminar, a conta passa ao plano gratuito. Os dados que excedam os limites desse ' +
       'plano <b>não são apagados</b>: ficam acessíveis para consulta e exportação, mas não podes criar ' +
       'novos registos acima do limite enquanto não voltares a subscrever.',
-      'Os limites dos planos <b>não se aplicam durante a fase de demonstração</b> e só entram em vigor ' +
-      'depois de aviso com pelo menos 30 dias.',
+      'Os limites de cada plano aplicam-se à <b>criação de novos registos</b>: nada do que já existe é ' +
+      'apagado ou fica inacessível por causa deles.',
     ]) +
     p('<b>Direito de livre resolução.</b> Sendo consumidor, tens 14 dias para desistir de uma subscrição ' +
       'sem indicar motivo. Se pedires para começar a usar o serviço pago de imediato, esse direito ' +
