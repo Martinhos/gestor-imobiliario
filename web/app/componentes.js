@@ -129,17 +129,26 @@ function fileBlock(label,list,inputId,onPick,delFn,opts){
          <div class="pth pcover" id="th_${f.id}" onclick="openMeta('${f.id}')">${i===0?'<span class="capa">capa</span>':''}</div>
          <input class="pnm" id="fn_${f.id}" value="${esc(f.name)}" placeholder="Nome da foto" autocomplete="off" oninput="livePhotoName('${f.id}',this.value)">
          ${opts.move?`<button type="button" class="pgrab" aria-label="Arrastar para reordenar" onpointerdown="photoDrag(event,this,${i})">${ic('grip',16)}</button>`:''}
-         <button type="button" class="btn sm danger" style="flex:0 0 auto" onclick="${delFn}('${f.id}')">${ic('trash',14)}</button></div>`).join('')}</div>`
+         <button type="button" class="btn sm danger" aria-label="Apagar a fotografia" style="flex:0 0 auto;min-width:40px;min-height:40px;margin-left:8px" onclick="delFileConfirm('${delFn}','${f.id}','fotografia')">${ic('trash',14)}</button></div>`).join('')}</div>`
       :`<div class="list" style="gap:8px;margin-bottom:9px">${list.map(f=>`
         <div class="card" style="padding:10px 12px"><div class="row-between" style="align-items:center">
           <div style="min-width:0;cursor:pointer" onclick="openMeta('${f.id}')">
             <div style="font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name)}</div>
             <div class="small">${kb(f.size)}${f.added?' · '+f.added:''}</div></div>
-          <button type="button" class="btn sm danger" onclick="${delFn}('${f.id}')">${ic('trash',14)}</button>
+          <button type="button" class="btn sm danger" aria-label="Apagar o ficheiro" style="min-width:40px;min-height:40px" onclick="delFileConfirm('${delFn}','${f.id}','ficheiro')">${ic('trash',14)}</button>
         </div></div>`).join('')}</div>`):''}
     <input type="file" id="${inputId}" multiple ${photos?'accept="image/*"':''} style="display:none" onchange="${onPick}(this${opts.arg?",'"+opts.arg+"'":''})">
     <button type="button" class="btn sm" style="margin-top:9px" onclick="document.getElementById('${inputId}').click()">${ic(photos?'photo':'clip',14)} ${opts.addLabel||(photos?'Adicionar fotos':'Adicionar ficheiro')}</button>
     ${opts.hint?`<div class="hint" style="margin-top:8px">${opts.hint}</div>`:''}</div>`;
+}
+/* A confirmação que faltava: o apagar ficava a 8px do puxador de arrastar,
+   ambos pequenos, e o toque falhado destruía o ficheiro no ato — do
+   IndexedDB, sem undo. Agora pergunta, e diz o que se perde. */
+function delFileConfirm(fn,fid,tipo){
+  const foto=tipo==='fotografia';
+  confirmModal(foto?'Apagar a fotografia':'Apagar o ficheiro',
+    (foto?'A fotografia':'O ficheiro')+' desaparece já daqui e do armazenamento. Não há como desfazer.',
+    ()=>{const f=window[fn];if(typeof f==='function')f(fid)});
 }
 function openMeta(fid){openFileMeta(allFileMetas().concat(pendingMetas()).find(f=>f.id===fid))}
 /* mostra as miniaturas depois do HTML entrar no DOM. "root" limita a procura (a lista de imóveis
@@ -191,11 +200,18 @@ Object.defineProperty(window,'onSave',{configurable:true,
   set(v){const t=modalTop();if(t)t.onSave=v}});
 function modalLayer(){
   const m=document.createElement('div');m.className='modal open';
-  m.innerHTML=`<div class="bg" onclick="closeModal()"></div><div class="sheet">
+  m.innerHTML=`<div class="bg" onclick="closeModal('fundo')"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
     <div class="head"><h2 id="modalTitle"></h2><div class="spacer"></div><span id="modalMenu"></span>
-      <button class="iconbtn" onclick="closeModal()" aria-label="Fechar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <button class="iconbtn" onclick="closeModal('x')" aria-label="Fechar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="body" id="modalBody"></div><div class="foot" id="modalFoot"></div></div>`;
   return m;
+}
+/* O que está escrito na janela, numa string comparável. É o suficiente para
+   saber se fechar deita fora trabalho de alguém. */
+function modalSnap(el){
+  return [].slice.call(el.querySelectorAll('input,select,textarea'))
+    .map(x=>x.type==='checkbox'||x.type==='radio'?(x.checked?'1':'0'):String(x.value||''))
+    .join('\x1f');
 }
 function demote(el){
   [].slice.call(el.querySelectorAll('[id]')).forEach(x=>{x.setAttribute('data-mid',x.id);x.removeAttribute('id')});
@@ -208,6 +224,7 @@ function promote(el){
 function fillModal(el,title,body,foot,menuHtml){
   el.querySelector('.head h2').textContent=title;
   el.querySelector('.body').innerHTML=body;
+  if(typeof tornarFocavel==='function')tornarFocavel(el.querySelector('.body'));
   el.querySelector('.head span').innerHTML=menuHtml||'';
   el.querySelector('.foot').innerHTML=foot||`<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="onSave&&onSave()">Guardar</button>`;
 }
@@ -221,8 +238,12 @@ window.addEventListener('popstate',()=>{
   closePops();
   const drawer=document.body.classList.contains('open');
   if(drawer||modalStack.length){
-    if(drawer)closeDrawer(true);else closeModal(true);
+    if(drawer)closeDrawer(true);else closeModal('voltar');
     if(document.body.classList.contains('open')||modalStack.length)pushHist();
+  }else if(typeof setPage!=='undefined'&&setPage){
+    /* dentro de uma subpágina de Definições, voltar sobe a Definições — o
+       sistema e o botão no ecrã deixam de se contradizer */
+    setPage='';render();try{window.scrollTo(0,0)}catch(e){}
   }else{
     try{history.back()}catch(e){}
   }
@@ -231,36 +252,71 @@ function openModal(title,body,foot,menuHtml){
   closePops();
   const top=modalTop();if(top)demote(top.el);
   const el=modalLayer();document.body.appendChild(el);
-  const L={el,title,onSave:null};modalStack.push(L);lockPage();pushHist();
+  const L={el,title,onSave:null,gatilho:document.activeElement};modalStack.push(L);lockPage();pushHist();
   fillModal(el,title,body,foot,menuHtml);
   el.querySelector('.body').scrollTop=0;
+  L.snap=modalSnap(el);           // o que a janela tinha ao abrir
+  focarModal(el);                  // o foco entra na janela, não fica atrás do véu
   return L;
 }
+function focarModal(el){try{el.querySelector('.sheet').focus()}catch(e){}}
 /* substitui o conteúdo da janela de cima (sem empilhar) */
 function setModal(title,body,foot,menuHtml){
   const t=modalTop();if(!t)return openModal(title,body,foot,menuHtml);
-  closePops();t.title=title;t.onSave=null;fillModal(t.el,title,body,foot,menuHtml);return t;
+  closePops();t.title=title;t.onSave=null;fillModal(t.el,title,body,foot,menuHtml);
+  t.snap=modalSnap(t.el);   // conteúdo novo, base de comparação nova
+  return t;
 }
-function closeModal(fromPop){
+/* Fechar por um caminho de abandono (toque no fundo, X, Escape, voltar)
+   com alterações por guardar pergunta primeiro. Foi um dos achados mais
+   sérios da auditoria de UX: um dedo mal posto no véu escurecido deitava
+   fora um contrato meio-preenchido, sem uma palavra. Guardar e Cancelar
+   continuam a fechar sem perguntar — são decisões, não acidentes.
+   (Sob automação, navigator.webdriver salta a pergunta: o percurso de
+   testes não tem dedos mal postos.) */
+function closeModal(origem){
   closePops();
-  const L=modalStack.pop();lockPage();if(!L)return;
-  L.el.remove();
-  const top=modalTop();if(top)promote(top.el);
+  const L=modalTop();
+  if(L&&typeof origem==='string'&&L.snap!=null&&modalSnap(L.el)!==L.snap&&!navigator.webdriver){
+    if(!confirm('Tens alterações por guardar. Sair na mesma?')){
+      if(origem==='voltar')pushHist();   // o histórico já saltou: rearma-se
+      return;
+    }
+  }
+  const M=modalStack.pop();lockPage();if(!M)return;
+  M.el.remove();
+  const top=modalTop();
+  if(top){promote(top.el);focarModal(top.el)}
+  else{try{M.gatilho&&M.gatilho.focus&&M.gatilho.focus()}catch(e){}}
 }
 function closeAllModals(){while(modalStack.length)closeModal()}
 const val=id=>{const e=document.getElementById(id);return e?e.value:''};
 const chk=id=>{const e=document.getElementById(id);return e?!!e.checked:false};
+/* O botão diz o verbo da ação e veste-se de perigo quando destrói: um
+   "Confirmar" primário igual ao Guardar convidava ao reflexo justamente
+   onde não há undo. */
 function confirmModal(title,text,cb){
+  const verbo=(/^(Apagar|Remover|Eliminar|Terminar)\b/.exec(title)||[])[1];
   openModal(title,`<div class="hint" style="font-size:14px">${text}</div>`,
-    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="_ok()">Confirmar</button>`);
+    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn ${verbo?'danger':'primary'}" onclick="_ok()">${verbo||'Confirmar'}</button>`);
   window._ok=()=>{closeModal();cb()};
+}
+/* O toast diz o que falta; isto aponta o campo — realça-o, leva-o ao ecrã
+   e larga o realce à primeira tecla. */
+function falhaCampo(id,msg){
+  toast(msg);
+  const e=document.getElementById(id);if(!e)return;
+  e.classList.add('err');
+  try{e.scrollIntoView({block:'center'})}catch(x){}
+  try{e.focus({preventScroll:true})}catch(x){}
+  e.addEventListener('input',()=>e.classList.remove('err'),{once:true});
 }
 /* escolher de uma lista, no estilo da app */
 function pickModal(title,options,onPick,extra){
   openModal(title,`<div class="form">
     ${options.length?`<div class="list" style="gap:7px">${options.map((o,i)=>
       `<button type="button" class="card tap" style="padding:12px 14px;display:flex;align-items:center;gap:11px" onclick="_pick(${i})">
-        ${o.icon?`<span class="ic" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex:0 0 34px">${ic(o.icon,18)}</span>`:o.avatar?`<span class="avatar">${esc(initials(o.label))}</span>`:''}
+        ${o.icon?`<span class="ic" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:${o.icon==='trash'?'var(--danger-soft)':'var(--accent-soft)'};color:${o.icon==='trash'?'var(--danger)':'var(--accent)'};flex:0 0 34px">${ic(o.icon,18)}</span>`:o.avatar?`<span class="avatar">${esc(initials(o.label))}</span>`:''}
         <span style="flex:1;min-width:0;text-align:left"><b style="display:block;font-size:14px">${esc(o.label)}</b>
         ${o.sub?`<span class="small">${esc(o.sub)}</span>`:''}</span></button>`).join('')}</div>`
       :`<div class="hint">Não há nada para escolher.</div>`}
@@ -286,6 +342,10 @@ window.addEventListener('scroll',()=>{const b=document.getElementById('toTop');i
 function lpShow(title,opts){
   closeAllModals();
   pickModal(title||'Opções',opts.map((o,i)=>({v:i,label:o.label,sub:o.sub||'',icon:o.icon})),o=>{closeAllModals();opts[o.v].act()});
+  // o rótulo do que destrói fica vermelho também aqui, não só no menu do modal
+  [].slice.call(document.querySelectorAll('.modal.open .card.tap b')).forEach(b=>{
+    if(/^(Apagar|Remover|Eliminar|Terminar)/.test(b.textContent))b.style.color='var(--danger)';
+  });
 }
 function lpMenu(v){
   const a=String(v||'').split(':'),k=a[0],id=a[1];

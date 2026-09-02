@@ -8,7 +8,7 @@ function propModal(id){
   paintThumbs(pForm.photos);
   onSave=()=>{
     collectProp();
-    if(!pForm.name.trim())return toast('Dá um nome ao imóvel.');
+    if(!pForm.name.trim())return falhaCampo('p_name','Dá um nome ao imóvel.');
     const i=db.properties.findIndex(x=>x.id===pForm.id);
     if(i<0)db.properties.push(pForm);else db.properties[i]=pForm;
     save();closeModal();render();toast(id?'Imóvel atualizado.':'Imóvel adicionado.');
@@ -20,7 +20,7 @@ function propBody(){
   const shares=sharesOf(p),custom=hasShares(p);
   const sumSh=sum(owners.map(o=>Number((p.ownerShares||{})[o.id])||0));
   return `<div class="form">
-    <label>Nome<input id="p_name" value="${esc(p.name)}" placeholder="T2 Lisboa" autocomplete="off"></label>
+    <label>Nome <span class="req">*</span><input id="p_name" value="${esc(p.name)}" placeholder="T2 Lisboa" autocomplete="off"></label>
     <label>Morada<input id="p_addr" value="${esc(p.address)}" placeholder="Opcional" autocomplete="off"></label>
     <div><div class="flabel">Proprietários e quota-parte</div>
       <div class="form" style="gap:7px">
@@ -197,11 +197,11 @@ function delLoan(lid){
     ((findLoan(pForm,lid)||{}).files||[]).forEach(f=>idbDel(f.id).catch(()=>{}));
     pForm.loans=pForm.loans.filter(x=>x.id!==lid);
   };
-  if(!used){drop();repaintProp();return toast('Hipoteca removida.')}
-  confirmModal('Remover hipoteca',`Há ${used} prestação(ões) registada(s) em “${esc(loanName(l))}”. Os movimentos ficam, mas deixam de estar ligados a esta hipoteca.`,()=>{
+  if(!used)return confirmModal('Apagar hipoteca',`Apagar “${esc(loanName(l))}”? Não tem prestações registadas.`,()=>{drop();repaintProp();toast('Hipoteca apagada.')});
+  confirmModal('Apagar hipoteca',`Há ${used} prestação(ões) registada(s) em “${esc(loanName(l))}”. Os movimentos ficam, mas deixam de estar ligados a esta hipoteca.`,()=>{
     db.transactions.forEach(t=>{if(t.loanId===lid)t.loanId=null});
     drop();repaintProp();
-    toast('Hipoteca removida.');
+    toast('Hipoteca apagada.');
   });
 }
 function loanAddFiles(input,lid){

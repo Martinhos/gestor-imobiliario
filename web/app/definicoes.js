@@ -214,9 +214,14 @@ function renameSub(tk,k,old){
   });
 }
 function delSub(tk,k,sb){
-  const cs=db.settings[tk]||{};cs[k]=(cs[k]||[]).filter(x=>x!==sb);
-  treeTx(tk).forEach(t=>{if(t.category===k&&t.sub===sb)t.sub=''});
-  save();render();toast('Subcategoria removida.');
+  /* apagar categoria e etiqueta confirmam com o impacto; a subcategoria
+     executava logo — a mesma ação, na mesma página, ora protegia ora não */
+  const usados=treeTx(tk).filter(t=>t.category===k&&t.sub===sb).length;
+  confirmModal('Apagar subcategoria',`“${esc(sb)}” sai de ${k}${usados?` e de ${usados} movimento(s) que a usam`:''}.`,()=>{
+    const cs=db.settings[tk]||{};cs[k]=(cs[k]||[]).filter(x=>x!==sb);
+    treeTx(tk).forEach(t=>{if(t.category===k&&t.sub===sb)t.sub=''});
+    save();render();toast('Subcategoria apagada.');
+  });
 }
 function resetCats(){
   confirmModal('Repor categorias','Volta às listas de origem (receitas e pagamentos). As categorias que criaste desaparecem; os movimentos mantêm o texto.',()=>{

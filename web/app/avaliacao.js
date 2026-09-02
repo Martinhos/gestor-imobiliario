@@ -33,12 +33,12 @@ function portCard(pid){
       ${kpi('Diferença',(diff>=0?'+':'')+pct(diff),diff>=0?'pos':'neg',diff>=0?'as rendas justificam mais':'as rendas justificam menos',WHY.diferenca)}
       ${kpi('Equity',euro(m.value-m.debt),'','valor menos dívida',WHY.equity)}</div>
     <div class="cols">
-      ${card('Rendas e gastos','Mês a mês em '+YEAR,cBars(inc.map((v,i)=>[{label:'Rendas',value:v,color:PAL[0]},{label:'Gastos',value:-exp[i],color:'#c56b68'},{label:'Prestação',value:-ln[i],color:'#d6a34a'}]),MES,{h:190}))}
-      ${card('Estrutura de gastos','',cs.length?cDonut(cs,{sub:'gastos do ano'}):`<div class="hint">Sem gastos em ${YEAR}.</div>`)}</div>
+      ${card('Rendas e despesas','Mês a mês em '+YEAR,cBars(inc.map((v,i)=>[{label:'Rendas',value:v,color:PAL[0]},{label:'Despesas',value:-exp[i],color:'#c56b68'},{label:'Prestação',value:-ln[i],color:'#d6a34a'}]),MES,{h:190}))}
+      ${card('Estrutura de despesas','',cs.length?cDonut(cs,{sub:'gastos do ano'}):`<div class="hint">Sem gastos em ${YEAR}.</div>`)}</div>
     <div class="cols">
       ${card('Conta de exploração',String(YEAR),`
         <div class="stat"><span>Rendas recebidas</span><b class="pos">${euro(m.income)}</b></div>
-        <div class="stat"><span>Gastos operacionais</span><b class="neg">−${euro(m.op)}</b></div>
+        <div class="stat"><span>Despesas operacionais</span><b class="neg">−${euro(m.op)}</b></div>
         <div class="stat"><span>Resultado líquido (NOI)</span><b>${euro(noi)}</b></div>
         <div class="stat"><span>Prestações pagas</span><b class="amber">−${euro(m.loan)}</b></div>
         <div class="stat"><span>Cashflow</span><b class="${m.cf>=0?'pos':'neg'}">${euro(m.cf)}</b></div>`)}
@@ -75,13 +75,13 @@ function repCard(p){
       <tr><td colspan="2"><b>Total mensal</b></td><td><b>${euro(rentOf(p))}</b></td><td></td><td><b>${euro(netRentOf(p))}</b></td></tr>
       </tbody></table></div>`):''}
     <div class="cols">
-      ${card('Rendas e gastos','Mês a mês em '+YEAR,cBars(inc.map((v,i)=>[{label:'Rendas',value:v,color:PAL[0]},{label:'Gastos',value:-exp[i],color:'#c56b68'},{label:'Prestação',value:-ln[i],color:'#d6a34a'}]),MES,{h:190}))}
-      ${card('Estrutura de gastos','',cs.length?cDonut(cs,{sub:'gastos do ano'})
+      ${card('Rendas e despesas','Mês a mês em '+YEAR,cBars(inc.map((v,i)=>[{label:'Rendas',value:v,color:PAL[0]},{label:'Despesas',value:-exp[i],color:'#c56b68'},{label:'Prestação',value:-ln[i],color:'#d6a34a'}]),MES,{h:190}))}
+      ${card('Estrutura de despesas','',cs.length?cDonut(cs,{sub:'gastos do ano'})
         :`<div class="hint">Não há gastos atribuídos a este imóvel em ${YEAR}.${orphanExpenses(YEAR).length?` Há ${euro(sum(orphanExpenses(YEAR).map(x=>x.amount)))} em despesas sem imóvel atribuído, que aparecem na visão geral mas não aqui.`:''}</div>`)}</div>
     <div class="cols">
       ${card('Conta de exploração',String(YEAR),`
         <div class="stat"><span>Rendas recebidas</span><b class="pos">${euro(m.income)}</b></div>
-        <div class="stat"><span>Gastos operacionais</span><b class="neg">−${euro(m.op)}</b></div>
+        <div class="stat"><span>Despesas operacionais</span><b class="neg">−${euro(m.op)}</b></div>
         <div class="stat"><span>Resultado líquido (NOI)</span><b>${euro(noi)}</b></div>
         <div class="stat"><span>Prestações pagas</span><b class="amber">−${euro(m.loan)}</b></div>
         <div class="stat"><span>Cashflow</span><b class="${m.cf>=0?'pos':'neg'}">${euro(m.cf)}</b></div>`)}

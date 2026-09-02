@@ -199,14 +199,22 @@ function pushNow() {
             if (!o) return;
             if (o.op === 'put' && r.ok) snap[o._key] = o._json;
             else if (o.op === 'del' && (r.ok || r.status === 403 || r.status === 404)) delete snap[o._key];
+            else pushNow._recusadas = (pushNow._recusadas || 0) + 1;
           });
         });
       });
     })(ops.slice(i, i + 200));
   }
   return chain
-    .then(function () { saveSnap(); setSyncBadge('ok'); try { subirPendentes(); } catch (e) {} })
-    .catch(function () { setSyncBadge('off'); })
+    .then(function () {
+      saveSnap();
+      /* um 200 com operações recusadas lá dentro ficava 'ok' para sempre,
+         com o selo verde e os dados sem subir */
+      var recusadas = pushNow._recusadas || 0; pushNow._recusadas = 0;
+      setSyncBadge(recusadas ? 'off' : 'ok');
+      try { subirPendentes(); } catch (e) {}
+    })
+    .catch(function () { pushNow._recusadas = 0; setSyncBadge('off'); })
     .then(function () {
       pushing = false;
       if (pushAgain) { pushAgain = false; schedulePush(); }

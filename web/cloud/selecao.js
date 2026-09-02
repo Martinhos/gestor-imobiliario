@@ -121,6 +121,8 @@ vTransactions = function () {
         b.setAttribute('onclick', 'CW.selMes(\'' + mo + '\',event)');
         n.insertBefore(b, n.firstChild);
         n.classList.add('sel-mes');
+        n.setAttribute('onclick', 'CW.selMes(\'' + mo + '\',event)');
+        n.style.cursor = 'pointer';
       }
       return;
     }
@@ -166,7 +168,7 @@ vTransactions = function () {
   var barra =
     '<div class="sel-bar">' +
       '<span class="selbox" id="selGlobal" onclick="CW.selTodos(event)">' + caixa(false) + '</span>' +
-      '<span style="flex:1;min-width:0"><b id="selConta">nenhum movimento</b>' +
+      '<span style="flex:1;min-width:0;cursor:pointer" onclick="CW.selTodos(event)"><b id="selConta">nenhum movimento</b>' +
       '<span class="small" style="display:block">toca para marcar ou desmarcar tudo</span></span>' +
     '</div>';
   return barra + tmp.innerHTML;
@@ -336,8 +338,8 @@ var css = document.createElement('style');
 css.textContent =
   // a caixa de marcar, desenhada e não <input>: um checkbox do sistema
   // destoava de tudo o resto e não aceita o tamanho que aqui é preciso
-  '.selbox{flex:0 0 auto;display:inline-flex;align-items:center;padding:2px 11px 2px 0;cursor:pointer}' +
-  '.selck{width:21px;height:21px;border-radius:7px;border:1.8px solid var(--line2);' +
+  '.selbox{flex:0 0 auto;display:inline-flex;align-items:center;padding:10px 12px 10px 2px;cursor:pointer}' +
+  '.selck{width:22px;height:22px;border-radius:7px;border:1.8px solid var(--line2);' +
     'display:grid;place-items:center;color:transparent;background:var(--field)}' +
   '.selck.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}' +
   '.selck.meio{border-color:var(--accent)}' +
@@ -351,6 +353,6 @@ css.textContent =
     'align-items:center;padding:7px 0;margin-top:14px}' +
   '.section-title.sel-mes .selbox{padding-right:9px}' +
   // o kebab de cada linha, discreto até se lhe tocar
-  '.txkebab{margin:-4px -6px 0 4px;color:var(--muted)}' +
+  '.txkebab{margin:0 0 0 4px;padding:9px;color:var(--muted)}' +
   '.txkebab:hover{color:var(--ink);background:var(--chip)}';
 document.head.appendChild(css);
