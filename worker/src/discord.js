@@ -487,7 +487,14 @@ export async function handleInteraction(request, env, ctx) {
     } catch (e) {
       return json(reply('Correu mal: ' + cut(e.message, 300)));
     }
-    return json(reply('Comando desconhecido.'));
+    /* O Discord regista os comandos para o bot todo, mas quem lhes responde
+       é o worker de cada ambiente. Um comando novo registado antes de ser
+       promovido aparece na lista e cai aqui — e "comando desconhecido" manda
+       procurar no registo, que é o sítio errado. */
+    return json(reply('**/' + nome + '** existe no Discord mas este servidor ainda não o conhece.
+' +
+      'Costuma querer dizer que o comando foi registado antes de o código ser publicado aqui' +
+      (env.ENV_NAME ? ' (ambiente **' + env.ENV_NAME + '**)' : ' (produção)') + '.'));
   }
 
   return json(PONG);
