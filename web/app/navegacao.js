@@ -8,7 +8,6 @@ const TABS=[
   {id:'transactions',icon:'swap',label:'Movimentos',sub:'Rendas, despesas e prestações'},
   {id:'recurring',icon:'clock',label:'Planeados',sub:'Movimentos recorrentes e modelos'},
   {id:'credits',icon:'bank',label:'Créditos',sub:'Hipotecas de todos os imóveis'},
-  {id:'insurance',icon:'shield',label:'Seguros',sub:'Apólices e previsão dos pagamentos'},
   {id:'projections',icon:'trend',label:'Projeções',sub:'Rendas futuras e aumentos anuais'},
   {id:'reports',icon:'file',label:'Avaliação',sub:'Análise imóvel a imóvel'},
   {id:'settings',icon:'gear',label:'Definições',sub:'Tema, categorias e etiquetas'}
@@ -21,7 +20,7 @@ const SUBPAGE={cats:{label:'Tipos de movimento',sub:'Como classificas o que entr
                dados:{label:'Dados',sub:'Splitwise e cópias de segurança'}};
 const view=()=>document.getElementById('view');
 const NAV_GROUPS=[{label:'Património',ids:['dashboard','properties','contracts']},{label:'Pessoas',ids:['tenants','owners']},
-  {label:'Finanças',ids:['transactions','recurring','credits','insurance','projections','reports']},{label:'Aplicação',ids:['settings']}];
+  {label:'Finanças',ids:['transactions','recurring','credits','projections','reports']},{label:'Aplicação',ids:['settings']}];
 function buildNav(){
   const late=recActive().length;
   document.getElementById('nav').innerHTML=NAV_GROUPS.map(g=>`<div class="navh">${g.label}</div>`+g.ids.map(id=>{const t=TABS.find(x=>x.id===id);

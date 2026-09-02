@@ -50,7 +50,7 @@ function render(){
     if(hasFilt){hb.innerHTML=ic('filter',16)+(hdrFiltN()?'<span class="dot"></span>':'');
       hb.classList.toggle('primary',isAna?!!anaOpen[tab]:(LFK[tab]?!!lf(LFK[tab])._open:false))}}
   let html=({dashboard:vDashboard,properties:vProperties,contracts:vContracts,tenants:vTenants,owners:vOwners,
-    transactions:vTransactions,recurring:vRecurring,credits:vCredits,insurance:vInsurance,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
+    transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
   view().innerHTML=html;
   /* A visão geral era o único ecrã sem criação rápida: registar uma renda
@@ -573,7 +573,7 @@ function txFilterBody(){
     ${db.owners.length?`<label>Proprietário${sel('txOwnerF',ownerFilter,owners,'onTxOwner')}</label>
     <label>Pago / recebido por${sel('txPaidF',txPaid,payers,'onTxPaid')}</label>
     <label class="check"><input type="checkbox" id="txNoPayer" ${txNoPayer?'checked':''} onchange="onTxNoPayer()"> Incluir movimentos sem pessoa atribuída</label>`:''}
-    <div class="row"><label>De<input id="txDeF" type="date" value="${txDe}" onchange="onTxDatas()"></label>
+    <div class="row lado-a-lado"><label>De<input id="txDeF" type="date" value="${txDe}" onchange="onTxDatas()"></label>
       <label>Até<input id="txAteF" type="date" value="${txAte}" onchange="onTxDatas()"></label></div>
     <div class="row"><label>Ordenar por${sel('txSortF',txSort,[{v:'date',label:'Data'},{v:'amount',label:'Valor'}],'onTxSort')}</label>
       <label>Ordem${sel('txDirF',txDir,[{v:'desc',label:'Descendente'},{v:'asc',label:'Ascendente'}],'onTxDir')}</label></div>

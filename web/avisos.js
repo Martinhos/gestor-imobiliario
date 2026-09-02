@@ -66,14 +66,6 @@ var AVISOS = [
         ],
       },
       {
-        titulo: 'Seguros, com a subida anual já contada',
-        afeta: ['imoveis', 'creditos'],
-        itens: [
-          'Novo separador Seguros, em Finanças: multirriscos, vida do crédito, recheio — com apólice, seguradora e periodicidade.',
-          'A previsão dos próximos pagamentos entra com o aumento anual de cada apólice: um seguro raramente custa o mesmo dois anos seguidos, e a app passa a mostrar isso.',
-        ],
-      },
-      {
         titulo: 'O toque longo passou a significar uma coisa só',
         afeta: ['imoveis', 'contratos', 'movimentos'],
         itens: [

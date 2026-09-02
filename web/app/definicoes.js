@@ -303,7 +303,7 @@ function fcCorpo(){
     <div class="row"><label>Proprietário${sel('fc_owner',fcForm.owner,owners,'fcColher')}</label>
       <label>Categoria${sel('fc_cat',fcForm.cat,catOpts,'fcColher')}</label></div>
     ${subs.length?`<label>Subcategoria${sel('fc_sub',fcForm.sub,[{v:'',label:'Todas'}].concat(subs.map(x=>({v:x,label:x}))),'fcColher')}</label>`:''}
-    <div class="row"><label>De<input id="fc_de" type="date" value="${fcForm.de||''}" onchange="fcColher()"></label>
+    <div class="row lado-a-lado"><label>De<input id="fc_de" type="date" value="${fcForm.de||''}" onchange="fcColher()"></label>
       <label>Até<input id="fc_ate" type="date" value="${fcForm.ate||''}" onchange="fcColher()"></label></div>
     <div class="hint">Deixa em branco o que não quiseres fixar. Cada vista aplica só o que lhe diz respeito.</div>
   </div>`;
