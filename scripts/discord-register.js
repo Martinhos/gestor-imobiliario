@@ -80,6 +80,7 @@ const comandos = [
   },
   Object.assign({ name: 'uso', description: 'Consumo da infraestrutura agora' }, soOperacao),
   { name: 'comandos', description: 'O que podes fazer com o teu papel' },
+  { name: 'entrar', description: 'Abrir a ferramenta de suporte no browser' },
   Object.assign({
     name: 'copias',
     description: 'Cópias da base de dados no R2',
