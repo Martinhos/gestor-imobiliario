@@ -607,15 +607,21 @@ async function acessoInteracao(env, i, meus, cid) {
   const papeis = await papeisDoAlvo(env, i, alvoId, (partes[2] || '').split(',').filter(Boolean));
   if (!papeis.length) return reply('Essa pessoa já não tem cargo nenhum no servidor.');
 
-  let acessos;
+  let acessos, resumo;
   if (partes[0] === 'acz') {
     acessos = await guardarAcessos(env, alvoId, { mais: [], menos: [] });
+    resumo = 'repôs tudo ao cargo';
   } else {
     const regras = { PERMISSOES, PODEM_TUDO, SO_MASTER };
     const doCargo = (c) => origemDoAcesso(papeis, c, { mais: [], menos: [] }, regras) === 'papel';
     const d = excecoesDoMenu((i.data && i.data.values) || [], GERIVEIS(), doCargo);
     acessos = await guardarAcessos(env, alvoId, d);
+    resumo = 'dado: ' + (d.mais.join(',') || '—') + ' · retirado: ' + (d.menos.join(',') || '—');
   }
+  /* Quem pode o quê é a decisão mais sensível do bot: muda sem rasto e
+     ninguém reconstrói quem abriu que porta a quem. */
+  const { auditar } = await import('./lib/auditoria.js');
+  await auditar(env, quemFala(i, meus), 'acesso.mudar', alvoId, resumo);
   return { type: UPDATE, data: vistaAcesso(alvoId, papeis, acessos) };
 }
 

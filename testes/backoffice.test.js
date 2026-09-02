@@ -86,6 +86,35 @@ describe('o rasto', () => {
     assert.equal(r[0].detalhe, '{"linhas":5}');
   });
 
+  test('ver e procurar pessoas fica no rasto — é tocar em dados pessoais', async () => {
+    const env = ambiente();
+    const id = await novaConta(env);
+    await chamar(env, SUPORTE, 'GET', '/api/equipa/pessoas', null, '?q=pessoa');
+    await chamar(env, SUPORTE, 'GET', '/api/equipa/pessoas/' + id);
+    const acoes = (await auditoria(env)).map((x) => x.acao);
+    assert.deepEqual(acoes, ['pessoa.procurar', 'pessoa.ver']);
+  });
+
+  test('entrar na ferramenta fica no rasto', async () => {
+    const { criarBilhete, rotasEquipa } = await import('../worker/src/equipa.js');
+    const env = ambiente();
+    const b = await criarBilhete(env, { discordId: 'm1', nome: 'Mestre', papel: 'master' });
+    const f = new FormData();
+    f.set('t', b.token);
+    await rotasEquipa({
+      env, request: new Request('https://x.pt/equipa/entrar', { method: 'POST', body: f }),
+      method: 'POST', path: '/equipa/entrar', url: new URL('https://x.pt/equipa/entrar'),
+    });
+    assert.ok((await auditoria(env)).some((x) => x.acao === 'equipa.entrar'));
+  });
+
+  test('mexer nos acessos do Discord fica no rasto', async () => {
+    // o /access decide quem pode o quê: é a mudança mais sensível do bot
+    const { readFileSync } = await import('node:fs');
+    const bot = readFileSync(new URL('../worker/src/discord.js', import.meta.url), 'utf8');
+    assert.match(bot, /'acesso\.mudar'/);
+  });
+
   test('só o master lê o rasto', async () => {
     const env = ambiente();
     assert.equal((await chamar(env, SUPORTE, 'GET', '/api/equipa/auditoria')).status, 403);

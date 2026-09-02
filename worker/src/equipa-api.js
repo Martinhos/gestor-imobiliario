@@ -354,6 +354,8 @@ export async function rotasEquipaApi(c) {
         WHERE email LIKE ? OR name LIKE ? OR id = ?
         ORDER BY created_at DESC LIMIT 20`
     ).bind(p, p, q.toUpperCase()).all()).results;
+    // procurar pessoas é tocar em dados pessoais: fica registado quem procurou o quê
+    await auditar(env, eu, 'pessoa.procurar', null, q);
     return json({ pessoas: rows });
   }
 
@@ -364,6 +366,8 @@ export async function rotasEquipaApi(c) {
     if (badId(id)) return err(400, 'Id inválido.');
     const f = await ficha360(env, id);
     if (!f || f.desconhecido) return err(404, 'Conta não encontrada.');
+    // abrir a ficha completa de alguém também: é a leitura mais sensível daqui
+    await auditar(env, eu, 'pessoa.ver', id, null);
     const pedidos = (await env.DB.prepare(
       `SELECT id, subject, status, kind, created_at FROM tickets
         WHERE user_id = ? AND category = 'user' ORDER BY created_at DESC LIMIT 20`

@@ -15,6 +15,7 @@
    pode fazer passar pela outra. */
 
 import { json, err } from './lib/http.js';
+import { auditar } from './lib/auditoria.js';
 
 const BILHETE_TTL = 300;          // 5 minutos para usar a ligação
 const SESSAO_TTL = 8 * 3600;      // 8 horas de sessão, um dia de trabalho
@@ -135,6 +136,9 @@ export async function rotasEquipa(c) {
       const { paginaEntrada } = await import('./equipa-vista.js');
       return paginaEntrada(t, await verBilhete(env, t));
     }
+    // cada entrada na ferramenta fica registada: é a porta dos dados pessoais
+    await auditar(env, { discordId: b.discordId, nome: b.nome, papeis: b.papeis || [b.papel] },
+      'equipa.entrar', null, null);
     const sessao = novoToken();
     await env.SESSIONS.put('equipa:' + sessao, JSON.stringify({
       discordId: b.discordId, nome: b.nome, papel: b.papel,
