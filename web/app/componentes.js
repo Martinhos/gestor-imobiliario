@@ -252,10 +252,16 @@ function openModal(title,body,foot,menuHtml){
   closePops();
   const top=modalTop();if(top)demote(top.el);
   const el=modalLayer();document.body.appendChild(el);
-  const L={el,title,onSave:null,gatilho:document.activeElement};modalStack.push(L);lockPage();pushHist();
+  const L={el,title,onSave:null,gatilho:document.activeElement,tocado:false};modalStack.push(L);lockPage();pushHist();
   fillModal(el,title,body,foot,menuHtml);
   el.querySelector('.body').scrollTop=0;
   L.snap=modalSnap(el);           // o que a janela tinha ao abrir
+  /* só conta como "mexido" o que vier de um dedo ou de um teclado a sério
+     (isTrusted): os valores automáticos que a app preenche depois de abrir
+     — a renda sugerida, o email da conta — não são trabalho de ninguém, e
+     perguntavam "queres sair?" a quem nunca tocou em nada */
+  el.addEventListener('input',e=>{if(e.isTrusted)L.tocado=true},true);
+  el.addEventListener('change',e=>{if(e.isTrusted)L.tocado=true},true);
   focarModal(el);                  // o foco entra na janela, não fica atrás do véu
   return L;
 }
@@ -265,6 +271,7 @@ function setModal(title,body,foot,menuHtml){
   const t=modalTop();if(!t)return openModal(title,body,foot,menuHtml);
   closePops();t.title=title;t.onSave=null;fillModal(t.el,title,body,foot,menuHtml);
   t.snap=modalSnap(t.el);   // conteúdo novo, base de comparação nova
+  t.tocado=false;
   return t;
 }
 /* Fechar por um caminho de abandono (toque no fundo, X, Escape, voltar)
@@ -274,20 +281,29 @@ function setModal(title,body,foot,menuHtml){
    continuam a fechar sem perguntar — são decisões, não acidentes.
    (Sob automação, navigator.webdriver salta a pergunta: o percurso de
    testes não tem dedos mal postos.) */
+let _forcaFecho=false;
 function closeModal(origem){
   closePops();
   const L=modalTop();
-  if(L&&typeof origem==='string'&&L.snap!=null&&modalSnap(L.el)!==L.snap&&!navigator.webdriver){
-    if(!confirm('Tens alterações por guardar. Sair na mesma?')){
-      if(origem==='voltar')pushHist();   // o histórico já saltou: rearma-se
-      return;
-    }
+  if(L&&!_forcaFecho&&typeof origem==='string'&&L.tocado&&L.snap!=null&&modalSnap(L.el)!==L.snap&&!navigator.webdriver){
+    /* a pergunta veste o tema da app, não o do browser. Abrir a pergunta
+       por cima também rearma o histórico (openModal→pushHist), por isso o
+       "voltar" que trouxe até aqui fica tratado sozinho. */
+    openModal('Sair sem guardar?',
+      `<div class="hint" style="font-size:14px">Tens alterações por guardar nesta janela. Se saíres, perdem-se.</div>`,
+      `<button class="btn" onclick="closeModal()">Continuar a editar</button>
+       <button class="btn danger" onclick="_sairSemGuardar()">Sair sem guardar</button>`);
+    return;
   }
   const M=modalStack.pop();lockPage();if(!M)return;
   M.el.remove();
   const top=modalTop();
   if(top){promote(top.el);focarModal(top.el)}
   else{try{M.gatilho&&M.gatilho.focus&&M.gatilho.focus()}catch(e){}}
+}
+function _sairSemGuardar(){
+  _forcaFecho=true;
+  try{closeModal();closeModal()}finally{_forcaFecho=false}   // a pergunta e a janela por baixo
 }
 function closeAllModals(){while(modalStack.length)closeModal()}
 const val=id=>{const e=document.getElementById(id);return e?e.value:''};

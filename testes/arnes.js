@@ -17,7 +17,7 @@ const WEB = path.join(AQUI, '..', 'web');
 export const MODULOS = [
   'dados', 'anexos', 'auxiliares', 'graficos', 'credito', 'componentes',
   'metricas', 'navegacao', 'vistas', 'imovel', 'pessoas', 'contrato',
-  'planeados', 'movimento', 'creditos', 'seguros', 'splitwise', 'contrato-pdf',
+  'planeados', 'movimento', 'creditos', 'splitwise', 'contrato-pdf',
   'avaliacao', 'definicoes', 'copias',
 ];
 

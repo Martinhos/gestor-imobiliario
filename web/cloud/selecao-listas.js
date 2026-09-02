@@ -42,8 +42,12 @@
     var r = _render_sl.apply(this, arguments);
     var ativo = CW.selL.tipo && tab === TABS_SEL[CW.selL.tipo];
     if (CW.selL.tipo && !ativo) CW.selL = { tipo: null, ids: {} };   // mudou de ecrã: sai
-    document.body.classList.toggle('sel-on', document.body.classList.contains('sel-on') || !!ativo);
-    if (!ativo && !(CW.selMode)) document.body.classList.remove('sel-on');
+    var algum = !!ativo || (CW.selMode && tab === 'transactions');
+    document.body.classList.toggle('sel-on', algum);
+    if (!algum) {
+      var f = document.querySelector('.sel-fundo');
+      if (f) f.remove();
+    }
     if (ativo) decorar();
     return r;
   };

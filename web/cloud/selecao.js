@@ -29,6 +29,11 @@ CW.selEntrar = function (id) {
   render();
 };
 
+/* limpa o estado sem repintar: para quem já vai repintar por outra razão */
+CW.selReset = function () {
+  CW.selMode = false;
+  selIds = {};
+};
 CW.selSair = function () {
   CW.selMode = false;
   selIds = {};
@@ -342,9 +347,16 @@ go = function (t) {
 
 var _render_sel = render;
 render = function () {
+  /* mudar de ecrã sai da seleção: a barra do fundo ficava viva num ecrã
+     onde as ações dela já não faziam sentido nenhum */
+  if (CW.selMode && tab !== 'transactions') CW.selReset();
   var r = _render_sel.apply(this, arguments);
   patchHdrSel();
   document.body.classList.toggle('sel-on', !!CW.selMode);
+  if (!CW.selMode && !(CW.selL && CW.selL.tipo)) {
+    var f = document.querySelector('.sel-fundo');
+    if (f) f.remove();
+  }
   if (CW.selMode) selPintar();
   return r;
 };
