@@ -491,8 +491,7 @@ export async function handleInteraction(request, env, ctx) {
        é o worker de cada ambiente. Um comando novo registado antes de ser
        promovido aparece na lista e cai aqui — e "comando desconhecido" manda
        procurar no registo, que é o sítio errado. */
-    return json(reply('**/' + nome + '** existe no Discord mas este servidor ainda não o conhece.
-' +
+    return json(reply('**/' + nome + '** existe no Discord mas este servidor ainda não o conhece.\n' +
       'Costuma querer dizer que o comando foi registado antes de o código ser publicado aqui' +
       (env.ENV_NAME ? ' (ambiente **' + env.ENV_NAME + '**)' : ' (produção)') + '.'));
   }
