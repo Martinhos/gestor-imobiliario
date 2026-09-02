@@ -4,7 +4,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { lerAcessos, guardarAcessos, origemDoAcesso } from '../worker/src/acessos.js';
+import { lerAcessos, guardarAcessos, origemDoAcesso, excecoesDoMenu } from '../worker/src/acessos.js';
 import { podeCorrer, comandosDe, PERMISSOES, PODEM_TUDO, SO_MASTER } from '../worker/src/discord.js';
 
 const REGRAS = { PERMISSOES, PODEM_TUDO, SO_MASTER };
@@ -100,9 +100,57 @@ describe('o /access não se dá a si próprio', () => {
     });
   });
 
-  test('nem o admin o herda por poder tudo o resto', () => {
-    assert.equal(PODEM_TUDO.includes('admin'), true, 'o admin pode o resto');
-    assert.equal(podeCorrer('admin', 'access'), false, 'mas não isto');
+  test('nem quem pode tudo o resto o herda', () => {
+    // hoje só o master está em PODEM_TUDO; se um dia lá entrar outro papel,
+    // este teste garante que não vem com a gestão de acessos atrás
+    PODEM_TUDO.filter((p) => p !== 'master').forEach((p) => {
+      assert.equal(podeCorrer(p, 'access'), false, p + ' pode o resto, mas não isto');
+    });
+    assert.equal(podeCorrer('admin', 'access'), false);
+  });
+});
+
+describe('as caixas do menu viram exceções', () => {
+  // o menu marca comandos; o que se guarda é a diferença para o cargo
+  const GERIVEIS = Object.keys(PERMISSOES).filter((c) => SO_MASTER.indexOf(c) < 0);
+  const doCargo = (pap) => (c) => origem(pap, c, { mais: [], menos: [] }) === 'papel';
+
+  test('marcar o que o cargo não dá guarda um mais', () => {
+    const d = excecoesDoMenu(comandosDe('suporte').concat('erros'), GERIVEIS, doCargo('suporte'));
+    assert.deepEqual(d.mais, ['erros']);
+    assert.deepEqual(d.menos, []);
+  });
+
+  test('desmarcar o que o cargo dá guarda um menos', () => {
+    const d = excecoesDoMenu(comandosDe('admin').filter((c) => c !== 'uso'), GERIVEIS, doCargo('admin'));
+    assert.deepEqual(d.mais, []);
+    assert.deepEqual(d.menos, ['uso']);
+  });
+
+  test('deixar tudo como veio não guarda exceção nenhuma', () => {
+    // abrir o menu e fechá-lo sem mexer não pode escrever nada
+    ['admin', 'dev', 'suporte'].forEach((p) => {
+      const d = excecoesDoMenu(comandosDe(p), GERIVEIS, doCargo(p));
+      assert.deepEqual(d, { mais: [], menos: [] }, p);
+    });
+  });
+
+  test('guarda-se a diferença para o cargo, não a lista marcada', () => {
+    /* É o que faz com que mudar o cargo de alguém no Discord continue a
+       mudar-lhe os acessos: se guardássemos a lista marcada, a pessoa
+       ficava congelada no cargo que tinha no dia em que se abriu o menu. */
+    const marcados = comandosDe('suporte').concat('erros');
+    const d = excecoesDoMenu(marcados, GERIVEIS, doCargo('suporte'));
+    assert.ok(d.mais.concat(d.menos).length < marcados.length);
+    // e o mesmo clique visto de um cargo diferente guarda outra coisa
+    const outro = excecoesDoMenu(marcados, GERIVEIS, doCargo('dev'));
+    assert.notDeepEqual(outro, d);
+  });
+
+  test('o /access nunca entra nas caixas', () => {
+    assert.equal(GERIVEIS.indexOf('access'), -1);
+    const d = excecoesDoMenu(['access'], GERIVEIS, doCargo('admin'));
+    assert.equal(d.mais.indexOf('access'), -1);
   });
 });
 

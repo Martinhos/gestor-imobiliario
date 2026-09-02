@@ -10,15 +10,17 @@
    de lhe ver as contas. */
 
 import { json, err, body, now, badId } from './lib/http.js';
-import { CATS_DO_PAPEL } from './discord.js';
+import { catsDe } from './discord.js';
 
 const cortar = (s, n) => {
   const t = String(s == null ? '' : s);
   return t.length > n ? t.slice(0, n - 1) + '…' : t;
 };
 
-function categoriasDe(pap) {
-  return CATS_DO_PAPEL[pap] || [];
+// A mesma regra do bot, e de propósito a mesma função: duas cópias disto
+// acabavam a discordar uma da outra na primeira mudança de papéis.
+function categoriasDe(eu) {
+  return catsDe(eu.papeis || eu.papel);
 }
 
 /* A ficha de quem escreveu. É a mesma informação que o bot mostra, e pela
@@ -49,7 +51,7 @@ async function ficha(env, userId) {
 
 export async function rotasEquipaApi(c) {
   const { env, request, path, method, url, eu } = c;
-  const cats = categoriasDe(eu.papel);
+  const cats = categoriasDe(eu);
   if (!cats.length) return err(403, 'O teu papel não vê pedidos.');
 
   const marcas = cats.map(() => '?').join(',');

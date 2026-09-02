@@ -35,6 +35,7 @@ export async function criarBilhete(env, quem) {
     discordId: quem.discordId,
     nome: quem.nome,
     papel: quem.papel,
+    papeis: quem.papeis || [quem.papel],   // dois cargos somam, como no bot
     criado: Date.now(),
   }), { expirationTtl: BILHETE_TTL });
   return { token: t, expiraEm: BILHETE_TTL };
@@ -83,7 +84,8 @@ export async function rotasEquipa(c) {
     const b = JSON.parse(raw);
     const sessao = novoToken();
     await env.SESSIONS.put('equipa:' + sessao, JSON.stringify({
-      discordId: b.discordId, nome: b.nome, papel: b.papel, desde: Date.now(),
+      discordId: b.discordId, nome: b.nome, papel: b.papel,
+      papeis: b.papeis || [b.papel], desde: Date.now(),
     }), { expirationTtl: SESSAO_TTL });
 
     return new Response(null, {

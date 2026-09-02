@@ -3,7 +3,7 @@
 // e dos erros, quem opera vê o consumo da infraestrutura.
 
 import { dailyReport, usageFields } from './notify.js';
-import { lerAcessos, guardarAcessos, origemDoAcesso } from './acessos.js';
+import { lerAcessos, guardarAcessos, origemDoAcesso, excecoesDoMenu } from './acessos.js';
 
 const PONG = { type: 1 };
 const MSG = 4;            // responder com mensagem
@@ -59,18 +59,21 @@ const cut = (s, n) => { const t = String(s == null ? '' : s); return t.length > 
    dev        constrói: erros da app e do servidor, infraestrutura, segurança
    suporte    fala com quem usa: só os pedidos contados por pessoas
 
-   dev e suporte são irmãos — nenhum manda no outro — e ambos ficam abaixo de
-   admin, que por sua vez fica abaixo de master. Cada lista aceita ids de
-   pessoa ou ids de cargo do Discord: com cargos, entra e sai gente sem mexer
-   nos segredos.
+   admin, dev e suporte são irmãos: nenhum manda nos outros e nenhum contém
+   os outros. Cada um tem o seu canto — quem opera vê o consumo e as cópias,
+   quem programa vê os erros, quem atende vê as pessoas. Só o master está
+   acima dos três, e é o único que decide quem pode o quê.
 
-   Hoje master e admin podem o mesmo. A diferença serve para o que vier: um
-   comando que apague dados ou mexa em contas nasce restrito a master, e não
-   é preciso repensar quem é quem nessa altura. */
+   Cada lista aceita ids de pessoa ou ids de cargo do Discord: com cargos,
+   entra e sai gente sem mexer nos segredos.
+
+   Estar em duas listas soma em vez de escolher: quem for admin e dev corre
+   os comandos dos dois. Enquanto o admin podia tudo isto não se notava; com
+   irmãos, escolher uma só tirava acessos a quem ganhasse um segundo cargo. */
 export const PAPEIS = ['master', 'admin', 'dev', 'suporte'];
 
 // Papéis que podem tudo, incluindo comandos que ainda não existem.
-export const PODEM_TUDO = ['master', 'admin'];
+export const PODEM_TUDO = ['master'];
 
 /* Comandos que nem o admin herda e que não se dão por exceção. Quem decide
    quem pode o quê tem de ser um só — senão o controlo de acessos passa a
@@ -79,27 +82,48 @@ export const SO_MASTER = ['access'];
 
 // O que cada papel pode correr. Os de cima não aparecem nas listas.
 export const PERMISSOES = {
-  pedidos: ['dev', 'suporte'],
-  pedido: ['dev', 'suporte'],
-  responder: ['dev', 'suporte'],
-  fechar: ['dev', 'suporte'],
+  pedidos: ['admin', 'dev', 'suporte'],
+  pedido: ['admin', 'dev', 'suporte'],
+  responder: ['admin', 'dev', 'suporte'],
+  fechar: ['admin', 'dev', 'suporte'],
   erros: ['dev'],
-  uso: [],
-  resumo: [],
-  copias: [],
-  comandos: ['dev', 'suporte'],
-  entrar: ['dev', 'suporte'],
+  uso: ['admin'],
+  resumo: ['admin'],
+  copias: ['admin'],
+  comandos: ['admin', 'dev', 'suporte'],
+  entrar: ['admin', 'dev', 'suporte'],
   access: [],
 };
 
-// As categorias de pedido que cada papel vê. O suporte não precisa de ver
-// rastreios de erro para responder a quem escreveu — e não deve.
+/* As categorias de pedido que cada papel vê. Os pedidos são dos três, mas
+   cada um só vê os do seu canto: o suporte não precisa de ver rastreios de
+   erro para responder a quem escreveu — e não deve.
+
+   'seguranca' está de propósito no dev e no admin ao mesmo tempo. É a única
+   sobreposição, e é deliberada: um aviso de segurança que ninguém vê é pior
+   do que um aviso visto duas vezes. */
 export const CATS_DO_PAPEL = {
   master: ['user', 'client', 'server', 'infra', 'seguranca'],
-  admin: ['user', 'client', 'server', 'infra', 'seguranca'],
-  dev: ['client', 'server', 'infra', 'seguranca'],
+  admin: ['infra', 'seguranca'],
+  dev: ['client', 'server', 'seguranca'],
   suporte: ['user'],
 };
+
+// Um papel ou vários: daqui para baixo aceita-se qualquer um dos dois.
+const comoLista = (p) => (Array.isArray(p) ? p.filter(Boolean) : p ? [p] : []);
+const nomeDoPapel = (p) => comoLista(p).join(' + ') || 'nenhum';
+
+const COR_PAPEL = { master: 0xb94a48, admin: 0x8a7bb8, dev: 0xd6a34a, suporte: 0x2f7d5b };
+const cor = (p) => COR_PAPEL[comoLista(p)[0]] || 0x2f7d5b;
+
+// As categorias que esta pessoa vê, somando os papéis que tiver.
+export function catsDe(pap) {
+  const vistas = [];
+  comoLista(pap).forEach((p) => (CATS_DO_PAPEL[p] || []).forEach((c) => {
+    if (vistas.indexOf(c) < 0) vistas.push(c);
+  }));
+  return vistas;
+}
 
 const lista = (v) => String(v || '').split(/[,\s]+/).filter(Boolean);
 
@@ -113,24 +137,31 @@ function pertence(env, i, chave) {
 
 // Sem nenhuma lista configurada, quem tiver acesso ao servidor de Discord é
 // admin — é o dono que decide, ao configurar.
+const CHAVE_DO_PAPEL = {
+  master: 'DISCORD_MASTER', admin: 'DISCORD_ADMINS',
+  dev: 'DISCORD_DEVS', suporte: 'DISCORD_SUPORTE',
+};
+
+// Todos os papéis de quem está a falar, do mais alto para o mais baixo.
+export function papeisDe(env, i) {
+  const configurado = PAPEIS.some((p) => lista(env[CHAVE_DO_PAPEL[p]]).length);
+  if (!configurado) return ['master'];
+  return PAPEIS.filter((p) => pertence(env, i, CHAVE_DO_PAPEL[p]));
+}
+
+// O papel principal, para mostrar e para dar cor: o mais alto que a pessoa tem.
 export function papel(env, i) {
-  const configurado = ['DISCORD_MASTER', 'DISCORD_ADMINS', 'DISCORD_DEVS', 'DISCORD_SUPORTE']
-    .some((k) => lista(env[k]).length);
-  if (!configurado) return 'master';
-  if (pertence(env, i, 'DISCORD_MASTER')) return 'master';
-  if (pertence(env, i, 'DISCORD_ADMINS')) return 'admin';
-  if (pertence(env, i, 'DISCORD_DEVS')) return 'dev';
-  if (pertence(env, i, 'DISCORD_SUPORTE')) return 'suporte';
-  return null;
+  return papeisDe(env, i)[0] || null;
 }
 
 /* O papel é a regra; as exceções por pessoa são o remendo. Passar `acessos`
    é opcional de propósito: sem elas, isto continua a ser a função pura que
    os testes usam, e o comportamento é o do papel. */
 export function podeCorrer(pap, comando, acessos) {
-  if (!pap) return false;
-  if (SO_MASTER.indexOf(comando) > -1) return pap === 'master';
-  const origem = origemDoAcesso(pap, comando, acessos, { PERMISSOES, PODEM_TUDO, SO_MASTER });
+  const papeis = comoLista(pap);
+  if (!papeis.length) return false;
+  if (SO_MASTER.indexOf(comando) > -1) return papeis.indexOf('master') > -1;
+  const origem = origemDoAcesso(papeis, comando, acessos, { PERMISSOES, PODEM_TUDO, SO_MASTER });
   return origem === 'papel' || origem === 'dado';
 }
 
@@ -187,11 +218,11 @@ async function mudarEstado(env, ref, estado, resposta) {
 
 async function cmdPedidos(env, opts, pap) {
   const estado = (opts.estado || '').trim();
-  const permitidas = CATS_DO_PAPEL[pap] || [];
+  const permitidas = catsDe(pap);
   let cat = (opts.categoria || '').trim();
   // pedir uma categoria que o papel não vê não devolve vazio às escondidas
   if (cat && permitidas.indexOf(cat) < 0) {
-    return reply('O papel **' + pap + '** não vê pedidos de *' + (CATS[cat] || cat) + '*.');
+    return reply('O papel **' + nomeDoPapel(pap) + '** não vê pedidos de *' + (CATS[cat] || cat) + '*.');
   }
   const onde = [], vals = [];
   if (estado) { onde.push('status = ?'); vals.push(estado); } else onde.push("status <> 'concluido'");
@@ -361,7 +392,7 @@ async function cmdCopias(env, opts) {
 
 // Um pedido só se lê e se responde de dentro do papel a que pertence.
 function podeVer(pap, categoria) {
-  return (CATS_DO_PAPEL[pap] || []).indexOf(categoria || 'user') > -1;
+  return catsDe(pap).indexOf(categoria || 'user') > -1;
 }
 
 async function guardaDoPedido(env, id, pap) {
@@ -392,15 +423,15 @@ function cmdComandos(pap, acessos) {
   const desc = DESCRICAO;
   const meus = comandosDe(pap, acessos);
   return reply('', [{
-    title: 'O que podes fazer · papel **' + pap + '**',
-    color: pap === 'master' ? 0xb94a48 : pap === 'admin' ? 0x8a7bb8 : pap === 'dev' ? 0xd6a34a : 0x2f7d5b,
+    title: 'O que podes fazer · papel ' + nomeDoPapel(pap),
+    color: cor(pap),
     description: meus.map(function (c) {
       const o = origemDoAcesso(pap, c, acessos, { PERMISSOES, PODEM_TUDO, SO_MASTER });
       return '`/' + c + '`' + (o === 'dado' ? ' *(dado a ti)*' : '') + ' — ' + desc[c];
     }).join('\n'),
     fields: [{
       name: 'Pedidos que vês',
-      value: (CATS_DO_PAPEL[pap] || []).map((c) => (ICONE[c] || '') + (CATS[c] || c)).join('\n'),
+      value: catsDe(pap).map((c) => (ICONE[c] || '') + (CATS[c] || c)).join('\n') || 'nenhum',
     }],
   }]);
 }
@@ -411,13 +442,15 @@ function cmdComandos(pap, acessos) {
    um canal partilhado não é sítio para ela. O endereço sai do próprio pedido,
    por isso o bot de dev dá uma ligação para o dev e o de produção para
    produção, sem ninguém ter de configurar nada. */
-async function cmdEntrar(env, i, pap, request) {
+async function cmdEntrar(env, i, papeis, request) {
   const u = (i.member && i.member.user) || i.user || {};
+  const pap = nomeDoPapel(papeis);
   const { criarBilhete } = await import('./equipa.js');
   const b = await criarBilhete(env, {
     discordId: u.id,
     nome: u.global_name || u.username || u.id,
-    papel: pap,
+    papel: papeis[0],   // o principal, para mostrar
+    papeis,             // todos, para decidir o que se vê
   });
   const base = new URL(request.url).origin;
   const minutos = Math.round(b.expiraEm / 60);
@@ -428,70 +461,145 @@ async function cmdEntrar(env, i, pap, request) {
   );
 }
 
-/* Quem pode o quê, e de onde vem.
+/* Quem pode o quê, com as caixas na própria mensagem.
 
-   O papel continua a mandar: o que vem dele fica marcado (predefinido) e não
-   se mexe aqui — muda-se o cargo no Discord. Isto serve para a exceção: dar
-   um comando a alguém sem lhe dar o cargo todo, ou tirar-lho sem lho tirar
-   aos outros. */
+   O papel continua a mandar: o que vem dele já vem marcado, e desmarcá-lo é
+   o que tira o comando a esta pessoa e só a ela. O que se guarda é a
+   diferença para o cargo, nunca a lista marcada — assim, mudar o cargo de
+   alguém no Discord continua a mudar-lhe os acessos.
+
+   O /access não aparece no menu: quem decide quem pode o quê tem de ser um
+   só, e um controlo de acessos que se pode dar a si próprio não controla
+   nada. */
+
+// Os comandos que se gerem aqui. Os do master ficam de fora de propósito.
+const GERIVEIS = () => Object.keys(PERMISSOES).filter((c) => SO_MASTER.indexOf(c) < 0);
+
+const MARCA = {
+  papel: '✅ *(do cargo)*',
+  dado: '➕ **dado a esta pessoa**',
+  retirado: '➖ **retirado**',
+  nao: '·',
+};
+const DE_ONDE = { papel: 'do cargo · ', dado: 'dado a esta pessoa · ', retirado: 'retirado · ', nao: '' };
+
+function menuAcesso(alvoId, papeis, acessos) {
+  const regras = { PERMISSOES, PODEM_TUDO, SO_MASTER };
+  // o alvo e os papéis dele viajam no botão: a interação de um menu não
+  // traz o membro consigo, ao contrário da do comando
+  const chave = alvoId + ':' + papeis.join(',');
+  const opcoes = GERIVEIS().map(function (c) {
+    const o = origemDoAcesso(papeis, c, acessos, regras);
+    return {
+      label: '/' + c,
+      value: c,
+      description: cut(DE_ONDE[o] + (DESCRICAO[c] || ''), 100),
+      default: o === 'papel' || o === 'dado',
+    };
+  });
+  return [
+    {
+      type: 1,
+      components: [{
+        type: 3,
+        custom_id: 'ac:' + chave,
+        placeholder: 'Marca o que esta pessoa pode correr',
+        min_values: 0,
+        max_values: opcoes.length,
+        options: opcoes,
+      }],
+    },
+    {
+      type: 1,
+      components: [{ type: 2, style: 2, label: 'Repor tudo ao cargo', custom_id: 'acz:' + chave }],
+    },
+  ];
+}
+
+/* A mensagem inteira: o menu é o que se mexe, o embed é o que explica.
+
+   O menu sozinho mostra o que está ligado mas não de onde vem, e essa é a
+   parte que interessa a quem gere — daí os dois juntos. */
+function vistaAcesso(alvoId, papeis, acessos) {
+  const regras = { PERMISSOES, PODEM_TUDO, SO_MASTER };
+  const eMaster = papeis.indexOf('master') > -1;
+  const linhas = Object.keys(PERMISSOES).map(function (c) {
+    return MARCA[origemDoAcesso(papeis, c, acessos, regras)] + '  `/' + c + '` — ' + (DESCRICAO[c] || '');
+  });
+  const excecoes = acessos.mais.length + acessos.menos.length;
+
+  const embed = {
+    title: 'Quem pode o quê',
+    description: '<@' + alvoId + '>\n\n' + linhas.join('\n'),
+    color: cor(papeis),
+    fields: [
+      { name: 'Papel', value: papeis.length ? papeis.join(' + ') : 'nenhum — não entra no bot', inline: true },
+      { name: 'Exceções ao cargo', value: String(excecoes || 'nenhuma'), inline: true },
+    ],
+    footer: {
+      text: !papeis.length
+        ? 'Sem cargo no servidor não há nada a gerir: dá-lhe primeiro um cargo.'
+        : eMaster
+          ? 'O master não perde acessos por exceção: um engano trancava-o fora.'
+          : 'Desmarca o que vem do cargo para lho tirares só a esta pessoa.',
+    },
+  };
+
+  // sem papel não há nada para mexer; ao master não se tira nada
+  const componentes = (!papeis.length || eMaster) ? [] : menuAcesso(alvoId, papeis, acessos);
+  return { embeds: [embed], components: componentes };
+}
+
 async function cmdAccess(env, i, opts) {
   const alvo = opts.utilizador;
   if (!alvo) return reply('Escolhe a pessoa.');
-
   const res = (i.data && i.data.resolved) || {};
-  const u = (res.users && res.users[alvo]) || {};
   const membro = (res.members && res.members[alvo]) || {};
-  const nome = u.global_name || u.username || alvo;
+  const papeis = papeisDe(env, { member: { user: { id: alvo }, roles: membro.roles || [] } });
+  const acessos = await lerAcessos(env, alvo);
+  return { type: MSG, data: Object.assign({ flags: 64 }, vistaAcesso(alvo, papeis, acessos)) };
+}
 
-  // o papel da pessoa calcula-se como se fosse ela a falar
-  const pap = papel(env, { member: { user: { id: alvo }, roles: membro.roles || [] } });
-  let acessos = await lerAcessos(env, alvo);
+/* Os cargos do alvo, perguntados ao Discord no momento de gravar.
 
-  const comando = opts.comando;
-  const acao = opts.acesso;
-
-  if (comando && acao) {
-    if (!pap) return reply('**' + nome + '** não tem papel nenhum. Dá-lhe primeiro um cargo no servidor.');
-    if (SO_MASTER.indexOf(comando) > -1) {
-      return reply('**/' + comando + '** é só do master e não se dá por exceção. ' +
-        'Quem decide quem pode o quê tem de ser um só.');
-    }
-    const mais = acessos.mais.filter((c) => c !== comando);
-    const menos = acessos.menos.filter((c) => c !== comando);
-    if (acao === 'permitir') mais.push(comando);
-    else if (acao === 'negar') menos.push(comando);
-    // 'repor' deixa o comando entregue ao papel, sem exceção
-    acessos = await guardarAcessos(env, alvo, { mais, menos });
-  } else if (acao === 'limpar') {
-    acessos = await guardarAcessos(env, alvo, { mais: [], menos: [] });
+   Os que viajaram na mensagem podem estar velhos — o cargo pode ter mudado
+   entre abrir o menu e mexer nele — e gravar exceções contra um cargo velho
+   dava exceções erradas. Se a pergunta não der, vale o que veio na mensagem:
+   é melhor do que recusar o clique. */
+async function papeisDoAlvo(env, i, alvoId, guardados) {
+  if (env.DISCORD_BOT_TOKEN && i.guild_id) {
+    try {
+      const r = await fetch(
+        'https://discord.com/api/v10/guilds/' + i.guild_id + '/members/' + alvoId,
+        { headers: { Authorization: 'Bot ' + env.DISCORD_BOT_TOKEN } }
+      );
+      if (r.ok) {
+        const m = await r.json();
+        return papeisDe(env, { member: { user: { id: alvoId }, roles: m.roles || [] } });
+      }
+    } catch (e) { /* fica o que veio na mensagem */ }
   }
+  return guardados;
+}
 
-  const regras = { PERMISSOES, PODEM_TUDO, SO_MASTER };
-  const MARCA = {
-    papel: '✅ *(predefinido)*',
-    dado: '➕ **dado**',
-    retirado: '➖ **retirado**',
-    nao: '·',
-  };
-  const linhas = Object.keys(PERMISSOES).map(function (c) {
-    const o = origemDoAcesso(pap, c, acessos, regras);
-    return MARCA[o] + '  `/' + c + '` — ' + (DESCRICAO[c] || '');
-  });
+async function acessoInteracao(env, i, meus, cid) {
+  if (!podeCorrer(meus, 'access')) return reply('O **/access** é só do master.');
 
-  return reply('', [{
-    title: 'Acessos de ' + nome,
-    description: linhas.join('\n'),
-    color: pap === 'master' ? 0xb94a48 : pap === 'admin' ? 0x8a7bb8 : pap === 'dev' ? 0xd6a34a : 0x2f7d5b,
-    fields: [
-      { name: 'Papel', value: pap || 'nenhum — não entra no bot', inline: true },
-      { name: 'Exceções', value: (acessos.mais.length + acessos.menos.length) || 'nenhuma', inline: true },
-    ],
-    footer: {
-      text: pap === 'master'
-        ? 'O master não perde acessos por exceção: um engano trancava-o fora.'
-        : 'O que é (predefinido) vem do cargo — muda-se no Discord, não aqui.',
-    },
-  }]);
+  const partes = cid.split(':');
+  const alvoId = partes[1];
+  const papeis = await papeisDoAlvo(env, i, alvoId, (partes[2] || '').split(',').filter(Boolean));
+  if (!papeis.length) return reply('Essa pessoa já não tem cargo nenhum no servidor.');
+
+  let acessos;
+  if (partes[0] === 'acz') {
+    acessos = await guardarAcessos(env, alvoId, { mais: [], menos: [] });
+  } else {
+    const regras = { PERMISSOES, PODEM_TUDO, SO_MASTER };
+    const doCargo = (c) => origemDoAcesso(papeis, c, { mais: [], menos: [] }, regras) === 'papel';
+    const d = excecoesDoMenu((i.data && i.data.values) || [], GERIVEIS(), doCargo);
+    acessos = await guardarAcessos(env, alvoId, d);
+  }
+  return { type: UPDATE, data: vistaAcesso(alvoId, papeis, acessos) };
 }
 
 async function cmdUso(env) {
@@ -527,18 +635,24 @@ export async function handleInteraction(request, env, ctx) {
 
   if (i.type === 1) return json(PONG);
 
-  const pap = papel(env, i);
-  if (!pap) return json(reply('Não tens permissão para usar este bot.'));
+  const papeis = papeisDe(env, i);
+  if (!papeis.length) return json(reply('Não tens permissão para usar este bot.'));
+  const pap = papeis;
   const quemSou = (i.member && i.member.user && i.member.user.id) || (i.user && i.user.id);
   const meusAcessos = await lerAcessos(env, quemSou);
 
-  // botões
+  // botões e menus
   if (i.type === 3) {
-    const [, acao, id] = String(i.data.custom_id || '').split(':');
+    const cid = String(i.data.custom_id || '');
+    // o menu do /access e o seu botão de repor
+    if (cid.indexOf('ac:') === 0 || cid.indexOf('acz:') === 0) {
+      return json(await acessoInteracao(env, i, papeis, cid));
+    }
+    const [, acao, id] = cid.split(':');
     const estado = acao === 'fim' ? 'concluido' : 'resolucao';
     const antes = await env.DB.prepare('SELECT category FROM tickets WHERE id = ?').bind(id).first();
     if (antes && !podeVer(pap, antes.category)) {
-      return json(reply('Esse pedido é de *' + (CATS[antes.category] || antes.category) + '*, fora do papel **' + pap + '**.'));
+      return json(reply('Esse pedido é de *' + (CATS[antes.category] || antes.category) + '*, fora do papel **' + nomeDoPapel(pap) + '**.'));
     }
     const t = await mudarEstado(env, id, estado);
     if (!t) return json(reply('Esse pedido já não existe.'));
@@ -557,14 +671,14 @@ export async function handleInteraction(request, env, ctx) {
     // recebe um "não tens permissão" seco vai perguntar a alguém.
     if (!podeCorrer(pap, nome, meusAcessos)) {
       const meus = comandosDe(pap, meusAcessos);
-      return json(reply('**/' + nome + '** não é para ti — tu és **' + pap + '**.\n' +
+      return json(reply('**/' + nome + '** não é para ti — tu és **' + nomeDoPapel(pap) + '**.\n' +
         (meus.length ? 'Podes correr: ' + meus.map((c) => '`/' + c + '`').join(', ') + '.'
                      : 'Não tens nenhum comando disponível.')));
     }
     try {
       if (nome === 'comandos') return json(cmdComandos(pap, meusAcessos));
       if (nome === 'access') return json(await cmdAccess(env, i, opts));
-      if (nome === 'entrar') return json(await cmdEntrar(env, i, pap, request));
+      if (nome === 'entrar') return json(await cmdEntrar(env, i, papeis, request));
       if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
       if (nome === 'pedido') return json(await cmdPedido(env, opts, pap));
       if (nome === 'responder') return json(await cmdResponder(env, opts, pap));

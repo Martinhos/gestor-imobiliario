@@ -84,22 +84,9 @@ const comandos = [
   Object.assign({
     name: 'access',
     description: 'Quem pode que comandos (só o master)',
+    // uma opção só: o que se muda, muda-se nas caixas da própria resposta
     options: [
       { type: UTILIZADOR, name: 'utilizador', description: 'De quem', required: true },
-      {
-        type: TEXTO, name: 'comando', description: 'Qual comando mexer', required: false,
-        choices: ['pedidos','pedido','responder','fechar','erros','uso','copias','resumo','entrar','comandos']
-          .map(function (c) { return { name: '/' + c, value: c }; }),
-      },
-      {
-        type: TEXTO, name: 'acesso', description: 'O que fazer', required: false,
-        choices: [
-          { name: 'permitir', value: 'permitir' },
-          { name: 'negar', value: 'negar' },
-          { name: 'repor (deixar ao cargo)', value: 'repor' },
-          { name: 'limpar todas as exceções', value: 'limpar' },
-        ],
-      },
     ],
   }, soOperacao),
   Object.assign({
