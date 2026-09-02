@@ -35,3 +35,13 @@ jobs:
           fi
           echo "A registar a partir de ${{ github.ref_name }}:"
           node scripts/discord-register.js
+
+      # Confirma o que o Discord ficou mesmo a ter. Responder a "o comando
+      # não aparece" com um facto em vez de um palpite: ou está registado e é
+      # a aplicação que não o mostra, ou nunca lá chegou.
+      - name: Confirmar o que o Discord tem
+        env:
+          DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+        run: node scripts/discord-comandos.js
