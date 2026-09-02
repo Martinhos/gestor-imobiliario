@@ -5,7 +5,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  papel, podeCorrer, comandosDe, PERMISSOES, CATS_DO_PAPEL, PAPEIS,
+  papel, podeCorrer, comandosDe, PERMISSOES, CATS_DO_PAPEL, PAPEIS, SO_MASTER,
 } from '../worker/src/discord.js';
 import { CATEGORIAS } from '../worker/src/lib/http.js';
 
@@ -51,11 +51,16 @@ describe('quem é quem', () => {
 });
 
 describe('o que cada papel corre', () => {
-  test('o master e o admin correm tudo', () => {
+  test('o master corre tudo', () => {
+    Object.keys(PERMISSOES).forEach((c) => assert.equal(podeCorrer('master', c), true, c));
+  });
+
+  test('o admin corre tudo menos o que é só do master', () => {
+    // quem gere quem pode o quê tem de ser um só: ver testes/acessos.test.js
     Object.keys(PERMISSOES).forEach((c) => {
-      assert.equal(podeCorrer('master', c), true, 'master · ' + c);
-      assert.equal(podeCorrer('admin', c), true, 'admin · ' + c);
+      assert.equal(podeCorrer('admin', c), SO_MASTER.indexOf(c) < 0, 'admin · ' + c);
     });
+    assert.ok(SO_MASTER.length, 'e há mesmo algum comando assim');
   });
 
   test('o master vê todas as categorias de pedido', () => {
