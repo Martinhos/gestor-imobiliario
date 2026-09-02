@@ -312,12 +312,12 @@ function showTermsGate() {
     '<div class="card" style="max-width:460px;width:100%;padding:24px;margin:auto">' +
     '<div style="display:flex;gap:12px;align-items:center">' +
     '<span class="avatar" style="background:var(--accent-soft);color:var(--accent)">' + ic('contract', 20) + '</span>' +
-    '<div><div class="title" style="font-size:18px">Termos atualizados</div>' +
+    '<div><div class="title" style="font-size:18px">Atualizámos os termos</div>' +
     '<div class="small">Precisamos da tua aceitação para continuar</div></div></div>' +
     '<div class="hint" style="font-size:14px;line-height:1.6;margin-top:14px">' +
-    '<p style="margin:0 0 10px">A app passou a ter <b>Termos e Condições</b> e <b>Política de Privacidade</b> ' +
-    'próprios. Explicam o que o serviço é e não é, os planos que vão existir, e como tratamos os teus dados ' +
-    'e os das pessoas que registas.</p>' +
+    '<p style="margin:0 0 10px">Os <b>Termos e Condições</b> e a <b>Política de Privacidade</b> foram ' +
+    '<b>atualizados</b> desde a versão que aceitaste. Vale a pena ler o que mudou — os planos e a fase ' +
+    'experimental estão descritos lá.</p>' +
     '<p style="margin:0">Sem a tua aceitação não podemos continuar a guardar os teus dados. Se recusares, ' +
     '<b>a conta e tudo o que lá está serão apagados</b>.</p></div>' +
     '<div class="toolbar" style="margin-top:14px;flex-direction:column;gap:8px">' +

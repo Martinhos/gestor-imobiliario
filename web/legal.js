@@ -20,7 +20,7 @@
 window.LEGAL = (function () {
   'use strict';
 
-  var VERSION = '2026-09-02';
+  var VERSION = '2026-09-03';
   var OPERADOR = '[O TEU NOME OU O DA EMPRESA]';
   var MORADA = '';                       // apartado, escritório virtual ou sede
   var NIF = '';                          // obrigatório quando houver cobrança
@@ -72,10 +72,13 @@ window.LEGAL = (function () {
       'submetê-las a revisão profissional antes de as assinar. Não assumimos responsabilidade pelo ' +
       'conteúdo, validade ou consequências dos documentos gerados.') +
 
-    h('3. Estado do serviço') +
-    p('A aplicação é disponibilizada tal como está e evolui continuamente: funcionalidades podem mudar ' +
-      'ou ser descontinuadas. Fazemos cópias de segurança diárias, mas deves manter as tuas próprias ' +
-      'cópias dos dados que te importam (Definições → Importar e cópias).') +
+    h('3. Fase experimental (demonstração)') +
+    p('A aplicação encontra-se em <b>fase experimental</b>: é uma versão de demonstração, disponibilizada ' +
+      'tal como está, e evolui continuamente — funcionalidades podem mudar ou ser descontinuadas. ' +
+      'Enquanto esta fase durar, os limites dos planos descritos na secção 6 estão suspensos. O fim da ' +
+      'fase experimental é anunciado na própria aplicação com pelo menos 30 dias de antecedência.') +
+    p('Fazemos cópias de segurança diárias, mas deves manter as tuas próprias cópias dos dados que te ' +
+      'importam (Definições → Importar e cópias).') +
 
     h('4. Conta') +
     ul([

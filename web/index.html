@@ -297,6 +297,10 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
 .tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:5px 2px;min-height:48px;
   font-size:11px;font-weight:600;color:var(--muted);border-radius:10px;position:relative;cursor:pointer}
 .tabbar a.on{color:var(--accent);background:var(--accent-soft)}
+/* a barra lateral marca o ativo com um traço à esquerda (nav a.on::before);
+   na barra de baixo esse traço aparecia como um risco sem sentido */
+.tabbar a.on::before{display:none}
+.tabbar a:hover{background:var(--accent-soft);color:var(--accent)}
 .tabbar a .cnt{position:absolute;top:1px;left:calc(50% + 7px);background:var(--danger);color:#fff;font-size:10px;min-width:15px;height:15px;border-radius:99px;display:grid;place-items:center;padding:0 3px}
 /* body à frente: estas regras vivem ANTES das de base do .fab/.totop na
    folha, e sem mais especificidade perdiam — o FAB ficava em cima da barra */

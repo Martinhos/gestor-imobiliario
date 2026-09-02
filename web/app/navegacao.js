@@ -13,8 +13,9 @@ const TABS=[
   {id:'reports',icon:'file',label:'Avaliação',sub:'Análise imóvel a imóvel'},
   {id:'settings',icon:'gear',label:'Definições',sub:'Tema, categorias e etiquetas'}
 ];
-let tab='dashboard',txFilter='',txProp='',txPaid='',txCat='',txSub='',txNoPayer=true,txSearch='',txSort='date',txDir='desc',repProp='',setPage='';
+let tab='dashboard',txFilter='',txProp='',txPaid='',txCat='',txSub='',txNoPayer=true,txSearch='',txDe='',txAte='',txSort='date',txDir='desc',repProp='',setPage='';
 const SUBPAGE={cats:{label:'Tipos de movimento',sub:'Como classificas o que entra e sai'},
+               filtros:{label:'Filtros comuns',sub:'Define uma vez, aplica em qualquer vista'},
                tags:{label:'Etiquetas',sub:'Para marcar movimentos'},
                groups:{label:'Grupos',sub:'Conjuntos de imóveis, proprietários e contratos'},
                dados:{label:'Dados',sub:'Splitwise e cópias de segurança'}};

@@ -23,7 +23,8 @@ function anaClear(){
 const ANA_N=()=>tab==='dashboard'?((ownerFilter?1:0)+(dashProp?1:0))
   :tab==='projections'?((ownerFilter?1:0)+(projProp?1:0))
   :tab==='reports'?((ownerFilter?1:0)+(repProp?1:0)):0;
-function anaPanel(inner){return `<div class="fwrap" style="height:0"><div class="fpanel ${anaOpen[tab]?'on':''}" style="top:0"><div class="card" style="padding:12px">${inner}
+function anaPanel(inner){return `<div class="fwrap" style="height:0"><div class="fpanel ${anaOpen[tab]?'on':''}" style="top:0"><div class="card" style="padding:12px">
+  ${typeof fcSelector==='function'?fcSelector():''}${inner}
   <div class="toolbar" style="margin:12px 0 0">
     <button class="btn" onclick="anaClear()">${ic('x',15)} Limpar</button>
     <button class="btn primary" onclick="anaApply()">${ic('check',15)} Fechar</button>
@@ -452,6 +453,11 @@ function vOwners(){
 }
 
 function txFilterCount(){
+  // as datas contam como UM filtro, tenham uma ponta ou as duas
+  const datas=(txDe||txAte)?1:0;
+  return datas+txFilterCountSem();
+}
+function txFilterCountSem(){
   return (txFilter?1:0)+(txProp?1:0)+(txPaid?1:0)+(ownerFilter?1:0)+(txCat?1:0)+(txSub?1:0)+(txNoPayer?0:1);
 }
 /* pesquisa por palavras e por frases entre aspas, sem ligar a acentos */
@@ -493,10 +499,14 @@ function txMatch(t){
   else if(txCat&&t.category!==txCat)return false;
   if(txSub==='__none__'){if(t.sub)return false}
   else if(txSub&&t.sub!==txSub)return false;
+  // entre datas: as ISO comparam-se como texto, e vazio é "sem limite"
+  if(txDe&&t.date<txDe)return false;
+  if(txAte&&t.date>txAte)return false;
   return true;
 }
 function filterSummary(){
   const p=[];
+  if(txDe||txAte)p.push(txDe&&txAte?txDe+' → '+txAte:txDe?'desde '+txDe:'até '+txAte);
   if(txFilter)p.push((KIND[txFilter]||{}).short||txFilter);
   if(txProp==='__none__')p.push('sem imóvel');
   else if(String(txProp||'').startsWith('g:'))p.push('grupo '+((grp(txProp.slice(2))||{}).name||''));
@@ -552,6 +562,7 @@ function txFilterBody(){
   const subsF=txCat&&txCat!=='__none__'?(tree[txCat]||[]):[];
   const subOpts=[{v:'',label:'Todas as subcategorias'},{v:'__none__',label:'Sem subcategoria'}].concat(subsF.map(x=>({v:x,label:x})));
   return `<div class="form">
+    ${typeof fcSelector==='function'?fcSelector():''}
     <div class="qwrap"><input id="tx_q" class="txq" type="search" value="${esc(txSearch)}" placeholder="Pesquisar…" autocomplete="off"
       oninput="onTxSearch(this.value);this.nextElementSibling.style.display=this.value?'':'none'">
       <button class="qclear" style="display:${txSearch?'':'none'}" onclick="const i=this.previousElementSibling;i.value='';onTxSearch('');this.style.display='none';i.focus()">✕</button></div>
@@ -562,6 +573,8 @@ function txFilterBody(){
     ${db.owners.length?`<label>Proprietário${sel('txOwnerF',ownerFilter,owners,'onTxOwner')}</label>
     <label>Pago / recebido por${sel('txPaidF',txPaid,payers,'onTxPaid')}</label>
     <label class="check"><input type="checkbox" id="txNoPayer" ${txNoPayer?'checked':''} onchange="onTxNoPayer()"> Incluir movimentos sem pessoa atribuída</label>`:''}
+    <div class="row"><label>De<input id="txDeF" type="date" value="${txDe}" onchange="onTxDatas()"></label>
+      <label>Até<input id="txAteF" type="date" value="${txAte}" onchange="onTxDatas()"></label></div>
     <div class="row"><label>Ordenar por${sel('txSortF',txSort,[{v:'date',label:'Data'},{v:'amount',label:'Valor'}],'onTxSort')}</label>
       <label>Ordem${sel('txDirF',txDir,[{v:'desc',label:'Descendente'},{v:'asc',label:'Ascendente'}],'onTxDir')}</label></div>
     <div class="hint">${txFilterCount()?filterSummary()+' · '+db.transactions.filter(txMatch).length+' movimentos':'Sem filtros: a lista mostra tudo.'}</div></div>`;
@@ -576,7 +589,12 @@ function onTxPaid(){txPaid=val('txPaidF')||'';txRerender()}
 function onTxCat(){txCat=val('txCatF')||'';txSub='';txRerender()}
 function onTxSub(){txSub=val('txSubF')||'';txRerender()}
 function onTxNoPayer(){txNoPayer=chk('txNoPayer');txRerender()}
-function clearTxFilters(){txFilter='';txProp='';txPaid='';txCat='';txSub='';ownerFilter='';txNoPayer=true;txSearch='';closePops();txRerender()}
+function onTxDatas(){
+  txDe=val('txDeF')||'';txAte=val('txAteF')||'';
+  if(txDe&&txAte&&txAte<txDe){const x=txDe;txDe=txAte;txAte=x}   // trocadas endireitam-se
+  txRerender();
+}
+function clearTxFilters(){txFilter='';txProp='';txPaid='';txCat='';txSub='';ownerFilter='';txNoPayer=true;txSearch='';txDe='';txAte='';closePops();txRerender()}
 /* ================= FILTROS DAS LISTAS =================
    Pesquisa por texto + seletores no topo de cada página de registos, ao estilo dos movimentos. */
 let listF={};
@@ -630,6 +648,7 @@ function lfBar(k,sels,found,sorts){
       ${lfSel(k,'sb',[{v:'',label:sorts.defLabel||'Ordem original'}].concat(sorts.opts))}
       ${lfSel(k,'sd',[{v:'',label:'Ascendente'},{v:'desc',label:'Descendente'}])}</div>`:'';
   return `<div class="fwrap" style="height:0"><div class="fpanel ${s._open?'on':''}" style="top:0"><div class="card" style="padding:12px">
+    ${k==='lprops'&&typeof fcSelector==='function'?fcSelector():''}
     <div class="qwrap"><input id="lq_${k}" class="txq" type="search" value="${esc(lf(k).q||'')}" placeholder="Pesquisar…" autocomplete="off"
       oninput="lfSearch('${k}',this.value);this.nextElementSibling.style.display=this.value?'':'none'">
       <button class="qclear" style="display:${(lf(k).q||'')?'':'none'}" onclick="const i=this.previousElementSibling;i.value='';lfSearch('${k}','');this.style.display='none';i.focus()">✕</button></div>
