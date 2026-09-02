@@ -224,6 +224,21 @@ describe('ações sobre contas', () => {
 /* ---------------------------- o fio dos pedidos -------------------------- */
 
 describe('o fio dos pedidos', () => {
+  test('uma resposta antiga sem fio continua visível na vista', async () => {
+    // registos de antes do fio existir vivem só na coluna reply
+    const { readFileSync } = await import('node:fs');
+    const vista = readFileSync(new URL('../worker/src/equipa-vista.js', import.meta.url), 'utf8');
+    assert.match(vista, /registo antigo/);
+  });
+
+  test('responder pelo bot do Discord escreve no fio e no rasto', async () => {
+    // senão uma resposta dada pelo Discord ficava invisível no back office
+    const { readFileSync } = await import('node:fs');
+    const bot = readFileSync(new URL('../worker/src/discord.js', import.meta.url), 'utf8');
+    assert.match(bot, /INSERT INTO ticket_msgs/);
+    assert.match(bot, /auditar\(env,/);
+  });
+
   test('responder duas vezes guarda as duas; a app vê a última', async () => {
     const env = ambiente();
     const pid = await novoPedido(env, await novaConta(env));
@@ -253,14 +268,33 @@ describe('o fio dos pedidos', () => {
     assert.equal(r.pedido.assignee, null);
   });
 
-  test('reclassificar muda a categoria e pode tirá-lo da própria vista', async () => {
+  test('reclassificar move entre categorias técnicas', async () => {
+    const env = ambiente();
+    const pid = await novoPedido(env, await novaConta(env), { categoria: 'client' });
+    const r = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/pedidos/' + pid + '/categoria', { categoria: 'server' }));
+    assert.equal(r.pedido.category, 'server');
+  });
+
+  test('mas nunca atravessa a fronteira do que a pessoa vê na app', async () => {
+    /* A categoria 'user' é o interruptor da Ajuda de quem escreveu: tirar um
+       pedido de lá fazia-o desaparecer (com a resposta) do ecrã da pessoa, e
+       passar um erro para 'user' punha um stack trace na Ajuda de alguém. */
+    const env = ambiente();
+    const dePessoa = await novoPedido(env, await novaConta(env));
+    const deErro = await novoPedido(env, await novaConta(env), { categoria: 'server', assunto: 'TypeError' });
+    assert.equal((await chamar(env, MASTER, 'POST', '/api/equipa/pedidos/' + dePessoa + '/categoria', { categoria: 'server' })).status, 400);
+    assert.equal((await chamar(env, MASTER, 'POST', '/api/equipa/pedidos/' + deErro + '/categoria', { categoria: 'user' })).status, 400);
+  });
+
+  test('atribuir não tem corrida: quem chega segundo fica a saber', async () => {
     const env = ambiente();
     const pid = await novoPedido(env, await novaConta(env));
-    const r = await corpoDe(await chamar(env, SUPORTE, 'POST', '/api/equipa/pedidos/' + pid + '/categoria', { categoria: 'server' }));
-    assert.equal(r.pedido.category, 'server');
-    // depois de reclassificado, o suporte já não o abre — e é esse o objetivo
-    assert.equal((await chamar(env, SUPORTE, 'GET', '/api/equipa/pedidos/' + pid)).status, 403);
-    assert.equal((await chamar(env, DEV, 'GET', '/api/equipa/pedidos/' + pid)).status, 200);
+    // a Dina tomou primeiro (entre a leitura da Sofia e o clique dela)
+    await env.DB.prepare('UPDATE tickets SET assignee = ?, assignee_nome = ? WHERE id = ?')
+      .bind('d1', 'Dina', pid).run();
+    const r = await chamar(env, SUPORTE, 'POST', '/api/equipa/pedidos/' + pid + '/atribuir');
+    assert.equal(r.status, 409);
+    assert.match((await r.json()).error, /Dina/);
   });
 
   test('a lista separa pedidos de pessoas e erros', async () => {
@@ -285,6 +319,32 @@ describe('o fio dos pedidos', () => {
 });
 
 /* ----------------------------- respostas-tipo ---------------------------- */
+
+describe('o que não pode vazar', () => {
+  test("a ação 'constructor' não devolve o env", async () => {
+    /* ACOES_DE_CONTA[acao] a seco apanhava propriedades herdadas do
+       protótipo: 'constructor' devolvia a função Object, que chamada com
+       (env, ...) devolvia o env inteiro — segredos incluídos — como
+       "resultado". */
+    const env = ambiente();
+    env.SEGREDO = 'DISCORD_BOT_TOKEN_FALSO';
+    const id = await novaConta(env);
+    for (const acao of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+      const r = await chamar(env, MASTER, 'POST', '/api/equipa/pessoas/' + id + '/acao',
+        { acao, motivo: 'tentativa de fuga' });
+      assert.equal(r.status, 400, acao);
+      assert.doesNotMatch(await r.text(), /FALSO/, acao + ' não vaza o env');
+    }
+  });
+
+  test('a versão que vem do cliente vai escapada para o HTML da equipa', async () => {
+    // a versao entra no ticket a partir do relato do cliente: é input hostil
+    const { readFileSync } = await import('node:fs');
+    const vista = readFileSync(new URL('../worker/src/equipa-vista.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(vista, /\+ p\.versao/, 'nenhum p.versao sem esc()');
+    assert.match(vista, /esc\(p\.versao\)/);
+  });
+});
 
 describe('respostas-tipo', () => {
   test('criam-se, listam-se, e só o autor ou o master as apagam', async () => {

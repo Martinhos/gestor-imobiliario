@@ -78,7 +78,7 @@ export async function rotasAuth(c) {
     /* Depois da password certa, de propósito: dizer "suspensa" a quem não
        provou ser o dono era contar a estranhos o estado da conta. */
     if (user.suspended_at) {
-      return err(403, 'Esta conta está suspensa. Escreve-nos pela Ajuda se achares que é engano.');
+      return err(403, 'Esta conta está suspensa.');
     }
     const token = await createSession(env, user.id, user.sess_epoch || 0);
     return json({ id: user.id, email: user.email, name: user.name, token }, 200, {
@@ -130,7 +130,7 @@ export async function rotasAuth(c) {
       user = { id, email, name };
     }
     if (user.suspended_at) {
-      return err(403, 'Esta conta está suspensa. Escreve-nos pela Ajuda se achares que é engano.');
+      return err(403, 'Esta conta está suspensa.');
     }
     const token2 = await createSession(env, user.id, user.sess_epoch || 0);
     return json({ id: user.id, email: user.email, name: user.name, token: token2 }, 200, {

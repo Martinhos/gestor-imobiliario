@@ -84,8 +84,12 @@ export default {
         await recordReport(env, ctx, 'infra', 'Cópia de segurança falhou',
           String((e && e.stack) || (e && e.message) || e).slice(0, 800));
       }
-      await dailyReport(env, ctx);
-      await registarOp(env, 'resumo', true);
+      // o resultado é o do envio a sério: um resumo que não chegou a lado
+      // nenhum registado como verde era o batimento a mentir
+      let entregue = null;
+      try { entregue = await dailyReport(env, ctx); } catch (e) { entregue = false; }
+      await registarOp(env, 'resumo', entregue !== false,
+        entregue === null ? 'sem canal configurado' : null);
     })());
   },
 

@@ -246,15 +246,37 @@ export async function rotasEquipaApi(c) {
       await msg('nota');
       await auditar(env, eu, 'pedido.nota', id, cortar(texto, 120));
     } else if (acao === 'atribuir') {
-      // tomar ou largar: com meia dúzia de pessoas não é preciso mais
+      /* Tomar ou largar — e o UPDATE exige o estado que se leu, senão duas
+         pessoas a clicar ao mesmo tempo ficavam ambas convencidas de que
+         tomaram, e uma delas enganada. */
       const tomar = !(t.assignee === (eu.discordId || '?'));
-      await env.DB.prepare('UPDATE tickets SET assignee = ?, assignee_nome = ?, updated_at = ? WHERE id = ?')
-        .bind(tomar ? eu.discordId || '?' : null, tomar ? eu.nome || '' : null, agora, id).run();
+      const r = await (tomar
+        ? env.DB.prepare(
+            'UPDATE tickets SET assignee = ?, assignee_nome = ?, updated_at = ? WHERE id = ? AND assignee IS NULL'
+          ).bind(eu.discordId || '?', eu.nome || '', agora, id)
+        : env.DB.prepare(
+            'UPDATE tickets SET assignee = NULL, assignee_nome = NULL, updated_at = ? WHERE id = ? AND assignee = ?'
+          ).bind(agora, id, eu.discordId || '?')
+      ).run();
+      if (!r.meta || r.meta.changes !== 1) {
+        const agora2 = await env.DB.prepare('SELECT assignee_nome FROM tickets WHERE id = ?').bind(id).first();
+        return err(409, ((agora2 && agora2.assignee_nome) || 'Outra pessoa') + ' chegou primeiro a este pedido.');
+      }
       await auditar(env, eu, 'pedido.atribuir', id, tomar ? 'tomou' : 'largou');
     } else if (acao === 'categoria') {
       const nova = String((b && b.categoria) || '').trim();
       if (CATEGORIAS.indexOf(nova) < 0) return err(400, 'Categoria desconhecida.');
       if (nova === t.category) return err(400, 'Já está nessa categoria.');
+      /* A categoria 'user' é também o interruptor do que a pessoa vê na
+         Ajuda da app. Tirar um pedido de 'user' fazia-o desaparecer (com a
+         resposta) do ecrã de quem o escreveu; passar um erro para 'user'
+         punha um stack trace na Ajuda de uma pessoa real. Entre os dois
+         mundos não se muda — para "isto afinal é um bug", responde-se à
+         pessoa e deixa-se uma nota interna. */
+      if ((nova === 'user') !== (t.category === 'user')) {
+        return err(400, 'Entre pedidos de pessoas e categorias técnicas não se muda: ' +
+          'a categoria decide o que a pessoa vê na app. Responde e deixa uma nota interna.');
+      }
       await env.DB.prepare('UPDATE tickets SET category = ?, updated_at = ? WHERE id = ?')
         .bind(nova, agora, id).run();
       await auditar(env, eu, 'pedido.categoria', id, t.category + ' → ' + nova);
@@ -264,10 +286,19 @@ export async function rotasEquipaApi(c) {
          última resposta em vez de a única. */
       const estado = acao === 'fechar' ? 'concluido' : acao === 'reabrir' ? 'criado' : 'resolucao';
       if (acao === 'responder' && !texto) return err(400, 'Escreve a resposta.');
-      if (texto) await msg('resposta');
-      await env.DB.prepare(
+      /* Numa só transação: com dois statements soltos, um erro entre eles
+         deixava o fio e a coluna reply a contarem histórias diferentes —
+         e o retry de quem viu o 500 duplicava a mensagem no fio. */
+      const ops = [];
+      if (texto) {
+        ops.push(env.DB.prepare(
+          'INSERT INTO ticket_msgs (id, ticket_id, tipo, texto, autor, nome, papel, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(crypto.randomUUID(), id, 'resposta', texto, eu.discordId || '?', eu.nome || '', eu.papel || '', agora));
+      }
+      ops.push(env.DB.prepare(
         'UPDATE tickets SET status = ?, reply = COALESCE(?, reply), updated_at = ? WHERE id = ?'
-      ).bind(estado, texto || null, agora, id).run();
+      ).bind(estado, texto || null, agora, id));
+      await env.DB.batch(ops);
       await auditar(env, eu, 'pedido.' + acao, id, texto ? cortar(texto, 120) : null);
     }
 
@@ -349,7 +380,12 @@ export async function rotasEquipaApi(c) {
     const b = await body(request);
     const acao = String((b && b.acao) || '');
     const motivo = String((b && b.motivo) || '').trim().slice(0, 300);
-    const fazer = ACOES_DE_CONTA[acao];
+    /* hasOwnProperty e não [acao] a seco: 'constructor' e afins são
+       propriedades herdadas de qualquer objeto — [acao] devolvia a função
+       Object, que chamada com (env, ...) devolvia o env inteiro, segredos
+       incluídos, como "resultado". */
+    const fazer = Object.prototype.hasOwnProperty.call(ACOES_DE_CONTA, acao)
+      ? ACOES_DE_CONTA[acao] : null;
     if (!fazer) return err(400, 'Ação desconhecida.');
     if (motivo.length < 5) return err(400, 'Escreve o motivo — daqui a seis meses é a única coisa que interessa.');
 
@@ -361,14 +397,19 @@ export async function rotasEquipaApi(c) {
     const registado = await auditar(env, eu, 'conta.' + acao, id, motivo);
     if (!registado) return err(500, 'A auditoria não está a escrever — sem rasto não se mexe em contas.');
 
+    let resultado;
     try {
-      const resultado = await fazer(env, u, b && b.valor);
-      await auditar(env, eu, 'conta.' + acao + '.feito', id, resultado);
-      return json({ ok: true, resultado, quem: await ficha360(env, id) });
+      resultado = await fazer(env, u, b && b.valor);
     } catch (e) {
       await auditar(env, eu, 'conta.' + acao + '.falhou', id, String(e && e.message));
       return err(400, String((e && e.message) || 'Não deu.'));
     }
+    // fora do try de propósito: a ação já aconteceu, e uma consulta da
+    // ficha a falhar não pode fazer o rasto dizer que a ação falhou
+    await auditar(env, eu, 'conta.' + acao + '.feito', id, resultado);
+    let quem = null;
+    try { quem = await ficha360(env, id); } catch (e) { /* a ficha é vitrine */ }
+    return json({ ok: true, resultado, quem });
   }
 
   /* ---- a sala das máquinas (quem vê a infraestrutura) ---- */
@@ -386,10 +427,19 @@ export async function rotasEquipaApi(c) {
       const historico = (await env.DB.prepare(
         "SELECT at, ok, detalhe FROM op_log WHERE op = 'copia' ORDER BY at DESC LIMIT 30"
       ).all()).results;
+      /* O R2 em baixo não pode derrubar o batimento e o consumo, que vivem
+         na D1 — cada fonte falha sozinha. */
+      let copias = [], estadoCopias;
+      try {
+        copias = (await listar(env)).slice(0, 40);
+        estadoCopias = await estado(env);
+      } catch (e) {
+        estadoCopias = { erro: String((e && e.message) || e), texto: '🔴 Não deu para ler as cópias.' };
+      }
       return json({
         consumo: await usageFields(env),
-        copias: (await listar(env)).slice(0, 40),
-        estadoCopias: await estado(env),
+        copias,
+        estadoCopias,
         crons,
         historico,
       });
@@ -416,11 +466,12 @@ export async function rotasEquipaApi(c) {
       if (!obj) return err(404, 'Não há cópia desse dia.');
       // o plano gratuito dá pouco CPU: uma cópia grande inspeciona-se em
       // casa, com scripts/restaurar.js --resumo, não aqui
-      if (obj.size > 8 * 1024 * 1024) {
-        return err(413, 'Cópia grande de mais para inspecionar aqui. Descarrega-a e corre scripts/restaurar.js --resumo.');
+      // o plano gratuito dá ~10 ms de CPU: acima disto, inspeciona-se em casa
+      if (obj.size > 2 * 1024 * 1024) {
+        return err(413, 'Cópia grande de mais para inspecionar no worker. Descarrega-a e corre scripts/restaurar.js --resumo.');
       }
       const tabelas = {};
-      let resto = '', linhas = 0, mas = 0;
+      let resto = '', total = 0, mas = 0;
       const leitor = obj.body.pipeThrough(new DecompressionStream('gzip')).getReader();
       const dec = new TextDecoder();
       for (;;) {
@@ -430,13 +481,15 @@ export async function rotasEquipaApi(c) {
         resto = done ? '' : partes.pop();
         for (const linha of partes) {
           if (!linha) continue;
-          linhas++;
+          total++;
           const m = /^\{"t":"([A-Za-z0-9_]+)"/.exec(linha);
           if (m) tabelas[m[1]] = (tabelas[m[1]] || 0) + 1;
-          else if (linhas > 1) mas++;   // a primeira linha é o cabeçalho
+          else if (total > 1) mas++;   // a primeira linha é o cabeçalho
         }
         if (done) break;
       }
+      // o cabeçalho não é um registo: assim o número bate com o do copiar()
+      const linhas = Math.max(0, total - 1);
       // e a base viva, para se ver a deriva desde o dia da cópia
       const vivas = {};
       for (const t of Object.keys(tabelas)) {

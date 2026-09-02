@@ -21,6 +21,19 @@ export function baseDeTeste() {
 
   return {
     _db: db,   // para os testes espreitarem por dentro quando precisarem
+    // como a D1: tudo ou nada
+    async batch(stmts) {
+      db.exec('BEGIN');
+      try {
+        const out = [];
+        for (const s of stmts) out.push(await s.run());
+        db.exec('COMMIT');
+        return out;
+      } catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+      }
+    },
     prepare(sql) {
       let args = [];
       const q = {

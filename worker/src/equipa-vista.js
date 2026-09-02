@@ -220,7 +220,7 @@ function verLista(tipo, e, q) {
         ' · ' + data(p.created_at) +
         (p.n > 1 ? ' · ×' + p.n : '') +
         (p.pessoas > 1 ? ' · ' + p.pessoas + ' pessoas' : '') +
-        (p.versao ? ' · v' + p.versao : '') +
+        (p.versao ? ' · v' + esc(p.versao) : '') +
         (p.assignee_nome ? ' · com ' + esc(p.assignee_nome) : '') + '</div></div>' +
         selo(p) + '</div></div>';
     }).join('');
@@ -261,6 +261,12 @@ function verPedido(id) {
         '<div class="small">' + (x.tipo === 'nota' ? 'nota interna · ' : '') +
         esc(x.nome || x.autor) + ' · ' + data(x.at) + '</div>' + esc(x.texto) + '</div>';
     }).join('');
+    // resposta de antes do fio existir (ou escrita por um caminho antigo):
+    // está na coluna reply e a pessoa vê-a — a equipa também tem de a ver
+    if (!(d.msgs || []).some(function (x) { return x.tipo === 'resposta'; }) && p.reply) {
+      fio = '<div class="msg"><div class="small">resposta enviada (registo antigo)</div>' +
+        esc(p.reply) + '</div>' + fio;
+    }
 
     var anteriores = (d.outros || []).length
       ? '<div class="card"><b>Outros pedidos desta pessoa</b>' + d.outros.map(function (o) {
