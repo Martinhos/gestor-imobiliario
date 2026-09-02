@@ -3,6 +3,7 @@
 // e dos erros, quem opera vê o consumo da infraestrutura.
 
 import { dailyReport, usageFields } from './notify.js';
+import { lerAcessos, guardarAcessos, origemDoAcesso } from './acessos.js';
 
 const PONG = { type: 1 };
 const MSG = 4;            // responder com mensagem
@@ -69,7 +70,12 @@ const cut = (s, n) => { const t = String(s == null ? '' : s); return t.length > 
 export const PAPEIS = ['master', 'admin', 'dev', 'suporte'];
 
 // Papéis que podem tudo, incluindo comandos que ainda não existem.
-const PODEM_TUDO = ['master', 'admin'];
+export const PODEM_TUDO = ['master', 'admin'];
+
+/* Comandos que nem o admin herda e que não se dão por exceção. Quem decide
+   quem pode o quê tem de ser um só — senão o controlo de acessos passa a
+   poder dar-se a si próprio. */
+export const SO_MASTER = ['access'];
 
 // O que cada papel pode correr. Os de cima não aparecem nas listas.
 export const PERMISSOES = {
@@ -83,6 +89,7 @@ export const PERMISSOES = {
   copias: [],
   comandos: ['dev', 'suporte'],
   entrar: ['dev', 'suporte'],
+  access: [],
 };
 
 // As categorias de pedido que cada papel vê. O suporte não precisa de ver
@@ -117,15 +124,19 @@ export function papel(env, i) {
   return null;
 }
 
-export function podeCorrer(pap, comando) {
+/* O papel é a regra; as exceções por pessoa são o remendo. Passar `acessos`
+   é opcional de propósito: sem elas, isto continua a ser a função pura que
+   os testes usam, e o comportamento é o do papel. */
+export function podeCorrer(pap, comando, acessos) {
   if (!pap) return false;
-  if (PODEM_TUDO.indexOf(pap) > -1) return true;
-  return (PERMISSOES[comando] || []).indexOf(pap) > -1;
+  if (SO_MASTER.indexOf(comando) > -1) return pap === 'master';
+  const origem = origemDoAcesso(pap, comando, acessos, { PERMISSOES, PODEM_TUDO, SO_MASTER });
+  return origem === 'papel' || origem === 'dado';
 }
 
-// Os comandos que este papel pode correr, para o /comandos e para as recusas.
-export function comandosDe(pap) {
-  return Object.keys(PERMISSOES).filter((c) => podeCorrer(pap, c));
+// Os comandos que esta pessoa pode correr, para o /comandos e para as recusas.
+export function comandosDe(pap, acessos) {
+  return Object.keys(PERMISSOES).filter((c) => podeCorrer(pap, c, acessos));
 }
 
 function ticketEmbedFull(t) {
@@ -363,23 +374,30 @@ async function guardaDoPedido(env, id, pap) {
   return { t };
 }
 
-function cmdComandos(pap) {
-  const desc = {
-    pedidos: 'lista o que está por tratar',
-    pedido: 'abre um pedido pelo id',
-    responder: 'responde a quem escreveu, sem fechar',
-    fechar: 'responde e dá por concluído',
-    erros: 'erros da app e do servidor nas últimas horas',
-    uso: 'consumo da infraestrutura agora',
-    copias: 'cópias da base no R2, ou forçar uma',
-    resumo: 'envia o resumo diário para o canal de administração',
-    comandos: 'esta lista',
-  };
-  const meus = comandosDe(pap);
+const DESCRICAO = {
+  pedidos: 'lista o que está por tratar',
+  pedido: 'abre um pedido pelo id',
+  responder: 'responde a quem escreveu, sem fechar',
+  fechar: 'responde e dá por concluído',
+  erros: 'erros da app e do servidor nas últimas horas',
+  uso: 'consumo da infraestrutura agora',
+  copias: 'cópias da base no R2, ou forçar uma',
+  resumo: 'envia o resumo diário para o canal de administração',
+  entrar: 'abre a ferramenta de suporte no browser',
+  comandos: 'esta lista',
+  access: 'quem pode o quê',
+};
+
+function cmdComandos(pap, acessos) {
+  const desc = DESCRICAO;
+  const meus = comandosDe(pap, acessos);
   return reply('', [{
     title: 'O que podes fazer · papel **' + pap + '**',
     color: pap === 'master' ? 0xb94a48 : pap === 'admin' ? 0x8a7bb8 : pap === 'dev' ? 0xd6a34a : 0x2f7d5b,
-    description: meus.map((c) => '`/' + c + '` — ' + desc[c]).join('\n'),
+    description: meus.map(function (c) {
+      const o = origemDoAcesso(pap, c, acessos, { PERMISSOES, PODEM_TUDO, SO_MASTER });
+      return '`/' + c + '`' + (o === 'dado' ? ' *(dado a ti)*' : '') + ' — ' + desc[c];
+    }).join('\n'),
     fields: [{
       name: 'Pedidos que vês',
       value: (CATS_DO_PAPEL[pap] || []).map((c) => (ICONE[c] || '') + (CATS[c] || c)).join('\n'),
@@ -408,6 +426,72 @@ async function cmdEntrar(env, i, pap, request) {
     base + '/equipa/entrar?t=' + b.token + '\n\n' +
     'Entras como **' + pap + '**. Não a partilhes: quem a abrir entra em teu nome.'
   );
+}
+
+/* Quem pode o quê, e de onde vem.
+
+   O papel continua a mandar: o que vem dele fica marcado (predefinido) e não
+   se mexe aqui — muda-se o cargo no Discord. Isto serve para a exceção: dar
+   um comando a alguém sem lhe dar o cargo todo, ou tirar-lho sem lho tirar
+   aos outros. */
+async function cmdAccess(env, i, opts) {
+  const alvo = opts.utilizador;
+  if (!alvo) return reply('Escolhe a pessoa.');
+
+  const res = (i.data && i.data.resolved) || {};
+  const u = (res.users && res.users[alvo]) || {};
+  const membro = (res.members && res.members[alvo]) || {};
+  const nome = u.global_name || u.username || alvo;
+
+  // o papel da pessoa calcula-se como se fosse ela a falar
+  const pap = papel(env, { member: { user: { id: alvo }, roles: membro.roles || [] } });
+  let acessos = await lerAcessos(env, alvo);
+
+  const comando = opts.comando;
+  const acao = opts.acesso;
+
+  if (comando && acao) {
+    if (!pap) return reply('**' + nome + '** não tem papel nenhum. Dá-lhe primeiro um cargo no servidor.');
+    if (SO_MASTER.indexOf(comando) > -1) {
+      return reply('**/' + comando + '** é só do master e não se dá por exceção. ' +
+        'Quem decide quem pode o quê tem de ser um só.');
+    }
+    const mais = acessos.mais.filter((c) => c !== comando);
+    const menos = acessos.menos.filter((c) => c !== comando);
+    if (acao === 'permitir') mais.push(comando);
+    else if (acao === 'negar') menos.push(comando);
+    // 'repor' deixa o comando entregue ao papel, sem exceção
+    acessos = await guardarAcessos(env, alvo, { mais, menos });
+  } else if (acao === 'limpar') {
+    acessos = await guardarAcessos(env, alvo, { mais: [], menos: [] });
+  }
+
+  const regras = { PERMISSOES, PODEM_TUDO, SO_MASTER };
+  const MARCA = {
+    papel: '✅ *(predefinido)*',
+    dado: '➕ **dado**',
+    retirado: '➖ **retirado**',
+    nao: '·',
+  };
+  const linhas = Object.keys(PERMISSOES).map(function (c) {
+    const o = origemDoAcesso(pap, c, acessos, regras);
+    return MARCA[o] + '  `/' + c + '` — ' + (DESCRICAO[c] || '');
+  });
+
+  return reply('', [{
+    title: 'Acessos de ' + nome,
+    description: linhas.join('\n'),
+    color: pap === 'master' ? 0xb94a48 : pap === 'admin' ? 0x8a7bb8 : pap === 'dev' ? 0xd6a34a : 0x2f7d5b,
+    fields: [
+      { name: 'Papel', value: pap || 'nenhum — não entra no bot', inline: true },
+      { name: 'Exceções', value: (acessos.mais.length + acessos.menos.length) || 'nenhuma', inline: true },
+    ],
+    footer: {
+      text: pap === 'master'
+        ? 'O master não perde acessos por exceção: um engano trancava-o fora.'
+        : 'O que é (predefinido) vem do cargo — muda-se no Discord, não aqui.',
+    },
+  }]);
 }
 
 async function cmdUso(env) {
@@ -445,6 +529,8 @@ export async function handleInteraction(request, env, ctx) {
 
   const pap = papel(env, i);
   if (!pap) return json(reply('Não tens permissão para usar este bot.'));
+  const quemSou = (i.member && i.member.user && i.member.user.id) || (i.user && i.user.id);
+  const meusAcessos = await lerAcessos(env, quemSou);
 
   // botões
   if (i.type === 3) {
@@ -469,12 +555,15 @@ export async function handleInteraction(request, env, ctx) {
     (i.data.options || []).forEach(function (o) { opts[o.name] = o.value; });
     // A recusa diz o que se pode fazer em vez de só dizer que não: quem
     // recebe um "não tens permissão" seco vai perguntar a alguém.
-    if (!podeCorrer(pap, nome)) {
-      return json(reply('**/' + nome + '** é de outro papel — tu és **' + pap + '**.\n' +
-        'Podes correr: ' + comandosDe(pap).map((c) => '`/' + c + '`').join(', ') + '.'));
+    if (!podeCorrer(pap, nome, meusAcessos)) {
+      const meus = comandosDe(pap, meusAcessos);
+      return json(reply('**/' + nome + '** não é para ti — tu és **' + pap + '**.\n' +
+        (meus.length ? 'Podes correr: ' + meus.map((c) => '`/' + c + '`').join(', ') + '.'
+                     : 'Não tens nenhum comando disponível.')));
     }
     try {
-      if (nome === 'comandos') return json(cmdComandos(pap));
+      if (nome === 'comandos') return json(cmdComandos(pap, meusAcessos));
+      if (nome === 'access') return json(await cmdAccess(env, i, opts));
       if (nome === 'entrar') return json(await cmdEntrar(env, i, pap, request));
       if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
       if (nome === 'pedido') return json(await cmdPedido(env, opts, pap));

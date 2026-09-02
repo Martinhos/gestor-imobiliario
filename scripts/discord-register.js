@@ -15,7 +15,7 @@ if (!APP || !TOKEN) {
   process.exit(1);
 }
 
-const TEXTO = 3, INTEIRO = 4, BOOLEANO = 5;
+const TEXTO = 3, INTEIRO = 4, BOOLEANO = 5, UTILIZADOR = 6;
 
 /* Quem vê cada comando.
    O Discord não conhece os nossos papéis, só as permissões dele. O que se
@@ -81,6 +81,27 @@ const comandos = [
   Object.assign({ name: 'uso', description: 'Consumo da infraestrutura agora' }, soOperacao),
   { name: 'comandos', description: 'O que podes fazer com o teu papel' },
   { name: 'entrar', description: 'Abrir a ferramenta de suporte no browser' },
+  Object.assign({
+    name: 'access',
+    description: 'Quem pode que comandos (só o master)',
+    options: [
+      { type: UTILIZADOR, name: 'utilizador', description: 'De quem', required: true },
+      {
+        type: TEXTO, name: 'comando', description: 'Qual comando mexer', required: false,
+        choices: ['pedidos','pedido','responder','fechar','erros','uso','copias','resumo','entrar','comandos']
+          .map(function (c) { return { name: '/' + c, value: c }; }),
+      },
+      {
+        type: TEXTO, name: 'acesso', description: 'O que fazer', required: false,
+        choices: [
+          { name: 'permitir', value: 'permitir' },
+          { name: 'negar', value: 'negar' },
+          { name: 'repor (deixar ao cargo)', value: 'repor' },
+          { name: 'limpar todas as exceções', value: 'limpar' },
+        ],
+      },
+    ],
+  }, soOperacao),
   Object.assign({
     name: 'copias',
     description: 'Cópias da base de dados no R2',
