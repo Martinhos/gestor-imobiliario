@@ -78,9 +78,10 @@ export async function getSessionUser(env, request) {
   const raw = await env.SESSIONS.get(`sess:${token}`);
   if (!raw) return null;
   const { userId, epoch } = JSON.parse(raw);
-  // contas apagadas deixam de ter sessão válida, mesmo com o token na mão
+  // contas apagadas ou suspensas deixam de ter sessão válida, mesmo com o
+  // token na mão (suspender também sobe o sess_epoch, mas isto é a rede)
   const user = await env.DB.prepare(
-    'SELECT id, email, name, sess_epoch, plan, terms_version FROM users WHERE id = ? AND deleted_at IS NULL'
+    'SELECT id, email, name, sess_epoch, plan, terms_version FROM users WHERE id = ? AND deleted_at IS NULL AND suspended_at IS NULL'
   )
     .bind(userId)
     .first();

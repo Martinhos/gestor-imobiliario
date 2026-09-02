@@ -1,0 +1,81 @@
+// Uma D1 de teste que é SQLite a sério, com as migrações aplicadas.
+//
+// Os fakes por instrução serviram enquanto as consultas eram meia dúzia;
+// com o back office deixaram de servir — cada um só sabia o SQL que
+// conhecia, e um JOIN novo passava sem ninguém o ter corrido. Isto corre o
+// SQL verdadeiro contra o esquema verdadeiro: uma coluna mal escrita ou uma
+// migração em falta rebenta no teste, não em produção.
+
+import { DatabaseSync } from 'node:sqlite';
+import { readFileSync, readdirSync } from 'node:fs';
+
+// A interface é a da D1: prepare().bind().first()/all()/run(), com o
+// `meta.changes` de que o código depende para saber se mexeu em algo.
+export function baseDeTeste() {
+  const db = new DatabaseSync(':memory:');
+  const pasta = new URL('../../migrations/', import.meta.url);
+  readdirSync(pasta)
+    .filter((f) => f.endsWith('.sql'))
+    .sort()
+    .forEach((f) => db.exec(readFileSync(new URL(f, pasta), 'utf8')));
+
+  return {
+    _db: db,   // para os testes espreitarem por dentro quando precisarem
+    prepare(sql) {
+      let args = [];
+      const q = {
+        bind(...a) { args = a.map((v) => (v === undefined ? null : v)); return q; },
+        async first() {
+          const linha = db.prepare(sql).get(...args);
+          return linha === undefined ? null : linha;
+        },
+        async all() { return { results: db.prepare(sql).all(...args) }; },
+        async run() {
+          const r = db.prepare(sql).run(...args);
+          return { meta: { changes: Number(r.changes) } };
+        },
+      };
+      return q;
+    },
+  };
+}
+
+// KV de faz-de-conta, o mesmo de sempre.
+export function kvFalso() {
+  const m = new Map();
+  return {
+    m,
+    async put(k, v) { m.set(k, v); },
+    async get(k) { return m.has(k) ? m.get(k) : null; },
+    async delete(k) { m.delete(k); },
+  };
+}
+
+// R2 de faz-de-conta: guarda os bytes tal como chegam, incluindo de um
+// fluxo — é o que a salvaguarda escreve.
+export function r2Falso() {
+  const m = new Map();
+  return {
+    m,
+    async put(k, corpo) {
+      const buf = corpo && typeof corpo.getReader === 'function'
+        ? new Uint8Array(await new Response(corpo).arrayBuffer())
+        : new Uint8Array(corpo);
+      m.set(k, buf);
+    },
+    async head(k) { const b = m.get(k); return b ? { size: b.length } : null; },
+    async get(k) {
+      const b = m.get(k);
+      return b ? { size: b.length, body: new Response(b).body } : null;
+    },
+    async delete(k) { m.delete(k); },
+    async list(o) {
+      const prefixo = (o && o.prefix) || '';
+      return {
+        objects: [...m.keys()].filter((k) => k.startsWith(prefixo))
+          .map((k) => ({ key: k, size: m.get(k).length, uploaded: new Date() })),
+        truncated: false,
+      };
+    },
+  };
+}

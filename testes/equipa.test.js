@@ -315,8 +315,11 @@ describe('o que a ferramenta não faz', () => {
     assert.match(api, /cats\.indexOf\(t\.category\) < 0/, 'e o detalhe também');
   });
 
-  test('deixa registo de quem respondeu', () => {
-    assert.match(api, /eu\.papel \+ ' ' \+ eu\.nome/);
+  test('deixa registo de quem respondeu — agora na auditoria a sério', () => {
+    // a marca de texto no context era o remendo "enquanto não houver
+    // auditoria"; há, e cada ação sobre um pedido escreve nela
+    assert.match(api, /auditar\(env, eu, 'pedido\./);
+    assert.match(api, /auditar\(env, eu, 'conta\./);
   });
 });
 
