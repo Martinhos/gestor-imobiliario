@@ -8,6 +8,7 @@ vSettings = function () {
   if (setPage === 'cloud') return backRow + vCloud();
   if (setPage === 'legal') return backRow + vLegal();
   if (setPage === 'ajuda') return backRow + vAjuda();
+  if (setPage === 'faq') return backRow + vFaq();
   if (setPage === 'termos') return backRow + vDoc(L.termos);
   if (setPage === 'privacidade') return backRow + vDoc(L.privacidade);
   if (setPage === 'tema') {
@@ -67,6 +68,7 @@ vSettings = function () {
       navRow('Ajuda e sugestões', 'Contar um problema ou pedir uma melhoria', 'info', 'ajuda') +
 
       sect('Sobre') +
+      navRow('Perguntas frequentes', 'As dúvidas mais comuns, respondidas', 'info', 'faq') + gap +
       navRow('Aviso legal', 'Termos e privacidade', 'contract', 'legal') + gap +
       card('Gestor Imobiliário', 'Versão ' + VERSAO,
         '<div class="stat"><span>Imóveis · contratos</span><b>' + db.properties.length + ' · ' + db.contracts.length + '</b></div>' +
@@ -177,3 +179,28 @@ lgCss.textContent =
   '.lg .lg-h{font-size:15.5px;font-weight:650;margin:26px 0 10px;letter-spacing:-.01em}' +
   '.lg b{font-weight:650}';
 document.head.appendChild(lgCss);
+
+
+SUBPAGE.faq = { label: 'Perguntas frequentes', sub: 'As dúvidas mais comuns' };
+
+/* As perguntas que vão chegar de certeza — respondidas antes de chegarem.
+   Cada resposta aponta o caminho concreto na app, não teoria. */
+function vFaq() {
+  var q = function (id, pergunta, resposta) {
+    return fold('faq_' + id, pergunta, '<div class="hint" style="font-size:14px;line-height:1.6">' + resposta + '</div>', { icon: 'info', open: false });
+  };
+  return card('Perguntas frequentes', 'Se a tua não estiver aqui, usa a Ajuda e sugestões', `
+    ${q('dados', 'Os meus dados estão seguros?', 'Ficam numa base de dados na nuvem com cópias de segurança diárias, e também no teu aparelho. Mesmo assim, mantém as tuas próprias cópias: <b>Definições → Importar e cópias → Guardar cópia</b>. Nenhuma nuvem substitui uma cópia tua.')}
+    ${q('renda', 'Como registo a renda todos os meses sem trabalho?', 'Cria o contrato com a renda mensal: a app gera um <b>movimento planeado</b> que aparece todos os meses na Visão geral, no cartão «Movimentos por confirmar». Um toque em <b>Confirmar</b> regista a renda — não escreves nada.')}
+    ${q('partilha', 'Como partilho as casas com o comproprietário?', 'Em <b>Definições → Conta e partilha</b> está o teu id de 8 caracteres. A outra pessoa cria conta, e um de vocês adiciona o id do outro. Depois escolhem casa a casa o que partilham — e a divisão de quotas só muda quando todos confirmarem.')}
+    ${q('fotos', 'As fotografias e documentos sincronizam entre aparelhos?', 'Sim — desde que tenhas sessão iniciada, os anexos sobem para a nuvem e descem nos outros aparelhos. Se um anexo não subir (por tamanho ou falha), a app avisa e ele fica só nesse aparelho até conseguir.')}
+    ${q('password', 'Esqueci-me da palavra-passe. E agora?', 'Se a conta tiver a Google ligada, entra com a Google — e em <b>Conta e partilha</b> podes definir uma palavra-passe nova. Se não tiver, ainda não há reposição automática por email; escreve-nos pela <b>Ajuda e sugestões</b> de um aparelho onde tenhas sessão, ou aguarda: a reposição por email está a caminho.')}
+    ${q('apagar', 'Apaguei uma coisa sem querer. Consigo recuperar?', 'Logo a seguir a apagar aparece um <b>«Anular»</b> no fundo do ecrã, durante seis segundos — repõe tudo, incluindo cascatas (um imóvel com os contratos e movimentos). Passado esse tempo, restaura a partir de uma cópia em <b>Importar e cópias</b>.')}
+    ${q('varios', 'Como apago ou edito vários movimentos de uma vez?', 'Faz um <b>toque longo</b> num movimento, imóvel ou contrato: entra em modo de seleção. Marca o que quiseres — há caixas por mês e uma global — e usa a barra no fundo do ecrã.')}
+    ${q('contratos', 'Porque é que não consigo criar um contrato?', 'Enquanto a fase experimental durar, consegues sempre. Quando os planos entrarem em vigor (anunciado com 30 dias de antecedência), os contratos fazem parte do plano <b>Plus</b>. O que já existir nunca é apagado nem fica inacessível.')}
+    ${q('pdf', 'O contrato em PDF serve para assinar?', 'É uma <b>minuta genérica</b>, não validada por advogado. Usa-a como ponto de partida e pede revisão profissional antes de assinar — a lei do arrendamento muda e cada caso é um caso.')}
+    ${q('tema', 'A app não muda para o modo escuro do telemóvel', 'Em <b>Definições → Tema</b>, escolhe «Automático». Em alguns browsers Samsung o sistema não passa a preferência — nesse caso escolhe «Escuro» à mão; a escolha é por aparelho.')}
+    ${q('instalar', 'Como instalo a app no telemóvel?', 'Android: <b>Definições → Conta e partilha</b> tem o APK, ou usa «Adicionar ao ecrã principal» no browser. iPhone: Safari → Partilhar → <b>Adicionar ao ecrã principal</b>.')}
+    ${q('conta', 'Como apago a minha conta?', 'Em <b>Definições → Conta e partilha → Apagar conta</b>. É definitivo: apaga imóveis, contratos, movimentos e ligações. Nas casas partilhadas, o teu nome passa a «[deleted]» para os outros.')}
+  `);
+}

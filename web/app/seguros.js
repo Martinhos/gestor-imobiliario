@@ -102,6 +102,16 @@ function segBody() {
       <label>Primeiro pagamento<input id="sg_start" type="date" value="${t.start || ''}" onchange="segColher()"></label>
       <label>Aumento anual (%)<input id="sg_increase" type="text" inputmode="decimal" value="${t.increase != null ? dec(t.increase) : ''}" placeholder="3" oninput="segColher()"></label></div>
     <label>Notas<textarea id="sg_notes">${esc(t.notes || '')}</textarea></label>
+    ${fold('segdocs', 'Onde encontrar isto nos documentos', `
+      <div class="hint" style="font-size:13.5px;line-height:1.6">
+        <b>Condições Particulares</b> — o número da apólice, o capital seguro, o prémio anual e o
+        fracionamento (se pagas ao mês, ao trimestre…). É o documento que recebeste ao contratar.<br><br>
+        <b>Recibo ou aviso de pagamento</b> — o valor exato de cada pagamento, já com taxas e
+        impostos. É esse o valor a pôr em «Valor de cada pagamento».<br><br>
+        <b>Carta de renovação anual</b> — o prémio do próximo ano. Comparando com o deste ano sai o
+        «Aumento anual»: por exemplo, de 150 € para 162 € são 8%. Nos seguros de vida do crédito o
+        aumento vem da idade e é normal ser maior.
+      </div>`, { icon: 'file', open: false })}
     <div class="card" style="background:var(--tint);padding:12px" id="segPrev">${segPrevisao()}</div>
   </div>`;
 }

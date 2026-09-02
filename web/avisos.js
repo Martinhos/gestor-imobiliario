@@ -56,6 +56,16 @@ var AVISOS = [
         ],
       },
       {
+        titulo: 'Filtros comuns, datas e perguntas frequentes',
+        afeta: ['app', 'movimentos'],
+        itens: [
+          'Filtros comuns: define um conjunto de escolhas com nome (Definições → Filtros comuns) e aplica-o num toque no funil de qualquer vista — cada uma usa o que lhe diz respeito.',
+          'Os movimentos passam a filtrar-se entre datas (De/Até no funil).',
+          'Definições → Perguntas frequentes: as dúvidas mais comuns, respondidas com o caminho concreto.',
+          'O botão do topo dos documentos longos diz «Voltar» e acompanha o scroll.',
+        ],
+      },
+      {
         titulo: 'Seguros, com a subida anual já contada',
         afeta: ['imoveis', 'creditos'],
         itens: [
