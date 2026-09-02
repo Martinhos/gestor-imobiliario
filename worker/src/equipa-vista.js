@@ -81,7 +81,7 @@ export function paginaEquipa(eu) {
 
   const corpo = `<header>
     <h1>Suporte</h1>
-    <span class="badge">${eu.papel}</span>
+    <span class="badge">${escapar((eu.papeis && eu.papeis.length ? eu.papeis : [eu.papel]).filter(Boolean).join(' + '))}</span>
     <span class="small">${escapar(eu.nome)}</span>
     <button class="btn" onclick="sair()">Sair</button>
   </header>
@@ -217,6 +217,53 @@ verLista('abertos');
   return new Response(pagina(corpo, 'Suporte'), {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
   });
+}
+
+/* A página que a ligação do Discord abre.
+
+   Abrir não entra. Mostra quem é e põe um botão — e é o botão que gasta a
+   ligação. É o que impede que uma pré-visualização, um leitor de links ou o
+   browser a adiantar-se gastem a ligação antes da pessoa lá chegar.
+
+   O endereço leva o token, por isso a página não pode deixar sair um
+   referer nem ficar em cache. */
+export function paginaEntrada(token, v) {
+  const cabecalhos = {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Referrer-Policy': 'no-referrer',
+  };
+
+  if (v.estado !== 'boa') {
+    const porque = {
+      'nao-existe': 'Esta ligação não existe.',
+      usada: 'Esta ligação já foi usada. Cada uma serve uma vez só.',
+      expirou: 'Esta ligação expirou. Valem cinco minutos.',
+    }[v.estado] || 'Esta ligação não serve.';
+    return new Response(pagina(`<div class="wrap" style="max-width:460px;padding-top:60px">
+      <div class="card">
+        <h1 style="margin:0 0 8px;font-size:19px">Não dá para entrar</h1>
+        <p class="small" style="margin:0 0 10px">${porque}</p>
+        <p class="small" style="margin:0">Corre <b>/entrar</b> outra vez no Discord para teres outra.</p>
+      </div></div>`, 'Entrar'), { status: 410, headers: cabecalhos });
+  }
+
+  const quem = v.quem || {};
+  const papeis = (quem.papeis && quem.papeis.length ? quem.papeis : [quem.papel]).filter(Boolean);
+  return new Response(pagina(`<div class="wrap" style="max-width:460px;padding-top:60px">
+    <div class="card">
+      <h1 style="margin:0 0 4px;font-size:19px">Ferramenta de equipa</h1>
+      <p class="small" style="margin:0 0 14px">
+        Entras como <b>${escapar(quem.nome || '')}</b>
+        <span class="badge">${escapar(papeis.join(' + ') || 'sem papel')}</span>
+      </p>
+      <form method="POST" action="/equipa/entrar">
+        <input type="hidden" name="t" value="${escapar(token)}">
+        <button class="btn primary" type="submit" style="width:100%;justify-content:center">Entrar</button>
+      </form>
+      <p class="small" style="margin:12px 0 0">
+        A ligação vale uma vez só e gasta-se ao carregares aqui.</p>
+    </div></div>`, 'Entrar'), { status: 200, headers: cabecalhos });
 }
 
 function escapar(s) {
