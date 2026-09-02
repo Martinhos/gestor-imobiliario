@@ -49,7 +49,7 @@ function render(){
     if(hasFilt){hb.innerHTML=ic('filter',16)+(hdrFiltN()?'<span class="dot"></span>':'');
       hb.classList.toggle('primary',isAna?!!anaOpen[tab]:(LFK[tab]?!!lf(LFK[tab])._open:false))}}
   let html=({dashboard:vDashboard,properties:vProperties,contracts:vContracts,tenants:vTenants,owners:vOwners,
-    transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
+    transactions:vTransactions,recurring:vRecurring,credits:vCredits,insurance:vInsurance,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
   view().innerHTML=html;
   /* A visão geral era o único ecrã sem criação rápida: registar uma renda

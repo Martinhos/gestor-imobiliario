@@ -509,6 +509,7 @@ const PAL_DARK=['#5ee0a8','#7aa9ff','#ffc35c','#ff8a80','#c89bff','#5ad0d8','#f0
 const PAL=PAL_LIGHT.slice();
 
 function ic(n,s){s=s||20;const I={
+  shield:'<path d="M12 3l7 2.6v5.2c0 4.6-3 8.4-7 10.2-4-1.8-7-5.6-7-10.2V5.6z"/><path d="M9 11.5l2 2 4-4"/>',
   home:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-5h5v5"/>',
   building:'<path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16"/><path d="M15 10h3a2 2 0 0 1 2 2v9"/><path d="M8 7h3M8 11h3M8 15h3"/><path d="M2 21h20"/>',
   users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',

@@ -63,6 +63,10 @@ CW.editProfile = function () {
     meP.id = CW.user.id;
     db.owners.push(meP);
   }
+  /* o que a conta já sabe não se pergunta outra vez: o email do registo ou
+     do Google e o nome entram sozinhos nos campos vazios */
+  if (!meP.email && CW.user.email) meP.email = CW.user.email;
+  if (!meP.name && CW.user.name) meP.name = CW.user.name;
   personModal('owner', CW.user.id);
   try { modalTop().el.querySelector('.head h2').textContent = 'O meu perfil'; } catch (e) {}
   injectPhoneCountry();

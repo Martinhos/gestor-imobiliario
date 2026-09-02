@@ -16,30 +16,46 @@ export const LIMITES = {
   pro: { imoveis: Infinity, contratos: true, planeados: true },
 };
 
-const CHAVE = 'config:demo';
-let _cache = { t: 0, v: true };
+const CHAVE = 'config:demo_fim';
+let _cache = { t: 0, fim: null };
 
-/* Uma leitura de KV por pedido chegava; com a cache nem isso — 60 segundos
-   de atraso a aplicar o interruptor não fazem diferença a ninguém. Sem KV
-   ou sem valor guardado, é demo: nunca se tranca clientes por um outage. */
-export async function modoDemo(env) {
-  if (Date.now() - _cache.t < 60000) return _cache.v;
-  let v = true;
+/* Desligar o demo não desliga nada no momento: marca a DATA em que os
+   limites entram em vigor, 30 dias à frente por omissão. Até lá, tudo se
+   comporta como sempre — mas a app passa a avisar toda a gente do que aí
+   vem, e é esse aviso que os termos prometem. Voltar a ligar apaga a data.
+
+   Uma leitura de KV por pedido chegava; com a cache nem isso. Sem KV ou sem
+   data marcada, é demo: nunca se tranca clientes por um outage. */
+export async function fimDemo(env) {
+  if (Date.now() - _cache.t < 60000) return _cache.fim;
+  let fim = null;
   try {
     const raw = await env.SESSIONS.get(CHAVE);
-    if (raw != null) v = raw === '1';
+    if (raw != null && isFinite(Number(raw))) fim = Number(raw);
   } catch (e) { /* KV em baixo: fica demo */ }
-  _cache = { t: Date.now(), v };
-  return v;
+  _cache = { t: Date.now(), fim };
+  return fim;
 }
 
-export async function definirDemo(env, ligado) {
-  await env.SESSIONS.put(CHAVE, ligado ? '1' : '0');
-  _cache = { t: Date.now(), v: !!ligado };
+export async function modoDemo(env) {
+  const fim = await fimDemo(env);
+  return fim == null || Date.now() < fim;
+}
+
+export async function definirDemo(env, ligado, dias) {
+  if (ligado) {
+    await env.SESSIONS.delete(CHAVE);
+    _cache = { t: Date.now(), fim: null };
+    return null;
+  }
+  const fim = Date.now() + Math.max(0, Number(dias == null ? 30 : dias)) * 86400000;
+  await env.SESSIONS.put(CHAVE, String(fim));
+  _cache = { t: Date.now(), fim };
+  return fim;
 }
 
 // exposto para os testes poderem limpar a cache entre casos
-export function esquecerCache() { _cache = { t: 0, v: true }; }
+export function esquecerCache() { _cache = { t: 0, fim: null }; }
 
 /* O veredicto sobre criar mais um. `tipo`: 'imovel' | 'contract' | 'rec'.
    Devolve null quando pode, ou a frase que explica porquê não. */

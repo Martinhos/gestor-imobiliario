@@ -477,15 +477,20 @@ function verOperacao() {
         return '<div class="stat"><span>' + OPS[op] + '</span><b><span class="badge ' + classe + '">' + texto + '</span></b></div>';
       }).join('') + '</div>';
 
-    var demo = '<div class="card"><div class="row"><div><b>Modo de demonstração</b>' +
-      '<div class="small">' + (d.demo
-        ? 'Ligado — os limites dos planos estão suspensos para toda a gente.'
-        : 'Desligado — os planos estão em vigor (free: 3 imóveis, sem contratos nem planeados novos).') + '</div></div>' +
-      (d.master
-        ? '<button class="btn mini' + (d.demo ? ' danger' : ' primary') + '" onclick="mudarDemo(' + (d.demo ? 'false' : 'true') + ')">' +
-          (d.demo ? 'Desligar' : 'Ligar') + '</button>'
-        : '<span class="badge">' + (d.demo ? 'ligado' : 'desligado') + '</span>') +
-      '</div></div>';
+    var fimTxt = d.fimDemo ? new Date(d.fimDemo).toISOString().slice(0, 10) : null;
+    var faltam = d.fimDemo ? Math.ceil((d.fimDemo - Date.now()) / 86400000) : null;
+    var estadoDemo = !d.fimDemo
+      ? 'Ligado — os limites dos planos estão suspensos, sem data marcada.'
+      : d.demo
+        ? 'A terminar — os planos entram em vigor a ' + fimTxt + ' (faltam ' + faltam + ' dias). A app está a avisar toda a gente.'
+        : 'Terminado a ' + fimTxt + ' — os planos estão em vigor (free: 3 imóveis, sem contratos nem planeados novos).';
+    var botaoDemo = !d.master
+      ? '<span class="badge">' + (d.demo ? 'ligado' : 'em vigor') + '</span>'
+      : !d.fimDemo
+        ? '<button class="btn mini danger" onclick="mudarDemo(false)">Marcar o fim</button>'
+        : '<button class="btn mini" onclick="mudarDemo(true)">' + (d.demo ? 'Cancelar' : 'Voltar ao demo') + '</button>';
+    var demo = '<div class="card"><div class="row"><div style="min-width:0"><b>Modo de demonstração</b>' +
+      '<div class="small">' + estadoDemo + '</div></div>' + botaoDemo + '</div></div>';
 
     var copias = '<div class="card"><div class="row"><b>Cópias no R2</b>' +
       '<button class="btn mini" onclick="copiarAgora()">Copiar agora</button></div>' +
@@ -515,7 +520,7 @@ function verOperacao() {
 }
 
 function mudarDemo(ligar) {
-  if (!ligar && !confirm('Desligar o modo de demonstração? Os limites dos planos passam a valer JÁ para toda a gente: free fica por 3 imóveis e sem criar contratos nem planeados.')) return;
+  if (!ligar && !confirm('Marcar o fim da demonstração? A app passa JÁ a avisar toda a gente de que os planos entram em vigor daqui a 30 dias — e nessa data o free fica por 3 imóveis, sem criar contratos nem planeados.')) return;
   var motivo = prompt('Motivo (fica no rasto):');
   if (!motivo) return;
   enviar('/api/equipa/operacao/demo', { ligado: ligar, motivo: motivo })

@@ -423,7 +423,7 @@ export async function rotasEquipaApi(c) {
     if (path === '/api/equipa/operacao' && method === 'GET') {
       const { usageFields } = await import('./notify.js');
       const { listar, estado } = await import('./salvaguarda.js');
-      const { modoDemo } = await import('./lib/planos.js');
+      const { modoDemo, fimDemo } = await import('./lib/planos.js');
       // o batimento: a última execução de cada operação agendada.
       // O alarme é a ausência — a idade calcula-se do lado de quem vê.
       const crons = (await env.DB.prepare(
@@ -448,6 +448,7 @@ export async function rotasEquipaApi(c) {
         crons,
         historico,
         demo: await modoDemo(env),
+        fimDemo: await fimDemo(env),
         master: eMaster(eu),
       });
     }
@@ -459,14 +460,21 @@ export async function rotasEquipaApi(c) {
       if (!eMaster(eu)) return err(403, 'O modo de demonstração é só do master.');
       const b = await body(request);
       const ligar = !!(b && b.ligado);
+      // os 30 dias são a regra; o parâmetro existe para os testes e para um
+      // adiamento consciente — nunca menos aviso do que os termos prometem,
+      // exceto em ambientes que não são produção
+      let dias = b && b.dias != null ? Number(b.dias) : 30;
+      if (!isFinite(dias) || dias < 0) dias = 30;
+      if (dias < 30 && !env.ENV_NAME) return err(400, 'Em produção o aviso é de pelo menos 30 dias — é o que os termos prometem.');
       const motivo = String((b && b.motivo) || '').trim().slice(0, 300);
       if (motivo.length < 5) return err(400, 'Escreve o motivo — fica no rasto.');
-      const registado = await auditar(env, eu, 'operacao.demo', null,
-        (ligar ? 'ligado' : 'desligado — os limites dos planos passam a valer') + ' · ' + motivo);
-      if (!registado) return err(500, 'A auditoria não está a escrever — sem rasto não se muda isto.');
       const { definirDemo } = await import('./lib/planos.js');
-      await definirDemo(env, ligar);
-      return json({ demo: ligar });
+      const registado = await auditar(env, eu, 'operacao.demo', null,
+        (ligar ? 'religado — a data marcada foi apagada'
+               : 'fim marcado para daqui a ' + dias + ' dias — a app passa a avisar toda a gente') + ' · ' + motivo);
+      if (!registado) return err(500, 'A auditoria não está a escrever — sem rasto não se muda isto.');
+      const fim = await definirDemo(env, ligar, dias);
+      return json({ demo: ligar, fim });
     }
 
     if (path === '/api/equipa/operacao/copiar' && method === 'POST') {

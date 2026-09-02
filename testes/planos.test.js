@@ -5,7 +5,7 @@
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { LIMITES, podeCriar, modoDemo, definirDemo, esquecerCache } from '../worker/src/lib/planos.js';
+import { LIMITES, podeCriar, modoDemo, fimDemo, definirDemo, esquecerCache } from '../worker/src/lib/planos.js';
 import { kvFalso } from './lib/bd.js';
 
 beforeEach(() => esquecerCache());
@@ -47,18 +47,32 @@ describe('o que cada plano deixa criar', () => {
   });
 });
 
-describe('o interruptor do modo de demonstração', () => {
+describe('o fim do demo é uma data, não um interruptor', () => {
   test('sem nada guardado, é demo: a app comporta-se como sempre', async () => {
     assert.equal(await modoDemo({ SESSIONS: kvFalso() }), true);
+    assert.equal(await fimDemo({ SESSIONS: kvFalso() }), null);
   });
 
-  test('desligar persiste, e ligar de volta também', async () => {
+  test('marcar o fim dá 30 dias de aviso: até lá continua tudo a passar', async () => {
     const env = { SESSIONS: kvFalso() };
-    await definirDemo(env, false);
+    const fim = await definirDemo(env, false);   // 30 dias por omissão
+    assert.ok(fim > Date.now() + 29 * 86400000, 'a data fica um mês à frente');
+    assert.equal(await modoDemo(env), true, 'os limites ainda não valem');
+    assert.equal(await fimDemo(env), fim, 'mas a data já se anuncia');
+  });
+
+  test('com a data passada, os limites valem', async () => {
+    const env = { SESSIONS: kvFalso() };
+    await definirDemo(env, false, 0);   // fim imediato (só para testes e dev)
     assert.equal(await modoDemo(env), false);
-    assert.equal(env.SESSIONS.m.get('config:demo'), '0');
+  });
+
+  test('religar apaga a data e cancela o aviso', async () => {
+    const env = { SESSIONS: kvFalso() };
+    await definirDemo(env, false, 0);
     await definirDemo(env, true);
     assert.equal(await modoDemo(env), true);
+    assert.equal(await fimDemo(env), null);
   });
 
   test('com o KV em baixo, é demo — um outage não tranca clientes', async () => {
@@ -66,10 +80,10 @@ describe('o interruptor do modo de demonstração', () => {
     assert.equal(await modoDemo(mau), true);
   });
 
-  test('a cache não sobrevive a definirDemo: o interruptor age já', async () => {
+  test('a cache não sobrevive a definirDemo: a mudança age já', async () => {
     const env = { SESSIONS: kvFalso() };
     assert.equal(await modoDemo(env), true);   // aquece a cache
-    await definirDemo(env, false);
+    await definirDemo(env, false, 0);
     assert.equal(await modoDemo(env), false, 'sem esperar os 60 segundos');
   });
 });
