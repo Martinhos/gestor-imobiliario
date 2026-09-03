@@ -80,7 +80,16 @@ export async function rotaTeste(c) {
     return pagina(410, 'Esta ligação expirou', 'Valem ' + VALIDADE_MIN + ' minutos. Corre /test outra vez e usa a nova.');
   }
   const esperada = await assinarTeste(env, exp, dados, manter);
-  if (sig !== esperada) return pagina(403, 'Assinatura errada', 'Esta ligação não foi emitida por nós. Pede uma nova com /test.');
+  /* transição: a produção ainda assina à moda antiga (sem o manter). Uma
+     ligação antiga só vale como "lavar" — a mesma chave, os mesmos campos.
+     Tirar este ramo quando a produção souber assinar o manter. */
+  const antiga = manter === '0'
+    ? await crypto.subtle.sign('HMAC', await chave(env), new TextEncoder().encode(exp + ':' + dados))
+        .then((b2) => [...new Uint8Array(b2)].map((x) => x.toString(16).padStart(2, '0')).join(''))
+    : null;
+  if (sig !== esperada && sig !== antiga) {
+    return pagina(403, 'Assinatura errada', 'Esta ligação não foi emitida por nós. Pede uma nova com /test.');
+  }
 
   /* cada visita começa lavada: as contas de teste anteriores vão-se, com
      tudo o que arrastam (casas, registos, ligações) — é o purge a sério.

@@ -109,6 +109,25 @@ describe('a opção manter: conta extra sem lavar', () => {
   });
 });
 
+describe('a assinatura antiga (sem manter) ainda vale — só como lavar', () => {
+  test('uma ligação assinada à moda da produção atual entra', async () => {
+    const env = ambiente();
+    const exp = String(Date.now() + 300000);
+    const sig = [...new Uint8Array(await crypto.subtle.sign('HMAC',
+      await crypto.subtle.importKey('raw', new TextEncoder().encode('teste:' + env.DISCORD_BOT_TOKEN),
+        { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']),
+      new TextEncoder().encode(exp + ':0')))].map((b) => b.toString(16).padStart(2, '0')).join('');
+    const lig = 'https://dev.x.pt/t/entrar?exp=' + exp + '&dados=0&sig=' + sig;
+    const r = await rotaTeste({ env, url: new URL(lig), request: new Request(lig) });
+    assert.equal(r.status, 302, 'a ligação antiga ainda entra');
+
+    // mas nunca como "manter": o m=1 com assinatura antiga é recusado
+    const lig2 = 'https://dev.x.pt/t/entrar?exp=' + exp + '&dados=0&m=1&sig=' + sig;
+    const r2 = await rotaTeste({ env, url: new URL(lig2), request: new Request(lig2) });
+    assert.equal(r2.status, 403);
+  });
+});
+
 describe('sair de uma conta de teste apaga-a', () => {
   const sair = (env, token) => handleApi(
     new Request('https://dev.x.pt/api/auth/logout', {
