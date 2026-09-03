@@ -504,11 +504,11 @@ async function cmdTest(env, i, opts, request) {
   const { ligacaoTeste } = await import('./teste.js');
   const base = 'https://dev.rendorium.com';   // o teste vive sempre aqui
   const u = (i.member && i.member.user) || i.user || {};
-  const lig = await ligacaoTeste(env, base, !!opts.dados, !!opts.manter, u.id, !!opts.limpar, opts.email);
+  const lig = await ligacaoTeste(env, base, !!opts.dados, !!opts.extra, u.id, !!opts.limpar, opts.email);
   return reply('🧪 O teu ambiente de teste (a ligação vale 10 minutos):\n' + lig + '\n\n' +
     (opts.limpar
       ? 'Abri-la APAGA as tuas contas de teste e começa numa lavada.'
-      : opts.manter
+      : opts.extra
         ? 'Abri-la cria uma conta de teste EXTRA, sem tocar nas existentes.'
         : 'Abri-la retoma a tua conta de teste mais recente, com os dados intactos — ou cria a primeira.') +
     (opts.dados ? ' Vem com dados de exemplo.' : '') +

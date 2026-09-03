@@ -167,6 +167,24 @@ describe('cada dev tem as suas contas', () => {
     assert.deepEqual(donos.results.map((x) => x.test_owner), ['alice', 'bob']);
   });
 
+  test('uma conta órfã é adotada pela primeira ligação com dono — não se cria outra ao lado', async () => {
+    const env = ambiente();
+    // ligação à moda antiga (sem dono): nasce órfã, com uma casa
+    await abrir(env, false);
+    const orfa = (await contas(env)).find((u) => !u.deleted_at);
+    await env.DB.prepare("INSERT INTO houses (id, owner_id, data, updated_at) VALUES ('H3', ?, '{}', 1)")
+      .bind(orfa.id).run();
+
+    const r = await abrir(env, false, null, false, 'alice');
+    assert.equal(r.status, 302);
+    const vivas = (await contas(env)).filter((u) => !u.deleted_at);
+    assert.equal(vivas.length, 1, 'adotou em vez de criar');
+    assert.equal(vivas[0].id, orfa.id);
+    const dona = await env.DB.prepare('SELECT test_owner FROM users WHERE id = ?').bind(orfa.id).first();
+    assert.equal(dona.test_owner, 'alice', 'a órfã passou a ter dono');
+    assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM houses').first()).n, 1, 'com os dados que lá estavam');
+  });
+
   test('o seletor: lista só as do próprio, troca dentro delas, e cria extra', async () => {
     const env = ambiente();
     const tAlice = tokenDe(await abrir(env, false, null, false, 'alice'));
