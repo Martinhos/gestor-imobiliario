@@ -465,7 +465,12 @@ textarea{min-height:90px;resize:vertical}
 .sheet .foot .btn{flex:1;justify-content:center}
 .iconbtn{border:0;background:transparent;padding:7px;border-radius:9px;cursor:pointer;color:var(--muted)}
 .iconbtn:hover{background:var(--chip);color:var(--ink)}
-@media(max-width:520px){.sheet{top:auto;bottom:0;left:0;transform:none;width:100%;max-height:93vh;border-radius:20px 20px 0 0}}
+/* A folha de baixo, no telemovel. O max-height tem de vir em dvh como o de
+   cima: esta regra vem depois e, so com vh, desfazia-o. E vh e a altura com
+   as barras do browser recolhidas — com a barra de endereco e a de comandos
+   a mostra, a folha crescia para alem do que se ve e o topo ficava cortado,
+   fora de alcance, porque esta encostada em baixo. */
+@media(max-width:520px){.sheet{top:auto;bottom:0;left:0;transform:none;width:100%;max-height:93vh;max-height:93dvh;border-radius:20px 20px 0 0}}
 .toast{position:fixed;left:50%;bottom:calc(22px + var(--inset-bottom));transform:translateX(-50%) translateY(80px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;z-index:90;font-size:13.5px;font-weight:550;opacity:0;transition:.22s;pointer-events:none;max-width:90vw;text-align:center}
 .toast.on{opacity:1;transform:translateX(-50%);pointer-events:auto}
 .toast .toastbtn{margin-left:12px;background:none;border:0;color:var(--accent);font:inherit;font-weight:750;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
