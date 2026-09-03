@@ -149,6 +149,20 @@ export async function rotaTeste(c) {
       (quem ? 'test_owner = ?' : 'test_owner IS NULL') + ' ORDER BY created_at DESC LIMIT 1'
     ).bind(...(quem ? [DOMINIO_TESTE, quem] : [DOMINIO_TESTE])).first();
     if (dona) { conta = dona; retomada = true; }
+    else if (quem) {
+      /* adoção: as contas de antes do dono existir são órfãs — em vez de se
+         criar outra ao lado, a mais recente passa a ser deste dev, com os
+         dados que lá estão. É o que faz o seletor aparecer a quem vinha
+         das ligações antigas. */
+      const orfa = await env.DB.prepare(
+        "SELECT id, sess_epoch FROM users WHERE email LIKE '%' || ? AND deleted_at IS NULL AND test_owner IS NULL ORDER BY created_at DESC LIMIT 1"
+      ).bind(DOMINIO_TESTE).first();
+      if (orfa) {
+        await env.DB.prepare('UPDATE users SET test_owner = ? WHERE id = ?').bind(quem, orfa.id).run();
+        conta = orfa;
+        retomada = true;
+      }
+    }
   }
   if (!conta) conta = Object.assign({ sess_epoch: 0 }, await criarContaDeTeste(env, quem));
 
