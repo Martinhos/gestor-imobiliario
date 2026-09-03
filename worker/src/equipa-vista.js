@@ -432,6 +432,7 @@ function cartaoAcoes(q) {
     b('email', 'Mudar email') +
     (q.entrada.indexOf('google') > -1 ? b('desligar-google', 'Desligar Google') : '') +
     (q.suspensa ? b('reativar', 'Reativar', 'primary') : b('suspender', 'Suspender', 'danger')) +
+    b('apagar', 'Apagar de vez', 'danger') +
     '</div></div>';
 }
 
@@ -442,6 +443,10 @@ function acaoConta(id, acao) {
     if (!valor) return;
   } else if (acao === 'email') {
     valor = prompt('Novo email desta conta:');
+    if (!valor) return;
+  } else if (acao === 'apagar') {
+    valor = prompt('Apagar APAGA MESMO: casas, registos, partilhas, tudo.
+Para confirmar, escreve o email exato da conta:');
     if (!valor) return;
   }
   var motivo = prompt('Motivo (fica no rasto):');

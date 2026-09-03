@@ -165,6 +165,25 @@ describe('ações sobre contas', () => {
     assert.equal((await auditoria(env)).pop().acao, 'conta.plano.falhou');
   });
 
+  test('apagar exige o email exato — e depois apaga mesmo', async () => {
+    const env = ambiente();
+    const id = await novaConta(env);
+    const errado = await chamar(env, MASTER, 'POST', '/api/equipa/pessoas/' + id + '/acao',
+      { acao: 'apagar', valor: 'outra@x.pt', motivo: 'pediu para sair' });
+    assert.equal(errado.status, 400, 'sem o email certo não se apaga nada');
+    let u = await env.DB.prepare('SELECT email, deleted_at FROM users WHERE id = ?').bind(id).first();
+    assert.equal(u.deleted_at, null);
+
+    const certo = await corpoDe(await chamar(env, MASTER, 'POST', '/api/equipa/pessoas/' + id + '/acao',
+      { acao: 'apagar', valor: u.email, motivo: 'pediu para sair (RGPD)' }));
+    assert.equal(certo.status, 200);
+    u = await env.DB.prepare('SELECT email, deleted_at FROM users WHERE id = ?').bind(id).first();
+    assert.ok(u.deleted_at, 'lápide posta');
+    assert.match(u.email, /^apagado-/, 'a identidade foi-se');
+    const rasto = (await auditoria(env)).map((x) => x.acao);
+    assert.ok(rasto.indexOf('conta.apagar.feito') > -1);
+  });
+
   test('suspender trava a sessão que já estava aberta', async () => {
     const env = ambiente();
     const id = await novaConta(env);
