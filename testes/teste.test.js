@@ -120,6 +120,20 @@ describe('a opção manter: conta extra sem lavar', () => {
   });
 });
 
+describe('a TESTE_CHAVE partilhada manda sobre o token do bot', () => {
+  test('dois ambientes com tokens diferentes mas a mesma chave entendem-se', async () => {
+    const prod = ambiente({ DISCORD_BOT_TOKEN: 'tok-prod', TESTE_CHAVE: 'chave-comum' });
+    const dev = ambiente({ DISCORD_BOT_TOKEN: 'tok-dev', TESTE_CHAVE: 'chave-comum' });
+    const lig = await ligacaoTeste(prod, 'https://dev.x.pt', false, false, 'alice');
+    const r = await rotaTeste({ env: dev, url: new URL(lig), request: new Request(lig) });
+    assert.equal(r.status, 302, 'a ligação de um vale no outro');
+
+    const semChave = ambiente({ DISCORD_BOT_TOKEN: 'tok-dev' });
+    const r2 = await rotaTeste({ env: semChave, url: new URL(lig), request: new Request(lig) });
+    assert.equal(r2.status, 403, 'sem a chave comum, tokens diferentes não se entendem');
+  });
+});
+
 describe('a assinatura antiga (sem manter) ainda vale — só como lavar', () => {
   test('uma ligação assinada à moda da produção atual entra', async () => {
     const env = ambiente();
