@@ -84,7 +84,12 @@ const comandos = [
   {
     name: 'test',
     description: 'Ligação temporária para o ambiente de teste, numa conta lavada',
-    options: [{ type: BOOLEANO, name: 'dados', description: 'Com dados de exemplo', required: false }],
+    options: [
+      { type: BOOLEANO, name: 'dados', description: 'Com dados de exemplo (ao criar)', required: false },
+      { type: BOOLEANO, name: 'extra', description: 'Criar uma conta extra, sem tocar nas existentes', required: false },
+      { type: BOOLEANO, name: 'limpar', description: 'Apagar as tuas contas de teste e começar do zero', required: false },
+      { type: TEXTO, name: 'email', description: 'Para onde vai o correio das tuas contas de teste (fica guardado)', required: false },
+    ],
   },
   Object.assign({
     name: 'access',
@@ -114,6 +119,16 @@ const registar = (url) =>
 const global = `https://discord.com/api/v10/applications/${APP}/commands`;
 
 (async () => {
+  /* Com dois bots (producao e dev), o erro classico e os secrets _DEV
+     levarem os valores do outro. Antes de registar, diz-se QUEM somos:
+     o nome da aplicacao denuncia a troca na hora. */
+  const eu = await fetch('https://discord.com/api/v10/applications/@me', {
+    headers: { Authorization: 'Bot ' + TOKEN },
+  }).then((r) => r.json()).catch(() => null);
+  if (eu && eu.name) {
+    console.log('A registar como: "' + eu.name + '"' +
+      (String(eu.id) === String(APP) ? '' : ' — ATENCAO: o token e de uma aplicacao DIFERENTE do DISCORD_APP_ID!'));
+  }
   if (GUILD) {
     const r = await registar(`https://discord.com/api/v10/applications/${APP}/guilds/${GUILD}/commands`);
     if (r.ok) {

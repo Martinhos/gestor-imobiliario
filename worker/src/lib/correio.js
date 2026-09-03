@@ -36,8 +36,33 @@ export function molde(titulo, corpoHtml, rodape) {
   </div></body></html>`;
 }
 
+// Qualquer endereço no domínio da casa — rendorium.com ou um subdomínio.
+// Serve o registo (ninguém cria contas com o nosso nome) e o correio que
+// entra (o test@ só aceita o que a própria casa envia).
+export function dominioDaCasa(email) {
+  const d = String(email || '').toLowerCase().split('@')[1] || '';
+  return d === DOMINIO || d.endsWith('.' + DOMINIO);
+}
+
 export async function enviarEmail(env, { para, assunto, html, texto, remetente }) {
   if (!env.RESEND_API_KEY) return { enviado: false, motivo: 'sem RESEND_API_KEY' };
+  /* O correio de uma conta de teste não vai para o endereço dela (não
+     existe, só daria bounces): vai para o email do DEV que a criou — o que
+     ele registou pela ligação do /test — ou, sem registo, para a caixa da
+     casa (test@). A conta original fica no assunto, para se saber de que
+     sessão veio. */
+  if (/@teste\.rendorium\.com$/i.test(String(para || ''))) {
+    const contaDeTeste = String(para).toLowerCase();
+    assunto = String(assunto || '') + ' · ' + contaDeTeste.split('@')[0];
+    para = 'test@' + DOMINIO;
+    try {
+      const u = env.DB && await env.DB.prepare('SELECT test_owner FROM users WHERE email = ?')
+        .bind(contaDeTeste).first();
+      const proprio = u && u.test_owner && env.SESSIONS &&
+        await env.SESSIONS.get('teste:email:' + u.test_owner);
+      if (proprio) para = proprio;
+    } catch (e) { /* sem pista do dono, fica a caixa da casa */ }
+  }
   if (!para || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(para))) {
     return { enviado: false, motivo: 'destinatário inválido' };
   }
@@ -71,6 +96,32 @@ export async function enviarEmail(env, { para, assunto, html, texto, remetente }
 
 /* -------------------- os emails concretos que a app manda ---------------- */
 
+/* O número de um pedido: os primeiros 8 caracteres do id, em maiúsculas.
+   É o mesmo prefixo que o /pedido do Discord e a procura do back office
+   aceitam — quem cita o número do email encontra o pedido em todo o lado. */
+export function numeroPedido(id) {
+  return '#' + String(id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
+export async function emailPedidoRecebido(env, para, id, assunto) {
+  const num = numeroPedido(id);
+  return enviarEmail(env, {
+    para,
+    remetente: 'maquina',
+    assunto: 'Recebemos o teu pedido ' + num,
+    texto: 'O teu pedido «' + assunto + '» chegou e tem o número ' + num + '.\n\n' +
+      'Vamos responder-te por email; também podes acompanhar e responder na app, ' +
+      'em Definições → Ajuda e sugestões.',
+    html: molde('Recebemos o teu pedido ' + num,
+      `<p style="margin:0 0 10px;color:#5c6862">${String(assunto || '').replace(/</g, '&lt;')}</p>
+       <p style="margin:0 0 14px">Chegou e ficou registado com o número <b>${num}</b>.
+       Vamos responder-te por email.</p>
+       <p style="margin:0">Podes acompanhar e responder na app, em
+       <b>Definições → Ajuda e sugestões</b>.</p>`,
+      'Recebeste este email porque escreveste um pedido de ajuda no Rendorium. Responder a este email também funciona — cai na nossa caixa de suporte.'),
+  });
+}
+
 export async function emailReporPassword(env, para, ligacao) {
   return enviarEmail(env, {
     para,
@@ -87,16 +138,17 @@ export async function emailReporPassword(env, para, ligacao) {
   });
 }
 
-export async function emailRespostaPedido(env, para, assunto, resposta) {
+export async function emailRespostaPedido(env, para, assunto, resposta, id) {
+  const num = id ? numeroPedido(id) + ' ' : '';
   const seguro = String(resposta || '').slice(0, 1500)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
   return enviarEmail(env, {
     para,
     remetente: 'suporte',
-    assunto: 'Respondemos ao teu pedido: ' + String(assunto || '').slice(0, 120),
-    texto: 'Respondemos ao teu pedido «' + assunto + '»:\n\n' + resposta +
+    assunto: 'Respondemos ao teu pedido ' + (num || ': ') + String(assunto || '').slice(0, 120),
+    texto: 'Respondemos ao teu pedido ' + num + '«' + assunto + '»:\n\n' + resposta +
       '\n\nPodes ver e responder na app, em Definições → Ajuda e sugestões.',
-    html: molde('Respondemos ao teu pedido',
+    html: molde('Respondemos ao teu pedido ' + num,
       `<p style="margin:0 0 10px;color:#5c6862">${String(assunto || '').replace(/</g, '&lt;')}</p>
        <div style="background:#f0f5f1;border-radius:10px;padding:14px 16px;margin:0 0 14px">${seguro}</div>
        <p style="margin:0">Podes ver o histórico e responder na app, em

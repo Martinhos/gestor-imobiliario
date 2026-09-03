@@ -188,6 +188,57 @@ CW.esqueci = function (e) {
     .catch(function () { toast('Não deu para pedir agora — tenta daqui a pouco.'); });
 };
 
+/* No ambiente de dev, numa conta de teste, a marca do topo dá lugar a um
+   seletor: as contas de teste DESTE dev, trocáveis a um toque, mais a opção
+   de criar uma extra. A cache local não se mistura — o sync deteta a troca
+   de dono (LS_OWNER) e substitui tudo pelo estado da conta nova. */
+(function () {
+  var u = CW.user;
+  if (!u || !/@teste\.rendorium\.com$/.test(u.email || '')) return;
+  if (!/^dev\.rendorium\.com$|^gestor-imobiliario-dev\.|^localhost$|^127\./.test(location.hostname)) return;
+  fetch('/api/teste/contas', { headers: { Authorization: 'Bearer ' + u.token } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d || !d.contas || !d.contas.length) return;
+      var brand = document.querySelector('.brand');
+      if (!brand) return;
+      /* o menu de escolha da própria app (sel), não o <select> do sistema —
+         que destoava aqui tanto como destoava nos formulários */
+      if (typeof window.sel !== 'function') return;
+      var atual = d.contas.find(function (c) { return c.atual; }) || d.contas[0];
+      var rotulo = function (ct) { return '\uD83E\uDDEA ' + ct.email.split('@')[0].replace('teste-', '#'); };
+      var opcoes = d.contas.map(function (ct) { return { v: ct.id, label: rotulo(ct) }; });
+      opcoes.push({ div: true }, { v: '+nova', label: '\uFF0B Nova conta de teste' });
+      window.cwTrocaConta = function () {
+        var inp = document.getElementById('cwContas');
+        var v = inp && inp.value;
+        if (!v || v === atual.id || window._cwTroca) return;
+        window._cwTroca = true;
+        var alvo = v === '+nova' ? ['/api/teste/nova', {}] : ['/api/teste/trocar', { para: v }];
+        fetch(alvo[0], {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + u.token },
+          body: JSON.stringify(alvo[1]),
+        })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('troca recusada')); })
+          .then(function (n) {
+            try { localStorage.setItem(LS_USER, JSON.stringify({ id: n.id, email: n.email, name: n.name, token: n.token })); } catch (e) {}
+            location.reload();
+          })
+          .catch(function () {
+            window._cwTroca = false;
+            if (inp) inp.value = atual.id;
+            var lab = document.getElementById('lab_cwContas');
+            if (lab) lab.textContent = rotulo(atual);
+            toast('Não deu para trocar de conta.');
+          });
+      };
+      brand.innerHTML = '<div style="flex:1;min-width:0">' +
+        window.sel('cwContas', atual.id, opcoes, 'cwTrocaConta') + '</div>';
+    })
+    .catch(function () { /* sem seletor, fica a marca */ });
+})();
+
 /* Entrar com um token no endereço: é a porta do ambiente de teste (/test)
    e de qualquer ligação de sessão emitida pelo servidor. O token sai já da
    URL, valida-se contra /api/me, e a app recarrega com a sessão posta. */

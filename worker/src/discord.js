@@ -240,7 +240,7 @@ async function mudarEstado(env, ref, estado, resposta, quem) {
       .bind(t.user_id).first();
     if (dono && dono.email) {
       const { emailRespostaPedido } = await import('./lib/correio.js');
-      await emailRespostaPedido(env, dono.email, t.subject, resposta);
+      await emailRespostaPedido(env, dono.email, t.subject, resposta, t.id);
     }
   }
   return Object.assign({}, t, { status: estado, reply: resposta || t.reply });
@@ -500,13 +500,21 @@ async function cmdEntrar(env, i, papeis, request) {
    aponta a si próprio; o de produção (quem responde ao Discord depois da
    promoção) aponta ao dev, porque o /t/entrar de produção nem existe.
    Abrir a ligação lava as contas de teste e entra numa fresca. */
-async function cmdTest(env, opts, request) {
+async function cmdTest(env, i, opts, request) {
   const { ligacaoTeste } = await import('./teste.js');
   const base = 'https://dev.rendorium.com';   // o teste vive sempre aqui
-  const lig = await ligacaoTeste(env, base, !!opts.dados);
+  const u = (i.member && i.member.user) || i.user || {};
+  const lig = await ligacaoTeste(env, base, !!opts.dados, !!opts.extra, u.id, !!opts.limpar, opts.email);
   return reply('🧪 O teu ambiente de teste (a ligação vale 10 minutos):\n' + lig + '\n\n' +
-    'Abri-la apaga as contas de teste anteriores e entra numa conta lavada' +
-    (opts.dados ? ', com dados de exemplo' : ', vazia') + '. Terminar a sessão apaga-a.');
+    (opts.limpar
+      ? 'Abri-la APAGA as tuas contas de teste e começa numa lavada.'
+      : opts.extra
+        ? 'Abri-la cria uma conta de teste EXTRA, sem tocar nas existentes.'
+        : 'Abri-la retoma a tua conta de teste mais recente, com os dados intactos — ou cria a primeira.') +
+    (opts.dados ? ' Vem com dados de exemplo.' : '') +
+    '\nAs contas ficam de um dia para o outro; troca-las no seletor do topo da app.' +
+    (opts.email ? '\n📬 O correio das tuas contas de teste passa a ir para ' + opts.email + '.'
+                : '\nO correio vai para o email que registares com /test email:… (até lá, test@rendorium.com).'));
 }
 
 /* Quem pode o quê, com as caixas na própria mensagem.
@@ -739,7 +747,7 @@ export async function handleInteraction(request, env, ctx) {
       if (nome === 'comandos') return json(cmdComandos(pap, meusAcessos));
       if (nome === 'access') return json(await cmdAccess(env, i, opts));
       if (nome === 'entrar') return json(await cmdEntrar(env, i, papeis, request));
-      if (nome === 'test') return json(await cmdTest(env, opts, request));
+      if (nome === 'test') return json(await cmdTest(env, i, opts, request));
       if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
       if (nome === 'pedido') return json(await cmdPedido(env, opts, pap));
       if (nome === 'responder') return json(await cmdResponder(env, opts, pap, quemFala(i, pap)));

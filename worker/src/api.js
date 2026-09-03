@@ -30,11 +30,13 @@ import { rotasTickets } from './rotas/tickets.js';
 import { rotasAnexos } from './rotas/anexos.js';
 import { rotasCasas } from './rotas/casas.js';
 import { rotasConexoes } from './rotas/conexoes.js';
+import { rotasContasDeTeste } from './teste.js';
 
 export { recordReport, CATEGORIAS };
 
 // Rotas que exigem sessão iniciada, pela ordem em que são tentadas.
 const COM_SESSAO = [
+  rotasContasDeTeste,
   rotasConta,
   rotasEstado,
   rotasSync,
