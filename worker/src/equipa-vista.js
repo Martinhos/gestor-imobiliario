@@ -348,7 +348,8 @@ function verPessoas(q) {
   var topo = '<div class="tabs">' +
     '<input id="q" placeholder="Procurar por email, nome ou id…" value="' + esc(q || '') + '"' +
     ' style="flex:1;min-width:210px" onkeydown="if(event.key===\\'Enter\\')verPessoas(this.value)">' +
-    '<button class="btn" onclick="verPessoas(el(\\'q\\').value)">Procurar</button></div>';
+    '<button class="btn" onclick="verPessoas(el(\\'q\\').value)">Procurar</button>' +
+    (eu.master ? '<button class="btn mini" onclick="criarConta()">Criar conta</button>' : '') + '</div>';
   if (!q || q.length < 3) {
     el('conteudo').innerHTML = topo + '<div class="vazio">Procura por email, nome ou id (3+ caracteres).</div>';
     return;
@@ -366,6 +367,21 @@ function verPessoas(q) {
             '</div></div>';
         }).join(''));
   }).catch(falha);
+}
+
+/* Criar uma conta à mão: para a equipa, para um teste com email verdadeiro,
+   para quem pede ajuda a entrar. O servidor recusa emails repetidos. */
+function criarConta() {
+  var email = prompt('Email da conta nova:');
+  if (!email) return;
+  var nome = prompt('Nome (vazio usa o email):') || '';
+  var pass = prompt('Palavra-passe (8+, com maiúscula, minúscula, número e símbolo):');
+  if (!pass) return;
+  var motivo = prompt('Motivo (fica no rasto):');
+  if (!motivo) return;
+  enviar('/api/equipa/pessoas', { email: email, nome: nome, password: pass, motivo: motivo })
+    .then(function (d) { alert('Criada: ' + d.email + ' (' + d.id + ')'); verPessoa(d.id); })
+    .catch(function (e) { alert(e.message); });
 }
 
 function verPessoa(id) {
@@ -430,6 +446,7 @@ function cartaoAcoes(q) {
     b('limpar-limites', 'Limpar limites') +
     b('plano', 'Mudar plano') +
     b('email', 'Mudar email') +
+    b('password', 'Definir palavra-passe') +
     (q.entrada.indexOf('google') > -1 ? b('desligar-google', 'Desligar Google') : '') +
     (q.suspensa ? b('reativar', 'Reativar', 'primary') : b('suspender', 'Suspender', 'danger')) +
     b('apagar', 'Apagar de vez', 'danger') +
@@ -444,9 +461,11 @@ function acaoConta(id, acao) {
   } else if (acao === 'email') {
     valor = prompt('Novo email desta conta:');
     if (!valor) return;
+  } else if (acao === 'password') {
+    valor = prompt('Palavra-passe nova (8+, com maiúscula, minúscula, número e símbolo).\\nAs sessões abertas terminam todas:');
+    if (!valor) return;
   } else if (acao === 'apagar') {
-    valor = prompt('Apagar APAGA MESMO: casas, registos, partilhas, tudo.
-Para confirmar, escreve o email exato da conta:');
+    valor = prompt('Apagar APAGA MESMO: casas, registos, partilhas, tudo.\\nPara confirmar, escreve o email exato da conta:');
     if (!valor) return;
   }
   var motivo = prompt('Motivo (fica no rasto):');
@@ -529,7 +548,14 @@ function verOperacao() {
       '<button class="btn mini" onclick="sessaoTeste(true)">Com dados</button></span></div>' +
       '<div id="ligTeste"></div></div>';
 
-    el('conteudo').innerHTML = demo + teste + batimento + copias + '<div id="resumoCopia"></div>' + historico + consumo;
+    var enderecos = '<div class="card"><div class="row"><div style="min-width:0"><b>Endereços @rendorium.com</b>' +
+      '<div class="small">Reencaminham para um destino verificado — não são caixas com palavra-passe. ' +
+      'Enviar a partir de qualquer @rendorium.com já funciona pelo Resend.</div></div>' +
+      (d.master ? '<button class="btn mini" onclick="criarEndereco()">Criar endereço</button>' : '') +
+      '</div><div id="emailCard" class="small" style="margin-top:8px">A carregar…</div></div>';
+
+    el('conteudo').innerHTML = demo + teste + batimento + enderecos + copias + '<div id="resumoCopia"></div>' + historico + consumo;
+    verEnderecos();
   }).catch(falha);
 }
 
@@ -540,6 +566,37 @@ function mudarDemo(ligar) {
   enviar('/api/equipa/operacao/demo', { ligado: ligar, motivo: motivo })
     .then(function () { verOperacao(); })
     .catch(function (e) { alert(e.message); });
+}
+
+function verEnderecos() {
+  pedir('/api/equipa/email').then(function (d) {
+    if (d.semChave) {
+      el('emailCard').innerHTML = 'Falta o token: cria no Cloudflare um API token com ' +
+        '<b>Zone → Email Routing Rules → Edit</b>, <b>Zone → Zone → Read</b> (zona rendorium.com) e ' +
+        '<b>Account → Email Routing Addresses → Edit</b>, guarda-o como segredo <code>CF_EMAIL_TOKEN</code> ' +
+        'no GitHub e faz um deploy.';
+      return;
+    }
+    var linhas = (d.enderecos || []).map(function (e) {
+      return '<div class="stat"><span>' + esc(e.email) + (e.ativo ? '' : ' <span class="badge dg">desligado</span>') +
+        '</span><b>→ ' + esc(e.destino || '—') + '</b></div>';
+    }).join('') || '<div class="vazio">Nenhum endereço.</div>';
+    var pendentes = (d.destinos || []).filter(function (x) { return !x.verificado; });
+    el('emailCard').innerHTML = linhas + (pendentes.length
+      ? '<div class="small" style="margin-top:6px">Destinos à espera de verificação: ' +
+        pendentes.map(function (x) { return esc(x.email); }).join(', ') + '</div>' : '');
+  }).catch(function (e) { el('emailCard').innerHTML = '<span class="badge dg">' + esc(e.message) + '</span>'; });
+}
+
+function criarEndereco() {
+  var nome = prompt('Endereço novo (só a parte antes do @, ex.: faturas):');
+  if (!nome) return;
+  var destino = prompt('Destino (vazio usa o destino já verificado):') || '';
+  var motivo = prompt('Motivo (fica no rasto):');
+  if (!motivo) return;
+  enviar('/api/equipa/email', { endereco: nome, destino: destino, motivo: motivo })
+    .then(function (d) { alert('Criado: ' + d.email + ' → ' + d.destino); verEnderecos(); })
+    .catch(function (e) { alert(e.message); verEnderecos(); });
 }
 
 function sessaoTeste(comDados) {

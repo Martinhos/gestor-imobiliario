@@ -161,6 +161,23 @@ const ACOES_DE_CONTA = {
   },
   /* Só com password definida: uma conta criada pelo Google não tem outra
      porta, e desligar-lhe o Google era trancar a pessoa fora de vez. */
+  /* Definir uma palavra-passe nova, sem passar pelo email: para quem ficou
+     trancado fora com o email inacessível, e para dar uma porta própria a
+     uma conta só-Google antes de lhe desligar o Google. As sessões antigas
+     morrem todas — quem sabia a palavra-passe velha fica lá fora. A nova
+     nunca toca no rasto: o motivo sim, o segredo não. */
+  async password(env, u, valor) {
+    const { weakPassword } = await import('./lib/http.js');
+    if (weakPassword(String(valor || ''))) {
+      throw new Error('Fraca: 8+ caracteres, com maiúscula, minúscula, número e símbolo.');
+    }
+    const { hashPassword } = await import('./auth.js');
+    const pw = await hashPassword(String(valor));
+    await env.DB.prepare(
+      'UPDATE users SET pass_hash = ?, pass_salt = ?, sess_epoch = COALESCE(sess_epoch, 0) + 1 WHERE id = ?'
+    ).bind(pw.hash, pw.salt, u.id).run();
+    return 'palavra-passe definida — todas as sessões terminadas';
+  },
   /* Apagar de vez: o purge a sério, o mesmo do "apagar conta" na app e do
      RGPD — os dados vão-se, fica a lápide para as referências alheias.
      A confirmação é escrever o email da conta: apagar não pode estar à
@@ -368,6 +385,37 @@ export async function rotasEquipaApi(c) {
   }
 
   /* ---- procurar uma pessoa ---- */
+  /* Criar uma conta pelo back office: só o master, com motivo, e sem
+     nunca colidir — o email é único, e a resposta de uma colisão diz qual
+     é a conta que já lá está. Os termos ficam por aceitar de propósito:
+     quem entrar pela primeira vez aceita-os como toda a gente. */
+  if (path === '/api/equipa/pessoas' && method === 'POST') {
+    if (!eMaster(eu)) return err(403, 'Criar contas é só do master.');
+    const b = await body(request);
+    const email = String((b && b.email) || '').trim().toLowerCase();
+    const nome = String((b && b.nome) || '').trim().slice(0, 120);
+    const pass = String((b && b.password) || '');
+    const motivo = String((b && b.motivo) || '').trim().slice(0, 300);
+    if (motivo.length < 5) return err(400, 'Escreve o motivo — fica no rasto.');
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err(400, 'Esse email não parece um email.');
+    const { weakPassword } = await import('./lib/http.js');
+    if (weakPassword(pass)) return err(400, 'Palavra-passe fraca: 8+ caracteres, com maiúscula, minúscula, número e símbolo.');
+    const outro = await env.DB.prepare('SELECT id, deleted_at FROM users WHERE email = ?').bind(email).first();
+    if (outro) {
+      return err(409, 'Já existe uma conta com esse email: ' + outro.id + (outro.deleted_at ? ' (apagada — o email ficou na lápide?)' : '') + '.');
+    }
+    const registado = await auditar(env, eu, 'conta.criar', email, motivo);
+    if (!registado) return err(500, 'A auditoria não está a escrever — sem rasto não se criam contas.');
+    const { newUserId, hashPassword } = await import('./auth.js');
+    const pw = await hashPassword(pass);
+    const id = newUserId();
+    await env.DB.prepare(
+      'INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(id, email, nome || email.split('@')[0], pw.hash, pw.salt, now()).run();
+    await auditar(env, eu, 'conta.criar.feito', id, email);
+    return json({ id, email });
+  }
+
   if (path === '/api/equipa/pessoas' && method === 'GET') {
     if (cats.indexOf('user') < 0) return err(403, 'O teu papel não vê pessoas.');
     const q = (url.searchParams.get('q') || '').trim().slice(0, 80);
@@ -441,6 +489,37 @@ export async function rotasEquipaApi(c) {
   }
 
   /* ---- a sala das máquinas (quem vê a infraestrutura) ---- */
+  /* ---- endereços @rendorium.com (Email Routing do Cloudflare) ---- */
+  if (path === '/api/equipa/email' && method === 'GET') {
+    if (cats.indexOf('infra') < 0) return err(403, 'Os endereços são de quem vê a infraestrutura.');
+    if (!env.CF_EMAIL_TOKEN) return json({ semChave: true, master: eMaster(eu) });
+    const { listarEnderecos } = await import('./lib/enderecos.js');
+    try {
+      return json(Object.assign(await listarEnderecos(env), { master: eMaster(eu) }));
+    } catch (e) {
+      return err(502, String((e && e.message) || e));
+    }
+  }
+  if (path === '/api/equipa/email' && method === 'POST') {
+    if (!eMaster(eu)) return err(403, 'Criar endereços é só do master.');
+    if (!env.CF_EMAIL_TOKEN) return err(503, 'Falta o CF_EMAIL_TOKEN — vê as instruções no cartão dos endereços.');
+    const b = await body(request);
+    const pedidoNome = String((b && b.endereco) || '').trim();
+    const motivo = String((b && b.motivo) || '').trim().slice(0, 300);
+    if (motivo.length < 5) return err(400, 'Escreve o motivo — fica no rasto.');
+    const registado = await auditar(env, eu, 'email.criar', pedidoNome, motivo);
+    if (!registado) return err(500, 'A auditoria não está a escrever — sem rasto não se mexe no correio.');
+    const { criarEndereco } = await import('./lib/enderecos.js');
+    try {
+      const r = await criarEndereco(env, pedidoNome, b && b.destino);
+      await auditar(env, eu, 'email.criar.feito', r.email, '→ ' + r.destino);
+      return json(r);
+    } catch (e) {
+      await auditar(env, eu, 'email.criar.falhou', pedidoNome, String(e && e.message));
+      return err(400, String((e && e.message) || 'Não deu.'));
+    }
+  }
+
   if (path.startsWith('/api/equipa/operacao')) {
     if (cats.indexOf('infra') < 0) return err(403, 'A operação é de quem vê a infraestrutura.');
 
