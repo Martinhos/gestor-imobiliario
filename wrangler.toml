@@ -9,6 +9,9 @@ compatibility_date = "2026-08-01"
 # deploy cria os registos DNS sozinho. O endereço workers.dev continua a
 # servir: as instalações antigas (PWA e APK) apontam para lá e não podem
 # partir. A app canónica é app.; a raiz e o www servem a landing.
+# Definir routes desliga o workers.dev por omissão — e as instalações
+# antigas vivem lá. Fica ligado à mão, explicitamente.
+workers_dev = true
 routes = [
   { pattern = "app.rendorium.com", custom_domain = true },
   { pattern = "rendorium.com", custom_domain = true },
@@ -77,6 +80,7 @@ MAX_USERS = "2000"
 # ---------------------------------------------------------------------------
 [env.dev]
 name = "gestor-imobiliario-dev"
+workers_dev = true
 routes = [
   { pattern = "dev.rendorium.com", custom_domain = true },
 ]
