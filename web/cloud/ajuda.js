@@ -580,7 +580,18 @@ CW.doDeleteAccount = function () {
   var e = document.getElementById('cw_del_e');
   e.textContent = '';
   api('DELETE', '/api/me', { confirm: val('cw_del_c'), password: val('cw_del_p') })
-    .then(function () {
+    .then(function (r) {
+      /* numa conta de teste, o servidor entrega logo a próxima (a irmã do
+         mesmo dev, ou uma nova): troca-se em vez de cair no login */
+      if (r && r.proxima && r.proxima.token) {
+        try {
+          localStorage.setItem(LS_USER, JSON.stringify({
+            id: r.proxima.id, email: r.proxima.email, name: r.proxima.name, token: r.proxima.token,
+          }));
+        } catch (x) {}
+        location.reload();
+        return;
+      }
       // limpa tudo o que ficou neste aparelho
       CW.user = null;
       db = JSON.parse(JSON.stringify(blank));

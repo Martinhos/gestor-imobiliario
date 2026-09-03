@@ -251,6 +251,52 @@ describe('cada dev tem as suas contas', () => {
   });
 });
 
+describe('apagar uma conta de teste entrega logo a próxima', () => {
+  const apagar = (env, token) => handleApi(new Request('https://dev.x.pt/api/me', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ confirm: 'APAGAR' }),
+  }), env, { waitUntil() {} });
+
+  test('com irmã, troca para ela; sem nenhuma, cria e entra — sem pedir palavra-passe', async () => {
+    const env = ambiente();
+    const tA = tokenDe(await abrir(env, false, null, false, 'alice'));
+    const a1 = (await contas(env)).find((u) => !u.deleted_at);
+    const tB = tokenDe(await abrir(env, false, null, true, 'alice'));   // extra
+
+    // apagar a extra: aterra na irmã (a primeira), sem password nenhuma
+    const r1 = await (await apagar(env, tB)).json();
+    assert.ok(r1.proxima, 'veio a próxima');
+    assert.equal(r1.proxima.id, a1.id, 'a irmã mais recente do mesmo dono');
+    assert.ok(r1.proxima.token);
+
+    // apagar a última: cria-se uma nova na hora, do mesmo dono
+    const r2 = await (await apagar(env, r1.proxima.token)).json();
+    assert.ok(r2.proxima, 'mesmo sem irmãs há próxima');
+    assert.notEqual(r2.proxima.id, a1.id);
+    const nova = await env.DB.prepare('SELECT test_owner, pass_hash FROM users WHERE id = ?')
+      .bind(r2.proxima.id).first();
+    assert.equal(nova.test_owner, 'alice');
+    assert.equal(nova.pass_hash, '', 'sem palavra-passe de todo');
+    const eu = await (await handleApi(new Request('https://dev.x.pt/api/me', {
+      headers: { Authorization: 'Bearer ' + r2.proxima.token },
+    }), env, { waitUntil() {} })).json();
+    assert.equal(eu.id, r2.proxima.id, 'o token da próxima entra mesmo');
+  });
+
+  test('uma conta normal continua a exigir a palavra-passe para se apagar', async () => {
+    const env = ambiente();
+    const pw = await hashPassword('Descartavel1!');
+    await env.DB.prepare(
+      `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, terms_version, terms_at)
+       VALUES ('N7', 'gente@x.pt', 'G', ?, ?, 1, ?, 1)`
+    ).bind(pw.hash, pw.salt, TERMS_VERSION).run();
+    const t = await createSession(env, 'N7', 0);
+    const r = await apagar(env, t);
+    assert.equal(r.status, 401, 'sem palavra-passe não se apaga');
+  });
+});
+
 describe('sair de uma conta de teste NÃO apaga nada', () => {
   const sair = (env, token) => handleApi(
     new Request('https://dev.x.pt/api/auth/logout', {
