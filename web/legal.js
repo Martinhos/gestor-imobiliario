@@ -43,7 +43,7 @@ window.LEGAL = (function () {
   /* ---------------------- TERMOS E CONDIÇÕES ---------------------- */
 
   var TERMOS =
-    p('<b>Em vigor desde ' + VERSION + '.</b> Estes termos regulam a utilização do Gestor Imobiliário ' +
+    p('<b>Em vigor desde ' + VERSION + '.</b> Estes termos regulam a utilização do Rendorium ' +
       '(“a aplicação”), um serviço acessível em gestor-imobiliario.martinhos.workers.dev.') +
 
     h('1. Quem opera o serviço') +

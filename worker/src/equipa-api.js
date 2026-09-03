@@ -170,7 +170,7 @@ const ACOES_DE_CONTA = {
 };
 
 export async function rotasEquipaApi(c) {
-  const { env, request, path, method, url, eu } = c;
+  const { env, request, path, method, url, eu, ctx } = c;
   const cats = categoriasDe(eu);
   if (!cats.length) return err(403, 'O teu papel não vê pedidos.');
 
@@ -300,6 +300,18 @@ export async function rotasEquipaApi(c) {
       ).bind(estado, texto || null, agora, id));
       await env.DB.batch(ops);
       await auditar(env, eu, 'pedido.' + acao, id, texto ? cortar(texto, 120) : null);
+      /* a pessoa fica a saber por email que houve resposta — só nos pedidos
+         de pessoas: os tickets técnicos têm dono emprestado e um stack trace
+         não é correio para ninguém */
+      if (texto && t.category === 'user') {
+        const dono = await env.DB.prepare('SELECT email FROM users WHERE id = ? AND deleted_at IS NULL')
+          .bind(t.user_id).first();
+        if (dono && dono.email) {
+          const { emailRespostaPedido } = await import('./lib/correio.js');
+          const envio = emailRespostaPedido(env, dono.email, t.subject, texto);
+          if (ctx && ctx.waitUntil) ctx.waitUntil(envio); else await envio;
+        }
+      }
     }
 
     const novo = await env.DB.prepare('SELECT * FROM tickets WHERE id = ?').bind(id).first();

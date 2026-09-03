@@ -1,4 +1,6 @@
-# Gestor Imobiliário
+# Rendorium
+
+> Nome interno (worker, bases, repositório): `gestor-imobiliario` — não mudou de propósito: renomear infraestrutura viva é risco sem ganho.
 
 Versão web (PWA, multi-utilizador) da app Android de gestão de imóveis: imóveis, contratos,
 inquilinos, proprietários, movimentos, créditos à habitação, projeções e avaliação.
@@ -47,7 +49,8 @@ npx wrangler dev
 | | Produção | Dev |
 |---|---|---|
 | Ramo | `main` | `dev` |
-| Endereço | gestor-imobiliario.martinhos.workers.dev | gestor-imobiliario-dev.martinhos.workers.dev |
+| Endereço | app.rendorium.com (e o antigo workers.dev, que continua a servir as instalações feitas lá) | dev.rendorium.com (e o antigo workers.dev) |
+| Landing | rendorium.com e www — servida pelo worker (worker/src/landing.js) | — |
 | Base de dados | `gestor-imobiliario` | `gestor-imobiliario-dev` |
 | Contas | até 2000 | até 50 |
 | Entrada com Google | sim | não (o endereço não está autorizado na Google) |

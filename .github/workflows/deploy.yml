@@ -138,6 +138,7 @@ jobs:
           DISCORD_SUPORTE: ${{ secrets.DISCORD_SUPORTE }}
           DISCORD_SUPORTE_CHANNEL: ${{ secrets.DISCORD_SUPORTE_CHANNEL }}
           DISCORD_SUPORTE_WEBHOOK: ${{ secrets.DISCORD_SUPORTE_WEBHOOK }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           CF_ANALYTICS_TOKEN: ${{ secrets.CF_ANALYTICS_TOKEN }}
         run: |
           set -e
@@ -159,6 +160,7 @@ jobs:
           put DISCORD_SUPORTE "$DISCORD_SUPORTE"
           put DISCORD_SUPORTE_CHANNEL "$DISCORD_SUPORTE_CHANNEL"
           put DISCORD_SUPORTE_WEBHOOK "$DISCORD_SUPORTE_WEBHOOK"
+          put RESEND_API_KEY "$RESEND_API_KEY"
           # o resumo de consumo e os comandos de administração são só da produção
           if [ -n "$IS_PROD" ]; then
             put DISCORD_ADMIN_WEBHOOK "$DISCORD_ADMIN_WEBHOOK"

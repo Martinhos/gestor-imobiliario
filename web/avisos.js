@@ -56,6 +56,21 @@ var AVISOS = [
         ],
       },
       {
+        titulo: 'Recuperar a palavra-passe, e respostas por email',
+        afeta: ['conta', 'suporte'],
+        itens: [
+          '«Esqueci-me da palavra-passe» no ecrã de entrada: chega-te uma ligação por email, válida 1 hora, para definires uma nova — também serve a quem entra pela Google e quer ter palavra-passe.',
+          'Quando respondemos a um pedido de ajuda, recebes um email — deixa de ser preciso ir à app ver se já há resposta.',
+        ],
+      },
+      {
+        titulo: 'A app passou a chamar-se Rendorium',
+        afeta: ['app'],
+        itens: [
+          'Nome novo, casa nova: rendorium.com, com a app em app.rendorium.com. O endereço antigo continua a funcionar — nada muda para quem já a tem instalada.',
+        ],
+      },
+      {
         titulo: 'Filtros comuns, datas e perguntas frequentes',
         afeta: ['app', 'movimentos'],
         itens: [

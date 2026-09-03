@@ -232,7 +232,7 @@ export async function dailyReport(env, ctx) {
   });
   const payload = {
     embeds: [{
-      title: '📊 Gestor Imobiliário · consumo diário',
+      title: '📊 Rendorium · consumo diário',
       color: cor,
       fields,
       timestamp: new Date().toISOString(),

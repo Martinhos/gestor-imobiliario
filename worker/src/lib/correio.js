@@ -1,0 +1,106 @@
+/* O correio do Rendorium, pelo Resend.
+   ------------------------------------
+   Três remetentes, três papéis:
+
+   no-reply@rendorium.com   o que a máquina diz sozinha (reset de password,
+                            avisos) — com Reply-To para o support, porque
+                            as pessoas respondem na mesma e alguém tem de ler
+   support@rendorium.com    respostas a pedidos de ajuda
+   general@rendorium.com    o resto (contacto, anúncios)
+
+   Sem RESEND_API_KEY definido, tudo isto é um no-op que diz que não enviou
+   — a app funciona na mesma, como sempre foi a regra com o Discord. Fora
+   de produção o assunto leva o prefixo do ambiente, para um teste nunca
+   se confundir com um email a sério. */
+
+const DOMINIO = 'rendorium.com';
+export const REMETENTES = {
+  maquina: { de: 'Rendorium <no-reply@' + DOMINIO + '>', responderA: 'support@' + DOMINIO },
+  suporte: { de: 'Rendorium <support@' + DOMINIO + '>', responderA: 'support@' + DOMINIO },
+  geral: { de: 'Rendorium <general@' + DOMINIO + '>', responderA: 'general@' + DOMINIO },
+};
+
+/* O molde de todos os emails: simples, com a cara da app, e sempre com a
+   versão em texto — há caixas de correio que só mostram isso. */
+export function molde(titulo, corpoHtml, rodape) {
+  return `<!doctype html><html lang="pt"><body style="margin:0;padding:0;background:#f4f6f4">
+  <div style="max-width:520px;margin:0 auto;padding:28px 18px;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a231e">
+    <div style="font-weight:800;font-size:17px;margin-bottom:18px">
+      <span style="display:inline-block;width:26px;height:26px;border-radius:8px;background:#244c3b;color:#fff;text-align:center;line-height:26px;margin-right:8px">R</span>Rendorium</div>
+    <div style="background:#fff;border:1px solid #e3e9e4;border-radius:14px;padding:22px 24px">
+      <h1 style="font-size:18px;margin:0 0 12px">${titulo}</h1>
+      <div style="font-size:14.5px;line-height:1.65">${corpoHtml}</div>
+    </div>
+    <div style="font-size:12px;color:#5c6862;margin-top:14px;line-height:1.6">${rodape ||
+      'Recebeste este email porque tens uma conta no Rendorium. Se não foste tu, ignora — nada acontece sem o teu clique.'}</div>
+  </div></body></html>`;
+}
+
+export async function enviarEmail(env, { para, assunto, html, texto, remetente }) {
+  if (!env.RESEND_API_KEY) return { enviado: false, motivo: 'sem RESEND_API_KEY' };
+  if (!para || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(para))) {
+    return { enviado: false, motivo: 'destinatário inválido' };
+  }
+  const quem = REMETENTES[remetente || 'maquina'] || REMETENTES.maquina;
+  const prefixo = env.ENV_NAME ? '[' + env.ENV_NAME + '] ' : '';
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + env.RESEND_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: quem.de,
+        to: [String(para)],
+        reply_to: quem.responderA,
+        subject: prefixo + String(assunto).slice(0, 200),
+        html: html || undefined,
+        text: texto || undefined,
+      }),
+    });
+    if (!r.ok) {
+      const corpo = await r.text().catch(() => '');
+      return { enviado: false, motivo: 'resend ' + r.status + ': ' + corpo.slice(0, 200) };
+    }
+    return { enviado: true };
+  } catch (e) {
+    return { enviado: false, motivo: String((e && e.message) || e) };
+  }
+}
+
+/* -------------------- os emails concretos que a app manda ---------------- */
+
+export async function emailReporPassword(env, para, ligacao) {
+  return enviarEmail(env, {
+    para,
+    remetente: 'maquina',
+    assunto: 'Repor a tua palavra-passe',
+    texto: 'Para definires uma palavra-passe nova, abre esta ligação (vale 1 hora, uma só vez):\n\n' +
+      ligacao + '\n\nSe não pediste isto, ignora este email — nada muda sem o teu clique.',
+    html: molde('Repor a tua palavra-passe',
+      `<p style="margin:0 0 14px">Pediste para repor a palavra-passe da tua conta. A ligação vale
+       <b>1 hora</b> e serve <b>uma vez</b>:</p>
+       <p style="margin:0 0 14px"><a href="${ligacao}" style="display:inline-block;background:#244c3b;color:#fff;
+       text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600">Definir palavra-passe nova</a></p>
+       <p style="margin:0;color:#5c6862;font-size:13px">Se o botão não abrir, copia a ligação:<br>${ligacao}</p>`),
+  });
+}
+
+export async function emailRespostaPedido(env, para, assunto, resposta) {
+  const seguro = String(resposta || '').slice(0, 1500)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+  return enviarEmail(env, {
+    para,
+    remetente: 'suporte',
+    assunto: 'Respondemos ao teu pedido: ' + String(assunto || '').slice(0, 120),
+    texto: 'Respondemos ao teu pedido «' + assunto + '»:\n\n' + resposta +
+      '\n\nPodes ver e responder na app, em Definições → Ajuda e sugestões.',
+    html: molde('Respondemos ao teu pedido',
+      `<p style="margin:0 0 10px;color:#5c6862">${String(assunto || '').replace(/</g, '&lt;')}</p>
+       <div style="background:#f0f5f1;border-radius:10px;padding:14px 16px;margin:0 0 14px">${seguro}</div>
+       <p style="margin:0">Podes ver o histórico e responder na app, em
+       <b>Definições → Ajuda e sugestões</b>.</p>`,
+      'Recebeste este email porque escreveste um pedido de ajuda no Rendorium. Responder a este email também funciona — cai na nossa caixa de suporte.'),
+  });
+}

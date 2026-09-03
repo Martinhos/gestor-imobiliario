@@ -233,6 +233,15 @@ async function mudarEstado(env, ref, estado, resposta, quem) {
     { discordId: (quem && quem.id) || 'discord', nome: (quem && quem.nome) || '', papeis: [(quem && quem.papel) || 'bot'] },
     'pedido.' + (estado === 'concluido' ? 'fechar' : resposta ? 'responder' : 'estado'),
     t.id, resposta ? String(resposta).slice(0, 120) : estado);
+  // responder pelo Discord também avisa a pessoa por email (só pedidos de gente)
+  if (resposta && t.category === 'user') {
+    const dono = await env.DB.prepare('SELECT email FROM users WHERE id = ? AND deleted_at IS NULL')
+      .bind(t.user_id).first();
+    if (dono && dono.email) {
+      const { emailRespostaPedido } = await import('./lib/correio.js');
+      await emailRespostaPedido(env, dono.email, t.subject, resposta);
+    }
+  }
   return Object.assign({}, t, { status: estado, reply: resposta || t.reply });
 }
 
