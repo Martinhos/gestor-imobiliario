@@ -132,7 +132,7 @@ jobs:
           DISCORD_PUBLIC_KEY: ${{ secrets.DISCORD_PUBLIC_KEY }}
           DISCORD_DEV_CHANNEL: ${{ secrets.DISCORD_DEV_CHANNEL }}
           DISCORD_ADMIN_CHANNEL: ${{ secrets.DISCORD_ADMIN_CHANNEL }}
-          DISCORD_MASTER: ${{ secrets.DISCORD_MASTER }}
+          DISCORD_MASTER: ${{ secrets.DISCORD_MASTERS || secrets.DISCORD_MASTER }}
           DISCORD_ADMINS: ${{ secrets.DISCORD_ADMINS }}
           DISCORD_DEVS: ${{ secrets.DISCORD_DEVS }}
           DISCORD_SUPORTE: ${{ secrets.DISCORD_SUPORTE }}
@@ -166,7 +166,9 @@ jobs:
           if [ -n "$IS_PROD" ]; then
             put DISCORD_ADMIN_WEBHOOK "$DISCORD_ADMIN_WEBHOOK"
             put DISCORD_ADMIN_CHANNEL "$DISCORD_ADMIN_CHANNEL"
-            put CF_ANALYTICS_TOKEN "${CF_ANALYTICS_TOKEN:-$CLOUDFLARE_API_TOKEN}"
+            # sem fallback para o token de deploy: um token com poder sobre a
+            # conta inteira nunca entra no runtime de um worker
+            put CF_ANALYTICS_TOKEN "$CF_ANALYTICS_TOKEN"
             # escreve no Email Routing do dominio REAL: nunca no worker de dev,
             # que corre codigo ainda nao promovido
             put CF_EMAIL_TOKEN "$CF_EMAIL_TOKEN"
