@@ -71,7 +71,10 @@ describe('o filtro por funcionalidade', () => {
   });
 
   test('uma funcionalidade sem novidades não mostra nada', () => {
-    assert.deepEqual(paraQuemTem(['creditos']), []);
+    /* uma chave inventada, de propósito: usar uma funcionalidade real
+       ('creditos') partiu no dia em que ela ganhou novidades — o teste
+       validava o estado do momento, não a regra */
+    assert.deepEqual(paraQuemTem(['__sem_novidades__']), []);
   });
 
   test('sem funcionalidade nenhuma não se vê nada', () => {

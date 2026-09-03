@@ -1,4 +1,4 @@
-// Worker do Gestor Imobiliário: /api/* vai para a API (D1 + KV);
+// Worker do Rendorium (nome interno: gestor-imobiliario): /api/* vai para a API (D1 + KV);
 // tudo o resto é servido pelos assets estáticos (a PWA em web/).
 
 import { handleApi, recordReport } from './api.js';
@@ -60,8 +60,16 @@ export default {
     // a cópia e o resumo são o trabalho pesado e ficam uma vez por dia.
     const diario = String(event.cron || '').startsWith('0 9 ');
     ctx.waitUntil((async () => {
+      /* Cada execução deixa uma linha no op_log. O alarme não é uma linha
+         com erro — é a ausência de linhas novas, que era o que ninguém via
+         quando o cron morria de todo. */
+      const { registarOp } = await import('./lib/auditoria.js');
       if (!diario) {
-        try { await watchLimits(env, ctx); } catch (e) {
+        try {
+          await watchLimits(env, ctx);
+          await registarOp(env, 'vigia', true);
+        } catch (e) {
+          await registarOp(env, 'vigia', false, String((e && e.message) || e));
           await recordReport(env, ctx, 'infra', 'Vigia dos limites falhou',
             String((e && e.stack) || (e && e.message) || e).slice(0, 800));
         }
@@ -69,17 +77,44 @@ export default {
       }
       try {
         const r = await copiar(env);
+        await registarOp(env, 'copia', !r.erro, JSON.stringify(r).slice(0, 490));
         if (r.erro) await recordReport(env, ctx, 'infra', 'Cópia de segurança falhou', r.erro);
       } catch (e) {
+        await registarOp(env, 'copia', false, String((e && e.message) || e));
         await recordReport(env, ctx, 'infra', 'Cópia de segurança falhou',
           String((e && e.stack) || (e && e.message) || e).slice(0, 800));
       }
-      await dailyReport(env, ctx);
+      // o resultado é o do envio a sério: um resumo que não chegou a lado
+      // nenhum registado como verde era o batimento a mentir
+      let entregue = null;
+      try { entregue = await dailyReport(env, ctx); } catch (e) { entregue = false; }
+      await registarOp(env, 'resumo', entregue !== false,
+        entregue === null ? 'sem canal configurado' : null);
     })());
   },
 
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    /* O domínio raiz é a montra; a app vive em app.rendorium.com. Quem
+       chegar a rendorium.com vê a landing, e qualquer outro caminho na
+       raiz é reencaminhado para a app — os endereços antigos (workers.dev)
+       continuam a servir a app diretamente, porque as instalações feitas
+       lá não podem partir. */
+    if (url.hostname === 'rendorium.com' || url.hostname === 'www.rendorium.com') {
+      if (url.pathname === '/') {
+        const { paginaLanding } = await import('./landing.js');
+        return harden(paginaLanding());
+      }
+      return Response.redirect('https://app.rendorium.com' + url.pathname + url.search, 302);
+    }
+
+    /* A porta do ambiente de teste (/test no Discord ou o botão na
+       Operação). Fora de produção, só: lá dentro a rota diz que não. */
+    if (url.pathname === '/t/entrar' && request.method === 'GET') {
+      const { rotaTeste } = await import('./teste.js');
+      return harden(await rotaTeste({ env, url, request }));
+    }
 
     // Interações do bot do Discord. A autenticação é a assinatura Ed25519
     // que o Discord envia — não há sessão nem cookies aqui.

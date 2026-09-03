@@ -125,7 +125,6 @@ export async function purgeAccount(env, uid) {
       ).bind(now(), uid)
     );
     await env.DB.batch(stmts);
-  await env.DB.batch(stmts);
 }
 
 // Guarda um erro e avisa quem programa. Erros repetidos agrupam-se, para o

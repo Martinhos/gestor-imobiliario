@@ -23,11 +23,23 @@ function anaClear(){
 const ANA_N=()=>tab==='dashboard'?((ownerFilter?1:0)+(dashProp?1:0))
   :tab==='projections'?((ownerFilter?1:0)+(projProp?1:0))
   :tab==='reports'?((ownerFilter?1:0)+(repProp?1:0)):0;
-function anaPanel(inner){return `<div class="fwrap" style="height:0"><div class="fpanel ${anaOpen[tab]?'on':''}" style="top:0"><div class="card" style="padding:12px">${inner}
+function anaPanel(inner){return `<div class="fwrap" style="height:0"><div class="fpanel ${anaOpen[tab]?'on':''}" style="top:0"><div class="card" style="padding:12px">
+  ${typeof fcSelector==='function'?fcSelector():''}${inner}
   <div class="toolbar" style="margin:12px 0 0">
-    <button class="btn primary" onclick="anaApply()">${ic('check',15)} Aplicar</button>
     <button class="btn" onclick="anaClear()">${ic('x',15)} Limpar</button>
+    <button class="btn primary" onclick="anaApply()">${ic('check',15)} Fechar</button>
   </div></div></div></div>`}
+/* Cartões e afins são divs com onclick: sem isto, o teclado não chega a
+   nenhuma lista — nem um leitor de ecrã os anuncia como acionáveis. Corre
+   depois de cada render e de cada fillModal. */
+function tornarFocavel(raiz){
+  if(!raiz)return;
+  [].slice.call(raiz.querySelectorAll('[onclick]')).forEach(e=>{
+    if(/^(A|BUTTON|INPUT|SELECT|TEXTAREA|LABEL)$/.test(e.tagName))return;
+    if(!e.hasAttribute('tabindex'))e.setAttribute('tabindex','0');
+    if(!e.hasAttribute('role'))e.setAttribute('role','button');
+  });
+}
 function render(){
   const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
   document.getElementById('pageTitle').textContent=meta.label;
@@ -41,6 +53,15 @@ function render(){
     transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
   view().innerHTML=html;
+  /* A visão geral era o único ecrã sem criação rápida: registar uma renda
+     avulsa custava quatro toques de viagem. Entra aqui, depois do painel
+     rearranjar os cartões, para não virar um cartão arrastável. */
+  if(tab==='dashboard'&&!view().querySelector('.fab')){
+    view().insertAdjacentHTML('beforeend',
+      '<div style="text-align:center;margin:2px 0 0"><button type="button" class="btn sm" onclick="window.CW&&CW.enterEdit&&CW.enterEdit()">'+ic('grip',13)+' Personalizar painel</button></div>'+
+      fab([{act:'newTxPick()',label:'Novo movimento'}])+'<div class="fabpad"></div>');
+  }
+  tornarFocavel(view());
   if(tab==='properties')db.properties.forEach(p=>paintThumbs(p.photos,view()));
 }
 let kpiN=0;const KPI_REG={};
@@ -316,11 +337,11 @@ function vProperties(){
       <div class="chips">
         <span class="badge ${st.badge}">${st.label}</span>
         ${p.use==='investimento'?`<span class="badge grey">${p.rentalMode==='quartos'?'Por quartos':'Imóvel inteiro'}</span>`:''}
-        ${rent?`<span class="badge">${euro(rent)}/mês</span>`:''}
+        ${rent?`<span class="badge">${euroS(rent)}/mês</span>`:''}
         ${isFinite(y)?`<span class="badge">Yield ${pct(y)}</span>`:''}
         <span class="badge grey">Valor ${euro(p.value)}</span>
         ${ls.length?`<span class="badge amber">Dívida ${euro(debtOf(p))}${ls.length>1?' · '+ls.length+' hipotecas':''}</span>`:''}
-        ${propDebt(p.id)>0.005?`<span class="badge red">${ic('users',12)} ${euro(propDebt(p.id))} entre donos</span>`:''}
+        ${propDebt(p.id)>0.005?`<span class="badge red">${ic('users',12)} ${euro(propDebt(p.id))} entre proprietários</span>`:''}
         ${(p.photos||[]).length?`<span class="badge grey">${ic('photo',12)} ${p.photos.length}</span>`:''}</div>
       ${ac.length?`<div class="small" style="margin-top:10px">${ac.map(c2=>`${c2.roomId?esc(roomName(p,c2.roomId))+': ':''}${esc(ctNames(c2))} · ${euro(c2.rent)}`).join('<br>')}</div>`:''}
       ${ls.length?`<div class="small" style="margin-top:9px">${ls.map(l=>`${esc(loanName(l))} · ${RATE[l.type]} · ${euro2(loanCalc(l).total)}/mês${(l.files||[]).length?' · '+l.files.length+' doc.':''}`).join('<br>')}
@@ -347,7 +368,7 @@ function vContracts(){
     const cs=lfSort(K,contractsOf(p.id).filter(c=>ctFMatch(c,s)),{nome:c=>ctName(c),renda:c=>c.rent,inicio:c=>c.start||''});if(!cs.length)return '';
     any=true;
     return `<div class="section-title" style="display:flex;justify-content:space-between;text-transform:none">
-      <span>${esc(p.name)}</span><span>${euro(rentOf(p))}/mês</span></div>
+      <span>${esc(p.name)}</span><span>${euroS(rentOf(p))}/mês</span></div>
       <div class="list">${cs.map(c=>{
         const on=isActive(c),ts=ctTenants(c);
         return `<div class="card tap" data-lp="ct:${esc(c.id)}" onclick="ctModal('${jsq(c.id)}')">
@@ -367,7 +388,7 @@ function vContracts(){
           ${(c.files||[]).length?`<span class="badge grey">${ic('clip',12)} ${c.files.length}</span>`:''}
           ${(c.inventory||[]).length?`<span class="badge grey">${ic('box',12)} ${c.inventory.length} artigos</span>`:''}</div>
 </div>`}).join('')}</div>`}).join('');
-  return head+(any?body:`<div class="empty"><b>Nada neste filtro</b></div>`);
+  return head+(any?body:`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`);
 }
 function ctFMatch(c,s){
   if(s.p&&c.propertyId!==s.p)return false;
@@ -409,7 +430,7 @@ function vTenants(){
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'contratos',label:'Ordenar por nº de contratos'},{v:'renda',label:'Ordenar por renda'}]})
     +fab([{label:'Adicionar inquilino',act:"personModal('tenant')"}]);
   if(!db.tenants.length)return head+`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.</div>`;
-  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b></div>`;
+  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   return head+`<div class="list">${list.map(t=>personCard(t,'tenant')).join('')}</div>`;
 }
 function vOwners(){
@@ -427,11 +448,16 @@ function vOwners(){
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'imoveis',label:'Ordenar por nº de imóveis'}]})
     +fab([{label:'Adicionar proprietário',act:"personModal('owner')"}]);
   if(!db.owners.length)return head+`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.</div>`;
-  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b></div>`;
+  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   return head+`<div class="list">${list.map(o=>personCard(o,'owner')).join('')}</div>`;
 }
 
 function txFilterCount(){
+  // as datas contam como UM filtro, tenham uma ponta ou as duas
+  const datas=(txDe||txAte)?1:0;
+  return datas+txFilterCountSem();
+}
+function txFilterCountSem(){
   return (txFilter?1:0)+(txProp?1:0)+(txPaid?1:0)+(ownerFilter?1:0)+(txCat?1:0)+(txSub?1:0)+(txNoPayer?0:1);
 }
 /* pesquisa por palavras e por frases entre aspas, sem ligar a acentos */
@@ -473,10 +499,14 @@ function txMatch(t){
   else if(txCat&&t.category!==txCat)return false;
   if(txSub==='__none__'){if(t.sub)return false}
   else if(txSub&&t.sub!==txSub)return false;
+  // entre datas: as ISO comparam-se como texto, e vazio é "sem limite"
+  if(txDe&&t.date<txDe)return false;
+  if(txAte&&t.date>txAte)return false;
   return true;
 }
 function filterSummary(){
   const p=[];
+  if(txDe||txAte)p.push(txDe&&txAte?txDe+' → '+txAte:txDe?'desde '+txDe:'até '+txAte);
   if(txFilter)p.push((KIND[txFilter]||{}).short||txFilter);
   if(txProp==='__none__')p.push('sem imóvel');
   else if(String(txProp||'').startsWith('g:'))p.push('grupo '+((grp(txProp.slice(2))||{}).name||''));
@@ -526,12 +556,13 @@ function txRerender(){
 function txFilterBody(){
   const kinds=[['','Todos os tipos'],['income','Receitas'],['expense','Despesas'],['loan','Pagamentos de crédito'],['debt','Dívidas'],['settle','Transferências entre proprietários']];
   const props=[{v:'',label:'Todos os imóveis'},{v:'__none__',label:'Sem imóvel atribuído'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
-  const payers=[{v:'',label:'Qualquer pessoa'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
+  const payers=[{v:'',label:'Qualquer proprietário'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
   const owners=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')));
   const tree=allCats(txFilter==='debt'?'expense':txFilter),catOpts=[{v:'',label:'Todas as categorias'},{v:'__none__',label:'Sem categoria'}].concat(Object.keys(tree).map(c=>({v:c,label:c})));
   const subsF=txCat&&txCat!=='__none__'?(tree[txCat]||[]):[];
   const subOpts=[{v:'',label:'Todas as subcategorias'},{v:'__none__',label:'Sem subcategoria'}].concat(subsF.map(x=>({v:x,label:x})));
   return `<div class="form">
+    ${typeof fcSelector==='function'?fcSelector():''}
     <div class="qwrap"><input id="tx_q" class="txq" type="search" value="${esc(txSearch)}" placeholder="Pesquisar…" autocomplete="off"
       oninput="onTxSearch(this.value);this.nextElementSibling.style.display=this.value?'':'none'">
       <button class="qclear" style="display:${txSearch?'':'none'}" onclick="const i=this.previousElementSibling;i.value='';onTxSearch('');this.style.display='none';i.focus()">✕</button></div>
@@ -542,13 +573,15 @@ function txFilterBody(){
     ${db.owners.length?`<label>Proprietário${sel('txOwnerF',ownerFilter,owners,'onTxOwner')}</label>
     <label>Pago / recebido por${sel('txPaidF',txPaid,payers,'onTxPaid')}</label>
     <label class="check"><input type="checkbox" id="txNoPayer" ${txNoPayer?'checked':''} onchange="onTxNoPayer()"> Incluir movimentos sem pessoa atribuída</label>`:''}
+    <div class="row lado-a-lado"><label>De<input id="txDeF" type="date" value="${txDe}" onchange="onTxDatas()"></label>
+      <label>Até<input id="txAteF" type="date" value="${txAte}" onchange="onTxDatas()"></label></div>
     <div class="row"><label>Ordenar por${sel('txSortF',txSort,[{v:'date',label:'Data'},{v:'amount',label:'Valor'}],'onTxSort')}</label>
       <label>Ordem${sel('txDirF',txDir,[{v:'desc',label:'Descendente'},{v:'asc',label:'Ascendente'}],'onTxDir')}</label></div>
     <div class="hint">${txFilterCount()?filterSummary()+' · '+db.transactions.filter(txMatch).length+' movimentos':'Sem filtros: a lista mostra tudo.'}</div></div>`;
 }
 function onTxSort(){txSort=val('txSortF')||'date';txRerender()}
 function onTxDir(){txDir=val('txDirF')||'desc';txRerender()}
-function txFilterFoot(){return `${txFilterCount()?`<button class="btn danger" onclick="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" onclick="closeModal()">Ver movimentos</button>`}
+function txFilterFoot(){return `${txFilterCount()?`<button class="btn" onclick="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" onclick="closeModal()">${ic('check',15)} Fechar</button>`}
 function txFilterModal(){openModal('Filtros',txFilterBody(),txFilterFoot())}
 function onTxProp(){txProp=val('txPropF')||'';txRerender()}
 function onTxOwner(){ownerFilter=val('txOwnerF')||'';txProp='';txRerender()}
@@ -556,15 +589,32 @@ function onTxPaid(){txPaid=val('txPaidF')||'';txRerender()}
 function onTxCat(){txCat=val('txCatF')||'';txSub='';txRerender()}
 function onTxSub(){txSub=val('txSubF')||'';txRerender()}
 function onTxNoPayer(){txNoPayer=chk('txNoPayer');txRerender()}
-function clearTxFilters(){txFilter='';txProp='';txPaid='';txCat='';txSub='';ownerFilter='';txNoPayer=true;txSearch='';closePops();txRerender()}
+function onTxDatas(){
+  txDe=val('txDeF')||'';txAte=val('txAteF')||'';
+  if(txDe&&txAte&&txAte<txDe){const x=txDe;txDe=txAte;txAte=x}   // trocadas endireitam-se
+  txRerender();
+}
+function clearTxFilters(){txFilter='';txProp='';txPaid='';txCat='';txSub='';ownerFilter='';txNoPayer=true;txSearch='';txDe='';txAte='';closePops();txRerender()}
 /* ================= FILTROS DAS LISTAS =================
    Pesquisa por texto + seletores no topo de cada página de registos, ao estilo dos movimentos. */
 let listF={};
 const lf=k=>listF[k]||(listF[k]={});
-function lfSearch(k,v){lfState(k).q=v}
+let _lqT=null;
+function lfSearch(k,v){
+  clearTimeout(_lqT);
+  _lqT=setTimeout(()=>{lf(k).q=v;render();
+    const i=document.getElementById('lq_'+k);
+    if(i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}}},280);
+}
+/* limpa o filtro do separador atual, seja ele qual for — para o botão dos
+   estados vazios não ter de saber onde está */
+function limparFiltroAtual(){
+  if(typeof LFK!=='undefined'&&LFK[tab])return lfClear(LFK[tab]);
+  if(tab==='transactions'&&typeof clearTxFilters==='function')return clearTxFilters();
+  if(typeof anaClear==='function')anaClear();
+}
 function lfClear(k){
   const s=lf(k);listF[k]={_open:s._open};
-  if(lfDraft&&lfDraftK===k)lfDraft={};
   if(k==='lprops')ownerFilter='';
   closePops();render();
 }
@@ -575,25 +625,21 @@ function lfHit(k,hay){const q=String(lf(k).q||'');if(!q.trim())return true;
   const h=deacc(hay),terms=[];
   q.replace(/"([^"]*)"/g,(m,ph)=>{if(ph.trim())terms.push(deacc(ph.trim()));return ' '}).split(/\s+/).forEach(w=>{if(w)terms.push(deacc(w))});
   for(const t of terms)if(h.indexOf(t)<0)return false;return true}
-/* seleções em rascunho: só entram em vigor ao tocar em Aplicar */
-let lfDraft=null,lfDraftK='';
-const lfState=k=>(lf(k)._open&&lfDraft&&lfDraftK===k)?lfDraft:lf(k);
+/* Os três painéis de filtro tinham três feitios: rascunho com Aplicar nas
+   listas, aplicação imediata no modal dos movimentos, imediata com um botão
+   chamado «Aplicar» nas análises. Fica UM modelo mental: mexes, a lista
+   muda logo atrás; «Limpar» à esquerda, «Fechar» primário à direita, em
+   todo o lado. O rascunho foi-se com a razão de ser dele. */
 function lfSel(k,key,opts){
   const id='lfsel_'+k+'_'+key,fn='onlf_'+k+'_'+key;
-  window[fn]=()=>{lfState(k)[key]=val(id)||''};
-  return `<div style="width:100%">${sel(id,lfState(k)[key]||'',opts,fn)}</div>`;
+  window[fn]=()=>{lf(k)[key]=val(id)||'';if(k==='lprops')ownerFilter=lf(k).own||'';render()};
+  return `<div style="width:100%">${sel(id,lf(k)[key]||'',opts,fn)}</div>`;
 }
 function lfToggle(k){
-  const s=lf(k);
-  if(s._open){s._open=false;lfDraft=null}
-  else{s._open=true;lfDraftK=k;lfDraft=Object.assign({},s);delete lfDraft._open}
-  render();
+  const s=lf(k);s._open=!s._open;render();
 }
 function lfApply(k){
-  const d=Object.assign({},lfDraft||{},{_open:false});
-  listF[k]=d;lfDraft=null;
-  if(k==='lprops')ownerFilter=d.own||'';
-  closePops();render();
+  lf(k)._open=false;closePops();render();
 }
 /* o dropdown de filtros (aberto pelo botão do cabeçalho) inclui a pesquisa no topo */
 function lfBar(k,sels,found,sorts){
@@ -602,14 +648,15 @@ function lfBar(k,sels,found,sorts){
       ${lfSel(k,'sb',[{v:'',label:sorts.defLabel||'Ordem original'}].concat(sorts.opts))}
       ${lfSel(k,'sd',[{v:'',label:'Ascendente'},{v:'desc',label:'Descendente'}])}</div>`:'';
   return `<div class="fwrap" style="height:0"><div class="fpanel ${s._open?'on':''}" style="top:0"><div class="card" style="padding:12px">
-    <div class="qwrap"><input id="lq_${k}" class="txq" type="search" value="${esc(lfState(k).q||'')}" placeholder="Pesquisar…" autocomplete="off"
+    ${k==='lprops'&&typeof fcSelector==='function'?fcSelector():''}
+    <div class="qwrap"><input id="lq_${k}" class="txq" type="search" value="${esc(lf(k).q||'')}" placeholder="Pesquisar…" autocomplete="off"
       oninput="lfSearch('${k}',this.value);this.nextElementSibling.style.display=this.value?'':'none'">
-      <button class="qclear" style="display:${(lfState(k).q||'')?'':'none'}" onclick="const i=this.previousElementSibling;i.value='';lfSearch('${k}','');this.style.display='none';i.focus()">✕</button></div>
+      <button class="qclear" style="display:${(lf(k).q||'')?'':'none'}" onclick="const i=this.previousElementSibling;i.value='';lfSearch('${k}','');this.style.display='none';i.focus()">✕</button></div>
     <div style="display:flex;flex-direction:column;gap:9px;margin-top:9px">${sels.join('')}</div>
     ${sortRow}
     <div class="toolbar" style="margin:12px 0 0">
-      <button class="btn primary" onclick="lfApply('${k}')">${ic('check',15)} Aplicar</button>
       <button class="btn" onclick="lfClear('${k}')">${ic('x',15)} Limpar</button>
+      <button class="btn primary" onclick="lfApply('${k}')">${ic('check',15)} Fechar</button>
     </div>
   </div></div></div>
   ${n?`<div class="small" style="margin:2px 0 10px">${found} resultado${found===1?'':'s'} com os filtros ativos${String(s.q||'').trim()?' · pesquisa: “'+esc(s.q.trim())+'”':''}.</div>`:''}`;
@@ -658,7 +705,7 @@ function vTransactions(){
   const list=db.transactions.filter(txMatch).sort((a,b)=>{const d=txDir==='desc'?-1:1;
     if(txSort==='amount')return d*((a.amount||0)-(b.amount||0))||String(a.date).localeCompare(String(b.date));
     return d*String(a.date).localeCompare(String(b.date))});
-  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b></div>`
+  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`
     +balancesCard(txProp||null);   /* pode não haver movimentos e haver contas por acertar */
   const tot={income:0,expense:0,loan:0,owed:0,repay:0,settle:0};list.forEach(t=>{if(countsInTotals(t))tot[t.kind]=(tot[t.kind]||0)+t.amount});
   const saldo=tot.income+tot.owed-tot.expense-tot.loan-tot.repay;
@@ -694,7 +741,7 @@ function vTransactions(){
           ${t.kind==='loan'&&(t.principal||t.interest||t.fee)?`<div class="small">${t.payType==='amortizacao'?`Amortização · capital ${euro2(t.principal||0)} · comissão ${euro2(t.fee||0)}`:`Capital ${euro2(t.principal||0)} · juros ${euro2(t.interest||0)} · selo ${euro2(t.stamp||0)}`}</div>`:''}
           ${(!countsInTotals(t)||(t.tags||[]).length)?`<div class="chips">${countsInTotals(t)?'':'<span class="badge grey">fora dos totais</span>'}${(t.tags||[]).map(g=>`<span class="badge grey">${esc(g)}</span>`).join('')}</div>`:''}</div>
         <div style="text-align:right;flex:0 0 auto"><div class="${k.color}" style="font-weight:750${t.kind==='settle'?';color:var(--muted)':''}">${k.sign}${euro2(t.amount)}</div>
-          ${t.notes?`<div class="small" style="margin-top:3px">${ic('contract',12)}</div>`:''}</div>
+          ${t.notes?`<div class="small" style="margin-top:3px" title="Tem comentários">${ic('pen',12)}</div>`:''}</div>
       </div></div>`}).join('')}</div>`}).join('');
 }
 function onTxFilter(){txFilter=val('txKind')||'';txCat='';txSub='';txRerender()}

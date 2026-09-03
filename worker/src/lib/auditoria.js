@@ -1,0 +1,51 @@
+/* Rasto do que a equipa faz e do que as máquinas fazem.
+   ----------------------------------------------------
+   Duas tabelas, duas perguntas:
+
+   audit_log — quem fez o quê sobre quem, e porquê. Escreve-se em cada ação
+   do back office e nunca se altera nem se apaga: no primeiro desentendimento
+   sobre "quem mudou isto?", ou o registo existe ou já não se reconstrói.
+
+   op_log — as operações agendadas deixam uma linha por execução. O alarme
+   não é uma linha com erro: é a ausência de linhas novas, que era o que
+   ninguém via quando o cron morria de todo. */
+
+import { now } from './http.js';
+
+// Nunca lança: a auditoria não pode ser o motivo de uma ação falhar. Mas
+// também não engole em silêncio — devolve se escreveu, e quem chama uma
+// ação sensível pode recusar-se a agir sem rasto.
+export async function auditar(env, eu, acao, alvo, detalhe) {
+  try {
+    await env.DB.prepare(
+      'INSERT INTO audit_log (at, quem, nome, papel, acao, alvo, detalhe) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      now(),
+      String((eu && eu.discordId) || '?'),
+      String((eu && eu.nome) || ''),
+      ((eu && eu.papeis) || [(eu && eu.papel)]).filter(Boolean).join('+'),
+      String(acao),
+      alvo == null ? null : String(alvo),
+      detalhe == null ? null : String(detalhe).slice(0, 500)
+    ).run();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Uma linha por execução de uma operação agendada (ou manual). A poda dos
+// registos velhos vai de caminho: 90 dias chegam para ver tendências, e uma
+// tabela de batimentos não pode crescer para sempre.
+export async function registarOp(env, op, ok, detalhe) {
+  try {
+    const t = now();
+    await env.DB.prepare(
+      'INSERT INTO op_log (op, at, ok, detalhe) VALUES (?, ?, ?, ?)'
+    ).bind(String(op), t, ok ? 1 : 0, detalhe == null ? null : String(detalhe).slice(0, 500)).run();
+    await env.DB.prepare('DELETE FROM op_log WHERE at < ?').bind(t - 90 * 86400000).run();
+    return true;
+  } catch (e) {
+    return false;   // um batimento que falha não pode travar a operação
+  }
+}

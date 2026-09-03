@@ -26,6 +26,93 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 29,
+    data: '2026-09-02',
+    titulo: 'Nada se perde sem perguntar',
+    seccoes: [
+      {
+        titulo: 'As janelas protegem o que escreveste',
+        afeta: ['app'],
+        itens: [
+          'Fechar uma janela com alterações por guardar — no fundo escurecido, no X ou com o botão voltar — passa a perguntar primeiro. Um toque acidental deixou de deitar fora um formulário meio preenchido.',
+          'Apagar uma fotografia ou um ficheiro passa a pedir confirmação, e o botão afastou-se do puxador de arrastar.',
+        ],
+      },
+      {
+        titulo: 'A app inteira anda a teclado',
+        afeta: ['app'],
+        itens: [
+          'O menu, os cartões e as listas passaram a ser alcançáveis com Tab e a abrir com Enter.',
+          'Dentro de uma janela, o foco fica na janela — e ao fechar volta para onde estava.',
+          'As confirmações («Guardado», «Apagado») passam a ser anunciadas por leitores de ecrã.',
+        ],
+      },
+      {
+        titulo: 'Apagar com rede por baixo',
+        afeta: ['movimentos', 'imoveis', 'contratos'],
+        itens: [
+          'Apagar um movimento deixa de perguntar — apaga e dá seis segundos de «Anular». Apagar um imóvel, um contrato ou uma seleção inteira continua a confirmar, mas também ganha o «Anular».',
+          'Ao abrir, se a app estiver a atualizar-se, passa a dizê-lo: versão de destino e passo a passo, em vez de um recarregamento mudo.',
+        ],
+      },
+      {
+        titulo: 'Recuperar a palavra-passe, e respostas por email',
+        afeta: ['conta', 'suporte'],
+        itens: [
+          '«Esqueci-me da palavra-passe» no ecrã de entrada: chega-te uma ligação por email, válida 1 hora, para definires uma nova — também serve a quem entra pela Google e quer ter palavra-passe.',
+          'Quando respondemos a um pedido de ajuda, recebes um email — deixa de ser preciso ir à app ver se já há resposta.',
+        ],
+      },
+      {
+        titulo: 'A app passou a chamar-se Rendorium',
+        afeta: ['app'],
+        itens: [
+          'Nome novo, casa nova: rendorium.com, com a app em app.rendorium.com. O endereço antigo continua a funcionar — nada muda para quem já a tem instalada.',
+        ],
+      },
+      {
+        titulo: 'Filtros comuns, datas e perguntas frequentes',
+        afeta: ['app', 'movimentos'],
+        itens: [
+          'Filtros comuns: define um conjunto de escolhas com nome (Definições → Filtros comuns) e aplica-o num toque no funil de qualquer vista — cada uma usa o que lhe diz respeito.',
+          'Os movimentos passam a filtrar-se entre datas (De/Até no funil).',
+          'Definições → Perguntas frequentes: as dúvidas mais comuns, respondidas com o caminho concreto.',
+          'O botão do topo dos documentos longos diz «Voltar» e acompanha o scroll.',
+        ],
+      },
+      {
+        titulo: 'O toque longo passou a significar uma coisa só',
+        afeta: ['imoveis', 'contratos', 'movimentos'],
+        itens: [
+          'Segurar num cartão seleciona vários — nos movimentos, nos imóveis e nos contratos. As opções de um cartão vivem no botão ⋮.',
+          'Imóveis e contratos podem apagar-se em massa: a confirmação diz quantos contratos e movimentos vão junto, e o «Anular» repõe tudo.',
+        ],
+      },
+      {
+        titulo: 'O teu perfil preenche-se sozinho',
+        afeta: ['conta'],
+        itens: [
+          'O email da conta (do registo ou da Google) e o nome entram sozinhos nos campos vazios do perfil.',
+        ],
+      },
+      {
+        titulo: 'Filtros com um só feitio',
+        afeta: ['app'],
+        itens: [
+          'Todos os painéis de filtro aplicam no momento: mexes, a lista muda logo atrás. «Limpar» à esquerda, «Fechar» à direita, em todo o lado.',
+          'No modo de seleção, as ações desceram para uma barra em baixo, à mão do polegar.',
+        ],
+      },
+      {
+        titulo: 'Apagar tudo diz a verdade',
+        afeta: ['app', 'conta'],
+        itens: [
+          'Com sessão iniciada, «Apagar tudo» apagava também na conta e nos outros aparelhos — dizendo «deste dispositivo». Agora explica as duas opções em vez de arriscar.',
+        ],
+      },
+    ],
+  },
+  {
     v: 28,
     data: '2026-09-01',
     titulo: 'Tutoriais na ajuda, e a funcionar com janelas abertas',

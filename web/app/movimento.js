@@ -4,7 +4,7 @@ let tForm={};
 function txModal(id,kind,propId,_x,ctId,preset){
   foldState={};
   tForm=id?normTx(JSON.parse(JSON.stringify(db.transactions.find(x=>x.id===id)))):
-    normTx(Object.assign({kind:kind||'income',date:today(),amount:'',propertyId:propId||null,contractId:ctId||null,split:null},preset||{}));
+    normTx(Object.assign({kind:kind||'income',date:today(),amount:'',propertyId:propId||(db.properties.length===1?db.properties[0].id:null),contractId:ctId||null,split:null},preset||{}));
   if(tForm.contractId&&!tForm.propertyId){const c=contract(tForm.contractId);if(c)tForm.propertyId=c.propertyId}
   tForm._edit=!!id;
   if(!id&&tForm.amount){tForm._aA=tForm.amount}
@@ -13,8 +13,8 @@ function txModal(id,kind,propId,_x,ctId,preset){
   openModal((id?'Editar ':txNewWord(tForm.kind))+txTypeName(tForm.kind),txBody(),null,m);
   tForm._saver=()=>{
     collectTx();
-    if(!tForm.label.trim())return toast('Escreve uma descrição.');
-    if(!(tForm.amount>0))return toast('Indica um montante.');
+    if(!tForm.label.trim())return falhaCampo('t_label','Escreve uma descrição.');
+    if(!(tForm.amount>0))return falhaCampo('t_amount','Indica um montante.');
     if(tForm.kind==='settle'){
       if(!tForm.propertyId)return toast('Um acerto é sempre de um imóvel.');
       if(!tForm.paidBy||!tForm.toId)return toast('Indica quem paga e quem recebe.');
@@ -110,9 +110,9 @@ function txBody(){
   return `<div class="form">
     ${(t._tplId||t._tplNew)?`<label>Nome do modelo<input id="t_tplName" value="${esc(t._tplName||'')}" placeholder="Ex.: Renda mensal T2" autocomplete="off"></label>`:''}
     ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" onclick="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
-    <label>Descrição<input id="t_label" value="${esc(t.label)}" placeholder="${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
+    <label>Descrição <span class="req">*</span><input id="t_label" value="${esc(t.label)}" placeholder="${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
     <div class="row">
-      <label>Montante (€)<div style="display:flex;gap:7px;align-items:center">
+      <label>Montante (€) <span class="req">*</span><div style="display:flex;gap:7px;align-items:center">
         <input id="t_amount" type="text" inputmode="decimal" style="flex:1;min-width:0" value="${t.amount||''}" placeholder="900" oninput="tForm.amount=num(this.value);refreshLoanHint();refreshSplit();amtResetSync()">
         <button type="button" class="btn sm primary" id="amt_reset" style="flex:0 0 auto;padding:9px 12px;display:${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':'none'}" title="Repor a prestação calculada" onclick="onAmtReset()">Repor</button></div></label>
       ${(t._recId||t._recNew)?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}"></label>`}</div>
@@ -453,13 +453,21 @@ function applyLoan(t){
     else ar.tx.amount=Math.round(loanCalc(l).total*100)/100}
 }
 function delTx(id){
-  const t=db.transactions.find(x=>x.id===id);
-  confirmModal('Apagar movimento',`Apagar “${esc(t.label)}”?`,()=>{
-    if(t.kind==='loan'&&t.principal&&t.loanId){
-      const l=findLoan(prop(t.propertyId),t.loanId);
-      if(l){l.outstanding=Math.round((l.outstanding+t.principal)*100)/100;syncLoanRec(prop(t.propertyId),l)}
+  /* sem confirmação, com Anular: é a eliminação mais frequente da app, e a
+     pergunta constante ensinava o dedo a confirmar sem ler */
+  const t=db.transactions.find(x=>x.id===id);if(!t)return;
+  const copia=JSON.parse(JSON.stringify(t));
+  if(t.kind==='loan'&&t.principal&&t.loanId){
+    const l=findLoan(prop(t.propertyId),t.loanId);
+    if(l){l.outstanding=Math.round((l.outstanding+t.principal)*100)/100;syncLoanRec(prop(t.propertyId),l)}
+  }
+  db.transactions=db.transactions.filter(x=>x.id!==id);save();closeAllModals();render();
+  comDesfazer('Movimento apagado.',()=>{
+    db.transactions.push(copia);
+    if(copia.kind==='loan'&&copia.principal&&copia.loanId){
+      const l=findLoan(prop(copia.propertyId),copia.loanId);
+      if(l){l.outstanding=Math.round((l.outstanding-copia.principal)*100)/100;syncLoanRec(prop(copia.propertyId),l)}
     }
-    db.transactions=db.transactions.filter(x=>x.id!==id);save();closeAllModals();render();toast('Movimento apagado.');
   });
 }
 function yearRows(l){

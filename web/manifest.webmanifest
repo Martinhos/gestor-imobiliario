@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Gestor Imobiliário",
-  "short_name": "Imobiliário",
+  "name": "Rendorium",
+  "short_name": "Rendorium",
   "description": "Gestão de imóveis, contratos, rendas e despesas — com partilha entre utilizadores.",
   "lang": "pt",
   "start_url": "/",

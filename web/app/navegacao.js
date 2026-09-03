@@ -12,8 +12,9 @@ const TABS=[
   {id:'reports',icon:'file',label:'Avaliação',sub:'Análise imóvel a imóvel'},
   {id:'settings',icon:'gear',label:'Definições',sub:'Tema, categorias e etiquetas'}
 ];
-let tab='dashboard',txFilter='',txProp='',txPaid='',txCat='',txSub='',txNoPayer=true,txSearch='',txSort='date',txDir='desc',repProp='',setPage='';
+let tab='dashboard',txFilter='',txProp='',txPaid='',txCat='',txSub='',txNoPayer=true,txSearch='',txDe='',txAte='',txSort='date',txDir='desc',repProp='',setPage='';
 const SUBPAGE={cats:{label:'Tipos de movimento',sub:'Como classificas o que entra e sai'},
+               filtros:{label:'Filtros comuns',sub:'Define uma vez, aplica em qualquer vista'},
                tags:{label:'Etiquetas',sub:'Para marcar movimentos'},
                groups:{label:'Grupos',sub:'Conjuntos de imóveis, proprietários e contratos'},
                dados:{label:'Dados',sub:'Splitwise e cópias de segurança'}};
@@ -23,15 +24,28 @@ const NAV_GROUPS=[{label:'Património',ids:['dashboard','properties','contracts'
 function buildNav(){
   const late=recActive().length;
   document.getElementById('nav').innerHTML=NAV_GROUPS.map(g=>`<div class="navh">${g.label}</div>`+g.ids.map(id=>{const t=TABS.find(x=>x.id===id);
-    return `<a class="${t.id===tab?'on':''}" onclick="go('${t.id}')">${ic(t.icon)}<span class="txt">${t.label}</span>${t.id==='recurring'&&late?`<span class="cnt" ${recLate().length?'':'style="background:var(--warn)"'}>${late}</span>`:''}</a>`}).join('')).join('');
+    return `<a class="${t.id===tab?'on':''}" tabindex="0" ${t.id===tab?'aria-current="page"':''} onclick="go('${t.id}')">${ic(t.icon)}<span class="txt">${t.label}</span>${t.id==='recurring'&&late?`<span class="cnt" ${recLate().length?'':'style="background:var(--warn)"'}>${late}</span>`:''}</a>`}).join('')).join('');
+  buildTabbar(late);
+}
+/* Os quatro destinos quentes, a um toque no telemóvel. A auditoria mediu:
+   com tudo atrás da gaveta, qualquer mudança de ecrã custava dois. */
+const TABBAR=['dashboard','transactions','properties','recurring'];
+function buildTabbar(late){
+  const el=document.getElementById('tabbar');if(!el)return;
+  el.innerHTML=TABBAR.map(id=>{const t=TABS.find(x=>x.id===id);
+    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} onclick="go('${id}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${id==='recurring'&&late?`<span class="cnt">${late}</span>`:''}</a>`}).join('');
 }
 function go(id){tab=id;setPage='';donutCat='';closeDrawer();buildNav();render();try{window.scrollTo(0,0)}catch(e){}}
-function goSet(p){setPage=p;render();try{window.scrollTo(0,0)}catch(e){}}
-function openDrawer(){if(document.body.classList.contains('open'))return;closeFilterPanels();document.body.classList.add('open');pushHist();lockPage()}
+function goSet(p){setPage=p;if(p)pushHist();render();try{window.scrollTo(0,0)}catch(e){}}
+function openDrawer(){if(document.body.classList.contains('open'))return;closeFilterPanels();document.body.classList.add('open');pushHist();lockPage();
+  const b=document.querySelector('.burger');if(b)b.setAttribute('aria-expanded','true');
+  // o foco entra na gaveta: sem isto, o teclado continuava atrás do véu
+  const a=document.querySelector('#nav a');try{if(a)a.focus()}catch(e){}}
 function closeFilterPanels(){
   let was=false;
   if(typeof LFK!=='undefined'&&LFK[tab]&&lf(LFK[tab])._open){lf(LFK[tab])._open=false;lfDraft=null;was=true}
   if(typeof anaOpen!=='undefined'&&anaOpen[tab]){anaOpen[tab]=false;was=true}
   if(was){closePops();render()}
 }
-function closeDrawer(fromPop){if(!document.body.classList.contains('open'))return;document.body.classList.remove('open');lockPage()}
+function closeDrawer(fromPop){if(!document.body.classList.contains('open'))return;document.body.classList.remove('open');lockPage();
+  const b=document.querySelector('.burger');if(b)b.setAttribute('aria-expanded','false')}

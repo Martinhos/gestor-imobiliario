@@ -66,6 +66,19 @@ function shareReport(){
   toast('Não foi possível partilhar.');
 }
 function wipe(){
+  /* Com sessão iniciada, o sync propagava o apagão à conta e aos outros
+     aparelhos — e a confirmação dizia "deste dispositivo". Um botão que
+     promete menos do que destrói não se corrige com texto: bloqueia-se, e
+     aponta-se o caminho certo para cada intenção. */
+  if(window.CW&&CW.user){
+    openModal('Apagar tudo',
+      `<div class="hint" style="font-size:14px">Com sessão iniciada, isto apagava os dados também
+       na tua conta e nos outros aparelhos — não só neste.<br><br>
+       · Para limpar só este dispositivo, sai da conta primeiro (Definições → Conta e partilha).<br>
+       · Para apagar a conta e tudo o que lá está, usa Conta e partilha → Apagar conta.</div>`,
+      '<button class="btn primary" onclick="closeModal()">Percebi</button>');
+    return;
+  }
   confirmModal('Apagar tudo','Isto apaga imóveis, contratos, pessoas, movimentos e definições deste dispositivo.',()=>{
     const th=db.settings.theme;db=JSON.parse(JSON.stringify(blank));db.settings.theme=th;
     ownerFilter='';save();render();toast('Dados apagados.');

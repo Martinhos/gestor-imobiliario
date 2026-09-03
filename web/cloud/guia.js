@@ -124,6 +124,7 @@ var TUTORIAIS = {
         titulo: 'Porquê começar por aqui',
         texto: 'Os teus dados — nome, NIF, morada, IBAN — entram nos contratos que a app gera. ' +
           'Preenchidos uma vez, não voltas a escrevê-los.',
+        ir: 'settings',   // lançado da Ajuda, o tutorial leva-te logo ao sítio
       },
       {
         titulo: 'Onde se preenche',

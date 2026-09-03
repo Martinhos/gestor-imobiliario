@@ -25,7 +25,12 @@ const navRow=(title,sub,icon,page)=>`<div class="card tap" onclick="goSet('${pag
   <span class="avatar">${ic(icon,18)}</span>
   <span style="flex:1;min-width:0"><b style="display:block">${esc(title)}</b><span class="small">${esc(sub)}</span></span>
   <span style="color:var(--muted);transform:rotate(180deg)">${ic('chev',18)}</span></div>`;
-const backRow=`<div class="toolbar"><button class="btn" onclick="goSet('')">${ic('chev',15)} Definições</button></div>`;
+/* Voltar, colado ao topo: nos documentos longos (termos, política) o botão
+   dizia "Definições" e desaparecia com o scroll — a meio de 300 linhas não
+   havia porta de saída à vista. O do fundo já dizia Voltar; agora dizem o
+   mesmo e um deles está sempre presente. */
+const backRow=`<div class="toolbar" style="position:sticky;top:calc(57px + var(--inset-top));z-index:20;background:var(--bg);padding:8px 0;margin:-6px 0 6px">
+  <button class="btn" onclick="goSet('')">${ic('chev',15)} Voltar</button></div>`;
 
 function vDefaults(){
   const s=db.settings;
@@ -48,6 +53,7 @@ function vSettings(){
   if(setPage==='cats')return backRow+vCats();
   if(setPage==='tags')return backRow+vTags();
   if(setPage==='groups')return backRow+vGroups();
+  if(setPage==='filtros')return backRow+vFiltrosComuns();
   if(setPage==='dados')return backRow+vImport();
   return `${card('Tema','Como a app se apresenta',`<div class="seg c3">
       ${[['auto','auto','Automático','segue o telemóvel'],['light','sun','Claro',''],['dark','moon','Escuro','']]
@@ -60,6 +66,8 @@ function vSettings(){
   ${navRow('Etiquetas',(s.tags||[]).length+' etiquetas','tag','tags')}
   <div style="height:14px"></div>
   ${navRow('Grupos',(db.groups||[]).length+' grupos','users','groups')}
+  <div style="height:14px"></div>
+  ${navRow('Filtros comuns',(db.settings.filters||[]).length+' filtros','filter','filtros')}
   <div style="height:14px"></div>
   ${navRow('Dados','Splitwise, Google Drive e cópias de segurança','down','dados')}
   <div style="height:14px"></div>
@@ -214,9 +222,14 @@ function renameSub(tk,k,old){
   });
 }
 function delSub(tk,k,sb){
-  const cs=db.settings[tk]||{};cs[k]=(cs[k]||[]).filter(x=>x!==sb);
-  treeTx(tk).forEach(t=>{if(t.category===k&&t.sub===sb)t.sub=''});
-  save();render();toast('Subcategoria removida.');
+  /* apagar categoria e etiqueta confirmam com o impacto; a subcategoria
+     executava logo — a mesma ação, na mesma página, ora protegia ora não */
+  const usados=treeTx(tk).filter(t=>t.category===k&&t.sub===sb).length;
+  confirmModal('Apagar subcategoria',`“${esc(sb)}” sai de ${k}${usados?` e de ${usados} movimento(s) que a usam`:''}.`,()=>{
+    const cs=db.settings[tk]||{};cs[k]=(cs[k]||[]).filter(x=>x!==sb);
+    treeTx(tk).forEach(t=>{if(t.category===k&&t.sub===sb)t.sub=''});
+    save();render();toast('Subcategoria apagada.');
+  });
 }
 function resetCats(){
   confirmModal('Repor categorias','Volta às listas de origem (receitas e pagamentos). As categorias que criaste desaparecem; os movimentos mantêm o texto.',()=>{
@@ -234,3 +247,112 @@ function delTag(g){
     save();render();toast('Etiqueta apagada.');
   });
 }
+
+
+/* ======================= FILTROS COMUNS =======================
+   Um conjunto de escolhas com nome — "T2 Lisboa · rendas", "Só despesas do
+   Manel" — definido uma vez e aplicado em qualquer vista que filtre. Cada
+   vista aplica só o que lhe diz respeito: a visão geral usa o imóvel e o
+   proprietário, os movimentos usam tudo. */
+
+function filtrosComuns(){return db.settings.filters||[]}
+
+function vFiltrosComuns(){
+  const list=filtrosComuns();
+  return card('Filtros comuns','Aplicam-se no funil de cada vista',`
+    ${list.length?`<div class="list" style="gap:8px">${list.map(f=>`
+      <div class="card" style="padding:11px 13px"><div class="row-between" style="align-items:center">
+        <div style="min-width:0;cursor:pointer" onclick="fcModal('${jsq(f.id)}')">
+          <b style="font-size:14px">${esc(f.name)}</b>
+          <div class="small">${esc(fcResumo(f)||'sem escolhas — aplica-lo limpa os filtros')}</div></div>
+        <button type="button" class="btn sm danger" aria-label="Apagar" style="min-width:40px;min-height:40px" onclick="delFiltroComum('${jsq(f.id)}')">${ic('trash',14)}</button>
+      </div></div>`).join('')}</div>`
+      :'<div class="hint">Ainda não tens nenhum. Um filtro comum guarda um conjunto de escolhas — imóvel, proprietário, tipo, categoria, datas — para aplicares num toque.</div>'}
+    <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" onclick="fcModal()">${ic('plus',15)} Novo filtro comum</button></div>`);
+}
+
+function fcResumo(f){
+  const p=[];
+  if(f.kind)p.push((KIND[f.kind]||{}).short||f.kind);
+  if(f.prop){const pr=prop(f.prop);p.push(pr?pr.name:f.prop)}
+  if(f.owner){const o=db.owners.find(x=>x.id===f.owner);p.push(o?o.name:f.owner)}
+  if(f.cat)p.push(f.cat);
+  if(f.sub)p.push(f.sub);
+  if(f.de||f.ate)p.push(f.de&&f.ate?f.de+' → '+f.ate:f.de?'desde '+f.de:'até '+f.ate);
+  return p.join(' · ');
+}
+
+let fcForm=null;
+function fcModal(id){
+  const f=filtrosComuns().find(x=>x.id===id);
+  fcForm=f?JSON.parse(JSON.stringify(f)):{id:uid(),name:'',kind:'',prop:'',owner:'',cat:'',sub:'',de:'',ate:''};
+  openModal(f?'Editar filtro comum':'Novo filtro comum',fcCorpo(),
+    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="fcGuardar()">Guardar</button>`);
+}
+function fcCorpo(){
+  const kinds=[{v:'',label:'Todos os tipos'},{v:'income',label:'Receitas'},{v:'expense',label:'Despesas'},{v:'loan',label:'Pagamentos de crédito'},{v:'debt',label:'Dívidas'}];
+  const props=[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p=>({v:p.id,label:p.name})));
+  const owners=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
+  const tree=allCats(fcForm.kind==='debt'?'expense':fcForm.kind);
+  const catOpts=[{v:'',label:'Todas as categorias'}].concat(Object.keys(tree).map(c=>({v:c,label:c})));
+  const subs=fcForm.cat?(tree[fcForm.cat]||[]):[];
+  return `<div class="form">
+    <label>Nome <span class="req">*</span><input id="fc_name" value="${esc(fcForm.name)}" placeholder="T2 Lisboa · rendas" autocomplete="off" oninput="fcColher(1)"></label>
+    <div class="row"><label>Tipo${sel('fc_kind',fcForm.kind,kinds,'fcColher')}</label>
+      <label>Imóvel${sel('fc_prop',fcForm.prop,props,'fcColher')}</label></div>
+    <div class="row"><label>Proprietário${sel('fc_owner',fcForm.owner,owners,'fcColher')}</label>
+      <label>Categoria${sel('fc_cat',fcForm.cat,catOpts,'fcColher')}</label></div>
+    ${subs.length?`<label>Subcategoria${sel('fc_sub',fcForm.sub,[{v:'',label:'Todas'}].concat(subs.map(x=>({v:x,label:x}))),'fcColher')}</label>`:''}
+    <div class="row lado-a-lado"><label>De<input id="fc_de" type="date" value="${fcForm.de||''}" onchange="fcColher()"></label>
+      <label>Até<input id="fc_ate" type="date" value="${fcForm.ate||''}" onchange="fcColher()"></label></div>
+    <div class="hint">Deixa em branco o que não quiseres fixar. Cada vista aplica só o que lhe diz respeito.</div>
+  </div>`;
+}
+/* soFormulario: escrever no nome não repinta (perdia o foco a cada tecla);
+   mudar tipo ou categoria repinta, porque as opções seguintes dependem */
+function fcColher(soFormulario){
+  fcForm.name=val('fc_name');
+  const kindNovo=val('fc_kind')||'',catNova=val('fc_cat')||'';
+  const repinta=!soFormulario&&(kindNovo!==fcForm.kind||catNova!==fcForm.cat);
+  if(catNova!==fcForm.cat)fcForm.sub='';
+  fcForm.kind=kindNovo;fcForm.cat=catNova;
+  fcForm.prop=val('fc_prop')||'';fcForm.owner=val('fc_owner')||'';
+  fcForm.sub=val('fc_sub')||fcForm.sub||'';fcForm.de=val('fc_de')||'';fcForm.ate=val('fc_ate')||'';
+  if(repinta){const t=modalTop();if(t){const b=modalBodyEl();if(b)b.innerHTML=fcCorpo()}}
+}
+function fcGuardar(){
+  fcColher();
+  if(!String(fcForm.name||'').trim())return falhaCampo('fc_name','Dá um nome ao filtro.');
+  db.settings.filters=filtrosComuns().filter(x=>x.id!==fcForm.id).concat([fcForm]);
+  save();closeModal();render();toast('Filtro comum guardado.');
+}
+function delFiltroComum(id){
+  const f=filtrosComuns().find(x=>x.id===id);if(!f)return;
+  const copia=JSON.parse(JSON.stringify(f));
+  db.settings.filters=filtrosComuns().filter(x=>x.id!==id);
+  save();render();
+  comDesfazer('Filtro comum apagado.',()=>{db.settings.filters=(db.settings.filters||[]).concat([copia])});
+}
+
+/* O aplicador: cada vista pega no que lhe diz respeito. */
+function aplicarFiltroComum(id){
+  const f=filtrosComuns().find(x=>x.id===id);if(!f)return;
+  if(tab==='transactions'){
+    txFilter=f.kind||'';txProp=f.prop||'';ownerFilter=f.owner||'';
+    txCat=f.cat||'';txSub=f.sub||'';txDe=f.de||'';txAte=f.ate||'';
+    txRerender();toast('Filtro «'+f.name+'» aplicado.');return;
+  }
+  // vistas de análise e listas: aplica-se o imóvel e o proprietário
+  if(tab==='dashboard')dashProp=f.prop||'';
+  if(tab==='projections')projProp=f.prop||'';
+  if(tab==='reports')repProp=f.prop||'';
+  ownerFilter=f.owner||'';
+  if(typeof LFK!=='undefined'&&LFK[tab]&&f.owner!==undefined){lf(LFK[tab]).own=f.owner||''}
+  render();toast('Filtro «'+f.name+'» aplicado — '+(f.cat||f.kind||f.de?'esta vista usa só o imóvel e o proprietário.':'feito.'));
+}
+function fcSelector(fn){
+  const list=filtrosComuns();
+  if(!list.length)return '';
+  return `<label>Filtro comum${sel('fcAplicar','',[{v:'',label:'— aplicar um filtro comum —'}].concat(list.map(f=>({v:f.id,label:f.name}))),fn||'onFcAplicar')}</label>`;
+}
+function onFcAplicar(){const v=val('fcAplicar');if(v)aplicarFiltroComum(v)}

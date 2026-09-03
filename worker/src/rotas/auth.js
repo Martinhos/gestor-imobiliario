@@ -56,6 +56,47 @@ export async function rotasAuth(c) {
     });
   }
 
+  /* Esqueci-me da palavra-passe. Duas rotas: pedir (manda o email com a
+     ligação) e confirmar (troca a palavra-passe). A resposta do pedido é
+     sempre a mesma, exista a conta ou não — enumerar emails registados é
+     um presente que não se dá. A ligação vale 1 hora e uma só utilização,
+     e serve também a quem entrou sempre pela Google e quer uma palavra-
+     passe: é o mesmo gesto. */
+  if (path === '/api/auth/repor' && method === 'POST') {
+    const b = await body(request);
+    const email = String((b && b.email) || '').trim().toLowerCase();
+    const sempre = json({ ok: true, msg: 'Se esse email tiver conta, enviámos uma ligação para repor a palavra-passe.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sempre;
+    const u = await env.DB.prepare('SELECT id, email FROM users WHERE email = ? AND deleted_at IS NULL').bind(email).first();
+    if (u) {
+      const t = [...crypto.getRandomValues(new Uint8Array(32))].map((x) => x.toString(16).padStart(2, '0')).join('');
+      await env.SESSIONS.put('repor:' + t, u.id, { expirationTtl: 3600 });
+      const { emailReporPassword } = await import('../lib/correio.js');
+      const ligacao = new URL(request.url).origin + '/?repor=' + t;
+      const r = await emailReporPassword(env, u.email, ligacao);
+      if (!r.enviado) console.error('repor: email não enviado —', r.motivo);
+    }
+    return sempre;
+  }
+
+  if (path === '/api/auth/repor/confirmar' && method === 'POST') {
+    const b = await body(request);
+    const t = String((b && b.t) || '');
+    const pass = String((b && b.password) || '');
+    if (!/^[a-f0-9]{64}$/.test(t)) return err(400, 'Essa ligação não é válida.');
+    if (weakPassword(pass)) return err(400, 'A palavra-passe precisa de 8+ caracteres com maiúscula, minúscula, número e símbolo.');
+    const userId = await env.SESSIONS.get('repor:' + t);
+    if (!userId) return err(410, 'Essa ligação já foi usada ou expirou. Pede outra no ecrã de entrada.');
+    await env.SESSIONS.delete('repor:' + t);   // uso único, antes de mexer
+    const { hash, salt } = await hashPassword(pass);
+    // trocar a palavra-passe termina as sessões todas: se foi um estranho a
+    // pedir a troca, as sessões dele morrem aqui
+    await env.DB.prepare(
+      'UPDATE users SET pass_hash = ?, pass_salt = ?, sess_epoch = COALESCE(sess_epoch, 0) + 1 WHERE id = ?'
+    ).bind(hash, salt, userId).run();
+    return json({ ok: true });
+  }
+
   if (path === '/api/auth/login' && method === 'POST') {
     const b = await body(request);
     if (!b || !b.email || !b.password) return err(400, 'Email e palavra-passe são obrigatórios.');
@@ -74,6 +115,11 @@ export async function rotasAuth(c) {
     }
     if (!(await verifyPassword(String(b.password), user.pass_salt, user.pass_hash))) {
       return err(401, 'Email ou palavra-passe errados.');
+    }
+    /* Depois da password certa, de propósito: dizer "suspensa" a quem não
+       provou ser o dono era contar a estranhos o estado da conta. */
+    if (user.suspended_at) {
+      return err(403, 'Esta conta está suspensa.');
     }
     const token = await createSession(env, user.id, user.sess_epoch || 0);
     return json({ id: user.id, email: user.email, name: user.name, token }, 200, {
@@ -124,6 +170,9 @@ export async function rotasAuth(c) {
         .run();
       user = { id, email, name };
     }
+    if (user.suspended_at) {
+      return err(403, 'Esta conta está suspensa.');
+    }
     const token2 = await createSession(env, user.id, user.sess_epoch || 0);
     return json({ id: user.id, email: user.email, name: user.name, token: token2 }, 200, {
       'Set-Cookie': sessionCookie(token2),
@@ -131,6 +180,14 @@ export async function rotasAuth(c) {
   }
 
   if (path === '/api/auth/logout' && method === 'POST') {
+    /* Uma conta de teste morre com a sessão: sair é apagá-la. É o contrato
+       do /test — cada ligação nova encontra a casa vazia. */
+    try {
+      const { getSessionUser } = await import('../auth.js');
+      const { eContaDeTeste } = await import('../teste.js');
+      const u = await getSessionUser(env, request);
+      if (u && eContaDeTeste(u.email)) await purgeAccount(env, u.id);
+    } catch (e) { /* sair tem de sair, mesmo que a limpeza falhe */ }
     await destroySession(env, readSessionToken(request));
     return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', true) });
   }

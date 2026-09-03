@@ -155,20 +155,20 @@ function vDoc(html) {
     '<button class="btn" onclick="goSet(\'legal\')">' + ic('chev', 15) + ' Voltar</button></div>';
 }
 
-var LEGAL_UPDATED = '31 de agosto de 2026';
+var LEGAL_UPDATED = '2 de setembro de 2026';
 
-// O aviso de demonstração deixou de repetir os documentos: os Termos e a
-// Política dizem-no com valor legal, aqui fica só o essencial prático.
+// O aviso prático não repete os documentos: os Termos e a Política dizem-no
+// com valor legal, aqui fica só o essencial.
 function vLegal() {
   return navRow('Termos e Condições', 'Em vigor desde ' + L.version, 'contract', 'termos') +
     '<div style="height:10px"></div>' +
     navRow('Política de Privacidade', 'Dados, direitos e subcontratação', 'lock', 'privacidade') +
     '<div style="height:16px"></div>' +
-    card('Versão de demonstração', 'O que convém saberes',
+    card('Antes de confiares dados reais', 'O que convém saberes',
       '<div class="hint" style="font-size:14px;line-height:1.6">' +
-      '<p style="margin:0 0 8px">A app está em desenvolvimento e é fornecida tal como está.</p>' +
+      '<p style="margin:0 0 8px">A app evolui continuamente e é fornecida tal como está.</p>' +
       '<ul style="margin:0;padding-left:18px">' +
-      '<li style="margin-bottom:5px"><b>Os dados podem ser apagados sem aviso.</b> Guarda cópias em Definições → Importar e cópias.</li>' +
+      '<li style="margin-bottom:5px"><b>Guarda as tuas próprias cópias</b> em Definições → Importar e cópias — nenhuma nuvem substitui uma cópia tua.</li>' +
       '<li style="margin-bottom:5px">Anexos e fotos ficam só neste aparelho — não sincronizam nem entram nas cópias.</li>' +
       '<li style="margin-bottom:5px">Os valores e projeções são estimativas, não aconselhamento fiscal ou jurídico.</li>' +
       '<li style="margin-bottom:5px">O contrato em PDF é um modelo genérico: revê-o antes de assinar.</li>' +
@@ -179,18 +179,18 @@ function vLegal() {
 
 function vLegalAntigo() {
   var p = function (t) { return '<p style="margin:0 0 10px">' + t + '</p>'; };
-  return card('Versão de demonstração', 'Lê antes de usares com dados reais',
+  return card('Aviso completo', 'Lê antes de usares com dados reais',
     '<div class="hint" style="font-size:14px;line-height:1.65">' +
-    p('<b>Esta aplicação é uma versão de demonstração, em desenvolvimento.</b> É um projeto pessoal, ' +
+    p('<b>Esta aplicação está em desenvolvimento contínuo.</b> É um projeto pessoal, ' +
       'disponibilizado tal como está, sem qualquer garantia de funcionamento, exatidão, disponibilidade ou ' +
-      'conservação dos dados. Não é um produto comercial nem um serviço contratado.') +
+      'conservação dos dados.') +
     p('Funcionalidades podem mudar, deixar de existir ou comportar-se de forma inesperada de um dia para o outro.') +
     '</div>') +
     '<div style="height:14px"></div>' +
     card('Os teus dados', 'Podes perdê-los',
       '<div class="hint" style="font-size:14px;line-height:1.65">' +
-      p('Os dados são guardados numa base de dados na nuvem e no próprio dispositivo. Sendo uma demonstração, ' +
-        '<b>podem ser apagados, repostos ou corrompidos sem aviso prévio</b>, seja por erro, manutenção ou fim do projeto.') +
+      p('Os dados são guardados numa base de dados na nuvem e no próprio dispositivo. ' +
+        '<b>Nenhum sistema está livre de erro</b>: mantém as tuas cópias.') +
       p('<b>Faz cópias de segurança regulares</b> em Definições → Dados → Guardar cópia. A responsabilidade de ' +
         'manter uma cópia dos teus registos é tua.') +
       p('Fotografias e documentos anexados ficam apenas no dispositivo onde foram adicionados: não são ' +
@@ -312,12 +312,12 @@ function showTermsGate() {
     '<div class="card" style="max-width:460px;width:100%;padding:24px;margin:auto">' +
     '<div style="display:flex;gap:12px;align-items:center">' +
     '<span class="avatar" style="background:var(--accent-soft);color:var(--accent)">' + ic('contract', 20) + '</span>' +
-    '<div><div class="title" style="font-size:18px">Termos atualizados</div>' +
+    '<div><div class="title" style="font-size:18px">Atualizámos os termos</div>' +
     '<div class="small">Precisamos da tua aceitação para continuar</div></div></div>' +
     '<div class="hint" style="font-size:14px;line-height:1.6;margin-top:14px">' +
-    '<p style="margin:0 0 10px">A app passou a ter <b>Termos e Condições</b> e <b>Política de Privacidade</b> ' +
-    'próprios. Explicam o que o serviço é e não é, os planos que vão existir, e como tratamos os teus dados ' +
-    'e os das pessoas que registas.</p>' +
+    '<p style="margin:0 0 10px">Os <b>Termos e Condições</b> e a <b>Política de Privacidade</b> foram ' +
+    '<b>atualizados</b> desde a versão que aceitaste. Vale a pena ler o que mudou — os planos e a fase ' +
+    'experimental estão descritos lá.</p>' +
     '<p style="margin:0">Sem a tua aceitação não podemos continuar a guardar os teus dados. Se recusares, ' +
     '<b>a conta e tudo o que lá está serão apagados</b>.</p></div>' +
     '<div class="toolbar" style="margin-top:14px;flex-direction:column;gap:8px">' +
@@ -380,9 +380,9 @@ CW.doRefuseTerms = function () {
     .catch(function (err) { e.textContent = err.message || 'Não foi possível apagar a conta.'; });
 };
 
-/* O aviso de demonstração aparecia a cada abertura e repetia o que os
-   Termos já dizem com valor legal. Passa a aparecer uma vez por aparelho,
-   curto, com o detalhe a um toque de distância. */
+/* O aviso prático aparece uma vez por aparelho, curto, com o detalhe a um
+   toque de distância. (A chave no localStorage mantém o nome antigo para
+   não reaparecer a quem já o dispensou.) */
 var LS_GATE = 'gi_demo_visto';
 
 function showLegalGate() {
@@ -399,10 +399,10 @@ function showLegalGate() {
     '<div class="card" style="max-width:400px;width:100%;padding:24px;margin:auto">' +
     '<div style="display:flex;gap:12px;align-items:center">' +
     '<span class="avatar" style="background:var(--warn-soft);color:var(--warn)">' + ic('info', 20) + '</span>' +
-    '<div><div class="title" style="font-size:18px">Isto é uma demonstração</div>' +
+    '<div><div class="title" style="font-size:18px">Antes de começares</div>' +
     '<div class="small">Aparece só desta vez</div></div></div>' +
     '<div class="hint" style="font-size:14.5px;line-height:1.6;margin-top:14px">' +
-    '<b>Os dados podem ser apagados sem aviso</b> — guarda cópias de vez em quando. ' +
+    '<b>Guarda cópias de vez em quando</b> — nenhuma nuvem substitui uma cópia tua. ' +
     'Os números que a app mostra são estimativas, não aconselhamento.' +
     '</div>' +
     '<div class="toolbar" style="margin-top:16px;flex-direction:column;gap:8px">' +

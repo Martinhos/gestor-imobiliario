@@ -5,6 +5,19 @@ name = "gestor-imobiliario"
 main = "worker/src/index.js"
 compatibility_date = "2026-08-01"
 
+# Os domínios. A zona rendorium.com vive nesta conta Cloudflare, por isso o
+# deploy cria os registos DNS sozinho. O endereço workers.dev continua a
+# servir: as instalações antigas (PWA e APK) apontam para lá e não podem
+# partir. A app canónica é app.; a raiz e o www servem a landing.
+# Definir routes desliga o workers.dev por omissão — e as instalações
+# antigas vivem lá. Fica ligado à mão, explicitamente.
+workers_dev = true
+routes = [
+  { pattern = "app.rendorium.com", custom_domain = true },
+  { pattern = "rendorium.com", custom_domain = true },
+  { pattern = "www.rendorium.com", custom_domain = true },
+]
+
 [assets]
 directory = "web"
 binding = "ASSETS"
@@ -33,7 +46,8 @@ crons = ["0 9 * * *", "0 * * * *"]
 
 # Entrada com Google (id público; vazio = botão escondido).
 # Cria um OAuth Client ID (Web) em console.cloud.google.com e autoriza
-# a origem https://gestor-imobiliario.martinhos.workers.dev.
+# as origens https://app.rendorium.com e (a antiga)
+# https://gestor-imobiliario.martinhos.workers.dev.
 # Não é preciso client secret: o fluxo usa o ID token, verificado no worker.
 [vars]
 GOOGLE_CLIENT_ID = "34372660209-our5uhdtk77vnfo34nf64u1m9o2c3erl.apps.googleusercontent.com"
@@ -66,6 +80,10 @@ MAX_USERS = "2000"
 # ---------------------------------------------------------------------------
 [env.dev]
 name = "gestor-imobiliario-dev"
+workers_dev = true
+routes = [
+  { pattern = "dev.rendorium.com", custom_domain = true },
+]
 
 [env.dev.assets]
 directory = "web"

@@ -17,7 +17,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-<title>Gestor Imobiliário</title>
+<title>Rendorium</title>
 <script>
 /* Armadilha de erros, antes de tudo o resto.
    O relato normal vive em cloud/ajuda.js, que é o 27.º script a carregar: se
@@ -190,8 +190,12 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
 .list{display:grid;gap:11px}
 .badge{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700}
 .badge.grey{background:var(--chip);color:var(--muted)}
-.badge.amber{background:var(--warn-soft);color:var(--warn)}
-.badge.red{background:var(--danger-soft);color:var(--danger)}
+/* no claro, o texto dos alertas desce um tom: 11px pedem 4,5:1 e o tom da
+   marca ficava aquém; no escuro os pares originais já passam folgados */
+.badge.amber{background:var(--warn-soft);color:#7d5200}
+.badge.red{background:var(--danger-soft);color:#9c3a38}
+html.dark .badge.amber{color:var(--warn)}
+html.dark .badge.red{color:var(--danger)}
 .title{font-weight:700;letter-spacing:-.01em}
 .small{font-size:12px;color:var(--muted)}
 .empty{padding:38px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:16px;background:var(--card)}
@@ -225,7 +229,7 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
 .thumb input.nm{color:var(--ink);font-weight:500;background:var(--field)}
 .prow{display:flex;align-items:center;gap:8px;min-width:0}
 .prow .pth{width:64px;height:52px;border-radius:10px;background:var(--chip);overflow:hidden;flex:0 0 64px;cursor:pointer;position:relative}
-.prow .capa{position:absolute;left:4px;bottom:4px;z-index:2;background:rgba(0,0,0,.55);color:#fff;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:999px;letter-spacing:.03em}
+.prow .capa{position:absolute;left:4px;bottom:4px;z-index:2;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:1px 6px;border-radius:999px;letter-spacing:.03em}
 .prow .pnm{flex:1;min-width:0}
 .pgrab{width:34px;height:40px;border:1px solid var(--line);background:var(--field);border-radius:9px;display:grid;place-items:center;color:var(--muted);cursor:grab;flex:0 0 34px;touch-action:none}
 .prow.drag{position:relative;z-index:5;box-shadow:0 10px 26px rgba(0,0,0,.25);background:var(--card);border-radius:12px}
@@ -266,17 +270,63 @@ nav a .cnt{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px
 .legend .li.tap:hover{background:var(--chip)}
 .legend .dot{width:10px;height:10px;border-radius:3px;flex:0 0 10px}
 .legend .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+/* Em ecrã de dedo, nada abaixo do mínimo de toque. Só em pointer:coarse:
+   no rato os tamanhos compactos continuam certos. */
+@media(pointer:coarse){
+  .btn{min-height:44px}
+  .btn.sm{min-height:40px}
+  .iconbtn,.burger{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  #nav a{min-height:44px}
+  .legend .li.tap{min-height:40px;padding:8px 6px;margin:0 -6px}
+  .tag button{min-width:28px;min-height:28px;display:inline-flex;align-items:center;justify-content:center}
+  .qclear{min-width:36px;min-height:36px}
+  .rich-tools button{min-width:38px;min-height:36px}
+  .fold-head{min-height:44px}
+}
+/* um campo com erro aponta para si próprio, em vez de só um toast longe dele */
+.err{border-color:var(--danger)!important;box-shadow:0 0 0 2px var(--danger-soft)}
+.req{color:var(--danger);font-weight:700}
+/* quem pediu menos movimento ao sistema recebe menos movimento */
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+/* O FAB respeita o recorte lateral em landscape */
+body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
+/* A barra de baixo: os quatro destinos quentes a um toque, no telemóvel.
+   A gaveta fica para o resto — deixou de ser a única porta. */
+.tabbar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--card);border-top:1px solid var(--line);
+  grid-template-columns:repeat(4,1fr);gap:2px;padding:5px calc(6px + var(--inset-right)) calc(5px + var(--inset-bottom)) calc(6px + var(--inset-left))}
+.tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:5px 2px;min-height:48px;
+  font-size:11px;font-weight:600;color:var(--muted);border-radius:10px;position:relative;cursor:pointer}
+.tabbar a.on{color:var(--accent);background:var(--accent-soft)}
+/* a barra lateral marca o ativo com um traço à esquerda (nav a.on::before);
+   na barra de baixo esse traço aparecia como um risco sem sentido */
+.tabbar a.on::before{display:none}
+.tabbar a:hover{background:var(--accent-soft);color:var(--accent)}
+.tabbar a .cnt{position:absolute;top:1px;left:calc(50% + 7px);background:var(--danger);color:#fff;font-size:10px;min-width:15px;height:15px;border-radius:99px;display:grid;place-items:center;padding:0 3px}
+/* body à frente: estas regras vivem ANTES das de base do .fab/.totop na
+   folha, e sem mais especificidade perdiam — o FAB ficava em cima da barra */
+@media(max-width:900px){
+  .tabbar{display:grid}
+  .wrap{padding-bottom:calc(96px + var(--inset-bottom))}
+  body .fab{bottom:calc(76px + var(--inset-bottom))}
+  body .fabmenu{bottom:calc(134px + var(--inset-bottom))}
+  body .totop{bottom:calc(76px + var(--inset-bottom))}
+  body.open .tabbar{display:none}
+}
 .donut{display:flex;gap:14px;align-items:center;flex-wrap:wrap;min-width:0}
 .donut .pie{flex:0 0 132px;max-width:132px}
 .donut .leg{flex:1 1 160px;min-width:0}
 .legend .vl{font-weight:650;font-variant-numeric:tabular-nums}
 .xlab{display:flex;gap:4px;margin-top:6px}
-.xlab span{flex:1;text-align:center;font-size:10px;color:var(--muted);min-width:0;overflow:hidden}
+.xlab span{flex:1;text-align:center;font-size:11px;color:var(--muted);min-width:0;overflow:hidden}
 
 .form{display:grid;gap:13px}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:11px}
 .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}
 @media(max-width:520px){.row,.row3{grid-template-columns:1fr}}
+/* um intervalo De/Até lê-se lado a lado; empilhado parecia dois filtros */
+.row.lado-a-lado{grid-template-columns:1fr 1fr}
+/* um estado vazio não se cola aos indicadores que o antecedem */
+.grid+.empty,.grid+.list{margin-top:14px}
 label{font-size:12px;color:var(--muted);display:grid;gap:6px;font-weight:600}
 .flabel{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:7px}
 input,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:var(--field);font-weight:500}
@@ -415,9 +465,15 @@ textarea{min-height:90px;resize:vertical}
 .sheet .foot .btn{flex:1;justify-content:center}
 .iconbtn{border:0;background:transparent;padding:7px;border-radius:9px;cursor:pointer;color:var(--muted)}
 .iconbtn:hover{background:var(--chip);color:var(--ink)}
-@media(max-width:520px){.sheet{top:auto;bottom:0;left:0;transform:none;width:100%;max-height:93vh;border-radius:20px 20px 0 0}}
+/* A folha de baixo, no telemovel. O max-height tem de vir em dvh como o de
+   cima: esta regra vem depois e, so com vh, desfazia-o. E vh e a altura com
+   as barras do browser recolhidas — com a barra de endereco e a de comandos
+   a mostra, a folha crescia para alem do que se ve e o topo ficava cortado,
+   fora de alcance, porque esta encostada em baixo. */
+@media(max-width:520px){.sheet{top:auto;bottom:0;left:0;transform:none;width:100%;max-height:93vh;max-height:93dvh;border-radius:20px 20px 0 0}}
 .toast{position:fixed;left:50%;bottom:calc(22px + var(--inset-bottom));transform:translateX(-50%) translateY(80px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;z-index:90;font-size:13.5px;font-weight:550;opacity:0;transition:.22s;pointer-events:none;max-width:90vw;text-align:center}
-.toast.on{opacity:1;transform:translateX(-50%)}
+.toast.on{opacity:1;transform:translateX(-50%);pointer-events:auto}
+.toast .toastbtn{margin-left:12px;background:none;border:0;color:var(--accent);font:inherit;font-weight:750;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 </style>
 </head>
 <body>
@@ -426,21 +482,22 @@ textarea{min-height:90px;resize:vertical}
   <aside>
     <div class="brand">
       <div class="mark"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-5h5v5"/></svg></div>
-      <div class="txt"><b>Gestor Imobiliário</b><small>Portefólio &amp; rentabilidade</small></div>
+      <div class="txt"><b>Rendorium</b><small>Portefólio &amp; rentabilidade</small></div>
     </div>
     <nav id="nav"></nav>
   </aside>
   <main>
     <header class="top">
-      <button class="burger" onclick="openDrawer()" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <button class="burger" aria-expanded="false" onclick="openDrawer()" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <div style="min-width:0;flex:1"><h1 id="pageTitle">Visão geral</h1><div class="sub" id="pageSub"></div></div>
       <button class="btn filtbtn" id="hdrFilt" style="display:none;flex:0 0 auto" onclick="hdrFiltToggle()" title="Filtros e parâmetros"></button>
     </header>
     <div class="wrap" id="view"></div>
   </main>
 </div>
+<nav class="tabbar" id="tabbar" aria-label="Atalhos"></nav>
 <button class="totop" id="toTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Topo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="tip" id="tip"></div>
 <script src="app/dados.js"></script>
 <script src="app/anexos.js"></script>
@@ -475,6 +532,7 @@ textarea{min-height:90px;resize:vertical}
 <script src="cloud/entrada.js"></script>
 <script src="cloud/novidades.js"></script>
 <script src="cloud/selecao.js"></script>
+<script src="cloud/selecao-listas.js"></script>
 <script src="cloud/guia.js"></script>
 </body>
 </html>

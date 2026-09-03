@@ -2,7 +2,12 @@
 const KEY='gi_v13', OLDS=['gi_v12','gi_v11','gi_v10','gi_v9','gi_v8','gi_v6','gi_v5','gi_v4','gi_v3','gi_v2','gi_v1'];
 let mem={};
 function rawGet(k){try{const v=localStorage.getItem(k);return v===null&&k in mem?mem[k]:v}catch(e){return k in mem?mem[k]:null}}
-function rawSet(k,v){mem[k]=String(v);try{localStorage.setItem(k,v)}catch(e){}}
+function rawSet(k,v){mem[k]=String(v);try{localStorage.setItem(k,v)}catch(e){
+  /* sem isto, «Guardado.» era mentira em modo privado ou com a quota cheia:
+     um reinício levava a sessão toda sem nunca ter avisado */
+  if(!rawSet._avisado){rawSet._avisado=1;
+    setTimeout(function(){try{toast('Não consegui guardar neste aparelho — armazenamento cheio ou bloqueado. O que fizeres vive só nesta sessão.')}catch(x){}},0)}
+}}
 
 const STAMP=0.04;
 /* taxa do imposto do selo sobre os juros: configurável em Definições, 4% por omissão */

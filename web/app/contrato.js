@@ -19,8 +19,11 @@ function ctSaver(){
   return ()=>{
     collectCt();
     if(!cForm.propertyId)return toast('Escolhe o imóvel.');
-    if(!(cForm.rent>0))return toast('Indica a renda mensal.');
+    if(!(cForm.rent>0))return falhaCampo('c_rent','Indica a renda mensal.');
     if(!cForm.tenantIds.length)return toast('Escolhe pelo menos um inquilino.');
+    /* um fim antes do início guardava sem aviso e o contrato sumia das
+       rendas e projeções, sem sinal nenhum do porquê */
+    if(cForm.start&&cForm.end&&cForm.end<cForm.start)return falhaCampo('c_end','O fim do contrato é antes do início — verifica as datas.');
     const i=db.contracts.findIndex(x=>x.id===cForm.id);
     if(i<0)db.contracts.push(cForm);else db.contracts[i]=cForm;
     syncContractRec(cForm);
@@ -41,7 +44,7 @@ function ctBody(){
      :(p&&p.use==='investimento'?`<div class="hint">Este imóvel está definido como arrendado por inteiro. Para arrendar por quartos, muda isso na ficha do imóvel.</div>`:'')}
     <div><div class="flabel">Inquilinos</div>${tagField(tags,'Adicionar','addCtTenant()','delCtTenant')}</div>
     <div class="row">
-      <label>Renda mensal (€)<input id="c_rent" type="text" inputmode="decimal" value="${c.rent||''}" placeholder="450" oninput="liveNet()"></label>
+      <label>Renda mensal (€) <span class="req">*</span><input id="c_rent" type="text" inputmode="decimal" value="${c.rent||''}" placeholder="450" oninput="liveNet()"></label>
       <label>Imposto sobre a renda (%)<input id="c_tax" type="text" inputmode="decimal" value="${c.taxRate?dec(c.taxRate):''}" placeholder="25" oninput="liveNet()"></label></div>
     <div class="card" style="background:var(--tint);padding:12px" id="netBox">${netBox()}</div>
     ${fold('terms','Prazo, caução e pagamento',`
@@ -56,7 +59,7 @@ function ctBody(){
       <label>Rendas antecipadas (meses)<input id="c_adv" type="text" inputmode="numeric" value="${c.advance||''}" placeholder="0"></label></div>
     <div class="hint" style="margin-top:-6px">A renda cria um movimento recorrente todos os meses. Com rendas antecipadas, arranca depois dos meses pagos à cabeça.</div>
     <label>IBAN para pagamento das rendas<input id="c_iban" value="${esc(c.iban)}" placeholder="PT50 0000 0000 0000 0000 0000 0" autocomplete="off"></label>`,
-      {icon:'contract',open:!c.id||!db.contracts.some(x=>x.id===c.id),summary:[c.start?'de '+c.start:'',c.end?'a '+c.end:'',c.deposit?'caução '+euro(c.deposit):''].filter(Boolean).join(' ')})}
+      {icon:'contract',open:false,summary:[c.start?'de '+c.start:'',c.end?'a '+c.end:'',c.deposit?'caução '+euro(c.deposit):''].filter(Boolean).join(' ')})}
     ${fold('contacts','Contactos',contactSect('owner',c,p)+contactSect('tenant',c,p),{icon:'users',summary:[c.ownerPhone||c.ownerEmail?'senhorio':'',c.tenantPhone||c.tenantEmail?'inquilino':''].filter(Boolean).join(' · ')})}
     ${fold('inv','Inventário',`
       ${inv.length?`<div class="form" style="gap:7px">
@@ -164,8 +167,8 @@ function contactSect(kind,c,p){
     ${chosen?`<div class="stat" style="border:0;padding:4px 0"><span>${esc(chosen.name)}</span>
         <b>${esc([chosen.phone?fmtPhone(chosen.phone):'',chosen.email].filter(Boolean).join(' · ')||'sem contacto na ficha')}</b></div>`
       :`<div class="row">
-        <label>Email<input id="${owners?'c_omail':'c_tmail'}" value="${esc(owners?c.ownerEmail:c.tenantEmail)}" placeholder="nome@exemplo.pt" autocomplete="off"></label>
-        <label>Telemóvel<input id="${owners?'c_ophone':'c_tphone'}" value="${esc(owners?c.ownerPhone:c.tenantPhone)}" placeholder="+351 912 000 000" autocomplete="off"></label></div>`}
+        <label>Email<input id="${owners?'c_omail':'c_tmail'}" type="email" inputmode="email" value="${esc(owners?c.ownerEmail:c.tenantEmail)}" placeholder="nome@exemplo.pt" autocomplete="off"></label>
+        <label>Telemóvel<input id="${owners?'c_ophone':'c_tphone'}" type="tel" inputmode="tel" value="${esc(owners?c.ownerPhone:c.tenantPhone)}" placeholder="+351 912 000 000" autocomplete="off"></label></div>`}
   </div>`;
 }
 function onOwnerContact(){
@@ -302,10 +305,19 @@ function reactivateContract(id){
 function delContract(id){
   const c=contract(id);
   confirmModal('Apagar contrato',`Apagar o contrato de ${esc(ctNames(c))}? Os movimentos ficam, mas deixam de estar ligados a ele.`,()=>{
-    (c.files||[]).forEach(f=>idbDel(f.id).catch(()=>{}));
+    const copia=JSON.parse(JSON.stringify(c));
+    const recs=JSON.parse(JSON.stringify((db.recurring||[]).filter(r=>r.auto&&r.tx&&r.tx.contractId===id)));
+    const ligados=db.transactions.filter(t=>t.contractId===id).map(t=>t.id);
     db.contracts=db.contracts.filter(x=>x.id!==id);
     db.recurring=(db.recurring||[]).filter(r=>!(r.auto&&r.tx&&r.tx.contractId===id));
     db.transactions.forEach(t=>{if(t.contractId===id)t.contractId=null});
-    save();closeAllModals();buildNav();render();toast('Contrato apagado.');
+    save();closeAllModals();buildNav();render();
+    comDesfazer('Contrato apagado.',()=>{
+      db.contracts.push(copia);
+      db.recurring=(db.recurring||[]).concat(recs);
+      db.transactions.forEach(t=>{if(ligados.indexOf(t.id)>-1)t.contractId=id});
+    },()=>{
+      (copia.files||[]).forEach(f=>idbDel(f.id).catch(()=>{}));
+    });
   });
 }

@@ -76,8 +76,31 @@ function seed(){
 }
 
 /* ================= ARRANQUE ================= */
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal('esc')});
 document.addEventListener('click',()=>closePops());
+/* Enter ativa o que é clicável mas não é botão nativo (cartões, itens do
+   menu): é o que falta para a app inteira andar a teclado. */
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter'&&e.key!==' ')return;
+  const t=e.target;
+  if(!t||!t.hasAttribute||!t.hasAttribute('onclick'))return;
+  if(/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName)&&e.key===' ')return;
+  if(/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))return;
+  e.preventDefault();t.click();
+});
+/* O Tab fica dentro da janela de cima: sem isto o foco saía para a página
+   tapada e o leitor de ecrã perdia-se atrás do véu. */
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Tab'||typeof modalStack==='undefined'||!modalStack.length)return;
+  const sheet=modalStack[modalStack.length-1].el.querySelector('.sheet');
+  const foc=[].slice.call(sheet.querySelectorAll('button,[href],input,select,textarea,[tabindex]'))
+    .filter(x=>x.tabIndex>-1&&!x.disabled&&x.offsetParent!==null);
+  if(!foc.length)return;
+  const primeiro=foc[0],ultimo=foc[foc.length-1],ativo=document.activeElement;
+  if(!sheet.contains(ativo)){e.preventDefault();primeiro.focus();return}
+  if(e.shiftKey&&ativo===primeiro){e.preventDefault();ultimo.focus()}
+  else if(!e.shiftKey&&ativo===ultimo){e.preventDefault();primeiro.focus()}
+});
 /* o teclado tapava as caixas de texto no fundo do ecrã */
 const typing=t=>!!t&&((/^(INPUT|TEXTAREA)$/.test(t.tagName||'')&&!/^(date|month|time|checkbox|file)$/.test(t.type||''))||t.isContentEditable);
 /* o seletor de data é uma janela do sistema: ao escolher, larga o foco para o ecrã voltar ao sítio */
