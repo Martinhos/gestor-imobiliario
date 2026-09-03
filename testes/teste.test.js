@@ -24,12 +24,14 @@ const ambiente = (extra = {}) => Object.assign({
 }, extra);
 
 // abre a ligação como um browser abriria: emite-a e entrega-a à rota
-async function abrir(env, comDados, mexe, manter) {
-  let lig = await ligacaoTeste(env, 'https://dev.x.pt', comDados, manter);
+async function abrir(env, comDados, mexe, manter, quem) {
+  let lig = await ligacaoTeste(env, 'https://dev.x.pt', comDados, manter, quem);
   if (mexe) lig = mexe(lig);
   const url = new URL(lig);
   return rotaTeste({ env, url, request: new Request(lig) });
 }
+
+const tokenDe = (r) => /entrar=([a-f0-9]{64})/.exec(r.headers.get('Location'))[1];
 
 const contas = async (env) => (await env.DB.prepare(
   "SELECT id, email, deleted_at FROM users ORDER BY created_at"
@@ -125,6 +127,74 @@ describe('a assinatura antiga (sem manter) ainda vale — só como lavar', () =>
     const lig2 = 'https://dev.x.pt/t/entrar?exp=' + exp + '&dados=0&m=1&sig=' + sig;
     const r2 = await rotaTeste({ env, url: new URL(lig2), request: new Request(lig2) });
     assert.equal(r2.status, 403);
+  });
+});
+
+describe('cada dev tem as suas contas', () => {
+  test('o dono fica gravado, e a lavagem de um não toca nas do outro', async () => {
+    const env = ambiente();
+    await abrir(env, false, null, false, 'alice');
+    await abrir(env, false, null, true, 'bob');   // manter: junta-se
+    let vivas = (await contas(env)).filter((u) => !u.deleted_at);
+    assert.equal(vivas.length, 2);
+
+    // alice lava outra vez: a dela vai-se, a do bob fica
+    await abrir(env, false, null, false, 'alice');
+    vivas = (await contas(env)).filter((u) => !u.deleted_at);
+    assert.equal(vivas.length, 2, 'a nova da alice e a do bob');
+    const donos = await env.DB.prepare('SELECT test_owner FROM users WHERE deleted_at IS NULL ORDER BY test_owner').all();
+    assert.deepEqual(donos.results.map((x) => x.test_owner), ['alice', 'bob']);
+  });
+
+  test('o seletor: lista só as do próprio, troca dentro delas, e cria extra', async () => {
+    const env = ambiente();
+    const tAlice = tokenDe(await abrir(env, false, null, false, 'alice'));
+    const tBob = tokenDe(await abrir(env, false, null, true, 'bob'));
+    const chama = (token, path, metodo, corpo) => handleApi(new Request('https://dev.x.pt' + path, {
+      method: metodo || 'GET',
+      headers: Object.assign({ Authorization: 'Bearer ' + token },
+        corpo ? { 'Content-Type': 'application/json' } : {}),
+      body: corpo ? JSON.stringify(corpo) : undefined,
+    }), env, { waitUntil() {} });
+
+    const lista = await (await chama(tAlice, '/api/teste/contas')).json();
+    assert.equal(lista.contas.length, 1, 'a alice só vê a dela');
+    assert.equal(lista.contas[0].atual, true);
+
+    const deBob = (await (await chama(tBob, '/api/teste/contas')).json()).contas[0].id;
+    const roubo = await chama(tAlice, '/api/teste/trocar', 'POST', { para: deBob });
+    assert.equal(roubo.status, 404, 'a conta do bob não é trocável pela alice');
+
+    const nova = await (await chama(tAlice, '/api/teste/nova', 'POST', {})).json();
+    assert.ok(nova.token, 'a extra vem com sessão');
+    const lista2 = await (await chama(tAlice, '/api/teste/contas')).json();
+    assert.equal(lista2.contas.length, 2, 'a alice passou a ter duas');
+
+    const troca = await (await chama(tAlice, '/api/teste/trocar', 'POST', { para: nova.id })).json();
+    assert.ok(troca.token);
+    const eu = await (await chama(troca.token, '/api/me')).json();
+    assert.equal(eu.id, nova.id, 'o token da troca entra mesmo na outra conta');
+  });
+
+  test('em produção o seletor nem existe; e uma conta normal não lhe toca', async () => {
+    const env = ambiente();
+    const t = tokenDe(await abrir(env, false, null, false, 'alice'));
+    const semEnv = Object.assign({}, env, { ENV_NAME: undefined });
+    const r = await handleApi(new Request('https://x.pt/api/teste/contas', {
+      headers: { Authorization: 'Bearer ' + t },
+    }), semEnv, { waitUntil() {} });
+    assert.equal(r.status, 404);
+
+    const pw = await hashPassword('Descartavel1!');
+    await env.DB.prepare(
+      `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, terms_version, terms_at)
+       VALUES ('N9', 'gente@x.pt', 'Gente', ?, ?, 1, ?, 1)`
+    ).bind(pw.hash, pw.salt, TERMS_VERSION).run();
+    const tNormal = await createSession(env, 'N9', 0);
+    const r2 = await handleApi(new Request('https://dev.x.pt/api/teste/contas', {
+      headers: { Authorization: 'Bearer ' + tNormal },
+    }), env, { waitUntil() {} });
+    assert.equal(r2.status, 403, 'uma conta a sério não mexe no seletor');
   });
 });
 
