@@ -9,7 +9,7 @@ import { webcrypto } from 'node:crypto';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-import { enviarEmail, emailReporPassword, emailRespostaPedido, emailPedidoRecebido, numeroPedido, REMETENTES } from '../worker/src/lib/correio.js';
+import { enviarEmail, emailReporPassword, emailRespostaPedido, emailPedidoRecebido, numeroPedido, dominioDaCasa, REMETENTES } from '../worker/src/lib/correio.js';
 import { baseDeTeste, kvFalso, r2Falso } from './lib/bd.js';
 import { rotasEquipaApi } from '../worker/src/equipa-api.js';
 
@@ -61,6 +61,32 @@ describe('o envelope', () => {
     const r = await enviarEmail({ RESEND_API_KEY: 'k' }, { para: 'a@x.pt', assunto: 'x' });
     assert.equal(r.enviado, false);
     assert.match(r.motivo, /422/);
+  });
+});
+
+describe('o correio das contas de teste vai para a caixa da casa', () => {
+  test('o destinatario @teste.rendorium.com vira test@ e a conta fica no assunto', async () => {
+    armarFetch();
+    const r = await enviarEmail({ RESEND_API_KEY: 'k' }, { para: 'teste-ab12cd@teste.rendorium.com', assunto: 'Recebemos o teu pedido' });
+    assert.equal(r.enviado, true);
+    assert.deepEqual(capturados[0].corpo.to, ['test@rendorium.com']);
+    assert.match(capturados[0].corpo.subject, /teste-ab12cd/, 'sabe-se de que sessao veio');
+  });
+
+  test('um destinatario normal nao e tocado', async () => {
+    armarFetch();
+    await enviarEmail({ RESEND_API_KEY: 'k' }, { para: 'pessoa@gmail.com', assunto: 'Ola' });
+    assert.deepEqual(capturados[0].corpo.to, ['pessoa@gmail.com']);
+  });
+
+  test('dominioDaCasa reconhece o dominio e os subdominios, e mais nada', () => {
+    assert.equal(dominioDaCasa('x@rendorium.com'), true);
+    assert.equal(dominioDaCasa('bounces@send.rendorium.com'), true, 'o envelope do Resend e da casa');
+    assert.equal(dominioDaCasa('a@teste.rendorium.com'), true);
+    assert.equal(dominioDaCasa('x@rendorium.com.pt'), false, 'gralha nao e a casa');
+    assert.equal(dominioDaCasa('x@meurendorium.com'), false);
+    assert.equal(dominioDaCasa('x@gmail.com'), false);
+    assert.equal(dominioDaCasa(''), false);
   });
 });
 

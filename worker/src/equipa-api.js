@@ -153,6 +153,8 @@ const ACOES_DE_CONTA = {
   async email(env, u, valor) {
     const email = String(valor || '').trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Esse email não parece um email.');
+    const { dominioDaCasa } = await import('./lib/correio.js');
+    if (dominioDaCasa(email)) throw new Error('Os endereços @rendorium.com são da casa — não se pendura uma conta neles.');
     const outro = await env.DB.prepare('SELECT id FROM users WHERE email = ? AND id <> ?')
       .bind(email, u.id).first();
     if (outro) throw new Error('Já há uma conta com esse email (' + outro.id + ').');
@@ -398,6 +400,10 @@ export async function rotasEquipaApi(c) {
     const motivo = String((b && b.motivo) || '').trim().slice(0, 300);
     if (motivo.length < 5) return err(400, 'Escreve o motivo — fica no rasto.');
     if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err(400, 'Esse email não parece um email.');
+    {
+      const { dominioDaCasa } = await import('./lib/correio.js');
+      if (dominioDaCasa(email)) return err(400, 'Os endereços @rendorium.com são da casa — as contas de teste nascem pelo /test.');
+    }
     const { weakPassword } = await import('./lib/http.js');
     if (weakPassword(pass)) return err(400, 'Palavra-passe fraca: 8+ caracteres, com maiúscula, minúscula, número e símbolo.');
     const outro = await env.DB.prepare('SELECT id, deleted_at FROM users WHERE email = ?').bind(email).first();
@@ -588,8 +594,9 @@ export async function rotasEquipaApi(c) {
       const b = await body(request);
       const { ligacaoTeste } = await import('./teste.js');
       await auditar(env, eu, 'operacao.teste', null,
-        'ligação de teste emitida' + (b && b.dados ? ' (com dados de exemplo)' : ' (vazia)'));
-      return json({ ligacao: await ligacaoTeste(env, url.origin, !!(b && b.dados)) });
+        'ligação de teste emitida' + (b && b.dados ? ' (com dados de exemplo)' : ' (vazia)') +
+        (b && b.manter ? ' (extra, sem lavar)' : ''));
+      return json({ ligacao: await ligacaoTeste(env, url.origin, !!(b && b.dados), !!(b && b.manter)) });
     }
 
     if (path === '/api/equipa/operacao/copiar' && method === 'POST') {

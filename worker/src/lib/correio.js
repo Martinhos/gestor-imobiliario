@@ -36,8 +36,24 @@ export function molde(titulo, corpoHtml, rodape) {
   </div></body></html>`;
 }
 
+// Qualquer endereço no domínio da casa — rendorium.com ou um subdomínio.
+// Serve o registo (ninguém cria contas com o nosso nome) e o correio que
+// entra (o test@ só aceita o que a própria casa envia).
+export function dominioDaCasa(email) {
+  const d = String(email || '').toLowerCase().split('@')[1] || '';
+  return d === DOMINIO || d.endsWith('.' + DOMINIO);
+}
+
 export async function enviarEmail(env, { para, assunto, html, texto, remetente }) {
   if (!env.RESEND_API_KEY) return { enviado: false, motivo: 'sem RESEND_API_KEY' };
+  /* O correio de uma conta de teste vai todo para a caixa da casa: o
+     teste-…@teste.rendorium.com não existe (só daria bounces), e quem
+     testa quer VER o email que a app mandou. A conta original fica no
+     assunto, para se saber de que sessão veio. */
+  if (/@teste\.rendorium\.com$/i.test(String(para || ''))) {
+    assunto = String(assunto || '') + ' · ' + String(para).split('@')[0];
+    para = 'test@' + DOMINIO;
+  }
   if (!para || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(para))) {
     return { enviado: false, motivo: 'destinatário inválido' };
   }
