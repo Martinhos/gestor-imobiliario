@@ -140,6 +140,7 @@ jobs:
           DISCORD_SUPORTE_WEBHOOK: ${{ secrets.DISCORD_SUPORTE_WEBHOOK }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           CF_EMAIL_TOKEN: ${{ secrets.CF_EMAIL_TOKEN }}
+          DESTINO_CORREIO_TESTE: ${{ secrets.DESTINO_CORREIO_TESTE }}
           CF_ANALYTICS_TOKEN: ${{ secrets.CF_ANALYTICS_TOKEN }}
         run: |
           set -e
@@ -172,6 +173,7 @@ jobs:
             # escreve no Email Routing do dominio REAL: nunca no worker de dev,
             # que corre codigo ainda nao promovido
             put CF_EMAIL_TOKEN "$CF_EMAIL_TOKEN"
+            put DESTINO_CORREIO_TESTE "$DESTINO_CORREIO_TESTE"
             put CF_ACCOUNT_ID "$TF_VAR_cloudflare_account_id"
           fi
 

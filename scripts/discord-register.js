@@ -84,7 +84,10 @@ const comandos = [
   {
     name: 'test',
     description: 'Ligação temporária para o ambiente de teste, numa conta lavada',
-    options: [{ type: BOOLEANO, name: 'dados', description: 'Com dados de exemplo', required: false }],
+    options: [
+      { type: BOOLEANO, name: 'dados', description: 'Com dados de exemplo', required: false },
+      { type: BOOLEANO, name: 'manter', description: 'Conta extra, sem apagar as existentes', required: false },
+    ],
   },
   Object.assign({
     name: 'access',

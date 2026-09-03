@@ -93,6 +93,19 @@ export default {
     })());
   },
 
+  /* O correio que ENTRA (a regra do test@rendorium.com aponta para aqui).
+     Só se aceita o que a própria casa envia — o envelope do Resend vem de
+     send.rendorium.com, e é o envelope que se verifica. O resto é recusado
+     à porta, antes de existir caixa: test@ não é um endereço público. */
+  async email(message, env, ctx) {
+    const { dominioDaCasa } = await import('./lib/correio.js');
+    const destino = env.DESTINO_CORREIO_TESTE;
+    if (!destino || !dominioDaCasa(message.from)) {
+      return message.setReject('Este endereço só aceita correio do próprio Rendorium.');
+    }
+    await message.forward(destino);
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 

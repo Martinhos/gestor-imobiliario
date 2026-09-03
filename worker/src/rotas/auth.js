@@ -37,6 +37,12 @@ export async function rotasAuth(c) {
     }
     const email = String(b.email).trim().toLowerCase();
     if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return err(400, 'Email inválido.');
+    {
+      // os endereços da casa não são de ninguém: contas @rendorium.com só
+      // as de teste, e essas nascem pela porta própria (/test)
+      const { dominioDaCasa } = await import('../lib/correio.js');
+      if (dominioDaCasa(email)) return err(400, 'Os endereços @rendorium.com são da casa — usa o teu email pessoal.');
+    }
     if (String(b.name || '').length > 120) return err(400, 'Nome demasiado longo.');
     const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
     if (existing) return err(409, 'Já existe uma conta com este email.');
@@ -151,6 +157,10 @@ export async function rotasAuth(c) {
     }
     const col = 'google_sub';
     const email = String(payload.email || '').trim().toLowerCase();
+    {
+      const { dominioDaCasa } = await import('../lib/correio.js');
+      if (dominioDaCasa(email)) return err(400, 'Os endereços @rendorium.com são da casa — entra com o teu email pessoal.');
+    }
     let user = await env.DB.prepare(`SELECT * FROM users WHERE ${col} = ? AND deleted_at IS NULL`)
       .bind(payload.sub)
       .first();

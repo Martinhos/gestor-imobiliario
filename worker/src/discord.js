@@ -503,10 +503,13 @@ async function cmdEntrar(env, i, papeis, request) {
 async function cmdTest(env, opts, request) {
   const { ligacaoTeste } = await import('./teste.js');
   const base = 'https://dev.rendorium.com';   // o teste vive sempre aqui
-  const lig = await ligacaoTeste(env, base, !!opts.dados);
+  const lig = await ligacaoTeste(env, base, !!opts.dados, !!opts.manter);
   return reply('🧪 O teu ambiente de teste (a ligação vale 10 minutos):\n' + lig + '\n\n' +
-    'Abri-la apaga as contas de teste anteriores e entra numa conta lavada' +
-    (opts.dados ? ', com dados de exemplo' : ', vazia') + '. Terminar a sessão apaga-a.');
+    (opts.manter
+      ? 'Abri-la cria uma conta de teste EXTRA, sem apagar as existentes — para testar partilhas entre contas.'
+      : 'Abri-la apaga as contas de teste anteriores e entra numa conta lavada') +
+    (opts.dados ? ' Vem com dados de exemplo.' : '') + ' Terminar a sessão apaga-a.\n' +
+    'O correio destas contas cai todo em test@rendorium.com.');
 }
 
 /* Quem pode o quê, com as caixas na própria mensagem.

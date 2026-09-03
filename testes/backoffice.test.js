@@ -202,6 +202,10 @@ describe('ações sobre contas', () => {
     assert.equal(r.status, 200);
     assert.equal(r.email, 'nova@x.pt', 'o email normaliza');
 
+    const daCasa = await chamar(env, MASTER, 'POST', '/api/equipa/pessoas',
+      { email: 'chefe@rendorium.com', password: 'Aa1!aaaa', motivo: 'conta interna' });
+    assert.equal(daCasa.status, 400, 'os endereços da casa não são de contas');
+
     const repete = await chamar(env, MASTER, 'POST', '/api/equipa/pessoas',
       { email: 'nova@x.pt', password: 'Aa1!aaaa', motivo: 'outra vez' });
     assert.equal(repete.status, 409, 'colisão recusada');

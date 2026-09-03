@@ -30,19 +30,22 @@ async function chave(env) {
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 }
 
-export async function assinarTeste(env, exp, dados) {
+export async function assinarTeste(env, exp, dados, manter) {
   const sig = await crypto.subtle.sign('HMAC', await chave(env),
-    new TextEncoder().encode(exp + ':' + dados));
+    new TextEncoder().encode(exp + ':' + dados + ':' + (manter || '0')));
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /* A ligação completa, para o bot e para o back office. `base` é o worker de
    destino: o de dev aponta a si próprio; o de produção aponta ao dev. */
-export async function ligacaoTeste(env, base, comExemplo) {
+/* `manter` cria uma conta EXTRA sem apagar as existentes — é o que permite
+   testar partilhas e ligações entre duas contas de teste ao mesmo tempo. */
+export async function ligacaoTeste(env, base, comExemplo, manter) {
   const exp = String(now() + VALIDADE_MIN * 60000);
   const dados = comExemplo ? '1' : '0';
-  const sig = await assinarTeste(env, exp, dados);
-  return base + '/t/entrar?exp=' + exp + '&dados=' + dados + '&sig=' + sig;
+  const m = manter ? '1' : '0';
+  const sig = await assinarTeste(env, exp, dados, m);
+  return base + '/t/entrar?exp=' + exp + '&dados=' + dados + '&m=' + m + '&sig=' + sig;
 }
 
 // Quem abre esta rota é uma pessoa num browser: os erros são uma página
@@ -68,6 +71,7 @@ export async function rotaTeste(c) {
 
   const exp = url.searchParams.get('exp') || '';
   const dados = url.searchParams.get('dados') === '1' ? '1' : '0';
+  const manter = url.searchParams.get('m') === '1' ? '1' : '0';
   const sig = url.searchParams.get('sig') || '';
   if (!/^\d{10,16}$/.test(exp) || !/^[a-f0-9]{64}$/.test(sig)) {
     return pagina(400, 'Ligação inválida', 'Falta-lhe um pedaço. Pede uma nova com /test no Discord.');
@@ -75,16 +79,21 @@ export async function rotaTeste(c) {
   if (Number(exp) < now()) {
     return pagina(410, 'Esta ligação expirou', 'Valem ' + VALIDADE_MIN + ' minutos. Corre /test outra vez e usa a nova.');
   }
-  const esperada = await assinarTeste(env, exp, dados);
+  const esperada = await assinarTeste(env, exp, dados, manter);
   if (sig !== esperada) return pagina(403, 'Assinatura errada', 'Esta ligação não foi emitida por nós. Pede uma nova com /test.');
 
   /* cada visita começa lavada: as contas de teste anteriores vão-se, com
-     tudo o que arrastam (casas, registos, ligações) — é o purge a sério */
-  const velhas = (await env.DB.prepare(
-    "SELECT id FROM users WHERE email LIKE '%' || ? AND deleted_at IS NULL"
-  ).bind(DOMINIO_TESTE).all()).results || [];
-  for (const v of velhas) {
-    try { await purgeAccount(env, v.id); } catch (e) { /* uma teimosa não trava a nova */ }
+     tudo o que arrastam (casas, registos, ligações) — é o purge a sério.
+     Com `manter`, salta-se a lavagem: a conta nova junta-se às que há,
+     para testes que precisam de duas ao mesmo tempo. */
+  let velhas = [];
+  if (manter !== '1') {
+    velhas = (await env.DB.prepare(
+      "SELECT id FROM users WHERE email LIKE '%' || ? AND deleted_at IS NULL"
+    ).bind(DOMINIO_TESTE).all()).results || [];
+    for (const v of velhas) {
+      try { await purgeAccount(env, v.id); } catch (e) { /* uma teimosa não trava a nova */ }
+    }
   }
 
   // a conta nova: sem palavra-passe conhecida (hash aleatório) — entra-se
@@ -98,8 +107,8 @@ export async function rotaTeste(c) {
 
   const token = await createSession(env, id, 0);
   await auditar(env, { discordId: 'sistema', nome: '/test', papeis: ['bot'] },
-    'teste.sessao', id, 'conta lavada' + (dados === '1' ? ', com dados de exemplo' : '') +
-    ' · apagadas ' + velhas.length + ' anteriores');
+    'teste.sessao', id, (manter === '1' ? 'conta extra (as outras ficam)' : 'conta lavada · apagadas ' + velhas.length + ' anteriores') +
+    (dados === '1' ? ' · com dados de exemplo' : ''));
 
   return new Response(null, {
     status: 302,

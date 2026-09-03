@@ -24,8 +24,8 @@ const ambiente = (extra = {}) => Object.assign({
 }, extra);
 
 // abre a ligação como um browser abriria: emite-a e entrega-a à rota
-async function abrir(env, comDados, mexe) {
-  let lig = await ligacaoTeste(env, 'https://dev.x.pt', comDados);
+async function abrir(env, comDados, mexe, manter) {
+  let lig = await ligacaoTeste(env, 'https://dev.x.pt', comDados, manter);
   if (mexe) lig = mexe(lig);
   const url = new URL(lig);
   return rotaTeste({ env, url, request: new Request(lig) });
@@ -91,6 +91,21 @@ describe('a porta /t/entrar', () => {
     assert.ok(velha.deleted_at, 'a anterior ficou lápide');
     const casas = await env.DB.prepare('SELECT COUNT(*) AS n FROM houses').first();
     assert.equal(casas.n, 0, 'a casa foi com a conta');
+  });
+});
+
+describe('a opção manter: conta extra sem lavar', () => {
+  test('duas contas vivas ao mesmo tempo — e mexer no m rebenta a assinatura', async () => {
+    const env = ambiente();
+    await abrir(env, false);
+    const r2 = await abrir(env, false, null, true);
+    assert.equal(r2.status, 302);
+    const vivas = (await contas(env)).filter((u) => !u.deleted_at);
+    assert.equal(vivas.length, 2, 'a primeira sobreviveu à extra');
+
+    // promover um link "lavar" a "manter" sem assinar de novo: 403
+    const mau = await abrir(env, false, (l) => l.replace('&m=0&', '&m=1&'));
+    assert.equal(mau.status, 403, 'o manter está dentro do que se assina');
   });
 });
 
