@@ -71,6 +71,32 @@ export async function enviarEmail(env, { para, assunto, html, texto, remetente }
 
 /* -------------------- os emails concretos que a app manda ---------------- */
 
+/* O número de um pedido: os primeiros 8 caracteres do id, em maiúsculas.
+   É o mesmo prefixo que o /pedido do Discord e a procura do back office
+   aceitam — quem cita o número do email encontra o pedido em todo o lado. */
+export function numeroPedido(id) {
+  return '#' + String(id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
+export async function emailPedidoRecebido(env, para, id, assunto) {
+  const num = numeroPedido(id);
+  return enviarEmail(env, {
+    para,
+    remetente: 'maquina',
+    assunto: 'Recebemos o teu pedido ' + num,
+    texto: 'O teu pedido «' + assunto + '» chegou e tem o número ' + num + '.\n\n' +
+      'Vamos responder-te por email; também podes acompanhar e responder na app, ' +
+      'em Definições → Ajuda e sugestões.',
+    html: molde('Recebemos o teu pedido ' + num,
+      `<p style="margin:0 0 10px;color:#5c6862">${String(assunto || '').replace(/</g, '&lt;')}</p>
+       <p style="margin:0 0 14px">Chegou e ficou registado com o número <b>${num}</b>.
+       Vamos responder-te por email.</p>
+       <p style="margin:0">Podes acompanhar e responder na app, em
+       <b>Definições → Ajuda e sugestões</b>.</p>`,
+      'Recebeste este email porque escreveste um pedido de ajuda no Rendorium. Responder a este email também funciona — cai na nossa caixa de suporte.'),
+  });
+}
+
 export async function emailReporPassword(env, para, ligacao) {
   return enviarEmail(env, {
     para,
@@ -87,16 +113,17 @@ export async function emailReporPassword(env, para, ligacao) {
   });
 }
 
-export async function emailRespostaPedido(env, para, assunto, resposta) {
+export async function emailRespostaPedido(env, para, assunto, resposta, id) {
+  const num = id ? numeroPedido(id) + ' ' : '';
   const seguro = String(resposta || '').slice(0, 1500)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
   return enviarEmail(env, {
     para,
     remetente: 'suporte',
-    assunto: 'Respondemos ao teu pedido: ' + String(assunto || '').slice(0, 120),
-    texto: 'Respondemos ao teu pedido «' + assunto + '»:\n\n' + resposta +
+    assunto: 'Respondemos ao teu pedido ' + (num || ': ') + String(assunto || '').slice(0, 120),
+    texto: 'Respondemos ao teu pedido ' + num + '«' + assunto + '»:\n\n' + resposta +
       '\n\nPodes ver e responder na app, em Definições → Ajuda e sugestões.',
-    html: molde('Respondemos ao teu pedido',
+    html: molde('Respondemos ao teu pedido ' + num,
       `<p style="margin:0 0 10px;color:#5c6862">${String(assunto || '').replace(/</g, '&lt;')}</p>
        <div style="background:#f0f5f1;border-radius:10px;padding:14px 16px;margin:0 0 14px">${seguro}</div>
        <p style="margin:0">Podes ver o histórico e responder na app, em

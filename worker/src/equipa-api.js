@@ -337,7 +337,7 @@ export async function rotasEquipaApi(c) {
           .bind(t.user_id).first();
         if (dono && dono.email) {
           const { emailRespostaPedido } = await import('./lib/correio.js');
-          const envio = emailRespostaPedido(env, dono.email, t.subject, texto);
+          const envio = emailRespostaPedido(env, dono.email, t.subject, texto, t.id);
           if (ctx && ctx.waitUntil) ctx.waitUntil(envio); else await envio;
         }
       }
