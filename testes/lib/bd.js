@@ -35,16 +35,21 @@ export function baseDeTeste() {
       }
     },
     prepare(sql) {
+      /* A D1 aceita parâmetros numerados (?1) e repetidos; o node:sqlite
+         não. Traduz-se aqui — o SQL do worker corre tal e qual está. */
+      const ordem = [];
+      const sqlPos = sql.replace(/\?(\d+)/g, (m, n) => { ordem.push(Number(n) - 1); return '?'; });
       let args = [];
+      const vai = () => (ordem.length ? ordem.map((i) => args[i]) : args);
       const q = {
         bind(...a) { args = a.map((v) => (v === undefined ? null : v)); return q; },
         async first() {
-          const linha = db.prepare(sql).get(...args);
+          const linha = db.prepare(sqlPos).get(...vai());
           return linha === undefined ? null : linha;
         },
-        async all() { return { results: db.prepare(sql).all(...args) }; },
+        async all() { return { results: db.prepare(sqlPos).all(...vai()) }; },
         async run() {
-          const r = db.prepare(sql).run(...args);
+          const r = db.prepare(sqlPos).run(...vai());
           return { meta: { changes: Number(r.changes) } };
         },
       };

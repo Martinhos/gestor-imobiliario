@@ -515,7 +515,16 @@ function verOperacao() {
         }).join('') + '</div>'
       : '';
 
-    el('conteudo').innerHTML = demo + batimento + copias + '<div id="resumoCopia"></div>' + historico + consumo;
+    /* fora de produção: uma sessão de teste a um clique — a mesma ligação
+       que o /test do Discord dá, com a mesma lavagem de contas */
+    var teste = !d.teste ? '' :
+      '<div class="card"><div class="row"><div style="min-width:0"><b>Sessão de teste</b>' +
+      '<div class="small">Abre a app numa conta lavada. As contas de teste anteriores são apagadas; sair da conta apaga-a.</div></div>' +
+      '<span style="white-space:nowrap"><button class="btn mini" onclick="sessaoTeste(false)">Vazia</button> ' +
+      '<button class="btn mini" onclick="sessaoTeste(true)">Com dados</button></span></div>' +
+      '<div id="ligTeste"></div></div>';
+
+    el('conteudo').innerHTML = demo + teste + batimento + copias + '<div id="resumoCopia"></div>' + historico + consumo;
   }).catch(falha);
 }
 
@@ -526,6 +535,14 @@ function mudarDemo(ligar) {
   enviar('/api/equipa/operacao/demo', { ligado: ligar, motivo: motivo })
     .then(function () { verOperacao(); })
     .catch(function (e) { alert(e.message); });
+}
+
+function sessaoTeste(comDados) {
+  el('ligTeste').innerHTML = '<div class="small" style="margin-top:8px">A emitir…</div>';
+  enviar('/api/equipa/operacao/teste', { dados: comDados }).then(function (d) {
+    el('ligTeste').innerHTML = '<div class="small" style="margin-top:8px">Vale 10 minutos: ' +
+      '<a href="' + esc(d.ligacao) + '" target="_blank" rel="noopener">abrir a sessão de teste</a></div>';
+  }).catch(function (e) { el('ligTeste').innerHTML = ''; alert(e.message); });
 }
 
 function copiarAgora() {

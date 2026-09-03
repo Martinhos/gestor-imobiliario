@@ -97,6 +97,7 @@ export const PERMISSOES = {
   copias: ['admin'],
   comandos: ['admin', 'dev', 'suporte'],
   entrar: ['admin', 'dev', 'suporte'],
+  test: ['dev', 'suporte'],
   access: [],
 };
 
@@ -492,6 +493,19 @@ async function cmdEntrar(env, i, papeis, request) {
   );
 }
 
+/* Uma ligação para o ambiente de TESTE — nunca para produção. O bot de dev
+   aponta a si próprio; o de produção (quem responde ao Discord depois da
+   promoção) aponta ao dev, porque o /t/entrar de produção nem existe.
+   Abrir a ligação lava as contas de teste e entra numa fresca. */
+async function cmdTest(env, opts, request) {
+  const { ligacaoTeste } = await import('./teste.js');
+  const base = env.ENV_NAME ? new URL(request.url).origin : 'https://dev.rendorium.com';
+  const lig = await ligacaoTeste(env, base, !!opts.dados);
+  return reply('🧪 O teu ambiente de teste (a ligação vale 10 minutos):\n' + lig + '\n\n' +
+    'Abri-la apaga as contas de teste anteriores e entra numa conta lavada' +
+    (opts.dados ? ', com dados de exemplo' : ', vazia') + '. Terminar a sessão apaga-a.');
+}
+
 /* Quem pode o quê, com as caixas na própria mensagem.
 
    O papel continua a mandar: o que vem dele já vem marcado, e desmarcá-lo é
@@ -722,6 +736,7 @@ export async function handleInteraction(request, env, ctx) {
       if (nome === 'comandos') return json(cmdComandos(pap, meusAcessos));
       if (nome === 'access') return json(await cmdAccess(env, i, opts));
       if (nome === 'entrar') return json(await cmdEntrar(env, i, papeis, request));
+      if (nome === 'test') return json(await cmdTest(env, opts, request));
       if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
       if (nome === 'pedido') return json(await cmdPedido(env, opts, pap));
       if (nome === 'responder') return json(await cmdResponder(env, opts, pap, quemFala(i, pap)));

@@ -109,6 +109,13 @@ export default {
       return Response.redirect('https://app.rendorium.com' + url.pathname + url.search, 302);
     }
 
+    /* A porta do ambiente de teste (/test no Discord ou o botão na
+       Operação). Fora de produção, só: lá dentro a rota diz que não. */
+    if (url.pathname === '/t/entrar' && request.method === 'GET') {
+      const { rotaTeste } = await import('./teste.js');
+      return harden(await rotaTeste({ env, url, request }));
+    }
+
     // Interações do bot do Discord. A autenticação é a assinatura Ed25519
     // que o Discord envia — não há sessão nem cookies aqui.
     if (url.pathname === '/api/discord' && request.method === 'POST') {
