@@ -138,6 +138,23 @@ jobs:
           DISCORD_SUPORTE: ${{ secrets.DISCORD_SUPORTE }}
           DISCORD_SUPORTE_CHANNEL: ${{ secrets.DISCORD_SUPORTE_CHANNEL }}
           DISCORD_SUPORTE_WEBHOOK: ${{ secrets.DISCORD_SUPORTE_WEBHOOK }}
+          # O servidor de Discord de dev tem a sua própria aplicação (o
+          # endereço das interações é da aplicação, não do servidor). No
+          # ambiente de dev, um segredo _DEV manda; sem ele, vale o
+          # partilhado — configurar o servidor novo é opcional peça a peça.
+          DISCORD_BOT_TOKEN_DEV: ${{ secrets.DISCORD_BOT_TOKEN_DEV }}
+          DISCORD_PUBLIC_KEY_DEV: ${{ secrets.DISCORD_PUBLIC_KEY_DEV }}
+          DISCORD_DEV_WEBHOOK_DEV: ${{ secrets.DISCORD_DEV_WEBHOOK_DEV }}
+          DISCORD_DEV_CHANNEL_DEV: ${{ secrets.DISCORD_DEV_CHANNEL_DEV }}
+          DISCORD_MASTER_DEV: ${{ secrets.DISCORD_MASTERS_DEV || secrets.DISCORD_MASTER_DEV }}
+          DISCORD_ADMINS_DEV: ${{ secrets.DISCORD_ADMINS_DEV }}
+          DISCORD_DEVS_DEV: ${{ secrets.DISCORD_DEVS_DEV }}
+          DISCORD_SUPORTE_DEV: ${{ secrets.DISCORD_SUPORTE_DEV }}
+          DISCORD_SUPORTE_CHANNEL_DEV: ${{ secrets.DISCORD_SUPORTE_CHANNEL_DEV }}
+          DISCORD_SUPORTE_WEBHOOK_DEV: ${{ secrets.DISCORD_SUPORTE_WEBHOOK_DEV }}
+          # partilhada pelos dois ambientes: é ela que deixa o /test de um
+          # servidor assinar ligações que o outro worker aceita
+          TESTE_CHAVE: ${{ secrets.TESTE_CHAVE }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           CF_EMAIL_TOKEN: ${{ secrets.CF_EMAIL_TOKEN }}
           DESTINO_CORREIO_TESTE: ${{ secrets.DESTINO_CORREIO_TESTE }}
@@ -145,11 +162,17 @@ jobs:
         run: |
           set -e
           put () {
-            if [ -n "$2" ]; then
-              printf '%s' "$2" | npx wrangler@4 secret put "$1" $ENV_FLAG
-              echo "definido: $1"
+            nome="$1"; valor="$2"
+            # no dev, o segredo _DEV do mesmo nome tem precedência
+            if [ -z "$IS_PROD" ]; then
+              eval "alt=\"\${${nome}_DEV:-}\""
+              if [ -n "$alt" ]; then valor="$alt"; echo "(a usar ${nome}_DEV)"; fi
+            fi
+            if [ -n "$valor" ]; then
+              printf '%s' "$valor" | npx wrangler@4 secret put "$nome" $ENV_FLAG
+              echo "definido: $nome"
             else
-              echo "sem valor: $1 (ignorado)"
+              echo "sem valor: $nome (ignorado)"
             fi
           }
           put DISCORD_DEV_WEBHOOK "$DISCORD_DEV_WEBHOOK"
@@ -163,6 +186,7 @@ jobs:
           put DISCORD_SUPORTE_CHANNEL "$DISCORD_SUPORTE_CHANNEL"
           put DISCORD_SUPORTE_WEBHOOK "$DISCORD_SUPORTE_WEBHOOK"
           put RESEND_API_KEY "$RESEND_API_KEY"
+          put TESTE_CHAVE "$TESTE_CHAVE"
           # o resumo de consumo e os comandos de administração são só da produção
           if [ -n "$IS_PROD" ]; then
             put DISCORD_ADMIN_WEBHOOK "$DISCORD_ADMIN_WEBHOOK"

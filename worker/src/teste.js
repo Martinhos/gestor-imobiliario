@@ -24,9 +24,13 @@ const VALIDADE_MIN = 10;
 
 export const eContaDeTeste = (email) => String(email || '').endsWith(DOMINIO_TESTE);
 
+/* A chave das ligações de teste. Com os bots de dev e produção separados,
+   o token do bot deixou de ser partilhado — a TESTE_CHAVE (a mesma nos dois
+   ambientes) é o que deixa o /test de qualquer servidor assinar ligações
+   que o worker de dev aceita. Sem ela, vale o token do bot, como dantes. */
 async function chave(env) {
   return crypto.subtle.importKey('raw',
-    new TextEncoder().encode('teste:' + (env.DISCORD_BOT_TOKEN || 'sem-chave')),
+    new TextEncoder().encode('teste:' + (env.TESTE_CHAVE || env.DISCORD_BOT_TOKEN || 'sem-chave')),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 }
 

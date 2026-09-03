@@ -12,6 +12,12 @@ name: Comandos do Discord
 # quem responde, que é o worker de cada um.
 on:
   workflow_dispatch:
+    inputs:
+      app:
+        description: Em que aplicação do Discord registar
+        type: choice
+        options: [producao, dev]
+        default: producao
 
 jobs:
   registar:
@@ -25,9 +31,9 @@ jobs:
 
       - name: Registar
         env:
-          DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
-          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          DISCORD_APP_ID: ${{ inputs.app == 'dev' && secrets.DISCORD_APP_ID_DEV || secrets.DISCORD_APP_ID }}
+          DISCORD_BOT_TOKEN: ${{ inputs.app == 'dev' && secrets.DISCORD_BOT_TOKEN_DEV || secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ inputs.app == 'dev' && secrets.DISCORD_GUILD_ID_DEV || secrets.DISCORD_GUILD_ID }}
         run: |
           if [ -z "$DISCORD_APP_ID" ] || [ -z "$DISCORD_BOT_TOKEN" ]; then
             echo "Falta DISCORD_APP_ID ou DISCORD_BOT_TOKEN nos segredos do repositório."
@@ -41,7 +47,7 @@ jobs:
       # a aplicação que não o mostra, ou nunca lá chegou.
       - name: Confirmar o que o Discord tem
         env:
-          DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
-          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          DISCORD_APP_ID: ${{ inputs.app == 'dev' && secrets.DISCORD_APP_ID_DEV || secrets.DISCORD_APP_ID }}
+          DISCORD_BOT_TOKEN: ${{ inputs.app == 'dev' && secrets.DISCORD_BOT_TOKEN_DEV || secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ inputs.app == 'dev' && secrets.DISCORD_GUILD_ID_DEV || secrets.DISCORD_GUILD_ID }}
         run: node scripts/discord-comandos.js
