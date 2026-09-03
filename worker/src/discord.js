@@ -240,7 +240,7 @@ async function mudarEstado(env, ref, estado, resposta, quem) {
       .bind(t.user_id).first();
     if (dono && dono.email) {
       const { emailRespostaPedido } = await import('./lib/correio.js');
-      await emailRespostaPedido(env, dono.email, t.subject, resposta);
+      await emailRespostaPedido(env, dono.email, t.subject, resposta, t.id);
     }
   }
   return Object.assign({}, t, { status: estado, reply: resposta || t.reply });

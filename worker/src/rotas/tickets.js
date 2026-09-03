@@ -27,6 +27,13 @@ export async function rotasTickets(c) {
     const { ticketButtons } = await import('../discord.js');
     // um pedido contado por alguém é trabalho de suporte, não de quem programa
     notifySuporte(env, ctx, ticketEmbed(row, me), ticketButtons(id));
+    // quem escreveu fica logo com o número na caixa de correio — o mesmo
+    // que o suporte vai citar quando responder
+    if (me.email) {
+      const { emailPedidoRecebido } = await import('../lib/correio.js');
+      const envio = emailPedidoRecebido(env, me.email, id, subject);
+      if (ctx && ctx.waitUntil) ctx.waitUntil(envio); else await envio;
+    }
     return json({ ok: true, id }, 201);
   }
 
