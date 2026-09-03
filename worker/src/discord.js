@@ -484,7 +484,10 @@ async function cmdEntrar(env, i, papeis, request) {
     papel: papeis[0],   // o principal, para mostrar
     papeis,             // todos, para decidir o que se vê
   });
-  const base = new URL(request.url).origin;
+  /* O origin do pedido é o endpoint das interações — que continua a ser o
+     workers.dev antigo, e continua a funcionar. Mas a ligação que se dá às
+     pessoas leva o domínio verdadeiro do ambiente que responde. */
+  const base = env.ENV_NAME ? 'https://dev.rendorium.com' : 'https://app.rendorium.com';
   const minutos = Math.round(b.expiraEm / 60);
   return reply(
     '🔑 A tua ligação, válida ' + minutos + ' minutos e para uma só utilização:\n' +
@@ -499,7 +502,7 @@ async function cmdEntrar(env, i, papeis, request) {
    Abrir a ligação lava as contas de teste e entra numa fresca. */
 async function cmdTest(env, opts, request) {
   const { ligacaoTeste } = await import('./teste.js');
-  const base = env.ENV_NAME ? new URL(request.url).origin : 'https://dev.rendorium.com';
+  const base = 'https://dev.rendorium.com';   // o teste vive sempre aqui
   const lig = await ligacaoTeste(env, base, !!opts.dados);
   return reply('🧪 O teu ambiente de teste (a ligação vale 10 minutos):\n' + lig + '\n\n' +
     'Abri-la apaga as contas de teste anteriores e entra numa conta lavada' +
