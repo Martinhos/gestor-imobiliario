@@ -188,6 +188,62 @@ CW.esqueci = function (e) {
     .catch(function () { toast('Não deu para pedir agora — tenta daqui a pouco.'); });
 };
 
+/* No ambiente de dev, numa conta de teste, a marca do topo dá lugar a um
+   seletor: as contas de teste DESTE dev, trocáveis a um toque, mais a opção
+   de criar uma extra. A cache local não se mistura — o sync deteta a troca
+   de dono (LS_OWNER) e substitui tudo pelo estado da conta nova. */
+(function () {
+  var u = CW.user;
+  if (!u || !/@teste\.rendorium\.com$/.test(u.email || '')) return;
+  if (!/^dev\.rendorium\.com$|^gestor-imobiliario-dev\.|^localhost$|^127\./.test(location.hostname)) return;
+  fetch('/api/teste/contas', { headers: { Authorization: 'Bearer ' + u.token } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d || !d.contas || !d.contas.length) return;
+      var brand = document.querySelector('.brand');
+      if (!brand) return;
+      var sel = document.createElement('select');
+      sel.setAttribute('aria-label', 'Trocar de conta de teste');
+      sel.style.cssText = 'width:100%;min-height:40px;padding:8px 10px;border-radius:10px;' +
+        'border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:13px';
+      d.contas.forEach(function (ct) {
+        var o = document.createElement('option');
+        o.value = ct.id;
+        o.textContent = '\uD83E\uDDEA ' + ct.email.split('@')[0].replace('teste-', '#');
+        if (ct.atual) { o.selected = true; sel._atual = ct.id; }
+        sel.appendChild(o);
+      });
+      var novo = document.createElement('option');
+      novo.value = '+nova';
+      novo.textContent = '\uFF0B Nova conta de teste';
+      sel.appendChild(novo);
+      sel.onchange = function () {
+        var v = sel.value;
+        if (v === sel._atual) return;
+        var alvo = v === '+nova' ? ['/api/teste/nova', {}] : ['/api/teste/trocar', { para: v }];
+        sel.disabled = true;
+        fetch(alvo[0], {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + u.token },
+          body: JSON.stringify(alvo[1]),
+        })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('troca recusada')); })
+          .then(function (n) {
+            try { localStorage.setItem(LS_USER, JSON.stringify({ id: n.id, email: n.email, name: n.name, token: n.token })); } catch (e) {}
+            location.reload();
+          })
+          .catch(function () {
+            sel.disabled = false;
+            sel.value = sel._atual;
+            toast('Não deu para trocar de conta.');
+          });
+      };
+      brand.innerHTML = '';
+      brand.appendChild(sel);
+    })
+    .catch(function () { /* sem seletor, fica a marca */ });
+})();
+
 /* Entrar com um token no endereço: é a porta do ambiente de teste (/test)
    e de qualquer ligação de sessão emitida pelo servidor. O token sai já da
    URL, valida-se contra /api/me, e a app recarrega com a sessão posta. */

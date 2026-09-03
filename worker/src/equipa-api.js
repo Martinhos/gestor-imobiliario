@@ -596,7 +596,7 @@ export async function rotasEquipaApi(c) {
       await auditar(env, eu, 'operacao.teste', null,
         'ligação de teste emitida' + (b && b.dados ? ' (com dados de exemplo)' : ' (vazia)') +
         (b && b.manter ? ' (extra, sem lavar)' : ''));
-      return json({ ligacao: await ligacaoTeste(env, url.origin, !!(b && b.dados), !!(b && b.manter)) });
+      return json({ ligacao: await ligacaoTeste(env, url.origin, !!(b && b.dados), !!(b && b.manter), eu.discordId) });
     }
 
     if (path === '/api/equipa/operacao/copiar' && method === 'POST') {
