@@ -85,8 +85,10 @@ const comandos = [
     name: 'test',
     description: 'Ligação temporária para o ambiente de teste, numa conta lavada',
     options: [
-      { type: BOOLEANO, name: 'dados', description: 'Com dados de exemplo', required: false },
-      { type: BOOLEANO, name: 'manter', description: 'Conta extra, sem apagar as existentes', required: false },
+      { type: BOOLEANO, name: 'dados', description: 'Com dados de exemplo (ao criar)', required: false },
+      { type: BOOLEANO, name: 'manter', description: 'Conta extra, sem tocar nas existentes', required: false },
+      { type: BOOLEANO, name: 'limpar', description: 'Apagar as tuas contas de teste e começar do zero', required: false },
+      { type: TEXTO, name: 'email', description: 'Para onde vai o correio das tuas contas de teste (fica guardado)', required: false },
     ],
   },
   Object.assign({

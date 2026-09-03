@@ -30,9 +30,10 @@ async function chave(env) {
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 }
 
-export async function assinarTeste(env, exp, dados, manter, quem) {
+export async function assinarTeste(env, exp, dados, manter, quem, limpar, email) {
   const sig = await crypto.subtle.sign('HMAC', await chave(env),
-    new TextEncoder().encode(exp + ':' + dados + ':' + (manter || '0') + ':' + (quem || '')));
+    new TextEncoder().encode(exp + ':' + dados + ':' + (manter || '0') + ':' + (quem || '') +
+      ':' + (limpar || '0') + ':' + (email || '')));
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
@@ -40,14 +41,26 @@ export async function assinarTeste(env, exp, dados, manter, quem) {
    destino: o de dev aponta a si próprio; o de produção aponta ao dev. */
 /* `manter` cria uma conta EXTRA sem apagar as existentes — é o que permite
    testar partilhas e ligações entre duas contas de teste ao mesmo tempo. */
-export async function ligacaoTeste(env, base, comExemplo, manter, quem) {
+/* As contas de teste são PERSISTENTES: por omissão a ligação retoma a conta
+   mais recente do dono (os dados ficam de um dia para o outro); `manter`
+   cria uma extra; `limpar` é a única coisa que apaga. O `email` do dev vai
+   assinado dentro da ligação — quem a abre grava-o no KV do ambiente de
+   teste, e é para lá que segue o correio das contas dele. */
+export async function ligacaoTeste(env, base, comExemplo, manter, quem, limpar, email) {
   const exp = String(now() + VALIDADE_MIN * 60000);
   const dados = comExemplo ? '1' : '0';
   const m = manter ? '1' : '0';
+  const l = limpar ? '1' : '0';
   const q = String(quem || '').replace(/[^\w.-]/g, '').slice(0, 32);
-  const sig = await assinarTeste(env, exp, dados, m, q);
-  return base + '/t/entrar?exp=' + exp + '&dados=' + dados + '&m=' + m + '&q=' + q + '&sig=' + sig;
+  let e = String(email || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 254) e = '';
+  const sig = await assinarTeste(env, exp, dados, m, q, l, e);
+  return base + '/t/entrar?exp=' + exp + '&dados=' + dados + '&m=' + m + '&l=' + l + '&q=' + q +
+    (e ? '&e=' + encodeURIComponent(e) : '') + '&sig=' + sig;
 }
+
+// o correio das contas deste dev vai para aqui (gravado pela ligação)
+export const chaveEmailDev = (quem) => 'teste:email:' + quem;
 
 /* A conta de teste em si: email no subdomínio, palavra-passe impossível,
    termos aceites, e o dono (o dev que a pediu) gravado para o seletor. */
@@ -86,7 +99,9 @@ export async function rotaTeste(c) {
   const exp = url.searchParams.get('exp') || '';
   const dados = url.searchParams.get('dados') === '1' ? '1' : '0';
   const manter = url.searchParams.get('m') === '1' ? '1' : '0';
+  const limpar = url.searchParams.get('l') === '1' ? '1' : '0';
   const quem = String(url.searchParams.get('q') || '').replace(/[^\w.-]/g, '').slice(0, 32);
+  const emailDev = String(url.searchParams.get('e') || '').trim().toLowerCase().slice(0, 254);
   const sig = url.searchParams.get('sig') || '';
   if (!/^\d{10,16}$/.test(exp) || !/^[a-f0-9]{64}$/.test(sig)) {
     return pagina(400, 'Ligação inválida', 'Falta-lhe um pedaço. Pede uma nova com /test no Discord.');
@@ -94,11 +109,11 @@ export async function rotaTeste(c) {
   if (Number(exp) < now()) {
     return pagina(410, 'Esta ligação expirou', 'Valem ' + VALIDADE_MIN + ' minutos. Corre /test outra vez e usa a nova.');
   }
-  const esperada = await assinarTeste(env, exp, dados, manter, quem);
+  const esperada = await assinarTeste(env, exp, dados, manter, quem, limpar, emailDev);
   /* transição: a produção ainda assina à moda antiga (só exp:dados). Uma
-     ligação antiga só vale como "lavar sem dono" — a mesma chave, os mesmos
-     campos. Tirar este ramo quando a produção souber assinar o resto. */
-  const antiga = manter === '0' && !quem
+     ligação antiga só vale como "retomar sem dono" — a mesma chave, os
+     mesmos campos. Tirar este ramo quando a produção souber assinar o resto. */
+  const antiga = manter === '0' && limpar === '0' && !quem && !emailDev
     ? await crypto.subtle.sign('HMAC', await chave(env), new TextEncoder().encode(exp + ':' + dados))
         .then((b2) => [...new Uint8Array(b2)].map((x) => x.toString(16).padStart(2, '0')).join(''))
     : null;
@@ -106,14 +121,16 @@ export async function rotaTeste(c) {
     return pagina(403, 'Assinatura errada', 'Esta ligação não foi emitida por nós. Pede uma nova com /test.');
   }
 
-  /* cada visita começa lavada: as contas de teste anteriores vão-se, com
-     tudo o que arrastam (casas, registos, ligações) — é o purge a sério.
-     Com `manter`, salta-se a lavagem: a conta nova junta-se às que há,
-     para testes que precisam de duas ao mesmo tempo. */
-  /* a lavagem é por dono: cada dev lava as SUAS contas (e as órfãs de
-     ligações antigas) — as dos outros ficam de pé */
+  // o email do dev, se veio, fica no KV DESTE ambiente: o /test corre na
+  // produção, mas o correio das contas de teste decide-se aqui
+  if (quem && emailDev) {
+    try { await env.SESSIONS.put(chaveEmailDev(quem), emailDev); } catch (e) {}
+  }
+
+  /* limpar é a única coisa que apaga — e é por dono: cada dev limpa as SUAS
+     contas (e as órfãs de ligações antigas); as dos outros ficam de pé */
   let velhas = [];
-  if (manter !== '1') {
+  if (limpar === '1') {
     velhas = (await env.DB.prepare(
       "SELECT id FROM users WHERE email LIKE '%' || ? AND deleted_at IS NULL AND (test_owner IS NULL OR test_owner = ?)"
     ).bind(DOMINIO_TESTE, quem).all()).results || [];
@@ -122,18 +139,32 @@ export async function rotaTeste(c) {
     }
   }
 
-  // a conta nova: sem palavra-passe conhecida — entra-se só por aqui
-  const { id } = await criarContaDeTeste(env, quem);
+  /* por omissão RETOMA-SE: a conta mais recente do dono, com os dados
+     intactos de um dia para o outro. Cria-se de novo quando não há nenhuma,
+     quando se limpou, ou quando se pediu uma extra (manter). */
+  let conta = null, retomada = false;
+  if (manter !== '1' && limpar !== '1') {
+    const dona = await env.DB.prepare(
+      "SELECT id, sess_epoch FROM users WHERE email LIKE '%' || ? AND deleted_at IS NULL AND " +
+      (quem ? 'test_owner = ?' : 'test_owner IS NULL') + ' ORDER BY created_at DESC LIMIT 1'
+    ).bind(...(quem ? [DOMINIO_TESTE, quem] : [DOMINIO_TESTE])).first();
+    if (dona) { conta = dona; retomada = true; }
+  }
+  if (!conta) conta = Object.assign({ sess_epoch: 0 }, await criarContaDeTeste(env, quem));
 
-  const token = await createSession(env, id, 0);
-  await auditar(env, { discordId: 'sistema', nome: '/test', papeis: ['bot'] },
-    'teste.sessao', id, (manter === '1' ? 'conta extra (as outras ficam)' : 'conta lavada · apagadas ' + velhas.length + ' anteriores') +
-    (dados === '1' ? ' · com dados de exemplo' : ''));
+  const token = await createSession(env, conta.id, conta.sess_epoch || 0);
+  await auditar(env, { discordId: quem || 'sistema', nome: '/test', papeis: ['bot'] },
+    'teste.sessao', conta.id,
+    retomada ? 'conta retomada, dados intactos'
+      : (limpar === '1' ? 'conta lavada · apagadas ' + velhas.length + ' anteriores'
+        : manter === '1' ? 'conta extra (as outras ficam)' : 'primeira conta deste dono') +
+        (dados === '1' ? ' · com dados de exemplo' : ''));
 
+  const comExemplo = !retomada && dados === '1';
   return new Response(null, {
     status: 302,
     headers: {
-      Location: '/?entrar=' + token + (dados === '1' ? '&exemplo=1' : ''),
+      Location: '/?entrar=' + token + (comExemplo ? '&exemplo=1' : ''),
       'Set-Cookie': sessionCookie(token),
       'Cache-Control': 'no-store',
       'Referrer-Policy': 'no-referrer',

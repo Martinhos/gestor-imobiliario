@@ -24,8 +24,8 @@ const ambiente = (extra = {}) => Object.assign({
 }, extra);
 
 // abre a ligação como um browser abriria: emite-a e entrega-a à rota
-async function abrir(env, comDados, mexe, manter, quem) {
-  let lig = await ligacaoTeste(env, 'https://dev.x.pt', comDados, manter, quem);
+async function abrir(env, comDados, mexe, manter, quem, limpar, email) {
+  let lig = await ligacaoTeste(env, 'https://dev.x.pt', comDados, manter, quem, limpar, email);
   if (mexe) lig = mexe(lig);
   const url = new URL(lig);
   return rotaTeste({ env, url, request: new Request(lig) });
@@ -74,25 +74,34 @@ describe('a porta /t/entrar', () => {
     assert.equal(vivas.length, 1);
     assert.ok(eContaDeTeste(vivas[0].email));
 
-    const r2 = await abrir(env, true);
-    assert.match(r2.headers.get('Location'), /&exemplo=1$/, 'com dados, a marca vai no endereço');
+    const env2 = ambiente();
+    const r2 = await abrir(env2, true);
+    assert.match(r2.headers.get('Location'), /&exemplo=1$/, 'com dados, a marca vai no endereço ao criar');
   });
 
-  test('cada ligação lava as anteriores — a conta velha e a casa dela vão-se', async () => {
+  test('por omissão retoma-se a conta com os dados intactos; limpar é que apaga', async () => {
     const env = ambiente();
-    await abrir(env, false);
+    await abrir(env, false, null, false, 'alice');
     const primeira = (await contas(env)).find((u) => !u.deleted_at);
     await env.DB.prepare(
       "INSERT INTO houses (id, owner_id, data, updated_at) VALUES ('H1', ?, '{}', 1)"
     ).bind(primeira.id).run();
 
-    await abrir(env, false);
+    // no dia seguinte: a ligação nova retoma a MESMA conta, casa e tudo
+    const r = await abrir(env, true, null, false, 'alice');
+    assert.equal(r.status, 302);
+    assert.ok(!/exemplo=1/.test(r.headers.get('Location')), 'retomar nunca semeia por cima');
+    const vivas = (await contas(env)).filter((u) => !u.deleted_at);
+    assert.equal(vivas.length, 1, 'não se criou outra');
+    assert.equal(vivas[0].id, primeira.id, 'é a mesma conta');
+    assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM houses').first()).n, 1, 'a casa ficou');
+
+    // limpar: aí sim, tudo fora e conta nova
+    await abrir(env, false, null, false, 'alice', true);
     const todas = await contas(env);
-    assert.equal(todas.filter((u) => !u.deleted_at).length, 1, 'uma viva de cada vez');
-    const velha = todas.find((u) => u.id === primeira.id);
-    assert.ok(velha.deleted_at, 'a anterior ficou lápide');
-    const casas = await env.DB.prepare('SELECT COUNT(*) AS n FROM houses').first();
-    assert.equal(casas.n, 0, 'a casa foi com a conta');
+    assert.equal(todas.filter((u) => !u.deleted_at).length, 1);
+    assert.ok(todas.find((u) => u.id === primeira.id).deleted_at, 'a antiga ficou lápide');
+    assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM houses').first()).n, 0, 'a casa foi com ela');
   });
 });
 
@@ -130,6 +139,18 @@ describe('a assinatura antiga (sem manter) ainda vale — só como lavar', () =>
   });
 });
 
+describe('o email do dev viaja assinado na ligação', () => {
+  test('abrir a ligação grava o registo no KV; mexer no email rebenta a assinatura', async () => {
+    const env = ambiente();
+    await abrir(env, false, null, false, 'alice', false, 'Alice@Gmail.com');
+    assert.equal(await env.SESSIONS.get('teste:email:alice'), 'alice@gmail.com', 'guardado, normalizado');
+
+    const mau = await abrir(env, false, (l) => l.replace('alice%40gmail.com', 'ladrao%40mal.com'),
+      false, 'alice', false, 'alice@gmail.com');
+    assert.equal(mau.status, 403, 'o destino do correio não se troca sem assinar');
+  });
+});
+
 describe('cada dev tem as suas contas', () => {
   test('o dono fica gravado, e a lavagem de um não toca nas do outro', async () => {
     const env = ambiente();
@@ -138,8 +159,8 @@ describe('cada dev tem as suas contas', () => {
     let vivas = (await contas(env)).filter((u) => !u.deleted_at);
     assert.equal(vivas.length, 2);
 
-    // alice lava outra vez: a dela vai-se, a do bob fica
-    await abrir(env, false, null, false, 'alice');
+    // alice limpa: a dela vai-se, a do bob fica
+    await abrir(env, false, null, false, 'alice', true);
     vivas = (await contas(env)).filter((u) => !u.deleted_at);
     assert.equal(vivas.length, 2, 'a nova da alice e a do bob');
     const donos = await env.DB.prepare('SELECT test_owner FROM users WHERE deleted_at IS NULL ORDER BY test_owner').all();
@@ -198,18 +219,21 @@ describe('cada dev tem as suas contas', () => {
   });
 });
 
-describe('sair de uma conta de teste apaga-a', () => {
+describe('sair de uma conta de teste NÃO apaga nada', () => {
   const sair = (env, token) => handleApi(
     new Request('https://dev.x.pt/api/auth/logout', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token },
     }), env, { waitUntil() {} });
 
-  test('logout de teste purga; logout normal não toca em nada', async () => {
+  test('logout fecha a sessão e a conta fica — a ligação do dia seguinte retoma-a', async () => {
     const env = ambiente();
-    const r = await abrir(env, false);
+    const r = await abrir(env, false, null, false, 'alice');
     const token = /entrar=([a-f0-9]{64})/.exec(r.headers.get('Location'))[1];
     const deTeste = (await contas(env)).find((u) => !u.deleted_at);
+    await env.DB.prepare(
+      "INSERT INTO houses (id, owner_id, data, updated_at) VALUES ('H2', ?, '{}', 1)"
+    ).bind(deTeste.id).run();
 
     // a conta normal, de controlo
     const pw = await hashPassword('Descartavel1!');
@@ -221,8 +245,17 @@ describe('sair de uma conta de teste apaga-a', () => {
 
     const s1 = await sair(env, token);
     assert.equal(s1.status, 200);
+    assert.equal(await env.SESSIONS.get('sess:' + token), null, 'a sessão morreu');
     const depois = await contas(env);
-    assert.ok(depois.find((u) => u.id === deTeste.id).deleted_at, 'a de teste morreu com a sessão');
+    assert.equal(depois.find((u) => u.id === deTeste.id).deleted_at, null, 'a conta fica');
+
+    // no dia seguinte: retomada, com a casa lá dentro
+    const volta = await abrir(env, false, null, false, 'alice');
+    assert.match(volta.headers.get('Location'), /entrar=/);
+    const vivas = (await contas(env)).filter((u) => !u.deleted_at && u.email.includes('@teste.'));
+    assert.equal(vivas.length, 1);
+    assert.equal(vivas[0].id, deTeste.id, 'a mesma conta de ontem');
+    assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM houses').first()).n, 1, 'os dados intactos');
 
     const s2 = await sair(env, tokenNormal);
     assert.equal(s2.status, 200);

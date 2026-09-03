@@ -504,13 +504,17 @@ async function cmdTest(env, i, opts, request) {
   const { ligacaoTeste } = await import('./teste.js');
   const base = 'https://dev.rendorium.com';   // o teste vive sempre aqui
   const u = (i.member && i.member.user) || i.user || {};
-  const lig = await ligacaoTeste(env, base, !!opts.dados, !!opts.manter, u.id);
+  const lig = await ligacaoTeste(env, base, !!opts.dados, !!opts.manter, u.id, !!opts.limpar, opts.email);
   return reply('🧪 O teu ambiente de teste (a ligação vale 10 minutos):\n' + lig + '\n\n' +
-    (opts.manter
-      ? 'Abri-la cria uma conta de teste EXTRA, sem apagar as existentes — para testar partilhas entre contas.'
-      : 'Abri-la apaga as contas de teste anteriores e entra numa conta lavada') +
-    (opts.dados ? ' Vem com dados de exemplo.' : '') + ' Terminar a sessão apaga-a.\n' +
-    'O correio destas contas cai todo em test@rendorium.com.');
+    (opts.limpar
+      ? 'Abri-la APAGA as tuas contas de teste e começa numa lavada.'
+      : opts.manter
+        ? 'Abri-la cria uma conta de teste EXTRA, sem tocar nas existentes.'
+        : 'Abri-la retoma a tua conta de teste mais recente, com os dados intactos — ou cria a primeira.') +
+    (opts.dados ? ' Vem com dados de exemplo.' : '') +
+    '\nAs contas ficam de um dia para o outro; troca-las no seletor do topo da app.' +
+    (opts.email ? '\n📬 O correio das tuas contas de teste passa a ir para ' + opts.email + '.'
+                : '\nO correio vai para o email que registares com /test email:… (até lá, test@rendorium.com).'));
 }
 
 /* Quem pode o quê, com as caixas na própria mensagem.
