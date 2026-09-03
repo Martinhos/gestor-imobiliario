@@ -165,6 +165,53 @@ describe('ações sobre contas', () => {
     assert.equal((await auditoria(env)).pop().acao, 'conta.plano.falhou');
   });
 
+  test('definir palavra-passe: fraca é recusada, boa entra e mata as sessões antigas', async () => {
+    const env = ambiente();
+    const id = await novaConta(env);
+    const { createSession, getSessionUser, verifyPassword } = await import('../worker/src/auth.js');
+    const antiga = await createSession(env, id, 0);
+
+    const fraca = await chamar(env, MASTER, 'POST', '/api/equipa/pessoas/' + id + '/acao',
+      { acao: 'password', valor: '1234', motivo: 'pediu ajuda' });
+    assert.equal(fraca.status, 400);
+
+    const boa = await chamar(env, MASTER, 'POST', '/api/equipa/pessoas/' + id + '/acao',
+      { acao: 'password', valor: 'Trocada9!x', motivo: 'trancado fora, email inacessível' });
+    assert.equal(boa.status, 200);
+    const u = await env.DB.prepare('SELECT pass_hash, pass_salt, sess_epoch FROM users WHERE id = ?').bind(id).first();
+    assert.ok(await verifyPassword('Trocada9!x', u.pass_salt, u.pass_hash), 'a nova entra');
+    assert.equal(u.sess_epoch, 1, 'época subiu');
+    const req = new Request('https://x.pt/api/state', { headers: { Authorization: 'Bearer ' + antiga } });
+    assert.equal(await getSessionUser(env, req), null, 'a sessão antiga morreu');
+    const rasto = await auditoria(env);
+    assert.ok(!rasto.some((x) => String(x.detalhe || '').includes('Trocada9!x')), 'o segredo nunca toca no rasto');
+  });
+
+  test('criar conta: só o master, sem colisões, e com rasto', async () => {
+    const env = ambiente();
+    const nega = await chamar(env, SUPORTE, 'POST', '/api/equipa/pessoas',
+      { email: 'nova@x.pt', password: 'Aa1!aaaa', motivo: 'quero lá saber' });
+    assert.equal(nega.status, 403);
+
+    const fraca = await chamar(env, MASTER, 'POST', '/api/equipa/pessoas',
+      { email: 'nova@x.pt', password: 'fraca', motivo: 'conta para a equipa' });
+    assert.equal(fraca.status, 400);
+
+    const r = await corpoDe(await chamar(env, MASTER, 'POST', '/api/equipa/pessoas',
+      { email: 'Nova@X.pt', nome: 'Equipa', password: 'Aa1!aaaa', motivo: 'conta para a equipa' }));
+    assert.equal(r.status, 200);
+    assert.equal(r.email, 'nova@x.pt', 'o email normaliza');
+
+    const repete = await chamar(env, MASTER, 'POST', '/api/equipa/pessoas',
+      { email: 'nova@x.pt', password: 'Aa1!aaaa', motivo: 'outra vez' });
+    assert.equal(repete.status, 409, 'colisão recusada');
+    const corpo = await corpoDe(repete);
+    assert.match(String(corpo.error || ''), new RegExp(r.id), 'a recusa diz quem lá está');
+
+    const acoes = (await auditoria(env)).map((x) => x.acao);
+    assert.ok(acoes.indexOf('conta.criar.feito') > -1);
+  });
+
   test('apagar exige o email exato — e depois apaga mesmo', async () => {
     const env = ambiente();
     const id = await novaConta(env);
