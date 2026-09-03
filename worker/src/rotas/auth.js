@@ -190,14 +190,9 @@ export async function rotasAuth(c) {
   }
 
   if (path === '/api/auth/logout' && method === 'POST') {
-    /* Uma conta de teste morre com a sessão: sair é apagá-la. É o contrato
-       do /test — cada ligação nova encontra a casa vazia. */
-    try {
-      const { getSessionUser } = await import('../auth.js');
-      const { eContaDeTeste } = await import('../teste.js');
-      const u = await getSessionUser(env, request);
-      if (u && eContaDeTeste(u.email)) await purgeAccount(env, u.id);
-    } catch (e) { /* sair tem de sair, mesmo que a limpeza falhe */ }
+    /* As contas de teste são persistentes: sair fecha a sessão e mais nada.
+       No dia seguinte, a ligação nova do /test retoma a conta com os dados
+       intactos — apagar é só com a opção limpar, de propósito. */
     await destroySession(env, readSessionToken(request));
     return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', true) });
   }

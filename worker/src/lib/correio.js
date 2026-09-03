@@ -46,13 +46,22 @@ export function dominioDaCasa(email) {
 
 export async function enviarEmail(env, { para, assunto, html, texto, remetente }) {
   if (!env.RESEND_API_KEY) return { enviado: false, motivo: 'sem RESEND_API_KEY' };
-  /* O correio de uma conta de teste vai todo para a caixa da casa: o
-     teste-…@teste.rendorium.com não existe (só daria bounces), e quem
-     testa quer VER o email que a app mandou. A conta original fica no
-     assunto, para se saber de que sessão veio. */
+  /* O correio de uma conta de teste não vai para o endereço dela (não
+     existe, só daria bounces): vai para o email do DEV que a criou — o que
+     ele registou pela ligação do /test — ou, sem registo, para a caixa da
+     casa (test@). A conta original fica no assunto, para se saber de que
+     sessão veio. */
   if (/@teste\.rendorium\.com$/i.test(String(para || ''))) {
-    assunto = String(assunto || '') + ' · ' + String(para).split('@')[0];
+    const contaDeTeste = String(para).toLowerCase();
+    assunto = String(assunto || '') + ' · ' + contaDeTeste.split('@')[0];
     para = 'test@' + DOMINIO;
+    try {
+      const u = env.DB && await env.DB.prepare('SELECT test_owner FROM users WHERE email = ?')
+        .bind(contaDeTeste).first();
+      const proprio = u && u.test_owner && env.SESSIONS &&
+        await env.SESSIONS.get('teste:email:' + u.test_owner);
+      if (proprio) para = proprio;
+    } catch (e) { /* sem pista do dono, fica a caixa da casa */ }
   }
   if (!para || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(para))) {
     return { enviado: false, motivo: 'destinatário inválido' };

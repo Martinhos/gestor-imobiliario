@@ -73,6 +73,26 @@ describe('o correio das contas de teste vai para a caixa da casa', () => {
     assert.match(capturados[0].corpo.subject, /teste-ab12cd/, 'sabe-se de que sessao veio');
   });
 
+  test('com dono e email registado, vai direto ao dev que criou a conta', async () => {
+    const env = { RESEND_API_KEY: 'k', DB: baseDeTeste(), SESSIONS: kvFalso() };
+    await env.DB.prepare(
+      "INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, test_owner) VALUES ('T1', 'teste-t1@teste.rendorium.com', 'T', 'h', 's', 1, 'alice')"
+    ).run();
+    await env.SESSIONS.put('teste:email:alice', 'alice@gmail.com');
+    armarFetch();
+    await enviarEmail(env, { para: 'teste-t1@teste.rendorium.com', assunto: 'Recebemos o teu pedido' });
+    assert.deepEqual(capturados[0].corpo.to, ['alice@gmail.com'], 'o correio segue para quem criou a conta');
+    assert.match(capturados[0].corpo.subject, /teste-t1/);
+
+    // outro dono sem email registado: fica na caixa da casa
+    await env.DB.prepare(
+      "INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, test_owner) VALUES ('T2', 'teste-t2@teste.rendorium.com', 'T', 'h', 's', 1, 'bob')"
+    ).run();
+    armarFetch();
+    await enviarEmail(env, { para: 'teste-t2@teste.rendorium.com', assunto: 'Olá' });
+    assert.deepEqual(capturados[0].corpo.to, ['test@rendorium.com']);
+  });
+
   test('um destinatario normal nao e tocado', async () => {
     armarFetch();
     await enviarEmail({ RESEND_API_KEY: 'k' }, { para: 'pessoa@gmail.com', assunto: 'Ola' });
