@@ -161,6 +161,18 @@ const ACOES_DE_CONTA = {
   },
   /* Só com password definida: uma conta criada pelo Google não tem outra
      porta, e desligar-lhe o Google era trancar a pessoa fora de vez. */
+  /* Apagar de vez: o purge a sério, o mesmo do "apagar conta" na app e do
+     RGPD — os dados vão-se, fica a lápide para as referências alheias.
+     A confirmação é escrever o email da conta: apagar não pode estar à
+     distância de um clique num id parecido. */
+  async apagar(env, u, valor) {
+    if (String(valor || '').trim().toLowerCase() !== String(u.email).toLowerCase()) {
+      throw new Error('Para apagar, escreve o email exato da conta: ' + u.email);
+    }
+    const { purgeAccount } = await import('./lib/acesso.js');
+    await purgeAccount(env, u.id);
+    return 'conta apagada de vez (' + u.email + ')';
+  },
   async 'desligar-google'(env, u) {
     if (!u.google_sub) throw new Error('Esta conta não tem Google ligado.');
     if (!u.pass_hash) throw new Error('É uma conta só-Google: sem password, desligar o Google trancava-a fora.');
@@ -454,6 +466,7 @@ export async function rotasEquipaApi(c) {
         estadoCopias = { erro: String((e && e.message) || e), texto: '🔴 Não deu para ler as cópias.' };
       }
       return json({
+        teste: env.ENV_NAME || null,   // fora de produção há botão de sessão de teste
         consumo: await usageFields(env),
         copias,
         estadoCopias,
@@ -487,6 +500,17 @@ export async function rotasEquipaApi(c) {
       if (!registado) return err(500, 'A auditoria não está a escrever — sem rasto não se muda isto.');
       const fim = await definirDemo(env, ligar, dias);
       return json({ demo: ligar, fim });
+    }
+
+    /* A mesma ligação que o /test do Discord dá, sem sair daqui. Só existe
+       fora de produção — lá dentro nem a rota de destino existe. */
+    if (path === '/api/equipa/operacao/teste' && method === 'POST') {
+      if (!env.ENV_NAME) return err(404, 'Produção não tem ambiente de teste.');
+      const b = await body(request);
+      const { ligacaoTeste } = await import('./teste.js');
+      await auditar(env, eu, 'operacao.teste', null,
+        'ligação de teste emitida' + (b && b.dados ? ' (com dados de exemplo)' : ' (vazia)'));
+      return json({ ligacao: await ligacaoTeste(env, url.origin, !!(b && b.dados)) });
     }
 
     if (path === '/api/equipa/operacao/copiar' && method === 'POST') {

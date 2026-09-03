@@ -1,0 +1,71 @@
+# Limpar as contas do ambiente de DEV — e só do dev.
+#
+# Apaga todas as contas de utilizador e o que lhes pertence (casas, registos,
+# ligações, partilhas, pedidos, ficheiros, contadores). O rasto fica: o
+# audit_log e o op_log não se tocam — a história do que a equipa fez não
+# se apaga com os dados de quem testou.
+#
+# Corre-se à mão, e obriga a escrever "limpar" de propósito: uma limpeza
+# total não pode estar a um clique distraído de distância. O UUID da base
+# sai do terraform.tfstate pelo NOME do recurso de dev (db_dev) — não há
+# maneira de este workflow acertar na base de produção.
+
+name: Limpar dev
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: Escreve "limpar" para confirmar
+        required: true
+
+jobs:
+  limpar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: A confirmação é a palavra, não o clique
+        if: inputs.confirmar != 'limpar'
+        run: |
+          echo 'Não escreveste "limpar" — nada foi tocado.'
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Apagar as contas e o que lhes pertence
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_CONTA: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          BD=$(python3 -c "
+          import json
+          s = json.load(open('terraform/terraform.tfstate'))
+          ids = [i['attributes']['id'] for r in s['resources']
+                 if r.get('type') == 'cloudflare_d1_database' and r.get('name') == 'db_dev'
+                 for i in r['instances']]
+          assert len(ids) == 1, 'esperava exatamente um db_dev no estado'
+          print(ids[0])")
+          echo "Base de dev: $BD"
+
+          executa() {
+            corpo=$(python3 -c "import json,sys; print(json.dumps({'sql': sys.argv[1]}))" "$1")
+            r=$(curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/accounts/$CF_CONTA/d1/database/$BD/query" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              --data "$corpo")
+            echo "$r" | python3 -c "
+          import json,sys
+          d = json.load(sys.stdin)
+          assert d.get('success'), d
+          for res in d.get('result') or []:
+              m = res.get('meta') or {}
+              print('  →', m.get('changes', '?'), 'linhas')"
+          }
+
+          # por ordem de dependência; audit_log e op_log ficam de propósito
+          for t in user_records records shares share_proposals connections \
+                   ticket_msgs ticket_users tickets files rate_limits houses users; do
+            echo "DELETE FROM $t"
+            executa "DELETE FROM $t"
+          done
+          echo "Feito. As sessões antigas no KV morrem sozinhas: sem conta, o /api/me responde 401."

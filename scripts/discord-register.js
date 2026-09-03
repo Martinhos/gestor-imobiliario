@@ -81,6 +81,11 @@ const comandos = [
   Object.assign({ name: 'uso', description: 'Consumo da infraestrutura agora' }, soOperacao),
   { name: 'comandos', description: 'O que podes fazer com o teu papel' },
   { name: 'entrar', description: 'Abrir a ferramenta de suporte no browser' },
+  {
+    name: 'test',
+    description: 'Ligação temporária para o ambiente de teste, numa conta lavada',
+    options: [{ type: BOOLEANO, name: 'dados', description: 'Com dados de exemplo', required: false }],
+  },
   Object.assign({
     name: 'access',
     description: 'Quem pode que comandos (só o master)',

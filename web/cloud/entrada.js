@@ -188,21 +188,56 @@ CW.esqueci = function (e) {
     .catch(function () { toast('Não deu para pedir agora — tenta daqui a pouco.'); });
 };
 
+/* Entrar com um token no endereço: é a porta do ambiente de teste (/test)
+   e de qualquer ligação de sessão emitida pelo servidor. O token sai já da
+   URL, valida-se contra /api/me, e a app recarrega com a sessão posta. */
+(function () {
+  var m = /[?&]entrar=([a-f0-9]{64})/.exec(location.search);
+  if (!m) return;
+  var token = m[1];
+  var exemplo = /[?&]exemplo=1/.test(location.search);
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  fetch('/api/me', { headers: { Authorization: 'Bearer ' + token } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (u) {
+      if (!u) { toast('Essa ligação de entrada já não vale.'); return; }
+      try {
+        localStorage.setItem(LS_USER, JSON.stringify({ id: u.id, email: u.email, name: u.name, token: token }));
+        if (exemplo) sessionStorage.setItem('gi_exemplo', '1');
+      } catch (e) {}
+      location.reload();   // arranca limpo, já com a sessão posta
+    })
+    .catch(function () { toast('Não deu para entrar por essa ligação.'); });
+})();
+
 (function () {
   var m = /[?&]repor=([a-f0-9]{64})/.exec(location.search);
   if (!m) return;
   CW._reporToken = m[1];
   // o token sai já do endereço: não fica no histórico nem em partilhas
   try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  /* Uma sobreposição própria, ACIMA do portão de login (z 200): um modal
+     normal (z 60) abria por baixo do ecrã de entrada e ninguém o via — a
+     ligação do email parecia não fazer nada. O mesmo bug do ecrã de
+     atualização, o mesmo remédio. */
   setTimeout(function () {
-    openModal('Palavra-passe nova',
+    var el = document.createElement('div');
+    el.id = 'cwRepor';
+    el.style.cssText = 'position:fixed;inset:0;z-index:230;background:var(--bg);overflow:auto;' +
+      'display:flex;justify-content:center;padding:22px';
+    el.innerHTML =
+      '<div class="card" style="max-width:420px;width:100%;padding:24px;margin:auto">' +
+      '<div class="title" style="font-size:18px;margin-bottom:12px">Palavra-passe nova</div>' +
       '<div class="form">' +
       '<label>Nova palavra-passe<input id="rp_1" type="password" autocomplete="new-password"></label>' +
       '<label>Repete-a<input id="rp_2" type="password" autocomplete="new-password"></label>' +
       '<div class="hint">8+ caracteres, com maiúscula, minúscula, número e símbolo.</div>' +
-      '<div id="rp_err" class="small" style="color:var(--danger)"></div></div>',
-      '<button class="btn" onclick="closeModal()">Cancelar</button>' +
-      '<button class="btn primary" onclick="CW.reporConfirmar()">Guardar</button>');
+      '<div id="rp_err" class="small" style="color:var(--danger)"></div></div>' +
+      '<div class="toolbar" style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">' +
+      '<button class="btn" onclick="document.getElementById(\'cwRepor\').remove()">Cancelar</button>' +
+      '<button class="btn primary" onclick="CW.reporConfirmar()">Guardar</button></div></div>';
+    document.body.appendChild(el);
+    try { document.getElementById('rp_1').focus(); } catch (e) {}
   }, 700);
 })();
 
@@ -215,7 +250,8 @@ CW.reporConfirmar = function () {
   api('POST', '/api/auth/repor/confirmar', { t: CW._reporToken, password: p1 })
     .then(function () {
       CW._reporToken = null;
-      closeModal();
+      var el = document.getElementById('cwRepor');
+      if (el) el.remove();
       toast('Feito — entra com a palavra-passe nova.');
       showAuth();
     })
@@ -314,6 +350,16 @@ if (CW.user) {
     // conta anterior a estes documentos: pedir a aceitação antes de continuar
     if (u.termsCurrent && u.terms !== u.termsCurrent) showTermsGate();
     if (u.fimDemo) avisoFimDemo(u.fimDemo);
+    try {
+      if (sessionStorage.getItem('gi_exemplo') === '1') {
+        sessionStorage.removeItem('gi_exemplo');
+        // só numa conta vazia: o exemplo nunca se despeja em cima de dados
+        if (!(db.properties || []).length && typeof seed === 'function') {
+          seed();
+          toast('Dados de exemplo carregados.');
+        }
+      }
+    } catch (e) {}
     startSync();
   }).catch(function (e) {
     if (e && e.status === 401) sessionLost();
