@@ -82,10 +82,28 @@ export async function rotasConta(c) {
     }
     const full = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(me.id).first();
     // quem tem palavra-passe confirma com ela; contas Google confirmam so com a palavra
-    if (full && full.pass_hash) {
+    // uma conta de teste nao tem palavra-passe que se conheca: no ambiente
+    // de teste, apaga-se sem ela
+    const eDeTeste = env.ENV_NAME && /@teste\.rendorium\.com$/i.test(me.email || '');
+    if (full && full.pass_hash && !eDeTeste) {
       if (!b.password || !(await verifyPassword(String(b.password), full.pass_salt, full.pass_hash))) {
         return err(401, 'Palavra-passe errada.');
       }
+    }
+    /* uma conta de teste com dono não deixa quem testa no ecrã de login:
+       apagada esta, entra-se logo na irmã — ou numa acabada de criar */
+    let proxima = null;
+    if (env.ENV_NAME && /@teste\.rendorium\.com$/i.test(me.email || '')) {
+      try {
+        const eu2 = await env.DB.prepare('SELECT test_owner FROM users WHERE id = ?').bind(me.id).first();
+        if (eu2 && eu2.test_owner) {
+          const { proximaContaDeTeste } = await import('../teste.js');
+          await purgeAccount(env, me.id);
+          await destroySession(env, me.token);
+          proxima = await proximaContaDeTeste(env, eu2.test_owner);
+          return json({ ok: true, proxima }, 200, { 'Set-Cookie': sessionCookie(proxima.token) });
+        }
+      } catch (e) { /* sem próxima, segue o caminho normal */ }
     }
     await purgeAccount(env, me.id);
     await destroySession(env, me.token);

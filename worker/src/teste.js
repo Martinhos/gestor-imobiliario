@@ -70,12 +70,13 @@ export const chaveEmailDev = (quem) => 'teste:email:' + quem;
    termos aceites, e o dono (o dev que a pediu) gravado para o seletor. */
 async function criarContaDeTeste(env, quem) {
   const id = newUserId();
-  const lixo = () => [...crypto.getRandomValues(new Uint8Array(24))].map((b) => b.toString(16).padStart(2, '0')).join('');
   const email = 'teste-' + id.toLowerCase() + DOMINIO_TESTE;
+  // sem palavra-passe de todo (como as contas so-Google): o formulario de
+  // entrada nunca lhe serve, e o "apagar conta" nao exige o que nao existe
   await env.DB.prepare(
     `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, terms_version, terms_at, test_owner)
-     VALUES (?, ?, 'Conta de teste', ?, ?, ?, ?, ?, ?)`
-  ).bind(id, email, lixo(), lixo(), now(), TERMS_VERSION, now(), quem || null).run();
+     VALUES (?, ?, 'Conta de teste', '', '', ?, ?, ?, ?)`
+  ).bind(id, email, now(), TERMS_VERSION, now(), quem || null).run();
   return { id, email };
 }
 
@@ -188,6 +189,22 @@ export async function rotaTeste(c) {
       'Referrer-Policy': 'no-referrer',
     },
   });
+}
+
+/* Depois de se apagar uma conta de teste, a sessão seguinte: a irmã mais
+   recente do mesmo dono — ou, se não sobrar nenhuma, uma acabada de criar.
+   Quem testa o "apagar conta" não pode aterrar no ecrã de login de um
+   ambiente onde nem sequer há formulário que lhe valha. */
+export async function proximaContaDeTeste(env, dono) {
+  let conta = await env.DB.prepare(
+    "SELECT id, email, name, sess_epoch FROM users WHERE test_owner = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1"
+  ).bind(dono).first();
+  if (!conta) {
+    const nova = await criarContaDeTeste(env, dono);
+    conta = { id: nova.id, email: nova.email, name: 'Conta de teste', sess_epoch: 0 };
+  }
+  const token = await createSession(env, conta.id, conta.sess_epoch || 0);
+  return { id: conta.id, email: conta.email, name: conta.name || 'Conta de teste', token };
 }
 
 /* -------- o seletor de contas do ambiente de dev ------------------------
