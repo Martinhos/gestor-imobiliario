@@ -52,7 +52,7 @@ function showAuth(msg) {
     '<div class="card" style="max-width:400px;width:100%;padding:24px;margin:auto">' +
     '<div style="display:flex;gap:12px;align-items:center;margin-bottom:6px">' +
     '<span class="avatar" style="background:var(--accent);color:var(--accent-ink)">' + (typeof ic === 'function' ? ic('building', 20) : '') + '</span>' +
-    '<div><div class="title" style="font-size:18px">Gestor Imobiliário</div>' +
+    '<div><div class="title" style="font-size:18px">Rendorium</div>' +
     '<div class="small">' + (login ? 'Inicia sessão para continuar' : 'Cria a tua conta') + '</div></div></div>' +
     (msg ? '<div class="hint" style="color:var(--danger);margin:8px 0">' + esc(msg) + '</div>' : '') +
     '<div class="form" style="margin-top:12px;display:grid;gap:10px">' +
@@ -70,6 +70,7 @@ function showAuth(msg) {
     '<button class="btn primary" style="width:100%;justify-content:center" onclick="CW.submitAuth()">' + (login ? 'Entrar' : 'Criar conta') + '</button>' +
     '<button class="btn" style="width:100%;justify-content:center" onclick="CW.toggleAuth()">' +
     (login ? 'Ainda não tenho conta' : 'Já tenho conta') + '</button>' +
+    (login ? '<div style="text-align:center;margin-top:2px"><a href="#" class="small" style="color:var(--muted)" onclick="CW.esqueci(event)">Esqueci-me da palavra-passe</a></div>' : '') +
     '<div id="cwa_social" style="display:none">' +
     '<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="flex:1;height:1px;background:var(--line)"></span>' +
     '<span class="small">ou</span><span style="flex:1;height:1px;background:var(--line)"></span></div>' +
@@ -172,6 +173,53 @@ CW.submitAuth = function () {
   api('POST', login ? '/api/auth/login' : '/api/auth/register', payload)
     .then(finishLogin)
     .catch(function (e) { repor(); errEl.textContent = e.message || 'Não foi possível entrar.'; });
+};
+
+/* Esqueci-me da palavra-passe: pede a ligação por email e, quando a pessoa
+   volta com o token no endereço, troca-a aqui mesmo. A resposta do servidor
+   é sempre a mesma, exista a conta ou não. */
+CW.esqueci = function (e) {
+  if (e) e.preventDefault();
+  var em = val('cwa_email') || prompt('O email da tua conta:') || '';
+  em = em.trim();
+  if (!em) return;
+  api('POST', '/api/auth/repor', { email: em })
+    .then(function (r) { toast(r.msg || 'Se esse email tiver conta, enviámos uma ligação.'); })
+    .catch(function () { toast('Não deu para pedir agora — tenta daqui a pouco.'); });
+};
+
+(function () {
+  var m = /[?&]repor=([a-f0-9]{64})/.exec(location.search);
+  if (!m) return;
+  CW._reporToken = m[1];
+  // o token sai já do endereço: não fica no histórico nem em partilhas
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  setTimeout(function () {
+    openModal('Palavra-passe nova',
+      '<div class="form">' +
+      '<label>Nova palavra-passe<input id="rp_1" type="password" autocomplete="new-password"></label>' +
+      '<label>Repete-a<input id="rp_2" type="password" autocomplete="new-password"></label>' +
+      '<div class="hint">8+ caracteres, com maiúscula, minúscula, número e símbolo.</div>' +
+      '<div id="rp_err" class="small" style="color:var(--danger)"></div></div>',
+      '<button class="btn" onclick="closeModal()">Cancelar</button>' +
+      '<button class="btn primary" onclick="CW.reporConfirmar()">Guardar</button>');
+  }, 700);
+})();
+
+CW.reporConfirmar = function () {
+  var p1 = val('rp_1'), p2 = val('rp_2');
+  var errEl = document.getElementById('rp_err');
+  var prob = passProblem(p1);
+  if (prob) { errEl.textContent = prob; return; }
+  if (p1 !== p2) { errEl.textContent = 'As palavras-passe não coincidem.'; return; }
+  api('POST', '/api/auth/repor/confirmar', { t: CW._reporToken, password: p1 })
+    .then(function () {
+      CW._reporToken = null;
+      closeModal();
+      toast('Feito — entra com a palavra-passe nova.');
+      showAuth();
+    })
+    .catch(function (e) { errEl.textContent = e.message || 'Essa ligação já não serve.'; });
 };
 
 /* O aviso dos 30 dias: quando o master marca o fim da demonstração, toda a

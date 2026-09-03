@@ -70,7 +70,7 @@ vSettings = function () {
       sect('Sobre') +
       navRow('Perguntas frequentes', 'As dúvidas mais comuns, respondidas', 'info', 'faq') + gap +
       navRow('Aviso legal', 'Termos e privacidade', 'contract', 'legal') + gap +
-      card('Gestor Imobiliário', 'Versão ' + VERSAO,
+      card('Rendorium', 'Versão ' + VERSAO,
         '<div class="stat"><span>Imóveis · contratos</span><b>' + db.properties.length + ' · ' + db.contracts.length + '</b></div>' +
         '<div class="stat"><span>Inquilinos</span><b>' + db.tenants.length + '</b></div>' +
         '<div class="stat" style="border:0"><span>Movimentos</span><b>' + db.transactions.length + '</b></div>');
@@ -194,7 +194,7 @@ function vFaq() {
     ${q('renda', 'Como registo a renda todos os meses sem trabalho?', 'Cria o contrato com a renda mensal: a app gera um <b>movimento planeado</b> que aparece todos os meses na Visão geral, no cartão «Movimentos por confirmar». Um toque em <b>Confirmar</b> regista a renda — não escreves nada.')}
     ${q('partilha', 'Como partilho as casas com o comproprietário?', 'Em <b>Definições → Conta e partilha</b> está o teu id de 8 caracteres. A outra pessoa cria conta, e um de vocês adiciona o id do outro. Depois escolhem casa a casa o que partilham — e a divisão de quotas só muda quando todos confirmarem.')}
     ${q('fotos', 'As fotografias e documentos sincronizam entre aparelhos?', 'Sim — desde que tenhas sessão iniciada, os anexos sobem para a nuvem e descem nos outros aparelhos. Se um anexo não subir (por tamanho ou falha), a app avisa e ele fica só nesse aparelho até conseguir.')}
-    ${q('password', 'Esqueci-me da palavra-passe. E agora?', 'Se a conta tiver a Google ligada, entra com a Google — e em <b>Conta e partilha</b> podes definir uma palavra-passe nova. Se não tiver, ainda não há reposição automática por email; escreve-nos pela <b>Ajuda e sugestões</b> de um aparelho onde tenhas sessão, ou aguarda: a reposição por email está a caminho.')}
+    ${q('password', 'Esqueci-me da palavra-passe. E agora?', 'No ecrã de entrada, toca em <b>«Esqueci-me da palavra-passe»</b>: enviamos-te uma ligação por email (vale 1 hora, uma só vez) para definires uma nova. Serve também a quem sempre entrou com a Google e quer passar a ter palavra-passe.')}
     ${q('apagar', 'Apaguei uma coisa sem querer. Consigo recuperar?', 'Logo a seguir a apagar aparece um <b>«Anular»</b> no fundo do ecrã, durante seis segundos — repõe tudo, incluindo cascatas (um imóvel com os contratos e movimentos). Passado esse tempo, restaura a partir de uma cópia em <b>Importar e cópias</b>.')}
     ${q('varios', 'Como apago ou edito vários movimentos de uma vez?', 'Faz um <b>toque longo</b> num movimento, imóvel ou contrato: entra em modo de seleção. Marca o que quiseres — há caixas por mês e uma global — e usa a barra no fundo do ecrã.')}
     ${q('contratos', 'Porque é que não consigo criar um contrato?', 'Enquanto a fase experimental durar, consegues sempre. Quando os planos entrarem em vigor (anunciado com 30 dias de antecedência), os contratos fazem parte do plano <b>Plus</b>. O que já existir nunca é apagado nem fica inacessível.')}

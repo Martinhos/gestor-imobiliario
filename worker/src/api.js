@@ -1,4 +1,4 @@
-// API REST do Gestor Imobiliário.
+// API REST do Rendorium.
 //
 // Modelo de dados: cada utilizador é dono das suas casas; os registos
 // (inquilinos, contratos, movimentos, ...) pertencem a uma casa. Um utilizador

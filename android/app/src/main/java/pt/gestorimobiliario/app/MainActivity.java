@@ -41,7 +41,9 @@ import java.util.Locale;
  */
 public class MainActivity extends Activity {
 
-    private static final String HOST = "gestor-imobiliario.martinhos.workers.dev";
+    // O domínio novo. As instalações antigas têm o APK antigo com o host
+    // antigo — que continua a servir — por isso ninguém parte com a mudança.
+    private static final String HOST = "app.rendorium.com";
     private static final String START_URL = "https://" + HOST + "/";
 
     private static final int REQ_PICK_FORM = 11;   // <input type="file"> da pagina

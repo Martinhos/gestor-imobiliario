@@ -1,4 +1,4 @@
-// Worker do Gestor Imobiliário: /api/* vai para a API (D1 + KV);
+// Worker do Rendorium (nome interno: gestor-imobiliario): /api/* vai para a API (D1 + KV);
 // tudo o resto é servido pelos assets estáticos (a PWA em web/).
 
 import { handleApi, recordReport } from './api.js';
@@ -95,6 +95,19 @@ export default {
 
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    /* O domínio raiz é a montra; a app vive em app.rendorium.com. Quem
+       chegar a rendorium.com vê a landing, e qualquer outro caminho na
+       raiz é reencaminhado para a app — os endereços antigos (workers.dev)
+       continuam a servir a app diretamente, porque as instalações feitas
+       lá não podem partir. */
+    if (url.hostname === 'rendorium.com' || url.hostname === 'www.rendorium.com') {
+      if (url.pathname === '/') {
+        const { paginaLanding } = await import('./landing.js');
+        return harden(paginaLanding());
+      }
+      return Response.redirect('https://app.rendorium.com' + url.pathname + url.search, 302);
+    }
 
     // Interações do bot do Discord. A autenticação é a assinatura Ed25519
     // que o Discord envia — não há sessão nem cookies aqui.
