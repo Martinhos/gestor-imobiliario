@@ -21,6 +21,11 @@ routes = [
 [assets]
 directory = "web"
 binding = "ASSETS"
+# Os assets respondem ANTES do worker por omissao — e "/" batia no
+# index.html da app em qualquer hostname, tapando a landing do apex/www.
+# So a raiz passa pelo worker (que decide landing ou app); o resto dos
+# ficheiros continua a servir-se direto.
+run_worker_first = ["/"]
 
 [[d1_databases]]
 binding = "DB"
@@ -88,6 +93,7 @@ routes = [
 [env.dev.assets]
 directory = "web"
 binding = "ASSETS"
+run_worker_first = ["/"]
 
 [[env.dev.d1_databases]]
 binding = "DB"
