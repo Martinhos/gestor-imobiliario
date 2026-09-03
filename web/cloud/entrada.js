@@ -202,26 +202,19 @@ CW.esqueci = function (e) {
       if (!d || !d.contas || !d.contas.length) return;
       var brand = document.querySelector('.brand');
       if (!brand) return;
-      var sel = document.createElement('select');
-      sel.setAttribute('aria-label', 'Trocar de conta de teste');
-      sel.style.cssText = 'width:100%;min-height:40px;padding:8px 10px;border-radius:10px;' +
-        'border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:13px';
-      d.contas.forEach(function (ct) {
-        var o = document.createElement('option');
-        o.value = ct.id;
-        o.textContent = '\uD83E\uDDEA ' + ct.email.split('@')[0].replace('teste-', '#');
-        if (ct.atual) { o.selected = true; sel._atual = ct.id; }
-        sel.appendChild(o);
-      });
-      var novo = document.createElement('option');
-      novo.value = '+nova';
-      novo.textContent = '\uFF0B Nova conta de teste';
-      sel.appendChild(novo);
-      sel.onchange = function () {
-        var v = sel.value;
-        if (v === sel._atual) return;
+      /* o menu de escolha da própria app (sel), não o <select> do sistema —
+         que destoava aqui tanto como destoava nos formulários */
+      if (typeof window.sel !== 'function') return;
+      var atual = d.contas.find(function (c) { return c.atual; }) || d.contas[0];
+      var rotulo = function (ct) { return '\uD83E\uDDEA ' + ct.email.split('@')[0].replace('teste-', '#'); };
+      var opcoes = d.contas.map(function (ct) { return { v: ct.id, label: rotulo(ct) }; });
+      opcoes.push({ div: true }, { v: '+nova', label: '\uFF0B Nova conta de teste' });
+      window.cwTrocaConta = function () {
+        var inp = document.getElementById('cwContas');
+        var v = inp && inp.value;
+        if (!v || v === atual.id || window._cwTroca) return;
+        window._cwTroca = true;
         var alvo = v === '+nova' ? ['/api/teste/nova', {}] : ['/api/teste/trocar', { para: v }];
-        sel.disabled = true;
         fetch(alvo[0], {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + u.token },
@@ -233,13 +226,15 @@ CW.esqueci = function (e) {
             location.reload();
           })
           .catch(function () {
-            sel.disabled = false;
-            sel.value = sel._atual;
+            window._cwTroca = false;
+            if (inp) inp.value = atual.id;
+            var lab = document.getElementById('lab_cwContas');
+            if (lab) lab.textContent = rotulo(atual);
             toast('Não deu para trocar de conta.');
           });
       };
-      brand.innerHTML = '';
-      brand.appendChild(sel);
+      brand.innerHTML = '<div style="flex:1;min-width:0">' +
+        window.sel('cwContas', atual.id, opcoes, 'cwTrocaConta') + '</div>';
     })
     .catch(function () { /* sem seletor, fica a marca */ });
 })();
