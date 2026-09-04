@@ -11,20 +11,31 @@ describe('gerar-docs', () => {
     execFileSync(process.execPath, [fileURLToPath(new URL('../scripts/gerar-docs.js', import.meta.url))], { stdio: 'pipe' });
     const { DOCS } = await import('../worker/src/docs-gerados.js?' + Date.now());
     const total = DOCS.capitulos.reduce((n, c) => n + c.itens.length, 0);
-    assert.ok(total >= 40, 'ha ' + total + ' ficheiros documentados — o extrator perdeu coisas?');
+    const fns = DOCS.capitulos.reduce((n, c) => n + c.itens.reduce((m, i) => m + (i.funcoes || []).length, 0), 0);
+    assert.ok(total >= 60, 'ha ' + total + ' ficheiros documentados');
+    assert.ok(fns >= 400, 'ha ' + fns + ' funcoes com interface extraido');
+    assert.ok(!DOCS.capitulos.some((c) => c.id === 'outros'), 'o mapa cobre tudo — sem capitulo Outros');
     assert.ok(DOCS.comandos.length >= 10, 'os comandos do Discord vieram todos');
-    const nomes = DOCS.comandos.map((c) => c.nome);
     for (const c of ['test', 'docs', 'entrar', 'access']) {
-      assert.ok(nomes.includes(c), '/' + c + ' esta na lista');
+      assert.ok(DOCS.comandos.some((x) => x.nome === c), '/' + c + ' esta na lista');
     }
-    const teste = DOCS.capitulos[0].itens.find((x) => x.nome === 'teste.js');
-    assert.ok(teste && /\/test/.test(teste.texto), 'o cabecalho do teste.js veio inteiro');
+    // o interface das funcoes: o sel() dos componentes vem com assinatura e doc
+    const ui = DOCS.capitulos.find((c) => c.id === 'ui');
+    const comp = ui.itens.find((x) => x.nome === 'web/app/componentes.js');
+    const sel = comp.funcoes.find((f) => f.nome === 'sel');
+    assert.ok(sel && /sel\(id/.test(sel.assinatura), 'a assinatura do sel() foi extraida');
+    assert.ok(!/[=]{4,}/.test(JSON.stringify(comp)), 'os banners ===== foram limpos');
+    // as armadilhas vieram do markdown
+    const arm = DOCS.capitulos.find((c) => c.id === 'armadilhas');
+    assert.ok(arm.itens[0].funcoes.length >= 8, 'as armadilhas estao la');
     assert.match(DOCS.comandos.find((c) => c.nome === 'access').quem, /master/, 'as permissoes vieram do worker');
 
     const { paginaDocs } = await import('../worker/src/docs-vista.js');
     const html = await new Response(paginaDocs().body).text();
-    assert.ok(html.includes('/test'), 'a pagina lista os comandos');
+    assert.ok(html.includes('id="q"'), 'ha pesquisa');
+    assert.ok(html.includes('id="nav"'), 'ha gaveta');
+    assert.ok(html.includes('Armadilhas conhecidas'), 'as armadilhas na gaveta');
+    assert.ok(!html.includes('Gerado do próprio código a cada deploy'), 'o subtitulo foi retirado');
     assert.ok(html.includes('teste.js'), 'a pagina lista os ficheiros');
-    assert.ok(!html.includes('<script'), 'pagina estatica, sem guiao');
   });
 });
