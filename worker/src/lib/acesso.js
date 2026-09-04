@@ -6,6 +6,10 @@ import { now } from './http.js';
 
 // O dono acede sempre; outro utilizador só se a casa estiver partilhada consigo
 // numa conexão aceite.
+// Recebe: env — o ambiente do worker (a base D1); userId — o id do
+// utilizador, vindo da sessão; houseId — o id da casa.
+// Devolve: promessa de { ok, owner } — ok diz se pode entrar, owner se é o
+// dono; casa inexistente ou apagada dá { ok: false }.
 export async function canAccessHouse(env, userId, houseId) {
   const house = await env.DB.prepare('SELECT owner_id FROM houses WHERE id = ? AND deleted = 0')
     .bind(houseId)
@@ -26,6 +30,9 @@ export async function canAccessHouse(env, userId, houseId) {
 
 // Comproprietários de uma casa: o dono + todos os utilizadores com quem a
 // casa está partilhada através de conexões aceites.
+// Recebe: env — o ambiente do worker (a base D1); houseId — o id da casa.
+// Devolve: promessa da lista de ids de utilizadores (o dono primeiro, sem
+// repetidos), ou de null se a casa não existir.
 export async function participantsOf(env, houseId) {
   const house = await env.DB.prepare('SELECT owner_id FROM houses WHERE id = ? AND deleted = 0')
     .bind(houseId)
@@ -50,6 +57,11 @@ export async function participantsOf(env, houseId) {
 
 // As quotas (ownerIds/ownerShares) são geridas pelo servidor através das
 // propostas de divisão: um cliente a gravar a casa nunca as pode alterar.
+// Recebe: existingDataStr — o JSON da casa como está na base, em texto (pode
+// nem ser JSON válido); incoming — o objeto da casa que o cliente mandou,
+// alterado no próprio sítio.
+// Devolve: o mesmo incoming, com ownerShares/ownerIds repostos do que havia
+// (ou sem eles, quando não havia).
 export function preserveOwnership(existingDataStr, incoming) {
   // sem casa anterior (criação, ou ressurreição de uma apagada) as quotas
   // partem do zero: só o caminho das propostas as pode escrever
@@ -67,6 +79,10 @@ export function preserveOwnership(existingDataStr, incoming) {
 
 // A conexão com este id em que o utilizador participa (convidou ou foi
 // convidado), ou nada — a procura serve logo de verificação de acesso.
+// Recebe: env — o ambiente do worker (a base D1); connId — o id da conexão;
+// userId — o id do utilizador, vindo da sessão.
+// Devolve: promessa da linha completa da tabela connections, ou de null
+// quando não existe ou não é dele.
 export async function connectionForUser(env, connId, userId) {
   return env.DB.prepare(
     'SELECT * FROM connections WHERE id = ? AND (requester_id = ? OR target_id = ?)'
@@ -77,6 +93,8 @@ export async function connectionForUser(env, connId, userId) {
 
 // Apaga tudo o que e do utilizador e deixa a identidade como lapide, para as
 // referencias noutras contas continuarem legiveis sem revelar quem era.
+// Recebe: env — o ambiente do worker (a base D1); uid — o id da conta a apagar.
+// Devolve: nada — o efeito é o lote de escritas na base, lápide incluída.
 export async function purgeAccount(env, uid) {
     // casas de outros onde este utilizador constava como comproprietário
     const foreign = (

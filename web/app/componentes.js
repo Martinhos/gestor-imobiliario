@@ -4,7 +4,13 @@ window.__sel={};
 /* Gera o HTML de um menu de escolha. `id` fica num input escondido, de onde
    val(id) lê o valor; `options` é [{v,label}] (ou {div:true} para uma linha
    separadora); `onchange` é o NOME de uma função global, chamada quando se
-   escolhe. Regista as opções em window.__sel para o selPick as encontrar. */
+   escolhe. Regista as opções em window.__sel para o selPick as encontrar.
+   Recebe: id — identificador único do campo (o valor escolhido fica no input
+   escondido com este id, de onde val(id) o lê); value — o valor pré-selecionado
+   (comparado como string; pode vir null ou vazio); options — lista [{v,label}]
+   das opções, com {div:true} no lugar de uma linha separadora; onchange
+   (opcional) — o nome de uma função global a chamar quando se escolhe.
+   Devolve: string de HTML do menu, pronta a inserir com innerHTML. */
 function sel(id,value,options,onchange){
   window.__sel[id]={options:options,onchange:onchange||''};
   const cur=options.find(o=>!o.div&&String(o.v)===String(value))||options.find(o=>!o.div)||{v:'',label:'—'};
@@ -20,7 +26,9 @@ function sel(id,value,options,onchange){
 const gdiv=arr=>arr.length?[{div:true}].concat(arr):[];
 const gOpts=kind=>grpsOf(kind).map(g=>({v:'g:'+g.id,label:'Grupo · '+g.name}));
 /* fecha os menus abertos, excepto os que contêm "keep" (um menu de escolha dentro do menu de filtros
-   não pode fechar o menu que o contém) */
+   não pode fechar o menu que o contém)
+   Recebe: keep (opcional) — um elemento do DOM; os menus que o contenham ficam abertos.
+   Devolve: nada — tira a classe .on aos menus abertos. */
 function closePops(keep){
   const list=document.querySelectorAll('.selpop.on,.menupop.on');
   [].slice.call(list).forEach(x=>{if(!(keep&&x.contains(keep)))x.classList.remove('on')});
@@ -33,7 +41,15 @@ function closePops(keep){
 
    `quer` é a altura que o menu já tem com o tecto do CSS aplicado. Só se
    encolhe, nunca se cresce: deixar um menu de 16 categorias crescer até ao
-   espaço disponível dava-lhe 488px e tomava conta do ecrã. */
+   espaço disponível dava-lhe 488px e tomava conta do ecrã.
+
+   Recebe: botao — o retângulo do botão ({top,bottom} em px do ecrã, tipicamente
+   um getBoundingClientRect()); limite — {top,bottom} do espaço utilizável;
+   quer — a altura (px) que o menu tem com o tecto do CSS aplicado; folga
+   (opcional) — margem em px a deixar nas pontas (10 por omissão).
+   Devolve: objeto {lado,maxHeight} — lado é 'cima' ou 'baixo'; maxHeight é a
+   altura (px, nunca abaixo de 60) a que o menu tem de encolher, ou null quando
+   cabe inteiro. */
 function posicaoPop(botao, limite, quer, folga){
   folga = folga == null ? 10 : folga;
   const abaixo = limite.bottom - botao.bottom - folga;
@@ -60,7 +76,11 @@ function posicaoPop(botao, limite, quer, folga){
 
    Os menus dentro dos painéis de filtro têm tratamento próprio em
    cloud/filtros.js, que os solta para position:fixed — esses não passam por
-   aqui com o mesmo efeito, e não há conflito porque esse corre depois. */
+   aqui com o mesmo efeito, e não há conflito porque esse corre depois.
+
+   Recebe: p — o elemento do menu (.selpop ou .menupop) a posicionar; com null
+   não faz nada.
+   Devolve: nada — escreve top/bottom/maxHeight nos estilos inline do menu. */
 function ajustarPop(p){
   if(!p)return;
   const btn=p.parentNode.querySelector('.selbtn,.iconbtn')||p.previousElementSibling;
@@ -83,6 +103,8 @@ function ajustarPop(p){
 
 // Abre o dropdown de um sel() — ou fecha-o, se já estava aberto. Fecha os
 // outros menus primeiro e deixa o ajustarPop virá-lo ou encolhê-lo para caber.
+// Recebe: e — o evento do clique (trava-lhe a propagação; pode vir null); id — o id dado ao sel().
+// Devolve: nada — alterna a classe .on do dropdown no DOM.
 function selOpen(e,id){
   if(e)e.stopPropagation();
   const p=document.getElementById('pop_'+id),was=p&&p.classList.contains('on');
@@ -91,7 +113,10 @@ function selOpen(e,id){
 }
 /* Escolha de uma opção: escreve o valor no input escondido, troca o rótulo do
    botão, fecha o menu e chama o onchange registado (pelo nome, em window) —
-   é por aí que os formulários reagem à mudança. */
+   é por aí que os formulários reagem à mudança.
+   Recebe: e — o evento do clique (pode vir null); id — o id dado ao sel();
+   i — o índice da opção escolhida em window.__sel[id].options.
+   Devolve: nada — atualiza o input e o rótulo no DOM e chama o onchange. */
 function selPick(e,id,i){
   if(e)e.stopPropagation();
   const cfg=window.__sel[id]||{options:[]},o=cfg.options[i];if(!o)return;
@@ -100,19 +125,30 @@ function selPick(e,id,i){
   const pop=document.getElementById('pop_'+id);if(pop)pop.classList.remove('on');
   if(cfg.onchange&&window[cfg.onchange])window[cfg.onchange]();
 }
-/* menu de ações (⋯) */
+/* menu de ações (⋯)
+   Recebe: id — sufixo único do menu (o pop fica em menu_<id>); items — lista de
+   {label,act,icon,danger}: act é o código inline do onclick, icon (opcional) o
+   nome do ícone e danger (opcional) pinta a opção de vermelho.
+   Devolve: string de HTML do botão ⋯ com o menu, pronta a inserir com innerHTML. */
 function menu(id,items){
   return `<span class="menuwrap"><button type="button" class="iconbtn" onclick="menuOpen(event,'${id}')" aria-label="Mais">${ic('dots',20)}</button>
     <div class="menupop" id="menu_${id}">${items.map(it=>
       `<button type="button" class="${it.danger?'danger':''}" onclick="closePops();${it.act}">${ic(it.icon||'dots',17)} ${esc(it.label)}</button>`).join('')}</div></span>`;
 }
 // Abre/fecha o menu de ações (⋯) criado por menu(), com o mesmo ajuste de posição dos sel().
+// Recebe: e — o evento do clique (pode vir null); id — o id dado ao menu() (abre menu_<id>).
+// Devolve: nada — alterna a classe .on do menu no DOM.
 function menuOpen(e,id){
   if(e)e.stopPropagation();
   const p=document.getElementById('menu_'+id),was=p&&p.classList.contains('on');
   closePops(p?p.parentNode:null);if(p&&!was){p.classList.add('on');ajustarPop(p);};
 }
-/* etiquetas removíveis */
+/* etiquetas removíveis
+   Recebe: items — lista de {id,label} das etiquetas a mostrar; addLabel — o texto
+   do botão de adicionar; addAct — o código inline do onclick desse botão;
+   removeAct — o nome de uma função global, chamada com o id da etiqueta a remover;
+   cls (opcional) — classe CSS extra para cada etiqueta.
+   Devolve: string de HTML da caixa de etiquetas, pronta a inserir com innerHTML. */
 function tagField(items,addLabel,addAct,removeAct,cls){
   return `<div class="tagbox">
     ${items.map(it=>`<span class="tag ${cls||''}">${esc(it.label)}
@@ -123,7 +159,11 @@ function tagField(items,addLabel,addAct,removeAct,cls){
 let foldState={};
 /* Devolve o HTML de uma secção dobrável. `o.open` é só o estado inicial:
    depois manda o foldState, para a dobra sobreviver aos re-renders.
-   `o.summary` aparece no cabeçalho, visível mesmo com a secção fechada. */
+   `o.summary` aparece no cabeçalho, visível mesmo com a secção fechada.
+   Recebe: id — identificador da secção (o elemento fica em fold_<id> e é a chave
+   no foldState); title — HTML do título do cabeçalho; body — HTML do conteúdo;
+   o (opcional) — {open,icon,summary}: estado inicial, nome do ícone e resumo.
+   Devolve: string de HTML da secção dobrável, pronta a inserir com innerHTML. */
 function fold(id,title,body,o){
   o=o||{};const open=foldState[id]===undefined?!!o.open:foldState[id];
   return `<div class="sect fold ${open?'open':''}" id="fold_${id}">
@@ -132,8 +172,19 @@ function fold(id,title,body,o){
     <div class="fold-body">${body}</div></div>`;
 }
 // abre ou fecha a secção no DOM e guarda o estado, para o próximo render o respeitar
+// Recebe: id — o id dado ao fold() (procura o elemento fold_<id>).
+// Devolve: nada — alterna a classe .open no DOM e guarda o estado em foldState.
 function toggleFold(id){const el=document.getElementById('fold_'+id);if(!el)return;const on=!el.classList.contains('open');el.classList.toggle('open',on);foldState[id]=on}
-/* bloco de ficheiros reutilizável */
+/* bloco de ficheiros reutilizável
+   Recebe: label — título por cima da lista (vazio para não mostrar); list — lista
+   de metadados {id,name,size,added} dos ficheiros já anexados; inputId — id do
+   <input type=file> escondido; onPick — nome de uma função global chamada quando
+   se escolhem ficheiros (recebe o input e, se opts.arg existir, esse argumento);
+   delFn — nome de uma função global que apaga pelo id (só corre depois da
+   confirmação); opts (opcional) — {photos,move,arg,addLabel,hint}: modo
+   fotografias com miniaturas, puxador de reordenação, argumento extra do onPick,
+   rótulo do botão de adicionar e nota por baixo.
+   Devolve: string de HTML do bloco, pronta a inserir com innerHTML. */
 function fileBlock(label,list,inputId,onPick,delFn,opts){
   opts=opts||{};
   const photos=opts.photos;
@@ -157,7 +208,10 @@ function fileBlock(label,list,inputId,onPick,delFn,opts){
 }
 /* A confirmação que faltava: o apagar ficava a 8px do puxador de arrastar,
    ambos pequenos, e o toque falhado destruía o ficheiro no ato — do
-   IndexedDB, sem undo. Agora pergunta, e diz o que se perde. */
+   IndexedDB, sem undo. Agora pergunta, e diz o que se perde.
+   Recebe: fn — o nome (em window) da função que apaga; fid — o id do ficheiro,
+   passado a essa função; tipo — 'fotografia' ou 'ficheiro', para o texto da pergunta.
+   Devolve: nada — abre a janela de confirmação; só se apaga depois do sim. */
 function delFileConfirm(fn,fid,tipo){
   const foto=tipo==='fotografia';
   confirmModal(foto?'Apagar a fotografia':'Apagar o ficheiro',
@@ -166,10 +220,15 @@ function delFileConfirm(fn,fid,tipo){
 }
 // Abre a ficha do ficheiro `fid` (nome, tamanho, pré-visualização), procurando-o
 // entre os metadados já guardados e os pendentes do formulário aberto.
+// Recebe: fid — o id do ficheiro cuja ficha se abre.
+// Devolve: nada — abre a janela com a ficha do ficheiro.
 function openMeta(fid){openFileMeta(allFileMetas().concat(pendingMetas()).find(f=>f.id===fid))}
 /* mostra as miniaturas depois do HTML entrar no DOM. "root" limita a procura (a lista de imóveis
    e a janela aberta por cima usam os mesmos ids). */
-/* miniatura pequena de uma foto: usa a guardada (tn_), ou cria-a uma vez a partir do original */
+/* miniatura pequena de uma foto: usa a guardada (tn_), ou cria-a uma vez a partir do original.
+   Recebe: id — o id da foto (chave do blob no IndexedDB; a miniatura vive em tn_<id>).
+   Devolve: Promise que resolve para um object URL da miniatura (ou do original,
+   se a miniatura não se conseguir criar), ou null quando o blob não existe. */
 function thumbSrc(id){
   if(thumbCache[id])return Promise.resolve(thumbCache[id]);
   return idbGet('tn_'+id).then(tb=>{
@@ -184,7 +243,10 @@ function thumbSrc(id){
   });
 }
 /* Encolhe uma imagem para miniatura (lado maior ≤ 220px) e devolve uma Promise
-   com o blob JPEG. Nunca amplia; rejeita se o blob não for imagem legível. */
+   com o blob JPEG. Nunca amplia; rejeita se o blob não for imagem legível.
+   Recebe: blob — a imagem original (Blob), tal como vive no IndexedDB.
+   Devolve: Promise que resolve para um Blob JPEG da miniatura (lado maior ≤ 220px);
+   rejeita se o blob não for uma imagem legível. */
 function makeThumb(blob){
   return createImageBitmap(blob).then(bm=>{
     const k=Math.min(1,220/Math.max(bm.width,bm.height));
@@ -198,7 +260,11 @@ function makeThumb(blob){
 /* Pinta as miniaturas depois do HTML entrar no DOM: para cada ficheiro da
    lista resolve a miniatura (thumbSrc) e mete o <img> na caixa th_<id>.
    `root` limita a procura — por omissão à janela de cima, porque a lista
-   por baixo usa os mesmos ids. */
+   por baixo usa os mesmos ids.
+   Recebe: list — lista de metadados {id,…} das fotos a pintar (pode vir vazia ou
+   null); root (opcional) — o elemento onde procurar as caixas th_<id> (por
+   omissão, a janela de cima; sem janela, o documento).
+   Devolve: nada — insere os <img> nas caixas à medida que as miniaturas chegam. */
 function paintThumbs(list,root){
   root=root||(modalTop()?modalTop().el:document);
   (list||[]).forEach(f=>{
@@ -208,6 +274,8 @@ function paintThumbs(list,root){
   });
 }
 // guarda o nome da foto no pForm à medida que se escreve, para não se perder num repinte
+// Recebe: id — o id da foto em pForm.photos; v — o nome tal como está escrito no campo.
+// Devolve: nada — atualiza o name da foto em memória.
 function livePhotoName(id,v){const f=(window.pForm&&pForm.photos||[]).find(x=>x.id===id);if(f)f.name=v}
 
 /* ================= MODAL =================
@@ -217,14 +285,17 @@ function livePhotoName(id,v){const f=(window.pForm&&pForm.photos||[]).find(x=>x.
    para o formulário que está a ser editado. */
 let modalStack=[];
 // a janela de cima da pilha, ou null se não há nenhuma aberta
+// Devolve: a camada de cima ({el,title,onSave,snap,tocado,gatilho}), ou null sem janelas.
 const modalTop=()=>modalStack[modalStack.length-1]||null;
 // o elemento .body da janela de cima — onde as vistas repintam o conteúdo (null sem janela)
+// Devolve: o elemento .body da janela de cima, ou null se não houver janela aberta.
 const modalBodyEl=()=>{const t=modalTop();return t?t.el.querySelector('.body'):null};
 Object.defineProperty(window,'onSave',{configurable:true,
   get(){const t=modalTop();return t?t.onSave:null},
   set(v){const t=modalTop();if(t)t.onSave=v}});
 // Constrói e devolve o esqueleto DOM de uma janela vazia (véu, cabeçalho com X,
 // corpo e rodapé) — quem chama pendura-o no body e preenche-o com o fillModal.
+// Devolve: o elemento DOM da janela (div.modal.open), ainda por pendurar no documento.
 function modalLayer(){
   const m=document.createElement('div');m.className='modal open';
   m.innerHTML=`<div class="bg" onclick="closeModal('fundo')"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
@@ -234,25 +305,36 @@ function modalLayer(){
   return m;
 }
 /* O que está escrito na janela, numa string comparável. É o suficiente para
-   saber se fechar deita fora trabalho de alguém. */
+   saber se fechar deita fora trabalho de alguém.
+   Recebe: el — o elemento da janela cujos campos se leem.
+   Devolve: string com os valores de todos os campos (checkboxes como 1/0),
+   separados por um carácter de controlo — duas iguais quer dizer nada mudou. */
 function modalSnap(el){
   return [].slice.call(el.querySelectorAll('input,select,textarea'))
     .map(x=>x.type==='checkbox'||x.type==='radio'?(x.checked?'1':'0'):String(x.value||''))
     .join('\x1f');
 }
 /* Manda uma janela para baixo da pilha: os ids passam a data-mid (para o
-   getElementById só ver a de cima), e a janela fica escurecida e inerte. */
+   getElementById só ver a de cima), e a janela fica escurecida e inerte.
+   Recebe: el — o elemento da janela a mandar para baixo.
+   Devolve: nada — troca os ids por data-mid e deixa a janela escurecida e inerte. */
 function demote(el){
   [].slice.call(el.querySelectorAll('[id]')).forEach(x=>{x.setAttribute('data-mid',x.id);x.removeAttribute('id')});
   el.classList.add('under');el.setAttribute('aria-hidden','true');try{el.inert=true}catch(e){}
 }
 // o inverso do demote: devolve os ids à janela e torna-a de novo utilizável quando a de cima fecha
+// Recebe: el — o elemento da janela a repor.
+// Devolve: nada — repõe os ids nos elementos e torna a janela utilizável.
 function promote(el){
   [].slice.call(el.querySelectorAll('[data-mid]')).forEach(x=>{x.id=x.getAttribute('data-mid');x.removeAttribute('data-mid')});
   el.classList.remove('under');el.removeAttribute('aria-hidden');try{el.inert=false}catch(e){}
 }
 // Preenche uma janela já criada: título, corpo, menu do cabeçalho e rodapé —
 // por omissão, Cancelar + Guardar (que chama o onSave da janela de cima).
+// Recebe: el — o elemento da janela (vindo do modalLayer); title — o texto do título;
+// body — HTML do corpo; foot (opcional) — HTML do rodapé (por omissão Cancelar+Guardar);
+// menuHtml (opcional) — HTML para o menu do cabeçalho.
+// Devolve: nada — preenche a janela no DOM.
 function fillModal(el,title,body,foot,menuHtml){
   el.querySelector('.head h2').textContent=title;
   el.querySelector('.body').innerHTML=body;
@@ -266,6 +348,7 @@ function fillModal(el,title,body,foot,menuHtml){
 let _histOn=false;
 // Arma a sentinela no histórico (uma só de cada vez, via _histOn) para o
 // "voltar" do Android cair no popstate abaixo em vez de sair da app.
+// Devolve: nada — empurra a entrada sentinela para o history.
 function pushHist(){if(_histOn)return;try{history.pushState({gi:1},'');_histOn=true}catch(e){}}
 window.addEventListener('popstate',()=>{
   _histOn=false;
@@ -286,7 +369,12 @@ window.addEventListener('popstate',()=>{
    (demote), o scroll da página tranca e a sentinela do "voltar" arma-se.
    Tira também um retrato do formulário (snap), para o closeModal saber se
    há alterações por deitar fora. Devolve a camada, com onSave a null —
-   quem chama define-o depois. */
+   quem chama define-o depois.
+   Recebe: title — o texto do título; body — HTML do corpo; foot (opcional) —
+   HTML do rodapé (por omissão Cancelar+Guardar); menuHtml (opcional) — HTML do
+   menu do cabeçalho.
+   Devolve: a camada criada ({el,title,onSave,snap,tocado,gatilho}), com onSave
+   a null — quem chama define-o. */
 function openModal(title,body,foot,menuHtml){
   closePops();
   const top=modalTop();if(top)demote(top.el);
@@ -305,8 +393,15 @@ function openModal(title,body,foot,menuHtml){
   return L;
 }
 // leva o foco para dentro da janela, para o teclado e os leitores de ecrã não ficarem atrás do véu
+// Recebe: el — o elemento da janela cujo .sheet recebe o foco.
+// Devolve: nada — move o foco para dentro da janela.
 function focarModal(el){try{el.querySelector('.sheet').focus()}catch(e){}}
-/* substitui o conteúdo da janela de cima (sem empilhar) */
+/* substitui o conteúdo da janela de cima (sem empilhar)
+   Recebe: title — o texto do título; body — HTML do corpo; foot (opcional) —
+   HTML do rodapé (por omissão Cancelar+Guardar); menuHtml (opcional) — HTML do
+   menu do cabeçalho.
+   Devolve: a camada de cima já com o conteúdo novo — ou a que o openModal
+   criar, se não houver nenhuma aberta. */
 function setModal(title,body,foot,menuHtml){
   const t=modalTop();if(!t)return openModal(title,body,foot,menuHtml);
   closePops();t.title=title;t.onSave=null;fillModal(t.el,title,body,foot,menuHtml);
@@ -325,7 +420,10 @@ let _forcaFecho=false;
 /* Fecha a janela de cima. `origem` diz por onde se saiu ('fundo', 'x',
    'voltar'…): esses caminhos de abandono, com alterações por guardar,
    abrem primeiro a pergunta "Sair sem guardar?". Sem origem (Guardar,
-   Cancelar), fecha sem perguntar — são decisões, não acidentes. */
+   Cancelar), fecha sem perguntar — são decisões, não acidentes.
+   Recebe: origem (opcional) — string com o caminho de saída ('fundo', 'x',
+   'voltar'…); presente, e havendo alterações, abre primeiro a pergunta.
+   Devolve: nada — tira a janela da pilha e repõe a de baixo (ou o foco no gatilho). */
 function closeModal(origem){
   closePops();
   const L=modalTop();
@@ -346,17 +444,23 @@ function closeModal(origem){
   else{try{M.gatilho&&M.gatilho.focus&&M.gatilho.focus()}catch(e){}}
 }
 // resposta ao "Sair sem guardar": fecha a pergunta e a janela por baixo, sem voltar a perguntar
+// Devolve: nada — fecha as duas janelas.
 function _sairSemGuardar(){
   _forcaFecho=true;
   try{closeModal();closeModal()}finally{_forcaFecho=false}   // a pergunta e a janela por baixo
 }
 // despeja a pilha inteira de janelas (closeModal sem origem: fecha sem perguntar)
+// Devolve: nada — fecha todas as janelas da pilha.
 function closeAllModals(){while(modalStack.length)closeModal()}
 const val=id=>{const e=document.getElementById(id);return e?e.value:''};
 const chk=id=>{const e=document.getElementById(id);return e?!!e.checked:false};
 /* O botão diz o verbo da ação e veste-se de perigo quando destrói: um
    "Confirmar" primário igual ao Guardar convidava ao reflexo justamente
-   onde não há undo. */
+   onde não há undo.
+   Recebe: title — o título da pergunta (a começar por Apagar/Remover/Eliminar/
+   Terminar, o botão fica vermelho e usa esse verbo); text — HTML com a
+   explicação do que se perde; cb — função corrida só se a pessoa confirmar.
+   Devolve: nada — abre a janela de confirmação. */
 function confirmModal(title,text,cb){
   const verbo=(/^(Apagar|Remover|Eliminar|Terminar)\b/.exec(title)||[])[1];
   openModal(title,`<div class="hint" style="font-size:14px">${text}</div>`,
@@ -372,7 +476,11 @@ let _desfazer=null;
 /* Toast com "Anular" durante seis segundos. `restaurar` repõe os dados (a
    gravação e o repinte vêm por acréscimo) se o anular for clicado;
    `aoExpirar` corre quando o prazo passa sem clique — ou quando outro
-   desfazer atropela este — e é aí que se liquida o que não volta. */
+   desfazer atropela este — e é aí que se liquida o que não volta.
+   Recebe: msg — o texto do toast; restaurar — função que repõe os dados quando
+   o Anular é clicado; aoExpirar (opcional) — função corrida quando o prazo
+   passa sem clique, ou quando outro desfazer atropela este.
+   Devolve: nada — mostra o toast e arma o prazo de seis segundos. */
 function comDesfazer(msg,restaurar,aoExpirar){
   if(_desfazer&&_desfazer.expira)_desfazer.expira();   // o anterior liquida-se
   const eu={expira:aoExpirar||null};_desfazer=eu;
@@ -384,7 +492,9 @@ function comDesfazer(msg,restaurar,aoExpirar){
 }
 
 /* O toast diz o que falta; isto aponta o campo — realça-o, leva-o ao ecrã
-   e larga o realce à primeira tecla. */
+   e larga o realce à primeira tecla.
+   Recebe: id — o id do campo com o problema; msg — o texto do toast.
+   Devolve: nada — mostra o toast e realça o campo no ecrã. */
 function falhaCampo(id,msg){
   toast(msg);
   const e=document.getElementById(id);if(!e)return;
@@ -393,7 +503,12 @@ function falhaCampo(id,msg){
   try{e.focus({preventScroll:true})}catch(x){}
   e.addEventListener('input',()=>e.classList.remove('err'),{once:true});
 }
-/* escolher de uma lista, no estilo da app */
+/* escolher de uma lista, no estilo da app
+   Recebe: title — o texto do título; options — lista de opções {label,sub,icon,
+   avatar,…} (sub, icon e avatar são opcionais; a opção inteira volta no onPick);
+   onPick — função chamada com a opção escolhida; extra (opcional) — HTML
+   acrescentado por baixo da lista.
+   Devolve: nada — abre a janela de escolha. */
 function pickModal(title,options,onPick,extra){
   openModal(title,`<div class="form">
     ${options.length?`<div class="list" style="gap:7px">${options.map((o,i)=>
@@ -424,7 +539,11 @@ window.addEventListener('scroll',()=>{const b=document.getElementById('toTop');i
 /* A folha de opções do toque longo: fecha o que estiver aberto e mostra a
    lista num pickModal. Cada opção é {label, icon, act} — o act corre depois
    de fechar tudo. Os rótulos destrutivos (Apagar/Remover/…) pintam-se de
-   vermelho aqui mesmo, já com o HTML no DOM. */
+   vermelho aqui mesmo, já com o HTML no DOM.
+   Recebe: title — o título da folha ('Opções' quando vazio); opts — lista de
+   {label, icon, act, sub}: act é a função corrida depois de fechar tudo, sub
+   (opcional) a linha pequena por baixo do rótulo.
+   Devolve: nada — abre o pickModal com as opções. */
 function lpShow(title,opts){
   closeAllModals();
   pickModal(title||'Opções',opts.map((o,i)=>({v:i,label:o.label,sub:o.sub||'',icon:o.icon})),o=>{closeAllModals();opts[o.v].act()});
@@ -436,7 +555,11 @@ function lpShow(title,opts){
 /* O menu por omissão do toque longo: descodifica o data-lp ("tipo:id", ex.
    "prop:abc") e mostra as ações que fazem sentido para esse cartão — imóvel,
    movimento, contrato, pessoa, recorrente, modelo ou hipoteca. A seleção em
-   massa (cloud/selecao.js) embrulha-o para tratar dos movimentos à maneira dela. */
+   massa (cloud/selecao.js) embrulha-o para tratar dos movimentos à maneira dela.
+   Recebe: v — o valor do data-lp do cartão, no formato "tipo:id" (pessoas e
+   hipotecas levam dois ids: "per:owner:<id>" ou "per:tenant:<id>", e
+   "mort:<idImovel>:<idHipoteca>").
+   Devolve: nada — abre a folha de opções (ou não faz nada, se o alvo já não existir). */
 function lpMenu(v){
   const a=String(v||'').split(':'),k=a[0],id=a[1];
   if(k==='prop'){const p=prop(id);if(!p)return;

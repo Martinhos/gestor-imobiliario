@@ -1,6 +1,7 @@
 /* ================= ANEXOS (IndexedDB) ================= */
 let _idb=null;
 // Abre (uma só vez) a base 'gi_files' do IndexedDB e devolve a ligação; rejeita quando o browser não deixa.
+// Devolve: promessa da ligação (IDBDatabase) à base 'gi_files'; rejeita quando o IndexedDB não abre.
 function idb(){
   return new Promise((res,rej)=>{
     if(_idb)return res(_idb);
@@ -28,6 +29,7 @@ let idbDel=id=>{delete memFiles[id];return idb().then(d=>new Promise((res,rej)=>
 const pendingFiles={},thumbCache={};
 // Os metadados de todos os anexos referidos nos dados gravados: contratos, fotos e
 // hipotecas dos imóveis, documentos de pessoas. É a lista do que deve existir em disco.
+// Devolve: lista de metadados ({id,name,type,size,added}), um por anexo referido.
 function allFileMetas(){
   const out=[];
   db.contracts.forEach(c=>(c.files||[]).forEach(f=>out.push(f)));
@@ -38,6 +40,7 @@ function allFileMetas(){
 }
 // Apaga do IndexedDB os blobs que já nada refere, poupando os pendentes dos
 // formulários ainda abertos. Corre em fundo e falha em silêncio.
+// Devolve: nada — a limpeza segue em fundo.
 function cleanFiles(){
   idb().then(d=>{
     const r=d.transaction('files','readonly').objectStore('files').getAllKeys();
@@ -50,7 +53,9 @@ function cleanFiles(){
 }
 const kb=b=>b>=1048576?(b/1048576).toFixed(1).replace('.',',')+' MB':Math.max(1,Math.round(b/1024))+' KB';
 const isImg=t=>/^image\//.test(String(t||''));
-/** Lê ficheiros do <input>, guarda os blobs e devolve os metadados. */
+/** Lê ficheiros do <input>, guarda os blobs e devolve os metadados.
+   Recebe: input — o elemento <input type="file"> de onde vêm os ficheiros (o value fica limpo).
+   Devolve: promessa da lista de metadados ({id,name,type,size,added}) dos aceites — os maiores de 25 MB ficam de fora. */
 function takeFiles(input){
   const fs=[].slice.call(input.files||[]);input.value='';
   if(!fs.length)return Promise.resolve([]);
@@ -67,6 +72,8 @@ function takeFiles(input){
 }
 // Abre um anexo a partir dos metadados: imagens em modal com botão de guardar,
 // o resto descarrega logo. Avisa por toast quando o blob não está no aparelho.
+// Recebe: meta — os metadados do anexo ({id,name,type,size,added}).
+// Devolve: nada — abre o modal ou dispara a descarga.
 function openFileMeta(meta){
   if(!meta)return toast('Anexo não encontrado.');
   idbGet(meta.id).then(blob=>{
@@ -80,6 +87,8 @@ function openFileMeta(meta){
   }).catch(()=>toast('Não foi possível abrir o anexo.'));
 }
 // Descarrega o anexo com o nome original, através de um <a download> temporário.
+// Recebe: fid — o id do anexo (o campo id dos metadados).
+// Devolve: nada — dispara a descarga no browser.
 function downloadMeta(fid){
   const meta=allFileMetas().concat(pendingMetas()).find(f=>f.id===fid);
   idbGet(fid).then(blob=>{
@@ -91,6 +100,7 @@ function downloadMeta(fid){
 }
 // Os anexos ainda nos formulários abertos (contrato, imóvel, pessoa, hipotecas):
 // já têm blob guardado, mas os metadados ainda não chegaram a db.
+// Devolve: lista de metadados ({id,name,type,size,added}) desses anexos pendentes.
 function pendingMetas(){
   return [].concat(cForm.files||[],pForm.photos||[],perForm.files||[],
     ...((pForm.loans||[]).map(l=>l.files||[])));

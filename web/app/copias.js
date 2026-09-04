@@ -1,27 +1,36 @@
 /* ================= CÓPIAS ================= */
+// Nome do ficheiro da cópia de segurança do dia.
+// Devolve: string — "gestor-imobiliario-<AAAA-MM-DD>.json", com a data de hoje.
 const bkName=()=>'gestor-imobiliario-'+today()+'.json';
 // Texto -> base64 passando por UTF-8 (o btoa sozinho rebenta com acentos); devolve '' se tudo falhar.
+// Recebe: s — o texto a codificar (string).
+// Devolve: string em base64; '' se tudo falhar.
 function b64(s){
   try{const by=new TextEncoder().encode(s);let bin='';for(const b of by)bin+=String.fromCharCode(b);return btoa(bin)}
   catch(e){try{return btoa(unescape(encodeURIComponent(s)))}catch(e2){return ''}}
 }
 // Cópia de segurança: serializa a base inteira em JSON e entrega ao seletor de ficheiros do Android ou, no browser, descarrega o .json.
+// Devolve: nada — entrega o ficheiro ao Android ou dispara a descarga.
 function driveSave(){
   const json=JSON.stringify(db,null,2);
   if(window.Android&&window.Android.saveAs){window.Android.saveAs(bkName(),'application/json',b64(json));return toast('Escolhe onde guardar.')}
   download(bkName(),'application/json',json);
 }
 // Repor uma cópia: no Android abre o seletor de ficheiros nativo; no browser cai no modal de colar o JSON.
+// Devolve: nada — abre o seletor nativo ou o modal de colar.
 function driveOpen(){
   if(window.Android&&window.Android.openFile){window.Android.openFile('application/json');return toast('Escolhe a cópia.')}
   bkPasteBox();
 }
 // Chamada pelo lado Android depois de o utilizador escolher um ficheiro: .csv segue para a importação do Splitwise, o resto é tratado como cópia de segurança.
+// Recebe: name — o nome do ficheiro escolhido (string; decide pelo sufixo); text — o conteúdo dele (string).
+// Devolve: nada de útil — só encaminha o texto para a importação certa.
 window.__fileLoaded=function(name,text){
   if(String(name||'').toLowerCase().endsWith('.csv'))return swParse(text);
   bkLoad(text);
 };
 // Modal com textarea para colar o conteúdo de uma cópia de segurança à mão.
+// Devolve: nada — abre o modal; o Repor chama bkLoad com o que lá estiver.
 function bkPasteBox(){
   openModal('Colar cópia de segurança',`<div class="form">
     <textarea id="bkText" style="min-height:130px;font:13px/1.5 ui-monospace,Menlo,monospace" placeholder='{"properties":[…]}'></textarea></div>`,
@@ -30,7 +39,9 @@ function bkPasteBox(){
 /* Repõe uma cópia de segurança: valida o JSON (tem de trazer imóveis e movimentos),
    pede confirmação com os totais e só então substitui a base inteira — normalizando
    cada coleção e correndo as migrações, para as cópias de versões antigas continuarem
-   a abrir. No fim grava, refaz a navegação e re-renderiza tudo. */
+   a abrir. No fim grava, refaz a navegação e re-renderiza tudo.
+   Recebe: text — o conteúdo da cópia (string com o JSON exportado).
+   Devolve: nada — pede confirmação e, com o sim, substitui a base e redesenha tudo. */
 function bkLoad(text){
   let d;try{d=JSON.parse(text)}catch(e){return toast('Isso não é um ficheiro válido.')}
   if(!d||!Array.isArray(d.properties)||!Array.isArray(d.transactions))return toast('Falta a lista de imóveis ou de movimentos.');
@@ -48,19 +59,26 @@ function bkLoad(text){
   });
 }
 // Descarrega "content" como ficheiro no browser: cria um <a download> temporário, clica-o e remove-o.
+// Recebe: name — o nome do ficheiro a gravar; mime — o tipo MIME dele; content — o
+// conteúdo (string ou Uint8Array; vai tal e qual para o Blob).
+// Devolve: nada — dispara a descarga.
 function download(name,mime,content){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([content],{type:mime}));
   a.download=name;document.body.appendChild(a);a.click();a.remove();
 }
-/* "bin" é uma string em que cada carácter é um byte (o PDF) — não pode passar por UTF-8 */
+/* "bin" é uma string em que cada carácter é um byte (o PDF) — não pode passar por UTF-8
+   Recebe: name — o nome do ficheiro; mime — o tipo MIME; bin — a string binária
+   (um byte por carácter, 0–255).
+   Devolve: nada — converte para Uint8Array e dispara a descarga. */
 function downloadBytes(name,mime,bin){
   const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i)&255;
   download(name,mime,u);
 }
 /* Exporta todos os movimentos para CSV (ponto e vírgula, campos entre aspas), com
    as colunas já traduzidas para nomes legíveis — imóvel, quem pagou, inquilinos,
-   categoria. Pensado para abrir diretamente no Excel. */
+   categoria. Pensado para abrir diretamente no Excel.
+   Devolve: nada — dispara a descarga do CSV. */
 function downloadCsv(){
   const rows=[['data','descricao','tipo','valor','imovel','pago_por','recebido_por','divisao','quarto','inquilinos','categoria','subcategoria','etiquetas','credor','comentarios','capital','juros','selo'],
     ...db.transactions.map(t=>{const c=t.contractId?contract(t.contractId):null,p=prop(t.propertyId);
@@ -72,6 +90,7 @@ function downloadCsv(){
   toast('CSV exportado.');
 }
 // Partilha o relatório do portefólio por ordem de preferência: folha de partilha do Android, Web Share API, ou cópia para a área de transferência.
+// Devolve: nada de útil — só o efeito de partilhar (ou copiar) o texto.
 function shareReport(){
   const txt=reportText();
   if(window.Android&&window.Android.shareText)return window.Android.shareText('Avaliação do portefólio',txt);
@@ -80,6 +99,7 @@ function shareReport(){
   toast('Não foi possível partilhar.');
 }
 // Apagar tudo: limpa a base local (mantém o tema) após confirmação; com sessão iniciada recusa e aponta as alternativas seguras.
+// Devolve: nada — com sessão iniciada só explica; sem sessão, apaga após o sim.
 function wipe(){
   /* Com sessão iniciada, o sync propagava o apagão à conta e aos outros
      aparelhos — e a confirmação dizia "deste dispositivo". Um botão que

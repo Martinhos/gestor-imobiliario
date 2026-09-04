@@ -7,7 +7,11 @@ import { weakPassword } from '../lib/http.js';
    palavra-passe e as sessões. Tudo aqui chega já autenticado — o `me` vem no
    contexto. O que mexe em credenciais sobe o sess_epoch, que é o que deita
    abaixo as sessões dos outros aparelhos, e devolve um token novo para este
-   continuar dentro. Sem rota que sirva não devolve nada, e o worker segue. */
+   continuar dentro. Sem rota que sirva não devolve nada, e o worker segue.
+   Recebe: c — o contexto partilhado montado pelo handleApi (env, request,
+   path, method, o utilizador em c.me e os ajudantes).
+   Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
+   para o encaminhador tentar a seguinte. */
 export async function rotasConta(c) {
   const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
 

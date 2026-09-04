@@ -1,4 +1,6 @@
-/* ================= CRÉDITOS (todas as hipotecas) ================= */
+/* ================= CRÉDITOS (todas as hipotecas) =================
+   Devolve: o HTML da vista de créditos — barra de filtros, KPIs e a lista de
+   hipotecas em cartões. */
 function vCredits(){
   const K='lcred',s=lf(K);
   const rows=[];
@@ -35,7 +37,9 @@ function vCredits(){
       <div class="hint" style="margin-top:10px">Se editares um pagamento e a dívida voltar a subir, o crédito volta para a lista de cima.</div>`:'');
   return head+kpis+list+`<div class="hint" style="margin-top:12px">Também podes geri-las na ficha de cada imóvel.</div>`;
 }
-/* nova hipoteca: escolhe-se primeiro o imóvel (uma hipoteca tem sempre um) */
+/* nova hipoteca: escolhe-se primeiro o imóvel (uma hipoteca tem sempre um)
+   Devolve: nada — abre o seletor de imóvel e depois o modal da hipoteca nova
+   (ou um toast, quando ainda não há imóveis). */
 function newMort(){
   if(!db.properties.length)return toast('Cria primeiro um imóvel.');
   pickModal('Hipoteca de que imóvel?',db.properties.map(p=>({v:p.id,label:p.name,sub:loansOf(p).length?loansOf(p).length+' hipoteca(s)':'sem hipotecas',icon:'building'})),
@@ -46,7 +50,9 @@ function newMort(){
       mortOpen(l.id,true);
     });
 }
-/* editar uma hipoteca num modal próprio, gravando no imóvel */
+/* editar uma hipoteca num modal próprio, gravando no imóvel
+   Recebe: pid — o id do imóvel; lid — o id da hipoteca dentro dele.
+   Devolve: nada — carrega o imóvel em pForm e abre o modal. */
 function mortModal(pid,lid){
   pForm=normProp(JSON.parse(JSON.stringify(prop(pid))));
   mortOpen(lid,false);
@@ -55,7 +61,10 @@ function mortModal(pid,lid){
    mortModal tratam disso primeiro). Liga o repaint ao mortBody, põe o menu de
    apagar quando é edição, e define o onSave: numa hipoteca nova sem capital
    em dívida recusa; senão grava o imóvel inteiro na db, sincroniza os
-   movimentos planeados das prestações e fecha. */
+   movimentos planeados das prestações e fecha.
+   Recebe: lid — o id da hipoteca dentro de pForm; isNew — verdadeiro quando
+   acabou de ser criada pelo newMort.
+   Devolve: nada — abre o modal e deixa o onSave armado. */
 function mortOpen(lid,isNew){
   foldState={};
   _propPaint=()=>mortBody(lid);
@@ -70,6 +79,8 @@ function mortOpen(lid,isNew){
 }
 // O corpo do modal: o formulário da hipoteca `lid` dentro de pForm — o mesmo
 // loanSect da ficha do imóvel. É também a função de repaint do modal.
+// Recebe: lid — o id da hipoteca dentro de pForm.
+// Devolve: o HTML do formulário, ou um aviso se a hipoteca já não existir.
 function mortBody(lid){
   const i=(pForm.loans||[]).findIndex(x=>x.id===lid),l=pForm.loans[i];
   if(!l)return '<div class="hint">Hipoteca não encontrada.</div>';
@@ -78,11 +89,15 @@ function mortBody(lid){
     ${loanSect(l,i)}</div>`;
 }
 // Apagar a partir da lista, onde ainda não há pForm: carrega o imóvel e delega no delMort.
+// Recebe: pid — o id do imóvel; lid — o id da hipoteca.
+// Devolve: nada — o delMort trata da confirmação e do resto.
 function delMortFrom(pid,lid){pForm=normProp(JSON.parse(JSON.stringify(prop(pid))));delMort(lid)}
 /* Apagar a hipoteca `lid` de pForm, com confirmação. As prestações já
    registadas não se apagam — só lhes tira o loanId, e o aviso diz quantas
    ficam assim. Limpa também os anexos dela do IndexedDB antes de gravar o
-   imóvel e repintar. */
+   imóvel e repintar.
+   Recebe: lid — o id da hipoteca dentro de pForm.
+   Devolve: nada — pede confirmação e, com o sim, grava, fecha e repinta. */
 function delMort(lid){
   const l=findLoan(pForm,lid),used=db.transactions.filter(t=>t.loanId===lid).length;
   confirmModal('Apagar hipoteca',`Apagar “${esc(loanName(l))}”?${used?` ${used} prestação(ões) ficam sem hipoteca associada.`:''}`,()=>{

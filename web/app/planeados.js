@@ -3,7 +3,10 @@ const EVERY={once:'uma só vez',week:'semanal',month:'mensal',quarter:'trimestra
 /* Data da ocorrência seguinte: soma o período (semana, mês, trimestre ou ano)
    à data dada, prendendo o dia ao último do mês quando ele não existe
    (31 de janeiro + 1 mês dá 28/29 de fevereiro). Devolve AAAA-MM-DD;
-   data inválida devolve hoje. */
+   data inválida devolve hoje.
+   Recebe: iso — data de partida em AAAA-MM-DD (vazia usa hoje); every — o período:
+   'week', 'month', 'quarter' ou 'year' (qualquer outro conta como mês).
+   Devolve: a data seguinte em AAAA-MM-DD (texto); se a data for inválida, a de hoje. */
 function nextDate(iso,every){
   const d=new Date((iso||today())+'T00:00:00');if(isNaN(d))return today();
   if(every==='week'){d.setDate(d.getDate()+7)}
@@ -12,15 +15,23 @@ function nextDate(iso,every){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 // Soma n dias a uma data AAAA-MM-DD e devolve no mesmo formato.
+// Recebe: iso — data AAAA-MM-DD; n — quantos dias somar (número; negativo recua).
+// Devolve: a data resultante em AAAA-MM-DD (texto).
 const addDays=(iso,n)=>{const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)};
-/* a renda de cada contrato ativo vive como movimento recorrente, criado e mantido pela app */
+/* a renda de cada contrato ativo vive como movimento recorrente, criado e mantido pela app
+   Recebe: c — o contrato (objeto de db.contracts).
+   Devolve: a recorrência automática dessa renda em db.recurring, ou undefined se não existir. */
 function ctRecOf(c){return (db.recurring||[]).find(r=>r.auto&&r.tx&&r.tx.contractId===c.id)}
 // Data AAAA-MM-DD para o dia d do mês m (0-11) de y, preso ao último dia desse mês.
+// Recebe: y — ano (número); m — mês 0-11 (número); d — dia pretendido (número).
+// Devolve: a data em AAAA-MM-DD (texto), com o dia preso ao último do mês.
 function dayInMonth(y,m,d){const last=new Date(y,m+1,0).getDate();return `${y}-${String(m+1).padStart(2,'0')}-${String(Math.min(d,last)).padStart(2,'0')}`}
 /* Mantém a recorrência automática da renda de um contrato: cria-a, atualiza-a
    ou remove-a conforme o contrato esteja ativo, com renda e com o automático
    ligado (autoRec). A janela payDay..payDayTo dá as datas; rendas antecipadas
-   adiam a primeira ocorrência. Mexe em db.recurring — quem chama grava. */
+   adiam a primeira ocorrência. Mexe em db.recurring — quem chama grava.
+   Recebe: c — o contrato a sincronizar (objeto de db.contracts).
+   Devolve: nada — mexe em db.recurring; quem chama grava. */
 function syncContractRec(c){
   const r=ctRecOf(c),want=isActive(c)&&c.rent>0&&c.autoRec!==false;
   if(!want){if(r)db.recurring=db.recurring.filter(x=>x.id!==r.id);return}
@@ -48,17 +59,22 @@ function syncContractRec(c){
 }
 // Varre as recorrências automáticas de contratos: apaga as órfãs (o contrato
 // já não existe) e sincroniza cada contrato com syncContractRec.
+// Devolve: nada — mexe em db.recurring; quem chama grava.
 function syncAllContractRecs(){
   (db.recurring||[]).slice().forEach(r=>{if(r.auto&&!(r.tx||{}).loanId&&(!r.tx.contractId||!db.contracts.some(c=>c.id===r.tx.contractId)))db.recurring=db.recurring.filter(x=>x.id!==r.id)});
   db.contracts.forEach(syncContractRec);
 }
-/* ---- prestações das hipotecas: recorrência automática, tal como as rendas dos contratos ---- */
+/* ---- prestações das hipotecas: recorrência automática, tal como as rendas dos contratos ----
+   Recebe: l — a hipoteca (objeto de p.loans de um imóvel).
+   Devolve: a recorrência automática dessa prestação em db.recurring, ou undefined se não existir. */
 function loanRecOf(l){return (db.recurring||[]).find(r=>r.auto&&r.tx&&r.tx.loanId===l.id)}
 /* Mantém a recorrência automática da prestação da hipoteca l do imóvel p:
    cria, atualiza ou remove conforme haja dívida por pagar e o automático
    esteja ligado. O dia de cobrança sai do dia do início do empréstimo
    (limitado a 28) e o valor vem de loanCalc. Mexe em db.recurring — quem
-   chama grava. */
+   chama grava.
+   Recebe: p — o imóvel dono da hipoteca (objeto de db.properties); l — a hipoteca (objeto de p.loans).
+   Devolve: nada — mexe em db.recurring; quem chama grava. */
 function syncLoanRec(p,l){
   const r=loanRecOf(l);
   /* se o utilizador já tem uma recorrência manual para esta hipoteca, não se duplica */
@@ -79,23 +95,29 @@ function syncLoanRec(p,l){
 }
 // Apaga as recorrências automáticas de hipotecas que já não existem e
 // sincroniza as das hipotecas vivas, imóvel a imóvel.
+// Devolve: nada — mexe em db.recurring; quem chama grava.
 function syncAllLoanRecs(){
   const live=id=>db.properties.some(p=>(p.loans||[]).some(l=>l.id===id));
   (db.recurring||[]).slice().forEach(r=>{if(r.auto&&(r.tx||{}).loanId&&!live(r.tx.loanId))db.recurring=db.recurring.filter(x=>x.id!==r.id)});
   db.properties.forEach(p=>(p.loans||[]).forEach(l=>syncLoanRec(p,l)));
 }
-/* recorrências vencidas (a data prevista já passou ou é hoje) */
+/* recorrências vencidas (a data prevista já passou ou é hoje)
+   Devolve: a lista dessas recorrências (array de objetos de db.recurring). */
 function recPending(){const t=today();return (db.recurring||[]).filter(r=>r.next&&r.next<=t)}
-/* silenciada: continua por confirmar em Planeados, mas não avisa nem conta no menu */
+/* silenciada: continua por confirmar em Planeados, mas não avisa nem conta no menu
+   Devolve: as vencidas que não estão silenciadas (array de objetos de db.recurring). */
 function recActive(){return recPending().filter(r=>!r.muted)}
 /* em atraso: passou o último dia da janela sem confirmação */
 const recIsLate=r=>!!(r.next&&r.next<=today()&&(r.until||r.next)<today());
 // as vencidas que ainda avisam e cuja janela já fechou — alimenta os alertas de atraso
+// Devolve: essas recorrências em atraso (array de objetos de db.recurring).
 function recLate(){return recActive().filter(recIsLate)}
 /* Avança a recorrência para a ocorrência seguinte (depois de confirmada):
    "uma só vez" apaga-se; as outras saltam para a próxima data mantendo a
    largura da janela next..until. Passado o fim (end), remove-se e avisa.
-   Tira também o silêncio — confirmar volta a ligar os avisos. */
+   Tira também o silêncio — confirmar volta a ligar os avisos.
+   Recebe: r — a recorrência a avançar (objeto de db.recurring).
+   Devolve: nada — altera r (ou tira-a de db.recurring); quem chama grava. */
 function recAdvance(r){
   r.muted=false;
   if(r.every==='once'){db.recurring=db.recurring.filter(x=>x.id!==r.id);return}
@@ -105,8 +127,13 @@ function recAdvance(r){
 }
 // Movimento normalizado a partir do tx da recorrência, datado de 'date' (ou da
 // data prevista). Só constrói: não regista nem toca na recorrência.
+// Recebe: r — a recorrência de origem (objeto de db.recurring); date (opcional) — data
+// AAAA-MM-DD do movimento; sem ela usa r.next.
+// Devolve: o movimento normalizado (objeto pronto para db.transactions).
 function recTx(r,date){return normTx(Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:date||r.next,label:r.tx.label||r.name}))}
-/* confirmar sem abrir: cria o movimento na data prevista e passa à seguinte */
+/* confirmar sem abrir: cria o movimento na data prevista e passa à seguinte
+   Recebe: id — o id da recorrência a confirmar.
+   Devolve: nada — regista o movimento, grava e redesenha. */
 function quickConfirmRec(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   const t=recTx(r);if(t.kind==='loan')applyLoan(t);
@@ -114,8 +141,12 @@ function quickConfirmRec(id){
 }
 // Silencia ou reativa a recorrência: silenciada fica em Planeados à espera de
 // confirmação, mas sem avisos nem contagem no menu. Grava e redesenha.
+// Recebe: id — o id da recorrência a silenciar ou reativar.
+// Devolve: nada — grava e redesenha.
 function skipRec(id){const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;r.muted=!r.muted;save();buildNav();render();toast(r.muted?'Silenciada: fica em Planeados à espera de confirmação, sem avisos.':'Volta a avisar.')}
-/* abrir para rever antes de confirmar */
+/* abrir para rever antes de confirmar
+   Recebe: id — o id da recorrência a confirmar.
+   Devolve: nada — abre o formulário do movimento em modo de confirmação. */
 function confirmRec(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   txModal(null,r.tx.kind,r.tx.propertyId,null,r.tx.contractId,Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:r.next,label:r.tx.label||r.name}));
@@ -123,6 +154,8 @@ function confirmRec(id){
 }
 // Abre o formulário de movimento carregado com a recorrência, em modo de
 // edição: guardar altera a recorrência em vez de criar um movimento.
+// Recebe: id — o id da recorrência a editar.
+// Devolve: nada — abre o formulário carregado com a recorrência.
 function editRec(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   txModal(null,r.tx.kind,r.tx.propertyId,null,r.tx.contractId,Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:r.next,label:r.tx.label||r.name}));
@@ -132,17 +165,21 @@ function editRec(id){
 }
 // Novo movimento recorrente: pergunta o tipo e abre o formulário já em modo
 // recorrente (mensal por omissão), com a secção de repetição aberta.
+// Devolve: nada — abre o formulário de movimento novo em modo recorrente.
 function newRec(){
   newTxPick(k=>{txModal(null,k,null);tForm._recNew=true;tForm._every='month';
     const h=modalTop().el.querySelector('.head h2');if(h)h.textContent='Novo movimento recorrente';foldState.rec=true;repaintTx()});
 }
 // Novo modelo: pergunta o tipo e abre o formulário; guardar cria um modelo
 // em vez de registar um movimento.
+// Devolve: nada — abre o formulário de movimento novo em modo modelo.
 function newTpl(){
   newTxPick(k=>{txModal(null,k,null);tForm._tplNew=true;
     const h=modalTop().el.querySelector('.head h2');if(h)h.textContent='Novo modelo';repaintTx()});
 }
 // Abre o formulário carregado com o modelo para o editar (guardar altera o modelo).
+// Recebe: id — o id do modelo em db.templates.
+// Devolve: nada — abre o formulário carregado com o modelo.
 function editTpl(id){
   const x=(db.templates||[]).find(y=>y.id===id);if(!x)return;
   txModal(null,x.tx.kind,x.tx.propertyId,null,x.tx.contractId,JSON.parse(JSON.stringify(x.tx)));
@@ -151,7 +188,9 @@ function editTpl(id){
 }
 /* Apaga a recorrência, com confirmação. Nas automáticas desliga também o
    autoRec no contrato ou na hipoteca de origem — sem isso, a sincronização
-   voltava a criá-la logo a seguir. Os movimentos já registados ficam. */
+   voltava a criá-la logo a seguir. Os movimentos já registados ficam.
+   Recebe: id — o id da recorrência a apagar.
+   Devolve: nada — pede confirmação; ao confirmar, apaga, grava e redesenha. */
 function delRec(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   const isLoan=r.auto&&(r.tx||{}).loanId;
@@ -162,13 +201,17 @@ function delRec(id){
   });
 }
 // Apaga o modelo, com confirmação; os movimentos criados a partir dele ficam.
+// Recebe: id — o id do modelo a apagar.
+// Devolve: nada — pede confirmação; ao confirmar, apaga, grava e redesenha.
 function delTpl(id){
   const x=(db.templates||[]).find(y=>y.id===id);if(!x)return;
   confirmModal('Apagar modelo',`Apagar o modelo “${esc(x.name)}”?`,()=>{db.templates=db.templates.filter(y=>y.id!==id);save();closeAllModals();render();toast('Modelo apagado.')});
 }
 /* Despeja o tx do modelo no formulário aberto, preservando o que é da sessão
    de edição (id, data e as marcas _rec/_tpl) para não trocar o modo do
-   formulário. Redesenha o modal. */
+   formulário. Redesenha o modal.
+   Recebe: x — o modelo a aplicar (objeto com tx, p. ex. de db.templates).
+   Devolve: nada — substitui tForm e redesenha o modal. */
 function applyTemplate(x){
   if(!x)return;
   const keep={id:tForm.id,date:tForm.date,_edit:tForm._edit,_saver:tForm._saver,_recId:tForm._recId,_recNew:tForm._recNew,_every:tForm._every,_recEnd:tForm._recEnd,_until:tForm._until,_tplId:tForm._tplId,_tplNew:tForm._tplNew,_tplName:tForm._tplName};
@@ -177,13 +220,18 @@ function applyTemplate(x){
   repaintTx();toast('Modelo aplicado.');
 }
 // Fecha o que estiver aberto e abre um movimento novo pré-preenchido com o modelo.
+// Recebe: id — o id do modelo em db.templates.
+// Devolve: nada — abre o formulário de movimento novo pré-preenchido.
 function newFromTemplate(id){const x=(db.templates||[]).find(y=>y.id===id);if(!x)return;closeAllModals();txModal(null,x.tx.kind,x.tx.propertyId,null,x.tx.contractId,JSON.parse(JSON.stringify(x.tx)))}
 /* cartão dos movimentos em atraso / por confirmar */
 let pendAll=false;
 /* HTML do cartão "Movimentos por confirmar". Com all mostra também as
    silenciadas (é assim que a página Planeados o usa); sem all, só as que
    avisam (vista geral). Devolve '' quando não há nada; o aberto/fechado
-   vem de pendShut(). */
+   vem de pendShut().
+   Recebe: all (opcional) — verdadeiro inclui também as silenciadas; falso ou omisso
+   mostra só as que avisam.
+   Devolve: o HTML do cartão (texto), ou '' quando não há nada por confirmar. */
 function pendingCard(all){
   pendAll=!!all;   // para o colapso se redesenhar com a mesma lista
   const pend=all?recPending():recActive();
@@ -217,16 +265,19 @@ function pendingCard(all){
    de "quis aberto". */
 const PEND_LS='gi_pend_shut';
 // O cartão está fechado? Verdade por omissão; só o '0' guardado quer dizer "aberto".
+// Devolve: verdadeiro se o cartão está fechado, falso se o utilizador o quis aberto.
 function pendShut(){try{return localStorage.getItem(PEND_LS)!=='0'}catch(e){return true}}
 // Abre/fecha o cartão: guarda a escolha no aparelho e substitui só o cartão
 // no DOM (render completo apenas se ele já não existir).
+// Devolve: nada — guarda a escolha e atualiza o cartão no ecrã.
 function pendToggle(){
   try{localStorage.setItem(PEND_LS,pendShut()?'0':'1')}catch(e){}
   const e=document.getElementById('pendCard');
   if(!e)return render();
   e.outerHTML=pendingCard(pendAll);
 }
-/* página das recorrências e modelos */
+/* página das recorrências e modelos
+   Devolve: o HTML da página (texto). */
 function vRecurring(){
   const K='lrec',s=lf(K);
   const hit=(name,tx)=>lfHit(K,[name,tx.label,tx.category,tx.sub,tx.creditor,propName(tx.propertyId),String(tx.amount||''),(tx.tags||[]).join(' '),tx.notes].join(' '));
@@ -266,7 +317,8 @@ function vRecurring(){
     :`<div class="empty" style="padding:24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem modelos'}</b>${lfCount('lrec')?'':'Um modelo é um movimento guardado para copiar à mão quando precisares.'}</div>`;
   return head+pendingCard(true)+`<div class="section-title">Movimentos recorrentes</div>${recs}<div class="section-title" style="margin-top:18px">Modelos</div>${tpls}`;
 }
-/* secção do formulário: guardar como modelo e repetir */
+/* secção do formulário: guardar como modelo e repetir
+   Devolve: o HTML da secção dobrável "Datas e repetição" (texto). */
 function recSect(){
   const t=tForm,every=t._every||'month';
   const body=`

@@ -113,6 +113,9 @@ const comandos = [
 // PUT da lista completa de comandos no endereço dado — o Discord substitui o
 // que lá estava. Devolve { ok, status, texto } em vez de lançar, para quem
 // chama poder tentar o registo global a seguir.
+// Recebe: url — o endereço de registo (do servidor ou global).
+// Devolve: promessa de { ok, status, texto } — se foi 2xx, o status HTTP e o
+// corpo em texto cru; nunca lança.
 const registar = (url) =>
   fetch(url, {
     method: 'PUT',

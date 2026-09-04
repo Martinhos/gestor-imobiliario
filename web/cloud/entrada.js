@@ -5,6 +5,8 @@
 
 // Selo fixo no canto superior direito: 'off' mostra o aviso de falta de ligação,
 // qualquer outro estado esconde-o. Cria o elemento na primeira chamada.
+// Recebe: state — 'off' para mostrar o aviso; qualquer outro valor esconde o selo.
+// Devolve: nada — mexe só no elemento #cwSync.
 function setSyncBadge(state) {
   var el = document.getElementById('cwSync');
   if (!el) {
@@ -29,6 +31,8 @@ var authEl = null;
 var authCfg; // /api/auth/config (ids públicos do Google/Apple), em cache
 
 // forte: 8+ caracteres com maiúsculas, minúsculas, números e um símbolo
+// Recebe: p — a palavra-passe a avaliar (qualquer valor; é tratada como string).
+// Devolve: a mensagem do primeiro requisito em falta, ou '' se estiver forte.
 function passProblem(p) {
   p = String(p || '');
   if (p.length < 8) return 'A palavra-passe precisa de pelo menos 8 caracteres.';
@@ -42,7 +46,9 @@ function passProblem(p) {
 /* Desenha o ecrã de entrada por cima de tudo — login ou registo, conforme
    CW.showAuthMode — com msg como erro opcional no topo. No registo liga a
    validação ao vivo do email e dos requisitos da palavra-passe; no fim tenta
-   montar a entrada social (Google), se estiver configurada. */
+   montar a entrada social (Google), se estiver configurada.
+   Recebe: msg (opcional) — mensagem de erro a mostrar no topo do ecrã.
+   Devolve: nada — redesenha o ecrã de entrada. */
 function showAuth(msg) {
   CW.showAuthMode = CW.showAuthMode || 'login';
   if (!authEl) {
@@ -124,9 +130,11 @@ function showAuth(msg) {
   loadSocial();
 }
 // a versão pública, sem mensagem de erro — é a que os botões da app chamam
+// Devolve: nada — redesenha o ecrã de entrada.
 CW.showAuth = function () { showAuth(); };
 
 // alterna entre "Entrar" e "Criar conta" e redesenha o ecrã
+// Devolve: nada — redesenha o ecrã de entrada no modo trocado.
 CW.toggleAuth = function () {
   CW.showAuthMode = CW.showAuthMode === 'login' ? 'register' : 'login';
   showAuth();
@@ -134,7 +142,9 @@ CW.toggleAuth = function () {
 
 /* O fecho de qualquer entrada bem-sucedida (formulário, Google, ligação por
    email): guarda a sessão, descarta a cache local se pertencia a outra conta,
-   volta à visão geral, mostra os portões legais que faltem e arranca o sync. */
+   volta à visão geral, mostra os portões legais que faltem e arranca o sync.
+   Recebe: u — a resposta da API com a sessão: {id, name, email, token}.
+   Devolve: nada — guarda a sessão, repinta a app e arranca o sync. */
 function finishLogin(u) {
   CW.user = { id: u.id, name: u.name, email: u.email, token: u.token };
   try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
@@ -159,6 +169,7 @@ function finishLogin(u) {
 // Valida o formulário (no registo: palavra-passe forte, confirmação igual e
 // termos aceites) e envia o login ou o registo à API. Os erros ficam escritos
 // no próprio ecrã, e o botão desativa-se enquanto o pedido anda.
+// Devolve: nada — o desfecho aparece no próprio ecrã (e o sucesso acaba em finishLogin).
 CW.submitAuth = function () {
   var login = CW.showAuthMode !== 'register';
   var payload = { email: val('cwa_email'), password: val('cwa_pass') };
@@ -191,7 +202,9 @@ CW.submitAuth = function () {
 
 /* Esqueci-me da palavra-passe: pede a ligação por email e, quando a pessoa
    volta com o token no endereço, troca-a aqui mesmo. A resposta do servidor
-   é sempre a mesma, exista a conta ou não. */
+   é sempre a mesma, exista a conta ou não.
+   Recebe: e (opcional) — o evento do clique, para travar a navegação da ligação.
+   Devolve: nada — pede a ligação de reposição e avisa num toast. */
 CW.esqueci = function (e) {
   if (e) e.preventDefault();
   var em = val('cwa_email') || prompt('O email da tua conta:') || '';
@@ -308,6 +321,7 @@ CW.esqueci = function (e) {
 
 // Valida a palavra-passe nova e confirma a reposição com o token da ligação de
 // email; se o servidor aceitar, fecha a sobreposição e devolve o ecrã de entrada.
+// Devolve: nada — os erros ficam escritos na sobreposição; o sucesso fecha-a.
 CW.reporConfirmar = function () {
   var p1 = val('rp_1'), p2 = val('rp_2');
   var errEl = document.getElementById('rp_err');
@@ -327,7 +341,9 @@ CW.reporConfirmar = function () {
 
 /* O aviso dos 30 dias: quando o master marca o fim da demonstração, toda a
    gente fica a saber — uma vez por aparelho e por data marcada, com a data
-   concreta e o que muda. É este aviso que os termos prometem. */
+   concreta e o que muda. É este aviso que os termos prometem.
+   Recebe: fim — o instante do fim da demonstração, em milissegundos (como Date.now()).
+   Devolve: nada — abre o modal do aviso (ou nada, se já entrou em vigor ou já foi visto). */
 function avisoFimDemo(fim) {
   if (Date.now() >= fim) return;   // já entrou em vigor: os limites falam por si
   var chave = 'gi_aviso_fim_' + fim;
@@ -348,6 +364,8 @@ function avisoFimDemo(fim) {
   }, 1200);
 }
 // o "Percebi" do aviso: marca-o como visto neste aparelho e fecha o modal
+// Recebe: chave — a chave do localStorage que identifica este aviso (inclui a data marcada).
+// Devolve: nada — grava a marca e fecha o modal.
 CW.fimDemoVisto = function (chave) {
   try { localStorage.setItem(chave, '1'); } catch (e) {}
   closeModal();
@@ -356,6 +374,8 @@ CW.fimDemoVisto = function (chave) {
 /* ---- entrada com Google / Apple (aparece quando configurada) ---- */
 
 // carrega um script externo uma única vez; se já estiver na página, só espera pelo load
+// Recebe: src — o URL do script; cb — função chamada (sem argumentos) quando ele estiver carregado.
+// Devolve: nada — o sinal de pronto chega pelo cb.
 function loadScript(src, cb) {
   var s = document.querySelector('script[src="' + src + '"]');
   if (s) { if (s._loaded) cb(); else s.addEventListener('load', cb); return; }
@@ -369,6 +389,7 @@ function loadScript(src, cb) {
 // Monta a zona "ou continua com…" do ecrã de entrada: pede /api/auth/config
 // (fica em cache) e, se houver id do Google, carrega o SDK e desenha o botão.
 // Sem configuração — ou sem rede — a zona simplesmente não aparece.
+// Devolve: nada — mostra e preenche a zona #cwa_social quando há configuração.
 function loadSocial() {
   var mount = document.getElementById('cwa_social');
   if (!mount) return;
@@ -392,6 +413,9 @@ function loadSocial() {
 }
 
 // troca a credencial do fornecedor (ex.: Google) por uma sessão nossa e acaba como um login normal
+// Recebe: provider — o nome do fornecedor no caminho da API (ex.: 'google');
+// body — o corpo a enviar a /api/auth/<provider> (ex.: {credential} do Google).
+// Devolve: nada — o sucesso acaba em finishLogin; o erro fica escrito no ecrã.
 function socialLogin(provider, body) {
   var errEl = document.getElementById('cwa_err');
   api('POST', '/api/auth/' + provider, body)
@@ -401,6 +425,7 @@ function socialLogin(provider, body) {
 
 
 // esconde o ecrã de entrada e devolve o scroll à página
+// Devolve: nada — só esconde o elemento e destrava o scroll.
 function hideAuth() {
   if (authEl) authEl.style.display = 'none';
   lockScroll(false);

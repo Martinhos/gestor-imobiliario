@@ -12,6 +12,9 @@ const LIMITS = {
 
 // POST de JSON para um webhook. Devolve true/false e nunca lança:
 // um Discord em baixo não pode partir o resto do pedido.
+// Recebe: url — o endereço do webhook (string; vazia ou em falta dá logo false);
+// payload — o objeto a serializar em JSON no corpo.
+// Devolve: Promise de true/false — true quando o Discord aceitou.
 async function post(url, payload) {
   if (!url) return false;
   try {
@@ -27,6 +30,8 @@ async function post(url, payload) {
 }
 
 // Corta a n caracteres com reticências — o Discord recusa embeds com campos longos demais.
+// Recebe: s — o texto (qualquer valor; null e undefined viram ''); n — o tamanho máximo (número).
+// Devolve: string com n caracteres no máximo, com … no fim quando cortou.
 const cut = (s, n) => {
   const t = String(s == null ? '' : s);
   return t.length > n ? t.slice(0, n - 1) + '…' : t;
@@ -34,6 +39,12 @@ const cut = (s, n) => {
 
 // Com bot configurado, a mensagem leva botões para resolver o pedido sem sair
 // do Discord; sem ele, vai pelo webhook, sem botões.
+// Recebe: env — o ambiente do worker (segredos e configuração); ctx — o contexto
+// do pedido, para o waitUntil (pode vir nulo); embed — o embed do Discord (objeto);
+// components (opcional) — os botões a juntar à mensagem; canal — o id do canal do
+// Discord para o bot; webhook — o URL do webhook de recurso; reserva (opcional) —
+// função a chamar quando nem o bot nem o webhook entregam.
+// Devolve: Promise de true/false — se o aviso chegou por algum caminho.
 function avisar(env, ctx, embed, components, canal, webhook, reserva) {
   // fora da produção, o aviso vai marcado para não se confundir
   if (env.ENV_NAME) {
@@ -54,12 +65,18 @@ function avisar(env, ctx, embed, components, canal, webhook, reserva) {
 }
 
 // Erros da app e do servidor, infraestrutura, segurança: quem constrói.
+// Recebe: env — o ambiente do worker; ctx — o contexto do pedido (pode vir nulo);
+// embed — o embed do Discord (objeto); components (opcional) — os botões.
+// Devolve: Promise de true/false — se o aviso chegou.
 export function notifyDev(env, ctx, embed, components) {
   return avisar(env, ctx, embed, components, env.DISCORD_DEV_CHANNEL, env.DISCORD_DEV_WEBHOOK);
 }
 
 // Pedidos contados por pessoas: quem fala com quem usa. Sem canal de suporte
 // configurado, vão para onde iam antes.
+// Recebe: env — o ambiente do worker; ctx — o contexto do pedido (pode vir nulo);
+// embed — o embed do Discord (objeto); components (opcional) — os botões.
+// Devolve: Promise de true/false — se o aviso chegou, ao suporte ou a quem programa.
 export function notifySuporte(env, ctx, embed, components) {
   return avisar(env, ctx, embed, components,
     env.DISCORD_SUPORTE_CHANNEL, env.DISCORD_SUPORTE_WEBHOOK,
@@ -68,6 +85,9 @@ export function notifySuporte(env, ctx, embed, components) {
 
 // O embed de um pedido novo (problema ou sugestão): assunto, corpo, quem o fez
 // e o id do ticket no rodapé — é por esse id que os botões do bot o encontram.
+// Recebe: t — o ticket (objeto com id, kind — 'problema' ou 'sugestao' —, subject,
+// body, context e created_at em milissegundos); user — quem o fez (objeto com id e name).
+// Devolve: objeto embed do Discord, pronto para notifySuporte.
 export function ticketEmbed(t, user) {
   return {
     title: (t.kind === 'problema' ? '🐞 Problema' : '💡 Sugestão') + ' · ' + cut(t.subject, 80),
@@ -85,6 +105,9 @@ export function ticketEmbed(t, user) {
 
 // O embed de um relato de erro (r vem da tabela de relatos, já agregado por mensagem:
 // n é quantas vezes aconteceu, pessoas a quantos utilizadores diferentes).
+// Recebe: r — o relato (objeto com id, kind — 'server' ou 'client' —, message, detail,
+// user_id, versao, contexto, n, pessoas e created_at em milissegundos).
+// Devolve: objeto embed do Discord, pronto para notifyDev.
 export function errorEmbed(r) {
   /* Vermelho quando toca em mais do que uma pessoa. Um erro que só acontece a
      alguém pode esperar; um que acontece a vários é outra coisa, e a cor
@@ -112,6 +135,8 @@ export function errorEmbed(r) {
 // Cloudflare vêm da API de análise; se ela não responder, vai o que
 // conseguimos contar por dentro, que chega para perceber a tendência.
 // Os campos do consumo, partilhados pelo resumo diário e pelo comando /uso.
+// Recebe: env — o ambiente do worker (DB, MAX_USERS e as credenciais da Cloudflare).
+// Devolve: Promise com a lista de campos { name, value, inline } para um embed.
 export async function usageFields(env) {
   const q = async (sql) => {
     try { return (await env.DB.prepare(sql).first()) || {}; } catch (e) { return {}; }
@@ -182,6 +207,10 @@ export const LIMIAR_AVISO = 0.8;
 // A vigia em si (a razão de ser está no comentário acima): compara o consumo com os
 // tectos, avisa o canal de administração quando um passa o limiar — com @here a partir
 // de 95% — e devolve quantos limites motivaram aviso, para o cron poder registar.
+// Recebe: env — o ambiente do worker (canal e webhook de administração, credenciais
+// da Cloudflare); ctx — o contexto do cron, para o waitUntil (pode vir nulo).
+// Devolve: Promise de { avisados, limites?, motivo? } — quantos limites motivaram
+// aviso e quais; motivo explica porque não houve avisos quando faltou canal ou dados.
 export async function watchLimits(env, ctx) {
   const canal = env.DISCORD_ADMIN_CHANNEL, url = env.DISCORD_ADMIN_WEBHOOK;
   if (!canal && !url) return { avisados: 0, motivo: 'sem canal de administração' };
@@ -232,6 +261,9 @@ export async function watchLimits(env, ctx) {
 // O resumo diário: manda os campos de usageFields para o canal de administração, com a
 // cor a acompanhar o pior sinal encontrado (🔴 acima de 90%, ⚠️ acima de 70%). Devolve
 // true/false conforme chegou, ou null quando não há canal nem webhook configurados.
+// Recebe: env — o ambiente do worker (canal e webhook de administração); ctx — o
+// contexto do cron (aceite mas não usado: aqui espera-se com await).
+// Devolve: Promise de true/false conforme chegou, ou null sem canal nem webhook.
 export async function dailyReport(env, ctx) {
   const url = env.DISCORD_ADMIN_WEBHOOK;
   const canal = env.DISCORD_ADMIN_CHANNEL;
@@ -259,6 +291,10 @@ export async function dailyReport(env, ctx) {
 }
 
 // API de análise da Cloudflare (GraphQL). Devolve null se não der.
+// Recebe: env — o ambiente do worker (CF_ANALYTICS_TOKEN e CF_ACCOUNT_ID).
+// Devolve: Promise com os totais das últimas 24 horas por nome de limite
+// ('D1 · linhas lidas', 'D1 · linhas escritas', 'Workers · pedidos'),
+// ou null quando falta configuração ou a API não responde.
 async function cloudflareUsage(env) {
   const token = env.CF_ANALYTICS_TOKEN, acc = env.CF_ACCOUNT_ID;
   if (!token || !acc) return null;

@@ -17,6 +17,8 @@ import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 
 const raiz = new URL('../', import.meta.url);
 // lê um ficheiro do repositório (caminho relativo à raiz) como UTF-8
+// Recebe: p — caminho do ficheiro relativo à raiz do repositório (texto).
+// Devolve: o conteúdo do ficheiro (texto UTF-8).
 const ler = (p) => readFileSync(new URL(p, raiz), 'utf8');
 
 /* ------------------- o mapa das funcionalidades --------------------------
@@ -73,6 +75,8 @@ const MAPA = [
 /* ------------------------- extração ------------------------------------- */
 
 // tira a decoração dos banners (===== TÍTULO =====) e a sintaxe de comentário
+// Recebe: texto — o interior de um comentário (texto, pode ter várias linhas).
+// Devolve: o texto limpo (sem asteriscos, decoração nem linhas em branco a mais).
 function limpa(texto) {
   return texto.split('\n')
     .map((l) => l.replace(/^\s*\*? ?/, '').replace(/[=\-]{4,}/g, '').trim())
@@ -82,6 +86,8 @@ function limpa(texto) {
 }
 
 // o comentário de abertura de um ficheiro (bloco /* */ ou série de //)
+// Recebe: src — o código-fonte completo do ficheiro (texto).
+// Devolve: o texto desse comentário, limpo; '' se não houver.
 function cabecalho(src) {
   const bloco = src.match(/^\s*\/\*([\s\S]*?)\*\//);
   if (bloco) {
@@ -112,6 +118,8 @@ const FORMAS = [
 
 // percorre o ficheiro linha a linha e devolve [{nome, assinatura, doc}] por cada
 // função de topo que case com uma das FORMAS; doc é o comentário adjacente acima
+// Recebe: src — o código-fonte completo do ficheiro (texto).
+// Devolve: array de {nome, assinatura, doc}, um por função de topo.
 function funcoesDe(src) {
   const linhas = src.split('\n');
   const out = [];
@@ -135,7 +143,7 @@ function funcoesDe(src) {
     let doc = '';
     if (i > 0 && linhas[i - 1].trim().endsWith('*/')) {
       for (let j = i - 1; j >= 0 && j > i - 40; j--) {
-        if (linhas[j].includes('/*')) {
+        if (/^\s*\/\*/.test(linhas[j])) {
           doc = limpa(linhas.slice(j, i).join('\n').replace(/\/\*|\*\//g, ''));
           break;
         }
@@ -153,24 +161,76 @@ function funcoesDe(src) {
 }
 
 // tudo o que os docs mostram de um ficheiro: o caminho, o cabeçalho e as funções
+// Recebe: caminho — caminho do ficheiro relativo à raiz do repositório (texto).
+// Devolve: {nome, texto, funcoes} — o caminho, o cabeçalho limpo e as funções extraídas.
 function ficheiro(caminho) {
   const src = ler(caminho);
   return { nome: caminho, texto: cabecalho(src), funcoes: funcoesDe(src) };
 }
 
-/* Os comandos do bot, lidos do registo (entradas de topo, dois espaços de
-   indentação — se a formatação mudar, o teste dos docs rebenta e avisa). */
+/* Os comandos do bot, lidos do registo — nome, descrição E OPÇÕES, com um
+   varrimento por profundidade de chavetas (não depende da formatação). O
+   «o que acontece a seguir» vem do docs/comandos.md, mantido à mão: um
+   comando registado sem secção lá rebenta o build. */
+const TIPOS_DISCORD = { TEXTO: 'texto', INTEIRO: 'número', BOOLEANO: 'sim/não', UTILIZADOR: 'utilizador' };
+
+// os comandos do bot, lidos do registo (o bloco acima explica como)
+// Devolve: array de {nome, descricao, opcoes} por comando registado; cada opção
+// traz {nome, tipo, obrigatoria, descricao, escolhas}.
 function comandosDoDiscord() {
   const src = ler('scripts/discord-register.js');
-  const dentro = src.slice(src.indexOf('const comandos = ['));
-  const achados = [];
-  const re = /\n  (?:Object\.assign\()?\{\s*\n?\s*name: '([a-z-]+)',\s*\n?\s*description: '([^']+)'/g;
-  let m;
-  while ((m = re.exec(dentro))) achados.push({ nome: m[1], descricao: m[2] });
-  return achados;
+  const ini = src.indexOf('[', src.indexOf('const comandos = ['));
+  // separa as entradas de topo do array pela profundidade
+  const entradas = [];
+  let depth = 0, atual = '';
+  for (let i = ini + 1; i < src.length; i++) {
+    const ch = src[i];
+    if (ch === ']' && depth === 0) break;
+    if ('[{('.includes(ch)) depth++;
+    if (']})'.includes(ch)) depth--;
+    if (ch === ',' && depth === 0) { entradas.push(atual); atual = ''; continue; }
+    atual += ch;
+  }
+  if (atual.trim()) entradas.push(atual);
+
+  return entradas.map((e) => {
+    const nome = (e.match(/name: '([a-z-]+)'/) || [])[1];
+    const descricao = (e.match(/description: '([^']+)'/) || [])[1];
+    if (!nome) return null;
+    // as opções: pedaços entre marcadores «type:» dentro do bloco options
+    const opcoes = [];
+    const soOpts = e.slice(e.indexOf('options:'));
+    const marcas = [...soOpts.matchAll(/type: \w+/g)].map((m) => m.index);
+    marcas.forEach((pos, j) => {
+      const pedaco = soOpts.slice(pos, marcas[j + 1] || soOpts.length);
+      const o = pedaco.match(/type: (\w+), name: '(\w+)', description: '([^']+)'(?:, required: (true|false))?/);
+      if (!o) return;
+      opcoes.push({
+        nome: o[2],
+        tipo: TIPOS_DISCORD[o[1]] || o[1].toLowerCase(),
+        obrigatoria: o[4] === 'true',
+        descricao: o[3],
+        escolhas: [...pedaco.matchAll(/\{ name: '([^']+)', value: '[^']+' \}/g)].map((m) => m[1]),
+      });
+    });
+    return { nome, descricao, opcoes };
+  }).filter(Boolean);
+}
+
+// o «o que acontece» de cada comando, do docs/comandos.md (secções por ## )
+// Devolve: mapa {nomeDoComando: texto da secção}.
+function guiaDosComandos() {
+  const md = ler('docs/comandos.md');
+  const guia = {};
+  for (const p of md.split(/\n## /).slice(1)) {
+    const [titulo, ...resto] = p.split('\n');
+    guia[titulo.trim()] = resto.join('\n').trim();
+  }
+  return guia;
 }
 
 // o mapa PERMISSOES de worker/src/discord.js, lido do próprio código: comando → papéis que o podem correr
+// Devolve: mapa {comando: [papéis]}; array vazio quer dizer só o master.
 function permissoes() {
   const src = ler('worker/src/discord.js');
   const bloco = (src.match(/export const PERMISSOES = \{([\s\S]*?)\};/) || [])[1] || '';
@@ -184,6 +244,7 @@ function permissoes() {
 }
 
 // as armadilhas: um markdown mantido à mão, secções por «## »
+// Devolve: array de {nome, assinatura: '', doc}, uma entrada por secção do markdown.
 function armadilhas() {
   const md = ler('docs/armadilhas.md');
   const partes = md.split(/\n## /).slice(1);
@@ -197,6 +258,7 @@ function armadilhas() {
 
 // varre as pastas de código e devolve todos os .js (menos o gerado),
 // para se saber o que ainda não está arrumado no MAPA
+// Devolve: array de caminhos relativos à raiz (texto), sem o docs-gerados.js.
 function todosOsFicheiros() {
   const lista = [];
   const varre = (pasta, ext) => readdirSync(new URL(pasta, raiz))
@@ -234,6 +296,7 @@ capitulos.push({
   itens: [{ nome: 'docs/armadilhas.md', texto: 'Coisas que já morderam alguém neste projeto. Cada uma custou uma tarde; ler isto custa cinco minutos.', funcoes: armadilhas() }],
 });
 
+const guia = guiaDosComandos();
 const DOCS = {
   geradoEm: process.env.GITHUB_SHA ? process.env.GITHUB_SHA.slice(0, 7) : 'local',
   comandos: comandosDoDiscord().map((c) => ({
@@ -241,9 +304,16 @@ const DOCS = {
     quem: c.nome in quem
       ? (quem[c.nome].length ? quem[c.nome].join(', ') + ' (e master)' : 'só o master')
       : 'todos os papéis',
+    oQueFaz: guia[c.nome] || '',
   })),
   capitulos,
 };
+
+const semGuia = DOCS.comandos.filter((c) => !c.oQueFaz).map((c) => c.nome);
+if (semGuia.length) {
+  console.error('Comandos sem secção no docs/comandos.md (escreve o que acontece): ' + semGuia.join(', '));
+  process.exit(1);
+}
 
 writeFileSync(new URL('worker/src/docs-gerados.js', raiz),
   '// GERADO por scripts/gerar-docs.js — não editar à mão; corre no deploy.\n' +
@@ -255,8 +325,23 @@ const semDoc = capitulos.flatMap((c) => c.itens.flatMap((i) =>
   (i.funcoes || []).filter((f) => !f.doc && f.assinatura).map((f) => i.nome + ' :: ' + f.nome)));
 console.log('docs: ' + totalF + ' ficheiros, ' + totalFn + ' funções, ' + DOCS.comandos.length +
   ' comandos, ' + soltos.length + ' por arrumar, ' + semDoc.length + ' sem comentário.');
-/* A regra da casa: não há funções sem comentário. Uma função nova nua
-   rebenta aqui — no teste e no deploy — com o nome à vista. */
+/* A regra da casa: não há funções sem comentário — e o comentário é um
+   guia de interface: «Recebe:» quando a função tem parâmetros, «Devolve:»
+   sempre. Uma função nova que falhe isto rebenta aqui, com o nome à vista. */
+const semInterface = capitulos.flatMap((c) => c.itens.flatMap((i) =>
+  (i.funcoes || []).filter((f) => {
+    if (!f.assinatura || !f.doc) return false;
+    const params = (f.assinatura.match(/\(([^)]*)\)/) || [])[1] || '';
+    // um IIFE (const X = (function(){…})()) não tem parâmetros para receber
+    const precisaRecebe = params.trim() !== '' && !params.trim().startsWith('function');
+    return (precisaRecebe && !/recebe:/i.test(f.doc)) || !/devolve:/i.test(f.doc);
+  }).map((f) => i.nome + ' :: ' + f.nome)));
+console.log(semInterface.length + ' sem guia de interface (Recebe/Devolve).');
+if (semInterface.length) {
+  console.error('Sem guia de interface:\n  ' + semInterface.slice(0, 30).join('\n  ') +
+    (semInterface.length > 30 ? '\n  … e mais ' + (semInterface.length - 30) : ''));
+  process.exit(1);
+}
 if (semDoc.length) {
   console.error('Funções sem comentário (comenta-as antes de seguir):\n  ' + semDoc.join('\n  '));
   process.exit(1);

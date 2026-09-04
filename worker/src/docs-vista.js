@@ -12,18 +12,25 @@
 import { DOCS } from './docs-gerados.js';
 
 // Escapa &, < e > para HTML; null e undefined viram ''.
+// Recebe: s — o valor a escapar (qualquer coisa; é convertido a string).
+// Devolve: a string com &, < e > trocados pelas entidades HTML.
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-// os comentários são prosa: quebras duplas separam parágrafos, simples juntam
+// os comentários são prosa: quebras duplas separam parágrafos, simples
+// juntam — e as linhas do guia de interface (Recebe/Devolve) ganham relevo
+// Recebe: t — o texto do comentário (string).
+// Devolve: HTML em string — um <p> por parágrafo, com Recebe:/Devolve: em relevo.
 const prosa = (t) => esc(t).split(/\n{2,}/)
   .filter(Boolean)
-  .map((p) => '<p>' + p.replace(/\n/g, ' ') + '</p>').join('');
+  .map((p) => '<p>' + p.replace(/\n/g, ' ')
+    .replace(/(^|[.;] )(Recebe|Devolve):/g, '$1<b class="io">$2:</b>') + '</p>').join('');
 
 /* Monta a página inteira — gaveta, comandos, capítulos, pesquisa — a partir
    do DOCS gerado no deploy, e devolve-a como Response HTML sem cache. Tudo
    inline: a página não volta a pedir nada ao servidor, e a pesquisa corre no
-   browser sobre o próprio DOM. */
+   browser sobre o próprio DOM.
+   Devolve: uma Response HTML sem cache com a página completa. */
 export function paginaDocs() {
   let nFn = 0;
 
@@ -45,9 +52,18 @@ export function paginaDocs() {
     return `<section class="cap" id="cap_${esc(c.id)}"><h2>${esc(c.titulo)}</h2>${itens}</section>`;
   }).join('');
 
-  const comandos = (DOCS.comandos || []).map((c) =>
-    `<tr><td><code>/${esc(c.nome)}</code></td><td>${esc(c.descricao)}</td><td class="quem">${esc(c.quem)}</td></tr>`
-  ).join('');
+  const comandos = (DOCS.comandos || []).map((c) => {
+    const opts = (c.opcoes || []).map((o) =>
+      `<div class="opt"><code>${esc(o.nome)}</code> <span class="otipo">${esc(o.tipo)}${o.obrigatoria ? ' · obrigatória' : ''}</span>
+       — ${esc(o.descricao)}${o.escolhas && o.escolhas.length ? ' <span class="otipo">(escolhas: ' + esc(o.escolhas.join(', ')) + ')</span>' : ''}</div>`
+    ).join('');
+    return `<div class="fich cmdcard">
+      <div class="cmdtop"><code>/${esc(c.nome)}</code><span class="quem">${esc(c.quem)}</span></div>
+      <p class="cdesc">${esc(c.descricao)}</p>
+      ${opts ? '<div class="opts">' + opts + '</div>' : ''}
+      <div class="oq">${prosa(c.oQueFaz || '')}</div>
+    </div>`;
+  }).join('');
 
   const gaveta = `<a data-cap="cmd" href="#cmd">Comandos do Discord</a>` +
     (DOCS.capitulos || []).map((c) => `<a data-cap="cap_${esc(c.id)}" href="#${esc(c.id)}">${esc(c.titulo)}</a>`).join('');
@@ -59,6 +75,7 @@ export function paginaDocs() {
 :root{color-scheme:light dark;--bg:#f7f8fa;--card:#fff;--ink:#17221d;--muted:#5a635e;--line:#e7ebe8;--accent:#244c3b;--accent-ink:#fff;--chip:#f2f4f3;--marca:#fff4c2}
 @media(prefers-color-scheme:dark){:root{--bg:#12141b;--card:#1b1e28;--ink:#eef0f6;--muted:#9aa3b8;--line:#2b3040;--accent:#5ee0a8;--accent-ink:#0b1410;--chip:#272b38;--marca:#4a3f14}}
 *{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:14.5px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 .app{display:grid;grid-template-columns:264px 1fr;min-height:100vh}
 aside{border-right:1px solid var(--line);padding:16px 12px;position:sticky;top:0;height:100vh;overflow:auto;background:var(--card)}
@@ -70,10 +87,16 @@ nav a:hover:not(.on){background:var(--chip);color:var(--ink)}
 main{padding:26px 30px 60px;min-width:0;max-width:860px}
 h2{font-size:19px;letter-spacing:-.01em;margin:0 0 14px}
 .cap,.painel{display:none}.cap.on,.painel.on{display:block}
-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13.5px}
-td{padding:8px 12px;border-top:1px solid var(--line);vertical-align:top}
-tr:first-child td{border-top:0}
-td.quem{color:var(--muted);white-space:nowrap;font-size:12px}
+.cmdcard{padding:13px 16px}
+.cmdtop{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.cmdtop .quem{color:var(--muted);font-size:11.5px;margin-left:auto}
+.cdesc{margin:6px 0 8px;font-size:13.5px}
+.opts{border-left:2px solid var(--line);padding-left:12px;margin:0 0 10px;display:grid;gap:6px}
+.opt{font-size:13px;color:var(--muted)}
+.otipo{font-size:11px;color:var(--muted);background:var(--chip);border-radius:5px;padding:1px 6px}
+.oq{font-size:13.5px;color:var(--muted)}
+.oq p{margin:0 0 8px}
+.io{color:var(--accent)}
 code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;font-family:ui-monospace,Consolas,monospace;overflow-wrap:anywhere}
 .fich{background:var(--card);border:1px solid var(--line);border-radius:11px;margin-bottom:8px}
 .fich summary{padding:10px 14px;cursor:pointer;font-size:13px;color:var(--muted)}
@@ -89,16 +112,6 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
 .res .onde{color:var(--muted);font-size:11.5px;margin-bottom:3px}
 .res:hover{border-color:var(--accent)}
 .burger{display:none}
-/* no telemóvel a tabela dos comandos empilha: três colunas lado a lado não
-   cabem, e o nowrap do "quem" empurrava a página para fora do ecrã */
-@media(max-width:640px){
-  #cmd table,#cmd tbody,#cmd tr{display:block}
-  #cmd td{display:block;padding:0;border:0}
-  #cmd tr{padding:10px 13px;border-top:1px solid var(--line)}
-  #cmd tr:first-child{border-top:0}
-  #cmd td:nth-child(2){margin:3px 0 2px}
-  #cmd td.quem{white-space:normal}
-}
 @media(max-width:860px){
   .app{grid-template-columns:1fr}
   aside{position:fixed;z-index:5;width:min(300px,84vw);transform:translateX(-102%);transition:transform .2s;box-shadow:6px 0 30px rgba(0,0,0,.2)}
@@ -116,7 +129,7 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
 </aside>
 <main>
   <section class="painel" id="resultados"><h2>Resultados</h2><div id="lista"></div></section>
-  <section class="cap" id="cmd"><h2>Comandos do Discord</h2><table>${comandos}</table></section>
+  <section class="cap" id="cmd"><h2>Comandos do Discord</h2>${comandos}</section>
   ${capitulos}
 </main>
 </div>
@@ -144,8 +157,8 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
   var indice = [];
   caps.forEach(function (c) {
     if (c.id === 'cmd') {
-      [].forEach.call(c.querySelectorAll('tr'), function (tr) {
-        indice.push({ el: tr, cap: c.id, capNome: 'Comandos', rotulo: tr.cells[0].textContent, texto: tr.textContent.toLowerCase() });
+      [].forEach.call(c.querySelectorAll('.cmdcard'), function (d) {
+        indice.push({ el: d, cap: c.id, capNome: 'Comandos', rotulo: d.querySelector('code').textContent, texto: d.textContent.toLowerCase() });
       });
       return;
     }

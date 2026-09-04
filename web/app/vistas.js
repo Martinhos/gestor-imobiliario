@@ -4,21 +4,25 @@ let anaOpen={};
 const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',recurring:'lrec',credits:'lcred'};
 /* toque no botão de filtros do cabeçalho: abre o painel certo consoante o
    separador — dropdown nas listas de registos, modal nos movimentos, painel
-   de análise nos restantes. */
+   de análise nos restantes.
+   Devolve: nada — abre/fecha o painel respetivo e redesenha a vista. */
 function hdrFiltToggle(){
   if(LFK[tab])return lfToggle(LFK[tab]);
   if(tab==='transactions')return txFilterModal();
   anaOpen[tab]=!anaOpen[tab];render();
 }
 // nº de filtros ativos no separador atual — decide o ponto no botão do cabeçalho
+// Devolve: número de filtros ativos no separador atual.
 function hdrFiltN(){
   if(LFK[tab])return lfCount(LFK[tab]);
   if(tab==='transactions')return txFilterCount()+(String(txSearch||'').trim()?1:0);
   return ANA_N();
 }
 // fecha o painel de análise do separador atual (os filtros aplicam-se logo ao mexer)
+// Devolve: nada — fecha o painel e redesenha a vista.
 function anaApply(){anaOpen[tab]=false;render()}
 // limpa o proprietário global e o imóvel em foco do separador de análise onde estamos
+// Devolve: nada — limpa os filtros e redesenha a vista.
 function anaClear(){
   ownerFilter='';
   if(tab==='dashboard')dashProp='';
@@ -27,12 +31,15 @@ function anaClear(){
   closePops();render();
 }
 // nº de filtros ativos nos separadores de análise: proprietário e imóvel em foco
+// Devolve: número de filtros ativos (0 a 2; 0 fora dos separadores de análise).
 const ANA_N=()=>tab==='dashboard'?((ownerFilter?1:0)+(dashProp?1:0))
   :tab==='projections'?((ownerFilter?1:0)+(projProp?1:0))
   :tab==='reports'?((ownerFilter?1:0)+(repProp?1:0)):0;
 /* embrulha os controlos de análise (inner, já em HTML) no painel dropdown do
    cabeçalho, com os botões Limpar/Fechar; o wrapper tem altura 0 para o
-   painel flutuar por cima da página em vez de a empurrar. */
+   painel flutuar por cima da página em vez de a empurrar.
+   Recebe: inner — os controlos do painel, já em HTML (string).
+   Devolve: string HTML do painel pronto a inserir na vista. */
 function anaPanel(inner){return `<div class="fwrap" style="height:0"><div class="fpanel ${anaOpen[tab]?'on':''}" style="top:0"><div class="card" style="padding:12px">
   ${typeof fcSelector==='function'?fcSelector():''}${inner}
   <div class="toolbar" style="margin:12px 0 0">
@@ -41,7 +48,9 @@ function anaPanel(inner){return `<div class="fwrap" style="height:0"><div class=
   </div></div></div></div>`}
 /* Cartões e afins são divs com onclick: sem isto, o teclado não chega a
    nenhuma lista — nem um leitor de ecrã os anuncia como acionáveis. Corre
-   depois de cada render e de cada fillModal. */
+   depois de cada render e de cada fillModal.
+   Recebe: raiz — o elemento do DOM onde procurar os [onclick]; com null não faz nada.
+   Devolve: nada — acrescenta tabindex e role aos elementos, no próprio DOM. */
 function tornarFocavel(raiz){
   if(!raiz)return;
   [].slice.call(raiz.querySelectorAll('[onclick]')).forEach(e=>{
@@ -53,7 +62,8 @@ function tornarFocavel(raiz){
 /* Redesenha a página inteira: título e subtítulo, botão de filtros do
    cabeçalho, e o HTML da vista do separador atual (vDashboard, vProperties…).
    Substitui o innerHTML de #view, por isso o estado do DOM anterior perde-se;
-   no fim torna os cartões focáveis e repinta as miniaturas dos imóveis. */
+   no fim torna os cartões focáveis e repinta as miniaturas dos imóveis.
+   Devolve: nada — redesenha a vista no DOM. */
 function render(){
   const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
   document.getElementById('pageTitle').textContent=meta.label;
@@ -79,7 +89,11 @@ function render(){
   if(tab==='properties')db.properties.forEach(p=>paintThumbs(p.photos,view()));
 }
 let kpiN=0;const KPI_REG={};
-/* evo: função que devolve a série do indicador ao longo do tempo; ao tocar abre-se uma janela com a evolução */
+/* evo: função que devolve a série do indicador ao longo do tempo; ao tocar abre-se uma janela com a evolução
+   Recebe: l — o rótulo do cartão; v — o valor já formatado (string); c (opcional) — classe de cor ('pos', 'neg',
+   'amber' ou vazio); f (opcional) — texto do rodapé; why (opcional) — explicação que abre ao toque;
+   evo (opcional) — função sem argumentos que devolve a série ({monthly, yearly, fmt, …}) para a janela de evolução.
+   Devolve: string HTML do cartão KPI. */
 const kpi=(l,v,c,f,why,evo)=>{
   const id='k'+(++kpiN);
   if(evo){KPI_REG[id]={title:l,why:why||'',evo};
@@ -91,7 +105,9 @@ const kpi=(l,v,c,f,why,evo)=>{
 };
 /* abre a janela de evolução de um KPI: corre o evo() registado no cartão e
    mostra a série mês a mês, a ano a ano e a tabela. Se o evo falhar ou não
-   devolver nada, simplesmente não abre. */
+   devolver nada, simplesmente não abre.
+   Recebe: id — o id do cartão KPI ('k1', 'k2', …) registado em KPI_REG.
+   Devolve: nada — abre a janela de evolução (ou nada, se o evo falhar). */
 function kpiModal(id){
   const k=KPI_REG[id];if(!k)return;
   let d;try{d=k.evo()}catch(e){d=null}
@@ -107,7 +123,9 @@ function kpiModal(id){
     ${d.note?`<div class="hint">${d.note}</div>`:''}</div>`;
   openModal(k.title,body,`<button class="btn" onclick="closeModal()">Fechar</button>`);
 }
-/* anos com movimentos (no âmbito), mais o corrente */
+/* anos com movimentos (no âmbito), mais o corrente
+   Recebe: pid (opcional) — id do imóvel a que limitar; vazio/null usa o âmbito do proprietário filtrado.
+   Devolve: array de anos (números) por ordem ascendente. */
 function yearsWithData(pid){
   const ys={};ys[YEAR]=1;
   db.transactions.forEach(t=>{const y=Number(String(t.date||'').slice(0,4));if(y&&(pid?t.propertyId===pid:inScope(t.propertyId)))ys[y]=1});
@@ -115,17 +133,25 @@ function yearsWithData(pid){
 }
 /* série histórica de um campo monetário das métricas (income, op, loan ou cf):
    mês a mês no ano corrente e ano a ano nos anos com movimentos. pid limita a
-   um imóvel ou grupo; sem fmt, formata em euros. */
+   um imóvel ou grupo; sem fmt, formata em euros.
+   Recebe: field — o campo das métricas ('income', 'op', 'loan' ou 'cf'); pid (opcional) — id do imóvel ou de grupo
+   ('g:…'), null/vazio para o âmbito todo; fmt (opcional) — função de formatação dos valores.
+   Devolve: objeto {fmt, monthly (12 totais mensais), yearly (array de {label: ano, value})} para a janela do KPI. */
 function evoMoney(field,pid,fmt){
   const kind={income:'income',op:'expense',loan:'loan'}[field];
   const monthly=kind?monthly_(YEAR,pid,kind):[...Array(12)].map((_,i)=>monthly_(YEAR,pid,'income')[i]-monthly_(YEAR,pid,'expense')[i]-monthly_(YEAR,pid,'loan')[i]);
   return {fmt:fmt||euro,monthly,yearly:yearsWithData(pid).map(y=>({label:y,value:metrics(y,pid,{share:true})[field]}))};
 }
 // atalho: totais mensais já na quota-parte do proprietário filtrado
+// Recebe: y — o ano (número); pid — id do imóvel ou de grupo ('g:…'), ou null para o âmbito todo; kind — 'income', 'expense' ou 'loan'.
+// Devolve: array de 12 números — o total de cada mês desse ano.
 const monthly_=(y,pid,kind)=>monthly(y,pid,kind,true);
 /* série ano a ano de um rácio, para a janela do KPI. cap e coc saem do
    histórico real; grossYield e ltv são projeções para a frente — daí o
-   título e a nota diferentes que devolve. */
+   título e a nota diferentes que devolve.
+   Recebe: field — o rácio ('cap', 'coc', 'grossYield' ou 'ltv'); pid — id do imóvel, ou null/vazio para o âmbito todo.
+   Devolve: objeto {fmt, yearly (array de {label, value, extra?})} para a janela do KPI; nas projeções
+   (grossYield e ltv) leva ainda yearlyTitle, extraTitle, marks e note. */
 function evoRatio(field,pid){
   if(field==='cap'||field==='coc')return {fmt:v=>pct(v),yearly:yearsWithData(pid).map(y=>({label:y,value:metrics(y,pid,{share:true})[field]}))};
   /* yield bruto e LTV: projeção com os aumentos de renda e a amortização das hipotecas */
@@ -165,6 +191,8 @@ const WHY={
   cashflowFim:'Rendas projetadas menos despesas inflacionadas menos as prestações previstas nesse ano.'
 };
 // cartão genérico das vistas: título, subtítulo opcional e corpo em HTML
+// Recebe: t — o título; s — o subtítulo (vazio para não aparecer); b — o corpo, em HTML.
+// Devolve: string HTML do cartão.
 const card=(t,s,b)=>`<div class="card"><div><div class="title">${t}</div>${s?`<div class="small">${s}</div>`:''}</div><div style="margin-top:13px">${b}</div></div>`;
 const stop='event.stopPropagation();';
 /* botão "⋮" dos cartões: abre o mesmo menu do toque longo */
@@ -172,7 +200,8 @@ const kebab=v=>`<button class="btn sm" style="flex:0 0 auto;padding:7px 9px;alig
 let _lockY=0;
 /* trava o scroll do fundo enquanto houver um modal ou o menu lateral aberto,
    e repõe a posição ao destravar. Corre a cada abrir/fechar (componentes.js e
-   navegacao.js chamam-na) e é idempotente: só mexe quando o estado muda. */
+   navegacao.js chamam-na) e é idempotente: só mexe quando o estado muda.
+   Devolve: nada — mexe nas classes do documento e na posição do scroll. */
 function lockPage(){try{
   const on=modalStack.length>0||document.body.classList.contains('open'),h=document.documentElement,was=h.classList.contains('noscroll');
   if(on&&!was){_lockY=window.scrollY||0;h.classList.add('noscroll');document.body.style.top=(-_lockY)+'px'}
@@ -180,14 +209,17 @@ function lockPage(){try{
 }catch(e){}}
 
 // barra com o seletor de proprietário; vazia se não há proprietários registados
+// Devolve: string HTML da barra (vazia se não há proprietários).
 function ownerBar(){
   if(!db.owners.length)return '';
   const opts=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')));
   return `<div class="toolbar"><div style="min-width:230px;max-width:320px">${sel('ownerSel',ownerFilter,opts,'onOwnerFilter')}</div></div>`;
 }
 // muda o filtro global de proprietário; se o imóvel em foco sair do âmbito, larga-o
+// Devolve: nada — redesenha a vista.
 function onOwnerFilter(){ownerFilter=val('ownerSel')||'';if(dashProp&&!inScope(dashProp))dashProp='';render()}
-/* visão geral: proprietário e imóvel */
+/* visão geral: proprietário e imóvel
+   Devolve: string HTML do painel de análise com os dois seletores. */
 function dashBar(){
   const oo=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')));
   const po=[{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
@@ -196,12 +228,14 @@ function dashBar(){
     <div style="width:100%">${sel('dashPropSel',dashProp,po,'onDashProp')}</div></div>`);
 }
 // muda o imóvel (ou grupo) em foco na visão geral
+// Devolve: nada — redesenha a vista.
 function onDashProp(){dashProp=val('dashPropSel')||'';render()}
 
 /* Visão geral: KPIs do ano e de rentabilidade (com evolução ao toque),
    gráficos mensais, donut das despesas, resumo do portefólio e saldos entre
    proprietários. Respeita o filtro de proprietário (valores na quota-parte)
-   e o imóvel/grupo em foco; devolve o HTML completo da vista. */
+   e o imóvel/grupo em foco; devolve o HTML completo da vista.
+   Devolve: string com o HTML completo da vista. */
 function vDashboard(){
   if(dashProp&&!pidProps(dashProp).length)dashProp='';
   const pid=dashProp||null,m=metrics(YEAR,pid,{share:true});
@@ -259,6 +293,7 @@ function vDashboard(){
 /* donut das despesas: tocar numa categoria mostra as suas subcategorias */
 let donutCat='';
 // o cartão do donut: categorias ao nível de topo, ou as subcategorias de donutCat
+// Devolve: string HTML do cartão.
 function donutCard(){
   const items=byCategory(YEAR,dashProp||null,true,donutCat||null);
   return `<div class="card" id="donutCard">
@@ -270,18 +305,23 @@ function donutCard(){
     ${donutCat||!items.length?'':'<div class="hint" style="margin-top:10px">Toca numa categoria para veres as subcategorias.</div>'}</div>`;
 }
 // entra numa categoria do donut (ou sai, com cat vazio) repintando só o cartão
+// Recebe: cat — o nome da categoria a abrir; vazio ('') volta às categorias de topo.
+// Devolve: nada — repinta o cartão do donut (ou a vista toda, se o cartão não estiver no DOM).
 function donutDrill(cat){
   donutCat=cat||'';
   const e=document.getElementById('donutCard');if(!e)return render();
   e.outerHTML=donutCard();
 }
-/* despesas sem imóvel atribuído: contam no total mas não aparecem em nenhuma avaliação */
+/* despesas sem imóvel atribuído: contam no total mas não aparecem em nenhuma avaliação
+   Recebe: y — o ano a filtrar (número ou texto de 4 dígitos).
+   Devolve: array dos movimentos de despesa desse ano sem imóvel nem grupo. */
 function orphanExpenses(y){
   return db.transactions.filter(t=>t.kind==='expense'&&!t.propertyId&&!t.groupId&&String(t.date||'').startsWith(String(y)));
 }
 /* aviso das despesas sem imóvel na visão geral: explica porque é que os
    totais divergem da Avaliação e dá o atalho para as ver nos movimentos.
-   Escondido quando há filtro de proprietário ou não há órfãs. */
+   Escondido quando há filtro de proprietário ou não há órfãs.
+   Devolve: string HTML do aviso, ou vazia quando não se aplica. */
 function orphanCard(){
   if(ownerFilter)return '';
   const o=orphanExpenses(YEAR);if(!o.length)return '';
@@ -293,7 +333,9 @@ function orphanCard(){
   </div></div>`;
 }
 
-/* cartão reutilizável: saldos entre proprietários (de um imóvel ou de todos) */
+/* cartão reutilizável: saldos entre proprietários (de um imóvel ou de todos)
+   Recebe: pid — id do imóvel a que limitar, ou null/vazio para todos os do âmbito.
+   Devolve: string HTML do cartão, ou vazia se não há saldos a mostrar. */
 function balancesCard(pid){
   const bal=ownerBalances(pid),ks=Object.keys(bal);
   if(!ks.length)return '';
@@ -316,7 +358,9 @@ function balancesCard(pid){
 }
 /* pré-visualização do acerto de contas: lista as transferências que vão ser
    registadas, imóvel a imóvel, e as últimas liquidações. pid limita a um
-   imóvel; null abrange o âmbito todo. Só escreve ao confirmar (doSettle). */
+   imóvel; null abrange o âmbito todo. Só escreve ao confirmar (doSettle).
+   Recebe: pid — id do imóvel a que limitar, ou null para o âmbito todo.
+   Devolve: nada — abre o modal (ou um toast, se não há dívidas). */
 function settleModal(pid){
   const props=pid?[prop(pid)].filter(Boolean):scope();
   const plans=props.map(p=>({p,plan:settlePlan(ownerBalances(p.id))})).filter(x=>x.plan.length);
@@ -336,7 +380,9 @@ function settleModal(pid){
     `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="doSettle(${pid?`'${pid}'`:'null'})">Registar pagamentos</button>`);
 }
 /* regista o plano de liquidação como movimentos "settle" e grava — os saldos
-   entre proprietários ficam a zero. É o passo destrutivo do settleModal. */
+   entre proprietários ficam a zero. É o passo destrutivo do settleModal.
+   Recebe: pid — id do imóvel a que limitar, ou null para o âmbito todo.
+   Devolve: nada — grava os movimentos, fecha o modal e redesenha. */
 function doSettle(pid){
   const props=pid?[prop(pid)].filter(Boolean):scope();
   let k=0;
@@ -351,7 +397,8 @@ function doSettle(pid){
 
 /* Lista de imóveis com pesquisa, filtros (estado, modo de arrendamento,
    proprietário — este espelha o filtro global) e ordenação. Cada cartão
-   resume estado, renda, yield, dívida, contratos e hipotecas em curso. */
+   resume estado, renda, yield, dívida, contratos e hipotecas em curso.
+   Devolve: string com o HTML completo da vista. */
 function vProperties(){
   const K='lprops',s=lf(K);
   let list=scope();
@@ -399,10 +446,12 @@ function vProperties(){
 
 let ctGroupF='';
 // handler do antigo seletor de grupo ('ctGroupSel'); a vista atual filtra grupos via lfSel, por isso só dispara se esse seletor existir no DOM
+// Devolve: nada — redesenha a vista.
 function onCtGroupF(){ctGroupF=val('ctGroupSel')||'';render()}
 /* Contratos agrupados por imóvel, com a renda mensal de cada um no cabeçalho
    da secção. Filtros: imóvel, ativos/terminados, grupo e pesquisa; ordenação
-   por nome, renda ou data de início. */
+   por nome, renda ou data de início.
+   Devolve: string com o HTML completo da vista. */
 function vContracts(){
   const K='lcts',s=lf(K),cgs=grpsOf('contract');
   const head=lfBar(K,[
@@ -443,6 +492,8 @@ function vContracts(){
   return head+(any?body:`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`);
 }
 // um contrato passa nos filtros da lista? imóvel, estado, grupo e pesquisa por texto (nome, inquilinos, IBAN, notas…)
+// Recebe: c — o contrato (objeto); s — o estado dos filtros da lista (lf('lcts'): campos p, st, g e a pesquisa).
+// Devolve: true se o contrato passa em todos os filtros, false caso contrário.
 function ctFMatch(c,s){
   if(s.p&&c.propertyId!==s.p)return false;
   if(s.st==='on'&&!isActive(c))return false;
@@ -454,7 +505,9 @@ function ctFMatch(c,s){
 }
 
 /* cartão de pessoa para as listas: com kind 'tenant' mostra os contratos
-   ativos, com 'owner' os imóveis. Ao toque abre a ficha (personModal). */
+   ativos, com 'owner' os imóveis. Ao toque abre a ficha (personModal).
+   Recebe: pp — a pessoa (objeto de inquilino ou de proprietário); kind — 'tenant' ou 'owner'.
+   Devolve: string HTML do cartão. */
 function personCard(pp,kind){
   const cs=kind==='tenant'?contractsOfTenant(pp.id).filter(isActive):propsOf(pp.id);
   return `<div class="card tap" data-lp="per:${esc(kind)}:${esc(pp.id)}" onclick="personModal('${jsq(kind)}','${jsq(pp.id)}')"><div class="row-between">
@@ -471,7 +524,8 @@ function personCard(pp,kind){
     ${kind==='tenant'&&pp.notes?`<div class="small rich" style="margin-top:10px">${rich(pp.notes)}</div>`:''}</div>`;
 }
 /* Lista de inquilinos, filtrável por com/sem contrato ativo e por pesquisa;
-   ordenação por nome, nº de contratos ou renda. */
+   ordenação por nome, nº de contratos ou renda.
+   Devolve: string com o HTML completo da vista. */
 function vTenants(){
   const K='lten',s=lf(K);
   let list=db.tenants.filter(t=>{
@@ -491,7 +545,8 @@ function vTenants(){
   return head+`<div class="list">${list.map(t=>personCard(t,'tenant')).join('')}</div>`;
 }
 /* Lista de proprietários, filtrável por imóvel, com/sem imóveis e pesquisa;
-   ordenação por nome ou nº de imóveis. */
+   ordenação por nome ou nº de imóveis.
+   Devolve: string com o HTML completo da vista. */
 function vOwners(){
   const K='lown',s=lf(K);
   let list=db.owners.filter(o=>{
@@ -512,18 +567,21 @@ function vOwners(){
 }
 
 // nº de filtros ativos nos movimentos (a pesquisa não conta: soma-se à parte no cabeçalho)
+// Devolve: número de filtros ativos (as datas contam como um só).
 function txFilterCount(){
   // as datas contam como UM filtro, tenham uma ponta ou as duas
   const datas=(txDe||txAte)?1:0;
   return datas+txFilterCountSem();
 }
 // a mesma contagem sem as datas; atenção: desligar "sem pessoa atribuída" conta como um filtro
+// Devolve: número de filtros ativos, sem contar as datas.
 function txFilterCountSem(){
   return (txFilter?1:0)+(txProp?1:0)+(txPaid?1:0)+(ownerFilter?1:0)+(txCat?1:0)+(txSub?1:0)+(txNoPayer?0:1);
 }
 /* pesquisa por palavras e por frases entre aspas, sem ligar a acentos */
 const deacc=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 // parte a pesquisa em termos: palavras soltas e frases entre aspas, tudo sem acentos
+// Devolve: array de termos (strings já desacentuadas); vazio sem pesquisa.
 function txTerms(){
   const out=[];
   const rest=String(txSearch||'').replace(/"([^"]*)"/g,(m,ph)=>{if(ph.trim())out.push(deacc(ph.trim()));return ' '});
@@ -531,7 +589,9 @@ function txTerms(){
   return out;
 }
 /* o "palheiro" onde a pesquisa procura: rótulo, notas, categorias, etiquetas,
-   imóvel, contrato, pessoas, data e valor do movimento, tudo desacentuado. */
+   imóvel, contrato, pessoas, data e valor do movimento, tudo desacentuado.
+   Recebe: t — o movimento (objeto de transação).
+   Devolve: string única, desacentuada, com todos os campos pesquisáveis. */
 function txHay(t){
   const c=t.contractId?contract(t.contractId):null;
   return deacc([t.label,t.notes,t.category,t.sub,(t.tags||[]).join(' '),t.creditor,t.date,
@@ -541,7 +601,9 @@ function txHay(t){
 }
 let _qT=null;
 /* pesquisa dos movimentos com atraso de 280 ms para não redesenhar a cada
-   tecla; como o render recria o campo, devolve-lhe o foco com o cursor no fim. */
+   tecla; como o render recria o campo, devolve-lhe o foco com o cursor no fim.
+   Recebe: v — o texto escrito no campo de pesquisa.
+   Devolve: nada — agenda o redesenho da vista. */
 function onTxSearch(v){
   clearTimeout(_qT);
   _qT=setTimeout(()=>{txSearch=v;render();
@@ -551,7 +613,9 @@ function onTxSearch(v){
 /* um movimento passa em TODOS os filtros ativos? Tipo ('debt' junta owed e
    repay), imóvel/grupo ('__none__' = sem imóvel; um imóvel apanha também os
    movimentos de grupo com quota nele), âmbito do proprietário, pessoa que
-   pagou/recebeu, pesquisa, categoria/subcategoria e intervalo de datas. */
+   pagou/recebeu, pesquisa, categoria/subcategoria e intervalo de datas.
+   Recebe: t — o movimento (objeto de transação).
+   Devolve: true se passa em todos os filtros ativos, false caso contrário. */
 function txMatch(t){
   if(txFilter==='debt'){if(t.kind!=='owed'&&t.kind!=='repay')return false}
   else if(txFilter&&t.kind!==txFilter)return false;
@@ -575,6 +639,7 @@ function txMatch(t){
   return true;
 }
 // descreve os filtros ativos numa linha legível, para o topo da lista e do modal
+// Devolve: string (já escapada para HTML) com os filtros ativos; vazia sem filtros.
 function filterSummary(){
   const p=[];
   if(txDe||txAte)p.push(txDe&&txAte?txDe+' → '+txAte:txDe?'desde '+txDe:'até '+txAte);
@@ -589,12 +654,17 @@ function filterSummary(){
   if(!txNoPayer)p.push('só com pessoa atribuída');
   return esc(p.join(' · '));
 }
-/* um movimento novo assume os filtros ativos; sem filtro, o campo fica vazio */
+/* um movimento novo assume os filtros ativos; sem filtro, o campo fica vazio
+   Recebe: kind (opcional) — o tipo do movimento ('income', 'expense', …); sem ele assume 'income'.
+   Devolve: nada — abre o modal do novo movimento. */
 function newTxFromFilters(kind){
   const cat=txCat&&txCat!=='__none__'?txCat:'',sub=txSub&&txSub!=='__none__'?txSub:'';
   txModal(null,kind||'income',txProp&&txProp!=='__none__'?txProp:null,null,null,{paidBy:txPaid||null,category:treeKey(kind)===(cat in catsIn()&&!(cat in cats())?'catsIn':'cats')?cat:'',sub:treeKey(kind)===(cat in catsIn()&&!(cat in cats())?'catsIn':'cats')?sub:''});
 }
-/* "Novo movimento": primeiro o tipo, num menu */
+/* "Novo movimento": primeiro o tipo, num menu
+   Recebe: after (opcional) — função chamada com o tipo escolhido, em vez do fluxo normal; sem ela segue
+   para newTxFromFilters e o menu inclui a opção "a partir de um modelo".
+   Devolve: nada — abre o menu de escolha. */
 function newTxPick(after){
   const items=TX_TYPES.map(([k,i,l,sb])=>({v:k,label:l,sub:sb,icon:i}));
   if(!after)items.push({v:'__tpl__',label:'A partir de um modelo…',sub:(db.templates||[]).length?'copia um movimento guardado':'ainda não há modelos: cria o primeiro',icon:'file'});
@@ -606,7 +676,8 @@ function newTxPick(after){
   });
 }
 /* "a partir de um modelo": escolhe um modelo guardado e regista um movimento
-   com base nele; sem modelos, salta logo para criar o primeiro. */
+   com base nele; sem modelos, salta logo para criar o primeiro.
+   Devolve: nada — abre o modal de escolha do modelo (ou o fluxo de criar um). */
 function useTemplateNew(){
   const tp=db.templates||[];
   if(!tp.length)return newTplForTx();
@@ -615,12 +686,14 @@ function useTemplateNew(){
     `<button type="button" class="btn" style="width:100%;justify-content:center" onclick="newTplForTx()">${ic('plus',15)} Criar modelo novo</button>
      <div class="hint" style="margin-top:8px">Ao guardar, o modelo fica criado e o movimento é registado. Os modelos gerem-se em Finanças → Planeados.</div>`);
 }
-/* criar um modelo a meio de “novo movimento”: guarda o modelo E regista o movimento */
+/* criar um modelo a meio de “novo movimento”: guarda o modelo E regista o movimento
+   Devolve: nada — abre o fluxo do modelo novo. */
 function newTplForTx(){
   newTxPick(k=>{txModal(null,k,null);tForm._tplNew=true;tForm._alsoTx=true;
     const h=modalTop().el.querySelector('.head h2');if(h)h.textContent='Novo modelo';repaintTx()});
 }
-/* os filtros vivem numa janela por cima da lista: mudar um filtro atualiza a lista e a própria janela */
+/* os filtros vivem numa janela por cima da lista: mudar um filtro atualiza a lista e a própria janela
+   Devolve: nada — redesenha a vista e, se estiver aberto, o modal de filtros. */
 function txRerender(){
   render();
   const top=modalTop();
@@ -628,7 +701,8 @@ function txRerender(){
 }
 /* corpo do modal de filtros dos movimentos: pesquisa, tipo, imóvel,
    categoria/subcategoria, pessoas, datas e ordenação. Cada controlo aplica
-   logo (handlers onTx*), e no fim mostra o resumo e quantos movimentos passam. */
+   logo (handlers onTx*), e no fim mostra o resumo e quantos movimentos passam.
+   Devolve: string HTML do corpo do modal. */
 function txFilterBody(){
   const kinds=[['','Todos os tipos'],['income','Receitas'],['expense','Despesas'],['loan','Pagamentos de crédito'],['debt','Dívidas'],['settle','Transferências entre proprietários']];
   const props=[{v:'',label:'Todos os imóveis'},{v:'__none__',label:'Sem imóvel atribuído'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
@@ -656,32 +730,44 @@ function txFilterBody(){
     <div class="hint">${txFilterCount()?filterSummary()+' · '+db.transactions.filter(txMatch).length+' movimentos':'Sem filtros: a lista mostra tudo.'}</div></div>`;
 }
 // muda o campo de ordenação dos movimentos (data ou valor)
+// Devolve: nada — redesenha a lista e o modal.
 function onTxSort(){txSort=val('txSortF')||'date';txRerender()}
 // muda o sentido da ordenação dos movimentos
+// Devolve: nada — redesenha a lista e o modal.
 function onTxDir(){txDir=val('txDirF')||'desc';txRerender()}
 // rodapé do modal de filtros: Limpar (só quando há filtros) e Fechar
+// Devolve: string HTML do rodapé.
 function txFilterFoot(){return `${txFilterCount()?`<button class="btn" onclick="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" onclick="closeModal()">${ic('check',15)} Fechar</button>`}
 // abre o modal de filtros dos movimentos
+// Devolve: nada — abre o modal.
 function txFilterModal(){openModal('Filtros',txFilterBody(),txFilterFoot())}
 // muda o filtro de imóvel/grupo dos movimentos
+// Devolve: nada — redesenha a lista e o modal.
 function onTxProp(){txProp=val('txPropF')||'';txRerender()}
 // muda o proprietário em foco; o filtro de imóvel cai porque o âmbito mudou
+// Devolve: nada — redesenha a lista e o modal.
 function onTxOwner(){ownerFilter=val('txOwnerF')||'';txProp='';txRerender()}
 // muda o filtro de quem pagou ou recebeu
+// Devolve: nada — redesenha a lista e o modal.
 function onTxPaid(){txPaid=val('txPaidF')||'';txRerender()}
 // muda a categoria; a subcategoria cai porque pertencia à anterior
+// Devolve: nada — redesenha a lista e o modal.
 function onTxCat(){txCat=val('txCatF')||'';txSub='';txRerender()}
 // muda o filtro de subcategoria
+// Devolve: nada — redesenha a lista e o modal.
 function onTxSub(){txSub=val('txSubF')||'';txRerender()}
 // liga/desliga a inclusão de movimentos sem pessoa atribuída
+// Devolve: nada — redesenha a lista e o modal.
 function onTxNoPayer(){txNoPayer=chk('txNoPayer');txRerender()}
 // lê o intervalo de datas do modal e aplica-o à lista
+// Devolve: nada — redesenha a lista e o modal.
 function onTxDatas(){
   txDe=val('txDeF')||'';txAte=val('txAteF')||'';
   if(txDe&&txAte&&txAte<txDe){const x=txDe;txDe=txAte;txAte=x}   // trocadas endireitam-se
   txRerender();
 }
 // repõe todos os filtros dos movimentos na origem, incluindo a pesquisa e o proprietário global
+// Devolve: nada — redesenha a lista e o modal.
 function clearTxFilters(){txFilter='';txProp='';txPaid='';txCat='';txSub='';ownerFilter='';txNoPayer=true;txSearch='';txDe='';txAte='';closePops();txRerender()}
 /* ================= FILTROS DAS LISTAS =================
    Pesquisa por texto + seletores no topo de cada página de registos, ao estilo dos movimentos. */
@@ -689,7 +775,9 @@ let listF={};
 const lf=k=>listF[k]||(listF[k]={});
 let _lqT=null;
 /* pesquisa das listas com atraso de 280 ms para não redesenhar a cada tecla;
-   como o render recria o campo, devolve-lhe o foco com o cursor no fim. */
+   como o render recria o campo, devolve-lhe o foco com o cursor no fim.
+   Recebe: k — a chave da lista ('lprops', 'lcts', …); v — o texto escrito no campo de pesquisa.
+   Devolve: nada — agenda o redesenho da vista. */
 function lfSearch(k,v){
   clearTimeout(_lqT);
   _lqT=setTimeout(()=>{lf(k).q=v;render();
@@ -697,23 +785,30 @@ function lfSearch(k,v){
     if(i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}}},280);
 }
 /* limpa o filtro do separador atual, seja ele qual for — para o botão dos
-   estados vazios não ter de saber onde está */
+   estados vazios não ter de saber onde está
+   Devolve: nada — limpa os filtros e redesenha a vista. */
 function limparFiltroAtual(){
   if(typeof LFK!=='undefined'&&LFK[tab])return lfClear(LFK[tab]);
   if(tab==='transactions'&&typeof clearTxFilters==='function')return clearTxFilters();
   if(typeof anaClear==='function')anaClear();
 }
 // limpa os filtros da lista k sem mexer no painel; nos imóveis larga também o proprietário global
+// Recebe: k — a chave da lista ('lprops', 'lcts', …).
+// Devolve: nada — redesenha a vista.
 function lfClear(k){
   const s=lf(k);listF[k]={_open:s._open};
   if(k==='lprops')ownerFilter='';
   closePops();render();
 }
 // nº de filtros ativos da lista k — a ordenação (sb/sd) e o estado do painel não contam
+// Recebe: k — a chave da lista.
+// Devolve: número de filtros ativos.
 function lfCount(k){const s=lf(k);return Object.keys(s).reduce((n,f)=>{
   if(f==='_open'||f==='sb'||f==='sd')return n;
   return n+(f==='q'?(String(s.q||'').trim()?1:0):(s[f]?1:0))},0)}
 // a pesquisa da lista k encontra-se em hay? palavras e frases entre aspas, sem acentos; sem pesquisa passa tudo
+// Recebe: k — a chave da lista; hay — o texto onde procurar (os campos do registo juntos numa string).
+// Devolve: true se todos os termos da pesquisa aparecem em hay (ou não há pesquisa), false caso contrário.
 function lfHit(k,hay){const q=String(lf(k).q||'');if(!q.trim())return true;
   const h=deacc(hay),terms=[];
   q.replace(/"([^"]*)"/g,(m,ph)=>{if(ph.trim())terms.push(deacc(ph.trim()));return ' '}).split(/\s+/).forEach(w=>{if(w)terms.push(deacc(w))});
@@ -722,21 +817,31 @@ function lfHit(k,hay){const q=String(lf(k).q||'');if(!q.trim())return true;
    listas, aplicação imediata no modal dos movimentos, imediata com um botão
    chamado «Aplicar» nas análises. Fica UM modelo mental: mexes, a lista
    muda logo atrás; «Limpar» à esquerda, «Fechar» primário à direita, em
-   todo o lado. O rascunho foi-se com a razão de ser dele. */
+   todo o lado. O rascunho foi-se com a razão de ser dele.
+   Recebe: k — a chave da lista; key — o nome do campo no estado do filtro (ex.: 'st', 'own', 'sb');
+   opts — array de opções {v, label} para o seletor.
+   Devolve: string HTML do seletor (e regista o handler global que aplica o filtro). */
 function lfSel(k,key,opts){
   const id='lfsel_'+k+'_'+key,fn='onlf_'+k+'_'+key;
   window[fn]=()=>{lf(k)[key]=val(id)||'';if(k==='lprops')ownerFilter=lf(k).own||'';render()};
   return `<div style="width:100%">${sel(id,lf(k)[key]||'',opts,fn)}</div>`;
 }
 // abre/fecha o painel de filtros da lista k
+// Recebe: k — a chave da lista.
+// Devolve: nada — redesenha a vista.
 function lfToggle(k){
   const s=lf(k);s._open=!s._open;render();
 }
 // fecha o painel da lista k (os filtros aplicam-se logo ao mexer)
+// Recebe: k — a chave da lista.
+// Devolve: nada — redesenha a vista.
 function lfApply(k){
   lf(k)._open=false;closePops();render();
 }
-/* o dropdown de filtros (aberto pelo botão do cabeçalho) inclui a pesquisa no topo */
+/* o dropdown de filtros (aberto pelo botão do cabeçalho) inclui a pesquisa no topo
+   Recebe: k — a chave da lista; sels — array de seletores já em HTML (saídos de lfSel); found — nº de resultados
+   com os filtros ativos; sorts (opcional) — {opts: [{v, label}], defLabel} com as opções de ordenação.
+   Devolve: string HTML do dropdown, com a linha de resultados quando há filtros ativos. */
 function lfBar(k,sels,found,sorts){
   const n=lfCount(k),s=lf(k);
   const sortRow=sorts?`<div style="display:flex;flex-direction:column;gap:9px;margin-top:9px">
@@ -756,7 +861,9 @@ function lfBar(k,sels,found,sorts){
   </div></div></div>
   ${n?`<div class="small" style="margin:2px 0 10px">${found} resultado${found===1?'':'s'} com os filtros ativos${String(s.q||'').trim()?' · pesquisa: “'+esc(s.q.trim())+'”':''}.</div>`:''}`;
 }
-/* aplica a ordenação escolhida; sem escolha, mantém a ordem dada */
+/* aplica a ordenação escolhida; sem escolha, mantém a ordem dada
+   Recebe: k — a chave da lista; list — o array a ordenar; keys — objeto {opção: função que extrai o valor a comparar}.
+   Devolve: novo array ordenado (ou a própria list, intacta, sem escolha de ordenação). */
 function lfSort(k,list,keys){
   const s=lf(k),f=keys[s.sb];if(!f)return list;
   const dir=s.sd==='desc'?-1:1;
@@ -764,15 +871,22 @@ function lfSort(k,list,keys){
     if(typeof x==='string'||typeof y==='string')return dir*String(x??'').localeCompare(String(y??''),'pt');
     return dir*((Number(x)||0)-(Number(y)||0))});
 }
-/* botão flutuante de adicionar, no canto inferior direito (o espaço no fundo da página é acrescentado no render) */
+/* botão flutuante de adicionar, no canto inferior direito (o espaço no fundo da página é acrescentado no render)
+   Recebe: actions — array de {act: código do onclick, label, icon (opcional)}; com um só item sai o botão simples,
+   com vários sai também o menu.
+   Devolve: string HTML do botão (e do menu, quando há vários). */
 function fab(actions){
   if(actions.length===1)return `<button class="fab" onclick="${actions[0].act}" title="${esc(actions[0].label||'')}">${ic('plus',26)}</button>`;
   return `<div class="fabmenu" id="fabMenu">${actions.map(a=>`<button class="btn primary" onclick="document.getElementById('fabMenu').classList.remove('on');${a.act}">${ic(a.icon||'plus',15)} ${esc(a.label)}</button>`).join('')}</div>
   <button class="fab" onclick="document.getElementById('fabMenu').classList.toggle('on')">${ic('plus',26)}</button>`;
 }
 // opções de imóvel para os seletores das listas: "Todos os imóveis" + um por imóvel
+// Recebe: withAll (opcional) — sem efeito atual: as opções saem sempre com "Todos os imóveis" à cabeça.
+// Devolve: array de opções {v, label} para um seletor.
 const lfPropOpts=(withAll)=>[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p=>({v:p.id,label:p.name})));
-/* dívidas a terceiros: recebido, devolvido e o que falta, com botão para pagar */
+/* dívidas a terceiros: recebido, devolvido e o que falta, com botão para pagar
+   Recebe: pid — id do imóvel a que limitar, ou null/vazio para todo o âmbito.
+   Devolve: string HTML do cartão, ou vazia se não há dívidas registadas. */
 function creditorsCard(pid){
   const rows=creditorBalances(pid);if(!rows.length)return '';
   const due=sum(rows.map(r=>r.due));
@@ -788,7 +902,8 @@ function creditorsCard(pid){
 }
 /* Movimentos: KPIs do filtro atual (com evolução ao toque), saldos entre
    proprietários, dívidas a terceiros e a lista agrupada por mês com o saldo
-   de cada um. Tudo respeita os filtros e a ordenação escolhidos no modal. */
+   de cada um. Tudo respeita os filtros e a ordenação escolhidos no modal.
+   Devolve: string com o HTML completo da vista. */
 function vTransactions(){
   const kinds=[['','Todos os tipos'],['income','Receitas'],['expense','Despesas'],['loan','Pagamentos de crédito'],['debt','Dívidas'],['settle','Transferências entre proprietários']];
   const props=[{v:'',label:'Todos os imóveis'},{v:'__none__',label:'Sem imóvel atribuído'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
@@ -844,15 +959,18 @@ function vTransactions(){
       </div></div>`}).join('')}</div>`}).join('');
 }
 // muda o filtro de tipo; categoria e subcategoria caem porque a árvore muda com o tipo
+// Devolve: nada — redesenha a lista e o modal.
 function onTxFilter(){txFilter=val('txKind')||'';txCat='';txSub='';txRerender()}
 
 let projProp='';
 // muda o imóvel (ou grupo) em foco nas projeções
+// Devolve: nada — redesenha a vista.
 function onProjProp(){projProp=val('projSel')||'';render()}
 /* Projeções ao horizonte definido nas definições (s.years): rendas com o
    aumento anual de cada contrato, despesas do ano corrente inflacionadas, e
    prestações segundo o plano de cada hipoteca — param quando o crédito acaba.
-   Sai em KPIs, gráficos e tabela ano a ano com uma coluna por contrato. */
+   Sai em KPIs, gráficos e tabela ano a ano com uma coluna por contrato.
+   Devolve: string com o HTML completo da vista. */
 function vProjections(){
   if(projProp&&!pidProps(projProp).length)projProp='';
   const s=db.settings,act=db.contracts.filter(c=>isActive(c)&&inScope(c.propertyId)&&(!projProp||pidProps(projProp).some(p=>p.id===c.propertyId)));
@@ -898,6 +1016,10 @@ function vProjections(){
       <td class="${r.cf>=0?'pos':'neg'}"><b>${euro(r.cf)}</b></td></tr>`).join('')}</tbody></table></div>`)}</div>`;
 }
 // marcas para os gráficos de longo prazo: um traço em cada ano terminado em 0 dentro do horizonte
+// Recebe: y0 — o primeiro ano (número); n — quantos anos tem o horizonte.
+// Devolve: array de {i: índice no eixo, label: o ano em texto}, um por ano terminado em 0.
 const decadeMarks=(y0,n)=>{const out=[];for(let i=0;i<n;i++)if((y0+i)%10===0)out.push({i,label:String(y0+i)});return out};
 // escreve uma definição, grava na base e redesenha — usado pelos inputs das definições e das projeções
+// Recebe: k — o nome da definição (ex.: 'years', 'growth', 'inflation'); v — o novo valor.
+// Devolve: nada — grava na base e redesenha a vista.
 function setSet(k,v){db.settings[k]=v;save();render()}

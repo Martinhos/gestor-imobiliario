@@ -1,4 +1,6 @@
-/* ================= EXEMPLO ================= */
+/* ================= EXEMPLO =================
+   Devolve: nada — enche a base com os dados de exemplo (donos, imóveis,
+   contratos, movimentos, modelos e recorrências), sincroniza, grava e redesenha. */
 function seed(){
   const o1=normPerson({name:'Maria Costa',phone:'913 000 001',email:'maria@exemplo.pt',nif:'210000001',gender:'f',marital:'Casado(a)',nationality:'Portuguesa'});
   const o2=normPerson({name:'Pedro Costa',phone:'913 000 002',email:'pedro@exemplo.pt',nif:'210000002',gender:'m',marital:'Casado(a)',nationality:'Portuguesa'});
@@ -107,6 +109,7 @@ const typing=t=>!!t&&((/^(INPUT|TEXTAREA)$/.test(t.tagName||'')&&!/^(date|month|
 document.addEventListener('change',e=>{const t=e.target;if(t&&t.tagName==='INPUT'&&/^(date|month|time)$/.test(t.type||'')){try{t.blur()}catch(x){}
   [].slice.call(document.querySelectorAll('.sheet.kb')).forEach(x=>x.classList.remove('kb'))}});
 // a folha (.sheet) da janela que está por cima, ou null se não há nenhuma aberta
+// Devolve: o elemento .sheet dessa janela (nó do DOM), ou null sem janela aberta.
 const topSheet=()=>{const t=modalTop();return t?t.el.querySelector('.sheet'):null};
 document.addEventListener('focusin',e=>{
   const t=e.target;

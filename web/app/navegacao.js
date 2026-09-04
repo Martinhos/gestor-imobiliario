@@ -19,12 +19,14 @@ const SUBPAGE={cats:{label:'Tipos de movimento',sub:'Como classificas o que entr
                groups:{label:'Grupos',sub:'Conjuntos de imóveis, proprietários e contratos'},
                dados:{label:'Dados',sub:'Splitwise e cópias de segurança'}};
 // O contentor onde cada vista é desenhada (o elemento #view).
+// Devolve: o elemento #view do DOM (ou null se ainda não existir).
 const view=()=>document.getElementById('view');
 const NAV_GROUPS=[{label:'Património',ids:['dashboard','properties','contracts']},{label:'Pessoas',ids:['tenants','owners']},
   {label:'Finanças',ids:['transactions','recurring','credits','projections','reports']},{label:'Aplicação',ids:['settings']}];
 /* Reconstrói a navegação da gaveta (agrupada por NAV_GROUPS), marcando o
    separador atual e o crachá dos planeados pendentes — na cor de aviso quando
-   nenhum passou do prazo. Refaz também a barra de baixo. */
+   nenhum passou do prazo. Refaz também a barra de baixo.
+   Devolve: nada — reescreve o HTML de #nav e chama buildTabbar. */
 function buildNav(){
   const late=recActive().length;
   document.getElementById('nav').innerHTML=NAV_GROUPS.map(g=>`<div class="navh">${g.label}</div>`+g.ids.map(id=>{const t=TABS.find(x=>x.id===id);
@@ -36,6 +38,8 @@ function buildNav(){
 const TABBAR=['dashboard','transactions','properties','recurring'];
 // Reconstrói a barra de baixo do telemóvel com os destinos de TABBAR;
 // late é a contagem de planeados pendentes para o crachá.
+// Recebe: late — a contagem de planeados pendentes (número), para o crachá.
+// Devolve: nada — reescreve o HTML de #tabbar (se o elemento existir).
 function buildTabbar(late){
   const el=document.getElementById('tabbar');if(!el)return;
   el.innerHTML=TABBAR.map(id=>{const t=TABS.find(x=>x.id===id);
@@ -43,18 +47,24 @@ function buildTabbar(late){
 }
 // Muda de separador: limpa a subpágina das Definições e o donut, fecha a
 // gaveta, refaz a navegação e repinta, com scroll para o topo.
+// Recebe: id — o separador de destino (um id de TABS, ex.: 'transactions').
+// Devolve: nada — redesenha a vista.
 function go(id){tab=id;setPage='';donutCat='';closeDrawer();buildNav();render();try{window.scrollTo(0,0)}catch(e){}}
 // Navega dentro das Definições: p é a subpágina ('' volta ao menu). Entrar
 // numa subpágina arma o histórico, para o voltar do sistema subir a Definições.
+// Recebe: p — a subpágina das Definições (uma chave de SUBPAGE; '' volta ao menu).
+// Devolve: nada — redesenha a vista.
 function goSet(p){setPage=p;if(p)pushHist();render();try{window.scrollTo(0,0)}catch(e){}}
 /* Abre a gaveta de navegação: fecha primeiro os painéis de filtros, arma o
-   histórico (o voltar do sistema fecha-a) e trava o scroll do fundo. */
+   histórico (o voltar do sistema fecha-a) e trava o scroll do fundo.
+   Devolve: nada — abre a gaveta e passa o foco para dentro dela. */
 function openDrawer(){if(document.body.classList.contains('open'))return;closeFilterPanels();document.body.classList.add('open');pushHist();lockPage();
   const b=document.querySelector('.burger');if(b)b.setAttribute('aria-expanded','true');
   // o foco entra na gaveta: sem isto, o teclado continuava atrás do véu
   const a=document.querySelector('#nav a');try{if(a)a.focus()}catch(e){}}
 // Fecha os painéis de filtros abertos na vista atual (funil das listas e painel
 // de análise), deitando fora o rascunho; só repinta se algum estava aberto.
+// Devolve: nada — fecha os painéis e repinta quando algum estava aberto.
 function closeFilterPanels(){
   let was=false;
   if(typeof LFK!=='undefined'&&LFK[tab]&&lf(LFK[tab])._open){lf(LFK[tab])._open=false;lfDraft=null;was=true}
@@ -63,5 +73,7 @@ function closeFilterPanels(){
 }
 // Fecha a gaveta se estiver aberta e destrava o scroll do fundo. fromPop marca
 // as chamadas vindas do voltar do sistema (de momento não muda o comportamento).
+// Recebe: fromPop (opcional) — verdadeiro nas chamadas vindas do voltar do sistema (sem efeito de momento).
+// Devolve: nada — fecha a gaveta e destrava o scroll.
 function closeDrawer(fromPop){if(!document.body.classList.contains('open'))return;document.body.classList.remove('open');lockPage();
   const b=document.querySelector('.burger');if(b)b.setAttribute('aria-expanded','false')}

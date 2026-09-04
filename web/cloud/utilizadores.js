@@ -30,7 +30,8 @@ var DIAL_CODES = [
 /* mete um seletor de indicativo de país à frente do campo do telefone no modal de
    perfil, separando o indicativo que já lá estiver escrito do resto do número
    (mexe no DOM: embrulha campo e seletor numa linha flex). Não faz nada se o campo
-   não existir ou se o seletor já tiver sido injetado. */
+   não existir ou se o seletor já tiver sido injetado.
+   Devolve: nada — injeta o seletor no DOM do modal do perfil. */
 function injectPhoneCountry() {
   var inp = document.getElementById('pe_phone');
   if (!inp || document.getElementById('cw_cc')) return;
@@ -62,7 +63,8 @@ function injectPhoneCountry() {
 /* abre "O meu perfil": a ficha de proprietário do próprio utilizador (criada na hora
    se faltar, com nome e email da conta a entrarem nos campos vazios), com o seletor
    de indicativo no telefone. Embrulha o onSave do modal para juntar indicativo e
-   número antes de gravar. Sem sessão iniciada, abre antes o ecrã de entrada. */
+   número antes de gravar. Sem sessão iniciada, abre antes o ecrã de entrada.
+   Devolve: nada — abre o modal do perfil (ou o ecrã de entrada). */
 CW.editProfile = function () {
   if (!CW.user) return showAuth();
   var meP = (db.owners || []).find(function (o) { return o.id === CW.user.id; });
@@ -109,7 +111,8 @@ propBody = function () {
    com contas: quotas atuais e, se houver proposta pendente, as novas percentagens
    com os botões de confirmar/rejeitar (ou cancelar, para quem já confirmou); sem
    proposta, o botão de propor. Com um só dono, apenas explica como partilhar.
-   Lê o imóvel "vivo" da base, não o rascunho do formulário. */
+   Lê o imóvel "vivo" da base, não o rascunho do formulário.
+   Devolve: o HTML (texto) da secção, pronto a entrar no corpo do formulário. */
 function cwOwnersBlock() {
   var p = pForm;
   var live = (db.properties || []).find(function (x) { return x.id === p.id; }) || p;
@@ -151,6 +154,8 @@ function cwOwnersBlock() {
 
 // se o modal do imóvel hid estiver aberto, recolhe o que está escrito e repinta-o —
 // é assim que uma proposta acabada de chegar aparece sem fechar o formulário.
+// Recebe: hid — o id do imóvel (a casa) cujo modal interessa.
+// Devolve: nada — recolhe e repinta o modal, se for o desse imóvel.
 function refreshPropModal(hid) {
   try {
     if (modalStack.length && pForm && pForm.id === hid) { collectProp(); repaintProp(); }
@@ -161,7 +166,10 @@ function refreshPropModal(hid) {
    somam 100 e envia a proposta para a API — só entra em vigor quando todos os
    comproprietários confirmarem. Uma divisão igual à atual não gera proposta.
    fromShare ajusta o texto para o caso de a casa ter acabado de ser partilhada;
-   no fim segue para a próxima proposta em fila (nextShareProposal). */
+   no fim segue para a próxima proposta em fila (nextShareProposal).
+   Recebe: hid — o id da casa; fromShare (opcional) — verdadeiro quando a casa
+   acabou de ser partilhada (muda o texto do modal).
+   Devolve: nada — abre o modal; o envio à API acontece no Guardar. */
 CW.proposeShares = function (hid, fromShare) {
   var live = (db.properties || []).find(function (x) { return x.id === hid; });
   if (!live) return nextShareProposal();
@@ -203,7 +211,9 @@ CW.proposeShares = function (hid, fromShare) {
 
 /* responde à proposta de divisão pendente da casa hid: com accept confirma (e avisa
    se, sendo o último, a divisão entrou logo em vigor), sem accept rejeita — que
-   serve também para quem propôs a cancelar. Fala com a API e atualiza o modal. */
+   serve também para quem propôs a cancelar. Fala com a API e atualiza o modal.
+   Recebe: hid — o id da casa; accept — 1/verdadeiro confirma, 0/falso rejeita.
+   Devolve: nada — chama a API e depois repinta o modal. */
 CW.answerProposal = function (hid, accept) {
   api('POST', '/api/houses/' + hid + '/proposal/' + (accept ? 'accept' : 'reject'))
     .then(function (r) {

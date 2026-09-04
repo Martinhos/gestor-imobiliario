@@ -1,4 +1,6 @@
 /* ================= AVALIAÇÃO ================= */
+// A vista de avaliação: filtros, cartão do portefólio e um cartão por imóvel.
+// Devolve: o HTML da vista (string).
 function vReports(){
   if(repProp&&!pidProps(repProp).length)repProp='';
   const list=pidProps(repProp);
@@ -14,8 +16,11 @@ function vReports(){
     +((!repProp||String(repProp).startsWith('g:'))?portCard(repProp||null):'')+list.map(repCard).join('');
 }
 // aplica o imóvel (ou grupo) escolhido no seletor e volta a desenhar
+// Devolve: nada — guarda o filtro e redesenha a vista.
 function onRepSel(){repProp=val('repSel')||'';render()}
-/* agregado de todo o portefólio (no âmbito do filtro de proprietário) */
+/* agregado de todo o portefólio (no âmbito do filtro de proprietário)
+   Recebe: pid — 'g:ID' de um grupo de imóveis, ou null/vazio para o portefólio completo.
+   Devolve: o HTML do cartão (string); '' sem imóveis no âmbito. */
 function portCard(pid){
   const m=metrics(YEAR,pid||null,{share:true}),ps=pidProps(pid);
   if(!ps.length)return '';
@@ -53,7 +58,9 @@ function portCard(pid){
 }
 /* O cartão de avaliação de um imóvel: valor introduzido contra valor por rendimento,
    contratos ativos, gráficos do ano, conta de exploração, indicadores e — havendo
-   hipotecas — a projeção da dívida até ao fim. Devolve o HTML do cartão. */
+   hipotecas — a projeção da dívida até ao fim. Devolve o HTML do cartão.
+   Recebe: p — o imóvel (objeto da base local).
+   Devolve: o HTML do cartão (string). */
 function repCard(p){
   const m=metrics(YEAR,p.id),ls=liveLoans(p);
   const ac=activeContracts(p.id),rentY=rentOf(p)*12,netY=netRentOf(p)*12;
@@ -114,7 +121,9 @@ function repCard(p){
     })():''}
   </div>`;
 }
-/* avaliação por rendimento ano a ano (histórico) e equity projetado com a amortização */
+/* avaliação por rendimento ano a ano (histórico) e equity projetado com a amortização
+   Recebe: p — o imóvel; what — o que evolui: 'val' (avaliação), 'diff' (diferença) ou 'equity' (projeção).
+   Devolve: a série para a janela do KPI (objeto {fmt, yearly: [{label, value, extra}], extraTitle, …}). */
 function evoValuation(p,what){
   const target=(db.settings.capTarget||5)/100;
   if(what==='equity'){
@@ -129,6 +138,7 @@ function evoValuation(p,what){
 }
 // A avaliação em texto simples, para partilhar ou copiar: totais do portefólio,
 // contas entre proprietários e cada imóvel com os seus contratos. Respeita o filtro de proprietário.
+// Devolve: o texto do relatório (string, várias linhas).
 function reportText(){
   const m=metrics(YEAR,null,{share:true}),act=db.contracts.filter(c=>isActive(c)&&inScope(c.propertyId)),cs=c=>sh(prop(c.propertyId));
   return `AVALIAÇÃO DO PORTEFÓLIO — ${YEAR}${ownerFilter?' · '+ownerFilterName():''}
