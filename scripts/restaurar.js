@@ -33,6 +33,8 @@ if (!ficheiro) {
   process.exit(1);
 }
 
+// Um valor de coluna como literal SQL: NULL, número tal e qual, 0/1 para
+// booleanos, X'...' para blobs e texto entre plicas com as plicas dobradas.
 const cita = (v) => {
   if (v === null || v === undefined) return 'NULL';
   if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'NULL';

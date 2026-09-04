@@ -3,6 +3,8 @@
 
 /* ---------------- indicador de sincronização ---------------- */
 
+// Selo fixo no canto superior direito: 'off' mostra o aviso de falta de ligação,
+// qualquer outro estado esconde-o. Cria o elemento na primeira chamada.
 function setSyncBadge(state) {
   var el = document.getElementById('cwSync');
   if (!el) {
@@ -37,6 +39,10 @@ function passProblem(p) {
   return '';
 }
 
+/* Desenha o ecrã de entrada por cima de tudo — login ou registo, conforme
+   CW.showAuthMode — com msg como erro opcional no topo. No registo liga a
+   validação ao vivo do email e dos requisitos da palavra-passe; no fim tenta
+   montar a entrada social (Google), se estiver configurada. */
 function showAuth(msg) {
   CW.showAuthMode = CW.showAuthMode || 'login';
   if (!authEl) {
@@ -117,13 +123,18 @@ function showAuth(msg) {
   }
   loadSocial();
 }
+// a versão pública, sem mensagem de erro — é a que os botões da app chamam
 CW.showAuth = function () { showAuth(); };
 
+// alterna entre "Entrar" e "Criar conta" e redesenha o ecrã
 CW.toggleAuth = function () {
   CW.showAuthMode = CW.showAuthMode === 'login' ? 'register' : 'login';
   showAuth();
 };
 
+/* O fecho de qualquer entrada bem-sucedida (formulário, Google, ligação por
+   email): guarda a sessão, descarta a cache local se pertencia a outra conta,
+   volta à visão geral, mostra os portões legais que faltem e arranca o sync. */
 function finishLogin(u) {
   CW.user = { id: u.id, name: u.name, email: u.email, token: u.token };
   try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
@@ -145,6 +156,9 @@ function finishLogin(u) {
   startSync();
 }
 
+// Valida o formulário (no registo: palavra-passe forte, confirmação igual e
+// termos aceites) e envia o login ou o registo à API. Os erros ficam escritos
+// no próprio ecrã, e o botão desativa-se enquanto o pedido anda.
 CW.submitAuth = function () {
   var login = CW.showAuthMode !== 'register';
   var payload = { email: val('cwa_email'), password: val('cwa_pass') };
@@ -292,6 +306,8 @@ CW.esqueci = function (e) {
   }, 700);
 })();
 
+// Valida a palavra-passe nova e confirma a reposição com o token da ligação de
+// email; se o servidor aceitar, fecha a sobreposição e devolve o ecrã de entrada.
 CW.reporConfirmar = function () {
   var p1 = val('rp_1'), p2 = val('rp_2');
   var errEl = document.getElementById('rp_err');
@@ -331,6 +347,7 @@ function avisoFimDemo(fim) {
       '<button class="btn primary" onclick="CW.fimDemoVisto(\'' + chave + '\')">Percebi</button>');
   }, 1200);
 }
+// o "Percebi" do aviso: marca-o como visto neste aparelho e fecha o modal
 CW.fimDemoVisto = function (chave) {
   try { localStorage.setItem(chave, '1'); } catch (e) {}
   closeModal();
@@ -338,6 +355,7 @@ CW.fimDemoVisto = function (chave) {
 
 /* ---- entrada com Google / Apple (aparece quando configurada) ---- */
 
+// carrega um script externo uma única vez; se já estiver na página, só espera pelo load
 function loadScript(src, cb) {
   var s = document.querySelector('script[src="' + src + '"]');
   if (s) { if (s._loaded) cb(); else s.addEventListener('load', cb); return; }
@@ -348,6 +366,9 @@ function loadScript(src, cb) {
   document.head.appendChild(s);
 }
 
+// Monta a zona "ou continua com…" do ecrã de entrada: pede /api/auth/config
+// (fica em cache) e, se houver id do Google, carrega o SDK e desenha o botão.
+// Sem configuração — ou sem rede — a zona simplesmente não aparece.
 function loadSocial() {
   var mount = document.getElementById('cwa_social');
   if (!mount) return;
@@ -370,6 +391,7 @@ function loadSocial() {
   });
 }
 
+// troca a credencial do fornecedor (ex.: Google) por uma sessão nossa e acaba como um login normal
 function socialLogin(provider, body) {
   var errEl = document.getElementById('cwa_err');
   api('POST', '/api/auth/' + provider, body)
@@ -378,6 +400,7 @@ function socialLogin(provider, body) {
 }
 
 
+// esconde o ecrã de entrada e devolve o scroll à página
 function hideAuth() {
   if (authEl) authEl.style.display = 'none';
   lockScroll(false);

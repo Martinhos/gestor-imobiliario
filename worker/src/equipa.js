@@ -21,6 +21,8 @@ const BILHETE_TTL = 300;          // 5 minutos para usar a ligação
 const SESSAO_TTL = 8 * 3600;      // 8 horas de sessão, um dia de trabalho
 export const COOKIE = 'gi_equipa';
 
+// 32 bytes de aleatório criptográfico em hexadecimal (64 caracteres):
+// serve de bilhete e de token de sessão.
 function novoToken() {
   const a = new Uint8Array(32);
   crypto.getRandomValues(a);
@@ -79,11 +81,15 @@ async function usarBilhete(env, t) {
   return linha ? JSON.parse(linha.payload) : null;
 }
 
+// A linha Set-Cookie da sessão de equipa. Com expirar=true sai com
+// Max-Age=0, que é como se apaga um cookie HttpOnly.
 export function cookieDaEquipa(token, expirar = false) {
   const maxAge = expirar ? 0 : SESSAO_TTL;
   return COOKIE + '=' + token + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + maxAge;
 }
 
+// O valor do cookie `nome`, mas só se tiver a forma de um token nosso
+// (64 hex) — qualquer outra coisa vale null e nem chega a tocar no KV.
 function lerCookie(request, nome) {
   const c = request.headers.get('Cookie') || '';
   const m = new RegExp('(?:^|;\\s*)' + nome + '=([a-f0-9]{64})(?:;|$)').exec(c);
@@ -105,6 +111,10 @@ export async function getEquipa(env, request) {
   }
 }
 
+/* As rotas de entrar e sair da ferramenta de equipa. Devolve a Response, ou
+   null quando o pedido não é daqui e o worker deve seguir para as outras
+   rotas. O que a ferramenta faz por dentro vive no equipa-api.js — aqui é
+   só a porta. */
 export async function rotasEquipa(c) {
   const { env, request, path, method, url } = c;
 

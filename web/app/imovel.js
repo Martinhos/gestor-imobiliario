@@ -1,5 +1,8 @@
 /* ================= IMÓVEL ================= */
 let pForm={};
+/* Abre o modal de criar/editar imóvel. Com id, trabalha sobre uma cópia
+   profunda do imóvel (nada muda na base até Guardar); sem id, começa um novo.
+   Ao guardar valida o nome, escreve em db.properties e repinta a app. */
 function propModal(id){
   foldState={};_propPaint=null;
   pForm=normProp(id?JSON.parse(JSON.stringify(prop(id))):null);
@@ -14,6 +17,9 @@ function propModal(id){
     save();closeModal();render();toast(id?'Imóvel atualizado.':'Imóvel adicionado.');
   };
 }
+/* Constrói o HTML do formulário do imóvel a partir de pForm: proprietários e
+   quotas-partes, destino, quartos, valores, fotos, dados registais, hipotecas
+   e anúncio. Só lê — quem escreve de volta é collectProp(). */
 function propBody(){
   const p=pForm,ls=p.loans||[];
   const owners=(p.ownerIds||[]).map(owner).filter(Boolean);
@@ -85,6 +91,8 @@ function propBody(){
     <div class="hint">A renda, as datas e os inquilinos ficam no contrato, não aqui.</div>
     ${richEditor('Comentários dos proprietários','p_notes',p.notes)}</div>`;
 }
+// Secção de uma hipoteca no formulário: campos consoante o tipo de taxa,
+// caixa de simulação e documentos. O i serve só para o título por omissão.
 function loanSect(l,i){
   return `<div class="sect">
     <div class="sect-head"><span class="ic">${ic('bank',18)}</span><b>${esc(l.name||'Hipoteca '+(i+1))}</b><span class="spacer"></span>
@@ -122,6 +130,9 @@ function loanSect(l,i){
     <div class="hint" style="margin-top:-4px">Todos os meses a app pede para confirmar a prestação em Planeados, já com a hipoteca associada.</div>
     </div>`;
 }
+/* Lê os campos do DOM de volta para pForm. Tolerante a campos ausentes: as
+   secções dobradas podem não estar no DOM e nesses casos ficam os valores
+   que lá estavam. Chamar sempre antes de mexer em pForm ou de repintar. */
 function collectProp(){
   const p=pForm,has=id=>!!document.getElementById(id);
   if(has('p_name'))p.name=val('p_name');
@@ -156,6 +167,8 @@ function collectProp(){
     if(g('fvar'))l.amortFeeVar=Math.max(0,num(val('l_fvar_'+l.id)));
   });
 }
+// Frase que explica a divisão das quotas-partes: partes iguais, soma 100%,
+// restante para quem não tem percentagem, ou soma diferente normalizada.
 function shareHint(owners,custom,sumSh){
   if(!owners.length)return 'Sem proprietários. Podes filtrar a visão geral por proprietário e as contas entre donos dividem-se pela quota-parte.';
   if(!custom)return owners.length>1?`Partes iguais (${dec(Math.round(1000/owners.length)/10)}% cada). Escreve as percentagens para uma divisão diferente.`:'Proprietário único.';
@@ -163,6 +176,7 @@ function shareHint(owners,custom,sumSh){
   if(Math.abs(sumSh-100)<0.01)return `Soma 100%. ${parts}`;
   return (sumSh<100?`Quem não tem percentagem fica com o restante. `:`Soma ${dec(Math.round(sumSh*100)/100)}%, normalizado. `)+parts;
 }
+// oninput das percentagens: relê o formulário e actualiza a frase das quotas.
 function liveShares(){
   collectProp();
   const owners=(pForm.ownerIds||[]).map(owner).filter(Boolean);
@@ -170,14 +184,23 @@ function liveShares(){
   if(e)e.innerHTML=shareHint(owners,hasShares(pForm),sum(owners.map(o=>Number((pForm.ownerShares||{})[o.id])||0)));
 }
 let _propPaint=null;
+// Repinta o corpo do modal a partir de pForm (ou do pintor alternativo em
+// _propPaint) e volta a carregar as miniaturas das fotos.
 function repaintProp(){const b=modalBodyEl();if(!b)return;b.innerHTML=(_propPaint||propBody)();paintThumbs(pForm.photos)}
+// Muda o destino do imóvel (arrendamento/uso próprio) e repinta — os campos
+// visíveis dependem dele.
 function setUse(u){collectProp();pForm.use=u;repaintProp()}
+// Muda o tipo de arrendamento; ao passar a quartos sem nenhum criado, semeia
+// dois para a lista não aparecer vazia.
 function setMode(m){
   collectProp();pForm.rentalMode=m;
   if(m==='quartos'&&!(pForm.rooms||[]).length)pForm.rooms=[{id:uid(),name:'Quarto 1'},{id:uid(),name:'Quarto 2'}];
   repaintProp();
 }
+// Acrescenta um quarto com nome sequencial e repinta.
 function addRoom(){collectProp();pForm.rooms.push({id:uid(),name:'Quarto '+(pForm.rooms.length+1)});repaintProp()}
+/* Tira um quarto do formulário. Se algum contrato apontava para ele, perde já
+   a ligação em db.contracts (não espera pelo Guardar do imóvel) e avisa. */
 function delRoom(rid){
   collectProp();
   const used=db.contracts.some(c=>c.roomId===rid);
@@ -185,11 +208,16 @@ function delRoom(rid){
   if(used){db.contracts.forEach(c=>{if(c.roomId===rid)c.roomId=null});toast('O contrato desse quarto ficou sem quarto associado.')}
   repaintProp();
 }
+// Acrescenta uma hipoteca normalizada; a primeira chama-se "Aquisição" por
+// omissão, as seguintes ficam sem nome até o utilizador dizer a finalidade.
 function addLoan(){
   collectProp();
   pForm.loans.push(normLoan({name:pForm.loans.length?'':'Aquisição'}));
   repaintProp();
 }
+/* Apaga uma hipoteca depois de confirmar. Se há prestações registadas, os
+   movimentos ficam mas perdem a ligação (loanId a null); os documentos
+   anexados são apagados do IndexedDB de imediato, sem Anular. */
 function delLoan(lid){
   collectProp();
   const l=findLoan(pForm,lid),used=db.transactions.filter(t=>t.loanId===lid).length;
@@ -204,6 +232,8 @@ function delLoan(lid){
     toast('Hipoteca apagada.');
   });
 }
+// Anexa os ficheiros escolhidos no input à hipoteca lid (assíncrono — lê e
+// guarda os ficheiros primeiro) e repinta quando estiverem prontos.
 function loanAddFiles(input,lid){
   collectProp();
   takeFiles(input).then(ms=>{
@@ -212,20 +242,32 @@ function loanAddFiles(input,lid){
     if(ms.length)toast(ms.length===1?'Documento anexado.':ms.length+' documentos anexados.');
   });
 }
+// Remove um documento de qualquer hipoteca que o tenha e apaga o blob do
+// IndexedDB.
 function delLoanFile(fid){
   collectProp();
   (pForm.loans||[]).forEach(l=>{l.files=(l.files||[]).filter(f=>f.id!==fid)});
   idbDel(fid).catch(()=>{});repaintProp();
 }
+// Liga/desliga o imposto do selo de uma hipoteca e refaz a simulação dela.
 function toggleStamp(lid){collectProp();const l=findLoan(pForm,lid);if(l)l.stampTax=chk('l_stamp_'+lid);liveLoan(lid)}
+// Muda o tipo de taxa (fixa/mista/variável) e repinta — cada tipo tem os
+// seus campos.
 function setLType(lid,t){collectProp();const l=findLoan(pForm,lid);if(l)l.type=t;repaintProp()}
+// Refaz a caixa de simulação da hipoteca lid sem repintar o resto do
+// formulário; sem lid, refaz todas.
 function liveLoan(lid){
   collectProp();
   if(lid){const b=document.getElementById('loanBox_'+lid);if(b)b.innerHTML=loanBox(findLoan(pForm,lid))}
   else liveLoanAll();
 }
+// Refaz as caixas de simulação de todas as hipotecas (o select do indexante
+// repinta-se a si próprio, por isso não dá para saber qual mudou).
 function liveLoanAll(){collectProp();(pForm.loans||[]).forEach(l=>{
   const b=document.getElementById('loanBox_'+l.id);if(b)b.innerHTML=loanBox(l)})}
+/* HTML da caixa de simulação de uma hipoteca: prestação mensal decomposta em
+   capital, juros e selo, prestação após a fase fixa (mista) e custo total do
+   crédito. Sem capital em dívida ou prazo devolve só a dica do que falta. */
 function loanBox(l){
   if(!l)return '';
   if(!l.outstanding||!l.years)return `<div class="hint">Falta o capital em dívida e o prazo.</div>`;
@@ -240,6 +282,7 @@ function loanBox(l){
     <div class="stat" style="border:0"><span>Custo total do crédito</span><b class="neg">${euro(a.totInt+a.totStamp)}</b></div>
     <div class="hint">${rateLabel(l)} · ${c.n} prestações</div>`;
 }
+// Junta as fotos escolhidas no input às do imóvel (assíncrono) e repinta.
 function propAddPhotos(input){
   collectProp();
   takeFiles(input).then(ms=>{pForm.photos=(pForm.photos||[]).concat(ms);repaintProp();
@@ -247,6 +290,8 @@ function propAddPhotos(input){
 }
 /* arrastar as fotos para a posição pretendida (rato e dedo) */
 let _pd=null;
+/* Início do arrasto (pointerdown no puxador): mede o passo entre linhas,
+   captura o ponteiro e liga os handlers de mover e largar. */
 function photoDrag(e,h,idx){
   e.preventDefault();e.stopPropagation();
   const row=h.closest('.prow');if(!row)return;
@@ -267,6 +312,8 @@ function photoDrag(e,h,idx){
   document.addEventListener('pointerup',done);
   document.addEventListener('pointercancel',done);
 }
+// Durante o arrasto: a linha agarrada segue o ponteiro e as outras deslocam-se
+// para mostrar onde ela vai cair.
 function photoDragMove(e){
   if(!_pd)return;
   e.preventDefault();
@@ -281,6 +328,8 @@ function photoDragMove(e){
       r.style.transform=sh?`translateY(${sh}px)`:'';});
   }
 }
+// Largar a foto: limpa os transforms e, se a posição mudou, aplica a nova
+// ordem a pForm.photos e ajusta o DOM e a etiqueta de capa à mão.
 function photoDragEnd(){
   if(!_pd)return;
   const {idx,to,row,rows}=_pd;
@@ -296,7 +345,10 @@ function photoDragEnd(){
   const first=list.querySelector('.prow .pth');
   if(first)first.insertAdjacentHTML('afterbegin','<span class="capa">capa</span>');
 }
+// Tira uma foto do imóvel e apaga o blob e a miniatura do IndexedDB.
 function delPropPhoto(fid){collectProp();pForm.photos=(pForm.photos||[]).filter(f=>f.id!==fid);idbDel(fid).catch(()=>{});idbDel('tn_'+fid).catch(()=>{});repaintProp()}
+// Abre a lista dos proprietários ainda não associados para escolher um, com
+// atalho para criar um novo.
 function addPropOwner(){
   collectProp();
   const free=db.owners.filter(o=>(pForm.ownerIds||[]).indexOf(o.id)<0);
@@ -304,11 +356,17 @@ function addPropOwner(){
     o=>{pForm.ownerIds.push(o.v);closeModal();repaintProp()},
     `<button type="button" class="btn" style="width:100%;justify-content:center" onclick="newOwnerFromProp()">${ic('plus',15)} Criar proprietário novo</button>`);
 }
+// Desassocia um proprietário do imóvel e esquece a quota-parte dele.
 function delPropOwner(oid){collectProp();pForm.ownerIds=(pForm.ownerIds||[]).filter(x=>x!==oid);if(pForm.ownerShares)delete pForm.ownerShares[oid];repaintProp()}
+// Cria um proprietário novo a partir da ficha do imóvel: abre a ficha de
+// pessoa e, ao gravar, associa-o logo ao imóvel em edição.
 function newOwnerFromProp(){
   closeModal();   /* fecha a lista de escolha; a ficha nova abre por cima do imóvel */
   personModal('owner',null,nid=>{if(pForm.ownerIds.indexOf(nid)<0)pForm.ownerIds.push(nid);closeModal();render();repaintProp();toast('Proprietário criado.')});
 }
+/* Devolve o handler de gravação do imóvel (para usar como onSave): valida o
+   nome, escreve em db.properties e sincroniza os movimentos recorrentes das
+   hipotecas antes de fechar e repintar. */
 function propSaver(){
   return ()=>{collectProp();
     if(!pForm.name.trim())return toast('Dá um nome ao imóvel.');
@@ -316,6 +374,9 @@ function propSaver(){
     if(i<0)db.properties.push(pForm);else db.properties[i]=pForm;
     syncAllLoanRecs();save();closeModal();render();toast('Imóvel guardado.')};
 }
+/* Apaga o imóvel e, em cascata, os contratos e os movimentos associados, com
+   Anular. A cópia guarda-se antes de apagar; as fotos e os documentos das
+   hipotecas só saem do IndexedDB quando o Anular expira. */
 function delProp(id){
   const p=prop(id),n=contractsOf(id).length;
   confirmModal('Apagar imóvel',`Apagar “${esc(p.name)}”${n?`, os seus ${n} contratos`:''} e todos os movimentos associados?`,()=>{

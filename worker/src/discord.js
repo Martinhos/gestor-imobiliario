@@ -9,6 +9,7 @@ const PONG = { type: 1 };
 const MSG = 4;            // responder com mensagem
 const UPDATE = 7;         // substituir a mensagem do botão
 
+// Converte uma string hexadecimal (chave pública, assinatura) nos bytes correspondentes.
 const hex = (s) => {
   const a = new Uint8Array(s.length / 2);
   for (let i = 0; i < a.length; i++) a[i] = parseInt(s.substr(i * 2, 2), 16);
@@ -33,10 +34,12 @@ export async function verifySignature(env, sig, ts, raw) {
   return false;
 }
 
+// Resposta efémera: só quem correu o comando a vê.
 const reply = (content, embeds) => ({
   type: MSG,
   data: { content: content || '', embeds: embeds || [], flags: 64 },   // 64 = só quem escreveu vê
 });
+// Resposta à vista de todos no canal, com botões opcionais.
 const publico = (content, embeds, components) => ({
   type: MSG,
   data: { content: content || '', embeds: embeds || [], components: components || [] },
@@ -55,6 +58,7 @@ const CATS = {
 };
 const ICONE = { user: '💬 ', client: '🐞 ', server: '🔥 ', infra: '📊 ', seguranca: '🔒 ' };
 const COR = { user: 0x2f7d5b, client: 0xd6a34a, server: 0xb94a48, infra: 0x7aa9d6, seguranca: 0x8a7bb8 };
+// Corta o texto a n caracteres, com reticências — o Discord recusa campos longos.
 const cut = (s, n) => { const t = String(s == null ? '' : s); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 
 /* Papéis
@@ -118,9 +122,11 @@ export const CATS_DO_PAPEL = {
 
 // Um papel ou vários: daqui para baixo aceita-se qualquer um dos dois.
 const comoLista = (p) => (Array.isArray(p) ? p.filter(Boolean) : p ? [p] : []);
+// Os papéis por extenso, para as mensagens: "admin + dev", ou "nenhum".
 const nomeDoPapel = (p) => comoLista(p).join(' + ') || 'nenhum';
 
 const COR_PAPEL = { master: 0xb94a48, admin: 0x8a7bb8, dev: 0xd6a34a, suporte: 0x2f7d5b };
+// A cor dos embeds segue o papel mais alto que a pessoa tem.
 const cor = (p) => COR_PAPEL[comoLista(p)[0]] || 0x2f7d5b;
 
 // As categorias que esta pessoa vê, somando os papéis que tiver.
@@ -132,8 +138,11 @@ export function catsDe(pap) {
   return vistas;
 }
 
+// Parte uma variável de ambiente numa lista de ids (aceita vírgulas e espaços).
 const lista = (v) => String(v || '').split(/[,\s]+/).filter(Boolean);
 
+// Diz se quem fala está na lista da variável de ambiente `chave`: pelo id de
+// pessoa ou por qualquer um dos cargos de Discord que tem.
 function pertence(env, i, chave) {
   const l = lista(env[chave]);
   if (!l.length) return false;
@@ -177,6 +186,8 @@ export function comandosDe(pap, acessos) {
   return Object.keys(PERMISSOES).filter((c) => podeCorrer(pap, c, acessos));
 }
 
+// O embed completo de um pedido: estado, categoria, de quem veio e a resposta
+// já dada. Fica cinzento quando concluído.
 function ticketEmbedFull(t) {
   return {
     title: (t.kind === 'problema' ? '🐞 ' : '💡 ') + cut(t.subject, 90),
@@ -196,6 +207,8 @@ function ticketEmbedFull(t) {
   };
 }
 
+// Os botões "Em resolução" e "Concluir" que acompanham um pedido; o id viaja
+// no custom_id, para o clique saber de que pedido é.
 export function ticketButtons(id) {
   return [{
     type: 1,
@@ -206,6 +219,8 @@ export function ticketButtons(id) {
   }];
 }
 
+// Procura um pedido pelo id inteiro ou por um prefixo — as listas só mostram
+// os primeiros 8 caracteres, e escrevê-los chega.
 async function acharTicket(env, ref) {
   const r = String(ref || '').trim();
   if (!r) return null;
@@ -249,6 +264,9 @@ async function mudarEstado(env, ref, estado, resposta, quem) {
 
 /* ------------------------------ comandos ------------------------------ */
 
+/* /pedidos: até dez pedidos, do mais recente para trás, sempre dentro das
+   categorias que o papel vê. Sem filtros mostra o que está por tratar; aceita
+   estado e categoria — e pedir uma categoria vedada é dito, não escondido. */
 async function cmdPedidos(env, opts, pap) {
   const estado = (opts.estado || '').trim();
   const permitidas = catsDe(pap);
@@ -309,6 +327,8 @@ async function fichaDe(env, userId) {
   }
 }
 
+// A ficha de quem escreveu, como campo de embed: plano, antiguidade, casas, e
+// os avisos que mudam a resposta. Devolve null quando não há ficha.
 function campoDaFicha(f) {
   if (!f) return null;
   if (f.desconhecido) return { name: 'Quem escreveu', value: 'conta já não existe', inline: false };
@@ -329,6 +349,8 @@ function campoDaFicha(f) {
   return { name: 'Quem escreveu', value: linhas.join('\n'), inline: false };
 }
 
+// /pedido: abre um pedido pelo id, com a ficha de quem escreveu no lugar do
+// campo "De" e os botões de mudar o estado.
 async function cmdPedido(env, opts, pap) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
@@ -338,6 +360,8 @@ async function cmdPedido(env, opts, pap) {
   return { type: MSG, data: { embeds: [embed], components: ticketButtons(g.t.id) } };
 }
 
+// /responder: escreve a resposta no pedido e marca-o em resolução; se for um
+// pedido de gente, a pessoa recebe a resposta por email e na app.
 async function cmdResponder(env, opts, pap, quem) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
@@ -346,6 +370,7 @@ async function cmdResponder(env, opts, pap, quem) {
     [ticketEmbedFull(t)]);
 }
 
+// /fechar: dá o pedido por concluído, com resposta final se vier texto.
 async function cmdFechar(env, opts, pap, quem) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
@@ -428,6 +453,9 @@ function podeVer(pap, categoria) {
   return catsDe(pap).indexOf(categoria || 'user') > -1;
 }
 
+/* A guarda comum dos comandos que mexem num pedido: acha-o e confirma que o
+   papel o pode ver. Devolve { t } com o pedido, ou { erro } com a recusa já
+   pronta a devolver ao Discord. */
 async function guardaDoPedido(env, id, pap) {
   const t = await acharTicket(env, id);
   if (!t) return { erro: reply('Não encontrei nenhum pedido com esse id.') };
@@ -452,6 +480,8 @@ const DESCRICAO = {
   access: 'quem pode o quê',
 };
 
+// /comandos: o que esta pessoa pode correr, com a nota do que lhe foi dado
+// por exceção e as categorias de pedidos que vê.
 function cmdComandos(pap, acessos) {
   const desc = DESCRICAO;
   const meus = comandosDe(pap, acessos);
@@ -558,6 +588,9 @@ const MARCA = {
 };
 const DE_ONDE = { papel: 'do cargo · ', dado: 'dado a esta pessoa · ', retirado: 'retirado · ', nao: '' };
 
+/* Os componentes do /access: um menu de escolha múltipla com o estado de cada
+   comando gerível (o que vem do cargo já vem marcado) e o botão de repor tudo
+   ao cargo. */
 function menuAcesso(alvoId, papeis, acessos) {
   const regras = { PERMISSOES, PODEM_TUDO, SO_MASTER };
   // o alvo e os papéis dele viajam no botão: a interação de um menu não
@@ -625,6 +658,8 @@ function vistaAcesso(alvoId, papeis, acessos) {
   return { embeds: [embed], components: componentes };
 }
 
+// /access: mostra quem pode o quê para a pessoa escolhida, com o menu para
+// dar e tirar comandos. Só o master cá chega.
 async function cmdAccess(env, i, opts) {
   const alvo = opts.utilizador;
   if (!alvo) return reply('Escolhe a pessoa.');
@@ -657,6 +692,10 @@ async function papeisDoAlvo(env, i, alvoId, guardados) {
   return guardados;
 }
 
+/* Trata os cliques na mensagem do /access: o botão repõe tudo ao cargo, o
+   menu grava a diferença entre o que ficou marcado e o que o cargo dá.
+   Escreve na base, deixa rasto na auditoria, e substitui a mensagem pela
+   vista nova. */
 async function acessoInteracao(env, i, meus, cid) {
   if (!podeCorrer(meus, 'access')) return reply('O **/access** é só do master.');
 
@@ -683,6 +722,7 @@ async function acessoInteracao(env, i, meus, cid) {
   return { type: UPDATE, data: vistaAcesso(alvoId, papeis, acessos) };
 }
 
+// /uso: o consumo da infraestrutura neste momento, num embed.
 async function cmdUso(env) {
   const fields = await usageFields(env);
   return reply('', [{
@@ -693,6 +733,8 @@ async function cmdUso(env) {
   }]);
 }
 
+// /resumo: envia já o resumo diário para o canal de administração, sem
+// esperar pela hora marcada.
 async function cmdResumo(env, ctx) {
   await dailyReport(env, ctx);
   return reply('Resumo enviado para o canal de administração.');
@@ -706,6 +748,10 @@ function quemFala(i, pap) {
 
 /* ---------------------------- encaminhamento ---------------------------- */
 
+/* A porta de entrada de todas as interações do Discord: verifica a assinatura,
+   responde ao ping, e encaminha botões, menus e comandos — cada um atrás da
+   pergunta "este papel pode?". Devolve sempre a Response JSON que o Discord
+   espera; um erro num comando vira mensagem, não um 500. */
 export async function handleInteraction(request, env, ctx) {
   const raw = await request.text();
   const ok = await verifySignature(

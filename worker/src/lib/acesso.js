@@ -65,6 +65,8 @@ export function preserveOwnership(existingDataStr, incoming) {
   return incoming;
 }
 
+// A conexão com este id em que o utilizador participa (convidou ou foi
+// convidado), ou nada — a procura serve logo de verificação de acesso.
 export async function connectionForUser(env, connId, userId) {
   return env.DB.prepare(
     'SELECT * FROM connections WHERE id = ? AND (requester_id = ? OR target_id = ?)'

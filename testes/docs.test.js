@@ -14,6 +14,9 @@ describe('gerar-docs', () => {
     const fns = DOCS.capitulos.reduce((n, c) => n + c.itens.reduce((m, i) => m + (i.funcoes || []).length, 0), 0);
     assert.ok(total >= 60, 'ha ' + total + ' ficheiros documentados');
     assert.ok(fns >= 400, 'ha ' + fns + ' funcoes com interface extraido');
+    const nuas = DOCS.capitulos.flatMap((c) => c.itens.flatMap((i) =>
+      (i.funcoes || []).filter((f) => !f.doc && f.assinatura).map((f) => i.nome + '::' + f.nome)));
+    assert.deepEqual(nuas, [], 'nenhuma funcao fica sem comentario — e a regra da casa');
     assert.ok(!DOCS.capitulos.some((c) => c.id === 'outros'), 'o mapa cobre tudo — sem capitulo Outros');
     assert.ok(DOCS.comandos.length >= 10, 'os comandos do Discord vieram todos');
     for (const c of ['test', 'docs', 'entrar', 'access']) {

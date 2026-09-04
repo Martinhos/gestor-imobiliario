@@ -21,9 +21,12 @@ api('GET', '/api/auth/config')
   .then(function (c) { if (c && c.ambiente) CW.ambiente = c.ambiente; })
   .catch(function () {});
 
+// os tutoriais já vistos até ao fim, lidos do localStorage ({id: 1});
+// devolve {} quando não há nada ou o armazenamento está vedado
 function feitos() {
   try { return JSON.parse(localStorage.getItem(LS_GUIA) || '{}'); } catch (e) { return {}; }
 }
+// regista no localStorage que este tutorial foi visto até ao fim
 function marcarFeito(id) {
   try { var f = feitos(); f[id] = 1; localStorage.setItem(LS_GUIA, JSON.stringify(f)); } catch (e) {}
 }
@@ -32,6 +35,7 @@ function marcarFeito(id) {
 
 var guia = null;   // { id, passos, i }
 
+// abre o tutorial pedido no primeiro passo; um id desconhecido não faz nada
 CW.guiaAbrir = function (id) {
   var t = TUTORIAIS[id];
   if (!t) return;
@@ -39,8 +43,11 @@ CW.guiaAbrir = function (id) {
   guiaPintar();
 };
 
+// recua um passo no tutorial aberto (no primeiro passo não faz nada)
 CW.guiaAnterior = function () { if (guia && guia.i > 0) { guia.i--; guiaPintar(); } };
 
+// avança um passo; no último ("Terminar") marca o tutorial como visto,
+// fecha o cartão e repinta a app, para o cartão de passos refletir isso
 CW.guiaSeguinte = function () {
   if (!guia) return;
   if (guia.i < guia.passos.length - 1) { guia.i++; guiaPintar(); return; }
@@ -49,6 +56,7 @@ CW.guiaSeguinte = function () {
   render();
 };
 
+// fecha e remove o cartão do tutorial, sem o marcar como visto
 CW.guiaFechar = function () {
   guia = null;
   var el = document.getElementById('cwGuia');
@@ -77,6 +85,10 @@ function guiaAjustar() {
   };
 });
 
+/* Desenha (ou redesenha) o cartão flutuante com o passo atual: cria o #cwGuia
+   se ainda não existir, muda para o ecrã que o passo aponta (p.ir) e escreve
+   título, texto e botões. O texto do passo é HTML de confiança — vem de
+   TUTORIAIS, escrito aqui —, por isso só o título passa pelo esc. */
 function guiaPintar() {
   if (!guia) return;
   var p = guia.passos[guia.i], n = guia.passos.length;
@@ -211,11 +223,17 @@ var TUTORIAIS = {
 
 /* ------------------------------------------------- o que falta a esta conta */
 
+// o registo de owner do utilizador com sessão, ou null — é lá que vive
+// o NIF que diz se o perfil está preenchido
 function euSou() {
   var id = CW.user && CW.user.id;
   return (db.owners || []).find(function (o) { return o.id === id; }) || null;
 }
 
+/* A lista de primeiros passos com o estado calculado da base local: perfil
+   (há NIF?), imóveis, contratos e movimentos. O passo dos contratos salta
+   quando não há imóveis para arrendar. Cada passo traz o porquê e a ação
+   (act) que o botão "Fazer agora" dispara. */
 function passos() {
   var eu = euSou();
   var arrendar = (db.properties || []).filter(function (p) { return p.use === 'investimento'; });
@@ -257,15 +275,22 @@ function passos() {
   ].filter(function (p) { return !p.salta; });
 }
 
+// dispensa o cartão de primeiros passos de vez (fica no localStorage)
+// e repinta já, para ele desaparecer
 CW.passosFora = function () {
   try { localStorage.setItem(LS_PASSOS, '1'); } catch (e) {}
   render();
 };
 
+// o cartão de primeiros passos foi dispensado? (false se o localStorage falhar)
 function passosDispensados() {
   try { return localStorage.getItem(LS_PASSOS) === '1'; } catch (e) { return false; }
 }
 
+/* O HTML do cartão de primeiros passos que a vista geral mostra no topo —
+   ou '' quando foi dispensado, não há sessão, ou já está tudo feito (o
+   cartão não fica pendurado a dar os parabéns). Cada passo por fazer tem
+   o "Fazer agora" e o botão do tutorial respetivo. */
 function cartaoPassos() {
   if (passosDispensados() || !CW.user) return '';
   var ps = passos();

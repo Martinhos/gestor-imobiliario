@@ -18,6 +18,9 @@ const CATS = {
   infra: 'infraestrutura', seguranca: 'segurança',
 };
 
+/* Embrulha o corpo no documento HTML completo: <head>, tema claro e escuro,
+   e os estilos da ferramenta inteira. Todas as páginas da equipa — a própria
+   ferramenta, o ecrã de entrada — passam por aqui. */
 function pagina(corpo, titulo) {
   return `<!doctype html>
 <html lang="pt"><head>
@@ -141,6 +144,9 @@ var idade = function (t) {
   return 'há ' + Math.round(m / 1440) + ' dias';
 };
 
+/* fetch com as regras da casa: cookies de sessão, resposta lida como JSON,
+   um 401 recarrega a página (a sessão morreu, volta-se ao ecrã de entrada)
+   e qualquer outro falhanço vira Error com a mensagem do servidor */
 function pedir(rota, opcoes) {
   return fetch(rota, Object.assign({ credentials: 'same-origin' }, opcoes || {}))
     .then(function (r) {
@@ -151,18 +157,23 @@ function pedir(rota, opcoes) {
       });
     });
 }
+// POST em JSON por cima de pedir; sem corpo vai um {} vazio
 function enviar(rota, corpo) {
   return pedir(rota, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(corpo || {}),
   });
 }
+// termina a sessão de equipa no servidor e recarrega — cai no ecrã de entrada
 function sair() {
   pedir('/api/equipa/sair', { method: 'POST' }).then(function () { location.reload(); });
 }
+// mostra a mensagem do erro no lugar do conteúdo (o .catch das vistas)
 function falha(e) { el('conteudo').innerHTML = '<div class="vazio">' + esc(e.message) + '</div>'; }
+// substitui o conteúdo pelo "A carregar…" enquanto a rede responde
 function aCarregar() { el('conteudo').innerHTML = '<div class="vazio">A carregar…</div>'; }
 
+// o distintivo de estado de um pedido: verde concluído, âmbar em resolução
 function selo(p) {
   var c = p.status === 'concluido' ? 'ok' : p.status === 'resolucao' ? 'wa' : '';
   return '<span class="badge ' + c + '">' + (ESTADOS[p.status] || p.status) + '</span>';
@@ -178,12 +189,15 @@ var SECCOES = [
   { id: 'rasto', nome: 'Rasto', se: eu.master },
 ];
 
+// pinta os separadores do cabeçalho — só os que os papéis deixam ver —
+// e marca o ativo; guarda a secção atual em seccao
 function nav(ativa) {
   seccao = ativa;
   el('nav').innerHTML = SECCOES.filter(function (s) { return s.se; }).map(function (s) {
     return '<button class="btn mini' + (s.id === ativa ? ' on' : '') + '" onclick="ir(\\'' + s.id + '\\')">' + s.nome + '</button>';
   }).join('');
 }
+// muda de secção: marca o separador e abre a vista respetiva
 function ir(s) {
   nav(s);
   if (s === 'pedidos') verLista('pessoas', 'abertos');
@@ -195,6 +209,10 @@ function ir(s) {
 
 /* ------------------------- pedidos e erros (lista) ----------------------- */
 
+/* A lista de pedidos (tipo 'pessoas') ou de erros (tipo 'erros'), filtrada
+   no servidor: e é o estado ('abertos' ou '' para todos) e q o texto da
+   procura, feita com Enter no campo. O filtro fica na variável estado para
+   a procura não o perder; cada cartão abre o detalhe. */
 function verLista(tipo, e, q) {
   estado = e;
   var url = '/api/equipa/pedidos?tipo=' + tipo + '&estado=' + encodeURIComponent(e) +
@@ -229,6 +247,10 @@ function verLista(tipo, e, q) {
 
 /* --------------------------- um pedido (detalhe) ------------------------- */
 
+/* O detalhe de um pedido: o texto e o contexto, a ficha de quem escreveu,
+   o fio de respostas e notas internas, os outros pedidos da mesma pessoa
+   e a caixa de responder com as respostas-tipo. Os modelos carregam-se à
+   primeira vez e ficam em cache na variável modelos. */
 function verPedido(id) {
   aCarregar();
   var m = modelos == null ? pedir('/api/equipa/modelos').then(function (d) { modelos = d.modelos; }) : Promise.resolve();
@@ -318,21 +340,27 @@ function verPedido(id) {
   }).catch(falha);
 }
 
+// executa uma ação sobre o pedido (responder, fechar, nota, atribuir,
+// reabrir) com o texto da caixa; responder e nota exigem texto escrito
 function agir(id, acao) {
   var t = el('resposta') ? el('resposta').value.trim() : '';
   if ((acao === 'responder' || acao === 'nota') && !t) { alert('Escreve o texto primeiro.'); return; }
   enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/' + acao, { texto: t })
     .then(function () { verPedido(id); }).catch(function (e) { alert(e.message); });
 }
+// muda a categoria do pedido para a escolhida no seletor e reabre o detalhe
 function mudarCategoria(id) {
   enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/categoria', { categoria: el('catNova').value })
     .then(function () { verPedido(id); }).catch(function (e) { alert(e.message); });
 }
+// copia a resposta-tipo escolhida para a caixa, por cima do que lá estiver
 function usarModelo() {
   var i = el('modelo').value;
   if (i === '') return;
   el('resposta').value = (modelos[Number(i)] || {}).texto || '';
 }
+// guarda o texto da caixa como resposta-tipo nova (o nome vem de um prompt)
+// e deita fora a cache, para a lista vir fresca no próximo pedido
 function guardarModelo() {
   var t = el('resposta').value.trim();
   if (!t) { alert('Escreve primeiro o texto do modelo.'); return; }
@@ -344,6 +372,9 @@ function guardarModelo() {
 
 /* ------------------------------- pessoas -------------------------------- */
 
+/* A procura de contas por email, nome ou id. Só vai à rede com 3 ou mais
+   caracteres — menos que isso era pedir meia base de dados. Cada resultado
+   abre a ficha; o master tem ainda o botão de criar conta. */
 function verPessoas(q) {
   var topo = '<div class="tabs">' +
     '<input id="q" placeholder="Procurar por email, nome ou id…" value="' + esc(q || '') + '"' +
@@ -384,6 +415,9 @@ function criarConta() {
     .catch(function (e) { alert(e.message); });
 }
 
+/* A ficha completa de uma conta: dados e atividade, ligações e partilhas,
+   propostas de quotas pendentes, limites ativos e os pedidos que fez.
+   O cartão de ações só aparece quando o servidor diz que quem vê é master. */
 function verPessoa(id) {
   nav('pessoas');
   aCarregar();
@@ -453,6 +487,9 @@ function cartaoAcoes(q) {
     '</div></div>';
 }
 
+/* Dispara uma ação de master sobre a conta. Umas pedem primeiro um valor
+   (plano, email, palavra-passe; apagar pede o email exato da conta como
+   confirmação) e todas pedem o motivo — sem motivo não acontece nada. */
 function acaoConta(id, acao) {
   var valor;
   if (acao === 'plano') {
@@ -482,6 +519,10 @@ function acaoConta(id, acao) {
 var CADENCIA = { copia: 26, vigia: 2, resumo: 26 };   // horas
 var OPS = { copia: 'Cópia diária', vigia: 'Vigia dos limites', resumo: 'Resumo diário' };
 
+/* O painel de operação inteiro: modo de demonstração, sessão de teste (fora
+   de produção), o batimento das operações agendadas, os endereços de email,
+   as cópias no R2 com o histórico e o consumo. Os endereços chegam à parte,
+   por verEnderecos — o resto do painel não fica à espera do Cloudflare. */
 function verOperacao() {
   aCarregar();
   pedir('/api/equipa/operacao').then(function (d) {
@@ -561,6 +602,9 @@ function verOperacao() {
   }).catch(falha);
 }
 
+// ligar=true volta ao modo demo (ou cancela o fim marcado); false marca o
+// fim, com confirmação — a app passa logo a avisar toda a gente. O motivo
+// fica no rasto.
 function mudarDemo(ligar) {
   if (!ligar && !confirm('Marcar o fim da demonstração? A app passa JÁ a avisar toda a gente de que os planos entram em vigor daqui a 30 dias — e nessa data o free fica por 3 imóveis, sem criar contratos nem planeados.')) return;
   var motivo = prompt('Motivo (fica no rasto):');
@@ -570,6 +614,9 @@ function mudarDemo(ligar) {
     .catch(function (e) { alert(e.message); });
 }
 
+/* Preenche o cartão dos endereços de email: cada um com o destino para onde
+   reencaminha, mais os destinos ainda por verificar. Sem CF_EMAIL_TOKEN no
+   servidor, escreve a receita para o criar em vez de fingir que funciona. */
 function verEnderecos() {
   pedir('/api/equipa/email').then(function (d) {
     if (d.semChave) {
@@ -590,6 +637,9 @@ function verEnderecos() {
   }).catch(function (e) { el('emailCard').innerHTML = '<span class="badge dg">' + esc(e.message) + '</span>'; });
 }
 
+// pede por prompt o nome, o destino (vazio usa o já verificado) e o motivo,
+// e cria o endereço; mesmo em erro recarrega a lista — o servidor pode ter
+// posto um destino novo à espera de verificação
 function criarEndereco() {
   var nome = prompt('Endereço novo (só a parte antes do @, ex.: faturas):');
   if (!nome) return;
@@ -601,6 +651,10 @@ function criarEndereco() {
     .catch(function (e) { alert(e.message); verEnderecos(); });
 }
 
+/* Pede uma ligação de sessão de teste — a mesma que o /test do Discord dá.
+   comDados semeia dados de exemplo, manter cria uma conta extra em vez de
+   retomar a mais recente, limpar apaga as contas de teste de quem pede
+   (com confirmação). A ligação vale 10 minutos e aparece no cartão. */
 function sessaoTeste(comDados, manter, limpar) {
   if (limpar && !confirm('Apagar as TUAS contas de teste e o que têm dentro? As dos outros devs ficam.')) return;
   el('ligTeste').innerHTML = '<div class="small" style="margin-top:8px">A emitir…</div>';
@@ -610,6 +664,8 @@ function sessaoTeste(comDados, manter, limpar) {
   }).catch(function (e) { el('ligTeste').innerHTML = ''; alert(e.message); });
 }
 
+// dispara uma cópia manual da base para o R2, com confirmação; no fim
+// diz as linhas e o tamanho, e recarrega o painel
 function copiarAgora() {
   if (!confirm('Fazer uma cópia da base agora?')) return;
   enviar('/api/equipa/operacao/copiar').then(function (d) {
@@ -643,6 +699,8 @@ function resumoCopia(dia) {
 
 /* -------------------------------- rasto --------------------------------- */
 
+// a auditoria: as últimas 200 ações da equipa, opcionalmente filtradas por
+// alvo. Só leitura — o rasto escreve-se sempre e não se apaga nunca.
 function verRasto(alvo) {
   aCarregar();
   pedir('/api/equipa/auditoria' + (alvo ? '?alvo=' + encodeURIComponent(alvo) : '')).then(function (d) {
@@ -715,6 +773,8 @@ export function paginaEntrada(token, v, depois) {
     </div></div>`, 'Entrar'), { status: 200, headers: cabecalhos });
 }
 
+// escapa HTML para as interpolações destas páginas (do lado do cliente
+// existe o gémeo, esc)
 function escapar(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (m) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]

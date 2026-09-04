@@ -1,5 +1,8 @@
 /* ================= PESSOAS (inquilinos e proprietários) ================= */
 let perForm={},perKind='tenant',perAfter=null;
+/* Abre a ficha de pessoa (kind 'owner' ou 'tenant'); sem id cria uma nova.
+   after, se vier, é chamado com o id da ficha depois de guardar, em vez do
+   fecho normal — é assim que o contrato cria um inquilino sem perder o fluxo. */
 function personModal(kind,id,after){
   foldState={};
   perKind=kind;perAfter=after||null;
@@ -20,6 +23,8 @@ function personModal(kind,id,after){
     closeModal();render();toast('Ficha guardada.');
   };
 }
+// HTML do formulário da ficha, montado a partir de perForm. Proprietários
+// não têm a secção de documentos nem as notas.
 function personBody(){
   const t=perForm;
   return `<div class="form">
@@ -46,6 +51,8 @@ function personBody(){
       {icon:'clip',open:!!(t.files||[]).length,summary:(t.files||[]).length?t.files.length+' doc.':''})
       +`<label>Notas<textarea id="pe_notes" placeholder="Fiador, referências, observações…">${esc(t.notes)}</textarea></label>`}</div>`;
 }
+// Copia os campos do modal para perForm. Chamar antes de repintar ou de
+// mexer nos documentos, senão perde-se o que o utilizador escreveu.
 function collectPerson(){
   const t=perForm;
   t.name=val('pe_name');t.phone=val('pe_phone');t.email=val('pe_mail');
@@ -55,14 +62,21 @@ function collectPerson(){
   if(document.getElementById('pe_notes'))t.notes=val('pe_notes');
   (t.files||[]).forEach(f=>{const e=document.getElementById('fn_'+f.id);if(e)f.name=e.value});
 }
+// Recebe os ficheiros do input de documentos: o conteúdo vai para o IndexedDB
+// (takeFiles) e os metadados juntam-se a perForm.files. Assíncrono — repinta no fim.
 function personAddFiles(input){
   collectPerson();
   takeFiles(input).then(ms=>{perForm.files=(perForm.files||[]).concat(ms);
     repaintPerson();
     if(ms.length)toast('Documento adicionado.')});
 }
+// Repinta o corpo do modal a partir de perForm (sem recolher os campos antes).
 function repaintPerson(){const b=modalBodyEl();if(b)b.innerHTML=personBody()}
+// Tira um documento da ficha e apaga logo o conteúdo do IndexedDB — sem desfazer.
 function delPersonFile(fid){collectPerson();perForm.files=(perForm.files||[]).filter(f=>f.id!==fid);idbDel(fid).catch(()=>{});repaintPerson()}
+/* Apaga a ficha, com confirmação: a pessoa sai da lista e o seu id é tirado
+   dos imóveis (proprietário) ou contratos (inquilino), que se mantêm. Os
+   documentos saem já do IndexedDB — aqui não há desfazer. */
 function delPerson(kind,id){
   const list=kind==='owner'?db.owners:db.tenants;
   const p=list.find(x=>x.id===id),word=kind==='owner'?'proprietário':'inquilino';

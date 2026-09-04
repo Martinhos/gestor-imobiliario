@@ -3,6 +3,11 @@
 
 import { now } from './http.js';
 
+/* Conta mais um acontecimento na chave e diz se ainda cabe: true deixa
+   passar, false é para responder 429. A janela é fixa — windowSec segundos a
+   contar do primeiro acontecimento — e cada chamada gasta uma escrita na D1.
+   Se a base falhar, deixa passar: um contador em baixo não pode deitar o
+   serviço abaixo. */
 export async function rateLimit(env, key, limit, windowSec) {
   const t = now();
   try {

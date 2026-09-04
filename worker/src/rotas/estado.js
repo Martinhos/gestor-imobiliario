@@ -1,5 +1,8 @@
 // O estado completo que este utilizador pode ver, numa so leitura.
 
+// Rota do GET /api/state: junta numa só resposta tudo o que este utilizador
+// pode ver — casas, registos, dados globais, conexões, perfis e propostas.
+// Só lê da base; noutros caminhos não devolve nada.
 export async function rotasEstado(c) {
   const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
 

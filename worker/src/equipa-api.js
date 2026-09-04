@@ -19,6 +19,7 @@ import { json, err, body, now, badId, CATEGORIAS } from './lib/http.js';
 import { catsDe } from './discord.js';
 import { auditar, registarOp } from './lib/auditoria.js';
 
+// Corta a `n` caracteres com reticências — para os resumos que vão para o rasto.
 const cortar = (s, n) => {
   const t = String(s == null ? '' : s);
   return t.length > n ? t.slice(0, n - 1) + '…' : t;
@@ -200,6 +201,11 @@ const ACOES_DE_CONTA = {
   },
 };
 
+/* As rotas /api/equipa/* que fazem o trabalho: pedidos, pessoas, contas,
+   endereços, operação e rasto. Chega cá com `eu` — a sessão de equipa — já
+   verificado; tudo o que devolve passa primeiro pelo filtro das categorias
+   do papel, e as ações sensíveis pelo eMaster. Devolve a Response, ou null
+   quando a rota não é daqui. */
 export async function rotasEquipaApi(c) {
   const { env, request, path, method, url, eu, ctx } = c;
   const cats = categoriasDe(eu);

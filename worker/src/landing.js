@@ -11,6 +11,9 @@
 
 const APP = 'https://app.rendorium.com';
 
+// Constrói a página inteira (HTML, estilos e o guião do carrossel, tudo
+// inline) e devolve-a como Response com uma hora de cache — a página muda
+// quando se publica, não por pedido.
 export function paginaLanding() {
   const html = `<!doctype html>
 <html lang="pt"><head>

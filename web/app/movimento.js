@@ -65,6 +65,10 @@ function txModal(id,kind,propId,_x,ctId,preset){
   };
   onSave=tForm._saver;
 }
+/* Afina o tForm depois de mudar o imóvel ou o tipo: limpa quem paga/recebe se já não for dono,
+   escolhe a hipoteca viva por defeito e, se o montante ainda estiver vazio, sugere valor e
+   descrição a partir da renda do contrato ou da prestação da hipoteca. As sugestões ficam
+   marcadas em _aA/_aL para o keepTyped as distinguir do que o utilizador escreveu. */
 function prefill(){
   const p=prop(tForm.propertyId);
   const ows=p?ownersOfProp(p):(tForm.groupId?txGroupOwners(tForm).map(o=>o.id):db.owners.map(o=>o.id));
@@ -90,8 +94,14 @@ function prefill(){
     if(l)set(loanCalc(l).total,'Prestação '+(l.name?l.name+' · ':'')+p.name);
   }
 }
+// Antes de repintar por causa de uma mudança: guarda o que está no DOM e esvazia
+// descrição/montante se ainda forem as sugestões automáticas — o que foi escrito à mão fica.
 function keepTyped(){collectTx();if(tForm.label===tForm._aL)tForm.label='';if(tForm.amount===tForm._aA)tForm.amount=''}
 const SPLIT_MODES=[['equal','Partes iguais','o mesmo para cada proprietário'],['quota','Quotas do imóvel','pela quota-parte de cada um'],['pct','Quotas a definir','em partes: quem tem 2 paga o dobro de quem tem 1 (2 e 1 → 2/3 e 1/3)'],['percent','Percentagem','percentagem de cada um; devem somar 100'],['amount','Valor certo','montante de cada um; têm de somar o total'],['adjust','Ajuste','quem tem valor paga só esse; o resto divide-se em partes iguais pelos outros']];
+/* Monta o HTML do formulário do movimento a partir do tForm. Os campos variam com o tipo
+   (contrato nas rendas, hipoteca e distribuição nos créditos, credor nas dívidas a terceiros,
+   quem paga/recebe nos acertos) e com o contexto (modelo, recorrência, grupo de imóveis).
+   Só devolve a string; quem a põe no DOM é o openModal ou o repaintTx. */
 function txBody(){
   const t=tForm,p=prop(t.propertyId),acs=t.propertyId?activeContracts(t.propertyId):[];
   const lns=liveLoans(p);
@@ -140,6 +150,8 @@ function txBody(){
     ${(t._recId||t._recNew)?recSect():''}
     ${richEditor('Comentários','t_notes',t.notes)}</div>`;
 }
+// Texto por baixo do campo do credor: o saldo corrente com essa pessoa
+// (recebido, devolvido, o que falta) ou uma orientação se ainda não há registos.
 function credHint(){
   const t=tForm,name=(t.creditor||'').trim();
   if(!name)return t.kind==='owed'?'Não precisa de ficha: escreve o nome. Estas dívidas ficam fora da conta de exploração do imóvel.':'Escreve a quem estás a devolver o dinheiro.';
@@ -147,6 +159,7 @@ function credHint(){
   if(!r)return t.kind==='owed'?'Primeira dívida a '+esc(name)+'.':'Não há dívida registada a '+esc(name)+' neste imóvel.';
   return `Recebido de ${esc(name)}: ${euro2(r.received)} · devolvido ${euro2(r.repaid)} · <b>${r.due>0.005?'em dívida '+euro2(r.due):'liquidado'}</b>`;
 }
+// Ao escrever o nome do credor: atualiza tForm.creditor e repinta só a dica do saldo.
 function refreshCredHint(){const e=document.getElementById('credHint');if(e){tForm.creditor=val('t_creditor');e.innerHTML=credHint()}}
 /* divisão entre proprietários: quotas, percentagem, valor certo ou ajuste */
 function splitSect(ows){
@@ -160,6 +173,9 @@ function splitSect(ows){
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
     <div class="hint" id="splitHint">${splitHint(ows)}</div>`,{icon:'split',summary:lab});
 }
+/* Dica por baixo da divisão entre proprietários: explica o modo escolhido, avisa quando
+   as contas não batem certo (falta, excesso, percentagens fora dos 100) e mostra quanto
+   calha a cada um com o montante atual. ows: os proprietários do imóvel, já resolvidos. */
 function splitHint(ows){
   const t=tForm,p=prop(t.propertyId);if(!p)return '';
   const mode=(t.split||{}).mode||'quota',total=Math.abs(Number(t.amount)||0);
@@ -175,6 +191,8 @@ function splitHint(ows){
     if(s2>total+0.005)warn=`<b class="neg">Os ajustes passam o total</b> · `}
   return warn+intro+'<br>'+ows.map((o,i)=>`${esc(o.name.split(' ')[0])} <b>${euro2(c[i]/100)}</b>`).join(' · ');
 }
+// Valida a divisão entre proprietários antes de guardar: devolve a mensagem de erro,
+// ou '' se está tudo certo (quotas e partes iguais nunca falham).
 function splitError(){
   const t=tForm,p=prop(t.propertyId),mode=(t.split||{}).mode;
   if(!p||!mode||mode==='quota'||mode==='equal')return '';
@@ -186,6 +204,8 @@ function splitError(){
   if(mode==='percent'&&Math.abs(s2-100)>0.01)return 'As percentagens têm de somar 100 (somam '+dec(Math.round(s2*100)/100)+').';
   return '';
 }
+// Lê do DOM o modo e os valores da divisão entre proprietários para tForm.split.
+// 'quota' é o comportamento por omissão, por isso guarda-se como null.
 function collectSplit(){
   const t=tForm,mode=(t.split||{}).mode;
   if(document.getElementById('t_split'))t.split=Object.assign({},t.split||{},{mode:val('t_split')||'quota'});
@@ -199,6 +219,8 @@ function collectSplit(){
 }
 /* divisão do valor pelos imóveis do grupo */
 const PSPLIT_MODES=[['equal','Partes iguais','o mesmo para cada imóvel'],['value','Pelo valor de mercado','proporcional ao valor atual'],['purchase','Pelo valor de aquisição','proporcional ao que custou'],['pct','Quotas a definir','em partes: 2 e 1 → 2/3 e 1/3'],['percent','Percentagem','de cada imóvel; devem somar 100'],['amount','Valor certo','montante de cada imóvel; têm de somar o total'],['adjust','Ajuste','quem tem valor fica só com esse; o resto em partes iguais']];
+// Secção "Divisão entre imóveis" dos movimentos de grupo: escolha do modo e,
+// quando o modo pede valores, um campo por imóvel. Devolve o HTML do fold.
 function psplitSect(){
   const t=tForm,ps=txProps(t),sp=t.psplit||{mode:'equal',parts:{}},mode=sp.mode||'equal',parts=sp.parts||{};
   const lab=(PSPLIT_MODES.find(m=>m[0]===mode)||[])[1]||'';
@@ -210,6 +232,8 @@ function psplitSect(){
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
     <div class="hint" id="psplitHint">${psplitHint()}</div>`,{icon:'building',open:true,summary:lab});
 }
+// Dica da divisão entre imóveis: explica o modo, avisa somas que não batem certo
+// e mostra quanto fica para cada imóvel do grupo.
 function psplitHint(){
   const t=tForm,ps=txProps(t);if(ps.length<2)return '';
   const mode=(t.psplit||{}).mode||'equal',total=Math.abs(Number(t.amount)||0);
@@ -223,6 +247,8 @@ function psplitHint(){
   if(mode==='adjust'&&s2>total+0.005)warn=`<b class="neg">Os ajustes passam o total</b> · `;
   return warn+intro+'<br>'+ps.map((p,i)=>`${esc(p.name)} <b>${euro2(c[i]/100)}</b>`).join(' · ');
 }
+// Valida a divisão entre imóveis: devolve a mensagem de erro ou '' se ok.
+// Só se aplica a movimentos de grupo com dois ou mais imóveis.
 function psplitError(){
   const t=tForm;if(!t.groupId)return '';
   const ps=txProps(t),mode=(t.psplit||{}).mode;
@@ -235,6 +261,7 @@ function psplitError(){
   if(mode==='percent'&&Math.abs(s2-100)>0.01)return 'As percentagens por imóvel têm de somar 100 (somam '+dec(Math.round(s2*100)/100)+').';
   return '';
 }
+// Lê do DOM o modo e os valores por imóvel para tForm.psplit (fora de um grupo fica null).
 function collectPsplit(){
   const t=tForm;
   if(!t.groupId){t.psplit=null;return}
@@ -243,15 +270,24 @@ function collectPsplit(){
   txProps(t).forEach(p=>{const e=document.getElementById('t_pp_'+p.id);if(e&&String(e.value).trim()!=='')parts[p.id]=num(e.value)});
   t.psplit={mode,parts};
 }
+// Mudou o modo da divisão entre imóveis: guarda o formulário e repinta para mostrar ou esconder os campos.
 function onPsplitSel(){collectTx();tForm.psplit={mode:val('t_psplit')||'equal',parts:(tForm.psplit||{}).parts||{}};repaintTx()}
+// Ao escrever num valor por imóvel: recolhe e atualiza só a dica, sem repintar o resto do modal.
 function refreshPsplit(){collectPsplit();const e=document.getElementById('psplitHint');if(e)e.innerHTML=psplitHint()}
+// Muda o modo da divisão entre proprietários e repinta; 'quota' é o defeito e guarda-se como split=null.
 function setSplitMode(m){collectTx();tForm.split=m==='quota'?null:{mode:m,parts:(tForm.split||{}).parts||{}};repaintTx()}
+// Aplica o modo escolhido no select da divisão entre proprietários.
 function onSplitSel(){setSplitMode(val('t_split')||'quota')}
+// Ao escrever num valor da divisão entre proprietários: recolhe e atualiza só a dica com os novos montantes.
 function refreshSplit(){
   collectSplit();
   const e=document.getElementById('splitHint');if(!e)return;
   e.innerHTML=splitHint(ownersOfProp(prop(tForm.propertyId)||{}).map(owner).filter(Boolean));
 }
+/* Cartão da distribuição de um pagamento de crédito: o seletor prestação/amortização e,
+   conforme o tipo, capital+comissão ou juros editáveis com selo derivado e capital como resto.
+   Atenção: além de devolver HTML, escreve interest/stamp/principal/fee no tForm —
+   é aqui que a distribuição sugerida passa a fazer parte do formulário. */
 function loanHint(){
   const t=tForm,p=prop(t.propertyId),l=t.loanId?findLoan(p,t.loanId):null;
   if(t.kind!=='loan')return'';
@@ -290,12 +326,15 @@ function loanHint(){
       <input class="statin pos" id="t_cap" type="text" inputmode="decimal" value="${dec(Math.max(0,cap).toFixed(2))}" oninput="onLoanSplit('cap')"></div>
     <div class="hint" id="loanLeft">${loanLeftTxt(l,int,st,cap,0,amt,avail)}</div></div>`;
 }
+// Linha por baixo da distribuição: quanto fica em dívida depois deste pagamento,
+// ou o aviso quando o capital passa o que falta ou a soma não bate com o montante.
 function loanLeftTxt(l,int,st,cap,fee,amt,avail){
   const sum=r2(int+st+cap+(fee||0));
   if(cap>avail+0.011)return `<b class="neg">Só faltam ${euro2(avail)} pagar — não podes amortizar mais do que isso.</b>`;
   if(cap<-0.005||fee<-0.005||int<-0.005||Math.abs(sum-amt)>0.011)return `<b class="neg">A soma da distribuição dá ${euro2(r2(int+st+Math.max(0,cap)+Math.max(0,fee||0)))}, mas o montante é ${euro2(amt)}.</b>`;
   return `Ficam ${euro(Math.max(0,avail-Math.min(cap,avail)))} em dívida.`;
 }
+// Alterna entre prestação e amortização: deita fora a distribuição editada à mão e recalcula a sugerida.
 function setPayType(v){
   const t=tForm;if(t.payType===v)return;
   t.payType=v;
@@ -308,17 +347,22 @@ function calcLoanTotal(){
   const p=prop(t.propertyId),l=p?findLoan(p,t.loanId):null;if(!l)return null;
   return r2(loanCalc(Object.assign({},l,{outstanding:loanAvail(t,l)},t._edit?{_paidOfs:-1}:{})).total);
 }
+// Mostra o botão "Repor" ao lado do montante só quando o que está escrito
+// difere da prestação calculada na hipoteca.
 function amtResetSync(){
   const b=document.getElementById('amt_reset');if(!b)return;
   const c=calcLoanTotal();
   b.style.display=(c!=null&&Math.abs((num(val('t_amount'))||0)-c)>0.011)?'':'none';
 }
+// Botão "Repor" do montante: volta a pôr a prestação calculada e refresca distribuição e divisões.
 function onAmtReset(){
   const c=calcLoanTotal();if(c==null)return;
   tForm.amount=c;tForm._aA=c;
   const e=document.getElementById('t_amount');if(e)e.value=dec(c.toFixed(2));
   refreshLoanHint();refreshSplit();amtResetSync();
 }
+// Botão "Repor" da distribuição: descarta os juros/capital editados à mão e volta
+// ao calculado na hipoteca — incluindo o próprio montante da prestação.
 function onLoanReset(){
   const t=tForm,l=t.loanId?findLoan(prop(t.propertyId),t.loanId):null;
   delete t.interest;delete t.stamp;delete t.principal;delete t.fee;delete t._splitTouched;
@@ -349,12 +393,19 @@ function onLoanSplit(w){
   const e2=document.getElementById('lh_stamp');if(e2)e2.textContent=euro2(st);
   const e=document.getElementById('loanLeft');if(e)e.innerHTML=loanLeftTxt(l,int,st,cap,0,amt,avail);
 }
+// Repinta o cartão da distribuição do crédito e sincroniza o botão "Repor" do montante.
 function refreshLoanHint(){const e=document.getElementById('loanHint');if(e)e.innerHTML=loanHint();amtResetSync()}
+// Reconstrói o corpo do modal do movimento a partir do tForm — usa-se depois de qualquer mudança estrutural.
 function repaintTx(){const b=modalBodyEl();if(b)b.innerHTML=txBody()}
+/* Muda o tipo do movimento (ex.: dívida recebida ↔ paga): preserva o que foi escrito à mão,
+   limpa categoria/subcategoria se a árvore de categorias do novo tipo for outra,
+   e acerta o título do modal quando não é modelo nem recorrência. */
 function setKind(k){keepTyped();
   if(treeKey(tForm.kind)!==treeKey(k)){tForm.category='';tForm.sub=''}
   tForm.kind=k;if(k!=='settle'&&tForm.label==='Transferência entre proprietários')tForm.label='';prefill();repaintTx();
   const h=modalTop()&&modalTop().el.querySelector('.head h2');if(h&&!tForm._recId&&!tForm._recNew&&!tForm._tplId&&!tForm._tplNew)h.textContent=(tForm._edit?'Editar ':txNewWord(k))+txTypeName(k)}
+/* Mudou o imóvel (ou grupo, valores "g:id"): limpa tudo o que dependia dele — contrato,
+   hipoteca, divisões e distribuição — e volta a sugerir valores para o novo contexto. */
 function onPropChange(){keepTyped();
   const v=val('t_prop')||'';
   tForm.groupId=String(v).startsWith('g:')?v.slice(2):null;
@@ -363,8 +414,12 @@ function onPropChange(){keepTyped();
   delete tForm.interest;delete tForm.stamp;delete tForm.principal;
   tForm.psplit=tForm.groupId?{mode:'equal',parts:{}}:null;
   prefill();repaintTx()}
+// Mudou o contrato: volta a sugerir a renda e a descrição do contrato escolhido.
 function onCtChange(){keepTyped();tForm.contractId=val('t_ct')||null;prefill();repaintTx()}
+// Mudou a hipoteca: descarta a distribuição anterior e sugere a prestação da nova.
 function onLoanChange(){keepTyped();tForm.loanId=val('t_loan')||null;delete tForm.interest;delete tForm.stamp;delete tForm.principal;prefill();repaintTx()}
+// Mudou a categoria: limpa a subcategoria; "__new__" abre o prompt para criar uma categoria
+// nova na árvore deste tipo de movimento (fica logo gravada nas definições).
 function onCatChange(){
   collectTx();
   const v=val('t_cat');
@@ -375,6 +430,7 @@ function onCatChange(){
   })}
   tForm.category=v;tForm.sub='';repaintTx();
 }
+// Mudou a subcategoria; "__new__" abre o prompt para criar uma nova dentro da categoria atual.
 function onSubChange(){
   collectTx();
   const v=val('t_sub');
@@ -386,6 +442,10 @@ function onSubChange(){
   })}
   tForm.sub=v;
 }
+/* Recolhe do DOM para o tForm tudo o que estiver presente no modal: campos base, distribuição
+   da hipoteca, quem paga/recebe, credor, divisões, categoria e opções de recorrência/modelo.
+   Cada campo só é lido se existir, porque o formulário varia com o tipo de movimento.
+   É o passo obrigatório antes de guardar ou repintar — o que não passar por aqui perde-se. */
 function collectTx(){
   const t=tForm;
   t.label=val('t_label');t.amount=num(val('t_amount'));t.date=val('t_date')||today();
@@ -414,6 +474,8 @@ function collectTx(){
   if(document.getElementById('t_next'))t._next=val('t_next')||'';
   if(document.getElementById('t_recEnd'))t._recEnd=val('t_recEnd')||'';
 }
+// Abre o seletor de etiquetas com as que ainda não estão neste movimento,
+// com atalho para criar uma nova.
 function addTxTag(){
   collectTx();
   const free=(db.settings.tags||[]).filter(g=>(tForm.tags||[]).indexOf(g)<0);
@@ -422,6 +484,8 @@ function addTxTag(){
     `<button type="button" class="btn" style="width:100%;justify-content:center" onclick="newTagFromTx()">${ic('plus',15)} Criar etiqueta nova</button>
      <div class="hint" style="margin-top:8px">Podes gerir a lista em Definições → Etiquetas.</div>`);
 }
+// Cria uma etiqueta nova a partir do modal do movimento: entra na lista global
+// (Definições → Etiquetas), fica gravada, e aplica-se logo a este movimento.
 function newTagFromTx(){
   closeModal();
   promptModal('Nova etiqueta','Nome','',nm=>{
@@ -432,7 +496,12 @@ function newTagFromTx(){
     toast('Etiqueta criada e aplicada.');
   });
 }
+// Tira uma etiqueta do movimento e repinta o modal.
 function delTxTag(g){collectTx();tForm.tags=(tForm.tags||[]).filter(x=>x!==g);repaintTx()}
+/* Efeito do pagamento na hipoteca, na altura de guardar: valida a distribuição do movimento
+   (ou recalcula-a quando não bate certo com o montante) e abate o capital ao que está em dívida.
+   Também acerta a recorrência automática da hipoteca — atualiza a prestação, ou apaga-a
+   quando o crédito fica liquidado. Mexe na db mas não faz save(); isso é de quem chama. */
 function applyLoan(t){
   const p=prop(t.propertyId),l=t.loanId?findLoan(p,t.loanId):null;if(!l)return;
   /* amortização: capital + comissão da hipoteca; prestação: juros + selo + capital (sem comissão) */
@@ -452,6 +521,8 @@ function applyLoan(t){
   if(ar){if(!(l.outstanding>0))db.recurring=db.recurring.filter(x=>x.id!==ar.id);
     else ar.tx.amount=Math.round(loanCalc(l).total*100)/100}
 }
+/* Apaga o movimento e, se era um pagamento de crédito, repõe o capital na hipoteca
+   e sincroniza a recorrência dela. O toast traz "Anular", que desfaz as duas coisas. */
 function delTx(id){
   /* sem confirmação, com Anular: é a eliminação mais frequente da app, e a
      pergunta constante ensinava o dedo a confirmar sem ler */
@@ -470,6 +541,8 @@ function delTx(id){
     }
   });
 }
+// Agrega o plano de amortização da hipoteca em linhas anuais (capital, juros, selo,
+// taxa e dívida no fim do ano) e devolve também os totais de juros e selo até ao fim.
 function yearRows(l){
   const a=amort(l),yrs=[];let ai=0,as=0,ac=0,bal=l.outstanding,yr=YEAR;
   a.rows.forEach((r,i)=>{ai+=r.int;as+=r.st;ac+=r.cap;bal=r.bal;
@@ -477,6 +550,9 @@ function yearRows(l){
   return {yrs,totInt:a.totInt,totStamp:a.totStamp};
 }
 let amortPid=null,amortLid='';
+/* Modal da amortização de um imóvel: com uma hipoteca escolhida, gráfico e tabela ano a ano;
+   sem escolha, todas as hipotecas com a linha do total. lid===undefined é a primeira abertura
+   (openModal, e escolhe sozinho se só houver uma); com lid vindo do select só troca o conteúdo. */
 function amortModal(pid,lid){
   const p=prop(pid),ls=liveLoans(p);if(!ls.length)return;
   amortPid=pid;amortLid=lid===undefined?(ls.length===1?ls[0].id:''):lid;
@@ -505,4 +581,5 @@ function amortModal(pid,lid){
     ${ls.length>1?`<label>Ver${sel('amSel',amortLid,opts,'onAmortSel')}</label>`:''}
     ${body}</div>`,`<button class="btn" onclick="closeModal()">Fechar</button>`);
 }
+// Mudou a hipoteca no select do modal da amortização: reconstrói o conteúdo.
 function onAmortSel(){amortModal(amortPid,val('amSel'))}

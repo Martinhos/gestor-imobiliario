@@ -29,6 +29,10 @@ function casaDoAnexo(id) {
   return casa;
 }
 
+/* Sobe um anexo para o servidor (PUT /api/files/:id), a indicar a casa a que pertence
+   para quem recebe a partilha o poder ler. Ignora miniaturas e uploads já em curso.
+   Sem rede fica tudo local e tenta-se de novo na próxima sincronização; uma recusa do
+   servidor (grande de mais, sem permissão) avisa por toast, mas só uma vez por sessão. */
 function subirAnexo(id, blob) {
   if (!CW.user || subindo[id] || String(id).indexOf('tn_') === 0) return;
   subindo[id] = 1;
@@ -53,6 +57,8 @@ function subirAnexo(id, blob) {
   }).catch(function () { delete subindo[id]; });   // sem rede: fica local; sobe na próxima
 }
 
+// Vai buscar ao servidor um anexo que falta neste aparelho; guarda-o no IndexedDB para
+// a próxima vez e devolve o blob — ou null sem sessão, sem rede ou sem o ficheiro lá.
 function baixarAnexo(id) {
   if (!CW.user) return Promise.resolve(null);
   if (baixando[id]) return baixando[id];
@@ -127,6 +133,8 @@ render = function () {
   } catch (e) {}
 };
 
+// Depois de cada render, pendura o distintivo "de <nome>" nos cartões das casas
+// que outra pessoa partilhou connosco (mexe no DOM já desenhado, sem re-render).
 function decorateShared() {
   (db.properties || []).forEach(function (p) {
     if (!p._sharedFrom) return;
@@ -179,12 +187,15 @@ go = function (id) {
 
 // recarregar a página devolve o utilizador ao sítio onde estava
 var LS_PAGE = 'gi_page';
+// Guarda em localStorage o separador atual (e a sub-página das definições), para o restorePage.
 function rememberPage() {
   try { localStorage.setItem(LS_PAGE, JSON.stringify({ tab: tab, set: setPage || '' })); } catch (e) {}
 }
 var _goSet = goSet;
 goSet = function (p) { _goSet(p); rememberPage(); };
 
+// No arranque, devolve o utilizador ao separador onde estava; ignora estados
+// guardados que já não existem e não faz nada quando era só o painel inicial.
 function restorePage() {
   var s = null;
   try { s = JSON.parse(localStorage.getItem(LS_PAGE) || 'null'); } catch (e) {}

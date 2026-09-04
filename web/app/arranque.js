@@ -106,6 +106,7 @@ const typing=t=>!!t&&((/^(INPUT|TEXTAREA)$/.test(t.tagName||'')&&!/^(date|month|
 /* o seletor de data é uma janela do sistema: ao escolher, larga o foco para o ecrã voltar ao sítio */
 document.addEventListener('change',e=>{const t=e.target;if(t&&t.tagName==='INPUT'&&/^(date|month|time)$/.test(t.type||'')){try{t.blur()}catch(x){}
   [].slice.call(document.querySelectorAll('.sheet.kb')).forEach(x=>x.classList.remove('kb'))}});
+// a folha (.sheet) da janela que está por cima, ou null se não há nenhuma aberta
 const topSheet=()=>{const t=modalTop();return t?t.el.querySelector('.sheet'):null};
 document.addEventListener('focusin',e=>{
   const t=e.target;

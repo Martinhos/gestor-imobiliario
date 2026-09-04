@@ -1,5 +1,6 @@
 /* ================= ANEXOS (IndexedDB) ================= */
 let _idb=null;
+// Abre (uma só vez) a base 'gi_files' do IndexedDB e devolve a ligação; rejeita quando o browser não deixa.
 function idb(){
   return new Promise((res,rej)=>{
     if(_idb)return res(_idb);
@@ -25,6 +26,8 @@ let idbDel=id=>{delete memFiles[id];return idb().then(d=>new Promise((res,rej)=>
   const t=d.transaction('files','readwrite');t.objectStore('files').delete(id);
   t.oncomplete=()=>res();t.onerror=()=>rej(t.error)}))};
 const pendingFiles={},thumbCache={};
+// Os metadados de todos os anexos referidos nos dados gravados: contratos, fotos e
+// hipotecas dos imóveis, documentos de pessoas. É a lista do que deve existir em disco.
 function allFileMetas(){
   const out=[];
   db.contracts.forEach(c=>(c.files||[]).forEach(f=>out.push(f)));
@@ -33,6 +36,8 @@ function allFileMetas(){
   db.owners.concat(db.tenants).forEach(p=>(p.files||[]).forEach(f=>out.push(f)));
   return out;
 }
+// Apaga do IndexedDB os blobs que já nada refere, poupando os pendentes dos
+// formulários ainda abertos. Corre em fundo e falha em silêncio.
 function cleanFiles(){
   idb().then(d=>{
     const r=d.transaction('files','readonly').objectStore('files').getAllKeys();
@@ -60,6 +65,8 @@ function takeFiles(input){
     }));
   }).filter(Boolean));
 }
+// Abre um anexo a partir dos metadados: imagens em modal com botão de guardar,
+// o resto descarrega logo. Avisa por toast quando o blob não está no aparelho.
 function openFileMeta(meta){
   if(!meta)return toast('Anexo não encontrado.');
   idbGet(meta.id).then(blob=>{
@@ -72,6 +79,7 @@ function openFileMeta(meta){
     }else downloadMeta(meta.id);
   }).catch(()=>toast('Não foi possível abrir o anexo.'));
 }
+// Descarrega o anexo com o nome original, através de um <a download> temporário.
 function downloadMeta(fid){
   const meta=allFileMetas().concat(pendingMetas()).find(f=>f.id===fid);
   idbGet(fid).then(blob=>{
@@ -81,6 +89,8 @@ function downloadMeta(fid){
     document.body.appendChild(a);a.click();a.remove();toast('Guardado.');
   }).catch(()=>toast('Não foi possível guardar o anexo.'));
 }
+// Os anexos ainda nos formulários abertos (contrato, imóvel, pessoa, hipotecas):
+// já têm blob guardado, mas os metadados ainda não chegaram a db.
 function pendingMetas(){
   return [].concat(cForm.files||[],pForm.photos||[],perForm.files||[],
     ...((pForm.loans||[]).map(l=>l.files||[])));

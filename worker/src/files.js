@@ -34,6 +34,8 @@ export async function linkFiles(env, houseId, data) {
   } catch (e) { /* o anexo pode ainda não ter sido carregado */ }
 }
 
+// A regra de acesso a um anexo: o dono vê sempre; guardado numa casa, vê
+// quem tiver acesso à casa; solto e de outra pessoa, ninguém.
 async function podeVer(env, me, row, canAccessHouse) {
   if (!row) return false;
   if (row.owner_id === me.id) return true;
@@ -41,6 +43,11 @@ async function podeVer(env, me, row, canAccessHouse) {
   return (await canAccessHouse(env, me.id, row.house_id)).ok;
 }
 
+/* As rotas /api/files/:id. PUT carrega (o corpo para o R2, os metadados
+   para a D1, com os limites de tamanho e o id preso ao primeiro dono); GET
+   devolve o conteúdo com o tipo e o nome originais; DELETE apaga dos dois
+   lados. O GET responde 404 tanto ao que não existe como ao que não se pode
+   ver — não se confirma a existência do que é dos outros. */
 export async function handleFiles(request, env, me, seg, method, deps) {
   const { json, err, canAccessHouse, now } = deps;
   const id = seg[2];

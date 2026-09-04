@@ -37,11 +37,17 @@ export async function fimDemo(env) {
   return fim;
 }
 
+// Ainda estamos em demonstração? true enquanto não houver data de fim
+// marcada, ou enquanto ela não chegar. É isto que suspende os limites.
 export async function modoDemo(env) {
   const fim = await fimDemo(env);
   return fim == null || Date.now() < fim;
 }
 
+/* Liga ou desliga o modo de demonstração. Ligar apaga a data marcada;
+   desligar marca o fim para daqui a `dias` (30 por omissão) — só nessa data
+   é que os limites passam a valer. Escreve no KV, atualiza a cache, e
+   devolve a data marcada (ou null quando fica ligado). */
 export async function definirDemo(env, ligado, dias) {
   if (ligado) {
     await env.SESSIONS.delete(CHAVE);

@@ -11,8 +11,11 @@
 
 const VAZIO = { mais: [], menos: [] };
 
+// A chave no KV onde vivem as exceções desta pessoa.
 const chave = (discordId) => 'acesso:' + discordId;
 
+// As exceções desta pessoa, lidas do KV. Devolve sempre {mais, menos}: sem
+// entrada, sem KV ou com lixo lá dentro, sai o vazio — e vale só o papel.
 export async function lerAcessos(env, discordId) {
   if (!discordId || !env.SESSIONS) return VAZIO;
   try {
@@ -28,6 +31,8 @@ export async function lerAcessos(env, discordId) {
   }
 }
 
+// Grava as exceções no KV, sem duplicados, e devolve o que ficou. Sem
+// nenhuma exceção apaga a entrada — ausência e vazio são a mesma coisa.
 export async function guardarAcessos(env, discordId, acessos) {
   const limpo = {
     mais: [...new Set(acessos.mais || [])],

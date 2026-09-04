@@ -97,6 +97,9 @@ vSettings = function () {
   return h;
 };
 
+/* O cartão de uma ligação a outro utilizador, com os botões certos para o
+   estado dela: convite recebido (aceitar/recusar), convite enviado (cancelar)
+   ou ligação ativa, com a contagem de casas partilhadas em cada sentido. */
 function connCard(c) {
   var peer = esc(c.peer.name || c.peer.email || c.peer.id);
   var lines = '';
@@ -123,6 +126,9 @@ function connCard(c) {
     '<div class="toolbar" style="margin-top:10px">' + btns + '</div></div>';
 }
 
+// O HTML da página "Conta e partilha": a conta e o id para dar a outros, o campo
+// para adicionar uma ligação, a lista de utilizadores ligados, a segurança e o
+// apagar da conta. Sem sessão iniciada, mostra apenas o convite para entrar.
 function vCloud() {
   if (!CW.user) return card('Conta', 'Sem sessão iniciada', '<button class="btn primary" onclick="CW.showAuth()">Iniciar sessão</button>');
   var conns = (CW.state.connections || []).slice();
