@@ -3,6 +3,11 @@ import { hashPassword, verifyPassword, createSession, destroySession,
   sessionCookie } from '../auth.js';
 import { weakPassword } from '../lib/http.js';
 
+/* As rotas da própria conta: /api/me (ver e apagar), os termos, a
+   palavra-passe e as sessões. Tudo aqui chega já autenticado — o `me` vem no
+   contexto. O que mexe em credenciais sobe o sess_epoch, que é o que deita
+   abaixo as sessões dos outros aparelhos, e devolve um token novo para este
+   continuar dentro. Sem rota que sirva não devolve nada, e o worker segue. */
 export async function rotasConta(c) {
   const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
 

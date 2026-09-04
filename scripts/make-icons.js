@@ -16,6 +16,7 @@ const zlib = require('zlib');
 
 /* ----------------------------------------------------------- PNG à mão */
 
+// CRC-32 de um chunk do PNG, com a tabela calculada uma vez e guardada na própria função.
 function crc32(buf) {
   let table = crc32.table;
   if (!table) {
@@ -31,6 +32,7 @@ function crc32(buf) {
   return (c ^ 0xffffffff) >>> 0;
 }
 
+// Um chunk PNG completo: comprimento, tipo, dados e CRC — o formato exige os quatro.
 function chunk(type, data) {
   const len = Buffer.alloc(4);
   len.writeUInt32BE(data.length);
@@ -40,6 +42,8 @@ function chunk(type, data) {
   return Buffer.concat([len, body, crc]);
 }
 
+// Embrulha os pixels RGBA num PNG válido (assinatura, IHDR, IDAT comprimido, IEND)
+// e devolve o Buffer pronto a escrever em disco.
 function png(width, height, rgba) {
   const raw = Buffer.alloc((width * 4 + 1) * height);
   for (let y = 0; y < height; y++) {
@@ -83,6 +87,7 @@ function distSegmento(px, py, ax, ay, bx, by) {
   return Math.hypot(px - qx, py - qy);
 }
 
+// A distância de um ponto ao traço mais próximo da casa, nas coordenadas do vetor de 48.
 function distCasa(x, y) {
   let d = Infinity;
   for (const linha of LINHAS) {
@@ -93,6 +98,9 @@ function distCasa(x, y) {
   return d;
 }
 
+/* Desenha o ícone pixel a pixel: o gradiente diagonal de fundo e a casa a traço
+   branco, com 3×3 amostras por pixel para o contorno não sair serrado.
+   Devolve o PNG como Buffer, no tamanho pedido. */
 function makeIcon(size) {
   const img = Buffer.alloc(size * size * 4);
   const meio = TRACO / 2;

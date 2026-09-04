@@ -22,6 +22,7 @@ var selTem = function (id) { return !!selIds[id]; };
 
 /* ------------------------------------------------------------- entrar e sair */
 
+// Entra em modo de seleção — opcionalmente já com um movimento marcado — e repinta a vista com as caixas.
 CW.selEntrar = function (id) {
   CW.selMode = true;
   selIds = {};
@@ -34,6 +35,7 @@ CW.selReset = function () {
   CW.selMode = false;
   selIds = {};
 };
+// sai da seleção e repinta; o par do selReset, para quando ninguém mais vai repintar
 CW.selSair = function () {
   CW.selMode = false;
   selIds = {};
@@ -48,6 +50,8 @@ CW.selToggle = function (id, ev) {
   selPintar();
 };
 
+/* Marca ou desmarca um mês inteiro: se já estava todo marcado, limpa-o;
+   senão marca o que faltar. Só conta o que está visível (filtros incluídos). */
 CW.selMes = function (mo, ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   var ids = selIdsDoMes(mo);
@@ -56,6 +60,7 @@ CW.selMes = function (mo, ev) {
   selPintar();
 };
 
+// como o selMes, mas para todas as linhas visíveis: tudo marcado limpa, senão marca o que falta
 CW.selTodos = function (ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   var ids = selIdsVisiveis();
@@ -64,10 +69,12 @@ CW.selTodos = function (ev) {
   selPintar();
 };
 
+// os ids de todos os movimentos que a vista mostra neste momento (já com os filtros aplicados)
 function selIdsVisiveis() {
   return [].slice.call(document.querySelectorAll('#view .txrow[data-tx]'))
     .map(function (e) { return e.getAttribute('data-tx'); });
 }
+// os ids visíveis de um mês ("AAAA-MM"), lidos das próprias linhas no DOM
 function selIdsDoMes(mo) {
   return [].slice.call(document.querySelectorAll('#view .txrow[data-mes="' + mo + '"]'))
     .map(function (e) { return e.getAttribute('data-tx'); });
@@ -95,6 +102,7 @@ function selPintar() {
   patchHdrSel();
 }
 
+// o HTML da caixa de marcar: cheia, vazia, ou a meio (parcial) com um traço
 function caixa(marcada, parcial) {
   if (marcada) {
     return '<span class="selck on">' + ic('check', 13) + '</span>';
@@ -192,6 +200,7 @@ vTransactions = function () {
 
 /* ------------------------------------------ o toque longo e o kebab da linha */
 
+// O kebab da linha: as opções de um movimento sozinho, mais a porta de entrada na seleção.
 CW.txOpcoes = function (id) {
   var t = (db.transactions || []).find(function (x) { return x.id === id; });
   if (!t) return;
@@ -212,6 +221,9 @@ lpMenu = function (v) {
 
 /* ------------------------------------------------------- o botão do cabeçalho */
 
+/* Veste o botão do cabeçalho para a seleção: passa a "⋯" (as ações da
+   seleção), acende quando há marcas, e ganha um X ao lado para sair. Fora
+   da seleção só remove o X — o render normal repõe o resto. */
 function patchHdrSel() {
   var hb = document.getElementById('hdrFilt');
   if (!hb) return;
@@ -242,6 +254,7 @@ hdrFiltToggle = function () {
   return _hdrFiltToggle_sel();
 };
 
+// o menu do "⋯" do cabeçalho: editar ou eliminar a seleção (avisa se nada estiver marcado)
 CW.selAcoes = function () {
   var n = selN();
   if (!n) return toast('Marca pelo menos um movimento.');
@@ -253,6 +266,9 @@ CW.selAcoes = function () {
 
 /* --------------------------------------------------------- editar em massa */
 
+/* Abre a janela de edição em massa: categoria, subcategoria e etiquetas.
+   Só se aplica o que for preenchido — o resto de cada movimento fica como
+   está, e as etiquetas só se acrescentam. O Aplicar é o selGravar. */
 CW.selEditar = function () {
   var ids = Object.keys(selIds);
   if (!ids.length) return;
@@ -282,6 +298,7 @@ CW.selEditar = function () {
     '<button class="btn primary" onclick="CW.selGravar()">Aplicar</button>');
 };
 
+// ao mudar a categoria na edição em massa, refaz o menu de subcategorias com as dessa categoria
 CW.selCatMudou = function () {
   var c = val('selCat'), tree = allCats('');
   var subs = c && tree[c] ? tree[c] : [];
@@ -291,10 +308,15 @@ CW.selCatMudou = function () {
     [{ v: '', label: '— não mexer —' }].concat(subs.map(function (x) { return { v: x, label: x }; })), '') + '</label>';
 };
 
+// liga/desliga uma etiqueta na edição em massa (o estado vive na classe do próprio botão)
 CW.selTagToggle = function (b) {
   b.classList.toggle('on');
 };
 
+/* Aplica a edição em massa aos movimentos marcados e grava na base. Uma
+   categoria nova sem subcategoria escolhida limpa a antiga — ficava a
+   apontar para a árvore errada. Etiquetas só entram, nunca saem. No fim
+   fecha tudo e sai da seleção. */
 CW.selGravar = function () {
   var ids = Object.keys(selIds);
   var cat = val('selCat'), sub = val('selSub');
@@ -317,6 +339,9 @@ CW.selGravar = function () {
   toast(n + (n === 1 ? ' movimento alterado.' : ' movimentos alterados.'));
 };
 
+/* Elimina os movimentos marcados: a confirmação diz quanto somam, e à saída
+   fica um "Anular" de seis segundos (comDesfazer) — a cópia é tirada antes
+   do corte e volta inteira se o anular for clicado. */
 CW.selApagar = function () {
   var ids = Object.keys(selIds);
   if (!ids.length) return;

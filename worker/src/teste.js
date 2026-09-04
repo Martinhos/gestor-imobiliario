@@ -34,6 +34,9 @@ async function chave(env) {
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 }
 
+// A assinatura HMAC-SHA256, em hexadecimal, dos campos de uma ligação de
+// teste — na ordem fixa em que o rotaTeste os volta a verificar. Os campos
+// vazios também contam: mudar qualquer um muda a assinatura.
 export async function assinarTeste(env, exp, dados, manter, quem, limpar, email) {
   const sig = await crypto.subtle.sign('HMAC', await chave(env),
     new TextEncoder().encode(exp + ':' + dados + ':' + (manter || '0') + ':' + (quem || '') +
@@ -96,6 +99,11 @@ function pagina(status, titulo, texto) {
   });
 }
 
+/* A rota /t/entrar: valida a validade e a assinatura e, conforme as opções
+   da ligação, limpa as contas do dono, retoma a mais recente ou cria uma
+   nova — e entra com ela (302 com cookie de sessão). Os erros são páginas
+   legíveis, porque quem abre isto é uma pessoa num browser. Fora do
+   ambiente de teste é sempre 404, venha a assinatura de onde vier. */
 export async function rotaTeste(c) {
   const { env, url } = c;
   // produção nunca cria contas de teste — nem com assinatura boa

@@ -13,6 +13,10 @@
 
 const DOMINIO = 'rendorium.com';
 
+/* Uma chamada à API do Cloudflare, autenticada com o CF_EMAIL_TOKEN. Devolve
+   o corpo já como objeto quando o Cloudflare diz success; tudo o resto —
+   HTTP falhado, resposta que não é JSON, success a false — vira um Error
+   com a mensagem deles (ou o código HTTP, quando nem mensagem há). */
 async function cf(env, caminho, metodo, corpo) {
   const r = await fetch('https://api.cloudflare.com/client/v4' + caminho, {
     method: metodo || 'GET',
@@ -59,6 +63,10 @@ export function endereco(nome) {
   return n + '@' + DOMINIO;
 }
 
+/* O estado do Email Routing num só objeto: os endereços @rendorium.com (as
+   regras com matcher literal no "to" — email, destino e se está ativa) e os
+   destinos da conta, cada um com a marca de verificado. Duas chamadas ao
+   Cloudflare em paralelo, sem cache: é sempre o estado real. */
 export async function listarEnderecos(env) {
   const z = await zona(env);
   const [regras, destinos] = await Promise.all([

@@ -1,27 +1,36 @@
 /* ================= CÓPIAS ================= */
 const bkName=()=>'gestor-imobiliario-'+today()+'.json';
+// Texto -> base64 passando por UTF-8 (o btoa sozinho rebenta com acentos); devolve '' se tudo falhar.
 function b64(s){
   try{const by=new TextEncoder().encode(s);let bin='';for(const b of by)bin+=String.fromCharCode(b);return btoa(bin)}
   catch(e){try{return btoa(unescape(encodeURIComponent(s)))}catch(e2){return ''}}
 }
+// Cópia de segurança: serializa a base inteira em JSON e entrega ao seletor de ficheiros do Android ou, no browser, descarrega o .json.
 function driveSave(){
   const json=JSON.stringify(db,null,2);
   if(window.Android&&window.Android.saveAs){window.Android.saveAs(bkName(),'application/json',b64(json));return toast('Escolhe onde guardar.')}
   download(bkName(),'application/json',json);
 }
+// Repor uma cópia: no Android abre o seletor de ficheiros nativo; no browser cai no modal de colar o JSON.
 function driveOpen(){
   if(window.Android&&window.Android.openFile){window.Android.openFile('application/json');return toast('Escolhe a cópia.')}
   bkPasteBox();
 }
+// Chamada pelo lado Android depois de o utilizador escolher um ficheiro: .csv segue para a importação do Splitwise, o resto é tratado como cópia de segurança.
 window.__fileLoaded=function(name,text){
   if(String(name||'').toLowerCase().endsWith('.csv'))return swParse(text);
   bkLoad(text);
 };
+// Modal com textarea para colar o conteúdo de uma cópia de segurança à mão.
 function bkPasteBox(){
   openModal('Colar cópia de segurança',`<div class="form">
     <textarea id="bkText" style="min-height:130px;font:13px/1.5 ui-monospace,Menlo,monospace" placeholder='{"properties":[…]}'></textarea></div>`,
     `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="bkLoad(val('bkText'))">Repor</button>`);
 }
+/* Repõe uma cópia de segurança: valida o JSON (tem de trazer imóveis e movimentos),
+   pede confirmação com os totais e só então substitui a base inteira — normalizando
+   cada coleção e correndo as migrações, para as cópias de versões antigas continuarem
+   a abrir. No fim grava, refaz a navegação e re-renderiza tudo. */
 function bkLoad(text){
   let d;try{d=JSON.parse(text)}catch(e){return toast('Isso não é um ficheiro válido.')}
   if(!d||!Array.isArray(d.properties)||!Array.isArray(d.transactions))return toast('Falta a lista de imóveis ou de movimentos.');
@@ -38,6 +47,7 @@ function bkLoad(text){
     save();migrateInline();closeAllModals();applyTheme();buildNav();render();toast('Cópia reposta.');
   });
 }
+// Descarrega "content" como ficheiro no browser: cria um <a download> temporário, clica-o e remove-o.
 function download(name,mime,content){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([content],{type:mime}));
@@ -48,6 +58,9 @@ function downloadBytes(name,mime,bin){
   const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i)&255;
   download(name,mime,u);
 }
+/* Exporta todos os movimentos para CSV (ponto e vírgula, campos entre aspas), com
+   as colunas já traduzidas para nomes legíveis — imóvel, quem pagou, inquilinos,
+   categoria. Pensado para abrir diretamente no Excel. */
 function downloadCsv(){
   const rows=[['data','descricao','tipo','valor','imovel','pago_por','recebido_por','divisao','quarto','inquilinos','categoria','subcategoria','etiquetas','credor','comentarios','capital','juros','selo'],
     ...db.transactions.map(t=>{const c=t.contractId?contract(t.contractId):null,p=prop(t.propertyId);
@@ -58,6 +71,7 @@ function downloadCsv(){
   download('movimentos-imobiliarios.csv','text/csv;charset=utf-8',rows.map(r=>r.map(x=>'"'+String(x).split('"').join('""')+'"').join(';')).join('\n'));
   toast('CSV exportado.');
 }
+// Partilha o relatório do portefólio por ordem de preferência: folha de partilha do Android, Web Share API, ou cópia para a área de transferência.
 function shareReport(){
   const txt=reportText();
   if(window.Android&&window.Android.shareText)return window.Android.shareText('Avaliação do portefólio',txt);
@@ -65,6 +79,7 @@ function shareReport(){
   if(navigator.clipboard)return navigator.clipboard.writeText(txt).then(()=>toast('Relatório copiado.'));
   toast('Não foi possível partilhar.');
 }
+// Apagar tudo: limpa a base local (mantém o tema) após confirmação; com sessão iniciada recusa e aponta as alternativas seguras.
 function wipe(){
   /* Com sessão iniciada, o sync propagava o apagão à conta e aos outros
      aparelhos — e a confirmação dizia "deste dispositivo". Um botão que

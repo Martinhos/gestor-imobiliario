@@ -46,6 +46,10 @@ const COM_SESSAO = [
   rotasConexoes,
 ];
 
+/* Ponto de entrada de todos os /api/*: normaliza o caminho, monta o contexto
+   partilhado e corre as rotas por ordem — primeiro as que dispensam sessão
+   (autenticação e relatos de erro), depois, já com o utilizador resolvido,
+   as de COM_SESSAO. A primeira Response ganha; sem nenhuma, 404. */
 export async function handleApi(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, '');

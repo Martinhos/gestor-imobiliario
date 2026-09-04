@@ -132,6 +132,7 @@ export async function copiar(env) {
   };
 }
 
+// Apaga do R2 as cópias que o aPodar marcar e devolve quantas foram.
 export async function podar(env, agora = now()) {
   const todas = await listar(env);
   const fora = aPodar(todas.map((o) => o.key), agora);
@@ -139,6 +140,8 @@ export async function podar(env, agora = now()) {
   return fora.length;
 }
 
+// Todas as cópias no R2, como {key, size, uploaded}, da mais recente para a
+// mais antiga. Segue a paginação até ao fim: é sobre esta lista que se poda.
 export async function listar(env) {
   const out = [];
   let cursor;
@@ -171,6 +174,7 @@ export async function estado(env) {
   }
 }
 
+// Bytes em texto de gente: "512 KB", "3,2 MB" — com a vírgula portuguesa.
 export function kb(n) {
   if (!(n > 0)) return '0 KB';
   if (n < 1024 * 1024) return Math.max(1, Math.round(n / 1024)) + ' KB';

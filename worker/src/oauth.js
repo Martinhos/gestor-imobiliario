@@ -13,16 +13,20 @@ const ISSUERS = {
 
 let jwksCache = {};
 
+// base64url → bytes: repõe o padding e os carateres +/ do base64 clássico antes do atob.
 function b64uToBytes(s) {
   s = String(s).replace(/-/g, '+').replace(/_/g, '/');
   while (s.length % 4) s += '=';
   return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 }
 
+// descodifica um segmento base64url do JWT (cabeçalho ou payload) para objeto
 function b64uToJSON(s) {
   return JSON.parse(new TextDecoder().decode(b64uToBytes(s)));
 }
 
+// A chave pública do fornecedor com aquele kid. Cache de uma hora, renovada também
+// quando o kid não aparece — é assim que uma rotação de chaves passa sem se dar por ela.
 async function getKey(provider, kid) {
   let entry = jwksCache[provider];
   if (!entry || Date.now() - entry.at > 3600e3 || !entry.keys.some((k) => k.kid === kid)) {
@@ -34,6 +38,11 @@ async function getKey(provider, kid) {
   return entry.keys.find((k) => k.kid === kid) || null;
 }
 
+/* Valida um ID token de ponta a ponta: assinatura RS256 contra as chaves públicas do
+   fornecedor ('google' ou 'apple'), emissor, audiência (o client id da app), validade
+   e email confirmado. Devolve o payload quando tudo bate certo; qualquer falha lança
+   Error com a razão — quem chama decide o que mostrar. Vai à rede buscar as chaves
+   quando a cache não chega. */
 export async function verifyIdToken(provider, token, audience) {
   const parts = String(token || '').split('.');
   if (parts.length !== 3) throw new Error('token malformado');

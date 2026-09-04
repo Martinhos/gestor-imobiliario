@@ -14,6 +14,7 @@ export const CATEGORIAS = ['user', 'client', 'server', 'infra', 'seguranca'];
 
 export const now = () => Date.now();
 
+// Uma Response JSON com o charset certo; headers extra somam-se aos nossos.
 export function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
     status,
@@ -21,10 +22,13 @@ export function json(data, status = 200, headers = {}) {
   });
 }
 
+// O erro no formato que a app espera: { error: mensagem }, com o status dado.
 export function err(status, message) {
   return json({ error: message }, status);
 }
 
+// O corpo do pedido como objeto, ou null quando não é JSON ou passa de
+// MAX_BODY — quem chama trata o null como pedido inválido, sem try/catch.
 export async function body(request) {
   const len = Number(request.headers.get('Content-Length') || 0);
   if (len > MAX_BODY) return null;

@@ -2,17 +2,23 @@
 /* botão de filtros no cabeçalho: análise, registos e movimentos */
 let anaOpen={};
 const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',recurring:'lrec',credits:'lcred'};
+/* toque no botão de filtros do cabeçalho: abre o painel certo consoante o
+   separador — dropdown nas listas de registos, modal nos movimentos, painel
+   de análise nos restantes. */
 function hdrFiltToggle(){
   if(LFK[tab])return lfToggle(LFK[tab]);
   if(tab==='transactions')return txFilterModal();
   anaOpen[tab]=!anaOpen[tab];render();
 }
+// nº de filtros ativos no separador atual — decide o ponto no botão do cabeçalho
 function hdrFiltN(){
   if(LFK[tab])return lfCount(LFK[tab]);
   if(tab==='transactions')return txFilterCount()+(String(txSearch||'').trim()?1:0);
   return ANA_N();
 }
+// fecha o painel de análise do separador atual (os filtros aplicam-se logo ao mexer)
 function anaApply(){anaOpen[tab]=false;render()}
+// limpa o proprietário global e o imóvel em foco do separador de análise onde estamos
 function anaClear(){
   ownerFilter='';
   if(tab==='dashboard')dashProp='';
@@ -20,9 +26,13 @@ function anaClear(){
   if(tab==='reports')repProp='';
   closePops();render();
 }
+// nº de filtros ativos nos separadores de análise: proprietário e imóvel em foco
 const ANA_N=()=>tab==='dashboard'?((ownerFilter?1:0)+(dashProp?1:0))
   :tab==='projections'?((ownerFilter?1:0)+(projProp?1:0))
   :tab==='reports'?((ownerFilter?1:0)+(repProp?1:0)):0;
+/* embrulha os controlos de análise (inner, já em HTML) no painel dropdown do
+   cabeçalho, com os botões Limpar/Fechar; o wrapper tem altura 0 para o
+   painel flutuar por cima da página em vez de a empurrar. */
 function anaPanel(inner){return `<div class="fwrap" style="height:0"><div class="fpanel ${anaOpen[tab]?'on':''}" style="top:0"><div class="card" style="padding:12px">
   ${typeof fcSelector==='function'?fcSelector():''}${inner}
   <div class="toolbar" style="margin:12px 0 0">
@@ -40,6 +50,10 @@ function tornarFocavel(raiz){
     if(!e.hasAttribute('role'))e.setAttribute('role','button');
   });
 }
+/* Redesenha a página inteira: título e subtítulo, botão de filtros do
+   cabeçalho, e o HTML da vista do separador atual (vDashboard, vProperties…).
+   Substitui o innerHTML de #view, por isso o estado do DOM anterior perde-se;
+   no fim torna os cartões focáveis e repinta as miniaturas dos imóveis. */
 function render(){
   const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
   document.getElementById('pageTitle').textContent=meta.label;
@@ -75,6 +89,9 @@ const kpi=(l,v,c,f,why,evo)=>{
     <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${f?`<div class="foot">${f}</div>`:''}
     ${why?`<div class="expl">${why}</div>`:''}</div>`;
 };
+/* abre a janela de evolução de um KPI: corre o evo() registado no cartão e
+   mostra a série mês a mês, a ano a ano e a tabela. Se o evo falhar ou não
+   devolver nada, simplesmente não abre. */
 function kpiModal(id){
   const k=KPI_REG[id];if(!k)return;
   let d;try{d=k.evo()}catch(e){d=null}
@@ -96,12 +113,19 @@ function yearsWithData(pid){
   db.transactions.forEach(t=>{const y=Number(String(t.date||'').slice(0,4));if(y&&(pid?t.propertyId===pid:inScope(t.propertyId)))ys[y]=1});
   return Object.keys(ys).map(Number).sort();
 }
+/* série histórica de um campo monetário das métricas (income, op, loan ou cf):
+   mês a mês no ano corrente e ano a ano nos anos com movimentos. pid limita a
+   um imóvel ou grupo; sem fmt, formata em euros. */
 function evoMoney(field,pid,fmt){
   const kind={income:'income',op:'expense',loan:'loan'}[field];
   const monthly=kind?monthly_(YEAR,pid,kind):[...Array(12)].map((_,i)=>monthly_(YEAR,pid,'income')[i]-monthly_(YEAR,pid,'expense')[i]-monthly_(YEAR,pid,'loan')[i]);
   return {fmt:fmt||euro,monthly,yearly:yearsWithData(pid).map(y=>({label:y,value:metrics(y,pid,{share:true})[field]}))};
 }
+// atalho: totais mensais já na quota-parte do proprietário filtrado
 const monthly_=(y,pid,kind)=>monthly(y,pid,kind,true);
+/* série ano a ano de um rácio, para a janela do KPI. cap e coc saem do
+   histórico real; grossYield e ltv são projeções para a frente — daí o
+   título e a nota diferentes que devolve. */
 function evoRatio(field,pid){
   if(field==='cap'||field==='coc')return {fmt:v=>pct(v),yearly:yearsWithData(pid).map(y=>({label:y,value:metrics(y,pid,{share:true})[field]}))};
   /* yield bruto e LTV: projeção com os aumentos de renda e a amortização das hipotecas */
@@ -140,22 +164,28 @@ const WHY={
   totalPeriodo:'Soma de todas as rendas do período projetado.',
   cashflowFim:'Rendas projetadas menos despesas inflacionadas menos as prestações previstas nesse ano.'
 };
+// cartão genérico das vistas: título, subtítulo opcional e corpo em HTML
 const card=(t,s,b)=>`<div class="card"><div><div class="title">${t}</div>${s?`<div class="small">${s}</div>`:''}</div><div style="margin-top:13px">${b}</div></div>`;
 const stop='event.stopPropagation();';
 /* botão "⋮" dos cartões: abre o mesmo menu do toque longo */
 const kebab=v=>`<button class="btn sm" style="flex:0 0 auto;padding:7px 9px;align-self:flex-start" onclick="${stop}lpMenu('${v}')">${ic('dots',17)}</button>`;
 let _lockY=0;
+/* trava o scroll do fundo enquanto houver um modal ou o menu lateral aberto,
+   e repõe a posição ao destravar. Corre a cada abrir/fechar (componentes.js e
+   navegacao.js chamam-na) e é idempotente: só mexe quando o estado muda. */
 function lockPage(){try{
   const on=modalStack.length>0||document.body.classList.contains('open'),h=document.documentElement,was=h.classList.contains('noscroll');
   if(on&&!was){_lockY=window.scrollY||0;h.classList.add('noscroll');document.body.style.top=(-_lockY)+'px'}
   else if(!on&&was){h.classList.remove('noscroll');document.body.style.top='';window.scrollTo(0,_lockY)}
 }catch(e){}}
 
+// barra com o seletor de proprietário; vazia se não há proprietários registados
 function ownerBar(){
   if(!db.owners.length)return '';
   const opts=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')));
   return `<div class="toolbar"><div style="min-width:230px;max-width:320px">${sel('ownerSel',ownerFilter,opts,'onOwnerFilter')}</div></div>`;
 }
+// muda o filtro global de proprietário; se o imóvel em foco sair do âmbito, larga-o
 function onOwnerFilter(){ownerFilter=val('ownerSel')||'';if(dashProp&&!inScope(dashProp))dashProp='';render()}
 /* visão geral: proprietário e imóvel */
 function dashBar(){
@@ -165,8 +195,13 @@ function dashBar(){
     ${db.owners.length?`<div style="width:100%">${sel('ownerSel',ownerFilter,oo,'onOwnerFilter')}</div>`:''}
     <div style="width:100%">${sel('dashPropSel',dashProp,po,'onDashProp')}</div></div>`);
 }
+// muda o imóvel (ou grupo) em foco na visão geral
 function onDashProp(){dashProp=val('dashPropSel')||'';render()}
 
+/* Visão geral: KPIs do ano e de rentabilidade (com evolução ao toque),
+   gráficos mensais, donut das despesas, resumo do portefólio e saldos entre
+   proprietários. Respeita o filtro de proprietário (valores na quota-parte)
+   e o imóvel/grupo em foco; devolve o HTML completo da vista. */
 function vDashboard(){
   if(dashProp&&!pidProps(dashProp).length)dashProp='';
   const pid=dashProp||null,m=metrics(YEAR,pid,{share:true});
@@ -223,6 +258,7 @@ function vDashboard(){
 
 /* donut das despesas: tocar numa categoria mostra as suas subcategorias */
 let donutCat='';
+// o cartão do donut: categorias ao nível de topo, ou as subcategorias de donutCat
 function donutCard(){
   const items=byCategory(YEAR,dashProp||null,true,donutCat||null);
   return `<div class="card" id="donutCard">
@@ -233,6 +269,7 @@ function donutCard(){
     <div style="margin-top:13px">${cDonut(items,{sub:donutCat?'total da categoria':'total de despesas',onPick:donutCat?'':'donutDrill'})}</div>
     ${donutCat||!items.length?'':'<div class="hint" style="margin-top:10px">Toca numa categoria para veres as subcategorias.</div>'}</div>`;
 }
+// entra numa categoria do donut (ou sai, com cat vazio) repintando só o cartão
 function donutDrill(cat){
   donutCat=cat||'';
   const e=document.getElementById('donutCard');if(!e)return render();
@@ -242,6 +279,9 @@ function donutDrill(cat){
 function orphanExpenses(y){
   return db.transactions.filter(t=>t.kind==='expense'&&!t.propertyId&&!t.groupId&&String(t.date||'').startsWith(String(y)));
 }
+/* aviso das despesas sem imóvel na visão geral: explica porque é que os
+   totais divergem da Avaliação e dá o atalho para as ver nos movimentos.
+   Escondido quando há filtro de proprietário ou não há órfãs. */
 function orphanCard(){
   if(ownerFilter)return '';
   const o=orphanExpenses(YEAR);if(!o.length)return '';
@@ -274,6 +314,9 @@ function balancesCard(pid){
         :`<div class="hint" style="margin-top:11px">Está tudo liquidado.</div>`}
     </div></div></div>`;
 }
+/* pré-visualização do acerto de contas: lista as transferências que vão ser
+   registadas, imóvel a imóvel, e as últimas liquidações. pid limita a um
+   imóvel; null abrange o âmbito todo. Só escreve ao confirmar (doSettle). */
 function settleModal(pid){
   const props=pid?[prop(pid)].filter(Boolean):scope();
   const plans=props.map(p=>({p,plan:settlePlan(ownerBalances(p.id))})).filter(x=>x.plan.length);
@@ -292,6 +335,8 @@ function settleModal(pid){
     </div>`,
     `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="doSettle(${pid?`'${pid}'`:'null'})">Registar pagamentos</button>`);
 }
+/* regista o plano de liquidação como movimentos "settle" e grava — os saldos
+   entre proprietários ficam a zero. É o passo destrutivo do settleModal. */
 function doSettle(pid){
   const props=pid?[prop(pid)].filter(Boolean):scope();
   let k=0;
@@ -304,6 +349,9 @@ function doSettle(pid){
   toast(k?k+' pagamento(s) registado(s). Saldos a zero.':'Não havia nada a liquidar.');
 }
 
+/* Lista de imóveis com pesquisa, filtros (estado, modo de arrendamento,
+   proprietário — este espelha o filtro global) e ordenação. Cada cartão
+   resume estado, renda, yield, dívida, contratos e hipotecas em curso. */
 function vProperties(){
   const K='lprops',s=lf(K);
   let list=scope();
@@ -350,7 +398,11 @@ function vProperties(){
 }
 
 let ctGroupF='';
+// handler do antigo seletor de grupo ('ctGroupSel'); a vista atual filtra grupos via lfSel, por isso só dispara se esse seletor existir no DOM
 function onCtGroupF(){ctGroupF=val('ctGroupSel')||'';render()}
+/* Contratos agrupados por imóvel, com a renda mensal de cada um no cabeçalho
+   da secção. Filtros: imóvel, ativos/terminados, grupo e pesquisa; ordenação
+   por nome, renda ou data de início. */
 function vContracts(){
   const K='lcts',s=lf(K),cgs=grpsOf('contract');
   const head=lfBar(K,[
@@ -390,6 +442,7 @@ function vContracts(){
 </div>`}).join('')}</div>`}).join('');
   return head+(any?body:`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`);
 }
+// um contrato passa nos filtros da lista? imóvel, estado, grupo e pesquisa por texto (nome, inquilinos, IBAN, notas…)
 function ctFMatch(c,s){
   if(s.p&&c.propertyId!==s.p)return false;
   if(s.st==='on'&&!isActive(c))return false;
@@ -400,6 +453,8 @@ function ctFMatch(c,s){
     ts.map(t=>[t.name,t.phone,t.email,t.nif].join(' ')).join(' '),c.tenantEmail,c.tenantPhone,c.ownerEmail,c.ownerPhone].join(' '));
 }
 
+/* cartão de pessoa para as listas: com kind 'tenant' mostra os contratos
+   ativos, com 'owner' os imóveis. Ao toque abre a ficha (personModal). */
 function personCard(pp,kind){
   const cs=kind==='tenant'?contractsOfTenant(pp.id).filter(isActive):propsOf(pp.id);
   return `<div class="card tap" data-lp="per:${esc(kind)}:${esc(pp.id)}" onclick="personModal('${jsq(kind)}','${jsq(pp.id)}')"><div class="row-between">
@@ -415,6 +470,8 @@ function personCard(pp,kind){
       ${kebab('per:'+kind+':'+pp.id)}</div></div>
     ${kind==='tenant'&&pp.notes?`<div class="small rich" style="margin-top:10px">${rich(pp.notes)}</div>`:''}</div>`;
 }
+/* Lista de inquilinos, filtrável por com/sem contrato ativo e por pesquisa;
+   ordenação por nome, nº de contratos ou renda. */
 function vTenants(){
   const K='lten',s=lf(K);
   let list=db.tenants.filter(t=>{
@@ -433,6 +490,8 @@ function vTenants(){
   if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   return head+`<div class="list">${list.map(t=>personCard(t,'tenant')).join('')}</div>`;
 }
+/* Lista de proprietários, filtrável por imóvel, com/sem imóveis e pesquisa;
+   ordenação por nome ou nº de imóveis. */
 function vOwners(){
   const K='lown',s=lf(K);
   let list=db.owners.filter(o=>{
@@ -452,22 +511,27 @@ function vOwners(){
   return head+`<div class="list">${list.map(o=>personCard(o,'owner')).join('')}</div>`;
 }
 
+// nº de filtros ativos nos movimentos (a pesquisa não conta: soma-se à parte no cabeçalho)
 function txFilterCount(){
   // as datas contam como UM filtro, tenham uma ponta ou as duas
   const datas=(txDe||txAte)?1:0;
   return datas+txFilterCountSem();
 }
+// a mesma contagem sem as datas; atenção: desligar "sem pessoa atribuída" conta como um filtro
 function txFilterCountSem(){
   return (txFilter?1:0)+(txProp?1:0)+(txPaid?1:0)+(ownerFilter?1:0)+(txCat?1:0)+(txSub?1:0)+(txNoPayer?0:1);
 }
 /* pesquisa por palavras e por frases entre aspas, sem ligar a acentos */
 const deacc=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+// parte a pesquisa em termos: palavras soltas e frases entre aspas, tudo sem acentos
 function txTerms(){
   const out=[];
   const rest=String(txSearch||'').replace(/"([^"]*)"/g,(m,ph)=>{if(ph.trim())out.push(deacc(ph.trim()));return ' '});
   rest.split(/\s+/).forEach(w=>{if(w)out.push(deacc(w))});
   return out;
 }
+/* o "palheiro" onde a pesquisa procura: rótulo, notas, categorias, etiquetas,
+   imóvel, contrato, pessoas, data e valor do movimento, tudo desacentuado. */
 function txHay(t){
   const c=t.contractId?contract(t.contractId):null;
   return deacc([t.label,t.notes,t.category,t.sub,(t.tags||[]).join(' '),t.creditor,t.date,
@@ -476,12 +540,18 @@ function txHay(t){
     String(t.amount),euro2(t.amount)].join(' '));
 }
 let _qT=null;
+/* pesquisa dos movimentos com atraso de 280 ms para não redesenhar a cada
+   tecla; como o render recria o campo, devolve-lhe o foco com o cursor no fim. */
 function onTxSearch(v){
   clearTimeout(_qT);
   _qT=setTimeout(()=>{txSearch=v;render();
     const i=document.getElementById('tx_q');
     if(i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}}},280);
 }
+/* um movimento passa em TODOS os filtros ativos? Tipo ('debt' junta owed e
+   repay), imóvel/grupo ('__none__' = sem imóvel; um imóvel apanha também os
+   movimentos de grupo com quota nele), âmbito do proprietário, pessoa que
+   pagou/recebeu, pesquisa, categoria/subcategoria e intervalo de datas. */
 function txMatch(t){
   if(txFilter==='debt'){if(t.kind!=='owed'&&t.kind!=='repay')return false}
   else if(txFilter&&t.kind!==txFilter)return false;
@@ -504,6 +574,7 @@ function txMatch(t){
   if(txAte&&t.date>txAte)return false;
   return true;
 }
+// descreve os filtros ativos numa linha legível, para o topo da lista e do modal
 function filterSummary(){
   const p=[];
   if(txDe||txAte)p.push(txDe&&txAte?txDe+' → '+txAte:txDe?'desde '+txDe:'até '+txAte);
@@ -534,6 +605,8 @@ function newTxPick(after){
     newTxFromFilters(o.v);
   });
 }
+/* "a partir de um modelo": escolhe um modelo guardado e regista um movimento
+   com base nele; sem modelos, salta logo para criar o primeiro. */
 function useTemplateNew(){
   const tp=db.templates||[];
   if(!tp.length)return newTplForTx();
@@ -553,6 +626,9 @@ function txRerender(){
   const top=modalTop();
   if(top&&top.title==='Filtros'){modalBodyEl().innerHTML=txFilterBody();const f=document.getElementById('modalFoot');if(f)f.innerHTML=txFilterFoot()}
 }
+/* corpo do modal de filtros dos movimentos: pesquisa, tipo, imóvel,
+   categoria/subcategoria, pessoas, datas e ordenação. Cada controlo aplica
+   logo (handlers onTx*), e no fim mostra o resumo e quantos movimentos passam. */
 function txFilterBody(){
   const kinds=[['','Todos os tipos'],['income','Receitas'],['expense','Despesas'],['loan','Pagamentos de crédito'],['debt','Dívidas'],['settle','Transferências entre proprietários']];
   const props=[{v:'',label:'Todos os imóveis'},{v:'__none__',label:'Sem imóvel atribuído'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
@@ -579,27 +655,41 @@ function txFilterBody(){
       <label>Ordem${sel('txDirF',txDir,[{v:'desc',label:'Descendente'},{v:'asc',label:'Ascendente'}],'onTxDir')}</label></div>
     <div class="hint">${txFilterCount()?filterSummary()+' · '+db.transactions.filter(txMatch).length+' movimentos':'Sem filtros: a lista mostra tudo.'}</div></div>`;
 }
+// muda o campo de ordenação dos movimentos (data ou valor)
 function onTxSort(){txSort=val('txSortF')||'date';txRerender()}
+// muda o sentido da ordenação dos movimentos
 function onTxDir(){txDir=val('txDirF')||'desc';txRerender()}
+// rodapé do modal de filtros: Limpar (só quando há filtros) e Fechar
 function txFilterFoot(){return `${txFilterCount()?`<button class="btn" onclick="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" onclick="closeModal()">${ic('check',15)} Fechar</button>`}
+// abre o modal de filtros dos movimentos
 function txFilterModal(){openModal('Filtros',txFilterBody(),txFilterFoot())}
+// muda o filtro de imóvel/grupo dos movimentos
 function onTxProp(){txProp=val('txPropF')||'';txRerender()}
+// muda o proprietário em foco; o filtro de imóvel cai porque o âmbito mudou
 function onTxOwner(){ownerFilter=val('txOwnerF')||'';txProp='';txRerender()}
+// muda o filtro de quem pagou ou recebeu
 function onTxPaid(){txPaid=val('txPaidF')||'';txRerender()}
+// muda a categoria; a subcategoria cai porque pertencia à anterior
 function onTxCat(){txCat=val('txCatF')||'';txSub='';txRerender()}
+// muda o filtro de subcategoria
 function onTxSub(){txSub=val('txSubF')||'';txRerender()}
+// liga/desliga a inclusão de movimentos sem pessoa atribuída
 function onTxNoPayer(){txNoPayer=chk('txNoPayer');txRerender()}
+// lê o intervalo de datas do modal e aplica-o à lista
 function onTxDatas(){
   txDe=val('txDeF')||'';txAte=val('txAteF')||'';
   if(txDe&&txAte&&txAte<txDe){const x=txDe;txDe=txAte;txAte=x}   // trocadas endireitam-se
   txRerender();
 }
+// repõe todos os filtros dos movimentos na origem, incluindo a pesquisa e o proprietário global
 function clearTxFilters(){txFilter='';txProp='';txPaid='';txCat='';txSub='';ownerFilter='';txNoPayer=true;txSearch='';txDe='';txAte='';closePops();txRerender()}
 /* ================= FILTROS DAS LISTAS =================
    Pesquisa por texto + seletores no topo de cada página de registos, ao estilo dos movimentos. */
 let listF={};
 const lf=k=>listF[k]||(listF[k]={});
 let _lqT=null;
+/* pesquisa das listas com atraso de 280 ms para não redesenhar a cada tecla;
+   como o render recria o campo, devolve-lhe o foco com o cursor no fim. */
 function lfSearch(k,v){
   clearTimeout(_lqT);
   _lqT=setTimeout(()=>{lf(k).q=v;render();
@@ -613,14 +703,17 @@ function limparFiltroAtual(){
   if(tab==='transactions'&&typeof clearTxFilters==='function')return clearTxFilters();
   if(typeof anaClear==='function')anaClear();
 }
+// limpa os filtros da lista k sem mexer no painel; nos imóveis larga também o proprietário global
 function lfClear(k){
   const s=lf(k);listF[k]={_open:s._open};
   if(k==='lprops')ownerFilter='';
   closePops();render();
 }
+// nº de filtros ativos da lista k — a ordenação (sb/sd) e o estado do painel não contam
 function lfCount(k){const s=lf(k);return Object.keys(s).reduce((n,f)=>{
   if(f==='_open'||f==='sb'||f==='sd')return n;
   return n+(f==='q'?(String(s.q||'').trim()?1:0):(s[f]?1:0))},0)}
+// a pesquisa da lista k encontra-se em hay? palavras e frases entre aspas, sem acentos; sem pesquisa passa tudo
 function lfHit(k,hay){const q=String(lf(k).q||'');if(!q.trim())return true;
   const h=deacc(hay),terms=[];
   q.replace(/"([^"]*)"/g,(m,ph)=>{if(ph.trim())terms.push(deacc(ph.trim()));return ' '}).split(/\s+/).forEach(w=>{if(w)terms.push(deacc(w))});
@@ -635,9 +728,11 @@ function lfSel(k,key,opts){
   window[fn]=()=>{lf(k)[key]=val(id)||'';if(k==='lprops')ownerFilter=lf(k).own||'';render()};
   return `<div style="width:100%">${sel(id,lf(k)[key]||'',opts,fn)}</div>`;
 }
+// abre/fecha o painel de filtros da lista k
 function lfToggle(k){
   const s=lf(k);s._open=!s._open;render();
 }
+// fecha o painel da lista k (os filtros aplicam-se logo ao mexer)
 function lfApply(k){
   lf(k)._open=false;closePops();render();
 }
@@ -675,6 +770,7 @@ function fab(actions){
   return `<div class="fabmenu" id="fabMenu">${actions.map(a=>`<button class="btn primary" onclick="document.getElementById('fabMenu').classList.remove('on');${a.act}">${ic(a.icon||'plus',15)} ${esc(a.label)}</button>`).join('')}</div>
   <button class="fab" onclick="document.getElementById('fabMenu').classList.toggle('on')">${ic('plus',26)}</button>`;
 }
+// opções de imóvel para os seletores das listas: "Todos os imóveis" + um por imóvel
 const lfPropOpts=(withAll)=>[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p=>({v:p.id,label:p.name})));
 /* dívidas a terceiros: recebido, devolvido e o que falta, com botão para pagar */
 function creditorsCard(pid){
@@ -690,6 +786,9 @@ function creditorsCard(pid){
           ${r.due>0.005?`<button class="btn sm" onclick="${stop}txModal(null,'repay',${r.propertyId?`'${r.propertyId}'`:'null'},null,null,{creditor:'${jsq(r.creditor==='—'?'':r.creditor)}',amount:${r.due}})">Pagar</button>`:''}</span></div>`).join('')}
     </div></div></div>`;
 }
+/* Movimentos: KPIs do filtro atual (com evolução ao toque), saldos entre
+   proprietários, dívidas a terceiros e a lista agrupada por mês com o saldo
+   de cada um. Tudo respeita os filtros e a ordenação escolhidos no modal. */
 function vTransactions(){
   const kinds=[['','Todos os tipos'],['income','Receitas'],['expense','Despesas'],['loan','Pagamentos de crédito'],['debt','Dívidas'],['settle','Transferências entre proprietários']];
   const props=[{v:'',label:'Todos os imóveis'},{v:'__none__',label:'Sem imóvel atribuído'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
@@ -744,10 +843,16 @@ function vTransactions(){
           ${t.notes?`<div class="small" style="margin-top:3px" title="Tem comentários">${ic('pen',12)}</div>`:''}</div>
       </div></div>`}).join('')}</div>`}).join('');
 }
+// muda o filtro de tipo; categoria e subcategoria caem porque a árvore muda com o tipo
 function onTxFilter(){txFilter=val('txKind')||'';txCat='';txSub='';txRerender()}
 
 let projProp='';
+// muda o imóvel (ou grupo) em foco nas projeções
 function onProjProp(){projProp=val('projSel')||'';render()}
+/* Projeções ao horizonte definido nas definições (s.years): rendas com o
+   aumento anual de cada contrato, despesas do ano corrente inflacionadas, e
+   prestações segundo o plano de cada hipoteca — param quando o crédito acaba.
+   Sai em KPIs, gráficos e tabela ano a ano com uma coluna por contrato. */
 function vProjections(){
   if(projProp&&!pidProps(projProp).length)projProp='';
   const s=db.settings,act=db.contracts.filter(c=>isActive(c)&&inScope(c.propertyId)&&(!projProp||pidProps(projProp).some(p=>p.id===c.propertyId)));
@@ -792,5 +897,7 @@ function vProjections(){
       <td><b>${euro(r.rent)}</b></td><td class="neg">${euro(r.exp)}</td><td class="amber">${euro(r.loan)}</td>
       <td class="${r.cf>=0?'pos':'neg'}"><b>${euro(r.cf)}</b></td></tr>`).join('')}</tbody></table></div>`)}</div>`;
 }
+// marcas para os gráficos de longo prazo: um traço em cada ano terminado em 0 dentro do horizonte
 const decadeMarks=(y0,n)=>{const out=[];for(let i=0;i<n;i++)if((y0+i)%10===0)out.push({i,label:String(y0+i)});return out};
+// escreve uma definição, grava na base e redesenha — usado pelos inputs das definições e das projeções
 function setSet(k,v){db.settings[k]=v;save();render()}

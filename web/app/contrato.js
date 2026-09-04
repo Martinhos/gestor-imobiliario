@@ -1,5 +1,9 @@
 /* ================= CONTRATO ================= */
 let cForm={};
+/* Abre o modal de criar/editar contrato. Sem id é um contrato novo; pid
+   pré-escolhe o imóvel (só se for de investimento, senão cai no primeiro
+   arrendável). Trabalha sobre uma cópia em cForm — nada toca na base até
+   o guardar. Recusa abrir se não houver imóveis de arrendamento. */
 function ctModal(id,pid){
   foldState={};
   if(!db.properties.length)return toast('Cria primeiro um imóvel.');
@@ -15,6 +19,9 @@ function ctModal(id,pid){
   const p=prop(cForm.propertyId);if(p)paintThumbs(p.photos);
   onSave=ctSaver();
 }
+/* Devolve o handler que o modal usa ao guardar: valida imóvel, renda,
+   inquilinos e datas, insere ou substitui o contrato em db.contracts,
+   sincroniza o movimento recorrente da renda e persiste tudo. */
 function ctSaver(){
   return ()=>{
     collectCt();
@@ -30,6 +37,8 @@ function ctSaver(){
     save();closeModal();buildNav();render();toast('Contrato guardado.');
   };
 }
+// HTML do formulário do contrato, montado a partir de cForm. Só devolve a
+// string — é o ctModal/repaintCt que a põe no modal e pinta as miniaturas.
 function ctBody(){
   const c=cForm,p=prop(c.propertyId),rooms=(p&&p.rentalMode==='quartos')?(p.rooms||[]):[];
   const taken=db.contracts.filter(x=>x.id!==c.id&&x.propertyId===c.propertyId&&isActive(x)).map(x=>x.roomId);
@@ -110,6 +119,8 @@ function ctBody(){
     ${richEditor('Notas','c_notes',c.notes)}
   </div>`;
 }
+// HTML do resumo bruto → imposto → líquido. Lê os campos do formulário se
+// já estiverem no DOM; antes disso usa os valores de cForm.
 function netBox(){
   const r=num(val('c_rent'))||cForm.rent,tx=num(val('c_tax'))||cForm.taxRate||0;
   if(!r)return `<div class="hint">Falta a renda.</div>`;
@@ -119,7 +130,12 @@ function netBox(){
     <div class="stat" style="border:0"><span>Renda líquida</span><b class="pos" style="font-size:16px">${euro2(r-imposto)}</b></div>
     <div class="hint">${euro(( r-imposto)*12)} por ano, se a renda se mantiver.</div>`;
 }
+// Recalcula o resumo da renda líquida enquanto se escreve na renda ou no imposto.
 function liveNet(){const b=document.getElementById('netBox');if(b)b.innerHTML=netBox()}
+/* Copia o que está nos campos do modal para cForm. Chamar SEMPRE antes de
+   repintar ou de mexer nas listas (inventário, chaves, fotos), senão o que
+   o utilizador escreveu perde-se. Também normaliza os dias de pagamento
+   (1–31, o "até" nunca antes do "de") e as rendas antecipadas (0–36). */
 function collectCt(){
   const c=cForm;
   if(document.getElementById('c_prop'))c.propertyId=val('c_prop')||null;
@@ -150,6 +166,8 @@ function collectCt(){
   if(document.getElementById('c_ocid'))c.ownerContactId=val('c_ocid')||'';
   if(document.getElementById('c_tcid'))c.tenantContactId=val('c_tcid')||'';
 }
+// Repinta o corpo do modal a partir de cForm e recarrega as miniaturas das
+// fotos. Não recolhe os campos — chama collectCt() antes, se for preciso.
 function repaintCt(){const b=modalBodyEl();if(!b)return;b.innerHTML=ctBody();
   const p=prop(cForm.propertyId);if(p)paintThumbs(p.photos)}
 
@@ -171,33 +189,43 @@ function contactSect(kind,c,p){
         <label>Telemóvel<input id="${owners?'c_ophone':'c_tphone'}" type="tel" inputmode="tel" value="${esc(owners?c.ownerPhone:c.tenantPhone)}" placeholder="+351 912 000 000" autocomplete="off"></label></div>`}
   </div>`;
 }
+// Ao escolher o contacto do senhorio: copia o email/telefone da pessoa
+// escolhida para o contrato e repinta o formulário.
 function onOwnerContact(){
   collectCt();cForm.ownerContactId=val('c_ocid')||'';
   const g=cForm.ownerContactId?owner(cForm.ownerContactId):null;
   if(g){cForm.ownerEmail=g.email||'';cForm.ownerPhone=g.phone||''}
   repaintCt();
 }
+// Ao escolher o contacto do inquilino: copia o email/telefone da pessoa
+// escolhida para o contrato e repinta o formulário.
 function onTenantContact(){
   collectCt();cForm.tenantContactId=val('c_tcid')||'';
   const g=cForm.tenantContactId?tenant(cForm.tenantContactId):null;
   if(g){cForm.tenantEmail=g.email||'';cForm.tenantPhone=g.phone||''}
   repaintCt();
 }
+// Liga/desliga uma foto do imóvel no registo fotográfico do contrato.
 function togCtPhoto(fid){
   collectCt();
   const l=cForm.photoIds||(cForm.photoIds=[]),i=l.indexOf(fid);
   if(i>-1)l.splice(i,1);else l.push(fid);
   repaintCt();
 }
+// Seleciona todas as fotos do imóvel para o contrato (on=1) ou nenhuma (on=0).
 function allCtPhotos(on){
   collectCt();
   const p=prop(cForm.propertyId);
   cForm.photoIds=on?(p&&p.photos||[]).map(f=>f.id):[];
   repaintCt();
 }
+// Acrescenta uma linha de chave vazia (quantidade 1) e repinta.
 function addKey(){collectCt();cForm.keys.push({id:uid(),name:'',qty:1});repaintCt()}
+// Remove um tipo de chave pelo id e repinta.
 function delKey(kid){collectCt();cForm.keys=cForm.keys.filter(k=>k.id!==kid);repaintCt()}
+// Marca/desmarca as checkboxes de todas as chaves conforme o "Selecionar todos".
 function keyToggleAll(){const on=chk('key_all');(cForm.keys||[]).forEach(k=>{const e=document.getElementById('keyc_'+k.id);if(e)e.checked=on})}
+// Remove as chaves com a checkbox marcada; avisa se nenhuma estiver selecionada.
 function delKeySelected(){
   collectCt();
   const s2=(cForm.keys||[]).filter(k=>chk('keyc_'+k.id));
@@ -205,6 +233,8 @@ function delKeySelected(){
   const ids={};s2.forEach(k=>ids[k.id]=1);
   cForm.keys=cForm.keys.filter(k=>!ids[k.id]);repaintCt();toast(s2.length+' removidas.');
 }
+// Abre um modal com textarea para colar várias chaves de uma vez, uma por
+// linha ("Nome; quantidade"). Quem as processa é o doKeyBulk().
 function addKeyBulk(){
   collectCt();
   openModal('Adicionar várias chaves',`<div class="form">
@@ -212,6 +242,8 @@ function addKeyBulk(){
     <textarea id="keybulk" style="min-height:130px;font:13px/1.6 ui-monospace,Menlo,monospace" placeholder="Chave de casa; 2&#10;Chave do correio; 1&#10;Comando do portão"></textarea></div>`,
     `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="doKeyBulk()">Adicionar</button>`);
 }
+// Lê o textarea do addKeyBulk: uma chave por linha, nome e quantidade
+// separados por ;, | ou tab. Sem quantidade, fica 1.
 function doKeyBulk(){
   let added=0;
   String(val('keybulk')||'').split('\n').map(x=>x.trim()).filter(Boolean).forEach(line=>{
@@ -227,12 +259,18 @@ function fillOwnerContact(){
   if(!cForm.ownerEmail)cForm.ownerEmail=o.email||'';
   if(!cForm.ownerPhone)cForm.ownerPhone=o.phone||'';
 }
+// Preenche o contacto do inquilino do contrato com o da pessoa, mas só os
+// campos ainda vazios — não pisa o que já lá estava.
 function fillTenantContact(tid){
   const t=tenant(tid);if(!t)return;
   if(!cForm.tenantEmail)cForm.tenantEmail=t.email||'';
   if(!cForm.tenantPhone)cForm.tenantPhone=t.phone||'';
 }
+// Ao trocar o imóvel do contrato: limpa o quarto (pertencia ao anterior),
+// puxa o contacto do proprietário novo e repinta.
 function onCtProp(){collectCt();cForm.propertyId=val('c_prop');cForm.roomId=null;fillOwnerContact();repaintCt()}
+// Abre o seletor de inquilinos (só os que ainda não estão no contrato); ao
+// escolher, junta-o e preenche o contacto do contrato se estiver vazio.
 function addCtTenant(){
   collectCt();
   const free=db.tenants.filter(t=>(cForm.tenantIds||[]).indexOf(t.id)<0);
@@ -240,7 +278,11 @@ function addCtTenant(){
     t=>{cForm.tenantIds.push(t.v);fillTenantContact(t.v);closeModal();repaintCt()},
     `<button type="button" class="btn" style="width:100%;justify-content:center" onclick="newTenantFromCt()">${ic('plus',15)} Criar inquilino novo</button>`);
 }
+// Tira um inquilino do contrato — a ficha da pessoa fica intacta.
 function delCtTenant(tid){collectCt();cForm.tenantIds=(cForm.tenantIds||[]).filter(x=>x!==tid);repaintCt()}
+/* Cria um inquilino novo sem sair do fluxo do contrato: fecha o seletor,
+   abre a ficha de pessoa e, quando esta é guardada, volta ao modal do
+   contrato já com o inquilino adicionado e o contacto preenchido. */
 function newTenantFromCt(){
   closeModal();
   personModal('tenant',null,nid=>{
@@ -250,12 +292,16 @@ function newTenantFromCt(){
     toast('Inquilino criado e adicionado ao contrato.');
   });
 }
+// Acrescenta um artigo vazio ao inventário (quantidade 1, usado) e repinta.
 function addInv(){collectCt();cForm.inventory.push({id:uid(),name:'',qty:1,state:'usado'});repaintCt()}
+// Remove um artigo do inventário pelo id e repinta.
 function delInv(iid){collectCt();cForm.inventory=cForm.inventory.filter(i=>i.id!==iid);repaintCt()}
+// Marca/desmarca as checkboxes de todos os artigos conforme o "Selecionar todos".
 function invToggleAll(){
   const on=chk('inv_all');
   (cForm.inventory||[]).forEach(i=>{const e=document.getElementById('invc_'+i.id);if(e)e.checked=on});
 }
+// Remove os artigos com a checkbox marcada; avisa se nenhum estiver selecionado.
 function delInvSelected(){
   collectCt();
   const sel2=(cForm.inventory||[]).filter(i=>chk('invc_'+i.id));
@@ -264,6 +310,8 @@ function delInvSelected(){
   cForm.inventory=cForm.inventory.filter(i=>!ids[i.id]);
   repaintCt();toast(sel2.length+' artigos removidos.');
 }
+// Abre um modal com textarea para colar vários artigos de uma vez, um por
+// linha ("Nome; quantidade; estado"). Quem os processa é o doInvBulk().
 function addInvBulk(){
   collectCt();
   openModal('Adicionar vários artigos',`<div class="form">
@@ -271,6 +319,8 @@ function addInvBulk(){
     <textarea id="invbulk" style="min-height:150px;font:13px/1.6 ui-monospace,Menlo,monospace" placeholder="Sofá; 1; novo&#10;Cadeira; 4; usado&#10;Frigorífico"></textarea></div>`,
     `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="doInvBulk()">Adicionar</button>`);
 }
+// Lê o textarea do addInvBulk: um artigo por linha, campos separados por ;,
+// | ou tab. Sem quantidade fica 1; o estado só é "novo" se a linha o disser.
 function doInvBulk(){
   const lines=String(val('invbulk')||'').split('\n').map(x=>x.trim()).filter(Boolean);
   let added=0;
@@ -284,24 +334,36 @@ function doInvBulk(){
   closeModal();repaintCt();
   toast(added?added+' artigos adicionados.':'Nada para adicionar.');
 }
+// Recebe os ficheiros do input de anexos: o conteúdo vai para o IndexedDB
+// (takeFiles) e os metadados juntam-se a cForm.files. Assíncrono — repinta no fim.
 function ctAddFiles(input){
   collectCt();
   takeFiles(input).then(ms=>{cForm.files=(cForm.files||[]).concat(ms);repaintCt();
     if(ms.length)toast(ms.length===1?'Anexo adicionado.':ms.length+' anexos adicionados.')});
 }
+// Tira um anexo do contrato e apaga logo o conteúdo do IndexedDB — para o
+// ficheiro em si não há desfazer.
 function ctDelFile(fid){collectCt();cForm.files=(cForm.files||[]).filter(f=>f.id!==fid);idbDel(fid).catch(()=>{});repaintCt()}
+// Pede confirmação e termina o contrato: fica inativo, ganha data de fim
+// (hoje, se não tiver) e o movimento recorrente da renda é desligado.
 function endContract(id){
   const c=contract(id);
   confirmModal('Terminar contrato',`Marcar o contrato de ${esc(ctNames(c))} como terminado? Deixa de contar para as rendas e projeções.`,()=>{
     c.active=false;if(!c.end)c.end=today();syncContractRec(c);save();closeAllModals();buildNav();render();toast('Contrato terminado.');
   });
 }
+// Pede confirmação e reativa o contrato: limpa a data de fim e volta a
+// ligar o movimento recorrente da renda.
 function reactivateContract(id){
   const c=contract(id);
   confirmModal('Reativar contrato',`Voltar a pôr o contrato de ${esc(ctNames(c))} ativo? Volta a contar para as rendas e projeções.`,()=>{
     c.active=true;c.end='';syncContractRec(c);save();closeAllModals();buildNav();render();toast('Contrato reativado.');
   });
 }
+/* Apaga o contrato, com confirmação: sai da lista, o recorrente automático
+   da renda vai com ele e os movimentos ligados ficam órfãos (mantêm-se, mas
+   sem contractId). O toast dá para desfazer tudo; os anexos só se apagam do
+   IndexedDB quando o desfazer expira sem ser usado. */
 function delContract(id){
   const c=contract(id);
   confirmModal('Apagar contrato',`Apagar o contrato de ${esc(ctNames(c))}? Os movimentos ficam, mas deixam de estar ligados a ele.`,()=>{

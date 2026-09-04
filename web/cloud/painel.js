@@ -75,6 +75,7 @@ kpiModal = function (id) {
   CW._kpiQ = { field: q.field, pid: q.pid, year: q.year, title: k.title };
 };
 
+// abre a ficha de um movimento a partir da lista do indicador — só se ele ainda existir
 CW.openTx = function (id) {
   if ((db.transactions || []).some(function (x) { return x.id === id; })) txModal(id);
 };
@@ -95,6 +96,7 @@ CW.kpiToTx = function () {
   go('transactions');
 };
 
+// regressa à visão geral e repõe nos Movimentos os filtros que lá estavam antes do salto
 CW.backToDash = function (fromModal) {
   var f = CW._fromKpi;
   if (f && f.prev) {
@@ -119,6 +121,8 @@ vTransactions = function () {
 
 /* ---------------- recusar um movimento planeado ---------------- */
 
+// Recusar a ocorrência de um planeado: pede confirmação e depois avança o plano
+// sem criar movimento nenhum (um "once" desaparece de vez). Grava e re-renderiza.
 CW.rejectRec = function (id) {
   var r = (db.recurring || []).find(function (x) { return x.id === id; });
   if (!r) return;
@@ -165,6 +169,9 @@ function already(r, d) {
   });
 }
 
+/* As datas do plano que já passaram sem movimento registado, da origem
+   (início do contrato ou da hipoteca) até hoje, respeitando o fim do plano.
+   O guarda de 600 períodos evita ciclos infinitos com datas estragadas. */
 function missedDates(r) {
   if (!r || !r.next) return [];
   var t = today(), day = Number(String(r.next).slice(8, 10)) || 1;
@@ -188,6 +195,9 @@ function missedDates(r) {
 
 var EVERY_WORD = { once: 'ocorrência', week: 'semana', month: 'mês', quarter: 'trimestre', year: 'ano' };
 
+// Abre o modal que propõe registar de uma vez os períodos em falta do plano,
+// com o total e o aviso de que é tudo estimativa. Não escreve nada na base —
+// isso é o doFillMissed, ao confirmar.
 CW.fillMissed = function (id) {
   var r = (db.recurring || []).find(function (x) { return x.id === id; });
   if (!r) return;
@@ -213,6 +223,10 @@ CW.fillMissed = function (id) {
     '<button class="btn primary" onclick="CW.doFillMissed(\'' + id + '\')">Registar estimativa</button>');
 };
 
+/* Cria de facto os movimentos em falta, todos com o valor atual do plano e a
+   etiqueta "Estimativa" (que fica registada nas etiquetas das definições). As
+   prestações abatem no capital da hipoteca, como se confirmadas uma a uma. No
+   fim empurra o plano até à próxima data futura, grava e fecha os modais. */
 CW.doFillMissed = function (id) {
   var r = (db.recurring || []).find(function (x) { return x.id === id; });
   if (!r) return closeModal();
@@ -239,9 +253,11 @@ CW.doFillMissed = function (id) {
 
 // Depois de gravar um contrato ou uma hipoteca antiga, perguntar uma vez.
 var LS_ASKED = 'gi_est_asked';
+// os ids dos planos por que já perguntámos, guardados neste aparelho
 function asked() {
   try { return JSON.parse(localStorage.getItem(LS_ASKED) || '[]'); } catch (e) { return []; }
 }
+// junta estes ids à lista dos já perguntados (só ficam os últimos 200)
 function markAsked(ids) {
   try { localStorage.setItem(LS_ASKED, JSON.stringify(asked().concat(ids).slice(-200))); } catch (e) {}
 }
@@ -249,11 +265,15 @@ function markAsked(ids) {
 // Só se pergunta por planos acabados de criar: nada de abordar o
 // utilizador por causa de recorrências que já lá estavam.
 var knownRecs = null;
+// fotografa os planos que existem neste momento, para reconhecer os acabados de criar
 function refreshKnown() {
   knownRecs = {};
   (db.recurring || []).forEach(function (r) { knownRecs[r.id] = 1; });
 }
 
+/* Corre pouco depois de cada save(): se entretanto apareceu um plano novo com
+   2 ou mais períodos em atraso, abre-lhe logo o modal de preenchimento — uma
+   única vez por plano, e nunca por cima de outro modal aberto. */
 function offerFill() {
   if (!CW.user) return;
   if (knownRecs === null) return refreshKnown();
@@ -343,6 +363,7 @@ lpMenu = function (v) {
 
 /* ------- pendentes dentro de cada imóvel e de cada contrato ------- */
 
+// o HTML da lista "por confirmar" que se pendura no cartão de um imóvel ou contrato
 function pendBlock(list) {
   return '<div class="cw-pend" style="margin-top:11px;border-top:1px solid var(--line);padding-top:10px">' +
     '<div class="small" style="font-weight:650;margin-bottom:7px">' +
@@ -361,6 +382,9 @@ function pendBlock(list) {
     }).join('') + '</div>';
 }
 
+// Depois de cada render de Imóveis ou Contratos, acrescenta a cada cartão os
+// seus movimentos por confirmar. Mexe no DOM já desenhado, e não duplica o
+// bloco se ele já lá estiver.
 function decoratePending() {
   if (tab !== 'properties' && tab !== 'contracts') return;
   var pend = recActive();
@@ -383,6 +407,9 @@ function decoratePending() {
 var DASH_TITLES = ['Entradas e saídas', 'Cashflow acumulado', 'Renda por contrato',
   'Cashflow por imóvel', 'Despesas sem imóvel', 'Contas entre proprietários'];
 
+/* Chave estável que identifica um bloco da visão geral (título de secção,
+   indicador, gráfico…), para a ordem guardada sobreviver a re-renderizações.
+   Vive do texto visível, porque os blocos não trazem ids próprios. */
 function dashKey(el) {
   if (el.classList && el.classList.contains('section-title')) return 'titulo:' + el.textContent.trim();
   var kl = el.querySelector('.kpi .label');
@@ -449,12 +476,14 @@ vDashboard = function () {
   }).join('') + '</div></div>';
 };
 
+// o elemento .cw-blk com esta chave, se estiver no ecrã
 function blkByKey(k) {
   return [].slice.call(document.querySelectorAll('.cw-blk')).filter(function (x) {
     return x.getAttribute('data-k') === k;
   })[0];
 }
 
+// grava em db.settings.dashOrder2 a ordem em que os blocos estão agora no DOM
 function saveDashOrder() {
   var keys = [].slice.call(document.querySelectorAll('#view .cw-blk')).map(function (x) { return x.getAttribute('data-k'); });
   if (!keys.length) return;
@@ -462,6 +491,7 @@ function saveDashOrder() {
   save();
 }
 
+// esquece a ordem personalizada e volta à de origem, redesenhando a vista
 CW.resetDashOrder = function () {
   delete db.settings.dashOrder2;
   delete db.settings.dashOrder;   // limpa também a ordem do esquema antigo
@@ -469,6 +499,7 @@ CW.resetDashOrder = function () {
   toast('Ordem reposta.');
 };
 
+// insere no topo da vista a barra do modo de edição (repor ordem / concluir), sem duplicar
 function editBar() {
   var v = view();
   if (!v || document.getElementById('cwEditBar')) return;
@@ -483,6 +514,7 @@ function editBar() {
   v.insertBefore(el, grid || v.firstChild);
 }
 
+// em modo de edição, o botão de filtros do cabeçalho passa a dizer "Concluir"
 function patchHdr() {
   var hb = document.getElementById('hdrFilt');
   if (!hb) return;
@@ -496,6 +528,8 @@ function patchHdr() {
   }
 }
 
+// Entra no modo de edição dos cartões (chega-se cá pelo toque longo). Recebe a
+// chave do bloco tocado para o arrasto poder começar sem levantar o dedo.
 CW.enterEdit = function (key) {
   if (tab !== 'dashboard' || CW.editMode) return;
   CW.editMode = true;
@@ -509,6 +543,7 @@ CW.enterEdit = function (key) {
   }
 };
 
+// sai do modo de edição: solta o arrasto, re-renderiza e avisa com um toast (salvo silent)
 CW.exitEdit = function (silent) {
   if (!CW.editMode) return;
   endDrag();
@@ -530,6 +565,7 @@ hdrFiltToggle = function () {
 
 var drag = null, lastY = 0, lastX = 0, pointerDown = false;
 
+// começa a arrastar um bloco: marca-o, trava a seleção de texto e liga o scroll automático
 function startDrag(el, clientY, clientX) {
   if (!el || drag) return;
   drag = { el: el, cont: el.parentNode, startY: clientY, startX: clientX == null ? lastX : clientX };
@@ -538,6 +574,7 @@ function startDrag(el, clientY, clientX) {
   comecarAuto();
 }
 
+// os blocos da grelha onde decorre o arrasto (irmãos do que vai na mão)
 function blocks() {
   return [].slice.call(drag.cont.children).filter(function (x) { return x.classList.contains('cw-blk'); });
 }
@@ -570,6 +607,9 @@ var cobre = function (r, x, y, m) {
 };
 var ENTRADA = 0.18;   // quanto e preciso entrar para a troca contar
 
+// Põe o cartão debaixo do dedo e, quando o centro dele entra a sério no espaço
+// de outro bloco (ver cobre/ENTRADA acima), troca-os. Também solta o bloqueio
+// anti-oscilação assim que o centro sai de cima do último bloco trocado.
 function dragTo(cx, cy) {
   if (!drag) return;
   drag.el.style.transform = 'translate(' + (cx - drag.startX) + 'px,' + (cy - drag.startY) + 'px)';
@@ -594,6 +634,8 @@ function dragTo(cx, cy) {
    o qual o cartão descolava do dedo a cada pixel de scroll. */
 var MARGEM = 90, VEL_MAX = 18, auto = 0;
 
+// Um passo do scroll automático: perto das margens a página desliza (tanto mais
+// depressa quanto mais perto) e o arrasto é reavaliado para o cartão seguir o dedo.
 function passoAuto() {
   if (!drag) return pararAuto();
   var h = window.innerHeight, d = 0;
@@ -610,6 +652,7 @@ function passoAuto() {
 // andar com o dedo parado na margem, e um rAF que não dispare (aba sem pintar)
 // deixaria o arrasto preso sem dar sinal.
 function comecarAuto() { if (!auto) auto = setInterval(passoAuto, 16); }
+// desliga o temporizador do scroll automático
 function pararAuto() { if (auto) { clearInterval(auto); auto = 0; } }
 
 document.addEventListener('pointermove', function (e) {
@@ -628,6 +671,7 @@ document.addEventListener('pointerdown', function (e) {
   if (blk) startDrag(blk, e.clientY, e.clientX);
 }, true);
 
+// larga o cartão: para o scroll automático, limpa o estado visual e grava a ordem nova
 function endDrag() {
   if (!drag) return;
   pararAuto();

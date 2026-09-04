@@ -23,6 +23,8 @@ function thinLabels(labels){
   return labels.map((l,i)=>((n-1-i)%step===0)?l:'');   /* alinhado ao último: o fim aparece sempre */
 }
 const kfmt=v=>Math.abs(v)>=1000?(v/1000).toFixed(Math.abs(v)>=10000?0:1).replace('.',',')+'k':String(Math.round(v));
+// Grelha e valores do eixo Y: 5 marcas de min a max, formatadas com fmt (ou kfmt).
+// Devolve o fragmento SVG que os gráficos de linhas e de barras partilham.
 function axisY(min,max,x0,x1,y0,y1,fmt){
   let g='';
   for(let k=0;k<=4;k++){const v=min+(max-min)*k/4,y=y1-(y1-y0)*k/4;
@@ -30,6 +32,11 @@ function axisY(min,max,x0,x1,y0,y1,fmt){
     g+=`<text x="${x0-6}" y="${(y+3.2).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmt?esc(fmt(v)):kfmt(v)}</text>`}
   return g;
 }
+/* Gráfico de linhas com área sombreada e dica em cada ponto. series=[{name,values,color}],
+   labels no eixo X; o: h (altura), fmt (formatação dos valores, por omissão euro),
+   area:false tira o sombreado, marks=[{i,label}] põe linhas verticais de referência.
+   Substitui valores não finitos por 0 (mexe nos arrays recebidos). Devolve HTML pronto
+   a inserir; com mais de uma série acrescenta a legenda por baixo. */
 function cLine(series,labels,o){
   o=o||{};const h=o.h||180,x0=44,x1=W-6,y0=10,y1=h-8,F=o.fmt||euro;
   series.forEach(s=>{s.values=s.values.map(v=>isFinite(v)?v:0)});
@@ -66,6 +73,9 @@ function cLine(series,labels,o){
   return `<div class="chartbox"><svg viewBox="0 0 ${W} ${h+13}" role="img">${g}</svg></div>
     ${series.length>1?legend(series.map((s,i)=>({label:s.name,color:s.color||PAL[i%PAL.length]})),false):''}`;
 }
+/* Barras empilhadas: cada grupo é um array de segmentos {label,value,color}, com os
+   positivos a empilhar para cima e os negativos para baixo (rendas contra despesas).
+   Devolve HTML; a legenda junta-se a partir das etiquetas que aparecem nos segmentos. */
 function cBars(groups,labels,o){
   o=o||{};const h=o.h||190,x0=44,x1=W-6,y0=10,y1=h-8;
   const tops=groups.map(g=>sum(g.filter(v=>v.value>0).map(v=>v.value)));
@@ -93,6 +103,10 @@ function cBars(groups,labels,o){
   });
   return `<div class="chartbox"><svg viewBox="0 0 ${W} ${h+13}" role="img">${g}</svg></div>${legend(names,false)}`;
 }
+/* Anel de proporções com o total ao centro. items=[{label,value,color}] — valores ≤ 0
+   ficam de fora. o: center substitui o texto central, sub é a linha pequena por baixo,
+   onPick é o nome de uma função global chamada com a etiqueta da fatia (ou da legenda)
+   em que se toca. Devolve HTML com a legenda ao lado; "Sem dados." quando o total é zero. */
 function cDonut(items,o){
   o=o||{};const S=150,th=26,r=(S-th)/2,c=S/2;
   items=items.filter(i=>i.value>0);
@@ -115,6 +129,8 @@ function cDonut(items,o){
     <div class="leg">${legend(items.map((it,i)=>({label:it.label,color:it.color||PAL[i%PAL.length],value:euro(it.value),extra:pct(it.value/tot,0),
       act:o.onPick?`${o.onPick}('${jsq(it.label)}')`:''})),true)}</div></div>`;
 }
+// Barras horizontais em HTML puro (sem SVG): uma linha por item, com a largura
+// proporcional ao maior valor absoluto e os negativos a vermelho. o.fmt formata os valores.
 function cHBars(items,o){
   o=o||{};if(!items.length)return `<div class="hint">Sem dados.</div>`;
   const max=Math.max(...items.map(i=>Math.abs(i.value)))||1;
@@ -125,6 +141,7 @@ function cHBars(items,o){
       <div style="height:8px;border-radius:99px;background:var(--chip);overflow:hidden">
       <i style="display:block;height:100%;width:${(Math.abs(it.value)/max*100).toFixed(1)}%;background:${col};border-radius:99px"></i></div></div>`}).join('')}</div>`;
 }
+// Legenda com bolinha de cor. withVal acrescenta valor e percentagem; itens com "act" ficam clicáveis.
 function legend(items,withVal){
   return `<div class="legend">${items.map(i=>`<div class="li ${i.act?'tap':''}" ${i.act?`onclick="${i.act}"`:''}><span class="dot" style="background:${i.color}"></span>
     <span class="nm">${esc(i.label)}</span>${withVal?`<span class="vl">${i.value||''}</span>${i.extra?`<span class="small" style="min-width:38px;text-align:right">${i.extra}</span>`:''}`:''}</div>`).join('')}</div>`;

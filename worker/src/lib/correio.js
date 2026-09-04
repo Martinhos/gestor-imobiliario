@@ -44,6 +44,11 @@ export function dominioDaCasa(email) {
   return d === DOMINIO || d.endsWith('.' + DOMINIO);
 }
 
+/* Envia um email pelo Resend. Devolve sempre { enviado, motivo } e nunca
+   lança: sem RESEND_API_KEY é um no-op, e um erro de rede ou do Resend vem
+   como motivo — quem chama decide se isso trava alguma coisa. `remetente` é
+   uma chave de REMETENTES ('maquina' por omissão); `html` e `texto` são as
+   duas versões do corpo, e manda-se as que existirem. */
 export async function enviarEmail(env, { para, assunto, html, texto, remetente }) {
   if (!env.RESEND_API_KEY) return { enviado: false, motivo: 'sem RESEND_API_KEY' };
   /* O correio de uma conta de teste não vai para o endereço dela (não
@@ -103,6 +108,8 @@ export function numeroPedido(id) {
   return '#' + String(id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
 }
 
+// A confirmação automática de que um pedido de ajuda ficou registado, com o
+// número que a pessoa pode citar em qualquer canal. Devolve o resultado do enviarEmail.
 export async function emailPedidoRecebido(env, para, id, assunto) {
   const num = numeroPedido(id);
   return enviarEmail(env, {
@@ -122,6 +129,8 @@ export async function emailPedidoRecebido(env, para, id, assunto) {
   });
 }
 
+// O email de reset de palavra-passe: entrega a `ligacao` já pronta. O "vale
+// 1 hora, uma vez" é garantido por quem a criou — aqui só se escreve o envelope.
 export async function emailReporPassword(env, para, ligacao) {
   return enviarEmail(env, {
     para,
@@ -138,6 +147,9 @@ export async function emailReporPassword(env, para, ligacao) {
   });
 }
 
+/* A resposta da equipa a um pedido, enviada do support@ para a pessoa poder
+   responder na mesma conversa. A `resposta` vai cortada a 1500 caracteres e
+   escapada — é texto da equipa, mas HTML de email não é sítio para surpresas. */
 export async function emailRespostaPedido(env, para, assunto, resposta, id) {
   const num = id ? numeroPedido(id) + ' ' : '';
   const seguro = String(resposta || '').slice(0, 1500)

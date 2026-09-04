@@ -11,6 +11,7 @@
 
 import { DOCS } from './docs-gerados.js';
 
+// Escapa &, < e > para HTML; null e undefined viram ''.
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -19,6 +20,10 @@ const prosa = (t) => esc(t).split(/\n{2,}/)
   .filter(Boolean)
   .map((p) => '<p>' + p.replace(/\n/g, ' ') + '</p>').join('');
 
+/* Monta a página inteira — gaveta, comandos, capítulos, pesquisa — a partir
+   do DOCS gerado no deploy, e devolve-a como Response HTML sem cache. Tudo
+   inline: a página não volta a pedir nada ao servidor, e a pesquisa corre no
+   browser sobre o próprio DOM. */
 export function paginaDocs() {
   let nFn = 0;
 
@@ -84,6 +89,16 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
 .res .onde{color:var(--muted);font-size:11.5px;margin-bottom:3px}
 .res:hover{border-color:var(--accent)}
 .burger{display:none}
+/* no telemóvel a tabela dos comandos empilha: três colunas lado a lado não
+   cabem, e o nowrap do "quem" empurrava a página para fora do ecrã */
+@media(max-width:640px){
+  #cmd table,#cmd tbody,#cmd tr{display:block}
+  #cmd td{display:block;padding:0;border:0}
+  #cmd tr{padding:10px 13px;border-top:1px solid var(--line)}
+  #cmd tr:first-child{border-top:0}
+  #cmd td:nth-child(2){margin:3px 0 2px}
+  #cmd td.quem{white-space:normal}
+}
 @media(max-width:860px){
   .app{grid-template-columns:1fr}
   aside{position:fixed;z-index:5;width:min(300px,84vw);transform:translateX(-102%);transition:transform .2s;box-shadow:6px 0 30px rgba(0,0,0,.2)}

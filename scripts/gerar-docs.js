@@ -16,6 +16,7 @@
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 
 const raiz = new URL('../', import.meta.url);
+// lê um ficheiro do repositório (caminho relativo à raiz) como UTF-8
 const ler = (p) => readFileSync(new URL(p, raiz), 'utf8');
 
 /* ------------------- o mapa das funcionalidades --------------------------
@@ -109,6 +110,8 @@ const FORMAS = [
   /^(?:window\.|CW\.)(\w+)\s*=\s*(?:async )?function\s*\(/,
 ];
 
+// percorre o ficheiro linha a linha e devolve [{nome, assinatura, doc}] por cada
+// função de topo que case com uma das FORMAS; doc é o comentário adjacente acima
 function funcoesDe(src) {
   const linhas = src.split('\n');
   const out = [];
@@ -149,6 +152,7 @@ function funcoesDe(src) {
   return out;
 }
 
+// tudo o que os docs mostram de um ficheiro: o caminho, o cabeçalho e as funções
 function ficheiro(caminho) {
   const src = ler(caminho);
   return { nome: caminho, texto: cabecalho(src), funcoes: funcoesDe(src) };
@@ -166,6 +170,7 @@ function comandosDoDiscord() {
   return achados;
 }
 
+// o mapa PERMISSOES de worker/src/discord.js, lido do próprio código: comando → papéis que o podem correr
 function permissoes() {
   const src = ler('worker/src/discord.js');
   const bloco = (src.match(/export const PERMISSOES = \{([\s\S]*?)\};/) || [])[1] || '';
@@ -190,6 +195,8 @@ function armadilhas() {
 
 /* ------------------------- montagem ------------------------------------- */
 
+// varre as pastas de código e devolve todos os .js (menos o gerado),
+// para se saber o que ainda não está arrumado no MAPA
 function todosOsFicheiros() {
   const lista = [];
   const varre = (pasta, ext) => readdirSync(new URL(pasta, raiz))
@@ -244,8 +251,16 @@ writeFileSync(new URL('worker/src/docs-gerados.js', raiz),
 
 const totalF = capitulos.reduce((n, c) => n + c.itens.length, 0);
 const totalFn = capitulos.reduce((n, c) => n + c.itens.reduce((m, i) => m + (i.funcoes || []).length, 0), 0);
+const semDoc = capitulos.flatMap((c) => c.itens.flatMap((i) =>
+  (i.funcoes || []).filter((f) => !f.doc && f.assinatura).map((f) => i.nome + ' :: ' + f.nome)));
 console.log('docs: ' + totalF + ' ficheiros, ' + totalFn + ' funções, ' + DOCS.comandos.length +
-  ' comandos, ' + soltos.length + ' por arrumar.');
+  ' comandos, ' + soltos.length + ' por arrumar, ' + semDoc.length + ' sem comentário.');
+/* A regra da casa: não há funções sem comentário. Uma função nova nua
+   rebenta aqui — no teste e no deploy — com o nome à vista. */
+if (semDoc.length) {
+  console.error('Funções sem comentário (comenta-as antes de seguir):\n  ' + semDoc.join('\n  '));
+  process.exit(1);
+}
 if (totalF < 40 || totalFn < 200 || DOCS.comandos.length < 8) {
   console.error('Poucos: ou o código perdeu os cabeçalhos, ou o extrator partiu.');
   process.exit(1);

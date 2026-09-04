@@ -2,6 +2,7 @@
 const EXT_U=['zero','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','catorze','quinze','dezasseis','dezassete','dezoito','dezanove'];
 const EXT_D=['','','vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
 const EXT_C=['','cento','duzentos','trezentos','quatrocentos','quinhentos','seiscentos','setecentos','oitocentos','novecentos'];
+// Escreve 1–999 por extenso ("cento e vinte e três"); devolve '' para zero, para o extenso() ligar os grupos sem restos.
 function ext3(n){
   if(n===0)return '';
   if(n===100)return 'cem';
@@ -14,6 +15,8 @@ function ext3(n){
   }
   return parts.join(' e ');
 }
+/* Número inteiro por extenso até aos milhões, com as ligações certas do português:
+   "mil e cem", "duzentos e trinta mil quatrocentos e doze". Ignora o sinal e a parte decimal. */
 function extenso(n){
   n=Math.floor(Math.abs(Number(n)||0));
   if(n===0)return 'zero';
@@ -27,6 +30,7 @@ function extenso(n){
   if(p.length===2)return p[0]+liga+p[1];
   return p[0]+' '+p[1]+liga+p[2];
 }
+// Valor em euros por extenso: "mil duzentos e trinta euros e cinquenta cêntimos". Arredonda ao cêntimo.
 function euroExtenso(v){
   const n=Math.round((Number(v)||0)*100),int=Math.floor(n/100),cent=n%100;
   let s=extenso(int)+(int===1?' euro':' euros');
@@ -34,11 +38,13 @@ function euroExtenso(v){
   return s;
 }
 const MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+// "2026-03-05" -> "5 de março de 2026"; devolve o valor tal e qual se não vier em ISO.
 function dataLonga(iso){
   if(!iso)return '';
   const p=String(iso).split('-');if(p.length<3)return iso;
   return `${Number(p[2])} de ${MESES[Number(p[1])-1]||''} de ${p[0]}`;
 }
+// Duração entre duas datas por extenso: anos certos como "2 (dois) anos", o resto em meses arredondados. Sem datas devolve "prazo certo".
 function prazoTexto(a,b){
   if(!a||!b)return 'prazo certo';
   const d1=new Date(a),d2=new Date(b);
@@ -55,6 +61,9 @@ function generoTexto(t,g){
   else if(g==='m')s=s.replace(/o\(a\)/g,'o').replace(/\(a\)/g,'');
   return s;
 }
+/* Frase de identificação de uma pessoa para o contrato: nome em maiúsculas, estado
+   civil ajustado ao género, nacionalidade, nascimento, Cartão de Cidadão, NIF e
+   morada fiscal — só entram os campos preenchidos na ficha. */
 function pessoaTexto(p){
   const b=[];
   b.push((p.name||'').toUpperCase());
@@ -77,6 +86,10 @@ function fullAddress(p){
   const cp=[p.postalCode,p.locality].filter(Boolean).join(' ');if(cp)a.push(cp);
   return a.length?a.join(', '):(p.address||'');
 }
+/* Constrói o dicionário de marcadores {{...}} do modelo a partir do contrato, do
+   imóvel e das fichas das partes: moradas, identificações, valores por extenso,
+   datas longas e o local de assinatura. Um marcador vazio faz o modelo omitir a
+   frase ou a cláusula que o usa. */
 function contractData(c){
   const p=prop(c.propertyId)||{};
   const owners=ownersOfProp(p).map(owner).filter(Boolean);
@@ -109,6 +122,7 @@ function contractData(c){
     fotos:(c.photoIds||[]).length
   };
 }
+// Substitui os marcadores {{chave}} pelos valores de d; os blocos {{#chave}}…{{/}} só sobrevivem se a chave tiver valor.
 function fillTpl(str,d){
   /* blocos condicionais {{#chave}}…{{/}} */
   str=String(str).replace(/\{\{#([\w.]+)\}\}([\s\S]*?)\{\{\/\}\}/g,(m,k,inner)=>d[k]?inner:'');
@@ -118,6 +132,11 @@ const ROMANOS=['','PRIMEIRA','SEGUNDA','TERCEIRA','QUARTA','QUINTA','SEXTA','SÉ
   'DÉCIMA PRIMEIRA','DÉCIMA SEGUNDA','DÉCIMA TERCEIRA','DÉCIMA QUARTA','DÉCIMA QUINTA','DÉCIMA SEXTA',
   'DÉCIMA SÉTIMA','DÉCIMA OITAVA','DÉCIMA NONA','VIGÉSIMA'];
 
+/* Gera e descarrega o PDF do contrato: valida (imóvel e pelo menos um inquilino),
+   lê o modelo CONTRACT_XML, preenche os marcadores com contractData e percorre
+   cláusulas, secções e anexos a escrever no PDF — incluindo as fotografias
+   escolhidas, carregadas do IndexedDB e redimensionadas (daí ser assíncrona).
+   No Android entrega o ficheiro ao seletor nativo em vez de descarregar. */
 async function generateContractPdf(cid){
   const c=contract(cid);if(!c)return toast('Contrato não encontrado.');
   const p=prop(c.propertyId);
@@ -176,6 +195,9 @@ async function generateContractPdf(cid){
   else downloadBytes(name,'application/pdf',bytes);
   toast('Contrato gerado.');
 }
+/* Desenha um elemento <tabela> do modelo: inventário e chaves saem como tabela de
+   texto; a fonte "fotos" sai como sequência de fotografias com legenda. Sem dados
+   escreve uma nota entre parênteses em vez de deixar o anexo vazio. */
 function tabela(pdf,el,c,p,d,imgs){
   const cols=(el.getAttribute('colunas')||'').split('|');
   const fonte=el.getAttribute('fonte');
@@ -202,6 +224,7 @@ function tabela(pdf,el,c,p,d,imgs){
   rows.forEach(r=>pdf.line(r,widths,{size:9.5,right:fonte==='chaves'?[1]:(fonte==='inventario'?[2]:[])}));
   pdf.gap(6);
 }
+// Blocos de assinatura de uma das partes: linha, nome e papel ajustado ao género (Senhoria/Senhorio, Inquilina/Inquilino), sem quebrar a meio da página.
 function assinaturas(pdf,parte,c,p){
   const gente=parte==='senhorios'?ownersOfProp(p).map(owner).filter(Boolean):ctTenants(c);
   if(!gente.length)return;

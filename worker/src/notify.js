@@ -10,6 +10,8 @@ const LIMITS = {
   'KV · escritas': 1000,
 };
 
+// POST de JSON para um webhook. Devolve true/false e nunca lança:
+// um Discord em baixo não pode partir o resto do pedido.
 async function post(url, payload) {
   if (!url) return false;
   try {
@@ -24,6 +26,7 @@ async function post(url, payload) {
   }
 }
 
+// Corta a n caracteres com reticências — o Discord recusa embeds com campos longos demais.
 const cut = (s, n) => {
   const t = String(s == null ? '' : s);
   return t.length > n ? t.slice(0, n - 1) + '…' : t;
@@ -63,6 +66,8 @@ export function notifySuporte(env, ctx, embed, components) {
     () => avisar(env, null, embed, components, env.DISCORD_DEV_CHANNEL, env.DISCORD_DEV_WEBHOOK));
 }
 
+// O embed de um pedido novo (problema ou sugestão): assunto, corpo, quem o fez
+// e o id do ticket no rodapé — é por esse id que os botões do bot o encontram.
 export function ticketEmbed(t, user) {
   return {
     title: (t.kind === 'problema' ? '🐞 Problema' : '💡 Sugestão') + ' · ' + cut(t.subject, 80),
@@ -78,6 +83,8 @@ export function ticketEmbed(t, user) {
   };
 }
 
+// O embed de um relato de erro (r vem da tabela de relatos, já agregado por mensagem:
+// n é quantas vezes aconteceu, pessoas a quantos utilizadores diferentes).
 export function errorEmbed(r) {
   /* Vermelho quando toca em mais do que uma pessoa. Um erro que só acontece a
      alguém pode esperar; um que acontece a vários é outra coisa, e a cor
@@ -172,6 +179,9 @@ export async function usageFields(env) {
    exatamente o que aqui é preciso, e poupa uma tabela. */
 export const LIMIAR_AVISO = 0.8;
 
+// A vigia em si (a razão de ser está no comentário acima): compara o consumo com os
+// tectos, avisa o canal de administração quando um passa o limiar — com @here a partir
+// de 95% — e devolve quantos limites motivaram aviso, para o cron poder registar.
 export async function watchLimits(env, ctx) {
   const canal = env.DISCORD_ADMIN_CHANNEL, url = env.DISCORD_ADMIN_WEBHOOK;
   if (!canal && !url) return { avisados: 0, motivo: 'sem canal de administração' };
@@ -219,6 +229,9 @@ export async function watchLimits(env, ctx) {
   return { avisados: apertados.length, limites: apertados.map((a) => a.nome) };
 }
 
+// O resumo diário: manda os campos de usageFields para o canal de administração, com a
+// cor a acompanhar o pior sinal encontrado (🔴 acima de 90%, ⚠️ acima de 70%). Devolve
+// true/false conforme chegou, ou null quando não há canal nem webhook configurados.
 export async function dailyReport(env, ctx) {
   const url = env.DISCORD_ADMIN_WEBHOOK;
   const canal = env.DISCORD_ADMIN_CHANNEL;

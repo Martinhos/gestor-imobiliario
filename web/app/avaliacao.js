@@ -13,6 +13,7 @@ function vReports(){
     <button class="btn" onclick="downloadCsv()">CSV</button></div>`
     +((!repProp||String(repProp).startsWith('g:'))?portCard(repProp||null):'')+list.map(repCard).join('');
 }
+// aplica o imóvel (ou grupo) escolhido no seletor e volta a desenhar
 function onRepSel(){repProp=val('repSel')||'';render()}
 /* agregado de todo o portefólio (no âmbito do filtro de proprietário) */
 function portCard(pid){
@@ -50,6 +51,9 @@ function portCard(pid){
         <div class="stat"><span>LTV</span><b>${pct(m.ltv)}</b></div>`)}</div>
   </div>`;
 }
+/* O cartão de avaliação de um imóvel: valor introduzido contra valor por rendimento,
+   contratos ativos, gráficos do ano, conta de exploração, indicadores e — havendo
+   hipotecas — a projeção da dívida até ao fim. Devolve o HTML do cartão. */
 function repCard(p){
   const m=metrics(YEAR,p.id),ls=liveLoans(p);
   const ac=activeContracts(p.id),rentY=rentOf(p)*12,netY=netRentOf(p)*12;
@@ -123,6 +127,8 @@ function evoValuation(p,what){
     yearly:yearsWithData(p.id).map(y=>{const m=metrics(y,p.id),noi=m.income-m.op,v=target?noi/target:0;
       return {label:y,value:what==='diff'?(p.value?v/p.value-1:NaN):v,extra:euro(noi)}})};
 }
+// A avaliação em texto simples, para partilhar ou copiar: totais do portefólio,
+// contas entre proprietários e cada imóvel com os seus contratos. Respeita o filtro de proprietário.
 function reportText(){
   const m=metrics(YEAR,null,{share:true}),act=db.contracts.filter(c=>isActive(c)&&inScope(c.propertyId)),cs=c=>sh(prop(c.propertyId));
   return `AVALIAÇÃO DO PORTEFÓLIO — ${YEAR}${ownerFilter?' · '+ownerFilterName():''}

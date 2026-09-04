@@ -20,6 +20,7 @@ function funcsDoUtilizador() {
   return Object.keys(FUNCIONALIDADES);
 }
 
+// Diz se uma secção de novidades toca nalguma funcionalidade desta pessoa.
 function afetaMe(sec) {
   var minhas = funcsDoUtilizador();
   var toca = sec.afeta || ['app'];
@@ -32,13 +33,16 @@ function avisoParaMim(a) {
   return secs.length ? { v: a.v, data: a.data, titulo: a.titulo, seccoes: secs } : null;
 }
 
+// Os avisos posteriores à versão v, já filtrados ao que diz respeito a quem vê.
 function avisosDesde(v) {
   return AVISOS.filter(function (a) { return a.v > v; }).map(avisoParaMim).filter(Boolean);
 }
 
+// Até que versão as novidades já foram vistas (0 se nunca, ou sem localStorage).
 function vistoAte() {
   try { return Number(localStorage.getItem(LS_VISTO)) || 0; } catch (e) { return 0; }
 }
+// Guarda no localStorage que as novidades até à versão v já foram vistas.
 function marcarVisto(v) {
   try { localStorage.setItem(LS_VISTO, String(v)); } catch (e) {}
 }
@@ -47,6 +51,8 @@ function marcarVisto(v) {
 
 var novAbertas = {};   // que secções estão abertas neste modal
 
+// Uma secção de novidades como cartão dobrável; a chave liga-a ao estado de
+// aberta/fechada em novAbertas.
 function secHtml(sec, chave) {
   var aberta = novAbertas[chave] !== false;   // por omissão, abertas
   return '<div class="card" style="padding:0;overflow:hidden">' +
@@ -64,6 +70,7 @@ function secHtml(sec, chave) {
     '</div>';
 }
 
+// A lista de avisos inteira em HTML — serve o modal e a secção das Definições.
 function novHtml(avisos) {
   // o id permite redesenhar só esta lista, sem a página saltar para o topo
   return '<div class="form" id="novLista">' + avisos.map(function (a) {
@@ -95,6 +102,8 @@ CW.novToggle = function (chave) {
   if (lista) lista.outerHTML = novHtml(CW._novAvisos);
 };
 
+// Abre o modal "O que há de novo"; aoFechar, se vier, corre quando a pessoa
+// carrega em Continuar.
 CW.verNovidades = function (avisos, aoFechar) {
   CW._novAvisos = avisos;
   novAbertas = {};
@@ -103,6 +112,7 @@ CW.verNovidades = function (avisos, aoFechar) {
   CW._novFecho = aoFechar;
 };
 
+// Fecha o modal, marca as novidades como vistas e corre o combinado ao fechar.
 CW.novFechar = function () {
   closeAllModals();
   marcarVisto(VERSAO);
@@ -125,6 +135,8 @@ function mostrarNovidadesSeHouver() {
 
 /* ------------------------------------------------------ atualização forçada */
 
+/* O ecrã que tranca a app quando a versão em uso desceu abaixo da mínima
+   aceite: tapa tudo e só deixa atualizar. Chamado duas vezes não duplica. */
 function gateAtualizar(minima) {
   if (document.getElementById('cwUpd')) return;
   var el = document.createElement('div');
@@ -141,6 +153,8 @@ function gateAtualizar(minima) {
   document.body.appendChild(el);
 }
 
+// Limpa as caches com o passo a passo à vista e recarrega a página — é o
+// caminho de todos os botões "Atualizar".
 CW.atualizarAgora = function () {
   ecraAtualizar('nova', 'a limpar a versão antiga…');
   limparCaches().then(function () {
@@ -149,6 +163,9 @@ CW.atualizarAgora = function () {
   });
 };
 
+/* Apaga as caches do browser e pede ao service worker para se atualizar.
+   Nunca rejeita: sem caches ou sem service worker resolve na mesma, porque o
+   que importa é a recarga que vem a seguir. */
 function limparCaches() {
   var p = [];
   try {
@@ -175,10 +192,13 @@ function limparCaches() {
 function jaRecarreguei(alvo) {
   try { return Number(sessionStorage.getItem(SS_RECARGA)) === alvo; } catch (e) { return true; }
 }
+// Regista (na sessão) que já se recarregou a caminho desta versão.
 function marcarRecarga(alvo) {
   try { sessionStorage.setItem(SS_RECARGA, String(alvo)); } catch (e) {}
 }
 
+// A faixa discreta no fundo do ecrã: há versão nova, atualiza quando quiseres.
+// É o plano B, para quando a recarga automática não chegou à versão nova.
 function bannerAtualizar(v) {
   if (document.getElementById('cwUpdBar')) return;
   var el = document.createElement('div');
@@ -220,6 +240,10 @@ function ecraAtualizar(versao, passo) {
   if (p) p.textContent = passo;
 }
 
+/* Pergunta ao servidor (/versao.json) que versão há: abaixo da mínima tranca
+   a app; havendo mais nova, limpa as caches e recarrega sozinha uma vez, com
+   o ecrã de progresso à vista; se mesmo assim continuar velha, resta a faixa.
+   Sem rede não faz nada — a app fica com o que tem. */
 CW.verificarVersao = function () {
   /* acabada de atualizar? diz-se — é a outra metade de mostrar o estado */
   try {
@@ -248,6 +272,8 @@ CW.verificarVersao = function () {
 
 /* ------------------------------------------------- a secção nas definições */
 
+// A secção "Novidades" das Definições: todos os avisos que dizem respeito a
+// esta pessoa, ou uma nota de que ainda não há nenhum.
 function vNovidades() {
   var todas = AVISOS.map(avisoParaMim).filter(Boolean);
   if (!todas.length) return '<div class="hint">Ainda não há novidades que te digam respeito.</div>';
@@ -285,6 +311,8 @@ function ecraLivre() {
     !document.getElementById('cwUpd');
 }
 
+// Mostra as novidades por ver, mas só com o ecrã livre de avisos mais
+// importantes (aviso inicial, termos, atualização forçada).
 CW.talvezNovidades = function () {
   if (ecraLivre()) mostrarNovidadesSeHouver();
 };

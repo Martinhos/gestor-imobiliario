@@ -1,7 +1,11 @@
 /* ================= AUXILIARES ================= */
 /* milhares separados por espaço fino, como pedido */
 const SP='\u202F';
+// mete o espaço fino de milhares numa string de dígitos (a parte inteira, já em texto).
 function grupos(intStr){return intStr.replace(/\B(?=(\d{3})+(?!\d))/g,SP)}
+/* valor em euros para mostrar: milhares com espaço fino, vírgula decimal e € no fim.
+   dec2 força sempre duas casas; sem dec2 arredonda ao euro inteiro. Os negativos
+   levam o sinal de menos tipográfico (−), não o hífen. */
 function money(v,dec2){
   const n=Number(v)||0,neg=n<0,a=Math.abs(n);
   const s=dec2?a.toFixed(2):String(Math.round(a));
@@ -16,6 +20,8 @@ const fmtNIF=v=>{const t=String(v||'').replace(/\D/g,'');
   return t.length===9?t.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3'):String(v||'')};
 const fmtCC=v=>{const t=String(v||'').replace(/\s+/g,'').toUpperCase();
   const m=t.match(/^(\d{8})(.+)$/);return m?m[1]+' '+m[2]:String(v||'')};
+/* telefone legível: 9 dígitos sem indicativo assumem-se portugueses (+351), o resto
+   do número agrupa-se de 3 em 3 a seguir ao indicativo. Vazio se não houver dígitos. */
 function fmtPhone(v){
   let t=String(v||'').replace(/[^\d+]/g,'');
   if(!t)return '';
@@ -28,6 +34,9 @@ const RICH_TAGS={B:'b',STRONG:'b',I:'i',EM:'i',S:'s',STRIKE:'s',DEL:'s',U:'u',CO
 /* HTML vindo do editor: fica só com as marcas que a interface cria, sem atributos */
 const ZW='\u200B';   /* marcador invisível que segura o cursor dentro de um <b>/<i>/<s> vazio */
 const INLINE_TAGS={b:1,i:1,s:1,u:1,code:1};
+/* limpa HTML vindo de fora: só ficam as marcas que o editor cria (negrito, listas,
+   parágrafos…), sem atributos, scripts nem estilos; marcas inline vazias caem.
+   Se o DOMParser falhar, devolve o texto todo escapado — nunca HTML por limpar. */
 function sanitizeRich(html){
   let doc;try{doc=new DOMParser().parseFromString('<div>'+html+'</div>','text/html')}catch(e){return esc(html)}
   const walk=node=>{let out='';[].slice.call(node.childNodes).forEach(ch=>{
@@ -42,6 +51,7 @@ function sanitizeRich(html){
   });return out};
   return walk(doc.body.firstChild||doc.body);
 }
+// texto guardado → HTML seguro de apresentação: sanitiza se trouxer marcas; senão escapa e converte \n em <br>.
 function rich(s){
   let t=String(s||'');
   if(/<[a-z][^>]*>/i.test(t))return sanitizeRich(t);
@@ -56,6 +66,9 @@ function rich(s){
 function richEditor(label,id,value,ph){
   return `<label>${label||''}<textarea id="${id}" placeholder="${esc(ph||'Escreve aqui…')}">${esc(richToText(value||''))}</textarea></label>`;
 }
+/* HTML antigo → texto simples: itens de lista viram "• ", blocos viram quebras de
+   linha, as restantes marcas caem e as entidades são descodificadas. Texto sem
+   marcas passa intacto. */
 function richToText(s){
   let t=String(s||'');
   if(!/<[a-z][^>]*>/i.test(t))return t;
@@ -63,6 +76,7 @@ function richToText(s){
   const d=document.createElement('textarea');d.innerHTML=t;
   return d.value.replace(/\n{3,}/g,'\n\n').trim();
 }
+// touchstart na barra do editor: executa o comando do botão tocado sem deixar o editor perder o foco.
 function richTouch(e){
   const btn=e.target&&e.target.closest?e.target.closest('button'):null;
   if(!btn)return;
@@ -82,6 +96,9 @@ document.addEventListener('selectionchange',()=>{
   }catch(e){}
 });
 const RICH_INLINE={bold:['B','STRONG'],italic:['I','EM'],strikeThrough:['S','STRIKE','DEL']};
+/* o editor onde um comando da barra deve atuar: o que tem o foco, ou o da última
+   seleção guardada (que é reposta), ou, em último recurso, o do modal de cima com o
+   cursor no fim. Devolve a caixa .rich-content já focada, ou null se não houver. */
 function richHost(editor){
   let e=document.activeElement;
   if(e&&e.classList&&e.classList.contains('rich-content')&&(!editor||editor.contains(e)))return e;
@@ -109,6 +126,8 @@ function toggleInline(host,cmd){
   nr.setStart(zw,1);nr.collapse(true);s.removeAllRanges();s.addRange(nr);
   return true;
 }
+// aplica um comando de formatação (execCommand) no editor certo, dispara "input"
+// para quem estiver a gravar alterações e atualiza o realce da barra.
 function richCmd(cmd,arg,editor){
   const e=richHost(editor);if(!e)return;
   const s=document.getSelection(),collapsed=!s||!s.rangeCount||s.getRangeAt(0).collapsed;
@@ -128,12 +147,14 @@ function richState(host){
 /* conteúdo de um editor, já limpo; vazio se só tiver quebras */
 function richVal(id){const e=document.getElementById(id);return e?String(e.value||'').trim():''}
 
+// fração → percentagem com vírgula (0.253 → "25,3%"); d casas decimais (1 por omissão); "—" se não for número.
 const pct=(v,d)=>isFinite(v)?(v*100).toFixed(d==null?1:d).replace('.',',')+'%':'—';
 const dec=v=>String(v==null?'':v).replace('.',',');
 const sum=a=>a.reduce((x,y)=>x+(Number(y)||0),0);
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 /* texto dentro de uma string JS num atributo onclick="f('…')" */
 const jsq=s=>esc(String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,' '));
+// data de hoje em ISO (AAAA-MM-DD) — o formato em que as datas se guardam e comparam.
 const today=()=>new Date().toISOString().slice(0,10);
 const YEAR=new Date().getFullYear();
 const MES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
@@ -149,6 +170,7 @@ const isActive=c=>c&&c.active!==false&&(!c.end||c.end>=today());
 const activeContracts=pid=>contractsOf(pid).filter(isActive);
 const ctTenants=c=>(c.tenantIds||[]).map(tenant).filter(Boolean);
 const ctNames=c=>ctTenants(c).map(t=>t.name).join(', ')||'Sem inquilino';
+// nome do quarto rid do imóvel p; vazio se não existir.
 const roomName=(p,rid)=>{const r=((p||{}).rooms||[]).find(x=>x.id===rid);return r?r.name:''};
 const ctLabel=c=>{const p=prop(c.propertyId);return (p?p.name:'?')+(c.roomId?' · '+roomName(p,c.roomId):'')};
 /* nome pelos inquilinos (e quarto, se houver) — para escolher o contrato */
@@ -163,6 +185,7 @@ const loansOf=p=>((p||{}).loans)||[];
 const liveLoans=p=>loansOf(p).filter(l=>Number(l.outstanding)>0);
 const debtOf=p=>sum(liveLoans(p).map(l=>l.outstanding));
 const payOf=p=>sum(liveLoans(p).map(l=>loanCalc(l).total));
+// hipoteca com este id dentro do imóvel p; null se lá não estiver.
 const findLoan=(p,id)=>loansOf(p).find(l=>l.id===id)||null;
 /* hipoteca por id, procurada em todos os imóveis */
 function anyLoan(id){for(const p of db.properties){const l=findLoan(p,id);if(l)return{p,l}}return null}
@@ -200,6 +223,7 @@ function sharesOf(p){
   os.forEach(o=>{out[o]=has(o)?Number(raw[o])/tot:(blank.length?rest/blank.length/tot:0)});
   return out;
 }
+// quota-parte (fração 0–1) do proprietário oid no imóvel p; 0 se não for dono.
 const shareOf=(p,oid)=>{const s=sharesOf(p);return s[oid]===undefined?0:s[oid]};
 const hasShares=p=>Object.keys((p&&p.ownerShares)||{}).length>0;
 /* fator a aplicar aos valores de um imóvel quando a vista está filtrada por proprietário */
@@ -331,7 +355,11 @@ function balanceLines(pid){
   return out.sort((a,b)=>String(a.t.date).localeCompare(String(b.t.date)));
 }
 let _detailPid=null;
+// se o modal "Como se chega aos saldos" estiver por cima, reabre-o para refletir dados frescos.
 function refreshDetail(){const t=modalTop();if(t&&t.title==='Como se chega aos saldos'){closeModal();balancesDetail(_detailPid)}}
+/* abre o modal "Como se chega aos saldos": cada movimento que conta, o efeito em
+   cêntimos por dono e o saldo acumulado até aí. pid limita a um imóvel (vazio =
+   âmbito atual). Tocar num movimento abre-o para editar; sem movimentos, só avisa. */
 function balancesDetail(pid){
   _detailPid=pid||null;
   const lines=balanceLines(pid);
@@ -348,6 +376,10 @@ function balancesDetail(pid){
     <div class="hint">"Saldo" é o acumulado até esse movimento: positivo a receber, negativo a pagar. Toca num movimento para o editar.</div></div>`,
     `<button class="btn" onclick="closeModal()">Fechar</button>`);
 }
+/* saldos entre comproprietários, em euros por dono: quem pagou fica a crédito e a
+   parte de cada um sai das quotas ou da divisão escolhida no movimento; as
+   transferências acertam contas diretamente. pid limita a um imóvel; sem pid vale o
+   âmbito atual. Positivo é a receber, negativo a pagar. */
 function ownerBalances(pid){
   const props=pid?[prop(pid)].filter(Boolean):scope(),cents={};
   props.forEach(p=>{
@@ -404,21 +436,28 @@ const debtTotal=bal=>sum(Object.keys(bal).map(k=>bal[k]>0?bal[k]:0));
 const propDebt=pid=>debtTotal(ownerBalances(pid));
 
 let ownerFilter='',dashProp='';
+// o filtro de proprietário atual é um grupo ('g:ID')?
 const ownerIsGrp=()=>String(ownerFilter||'').startsWith('g:');
+// ids de proprietário abrangidos pelo filtro atual: vazio sem filtro, os do grupo, ou só o escolhido.
 function ownerFilterIds(){
   if(!ownerFilter)return [];
   if(ownerIsGrp()){const g=grp(ownerFilter.slice(2));return g?g.ids:[]}
   return [ownerFilter];
 }
+// nome a mostrar do filtro de proprietário atual (pessoa ou grupo); vazio sem filtro.
 function ownerFilterName(){
   if(!ownerFilter)return '';
   if(ownerIsGrp()){const g=grp(ownerFilter.slice(2));return g?g.name:''}
   return (owner(ownerFilter)||{}).name||'';
 }
+/* imóveis da vista atual: todos sem filtro de proprietário; com filtro, os que
+   pertencem a quem foi escolhido (e, para uma pessoa, só onde a quota é > 0). */
 const scope=()=>{if(!ownerFilter)return db.properties;const ids=ownerFilterIds();
   return db.properties.filter(p=>(p.ownerIds||[]).some(o=>ids.indexOf(o)>-1)&&(ownerIsGrp()||shareOf(p,ownerFilter)>0))};
 const inScope=pid=>!ownerFilter||scope().some(p=>p.id===pid);
 
+/* estado de ocupação de um imóvel, para cartões e filtros: devolve {key,label,badge}
+   — uso próprio, vago, parcial ("2/3 quartos", no modo de quartos) ou arrendado. */
 function propStatus(p){
   if(p.use==='proprio')return{key:'proprio',label:'Uso próprio',badge:'grey'};
   const ac=activeContracts(p.id);
@@ -432,6 +471,9 @@ function propStatus(p){
 }
 const isRented=p=>['arrendado','parcial'].indexOf(propStatus(p).key)>-1;
 
+/* número escrito à mão → Number: ignora símbolos e decide se as vírgulas e os
+   pontos são decimais ou separadores de milhares. Devolve 0 quando não percebe —
+   nunca NaN, para as somas não se estragarem. */
 function num(s){
   if(typeof s==='number')return s;
   let t=String(s??'').replace(/[^0-9,.\-]/g,'');
@@ -466,18 +508,23 @@ const txTypeName=k=>({income:'receita',expense:'despesa',loan:'pagamento de cré
 const txNewWord=k=>(k==='loan'?'Novo ':'Nova ');
 const flowOf=k=>(KIND[k]||KIND.expense).flow;
 const isIn=k=>flowOf(k)==='in',isOut=k=>flowOf(k)==='out';
+// árvore de categorias das despesas e pagamentos: a das definições, ou a de fábrica.
 const cats=()=>db.settings.cats||CATS0;
+// árvore de categorias das receitas: a das definições, ou a de fábrica.
 const catsIn=()=>db.settings.catsIn||CATS_IN0;
 /* árvore de categorias de um tipo de movimento: receitas ou pagamentos (acertos não têm) */
 const treeKey=k=>k==='settle'?'':(isIn(k)?'catsIn':'cats');
 const catsFor=k=>{const t=treeKey(k);return t?db.settings[t]:null};
 /* categorias/subcategorias podem ficar fora dos totais de receitas e despesas */
 const excKey=(tk,cat,sub)=>tk+':'+cat+(sub?'/'+sub:'');
+// esta categoria (ou a subcategoria, se dada) está excluída dos totais deste tipo de movimento?
 function isExc(kind,cat,sub){
   if(!cat)return false;
   const e=(db.settings||{}).exclude||{},tk=treeKey(kind);
   return !!(e[excKey(tk,cat)]||(sub&&e[excKey(tk,cat,sub)]));
 }
+// liga/desliga a exclusão de uma categoria dos totais; tk é a chave da árvore
+// ('cats' ou 'catsIn'), não o tipo do movimento. Grava e volta a desenhar tudo.
 function toggleExc(tk,cat,sub){
   const e=db.settings.exclude=db.settings.exclude||{},k=excKey(tk,cat,sub||null);
   if(e[k])delete e[k];else e[k]=true;
@@ -500,6 +547,7 @@ function creditorBalances(pid){
   });
   return Object.keys(map).map(k=>map[k]).map(e=>Object.assign(e,{due:Math.round((e.received-e.repaid)*100)/100})).sort((a,b)=>b.due-a.due);
 }
+// credores já escritos nos movimentos, sem repetir e por ordem — para sugerir ao preencher.
 const knownCreditors=()=>[...new Set(db.transactions.map(t=>(t.creditor||'').trim()).filter(Boolean))].sort();
 const RATE={fixa:'Taxa fixa',mista:'Taxa mista',variavel:'Taxa variável'};
 const GENDER=[['','—'],['f','Feminino'],['m','Masculino']];
@@ -508,6 +556,8 @@ const PAL_LIGHT=['#2f7d5b','#7aa9d6','#d6a34a','#c56b68','#8a7bb8','#5aa8a0','#b
 const PAL_DARK=['#5ee0a8','#7aa9ff','#ffc35c','#ff8a80','#c89bff','#5ad0d8','#f0a06a','#b8c2d6','#8fd0a0','#ffb08a','#9fb8ff','#d4e07a'];
 const PAL=PAL_LIGHT.slice();
 
+// ícone SVG inline pelo nome n, com s px de lado (20 por omissão);
+// o traço herda a cor do texto onde for colado (currentColor).
 function ic(n,s){s=s||20;const I={
   shield:'<path d="M12 3l7 2.6v5.2c0 4.6-3 8.4-7 10.2-4-1.8-7-5.6-7-10.2V5.6z"/><path d="M9 11.5l2 2 4-4"/>',
   home:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-5h5v5"/>',
@@ -564,6 +614,8 @@ function fitInsets(){
   try{full=window.screen&&Math.abs(screen.height-window.innerHeight)<52}catch(e){}
   if(full)el.style.setProperty('--inset-top','28px');
 }
+/* chamada pelo wrapper Android com as margens exatas da área segura (px); passa-as
+   às variáveis CSS e marca-as como nativas, para o fitInsets deixar de adivinhar. */
 window.__setInsets=function(t,b,l,r){
   window.__nativeInsets=1;
   const s=document.documentElement.style;
@@ -577,13 +629,20 @@ window.__setInsets=function(t,b,l,r){
 /* uma so MediaQueryList, guardada: registar o ouvinte numa criada de fresco
    deixa-a sem referencias, e ha motores que a recolhem e param de avisar */
 let _mq=null;
+// a tal MediaQueryList do modo escuro, criada uma vez e reutilizada; se o matchMedia
+// falhar, devolve um substituto inerte para o resto do código não ter de testar.
 const mq=()=>{
   if(_mq)return _mq;
   try{_mq=window.matchMedia('(prefers-color-scheme: dark)')}
   catch(e){_mq={matches:false,addEventListener(){},addListener(){}}}
   return _mq;
 };
+// o tema efetivo é escuro? Sim com 'dark' explícito, ou em automático quando o sistema está escuro.
 function isDark(){const t=db.settings.theme;return t==='dark'||(t!=='light'&&mq().matches)}
+/* aplica o tema efetivo à página: classe .dark no <html>, paleta dos gráficos
+   trocada dentro do próprio array PAL (quem lhe guarda referência vê as cores
+   novas), e meta theme-color / color-scheme atualizados — a razão de o modo
+   automático não fixar o color-scheme está na nota lá dentro. */
 function applyTheme(){
   const d=isDark();
   document.documentElement.classList.toggle('dark',d);
@@ -598,6 +657,7 @@ function applyTheme(){
   const cs=document.querySelector('meta[name=color-scheme]');if(cs)cs.content=esq;
   try{document.documentElement.style.colorScheme=esq}catch(e){}
 }
+// escolhe o tema ('light', 'dark' ou 'auto'), grava nas definições e aplica já.
 function setTheme(t){db.settings.theme=t;save();applyTheme();render()}
 /* o Safari so ganhou addEventListener em MediaQueryList na versao 14: sem o
    addListener antigo, os iPhones mais velhos nunca sabiam da mudanca */

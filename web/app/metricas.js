@@ -27,7 +27,11 @@ function metrics(y,pid,opts){
     grossYield:rentedValue?annualRent/rentedValue:NaN,cap:value?noi/value:NaN,
     coc:purchase?cf/purchase:NaN,ltv:value?debt/value:NaN};
 }
+/* fração do movimento que cabe ao proprietário filtrado — só quando se pede share, o filtro é uma
+   pessoa (não um grupo) e o movimento tem imóvel; nos restantes casos conta por inteiro */
 const txShare=(t,share)=>share&&ownerFilter&&!ownerIsGrp()&&t.propertyId?txOwnerFrac(t,ownerFilter):1;
+/* total mensal (12 valores, jan–dez) dos movimentos do tipo kind no ano y, pesado pelo
+   imóvel ou âmbito atual (txW) e, com share, pela quota do proprietário filtrado */
 const monthly=(y,pid,kind,share)=>[...Array(12)].map((_,i)=>{
   const mo=`${y}-${String(i+1).padStart(2,'0')}`;
   return sum(db.transactions.filter(t=>String(t.date).startsWith(mo)&&t.kind===kind&&countsInTotals(t)).map(t=>t.amount*txShare(t,share)*txW(t,pid)));

@@ -1,7 +1,9 @@
 /* ================= ARMAZENAMENTO ================= */
 const KEY='gi_v13', OLDS=['gi_v12','gi_v11','gi_v10','gi_v9','gi_v8','gi_v6','gi_v5','gi_v4','gi_v3','gi_v2','gi_v1'];
 let mem={};
+/* lê do localStorage; se estiver bloqueado (modo privado), vale a cópia em memória desta sessão */
 function rawGet(k){try{const v=localStorage.getItem(k);return v===null&&k in mem?mem[k]:v}catch(e){return k in mem?mem[k]:null}}
+/* escreve no localStorage e numa cópia em memória; se o disco falhar, a app continua só em memória e avisa uma vez */
 function rawSet(k,v){mem[k]=String(v);try{localStorage.setItem(k,v)}catch(e){
   /* sem isto, «Guardado.» era mentira em modo privado ou com a quota cheia:
      um reinício levava a sessão toda sem nunca ter avisado */
@@ -59,26 +61,33 @@ const blank={v:13,properties:[],owners:[],tenants:[],contracts:[],transactions:[
   settings:{growth:2,inflation:2,years:10,theme:'auto',capTarget:5,quota:100,payTax:true,stampPct:4,
             cats:JSON.parse(JSON.stringify(CATS0)),catsIn:JSON.parse(JSON.stringify(CATS_IN0)),tags:TAGS0.slice()}};
 
+/* id único para qualquer registo novo; onde não há crypto.randomUUID, serve data + aleatório */
 function uid(){try{return crypto.randomUUID()}catch(e){return 'id'+Date.now()+Math.random().toString(16).slice(2,8)}}
 /* versões anteriores guardavam a imagem em base64 dentro dos dados (rebentava a quota do localStorage);
    agora fica só em IndexedDB. O que vier em "data" é migrado para lá e retirado dos dados. */
 const INLINE_DATA=[];
 const normFile=f=>{const o=Object.assign({id:uid(),name:'',type:'',size:0,added:''},f||{});
   if(o.data){INLINE_DATA.push({id:o.id,data:o.data});delete o.data}return o};
+/* despacha para o IndexedDB os anexos que o normFile apanhou em base64 e grava os dados já sem eles;
+   o que já existir lá não é reescrito, e uma falha num ficheiro não trava os outros */
 function migrateInline(){
   if(!INLINE_DATA.length)return;
   const list=INLINE_DATA.splice(0);
   Promise.all(list.map(x=>idbGet(x.id).then(b=>{if(b)return;return fetch(x.data).then(r=>r.blob()).then(bl=>idbPut(x.id,bl))}).catch(()=>{})))
     .then(()=>{save()});
 }
+/* normaliza uma hipoteca: omissões preenchidas, campos extintos (active, taeg, mtic) fora, anexos pelo normFile */
 function normLoan(l){const o=Object.assign({id:uid(),name:'',bank:'',outstanding:0,years:30,type:'fixa',
   rate:0,fixedYears:5,euribor:0,spread:0,index:'6m',start:'',stampTax:true,amortFeeFix:2,amortFeeVar:0.5,files:[]},l||{});
   delete o.active;delete o.taeg;delete o.mtic;
   if(o.stampTax===undefined)o.stampTax=true;
   o.files=(o.files||[]).map(normFile);return o}
+/* normaliza uma ficha de pessoa (dono ou inquilino): campos em falta ficam vazios, anexos pelo normFile */
 function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:'',nif:'',gender:'',marital:'',
   nationality:'Portuguesa',birth:'',cc:'',ccValid:'',taxAddress:'',notes:'',files:[]},p||{});
   o.files=(o.files||[]).map(normFile);return o}
+/* normaliza um imóvel e migra o que mudou entre versões: equity passa a purchase, o crédito único
+   vira lista de hipotecas, quartos em texto ganham id, e quotas de donos removidos são descartadas */
 function normProp(p){
   const o=Object.assign({id:uid(),name:'',address:'',use:'investimento',rentalMode:'inteiro',rooms:[],
     value:0,purchase:0,ownerIds:[],ownerShares:{},notes:'',listing:'',photos:[],loans:[],
@@ -96,6 +105,7 @@ function normProp(p){
   o.ownerShares=sh;
   return o;
 }
+/* normaliza um contrato: omissões preenchidas; itens do inventário e chaves ganham id próprio */
 function normContract(c){
   const o=Object.assign({id:uid(),name:'',propertyId:null,roomId:null,tenantIds:[],rent:0,taxRate:0,iban:'',
     ownerEmail:'',ownerPhone:'',tenantEmail:'',tenantPhone:'',ownerContactId:'',tenantContactId:'',
@@ -137,6 +147,8 @@ function fillCats(st){
 const normSettle=x=>Object.assign({id:uid(),date:'',propertyId:null,fromId:null,toId:null,amount:0},x||{});
 /* modelo: um movimento guardado para repetir à mão; recorrência: repete-se sozinho e pede confirmação */
 const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType'];
+/* cópia profunda de um movimento só com os campos que fazem sentido repetir (TX_TPL_KEYS):
+   é o que os modelos e as recorrências guardam — data e id ficam de fora de propósito */
 function txSnapshot(t){const o={};TX_TPL_KEYS.forEach(k=>{if(t[k]!==undefined)o[k]=JSON.parse(JSON.stringify(t[k]))});return o}
 const normTpl=x=>{const o=Object.assign({id:uid(),name:''},x||{});o.tx=txSnapshot(normTx(o.tx||{}));return o};
 const normRec=x=>{const o=Object.assign({id:uid(),name:'',every:'month',next:'',until:'',end:'',muted:false,auto:false},x||{});o.tx=txSnapshot(normTx(o.tx||{}));if(o.until&&o.until<o.next)o.until=o.next;return o};
@@ -147,6 +159,9 @@ const CATMAP={'IMI':['Impostos','IMI'],'Seguro':['Seguros','Multirriscos'],'Águ
   'Obras':['Obras e benfeitorias',''],'Manutenção':['Manutenção e reparações',''],'Comissões':['Gestão e mediação','']};
 
 let db=load();
+/* lê os dados guardados (ou a versão antiga mais recente que houver), normaliza tudo e faz as
+   migrações maiores: inquilinos com renda passam a contratos, categorias renomeadas são remapeadas
+   e as liquidações antigas viram movimentos de acerto; devolve sempre uma base utilizável */
 function load(){
   let d=null;
   try{d=JSON.parse(rawGet(KEY)||'null')}catch(e){}
@@ -201,9 +216,12 @@ function load(){
   migrateSettlements(out);
   return out;
 }
+/* grava a base inteira no aparelho e reagenda os lembretes no telemóvel */
 function save(){rawSet(KEY,JSON.stringify(db));scheduleReminders()}
 /* lembretes no telemovel: quando um recorrente entra para confirmar e quando passa a atraso */
 let _remT=null;
+/* reagenda as notificações locais via ponte Android (fora da app instalada não faz nada): espera
+   400ms para juntar gravações seguidas numa só chamada e envia até 60 lembretes futuros, por data */
 function scheduleReminders(){
   if(!(window.Android&&Android.scheduleReminders))return;
   clearTimeout(_remT);

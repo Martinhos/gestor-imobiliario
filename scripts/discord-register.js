@@ -110,6 +110,9 @@ const comandos = [
   Object.assign({ name: 'resumo', description: 'Enviar o resumo diário para o canal de administração' }, soOperacao),
 ];
 
+// PUT da lista completa de comandos no endereço dado — o Discord substitui o
+// que lá estava. Devolve { ok, status, texto } em vez de lançar, para quem
+// chama poder tentar o registo global a seguir.
 const registar = (url) =>
   fetch(url, {
     method: 'PUT',

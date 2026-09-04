@@ -27,9 +27,11 @@ if (!window.Android) {
 /* O tema é uma preferência do aparelho, não da conta: sincronizá-lo fazia
    um telemóvel em modo escuro herdar o "claro" escolhido noutro sítio. */
 var LS_THEME = 'gi_theme';
+// Tema guardado neste aparelho; 'auto' se nada houver ou se o localStorage falhar.
 function localTheme() {
   try { return localStorage.getItem(LS_THEME) || 'auto'; } catch (e) { return 'auto'; }
 }
+// Sobrepõe o tema do aparelho ao que estiver em db.settings e aplica-o.
 function applyLocalTheme() {
   db.settings.theme = localTheme();
   applyTheme();
@@ -43,11 +45,17 @@ applyLocalTheme();
 
 var snap = {};
 var snapKey = function () { return 'gi_cloud_snap_' + (CW.user ? CW.user.id : ''); };
+// Carrega do aparelho o retrato do servidor (chave -> JSON do que já lá está).
 function loadSnap() { try { snap = JSON.parse(localStorage.getItem(snapKey()) || '{}'); } catch (e) { snap = {}; } }
+// Guarda o retrato no aparelho; se o localStorage falhar, refaz-se no próximo pull.
 function saveSnap() { try { localStorage.setItem(snapKey(), JSON.stringify(snap)); } catch (e) {} }
 
 /* ---------------- API ---------------- */
 
+/* Chamada à API: junta o token da sessão, serializa 'data' em JSON e devolve
+   a resposta já decomposta. Um 401 fora de /api/auth/ encerra a sessão local
+   (sessionLost). Resposta não-ok rejeita com um Error cuja mensagem vem do
+   servidor e com .status preenchido. */
 function api(method, path, data) {
   var opts = { method: method, headers: {}, credentials: 'same-origin' };
   if (CW.user && CW.user.token) opts.headers['Authorization'] = 'Bearer ' + CW.user.token;
@@ -66,6 +74,7 @@ function api(method, path, data) {
   });
 }
 
+// Deita fora a sessão local e volta ao ecrã de entrada, com aviso de expiração.
 function sessionLost() {
   CW.user = null;
   try { localStorage.removeItem(LS_USER); } catch (e) {}
@@ -74,6 +83,8 @@ function sessionLost() {
 
 /* ---------------- exportação: db -> entidades do servidor ------------- */
 
+// Cópia profunda sem as chaves de trabalho (as que começam por '_'):
+// é esta a forma que segue para o servidor.
 function strip(o) {
   var c = JSON.parse(JSON.stringify(o));
   Object.keys(c).forEach(function (k) { if (k.charAt(0) === '_') delete c[k]; });
@@ -138,6 +149,8 @@ function exportEntities() {
   return map;
 }
 
+// Decompõe uma chave do retrato ('h:...', 'r:...', 'u:...') em {scope, houseId?,
+// kind?, id?} — o inverso das chaves que exportEntities() constrói.
 function parseKey(k) {
   var p = k.split(':');
   if (p[0] === 'h') return { scope: 'house', houseId: p[1] };
@@ -149,6 +162,7 @@ function parseKey(k) {
 
 var pushing = false, pushAgain = false, pushTimer = null;
 
+// Agenda um envio daqui a 1,2s, juntando alterações seguidas num só push.
 function schedulePush() {
   if (!CW.user) return;
   clearTimeout(pushTimer);
@@ -161,12 +175,19 @@ function schedulePush() {
    modo demo e recarregar volta a tentar tudo. */
 var _plano402 = {};
 var _avisosPlano = {};
+// Cada aviso de limite do plano aparece uma única vez por sessão (toast de 6s).
 function avisoPlano(msg) {
   if (!msg || _avisosPlano[msg]) return;
   _avisosPlano[msg] = 1;
   try { toast(msg, { ms: 6000 }); } catch (e) {}
 }
 
+/* Envia ao servidor a diferença entre o estado local e o retrato: 'put' do que
+   mudou (casas primeiro, que os registos dependem delas) e 'del' do que
+   desapareceu, em lotes de 200. Atualiza o retrato à medida que o servidor
+   aceita, marca as recusas do plano (402) para não reinsistir e acerta o selo
+   de sincronização. Reentrante: se já está a enviar, fica marcado um novo
+   envio para o fim. A Promise devolvida nunca rejeita. */
 function pushNow() {
   if (!CW.user) return Promise.resolve();
   if (pushing) { pushAgain = true; return Promise.resolve(); }
@@ -239,6 +260,11 @@ function pushNow() {
 
 var lastPull = 0;
 
+/* Reconstrói a base local inteira a partir do estado do servidor: casas com
+   donos e quotas vindas de lá, registos por casa, dados do utilizador e
+   perfis — os "proprietários" passam a ser os utilizadores com acesso.
+   Devolve o db novo, normalizado e filtrado por dropUnsafe; não toca no
+   db global. */
 function rebuildDb(st) {
   var d = JSON.parse(JSON.stringify(blank));
   var myId = CW.user ? CW.user.id : '';
@@ -309,6 +335,9 @@ function rebuildDb(st) {
   return dropUnsafe(d);
 }
 
+/* Adota o estado do servidor: substitui o db local, refaz o retrato (o que o
+   servidor não tem fica de fora, para o próximo push o enviar; o que só ele
+   tem fica marcado para apagar), grava tudo no aparelho e redesenha a app. */
 function applyState(st) {
   CW.state = st;
   db = rebuildDb(st);
@@ -336,6 +365,8 @@ function applyState(st) {
   schedulePush(); // envia o que ainda faltar no servidor
 }
 
+// Lê o estado do servidor e adota-o. Com um modal aberto não faz nada (para
+// não pisar uma edição a meio), salvo com force. Falhas põem o selo a 'off'.
 function pullNow(force) {
   if (!CW.user) return Promise.resolve();
   if (!force && modalStack.length) return Promise.resolve(); // não pisar edições abertas
@@ -345,6 +376,8 @@ function pullNow(force) {
   }).catch(function () { setSyncBadge('off'); });
 }
 
+// Um ciclo: envia o que houver e, se a última leitura já passou PULL_MS e
+// nada está a ser editado, volta a ler.
 function syncCycle() {
   if (!CW.user) return;
   pushNow().then(function () {
@@ -354,6 +387,10 @@ function syncCycle() {
 
 /* ---------------- arranque de sessão ---------------- */
 
+/* Arranque da sessão: primeira leitura ao servidor. Se ele está vazio e há
+   dados locais deste utilizador (primeira sessão de quem já usava a app sem
+   conta), sobem primeiro; caso contrário o servidor manda. Liga o ciclo de
+   30s e as sincronizações ao voltar online ou ao regressar à frente. */
 function startSync() {
   loadSnap();
   api('GET', '/api/state').then(function (st) {
@@ -388,6 +425,9 @@ var SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 var SAFE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 var safe = function (o) { return !!o && SAFE_ID.test(String(o.id == null ? '' : o.id)); };
 
+/* Deita fora, à entrada, tudo o que tenha id fora do formato que a app gera —
+   registos e sub-listas das casas — e limpa as datas fora do ISO. Altera e
+   devolve o próprio objeto. */
 function dropUnsafe(d) {
   if (!d) return d;
   ['contracts', 'transactions', 'recurring', 'templates', 'groups', 'owners', 'tenants'].forEach(function (k) {

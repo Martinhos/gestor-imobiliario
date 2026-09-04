@@ -7,6 +7,10 @@
    passa a flutuar por cima (position:fixed), ancorada ao botão.
    --------------------------------------------------------------- */
 
+/* Prende a lista ao botão em position:fixed, por baixo ou por cima conforme
+   o espaço que houver no ecrã (a altura fica entre 150 e 340px), e marca-a
+   com data-float para o popRelease saber o que desfazer. Mede o .selbtn
+   irmão; sem ele não mexe em nada. */
 function popAnchor(pop) {
   var btn = pop.parentNode && pop.parentNode.querySelector('.selbtn');
   if (!btn) return;
@@ -24,6 +28,8 @@ function popAnchor(pop) {
   pop.setAttribute('data-float', '1');
 }
 
+// Desfaz o que o popAnchor pôs — os estilos inline e o data-float. Nas
+// listas que nunca flutuaram não toca.
 function popRelease(pop) {
   if (!pop.getAttribute('data-float')) return;
   ['position', 'left', 'width', 'right', 'top', 'bottom', 'maxHeight', 'zIndex'].forEach(function (k) {
@@ -32,6 +38,8 @@ function popRelease(pop) {
   pop.removeAttribute('data-float');
 }
 
+// Solta todas as listas flutuantes que entretanto fecharam; as ainda
+// abertas ficam ancoradas onde estão.
 function releaseAll() {
   [].slice.call(document.querySelectorAll('.selpop[data-float]')).forEach(function (p) {
     if (!p.classList.contains('on')) popRelease(p);
