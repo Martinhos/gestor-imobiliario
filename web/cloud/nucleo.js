@@ -138,6 +138,10 @@ function exportEntities() {
       if (!(r.tx && r.tx.propertyId === p.id)) return;
       map['r:' + p.id + ':rec:' + r.id] = { scope: 'record', houseId: p.id, kind: 'rec', id: r.id, data: strip(r) };
     });
+    (db.visits || []).forEach(function (v) {
+      if (v.propertyId !== p.id) return;
+      map['r:' + p.id + ':visit:' + v.id] = { scope: 'record', houseId: p.id, kind: 'visit', id: v.id, data: strip(v) };
+    });
     Object.keys(persons).forEach(function (k) {
       var kind = k.split(':')[0], id = k.split(':')[1];
       map['r:' + p.id + ':' + kind + ':' + id] = { scope: 'record', houseId: p.id, kind: kind, id: id, data: strip(persons[k]) };
@@ -328,6 +332,7 @@ function rebuildDb(st) {
       if (r.kind === 'contract') d.contracts.push(normContract(r.data));
       else if (r.kind === 'tx') d.transactions.push(normTx(r.data));
       else if (r.kind === 'rec') d.recurring.push(normRec(r.data));
+      else if (r.kind === 'visit') d.visits.push(normVisit(r.data));
       else if (r.kind === 'tenant') {
         if (!tenants[r.id]) {
           var per = normPerson(r.data);

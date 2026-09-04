@@ -28,8 +28,17 @@ var AVISOS = [
   {
     v: 30,
     data: '2026-09-04',
-    titulo: 'Os prazos deixam de se perder',
+    titulo: 'Visitas, calendário, e os prazos deixam de se perder',
     seccoes: [
+      {
+        titulo: 'Dois menus novos: Visitas e Calendário',
+        afeta: ['imoveis', 'contratos'],
+        itens: [
+          'As visitas às casas têm agora registo próprio: quem vem (sem precisar de ficha — ainda não é inquilino), a que imóvel ou quarto, quando (com horas), o estado e o desfecho, e os teus comentários.',
+          'Quando uma visita corre bem, o menu da visita converte-a numa ficha de inquilino num toque, com nome e contacto já preenchidos.',
+          'O Calendário mostra o mês de relance: visitas agendadas e movimentos planeados, dia a dia. Tocar num dia abre a lista dele — e um dia vazio oferece logo marcar visita ali.',
+        ],
+      },
       {
         titulo: 'A vista geral ganha o cartão «Prazos»',
         afeta: ['contratos', 'imoveis', 'creditos'],
