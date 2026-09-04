@@ -20,17 +20,68 @@ const esc = (s) => String(s == null ? '' : s)
 // os comentários são prosa: quebras duplas separam parágrafos, simples
 // juntam — e as linhas do guia de interface (Recebe/Devolve) ganham relevo
 // Recebe: t — o texto do comentário (string).
-// Devolve: HTML em string — um <p> por parágrafo, com Recebe:/Devolve: em relevo.
+// Devolve: HTML em string — um <p> por parágrafo.
 const prosa = (t) => esc(t).split(/\n{2,}/)
   .filter(Boolean)
-  .map((p) => '<p>' + p.replace(/\n/g, ' ')
-    .replace(/(^|[.;] )(Recebe|Devolve):/g, '$1<b class="io">$2:</b>') + '</p>').join('');
+  .map((p) => '<p>' + p.replace(/\n/g, ' ') + '</p>').join('');
 
 /* Monta a página inteira — gaveta, comandos, capítulos, pesquisa — a partir
    do DOCS gerado no deploy, e devolve-a como Response HTML sem cache. Tudo
    inline: a página não volta a pedir nada ao servidor, e a pesquisa corre no
    browser sobre o próprio DOM.
    Devolve: uma Response HTML sem cache com a página completa. */
+/* Parte o comentário de uma função nas suas três peças: o sumário (a prosa
+   que explica o que faz), o Recebe e o Devolve. As etiquetas procuram-se no
+   princípio de uma linha ou de uma frase — a palavra «devolve» no meio de
+   uma explicação não é uma etiqueta.
+   Recebe: doc — o comentário extraído do código (texto, pode ser vazio).
+   Devolve: {sumario, recebe, devolve} — três textos, vazios quando faltam. */
+function partesDoComentario(doc) {
+  const t = String(doc || '');
+  const acha = (etiqueta) => {
+    const linha = new RegExp('(?:^|\\n)\\s*' + etiqueta + ':', 'i').exec(t);
+    if (linha) return linha.index + (linha[0][0] === '\n' ? 1 : 0);
+    const frase = new RegExp('(?:^|[.;)] )' + etiqueta + ':', 'i').exec(t);
+    return frase ? frase.index + (frase[0].length - etiqueta.length - 1) : -1;
+  };
+  const iR = acha('Recebe');
+  const iD = acha('Devolve');
+  const corte = [iR, iD].filter((i) => i >= 0).sort((a, b) => a - b)[0];
+  const sumario = (corte == null ? t : t.slice(0, corte)).trim();
+  const pedaco = (ini, fim) => ini < 0 ? ''
+    : t.slice(ini, fim >= 0 && fim > ini ? fim : undefined).replace(/^\s*\w+:\s*/i, '').trim();
+  // as quebras de linha do código-fonte não são quebras de sentido nos
+  // campos: um parâmetro partido em duas linhas é uma frase só
+  const junta = (x) => x.split(/\s+/).join(' ').trim();
+  return {
+    sumario,
+    recebe: junta(pedaco(iR, iD)),
+    devolve: junta(pedaco(iD, iR > iD ? iR : -1)),
+  };
+}
+
+/* Os parâmetros de um «Recebe», um por linha. O formato escrito é
+   «nome — o que é; outro — o que é», mas nem sempre: o que não tiver traço
+   fica como está, numa linha só.
+   Recebe: texto — o corpo do Recebe, sem a etiqueta.
+   Devolve: lista de {nome, descricao} — o nome vazio quando não há traço. */
+function paramsDe(texto) {
+  if (!texto) return [];
+  return texto.split(/;\s+(?=[\w$[{.]+ *(?:\(opcional\) *)?—)/)
+    .map((p) => p.trim().replace(/[.;]$/, ''))
+    .filter(Boolean)
+    .map((p) => {
+      // o «(opcional)» faz parte do nome do parâmetro, não da descrição
+      const m = /^([\w$[\]{}., ]+?)(\s*\((?:opcional|opcionais)\))?\s+—\s+([\s\S]+)$/.exec(p);
+      if (!m) return { nome: '', descricao: p };
+      return { nome: m[1].trim(), opcional: !!m[2], descricao: m[3].trim() };
+    });
+}
+
+/* Monta a página inteira — gaveta, comandos, capítulos e pesquisa — a partir
+   do DOCS gerado no deploy. Cada função aparece em quatro peças distintas:
+   assinatura, sumário, Recebe e Devolve.
+   Devolve: uma Response HTML sem cache, pronta a servir em /equipa/docs. */
 export function paginaDocs() {
   let nFn = 0;
 
@@ -38,9 +89,16 @@ export function paginaDocs() {
     const itens = c.itens.map((x) => {
       const fns = (x.funcoes || []).map((f) => {
         nFn++;
+        const p = partesDoComentario(f.doc);
+        const linhas = paramsDe(p.recebe).map((a) =>
+          `<div class="param">${a.nome ? '<code>' + esc(a.nome) + '</code> ' : ''}` +
+          `${a.opcional ? '<span class="opc">opcional</span> ' : ''}<span>${esc(a.descricao)}</span></div>`).join('');
         return `<div class="fn" id="fn_${nFn}">
-          <code class="ass">${esc(f.assinatura || f.nome)}</code>
-          <div class="doc">${f.doc ? prosa(f.doc) : '<p class="semdoc">Sem comentário — lê a implementação antes de usar.</p>'}</div>
+          <div class="ass"><code>${esc(f.assinatura || f.nome)}</code></div>
+          ${p.sumario ? '<div class="sum">' + prosa(p.sumario) + '</div>'
+            : '<div class="sum"><p class="semdoc">Sem comentário — lê a implementação antes de usar.</p></div>'}
+          ${p.recebe ? '<div class="io"><span class="rot">Recebe</span><div class="val">' + linhas + '</div></div>' : ''}
+          ${p.devolve ? '<div class="io"><span class="rot">Devolve</span><div class="val">' + esc(p.devolve) + '</div></div>' : ''}
         </div>`;
       }).join('');
       const resumo = (x.texto || '').split('\n')[0].slice(0, 110);
@@ -103,9 +161,24 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
 .fich summary code{color:var(--ink)}
 .corpo{padding:2px 16px 12px;font-size:14px}
 .corpo>p{margin:0 0 10px;color:var(--muted)}
-.fn{border-top:1px solid var(--line);padding:11px 0}
-.fn .ass{display:inline-block;background:var(--chip);padding:4px 9px;border-radius:7px;font-size:12.5px;margin-bottom:6px}
-.fn .doc p{margin:0 0 8px}
+.fn{border-top:1px solid var(--line);padding:13px 0}
+.fn .ass{margin-bottom:7px}
+.fn .ass code{display:inline-block;background:var(--chip);padding:5px 10px;border-radius:7px;
+  font-size:12.5px;font-weight:600;color:var(--ink)}
+.fn .sum{margin-bottom:9px}
+.fn .sum p{margin:0 0 7px}
+/* Recebe e Devolve como campos etiquetados: a etiqueta à esquerda em ecrã
+   largo, por cima no telemóvel — em ambos os casos, separada do sumário. */
+.fn .io{display:grid;grid-template-columns:74px 1fr;gap:10px;align-items:baseline;
+  padding:5px 0 5px 10px;border-left:2px solid var(--accent);margin-bottom:5px}
+.fn .rot{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--accent)}
+.fn .val{font-size:13.5px;color:var(--muted);min-width:0}
+.fn .param{margin-bottom:4px}
+.fn .param:last-child{margin-bottom:0}
+.fn .param code{color:var(--ink);font-size:12px}
+.fn .param .opc{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;
+  background:var(--chip);border-radius:5px;padding:1px 5px;margin-right:3px}
+@media(max-width:560px){.fn .io{grid-template-columns:1fr;gap:3px}}
 .fn.marca{background:var(--marca);border-radius:8px;padding:11px 10px;margin:0 -10px}
 .semdoc{color:var(--muted);font-style:italic}
 .res{display:block;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:7px;cursor:pointer;font-size:13.5px}
@@ -176,7 +249,7 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
     [].forEach.call(c.querySelectorAll('.fich'), function (d) {
       indice.push({ el: d, cap: c.id, capNome: capNome, rotulo: d.dataset.nome, texto: d.textContent.toLowerCase() });
       [].forEach.call(d.querySelectorAll('.fn'), function (f) {
-        indice.push({ el: f, cap: c.id, capNome: capNome, rotulo: f.querySelector('.ass').textContent, fich: d, texto: f.textContent.toLowerCase() });
+        indice.push({ el: f, cap: c.id, capNome: capNome, rotulo: f.querySelector('.ass').textContent.trim(), fich: d, texto: f.textContent.toLowerCase() });
       });
     });
   });
