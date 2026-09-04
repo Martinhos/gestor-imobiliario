@@ -26,6 +26,24 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 30,
+    data: '2026-09-04',
+    titulo: 'Os prazos deixam de se perder',
+    seccoes: [
+      {
+        titulo: 'A vista geral ganha o cartão «Prazos»',
+        afeta: ['contratos', 'imoveis', 'creditos'],
+        itens: [
+          'O fim de cada contrato avisa com antecedência — incluindo a janela legal de oposição à renovação (120 dias), enquanto ainda vais a tempo.',
+          'O aumento anual da renda avisa a tempo de o comunicar ao inquilino com os 30 dias de pré-aviso.',
+          'A validade do cartão de cidadão de inquilinos e proprietários, e o certificado energético de cada imóvel, avisam antes de caducarem.',
+          'Nos créditos mistos, o fim da fase de taxa fixa avisa com 90 dias — o momento certo para comparar propostas.',
+          'Cada aviso pode ser silenciado; quando a data mudar (contrato renovado, documento novo), volta sozinho. Na app instalada, os prazos também chegam como notificações.',
+        ],
+      },
+    ],
+  },
+  {
     v: 29,
     data: '2026-09-02',
     titulo: 'Nada se perde sem perguntar',

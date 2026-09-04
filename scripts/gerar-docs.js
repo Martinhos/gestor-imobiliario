@@ -36,7 +36,7 @@ const MAPA = [
       'web/cloud/partilha.js', 'web/cloud/utilizadores.js', 'web/app/splitwise.js'] },
   { id: 'imoveis', titulo: 'Imóveis, contratos e pessoas',
     ficheiros: ['web/app/imovel.js', 'web/app/contrato.js', 'web/app/contrato-pdf.js',
-      'web/app/pessoas.js', 'web/app/avaliacao.js'] },
+      'web/app/pessoas.js', 'web/app/avaliacao.js', 'web/app/prazos.js'] },
   { id: 'movimentos', titulo: 'Movimentos e seleção em massa',
     ficheiros: ['web/app/movimento.js', 'web/app/planeados.js', 'web/cloud/selecao.js',
       'web/cloud/selecao-listas.js'] },

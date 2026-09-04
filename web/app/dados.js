@@ -266,6 +266,7 @@ function scheduleReminders(){
       list.push({id:'l_'+r.id+'_'+lim,at:at(lim,9),title:'Em atraso: '+r.name,
         text:'“'+r.name+'”'+v+' passou o prazo sem confirmação.'});
     });
+    if(typeof prazosLembretes==='function')list.push(...prazosLembretes());
     Android.scheduleReminders(JSON.stringify(list.filter(x=>x.at>Date.now()).sort((a,b)=>a.at-b.at).slice(0,60)));
   }catch(e){}},400);
 }
