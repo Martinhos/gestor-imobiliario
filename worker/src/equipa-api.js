@@ -19,6 +19,9 @@ import { json, err, body, now, badId, CATEGORIAS } from './lib/http.js';
 import { catsDe } from './discord.js';
 import { auditar, registarOp } from './lib/auditoria.js';
 
+// Corta a `n` caracteres com reticências — para os resumos que vão para o rasto.
+// Recebe: s — o texto (qualquer valor; null e undefined contam como vazio); n — o máximo de caracteres.
+// Devolve: string com n caracteres no máximo, a acabar em '…' quando houve corte.
 const cortar = (s, n) => {
   const t = String(s == null ? '' : s);
   return t.length > n ? t.slice(0, n - 1) + '…' : t;
@@ -26,6 +29,8 @@ const cortar = (s, n) => {
 
 // A mesma regra do bot, e de propósito a mesma função: duas cópias disto
 // acabavam a discordar uma da outra na primeira mudança de papéis.
+// Recebe: eu — a sessão de equipa, com papeis (lista) ou papel (string).
+// Devolve: lista de categorias ('user', 'client', …) que esses papéis veem, sem repetidos.
 function categoriasDe(eu) {
   return catsDe(eu.papeis || eu.papel);
 }
@@ -33,10 +38,17 @@ function categoriasDe(eu) {
 // As ações sobre contas são só do master. Não por desconfiança dos outros —
 // por serem as únicas ações daqui que mexem na vida de quem usa a app, e
 // isso quer um responsável único enquanto a equipa couber numa mão.
+// Recebe: eu — a sessão de equipa, com papeis (lista) ou papel (string).
+// Devolve: booleano — true se um dos papéis for 'master'.
 const eMaster = (eu) => ((eu.papeis || [eu.papel]).indexOf('master') > -1);
 
 /* A ficha de quem escreveu. É a mesma informação que o bot mostra, e pela
-   mesma razão: responder sem saber quem é a pessoa é responder às cegas. */
+   mesma razão: responder sem saber quem é a pessoa é responder às cegas.
+   Recebe: env — o ambiente do worker (a base em env.DB); userId — o id da conta.
+   Devolve: promessa da ficha ({id, nome, email, plano, desde, apagada,
+   suspensa, aceitouTermos, termos, entrada, e as contagens casas, registos,
+   pedidos, errosApanhados}); de { id, desconhecido: true } quando a conta não
+   existe; de null sem userId. */
 async function ficha(env, userId) {
   if (!userId) return null;
   const u = await env.DB.prepare(
@@ -69,7 +81,11 @@ async function ficha(env, userId) {
 }
 
 /* O resto da vista a 360º: só na página da pessoa, porque são mais seis
-   consultas e a ficha básica também serve dentro de cada pedido. */
+   consultas e a ficha básica também serve dentro de cada pedido.
+   Recebe: env — o ambiente do worker (a base em env.DB); userId — o id da conta.
+   Devolve: promessa da ficha completa — a da ficha() mais ultimaAtividade,
+   versaoApp, limites, ligacoes e propostas; tal e qual a ficha() (null ou
+   desconhecido) quando a conta não existe. */
 async function ficha360(env, userId) {
   const f = await ficha(env, userId);
   if (!f || f.desconhecido) return f;
@@ -200,6 +216,14 @@ const ACOES_DE_CONTA = {
   },
 };
 
+/* As rotas /api/equipa/* que fazem o trabalho: pedidos, pessoas, contas,
+   endereços, operação e rasto. Chega cá com `eu` — a sessão de equipa — já
+   verificado; tudo o que devolve passa primeiro pelo filtro das categorias
+   do papel, e as ações sensíveis pelo eMaster. Devolve a Response, ou null
+   quando a rota não é daqui.
+   Recebe: c — o contexto do pedido ({ env, request, path, method, url, eu, ctx }),
+   com a sessão de equipa em eu já verificada.
+   Devolve: promessa da Response da rota, ou de null quando o caminho não é daqui. */
 export async function rotasEquipaApi(c) {
   const { env, request, path, method, url, eu, ctx } = c;
   const cats = categoriasDe(eu);

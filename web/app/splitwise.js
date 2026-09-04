@@ -1,12 +1,26 @@
 /* ================= SPLITWISE ================= */
 let swRows=null,swHead=null;
+// Recebe o ficheiro escolhido no <input type=file>, lê-o como texto e passa-o ao swParse.
+// Limpa o input para que escolher o mesmo ficheiro volte a disparar o evento.
+// Recebe: input — o próprio elemento <input type=file> (usa input.files[0]).
+// Devolve: nada — a leitura é assíncrona e desagua no swParse.
 function swPick(input){const f=input.files&&input.files[0];if(!f)return;input.value='';const r=new FileReader();r.onload=()=>swParse(String(r.result));r.readAsText(f,'utf-8')}
+// Alternativa ao seletor de ficheiros: modal com textarea para colar o conteúdo do CSV à mão.
+// Devolve: nada — abre o modal.
 function swPasteBox(){
   openModal('Colar CSV do Splitwise',`<div class="form"><div class="hint">Abre o CSV, copia tudo e cola aqui — incluindo a linha dos títulos.</div>
     <textarea id="swText" style="min-height:120px;font:13px/1.5 ui-monospace,Menlo,monospace" placeholder="Date,Description,Category,Cost,Currency,..."></textarea></div>`,
     `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="swParse(val('swText'))">Continuar</button>`);
 }
+// Adivinha o separador do CSV pela linha de cabeçalho: conta vírgulas e pontos e vírgula fora de aspas e fica com o mais frequente.
+// Recebe: line — a primeira linha do CSV (o cabeçalho), como texto.
+// Devolve: o separador detetado, ';' ou ',' (string de um carácter).
 function splitDelim(line){let q=false,c=0,s=0;for(const ch of line){if(ch==='"')q=!q;else if(!q){if(ch===',')c++;if(ch===';')s++}}return s>c?';':','}
+/* Leitor de CSV completo: respeita campos entre aspas, aspas escapadas ("") e
+   fins de linha \r\n. Recebe o texto e o separador (d) e devolve as linhas como
+   arrays de células, já sem as linhas totalmente vazias.
+   Recebe: text — o conteúdo do CSV como string; d — o separador de campos (',' ou ';').
+   Devolve: array de linhas, cada linha um array de strings (as células). */
 function parseCsv(text,d){
   const rows=[];let row=[],cur='',q=false;
   for(let i=0;i<text.length;i++){const c=text[i];
@@ -17,6 +31,10 @@ function parseCsv(text,d){
   if(cur!==''||row.length){row.push(cur);rows.push(row)}
   return rows.filter(r=>r.some(x=>String(x).trim()!==''));
 }
+// Ponto de entrada da importação (ficheiro ou colagem): analisa o CSV, guarda cabeçalho e
+// linhas em swHead/swRows e abre o modal de mapeamento. Avisa por toast se não houver nada aproveitável.
+// Recebe: text — o conteúdo do CSV como string (vindo do ficheiro ou da colagem).
+// Devolve: nada — guarda o estado em swHead/swRows e abre o modal (ou avisa por toast).
 function swParse(text){
   text=String(text||'').trim();
   if(!text)return toast('Não recebi nenhum texto.');
@@ -24,7 +42,14 @@ function swParse(text){
   if(rows.length<2)return toast('Não consegui ler linhas neste ficheiro.');
   swHead=rows[0].map(h=>String(h).trim());swRows=rows.slice(1);closeAllModals();swMapModal();
 }
+// Índice da coluna cujo cabeçalho, reduzido a minúsculas e só letras (a-z e ç), coincide com um dos nomes dados; -1 se nenhum.
+// Recebe: ...names — nomes candidatos do cabeçalho, já nessa forma reduzida (ex.: 'data', 'custo').
+// Devolve: o índice (número) da primeira coluna que coincide, ou -1 se nenhuma.
 const findCol=(...names)=>{for(const n of names){const i=swHead.findIndex(h=>h.toLowerCase().replace(/[^a-zç]/g,'')===n);if(i>-1)return i}return -1};
+/* Depois de ler o CSV: deteta as colunas de data, descrição, custo e categoria,
+   guarda os índices em window._swCols e abre o modal de importação com escolha
+   de imóvel, quota-parte e pré-visualização das despesas.
+   Devolve: nada — abre o modal de importação. */
 function swMapModal(){
   const iDate=findCol('date','data'),iDesc=findCol('description','descrição','descricao'),
         iCost=findCol('cost','custo','amount','valor'),iCat=findCol('category','categoria');
@@ -37,7 +62,17 @@ function swMapModal(){
     <div class="divider"></div><div id="swPrev">${swPrevHtml(swPrepare(iDate,iDesc,iCost,iCat,100,db.settings.quota||100))}</div></div>`,
     `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="swDo(${iDate},${iDesc},${iCost},${iCat})">Importar</button>`);
 }
+// Refaz a pré-visualização (#swPrev) quando o utilizador mexe na quota-parte.
+// Devolve: nada — redesenha a pré-visualização no DOM.
 function swRefresh(){const[a,b,c,d]=window._swCols;document.getElementById('swPrev').innerHTML=swPrevHtml(swPrepare(a,b,c,d,100,num(val('sw_quota'))))}
+/* Converte as linhas do CSV em despesas prontas a lançar: salta o "Total balance"
+   e os acertos ("Payment"), aplica a quota-parte (%), normaliza a data para ISO
+   e traduz a categoria. Pára ao atingir "limit" (a pré-visualização usa 100).
+   Recebe: iDate, iDesc, iCost, iCat — índices (números) das colunas de data,
+   descrição, custo e categoria nas linhas do CSV; limit — máximo de despesas a
+   devolver; quota — a quota-parte em percentagem (ex.: 50).
+   Devolve: array de despesas {date, label, amount, category, sub}, com a data
+   em AAAA-MM-DD e o valor já com a quota aplicada e arredondado aos cêntimos. */
 function swPrepare(iDate,iDesc,iCost,iCat,limit,quota){
   const q=(quota||100)/100,out=[];
   for(const r of swRows){
@@ -52,6 +87,9 @@ function swPrepare(iDate,iDesc,iCost,iCat,limit,quota){
   }
   return out;
 }
+// Normaliza "31/12/2024", "2024-12-31" ou "31.12.2024" para AAAA-MM-DD; assume dia primeiro quando o ano vem no fim. Devolve null se não reconhecer.
+// Recebe: s — a data como texto, num desses formatos.
+// Devolve: a data em "AAAA-MM-DD" (string), ou null se não a reconhecer.
 function isoDate(s){
   const m=String(s).match(/(\d{1,4})[\/\-.](\d{1,2})[\/\-.](\d{1,4})/);if(!m)return null;
   const a=m[1],b=m[2],c=m[3];
@@ -59,6 +97,9 @@ function isoDate(s){
   if(c.length===4)return `${c}-${b.padStart(2,'0')}-${a.padStart(2,'0')}`;
   return null;
 }
+// Traduz a categoria do Splitwise (inglês ou português) para o par [categoria, subcategoria] da app; sem correspondência cai em "Outros".
+// Recebe: c — a categoria vinda do Splitwise, como texto (pode vir vazia).
+// Devolve: o par [categoria, subcategoria] (array de duas strings; a subcategoria pode ser '').
 function mapCat(c){
   const s=String(c||'').toLowerCase();
   if(/water|água|agua/.test(s))return ['Água, luz e gás','Água'];
@@ -74,6 +115,9 @@ function mapCat(c){
   if(/condom/.test(s))return ['Condomínio',''];
   return ['Outros',''];
 }
+// HTML da pré-visualização: contagem e total das despesas, mais as primeiras 6 em tabela.
+// Recebe: rows — as despesas preparadas pelo swPrepare ({date, label, amount, ...}).
+// Devolve: string de HTML da pré-visualização, pronta a inserir com innerHTML.
 function swPrevHtml(rows){
   if(!rows.length)return `<div class="hint">Nenhuma linha aproveitável. Confirma que exportaste o CSV do grupo.</div>`;
   return `<div class="hint" style="margin-bottom:8px">${rows.length} despesas · total <b>${euro2(sum(rows.map(r=>r.amount)))}</b></div>
@@ -81,6 +125,12 @@ function swPrevHtml(rows){
     ${rows.slice(0,6).map(r=>`<tr><td>${r.date}</td><td style="text-align:left;white-space:normal">${esc(r.label)}</td><td>${euro2(r.amount)}</td></tr>`).join('')}
     ${rows.length>6?`<tr><td colspan="3" style="text-align:left;color:var(--muted)">…e mais ${rows.length-6}</td></tr>`:''}</tbody></table></div>`;
 }
+/* Executa a importação: guarda a quota nas definições, lança as despesas no imóvel
+   escolhido saltando duplicados (mesma data, imóvel, valor e descrição) e marca o
+   lote com um id para o undoImport poder anular. Grava e volta a renderizar.
+   Recebe: iDate, iDesc, iCost, iCat — índices (números) das colunas de data,
+   descrição, custo e categoria detetados no CSV.
+   Devolve: nada — grava, fecha o modal, redesenha a vista e avisa por toast. */
 function swDo(iDate,iDesc,iCost,iCat){
   const pid=val('sw_prop'),quota=num(val('sw_quota'))||100;
   if(!pid)return toast('Cria primeiro um imóvel.');
@@ -94,6 +144,8 @@ function swDo(iDate,iDesc,iCost,iCat){
   });
   save();closeModal();render();toast(`${added} despesas importadas${dup?` · ${dup} repetidas ignoradas`:''}.`);
 }
+// Anula a última importação: apaga, após confirmação, todos os movimentos do lote mais recente.
+// Devolve: nada — se for confirmado, grava e redesenha a vista.
 function undoImport(){
   const b=[...new Set(db.transactions.filter(t=>t.batch).map(t=>t.batch))].sort(),last=b[b.length-1];
   if(!last)return toast('Não há importações para anular.');
@@ -298,7 +350,9 @@ const CONTRACT_XML=`<?xml version="1.0" encoding="utf-8"?>
 /* ================= GERADOR DE PDF =================
    Escritor de PDF mínimo, sem bibliotecas: fontes Helvetica padrão,
    codificação WinAnsi (cobre todos os acentos portugueses) e quebra de
-   linha calculada com as larguras reais dos glifos. */
+   linha calculada com as larguras reais dos glifos.
+   O HW é a tabela de larguras da Helvetica normal, construída uma vez pelo IIFE.
+   Devolve: objeto {código do carácter → largura em milésimos de em}. */
 const HW=(function(){
   const w={},a=(s,v)=>{for(const c of s)w[c.charCodeAt(0)]=v};
   a(' ',278);a('!',278);a('"',355);a('#',556);a('$',556);a('%',889);a('&',667);a("'",191);
@@ -314,6 +368,8 @@ const HW=(function(){
   a('y',500);a('z',500);a('{',334);a('|',260);a('}',334);a('~',584);
   return w;
 })();
+// Larguras dos glifos da Helvetica-Bold — o par negrito da tabela HW acima.
+// Devolve: objeto {código do carácter → largura em milésimos de em}, construído uma vez pelo IIFE.
 const HWB=(function(){
   const w={},a=(s,v)=>{for(const c of s)w[c.charCodeAt(0)]=v};
   a(' ',278);a('!',333);a('"',474);a('#',556);a('$',556);a('%',889);a('&',722);a("'",238);
@@ -336,6 +392,9 @@ const BASE={192:'A',193:'A',194:'A',195:'A',196:'A',197:'A',199:'C',200:'E',201:
   231:'c',232:'e',233:'e',234:'e',235:'e',236:'i',237:'i',238:'i',239:'i',241:'n',242:'o',
   243:'o',244:'o',245:'o',246:'o',249:'u',250:'u',251:'u',252:'u',253:'y',186:'o',170:'a',
   8364:'E',8220:'"',8221:'"',8216:"'",8217:"'",8212:'-',8211:'-',183:'.',176:'o',186:'o'};
+// Largura de um carácter (milésimos de em) na fonte pedida; acentuados usam a letra base, desconhecidos levam uma largura média.
+// Recebe: code — o código do carácter (charCodeAt); bold — true para a Helvetica-Bold.
+// Devolve: a largura em milésimos de em (número).
 function charW(code,bold){
   const w=bold?HWB:HW;
   if(w[code]!==undefined)return w[code];
@@ -343,11 +402,19 @@ function charW(code,bold){
   if(b)return w[b.charCodeAt(0)]||500;
   return bold?611:556;
 }
+// Largura de uma linha de texto em pontos, para o tamanho e peso dados — é isto que decide as quebras de linha.
+// Recebe: s — o texto; size — o tamanho da fonte em pontos; bold — true para negrito.
+// Devolve: a largura do texto em pontos (número).
 const textW=(s,size,bold)=>{let t=0;for(let i=0;i<s.length;i++)t+=charW(s.charCodeAt(i),bold);return t*size/1000};
 
 /* WinAnsi: mapeia o que precisamos e substitui o resto */
 const WIN={8364:128,8218:130,8222:132,8230:133,8224:134,8225:135,8216:145,8217:146,
   8220:147,8221:148,8226:149,8211:150,8212:151,732:152,8482:153,8250:155};
+/* Prepara texto para uma string literal do PDF: converte os símbolos tipográficos
+   via tabela WIN, reduz o resto do não-latin-1 à letra base (ou "?") e escapa
+   parênteses e barra invertida.
+   Recebe: s — o texto a escrever no PDF.
+   Devolve: a string pronta para o literal do PDF (só latin-1, com escapes). */
 function pdfEsc(s){
   let out='';
   for(let i=0;i<s.length;i++){
@@ -360,6 +427,12 @@ function pdfEsc(s){
   return out;
 }
 
+/* Cria um documento A4 e devolve o escritor: text() escreve parágrafos com quebra
+   de linha calculada e mudança de página automática, line() faz linhas de tabela,
+   photo() coloca um JPEG com legenda, rule()/gap() separam, e build() devolve o
+   ficheiro completo como string latin-1 (um carácter = um byte).
+   Devolve: o objeto escritor, com esses métodos (e image/draw/need/newPage/gap),
+   já com a primeira página aberta. */
 function PDF(){
   const P={pages:[],cur:null,y:0,W:595.28,H:841.89,ML:56,MR:56,MT:64,MB:64,images:[]};
   P.newPage=()=>{P.cur=[];P.pages.push(P.cur);P.y=P.H-P.MT};
@@ -444,7 +517,11 @@ function PDF(){
   return P;
 }
 
-/* fotografia guardada em IndexedDB -> JPEG redimensionado, em string de bytes (para o PDF) */
+/* fotografia guardada em IndexedDB -> JPEG redimensionado, em string de bytes (para o PDF)
+   Recebe: meta — os metadados da fotografia (usa meta.id como chave no IndexedDB);
+   maxPx (opcional) — lado máximo da imagem em píxeis (por omissão 1200).
+   Devolve: Promise de {bin, w, h} — os bytes JPEG numa string latin-1 e as
+   dimensões em píxeis — ou de null se a foto faltar ou a conversão falhar. */
 function photoJpeg(meta,maxPx){
   return idbGet(meta.id).then(blob=>{
     if(!blob)return null;

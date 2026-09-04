@@ -11,8 +11,15 @@
 
 const VAZIO = { mais: [], menos: [] };
 
+// A chave no KV onde vivem as exceções desta pessoa.
+// Recebe: discordId — o id Discord da pessoa.
+// Devolve: string — a chave ('acesso:' + id).
 const chave = (discordId) => 'acesso:' + discordId;
 
+// As exceções desta pessoa, lidas do KV. Devolve sempre {mais, menos}: sem
+// entrada, sem KV ou com lixo lá dentro, sai o vazio — e vale só o papel.
+// Recebe: env — as variáveis de ambiente (o KV em SESSIONS); discordId — o id Discord da pessoa.
+// Devolve: promessa de {mais, menos} — listas de nomes de comandos.
 export async function lerAcessos(env, discordId) {
   if (!discordId || !env.SESSIONS) return VAZIO;
   try {
@@ -28,6 +35,11 @@ export async function lerAcessos(env, discordId) {
   }
 }
 
+// Grava as exceções no KV, sem duplicados, e devolve o que ficou. Sem
+// nenhuma exceção apaga a entrada — ausência e vazio são a mesma coisa.
+// Recebe: env — as variáveis de ambiente (o KV em SESSIONS); discordId — o id
+// Discord da pessoa; acessos — {mais, menos} com as listas de comandos a guardar.
+// Devolve: promessa de {mais, menos} — o que ficou gravado, sem duplicados.
 export async function guardarAcessos(env, discordId, acessos) {
   const limpo = {
     mais: [...new Set(acessos.mais || [])],
@@ -47,7 +59,12 @@ export async function guardarAcessos(env, discordId, acessos) {
    'papel'    vem do cargo — é o que se marca como (predefinido)
    'dado'     acrescentado a esta pessoa
    'retirado' tirado a esta pessoa
-   'nao'      nem o papel dá nem foi acrescentado */
+   'nao'      nem o papel dá nem foi acrescentado
+
+   Recebe: pap — um papel (string) ou lista de papéis; comando — o nome do
+   comando; acessos — as exceções {mais, menos} desta pessoa (ou null, que
+   vale vazio); regras — { PERMISSOES, PODEM_TUDO, SO_MASTER } de quem chama.
+   Devolve: 'papel' | 'dado' | 'retirado' | 'nao'. */
 export function origemDoAcesso(pap, comando, acessos, regras) {
   const { PERMISSOES, PODEM_TUDO, SO_MASTER } = regras;
   const a = acessos || VAZIO;
@@ -73,7 +90,12 @@ export function origemDoAcesso(pap, comando, acessos, regras) {
    É a única parte do menu de caixas que decide alguma coisa: guarda-se a
    diferença para o cargo, não a lista marcada. Assim, mudar o cargo de
    alguém no Discord continua a mudar-lhe os acessos — o que ficou aqui é só
-   aquilo em que esta pessoa difere do cargo dela. */
+   aquilo em que esta pessoa difere do cargo dela.
+
+   Recebe: marcados — lista dos comandos que ficaram marcados no menu;
+   geriveis — lista dos comandos que o menu gere; vemDoCargo — função
+   (comando) => booleano que diz se o cargo já o dá.
+   Devolve: {mais, menos} — só a diferença para o cargo. */
 export function excecoesDoMenu(marcados, geriveis, vemDoCargo) {
   const mais = [], menos = [];
   geriveis.forEach((c) => {

@@ -37,6 +37,11 @@ export const diaDaChave = (k) => {
 // Que cópias já não são precisas. Mantém-se as dos últimos DIAS dias e, para
 // trás disso, só a do dia 1 de cada mês durante MESES meses. Função pura de
 // propósito: a decisão de apagar é a que mais interessa poder testar.
+// Recebe: chaves — as chaves R2 das cópias (copias/AAAA-MM-DD.ndjson.gz);
+// agora — o instante atual, em milissegundos de época; dias (opcional) —
+// quantos dias de cópias diárias manter; meses (opcional) — por quantos
+// meses guardar a do dia 1.
+// Devolve: a lista das chaves a apagar (o que não se reconhece fica).
 export function aPodar(chaves, agora, dias = DIAS, meses = MESES) {
   const limiteDiario = agora - dias * 86400000;
   const limiteMensal = agora - meses * 31 * 86400000;
@@ -53,6 +58,9 @@ export function aPodar(chaves, agora, dias = DIAS, meses = MESES) {
 
 // As tabelas da base, descobertas em vez de escritas à mão: uma tabela nova
 // numa migração passa a ser copiada sem ninguém se lembrar dela.
+// Recebe: env — o ambiente do worker (a base D1).
+// Devolve: promessa da lista de nomes das tabelas a copiar, por ordem
+// alfabética.
 export async function tabelasDaBase(env) {
   const r = await env.DB.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
@@ -64,6 +72,11 @@ export async function tabelasDaBase(env) {
 
 // Lê a base por páginas e vai entregando linhas NDJSON. Nunca tem a base
 // toda em memória — o worker tem 128 MB e a base pode ir até 500.
+// Recebe: env — o ambiente do worker (a base D1); tabelas — os nomes das
+// tabelas a copiar; conta — o objeto { linhas, t } onde se vai somando o que
+// já foi escrito.
+// Devolve: um ReadableStream de bytes — o cabeçalho primeiro, depois uma
+// linha NDJSON por registo.
 function fluxo(env, tabelas, conta) {
   const enc = new TextEncoder();
   let ti = 0, salto = 0, cabecalho = false;
@@ -94,6 +107,9 @@ function fluxo(env, tabelas, conta) {
 
 // Faz a cópia do dia e poda as que já não são precisas. Devolve o que
 // aconteceu, para o resumo diário poder dizer se correu bem.
+// Recebe: env — o ambiente do worker (a base D1 e o bucket FILES).
+// Devolve: promessa de { chave, tabelas, linhas, modo, bytes, podadas, ms }
+// quando corre, ou { erro } sem bucket ou com a base grande de mais.
 export async function copiar(env) {
   if (!env.FILES) return { erro: 'Sem bucket R2 ligado.' };
   const t = now();
@@ -132,6 +148,10 @@ export async function copiar(env) {
   };
 }
 
+// Apaga do R2 as cópias que o aPodar marcar e devolve quantas foram.
+// Recebe: env — o ambiente do worker (o bucket FILES); agora (opcional) — o
+// instante de referência, em milissegundos de época (por omissão, este).
+// Devolve: promessa do número de cópias apagadas.
 export async function podar(env, agora = now()) {
   const todas = await listar(env);
   const fora = aPodar(todas.map((o) => o.key), agora);
@@ -139,6 +159,11 @@ export async function podar(env, agora = now()) {
   return fora.length;
 }
 
+// Todas as cópias no R2, como {key, size, uploaded}, da mais recente para a
+// mais antiga. Segue a paginação até ao fim: é sobre esta lista que se poda.
+// Recebe: env — o ambiente do worker (o bucket FILES).
+// Devolve: promessa da lista de { key, size, uploaded }, da mais recente
+// para a mais antiga.
 export async function listar(env) {
   const out = [];
   let cursor;
@@ -152,6 +177,10 @@ export async function listar(env) {
 
 // Resumo para o canal de administração: uma cópia que deixou de acontecer só
 // se dá por falta quando é precisa, por isso é preciso dizê-lo todos os dias.
+// Recebe: env — o ambiente do worker (o bucket FILES).
+// Devolve: promessa de { copias, idade, bytes, ultima, texto } — ou
+// { vazio, texto } sem cópias, ou { erro, texto } quando a leitura falha.
+// O texto vai sempre pronto para o canal.
 export async function estado(env) {
   try {
     const copias = await listar(env);
@@ -171,6 +200,9 @@ export async function estado(env) {
   }
 }
 
+// Bytes em texto de gente: "512 KB", "3,2 MB" — com a vírgula portuguesa.
+// Recebe: n — o número de bytes.
+// Devolve: o texto legível; o que não for positivo dá "0 KB".
 export function kb(n) {
   if (!(n > 0)) return '0 KB';
   if (n < 1024 * 1024) return Math.max(1, Math.round(n / 1024)) + ' KB';

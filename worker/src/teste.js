@@ -27,13 +27,25 @@ export const eContaDeTeste = (email) => String(email || '').endsWith(DOMINIO_TES
 /* A chave das ligações de teste. Com os bots de dev e produção separados,
    o token do bot deixou de ser partilhado — a TESTE_CHAVE (a mesma nos dois
    ambientes) é o que deixa o /test de qualquer servidor assinar ligações
-   que o worker de dev aceita. Sem ela, vale o token do bot, como dantes. */
+   que o worker de dev aceita. Sem ela, vale o token do bot, como dantes.
+   Recebe: env — o ambiente do worker, de onde sai a TESTE_CHAVE (ou, na
+   falta dela, o token do bot).
+   Devolve: promessa de uma CryptoKey HMAC-SHA256, só para assinar. */
 async function chave(env) {
   return crypto.subtle.importKey('raw',
     new TextEncoder().encode('teste:' + (env.TESTE_CHAVE || env.DISCORD_BOT_TOKEN || 'sem-chave')),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 }
 
+// A assinatura HMAC-SHA256, em hexadecimal, dos campos de uma ligação de
+// teste — na ordem fixa em que o rotaTeste os volta a verificar. Os campos
+// vazios também contam: mudar qualquer um muda a assinatura.
+// Recebe: env — o ambiente do worker (dá a chave); exp — a validade, em
+// milissegundos de época como texto; dados — '1' com dados de exemplo, '0'
+// sem; manter (opcional) — '1' para conta extra; quem (opcional) — o id do
+// dev dono; limpar (opcional) — '1' para lavar as contas do dono; email
+// (opcional) — o email do dev para o correio das contas de teste.
+// Devolve: promessa da assinatura em hexadecimal (64 caracteres).
 export async function assinarTeste(env, exp, dados, manter, quem, limpar, email) {
   const sig = await crypto.subtle.sign('HMAC', await chave(env),
     new TextEncoder().encode(exp + ':' + dados + ':' + (manter || '0') + ':' + (quem || '') +
@@ -49,7 +61,14 @@ export async function assinarTeste(env, exp, dados, manter, quem, limpar, email)
    mais recente do dono (os dados ficam de um dia para o outro); `manter`
    cria uma extra; `limpar` é a única coisa que apaga. O `email` do dev vai
    assinado dentro da ligação — quem a abre grava-o no KV do ambiente de
-   teste, e é para lá que segue o correio das contas dele. */
+   teste, e é para lá que segue o correio das contas dele.
+   Recebe: env — o ambiente do worker; base — o URL do worker de destino, sem
+   barra final; comExemplo — verdadeiro para a conta nascer com dados de
+   exemplo; manter (opcional) — verdadeiro para uma conta extra; quem
+   (opcional) — o id do dev dono; limpar (opcional) — verdadeiro para apagar
+   as contas do dono; email (opcional) — o email do dev (ignorado se não
+   parecer um email).
+   Devolve: promessa do URL de /t/entrar, assinado e válido 10 minutos. */
 export async function ligacaoTeste(env, base, comExemplo, manter, quem, limpar, email) {
   const exp = String(now() + VALIDADE_MIN * 60000);
   const dados = comExemplo ? '1' : '0';
@@ -67,7 +86,10 @@ export async function ligacaoTeste(env, base, comExemplo, manter, quem, limpar, 
 export const chaveEmailDev = (quem) => 'teste:email:' + quem;
 
 /* A conta de teste em si: email no subdomínio, palavra-passe impossível,
-   termos aceites, e o dono (o dev que a pediu) gravado para o seletor. */
+   termos aceites, e o dono (o dev que a pediu) gravado para o seletor.
+   Recebe: env — o ambiente do worker (a base D1); quem (opcional) — o id do
+   dev dono, para o seletor (fica null quando falta).
+   Devolve: promessa de { id, email } da conta acabada de criar. */
 async function criarContaDeTeste(env, quem) {
   const id = newUserId();
   const email = 'teste-' + id.toLowerCase() + DOMINIO_TESTE;
@@ -82,6 +104,9 @@ async function criarContaDeTeste(env, quem) {
 
 // Quem abre esta rota é uma pessoa num browser: os erros são uma página
 // que se lê, não um JSON que se decifra.
+// Recebe: status — o código HTTP da resposta; titulo — o título, no
+// separador e na página; texto — a explicação por baixo (HTML simples).
+// Devolve: uma Response HTML completa, sem cache.
 function pagina(status, titulo, texto) {
   return new Response('<!doctype html><html lang="pt"><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
@@ -96,6 +121,15 @@ function pagina(status, titulo, texto) {
   });
 }
 
+/* A rota /t/entrar: valida a validade e a assinatura e, conforme as opções
+   da ligação, limpa as contas do dono, retoma a mais recente ou cria uma
+   nova — e entra com ela (302 com cookie de sessão). Os erros são páginas
+   legíveis, porque quem abre isto é uma pessoa num browser. Fora do
+   ambiente de teste é sempre 404, venha a assinatura de onde vier.
+   Recebe: c — o contexto do pedido, com env e url (as opções vêm todas da
+   query string da ligação).
+   Devolve: promessa de uma Response — o 302 com cookie de sessão quando tudo
+   bate certo, ou uma página de erro (400/403/404/410). */
 export async function rotaTeste(c) {
   const { env, url } = c;
   // produção nunca cria contas de teste — nem com assinatura boa
@@ -194,7 +228,11 @@ export async function rotaTeste(c) {
 /* Depois de se apagar uma conta de teste, a sessão seguinte: a irmã mais
    recente do mesmo dono — ou, se não sobrar nenhuma, uma acabada de criar.
    Quem testa o "apagar conta" não pode aterrar no ecrã de login de um
-   ambiente onde nem sequer há formulário que lhe valha. */
+   ambiente onde nem sequer há formulário que lhe valha.
+   Recebe: env — o ambiente do worker; dono — o id do dev cujas contas se
+   procuram.
+   Devolve: promessa de { id, email, name, token } — a conta seguinte, já com
+   sessão criada. */
 export async function proximaContaDeTeste(env, dono) {
   let conta = await env.DB.prepare(
     "SELECT id, email, name, sess_epoch FROM users WHERE test_owner = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1"
@@ -210,7 +248,11 @@ export async function proximaContaDeTeste(env, dono) {
 /* -------- o seletor de contas do ambiente de dev ------------------------
    Três rotas com sessão, só fora de produção e só para contas de teste COM
    dono: listar as contas do mesmo dev, trocar para uma delas, e criar uma
-   extra. A afinidade é o test_owner — cada dev vê e toca só nas suas. */
+   extra. A afinidade é o test_owner — cada dev vê e toca só nas suas.
+   Recebe: c — o contexto do pedido, com env, request, path, method, me e os
+   ajudantes json/err/body.
+   Devolve: promessa de uma Response JSON (ou de erro) nas rotas /api/teste/*,
+   ou de null quando o caminho não é destas rotas. */
 export async function rotasContasDeTeste(c) {
   const { env, request, path, method, me, json, err, body } = c;
   if (!path.startsWith('/api/teste/')) return null;

@@ -16,6 +16,9 @@ const zlib = require('zlib');
 
 /* ----------------------------------------------------------- PNG à mão */
 
+// CRC-32 de um chunk do PNG, com a tabela calculada uma vez e guardada na própria função.
+// Recebe: buf — o Buffer sobre o qual calcular (tipo + dados do chunk).
+// Devolve: número — o CRC-32, como inteiro sem sinal.
 function crc32(buf) {
   let table = crc32.table;
   if (!table) {
@@ -31,6 +34,9 @@ function crc32(buf) {
   return (c ^ 0xffffffff) >>> 0;
 }
 
+// Um chunk PNG completo: comprimento, tipo, dados e CRC — o formato exige os quatro.
+// Recebe: type — o tipo do chunk, quatro letras ASCII ('IHDR', 'IDAT', …); data — Buffer com os dados.
+// Devolve: Buffer com o chunk pronto (comprimento + tipo + dados + CRC).
 function chunk(type, data) {
   const len = Buffer.alloc(4);
   len.writeUInt32BE(data.length);
@@ -40,6 +46,11 @@ function chunk(type, data) {
   return Buffer.concat([len, body, crc]);
 }
 
+// Embrulha os pixels RGBA num PNG válido (assinatura, IHDR, IDAT comprimido, IEND)
+// e devolve o Buffer pronto a escrever em disco.
+// Recebe: width — a largura em pixels; height — a altura em pixels; rgba —
+// Buffer com os pixels RGBA, 4 bytes por pixel, linha a linha.
+// Devolve: Buffer com o ficheiro PNG completo.
 function png(width, height, rgba) {
   const raw = Buffer.alloc((width * 4 + 1) * height);
   for (let y = 0; y < height; y++) {
@@ -76,6 +87,9 @@ const LINHAS = [
 
 // Distância de um ponto a um segmento — é o que dá o traço com pontas
 // redondas sem ter de desenhar círculos nas juntas.
+// Recebe: px, py — o ponto; ax, ay — uma ponta do segmento; bx, by — a outra
+// ponta (tudo nas mesmas coordenadas).
+// Devolve: número — a distância do ponto ao lugar mais próximo do segmento.
 function distSegmento(px, py, ax, ay, bx, by) {
   const dx = bx - ax, dy = by - ay;
   const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
@@ -83,6 +97,9 @@ function distSegmento(px, py, ax, ay, bx, by) {
   return Math.hypot(px - qx, py - qy);
 }
 
+// A distância de um ponto ao traço mais próximo da casa, nas coordenadas do vetor de 48.
+// Recebe: x, y — o ponto, nas coordenadas do vetor de 48.
+// Devolve: número — a distância à linha mais próxima da casa.
 function distCasa(x, y) {
   let d = Infinity;
   for (const linha of LINHAS) {
@@ -93,6 +110,11 @@ function distCasa(x, y) {
   return d;
 }
 
+/* Desenha o ícone pixel a pixel: o gradiente diagonal de fundo e a casa a traço
+   branco, com 3×3 amostras por pixel para o contorno não sair serrado.
+   Devolve o PNG como Buffer, no tamanho pedido.
+   Recebe: size — o lado do ícone, em pixels.
+   Devolve: Buffer com o PNG quadrado de size×size. */
 function makeIcon(size) {
   const img = Buffer.alloc(size * size * 4);
   const meio = TRACO / 2;

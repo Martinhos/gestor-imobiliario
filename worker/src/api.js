@@ -46,6 +46,14 @@ const COM_SESSAO = [
   rotasConexoes,
 ];
 
+/* Ponto de entrada de todos os /api/*: normaliza o caminho, monta o contexto
+   partilhado e corre as rotas por ordem — primeiro as que dispensam sessão
+   (autenticação e relatos de erro), depois, já com o utilizador resolvido,
+   as de COM_SESSAO. A primeira Response ganha; sem nenhuma, 404.
+   Recebe: request — o pedido HTTP (Request); env — o ambiente do worker (D1,
+   KV, R2 e segredos); ctx — o contexto de execução (waitUntil).
+   Devolve: a Response da primeira rota que casar com o pedido — 401 sem
+   sessão válida nas rotas que a exigem, 404 quando nenhuma responde. */
 export async function handleApi(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, '');

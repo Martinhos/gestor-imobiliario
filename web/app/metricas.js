@@ -1,5 +1,11 @@
 /* ================= MÉTRICAS ================= */
-/* opts.share: com a vista filtrada por proprietário, cada imóvel entra pela quota-parte dele */
+/* opts.share: com a vista filtrada por proprietário, cada imóvel entra pela quota-parte dele
+   Recebe: y — o ano (número, ex.: 2026); pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio
+   para o âmbito atual; opts (opcional) — com opts.share, os valores entram pela quota-parte do
+   proprietário filtrado.
+   Devolve: objeto com os movimentos do ano (t), os imóveis (props, rented), os totais (income,
+   op, loan, noi, cf, value, rentedValue, annualRent, purchase, debt, gain, gainOut) e os rácios
+   (grossYield, cap, coc, ltv — NaN quando a base é zero). */
 function metrics(y,pid,opts){
   const ps=pidProps(pid);
   const k=(opts&&opts.share)?sh:()=>1;
@@ -27,12 +33,26 @@ function metrics(y,pid,opts){
     grossYield:rentedValue?annualRent/rentedValue:NaN,cap:value?noi/value:NaN,
     coc:purchase?cf/purchase:NaN,ltv:value?debt/value:NaN};
 }
+/* fração do movimento que cabe ao proprietário filtrado — só quando se pede share, o filtro é uma
+   pessoa (não um grupo) e o movimento tem imóvel; nos restantes casos conta por inteiro
+   Recebe: t — o movimento (objeto); share — se se quer a quota do proprietário filtrado (booleano).
+   Devolve: número 0–1 — a fração do valor que cabe a esse proprietário; 1 nos restantes casos. */
 const txShare=(t,share)=>share&&ownerFilter&&!ownerIsGrp()&&t.propertyId?txOwnerFrac(t,ownerFilter):1;
+/* total mensal (12 valores, jan–dez) dos movimentos do tipo kind no ano y, pesado pelo
+   imóvel ou âmbito atual (txW) e, com share, pela quota do proprietário filtrado
+   Recebe: y — o ano; pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio para o âmbito atual;
+   kind — o tipo de movimento ('income', 'expense' ou 'loan'); share (opcional) — pesar pela
+   quota do proprietário filtrado.
+   Devolve: array de 12 números (jan–dez) com o total de cada mês. */
 const monthly=(y,pid,kind,share)=>[...Array(12)].map((_,i)=>{
   const mo=`${y}-${String(i+1).padStart(2,'0')}`;
   return sum(db.transactions.filter(t=>String(t.date).startsWith(mo)&&t.kind===kind&&countsInTotals(t)).map(t=>t.amount*txShare(t,share)*txW(t,pid)));
 });
-/* cat: se indicado, devolve as subcategorias dessa categoria */
+/* cat: se indicado, devolve as subcategorias dessa categoria
+   Recebe: y — o ano; pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio para o âmbito atual;
+   share — pesar pela quota do proprietário filtrado; cat (opcional) — uma categoria de despesa,
+   para detalhar as suas subcategorias.
+   Devolve: array de {label, value} ordenado do maior para o menor. */
 function byCategory(y,pid,share,cat){
   const map={};
   db.transactions.filter(t=>t.kind==='expense'&&countsInTotals(t)&&String(t.date).startsWith(String(y))&&(!cat||(t.category||'Outros')===cat))

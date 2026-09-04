@@ -1,5 +1,13 @@
 // Ligacoes entre utilizadores e escolha das casas partilhadas.
 
+/* Rotas das conexões: convidar outro utilizador pelo id curto, aceitar o
+   convite, cortar a ligação (leva as partilhas com ela) e escolher que casas
+   minhas ficam partilhadas nessa conexão. Devolve a Response da rota que
+   casar com o pedido, ou nada.
+   Recebe: c — o contexto partilhado montado pelo handleApi (env, request,
+   path, method, seg, o utilizador em c.me e os ajudantes).
+   Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
+   para o encaminhador tentar a seguinte. */
 export async function rotasConexoes(c) {
   const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
 

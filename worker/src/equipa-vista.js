@@ -18,6 +18,12 @@ const CATS = {
   infra: 'infraestrutura', seguranca: 'segurança',
 };
 
+/* Embrulha o corpo no documento HTML completo: <head>, tema claro e escuro,
+   e os estilos da ferramenta inteira. Todas as páginas da equipa — a própria
+   ferramenta, o ecrã de entrada — passam por aqui.
+   Recebe: corpo — o HTML do miolo da página (string, vai dentro de <body>);
+   titulo — o título da janela (string, aparece como "titulo · equipa").
+   Devolve: string com o documento HTML completo, pronta a ir numa Response. */
 function pagina(corpo, titulo) {
   return `<!doctype html>
 <html lang="pt"><head>
@@ -84,6 +90,10 @@ header nav{margin:0;min-width:0;flex:1;justify-content:flex-end}
 }
 
 // Quem não tem sessão não vê a ferramenta, nem sabe o que lá está.
+// Recebe: eu — a sessão de equipa (objeto com nome, discordId e papeis/papel),
+// ou nada quando não há sessão válida.
+// Devolve: Response HTML — a ferramenta inteira com sessão; sem ela, o ecrã
+// que manda ir ao /entrar do Discord (401).
 export function paginaEquipa(eu) {
   if (!eu) {
     return new Response(pagina(`<div class="wrap" style="max-width:460px;padding-top:60px">
@@ -141,6 +151,12 @@ var idade = function (t) {
   return 'há ' + Math.round(m / 1440) + ' dias';
 };
 
+/* fetch com as regras da casa: cookies de sessão, resposta lida como JSON,
+   um 401 recarrega a página (a sessão morreu, volta-se ao ecrã de entrada)
+   e qualquer outro falhanço vira Error com a mensagem do servidor
+   Recebe: rota — o caminho da API (string, ex.: /api/equipa/pedidos);
+   opcoes (opcional) — opções do fetch (método, cabeçalhos, corpo).
+   Devolve: Promise com o JSON da resposta; rejeita com Error quando o pedido falha. */
 function pedir(rota, opcoes) {
   return fetch(rota, Object.assign({ credentials: 'same-origin' }, opcoes || {}))
     .then(function (r) {
@@ -151,18 +167,31 @@ function pedir(rota, opcoes) {
       });
     });
 }
+// POST em JSON por cima de pedir; sem corpo vai um {} vazio
+// Recebe: rota — o caminho da API (string); corpo (opcional) — o objeto a serializar em JSON.
+// Devolve: Promise com o JSON da resposta, como pedir.
 function enviar(rota, corpo) {
   return pedir(rota, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(corpo || {}),
   });
 }
+// termina a sessão de equipa no servidor e recarrega — cai no ecrã de entrada
+// Devolve: nada — recarrega a página.
 function sair() {
   pedir('/api/equipa/sair', { method: 'POST' }).then(function () { location.reload(); });
 }
+// mostra a mensagem do erro no lugar do conteúdo (o .catch das vistas)
+// Recebe: e — o Error apanhado, com a mensagem a mostrar.
+// Devolve: nada — substitui o conteúdo pela mensagem.
 function falha(e) { el('conteudo').innerHTML = '<div class="vazio">' + esc(e.message) + '</div>'; }
+// substitui o conteúdo pelo "A carregar…" enquanto a rede responde
+// Devolve: nada — redesenha o conteúdo.
 function aCarregar() { el('conteudo').innerHTML = '<div class="vazio">A carregar…</div>'; }
 
+// o distintivo de estado de um pedido: verde concluído, âmbar em resolução
+// Recebe: p — o pedido (objeto com status: criado, resolucao ou concluido).
+// Devolve: string HTML com o distintivo, pronta a inserir.
 function selo(p) {
   var c = p.status === 'concluido' ? 'ok' : p.status === 'resolucao' ? 'wa' : '';
   return '<span class="badge ' + c + '">' + (ESTADOS[p.status] || p.status) + '</span>';
@@ -178,12 +207,19 @@ var SECCOES = [
   { id: 'rasto', nome: 'Rasto', se: eu.master },
 ];
 
+// pinta os separadores do cabeçalho — só os que os papéis deixam ver —
+// e marca o ativo; guarda a secção atual em seccao
+// Recebe: ativa — o id da secção a marcar (string: pedidos, erros, pessoas, operacao ou rasto).
+// Devolve: nada — redesenha os separadores.
 function nav(ativa) {
   seccao = ativa;
   el('nav').innerHTML = SECCOES.filter(function (s) { return s.se; }).map(function (s) {
     return '<button class="btn mini' + (s.id === ativa ? ' on' : '') + '" onclick="ir(\\'' + s.id + '\\')">' + s.nome + '</button>';
   }).join('');
 }
+// muda de secção: marca o separador e abre a vista respetiva
+// Recebe: s — o id da secção de destino (string, um dos ids de SECCOES).
+// Devolve: nada — abre a vista.
 function ir(s) {
   nav(s);
   if (s === 'pedidos') verLista('pessoas', 'abertos');
@@ -195,6 +231,13 @@ function ir(s) {
 
 /* ------------------------- pedidos e erros (lista) ----------------------- */
 
+/* A lista de pedidos (tipo 'pessoas') ou de erros (tipo 'erros'), filtrada
+   no servidor: e é o estado ('abertos' ou '' para todos) e q o texto da
+   procura, feita com Enter no campo. O filtro fica na variável estado para
+   a procura não o perder; cada cartão abre o detalhe.
+   Recebe: tipo — 'pessoas' ou 'erros' (string); e — o estado do filtro
+   ('abertos' ou '' para todos); q (opcional) — o texto da procura.
+   Devolve: nada — redesenha a vista com a lista. */
 function verLista(tipo, e, q) {
   estado = e;
   var url = '/api/equipa/pedidos?tipo=' + tipo + '&estado=' + encodeURIComponent(e) +
@@ -229,6 +272,12 @@ function verLista(tipo, e, q) {
 
 /* --------------------------- um pedido (detalhe) ------------------------- */
 
+/* O detalhe de um pedido: o texto e o contexto, a ficha de quem escreveu,
+   o fio de respostas e notas internas, os outros pedidos da mesma pessoa
+   e a caixa de responder com as respostas-tipo. Os modelos carregam-se à
+   primeira vez e ficam em cache na variável modelos.
+   Recebe: id — o id do pedido (string, como vem dos cartões da lista).
+   Devolve: nada — redesenha a vista com o detalhe. */
 function verPedido(id) {
   aCarregar();
   var m = modelos == null ? pedir('/api/equipa/modelos').then(function (d) { modelos = d.modelos; }) : Promise.resolve();
@@ -318,21 +367,34 @@ function verPedido(id) {
   }).catch(falha);
 }
 
+// executa uma ação sobre o pedido (responder, fechar, nota, atribuir,
+// reabrir) com o texto da caixa; responder e nota exigem texto escrito
+// Recebe: id — o id do pedido (string); acao — a ação (string: responder,
+// fechar, nota, atribuir ou reabrir).
+// Devolve: nada — executa no servidor e reabre o detalhe.
 function agir(id, acao) {
   var t = el('resposta') ? el('resposta').value.trim() : '';
   if ((acao === 'responder' || acao === 'nota') && !t) { alert('Escreve o texto primeiro.'); return; }
   enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/' + acao, { texto: t })
     .then(function () { verPedido(id); }).catch(function (e) { alert(e.message); });
 }
+// muda a categoria do pedido para a escolhida no seletor e reabre o detalhe
+// Recebe: id — o id do pedido (string).
+// Devolve: nada — grava no servidor e reabre o detalhe.
 function mudarCategoria(id) {
   enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/categoria', { categoria: el('catNova').value })
     .then(function () { verPedido(id); }).catch(function (e) { alert(e.message); });
 }
+// copia a resposta-tipo escolhida para a caixa, por cima do que lá estiver
+// Devolve: nada — preenche a caixa de resposta.
 function usarModelo() {
   var i = el('modelo').value;
   if (i === '') return;
   el('resposta').value = (modelos[Number(i)] || {}).texto || '';
 }
+// guarda o texto da caixa como resposta-tipo nova (o nome vem de um prompt)
+// e deita fora a cache, para a lista vir fresca no próximo pedido
+// Devolve: nada — grava no servidor e esvazia a cache dos modelos.
 function guardarModelo() {
   var t = el('resposta').value.trim();
   if (!t) { alert('Escreve primeiro o texto do modelo.'); return; }
@@ -344,6 +406,11 @@ function guardarModelo() {
 
 /* ------------------------------- pessoas -------------------------------- */
 
+/* A procura de contas por email, nome ou id. Só vai à rede com 3 ou mais
+   caracteres — menos que isso era pedir meia base de dados. Cada resultado
+   abre a ficha; o master tem ainda o botão de criar conta.
+   Recebe: q (opcional) — o texto da procura (string; só procura com 3+ caracteres).
+   Devolve: nada — redesenha a vista com os resultados. */
 function verPessoas(q) {
   var topo = '<div class="tabs">' +
     '<input id="q" placeholder="Procurar por email, nome ou id…" value="' + esc(q || '') + '"' +
@@ -370,7 +437,8 @@ function verPessoas(q) {
 }
 
 /* Criar uma conta à mão: para a equipa, para um teste com email verdadeiro,
-   para quem pede ajuda a entrar. O servidor recusa emails repetidos. */
+   para quem pede ajuda a entrar. O servidor recusa emails repetidos.
+   Devolve: nada — pede os dados por prompt, cria no servidor e abre a ficha. */
 function criarConta() {
   var email = prompt('Email da conta nova:');
   if (!email) return;
@@ -384,6 +452,11 @@ function criarConta() {
     .catch(function (e) { alert(e.message); });
 }
 
+/* A ficha completa de uma conta: dados e atividade, ligações e partilhas,
+   propostas de quotas pendentes, limites ativos e os pedidos que fez.
+   O cartão de ações só aparece quando o servidor diz que quem vê é master.
+   Recebe: id — o id da conta (string).
+   Devolve: nada — redesenha a vista com a ficha. */
 function verPessoa(id) {
   nav('pessoas');
   aCarregar();
@@ -435,7 +508,9 @@ function verPessoa(id) {
 }
 
 /* As ações sobre a conta. Cada uma pede o motivo — é o que daqui a seis
-   meses distingue "porque foi preciso" de "ninguém sabe". */
+   meses distingue "porque foi preciso" de "ninguém sabe".
+   Recebe: q — a ficha da conta (objeto com id, entrada e suspensa, entre o resto).
+   Devolve: string HTML com o cartão de ações, pronta a inserir. */
 function cartaoAcoes(q) {
   var b = function (acao, nome, classe) {
     return '<button class="btn mini ' + (classe || '') + '" onclick="acaoConta(\\'' + esc(q.id) + '\\',\\'' + acao + '\\')">' + nome + '</button>';
@@ -453,6 +528,13 @@ function cartaoAcoes(q) {
     '</div></div>';
 }
 
+/* Dispara uma ação de master sobre a conta. Umas pedem primeiro um valor
+   (plano, email, palavra-passe; apagar pede o email exato da conta como
+   confirmação) e todas pedem o motivo — sem motivo não acontece nada.
+   Recebe: id — o id da conta (string); acao — a ação (string: sessoes,
+   limpar-limites, plano, email, password, desligar-google, suspender,
+   reativar ou apagar).
+   Devolve: nada — executa no servidor e recarrega a ficha. */
 function acaoConta(id, acao) {
   var valor;
   if (acao === 'plano') {
@@ -482,6 +564,11 @@ function acaoConta(id, acao) {
 var CADENCIA = { copia: 26, vigia: 2, resumo: 26 };   // horas
 var OPS = { copia: 'Cópia diária', vigia: 'Vigia dos limites', resumo: 'Resumo diário' };
 
+/* O painel de operação inteiro: modo de demonstração, sessão de teste (fora
+   de produção), o batimento das operações agendadas, os endereços de email,
+   as cópias no R2 com o histórico e o consumo. Os endereços chegam à parte,
+   por verEnderecos — o resto do painel não fica à espera do Cloudflare.
+   Devolve: nada — redesenha a vista com o painel. */
 function verOperacao() {
   aCarregar();
   pedir('/api/equipa/operacao').then(function (d) {
@@ -561,6 +648,11 @@ function verOperacao() {
   }).catch(falha);
 }
 
+// ligar=true volta ao modo demo (ou cancela o fim marcado); false marca o
+// fim, com confirmação — a app passa logo a avisar toda a gente. O motivo
+// fica no rasto.
+// Recebe: ligar — booleano (o que cada valor faz está dito acima).
+// Devolve: nada — grava no servidor e recarrega o painel.
 function mudarDemo(ligar) {
   if (!ligar && !confirm('Marcar o fim da demonstração? A app passa JÁ a avisar toda a gente de que os planos entram em vigor daqui a 30 dias — e nessa data o free fica por 3 imóveis, sem criar contratos nem planeados.')) return;
   var motivo = prompt('Motivo (fica no rasto):');
@@ -570,6 +662,10 @@ function mudarDemo(ligar) {
     .catch(function (e) { alert(e.message); });
 }
 
+/* Preenche o cartão dos endereços de email: cada um com o destino para onde
+   reencaminha, mais os destinos ainda por verificar. Sem CF_EMAIL_TOKEN no
+   servidor, escreve a receita para o criar em vez de fingir que funciona.
+   Devolve: nada — preenche o cartão emailCard. */
 function verEnderecos() {
   pedir('/api/equipa/email').then(function (d) {
     if (d.semChave) {
@@ -590,6 +686,10 @@ function verEnderecos() {
   }).catch(function (e) { el('emailCard').innerHTML = '<span class="badge dg">' + esc(e.message) + '</span>'; });
 }
 
+// pede por prompt o nome, o destino (vazio usa o já verificado) e o motivo,
+// e cria o endereço; mesmo em erro recarrega a lista — o servidor pode ter
+// posto um destino novo à espera de verificação
+// Devolve: nada — cria no servidor e recarrega a lista dos endereços.
 function criarEndereco() {
   var nome = prompt('Endereço novo (só a parte antes do @, ex.: faturas):');
   if (!nome) return;
@@ -601,6 +701,13 @@ function criarEndereco() {
     .catch(function (e) { alert(e.message); verEnderecos(); });
 }
 
+/* Pede uma ligação de sessão de teste — a mesma que o /test do Discord dá.
+   comDados semeia dados de exemplo, manter cria uma conta extra em vez de
+   retomar a mais recente, limpar apaga as contas de teste de quem pede
+   (com confirmação). A ligação vale 10 minutos e aparece no cartão.
+   Recebe: comDados — booleano, semeia dados de exemplo; manter — booleano,
+   cria uma conta extra; limpar — booleano, apaga as contas de teste.
+   Devolve: nada — escreve a ligação no cartão ligTeste. */
 function sessaoTeste(comDados, manter, limpar) {
   if (limpar && !confirm('Apagar as TUAS contas de teste e o que têm dentro? As dos outros devs ficam.')) return;
   el('ligTeste').innerHTML = '<div class="small" style="margin-top:8px">A emitir…</div>';
@@ -610,6 +717,9 @@ function sessaoTeste(comDados, manter, limpar) {
   }).catch(function (e) { el('ligTeste').innerHTML = ''; alert(e.message); });
 }
 
+// dispara uma cópia manual da base para o R2, com confirmação; no fim
+// diz as linhas e o tamanho, e recarrega o painel
+// Devolve: nada — dispara a cópia no servidor e recarrega o painel.
 function copiarAgora() {
   if (!confirm('Fazer uma cópia da base agora?')) return;
   enviar('/api/equipa/operacao/copiar').then(function (d) {
@@ -620,7 +730,9 @@ function copiarAgora() {
 
 /* A verificação de uma cópia: descomprime no servidor, conta por tabela, e
    compara com a base viva. Uma cópia truncada rebenta na descompressão; uma
-   coxa aparece aqui com as contagens a divergir. */
+   coxa aparece aqui com as contagens a divergir.
+   Recebe: dia — o dia da cópia (string no formato AAAA-MM-DD).
+   Devolve: nada — redesenha o cartão resumoCopia com as contagens. */
 function resumoCopia(dia) {
   el('resumoCopia').innerHTML = '<div class="card"><div class="small">A verificar ' + esc(dia) + '…</div></div>';
   pedir('/api/equipa/operacao/copias/' + encodeURIComponent(dia) + '/resumo').then(function (d) {
@@ -643,6 +755,10 @@ function resumoCopia(dia) {
 
 /* -------------------------------- rasto --------------------------------- */
 
+// a auditoria: as últimas 200 ações da equipa, opcionalmente filtradas por
+// alvo. Só leitura — o rasto escreve-se sempre e não se apaga nunca.
+// Recebe: alvo (opcional) — o alvo por que filtrar (string, como aparece na coluna Sobre).
+// Devolve: nada — redesenha a vista com a tabela.
 function verRasto(alvo) {
   aCarregar();
   pedir('/api/equipa/auditoria' + (alvo ? '?alvo=' + encodeURIComponent(alvo) : '')).then(function (d) {
@@ -674,8 +790,13 @@ ir(SECCOES.filter(function (s) { return s.se; })[0].id);
    browser a adiantar-se gastem a ligação antes da pessoa lá chegar.
 
    O endereço leva o token, por isso a página não pode deixar sair um
-   referer nem ficar em cache. */
-export function paginaEntrada(token, v) {
+   referer nem ficar em cache.
+   Recebe: token — o token da ligação (string, segue escondido no formulário);
+   v — a verificação do token (objeto com estado — 'boa', 'nao-existe',
+   'usada' ou 'expirou' — e quem, a pessoa que vai entrar); depois (opcional) —
+   'docs' para seguir para a documentação depois de entrar.
+   Devolve: Response HTML — o botão de entrar (200) ou o porquê de não dar (410). */
+export function paginaEntrada(token, v, depois) {
   const cabecalhos = {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -707,6 +828,7 @@ export function paginaEntrada(token, v) {
       </p>
       <form method="POST" action="/equipa/entrar">
         <input type="hidden" name="t" value="${escapar(token)}">
+        ${depois === 'docs' ? '<input type="hidden" name="depois" value="docs">' : ''}
         <button class="btn primary" type="submit" style="width:100%;justify-content:center">Entrar</button>
       </form>
       <p class="small" style="margin:12px 0 0">
@@ -714,6 +836,10 @@ export function paginaEntrada(token, v) {
     </div></div>`, 'Entrar'), { status: 200, headers: cabecalhos });
 }
 
+// escapa HTML para as interpolações destas páginas (do lado do cliente
+// existe o gémeo, esc)
+// Recebe: s — o valor a escapar (qualquer coisa; null e undefined viram '').
+// Devolve: string com &, <, >, " e ' trocados pelas entidades HTML.
 function escapar(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (m) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]

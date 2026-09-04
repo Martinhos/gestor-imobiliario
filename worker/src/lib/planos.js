@@ -25,7 +25,11 @@ let _cache = { t: 0, fim: null };
    vem, e é esse aviso que os termos prometem. Voltar a ligar apaga a data.
 
    Uma leitura de KV por pedido chegava; com a cache nem isso. Sem KV ou sem
-   data marcada, é demo: nunca se tranca clientes por um outage. */
+   data marcada, é demo: nunca se tranca clientes por um outage.
+
+   Recebe: env — as variáveis de ambiente (o KV em SESSIONS).
+   Devolve: promessa da data de fim em milissegundos de época, ou de null
+   quando não há data marcada — e é demo. */
 export async function fimDemo(env) {
   if (Date.now() - _cache.t < 60000) return _cache.fim;
   let fim = null;
@@ -37,11 +41,25 @@ export async function fimDemo(env) {
   return fim;
 }
 
+// Ainda estamos em demonstração? true enquanto não houver data de fim
+// marcada, ou enquanto ela não chegar. É isto que suspende os limites.
+// Recebe: env — as variáveis de ambiente (o KV em SESSIONS).
+// Devolve: promessa de booleano — true enquanto for demonstração.
 export async function modoDemo(env) {
   const fim = await fimDemo(env);
   return fim == null || Date.now() < fim;
 }
 
+/* Liga ou desliga o modo de demonstração. Ligar apaga a data marcada;
+   desligar marca o fim para daqui a `dias` (30 por omissão) — só nessa data
+   é que os limites passam a valer. Escreve no KV, atualiza a cache, e
+   devolve a data marcada (ou null quando fica ligado).
+
+   Recebe: env — as variáveis de ambiente (o KV em SESSIONS); ligado —
+   booleano, true religa o demo; dias (opcional) — daqui a quantos dias acaba,
+   30 por omissão.
+   Devolve: promessa da data marcada em milissegundos de época, ou de null
+   quando ficou ligado. */
 export async function definirDemo(env, ligado, dias) {
   if (ligado) {
     await env.SESSIONS.delete(CHAVE);
@@ -55,10 +73,15 @@ export async function definirDemo(env, ligado, dias) {
 }
 
 // exposto para os testes poderem limpar a cache entre casos
+// Devolve: nada — só esvazia a cache.
 export function esquecerCache() { _cache = { t: 0, fim: null }; }
 
 /* O veredicto sobre criar mais um. `tipo`: 'imovel' | 'contract' | 'rec'.
-   Devolve null quando pode, ou a frase que explica porquê não. */
+   Devolve null quando pode, ou a frase que explica porquê não.
+   Recebe: plan — o plano da conta ('free', 'plus' ou 'pro'; desconhecido vale
+   free); tipo — 'imovel' | 'contract' | 'rec'; imoveisAtuais — quantos
+   imóveis a conta já tem (número; só interessa aos imóveis).
+   Devolve: null quando pode criar, ou a string com o porquê de não. */
 export function podeCriar(plan, tipo, imoveisAtuais) {
   const l = LIMITES[plan] || LIMITES.free;
   if (tipo === 'imovel') {

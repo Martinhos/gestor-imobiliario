@@ -2,6 +2,16 @@
 import { linkFiles } from '../files.js';
 import { modoDemo, podeCriar } from '../lib/planos.js';
 
+/* Rota do POST /api/sync: aplica as operações pendentes do cliente (put/del
+   de casas, registos e dados globais) uma a uma, com validação e controlo de
+   acesso por operação — uma falha não trava as seguintes. Escreve na D1 e
+   devolve a Response; noutros caminhos não devolve nada, para o encaminhador
+   tentar a rota seguinte.
+   Recebe: c — o contexto partilhado montado pelo handleApi (env, request,
+   path, method, o utilizador em c.me e os ajudantes).
+   Devolve: a Response do POST /api/sync — JSON { results } com o resultado
+   por operação, pela mesma ordem, ou o erro que couber; nada (undefined)
+   noutros caminhos. */
 export async function rotasSync(c) {
   const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
 

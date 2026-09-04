@@ -81,6 +81,7 @@ const comandos = [
   Object.assign({ name: 'uso', description: 'Consumo da infraestrutura agora' }, soOperacao),
   { name: 'comandos', description: 'O que podes fazer com o teu papel' },
   { name: 'entrar', description: 'Abrir a ferramenta de suporte no browser' },
+  { name: 'docs', description: 'Como isto funciona por dentro (gerado do código)' },
   {
     name: 'test',
     description: 'Ligação temporária para o ambiente de teste, numa conta lavada',
@@ -109,6 +110,12 @@ const comandos = [
   Object.assign({ name: 'resumo', description: 'Enviar o resumo diário para o canal de administração' }, soOperacao),
 ];
 
+// PUT da lista completa de comandos no endereço dado — o Discord substitui o
+// que lá estava. Devolve { ok, status, texto } em vez de lançar, para quem
+// chama poder tentar o registo global a seguir.
+// Recebe: url — o endereço de registo (do servidor ou global).
+// Devolve: promessa de { ok, status, texto } — se foi 2xx, o status HTTP e o
+// corpo em texto cru; nunca lança.
 const registar = (url) =>
   fetch(url, {
     method: 'PUT',

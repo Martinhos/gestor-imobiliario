@@ -1,6 +1,15 @@
 // Casas, quotas, registos de cada casa e dados globais do utilizador.
 import { linkFiles } from '../files.js';
 
+/* Rotas das casas e do que vive dentro delas: criar/atualizar e apagar uma
+   casa, propor e confirmar a divisão de quotas entre comproprietários, e os
+   put/del de registos da casa e de dados globais do utilizador. Escreve na
+   D1; devolve a Response da rota que casar com o pedido, ou nada para o
+   encaminhador tentar a seguinte.
+   Recebe: c — o contexto partilhado montado pelo handleApi (env, request,
+   path, method, seg, o utilizador em c.me e os ajudantes).
+   Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
+   para o encaminhador tentar a seguinte. */
 export async function rotasCasas(c) {
   const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
 

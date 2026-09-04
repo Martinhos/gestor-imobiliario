@@ -13,6 +13,15 @@
 
 const DOMINIO = 'rendorium.com';
 
+/* Uma chamada à API do Cloudflare, autenticada com o CF_EMAIL_TOKEN. Devolve
+   o corpo já como objeto quando o Cloudflare diz success; tudo o resto —
+   HTTP falhado, resposta que não é JSON, success a false — vira um Error
+   com a mensagem deles (ou o código HTTP, quando nem mensagem há).
+   Recebe: env — as variáveis de ambiente (usa o CF_EMAIL_TOKEN); caminho — o
+   caminho da API a seguir a /client/v4 (ex.: '/zones?name=…'); metodo
+   (opcional) — o verbo HTTP, GET por omissão; corpo (opcional) — objeto a
+   enviar como JSON.
+   Devolve: promessa do corpo da resposta já como objeto, com success a true. */
 async function cf(env, caminho, metodo, corpo) {
   const r = await fetch('https://api.cloudflare.com/client/v4' + caminho, {
     method: metodo || 'GET',
@@ -31,7 +40,9 @@ async function cf(env, caminho, metodo, corpo) {
 }
 
 /* A zona e a conta descobrem-se pelo nome e ficam 1h no KV: com o token
-   chega, sem ids para configurar à mão. */
+   chega, sem ids para configurar à mão.
+   Recebe: env — as variáveis de ambiente (o KV em SESSIONS e o CF_EMAIL_TOKEN).
+   Devolve: promessa de { id, conta } — os ids da zona e da conta no Cloudflare. */
 async function zona(env) {
   const c = await env.SESSIONS.get('cf:zona:' + DOMINIO);
   if (c) return JSON.parse(c);
@@ -46,6 +57,8 @@ async function zona(env) {
 
 // aceita "faturas" ou "faturas@rendorium.com"; devolve o endereço completo
 // ou null se o nome não presta
+// Recebe: nome — o nome pedido, com ou sem o @rendorium.com.
+// Devolve: string 'nome@rendorium.com' em minúsculas, ou null quando o nome não presta.
 export function endereco(nome) {
   let n = String(nome || '').trim().toLowerCase();
   /* só o sufixo exato sai; um domínio com gralha ('@rendorium.com.pt',
@@ -59,6 +72,13 @@ export function endereco(nome) {
   return n + '@' + DOMINIO;
 }
 
+/* O estado do Email Routing num só objeto: os endereços @rendorium.com (as
+   regras com matcher literal no "to" — email, destino e se está ativa) e os
+   destinos da conta, cada um com a marca de verificado. Duas chamadas ao
+   Cloudflare em paralelo, sem cache: é sempre o estado real.
+   Recebe: env — as variáveis de ambiente (o CF_EMAIL_TOKEN e o KV da zona).
+   Devolve: promessa de { enderecos, destinos } — cada endereço como
+   { email, destino, ativo } e cada destino como { email, verificado }. */
 export async function listarEnderecos(env) {
   const z = await zona(env);
   const [regras, destinos] = await Promise.all([
@@ -81,7 +101,12 @@ export async function listarEnderecos(env) {
 /* Criar um endereço: recusa colisões (a regra que já existe diz para onde
    manda), e só reencaminha para destinos verificados — um destino novo
    recebe o email de verificação do Cloudflare e o endereço cria-se à
-   segunda, depois do clique. */
+   segunda, depois do clique.
+   Recebe: env — as variáveis de ambiente; nome — o nome do endereço, com ou
+   sem o @rendorium.com; destino (opcional) — o email para onde reencaminhar,
+   por omissão o primeiro destino verificado.
+   Devolve: promessa de { email, destino } do endereço criado; qualquer recusa
+   sai como Error com a explicação. */
 export async function criarEndereco(env, nome, destino) {
   const email = endereco(nome);
   if (!email) throw new Error('Nome inválido: letras e números, pontos ou hífens no meio (ex.: faturas).');

@@ -1,6 +1,14 @@
 // Pedidos de ajuda e erros comunicados pela app.
 import { notifySuporte, ticketEmbed } from '../notify.js';
 
+/* Rotas dos pedidos de ajuda: criar um pedido (grava na D1, avisa o suporte
+   no Discord e envia o número por email a quem escreveu) e listar os pedidos
+   da própria pessoa — só os que ela contou, não os erros registados pela app.
+   Devolve a Response, ou nada.
+   Recebe: c — o contexto partilhado montado pelo handleApi (env, request,
+   path, method, o utilizador em c.me e os ajudantes).
+   Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
+   para o encaminhador tentar a seguinte. */
 export async function rotasTickets(c) {
   const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
 

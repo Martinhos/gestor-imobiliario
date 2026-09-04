@@ -13,7 +13,9 @@ import { recordReport } from '../lib/relatos.js';
 
 /* O user-agent inteiro não cabe num embed e ninguém o lê. O que interessa é
    qual o browser e o sistema — que é o que separa "está partido" de "está
-   partido no browser da Samsung". */
+   partido no browser da Samsung".
+   Recebe: ua — a string User-Agent tal como o browser a envia (pode faltar).
+   Devolve: um resumo curto 'browser versão · sistema' (ex.: 'Chrome 128 · Android 14'), ou '' sem user-agent. */
 function navegador(ua) {
   const t = String(ua || '');
   if (!t) return '';
@@ -35,6 +37,12 @@ function navegador(ua) {
   return [browser.split(' ').slice(0, 2).join(' '), sistema].filter(Boolean).join(' · ');
 }
 
+/* Rota do POST /api/reports: guarda um relato de erro vindo do browser,
+   assinado pela sessão quando existe, anónimo e com tecto mais baixo quando
+   não. Acima do tecto responde ok na mesma, para o cliente não insistir.
+   Devolve null noutros caminhos.
+   Recebe: c — o contexto do pedido: {env, request, ctx, path, method}.
+   Devolve: uma Promise — a Response JSON ({ok:true}, ou erro 400 com corpo inválido) quando trata o pedido; null nos outros caminhos. */
 export async function rotasRelatos(c) {
   const { env, request, ctx, path, method } = c;
   if (path !== '/api/reports' || method !== 'POST') return null;

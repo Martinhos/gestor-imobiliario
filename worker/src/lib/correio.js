@@ -21,7 +21,11 @@ export const REMETENTES = {
 };
 
 /* O molde de todos os emails: simples, com a cara da app, e sempre com a
-   versão em texto — há caixas de correio que só mostram isso. */
+   versão em texto — há caixas de correio que só mostram isso.
+   Recebe: titulo — o título dentro do cartão; corpoHtml — o corpo, já em
+   HTML; rodape (opcional) — o texto pequeno do fim (por omissão, o aviso de
+   quem tem conta).
+   Devolve: o HTML completo do email, como texto. */
 export function molde(titulo, corpoHtml, rodape) {
   return `<!doctype html><html lang="pt"><body style="margin:0;padding:0;background:#f4f6f4">
   <div style="max-width:520px;margin:0 auto;padding:28px 18px;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a231e">
@@ -39,11 +43,24 @@ export function molde(titulo, corpoHtml, rodape) {
 // Qualquer endereço no domínio da casa — rendorium.com ou um subdomínio.
 // Serve o registo (ninguém cria contas com o nosso nome) e o correio que
 // entra (o test@ só aceita o que a própria casa envia).
+// Recebe: email — o endereço a examinar (o que não parecer um email dá falso).
+// Devolve: verdadeiro se o domínio for rendorium.com ou um subdomínio dele.
 export function dominioDaCasa(email) {
   const d = String(email || '').toLowerCase().split('@')[1] || '';
   return d === DOMINIO || d.endsWith('.' + DOMINIO);
 }
 
+/* Envia um email pelo Resend. Devolve sempre { enviado, motivo } e nunca
+   lança: sem RESEND_API_KEY é um no-op, e um erro de rede ou do Resend vem
+   como motivo — quem chama decide se isso trava alguma coisa. `remetente` é
+   uma chave de REMETENTES ('maquina' por omissão); `html` e `texto` são as
+   duas versões do corpo, e manda-se as que existirem.
+   Recebe: env — o ambiente do worker (RESEND_API_KEY, ENV_NAME e, para o
+   desvio das contas de teste, DB e SESSIONS); para — o endereço de destino;
+   assunto — o assunto (cortado a 200 caracteres); html (opcional) — o corpo
+   em HTML; texto (opcional) — o corpo em texto simples; remetente (opcional)
+   — chave de REMETENTES ('maquina' por omissão).
+   Devolve: promessa de { enviado, motivo } — o motivo só vem quando não foi. */
 export async function enviarEmail(env, { para, assunto, html, texto, remetente }) {
   if (!env.RESEND_API_KEY) return { enviado: false, motivo: 'sem RESEND_API_KEY' };
   /* O correio de uma conta de teste não vai para o endereço dela (não
@@ -98,11 +115,18 @@ export async function enviarEmail(env, { para, assunto, html, texto, remetente }
 
 /* O número de um pedido: os primeiros 8 caracteres do id, em maiúsculas.
    É o mesmo prefixo que o /pedido do Discord e a procura do back office
-   aceitam — quem cita o número do email encontra o pedido em todo o lado. */
+   aceitam — quem cita o número do email encontra o pedido em todo o lado.
+   Recebe: id — o id do pedido (o UUID inteiro; os hífenes não contam).
+   Devolve: o número curto, tipo "#1A2B3C4D". */
 export function numeroPedido(id) {
   return '#' + String(id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
 }
 
+// A confirmação automática de que um pedido de ajuda ficou registado, com o
+// número que a pessoa pode citar em qualquer canal. Devolve o resultado do enviarEmail.
+// Recebe: env — o ambiente do worker; para — o email da pessoa; id — o id do
+// pedido (dá o número); assunto — o assunto que a pessoa escreveu.
+// Devolve: promessa de { enviado, motivo } — o que o enviarEmail disser.
 export async function emailPedidoRecebido(env, para, id, assunto) {
   const num = numeroPedido(id);
   return enviarEmail(env, {
@@ -122,6 +146,11 @@ export async function emailPedidoRecebido(env, para, id, assunto) {
   });
 }
 
+// O email de reset de palavra-passe: entrega a `ligacao` já pronta. O "vale
+// 1 hora, uma vez" é garantido por quem a criou — aqui só se escreve o envelope.
+// Recebe: env — o ambiente do worker; para — o email da conta; ligacao — o
+// URL de reposição, completo e já assinado.
+// Devolve: promessa de { enviado, motivo } — o que o enviarEmail disser.
 export async function emailReporPassword(env, para, ligacao) {
   return enviarEmail(env, {
     para,
@@ -138,6 +167,13 @@ export async function emailReporPassword(env, para, ligacao) {
   });
 }
 
+/* A resposta da equipa a um pedido, enviada do support@ para a pessoa poder
+   responder na mesma conversa. A `resposta` vai cortada a 1500 caracteres e
+   escapada — é texto da equipa, mas HTML de email não é sítio para surpresas.
+   Recebe: env — o ambiente do worker; para — o email da pessoa; assunto — o
+   assunto do pedido original (cortado a 120 no assunto do email); resposta —
+   o texto da equipa; id (opcional) — o id do pedido, para levar o número.
+   Devolve: promessa de { enviado, motivo } — o que o enviarEmail disser. */
 export async function emailRespostaPedido(env, para, assunto, resposta, id) {
   const num = id ? numeroPedido(id) + ' ' : '';
   const seguro = String(resposta || '').slice(0, 1500)

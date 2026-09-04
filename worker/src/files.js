@@ -7,6 +7,8 @@ const MAX_FILE = 25 * 1024 * 1024;   // o mesmo limite que a app aplica
 export const isFileId = (v) => /^[A-Za-z0-9_-]{1,64}$/.test(String(v || ''));
 
 // Percorre um registo à procura dos anexos que ele refere.
+// Recebe: data — o registo (objeto; olha para files, photos e loans[].files).
+// Devolve: os ids de anexo válidos encontrados (array de strings; vazio sem nenhum).
 export function fileIdsIn(data) {
   const out = [];
   const colher = (arr) => {
@@ -23,6 +25,9 @@ export function fileIdsIn(data) {
 
 // Depois de guardar uma casa ou um registo, os anexos que ele refere passam a
 // pertencer-lhe — é isto que os torna visíveis a quem partilha a casa.
+// Recebe: env — o ambiente do worker (D1 em env.DB); houseId — o id da casa;
+// data — o registo acabado de gravar, onde se procuram os anexos.
+// Devolve: nada — atualiza o house_id dos anexos na D1 (falhas são engolidas).
 export async function linkFiles(env, houseId, data) {
   const ids = fileIdsIn(data);
   if (!ids.length || !houseId) return;
@@ -34,6 +39,12 @@ export async function linkFiles(env, houseId, data) {
   } catch (e) { /* o anexo pode ainda não ter sido carregado */ }
 }
 
+// A regra de acesso a um anexo: o dono vê sempre; guardado numa casa, vê
+// quem tiver acesso à casa; solto e de outra pessoa, ninguém.
+// Recebe: env — o ambiente do worker; me — o utilizador com sessão (usa me.id);
+// row — a linha do anexo na D1 (ou null quando não existe); canAccessHouse —
+// a função que decide o acesso à casa.
+// Devolve: true se este utilizador pode ver o anexo, false se não.
 async function podeVer(env, me, row, canAccessHouse) {
   if (!row) return false;
   if (row.owner_id === me.id) return true;
@@ -41,6 +52,17 @@ async function podeVer(env, me, row, canAccessHouse) {
   return (await canAccessHouse(env, me.id, row.house_id)).ok;
 }
 
+/* As rotas /api/files/:id. PUT carrega (o corpo para o R2, os metadados
+   para a D1, com os limites de tamanho e o id preso ao primeiro dono); GET
+   devolve o conteúdo com o tipo e o nome originais; DELETE apaga dos dois
+   lados. O GET responde 404 tanto ao que não existe como ao que não se pode
+   ver — não se confirma a existência do que é dos outros.
+   Recebe: request — o pedido HTTP (Request); env — o ambiente do worker (R2
+   em env.FILES, D1 em env.DB); me — o utilizador com sessão; seg — os
+   segmentos do caminho (seg[2] é o id do anexo); method — o método HTTP;
+   deps — os ajudantes { json, err, canAccessHouse, now }.
+   Devolve: uma Response — JSON { ok: true } no PUT e no DELETE, o conteúdo
+   com o tipo e o nome originais no GET, ou o erro que couber. */
 export async function handleFiles(request, env, me, seg, method, deps) {
   const { json, err, canAccessHouse, now } = deps;
   const id = seg[2];

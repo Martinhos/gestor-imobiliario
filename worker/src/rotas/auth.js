@@ -4,6 +4,15 @@ import { hashPassword, verifyPassword, newUserId, createSession, destroySession,
 import { verifyIdToken } from '../oauth.js';
 import { weakPassword } from '../lib/http.js';
 
+/* Trata as rotas /api/auth/*: registo, entrada (email e Google), reposição de
+   palavra-passe, configuração pública e saída. Recebe o contexto partilhado do
+   worker; devolve uma Response quando a rota é dele e undefined para o pedido
+   seguir para as rotas com sessão. Os POST (menos o logout) têm limite por IP.
+   Recebe: c — o contexto partilhado montado pelo handleApi (env, request,
+   path, method e os ajudantes; aqui ainda sem `me`, porque corre antes da
+   sessão).
+   Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
+   para o pedido seguir para as rotas com sessão. */
 export async function rotasAuth(c) {
   const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
 

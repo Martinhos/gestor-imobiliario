@@ -5,11 +5,16 @@
    mão, sem dependências, com a mesma cara da app: quem clica em "Abrir a
    app" não pode sentir que mudou de produto.
 
-   O estudo de mercado mandou aqui: a aquisição faz-se por conteúdo e
-   ferramentas fiscais, e esta página é a fundação onde isso vai assentar. */
+   O Rendorium é um projeto pessoal, sem planos nem pagamentos — a página
+   diz o que a ferramenta faz e mais nada. As funcionalidades vivem num
+   carrossel: no telemóvel desliza-se, no computador há setas e pontos. */
 
 const APP = 'https://app.rendorium.com';
 
+// Constrói a página inteira (HTML, estilos e o guião do carrossel, tudo
+// inline) e devolve-a como Response com uma hora de cache — a página muda
+// quando se publica, não por pedido.
+// Devolve: uma Response HTML com a página completa e uma hora de cache.
 export function paginaLanding() {
   const html = `<!doctype html>
 <html lang="pt"><head>
@@ -17,7 +22,7 @@ export function paginaLanding() {
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>Rendorium — o teu portefólio de arrendamento, arrumado</title>
-<meta name="description" content="Imóveis, contratos, rendas, créditos e IRS num só sítio. Feito para senhorios portugueses com 1 a 10 imóveis. Grátis para começar.">
+<meta name="description" content="Imóveis, contratos, rendas, créditos e IRS num só sítio. Um projeto pessoal para senhorios portugueses.">
 <meta property="og:title" content="Rendorium">
 <meta property="og:description" content="O teu portefólio de arrendamento, arrumado. Imóveis, contratos, rendas e IRS num só sítio.">
 <meta property="og:url" content="https://rendorium.com">
@@ -43,27 +48,35 @@ a.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padd
   border-radius:11px;border:1px solid var(--line);background:var(--card);color:var(--ink);
   text-decoration:none;font-weight:650;font-size:14.5px;min-height:44px}
 a.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.hero{padding:52px 0 34px;max-width:640px}
-.hero h1{font-size:clamp(30px,5.4vw,44px);line-height:1.12;letter-spacing:-.02em;margin:0 0 14px;text-wrap:balance}
-.hero p{font-size:17.5px;color:var(--muted);margin:0 0 24px;max-width:56ch}
+.hero{padding:60px 0 40px;max-width:660px}
+.hero h1{font-size:clamp(30px,5.4vw,46px);line-height:1.1;letter-spacing:-.02em;margin:0 0 14px;text-wrap:balance}
+.hero p{font-size:17.5px;color:var(--muted);margin:0 0 26px;max-width:56ch}
 .cta{display:flex;gap:10px;flex-wrap:wrap}
 .faixa{font-size:12.5px;color:var(--muted);margin-top:14px}
-.grelha{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;padding:22px 0 8px}
-.cartao{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 19px}
-.cartao b{display:block;font-size:15px;margin-bottom:5px}
-.cartao p{margin:0;font-size:14px;color:var(--muted)}
-h2{font-size:22px;letter-spacing:-.01em;margin:44px 0 4px}
-.sub{color:var(--muted);font-size:14.5px;margin:0 0 14px}
-.planos{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;max-width:640px}
-.plano{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
-.plano.on{border-color:var(--accent)}
-.plano .nome{font-weight:750}
-.plano .preco{font-size:26px;font-weight:750;margin:6px 0 2px}
-.plano .preco small{font-size:13px;font-weight:500;color:var(--muted)}
-.plano ul{margin:10px 0 0;padding-left:18px;font-size:14px;color:var(--muted)}
-.plano li{margin-bottom:6px}
-.nota{background:var(--tint);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
-  font-size:14px;color:var(--muted);margin:34px 0 0;max-width:640px}
+
+/* ---- o carrossel das funcionalidades ---- */
+.caro{position:relative;margin:28px 0 4px}
+.tira{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;
+  scrollbar-width:none;padding:4px 2px 6px;scroll-behavior:smooth}
+.tira::-webkit-scrollbar{display:none}
+.cartao{flex:0 0 min(300px,82vw);scroll-snap-align:start;background:var(--card);
+  border:1px solid var(--line);border-radius:15px;padding:20px 21px;min-height:150px}
+.cartao b{display:block;font-size:15.5px;margin-bottom:6px}
+.cartao p{margin:0;font-size:14px;color:var(--muted);line-height:1.55}
+.seta{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:40px;height:40px;
+  border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);
+  font-size:19px;line-height:1;cursor:pointer;display:grid;place-items:center;
+  box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.seta[disabled]{opacity:.35;cursor:default}
+.seta.esq{left:-14px}.seta.dir{right:-14px}
+@media(hover:none),(max-width:700px){.seta{display:none}}
+.pontos{display:flex;gap:7px;justify-content:center;padding:10px 0 0}
+.pontos i{width:7px;height:7px;border-radius:50%;background:var(--line);transition:background .2s,width .2s}
+.pontos i.on{background:var(--accent);width:18px;border-radius:99px}
+
+.nota{background:var(--tint);border:1px solid var(--line);border-radius:15px;padding:18px 20px;
+  font-size:14.5px;color:var(--muted);margin:36px 0 0;max-width:640px}
+.nota b{color:var(--ink)}
 footer{margin-top:56px;padding:22px 0 40px;border-top:1px solid var(--line);
   font-size:13px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--muted)}
@@ -77,42 +90,32 @@ footer a{color:var(--muted)}
 
   <section class="hero">
     <h1>O teu portefólio de arrendamento, arrumado.</h1>
-    <p>Imóveis, contratos, rendas, créditos e o IRS num só sítio — feito para senhorios
-    portugueses que hoje gerem tudo em Excel, papel e memória.</p>
+    <p>Imóveis, contratos, rendas, créditos e o IRS num só sítio — para senhorios
+    que hoje gerem tudo em Excel, papel e memória.</p>
     <div class="cta">
-      <a class="btn primary" href="${APP}">Criar conta grátis</a>
+      <a class="btn primary" href="${APP}">Criar conta</a>
       <a class="btn" href="${APP}">Abrir a app</a>
     </div>
-    <div class="faixa">Funciona no browser, no telemóvel e como app instalada. Sem cartão de crédito.</div>
+    <div class="faixa">Funciona no browser, no telemóvel e como app instalada.</div>
   </section>
 
-  <section class="grelha">
-    <div class="cartao"><b>Rendas sem esforço</b><p>O contrato gera o movimento planeado; todos os meses, um toque em «Confirmar» e a renda fica registada.</p></div>
-    <div class="cartao"><b>Contratos e inquilinos</b><p>Fichas, prazos, caução e um contrato em PDF pronto a rever — com os teus dados e os do inquilino já lá dentro.</p></div>
-    <div class="cartao"><b>Comproprietários a sério</b><p>Casa herdada a meias? Quotas, contas entre proprietários e partilha segura entre contas — cada um vê o que lhe toca.</p></div>
-    <div class="cartao"><b>Créditos à habitação</b><p>Prestações com juros, capital e imposto do selo separados, amortizações e o plano até ao fim.</p></div>
-    <div class="cartao"><b>Pronto para o IRS</b><p>Rendas e despesas organizadas por imóvel ao longo do ano — quando chegar o Anexo F, está tudo à mão.</p></div>
-    <div class="cartao"><b>Os dados são teus</b><p>Cópias de segurança num toque, exportação em CSV, e a conta apaga-se quando quiseres. Sem letras pequenas.</p></div>
-  </section>
-
-  <h2>Planos</h2>
-  <p class="sub">Simples de propósito: paga-se pelo tamanho do portefólio, não por truques.</p>
-  <section class="planos">
-    <div class="plano on">
-      <div class="nome">Gratuito</div>
-      <div class="preco">0 €<small> /mês</small></div>
-      <ul><li>Até 3 imóveis</li><li>Movimentos e créditos</li><li>Cópias e exportação</li></ul>
+  <div class="caro">
+    <button class="seta esq" id="sEsq" aria-label="Anterior">&#8249;</button>
+    <div class="tira" id="tira">
+      <div class="cartao"><b>Rendas sem esforço</b><p>O contrato gera o movimento planeado; todos os meses, um toque em «Confirmar» e a renda fica registada.</p></div>
+      <div class="cartao"><b>Contratos e inquilinos</b><p>Fichas, prazos, caução e um contrato em PDF pronto a rever — com os teus dados e os do inquilino já lá dentro.</p></div>
+      <div class="cartao"><b>Comproprietários a sério</b><p>Casa herdada a meias? Quotas, contas entre proprietários e partilha segura entre contas — cada um vê o que lhe toca.</p></div>
+      <div class="cartao"><b>Créditos à habitação</b><p>Prestações com juros, capital e imposto do selo separados, amortizações e o plano até ao fim.</p></div>
+      <div class="cartao"><b>Pronto para o IRS</b><p>Rendas e despesas organizadas por imóvel ao longo do ano — quando chegar o Anexo F, está tudo à mão.</p></div>
+      <div class="cartao"><b>Os dados são teus</b><p>Cópias de segurança num toque, exportação em CSV, e a conta apaga-se quando quiseres. Sem letras pequenas.</p></div>
     </div>
-    <div class="plano">
-      <div class="nome">Plus</div>
-      <div class="preco">Em breve</div>
-      <ul><li>Até 10 imóveis</li><li>Contratos e movimentos planeados</li><li>Indicadores e estatísticas</li></ul>
-    </div>
-  </section>
+    <button class="seta dir" id="sDir" aria-label="Seguinte">&#8250;</button>
+    <div class="pontos" id="pontos" aria-hidden="true"></div>
+  </div>
 
-  <div class="nota"><b>Fase experimental:</b> neste momento está tudo aberto e é grátis para toda a gente.
-  Quando os planos entrarem em vigor, avisamos dentro da app com pelo menos 30 dias de antecedência —
-  e nada do que criaste é apagado ou fica inacessível.</div>
+  <div class="nota"><b>Um projeto pessoal.</b> O Rendorium nasceu para gerir o meu próprio
+  portefólio e está aberto a quem lhe quiser dar uso. Está em evolução constante — o que
+  criares é teu, exporta-se quando quiseres, e a conta apaga-se num toque.</div>
 
   <footer>
     <span>© ${new Date().getFullYear()} Rendorium</span>
@@ -120,6 +123,28 @@ footer a{color:var(--muted)}
     <span>Termos e privacidade: dentro da app, em Definições → Aviso legal</span>
   </footer>
 </div>
+<script>
+(function () {
+  var tira = document.getElementById('tira');
+  var pontos = document.getElementById('pontos');
+  var esq = document.getElementById('sEsq'), dir = document.getElementById('sDir');
+  var cartoes = tira.children.length;
+  for (var i = 0; i < cartoes; i++) pontos.appendChild(document.createElement('i'));
+  var passo = function () { return tira.children[0].offsetWidth + 12; };
+  var pinta = function () {
+    var i = Math.round(tira.scrollLeft / passo());
+    var fim = tira.scrollLeft >= tira.scrollWidth - tira.clientWidth - 4;
+    [].forEach.call(pontos.children, function (p, j) { p.className = j === i ? 'on' : ''; });
+    esq.disabled = tira.scrollLeft < 4;
+    dir.disabled = fim;
+  };
+  esq.onclick = function () { tira.scrollBy({ left: -passo(), behavior: 'smooth' }); };
+  dir.onclick = function () { tira.scrollBy({ left: passo(), behavior: 'smooth' }); };
+  tira.addEventListener('scroll', pinta, { passive: true });
+  window.addEventListener('resize', pinta);
+  pinta();
+})();
+</script>
 </body></html>`;
   return new Response(html, {
     headers: {

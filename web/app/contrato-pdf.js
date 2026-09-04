@@ -2,6 +2,9 @@
 const EXT_U=['zero','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','catorze','quinze','dezasseis','dezassete','dezoito','dezanove'];
 const EXT_D=['','','vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
 const EXT_C=['','cento','duzentos','trezentos','quatrocentos','quinhentos','seiscentos','setecentos','oitocentos','novecentos'];
+// Escreve 1–999 por extenso ("cento e vinte e três"); devolve '' para zero, para o extenso() ligar os grupos sem restos.
+// Recebe: n — um inteiro de 0 a 999.
+// Devolve: o número por extenso (string); '' para zero.
 function ext3(n){
   if(n===0)return '';
   if(n===100)return 'cem';
@@ -14,6 +17,10 @@ function ext3(n){
   }
   return parts.join(' e ');
 }
+/* Número inteiro por extenso até aos milhões, com as ligações certas do português:
+   "mil e cem", "duzentos e trinta mil quatrocentos e doze". Ignora o sinal e a parte decimal.
+   Recebe: n — o número a escrever (aceita string numérica).
+   Devolve: o número por extenso (string); "zero" para zero. */
 function extenso(n){
   n=Math.floor(Math.abs(Number(n)||0));
   if(n===0)return 'zero';
@@ -27,6 +34,9 @@ function extenso(n){
   if(p.length===2)return p[0]+liga+p[1];
   return p[0]+' '+p[1]+liga+p[2];
 }
+// Valor em euros por extenso: "mil duzentos e trinta euros e cinquenta cêntimos". Arredonda ao cêntimo.
+// Recebe: v — o valor em euros (número; aceita string numérica).
+// Devolve: o valor por extenso, com euros e cêntimos (string).
 function euroExtenso(v){
   const n=Math.round((Number(v)||0)*100),int=Math.floor(n/100),cent=n%100;
   let s=extenso(int)+(int===1?' euro':' euros');
@@ -34,11 +44,17 @@ function euroExtenso(v){
   return s;
 }
 const MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+// "2026-03-05" -> "5 de março de 2026"; devolve o valor tal e qual se não vier em ISO.
+// Recebe: iso — a data em "AAAA-MM-DD".
+// Devolve: a data por extenso (string); '' sem valor.
 function dataLonga(iso){
   if(!iso)return '';
   const p=String(iso).split('-');if(p.length<3)return iso;
   return `${Number(p[2])} de ${MESES[Number(p[1])-1]||''} de ${p[0]}`;
 }
+// Duração entre duas datas por extenso: anos certos como "2 (dois) anos", o resto em meses arredondados. Sem datas devolve "prazo certo".
+// Recebe: a — a data de início ("AAAA-MM-DD"); b — a data de fim ("AAAA-MM-DD").
+// Devolve: a duração por extenso (string), p. ex. "2 (dois) anos" ou "6 (seis) meses".
 function prazoTexto(a,b){
   if(!a||!b)return 'prazo certo';
   const d1=new Date(a),d2=new Date(b);
@@ -48,13 +64,20 @@ function prazoTexto(a,b){
 }
 
 /* ================= IDENTIFICAÇÃO DAS PARTES ================= */
-/* "Casado(a)" -> "casado" ou "casada", conforme o género da ficha */
+/* "Casado(a)" -> "casado" ou "casada", conforme o género da ficha
+   Recebe: t — o texto com as marcas "o(a)"/"(a)"; g — o género da ficha ('f' ou 'm'; outro valor deixa as marcas).
+   Devolve: o texto em minúsculas com as marcas resolvidas (string). */
 function generoTexto(t,g){
   let s=String(t||'').toLowerCase();
   if(g==='f')s=s.replace(/o\(a\)/g,'a').replace(/\(a\)/g,'a');
   else if(g==='m')s=s.replace(/o\(a\)/g,'o').replace(/\(a\)/g,'');
   return s;
 }
+/* Frase de identificação de uma pessoa para o contrato: nome em maiúsculas, estado
+   civil ajustado ao género, nacionalidade, nascimento, Cartão de Cidadão, NIF e
+   morada fiscal — só entram os campos preenchidos na ficha.
+   Recebe: p — a ficha da pessoa (name, marital, gender, nationality, birth, cc, ccValid, nif, taxAddress).
+   Devolve: a frase de identificação (string), com os campos separados por vírgulas. */
 function pessoaTexto(p){
   const b=[];
   b.push((p.name||'').toUpperCase());
@@ -69,7 +92,9 @@ function pessoaTexto(p){
 const listaPessoas=arr=>arr.map(pessoaTexto).filter(Boolean).join('; e ');
 
 /* ================= GERAR O CONTRATO ================= */
-/* morada completa a partir dos campos registais; se não houver, a morada curta da ficha */
+/* morada completa a partir dos campos registais; se não houver, a morada curta da ficha
+   Recebe: p — a ficha do imóvel (street, doorNumber, floor, fraction, postalCode, locality, address).
+   Devolve: a morada numa linha (string); '' sem nada preenchido. */
 function fullAddress(p){
   const a=[];
   const rua=[p.street,p.doorNumber].filter(Boolean).join(', ');if(rua)a.push(rua);
@@ -77,6 +102,13 @@ function fullAddress(p){
   const cp=[p.postalCode,p.locality].filter(Boolean).join(' ');if(cp)a.push(cp);
   return a.length?a.join(', '):(p.address||'');
 }
+/* Constrói o dicionário de marcadores {{...}} do modelo a partir do contrato, do
+   imóvel e das fichas das partes: moradas, identificações, valores por extenso,
+   datas longas e o local de assinatura. Um marcador vazio faz o modelo omitir a
+   frase ou a cláusula que o usa.
+   Recebe: c — o contrato (objeto da base local).
+   Devolve: o dicionário marcador → valor (objeto; strings prontas a inserir, mais
+   'contrato.diaPagamento' numérico e 'fotos' com a contagem de fotografias). */
 function contractData(c){
   const p=prop(c.propertyId)||{};
   const owners=ownersOfProp(p).map(owner).filter(Boolean);
@@ -109,6 +141,9 @@ function contractData(c){
     fotos:(c.photoIds||[]).length
   };
 }
+// Substitui os marcadores {{chave}} pelos valores de d; os blocos {{#chave}}…{{/}} só sobrevivem se a chave tiver valor.
+// Recebe: str — o texto do modelo, com {{chave}} e blocos {{#chave}}…{{/}}; d — o dicionário de valores (de contractData).
+// Devolve: o texto preenchido (string); chaves sem valor saem vazias.
 function fillTpl(str,d){
   /* blocos condicionais {{#chave}}…{{/}} */
   str=String(str).replace(/\{\{#([\w.]+)\}\}([\s\S]*?)\{\{\/\}\}/g,(m,k,inner)=>d[k]?inner:'');
@@ -118,6 +153,14 @@ const ROMANOS=['','PRIMEIRA','SEGUNDA','TERCEIRA','QUARTA','QUINTA','SEXTA','SÉ
   'DÉCIMA PRIMEIRA','DÉCIMA SEGUNDA','DÉCIMA TERCEIRA','DÉCIMA QUARTA','DÉCIMA QUINTA','DÉCIMA SEXTA',
   'DÉCIMA SÉTIMA','DÉCIMA OITAVA','DÉCIMA NONA','VIGÉSIMA'];
 
+/* Gera e descarrega o PDF do contrato: valida (imóvel e pelo menos um inquilino),
+   lê o modelo CONTRACT_XML, preenche os marcadores com contractData e percorre
+   cláusulas, secções e anexos a escrever no PDF — incluindo as fotografias
+   escolhidas, carregadas do IndexedDB e redimensionadas (daí ser assíncrona).
+   No Android entrega o ficheiro ao seletor nativo em vez de descarregar.
+   Recebe: cid — o id do contrato.
+   Devolve: nada de útil (é assíncrona) — descarrega o PDF (ou entrega-o ao Android)
+   e avisa com um toast quando falta alguma coisa. */
 async function generateContractPdf(cid){
   const c=contract(cid);if(!c)return toast('Contrato não encontrado.');
   const p=prop(c.propertyId);
@@ -176,6 +219,13 @@ async function generateContractPdf(cid){
   else downloadBytes(name,'application/pdf',bytes);
   toast('Contrato gerado.');
 }
+/* Desenha um elemento <tabela> do modelo: inventário e chaves saem como tabela de
+   texto; a fonte "fotos" sai como sequência de fotografias com legenda. Sem dados
+   escreve uma nota entre parênteses em vez de deixar o anexo vazio.
+   Recebe: pdf — o documento em construção (de PDF()); el — o elemento <tabela> do modelo;
+   c — o contrato; p — o imóvel; d — o dicionário de contractData; imgs — as imagens
+   já embutidas no PDF, por id de fotografia ({id: {n, w, h}}).
+   Devolve: nada — escreve a tabela (ou as fotografias) no PDF. */
 function tabela(pdf,el,c,p,d,imgs){
   const cols=(el.getAttribute('colunas')||'').split('|');
   const fonte=el.getAttribute('fonte');
@@ -202,6 +252,9 @@ function tabela(pdf,el,c,p,d,imgs){
   rows.forEach(r=>pdf.line(r,widths,{size:9.5,right:fonte==='chaves'?[1]:(fonte==='inventario'?[2]:[])}));
   pdf.gap(6);
 }
+// Blocos de assinatura de uma das partes: linha, nome e papel ajustado ao género (Senhoria/Senhorio, Inquilina/Inquilino), sem quebrar a meio da página.
+// Recebe: pdf — o documento em construção; parte — 'senhorios' ou 'inquilinos'; c — o contrato; p — o imóvel.
+// Devolve: nada — escreve os blocos de assinatura no PDF.
 function assinaturas(pdf,parte,c,p){
   const gente=parte==='senhorios'?ownersOfProp(p).map(owner).filter(Boolean):ctTenants(c);
   if(!gente.length)return;
@@ -215,7 +268,9 @@ function assinaturas(pdf,parte,c,p){
     pdf.text(parte==='senhorios'?(g.gender==='f'?'Senhoria':'Senhorio'):(g.gender==='f'?'Inquilina':'Inquilino'),{size:8.5,after:6});
   });
 }
-/* o PDF é texto latin-1: converte byte a byte, sem passar por UTF-8 */
+/* o PDF é texto latin-1: converte byte a byte, sem passar por UTF-8
+   Recebe: s — a string de bytes do PDF (um byte por carácter, 0–255).
+   Devolve: a string em base64; '' se a conversão falhar. */
 function b64Latin1(s){
   try{let out='';for(let i=0;i<s.length;i++)out+=String.fromCharCode(s.charCodeAt(i)&0xFF);return btoa(out)}
   catch(e){return ''}

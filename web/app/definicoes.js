@@ -1,4 +1,6 @@
 /* ================= DADOS ================= */
+// Devolve: o HTML (texto) da subpágina "Dados": importação do Splitwise,
+// cópias de segurança e o botão de recomeçar.
 function vImport(){
   return `${card('Importar do Splitwise','Despesas partilhadas de uma casa',`
     <div class="hint">No Splitwise: abre o grupo → <b>Export as spreadsheet</b> → guarda o CSV.</div>
@@ -21,6 +23,10 @@ function vImport(){
 }
 
 /* ================= DEFINIÇÕES ================= */
+// Recebe: title — o título da linha; sub — a linha pequena por baixo; icon — o
+// nome do ícone (para ic); page — a chave da subpágina a abrir com goSet
+// ('defaults', 'cats', 'tags', 'groups', 'filtros' ou 'dados').
+// Devolve: o HTML (texto) de uma linha de navegação das Definições.
 const navRow=(title,sub,icon,page)=>`<div class="card tap" onclick="goSet('${page}')" style="display:flex;align-items:center;gap:13px">
   <span class="avatar">${ic(icon,18)}</span>
   <span style="flex:1;min-width:0"><b style="display:block">${esc(title)}</b><span class="small">${esc(sub)}</span></span>
@@ -32,6 +38,9 @@ const navRow=(title,sub,icon,page)=>`<div class="card tap" onclick="goSet('${pag
 const backRow=`<div class="toolbar" style="position:sticky;top:calc(57px + var(--inset-top));z-index:20;background:var(--bg);padding:8px 0;margin:-6px 0 6px">
   <button class="btn" onclick="goSet('')">${ic('chev',15)} Voltar</button></div>`;
 
+// Subpágina "Valores por omissão": crescimento das rendas, inflação, horizonte,
+// yield de avaliação e imposto do selo. Cada campo grava logo ao sair (setSet).
+// Devolve: o HTML (texto) da subpágina.
 function vDefaults(){
   const s=db.settings;
   return `${card('Projeções','Como rendas e despesas evoluem nos gráficos de futuro',`
@@ -47,6 +56,10 @@ function vDefaults(){
     <label>Imposto do selo sobre juros (%)<input type="text" inputmode="decimal" value="${dec(s.stampPct??4)}" onchange="setSet('stampPct',Math.max(0,num(this.value)))"></label>
     <div class="hint">Percentagem cobrada sobre os juros de cada prestação. Em Portugal é 4%. As hipotecas com o imposto do selo desligado não são afetadas.</div>`)}`;
 }
+/* Vista principal das Definições: com setPage preenchido devolve a subpágina
+   respetiva (com o Voltar colado ao topo); sem ele, o menu — tema, linhas de
+   navegação com contagens e o cartão "Sobre".
+   Devolve: o HTML (texto) do menu ou da subpágina ativa. */
 function vSettings(){
   const t=db.settings.theme,s=db.settings,cs=cats();
   if(setPage==='defaults')return backRow+vDefaults();
@@ -78,6 +91,12 @@ function vSettings(){
 }
 /* cada árvore serve um grupo de tipos: receitas (rendas, dívidas recebidas) ou pagamentos (despesas, prestações, dívidas pagas) */
 const treeTx=tk=>db.transactions.filter(t=>treeKey(t.kind)===tk);
+/* Cartão editável de uma árvore de categorias (tk: 'cats' ou 'catsIn'):
+   renomear escrevendo no próprio nome, apagar, tirar dos totais (botão €)
+   e gerir subcategorias em chips. O crachá diz quantos movimentos a usam.
+   Recebe: tk — a árvore: 'cats' (pagamentos) ou 'catsIn' (receitas); title — o
+   título do cartão (pode ir vazio, dentro das dobras); sub — o subtítulo.
+   Devolve: o HTML (texto) do cartão. */
 function catTree(tk,title,sub){
   const cs=db.settings[tk]||{},txs=treeTx(tk);
   return card(title,sub,`
@@ -98,6 +117,9 @@ function catTree(tk,title,sub){
       </div>`).join('')}</div>
     <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" onclick="addCat('${tk}')">${ic('plus',15)} Nova categoria</button></div>`);
 }
+// Subpágina "Tipos de movimento": as duas árvores (receitas e pagamentos) em
+// dobras, mais o botão de repor as listas de origem.
+// Devolve: o HTML (texto) da subpágina.
 function vCats(){
   const n=tk=>Object.keys(db.settings[tk]||{}).length+' categorias';
   return `<div class="form">
@@ -106,6 +128,9 @@ function vCats(){
     +`<div class="toolbar" style="margin:13px 0 0"><button class="btn" onclick="resetCats()">Repor as de origem</button></div>
   <div class="hint" style="margin-top:14px">O número é quantos movimentos usam a categoria. Apagá-la não apaga movimentos — ficam sem categoria. O botão € tira-a dos totais, sem sair da lista.</div>`;
 }
+// Subpágina "Etiquetas": cada uma com o número de movimentos que a usam,
+// botão de apagar e botão de criar nova.
+// Devolve: o HTML (texto) da subpágina.
 function vTags(){
   const tg=db.settings.tags||[];
   const usage=g=>db.transactions.filter(t=>(t.tags||[]).indexOf(g)>-1).length;
@@ -121,11 +146,17 @@ function vTags(){
 }
 /* ===== grupos ===== */
 const GKIND={prop:{label:'Imóveis',icon:'building',one:'imóvel'},owner:{label:'Proprietários',icon:'crown',one:'proprietário'},contract:{label:'Contratos',icon:'contract',one:'contrato'}};
+// Nome legível de um membro de grupo a partir do tipo e do id; '' se já não existir.
+// Recebe: kind — o tipo do grupo: 'prop', 'owner' ou 'contract'; id — o id do membro.
+// Devolve: o nome (texto); '' se o membro já não existir.
 function gMemberName(kind,id){
   if(kind==='prop')return propName(id);
   if(kind==='owner')return (owner(id)||{}).name||'';
   const c=contract(id);return c?ctName(c):'';
 }
+// Subpágina "Grupos": uma secção por tipo (imóveis, proprietários, contratos),
+// cada grupo com os membros em resumo; tocar num abre o modal de edição.
+// Devolve: o HTML (texto) da subpágina.
 function vGroups(){
   const secs=['prop','owner','contract'].map(kind=>{
     const gs=grpsOf(kind);
@@ -142,6 +173,12 @@ function vGroups(){
   return secs+`<div class="hint" style="margin-top:16px">Servem de filtro em toda a app. Um movimento atribuído a um grupo de imóveis divide-se por eles.</div>`;
 }
 let gForm=null;
+/* Abre o modal de criar (só kind) ou editar (com id) um grupo. Trabalha numa
+   cópia (gForm) — nada é gravado até Guardar, que exige nome e pelo menos um
+   membro antes de escrever em db.groups.
+   Recebe: kind — o tipo do grupo: 'prop', 'owner' ou 'contract'; id (opcional)
+   — o id do grupo a editar; sem ele cria um novo.
+   Devolve: nada — abre o modal. */
 function groupModal(kind,id){
   gForm=normGroup(id?JSON.parse(JSON.stringify(grp(id))):{kind});
   const m=id?menu('grp',[{label:'Apagar grupo',icon:'trash',danger:true,act:`delGroup('${id}')`}]):'';
@@ -156,6 +193,8 @@ function groupModal(kind,id){
     save();closeModal();render();toast('Grupo guardado.');
   };
 }
+// Corpo do modal do grupo, gerado a partir de gForm: nome e membros em chips.
+// Devolve: o HTML (texto) do corpo do modal.
 function groupBody(){
   const g=gForm,tags=g.ids.map(id=>({id,label:gMemberName(g.kind,id)||'?'}));
   return `<div class="form">
@@ -163,7 +202,13 @@ function groupBody(){
     <div><div class="flabel">${GKIND[g.kind].label} no grupo</div>${tagField(tags,'Adicionar','addGroupMember()','delGroupMember')}</div>
     ${g.kind==='prop'?`<div class="hint">Um movimento atribuído a este grupo divide-se pelos imóveis (em partes iguais, pelo valor, por percentagens…).</div>`:''}</div>`;
 }
+// Redesenha o corpo do modal do grupo depois de mexer nos membros, sem o fechar.
+// Devolve: nada — redesenha o corpo do modal.
 function repaintGroup(){const b=modalBodyEl();if(b)b.innerHTML=groupBody()}
+/* Seletor com os candidatos que ainda não estão no grupo (imóveis,
+   proprietários ou contratos, conforme o tipo). Recolhe primeiro o nome já
+   escrito para gForm, para o repinte não o perder.
+   Devolve: nada — ao escolher, junta o membro a gForm e repinta o modal. */
 function addGroupMember(){
   gForm.name=val('g_name');
   const g=gForm;
@@ -173,7 +218,15 @@ function addGroupMember(){
   else cands=db.contracts.filter(c=>g.ids.indexOf(c.id)<0).map(c=>({v:c.id,label:ctName(c),sub:propName(c.propertyId),icon:'contract'}));
   pickModal('Adicionar ao grupo',cands,o=>{g.ids.push(o.v);closeModal();repaintGroup()});
 }
+// Tira um membro do grupo em edição (só em gForm) e repinta; recolhe antes o nome escrito.
+// Recebe: id — o id do membro a tirar.
+// Devolve: nada — atualiza gForm e repinta o corpo do modal.
 function delGroupMember(id){gForm.name=val('g_name');gForm.ids=gForm.ids.filter(x=>x!==id);repaintGroup()}
+/* Apaga o grupo depois de confirmar com o impacto: os movimentos atribuídos
+   ficam sem grupo (voltam a contar para todos) e os filtros ativos que
+   apontavam para ele são limpos. Grava e repinta.
+   Recebe: id — o id do grupo a apagar.
+   Devolve: nada — abre a confirmação; só ao confirmar apaga e grava. */
 function delGroup(id){
   const g=grp(id),used=db.transactions.filter(t=>t.groupId===id).length;
   confirmModal('Apagar grupo',`Apagar o grupo “${esc((g||{}).name||'')}”?${used?` ${used} movimento(s) ficam sem grupo (passam a contar para todos).`:''}`,()=>{
@@ -184,13 +237,27 @@ function delGroup(id){
     save();closeAllModals();render();toast('Grupo apagado.');
   });
 }
+/* Modal genérico de um só campo de texto. Enter equivale a Guardar; o cb só é
+   chamado se sobrar texto depois do trim. Foca o campo ao abrir.
+   Recebe: title — o título do modal; label — o rótulo do campo; value — o
+   texto inicial (pode vir null); cb — a função chamada com o texto (já com
+   trim) quando se guarda com algo escrito.
+   Devolve: nada — abre o modal. */
 function promptModal(title,label,value,cb){
   openModal(title,`<div class="form"><label>${esc(label)}<input id="pm_v" value="${esc(value||'')}" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();_pm()}"></label></div>`,
     `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="_pm()">Guardar</button>`);
   window._pm=()=>{const v=val('pm_v').trim();closeModal();if(v)cb(v)};
   setTimeout(()=>{const e=document.getElementById('pm_v');if(e)e.focus()},50);
 }
+// Pede o nome e cria uma categoria vazia na árvore tk; grava e repinta.
+// Recebe: tk — a árvore: 'cats' (pagamentos) ou 'catsIn' (receitas).
+// Devolve: nada — abre o prompt; só ao guardar cria e grava.
 function addCat(tk){promptModal('Nova categoria','Nome',null,v=>{const cs=db.settings[tk]||(db.settings[tk]={});if(!cs[v])cs[v]=[];save();render();toast('Categoria criada.')})}
+/* Renomeia uma categoria mantendo a ordem (reconstrói o objeto) e atualiza os
+   movimentos dessa árvore que a usavam. Nome vazio ou igual só repinta.
+   Recebe: tk — a árvore: 'cats' ou 'catsIn'; oldName — o nome atual;
+   newName — o nome novo, tal como vem do campo (é-lhe feito trim).
+   Devolve: nada — grava e repinta. */
 function renameCat(tk,oldName,newName){
   newName=String(newName||'').trim();
   if(!newName||newName===oldName)return render();
@@ -200,6 +267,10 @@ function renameCat(tk,oldName,newName){
   treeTx(tk).forEach(t=>{if(t.category===oldName)t.category=newName});
   save();render();toast('Categoria renomeada.');
 }
+// Apaga a categoria depois de confirmar com o impacto: os movimentos que a
+// usavam ficam sem categoria nem subcategoria (não se apagam).
+// Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria.
+// Devolve: nada — abre a confirmação; só ao confirmar apaga e grava.
 function delCat(tk,k){
   const used=treeTx(tk).filter(t=>t.category===k).length;
   confirmModal('Apagar categoria',`Apagar “${esc(k)}”?${used?` ${used} movimento(s) ficam sem categoria.`:''}`,()=>{
@@ -208,9 +279,17 @@ function delCat(tk,k){
     save();render();toast('Categoria apagada.');
   });
 }
+// Pede o nome e junta uma subcategoria à categoria k (ignora repetidas); grava e repinta.
+// Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria.
+// Devolve: nada — abre o prompt; só ao guardar cria e grava.
 function addSub(tk,k){promptModal('Nova subcategoria','Nome',null,v=>{
   const cs=db.settings[tk]||(db.settings[tk]={}),l=cs[k]||(cs[k]=[]);
   if(l.indexOf(v)<0)l.push(v);save();render();toast('Subcategoria criada.')})}
+/* Muda o nome de uma subcategoria via prompt: atualiza a lista, os movimentos
+   que a usavam e migra a marca de exclusão dos totais para o nome novo.
+   Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria;
+   old — o nome atual da subcategoria.
+   Devolve: nada — abre o prompt; só ao guardar renomeia e grava. */
 function renameSub(tk,k,old){
   promptModal('Mudar o nome da subcategoria','Nome',old,nn=>{
     nn=String(nn||'').trim();if(!nn||nn===old)return;
@@ -221,6 +300,11 @@ function renameSub(tk,k,old){
     save();render();toast('Subcategoria renomeada.');
   });
 }
+// Apaga a subcategoria depois de confirmar com o impacto: sai da lista e dos
+// movimentos que a usavam (ficam só sem subcategoria).
+// Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria;
+// sb — o nome da subcategoria.
+// Devolve: nada — abre a confirmação; só ao confirmar apaga e grava.
 function delSub(tk,k,sb){
   /* apagar categoria e etiqueta confirmam com o impacto; a subcategoria
      executava logo — a mesma ação, na mesma página, ora protegia ora não */
@@ -231,14 +315,23 @@ function delSub(tk,k,sb){
     save();render();toast('Subcategoria apagada.');
   });
 }
+// Repõe as duas árvores nas listas de origem, após confirmação; os movimentos
+// mantêm o texto de categoria que já tinham.
+// Devolve: nada — abre a confirmação; só ao confirmar repõe e grava.
 function resetCats(){
   confirmModal('Repor categorias','Volta às listas de origem (receitas e pagamentos). As categorias que criaste desaparecem; os movimentos mantêm o texto.',()=>{
     db.settings.cats=JSON.parse(JSON.stringify(CATS0));db.settings.catsIn=JSON.parse(JSON.stringify(CATS_IN0));save();render();toast('Categorias repostas.');
   });
 }
+// Pede o nome e cria uma etiqueta (ignora repetidas); grava e repinta.
+// Devolve: nada — abre o prompt; só ao guardar cria e grava.
 function addTag(){promptModal('Nova etiqueta','Nome',null,v=>{
   const l=db.settings.tags||(db.settings.tags=[]);
   if(l.indexOf(v)<0)l.push(v);save();render();toast('Etiqueta criada.')})}
+// Apaga a etiqueta depois de confirmar com o impacto: sai das definições e de
+// todos os movimentos que a tinham.
+// Recebe: g — o nome da etiqueta.
+// Devolve: nada — abre a confirmação; só ao confirmar apaga e grava.
 function delTag(g){
   const used=db.transactions.filter(t=>(t.tags||[]).indexOf(g)>-1).length;
   confirmModal('Apagar etiqueta',`Apagar “${esc(g)}”?${used?` Sai de ${used} movimento(s).`:''}`,()=>{
@@ -255,8 +348,13 @@ function delTag(g){
    vista aplica só o que lhe diz respeito: a visão geral usa o imóvel e o
    proprietário, os movimentos usam tudo. */
 
+// A lista de filtros comuns guardada nas definições ([] enquanto não houver).
+// Devolve: o array de filtros de db.settings.filters ([] novo se ainda não houver).
 function filtrosComuns(){return db.settings.filters||[]}
 
+// Subpágina "Filtros comuns": cada filtro com o resumo das escolhas (tocar
+// abre o modal de edição), botão de apagar e botão de criar novo.
+// Devolve: o HTML (texto) da subpágina.
 function vFiltrosComuns(){
   const list=filtrosComuns();
   return card('Filtros comuns','Aplicam-se no funil de cada vista',`
@@ -271,6 +369,10 @@ function vFiltrosComuns(){
     <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" onclick="fcModal()">${ic('plus',15)} Novo filtro comum</button></div>`);
 }
 
+// Resumo das escolhas de um filtro numa linha, separadas por «·»;
+// devolve '' quando o filtro não fixa nada.
+// Recebe: f — o filtro comum (objeto {kind,prop,owner,cat,sub,de,ate,…}).
+// Devolve: o resumo em texto; '' se o filtro não fixar nada.
 function fcResumo(f){
   const p=[];
   if(f.kind)p.push((KIND[f.kind]||{}).short||f.kind);
@@ -283,12 +385,20 @@ function fcResumo(f){
 }
 
 let fcForm=null;
+// Abre o modal de criar (sem id) ou editar um filtro comum; trabalha numa
+// cópia (fcForm) — nada é gravado até fcGuardar.
+// Recebe: id (opcional) — o id do filtro a editar; sem ele cria um novo.
+// Devolve: nada — abre o modal.
 function fcModal(id){
   const f=filtrosComuns().find(x=>x.id===id);
   fcForm=f?JSON.parse(JSON.stringify(f)):{id:uid(),name:'',kind:'',prop:'',owner:'',cat:'',sub:'',de:'',ate:''};
   openModal(f?'Editar filtro comum':'Novo filtro comum',fcCorpo(),
     `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="fcGuardar()">Guardar</button>`);
 }
+/* Corpo do modal do filtro: nome, tipo, imóvel, proprietário, categoria,
+   subcategoria e datas. As categorias dependem do tipo escolhido (as dívidas
+   usam a árvore das despesas), daí mudar o tipo repintar o formulário.
+   Devolve: o HTML (texto) do corpo do modal, gerado a partir de fcForm. */
 function fcCorpo(){
   const kinds=[{v:'',label:'Todos os tipos'},{v:'income',label:'Receitas'},{v:'expense',label:'Despesas'},{v:'loan',label:'Pagamentos de crédito'},{v:'debt',label:'Dívidas'}];
   const props=[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p=>({v:p.id,label:p.name})));
@@ -309,7 +419,11 @@ function fcCorpo(){
   </div>`;
 }
 /* soFormulario: escrever no nome não repinta (perdia o foco a cada tecla);
-   mudar tipo ou categoria repinta, porque as opções seguintes dependem */
+   mudar tipo ou categoria repinta, porque as opções seguintes dependem
+   Recebe: soFormulario (opcional) — verdadeiro quando a chamada vem de
+   escrever no nome: colhe sem repintar.
+   Devolve: nada — copia os campos do modal para fcForm (e repinta o corpo
+   se o tipo ou a categoria mudarem). */
 function fcColher(soFormulario){
   fcForm.name=val('fc_name');
   const kindNovo=val('fc_kind')||'',catNova=val('fc_cat')||'';
@@ -320,12 +434,19 @@ function fcColher(soFormulario){
   fcForm.sub=val('fc_sub')||fcForm.sub||'';fcForm.de=val('fc_de')||'';fcForm.ate=val('fc_ate')||'';
   if(repinta){const t=modalTop();if(t){const b=modalBodyEl();if(b)b.innerHTML=fcCorpo()}}
 }
+// Guarda o filtro do modal: colhe o formulário, exige nome, substitui (ou
+// acrescenta) em db.settings.filters e fecha com um toast.
+// Devolve: nada — grava nas definições e fecha o modal (ou avisa se faltar o nome).
 function fcGuardar(){
   fcColher();
   if(!String(fcForm.name||'').trim())return falhaCampo('fc_name','Dá um nome ao filtro.');
   db.settings.filters=filtrosComuns().filter(x=>x.id!==fcForm.id).concat([fcForm]);
   save();closeModal();render();toast('Filtro comum guardado.');
 }
+// Apaga um filtro comum sem pedir confirmação — o toast traz Desfazer,
+// que repõe a cópia guardada.
+// Recebe: id — o id do filtro a apagar.
+// Devolve: nada — apaga, grava e mostra o toast com Desfazer.
 function delFiltroComum(id){
   const f=filtrosComuns().find(x=>x.id===id);if(!f)return;
   const copia=JSON.parse(JSON.stringify(f));
@@ -334,7 +455,9 @@ function delFiltroComum(id){
   comDesfazer('Filtro comum apagado.',()=>{db.settings.filters=(db.settings.filters||[]).concat([copia])});
 }
 
-/* O aplicador: cada vista pega no que lhe diz respeito. */
+/* O aplicador: cada vista pega no que lhe diz respeito.
+   Recebe: id — o id do filtro comum a aplicar.
+   Devolve: nada — muda os filtros da vista ativa e repinta. */
 function aplicarFiltroComum(id){
   const f=filtrosComuns().find(x=>x.id===id);if(!f)return;
   if(tab==='transactions'){
@@ -350,9 +473,16 @@ function aplicarFiltroComum(id){
   if(typeof LFK!=='undefined'&&LFK[tab]&&f.owner!==undefined){lf(LFK[tab]).own=f.owner||''}
   render();toast('Filtro «'+f.name+'» aplicado — '+(f.cat||f.kind||f.de?'esta vista usa só o imóvel e o proprietário.':'feito.'));
 }
+// Selector "aplicar um filtro comum" para meter num funil de filtros; devolve
+// '' enquanto não houver filtros. fn é o onchange (por omissão onFcAplicar).
+// Recebe: fn (opcional) — o nome (texto) da função global a chamar no onchange;
+// por omissão 'onFcAplicar'.
+// Devolve: o HTML (texto) do seletor; '' enquanto não houver filtros.
 function fcSelector(fn){
   const list=filtrosComuns();
   if(!list.length)return '';
   return `<label>Filtro comum${sel('fcAplicar','',[{v:'',label:'— aplicar um filtro comum —'}].concat(list.map(f=>({v:f.id,label:f.name}))),fn||'onFcAplicar')}</label>`;
 }
+// onchange do selector: aplica o filtro escolhido (a opção vazia não faz nada).
+// Devolve: nada — aplica o filtro escolhido na vista ativa.
 function onFcAplicar(){const v=val('fcAplicar');if(v)aplicarFiltroComum(v)}

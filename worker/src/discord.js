@@ -9,6 +9,9 @@ const PONG = { type: 1 };
 const MSG = 4;            // responder com mensagem
 const UPDATE = 7;         // substituir a mensagem do botão
 
+// Converte uma string hexadecimal (chave pública, assinatura) nos bytes correspondentes.
+// Recebe: s — string hexadecimal, dois dígitos por byte, sem prefixo.
+// Devolve: Uint8Array com os bytes correspondentes.
 const hex = (s) => {
   const a = new Uint8Array(s.length / 2);
   for (let i = 0; i < a.length; i++) a[i] = parseInt(s.substr(i * 2, 2), 16);
@@ -16,6 +19,11 @@ const hex = (s) => {
 };
 
 // A assinatura Ed25519 do Discord é a única autenticação deste endpoint.
+// Recebe: env — variáveis de ambiente (usa DISCORD_PUBLIC_KEY, em hexadecimal);
+// sig — a assinatura Ed25519 em hexadecimal (cabeçalho X-Signature-Ed25519);
+// ts — o timestamp em segundos (cabeçalho X-Signature-Timestamp); raw — o corpo
+// do pedido tal e qual chegou, em texto.
+// Devolve: promessa de booleano — true se a assinatura é válida e recente.
 export async function verifySignature(env, sig, ts, raw) {
   if (!env.DISCORD_PUBLIC_KEY || !sig || !ts) return false;
   /* A assinatura prova que foi o Discord a escrever — mas um pedido antigo
@@ -33,10 +41,17 @@ export async function verifySignature(env, sig, ts, raw) {
   return false;
 }
 
+// Resposta efémera: só quem correu o comando a vê.
+// Recebe: content (opcional) — o texto da mensagem; embeds (opcional) — lista de embeds do Discord.
+// Devolve: o objeto de interação (type 4, flags 64) pronto a ir na Response.
 const reply = (content, embeds) => ({
   type: MSG,
   data: { content: content || '', embeds: embeds || [], flags: 64 },   // 64 = só quem escreveu vê
 });
+// Resposta à vista de todos no canal, com botões opcionais.
+// Recebe: content (opcional) — o texto; embeds (opcional) — lista de embeds;
+// components (opcional) — as action rows com botões ou menus.
+// Devolve: o objeto de interação (type 4, sem flags) pronto a ir na Response.
 const publico = (content, embeds, components) => ({
   type: MSG,
   data: { content: content || '', embeds: embeds || [], components: components || [] },
@@ -55,6 +70,9 @@ const CATS = {
 };
 const ICONE = { user: '💬 ', client: '🐞 ', server: '🔥 ', infra: '📊 ', seguranca: '🔒 ' };
 const COR = { user: 0x2f7d5b, client: 0xd6a34a, server: 0xb94a48, infra: 0x7aa9d6, seguranca: 0x8a7bb8 };
+// Corta o texto a n caracteres, com reticências — o Discord recusa campos longos.
+// Recebe: s — o texto (qualquer valor; null e undefined viram ''); n — o comprimento máximo em caracteres.
+// Devolve: string com n caracteres no máximo, terminada em '…' quando cortada.
 const cut = (s, n) => { const t = String(s == null ? '' : s); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 
 /* Papéis
@@ -98,6 +116,7 @@ export const PERMISSOES = {
   comandos: ['admin', 'dev', 'suporte'],
   entrar: ['admin', 'dev', 'suporte'],
   test: ['dev', 'suporte'],
+  docs: ['admin', 'dev', 'suporte'],
   access: [],
 };
 
@@ -116,13 +135,23 @@ export const CATS_DO_PAPEL = {
 };
 
 // Um papel ou vários: daqui para baixo aceita-se qualquer um dos dois.
+// Recebe: p — um papel (string), uma lista de papéis, ou nada.
+// Devolve: sempre uma lista de papéis, sem entradas vazias.
 const comoLista = (p) => (Array.isArray(p) ? p.filter(Boolean) : p ? [p] : []);
+// Os papéis por extenso, para as mensagens: "admin + dev", ou "nenhum".
+// Recebe: p — um papel (string) ou lista de papéis.
+// Devolve: string com os papéis unidos por " + ", ou "nenhum" se não houver.
 const nomeDoPapel = (p) => comoLista(p).join(' + ') || 'nenhum';
 
 const COR_PAPEL = { master: 0xb94a48, admin: 0x8a7bb8, dev: 0xd6a34a, suporte: 0x2f7d5b };
+// A cor dos embeds segue o papel mais alto que a pessoa tem.
+// Recebe: p — um papel (string) ou lista de papéis, do mais alto para o mais baixo.
+// Devolve: número — a cor (inteiro RGB) do primeiro papel; verde se não houver.
 const cor = (p) => COR_PAPEL[comoLista(p)[0]] || 0x2f7d5b;
 
 // As categorias que esta pessoa vê, somando os papéis que tiver.
+// Recebe: pap — um papel (string) ou lista de papéis.
+// Devolve: lista de categorias ('user', 'client', …) sem repetidos.
 export function catsDe(pap) {
   const vistas = [];
   comoLista(pap).forEach((p) => (CATS_DO_PAPEL[p] || []).forEach((c) => {
@@ -131,8 +160,16 @@ export function catsDe(pap) {
   return vistas;
 }
 
+// Parte uma variável de ambiente numa lista de ids (aceita vírgulas e espaços).
+// Recebe: v — o valor da variável (string com ids separados por vírgulas ou espaços, ou nada).
+// Devolve: lista de ids (strings), sem entradas vazias.
 const lista = (v) => String(v || '').split(/[,\s]+/).filter(Boolean);
 
+// Diz se quem fala está na lista da variável de ambiente `chave`: pelo id de
+// pessoa ou por qualquer um dos cargos de Discord que tem.
+// Recebe: env — variáveis de ambiente; i — a interação do Discord (usa o id de
+// quem fala e os cargos em member.roles); chave — o nome da variável com a lista.
+// Devolve: booleano — true se o id da pessoa ou um dos cargos está na lista.
 function pertence(env, i, chave) {
   const l = lista(env[chave]);
   if (!l.length) return false;
@@ -149,6 +186,10 @@ const CHAVE_DO_PAPEL = {
 };
 
 // Todos os papéis de quem está a falar, do mais alto para o mais baixo.
+// Recebe: env — variáveis de ambiente (as listas DISCORD_MASTER/ADMINS/DEVS/SUPORTE);
+// i — a interação do Discord.
+// Devolve: lista de papéis do mais alto para o mais baixo; ['master'] quando
+// nenhuma lista está configurada; vazia se a pessoa não está em nenhuma.
 export function papeisDe(env, i) {
   const configurado = PAPEIS.some((p) => lista(env[CHAVE_DO_PAPEL[p]]).length);
   if (!configurado) return ['master'];
@@ -156,13 +197,19 @@ export function papeisDe(env, i) {
 }
 
 // O papel principal, para mostrar e para dar cor: o mais alto que a pessoa tem.
+// Recebe: env — variáveis de ambiente; i — a interação do Discord.
+// Devolve: string com o papel mais alto, ou null se não tiver nenhum.
 export function papel(env, i) {
   return papeisDe(env, i)[0] || null;
 }
 
 /* O papel é a regra; as exceções por pessoa são o remendo. Passar `acessos`
    é opcional de propósito: sem elas, isto continua a ser a função pura que
-   os testes usam, e o comportamento é o do papel. */
+   os testes usam, e o comportamento é o do papel.
+   Recebe: pap — um papel (string) ou lista de papéis; comando — o nome do
+   comando (ex.: 'pedidos'); acessos (opcional) — as exceções { mais, menos }
+   da pessoa, lidas do KV.
+   Devolve: booleano — true se a pessoa pode correr o comando. */
 export function podeCorrer(pap, comando, acessos) {
   const papeis = comoLista(pap);
   if (!papeis.length) return false;
@@ -172,10 +219,18 @@ export function podeCorrer(pap, comando, acessos) {
 }
 
 // Os comandos que esta pessoa pode correr, para o /comandos e para as recusas.
+// Recebe: pap — um papel (string) ou lista de papéis; acessos (opcional) — as
+// exceções { mais, menos } da pessoa.
+// Devolve: lista com os nomes dos comandos que pode correr.
 export function comandosDe(pap, acessos) {
   return Object.keys(PERMISSOES).filter((c) => podeCorrer(pap, c, acessos));
 }
 
+// O embed completo de um pedido: estado, categoria, de quem veio e a resposta
+// já dada. Fica cinzento quando concluído.
+// Recebe: t — a linha do pedido tal como sai da tabela tickets (id, subject,
+// body, status, category, user_id, created_at, e versao/context/reply se houver).
+// Devolve: o objeto embed do Discord, pronto a ir numa resposta.
 function ticketEmbedFull(t) {
   return {
     title: (t.kind === 'problema' ? '🐞 ' : '💡 ') + cut(t.subject, 90),
@@ -195,6 +250,10 @@ function ticketEmbedFull(t) {
   };
 }
 
+// Os botões "Em resolução" e "Concluir" que acompanham um pedido; o id viaja
+// no custom_id, para o clique saber de que pedido é.
+// Recebe: id — o id do pedido (string), que segue dentro do custom_id.
+// Devolve: lista com uma action row de dois botões, para o campo components.
 export function ticketButtons(id) {
   return [{
     type: 1,
@@ -205,6 +264,10 @@ export function ticketButtons(id) {
   }];
 }
 
+// Procura um pedido pelo id inteiro ou por um prefixo — as listas só mostram
+// os primeiros 8 caracteres, e escrevê-los chega.
+// Recebe: env — dá acesso à base (env.DB); ref — o id do pedido, inteiro ou só o prefixo.
+// Devolve: promessa da linha do pedido, ou null se não houver correspondência.
 async function acharTicket(env, ref) {
   const r = String(ref || '').trim();
   if (!r) return null;
@@ -213,7 +276,13 @@ async function acharTicket(env, ref) {
 
 /* Também por aqui se escreve no fio e no rasto: uma resposta dada pelo
    Discord que só mexesse na coluna reply ficava invisível no back office,
-   e ninguém sabia que caminho a escreveu. */
+   e ninguém sabia que caminho a escreveu.
+   Recebe: env — acesso à base e ao correio; ref — o id do pedido, inteiro ou
+   prefixo; estado — o novo estado ('resolucao' ou 'concluido'); resposta
+   (opcional) — o texto a escrever no fio e a enviar por email; quem (opcional)
+   — quem mexeu, como { id, nome, papel }.
+   Devolve: promessa do pedido já com o estado (e a resposta) novos, ou null
+   se o pedido não existir. */
 async function mudarEstado(env, ref, estado, resposta, quem) {
   const t = await acharTicket(env, ref);
   if (!t) return null;
@@ -248,6 +317,14 @@ async function mudarEstado(env, ref, estado, resposta, quem) {
 
 /* ------------------------------ comandos ------------------------------ */
 
+/* /pedidos: até dez pedidos, do mais recente para trás, sempre dentro das
+   categorias que o papel vê. Sem filtros mostra o que está por tratar; aceita
+   estado e categoria — e pedir uma categoria vedada é dito, não escondido.
+   Recebe: env — acesso à base; opts — as opções do comando (estado e categoria,
+   ambos opcionais, como strings); pap — um papel (string) ou lista de papéis
+   de quem chamou.
+   Devolve: promessa da resposta efémera do Discord — os embeds da lista, o
+   aviso de que não há nada, ou a recusa da categoria vedada. */
 async function cmdPedidos(env, opts, pap) {
   const estado = (opts.estado || '').trim();
   const permitidas = catsDe(pap);
@@ -287,7 +364,11 @@ async function cmdPedidos(env, opts, pap) {
    O aviso que chega ao canal traz o nome; o /pedido, aberto mais tarde,
    trazia só o id. Quem faz suporte estava a responder a uma pessoa de quem
    não sabia nada — nem o plano, nem há quanto tempo era utilizador, nem se
-   já tinha escrito antes. */
+   já tinha escrito antes.
+   Recebe: env — acesso à base; userId — o id do utilizador na app.
+   Devolve: promessa de { u, casas, registos, antes, erros } com a conta e as
+   contagens; { desconhecido: true } se a conta já não existe; null sem id ou
+   se a consulta falhar. */
 async function fichaDe(env, userId) {
   if (!userId) return null;
   try {
@@ -308,6 +389,10 @@ async function fichaDe(env, userId) {
   }
 }
 
+// A ficha de quem escreveu, como campo de embed: plano, antiguidade, casas, e
+// os avisos que mudam a resposta. Devolve null quando não há ficha.
+// Recebe: f — a ficha vinda de fichaDe (objeto, ou null).
+// Devolve: o campo de embed { name, value, inline }, ou null quando não há ficha.
 function campoDaFicha(f) {
   if (!f) return null;
   if (f.desconhecido) return { name: 'Quem escreveu', value: 'conta já não existe', inline: false };
@@ -328,6 +413,11 @@ function campoDaFicha(f) {
   return { name: 'Quem escreveu', value: linhas.join('\n'), inline: false };
 }
 
+// /pedido: abre um pedido pelo id, com a ficha de quem escreveu no lugar do
+// campo "De" e os botões de mudar o estado.
+// Recebe: env — acesso à base; opts — as opções do comando (id — o id do
+// pedido, inteiro ou prefixo); pap — um papel (string) ou lista de papéis.
+// Devolve: promessa da resposta do Discord com o embed e os botões, ou a recusa.
 async function cmdPedido(env, opts, pap) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
@@ -337,6 +427,12 @@ async function cmdPedido(env, opts, pap) {
   return { type: MSG, data: { embeds: [embed], components: ticketButtons(g.t.id) } };
 }
 
+// /responder: escreve a resposta no pedido e marca-o em resolução; se for um
+// pedido de gente, a pessoa recebe a resposta por email e na app.
+// Recebe: env — acesso à base e ao correio; opts — as opções (id — o id ou
+// prefixo do pedido; texto — a resposta a dar); pap — um papel ou lista de
+// papéis; quem — quem responde, como { id, nome, papel }.
+// Devolve: promessa da resposta efémera com o pedido atualizado, ou a recusa.
 async function cmdResponder(env, opts, pap, quem) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
@@ -345,6 +441,11 @@ async function cmdResponder(env, opts, pap, quem) {
     [ticketEmbedFull(t)]);
 }
 
+// /fechar: dá o pedido por concluído, com resposta final se vier texto.
+// Recebe: env — acesso à base e ao correio; opts — as opções (id — o id ou
+// prefixo do pedido; texto (opcional) — a resposta final); pap — um papel ou
+// lista de papéis; quem — quem fecha, como { id, nome, papel }.
+// Devolve: promessa da resposta efémera "Concluído" com o pedido, ou a recusa.
 async function cmdFechar(env, opts, pap, quem) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
@@ -354,6 +455,10 @@ async function cmdFechar(env, opts, pap, quem) {
 
 // Os erros apanhados sozinhos vivem em `tickets` desde a migração 0008, com
 // a categoria a dizer de onde vieram. A tabela `reports` ficou para trás.
+// Recebe: env — acesso à base; opts — as opções (horas (opcional) — a janela
+// para trás, de 1 a 720; 24 por omissão).
+// Devolve: promessa da resposta efémera com até dez embeds de erros, ou o
+// aviso de que não há nenhuns.
 async function cmdErros(env, opts) {
   const horas = Math.min(Math.max(Number(opts.horas || 24), 1), 720);
   const desde = Date.now() - horas * 3600000;
@@ -396,6 +501,10 @@ async function cmdErros(env, opts) {
 
 // Ver as cópias que existem, ou forçar uma agora — antes de uma migração
 // arriscada, por exemplo, em vez de esperar pelas 09:00.
+// Recebe: env — acesso à base e ao R2; opts — as opções (agora (opcional) —
+// quando verdadeiro, força já uma cópia em vez de listar).
+// Devolve: promessa da resposta efémera — a lista das cópias, o resultado da
+// cópia feita, ou o erro.
 async function cmdCopias(env, opts) {
   const s = await import('./salvaguarda.js');
   if (opts.agora) {
@@ -423,10 +532,19 @@ async function cmdCopias(env, opts) {
 }
 
 // Um pedido só se lê e se responde de dentro do papel a que pertence.
+// Recebe: pap — um papel (string) ou lista de papéis; categoria — a categoria
+// do pedido ('user' quando vier vazia).
+// Devolve: booleano — true se o papel vê essa categoria.
 function podeVer(pap, categoria) {
   return catsDe(pap).indexOf(categoria || 'user') > -1;
 }
 
+/* A guarda comum dos comandos que mexem num pedido: acha-o e confirma que o
+   papel o pode ver. Devolve { t } com o pedido, ou { erro } com a recusa já
+   pronta a devolver ao Discord.
+   Recebe: env — acesso à base; id — o id do pedido, inteiro ou prefixo; pap —
+   um papel (string) ou lista de papéis de quem chamou.
+   Devolve: promessa de { t } com o pedido, ou { erro } com a recusa efémera. */
 async function guardaDoPedido(env, id, pap) {
   const t = await acharTicket(env, id);
   if (!t) return { erro: reply('Não encontrei nenhum pedido com esse id.') };
@@ -451,6 +569,11 @@ const DESCRICAO = {
   access: 'quem pode o quê',
 };
 
+// /comandos: o que esta pessoa pode correr, com a nota do que lhe foi dado
+// por exceção e as categorias de pedidos que vê.
+// Recebe: pap — um papel (string) ou lista de papéis; acessos — as exceções
+// { mais, menos } da pessoa.
+// Devolve: a resposta efémera com a lista de comandos e as categorias que vê.
 function cmdComandos(pap, acessos) {
   const desc = DESCRICAO;
   const meus = comandosDe(pap, acessos);
@@ -468,12 +591,40 @@ function cmdComandos(pap, acessos) {
   }]);
 }
 
+/* /docs: a mesma entrada do /entrar, mas a aterrar na documentação — um
+   comando, zero passos intermédios. O bilhete é igual ao do /entrar (cinco
+   minutos, uma utilização) e o destino vem de uma lista fechada.
+   Recebe: env — as variáveis de ambiente (a base do bilhete e o nome do
+   ambiente); i — a interação do Discord (traz quem chamou); papeis — a lista
+   de papéis, do mais alto para o mais baixo.
+   Devolve: promessa da resposta efémera com a ligação de uso único para os docs. */
+async function cmdDocs(env, i, papeis) {
+  const u = (i.member && i.member.user) || i.user || {};
+  const { criarBilhete } = await import('./equipa.js');
+  const b = await criarBilhete(env, {
+    discordId: u.id,
+    nome: u.global_name || u.username || u.id,
+    papel: papeis[0],
+    papeis,
+  });
+  const base = env.ENV_NAME ? 'https://dev.rendorium.com' : 'https://app.rendorium.com';
+  return reply('📚 A documentação da casa — gerada do próprio código a cada deploy:\n' +
+    base + '/equipa/entrar?t=' + b.token + '&depois=docs\n\n' +
+    'A ligação vale ' + Math.round(b.expiraEm / 60) + ' minutos e uma utilização; entra e aterra logo nos docs.');
+}
+
 /* Uma ligação de uso único para a ferramenta de equipa.
 
    A resposta é sempre privada (flags 64): a ligação vale por uma sessão, e
    um canal partilhado não é sítio para ela. O endereço sai do próprio pedido,
    por isso o bot de dev dá uma ligação para o dev e o de produção para
-   produção, sem ninguém ter de configurar nada. */
+   produção, sem ninguém ter de configurar nada.
+   Recebe: env — as variáveis de ambiente (a base do bilhete e o nome do
+   ambiente); i — a interação do Discord (traz quem chamou); papeis — a lista
+   de papéis, do mais alto para o mais baixo; request — o pedido HTTP recebido
+   (hoje fica por usar: o domínio sai de env.ENV_NAME).
+   Devolve: promessa da resposta efémera com a ligação de uso único e o aviso
+   para não a partilhar. */
 async function cmdEntrar(env, i, papeis, request) {
   const u = (i.member && i.member.user) || i.user || {};
   const pap = nomeDoPapel(papeis);
@@ -499,7 +650,13 @@ async function cmdEntrar(env, i, papeis, request) {
 /* Uma ligação para o ambiente de TESTE — nunca para produção. O bot de dev
    aponta a si próprio; o de produção (quem responde ao Discord depois da
    promoção) aponta ao dev, porque o /t/entrar de produção nem existe.
-   Abrir a ligação lava as contas de teste e entra numa fresca. */
+   Abrir a ligação lava as contas de teste e entra numa fresca.
+   Recebe: env — as variáveis de ambiente; i — a interação do Discord (traz
+   quem chamou); opts — as opções (dados, extra e limpar (opcionais) —
+   bandeiras; email (opcional) — para onde passa a ir o correio de teste);
+   request — o pedido HTTP recebido (hoje fica por usar).
+   Devolve: promessa da resposta efémera com a ligação de teste e as notas do
+   que abri-la faz. */
 async function cmdTest(env, i, opts, request) {
   const { ligacaoTeste } = await import('./teste.js');
   const base = 'https://dev.rendorium.com';   // o teste vive sempre aqui
@@ -529,6 +686,7 @@ async function cmdTest(env, i, opts, request) {
    nada. */
 
 // Os comandos que se gerem aqui. Os do master ficam de fora de propósito.
+// Devolve: lista com os nomes dos comandos geríveis (todos menos os só do master).
 const GERIVEIS = () => Object.keys(PERMISSOES).filter((c) => SO_MASTER.indexOf(c) < 0);
 
 const MARCA = {
@@ -539,6 +697,12 @@ const MARCA = {
 };
 const DE_ONDE = { papel: 'do cargo · ', dado: 'dado a esta pessoa · ', retirado: 'retirado · ', nao: '' };
 
+/* Os componentes do /access: um menu de escolha múltipla com o estado de cada
+   comando gerível (o que vem do cargo já vem marcado) e o botão de repor tudo
+   ao cargo.
+   Recebe: alvoId — o id de Discord da pessoa alvo; papeis — a lista de papéis
+   dela; acessos — as exceções { mais, menos } dela.
+   Devolve: lista de duas action rows — o menu e o botão de repor. */
 function menuAcesso(alvoId, papeis, acessos) {
   const regras = { PERMISSOES, PODEM_TUDO, SO_MASTER };
   // o alvo e os papéis dele viajam no botão: a interação de um menu não
@@ -575,7 +739,11 @@ function menuAcesso(alvoId, papeis, acessos) {
 /* A mensagem inteira: o menu é o que se mexe, o embed é o que explica.
 
    O menu sozinho mostra o que está ligado mas não de onde vem, e essa é a
-   parte que interessa a quem gere — daí os dois juntos. */
+   parte que interessa a quem gere — daí os dois juntos.
+   Recebe: alvoId — o id de Discord da pessoa alvo; papeis — a lista de papéis
+   dela; acessos — as exceções { mais, menos } dela.
+   Devolve: { embeds, components } prontos para a mensagem — components vazio
+   quando o alvo não tem papel ou é master. */
 function vistaAcesso(alvoId, papeis, acessos) {
   const regras = { PERMISSOES, PODEM_TUDO, SO_MASTER };
   const eMaster = papeis.indexOf('master') > -1;
@@ -606,6 +774,13 @@ function vistaAcesso(alvoId, papeis, acessos) {
   return { embeds: [embed], components: componentes };
 }
 
+// /access: mostra quem pode o quê para a pessoa escolhida, com o menu para
+// dar e tirar comandos. Só o master cá chega.
+// Recebe: env — acesso às listas de papéis e aos acessos guardados; i — a
+// interação do Discord (usa data.resolved para os cargos do alvo); opts — as
+// opções (utilizador — o id de Discord da pessoa escolhida).
+// Devolve: promessa da resposta efémera com a vista de acessos, ou o pedido
+// para escolher a pessoa.
 async function cmdAccess(env, i, opts) {
   const alvo = opts.utilizador;
   if (!alvo) return reply('Escolhe a pessoa.');
@@ -621,7 +796,11 @@ async function cmdAccess(env, i, opts) {
    Os que viajaram na mensagem podem estar velhos — o cargo pode ter mudado
    entre abrir o menu e mexer nele — e gravar exceções contra um cargo velho
    dava exceções erradas. Se a pergunta não der, vale o que veio na mensagem:
-   é melhor do que recusar o clique. */
+   é melhor do que recusar o clique.
+   Recebe: env — as variáveis de ambiente (usa DISCORD_BOT_TOKEN); i — a
+   interação (usa guild_id); alvoId — o id de Discord do alvo; guardados — a
+   lista de papéis que viajou na mensagem, para valer se a pergunta falhar.
+   Devolve: promessa da lista de papéis fresca do Discord, ou `guardados`. */
 async function papeisDoAlvo(env, i, alvoId, guardados) {
   if (env.DISCORD_BOT_TOKEN && i.guild_id) {
     try {
@@ -638,6 +817,15 @@ async function papeisDoAlvo(env, i, alvoId, guardados) {
   return guardados;
 }
 
+/* Trata os cliques na mensagem do /access: o botão repõe tudo ao cargo, o
+   menu grava a diferença entre o que ficou marcado e o que o cargo dá.
+   Escreve na base, deixa rasto na auditoria, e substitui a mensagem pela
+   vista nova.
+   Recebe: env — acesso aos acessos guardados e à auditoria; i — a interação
+   do menu ou do botão; meus — a lista de papéis de quem clicou; cid — o
+   custom_id ('ac:' ou 'acz:' seguido do id do alvo e dos papéis dele).
+   Devolve: promessa da resposta UPDATE com a vista nova, ou a recusa/aviso
+   efémero. */
 async function acessoInteracao(env, i, meus, cid) {
   if (!podeCorrer(meus, 'access')) return reply('O **/access** é só do master.');
 
@@ -664,6 +852,9 @@ async function acessoInteracao(env, i, meus, cid) {
   return { type: UPDATE, data: vistaAcesso(alvoId, papeis, acessos) };
 }
 
+// /uso: o consumo da infraestrutura neste momento, num embed.
+// Recebe: env — as variáveis de ambiente, que o usageFields usa para perguntar o consumo.
+// Devolve: promessa da resposta efémera com o embed do consumo.
 async function cmdUso(env) {
   const fields = await usageFields(env);
   return reply('', [{
@@ -674,12 +865,19 @@ async function cmdUso(env) {
   }]);
 }
 
+// /resumo: envia já o resumo diário para o canal de administração, sem
+// esperar pela hora marcada.
+// Recebe: env — as variáveis de ambiente; ctx — o contexto de execução do
+// worker, que segue para o dailyReport.
+// Devolve: promessa da resposta efémera a confirmar o envio.
 async function cmdResumo(env, ctx) {
   await dailyReport(env, ctx);
   return reply('Resumo enviado para o canal de administração.');
 }
 
 // Quem está a falar, para o fio e para o rasto.
+// Recebe: i — a interação do Discord; pap — um papel (string) ou lista de papéis.
+// Devolve: { id, nome, papel } de quem está a falar, com o papel por extenso.
 function quemFala(i, pap) {
   const u = (i.member && i.member.user) || i.user || {};
   return { id: u.id, nome: u.global_name || u.username || u.id, papel: nomeDoPapel(pap) };
@@ -687,6 +885,15 @@ function quemFala(i, pap) {
 
 /* ---------------------------- encaminhamento ---------------------------- */
 
+/* A porta de entrada de todas as interações do Discord: verifica a assinatura,
+   responde ao ping, e encaminha botões, menus e comandos — cada um atrás da
+   pergunta "este papel pode?". Devolve sempre a Response JSON que o Discord
+   espera; um erro num comando vira mensagem, não um 500.
+   Recebe: request — o pedido HTTP vindo do Discord (assinatura nos cabeçalhos,
+   interação no corpo); env — as variáveis de ambiente; ctx — o contexto de
+   execução do worker.
+   Devolve: promessa de Response — JSON para o Discord, ou 401/400 quando a
+   assinatura ou o corpo não prestam. */
 export async function handleInteraction(request, env, ctx) {
   const raw = await request.text();
   const ok = await verifySignature(
@@ -748,6 +955,7 @@ export async function handleInteraction(request, env, ctx) {
       if (nome === 'access') return json(await cmdAccess(env, i, opts));
       if (nome === 'entrar') return json(await cmdEntrar(env, i, papeis, request));
       if (nome === 'test') return json(await cmdTest(env, i, opts, request));
+      if (nome === 'docs') return json(await cmdDocs(env, i, papeis));
       if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
       if (nome === 'pedido') return json(await cmdPedido(env, opts, pap));
       if (nome === 'responder') return json(await cmdResponder(env, opts, pap, quemFala(i, pap)));
@@ -772,6 +980,9 @@ export async function handleInteraction(request, env, ctx) {
 }
 
 // Mensagem num canal usando o bot (permite botões, ao contrário do webhook).
+// Recebe: env — as variáveis de ambiente (usa DISCORD_BOT_TOKEN); channelId —
+// o id do canal de Discord; payload — o corpo da mensagem (content, embeds, components).
+// Devolve: promessa de booleano — true se o Discord aceitou a mensagem.
 export async function postAsBot(env, channelId, payload) {
   if (!env.DISCORD_BOT_TOKEN || !channelId) return false;
   try {

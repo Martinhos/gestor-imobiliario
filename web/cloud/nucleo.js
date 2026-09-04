@@ -27,9 +27,13 @@ if (!window.Android) {
 /* O tema é uma preferência do aparelho, não da conta: sincronizá-lo fazia
    um telemóvel em modo escuro herdar o "claro" escolhido noutro sítio. */
 var LS_THEME = 'gi_theme';
+// Tema guardado neste aparelho; 'auto' se nada houver ou se o localStorage falhar.
+// Devolve: o tema em texto (o guardado, ou 'auto' na falta dele).
 function localTheme() {
   try { return localStorage.getItem(LS_THEME) || 'auto'; } catch (e) { return 'auto'; }
 }
+// Sobrepõe o tema do aparelho ao que estiver em db.settings e aplica-o.
+// Devolve: nada — escreve db.settings.theme e chama applyTheme().
 function applyLocalTheme() {
   db.settings.theme = localTheme();
   applyTheme();
@@ -43,11 +47,23 @@ applyLocalTheme();
 
 var snap = {};
 var snapKey = function () { return 'gi_cloud_snap_' + (CW.user ? CW.user.id : ''); };
+// Carrega do aparelho o retrato do servidor (chave -> JSON do que já lá está).
+// Devolve: nada — preenche a variável snap ({} se nada houver ou a leitura falhar).
 function loadSnap() { try { snap = JSON.parse(localStorage.getItem(snapKey()) || '{}'); } catch (e) { snap = {}; } }
+// Guarda o retrato no aparelho; se o localStorage falhar, refaz-se no próximo pull.
+// Devolve: nada — grava snap no localStorage.
 function saveSnap() { try { localStorage.setItem(snapKey(), JSON.stringify(snap)); } catch (e) {} }
 
 /* ---------------- API ---------------- */
 
+/* Chamada à API: junta o token da sessão, serializa 'data' em JSON e devolve
+   a resposta já decomposta. Um 401 fora de /api/auth/ encerra a sessão local
+   (sessionLost). Resposta não-ok rejeita com um Error cuja mensagem vem do
+   servidor e com .status preenchido.
+   Recebe: method — o verbo HTTP ('GET', 'POST', …); path — o caminho do pedido
+   (ex.: '/api/state'); data (opcional) — corpo do pedido, serializado em JSON.
+   Devolve: Promise com o JSON da resposta ({} se o corpo não for JSON); rejeita
+   com esse Error quando a resposta não é ok. */
 function api(method, path, data) {
   var opts = { method: method, headers: {}, credentials: 'same-origin' };
   if (CW.user && CW.user.token) opts.headers['Authorization'] = 'Bearer ' + CW.user.token;
@@ -66,6 +82,8 @@ function api(method, path, data) {
   });
 }
 
+// Deita fora a sessão local e volta ao ecrã de entrada, com aviso de expiração.
+// Devolve: nada — limpa CW.user e mostra o ecrã de entrada.
 function sessionLost() {
   CW.user = null;
   try { localStorage.removeItem(LS_USER); } catch (e) {}
@@ -74,6 +92,10 @@ function sessionLost() {
 
 /* ---------------- exportação: db -> entidades do servidor ------------- */
 
+// Cópia profunda sem as chaves de trabalho (as que começam por '_'):
+// é esta a forma que segue para o servidor.
+// Recebe: o — o objeto a limpar (tem de ser serializável em JSON).
+// Devolve: cópia profunda do objeto, sem as chaves que começam por '_'.
 function strip(o) {
   var c = JSON.parse(JSON.stringify(o));
   Object.keys(c).forEach(function (k) { if (k.charAt(0) === '_') delete c[k]; });
@@ -82,6 +104,8 @@ function strip(o) {
 
 // As quotas são geridas pelo servidor (propostas com confirmação): a casa
 // exportada nunca as leva, para um cliente desatualizado não as reverter.
+// Recebe: p — o imóvel (um objeto de db.properties).
+// Devolve: cópia limpa (via strip) e ainda sem ownerIds nem ownerShares.
 function stripHouse(p) {
   var c = strip(p);
   delete c.ownerIds;
@@ -91,6 +115,7 @@ function stripHouse(p) {
 
 // Mapa completo do que este utilizador deve ter no servidor.
 // chave -> {scope, houseId?, kind?, id?, data}
+// Devolve: esse mapa (objeto), montado a partir do db local já limpo por strip.
 function exportEntities() {
   var map = {};
   var owners = db.owners || [], tenants = db.tenants || [];
@@ -138,6 +163,10 @@ function exportEntities() {
   return map;
 }
 
+// Decompõe uma chave do retrato ('h:...', 'r:...', 'u:...') em {scope, houseId?,
+// kind?, id?} — o inverso das chaves que exportEntities() constrói.
+// Recebe: k — a chave em texto ('h:casa', 'r:casa:tipo:id' ou 'u:tipo:id').
+// Devolve: objeto {scope, houseId?, kind?, id?} com as partes da chave.
 function parseKey(k) {
   var p = k.split(':');
   if (p[0] === 'h') return { scope: 'house', houseId: p[1] };
@@ -149,6 +178,8 @@ function parseKey(k) {
 
 var pushing = false, pushAgain = false, pushTimer = null;
 
+// Agenda um envio daqui a 1,2s, juntando alterações seguidas num só push.
+// Devolve: nada — (re)arma o temporizador que chama pushNow.
 function schedulePush() {
   if (!CW.user) return;
   clearTimeout(pushTimer);
@@ -161,12 +192,22 @@ function schedulePush() {
    modo demo e recarregar volta a tentar tudo. */
 var _plano402 = {};
 var _avisosPlano = {};
+// Cada aviso de limite do plano aparece uma única vez por sessão (toast de 6s).
+// Recebe: msg — o texto do aviso vindo do servidor (vazio: não faz nada).
+// Devolve: nada — mostra o toast à primeira e ignora as repetições.
 function avisoPlano(msg) {
   if (!msg || _avisosPlano[msg]) return;
   _avisosPlano[msg] = 1;
   try { toast(msg, { ms: 6000 }); } catch (e) {}
 }
 
+/* Envia ao servidor a diferença entre o estado local e o retrato: 'put' do que
+   mudou (casas primeiro, que os registos dependem delas) e 'del' do que
+   desapareceu, em lotes de 200. Atualiza o retrato à medida que o servidor
+   aceita, marca as recusas do plano (402) para não reinsistir e acerta o selo
+   de sincronização. Reentrante: se já está a enviar, fica marcado um novo
+   envio para o fim. A Promise devolvida nunca rejeita.
+   Devolve: Promise que resolve quando o envio terminar (nunca rejeita). */
 function pushNow() {
   if (!CW.user) return Promise.resolve();
   if (pushing) { pushAgain = true; return Promise.resolve(); }
@@ -239,6 +280,14 @@ function pushNow() {
 
 var lastPull = 0;
 
+/* Reconstrói a base local inteira a partir do estado do servidor: casas com
+   donos e quotas vindas de lá, registos por casa, dados do utilizador e
+   perfis — os "proprietários" passam a ser os utilizadores com acesso.
+   Devolve o db novo, normalizado e filtrado por dropUnsafe; não toca no
+   db global.
+   Recebe: st — o estado vindo de GET /api/state ({houses, records, userRecords,
+   profiles, …}).
+   Devolve: o db novo (objeto com a forma de blank), pronto a substituir o local. */
 function rebuildDb(st) {
   var d = JSON.parse(JSON.stringify(blank));
   var myId = CW.user ? CW.user.id : '';
@@ -309,6 +358,11 @@ function rebuildDb(st) {
   return dropUnsafe(d);
 }
 
+/* Adota o estado do servidor: substitui o db local, refaz o retrato (o que o
+   servidor não tem fica de fora, para o próximo push o enviar; o que só ele
+   tem fica marcado para apagar), grava tudo no aparelho e redesenha a app.
+   Recebe: st — o estado vindo de GET /api/state (o mesmo que rebuildDb recebe).
+   Devolve: nada — substitui db e snap, grava no aparelho e redesenha. */
 function applyState(st) {
   CW.state = st;
   db = rebuildDb(st);
@@ -336,6 +390,10 @@ function applyState(st) {
   schedulePush(); // envia o que ainda faltar no servidor
 }
 
+// Lê o estado do servidor e adota-o. Com um modal aberto não faz nada (para
+// não pisar uma edição a meio), salvo com force. Falhas põem o selo a 'off'.
+// Recebe: force (opcional) — verdadeiro para ler mesmo com um modal aberto.
+// Devolve: Promise que resolve quando a leitura acabar (nunca rejeita).
 function pullNow(force) {
   if (!CW.user) return Promise.resolve();
   if (!force && modalStack.length) return Promise.resolve(); // não pisar edições abertas
@@ -345,6 +403,9 @@ function pullNow(force) {
   }).catch(function () { setSyncBadge('off'); });
 }
 
+// Um ciclo: envia o que houver e, se a última leitura já passou PULL_MS e
+// nada está a ser editado, volta a ler.
+// Devolve: nada — dispara o push (e talvez o pull) e segue.
 function syncCycle() {
   if (!CW.user) return;
   pushNow().then(function () {
@@ -354,6 +415,11 @@ function syncCycle() {
 
 /* ---------------- arranque de sessão ---------------- */
 
+/* Arranque da sessão: primeira leitura ao servidor. Se ele está vazio e há
+   dados locais deste utilizador (primeira sessão de quem já usava a app sem
+   conta), sobem primeiro; caso contrário o servidor manda. Liga o ciclo de
+   30s e as sincronizações ao voltar online ou ao regressar à frente.
+   Devolve: nada — dispara a primeira leitura e deixa os ciclos armados. */
 function startSync() {
   loadSnap();
   api('GET', '/api/state').then(function (st) {
@@ -388,6 +454,11 @@ var SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 var SAFE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 var safe = function (o) { return !!o && SAFE_ID.test(String(o.id == null ? '' : o.id)); };
 
+/* Deita fora, à entrada, tudo o que tenha id fora do formato que a app gera —
+   registos e sub-listas das casas — e limpa as datas fora do ISO. Altera e
+   devolve o próprio objeto.
+   Recebe: d — a base de dados (com a forma de db) a filtrar; aguenta null.
+   Devolve: o mesmo objeto d, já filtrado (ou o que veio, se vier vazio). */
 function dropUnsafe(d) {
   if (!d) return d;
   ['contracts', 'transactions', 'recurring', 'templates', 'groups', 'owners', 'tenants'].forEach(function (k) {
