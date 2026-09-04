@@ -254,7 +254,7 @@ function vDashboard(){
   const cs=c=>sh(prop(c.propertyId));
   const quota=ownerFilter?(ownerIsGrp()?`<div class="hint" style="margin:-4px 0 12px">A ver os imóveis do grupo <b>${esc(ownerFilterName())}</b>.</div>`:`<div class="hint" style="margin:-4px 0 12px">Valores na quota-parte de <b>${esc(ownerFilterName())}</b>: cada imóvel entra pela percentagem que lhe pertence.</div>`):'';
   const E=(field,fmt)=>()=>evoMoney(field,pid,fmt);
-  return dashBar()+quota+pendingCard()+`<div class="grid">
+  return dashBar()+quota+pendingCard()+prazosCard()+`<div class="grid">
     ${kpi('Receita',euro(m.income),'pos',YEAR+' · rendas e outros',WHY.receita,E('income'))}
     ${kpi('Despesas',euro(m.op),'neg','impostos, condomínio, obras…',WHY.despesas,E('op'))}
     ${kpi('Prestações',euro(m.loan),'amber','capital, juros e selo',WHY.prestacoes,E('loan'))}
