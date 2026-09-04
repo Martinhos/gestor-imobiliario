@@ -103,11 +103,11 @@ export const DOCS = {
     },
     {
      "nome": "equipa-vista.js",
-     "texto": "A página da ferramenta de equipa.\n\nServida pelo worker e não pelos ficheiros da app: quem faz suporte não\ncarrega a aplicação de quem a usa, nem partilha código com ela. São duas\ncoisas com públicos diferentes, e mantê-las separadas evita que um dia\numa sessão de equipa consiga chamar alguma coisa da outra.\n\nÉ uma página escrita à mão, sem dependências. Cresceu de fila de pedidos\npara back office — pedidos, erros, pessoas, operação e rasto — mas o\nprincípio mantém-se: uma ferramenta usada por meia dúzia de pessoas não\njustifica mais do que isto."
+     "texto": "A página da ferramenta de equipa.\r\n\nServida pelo worker e não pelos ficheiros da app: quem faz suporte não\r\ncarrega a aplicação de quem a usa, nem partilha código com ela. São duas\r\ncoisas com públicos diferentes, e mantê-las separadas evita que um dia\r\numa sessão de equipa consiga chamar alguma coisa da outra.\r\n\nÉ uma página escrita à mão, sem dependências. Cresceu de fila de pedidos\r\npara back office — pedidos, erros, pessoas, operação e rasto — mas o\r\nprincípio mantém-se: uma ferramenta usada por meia dúzia de pessoas não\r\njustifica mais do que isto."
     },
     {
      "nome": "equipa.js",
-     "texto": "Sessões de quem trabalha no serviço.\n\nEntra-se a partir do Discord e mais lado nenhum. Quem faz suporte corre\n/entrar no servidor, o bot responde com uma ligação de uso único, e essa\nligação cria a sessão. Não há botão de \"entrar com Discord\" no ecrã de\nquem usa a app, nem sequer uma página onde tentar.\n\nPorquê assim e não por OAuth: a interação do Discord já traz quem é\n(i.member.user.id) e que cargos tem (i.member.roles), assinada com a\nchave do Discord. Um OAuth pediria à pessoa uma autorização para saber o\nque o bot já sabe, e obrigaria a expor um endereço de entrada.\n\nA sessão de equipa é deliberadamente separada da de quem usa a app: outro\ncookie, outro espaço no KV, outra função de leitura. Nenhuma das duas se\npode fazer passar pela outra."
+     "texto": "Sessões de quem trabalha no serviço.\r\n\nEntra-se a partir do Discord e mais lado nenhum. Quem faz suporte corre\r\n/entrar no servidor, o bot responde com uma ligação de uso único, e essa\r\nligação cria a sessão. Não há botão de \"entrar com Discord\" no ecrã de\r\nquem usa a app, nem sequer uma página onde tentar.\r\n\nPorquê assim e não por OAuth: a interação do Discord já traz quem é\r\n(i.member.user.id) e que cargos tem (i.member.roles), assinada com a\r\nchave do Discord. Um OAuth pediria à pessoa uma autorização para saber o\r\nque o bot já sabe, e obrigaria a expor um endereço de entrada.\r\n\nA sessão de equipa é deliberadamente separada da de quem usa a app: outro\r\ncookie, outro espaço no KV, outra função de leitura. Nenhuma das duas se\r\npode fazer passar pela outra."
     },
     {
      "nome": "files.js",
@@ -119,7 +119,7 @@ export const DOCS = {
     },
     {
      "nome": "landing.js",
-     "texto": "A página de entrada do rendorium.com.\r\n\nServida pelo worker quando o pedido chega pelo domínio raiz (ou www) —\r\na app vive em app.rendorium.com e não se mistura. É uma página escrita à\r\nmão, sem dependências, com a mesma cara da app: quem clica em \"Abrir a\r\napp\" não pode sentir que mudou de produto.\r\n\nO estudo de mercado mandou aqui: a aquisição faz-se por conteúdo e\r\nferramentas fiscais, e esta página é a fundação onde isso vai assentar."
+     "texto": "A página de entrada do rendorium.com.\n\nServida pelo worker quando o pedido chega pelo domínio raiz (ou www) —\na app vive em app.rendorium.com e não se mistura. É uma página escrita à\nmão, sem dependências, com a mesma cara da app: quem clica em \"Abrir a\napp\" não pode sentir que mudou de produto.\n\nO Rendorium é um projeto pessoal, sem planos nem pagamentos — a página\ndiz o que a ferramenta faz e mais nada. As funcionalidades vivem num\ncarrossel: no telemóvel desliza-se, no computador há setas e pontos."
     },
     {
      "nome": "notify.js",

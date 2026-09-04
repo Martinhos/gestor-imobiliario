@@ -20,7 +20,7 @@
 window.LEGAL = (function () {
   'use strict';
 
-  var VERSION = '2026-09-03';
+  var VERSION = '2026-09-04';
   var OPERADOR = '[O TEU NOME OU O DA EMPRESA]';
   var MORADA = '';                       // apartado, escritório virtual ou sede
   var NIF = '';                          // obrigatório quando houver cobrança
@@ -44,7 +44,7 @@ window.LEGAL = (function () {
 
   var TERMOS =
     p('<b>Em vigor desde ' + VERSION + '.</b> Estes termos regulam a utilização do Rendorium ' +
-      '(“a aplicação”), um serviço acessível em gestor-imobiliario.martinhos.workers.dev.') +
+      '(“a aplicação”), um serviço acessível em app.rendorium.com.') +
 
     h('1. Quem opera o serviço') +
     p('O serviço é operado por ' + ident() + '. Para qualquer questão relacionada com estes termos, ' +
@@ -75,7 +75,7 @@ window.LEGAL = (function () {
     h('3. Fase experimental (demonstração)') +
     p('A aplicação encontra-se em <b>fase experimental</b>: é uma versão de demonstração, disponibilizada ' +
       'tal como está, e evolui continuamente — funcionalidades podem mudar ou ser descontinuadas. ' +
-      'Enquanto esta fase durar, os limites dos planos descritos na secção 6 estão suspensos. O fim da ' +
+      'Enquanto esta fase durar, os limites de utilização descritos na secção 6 estão suspensos. O fim da ' +
       'fase experimental é anunciado na própria aplicação com pelo menos 30 dias de antecedência.') +
     p('Fazemos cópias de segurança diárias, mas deves manter as tuas próprias cópias dos dados que te ' +
       'importam (Definições → Importar e cópias).') +
@@ -100,56 +100,32 @@ window.LEGAL = (function () {
     p('A partilha é uma decisão tua e da tua responsabilidade, incluindo quanto aos dados de terceiros ' +
       'que essa casa contenha.') +
 
-    h('6. Planos e pagamento') +
-    p('A aplicação tem planos de subscrição mensal:') +
+    h('6. Utilização gratuita e limites') +
+    p('O Rendorium é um <b>projeto pessoal</b> e a utilização é <b>gratuita</b>: não há subscrições, ' +
+      'pagamentos nem publicidade.') +
     ul([
-      '<b>Gratuito</b> — gestão até 3 imóveis próprios, com movimentos e créditos. Sem criação de ' +
-      'contratos nem funcionalidades que envolvam inquilinos, sem movimentos planeados e sem ' +
-      'indicadores e estatísticas. Inclui publicidade.',
-      '<b>Plus</b> — até 10 imóveis próprios, com criação de contratos, movimentos planeados e acesso ' +
-      'aos indicadores e estatísticas. Sem publicidade.',
-      '<b>Pro</b> — a definir, para quem tem mais imóveis ou precisa de funcionalidades adicionais.',
+      'Para manter o serviço sustentável, podem existir <b>limites técnicos de utilização</b> — por ' +
+      'exemplo, ao número de imóveis por conta.',
+      'Os limites aplicam-se à <b>criação de novos registos</b>: nada do que já existe é apagado ou ' +
+      'fica inacessível por causa deles.',
+      'A entrada em vigor de limites novos é anunciada <b>na própria aplicação com pelo menos 30 dias ' +
+      'de antecedência</b>.',
     ]) +
-    ul([
-      'Os preços em vigor são os anunciados na aplicação no momento da subscrição, e incluem IVA à taxa ' +
-      'legal quando aplicável.',
-      'A subscrição é <b>mensal e renova-se automaticamente</b> até ser cancelada. Podes cancelar a ' +
-      'qualquer momento, com efeito no fim do período já pago.',
-      'Alterações de preço são comunicadas com <b>pelo menos 30 dias</b> de antecedência e só se aplicam ' +
-      'a períodos seguintes. Se não concordares, podes cancelar.',
-      'Se a subscrição terminar, a conta passa ao plano gratuito. Os dados que excedam os limites desse ' +
-      'plano <b>não são apagados</b>: ficam acessíveis para consulta e exportação, mas não podes criar ' +
-      'novos registos acima do limite enquanto não voltares a subscrever.',
-      'Os limites de cada plano aplicam-se à <b>criação de novos registos</b>: nada do que já existe é ' +
-      'apagado ou fica inacessível por causa deles.',
-      'A entrada em vigor dos limites é anunciada <b>na própria aplicação com pelo menos 30 dias de ' +
-      'antecedência</b>.',
-    ]) +
-    p('<b>Direito de livre resolução.</b> Sendo consumidor, tens 14 dias para desistir de uma subscrição ' +
-      'sem indicar motivo. Se pedires para começar a usar o serviço pago de imediato, esse direito ' +
-      'cessa quando o serviço for integralmente prestado, e em caso de desistência a meio pagas a parte ' +
-      'proporcional ao que já usaste.') +
 
-    h('7. Publicidade no plano gratuito') +
-    p('O plano gratuito inclui publicidade. Os anúncios não dão a terceiros acesso aos dados que registas ' +
-      'na aplicação — imóveis, contratos, movimentos ou fichas de pessoas — e esses dados nunca são ' +
-      'vendidos nem cedidos para fins publicitários. Se a publicidade vier a usar cookies ou tecnologias ' +
-      'semelhantes, será pedido o teu consentimento antes.') +
-
-    h('8. Utilização aceitável') +
+    h('7. Utilização aceitável') +
     p('Não podes usar a aplicação para atividades ilegais, para guardar conteúdos que não tens direito de ' +
-      'guardar, para tentar aceder a dados de outros utilizadores, para contornar limites técnicos ou ' +
-      'de plano, para sobrecarregar o serviço, nem para recolher dados de terceiros de forma automatizada. ' +
+      'guardar, para tentar aceder a dados de outros utilizadores, para contornar limites técnicos, ' +
+      'para sobrecarregar o serviço, nem para recolher dados de terceiros de forma automatizada. ' +
       'Podemos suspender ou encerrar contas que violem estas regras.') +
 
-    h('9. Os teus conteúdos') +
+    h('8. Os teus conteúdos') +
     p('Os dados que introduzes continuam teus. Concedes-nos apenas a autorização técnica necessária para ' +
       'os alojar, processar e mostrar-te, e para os disponibilizar aos utilizadores com quem <b>tu</b> ' +
       'escolheste partilhá-los. Não os usamos para mais nada.') +
     p('O software, a marca, o desenho e os textos da aplicação são nossos e não podem ser copiados ou ' +
       'reutilizados sem autorização.') +
 
-    h('10. Disponibilidade e responsabilidade') +
+    h('9. Disponibilidade e responsabilidade') +
     p('Não garantimos que o serviço esteja sempre disponível, livre de erros ou que os resultados sejam ' +
       'exatos. Na medida máxima permitida por lei, não respondemos por danos indiretos, perda de dados, ' +
       'perda de lucros, nem por decisões tomadas com base na informação da aplicação, incluindo ' +
@@ -157,17 +133,17 @@ window.LEGAL = (function () {
     p('Nada nestes termos exclui a responsabilidade que a lei não permite excluir, designadamente perante ' +
       'consumidores.') +
 
-    h('11. Cessação') +
+    h('10. Cessação') +
     p('Podes deixar de usar a aplicação quando quiseres. Podemos encerrar ou suspender a tua conta em caso ' +
       'de violação destes termos, de exigência legal, ou de descontinuação do serviço — neste último caso, ' +
       'com aviso prévio razoável e tempo para exportares os teus dados.') +
 
-    h('12. Alterações a estes termos') +
+    h('11. Alterações a estes termos') +
     p('Podemos alterar estes termos. Alterações significativas são comunicadas na aplicação e, quando ' +
       'existir email confirmado, também por email. Ao voltares a entrar, será pedida a aceitação da nova ' +
       'versão; se não aceitares, podes apagar a conta e exportar os teus dados antes disso.') +
 
-    h('13. Lei aplicável e resolução de litígios') +
+    h('12. Lei aplicável e resolução de litígios') +
     p('Aplica-se a lei portuguesa. Em caso de litígio de consumo, podes recorrer a uma entidade de ' +
       'resolução alternativa de litígios de consumo, e também apresentar reclamação no <b>Livro de ' +
       'Reclamações eletrónico</b> em livroreclamacoes.pt. Sendo consumidor, podes ainda usar a plataforma ' +
@@ -203,8 +179,6 @@ window.LEGAL = (function () {
       'senhorio nos contratos que a app gera.',
       '<b>Dados da tua atividade:</b> imóveis, contratos, movimentos, créditos, documentos e notas.',
       '<b>Dados técnicos:</b> endereço IP e registos de acesso, usados para segurança e para travar abusos.',
-      '<b>Pagamento:</b> quando existirem planos pagos, os dados do cartão são tratados diretamente pelo ' +
-      'prestador de pagamentos; nós guardamos apenas o registo da subscrição e da faturação.',
     ]) +
 
     h('4. Para quê e com que fundamento') +
@@ -213,7 +187,7 @@ window.LEGAL = (function () {
       'quem indicares) — execução do contrato entre nós.',
       '<b>Segurança e prevenção de abusos</b> (limites de tentativas, registos de acesso) — interesse ' +
       'legítimo em manter o serviço a funcionar e protegido.',
-      '<b>Cumprir obrigações legais</b> — designadamente fiscais e contabilísticas, quando existir faturação.',
+      '<b>Cumprir obrigações legais</b> — quando alguma norma nos obrigar a conservar ou fornecer informação.',
       '<b>Comunicações sobre o serviço</b> (confirmação de email, avisos de segurança, alterações aos ' +
       'termos) — execução do contrato. Comunicações de marketing, se as houver, só com o teu consentimento.',
     ]) +
@@ -225,10 +199,7 @@ window.LEGAL = (function () {
     ul([
       '<b>Cloudflare, Inc.</b> — alojamento da aplicação, base de dados e sessões.',
       '<b>Google Ireland Ltd.</b> — apenas se optares por entrar com a conta Google.',
-      '<b>Prestador de envio de email</b> — para confirmação de email e avisos, quando estiver ativo.',
-      '<b>Prestador de pagamentos</b> — quando existirem planos pagos.',
-      '<b>Rede de publicidade</b> — quando existir publicidade no plano gratuito, e sem acesso aos dados ' +
-      'que registas na aplicação.',
+      '<b>Resend, Inc.</b> — envio dos emails do serviço (confirmações, avisos e respostas do suporte).',
     ]) +
     p('Os outros utilizadores só veem o que <b>tu</b> decidires partilhar: quem recebe uma casa tua vê os ' +
       'dados dessa casa, e quem aceita ligar-se a ti vê o teu perfil. Um convite ainda não aceite não dá ' +
@@ -248,7 +219,6 @@ window.LEGAL = (function () {
       'normal de rotação.',
       'Os registos técnicos de segurança são conservados por um período curto, proporcional à sua ' +
       'finalidade.',
-      'Os documentos de faturação são conservados pelo prazo legal.',
     ]) +
 
     h('8. Os teus direitos') +
