@@ -145,12 +145,12 @@ export async function rotasCasas(c) {
       if (!b.data) return err(400, 'Corpo inválido.');
       if (tooBig(b.data)) return err(413, 'Registo demasiado grande.');
       await env.DB.prepare(
-        `INSERT INTO records (house_id, kind, id, data, updated_at, deleted)
-         VALUES (?, ?, ?, ?, ?, 0)
+        `INSERT INTO records (house_id, kind, id, data, updated_at, deleted, author)
+         VALUES (?, ?, ?, ?, ?, 0, ?)
          ON CONFLICT (house_id, kind, id)
-         DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0`
+         DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0, author = excluded.author`
       )
-        .bind(houseId, kind, recordId, JSON.stringify(b.data), now())
+        .bind(houseId, kind, recordId, JSON.stringify(b.data), now(), me.id)
         .run();
       await linkFiles(env, houseId, b.data);
       return json({ ok: true });

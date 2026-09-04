@@ -43,6 +43,8 @@ const MAPA = [
       'web/cloud/selecao-listas.js'] },
   { id: 'creditos', titulo: 'Créditos à habitação',
     ficheiros: ['web/app/credito.js', 'web/app/creditos.js'] },
+  { id: 'notif', titulo: 'Notificações e sino',
+    ficheiros: ['web/app/notificacoes.js'] },
   { id: 'vistas', titulo: 'Métricas, gráficos e filtros',
     ficheiros: ['web/app/metricas.js', 'web/app/graficos.js', 'web/app/vistas.js',
       'web/cloud/painel.js', 'web/cloud/filtros.js'] },

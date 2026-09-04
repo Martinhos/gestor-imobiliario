@@ -17,7 +17,7 @@ const VESTADO={agendada:'Agendada',realizada:'Realizada',faltou:'Faltou',cancela
 // o desfecho de uma visita realizada — vazio enquanto não se souber
 const VDESFECHO={'':'—',interessado:'Interessado',pensar:'A pensar','sem-interesse':'Sem interesse'};
 
-let visForm=null,visFiltroProp='',visFiltroEstado='';
+let visForm=null;
 
 /* A lista de visitas ordenada da mais próxima para a mais distante (as
    futuras primeiro, depois as passadas em ordem inversa).
@@ -32,35 +32,52 @@ function visOrdenadas(){
    Devolve: verdadeiro quando a data é anterior a hoje. */
 function visPassada(v){return (v.date||'')<pzHoje()}
 
-/* A página das visitas: filtros no topo (imóvel e estado, com os menus da
-   casa), as próximas e as passadas em blocos separados, e o FAB para marcar.
+/* Um par de campos de intervalo (de–até) para o painel de filtros, na
+   mesma linha: datas ou horas, guardados no estado da lista.
+   Recebe: k — a chave da lista ('lvis'); tipo — 'date' ou 'time';
+   k1/k2 — as chaves do estado para o «de» e o «até»; rotulo — o texto do label.
+   Devolve: o HTML da linha (texto). */
+function visIntervalo(k,tipo,k1,k2,rotulo){
+  const s=lf(k);
+  const campo=(chave)=>`<input type="${tipo}" value="${esc(s[chave]||'')}" style="flex:1;min-width:0"
+    onchange="lf('${k}').${chave}=this.value;render()">`;
+  return `<div><div class="small" style="margin-bottom:4px">${rotulo}</div>
+    <div style="display:flex;gap:8px;align-items:center">${campo(k1)}<span class="small">até</span>${campo(k2)}</div></div>`;
+}
+
+/* A página das visitas: o painel de filtros comum da app (imóvel, estado,
+   desfecho, dia de–até, hora de–até e pesquisa de texto), as próximas e as
+   passadas em blocos separados, e o FAB para marcar.
    Devolve: o HTML da página (texto). */
 function vVisits(){
-  const lista=visOrdenadas()
-    .filter(v=>!visFiltroProp||v.propertyId===visFiltroProp)
-    .filter(v=>!visFiltroEstado||v.estado===visFiltroEstado);
-  const props=db.properties.map(p=>({v:p.id,label:p.name||p.address||'imóvel'}));
-  const filtros=`<div class="toolbar" style="margin-bottom:14px;gap:10px;flex-wrap:wrap">
-    <div style="flex:1;min-width:170px">${sel('vi_fp',visFiltroProp,[{v:'',label:'Todos os imóveis'}].concat(props),'visFiltra')}</div>
-    <div style="flex:1;min-width:150px">${sel('vi_fe',visFiltroEstado,[{v:'',label:'Todos os estados'}].concat(Object.keys(VESTADO).map(k=>({v:k,label:VESTADO[k]}))),'visFiltra')}</div></div>`;
+  const K='lvis',s=lf(K);
+  const lista=visOrdenadas().filter(v=>{
+    if(s.pr&&v.propertyId!==s.pr)return false;
+    if(s.es&&v.estado!==s.es)return false;
+    if(s.rs&&v.resultado!==s.rs)return false;
+    if(s.d1&&(v.date||'')<s.d1)return false;
+    if(s.d2&&(v.date||'')>s.d2)return false;
+    if(s.h1&&(v.start||'')<s.h1)return false;
+    if(s.h2&&(v.start||'99:99')>s.h2)return false;
+    return lfHit(K,[v.nomes,v.contacto,v.notas,propName(v.propertyId)].join(' '));
+  });
   if(!(db.visits||[]).length)
     return `<div class="empty"><b>Ainda não há visitas</b>Marca a primeira: quem vem, a que imóvel, e quando.
       <div class="toolbar" style="justify-content:center;margin-top:16px">
       <button class="btn primary" onclick="visitModal()">Marcar visita</button></div></div>`;
+  const head=lfBar(K,[
+    lfSel(K,'pr',[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p=>({v:p.id,label:p.name||p.address||'imóvel'})))),
+    lfSel(K,'es',[{v:'',label:'Todos os estados'}].concat(Object.keys(VESTADO).map(x=>({v:x,label:VESTADO[x]})))),
+    lfSel(K,'rs',[{v:'',label:'Todos os desfechos'}].concat(Object.keys(VDESFECHO).filter(Boolean).map(x=>({v:x,label:VDESFECHO[x]})))),
+    visIntervalo(K,'date','d1','d2','Dia'),
+    visIntervalo(K,'time','h1','h2','Hora de início'),
+  ],lista.length);
   const futuras=lista.filter(v=>!visPassada(v)),passadas=lista.filter(visPassada).reverse();
   const bloco=(titulo,vs)=>vs.length?`<div class="navh" style="margin:4px 0 8px">${titulo}</div>
     <div class="list" style="margin-bottom:16px">${vs.map(visCard).join('')}</div>`:'';
-  return filtros+bloco('Próximas',futuras)+bloco('Passadas',passadas)+
+  return head+bloco('Próximas',futuras)+bloco('Passadas',passadas)+
     (lista.length?'':'<div class="empty">Nada com estes filtros.</div>')+
     `<button class="fab" onclick="visitModal()" aria-label="Marcar visita">${ic('plus',22)}</button>`;
-}
-
-/* Reage aos menus de filtro da página (imóvel e estado) e redesenha.
-   Devolve: nada — lê os valores escolhidos e chama render(). */
-function visFiltra(){
-  visFiltroProp=(document.getElementById('vi_fp')||{}).value||'';
-  visFiltroEstado=(document.getElementById('vi_fe')||{}).value||'';
-  render();
 }
 
 /* O cartão de uma visita na lista: quem, onde e quando à esquerda, o selo
@@ -101,7 +118,7 @@ function visCard(v){
    Devolve: nada — abre o modal e liga o onSave. */
 function visitModal(id,extra){
   visForm=normVisit(id?JSON.parse(JSON.stringify((db.visits||[]).find(x=>x.id===id))):
-    Object.assign({propertyId:visFiltroProp||(db.properties[0]||{}).id||'',date:pzHoje()},extra||{}));
+    Object.assign({propertyId:lf('lvis').pr||(db.properties[0]||{}).id||'',date:pzHoje()},extra||{}));
   const m=id?menu('vism',[{label:'Apagar visita',icon:'trash',danger:true,act:`closeModal();visApaga('${id}')`}]):'';
   openModal(id?'Editar visita':'Marcar visita',visBody(),null,m);
   onSave=()=>{
@@ -128,11 +145,12 @@ function visBody(){
     :null;
   return `<div class="form">
     <label>Quem vem<input id="vi_nomes" value="${esc(v.nomes)}" placeholder="Ana Rodrigues (e o irmão)" autocomplete="off"></label>
-    <label>Contacto<input id="vi_contacto" value="${esc(v.contacto)}" placeholder="Telemóvel ou email — opcional, para confirmar ou remarcar" autocomplete="off"></label>
+    <label>Contacto<input id="vi_contacto" value="${esc(v.contacto)}" placeholder="Telemóvel ou email (opcional)" autocomplete="off"></label>
+    <div class="hint" style="margin:-4px 0 0">Para confirmar ou remarcar — segue para a ficha se a visita virar inquilino.</div>
     <label>Imóvel${sel('vi_prop',v.propertyId,props,'visPropMudou')}</label>
     ${quartos?`<label>Quarto${sel('vi_room',v.roomId,quartos)}</label>`:''}
-    <div class="row3">
-      <label>Data<input id="vi_date" type="date" value="${v.date||''}"></label>
+    <label>Data<input id="vi_date" type="date" value="${v.date||''}"></label>
+    <div class="row">
       <label>Início<input id="vi_start" type="time" value="${v.start||''}"></label>
       <label>Fim<input id="vi_end" type="time" value="${v.end||''}"></label></div>
     <div class="row">
