@@ -42,6 +42,14 @@ describe('gerar-docs', () => {
 
     const { paginaDocs } = await import('../worker/src/docs-vista.js');
     const html = await new Response(paginaDocs().body).text();
+    // a estrutura de cada funcao: assinatura, sumario, Recebe e Devolve
+    // em blocos distintos e etiquetados
+    assert.ok(/<div class="ass"><code>/.test(html), 'a assinatura tem bloco proprio');
+    assert.ok(/<div class="sum">/.test(html), 'o sumario tem bloco proprio');
+    assert.ok(/<span class="rot">Recebe<\/span>/.test(html), 'Recebe e etiqueta, nao prosa');
+    assert.ok(/<span class="rot">Devolve<\/span>/.test(html), 'Devolve e etiqueta, nao prosa');
+    assert.ok((html.match(/class="param"/g) || []).length > 500, 'cada parametro na sua linha');
+    assert.ok(!/<b class="io">/.test(html), 'as etiquetas ja nao vao embutidas na prosa');
     assert.ok(html.includes('id="q"'), 'ha pesquisa');
     assert.ok(html.includes('id="nav"'), 'ha gaveta');
     assert.ok(html.includes('Armadilhas conhecidas'), 'as armadilhas na gaveta');
