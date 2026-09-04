@@ -67,7 +67,7 @@ const CATS_IN0={
   'Outras receitas':[]
 };
 const TAGS0=['Urgente','A reembolsar','Recorrente','Dedutível','Em disputa'];
-const blank={v:13,properties:[],owners:[],tenants:[],contracts:[],transactions:[],settlements:[],templates:[],recurring:[],groups:[],
+const blank={v:13,properties:[],owners:[],tenants:[],contracts:[],transactions:[],settlements:[],templates:[],recurring:[],groups:[],visits:[],
   settings:{growth:2,inflation:2,years:10,theme:'auto',capTarget:5,quota:100,payTax:true,stampPct:4,
             cats:JSON.parse(JSON.stringify(CATS0)),catsIn:JSON.parse(JSON.stringify(CATS_IN0)),tags:TAGS0.slice()}};
 
@@ -96,6 +96,13 @@ function normLoan(l){const o=Object.assign({id:uid(),name:'',bank:'',outstanding
   delete o.active;delete o.taeg;delete o.mtic;
   if(o.stampTax===undefined)o.stampTax=true;
   o.files=(o.files||[]).map(normFile);return o}
+/* normaliza uma visita a um imóvel: quem vem (texto livre — ainda não é
+   inquilino, não há ficha), onde, quando (data + horas), estado, desfecho
+   e comentários. O contacto é opcional, para confirmar ou remarcar.
+   Recebe: v — a visita em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo com todos os campos da visita preenchidos. */
+function normVisit(v){return Object.assign({id:uid(),propertyId:'',roomId:'',nomes:'',contacto:'',
+  date:'',start:'',end:'',estado:'agendada',resultado:'',notas:''},v||{})}
 /* normaliza uma ficha de pessoa (dono ou inquilino): campos em falta ficam vazios, anexos pelo normFile
    Recebe: p — a ficha em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos da ficha preenchidos. */
@@ -229,6 +236,7 @@ function load(){
   out.settlements=(out.settlements||[]).map(normSettle);
   out.templates=(out.templates||[]).map(normTpl);
   out.recurring=(out.recurring||[]).map(normRec);
+  out.visits=(out.visits||[]).map(normVisit);
   out.tenants=(out.tenants||[]).map(normPerson);
   out.contracts=((out.contracts||[]).map(normContract)).concat(newContracts);
   out.transactions=(out.transactions||[]).map(t=>{

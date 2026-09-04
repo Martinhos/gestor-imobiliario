@@ -3,10 +3,12 @@ const TABS=[
   {id:'dashboard',icon:'home',label:'Visão geral',sub:'Indicadores do portefólio'},
   {id:'properties',icon:'building',label:'Imóveis',sub:'Dados, fotos, proprietários e crédito'},
   {id:'contracts',icon:'contract',label:'Contratos',sub:'Renda, impostos, inventário e anexos'},
+  {id:'visits',icon:'door',label:'Visitas',sub:'Quem vem ver as casas'},
   {id:'tenants',icon:'users',label:'Inquilinos',sub:'Ficha e documentos de cada pessoa'},
   {id:'owners',icon:'crown',label:'Proprietários',sub:'Quem é dono de quê'},
   {id:'transactions',icon:'swap',label:'Movimentos',sub:'Rendas, despesas e prestações'},
   {id:'recurring',icon:'clock',label:'Planeados',sub:'Movimentos recorrentes e modelos'},
+  {id:'calendar',icon:'cal',label:'Calendário',sub:'Visitas e planeados, dia a dia'},
   {id:'credits',icon:'bank',label:'Créditos',sub:'Hipotecas de todos os imóveis'},
   {id:'projections',icon:'trend',label:'Projeções',sub:'Rendas futuras e aumentos anuais'},
   {id:'reports',icon:'file',label:'Avaliação',sub:'Análise imóvel a imóvel'},
@@ -21,7 +23,7 @@ const SUBPAGE={cats:{label:'Tipos de movimento',sub:'Como classificas o que entr
 // O contentor onde cada vista é desenhada (o elemento #view).
 // Devolve: o elemento #view do DOM (ou null se ainda não existir).
 const view=()=>document.getElementById('view');
-const NAV_GROUPS=[{label:'Património',ids:['dashboard','properties','contracts']},{label:'Pessoas',ids:['tenants','owners']},
+const NAV_GROUPS=[{label:'Património',ids:['dashboard','calendar','properties','contracts']},{label:'Pessoas',ids:['visits','tenants','owners']},
   {label:'Finanças',ids:['transactions','recurring','credits','projections','reports']},{label:'Aplicação',ids:['settings']}];
 /* Reconstrói a navegação da gaveta (agrupada por NAV_GROUPS), marcando o
    separador atual e o crachá dos planeados pendentes — na cor de aviso quando
