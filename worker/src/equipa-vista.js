@@ -675,7 +675,7 @@ ir(SECCOES.filter(function (s) { return s.se; })[0].id);
 
    O endereço leva o token, por isso a página não pode deixar sair um
    referer nem ficar em cache. */
-export function paginaEntrada(token, v) {
+export function paginaEntrada(token, v, depois) {
   const cabecalhos = {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -707,6 +707,7 @@ export function paginaEntrada(token, v) {
       </p>
       <form method="POST" action="/equipa/entrar">
         <input type="hidden" name="t" value="${escapar(token)}">
+        ${depois === 'docs' ? '<input type="hidden" name="depois" value="docs">' : ''}
         <button class="btn primary" type="submit" style="width:100%;justify-content:center">Entrar</button>
       </form>
       <p class="small" style="margin:12px 0 0">

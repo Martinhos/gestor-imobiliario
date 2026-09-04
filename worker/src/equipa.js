@@ -121,14 +121,20 @@ export async function rotasEquipa(c) {
   if (path === '/equipa/entrar' && method === 'GET') {
     const t = url.searchParams.get('t') || '';
     if (!/^[a-f0-9]{64}$/.test(t)) return err(400, 'Ligação inválida.');
+    // onde aterrar depois de entrar — lista fechada, nunca um URL livre
+    const depois = url.searchParams.get('depois') === 'docs' ? 'docs' : '';
     const { paginaEntrada } = await import('./equipa-vista.js');
-    return paginaEntrada(t, await verBilhete(env, t));
+    return paginaEntrada(t, await verBilhete(env, t), depois);
   }
 
   /* Aqui é que se entra mesmo. */
   if (path === '/equipa/entrar' && method === 'POST') {
-    let t = '';
-    try { t = String((await request.formData()).get('t') || ''); } catch (e) { /* sem formulário */ }
+    let t = '', depois = '';
+    try {
+      const f = await request.formData();
+      t = String(f.get('t') || '');
+      depois = String(f.get('depois') || '') === 'docs' ? 'docs' : '';
+    } catch (e) { /* sem formulário */ }
     if (!/^[a-f0-9]{64}$/.test(t)) return err(400, 'Ligação inválida.');
 
     const b = await usarBilhete(env, t);
@@ -149,7 +155,7 @@ export async function rotasEquipa(c) {
       // 303 e não 302: depois de um POST, o que se segue é um GET
       status: 303,
       headers: {
-        Location: '/equipa',
+        Location: depois === 'docs' ? '/equipa/docs' : '/equipa',
         'Set-Cookie': cookieDaEquipa(sessao),
         'Cache-Control': 'no-store',
         // o endereço tinha um bilhete: não o deixar seguir para lado nenhum

@@ -469,6 +469,24 @@ function cmdComandos(pap, acessos) {
   }]);
 }
 
+/* /docs: a mesma entrada do /entrar, mas a aterrar na documentação — um
+   comando, zero passos intermédios. O bilhete é igual ao do /entrar (cinco
+   minutos, uma utilização) e o destino vem de uma lista fechada. */
+async function cmdDocs(env, i, papeis) {
+  const u = (i.member && i.member.user) || i.user || {};
+  const { criarBilhete } = await import('./equipa.js');
+  const b = await criarBilhete(env, {
+    discordId: u.id,
+    nome: u.global_name || u.username || u.id,
+    papel: papeis[0],
+    papeis,
+  });
+  const base = env.ENV_NAME ? 'https://dev.rendorium.com' : 'https://app.rendorium.com';
+  return reply('📚 A documentação da casa — gerada do próprio código a cada deploy:\n' +
+    base + '/equipa/entrar?t=' + b.token + '&depois=docs\n\n' +
+    'A ligação vale ' + Math.round(b.expiraEm / 60) + ' minutos e uma utilização; entra e aterra logo nos docs.');
+}
+
 /* Uma ligação de uso único para a ferramenta de equipa.
 
    A resposta é sempre privada (flags 64): a ligação vale por uma sessão, e
@@ -749,11 +767,7 @@ export async function handleInteraction(request, env, ctx) {
       if (nome === 'access') return json(await cmdAccess(env, i, opts));
       if (nome === 'entrar') return json(await cmdEntrar(env, i, papeis, request));
       if (nome === 'test') return json(await cmdTest(env, i, opts, request));
-      if (nome === 'docs') {
-        const base = env.ENV_NAME ? 'https://dev.rendorium.com' : 'https://app.rendorium.com';
-        return json(reply('📚 A documentação da casa — gerada do próprio código a cada deploy:\n' +
-          base + '/equipa/docs\n\nPrecisa de sessão de equipa: se ainda não tiveres, corre /entrar primeiro.'));
-      }
+      if (nome === 'docs') return json(await cmdDocs(env, i, papeis));
       if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
       if (nome === 'pedido') return json(await cmdPedido(env, opts, pap));
       if (nome === 'responder') return json(await cmdResponder(env, opts, pap, quemFala(i, pap)));
