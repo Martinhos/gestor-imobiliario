@@ -317,6 +317,7 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
 .tabbar a.on::before{display:none}
 .tabbar a:hover{background:var(--accent-soft);color:var(--accent)}
 .tabbar a .cnt{position:absolute;top:1px;left:calc(50% + 7px);background:var(--danger);color:#fff;font-size:10px;min-width:15px;height:15px;border-radius:99px;display:grid;place-items:center;padding:0 3px}
+#hdrBell .cnt{position:absolute;top:1px;right:1px;background:var(--danger);color:#fff;font-size:10px;min-width:15px;height:15px;border-radius:99px;display:grid;place-items:center;padding:0 3px}
 /* body à frente: estas regras vivem ANTES das de base do .fab/.totop na
    folha, e sem mais especificidade perdiam — o FAB ficava em cima da barra */
 @media(max-width:900px){
@@ -505,6 +506,7 @@ textarea{min-height:90px;resize:vertical}
     <header class="top">
       <button class="burger" aria-expanded="false" onclick="openDrawer()" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <div style="min-width:0;flex:1"><h1 id="pageTitle">Visão geral</h1><div class="sub" id="pageSub"></div></div>
+      <button class="btn filtbtn" id="hdrBell" style="display:none;flex:0 0 auto;position:relative" onclick="notifModal()" title="Notificações"></button>
       <button class="btn filtbtn" id="hdrFilt" style="display:none;flex:0 0 auto" onclick="hdrFiltToggle()" title="Filtros e parâmetros"></button>
     </header>
     <div class="wrap" id="view"></div>
@@ -528,6 +530,7 @@ textarea{min-height:90px;resize:vertical}
 <script src="app/contrato.js"></script>
 <script src="app/planeados.js"></script>
 <script src="app/prazos.js"></script>
+<script src="app/notificacoes.js"></script>
 <script src="app/visitas.js"></script>
 <script src="app/calendario.js"></script>
 <script src="app/movimento.js"></script>

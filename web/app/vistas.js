@@ -1,7 +1,7 @@
 /* ================= VISTAS ================= */
 /* botão de filtros no cabeçalho: análise, registos e movimentos */
 let anaOpen={};
-const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',recurring:'lrec',credits:'lcred'};
+const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',recurring:'lrec',credits:'lcred',visits:'lvis'};
 /* toque no botão de filtros do cabeçalho: abre o painel certo consoante o
    separador — dropdown nas listas de registos, modal nos movimentos, painel
    de análise nos restantes.
@@ -70,6 +70,7 @@ function render(){
   document.getElementById('pageSub').textContent=meta.sub;
   const hb=document.getElementById('hdrFilt'),isAna=['dashboard','projections','reports'].indexOf(tab)>-1,
     hasFilt=isAna||LFK[tab]||tab==='transactions';
+  if(typeof notifSino==='function')notifSino();
   if(hb){hb.style.display=hasFilt?'':'none';
     if(hasFilt){hb.innerHTML=ic('filter',16)+(hdrFiltN()?'<span class="dot"></span>':'');
       hb.classList.toggle('primary',isAna?!!anaOpen[tab]:(LFK[tab]?!!lf(LFK[tab])._open:false))}}

@@ -36,8 +36,10 @@ function buildNav(){
   buildTabbar(late);
 }
 /* Os quatro destinos quentes, a um toque no telemóvel. A auditoria mediu:
-   com tudo atrás da gaveta, qualquer mudança de ecrã custava dois. */
-const TABBAR=['dashboard','transactions','properties','recurring'];
+   com tudo atrás da gaveta, qualquer mudança de ecrã custava dois. O
+   Calendário tomou o lugar dos Planeados: mostra-os dia a dia (e às
+   visitas), e a confirmação rápida continua no cartão da vista geral. */
+const TABBAR=['dashboard','transactions','properties','calendar'];
 // Reconstrói a barra de baixo do telemóvel com os destinos de TABBAR;
 // late é a contagem de planeados pendentes para o crachá.
 // Recebe: late — a contagem de planeados pendentes (número), para o crachá.
@@ -45,7 +47,7 @@ const TABBAR=['dashboard','transactions','properties','recurring'];
 function buildTabbar(late){
   const el=document.getElementById('tabbar');if(!el)return;
   el.innerHTML=TABBAR.map(id=>{const t=TABS.find(x=>x.id===id);
-    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} onclick="go('${id}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${id==='recurring'&&late?`<span class="cnt">${late}</span>`:''}</a>`}).join('');
+    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} onclick="go('${id}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${id==='calendar'&&late?`<span class="cnt">${late}</span>`:''}</a>`}).join('');
 }
 // Muda de separador: limpa a subpágina das Definições e o donut, fecha a
 // gaveta, refaz a navegação e repinta, com scroll para o topo.

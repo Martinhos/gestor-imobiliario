@@ -40,6 +40,15 @@ var AVISOS = [
         ],
       },
       {
+        titulo: 'Um sino com tudo o que pede atenção',
+        afeta: ['app', 'movimentos'],
+        itens: [
+          'A vista geral ganha um sino de notificações: movimentos em atraso, por confirmar, prazos, e — novidade — o que os outros fizeram nas casas partilhadas contigo, com nome e hora.',
+          '«Marcar tudo como lido» sincroniza entre aparelhos: ler num, cala o sino nos outros.',
+          'Na barra de baixo do telemóvel, o Calendário tomou o lugar dos Planeados — que vivem lá dentro, dia a dia, e continuam no cartão «por confirmar» da vista geral.',
+        ],
+      },
+      {
         titulo: 'A vista geral ganha o cartão «Prazos»',
         afeta: ['contratos', 'imoveis', 'creditos'],
         itens: [

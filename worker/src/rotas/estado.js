@@ -52,7 +52,7 @@ export async function rotasEstado(c) {
 
     const records = houseIds.length
       ? await inChunks(houseIds,
-          `SELECT house_id, kind, id, data, updated_at FROM records
+          `SELECT house_id, kind, id, data, updated_at, author FROM records
             WHERE deleted = 0 AND house_id IN ({IN})`)
       : [];
 
@@ -176,6 +176,7 @@ export async function rotasEstado(c) {
         kind: r.kind,
         id: r.id,
         updatedAt: r.updated_at,
+        author: r.author || null,
         data: JSON.parse(r.data),
       })),
       userRecords: userRecords.map((r) => ({

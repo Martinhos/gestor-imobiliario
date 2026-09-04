@@ -329,13 +329,20 @@ function rebuildDb(st) {
   (st.records || []).forEach(function (r) {
     try {
       var h = houseOwner[r.houseId], mine = h ? h.mine : false;
-      if (r.kind === 'contract') d.contracts.push(normContract(r.data));
-      else if (r.kind === 'tx') d.transactions.push(normTx(r.data));
-      else if (r.kind === 'rec') d.recurring.push(normRec(r.data));
-      else if (r.kind === 'visit') d.visits.push(normVisit(r.data));
+      // quem escreveu e quando, para o sino das notificações; os campos com
+      // _ nunca voltam ao servidor (o strip tira-os no export)
+      var marca = function (x) {
+        if (r.author) x._author = r.author;
+        if (r.updatedAt) x._atServidor = r.updatedAt;
+        return x;
+      };
+      if (r.kind === 'contract') d.contracts.push(marca(normContract(r.data)));
+      else if (r.kind === 'tx') d.transactions.push(marca(normTx(r.data)));
+      else if (r.kind === 'rec') d.recurring.push(marca(normRec(r.data)));
+      else if (r.kind === 'visit') d.visits.push(marca(normVisit(r.data)));
       else if (r.kind === 'tenant') {
         if (!tenants[r.id]) {
-          var per = normPerson(r.data);
+          var per = marca(normPerson(r.data));
           if (!mine) per._sharedFrom = h ? h.ownerName : '';
           tenants[r.id] = per;
         }

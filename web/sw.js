@@ -12,7 +12,7 @@ const CACHE = 'gi-shell-v' + (typeof VERSAO === 'number' ? VERSAO : 0);
 // A app passou a viver em módulos: guardam-se todos, senão abre offline
 // com metade do código.
 const APP = ['dados', 'anexos', 'auxiliares', 'graficos', 'credito', 'componentes',
-  'metricas', 'navegacao', 'vistas', 'imovel', 'pessoas', 'contrato', 'planeados', 'prazos', 'visitas', 'calendario',
+  'metricas', 'navegacao', 'vistas', 'imovel', 'pessoas', 'contrato', 'planeados', 'prazos', 'notificacoes', 'visitas', 'calendario',
   'movimento', 'creditos', 'splitwise', 'contrato-pdf', 'avaliacao', 'definicoes',
   'copias', 'arranque'].map((n) => '/app/' + n + '.js');
 const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'ajuda', 'painel',

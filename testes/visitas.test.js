@@ -43,7 +43,8 @@ describe('a página das visitas', () => {
     assert.match(html, /Ana/);
     assert.match(html, /Interessado/, 'o desfecho aparece nas realizadas');
     assert.match(html, /class="fab"/, 'há FAB para marcar');
-    assert.match(html, /selbtn/, 'os filtros usam o menu da casa, não <select>');
+    assert.match(html, /fpanel/, 'os filtros vivem no painel comum da app');
+    assert.match(html, /type="date"[\s\S]*type="time"/, 'intervalos de dia e de hora no painel');
   });
 });
 
