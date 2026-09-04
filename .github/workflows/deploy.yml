@@ -37,6 +37,10 @@ jobs:
         with:
           node-version: 22
 
+      # a documentação sai do código no momento do deploy — nunca fica atrás
+      - name: Gerar a documentação
+        run: node scripts/gerar-docs.js
+
       # Produção sai do ramo main; tudo o resto vai para o ambiente de dev.
       - name: Escolher ambiente
         run: |

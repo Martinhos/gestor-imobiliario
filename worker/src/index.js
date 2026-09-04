@@ -150,6 +150,16 @@ export default {
           const eu = await getEquipa(env, request);
           return harden(paginaEquipa(eu));
         }
+        // a documentação da casa: gerada do código no deploy, para a equipa
+        if (url.pathname === '/equipa/docs') {
+          const eu = await getEquipa(env, request);
+          if (!eu) {
+            const { paginaEquipa } = await import('./equipa-vista.js');
+            return harden(paginaEquipa(null));
+          }
+          const { paginaDocs } = await import('./docs-vista.js');
+          return harden(paginaDocs());
+        }
         const { rotasEquipaApi } = await import('./equipa-api.js');
         const eu = await getEquipa(env, request);
         if (!eu) {

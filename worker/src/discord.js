@@ -98,6 +98,7 @@ export const PERMISSOES = {
   comandos: ['admin', 'dev', 'suporte'],
   entrar: ['admin', 'dev', 'suporte'],
   test: ['dev', 'suporte'],
+  docs: ['admin', 'dev', 'suporte'],
   access: [],
 };
 
@@ -748,6 +749,11 @@ export async function handleInteraction(request, env, ctx) {
       if (nome === 'access') return json(await cmdAccess(env, i, opts));
       if (nome === 'entrar') return json(await cmdEntrar(env, i, papeis, request));
       if (nome === 'test') return json(await cmdTest(env, i, opts, request));
+      if (nome === 'docs') {
+        const base = env.ENV_NAME ? 'https://dev.rendorium.com' : 'https://app.rendorium.com';
+        return json(reply('📚 A documentação da casa — gerada do próprio código a cada deploy:\n' +
+          base + '/equipa/docs\n\nPrecisa de sessão de equipa: se ainda não tiveres, corre /entrar primeiro.'));
+      }
       if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
       if (nome === 'pedido') return json(await cmdPedido(env, opts, pap));
       if (nome === 'responder') return json(await cmdResponder(env, opts, pap, quemFala(i, pap)));

@@ -81,6 +81,7 @@ const comandos = [
   Object.assign({ name: 'uso', description: 'Consumo da infraestrutura agora' }, soOperacao),
   { name: 'comandos', description: 'O que podes fazer com o teu papel' },
   { name: 'entrar', description: 'Abrir a ferramenta de suporte no browser' },
+  { name: 'docs', description: 'Como isto funciona por dentro (gerado do código)' },
   {
     name: 'test',
     description: 'Ligação temporária para o ambiente de teste, numa conta lavada',
