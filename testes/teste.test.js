@@ -47,7 +47,9 @@ describe('a porta /t/entrar', () => {
 
   test('assinatura errada é 403; expirada é 410; incompleta é 400', async () => {
     const env = ambiente();
-    const ma = await abrir(env, false, (l) => l.replace(/sig=./, 'sig=f'));
+    // trocar o primeiro caracter por um DIFERENTE — substituir por um fixo
+    // deixava o link intacto 1 vez em 16, e o teste falhava aleatoriamente
+    const ma = await abrir(env, false, (l) => l.replace(/sig=(.)/, (m, c) => 'sig=' + (c === 'f' ? '0' : 'f')));
     assert.equal(ma.status, 403);
     const velha = await abrir(env, false, (l) => l.replace(/exp=\d+/, 'exp=1700000000000'));
     assert.equal(velha.status, 410, 'a validade assinada manda — mudar o exp também mata a assinatura, mas uma ligação genuína velha morre aqui');
