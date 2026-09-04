@@ -6,7 +6,7 @@ export const MAX_RECORD = 256 * 1024;      // 256 KB por registo guardado
 
 // Versão dos termos e da política em vigor. Mudá-la faz a app pedir de novo
 // a aceitação a toda a gente, na próxima vez que abrirem.
-export const TERMS_VERSION = '2026-09-03';
+export const TERMS_VERSION = '2026-09-04';
 
 // Categorias de tudo o que precisa de atenção. Um pedido contado por uma
 // pessoa e um erro apanhado sozinho vivem na mesma fila.
