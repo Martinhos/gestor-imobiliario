@@ -1,9 +1,13 @@
 /* ================= ARMAZENAMENTO ================= */
 const KEY='gi_v13', OLDS=['gi_v12','gi_v11','gi_v10','gi_v9','gi_v8','gi_v6','gi_v5','gi_v4','gi_v3','gi_v2','gi_v1'];
 let mem={};
-/* lê do localStorage; se estiver bloqueado (modo privado), vale a cópia em memória desta sessão */
+/* lê do localStorage; se estiver bloqueado (modo privado), vale a cópia em memória desta sessão
+   Recebe: k — a chave a ler (string, ex.: 'gi_v13').
+   Devolve: o valor guardado (string), ou null se não existir nem no disco nem em memória. */
 function rawGet(k){try{const v=localStorage.getItem(k);return v===null&&k in mem?mem[k]:v}catch(e){return k in mem?mem[k]:null}}
-/* escreve no localStorage e numa cópia em memória; se o disco falhar, a app continua só em memória e avisa uma vez */
+/* escreve no localStorage e numa cópia em memória; se o disco falhar, a app continua só em memória e avisa uma vez
+   Recebe: k — a chave onde guardar; v — o valor, guardado como string.
+   Devolve: nada — grava a chave (em memória sempre; no disco quando dá). */
 function rawSet(k,v){mem[k]=String(v);try{localStorage.setItem(k,v)}catch(e){
   /* sem isto, «Guardado.» era mentira em modo privado ou com a quota cheia:
      um reinício levava a sessão toda sem nunca ter avisado */
@@ -12,10 +16,14 @@ function rawSet(k,v){mem[k]=String(v);try{localStorage.setItem(k,v)}catch(e){
 }}
 
 const STAMP=0.04;
-/* taxa do imposto do selo sobre os juros: configurável em Definições, 4% por omissão */
+/* taxa do imposto do selo sobre os juros: configurável em Definições, 4% por omissão
+   Devolve: a taxa em fração (ex.: 0.04 para 4%). */
 const stampPct=()=>{const v=Number((db&&db.settings||{}).stampPct);return isFinite(v)&&v>=0?v/100:STAMP};
 const r2=v=>Math.round(v*100)/100;
-/* comissão de amortização antecipada, conforme a fase da taxa (mista: fixa até fixedYears, variável depois) */
+/* comissão de amortização antecipada, conforme a fase da taxa (mista: fixa até fixedYears, variável depois)
+   Recebe: l — a hipoteca (usa type, amortFeeFix, amortFeeVar, start e fixedYears);
+   dateStr (opcional) — a data a avaliar, 'AAAA-MM-DD'; por omissão, hoje.
+   Devolve: a comissão em fração (ex.: 0.02 para 2%). */
 function amortFeeRate(l,dateStr){
   const F=isFinite(Number(l.amortFeeFix))?Number(l.amortFeeFix)/100:0.02;
   const V=isFinite(Number(l.amortFeeVar))?Number(l.amortFeeVar)/100:0.005;
@@ -25,7 +33,9 @@ function amortFeeRate(l,dateStr){
   const m=(Number(d.slice(0,4))-Number(st.slice(0,4)))*12+(Number(d.slice(5,7))-Number(st.slice(5,7)));
   return m<(Number(l.fixedYears)||5)*12?F:V;
 }
-/* quanto ainda se pode amortizar nesta prestação: dívida atual + o capital do próprio registo (em edição) */
+/* quanto ainda se pode amortizar nesta prestação: dívida atual + o capital do próprio registo (em edição)
+   Recebe: t — o movimento em causa (pode ser null; só pesa se estiver em edição, t._edit); l — a hipoteca.
+   Devolve: o valor amortizável em euros (número). */
 function loanAvail(t,l){
   let a=Number(l.outstanding)||0;
   if(t&&t._edit&&t.id){const old=db.transactions.find(x=>x.id===t.id);
@@ -61,7 +71,8 @@ const blank={v:13,properties:[],owners:[],tenants:[],contracts:[],transactions:[
   settings:{growth:2,inflation:2,years:10,theme:'auto',capTarget:5,quota:100,payTax:true,stampPct:4,
             cats:JSON.parse(JSON.stringify(CATS0)),catsIn:JSON.parse(JSON.stringify(CATS_IN0)),tags:TAGS0.slice()}};
 
-/* id único para qualquer registo novo; onde não há crypto.randomUUID, serve data + aleatório */
+/* id único para qualquer registo novo; onde não há crypto.randomUUID, serve data + aleatório
+   Devolve: uma string única (UUID, ou 'id' + data + aleatório como recurso). */
 function uid(){try{return crypto.randomUUID()}catch(e){return 'id'+Date.now()+Math.random().toString(16).slice(2,8)}}
 /* versões anteriores guardavam a imagem em base64 dentro dos dados (rebentava a quota do localStorage);
    agora fica só em IndexedDB. O que vier em "data" é migrado para lá e retirado dos dados. */
@@ -69,25 +80,32 @@ const INLINE_DATA=[];
 const normFile=f=>{const o=Object.assign({id:uid(),name:'',type:'',size:0,added:''},f||{});
   if(o.data){INLINE_DATA.push({id:o.id,data:o.data});delete o.data}return o};
 /* despacha para o IndexedDB os anexos que o normFile apanhou em base64 e grava os dados já sem eles;
-   o que já existir lá não é reescrito, e uma falha num ficheiro não trava os outros */
+   o que já existir lá não é reescrito, e uma falha num ficheiro não trava os outros
+   Devolve: nada — esvazia INLINE_DATA, envia os anexos para o IndexedDB e grava a base no fim. */
 function migrateInline(){
   if(!INLINE_DATA.length)return;
   const list=INLINE_DATA.splice(0);
   Promise.all(list.map(x=>idbGet(x.id).then(b=>{if(b)return;return fetch(x.data).then(r=>r.blob()).then(bl=>idbPut(x.id,bl))}).catch(()=>{})))
     .then(()=>{save()});
 }
-/* normaliza uma hipoteca: omissões preenchidas, campos extintos (active, taeg, mtic) fora, anexos pelo normFile */
+/* normaliza uma hipoteca: omissões preenchidas, campos extintos (active, taeg, mtic) fora, anexos pelo normFile
+   Recebe: l — a hipoteca em bruto (objeto parcial de qualquer versão, ou nada).
+   Devolve: um objeto novo com todos os campos da hipoteca preenchidos. */
 function normLoan(l){const o=Object.assign({id:uid(),name:'',bank:'',outstanding:0,years:30,type:'fixa',
   rate:0,fixedYears:5,euribor:0,spread:0,index:'6m',start:'',stampTax:true,amortFeeFix:2,amortFeeVar:0.5,files:[]},l||{});
   delete o.active;delete o.taeg;delete o.mtic;
   if(o.stampTax===undefined)o.stampTax=true;
   o.files=(o.files||[]).map(normFile);return o}
-/* normaliza uma ficha de pessoa (dono ou inquilino): campos em falta ficam vazios, anexos pelo normFile */
+/* normaliza uma ficha de pessoa (dono ou inquilino): campos em falta ficam vazios, anexos pelo normFile
+   Recebe: p — a ficha em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo com todos os campos da ficha preenchidos. */
 function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:'',nif:'',gender:'',marital:'',
   nationality:'Portuguesa',birth:'',cc:'',ccValid:'',taxAddress:'',notes:'',files:[]},p||{});
   o.files=(o.files||[]).map(normFile);return o}
 /* normaliza um imóvel e migra o que mudou entre versões: equity passa a purchase, o crédito único
-   vira lista de hipotecas, quartos em texto ganham id, e quotas de donos removidos são descartadas */
+   vira lista de hipotecas, quartos em texto ganham id, e quotas de donos removidos são descartadas
+   Recebe: p — o imóvel em bruto, de qualquer versão dos dados (ou nada).
+   Devolve: um objeto novo com o imóvel completo e já migrado. */
 function normProp(p){
   const o=Object.assign({id:uid(),name:'',address:'',use:'investimento',rentalMode:'inteiro',rooms:[],
     value:0,purchase:0,ownerIds:[],ownerShares:{},notes:'',listing:'',photos:[],loans:[],
@@ -105,7 +123,9 @@ function normProp(p){
   o.ownerShares=sh;
   return o;
 }
-/* normaliza um contrato: omissões preenchidas; itens do inventário e chaves ganham id próprio */
+/* normaliza um contrato: omissões preenchidas; itens do inventário e chaves ganham id próprio
+   Recebe: c — o contrato em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo com todos os campos do contrato preenchidos. */
 function normContract(c){
   const o=Object.assign({id:uid(),name:'',propertyId:null,roomId:null,tenantIds:[],rent:0,taxRate:0,iban:'',
     ownerEmail:'',ownerPhone:'',tenantEmail:'',tenantPhone:'',ownerContactId:'',tenantContactId:'',
@@ -128,7 +148,9 @@ const normTx=t=>{const o=Object.assign({id:uid(),kind:'expense',label:'',amount:
   if(o.psplit&&!o.psplit.mode)o.psplit=null;
   if(o.psplit){o.psplit={mode:o.psplit.mode,parts:Object.assign({},o.psplit.parts||{})}}
   return o};
-/* as liquidações antigas (lista própria) passam a movimentos do tipo "acerto" */
+/* as liquidações antigas (lista própria) passam a movimentos do tipo "acerto"
+   Recebe: d — a base de dados (usa d.settlements e d.transactions).
+   Devolve: nada — acrescenta os acertos a d.transactions e esvazia d.settlements. */
 function migrateSettlements(d){
   (d.settlements||[]).forEach(x=>{
     if(d.transactions.some(t=>t.id===x.id))return;
@@ -137,7 +159,9 @@ function migrateSettlements(d){
   });
   d.settlements=[];
 }
-/* categorias novas que uma base antiga ainda não tem */
+/* categorias novas que uma base antiga ainda não tem
+   Recebe: st — o objeto settings da base.
+   Devolve: nada — completa st.cats, st.catsIn e st.exclude no próprio objeto. */
 function fillCats(st){
   st.exclude=st.exclude||{};
   if(!st.cats||!Object.keys(st.cats).length)st.cats=JSON.parse(JSON.stringify(CATS0));
@@ -148,7 +172,9 @@ const normSettle=x=>Object.assign({id:uid(),date:'',propertyId:null,fromId:null,
 /* modelo: um movimento guardado para repetir à mão; recorrência: repete-se sozinho e pede confirmação */
 const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType'];
 /* cópia profunda de um movimento só com os campos que fazem sentido repetir (TX_TPL_KEYS):
-   é o que os modelos e as recorrências guardam — data e id ficam de fora de propósito */
+   é o que os modelos e as recorrências guardam — data e id ficam de fora de propósito
+   Recebe: t — o movimento a copiar.
+   Devolve: um objeto novo só com os campos de TX_TPL_KEYS presentes em t (cópia profunda). */
 function txSnapshot(t){const o={};TX_TPL_KEYS.forEach(k=>{if(t[k]!==undefined)o[k]=JSON.parse(JSON.stringify(t[k]))});return o}
 const normTpl=x=>{const o=Object.assign({id:uid(),name:''},x||{});o.tx=txSnapshot(normTx(o.tx||{}));return o};
 const normRec=x=>{const o=Object.assign({id:uid(),name:'',every:'month',next:'',until:'',end:'',muted:false,auto:false},x||{});o.tx=txSnapshot(normTx(o.tx||{}));if(o.until&&o.until<o.next)o.until=o.next;return o};
@@ -161,7 +187,8 @@ const CATMAP={'IMI':['Impostos','IMI'],'Seguro':['Seguros','Multirriscos'],'Águ
 let db=load();
 /* lê os dados guardados (ou a versão antiga mais recente que houver), normaliza tudo e faz as
    migrações maiores: inquilinos com renda passam a contratos, categorias renomeadas são remapeadas
-   e as liquidações antigas viram movimentos de acerto; devolve sempre uma base utilizável */
+   e as liquidações antigas viram movimentos de acerto; devolve sempre uma base utilizável
+   Devolve: a base de dados completa e normalizada (o objeto que passa a viver em db). */
 function load(){
   let d=null;
   try{d=JSON.parse(rawGet(KEY)||'null')}catch(e){}
@@ -216,12 +243,14 @@ function load(){
   migrateSettlements(out);
   return out;
 }
-/* grava a base inteira no aparelho e reagenda os lembretes no telemóvel */
+/* grava a base inteira no aparelho e reagenda os lembretes no telemóvel
+   Devolve: nada — grava db no localStorage e chama scheduleReminders. */
 function save(){rawSet(KEY,JSON.stringify(db));scheduleReminders()}
 /* lembretes no telemovel: quando um recorrente entra para confirmar e quando passa a atraso */
 let _remT=null;
 /* reagenda as notificações locais via ponte Android (fora da app instalada não faz nada): espera
-   400ms para juntar gravações seguidas numa só chamada e envia até 60 lembretes futuros, por data */
+   400ms para juntar gravações seguidas numa só chamada e envia até 60 lembretes futuros, por data
+   Devolve: nada — entrega a lista de lembretes à ponte Android (fora dela, não faz nada). */
 function scheduleReminders(){
   if(!(window.Android&&Android.scheduleReminders))return;
   clearTimeout(_remT);

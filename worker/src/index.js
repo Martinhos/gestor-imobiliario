@@ -43,6 +43,9 @@ const PODE_APERTAR = { 'Referrer-Policy': ['no-referrer'] };
 // Veste uma resposta com os cabeçalhos de segurança antes de sair; só os
 // valores exactos em PODE_APERTAR escapam a ser substituídos. Devolve uma
 // Response nova — a original não se volta a usar.
+// Recebe: res — a Response acabada de produzir por uma rota.
+// Devolve: uma Response nova com os cabeçalhos de segurança postos — a
+// original não se volta a usar.
 function harden(res) {
   const out = new Response(res.body, res);
   Object.keys(SECURITY_HEADERS).forEach((k) => {

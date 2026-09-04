@@ -99,7 +99,10 @@ vSettings = function () {
 
 /* O cartão de uma ligação a outro utilizador, com os botões certos para o
    estado dela: convite recebido (aceitar/recusar), convite enviado (cancelar)
-   ou ligação ativa, com a contagem de casas partilhadas em cada sentido. */
+   ou ligação ativa, com a contagem de casas partilhadas em cada sentido.
+   Recebe: c — a ligação, com id, status ('pending' ou ativa), incoming,
+   peer {id, name, email} e as listas myShares/peerShares.
+   Devolve: string de HTML do cartão, pronta a inserir com innerHTML. */
 function connCard(c) {
   var peer = esc(c.peer.name || c.peer.email || c.peer.id);
   var lines = '';
@@ -129,6 +132,7 @@ function connCard(c) {
 // O HTML da página "Conta e partilha": a conta e o id para dar a outros, o campo
 // para adicionar uma ligação, a lista de utilizadores ligados, a segurança e o
 // apagar da conta. Sem sessão iniciada, mostra apenas o convite para entrar.
+// Devolve: string de HTML da página, pronta a inserir com innerHTML.
 function vCloud() {
   if (!CW.user) return card('Conta', 'Sem sessão iniciada', '<button class="btn primary" onclick="CW.showAuth()">Iniciar sessão</button>');
   var conns = (CW.state.connections || []).slice();
@@ -190,7 +194,8 @@ document.head.appendChild(lgCss);
 SUBPAGE.faq = { label: 'Perguntas frequentes', sub: 'As dúvidas mais comuns' };
 
 /* As perguntas que vão chegar de certeza — respondidas antes de chegarem.
-   Cada resposta aponta o caminho concreto na app, não teoria. */
+   Cada resposta aponta o caminho concreto na app, não teoria.
+   Devolve: string de HTML do cartão das perguntas, pronta a inserir com innerHTML. */
 function vFaq() {
   var q = function (id, pergunta, resposta) {
     return fold('faq_' + id, pergunta, '<div class="hint" style="font-size:14px;line-height:1.6">' + resposta + '</div>', { icon: 'info', open: false });

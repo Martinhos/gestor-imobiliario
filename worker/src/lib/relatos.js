@@ -9,7 +9,13 @@ import { notifyDev, errorEmbed } from '../notify.js';
    Duzentas ocorrências de uma pessoa e duzentas de duzentas pessoas contavam
    igual no `n`, e são problemas de gravidade muito diferente. A chave
    primária da tabela faz a distinção sozinha: a mesma pessoa a repetir o
-   mesmo erro não acrescenta linha. */
+   mesmo erro não acrescenta linha.
+   Recebe: env — o ambiente do worker (D1 em env.DB); fp — a assinatura do
+   erro (string); userId — o id de quem o apanhou (ou nada, quando não se
+   sabe); t — o instante em milissegundos.
+   Devolve: { total, novo } — quantas pessoas distintas já apanharam esta
+   assinatura e se esta pessoa é nova nela; { total: null, novo: false } sem
+   utilizador ou com a base em baixo. */
 async function marcarPessoa(env, fp, userId, t) {
   if (!userId) return { total: null, novo: false };
   try {
@@ -31,6 +37,13 @@ async function marcarPessoa(env, fp, userId, t) {
 // Um erro apanhado sozinho abre um pedido na mesma fila dos que as pessoas
 // contam. Erros repetidos somam-se ao pedido que já existe, em vez de abrirem
 // um novo de cada vez.
+// Recebe: env — o ambiente do worker; ctx — o contexto de execução (para as
+// notificações); categoria — uma das CATEGORIAS ('user', 'client', 'server',
+// 'infra', 'seguranca'); message — a mensagem do erro (corta a 2000);
+// detail — o detalhe ou stack (corta a 4000); userId (opcional) — o id de
+// quem o apanhou, se se souber; extra (opcional) — { versao, contexto }.
+// Devolve: nada — grava ou engorda o pedido na D1 e avisa quem programa no
+// Discord quando vale a pena.
 export async function recordReport(env, ctx, categoria, message, detail, userId, extra) {
   const msg = String(message || '').slice(0, 2000);
   const fp = categoria + ':' + msg.slice(0, 120);

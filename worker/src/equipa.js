@@ -23,6 +23,7 @@ export const COOKIE = 'gi_equipa';
 
 // 32 bytes de aleatório criptográfico em hexadecimal (64 caracteres):
 // serve de bilhete e de token de sessão.
+// Devolve: o token (string de 64 caracteres hexadecimais).
 function novoToken() {
   const a = new Uint8Array(32);
   crypto.getRandomValues(a);
@@ -37,7 +38,9 @@ function novoToken() {
    única coisa aqui que se escreve num sítio e se lê noutro: o bot é
    atendido perto do Discord e o clique perto de quem clica. O KV leva algum
    tempo a concordar consigo próprio entre regiões, e nesse intervalo uma
-   ligação acabada de criar não existe para quem a abre. */
+   ligação acabada de criar não existe para quem a abre.
+   Recebe: env — o ambiente do worker (usa env.DB); quem — {discordId, nome, papel, papeis?}, vindo do bot.
+   Devolve: {token, expiraEm} — o token do bilhete e a validade em segundos. */
 export async function criarBilhete(env, quem) {
   const t = novoToken();
   const agora = Date.now();
@@ -59,7 +62,9 @@ export async function criarBilhete(env, quem) {
 
 /* O que uma ligação é, sem lhe mexer. Mostrar não é usar: a página de
    entrada precisa de saber a quem pertence, e não pode gastá-la só por
-   alguém — ou alguma coisa — a ter aberto. */
+   alguém — ou alguma coisa — a ter aberto.
+   Recebe: env — o ambiente do worker (usa env.DB); t — o token do bilhete (64 hex).
+   Devolve: {estado: 'nao-existe' | 'usada' | 'expirou'}, ou {estado: 'boa', quem} com o payload do bilhete. */
 export async function verBilhete(env, t) {
   const r = await env.DB.prepare('SELECT * FROM team_links WHERE token = ?').bind(t).first();
   if (!r) return { estado: 'nao-existe' };
@@ -70,7 +75,10 @@ export async function verBilhete(env, t) {
 
 /* Gastar a ligação. Numa só instrução de propósito: com ler-e-depois-apagar,
    dois pedidos ao mesmo tempo liam ambos a mesma ligação por usar e entravam
-   os dois. Assim, quem marcar a linha primeiro é o único que entra. */
+   os dois. Assim, quem marcar a linha primeiro é o único que entra.
+   Recebe: env — o ambiente do worker (usa env.DB); t — o token do bilhete (64 hex).
+   Devolve: o payload do bilhete ({discordId, nome, papel, papeis}) para quem o gastou;
+   null se já estava usada, expirou ou não existe. */
 async function usarBilhete(env, t) {
   const agora = Date.now();
   const r = await env.DB.prepare(
@@ -83,6 +91,8 @@ async function usarBilhete(env, t) {
 
 // A linha Set-Cookie da sessão de equipa. Com expirar=true sai com
 // Max-Age=0, que é como se apaga um cookie HttpOnly.
+// Recebe: token — o token da sessão de equipa (ou '' para apagar); expirar (opcional) — true para o apagar.
+// Devolve: a linha Set-Cookie completa (string).
 export function cookieDaEquipa(token, expirar = false) {
   const maxAge = expirar ? 0 : SESSAO_TTL;
   return COOKIE + '=' + token + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + maxAge;
@@ -90,6 +100,8 @@ export function cookieDaEquipa(token, expirar = false) {
 
 // O valor do cookie `nome`, mas só se tiver a forma de um token nosso
 // (64 hex) — qualquer outra coisa vale null e nem chega a tocar no KV.
+// Recebe: request — o pedido (Request); nome — o nome do cookie a procurar.
+// Devolve: o valor do cookie (string de 64 hex) ou null.
 function lerCookie(request, nome) {
   const c = request.headers.get('Cookie') || '';
   const m = new RegExp('(?:^|;\\s*)' + nome + '=([a-f0-9]{64})(?:;|$)').exec(c);
@@ -97,7 +109,9 @@ function lerCookie(request, nome) {
 }
 
 /* Quem está a usar a ferramenta de equipa, ou null.
-   Só lê o cookie da equipa: uma sessão de cliente nunca dá acesso a isto. */
+   Só lê o cookie da equipa: uma sessão de cliente nunca dá acesso a isto.
+   Recebe: env — o ambiente do worker (usa env.SESSIONS); request — o pedido, de onde sai o cookie.
+   Devolve: a sessão {token, discordId, nome, papel, papeis, desde} ou null. */
 export async function getEquipa(env, request) {
   const t = lerCookie(request, COOKIE);
   if (!t) return null;
@@ -114,7 +128,9 @@ export async function getEquipa(env, request) {
 /* As rotas de entrar e sair da ferramenta de equipa. Devolve a Response, ou
    null quando o pedido não é daqui e o worker deve seguir para as outras
    rotas. O que a ferramenta faz por dentro vive no equipa-api.js — aqui é
-   só a porta. */
+   só a porta.
+   Recebe: c — o contexto do pedido ({env, request, path, method, url}).
+   Devolve: a Response, ou null quando o pedido deve seguir para as outras rotas. */
 export async function rotasEquipa(c) {
   const { env, request, path, method, url } = c;
 

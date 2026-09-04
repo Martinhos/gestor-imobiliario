@@ -14,6 +14,8 @@ const ISSUERS = {
 let jwksCache = {};
 
 // base64url → bytes: repõe o padding e os carateres +/ do base64 clássico antes do atob.
+// Recebe: s — string em base64url (um segmento de um JWT, por exemplo).
+// Devolve: Uint8Array com os bytes descodificados.
 function b64uToBytes(s) {
   s = String(s).replace(/-/g, '+').replace(/_/g, '/');
   while (s.length % 4) s += '=';
@@ -21,12 +23,17 @@ function b64uToBytes(s) {
 }
 
 // descodifica um segmento base64url do JWT (cabeçalho ou payload) para objeto
+// Recebe: s — o segmento do JWT em base64url.
+// Devolve: o objeto que resulta do JSON.parse do texto descodificado.
 function b64uToJSON(s) {
   return JSON.parse(new TextDecoder().decode(b64uToBytes(s)));
 }
 
 // A chave pública do fornecedor com aquele kid. Cache de uma hora, renovada também
 // quando o kid não aparece — é assim que uma rotação de chaves passa sem se dar por ela.
+// Recebe: provider — 'google' ou 'apple'; kid — o id da chave, vindo do cabeçalho do JWT.
+// Devolve: Promise com o objeto JWK da chave, ou null se o kid não existir;
+// lança Error se não conseguir obter as chaves do fornecedor.
 async function getKey(provider, kid) {
   let entry = jwksCache[provider];
   if (!entry || Date.now() - entry.at > 3600e3 || !entry.keys.some((k) => k.kid === kid)) {
@@ -42,7 +49,12 @@ async function getKey(provider, kid) {
    fornecedor ('google' ou 'apple'), emissor, audiência (o client id da app), validade
    e email confirmado. Devolve o payload quando tudo bate certo; qualquer falha lança
    Error com a razão — quem chama decide o que mostrar. Vai à rede buscar as chaves
-   quando a cache não chega. */
+   quando a cache não chega.
+   Recebe: provider — 'google' ou 'apple'; token — o ID token (JWT compacto,
+   três segmentos separados por pontos); audience — o client id que tem de
+   constar no aud do token.
+   Devolve: Promise com o payload do token quando tudo bate certo; qualquer
+   falha lança Error com a razão. */
 export async function verifyIdToken(provider, token, audience) {
   const parts = String(token || '').split('.');
   if (parts.length !== 3) throw new Error('token malformado');

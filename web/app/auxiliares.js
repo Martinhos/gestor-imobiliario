@@ -2,10 +2,15 @@
 /* milhares separados por espaço fino, como pedido */
 const SP='\u202F';
 // mete o espaço fino de milhares numa string de dígitos (a parte inteira, já em texto).
+// Recebe: intStr — a parte inteira do número, já em texto, só com dígitos.
+// Devolve: a mesma string com um espaço fino a separar os grupos de milhares.
 function grupos(intStr){return intStr.replace(/\B(?=(\d{3})+(?!\d))/g,SP)}
 /* valor em euros para mostrar: milhares com espaço fino, vírgula decimal e € no fim.
    dec2 força sempre duas casas; sem dec2 arredonda ao euro inteiro. Os negativos
-   levam o sinal de menos tipográfico (−), não o hífen. */
+   levam o sinal de menos tipográfico (−), não o hífen.
+   Recebe: v — o valor em euros (número, ou texto convertível; o que não for número conta como 0);
+   dec2 — verdadeiro para mostrar sempre duas casas decimais, falso arredonda ao euro inteiro.
+   Devolve: o valor formatado em texto, ex.: "1 250,50 €". */
 function money(v,dec2){
   const n=Number(v)||0,neg=n<0,a=Math.abs(n);
   const s=dec2?a.toFixed(2):String(Math.round(a));
@@ -21,7 +26,9 @@ const fmtNIF=v=>{const t=String(v||'').replace(/\D/g,'');
 const fmtCC=v=>{const t=String(v||'').replace(/\s+/g,'').toUpperCase();
   const m=t.match(/^(\d{8})(.+)$/);return m?m[1]+' '+m[2]:String(v||'')};
 /* telefone legível: 9 dígitos sem indicativo assumem-se portugueses (+351), o resto
-   do número agrupa-se de 3 em 3 a seguir ao indicativo. Vazio se não houver dígitos. */
+   do número agrupa-se de 3 em 3 a seguir ao indicativo. Vazio se não houver dígitos.
+   Recebe: v — o telefone tal como foi escrito (texto; dígitos, espaços e "+" à mistura).
+   Devolve: o número formatado em texto, ex.: "+351 912 345 678"; string vazia sem dígitos. */
 function fmtPhone(v){
   let t=String(v||'').replace(/[^\d+]/g,'');
   if(!t)return '';
@@ -36,7 +43,9 @@ const ZW='\u200B';   /* marcador invisível que segura o cursor dentro de um <b>
 const INLINE_TAGS={b:1,i:1,s:1,u:1,code:1};
 /* limpa HTML vindo de fora: só ficam as marcas que o editor cria (negrito, listas,
    parágrafos…), sem atributos, scripts nem estilos; marcas inline vazias caem.
-   Se o DOMParser falhar, devolve o texto todo escapado — nunca HTML por limpar. */
+   Se o DOMParser falhar, devolve o texto todo escapado — nunca HTML por limpar.
+   Recebe: html — o HTML a limpar (texto).
+   Devolve: HTML seguro (texto) só com as marcas permitidas, pronto a colar na página. */
 function sanitizeRich(html){
   let doc;try{doc=new DOMParser().parseFromString('<div>'+html+'</div>','text/html')}catch(e){return esc(html)}
   const walk=node=>{let out='';[].slice.call(node.childNodes).forEach(ch=>{
@@ -52,6 +61,8 @@ function sanitizeRich(html){
   return walk(doc.body.firstChild||doc.body);
 }
 // texto guardado → HTML seguro de apresentação: sanitiza se trouxer marcas; senão escapa e converte \n em <br>.
+// Recebe: s — o texto guardado (pode trazer HTML antigo, ou ser texto simples com quebras \n).
+// Devolve: HTML seguro (texto) pronto a apresentar.
 function rich(s){
   let t=String(s||'');
   if(/<[a-z][^>]*>/i.test(t))return sanitizeRich(t);
@@ -62,13 +73,19 @@ function rich(s){
 /* A barra trata o toque ela própria (touchstart com preventDefault): assim o editor não
    perde o foco nem a seleção quando se carrega num botão, que era o que fazia o
    negrito/itálico/rasurado não fazerem nada no telemóvel. */
-/* caixas de texto simples; o que estava guardado com HTML antigo é convertido em texto ao editar */
+/* caixas de texto simples; o que estava guardado com HTML antigo é convertido em texto ao editar
+   Recebe: label — o rótulo a mostrar por cima (texto; pode ser vazio); id — o id a dar ao
+   <textarea>; value — o texto guardado (pode trazer HTML antigo); ph (opcional) — o
+   placeholder ("Escreve aqui…" por omissão).
+   Devolve: o HTML do campo (texto): um <label> com o <textarea> lá dentro. */
 function richEditor(label,id,value,ph){
   return `<label>${label||''}<textarea id="${id}" placeholder="${esc(ph||'Escreve aqui…')}">${esc(richToText(value||''))}</textarea></label>`;
 }
 /* HTML antigo → texto simples: itens de lista viram "• ", blocos viram quebras de
    linha, as restantes marcas caem e as entidades são descodificadas. Texto sem
-   marcas passa intacto. */
+   marcas passa intacto.
+   Recebe: s — o texto guardado, com ou sem marcas HTML.
+   Devolve: o texto simples equivalente (string), sem marcas e com as entidades descodificadas. */
 function richToText(s){
   let t=String(s||'');
   if(!/<[a-z][^>]*>/i.test(t))return t;
@@ -77,6 +94,8 @@ function richToText(s){
   return d.value.replace(/\n{3,}/g,'\n\n').trim();
 }
 // touchstart na barra do editor: executa o comando do botão tocado sem deixar o editor perder o foco.
+// Recebe: e — o evento touchstart vindo da barra de ferramentas do editor.
+// Devolve: nada — executa o comando do botão tocado (via richCmd).
 function richTouch(e){
   const btn=e.target&&e.target.closest?e.target.closest('button'):null;
   if(!btn)return;
@@ -98,7 +117,9 @@ document.addEventListener('selectionchange',()=>{
 const RICH_INLINE={bold:['B','STRONG'],italic:['I','EM'],strikeThrough:['S','STRIKE','DEL']};
 /* o editor onde um comando da barra deve atuar: o que tem o foco, ou o da última
    seleção guardada (que é reposta), ou, em último recurso, o do modal de cima com o
-   cursor no fim. Devolve a caixa .rich-content já focada, ou null se não houver. */
+   cursor no fim. Devolve a caixa .rich-content já focada, ou null se não houver.
+   Recebe: editor (opcional) — o elemento .rich-editor a que o comando se destina; sem ele serve qualquer editor.
+   Devolve: o elemento .rich-content já focado, ou null se não houver nenhum. */
 function richHost(editor){
   let e=document.activeElement;
   if(e&&e.classList&&e.classList.contains('rich-content')&&(!editor||editor.contains(e)))return e;
@@ -114,7 +135,10 @@ function richHost(editor){
 }
 /* com o cursor apenas pousado (sem texto selecionado), o teclado do telemóvel ignora o
    "estilo pendente" do execCommand; por isso criamos a marca com um marcador invisível
-   e pomos o cursor lá dentro — o que se escrever a seguir fica formatado */
+   e pomos o cursor lá dentro — o que se escrever a seguir fica formatado
+   Recebe: host — a caixa .rich-content onde o cursor está; cmd — o comando inline
+   ('bold', 'italic' ou 'strikeThrough').
+   Devolve: true se tratou o caso (marca criada, ou cursor posto fora da atual); false sem seleção. */
 function toggleInline(host,cmd){
   const s=document.getSelection();if(!s||!s.rangeCount)return false;
   const r=s.getRangeAt(0),tags=RICH_INLINE[cmd];
@@ -128,6 +152,9 @@ function toggleInline(host,cmd){
 }
 // aplica um comando de formatação (execCommand) no editor certo, dispara "input"
 // para quem estiver a gravar alterações e atualiza o realce da barra.
+// Recebe: cmd — o comando do execCommand (ex.: 'bold', 'insertUnorderedList'); arg — o argumento
+// do comando (texto; vazio quando não é preciso); editor (opcional) — o .rich-editor onde atuar.
+// Devolve: nada — aplica a formatação no editor e atualiza a barra.
 function richCmd(cmd,arg,editor){
   const e=richHost(editor);if(!e)return;
   const s=document.getSelection(),collapsed=!s||!s.rangeCount||s.getRangeAt(0).collapsed;
@@ -135,7 +162,9 @@ function richCmd(cmd,arg,editor){
   e.dispatchEvent(new Event('input',{bubbles:true}));
   richState(e);
 }
-/* realça na barra o que está ativo onde o cursor está */
+/* realça na barra o que está ativo onde o cursor está
+   Recebe: host — a caixa .rich-content cuja barra se vai atualizar.
+   Devolve: nada — liga/desliga a classe .on nos botões da barra. */
 function richState(host){
   const box=host&&host.closest?host.closest('.rich-editor'):null;if(!box)return;
   [].slice.call(box.querySelectorAll('.rich-tools button')).forEach(b=>{
@@ -144,10 +173,14 @@ function richState(host){
     b.classList.toggle('on',!!on);
   });
 }
-/* conteúdo de um editor, já limpo; vazio se só tiver quebras */
+/* conteúdo de um editor, já limpo; vazio se só tiver quebras
+   Recebe: id — o id do <textarea> do editor.
+   Devolve: o texto lá escrito, aparado (string); vazia se o campo não existir. */
 function richVal(id){const e=document.getElementById(id);return e?String(e.value||'').trim():''}
 
 // fração → percentagem com vírgula (0.253 → "25,3%"); d casas decimais (1 por omissão); "—" se não for número.
+// Recebe: v — a fração (número; 0.25 é 25%); d (opcional) — quantas casas decimais (1 por omissão).
+// Devolve: a percentagem em texto, ex.: "25,3%"; "—" se v não for um número finito.
 const pct=(v,d)=>isFinite(v)?(v*100).toFixed(d==null?1:d).replace('.',',')+'%':'—';
 const dec=v=>String(v==null?'':v).replace('.',',');
 const sum=a=>a.reduce((x,y)=>x+(Number(y)||0),0);
@@ -155,6 +188,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&
 /* texto dentro de uma string JS num atributo onclick="f('…')" */
 const jsq=s=>esc(String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,' '));
 // data de hoje em ISO (AAAA-MM-DD) — o formato em que as datas se guardam e comparam.
+// Devolve: a data de hoje em texto "AAAA-MM-DD".
 const today=()=>new Date().toISOString().slice(0,10);
 const YEAR=new Date().getFullYear();
 const MES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
@@ -171,6 +205,8 @@ const activeContracts=pid=>contractsOf(pid).filter(isActive);
 const ctTenants=c=>(c.tenantIds||[]).map(tenant).filter(Boolean);
 const ctNames=c=>ctTenants(c).map(t=>t.name).join(', ')||'Sem inquilino';
 // nome do quarto rid do imóvel p; vazio se não existir.
+// Recebe: p — o imóvel (objeto; aguenta null); rid — o id do quarto.
+// Devolve: o nome do quarto (string); vazia se não existir.
 const roomName=(p,rid)=>{const r=((p||{}).rooms||[]).find(x=>x.id===rid);return r?r.name:''};
 const ctLabel=c=>{const p=prop(c.propertyId);return (p?p.name:'?')+(c.roomId?' · '+roomName(p,c.roomId):'')};
 /* nome pelos inquilinos (e quarto, se houver) — para escolher o contrato */
@@ -186,13 +222,19 @@ const liveLoans=p=>loansOf(p).filter(l=>Number(l.outstanding)>0);
 const debtOf=p=>sum(liveLoans(p).map(l=>l.outstanding));
 const payOf=p=>sum(liveLoans(p).map(l=>loanCalc(l).total));
 // hipoteca com este id dentro do imóvel p; null se lá não estiver.
+// Recebe: p — o imóvel (objeto; aguenta null); id — o id da hipoteca.
+// Devolve: o objeto da hipoteca, ou null se lá não estiver.
 const findLoan=(p,id)=>loansOf(p).find(l=>l.id===id)||null;
-/* hipoteca por id, procurada em todos os imóveis */
+/* hipoteca por id, procurada em todos os imóveis
+   Recebe: id — o id da hipoteca.
+   Devolve: {p, l} — o imóvel e a hipoteca; null se não existir em lado nenhum. */
 function anyLoan(id){for(const p of db.properties){const l=findLoan(p,id);if(l)return{p,l}}return null}
 /* grupos de imóveis, proprietários ou contratos */
 const grp=id=>(db.groups||[]).find(g=>g.id===id);
 const grpsOf=kind=>(db.groups||[]).filter(g=>g.kind===kind);
-/* imóveis de um filtro: id de imóvel, 'g:ID' de grupo, ou vazio = âmbito atual */
+/* imóveis de um filtro: id de imóvel, 'g:ID' de grupo, ou vazio = âmbito atual
+   Recebe: pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio para o âmbito atual.
+   Devolve: os imóveis abrangidos pelo filtro (array de objetos). */
 function pidProps(pid){
   if(!pid)return scope();
   if(String(pid).startsWith('g:')){const g=grp(String(pid).slice(2));return g?g.ids.map(prop).filter(Boolean):[]}
@@ -207,9 +249,13 @@ const ownerNames=p=>(p.ownerIds||[]).map(owner).filter(Boolean).map(o=>o.name).j
    Cada movimento com "pago por" fica a crédito de quem pagou, e o custo divide-se
    em partes iguais pelos proprietários do imóvel. Receber uma renda é o inverso:
    quem recebeu passa a dever aos outros. Movimentos sem pagador indicado não
-   entram nestas contas — de outra forma inventavam-se dívidas. */
+   entram nestas contas — de outra forma inventavam-se dívidas.
+   Recebe: p — o imóvel (objeto).
+   Devolve: os ids dos proprietários do imóvel que têm ficha (array de strings). */
 function ownersOfProp(p){return (p.ownerIds||[]).filter(id=>owner(id))}
-/* quota-parte de cada proprietário (fração). Sem percentagens definidas: partes iguais. */
+/* quota-parte de cada proprietário (fração). Sem percentagens definidas: partes iguais.
+   Recebe: p — o imóvel (objeto; aguenta null).
+   Devolve: objeto {idDoDono: fração 0–1}; vazio se o imóvel não tiver donos com ficha. */
 function sharesOf(p){
   const os=ownersOfProp(p||{}),out={};if(!os.length)return out;
   const raw=(p&&p.ownerShares)||{};
@@ -224,12 +270,16 @@ function sharesOf(p){
   return out;
 }
 // quota-parte (fração 0–1) do proprietário oid no imóvel p; 0 se não for dono.
+// Recebe: p — o imóvel (objeto); oid — o id do proprietário.
+// Devolve: a fração 0–1 desse dono; 0 se não for dono.
 const shareOf=(p,oid)=>{const s=sharesOf(p);return s[oid]===undefined?0:s[oid]};
 const hasShares=p=>Object.keys((p&&p.ownerShares)||{}).length>0;
 /* fator a aplicar aos valores de um imóvel quando a vista está filtrada por proprietário */
 const sh=p=>(ownerFilter&&!ownerIsGrp()&&p)?shareOf(p,ownerFilter):1;
 const shareText=p=>ownerFilter?pct(sh(p),0):'';
-/* divide um total inteiro (cêntimos) pelas quotas, somando exatamente o total */
+/* divide um total inteiro (cêntimos) pelas quotas, somando exatamente o total
+   Recebe: total — o valor a dividir (inteiro, em cêntimos); shares — a fração de cada um (array de números).
+   Devolve: array de inteiros (cêntimos), pela mesma ordem de shares, cuja soma dá exatamente o total. */
 function splitShares(total,shares){
   const raw=shares.map(x=>total*x),out=raw.map(x=>Math.trunc(x));
   let rem=total-out.reduce((a,b)=>a+b,0);
@@ -240,7 +290,10 @@ function splitShares(total,shares){
 }
 /* quanto cabe a cada dono (cêntimos, positivos) num movimento, conforme o modo de divisão:
    quota (quota-parte), pct (percentagens próprias), amount (valores certos) ou adjust
-   (ajustes individuais; o resto pelas quotas) */
+   (ajustes individuais; o resto pelas quotas)
+   Recebe: t — o movimento (objeto; usa t.amount e t.split); p — o imóvel (objeto; pode ser null
+   e, sem quotas, a divisão cai em partes iguais); os — os ids dos donos (array de strings).
+   Devolve: array de cêntimos (inteiros, positivos) por dono, pela ordem de os. */
 function txSplitCents(t,p,os){
   const total=Math.abs(Math.round((Number(t.amount)||0)*100));
   const shares=sharesOf(p),fr=os.map(o=>shares[o]||0);
@@ -263,7 +316,9 @@ function txSplitCents(t,p,os){
   }
   return splitShares(total,sum(fr)>0?fr:eq);
 }
-/* fração de um movimento que cabe a um dono (para a vista filtrada por proprietário) */
+/* fração de um movimento que cabe a um dono (para a vista filtrada por proprietário)
+   Recebe: t — o movimento (objeto); oid — o id do proprietário.
+   Devolve: a fração 0–1 do valor do movimento que cabe a esse dono; 0 se não for dono do imóvel. */
 function txOwnerFrac(t,oid){
   const p=prop(t.propertyId);if(!p)return 0;
   const os=ownersOfProp(p);if(os.indexOf(oid)<0)return 0;
@@ -272,13 +327,18 @@ function txOwnerFrac(t,oid){
   return txSplitCents(t,p,os)[os.indexOf(oid)]/total;
 }
 const splitLabel=t=>({equal:'em partes iguais',pct:'por quotas a definir',percent:'por percentagem',amount:'por valor',adjust:'por ajuste'})[(t.split||{}).mode]||'';
-/* imóveis abrangidos por um movimento (o próprio, ou os do grupo) */
+/* imóveis abrangidos por um movimento (o próprio, ou os do grupo)
+   Recebe: t — o movimento (objeto; usa t.propertyId ou t.groupId).
+   Devolve: os imóveis abrangidos (array de objetos); vazio se não apontar a nenhum. */
 function txProps(t){
   if(t.propertyId){const p=prop(t.propertyId);return p?[p]:[]}
   if(t.groupId){const g=grp(t.groupId);return g?g.ids.map(prop).filter(Boolean):[]}
   return [];
 }
-/* divide o total (cêntimos) pelos imóveis do grupo, conforme o modo escolhido */
+/* divide o total (cêntimos) pelos imóveis do grupo, conforme o modo escolhido
+   Recebe: t — o movimento (objeto; usa t.psplit); ps — os imóveis do grupo (array de objetos);
+   total — o valor a dividir (inteiro, em cêntimos).
+   Devolve: array de cêntimos (inteiros) por imóvel, pela ordem de ps. */
 function psplitCents(t,ps,total){
   const sp=t.psplit||{},parts=sp.parts||{},get=p=>Math.max(0,Number(parts[p.id])||0);
   const eq=ps.map(()=>1/ps.length);
@@ -297,7 +357,9 @@ function psplitCents(t,ps,total){
     return c.map((x,i)=>x+rest[i]);}
   return splitShares(total,eq);
 }
-/* fração de um movimento que cabe a um imóvel */
+/* fração de um movimento que cabe a um imóvel
+   Recebe: t — o movimento (objeto); pid — o id do imóvel.
+   Devolve: a fração 0–1 do valor do movimento que cabe a esse imóvel. */
 function txPropShare(t,pid){
   if(t.propertyId)return t.propertyId===pid?1:0;
   if(!t.groupId)return 0;
@@ -306,7 +368,10 @@ function txPropShare(t,pid){
   if(!total)return 1/ps.length;
   return psplitCents(t,ps,total)[i]/total;
 }
-/* peso do movimento numa vista: por imóvel (pid) ou no âmbito atual */
+/* peso do movimento numa vista: por imóvel (pid) ou no âmbito atual
+   Recebe: t — o movimento (objeto); pid (opcional) — o id de um imóvel ou 'g:ID' de um grupo;
+   vazio vale o âmbito atual.
+   Devolve: número 0–1 — a fração do valor do movimento que conta nessa vista. */
 function txW(t,pid){
   if(String(pid||'').startsWith('g:'))return sum(pidProps(pid).map(p=>txW(t,p.id)));
   if(pid)return txPropShare(t,pid);
@@ -314,7 +379,9 @@ function txW(t,pid){
   if(t.groupId)return sum(txProps(t).filter(p=>inScope(p.id)).map(p=>txPropShare(t,p.id)));
   return ownerFilter?0:1;
 }
-/* donos (fichas) dos imóveis do grupo de um movimento, sem repetir */
+/* donos (fichas) dos imóveis do grupo de um movimento, sem repetir
+   Recebe: t — o movimento (objeto).
+   Devolve: as fichas dos proprietários (array de objetos), sem repetidos. */
 function txGroupOwners(t){
   const ids=[];txProps(t).forEach(p=>ownersOfProp(p).forEach(o=>{if(ids.indexOf(o)<0)ids.push(o)}));
   return ids.map(owner).filter(Boolean);
@@ -323,7 +390,10 @@ const psplitLabel=t=>({equal:'em partes iguais',value:'pelo valor de mercado',pu
 /* o que entra nas contas entre donos: receitas, despesas e prestações com pessoa indicada.
    Dívidas a terceiros (recebidas ou pagas) ficam de fora — são de quem as contraiu. */
 const countsBetweenOwners=t=>!!t.paidBy&&(t.kind==='income'||t.kind==='expense'||t.kind==='loan');
-/* efeito de cada movimento nos saldos (cêntimos por dono), para se poder conferir */
+/* efeito de cada movimento nos saldos (cêntimos por dono), para se poder conferir
+   Recebe: pid (opcional) — o id de um imóvel; vazio vale o âmbito atual.
+   Devolve: array de {t, p, os, eff}, ordenado por data — o movimento, o imóvel (ou só
+   {name:…} nos movimentos de grupo/globais), os ids dos donos e o efeito em cêntimos por dono. */
 function balanceLines(pid){
   const props=pid?[prop(pid)].filter(Boolean):scope(),out=[];
   props.forEach(p=>{
@@ -356,10 +426,13 @@ function balanceLines(pid){
 }
 let _detailPid=null;
 // se o modal "Como se chega aos saldos" estiver por cima, reabre-o para refletir dados frescos.
+// Devolve: nada — fecha e reabre o modal quando é ele que está por cima.
 function refreshDetail(){const t=modalTop();if(t&&t.title==='Como se chega aos saldos'){closeModal();balancesDetail(_detailPid)}}
 /* abre o modal "Como se chega aos saldos": cada movimento que conta, o efeito em
    cêntimos por dono e o saldo acumulado até aí. pid limita a um imóvel (vazio =
-   âmbito atual). Tocar num movimento abre-o para editar; sem movimentos, só avisa. */
+   âmbito atual). Tocar num movimento abre-o para editar; sem movimentos, só avisa.
+   Recebe: pid (opcional) — o id de um imóvel; vazio vale o âmbito atual.
+   Devolve: nada — abre o modal (ou mostra só um toast se não houver movimentos). */
 function balancesDetail(pid){
   _detailPid=pid||null;
   const lines=balanceLines(pid);
@@ -379,7 +452,9 @@ function balancesDetail(pid){
 /* saldos entre comproprietários, em euros por dono: quem pagou fica a crédito e a
    parte de cada um sai das quotas ou da divisão escolhida no movimento; as
    transferências acertam contas diretamente. pid limita a um imóvel; sem pid vale o
-   âmbito atual. Positivo é a receber, negativo a pagar. */
+   âmbito atual. Positivo é a receber, negativo a pagar.
+   Recebe: pid (opcional) — o id de um imóvel; vazio vale o âmbito atual.
+   Devolve: objeto {idDoDono: saldo em euros} — positivo a receber, negativo a pagar. */
 function ownerBalances(pid){
   const props=pid?[prop(pid)].filter(Boolean):scope(),cents={};
   props.forEach(p=>{
@@ -416,7 +491,9 @@ function ownerBalances(pid){
   const bal={};Object.keys(cents).forEach(k=>{bal[k]=cents[k]/100});
   return bal;
 }
-/* menor número de transferências que zera os saldos */
+/* menor número de transferências que zera os saldos
+   Recebe: bal — os saldos por dono em euros (objeto {id: valor}, como o de ownerBalances).
+   Devolve: array de {from, to, amount} — quem paga, quem recebe e quanto (euros, 2 casas). */
 function settlePlan(bal){
   const cred=[],deb=[];
   Object.keys(bal).forEach(k=>{const v=bal[k];
@@ -437,27 +514,33 @@ const propDebt=pid=>debtTotal(ownerBalances(pid));
 
 let ownerFilter='',dashProp='';
 // o filtro de proprietário atual é um grupo ('g:ID')?
+// Devolve: true se o filtro atual for um grupo; false caso contrário.
 const ownerIsGrp=()=>String(ownerFilter||'').startsWith('g:');
 // ids de proprietário abrangidos pelo filtro atual: vazio sem filtro, os do grupo, ou só o escolhido.
+// Devolve: os ids abrangidos (array de strings); vazio sem filtro.
 function ownerFilterIds(){
   if(!ownerFilter)return [];
   if(ownerIsGrp()){const g=grp(ownerFilter.slice(2));return g?g.ids:[]}
   return [ownerFilter];
 }
 // nome a mostrar do filtro de proprietário atual (pessoa ou grupo); vazio sem filtro.
+// Devolve: o nome a mostrar (string); vazia sem filtro ou se a ficha já não existir.
 function ownerFilterName(){
   if(!ownerFilter)return '';
   if(ownerIsGrp()){const g=grp(ownerFilter.slice(2));return g?g.name:''}
   return (owner(ownerFilter)||{}).name||'';
 }
 /* imóveis da vista atual: todos sem filtro de proprietário; com filtro, os que
-   pertencem a quem foi escolhido (e, para uma pessoa, só onde a quota é > 0). */
+   pertencem a quem foi escolhido (e, para uma pessoa, só onde a quota é > 0).
+   Devolve: os imóveis da vista atual (array de objetos). */
 const scope=()=>{if(!ownerFilter)return db.properties;const ids=ownerFilterIds();
   return db.properties.filter(p=>(p.ownerIds||[]).some(o=>ids.indexOf(o)>-1)&&(ownerIsGrp()||shareOf(p,ownerFilter)>0))};
 const inScope=pid=>!ownerFilter||scope().some(p=>p.id===pid);
 
 /* estado de ocupação de um imóvel, para cartões e filtros: devolve {key,label,badge}
-   — uso próprio, vago, parcial ("2/3 quartos", no modo de quartos) ou arrendado. */
+   — uso próprio, vago, parcial ("2/3 quartos", no modo de quartos) ou arrendado.
+   Recebe: p — o imóvel (objeto).
+   Devolve: {key, label, badge} — a chave do estado, o texto a mostrar e a cor do selo. */
 function propStatus(p){
   if(p.use==='proprio')return{key:'proprio',label:'Uso próprio',badge:'grey'};
   const ac=activeContracts(p.id);
@@ -473,7 +556,9 @@ const isRented=p=>['arrendado','parcial'].indexOf(propStatus(p).key)>-1;
 
 /* número escrito à mão → Number: ignora símbolos e decide se as vírgulas e os
    pontos são decimais ou separadores de milhares. Devolve 0 quando não percebe —
-   nunca NaN, para as somas não se estragarem. */
+   nunca NaN, para as somas não se estragarem.
+   Recebe: s — o número escrito à mão (texto; um número a sério passa tal e qual).
+   Devolve: o valor como Number; 0 quando não percebe. */
 function num(s){
   if(typeof s==='number')return s;
   let t=String(s??'').replace(/[^0-9,.\-]/g,'');
@@ -489,7 +574,10 @@ function num(s){
    512,74 € aparecia «513 €» num cartão e «512,74 €» no movimento ao lado */
 const euroS=v=>Math.round(v*100)%100?euro2(v):euro(v);
 /* op: {rotulo, fn, ms} poe um botao no toast — e a peca que faz o Anular
-   possivel. Sem op, comporta-se exatamente como sempre. */
+   possivel. Sem op, comporta-se exatamente como sempre.
+   Recebe: m — a mensagem a mostrar (texto); op (opcional) — {rotulo, fn, ms}: o texto do botão,
+   o que ele faz ao ser tocado e quanto tempo o aviso fica no ecrã (ms; 2800 por omissão).
+   Devolve: nada — mostra o aviso no fundo do ecrã. */
 function toast(m,op){const t=document.getElementById('toast');
   t.textContent=m;
   if(op&&op.rotulo&&op.fn){const b=document.createElement('button');b.type='button';b.className='toastbtn';
@@ -509,15 +597,23 @@ const txNewWord=k=>(k==='loan'?'Novo ':'Nova ');
 const flowOf=k=>(KIND[k]||KIND.expense).flow;
 const isIn=k=>flowOf(k)==='in',isOut=k=>flowOf(k)==='out';
 // árvore de categorias das despesas e pagamentos: a das definições, ou a de fábrica.
+// Devolve: a árvore (objeto {categoria: [subcategorias]}).
 const cats=()=>db.settings.cats||CATS0;
 // árvore de categorias das receitas: a das definições, ou a de fábrica.
+// Devolve: a árvore (objeto {categoria: [subcategorias]}).
 const catsIn=()=>db.settings.catsIn||CATS_IN0;
 /* árvore de categorias de um tipo de movimento: receitas ou pagamentos (acertos não têm) */
 const treeKey=k=>k==='settle'?'':(isIn(k)?'catsIn':'cats');
 const catsFor=k=>{const t=treeKey(k);return t?db.settings[t]:null};
-/* categorias/subcategorias podem ficar fora dos totais de receitas e despesas */
+/* categorias/subcategorias podem ficar fora dos totais de receitas e despesas
+   Recebe: tk — a chave da árvore ('cats' ou 'catsIn'); cat — o nome da categoria;
+   sub (opcional) — a subcategoria.
+   Devolve: a chave da exclusão (string), ex.: "cats:Obras" ou "cats:Obras/Pinturas". */
 const excKey=(tk,cat,sub)=>tk+':'+cat+(sub?'/'+sub:'');
 // esta categoria (ou a subcategoria, se dada) está excluída dos totais deste tipo de movimento?
+// Recebe: kind — o tipo do movimento (ex.: 'income', 'expense'); cat — a categoria;
+// sub (opcional) — a subcategoria.
+// Devolve: true se estiver excluída dos totais; false caso contrário.
 function isExc(kind,cat,sub){
   if(!cat)return false;
   const e=(db.settings||{}).exclude||{},tk=treeKey(kind);
@@ -525,19 +621,26 @@ function isExc(kind,cat,sub){
 }
 // liga/desliga a exclusão de uma categoria dos totais; tk é a chave da árvore
 // ('cats' ou 'catsIn'), não o tipo do movimento. Grava e volta a desenhar tudo.
+// Recebe: tk — a chave da árvore ('cats' ou 'catsIn'); cat — a categoria; sub (opcional) — a subcategoria.
+// Devolve: nada — grava a alteração e volta a desenhar a vista.
 function toggleExc(tk,cat,sub){
   const e=db.settings.exclude=db.settings.exclude||{},k=excKey(tk,cat,sub||null);
   if(e[k])delete e[k];else e[k]=true;
   save();render();
 }
 const countsInTotals=t=>!((t.kind==='income'||t.kind==='expense')&&isExc(t.kind,t.category,t.sub));
-/* todas as categorias conhecidas, para o filtro (sem repetir) */
+/* todas as categorias conhecidas, para o filtro (sem repetir)
+   Recebe: kind (opcional) — o tipo de movimento; vazio junta receitas e despesas.
+   Devolve: a árvore (objeto {categoria: [subcategorias]}), sem repetidos. */
 function allCats(kind){
   if(kind)return catsFor(kind)||{};
   const out={};[catsIn(),cats()].forEach(tr=>Object.keys(tr).forEach(k=>{out[k]=(out[k]||[]).concat(tr[k].filter(x=>(out[k]||[]).indexOf(x)<0))}));
   return out;
 }
-/* de quem se recebeu / a quem se pagou uma dívida a terceiros, com o que falta devolver */
+/* de quem se recebeu / a quem se pagou uma dívida a terceiros, com o que falta devolver
+   Recebe: pid (opcional) — o id de um imóvel; vazio vale o âmbito atual.
+   Devolve: array de {creditor, propertyId, received, repaid, due} — valores em euros,
+   do maior "due" (o que falta devolver) para o menor. */
 function creditorBalances(pid){
   const map={};
   db.transactions.filter(t=>(t.kind==='owed'||t.kind==='repay')&&(pid?t.propertyId===pid:inScope(t.propertyId))).forEach(t=>{
@@ -548,6 +651,7 @@ function creditorBalances(pid){
   return Object.keys(map).map(k=>map[k]).map(e=>Object.assign(e,{due:Math.round((e.received-e.repaid)*100)/100})).sort((a,b)=>b.due-a.due);
 }
 // credores já escritos nos movimentos, sem repetir e por ordem — para sugerir ao preencher.
+// Devolve: os nomes dos credores (array de strings), sem repetidos e por ordem alfabética.
 const knownCreditors=()=>[...new Set(db.transactions.map(t=>(t.creditor||'').trim()).filter(Boolean))].sort();
 const RATE={fixa:'Taxa fixa',mista:'Taxa mista',variavel:'Taxa variável'};
 const GENDER=[['','—'],['f','Feminino'],['m','Masculino']];
@@ -558,6 +662,8 @@ const PAL=PAL_LIGHT.slice();
 
 // ícone SVG inline pelo nome n, com s px de lado (20 por omissão);
 // o traço herda a cor do texto onde for colado (currentColor).
+// Recebe: n — o nome do ícone (ex.: 'home', 'trash'); s (opcional) — o lado em px (20 por omissão).
+// Devolve: o SVG inline (string HTML); um SVG sem traços se o nome não existir.
 function ic(n,s){s=s||20;const I={
   shield:'<path d="M12 3l7 2.6v5.2c0 4.6-3 8.4-7 10.2-4-1.8-7-5.6-7-10.2V5.6z"/><path d="M9 11.5l2 2 4-4"/>',
   home:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-5h5v5"/>',
@@ -599,7 +705,8 @@ return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke
 
 /* ================= ÁREA SEGURA ================= */
 /* O wrapper Android injeta os valores exatos. Fora dele, medimos o env() e,
-   se der zero num ecrã sem barra do browser, assumimos uma barra de estado. */
+   se der zero num ecrã sem barra do browser, assumimos uma barra de estado.
+   Devolve: nada — quando é preciso, escreve a variável CSS --inset-top no <html>. */
 function fitInsets(){
   const el=document.documentElement;
   if(window.__nativeInsets)return;
@@ -615,7 +722,9 @@ function fitInsets(){
   if(full)el.style.setProperty('--inset-top','28px');
 }
 /* chamada pelo wrapper Android com as margens exatas da área segura (px); passa-as
-   às variáveis CSS e marca-as como nativas, para o fitInsets deixar de adivinhar. */
+   às variáveis CSS e marca-as como nativas, para o fitInsets deixar de adivinhar.
+   Recebe: t — a margem de topo (número, px); b — a de fundo; l — a da esquerda; r — a da direita.
+   Devolve: nada — escreve as variáveis CSS --inset-* no <html>. */
 window.__setInsets=function(t,b,l,r){
   window.__nativeInsets=1;
   const s=document.documentElement.style;
@@ -631,6 +740,7 @@ window.__setInsets=function(t,b,l,r){
 let _mq=null;
 // a tal MediaQueryList do modo escuro, criada uma vez e reutilizada; se o matchMedia
 // falhar, devolve um substituto inerte para o resto do código não ter de testar.
+// Devolve: a MediaQueryList de '(prefers-color-scheme: dark)', ou o tal substituto inerte.
 const mq=()=>{
   if(_mq)return _mq;
   try{_mq=window.matchMedia('(prefers-color-scheme: dark)')}
@@ -638,11 +748,13 @@ const mq=()=>{
   return _mq;
 };
 // o tema efetivo é escuro? Sim com 'dark' explícito, ou em automático quando o sistema está escuro.
+// Devolve: true se o tema efetivo for escuro; false caso contrário.
 function isDark(){const t=db.settings.theme;return t==='dark'||(t!=='light'&&mq().matches)}
 /* aplica o tema efetivo à página: classe .dark no <html>, paleta dos gráficos
    trocada dentro do próprio array PAL (quem lhe guarda referência vê as cores
    novas), e meta theme-color / color-scheme atualizados — a razão de o modo
-   automático não fixar o color-scheme está na nota lá dentro. */
+   automático não fixar o color-scheme está na nota lá dentro.
+   Devolve: nada — aplica o tema à página (classe, paleta e metas). */
 function applyTheme(){
   const d=isDark();
   document.documentElement.classList.toggle('dark',d);
@@ -658,6 +770,8 @@ function applyTheme(){
   try{document.documentElement.style.colorScheme=esq}catch(e){}
 }
 // escolhe o tema ('light', 'dark' ou 'auto'), grava nas definições e aplica já.
+// Recebe: t — o tema a usar: 'light', 'dark' ou 'auto'.
+// Devolve: nada — grava nas definições, aplica o tema e redesenha a vista.
 function setTheme(t){db.settings.theme=t;save();applyTheme();render()}
 /* o Safari so ganhou addEventListener em MediaQueryList na versao 14: sem o
    addListener antigo, os iPhones mais velhos nunca sabiam da mudanca */

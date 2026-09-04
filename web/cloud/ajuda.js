@@ -12,6 +12,7 @@ CW.tickets = null;
 
 // Vai buscar os pedidos do utilizador à API; quando chegam, repinta a página
 // de Ajuda se ela estiver à vista. Se a rede falhar, fica uma lista vazia.
+// Devolve: nada — enche CW.tickets e repinta a Ajuda quando a resposta chegar.
 function loadTickets() {
   api('GET', '/api/tickets')
     .then(function (r) { CW.tickets = r.tickets || []; if (tab === 'settings' && setPage === 'ajuda') render(); })
@@ -21,7 +22,8 @@ function loadTickets() {
 /* A página "Ajuda e sugestões": botões para reportar problema ou sugerir
    melhoria, os pedidos em curso e os concluídos (com estado e resposta da
    equipa), e a lista de tutoriais. À primeira passagem dispara o loadTickets
-   e repinta quando os pedidos chegarem. */
+   e repinta quando os pedidos chegarem.
+   Devolve: o HTML da página, como string. */
 function vAjuda() {
   if (CW.tickets === null) { loadTickets(); }
   var t = CW.tickets || [];
@@ -59,7 +61,9 @@ function vAjuda() {
 
 /* Os tutoriais listados um a um: quem precisa de um não devia ter de esperar
    que a app lho ofereça na vista geral, nem de dispensar o cartão dos
-   primeiros passos para nunca mais lá chegar. */
+   primeiros passos para nunca mais lá chegar.
+   Devolve: o HTML da secção "Como se faz", como string — vazia se não houver
+   tutoriais. */
 function tutoriaisNaAjuda() {
   if (typeof CW.listaDeTutoriais !== 'function') return '';
   var ts = CW.listaDeTutoriais();
@@ -77,6 +81,8 @@ function tutoriaisNaAjuda() {
 }
 
 // Abre o modal de novo pedido; kind ('problema' ou 'sugestao') só muda os textos.
+// Recebe: kind — 'problema' ou 'sugestao', o tipo de pedido.
+// Devolve: nada — abre o modal.
 CW.newTicket = function (kind) {
   var problema = kind === 'problema';
   var body = '<div class="form">' +
@@ -95,7 +101,9 @@ CW.newTicket = function (kind) {
 
 /* Valida e envia o pedido escrito no modal, juntando a versão e o user agent
    (os dados do utilizador não vão). Com sucesso fecha o modal e recarrega a
-   lista; o erro fica escrito dentro do próprio modal. */
+   lista; o erro fica escrito dentro do próprio modal.
+   Recebe: kind — 'problema' ou 'sugestao', o tipo que segue para a API.
+   Devolve: nada — envia o pedido e fecha o modal quando corre bem. */
 CW.sendTicket = function (kind) {
   var e = document.getElementById('tk_e');
   e.textContent = '';
@@ -120,6 +128,9 @@ var errVistos = {};
 // Envia um relato de erro para a API: mensagem, detalhe (stack), versão, ecrã
 // e user agent. No máximo 8 por sessão e cada mensagem conta uma vez; falhas
 // no envio são silenciosas — não há para onde reportar o próprio relato.
+// Recebe: msg — a mensagem do erro (qualquer valor; é convertido em texto);
+// detail — o detalhe (stack e afins, também vira texto; pode vir vazio).
+// Devolve: nada — envia o relato à API, ou desiste em silêncio.
 function reportErr(msg, detail) {
   if (errCount >= 8) return;
   // o mesmo erro em ciclo conta uma vez: um requestAnimationFrame partido
@@ -141,6 +152,7 @@ function reportErr(msg, detail) {
 }
 // em que ecrã estava a pessoa: ajuda a reproduzir, e `tab` pode ainda não
 // existir se o erro for cedo
+// Devolve: o nome do ecrã atual, como string — 'arranque' se `tab` ainda não existir.
 function ondeEstava() {
   try { return String(tab); } catch (e) { return 'arranque'; }
 }
@@ -164,6 +176,8 @@ window.addEventListener('unhandledrejection', function (e) {
 
 // Embrulha um documento legal (Termos ou Privacidade) num cartão de leitura
 // com botão para voltar à página legal das Definições.
+// Recebe: html — o corpo do documento, já em HTML.
+// Devolve: o HTML do cartão com o documento e o botão de voltar, como string.
 function vDoc(html) {
   return '<div class="card"><div class="lg">' + html + '</div></div>' +
     '<div class="toolbar" style="margin-top:14px">' +
@@ -174,6 +188,7 @@ var LEGAL_UPDATED = '2 de setembro de 2026';
 
 // O aviso prático não repete os documentos: os Termos e a Política dizem-no
 // com valor legal, aqui fica só o essencial.
+// Devolve: o HTML da página legal das Definições, como string.
 function vLegal() {
   return navRow('Termos e Condições', 'Em vigor desde ' + L.version, 'contract', 'termos') +
     '<div style="height:10px"></div>' +
@@ -194,7 +209,8 @@ function vLegal() {
 
 /* O aviso completo de antes de haver Termos e Condições: garantias, cópias,
    dados de terceiros, segurança e responsabilidade, por extenso. Já nenhuma
-   página o mostra — o caminho em vigor é o vLegal com os documentos legais. */
+   página o mostra — o caminho em vigor é o vLegal com os documentos legais.
+   Devolve: o HTML do aviso completo, como string. */
 function vLegalAntigo() {
   var p = function (t) { return '<p style="margin:0 0 10px">' + t + '</p>'; };
   return card('Aviso completo', 'Lê antes de usares com dados reais',
@@ -264,6 +280,9 @@ function vLegalAntigo() {
    mostra-se o aviso e nada mais, até o utilizador continuar. */
 
 // trava a página por baixo enquanto um ecrã de entrada estiver aberto
+// Recebe: on — true trava o scroll; false destrava, mas só se já não houver
+// nenhum ecrã ou modal aberto por cima.
+// Devolve: nada — mexe nas classes e no estilo do documento.
 function lockScroll(on) {
   try {
     var h = document.documentElement;
@@ -291,6 +310,9 @@ function lockScroll(on) {
 
 // Os ecrãs de entrada (sessão, aviso, termos) vivem acima dos modais, por
 // isso o documento tem de abrir numa camada própria, por cima de tudo.
+// Recebe: e — o evento do clique, para o preventDefault (tolera null);
+// page — 'termos' ou 'privacidade', o documento a abrir.
+// Devolve: nada — monta a camada #cwDoc por cima de tudo e trava o scroll.
 CW.readDoc = function (e, page) {
   if (e && e.preventDefault) e.preventDefault();
   var doc = page === 'termos' ? L.termos : L.privacidade;
@@ -315,6 +337,7 @@ CW.readDoc = function (e, page) {
 };
 
 // Fecha a camada do documento aberta pelo CW.readDoc e devolve o scroll à página.
+// Devolve: nada — remove a camada #cwDoc e destrava o scroll.
 CW.closeDoc = function () {
   var el = document.getElementById('cwDoc');
   if (el) el.remove();
@@ -323,7 +346,8 @@ CW.closeDoc = function () {
 
 /* Ecrã bloqueante para quem aceitou uma versão antiga dos termos: deixa ler
    os documentos e só sai dali aceitando — ou recusando, o que apaga a conta
-   depois de mais uma confirmação. Se já estiver aberto, não duplica. */
+   depois de mais uma confirmação. Se já estiver aberto, não duplica.
+   Devolve: nada — monta o ecrã #cwTerms e trava o scroll. */
 function showTermsGate() {
   if (document.getElementById('cwTerms')) return;
   var el = document.createElement('div');
@@ -354,6 +378,7 @@ function showTermsGate() {
 
 // Regista a aceitação dos termos na API e fecha o ecrã bloqueante; se o
 // registo falhar, o erro aparece no próprio ecrã e ele fica aberto.
+// Devolve: nada — regista na API e fecha o ecrã quando corre bem.
 CW.acceptTerms = function () {
   api('POST', '/api/me/terms', { accept: true })
     .then(function () {
@@ -371,6 +396,7 @@ CW.acceptTerms = function () {
 
 // Modal de confirmação da recusa dos termos: avisa que apaga a conta e tudo o
 // que lá está, sugere exportar primeiro e exige escrever APAGAR.
+// Devolve: nada — abre o modal de confirmação.
 CW.refuseTerms = function () {
   var body = '<div class="form">' +
     '<div class="hint" style="color:var(--danger)"><b>A conta e todos os teus dados serão apagados.</b> ' +
@@ -386,7 +412,8 @@ CW.refuseTerms = function () {
 
 /* Consuma a recusa: a API apaga a conta no servidor (a palavra de confirmação
    é validada lá) e este aparelho fica limpo — dados locais, sessão e snapshots
-   — a terminar no ecrã de entrada. */
+   — a terminar no ecrã de entrada.
+   Devolve: nada — apaga a conta e deixa a app no ecrã de entrada. */
 CW.doRefuseTerms = function () {
   var e = document.getElementById('cw_ref_e');
   e.textContent = '';
@@ -416,6 +443,8 @@ var LS_GATE = 'gi_demo_visto';
 
 // Abre o aviso prático por cima da app, logo depois de haver sessão — uma vez
 // por aparelho e por versão dos documentos. Fica até se carregar num botão.
+// Devolve: nada — monta o ecrã #cwLegal e trava o scroll (ou não faz nada,
+// se já foi visto nesta versão ou não houver sessão).
 function showLegalGate() {
   if (!CW.user || CW._legalShown) return;
   var visto = null;
@@ -446,6 +475,8 @@ function showLegalGate() {
 
 // Fecha o aviso prático e marca-o como visto nesta versão; com `full`, segue
 // para a página legal das Definições, onde está o detalhe todo.
+// Recebe: full (opcional) — qualquer valor verdadeiro abre a página legal das Definições.
+// Devolve: nada — fecha o aviso e grava a versão vista no localStorage.
 CW.acceptLegal = function (full) {
   var el = document.getElementById('cwLegal');
   if (el) el.remove();
@@ -456,6 +487,7 @@ CW.acceptLegal = function (full) {
 
 // Copia o id do utilizador para a área de transferência, para o dar a quem se
 // quer conectar; o toast aparece na mesma quando o clipboard não existe.
+// Devolve: nada — copia o id e mostra o toast.
 CW.copyId = function () {
   var done = function () { toast('Id copiado: partilha-o com o outro utilizador.'); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(CW.user.id).then(done, done);
@@ -464,6 +496,7 @@ CW.copyId = function () {
 
 // Envia um convite de conexão para o id escrito no campo; fica pendente até o
 // outro utilizador aceitar do lado dele.
+// Devolve: nada — envia o convite à API, sincroniza e repinta.
 CW.addConn = function () {
   var id = (val('cw_peer') || '').trim().toUpperCase();
   if (!id) return toast('Escreve o id do outro utilizador.');
@@ -474,6 +507,8 @@ CW.addConn = function () {
 };
 
 // Aceita o convite de conexão id e sincroniza logo, para o que o outro já partilhou aparecer.
+// Recebe: id — o id da conexão (o convite), tal como vem da API.
+// Devolve: nada — aceita na API, sincroniza e repinta.
 CW.acceptConn = function (id) {
   api('POST', '/api/connections/' + id + '/accept')
     .then(function () { toast('Conexão aceite. Escolhe agora que casas queres partilhar.'); return pullNow(true); })
@@ -483,7 +518,10 @@ CW.acceptConn = function (id) {
 
 /* Remove uma conexão, ou retira um convite (isPending). Convites saem sem
    perguntar; conexões feitas pedem confirmação, porque ambos deixam de ver as
-   casas partilhadas do outro — os dados de cada um não se apagam. */
+   casas partilhadas do outro — os dados de cada um não se apagam.
+   Recebe: id — o id da conexão ou do convite; isPending — verdadeiro quando
+   ainda é só um convite (remove sem confirmar).
+   Devolve: nada — remove na API, sincroniza e repinta. */
 CW.delConn = function (id, isPending) {
   var doDel = function () {
     api('DELETE', '/api/connections/' + id)
@@ -497,7 +535,9 @@ CW.delConn = function (id, isPending) {
 
 /* Modal para escolher que casas se partilham com a conexão connId. Ao guardar
    envia a lista à API e, para cada casa partilhada pela primeira vez, abre de
-   seguida a proposta de divisão de quotas, uma de cada vez (fila _shareQueue). */
+   seguida a proposta de divisão de quotas, uma de cada vez (fila _shareQueue).
+   Recebe: connId — o id da conexão cujas partilhas se editam.
+   Devolve: nada — abre o modal; o guardar acontece no onSave. */
 CW.sharesModal = function (connId) {
   var c = (CW.state.connections || []).find(function (x) { return x.id === connId; });
   if (!c) return;
@@ -535,13 +575,15 @@ CW.sharesModal = function (connId) {
 };
 
 // Passa à casa seguinte na fila de propostas de quotas que o sharesModal deixou.
+// Devolve: nada — abre a proposta seguinte, se a houver.
 function nextShareProposal() {
   var nxt = (CW._shareQueue || []).shift();
   if (nxt) CW.proposeShares(nxt, true);
 }
 
 /* Modal de mudança de palavra-passe, com os requisitos a acenderem-se à
-   medida que se escreve. Quem entra com Google deixa o campo da atual vazio. */
+   medida que se escreve. Quem entra com Google deixa o campo da atual vazio.
+   Devolve: nada — abre o modal e liga os requisitos ao campo. */
 CW.passwordModal = function () {
   var body = '<div class="form">' +
     '<div class="hint">Ao mudar a palavra-passe, todos os outros aparelhos têm de iniciar sessão de novo. ' +
@@ -574,7 +616,8 @@ CW.passwordModal = function () {
 
 /* Valida a nova palavra-passe e envia a mudança à API; o servidor termina as
    sessões dos outros aparelhos e pode devolver um token novo para este, que
-   fica guardado. Os erros aparecem dentro do próprio modal. */
+   fica guardado. Os erros aparecem dentro do próprio modal.
+   Devolve: nada — envia a mudança à API e fecha o modal quando corre bem. */
 CW.savePassword = function () {
   var e = document.getElementById('cw_pw_err');
   e.textContent = '';
@@ -596,6 +639,7 @@ CW.savePassword = function () {
 
 // Depois de confirmado, termina a sessão em todos os outros aparelhos; este
 // continua ligado (guarda o token novo se o servidor o devolver).
+// Devolve: nada — pede confirmação e chama a API.
 CW.revokeSessions = function () {
   confirmModal('Terminar as outras sessões',
     'Todos os outros aparelhos onde tenhas a conta aberta passam a pedir início de sessão. Este continua ligado.',
@@ -614,6 +658,7 @@ CW.revokeSessions = function () {
 
 // Modal de confirmação para apagar a conta: diz quantos imóveis se perdem e
 // exige escrever APAGAR e a palavra-passe (vazia para quem entra com Google).
+// Devolve: nada — abre o modal de confirmação.
 CW.deleteAccount = function () {
   var mine = (db.properties || []).filter(function (p) { return !p._sharedFrom; }).length;
   var body = '<div class="form">' +
@@ -633,7 +678,9 @@ CW.deleteAccount = function () {
 /* Apaga a conta na API (confirmação e palavra-passe validadas lá) e limpa
    este aparelho — dados locais, sessão e snapshots — a acabar no ecrã de
    entrada. Numa conta de teste o servidor pode entregar logo a seguinte, e
-   nesse caso a app recarrega já com ela em vez de cair no login. */
+   nesse caso a app recarrega já com ela em vez de cair no login.
+   Devolve: nada — apaga a conta, limpa o aparelho e acaba no ecrã de
+   entrada (ou recarrega com a conta seguinte). */
 CW.doDeleteAccount = function () {
   var e = document.getElementById('cw_del_e');
   e.textContent = '';
@@ -669,6 +716,7 @@ CW.doDeleteAccount = function () {
 
 // Termina a sessão neste aparelho depois de confirmar: os dados ficam na
 // conta e a app volta ao ecrã de entrada, com a navegação reposta.
+// Devolve: nada — termina a sessão e volta ao ecrã de entrada.
 CW.logout = function () {
   confirmModal('Terminar sessão', 'Os dados continuam guardados na tua conta e voltam quando iniciares sessão.', function () {
     api('POST', '/api/auth/logout').catch(function () {});

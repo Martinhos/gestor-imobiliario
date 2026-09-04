@@ -35,6 +35,8 @@ if (!ficheiro) {
 
 // Um valor de coluna como literal SQL: NULL, número tal e qual, 0/1 para
 // booleanos, X'...' para blobs e texto entre plicas com as plicas dobradas.
+// Recebe: v — o valor da coluna (null/undefined, número, booleano, Buffer ou texto).
+// Devolve: o literal SQL correspondente (string), pronto a entrar no VALUES.
 const cita = (v) => {
   if (v === null || v === undefined) return 'NULL';
   if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'NULL';

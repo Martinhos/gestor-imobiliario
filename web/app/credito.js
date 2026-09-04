@@ -1,4 +1,7 @@
 /* ================= CRÉDITO ================= */
+// Recebe: l — o crédito (passa pelo normLoan); m — o mês do crédito, contado do início e a começar no 0.
+// Devolve: número — a taxa anual em percentagem que vigora nesse mês: a fixa,
+// a Euribor+spread nas variáveis, ou a fase certa nas mistas.
 function rateAt(l,m){
   l=normLoan(l);
   const vr=(Number(l.euribor)||0)+(Number(l.spread)||0);
@@ -7,7 +10,10 @@ function rateAt(l,m){
   return Number(l.rate)||0;
 }
 /* prestações já registadas deste crédito (amortizações antecipadas não contam):
-   encurtam o prazo restante e avançam a fase da taxa nas mistas */
+   encurtam o prazo restante e avançam a fase da taxa nas mistas
+   Recebe: l — o crédito, com id.
+   Devolve: número inteiro — quantas prestações deste crédito já estão nos
+   movimentos; 0 sem crédito ou sem dados. */
 function loanPaidN(l){
   if(!l||!l.id||!db||!db.transactions)return 0;
   return db.transactions.filter(t=>t.kind==='loan'&&t.loanId===l.id&&t.payType!=='amortizacao').length;
@@ -16,7 +22,11 @@ function loanPaidN(l){
    {rows,totInt,totStamp,n}, cada linha com taxa, prestação, juro, selo,
    capital e saldo. Desconta as prestações já registadas (encurtam o prazo e
    avançam a fase da taxa nas mistas) e recalcula a prestação sempre que a
-   taxa muda. Com maxMonths pára cedo — os totais ficam só até aí. */
+   taxa muda. Com maxMonths pára cedo — os totais ficam só até aí.
+   Recebe: l — o crédito; maxMonths (opcional) — número máximo de linhas a calcular.
+   Devolve: {rows,totInt,totStamp,n} — linhas {m,rate,pay,int,st,cap,bal} (m a
+   começar em 1, a taxa em %, o resto em euros), os totais de juro e selo até
+   onde calculou, e n o total de meses por pagar. */
 function amort(l,maxMonths){
   const ofs=Number(l._paidOfs)||0;
   const paid=Math.max(0,loanPaidN(l)+ofs);
@@ -36,6 +46,9 @@ function amort(l,maxMonths){
 }
 // A prestação deste mês, pronta a mostrar: a primeira linha da amortização,
 // como {base,interest,stamp,principal,total,rate,n} — o total já leva o selo.
+// Recebe: l — o crédito.
+// Devolve: {base,interest,stamp,principal,total,rate,n} — valores em euros, a
+// rate em % e n os meses por pagar.
 function loanCalc(l){
   const a=amort(l,1),r=a.rows[0]||{pay:0,int:0,st:0,cap:0};
   return {base:r.pay,interest:r.int,stamp:r.st,principal:r.cap,total:r.pay+r.st,rate:rateAt(l,0),n:a.n};
@@ -43,6 +56,8 @@ function loanCalc(l){
 const loanCost=l=>{const a=amort(l);return a.totInt+a.totStamp};
 // A taxa em palavras, para as listas: "fixa X%", a Euribor com o spread e a
 // soma, ou as duas fases da mista.
+// Recebe: l — o crédito.
+// Devolve: string com a taxa por extenso, conforme o tipo.
 function rateLabel(l){
   if(l.type==='fixa')return `fixa ${dec(l.rate)}%`;
   if(l.type==='variavel')return `Euribor ${l.index} ${dec(l.euribor)}% + ${dec(l.spread)}% = ${dec(rateAt(l,0))}%`;

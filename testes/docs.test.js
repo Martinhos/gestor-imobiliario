@@ -32,6 +32,13 @@ describe('gerar-docs', () => {
     const arm = DOCS.capitulos.find((c) => c.id === 'armadilhas');
     assert.ok(arm.itens[0].funcoes.length >= 8, 'as armadilhas estao la');
     assert.match(DOCS.comandos.find((c) => c.nome === 'access').quem, /master/, 'as permissoes vieram do worker');
+    // cada comando traz o guia (o que acontece) e as opcoes com tipo
+    assert.ok(DOCS.comandos.every((c) => c.oQueFaz && c.oQueFaz.length > 40), 'todos os comandos explicam o que acontece');
+    const t = DOCS.comandos.find((c) => c.nome === 'test');
+    assert.equal(t.opcoes.length, 4, 'o /test traz as 4 opcoes');
+    assert.ok(t.opcoes.some((o) => o.nome === 'limpar' && o.tipo === 'sim/não'), 'opcoes com nome e tipo');
+    const cat = DOCS.comandos.find((c) => c.nome === 'pedidos').opcoes.find((o) => o.nome === 'categoria');
+    assert.ok(cat.escolhas.length >= 4, 'as escolhas vem com a opcao');
 
     const { paginaDocs } = await import('../worker/src/docs-vista.js');
     const html = await new Response(paginaDocs().body).text();

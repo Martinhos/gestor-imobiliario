@@ -1,6 +1,9 @@
 /* ================= GRÁFICOS ================= */
 const W=360;
-/* dica interativa: funciona a toque e a rato */
+/* dica interativa: funciona a toque e a rato
+   Recebe: e — o evento de rato ou de toque, de onde saem as coordenadas (pode
+   faltar: a dica cai então a meio do ecrã); txt — o texto a mostrar.
+   Devolve: nada — mostra a dica por cima da página durante ~2 segundos. */
 function chartTip(e,txt){
   const t=document.getElementById('tip');if(!t)return;
   t.textContent=txt;t.classList.add('on');
@@ -16,7 +19,10 @@ function chartTip(e,txt){
   if(e&&e.stopPropagation)e.stopPropagation();
 }
 const hit=txt=>{const j=jsq(txt);return `onclick="chartTip(event,'${j}')" onmouseenter="chartTip(event,'${j}')" style="cursor:pointer"`};
-/* mostra no máximo ~13 etiquetas para não ficarem ilegíveis */
+/* mostra no máximo ~13 etiquetas para não ficarem ilegíveis
+   Recebe: labels — array das etiquetas (strings) do eixo X.
+   Devolve: novo array do mesmo tamanho, com '' nas posições que se escondem
+   (alinhado ao fim: a última etiqueta aparece sempre). */
 function thinLabels(labels){
   const n=labels.length,step=Math.ceil(n/13);
   if(step<=1)return labels.slice();
@@ -24,7 +30,11 @@ function thinLabels(labels){
 }
 const kfmt=v=>Math.abs(v)>=1000?(v/1000).toFixed(Math.abs(v)>=10000?0:1).replace('.',',')+'k':String(Math.round(v));
 // Grelha e valores do eixo Y: 5 marcas de min a max, formatadas com fmt (ou kfmt).
-// Devolve o fragmento SVG que os gráficos de linhas e de barras partilham.
+// Recebe: min, max — os valores dos extremos do eixo; x0, x1 — os limites
+// horizontais da área do gráfico (unidades do viewBox); y0, y1 — os verticais
+// (y0 em cima, y1 na base); fmt (opcional) — função que formata cada valor
+// (sem ela usa-se kfmt).
+// Devolve: o fragmento SVG (string) que os gráficos de linhas e de barras partilham.
 function axisY(min,max,x0,x1,y0,y1,fmt){
   let g='';
   for(let k=0;k<=4;k++){const v=min+(max-min)*k/4,y=y1-(y1-y0)*k/4;
@@ -35,8 +45,12 @@ function axisY(min,max,x0,x1,y0,y1,fmt){
 /* Gráfico de linhas com área sombreada e dica em cada ponto. series=[{name,values,color}],
    labels no eixo X; o: h (altura), fmt (formatação dos valores, por omissão euro),
    area:false tira o sombreado, marks=[{i,label}] põe linhas verticais de referência.
-   Substitui valores não finitos por 0 (mexe nos arrays recebidos). Devolve HTML pronto
-   a inserir; com mais de uma série acrescenta a legenda por baixo. */
+   Substitui valores não finitos por 0 (mexe nos arrays recebidos).
+   Recebe: series — array de séries {name, values, color} (values em números;
+   color opcional, sai da paleta); labels — etiquetas do eixo X, uma por ponto;
+   o (opcional) — as opções h, fmt, area e marks descritas acima.
+   Devolve: HTML pronto a inserir; com mais de uma série acrescenta a legenda
+   por baixo. */
 function cLine(series,labels,o){
   o=o||{};const h=o.h||180,x0=44,x1=W-6,y0=10,y1=h-8,F=o.fmt||euro;
   series.forEach(s=>{s.values=s.values.map(v=>isFinite(v)?v:0)});
@@ -75,7 +89,10 @@ function cLine(series,labels,o){
 }
 /* Barras empilhadas: cada grupo é um array de segmentos {label,value,color}, com os
    positivos a empilhar para cima e os negativos para baixo (rendas contra despesas).
-   Devolve HTML; a legenda junta-se a partir das etiquetas que aparecem nos segmentos. */
+   Recebe: groups — array de grupos, cada um o tal array de segmentos {label,
+   value, color} (value em euros; negativo empilha para baixo); labels —
+   etiquetas do eixo X, uma por grupo; o (opcional) — h é a altura do gráfico.
+   Devolve: HTML; a legenda junta-se a partir das etiquetas que aparecem nos segmentos. */
 function cBars(groups,labels,o){
   o=o||{};const h=o.h||190,x0=44,x1=W-6,y0=10,y1=h-8;
   const tops=groups.map(g=>sum(g.filter(v=>v.value>0).map(v=>v.value)));
@@ -106,7 +123,10 @@ function cBars(groups,labels,o){
 /* Anel de proporções com o total ao centro. items=[{label,value,color}] — valores ≤ 0
    ficam de fora. o: center substitui o texto central, sub é a linha pequena por baixo,
    onPick é o nome de uma função global chamada com a etiqueta da fatia (ou da legenda)
-   em que se toca. Devolve HTML com a legenda ao lado; "Sem dados." quando o total é zero. */
+   em que se toca.
+   Recebe: items — array de fatias {label, value, color} (value numérico; color
+   opcional, sai da paleta); o (opcional) — as opções center, sub e onPick acima.
+   Devolve: HTML com a legenda ao lado; "Sem dados." quando o total é zero. */
 function cDonut(items,o){
   o=o||{};const S=150,th=26,r=(S-th)/2,c=S/2;
   items=items.filter(i=>i.value>0);
@@ -131,6 +151,9 @@ function cDonut(items,o){
 }
 // Barras horizontais em HTML puro (sem SVG): uma linha por item, com a largura
 // proporcional ao maior valor absoluto e os negativos a vermelho. o.fmt formata os valores.
+// Recebe: items — array de {label, value, color} (value numérico; color opcional);
+// o (opcional) — fmt é a função que formata os valores (por omissão euro).
+// Devolve: HTML (string) com as barras — ou "Sem dados." se a lista vier vazia.
 function cHBars(items,o){
   o=o||{};if(!items.length)return `<div class="hint">Sem dados.</div>`;
   const max=Math.max(...items.map(i=>Math.abs(i.value)))||1;
@@ -142,6 +165,10 @@ function cHBars(items,o){
       <i style="display:block;height:100%;width:${(Math.abs(it.value)/max*100).toFixed(1)}%;background:${col};border-radius:99px"></i></div></div>`}).join('')}</div>`;
 }
 // Legenda com bolinha de cor. withVal acrescenta valor e percentagem; itens com "act" ficam clicáveis.
+// Recebe: items — array de {label, color} e, conforme o caso, value (texto já
+// formatado), extra (a percentagem) e act (o código a correr ao tocar);
+// withVal — verdadeiro para mostrar value e extra.
+// Devolve: HTML (string) da legenda.
 function legend(items,withVal){
   return `<div class="legend">${items.map(i=>`<div class="li ${i.act?'tap':''}" ${i.act?`onclick="${i.act}"`:''}><span class="dot" style="background:${i.color}"></span>
     <span class="nm">${esc(i.label)}</span>${withVal?`<span class="vl">${i.value||''}</span>${i.extra?`<span class="small" style="min-width:38px;text-align:right">${i.extra}</span>`:''}`:''}</div>`).join('')}</div>`;

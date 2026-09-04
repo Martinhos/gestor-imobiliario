@@ -7,7 +7,12 @@ import { now } from './http.js';
    passar, false é para responder 429. A janela é fixa — windowSec segundos a
    contar do primeiro acontecimento — e cada chamada gasta uma escrita na D1.
    Se a base falhar, deixa passar: um contador em baixo não pode deitar o
-   serviço abaixo. */
+   serviço abaixo.
+   Recebe: env — o ambiente do worker (D1 em env.DB); key — a chave do
+   contador (ex.: 'login:' + ip); limit — o máximo de acontecimentos na
+   janela; windowSec — a janela em segundos, a contar do primeiro.
+   Devolve: true se ainda cabe (ou se a base falhou), false quando o limite
+   foi atingido — é para responder 429. */
 export async function rateLimit(env, key, limit, windowSec) {
   const t = now();
   try {

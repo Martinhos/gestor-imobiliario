@@ -10,7 +10,9 @@
 /* Prende a lista ao botão em position:fixed, por baixo ou por cima conforme
    o espaço que houver no ecrã (a altura fica entre 150 e 340px), e marca-a
    com data-float para o popRelease saber o que desfazer. Mede o .selbtn
-   irmão; sem ele não mexe em nada. */
+   irmão; sem ele não mexe em nada.
+   Recebe: pop — o elemento .selpop da lista a ancorar.
+   Devolve: nada — aplica os estilos inline e marca o data-float. */
 function popAnchor(pop) {
   var btn = pop.parentNode && pop.parentNode.querySelector('.selbtn');
   if (!btn) return;
@@ -30,6 +32,8 @@ function popAnchor(pop) {
 
 // Desfaz o que o popAnchor pôs — os estilos inline e o data-float. Nas
 // listas que nunca flutuaram não toca.
+// Recebe: pop — o elemento .selpop a soltar.
+// Devolve: nada — limpa os estilos inline e tira o data-float.
 function popRelease(pop) {
   if (!pop.getAttribute('data-float')) return;
   ['position', 'left', 'width', 'right', 'top', 'bottom', 'maxHeight', 'zIndex'].forEach(function (k) {
@@ -40,6 +44,7 @@ function popRelease(pop) {
 
 // Solta todas as listas flutuantes que entretanto fecharam; as ainda
 // abertas ficam ancoradas onde estão.
+// Devolve: nada — solta as que já não estão abertas.
 function releaseAll() {
   [].slice.call(document.querySelectorAll('.selpop[data-float]')).forEach(function (p) {
     if (!p.classList.contains('on')) popRelease(p);

@@ -18,12 +18,18 @@ if (!APP || !TOKEN) {
 
 // GET à API do Discord com o token do bot. Devolve {ok, estado, corpo} com
 // o corpo em texto cru — em erro é isso mesmo que se quer mostrar.
+// Recebe: url — o endereço da API do Discord a consultar.
+// Devolve: promessa de { ok, estado, corpo } — se a resposta foi 2xx, o
+// status HTTP e o corpo em texto cru.
 const pedir = (url) =>
   fetch(url, { headers: { Authorization: 'Bot ' + TOKEN } })
     .then(async (r) => ({ ok: r.ok, estado: r.status, corpo: await r.text() }));
 
 // Imprime a lista de comandos de uma resposta do pedir e devolve os nomes,
 // para se poderem comparar servidor e globais. Em erro diz o que veio e devolve [].
+// Recebe: titulo — o cabeçalho a imprimir antes da lista; r — a resposta do
+// pedir ({ ok, estado, corpo }).
+// Devolve: os nomes dos comandos (array de strings); [] em erro ou sem nenhum.
 function mostrar(titulo, r) {
   console.log('\n' + titulo);
   if (!r.ok) {

@@ -15,6 +15,11 @@ import { now } from './http.js';
 // Nunca lança: a auditoria não pode ser o motivo de uma ação falhar. Mas
 // também não engole em silêncio — devolve se escreveu, e quem chama uma
 // ação sensível pode recusar-se a agir sem rasto.
+// Recebe: env — o ambiente do worker (D1 em env.DB); eu — quem age (objeto
+// com discordId, nome e papeis ou papel); acao — o que fez (string curta);
+// alvo (opcional) — sobre quem ou o quê; detalhe (opcional) — texto livre,
+// cortado a 500 caracteres.
+// Devolve: true se a linha ficou escrita, false se a escrita falhou.
 export async function auditar(env, eu, acao, alvo, detalhe) {
   try {
     await env.DB.prepare(
@@ -37,6 +42,10 @@ export async function auditar(env, eu, acao, alvo, detalhe) {
 // Uma linha por execução de uma operação agendada (ou manual). A poda dos
 // registos velhos vai de caminho: 90 dias chegam para ver tendências, e uma
 // tabela de batimentos não pode crescer para sempre.
+// Recebe: env — o ambiente do worker (D1 em env.DB); op — o nome da operação
+// ('copia', 'vigia', 'resumo', ...); ok — se correu bem (vira 1/0 na tabela);
+// detalhe (opcional) — texto livre, cortado a 500 caracteres.
+// Devolve: true se o batimento ficou registado, false se falhou.
 export async function registarOp(env, op, ok, detalhe) {
   try {
     const t = now();

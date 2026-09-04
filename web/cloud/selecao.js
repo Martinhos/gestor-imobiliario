@@ -23,6 +23,8 @@ var selTem = function (id) { return !!selIds[id]; };
 /* ------------------------------------------------------------- entrar e sair */
 
 // Entra em modo de seleção — opcionalmente já com um movimento marcado — e repinta a vista com as caixas.
+// Recebe: id (opcional) — o id do movimento a marcar logo à entrada.
+// Devolve: nada — redesenha a vista.
 CW.selEntrar = function (id) {
   CW.selMode = true;
   selIds = {};
@@ -30,12 +32,14 @@ CW.selEntrar = function (id) {
   render();
 };
 
-/* limpa o estado sem repintar: para quem já vai repintar por outra razão */
+/* limpa o estado sem repintar: para quem já vai repintar por outra razão
+   Devolve: nada — só limpa o estado da seleção. */
 CW.selReset = function () {
   CW.selMode = false;
   selIds = {};
 };
 // sai da seleção e repinta; o par do selReset, para quando ninguém mais vai repintar
+// Devolve: nada — redesenha a vista.
 CW.selSair = function () {
   CW.selMode = false;
   selIds = {};
@@ -43,7 +47,10 @@ CW.selSair = function () {
 };
 
 /* Marcar e desmarcar sem redesenhar a vista toda: numa lista longa, um
-   render() por cada toque numa caixa dava um salto a cada marca. */
+   render() por cada toque numa caixa dava um salto a cada marca.
+   Recebe: id — o id do movimento a marcar ou desmarcar; ev (opcional) — o
+   evento do toque, para lhe travar a propagação.
+   Devolve: nada — repinta só as marcas. */
 CW.selToggle = function (id, ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   if (selIds[id]) delete selIds[id]; else selIds[id] = 1;
@@ -51,7 +58,10 @@ CW.selToggle = function (id, ev) {
 };
 
 /* Marca ou desmarca um mês inteiro: se já estava todo marcado, limpa-o;
-   senão marca o que faltar. Só conta o que está visível (filtros incluídos). */
+   senão marca o que faltar. Só conta o que está visível (filtros incluídos).
+   Recebe: mo — o mês em "AAAA-MM"; ev (opcional) — o evento do toque, para lhe
+   travar a propagação.
+   Devolve: nada — repinta só as marcas. */
 CW.selMes = function (mo, ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   var ids = selIdsDoMes(mo);
@@ -61,6 +71,8 @@ CW.selMes = function (mo, ev) {
 };
 
 // como o selMes, mas para todas as linhas visíveis: tudo marcado limpa, senão marca o que falta
+// Recebe: ev (opcional) — o evento do toque, para lhe travar a propagação.
+// Devolve: nada — repinta só as marcas.
 CW.selTodos = function (ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   var ids = selIdsVisiveis();
@@ -70,17 +82,21 @@ CW.selTodos = function (ev) {
 };
 
 // os ids de todos os movimentos que a vista mostra neste momento (já com os filtros aplicados)
+// Devolve: array com os ids (strings) das linhas visíveis, lidos do DOM.
 function selIdsVisiveis() {
   return [].slice.call(document.querySelectorAll('#view .txrow[data-tx]'))
     .map(function (e) { return e.getAttribute('data-tx'); });
 }
 // os ids visíveis de um mês ("AAAA-MM"), lidos das próprias linhas no DOM
+// Recebe: mo — o mês em "AAAA-MM".
+// Devolve: array com os ids (strings) das linhas visíveis desse mês.
 function selIdsDoMes(mo) {
   return [].slice.call(document.querySelectorAll('#view .txrow[data-mes="' + mo + '"]'))
     .map(function (e) { return e.getAttribute('data-tx'); });
 }
 
 // Repõe as marcas e as contagens a partir do estado, sem redesenhar a vista.
+// Devolve: nada — mexe diretamente no DOM (caixas, contagem e cabeçalho).
 function selPintar() {
   [].slice.call(document.querySelectorAll('#view .txrow[data-tx]')).forEach(function (e) {
     var on = selTem(e.getAttribute('data-tx'));
@@ -103,6 +119,8 @@ function selPintar() {
 }
 
 // o HTML da caixa de marcar: cheia, vazia, ou a meio (parcial) com um traço
+// Recebe: marcada — true para a caixa cheia; parcial (opcional) — true para o traço a meio quando não está tudo marcado.
+// Devolve: string de HTML da caixa, pronta a inserir com innerHTML.
 function caixa(marcada, parcial) {
   if (marcada) {
     return '<span class="selck on">' + ic('check', 13) + '</span>';
@@ -201,6 +219,8 @@ vTransactions = function () {
 /* ------------------------------------------ o toque longo e o kebab da linha */
 
 // O kebab da linha: as opções de um movimento sozinho, mais a porta de entrada na seleção.
+// Recebe: id — o id do movimento da linha.
+// Devolve: nada — abre a folha de opções (lpShow); se o id não existir, não faz nada.
 CW.txOpcoes = function (id) {
   var t = (db.transactions || []).find(function (x) { return x.id === id; });
   if (!t) return;
@@ -223,7 +243,8 @@ lpMenu = function (v) {
 
 /* Veste o botão do cabeçalho para a seleção: passa a "⋯" (as ações da
    seleção), acende quando há marcas, e ganha um X ao lado para sair. Fora
-   da seleção só remove o X — o render normal repõe o resto. */
+   da seleção só remove o X — o render normal repõe o resto.
+   Devolve: nada — mexe diretamente no botão do cabeçalho, no DOM. */
 function patchHdrSel() {
   var hb = document.getElementById('hdrFilt');
   if (!hb) return;
@@ -255,6 +276,7 @@ hdrFiltToggle = function () {
 };
 
 // o menu do "⋯" do cabeçalho: editar ou eliminar a seleção (avisa se nada estiver marcado)
+// Devolve: nada — abre a folha de opções (lpShow), ou um toast se nada estiver marcado.
 CW.selAcoes = function () {
   var n = selN();
   if (!n) return toast('Marca pelo menos um movimento.');
@@ -268,7 +290,8 @@ CW.selAcoes = function () {
 
 /* Abre a janela de edição em massa: categoria, subcategoria e etiquetas.
    Só se aplica o que for preenchido — o resto de cada movimento fica como
-   está, e as etiquetas só se acrescentam. O Aplicar é o selGravar. */
+   está, e as etiquetas só se acrescentam. O Aplicar é o selGravar.
+   Devolve: nada — abre o modal de edição em massa (ou nada, sem marcas). */
 CW.selEditar = function () {
   var ids = Object.keys(selIds);
   if (!ids.length) return;
@@ -299,6 +322,7 @@ CW.selEditar = function () {
 };
 
 // ao mudar a categoria na edição em massa, refaz o menu de subcategorias com as dessa categoria
+// Devolve: nada — refaz o menu de subcategorias no DOM.
 CW.selCatMudou = function () {
   var c = val('selCat'), tree = allCats('');
   var subs = c && tree[c] ? tree[c] : [];
@@ -309,6 +333,8 @@ CW.selCatMudou = function () {
 };
 
 // liga/desliga uma etiqueta na edição em massa (o estado vive na classe do próprio botão)
+// Recebe: b — o próprio botão da etiqueta (elemento do DOM).
+// Devolve: nada — alterna a classe .on do botão.
 CW.selTagToggle = function (b) {
   b.classList.toggle('on');
 };
@@ -316,7 +342,9 @@ CW.selTagToggle = function (b) {
 /* Aplica a edição em massa aos movimentos marcados e grava na base. Uma
    categoria nova sem subcategoria escolhida limpa a antiga — ficava a
    apontar para a árvore errada. Etiquetas só entram, nunca saem. No fim
-   fecha tudo e sai da seleção. */
+   fecha tudo e sai da seleção.
+   Devolve: nada — grava, fecha os modais e sai da seleção (ou avisa por
+   toast se nada foi preenchido). */
 CW.selGravar = function () {
   var ids = Object.keys(selIds);
   var cat = val('selCat'), sub = val('selSub');
@@ -341,7 +369,8 @@ CW.selGravar = function () {
 
 /* Elimina os movimentos marcados: a confirmação diz quanto somam, e à saída
    fica um "Anular" de seis segundos (comDesfazer) — a cópia é tirada antes
-   do corte e volta inteira se o anular for clicado. */
+   do corte e volta inteira se o anular for clicado.
+   Devolve: nada — se for confirmado, grava e sai da seleção. */
 CW.selApagar = function () {
   var ids = Object.keys(selIds);
   if (!ids.length) return;
