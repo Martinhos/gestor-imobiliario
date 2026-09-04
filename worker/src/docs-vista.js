@@ -140,12 +140,22 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
   var caps = [].slice.call(document.querySelectorAll('.cap'));
   var res = document.getElementById('resultados'), lista = document.getElementById('lista');
 
-  function ativa(id) {
+  /* o capítulo ativo vive no #hash: um refresh (ou uma ligação partilhada)
+     volta ao mesmo sítio. O fechaGaveta distingue navegação a sério de
+     restauros silenciosos — limpar a pesquisa não pode fechar a gaveta
+     debaixo dos dedos de quem está a escrever nela. */
+  var capAtual = 'cmd';
+  function ativa(id, fechaGaveta) {
+    if (!document.getElementById(id)) id = document.getElementById('cap_' + id) ? 'cap_' + id : 'cmd';
+    capAtual = id;
+    try { history.replaceState(null, '', '#' + id); } catch (e) {}
     res.classList.remove('on');
     caps.forEach(function (c) { c.classList.toggle('on', c.id === id); });
     [].forEach.call(nav.children, function (a) { a.classList.toggle('on', a.dataset.cap === id); });
-    document.querySelector('aside').classList.remove('aberta');
-    var m = document.querySelector('main'); if (m) m.scrollTop = 0; window.scrollTo(0, 0);
+    if (fechaGaveta !== false) {
+      document.querySelector('aside').classList.remove('aberta');
+      var m = document.querySelector('main'); if (m) m.scrollTop = 0; window.scrollTo(0, 0);
+    }
   }
   nav.onclick = function (e) {
     var a = e.target.closest('a'); if (!a) return;
@@ -173,7 +183,7 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
 
   q.oninput = function () {
     var termo = q.value.trim().toLowerCase();
-    if (termo.length < 2) { if (res.classList.contains('on')) ativa('cmd'); return; }
+    if (termo.length < 2) { if (res.classList.contains('on')) ativa(capAtual, false); return; }
     caps.forEach(function (c) { c.classList.remove('on'); });
     [].forEach.call(nav.children, function (a) { a.classList.remove('on'); });
     var vistos = 0;
@@ -201,7 +211,7 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
     res.classList.add('on');
   };
 
-  ativa('cmd');
+  ativa((location.hash || '').slice(1) || 'cmd', false);
 })();
 </script>
 </body></html>`;
