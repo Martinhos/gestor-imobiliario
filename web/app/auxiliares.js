@@ -767,7 +767,11 @@ function applyTheme(){
      é ele; só uma escolha explícita fixa um deles. */
   const esq=db.settings.theme==='auto'?'light dark':(d?'dark':'light');
   const cs=document.querySelector('meta[name=color-scheme]');if(cs)cs.content=esq;
-  try{document.documentElement.style.colorScheme=esq}catch(e){}
+  /* «only light» e não «light»: com o telemóvel em modo escuro, o Chrome
+     Android («tema escuro para sites») escurece à força páginas que se
+     declaram só-claras — o «modo claro que não é bem claro». O only é o
+     opt-out documentado desse escurecimento; no escuro não é preciso. */
+  try{document.documentElement.style.colorScheme=(esq==='light'?'only light':esq)}catch(e){}
 }
 // escolhe o tema ('light', 'dark' ou 'auto'), grava nas definições e aplica já.
 // Recebe: t — o tema a usar: 'light', 'dark' ou 'auto'.
