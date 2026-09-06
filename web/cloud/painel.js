@@ -250,7 +250,23 @@ CW.doFillMissed = function (id) {
     var x = anyLoan(r.tx.loanId), lista = planoPrestacoesEmFalta(r);
     closeAllModals();
     if (x && lista.length) inserirPrestacoesEmFalta(x.p, x.l, lista);
-    else toast('Não há prestações por preencher.');
+    // as ocorrências do próprio plano já vencidas (de r.next até hoje) registam-se como
+    // no caminho genérico — estas abatem capital, porque o plano estava à espera delas
+    var n2 = 0, live2 = r, guard2 = 0;
+    var tags2 = db.settings.tags || (db.settings.tags = []);
+    while (live2 && live2.next && live2.next <= today() && guard2++ < 600) {
+      if (!jaRegistado(live2, live2.next)) {
+        var t2 = recTx(live2, live2.next);
+        t2.label = (t2.label || live2.name) + ' (estimativa)';
+        t2.tags = (t2.tags || []).concat(['Estimativa']);
+        if (tags2.indexOf('Estimativa') < 0) tags2.push('Estimativa');
+        applyLoan(t2); db.transactions.push(t2); n2++;
+      }
+      recAdvance(live2);
+      live2 = (db.recurring || []).find(function (x2) { return x2.id === id; });
+    }
+    if (n2) { save(); buildNav(); render(); toast(n2 + ' prestaç' + (n2 === 1 ? 'ão' : 'ões') + ' do plano registada' + (n2 === 1 ? '' : 's') + ' por estimativa.'); }
+    else if (!(x && lista.length)) toast('Não há prestações por preencher.');
     CW.fillNext();
     return;
   }

@@ -130,7 +130,9 @@ function ctBody(){
 // a estimativa pela duração do contrato (irsRate), marcada como tal.
 // Devolve: string com o HTML do resumo (ou um aviso, se faltar a renda).
 function netBox(){
-  const r=num(val('c_rent'))||cForm.rent,escrita=num(val('c_tax'))||cForm.taxRate||0;
+  /* «campo presente e vazio» (apagado de propósito → estimativa) é diferente de «ainda sem DOM» (cForm) */
+  const eR=document.getElementById('c_rent'),eT=document.getElementById('c_tax');
+  const r=eR?num(eR.value):cForm.rent,escrita=eT?num(eT.value):(Number(cForm.taxRate)||0);
   const datas={start:val('c_start')||cForm.start,end:val('c_end')||cForm.end};
   const tx=escrita>0?escrita:irsRate(datas);
   if(!r)return `<div class="hint">Falta a renda.</div>`;

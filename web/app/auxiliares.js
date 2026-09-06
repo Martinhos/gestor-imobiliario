@@ -419,11 +419,19 @@ const countsBetweenOwners=t=>!!t.paidBy&&(t.kind==='income'||t.kind==='expense'|
 function balanceLines(pid){
   const props=pidProps(pid),out=[];
   props.forEach(p=>{
-    const os=ownersOfProp(p).slice().sort();if(os.length<2)return;
-    db.transactions.filter(t=>t.propertyId===p.id&&((countsBetweenOwners(t)&&os.indexOf(t.paidBy)>-1)||t.kind==='settle')).forEach(t=>{
+    const os=ownersOfProp(p).slice().sort();
+    /* os acertos deste imóvel contam sempre — com um só dono, ou entre quem não é dono dele:
+       uma dívida de grupo paga por quem não é dono do imóvel salda-se com um acerto aqui */
+    db.transactions.filter(t=>t.propertyId===p.id&&t.kind==='settle').forEach(t=>{
+      const v=Math.round((Number(t.amount)||0)*100),eff={};os.forEach(o=>eff[o]=0);
+      const add=(o,x)=>{if(!o)return;eff[o]=(eff[o]||0)+x};
+      add(t.paidBy,v);add(t.toId,-v);
+      out.push({t,p,os:Object.keys(eff).sort(),eff});
+    });
+    if(os.length<2)return;
+    db.transactions.filter(t=>t.propertyId===p.id&&countsBetweenOwners(t)&&os.indexOf(t.paidBy)>-1).forEach(t=>{
       const eff={};os.forEach(o=>eff[o]=0);
-      if(t.kind==='settle'){const v=Math.round((Number(t.amount)||0)*100);if(eff[t.paidBy]!==undefined)eff[t.paidBy]+=v;if(eff[t.toId]!==undefined)eff[t.toId]-=v}
-      else{const sign=isIn(t.kind)?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));eff[t.paidBy]+=total*sign;txSplitCents(t,p,os).forEach((part,i)=>{eff[os[i]]-=part*sign})}
+      const sign=isIn(t.kind)?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));eff[t.paidBy]+=total*sign;txSplitCents(t,p,os).forEach((part,i)=>{eff[os[i]]-=part*sign});
       out.push({t,p,os,eff});
     });
   });
@@ -482,17 +490,20 @@ function balancesDetail(pid){
 function ownerBalances(pid){
   const props=pidProps(pid),cents={};
   props.forEach(p=>{
-    const os=ownersOfProp(p).slice().sort();if(os.length<2)return;
+    const os=ownersOfProp(p).slice().sort();
+    /* os acertos deste imóvel contam sempre — com um só dono, ou entre quem não é dono dele
+       (uma dívida de grupo paga por quem não é dono do imóvel salda-se com um acerto aqui) */
+    db.transactions.filter(t=>t.propertyId===p.id&&t.kind==='settle').forEach(t=>{
+      const v=Math.round((Number(t.amount)||0)*100);
+      const add=(o,x)=>{if(!o)return;if(cents[o]===undefined)cents[o]=0;cents[o]+=x};
+      add(t.paidBy,v);add(t.toId,-v);
+    });
+    if(os.length<2)return;
     os.forEach(o=>{if(cents[o]===undefined)cents[o]=0});
     db.transactions.filter(t=>countsBetweenOwners(t)&&t.propertyId===p.id&&os.indexOf(t.paidBy)>-1).forEach(t=>{
       const sign=isIn(t.kind)?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));
       cents[t.paidBy]+=total*sign;
       txSplitCents(t,p,os).forEach((part,i)=>{cents[os[i]]-=part*sign});
-    });
-    db.transactions.filter(t=>t.propertyId===p.id&&t.kind==='settle').forEach(t=>{
-      const v=Math.round((Number(t.amount)||0)*100);
-      if(cents[t.paidBy]!==undefined)cents[t.paidBy]+=v;
-      if(cents[t.toId]!==undefined)cents[t.toId]-=v;
     });
   });
   /* sem imóvel: divide-se por todos os proprietários (e os acertos globais saldam-se aqui);

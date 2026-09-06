@@ -254,6 +254,23 @@ describe('contas entre proprietários (grupo e global)', () => {
     assert.equal(app.settleTargets(null).length, 0);
   });
 
+  test('um acerto num imóvel conta mesmo com um só dono ou entre quem não é dono', () => {
+    mov({ amount: 1000, groupId: 'G', paidBy: 'ana' });
+    const alvos = app.settleTargets(null);
+    assert.ok(alvos.some((x) => x.pid === 'casa2'), 'a dívida da casa2 (dono único) entra no plano');
+    alvos.forEach((x) => x.plan.forEach((y) => mov({ kind: 'settle', amount: y.amount, propertyId: x.pid, paidBy: y.from, toId: y.to })));
+    const b = app.ownerBalances(null);
+    Object.keys(b).forEach((k) => perto(b[k], 0, 0.005));
+    const c2 = app.ownerBalances('casa2');
+    Object.keys(c2).forEach((k) => perto(c2[k], 0, 0.005));
+    assert.equal(app.settleTargets(null).length, 0, 'depois de pagar, nada fica por pagar');
+    assert.ok(app.balanceLines('casa2').some((l) => l.t.kind === 'settle'), 'o acerto aparece em «como se chega aos saldos»');
+    // o acerto gravado continua editável: quem lá está fica, mesmo sem ser dono do imóvel
+    app.tForm = app.normTx({ kind: 'settle', amount: 500, propertyId: 'casa2', paidBy: 'carla', toId: 'ana' });
+    app.prefill();
+    assert.equal(app.tForm.toId, 'ana');
+  });
+
   test('balanceLines e ownerBalances contam a mesma coisa', () => {
     mov({ amount: 1000, groupId: 'G', paidBy: 'ana' });
     mov({ amount: 90, paidBy: 'bruno' });

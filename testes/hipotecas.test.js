@@ -29,6 +29,30 @@ const casa = (loans) => {
 const A = () => app.findLoan(app.prop('p1'), 'a'), B = () => app.findLoan(app.prop('p1'), 'b');
 const recDe = (id) => app.db.recurring.find((r) => r.auto && r.tx.loanId === id);
 
+describe('a prestação de hoje', () => {
+  test('confirmar a prestação do próprio dia avança o mês do crédito', () => {
+    limpar(app);
+    const hoje = app.today(), dia = Math.min(28, Number(hoje.slice(8, 10)));
+    const start = (Number(hoje.slice(0, 4)) - 10) + hoje.slice(4, 7) + '-' + String(dia).padStart(2, '0');
+    const l = app.normLoan({ id: 'lh', outstanding: 76019.81, years: 30, type: 'fixa', rate: 3, start });
+    app.db.properties.push(app.normProp({ id: 'ph', name: 'Casa', loans: [l] }));
+    const antes = app.loanMes(l);
+    app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'lh', propertyId: 'ph', payType: 'prestacao', amount: 421.6, principal: 200, interest: 190, stamp: 7.6, date: hoje }));
+    assert.equal(app.loanMes(l), antes + 1, 'a de hoje, já registada, conta como vencida');
+    assert.equal(app.amort(l).n, 360 - antes - 1, 'o prazo restante desce um mês');
+  });
+
+  test('a prestação que vence hoje não entra na reconstrução', () => {
+    const hoje = app.today(), dia = Math.min(28, Number(hoje.slice(8, 10)));
+    const start = (Number(hoje.slice(0, 4)) - 2) + hoje.slice(4, 7) + '-' + String(dia).padStart(2, '0');
+    const l = app.normLoan({ id: 'lr', outstanding: 100000, years: 30, type: 'fixa', rate: 3, start });
+    const r = app.loanPrestacoesEmFalta(l, [], hoje);
+    assert.ok(r.length > 0);
+    assert.ok(r[r.length - 1].date < hoje, 'a última é anterior a hoje');
+    assert.equal(r.length, app.mesesDesdeInicio(l, hoje), 'tantas quantas as vencidas');
+  });
+});
+
 describe('recorrências das hipotecas', () => {
   test('cada hipoteca ganha a sua recorrência com o loanId certo', () => {
     casa([loan('a', { start: haAnos(3) }), loan('b', { start: haAnos(1) })]);

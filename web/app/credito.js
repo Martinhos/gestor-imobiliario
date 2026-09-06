@@ -45,7 +45,18 @@ function mesesDesdeInicio(l,data){
    Devolve: número inteiro ≥ 0. */
 function loanMes(l,data){
   const ofs=Number((l||{})._paidOfs)||0;
-  return Math.max(0,loanPaidN(l)+ofs,mesesDesdeInicio(l,data));
+  let vencidas=mesesDesdeInicio(l,data);
+  /* a prestação deste mês já registada conta como vencida mesmo antes de o dia passar:
+     confirmar a de hoje avança o mês do crédito — senão o capital abatia e o prazo não */
+  const s=String((l&&l.start)||'');
+  if(l&&l.id&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&db&&db.transactions){
+    const hoje=String(data||today()),mes=hoje.slice(0,7);
+    const day=Math.max(1,Math.min(28,Number(s.slice(8,10))||1));
+    const venc=dayInMonth(Number(hoje.slice(0,4)),Number(hoje.slice(5,7))-1,day);
+    if(venc>=hoje&&venc>=s&&db.transactions.some(t=>t.kind==='loan'&&t.loanId===l.id&&t.payType!=='amortizacao'&&String(t.date||'').slice(0,7)===mes))
+      vencidas=Math.max(vencidas,mesesDesdeInicio(l,venc)+1);
+  }
+  return Math.max(0,loanPaidN(l)+ofs,vencidas);
 }
 /* Prestações que faltam entre o início do crédito e o primeiro movimento já
    registado nele (ou hoje): uma por mês, no dia do início (máx. 28), com a
@@ -74,7 +85,8 @@ function loanPrestacoesEmFalta(l,txs,hoje,ate){
   const datas=[];
   for(;;){
     const d=dayInMonth(y,m,day);
-    if(d>hoje||(ate&&d>=ate)||(limMes&&d.slice(0,7)>=limMes)||datas.length>=cabem)break;
+    /* a que vence hoje ainda está por pagar (como em mesesDesdeInicio): nunca entra aqui */
+    if(d>=hoje||(ate&&d>=ate)||(limMes&&d.slice(0,7)>=limMes)||datas.length>=cabem)break;
     datas.push(d);m++;if(m>11){m=0;y++}
   }
   const K=datas.length;if(!K)return [];

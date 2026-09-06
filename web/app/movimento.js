@@ -82,7 +82,9 @@ function txModal(id,kind,propId,_x,ctId,preset){
    Devolve: nada — só mexe no tForm; quem chama repinta depois. */
 function prefill(){
   const p=prop(tForm.propertyId);
-  const ows=p?ownersOfProp(p):(tForm.groupId?txGroupOwners(tForm).map(o=>o.id):db.owners.map(o=>o.id));
+  const ows=p?ownersOfProp(p).slice():(tForm.groupId?txGroupOwners(tForm).map(o=>o.id):db.owners.map(o=>o.id));
+  /* num acerto, quem já lá está fica — pode não ser dono do imóvel (dívida de grupo paga por outro) */
+  if(tForm.kind==='settle')[tForm.paidBy,tForm.toId].forEach(o=>{if(o&&ows.indexOf(o)<0&&owner(o))ows.push(o)});
   if(tForm.paidBy&&ows.indexOf(tForm.paidBy)<0)tForm.paidBy=null;
   if(tForm.toId&&ows.indexOf(tForm.toId)<0)tForm.toId=null;
   if(tForm.kind==='settle'&&!tForm.label)tForm.label='Transferência entre proprietários';
@@ -128,6 +130,7 @@ function txBody(){
     .concat(t.kind==='loan'&&t.loanId&&!curLoan?[{v:t.loanId,label:'Hipoteca desconhecida (outro imóvel)'}]:[]);
   /* sem imóvel, a despesa pode na mesma ser paga por alguém; num grupo, pelos donos dos imóveis do grupo */
   const ows=(p?ownersOfProp(p).map(owner):(t.groupId?txGroupOwners(t):db.owners.map(o=>o.id).map(owner))).filter(Boolean);
+  if(t.kind==='settle')[t.paidBy,t.toId].forEach(o=>{const x=o&&owner(o);if(x&&!ows.some(y=>y.id===o))ows.push(x)});
   const cs=catsFor(t.kind)||{},subs=(cs[t.category]||[]).slice();
   if(t.sub&&subs.indexOf(t.sub)<0)subs.unshift(t.sub);
   /* «Crédito à habitação» é dos pagamentos de crédito: uma despesa assim classificada contava como despesa e não abatia nada */
