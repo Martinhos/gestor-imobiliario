@@ -31,6 +31,12 @@ describe('gerar-docs', () => {
     // as armadilhas vieram do markdown
     const arm = DOCS.capitulos.find((c) => c.id === 'armadilhas');
     assert.ok(arm.itens[0].funcoes.length >= 8, 'as armadilhas estao la');
+    // as regras de design vieram do markdown, com a mesma forma das armadilhas
+    const des = DOCS.capitulos.find((c) => c.id === 'design');
+    assert.ok(des, 'o capitulo de design existe');
+    assert.equal(des.itens[0].nome, 'docs/design.md');
+    assert.ok(des.itens[0].funcoes.length >= 8, 'as seccoes de design estao la (' + des.itens[0].funcoes.length + ')');
+    assert.ok(des.itens[0].funcoes.every((f) => f.assinatura === '' && f.doc.length > 40), 'cada seccao e prosa sem assinatura');
     assert.match(DOCS.comandos.find((c) => c.nome === 'access').quem, /master/, 'as permissoes vieram do worker');
     // cada comando traz o guia (o que acontece) e as opcoes com tipo
     assert.ok(DOCS.comandos.every((c) => c.oQueFaz && c.oQueFaz.length > 40), 'todos os comandos explicam o que acontece');
@@ -53,6 +59,7 @@ describe('gerar-docs', () => {
     assert.ok(html.includes('id="q"'), 'ha pesquisa');
     assert.ok(html.includes('id="nav"'), 'ha gaveta');
     assert.ok(html.includes('Armadilhas conhecidas'), 'as armadilhas na gaveta');
+    assert.ok(html.includes('Regras de design'), 'o design na gaveta');
     assert.ok(!html.includes('Gerado do próprio código a cada deploy'), 'o subtitulo foi retirado');
     assert.ok(html.includes('teste.js'), 'a pagina lista os ficheiros');
   });
