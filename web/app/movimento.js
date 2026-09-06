@@ -106,7 +106,7 @@ function prefill(){
 // descrição/montante se ainda forem as sugestões automáticas — o que foi escrito à mão fica.
 // Devolve: nada — só mexe no tForm.
 function keepTyped(){collectTx();if(tForm.label===tForm._aL)tForm.label='';if(tForm.amount===tForm._aA)tForm.amount=''}
-const SPLIT_MODES=[['equal','Partes iguais','o mesmo para cada proprietário'],['quota','Quotas do imóvel','pela quota-parte de cada um'],['pct','Quotas a definir','em partes: quem tem 2 paga o dobro de quem tem 1 (2 e 1 → 2/3 e 1/3)'],['percent','Percentagem','percentagem de cada um; devem somar 100'],['amount','Valor certo','montante de cada um; têm de somar o total'],['adjust','Ajuste','quem tem valor paga só esse; o resto divide-se em partes iguais pelos outros']];
+const SPLIT_MODES=[['equal','Partes iguais','o mesmo para cada proprietário'],['quota','Quotas do imóvel','pela quota-parte de cada um'],['pct','Quotas a definir','em partes: quem tem 2 paga o dobro de quem tem 1 (2 e 1 → 2/3 e 1/3)'],['percent','Percentagem','percentagem de cada um; devem somar 100'],['amount','Valor certo','montante de cada um; têm de somar o total'],['adjust','Ajuste','um extra por cima da parte igual: tira-se ao total o extra de cada um, o resto divide-se em partes iguais por todos e cada um soma o seu (15 € com 5 de extra para um de dois → 10 € e 5 €)']];
 /* Monta o HTML do formulário do movimento a partir do tForm. Os campos variam com o tipo
    (contrato nas rendas, hipoteca e distribuição nos créditos, credor nas dívidas a terceiros,
    quem paga/recebe nos acertos) e com o contexto (modelo, recorrência, grupo de imóveis).
@@ -183,7 +183,7 @@ function splitSect(ows){
     <label>Como se divide${sel('t_split',mode,SPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onSplitSel')}</label>
     ${(mode==='quota'||mode==='equal')?'':`<div class="form" style="gap:7px">${ows.map(o=>`<div class="ownrow"><span class="avatar" style="width:30px;height:30px;font-size:11px;flex:0 0 30px">${esc(initials(o.name))}</span>
       <span class="nm">${esc(o.name)}</span>
-      <input id="t_sp_${o.id}" type="text" inputmode="decimal" style="width:84px;flex:0 0 84px" value="${parts[o.id]!=null&&parts[o.id]!==''?dec(parts[o.id]):''}" placeholder="${mode==='adjust'?'—':'0'}" oninput="refreshSplit()">
+      <input id="t_sp_${o.id}" type="text" inputmode="decimal" style="width:84px;flex:0 0 84px" value="${parts[o.id]!=null&&parts[o.id]!==''?dec(parts[o.id]):''}" placeholder="0" oninput="refreshSplit()">
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
     <div class="hint" id="splitHint">${splitHint(ows)}</div>`,{icon:'split',summary:lab});
 }
@@ -203,8 +203,9 @@ function splitHint(ows){
     if(Math.abs(d)>0.005)warn=`<b class="neg">${d>0?'Faltam '+euro2(d):'Passa '+euro2(-d)}</b> · `}
   if(mode==='percent'){const s2=sum(os.map(o=>Number(((t.split||{}).parts||{})[o])||0));
     if(Math.abs(s2-100)>0.01)warn=`<b class="neg">Somam ${dec(Math.round(s2*100)/100)}%</b> · `}
-  if(mode==='adjust'){const s2=sum(os.map(o=>Number(((t.split||{}).parts||{})[o])||0));
-    if(s2>total+0.005)warn=`<b class="neg">Os ajustes passam o total</b> · `}
+  if(mode==='adjust'){const pr=(t.split||{}).parts||{},s2=sum(os.map(o=>Number(pr[o])||0));
+    if(os.some(o=>Number(pr[o])<0))warn=`<b class="neg">Ajustes negativos não contam</b> · `;
+    else if(s2>total+0.005)warn=`<b class="neg">Os ajustes (${euro2(s2)}) passam o total</b> · `}
   return warn+intro+'<br>'+ows.map((o,i)=>`${esc(o.name.split(' ')[0])} <b>${euro2(c[i]/100)}</b>`).join(' · ');
 }
 // Valida a divisão entre proprietários antes de guardar: devolve a mensagem de erro,
@@ -216,7 +217,10 @@ function splitError(){
   const os=ownersOfProp(p),parts=(t.split||{}).parts||{},total=Math.abs(Number(t.amount)||0);
   const s2=sum(os.map(o=>Number(parts[o])||0));
   if(mode==='amount'&&Math.abs(s2-total)>0.005)return 'Os valores da divisão têm de somar '+euro2(total)+'.';
-  if(mode==='adjust'&&s2>total+0.005)return 'Os ajustes não podem passar o total.';
+  if(mode==='adjust'){
+    if(os.some(o=>Number(parts[o])<0))return 'Os ajustes não podem ser negativos: um ajuste é sempre um extra.';
+    if(s2>total+0.005)return 'Os ajustes somam '+euro2(s2)+' e não podem passar o total ('+euro2(total)+').';
+  }
   if(mode==='pct'&&!(s2>0))return 'Indica pelo menos uma quota.';
   if(mode==='percent'&&Math.abs(s2-100)>0.01)return 'As percentagens têm de somar 100 (somam '+dec(Math.round(s2*100)/100)+').';
   return '';
@@ -236,7 +240,7 @@ function collectSplit(){
   t.split={mode,parts};
 }
 /* divisão do valor pelos imóveis do grupo */
-const PSPLIT_MODES=[['equal','Partes iguais','o mesmo para cada imóvel'],['value','Pelo valor de mercado','proporcional ao valor atual'],['purchase','Pelo valor de aquisição','proporcional ao que custou'],['pct','Quotas a definir','em partes: 2 e 1 → 2/3 e 1/3'],['percent','Percentagem','de cada imóvel; devem somar 100'],['amount','Valor certo','montante de cada imóvel; têm de somar o total'],['adjust','Ajuste','quem tem valor fica só com esse; o resto em partes iguais']];
+const PSPLIT_MODES=[['equal','Partes iguais','o mesmo para cada imóvel'],['value','Pelo valor de mercado','proporcional ao valor atual'],['purchase','Pelo valor de aquisição','proporcional ao que custou'],['pct','Quotas a definir','em partes: 2 e 1 → 2/3 e 1/3'],['percent','Percentagem','de cada imóvel; devem somar 100'],['amount','Valor certo','montante de cada imóvel; têm de somar o total'],['adjust','Ajuste','um extra por cima da parte igual: o total menos os extras divide-se em partes iguais por todos os imóveis e cada um soma o seu']];
 // Secção "Divisão entre imóveis" dos movimentos de grupo: escolha do modo e,
 // quando o modo pede valores, um campo por imóvel. Devolve o HTML do fold.
 // Devolve: o HTML do fold (string).
@@ -247,7 +251,7 @@ function psplitSect(){
     <label>Como se divide${sel('t_psplit',mode,PSPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onPsplitSel')}</label>
     ${['equal','value','purchase'].indexOf(mode)>-1?'':`<div class="form" style="gap:7px">${ps.map(p=>`<div class="ownrow"><span class="avatar" style="width:30px;height:30px;font-size:11px;flex:0 0 30px">${ic('building',15)}</span>
       <span class="nm">${esc(p.name)}</span>
-      <input id="t_pp_${p.id}" type="text" inputmode="decimal" style="width:84px;flex:0 0 84px" value="${parts[p.id]!=null&&parts[p.id]!==''?dec(parts[p.id]):''}" placeholder="${mode==='adjust'?'—':'0'}" oninput="refreshPsplit()">
+      <input id="t_pp_${p.id}" type="text" inputmode="decimal" style="width:84px;flex:0 0 84px" value="${parts[p.id]!=null&&parts[p.id]!==''?dec(parts[p.id]):''}" placeholder="0" oninput="refreshPsplit()">
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
     <div class="hint" id="psplitHint">${psplitHint()}</div>`,{icon:'building',open:true,summary:lab});
 }
@@ -264,7 +268,9 @@ function psplitHint(){
   const s2=sum(ps.map(p=>Number(((t.psplit||{}).parts||{})[p.id])||0));
   if(mode==='amount'){const d=Math.round((total-s2)*100)/100;if(Math.abs(d)>0.005)warn=`<b class="neg">${d>0?'Faltam '+euro2(d):'Passa '+euro2(-d)}</b> · `}
   if(mode==='percent'&&Math.abs(s2-100)>0.01)warn=`<b class="neg">Somam ${dec(Math.round(s2*100)/100)}%</b> · `;
-  if(mode==='adjust'&&s2>total+0.005)warn=`<b class="neg">Os ajustes passam o total</b> · `;
+  if(mode==='adjust'){const pr=(t.psplit||{}).parts||{};
+    if(ps.some(p=>Number(pr[p.id])<0))warn=`<b class="neg">Ajustes negativos não contam</b> · `;
+    else if(s2>total+0.005)warn=`<b class="neg">Os ajustes (${euro2(s2)}) passam o total</b> · `}
   return warn+intro+'<br>'+ps.map((p,i)=>`${esc(p.name)} <b>${euro2(c[i]/100)}</b>`).join(' · ');
 }
 // Valida a divisão entre imóveis: devolve a mensagem de erro ou '' se ok.
@@ -277,7 +283,10 @@ function psplitError(){
   const parts=(t.psplit||{}).parts||{},total=Math.abs(Number(t.amount)||0);
   const s2=sum(ps.map(p=>Number(parts[p.id])||0));
   if(mode==='amount'&&Math.abs(s2-total)>0.005)return 'Os valores por imóvel têm de somar '+euro2(total)+'.';
-  if(mode==='adjust'&&s2>total+0.005)return 'Os ajustes por imóvel não podem passar o total.';
+  if(mode==='adjust'){
+    if(ps.some(p=>Number(parts[p.id])<0))return 'Os ajustes por imóvel não podem ser negativos: um ajuste é sempre um extra.';
+    if(s2>total+0.005)return 'Os ajustes por imóvel somam '+euro2(s2)+' e não podem passar o total ('+euro2(total)+').';
+  }
   if(mode==='pct'&&!(s2>0))return 'Indica pelo menos uma quota de imóvel.';
   if(mode==='percent'&&Math.abs(s2-100)>0.01)return 'As percentagens por imóvel têm de somar 100 (somam '+dec(Math.round(s2*100)/100)+').';
   return '';

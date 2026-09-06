@@ -289,8 +289,9 @@ function splitShares(total,shares){
   return out;
 }
 /* quanto cabe a cada dono (cêntimos, positivos) num movimento, conforme o modo de divisão:
-   quota (quota-parte), pct (percentagens próprias), amount (valores certos) ou adjust
-   (ajustes individuais; o resto pelas quotas)
+   equal (partes iguais), quota (quota-parte), pct/percent (pesos ou percentagens próprias),
+   amount (valores certos) ou adjust (um extra por cima da parte igual: ao total tira-se a
+   soma dos ajustes, o resto divide-se em partes iguais por todos e cada um soma o seu)
    Recebe: t — o movimento (objeto; usa t.amount e t.split); p — o imóvel (objeto; pode ser null
    e, sem quotas, a divisão cai em partes iguais); os — os ids dos donos (array de strings).
    Devolve: array de cêntimos (inteiros, positivos) por dono, pela ordem de os. */
@@ -307,12 +308,14 @@ function txSplitCents(t,p,os){
     const rest=splitShares(Math.max(0,rem),eq);return c.map((x,i)=>x+rest[i]);
   }
   if(sp.mode==='adjust'){
-    /* quem tem valor paga só esse valor; o resto divide-se em partes iguais pelos que ficaram em branco */
-    const has=os.map(o=>parts[o]!=null&&String(parts[o]).trim()!==''&&isFinite(Number(parts[o])));
-    const c=os.map((o,i)=>has[i]?Math.round(get(o)*100):0),rem=Math.max(0,total-sum(c));
-    const blanks=has.map((h,i)=>h?0:1),nb=sum(blanks);
-    const rest=splitShares(rem,nb?blanks.map(b=>b/nb):eq);
-    return c.map((x,i)=>x+rest[i]);
+    /* o ajuste é um extra por cima da parte igual: tira-se ao total a soma dos ajustes,
+       o que sobra divide-se em partes iguais por todos e cada um soma o seu
+       (15 € com A=5: 10/2=5 → A 10, B 5). Em branco vale 0; negativos contam 0.
+       Se os ajustes passarem o total (o formulário recusa, mas dados antigos podem
+       trazê-lo), reparte-se o total na proporção dos ajustes para a soma bater certo. */
+    const adj=os.map(o=>Math.round(get(o)*100)),ta=sum(adj),rem=total-ta;
+    if(rem<0)return splitShares(total,adj.map(x=>x/ta));
+    const rest=splitShares(rem,eq);return adj.map((x,i)=>x+rest[i]);
   }
   return splitShares(total,sum(fr)>0?fr:eq);
 }
@@ -335,7 +338,8 @@ function txProps(t){
   if(t.groupId){const g=grp(t.groupId);return g?g.ids.map(prop).filter(Boolean):[]}
   return [];
 }
-/* divide o total (cêntimos) pelos imóveis do grupo, conforme o modo escolhido
+/* divide o total (cêntimos) pelos imóveis do grupo, conforme o modo escolhido; em
+   'adjust' o valor de cada imóvel é um extra por cima da parte igual, como entre donos
    Recebe: t — o movimento (objeto; usa t.psplit); ps — os imóveis do grupo (array de objetos);
    total — o valor a dividir (inteiro, em cêntimos).
    Devolve: array de cêntimos (inteiros) por imóvel, pela ordem de ps. */
@@ -350,11 +354,10 @@ function psplitCents(t,ps,total){
   if(sp.mode==='amount'){const c=ps.map(p=>Math.round(get(p)*100));let rem=total-sum(c);
     if(rem<0){const k=total/Math.max(1,sum(c));return c.map(x=>Math.round(x*k))}
     const rest=splitShares(Math.max(0,rem),eq);return c.map((x,i)=>x+rest[i]);}
-  if(sp.mode==='adjust'){const has=ps.map(p=>parts[p.id]!=null&&String(parts[p.id]).trim()!==''&&isFinite(Number(parts[p.id])));
-    const c=ps.map((p,i)=>has[i]?Math.round(get(p)*100):0),rem=Math.max(0,total-sum(c));
-    const blanks=has.map(h=>h?0:1),nb=sum(blanks);
-    const rest=splitShares(rem,nb?blanks.map(b=>b/nb):eq);
-    return c.map((x,i)=>x+rest[i]);}
+  if(sp.mode==='adjust'){/* extra por cima da parte igual — a mesma regra do txSplitCents */
+    const adj=ps.map(p=>Math.round(get(p)*100)),ta=sum(adj),rem=total-ta;
+    if(rem<0)return splitShares(total,adj.map(x=>x/ta));
+    const rest=splitShares(rem,eq);return adj.map((x,i)=>x+rest[i]);}
   return splitShares(total,eq);
 }
 /* fração de um movimento que cabe a um imóvel

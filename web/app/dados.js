@@ -145,7 +145,8 @@ function normContract(c){
 }
 /* kind: income (renda), expense (despesa), loan (prestação), owed (dívida recebida de terceiro),
    repay (pagamento dessa dívida), settle (acerto entre proprietários: paidBy → toId).
-   split: como o valor se divide entre os donos — {mode:'quota'|'pct'|'amount'|'adjust',parts:{ownerId:n}} */
+   split: como o valor se divide entre os donos — {mode:'equal'|'quota'|'pct'|'percent'|'amount'|'adjust',parts:{ownerId:n}};
+   em 'adjust', parts é o extra de cada um por cima da parte igual */
 const normTx=t=>{const o=Object.assign({id:uid(),kind:'expense',label:'',amount:0,date:'',propertyId:null,contractId:null,
   loanId:null,payType:'prestacao',paidBy:null,toId:null,creditor:'',category:'',sub:'',tags:[],notes:'',split:null,groupId:null,psplit:null},t||{});
   if(o.split&&(!o.split.mode||o.split.mode==='quota'))o.split=null;
