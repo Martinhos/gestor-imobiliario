@@ -187,9 +187,11 @@ const sum=a=>a.reduce((x,y)=>x+(Number(y)||0),0);
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 /* texto dentro de uma string JS num atributo onclick="f('…')" */
 const jsq=s=>esc(String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,' '));
-// data de hoje em ISO (AAAA-MM-DD) — o formato em que as datas se guardam e comparam.
-// Devolve: a data de hoje em texto "AAAA-MM-DD".
-const today=()=>new Date().toISOString().slice(0,10);
+/* data de hoje em ISO (AAAA-MM-DD) — o formato em que as datas se guardam e comparam.
+   Formatada em hora local, nunca pelo toISOString: esse converte para UTC e, à noite
+   com horário de verão, dava o dia anterior a cada movimento novo.
+   Devolve: a data de hoje em texto "AAAA-MM-DD". */
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const YEAR=new Date().getFullYear();
 const MES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 const initials=n=>String(n||'?').trim().split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
@@ -215,7 +217,23 @@ const ctPick=c=>{const p=prop(c.propertyId),r=c.roomId?roomName(p,c.roomId):'';r
 const ctName=c=>String((c&&c.name)||'').trim()||ctPick(c);
 const contractsOfTenant=tid=>db.contracts.filter(c=>(c.tenantIds||[]).indexOf(tid)>-1);
 const rentOf=p=>sum(activeContracts(p.id).map(c=>c.rent));
-const netRent=c=>c.rent*(1-(Number(c.taxRate)||0)/100);
+/* taxa especial de IRS sobre rendas de habitação, pela duração do contrato (Lei 56/2023):
+   25 %; 15 % com 5 anos ou mais; 10 % com 10 ou mais; 5 % com 20 ou mais. A duração
+   conta do início ao fim inclusive (1 jan a 31 dez são 12 meses); sem fim, vale 25 %.
+   Recebe: c — o contrato (usa start e end, 'AAAA-MM-DD'; aguenta null).
+   Devolve: a taxa em percentagem (número: 25, 15, 10 ou 5). */
+function irsRate(c){
+  if(!c||!c.start||!c.end)return 25;
+  const s=new Date(c.start+'T00:00:00'),e=new Date(c.end+'T00:00:00');e.setDate(e.getDate()+1);
+  const meses=(e.getFullYear()-s.getFullYear())*12+(e.getMonth()-s.getMonth())-(e.getDate()<s.getDate()?1:0);
+  return meses>=240?5:meses>=120?10:meses>=60?15:25;
+}
+/* a taxa de imposto que se aplica à renda de um contrato: a que foi escrita; em branco
+   (ou 0, que é como o formulário guarda o branco) a estimativa pela duração (irsRate)
+   Recebe: c — o contrato.
+   Devolve: a taxa em percentagem (número). */
+const taxRateOf=c=>Number(c.taxRate)>0?Number(c.taxRate):irsRate(c);
+const netRent=c=>c.rent*(1-taxRateOf(c)/100);
 const netRentOf=p=>sum(activeContracts(p.id).map(netRent));
 const loansOf=p=>((p||{}).loans)||[];
 const liveLoans=p=>loansOf(p).filter(l=>Number(l.outstanding)>0);
@@ -232,12 +250,13 @@ function anyLoan(id){for(const p of db.properties){const l=findLoan(p,id);if(l)r
 /* grupos de imóveis, proprietários ou contratos */
 const grp=id=>(db.groups||[]).find(g=>g.id===id);
 const grpsOf=kind=>(db.groups||[]).filter(g=>g.kind===kind);
-/* imóveis de um filtro: id de imóvel, 'g:ID' de grupo, ou vazio = âmbito atual
+/* imóveis de um filtro: id de imóvel, 'g:ID' de grupo, ou vazio = âmbito atual. Num grupo
+   só entram os imóveis do âmbito: com um proprietário filtrado, os dos outros ficam de fora.
    Recebe: pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio para o âmbito atual.
    Devolve: os imóveis abrangidos pelo filtro (array de objetos). */
 function pidProps(pid){
   if(!pid)return scope();
-  if(String(pid).startsWith('g:')){const g=grp(String(pid).slice(2));return g?g.ids.map(prop).filter(Boolean):[]}
+  if(String(pid).startsWith('g:')){const g=grp(String(pid).slice(2));return g?g.ids.map(prop).filter(p=>p&&inScope(p.id)):[]}
   const p=prop(pid);return p?[p]:[];
 }
 const loanName=l=>{const n=((l&&l.name)||'').trim(),b=((l&&l.bank)||'').trim();
@@ -289,8 +308,9 @@ function splitShares(total,shares){
   return out;
 }
 /* quanto cabe a cada dono (cêntimos, positivos) num movimento, conforme o modo de divisão:
-   quota (quota-parte), pct (percentagens próprias), amount (valores certos) ou adjust
-   (ajustes individuais; o resto pelas quotas)
+   equal (partes iguais), quota (quota-parte), pct/percent (pesos ou percentagens próprias),
+   amount (valores certos) ou adjust (um extra por cima da parte igual: ao total tira-se a
+   soma dos ajustes, o resto divide-se em partes iguais por todos e cada um soma o seu)
    Recebe: t — o movimento (objeto; usa t.amount e t.split); p — o imóvel (objeto; pode ser null
    e, sem quotas, a divisão cai em partes iguais); os — os ids dos donos (array de strings).
    Devolve: array de cêntimos (inteiros, positivos) por dono, pela ordem de os. */
@@ -307,12 +327,14 @@ function txSplitCents(t,p,os){
     const rest=splitShares(Math.max(0,rem),eq);return c.map((x,i)=>x+rest[i]);
   }
   if(sp.mode==='adjust'){
-    /* quem tem valor paga só esse valor; o resto divide-se em partes iguais pelos que ficaram em branco */
-    const has=os.map(o=>parts[o]!=null&&String(parts[o]).trim()!==''&&isFinite(Number(parts[o])));
-    const c=os.map((o,i)=>has[i]?Math.round(get(o)*100):0),rem=Math.max(0,total-sum(c));
-    const blanks=has.map((h,i)=>h?0:1),nb=sum(blanks);
-    const rest=splitShares(rem,nb?blanks.map(b=>b/nb):eq);
-    return c.map((x,i)=>x+rest[i]);
+    /* o ajuste é um extra por cima da parte igual: tira-se ao total a soma dos ajustes,
+       o que sobra divide-se em partes iguais por todos e cada um soma o seu
+       (15 € com A=5: 10/2=5 → A 10, B 5). Em branco vale 0; negativos contam 0.
+       Se os ajustes passarem o total (o formulário recusa, mas dados antigos podem
+       trazê-lo), reparte-se o total na proporção dos ajustes para a soma bater certo. */
+    const adj=os.map(o=>Math.round(get(o)*100)),ta=sum(adj),rem=total-ta;
+    if(rem<0)return splitShares(total,adj.map(x=>x/ta));
+    const rest=splitShares(rem,eq);return adj.map((x,i)=>x+rest[i]);
   }
   return splitShares(total,sum(fr)>0?fr:eq);
 }
@@ -335,7 +357,8 @@ function txProps(t){
   if(t.groupId){const g=grp(t.groupId);return g?g.ids.map(prop).filter(Boolean):[]}
   return [];
 }
-/* divide o total (cêntimos) pelos imóveis do grupo, conforme o modo escolhido
+/* divide o total (cêntimos) pelos imóveis do grupo, conforme o modo escolhido; em
+   'adjust' o valor de cada imóvel é um extra por cima da parte igual, como entre donos
    Recebe: t — o movimento (objeto; usa t.psplit); ps — os imóveis do grupo (array de objetos);
    total — o valor a dividir (inteiro, em cêntimos).
    Devolve: array de cêntimos (inteiros) por imóvel, pela ordem de ps. */
@@ -350,11 +373,10 @@ function psplitCents(t,ps,total){
   if(sp.mode==='amount'){const c=ps.map(p=>Math.round(get(p)*100));let rem=total-sum(c);
     if(rem<0){const k=total/Math.max(1,sum(c));return c.map(x=>Math.round(x*k))}
     const rest=splitShares(Math.max(0,rem),eq);return c.map((x,i)=>x+rest[i]);}
-  if(sp.mode==='adjust'){const has=ps.map(p=>parts[p.id]!=null&&String(parts[p.id]).trim()!==''&&isFinite(Number(parts[p.id])));
-    const c=ps.map((p,i)=>has[i]?Math.round(get(p)*100):0),rem=Math.max(0,total-sum(c));
-    const blanks=has.map(h=>h?0:1),nb=sum(blanks);
-    const rest=splitShares(rem,nb?blanks.map(b=>b/nb):eq);
-    return c.map((x,i)=>x+rest[i]);}
+  if(sp.mode==='adjust'){/* extra por cima da parte igual — a mesma regra do txSplitCents */
+    const adj=ps.map(p=>Math.round(get(p)*100)),ta=sum(adj),rem=total-ta;
+    if(rem<0)return splitShares(total,adj.map(x=>x/ta));
+    const rest=splitShares(rem,eq);return adj.map((x,i)=>x+rest[i]);}
   return splitShares(total,eq);
 }
 /* fração de um movimento que cabe a um imóvel
@@ -391,24 +413,34 @@ const psplitLabel=t=>({equal:'em partes iguais',value:'pelo valor de mercado',pu
    Dívidas a terceiros (recebidas ou pagas) ficam de fora — são de quem as contraiu. */
 const countsBetweenOwners=t=>!!t.paidBy&&(t.kind==='income'||t.kind==='expense'||t.kind==='loan');
 /* efeito de cada movimento nos saldos (cêntimos por dono), para se poder conferir
-   Recebe: pid (opcional) — o id de um imóvel; vazio vale o âmbito atual.
+   Recebe: pid (opcional) — o id de um imóvel ou 'g:ID' de um grupo; vazio vale o âmbito atual.
    Devolve: array de {t, p, os, eff}, ordenado por data — o movimento, o imóvel (ou só
    {name:…} nos movimentos de grupo/globais), os ids dos donos e o efeito em cêntimos por dono. */
 function balanceLines(pid){
-  const props=pid?[prop(pid)].filter(Boolean):scope(),out=[];
+  const props=pidProps(pid),out=[];
   props.forEach(p=>{
-    const os=ownersOfProp(p).slice().sort();if(os.length<2)return;
-    db.transactions.filter(t=>t.propertyId===p.id&&((countsBetweenOwners(t)&&os.indexOf(t.paidBy)>-1)||t.kind==='settle')).forEach(t=>{
+    const os=ownersOfProp(p).slice().sort();
+    /* os acertos deste imóvel contam sempre — com um só dono, ou entre quem não é dono dele:
+       uma dívida de grupo paga por quem não é dono do imóvel salda-se com um acerto aqui */
+    db.transactions.filter(t=>t.propertyId===p.id&&t.kind==='settle').forEach(t=>{
+      const v=Math.round((Number(t.amount)||0)*100),eff={};os.forEach(o=>eff[o]=0);
+      const add=(o,x)=>{if(!o)return;eff[o]=(eff[o]||0)+x};
+      add(t.paidBy,v);add(t.toId,-v);
+      out.push({t,p,os:Object.keys(eff).sort(),eff});
+    });
+    if(os.length<2)return;
+    db.transactions.filter(t=>t.propertyId===p.id&&countsBetweenOwners(t)&&os.indexOf(t.paidBy)>-1).forEach(t=>{
       const eff={};os.forEach(o=>eff[o]=0);
-      if(t.kind==='settle'){const v=Math.round((Number(t.amount)||0)*100);if(eff[t.paidBy]!==undefined)eff[t.paidBy]+=v;if(eff[t.toId]!==undefined)eff[t.toId]-=v}
-      else{const sign=isIn(t.kind)?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));eff[t.paidBy]+=total*sign;txSplitCents(t,p,os).forEach((part,i)=>{eff[os[i]]-=part*sign})}
+      const sign=isIn(t.kind)?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));eff[t.paidBy]+=total*sign;txSplitCents(t,p,os).forEach((part,i)=>{eff[os[i]]-=part*sign});
       out.push({t,p,os,eff});
     });
   });
-  db.transactions.filter(t=>countsBetweenOwners(t)&&!t.propertyId&&(t.groupId?txProps(t).some(p2=>props.some(p3=>p3.id===p2.id)):!pid&&!ownerFilter)).forEach(t=>{
+  db.transactions.filter(t=>!t.propertyId&&(t.groupId?countsBetweenOwners(t)&&txProps(t).some(p2=>props.some(p3=>p3.id===p2.id)):(countsBetweenOwners(t)||t.kind==='settle')&&!pid&&!ownerFilter)).forEach(t=>{
     const sign=isIn(t.kind)?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));
     const eff={},add=(o,v)=>{eff[o]=(eff[o]||0)+v};
-    if(t.groupId){
+    if(t.kind==='settle'){   /* acerto das dívidas globais (sem imóvel nem grupo): quem paga sobe, quem recebe desce */
+      add(t.paidBy,total);add(t.toId,-total);
+    }else if(t.groupId){
       txProps(t).filter(p2=>props.some(p3=>p3.id===p2.id)).forEach(p2=>{
         const cP=Math.round(total*txPropShare(t,p2.id)),os2=ownersOfProp(p2).slice().sort();
         if(!os2.length||!cP)return;
@@ -451,31 +483,37 @@ function balancesDetail(pid){
 }
 /* saldos entre comproprietários, em euros por dono: quem pagou fica a crédito e a
    parte de cada um sai das quotas ou da divisão escolhida no movimento; as
-   transferências acertam contas diretamente. pid limita a um imóvel; sem pid vale o
-   âmbito atual. Positivo é a receber, negativo a pagar.
-   Recebe: pid (opcional) — o id de um imóvel; vazio vale o âmbito atual.
+   transferências acertam contas diretamente. pid limita a um imóvel ou grupo; sem
+   pid vale o âmbito atual. Positivo é a receber, negativo a pagar.
+   Recebe: pid (opcional) — o id de um imóvel ou 'g:ID' de um grupo; vazio vale o âmbito atual.
    Devolve: objeto {idDoDono: saldo em euros} — positivo a receber, negativo a pagar. */
 function ownerBalances(pid){
-  const props=pid?[prop(pid)].filter(Boolean):scope(),cents={};
+  const props=pidProps(pid),cents={};
   props.forEach(p=>{
-    const os=ownersOfProp(p).slice().sort();if(os.length<2)return;
+    const os=ownersOfProp(p).slice().sort();
+    /* os acertos deste imóvel contam sempre — com um só dono, ou entre quem não é dono dele
+       (uma dívida de grupo paga por quem não é dono do imóvel salda-se com um acerto aqui) */
+    db.transactions.filter(t=>t.propertyId===p.id&&t.kind==='settle').forEach(t=>{
+      const v=Math.round((Number(t.amount)||0)*100);
+      const add=(o,x)=>{if(!o)return;if(cents[o]===undefined)cents[o]=0;cents[o]+=x};
+      add(t.paidBy,v);add(t.toId,-v);
+    });
+    if(os.length<2)return;
     os.forEach(o=>{if(cents[o]===undefined)cents[o]=0});
     db.transactions.filter(t=>countsBetweenOwners(t)&&t.propertyId===p.id&&os.indexOf(t.paidBy)>-1).forEach(t=>{
       const sign=isIn(t.kind)?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));
       cents[t.paidBy]+=total*sign;
       txSplitCents(t,p,os).forEach((part,i)=>{cents[os[i]]-=part*sign});
     });
-    db.transactions.filter(t=>t.propertyId===p.id&&t.kind==='settle').forEach(t=>{
-      const v=Math.round((Number(t.amount)||0)*100);
-      if(cents[t.paidBy]!==undefined)cents[t.paidBy]+=v;
-      if(cents[t.toId]!==undefined)cents[t.toId]-=v;
-    });
   });
-  /* sem imóvel: divide-se por todos os proprietários; com grupo: pelos donos de cada imóvel do grupo */
-  db.transactions.filter(t=>countsBetweenOwners(t)&&!t.propertyId).forEach(t=>{
+  /* sem imóvel: divide-se por todos os proprietários (e os acertos globais saldam-se aqui);
+     com grupo: pelos donos de cada imóvel do grupo */
+  db.transactions.filter(t=>!t.propertyId&&(countsBetweenOwners(t)||(t.kind==='settle'&&!t.groupId))).forEach(t=>{
     const sign=isIn(t.kind)?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));
     const add=(o,v)=>{if(cents[o]===undefined)cents[o]=0;cents[o]+=v};
-    if(t.groupId){
+    if(t.kind==='settle'){
+      if(!pid&&!ownerFilter){add(t.paidBy,total);add(t.toId,-total)}
+    }else if(t.groupId){
       txProps(t).filter(p2=>props.some(p3=>p3.id===p2.id)).forEach(p2=>{
         const cP=Math.round(total*txPropShare(t,p2.id)),os=ownersOfProp(p2).slice().sort();
         if(!os.length||!cP)return;
@@ -628,7 +666,12 @@ function toggleExc(tk,cat,sub){
   if(e[k])delete e[k];else e[k]=true;
   save();render();
 }
-const countsInTotals=t=>!((t.kind==='income'||t.kind==='expense')&&isExc(t.kind,t.category,t.sub));
+/* receitas que são passivo, não rendimento: a caução devolve-se e o empréstimo paga-se.
+   Nunca entram nos totais, no resultado nem no cashflow — capitalizadas a 5 % inflavam a avaliação.
+   Recebe: t — o movimento.
+   Devolve: true se for uma caução ou um empréstimo recebido. */
+const isPassivo=t=>t.kind==='income'&&(t.category==='Empréstimos recebidos'||t.sub==='Caução');
+const countsInTotals=t=>!isPassivo(t)&&!((t.kind==='income'||t.kind==='expense')&&isExc(t.kind,t.category,t.sub));
 /* todas as categorias conhecidas, para o filtro (sem repetir)
    Recebe: kind (opcional) — o tipo de movimento; vazio junta receitas e despesas.
    Devolve: a árvore (objeto {categoria: [subcategorias]}), sem repetidos. */

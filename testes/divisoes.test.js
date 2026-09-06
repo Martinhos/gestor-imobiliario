@@ -114,6 +114,47 @@ describe('divisão de um movimento', () => {
     assert.equal(r[0], 8000);   // 60 seus mais metade dos 40 que sobram
   });
 
+  test('modo ajuste: o ajuste é um extra por cima da parte igual', () => {
+    // o exemplo do utilizador: 15 com 5 de extra para a Ana → 15−5=10 → 5 cada → Ana 10, Bruno 5
+    const t = desp({ amount: 15, split: { mode: 'adjust', parts: { ana: 5 } } });
+    igual(app.txSplitCents(t, casa, os), [1000, 500]);
+  });
+
+  test('modo ajuste: em branco vale o mesmo que zero', () => {
+    const a = app.txSplitCents(desp({ amount: 15, split: { mode: 'adjust', parts: { ana: 5 } } }), casa, os);
+    const b = app.txSplitCents(desp({ amount: 15, split: { mode: 'adjust', parts: { ana: 5, bruno: 0 } } }), casa, os);
+    igual(a, b);
+    igual(b, [1000, 500]);
+  });
+
+  test('modo ajuste: todos com extra, três donos, e o resto ao cêntimo', () => {
+    igual(app.txSplitCents(desp({ amount: 100, split: { mode: 'adjust', parts: { ana: 10, bruno: 30 } } }), casa, os), [4000, 6000]);
+    const tres = ['ana', 'bruno', 'carla'];
+    igual(app.txSplitCents(desp({ amount: 100, split: { mode: 'adjust', parts: { ana: 10 } } }), casa, tres), [4000, 3000, 3000]);
+    const r = app.txSplitCents(desp({ amount: 33.33, split: { mode: 'adjust', parts: { ana: 10 } } }), casa, os);
+    igual(r, [2167, 1166]);
+    assert.equal(r[0] + r[1], 3333);
+  });
+
+  test('modo ajuste: extras acima do total repartem o total sem o passar', () => {
+    const r = app.txSplitCents(desp({ amount: 10, split: { mode: 'adjust', parts: { ana: 30, bruno: 10 } } }), casa, os);
+    igual(r, [750, 250]);
+    assert.equal(r[0] + r[1], 1000);
+  });
+
+  test('modo ajuste: um extra negativo conta como zero', () => {
+    igual(app.txSplitCents(desp({ amount: 15, split: { mode: 'adjust', parts: { ana: -5 } } }), casa, os), [750, 750]);
+  });
+
+  test('a validação recusa extras negativos e acima do total', () => {
+    app.tForm = { propertyId: 'casa', amount: 10, split: { mode: 'adjust', parts: { ana: 20 } } };
+    assert.match(app.splitError(), /passar o total/);
+    app.tForm = { propertyId: 'casa', amount: 10, split: { mode: 'adjust', parts: { ana: -1 } } };
+    assert.match(app.splitError(), /negativos/);
+    app.tForm = { propertyId: 'casa', amount: 15, split: { mode: 'adjust', parts: { ana: 5 } } };
+    assert.equal(app.splitError(), '');
+  });
+
   test('a soma das partes é sempre o total, em qualquer modo', () => {
     [
       { mode: 'equal', parts: {} },
@@ -124,6 +165,15 @@ describe('divisão de um movimento', () => {
       const r = app.txSplitCents(desp({ amount: 33.33, split }), casa, os);
       assert.equal(r.reduce((a, b) => a + b, 0), 3333, 'modo ' + (split ? split.mode : 'quota'));
     });
+  });
+});
+
+describe('divisão entre imóveis', () => {
+  test('por ajuste segue a mesma regra do extra', () => {
+    const p1 = app.normProp({ id: 'p1', name: 'P1' }), p2 = app.normProp({ id: 'p2', name: 'P2' });
+    const g = (amount, parts) => app.normTx({ kind: 'expense', amount, groupId: 'g', date: '2026-01-01', psplit: { mode: 'adjust', parts } });
+    igual(app.psplitCents(g(15, { p1: 5 }), [p1, p2], 1500), [1000, 500]);
+    igual(app.psplitCents(g(10, { p1: 20, p2: 20 }), [p1, p2], 1000), [500, 500]);
   });
 });
 

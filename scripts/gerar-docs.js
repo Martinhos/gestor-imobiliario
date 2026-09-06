@@ -4,8 +4,9 @@
 // que explica o que é, e as funções têm o seu comentário por cima. Este
 // guião junta tudo por FUNCIONALIDADE (não por pasta): o cabeçalho de cada
 // ficheiro, a assinatura de cada função com a documentação adjacente, os
-// comandos do Discord com quem os pode correr, e as armadilhas conhecidas
-// (docs/armadilhas.md). Escreve worker/src/docs-gerados.js, que o worker
+// comandos do Discord com quem os pode correr, as regras de design
+// (docs/design.md) e as armadilhas conhecidas (docs/armadilhas.md).
+// Escreve worker/src/docs-gerados.js, que o worker
 // serve em /equipa/docs — com gaveta de navegação e pesquisa.
 //
 // Corre no deploy (a página nunca fica atrás do código) e o resultado vai
@@ -246,10 +247,12 @@ function permissoes() {
   return mapa;
 }
 
-// as armadilhas: um markdown mantido à mão, secções por «## »
+// um markdown mantido à mão (as armadilhas, as regras de design), partido
+// por «## »: cada secção vira uma entrada sem assinatura, que a vista pinta pelo nome
+// Recebe: caminho — o ficheiro .md, relativo à raiz do repositório (texto).
 // Devolve: array de {nome, assinatura: '', doc}, uma entrada por secção do markdown.
-function armadilhas() {
-  const md = ler('docs/armadilhas.md');
+function seccoesMd(caminho) {
+  const md = ler(caminho);
   const partes = md.split(/\n## /).slice(1);
   return partes.map((p) => {
     const [titulo, ...resto] = p.split('\n');
@@ -295,8 +298,12 @@ capitulos.push({
     }),
 });
 capitulos.push({
+  id: 'design', titulo: 'Regras de design',
+  itens: [{ nome: 'docs/design.md', texto: 'Como a app se veste e como se comporta: cada regra esteve primeiro no código, com a razão ao lado e o sítio onde está.', funcoes: seccoesMd('docs/design.md') }],
+});
+capitulos.push({
   id: 'armadilhas', titulo: 'Armadilhas conhecidas',
-  itens: [{ nome: 'docs/armadilhas.md', texto: 'Coisas que já morderam alguém neste projeto. Cada uma custou uma tarde; ler isto custa cinco minutos.', funcoes: armadilhas() }],
+  itens: [{ nome: 'docs/armadilhas.md', texto: 'Coisas que já morderam alguém neste projeto. Cada uma custou uma tarde; ler isto custa cinco minutos.', funcoes: seccoesMd('docs/armadilhas.md') }],
 });
 
 const guia = guiaDosComandos();

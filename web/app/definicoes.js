@@ -50,7 +50,8 @@ function vDefaults(){
       <label>Horizonte (anos)<input type="text" inputmode="numeric" value="${s.years}" onchange="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label></div>`)}
   <div style="height:14px"></div>
   ${card('Avaliação','Usado ao avaliar os imóveis pelo rendimento',`
-    <label>Yield exigido na avaliação (%)<input type="text" inputmode="decimal" value="${dec(s.capTarget)}" onchange="setSet('capTarget',num(this.value)||5)"></label>`)}
+    <label>Yield exigido na avaliação (%)<input type="text" inputmode="decimal" value="${dec(s.capTarget)}" onchange="capTargetSet(this.value)"></label>
+    <div class="hint">O resultado anual de cada imóvel dividido por este yield dá o valor por rendimento. Tem de ser maior que zero; em branco volta aos 5 %.</div>`)}
   <div style="height:14px"></div>
   ${card('Crédito à habitação','Usado nas prestações e nos planos das hipotecas',`
     <label>Imposto do selo sobre juros (%)<input type="text" inputmode="decimal" value="${dec(s.stampPct??4)}" onchange="setSet('stampPct',Math.max(0,num(this.value)))"></label>

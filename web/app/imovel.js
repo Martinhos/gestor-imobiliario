@@ -14,9 +14,12 @@ function propModal(id){
   onSave=()=>{
     collectProp();
     if(!pForm.name.trim())return falhaCampo('p_name','Dá um nome ao imóvel.');
+    (pForm.loans||[]).forEach(l=>{l.name=l.name||l.bank||'Hipoteca'});   /* a recorrência identifica-se pelo nome */
+    const antes=loanStartsAntes(prop(pForm.id));   /* antes de trocar o objeto na db */
     const i=db.properties.findIndex(x=>x.id===pForm.id);
     if(i<0)db.properties.push(pForm);else db.properties[i]=pForm;
-    save();closeModal();render();toast(id?'Imóvel atualizado.':'Imóvel adicionado.');
+    syncAllLoanRecs();save();closeModal();render();toast(id?'Imóvel atualizado.':'Imóvel adicionado.');
+    perguntarPrestacoesEmFalta(pForm,antes);
   };
 }
 /* Constrói o HTML do formulário do imóvel a partir de pForm: proprietários e
@@ -301,8 +304,10 @@ function liveLoan(lid){
 function liveLoanAll(){collectProp();(pForm.loans||[]).forEach(l=>{
   const b=document.getElementById('loanBox_'+l.id);if(b)b.innerHTML=loanBox(l)})}
 /* HTML da caixa de simulação de uma hipoteca: prestação mensal decomposta em
-   capital, juros e selo, prestação após a fase fixa (mista) e custo total do
-   crédito. Sem capital em dívida ou prazo devolve só a dica do que falta.
+   capital, juros e selo, prestação após a fase fixa (mista, se ainda não
+   chegou — descontando as prestações já pagas) e custo total do crédito.
+   Sem capital em dívida ou prazo devolve só a dica do que falta; com o prazo
+   já esgotado pelas prestações pagas, avisa em vez de fingir uma prestação.
    Recebe: l — a hipoteca (objeto; aguenta null/undefined).
    Devolve: string de HTML da caixa, pronta a inserir com innerHTML; '' sem hipoteca. */
 function loanBox(l){
@@ -310,14 +315,22 @@ function loanBox(l){
   if(!l.outstanding||!l.years)return `<div class="hint">Falta o capital em dívida e o prazo.</div>`;
   const c=loanCalc(l),a=amort(l);
   let extra='';
-  if(l.type==='mista'){const k=Math.round((Number(l.fixedYears)||0)*12),r=a.rows[k];
-    if(r)extra=`<div class="stat"><span>Prestação a partir do ano ${dec(l.fixedYears)}</span><b>${euro2(r.pay+r.st)}</b></div>`}
+  if(l.type==='mista'){
+    /* as linhas do plano começam no mês de hoje: a fase muda em rows[fixedYears*12 − pagas] */
+    const k=Math.round((Number(l.fixedYears)||0)*12)-loanMes(l),r=k>0?a.rows[k]:null;
+    if(r){
+      let quando='daqui a '+(k>=24?Math.round(k/12)+' anos':k+' meses');
+      if(/^\d{4}-\d{2}/.test(l.start||'')){const t0=Number(l.start.slice(0,4))*12+Number(l.start.slice(5,7))-1+Math.round((Number(l.fixedYears)||0)*12);
+        quando='a partir de '+MES[t0%12]+' '+Math.floor(t0/12)}
+      extra=`<div class="stat"><span>Prestação ${quando}</span><b>${euro2(r.pay+r.st)}</b></div>`}
+  }
+  if(a.esgotado)extra+=`<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px"><b>Prazo esgotado</b> — as prestações já pagas cobrem o prazo inteiro e ainda há dívida. Confirma o prazo e o início.</div>`;
   return `<div class="stat" style="padding-top:0"><span>Prestação mensal</span><b style="font-size:16px">${euro2(c.total)}</b></div>
     <div class="stat"><span>Capital</span><b>${euro2(c.principal)}</b></div>
     <div class="stat"><span>Juros</span><b>${euro2(c.interest)}</b></div>
     ${l.stampTax?`<div class="stat"><span>Imposto do selo (${dec(db.settings.stampPct??4)}% dos juros)</span><b>${euro2(c.stamp)}</b></div>`:''}${extra}
     <div class="stat" style="border:0"><span>Custo total do crédito</span><b class="neg">${euro(a.totInt+a.totStamp)}</b></div>
-    <div class="hint">${rateLabel(l)} · ${c.n} prestações</div>`;
+    <div class="hint">${rateLabel(l)} · ${c.n} prestações por pagar</div>`;
 }
 // Junta as fotos escolhidas no input às do imóvel (assíncrono) e repinta.
 // Recebe: input — o <input type="file"> com as fotos escolhidas.
@@ -414,17 +427,6 @@ function delPropOwner(oid){collectProp();pForm.ownerIds=(pForm.ownerIds||[]).fil
 function newOwnerFromProp(){
   closeModal();   /* fecha a lista de escolha; a ficha nova abre por cima do imóvel */
   personModal('owner',null,nid=>{if(pForm.ownerIds.indexOf(nid)<0)pForm.ownerIds.push(nid);closeModal();render();repaintProp();toast('Proprietário criado.')});
-}
-/* Devolve o handler de gravação do imóvel (para usar como onSave): valida o
-   nome, escreve em db.properties e sincroniza os movimentos recorrentes das
-   hipotecas antes de fechar e repintar.
-   Devolve: função sem argumentos que faz essa gravação, pronta a pendurar em onSave. */
-function propSaver(){
-  return ()=>{collectProp();
-    if(!pForm.name.trim())return toast('Dá um nome ao imóvel.');
-    const i=db.properties.findIndex(x=>x.id===pForm.id);
-    if(i<0)db.properties.push(pForm);else db.properties[i]=pForm;
-    syncAllLoanRecs();save();closeModal();render();toast('Imóvel guardado.')};
 }
 /* Apaga o imóvel e, em cascata, os contratos e os movimentos associados, com
    Anular. A cópia guarda-se antes de apagar; as fotos e os documentos das

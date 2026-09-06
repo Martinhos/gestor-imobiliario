@@ -72,7 +72,42 @@ describe('o calendário', () => {
     assert.ok((html.match(/pt vis/g) || []).length >= 2, 'ponto de visita (célula + legenda)');
     assert.ok((html.match(/pt pla/g) || []).length >= 2, 'ponto de planeado');
     assert.match(html, /setembro de 2026/i);
+    assert.match(html, /id="calDiaPanel"/, 'o painel do dia vive na própria vista');
+    assert.doesNotMatch(html, /calDia\(/, 'já não há modal do dia');
     app.calMes = '';
+  });
+
+  test('o dia em foco: o escolhido no mês em vista, senão hoje, senão o dia 1', () => {
+    monta();
+    const hoje = app.pzHoje();
+    app.calMes = ''; app.calDiaSel = '';
+    assert.equal(app.calSelDia(), hoje, 'no mês de hoje o foco é hoje');
+    app.calMes = '2031-03';
+    assert.equal(app.calSelDia(), '2031-03-01', 'noutro mês cai no dia 1');
+    app.calDiaSel = '2031-03-14';
+    assert.equal(app.calSelDia(), '2031-03-14', 'o escolhido manda se for deste mês');
+    app.calDiaSel = '2030-01-05';
+    assert.equal(app.calSelDia(), '2031-03-01', 'um escolhido de outro mês não conta');
+    app.calMes = ''; app.calDiaSel = '';
+  });
+
+  test('o painel do dia lista as visitas e os planeados dele, ou convida a marcar', () => {
+    monta();
+    app.db.visits = [app.normVisit({ id: 'V1', nomes: 'Ana', propertyId: 'P1', date: '2026-09-10', start: '15:00' })];
+    app.db.recurring = [{ id: 'R1', name: 'Renda', next: '2026-09-10', every: 'month', muted: false, tx: { kind: 'income', amount: 800, propertyId: 'P1' } }];
+    const cheio = app.calDiaPanel('2026-09-10');
+    assert.match(cheio, /Visitas/); assert.match(cheio, /Ana/); assert.match(cheio, /15:00/);
+    assert.match(cheio, /Planeados/); assert.match(cheio, /Renda/);
+    assert.match(cheio, /visitModal\('V1'\)/, 'a visita abre a ficha');
+    assert.match(cheio, /go\('recurring'\)/, 'o planeado leva aos Planeados');
+    const vazio = app.calDiaPanel('2026-09-11');
+    assert.match(vazio, /Nada marcado/);
+    assert.match(vazio, /visitModal\(null,\{date:'2026-09-11'\}\)/, 'marcar visita já com a data');
+    // a célula do dia em foco leva a classe .on e o aria-pressed
+    app.calMes = '2026-09'; app.calDiaSel = '2026-09-10';
+    const html = app.vCalendar();
+    assert.match(html, /calday tap[^"]*on" data-d="2026-09-10"[^>]*aria-pressed="true"/);
+    app.calMes = ''; app.calDiaSel = '';
   });
 });
 
