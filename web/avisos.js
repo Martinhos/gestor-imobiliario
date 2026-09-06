@@ -31,12 +31,33 @@ var AVISOS = [
     titulo: 'Visitas, calendário, e os prazos deixam de se perder',
     seccoes: [
       {
+        titulo: 'Créditos antigos: as prestações que faltam, na hipoteca certa',
+        afeta: ['creditos', 'movimentos'],
+        itens: [
+          'Ao criar uma hipoteca com início no passado, ou ao recuar o início de uma que já existe, a app pergunta se queres inserir as prestações em falta desde essa data. Ficam com os juros, o selo e o capital do plano, reconstruído para trás, e não mexem no capital em dívida — esse é o de hoje.',
+          'O prazo restante e a fase da taxa passam a contar com a data de início: um crédito de 30 anos contraído há 10 tem 20 por pagar, mesmo sem as prestações antigas registadas. A prestação sugerida e a recorrência acompanham.',
+          'Com duas hipotecas no mesmo imóvel, o preenchimento das prestações antigas ia às vezes parar à hipoteca errada. Agora identifica a hipoteca pelo nome, banco e início, e um pagamento de crédito novo pede-te que escolhas a hipoteca em vez de assumir a primeira.',
+        ],
+      },
+      {
+        titulo: 'As contas revistas',
+        afeta: ['movimentos', 'partilha', 'imoveis'],
+        itens: [
+          'A divisão «por ajuste» passa a ser o que o nome diz: um extra por cima da parte igual. Ao total tira-se a soma dos ajustes, o resto divide-se por todos e cada um soma o seu (15 € com 5 de extra para um de dois → 10 € e 5 €). Se tinhas movimentos guardados nesse modo, os saldos entre proprietários mudam — confere-os.',
+          'Os rácios de rentabilidade (yield bruto, cap rate, sobre a aquisição, LTV) saem da vista geral e vivem só na Avaliação, com a explicação e a evolução ao toque.',
+          'A avaliação por rendimento e o cap rate anualizam o ano corrente em vez de capitalizar só os meses já lançados; as cauções e os empréstimos recebidos deixam de contar como receita; as amortizações antecipadas aparecem à parte das prestações.',
+          'Na vista por proprietário, os movimentos de grupo entram pela tua quota em cada imóvel; com um grupo em foco, a evolução e os saldos entre donos funcionam. «Pagar todas as dívidas» inclui os movimentos sem imóvel.',
+          'A renda líquida de impostos usa por omissão a taxa especial de IRS conforme a duração do contrato (25 %, e 15/10/5 % nos contratos de 5, 10 e 20 anos ou mais) — é uma estimativa, e diz que é.',
+          'O yield bruto compara rendas e valor sobre o mesmo conjunto de imóveis; a projeção parte das despesas do último ano completo (ou anualiza o corrente), e diz qual é a base.',
+        ],
+      },
+      {
         titulo: 'Dois menus novos: Visitas e Calendário',
         afeta: ['imoveis', 'contratos'],
         itens: [
           'As visitas às casas têm agora registo próprio: quem vem (sem precisar de ficha — ainda não é inquilino), a que imóvel ou quarto, quando (com horas), o estado e o desfecho, e os teus comentários.',
           'Quando uma visita corre bem, o menu da visita converte-a numa ficha de inquilino num toque, com nome e contacto já preenchidos.',
-          'O Calendário mostra o mês de relance: visitas agendadas e movimentos planeados, dia a dia. Tocar num dia abre a lista dele — e um dia vazio oferece logo marcar visita ali.',
+          'O Calendário mostra o mês de relance: visitas agendadas e movimentos planeados, dia a dia. Tocar num dia realça-o e mostra por baixo da grelha o que ele tem — e há sempre o botão para marcar visita nesse dia.',
         ],
       },
       {
