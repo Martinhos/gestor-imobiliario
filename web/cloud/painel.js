@@ -17,7 +17,9 @@ evoMoney = function (field, pid, fmt) {
   return d;
 };
 
-// mesma regra do metrics(): ano, tipo, fora-dos-totais e peso do imóvel/quota
+// mesma regra do metrics(): ano, tipo, fora-dos-totais e o peso único de
+// txWeight (imóvel, grupo e quota do proprietário); em Prestações as
+// amortizações antecipadas ficam de fora, como no KPI
 // Recebe: q — objeto {field, pid, year}: field é a chave do indicador ('income',
 // 'op', 'loan' ou 'cf'), pid o id do imóvel a que se limita (ou null para todos)
 // e year o ano por que a data do movimento tem de começar.
@@ -30,9 +32,10 @@ function kpiTxs(q) {
       if (String(t.date || '').indexOf(String(q.year)) !== 0) return false;
       if (kinds.indexOf(t.kind) < 0) return false;
       if ((t.kind === 'income' || t.kind === 'expense') && !countsInTotals(t)) return false;
-      return txW(t, q.pid) !== 0;
+      if (q.field === 'loan' && isAmort(t)) return false;
+      return txWeight(t, q.pid, true) !== 0;
     })
-    .map(function (t) { return { t: t, v: t.amount * txShare(t, true) * txW(t, q.pid) }; })
+    .map(function (t) { return { t: t, v: t.amount * txWeight(t, q.pid, true) }; })
     .sort(function (a, b) { return String(b.t.date).localeCompare(String(a.t.date)); });
 }
 
@@ -152,109 +155,106 @@ CW.rejectRec = function (id) {
 /* ---------- preencher por estimativa os períodos já passados ----------
    Quem regista um contrato ou uma hipoteca que já vem de trás não vai
    confirmar dezenas de meses um a um. Oferecemos criá-los de uma vez,
-   deixando claro que são estimativas. */
-
-// De onde vem a história: o início do contrato ou da hipoteca. A
-// recorrência criada por eles arranca no mês corrente, por isso os meses
-// anteriores não aparecem em lado nenhum.
-// Recebe: r — o plano recorrente ({tx, next, …}) cuja origem se procura.
-// Devolve: uma data "AAAA-MM-DD" — o início do contrato ou da hipoteca; sem eles, r.next.
-function originOf(r) {
-  var c = r.tx.contractId ? contract(r.tx.contractId) : null;
-  if (c && c.start) return c.start;
-  if (r.tx.loanId) {
-    var found = '';
-    (db.properties || []).forEach(function (p) {
-      (p.loans || []).forEach(function (l) { if (l.id === r.tx.loanId && l.start) found = l.start; });
-    });
-    if (found) return found;
-  }
-  return r.next;
-}
-
-// já existe um movimento deste contrato/hipoteca nesse mês?
-// Recebe: r — o plano recorrente; d — a data "AAAA-MM-DD" cujo mês se verifica.
-// Devolve: true/false — se nesse mês já há movimento do mesmo contrato/hipoteca
-// (ou, sem eles, do mesmo imóvel com a mesma descrição).
-function already(r, d) {
-  var mo = String(d).slice(0, 7);
-  return (db.transactions || []).some(function (t) {
-    if (String(t.date || '').indexOf(mo) !== 0) return false;
-    if (r.tx.contractId) return t.contractId === r.tx.contractId;
-    if (r.tx.loanId) return t.loanId === r.tx.loanId;
-    return t.propertyId === r.tx.propertyId && t.label === r.tx.label;
-  });
-}
-
-/* As datas do plano que já passaram sem movimento registado, da origem
-   (início do contrato ou da hipoteca) até hoje, respeitando o fim do plano.
-   O guarda de 600 períodos evita ciclos infinitos com datas estragadas.
-   Recebe: r — o plano recorrente a analisar.
-   Devolve: array de datas "AAAA-MM-DD" por ordem cronológica — os períodos
-   vencidos sem movimento registado; vazio sem plano ou sem próxima data. */
-function missedDates(r) {
-  if (!r || !r.next) return [];
-  var t = today(), day = Number(String(r.next).slice(8, 10)) || 1;
-  var origin = originOf(r), d;
-  if (['month', 'quarter', 'year'].indexOf(r.every) > -1) {
-    var o = new Date(origin + 'T00:00:00');
-    d = dayInMonth(o.getFullYear(), o.getMonth(), day);
-    if (d < origin) d = nextDate(d, r.every);
-  } else {
-    d = origin;
-  }
-  var out = [], guard = 0;
-  while (d && d <= t && guard++ < 600) {
-    if (!already(r, d)) out.push(d);
-    if (r.every === 'once') break;
-    d = nextDate(d, r.every);
-    if (r.end && d > r.end) break;
-  }
-  return out;
-}
+   deixando claro que são estimativas. As funções puras (origemDoPlano,
+   jaRegistado, datasEmFalta, planoPrestacoesEmFalta) vivem em
+   app/planeados.js, para os testes as apanharem sem a camada cloud.
+   Numa hipoteca a lista é a reconstruída para trás a partir do capital em
+   dívida de hoje, e entra como retroativa: não abate capital. */
 
 var EVERY_WORD = { once: 'ocorrência', week: 'semana', month: 'mês', quarter: 'trimestre', year: 'ano' };
 
+// A linha que identifica o plano no modal: a hipoteca (nome e banco, início,
+// dívida) ou o contrato (nome, renda, início), sempre com o imóvel — só o
+// r.name não distingue duas hipotecas do mesmo imóvel.
+// Recebe: r — o plano recorrente.
+// Devolve: HTML (string) com a identificação; '' quando o plano não é de hipoteca nem de contrato.
+function planoQuem(r) {
+  var tx = r.tx || {};
+  if (tx.loanId) {
+    var x = anyLoan(tx.loanId);
+    if (!x) return '';
+    return '<div class="hint">Hipoteca: <b>' + esc(loanName(x.l)) + '</b>' +
+      (x.l.start ? ' · início ' + esc(x.l.start) : '') + ' · ' + euro(x.l.outstanding) + ' em dívida · ' + esc(x.p.name) + '</div>';
+  }
+  if (tx.contractId) {
+    var c = contract(tx.contractId);
+    if (!c) return '';
+    return '<div class="hint">Contrato: <b>' + esc(ctName(c)) + '</b> · ' + euro2(c.rent) + '/mês' +
+      (c.start ? ' · início ' + esc(c.start) : '') + (c.propertyId ? ' · ' + esc(propName(c.propertyId)) : '') + '</div>';
+  }
+  return '';
+}
+
 // Abre o modal que propõe registar de uma vez os períodos em falta do plano,
-// com o total e o aviso de que é tudo estimativa. Não escreve nada na base —
-// isso é o doFillMissed, ao confirmar.
+// com o total e o aviso de que é tudo estimativa. Numa hipoteca são as
+// prestações reconstruídas (juros, selo e capital do plano) e o modal diz que
+// o capital em dívida não muda. Não escreve nada na base — isso é o
+// doFillMissed, ao confirmar.
 // Recebe: id — o id (string) do plano recorrente com períodos em falta.
 // Devolve: nada — abre o modal (ou avisa num toast que não há nada por preencher).
 CW.fillMissed = function (id) {
   var r = (db.recurring || []).find(function (x) { return x.id === id; });
   if (!r) return;
-  var dates = missedDates(r);
-  if (!dates.length) return toast('Não há períodos por preencher.');
-  var val0 = Number(r.tx.amount) || 0;
-  var per = EVERY_WORD[r.every] || 'período';
-  var isLoan = r.tx.kind === 'loan';
-  var body = '<div class="form">' +
-    '<div class="hint">Vais registar <b>' + dates.length + '</b> movimento' + (dates.length === 1 ? '' : 's') +
-    ' de <b>' + esc(r.name) + '</b>, de <b>' + dates[0] + '</b> a <b>' + dates[dates.length - 1] + '</b>, ' +
-    'todos com o valor atual de <b>' + euro2(val0) + '</b> por ' + per + '.</div>' +
-    '<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px">' +
-    '<b>Isto é uma estimativa.</b> O valor de cada período pode não corresponder ao que foi realmente pago: ' +
-    'não entra em conta com aumentos de renda, meses em falta, atrasos nem valores diferentes. ' +
-    'Confere e corrige depois o que não bater certo.' +
-    (isLoan ? ' Como são prestações, o capital em dívida da hipoteca desce com cada uma, tal como se as confirmasses uma a uma.' : '') +
-    '</div>' +
-    '<div class="hint">Ficam marcados com a etiqueta <b>Estimativa</b> — procura por “estimativa” nos Movimentos para os veres todos.</div>' +
-    '<div class="stat" style="margin-top:6px"><span>Total a registar</span><b>' + euro2(val0 * dates.length) + '</b></div></div>';
-  openModal('Preencher ' + dates.length + ' ' + (dates.length === 1 ? 'período' : 'períodos'), body,
-    '<button class="btn" onclick="closeModal()">Cancelar</button>' +
+  var body, n;
+  if ((r.tx || {}).loanId) {
+    var lista = planoPrestacoesEmFalta(r);
+    n = lista.length;
+    if (!n) return toast('Não há prestações por preencher.');
+    var total = lista.reduce(function (a, x) { return a + x.amount; }, 0);
+    body = '<div class="form">' +
+      '<div class="hint">Vais registar <b>' + n + '</b> prestaç' + (n === 1 ? 'ão' : 'ões') + ' de <b>' + esc(r.name) + '</b>, de <b>' +
+      lista[0].date + '</b> a <b>' + lista[n - 1].date + '</b>, com os juros, o selo e o capital do plano da hipoteca, reconstruído para trás.</div>' +
+      planoQuem(r) +
+      '<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px">' +
+      '<b>O capital em dívida não muda</b> — é o de hoje; estas prestações são anteriores a ele e ficam marcadas como retroativas ' +
+      '(apagá-las também não o altera). Os anos anteriores passam a incluí-las. ' +
+      '<b>É uma estimativa:</b> o que o banco cobrou pode ter sido diferente. Confere e corrige depois o que não bater certo.</div>' +
+      '<div class="hint">Ficam marcadas com a etiqueta <b>Estimativa</b> — procura por “estimativa” nos Movimentos para as veres todas.</div>' +
+      '<div class="stat" style="margin-top:6px"><span>Total a registar</span><b>' + euro2(total) + '</b></div></div>';
+  } else {
+    var dates = datasEmFalta(r);
+    n = dates.length;
+    if (!n) return toast('Não há períodos por preencher.');
+    var val0 = Number(r.tx.amount) || 0;
+    var per = EVERY_WORD[r.every] || 'período';
+    body = '<div class="form">' +
+      '<div class="hint">Vais registar <b>' + n + '</b> movimento' + (n === 1 ? '' : 's') +
+      ' de <b>' + esc(r.name) + '</b>, de <b>' + dates[0] + '</b> a <b>' + dates[n - 1] + '</b>, ' +
+      'todos com o valor atual de <b>' + euro2(val0) + '</b> por ' + per + '.</div>' +
+      planoQuem(r) +
+      '<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px">' +
+      '<b>Isto é uma estimativa.</b> O valor de cada período pode não corresponder ao que foi realmente pago: ' +
+      'não entra em conta com aumentos de renda, meses em falta, atrasos nem valores diferentes. ' +
+      'Confere e corrige depois o que não bater certo.</div>' +
+      '<div class="hint">Ficam marcados com a etiqueta <b>Estimativa</b> — procura por “estimativa” nos Movimentos para os veres todos.</div>' +
+      '<div class="stat" style="margin-top:6px"><span>Total a registar</span><b>' + euro2(val0 * n) + '</b></div></div>';
+  }
+  openModal('Preencher ' + n + ' ' + (n === 1 ? 'período' : 'períodos'), body,
+    '<button class="btn" onclick="CW.fillNext()">Cancelar</button>' +
     '<button class="btn primary" onclick="CW.doFillMissed(\'' + id + '\')">Registar estimativa</button>');
 };
 
-/* Cria de facto os movimentos em falta, todos com o valor atual do plano e a
-   etiqueta "Estimativa" (que fica registada nas etiquetas das definições). As
-   prestações abatem no capital da hipoteca, como se confirmadas uma a uma. No
-   fim empurra o plano até à próxima data futura, grava e fecha os modais.
+/* Cria de facto os movimentos em falta. Numa hipoteca entrega a lista
+   reconstruída a inserirPrestacoesEmFalta (retroativas: não abatem capital;
+   grava e dá Anular em bloco). Nos outros planos, todos com o valor atual e
+   a etiqueta "Estimativa" (que fica registada nas etiquetas das definições),
+   e no fim empurra o plano até à próxima data futura, grava e fecha os
+   modais. Se a oferta automática deixou mais planos na fila, segue para o
+   próximo.
    Recebe: id — o id (string) do plano recorrente a preencher.
    Devolve: nada — grava os movimentos novos e redesenha a vista. */
 CW.doFillMissed = function (id) {
   var r = (db.recurring || []).find(function (x) { return x.id === id; });
   if (!r) return closeModal();
-  var dates = missedDates(r), n = 0;
+  if ((r.tx || {}).loanId) {
+    var x = anyLoan(r.tx.loanId), lista = planoPrestacoesEmFalta(r);
+    closeAllModals();
+    if (x && lista.length) inserirPrestacoesEmFalta(x.p, x.l, lista);
+    else toast('Não há prestações por preencher.');
+    CW.fillNext();
+    return;
+  }
+  var dates = datasEmFalta(r), n = 0;
   var tags = db.settings.tags || (db.settings.tags = []);
   if (tags.indexOf('Estimativa') < 0) tags.push('Estimativa');
   for (var i = 0; i < dates.length; i++) {
@@ -273,9 +273,32 @@ CW.doFillMissed = function (id) {
   }
   save(); buildNav(); render(); closeAllModals();
   toast(n + ' movimento' + (n === 1 ? '' : 's') + ' registado' + (n === 1 ? '' : 's') + ' por estimativa.');
+  CW.fillNext();
 };
 
-// Depois de gravar um contrato ou uma hipoteca antiga, perguntar uma vez.
+// Fecha o modal do preenchimento e, se a oferta automática deixou mais planos
+// na fila (vários criados na mesma gravação), marca e abre o seguinte.
+// Devolve: nada — abre o modal do plano seguinte, ou não faz nada sem fila.
+CW.fillNext = function () {
+  if (modalStack.length) closeModal();
+  var q = CW._fillQueue || [], id = q.shift();
+  if (!id) return;
+  markAsked([id]);
+  CW.fillMissed(id);
+};
+
+// Quem acabou de ganhar recorrência: o contrato gravado (ficha, terminar,
+// reativar) fica em CW.lastSaved, para o offerFill o preferir entre vários
+// planos novos da mesma gravação.
+var _syncContractRec = syncContractRec;
+syncContractRec = function (c) {
+  var antes = ctRecOf(c);
+  _syncContractRec(c);
+  var depois = ctRecOf(c);
+  if (depois && (!antes || antes.id !== depois.id)) CW.lastSaved = { contractId: c.id, propertyId: c.propertyId || null };
+};
+
+// Depois de gravar um contrato antigo, perguntar uma vez.
 var LS_ASKED = 'gi_est_asked';
 // os ids dos planos por que já perguntámos, guardados neste aparelho
 // Devolve: array de ids (strings) lido do localStorage — vazio se não houver ou a leitura falhar.
@@ -299,34 +322,48 @@ function refreshKnown() {
   (db.recurring || []).forEach(function (r) { knownRecs[r.id] = 1; });
 }
 
-/* Corre pouco depois de cada save(): se entretanto apareceu um plano novo com
-   2 ou mais períodos em atraso, abre-lhe logo o modal de preenchimento — uma
-   única vez por plano, e nunca por cima de outro modal aberto.
+/* Corre pouco depois de cada save(): se entretanto apareceu um plano novo de
+   contrato com 2 ou mais períodos em atraso, abre-lhe logo o modal de
+   preenchimento — uma única vez por plano; nunca por cima de outro modal
+   aberto (aí não marca nada e tenta no save seguinte) e nunca por planos
+   que chegaram do servidor (_atServidor/_author: outro aparelho). As
+   hipotecas ficam de fora: é a camada app que pergunta pelas prestações
+   antigas ao gravar (perguntarPrestacoesEmFalta), para não perguntar duas
+   vezes. Com vários planos novos, prefere o do contrato acabado de gravar
+   (CW.lastSaved), marca só esse e deixa os restantes na fila (CW._fillQueue)
+   para o doFillMissed/Cancelar encadearem.
    Devolve: nada — quando há candidato, abre-lhe o modal de preenchimento. */
 function offerFill() {
   if (!CW.user) return;
   if (knownRecs === null) return refreshKnown();
-  var seen = asked(), novos = (db.recurring || []).filter(function (r) { return !knownRecs[r.id]; });
+  var novos = (db.recurring || []).filter(function (r) { return !knownRecs[r.id] && !r._atServidor && !r._author; });
+  if (modalStack.length) return;   // sem marcar como conhecidos: tenta no save seguinte
   refreshKnown();
-  if (modalStack.length) return;
+  var seen = asked();
   var cand = novos.filter(function (r) {
-    return seen.indexOf(r.id) < 0 && missedDates(r).length >= 2;
+    return !(r.tx || {}).loanId && seen.indexOf(r.id) < 0 && datasEmFalta(r).length >= 2;
   });
   if (!cand.length) return;
-  markAsked(cand.map(function (r) { return r.id; }));
-  CW.fillMissed(cand[0].id);
+  var ls = CW.lastSaved || {};
+  var alvo = cand.filter(function (r) { return ls.contractId && r.tx.contractId === ls.contractId; })[0] ||
+    cand.filter(function (r) { return ls.propertyId && r.tx.propertyId === ls.propertyId; })[0] || cand[0];
+  markAsked([alvo.id]);
+  CW._fillQueue = cand.filter(function (r) { return r !== alvo; }).map(function (r) { return r.id; });
+  CW.fillMissed(alvo.id);
 }
 
 var REJECT_BTN = function (id) {
   return '<button class="btn sm danger" onclick="event.stopPropagation();CW.rejectRec(\'' + id + '\')">Recusar</button>';
 };
 
-// acrescenta "Recusar" a cada linha do cartão de pendentes
+// acrescenta "Recusar" a cada linha do cartão de pendentes (e, com períodos
+// em falta, o botão de os preencher — numa hipoteca, as prestações
+// reconstruídas desde o início, retroativas)
 var _pendingCard = pendingCard;
 pendingCard = function (all) {
   return _pendingCard(all).replace(/skipRec\('([^']+)'\)"[^>]*>[^<]*<\/button>/g, function (m, id) {
     var r = (db.recurring || []).find(function (x) { return x.id === id; });
-    var n = r ? missedDates(r).length : 0;
+    var n = r ? datasEmFalta(r).length : 0;
     // com vários períodos em atraso, confirmar um a um não é opção
     var fill = n >= 2
       ? '<button class="btn sm" onclick="event.stopPropagation();CW.fillMissed(\'' + id + '\')">' +
@@ -378,10 +415,11 @@ lpMenu = function (v) {
   var a = s.split(':');
   if (a[0] === 'rec') {
     var r = (db.recurring || []).find(function (x) { return x.id === a[1]; });
-    var n = r ? missedDates(r).length : 0;
+    var n = r ? datasEmFalta(r).length : 0;
     if (n >= 2) {
       menuOption({ icon: 'clock', label: 'Preencher ' + n + ' períodos em falta', first: true,
-        sub: 'de uma vez, por estimativa', act: function () { CW.fillMissed(a[1]); } });
+        sub: (r.tx || {}).loanId ? 'prestações antigas, sem mexer no capital em dívida' : 'de uma vez, por estimativa',
+        act: function () { CW.fillMissed(a[1]); } });
     }
     menuOption({ icon: 'x', danger: true, label: 'Recusar desta vez',
       sub: 'não cria o movimento e passa à data seguinte', act: function () { CW.rejectRec(a[1]); } });

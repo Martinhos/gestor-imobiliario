@@ -73,9 +73,12 @@ function mortOpen(lid,isNew){
   onSave=()=>{collectProp();
     const l=findLoan(pForm,lid);
     if(l&&!(l.outstanding>0)&&isNew)return toast('Indica o capital em dívida.');
+    if(l)l.name=l.name||l.bank||'Hipoteca';   /* a recorrência identifica-se pelo nome */
+    const antes=loanStartsAntes(prop(pForm.id));   /* antes de trocar o objeto na db */
     const i=db.properties.findIndex(x=>x.id===pForm.id);
     if(i>-1)db.properties[i]=pForm;
-    syncAllLoanRecs();save();closeModal();render();toast('Hipoteca guardada.')};
+    syncAllLoanRecs();save();closeModal();render();toast('Hipoteca guardada.');
+    perguntarPrestacoesEmFalta(pForm,antes)};
 }
 // O corpo do modal: o formulário da hipoteca `lid` dentro de pForm — o mesmo
 // loanSect da ficha do imóvel. É também a função de repaint do modal.

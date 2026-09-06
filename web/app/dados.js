@@ -20,8 +20,10 @@ const STAMP=0.04;
    Devolve: a taxa em fração (ex.: 0.04 para 4%). */
 const stampPct=()=>{const v=Number((db&&db.settings||{}).stampPct);return isFinite(v)&&v>=0?v/100:STAMP};
 const r2=v=>Math.round(v*100)/100;
-/* comissão de amortização antecipada, conforme a fase da taxa (mista: fixa até fixedYears, variável depois)
-   Recebe: l — a hipoteca (usa type, amortFeeFix, amortFeeVar, start e fixedYears);
+/* comissão de amortização antecipada, conforme a fase da taxa (mista: fixa até
+   fixedYears, variável depois). A fase vem de loanMes — a mesma conta que o
+   plano de amortização usa, para a comissão e a taxa nunca discordarem.
+   Recebe: l — a hipoteca (usa type, amortFeeFix, amortFeeVar, start, fixedYears e as prestações registadas);
    dateStr (opcional) — a data a avaliar, 'AAAA-MM-DD'; por omissão, hoje.
    Devolve: a comissão em fração (ex.: 0.02 para 2%). */
 function amortFeeRate(l,dateStr){
@@ -29,17 +31,16 @@ function amortFeeRate(l,dateStr){
   const V=isFinite(Number(l.amortFeeVar))?Number(l.amortFeeVar)/100:0.005;
   if(l.type==='variavel')return V;
   if(l.type==='fixa')return F;
-  const d=String(dateStr||today()),st=String(l.start||d);
-  const m=(Number(d.slice(0,4))-Number(st.slice(0,4)))*12+(Number(d.slice(5,7))-Number(st.slice(5,7)));
-  return m<(Number(l.fixedYears)||5)*12?F:V;
+  return loanMes(l,String(dateStr||today()))<Math.round((Number(l.fixedYears)||5)*12)?F:V;
 }
-/* quanto ainda se pode amortizar nesta prestação: dívida atual + o capital do próprio registo (em edição)
+/* quanto ainda se pode amortizar nesta prestação: dívida atual + o capital do próprio registo (em edição);
+   uma prestação retroativa (retro) nunca abateu nada, por isso não devolve capital
    Recebe: t — o movimento em causa (pode ser null; só pesa se estiver em edição, t._edit); l — a hipoteca.
    Devolve: o valor amortizável em euros (número). */
 function loanAvail(t,l){
   let a=Number(l.outstanding)||0;
   if(t&&t._edit&&t.id){const old=db.transactions.find(x=>x.id===t.id);
-    if(old&&old.kind==='loan'&&old.loanId===l.id&&old.principal)a=r2(a+old.principal)}
+    if(old&&old.kind==='loan'&&old.loanId===l.id&&old.principal&&!old.retro)a=r2(a+old.principal)}
   return a;
 }
 const CATS0={

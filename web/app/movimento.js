@@ -22,8 +22,10 @@ function txModal(id,kind,propId,_x,ctId,preset){
     collectTx();
     if(!tForm.label.trim())return falhaCampo('t_label','Escreve uma descrição.');
     if(!(tForm.amount>0))return falhaCampo('t_amount','Indica um montante.');
+    /* com hipotecas vivas, um pagamento de crédito sem hipoteca ia parar à conta errada ou a nenhuma */
+    if(tForm.kind==='loan'&&!tForm.loanId&&liveLoans(prop(tForm.propertyId)).length)return falhaCampo('t_loan','Indica a hipoteca.');
     if(tForm.kind==='settle'){
-      if(!tForm.propertyId)return toast('Um acerto é sempre de um imóvel.');
+      if(!tForm.propertyId&&tForm.groupId)return toast('Um acerto é de um imóvel ou de todos os imóveis, não de um grupo.');
       if(!tForm.paidBy||!tForm.toId)return toast('Indica quem paga e quem recebe.');
       if(tForm.paidBy===tForm.toId)return toast('Quem paga e quem recebe têm de ser pessoas diferentes.');
     }
@@ -36,7 +38,8 @@ function txModal(id,kind,propId,_x,ctId,preset){
         const s=r2(Number(tForm.interest||0)+Number(tForm.stamp||0)+Number(tForm.principal||0));
         if(Math.abs(s-tForm.amount)>0.011)return toast('Juros, selo e capital têm de somar o montante ('+euro2(tForm.amount)+').');
       }
-      if(lV){const av=loanAvail(tForm,lV);
+      /* uma prestação retroativa nunca abateu capital: o que está em dívida hoje não a limita */
+      if(lV&&!tForm.retro){const av=loanAvail(tForm,lV);
         if(Number(tForm.principal)>av+0.011)return toast('Só faltam '+euro2(av)+' pagar nesta hipoteca — não podes amortizar mais do que isso.');
         if(!tForm._edit&&!(Number(lV.outstanding)>0))return toast('Esta hipoteca já está paga: não é possível associar novos pagamentos.');}
     }
@@ -53,11 +56,11 @@ function txModal(id,kind,propId,_x,ctId,preset){
       if(also){const tx=normTx(txSnapshot(tForm));tx.date=tForm.date||today();if(tx.kind==='loan')applyLoan(tx);db.transactions.push(tx)}
       save();closeModal();buildNav();render();toast(tForm._tplNew?(also?'Modelo criado e movimento registado.':'Modelo criado.'):'Modelo atualizado.');return;
     }
-    /* sincronizar com a hipoteca: ao editar, repõe-se primeiro o capital do registo antigo;
-       depois aplica-se a distribuição atual (criação ou edição) */
+    /* sincronizar com a hipoteca: ao editar, repõe-se primeiro o capital do registo antigo
+       (não numa retroativa, que nunca o abateu); depois aplica-se a distribuição atual (criação ou edição) */
     if(id){
       const old=db.transactions.find(x=>x.id===tForm.id);
-      if(old&&old.kind==='loan'&&old.principal){
+      if(old&&old.kind==='loan'&&old.principal&&!old.retro){
         const l0=findLoan(prop(old.propertyId),old.loanId);
         if(l0)l0.outstanding=Math.round((l0.outstanding+old.principal)*100)/100;
       }
@@ -85,10 +88,11 @@ function prefill(){
   if(tForm.kind==='settle'&&!tForm.label)tForm.label='Transferência entre proprietários';
   /* imóvel com um só proprietário: os movimentos dele ficam com esse proprietário por defeito */
   if(p&&!tForm.paidBy&&tForm.kind!=='settle'){const os=ownersOfProp(p);if(os.length===1)tForm.paidBy=os[0]}
-  /* a hipoteca fica associada mesmo que o montante já esteja escrito — só a sugestão de valores é que é saltada */
+  /* a hipoteca fica associada mesmo que o montante já esteja escrito — só a sugestão de valores é que é saltada;
+     com várias vivas não se escolhe nenhuma ao acaso: o seletor pede para escolher */
   if(tForm.kind==='loan'&&p&&!tForm._edit){
     const ls=liveLoans(p);
-    if((!tForm.loanId||!findLoan(p,tForm.loanId))&&ls.length)tForm.loanId=ls[0].id;
+    if(!tForm.loanId||!findLoan(p,tForm.loanId))tForm.loanId=ls.length===1?ls[0].id:null;
   }
   if(tForm.amount)return;
   const set=(a,l)=>{tForm.amount=Math.round(a*100)/100;tForm._aA=tForm.amount;if(!tForm.label){tForm.label=l;tForm._aL=l}};
@@ -116,13 +120,18 @@ function txBody(){
   const t=tForm,p=prop(t.propertyId),acs=t.propertyId?activeContracts(t.propertyId):[];
   const lns=liveLoans(p);
   const curLoan=t.kind==='loan'&&t.loanId?findLoan(p,t.loanId):null;
-  const lnOpts=lns.map(l=>({v:l.id,label:loanName(l)+' · '+euro(l.outstanding)}))
-    .concat(curLoan&&!(Number(curLoan.outstanding)>0)?[{v:curLoan.id,label:loanName(curLoan)+' · liquidada'}]:[]);
+  /* com várias vivas e nenhuma escolhida, a primeira opção pede a escolha; uma hipoteca que não
+     existe neste imóvel (dados importados) aparece como desconhecida em vez de fingir ser a primeira */
+  const lnOpts=(!t.loanId&&lns.length>1?[{v:'',label:'— escolhe a hipoteca —'}]:[])
+    .concat(lns.map(l=>({v:l.id,label:loanName(l)+' · '+euro(l.outstanding)})))
+    .concat(curLoan&&!(Number(curLoan.outstanding)>0)?[{v:curLoan.id,label:loanName(curLoan)+' · liquidada'}]:[])
+    .concat(t.kind==='loan'&&t.loanId&&!curLoan?[{v:t.loanId,label:'Hipoteca desconhecida (outro imóvel)'}]:[]);
   /* sem imóvel, a despesa pode na mesma ser paga por alguém; num grupo, pelos donos dos imóveis do grupo */
   const ows=(p?ownersOfProp(p).map(owner):(t.groupId?txGroupOwners(t):db.owners.map(o=>o.id).map(owner))).filter(Boolean);
   const cs=catsFor(t.kind)||{},subs=(cs[t.category]||[]).slice();
   if(t.sub&&subs.indexOf(t.sub)<0)subs.unshift(t.sub);
-  const catKeys=Object.keys(cs);if(t.category&&catKeys.indexOf(t.category)<0)catKeys.unshift(t.category);
+  /* «Crédito à habitação» é dos pagamentos de crédito: uma despesa assim classificada contava como despesa e não abatia nada */
+  const catKeys=Object.keys(cs).filter(c=>!(t.kind==='expense'&&c==='Crédito à habitação'));if(t.category&&catKeys.indexOf(t.category)<0)catKeys.unshift(t.category);
   const credit=t.kind==='owed'||t.kind==='repay',settle=t.kind==='settle';
   const owOpts=[{v:'',label:'Todos os proprietários'}].concat(ows.map(o=>({v:o.id,label:o.name})));
   const cred=creditorBalances(t.propertyId||null).find(r=>r.creditor===(t.creditor||'').trim());
@@ -329,7 +338,11 @@ function refreshSplit(){
 function loanHint(){
   const t=tForm,p=prop(t.propertyId),l=t.loanId?findLoan(p,t.loanId):null;
   if(t.kind!=='loan')return'';
-  if(!l)return `<div class="hint">Nenhuma hipoteca associada. Podes registar o pagamento na mesma, ou criar a hipoteca em Finanças → Créditos.</div>`;
+  if(!l){
+    if(!t.loanId&&liveLoans(p).length>1)return `<div class="hint">Escolhe a hipoteca acima: é a ela que este pagamento abate.</div>`;
+    if(t.loanId)return `<div class="hint">A hipoteca deste movimento não existe neste imóvel. Escolhe outra acima, ou deixa como está.</div>`;
+    return `<div class="hint">Nenhuma hipoteca associada. Podes registar o pagamento na mesma, ou criar a hipoteca em Finanças → Créditos.</div>`;
+  }
   const avail=loanAvail(t,l);
   const c=loanCalc(Object.assign({},l,{outstanding:avail},t._edit?{_paidOfs:-1}:{})),rate=l.stampTax===false?0:stampPct();
   const fr=amortFeeRate(l,t.date),amort=t.payType==='amortizacao';
@@ -562,10 +575,13 @@ function newTagFromTx(){
 // Devolve: nada — repinta o modal.
 function delTxTag(g){collectTx();tForm.tags=(tForm.tags||[]).filter(x=>x!==g);repaintTx()}
 /* Efeito do pagamento na hipoteca, na altura de guardar: valida a distribuição do movimento
-   (ou recalcula-a quando não bate certo com o montante) e abate o capital ao que está em dívida.
-   Também acerta a recorrência automática da hipoteca — atualiza a prestação, ou apaga-a
-   quando o crédito fica liquidado. Mexe na db mas não faz save(); isso é de quem chama.
-   Recebe: t — o movimento de crédito (objeto com amount, loanId, payType e a distribuição).
+   (ou recalcula-a quando não bate certo com o montante — sempre a somar o montante ao cêntimo,
+   com os juros limitados ao que o montante paga) e abate o capital ao que está em dívida.
+   Uma prestação retroativa (t.retro, anterior ao capital em dívida de hoje) só ganha a
+   distribuição: não abate nada. Também acerta a recorrência automática da hipoteca —
+   atualiza a prestação, ou apaga-a quando o crédito fica liquidado. Mexe na db mas não faz
+   save(); isso é de quem chama.
+   Recebe: t — o movimento de crédito (objeto com amount, loanId, payType, a distribuição e, se for o caso, retro).
    Devolve: nada — acerta a distribuição no próprio t e abate o capital na db. */
 function applyLoan(t){
   const p=prop(t.propertyId),l=t.loanId?findLoan(p,t.loanId):null;if(!l)return;
@@ -576,10 +592,13 @@ function applyLoan(t){
     if(!(isFinite(cap)&&isFinite(fee)&&cap>=0&&fee>=0&&Math.abs(cap+fee-t.amount)<=0.011)){cap=r2(t.amount/(1+fr));fee=r2(t.amount-cap)}
     int=0;st=0;
   }else if(!(isFinite(int)&&isFinite(st)&&isFinite(cap)&&int>=0&&st>=0&&cap>=0&&Math.abs(int+st+cap+(fee>0?fee:0)-t.amount)<=0.011)){
-    const c=loanCalc(l);int=c.interest;st=c.stamp;fee=0;cap=Math.max(0,t.amount-int-st);
+    const c=loanCalc(l),sr=l.stampTax===false?0:stampPct();
+    int=r2(Math.min(c.interest,t.amount/(1+sr)));st=r2(int*sr);fee=0;cap=Math.max(0,r2(t.amount-int-st));
+    int=r2(int+r2(t.amount-int-st-cap));   /* os cêntimos do arredondamento vão para os juros: a soma bate com o montante */
   }
-  cap=Math.max(0,Math.min(l.outstanding,cap));
+  if(!t.retro)cap=Math.max(0,Math.min(l.outstanding,cap));
   t.interest=r2(int);t.stamp=r2(st);t.principal=r2(cap);t.fee=r2(fee);
+  if(t.retro)return;
   l.outstanding=Math.max(0,r2(l.outstanding-cap));
   /* recorrência automática desta hipoteca: acompanha a nova prestação e desaparece quando o crédito acaba */
   const ar=loanRecOf(l);
@@ -587,7 +606,8 @@ function applyLoan(t){
     else ar.tx.amount=Math.round(loanCalc(l).total*100)/100}
 }
 /* Apaga o movimento e, se era um pagamento de crédito, repõe o capital na hipoteca
-   e sincroniza a recorrência dela. O toast traz "Anular", que desfaz as duas coisas.
+   e sincroniza a recorrência dela (uma prestação retroativa nunca abateu capital:
+   sai sem repor nada). O toast traz "Anular", que desfaz as duas coisas.
    Recebe: id — o id do movimento a apagar (string).
    Devolve: nada — grava e re-renderiza. */
 function delTx(id){
@@ -595,14 +615,14 @@ function delTx(id){
      pergunta constante ensinava o dedo a confirmar sem ler */
   const t=db.transactions.find(x=>x.id===id);if(!t)return;
   const copia=JSON.parse(JSON.stringify(t));
-  if(t.kind==='loan'&&t.principal&&t.loanId){
+  if(t.kind==='loan'&&t.principal&&t.loanId&&!t.retro){
     const l=findLoan(prop(t.propertyId),t.loanId);
     if(l){l.outstanding=Math.round((l.outstanding+t.principal)*100)/100;syncLoanRec(prop(t.propertyId),l)}
   }
   db.transactions=db.transactions.filter(x=>x.id!==id);save();closeAllModals();render();
   comDesfazer('Movimento apagado.',()=>{
     db.transactions.push(copia);
-    if(copia.kind==='loan'&&copia.principal&&copia.loanId){
+    if(copia.kind==='loan'&&copia.principal&&copia.loanId&&!copia.retro){
       const l=findLoan(prop(copia.propertyId),copia.loanId);
       if(l){l.outstanding=Math.round((l.outstanding-copia.principal)*100)/100;syncLoanRec(prop(copia.propertyId),l)}
     }

@@ -82,9 +82,7 @@ function syncLoanRec(p,l){
   const want=l.outstanding>0&&l.autoRec!==false&&!manual;
   if(!want){if(r)db.recurring=db.recurring.filter(x=>x.id!==r.id);return}
   const day=(()=>{const d=l.start?Number(l.start.slice(8,10)):0;return Math.max(1,Math.min(28,d||1))})();
-  const name='Prestação '+(l.name?l.name+' · ':'')+p.name;
-  const out=cats(),cat='Crédito à habitação' in out?'Crédito à habitação':'',sub=cat&&(out[cat]||[]).indexOf('Prestação mensal')>-1?'Prestação mensal':'';
-  const tx={kind:'loan',payType:'prestacao',label:name,amount:Math.round(loanCalc(l).total*100)/100,propertyId:p.id,loanId:l.id,category:cat,sub,split:null};
+  const tx=loanRecTx(p,l),name=tx.label;
   if(r){Object.assign(r.tx,tx);r.name=name;
     if(r.next){const d=new Date(r.next+'T00:00:00');r.next=dayInMonth(d.getFullYear(),d.getMonth(),day)}
     return}
@@ -100,6 +98,127 @@ function syncAllLoanRecs(){
   const live=id=>db.properties.some(p=>(p.loans||[]).some(l=>l.id===id));
   (db.recurring||[]).slice().forEach(r=>{if(r.auto&&(r.tx||{}).loanId&&!live(r.tx.loanId))db.recurring=db.recurring.filter(x=>x.id!==r.id)});
   db.properties.forEach(p=>(p.loans||[]).forEach(l=>syncLoanRec(p,l)));
+}
+/* O movimento-modelo da prestação da hipoteca l do imóvel p — o que a
+   recorrência automática guarda em r.tx e o que as prestações inseridas em
+   bloco copiam: descrição, prestação atual, imóvel, hipoteca e categoria.
+   Recebe: p — o imóvel (objeto de db.properties); l — a hipoteca (objeto de p.loans).
+   Devolve: o objeto do movimento (sem id nem data), pronto para normTx. */
+function loanRecTx(p,l){
+  const name='Prestação '+(l.name?l.name+' · ':'')+p.name;
+  const out=cats(),cat='Crédito à habitação' in out?'Crédito à habitação':'',sub=cat&&(out[cat]||[]).indexOf('Prestação mensal')>-1?'Prestação mensal':'';
+  return {kind:'loan',payType:'prestacao',label:name,amount:Math.round(loanCalc(l).total*100)/100,propertyId:p.id,loanId:l.id,category:cat,sub,split:null};
+}
+/* ---- prestações anteriores à app: quando o início de uma hipoteca recua ---- */
+/* Retrato dos inícios das hipotecas de um imóvel, {idDaHipoteca: início},
+   tirado ANTES de gravar — depois de db.properties[i]=pForm o prop(id) já é
+   o próprio pForm e não há com que comparar.
+   Recebe: p — o imóvel tal como está na db (objeto; aguenta null/undefined).
+   Devolve: objeto {loanId: 'AAAA-MM-DD' ou ''}; vazio sem imóvel. */
+function loanStartsAntes(p){const o={};loansOf(p).forEach(l=>{o[l.id]=l.start||''});return o}
+// "set 2026" a partir de uma data AAAA-MM-DD, para as perguntas.
+// Recebe: iso — data AAAA-MM-DD (texto).
+// Devolve: o mês abreviado e o ano (texto), ex.: "set 2026".
+const mesPt=iso=>(MES[Number(String(iso).slice(5,7))-1]||'')+' '+String(iso).slice(0,4);
+/* Depois de gravar o imóvel: para cada hipoteca com dívida cujo início recuou
+   (ou que é nova e começou no passado, ou cujo início acabou de ser
+   preenchido) e à qual faltam prestações entre o início e a primeira
+   registada, pergunta se se inserem — uma hipoteca de cada vez. Correr depois
+   de syncAllLoanRecs, para a janela parar onde a recorrência começa (r.next).
+   Recebe: p — o imóvel acabado de gravar (objeto de db.properties); antes — o
+   retrato de loanStartsAntes tirado antes da gravação ({} num imóvel novo).
+   Devolve: nada — abre a(s) pergunta(s); ao confirmar, insere e grava. */
+function perguntarPrestacoesEmFalta(p,antes){
+  const hoje=today();antes=antes||{};
+  const fila=loansOf(p).filter(l=>{
+    if(!(Number(l.outstanding)>0)||!l.start||l.start>hoje)return false;
+    if(!(l.id in antes))return true;            /* hipoteca nova com início no passado */
+    return !antes[l.id]||l.start<antes[l.id];   /* início preenchido agora, ou recuou */
+  }).map(l=>{const r=loanRecOf(l);return {l,lista:loanPrestacoesEmFalta(l,db.transactions,hoje,r?r.next:'')}}).filter(x=>x.lista.length);
+  const seguinte=()=>{const x=fila.shift();if(!x)return;
+    const {l,lista}=x,n=lista.length,de=lista[0].date,a=lista[n-1].date;
+    confirmModal('Prestações em falta',`“${esc(loanName(l))}” começou a ${esc(de)} e não tem ${n===1?'a prestação de '+esc(mesPt(de))+' registada':n+' prestações registadas, de '+esc(mesPt(de))+' a '+esc(mesPt(a))} (${euro2(sum(lista.map(x2=>x2.amount)))} no total). Inserir agora? Ficam com os juros, o selo e o capital do plano e <b>não alteram o capital em dívida</b> — esse é o de hoje. Os anos anteriores passam a incluí-las.`,
+      ()=>{inserirPrestacoesEmFalta(p,l,lista);seguinte()});
+  };
+  seguinte();
+}
+/* Regista as prestações calculadas como movimentos retroativos (retro:true —
+   não abatem capital, nem ao apagar o repõem), com a cara da recorrência
+   automática e a etiqueta "Estimativa"; ressincroniza a recorrência (o prazo
+   restante encurtou: a prestação muda), grava, redesenha e dá Anular em bloco.
+   Recebe: p — o imóvel (objeto de db.properties); l — a hipoteca (objeto de
+   p.loans); lista — as prestações de loanPrestacoesEmFalta.
+   Devolve: nada — mexe em db.transactions e db.recurring, grava e redesenha. */
+function inserirPrestacoesEmFalta(p,l,lista){
+  const base=loanRecTx(p,l),os=ownersOfProp(p),paidBy=os.length===1?os[0]:null;
+  const tags=db.settings.tags||(db.settings.tags=[]);if(tags.indexOf('Estimativa')<0)tags.push('Estimativa');
+  const novos=lista.map(x=>normTx(Object.assign({},base,{date:x.date,amount:x.amount,interest:x.interest,stamp:x.stamp,principal:x.principal,fee:0,paidBy,tags:['Estimativa'],retro:true})));
+  db.transactions=db.transactions.concat(novos);
+  syncLoanRec(p,l);save();buildNav();render();
+  const ids=novos.map(t=>t.id);
+  comDesfazer(novos.length===1?'Prestação inserida.':novos.length+' prestações inseridas.',()=>{
+    db.transactions=db.transactions.filter(t=>ids.indexOf(t.id)<0);syncLoanRec(p,l);
+  });
+}
+/* ---- períodos em falta de um plano: a origem, o que já está, as datas ---- */
+/* De onde vem a história de um plano: o início do contrato ou da hipoteca.
+   A recorrência criada por eles arranca no mês corrente, por isso os meses
+   anteriores não aparecem em lado nenhum sem isto.
+   Recebe: r — o plano recorrente ({tx, next, …}) cuja origem se procura.
+   Devolve: uma data AAAA-MM-DD — o início do contrato ou da hipoteca; sem eles, r.next. */
+function origemDoPlano(r){
+  const c=r.tx.contractId?contract(r.tx.contractId):null;
+  if(c&&c.start)return c.start;
+  if(r.tx.loanId){const x=anyLoan(r.tx.loanId);if(x&&x.l.start)return x.l.start}
+  return r.next;
+}
+/* Já existe um movimento deste contrato/hipoteca nesse mês?
+   Recebe: r — o plano recorrente; d — a data AAAA-MM-DD cujo mês se verifica.
+   Devolve: true/false — se nesse mês já há movimento do mesmo contrato/hipoteca
+   (ou, sem eles, do mesmo imóvel com a mesma descrição). */
+function jaRegistado(r,d){
+  const mo=String(d).slice(0,7);
+  return (db.transactions||[]).some(t=>{
+    if(String(t.date||'').indexOf(mo)!==0)return false;
+    if(r.tx.contractId)return t.contractId===r.tx.contractId;
+    if(r.tx.loanId)return t.loanId===r.tx.loanId;
+    return t.propertyId===r.tx.propertyId&&t.label===r.tx.label;
+  });
+}
+/* As prestações que faltam ao plano de uma hipoteca: a lista reconstruída
+   (loanPrestacoesEmFalta) do início da hipoteca até à primeira registada,
+   parando onde a recorrência começa (r.next). Nunca abatem capital.
+   Recebe: r — o plano recorrente com tx.loanId.
+   Devolve: a lista de loanPrestacoesEmFalta; [] sem hipoteca ou sem nada a inserir. */
+function planoPrestacoesEmFalta(r){
+  const x=r&&r.tx&&r.tx.loanId?anyLoan(r.tx.loanId):null;
+  if(!x||r.tx.kind!=='loan'||r.tx.payType==='amortizacao')return [];
+  return loanPrestacoesEmFalta(x.l,db.transactions,today(),r.next||'');
+}
+/* As datas do plano que já passaram sem movimento registado, da origem
+   (início do contrato ou da hipoteca) até hoje, respeitando o fim do plano.
+   Numa hipoteca são as datas da lista reconstruída (planoPrestacoesEmFalta);
+   nas outras, período a período a partir da origem, saltando os meses em que
+   já há movimento. O guarda de 600 períodos evita ciclos com datas estragadas.
+   Recebe: r — o plano recorrente a analisar.
+   Devolve: array de datas AAAA-MM-DD por ordem cronológica; vazio sem plano ou sem próxima data. */
+function datasEmFalta(r){
+  if(!r||!r.next)return [];
+  if((r.tx||{}).loanId)return planoPrestacoesEmFalta(r).map(x=>x.date);
+  const t=today(),day=Number(String(r.next).slice(8,10))||1;
+  const origin=String(origemDoPlano(r));let d;
+  if(['month','quarter','year'].indexOf(r.every)>-1){
+    d=dayInMonth(Number(origin.slice(0,4)),Number(origin.slice(5,7))-1,day);
+    if(d<origin)d=nextDate(d,r.every);
+  }else d=origin;
+  const out=[];let guard=0;
+  while(d&&d<=t&&guard++<600){
+    if(!jaRegistado(r,d))out.push(d);
+    if(r.every==='once')break;
+    d=nextDate(d,r.every);
+    if(r.end&&d>r.end)break;
+  }
+  return out;
 }
 /* recorrências vencidas (a data prevista já passou ou é hoje)
    Devolve: a lista dessas recorrências (array de objetos de db.recurring). */
