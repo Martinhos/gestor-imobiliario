@@ -10,14 +10,18 @@ let perForm={},perKind='tenant',perAfter=null;
 function personModal(kind,id,after){
   foldState={};
   perKind=kind;perAfter=after||null;
-  const listOf=kind==='owner'?db.owners:db.tenants;
-  perForm=normPerson(id?JSON.parse(JSON.stringify(listOf.find(x=>x.id===id))):null);
+  const listOf=kind==='owner'?db.owners:db.tenants,orig=id?listOf.find(x=>x.id===id):null;
+  perForm=normPerson(orig?JSON.parse(JSON.stringify(orig)):null);
   const word=kind==='owner'?'proprietário':'inquilino';
-  const m=id?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,act:`delPerson('${kind}','${id}')`}]):'';
-  openModal((id?'Editar ':'Novo ')+word,personBody(),null,m);
+  /* a ficha de um inquilino de um imóvel onde só colaboro abre em leitura sem «Adicionar inquilinos» */
+  const soLer=kind==='tenant'&&!!orig&&!podeEditarInquilino(orig);
+  const m=id&&!soLer?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,act:`delPerson('${kind}','${id}')`}]):'';
+  openModal((id?(soLer?'':'Editar '):'Novo ')+(soLer?'Ficha de '+word:word),personBody(),null,m);
+  if(soLer)return modalSoLeitura('Ficha de um imóvel onde colaboras — só de leitura.');
   onSave=()=>{
     collectPerson();
     if(!perForm.name.trim())return toast('Escreve o nome.');
+    if(perKind==='tenant'){const recusa=motivoRecusa(casaDoInquilino(orig||perForm),'tenant.add',orig);if(recusa)return toast(recusa)}
     const list=perKind==='owner'?db.owners:db.tenants;
     const i=list.findIndex(x=>x.id===perForm.id);
     if(i<0)list.push(perForm);else list[i]=perForm;
@@ -94,6 +98,8 @@ function delPersonFile(fid){collectPerson();perForm.files=(perForm.files||[]).fi
 function delPerson(kind,id){
   const list=kind==='owner'?db.owners:db.tenants;
   const p=list.find(x=>x.id===id),word=kind==='owner'?'proprietário':'inquilino';
+  if(!p)return;
+  if(kind==='tenant'){const recusa=motivoRecusa(casaDoInquilino(p),'tenant.add',p);if(recusa)return toast(recusa)}
   const used=kind==='owner'?propsOf(id).length:contractsOfTenant(id).length;
   confirmModal('Apagar '+word,`Apagar “${esc(p.name)}”?${used?` Sai de ${used} ${kind==='owner'?'imóvel(is)':'contrato(s)'}, que se mantêm.`:''}`,()=>{
     (p.files||[]).forEach(f=>idbDel(f.id).catch(()=>{}));

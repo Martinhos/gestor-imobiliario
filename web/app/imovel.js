@@ -6,13 +6,16 @@ let pForm={};
    Recebe: id (opcional) — o id do imóvel a editar; sem id, cria um imóvel novo.
    Devolve: nada — abre o modal e deixa a gravação pendurada em onSave. */
 function propModal(id){
+  /* num imóvel onde só colaboro sem «Editar a ficha», a ficha é só de leitura */
+  if(id&&!pode(id,'house.edit'))return propView(id);
   foldState={};_propPaint=null;
   pForm=normProp(id?JSON.parse(JSON.stringify(prop(id))):null);
-  const m=id?menu('prop',[{label:'Apagar imóvel',icon:'trash',danger:true,act:`delProp('${id}')`}]):'';
+  const m=id&&souCriador(id)?menu('prop',[{label:'Apagar imóvel',icon:'trash',danger:true,act:`delProp('${id}')`}]):'';
   openModal(id?'Editar imóvel':'Novo imóvel',propBody(),null,m);
   paintThumbs(pForm.photos);
   onSave=()=>{
     collectProp();
+    if(pForm.id&&prop(pForm.id)&&!pode(pForm.id,'house.edit'))return toast(fraseSemPerm('house.edit'));
     if(!pForm.name.trim())return falhaCampo('p_name','Dá um nome ao imóvel.');
     (pForm.loans||[]).forEach(l=>{l.name=l.name||l.bank||'Hipoteca'});   /* a recorrência identifica-se pelo nome */
     const antes=loanStartsAntes(prop(pForm.id));   /* antes de trocar o objeto na db */
@@ -21,6 +24,36 @@ function propModal(id){
     syncAllLoanRecs();save();closeModal();render();toast(id?'Imóvel atualizado.':'Imóvel adicionado.');
     perguntarPrestacoesEmFalta(pForm,antes);
   };
+}
+/* A ficha de um imóvel só de leitura, para quem colabora nele sem poder
+   editar: o que é sempre visível (nome, morada, destino, quartos, donos) e o
+   resto conforme o cargo — fotos com file.view, valores com report.view,
+   hipotecas com loan.view. Nunca o bloco de quotas nem os comentários dos
+   donos (o servidor já não os manda). Rodapé «Fechar».
+   Recebe: id — o id do imóvel.
+   Devolve: nada — abre a janela. */
+function propView(id){
+  const p=prop(id);if(!p)return;
+  const st=pode(id,'contract.view')?propStatus(p):null,ls=loansOf(p),c=cargoDe(id);
+  const dono=p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):''),ac=pode(id,'contract.view')?activeContracts(id):[];
+  const stat=(k,v)=>v?`<div class="stat"><span>${k}</span><b>${v}</b></div>`:'';
+  const reg=[p.freguesia||p.parish,p.concelho,p.fraction?'fração '+p.fraction:'',p.floor,p.registry?'n.º '+p.registry:'',p.matrix?'artigo '+p.matrix:'',p.energyClass?'classe '+p.energyClass:''].filter(Boolean).map(esc).join(' · ');
+  const body=`<div class="form">
+    ${c.dono?'':`<div class="hint">${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}És colaborador${c.nome?' como <b>'+esc(c.nome)+'</b>':''} — a ficha é só de leitura.</div>`}
+    ${stat('Morada',esc(p.address||''))}
+    ${stat('Destino',p.use==='proprio'?'Uso próprio':'Arrendamento'+(p.rentalMode==='quartos'?' · por quartos':' · imóvel inteiro'))}
+    ${st?stat('Estado',esc(st.label)):''}
+    ${(p.rooms||[]).length?stat('Quartos',(p.rooms||[]).map(r=>esc(r.name)).join(', ')):''}
+    ${stat('Proprietários',esc(ownerNames(p)))}
+    ${ac.length?`<div><div class="flabel">Contratos ativos</div><div class="small">${ac.map(x=>`${x.roomId?esc(roomName(p,x.roomId))+': ':''}${esc(ctNames(x))} · ${euro(x.rent)}`).join('<br>')}</div></div>`:''}
+    ${pode(id,'report.view')?stat('Valor de mercado',euro(p.value))+stat('Valor de aquisição',euro(p.purchase)):''}
+    ${pode(id,'loan.view')&&ls.length?`<div><div class="flabel">Hipotecas</div><div class="small">${ls.map(l=>`${esc(loanName(l))} · ${euro2(loanCalc(l).total)}/mês · ${euro(l.outstanding)} em dívida`).join('<br>')}</div></div>`:''}
+    ${pode(id,'file.view')&&(p.photos||[]).length?`<div><div class="flabel">Fotos</div><div style="display:flex;flex-wrap:wrap;gap:8px">${(p.photos||[]).map(f=>`<div class="pcover" id="th_${esc(f.id)}" style="width:84px;height:66px;border-radius:10px;background:var(--chip);overflow:hidden"></div>`).join('')}</div></div>`:''}
+    ${reg?`<div><div class="flabel">Dados registais</div><div class="small">${reg}</div></div>`:''}
+    ${p.listing?`<div><div class="flabel">Anúncio</div><div class="small">${esc(p.listing)}</div></div>`:''}
+  </div>`;
+  openModal(p.name,body,`<button class="btn" onclick="closeModal()">Fechar</button>`);
+  if(pode(id,'file.view'))paintThumbs(p.photos);
 }
 /* Constrói o HTML do formulário do imóvel a partir de pForm: proprietários e
    quotas-partes, destino, quartos, valores, fotos, dados registais, hipotecas
@@ -43,6 +76,7 @@ function propBody(){
           <button type="button" class="btn sm danger" onclick="delPropOwner('${o.id}')">${ic('x',13)}</button></div>`).join('')}
         <button type="button" class="tagadd" style="justify-self:start" onclick="addPropOwner()">+ Adicionar proprietário</button></div>
       <div class="hint" id="shareHint" style="margin-top:7px">${shareHint(owners,custom,sumSh)}</div></div>
+    ${colabHint(p)}
     <div><div class="flabel">Destino do imóvel</div>
       <div class="seg c2">${[['investimento','key','Arrendamento','para render'],['proprio','home','Uso próprio','vivo cá']]
         .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.use===k?'on':''}" onclick="setUse('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
@@ -177,6 +211,18 @@ function collectProp(){
     if(g('ffix'))l.amortFeeFix=Math.max(0,num(val('l_ffix_'+l.id)));
     if(g('fvar'))l.amortFeeVar=Math.max(0,num(val('l_fvar_'+l.id)));
   });
+}
+/* O bloco «Colaboradores» da ficha, para o dono e os comproprietários: quem
+   colabora neste imóvel e com que cargo (lido de p._colaboradores, que a
+   nuvem preenche). Gerem-se em Conta e partilha; quem não criou o imóvel só
+   vê a lista.
+   Recebe: p — o imóvel (o rascunho do formulário, com _colaboradores).
+   Devolve: HTML do bloco (texto), ou '' sem colaboradores. */
+function colabHint(p){
+  const cs=(p&&p._colaboradores)||[];
+  if(!cs.length||!souDono(p.id))return '';
+  const lista=cs.map(c=>esc(c.name||'?')+(c.roleName?' ('+esc(c.roleName)+')':'')).join(', ');
+  return `<div><div class="flabel">Colaboradores</div><div class="hint">${lista}. ${souCriador(p.id)?'Gerem-se em <b>Definições → Conta e partilha</b>.':'Só quem criou o imóvel gere colaboradores.'}</div></div>`;
 }
 // Frase que explica a divisão das quotas-partes: partes iguais, soma 100%,
 // restante para quem não tem percentagem, ou soma diferente normalizada.
@@ -438,6 +484,9 @@ function newOwnerFromProp(){
    Devolve: nada — abre a confirmação; só se apaga depois do sim. */
 function delProp(id){
   const p=prop(id),n=contractsOf(id).length;
+  if(!p)return;
+  /* só quem criou o imóvel o apaga: nem comproprietários, nem colaboradores */
+  if(!souCriador(id))return toast('Só quem criou o imóvel o pode apagar.');
   confirmModal('Apagar imóvel',`Apagar “${esc(p.name)}”${n?`, os seus ${n} contratos`:''} e todos os movimentos associados?`,()=>{
     /* a cópia primeiro, os blobs só quando o Anular expirar: uma cascata
        destas confirmada por hábito era irrecuperável */

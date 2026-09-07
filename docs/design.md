@@ -183,6 +183,22 @@ também na folha do toque longo (componentes.js:lpShow). Todos os menus
 fecham ao clique fora (componentes.js:closePops, chamada pelo ouvinte de
 click do arranque, em web/app/arranque.js).
 
+pode(pid,perm) antes de mostrar uma ação (acessos.js:pode). Num imóvel onde
+o utilizador só colabora, o cargo diz o que se vê e o que se adiciona; o
+servidor já despe os dados e recusa as escritas, mas um botão que leva a
+uma recusa é um botão a mais. Por isso cada ação pergunta primeiro: o menu
+do toque longo e do ⋮ filtra as opções (componentes.js:lpMenu), os FABs e
+os seletores de imóvel dos formulários só listam onde se pode adicionar
+(acessos.js:casasComo, acessos.js:propOptsPara; movimento.js:txBody), a
+ficha do imóvel abre só de leitura sem «Editar a ficha»
+(imovel.js:propView), uma ficha de inquilino idem
+(componentes.js:modalSoLeitura), e as contas entre proprietários são dos
+proprietários (vistas.js:balancesCard, acessos.js:souDono). Editar e apagar
+é só o que o próprio adicionou (acessos.js:podeEditar); quando a ação
+chega mesmo a um guardar sem permissão, recusa-se com a frase de
+acessos.js:motivoRecusa num toast, nunca com um selo vermelho mais tarde.
+Sem sessão nada disto existe: tudo é «dono» (acessos.js:cargoDe).
+
 openModal(title,body,foot,menuHtml) (componentes.js:openModal) abre uma
 janela por cima do que houver; a anterior desce na pilha, escurecida e
 inerte, e volta quando a de cima fecha (componentes.js:modalStack,
@@ -517,6 +533,10 @@ emojis: entra-se no ic() (auxiliares.js:ic).
 
 Não se escreve uma função sem comentário com Recebe e Devolve: o gerador
 de docs rebenta (scripts/gerar-docs.js).
+
+Não se mostra uma ação que o cargo não permite: pergunta-se pode() antes
+(acessos.js:pode; componentes.js:lpMenu), e um colaborador nunca entra em
+ownerIds, quotas ou contas entre proprietários (acessos.js:souDono).
 
 ## Dívidas de design conhecidas
 O que já está fora destas regras, por ordem de gravidade. Não está

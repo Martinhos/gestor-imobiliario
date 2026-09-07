@@ -546,6 +546,8 @@ window.addEventListener('scroll',()=>{const b=document.getElementById('toTop');i
    Devolve: nada — abre o pickModal com as opções. */
 function lpShow(title,opts){
   closeAllModals();
+  /* um cargo que só vê não tem ações: diz-se, em vez de abrir uma folha vazia */
+  if(!opts.length)return toast('Só podes ver este registo — o teu cargo não permite alterá-lo.');
   pickModal(title||'Opções',opts.map((o,i)=>({v:i,label:o.label,sub:o.sub||'',icon:o.icon})),o=>{closeAllModals();opts[o.v].act()});
   // o rótulo do que destrói fica vermelho também aqui, não só no menu do modal
   [].slice.call(document.querySelectorAll('.modal.open .card.tap b')).forEach(b=>{
@@ -556,6 +558,10 @@ function lpShow(title,opts){
    "prop:abc") e mostra as ações que fazem sentido para esse cartão — imóvel,
    movimento, contrato, pessoa, recorrente, modelo ou hipoteca. A seleção em
    massa (cloud/selecao.js) embrulha-o para tratar dos movimentos à maneira dela.
+   Cada ação passa primeiro por pode()/podeEditar(): num imóvel onde só
+   colaboro, só aparece o que o cargo permite (e editar/apagar só o que eu
+   próprio adicionei); um cargo que só vê fica com «Ver …» ou com o toast do
+   lpShow.
    Recebe: v — o valor do data-lp do cartão, no formato "tipo:id" (pessoas e
    hipotecas levam dois ids: "per:owner:<id>" ou "per:tenant:<id>", e
    "mort:<idImovel>:<idHipoteca>").
@@ -563,34 +569,54 @@ function lpShow(title,opts){
 function lpMenu(v){
   const a=String(v||'').split(':'),k=a[0],id=a[1];
   if(k==='prop'){const p=prop(id);if(!p)return;
-    const opts=[{label:'Editar imóvel',icon:'building',act:()=>propModal(id)}];
-    if(p.use==='investimento')opts.push({label:'Novo contrato',icon:'contract',act:()=>ctModal(null,id)});
-    opts.push({label:'Registar despesa',icon:'dn',act:()=>txModal(null,'expense',id)});
-    if(liveLoans(p).length)opts.push({label:'Pagamento de crédito',icon:'bank',act:()=>txModal(null,'loan',id)},{label:'Amortização',icon:'trend',act:()=>amortModal(id)});
-    opts.push({label:'Apagar imóvel',icon:'trash',act:()=>delProp(id)});
+    const opts=[pode(id,'house.edit')?{label:'Editar imóvel',icon:'building',act:()=>propModal(id)}:{label:'Ver imóvel',icon:'building',act:()=>propView(id)}];
+    if(p.use==='investimento'&&pode(id,'contract.add'))opts.push({label:'Novo contrato',icon:'contract',act:()=>ctModal(null,id)});
+    if(pode(id,'tx.add'))opts.push({label:'Registar despesa',icon:'dn',act:()=>txModal(null,'expense',id)});
+    if(liveLoans(p).length&&pode(id,'tx.add'))opts.push({label:'Pagamento de crédito',icon:'bank',act:()=>txModal(null,'loan',id)},{label:'Amortização',icon:'trend',act:()=>amortModal(id)});
+    if(souCriador(id))opts.push({label:'Apagar imóvel',icon:'trash',act:()=>delProp(id)});
     return lpShow(p.name,opts);}
   if(k==='tx'){const t=db.transactions.find(x=>x.id===id);if(!t)return;
-    return lpShow(t.label,[{label:'Editar movimento',icon:'swap',act:()=>txModal(id)},{label:'Apagar movimento',icon:'trash',act:()=>delTx(id)}]);}
+    const ok=podeEditar(t.propertyId,'tx.add',t);
+    return lpShow(t.label,[{label:ok?'Editar movimento':'Ver movimento',icon:'swap',act:()=>txModal(id)}].concat(ok?[{label:'Apagar movimento',icon:'trash',act:()=>delTx(id)}]:[]));}
   if(k==='ct'){const c=contract(id);if(!c)return;
-    const opts=[{label:'Editar contrato',icon:'contract',act:()=>ctModal(id)}];
-    if(isActive(c))opts.push({label:'Registar renda',icon:'up',act:()=>txModal(null,'income',c.propertyId,null,id)});
+    const ok=podeEditar(c.propertyId,'contract.add',c);
+    const opts=[{label:ok?'Editar contrato':'Ver contrato',icon:'contract',act:()=>ctModal(id)}];
+    if(isActive(c)&&pode(c.propertyId,'tx.add'))opts.push({label:'Registar renda',icon:'up',act:()=>txModal(null,'income',c.propertyId,null,id)});
     opts.push({label:'Gerar contrato em PDF',icon:'pen',act:()=>generateContractPdf(id)});
-    opts.push(isActive(c)?{label:'Terminar contrato',icon:'x',act:()=>endContract(id)}:{label:'Reativar contrato',icon:'check',act:()=>reactivateContract(id)});
-    opts.push({label:'Apagar contrato',icon:'trash',act:()=>delContract(id)});
+    if(ok)opts.push(isActive(c)?{label:'Terminar contrato',icon:'x',act:()=>endContract(id)}:{label:'Reativar contrato',icon:'check',act:()=>reactivateContract(id)},
+      {label:'Apagar contrato',icon:'trash',act:()=>delContract(id)});
     return lpShow(ctName(c),opts);}
   if(k==='per'){const kind=a[1],pid=a[2],list=kind==='owner'?db.owners:db.tenants,pp=list.find(x=>x.id===pid);if(!pp)return;
-    return lpShow(pp.name,[{label:'Editar ficha',icon:'users',act:()=>personModal(kind,pid)},{label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)}]);}
+    const ok=kind==='owner'||podeEditarInquilino(pp);
+    return lpShow(pp.name,[{label:ok?'Editar ficha':'Ver ficha',icon:'users',act:()=>personModal(kind,pid)}].concat(ok?[{label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)}]:[]));}
   if(k==='rec'){const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
-    const opts=[];
-    if(r.next&&r.next<=today())opts.push({label:'Confirmar',icon:'check',act:()=>quickConfirmRec(id)});
-    opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)},
+    const hid=(r.tx||{}).propertyId,ok=podeEditar(hid,'rec.add',r),opts=[];
+    if(r.next&&r.next<=today()&&pode(hid,'rec.add'))opts.push({label:'Confirmar',icon:'check',act:()=>quickConfirmRec(id)});
+    if(ok)opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)},
       {label:'Editar',icon:'swap',act:()=>editRec(id)},{label:'Apagar',icon:'trash',act:()=>delRec(id)});
     return lpShow(r.name,opts);}
   if(k==='tpl'){const x=(db.templates||[]).find(y=>y.id===id);if(!x)return;
     return lpShow(x.name,[{label:'Usar modelo',icon:'plus',act:()=>newFromTemplate(id)},{label:'Editar',icon:'file',act:()=>editTpl(id)},{label:'Apagar',icon:'trash',act:()=>delTpl(id)}]);}
   if(k==='mort'){const pid=a[1],lid=a[2],p=prop(pid),l=findLoan(p,lid);if(!l)return;
-    const opts=[{label:'Editar hipoteca',icon:'bank',act:()=>mortModal(pid,lid)}];
-    if(Number(l.outstanding)>0)opts.push({label:'Pagamento de crédito',icon:'bank',act:()=>txModal(null,'loan',pid,null,null,{loanId:lid})},{label:'Amortização',icon:'trend',act:()=>amortModal(pid,lid)});
-    opts.push({label:'Apagar hipoteca',icon:'trash',act:()=>delMortFrom(pid,lid)});
+    const opts=pode(pid,'house.edit')?[{label:'Editar hipoteca',icon:'bank',act:()=>mortModal(pid,lid)}]:[];
+    if(Number(l.outstanding)>0&&pode(pid,'tx.add'))opts.push({label:'Pagamento de crédito',icon:'bank',act:()=>txModal(null,'loan',pid,null,null,{loanId:lid})},{label:'Amortização',icon:'trend',act:()=>amortModal(pid,lid)});
+    if(pode(pid,'house.edit'))opts.push({label:'Apagar hipoteca',icon:'trash',act:()=>delMortFrom(pid,lid)});
     return lpShow(loanName(l),opts);}
+}
+/* Põe a janela de cima em modo só de leitura: desativa os campos e os botões
+   do corpo (as dobras continuam a abrir) e troca o rodapé por «Fechar». É o
+   que uma ficha de um imóvel onde só colaboro mostra quando o cargo não
+   deixa alterar.
+   Recebe: msg (opcional) — um hint a pôr no topo do corpo, a dizer porquê.
+   Devolve: nada — mexe na janela de cima. */
+function modalSoLeitura(msg){
+  const t=modalTop();if(!t)return;
+  t.onSave=null;
+  const b=t.el.querySelector('.body');
+  if(b){
+    [].slice.call(b.querySelectorAll('input,textarea,select,button:not(.fold-head)')).forEach(e=>{e.disabled=true});
+    if(msg)b.insertAdjacentHTML('afterbegin',`<div class="hint" style="margin-bottom:12px">${msg}</div>`);
+  }
+  const f=t.el.querySelector('.foot');if(f)f.innerHTML=`<button class="btn" onclick="closeModal()">Fechar</button>`;
+  t.snap=modalSnap(t.el);t.tocado=false;   /* nada por guardar: fechar nunca pergunta */
 }

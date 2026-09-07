@@ -13,13 +13,27 @@ function vImport(){
   <div style="height:14px"></div>
   ${card('Guardar ficheiros','',`
     <div class="toolbar" style="margin:0">
-      <button class="btn" onclick="driveSave()">Guardar cópia</button>
+      <button class="btn" onclick="exportarSoMeu(driveSave)">Guardar cópia</button>
       <button class="btn" onclick="driveOpen()">Abrir cópia</button>
-      <button class="btn" onclick="downloadCsv()">Exportar CSV</button>
-      <button class="btn" onclick="bkPasteBox()">Colar cópia</button></div>`)}
+      <button class="btn" onclick="exportarSoMeu(downloadCsv)">Exportar CSV</button>
+      <button class="btn" onclick="bkPasteBox()">Colar cópia</button></div>
+    ${casasDeColaboracao().length?'<div class="hint" style="margin-top:11px">As cópias levam só o que é teu — os imóveis onde colaboras ficam de fora.</div>':''}`)}
   <div style="height:14px"></div>
   ${card('Recomeçar','Apaga tudo o que está guardado neste dispositivo',`<button class="btn danger" onclick="wipe()">Apagar todos os dados</button>`)}
   <div class="hint" style="text-align:center;margin-top:18px">Fotos e documentos ficam no dispositivo e não entram na cópia em JSON.</div>`;
+}
+
+/* Corre uma exportação (cópia de segurança, CSV) sobre a base só com o que é
+   meu: os imóveis onde colaboro e os registos deles ficam de fora. As funções
+   de copias.js leem a db global no momento da chamada, por isso troca-se a
+   base durante a chamada e repõe-se logo a seguir — sem imóveis de
+   colaboração, corre tal e qual.
+   Recebe: fn — a função de exportar (sem argumentos), ex.: driveSave ou downloadCsv.
+   Devolve: nada — o que fn devolver é ignorado. */
+function exportarSoMeu(fn){
+  if(!casasDeColaboracao().length)return void fn();
+  const real=db;db=dbSoMeu();
+  try{fn()}finally{db=real}
 }
 
 /* ================= DEFINIÇÕES ================= */

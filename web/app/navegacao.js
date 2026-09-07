@@ -27,13 +27,16 @@ const NAV_GROUPS=[{label:'Património',ids:['dashboard','calendar','properties',
   {label:'Finanças',ids:['transactions','recurring','credits','projections','reports']},{label:'Aplicação',ids:['settings']}];
 /* Reconstrói a navegação da gaveta (agrupada por NAV_GROUPS), marcando o
    separador atual e o crachá dos planeados pendentes — na cor de aviso quando
-   nenhum passou do prazo. Refaz também a barra de baixo.
+   nenhum passou do prazo. Refaz também a barra de baixo. Quem só colabora
+   não vê os separadores que o cargo não abre (separadoresEscondidos): um
+   grupo que fique vazio desaparece com o título.
    Devolve: nada — reescreve o HTML de #nav e chama buildTabbar. */
 function buildNav(){
-  const late=recActive().length;
-  document.getElementById('nav').innerHTML=NAV_GROUPS.map(g=>`<div class="navh">${g.label}</div>`+g.ids.map(id=>{const t=TABS.find(x=>x.id===id);
-    return `<a class="${t.id===tab?'on':''}" tabindex="0" ${t.id===tab?'aria-current="page"':''} onclick="go('${t.id}')">${ic(t.icon)}<span class="txt">${t.label}</span>${t.id==='recurring'&&late?`<span class="cnt" ${recLate().length?'':'style="background:var(--warn)"'}>${late}</span>`:''}</a>`}).join('')).join('');
-  buildTabbar(late);
+  const late=recActive().length,fora=typeof separadoresEscondidos==='function'?separadoresEscondidos():[];
+  document.getElementById('nav').innerHTML=NAV_GROUPS.map(g=>{const ids=g.ids.filter(id=>fora.indexOf(id)<0);if(!ids.length)return '';
+    return `<div class="navh">${g.label}</div>`+ids.map(id=>{const t=TABS.find(x=>x.id===id);
+    return `<a class="${t.id===tab?'on':''}" tabindex="0" ${t.id===tab?'aria-current="page"':''} onclick="go('${t.id}')">${ic(t.icon)}<span class="txt">${t.label}</span>${t.id==='recurring'&&late?`<span class="cnt" ${recLate().length?'':'style="background:var(--warn)"'}>${late}</span>`:''}</a>`}).join('')}).join('');
+  buildTabbar(late,fora);
 }
 /* Os quatro destinos quentes, a um toque no telemóvel. A auditoria mediu:
    com tudo atrás da gaveta, qualquer mudança de ecrã custava dois. O
@@ -42,11 +45,12 @@ function buildNav(){
 const TABBAR=['dashboard','transactions','properties','calendar'];
 // Reconstrói a barra de baixo do telemóvel com os destinos de TABBAR;
 // late é a contagem de planeados pendentes para o crachá.
-// Recebe: late — a contagem de planeados pendentes (número), para o crachá.
+// Recebe: late — a contagem de planeados pendentes (número), para o crachá;
+// fora (opcional) — ids de separadores a esconder (os de separadoresEscondidos).
 // Devolve: nada — reescreve o HTML de #tabbar (se o elemento existir).
-function buildTabbar(late){
+function buildTabbar(late,fora){
   const el=document.getElementById('tabbar');if(!el)return;
-  el.innerHTML=TABBAR.map(id=>{const t=TABS.find(x=>x.id===id);
+  el.innerHTML=TABBAR.filter(id=>(fora||[]).indexOf(id)<0).map(id=>{const t=TABS.find(x=>x.id===id);
     return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} onclick="go('${id}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${id==='calendar'&&late?`<span class="cnt">${late}</span>`:''}</a>`}).join('');
 }
 // Muda de separador: limpa a subpágina das Definições e o donut, fecha a

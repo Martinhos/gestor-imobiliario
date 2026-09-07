@@ -81,7 +81,7 @@ function render(){
   /* A visão geral era o único ecrã sem criação rápida: registar uma renda
      avulsa custava quatro toques de viagem. Entra aqui, depois do painel
      rearranjar os cartões, para não virar um cartão arrastável. */
-  if(tab==='dashboard'&&!view().querySelector('.fab')){
+  if(tab==='dashboard'&&!view().querySelector('.fab')&&(podeSemImovel()||casasComo('tx.add').length)){
     view().insertAdjacentHTML('beforeend',
       '<div style="text-align:center;margin:2px 0 0"><button type="button" class="btn sm" onclick="window.CW&&CW.enterEdit&&CW.enterEdit()">'+ic('grip',13)+' Personalizar painel</button></div>'+
       fab([{act:'newTxPick()',label:'Novo movimento'}])+'<div class="fabpad"></div>');
@@ -222,6 +222,13 @@ function vDashboard(){
       <div class="toolbar" style="justify-content:center;margin-top:16px">
       <button class="btn primary" onclick="propModal()">Adicionar imóvel</button>
       <button class="btn" onclick="seed()">Carregar exemplo</button></div></div>`;
+  /* quem só colabora e cujo cargo não abre as finanças não tem nada para somar aqui */
+  if(souSoColaborador()&&!scope().length)
+    return `<div class="empty"><b>${fraseColaborador()}</b>O teu cargo não abre as finanças destes imóveis — a vista geral não tem nada para somar.
+      <div class="toolbar" style="justify-content:center;margin-top:16px">
+      <button class="btn primary" onclick="go('properties')">Ver os imóveis</button></div></div>`;
+  const nColab=scope().filter(p=>!souDono(p.id)).length;
+  const colabHint=nColab?`<div class="hint" style="margin:-4px 0 12px">Inclui ${nColab} ${nColab===1?'imóvel':'imóveis'} onde és colaborador (valores por inteiro).</div>`:'';
   const inc=monthly(YEAR,pid,'income',true),exp=monthly(YEAR,pid,'expense',true),ln=monthly(YEAR,pid,'loan',true),am=monthly(YEAR,pid,'amort',true);
   let acc=0;const cum=inc.map((v,i)=>acc+=v-exp[i]-ln[i]-am[i]);
   const groups=inc.map((v,i)=>[{label:'Receita',value:v,color:PAL[0]},{label:'Despesas',value:-exp[i],color:'#c56b68'},{label:'Prestações',value:-ln[i],color:'#d6a34a'}]);
@@ -230,7 +237,7 @@ function vDashboard(){
   const cs=c=>sh(prop(c.propertyId));
   const quota=ownerFilter?(ownerIsGrp()?`<div class="hint" style="margin:-4px 0 12px">A ver os imóveis do grupo <b>${esc(ownerFilterName())}</b>.</div>`:`<div class="hint" style="margin:-4px 0 12px">Valores na quota-parte de <b>${esc(ownerFilterName())}</b>: receitas, despesas e prestações entram pela divisão de cada movimento; valor, aquisição e dívida pela quota do imóvel.</div>`):'';
   const E=(field,fmt)=>()=>evoMoney(field,pid,fmt);
-  return dashBar()+quota+pendingCard()+prazosCard()+`<div class="grid">
+  return dashBar()+quota+colabHint+pendingCard()+prazosCard()+`<div class="grid">
     ${kpi('Receita',euro(m.income),'pos',YEAR+' · rendas e outros',WHY.receita,E('income'))}
     ${kpi('Despesas',euro(m.op),'neg','impostos, condomínio, obras…',WHY.despesas,E('op'))}
     ${kpi('Prestações',euro(m.loan),'amber','capital, juros e selo'+(m.amort?' · +'+euro(m.amort)+' amortizados':''),WHY.prestacoes,E('loan'))}
@@ -307,6 +314,8 @@ function orphanCard(){
    Recebe: pid — id do imóvel a que limitar, ou null/vazio para todos os do âmbito.
    Devolve: string HTML do cartão, ou vazia se não há saldos a mostrar. */
 function balancesCard(pid){
+  /* as contas entre proprietários são dos proprietários: num imóvel onde só colaboro não há cartão */
+  if(pid&&!String(pid).startsWith('g:')&&!souDono(pid))return '';
   const bal=ownerBalances(pid),ks=Object.keys(bal);
   if(!ks.length)return '';
   const tot=debtTotal(bal),plan=settlePlan(bal);
@@ -333,7 +342,7 @@ function balancesCard(pid){
    Devolve: array de {pid, name, plan} — o imóvel (pid null e nome «Todos os imóveis» para
    o resto global) e as transferências de settlePlan; só os alvos com transferências. */
 function settleTargets(pid){
-  const props=pidProps(pid);
+  const props=pidProps(pid).filter(p=>souDono(p.id));
   const out=props.map(p=>({pid:p.id,name:p.name,plan:settlePlan(ownerBalances(p.id))})).filter(x=>x.plan.length);
   if(!pid&&!ownerFilter){
     const tot=ownerBalances(null),per=props.map(p=>ownerBalances(p.id)),resto={};
@@ -349,6 +358,7 @@ function settleTargets(pid){
    Recebe: pid — id do imóvel ou 'g:ID' de um grupo a que limitar, ou null para o âmbito todo.
    Devolve: nada — abre o modal (ou um toast, se não há dívidas). */
 function settleModal(pid){
+  if(pid&&!String(pid).startsWith('g:')&&!souDono(pid))return toast('As contas entre proprietários são dos proprietários — só o dono as acerta.');
   const plans=settleTargets(pid);
   const total=sum(plans.map(x=>sum(x.plan.map(y=>y.amount))));
   if(!plans.length)return toast('Não há dívidas para liquidar.');
@@ -385,7 +395,7 @@ function doSettle(pid){
    Devolve: string com o HTML completo da vista. */
 function vProperties(){
   const K='lprops',s=lf(K);
-  let list=scope();
+  let list=visiveis();
   list=list.filter(p=>{
     if(s.st&&propStatus(p).key!==s.st)return false;
     if(s.md){if(p.use!=='investimento')return false;if((p.rentalMode||'inteiro')!==s.md)return false}
@@ -405,25 +415,28 @@ function vProperties(){
   return head+`<div class="list">${list.map(p=>{
     const st=propStatus(p),ls=liveLoans(p),ac=activeContracts(p.id),rent=rentOf(p);
     const y=rent&&p.value?rent*12/p.value:NaN,own=ownerNames(p);
+    /* num imóvel onde só colaboro, cada chip pede a sua permissão; o que o servidor não mandou não se inventa */
+    const vCt=pode(p.id,'contract.view'),vRep=pode(p.id,'report.view'),vLoan=pode(p.id,'loan.view'),vFile=pode(p.id,'file.view');
     return `<div class="card tap" data-lp="prop:${esc(p.id)}" onclick="propModal('${jsq(p.id)}')">
       <div class="row-between">
-        <div style="min-width:0"><div class="title">${esc(p.name)}</div>
+        <div style="min-width:0"><div class="title">${esc(p.name)}${seloCargo(p)}</div>
           <div class="small">${esc(p.address||'Sem morada')}${own?' · '+esc(own):''}${ownerFilter&&sh(p)<1?' · <b>'+shareText(p)+'</b>':''}</div></div>
         <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
-        ${(p.photos||[]).length?`<div style="flex:0 0 54px"><div class="pcover" id="th_${p.photos[0].id}" style="width:54px;height:44px;border-radius:10px;background:var(--chip);overflow:hidden"></div></div>`:''}
+        ${(p.photos||[]).length&&vFile?`<div style="flex:0 0 54px"><div class="pcover" id="th_${p.photos[0].id}" style="width:54px;height:44px;border-radius:10px;background:var(--chip);overflow:hidden"></div></div>`:''}
         ${kebab('prop:'+p.id)}</div>
       </div>
       <div class="chips">
-        <span class="badge ${st.badge}">${st.label}</span>
+        ${vCt?`<span class="badge ${st.badge}">${st.label}</span>`:''}
         ${p.use==='investimento'?`<span class="badge grey">${p.rentalMode==='quartos'?'Por quartos':'Imóvel inteiro'}</span>`:''}
-        ${rent?`<span class="badge">${euroS(rent)}/mês</span>`:''}
-        ${isFinite(y)?`<span class="badge">Yield ${pct(y)}</span>`:''}
-        <span class="badge grey">Valor ${euro(p.value)}</span>
-        ${ls.length?`<span class="badge amber">Dívida ${euro(debtOf(p))}${ls.length>1?' · '+ls.length+' hipotecas':''}</span>`:''}
-        ${propDebt(p.id)>0.005?`<span class="badge red">${ic('users',12)} ${euro(propDebt(p.id))} entre proprietários</span>`:''}
-        ${(p.photos||[]).length?`<span class="badge grey">${ic('photo',12)} ${p.photos.length}</span>`:''}</div>
-      ${ac.length?`<div class="small" style="margin-top:10px">${ac.map(c2=>`${c2.roomId?esc(roomName(p,c2.roomId))+': ':''}${esc(ctNames(c2))} · ${euro(c2.rent)}`).join('<br>')}</div>`:''}
-      ${ls.length?`<div class="small" style="margin-top:9px">${ls.map(l=>`${esc(loanName(l))} · ${RATE[l.type]} · ${euro2(loanCalc(l).total)}/mês${(l.files||[]).length?' · '+l.files.length+' doc.':''}`).join('<br>')}
+        ${rent&&vCt?`<span class="badge">${euroS(rent)}/mês</span>`:''}
+        ${isFinite(y)&&vCt&&vRep?`<span class="badge">Yield ${pct(y)}</span>`:''}
+        ${vRep?`<span class="badge grey">Valor ${euro(p.value)}</span>`:''}
+        ${ls.length&&vLoan?`<span class="badge amber">Dívida ${euro(debtOf(p))}${ls.length>1?' · '+ls.length+' hipotecas':''}</span>`:''}
+        ${souDono(p.id)&&propDebt(p.id)>0.005?`<span class="badge red">${ic('users',12)} ${euro(propDebt(p.id))} entre proprietários</span>`:''}
+        ${(p.photos||[]).length&&vFile?`<span class="badge grey">${ic('photo',12)} ${p.photos.length}</span>`:''}
+        ${seloColaboradores(p)}</div>
+      ${ac.length&&vCt?`<div class="small" style="margin-top:10px">${ac.map(c2=>`${c2.roomId?esc(roomName(p,c2.roomId))+': ':''}${esc(ctNames(c2))} · ${euro(c2.rent)}`).join('<br>')}</div>`:''}
+      ${ls.length&&vLoan?`<div class="small" style="margin-top:9px">${ls.map(l=>`${esc(loanName(l))} · ${RATE[l.type]} · ${euro2(loanCalc(l).total)}/mês${(l.files||[]).length?' · '+l.files.length+' doc.':''}`).join('<br>')}
         ${ls.length>1?`<br><b>Total ${euro2(payOf(p))}/mês</b>`:''}</div>`:''}
       </div>`}).join('')}</div>`;
 }
@@ -444,11 +457,11 @@ function vContracts(){
       .concat(cgs.length?[lfSel(K,'g',[{v:'',label:'Todos os grupos'}].concat(cgs.map(g=>({v:g.id,label:'Grupo · '+g.name}))))]:[]),
       db.contracts.filter(c=>ctFMatch(c,s)).length,
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'renda',label:'Ordenar por renda'},{v:'inicio',label:'Ordenar por início'}]})
-    +fab([{label:'Novo contrato',act:'ctModal()'}]);
+    +(casasComo('contract.add').length?fab([{label:'Novo contrato',act:'ctModal()'}]):'');
   if(!db.properties.length)return head+`<div class="empty"><b>Cria primeiro um imóvel</b>Um contrato liga um imóvel a um ou mais inquilinos.</div>`;
   if(!db.contracts.length)return head+`<div class="empty"><b>Sem contratos</b>O contrato é onde vive a renda: podes arrendar o imóvel inteiro, ou um contrato por quarto.</div>`;
   let any=false;
-  const body=scope().map(p=>{
+  const body=visiveis().map(p=>{
     if(s.p&&p.id!==s.p)return '';
     const cs=lfSort(K,contractsOf(p.id).filter(c=>ctFMatch(c,s)),{nome:c=>ctName(c),renda:c=>c.rent,inicio:c=>c.start||''});if(!cs.length)return '';
     any=true;
@@ -523,7 +536,7 @@ function vTenants(){
     renda:t=>sum(contractsOfTenant(t.id).filter(isActive).map(c=>c.rent))});
   const head=lfBar(K,[lfSel(K,'ct',[{v:'',label:'Todos os inquilinos'},{v:'com',label:'Com contrato ativo'},{v:'sem',label:'Sem contrato ativo'}])],list.length,
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'contratos',label:'Ordenar por nº de contratos'},{v:'renda',label:'Ordenar por renda'}]})
-    +fab([{label:'Adicionar inquilino',act:"personModal('tenant')"}]);
+    +((!souSoColaborador()||casasComo('tenant.add').length)?fab([{label:'Adicionar inquilino',act:"personModal('tenant')"}]):'');
   if(!db.tenants.length)return head+`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.</div>`;
   if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   return head+`<div class="list">${list.map(t=>personCard(t,'tenant')).join('')}</div>`;
@@ -898,7 +911,7 @@ function vTransactions(){
   const subOpts=[{v:'',label:'Todas as subcategorias'},{v:'__none__',label:'Sem subcategoria'}].concat(subsF.map(x=>({v:x,label:x})));
   const nF=txFilterCount();
   const head=`${nF||txSearch.trim()?`<div class="small" style="margin:2px 0 10px">${filterSummary()}${txSearch.trim()?(nF?' · ':'')+'pesquisa: “'+esc(txSearch.trim())+'”':''}</div>`:''}`
-  +fab([{label:'Novo movimento',act:'newTxPick()'}]);
+  +((podeSemImovel()||casasComo('tx.add').length)?fab([{label:'Novo movimento',act:'newTxPick()'}]):'');
   if(!db.transactions.length)return head+`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.</div>`;
   const list=db.transactions.filter(txMatch).sort((a,b)=>{const d=txDir==='desc'?-1:1;
     if(txSort==='amount')return d*((a.amount||0)-(b.amount||0))||String(a.date).localeCompare(String(b.date));

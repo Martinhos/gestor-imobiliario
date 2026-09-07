@@ -16,7 +16,7 @@ const WEB = path.join(AQUI, '..', 'web');
 // Ordem igual à do index.html. O arranque fica de fora: só liga a interface.
 export const MODULOS = [
   'dados', 'anexos', 'auxiliares', 'graficos', 'credito', 'componentes',
-  'metricas', 'navegacao', 'vistas', 'imovel', 'pessoas', 'contrato',
+  'metricas', 'navegacao', 'acessos', 'vistas', 'imovel', 'pessoas', 'contrato',
   'planeados', 'prazos', 'notificacoes', 'visitas', 'calendario', 'movimento', 'creditos', 'splitwise', 'contrato-pdf',
   'avaliacao', 'definicoes', 'copias',
 ];
