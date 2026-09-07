@@ -75,7 +75,7 @@ function render(){
     if(hasFilt){hb.innerHTML=ic('filter',16)+(hdrFiltN()?'<span class="dot"></span>':'');
       hb.classList.toggle('primary',isAna?!!anaOpen[tab]:(LFK[tab]?!!lf(LFK[tab])._open:false))}}
   let html=({dashboard:vDashboard,visits:vVisits,calendar:vCalendar,properties:vProperties,contracts:vContracts,tenants:vTenants,owners:vOwners,
-    transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
+    colaboradores:vColabTab,transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
   view().innerHTML=html;
   /* A visão geral era o único ecrã sem criação rápida: registar uma renda
@@ -93,11 +93,12 @@ let kpiN=0;const KPI_REG={};
 /* evo: função que devolve a série do indicador ao longo do tempo; ao tocar abre-se uma janela com a evolução
    Recebe: l — o rótulo do cartão; v — o valor já formatado (string); c (opcional) — classe de cor ('pos', 'neg',
    'amber' ou vazio); f (opcional) — texto do rodapé; why (opcional) — explicação que abre ao toque;
-   evo (opcional) — função sem argumentos que devolve a série ({monthly, yearly, fmt, …}) para a janela de evolução.
+   evo (opcional) — função sem argumentos que devolve a série ({monthly, yearly, fmt, …}) para a janela de evolução;
+   acao (opcional) — {label, act} de um botão que a janela oferece no rodapé (ex.: filtrar por este tipo).
    Devolve: string HTML do cartão KPI. */
-const kpi=(l,v,c,f,why,evo)=>{
+const kpi=(l,v,c,f,why,evo,acao)=>{
   const id='k'+(++kpiN);
-  if(evo){KPI_REG[id]={title:l,why:why||'',evo};
+  if(evo){KPI_REG[id]={title:l,why:why||'',evo,acao:acao||null};
     return `<div class="card kpi evo" id="${id}" onclick="kpiModal('${id}')"><span class="kic">${ic('trend',11)}</span>
       <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${f?`<div class="foot">${f}</div>`:''}</div>`}
   return `<div class="card kpi ${why?'why':''}" id="${id}" ${why?`onclick="document.getElementById('${id}').classList.toggle('open')"`:''}>
@@ -122,7 +123,8 @@ function kpiModal(id){
     ${(d.yearly||[]).length?`<div class="tablewrap"><table class="table"><thead><tr><th>${d.yearlyTitle?'Período':'Ano'}</th><th>${esc(k.title)}</th>${d.yearly[0].extra!==undefined?'<th>'+esc(d.extraTitle||'')+'</th>':''}</tr></thead><tbody>
       ${d.yearly.map(y=>`<tr><td><b>${esc(String(y.label))}</b></td><td>${fmt(y.value)}</td>${y.extra!==undefined?`<td>${y.extra}</td>`:''}</tr>`).join('')}</tbody></table></div>`:''}
     ${d.note?`<div class="hint">${d.note}</div>`:''}</div>`;
-  openModal(k.title,body,`<button class="btn" onclick="closeModal()">Fechar</button>`);
+  openModal(k.title,body,`<button class="btn" onclick="closeModal()">Fechar</button>`+
+    (k.acao?`<button class="btn primary" onclick="closeModal();${k.acao.act}">${esc(k.acao.label)}</button>`:''));
 }
 /* anos com movimentos que contam nesta vista (o mesmo peso das métricas: imóvel,
    grupo ou âmbito todo), mais o corrente
@@ -704,7 +706,8 @@ function txRerender(){
    logo (handlers onTx*), e no fim mostra o resumo e quantos movimentos passam.
    Devolve: string HTML do corpo do modal. */
 function txFilterBody(){
-  const kinds=[['','Todos os tipos'],['income','Receitas'],['expense','Despesas'],['loan','Pagamentos de crédito'],['debt','Dívidas'],['settle','Transferências entre proprietários']];
+  const kinds=[['','Todos os tipos'],['income','Receitas'],['expense','Despesas'],['loan','Pagamentos de crédito'],
+    ['debt','Dívidas (recebidas e pagas)'],['owed','Dívidas recebidas'],['repay','Dívidas pagas'],['settle','Transferências entre proprietários']];
   const props=[{v:'',label:'Todos os imóveis'},{v:'__none__',label:'Sem imóvel atribuído'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
   const payers=[{v:'',label:'Qualquer proprietário'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
   const owners=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')));
@@ -900,6 +903,18 @@ function creditorsCard(pid){
           ${r.due>0.005?`<button class="btn sm" onclick="${stop}txModal(null,'repay',${r.propertyId?`'${r.propertyId}'`:'null'},null,null,{creditor:'${jsq(r.creditor==='—'?'':r.creditor)}',amount:${r.due}})">Pagar</button>`:''}</span></div>`).join('')}
     </div></div></div>`;
 }
+/* O separador dos Colaboradores: a vista vive na camada da nuvem
+   (vColaboradores, em cloud/partilha.js), porque cargos e convites são do
+   servidor. Sem conta — e o separador só aparece com uma — fica o convite a
+   criar conta, em vez de um ecrã vazio sem explicação.
+   Devolve: o HTML da página (texto). */
+function vColabTab(){
+  if(typeof vColaboradores==='function')return vColaboradores();
+  return `<div class="empty"><b>Precisas de uma conta</b>Os colaboradores são pessoas que entram nos teus imóveis com um cargo — isso vive na tua conta, não só neste aparelho.
+    <div class="toolbar" style="justify-content:center;margin-top:16px">
+    <button class="btn primary" onclick="goSet('cloud')">Criar conta ou entrar</button></div></div>`;
+}
+
 /* Movimentos: KPIs do filtro atual (com evolução ao toque), saldos entre
    proprietários, dívidas a terceiros e a lista agrupada por mês com o saldo
    de cada um. Tudo respeita os filtros e a ordenação escolhidos no modal.
@@ -929,13 +944,17 @@ function vTransactions(){
     return {fmt:euro,monthly:[...Array(12)].map((_,i)=>sum(L.filter(t=>String(t.date).startsWith(`${YEAR}-${String(i+1).padStart(2,'0')}`)).map(f))),
       yearly:Object.keys(ys).map(Number).sort().map(y=>({label:y,value:sum(L.filter(t=>String(t.date).startsWith(String(y))).map(f))}))};
   };
+  /* cada cartão leva a sua lista: abrir o indicador e ficar a ver só esse tipo é
+     o caminho que se fazia à mão pelo modal de filtros. O Saldo é a volta atrás. */
+  const ver=(k,rot)=>({label:rot,act:`txVerTipo('${k}')`});
+  const jaSo=k=>txFilter===k;
   const resumo=`<div class="grid" style="margin-bottom:4px">
-    ${kpi('Receitas',euro(tot.income),'pos','no filtro atual','Soma das receitas dos movimentos que passam no filtro.',evoTx('income'))}
-    ${kpi('Despesas',euro(tot.expense),'neg','no filtro atual','Soma das despesas dos movimentos que passam no filtro.',evoTx('expense'))}
-    ${kpi('Prestações',euro(tot.loan),'amber','no filtro atual','Prestações do crédito dos movimentos que passam no filtro.',evoTx('loan'))}
-    ${tot.owed?kpi('Dívidas recebidas',euro(tot.owed),'amber','de terceiros','Dinheiro recebido de terceiros.',evoTx('owed')):''}
-    ${tot.repay?kpi('Dívidas pagas',euro(tot.repay),'neg','a terceiros','Devoluções a terceiros.',evoTx('repay')):''}
-    ${kpi('Saldo',euro(saldo),saldo>=0?'pos':'neg',list.length+' movimentos','Entradas menos saídas dos movimentos que passam no filtro.',evoTx('saldo'))}</div>`;
+    ${kpi('Receitas',euro(tot.income),'pos','no filtro atual','Soma das receitas dos movimentos que passam no filtro.',evoTx('income'),jaSo('income')?null:ver('income','Ver só as receitas'))}
+    ${kpi('Despesas',euro(tot.expense),'neg','no filtro atual','Soma das despesas dos movimentos que passam no filtro.',evoTx('expense'),jaSo('expense')?null:ver('expense','Ver só as despesas'))}
+    ${kpi('Prestações',euro(tot.loan),'amber','no filtro atual','Prestações do crédito dos movimentos que passam no filtro.',evoTx('loan'),jaSo('loan')?null:ver('loan','Ver só as prestações'))}
+    ${tot.owed?kpi('Dívidas recebidas',euro(tot.owed),'amber','de terceiros','Dinheiro recebido de terceiros.',evoTx('owed'),jaSo('owed')?null:ver('owed','Ver só as dívidas recebidas')):''}
+    ${tot.repay?kpi('Dívidas pagas',euro(tot.repay),'neg','a terceiros','Devoluções a terceiros.',evoTx('repay'),jaSo('repay')?null:ver('repay','Ver só as dívidas pagas')):''}
+    ${kpi('Saldo',euro(saldo),saldo>=0?'pos':'neg',list.length+' movimentos','Entradas menos saídas dos movimentos que passam no filtro.',evoTx('saldo'),txFilter?ver('','Ver todos os tipos'):null)}</div>`;
   const by={};list.forEach(t=>{const k=String(t.date).slice(0,7);(by[k]=by[k]||[]).push(t)});
   const who=t=>{
     if(t.kind==='settle')return `<div class="small"><b>${esc((owner(t.paidBy)||{}).name||'?')}</b> → <b>${esc((owner(t.toId)||{}).name||'?')}</b></div>`;
@@ -961,6 +980,12 @@ function vTransactions(){
 // muda o filtro de tipo; categoria e subcategoria caem porque a árvore muda com o tipo
 // Devolve: nada — redesenha a lista e o modal.
 function onTxFilter(){txFilter=val('txKind')||'';txCat='';txSub='';txRerender()}
+const TX_PLURAL={income:'as receitas',expense:'as despesas',loan:'as prestações',owed:'as dívidas recebidas',repay:'as dívidas pagas',settle:'as transferências',debt:'as dívidas'};
+/* Filtra os movimentos por um tipo, a partir da janela de um cartão de resumo.
+   A categoria e a subcategoria limpam-se: as que havia eram do tipo anterior.
+   Recebe: k — o tipo ('income', 'expense', 'loan', 'owed', 'repay'), ou '' para todos.
+   Devolve: nada — muda o filtro e redesenha. */
+function txVerTipo(k){txFilter=k||'';txCat='';txSub='';txRerender();toast(k?'A ver só '+(TX_PLURAL[k]||'este tipo')+'.':'A ver todos os tipos.')}
 
 let projProp='';
 // muda o imóvel (ou grupo) em foco nas projeções
