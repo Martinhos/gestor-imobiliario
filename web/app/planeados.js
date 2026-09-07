@@ -275,13 +275,16 @@ function skipRec(id){const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   r.muted=!r.muted;save();buildNav();render();toast(r.muted?'Silenciada: fica em Planeados à espera de confirmação, sem avisos.':'Volta a avisar.')}
 /* Confirmar um planeado cria um movimento: num imóvel onde só colaboro pede
    «Adicionar e confirmar planeados» e também «Adicionar movimentos» — sem a
-   segunda, o servidor recusava o movimento que a confirmação cria.
+   segunda, o servidor recusava o movimento que a confirmação cria. Uma
+   prestação de hipoteca abate capital na ficha do imóvel: pede ainda «Editar
+   a ficha do imóvel» (motivoCredito).
    Recebe: r — a recorrência.
    Devolve: a frase da recusa (texto), ou '' quando posso confirmar. */
 function recusaConfirmar(r){
   const hid=(r&&r.tx||{}).propertyId;
   if(!pode(hid,'rec.add'))return fraseSemPerm('rec.add');
   if(!pode(hid,'tx.add'))return fraseSemPerm('tx.add');
+  if((r&&r.tx||{}).kind==='loan')return motivoCredito(hid);
   return '';
 }
 /* abrir para rever antes de confirmar
@@ -335,7 +338,7 @@ function editTpl(id){
    Devolve: nada — pede confirmação; ao confirmar, apaga, grava e redesenha. */
 function delRec(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
-  const recusa=motivoRecusa((r.tx||{}).propertyId,'rec.add',r);if(recusa)return toast(recusa);
+  const recusa=motivoRecusa((r.tx||{}).propertyId,'rec.add',r,true);if(recusa)return toast(recusa);
   const isLoan=r.auto&&(r.tx||{}).loanId;
   confirmModal('Apagar movimento recorrente',r.auto?(isLoan?`Esta é a prestação de uma hipoteca. Apagar deixa de a pedir todos os meses (podes voltar a ligá-la na hipoteca).`:`Este é a renda de um contrato. Apagar deixa de a pedir todos os meses (podes voltar a ligá-la guardando o contrato de novo).`):`Deixar de repetir “${esc(r.name)}”? Os movimentos já criados ficam.`,()=>{
     if(r.auto){const c=contract((r.tx||{}).contractId);if(c)c.autoRec=false;

@@ -201,21 +201,23 @@ function visEstado(id,estado){
 function visApaga(id){
   const i=(db.visits||[]).findIndex(x=>x.id===id);if(i<0)return;
   const copia=db.visits[i];
-  const recusa=motivoRecusa(copia.propertyId,'visit.add',copia);if(recusa)return toast(recusa);
+  const recusa=motivoRecusa(copia.propertyId,'visit.add',copia,true);if(recusa)return toast(recusa);
   db.visits.splice(i,1);save();render();
   comDesfazer('Visita apagada.',()=>{db.visits.splice(i,0,copia);save();render()});
 }
 
 /* Converte a visita numa ficha de inquilino: abre a ficha nova já com o nome
    e o contacto preenchidos (telefone ou email, conforme o que lá estiver) —
-   o resto preenche-se quando o contrato for a sério.
+   o resto preenche-se quando o contrato for a sério. A ficha fica presa ao
+   imóvel da visita (houseId): é assim que, criada por um colaborador, sobe
+   como registo desse imóvel e chega ao dono mesmo sem contrato.
    Recebe: id — a visita a converter.
    Devolve: nada — abre o personModal de um inquilino novo pré-preenchido. */
 function visConverte(id){
   const v=(db.visits||[]).find(x=>x.id===id);if(!v)return;
   if(!pode(v.propertyId,'tenant.add'))return toast(fraseSemPerm('tenant.add'));
   const c=(v.contacto||'').trim();
-  const novo=normPerson({name:v.nomes,phone:/@/.test(c)?'':c,email:/@/.test(c)?c:'',
+  const novo=normPerson({name:v.nomes,phone:/@/.test(c)?'':c,email:/@/.test(c)?c:'',houseId:v.propertyId||'',
     notes:v.notas?'Da visita de '+(v.date||'?')+': '+v.notas:''});
   db.tenants.push(novo);save();
   personModal('tenant',novo.id);

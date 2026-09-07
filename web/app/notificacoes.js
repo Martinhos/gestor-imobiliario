@@ -93,12 +93,14 @@ function notifModal(){
     <div class="row-between" style="align-items:center;gap:8px"><div style="min-width:0">
       <b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(titulo)}</b>
       <span class="small">${esc(sub)}</span></div>${cls?`<span class="badge ${cls}" style="flex:0 0 auto">!</span>`:''}</div></div>`;
-  /* um pedido de partilha responde-se aqui mesmo: a nuvem define CW.pedidoAceitar(id) e CW.pedidoRecusar(id) */
+  /* um pedido de partilha responde-se aqui mesmo: a nuvem define CW.pedidoAceitar(id)
+     e CW.pedidoRecusar(id). O modal fecha-se primeiro — o render() não fecha
+     janelas, e o cartão ficava lá com os botões a repetir o pedido já respondido */
   const pedido=n=>`<div class="card" style="padding:10px 13px">
     <b style="display:block">${esc(n.titulo)}</b><span class="small">${esc(n.sub)}</span>
     <div class="toolbar" style="margin:9px 0 0">
-      <button class="btn sm primary" onclick="window.CW&&CW.pedidoAceitar&&CW.pedidoAceitar('${jsq(n.id)}')">Aceitar</button>
-      <button class="btn sm" onclick="window.CW&&CW.pedidoRecusar&&CW.pedidoRecusar('${jsq(n.id)}')">Recusar</button></div></div>`;
+      <button class="btn sm primary" onclick="closeModal();window.CW&&CW.pedidoAceitar&&CW.pedidoAceitar('${jsq(n.id)}')">Aceitar</button>
+      <button class="btn sm" onclick="closeModal();window.CW&&CW.pedidoRecusar&&CW.pedidoRecusar('${jsq(n.id)}')">Recusar</button></div></div>`;
   const bloco=(titulo,linhas)=>linhas.length?`<div class="navh">${titulo}</div>${linhas.join('')}`:'';
   const corpo=`<div class="list" style="gap:8px">
     ${bloco('Pedidos de partilha',pedidos.map(pedido))}

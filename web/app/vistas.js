@@ -656,7 +656,10 @@ function filterSummary(){
    Devolve: nada — abre o modal do novo movimento. */
 function newTxFromFilters(kind){
   const cat=txCat&&txCat!=='__none__'?txCat:'',sub=txSub&&txSub!=='__none__'?txSub:'';
-  txModal(null,kind||'income',txProp&&txProp!=='__none__'?txProp:null,null,null,{paidBy:txPaid||null,category:treeKey(kind)===(cat in catsIn()&&!(cat in cats())?'catsIn':'cats')?cat:'',sub:treeKey(kind)===(cat in catsIn()&&!(cat in cats())?'catsIn':'cats')?sub:''});
+  const pid=txProp&&txProp!=='__none__'?txProp:null;
+  /* pagar crédito abate capital na ficha do imóvel: sem «Editar a ficha» diz-se antes de abrir o formulário */
+  if(kind==='loan'&&pid){const rc=motivoCredito(pid);if(rc)return toast(rc)}
+  txModal(null,kind||'income',pid,null,null,{paidBy:txPaid||null,category:treeKey(kind)===(cat in catsIn()&&!(cat in cats())?'catsIn':'cats')?cat:'',sub:treeKey(kind)===(cat in catsIn()&&!(cat in cats())?'catsIn':'cats')?sub:''});
 }
 /* "Novo movimento": primeiro o tipo, num menu
    Recebe: after (opcional) — função chamada com o tipo escolhido, em vez do fluxo normal; sem ela segue

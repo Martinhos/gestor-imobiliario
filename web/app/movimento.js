@@ -10,18 +10,31 @@ let tForm={};
    Devolve: nada — abre o modal do movimento e prepara o guardar. */
 function txModal(id,kind,propId,_x,ctId,preset){
   foldState={};
+  /* sem imóvel escolhido: com um só imóvel onde posso adicionar fica esse; quem não
+     é dono de nenhum não tem «Todos os imóveis» e fica com o primeiro permitido —
+     senão o seletor mostrava o primeiro e o movimento gravava-se sem imóvel */
+  const auto=(db.properties.length===1||!podeSemImovel())?((casasComo('tx.add')[0]||{}).id||null):null;
   tForm=id?normTx(JSON.parse(JSON.stringify(db.transactions.find(x=>x.id===id)))):
-    normTx(Object.assign({kind:kind||'income',date:today(),amount:'',propertyId:propId||(db.properties.length===1&&pode(db.properties[0].id,'tx.add')?db.properties[0].id:null),contractId:ctId||null,split:null},preset||{}));
+    normTx(Object.assign({kind:kind||'income',date:today(),amount:'',propertyId:propId||auto,contractId:ctId||null,split:null},preset||{}));
   if(tForm.contractId&&!tForm.propertyId){const c=contract(tForm.contractId);if(c)tForm.propertyId=c.propertyId}
+  if(!id&&!tForm.propertyId&&!tForm.groupId&&!podeSemImovel())tForm.propertyId=auto;   /* um preset sem imóvel (modelo) também */
   tForm._edit=!!id;
   if(!id&&tForm.amount){tForm._aA=tForm.amount}
   prefill();
-  const m=id?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,act:`delTx('${id}')`}]):'';
-  openModal((id?'Editar ':txNewWord(tForm.kind))+txTypeName(tForm.kind),txBody(),null,m);
+  /* «Ver movimento»: o que não posso alterar num imóvel onde colaboro abre só de leitura */
+  const ok=!id||podeEditar(tForm.propertyId,'tx.add',db.transactions.find(x=>x.id===id));
+  const m=id&&ok?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,act:`delTx('${id}')`}]):'';
+  const nome=txTypeName(tForm.kind);
+  openModal(id?(ok?'Editar '+nome:nome.charAt(0).toUpperCase()+nome.slice(1)):txNewWord(tForm.kind)+nome,txBody(),null,m);
+  if(!ok){onSave=null;return modalSoLeitura('Movimento de um imóvel onde colaboras — só de leitura.')}
   tForm._saver=()=>{
     collectTx();
     /* a primeira barreira: o servidor recusaria na mesma, mas aqui diz-se porquê antes de gravar */
     const recusa=motivoRecusa(tForm.propertyId,'tx.add',id?db.transactions.find(x=>x.id===id):null);if(recusa)return toast(recusa);
+    if(!tForm.propertyId&&!podeSemImovel())return toast('Escolhe o imóvel.');
+    /* um pagamento de crédito a sério (não um planeado nem um modelo só) abate capital
+       na ficha do imóvel: sem «Editar a ficha» o movimento subia e a dívida não */
+    if(tForm.kind==='loan'&&!(tForm._recId||tForm._recNew)&&(!(tForm._tplId||tForm._tplNew)||tForm._alsoTx)){const rc=motivoCredito(tForm.propertyId);if(rc)return toast(rc)}
     if(!tForm.label.trim())return falhaCampo('t_label','Escreve uma descrição.');
     if(!(tForm.amount>0))return falhaCampo('t_amount','Indica um montante.');
     /* com hipotecas vivas, um pagamento de crédito sem hipoteca ia parar à conta errada ou a nenhuma */
@@ -614,7 +627,7 @@ function delTx(id){
   /* sem confirmação, com Anular: é a eliminação mais frequente da app, e a
      pergunta constante ensinava o dedo a confirmar sem ler */
   const t=db.transactions.find(x=>x.id===id);if(!t)return;
-  const recusa=motivoRecusa(t.propertyId,'tx.add',t);if(recusa)return toast(recusa);
+  const recusa=motivoRecusa(t.propertyId,'tx.add',t,true);if(recusa)return toast(recusa);
   const copia=JSON.parse(JSON.stringify(t));
   if(t.kind==='loan'&&t.principal&&t.loanId){
     const l=findLoan(prop(t.propertyId),t.loanId);

@@ -87,22 +87,40 @@ function souCriador(pid){const c=cargoDe(pid);return !!c.dono&&c.criador!==false
 function pode(pid,perm){if(!pid)return true;const c=cargoDe(pid);return c.dono?true:temPerm(c.perms||[],perm)}
 /* Posso alterar ou apagar este registo? Adicionar é criar; editar e apagar,
    só o que eu próprio criei (o dono e os comproprietários editam tudo). Um
-   registo sem marca de criador deixa-se passar — o servidor decide.
+   registo que veio do servidor sem marca de criador (anterior à marca) não é
+   meu — o servidor recusava-o e o registo do dono sumia do ecrã até ao pull
+   seguinte; um registo só local (ainda sem _atServidor) é meu por definição.
+   A exceção são os planeados: com «Adicionar e confirmar planeados» confirmo,
+   silencio e edito qualquer um (o servidor aceita o put seja de quem for),
+   mas apago só os meus.
    Recebe: pid — o id do imóvel do registo; perm — a permissão de adicionar
-   (ex.: 'tx.add'); x (opcional) — o registo, com _createdBy vindo do servidor.
+   (ex.: 'tx.add'); x (opcional) — o registo, com _createdBy e _atServidor
+   vindos do servidor; apagar (opcional) — true quando a ação é apagar.
    Devolve: true se posso. */
-function podeEditar(pid,perm,x){
+function podeEditar(pid,perm,x,apagar){
   if(!pid||souDono(pid))return true;
   if(!pode(pid,perm))return false;
-  return !x||!x._createdBy||x._createdBy===meuId();
+  if(!x)return true;
+  const meu=x._createdBy?x._createdBy===meuId():!x._atServidor;
+  return meu||(perm==='rec.add'&&!apagar);
 }
 /* A frase da recusa, para o toast: vazia quando posso.
-   Recebe: pid — o id do imóvel; perm — a permissão de adicionar; x (opcional) — o registo a alterar.
+   Recebe: pid — o id do imóvel; perm — a permissão de adicionar; x (opcional) —
+   o registo a alterar; apagar (opcional) — true quando a ação é apagar.
    Devolve: a frase (texto), ou '' quando não há nada a recusar. */
-function motivoRecusa(pid,perm,x){
-  if(podeEditar(pid,perm,x))return '';
+function motivoRecusa(pid,perm,x,apagar){
+  if(podeEditar(pid,perm,x,apagar))return '';
   if(!pode(pid,perm))return fraseSemPerm(perm);
-  return 'Só quem o adicionou pode alterar este registo — pede ao dono.';
+  return 'Só quem o adicionou pode '+(apagar?'apagar':'alterar')+' este registo — pede ao dono.';
+}
+/* Um pagamento de crédito ou uma amortização abate capital à hipoteca — e a
+   hipoteca vive na ficha do imóvel, que só sobe com «Editar a ficha do
+   imóvel». Sem isso o movimento subia e a dívida ficava na mesma no servidor.
+   Recebe: pid — o id do imóvel (vazio ou null para «sem imóvel»).
+   Devolve: a frase da recusa (texto), ou '' quando posso registar pagamentos de crédito. */
+function motivoCredito(pid){
+  if(!pode(pid,'tx.add'))return fraseSemPerm('tx.add');
+  return pode(pid,'house.edit')?'':'Registar pagamentos de crédito precisa de poder editar a ficha do imóvel — pede ao dono.';
 }
 // A frase «Não tens permissão para <rótulo> neste imóvel — pede ao dono.».
 // Recebe: perm — a chave da permissão em falta.
@@ -141,13 +159,14 @@ function donosGlobais(){
   const eu=meuId();
   return db.owners.filter(o=>o.id===eu||!o._userId||db.properties.some(p=>(p.ownerIds||[]).indexOf(o.id)>-1&&souDono(p.id))||!db.properties.some(p=>(p.ownerIds||[]).indexOf(o.id)>-1));
 }
-/* O imóvel a que uma ficha de inquilino pertence: a marca do servidor, ou o
-   do primeiro contrato dela; null numa ficha só minha.
+/* O imóvel a que uma ficha de inquilino pertence: o houseId gravado na ficha
+   (criada a partir de uma visita, ou por quem só colabora), a marca do
+   servidor, ou o do primeiro contrato dela; null numa ficha só minha.
    Recebe: t — a ficha do inquilino.
    Devolve: o id do imóvel, ou null. */
 function casaDoInquilino(t){
   if(!t)return null;
-  if(t._houseId)return t._houseId;
+  if(t.houseId||t._houseId)return t.houseId||t._houseId;
   const c=contractsOfTenant(t.id)[0];
   return c?c.propertyId:null;
 }
@@ -274,10 +293,11 @@ function dbSoMeu(){
   d.properties=d.properties.filter(p=>!fora.has(p.id));
   ['contracts','transactions','visits'].forEach(k=>{d[k]=(d[k]||[]).filter(x=>!fora.has(x.propertyId))});
   d.recurring=(d.recurring||[]).filter(r=>!fora.has((r.tx||{}).propertyId));
-  /* uma ficha de inquilino é de fora se o servidor a marcou com um imóvel de
-     colaboração, ou se só está em contratos desses imóveis */
+  /* uma ficha de inquilino é de fora se está presa (houseId ou a marca do
+     servidor) a um imóvel de colaboração, ou se só está em contratos desses imóveis */
   d.tenants=(d.tenants||[]).filter(t=>{
-    if(t._houseId)return !fora.has(t._houseId);
+    const h=t.houseId||t._houseId;
+    if(h)return !fora.has(h);
     const cs=(db.contracts||[]).filter(c=>(c.tenantIds||[]).indexOf(t.id)>-1);
     return !cs.length||cs.some(c=>!fora.has(c.propertyId));
   });

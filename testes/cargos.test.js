@@ -3,7 +3,7 @@
 // entre proprietários. As decisões vivem em web/app/acessos.js (puro) e
 // testam-se aqui sem a camada da nuvem: a sessão simula-se com window.CW.
 
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -13,6 +13,26 @@ const require = createRequire(import.meta.url);
 const acessos = require('../web/app/acessos.js');
 const app = carregarApp();
 const lpShowReal = app.lpShow;   // guardado antes de qualquer stub
+const personModalReal = app.personModal;
+
+/* uma camada de janela falsa, com corpo e rodapé observáveis: o modo só de
+   leitura desativa os campos do corpo e troca o rodapé por «Fechar» */
+function camadaFalsa() {
+  const campos = [{ disabled: false, type: 'text', value: 'a' }, { disabled: false, type: 'text', value: 'b' }];
+  const body = { innerHTML: '', hint: '', querySelectorAll: () => campos, insertAdjacentHTML: (w, h) => { body.hint += h; } };
+  const foot = { innerHTML: '' };
+  const el = { querySelector: (s) => (s === '.body' ? body : s === '.foot' ? foot : null), querySelectorAll: () => [] };
+  return { el, body, foot, campos, onSave: null };
+}
+// abre janelas numa pilha observável: cada openModal empilha uma camadaFalsa e guarda o que recebeu
+function janelasFalsas() {
+  const abertas = [];
+  app.openModal = (t, b, f, m) => { const L = camadaFalsa(); L.t = t; L.b = b; L.f = f; L.m = m || ''; app.modalStack.push(L); abertas.push(L); return L; };
+  app.closeModal = () => { app.modalStack.pop(); };
+  app.closeAllModals = () => { app.modalStack.length = 0; };
+  app.paintThumbs = () => {}; app.render = () => {}; app.buildNav = () => {}; app.save = () => {};
+  return abertas;
+}
 
 const GESTOR = ['visit.view', 'visit.add', 'tenant.view', 'tenant.add'];
 const CONTAB = ['tx.view', 'tx.add', 'rec.view', 'rec.add', 'contract.view', 'loan.view', 'file.view', 'file.add', 'report.view'];
@@ -131,15 +151,44 @@ describe('posso X nesta casa?', () => {
 
   test('editar e apagar é só o que eu adicionei; a recusa tem frase', () => {
     tresCasas();
-    const meu = { _createdBy: 'eu' }, dele = { _createdBy: 'rui' }, semMarca = {};
+    const meu = { _createdBy: 'eu' }, dele = { _createdBy: 'rui' }, local = {}, antigo = { _atServidor: 5 };
     assert.equal(app.podeEditar('P2', 'tx.add', meu), true);
     assert.equal(app.podeEditar('P2', 'tx.add', dele), false);
-    assert.equal(app.podeEditar('P2', 'tx.add', semMarca), true, 'sem marca deixa-se passar — o servidor decide');
+    assert.equal(app.podeEditar('P2', 'tx.add', local), true, 'ainda não subiu: é meu');
+    assert.equal(app.podeEditar('P2', 'tx.add', antigo), false, 'veio do servidor sem criador (anterior à marca): não é meu, o servidor recusava');
+    assert.equal(app.podeEditar('P2', 'tx.add', antigo, true), false);
     assert.equal(app.podeEditar('P1', 'tx.add', dele), true, 'no meu imóvel edito tudo');
+    assert.equal(app.podeEditar('P1', 'tx.add', antigo, true), true);
     assert.equal(app.motivoRecusa('P2', 'tx.add', meu), '');
-    assert.match(app.motivoRecusa('P2', 'tx.add', dele), /Só quem o adicionou/);
+    assert.match(app.motivoRecusa('P2', 'tx.add', dele), /Só quem o adicionou pode alterar este registo/);
+    assert.match(app.motivoRecusa('P2', 'tx.add', antigo, true), /Só quem o adicionou pode apagar este registo/);
     assert.equal(app.motivoRecusa('P3', 'tx.add'), 'Não tens permissão para adicionar movimentos neste imóvel — pede ao dono.');
     assert.equal(app.fraseSemPerm('visit.add'), 'Não tens permissão para marcar visitas neste imóvel — pede ao dono.');
+  });
+
+  test('um planeado edita-se e confirma-se com rec.add seja de quem for; apaga-se só o meu', () => {
+    tresCasas();
+    const doDono = { _createdBy: 'rui', _atServidor: 5 }, antigo = { _atServidor: 5 };
+    assert.equal(app.podeEditar('P2', 'rec.add', doDono), true, 'o contabilista confirma a renda do dono');
+    assert.equal(app.podeEditar('P2', 'rec.add', antigo), true);
+    assert.equal(app.podeEditar('P2', 'rec.add', doDono, true), false, 'mas não a apaga');
+    assert.equal(app.podeEditar('P2', 'rec.add', { _createdBy: 'eu' }, true), true);
+    assert.equal(app.podeEditar('P3', 'rec.add', doDono), false, 'sem rec.add, nada');
+    assert.equal(app.motivoRecusa('P2', 'rec.add', doDono), '');
+    assert.match(app.motivoRecusa('P2', 'rec.add', doDono, true), /Só quem o adicionou pode apagar/);
+    // silenciar passa; apagar recusa sem tirar nada
+    app.db.recurring = [Object.assign(app.normRec({ id: 'R1', name: 'Renda', next: '2000-01-01', tx: { kind: 'income', propertyId: 'P2', amount: 500 } }), doDono)];
+    let msg = '';
+    const reais = { toast: app.toast, save: app.save, render: app.render, buildNav: app.buildNav, confirmModal: app.confirmModal };
+    app.toast = (m) => { msg = m; };
+    app.save = () => {}; app.render = () => {}; app.buildNav = () => {};
+    app.skipRec('R1');
+    assert.equal(app.db.recurring[0].muted, true);
+    app.confirmModal = () => { throw new Error('não devia perguntar'); };
+    app.delRec('R1');
+    assert.match(msg, /Só quem o adicionou pode apagar/);
+    assert.equal(app.db.recurring.length, 1);
+    Object.keys(reais).forEach((k) => { app[k] = reais[k]; });
   });
 
   test('o seletor de imóvel lista onde posso adicionar, mais o já escolhido', () => {
@@ -267,6 +316,26 @@ describe('o que se esconde', () => {
     assert.ok(m1.includes('Ver movimento') && !m1.includes('Apagar movimento'), m1.join(', '));
     const m2 = menuDe('tx:T2').labels;
     assert.ok(m2.includes('Editar movimento') && m2.includes('Apagar movimento'), m2.join(', '));
+  });
+
+  test('um registo antigo do dono (sem criador) só se vê; o planeado do dono confirma-se mas não se apaga', () => {
+    tresCasas();
+    const t1 = app.normTx({ id: 'T1', label: 'Obra', propertyId: 'P2', amount: 10 }); t1._atServidor = 5;
+    app.db.transactions = [t1];
+    assert.deepEqual(Array.from(menuDe('tx:T1').labels), ['Ver movimento']);
+    let msg = '';
+    app.toast = (m) => { msg = m; };
+    app.delTx('T1');
+    assert.match(msg, /Só quem o adicionou pode apagar/);
+    assert.equal(app.db.transactions.length, 1, 'nada saiu da base');
+    const r1 = app.normRec({ id: 'R1', name: 'Renda', next: '2000-01-01', tx: { kind: 'income', propertyId: 'P2', amount: 500 } });
+    r1._createdBy = 'rui'; r1._atServidor = 5;
+    app.db.recurring = [r1];
+    const labels = menuDe('rec:R1').labels;
+    ['Confirmar', 'Silenciar', 'Editar'].forEach((l) => assert.ok(labels.includes(l), l));
+    assert.ok(!labels.includes('Apagar'), labels.join(', '));
+    r1._createdBy = 'eu';
+    assert.ok(menuDe('rec:R1').labels.includes('Apagar'), 'o meu apago');
   });
 
   test('sem nenhuma ação, o toque longo diz que só posso ver', () => {
@@ -421,6 +490,9 @@ describe('nomes, estado e a porta do URL', () => {
     assert.match(corpo, /Ana quer partilhar T4 Porto contigo/);
     assert.match(corpo, /CW\.pedidoAceitar\('q1'\)/);
     assert.match(corpo, /CW\.pedidoRecusar\('q1'\)/);
+    // responder fecha o sino primeiro: o cartão não fica a repetir o pedido já respondido
+    assert.match(corpo, /onclick="closeModal\(\);window\.CW&&CW\.pedidoAceitar&&CW\.pedidoAceitar\('q1'\)"/);
+    assert.match(corpo, /onclick="closeModal\(\);window\.CW&&CW\.pedidoRecusar&&CW\.pedidoRecusar\('q1'\)"/);
   });
 
   test('a cópia leva só o que é meu', () => {
@@ -434,5 +506,203 @@ describe('nomes, estado e a porta do URL', () => {
     assert.deepEqual(d.contracts, []);
     assert.deepEqual(d.tenants.map((t) => t.id), ['I2']);
     assert.equal(app.db.properties.length, 3, 'a base a sério não muda');
+  });
+});
+
+describe('o que um colaborador faz — e o ecrã não desmente', () => {
+  const reais = { collectTx: app.collectTx, collectPerson: app.collectPerson, pickModal: app.pickModal, repaintCt: app.repaintCt };
+  afterEach(() => { Object.keys(reais).forEach((k) => { app[k] = reais[k]; }); app.personModal = personModalReal; app.modalStack.length = 0; });
+  // o menu do toque longo devolve as opções em vez de abrir a folha
+  function menuDe(v) {
+    let opts = null;
+    app.lpShow = (t, o) => { opts = o; };
+    app.lpMenu(v);
+    return opts ? opts.map((o) => o.label) : null;
+  }
+
+  test('«Ver movimento» e «Ver contrato» abrem só de leitura; o que é meu abre para editar', () => {
+    tresCasas();
+    const abertas = janelasFalsas();
+    const t1 = app.normTx({ id: 'T1', label: 'Obra', kind: 'expense', propertyId: 'P2', amount: 10 }); t1._createdBy = 'rui';
+    const t2 = app.normTx({ id: 'T2', label: 'Luz', kind: 'expense', propertyId: 'P2', amount: 10 }); t2._createdBy = 'eu';
+    app.db.transactions = [t1, t2];
+    app.txModal('T1');
+    let L = abertas[0];
+    assert.equal(L.t, 'Despesa', 'o título não diz editar');
+    assert.equal(L.m, '', 'sem menu de apagar');
+    assert.ok(L.campos.every((c) => c.disabled), 'campos desativados');
+    assert.match(L.foot.innerHTML, /Fechar/);
+    assert.doesNotMatch(L.foot.innerHTML, /Guardar/);
+    assert.match(L.body.hint, /só de leitura/);
+    assert.equal(L.soLeitura, true);
+    assert.equal(app.onSave, null, 'nada por guardar');
+    app.txModal('T2');
+    L = abertas[1];
+    assert.equal(L.t, 'Editar despesa');
+    assert.match(L.m, /Apagar movimento/);
+    assert.ok(L.campos.every((c) => !c.disabled));
+    assert.equal(typeof app.onSave, 'function');
+    // o contabilista só vê contratos: o do Rui abre em leitura, com o PDF mas sem apagar
+    app.db.contracts = [app.normContract({ id: 'C1', propertyId: 'P2', rent: 500, tenantIds: [] })];
+    app.ctModal('C1');
+    L = abertas[2];
+    assert.equal(L.t, 'Contrato');
+    assert.match(L.m, /Gerar contrato em PDF/);
+    assert.doesNotMatch(L.m, /Apagar contrato/);
+    assert.ok(L.campos.every((c) => c.disabled));
+    assert.match(L.foot.innerHTML, /Fechar/);
+    assert.match(L.body.hint, /só de leitura/);
+    assert.equal(app.onSave, null);
+    // a miniatura do registo fotográfico é um div: em leitura não repinta (repintar reativava os campos)
+    let repintou = false;
+    app.repaintCt = () => { repintou = true; };
+    app.togCtPhoto('f1');
+    assert.equal(repintou, false);
+    // no meu imóvel o contrato abre para editar
+    app.db.contracts.push(app.normContract({ id: 'C2', propertyId: 'P1', rent: 500, tenantIds: [] }));
+    app.ctModal('C2');
+    L = abertas[3];
+    assert.equal(L.t, 'Editar contrato');
+    assert.match(L.m, /Apagar contrato/);
+    assert.equal(typeof app.onSave, 'function');
+  });
+
+  test('pagar crédito num imóvel onde colaboro pede «Editar a ficha do imóvel»', () => {
+    tresCasas();
+    app.db.properties[1].loans = [app.normLoan({ id: 'L1', name: 'Aquisição', outstanding: 100000, rate: 3 })];
+    const FRASE = 'Registar pagamentos de crédito precisa de poder editar a ficha do imóvel — pede ao dono.';
+    assert.equal(app.motivoCredito('P2'), FRASE, 'contabilista: tx.add e loan.view, sem house.edit');
+    assert.equal(app.motivoCredito('P1'), '', 'no meu imóvel posso');
+    assert.equal(app.motivoCredito(null), '', 'sem imóvel é meu');
+    assert.equal(app.motivoCredito('P3'), app.fraseSemPerm('tx.add'), 'sem tx.add é essa a falta');
+    const menu = menuDe('prop:P2');
+    assert.ok(menu.includes('Registar despesa') && !menu.includes('Pagamento de crédito') && !menu.includes('Amortização'), menu.join(', '));
+    assert.deepEqual(Array.from(menuDe('mort:P2:L1')), []);
+    // a prestação planeada da hipoteca também abate capital: não se confirma
+    const r = app.normRec({ id: 'R1', name: 'Prestação', next: '2000-01-01', tx: { kind: 'loan', propertyId: 'P2', loanId: 'L1', amount: 400 } });
+    assert.equal(app.recusaConfirmar(r), FRASE);
+    // o formulário aberto por outro caminho recusa ao guardar, antes de mexer em nada
+    janelasFalsas();
+    let msg = '';
+    app.toast = (m) => { msg = m; };
+    app.txModal(null, 'loan', 'P2');
+    app.collectTx = () => {};
+    Object.assign(app.tForm, { propertyId: 'P2', label: 'Prestação', amount: 400, loanId: 'L1' });
+    app.onSave();
+    assert.equal(msg, FRASE);
+    assert.equal(app.db.transactions.length, 0);
+    assert.equal(app.db.properties[1].loans[0].outstanding, 100000, 'nada abatido');
+    // o «Novo movimento» da lista nem chega a abrir o formulário
+    const antes = app.modalStack.length;
+    app.txProp = 'P2';
+    app.newTxFromFilters('loan');
+    assert.equal(app.modalStack.length, antes);
+    assert.equal(msg, FRASE);
+    app.txProp = '';
+    // com «Editar a ficha», tudo volta
+    app.window.CW.cargos.P2.perms = CONTAB.concat(['house.edit']);
+    assert.equal(app.motivoCredito('P2'), '');
+    assert.equal(app.recusaConfirmar(r), '');
+    assert.ok(menuDe('prop:P2').includes('Pagamento de crédito'));
+    assert.ok(menuDe('mort:P2:L1').includes('Amortização'));
+  });
+
+  test('quem só colabora abre o movimento novo já no primeiro imóvel permitido', () => {
+    tresCasas();
+    app.window.CW.cargos.P1 = { dono: false, nome: 'Gestor', perms: ['contract.add', 'tx.add'] };   // P1 e P2 dão tx.add
+    assert.equal(app.souSoColaborador(), true);
+    janelasFalsas();
+    app.txModal(null, 'expense', null);
+    assert.equal(app.tForm.propertyId, 'P1');
+    app.txModal(null, 'expense', null, null, null, { propertyId: null, label: 'De um modelo' });
+    assert.equal(app.tForm.propertyId, 'P1', 'um preset sem imóvel também');
+    app.txModal(null, 'expense', 'P2');
+    assert.equal(app.tForm.propertyId, 'P2', 'o que vem escolhido fica');
+    // e sem imóvel não grava
+    let msg = '';
+    app.toast = (m) => { msg = m; };
+    app.collectTx = () => {};
+    Object.assign(app.tForm, { propertyId: null, label: 'Luz', amount: 10 });
+    app.onSave();
+    assert.equal(msg, 'Escolhe o imóvel.');
+    assert.equal(app.db.transactions.length, 0);
+    // contrato e visita já caíam no primeiro permitido
+    app.ctModal(null);
+    assert.equal(app.cForm.propertyId, 'P1');
+    app.visitModal(null);
+    assert.equal(app.visForm.propertyId, 'P3');
+    // um dono sem imóvel escolhido fica em «Todos os imóveis», como sempre
+    sessao();
+    app.txModal(null, 'expense', null);
+    assert.equal(app.tForm.propertyId, null);
+  });
+
+  test('a ficha de inquilino de um colaborador fica presa ao imóvel', () => {
+    tresCasas();
+    assert.equal(app.normPerson({}).houseId, '', 'por omissão vazio');
+    assert.equal(app.normPerson({ houseId: 'P3' }).houseId, 'P3', 'persiste o que vier');
+    // «Converter em inquilino» numa visita do P3 (gestor de visitas)
+    app.db.visits = [app.normVisit({ id: 'V1', nomes: 'Ana', propertyId: 'P3', contacto: 'ana@x.pt' })];
+    app.personModal = () => {};
+    app.visConverte('V1');
+    app.personModal = personModalReal;
+    const ana = app.db.tenants[0];
+    assert.equal(ana.houseId, 'P3');
+    assert.equal(app.casaDoInquilino(ana), 'P3');
+    assert.equal(app.podeEditarInquilino(ana), true, 'é minha: edito-a');
+    assert.deepEqual(app.dbSoMeu().tenants.map((t) => t.id), [], 'não vai na cópia: é do imóvel do Rui');
+    assert.match(app.vTenants(), /Ana/, 'e está na lista');
+    assert.match(app.vTenants(), /Adicionar inquilino/);
+  });
+
+  test('o FAB «Adicionar inquilino» de quem só colabora pede o imóvel', () => {
+    tresCasas();
+    app.window.CW.cargos.P1 = { dono: false, nome: 'Gestor de visitas', perms: GESTOR };   // P1 e P3 dão tenant.add
+    const abertas = janelasFalsas();
+    let escolha = null;
+    app.pickModal = (t, opts, onPick) => { escolha = { t, opts, onPick }; };
+    app.personModal('tenant');
+    assert.equal(escolha.t, 'Inquilino de que imóvel?');
+    assert.deepEqual(escolha.opts.map((o) => o.label), ['T1 Meu', 'T3 Rui']);
+    assert.equal(abertas.length, 0, 'a ficha ainda não abriu');
+    escolha.onPick(escolha.opts[1]);
+    assert.equal(abertas.length, 1);
+    assert.equal(abertas[0].t, 'Novo inquilino');
+    assert.equal(app.perForm.houseId, 'P3');
+    // guardar deixa a ficha presa ao imóvel
+    app.collectPerson = () => {};
+    app.perForm.name = 'Bruno';
+    app.onSave();
+    assert.equal(app.db.tenants.length, 1);
+    assert.equal(app.db.tenants[0].houseId, 'P3');
+    // com um só imóvel possível, vai direto
+    escolha = null;
+    app.window.CW.cargos.P1 = { dono: false, nome: 'Contabilista', perms: CONTAB };
+    app.personModal('tenant');
+    assert.equal(escolha, null);
+    assert.equal(app.perForm.houseId, 'P3');
+    // sem nenhum, a frase — e o FAB nem aparece
+    let msg = '';
+    app.toast = (m) => { msg = m; };
+    app.window.CW.cargos.P3 = { dono: false, nome: 'Contabilista', perms: CONTAB };
+    const n = abertas.length;
+    app.personModal('tenant');
+    assert.equal(msg, app.fraseSemPerm('tenant.add'));
+    assert.equal(abertas.length, n);
+    assert.doesNotMatch(app.vTenants(), /Adicionar inquilino/);
+    // um dono não passa por aqui
+    sessao();
+    app.personModal('tenant');
+    assert.equal(app.perForm.houseId, '');
+    // o inquilino criado a meio de um contrato de um imóvel de colaboração fica preso a ele
+    tresCasas();
+    app.window.CW.cargos.P1 = { dono: false, nome: 'Gestor', perms: ['contract.add', 'tenant.add'] };
+    app.cForm = { propertyId: 'P1', tenantIds: [] };
+    app.newTenantFromCt();
+    assert.equal(app.perForm.houseId, 'P1');
+    sessao();
+    app.cForm = { propertyId: 'P1', tenantIds: [] };
+    app.newTenantFromCt();
+    assert.equal(app.perForm.houseId, '', 'para o dono nada muda');
   });
 });

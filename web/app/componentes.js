@@ -572,7 +572,8 @@ function lpMenu(v){
     const opts=[pode(id,'house.edit')?{label:'Editar imóvel',icon:'building',act:()=>propModal(id)}:{label:'Ver imóvel',icon:'building',act:()=>propView(id)}];
     if(p.use==='investimento'&&pode(id,'contract.add'))opts.push({label:'Novo contrato',icon:'contract',act:()=>ctModal(null,id)});
     if(pode(id,'tx.add'))opts.push({label:'Registar despesa',icon:'dn',act:()=>txModal(null,'expense',id)});
-    if(liveLoans(p).length&&pode(id,'tx.add'))opts.push({label:'Pagamento de crédito',icon:'bank',act:()=>txModal(null,'loan',id)},{label:'Amortização',icon:'trend',act:()=>amortModal(id)});
+    /* pagar crédito abate capital à hipoteca, que vive na ficha do imóvel: pede também «Editar a ficha» (motivoCredito) */
+    if(liveLoans(p).length&&!motivoCredito(id))opts.push({label:'Pagamento de crédito',icon:'bank',act:()=>txModal(null,'loan',id)},{label:'Amortização',icon:'trend',act:()=>amortModal(id)});
     if(souCriador(id))opts.push({label:'Apagar imóvel',icon:'trash',act:()=>delProp(id)});
     return lpShow(p.name,opts);}
   if(k==='tx'){const t=db.transactions.find(x=>x.id===id);if(!t)return;
@@ -590,28 +591,31 @@ function lpMenu(v){
     const ok=kind==='owner'||podeEditarInquilino(pp);
     return lpShow(pp.name,[{label:ok?'Editar ficha':'Ver ficha',icon:'users',act:()=>personModal(kind,pid)}].concat(ok?[{label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)}]:[]));}
   if(k==='rec'){const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
+    /* com rec.add confirmo, silencio e edito qualquer planeado; apagar é só o que eu criei */
     const hid=(r.tx||{}).propertyId,ok=podeEditar(hid,'rec.add',r),opts=[];
     if(r.next&&r.next<=today()&&pode(hid,'rec.add'))opts.push({label:'Confirmar',icon:'check',act:()=>quickConfirmRec(id)});
-    if(ok)opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)},
-      {label:'Editar',icon:'swap',act:()=>editRec(id)},{label:'Apagar',icon:'trash',act:()=>delRec(id)});
+    if(ok)opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)},{label:'Editar',icon:'swap',act:()=>editRec(id)});
+    if(podeEditar(hid,'rec.add',r,true))opts.push({label:'Apagar',icon:'trash',act:()=>delRec(id)});
     return lpShow(r.name,opts);}
   if(k==='tpl'){const x=(db.templates||[]).find(y=>y.id===id);if(!x)return;
     return lpShow(x.name,[{label:'Usar modelo',icon:'plus',act:()=>newFromTemplate(id)},{label:'Editar',icon:'file',act:()=>editTpl(id)},{label:'Apagar',icon:'trash',act:()=>delTpl(id)}]);}
   if(k==='mort'){const pid=a[1],lid=a[2],p=prop(pid),l=findLoan(p,lid);if(!l)return;
     const opts=pode(pid,'house.edit')?[{label:'Editar hipoteca',icon:'bank',act:()=>mortModal(pid,lid)}]:[];
-    if(Number(l.outstanding)>0&&pode(pid,'tx.add'))opts.push({label:'Pagamento de crédito',icon:'bank',act:()=>txModal(null,'loan',pid,null,null,{loanId:lid})},{label:'Amortização',icon:'trend',act:()=>amortModal(pid,lid)});
+    if(Number(l.outstanding)>0&&!motivoCredito(pid))opts.push({label:'Pagamento de crédito',icon:'bank',act:()=>txModal(null,'loan',pid,null,null,{loanId:lid})},{label:'Amortização',icon:'trend',act:()=>amortModal(pid,lid)});
     if(pode(pid,'house.edit'))opts.push({label:'Apagar hipoteca',icon:'trash',act:()=>delMortFrom(pid,lid)});
     return lpShow(loanName(l),opts);}
 }
 /* Põe a janela de cima em modo só de leitura: desativa os campos e os botões
    do corpo (as dobras continuam a abrir) e troca o rodapé por «Fechar». É o
-   que uma ficha de um imóvel onde só colaboro mostra quando o cargo não
-   deixa alterar.
+   que uma ficha de inquilino, um movimento ou um contrato de um imóvel onde
+   só colaboro mostram quando o cargo não deixa alterar. A camada fica
+   marcada (soLeitura), para o que repinta o corpo a partir de um div
+   clicável (as miniaturas do contrato) saber que não deve.
    Recebe: msg (opcional) — um hint a pôr no topo do corpo, a dizer porquê.
    Devolve: nada — mexe na janela de cima. */
 function modalSoLeitura(msg){
   const t=modalTop();if(!t)return;
-  t.onSave=null;
+  t.onSave=null;t.soLeitura=true;
   const b=t.el.querySelector('.body');
   if(b){
     [].slice.call(b.querySelectorAll('input,textarea,select,button:not(.fold-head)')).forEach(e=>{e.disabled=true});

@@ -21,6 +21,9 @@ function ctModal(id,pid){
     {label:'Apagar contrato',icon:'trash',danger:true,act:`delContract('${id}')`}]:[])):'';
   openModal(id?(ok?'Editar contrato':'Contrato'):'Novo contrato',ctBody(),null,m);
   const p=prop(cForm.propertyId);if(p)paintThumbs(p.photos);
+  /* «Ver contrato»: um contrato de um imóvel onde colaboro que não posso alterar
+     abre só de leitura — o rótulo diz ver, o ecrã não pode dizer editar */
+  if(id&&!ok){onSave=null;return modalSoLeitura('Contrato de um imóvel onde colaboras — só de leitura.')}
   onSave=ctSaver();
 }
 /* Devolve o handler que o modal usa ao guardar: valida imóvel, renda,
@@ -232,6 +235,7 @@ function onTenantContact(){
 // Recebe: fid — id da foto (uma das fotos do imóvel).
 // Devolve: nada — repinta o formulário.
 function togCtPhoto(fid){
+  if((modalTop()||{}).soLeitura)return;   /* a miniatura é um div: o modo de leitura não a desativa */
   collectCt();
   const l=cForm.photoIds||(cForm.photoIds=[]),i=l.indexOf(fid);
   if(i>-1)l.splice(i,1);else l.push(fid);
@@ -329,12 +333,14 @@ function newTenantFromCt(){
   /* a ficha nova vai subir como registo deste imóvel: sem «Adicionar inquilinos» o servidor recusava-a */
   if(!pode(cForm.propertyId,'tenant.add'))return toast(fraseSemPerm('tenant.add'));
   closeModal();
+  /* num imóvel onde só colaboro a ficha fica presa ao imóvel (houseId): se o
+     contrato ficar por guardar, sobe na mesma como registo dele, não privada */
   personModal('tenant',null,nid=>{
     if(cForm.tenantIds.indexOf(nid)<0)cForm.tenantIds.push(nid);
     fillTenantContact(nid);
     closeModal();render();repaintCt();
     toast('Inquilino criado e adicionado ao contrato.');
-  });
+  },souDono(cForm.propertyId)?'':cForm.propertyId);
 }
 // Acrescenta um artigo vazio ao inventário (quantidade 1, usado) e repinta.
 // Devolve: nada — repinta o formulário.
@@ -429,7 +435,7 @@ function reactivateContract(id){
    Devolve: nada — pede confirmação e, se aceite, grava e redesenha a vista. */
 function delContract(id){
   const c=contract(id);if(!c)return;
-  const recusa=motivoRecusa(c.propertyId,'contract.add',c);if(recusa)return toast(recusa);
+  const recusa=motivoRecusa(c.propertyId,'contract.add',c,true);if(recusa)return toast(recusa);
   confirmModal('Apagar contrato',`Apagar o contrato de ${esc(ctNames(c))}? Os movimentos ficam, mas deixam de estar ligados a ele.`,()=>{
     const copia=JSON.parse(JSON.stringify(c));
     const recs=JSON.parse(JSON.stringify((db.recurring||[]).filter(r=>r.auto&&r.tx&&r.tx.contractId===id)));
