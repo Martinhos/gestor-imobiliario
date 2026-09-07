@@ -128,7 +128,7 @@ function cwOwnersBlock() {
   var colabs = (live._colaboradores || []);
   var colabHtml = colabs.length
     ? '<div class="hint" style="margin-top:8px">Colaboradores: ' + esc(colabs.map(function (c) { return c.name + (c.roleName ? ' (' + c.roleName + ')' : ''); }).join(', ')) +
-      '. <a href="#" onclick="event.preventDefault();closeAllModals();go(\'settings\');goSet(\'cloud\')" style="color:var(--accent)">Gerir</a></div>'
+      '. <a href="#" onclick="event.preventDefault();closeAllModals();go(\'colaboradores\')" style="color:var(--accent)">Gerir</a></div>'
     : '';
   if (parts.length < 2) {
     return '<div><div class="flabel">Proprietários</div><div class="hint">Este imóvel é só teu (100%). ' +

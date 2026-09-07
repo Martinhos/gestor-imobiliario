@@ -1,4 +1,5 @@
-/* Pagina Conta e partilha: id, ligacoes, seguranca e apagar a conta. */
+/* Paginas Conta e partilha (id, ligacoes, seguranca e apagar a conta) e
+   Colaboradores (cargos, convites e quem colabora em cada imovel). */
 'use strict';
 
 /* ---------------- página "Conta e partilha" ---------------- */
@@ -210,7 +211,7 @@ function convidarCard() {
   var meus = cwImoveisMeus();
   var invites = CW.state.invites || [];
   var form;
-  if (!roles.length) form = '<div class="hint">Cria primeiro um cargo, em cima.</div>';
+  if (!roles.length) form = '<div class="hint">Cria primeiro um cargo, no cartão «Cargos» em baixo.</div>';
   else if (!meus.length) form = '<div class="hint">Ainda não tens imóveis para partilhar — cria um primeiro.</div>';
   else {
     var grupos = typeof gOpts === 'function' ? gOpts('prop') : [];
@@ -287,17 +288,60 @@ function colaboroCard() {
     '<div class="hint" style="margin-top:11px">Não tens quota-parte nestes imóveis nem entras nas contas entre proprietários. Ao sair, o que registaste fica com o dono.</div>');
 }
 
+/* O separador «Colaboradores» (menu, no grupo Pessoas): quem ajuda a gerir os
+   meus imóveis e com que cargo. Abre com uma frase a dizer o que é um
+   colaborador e depois, por esta ordem: convidar (a ligação de uso único),
+   quem colabora em cada imóvel, os cargos e os imóveis onde sou eu o
+   colaborador. Sem cargos, sem convites e sem colaboradores, o vazio convida
+   a criar o primeiro cargo — é ele que diz o que a pessoa pode fazer.
+   Devolve: string de HTML da página, pronta a inserir com innerHTML. */
+function vColaboradores() {
+  if (!CW.user) {
+    return card('Colaboradores', 'Sem sessão iniciada',
+      '<div class="hint">Convidar quem ajuda a gerir precisa de conta: é ela que guarda os cargos e os convites.</div>' +
+      '<div class="toolbar" style="margin-top:11px"><button class="btn primary" onclick="CW.showAuth()">Iniciar sessão</button></div>');
+  }
+  var gap = '<div style="height:14px"></div>';
+  var intro = '<div class="hint" style="margin:0 0 12px">Um colaborador entra nos imóveis que lhe deres, com um cargo que diz o que pode ver e adicionar — ' +
+    'sem quota-parte e sem entrar nas contas entre proprietários.</div>';
+  var colab = colaboroCard();
+  var roles = CW.state.roles || [];
+  var temGente = ((CW.state.collaborators || []).length + (CW.state.invites || []).length) > 0;
+  if (!roles.length && !temGente) {
+    return intro +
+      '<div class="empty"><b>Ainda não tens colaboradores</b>Começa pelo cargo: é ele que diz o que a pessoa vê e o que pode adicionar. ' +
+      'Depois convida-a com uma ligação de uso único.' +
+      '<div style="margin-top:10px"><button type="button" class="btn primary sm" onclick="CW.cargoModal()">' + ic('plus', 13) + ' Novo cargo</button></div></div>' +
+      (colab ? gap + colab : '');
+  }
+  return intro + convidarCard() + gap + colaboradoresCard() + gap + cargosCard() + (colab ? gap + colab : '');
+}
+
+/* A linha que leva de «Conta e partilha» ao separador «Colaboradores»: o
+   feitio das linhas de navegação das Definições, mas para um separador do
+   menu — daí o go() em vez do goSet() do navRow.
+   Devolve: o HTML da linha (texto). */
+function colabRow() {
+  var nc = (CW.state.collaborators || []).length, nr = (CW.state.roles || []).length;
+  var sub = nc
+    ? nc + (nc === 1 ? ' colaborador' : ' colaboradores') + ' · ' + nr + (nr === 1 ? ' cargo' : ' cargos')
+    : 'Quem ajuda a gerir, e com que cargo';
+  return '<div class="card tap" onclick="go(\'colaboradores\')" style="display:flex;align-items:center;gap:13px">' +
+    '<span class="avatar">' + ic('users', 18) + '</span>' +
+    '<span style="flex:1;min-width:0"><b style="display:block">Colaboradores</b><span class="small">' + esc(sub) + '</span></span>' +
+    '<span style="color:var(--muted);transform:rotate(180deg)">' + ic('chev', 18) + '</span></div>';
+}
+
 // O HTML da página "Conta e partilha": a conta e o id para dar a outros, a
 // ligação de partilha e os pedidos, o campo para adicionar uma ligação, a
-// lista de utilizadores ligados, os cargos e colaboradores, os imóveis onde
-// colaboro, a segurança e o apagar da conta. Sem sessão iniciada, mostra
-// apenas o convite para entrar.
+// lista de utilizadores ligados, a linha para o separador dos colaboradores,
+// a segurança e o apagar da conta. Sem sessão iniciada, mostra apenas o
+// convite para entrar.
 // Devolve: string de HTML da página, pronta a inserir com innerHTML.
 function vCloud() {
   if (!CW.user) return card('Conta', 'Sem sessão iniciada', '<button class="btn primary" onclick="CW.showAuth()">Iniciar sessão</button>');
   var conns = (CW.state.connections || []).slice();
   var gap = '<div style="height:14px"></div>';
-  var colab = colaboroCard();
   var pedidos = pedidosCard();
   var acc = card('A minha conta', 'Sincronizada neste e noutros aparelhos',
     '<div class="stat"><span>Nome</span><b>' + esc(CW.user.name || '—') + '</b></div>' +
@@ -328,14 +372,13 @@ function vCloud() {
     '<div class="toolbar" style="margin-top:11px"><button class="btn danger" onclick="CW.deleteAccount()">' +
     ic('trash', 15) + ' Apagar a minha conta</button></div>');
   return acc + gap + ligacaoCard() + (pedidos ? gap + pedidos : '') + gap + add + gap + list +
-    '<div style="height:18px"></div><div class="section-title">Colaboradores</div>' +
-    cargosCard() + gap + convidarCard() + gap + colaboradoresCard() + (colab ? gap + colab : '') +
+    '<div style="height:18px"></div>' + colabRow() +
     '<div style="height:18px"></div>' + seg + gap + danger;
 }
 
 /* ---------------- aviso legal ---------------- */
 
-SUBPAGE.cloud = { label: 'Conta e partilha', sub: 'O teu id, ligações, colaboradores e imóveis partilhados' };
+SUBPAGE.cloud = { label: 'Conta e partilha', sub: 'O teu id, ligações e imóveis partilhados' };
 SUBPAGE.legal = { label: 'Aviso legal', sub: 'Condições de utilização e privacidade' };
 SUBPAGE.tema = { label: 'Tema', sub: 'Claro, escuro ou o do telemóvel' };
 SUBPAGE.ajuda = { label: 'Ajuda e sugestões', sub: 'Contar um problema ou pedir uma melhoria' };
@@ -369,7 +412,7 @@ function vFaq() {
     ${q('dados', 'Os meus dados estão seguros?', 'Ficam numa base de dados na nuvem com cópias de segurança diárias, e também no teu aparelho. Mesmo assim, mantém as tuas próprias cópias: <b>Definições → Importar e cópias → Guardar cópia</b>. Nenhuma nuvem substitui uma cópia tua.')}
     ${q('renda', 'Como registo a renda todos os meses sem trabalho?', 'Cria o contrato com a renda mensal: a app gera um <b>movimento planeado</b> que aparece todos os meses na Visão geral, no cartão «Movimentos por confirmar». Um toque em <b>Confirmar</b> regista a renda — não escreves nada.')}
     ${q('partilha', 'Como partilho as casas com o comproprietário?', 'Em <b>Definições → Conta e partilha</b> está o teu id de 8 caracteres. A outra pessoa cria conta, e um de vocês adiciona o id do outro. Depois escolhem casa a casa o que partilham — e a divisão de quotas só muda quando todos confirmarem. Há também a <b>ligação de partilha</b>: quem a abrir escolhe que imóveis partilha contigo, e tu aceitas ou recusas cada pedido.')}
-    ${q('colaborador', 'Como dou acesso a um gestor sem o tornar comproprietário?', 'Convida-o como <b>colaborador</b>: em <b>Definições → Conta e partilha</b> crias um cargo (o que pode ver e adicionar — movimentos, visitas, contratos, documentos…) e uma ligação de convite com esse cargo e os imóveis. Quem a abrir entra (ou cria conta) e fica logo com o acesso. Não tem quota-parte, não entra nas contas entre proprietários, e só edita o que ele próprio adicionar. Podes mudar-lhe o cargo ou removê-lo quando quiseres.')}
+    ${q('colaborador', 'Como dou acesso a um gestor sem o tornar comproprietário?', 'Convida-o como <b>colaborador</b>: no menu, em Pessoas → <b>Colaboradores</b>, crias um cargo (o que pode ver e adicionar — movimentos, visitas, contratos, documentos…) e uma ligação de convite com esse cargo e os imóveis. Quem a abrir entra (ou cria conta) e fica logo com o acesso. Não tem quota-parte, não entra nas contas entre proprietários, e só edita o que ele próprio adicionar. Podes mudar-lhe o cargo ou removê-lo quando quiseres.')}
     ${q('fotos', 'As fotografias e documentos sincronizam entre aparelhos?', 'Sim — desde que tenhas sessão iniciada, os anexos sobem para a nuvem e descem nos outros aparelhos. Se um anexo não subir (por tamanho ou falha), a app avisa e ele fica só nesse aparelho até conseguir.')}
     ${q('password', 'Esqueci-me da palavra-passe. E agora?', 'No ecrã de entrada, toca em <b>«Esqueci-me da palavra-passe»</b>: enviamos-te uma ligação por email (vale 1 hora, uma só vez) para definires uma nova. Serve também a quem sempre entrou com a Google e quer passar a ter palavra-passe.')}
     ${q('apagar', 'Apaguei uma coisa sem querer. Consigo recuperar?', 'Logo a seguir a apagar aparece um <b>«Anular»</b> no fundo do ecrã, durante seis segundos — repõe tudo, incluindo cascatas (um imóvel com os contratos e movimentos). Passado esse tempo, restaura a partir de uma cópia em <b>Importar e cópias</b>.')}

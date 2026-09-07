@@ -6,6 +6,7 @@ const TABS=[
   {id:'visits',icon:'door',label:'Visitas',sub:'Quem vem ver as casas'},
   {id:'tenants',icon:'users',label:'Inquilinos',sub:'Ficha e documentos de cada pessoa'},
   {id:'owners',icon:'crown',label:'Proprietários',sub:'Quem é dono de quê'},
+  {id:'colaboradores',icon:'shield',label:'Colaboradores',sub:'Quem ajuda a gerir, e com que cargo'},
   {id:'transactions',icon:'swap',label:'Movimentos',sub:'Rendas, despesas e prestações'},
   {id:'recurring',icon:'clock',label:'Planeados',sub:'Movimentos recorrentes e modelos'},
   {id:'calendar',icon:'cal',label:'Calendário',sub:'Visitas e planeados, dia a dia'},
@@ -23,7 +24,7 @@ const SUBPAGE={cats:{label:'Tipos de movimento',sub:'Como classificas o que entr
 // O contentor onde cada vista é desenhada (o elemento #view).
 // Devolve: o elemento #view do DOM (ou null se ainda não existir).
 const view=()=>document.getElementById('view');
-const NAV_GROUPS=[{label:'Património',ids:['dashboard','calendar','properties','contracts']},{label:'Pessoas',ids:['visits','tenants','owners']},
+const NAV_GROUPS=[{label:'Património',ids:['dashboard','calendar','properties','contracts']},{label:'Pessoas',ids:['visits','tenants','owners','colaboradores']},
   {label:'Finanças',ids:['transactions','recurring','credits','projections','reports']},{label:'Aplicação',ids:['settings']}];
 /* Reconstrói a navegação da gaveta (agrupada por NAV_GROUPS), marcando o
    separador atual e o crachá dos planeados pendentes — na cor de aviso quando

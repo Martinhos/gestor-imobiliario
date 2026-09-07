@@ -280,8 +280,11 @@ function seloColaboradores(p){
    quando nenhum cargo os abre. Para quem tem imóveis seus, nada se esconde.
    Devolve: array de ids de TABS a esconder. */
 function separadoresEscondidos(){
-  if(!souSoColaborador())return [];
   const out=[],nada=perm=>!casasComo(perm).length;
+  /* cargos e convites vivem no servidor: sem conta na nuvem o separador não
+     tem o que mostrar (a vista explica-o, mas não vale ocupar o menu) */
+  if(!(typeof window!=='undefined'&&window.CW&&CW.user))out.push('colaboradores');
+  if(!souSoColaborador())return out;
   if(!scope().length){out.push('credits','projections','reports');
     if(nada('tx.view')&&!db.transactions.length)out.push('transactions');
     if(nada('rec.view')&&!(db.recurring||[]).length)out.push('recurring')}
