@@ -38,8 +38,7 @@ function txModal(id,kind,propId,_x,ctId,preset){
         const s=r2(Number(tForm.interest||0)+Number(tForm.stamp||0)+Number(tForm.principal||0));
         if(Math.abs(s-tForm.amount)>0.011)return toast('Juros, selo e capital têm de somar o montante ('+euro2(tForm.amount)+').');
       }
-      /* uma prestação retroativa nunca abateu capital: o que está em dívida hoje não a limita */
-      if(lV&&!tForm.retro){const av=loanAvail(tForm,lV);
+      if(lV){const av=loanAvail(tForm,lV);
         if(Number(tForm.principal)>av+0.011)return toast('Só faltam '+euro2(av)+' pagar nesta hipoteca — não podes amortizar mais do que isso.');
         if(!tForm._edit&&!(Number(lV.outstanding)>0))return toast('Esta hipoteca já está paga: não é possível associar novos pagamentos.');}
     }
@@ -56,11 +55,11 @@ function txModal(id,kind,propId,_x,ctId,preset){
       if(also){const tx=normTx(txSnapshot(tForm));tx.date=tForm.date||today();if(tx.kind==='loan')applyLoan(tx);db.transactions.push(tx)}
       save();closeModal();buildNav();render();toast(tForm._tplNew?(also?'Modelo criado e movimento registado.':'Modelo criado.'):'Modelo atualizado.');return;
     }
-    /* sincronizar com a hipoteca: ao editar, repõe-se primeiro o capital do registo antigo
-       (não numa retroativa, que nunca o abateu); depois aplica-se a distribuição atual (criação ou edição) */
+    /* sincronizar com a hipoteca: ao editar, repõe-se primeiro o capital do registo antigo;
+       depois aplica-se a distribuição atual (criação ou edição) */
     if(id){
       const old=db.transactions.find(x=>x.id===tForm.id);
-      if(old&&old.kind==='loan'&&old.principal&&!old.retro){
+      if(old&&old.kind==='loan'&&old.principal){
         const l0=findLoan(prop(old.propertyId),old.loanId);
         if(l0)l0.outstanding=Math.round((l0.outstanding+old.principal)*100)/100;
       }
@@ -348,7 +347,7 @@ function loanHint(){
   }
   const avail=loanAvail(t,l);
   const c=loanCalc(Object.assign({},l,{outstanding:avail},t._edit?{_paidOfs:-1}:{})),rate=l.stampTax===false?0:stampPct();
-  const fr=amortFeeRate(l,t.date),amort=t.payType==='amortizacao';
+  const fr=amortFeeRate(l),amort=t.payType==='amortizacao';
   const amt=num(t.amount)||(amort?0:c.total);
   const seg=`<div style="margin-bottom:10px"><div class="flabel">Tipo de pagamento</div>
     <div class="seg c2">
@@ -529,7 +528,7 @@ function collectTx(){
   if(document.getElementById('t_loan'))t.loanId=val('t_loan')||null;
   if(t.kind==='loan'&&t.loanId){
     const l2=findLoan(prop(t.propertyId),t.loanId);
-    if(l2&&t.payType==='amortizacao'){const fr=amortFeeRate(l2,t.date);t.principal=r2(t.amount/(1+fr));t.fee=r2(t.amount-t.principal);t.interest=0;t.stamp=0}
+    if(l2&&t.payType==='amortizacao'){const fr=amortFeeRate(l2);t.principal=r2(t.amount/(1+fr));t.fee=r2(t.amount-t.principal);t.interest=0;t.stamp=0}
     else if(document.getElementById('t_int')){const sr=l2&&l2.stampTax===false?0:stampPct();
       t.interest=num(val('t_int'));t.principal=num(val('t_cap'));t.stamp=r2(t.interest*sr);t.fee=0;
       /* o resto vai para o capital para a soma bater certa ao cêntimo */
@@ -580,18 +579,16 @@ function delTxTag(g){collectTx();tForm.tags=(tForm.tags||[]).filter(x=>x!==g);re
 /* Efeito do pagamento na hipoteca, na altura de guardar: valida a distribuição do movimento
    (ou recalcula-a quando não bate certo com o montante — sempre a somar o montante ao cêntimo,
    com os juros limitados ao que o montante paga) e abate o capital ao que está em dívida.
-   Uma prestação retroativa (t.retro, anterior ao capital em dívida de hoje) só ganha a
-   distribuição: não abate nada. Também acerta a recorrência automática da hipoteca —
-   atualiza a prestação, ou apaga-a quando o crédito fica liquidado. Mexe na db mas não faz
-   save(); isso é de quem chama.
-   Recebe: t — o movimento de crédito (objeto com amount, loanId, payType, a distribuição e, se for o caso, retro).
+   Também acerta a recorrência automática da hipoteca — atualiza a prestação, ou apaga-a
+   quando o crédito fica liquidado. Mexe na db mas não faz save(); isso é de quem chama.
+   Recebe: t — o movimento de crédito (objeto com amount, loanId, payType e a distribuição).
    Devolve: nada — acerta a distribuição no próprio t e abate o capital na db. */
 function applyLoan(t){
   const p=prop(t.propertyId),l=t.loanId?findLoan(p,t.loanId):null;if(!l)return;
   /* amortização: capital + comissão da hipoteca; prestação: juros + selo + capital (sem comissão) */
   let int=Number(t.interest),st=Number(t.stamp),cap=Number(t.principal),fee=Number(t.fee||0);
   if(t.payType==='amortizacao'){
-    const fr=amortFeeRate(l,t.date);
+    const fr=amortFeeRate(l);
     if(!(isFinite(cap)&&isFinite(fee)&&cap>=0&&fee>=0&&Math.abs(cap+fee-t.amount)<=0.011)){cap=r2(t.amount/(1+fr));fee=r2(t.amount-cap)}
     int=0;st=0;
   }else if(!(isFinite(int)&&isFinite(st)&&isFinite(cap)&&int>=0&&st>=0&&cap>=0&&Math.abs(int+st+cap+(fee>0?fee:0)-t.amount)<=0.011)){
@@ -599,9 +596,8 @@ function applyLoan(t){
     int=r2(Math.min(c.interest,t.amount/(1+sr)));st=r2(int*sr);fee=0;cap=Math.max(0,r2(t.amount-int-st));
     int=r2(int+r2(t.amount-int-st-cap));   /* os cêntimos do arredondamento vão para os juros: a soma bate com o montante */
   }
-  if(!t.retro)cap=Math.max(0,Math.min(l.outstanding,cap));
+  cap=Math.max(0,Math.min(l.outstanding,cap));
   t.interest=r2(int);t.stamp=r2(st);t.principal=r2(cap);t.fee=r2(fee);
-  if(t.retro)return;
   l.outstanding=Math.max(0,r2(l.outstanding-cap));
   /* recorrência automática desta hipoteca: acompanha a nova prestação e desaparece quando o crédito acaba */
   const ar=loanRecOf(l);
@@ -609,8 +605,7 @@ function applyLoan(t){
     else ar.tx.amount=Math.round(loanCalc(l).total*100)/100}
 }
 /* Apaga o movimento e, se era um pagamento de crédito, repõe o capital na hipoteca
-   e sincroniza a recorrência dela (uma prestação retroativa nunca abateu capital:
-   sai sem repor nada). O toast traz "Anular", que desfaz as duas coisas.
+   e sincroniza a recorrência dela. O toast traz "Anular", que desfaz as duas coisas.
    Recebe: id — o id do movimento a apagar (string).
    Devolve: nada — grava e re-renderiza. */
 function delTx(id){
@@ -618,14 +613,14 @@ function delTx(id){
      pergunta constante ensinava o dedo a confirmar sem ler */
   const t=db.transactions.find(x=>x.id===id);if(!t)return;
   const copia=JSON.parse(JSON.stringify(t));
-  if(t.kind==='loan'&&t.principal&&t.loanId&&!t.retro){
+  if(t.kind==='loan'&&t.principal&&t.loanId){
     const l=findLoan(prop(t.propertyId),t.loanId);
     if(l){l.outstanding=Math.round((l.outstanding+t.principal)*100)/100;syncLoanRec(prop(t.propertyId),l)}
   }
   db.transactions=db.transactions.filter(x=>x.id!==id);save();closeAllModals();render();
   comDesfazer('Movimento apagado.',()=>{
     db.transactions.push(copia);
-    if(copia.kind==='loan'&&copia.principal&&copia.loanId&&!copia.retro){
+    if(copia.kind==='loan'&&copia.principal&&copia.loanId){
       const l=findLoan(prop(copia.propertyId),copia.loanId);
       if(l){l.outstanding=Math.round((l.outstanding-copia.principal)*100)/100;syncLoanRec(prop(copia.propertyId),l)}
     }

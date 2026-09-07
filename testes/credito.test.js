@@ -208,10 +208,14 @@ describe('comissão de amortização antecipada', () => {
     perto(app.amortFeeRate(fixa({ type: 'variavel', amortFeeVar: 0.5 }), '2026-01-01'), 0.005);
   });
 
-  test('mista muda de comissão quando muda de taxa', () => {
+  test('mista muda de comissão quando as registadas passam a fase fixa — a data de início não conta', () => {
     const l = fixa({ type: 'mista', fixedYears: 5, start: '2020-01-01', amortFeeFix: 2, amortFeeVar: 0.5 });
-    perto(app.amortFeeRate(l, '2023-01-01'), 0.02);    // dentro dos cinco anos
-    perto(app.amortFeeRate(l, '2026-01-01'), 0.005);   // já depois
+    app.db.properties.push(app.normProp({ id: 'p1', name: 'Casa', loans: [l] }));
+    perto(app.amortFeeRate(l), 0.02);    // sem registadas: fase fixa, começou quando começou
+    for (let i = 0; i < 59; i++) app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'l1', amount: 500, date: '2025-01-01' }));
+    perto(app.amortFeeRate(l), 0.02);    // a 60.ª ainda é da fase fixa
+    app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'l1', amount: 500, date: '2025-01-01' }));
+    perto(app.amortFeeRate(l), 0.005);   // já depois
   });
 
   test('sem valores definidos usa os limites legais', () => {
