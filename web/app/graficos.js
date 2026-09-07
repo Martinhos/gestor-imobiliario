@@ -18,7 +18,21 @@ function chartTip(e,txt){
   clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2200);
   if(e&&e.stopPropagation)e.stopPropagation();
 }
-const hit=txt=>{const j=jsq(txt);return `onclick="chartTip(event,'${j}')" onmouseenter="chartTip(event,'${j}')" style="cursor:pointer"`};
+/* Atributos que tornam uma forma do gráfico tocável: mostra a dica ao toque e
+   ao rato, e põe o cursor de mão.
+   Recebe: txt — o texto da dica; estilo (opcional) — o que mais houver a pôr
+   na mesma etiqueta style (é por aqui que passa o atraso do escalonamento,
+   para não ficarem dois style no mesmo elemento).
+   Devolve: string com os atributos, para colar dentro da tag. */
+const hit=(txt,estilo)=>{const j=jsq(txt);return `onclick="chartTip(event,'${j}')" onmouseenter="chartTip(event,'${j}')" style="cursor:pointer${estilo?';'+estilo:''}"`};
+/* Atraso da entrada de uma forma do gráfico, pelo seu lugar na fila: seis
+   degraus de 30ms e depois pára (150ms no último). Com mais degraus, um
+   gráfico de doze barras demorava mais a desenhar-se do que a ser lido.
+   Vai escrito em cada forma porque em SVG as barras são irmãs dos elementos do
+   eixo — um nth-child contava-os a eles também.
+   Recebe: i — o índice da forma (0 é a primeira).
+   Devolve: o pedaço de CSS 'animation-delay:NNms', ou '' para a primeira. */
+const atrasoEntrada=i=>i?`animation-delay:${Math.min(i,5)*30}ms`:'';
 /* mostra no máximo ~13 etiquetas para não ficarem ilegíveis
    Recebe: labels — array das etiquetas (strings) do eixo X.
    Devolve: novo array do mesmo tamanho, com '' nas posições que se escondem
@@ -102,15 +116,22 @@ function cBars(groups,labels,o){
   const bw=(x1-x0)/groups.length,w=Math.max(3,bw*.6);
   let g=axisY(min,max,x0,x1,y0,y1);
   g+=`<line x1="${x0}" y1="${Y(0).toFixed(1)}" x2="${x1}" y2="${Y(0).toFixed(1)}" stroke="var(--line2)"/>`;
+  /* conta as colunas que chegam a desenhar alguma coisa, e não os meses: num
+     ano com uma só despesa em dezembro, o índice do grupo dava-lhe o último
+     degrau e a barra ficava 150ms invisível à espera de nada */
+  let col=0;
   groups.forEach((grp,i)=>{
     const cx=x0+bw*i+bw/2;let up=0,dn=0;
+    /* o atraso é da coluna e não do segmento: as parcelas de uma mesma coluna
+       sobem juntas, senão a barra empilhada crescia aos bocados */
+    const atraso=grp.some(s=>s.value)?atrasoEntrada(col++):'';
     grp.forEach(seg=>{
       if(!seg.value)return;
       const a=seg.value>0?up:dn,b=a+seg.value;
       if(seg.value>0)up=b;else dn=b;
       const ya=Y(Math.max(a,b)),yb=Y(Math.min(a,b));
       const tip=`${labels[i]} · ${seg.label}: ${euro(Math.abs(seg.value))}`;
-      g+=`<rect class="gbar" x="${(cx-w/2).toFixed(1)}" y="${ya.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1,yb-ya).toFixed(1)}" rx="2" fill="${seg.color}" ${hit(tip)}><title>${esc(tip)}</title></rect>`;
+      g+=`<rect class="gbar" x="${(cx-w/2).toFixed(1)}" y="${ya.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1,yb-ya).toFixed(1)}" rx="2" fill="${seg.color}" ${hit(tip,atraso)}><title>${esc(tip)}</title></rect>`;
     });
   });
   const names=[];groups.forEach(g2=>g2.forEach(s=>{if(!names.some(n=>n.label===s.label))names.push({label:s.label,color:s.color})}));
@@ -162,7 +183,7 @@ function cHBars(items,o){
     return `<div ${hit(it.label+': '+(o.fmt?o.fmt(it.value):euro(it.value)))}><div class="li" style="margin-bottom:4px"><span class="nm" style="color:var(--ink)">${esc(it.label)}</span>
       <span class="vl ${neg?'neg':''}">${o.fmt?o.fmt(it.value):euro(it.value)}</span></div>
       <div style="height:8px;border-radius:99px;background:var(--chip);overflow:hidden">
-      <i class="ghbar" style="display:block;height:100%;width:${(Math.abs(it.value)/max*100).toFixed(1)}%;background:${col};border-radius:99px"></i></div></div>`}).join('')}</div>`;
+      <i class="ghbar" style="display:block;height:100%;width:${(Math.abs(it.value)/max*100).toFixed(1)}%;background:${col};border-radius:99px;${atrasoEntrada(i)}"></i></div></div>`}).join('')}</div>`;
 }
 // Legenda com bolinha de cor. withVal acrescenta valor e percentagem; itens com "act" ficam clicáveis.
 // Recebe: items — array de {label, color} e, conforme o caso, value (texto já

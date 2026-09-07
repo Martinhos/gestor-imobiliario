@@ -82,6 +82,9 @@
      depressa e chega devagar — é a de quem entra em cena; --curva-sai faz o
      inverso, e serve o que se fecha ou desaparece. */
   --rapido:.12s; --medio:.2s; --lento:.26s;
+  /* fora da escala porque não são reações: --desenho é um gráfico a
+     desenhar-se, que se vê acontecer, e --pulso é um crachá a saltar */
+  --desenho:.5s; --pulso:.18s;
   --curva:cubic-bezier(.22,1,.36,1); --curva-sai:cubic-bezier(.4,0,1,1);
   --safe:env(safe-area-inset-top,0px);
   --inset-top:var(--safe); --inset-bottom:env(safe-area-inset-bottom,0px);
@@ -572,6 +575,16 @@ nav a:active,.railbtn:active{background:var(--side-on);color:#fff}
 .legend .li.tap:focus-visible,.thumb:focus-visible,.fab:focus-visible,
 .burger:focus-visible,.totop:focus-visible,.qclear:focus-visible,
 .rich-tools button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* Rede de segurança, e não repetição: o tornarFocavel (vistas.js:tornarFocavel)
+   põe tabindex e role=button em TUDO o que tem onclick — cartões, linhas de
+   lista, e até as formas dos gráficos. Medido na visão geral: dezanove dos
+   trinta e nove sítios que o Tab alcança não tinham anel nenhum, por não
+   caberem em nenhuma das classes acima. */
+[role="button"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* A gaveta tem fundo próprio e escuro: medido, o --accent (#244c3b) sobre o
+   --side (#1a3a2c) dá 1.29:1 — o anel existia e não se via. Aqui o contraste
+   vem da paleta da própria gaveta. */
+nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
 
 /* --- Janelas, folhas e menus entram ---
    O modal é criado e recebe .open no mesmo instante (componentes.js:modalLayer
@@ -620,7 +633,11 @@ nav a:active,.railbtn:active{background:var(--side-on);color:#fff}
    transition nunca chegaria a disparar — um @keyframes de entrada dispara
    sempre, que é precisamente quando a contagem muda. */
 @keyframes selo{from{transform:scale(.6);opacity:0}60%{transform:scale(1.06);opacity:1}}
-nav a .cnt,.tabbar a .cnt,#hdrBell .cnt{animation:selo .18s var(--curva) both}
+/* só quando o número MUDA. O buildNav corre a cada render, e o render corre
+   também na sincronização de fundo (cloud/nucleo.js:applyState, de 3 em 3
+   minutos): sem o .novo, a app dava um pulso sozinha sem nada ter acontecido.
+   Quem decide é o navegacao.js:cntNovo, que guarda a contagem anterior. */
+.cnt.novo{animation:selo var(--pulso) var(--curva) both}
 
 /* --- Os gráficos desenham-se ---
    As classes são postas pelo graficos.js; aqui ficam só as regras. O
@@ -632,17 +649,18 @@ nav a .cnt,.tabbar a .cnt,#hdrBell .cnt{animation:selo .18s var(--curva) both}
 @keyframes gbar{from{transform:scaleY(0)}}
 @keyframes ghbar{from{transform:scaleX(0)}}
 @keyframes gdonut{from{stroke-dashoffset:1}}
-.gbar{transform-box:fill-box;transform-origin:bottom;animation:gbar .5s var(--curva) both}
-.ghbar{transform-origin:left;animation:ghbar .5s var(--curva) both}
-.gdonut{stroke-dasharray:1;animation:gdonut .5s var(--curva) both}
-/* escalonamento por índice, no máximo seis degraus de .03s (.15s no último):
-   com mais, um gráfico de doze barras demorava mais a desenhar-se do que a ser
-   lido. O 6n faz o sétimo recomeçar no primeiro degrau. */
-.gbar:nth-child(6n+2),.ghbar:nth-child(6n+2){animation-delay:.03s}
-.gbar:nth-child(6n+3),.ghbar:nth-child(6n+3){animation-delay:.06s}
-.gbar:nth-child(6n+4),.ghbar:nth-child(6n+4){animation-delay:.09s}
-.gbar:nth-child(6n+5),.ghbar:nth-child(6n+5){animation-delay:.12s}
-.gbar:nth-child(6n),.ghbar:nth-child(6n){animation-delay:.15s}
+/* Só quem CHEGA ao ecrã vê os gráficos desenharem-se: a marca .entra é posta
+   pelo vistas.js:render e só quando foi uma navegação a pedir a repintura.
+   Sem este portão, a sincronização de fundo (cloud/nucleo.js:applyState) e
+   qualquer gesto que repinte a vista — fechar o cartão dos prazos, mudar um
+   filtro — mandavam os gráficos redesenharem-se a meio de uma leitura.
+   O escalonamento é escrito pelo graficos.js em cada barra: em SVG as barras
+   são irmãs dos onze elementos do eixo, e um nth-child contava-os a todos (a
+   primeira barra ficava com o último degrau); nas horizontais o .ghbar é
+   sempre filho único, e nenhuma regra chegava a casar. */
+#view.entra .gbar{transform-box:fill-box;transform-origin:bottom;animation:gbar var(--desenho) var(--curva) both}
+#view.entra .ghbar{transform-origin:left;animation:ghbar var(--desenho) var(--curva) both}
+#view.entra .gdonut{stroke-dasharray:1;animation:gdonut var(--desenho) var(--curva) both}
 </style>
 </head>
 <body>

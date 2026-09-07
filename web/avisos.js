@@ -69,7 +69,7 @@ var AVISOS = [
         itens: [
           'Tudo o que se toca reage: os botões, as opções, os separadores e os cartões afundam-se enquanto tens o dedo em cima. No telemóvel não havia sinal nenhum entre o toque e o resultado.',
           'As janelas sobem em vez de aparecerem feitas, os menus abrem do lado por onde nascem, as secções que abres deixam o conteúdo entrar e os gráficos desenham-se em vez de surgirem prontos.',
-          'A navegação por teclado passa a mostrar onde está: tudo o que se alcança com Tab ganha um contorno visível.',
+          'A navegação por teclado passa a mostrar onde está: o que se alcança com Tab ganha um contorno visível, também dentro da gaveta escura.',
           'Se pediste ao teu sistema menos movimento, não recebes nenhum — a app respeita essa definição em toda a parte.',
         ],
       },

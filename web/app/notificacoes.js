@@ -77,7 +77,7 @@ function notifSino(){
   if(tab!=='dashboard'){b.style.display='none';return}
   const n=notifConta();
   b.style.display='';
-  b.innerHTML=ic('bell',16)+(n?`<span class="cnt">${n>9?'9+':n}</span>`:'');
+  b.innerHTML=ic('bell',16)+(n?`<span class="cnt${cntNovo('sino',n)}">${n>9?'9+':n}</span>`:'');
 }
 
 /* O modal das notificações: as quatro fontes em secções, cada linha a levar

@@ -65,6 +65,10 @@ describe('alturas em unidades de ecrã', () => {
    para explicar o que MUDOU. Uma verificação de texto que os leia acusa
    sempre o que o comentário descreve, nunca o que a regra faz. */
 const cssLimpo = css.replace(/\/\*[\s\S]*?\*\//g, '');
+const navegacao = readFileSync(new URL('../web/app/navegacao.js', import.meta.url), 'utf8');
+const notificacoes = readFileSync(new URL('../web/app/notificacoes.js', import.meta.url), 'utf8');
+const vistas = readFileSync(new URL('../web/app/vistas.js', import.meta.url), 'utf8');
+const graficos = readFileSync(new URL('../web/app/graficos.js', import.meta.url), 'utf8');
 
 describe('movimento', () => {
   /* A folha tinha oito declarações de movimento, cada uma com a sua duração
@@ -77,12 +81,25 @@ describe('movimento', () => {
     });
   });
 
-  test('as declarações antigas passaram a citar os tokens', () => {
-    // nenhuma das oito ficou com a duração à mão
-    [/aside\{[^}]*transition:[^;}]*\.1?\ds\b/, /\.card\.tap\{[^}]*transition:[^;}]*\.\ds\b/,
-      /\.toast\{[^}]*transition:\.\d+s/, /\.prow\{transition:transform \.\d+s\}/,
-      /\.fold-head \.chev\{[^}]*transition:transform \.\d+s\}/, /\.opt\{[^}]*transition:\.\d+s\}/]
-      .forEach((r) => assert.doesNotMatch(cssLimpo, r, 'duração escrita à mão: ' + r));
+  /* Uma lista de seletores dava a ilusão de cobrir a regra e não cobria: o
+     regex do .card.tap pedia UM dígito antes do «s» e o valor lá era .12s, por
+     isso nunca podia falhar. Varre-se a folha inteira: qualquer transition ou
+     animation com um tempo escrito à mão acusa, seja de que regra for. O 0s é
+     a única excepção, e não é uma duração escolhida — é «troca já». */
+  test('nenhuma declaração de movimento tem tempo escrito à mão', () => {
+    const decls = cssLimpo.match(/(?:transition|animation)(?:-duration|-delay)?\s*:[^;{}]*/g) || [];
+    assert.ok(decls.length > 20, 'a folha tem declarações de movimento (' + decls.length + ')');
+    const mao = decls.filter((d) => /(?:^|[\s,:(])\.?\d+(?:\.\d+)?m?s\b/.test(d))
+      .filter((d) => !/(?:^|[\s,:(])0s\b/.test(d.replace(/var\([^)]*\)/g, '')));
+    assert.deepEqual(mao, [], 'cita os tokens: --rapido, --medio, --lento, --desenho, --pulso');
+  });
+
+  /* Provam-se os tokens novos como os outros: declarados E citados. */
+  test('o desenho dos gráficos e o pulso do crachá também são tokens', () => {
+    ['--desenho', '--pulso'].forEach((t) => {
+      assert.match(cssLimpo, new RegExp(t + '\\s*:\\s*[^;]'), t + ' declarado no :root');
+      assert.ok(cssLimpo.includes('var(' + t + ')'), t + ' declarado mas nunca citado');
+    });
   });
 
   /* O .fab tinha o scale(.96) no :active e nenhuma transition para o executar:
@@ -105,6 +122,22 @@ describe('movimento', () => {
   test('o premido não deita fora o transform de quem já o usa', () => {
     assert.match(cssLimpo, /\.totop:active\{transform:translateX\(-50%\) scale/);
     assert.match(cssLimpo, /\.qclear:active\{transform:translateY\(-50%\) scale/);
+  });
+
+  /* Medido: o --accent (#244c3b) sobre o --side (#1a3a2c) da gaveta dá 1.29:1
+     — o anel existia e não se via. */
+  test('o anel de foco na gaveta escura vem da paleta da gaveta', () => {
+    assert.match(cssLimpo, /nav a:focus-visible,\.railbtn:focus-visible\{outline-color:var\(--side-ink\)\}/);
+    // e depois da regra geral, senão não a ganhava
+    assert.ok(cssLimpo.indexOf('outline-color:var(--side-ink)') >
+      cssLimpo.indexOf('.rich-tools button:focus-visible'), 'a seguir à regra que corrige');
+  });
+
+  /* Medido na visão geral: 39 sítios alcançáveis pelo Tab, 19 deles sem anel
+     nenhum, por não caberem em nenhuma classe da lista. */
+  test('a rede apanha o que o tornarFocavel torna alcançável', () => {
+    assert.match(cssLimpo, /\[role="button"\]:focus-visible\{outline:2px solid var\(--accent\);outline-offset:2px\}/);
+    assert.match(vistas, /setAttribute\('role','button'\)/, 'é isso que o tornarFocavel escreve');
   });
 
   test('o foco vê-se, e só por :focus-visible', () => {
@@ -130,15 +163,46 @@ describe('movimento', () => {
     assert.match(cssLimpo, /@media\(max-width:520px\)\{\.modal\.open \.sheet\{animation:folhaSobe/);
   });
 
-  test('o crachá recriado entra com um pulso', () => {
-    assert.ok(cssLimpo.includes('#hdrBell .cnt'), 'o crachá do sino está na regra');
-    assert.match(cssLimpo, /\{animation:selo \.18s var\(--curva\) both\}/);
+  /* Medido: a sincronização adota o estado do servidor de 3 em 3 minutos e
+     chama render(), que refaz o buildNav — o crachá pulsava sozinho, sem nada
+     ter acontecido. O pulso é de quem MUDA de número, e quem decide isso é o
+     cntNovo, não a existência do nó. */
+  test('o crachá só pulsa quando o número muda', () => {
+    assert.match(cssLimpo, /\.cnt\.novo\{animation:selo var\(--pulso\) var\(--curva\) both\}/);
+    assert.doesNotMatch(cssLimpo, /(?:^|[,}])\s*(?:nav a|\.tabbar a|#hdrBell) \.cnt\{animation:selo/,
+      'sem o .novo, qualquer crachá recriado pulsava');
+    assert.match(navegacao, /function cntNovo\(chave,n\)/, 'a memória da contagem anterior existe');
+    assert.match(navegacao, /antes!==undefined&&antes!==n/, 'a primeira vez não pulsa, e o número igual também não');
+    // os três sítios que emitem um crachá passam por ela
+    assert.equal((navegacao.match(/cntNovo\(/g) || []).length, 3, 'a gaveta, a barra de baixo, e a definição');
+    assert.match(notificacoes, /cntNovo\('sino',n\)/, 'o sino também');
   });
 
-  test('as barras e o donut trazem a origem certa', () => {
-    assert.match(cssLimpo, /\.gbar\{[^}]*transform-box:fill-box[^}]*transform-origin:bottom/);
-    assert.match(cssLimpo, /\.ghbar\{[^}]*transform-origin:left/);
-    assert.match(cssLimpo, /\.gdonut\{[^}]*stroke-dasharray:1/);
+  /* O transform-box:fill-box é o que faz a origem de um <rect> valer sobre a
+     própria forma e não sobre o viewBox todo. E a entrada é de quem CHEGA ao
+     ecrã: sem o #view.entra, a sincronização de fundo e qualquer repintura
+     mandavam os gráficos desenharem-se outra vez a meio de uma leitura. */
+  test('os gráficos só se desenham para quem chega ao ecrã', () => {
+    assert.match(cssLimpo, /#view\.entra \.gbar\{[^}]*transform-box:fill-box[^}]*transform-origin:bottom/);
+    assert.match(cssLimpo, /#view\.entra \.ghbar\{[^}]*transform-origin:left/);
+    assert.match(cssLimpo, /#view\.entra \.gdonut\{[^}]*stroke-dasharray:1/);
+    assert.doesNotMatch(cssLimpo, /(?:^|[,}])\s*\.(?:gbar|ghbar|gdonut)\{[^}]*animation:/,
+      'sem o portão, animava em qualquer repintura');
+    assert.match(vistas, /view\(\)\.classList\.toggle\('entra',!!_entrar\);_entrar=0/, 'o render gasta a marca');
+    assert.equal((navegacao.match(/_entrar=1/g) || []).length, 2, 'quem a liga é o go e o goSet');
+  });
+
+  /* Medido no browser: as barras são irmãs dos onze elementos do eixo, por
+     isso um :nth-child contava-os a eles — a primeira barra ficava com o
+     último degrau. E o .ghbar é sempre filho único: nenhuma das cinco regras
+     chegava a casar. O atraso passa a ser escrito onde o índice se sabe. */
+  test('o escalonamento vem do graficos.js e não de um nth-child', () => {
+    assert.doesNotMatch(cssLimpo, /\.(?:gbar|ghbar):nth-child/, 'o nth-child contava o eixo');
+    assert.match(graficos, /const atrasoEntrada=i=>i\?`animation-delay:\$\{Math\.min\(i,5\)\*30\}ms`:''/);
+    assert.match(graficos, /const atraso=grp\.some\(s=>s\.value\)\?atrasoEntrada\(col\+\+\):''/,
+      'conta as colunas desenhadas, não os meses vazios');
+    assert.match(graficos, /class="gbar"[^`]*\$\{hit\(tip,atraso\)\}/, 'a barra vertical, pela coluna');
+    assert.match(graficos, /class="ghbar"[^`]*\$\{atrasoEntrada\(i\)\}/, 'a barra horizontal, pelo item');
   });
 
   /* A gaveta deslizava .22s e o véu era display:none→block: o escurecido
