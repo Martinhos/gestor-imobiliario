@@ -4,7 +4,7 @@
 // depois de inseridas as prestações desde então (só as registadas contam).
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar } from './arnes.js';
+import { carregarApp, limpar, igual } from './arnes.js';
 
 const app = carregarApp();
 const perto = (a, b, tol = 0.01) => assert.ok(Math.abs(a - b) <= tol, `esperava ${b} (±${tol}), veio ${a}`);
@@ -153,6 +153,139 @@ describe('gravar o imóvel e a hipoteca', () => {
     app.db.transactions.forEach((t) => assert.equal(t.loanId, 'a'));
     assert.equal(app.db.transactions.length, 24);
     assert.ok(A().outstanding < 100000, 'abateu em A'); perto(B().outstanding, 100000, 0.001);
+  });
+});
+
+/* O relato de produção: a prestação nascida de um planeado saía sem crédito
+   (não abatia capital nenhum) e a divisão definida na prestação planeada
+   desaparecia a cada arranque, porque o sync despejava o modelo por cima. */
+describe('o crédito e a divisão das prestações planeadas', () => {
+  const doisDonos = () => { app.db.owners.push(app.normPerson({ id: 'o2', name: 'Bruno' })); app.prop('p1').ownerIds = ['o1', 'o2']; };
+  const arranque = () => { app.syncAllContractRecs(); app.syncAllLoanRecs(); };
+  const planeado = (tx, extra = {}) => {
+    app.db.recurring.push(app.normRec(Object.assign({ id: 'rm', name: tx.label || 'Prestação', every: 'month', next: hoje, tx }, extra)));
+    return app.db.recurring.find((r) => r.id === 'rm');
+  };
+
+  test('quem paga, a divisão, as etiquetas e as notas sobrevivem ao arranque', () => {
+    casa([loan('a', { start: haAnos(1) })]); doisDonos();
+    app.syncAllLoanRecs();
+    const r = recDe('a');
+    r.tx.paidBy = 'o2'; r.tx.split = { mode: 'percent', parts: { o1: 70, o2: 30 } };
+    r.tx.tags = ['Dedutível']; r.tx.notes = 'combinado com o banco';
+    arranque(); arranque();
+    const r2 = recDe('a');
+    assert.equal(r2.tx.paidBy, 'o2');
+    igual(r2.tx.split, { mode: 'percent', parts: { o1: 70, o2: 30 } });
+    igual(r2.tx.tags, ['Dedutível']);
+    assert.equal(r2.tx.notes, 'combinado com o banco');
+  });
+
+  test('e sobrevivem a guardar a hipoteca', () => {
+    casa([loan('a', { start: haAnos(1) })]); doisDonos();
+    app.syncAllLoanRecs();
+    recDe('a').tx.paidBy = 'o1';
+    recDe('a').tx.split = { mode: 'amount', parts: { o1: 300, o2: 121.6 } };
+    app.openModal = () => { const L = { el: { querySelector: () => null }, onSave: null }; app.modalStack.push(L); return L; };
+    app.closeModal = () => { app.modalStack.pop(); };
+    app.collectProp = () => {}; app.paintThumbs = () => {}; app.confirmModal = () => {};
+    app.pForm = app.normProp(JSON.parse(JSON.stringify(app.prop('p1'))));
+    app.findLoan(app.pForm, 'a').rate = 3.5;
+    app.mortOpen('a', false);
+    app.onSave();
+    assert.equal(recDe('a').tx.paidBy, 'o1');
+    igual(recDe('a').tx.split, { mode: 'amount', parts: { o1: 300, o2: 121.6 } });
+  });
+
+  test('o montante e o nome automático acompanham a hipoteca; um nome dado à mão fica', () => {
+    casa([loan('a', { name: 'BPI' })]);
+    app.syncAllLoanRecs();
+    assert.ok(/BPI/.test(recDe('a').name));
+    A().name = 'Millennium'; app.syncAllLoanRecs();
+    assert.ok(/Millennium/.test(recDe('a').name), 'renomear a hipoteca renomeia o planeado automático');
+    recDe('a').name = 'A minha prestação'; recDe('a').tx.label = 'A minha prestação';
+    A().name = 'CGD'; app.syncAllLoanRecs();
+    assert.equal(recDe('a').name, 'A minha prestação', 'o nome do utilizador não se perde');
+    assert.equal(recDe('a').tx.loanId, 'a', 'mas o crédito continua a acertar');
+  });
+
+  test('um planeado de crédito sem hipoteca num imóvel com uma só viva gera o movimento certo', () => {
+    casa([loan('a')]); doisDonos();
+    const r = planeado({ kind: 'loan', label: 'Prestação da casa', amount: 421.6, propertyId: 'p1', paidBy: 'o2', split: { mode: 'equal', parts: {} } });
+    assert.equal(app.recLoanId(r), 'a');
+    assert.equal(app.recSemCredito(r), false);
+    const t = app.recTx(r);
+    assert.equal(t.loanId, 'a', 'o movimento identifica o crédito de onde vem');
+    assert.equal(t.paidBy, 'o2', 'e herda quem paga');
+    igual(t.split, { mode: 'equal', parts: {} }, 'e a divisão');
+    app.applyLoan(t);
+    assert.ok(A().outstanding < 100000, 'abate capital: ' + A().outstanding);
+  });
+
+  test('confirmar sem abrir dá o mesmo que abrir: o crédito certo e o capital abatido', () => {
+    casa([loan('a')]); doisDonos();
+    planeado({ kind: 'loan', label: 'Prestação da casa', amount: 421.6, propertyId: 'p1', paidBy: 'o1', split: { mode: 'percent', parts: { o1: 60, o2: 40 } } });
+    app.quickConfirmRec('rm');
+    assert.equal(app.db.transactions.length, 1);
+    const t = app.db.transactions[0];
+    assert.equal(t.loanId, 'a'); assert.equal(t.paidBy, 'o1');
+    igual(t.split, { mode: 'percent', parts: { o1: 60, o2: 40 } });
+    assert.ok(t.principal > 0 && A().outstanding < 100000);
+  });
+
+  test('com duas hipotecas vivas não adivinha: avisa e não confirma às cegas', () => {
+    casa([loan('a'), loan('b')]);
+    const r = planeado({ kind: 'loan', label: 'Prestação', amount: 400, propertyId: 'p1' });
+    assert.equal(app.recLoanId(r), null);
+    assert.equal(app.recSemCredito(r), true);
+    assert.equal(app.recTx(r).loanId, null);
+    let dito = ''; app.toast = (m) => { dito = m; };
+    app.quickConfirmRec('rm');
+    assert.equal(app.db.transactions.length, 0, 'não regista nada');
+    assert.match(dito, /Sem crédito associado/);
+    app.localStorage.setItem('gi_pend_shut', '0');   // o cartão só mostra as linhas quando está aberto
+    assert.match(app.pendingCard(true), /Sem crédito associado — abre para escolher/);
+    assert.ok(!/quickConfirmRec/.test(app.pendingCard(true)), 'e sem o botão de confirmar depressa');
+    assert.match(app.vRecurring(), /Sem crédito associado — abre para escolher/);
+  });
+
+  test('a reparação do arranque liga o planeado órfão e não deixa dois para a mesma hipoteca', () => {
+    casa([loan('a')]); doisDonos();
+    planeado({ kind: 'loan', label: 'Prestação da casa', amount: 421.6, propertyId: 'p1', paidBy: 'o2', split: { mode: 'equal', parts: {} } });
+    arranque();
+    assert.equal(app.db.recurring.length, 1, 'o automático reconhece o do utilizador e não se duplica');
+    const r = app.db.recurring[0];
+    assert.equal(r.id, 'rm'); assert.equal(r.tx.loanId, 'a');
+    assert.equal(r.tx.paidBy, 'o2');
+    igual(r.tx.split, { mode: 'equal', parts: {} });
+  });
+
+  test('com duas hipotecas a reparação não inventa nenhuma', () => {
+    casa([loan('a'), loan('b')]);
+    planeado({ kind: 'loan', label: 'Prestação', amount: 400, propertyId: 'p1' });
+    arranque();
+    assert.equal(app.db.recurring.find((r) => r.id === 'rm').tx.loanId, null);
+    assert.equal(app.db.recurring.length, 3, 'os dois automáticos nascem à mesma');
+  });
+
+  test('associar os pagamentos já registados sem crédito abate o capital, e o Anular repõe tudo', () => {
+    casa([loan('a')]);
+    app.db.transactions.push(
+      app.normTx({ id: 't1', kind: 'loan', label: 'Prestação', amount: 421.6, propertyId: 'p1', date: `${ANO}-01-05` }),
+      app.normTx({ id: 't2', kind: 'loan', label: 'Prestação', amount: 421.6, propertyId: 'p1', date: `${ANO}-02-05` }));
+    const o = app.creditosOrfaos();
+    assert.equal(o.length, 1); assert.equal(o[0].l.id, 'a'); assert.equal(o[0].txs.length, 2);
+    assert.match(app.vCredits(), /2 pagamentos sem crédito associado/);
+    let desfazer = null;
+    app.comDesfazer = (m, fn) => { desfazer = fn; };
+    app.confirmModal = (t, txt, cb) => cb();
+    app.associarOrfaos('p1', 'a');
+    app.db.transactions.forEach((t) => { assert.equal(t.loanId, 'a'); assert.ok(t.principal > 0); assert.ok(t.interest > 0); });
+    assert.ok(A().outstanding < 100000, 'o capital em dívida desceu');
+    assert.equal(app.creditosOrfaos().length, 0);
+    desfazer();
+    perto(A().outstanding, 100000, 0.001);
+    app.db.transactions.forEach((t) => assert.equal(t.loanId, null));
   });
 });
 

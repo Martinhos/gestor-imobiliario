@@ -30,12 +30,59 @@ function vCredits(){
         <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
           <div style="text-align:right"><b>${euro(l.outstanding)}</b>${live2?`<div class="small">${euro2(c.total)}/mês</div>`:''}</div>
           ${kebab('mort:'+p.id+':'+l.id)}</div></div></div>`};
+  const aviso=creditosOrfaos().filter(x=>!motivoCredito(x.p.id)).map(({p,l,txs})=>`<div class="card" style="margin-bottom:14px">
+    <div class="title">${txs.length===1?'1 pagamento sem crédito associado':txs.length+' pagamentos sem crédito associado'}</div>
+    <div class="small">${esc(p.name)} · ${euro2(sum(txs.map(t=>t.amount||0)))} · ${txs.length===1?'não abateu':'não abateram'} capital nenhum a ${esc(loanName(l))}.</div>
+    <div class="toolbar" style="margin:9px 0 0"><button class="btn sm primary" onclick="associarOrfaos('${jsq(p.id)}','${jsq(l.id)}')">Associar à hipoteca ${esc(loanName(l))}</button></div></div>`).join('');
   const act=shown.filter(x=>Number(x.l.outstanding)>0),paid=shown.filter(x=>!(Number(x.l.outstanding)>0));
-  const list=(act.length?`<div class="list">${act.map(mortCard).join('')}</div>`:'')
+  const list=aviso+(act.length?`<div class="list">${act.map(mortCard).join('')}</div>`:'')
     +(paid.length?`<div class="section-title" style="margin-top:${act.length?18:0}px">Créditos antigos já pagos</div>
       <div class="list">${paid.map(mortCard).join('')}</div>
       <div class="hint" style="margin-top:10px">Se editares um pagamento e a dívida voltar a subir, o crédito volta para a lista de cima.</div>`:'');
   return head+kpis+list+`<div class="hint" style="margin-top:12px">Também podes geri-las na ficha de cada imóvel.</div>`;
+}
+/* Pagamentos de crédito já registados sem hipoteca associada, imóvel a
+   imóvel — os que nasceram de um planeado sem crédito e por isso nunca
+   abateram capital nenhum. Só entram os que se podem ligar sem dúvida: o
+   imóvel tem uma e uma só hipoteca viva. Com duas ou mais, ninguém pode
+   adivinhar qual delas e o movimento fica como está, para se corrigir à mão.
+   Devolve: array de {p,l,txs} — o imóvel, a hipoteca única e os movimentos
+   por ligar por ordem de data; vazio quando não há nada a reparar. */
+function creditosOrfaos(){
+  const out=[];
+  scope().forEach(p=>{
+    const ls=liveLoans(p);if(ls.length!==1)return;
+    const txs=(db.transactions||[]).filter(t=>t.kind==='loan'&&!t.loanId&&t.propertyId===p.id)
+      .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+    if(txs.length)out.push({p,l:ls[0],txs});
+  });
+  return out;
+}
+/* Liga à hipoteca os pagamentos daquele imóvel que ficaram sem crédito: por
+   ordem de data, cada um passa pelo applyLoan, que lhe reparte juros, selo e
+   capital sobre a dívida do momento (ou respeita a distribuição que já
+   trouxer, se bater certo com o montante) e a abate — o mesmo que teria
+   acontecido se tivessem sido confirmados um a um. Não se faz sozinho no
+   arranque de propósito: mexer no capital em dívida sem o utilizador saber
+   era pior do que o erro. Deixa Anular, que repõe os movimentos e a dívida.
+   Recebe: pid — o id do imóvel; lid — o id da hipoteca.
+   Devolve: nada — pede confirmação e, com o sim, grava e redesenha. */
+function associarOrfaos(pid,lid){
+  const recusa=motivoCredito(pid);if(recusa)return toast(recusa);
+  const p=prop(pid),l=p?findLoan(p,lid):null;if(!l)return;
+  const txs=(db.transactions||[]).filter(t=>t.kind==='loan'&&!t.loanId&&t.propertyId===pid)
+    .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+  if(!txs.length)return toast('Já não há pagamentos por associar.');
+  const antes=l.outstanding,copias={};txs.forEach(t=>{copias[t.id]=JSON.parse(JSON.stringify(t))});
+  confirmModal('Associar à hipoteca',`${txs.length===1?'1 pagamento de crédito':txs.length+' pagamentos de crédito'} de ${esc(p.name)} (${euro2(sum(txs.map(t=>t.amount||0)))} no total) ${txs.length===1?'ficou':'ficaram'} sem hipoteca associada e nunca ${txs.length===1?'abateu':'abateram'} capital. Associar a “${esc(loanName(l))}”? Cada um fica com os juros, o selo e o capital do plano na sua data, e o capital em dívida desce a partir dos <b>${euro2(antes)}</b> de agora.`,()=>{
+    txs.forEach(t=>{t.loanId=l.id;applyLoan(t)});
+    syncLoanRec(p,l);save();buildNav();render();
+    comDesfazer(txs.length===1?'Pagamento associado a “'+loanName(l)+'”.':txs.length+' pagamentos associados a “'+loanName(l)+'”.',()=>{
+      db.transactions=db.transactions.map(t=>copias[t.id]?normTx(JSON.parse(JSON.stringify(copias[t.id]))):t);
+      /* volta a procurar a hipoteca: um sync entretanto pode ter trocado os objetos da db */
+      const x=anyLoan(lid);if(x){x.l.outstanding=antes;syncLoanRec(x.p,x.l)}
+    });
+  });
 }
 /* nova hipoteca: escolhe-se primeiro o imóvel (uma hipoteca tem sempre um)
    Devolve: nada — abre o seletor de imóvel e depois o modal da hipoteca nova
