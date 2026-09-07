@@ -563,6 +563,15 @@ index.html:.sheet, o .body) e a página tranca por baixo de uma janela ou
 da gaveta, repondo a posição ao destrancar (vistas.js:lockPage).
 
 ## O que não se faz
+Não se decora uma vista pegando no HTML que ela acabou de gerar, metendo-o
+num nó avulso e mexendo-lhe: pede-se um ponto de extensão à vista, e ela
+chama-o enquanto se escreve (vistas.js:txLinhaExtra e vistas.js:txMesExtra
+são os primeiros; quem os substitui é cloud/selecao.js). Medido com 500
+movimentos, o ida-e-volta custava 36 dos 40 ms de cada pintura dos
+Movimentos — e, pior do que o tempo: enquanto for assim, nenhuma repintura
+parcial é segura, porque uma linha repintada sozinha nasce sem as
+decorações e ninguém dá por isso.
+
 Não se escreve uma duração ou uma curva à mão: cita-se o token
 (index.html:--medio, index.html:--curva).
 
@@ -635,6 +644,16 @@ ownerIds, quotas ou contas entre proprietários (acessos.js:souDono).
 ## Dívidas de design conhecidas
 O que já está fora destas regras, por ordem de gravidade. Não está
 corrigido: cada uma tem o sítio, para quem lhe pegar.
+
+Média. Há três sítios onde a camada da nuvem ainda mexe no HTML da app por
+expressão regular ou por procura de texto: o bloco dos planeados no cartão
+por confirmar (cloud/painel.js), a secção dos proprietários na ficha de um
+imóvel (cloud/utilizadores.js) e a linha das novidades nas definições
+(cloud/novidades.js). Cada um deles depende da forma exata do HTML gerado —
+uma aspa trocada, um atributo por outra ordem, e a funcionalidade
+desaparece sem erro nenhum. O caminho é o mesmo que os Movimentos já
+seguiram: um ponto de extensão pedido à vista, em vez de cirurgia por cima
+dela.
 
 Média. O tornarFocavel (vistas.js:tornarFocavel) dá tabindex e role=button
 a tudo o que tem onclick, e cada barra e cada arco tem um (é por lá que a
