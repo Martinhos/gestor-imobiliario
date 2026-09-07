@@ -186,7 +186,7 @@ function prazosCard(){
     <div class="row-between tap" style="align-items:center;cursor:pointer;margin:-16px;padding:16px" onclick="pzToggle()">
       <div style="min-width:0"><div class="title">Prazos</div>
         <div class="small">${lista.length} na janela de aviso${urgentes?' · <b class="neg">'+urgentes+' com 7 dias ou menos</b>':''}${open?'':' · toca para ver'}</div></div>
-      <span style="flex:0 0 auto;display:inline-flex;transform:rotate(${open?'90':'-90'}deg);transition:transform .15s">${ic('chev',20)}</span></div>
+      <span style="flex:0 0 auto;display:inline-flex;transform:rotate(${open?'90':'-90'}deg)">${ic('chev',20)}</span></div>
     ${open?`<div class="list" style="gap:8px;margin-top:12px">${lista.map(row).join('')}</div>
     <div class="hint" style="margin-top:9px">Silenciar cala esta ocorrência; quando a data mudar, o aviso volta sozinho.</div>`:''}</div>`;
 }

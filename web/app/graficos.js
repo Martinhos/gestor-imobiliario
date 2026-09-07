@@ -110,7 +110,7 @@ function cBars(groups,labels,o){
       if(seg.value>0)up=b;else dn=b;
       const ya=Y(Math.max(a,b)),yb=Y(Math.min(a,b));
       const tip=`${labels[i]} · ${seg.label}: ${euro(Math.abs(seg.value))}`;
-      g+=`<rect x="${(cx-w/2).toFixed(1)}" y="${ya.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1,yb-ya).toFixed(1)}" rx="2" fill="${seg.color}" ${hit(tip)}><title>${esc(tip)}</title></rect>`;
+      g+=`<rect class="gbar" x="${(cx-w/2).toFixed(1)}" y="${ya.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1,yb-ya).toFixed(1)}" rx="2" fill="${seg.color}" ${hit(tip)}><title>${esc(tip)}</title></rect>`;
     });
   });
   const names=[];groups.forEach(g2=>g2.forEach(s=>{if(!names.some(n=>n.label===s.label))names.push({label:s.label,color:s.color})}));
@@ -135,11 +135,11 @@ function cDonut(items,o){
   let a=-Math.PI/2,g='';
   items.forEach((it,idx)=>{
     const col=it.color||PAL[idx%PAL.length],ang=it.value/tot*Math.PI*2;
-    if(ang>=Math.PI*2-1e-6){g+=`<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${col}" stroke-width="${th}" ${o.onPick?`onclick="${o.onPick}('${jsq(it.label)}')" style="cursor:pointer"`:''}/>`;return}
+    if(ang>=Math.PI*2-1e-6){g+=`<circle class="gdonut" pathLength="1" cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${col}" stroke-width="${th}" ${o.onPick?`onclick="${o.onPick}('${jsq(it.label)}')" style="cursor:pointer"`:''}/>`;return}
     const b=a+ang,L=ang>Math.PI?1:0;
     const tip=`${it.label}: ${euro(it.value)} (${pct(it.value/tot,0)})`;
     const act=o.onPick?`onclick="${o.onPick}('${jsq(it.label)}')" onmouseenter="chartTip(event,'${jsq(tip)}')" style="cursor:pointer"`:hit(tip);
-    g+=`<path d="M${(c+r*Math.cos(a)).toFixed(2)} ${(c+r*Math.sin(a)).toFixed(2)} A${r} ${r} 0 ${L} 1 ${(c+r*Math.cos(b)).toFixed(2)} ${(c+r*Math.sin(b)).toFixed(2)}" fill="none" stroke="${col}" stroke-width="${th}" ${act}><title>${esc(tip)}</title></path>`;
+    g+=`<path class="gdonut" pathLength="1" d="M${(c+r*Math.cos(a)).toFixed(2)} ${(c+r*Math.sin(a)).toFixed(2)} A${r} ${r} 0 ${L} 1 ${(c+r*Math.cos(b)).toFixed(2)} ${(c+r*Math.sin(b)).toFixed(2)}" fill="none" stroke="${col}" stroke-width="${th}" ${act}><title>${esc(tip)}</title></path>`;
     a=b;
   });
   g+=`<text x="${c}" y="${c-1}" text-anchor="middle" font-size="15" font-weight="700" fill="var(--ink)">${o.center||euro(tot)}</text>`;
@@ -162,7 +162,7 @@ function cHBars(items,o){
     return `<div ${hit(it.label+': '+(o.fmt?o.fmt(it.value):euro(it.value)))}><div class="li" style="margin-bottom:4px"><span class="nm" style="color:var(--ink)">${esc(it.label)}</span>
       <span class="vl ${neg?'neg':''}">${o.fmt?o.fmt(it.value):euro(it.value)}</span></div>
       <div style="height:8px;border-radius:99px;background:var(--chip);overflow:hidden">
-      <i style="display:block;height:100%;width:${(Math.abs(it.value)/max*100).toFixed(1)}%;background:${col};border-radius:99px"></i></div></div>`}).join('')}</div>`;
+      <i class="ghbar" style="display:block;height:100%;width:${(Math.abs(it.value)/max*100).toFixed(1)}%;background:${col};border-radius:99px"></i></div></div>`}).join('')}</div>`;
 }
 // Legenda com bolinha de cor. withVal acrescenta valor e percentagem; itens com "act" ficam clicáveis.
 // Recebe: items — array de {label, color} e, conforme o caso, value (texto já

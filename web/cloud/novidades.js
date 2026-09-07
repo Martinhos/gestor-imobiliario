@@ -100,7 +100,7 @@ function secHtml(sec, chave) {
       'onclick="CW.novToggle(\'' + chave + '\')">' +
       '<b style="min-width:0">' + esc(sec.titulo) + '</b>' +
       '<span style="flex:0 0 auto;display:inline-flex;color:var(--muted);' +
-        'transform:rotate(' + (aberta ? '90' : '-90') + 'deg);transition:transform .15s">' +
+        'transform:rotate(' + (aberta ? '90' : '-90') + 'deg)">' +
         ic('chev', 18) + '</span></div>' +
     (aberta
       ? '<div style="padding:0 15px 14px"><ul style="margin:0;padding-left:18px;color:var(--muted);font-size:14px">' +

@@ -161,6 +161,63 @@ a barra de baixo (index.html:.tabbar), 45 e 46 o painel de filtros
 (index.html:.scrim), 62 a gaveta (index.html:aside), 90 o toast
 (index.html:.toast), 95 a dica dos gráficos (index.html:.tip).
 
+## Movimento
+Três durações e duas curvas, e nada fora disso: --rapido .12s para o que
+responde ao dedo, --medio .2s para o que aparece e desaparece, --lento
+.26s para a janela, que é a peça maior (index.html:--rapido). A --curva
+arranca depressa e chega devagar — é a de quem entra em cena; a
+--curva-sai faz o inverso e serve o que se fecha (index.html:--curva). Um
+tempo escrito à mão numa regra nova é uma decisão que ninguém tomou.
+
+A escolha entre transition e animation não é de gosto: é a arquitetura da
+app. O render() troca o #view.innerHTML inteiro (vistas.js:render), o
+openModal reconstrói a janela a cada escolha (componentes.js:openModal) e
+o modalLayer nasce já com a classe .open (componentes.js:modalLayer) —
+quase tudo o que muda de estado é um nó NOVO, e uma transition não tem
+valor antigo de onde partir. Por isso as entradas escrevem-se em
+@keyframes: a folha e o véu da janela (index.html:folhaEntra,
+index.html:veuEntra), a folha que sobe abaixo dos 520px
+(index.html:folhaSobe), os menus (index.html:popEntra), o «porquê» do KPI
+(index.html:explEntra, e vistas.js:kpi, que o escreve solto dentro do
+.expl), o conteúdo de uma dobra (index.html:foldEntra), os crachás de
+contagem, que o buildNav e o buildTabbar recriam (index.html:selo;
+navegacao.js:buildNav, navegacao.js:buildTabbar) e as barras e arcos dos
+gráficos (index.html:gbar, index.html:ghbar, index.html:gdonut, postos
+pelo graficos.js:cBars, graficos.js:cHBars e graficos.js:cDonut).
+
+A transition fica para os poucos sítios onde a classe troca num nó vivo:
+o dia escolhido do calendário (calendario.js:calSel troca o .on sem
+redesenhar a grelha) e tudo o que reage ao dedo, que é reação e não
+entrada.
+
+Anima-se a entrada, não a saída. Fechar uma janela tira-lhe o nó
+(componentes.js:closeModal): animar a saída obrigava a adiar essa remoção
+e a mexer na pilha de janelas, e a app fecharia mais devagar do que a
+pessoa quer que feche.
+
+O que se toca afunda-se: sempre :active e nunca :hover, que no iOS fica
+preso depois do toque, e num telemóvel é o único sinal que existe entre o
+dedo e o resultado. A régua é a superfície: scale(.97) nos botões, opções
+e separadores, .98 no que é grande (index.html:.addbox, a dobra, a
+legenda), .99 no cartão (index.html:.card.tap). Quem já usa o transform
+para se colocar leva o scale a seguir ao que lá está, senão salta do
+sítio (index.html:.totop:active). O fundo premido é o --chip, e só onde
+há fundo neutro para escurecer: quem está ativo fica com o seu, o
+primário escurece para --accent-press e a gaveta tem paleta própria
+(index.html:.btn.primary:active).
+
+O foco desenha-se com 2px de --accent e 2px de afastamento, em
+:focus-visible e nunca :focus — quem chega de rato não pode ir deixando
+anéis por onde passa. Vale para tudo o que o tornarFocavel() torna
+alcançável pelo teclado (vistas.js:tornarFocavel), e não só para os
+campos.
+
+Quem pediu menos movimento ao sistema não recebe nenhum: uma só regra
+apaga animação e transição em tudo
+(index.html:@media(prefers-reduced-motion:reduce)). É por isso que
+nenhuma entrada pode ser a única coisa que torna um conteúdo visível — o
+estado final tem de ser o que se vê sem animação nenhuma.
+
 ## Componentes da casa, e quando usar cada um
 sel(id,value,options,onchange) (componentes.js:sel) é O menu de escolha.
 Nunca um <select> nativo: destoava nos formulários e destoa no topo (o
@@ -484,6 +541,17 @@ index.html:.sheet, o .body) e a página tranca por baixo de uma janela ou
 da gaveta, repondo a posição ao destrancar (vistas.js:lockPage).
 
 ## O que não se faz
+Não se escreve uma duração ou uma curva à mão: cita-se o token
+(index.html:--medio, index.html:--curva).
+
+Não se anima a altura de uma dobra: foi tentado com grid-template-rows
+0fr→1fr e a dobra ficou presa aberta (index.html:.fold.entra.open>.fold-body,
+a nota por cima).
+
+Não se põe uma animação de entrada num nó que o render recria a toda a
+hora sem uma marca de quem a pediu: piscava a cada re-render
+(componentes.js:toggleFold, a classe .entra).
+
 Não se usa <select>, confirm(), alert() nem prompt() do browser: destoam e
 não vestem o tema (o banner de web/app/componentes.js;
 componentes.js:closeModal).

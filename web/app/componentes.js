@@ -96,7 +96,11 @@ function ajustarPop(p){
       break;
     }
   }
-  const d=posicaoPop(btn.getBoundingClientRect(),limite,p.getBoundingClientRect().height);
+  /* offsetHeight e não getBoundingClientRect().height: o menu entra com um
+     scale(.96) (index.html:.selpop.on) e o rect vem afetado pelo transform —
+     media-se 4% a menos e a decisão de virar para cima saía errada à tangente.
+     O offsetHeight é a caixa de maquetização, que o transform não toca. */
+  const d=posicaoPop(btn.getBoundingClientRect(),limite,p.offsetHeight);
   if(d.lado==='cima'){p.style.top='auto';p.style.bottom='calc(100% + 5px)';}
   if(d.maxHeight)p.style.maxHeight=d.maxHeight+'px';
 }
@@ -174,7 +178,15 @@ function fold(id,title,body,o){
 // abre ou fecha a secção no DOM e guarda o estado, para o próximo render o respeitar
 // Recebe: id — o id dado ao fold() (procura o elemento fold_<id>).
 // Devolve: nada — alterna a classe .open no DOM e guarda o estado em foldState.
-function toggleFold(id){const el=document.getElementById('fold_'+id);if(!el)return;const on=!el.classList.contains('open');el.classList.toggle('open',on);foldState[id]=on}
+function toggleFold(id){
+  const el=document.getElementById('fold_'+id);if(!el)return;
+  const on=!el.classList.contains('open');
+  el.classList.toggle('open',on);foldState[id]=on;
+  /* marca de quem abriu agora, para o conteúdo entrar (index.html:.fold.entra).
+     Fica lá: um re-render deita o nó fora e o próximo nasce sem ela — que é o
+     que faz a dobra já aberta não voltar a piscar. */
+  if(on)el.classList.add('entra');
+}
 /* bloco de ficheiros reutilizável
    Recebe: label — título por cima da lista (vazio para não mostrar); list — lista
    de metadados {id,name,size,added} dos ficheiros já anexados; inputId — id do
