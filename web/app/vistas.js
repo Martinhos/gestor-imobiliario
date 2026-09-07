@@ -59,6 +59,10 @@ function tornarFocavel(raiz){
     if(!e.hasAttribute('role'))e.setAttribute('role','button');
   });
 }
+/* Ligado por quem NAVEGA (navegacao.js:go, navegacao.js:goSet) e gasto pelo
+   render logo a seguir. Arranca ligado: a primeira pintura da app é uma
+   chegada como as outras. */
+let _entrar=1;
 /* Redesenha a página inteira: título e subtítulo, botão de filtros do
    cabeçalho, e o HTML da vista do separador atual (vDashboard, vProperties…).
    Substitui o innerHTML de #view, por isso o estado do DOM anterior perde-se;
@@ -77,6 +81,12 @@ function render(){
   let html=({dashboard:vDashboard,visits:vVisits,calendar:vCalendar,properties:vProperties,contracts:vContracts,tenants:vTenants,owners:vOwners,
     colaboradores:vColabTab,transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
+  /* A entrada dos gráficos é de quem chega ao ecrã, não de cada repintura: o
+     render corre também quando a sincronização adota o estado do servidor de 3
+     em 3 minutos (cloud/nucleo.js:applyState) e a cada gesto que só mexe num
+     cartão. A marca fica até à próxima pintura, e as repinturas locais que
+     acontecem lá dentro (o donutDrill) são de quem tocou no gráfico. */
+  view().classList.toggle('entra',!!_entrar);_entrar=0;
   view().innerHTML=html;
   /* A visão geral era o único ecrã sem criação rápida: registar uma renda
      avulsa custava quatro toques de viagem. Entra aqui, depois do painel

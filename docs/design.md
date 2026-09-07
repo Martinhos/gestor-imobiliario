@@ -161,6 +161,85 @@ a barra de baixo (index.html:.tabbar), 45 e 46 o painel de filtros
 (index.html:.scrim), 62 a gaveta (index.html:aside), 90 o toast
 (index.html:.toast), 95 a dica dos gráficos (index.html:.tip).
 
+## Movimento
+Três durações e duas curvas, e nada fora disso: --rapido .12s para o que
+responde ao dedo, --medio .2s para o que aparece e desaparece, --lento
+.26s para a janela, que é a peça maior (index.html:--rapido). A --curva
+arranca depressa e chega devagar — é a de quem entra em cena; a
+--curva-sai faz o inverso e serve o que se fecha (index.html:--curva). Um
+tempo escrito à mão numa regra nova é uma decisão que ninguém tomou.
+
+A escolha entre transition e animation não é de gosto: é a arquitetura da
+app. O render() troca o #view.innerHTML inteiro (vistas.js:render), o
+openModal reconstrói a janela a cada escolha (componentes.js:openModal) e
+o modalLayer nasce já com a classe .open (componentes.js:modalLayer) —
+quase tudo o que muda de estado é um nó NOVO, e uma transition não tem
+valor antigo de onde partir. Por isso as entradas escrevem-se em
+@keyframes: a folha e o véu da janela (index.html:folhaEntra,
+index.html:veuEntra), a folha que sobe abaixo dos 520px
+(index.html:folhaSobe), os menus (index.html:popEntra), o «porquê» do KPI
+(index.html:explEntra, e vistas.js:kpi, que o escreve solto dentro do
+.expl), o conteúdo de uma dobra (index.html:foldEntra), os crachás de
+contagem, que o buildNav e o buildTabbar recriam (index.html:selo;
+navegacao.js:buildNav, navegacao.js:buildTabbar) e as barras e arcos dos
+gráficos (index.html:gbar, index.html:ghbar, index.html:gdonut, postos
+pelo graficos.js:cBars, graficos.js:cHBars e graficos.js:cDonut).
+
+A transition fica para os poucos sítios onde a classe troca num nó vivo:
+o dia escolhido do calendário (calendario.js:calSel troca o .on sem
+redesenhar a grelha) e tudo o que reage ao dedo, que é reação e não
+entrada.
+
+E uma entrada precisa sempre de um portão, porque «nó novo» não quer
+dizer «alguém pediu». O render corre a cada sincronização de fundo — de
+três em três minutos, quando a app adota o estado do servidor
+(cloud/nucleo.js:applyState) — e a cada gesto que só mexe num cartão.
+Sem portão, os gráficos redesenhavam-se e os crachás saltavam sozinhos a
+meio de uma leitura. São três portões, um por natureza de entrada:
+os gráficos animam-se só quando foi uma navegação a pedir a pintura
+(vistas.js:render põe a marca, navegacao.js:go e navegacao.js:goSet
+ligam-na); o crachá pulsa só quando o número muda desde a última vez
+(navegacao.js:cntNovo); a dobra entra só quando foi um toque a abri-la
+(componentes.js:toggleFold). A folha da janela e os menus não precisam de
+portão: só nascem quando alguém os abre.
+
+O escalonamento das formas de um gráfico escreve-se em cada forma, onde
+o índice se sabe (graficos.js:atrasoEntrada): em SVG as barras são irmãs
+dos elementos do eixo, e um :nth-child conta-os a eles também. São seis
+degraus de 30ms e depois pára — com mais, um gráfico de doze barras
+demora mais a desenhar-se do que a ser lido.
+
+Anima-se a entrada, não a saída. Fechar uma janela tira-lhe o nó
+(componentes.js:closeModal): animar a saída obrigava a adiar essa remoção
+e a mexer na pilha de janelas, e a app fecharia mais devagar do que a
+pessoa quer que feche.
+
+O que se toca afunda-se: sempre :active e nunca :hover, que no iOS fica
+preso depois do toque, e num telemóvel é o único sinal que existe entre o
+dedo e o resultado. A régua é a superfície: scale(.97) nos botões, opções
+e separadores, .98 no que é grande (index.html:.addbox, a dobra, a
+legenda), .99 no cartão (index.html:.card.tap). Quem já usa o transform
+para se colocar leva o scale a seguir ao que lá está, senão salta do
+sítio (index.html:.totop:active). O fundo premido é o --chip, e só onde
+há fundo neutro para escurecer: quem está ativo fica com o seu, o
+primário escurece para --accent-press e a gaveta tem paleta própria
+(index.html:.btn.primary:active).
+
+O foco desenha-se com 2px de --accent e 2px de afastamento, em
+:focus-visible e nunca :focus — quem chega de rato não pode ir deixando
+anéis por onde passa. A lista de classes não chega: o tornarFocavel()
+torna alcançável tudo o que tem onclick (vistas.js:tornarFocavel), e
+medimos dezanove sítios sem anel só na visão geral — por isso há a rede
+do index.html:[role="button"], que é o que ele escreve. Na gaveta o anel
+vem da paleta dela e não do --accent: sobre o --side, o --accent dá
+1.29:1 e o anel existia sem se ver (index.html:.railbtn:focus-visible).
+
+Quem pediu menos movimento ao sistema não recebe nenhum: uma só regra
+apaga animação e transição em tudo
+(index.html:@media(prefers-reduced-motion:reduce)). É por isso que
+nenhuma entrada pode ser a única coisa que torna um conteúdo visível — o
+estado final tem de ser o que se vê sem animação nenhuma.
+
 ## Componentes da casa, e quando usar cada um
 sel(id,value,options,onchange) (componentes.js:sel) é O menu de escolha.
 Nunca um <select> nativo: destoava nos formulários e destoa no topo (o
@@ -484,6 +563,21 @@ index.html:.sheet, o .body) e a página tranca por baixo de uma janela ou
 da gaveta, repondo a posição ao destrancar (vistas.js:lockPage).
 
 ## O que não se faz
+Não se escreve uma duração ou uma curva à mão: cita-se o token
+(index.html:--medio, index.html:--curva).
+
+Não se anima a altura de uma dobra: foi tentado com grid-template-rows
+0fr→1fr e a dobra ficou presa aberta (index.html:.fold.entra.open>.fold-body,
+a nota por cima).
+
+Não se põe uma animação de entrada sem um portão que diga que alguém a
+pediu. Um nó novo não é um gesto: a sincronização de fundo recria tudo de
+três em três minutos (vistas.js:render e a marca .entra;
+navegacao.js:cntNovo; componentes.js:toggleFold).
+
+Não se escalona com :nth-child o que tem irmãos que não são da série (as
+barras de um SVG têm o eixo pela frente: graficos.js:atrasoEntrada).
+
 Não se usa <select>, confirm(), alert() nem prompt() do browser: destoam e
 não vestem o tema (o banner de web/app/componentes.js;
 componentes.js:closeModal).
@@ -541,6 +635,13 @@ ownerIds, quotas ou contas entre proprietários (acessos.js:souDono).
 ## Dívidas de design conhecidas
 O que já está fora destas regras, por ordem de gravidade. Não está
 corrigido: cada uma tem o sítio, para quem lhe pegar.
+
+Média. O tornarFocavel (vistas.js:tornarFocavel) dá tabindex a tudo o que
+tem onclick, e isso inclui cada barra e cada arco dos gráficos: na visão
+geral são vinte e sete paragens do Tab que não levam a lado nenhum — a
+dica que abrem já se lê no texto ao lado. Quem lhes pegar deve deixá-las
+fora da ordem de tabulação (a dica continua a abrir ao toque e ao rato) e
+dar ao gráfico uma descrição só, em vez de as anelar uma a uma.
 
 Média. addDays (planeados.js:addDays) constrói a data em hora local e
 devolve-a com toISOString: meia-noite local no verão vira o dia anterior,

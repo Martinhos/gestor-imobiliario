@@ -49,6 +49,31 @@ var AVISOS = [
         ],
       },
       {
+        titulo: 'As prestações reconhecem o crédito',
+        afeta: ['creditos', 'movimentos'],
+        itens: [
+          'Um movimento criado a partir de uma prestação planeada já vem com a hipoteca certa preenchida — antes ficava sem crédito atribuído e tinhas de o escolher a cada mês.',
+          'A prestação segue a divisão que puseste no planeado: quem paga e por quem se divide passam para o movimento como estão.',
+        ],
+      },
+      {
+        titulo: 'Os cartões dos movimentos levam ao filtro',
+        afeta: ['movimentos'],
+        itens: [
+          'Abrir um dos seis cartões de resumo — receitas, despesas, prestações, dívidas pagas e recebidas, saldo — dá-te agora o botão para ver só esses movimentos. O saldo mostra tudo.',
+        ],
+      },
+      {
+        titulo: 'A app responde ao toque',
+        afeta: ['app'],
+        itens: [
+          'Tudo o que se toca reage: os botões, as opções, os separadores e os cartões afundam-se enquanto tens o dedo em cima. No telemóvel não havia sinal nenhum entre o toque e o resultado.',
+          'As janelas sobem em vez de aparecerem feitas, os menus abrem do lado por onde nascem, as secções que abres deixam o conteúdo entrar e os gráficos desenham-se em vez de surgirem prontos.',
+          'A navegação por teclado passa a mostrar onde está: o que se alcança com Tab ganha um contorno visível, também dentro da gaveta escura.',
+          'Se pediste ao teu sistema menos movimento, não recebes nenhum — a app respeita essa definição em toda a parte.',
+        ],
+      },
+      {
         titulo: 'Se és colaborador',
         afeta: ['colaboradores'],
         itens: [
