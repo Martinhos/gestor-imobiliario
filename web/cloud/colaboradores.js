@@ -1,6 +1,7 @@
 /* Colaboradores com cargos, convites de uso unico e a ligacao de partilha.
    ----------------------------------------------------------------------
-   As ações da página Conta e partilha e da aterragem das ligações: cargos
+   As ações do separador Colaboradores, da página Conta e partilha (só a
+   ligação de partilha e os pedidos) e da aterragem das ligações: cargos
    (PUT/DELETE /api/roles/:id), convites (POST/GET/DELETE /api/collab-invites
    e POST /api/convite/:token/aceitar), colaboradores (PUT/DELETE
    /api/collaborators/:id), a ligação permanente (POST/DELETE /api/share-link
@@ -11,7 +12,9 @@
    web/app/acessos.js (pode, souDono, temPerm, ROTULOS, CARGOS_EXEMPLO), para
    o arnês a testar sem esta camada. Aqui só se fala com o servidor e se
    desenham os modais; o servidor decide, o cliente esconde. Depois de cada
-   ação: pullNow(true) e render(). Os cartões da página estão em partilha.js. */
+   ação: pullNow(true) e render() — render() repinta o separador aberto, seja
+   ele qual for, por isso nenhuma ação precisa de saber para onde voltar. Os
+   cartões e a vista (vColaboradores) estão em partilha.js. */
 'use strict';
 
 var LS_LIGACAO = 'gi_ligacao_url';   // o URL da ligação permanente: só se mostra na criação
@@ -581,7 +584,7 @@ CW.aceitarConvite = function (token) {
         (pode.length ? '<div class="hint">Podes: ' + esc(pode.join(', ')) + '.</div>' : '') +
         (saltadas.length ? '<div class="hint">Já eras comproprietário de ' + esc(saltadas.join(', ')) + ' — aí fica tudo como estava.</div>' : '') +
         '<div class="hint">Os cartões desses imóveis levam o selo «de ' + esc(r.ownerName || prev.ownerName || '') + ' · ' + esc(r.roleName || prev.roleName || '') +
-        '». Podes sair quando quiseres em Definições → Conta e partilha.</div></div>',
+        '». Podes sair quando quiseres no menu, em Pessoas → Colaboradores.</div></div>',
         '<button class="btn primary" onclick="closeAllModals();go(\'properties\')">Ver os imóveis</button>');
     })
     .catch(function (e) {

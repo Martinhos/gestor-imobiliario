@@ -76,7 +76,6 @@ function propBody(){
           <button type="button" class="btn sm danger" onclick="delPropOwner('${o.id}')">${ic('x',13)}</button></div>`).join('')}
         <button type="button" class="tagadd" style="justify-self:start" onclick="addPropOwner()">+ Adicionar proprietário</button></div>
       <div class="hint" id="shareHint" style="margin-top:7px">${shareHint(owners,custom,sumSh)}</div></div>
-    ${colabHint(p)}
     <div><div class="flabel">Destino do imóvel</div>
       <div class="seg c2">${[['investimento','key','Arrendamento','para render'],['proprio','home','Uso próprio','vivo cá']]
         .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.use===k?'on':''}" onclick="setUse('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
@@ -211,18 +210,6 @@ function collectProp(){
     if(g('ffix'))l.amortFeeFix=Math.max(0,num(val('l_ffix_'+l.id)));
     if(g('fvar'))l.amortFeeVar=Math.max(0,num(val('l_fvar_'+l.id)));
   });
-}
-/* O bloco «Colaboradores» da ficha, para o dono e os comproprietários: quem
-   colabora neste imóvel e com que cargo (lido de p._colaboradores, que a
-   nuvem preenche). Gerem-se em Conta e partilha; quem não criou o imóvel só
-   vê a lista.
-   Recebe: p — o imóvel (o rascunho do formulário, com _colaboradores).
-   Devolve: HTML do bloco (texto), ou '' sem colaboradores. */
-function colabHint(p){
-  const cs=(p&&p._colaboradores)||[];
-  if(!cs.length||!souDono(p.id))return '';
-  const lista=cs.map(c=>esc(c.name||'?')+(c.roleName?' ('+esc(c.roleName)+')':'')).join(', ');
-  return `<div><div class="flabel">Colaboradores</div><div class="hint">${lista}. ${souCriador(p.id)?'Gerem-se em <b>Definições → Conta e partilha</b>.':'Só quem criou o imóvel gere colaboradores.'}</div></div>`;
 }
 // Frase que explica a divisão das quotas-partes: partes iguais, soma 100%,
 // restante para quem não tem percentagem, ou soma diferente normalizada.

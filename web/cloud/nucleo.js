@@ -611,6 +611,7 @@ function rebuildDb(st) {
    Recebe: st — o estado vindo de GET /api/state (o mesmo que rebuildDb recebe).
    Devolve: nada — substitui db e snap, grava no aparelho e redesenha. */
 function applyState(st) {
+  CW._pulled = 1;   // já falámos com o servidor: o que estiver vazio está mesmo vazio
   // os campos novos do estado (cargos, colaboradores, convites, ligação,
   // pedidos, pessoas) ficam sempre com forma, venham ou não do servidor
   ['roles', 'collaborators', 'invites', 'people', 'connections'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = []; });

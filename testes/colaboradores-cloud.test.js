@@ -71,13 +71,16 @@ describe('o contrato, em texto', () => {
     assert.match(marca[0], /r\.createdBy/, 'o criador entra na marca');
   });
 
-  test('partilha.js tem os cartões do contrato', () => {
+  test('partilha.js tem os cartões do contrato e a vista do separador', () => {
     const s = le('web/cloud/partilha.js');
     for (const t of ['A minha ligação de partilha', 'Pedidos de partilha', "'Cargos'", 'Convidar colaborador',
       "'Colaboradores'", 'Imóveis onde colaboras', 'Convites por usar', 'Escolher pelo grupo…', 'Vale 7 dias e uma só utilização',
-      'Como dou acesso a um gestor sem o tornar comproprietário?']) {
+      'Como dou acesso a um gestor sem o tornar comproprietário?', 'function vColaboradores()']) {
       assert.ok(s.includes(t), 'texto: ' + t);
     }
+    assert.match(s, /go\(\\?'colaboradores\\?'\)/, 'a linha de Conta e partilha vai para o separador');
+    const sub = /SUBPAGE\.cloud = .*/.exec(s)[0];
+    assert.ok(!/colaborador/i.test(sub), 'o subtítulo de Conta e partilha já não fala em colaboradores: ' + sub);
   });
 
   test('a guarda de apagar o imóvel saiu de cloud/anexos.js (vive em imovel.js com souCriador)', () => {
@@ -360,32 +363,87 @@ describe('os textos das permissões', () => {
   });
 });
 
+// A app montada com o estado de ESTADO() (ou o que a função mudar) na base e
+// em CW.state, para desenhar as vistas.
+// Recebe: muda (opcional) — função que recebe o estado e o altera antes de o usar.
+// Devolve: a janela da app, pronta para vCloud() e vColaboradores().
+function comEstado(muda) {
+  const { app } = montar();
+  const st = ESTADO();
+  if (muda) muda(st);
+  app.db = app.rebuildDb(st);
+  app.CW.state = st;
+  app.CW._pulled = 1;   // como depois de um applyState: o que estiver vazio está mesmo vazio
+  return app;
+}
+
+describe('antes do primeiro sync', () => {
+  test('o separador não diz «ainda não tens» a quem só ainda não sincronizou', () => {
+    const app = comEstado((st) => { st.roles = []; st.collaborators = []; st.invites = []; });
+    app.CW._pulled = 0;   // arranque sem rede: o estado do servidor ainda não chegou
+    const html = app.vColaboradores();
+    assert.match(html, /À espera do servidor/);
+    assert.doesNotMatch(html, /Ainda não tens colaboradores/, 'não mente a quem pode ter');
+    app.CW._pulled = 1;
+    assert.match(app.vColaboradores(), /Ainda não tens colaboradores/, 'depois do sync, o vazio é verdade');
+  });
+});
+
 describe('a página Conta e partilha', () => {
-  test('vCloud desenha os cartões do contrato com o estado', () => {
-    const { app } = montar();
-    const st = ESTADO();
-    app.db = app.rebuildDb(st);
-    app.CW.state = st;
+  test('vCloud fica com a partilha entre proprietários e uma linha para os colaboradores', () => {
+    const app = comEstado();
     const h = app.vCloud();
-    for (const t of ['A minha ligação de partilha', 'Pedidos de partilha', 'Ana quer partilhar T2 Porto contigo',
-      'Cargos', 'Gestor de visitas', 'Convidar colaborador', 'cw_inv_h_H1', 'Convites por usar', 'para a Ana',
-      'Colaboradores', 'Maria', 'Mudar cargo ou imóveis', 'Imóveis onde colaboras', 'Do Rui', "CW.sairDeImovel('C9')",
-      'Pedidos chegados por aqui', 'CW.ligacaoRodar()']) {
+    for (const t of ['A minha conta', 'A minha ligação de partilha', 'Pedidos de partilha', 'Ana quer partilhar T2 Porto contigo',
+      'Ligar a outro utilizador', 'Ainda não estás ligado a ninguém.', 'Pedidos chegados por aqui', 'CW.ligacaoRodar()',
+      "go('colaboradores')", 'Colaboradores', '1 colaborador · 1 cargo', 'Segurança', 'Apagar a conta']) {
       assert.ok(h.includes(t), 'a página tem: ' + t);
     }
-    // o imóvel de colaboração não entra nas caixas do convite
-    assert.ok(!h.includes('cw_inv_h_H2'), 'não convido para o imóvel do Rui');
+    for (const t of ['Convidar colaborador', 'cw_inv_h_H1', 'Convites por usar', 'Novo cargo', 'O que cada colaborador pode fazer',
+      'Mudar cargo ou imóveis', 'Imóveis onde colaboras', "CW.sairDeImovel('C9')"]) {
+      assert.ok(!h.includes(t), 'os cartões dos colaboradores saíram daqui: ' + t);
+    }
   });
 
   test('sem ligação e sem pedidos, o cartão oferece criar e o dos pedidos não aparece', () => {
-    const { app } = montar();
-    const st = ESTADO();
-    st.shareLink = null; st.shareRequests = { incoming: [], outgoing: [] };
-    app.db = app.rebuildDb(st);
-    app.CW.state = st;
+    const app = comEstado((st) => { st.shareLink = null; st.shareRequests = { incoming: [], outgoing: [] }; });
     const h = app.vCloud();
     assert.ok(h.includes('CW.ligacaoCriar()'));
     assert.ok(!h.includes('Pedidos de partilha'));
+  });
+});
+
+describe('o separador Colaboradores', () => {
+  test('vColaboradores traz os quatro blocos, por esta ordem', () => {
+    const app = comEstado();
+    const h = app.vColaboradores();
+    for (const t of ['sem quota-parte', 'Convidar colaborador', 'cw_inv_h_H1', 'Convites por usar', 'para a Ana',
+      'Colaboradores', 'Maria', 'Mudar cargo ou imóveis', 'Cargos', 'Gestor de visitas', 'CW.cargoModal()',
+      'Imóveis onde colaboras', 'Do Rui', "CW.sairDeImovel('C9')"]) {
+      assert.ok(h.includes(t), 'a vista tem: ' + t);
+    }
+    // o imóvel de colaboração não entra nas caixas do convite
+    assert.ok(!h.includes('cw_inv_h_H2'), 'não convido para o imóvel do Rui');
+    // convidar → colaboradores por imóvel → cargos → imóveis onde colaboro
+    const ordem = ['Uma ligação de uso único, com um cargo', 'Quem colabora em cada imóvel',
+      'O que cada colaborador pode fazer', 'Como colaborador, não como dono'].map((t) => h.indexOf(t));
+    assert.ok(ordem.every((i) => i > -1), 'os quatro subtítulos estão lá: ' + ordem.join(', '));
+    assert.deepEqual(ordem, [...ordem].sort((a, b) => a - b), 'e por esta ordem');
+  });
+
+  test('sem cargos, sem convites e sem colaboradores, o vazio convida a criar o primeiro cargo', () => {
+    const app = comEstado((st) => { st.roles = []; st.collaborators = []; st.invites = []; });
+    const h = app.vColaboradores();
+    assert.ok(h.includes('Ainda não tens colaboradores'));
+    assert.ok(h.includes('CW.cargoModal()'), 'com o botão de criar o cargo');
+    assert.ok(!h.includes('Convidar colaborador'), 'sem cargo não há convite a fazer');
+    // os imóveis onde sou eu o colaborador continuam à vista
+    assert.ok(h.includes('Imóveis onde colaboras') && h.includes('Do Rui'));
+  });
+
+  test('sem sessão iniciada, a vista pede a conta', () => {
+    const { app } = montar();
+    app.CW.user = null;
+    assert.match(app.vColaboradores(), /Iniciar sessão/);
   });
 });
 

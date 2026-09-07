@@ -37,7 +37,7 @@ var AVISOS = [
         itens: [
           'Podes dar acesso a um imóvel, ou a vários, a quem não é dono: um contabilista, quem faz as visitas, um familiar que só quer ver. Não têm quota-parte nem entram nas contas entre proprietários.',
           'Cada colaborador tem um cargo, e cada cargo diz o que se pode ver e adicionar — movimentos, planeados, visitas, contratos, inquilinos, hipotecas, documentos, avaliação. Crias os cargos que quiseres, ou começas por um dos três prontos: Gestor de visitas, Contabilista, Ver tudo.',
-          'O convite é uma ligação de uso único: escolhes o cargo e os imóveis, copias, envias. Quem a abrir entra (ou cria conta) e fica logo com o acesso. Tudo em Definições → Conta e partilha.',
+          'O convite é uma ligação de uso único: escolhes o cargo e os imóveis, copias, envias. Quem a abrir entra (ou cria conta) e fica logo com o acesso. Tudo no menu, em Pessoas → Colaboradores.',
           'Quem adiciona um registo pode editá-lo e apagá-lo; o que é teu, só tu e os comproprietários mexem. O sino diz quem fez o quê, e com que cargo.',
         ],
       },
@@ -45,7 +45,7 @@ var AVISOS = [
         titulo: 'Partilhar por ligação',
         afeta: ['partilha'],
         itens: [
-          'Em Conta e partilha há agora uma ligação permanente tua: quem a abrir escolhe que imóveis quer partilhar contigo e tu aceitas ou recusas cada pedido — sem escrever o id. Podes desativá-la quando quiseres.',
+          'Em Definições → Conta e partilha há agora uma ligação permanente tua: quem a abrir escolhe que imóveis quer partilhar contigo e tu aceitas ou recusas cada pedido — sem escrever o id. Podes desativá-la quando quiseres.',
         ],
       },
       {

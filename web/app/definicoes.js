@@ -390,7 +390,7 @@ function vFiltrosComuns(){
 // Devolve: o resumo em texto; '' se o filtro não fixar nada.
 function fcResumo(f){
   const p=[];
-  if(f.kind)p.push((KIND[f.kind]||{}).short||f.kind);
+  if(f.kind)p.push(nomeDoTipo(f.kind));
   if(f.prop){const pr=prop(f.prop);p.push(pr?pr.name:f.prop)}
   if(f.owner){const o=db.owners.find(x=>x.id===f.owner);p.push(o?o.name:f.owner)}
   if(f.cat)p.push(f.cat);

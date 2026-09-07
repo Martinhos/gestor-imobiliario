@@ -471,7 +471,7 @@ function modalConvite(token, prev) {
     '<div class="hint" style="font-size:14px"><b>' + esc(prev.ownerName || 'Alguém') + '</b> convida-te para colaborar como <b>' + esc(prev.roleName || 'colaborador') + '</b>.</div>' +
     (casas ? '<div><div class="flabel">Imóveis</div><div class="list" style="gap:7px">' + casas + '</div></div>' : '') +
     (pode.length ? '<div><div class="flabel">Vais poder</div><div class="hint">' + esc(pode.join(', ')) + '.</div></div>' : '') +
-    '<div class="hint">Não ficas comproprietário: as quotas e as contas entre donos não te incluem. Podes sair quando quiseres em Definições → Conta e partilha.</div>' +
+    '<div class="hint">Não ficas comproprietário: as quotas e as contas entre donos não te incluem. Podes sair quando quiseres no menu, em Pessoas → Colaboradores.</div>' +
     entrasComo() + '</div>',
     '<button class="btn" onclick="CW.chegadaDepois(\'convite\')">Agora não</button>' +
     '<button class="btn primary" onclick="CW.aceitarConvite(\'' + jsq(token) + '\')">Aceitar</button>');

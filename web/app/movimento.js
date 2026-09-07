@@ -64,7 +64,8 @@ function txModal(id,kind,propId,_x,ctId,preset){
     if(tForm._recId||tForm._recNew){   /* recorrência: só ela muda; não cria movimentos */
       const every=val('t_every')||'month',recEnd=val('t_recEnd')||'';let until=val('t_until')||'';if(until&&until<tForm.date)until='';
       if(tForm._recNew){db.recurring=db.recurring||[];db.recurring.push(normRec({name:tForm.label,every,next:tForm.date,until,end:recEnd,tx:txSnapshot(tForm)}))}
-      else{const r=(db.recurring||[]).find(x=>x.id===tForm._recId);if(r){r.tx=txSnapshot(tForm);r.name=tForm.label;r.every=every;r.next=tForm.date;r.until=until;r.end=recEnd}}
+      else{const r=(db.recurring||[]).find(x=>x.id===tForm._recId);if(r){r.tx=txSnapshot(tForm);r.name=tForm.label;r.every=every;r.next=tForm.date;r.until=until;r.end=recEnd;
+        if(r.tx.loanId)delete r.loanOff}}   /* escolheu a hipoteca à mão: a marca do delMort deixa de fazer sentido */
       save();closeModal();buildNav();render();toast(tForm._recNew?'Movimento recorrente criado.':'Movimento recorrente atualizado.');return;
     }
     if(tForm._tplId||tForm._tplNew){
@@ -604,6 +605,7 @@ function delTxTag(g){collectTx();tForm.tags=(tForm.tags||[]).filter(x=>x!==g);re
    Devolve: nada — acerta a distribuição no próprio t e abate o capital na db. */
 function applyLoan(t){
   const p=prop(t.propertyId),l=t.loanId?findLoan(p,t.loanId):null;if(!l)return;
+  if(t.loanOff)delete t.loanOff;   /* volta a ter hipoteca: a marca do delMort deixa de fazer sentido */
   /* amortização: capital + comissão da hipoteca; prestação: juros + selo + capital (sem comissão) */
   let int=Number(t.interest),st=Number(t.stamp),cap=Number(t.principal),fee=Number(t.fee||0);
   if(t.payType==='amortizacao'){
