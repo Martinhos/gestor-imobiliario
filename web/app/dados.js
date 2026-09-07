@@ -23,24 +23,22 @@ const r2=v=>Math.round(v*100)/100;
 /* comissão de amortização antecipada, conforme a fase da taxa (mista: fixa até
    fixedYears, variável depois). A fase vem de loanMes — a mesma conta que o
    plano de amortização usa, para a comissão e a taxa nunca discordarem.
-   Recebe: l — a hipoteca (usa type, amortFeeFix, amortFeeVar, start, fixedYears e as prestações registadas);
-   dateStr (opcional) — a data a avaliar, 'AAAA-MM-DD'; por omissão, hoje.
+   Recebe: l — a hipoteca (usa type, amortFeeFix, amortFeeVar, fixedYears e as prestações registadas).
    Devolve: a comissão em fração (ex.: 0.02 para 2%). */
-function amortFeeRate(l,dateStr){
+function amortFeeRate(l){
   const F=isFinite(Number(l.amortFeeFix))?Number(l.amortFeeFix)/100:0.02;
   const V=isFinite(Number(l.amortFeeVar))?Number(l.amortFeeVar)/100:0.005;
   if(l.type==='variavel')return V;
   if(l.type==='fixa')return F;
-  return loanMes(l,String(dateStr||today()))<Math.round((Number(l.fixedYears)||5)*12)?F:V;
+  return loanMes(l)<Math.round((Number(l.fixedYears)||5)*12)?F:V;
 }
-/* quanto ainda se pode amortizar nesta prestação: dívida atual + o capital do próprio registo (em edição);
-   uma prestação retroativa (retro) nunca abateu nada, por isso não devolve capital
+/* quanto ainda se pode amortizar nesta prestação: dívida atual + o capital do próprio registo (em edição)
    Recebe: t — o movimento em causa (pode ser null; só pesa se estiver em edição, t._edit); l — a hipoteca.
    Devolve: o valor amortizável em euros (número). */
 function loanAvail(t,l){
   let a=Number(l.outstanding)||0;
   if(t&&t._edit&&t.id){const old=db.transactions.find(x=>x.id===t.id);
-    if(old&&old.kind==='loan'&&old.loanId===l.id&&old.principal&&!old.retro)a=r2(a+old.principal)}
+    if(old&&old.kind==='loan'&&old.loanId===l.id&&old.principal)a=r2(a+old.principal)}
   return a;
 }
 const CATS0={

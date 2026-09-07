@@ -1,6 +1,7 @@
 // Hipotecas: cada prestação vai parar à hipoteca certa (recorrências, prefill,
-// preenchimento em bloco, apagar), e um crédito antigo introduzido com o
-// capital em dívida de hoje tem o prazo restante certo pela data de início.
+// preenchimento em bloco, apagar), e um crédito antigo — introduzido com o
+// capital em dívida da data de início — fica com o prazo restante certo
+// depois de inseridas as prestações desde então (só as registadas contam).
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { carregarApp, limpar } from './arnes.js';
@@ -28,30 +29,9 @@ const casa = (loans) => {
 };
 const A = () => app.findLoan(app.prop('p1'), 'a'), B = () => app.findLoan(app.prop('p1'), 'b');
 const recDe = (id) => app.db.recurring.find((r) => r.auto && r.tx.loanId === id);
-
-describe('a prestação de hoje', () => {
-  test('confirmar a prestação do próprio dia avança o mês do crédito', () => {
-    limpar(app);
-    const hoje = app.today(), dia = Math.min(28, Number(hoje.slice(8, 10)));
-    const start = (Number(hoje.slice(0, 4)) - 10) + hoje.slice(4, 7) + '-' + String(dia).padStart(2, '0');
-    const l = app.normLoan({ id: 'lh', outstanding: 76019.81, years: 30, type: 'fixa', rate: 3, start });
-    app.db.properties.push(app.normProp({ id: 'ph', name: 'Casa', loans: [l] }));
-    const antes = app.loanMes(l);
-    app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'lh', propertyId: 'ph', payType: 'prestacao', amount: 421.6, principal: 200, interest: 190, stamp: 7.6, date: hoje }));
-    assert.equal(app.loanMes(l), antes + 1, 'a de hoje, já registada, conta como vencida');
-    assert.equal(app.amort(l).n, 360 - antes - 1, 'o prazo restante desce um mês');
-  });
-
-  test('a prestação que vence hoje não entra na reconstrução', () => {
-    const hoje = app.today(), dia = Math.min(28, Number(hoje.slice(8, 10)));
-    const start = (Number(hoje.slice(0, 4)) - 2) + hoje.slice(4, 7) + '-' + String(dia).padStart(2, '0');
-    const l = app.normLoan({ id: 'lr', outstanding: 100000, years: 30, type: 'fixa', rate: 3, start });
-    const r = app.loanPrestacoesEmFalta(l, [], hoje);
-    assert.ok(r.length > 0);
-    assert.ok(r[r.length - 1].date < hoje, 'a última é anterior a hoje');
-    assert.equal(r.length, app.mesesDesdeInicio(l, hoje), 'tantas quantas as vencidas');
-  });
-});
+const somaCap = (r) => r.reduce((s, x) => s + x.principal, 0);
+// n prestações registadas numa hipoteca, sem mexer no capital (história que já lá estava)
+const registadas = (loanId, n) => { for (let i = 0; i < n; i++) app.db.transactions.push(app.normTx({ kind: 'loan', loanId, propertyId: 'p1', amount: 431.6, date: `${ANO - 1}-${mm((i % 12) + 1)}-01` })); };
 
 describe('recorrências das hipotecas', () => {
   test('cada hipoteca ganha a sua recorrência com o loanId certo', () => {
@@ -76,8 +56,9 @@ describe('recorrências das hipotecas', () => {
     assert.equal(app.loanPaidN(B()), 1); assert.equal(app.loanPaidN(A()), 0);
   });
 
-  test('a recorrência traz a prestação do prazo restante, não do prazo inteiro', () => {
+  test('a recorrência traz a prestação do prazo restante pelas registadas, não do prazo inteiro', () => {
     casa([loan('a', { outstanding: 76019.81, start: haAnos(10) })]);
+    registadas('a', 120);
     app.syncAllLoanRecs();
     perto(recDe('a').tx.amount, 421.60 + 76019.81 * 0.03 / 12 * 0.04, 0.06);
   });
@@ -104,10 +85,11 @@ describe('gravar o imóvel e a hipoteca', () => {
     assert.equal(app.db.properties.length, 1);
     assert.ok(recDe('a'), 'a recorrência nasce no mesmo save');
     assert.equal(perguntas.length, 1);
-    const retro = app.db.transactions.filter((t) => t.retro);
-    assert.equal(retro.length, 24);
-    retro.forEach((t) => assert.equal(t.loanId, 'a'));
-    perto(A().outstanding, 100000);
+    const ins = app.db.transactions.filter((t) => (t.tags || []).indexOf('Estimativa') > -1);
+    assert.equal(ins.length, 24);
+    ins.forEach((t) => { assert.equal(t.loanId, 'a'); assert.equal(t.retro, undefined); });
+    perto(A().outstanding, 100000 - somaCap(ins), 0.005);
+    assert.ok(A().outstanding > 95000 && A().outstanding < 96000, '24 meses de 360 abatem uns 4 %: ' + A().outstanding);
   });
 
   test('com o automático desligado não há recorrência', () => {
@@ -136,10 +118,11 @@ describe('gravar o imóvel e a hipoteca', () => {
     assert.ok(recDe('a') && recDe('b'), 'as duas têm recorrência');
     assert.equal(perguntas.length, 1, 'só pergunta pela hipoteca acabada de criar');
     assert.ok(/Banco b/.test(perguntas[0]), 'e diz qual é: ' + perguntas[0]);
-    const retro = app.db.transactions.filter((t) => t.retro);
-    assert.equal(retro.length, 12);
-    retro.forEach((t) => assert.equal(t.loanId, 'b'));
-    perto(A().outstanding, 100000); perto(B().outstanding, 40000);
+    const ins = app.db.transactions.filter((t) => (t.tags || []).indexOf('Estimativa') > -1);
+    assert.equal(ins.length, 12);
+    ins.forEach((t) => assert.equal(t.loanId, 'b'));
+    perto(A().outstanding, 100000, 0.001); perto(B().outstanding, 40000 - somaCap(ins), 0.005);
+    assert.ok(B().outstanding < 40000, 'abateu em B');
   });
 
   test('recuar o início de A no modal da hipoteca só pergunta por A', () => {
@@ -152,6 +135,7 @@ describe('gravar o imóvel e a hipoteca', () => {
     assert.equal(perguntas.length, 1);
     app.db.transactions.forEach((t) => assert.equal(t.loanId, 'a'));
     assert.equal(app.db.transactions.length, 24);
+    assert.ok(A().outstanding < 100000, 'abateu em A'); perto(B().outstanding, 100000, 0.001);
   });
 });
 
@@ -219,7 +203,7 @@ describe('datas em falta de um plano', () => {
     assert.equal(d.length, MES + 1);
   });
 
-  test('numa hipoteca são as prestações reconstruídas: desde o início, até ao mês do primeiro registo', () => {
+  test('numa hipoteca são as prestações do plano: desde o início, até ao mês do primeiro registo', () => {
     casa([loan('b', { start: `${ANO - 1}-09-05` })]);
     app.db.recurring.push(app.normRec({ id: 'r', auto: true, name: 'Prestação', every: 'month', next: hoje, tx: { kind: 'loan', amount: 400, loanId: 'b', propertyId: 'p1' } }));
     app.db.transactions.push(app.normTx({ kind: 'loan', amount: 400, loanId: 'b', propertyId: 'p1', date: `${ANO}-01-07`, principal: 150 }));
@@ -230,7 +214,7 @@ describe('datas em falta de um plano', () => {
 });
 
 describe('preencher em bloco e apagar', () => {
-  test('o preenchimento manual regista com o loanId do plano, retroativo, sem abater', () => {
+  test('o preenchimento manual regista com o loanId do plano e abate só nessa hipoteca', () => {
     casa([loan('a'), loan('b', { start: haAnos(1), outstanding: 60000 })]);
     app.syncAllLoanRecs();
     app.comDesfazer = () => {};
@@ -239,53 +223,50 @@ describe('preencher em bloco e apagar', () => {
     app.inserirPrestacoesEmFalta(app.prop('p1'), B(), lista);
     const txs = app.db.transactions;
     assert.equal(txs.length, 12);
-    txs.forEach((t) => { assert.equal(t.loanId, 'b'); assert.equal(t.retro, true); assert.ok(t.tags.indexOf('Estimativa') > -1); assert.ok(t.date < r.next); });
-    perto(A().outstanding, 100000); perto(B().outstanding, 60000);
+    txs.forEach((t) => { assert.equal(t.loanId, 'b'); assert.equal(t.retro, undefined); assert.ok(t.tags.indexOf('Estimativa') > -1); assert.ok(t.date < r.next); });
+    perto(A().outstanding, 100000, 0.001); perto(B().outstanding, 60000 - somaCap(lista), 0.005);
+    perto(B().outstanding, lista[11].bal, 0.005);
     assert.equal(app.loanPaidN(B()), 12); assert.equal(app.loanPaidN(A()), 0);
     assert.equal(app.planoPrestacoesEmFalta(r).length, 0, 'já não falta nada');
+    perto(recDe('b').tx.amount, Math.round(app.loanCalc(B()).total * 100) / 100, 0.005, 'a recorrência acompanha');
   });
 
-  test('apagar um pagamento repõe o capital na hipoteca certa e nunca numa retroativa', () => {
-    casa([loan('a'), loan('b', { outstanding: 60000 })]);
+  test('apagar um pagamento repõe o capital na hipoteca certa — também numa inserida em bloco', () => {
+    casa([loan('a'), loan('b', { start: haAnos(1), outstanding: 60000 })]);
     app.syncAllLoanRecs();
     app.closeAllModals = () => {}; app.comDesfazer = () => {};
     const t = app.recTx(recDe('b')); app.applyLoan(t); app.db.transactions.push(t);
     const dep = B().outstanding; assert.ok(dep < 60000);
     app.delTx(t.id);
     perto(B().outstanding, 60000); perto(A().outstanding, 100000);
-    const r = app.normTx({ kind: 'loan', loanId: 'b', propertyId: 'p1', amount: 400, principal: 150, interest: 240.38, stamp: 9.62, date: `${ANO - 1}-01-05`, retro: true });
-    app.db.transactions.push(r);
-    app.delTx(r.id);
-    perto(B().outstanding, 60000, 0.001);
+    const lista = app.planoPrestacoesEmFalta(recDe('b'));
+    app.inserirPrestacoesEmFalta(app.prop('p1'), B(), lista);
+    const dep2 = B().outstanding, ins = app.db.transactions.filter((x) => x.loanId === 'b')[0];
+    app.delTx(ins.id);
+    perto(B().outstanding, dep2 + ins.principal, 0.005); perto(A().outstanding, 100000, 0.001);
   });
 
-  test('editar: uma retroativa não devolve capital ao amortizável; uma normal devolve', () => {
+  test('editar: o registo em edição devolve o seu capital ao amortizável, seja qual for a origem', () => {
     casa([loan('b', { outstanding: 60000 })]);
     const n = app.normTx({ id: 'n', kind: 'loan', loanId: 'b', propertyId: 'p1', amount: 400, principal: 150, date: hoje });
-    const r = app.normTx({ id: 'r', kind: 'loan', loanId: 'b', propertyId: 'p1', amount: 400, principal: 150, date: hoje, retro: true });
-    app.db.transactions.push(n, r);
+    const e = app.normTx({ id: 'e', kind: 'loan', loanId: 'b', propertyId: 'p1', amount: 400, principal: 150, date: hoje, tags: ['Estimativa'] });
+    app.db.transactions.push(n, e);
     perto(app.loanAvail(Object.assign({}, n, { _edit: true }), B()), 60150);
-    perto(app.loanAvail(Object.assign({}, r, { _edit: true }), B()), 60000);
+    perto(app.loanAvail(Object.assign({}, e, { _edit: true }), B()), 60150);
+    perto(app.loanAvail(Object.assign({}, n, { _edit: false }), B()), 60000);
   });
 });
 
 describe('prazo restante de um crédito antigo', () => {
-  test('mesesDesdeInicio conta as prestações vencidas, no dia do início limitado a 28', () => {
-    const m = (start, data) => app.mesesDesdeInicio({ start }, data);
-    assert.equal(m('2016-09-06', '2026-09-06'), 120, 'a de hoje ainda não venceu');
-    assert.equal(m('2016-09-01', '2026-09-06'), 121, 'a deste mês já venceu');
-    assert.equal(m('2016-09-30', '2026-09-06'), 120, 'dia 30 cobra-se no 28');
-    assert.equal(m('2016-09-30', '2026-09-29'), 121);
-    assert.equal(m('', '2026-09-06'), 0);
-    assert.equal(m('2027-01-10', '2026-09-06'), 0, 'início no futuro');
-    assert.equal(m('2026-09-20', '2026-09-06'), 0);
-    assert.equal(m('2026-09-01', '2026-09-06'), 1);
-  });
-
-  test('100 000 € a 3 % por 30 anos há 10 anos: 240 meses e 421,60 € com 76 019,81 € em dívida', () => {
-    const l = loan('a', { outstanding: 76019.81, start: haAnos(10) });
-    assert.equal(app.mesesDesdeInicio(l), 120);
-    const a = app.amort(l), c = app.loanCalc(l);
+  test('100 000 € a 3 % por 30 anos há 10 anos: só com as prestações inseridas dá 240 meses e 421,60 €', () => {
+    casa([loan('a', { start: haAnos(10) })]);
+    app.comDesfazer = () => {};
+    assert.equal(app.amort(A()).n, 360, 'sem nada registado, a app só sabe o prazo inteiro');
+    const lista = app.loanPrestacoesEmFalta(A(), app.db.transactions, hoje);
+    assert.equal(lista.length, 120);
+    app.inserirPrestacoesEmFalta(app.prop('p1'), A(), lista);
+    perto(A().outstanding, 76019.81, 0.05);
+    const a = app.amort(A()), c = app.loanCalc(A());
     assert.equal(a.n, 240); assert.equal(c.n, 240);
     perto(c.base, 421.60, 0.05);
     assert.ok(Math.abs(a.totInt - 25165) < 60, 'juros até ao fim ≈ 25 165 €: ' + a.totInt);
@@ -293,38 +274,45 @@ describe('prazo restante de um crédito antigo', () => {
     assert.equal(a.esgotado, false);
   });
 
-  test('as registadas só contam quando são mais do que as vencidas pelo início', () => {
+  test('só as registadas contam para o prazo; a data de início, por si, não', () => {
     casa([loan('a', { start: haAnos(1) })]);
-    for (let i = 0; i < 6; i++) app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'a', amount: 431.6, date: `${ANO}-0${i + 1}-01` }));
-    assert.equal(app.loanMes(A()), 12);
-    for (let i = 0; i < 10; i++) app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'a', amount: 431.6, date: `${ANO - 1}-0${(i % 9) + 1}-01` }));
+    assert.equal(app.loanMes(A()), 0); assert.equal(app.amort(A()).n, 360);
+    registadas('a', 6);
+    assert.equal(app.loanMes(A()), 6);
+    registadas('a', 10);
     assert.equal(app.loanMes(A()), 16);
     assert.equal(app.amort(A()).n, 344);
+    app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'a', propertyId: 'p1', payType: 'amortizacao', amount: 5000, date: hoje }));
+    assert.equal(app.loanMes(A()), 16, 'amortizações antecipadas não contam');
   });
 
-  test('a fase da taxa e a comissão da mista seguem o início', () => {
-    const l = loan('a', { type: 'mista', rate: 2, fixedYears: 5, euribor: 3, spread: 1, start: haAnos(6), amortFeeFix: 2, amortFeeVar: 0.5 });
-    assert.equal(app.loanCalc(l).rate, 4);
-    assert.equal(app.amort(l).rows[0].rate, 4);
-    perto(app.amortFeeRate(l), 0.005);
-    perto(app.amortFeeRate(loan('x', Object.assign({}, l, { start: haAnos(2) }))), 0.02);
+  test('a fase da taxa e a comissão da mista seguem as prestações registadas', () => {
+    casa([loan('a', { type: 'mista', rate: 2, fixedYears: 5, euribor: 3, spread: 1, start: haAnos(6), amortFeeFix: 2, amortFeeVar: 0.5 })]);
+    assert.equal(app.loanCalc(A()).rate, 2, 'sem registadas está na fase fixa, começou quando começou');
+    perto(app.amortFeeRate(A()), 0.02);
+    registadas('a', 60);
+    assert.equal(app.loanCalc(A()).rate, 4);
+    assert.equal(app.amort(A()).rows[0].rate, 4);
+    perto(app.amortFeeRate(A()), 0.005);
   });
 
-  test('prazo esgotado pelas pagas com dívida por pagar: avisa em vez de fingir', () => {
-    const l = loan('a', { years: 5, start: haAnos(7) });
-    const a = app.amort(l);
+  test('prazo esgotado pelas registadas com dívida por pagar: avisa em vez de fingir', () => {
+    casa([loan('a', { years: 5, start: haAnos(7) }), loan('b', { start: haAnos(2) })]);
+    registadas('a', 60); registadas('b', 24);
+    const a = app.amort(A());
     assert.equal(a.n, 1); assert.equal(a.esgotado, true);
-    assert.ok(/Prazo esgotado/.test(app.loanBox(l)));
-    assert.ok(!/Prazo esgotado/.test(app.loanBox(loan('b', { start: haAnos(2) }))));
-    assert.ok(/prestações por pagar/.test(app.loanBox(loan('b', { start: haAnos(2) }))));
+    assert.ok(/Prazo esgotado/.test(app.loanBox(A())));
+    assert.ok(!/Prazo esgotado/.test(app.loanBox(B())));
+    assert.ok(/336 prestações por pagar/.test(app.loanBox(B())));
   });
 
-  test('a caixa da mista diz quando muda a prestação, descontando o que já passou', () => {
-    const l = loan('a', { type: 'mista', rate: 2, fixedYears: 5, euribor: 3, spread: 1, start: haAnos(2) });
-    const h = app.loanBox(l);
-    const t0 = Number(l.start.slice(0, 4)) * 12 + Number(l.start.slice(5, 7)) - 1 + 60;
+  test('a caixa da mista diz quando muda a prestação, descontando as registadas', () => {
+    casa([loan('a', { type: 'mista', rate: 2, fixedYears: 5, euribor: 3, spread: 1, start: haAnos(2) })]);
+    registadas('a', 24);
+    const h = app.loanBox(A());
+    const t0 = ANO * 12 + MES - 1 + 36;   // a fase muda daqui a 60 − 24 meses
     assert.ok(h.indexOf('a partir de ' + app.MES[t0 % 12] + ' ' + Math.floor(t0 / 12)) > -1, h);
-    const pos = app.loanBox(loan('b', { type: 'mista', rate: 2, fixedYears: 5, euribor: 3, spread: 1, start: haAnos(6) }));
-    assert.ok(!/Prestação a partir/.test(pos), 'já na fase variável não há linha');
+    registadas('a', 48);
+    assert.ok(!/Prestação a partir/.test(app.loanBox(A())), 'já na fase variável não há linha');
   });
 });

@@ -18,53 +18,28 @@ function loanPaidN(l){
   if(!l||!l.id||!db||!db.transactions)return 0;
   return db.transactions.filter(t=>t.kind==='loan'&&t.loanId===l.id&&t.payType!=='amortizacao').length;
 }
-/* Prestações vencidas desde o início do crédito até uma data: uma por mês, no
-   dia do início (limitado a 28, como a recorrência), contando só as que já
-   passaram — a que vence nesse dia ainda está por pagar. É o que faz um
-   crédito antigo, introduzido com o capital em dívida de hoje e o prazo
-   original, ter o prazo restante certo sem os movimentos de antes da app.
-   Recebe: l — o crédito (usa start); data (opcional) — AAAA-MM-DD; por omissão hoje.
-   Devolve: número inteiro ≥ 0; 0 sem início válido ou com início no futuro. */
-function mesesDesdeInicio(l,data){
-  const s=String((l&&l.start)||'');
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return 0;
-  const hoje=String(data||today());
-  const day=Math.max(1,Math.min(28,Number(s.slice(8,10))||1));
-  const Y=Number(hoje.slice(0,4)),M=Number(hoje.slice(5,7))-1;
-  let n=(Y-Number(s.slice(0,4)))*12+(M-(Number(s.slice(5,7))-1));
-  if(dayInMonth(Y,M,day)<hoje)n++;
-  return Math.max(0,n);
-}
-/* O mês do crédito (a contar do 0) em que se está numa data: as prestações
-   vencidas desde o início ou, se forem mais, as registadas nos movimentos
-   (sem início, só estas). É a única conta que alimenta o prazo restante, a
-   fase da taxa nas mistas e a comissão de amortização — para não discordarem.
+/* O mês do crédito (a contar do 0) em que se está: as prestações registadas
+   nos movimentos — a app só sabe o que está registado. É a única conta que
+   alimenta o prazo restante, a fase da taxa nas mistas e a comissão de
+   amortização — para não discordarem.
    Recebe: l — o crédito (pode trazer _paidOfs, um acerto ao número de
-   registadas, como −1 ao editar uma prestação); data (opcional) — AAAA-MM-DD;
-   por omissão hoje.
+   registadas, como −1 ao editar uma prestação).
    Devolve: número inteiro ≥ 0. */
-function loanMes(l,data){
+function loanMes(l){
   const ofs=Number((l||{})._paidOfs)||0;
-  let vencidas=mesesDesdeInicio(l,data);
-  /* a prestação deste mês já registada conta como vencida mesmo antes de o dia passar:
-     confirmar a de hoje avança o mês do crédito — senão o capital abatia e o prazo não */
-  const s=String((l&&l.start)||'');
-  if(l&&l.id&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&db&&db.transactions){
-    const hoje=String(data||today()),mes=hoje.slice(0,7);
-    const day=Math.max(1,Math.min(28,Number(s.slice(8,10))||1));
-    const venc=dayInMonth(Number(hoje.slice(0,4)),Number(hoje.slice(5,7))-1,day);
-    if(venc>=hoje&&venc>=s&&db.transactions.some(t=>t.kind==='loan'&&t.loanId===l.id&&t.payType!=='amortizacao'&&String(t.date||'').slice(0,7)===mes))
-      vencidas=Math.max(vencidas,mesesDesdeInicio(l,venc)+1);
-  }
-  return Math.max(0,loanPaidN(l)+ofs,vencidas);
+  return Math.max(0,loanPaidN(l)+ofs);
 }
 /* Prestações que faltam entre o início do crédito e o primeiro movimento já
    registado nele (ou hoje): uma por mês, no dia do início (máx. 28), com a
-   distribuição do plano reconstruída para trás — o saldo ao início é o que,
-   amortizado mês a mês, bate no capital em dívida de hoje mais o capital que
-   os movimentos registados já lhe tiraram. O plano é linear no saldo inicial,
-   por isso simula-se 1 € e escala-se; o último mês absorve os arredondamentos
-   para Σcapital + alvo = saldo inicial ao cêntimo. Só calcula; não mexe em nada.
+   distribuição do plano simulada para a frente a partir do capital em dívida
+   gravado — que é o da data de início: cada uma abate o seu capital, como se
+   fosse confirmada uma a uma. A prestação é a anuidade sobre o prazo que
+   resta (o prazo menos as registadas e as já simuladas) e a taxa a da fase
+   em que se vai (as registadas contam antes destas). O saldo corre exato e o
+   capital de cada linha é a diferença dos saldos arredondados, por isso
+   Σcapital = dívida antes − saldo final, ao cêntimo. Pára em `ate`, no mês
+   da primeira registada, quando o prazo acaba ou quando o saldo chega a 0
+   (crédito liquidado: a última linha leva o resto). Só calcula; não mexe em nada.
    Recebe: l — o crédito (id, start, outstanding, years, taxa…); txs — onde
    procurar os movimentos já registados (db.transactions); hoje — AAAA-MM-DD;
    ate (opcional) — data exclusiva a partir da qual a recorrência automática
@@ -76,8 +51,8 @@ function loanPrestacoesEmFalta(l,txs,hoje,ate){
   l=normLoan(l);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(l.start||'')||!(Number(l.outstanding)>0)||!(Number(l.years)>0))return [];
   const mine=(txs||[]).filter(t=>t.kind==='loan'&&t.loanId===l.id);
-  const N=Math.max(1,Math.round(Number(l.years)*12));
-  const cabem=N-1-mine.filter(t=>t.payType!=='amortizacao').length;   /* fica sempre um mês por pagar: há dívida hoje */
+  const N=Math.max(1,Math.round(Number(l.years)*12)),pagas=mine.filter(t=>t.payType!=='amortizacao').length;
+  const cabem=N-pagas;
   if(cabem<=0)return [];
   const day=Math.max(1,Math.min(28,Number(l.start.slice(8,10))||1));
   const primeira=mine.map(t=>t.date||'').filter(Boolean).sort()[0]||'',limMes=primeira?primeira.slice(0,7):'';
@@ -85,38 +60,31 @@ function loanPrestacoesEmFalta(l,txs,hoje,ate){
   const datas=[];
   for(;;){
     const d=dayInMonth(y,m,day);
-    /* a que vence hoje ainda está por pagar (como em mesesDesdeInicio): nunca entra aqui */
+    /* a que vence hoje ainda está por pagar: nunca entra aqui */
     if(d>=hoje||(ate&&d>=ate)||(limMes&&d.slice(0,7)>=limMes)||datas.length>=cabem)break;
     datas.push(d);m++;if(m>11){m=0;y++}
   }
-  const K=datas.length;if(!K)return [];
-  const alvo=r2(Number(l.outstanding)+sum(mine.map(t=>Number(t.principal)||0)));
-  const simula=b0=>{let bal=b0,pay=null,last=null;const rows=[];
-    for(let k=0;k<K;k++){const r=rateAt(l,k),i=r/100/12;
-      if(pay===null||r!==last){const rem=N-k;pay=i>0?bal*i/(1-Math.pow(1+i,-rem)):bal/rem;last=r}
-      const int=bal*i,cap=pay-int;bal-=cap;rows.push({rate:r,int,cap})}
-    return rows};
-  const fbal=1-sum(simula(1).map(x=>x.cap));   /* saldo que fica de cada 1 € inicial */
-  if(!(fbal>0))return [];
-  const b0=alvo/fbal,rows=simula(b0),sr=l.stampTax===false?0:stampPct();
-  const caps=rows.map(r=>r2(r.cap));
-  caps[K-1]=r2(b0-alvo-sum(caps.slice(0,K-1)));   /* o último absorve os arredondamentos */
-  const b0r=r2(alvo+sum(caps));   /* saldo inicial ao cêntimo: Σcapital + alvo */
-  let acum=0;
-  return rows.map((r,k)=>{
-    const interest=r2(r.int),stamp=r2(interest*sr),principal=caps[k];
-    acum=r2(acum+principal);
-    return {date:datas[k],m:k+1,rate:r.rate,interest,stamp,principal,amount:r2(interest+stamp+principal),bal:r2(b0r-acum)};
-  });
+  const sr=l.stampTax===false?0:stampPct();
+  let bal=Number(l.outstanding),balR=r2(bal),pay=null,last=null;
+  const out=[];
+  for(let k=0;k<datas.length&&balR>0;k++){
+    const r=rateAt(l,pagas+k),i=r/100/12;
+    if(pay===null||r!==last){const rem=N-pagas-k;pay=i>0?bal*i/(1-Math.pow(1+i,-rem)):bal/rem;last=r}
+    const int=bal*i,cap=Math.min(bal,pay-int);
+    bal=Math.max(0,bal-cap);
+    const b2=r2(bal),interest=r2(int),stamp=r2(interest*sr),principal=r2(balR-b2);
+    balR=b2;
+    out.push({date:datas[k],m:k+1,rate:r,interest,stamp,principal,amount:r2(interest+stamp+principal),bal:b2});
+  }
+  return out;
 }
 /* A tabela de amortização do que falta pagar, mês a mês: devolve
    {rows,totInt,totStamp,n,esgotado}, cada linha com taxa, prestação, juro,
    selo, capital e saldo. Desconta as prestações já pagas (loanMes: as
-   vencidas desde o início ou as registadas — encurtam o prazo e avançam a
-   fase da taxa nas mistas) e recalcula a prestação sempre que a taxa muda.
-   Com maxMonths pára cedo — os totais ficam só até aí. Se as pagas esgotam o
-   prazo e ainda há dívida, fica um mês (n=1) e esgotado avisa: o prazo ou o
-   início estão errados.
+   registadas — encurtam o prazo e avançam a fase da taxa nas mistas) e
+   recalcula a prestação sempre que a taxa muda. Com maxMonths pára cedo —
+   os totais ficam só até aí. Se as pagas esgotam o prazo e ainda há dívida,
+   fica um mês (n=1) e esgotado avisa: o prazo ou as registadas estão errados.
    Recebe: l — o crédito; maxMonths (opcional) — número máximo de linhas a calcular.
    Devolve: {rows,totInt,totStamp,n,esgotado} — linhas {m,rate,pay,int,st,cap,bal}
    (m a começar em 1, a taxa em %, o resto em euros), os totais de juro e selo

@@ -10,7 +10,7 @@ function seed(){
   const q1=r('Quarto 1'),q2=r('Quarto 2'),q3=r('Quarto 3'),q4=r('Quarto 4');
   const l1=normLoan({name:'Aquisição',bank:'Millennium',outstanding:152000,years:28,type:'variavel',euribor:2.1,spread:1.0,index:'6m',start:`${YEAR-6}-05-01`,taeg:3.4,mtic:238500});
   const l1b=normLoan({name:'Obras',bank:'Millennium',outstanding:18000,years:8,type:'fixa',rate:4.2,start:`${YEAR-2}-03-01`,taeg:4.6,mtic:22400});
-  const l3=normLoan({name:'Aquisição',bank:'CGD',outstanding:98000,years:25,type:'fixa',rate:3.1,start:`${YEAR-9}-01-15`});
+  const l3=normLoan({name:'Aquisição',bank:'CGD',outstanding:98000,years:15,type:'fixa',rate:3.1,start:`${YEAR-9}-01-15`});
   db.properties=[
     normProp({id:p1,name:'T2 Lisboa',address:'Campo de Ourique',use:'investimento',rentalMode:'inteiro',
       value:280000,purchase:225000,ownerIds:[o1.id,o2.id],ownerShares:{[o1.id]:60,[o2.id]:40},loans:[l1,l1b],
@@ -46,12 +46,12 @@ function seed(){
     db.transactions.push(
       normTx({kind:'income',label:'Renda T2 Lisboa',amount:1250,date:d(8),propertyId:p1,contractId:c1.id,paidBy:o1.id,category:'Rendas',sub:'Renda mensal'}),
       normTx({kind:'expense',label:'Quota do condomínio',amount:55,date:d(8),propertyId:p1,category:'Condomínio',sub:'Quota mensal',tags:['Recorrente'],paidBy:m%2?o1.id:o2.id}),
-      /* retro: o capital em dívida do exemplo já é o de hoje — estas prestações não o abatem nem o repõem */
-      normTx({kind:'loan',label:'Prestação aquisição · T2 Lisboa',amount:Math.round(k1.total*100)/100,date:d(10),propertyId:p1,loanId:l1.id,retro:true,
+      /* o capital em dívida do exemplo é o de hoje: estas prestações são história, semeadas sem abater */
+      normTx({kind:'loan',label:'Prestação aquisição · T2 Lisboa',amount:Math.round(k1.total*100)/100,date:d(10),propertyId:p1,loanId:l1.id,
         interest:Math.round(k1.interest*100)/100,stamp:Math.round(k1.stamp*100)/100,principal:Math.round(k1.principal*100)/100,paidBy:o1.id}),
-      normTx({kind:'loan',label:'Prestação obras · T2 Lisboa',amount:Math.round(k1b.total*100)/100,date:d(10),propertyId:p1,loanId:l1b.id,paidBy:o2.id,retro:true,
+      normTx({kind:'loan',label:'Prestação obras · T2 Lisboa',amount:Math.round(k1b.total*100)/100,date:d(10),propertyId:p1,loanId:l1b.id,paidBy:o2.id,
         interest:Math.round(k1b.interest*100)/100,stamp:Math.round(k1b.stamp*100)/100,principal:Math.round(k1b.principal*100)/100}),
-      normTx({kind:'loan',label:'Prestação casa de família',amount:Math.round(k3.total*100)/100,date:d(10),propertyId:p3,loanId:l3.id,retro:true,
+      normTx({kind:'loan',label:'Prestação casa de família',amount:Math.round(k3.total*100)/100,date:d(10),propertyId:p3,loanId:l3.id,
         interest:Math.round(k3.interest*100)/100,stamp:Math.round(k3.stamp*100)/100,principal:Math.round(k3.principal*100)/100})
     );
     if(m>=7)db.transactions.push(normTx({kind:'income',label:'Renda Quarto 3',amount:430,date:d(1),propertyId:p2,contractId:c4.id}));

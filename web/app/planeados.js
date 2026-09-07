@@ -136,28 +136,33 @@ function perguntarPrestacoesEmFalta(p,antes){
     return !antes[l.id]||l.start<antes[l.id];   /* início preenchido agora, ou recuou */
   }).map(l=>{const r=loanRecOf(l);return {l,lista:loanPrestacoesEmFalta(l,db.transactions,hoje,r?r.next:'')}}).filter(x=>x.lista.length);
   const seguinte=()=>{const x=fila.shift();if(!x)return;
-    const {l,lista}=x,n=lista.length,de=lista[0].date,a=lista[n-1].date;
-    confirmModal('Prestações em falta',`“${esc(loanName(l))}” começou a ${esc(de)} e não tem ${n===1?'a prestação de '+esc(mesPt(de))+' registada':n+' prestações registadas, de '+esc(mesPt(de))+' a '+esc(mesPt(a))} (${euro2(sum(lista.map(x2=>x2.amount)))} no total). Inserir agora? Ficam com os juros, o selo e o capital do plano e <b>não alteram o capital em dívida</b> — esse é o de hoje. Os anos anteriores passam a incluí-las.`,
+    const {l,lista}=x,n=lista.length,de=lista[0].date,a=lista[n-1].date,fim=lista[n-1].bal;
+    confirmModal('Prestações em falta',`“${esc(loanName(l))}” começou a ${esc(mesPt(de))} e não tem ${n===1?'a prestação de '+esc(mesPt(de))+' registada':n+' prestações registadas, de '+esc(mesPt(de))+' a '+esc(mesPt(a))} (${euro2(sum(lista.map(x2=>x2.amount)))} no total). Inserir agora? Ficam com os juros, o selo e o capital do plano, e o capital em dívida desce de <b>${euro2(l.outstanding)}</b> para <b>${euro2(fim)}</b>${fim>0?'':' — o crédito fica liquidado'}.`,
       ()=>{inserirPrestacoesEmFalta(p,l,lista);seguinte()});
   };
   seguinte();
 }
-/* Regista as prestações calculadas como movimentos retroativos (retro:true —
-   não abatem capital, nem ao apagar o repõem), com a cara da recorrência
-   automática e a etiqueta "Estimativa"; ressincroniza a recorrência (o prazo
-   restante encurtou: a prestação muda), grava, redesenha e dá Anular em bloco.
+/* Regista as prestações calculadas como movimentos normais, com a cara da
+   recorrência automática e a etiqueta "Estimativa", e abate-lhes o capital:
+   o capital em dívida passa a ser o saldo depois da última, como se fossem
+   confirmadas uma a uma. Ressincroniza a recorrência (o prazo restante
+   encurtou: a prestação muda; com o crédito liquidado, desaparece), grava,
+   redesenha e dá Anular em bloco — que tira os movimentos e repõe o capital.
    Recebe: p — o imóvel (objeto de db.properties); l — a hipoteca (objeto de
    p.loans); lista — as prestações de loanPrestacoesEmFalta.
-   Devolve: nada — mexe em db.transactions e db.recurring, grava e redesenha. */
+   Devolve: nada — mexe em db.transactions, na hipoteca e em db.recurring, grava e redesenha. */
 function inserirPrestacoesEmFalta(p,l,lista){
+  if(!lista||!lista.length)return;
   const base=loanRecTx(p,l),os=ownersOfProp(p),paidBy=os.length===1?os[0]:null;
   const tags=db.settings.tags||(db.settings.tags=[]);if(tags.indexOf('Estimativa')<0)tags.push('Estimativa');
-  const novos=lista.map(x=>normTx(Object.assign({},base,{date:x.date,amount:x.amount,interest:x.interest,stamp:x.stamp,principal:x.principal,fee:0,paidBy,tags:['Estimativa'],retro:true})));
+  const novos=lista.map(x=>normTx(Object.assign({},base,{date:x.date,amount:x.amount,interest:x.interest,stamp:x.stamp,principal:x.principal,fee:0,paidBy,tags:['Estimativa']})));
+  const antes=l.outstanding;
   db.transactions=db.transactions.concat(novos);
+  l.outstanding=r2(lista[lista.length-1].bal);
   syncLoanRec(p,l);save();buildNav();render();
   const ids=novos.map(t=>t.id);
   comDesfazer(novos.length===1?'Prestação inserida.':novos.length+' prestações inseridas.',()=>{
-    db.transactions=db.transactions.filter(t=>ids.indexOf(t.id)<0);syncLoanRec(p,l);
+    db.transactions=db.transactions.filter(t=>ids.indexOf(t.id)<0);l.outstanding=antes;syncLoanRec(p,l);
   });
 }
 /* ---- períodos em falta de um plano: a origem, o que já está, as datas ---- */
@@ -185,9 +190,9 @@ function jaRegistado(r,d){
     return t.propertyId===r.tx.propertyId&&t.label===r.tx.label;
   });
 }
-/* As prestações que faltam ao plano de uma hipoteca: a lista reconstruída
+/* As prestações que faltam ao plano de uma hipoteca: a lista simulada
    (loanPrestacoesEmFalta) do início da hipoteca até à primeira registada,
-   parando onde a recorrência começa (r.next). Nunca abatem capital.
+   parando onde a recorrência começa (r.next). Cada uma abate o seu capital.
    Recebe: r — o plano recorrente com tx.loanId.
    Devolve: a lista de loanPrestacoesEmFalta; [] sem hipoteca ou sem nada a inserir. */
 function planoPrestacoesEmFalta(r){
@@ -197,7 +202,7 @@ function planoPrestacoesEmFalta(r){
 }
 /* As datas do plano que já passaram sem movimento registado, da origem
    (início do contrato ou da hipoteca) até hoje, respeitando o fim do plano.
-   Numa hipoteca são as datas da lista reconstruída (planoPrestacoesEmFalta);
+   Numa hipoteca são as datas da lista simulada (planoPrestacoesEmFalta);
    nas outras, período a período a partir da origem, saltando os meses em que
    já há movimento. O guarda de 600 períodos evita ciclos com datas estragadas.
    Recebe: r — o plano recorrente a analisar.

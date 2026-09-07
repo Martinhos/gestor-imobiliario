@@ -34,8 +34,8 @@ var AVISOS = [
         titulo: 'Créditos antigos: as prestações que faltam, na hipoteca certa',
         afeta: ['creditos', 'movimentos'],
         itens: [
-          'Ao criar uma hipoteca com início no passado, ou ao recuar o início de uma que já existe, a app pergunta se queres inserir as prestações em falta desde essa data. Ficam com os juros, o selo e o capital do plano, reconstruído para trás, e não mexem no capital em dívida — esse é o de hoje.',
-          'O prazo restante e a fase da taxa passam a contar com a data de início: um crédito de 30 anos contraído há 10 tem 20 por pagar, mesmo sem as prestações antigas registadas. A prestação sugerida e a recorrência acompanham.',
+          'Ao criar uma hipoteca com início no passado, ou ao recuar o início de uma que já existe, a app pergunta se queres inserir as prestações em falta desde essa data. Ficam com os juros, o selo e o capital do plano, e o capital em dívida desce com elas, como se as confirmasses uma a uma.',
+          'O capital em dívida é o da data de início: com as prestações registadas até hoje, o prazo restante e a prestação ficam certos.',
           'Com duas hipotecas no mesmo imóvel, o preenchimento das prestações antigas ia às vezes parar à hipoteca errada. Agora identifica a hipoteca pelo nome, banco e início, e um pagamento de crédito novo pede-te que escolhas a hipoteca em vez de assumir a primeira.',
         ],
       },

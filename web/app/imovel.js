@@ -113,6 +113,7 @@ function loanSect(l,i){
       <label>Capital em dívida (€)<input id="l_out_${l.id}" type="text" inputmode="decimal" value="${l.outstanding||''}" placeholder="150000" oninput="liveLoan('${l.id}')"></label>
       <label>Prazo (anos)<input id="l_years_${l.id}" type="text" inputmode="numeric" value="${l.years||''}" placeholder="30" oninput="liveLoan('${l.id}')"></label>
       <label>Início<input id="l_start_${l.id}" type="date" value="${l.start||''}"></label></div>
+    <div class="hint" style="margin-top:-4px">À data de início. Se o crédito já vem de trás, ao guardar a app propõe registar as prestações desde então — e o capital desce com elas.</div>
     <div><div class="flabel">Tipo de taxa</div>
       <div class="seg c3">${[['fixa','lock','Fixa','não muda'],['mista','split','Mista','fixa e depois variável'],['variavel','wave','Variável','Euribor + spread']]
         .map(([k,ico,lb,sb])=>`<button type="button" class="opt ${l.type===k?'on':''}" onclick="setLType('${l.id}','${k}')"><span class="ic">${ic(ico,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>
@@ -305,9 +306,9 @@ function liveLoanAll(){collectProp();(pForm.loans||[]).forEach(l=>{
   const b=document.getElementById('loanBox_'+l.id);if(b)b.innerHTML=loanBox(l)})}
 /* HTML da caixa de simulação de uma hipoteca: prestação mensal decomposta em
    capital, juros e selo, prestação após a fase fixa (mista, se ainda não
-   chegou — descontando as prestações já pagas) e custo total do crédito.
+   chegou — descontando as prestações já registadas) e custo total do crédito.
    Sem capital em dívida ou prazo devolve só a dica do que falta; com o prazo
-   já esgotado pelas prestações pagas, avisa em vez de fingir uma prestação.
+   já esgotado pelas prestações registadas, avisa em vez de fingir uma prestação.
    Recebe: l — a hipoteca (objeto; aguenta null/undefined).
    Devolve: string de HTML da caixa, pronta a inserir com innerHTML; '' sem hipoteca. */
 function loanBox(l){
@@ -316,15 +317,14 @@ function loanBox(l){
   const c=loanCalc(l),a=amort(l);
   let extra='';
   if(l.type==='mista'){
-    /* as linhas do plano começam no mês de hoje: a fase muda em rows[fixedYears*12 − pagas] */
+    /* as linhas do plano começam no mês de hoje: a fase muda em rows[fixedYears*12 − registadas],
+       ou seja, daqui a k meses — a data diz-se a partir de hoje, não do início */
     const k=Math.round((Number(l.fixedYears)||0)*12)-loanMes(l),r=k>0?a.rows[k]:null;
     if(r){
-      let quando='daqui a '+(k>=24?Math.round(k/12)+' anos':k+' meses');
-      if(/^\d{4}-\d{2}/.test(l.start||'')){const t0=Number(l.start.slice(0,4))*12+Number(l.start.slice(5,7))-1+Math.round((Number(l.fixedYears)||0)*12);
-        quando='a partir de '+MES[t0%12]+' '+Math.floor(t0/12)}
-      extra=`<div class="stat"><span>Prestação ${quando}</span><b>${euro2(r.pay+r.st)}</b></div>`}
+      const hoje=today(),t0=Number(hoje.slice(0,4))*12+Number(hoje.slice(5,7))-1+k;
+      extra=`<div class="stat"><span>Prestação a partir de ${MES[t0%12]} ${Math.floor(t0/12)}</span><b>${euro2(r.pay+r.st)}</b></div>`}
   }
-  if(a.esgotado)extra+=`<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px"><b>Prazo esgotado</b> — as prestações já pagas cobrem o prazo inteiro e ainda há dívida. Confirma o prazo e o início.</div>`;
+  if(a.esgotado)extra+=`<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px"><b>Prazo esgotado</b> — as prestações já registadas cobrem o prazo inteiro e ainda há dívida. Confirma o prazo e as prestações registadas.</div>`;
   return `<div class="stat" style="padding-top:0"><span>Prestação mensal</span><b style="font-size:16px">${euro2(c.total)}</b></div>
     <div class="stat"><span>Capital</span><b>${euro2(c.principal)}</b></div>
     <div class="stat"><span>Juros</span><b>${euro2(c.interest)}</b></div>

@@ -158,8 +158,8 @@ CW.rejectRec = function (id) {
    deixando claro que são estimativas. As funções puras (origemDoPlano,
    jaRegistado, datasEmFalta, planoPrestacoesEmFalta) vivem em
    app/planeados.js, para os testes as apanharem sem a camada cloud.
-   Numa hipoteca a lista é a reconstruída para trás a partir do capital em
-   dívida de hoje, e entra como retroativa: não abate capital. */
+   Numa hipoteca a lista é a simulada para a frente a partir do capital em
+   dívida gravado (o da data de início), e cada prestação abate o seu capital. */
 
 var EVERY_WORD = { once: 'ocorrência', week: 'semana', month: 'mês', quarter: 'trimestre', year: 'ano' };
 
@@ -187,8 +187,8 @@ function planoQuem(r) {
 
 // Abre o modal que propõe registar de uma vez os períodos em falta do plano,
 // com o total e o aviso de que é tudo estimativa. Numa hipoteca são as
-// prestações reconstruídas (juros, selo e capital do plano) e o modal diz que
-// o capital em dívida não muda. Não escreve nada na base — isso é o
+// prestações do plano (juros, selo e capital) e o modal diz para quanto
+// desce o capital em dívida. Não escreve nada na base — isso é o
 // doFillMissed, ao confirmar.
 // Recebe: id — o id (string) do plano recorrente com períodos em falta.
 // Devolve: nada — abre o modal (ou avisa num toast que não há nada por preencher).
@@ -201,13 +201,15 @@ CW.fillMissed = function (id) {
     n = lista.length;
     if (!n) return toast('Não há prestações por preencher.');
     var total = lista.reduce(function (a, x) { return a + x.amount; }, 0);
+    var x0 = anyLoan(r.tx.loanId), fim = lista[n - 1].bal;
     body = '<div class="form">' +
       '<div class="hint">Vais registar <b>' + n + '</b> prestaç' + (n === 1 ? 'ão' : 'ões') + ' de <b>' + esc(r.name) + '</b>, de <b>' +
-      lista[0].date + '</b> a <b>' + lista[n - 1].date + '</b>, com os juros, o selo e o capital do plano da hipoteca, reconstruído para trás.</div>' +
+      lista[0].date + '</b> a <b>' + lista[n - 1].date + '</b>, com os juros, o selo e o capital do plano da hipoteca.</div>' +
       planoQuem(r) +
       '<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px">' +
-      '<b>O capital em dívida não muda</b> — é o de hoje; estas prestações são anteriores a ele e ficam marcadas como retroativas ' +
-      '(apagá-las também não o altera). Os anos anteriores passam a incluí-las. ' +
+      '<b>O capital em dívida desce com cada uma</b>, como se as confirmasses uma a uma' +
+      (x0 ? ': de <b>' + euro2(x0.l.outstanding) + '</b> para <b>' + euro2(fim) + '</b>' : '') +
+      (fim > 0 ? '' : ' — o crédito fica liquidado') + '. Apagar uma repõe o capital dela. ' +
       '<b>É uma estimativa:</b> o que o banco cobrou pode ter sido diferente. Confere e corrige depois o que não bater certo.</div>' +
       '<div class="hint">Ficam marcadas com a etiqueta <b>Estimativa</b> — procura por “estimativa” nos Movimentos para as veres todas.</div>' +
       '<div class="stat" style="margin-top:6px"><span>Total a registar</span><b>' + euro2(total) + '</b></div></div>';
@@ -235,8 +237,8 @@ CW.fillMissed = function (id) {
 };
 
 /* Cria de facto os movimentos em falta. Numa hipoteca entrega a lista
-   reconstruída a inserirPrestacoesEmFalta (retroativas: não abatem capital;
-   grava e dá Anular em bloco). Nos outros planos, todos com o valor atual e
+   simulada a inserirPrestacoesEmFalta (cada uma abate o seu capital; grava
+   e dá Anular em bloco). Nos outros planos, todos com o valor atual e
    a etiqueta "Estimativa" (que fica registada nas etiquetas das definições),
    e no fim empurra o plano até à próxima data futura, grava e fecha os
    modais. Se a oferta automática deixou mais planos na fila, segue para o
@@ -251,7 +253,7 @@ CW.doFillMissed = function (id) {
     closeAllModals();
     if (x && lista.length) inserirPrestacoesEmFalta(x.p, x.l, lista);
     // as ocorrências do próprio plano já vencidas (de r.next até hoje) registam-se como
-    // no caminho genérico — estas abatem capital, porque o plano estava à espera delas
+    // no caminho genérico — abatem capital como as da lista, uma a uma
     var n2 = 0, live2 = r, guard2 = 0;
     var tags2 = db.settings.tags || (db.settings.tags = []);
     while (live2 && live2.next && live2.next <= today() && guard2++ < 600) {
@@ -373,8 +375,8 @@ var REJECT_BTN = function (id) {
 };
 
 // acrescenta "Recusar" a cada linha do cartão de pendentes (e, com períodos
-// em falta, o botão de os preencher — numa hipoteca, as prestações
-// reconstruídas desde o início, retroativas)
+// em falta, o botão de os preencher — numa hipoteca, as prestações do plano
+// desde o início, que abatem capital)
 var _pendingCard = pendingCard;
 pendingCard = function (all) {
   return _pendingCard(all).replace(/skipRec\('([^']+)'\)"[^>]*>[^<]*<\/button>/g, function (m, id) {
@@ -434,7 +436,7 @@ lpMenu = function (v) {
     var n = r ? datasEmFalta(r).length : 0;
     if (n >= 2) {
       menuOption({ icon: 'clock', label: 'Preencher ' + n + ' períodos em falta', first: true,
-        sub: (r.tx || {}).loanId ? 'prestações antigas, sem mexer no capital em dívida' : 'de uma vez, por estimativa',
+        sub: (r.tx || {}).loanId ? 'prestações antigas do plano; o capital em dívida desce com elas' : 'de uma vez, por estimativa',
         act: function () { CW.fillMissed(a[1]); } });
     }
     menuOption({ icon: 'x', danger: true, label: 'Recusar desta vez',
