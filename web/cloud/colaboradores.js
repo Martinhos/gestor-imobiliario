@@ -586,8 +586,12 @@ CW.aceitarConvite = function (token) {
     })
     .catch(function (e) {
       if (e && (e.status === 404 || e.status === 400 || e.status === 410)) {
+        // definitivo (usada, expirada, minha): esquece-se o token e fecha-se
+        // o modal «Convite de …» — com ele aberto, cada toque em «Aceitar»
+        // repetia o pedido e o toast
         try { sessionStorage.removeItem('gi_convite'); } catch (x) {}
         CW._convitePrev = null;
+        closeAllModals();
       }
       toast(e.message || 'Não deu para aceitar o convite.', { ms: 6000 });
     });

@@ -388,3 +388,129 @@ describe('a página Conta e partilha', () => {
     assert.ok(!h.includes('Pedidos de partilha'));
   });
 });
+
+/* ---------------------------------------------- fichas com imóvel, donos e colaboradores por casa */
+
+// O estado de ESTADO() mais: H3, onde sou «Gestor de visitas» (tenant.add);
+// H4, em compropriedade com o Rui, com a lista de colaboradores na própria
+// casa; um movimento meu pago pelo ZE, cuja conta já não existe.
+const ESTADO_FICHAS = () => {
+  const st = ESTADO();
+  st.houses[0].collaborators = [{ id: 'C1', userId: 'MARIA', name: 'Maria', roleName: 'Gestor de visitas' }];
+  st.houses.push(
+    { id: 'H3', ownerId: 'RUI', ownerName: 'Rui', mine: false, participants: ['RUI'], updatedAt: 1,
+      collab: { id: 'C8', roleId: 'R3', roleName: 'Gestor de visitas', perms: ['visit.view', 'visit.add', 'tenant.view', 'tenant.add'] },
+      data: { id: 'H3', name: 'Visitas do Rui' } },
+    { id: 'H4', ownerId: 'RUI', ownerName: 'Rui', mine: false, participants: ['RUI', 'EU'], updatedAt: 1,
+      collaborators: [{ id: 'C7', userId: 'JOAO', name: 'João', roleName: 'Contabilista' }],
+      data: { id: 'H4', name: 'A meias' } },
+  );
+  st.records.push({ houseId: 'H1', kind: 'tx', id: 'T2', updatedAt: 5, author: 'EU', createdBy: 'EU',
+    data: { id: 'T2', label: 'Condomínio', propertyId: 'H1', amount: 40, kind: 'expense', date: '2026-02-01', paidBy: 'ZE' } });
+  st.profiles.push({ userId: 'ZE', name: '[deleted]', data: null }, { userId: 'JOAO', name: 'João', data: null });
+  st.people.push({ id: 'ZE', name: '[deleted]', kind: 'owner' }, { id: 'JOAO', name: 'João', kind: 'collab', roleName: 'Contabilista' });
+  return st;
+};
+
+describe('fichas de inquilino presas a um imóvel', () => {
+  let app, d;
+  beforeEach(() => {
+    ({ app } = montar());
+    d = app.rebuildDb(ESTADO_FICHAS());
+    app.db = d;
+  });
+
+  test('a ficha vinda de um registo de casa leva houseId (na ficha) e _houseId (a marca)', () => {
+    const p1 = d.tenants.find((t) => t.id === 'P1');
+    assert.equal(p1.houseId, 'H2');
+    assert.equal(p1._houseId, 'H2');
+  });
+
+  test('com houseId a ficha sobe como registo dessa casa — nunca como u:tenant — só onde o cargo dá tenant.add', () => {
+    const ficha = (id, houseId) => { const t = app.normPerson({ id, name: id }); if (houseId) t.houseId = houseId; return t; };
+    app.db.tenants.push(ficha('TN', 'H3'));   // criada por mim (Gestor de visitas) a partir de uma visita, sem contrato
+    app.db.tenants.push(ficha('TX', 'H2'));   // presa a um imóvel onde sou Contabilista (sem tenant.add)
+    app.db.tenants.push(ficha('TM', 'H1'));   // presa a um imóvel meu, sem contrato
+    app.db.tenants.push(ficha('TU'));         // só minha
+    const chaves = Object.keys(JSON.parse(JSON.stringify(app.exportEntities())));
+    assert.ok(chaves.includes('r:H3:tenant:TN'), 'sobe para a casa do dono, sem contrato');
+    assert.ok(!chaves.includes('u:tenant:TN'), 'e não fica privada de quem a criou');
+    assert.ok(!chaves.includes('r:H2:tenant:TX') && !chaves.includes('u:tenant:TX'), 'sem tenant.add não sobe para lado nenhum');
+    assert.ok(!chaves.includes('r:H2:tenant:P1') && !chaves.includes('u:tenant:P1'), 'a ficha do dono (sem tenant.add) não é minha');
+    assert.ok(chaves.includes('r:H1:tenant:TM') && !chaves.includes('u:tenant:TM'), 'no imóvel meu é registo da casa');
+    assert.ok(chaves.includes('u:tenant:TU'), 'sem imóvel continua a ser um registo meu');
+    const dados = JSON.parse(JSON.stringify(app.exportEntities()['r:H3:tenant:TN'].data));
+    assert.equal(dados.houseId, 'H3', 'o houseId vai na ficha');
+    assert.ok(!('_houseId' in dados), 'a marca não');
+  });
+});
+
+describe('db.owners e os colaboradores por casa', () => {
+  let app, d;
+  beforeEach(() => {
+    ({ app } = montar());
+    d = app.rebuildDb(ESTADO_FICHAS());
+  });
+
+  test('quem só é referido num movimento («[deleted]», ex-comproprietário) continua a virar ficha; o colaborador puro não', () => {
+    const ids = JSON.parse(JSON.stringify(d.owners.map((o) => o.id).sort()));
+    assert.deepEqual(ids, ['ANA', 'EU', 'RUI', 'ZE']);
+    const ze = d.owners.find((o) => o.id === 'ZE');
+    assert.equal(ze.name, '[deleted]');
+    assert.equal(ze._userId, 'ZE');
+    assert.ok(!d.owners.some((o) => o.id === 'MARIA' || o.id === 'JOAO'), 'os colaboradores ficam em CW.pessoas');
+    assert.equal(app.CW.pessoas.JOAO.kind, 'collab');
+  });
+
+  test('_colaboradores lê h.collaborators por casa — também na compropriedade; sem o campo, a lista global do dono', () => {
+    const h4 = d.properties.find((p) => p.id === 'H4');
+    assert.deepEqual(JSON.parse(JSON.stringify(h4._colaboradores)),
+      [{ id: 'C7', userId: 'JOAO', name: 'João', roleId: '', roleName: 'Contabilista' }]);
+    const h1 = d.properties.find((p) => p.id === 'H1');
+    assert.equal(h1._colaboradores.length, 1);
+    assert.equal(h1._colaboradores[0].userId, 'MARIA');
+    assert.equal(d.properties.find((p) => p.id === 'H3')._colaboradores, undefined, 'onde sou colaborador não há lista');
+    // um servidor que ainda não manda a lista por casa: vale a global, só nas minhas
+    const st = ESTADO_FICHAS();
+    delete st.houses[0].collaborators; delete st.houses[3].collaborators;
+    const d2 = app.rebuildDb(st);
+    assert.equal(d2.properties.find((p) => p.id === 'H1')._colaboradores[0].id, 'C1');
+    assert.deepEqual(JSON.parse(JSON.stringify(d2.properties.find((p) => p.id === 'H4')._colaboradores)), []);
+  });
+});
+
+describe('aceitar um convite que já não serve', () => {
+  const armar = () => {
+    const { app, esp } = montar();
+    const m = new Map();
+    app.sessionStorage = { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) };
+    app.sessionStorage.setItem('gi_convite', 'c'.repeat(64));
+    app.CW._convitePrev = { ownerName: 'Eu', roleName: 'Contabilista', perms: [], houses: [] };
+    esp.fechados = 0;
+    app.closeAllModals = () => { esp.fechados++; };
+    return { app, esp };
+  };
+
+  test('um 400 («A ligação é tua…») fecha o modal antes do toast e esquece o token', async () => {
+    const { app, esp } = armar();
+    esp.resposta = () => Object.assign(new Error('A ligação é tua — envia-a a quem vai colaborar.'), { status: 400 });
+    app.CW.aceitarConvite('c'.repeat(64));
+    await espera();
+    assert.equal(esp.fechados, 1, 'o modal «Convite de …» fechou');
+    assert.equal(app.sessionStorage.getItem('gi_convite'), null);
+    assert.equal(app.CW._convitePrev, null);
+    assert.deepEqual(esp.toasts, ['A ligação é tua — envia-a a quem vai colaborar.']);
+    assert.equal(esp.modais.length, 0);
+  });
+
+  test('um erro passageiro (500) deixa o modal e o token, para se tentar outra vez', async () => {
+    const { app, esp } = armar();
+    esp.resposta = () => Object.assign(new Error('Erro 500'), { status: 500 });
+    app.CW.aceitarConvite('c'.repeat(64));
+    await espera();
+    assert.equal(esp.fechados, 0);
+    assert.equal(app.sessionStorage.getItem('gi_convite'), 'c'.repeat(64));
+    assert.ok(app.CW._convitePrev);
+    assert.deepEqual(esp.toasts, ['Erro 500']);
+  });
+});

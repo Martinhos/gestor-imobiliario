@@ -166,9 +166,23 @@ function podeExportar(houseId, kind) {
   return !!fam && !!pode(houseId, fam + '.add');
 }
 
-// Mapa completo do que este utilizador deve ter no servidor.
-// chave -> {scope, houseId?, kind?, id?, data}
-// Devolve: esse mapa (objeto), montado a partir do db local já limpo por strip.
+/* O imóvel a que uma ficha de inquilino está presa: o campo houseId, que a
+   app grava na ficha (criada a partir de uma visita, ou num imóvel de
+   colaboração), ou a marca _houseId que o servidor põe ao vir de um registo
+   de casa. Uma ficha só minha não tem nenhum dos dois.
+   Recebe: t — a ficha do inquilino (aguenta null).
+   Devolve: o id do imóvel (texto), ou '' quando a ficha não está presa a nenhum. */
+function casaDaFicha(t) {
+  return (t && (t.houseId || t._houseId)) || '';
+}
+
+/* Mapa completo do que este utilizador deve ter no servidor.
+   chave -> {scope, houseId?, kind?, id?, data}
+   Uma ficha de inquilino presa a um imóvel (casaDaFicha) é um registo desse
+   imóvel — r:<casa>:tenant:<id> — com ou sem contrato, tal como as ligadas por
+   contrato; nunca sobe como u:tenant. É assim que a ficha que um colaborador
+   com tenant.add cria («Converter em inquilino») chega ao dono.
+   Devolve: esse mapa (objeto), montado a partir do db local já limpo por strip. */
 function exportEntities() {
   var map = {};
   var owners = db.owners || [], tenants = db.tenants || [];
@@ -183,6 +197,10 @@ function exportEntities() {
         var t = tenants.find(function (x) { return x.id === tid; });
         if (t) persons['tenant:' + tid] = t;
       });
+    });
+    // as fichas presas a este imóvel, mesmo sem contrato (podeExportar decide abaixo)
+    tenants.forEach(function (t) {
+      if (casaDaFicha(t) === p.id) persons['tenant:' + t.id] = t;
     });
     (db.transactions || []).forEach(function (t) {
       if (t.propertyId !== p.id || !podeExportar(p.id, 'tx')) return;
@@ -215,7 +233,12 @@ function exportEntities() {
   // os "proprietários" são os utilizadores: só o meu perfil é exportado
   var meOwner = CW.user && owners.find(function (o) { return o.id === CW.user.id; });
   if (meOwner) map['u:profile:main'] = { scope: 'user', kind: 'profile', id: 'main', data: strip(meOwner) };
-  tenants.forEach(function (t) { if (!t._sharedFrom) map['u:tenant:' + t.id] = { scope: 'user', kind: 'tenant', id: t.id, data: strip(t) }; });
+  // só as fichas só minhas sobem como registo de utilizador: as presas a um
+  // imóvel já subiram (ou não podem subir) como registo dessa casa
+  tenants.forEach(function (t) {
+    if (t._sharedFrom || casaDaFicha(t)) return;
+    map['u:tenant:' + t.id] = { scope: 'user', kind: 'tenant', id: t.id, data: strip(t) };
+  });
   var st = strip(db.settings);
   delete st.theme;   // preferência do aparelho: fica de fora da sincronização
   map['u:settings:main'] = { scope: 'user', kind: 'settings', id: 'main', data: st };
@@ -419,12 +442,39 @@ function colaboradoresDe(st, houseId) {
   });
 }
 
+/* Quem colabora num imóvel onde sou dono ou comproprietário: a lista que o
+   servidor manda na própria casa (h.collaborators — vem também nas casas em
+   compropriedade, para o comproprietário ver quem lá entra) ou, num servidor
+   que ainda não a manda, a lista global do dono (só nas minhas).
+   Recebe: st — o estado; h — a casa do estado ({id, mine, collaborators?}).
+   Devolve: array de {id, userId, name, roleId, roleName} (vazio quando não há). */
+function colaboradoresDaCasa(st, h) {
+  if (Array.isArray(h.collaborators)) {
+    return h.collaborators.map(function (c) {
+      return { id: c.id, userId: c.userId, name: c.name || '', roleId: c.roleId || '', roleName: c.roleName || '' };
+    });
+  }
+  return h.mine ? colaboradoresDe(st, h.id) : [];
+}
+
+/* Se este utilizador é um colaborador puro: tem cargo em imóveis meus e
+   nenhuma casa em comum comigo (é o kind 'collab' de st.people). É o único
+   que nunca vira ficha em db.owners.
+   Recebe: uid — o id do utilizador.
+   Devolve: true se é colaborador puro; false para donos, comproprietários e desconhecidos. */
+function colaboradorPuro(uid) {
+  var pe = CW.pessoas && CW.pessoas[uid];
+  return !!(pe && pe.kind === 'collab');
+}
+
 /* Reconstrói a base local inteira a partir do estado do servidor: casas com
    donos e quotas vindas de lá, registos por casa, dados do utilizador e
    perfis — os "proprietários" passam a ser os utilizadores com acesso.
-   Os imóveis onde sou colaborador levam _cargo (e _sharedFrom); os meus
-   levam _colaboradores; um colaborador nunca entra em ownerIds nem em
-   db.owners — fica em CW.pessoas, só com o nome.
+   Os imóveis onde sou colaborador levam _cargo (e _sharedFrom); os meus e os
+   em compropriedade levam _colaboradores; um colaborador nunca entra em
+   ownerIds nem em db.owners — fica em CW.pessoas, só com o nome. Quem vem
+   em profiles sem ser colaborador (comproprietário de outrora, conta apagada
+   «[deleted]» referida num movimento) continua a virar ficha, só com o nome.
    Devolve o db novo, normalizado e filtrado por dropUnsafe; não toca no
    db global.
    Recebe: st — o estado vindo de GET /api/state ({houses, records, userRecords,
@@ -468,7 +518,7 @@ function rebuildDb(st) {
         if (h.collab.id) p._collabId = h.collab.id;
         if (!acessos) CW.cargos[h.id] = { dono: false, nome: p._cargo, perms: h.collab.perms || [] };
       } else if (!acessos) CW.cargos[h.id] = { dono: true };
-      if (h.mine) p._colaboradores = colaboradoresDe(st, h.id);
+      if (!h.collab) p._colaboradores = colaboradoresDaCasa(st, h);
       // os donos do imóvel são os utilizadores com acesso (dono + partilhas);
       // as quotas vêm do servidor e só mudam por proposta confirmada. Um
       // colaborador nunca está aqui — nem eu, num imóvel onde o sou.
@@ -501,7 +551,12 @@ function rebuildDb(st) {
         if (!tenants[r.id]) {
           var per = marca(normPerson(r.data));
           if (!mine) per._sharedFrom = h ? h.ownerName : '';
-          per._houseId = r.houseId;   // o imóvel da ficha: é por ele que se decide quem a edita
+          // o imóvel da ficha: é por ele que se decide quem a edita e onde
+          // se mostra. Fica na ficha (houseId, sobe com ela) e na marca do
+          // servidor (_houseId), para o dono e o colaborador a verem no
+          // imóvel certo
+          per.houseId = r.houseId;
+          per._houseId = r.houseId;
           tenants[r.id] = per;
         }
       }
@@ -515,12 +570,12 @@ function rebuildDb(st) {
   ownersOut[myId] = minePer;
   (st.profiles || []).forEach(function (pr) {
     if (pr.userId === myId) return;
-    // só quem é proprietário de algo (ou tem ligação aceite) vira ficha de
-    // proprietário; um colaborador fica em CW.pessoas, com o nome
-    if (!temId(ownersIds, pr.userId)) {
-      if (!CW.pessoas[pr.userId]) CW.pessoas[pr.userId] = { name: pr.name || '', kind: 'collab', roleName: '' };
-      return;
-    }
+    // um colaborador puro nunca vira ficha de proprietário — fica em
+    // CW.pessoas, com o nome. Todos os outros (comproprietários, ligações
+    // aceites e quem só é referido em paidBy/toId de movimentos: contas
+    // apagadas «[deleted]», ex-comproprietários) viram ficha só com o nome,
+    // para «Pago por …», os acertos e o CSV continuarem legíveis
+    if (!temId(ownersIds, pr.userId) && colaboradorPuro(pr.userId)) return;
     var per = normPerson(pr.data || {});
     per.id = pr.userId;
     per._userId = pr.userId;
