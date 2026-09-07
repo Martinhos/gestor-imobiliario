@@ -932,6 +932,31 @@ function vColabTab(){
     <button class="btn primary" onclick="goSet('cloud')">Criar conta ou entrar</button></div></div>`;
 }
 
+/* Quantas linhas a última pintura dos Movimentos desenhou. A camada da nuvem
+   lê-a para saber se ainda há alguma coisa para marcar (cloud/selecao.js):
+   antes contava as linhas no HTML já parseado, e agora não há HTML parseado. */
+let txLinhasPintadas=0;
+/* O que a camada da nuvem tem a acrescentar a UMA linha de movimento. Por
+   omissão, nada — quem a substitui é cloud/selecao.js.
+
+   Existe por uma razão medida: a nuvem decorava as linhas pegando na vista
+   inteira já gerada, metendo-a num <div> avulso, mexendo-lhe linha a linha e
+   serializando-a de volta. Com 500 movimentos isso custava 42 dos 58 ms de
+   cada repintura — dentro E fora do modo de seleção — e era a razão pela qual
+   nenhuma repintura parcial podia ser segura: quem repintasse uma linha
+   sozinha nascia sem as decorações e ninguém dava por isso.
+
+   Recebe: t — o movimento desta linha; mes — o 'AAAA-MM' do bloco onde entra.
+   Devolve: {attrs,cls,onclick,caixa,acoes} — attrs são atributos extra da
+   linha, cls classes extra, onclick substitui o da linha se não for vazio,
+   caixa é HTML colado no início da linha e acoes HTML colado no fim da coluna
+   direita. Tudo opcional; o vazio devolve um objeto sem nada. */
+function txLinhaExtra(t,mes){return {}}
+/* O mesmo para o título de um mês, que em modo de seleção ganha caixa própria.
+   Recebe: mes — o mês em 'AAAA-MM'.
+   Devolve: {attrs,cls,caixa} — atributos e classes extra do título, e HTML a
+   colar antes do nome do mês. Tudo opcional. */
+function txMesExtra(mes){return {}}
 /* Movimentos: KPIs do filtro atual (com evolução ao toque), saldos entre
    proprietários, dívidas a terceiros e a lista agrupada por mês com o saldo
    de cada um. Tudo respeita os filtros e a ordenação escolhidos no modal.
@@ -947,12 +972,14 @@ function vTransactions(){
   const nF=txFilterCount();
   const head=`${nF||txSearch.trim()?`<div class="small" style="margin:2px 0 10px">${filterSummary()}${txSearch.trim()?(nF?' · ':'')+'pesquisa: “'+esc(txSearch.trim())+'”':''}</div>`:''}`
   +((podeSemImovel()||casasComo('tx.add').length)?fab([{label:'Novo movimento',act:'newTxPick()'}]):'');
+  txLinhasPintadas=0;
   if(!db.transactions.length)return head+`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.</div>`;
   const list=db.transactions.filter(txMatch).sort((a,b)=>{const d=txDir==='desc'?-1:1;
     if(txSort==='amount')return d*((a.amount||0)-(b.amount||0))||String(a.date).localeCompare(String(b.date));
     return d*String(a.date).localeCompare(String(b.date))});
   if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`
     +balancesCard(txProp||null);   /* pode não haver movimentos e haver contas por acertar */
+  txLinhasPintadas=list.length;
   const tot={income:0,expense:0,loan:0,owed:0,repay:0,settle:0};list.forEach(t=>{if(countsInTotals(t))tot[t.kind]=(tot[t.kind]||0)+t.amount});
   const saldo=tot.income+tot.owed-tot.expense-tot.loan-tot.repay;
   const evoTx=k=>()=>{
@@ -980,18 +1007,20 @@ function vTransactions(){
   };
   return head+resumo+balancesCard(txProp||null)+creditorsCard(txProp&&txProp!=='__none__'?txProp:null)+Object.keys(by).map(mo=>{
     const rows=by[mo],net=sum(rows.map(t=>!countsInTotals(t)?0:isIn(t.kind)?t.amount:(isOut(t.kind)?-t.amount:0)));
-    return `<div class="section-title" style="display:flex;justify-content:space-between;text-transform:none">
-      <span>${mo}</span><span class="${net>=0?'pos':'neg'}">${euro(net)}</span></div>
+    const xm=txMesExtra(mo)||{};
+    return `<div class="section-title${xm.cls?' '+xm.cls:''}" ${xm.attrs||''} style="display:flex;justify-content:space-between;text-transform:none">
+      ${xm.caixa||''}<span>${mo}</span><span class="${net>=0?'pos':'neg'}">${euro(net)}</span></div>
       <div class="list">${rows.map(t=>{const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null;
-      return `<div class="card tap txrow" data-lp="tx:${esc(t.id)}" style="padding:13px 15px" onclick="txModal('${jsq(t.id)}')"><div class="row-between">
-        <div style="min-width:0"><div class="title" style="font-size:14.5px">${esc(t.label)}</div>
+      const x=txLinhaExtra(t,mo)||{};
+      return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" ${x.attrs||''} style="padding:13px 15px" onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
+        ${x.caixa||''}<div style="min-width:0"><div class="title" style="font-size:14.5px">${esc(t.label)}</div>
           <div class="small">${esc(t.date)} · ${k.short}${t.category?' · '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' · '+esc(propName(t.propertyId)):''}${t.creditor?' · '+esc(t.creditor):''}</div>
           ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}
           ${who(t)}
           ${t.kind==='loan'&&(t.principal||t.interest||t.fee)?`<div class="small">${t.payType==='amortizacao'?`Amortização · capital ${euro2(t.principal||0)} · comissão ${euro2(t.fee||0)}`:`Capital ${euro2(t.principal||0)} · juros ${euro2(t.interest||0)} · selo ${euro2(t.stamp||0)}`}</div>`:''}
           ${(!countsInTotals(t)||(t.tags||[]).length)?`<div class="chips">${countsInTotals(t)?'':'<span class="badge grey">fora dos totais</span>'}${(t.tags||[]).map(g=>`<span class="badge grey">${esc(g)}</span>`).join('')}</div>`:''}</div>
         <div style="text-align:right;flex:0 0 auto"><div class="${k.color}" style="font-weight:750${t.kind==='settle'?';color:var(--muted)':''}">${k.sign}${euro2(t.amount)}</div>
-          ${t.notes?`<div class="small" style="margin-top:3px" title="Tem comentários">${ic('pen',12)}</div>`:''}</div>
+          ${t.notes?`<div class="small" style="margin-top:3px" title="Tem comentários">${ic('pen',12)}</div>`:''}${x.acoes||''}</div>
       </div></div>`}).join('')}</div>`}).join('');
 }
 // muda o filtro de tipo; categoria e subcategoria caem porque a árvore muda com o tipo

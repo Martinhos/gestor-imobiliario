@@ -139,7 +139,43 @@ function dentroDaPagina() {
   medidas.alvosPequenos = pequenos.length;
   if (pequenos.length) medidas.exemplosPequenos = pequenos.slice(0, 6);
 
-  /* 5. Texto que sai da sua caixa — normalmente uma coluna estreita demais. */
+  /* 5. As linhas dos movimentos nascem decoradas.
+
+     A camada da nuvem (cloud/selecao.js) acrescenta a cada linha o data-tx e
+     o data-mes — de onde saem os ids que o «marcar tudo» e o «marcar o mês»
+     leem — e, conforme o modo, o kebab (a única porta para as opções de um
+     movimento sozinho, sem toque longo) ou a caixa de marcar.
+
+     Até aqui isto era colado por cima do HTML já gerado, e agora é gerado com
+     ele (vistas.js:txLinhaExtra). De qualquer das formas, o que não pode
+     acontecer é uma linha aparecer sem nada disto: não dá erro nenhum, e a
+     seleção e as opções desaparecem em silêncio. Nada disto tinha teste — o
+     arnês de Node não carrega web/cloud/*. */
+  const linhas = [...document.querySelectorAll('#view .txrow')];
+  if (linhas.length) {
+    medidas.linhasDeMovimento = linhas.length;
+    const semId = linhas.filter((l) => !l.getAttribute('data-tx'));
+    const semMes = linhas.filter((l) => !l.getAttribute('data-mes'));
+    if (semId.length) falhar('cada linha traz o seu id', semId.length + ' de ' + linhas.length + ' sem data-tx');
+    if (semMes.length) falhar('cada linha sabe o seu mês', semMes.length + ' de ' + linhas.length + ' sem data-mes');
+    const selecao = !!document.querySelector('.sel-bar');
+    if (selecao) {
+      const semCaixa = linhas.filter((l) => !l.querySelector('.selbox'));
+      if (semCaixa.length) falhar('em seleção, cada linha tem caixa', semCaixa.length + ' de ' + linhas.length + ' sem .selbox');
+      const abrem = linhas.filter((l) => !/selToggle/.test(l.getAttribute('onclick') || ''));
+      if (abrem.length) falhar('em seleção, tocar marca em vez de abrir', abrem.length + ' linhas ainda abrem o movimento');
+      /* O título do mês é o que permite marcar um mês inteiro — e leva um
+         style próprio no template: um segundo style perdia o display:flex. */
+      const meses = [...document.querySelectorAll('#view .section-title.sel-mes')];
+      const chatos = meses.filter((m) => getComputedStyle(m).display !== 'flex');
+      if (meses.length && chatos.length) falhar('o título do mês continua em flex', chatos.length + ' títulos deixaram de o ser');
+    } else {
+      const semKebab = linhas.filter((l) => !l.querySelector('.txkebab'));
+      if (semKebab.length) falhar('fora da seleção, cada linha tem o seu kebab', semKebab.length + ' de ' + linhas.length + ' sem .txkebab');
+    }
+  }
+
+  /* 6. Texto que sai da sua caixa — normalmente uma coluna estreita demais. */
   const rebentam = [...document.querySelectorAll('#view *')]
     .filter((e) => e.children.length === 0 && e.textContent.trim())
     .filter((e) => e.scrollWidth > e.clientWidth + 4 && getComputedStyle(e).overflow === 'visible')

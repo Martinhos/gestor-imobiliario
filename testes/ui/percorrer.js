@@ -70,6 +70,15 @@ const CENAS = [
       if(l) CW.selEntrar(l.getAttribute('data-lp').replace('tx:',''));`,
   },
   {
+    /* O caso que nenhum teste apanhava: repintar com a seleção ligada. As
+       decorações das linhas são escritas pela camada da nuvem, e uma
+       repintura que as perca não dá erro nenhum — só deixa de haver caixas. */
+    nome: 'selecao-depois-de-repintar',
+    fazer: `go('transactions'); render();
+      const l=document.querySelector('#view .txrow');
+      if(l){ CW.selEntrar(l.getAttribute('data-tx')); render(); }`,
+  },
+  {
     nome: 'selecao-com-tudo-marcado',
     fazer: `go('transactions'); render();
       const l=document.querySelector('#view .txrow');
