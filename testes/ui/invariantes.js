@@ -152,8 +152,12 @@ function dentroDaPagina() {
      seleção e as opções desaparecem em silêncio. Nada disto tinha teste — o
      arnês de Node não carrega web/cloud/*. */
   const linhas = [...document.querySelectorAll('#view .txrow')];
+  /* Sempre, mesmo a zero: só com o número escrito é que se vê no resumo que a
+     regra não correu. Sem isto, uma lista vazia (ou um .txrow renomeado)
+     desligava a rede toda em silêncio — que é o modo de falha que ela existe
+     para apanhar. */
+  medidas.linhasDeMovimento = linhas.length;
   if (linhas.length) {
-    medidas.linhasDeMovimento = linhas.length;
     const semId = linhas.filter((l) => !l.getAttribute('data-tx'));
     const semMes = linhas.filter((l) => !l.getAttribute('data-mes'));
     if (semId.length) falhar('cada linha traz o seu id', semId.length + ' de ' + linhas.length + ' sem data-tx');
@@ -164,11 +168,27 @@ function dentroDaPagina() {
       if (semCaixa.length) falhar('em seleção, cada linha tem caixa', semCaixa.length + ' de ' + linhas.length + ' sem .selbox');
       const abrem = linhas.filter((l) => !/selToggle/.test(l.getAttribute('onclick') || ''));
       if (abrem.length) falhar('em seleção, tocar marca em vez de abrir', abrem.length + ' linhas ainda abrem o movimento');
-      /* O título do mês é o que permite marcar um mês inteiro — e leva um
-         style próprio no template: um segundo style perdia o display:flex. */
-      const meses = [...document.querySelectorAll('#view .section-title.sel-mes')];
-      const chatos = meses.filter((m) => getComputedStyle(m).display !== 'flex');
-      if (meses.length && chatos.length) falhar('o título do mês continua em flex', chatos.length + ' títulos deixaram de o ser');
+
+      /* As marcas sobrevivem a uma repintura. É o que o ponto de extensão tem
+         de garantir e o que nenhuma contagem de caixas apanha: o DOM tem de
+         concordar com o estado, linha a linha. */
+      const marcados = typeof selIds === 'object' && selIds ? selIds : null;
+      if (marcados) {
+        const deviam = linhas.filter((l) => marcados[l.getAttribute('data-tx')]).length;
+        const estao = linhas.filter((l) => l.classList.contains('sel-on')).length;
+        if (deviam !== estao) falhar('as marcas concordam com o estado', deviam + ' marcados, ' + estao + ' com marca no ecrã');
+      }
+
+      /* O título do mês é o que permite marcar um mês inteiro, e é um ponto de
+         extensão à parte do da linha: sem isto, neutralizá-lo deixava a suite
+         verde. Parte-se dos meses que as LINHAS dizem ter — assim a regra não
+         pode ficar vazia por a decoração ter desaparecido. */
+      const mesesDasLinhas = [...new Set(linhas.map((l) => l.getAttribute('data-mes')).filter(Boolean))];
+      const semTitulo = mesesDasLinhas.filter((m) => !document.querySelector('#view .section-title.sel-mes [data-mes-box="' + m + '"]'));
+      if (semTitulo.length) falhar('em seleção, cada mês tem a sua caixa', semTitulo.join(', ') + ' sem [data-mes-box]');
+      const chatos = [...document.querySelectorAll('#view .section-title.sel-mes')]
+        .filter((m) => getComputedStyle(m).display !== 'flex');
+      if (chatos.length) falhar('o título do mês continua em flex', chatos.length + ' títulos deixaram de o ser');
     } else {
       const semKebab = linhas.filter((l) => !l.querySelector('.txkebab'));
       if (semKebab.length) falhar('fora da seleção, cada linha tem o seu kebab', semKebab.length + ' de ' + linhas.length + ' sem .txkebab');
