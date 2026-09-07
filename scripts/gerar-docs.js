@@ -34,6 +34,8 @@ const MAPA = [
       'web/app/dados.js', 'web/app/arranque.js', 'web/app/copias.js'] },
   { id: 'partilha', titulo: 'Casas, partilha e ligações',
     ficheiros: ['worker/src/rotas/casas.js', 'worker/src/rotas/conexoes.js', 'worker/src/lib/acesso.js',
+      'worker/src/lib/permissoes.js', 'worker/src/rotas/colaboradores.js', 'web/app/acessos.js',
+      'web/cloud/colaboradores.js',
       'web/cloud/partilha.js', 'web/cloud/utilizadores.js', 'web/app/splitwise.js'] },
   { id: 'imoveis', titulo: 'Imóveis, contratos e pessoas',
     ficheiros: ['web/app/imovel.js', 'web/app/contrato.js', 'web/app/contrato-pdf.js',

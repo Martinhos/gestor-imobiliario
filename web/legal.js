@@ -201,9 +201,9 @@ window.LEGAL = (function () {
       '<b>Google Ireland Ltd.</b> — apenas se optares por entrar com a conta Google.',
       '<b>Resend, Inc.</b> — envio dos emails do serviço (confirmações, avisos e respostas do suporte).',
     ]) +
-    p('Os outros utilizadores só veem o que <b>tu</b> decidires partilhar: quem recebe uma casa tua vê os ' +
-      'dados dessa casa, e quem aceita ligar-se a ti vê o teu perfil. Um convite ainda não aceite não dá ' +
-      'acesso a nada.') +
+    p('Os outros utilizadores só veem o que <b>tu</b> decidires partilhar: quem é comproprietário de um ' +
+      'imóvel teu vê os dados desse imóvel e o teu perfil; colaboradores veem só o que o cargo permite. ' +
+      'Um convite ainda não aceite não dá acesso a nada.') +
 
     h('6. Transferências fora da União Europeia') +
     p('Alguns destes prestadores podem tratar dados fora do Espaço Económico Europeu. Nesses casos, a ' +

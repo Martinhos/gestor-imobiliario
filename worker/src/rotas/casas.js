@@ -1,5 +1,8 @@
 // Casas, quotas, registos de cada casa e dados globais do utilizador.
 import { linkFiles } from '../files.js';
+import { modoDemo } from '../lib/planos.js';
+import { acessoACasa, planoDosDonos, regraDoRegisto, apagarCasa } from '../lib/acesso.js';
+import { fundirCasa, fraseRecusa } from '../lib/permissoes.js';
 
 /* Rotas das casas e do que vive dentro delas: criar/atualizar e apagar uma
    casa, propor e confirmar a divisão de quotas entre comproprietários, e os
@@ -27,11 +30,19 @@ export async function rotasCasas(c) {
       .bind(houseId)
       .first();
     if (existing && !existing.deleted) {
-      const access = await canAccessHouse(env, me.id, houseId);
+      const access = await acessoACasa(env, me.id, houseId);
       if (!access.ok) return err(403, 'Sem acesso a esta casa.');
+      let dados = b.data;
+      if (access.collab) {
+        // a mesma regra do /api/sync: só com house.edit, e só os campos que o cargo vê
+        if (!access.collab.perms.has('house.edit')) return err(403, fraseRecusa('casa'));
+        dados = fundirCasa(existing.data, b.data, access.collab.perms);
+      }
       await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
-        .bind(JSON.stringify(preserveOwnership(existing.data, b.data)), now(), houseId)
+        .bind(JSON.stringify(preserveOwnership(existing.data, dados)), now(), houseId)
         .run();
+      await linkFiles(env, houseId, dados, 'house', houseId, me.id);
+      return json({ ok: true });
     } else if (existing && existing.deleted) {
       if (existing.owner_id !== me.id) return err(403, 'Sem acesso a esta casa.');
       await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ?, deleted = 0 WHERE id = ?')
@@ -44,7 +55,7 @@ export async function rotasCasas(c) {
         .bind(houseId, me.id, JSON.stringify(preserveOwnership('', b.data)), now())
         .run();
     }
-    await linkFiles(env, houseId, b.data);
+    await linkFiles(env, houseId, b.data, 'house', houseId, me.id);
     return json({ ok: true });
   }
 
@@ -55,12 +66,7 @@ export async function rotasCasas(c) {
       .first();
     if (!house) return err(404, 'Casa não encontrada.');
     if (house.owner_id !== me.id) return err(403, 'Só o dono pode apagar a casa.');
-    await env.DB.batch([
-      env.DB.prepare('UPDATE houses SET deleted = 1, updated_at = ? WHERE id = ?').bind(now(), houseId),
-      env.DB.prepare('UPDATE records SET deleted = 1, updated_at = ? WHERE house_id = ?').bind(now(), houseId),
-      env.DB.prepare('DELETE FROM shares WHERE house_id = ?').bind(houseId),
-      env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(houseId),
-    ]);
+    await apagarCasa(env, houseId, me.id);
     return json({ ok: true });
   }
 
@@ -133,11 +139,16 @@ export async function rotasCasas(c) {
 
   // ---- Registos de uma casa ----------------------------------------------
 
-  if (seg[1] === 'houses' && seg[3] === 'records' && seg.length === 6) {
+  if (seg[1] === 'houses' && seg[3] === 'records' && seg.length === 6 && (method === 'PUT' || method === 'DELETE')) {
     const [, , houseId, , kind, recordId] = seg;
     if (badId(houseId) || badId(kind) || badId(recordId)) return err(400, 'Identificador inválido.');
-    const access = await canAccessHouse(env, me.id, houseId);
+    const access = await acessoACasa(env, me.id, houseId);
     if (!access.ok) return err(403, 'Sem acesso a esta casa.');
+    // a mesma regra do /api/sync (kind com cargo, .add, só o que criou, plano do dono)
+    const veredicto = await regraDoRegisto(env, me, access, houseId, kind, recordId, method === 'PUT',
+      await modoDemo(env), planoDosDonos(env, me));
+    if (veredicto && veredicto.gone) return json({ ok: true, gone: true });
+    if (veredicto) return err(veredicto.status, veredicto.error);
     if (method === 'PUT') {
       const b = await body(request);
       if (!b) return err(400, 'Corpo inválido.');
@@ -145,24 +156,23 @@ export async function rotasCasas(c) {
       if (!b.data) return err(400, 'Corpo inválido.');
       if (tooBig(b.data)) return err(413, 'Registo demasiado grande.');
       await env.DB.prepare(
-        `INSERT INTO records (house_id, kind, id, data, updated_at, deleted, author)
-         VALUES (?, ?, ?, ?, ?, 0, ?)
+        `INSERT INTO records (house_id, kind, id, data, updated_at, deleted, author, created_by)
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?)
          ON CONFLICT (house_id, kind, id)
-         DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0, author = excluded.author`
+         DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0,
+           author = excluded.author, created_by = COALESCE(records.created_by, excluded.created_by)`
       )
-        .bind(houseId, kind, recordId, JSON.stringify(b.data), now(), me.id)
+        .bind(houseId, kind, recordId, JSON.stringify(b.data), now(), me.id, me.id)
         .run();
-      await linkFiles(env, houseId, b.data);
+      await linkFiles(env, houseId, b.data, kind, recordId, me.id);
       return json({ ok: true });
     }
-    if (method === 'DELETE') {
-      await env.DB.prepare(
-        'UPDATE records SET deleted = 1, updated_at = ? WHERE house_id = ? AND kind = ? AND id = ?'
-      )
-        .bind(now(), houseId, kind, recordId)
-        .run();
-      return json({ ok: true });
-    }
+    await env.DB.prepare(
+      'UPDATE records SET deleted = 1, updated_at = ? WHERE house_id = ? AND kind = ? AND id = ?'
+    )
+      .bind(now(), houseId, kind, recordId)
+      .run();
+    return json({ ok: true });
   }
 
   // ---- Dados globais do utilizador ---------------------------------------

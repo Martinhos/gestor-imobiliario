@@ -76,6 +76,21 @@ Qualquer alteração de substância aos termos ou à privacidade exige subir
 (iguais). É isso que faz a app pedir nova aceitação a toda a gente — o
 mecanismo prometido na secção de alterações dos próprios termos.
 
+## Um colaborador nunca entra em participants
+`canAccessHouse`/`participantsOf` (worker/src/lib/acesso.js) significam
+SÓ dono + comproprietários, e é isso que conta nas quotas, nas propostas
+e nas «contas entre proprietários». Um colaborador (cargo) entra por
+`acessoACasa`, que devolve o grau — e é o que as escritas e os anexos
+consultam. Se um dia alguém «simplificar» e meter os colaboradores em
+participants, passam a ter quota, a aparecer no splitwise e a poder
+propor divisões. A regra é: o servidor decide, o cliente esconde — o
+`/api/state` já manda a casa despida (`projetarCasa`), os registos
+filtrados por kind (`projetarRegisto`) e o perfil dos outros a `null`
+para quem não é comproprietário de casa comum; esconder no cliente é só
+cortesia, nunca a barreira. Ao acrescentar um campo sensível à casa ou a
+um kind novo, a pergunta é «que permissão o abre?» — e a resposta escreve-se
+em worker/src/lib/permissoes.js antes de escrever no cliente.
+
 ## Patches em ficheiros com UTF-8 no Windows
 Aplicar edições por heredoc bash corrompe acentos e emoji. Os patches
 escrevem-se num ficheiro .py (UTF-8) e corre-se esse ficheiro — nunca

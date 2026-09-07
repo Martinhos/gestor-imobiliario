@@ -1,13 +1,29 @@
 // O estado completo que este utilizador pode ver, numa so leitura.
+//
+// Três graus de acesso saem daqui com formas diferentes: as casas de que sou
+// dono ou comproprietário vêm inteiras; as casas onde tenho um cargo vêm
+// despidas ao que o cargo deixa (projetarCasa/projetarRegisto) e com o cargo
+// em `collab`; e o perfil completo de alguém só sai para quem é
+// comproprietário de uma casa comum — uma ligação aceite sem casa comum, um
+// dono de colaboração ou um colaborador levam data: null.
+
+import { casasDeColaborador } from '../lib/acesso.js';
+import { kindsVisiveis, projetarCasa, projetarRegisto } from '../lib/permissoes.js';
+import {
+  listarCargos, listarColaboradores, listarConvites, estadoDaLigacao, pedidosDePartilha,
+} from './colaboradores.js';
 
 // Rota do GET /api/state: junta numa só resposta tudo o que este utilizador
-// pode ver — casas, registos, dados globais, conexões, perfis e propostas.
+// pode ver — casas (próprias, partilhadas e de colaboração), registos, dados
+// globais, conexões, perfis, propostas, e o que geriu como dono (cargos,
+// colaboradores, convites, ligação e pedidos de partilha).
 // Só lê da base; noutros caminhos não devolve nada.
 // Recebe: c — o contexto partilhado montado pelo handleApi (env, request,
 // path, method, o utilizador em c.me e os ajudantes).
 // Devolve: a Response JSON com o estado completo (me, profiles, proposals,
-// houses, records, userRecords, connections) no GET /api/state; nada
-// (undefined) noutros caminhos.
+// houses, records, userRecords, connections, people, roles, collaborators,
+// invites, shareLink, shareRequests) no GET /api/state; nada (undefined)
+// noutros caminhos.
 export async function rotasEstado(c) {
   const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
 
@@ -50,11 +66,48 @@ export async function rotasEstado(c) {
       return out;
     };
 
-    const records = houseIds.length
+    /* casas onde tenho um cargo — menos as onde já sou participante, que
+       vêm inteiras por cima (precedência: dono > comproprietário > colaborador) */
+    const colab = await casasDeColaborador(env, me.id);
+    houseIds.forEach((id) => colab.delete(id));
+    const colabIds = [...colab.keys()];
+    const colabHouses = colabIds.length
+      ? await inChunks(colabIds,
+          `SELECT h.id, h.owner_id, h.data, h.updated_at, u.name AS owner_name
+             FROM houses h JOIN users u ON u.id = h.owner_id
+            WHERE h.deleted = 0 AND h.id IN ({IN})`)
+      : [];
+    const allIds = houseIds.concat(colabHouses.map((h) => h.id));
+
+    let records = houseIds.length
       ? await inChunks(houseIds,
-          `SELECT house_id, kind, id, data, updated_at, author FROM records
+          `SELECT house_id, kind, id, data, updated_at, author, created_by FROM records
             WHERE deleted = 0 AND house_id IN ({IN})`)
       : [];
+    /* nas casas de colaboração só se vão buscar os kinds que o cargo vê —
+       agrupadas pela mesma lista de kinds, uma consulta por grupo — e cada
+       registo passa pela projeção (um inquilino só de contrato fica em
+       {id, name}); a projeção fica em `proj` para o mapeamento final */
+    const porKinds = new Map();
+    colabHouses.forEach((h) => {
+      const ks = kindsVisiveis(colab.get(h.id).perms);
+      if (!ks.length) return;
+      const chave = ks.join(',');
+      if (!porKinds.has(chave)) porKinds.set(chave, { ks, ids: [] });
+      porKinds.get(chave).ids.push(h.id);
+    });
+    for (const { ks, ids } of porKinds.values()) {
+      const lista = ks.map((k) => "'" + k + "'").join(',');   // constantes de KIND_PERM, não input
+      const rows = await inChunks(ids,
+        `SELECT house_id, kind, id, data, updated_at, author, created_by FROM records
+          WHERE deleted = 0 AND kind IN (${lista}) AND house_id IN ({IN})`);
+      rows.forEach((r) => {
+        let d = null;
+        try { d = JSON.parse(r.data); } catch (e) { return; }
+        const proj = projetarRegisto(r.kind, d, colab.get(r.house_id).perms);
+        if (proj) records.push(Object.assign(r, { proj }));
+      });
+    }
 
     const userRecords = (
       await env.DB.prepare(
@@ -89,11 +142,13 @@ export async function rotasEstado(c) {
         .all()
     ).results;
 
-    // comproprietários por casa (dono primeiro)
+    // comproprietários por casa (dono primeiro) — também nas casas de
+    // colaboração, onde são os participantes REAIS: eu nunca entro
     const houseParts = {};
     houses.forEach((h) => { houseParts[h.id] = [h.owner_id]; });
-    if (houseIds.length) {
-      const rows = await inChunks(houseIds,
+    colabHouses.forEach((h) => { houseParts[h.id] = [h.owner_id]; });
+    if (allIds.length) {
+      const rows = await inChunks(allIds,
         `SELECT s.house_id, s.owner_id, c.requester_id, c.target_id
            FROM shares s JOIN connections c ON c.id = s.connection_id
           WHERE c.status = 'accepted' AND s.house_id IN ({IN})`);
@@ -104,31 +159,43 @@ export async function rotasEstado(c) {
       });
     }
 
-    // Ficha pessoal completa só para quem já é comproprietário ou aceitou a
-    // ligação: um convite pendente não dá acesso aos dados de ninguém.
+    /* Ficha pessoal completa SÓ para quem partilha comigo uma casa em
+       compropriedade. Uma ligação aceite sem casa comum, o dono de uma casa
+       onde só tenho um cargo, ou um colaborador meu, ficam pelo nome: o
+       perfil tem NIF, CC e morada fiscal, e nada disso é preciso para se
+       saber quem é. */
     const userIdSet = new Set([me.id]);
-    Object.keys(houseParts).forEach((hid) => houseParts[hid].forEach((u) => userIdSet.add(u)));
-    connections
-      .filter((c) => c.status === 'accepted')
-      .forEach((c) => { userIdSet.add(c.requester_id); userIdSet.add(c.target_id); });
-    // os convites pendentes entram só com o nome, para se saber quem é
-    const pendingPeers = new Set();
-    connections
-      .filter((c) => c.status !== 'accepted')
-      .forEach((c) => { pendingPeers.add(c.requester_id); pendingPeers.add(c.target_id); });
+    houseIds.forEach((hid) => (houseParts[hid] || []).forEach((u) => userIdSet.add(u)));
+    // toda a gente cujo nome o cliente pode precisar: participantes das
+    // casas de colaboração, pares de conexões (aceites ou não), colaboradores
+    // das casas onde sou participante, autores e referidos nos movimentos
+    const soNome = new Set();
+    colabHouses.forEach((h) => (houseParts[h.id] || []).forEach((u) => soNome.add(u)));
+    connections.forEach((c) => { soNome.add(c.requester_id); soNome.add(c.target_id); });
+    const cargoDe = new Map();   // userId → nome do cargo, para `people`
+    if (houseIds.length) {
+      const rows = await inChunks(houseIds,
+        `SELECT c.user_id, r.name AS role_name
+           FROM collaborators c
+           JOIN collaborator_houses ch ON ch.collaborator_id = c.id
+           JOIN roles r ON r.id = c.role_id
+          WHERE r.deleted = 0 AND ch.house_id IN ({IN})`);
+      rows.forEach((r) => { soNome.add(r.user_id); if (!cargoDe.has(r.user_id)) cargoDe.set(r.user_id, r.role_name); });
+    }
 
     // ids apenas referidos em movimentos das casas visíveis (quem pagou ou
-    // recebeu, incluindo contas já apagadas): entram só com o nome, para as
-    // referências continuarem legíveis — "[deleted]" quando a conta se foi.
-    const referenced = new Set();
+    // recebeu, incluindo contas já apagadas) e quem escreveu cada registo:
+    // entram só com o nome, para as referências continuarem legíveis —
+    // "[deleted]" quando a conta se foi.
     records.forEach((r) => {
+      [r.author, r.created_by].forEach((u) => { if (u) soNome.add(u); });
       try {
-        const d = JSON.parse(r.data);
-        [d.paidBy, d.toId].forEach((u) => { if (u && !userIdSet.has(u)) referenced.add(u); });
+        const d = r.proj || JSON.parse(r.data);
+        [d.paidBy, d.toId].forEach((u) => { if (u) soNome.add(u); });
       } catch (e) {}
     });
 
-    const uidArr = [...new Set([...userIdSet, ...pendingPeers, ...referenced])];
+    const uidArr = [...new Set([...userIdSet, ...soNome])];
     const userRows = await inChunks(uidArr, 'SELECT id, name FROM users WHERE id IN ({IN})');
     const fullArr = [...userIdSet];
     const profRecs = await inChunks(fullArr,
@@ -141,6 +208,9 @@ export async function rotasEstado(c) {
       name: u.name,
       data: userIdSet.has(u.id) ? profByUser[u.id] || null : null,
     }));
+    const people = userRows.map((u) => (cargoDe.has(u.id) && !userIdSet.has(u.id)
+      ? { id: u.id, name: u.name, kind: 'collab', roleName: cargoDe.get(u.id) }
+      : { id: u.id, name: u.name, kind: 'owner' }));
 
     // propostas de divisão pendentes nas casas visíveis
     let proposals = [];
@@ -158,9 +228,20 @@ export async function rotasEstado(c) {
       }));
     }
 
+    // o que geri como dono (vazio para quem não tem nada): cargos,
+    // colaboradores, convites por usar, a ligação e os pedidos de partilha
+    const [roles, collaborators, invites, shareLink, shareRequests] = await Promise.all([
+      listarCargos(env, me.id),
+      listarColaboradores(env, me.id),
+      listarConvites(env, me.id),
+      estadoDaLigacao(env, me.id),
+      pedidosDePartilha(env, me.id),
+    ]);
+
     return json({
       me: { id: me.id, email: me.email, name: me.name },
       profiles,
+      people,
       proposals,
       houses: houses.map((h) => ({
         id: h.id,
@@ -170,6 +251,18 @@ export async function rotasEstado(c) {
         participants: houseParts[h.id] || [h.owner_id],
         updatedAt: h.updated_at,
         data: JSON.parse(h.data),
+      })).concat(colabHouses.map((h) => {
+        const cg = colab.get(h.id);
+        return {
+          id: h.id,
+          ownerId: h.owner_id,
+          ownerName: h.owner_name,
+          mine: false,
+          participants: houseParts[h.id] || [h.owner_id],
+          collab: { id: cg.id, roleId: cg.roleId, roleName: cg.roleName, perms: [...cg.perms] },
+          updatedAt: h.updated_at,
+          data: projetarCasa(JSON.parse(h.data), cg.perms),
+        };
       })),
       records: records.map((r) => ({
         houseId: r.house_id,
@@ -177,8 +270,14 @@ export async function rotasEstado(c) {
         id: r.id,
         updatedAt: r.updated_at,
         author: r.author || null,
-        data: JSON.parse(r.data),
+        createdBy: r.created_by || null,
+        data: r.proj || JSON.parse(r.data),
       })),
+      roles,
+      collaborators,
+      invites,
+      shareLink,
+      shareRequests,
       userRecords: userRecords.map((r) => ({
         kind: r.kind,
         id: r.id,

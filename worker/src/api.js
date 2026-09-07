@@ -4,7 +4,10 @@
 // (inquilinos, contratos, movimentos, ...) pertencem a uma casa. Um utilizador
 // pode ligar-se a outro através do id curto e, dentro dessa conexão, cada um
 // escolhe que casas partilha. Casas partilhadas são visíveis e editáveis pelo
-// outro utilizador; apagar a casa ou gerir a partilha é só do dono.
+// outro utilizador; apagar a casa ou gerir a partilha é só do dono. Além dos
+// comproprietários há colaboradores: pessoas com um cargo (lista de
+// permissões) numa lista de casas do dono, que veem e fazem só o que o cargo
+// deixa e nunca entram nas quotas (rotas/colaboradores.js).
 //
 // Este ficheiro é só o encaminhador: monta o contexto, corre as rotas por
 // ordem e devolve a primeira resposta. Cada área vive no seu módulo, em
@@ -30,6 +33,7 @@ import { rotasTickets } from './rotas/tickets.js';
 import { rotasAnexos } from './rotas/anexos.js';
 import { rotasCasas } from './rotas/casas.js';
 import { rotasConexoes } from './rotas/conexoes.js';
+import { rotasColaboradores, rotasPreVisualizacao } from './rotas/colaboradores.js';
 import { rotasContasDeTeste } from './teste.js';
 
 export { recordReport, CATEGORIAS };
@@ -42,6 +46,7 @@ const COM_SESSAO = [
   rotasSync,
   rotasTickets,
   rotasAnexos,
+  rotasColaboradores,
   rotasCasas,
   rotasConexoes,
 ];
@@ -75,6 +80,11 @@ export async function handleApi(request, env, ctx) {
   // quem ficou preso no ecrã de entrada
   const relato = await rotasRelatos(c);
   if (relato) return relato;
+
+  // o que uma ligação de convite ou de partilha é, antes de haver sessão:
+  // só mostra, nunca gasta nem cria nada
+  const previa = await rotasPreVisualizacao(c);
+  if (previa) return previa;
 
   c.me = await getSessionUser(env, request);
   if (!c.me) return err(401, 'Sessão inválida — inicia sessão de novo.');

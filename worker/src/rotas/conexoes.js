@@ -14,6 +14,10 @@ export async function rotasConexoes(c) {
   // ---- Conexões e partilha ------------------------------------------------
 
   if (path === '/api/connections' && method === 'POST') {
+    // o id curto é enumerável: sem travão, uma conta varria ids e colhia nomes
+    if (!(await rateLimit(env, 'conn:' + me.id, 10, 3600))) {
+      return err(429, 'Demasiados convites seguidos. Espera uma hora e tenta de novo.');
+    }
     const b = await body(request);
     const peerId = String((b && b.peerId) || '').trim().toUpperCase();
     if (!peerId) return err(400, 'Indica o id do outro utilizador.');
