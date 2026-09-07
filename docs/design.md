@@ -636,12 +636,16 @@ ownerIds, quotas ou contas entre proprietários (acessos.js:souDono).
 O que já está fora destas regras, por ordem de gravidade. Não está
 corrigido: cada uma tem o sítio, para quem lhe pegar.
 
-Média. O tornarFocavel (vistas.js:tornarFocavel) dá tabindex a tudo o que
-tem onclick, e isso inclui cada barra e cada arco dos gráficos: na visão
-geral são vinte e sete paragens do Tab que não levam a lado nenhum — a
-dica que abrem já se lê no texto ao lado. Quem lhes pegar deve deixá-las
-fora da ordem de tabulação (a dica continua a abrir ao toque e ao rato) e
-dar ao gráfico uma descrição só, em vez de as anelar uma a uma.
+Média. O tornarFocavel (vistas.js:tornarFocavel) dá tabindex e role=button
+a tudo o que tem onclick, e cada barra e cada arco tem um (é por lá que a
+dica abre ao toque: graficos.js:hit). Resultado: cada forma de cada
+gráfico é uma paragem do Tab anunciada como botão — medido na visão
+geral, catorze das trinta e nove, e num gráfico de um ano inteiro são as
+barras todas. Não levam a lado nenhum: o que a dica mostra já está escrito
+na legenda ao lado, e o <title> dentro da forma já o diz a um leitor de
+ecrã. Quem lhe pegar deve deixar as formas fora da ordem de tabulação (o
+tornarFocavel a saltar o que está dentro de um <svg>; o toque e o rato
+continuam a abrir a dica) e dar ao gráfico uma descrição só.
 
 Média. addDays (planeados.js:addDays) constrói a data em hora local e
 devolve-a com toISOString: meia-noite local no verão vira o dia anterior,
