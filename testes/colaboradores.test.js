@@ -21,6 +21,7 @@ import {
   fundirCasa, podeVerKind, podeAddKind, kindsVisiveis,
 } from '../worker/src/lib/permissoes.js';
 import { definirDemo, esquecerCache } from '../worker/src/lib/planos.js';
+import { mascararTokens } from '../worker/src/lib/relatos.js';
 
 /* ------------------------------ armações ------------------------------- */
 
@@ -331,6 +332,27 @@ describe('o estado de um colaborador é despido pelo cargo', () => {
     assert.deepEqual(stP.roles, [], 'mas os cargos são do dono');
   });
 
+  test('cada casa minha ou partilhada comigo traz os seus colaboradores, em leitura', async () => {
+    const { env, D, P, C, visitas, contab } = await armar();
+    await darCargo(env, D, C, visitas, ['H1', 'H2']);
+    const C2 = await conta(env, 'Colab 2');
+    await darCargo(env, D, C2, contab, ['H2']);
+    const stD = await estado(env, D);
+    const idC = stD.collaborators.find((c) => c.userId === C.id).id;
+    // o comproprietário de H1 fica a saber quem vê os movimentos — só não os gere
+    const stP = await estado(env, P);
+    const h1 = stP.houses.find((h) => h.id === 'H1');
+    assert.deepEqual(h1.collaborators, [{ id: idC, userId: C.id, name: 'Colab', roleName: 'Gestor de visitas' }]);
+    assert.deepEqual(stP.collaborators, [], 'a lista para gerir continua a ser só do dono');
+    // o dono, por casa
+    assert.deepEqual(stD.houses.find((h) => h.id === 'H1').collaborators.map((x) => x.userId), [C.id]);
+    assert.deepEqual(stD.houses.find((h) => h.id === 'H2').collaborators.map((x) => [x.userId, x.roleName]).sort(),
+      [[C.id, 'Gestor de visitas'], [C2.id, 'Contabilista']].sort());
+    // um colaborador não vê os outros colaboradores da casa
+    const stC = await estado(env, C);
+    assert.ok(!('collaborators' in stC.houses.find((h) => h.id === 'H2')));
+  });
+
   test('uma conexão aceite sem casa comum não dá o perfil', async () => {
     const env = ambiente();
     const A = await conta(env, 'A');
@@ -463,6 +485,35 @@ describe('POST /api/sync com cargo', () => {
     assert.equal((await resp(pedir(env, C, '/api/houses/H1/proposal', 'POST', { shares: {} }))).status, 403, 'propostas nunca');
     assert.equal((await resp(pedir(env, C, '/api/houses/H1', 'DELETE'))).status, 403);
   });
+
+  test('rec.add confirma o planeado do dono (put), mas não o apaga', async () => {
+    const { env, D, C, visitas, contab } = await armar();
+    await darCargo(env, D, C, contab, ['H1']);
+    const rec = (op, data) => ({ op, scope: 'record', houseId: 'H1', kind: 'rec', id: 'r1', data });
+    let r = await sync(env, C, [
+      rec('put', { label: 'Planeado', next: '2026-10-01' }),   // confirmar avança o next
+      rec('del'),
+      { op: 'put', scope: 'record', houseId: 'H1', kind: 'tx', id: 'x1', data: { label: 'Renda', amount: 1 } },
+    ]);
+    assert.deepEqual(r[0], { ok: true }, 'confirmar é um put do planeado do dono');
+    assert.equal(r[1].status, 403);
+    assert.equal(r[1].error, 'Só podes alterar ou apagar o que tu criaste neste imóvel.');
+    assert.equal(r[2].status, 403, 'nos outros kinds a regra do criador mantém-se');
+    const row = await linha(env, 'H1', 'rec', 'r1');
+    assert.equal(JSON.parse(row.data).next, '2026-10-01');
+    assert.equal(row.deleted, 0);
+    assert.equal(row.created_by, D.id, 'o criador não muda');
+    assert.equal(row.author, C.id, 'o último a escrever sim');
+    // pela rota unitária, o mesmo (silenciar mexe em muted)
+    assert.equal((await resp(pedir(env, C, '/api/houses/H1/records/rec/r1', 'PUT', { data: { label: 'Planeado', muted: true } }))).status, 200);
+    assert.equal((await resp(pedir(env, C, '/api/houses/H1/records/rec/r1', 'DELETE'))).status, 403);
+    assert.equal((await linha(env, 'H1', 'rec', 'r1')).deleted, 0);
+    // sem rec.add, nem confirmar
+    await darCargo(env, D, C, visitas, ['H1']);
+    r = await sync(env, C, [rec('put', { label: 'Planeado', next: '2026-11-01' })]);
+    assert.equal(r[0].status, 403);
+    assert.equal(r[0].error, 'Sem permissão para adicionar planeados neste imóvel.');
+  });
 });
 
 describe('o plano do dono da casa é o que manda', () => {
@@ -493,6 +544,35 @@ describe('o plano do dono da casa é o que manda', () => {
       assert.deepEqual(r[0], { ok: true });
     } finally {
       await definirDemo(a.env, true);
+      esquecerCache();
+    }
+  });
+
+  test('PUT /api/houses/:id de casa nova respeita o plano, como o sync (fora de demo)', async () => {
+    const env = ambiente();
+    const A = await conta(env, 'A', 'free');
+    for (let i = 1; i <= 3; i++) await casa(env, A, 'HA' + i, { name: 'A' + i });
+    try {
+      await definirDemo(env, false, 0);
+      esquecerCache();
+      const r = await resp(pedir(env, A, '/api/houses/HA4', 'PUT', { data: { name: 'quarta' } }));
+      assert.equal(r.status, 402);
+      assert.equal(r.error, 'O plano free vai até 3 imóveis. O que criaste fica neste aparelho até mudares de plano.');
+      assert.equal(await env.DB.prepare("SELECT 1 FROM houses WHERE id = 'HA4'").first(), null, 'a 4.ª casa não ficou');
+      const s = await sync(env, A, [{ op: 'put', scope: 'house', houseId: 'HA4', data: { name: 'quarta' } }]);
+      assert.equal(s[0].status, 402);
+      assert.equal(s[0].error, r.error, 'a mesma frase pelos dois caminhos');
+      // só a criação é travada: editar e reativar o que existe passa
+      assert.equal((await resp(pedir(env, A, '/api/houses/HA1', 'PUT', { data: { name: 'editada' } }))).status, 200);
+      await resp(pedir(env, A, '/api/houses/HA1', 'DELETE'));
+      assert.equal((await resp(pedir(env, A, '/api/houses/HA1', 'PUT', { data: { name: 'de volta' } }))).status, 200, 'reativar');
+      assert.equal((await resp(pedir(env, A, '/api/houses/HA4', 'PUT', { data: { name: 'quarta' } }))).status, 402, 'e continua a contar 3');
+      // com plano plus, a 4.ª entra
+      await env.DB.prepare("UPDATE users SET plan = 'plus' WHERE id = ?").bind(A.id).run();
+      const Ap = { id: A.id, token: await createSession(env, A.id, 0) };
+      assert.equal((await resp(pedir(env, Ap, '/api/houses/HA4', 'PUT', { data: { name: 'quarta' } }))).status, 200);
+    } finally {
+      await definirDemo(env, true);
       esquecerCache();
     }
   });
@@ -553,6 +633,86 @@ describe('anexos por permissão', () => {
     const f = await env.DB.prepare("SELECT house_id FROM files WHERE id = 'f_x'").first();
     assert.equal(f.house_id, 'H3');
     assert.equal(await pedir(env, C, '/api/files/f_x').then((r) => r.status), 404);
+  });
+
+  test('um anexo sem kind (anterior à migração 0014) só sai para o dono e o comproprietário', async () => {
+    const { env, D, P, C, vertudo } = await armar();
+    await ficheiro(env, 'f_nulo', D, 'H1', null, null);   // carregado antes de haver record_kind
+    await ficheiro(env, 'f_zzz', D, 'H1', 'zzz', 'z1');    // um kind que o servidor não conhece
+    await darCargo(env, D, C, vertudo, ['H1']);
+    assert.equal(await ver(env, C, 'f_nulo'), 404, 'com todos os .view — mas sem kind não se sabe que permissão o abre');
+    assert.equal(await ver(env, C, 'f_zzz'), 404, 'kind desconhecido, o mesmo');
+    assert.equal(await ver(env, D, 'f_nulo'), 200, 'o dono vê');
+    assert.equal(await ver(env, P, 'f_nulo'), 200, 'o comproprietário também');
+    // o dono volta a gravar a ficha: o anexo ganha kind e passa a seguir a regra dele
+    await sync(env, D, [{ op: 'put', scope: 'record', houseId: 'H1', kind: 'tenant', id: 't1', data: { name: 'Inês', files: [{ id: 'f_t' }, { id: 'f_nulo' }] } }]);
+    assert.equal((await env.DB.prepare("SELECT record_kind FROM files WHERE id = 'f_nulo'").first()).record_kind, 'tenant');
+    assert.equal(await ver(env, C, 'f_nulo'), 200, '«Ver tudo» tem tenant.view');
+  });
+
+  test('gravar um registo não re-etiqueta o anexo de outro registo da casa', async () => {
+    const { env, D, C, contab } = await armar();
+    await darCargo(env, D, C, contab, ['H1']);   // tx.add e file.add, sem tenant.view
+    assert.equal(await ver(env, C, 'f_t'), 404, 'o CC do inquilino não é do contabilista');
+    const r = await sync(env, C, [{ op: 'put', scope: 'record', houseId: 'H1', kind: 'tx', id: 'x9', data: { label: 'r', files: [{ id: 'f_t' }] } }]);
+    assert.deepEqual(r[0], { ok: true }, 'a gravação passa — é o anexo que fica onde estava');
+    let f = await env.DB.prepare("SELECT record_kind, record_id FROM files WHERE id = 'f_t'").first();
+    assert.equal(f.record_kind, 'tenant');
+    assert.equal(f.record_id, 't1');
+    assert.equal(await ver(env, C, 'f_t'), 404, 'e continua sem o ver');
+    assert.equal((await resp(pedir(env, C, '/api/houses/H1/records/tx/x9', 'PUT', { data: { label: 'r', files: [{ id: 'f_t' }] } }))).status, 200);
+    f = await env.DB.prepare("SELECT record_kind, record_id FROM files WHERE id = 'f_t'").first();
+    assert.equal(f.record_id, 't1', 'pela rota unitária, o mesmo');
+    // o dono, esse, move o que é dele
+    await sync(env, D, [{ op: 'put', scope: 'record', houseId: 'H1', kind: 'tx', id: 'x1', data: { label: 'Renda', files: [{ id: 'f_t' }] } }]);
+    f = await env.DB.prepare("SELECT record_kind, record_id FROM files WHERE id = 'f_t'").first();
+    assert.equal(f.record_kind, 'tx');
+    assert.equal(f.record_id, 'x1');
+  });
+
+  test('juntar anexos a um registo exige file.add — também pelo caminho do anexo solto', async () => {
+    const { env, D, C } = await armar();
+    const frase = 'Sem permissão para adicionar fotos e documentos neste imóvel.';
+    const soTx = await cargo(env, D, 'Só movimentos', ['tx.add'], 'R_TX');
+    const txAnexos = await cargo(env, D, 'Movimentos e anexos', ['tx.add', 'file.add'], 'R_TXF');
+    await darCargo(env, D, C, soTx, ['H1']);
+    // carregar solto (sem ?casa=) passa sempre — ainda não está em casa nenhuma
+    const solto = (id) => handleApi(new Request('https://app.x.pt/api/files/' + id, {
+      method: 'PUT', body: new Uint8Array([9]),
+      headers: { Authorization: 'Bearer ' + C.token, 'X-Ficheiro-Tipo': 'text/plain', 'Content-Length': '1' },
+    }), env, { waitUntil() {} });
+    const anexo = (id) => env.DB.prepare('SELECT house_id, record_kind, record_id FROM files WHERE id = ?').bind(id).first();
+    const tx = (data) => ({ op: 'put', scope: 'record', houseId: 'H1', kind: 'tx', id: 'x10', data });
+    assert.equal((await solto('solto1')).status, 200);
+    let r = await sync(env, C, [tx({ label: 'recibo', files: [{ id: 'solto1' }] })]);
+    assert.equal(r[0].status, 403);
+    assert.equal(r[0].error, frase);
+    assert.equal(await linha(env, 'H1', 'tx', 'x10'), null, 'o registo não se gravou');
+    assert.equal((await anexo('solto1')).house_id, null, 'e o anexo continua solto');
+    const u = await resp(pedir(env, C, '/api/houses/H1/records/tx/x10', 'PUT', { data: { label: 'recibo', files: [{ id: 'solto1' }] } }));
+    assert.equal(u.status, 403, 'a rota unitária também');
+    assert.equal(u.error, frase);
+    r = await sync(env, C, [tx({ label: 'sem anexos' })]);
+    assert.deepEqual(r[0], { ok: true }, 'sem anexos, tx.add chega');
+    // com file.add passa, e o anexo fica preso ao registo
+    await darCargo(env, D, C, txAnexos, ['H1']);
+    r = await sync(env, C, [tx({ label: 'recibo', files: [{ id: 'solto1' }] })]);
+    assert.deepEqual(r[0], { ok: true });
+    let f = await anexo('solto1');
+    assert.equal(f.house_id, 'H1');
+    assert.equal(f.record_kind, 'tx');
+    assert.equal(f.record_id, 'x10');
+    // de volta ao cargo sem file.add: editar o registo sem juntar anexos novos passa; um novo, não
+    await darCargo(env, D, C, soTx, ['H1']);
+    r = await sync(env, C, [tx({ label: 'editado', amount: 1, files: [{ id: 'solto1' }] })]);
+    assert.deepEqual(r[0], { ok: true }, 'o anexo já estava preso a este registo');
+    assert.equal((await solto('solto2')).status, 200);
+    r = await sync(env, C, [tx({ label: 'com mais um', files: [{ id: 'solto1' }, { id: 'solto2' }] })]);
+    assert.equal(r[0].status, 403);
+    assert.equal(r[0].error, frase);
+    assert.equal(JSON.parse((await linha(env, 'H1', 'tx', 'x10')).data).label, 'editado', 'a edição recusada não ficou');
+    f = await anexo('solto2');
+    assert.equal(f.house_id, null);
   });
 });
 
@@ -639,6 +799,37 @@ describe('o convite de uso único', () => {
     assert.equal(r.status, 404); assert.equal(r.error, frase);
     assert.equal((await resp(pedir(env, null, '/api/convite/nao-hex'))).status, 404);
     assert.equal(await conta1(env, 'SELECT COUNT(*) AS n FROM collaborators'), 0, 'nada entrou');
+  });
+
+  test('a D1 a falhar na pré-visualização: o mesmo 404, e o relato sem o token', async () => {
+    const env = ambiente();
+    await conta(env, 'Alguém');   // o relato pendura-se no primeiro utilizador
+    const token = 'a'.repeat(64);
+    assert.equal(mascararTokens('/api/convite/' + token), '/api/convite/…');
+    assert.equal(mascararTokens('POST /api/ligar/' + token + '/pedir'), 'POST /api/ligar/…/pedir');
+    assert.equal(mascararTokens('https://app.x.pt/?convite=' + token + '&x=1'), 'https://app.x.pt/?convite=…&x=1');
+    assert.equal(mascararTokens(null), '');
+    assert.equal(mascararTokens('/api/convite/nao-hex'), '/api/convite/nao-hex', 'só o que tem forma de token');
+    // a D1 cai a meio da consulta do convite
+    const prepare = env.DB.prepare.bind(env.DB);
+    env.DB.prepare = (sql) => {
+      if (/collab_invites/.test(sql)) throw new Error('D1 em baixo');
+      return prepare(sql);
+    };
+    const pendentes = [];
+    const r = await resp(handleApi(new Request('https://app.x.pt/api/convite/' + token), env, { waitUntil(p) { pendentes.push(p); } }));
+    env.DB.prepare = prepare;
+    await Promise.all(pendentes);
+    assert.equal(r.status, 404);
+    assert.equal(r.error, 'Essa ligação já foi usada, expirou, ou não existe. Pede outra a quem te convidou.');
+    const tickets = (await env.DB.prepare('SELECT * FROM tickets').all()).results;
+    assert.equal(tickets.length, 1, 'ficou um relato para quem programa');
+    assert.ok(!JSON.stringify(tickets).includes(token), 'sem o token em claro');
+    assert.ok(tickets[0].body.startsWith('GET /api/convite/…'), tickets[0].body);
+    // um token que não existe não é um erro: o mesmo 404 e nenhum relato
+    assert.equal((await resp(pedir(env, null, '/api/convite/' + 'b'.repeat(64)))).status, 404);
+    assert.equal((await resp(pedir(env, null, '/api/ligar/' + 'b'.repeat(64)))).status, 404);
+    assert.equal(await conta1(env, 'SELECT COUNT(*) AS n FROM tickets'), 1);
   });
 
   test('o dono não aceita o seu; o comproprietário salta as casas onde já está; o cargo substitui-se', async () => {
@@ -864,6 +1055,35 @@ describe('a ligação de partilha', () => {
     assert.equal((await estado(env, D)).shareRequests.incoming.length, 1, 'quem já pediu continua à espera');
     const acoes = (await auditoria(env)).map((x) => x.acao);
     assert.ok(acoes.includes('partilha.link.rodar') && acoes.includes('partilha.link.revogar'));
+  });
+
+  test('uma partilha aceite e depois cortada pode pedir-se de novo pela ligação', async () => {
+    const env = ambiente();
+    const D = await conta(env, 'Dono');
+    const B = await conta(env, 'B');
+    await casa(env, B, 'HB1', { name: 'B1' });
+    const t = /ligar=(\w+)/.exec((await resp(pedir(env, D, '/api/share-link', 'POST', {}))).url)[1];
+    await pedirPartilha(env, B, t, ['HB1']);
+    const id = (await estado(env, D)).shareRequests.incoming[0].id;
+    assert.equal((await resp(pedir(env, D, '/api/share-requests/' + id + '/accept', 'POST', {}))).status, 200);
+    assert.equal((await canAccessHouse(env, D.id, 'HB1')).ok, true);
+    // B corta a ligação entre os dois: a partilha vai-se, a linha do pedido fica 'accepted'
+    const conn = await env.DB.prepare('SELECT id FROM connections').first();
+    assert.equal((await resp(pedir(env, B, '/api/connections/' + conn.id, 'DELETE'))).status, 200);
+    assert.equal((await canAccessHouse(env, D.id, 'HB1')).ok, false);
+    assert.equal((await env.DB.prepare('SELECT status FROM share_requests WHERE id = ?').bind(id).first()).status, 'accepted');
+    // pedir de novo: a mesma linha volta a pendente e o dono vê o pedido
+    assert.deepEqual(await pedirPartilha(env, B, t, ['HB1']), { status: 200, pedidos: 1, saltadas: [] });
+    const row = await env.DB.prepare('SELECT status, decided_at FROM share_requests WHERE id = ?').bind(id).first();
+    assert.equal(row.status, 'pending');
+    assert.equal(row.decided_at, null);
+    const incoming = (await estado(env, D)).shareRequests.incoming;
+    assert.equal(incoming.length, 1);
+    assert.equal(incoming[0].id, id);
+    assert.equal((await resp(pedir(env, D, '/api/share-link'))).uses, 2);
+    // e aceitar outra vez volta a dar a partilha
+    assert.equal((await resp(pedir(env, D, '/api/share-requests/' + id + '/accept', 'POST', {}))).status, 200);
+    assert.equal((await canAccessHouse(env, D.id, 'HB1')).ok, true);
   });
 
   test('tectos: 5 casas por dia por remetente e 20 pedidos por responder por dono', async () => {

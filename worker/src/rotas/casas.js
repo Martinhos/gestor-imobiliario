@@ -1,6 +1,6 @@
 // Casas, quotas, registos de cada casa e dados globais do utilizador.
-import { linkFiles } from '../files.js';
-import { modoDemo } from '../lib/planos.js';
+import { linkFiles, regraDosAnexos } from '../files.js';
+import { modoDemo, podeCriar } from '../lib/planos.js';
 import { acessoACasa, planoDosDonos, regraDoRegisto, apagarCasa } from '../lib/acesso.js';
 import { fundirCasa, fraseRecusa } from '../lib/permissoes.js';
 
@@ -49,6 +49,15 @@ export async function rotasCasas(c) {
         .bind(JSON.stringify(preserveOwnership('', b.data)), now(), houseId)
         .run();
     } else {
+      // uma casa nova conta para o plano, como no /api/sync: só a criação é
+      // travada; editar e reativar o que existe passa sempre (fora de demo)
+      if (!(await modoDemo(env))) {
+        const n = ((await env.DB.prepare(
+          'SELECT COUNT(*) AS n FROM houses WHERE owner_id = ? AND deleted = 0'
+        ).bind(me.id).first()) || {}).n || 0;
+        const nao = podeCriar(me.plan, 'imovel', n);
+        if (nao) return err(402, nao);
+      }
       await env.DB.prepare(
         'INSERT INTO houses (id, owner_id, data, updated_at, deleted) VALUES (?, ?, ?, ?, 0)'
       )
@@ -155,6 +164,9 @@ export async function rotasCasas(c) {
       b.data = cleanData(b.data, recordId);
       if (!b.data) return err(400, 'Corpo inválido.');
       if (tooBig(b.data)) return err(413, 'Registo demasiado grande.');
+      // os anexos que a escrita junta: um colaborador só com file.add (a mesma regra do /api/sync)
+      const anexos = await regraDosAnexos(env, access, houseId, kind, recordId, b.data);
+      if (anexos) return err(anexos.status, anexos.error);
       await env.DB.prepare(
         `INSERT INTO records (house_id, kind, id, data, updated_at, deleted, author, created_by)
          VALUES (?, ?, ?, ?, ?, 0, ?, ?)

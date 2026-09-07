@@ -3,10 +3,13 @@
 // numa casa, só quem o carregou. Para um colaborador, a casa não chega: o
 // anexo sabe a que registo pertence (record_kind/record_id) e o cargo tem
 // de o poder ver — um CC digitalizado numa ficha de inquilino não sai para
-// quem só marca visitas.
+// quem só marca visitas. Um anexo SEM kind (carregado antes da migração
+// 0014, ou de um kind que o servidor não conhece) é «não classificado»: só
+// o dono e os comproprietários o veem, até o dono voltar a gravar o registo
+// (docs/armadilhas.md).
 
 import { acessoACasa } from './lib/acesso.js';
-import { podeVerKind, temPerm } from './lib/permissoes.js';
+import { permDoKind, podeVerKind, temPerm, fraseRecusa } from './lib/permissoes.js';
 
 const MAX_FILE = 25 * 1024 * 1024;   // o mesmo limite que a app aplica
 
@@ -33,8 +36,11 @@ export function fileIdsIn(data) {
 // pertencer-lhe — é isto que os torna visíveis a quem partilha a casa — e
 // ficam a saber a que registo pertencem, que é o que os cargos consultam.
 // Só se movem anexos que sejam de quem grava, que ainda não estejam em casa
-// nenhuma, ou que já estejam nesta: um id que circule não rouba o anexo de
-// outra conta para uma casa onde o ladrão o possa ler.
+// nenhuma, ou que já estejam presos a ESTE registo: um id que circule não
+// rouba o anexo de outra conta para uma casa onde o ladrão o possa ler, nem
+// re-etiqueta o anexo de outro registo da casa (o CC da ficha do inquilino)
+// para um kind que o cargo de quem grava leia. O que não passa no filtro
+// fica como está — a gravação do registo não falha por isso.
 // Recebe: env — o ambiente do worker (D1 em env.DB); houseId — o id da casa;
 // data — o registo acabado de gravar, onde se procuram os anexos; kind — o
 // kind do registo ('contract', 'tx', ...) ou 'house' para a casa inteira
@@ -45,15 +51,16 @@ export function fileIdsIn(data) {
 // (falhas são engolidas).
 export async function linkFiles(env, houseId, data, kind, recordId, userId) {
   if (!houseId || !data || typeof data !== 'object') return;
+  const rid = String(recordId || houseId);
   const grava = async (ids, rk) => {
     if (!ids.length) return;
     try {
       const ph = ids.map(() => '?').join(',');
-      const filtro = userId ? ' AND (owner_id = ? OR house_id IS NULL OR house_id = ?)' : '';
+      const filtro = userId ? ' AND (owner_id = ? OR house_id IS NULL OR (house_id = ? AND record_id = ?))' : '';
       await env.DB.prepare(
         `UPDATE files SET house_id = ?, record_kind = ?, record_id = ? WHERE id IN (${ph})${filtro}`
       )
-        .bind(houseId, rk, String(recordId || houseId), ...ids, ...(userId ? [userId, houseId] : []))
+        .bind(houseId, rk, rid, ...ids, ...(userId ? [userId, houseId, rid] : []))
         .run();
     } catch (e) { /* o anexo pode ainda não ter sido carregado */ }
   };
@@ -65,11 +72,40 @@ export async function linkFiles(env, houseId, data, kind, recordId, userId) {
   await grava(fileIdsIn(data), String(kind || ''));
 }
 
+// A regra dos anexos numa escrita de registo: um colaborador só junta anexos
+// a um registo com file.add. «Juntar» é referir um id que ainda não esteja
+// preso a ESTE registo — o que já lá estava (posto pelo dono, ou por ele
+// próprio antes) não conta, para editar o registo sem mexer nos anexos
+// continuar a passar. Sem isto, carregar solto (PUT /api/files/:id sem
+// ?casa=) e gravar o registo era o caminho por onde o file.add não se via.
+// Recebe: env — o ambiente do worker (D1 em env.DB); acesso — o objeto de
+// acessoACasa; houseId, kind, recordId — a linha do registo; data — o registo
+// que se vai gravar (já passado por cleanData).
+// Devolve: promessa de null quando pode, ou de { status: 403, error } com a
+// frase para o cliente.
+export async function regraDosAnexos(env, acesso, houseId, kind, recordId, data) {
+  if (!acesso || !acesso.collab || temPerm(acesso.collab.perms, 'file.add')) return null;
+  const ids = [...new Set(fileIdsIn(data))];
+  if (!ids.length) return null;
+  const presos = new Set();
+  for (let i = 0; i < ids.length; i += 50) {   // o limite de parâmetros da D1
+    const parte = ids.slice(i, i + 50);
+    const rows = (await env.DB.prepare(
+      `SELECT id FROM files WHERE house_id = ? AND record_kind = ? AND record_id = ?
+          AND id IN (${parte.map(() => '?').join(',')})`
+    ).bind(houseId, String(kind), String(recordId), ...parte).all()).results;
+    rows.forEach((r) => presos.add(r.id));
+  }
+  return ids.every((id) => presos.has(id)) ? null : { status: 403, error: fraseRecusa('anexo') };
+}
+
 // A regra de acesso a um anexo: o dono vê sempre; guardado numa casa, vê
 // quem tiver acesso à casa — dono e comproprietário a tudo; um colaborador
 // só com file.view, e ao que o cargo cobre (documentos de hipoteca pedem
-// loan.view; um anexo de inquilino pede tenant.view); solto e de outra
-// pessoa, ninguém.
+// loan.view; um anexo de inquilino pede tenant.view); um anexo sem kind
+// (anterior à migração 0014) ou de kind desconhecido não sai para nenhum
+// cargo — não se sabe o que é, logo não se sabe que permissão o abre;
+// solto e de outra pessoa, ninguém.
 // Recebe: env — o ambiente do worker; me — o utilizador com sessão (usa me.id);
 // row — a linha do anexo na D1 (ou null quando não existe).
 // Devolve: promessa de { ver, apagar } — se este utilizador pode ver o anexo
@@ -85,8 +121,9 @@ async function acessoAoAnexo(env, me, row) {
   const rk = row.record_kind || '';
   let ver;
   if (rk === 'house.loans') ver = temPerm(perms, 'loan.view');
-  else if (rk === 'house.photos' || rk === '') ver = temPerm(perms, 'file.view');
-  else ver = temPerm(perms, 'file.view') && podeVerKind(perms, rk);
+  else if (rk === 'house.photos') ver = temPerm(perms, 'file.view');
+  else if (permDoKind(rk)) ver = temPerm(perms, 'file.view') && podeVerKind(perms, rk);
+  else ver = false;   // sem kind ou kind desconhecido: só dono e comproprietários
   return { ver, apagar: false };
 }
 
@@ -119,9 +156,7 @@ export async function handleFiles(request, env, me, seg, method, deps) {
     if (casa) {
       const a = await acessoACasa(env, me.id, casa);
       if (!a.ok) return err(403, 'Sem acesso a esta casa.');
-      if (a.collab && !temPerm(a.collab.perms, 'file.add')) {
-        return err(403, 'Sem permissão para adicionar fotos e documentos neste imóvel.');
-      }
+      if (a.collab && !temPerm(a.collab.perms, 'file.add')) return err(403, fraseRecusa('anexo'));
     }
 
     const existe = await env.DB.prepare('SELECT owner_id FROM files WHERE id = ?').bind(id).first();

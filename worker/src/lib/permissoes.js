@@ -172,14 +172,16 @@ export function fundirCasa(existenteStr, incoming, perms) {
 // A frase que explica a um colaborador por que a escrita não passou — o
 // cliente mostra-a tal e qual num toast e tira o registo da base local.
 // Recebe: motivo — 'add' (falta o .add do kind), 'proprio' (não criou o
-// registo), 'casa' (sem house.edit), 'kind' (kind sem cargo que o cubra) ou
-// 'acesso'; kind (opcional) — o kind do registo, para a frase de 'add'.
+// registo), 'casa' (sem house.edit), 'kind' (kind sem cargo que o cubra),
+// 'anexo' (junta anexos sem file.add) ou 'acesso'; kind (opcional) — o kind
+// do registo, para a frase de 'add'.
 // Devolve: a frase em português.
 export function fraseRecusa(motivo, kind) {
   if (motivo === 'add') {
     return 'Sem permissão para adicionar ' + (NOME_DO_KIND[kind] || 'registos deste tipo') + ' neste imóvel.';
   }
   if (motivo === 'proprio') return 'Só podes alterar ou apagar o que tu criaste neste imóvel.';
+  if (motivo === 'anexo') return 'Sem permissão para adicionar fotos e documentos neste imóvel.';
   if (motivo === 'casa') return 'Sem permissão para editar a ficha deste imóvel.';
   if (motivo === 'kind') return 'Sem permissão para alterar este tipo de registo neste imóvel.';
   return 'Sem acesso a esta casa.';

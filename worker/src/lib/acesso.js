@@ -174,6 +174,11 @@ export function planoDosDonos(env, me) {
 // pelas rotas PUT/DELETE de casas.js: acesso à casa; para colaboradores, o
 // kind tem de ter cargo, o cargo tem de ter o .add, e editar/apagar só o que
 // o próprio criou; e criar contrato/planeado obedece ao plano do dono.
+// A exceção a «só o que criou»: gravar (não apagar) um planeado com rec.add.
+// rec.add é «Adicionar e confirmar planeados», e confirmar é um put do
+// planeado do dono (avança o next; silenciar mexe em muted) — sem isto o
+// contabilista via o cartão «por confirmar» e levava 403 ao tocar-lhe. Os
+// anexos que a escrita junta têm regra própria (regraDosAnexos, files.js).
 // Recebe: env — o ambiente do worker; me — o utilizador com sessão; acesso —
 // o objeto de acessoACasa; houseId, kind, recordId — a linha; put — true a
 // gravar, false a apagar; demo — true em modo de demonstração (sem limites);
@@ -189,7 +194,9 @@ export async function regraDoRegisto(env, me, acesso, houseId, kind, recordId, p
     const perms = acesso.collab.perms;
     if (!permDoKind(kind)) return { status: 403, error: fraseRecusa('kind') };
     if (!podeAddKind(perms, kind)) return { status: 403, error: fraseRecusa('add', kind) };
-    if (row && row.created_by !== me.id) return { status: 403, error: fraseRecusa('proprio') };
+    // confirmar um planeado é atualizá-lo: com rec.add passa, seja de quem for
+    const confirmar = put && kind === 'rec';
+    if (row && row.created_by !== me.id && !confirmar) return { status: 403, error: fraseRecusa('proprio') };
   }
   if (!put) return row ? null : { gone: true };
   // só a criação é travada pelo plano; o que existe edita-se sempre

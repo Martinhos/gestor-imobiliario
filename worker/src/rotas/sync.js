@@ -1,5 +1,5 @@
 // Sincronizacao em lote das alteracoes pendentes do cliente.
-import { linkFiles } from '../files.js';
+import { linkFiles, regraDosAnexos } from '../files.js';
 import { modoDemo, podeCriar } from '../lib/planos.js';
 import { acessoACasa, planoDosDonos, regraDoRegisto, apagarCasa } from '../lib/acesso.js';
 import { fundirCasa, fraseRecusa } from '../lib/permissoes.js';
@@ -123,6 +123,10 @@ export async function rotasSync(c) {
             continue;
           }
           if (put) {
+            // os anexos que a escrita junta têm regra própria: um colaborador
+            // só os junta com file.add (o que já estava preso ao registo não conta)
+            const anexos = await regraDosAnexos(env, a, houseId, tipo, rid, op.data);
+            if (anexos) { results.push({ ok: false, status: anexos.status, error: anexos.error }); continue; }
             // author é o último a escrever (o sino usa-o); created_by é o
             // criador e nunca muda — é o que decide «só o que criou»
             await env.DB.prepare(

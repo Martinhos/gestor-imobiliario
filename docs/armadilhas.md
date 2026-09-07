@@ -91,6 +91,22 @@ cortesia, nunca a barreira. Ao acrescentar um campo sensível à casa ou a
 um kind novo, a pergunta é «que permissão o abre?» — e a resposta escreve-se
 em worker/src/lib/permissoes.js antes de escrever no cliente.
 
+## Um anexo sem kind é só de donos
+A migração 0014 acrescentou `files.record_kind`/`record_id` sem os
+preencher: todos os anexos anteriores ficaram com kind NULL, e o mesmo
+acontece a qualquer id de kind que o servidor não conheça. `acessoAoAnexo`
+(worker/src/files.js) trata isso como «não classificado»: sai para o dono e
+os comproprietários, e para nenhum cargo — nem com file.view — porque não
+se sabe que permissão o abre (o CC de um inquilino pede tenant.view, o PDF
+de um contrato contract.view). O kind só aparece quando o registo volta a
+ser gravado (`linkFiles`), e aí o anexo passa a seguir a regra dele. Não
+«corrigir» o ramo `rk === ''` para cair em file.view: era assim, e mostrava
+os CC digitalizados a quem só marca visitas. Pela mesma razão, `linkFiles`
+só move anexos de quem grava, soltos, ou já presos a ESTE registo — um id
+que circule não re-etiqueta o anexo de outro registo para um kind que o
+cargo leia — e juntar anexos a um registo exige file.add
+(`regraDosAnexos`), mesmo quando o anexo foi carregado solto, sem `?casa=`.
+
 ## Patches em ficheiros com UTF-8 no Windows
 Aplicar edições por heredoc bash corrompe acentos e emoji. Os patches
 escrevem-se num ficheiro .py (UTF-8) e corre-se esse ficheiro — nunca

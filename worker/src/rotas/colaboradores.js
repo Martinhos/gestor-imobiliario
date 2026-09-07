@@ -21,6 +21,7 @@ import { randomToken } from '../auth.js';
 import { auditar } from '../lib/auditoria.js';
 import { normalizarPerms } from '../lib/permissoes.js';
 import { canAccessHouse } from '../lib/acesso.js';
+import { recordReport } from '../lib/relatos.js';
 
 const CONVITE_DIAS = 7;
 const MAX_CONVITES_PENDENTES = 20;
@@ -263,37 +264,46 @@ function idsDeCasas(v, badId) {
 /* As pré-visualizações, SEM sessão: o que uma ligação é, antes de a pessoa
    entrar ou criar conta. Nunca escrevem nada — abrir não é usar — e nunca
    revelam mais do que o nome do dono e o que o convite dá. Limitadas por
-   IP, para ninguém varrer tokens.
-   Recebe: c — o contexto do pedido (env, request, path, method, seg e os
-   ajudantes json/err/rateLimit/clientIp; ainda sem me).
+   IP, para ninguém varrer tokens. Uma exceção lá dentro (a D1 a falhar a
+   meio) não sobe ao index.js — o relato dele levaria o caminho, e o caminho
+   é o token: fica o mesmo 404 uniforme e um relato com o caminho mascarado.
+   Recebe: c — o contexto do pedido (env, request, ctx, path, method, seg e
+   os ajudantes json/err/rateLimit/clientIp; ainda sem me).
    Devolve: a Response nos GET /api/convite/:token e /api/ligar/:token; nada
    (undefined) noutros caminhos, para o encaminhador seguir. */
 export async function rotasPreVisualizacao(c) {
-  const { env, request, method, seg, json, err, rateLimit, clientIp } = c;
+  const { env, request, ctx, method, seg, json, err, rateLimit, clientIp } = c;
   if (method !== 'GET' || seg.length !== 3) return;
+  if (seg[1] !== 'convite' && seg[1] !== 'ligar') return;
 
-  if (seg[1] === 'convite') {
-    if (!(await rateLimit(env, 'conv:' + clientIp(request), 30, 900))) {
-      return err(429, 'Demasiadas tentativas. Espera uns minutos.');
+  try {
+    if (seg[1] === 'convite') {
+      if (!(await rateLimit(env, 'conv:' + clientIp(request), 30, 900))) {
+        return err(429, 'Demasiadas tentativas. Espera uns minutos.');
+      }
+      const v = await convitePorToken(env, seg[2]);
+      if (!v) return err(404, ERRO_CONVITE);
+      return json({
+        ownerName: v.row.owner_name,
+        roleName: v.row.role_name,
+        perms: v.perms,
+        houses: v.houses.map((h) => ({ name: h.name })),
+        expiresAt: v.row.expires_at,
+      }, 200, { 'Referrer-Policy': 'no-referrer' });
     }
-    const v = await convitePorToken(env, seg[2]);
-    if (!v) return err(404, ERRO_CONVITE);
-    return json({
-      ownerName: v.row.owner_name,
-      roleName: v.row.role_name,
-      perms: v.perms,
-      houses: v.houses.map((h) => ({ name: h.name })),
-      expiresAt: v.row.expires_at,
-    }, 200, { 'Referrer-Policy': 'no-referrer' });
-  }
 
-  if (seg[1] === 'ligar') {
     if (!(await rateLimit(env, 'lig:' + clientIp(request), 30, 900))) {
       return err(429, 'Demasiadas tentativas. Espera uns minutos.');
     }
     const l = await ligacaoPorToken(env, seg[2]);
     if (!l) return err(404, ERRO_LIGACAO);
     return json({ ownerName: l.ownerName }, 200, { 'Referrer-Policy': 'no-referrer' });
+  } catch (e) {
+    console.error('pré-visualização', e && e.message);
+    const relato = recordReport(env, ctx, 'server', e && e.message,
+      'GET /api/' + seg[1] + '/…\n' + String((e && e.stack) || '').slice(0, 800));
+    if (ctx && ctx.waitUntil) ctx.waitUntil(relato);
+    return err(404, seg[1] === 'convite' ? ERRO_CONVITE : ERRO_LIGACAO);
   }
 }
 
@@ -610,12 +620,16 @@ export async function rotasColaboradores(c) {
       if (((meus && meus.n) || 0) + pedir.length > MAX_PEDIDOS_POR_DIA) {
         return err(429, 'Já enviaste ' + MAX_PEDIDOS_POR_DIA + ' pedidos de partilha hoje — tenta amanhã.');
       }
+      /* a linha antiga reabre-se seja qual for o desfecho que teve: recusada,
+         ou aceite e entretanto cortada (a partilha já não existe — foi isso
+         que a pré-verificação acima confirmou ao não saltar a casa). Só um
+         pedido ainda pendente fica como está. */
       const stmts = pedir.map((h) => env.DB.prepare(
         `INSERT INTO share_requests (id, from_user, to_user, house_id, status, created_at, decided_at)
          VALUES (?, ?, ?, ?, 'pending', ?, NULL)
          ON CONFLICT (from_user, to_user, house_id) DO UPDATE SET
            status = 'pending', created_at = excluded.created_at, decided_at = NULL
-         WHERE share_requests.status = 'rejected'`
+         WHERE share_requests.status <> 'pending'`
       ).bind(crypto.randomUUID(), me.id, l.ownerId, h.id, t));
       stmts.push(env.DB.prepare('UPDATE share_links SET uses = uses + 1 WHERE owner_id = ?').bind(l.ownerId));
       await env.DB.batch(stmts);

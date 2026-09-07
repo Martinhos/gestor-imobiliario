@@ -1,11 +1,14 @@
 // O estado completo que este utilizador pode ver, numa so leitura.
 //
 // Três graus de acesso saem daqui com formas diferentes: as casas de que sou
-// dono ou comproprietário vêm inteiras; as casas onde tenho um cargo vêm
-// despidas ao que o cargo deixa (projetarCasa/projetarRegisto) e com o cargo
-// em `collab`; e o perfil completo de alguém só sai para quem é
-// comproprietário de uma casa comum — uma ligação aceite sem casa comum, um
-// dono de colaboração ou um colaborador levam data: null.
+// dono ou comproprietário vêm inteiras, cada uma com os seus colaboradores
+// em leitura (`collaborators: [{ id, userId, name, roleName }]` — é assim que
+// um comproprietário fica a saber quem vê os movimentos, embora só o dono
+// os gira); as casas onde tenho um cargo vêm despidas ao que o cargo deixa
+// (projetarCasa/projetarRegisto) e com o cargo em `collab`; e o perfil
+// completo de alguém só sai para quem é comproprietário de uma casa comum —
+// uma ligação aceite sem casa comum, um dono de colaboração ou um
+// colaborador levam data: null.
 
 import { casasDeColaborador } from '../lib/acesso.js';
 import { kindsVisiveis, projetarCasa, projetarRegisto } from '../lib/permissoes.js';
@@ -173,14 +176,19 @@ export async function rotasEstado(c) {
     colabHouses.forEach((h) => (houseParts[h.id] || []).forEach((u) => soNome.add(u)));
     connections.forEach((c) => { soNome.add(c.requester_id); soNome.add(c.target_id); });
     const cargoDe = new Map();   // userId → nome do cargo, para `people`
+    const colabPorCasa = {};     // houseId → [{ id, userId, roleName }], para as casas onde sou participante
     if (houseIds.length) {
       const rows = await inChunks(houseIds,
-        `SELECT c.user_id, r.name AS role_name
+        `SELECT c.id, c.user_id, ch.house_id, r.name AS role_name
            FROM collaborators c
            JOIN collaborator_houses ch ON ch.collaborator_id = c.id
            JOIN roles r ON r.id = c.role_id
           WHERE r.deleted = 0 AND ch.house_id IN ({IN})`);
-      rows.forEach((r) => { soNome.add(r.user_id); if (!cargoDe.has(r.user_id)) cargoDe.set(r.user_id, r.role_name); });
+      rows.forEach((r) => {
+        soNome.add(r.user_id);
+        if (!cargoDe.has(r.user_id)) cargoDe.set(r.user_id, r.role_name);
+        (colabPorCasa[r.house_id] = colabPorCasa[r.house_id] || []).push({ id: r.id, userId: r.user_id, roleName: r.role_name });
+      });
     }
 
     // ids apenas referidos em movimentos das casas visíveis (quem pagou ou
@@ -211,6 +219,11 @@ export async function rotasEstado(c) {
     const people = userRows.map((u) => (cargoDe.has(u.id) && !userIdSet.has(u.id)
       ? { id: u.id, name: u.name, kind: 'collab', roleName: cargoDe.get(u.id) }
       : { id: u.id, name: u.name, kind: 'owner' }));
+    const nomeDe = new Map(userRows.map((u) => [u.id, u.name]));
+    // os colaboradores de uma casa minha ou partilhada comigo, em leitura
+    const colaboradoresDe = (hid) => (colabPorCasa[hid] || []).map((x) => ({
+      id: x.id, userId: x.userId, name: nomeDe.get(x.userId) || '', roleName: x.roleName,
+    }));
 
     // propostas de divisão pendentes nas casas visíveis
     let proposals = [];
@@ -249,6 +262,7 @@ export async function rotasEstado(c) {
         ownerName: h.owner_name,
         mine: h.owner_id === me.id,
         participants: houseParts[h.id] || [h.owner_id],
+        collaborators: colaboradoresDe(h.id),
         updatedAt: h.updated_at,
         data: JSON.parse(h.data),
       })).concat(colabHouses.map((h) => {
