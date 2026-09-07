@@ -5,6 +5,56 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
+
+/* As regras de design (docs/design.md) citam o código por símbolo —
+   ficheiro.js:função, index.html:.seletor, index.html:#id,
+   index.html:<tag …> — e nunca por linha, que apodrece a cada commit. Um
+   símbolo que deixe de existir rebenta aqui com a citação à vista. */
+const raiz = new URL('../', import.meta.url);
+const existe = (p) => existsSync(new URL(p, raiz));
+const PASTAS = ['web/app/', 'web/cloud/', 'web/', 'scripts/', 'testes/'];
+
+// «componentes.js» → web/app/componentes.js. Um nome que exista em mais do
+// que uma pasta (anexos.js) devolve várias e a citação tem de vir completa.
+function resolveFicheiro(nome) {
+  if (nome === 'index.html') return ['web/index.html'];
+  if (nome.includes('/')) return existe(nome) ? [nome] : [];
+  return PASTAS.map((d) => d + nome).filter(existe);
+}
+
+// o símbolo existe no ficheiro? Em JS é uma definição — function/const/let/var
+// nome, ou nome= / nome: (chaves de objeto, CW.x = function). Em HTML é o
+// seletor tal e qual, o id (#x ou id="x"), a variável, ou o começo da tag.
+// Um número é uma linha, e só se verifica que ela existe.
+function temSimbolo(src, sim, html) {
+  if (/^\d+(?:-\d+)?$/.test(sim)) return Number(sim.split('-').pop()) <= src.split('\n').length;
+  if (html) {
+    if (sim.startsWith('<')) return src.includes(sim.slice(0, -1));
+    if (sim.startsWith('#')) return src.includes(sim) || src.includes('id="' + sim.slice(1) + '"');
+    if (sim.startsWith('.')) {
+      const classes = sim.slice(1).split('.').map((c) => '\\b' + c + '\\b').join('[^"]*');
+      return src.includes(sim) || new RegExp('class="[^"]*' + classes).test(src);
+    }
+    return src.includes(sim);
+  }
+  const id = sim.replace(/\$/g, '\\$');
+  return new RegExp('\\b(?:function|const|let|var)\\s+' + id + '\\b').test(src)
+    || new RegExp('(?:^|[^\\w$])' + id + '\\s*[=:](?!=)', 'm').test(src);
+}
+
+const RE_FICH = '((?:web\\/(?:app|cloud)\\/|web\\/|scripts\\/|testes\\/)?[\\w-]+(?:\\.test)?\\.(?:js|html))';
+// ficheiro:símbolo — o símbolo é uma tag <…> inteira, ou uma sequência sem espaços
+const RE_CIT = new RegExp('(?:^|[^\\w/.-])' + RE_FICH + ':(<[^>\\n]*>|[\\w$.#@:\\[\\]()>+-]+)', 'g');
+// um ficheiro referido sem símbolo tem de existir na mesma
+const RE_FICH_SOLTO = new RegExp('(?:^|[^\\w/.-])' + RE_FICH + '\\b', 'g');
+
+// tira o que é pontuação da frase e não do símbolo: «(vistas.js:fab)», «sel,», «hoje:»
+function limpaSimbolo(sim) {
+  let s = sim.replace(/[.,;:]+$/, '');
+  while (s.endsWith(')') && (s.match(/\(/g) || []).length < (s.match(/\)/g) || []).length) s = s.slice(0, -1);
+  return s;
+}
 
 describe('gerar-docs', () => {
   test('corre, cobre o codigo todo, e a vista compila com o resultado', async () => {
@@ -31,6 +81,12 @@ describe('gerar-docs', () => {
     // as armadilhas vieram do markdown
     const arm = DOCS.capitulos.find((c) => c.id === 'armadilhas');
     assert.ok(arm.itens[0].funcoes.length >= 8, 'as armadilhas estao la');
+    // as regras de design vieram do markdown, com a mesma forma das armadilhas
+    const des = DOCS.capitulos.find((c) => c.id === 'design');
+    assert.ok(des, 'o capitulo de design existe');
+    assert.equal(des.itens[0].nome, 'docs/design.md');
+    assert.ok(des.itens[0].funcoes.length >= 8, 'as seccoes de design estao la (' + des.itens[0].funcoes.length + ')');
+    assert.ok(des.itens[0].funcoes.every((f) => f.assinatura === '' && f.doc.length > 40), 'cada seccao e prosa sem assinatura');
     assert.match(DOCS.comandos.find((c) => c.nome === 'access').quem, /master/, 'as permissoes vieram do worker');
     // cada comando traz o guia (o que acontece) e as opcoes com tipo
     assert.ok(DOCS.comandos.every((c) => c.oQueFaz && c.oQueFaz.length > 40), 'todos os comandos explicam o que acontece');
@@ -53,7 +109,31 @@ describe('gerar-docs', () => {
     assert.ok(html.includes('id="q"'), 'ha pesquisa');
     assert.ok(html.includes('id="nav"'), 'ha gaveta');
     assert.ok(html.includes('Armadilhas conhecidas'), 'as armadilhas na gaveta');
+    assert.ok(html.includes('Regras de design'), 'o design na gaveta');
     assert.ok(!html.includes('Gerado do próprio código a cada deploy'), 'o subtitulo foi retirado');
     assert.ok(html.includes('teste.js'), 'a pagina lista os ficheiros');
+  });
+
+  test('as citações das regras de design apontam para código que existe', () => {
+    const md = readFileSync(new URL('docs/design.md', raiz), 'utf8');
+    const mortas = [];
+    const vistas = new Set();
+    let n = 0;
+    for (const m of md.matchAll(RE_CIT)) {
+      const nome = m[1], sim = limpaSimbolo(m[2]), cit = nome + ':' + sim;
+      if (vistas.has(cit)) continue;
+      vistas.add(cit); n++;
+      const fich = resolveFicheiro(nome);
+      if (!fich.length) { mortas.push(cit + ' — o ficheiro não existe'); continue; }
+      if (fich.length > 1) { mortas.push(cit + ' — ambíguo (' + fich.join(', ') + '): escreve o caminho completo'); continue; }
+      const src = readFileSync(new URL(fich[0], raiz), 'utf8');
+      if (!temSimbolo(src, sim, fich[0].endsWith('.html'))) mortas.push(cit + ' — «' + sim + '» não está em ' + fich[0]);
+    }
+    for (const m of md.matchAll(RE_FICH_SOLTO)) {
+      if (!resolveFicheiro(m[1]).length) mortas.push(m[1] + ' — o ficheiro não existe');
+    }
+    assert.deepEqual(mortas, [], 'citações mortas em docs/design.md');
+    // se o formato do documento mudar, o teste deixa de ver citações e ficava vazio sem ninguém dar por isso
+    assert.ok(n >= 200, 'o documento cita o código por símbolo (' + n + ' citações distintas)');
   });
 });

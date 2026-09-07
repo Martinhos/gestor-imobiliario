@@ -125,6 +125,78 @@ describe('plano de amortização', () => {
     }));
     assert.equal(app.amort(l).n, 360);
   });
+
+  test('a mista recalcula a prestação com o prazo restante quando a taxa muda', () => {
+    const a = app.amort(fixa({ outstanding: 150000, type: 'mista', rate: 2, fixedYears: 5, euribor: 3, spread: 1 }));
+    perto(a.rows[0].pay, 554.43, 0.05);
+    perto(a.rows[59].bal, 130806.54, 1);
+    perto(a.rows[60].pay, 690.45, 0.1);
+    perto(a.rows[359].bal, 0, 0.5);
+  });
+
+  test('a taxa devolvida por loanCalc é a do mês em que se está', () => {
+    const l = fixa({ type: 'mista', rate: 2, fixedYears: 5, euribor: 3, spread: 1 });
+    app.db.properties.push(app.normProp({ id: 'p1', name: 'Casa', loans: [l] }));
+    assert.equal(app.loanCalc(l).rate, 2);
+    for (let i = 0; i < 72; i++) app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'l1', amount: 500, date: '2025-01-01' }));
+    assert.equal(app.loanCalc(l).rate, 4);
+    assert.equal(app.amort(l).rows[0].rate, 4);
+  });
+
+  test('prazo esgotado pelas registadas: fica um mês e avisa', () => {
+    const l = fixa({ years: 1, outstanding: 5000 });
+    app.db.properties.push(app.normProp({ id: 'p1', name: 'Casa', loans: [l] }));
+    for (let i = 0; i < 12; i++) app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'l1', amount: 500, date: '2025-01-01' }));
+    const a = app.amort(l);
+    assert.equal(a.n, 1); assert.equal(a.esgotado, true);
+    assert.equal(app.amort(fixa({ years: 1, outstanding: 5000, id: 'outro' })).esgotado, false);
+  });
+});
+
+describe('efeito do pagamento na hipoteca (applyLoan)', () => {
+  // normProp copia a hipoteca: a que conta é a que fica na db
+  const monta = () => { app.db.properties.push(app.normProp({ id: 'p1', name: 'Casa', loans: [fixa()] })); return app.findLoan(app.prop('p1'), 'l1'); };
+  const pag = (extra) => app.normTx(Object.assign({ kind: 'loan', loanId: 'l1', propertyId: 'p1', date: '2026-01-10' }, extra));
+
+  test('a distribuição sugerida bate com a prestação e abate o capital', () => {
+    const l = monta(), t = pag({ amount: 431.6 });
+    app.applyLoan(t);
+    perto(t.interest, 250); perto(t.stamp, 10); perto(t.principal, 171.60);
+    perto(l.outstanding, 99828.40);
+  });
+
+  test('juros+selo+capital somam sempre o montante, mesmo abaixo dos juros', () => {
+    const l = monta();
+    [100, 7, 0.5, 13, 260.01, 1000].forEach((amt) => {
+      const t = pag({ amount: amt });
+      app.applyLoan(t);
+      perto(t.interest + t.stamp + t.principal, amt, 0.005);
+      assert.ok(t.principal >= 0 && t.interest >= 0 && t.stamp >= 0, 'nada negativo com ' + amt);
+      assert.ok(t.interest <= 250.005, 'os juros nunca passam os da prestação');
+    });
+    perto(l.outstanding, 100000 - 740 - 0.01, 0.02);   // só o de 1000 € e o de 260,01 abateram capital
+  });
+
+  test('amortização antecipada: capital e comissão somam o montante', () => {
+    const l = monta(), t = pag({ payType: 'amortizacao', amount: 10000 });
+    app.applyLoan(t);
+    perto(t.principal, 9803.92); perto(t.fee, 196.08); perto(t.interest, 0); perto(t.stamp, 0);
+    perto(l.outstanding, 90196.08);
+  });
+
+  test('o selo é 4% por omissão e configurável', () => {
+    app.db.settings.stampPct = 0; perto(app.loanCalc(fixa()).stamp, 0);
+    app.db.settings.stampPct = 4; perto(app.loanCalc(fixa()).stamp, 10);
+  });
+
+  test('a comissão de amortização segue a mesma fase que o plano', () => {
+    const l = fixa({ type: 'mista', fixedYears: 5, amortFeeFix: 2, amortFeeVar: 0.5 });   // sem data de início
+    app.db.properties.push(app.normProp({ id: 'p1', name: 'Casa', loans: [l] }));
+    perto(app.amortFeeRate(l, '2026-01-01'), 0.02);
+    for (let i = 0; i < 72; i++) app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'l1', amount: 500, date: '2025-01-01' }));
+    perto(app.amortFeeRate(l, '2026-01-01'), 0.005);
+    assert.equal(app.amort(l).rows[0].rate, app.rateAt(l, 72));
+  });
 });
 
 describe('comissão de amortização antecipada', () => {
@@ -136,10 +208,14 @@ describe('comissão de amortização antecipada', () => {
     perto(app.amortFeeRate(fixa({ type: 'variavel', amortFeeVar: 0.5 }), '2026-01-01'), 0.005);
   });
 
-  test('mista muda de comissão quando muda de taxa', () => {
+  test('mista muda de comissão quando as registadas passam a fase fixa — a data de início não conta', () => {
     const l = fixa({ type: 'mista', fixedYears: 5, start: '2020-01-01', amortFeeFix: 2, amortFeeVar: 0.5 });
-    perto(app.amortFeeRate(l, '2023-01-01'), 0.02);    // dentro dos cinco anos
-    perto(app.amortFeeRate(l, '2026-01-01'), 0.005);   // já depois
+    app.db.properties.push(app.normProp({ id: 'p1', name: 'Casa', loans: [l] }));
+    perto(app.amortFeeRate(l), 0.02);    // sem registadas: fase fixa, começou quando começou
+    for (let i = 0; i < 59; i++) app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'l1', amount: 500, date: '2025-01-01' }));
+    perto(app.amortFeeRate(l), 0.02);    // a 60.ª ainda é da fase fixa
+    app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'l1', amount: 500, date: '2025-01-01' }));
+    perto(app.amortFeeRate(l), 0.005);   // já depois
   });
 
   test('sem valores definidos usa os limites legais', () => {

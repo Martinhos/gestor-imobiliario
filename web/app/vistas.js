@@ -1,7 +1,7 @@
 /* ================= VISTAS ================= */
 /* botão de filtros no cabeçalho: análise, registos e movimentos */
 let anaOpen={};
-const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',recurring:'lrec',credits:'lcred'};
+const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',recurring:'lrec',credits:'lcred',visits:'lvis'};
 /* toque no botão de filtros do cabeçalho: abre o painel certo consoante o
    separador — dropdown nas listas de registos, modal nos movimentos, painel
    de análise nos restantes.
@@ -70,10 +70,11 @@ function render(){
   document.getElementById('pageSub').textContent=meta.sub;
   const hb=document.getElementById('hdrFilt'),isAna=['dashboard','projections','reports'].indexOf(tab)>-1,
     hasFilt=isAna||LFK[tab]||tab==='transactions';
+  if(typeof notifSino==='function')notifSino();
   if(hb){hb.style.display=hasFilt?'':'none';
     if(hasFilt){hb.innerHTML=ic('filter',16)+(hdrFiltN()?'<span class="dot"></span>':'');
       hb.classList.toggle('primary',isAna?!!anaOpen[tab]:(LFK[tab]?!!lf(LFK[tab])._open:false))}}
-  let html=({dashboard:vDashboard,properties:vProperties,contracts:vContracts,tenants:vTenants,owners:vOwners,
+  let html=({dashboard:vDashboard,visits:vVisits,calendar:vCalendar,properties:vProperties,contracts:vContracts,tenants:vTenants,owners:vOwners,
     transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
   view().innerHTML=html;
@@ -123,12 +124,13 @@ function kpiModal(id){
     ${d.note?`<div class="hint">${d.note}</div>`:''}</div>`;
   openModal(k.title,body,`<button class="btn" onclick="closeModal()">Fechar</button>`);
 }
-/* anos com movimentos (no âmbito), mais o corrente
-   Recebe: pid (opcional) — id do imóvel a que limitar; vazio/null usa o âmbito do proprietário filtrado.
+/* anos com movimentos que contam nesta vista (o mesmo peso das métricas: imóvel,
+   grupo ou âmbito todo), mais o corrente
+   Recebe: pid (opcional) — id do imóvel ou 'g:ID' de um grupo; vazio/null usa o âmbito do proprietário filtrado.
    Devolve: array de anos (números) por ordem ascendente. */
 function yearsWithData(pid){
   const ys={};ys[YEAR]=1;
-  db.transactions.forEach(t=>{const y=Number(String(t.date||'').slice(0,4));if(y&&(pid?t.propertyId===pid:inScope(t.propertyId)))ys[y]=1});
+  db.transactions.forEach(t=>{const y=Number(String(t.date||'').slice(0,4));if(y&&txWeight(t,pid,false)>0)ys[y]=1});
   return Object.keys(ys).map(Number).sort();
 }
 /* série histórica de um campo monetário das métricas (income, op, loan ou cf):
@@ -139,56 +141,30 @@ function yearsWithData(pid){
    Devolve: objeto {fmt, monthly (12 totais mensais), yearly (array de {label: ano, value})} para a janela do KPI. */
 function evoMoney(field,pid,fmt){
   const kind={income:'income',op:'expense',loan:'loan'}[field];
-  const monthly=kind?monthly_(YEAR,pid,kind):[...Array(12)].map((_,i)=>monthly_(YEAR,pid,'income')[i]-monthly_(YEAR,pid,'expense')[i]-monthly_(YEAR,pid,'loan')[i]);
+  const monthly=kind?monthly_(YEAR,pid,kind):[...Array(12)].map((_,i)=>monthly_(YEAR,pid,'income')[i]-monthly_(YEAR,pid,'expense')[i]-monthly_(YEAR,pid,'loan')[i]-monthly_(YEAR,pid,'amort')[i]);
   return {fmt:fmt||euro,monthly,yearly:yearsWithData(pid).map(y=>({label:y,value:metrics(y,pid,{share:true})[field]}))};
 }
 // atalho: totais mensais já na quota-parte do proprietário filtrado
-// Recebe: y — o ano (número); pid — id do imóvel ou de grupo ('g:…'), ou null para o âmbito todo; kind — 'income', 'expense' ou 'loan'.
+// Recebe: y — o ano (número); pid — id do imóvel ou de grupo ('g:…'), ou null para o âmbito todo; kind — 'income', 'expense', 'loan' ou 'amort'.
 // Devolve: array de 12 números — o total de cada mês desse ano.
 const monthly_=(y,pid,kind)=>monthly(y,pid,kind,true);
-/* série ano a ano de um rácio, para a janela do KPI. cap e coc saem do
-   histórico real; grossYield e ltv são projeções para a frente — daí o
-   título e a nota diferentes que devolve.
-   Recebe: field — o rácio ('cap', 'coc', 'grossYield' ou 'ltv'); pid — id do imóvel, ou null/vazio para o âmbito todo.
-   Devolve: objeto {fmt, yearly (array de {label, value, extra?})} para a janela do KPI; nas projeções
-   (grossYield e ltv) leva ainda yearlyTitle, extraTitle, marks e note. */
-function evoRatio(field,pid){
-  if(field==='cap'||field==='coc')return {fmt:v=>pct(v),yearly:yearsWithData(pid).map(y=>({label:y,value:metrics(y,pid,{share:true})[field]}))};
-  /* yield bruto e LTV: projeção com os aumentos de renda e a amortização das hipotecas */
-  const s=db.settings,n=Math.max(2,Math.round(s.years)),ps=pid?[prop(pid)].filter(Boolean):scope();
-  const value=sum(ps.map(p=>p.value*sh(p)));
-  const act=db.contracts.filter(c=>isActive(c)&&ps.some(p=>p.id===c.propertyId));
-  const out=[];
-  for(let i=0;i<n;i++){
-    if(field==='grossYield'){
-      const rent=sum(act.map(c=>c.rent*sh(prop(c.propertyId))*12*Math.pow(1+((c.increase==null?s.growth:c.increase)/100),i)));
-      const rv=sum(ps.filter(isRented).map(p=>p.value*sh(p)));
-      out.push({label:YEAR+i,value:rv?rent/rv:NaN,extra:euro(rent)});
-    }else{
-      const debt=sum(ps.map(p=>sh(p)*sum(liveLoans(p).map(l=>{const a=amort(l,(i+1)*12);return a.rows.length?a.rows[a.rows.length-1].bal:0}))));
-      out.push({label:YEAR+i,value:value?debt/value:NaN,extra:euro(debt)});
-    }
-  }
-  return {fmt:v=>pct(v),yearly:out,yearlyTitle:'Projeção ano a ano',extraTitle:field==='grossYield'?'Renda anual':'Em dívida',marks:decadeMarks(YEAR,n),
-    note:field==='grossYield'?'Renda projetada com o aumento anual de cada contrato, sobre o valor de mercado atual.':'Dívida no fim de cada ano segundo o plano de cada hipoteca, sobre o valor de mercado atual.'};
-}
 const WHY={
-  receita:'O que entrou este ano. Não é a renda contratada — é o que foi mesmo lançado.',
+  receita:'O que entrou este ano. Não é a renda contratada — é o que foi mesmo lançado. Cauções e empréstimos recebidos ficam de fora: são dinheiro a devolver, não rendimento.',
   despesas:'Soma dos movimentos de despesa do ano: impostos, condomínio, seguros, obras, manutenção. Não inclui prestações do crédito.',
-  prestacoes:'Capital, juros e selo. Separado das despesas porque parte é poupança, não custo.',
-  cashflow:'Receita menos despesas menos prestações. É o dinheiro que sobrou (ou faltou) na carteira.',
-  yieldBruto:'Renda anual sobre o valor de mercado dos arrendados. Ignora despesas — serve para comparar com anúncios.',
-  cap:'Resultado líquido a dividir pelo valor do portefólio. Mede o imóvel, não o financiamento.',
-  aquisicao:'Cashflow do ano a dividir pelo valor de aquisição. Mostra quanto rende o dinheiro que investiste, já depois de pagar o banco.',
-  ltv:'Dívida total a dividir pelo valor de mercado. Quanto mais baixo, menos alavancado está o portefólio.',
+  prestacoes:'Capital, juros e selo das prestações. Separado das despesas porque parte é poupança, não custo. As amortizações antecipadas ficam à parte, no rodapé.',
+  cashflow:'Receita menos despesas, prestações e amortizações antecipadas. É o dinheiro que saiu mesmo da carteira — uma amortização também sai, embora seja capital e não custo.',
+  yieldBruto:'Renda anual contratada sobre o valor de mercado dos imóveis com contrato ativo — os mesmos imóveis em cima e em baixo. Ignora despesas; serve para comparar com anúncios.',
+  cap:'Resultado líquido (rendas menos despesas, sem o banco) a dividir pelo valor de mercado. No ano corrente o resultado é anualizado. Mede o imóvel, não o financiamento — na tua quota, quando há filtro de proprietário.',
+  aquisicao:'Cashflow do ano até hoje a dividir pelo preço de compra, com o crédito incluído. Não é o retorno sobre o capital próprio: para isso faltaria tirar ao preço o que o banco emprestou.',
+  ltv:'Dívida a dividir pelo valor de mercado — na tua quota, quando há filtro de proprietário. Quanto mais baixo, menos alavancado está o portefólio.',
   valorIntro:'O valor de mercado que introduziste na ficha do imóvel. É a tua estimativa, não um cálculo.',
-  valorRend:'Quanto valeria o imóvel se o comprasses hoje exigindo o yield que definiste: resultado líquido anual dividido por esse yield.',
-  diferenca:'Positivo: as rendas justificam mais do que o valor que puseste.',
+  valorRend:'Quanto valeria o imóvel se o comprasses hoje exigindo o yield que definiste: resultado líquido anual dividido por esse yield. No ano corrente, o resultado até hoje é anualizado.',
+  diferenca:'Positivo: as rendas justificam mais do que o valor que puseste. Sem valor de mercado na ficha não há comparação.',
   equity:'Valor de mercado menos o que ainda está em dívida. É o que sobraria se vendesses e liquidasses as hipotecas hoje.',
   rendaHoje:'Soma das rendas anuais dos contratos ativos, aos valores de hoje.',
   rendaFim:'A mesma soma no último ano do horizonte, já com os aumentos anuais aplicados.',
   totalPeriodo:'Soma de todas as rendas do período projetado.',
-  cashflowFim:'Rendas projetadas menos despesas inflacionadas menos as prestações previstas nesse ano.'
+  cashflowFim:'Rendas projetadas menos despesas menos as prestações previstas nesse ano. As despesas partem do último ano completo com despesas (sem nenhum, do ano corrente anualizado) e crescem com a inflação.'
 };
 // cartão genérico das vistas: título, subtítulo opcional e corpo em HTML
 // Recebe: t — o título; s — o subtítulo (vazio para não aparecer); b — o corpo, em HTML.
@@ -231,10 +207,10 @@ function dashBar(){
 // Devolve: nada — redesenha a vista.
 function onDashProp(){dashProp=val('dashPropSel')||'';render()}
 
-/* Visão geral: KPIs do ano e de rentabilidade (com evolução ao toque),
-   gráficos mensais, donut das despesas, resumo do portefólio e saldos entre
-   proprietários. Respeita o filtro de proprietário (valores na quota-parte)
-   e o imóvel/grupo em foco; devolve o HTML completo da vista.
+/* Visão geral: KPIs do ano (com evolução ao toque), gráficos mensais, donut
+   das despesas, resumo do portefólio e saldos entre proprietários. Os rácios
+   de rentabilidade vivem na Avaliação. Respeita o filtro de proprietário
+   (valores na quota-parte) e o imóvel/grupo em foco; devolve o HTML completo da vista.
    Devolve: string com o HTML completo da vista. */
 function vDashboard(){
   if(dashProp&&!pidProps(dashProp).length)dashProp='';
@@ -246,25 +222,19 @@ function vDashboard(){
       <div class="toolbar" style="justify-content:center;margin-top:16px">
       <button class="btn primary" onclick="propModal()">Adicionar imóvel</button>
       <button class="btn" onclick="seed()">Carregar exemplo</button></div></div>`;
-  const inc=monthly(YEAR,pid,'income',true),exp=monthly(YEAR,pid,'expense',true),ln=monthly(YEAR,pid,'loan',true);
-  let acc=0;const cum=inc.map((v,i)=>acc+=v-exp[i]-ln[i]);
+  const inc=monthly(YEAR,pid,'income',true),exp=monthly(YEAR,pid,'expense',true),ln=monthly(YEAR,pid,'loan',true),am=monthly(YEAR,pid,'amort',true);
+  let acc=0;const cum=inc.map((v,i)=>acc+=v-exp[i]-ln[i]-am[i]);
   const groups=inc.map((v,i)=>[{label:'Receita',value:v,color:PAL[0]},{label:'Despesas',value:-exp[i],color:'#c56b68'},{label:'Prestações',value:-ln[i],color:'#d6a34a'}]);
   const perProp=m.props.map(p=>({label:p.name+(ownerFilter&&sh(p)<1?' ('+shareText(p)+')':''),value:metrics(YEAR,p.id,{share:true}).cf})).sort((a,b)=>b.value-a.value);
   const act=db.contracts.filter(c=>isActive(c)&&inScope(c.propertyId)&&(!pid||pidProps(pid).some(p=>p.id===c.propertyId)));
   const cs=c=>sh(prop(c.propertyId));
-  const quota=ownerFilter?(ownerIsGrp()?`<div class="hint" style="margin:-4px 0 12px">A ver os imóveis do grupo <b>${esc(ownerFilterName())}</b>.</div>`:`<div class="hint" style="margin:-4px 0 12px">Valores na quota-parte de <b>${esc(ownerFilterName())}</b>: cada imóvel entra pela percentagem que lhe pertence.</div>`):'';
+  const quota=ownerFilter?(ownerIsGrp()?`<div class="hint" style="margin:-4px 0 12px">A ver os imóveis do grupo <b>${esc(ownerFilterName())}</b>.</div>`:`<div class="hint" style="margin:-4px 0 12px">Valores na quota-parte de <b>${esc(ownerFilterName())}</b>: receitas, despesas e prestações entram pela divisão de cada movimento; valor, aquisição e dívida pela quota do imóvel.</div>`):'';
   const E=(field,fmt)=>()=>evoMoney(field,pid,fmt);
-  return dashBar()+quota+pendingCard()+`<div class="grid">
+  return dashBar()+quota+pendingCard()+prazosCard()+`<div class="grid">
     ${kpi('Receita',euro(m.income),'pos',YEAR+' · rendas e outros',WHY.receita,E('income'))}
     ${kpi('Despesas',euro(m.op),'neg','impostos, condomínio, obras…',WHY.despesas,E('op'))}
-    ${kpi('Prestações',euro(m.loan),'amber','capital, juros e selo',WHY.prestacoes,E('loan'))}
+    ${kpi('Prestações',euro(m.loan),'amber','capital, juros e selo'+(m.amort?' · +'+euro(m.amort)+' amortizados':''),WHY.prestacoes,E('loan'))}
     ${kpi('Cashflow',euro(m.cf),m.cf>=0?'pos':'neg','depois de tudo pago',WHY.cashflow,E('cf'))}</div>
-  <div class="section-title">Rentabilidade</div>
-  <div class="grid">
-    ${kpi('Yield bruto',pct(m.grossYield),'','imóveis com contrato ativo',WHY.yieldBruto,()=>evoRatio('grossYield',pid))}
-    ${kpi('Cap rate',pct(m.cap),'','NOI / valor do portefólio',WHY.cap,()=>evoRatio('cap',pid))}
-    ${kpi('Sobre a aquisição',pct(m.coc),'','sobre '+euro(m.purchase)+' de aquisição',WHY.aquisicao,()=>evoRatio('coc',pid))}
-    ${kpi('LTV',pct(m.ltv),'',euro(m.debt)+' em dívida',WHY.ltv,()=>evoRatio('ltv',pid))}</div>
   <div class="cols">
     ${card('Entradas e saídas','Mês a mês em '+YEAR,cBars(groups,MES,{h:200}))}
     ${card('Cashflow acumulado','',cLine([{name:'Acumulado',values:cum,color:PAL[0]}],MES,{h:200}))}</div>
@@ -276,7 +246,7 @@ function vDashboard(){
       <div class="stat"><span>Imóveis</span><b>${m.props.length}</b></div>
       <div class="stat"><span>Contratos ativos</span><b>${act.length}</b></div>
       <div class="stat"><span>Renda contratada</span><b>${euro(sum(act.map(c=>c.rent*cs(c))))}/mês</b></div>
-      <div class="stat"><span>Renda líquida de impostos</span><b>${euro(sum(act.map(c=>netRent(c)*cs(c))))}/mês</b></div>
+      <div class="stat"><span>Renda líquida de impostos (estim.)</span><b>${euro(sum(act.map(c=>netRent(c)*cs(c))))}/mês</b></div>
       <div class="stat"><span>Valor de mercado</span><b>${euro(m.value)}</b></div>
       <div class="stat"><span>Valor de aquisição</span><b>${euro(m.purchase)}</b></div>
       <div class="stat"><span>Em dívida</span><b class="amber">${euro(m.debt)}</b></div>
@@ -356,41 +326,55 @@ function balancesCard(pid){
         :`<div class="hint" style="margin-top:11px">Está tudo liquidado.</div>`}
     </div></div></div>`;
 }
+/* os acertos que zeram os saldos: um plano por imóvel da vista e, no âmbito todo,
+   mais um «Todos os imóveis» para o que os imóveis não explicam — as dívidas dos
+   movimentos sem imóvel nem grupo, que ownerBalances(null) conta mas nenhum imóvel tem.
+   Recebe: pid — id do imóvel, 'g:ID' de um grupo, ou null para o âmbito todo.
+   Devolve: array de {pid, name, plan} — o imóvel (pid null e nome «Todos os imóveis» para
+   o resto global) e as transferências de settlePlan; só os alvos com transferências. */
+function settleTargets(pid){
+  const props=pidProps(pid);
+  const out=props.map(p=>({pid:p.id,name:p.name,plan:settlePlan(ownerBalances(p.id))})).filter(x=>x.plan.length);
+  if(!pid&&!ownerFilter){
+    const tot=ownerBalances(null),per=props.map(p=>ownerBalances(p.id)),resto={};
+    Object.keys(tot).forEach(k=>{resto[k]=tot[k]-sum(per.map(b=>b[k]||0))});
+    const plan=settlePlan(resto);
+    if(plan.length)out.push({pid:null,name:'Todos os imóveis',plan});
+  }
+  return out;
+}
 /* pré-visualização do acerto de contas: lista as transferências que vão ser
-   registadas, imóvel a imóvel, e as últimas liquidações. pid limita a um
-   imóvel; null abrange o âmbito todo. Só escreve ao confirmar (doSettle).
-   Recebe: pid — id do imóvel a que limitar, ou null para o âmbito todo.
+   registadas (settleTargets), imóvel a imóvel, e as últimas liquidações. pid
+   limita a um imóvel ou grupo; null abrange o âmbito todo. Só escreve ao confirmar (doSettle).
+   Recebe: pid — id do imóvel ou 'g:ID' de um grupo a que limitar, ou null para o âmbito todo.
    Devolve: nada — abre o modal (ou um toast, se não há dívidas). */
 function settleModal(pid){
-  const props=pid?[prop(pid)].filter(Boolean):scope();
-  const plans=props.map(p=>({p,plan:settlePlan(ownerBalances(p.id))})).filter(x=>x.plan.length);
+  const plans=settleTargets(pid);
   const total=sum(plans.map(x=>sum(x.plan.map(y=>y.amount))));
   if(!plans.length)return toast('Não há dívidas para liquidar.');
   const hist=db.transactions.filter(t=>t.kind==='settle').sort((a,b)=>String(a.date).localeCompare(String(b.date))).slice(-4).reverse();
   openModal('Pagar dívidas entre proprietários',`<div class="form">
     <div class="hint">Vão ser registadas ${plans.reduce((a,x)=>a+x.plan.length,0)} transferências, ${euro2(total)} no total. Os saldos ficam a zero.</div>
     ${plans.map(x=>`<div class="card" style="padding:12px 14px">
-      <div class="title" style="font-size:14px">${esc(x.p.name)}</div>
+      <div class="title" style="font-size:14px">${esc(x.name)}</div>
       ${x.plan.map(y=>`<div class="stat"><span>${esc((owner(y.from)||{}).name)} → ${esc((owner(y.to)||{}).name)}</span><b>${euro2(y.amount)}</b></div>`).join('')}
     </div>`).join('')}
     ${hist.length?`<div class="divider"></div><div class="flabel">Liquidações anteriores</div>
-      ${hist.map(h=>`<div class="stat"><span class="small">${h.date} · ${esc(propName(h.propertyId))} · ${esc((owner(h.paidBy)||{}).name)} → ${esc((owner(h.toId)||{}).name)}</span><b>${euro2(h.amount)}</b></div>`).join('')}
+      ${hist.map(h=>`<div class="stat"><span class="small">${h.date} · ${esc(h.propertyId?propName(h.propertyId):'Todos os imóveis')} · ${esc((owner(h.paidBy)||{}).name)} → ${esc((owner(h.toId)||{}).name)}</span><b>${euro2(h.amount)}</b></div>`).join('')}
       <div class="hint">Os acertos ficam nos movimentos, onde podem ser editados.</div>`:''}
     </div>`,
     `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="doSettle(${pid?`'${pid}'`:'null'})">Registar pagamentos</button>`);
 }
-/* regista o plano de liquidação como movimentos "settle" e grava — os saldos
-   entre proprietários ficam a zero. É o passo destrutivo do settleModal.
-   Recebe: pid — id do imóvel a que limitar, ou null para o âmbito todo.
+/* regista o plano de liquidação (settleTargets) como movimentos "settle" e grava —
+   os saldos entre proprietários ficam a zero. Os acertos do resto global ficam sem
+   imóvel. É o passo destrutivo do settleModal.
+   Recebe: pid — id do imóvel ou 'g:ID' de um grupo a que limitar, ou null para o âmbito todo.
    Devolve: nada — grava os movimentos, fecha o modal e redesenha. */
 function doSettle(pid){
-  const props=pid?[prop(pid)].filter(Boolean):scope();
   let k=0;
-  props.forEach(p=>{
-    settlePlan(ownerBalances(p.id)).forEach(y=>{
-      db.transactions.push(normTx({kind:'settle',label:'Transferência entre proprietários',date:today(),propertyId:p.id,paidBy:y.from,toId:y.to,amount:y.amount}));k++;
-    });
-  });
+  settleTargets(pid).forEach(x=>x.plan.forEach(y=>{
+    db.transactions.push(normTx({kind:'settle',label:'Transferência entre proprietários',date:today(),propertyId:x.pid,paidBy:y.from,toId:y.to,amount:y.amount}));k++;
+  }));
   save();closeModal();render();
   toast(k?k+' pagamento(s) registado(s). Saldos a zero.':'Não havia nada a liquidar.');
 }
@@ -480,7 +464,7 @@ function vContracts(){
           </div>
           <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
             <div style="text-align:right"><div style="font-weight:750;font-size:16px">${euro(c.rent)}</div>
-            ${c.taxRate?`<div class="small">líquido ${euro(netRent(c))} · imposto ${dec(c.taxRate)}%</div>`:''}</div>
+            <div class="small">líquido ${euro(netRent(c))} · imposto ${dec(taxRateOf(c))}%${Number(c.taxRate)>0?'':' (estim.)'}</div></div>
             ${kebab('ct:'+c.id)}</div></div>
         ${ts.length?`<div style="margin-top:9px">${ts.map(t=>`<div class="small" style="display:flex;align-items:center;gap:7px;padding:2px 0">
           ${ic('users',13)}<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.name)}</span>
@@ -966,25 +950,18 @@ let projProp='';
 // muda o imóvel (ou grupo) em foco nas projeções
 // Devolve: nada — redesenha a vista.
 function onProjProp(){projProp=val('projSel')||'';render()}
-/* Projeções ao horizonte definido nas definições (s.years): rendas com o
-   aumento anual de cada contrato, despesas do ano corrente inflacionadas, e
-   prestações segundo o plano de cada hipoteca — param quando o crédito acaba.
-   Sai em KPIs, gráficos e tabela ano a ano com uma coluna por contrato.
-   Devolve: string com o HTML completo da vista. */
-function vProjections(){
-  if(projProp&&!pidProps(projProp).length)projProp='';
-  const s=db.settings,act=db.contracts.filter(c=>isActive(c)&&inScope(c.propertyId)&&(!projProp||pidProps(projProp).some(p=>p.id===c.propertyId)));
-  const pps=pidProps(projProp);
-  const head=anaPanel(`<div style="display:flex;flex-direction:column;gap:9px">
-    ${db.owners.length?`<div style="width:100%">${sel('ownerSel',ownerFilter,[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner'))),'onOwnerFilter')}</div>`:''}
-    <div style="width:100%">${sel('projSel',projProp,[{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop'))),'onProjProp')}</div></div>
-    <div class="row3" style="margin-top:10px">
-    <label>Horizonte (anos)<input type="text" inputmode="numeric" value="${s.years}" onchange="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label>
-    <label>Aumento anual (%)<input type="text" inputmode="decimal" value="${dec(s.growth)}" onchange="setSet('growth',num(this.value))"></label>
-    <label>Inflação das despesas (%)<input type="text" inputmode="decimal" value="${dec(s.inflation)}" onchange="setSet('inflation',num(this.value))"></label></div>
-    <div class="hint" style="margin-top:9px">Cada contrato tem o seu aumento. Em Portugal há um coeficiente máximo publicado todos os anos.</div>`);
-  if(!act.length)return head+`<div class="empty" style="margin-top:14px"><b>Nenhum contrato ativo</b>As projeções partem das rendas contratadas.</div>`;
-  const m=metrics(YEAR,projProp||null,{share:true}),n=Math.round(s.years),rows=[];
+/* Os números da projeção, sem HTML: por ano do horizonte (s.years), as rendas
+   dos contratos ativos com o aumento anual de cada um, as despesas a partir da
+   base de opBase com a inflação, as prestações segundo o plano de cada hipoteca
+   (param quando o crédito acaba) e o cashflow; mais a dívida no fim de cada ano.
+   Recebe: pid — id do imóvel, 'g:ID' de um grupo, ou null/vazio para o âmbito todo.
+   Devolve: {rows, act, debtY, base} — rows é um array de {yr, rent, exp, loan, cf, per}
+   (per: a renda de cada contrato, pela ordem de act); act os contratos ativos da vista;
+   debtY a dívida no fim de cada ano; base o {op, year, anualizado} de opBase. */
+function projRows(pid){
+  const s=db.settings,n=Math.max(1,Math.round(s.years)),pps=pidProps(pid);
+  const act=db.contracts.filter(c=>isActive(c)&&inScope(c.propertyId)&&pps.some(p=>p.id===c.propertyId));
+  const base=opBase(pid),rows=[];
   /* prestações previstas: vêm do plano de cada hipoteca e param quando o crédito acaba */
   const sched=[...Array(n)].map((_,i)=>sum(pps.map(p=>sh(p)*sum(liveLoans(p).map(l=>{
     const a=amort(l),from=i*12,to=Math.min((i+1)*12,a.rows.length);
@@ -993,17 +970,38 @@ function vProjections(){
   })))));
   for(let i=0;i<n;i++){
     const per=act.map(c=>c.rent*sh(prop(c.propertyId))*12*Math.pow(1+((c.increase==null?s.growth:c.increase)/100),i));
-    const rent=sum(per),exp=m.op*Math.pow(1+s.inflation/100,i),ln=sched[i];
+    const rent=sum(per),exp=base.op*Math.pow(1+s.inflation/100,i),ln=sched[i];
     rows.push({yr:YEAR+i,rent,exp,loan:ln,cf:rent-exp-ln,per});
   }
-  const first=rows[0],last=rows[rows.length-1],labels=rows.map(r=>String(r.yr).slice(2));
-  const debtY=[];for(let i=0;i<n;i++)debtY.push(sum(pps.map(p=>sh(p)*sum(liveLoans(p).map(l=>{
+  const debtY=[...Array(n)].map((_,i)=>sum(pps.map(p=>sh(p)*sum(liveLoans(p).map(l=>{
     const a=amort(l,(i+1)*12);return a.rows.length?a.rows[a.rows.length-1].bal:0})))));
+  return {rows,act,debtY,base};
+}
+/* Projeções ao horizonte definido nas definições (s.years), a partir de
+   projRows: KPIs, gráficos e tabela ano a ano com uma coluna por contrato. O
+   cabeçalho diz de onde vem a base das despesas.
+   Devolve: string com o HTML completo da vista. */
+function vProjections(){
+  if(projProp&&!pidProps(projProp).length)projProp='';
+  const s=db.settings,{rows,act,debtY,base}=projRows(projProp||null),n=rows.length;
+  const head=anaPanel(`<div style="display:flex;flex-direction:column;gap:9px">
+    ${db.owners.length?`<div style="width:100%">${sel('ownerSel',ownerFilter,[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner'))),'onOwnerFilter')}</div>`:''}
+    <div style="width:100%">${sel('projSel',projProp,[{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop'))),'onProjProp')}</div></div>
+    <div class="row3" style="margin-top:10px">
+    <label>Horizonte (anos)<input type="text" inputmode="numeric" value="${s.years}" onchange="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label>
+    <label>Aumento anual (%)<input type="text" inputmode="decimal" value="${dec(s.growth)}" onchange="setSet('growth',num(this.value))"></label>
+    <label>Inflação das despesas (%)<input type="text" inputmode="decimal" value="${dec(s.inflation)}" onchange="setSet('inflation',num(this.value))"></label></div>
+    <div class="hint" style="margin-top:9px">Cada contrato tem o seu aumento. Em Portugal há um coeficiente máximo publicado todos os anos.</div>
+    <div class="hint" style="margin-top:6px">Despesas: <b>${euro(base.op)}/ano</b> — ${base.anualizado?'o ano corrente anualizado, porque ainda não há um ano completo com despesas':'as de '+base.year+', o último ano completo com despesas'}; crescem com a inflação.</div>`);
+  if(!act.length)return head+`<div class="empty" style="margin-top:14px"><b>Nenhum contrato ativo</b>As projeções partem das rendas contratadas.</div>`;
+  const first=rows[0],last=rows[rows.length-1],labels=rows.map(r=>String(r.yr).slice(2));
+  const baseTxt=' Aqui: '+euro(base.op)+'/ano, '+(base.anualizado?'o ano corrente anualizado.':'base '+base.year+'.');
+  const varRenda=first.rent?last.rent/first.rent-1:0;
   return head+(ownerFilter&&!ownerIsGrp()?`<div class="hint" style="margin-top:12px">Valores na quota-parte de <b>${esc(ownerFilterName())}</b>.</div>`:'')+`<div class="grid" style="margin-top:14px">
     ${kpi('Renda anual hoje',euro(first.rent),'','a preços de '+YEAR,WHY.rendaHoje,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',yearly:rows.map(r=>({label:r.yr,value:r.rent}))}))}
-    ${kpi('Renda em '+last.yr,euro(last.rent),'pos','+'+pct(first.rent?last.rent/first.rent-1:0)+' acumulado',WHY.rendaFim,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',yearly:rows.map(r=>({label:r.yr,value:r.rent}))}))}
+    ${kpi('Renda em '+last.yr,euro(last.rent),varRenda>=0?'pos':'neg',(varRenda>=0?'+':'')+pct(varRenda)+' acumulado',WHY.rendaFim,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',yearly:rows.map(r=>({label:r.yr,value:r.rent}))}))}
     ${kpi('Total do período',euro(sum(rows.map(r=>r.rent))),'',n+' anos de rendas',WHY.totalPeriodo,()=>{let a=0;return {fmt:euro,yearlyTitle:'Acumulado ano a ano',yearly:rows.map(r=>({label:r.yr,value:a+=r.rent}))}})}
-    ${kpi('Cashflow em '+last.yr,euro(last.cf),last.cf>=0?'pos':'neg','com despesas e prestações',WHY.cashflowFim,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',extraTitle:'Prestações',yearly:rows.map(r=>({label:r.yr,value:r.cf,extra:euro(r.loan)}))}))}</div>
+    ${kpi('Cashflow em '+last.yr,euro(last.cf),last.cf>=0?'pos':'neg','com despesas e prestações',WHY.cashflowFim+baseTxt,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',extraTitle:'Prestações',yearly:rows.map(r=>({label:r.yr,value:r.cf,extra:euro(r.loan)}))}))}</div>
   <div class="cols">
     ${card('Rendas, prestações e cashflow','',cLine([{name:'Rendas',values:rows.map(r=>r.rent),color:PAL[0]},
       {name:'Prestações',values:rows.map(r=>r.loan),color:'#d6a34a'},

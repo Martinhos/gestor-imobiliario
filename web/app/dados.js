@@ -20,18 +20,17 @@ const STAMP=0.04;
    Devolve: a taxa em fração (ex.: 0.04 para 4%). */
 const stampPct=()=>{const v=Number((db&&db.settings||{}).stampPct);return isFinite(v)&&v>=0?v/100:STAMP};
 const r2=v=>Math.round(v*100)/100;
-/* comissão de amortização antecipada, conforme a fase da taxa (mista: fixa até fixedYears, variável depois)
-   Recebe: l — a hipoteca (usa type, amortFeeFix, amortFeeVar, start e fixedYears);
-   dateStr (opcional) — a data a avaliar, 'AAAA-MM-DD'; por omissão, hoje.
+/* comissão de amortização antecipada, conforme a fase da taxa (mista: fixa até
+   fixedYears, variável depois). A fase vem de loanMes — a mesma conta que o
+   plano de amortização usa, para a comissão e a taxa nunca discordarem.
+   Recebe: l — a hipoteca (usa type, amortFeeFix, amortFeeVar, fixedYears e as prestações registadas).
    Devolve: a comissão em fração (ex.: 0.02 para 2%). */
-function amortFeeRate(l,dateStr){
+function amortFeeRate(l){
   const F=isFinite(Number(l.amortFeeFix))?Number(l.amortFeeFix)/100:0.02;
   const V=isFinite(Number(l.amortFeeVar))?Number(l.amortFeeVar)/100:0.005;
   if(l.type==='variavel')return V;
   if(l.type==='fixa')return F;
-  const d=String(dateStr||today()),st=String(l.start||d);
-  const m=(Number(d.slice(0,4))-Number(st.slice(0,4)))*12+(Number(d.slice(5,7))-Number(st.slice(5,7)));
-  return m<(Number(l.fixedYears)||5)*12?F:V;
+  return loanMes(l)<Math.round((Number(l.fixedYears)||5)*12)?F:V;
 }
 /* quanto ainda se pode amortizar nesta prestação: dívida atual + o capital do próprio registo (em edição)
    Recebe: t — o movimento em causa (pode ser null; só pesa se estiver em edição, t._edit); l — a hipoteca.
@@ -67,7 +66,7 @@ const CATS_IN0={
   'Outras receitas':[]
 };
 const TAGS0=['Urgente','A reembolsar','Recorrente','Dedutível','Em disputa'];
-const blank={v:13,properties:[],owners:[],tenants:[],contracts:[],transactions:[],settlements:[],templates:[],recurring:[],groups:[],
+const blank={v:13,properties:[],owners:[],tenants:[],contracts:[],transactions:[],settlements:[],templates:[],recurring:[],groups:[],visits:[],
   settings:{growth:2,inflation:2,years:10,theme:'auto',capTarget:5,quota:100,payTax:true,stampPct:4,
             cats:JSON.parse(JSON.stringify(CATS0)),catsIn:JSON.parse(JSON.stringify(CATS_IN0)),tags:TAGS0.slice()}};
 
@@ -96,6 +95,13 @@ function normLoan(l){const o=Object.assign({id:uid(),name:'',bank:'',outstanding
   delete o.active;delete o.taeg;delete o.mtic;
   if(o.stampTax===undefined)o.stampTax=true;
   o.files=(o.files||[]).map(normFile);return o}
+/* normaliza uma visita a um imóvel: quem vem (texto livre — ainda não é
+   inquilino, não há ficha), onde, quando (data + horas), estado, desfecho
+   e comentários. O contacto é opcional, para confirmar ou remarcar.
+   Recebe: v — a visita em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo com todos os campos da visita preenchidos. */
+function normVisit(v){return Object.assign({id:uid(),propertyId:'',roomId:'',nomes:'',contacto:'',
+  date:'',start:'',end:'',estado:'agendada',resultado:'',notas:''},v||{})}
 /* normaliza uma ficha de pessoa (dono ou inquilino): campos em falta ficam vazios, anexos pelo normFile
    Recebe: p — a ficha em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos da ficha preenchidos. */
@@ -138,7 +144,8 @@ function normContract(c){
 }
 /* kind: income (renda), expense (despesa), loan (prestação), owed (dívida recebida de terceiro),
    repay (pagamento dessa dívida), settle (acerto entre proprietários: paidBy → toId).
-   split: como o valor se divide entre os donos — {mode:'quota'|'pct'|'amount'|'adjust',parts:{ownerId:n}} */
+   split: como o valor se divide entre os donos — {mode:'equal'|'quota'|'pct'|'percent'|'amount'|'adjust',parts:{ownerId:n}};
+   em 'adjust', parts é o extra de cada um por cima da parte igual */
 const normTx=t=>{const o=Object.assign({id:uid(),kind:'expense',label:'',amount:0,date:'',propertyId:null,contractId:null,
   loanId:null,payType:'prestacao',paidBy:null,toId:null,creditor:'',category:'',sub:'',tags:[],notes:'',split:null,groupId:null,psplit:null},t||{});
   if(o.split&&(!o.split.mode||o.split.mode==='quota'))o.split=null;
@@ -229,6 +236,7 @@ function load(){
   out.settlements=(out.settlements||[]).map(normSettle);
   out.templates=(out.templates||[]).map(normTpl);
   out.recurring=(out.recurring||[]).map(normRec);
+  out.visits=(out.visits||[]).map(normVisit);
   out.tenants=(out.tenants||[]).map(normPerson);
   out.contracts=((out.contracts||[]).map(normContract)).concat(newContracts);
   out.transactions=(out.transactions||[]).map(t=>{
@@ -266,6 +274,7 @@ function scheduleReminders(){
       list.push({id:'l_'+r.id+'_'+lim,at:at(lim,9),title:'Em atraso: '+r.name,
         text:'“'+r.name+'”'+v+' passou o prazo sem confirmação.'});
     });
+    if(typeof prazosLembretes==='function')list.push(...prazosLembretes());
     Android.scheduleReminders(JSON.stringify(list.filter(x=>x.at>Date.now()).sort((a,b)=>a.at-b.at).slice(0,60)));
   }catch(e){}},400);
 }

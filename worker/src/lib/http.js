@@ -61,7 +61,9 @@ const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 export const badId = (v) => !ID_RE.test(String(v == null ? '' : v));
 
 // O corpo de um registo tem de ser um objeto simples, sem tentativas de
-// poluir o protótipo, e o seu id nunca pode contradizer o id da linha.
+// poluir o protótipo, sem chaves de trabalho (prefixo '_', que são metadados
+// do servidor — vindas de fora seriam autoria forjada no sino dos outros),
+// e o seu id nunca pode contradizer o id da linha.
 // Recebe: data — o corpo do registo (tem de ser um objeto simples, não array);
 // id (opcional) — o id da linha, que se impõe a um data.id divergente.
 // Devolve: o próprio objeto já limpo, ou null quando não é um objeto simples.
@@ -70,6 +72,7 @@ export function cleanData(data, id) {
   if (Object.prototype.hasOwnProperty.call(data, '__proto__')) delete data['__proto__'];
   delete data.constructor;
   delete data.prototype;
+  for (const k of Object.keys(data)) if (k.startsWith('_')) delete data[k];
   if (id !== undefined && 'id' in data) data.id = id;   // o id manda é o da linha
   return data;
 }

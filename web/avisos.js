@@ -26,6 +26,63 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 30,
+    data: '2026-09-07',
+    titulo: 'Visitas, calendário, prazos, um sino, e as contas revistas',
+    seccoes: [
+      {
+        titulo: 'Créditos antigos: as prestações que faltam, na hipoteca certa',
+        afeta: ['creditos', 'movimentos'],
+        itens: [
+          'Ao criar uma hipoteca com início no passado, ou ao recuar o início de uma que já existe, a app pergunta se queres inserir as prestações em falta desde essa data. Ficam com os juros, o selo e o capital do plano, e o capital em dívida desce com elas, como se as confirmasses uma a uma.',
+          'O capital em dívida é o da data de início: com as prestações registadas até hoje, o prazo restante e a prestação ficam certos.',
+          'Com duas hipotecas no mesmo imóvel, o preenchimento das prestações antigas ia às vezes parar à hipoteca errada. Agora identifica a hipoteca pelo nome, banco e início, e um pagamento de crédito novo pede-te que escolhas a hipoteca em vez de assumir a primeira.',
+        ],
+      },
+      {
+        titulo: 'As contas revistas',
+        afeta: ['movimentos', 'partilha', 'imoveis'],
+        itens: [
+          'A divisão «por ajuste» passa a ser o que o nome diz: um extra por cima da parte igual. Ao total tira-se a soma dos ajustes, o resto divide-se por todos e cada um soma o seu (15 € com 5 de extra para um de dois → 10 € e 5 €). Se tinhas movimentos guardados nesse modo, os saldos entre proprietários mudam — confere-os.',
+          'Os rácios de rentabilidade (yield bruto, cap rate, sobre a aquisição, LTV) saem da vista geral e vivem só na Avaliação, com a explicação e a evolução ao toque.',
+          'A avaliação por rendimento e o cap rate anualizam o ano corrente em vez de capitalizar só os meses já lançados; as cauções e os empréstimos recebidos deixam de contar como receita; as amortizações antecipadas aparecem à parte das prestações.',
+          'Na vista por proprietário, os movimentos de grupo entram pela tua quota em cada imóvel; com um grupo em foco, a evolução e os saldos entre donos funcionam. «Pagar todas as dívidas» inclui os movimentos sem imóvel.',
+          'A renda líquida de impostos usa por omissão a taxa especial de IRS conforme a duração do contrato (25 %, e 15/10/5 % nos contratos de 5, 10 e 20 anos ou mais) — é uma estimativa, e diz que é.',
+          'O yield bruto compara rendas e valor sobre o mesmo conjunto de imóveis; a projeção parte das despesas do último ano completo (ou anualiza o corrente), e diz qual é a base.',
+        ],
+      },
+      {
+        titulo: 'Dois menus novos: Visitas e Calendário',
+        afeta: ['imoveis', 'contratos'],
+        itens: [
+          'As visitas às casas têm agora registo próprio: quem vem (sem precisar de ficha — ainda não é inquilino), a que imóvel ou quarto, quando (com horas), o estado e o desfecho, e os teus comentários.',
+          'Quando uma visita corre bem, o menu da visita converte-a numa ficha de inquilino num toque, com nome e contacto já preenchidos.',
+          'O Calendário mostra o mês de relance: visitas agendadas e movimentos planeados, dia a dia. Tocar num dia realça-o e mostra por baixo da grelha o que ele tem — e há sempre o botão para marcar visita nesse dia.',
+        ],
+      },
+      {
+        titulo: 'Um sino com tudo o que pede atenção',
+        afeta: ['app', 'movimentos'],
+        itens: [
+          'A vista geral ganha um sino de notificações: movimentos em atraso, por confirmar, prazos, e — novidade — o que os outros fizeram nas casas partilhadas contigo, com nome e hora.',
+          '«Marcar tudo como lido» sincroniza entre aparelhos: ler num, cala o sino nos outros.',
+          'Na barra de baixo do telemóvel, o Calendário tomou o lugar dos Planeados — que vivem lá dentro, dia a dia, e continuam no cartão «por confirmar» da vista geral.',
+        ],
+      },
+      {
+        titulo: 'A vista geral ganha o cartão «Prazos»',
+        afeta: ['contratos', 'imoveis', 'creditos'],
+        itens: [
+          'O fim de cada contrato avisa com antecedência — incluindo a janela legal de oposição à renovação (120 dias), enquanto ainda vais a tempo.',
+          'O aumento anual da renda avisa a tempo de o comunicar ao inquilino com os 30 dias de pré-aviso.',
+          'A validade do cartão de cidadão de inquilinos e proprietários, e o certificado energético de cada imóvel, avisam antes de caducarem.',
+          'Nos créditos mistos, o fim da fase de taxa fixa avisa com 90 dias — o momento certo para comparar propostas.',
+          'Cada aviso pode ser silenciado; quando a data mudar (contrato renovado, documento novo), volta sozinho. Na app instalada, os prazos também chegam como notificações.',
+        ],
+      },
+    ],
+  },
+  {
     v: 29,
     data: '2026-09-02',
     titulo: 'Nada se perde sem perguntar',

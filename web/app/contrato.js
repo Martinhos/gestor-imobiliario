@@ -59,12 +59,13 @@ function ctBody(){
     <div><div class="flabel">Inquilinos</div>${tagField(tags,'Adicionar','addCtTenant()','delCtTenant')}</div>
     <div class="row">
       <label>Renda mensal (€) <span class="req">*</span><input id="c_rent" type="text" inputmode="decimal" value="${c.rent||''}" placeholder="450" oninput="liveNet()"></label>
-      <label>Imposto sobre a renda (%)<input id="c_tax" type="text" inputmode="decimal" value="${c.taxRate?dec(c.taxRate):''}" placeholder="25" oninput="liveNet()"></label></div>
+      <label>Imposto sobre a renda (%)<input id="c_tax" type="text" inputmode="decimal" value="${c.taxRate?dec(c.taxRate):''}" placeholder="${dec(irsRate(c))}" oninput="liveNet()"></label></div>
+    <div class="hint" style="margin-top:-6px">Em branco, estima-se pela duração do contrato: a taxa especial de IRS sobre rendas de habitação é 25 %, e desce para 15 %, 10 % ou 5 % em contratos de 5, 10 ou 20 anos ou mais. Noutros usos é 28 % — escreve-a. É uma estimativa sobre a renda bruta: as despesas dedutíveis (IMI, condomínio, obras) baixam o imposto.</div>
     <div class="card" style="background:var(--tint);padding:12px" id="netBox">${netBox()}</div>
     ${fold('terms','Prazo, caução e pagamento',`
     <div class="row">
-      <label>Início<input id="c_start" type="date" value="${c.start||''}"></label>
-      <label>Fim<input id="c_end" type="date" value="${c.end||''}"></label></div>
+      <label>Início<input id="c_start" type="date" value="${c.start||''}" onchange="liveNet()"></label>
+      <label>Fim<input id="c_end" type="date" value="${c.end||''}" onchange="liveNet()"></label></div>
     <div class="row3">
       <label>Renda entre o dia<input id="c_day" type="text" inputmode="numeric" value="${c.payDay||''}" placeholder="1"></label>
       <label>e o dia<input id="c_dayTo" type="text" inputmode="numeric" value="${c.payDayTo||''}" placeholder="8"></label>
@@ -125,14 +126,19 @@ function ctBody(){
   </div>`;
 }
 // HTML do resumo bruto → imposto → líquido. Lê os campos do formulário se
-// já estiverem no DOM; antes disso usa os valores de cForm.
+// já estiverem no DOM; antes disso usa os valores de cForm. Sem taxa escrita,
+// a estimativa pela duração do contrato (irsRate), marcada como tal.
 // Devolve: string com o HTML do resumo (ou um aviso, se faltar a renda).
 function netBox(){
-  const r=num(val('c_rent'))||cForm.rent,tx=num(val('c_tax'))||cForm.taxRate||0;
+  /* «campo presente e vazio» (apagado de propósito → estimativa) é diferente de «ainda sem DOM» (cForm) */
+  const eR=document.getElementById('c_rent'),eT=document.getElementById('c_tax');
+  const r=eR?num(eR.value):cForm.rent,escrita=eT?num(eT.value):(Number(cForm.taxRate)||0);
+  const datas={start:val('c_start')||cForm.start,end:val('c_end')||cForm.end};
+  const tx=escrita>0?escrita:irsRate(datas);
   if(!r)return `<div class="hint">Falta a renda.</div>`;
   const imposto=r*tx/100;
   return `<div class="stat" style="padding-top:0"><span>Renda bruta</span><b>${euro2(r)}</b></div>
-    <div class="stat"><span>Imposto (${dec(tx)}%)</span><b class="neg">−${euro2(imposto)}</b></div>
+    <div class="stat"><span>Imposto (${dec(tx)}%${escrita>0?'':', estimado pela duração'})</span><b class="neg">−${euro2(imposto)}</b></div>
     <div class="stat" style="border:0"><span>Renda líquida</span><b class="pos" style="font-size:16px">${euro2(r-imposto)}</b></div>
     <div class="hint">${euro(( r-imposto)*12)} por ano, se a renda se mantiver.</div>`;
 }

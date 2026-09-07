@@ -115,11 +115,11 @@ export async function rotasSync(c) {
               }
             }
             await env.DB.prepare(
-              `INSERT INTO records (house_id, kind, id, data, updated_at, deleted)
-               VALUES (?, ?, ?, ?, ?, 0)
+              `INSERT INTO records (house_id, kind, id, data, updated_at, deleted, author)
+               VALUES (?, ?, ?, ?, ?, 0, ?)
                ON CONFLICT (house_id, kind, id)
-               DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0`
-            ).bind(houseId, String(op.kind), String(op.id), JSON.stringify(op.data), now()).run();
+               DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0, author = excluded.author`
+            ).bind(houseId, String(op.kind), String(op.id), JSON.stringify(op.data), now(), me.id).run();
             await linkFiles(env, houseId, op.data);
           } else {
             await env.DB.prepare(

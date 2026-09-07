@@ -71,7 +71,8 @@ function api(method, path, data) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(data);
   }
-  return fetch(path, opts).then(function (r) {
+  return fetch(path, opts).catch(function (e) { rastoPoe(method + ' ' + path + ' → sem rede'); throw e; }).then(function (r) {
+    rastoPoe(method + ' ' + path + ' → ' + r.status);
     return r.json().catch(function () { return {}; }).then(function (j) {
       if (r.status === 401 && CW.user && path.indexOf('/api/auth/') !== 0) {
         sessionLost();
@@ -80,6 +81,20 @@ function api(method, path, data) {
       return j;
     });
   });
+}
+
+// O rasto do que a pessoa andava a fazer: as últimas chamadas à API e
+// mudanças de ecrã, num anel de 10 entradas em memória. Vai no relato de
+// cada erro — «rebentou em Movimentos» diz pouco; «depois de POST /api/sync
+// → 500» diz onde procurar.
+// Recebe: s — a entrada a registar (texto; corta-se a 80 caracteres).
+// Devolve: nada — acrescenta ao anel CW._rasto.
+function rastoPoe(s) {
+  try {
+    CW._rasto = CW._rasto || [];
+    CW._rasto.push(String(s).slice(0, 80));
+    if (CW._rasto.length > 10) CW._rasto.shift();
+  } catch (e) {}
 }
 
 // Deita fora a sessão local e volta ao ecrã de entrada, com aviso de expiração.
@@ -137,6 +152,10 @@ function exportEntities() {
     (db.recurring || []).forEach(function (r) {
       if (!(r.tx && r.tx.propertyId === p.id)) return;
       map['r:' + p.id + ':rec:' + r.id] = { scope: 'record', houseId: p.id, kind: 'rec', id: r.id, data: strip(r) };
+    });
+    (db.visits || []).forEach(function (v) {
+      if (v.propertyId !== p.id) return;
+      map['r:' + p.id + ':visit:' + v.id] = { scope: 'record', houseId: p.id, kind: 'visit', id: v.id, data: strip(v) };
     });
     Object.keys(persons).forEach(function (k) {
       var kind = k.split(':')[0], id = k.split(':')[1];
@@ -325,12 +344,20 @@ function rebuildDb(st) {
   (st.records || []).forEach(function (r) {
     try {
       var h = houseOwner[r.houseId], mine = h ? h.mine : false;
-      if (r.kind === 'contract') d.contracts.push(normContract(r.data));
-      else if (r.kind === 'tx') d.transactions.push(normTx(r.data));
-      else if (r.kind === 'rec') d.recurring.push(normRec(r.data));
+      // quem escreveu e quando, para o sino das notificações; os campos com
+      // _ nunca voltam ao servidor (o strip tira-os no export)
+      var marca = function (x) {
+        if (r.author) x._author = r.author;
+        if (r.updatedAt) x._atServidor = r.updatedAt;
+        return x;
+      };
+      if (r.kind === 'contract') d.contracts.push(marca(normContract(r.data)));
+      else if (r.kind === 'tx') d.transactions.push(marca(normTx(r.data)));
+      else if (r.kind === 'rec') d.recurring.push(marca(normRec(r.data)));
+      else if (r.kind === 'visit') d.visits.push(marca(normVisit(r.data)));
       else if (r.kind === 'tenant') {
         if (!tenants[r.id]) {
-          var per = normPerson(r.data);
+          var per = marca(normPerson(r.data));
           if (!mine) per._sharedFrom = h ? h.ownerName : '';
           tenants[r.id] = per;
         }

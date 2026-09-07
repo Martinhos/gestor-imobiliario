@@ -119,7 +119,7 @@ export function errorEmbed(r) {
   if (r.pessoas) campos.push({ name: 'Pessoas', value: String(r.pessoas), inline: true });
   if (r.versao) campos.push({ name: 'Versão da app', value: String(r.versao), inline: true });
   if (r.contexto) campos.push({ name: 'Onde', value: cut(r.contexto, 100), inline: true });
-  campos.push({ name: 'Detalhe', value: '```' + cut(r.detail || '—', 700) + '```', inline: false });
+  campos.push({ name: 'Detalhe', value: '```' + cut(r.detail || '—', 1000) + '```', inline: false });   // o campo aceita 1024
   return {
     title: (varios ? '🔴' : '⚠️') + ' Erro ' + (r.kind === 'server' ? 'no servidor' : 'na app') +
       (r.n > 1 ? ' (×' + r.n + ')' : '') + (varios ? ' · ' + r.pessoas + ' pessoas' : ''),

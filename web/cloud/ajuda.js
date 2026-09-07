@@ -144,7 +144,7 @@ function reportErr(msg, detail) {
      — e faz perder tempo a procurar o que já foi corrigido. */
   api('POST', '/api/reports', {
     message: String(msg).slice(0, 500),
-    detail: String(detail || '').slice(0, 800),
+    detail: String(detail || '').slice(0, 1500),
     versao: typeof VERSAO !== 'undefined' ? VERSAO : null,
     ecra: ondeEstava(),
     agente: String(navigator.userAgent || '').slice(0, 180),
@@ -156,21 +156,65 @@ function reportErr(msg, detail) {
 function ondeEstava() {
   try { return String(tab); } catch (e) { return 'arranque'; }
 }
+/* O detalhe de um erro, com tudo o que o browser der: tipo e mensagem,
+   as primeiras linhas da stack, ficheiro:linha:coluna, e — quando ele
+   esconde tudo (script de outra origem, valor lançado que não é Error,
+   Safari sem stack) — diz isso, em vez de deixar «: · ecrã» sem nada.
+   Fecha com o ecrã, o URL, a rede, e o rasto do que a pessoa fazia.
+   Recebe: erro — o Error (ou a razão de uma promessa: pode ser qualquer
+   valor); ev (opcional) — o ErrorEvent, para o ficheiro/linha/coluna.
+   Devolve: texto de várias linhas, pronto para o relato. */
+function detalheDoErro(erro, ev) {
+  var linhas = [];
+  if (erro && typeof erro === 'object' && (erro.name || erro.message || erro.stack)) {
+    linhas.push((erro.name || 'Error') + ': ' + (erro.message || '(sem mensagem)') +
+      (erro.status ? ' · HTTP ' + erro.status : ''));
+    var msg = String(erro.message || '');
+    var st = String(erro.stack || '').split('\n')
+      .filter(function (l) { return l.trim() && !(msg && l.indexOf(msg) > -1); })
+      .slice(0, 6).join('\n');
+    if (st) linhas.push(st);
+  } else if (erro !== undefined && erro !== null) {
+    var s;
+    try { s = typeof erro === 'string' ? erro : JSON.stringify(erro); } catch (x) { s = String(erro); }
+    linhas.push('valor lançado (não é Error): ' + String(s).slice(0, 300));
+  }
+  if (ev && (ev.filename || ev.lineno)) {
+    linhas.push((ev.filename || '?') + ':' + (ev.lineno || 0) + ':' + (ev.colno || 0));
+  }
+  if (!linhas.length) {
+    linhas.push('o browser não deu ficheiro, linha nem stack — costuma ser um script de ' +
+      'outra origem (extensão, SDK de terceiros) ou um erro do próprio browser');
+  }
+  var onde = 'ecrã ' + ondeEstava();
+  try {
+    onde += ' · ' + String(location.pathname + location.hash).slice(0, 80) +
+      (navigator.onLine === false ? ' · sem rede' : '') +
+      (document.visibilityState === 'hidden' ? ' · página escondida' : '');
+  } catch (x2) {}
+  linhas.push(onde);
+  if (CW._rasto && CW._rasto.length) linhas.push('rasto: ' + CW._rasto.join(' | '));
+  return linhas.join('\n');
+}
 window.addEventListener('error', function (e) {
-  reportErr(e.message, (e.filename || '') + ':' + (e.lineno || '') + ' · ' + ondeEstava() +
-    '\n' + String((e.error && e.error.stack) || '').slice(0, 500));
+  reportErr(e.message || (e.error && e.error.message) || 'Erro sem mensagem', detalheDoErro(e.error, e));
 });
 window.addEventListener('unhandledrejection', function (e) {
   var r = e.reason;
-  reportErr('Promessa rejeitada: ' + ((r && r.message) || r),
-    String((r && r.stack) || '').slice(0, 500) + ' · ' + ondeEstava());
+  reportErr('Promessa rejeitada: ' + ((r && r.message) || (typeof r === 'string' ? r : 'sem mensagem')),
+    detalheDoErro(r));
 });
+// cada mudança de ecrã entra no rasto que vai nos relatos
+var _goRasto = go;
+go = function (id) { rastoPoe('→ ' + id); return _goRasto.apply(this, arguments); };
 
 // leva o que a armadilha do index.html apanhou antes de este ficheiro existir
 (function () {
-  var fila = window.__erros;
-  if (!fila || !fila.length || window.__errosLevados) return;
+  var fila = window.__erros, jaLevados = window.__errosLevados;
+  // a partir daqui os relatos são deste ficheiro: o temporizador da armadilha
+  // não pode voltar a enviar o que já foi relatado (dava ×2 no Discord)
   window.__errosLevados = 1;
+  if (!fila || !fila.length || jaLevados) return;
   fila.splice(0).forEach(function (r) { reportErr(r.message, r.detail); });
 })();
 
