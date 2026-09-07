@@ -102,11 +102,14 @@ function normLoan(l){const o=Object.assign({id:uid(),name:'',bank:'',outstanding
    Devolve: um objeto novo com todos os campos da visita preenchidos. */
 function normVisit(v){return Object.assign({id:uid(),propertyId:'',roomId:'',nomes:'',contacto:'',
   date:'',start:'',end:'',estado:'agendada',resultado:'',notas:''},v||{})}
-/* normaliza uma ficha de pessoa (dono ou inquilino): campos em falta ficam vazios, anexos pelo normFile
+/* normaliza uma ficha de pessoa (dono ou inquilino): campos em falta ficam vazios, anexos pelo normFile.
+   houseId é o imóvel a que a ficha está presa (vazio numa ficha só minha): é
+   com ele que a ficha de um inquilino criada por um colaborador sobe como
+   registo desse imóvel, mesmo sem contrato — persiste e mantém o que vier.
    Recebe: p — a ficha em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos da ficha preenchidos. */
 function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:'',nif:'',gender:'',marital:'',
-  nationality:'Portuguesa',birth:'',cc:'',ccValid:'',taxAddress:'',notes:'',files:[]},p||{});
+  nationality:'Portuguesa',birth:'',cc:'',ccValid:'',taxAddress:'',notes:'',files:[],houseId:''},p||{});
   o.files=(o.files||[]).map(normFile);return o}
 /* normaliza um imóvel e migra o que mudou entre versões: equity passa a purchase, o crédito único
    vira lista de hipotecas, quartos em texto ganham id, e quotas de donos removidos são descartadas

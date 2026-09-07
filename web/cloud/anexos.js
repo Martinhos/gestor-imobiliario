@@ -142,20 +142,39 @@ render = function () {
   } catch (e) {}
 };
 
-// Depois de cada render, pendura o distintivo "de <nome>" nos cartões das casas
-// que outra pessoa partilhou connosco (mexe no DOM já desenhado, sem re-render).
-// Devolve: nada — só acrescenta os distintivos ao DOM.
+/* Depois de cada render, pendura o selo nos cartões dos imóveis (mexe no DOM
+   já desenhado, sem re-render): «de <dono> · <cargo>» onde sou colaborador,
+   «de <dono>» nos que outra pessoa partilhou comigo, e «N colaboradores» nos
+   meus que têm colaboradores. Quando a própria vista já desenha o selo
+   (seloCargo / seloColaboradores em web/app/acessos.js), não se pendura
+   outro por cima.
+   Devolve: nada — só acrescenta os selos ao DOM. */
 function decorateShared() {
+  var appCargo = typeof seloCargo === 'function', appColab = typeof seloColaboradores === 'function';
   (db.properties || []).forEach(function (p) {
-    if (!p._sharedFrom) return;
+    var texto = '', titulo = '';
+    if (p._cargo) {
+      if (appCargo) return;
+      texto = 'de ' + p._sharedFrom + ' · ' + p._cargo;
+      titulo = 'És colaborador neste imóvel, como ' + p._cargo;
+    } else if (p._sharedFrom) {
+      texto = 'de ' + p._sharedFrom;
+      titulo = 'Imóvel partilhado por ' + p._sharedFrom;
+    } else if ((p._colaboradores || []).length) {
+      if (appColab) return;
+      var n = p._colaboradores.length;
+      texto = n + (n === 1 ? ' colaborador' : ' colaboradores');
+      titulo = p._colaboradores.map(function (c) { return c.name + (c.roleName ? ' (' + c.roleName + ')' : ''); }).join(', ');
+    }
+    if (!texto) return;
     var cards = document.querySelectorAll('[data-lp="prop:' + p.id + '"] .title');
     [].slice.call(cards).forEach(function (el) {
       if (el.querySelector('.cw-shared')) return;
       var b = document.createElement('span');
       b.className = 'badge grey cw-shared';
       b.style.marginLeft = '7px';
-      b.textContent = 'de ' + p._sharedFrom;
-      b.title = 'Casa partilhada por ' + p._sharedFrom;
+      b.textContent = texto;
+      b.title = titulo;
       el.appendChild(b);
     });
   });
@@ -218,9 +237,5 @@ function restorePage() {
   buildNav(); render();
 }
 
-var _delProp = delProp;
-delProp = function (id) {
-  var p = (db.properties || []).find(function (x) { return x.id === id; });
-  if (p && p._sharedFrom) return toast('Esta casa é de ' + p._sharedFrom + ' — só o dono a pode apagar.');
-  _delProp(id);
-};
+// A guarda de «só o dono apaga o imóvel» vive agora em web/app/imovel.js
+// (delProp com souDono): o embrulho que aqui havia saiu, para não haver duas.

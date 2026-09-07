@@ -34,9 +34,23 @@ async function marcarPessoa(env, fp, userId, t) {
   }
 }
 
+// Os tokens de convite e da ligação de partilha nunca podem ficar num relato
+// (as tabelas leem-se no back office e o Discord recebe o embed): um caminho
+// /api/convite/<64 hex>, /api/ligar/<64 hex> ou um ?convite=<64 hex> perde o
+// token e fica «…».
+// Recebe: s — o texto (um caminho, uma mensagem, um detalhe; nada vale '').
+// Devolve: o mesmo texto com cada token substituído por «…».
+export function mascararTokens(s) {
+  return String(s == null ? '' : s)
+    .replace(/\/(convite|ligar)\/[a-f0-9]{64}/gi, '/$1/…')
+    .replace(/([?&])(convite|ligar)=[a-f0-9]{64}/gi, '$1$2=…');
+}
+
 // Um erro apanhado sozinho abre um pedido na mesma fila dos que as pessoas
 // contam. Erros repetidos somam-se ao pedido que já existe, em vez de abrirem
-// um novo de cada vez.
+// um novo de cada vez. Tokens nos textos são mascarados antes de qualquer
+// escrita (mascararTokens) — também na assinatura, para o mesmo erro com
+// tokens diferentes não abrir um pedido por token.
 // Recebe: env — o ambiente do worker; ctx — o contexto de execução (para as
 // notificações); categoria — uma das CATEGORIAS ('user', 'client', 'server',
 // 'infra', 'seguranca'); message — a mensagem do erro (corta a 2000);
@@ -45,11 +59,11 @@ async function marcarPessoa(env, fp, userId, t) {
 // Devolve: nada — grava ou engorda o pedido na D1 e avisa quem programa no
 // Discord quando vale a pena.
 export async function recordReport(env, ctx, categoria, message, detail, userId, extra) {
-  const msg = String(message || '').slice(0, 2000);
+  const msg = mascararTokens(message).slice(0, 2000);
   const fp = categoria + ':' + msg.slice(0, 120);
   const t = now();
   const versao = extra && extra.versao != null ? String(extra.versao).slice(0, 20) : null;
-  const contexto = extra && extra.contexto ? String(extra.contexto).slice(0, 200) : '';
+  const contexto = extra && extra.contexto ? mascararTokens(extra.contexto).slice(0, 200) : '';
   try {
     const ex = await env.DB.prepare('SELECT * FROM tickets WHERE fingerprint = ?').bind(fp).first();
     if (ex) {
@@ -78,7 +92,7 @@ export async function recordReport(env, ctx, categoria, message, detail, userId,
       'SELECT id FROM users WHERE deleted_at IS NULL ORDER BY created_at LIMIT 1'
     ).first() || {}).id;
     if (!dono) return;   // sem contas ainda, não há onde pendurar o pedido
-    const detalhe = String(detail || '').slice(0, 4000);
+    const detalhe = mascararTokens(detail).slice(0, 4000);
     await env.DB.prepare(
       `INSERT INTO tickets (id, user_id, kind, subject, body, status, category, fingerprint, n, versao, context, created_at, updated_at)
        VALUES (?, ?, 'problema', ?, ?, 'criado', ?, ?, 1, ?, ?, ?, ?)`

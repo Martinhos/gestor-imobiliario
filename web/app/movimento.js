@@ -10,16 +10,35 @@ let tForm={};
    Devolve: nada — abre o modal do movimento e prepara o guardar. */
 function txModal(id,kind,propId,_x,ctId,preset){
   foldState={};
+  /* sem imóvel escolhido: com um só imóvel onde posso adicionar fica esse; quem não
+     é dono de nenhum não tem «Todos os imóveis» e fica com o primeiro permitido —
+     senão o seletor mostrava o primeiro e o movimento gravava-se sem imóvel */
+  const auto=(db.properties.length===1||!podeSemImovel())?((casasComo('tx.add')[0]||{}).id||null):null;
   tForm=id?normTx(JSON.parse(JSON.stringify(db.transactions.find(x=>x.id===id)))):
-    normTx(Object.assign({kind:kind||'income',date:today(),amount:'',propertyId:propId||(db.properties.length===1?db.properties[0].id:null),contractId:ctId||null,split:null},preset||{}));
+    normTx(Object.assign({kind:kind||'income',date:today(),amount:'',propertyId:propId||auto,contractId:ctId||null,split:null},preset||{}));
   if(tForm.contractId&&!tForm.propertyId){const c=contract(tForm.contractId);if(c)tForm.propertyId=c.propertyId}
+  if(!id&&!tForm.propertyId&&!tForm.groupId&&!podeSemImovel())tForm.propertyId=auto;   /* um preset sem imóvel (modelo) também */
   tForm._edit=!!id;
   if(!id&&tForm.amount){tForm._aA=tForm.amount}
   prefill();
-  const m=id?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,act:`delTx('${id}')`}]):'';
-  openModal((id?'Editar ':txNewWord(tForm.kind))+txTypeName(tForm.kind),txBody(),null,m);
+  /* «Ver movimento»: o que não posso alterar num imóvel onde colaboro abre só de leitura */
+  const ok=!id||podeEditar(tForm.propertyId,'tx.add',db.transactions.find(x=>x.id===id));
+  const m=id&&ok?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,act:`delTx('${id}')`}]):'';
+  const nome=txTypeName(tForm.kind);
+  openModal(id?(ok?'Editar '+nome:nome.charAt(0).toUpperCase()+nome.slice(1)):txNewWord(tForm.kind)+nome,txBody(),null,m);
+  if(!ok){onSave=null;return modalSoLeitura('Movimento de um imóvel onde colaboras — só de leitura.')}
   tForm._saver=()=>{
     collectTx();
+    /* a primeira barreira: o servidor recusaria na mesma, mas aqui diz-se porquê antes de gravar.
+       Criar ou alterar um planeado não cria movimentos: pede «Adicionar e confirmar planeados»
+       (e, a alterar, ser quem o criou); o resto — movimentos, e o Confirmar — pede «Adicionar movimentos» */
+    const recusa=(tForm._recId||tForm._recNew)?motivoRecusa(tForm.propertyId,'rec.add',tForm._recId?(db.recurring||[]).find(x=>x.id===tForm._recId):null)
+      :motivoRecusa(tForm.propertyId,'tx.add',id?db.transactions.find(x=>x.id===id):null);
+    if(recusa)return toast(recusa);
+    if(!tForm.propertyId&&!podeSemImovel())return toast('Escolhe o imóvel.');
+    /* um pagamento de crédito a sério (não um planeado nem um modelo só) abate capital
+       na ficha do imóvel: sem «Editar a ficha» o movimento subia e a dívida não */
+    if(tForm.kind==='loan'&&!(tForm._recId||tForm._recNew)&&(!(tForm._tplId||tForm._tplNew)||tForm._alsoTx)){const rc=motivoCredito(tForm.propertyId);if(rc)return toast(rc)}
     if(!tForm.label.trim())return falhaCampo('t_label','Escreve uma descrição.');
     if(!(tForm.amount>0))return falhaCampo('t_amount','Indica um montante.');
     /* com hipotecas vivas, um pagamento de crédito sem hipoteca ia parar à conta errada ou a nenhuma */
@@ -81,7 +100,7 @@ function txModal(id,kind,propId,_x,ctId,preset){
    Devolve: nada — só mexe no tForm; quem chama repinta depois. */
 function prefill(){
   const p=prop(tForm.propertyId);
-  const ows=p?ownersOfProp(p).slice():(tForm.groupId?txGroupOwners(tForm).map(o=>o.id):db.owners.map(o=>o.id));
+  const ows=p?ownersOfProp(p).slice():(tForm.groupId?txGroupOwners(tForm).map(o=>o.id):donosGlobais().map(o=>o.id));
   /* num acerto, quem já lá está fica — pode não ser dono do imóvel (dívida de grupo paga por outro) */
   if(tForm.kind==='settle')[tForm.paidBy,tForm.toId].forEach(o=>{if(o&&ows.indexOf(o)<0&&owner(o))ows.push(o)});
   if(tForm.paidBy&&ows.indexOf(tForm.paidBy)<0)tForm.paidBy=null;
@@ -128,7 +147,7 @@ function txBody(){
     .concat(curLoan&&!(Number(curLoan.outstanding)>0)?[{v:curLoan.id,label:loanName(curLoan)+' · liquidada'}]:[])
     .concat(t.kind==='loan'&&t.loanId&&!curLoan?[{v:t.loanId,label:'Hipoteca desconhecida (outro imóvel)'}]:[]);
   /* sem imóvel, a despesa pode na mesma ser paga por alguém; num grupo, pelos donos dos imóveis do grupo */
-  const ows=(p?ownersOfProp(p).map(owner):(t.groupId?txGroupOwners(t):db.owners.map(o=>o.id).map(owner))).filter(Boolean);
+  const ows=(p?ownersOfProp(p).map(owner):(t.groupId?txGroupOwners(t):donosGlobais())).filter(Boolean);
   if(t.kind==='settle')[t.paidBy,t.toId].forEach(o=>{const x=o&&owner(o);if(x&&!ows.some(y=>y.id===o))ows.push(x)});
   const cs=catsFor(t.kind)||{},subs=(cs[t.category]||[]).slice();
   if(t.sub&&subs.indexOf(t.sub)<0)subs.unshift(t.sub);
@@ -147,7 +166,7 @@ function txBody(){
         <input id="t_amount" type="text" inputmode="decimal" style="flex:1;min-width:0" value="${t.amount||''}" placeholder="900" oninput="tForm.amount=num(this.value);refreshLoanHint();refreshSplit();amtResetSync()">
         <button type="button" class="btn sm primary" id="amt_reset" style="flex:0 0 auto;padding:9px 12px;display:${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':'none'}" title="Repor a prestação calculada" onclick="onAmtReset()">Repor</button></div></label>
       ${(t._recId||t._recNew)?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}"></label>`}</div>
-    <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p2=>({v:p2.id,label:p2.name}))).concat(gdiv(gOpts('prop'))),'onPropChange')}</label>
+    <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),(podeSemImovel()?[{v:'',label:'Todos os imóveis'}]:[]).concat(propOptsPara((t._recId||t._recNew)?'rec.add':'tx.add',t.propertyId)).concat(podeSemImovel()?gdiv(gOpts('prop')):[]),'onPropChange')}</label>
     ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)}))),'onCtChange')}</label>`:''}
     ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange')}</label>`:''}
     ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'}<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Pai, amigo, empreiteiro…" autocomplete="off" list="creditorList" oninput="refreshCredHint()">
@@ -612,6 +631,7 @@ function delTx(id){
   /* sem confirmação, com Anular: é a eliminação mais frequente da app, e a
      pergunta constante ensinava o dedo a confirmar sem ler */
   const t=db.transactions.find(x=>x.id===id);if(!t)return;
+  const recusa=motivoRecusa(t.propertyId,'tx.add',t,true);if(recusa)return toast(recusa);
   const copia=JSON.parse(JSON.stringify(t));
   if(t.kind==='loan'&&t.principal&&t.loanId){
     const l=findLoan(prop(t.propertyId),t.loanId);

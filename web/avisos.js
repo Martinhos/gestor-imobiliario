@@ -19,12 +19,44 @@ var FUNCIONALIDADES = {
   movimentos: 'Movimentos e planeados',
   creditos: 'Créditos à habitação',
   partilha: 'Partilha entre proprietários',
+  colaboradores: 'Colaboradores e cargos',
   anexos: 'Fotos e documentos',
   conta: 'Conta e entrada',
   suporte: 'Pedidos de ajuda',
 };
 
 var AVISOS = [
+  {
+    v: 31,
+    data: '2026-09-07',
+    titulo: 'Colaboradores com cargos, e uma ligação em vez do id',
+    seccoes: [
+      {
+        titulo: 'Convida quem te ajuda a gerir',
+        afeta: ['colaboradores', 'partilha'],
+        itens: [
+          'Podes dar acesso a um imóvel, ou a vários, a quem não é dono: um contabilista, quem faz as visitas, um familiar que só quer ver. Não têm quota-parte nem entram nas contas entre proprietários.',
+          'Cada colaborador tem um cargo, e cada cargo diz o que se pode ver e adicionar — movimentos, planeados, visitas, contratos, inquilinos, hipotecas, documentos, avaliação. Crias os cargos que quiseres, ou começas por um dos três prontos: Gestor de visitas, Contabilista, Ver tudo.',
+          'O convite é uma ligação de uso único: escolhes o cargo e os imóveis, copias, envias. Quem a abrir entra (ou cria conta) e fica logo com o acesso. Tudo em Definições → Conta e partilha.',
+          'Quem adiciona um registo pode editá-lo e apagá-lo; o que é teu, só tu e os comproprietários mexem. O sino diz quem fez o quê, e com que cargo.',
+        ],
+      },
+      {
+        titulo: 'Partilhar por ligação',
+        afeta: ['partilha'],
+        itens: [
+          'Em Conta e partilha há agora uma ligação permanente tua: quem a abrir escolhe que imóveis quer partilhar contigo e tu aceitas ou recusas cada pedido — sem escrever o id. Podes desativá-la quando quiseres.',
+        ],
+      },
+      {
+        titulo: 'Se és colaborador',
+        afeta: ['colaboradores'],
+        itens: [
+          'Ao entrar, a app diz de quem és colaborador, em que imóveis e com que cargo. Os cartões desses imóveis levam o selo «de Maria · Contabilista», e a vista geral avisa que os inclui, por inteiro.',
+        ],
+      },
+    ],
+  },
   {
     v: 30,
     data: '2026-09-07',

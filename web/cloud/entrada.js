@@ -44,13 +44,18 @@ function passProblem(p) {
 }
 
 /* Desenha o ecrã de entrada por cima de tudo — login ou registo, conforme
-   CW.showAuthMode — com msg como erro opcional no topo. No registo liga a
-   validação ao vivo do email e dos requisitos da palavra-passe; no fim tenta
-   montar a entrada social (Google), se estiver configurada.
-   Recebe: msg (opcional) — mensagem de erro a mostrar no topo do ecrã.
+   CW.showAuthMode — com msg como erro opcional no topo (ou como nota, quando
+   quem chega vem por uma ligação de convite e ainda não errou nada). No
+   registo liga a validação ao vivo do email e dos requisitos da
+   palavra-passe; no fim tenta montar a entrada social (Google), se estiver
+   configurada.
+   Recebe: msg (opcional) — mensagem a mostrar no topo do ecrã; nota
+   (opcional) — verdadeiro para a mostrar como nota e não como erro.
    Devolve: nada — redesenha o ecrã de entrada. */
-function showAuth(msg) {
+function showAuth(msg, nota) {
   CW.showAuthMode = CW.showAuthMode || 'login';
+  // quem chegou por uma ligação e ainda não entrou vê sempre o porquê
+  if (!msg && CW._chegadaMsg) { msg = CW._chegadaMsg; nota = true; }
   if (!authEl) {
     authEl = document.createElement('div');
     authEl.id = 'cwAuth';
@@ -66,7 +71,7 @@ function showAuth(msg) {
     '<span class="avatar" style="background:var(--accent);color:var(--accent-ink)">' + (typeof ic === 'function' ? ic('building', 20) : '') + '</span>' +
     '<div><div class="title" style="font-size:18px">Rendorium</div>' +
     '<div class="small">' + (login ? 'Inicia sessão para continuar' : 'Cria a tua conta') + '</div></div></div>' +
-    (msg ? '<div class="hint" style="color:var(--danger);margin:8px 0">' + esc(msg) + '</div>' : '') +
+    (msg ? '<div class="hint" id="cwa_msg" style="' + (nota ? 'color:var(--ink);border-left:3px solid var(--accent);padding-left:10px' : 'color:var(--danger)') + ';margin:8px 0">' + esc(msg) + '</div>' : '') +
     '<div class="form" style="margin-top:12px;display:grid;gap:10px">' +
     (login ? '' : '<input id="cwa_name" placeholder="Nome" autocomplete="name">') +
     '<input id="cwa_email" type="email" placeholder="Email" autocomplete="email">' +
@@ -164,6 +169,10 @@ function finishLogin(u) {
     if (m.termsCurrent && m.terms !== m.termsCurrent) showTermsGate();
   }).catch(function () {});
   startSync();
+  // veio por uma ligação de convite ou de partilha: só DEPOIS de o ecrã de
+  // entrada sair — um modal por baixo dele não se via (a lição do cwRepor)
+  CW._chegadaMsg = '';
+  CW.resgatarChegada();
 }
 
 // Valida o formulário (no registo: palavra-passe forte, confirmação igual e
@@ -319,6 +328,210 @@ CW.esqueci = function (e) {
   }, 700);
 })();
 
+/* ---------------- aterragem: ?convite=<token> e ?ligar=<token> ----------------
+   A ligação de convite (uso único, com cargo) e a ligação de partilha
+   (permanente) chegam pelo endereço. O token sai já do URL e fica em
+   sessionStorage ('gi_convite' / 'gi_ligar'); o GET de pré-visualização não
+   altera nada — só o «Aceitar» ou o «Enviar pedido» (POST, com sessão) agem.
+   Sem sessão, o ecrã de entrada diz porquê e o resgate acontece depois de
+   finishLogin; com sessão, no arranque, mal os avisos de entrada saiam. */
+
+// Lê o endereço à procura de um token de convite ou de partilha (64 hex):
+// parseConvite (web/app/acessos.js) quando existe, senão o mesmo à mão.
+// Recebe: search — o location.search.
+// Devolve: {tipo:'convite'|'ligar', token} ou null.
+function chegadaNoEndereco(search) {
+  try { if (typeof parseConvite === 'function') return parseConvite(search) || null; } catch (e) {}
+  var m = /[?&](convite|ligar)=([a-f0-9]{64})\b/.exec(search || '');
+  return m ? { tipo: m[1], token: m[2] } : null;
+}
+
+// O que ficou guardado nesta sessão do browser à espera de resgate.
+// Devolve: {tipo, token} ou null.
+function chegadaGuardada() {
+  try {
+    var c = sessionStorage.getItem('gi_convite');
+    if (c) return { tipo: 'convite', token: c };
+    var l = sessionStorage.getItem('gi_ligar');
+    if (l) return { tipo: 'ligar', token: l };
+  } catch (e) {}
+  return null;
+}
+
+// Esquece o token guardado de um tipo (depois de agir, ou de «Agora não»).
+// Recebe: tipo — 'convite' ou 'ligar'.
+// Devolve: nada — limpa o sessionStorage.
+function esquecerChegada(tipo) {
+  try { sessionStorage.removeItem(tipo === 'ligar' ? 'gi_ligar' : 'gi_convite'); } catch (e) {}
+}
+
+// A pré-visualização de uma ligação (GET público): quem convida, o cargo, os imóveis.
+// Recebe: ch — {tipo, token}.
+// Devolve: Promise com a resposta do servidor ({ownerName, roleName, perms, houses…}).
+function preverChegada(ch) {
+  return api('GET', (ch.tipo === 'ligar' ? '/api/ligar/' : '/api/convite/') + encodeURIComponent(ch.token));
+}
+
+// A frase para o ecrã de entrada, a partir da pré-visualização.
+// Recebe: ch — {tipo, token}; prev — a resposta da pré-visualização (pode vir null).
+// Devolve: o texto da nota.
+function fraseDaChegada(ch, prev) {
+  if (ch.tipo === 'ligar') {
+    return (prev && prev.ownerName ? prev.ownerName + ' pede que partilhes imóveis com ele. ' : '') +
+      'Entra ou cria conta para responderes.';
+  }
+  if (!prev) return 'Entra ou cria conta para aceitares o convite.';
+  var casas = (prev.houses || []).map(function (h) { return h.name; }).filter(Boolean).join(', ');
+  return (prev.ownerName || 'Alguém') + ' convida-te para colaborar' + (prev.roleName ? ' como ' + prev.roleName : '') +
+    (casas ? ' em ' + casas : '') + '. Entra ou cria conta para aceitares o convite.';
+}
+
+(function () {
+  var ch = chegadaNoEndereco(location.search);
+  if (!ch) return;
+  // o token sai já do endereço: não fica no histórico nem em partilhas
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  try { sessionStorage.setItem(ch.tipo === 'ligar' ? 'gi_ligar' : 'gi_convite', ch.token); } catch (e) {}
+  if (CW.user) return;   // com sessão, o arranque resgata
+  CW._chegadaMsg = fraseDaChegada(ch, null);
+  preverChegada(ch).then(function (prev) {
+    CW._chegadaMsg = fraseDaChegada(ch, prev);
+    var el = document.getElementById('cwa_msg');
+    if (el) el.textContent = CW._chegadaMsg;
+  }).catch(function (e) {
+    // ligação que não serve: diz-se já, e não se volta a perguntar
+    esquecerChegada(ch.tipo);
+    CW._chegadaMsg = '';
+    var el = document.getElementById('cwa_msg');
+    if (el) { el.textContent = e.message || 'Essa ligação não serve.'; el.style.color = 'var(--danger)'; }
+  });
+})();
+
+// «Não sou eu»: sai da conta e volta ao ecrã de entrada, sem esquecer a
+// ligação — quem entrar a seguir é que responde.
+// Recebe: e (opcional) — o evento do clique, para travar a navegação.
+// Devolve: nada — termina a sessão e mostra o ecrã de entrada.
+CW.naoSouEu = function (e) {
+  if (e && e.preventDefault) e.preventDefault();
+  closeAllModals();
+  api('POST', '/api/auth/logout').catch(function () {});
+  CW.user = null;
+  CW.tickets = null;
+  try { localStorage.removeItem(LS_USER); localStorage.removeItem(LS_PAGE); } catch (x) {}
+  tab = 'dashboard'; setPage = '';
+  buildNav(); render();
+  CW.showAuthMode = 'login';
+  var ch = chegadaGuardada();
+  CW._chegadaMsg = ch ? fraseDaChegada(ch, ch.tipo === 'ligar' ? CW._ligarPrev : CW._convitePrev) : '';
+  showAuth();
+};
+
+// «Agora não»: fecha o modal e esquece a ligação nesta sessão (a ligação em
+// si continua a valer — basta abri-la outra vez).
+// Recebe: tipo — 'convite' ou 'ligar'.
+// Devolve: nada — fecha e limpa.
+CW.chegadaDepois = function (tipo) {
+  esquecerChegada(tipo);
+  CW._convitePrev = null; CW._ligarPrev = null;
+  closeAllModals();
+};
+
+// Lê as caixas do modal da ligação de partilha e envia o pedido.
+// Recebe: token — o token da ligação.
+// Devolve: nada — o CW.pedirPartilha trata do resto.
+CW.enviarPedido = function (token) {
+  var ids = (db.properties || []).filter(function (p) {
+    var e = document.getElementById('cw_lig_h_' + p.id);
+    return e && e.checked;
+  }).map(function (p) { return p.id; });
+  CW.pedirPartilha(token, ids);
+};
+
+// A linha «Entras como <email>» com o «Não sou eu», para os dois modais.
+// Devolve: o HTML (texto).
+function entrasComo() {
+  return '<div class="hint">Entras como <b>' + esc(CW.user.email || CW.user.name || '') + '</b>. ' +
+    '<a href="#" onclick="CW.naoSouEu(event)" style="color:var(--accent)">Não sou eu</a></div>';
+}
+
+// O modal do convite: quem convida, o cargo, os imóveis, o que vai poder, e
+// «Aceitar» / «Agora não». Só o Aceitar gasta a ligação.
+// Recebe: token — o token; prev — a pré-visualização do servidor.
+// Devolve: nada — abre o modal.
+function modalConvite(token, prev) {
+  CW._convitePrev = prev;
+  var casas = (prev.houses || []).map(function (h) {
+    return '<div class="card" style="padding:10px 13px"><b>' + esc(h.name || 'Sem nome') + '</b></div>';
+  }).join('');
+  var perms = typeof permsFechadas === 'function' ? permsFechadas(prev.perms || []) : (prev.perms || []);
+  var pode = perms.map(function (p) { return typeof rotuloDe === 'function' ? rotuloDe(p) : p; })
+    .map(function (t) { return t.charAt(0).toLowerCase() + t.slice(1); });
+  openModal('Convite de ' + (prev.ownerName || ''),
+    '<div class="form">' +
+    '<div class="hint" style="font-size:14px"><b>' + esc(prev.ownerName || 'Alguém') + '</b> convida-te para colaborar como <b>' + esc(prev.roleName || 'colaborador') + '</b>.</div>' +
+    (casas ? '<div><div class="flabel">Imóveis</div><div class="list" style="gap:7px">' + casas + '</div></div>' : '') +
+    (pode.length ? '<div><div class="flabel">Vais poder</div><div class="hint">' + esc(pode.join(', ')) + '.</div></div>' : '') +
+    '<div class="hint">Não ficas comproprietário: as quotas e as contas entre donos não te incluem. Podes sair quando quiseres em Definições → Conta e partilha.</div>' +
+    entrasComo() + '</div>',
+    '<button class="btn" onclick="CW.chegadaDepois(\'convite\')">Agora não</button>' +
+    '<button class="btn primary" onclick="CW.aceitarConvite(\'' + jsq(token) + '\')">Aceitar</button>');
+}
+
+// O modal da ligação de partilha: quem pede, as caixas dos meus imóveis, e
+// «Enviar pedido» / «Agora não». Cada imóvel marcado vira um pedido pendente.
+// Recebe: token — o token; prev — a pré-visualização ({ownerName}).
+// Devolve: nada — abre o modal.
+function modalLigar(token, prev) {
+  CW._ligarPrev = prev;
+  var dono = esc(prev.ownerName || 'Alguém');
+  var meus = (db.properties || []).filter(function (p) { return cwMinha(p); });
+  var caixas = meus.length
+    ? '<div><div class="flabel">Escolhe quais</div><div class="list" style="gap:7px">' + meus.map(function (p) {
+        return '<label class="check"><input type="checkbox" id="cw_lig_h_' + p.id + '"><span style="min-width:0"><b>' + esc(p.name || 'Sem nome') + '</b>' +
+          (p.address ? ' <span class="small">' + esc(p.address) + '</span>' : '') + '</span></label>';
+      }).join('') + '</div></div>'
+    : '<div class="hint">Ainda não tens imóveis para partilhar — cria um primeiro e volta a abrir a ligação.</div>';
+  openModal('Pedido de ' + (prev.ownerName || ''),
+    '<div class="form"><div class="hint" style="font-size:14px"><b>' + dono + '</b> pede que partilhes imóveis com ele.</div>' + caixas +
+    '<div class="hint">' + dono + ' passa a comproprietário dos imóveis que escolheres — vê contratos, movimentos e pessoas desses imóveis. Cada pedido fica à espera que ele aceite.</div>' +
+    entrasComo() + '</div>',
+    '<button class="btn" onclick="CW.chegadaDepois(\'ligar\')">Agora não</button>' +
+    (meus.length ? '<button class="btn primary" onclick="CW.enviarPedido(\'' + jsq(token) + '\')">Enviar pedido</button>' : ''));
+}
+
+/* Resgata a ligação guardada, com sessão: espera que os avisos de entrada
+   (aviso inicial, termos, atualização) saiam do ecrã, pede a pré-visualização
+   e abre o modal certo. Uma ligação que já não serve diz-o e esquece-se.
+   Devolve: nada — abre o modal quando puder (ou não faz nada sem ligação). */
+CW.resgatarChegada = function () {
+  var ch = chegadaGuardada();
+  if (!ch || !CW.user) return;
+  var ocupado = function () {
+    return document.getElementById('cwLegal') || document.getElementById('cwTerms') ||
+      document.getElementById('cwUpd') || (authEl && authEl.style.display !== 'none');
+  };
+  var tentativas = 0;
+  var tentar = function () {
+    if (!CW.user) return;
+    if (ocupado()) { if (tentativas++ < 120) setTimeout(tentar, 800); return; }
+    if (CW._chegadaEmCurso) return;
+    CW._chegadaEmCurso = true;
+    preverChegada(ch).then(function (prev) {
+      CW._chegadaEmCurso = false;
+      if (chegadaGuardada() === null) return;   // entretanto respondida noutro sítio
+      if (ch.tipo === 'ligar') modalLigar(ch.token, prev || {});
+      else modalConvite(ch.token, prev || {});
+    }).catch(function (e) {
+      CW._chegadaEmCurso = false;
+      esquecerChegada(ch.tipo);
+      openModal(ch.tipo === 'ligar' ? 'Esta ligação não serve' : 'Este convite já não vale',
+        '<div class="hint" style="font-size:14px">' + esc(e.message || 'Essa ligação não serve.') + '</div>',
+        '<button class="btn primary" onclick="closeModal()">Fechar</button>');
+    });
+  };
+  setTimeout(tentar, 400);
+};
+
 // Valida a palavra-passe nova e confirma a reposição com o token da ligação de
 // email; se o servidor aceitar, fecha a sobreposição e devolve o ecrã de entrada.
 // Devolve: nada — os erros ficam escritos na sobreposição; o sucesso fecha-a.
@@ -460,6 +673,7 @@ if (CW.user) {
       }
     } catch (e) {}
     startSync();
+    CW.resgatarChegada();   // uma ligação de convite ou de partilha à espera
   }).catch(function (e) {
     if (e && e.status === 401) sessionLost();
     else { setSyncBadge('off'); startSync(); } // offline: continua local

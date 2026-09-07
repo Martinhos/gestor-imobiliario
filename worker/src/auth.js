@@ -49,9 +49,10 @@ export async function verifyPassword(password, saltB64, expectedHashB64) {
 }
 
 // Token aleatório em hexadecimal (32 bytes por omissão → 64 caracteres, o formato que TOKEN_RE exige).
+// Serve às sessões e também aos convites e à ligação de partilha (colaboradores.js).
 // Recebe: bytes (opcional) — quantos bytes aleatórios gerar; 32 por omissão.
 // Devolve: string hexadecimal com o dobro dos caracteres (64 por omissão).
-function randomToken(bytes = 32) {
+export function randomToken(bytes = 32) {
   const buf = crypto.getRandomValues(new Uint8Array(bytes));
   return [...buf].map((b) => b.toString(16).padStart(2, '0')).join('');
 }

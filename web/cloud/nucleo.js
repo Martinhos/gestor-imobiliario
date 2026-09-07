@@ -9,7 +9,9 @@ var PULL_MS = 180000;
 
 var CW = (window.CW = {});
 CW.user = null;
-CW.state = { connections: [] };
+CW.state = { connections: [], roles: [], collaborators: [], invites: [], people: [], shareLink: null, shareRequests: { incoming: [], outgoing: [] } };
+CW.cargos = {};    // por imóvel: {dono, nome, perms} — vem de cargosDoEstado (web/app/acessos.js)
+CW.pessoas = {};   // por id de utilizador: {name, kind, roleName} — quem não é proprietário mas tem nome
 
 try { CW.user = JSON.parse(localStorage.getItem(LS_USER) || 'null'); } catch (e) {}
 
@@ -128,37 +130,96 @@ function stripHouse(p) {
   return c;
 }
 
-// Mapa completo do que este utilizador deve ter no servidor.
-// chave -> {scope, houseId?, kind?, id?, data}
-// Devolve: esse mapa (objeto), montado a partir do db local já limpo por strip.
+/* Um imóvel que é meu de raiz (criei-o eu): nem partilhado por outro nem de
+   colaboração. É o critério de quem gere partilha, colaboradores, quotas e
+   apagar — a decisão pura (souCriador) vive em web/app/acessos.js; sem ela,
+   valem as marcas.
+   Recebe: p — o imóvel (objeto de db.properties; aguenta null).
+   Devolve: true se o imóvel é meu de raiz; false caso contrário. */
+function cwMinha(p) {
+  if (!p || p._sharedFrom || p._cargo) return false;
+  if (typeof souCriador === 'function') return !!souCriador(p.id);
+  return typeof souDono === 'function' ? !!souDono(p.id) : true;
+}
+
+// Os tipos de registo com uma família de permissões (a cópia de recurso de
+// KIND_PERM, em web/app/acessos.js); o que não está aqui nunca sobe de um
+// imóvel de colaboração.
+var KIND_PERM_LOCAL = { contract: 'contract', tx: 'tx', rec: 'rec', visit: 'visit', tenant: 'tenant' };
+
+/* Se este utilizador pode enviar esta entidade ao servidor. Nos imóveis
+   próprios ou em compropriedade, tudo; nos de colaboração, a ficha do imóvel
+   só com house.edit e os registos só dos tipos cujo cargo dá «.add». Sem a
+   função pode() (acessos.js por carregar), nada sobe desses imóveis — o
+   servidor recusava na mesma, mas poupa-se o pedido.
+   Recebe: houseId — o id do imóvel; kind (opcional) — o tipo do registo
+   ('contract', 'tx', …); sem ele avalia-se a ficha do imóvel.
+   Devolve: true se pode subir; false se não. */
+function podeExportar(houseId, kind) {
+  var p = (db.properties || []).find(function (x) { return x.id === houseId; });
+  if (!p || !p._cargo) return true;
+  if (typeof pode !== 'function') return false;
+  if (!kind) return !!pode(houseId, 'house.edit');
+  var fam = null;
+  try { if (typeof KIND_PERM !== 'undefined' && KIND_PERM) fam = KIND_PERM[kind]; } catch (e) {}
+  if (!fam) fam = KIND_PERM_LOCAL[kind];
+  return !!fam && !!pode(houseId, fam + '.add');
+}
+
+/* O imóvel a que uma ficha de inquilino está presa: o campo houseId, que a
+   app grava na ficha (criada a partir de uma visita, ou num imóvel de
+   colaboração), ou a marca _houseId que o servidor põe ao vir de um registo
+   de casa. Uma ficha só minha não tem nenhum dos dois.
+   Recebe: t — a ficha do inquilino (aguenta null).
+   Devolve: o id do imóvel (texto), ou '' quando a ficha não está presa a nenhum. */
+function casaDaFicha(t) {
+  return (t && (t.houseId || t._houseId)) || '';
+}
+
+/* Mapa completo do que este utilizador deve ter no servidor.
+   chave -> {scope, houseId?, kind?, id?, data}
+   Uma ficha de inquilino presa a um imóvel (casaDaFicha) é um registo desse
+   imóvel — r:<casa>:tenant:<id> — com ou sem contrato, tal como as ligadas por
+   contrato. Presa a um imóvel de colaboração, é só isso: é assim que a ficha
+   que um colaborador com tenant.add cria («Converter em inquilino») chega ao
+   dono. Presa a um imóvel meu, ou a um que já não existe, sobe também como
+   u:tenant — uma ficha do dono nunca fica sem chave (era assim que se perdia
+   ao apagar o imóvel).
+   Devolve: esse mapa (objeto), montado a partir do db local já limpo por strip. */
 function exportEntities() {
   var map = {};
   var owners = db.owners || [], tenants = db.tenants || [];
   (db.properties || []).forEach(function (p) {
-    map['h:' + p.id] = { scope: 'house', houseId: p.id, data: stripHouse(p) };
+    // num imóvel de colaboração só sobe o que o cargo deixa (podeExportar)
+    if (podeExportar(p.id)) map['h:' + p.id] = { scope: 'house', houseId: p.id, data: stripHouse(p) };
     var persons = {};
     (db.contracts || []).forEach(function (c) {
       if (c.propertyId !== p.id) return;
-      map['r:' + p.id + ':contract:' + c.id] = { scope: 'record', houseId: p.id, kind: 'contract', id: c.id, data: strip(c) };
+      if (podeExportar(p.id, 'contract')) map['r:' + p.id + ':contract:' + c.id] = { scope: 'record', houseId: p.id, kind: 'contract', id: c.id, data: strip(c) };
       (c.tenantIds || []).forEach(function (tid) {
         var t = tenants.find(function (x) { return x.id === tid; });
         if (t) persons['tenant:' + tid] = t;
       });
     });
+    // as fichas presas a este imóvel, mesmo sem contrato (podeExportar decide abaixo)
+    tenants.forEach(function (t) {
+      if (casaDaFicha(t) === p.id) persons['tenant:' + t.id] = t;
+    });
     (db.transactions || []).forEach(function (t) {
-      if (t.propertyId !== p.id) return;
+      if (t.propertyId !== p.id || !podeExportar(p.id, 'tx')) return;
       map['r:' + p.id + ':tx:' + t.id] = { scope: 'record', houseId: p.id, kind: 'tx', id: t.id, data: strip(t) };
     });
     (db.recurring || []).forEach(function (r) {
-      if (!(r.tx && r.tx.propertyId === p.id)) return;
+      if (!(r.tx && r.tx.propertyId === p.id) || !podeExportar(p.id, 'rec')) return;
       map['r:' + p.id + ':rec:' + r.id] = { scope: 'record', houseId: p.id, kind: 'rec', id: r.id, data: strip(r) };
     });
     (db.visits || []).forEach(function (v) {
-      if (v.propertyId !== p.id) return;
+      if (v.propertyId !== p.id || !podeExportar(p.id, 'visit')) return;
       map['r:' + p.id + ':visit:' + v.id] = { scope: 'record', houseId: p.id, kind: 'visit', id: v.id, data: strip(v) };
     });
     Object.keys(persons).forEach(function (k) {
       var kind = k.split(':')[0], id = k.split(':')[1];
+      if (!podeExportar(p.id, kind)) return;
       map['r:' + p.id + ':' + kind + ':' + id] = { scope: 'record', houseId: p.id, kind: kind, id: id, data: strip(persons[k]) };
     });
   });
@@ -175,7 +236,16 @@ function exportEntities() {
   // os "proprietários" são os utilizadores: só o meu perfil é exportado
   var meOwner = CW.user && owners.find(function (o) { return o.id === CW.user.id; });
   if (meOwner) map['u:profile:main'] = { scope: 'user', kind: 'profile', id: 'main', data: strip(meOwner) };
-  tenants.forEach(function (t) { if (!t._sharedFrom) map['u:tenant:' + t.id] = { scope: 'user', kind: 'tenant', id: t.id, data: strip(t) }; });
+  // as fichas minhas sobem como registo de utilizador; as presas a um imóvel
+  // de colaboração já subiram (ou não podem subir) como registo dessa casa.
+  // Uma presa a um imóvel meu sobe também aqui, e uma presa a um imóvel que
+  // já não está em db.properties (apagado) só aqui — nunca fica sem chave
+  tenants.forEach(function (t) {
+    if (t._sharedFrom) return;
+    var h = casaDaFicha(t);
+    if (h && !souDono(h) && prop(h)) return;
+    map['u:tenant:' + t.id] = { scope: 'user', kind: 'tenant', id: t.id, data: strip(t) };
+  });
   var st = strip(db.settings);
   delete st.theme;   // preferência do aparelho: fica de fora da sincronização
   map['u:settings:main'] = { scope: 'user', kind: 'settings', id: 'main', data: st };
@@ -218,6 +288,36 @@ function avisoPlano(msg) {
   if (!msg || _avisosPlano[msg]) return;
   _avisosPlano[msg] = 1;
   try { toast(msg, { ms: 6000 }); } catch (e) {}
+}
+
+// A descrição curta de um registo, para os avisos («Renda de março», «T2 — Ana»).
+// Recebe: kind — o tipo ('tx', 'contract', 'rec', 'visit', 'tenant'); data — o registo.
+// Devolve: um texto curto; o tipo por extenso quando o registo não tem nome.
+function descricaoDe(kind, data) {
+  var d = data || {};
+  var nomes = { tx: 'O movimento', contract: 'O contrato', rec: 'O planeado', visit: 'A visita', tenant: 'A ficha de inquilino' };
+  var t = kind === 'tx' ? (d.label || d.category) : kind === 'visit' ? d.nomes : (d.name || d.label);
+  return t ? String(t).slice(0, 60) : (nomes[kind] || 'O registo');
+}
+
+/* O servidor recusou um registo por falta de permissão (403 num put de
+   registo, num imóvel onde sou colaborador): sai da base local — o próximo
+   pull traz a versão dele, se existir —, fica em db._recusados para
+   consulta, e diz-se na hora. Sem isto a pessoa via o registo «guardado» e
+   ele nunca subia.
+   Recebe: o — a operação do push ({kind, id, houseId, data, _key}); erro — a
+   frase do servidor (pode vir vazia).
+   Devolve: nada — mexe em db e junta a descrição à lista para o toast. */
+function recusaRegisto(o, erro) {
+  var listas = { contract: 'contracts', tx: 'transactions', rec: 'recurring', visit: 'visits', tenant: 'tenants' };
+  var lista = db[listas[o.kind]] || [];
+  var i = -1;
+  for (var k = 0; k < lista.length; k++) if (lista[k].id === o.id) { i = k; break; }
+  var reg = i > -1 ? lista.splice(i, 1)[0] : null;
+  db._recusados = db._recusados || [];
+  db._recusados.push({ kind: o.kind, id: o.id, houseId: o.houseId, erro: erro || '', data: reg || o.data, at: Date.now() });
+  if (db._recusados.length > 50) db._recusados.shift();
+  pushNow._recusadosAgora = (pushNow._recusadosAgora || []).concat([descricaoDe(o.kind, reg || o.data)]);
 }
 
 /* Envia ao servidor a diferença entre o estado local e o retrato: 'put' do que
@@ -273,6 +373,8 @@ function pushNow() {
             if (o.op === 'put' && r.ok) snap[o._key] = o._json;
             else if (o.op === 'del' && (r.ok || r.status === 403 || r.status === 404)) delete snap[o._key];
             else if (r.status === 402) { _plano402[o._key] = 1; avisoPlano(r.error); }
+            // sem permissão num imóvel de colaboração: o registo não fica a fingir que subiu
+            else if (o.op === 'put' && o.scope === 'record' && r.status === 403) recusaRegisto(o, r.error);
             else pushNow._recusadas = (pushNow._recusadas || 0) + 1;
           });
         });
@@ -286,6 +388,14 @@ function pushNow() {
          com o selo verde e os dados sem subir */
       var recusadas = pushNow._recusadas || 0; pushNow._recusadas = 0;
       setSyncBadge(recusadas ? 'off' : 'ok');
+      var fora = pushNow._recusadosAgora || []; pushNow._recusadosAgora = [];
+      if (fora.length) {
+        try { rawSet(KEY, JSON.stringify(db)); render(); } catch (e) {}
+        try {
+          toast(fora[0] + ' não foi guardado: sem permissão neste imóvel.' +
+            (fora.length > 1 ? ' E mais ' + (fora.length - 1) + '.' : ''), { ms: 6000 });
+        } catch (e) {}
+      }
       try { subirPendentes(); } catch (e) {}
     })
     .catch(function () { pushNow._recusadas = 0; setSyncBadge('off'); })
@@ -299,19 +409,98 @@ function pushNow() {
 
 var lastPull = 0;
 
+// Se um id está num conjunto que pode vir como Set, array ou objeto (a forma
+// de ownersIds depende de quem o montou).
+// Recebe: conj — o conjunto (Set, array ou objeto {id: true}; aguenta null); id — o id.
+// Devolve: true se está lá.
+function temId(conj, id) {
+  if (!conj) return false;
+  if (typeof conj.has === 'function') return conj.has(id);
+  if (Array.isArray(conj)) return conj.indexOf(id) > -1;
+  return !!conj[id];
+}
+
+/* Quem conta como proprietário para a base local: eu, quem está em
+   participants de algum imóvel e quem tem ligação aceite comigo. É a cópia
+   de recurso do ownersIds de cargosDoEstado (web/app/acessos.js), para o
+   rebuildDb nunca meter um colaborador em db.owners.
+   Recebe: st — o estado de GET /api/state; myId — o meu id.
+   Devolve: objeto {id: true} com os ids. */
+function donosDoEstado(st, myId) {
+  var out = {};
+  if (myId) out[myId] = true;
+  (st.houses || []).forEach(function (h) {
+    (h.participants || [h.ownerId]).forEach(function (u) { if (u) out[u] = true; });
+  });
+  (st.connections || []).forEach(function (c) {
+    if (c.status === 'accepted' && c.peer && c.peer.id) out[c.peer.id] = true;
+  });
+  return out;
+}
+
+// Os colaboradores de um imóvel meu, lidos de st.collaborators (que só o dono recebe).
+// Recebe: st — o estado; houseId — o id do imóvel.
+// Devolve: array de {id, userId, name, roleId, roleName} (vazio quando não há).
+function colaboradoresDe(st, houseId) {
+  return (st.collaborators || []).filter(function (c) {
+    return (c.houses || []).some(function (h) { return h.id === houseId; });
+  }).map(function (c) {
+    return { id: c.id, userId: c.userId, name: c.name || '', roleId: c.roleId, roleName: c.roleName || '' };
+  });
+}
+
+/* Quem colabora num imóvel onde sou dono ou comproprietário: a lista que o
+   servidor manda na própria casa (h.collaborators — vem também nas casas em
+   compropriedade, para o comproprietário ver quem lá entra) ou, num servidor
+   que ainda não a manda, a lista global do dono (só nas minhas).
+   Recebe: st — o estado; h — a casa do estado ({id, mine, collaborators?}).
+   Devolve: array de {id, userId, name, roleId, roleName} (vazio quando não há). */
+function colaboradoresDaCasa(st, h) {
+  if (Array.isArray(h.collaborators)) {
+    return h.collaborators.map(function (c) {
+      return { id: c.id, userId: c.userId, name: c.name || '', roleId: c.roleId || '', roleName: c.roleName || '' };
+    });
+  }
+  return h.mine ? colaboradoresDe(st, h.id) : [];
+}
+
+/* Se este utilizador é um colaborador puro: tem cargo em imóveis meus e
+   nenhuma casa em comum comigo (é o kind 'collab' de st.people). É o único
+   que nunca vira ficha em db.owners.
+   Recebe: uid — o id do utilizador.
+   Devolve: true se é colaborador puro; false para donos, comproprietários e desconhecidos. */
+function colaboradorPuro(uid) {
+  var pe = CW.pessoas && CW.pessoas[uid];
+  return !!(pe && pe.kind === 'collab');
+}
+
 /* Reconstrói a base local inteira a partir do estado do servidor: casas com
    donos e quotas vindas de lá, registos por casa, dados do utilizador e
    perfis — os "proprietários" passam a ser os utilizadores com acesso.
+   Os imóveis onde sou colaborador levam _cargo (e _sharedFrom); os meus e os
+   em compropriedade levam _colaboradores; um colaborador nunca entra em
+   ownerIds nem em db.owners — fica em CW.pessoas, só com o nome. Quem vem
+   em profiles sem ser colaborador (comproprietário de outrora, conta apagada
+   «[deleted]» referida num movimento) continua a virar ficha, só com o nome.
    Devolve o db novo, normalizado e filtrado por dropUnsafe; não toca no
    db global.
    Recebe: st — o estado vindo de GET /api/state ({houses, records, userRecords,
-   profiles, …}).
+   profiles, collaborators, people, …}).
    Devolve: o db novo (objeto com a forma de blank), pronto a substituir o local. */
 function rebuildDb(st) {
   var d = JSON.parse(JSON.stringify(blank));
   var myId = CW.user ? CW.user.id : '';
   var tenants = {};
   var myProfile = null;
+  // quem é o quê em cada imóvel: a parte pura vive em web/app/acessos.js
+  var acessos = null;
+  try { if (typeof cargosDoEstado === 'function') acessos = cargosDoEstado(st, myId); } catch (e) { acessos = null; }
+  CW.cargos = (acessos && acessos.cargos) || {};
+  CW.pessoas = (acessos && acessos.pessoas) || {};
+  var ownersIds = (acessos && acessos.ownersIds) || donosDoEstado(st, myId);
+  if (!acessos) {
+    (st.people || []).forEach(function (u) { if (u && u.id) CW.pessoas[u.id] = { name: u.name || '', kind: u.kind || '', roleName: u.roleName || '' }; });
+  }
   (st.userRecords || []).forEach(function (r) {
     try {
       if (r.kind === 'settings') d.settings = Object.assign({}, blank.settings, r.data, { theme: localTheme() });
@@ -329,9 +518,18 @@ function rebuildDb(st) {
     try {
       var p = normProp(h.data);
       if (!h.mine) { p._ownerUserId = h.ownerId; p._sharedFrom = h.ownerName || h.ownerId; }
+      // colaborador: o cargo (para o selo e as decisões) e a linha de
+      // colaboração (para o «Sair»); dono: quem colabora neste imóvel
+      if (h.collab) {
+        p._cargo = h.collab.roleName || 'Colaborador';
+        if (h.collab.id) p._collabId = h.collab.id;
+        if (!acessos) CW.cargos[h.id] = { dono: false, nome: p._cargo, perms: h.collab.perms || [] };
+      } else if (!acessos) CW.cargos[h.id] = { dono: true };
+      if (!h.collab) p._colaboradores = colaboradoresDaCasa(st, h);
       // os donos do imóvel são os utilizadores com acesso (dono + partilhas);
-      // as quotas vêm do servidor e só mudam por proposta confirmada
-      var parts = h.participants || [h.ownerId];
+      // as quotas vêm do servidor e só mudam por proposta confirmada. Um
+      // colaborador nunca está aqui — nem eu, num imóvel onde o sou.
+      var parts = (h.participants || [h.ownerId]).filter(function (u) { return !(h.collab && u === myId); });
       p.ownerIds = parts.slice();
       var rawSh = (h.data && h.data.ownerShares) || {};
       var shr = {};
@@ -349,6 +547,7 @@ function rebuildDb(st) {
       var marca = function (x) {
         if (r.author) x._author = r.author;
         if (r.updatedAt) x._atServidor = r.updatedAt;
+        if (r.createdBy) x._createdBy = r.createdBy;   // quem criou: só ele (ou o dono) edita
         return x;
       };
       if (r.kind === 'contract') d.contracts.push(marca(normContract(r.data)));
@@ -359,6 +558,12 @@ function rebuildDb(st) {
         if (!tenants[r.id]) {
           var per = marca(normPerson(r.data));
           if (!mine) per._sharedFrom = h ? h.ownerName : '';
+          // o imóvel da ficha: é por ele que se decide quem a edita e onde
+          // se mostra. Fica na ficha (houseId, sobe com ela) e na marca do
+          // servidor (_houseId), para o dono e o colaborador a verem no
+          // imóvel certo
+          per.houseId = r.houseId;
+          per._houseId = r.houseId;
           tenants[r.id] = per;
         }
       }
@@ -370,12 +575,27 @@ function rebuildDb(st) {
   minePer.id = myId;
   if (!minePer.name) minePer.name = (CW.user && (CW.user.name || CW.user.email)) || '';
   ownersOut[myId] = minePer;
+  // quem é referido em «pago por» ou num acerto de algum movimento (das
+  // casas ou meu): ganha ficha mesmo que o servidor o marque colaborador —
+  // o ex-comproprietário que pagou o condomínio e hoje só colabora
+  var referidos = {};
+  d.transactions.forEach(function (t) {
+    if (t.paidBy) referidos[t.paidBy] = true;
+    if (t.toId) referidos[t.toId] = true;
+  });
   (st.profiles || []).forEach(function (pr) {
     if (pr.userId === myId) return;
+    // um colaborador puro que nenhum movimento refere nunca vira ficha de
+    // proprietário — fica em CW.pessoas, com o nome. Todos os outros
+    // (comproprietários, ligações aceites e quem é referido em paidBy/toId
+    // de movimentos: contas apagadas «[deleted]», ex-comproprietários, mesmo
+    // que hoje sejam colaboradores) viram ficha só com o nome, para «Pago
+    // por …», os acertos e o CSV continuarem legíveis
+    if (!temId(ownersIds, pr.userId) && !referidos[pr.userId] && colaboradorPuro(pr.userId)) return;
     var per = normPerson(pr.data || {});
     per.id = pr.userId;
     per._userId = pr.userId;
-    if (!per.name) per.name = pr.name || pr.userId;
+    if (!per.name) per.name = pr.name || (CW.pessoas[pr.userId] || {}).name || pr.userId;
     ownersOut[pr.userId] = per;
   });
   d.owners = Object.keys(ownersOut).map(function (k) { return ownersOut[k]; });
@@ -391,6 +611,13 @@ function rebuildDb(st) {
    Recebe: st — o estado vindo de GET /api/state (o mesmo que rebuildDb recebe).
    Devolve: nada — substitui db e snap, grava no aparelho e redesenha. */
 function applyState(st) {
+  // os campos novos do estado (cargos, colaboradores, convites, ligação,
+  // pedidos, pessoas) ficam sempre com forma, venham ou não do servidor
+  ['roles', 'collaborators', 'invites', 'people', 'connections'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = []; });
+  if (!st.shareLink || typeof st.shareLink !== 'object') st.shareLink = null;
+  if (!st.shareRequests || typeof st.shareRequests !== 'object') st.shareRequests = {};
+  if (!Array.isArray(st.shareRequests.incoming)) st.shareRequests.incoming = [];
+  if (!Array.isArray(st.shareRequests.outgoing)) st.shareRequests.outgoing = [];
   CW.state = st;
   db = rebuildDb(st);
   // snapshot = o que o servidor tem, na forma local normalizada; chaves que
@@ -405,9 +632,14 @@ function applyState(st) {
     if (serverKeys[k]) snap[k] = JSON.stringify(map[k].data);
   });
   // o que o servidor tem mas o cliente já não exporta (ex.: proprietários do
-  // modelo antigo) fica marcado para o próximo push apagar
+  // modelo antigo) fica marcado para o próximo push apagar — menos o que
+  // não sobe por falta de permissão num imóvel de colaboração: isso não é
+  // obsoleto, é do dono
   Object.keys(serverKeys).forEach(function (k) {
-    if (!(k in map)) snap[k] = '__obsoleto__';
+    if (k in map) return;
+    var pk = parseKey(k);
+    if (pk.houseId && !podeExportar(pk.houseId, pk.kind)) return;
+    snap[k] = '__obsoleto__';
   });
   saveSnap();
   try { localStorage.setItem(LS_OWNER, CW.user.id); } catch (e) {}

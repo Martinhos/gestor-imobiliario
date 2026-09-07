@@ -11,14 +11,25 @@
    «Marcar tudo como lido» guarda a marca temporal nas definições — que
    sincronizam, por isso ler num aparelho limpa o sino nos outros. */
 
-/* O nome de quem fez uma alteração, a partir do id de utilizador: procura
-   nos proprietários (que são os utilizadores com acesso) e cai no id
-   encurtado quando não há nome — nunca «undefined».
+/* O nome de quem fez uma alteração, a partir do id de utilizador: delega em
+   nomeUtilizador (proprietários, depois as pessoas do estado, depois o id
+   encurtado) e junta o cargo quando é um colaborador — «Maria (Contabilista)».
    Recebe: uid — o id do utilizador autor.
    Devolve: um nome apresentável (texto). */
 function notifNome(uid){
-  const o=(db.owners||[]).find(x=>x.id===uid||x._userId===uid);
-  return (o&&o.name)||String(uid||'?').slice(0,8);
+  const c=cargoDeUtilizador(uid);
+  return nomeUtilizador(uid)+(c?' ('+c+')':'');
+}
+
+/* Os pedidos de partilha que me chegaram pela minha ligação (o estado
+   trá-los em CW.state.shareRequests.incoming): cada um é alguém a querer
+   que eu passe a comproprietário de um imóvel dele. Sem sessão, nenhum.
+   Devolve: lista de {id, titulo, sub} por ordem de chegada. */
+function notifPedidos(){
+  const st=window.CW&&CW.state&&CW.state.shareRequests;
+  return ((st&&st.incoming)||[]).map(r=>({id:r.id,
+    titulo:(r.fromName||'Alguém')+' quer partilhar '+(r.houseName||'um imóvel')+' contigo',
+    sub:'Aceitar torna-te comproprietário — vês contratos, movimentos e pessoas desse imóvel.'}));
 }
 
 /* A atividade dos outros: registos de casas partilhadas escritos por outra
@@ -50,12 +61,13 @@ function notifPartilha(desde){
   return out.sort((a,b)=>b.at-a.at).slice(0,40);
 }
 
-/* O que o sino conta: atrasados + atividade nova dos outros. O que está só
-   «por confirmar» ou é prazo informativo não incha o número — está no
-   modal, mas o crachá é para o que muda decisões.
+/* O que o sino conta: atrasados + atividade nova dos outros + pedidos de
+   partilha à espera de resposta. O que está só «por confirmar» ou é prazo
+   informativo não incha o número — está no modal, mas o crachá é para o que
+   muda decisões.
    Devolve: o número para o crachá do sino (inteiro). */
 function notifConta(){
-  return (typeof recLate==='function'?recLate().length:0)+notifPartilha().length;
+  return (typeof recLate==='function'?recLate().length:0)+notifPartilha().length+notifPedidos().length;
 }
 
 /* O sino do cabeçalho da vista geral, com o crachá quando há novidades.
@@ -76,18 +88,27 @@ function notifModal(){
   const atrasados=typeof recLate==='function'?recLate():[];
   const pendentes=(typeof recActive==='function'?recActive():[]).filter(r=>!recIsLate(r));
   const prazos=typeof prazosAtivos==='function'?prazosAtivos().slice(0,6):[];
-  const partilha=notifPartilha();
+  const partilha=notifPartilha(),pedidos=notifPedidos();
   const linha=(titulo,sub,ir,cls)=>`<div class="card tap" style="padding:10px 13px" onclick="closeModal();${ir}">
     <div class="row-between" style="align-items:center;gap:8px"><div style="min-width:0">
       <b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(titulo)}</b>
       <span class="small">${esc(sub)}</span></div>${cls?`<span class="badge ${cls}" style="flex:0 0 auto">!</span>`:''}</div></div>`;
+  /* um pedido de partilha responde-se aqui mesmo: a nuvem define CW.pedidoAceitar(id)
+     e CW.pedidoRecusar(id). O modal fecha-se primeiro — o render() não fecha
+     janelas, e o cartão ficava lá com os botões a repetir o pedido já respondido */
+  const pedido=n=>`<div class="card" style="padding:10px 13px">
+    <b style="display:block">${esc(n.titulo)}</b><span class="small">${esc(n.sub)}</span>
+    <div class="toolbar" style="margin:9px 0 0">
+      <button class="btn sm primary" onclick="closeModal();window.CW&&CW.pedidoAceitar&&CW.pedidoAceitar('${jsq(n.id)}')">Aceitar</button>
+      <button class="btn sm" onclick="closeModal();window.CW&&CW.pedidoRecusar&&CW.pedidoRecusar('${jsq(n.id)}')">Recusar</button></div></div>`;
   const bloco=(titulo,linhas)=>linhas.length?`<div class="navh">${titulo}</div>${linhas.join('')}`:'';
   const corpo=`<div class="list" style="gap:8px">
+    ${bloco('Pedidos de partilha',pedidos.map(pedido))}
     ${bloco('Em atraso',atrasados.map(r=>linha(r.name,'devia ter sido confirmado a '+r.next+(r.tx.amount?' · '+euro2(r.tx.amount):''),"go('recurring')",'red')))}
     ${bloco('Por confirmar',pendentes.slice(0,6).map(r=>linha(r.name,r.next+(r.tx.amount?' · '+euro2(r.tx.amount):''),"go('recurring')")))}
     ${bloco('Prazos',prazos.map(p=>linha(p.titulo,(p.dias<0?'há '+(-p.dias)+' dias':p.dias===0?'hoje':'em '+p.dias+' dias'),p.abrir,p.urg==='urgente'||p.urg==='passado'?'red':p.urg==='breve'?'amber':'')))}
     ${bloco('Nas casas partilhadas',partilha.map(n=>linha(n.titulo,n.sub,n.ir)))}
-    ${!atrasados.length&&!pendentes.length&&!prazos.length&&!partilha.length?'<div class="empty">Tudo em dia — nada a pedir atenção.</div>':''}
+    ${!atrasados.length&&!pendentes.length&&!prazos.length&&!partilha.length&&!pedidos.length?'<div class="empty">Tudo em dia — nada a pedir atenção.</div>':''}
   </div>`;
   openModal('Notificações',corpo,
     `<button class="btn" onclick="closeModal()">Fechar</button>`+

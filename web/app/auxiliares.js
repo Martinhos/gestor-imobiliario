@@ -417,7 +417,8 @@ const countsBetweenOwners=t=>!!t.paidBy&&(t.kind==='income'||t.kind==='expense'|
    Devolve: array de {t, p, os, eff}, ordenado por data — o movimento, o imóvel (ou só
    {name:…} nos movimentos de grupo/globais), os ids dos donos e o efeito em cêntimos por dono. */
 function balanceLines(pid){
-  const props=pidProps(pid),out=[];
+  /* as contas entre proprietários são dos proprietários: um imóvel onde só colaboro fica de fora */
+  const props=pidProps(pid).filter(p=>souDono(p.id)),out=[];
   props.forEach(p=>{
     const os=ownersOfProp(p).slice().sort();
     /* os acertos deste imóvel contam sempre — com um só dono, ou entre quem não é dono dele:
@@ -448,7 +449,7 @@ function balanceLines(pid){
         txSplitCents(Object.assign({},t,{amount:cP/100}),p2,os2).forEach((part,i)=>add(os2[i],-part*sign));
       });
     }else{
-      const os2=db.owners.map(o=>o.id).sort();if(!os2.length)return;
+      const os2=donosGlobais().map(o=>o.id).sort();if(!os2.length)return;
       add(t.paidBy,total*sign);
       txSplitCents(t,null,os2).forEach((part,i)=>add(os2[i],-part*sign));
     }
@@ -488,7 +489,8 @@ function balancesDetail(pid){
    Recebe: pid (opcional) — o id de um imóvel ou 'g:ID' de um grupo; vazio vale o âmbito atual.
    Devolve: objeto {idDoDono: saldo em euros} — positivo a receber, negativo a pagar. */
 function ownerBalances(pid){
-  const props=pidProps(pid),cents={};
+  /* as contas entre proprietários são dos proprietários: um imóvel onde só colaboro fica de fora */
+  const props=pidProps(pid).filter(p=>souDono(p.id)),cents={};
   props.forEach(p=>{
     const os=ownersOfProp(p).slice().sort();
     /* os acertos deste imóvel contam sempre — com um só dono, ou entre quem não é dono dele
@@ -521,7 +523,7 @@ function ownerBalances(pid){
         txSplitCents(Object.assign({},t,{amount:cP/100}),p2,os).forEach((part,i)=>add(os[i],-part*sign));
       });
     }else if(!pid&&!ownerFilter){
-      const os=db.owners.map(o=>o.id).sort();if(!os.length)return;
+      const os=donosGlobais().map(o=>o.id).sort();if(!os.length)return;
       add(t.paidBy,total*sign);
       txSplitCents(t,null,os).forEach((part,i)=>add(os[i],-part*sign));
     }
@@ -570,9 +572,16 @@ function ownerFilterName(){
 }
 /* imóveis da vista atual: todos sem filtro de proprietário; com filtro, os que
    pertencem a quem foi escolhido (e, para uma pessoa, só onde a quota é > 0).
+   É o âmbito das listas (Imóveis, Contratos); o das contas é scope().
    Devolve: os imóveis da vista atual (array de objetos). */
-const scope=()=>{if(!ownerFilter)return db.properties;const ids=ownerFilterIds();
+const visiveis=()=>{if(!ownerFilter)return db.properties;const ids=ownerFilterIds();
   return db.properties.filter(p=>(p.ownerIds||[]).some(o=>ids.indexOf(o)>-1)&&(ownerIsGrp()||shareOf(p,ownerFilter)>0))};
+/* o âmbito das contas: os imóveis visíveis onde o meu cargo abre as finanças —
+   movimentos, valores ou hipotecas. Nos meus imóveis é tudo; num imóvel onde
+   só colaboro sem nenhuma destas, os KPIs, a Avaliação e os Créditos não o contam
+   (o servidor já não manda esses dados; aqui evita-se somar zeros e listá-lo).
+   Devolve: os imóveis do âmbito financeiro (array de objetos). */
+const scope=()=>visiveis().filter(p=>pode(p.id,'tx.view')||pode(p.id,'report.view')||pode(p.id,'loan.view'));
 const inScope=pid=>!ownerFilter||scope().some(p=>p.id===pid);
 
 /* estado de ocupação de um imóvel, para cartões e filtros: devolve {key,label,badge}

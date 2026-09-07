@@ -16,11 +16,12 @@ const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const le = (p) => fs.readFileSync(path.join(AQUI, '..', p), 'utf8');
 
 describe('o contrato servidor → cliente', () => {
-  test('o /api/state devolve author e updatedAt nos records', () => {
+  test('o /api/state devolve author, createdBy e updatedAt nos records', () => {
     const s = le('worker/src/rotas/estado.js');
     const mapa = s.match(/records: records\.map\(\(r\) => \(\{[\s\S]*?\}\)\)/);
     assert.ok(mapa, 'o mapeamento dos records existe');
-    assert.match(mapa[0], /author:/, 'o autor entra na resposta');
+    assert.match(mapa[0], /author:/, 'o autor (último a escrever) entra na resposta');
+    assert.match(mapa[0], /createdBy:/, 'o criador entra na resposta — é o que decide «só o que criou»');
     assert.match(mapa[0], /updatedAt:/, 'o carimbo entra na resposta');
   });
 

@@ -3,21 +3,37 @@ let perForm={},perKind='tenant',perAfter=null;
 /* Abre a ficha de pessoa (kind 'owner' ou 'tenant'); sem id cria uma nova.
    after, se vier, é chamado com o id da ficha depois de guardar, em vez do
    fecho normal — é assim que o contrato cria um inquilino sem perder o fluxo.
+   Quem não é dono de imóvel nenhum só cria fichas presas a um imóvel onde
+   pode «Adicionar inquilinos» (senão a ficha ficava privada e nunca chegava
+   ao dono): com um só, fica esse; com vários, escolhe-se primeiro.
    Recebe: kind — 'owner' ou 'tenant', diz que lista se usa; id (opcional) —
    id da ficha a editar, sem ele cria uma nova; after (opcional) — função
-   chamada com o id da ficha depois de guardar.
-   Devolve: nada — abre o modal da ficha. */
-function personModal(kind,id,after){
+   chamada com o id da ficha depois de guardar; houseId (opcional) — o imóvel
+   a que a ficha nova fica presa.
+   Devolve: nada — abre o modal da ficha (ou, antes, a escolha do imóvel). */
+function personModal(kind,id,after,houseId){
+  if(kind==='tenant'&&!id&&!houseId&&souSoColaborador()){
+    const cs=casasComo('tenant.add');
+    if(!cs.length)return toast(fraseSemPerm('tenant.add'));
+    if(cs.length>1)return pickModal('Inquilino de que imóvel?',cs.map(p=>({v:p.id,label:p.name||p.address||'imóvel',sub:p._sharedFrom?'de '+p._sharedFrom:''})),
+      o=>{closeModal();personModal(kind,null,after,o.v)});
+    houseId=cs[0].id;
+  }
   foldState={};
   perKind=kind;perAfter=after||null;
-  const listOf=kind==='owner'?db.owners:db.tenants;
-  perForm=normPerson(id?JSON.parse(JSON.stringify(listOf.find(x=>x.id===id))):null);
+  const listOf=kind==='owner'?db.owners:db.tenants,orig=id?listOf.find(x=>x.id===id):null;
+  perForm=normPerson(orig?JSON.parse(JSON.stringify(orig)):null);
+  if(!orig&&houseId&&kind==='tenant')perForm.houseId=houseId;
   const word=kind==='owner'?'proprietário':'inquilino';
-  const m=id?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,act:`delPerson('${kind}','${id}')`}]):'';
-  openModal((id?'Editar ':'Novo ')+word,personBody(),null,m);
+  /* a ficha de um inquilino de um imóvel onde só colaboro abre em leitura sem «Adicionar inquilinos» */
+  const soLer=kind==='tenant'&&!!orig&&!podeEditarInquilino(orig);
+  const m=id&&!soLer?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,act:`delPerson('${kind}','${id}')`}]):'';
+  openModal((id?(soLer?'':'Editar '):'Novo ')+(soLer?'Ficha de '+word:word),personBody(),null,m);
+  if(soLer)return modalSoLeitura('Ficha de um imóvel onde colaboras — só de leitura.');
   onSave=()=>{
     collectPerson();
     if(!perForm.name.trim())return toast('Escreve o nome.');
+    if(perKind==='tenant'){const recusa=motivoRecusa(casaDoInquilino(orig||perForm),'tenant.add',orig);if(recusa)return toast(recusa)}
     const list=perKind==='owner'?db.owners:db.tenants;
     const i=list.findIndex(x=>x.id===perForm.id);
     if(i<0)list.push(perForm);else list[i]=perForm;
@@ -94,6 +110,8 @@ function delPersonFile(fid){collectPerson();perForm.files=(perForm.files||[]).fi
 function delPerson(kind,id){
   const list=kind==='owner'?db.owners:db.tenants;
   const p=list.find(x=>x.id===id),word=kind==='owner'?'proprietário':'inquilino';
+  if(!p)return;
+  if(kind==='tenant'){const recusa=motivoRecusa(casaDoInquilino(p),'tenant.add',p,true);if(recusa)return toast(recusa)}
   const used=kind==='owner'?propsOf(id).length:contractsOfTenant(id).length;
   confirmModal('Apagar '+word,`Apagar “${esc(p.name)}”?${used?` Sai de ${used} ${kind==='owner'?'imóvel(is)':'contrato(s)'}, que se mantêm.`:''}`,()=>{
     (p.files||[]).forEach(f=>idbDel(f.id).catch(()=>{}));

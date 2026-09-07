@@ -2,6 +2,7 @@
 // tudo o resto é servido pelos assets estáticos (a PWA em web/).
 
 import { handleApi, recordReport } from './api.js';
+import { mascararTokens } from './lib/relatos.js';
 import { dailyReport, watchLimits } from './notify.js';
 import { copiar } from './salvaguarda.js';
 
@@ -202,9 +203,11 @@ export default {
         return harden(res);
       } catch (e) {
         console.error('API error', e);
-        // quem programa fica a saber, sem o utilizador ter de reportar
+        // quem programa fica a saber, sem o utilizador ter de reportar — mas
+        // o caminho de um convite ou da ligação de partilha leva o token, e
+        // esse não pode ficar nos relatos
         ctx.waitUntil(recordReport(env, ctx, 'server', e && e.message,
-          request.method + ' ' + url.pathname + '\n' + String((e && e.stack) || '').slice(0, 800)));
+          request.method + ' ' + mascararTokens(url.pathname) + '\n' + String((e && e.stack) || '').slice(0, 800)));
         return new Response(JSON.stringify({ error: 'Erro interno do servidor.' }), {
           status: 500,
           headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
