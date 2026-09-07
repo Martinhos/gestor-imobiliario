@@ -46,7 +46,8 @@ function seed(){
     db.transactions.push(
       normTx({kind:'income',label:'Renda T2 Lisboa',amount:1250,date:d(8),propertyId:p1,contractId:c1.id,paidBy:o1.id,category:'Rendas',sub:'Renda mensal'}),
       normTx({kind:'expense',label:'Quota do condomínio',amount:55,date:d(8),propertyId:p1,category:'Condomínio',sub:'Quota mensal',tags:['Recorrente'],paidBy:m%2?o1.id:o2.id}),
-      /* o capital em dívida do exemplo é o de hoje: estas prestações são história, semeadas sem abater */
+      /* o capital em dívida do exemplo é o de hoje, depois destas 8 prestações — que, como
+         qualquer prestação registada, repõem o seu capital se as apagares */
       normTx({kind:'loan',label:'Prestação aquisição · T2 Lisboa',amount:Math.round(k1.total*100)/100,date:d(10),propertyId:p1,loanId:l1.id,
         interest:Math.round(k1.interest*100)/100,stamp:Math.round(k1.stamp*100)/100,principal:Math.round(k1.principal*100)/100,paidBy:o1.id}),
       normTx({kind:'loan',label:'Prestação obras · T2 Lisboa',amount:Math.round(k1b.total*100)/100,date:d(10),propertyId:p1,loanId:l1b.id,paidBy:o2.id,

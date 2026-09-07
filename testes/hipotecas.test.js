@@ -33,6 +33,23 @@ const somaCap = (r) => r.reduce((s, x) => s + x.principal, 0);
 // n prestações registadas numa hipoteca, sem mexer no capital (história que já lá estava)
 const registadas = (loanId, n) => { for (let i = 0; i < n; i++) app.db.transactions.push(app.normTx({ kind: 'loan', loanId, propertyId: 'p1', amount: 431.6, date: `${ANO - 1}-${mm((i % 12) + 1)}-01` })); };
 
+describe('o loanBox da mista', () => {
+  test('«Prestação a partir de …» conta a partir da próxima por pagar, mesmo com a deste mês registada', () => {
+    limpar(app);
+    const hoje = app.today(), Y = Number(hoje.slice(0, 4)), M = Number(hoje.slice(5, 7));
+    const start = (Y - 2) + '-' + String(M).padStart(2, '0') + '-01';
+    const l = app.normLoan({ id: 'lm', outstanding: 100000, years: 30, type: 'mista', rate: 2, fixedYears: 5, euribor: 3, spread: 1, start, stampTax: false });
+    app.db.properties.push(app.normProp({ id: 'pm', name: 'Casa', loans: [l] }));
+    // 24 prestações anteriores + a deste mês: a fase muda no mês 60 do crédito = mesmo mês, daqui a 3 anos
+    for (let k = 0; k <= 24; k++) {
+      let y = Y - 2, m = M + k; while (m > 12) { m -= 12; y++; }
+      app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'lm', propertyId: 'pm', payType: 'prestacao', amount: 370, principal: 200, interest: 170, date: y + '-' + String(m).padStart(2, '0') + '-01' }));
+    }
+    const html = app.loanBox(l);
+    assert.match(html, new RegExp('a partir de ' + app.MES[M - 1] + ' ' + (Y + 3)), 'o mês certo, não um a menos');
+  });
+});
+
 describe('recorrências das hipotecas', () => {
   test('cada hipoteca ganha a sua recorrência com o loanId certo', () => {
     casa([loan('a', { start: haAnos(3) }), loan('b', { start: haAnos(1) })]);

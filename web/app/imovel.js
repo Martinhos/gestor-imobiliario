@@ -321,7 +321,10 @@ function loanBox(l){
        ou seja, daqui a k meses — a data diz-se a partir de hoje, não do início */
     const k=Math.round((Number(l.fixedYears)||0)*12)-loanMes(l),r=k>0?a.rows[k]:null;
     if(r){
-      const hoje=today(),t0=Number(hoje.slice(0,4))*12+Number(hoje.slice(5,7))-1+k;
+      /* rows[0] é a PRÓXIMA por pagar: o mês da recorrência, ou o seguinte a hoje quando a deste mês já está registada */
+      const r0=loanRecOf(l),ref=(r0&&r0.next)||today();
+      const jaEste=!r0&&db.transactions.some(t=>t.kind==='loan'&&t.loanId===l.id&&t.payType!=='amortizacao'&&String(t.date||'').slice(0,7)===today().slice(0,7));
+      const t0=Number(ref.slice(0,4))*12+Number(ref.slice(5,7))-1+k+(jaEste?1:0);
       extra=`<div class="stat"><span>Prestação a partir de ${MES[t0%12]} ${Math.floor(t0/12)}</span><b>${euro2(r.pay+r.st)}</b></div>`}
   }
   if(a.esgotado)extra+=`<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px"><b>Prazo esgotado</b> — as prestações já registadas cobrem o prazo inteiro e ainda há dívida. Confirma o prazo e as prestações registadas.</div>`;

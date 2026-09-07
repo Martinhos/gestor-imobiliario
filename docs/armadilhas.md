@@ -50,7 +50,12 @@ interações é da aplicação, não do servidor), logo tokens de bot
 diferentes. As ligações do /test são assinadas com a TESTE_CHAVE — a
 mesma nos dois ambientes — precisamente porque o token do bot deixou de
 ser partilhado. No ambiente de dev, qualquer secret `<NOME>_DEV` tem
-precedência sobre o partilhado.
+precedência sobre o partilhado — e para os webhooks e canais do Discord
+o `_DEV` é obrigatório quando o servidor de dev é outro: o deploy resolve
+cada destino no Discord e recusa sair com um que aponte para o servidor
+errado (passo «Conferir o destino dos avisos»). Os nomes enganam:
+`DISCORD_DEV_WEBHOOK` é o canal de quem programa; `DISCORD_DEV_WEBHOOK_DEV`
+é esse canal no servidor de dev.
 
 ## Objetos indexados por input do utilizador
 `ACOES[acao]` com `acao = 'constructor'` devolve uma função herdada — e

@@ -28,6 +28,28 @@ const mm = (n) => String(n).padStart(2, '0');
 const haAnos = (n) => DIA <= 28 ? `${ANO - n}-${mm(MES)}-${mm(DIA)}`
   : (MES === 12 ? `${ANO - n + 1}-01-28` : `${ANO - n}-${mm(MES + 1)}-28`);
 
+describe('o Anular depois de um sync', () => {
+  test('repõe o capital na hipoteca que está na db, não no objeto antigo', () => {
+    limpar(app);
+    app.render = () => {}; app.buildNav = () => {}; app.toast = () => {};
+    let desfazer = null; app.comDesfazer = (m, r) => { desfazer = r; };
+    const hoje = app.today(), start = (Number(hoje.slice(0, 4)) - 1) + hoje.slice(4, 7) + '-05';
+    const l = app.normLoan({ id: 'ls', outstanding: 50000, years: 20, type: 'fixa', rate: 3, start });
+    const p = app.normProp({ id: 'ps', name: 'Casa', loans: [l] });
+    app.db.properties.push(p);
+    const lista = app.loanPrestacoesEmFalta(l, [], hoje, '');
+    assert.ok(lista.length > 0);
+    app.inserirPrestacoesEmFalta(p, l, lista);
+    assert.ok(l.outstanding < 50000, 'abateu');
+    // um sync troca os objetos da db por cópias (como o rebuildDb faz)
+    app.db.properties = JSON.parse(JSON.stringify(app.db.properties));
+    desfazer();
+    const viva = app.findLoan(app.prop('ps'), 'ls');
+    assert.equal(viva.outstanding, 50000, 'a hipoteca viva ficou com o capital reposto');
+    assert.equal(app.db.transactions.filter((t) => t.loanId === 'ls').length, 0);
+  });
+});
+
 describe('loanPrestacoesEmFalta (pura): as datas', () => {
   test('uma por mês, no dia do início, até hoje — sem a que vence hoje', () => {
     const r = app.loanPrestacoesEmFalta(fixa(), [], HOJE);

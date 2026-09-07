@@ -210,9 +210,11 @@ go = function (id) { rastoPoe('→ ' + id); return _goRasto.apply(this, argument
 
 // leva o que a armadilha do index.html apanhou antes de este ficheiro existir
 (function () {
-  var fila = window.__erros;
-  if (!fila || !fila.length || window.__errosLevados) return;
+  var fila = window.__erros, jaLevados = window.__errosLevados;
+  // a partir daqui os relatos são deste ficheiro: o temporizador da armadilha
+  // não pode voltar a enviar o que já foi relatado (dava ×2 no Discord)
   window.__errosLevados = 1;
+  if (!fila || !fila.length || jaLevados) return;
   fila.splice(0).forEach(function (r) { reportErr(r.message, r.detail); });
 })();
 

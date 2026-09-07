@@ -162,7 +162,9 @@ function inserirPrestacoesEmFalta(p,l,lista){
   syncLoanRec(p,l);save();buildNav();render();
   const ids=novos.map(t=>t.id);
   comDesfazer(novos.length===1?'Prestação inserida.':novos.length+' prestações inseridas.',()=>{
-    db.transactions=db.transactions.filter(t=>ids.indexOf(t.id)<0);l.outstanding=antes;syncLoanRec(p,l);
+    db.transactions=db.transactions.filter(t=>ids.indexOf(t.id)<0);
+    /* volta a procurar a hipoteca: um sync entretanto pode ter trocado os objetos da db (como o delTx faz) */
+    const x=anyLoan(l.id);if(x){x.l.outstanding=antes;syncLoanRec(x.p,x.l)}
   });
 }
 /* ---- períodos em falta de um plano: a origem, o que já está, as datas ---- */
