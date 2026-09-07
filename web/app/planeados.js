@@ -251,6 +251,17 @@ function recAdvance(r){
   r.next=nextDate(r.next,r.every);r.until=gap?addDays(r.next,gap):'';
   if(r.end&&r.next>r.end){db.recurring=db.recurring.filter(x=>x.id!==r.id);toast('“'+r.name+'” chegou ao fim: deixa de se repetir.')}
 }
+/* Um planeado que termina ao ser confirmado: «uma só vez», ou com fim e a
+   ocorrência seguinte já para lá dele — o que o recAdvance apaga em vez de
+   avançar. Num planeado alheio é o único apagar que o servidor aceita a quem
+   tem «Adicionar e confirmar planeados» (é o que podeEditar consulta).
+   Recebe: r — o planeado ({every, next, end}).
+   Devolve: true se confirmar o apaga. */
+function recTermina(r){
+  if(!r)return false;
+  if(r.every==='once')return true;
+  return !!(r.end&&r.next&&nextDate(r.next,r.every)>r.end);
+}
 // Movimento normalizado a partir do tx da recorrência, datado de 'date' (ou da
 // data prevista). Só constrói: não regista nem toca na recorrência.
 // Recebe: r — a recorrência de origem (objeto de db.recurring); date (opcional) — data
@@ -271,18 +282,20 @@ function quickConfirmRec(id){
 // Recebe: id — o id da recorrência a silenciar ou reativar.
 // Devolve: nada — grava e redesenha.
 function skipRec(id){const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
-  const recusa=motivoRecusa((r.tx||{}).propertyId,'rec.add',r);if(recusa)return toast(recusa);
+  const recusa=motivoRecusa((r.tx||{}).propertyId,'rec.add',r,'confirmar');if(recusa)return toast(recusa);
   r.muted=!r.muted;save();buildNav();render();toast(r.muted?'Silenciada: fica em Planeados à espera de confirmação, sem avisos.':'Volta a avisar.')}
 /* Confirmar um planeado cria um movimento: num imóvel onde só colaboro pede
    «Adicionar e confirmar planeados» e também «Adicionar movimentos» — sem a
-   segunda, o servidor recusava o movimento que a confirmação cria. Uma
-   prestação de hipoteca abate capital na ficha do imóvel: pede ainda «Editar
-   a ficha do imóvel» (motivoCredito).
+   segunda, o servidor recusava o movimento que a confirmação cria. Num
+   planeado alheio, confirmar é avançá-lo (o servidor funde next e until) ou,
+   quando termina (recTermina), apagá-lo — podeEditar sabe qual dos dois o
+   servidor aceita. Uma prestação de hipoteca abate capital na ficha do
+   imóvel: pede ainda «Editar a ficha do imóvel» (motivoCredito).
    Recebe: r — a recorrência.
    Devolve: a frase da recusa (texto), ou '' quando posso confirmar. */
 function recusaConfirmar(r){
   const hid=(r&&r.tx||{}).propertyId;
-  if(!pode(hid,'rec.add'))return fraseSemPerm('rec.add');
+  const m=motivoRecusa(hid,'rec.add',r,recTermina(r)?true:'confirmar');if(m)return m;
   if(!pode(hid,'tx.add'))return fraseSemPerm('tx.add');
   if((r&&r.tx||{}).kind==='loan')return motivoCredito(hid);
   return '';
@@ -296,17 +309,21 @@ function confirmRec(id){
   txModal(null,r.tx.kind,r.tx.propertyId,null,r.tx.contractId,Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:r.next,label:r.tx.label||r.name}));
   tForm._recConfirm=id;const h=modalTop().el.querySelector('.head h2');if(h)h.textContent='Confirmar movimento';
 }
-// Abre o formulário de movimento carregado com a recorrência, em modo de
-// edição: guardar altera a recorrência em vez de criar um movimento.
-// Recebe: id — o id da recorrência a editar.
-// Devolve: nada — abre o formulário carregado com a recorrência.
+/* Abre o formulário de movimento carregado com a recorrência, em modo de
+   edição: guardar altera a recorrência em vez de criar um movimento. Um
+   planeado que não posso alterar (alheio, num imóvel onde só colaboro — os
+   campos são de quem o criou; ou de um cargo que só vê) abre só de leitura:
+   confirmar e silenciar ficam no toque longo.
+   Recebe: id — o id da recorrência a editar.
+   Devolve: nada — abre o formulário carregado com a recorrência. */
 function editRec(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
-  const recusa=motivoRecusa((r.tx||{}).propertyId,'rec.add',r);if(recusa)return toast(recusa);
+  const recusa=motivoRecusa((r.tx||{}).propertyId,'rec.add',r);
   txModal(null,r.tx.kind,r.tx.propertyId,null,r.tx.contractId,Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:r.next,label:r.tx.label||r.name}));
   tForm._recId=id;tForm._every=r.every;tForm._recEnd=r.end||'';tForm._until=r.until||'';
-  const h=modalTop().el.querySelector('.head h2');if(h)h.textContent='Editar movimento recorrente';
+  const h=modalTop().el.querySelector('.head h2');if(h)h.textContent=recusa?'Movimento recorrente':'Editar movimento recorrente';
   foldState.rec=true;repaintTx();
+  if(recusa){onSave=null;modalSoLeitura('Planeado de um imóvel onde colaboras — só de leitura.')}
 }
 // Novo movimento recorrente: pergunta o tipo e abre o formulário já em modo
 // recorrente (mensal por omissão), com a secção de repetição aberta.
@@ -387,7 +404,7 @@ function pendingCard(all){
       <div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</b>
         <span class="small">${esc(r.next)}${r.until&&r.until!==r.next?' – '+esc(r.until):''}${EVERY[r.every]?' · '+esc(EVERY[r.every]):''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':''} · ${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}</span></div>
       <b style="flex:0 0 auto">${r.tx.amount?euro2(r.tx.amount):''}</b></div>
-    ${(()=>{const ok=podeEditar((r.tx||{}).propertyId,'rec.add',r),conf=!recusaConfirmar(r);   /* sem permissão, só a linha */
+    ${(()=>{const ok=podeEditar((r.tx||{}).propertyId,'rec.add',r,'confirmar'),conf=!recusaConfirmar(r);   /* sem permissão, só a linha */
       return ok||conf?`<div class="toolbar" style="margin:9px 0 0">
         ${conf?`<button class="btn sm primary" onclick="${stop}quickConfirmRec('${r.id}')">${ic('check',14)} Confirmar</button>`:''}
         ${ok?`<button class="btn sm" onclick="${stop}skipRec('${r.id}')">${r.muted?'Reativar':'Silenciar'}</button>`:''}</div>`:''})()}</div>`};

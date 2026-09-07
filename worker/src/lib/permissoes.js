@@ -169,6 +169,88 @@ export function fundirCasa(existenteStr, incoming, perms) {
   return out;
 }
 
+// Os campos de um planeado que confirmar e silenciar tocam — os únicos que um
+// colaborador com rec.add pode mudar num planeado que não criou.
+const CAMPOS_DE_CONFIRMAR = ['next', 'until', 'muted'];
+
+// O planeado de outrem que um colaborador com rec.add grava, fundido sobre o
+// que está na base: só next, until e muted entram (o que confirmar e silenciar
+// tocam); nome, cadência, montante, imóvel, contrato e o resto ficam como o
+// dono os deixou. Uma reescrita com amount/propertyId/tx diferentes não dá
+// erro — simplesmente não tem efeito nesses campos, e o put do cliente que
+// manda o planeado inteiro com o next avançado continua a passar.
+// Recebe: existenteStr — o JSON do planeado na base, em texto; incoming — o
+// objeto que o cliente mandou (já passado por cleanData).
+// Devolve: um objeto novo com o planeado fundido, pronto a gravar; quando o
+// JSON guardado não se lê, o próprio incoming (não há nada a preservar).
+export function fundirPlaneado(existenteStr, incoming) {
+  let base = null;
+  try { const ex = JSON.parse(existenteStr); if (ex && typeof ex === 'object') base = ex; } catch (e) {}
+  if (!base) return incoming;
+  const out = Object.assign({}, base);
+  CAMPOS_DE_CONFIRMAR.forEach((k) => {
+    if (Object.prototype.hasOwnProperty.call(incoming || {}, k)) out[k] = incoming[k];
+  });
+  return out;
+}
+
+// Quantos dias tem um mês.
+// Recebe: y — o ano (número); m — o mês 1-12 (número).
+// Devolve: 28 a 31 (número).
+function diasDoMes(y, m) {
+  if (m === 2) return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28;
+  return [4, 6, 9, 11].includes(m) ? 30 : 31;
+}
+
+// A data seguinte de um planeado pela cadência — a mesma aritmética do
+// nextDate de web/app/planeados.js, em texto e sem Date (nunca toISOString:
+// o worker não sabe o fuso de quem escreveu a data). Uma semana soma 7 dias;
+// mês, trimestre e ano somam meses e prendem o dia ao último do mês de
+// chegada (31 de janeiro + 1 mês = 28 ou 29 de fevereiro).
+// Recebe: iso — a data de partida em AAAA-MM-DD (texto); every — a cadência:
+// 'week', 'month', 'quarter' ou 'year' (qualquer outra conta como mês).
+// Devolve: a data seguinte em AAAA-MM-DD, ou '' quando iso não tem essa forma.
+export function proximaData(iso, every) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  if (!m) return '';
+  let y = Number(m[1]), mes = Number(m[2]), dia = Number(m[3]);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > diasDoMes(y, mes)) return '';
+  if (every === 'week') {
+    dia += 7;
+    while (dia > diasDoMes(y, mes)) {
+      dia -= diasDoMes(y, mes);
+      mes += 1;
+      if (mes > 12) { mes = 1; y += 1; }
+    }
+  } else {
+    const n = every === 'year' ? 12 : every === 'quarter' ? 3 : 1;
+    const total = mes - 1 + n;
+    y += Math.floor(total / 12);
+    mes = (total % 12) + 1;
+    dia = Math.min(dia, diasDoMes(y, mes));
+  }
+  return y + '-' + String(mes).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
+}
+
+// Este planeado termina na próxima confirmação? É o que decide se um
+// colaborador com rec.add pode apagar um planeado que não criou: o cliente
+// (recAdvance) apaga-o quando é «uma só vez» ou quando o next seguinte passa
+// o fim — e um del recusado ressuscitava o planeado ainda «por confirmar»,
+// com o movimento a duplicar-se à segunda confirmação. Um planeado sem fim,
+// ou cujo fim ainda não chegou, não termina — e esse continua a ser só do
+// dono. Sem next legível não se sabe: não termina.
+// Recebe: data — o JSON do planeado já interpretado (objeto; olha para every,
+// next e end).
+// Devolve: true quando every é 'once', ou quando há end e a data seguinte a
+// next pela cadência é posterior a end.
+export function planeadoTermina(data) {
+  if (!data || typeof data !== 'object') return false;
+  if (data.every === 'once') return true;
+  if (typeof data.end !== 'string' || !data.end) return false;
+  const seguinte = proximaData(data.next, data.every);
+  return !!seguinte && seguinte > data.end;
+}
+
 // A frase que explica a um colaborador por que a escrita não passou — o
 // cliente mostra-a tal e qual num toast e tira o registo da base local.
 // Recebe: motivo — 'add' (falta o .add do kind), 'proprio' (não criou o

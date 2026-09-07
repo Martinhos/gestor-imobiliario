@@ -101,11 +101,41 @@ se sabe que permissão o abre (o CC de um inquilino pede tenant.view, o PDF
 de um contrato contract.view). O kind só aparece quando o registo volta a
 ser gravado (`linkFiles`), e aí o anexo passa a seguir a regra dele. Não
 «corrigir» o ramo `rk === ''` para cair em file.view: era assim, e mostrava
-os CC digitalizados a quem só marca visitas. Pela mesma razão, `linkFiles`
-só move anexos de quem grava, soltos, ou já presos a ESTE registo — um id
-que circule não re-etiqueta o anexo de outro registo para um kind que o
-cargo leia — e juntar anexos a um registo exige file.add
-(`regraDosAnexos`), mesmo quando o anexo foi carregado solto, sem `?casa=`.
+os CC digitalizados a quem só marca visitas. Pela mesma razão, o filtro do
+`linkFiles` depende de quem grava (o `estrito` que os chamadores passam
+como `!!acesso.collab`): dono e comproprietário movem os anexos deles, os
+soltos e qualquer anexo já nesta casa — é assim que os anexos antigos sem
+kind ganham kind ao regravar o registo, incluindo os que o OUTRO
+comproprietário carregou; um colaborador só move os dele, os soltos, ou os
+já presos a ESTE registo pelo tuplo completo (casa, kind, id), o mesmo que
+`regraDosAnexos` compara. Comparar só (casa, id) não chega: os ids de
+registo são do cliente e repetem-se entre kinds — um tx com o id da ficha
+do inquilino (ou o da casa, que qualquer colaborador conhece) re-etiquetava
+o CC (ou o documento da hipoteca) para um kind que o cargo lê. E juntar
+anexos a um registo exige file.add (`regraDosAnexos`), mesmo quando o anexo
+foi carregado solto, sem `?casa=`.
+
+## Confirmar um planeado alheio não é reescrevê-lo
+rec.add é «Adicionar e confirmar planeados», e confirmar o planeado do dono
+é um put desse planeado (o cliente manda-o inteiro com o next avançado;
+silenciar mexe em muted). A exceção em `regraDoRegisto` deixa o put passar,
+mas o que se grava passa por `planeadoAGravar`/`fundirPlaneado`
+(worker/src/lib/acesso.js e permissoes.js): só `next`, `until` e `muted`
+entram do que veio; nome, cadência, montante, imóvel, contrato e fim ficam
+como o dono os deixou. Uma reescrita com amount/propertyId/tx trocados não
+dá erro — não tem efeito nesses campos —, e um put atrasado sobre um
+planeado que o dono já apagou leva 403 em vez de o ressuscitar. Não
+«simplificar» para aceitar o put inteiro: a renda do dono passava a 5 €
+noutro imóvel e a confirmação seguinte gerava o movimento errado.
+O contrário também morde: confirmar um planeado que termina («uma só vez»,
+ou o next seguinte passa o `end` — a renda automática do último mês de um
+contrato com fim) é apagá-lo no cliente (`recAdvance`), e um del recusado
+com 403 era engolido, o pull trazia o planeado de volta «por confirmar» e a
+segunda confirmação duplicava o movimento. Por isso o del de um rec alheio
+passa com rec.add SÓ quando `planeadoTermina` diz que sim, com a aritmética
+de `nextDate` portada em texto (`proximaData`, sem Date nem toISOString: o
+worker não sabe o fuso de quem escreveu a data). Sem fim, ou com o fim
+ainda longe, continua 403 «Só podes alterar ou apagar o que tu criaste…».
 
 ## Patches em ficheiros com UTF-8 no Windows
 Aplicar edições por heredoc bash corrompe acentos e emoji. Os patches

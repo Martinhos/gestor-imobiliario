@@ -35,32 +35,42 @@ export function fileIdsIn(data) {
 // Depois de guardar uma casa ou um registo, os anexos que ele refere passam a
 // pertencer-lhe — é isto que os torna visíveis a quem partilha a casa — e
 // ficam a saber a que registo pertencem, que é o que os cargos consultam.
-// Só se movem anexos que sejam de quem grava, que ainda não estejam em casa
-// nenhuma, ou que já estejam presos a ESTE registo: um id que circule não
-// rouba o anexo de outra conta para uma casa onde o ladrão o possa ler, nem
-// re-etiqueta o anexo de outro registo da casa (o CC da ficha do inquilino)
-// para um kind que o cargo de quem grava leia. O que não passa no filtro
-// fica como está — a gravação do registo não falha por isso.
+// O filtro depende de quem grava. Dono e comproprietário movem os anexos
+// que sejam deles, os soltos (sem casa) e qualquer anexo já nesta casa — é
+// assim que os anexos anteriores à migração 0014 (sem kind), carregados por
+// qualquer um dos dois, ganham kind ao regravar o registo. Um colaborador
+// só move os dele, os soltos, ou os que já estejam presos a ESTE registo —
+// o tuplo completo (casa, kind, id), o mesmo que regraDosAnexos compara:
+// os ids de registo são do cliente e repetem-se entre kinds, e um tx com o
+// id da ficha do inquilino (ou o da casa) re-etiquetava o CC (ou o documento
+// da hipoteca) para um kind que o cargo lê. Um id que circule também não
+// rouba o anexo de outra conta para uma casa onde o ladrão o possa ler. O
+// que não passa no filtro fica como está — a gravação não falha por isso.
 // Recebe: env — o ambiente do worker (D1 em env.DB); houseId — o id da casa;
 // data — o registo acabado de gravar, onde se procuram os anexos; kind — o
 // kind do registo ('contract', 'tx', ...) ou 'house' para a casa inteira
 // (as fotos ficam 'house.photos' e os documentos das hipotecas 'house.loans');
 // recordId — o id do registo (a casa: o próprio houseId); userId (opcional) —
-// quem grava; sem ele não se aplica o filtro de propriedade.
+// quem grava; sem ele não se aplica o filtro de propriedade; estrito
+// (opcional) — true quando quem grava é colaborador (acesso.collab): só se
+// movem anexos já presos a este registo, não qualquer anexo da casa.
 // Devolve: nada — atualiza house_id/record_kind/record_id dos anexos na D1
 // (falhas são engolidas).
-export async function linkFiles(env, houseId, data, kind, recordId, userId) {
+export async function linkFiles(env, houseId, data, kind, recordId, userId, estrito) {
   if (!houseId || !data || typeof data !== 'object') return;
   const rid = String(recordId || houseId);
   const grava = async (ids, rk) => {
     if (!ids.length) return;
     try {
       const ph = ids.map(() => '?').join(',');
-      const filtro = userId ? ' AND (owner_id = ? OR house_id IS NULL OR (house_id = ? AND record_id = ?))' : '';
+      const filtro = !userId ? ''
+        : estrito ? ' AND (owner_id = ? OR house_id IS NULL OR (house_id = ? AND record_kind = ? AND record_id = ?))'
+          : ' AND (owner_id = ? OR house_id IS NULL OR house_id = ?)';
+      const binds = !userId ? [] : estrito ? [userId, houseId, rk, rid] : [userId, houseId];
       await env.DB.prepare(
         `UPDATE files SET house_id = ?, record_kind = ?, record_id = ? WHERE id IN (${ph})${filtro}`
       )
-        .bind(houseId, rk, rid, ...ids, ...(userId ? [userId, houseId, rid] : []))
+        .bind(houseId, rk, rid, ...ids, ...binds)
         .run();
     } catch (e) { /* o anexo pode ainda não ter sido carregado */ }
   };

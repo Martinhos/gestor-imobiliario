@@ -90,28 +90,35 @@ function pode(pid,perm){if(!pid)return true;const c=cargoDe(pid);return c.dono?t
    registo que veio do servidor sem marca de criador (anterior à marca) não é
    meu — o servidor recusava-o e o registo do dono sumia do ecrã até ao pull
    seguinte; um registo só local (ainda sem _atServidor) é meu por definição.
-   A exceção são os planeados: com «Adicionar e confirmar planeados» confirmo,
-   silencio e edito qualquer um (o servidor aceita o put seja de quem for),
-   mas apago só os meus.
+   A exceção são os planeados: com «Adicionar e confirmar planeados» confirmo
+   e silencio qualquer um (o servidor só lhe funde next, until e muted), mas
+   os campos edito só nos meus, e apago só os meus — ou um alheio que termina
+   ao ser confirmado (recTermina, em planeados.js): confirmá-lo é apagá-lo, e
+   é o único apagar alheio que o servidor aceita.
    Recebe: pid — o id do imóvel do registo; perm — a permissão de adicionar
    (ex.: 'tx.add'); x (opcional) — o registo, com _createdBy e _atServidor
-   vindos do servidor; apagar (opcional) — true quando a ação é apagar.
+   vindos do servidor; acao (opcional) — true quando a ação é apagar,
+   'confirmar' quando é confirmar ou silenciar um planeado; omitida, é
+   alterar os campos.
    Devolve: true se posso. */
-function podeEditar(pid,perm,x,apagar){
+function podeEditar(pid,perm,x,acao){
   if(!pid||souDono(pid))return true;
   if(!pode(pid,perm))return false;
   if(!x)return true;
   const meu=x._createdBy?x._createdBy===meuId():!x._atServidor;
-  return meu||(perm==='rec.add'&&!apagar);
+  if(meu||perm!=='rec.add')return meu;
+  if(acao==='confirmar')return true;
+  return !!acao&&typeof recTermina==='function'&&recTermina(x);
 }
 /* A frase da recusa, para o toast: vazia quando posso.
    Recebe: pid — o id do imóvel; perm — a permissão de adicionar; x (opcional) —
-   o registo a alterar; apagar (opcional) — true quando a ação é apagar.
+   o registo a alterar; acao (opcional) — true quando a ação é apagar,
+   'confirmar' quando é confirmar ou silenciar um planeado (ver podeEditar).
    Devolve: a frase (texto), ou '' quando não há nada a recusar. */
-function motivoRecusa(pid,perm,x,apagar){
-  if(podeEditar(pid,perm,x,apagar))return '';
+function motivoRecusa(pid,perm,x,acao){
+  if(podeEditar(pid,perm,x,acao))return '';
   if(!pode(pid,perm))return fraseSemPerm(perm);
-  return 'Só quem o adicionou pode '+(apagar?'apagar':'alterar')+' este registo — pede ao dono.';
+  return 'Só quem o adicionou pode '+(acao&&acao!=='confirmar'?'apagar':'alterar')+' este registo — pede ao dono.';
 }
 /* Um pagamento de crédito ou uma amortização abate capital à hipoteca — e a
    hipoteca vive na ficha do imóvel, que só sobe com «Editar a ficha do

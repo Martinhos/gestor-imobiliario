@@ -426,18 +426,22 @@ describe('fichas de inquilino presas a um imóvel', () => {
     assert.equal(p1._houseId, 'H2');
   });
 
-  test('com houseId a ficha sobe como registo dessa casa — nunca como u:tenant — só onde o cargo dá tenant.add', () => {
+  test('com houseId de um imóvel de colaboração a ficha sobe só como registo dessa casa (com tenant.add); presa a um imóvel meu, ou a um apagado, sobe também como u:tenant', () => {
     const ficha = (id, houseId) => { const t = app.normPerson({ id, name: id }); if (houseId) t.houseId = houseId; return t; };
     app.db.tenants.push(ficha('TN', 'H3'));   // criada por mim (Gestor de visitas) a partir de uma visita, sem contrato
     app.db.tenants.push(ficha('TX', 'H2'));   // presa a um imóvel onde sou Contabilista (sem tenant.add)
     app.db.tenants.push(ficha('TM', 'H1'));   // presa a um imóvel meu, sem contrato
+    app.db.tenants.push(ficha('TA', 'H9'));   // presa a um imóvel que já não existe (apagado; a ficha ficou)
     app.db.tenants.push(ficha('TU'));         // só minha
     const chaves = Object.keys(JSON.parse(JSON.stringify(app.exportEntities())));
     assert.ok(chaves.includes('r:H3:tenant:TN'), 'sobe para a casa do dono, sem contrato');
     assert.ok(!chaves.includes('u:tenant:TN'), 'e não fica privada de quem a criou');
     assert.ok(!chaves.includes('r:H2:tenant:TX') && !chaves.includes('u:tenant:TX'), 'sem tenant.add não sobe para lado nenhum');
     assert.ok(!chaves.includes('r:H2:tenant:P1') && !chaves.includes('u:tenant:P1'), 'a ficha do dono (sem tenant.add) não é minha');
-    assert.ok(chaves.includes('r:H1:tenant:TM') && !chaves.includes('u:tenant:TM'), 'no imóvel meu é registo da casa');
+    assert.ok(chaves.includes('r:H1:tenant:TM'), 'no imóvel meu é registo da casa (os comproprietários veem-na)');
+    assert.ok(chaves.includes('u:tenant:TM'), 'e também minha: sobrevive ao imóvel');
+    assert.ok(chaves.includes('u:tenant:TA'), 'a ficha de um imóvel apagado continua a ser minha');
+    assert.ok(!chaves.some((k) => k.indexOf(':tenant:TA') > 0 && k[0] === 'r'), 'e não tem casa por onde subir');
     assert.ok(chaves.includes('u:tenant:TU'), 'sem imóvel continua a ser um registo meu');
     const dados = JSON.parse(JSON.stringify(app.exportEntities()['r:H3:tenant:TN'].data));
     assert.equal(dados.houseId, 'H3', 'o houseId vai na ficha');
@@ -460,6 +464,27 @@ describe('db.owners e os colaboradores por casa', () => {
     assert.equal(ze._userId, 'ZE');
     assert.ok(!d.owners.some((o) => o.id === 'MARIA' || o.id === 'JOAO'), 'os colaboradores ficam em CW.pessoas');
     assert.equal(app.CW.pessoas.JOAO.kind, 'collab');
+  });
+
+  test('um colaborador referido em «pago por» ou num acerto (o ex-comproprietário que hoje só colabora) ganha ficha só com o nome; o não referido não', () => {
+    const st = ESTADO_FICHAS();
+    st.records.push({ houseId: 'H4', kind: 'tx', id: 'T3', updatedAt: 5, author: 'RUI', createdBy: 'RUI',
+      data: { id: 'T3', label: 'Condomínio', propertyId: 'H4', amount: 60, kind: 'expense', date: '2026-03-01', paidBy: 'JOAO' } });
+    const d2 = app.rebuildDb(st);
+    const joao = d2.owners.find((o) => o.id === 'JOAO');
+    assert.ok(joao, 'o João pagou o condomínio: tem ficha, para o «Pago por» e os acertos');
+    assert.equal(joao.name, 'João');
+    assert.equal(joao._userId, 'JOAO');
+    assert.ok(!d2.owners.some((o) => o.id === 'MARIA'), 'a Maria não é referida em movimento nenhum: fica só em CW.pessoas');
+    assert.equal(app.CW.pessoas.JOAO.kind, 'collab', 'e o João continua colaborador em CW.pessoas');
+    assert.ok(!d2.properties.some((p) => (p.ownerIds || []).indexOf('JOAO') > -1), 'sem nunca entrar em ownerIds');
+    // o nome vem de CW.pessoas quando o perfil não o traz
+    st.profiles.find((p) => p.userId === 'JOAO').name = '';
+    assert.equal(app.rebuildDb(st).owners.find((o) => o.id === 'JOAO').name, 'João');
+    // por toId também, num acerto meu sem imóvel
+    const st2 = ESTADO_FICHAS();
+    st2.userRecords.push({ kind: 'tx', id: 'T4', data: { id: 'T4', kind: 'settle', label: 'Acerto', amount: 10, date: '2026-03-02', paidBy: 'EU', toId: 'MARIA' } });
+    assert.ok(app.rebuildDb(st2).owners.some((o) => o.id === 'MARIA'));
   });
 
   test('_colaboradores lê h.collaborators por casa — também na compropriedade; sem o campo, a lista global do dono', () => {

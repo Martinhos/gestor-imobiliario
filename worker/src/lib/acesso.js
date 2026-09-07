@@ -10,7 +10,7 @@
 
 import { now } from './http.js';
 import { podeCriar } from './planos.js';
-import { normalizarPerms, permDoKind, podeAddKind, fraseRecusa } from './permissoes.js';
+import { normalizarPerms, permDoKind, podeAddKind, fraseRecusa, fundirPlaneado, planeadoTermina } from './permissoes.js';
 
 // O dono acede sempre; outro utilizador só se a casa estiver partilhada consigo
 // numa conexão aceite.
@@ -174,11 +174,16 @@ export function planoDosDonos(env, me) {
 // pelas rotas PUT/DELETE de casas.js: acesso à casa; para colaboradores, o
 // kind tem de ter cargo, o cargo tem de ter o .add, e editar/apagar só o que
 // o próprio criou; e criar contrato/planeado obedece ao plano do dono.
-// A exceção a «só o que criou»: gravar (não apagar) um planeado com rec.add.
-// rec.add é «Adicionar e confirmar planeados», e confirmar é um put do
-// planeado do dono (avança o next; silenciar mexe em muted) — sem isto o
-// contabilista via o cartão «por confirmar» e levava 403 ao tocar-lhe. Os
-// anexos que a escrita junta têm regra própria (regraDosAnexos, files.js).
+// A exceção a «só o que criou»: confirmar um planeado com rec.add. rec.add é
+// «Adicionar e confirmar planeados», e confirmar é um put do planeado do
+// dono (avança o next; silenciar mexe em muted) — sem isto o contabilista
+// via o cartão «por confirmar» e levava 403 ao tocar-lhe. O put passa, mas
+// quem grava é planeadoAGravar/fundirPlaneado: só next, until e muted entram.
+// E confirmar um planeado que termina («uma só vez», ou o next seguinte
+// passa o fim) é apagá-lo no cliente — esse del passa também
+// (planeadoTermina); noutro caso apagar o de outrem continua 403. Um
+// planeado já apagado não se confirma nem se ressuscita por esta exceção.
+// Os anexos que a escrita junta têm regra própria (regraDosAnexos, files.js).
 // Recebe: env — o ambiente do worker; me — o utilizador com sessão; acesso —
 // o objeto de acessoACasa; houseId, kind, recordId — a linha; put — true a
 // gravar, false a apagar; demo — true em modo de demonstração (sem limites);
@@ -188,15 +193,19 @@ export function planoDosDonos(env, me) {
 export async function regraDoRegisto(env, me, acesso, houseId, kind, recordId, put, demo, planoDe) {
   if (!acesso.ok) return put ? { status: 403, error: fraseRecusa('acesso') } : { gone: true };
   const row = await env.DB.prepare(
-    'SELECT deleted, created_by FROM records WHERE house_id = ? AND kind = ? AND id = ?'
+    'SELECT deleted, created_by, data FROM records WHERE house_id = ? AND kind = ? AND id = ?'
   ).bind(houseId, kind, recordId).first();
   if (acesso.collab) {
     const perms = acesso.collab.perms;
     if (!permDoKind(kind)) return { status: 403, error: fraseRecusa('kind') };
     if (!podeAddKind(perms, kind)) return { status: 403, error: fraseRecusa('add', kind) };
-    // confirmar um planeado é atualizá-lo: com rec.add passa, seja de quem for
-    const confirmar = put && kind === 'rec';
-    if (row && row.created_by !== me.id && !confirmar) return { status: 403, error: fraseRecusa('proprio') };
+    if (row && row.created_by !== me.id) {
+      // confirmar um planeado vivo: o put passa (fundido depois); o del só se ele termina
+      let dados = null;
+      if (!put) { try { dados = JSON.parse(row.data); } catch (e) {} }
+      const confirmar = kind === 'rec' && !row.deleted && (put || planeadoTermina(dados));
+      if (!confirmar) return { status: 403, error: fraseRecusa('proprio') };
+    }
   }
   if (!put) return row ? null : { gone: true };
   // só a criação é travada pelo plano; o que existe edita-se sempre
@@ -205,6 +214,25 @@ export async function regraDoRegisto(env, me, acesso, houseId, kind, recordId, p
     if (nao) return { status: 402, error: nao };
   }
   return null;
+}
+
+// O que se grava quando um colaborador escreve um planeado: se o planeado
+// existe e não é dele, o que vem funde-se sobre o guardado (fundirPlaneado —
+// só next, until e muted mudam); o seu próprio, ou um novo, grava-se como
+// veio. Donos e comproprietários gravam sempre o que mandam. Corre depois de
+// regraDoRegisto dizer que sim e antes de regraDosAnexos, do UPSERT e do
+// linkFiles, para os três olharem para o que fica mesmo na base.
+// Recebe: env — o ambiente do worker; me — o utilizador com sessão; acesso —
+// o objeto de acessoACasa; houseId, kind, recordId — a linha; data — o
+// registo que o cliente mandou (já passado por cleanData).
+// Devolve: promessa do objeto a gravar — o próprio data, ou o planeado fundido.
+export async function planeadoAGravar(env, me, acesso, houseId, kind, recordId, data) {
+  if (!acesso.collab || kind !== 'rec') return data;
+  const row = await env.DB.prepare(
+    'SELECT created_by, data FROM records WHERE house_id = ? AND kind = ? AND id = ?'
+  ).bind(houseId, kind, recordId).first();
+  if (!row || row.created_by === me.id) return data;
+  return fundirPlaneado(row.data, data);
 }
 
 // Apagar uma casa, com tudo o que lhe está preso: os registos ficam marcados

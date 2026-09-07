@@ -166,18 +166,47 @@ describe('posso X nesta casa?', () => {
     assert.equal(app.fraseSemPerm('visit.add'), 'Não tens permissão para marcar visitas neste imóvel — pede ao dono.');
   });
 
-  test('um planeado edita-se e confirma-se com rec.add seja de quem for; apaga-se só o meu', () => {
+  test('um planeado alheio confirma-se e silencia-se com rec.add; os campos e o apagar são de quem o criou — salvo o que confirmar apaga', () => {
     tresCasas();
-    const doDono = { _createdBy: 'rui', _atServidor: 5 }, antigo = { _atServidor: 5 };
-    assert.equal(app.podeEditar('P2', 'rec.add', doDono), true, 'o contabilista confirma a renda do dono');
-    assert.equal(app.podeEditar('P2', 'rec.add', antigo), true);
-    assert.equal(app.podeEditar('P2', 'rec.add', doDono, true), false, 'mas não a apaga');
+    const doDono = { _createdBy: 'rui', _atServidor: 5, every: 'month', next: '2026-09-01', end: '' }, antigo = { _atServidor: 5, every: 'month', next: '2026-09-01' };
+    assert.equal(app.podeEditar('P2', 'rec.add', doDono, 'confirmar'), true, 'o contabilista confirma a renda do dono');
+    assert.equal(app.podeEditar('P2', 'rec.add', antigo, 'confirmar'), true);
+    assert.equal(app.podeEditar('P2', 'rec.add', doDono), false, 'mas não lhe altera os campos: o servidor só funde next, until e muted');
+    assert.equal(app.podeEditar('P2', 'rec.add', antigo), false);
+    assert.equal(app.podeEditar('P2', 'rec.add', doDono, true), false, 'nem a apaga: mensal sem fim');
+    assert.equal(app.podeEditar('P2', 'rec.add', { _createdBy: 'eu' }), true);
     assert.equal(app.podeEditar('P2', 'rec.add', { _createdBy: 'eu' }, true), true);
-    assert.equal(app.podeEditar('P3', 'rec.add', doDono), false, 'sem rec.add, nada');
-    assert.equal(app.motivoRecusa('P2', 'rec.add', doDono), '');
+    assert.equal(app.podeEditar('P3', 'rec.add', doDono, 'confirmar'), false, 'sem rec.add, nada');
+    assert.equal(app.podeEditar('P1', 'rec.add', doDono), true, 'no meu imóvel edito tudo');
+    // o que confirmar apaga (uma só vez; a última ocorrência antes do fim) o servidor deixa apagar a quem tem rec.add
+    const once = { _createdBy: 'rui', _atServidor: 5, every: 'once', next: '2026-09-15' };
+    const ultimo = { _createdBy: 'rui', _atServidor: 5, every: 'month', next: '2026-09-01', end: '2026-09-30' };
+    const aindaNao = { _createdBy: 'rui', _atServidor: 5, every: 'month', next: '2026-09-01', end: '2026-10-01' };
+    assert.equal(app.recTermina(once), true);
+    assert.equal(app.recTermina(ultimo), true);
+    assert.equal(app.recTermina(aindaNao), false);
+    assert.equal(app.recTermina(doDono), false);
+    assert.equal(app.recTermina(null), false);
+    assert.equal(app.podeEditar('P2', 'rec.add', once, true), true, 'confirmar um «uma só vez» é apagá-lo');
+    assert.equal(app.podeEditar('P2', 'rec.add', ultimo, true), true, 'a última ocorrência antes do fim também');
+    assert.equal(app.podeEditar('P2', 'rec.add', aindaNao, true), false, 'antes disso, não');
+    assert.equal(app.podeEditar('P2', 'rec.add', once), false, 'os campos continuam a ser do dono');
+    assert.equal(app.podeEditar('P2', 'tx.add', { _createdBy: 'rui', _atServidor: 5, every: 'once' }, true), false, 'a exceção é só dos planeados');
+    assert.equal(app.motivoRecusa('P2', 'rec.add', doDono, 'confirmar'), '');
+    assert.match(app.motivoRecusa('P2', 'rec.add', doDono), /Só quem o adicionou pode alterar/);
     assert.match(app.motivoRecusa('P2', 'rec.add', doDono, true), /Só quem o adicionou pode apagar/);
+    assert.equal(app.motivoRecusa('P2', 'rec.add', once, true), '');
+    // confirmar: o mensal (avança) e o «uma só vez» (apaga) passam; sem tx.add não — cria um movimento
+    const rec = (x) => Object.assign(app.normRec({ id: 'R1', name: 'Renda', next: '2000-01-01', tx: { kind: 'income', propertyId: 'P2', amount: 500 } }), x);
+    assert.equal(app.recusaConfirmar(rec(doDono)), '');
+    assert.equal(app.recusaConfirmar(rec(once)), '');
+    app.window.CW.cargos.P2.perms = ['rec.add'];
+    assert.equal(app.recusaConfirmar(rec(once)), app.fraseSemPerm('tx.add'));
+    app.window.CW.cargos.P2.perms = ['tx.add'];
+    assert.equal(app.recusaConfirmar(rec(once)), app.fraseSemPerm('rec.add'));
+    app.window.CW.cargos.P2.perms = CONTAB;
     // silenciar passa; apagar recusa sem tirar nada
-    app.db.recurring = [Object.assign(app.normRec({ id: 'R1', name: 'Renda', next: '2000-01-01', tx: { kind: 'income', propertyId: 'P2', amount: 500 } }), doDono)];
+    app.db.recurring = [rec(doDono)];
     let msg = '';
     const reais = { toast: app.toast, save: app.save, render: app.render, buildNav: app.buildNav, confirmModal: app.confirmModal };
     app.toast = (m) => { msg = m; };
@@ -318,7 +347,7 @@ describe('o que se esconde', () => {
     assert.ok(m2.includes('Editar movimento') && m2.includes('Apagar movimento'), m2.join(', '));
   });
 
-  test('um registo antigo do dono (sem criador) só se vê; o planeado do dono confirma-se mas não se apaga', () => {
+  test('um registo antigo do dono (sem criador) só se vê; o planeado do dono confirma-se e silencia-se, não se edita nem apaga', () => {
     tresCasas();
     const t1 = app.normTx({ id: 'T1', label: 'Obra', propertyId: 'P2', amount: 10 }); t1._atServidor = 5;
     app.db.transactions = [t1];
@@ -331,11 +360,17 @@ describe('o que se esconde', () => {
     const r1 = app.normRec({ id: 'R1', name: 'Renda', next: '2000-01-01', tx: { kind: 'income', propertyId: 'P2', amount: 500 } });
     r1._createdBy = 'rui'; r1._atServidor = 5;
     app.db.recurring = [r1];
-    const labels = menuDe('rec:R1').labels;
-    ['Confirmar', 'Silenciar', 'Editar'].forEach((l) => assert.ok(labels.includes(l), l));
-    assert.ok(!labels.includes('Apagar'), labels.join(', '));
+    assert.deepEqual(Array.from(menuDe('rec:R1').labels), ['Confirmar', 'Silenciar'], 'sem «Editar»: os campos são do dono; sem «Apagar»');
+    // um «uma só vez» do dono: confirmar apaga-o (o servidor aceita), mas o menu continua sem «Apagar» nem «Editar»
+    r1.every = 'once';
+    assert.deepEqual(Array.from(menuDe('rec:R1').labels), ['Confirmar', 'Silenciar']);
+    // sem tx.add o Confirmar some (criava um movimento); silenciar fica
+    app.window.CW.cargos.P2.perms = ['rec.add'];
+    assert.deepEqual(Array.from(menuDe('rec:R1').labels), ['Silenciar']);
+    app.window.CW.cargos.P2.perms = CONTAB;
     r1._createdBy = 'eu';
-    assert.ok(menuDe('rec:R1').labels.includes('Apagar'), 'o meu apago');
+    const meu = menuDe('rec:R1').labels;
+    ['Confirmar', 'Silenciar', 'Editar', 'Apagar'].forEach((l) => assert.ok(meu.includes(l), l));
   });
 
   test('sem nenhuma ação, o toque longo diz que só posso ver', () => {
@@ -653,6 +688,77 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     assert.deepEqual(app.dbSoMeu().tenants.map((t) => t.id), [], 'não vai na cópia: é do imóvel do Rui');
     assert.match(app.vTenants(), /Ana/, 'e está na lista');
     assert.match(app.vTenants(), /Adicionar inquilino/);
+    // a visita de um imóvel meu dá uma ficha minha (houseId vazio), como as do FAB: presa ao imóvel, perdia-se com ele
+    app.db.visits.push(app.normVisit({ id: 'V2', nomes: 'Bruno', propertyId: 'P1', contacto: '912' }));
+    app.personModal = () => {};
+    app.visConverte('V2');
+    const bruno = app.db.tenants.find((t) => t.name === 'Bruno');
+    assert.equal(bruno.houseId, '');
+    assert.equal(bruno.phone, '912');
+    assert.equal(app.casaDoInquilino(bruno), null);
+    assert.ok(app.dbSoMeu().tenants.some((t) => t.id === bruno.id), 'vai na cópia');
+    // sem sessão, tudo é meu: idem
+    sessao();
+    app.db.visits.push(app.normVisit({ id: 'V3', nomes: 'Carla', propertyId: 'P3' }));
+    app.visConverte('V3');
+    app.personModal = personModalReal;
+    assert.equal(app.db.tenants.find((t) => t.name === 'Carla').houseId, '');
+  });
+
+  test('criar ou alterar um planeado pede rec.add, não tx.add; o seletor lista onde há rec.add; o alheio abre só de leitura', () => {
+    tresCasas();
+    app.window.CW.cargos.P2 = { dono: false, nome: 'Gestor', perms: ['contract.add'] };   // rec.add por implicação, sem tx.add
+    const r1 = app.normRec({ id: 'R1', name: 'IMI', next: '2026-09-01', tx: { kind: 'expense', propertyId: 'P2', amount: 500 } });
+    r1._createdBy = 'eu'; r1._atServidor = 5;
+    const r2 = app.normRec({ id: 'R2', name: 'Renda', next: '2026-09-01', tx: { kind: 'income', propertyId: 'P2', amount: 700 } });
+    r2._createdBy = 'rui'; r2._atServidor = 5;
+    app.db.recurring = [r1, r2];
+    const abertas = janelasFalsas();
+    let msg = '';
+    app.toast = (m) => { msg = m; };
+    app.collectTx = () => {};
+    // o meu: abre para editar e grava sem «Adicionar movimentos»
+    app.editRec('R1');
+    assert.equal(abertas.length, 1);
+    assert.equal(app.tForm._recId, 'R1');
+    assert.equal(typeof app.onSave, 'function');
+    assert.ok(app.window.__sel.t_prop.options.some((o) => o.label === 'T2 Rui'), 'o seletor tem o imóvel onde tenho rec.add');
+    Object.assign(app.tForm, { label: 'IMI 2026', amount: 520, propertyId: 'P2' });
+    app.onSave();
+    assert.equal(msg, 'Movimento recorrente atualizado.');
+    assert.equal(app.db.recurring[0].tx.amount, 520);
+    assert.equal(app.db.recurring[0].name, 'IMI 2026');
+    // um planeado novo: o seletor lista P1 e P2 (rec.add), enquanto um movimento novo só lista P1 (tx.add)
+    app.txModal(null, 'expense', null);
+    const opcoes = () => Array.from(app.window.__sel.t_prop.options).filter((o) => !o.div).map((o) => o.label);
+    assert.deepEqual(opcoes(), ['Todos os imóveis', 'T1 Meu']);
+    app.tForm._recNew = true; app.tForm._every = 'month';
+    app.repaintTx();
+    assert.deepEqual(opcoes(), ['Todos os imóveis', 'T1 Meu', 'T2 Rui']);
+    Object.assign(app.tForm, { label: 'Seguro', amount: 30, propertyId: 'P2' });
+    app.onSave();
+    assert.equal(msg, 'Movimento recorrente criado.');
+    assert.equal(app.db.recurring.length, 3);
+    assert.equal(app.db.recurring[2].tx.propertyId, 'P2');
+    assert.equal(app.db.recurring[2].name, 'Seguro');
+    assert.equal(app.db.transactions.length, 0, 'não criou movimento nenhum');
+    // o do Rui abre só de leitura: os campos são de quem o criou
+    app.editRec('R2');
+    const L = abertas[abertas.length - 1];
+    assert.equal(L.soLeitura, true);
+    assert.equal(app.onSave, null);
+    assert.match(L.body.hint, /só de leitura/);
+    assert.match(L.foot.innerHTML, /Fechar/);
+    // confirmar continua a pedir tx.add — cria um movimento
+    assert.equal(app.recusaConfirmar(r2), app.fraseSemPerm('tx.add'));
+    // e sem rec.add nenhum, o guardar de um planeado recusa com a frase certa
+    app.window.CW.cargos.P2 = { dono: false, nome: 'Contab. sem planeados', perms: ['tx.add'] };
+    app.txModal(null, 'expense', 'P2');
+    app.tForm._recNew = true;
+    Object.assign(app.tForm, { label: 'Água', amount: 20, propertyId: 'P2' });
+    app.onSave();
+    assert.equal(msg, app.fraseSemPerm('rec.add'));
+    assert.equal(app.db.recurring.length, 3);
   });
 
   test('o FAB «Adicionar inquilino» de quem só colabora pede o imóvel', () => {

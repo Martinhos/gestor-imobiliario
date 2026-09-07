@@ -208,16 +208,18 @@ function visApaga(id){
 
 /* Converte a visita numa ficha de inquilino: abre a ficha nova já com o nome
    e o contacto preenchidos (telefone ou email, conforme o que lá estiver) —
-   o resto preenche-se quando o contrato for a sério. A ficha fica presa ao
-   imóvel da visita (houseId): é assim que, criada por um colaborador, sobe
-   como registo desse imóvel e chega ao dono mesmo sem contrato.
+   o resto preenche-se quando o contrato for a sério. Num imóvel onde só
+   colaboro a ficha fica presa a ele (houseId): é assim que sobe como registo
+   desse imóvel e chega ao dono mesmo sem contrato. Num imóvel meu é uma
+   ficha minha, como as do FAB (o critério de newTenantFromCt) — presa ao
+   imóvel, perdia-se com ele.
    Recebe: id — a visita a converter.
    Devolve: nada — abre o personModal de um inquilino novo pré-preenchido. */
 function visConverte(id){
   const v=(db.visits||[]).find(x=>x.id===id);if(!v)return;
   if(!pode(v.propertyId,'tenant.add'))return toast(fraseSemPerm('tenant.add'));
   const c=(v.contacto||'').trim();
-  const novo=normPerson({name:v.nomes,phone:/@/.test(c)?'':c,email:/@/.test(c)?c:'',houseId:v.propertyId||'',
+  const novo=normPerson({name:v.nomes,phone:/@/.test(c)?'':c,email:/@/.test(c)?c:'',houseId:souDono(v.propertyId)?'':(v.propertyId||''),
     notes:v.notas?'Da visita de '+(v.date||'?')+': '+v.notas:''});
   db.tenants.push(novo);save();
   personModal('tenant',novo.id);

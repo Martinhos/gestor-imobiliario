@@ -591,11 +591,13 @@ function lpMenu(v){
     const ok=kind==='owner'||podeEditarInquilino(pp);
     return lpShow(pp.name,[{label:ok?'Editar ficha':'Ver ficha',icon:'users',act:()=>personModal(kind,pid)}].concat(ok?[{label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)}]:[]));}
   if(k==='rec'){const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
-    /* com rec.add confirmo, silencio e edito qualquer planeado; apagar é só o que eu criei */
-    const hid=(r.tx||{}).propertyId,ok=podeEditar(hid,'rec.add',r),opts=[];
-    if(r.next&&r.next<=today()&&pode(hid,'rec.add'))opts.push({label:'Confirmar',icon:'check',act:()=>quickConfirmRec(id)});
-    if(ok)opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)},{label:'Editar',icon:'swap',act:()=>editRec(id)});
-    if(podeEditar(hid,'rec.add',r,true))opts.push({label:'Apagar',icon:'trash',act:()=>delRec(id)});
+    /* com rec.add confirmo e silencio qualquer planeado (o servidor só lhe funde next, until e muted);
+       editar os campos e apagar é só o que eu criei — o alheio que termina ao confirmar apaga-se
+       pelo Confirmar, não por aqui */
+    const hid=(r.tx||{}).propertyId,conf=podeEditar(hid,'rec.add',r,'confirmar'),edita=podeEditar(hid,'rec.add',r),opts=[];
+    if(r.next&&r.next<=today()&&!recusaConfirmar(r))opts.push({label:'Confirmar',icon:'check',act:()=>quickConfirmRec(id)});
+    if(conf)opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)});
+    if(edita)opts.push({label:'Editar',icon:'swap',act:()=>editRec(id)},{label:'Apagar',icon:'trash',act:()=>delRec(id)});
     return lpShow(r.name,opts);}
   if(k==='tpl'){const x=(db.templates||[]).find(y=>y.id===id);if(!x)return;
     return lpShow(x.name,[{label:'Usar modelo',icon:'plus',act:()=>newFromTemplate(id)},{label:'Editar',icon:'file',act:()=>editTpl(id)},{label:'Apagar',icon:'trash',act:()=>delTpl(id)}]);}

@@ -29,8 +29,12 @@ function txModal(id,kind,propId,_x,ctId,preset){
   if(!ok){onSave=null;return modalSoLeitura('Movimento de um imóvel onde colaboras — só de leitura.')}
   tForm._saver=()=>{
     collectTx();
-    /* a primeira barreira: o servidor recusaria na mesma, mas aqui diz-se porquê antes de gravar */
-    const recusa=motivoRecusa(tForm.propertyId,'tx.add',id?db.transactions.find(x=>x.id===id):null);if(recusa)return toast(recusa);
+    /* a primeira barreira: o servidor recusaria na mesma, mas aqui diz-se porquê antes de gravar.
+       Criar ou alterar um planeado não cria movimentos: pede «Adicionar e confirmar planeados»
+       (e, a alterar, ser quem o criou); o resto — movimentos, e o Confirmar — pede «Adicionar movimentos» */
+    const recusa=(tForm._recId||tForm._recNew)?motivoRecusa(tForm.propertyId,'rec.add',tForm._recId?(db.recurring||[]).find(x=>x.id===tForm._recId):null)
+      :motivoRecusa(tForm.propertyId,'tx.add',id?db.transactions.find(x=>x.id===id):null);
+    if(recusa)return toast(recusa);
     if(!tForm.propertyId&&!podeSemImovel())return toast('Escolhe o imóvel.');
     /* um pagamento de crédito a sério (não um planeado nem um modelo só) abate capital
        na ficha do imóvel: sem «Editar a ficha» o movimento subia e a dívida não */
@@ -162,7 +166,7 @@ function txBody(){
         <input id="t_amount" type="text" inputmode="decimal" style="flex:1;min-width:0" value="${t.amount||''}" placeholder="900" oninput="tForm.amount=num(this.value);refreshLoanHint();refreshSplit();amtResetSync()">
         <button type="button" class="btn sm primary" id="amt_reset" style="flex:0 0 auto;padding:9px 12px;display:${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':'none'}" title="Repor a prestação calculada" onclick="onAmtReset()">Repor</button></div></label>
       ${(t._recId||t._recNew)?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}"></label>`}</div>
-    <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),(podeSemImovel()?[{v:'',label:'Todos os imóveis'}]:[]).concat(propOptsPara('tx.add',t.propertyId)).concat(podeSemImovel()?gdiv(gOpts('prop')):[]),'onPropChange')}</label>
+    <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),(podeSemImovel()?[{v:'',label:'Todos os imóveis'}]:[]).concat(propOptsPara((t._recId||t._recNew)?'rec.add':'tx.add',t.propertyId)).concat(podeSemImovel()?gdiv(gOpts('prop')):[]),'onPropChange')}</label>
     ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)}))),'onCtChange')}</label>`:''}
     ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange')}</label>`:''}
     ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'}<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Pai, amigo, empreiteiro…" autocomplete="off" list="creditorList" oninput="refreshCredHint()">

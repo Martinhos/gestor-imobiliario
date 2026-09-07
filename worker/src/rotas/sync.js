@@ -1,7 +1,7 @@
 // Sincronizacao em lote das alteracoes pendentes do cliente.
 import { linkFiles, regraDosAnexos } from '../files.js';
 import { modoDemo, podeCriar } from '../lib/planos.js';
-import { acessoACasa, planoDosDonos, regraDoRegisto, apagarCasa } from '../lib/acesso.js';
+import { acessoACasa, planoDosDonos, regraDoRegisto, planeadoAGravar, apagarCasa } from '../lib/acesso.js';
 import { fundirCasa, fraseRecusa } from '../lib/permissoes.js';
 
 /* Rota do POST /api/sync: aplica as operações pendentes do cliente (put/del
@@ -86,7 +86,7 @@ export async function rotasSync(c) {
               }
               await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
                 .bind(JSON.stringify(preserveOwnership(existing.data, dados)), now(), houseId).run();
-              await linkFiles(env, houseId, dados, 'house', houseId, me.id);
+              await linkFiles(env, houseId, dados, 'house', houseId, me.id, !!a.collab);
             } else if (existing) {
               if (existing.owner_id !== me.id) { results.push({ ok: false, status: 403 }); continue; }
               await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ?, deleted = 0 WHERE id = ?')
@@ -123,9 +123,12 @@ export async function rotasSync(c) {
             continue;
           }
           if (put) {
+            // um colaborador a confirmar o planeado do dono só muda next,
+            // until e muted: o resto fica como estava (fundirPlaneado)
+            const dados = await planeadoAGravar(env, me, a, houseId, tipo, rid, op.data);
             // os anexos que a escrita junta têm regra própria: um colaborador
             // só os junta com file.add (o que já estava preso ao registo não conta)
-            const anexos = await regraDosAnexos(env, a, houseId, tipo, rid, op.data);
+            const anexos = await regraDosAnexos(env, a, houseId, tipo, rid, dados);
             if (anexos) { results.push({ ok: false, status: anexos.status, error: anexos.error }); continue; }
             // author é o último a escrever (o sino usa-o); created_by é o
             // criador e nunca muda — é o que decide «só o que criou»
@@ -135,8 +138,8 @@ export async function rotasSync(c) {
                ON CONFLICT (house_id, kind, id)
                DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0,
                  author = excluded.author, created_by = COALESCE(records.created_by, excluded.created_by)`
-            ).bind(houseId, tipo, rid, JSON.stringify(op.data), now(), me.id, me.id).run();
-            await linkFiles(env, houseId, op.data, tipo, rid, me.id);
+            ).bind(houseId, tipo, rid, JSON.stringify(dados), now(), me.id, me.id).run();
+            await linkFiles(env, houseId, dados, tipo, rid, me.id, !!a.collab);
           } else {
             await env.DB.prepare(
               'UPDATE records SET deleted = 1, updated_at = ? WHERE house_id = ? AND kind = ? AND id = ?'

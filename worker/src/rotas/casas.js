@@ -1,7 +1,7 @@
 // Casas, quotas, registos de cada casa e dados globais do utilizador.
 import { linkFiles, regraDosAnexos } from '../files.js';
 import { modoDemo, podeCriar } from '../lib/planos.js';
-import { acessoACasa, planoDosDonos, regraDoRegisto, apagarCasa } from '../lib/acesso.js';
+import { acessoACasa, planoDosDonos, regraDoRegisto, planeadoAGravar, apagarCasa } from '../lib/acesso.js';
 import { fundirCasa, fraseRecusa } from '../lib/permissoes.js';
 
 /* Rotas das casas e do que vive dentro delas: criar/atualizar e apagar uma
@@ -41,7 +41,7 @@ export async function rotasCasas(c) {
       await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
         .bind(JSON.stringify(preserveOwnership(existing.data, dados)), now(), houseId)
         .run();
-      await linkFiles(env, houseId, dados, 'house', houseId, me.id);
+      await linkFiles(env, houseId, dados, 'house', houseId, me.id, !!access.collab);
       return json({ ok: true });
     } else if (existing && existing.deleted) {
       if (existing.owner_id !== me.id) return err(403, 'Sem acesso a esta casa.');
@@ -164,8 +164,10 @@ export async function rotasCasas(c) {
       b.data = cleanData(b.data, recordId);
       if (!b.data) return err(400, 'Corpo inválido.');
       if (tooBig(b.data)) return err(413, 'Registo demasiado grande.');
+      // o planeado do dono confirmado por um colaborador: só next/until/muted mudam (a mesma regra do /api/sync)
+      const dados = await planeadoAGravar(env, me, access, houseId, kind, recordId, b.data);
       // os anexos que a escrita junta: um colaborador só com file.add (a mesma regra do /api/sync)
-      const anexos = await regraDosAnexos(env, access, houseId, kind, recordId, b.data);
+      const anexos = await regraDosAnexos(env, access, houseId, kind, recordId, dados);
       if (anexos) return err(anexos.status, anexos.error);
       await env.DB.prepare(
         `INSERT INTO records (house_id, kind, id, data, updated_at, deleted, author, created_by)
@@ -174,9 +176,9 @@ export async function rotasCasas(c) {
          DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0,
            author = excluded.author, created_by = COALESCE(records.created_by, excluded.created_by)`
       )
-        .bind(houseId, kind, recordId, JSON.stringify(b.data), now(), me.id, me.id)
+        .bind(houseId, kind, recordId, JSON.stringify(dados), now(), me.id, me.id)
         .run();
-      await linkFiles(env, houseId, b.data, kind, recordId, me.id);
+      await linkFiles(env, houseId, dados, kind, recordId, me.id, !!access.collab);
       return json({ ok: true });
     }
     await env.DB.prepare(

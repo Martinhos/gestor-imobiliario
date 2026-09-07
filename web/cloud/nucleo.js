@@ -180,8 +180,11 @@ function casaDaFicha(t) {
    chave -> {scope, houseId?, kind?, id?, data}
    Uma ficha de inquilino presa a um imóvel (casaDaFicha) é um registo desse
    imóvel — r:<casa>:tenant:<id> — com ou sem contrato, tal como as ligadas por
-   contrato; nunca sobe como u:tenant. É assim que a ficha que um colaborador
-   com tenant.add cria («Converter em inquilino») chega ao dono.
+   contrato. Presa a um imóvel de colaboração, é só isso: é assim que a ficha
+   que um colaborador com tenant.add cria («Converter em inquilino») chega ao
+   dono. Presa a um imóvel meu, ou a um que já não existe, sobe também como
+   u:tenant — uma ficha do dono nunca fica sem chave (era assim que se perdia
+   ao apagar o imóvel).
    Devolve: esse mapa (objeto), montado a partir do db local já limpo por strip. */
 function exportEntities() {
   var map = {};
@@ -233,10 +236,14 @@ function exportEntities() {
   // os "proprietários" são os utilizadores: só o meu perfil é exportado
   var meOwner = CW.user && owners.find(function (o) { return o.id === CW.user.id; });
   if (meOwner) map['u:profile:main'] = { scope: 'user', kind: 'profile', id: 'main', data: strip(meOwner) };
-  // só as fichas só minhas sobem como registo de utilizador: as presas a um
-  // imóvel já subiram (ou não podem subir) como registo dessa casa
+  // as fichas minhas sobem como registo de utilizador; as presas a um imóvel
+  // de colaboração já subiram (ou não podem subir) como registo dessa casa.
+  // Uma presa a um imóvel meu sobe também aqui, e uma presa a um imóvel que
+  // já não está em db.properties (apagado) só aqui — nunca fica sem chave
   tenants.forEach(function (t) {
-    if (t._sharedFrom || casaDaFicha(t)) return;
+    if (t._sharedFrom) return;
+    var h = casaDaFicha(t);
+    if (h && !souDono(h) && prop(h)) return;
     map['u:tenant:' + t.id] = { scope: 'user', kind: 'tenant', id: t.id, data: strip(t) };
   });
   var st = strip(db.settings);
@@ -568,18 +575,27 @@ function rebuildDb(st) {
   minePer.id = myId;
   if (!minePer.name) minePer.name = (CW.user && (CW.user.name || CW.user.email)) || '';
   ownersOut[myId] = minePer;
+  // quem é referido em «pago por» ou num acerto de algum movimento (das
+  // casas ou meu): ganha ficha mesmo que o servidor o marque colaborador —
+  // o ex-comproprietário que pagou o condomínio e hoje só colabora
+  var referidos = {};
+  d.transactions.forEach(function (t) {
+    if (t.paidBy) referidos[t.paidBy] = true;
+    if (t.toId) referidos[t.toId] = true;
+  });
   (st.profiles || []).forEach(function (pr) {
     if (pr.userId === myId) return;
-    // um colaborador puro nunca vira ficha de proprietário — fica em
-    // CW.pessoas, com o nome. Todos os outros (comproprietários, ligações
-    // aceites e quem só é referido em paidBy/toId de movimentos: contas
-    // apagadas «[deleted]», ex-comproprietários) viram ficha só com o nome,
-    // para «Pago por …», os acertos e o CSV continuarem legíveis
-    if (!temId(ownersIds, pr.userId) && colaboradorPuro(pr.userId)) return;
+    // um colaborador puro que nenhum movimento refere nunca vira ficha de
+    // proprietário — fica em CW.pessoas, com o nome. Todos os outros
+    // (comproprietários, ligações aceites e quem é referido em paidBy/toId
+    // de movimentos: contas apagadas «[deleted]», ex-comproprietários, mesmo
+    // que hoje sejam colaboradores) viram ficha só com o nome, para «Pago
+    // por …», os acertos e o CSV continuarem legíveis
+    if (!temId(ownersIds, pr.userId) && !referidos[pr.userId] && colaboradorPuro(pr.userId)) return;
     var per = normPerson(pr.data || {});
     per.id = pr.userId;
     per._userId = pr.userId;
-    if (!per.name) per.name = pr.name || pr.userId;
+    if (!per.name) per.name = pr.name || (CW.pessoas[pr.userId] || {}).name || pr.userId;
     ownersOut[pr.userId] = per;
   });
   d.owners = Object.keys(ownersOut).map(function (k) { return ownersOut[k]; });

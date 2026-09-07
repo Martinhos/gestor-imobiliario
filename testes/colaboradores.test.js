@@ -18,7 +18,7 @@ import {
 } from '../worker/src/lib/acesso.js';
 import {
   PERMS, IMPLICA, KIND_PERM, CARGOS_EXEMPLO, normalizarPerms, projetarCasa, projetarRegisto,
-  fundirCasa, podeVerKind, podeAddKind, kindsVisiveis,
+  fundirCasa, podeVerKind, podeAddKind, kindsVisiveis, fundirPlaneado, proximaData, planeadoTermina,
 } from '../worker/src/lib/permissoes.js';
 import { definirDemo, esquecerCache } from '../worker/src/lib/planos.js';
 import { mascararTokens } from '../worker/src/lib/relatos.js';
@@ -217,6 +217,31 @@ describe('as permissões (lista canónica, igual à do cliente)', () => {
     assert.equal(f.notes, 'x');
     const semLoans = fundirCasa(base, { loans: [] }, new Set(['tx.view']));
     assert.equal(semLoans.loans.length, 1, 'sem loan.view as hipotecas não se tocam');
+  });
+
+  test('proximaData, planeadoTermina e fundirPlaneado (a aritmética do cliente, em texto)', () => {
+    assert.equal(proximaData('2026-01-31', 'month'), '2026-02-28', 'o dia prende-se ao último do mês');
+    assert.equal(proximaData('2028-01-31', 'month'), '2028-02-29', 'bissexto');
+    assert.equal(proximaData('2026-12-15', 'month'), '2027-01-15', 'vira o ano');
+    assert.equal(proximaData('2026-11-30', 'quarter'), '2027-02-28');
+    assert.equal(proximaData('2028-02-29', 'year'), '2029-02-28');
+    assert.equal(proximaData('2026-12-28', 'week'), '2027-01-04');
+    assert.equal(proximaData('2026-02-25', 'week'), '2026-03-04');
+    assert.equal(proximaData('2026-09-01', 'lixo'), '2026-10-01', 'cadência desconhecida conta como mês');
+    assert.equal(proximaData('2026-02-30', 'month'), '', 'data que não existe');
+    assert.equal(proximaData('', 'month'), '');
+    assert.equal(proximaData(undefined, 'month'), '');
+    assert.equal(planeadoTermina({ every: 'once' }), true);
+    assert.equal(planeadoTermina({ every: 'month', next: '2026-09-01', end: '2026-09-30' }), true, 'o seguinte (1 de outubro) passa o fim');
+    assert.equal(planeadoTermina({ every: 'month', next: '2026-09-01', end: '2026-10-01' }), false, 'ainda há um em outubro');
+    assert.equal(planeadoTermina({ every: 'month', next: '2026-09-01' }), false, 'sem fim não termina');
+    assert.equal(planeadoTermina({ every: 'month', end: '2026-09-30' }), false, 'sem next legível não se sabe');
+    assert.equal(planeadoTermina(null), false);
+    const base = JSON.stringify({ id: 'r', name: 'Renda', every: 'month', next: '2026-09-01', until: '', muted: false, tx: { amount: 500, propertyId: 'H1' } });
+    const f = fundirPlaneado(base, { id: 'r', name: 'X', every: 'once', next: '2026-10-01', until: '2026-10-03', muted: true, tx: { amount: 1, propertyId: 'H2' } });
+    assert.deepEqual(f, { id: 'r', name: 'Renda', every: 'month', next: '2026-10-01', until: '2026-10-03', muted: true, tx: { amount: 500, propertyId: 'H1' } });
+    assert.equal(fundirPlaneado(base, { muted: true }).next, '2026-09-01', 'o que não vem fica como estava');
+    assert.deepEqual(fundirPlaneado('lixo', { id: 'r', next: '2026-10-01' }), { id: 'r', next: '2026-10-01' }, 'sem JSON guardado que se leia, vai o novo');
   });
 });
 
@@ -486,7 +511,7 @@ describe('POST /api/sync com cargo', () => {
     assert.equal((await resp(pedir(env, C, '/api/houses/H1', 'DELETE'))).status, 403);
   });
 
-  test('rec.add confirma o planeado do dono (put), mas não o apaga', async () => {
+  test('rec.add confirma o planeado do dono (put), mas não apaga um que não termina', async () => {
     const { env, D, C, visitas, contab } = await armar();
     await darCargo(env, D, C, contab, ['H1']);
     const rec = (op, data) => ({ op, scope: 'record', houseId: 'H1', kind: 'rec', id: 'r1', data });
@@ -513,6 +538,103 @@ describe('POST /api/sync com cargo', () => {
     r = await sync(env, C, [rec('put', { label: 'Planeado', next: '2026-11-01' })]);
     assert.equal(r[0].status, 403);
     assert.equal(r[0].error, 'Sem permissão para adicionar planeados neste imóvel.');
+  });
+
+  test('confirmar o planeado do dono só mexe em next, until e muted', async () => {
+    const { env, D, C, contab } = await armar();
+    await darCargo(env, D, C, contab, ['H1']);
+    const dono = { name: 'Renda Inês', every: 'month', next: '2026-09-01', until: '', end: '2027-08-31', muted: false, auto: true,
+      tx: { kind: 'income', label: 'Renda', amount: 500, propertyId: 'H1', contractId: 'c1' } };
+    await registo(env, 'H1', 'rec', 'r2', dono, D);
+    // o cliente manda o planeado inteiro (quickConfirmRec) com o next avançado — aqui com tudo o resto trocado também
+    const roubo = Object.assign({}, dono, { id: 'r2', name: 'Outro', every: 'week', next: '2026-10-01', until: '2026-10-05', end: '', muted: true,
+      tx: { kind: 'income', label: 'x', amount: 5, propertyId: 'H2', contractId: '' } });
+    const put = (id, data) => ({ op: 'put', scope: 'record', houseId: 'H1', kind: 'rec', id, data });
+    let r = await sync(env, C, [put('r2', roubo)]);
+    assert.deepEqual(r[0], { ok: true }, 'o put passa — é o que confirmar e silenciar fazem');
+    let g = JSON.parse((await linha(env, 'H1', 'rec', 'r2')).data);
+    assert.equal(g.next, '2026-10-01');
+    assert.equal(g.until, '2026-10-05');
+    assert.equal(g.muted, true);
+    assert.equal(g.name, 'Renda Inês');
+    assert.equal(g.every, 'month');
+    assert.equal(g.end, '2027-08-31');
+    assert.deepEqual(g.tx, dono.tx, 'montante, imóvel e contrato ficam do dono');
+    assert.equal(g.id, 'r2');
+    // pela rota unitária, o mesmo
+    const u = await resp(pedir(env, C, '/api/houses/H1/records/rec/r2', 'PUT', { data: Object.assign({}, roubo, { next: '2026-11-01', muted: false }) }));
+    assert.equal(u.status, 200);
+    g = JSON.parse((await linha(env, 'H1', 'rec', 'r2')).data);
+    assert.equal(g.next, '2026-11-01');
+    assert.equal(g.muted, false);
+    assert.equal(g.tx.amount, 500);
+    assert.equal(g.tx.propertyId, 'H1');
+    // no aparelho do dono a renda continua em H1, com 500
+    const rec = (await estado(env, D)).records.find((x) => x.kind === 'rec' && x.id === 'r2');
+    assert.equal(rec.data.tx.propertyId, 'H1');
+    assert.equal(rec.data.tx.amount, 500);
+    assert.equal(rec.data.next, '2026-11-01');
+    // o seu próprio planeado, esse, reescreve por inteiro
+    r = await sync(env, C, [put('r3', { name: 'Meu', every: 'month', next: '2026-09-10', tx: { kind: 'expense', amount: 10, propertyId: 'H1' } })]);
+    assert.deepEqual(r[0], { ok: true });
+    r = await sync(env, C, [put('r3', { name: 'Meu 2', every: 'year', next: '2026-09-10', tx: { kind: 'expense', amount: 20, propertyId: 'H1' } })]);
+    assert.deepEqual(r[0], { ok: true });
+    g = JSON.parse((await linha(env, 'H1', 'rec', 'r3')).data);
+    assert.equal(g.name, 'Meu 2');
+    assert.equal(g.tx.amount, 20);
+    // o dono apagou o planeado: um put atrasado do colaborador não o ressuscita
+    await sync(env, D, [{ op: 'del', scope: 'record', houseId: 'H1', kind: 'rec', id: 'r2' }]);
+    r = await sync(env, C, [put('r2', roubo)]);
+    assert.equal(r[0].status, 403);
+    assert.equal(r[0].error, 'Só podes alterar ou apagar o que tu criaste neste imóvel.');
+    assert.equal((await linha(env, 'H1', 'rec', 'r2')).deleted, 1);
+  });
+
+  test('apagar o planeado do dono só quando ele termina (confirmar um «uma só vez» ou a última renda)', async () => {
+    const { env, D, C, visitas, contab } = await armar();
+    await darCargo(env, D, C, contab, ['H1']);
+    const rec = (id, data) => registo(env, 'H1', 'rec', id, Object.assign({ name: id, tx: { kind: 'expense', amount: 1, propertyId: 'H1' } }, data), D);
+    await rec('r_once', { every: 'once', next: '2026-09-15' });
+    await rec('r_fim', { every: 'month', next: '2026-09-01', end: '2026-09-30' });     // a renda do último mês do contrato
+    await rec('r_longe', { every: 'month', next: '2026-09-01', end: '2026-12-31' });
+    await rec('r_sem', { every: 'month', next: '2026-09-01' });
+    await rec('r_semnext', { every: 'month', end: '2026-09-30' });
+    const del = (id) => ({ op: 'del', scope: 'record', houseId: 'H1', kind: 'rec', id });
+    const frase = 'Só podes alterar ou apagar o que tu criaste neste imóvel.';
+    const r = await sync(env, C, [del('r_once'), del('r_fim'), del('r_longe'), del('r_sem'), del('r_semnext')]);
+    assert.deepEqual(r[0], { ok: true }, '«uma só vez»: confirmar é apagar');
+    assert.deepEqual(r[1], { ok: true }, 'o next seguinte (1 de outubro) passa o fim');
+    assert.equal(r[2].status, 403, 'ainda não termina');
+    assert.equal(r[2].error, frase);
+    assert.equal(r[3].status, 403, 'sem fim nunca termina');
+    assert.equal(r[4].status, 403, 'sem next legível não se sabe');
+    assert.equal((await linha(env, 'H1', 'rec', 'r_once')).deleted, 1);
+    assert.equal((await linha(env, 'H1', 'rec', 'r_fim')).deleted, 1);
+    for (const id of ['r_longe', 'r_sem', 'r_semnext']) assert.equal((await linha(env, 'H1', 'rec', id)).deleted, 0, id);
+    // a sequência do cliente na penúltima renda: confirma (put com o next avançado) e, na última, apaga
+    await rec('r_duas', { every: 'month', next: '2026-08-01', end: '2026-09-30' });
+    let s = await sync(env, C, [del('r_duas')]);
+    assert.equal(s[0].status, 403, 'ainda falta a de setembro');
+    s = await sync(env, C, [
+      { op: 'put', scope: 'record', houseId: 'H1', kind: 'rec', id: 'r_duas', data: { name: 'r_duas', every: 'month', next: '2026-09-01', end: '2026-09-30', tx: { kind: 'expense', amount: 1, propertyId: 'H1' } } },
+      del('r_duas'),
+    ]);
+    assert.deepEqual(s, [{ ok: true }, { ok: true }]);
+    assert.equal((await linha(env, 'H1', 'rec', 'r_duas')).deleted, 1);
+    // pela rota unitária, o mesmo
+    await rec('r_once2', { every: 'once', next: '2026-09-15' });
+    assert.equal((await resp(pedir(env, C, '/api/houses/H1/records/rec/r_once2', 'DELETE'))).status, 200);
+    assert.equal((await linha(env, 'H1', 'rec', 'r_once2')).deleted, 1);
+    const un = await resp(pedir(env, C, '/api/houses/H1/records/rec/r_longe', 'DELETE'));
+    assert.equal(un.status, 403);
+    assert.equal(un.error, frase);
+    // sem rec.add, nem o que termina
+    await darCargo(env, D, C, visitas, ['H1']);
+    await rec('r_once3', { every: 'once', next: '2026-09-15' });
+    s = await sync(env, C, [del('r_once3')]);
+    assert.equal(s[0].status, 403);
+    assert.equal(s[0].error, 'Sem permissão para adicionar planeados neste imóvel.');
+    assert.equal((await linha(env, 'H1', 'rec', 'r_once3')).deleted, 0);
   });
 });
 
@@ -668,6 +790,80 @@ describe('anexos por permissão', () => {
     f = await env.DB.prepare("SELECT record_kind, record_id FROM files WHERE id = 'f_t'").first();
     assert.equal(f.record_kind, 'tx');
     assert.equal(f.record_id, 'x1');
+  });
+
+  test('com file.add, um id de registo colidido não re-etiqueta o anexo (o tuplo completo conta)', async () => {
+    const { env, D, C } = await armar();
+    // tx.add e file.add, sem tenant.view nem loan.view
+    const txAnexos = await cargo(env, D, 'Movimentos e anexos', ['tx.add', 'file.add'], 'R_TXF');
+    await darCargo(env, D, C, txAnexos, ['H1']);
+    assert.equal(await ver(env, C, 'f_t'), 404);
+    assert.equal(await ver(env, C, 'f_l'), 404);
+    assert.ok(!(await estado(env, C)).records.some((x) => x.kind === 'tenant'), 'nem sabe que t1 existe — mas os ids circulam');
+    // um tx com o id da ficha do inquilino a referir o CC dela; outro com o id da casa a referir o documento da hipoteca
+    const r = await sync(env, C, [
+      { op: 'put', scope: 'record', houseId: 'H1', kind: 'tx', id: 't1', data: { label: 'r', files: [{ id: 'f_t' }] } },
+      { op: 'put', scope: 'record', houseId: 'H1', kind: 'tx', id: 'H1', data: { label: 'r', files: [{ id: 'f_l' }] } },
+    ]);
+    assert.ok(r.every((x) => x.ok), JSON.stringify(r));
+    const anexo = (id) => env.DB.prepare('SELECT house_id, record_kind, record_id FROM files WHERE id = ?').bind(id).first();
+    let f = await anexo('f_t');
+    assert.equal(f.record_kind, 'tenant');
+    assert.equal(f.record_id, 't1');
+    f = await anexo('f_l');
+    assert.equal(f.record_kind, 'house.loans');
+    assert.equal(f.record_id, 'H1');
+    assert.equal(await ver(env, C, 'f_t'), 404, 'o CC continua da ficha');
+    assert.equal(await ver(env, C, 'f_l'), 404, 'e o documento da hipoteca');
+    // pela rota unitária, o mesmo
+    assert.equal((await resp(pedir(env, C, '/api/houses/H1/records/tx/t1', 'PUT', { data: { label: 'r', files: [{ id: 'f_t' }] } }))).status, 200);
+    assert.equal((await anexo('f_t')).record_kind, 'tenant');
+    // o que já está preso a ESTE registo (posto pelo dono) e o que ele próprio carregou movem-se como sempre
+    await ficheiro(env, 'f_dono_tx', D, 'H1', 'tx', 't1');
+    await ficheiro(env, 'f_meu', C, null, null, null);
+    assert.deepEqual((await sync(env, C, [{ op: 'put', scope: 'record', houseId: 'H1', kind: 'tx', id: 't1', data: { label: 'r', files: [{ id: 'f_dono_tx' }, { id: 'f_meu' }] } }]))[0], { ok: true });
+    f = await anexo('f_meu');
+    assert.equal(f.house_id, 'H1');
+    assert.equal(f.record_kind, 'tx');
+    assert.equal(f.record_id, 't1');
+    assert.equal((await anexo('f_dono_tx')).record_id, 't1');
+  });
+
+  test('o dono e o comproprietário classificam os anexos antigos sem kind — de qualquer um dos dois', async () => {
+    const { env, D, P, C, vertudo } = await armar();
+    await ficheiro(env, 'f_nulo', D, 'H1', null, null);    // carregado pelo dono antes da 0014
+    await ficheiro(env, 'f_nuloP', P, 'H1', null, null);   // pelo comproprietário
+    await darCargo(env, D, C, vertudo, ['H1']);
+    assert.equal(await ver(env, C, 'f_nulo'), 404);
+    assert.equal(await ver(env, C, 'f_nuloP'), 404);
+    const anexo = (id) => env.DB.prepare('SELECT house_id, record_kind, record_id FROM files WHERE id = ?').bind(id).first();
+    // o comproprietário regrava o movimento do dono com os dois anexos
+    let r = await sync(env, P, [{ op: 'put', scope: 'record', houseId: 'H1', kind: 'tx', id: 'x1', data: { label: 'Renda', amount: 500, files: [{ id: 'f_nulo' }, { id: 'f_nuloP' }] } }]);
+    assert.deepEqual(r[0], { ok: true });
+    for (const id of ['f_nulo', 'f_nuloP']) {
+      const f = await anexo(id);
+      assert.equal(f.record_kind, 'tx', id);
+      assert.equal(f.record_id, 'x1', id);
+      assert.equal(await ver(env, C, id), 200, id + ' com «Ver tudo»');
+    }
+    // e o dono classifica o que o comproprietário carregou
+    await ficheiro(env, 'f_nuloP2', P, 'H1', null, null);
+    r = await sync(env, D, [{ op: 'put', scope: 'record', houseId: 'H1', kind: 'tenant', id: 't1', data: { name: 'Inês', files: [{ id: 'f_t' }, { id: 'f_nuloP2' }] } }]);
+    assert.deepEqual(r[0], { ok: true });
+    const f = await anexo('f_nuloP2');
+    assert.equal(f.record_kind, 'tenant');
+    assert.equal(f.record_id, 't1');
+    // pela rota unitária (o comproprietário) também
+    await ficheiro(env, 'f_nulo3', D, 'H1', null, null);
+    assert.equal((await resp(pedir(env, P, '/api/houses/H1/records/tx/x1', 'PUT', { data: { label: 'Renda', files: [{ id: 'f_nulo3' }] } }))).status, 200);
+    assert.equal((await anexo('f_nulo3')).record_kind, 'tx');
+    // mas um anexo de outra casa fica onde está, também para o dono
+    const X = await conta(env, 'Outra');
+    await casa(env, X, 'H3', { name: 'Da X' });
+    await ficheiro(env, 'f_x', X, 'H3', 'tx', 'tx1');
+    await sync(env, D, [{ op: 'put', scope: 'record', houseId: 'H1', kind: 'tx', id: 'x1', data: { label: 'Renda', files: [{ id: 'f_x' }] } }]);
+    assert.equal((await anexo('f_x')).house_id, 'H3');
+    assert.equal(await ver(env, D, 'f_x'), 404);
   });
 
   test('juntar anexos a um registo exige file.add — também pelo caminho do anexo solto', async () => {
