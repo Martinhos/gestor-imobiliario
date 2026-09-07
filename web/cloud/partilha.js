@@ -327,25 +327,11 @@ function vColaboradores() {
   return intro + convidarCard() + gap + colaboradoresCard() + gap + cargosCard() + (colab ? gap + colab : '');
 }
 
-/* A linha que leva de «Conta e partilha» ao separador «Colaboradores»: o
-   feitio das linhas de navegação das Definições, mas para um separador do
-   menu — daí o go() em vez do goSet() do navRow.
-   Devolve: o HTML da linha (texto). */
-function colabRow() {
-  var nc = (CW.state.collaborators || []).length, nr = (CW.state.roles || []).length;
-  var sub = nc
-    ? nc + (nc === 1 ? ' colaborador' : ' colaboradores') + ' · ' + nr + (nr === 1 ? ' cargo' : ' cargos')
-    : 'Quem ajuda a gerir, e com que cargo';
-  return '<div class="card tap" onclick="go(\'colaboradores\')" style="display:flex;align-items:center;gap:13px">' +
-    '<span class="avatar">' + ic('users', 18) + '</span>' +
-    '<span style="flex:1;min-width:0"><b style="display:block">Colaboradores</b><span class="small">' + esc(sub) + '</span></span>' +
-    '<span style="color:var(--muted);transform:rotate(180deg)">' + ic('chev', 18) + '</span></div>';
-}
-
 // O HTML da página "Conta e partilha": a conta e o id para dar a outros, a
 // ligação de partilha e os pedidos, o campo para adicionar uma ligação, a
-// lista de utilizadores ligados, a linha para o separador dos colaboradores,
-// a segurança e o apagar da conta. Sem sessão iniciada, mostra apenas o
+// lista de utilizadores ligados, a segurança e o apagar da conta. Os
+// colaboradores vivem no menu (Pessoas → Colaboradores) e não têm aqui
+// segunda porta. Sem sessão iniciada, mostra apenas o
 // convite para entrar.
 // Devolve: string de HTML da página, pronta a inserir com innerHTML.
 function vCloud() {
@@ -382,7 +368,6 @@ function vCloud() {
     '<div class="toolbar" style="margin-top:11px"><button class="btn danger" onclick="CW.deleteAccount()">' +
     ic('trash', 15) + ' Apagar a minha conta</button></div>');
   return acc + gap + ligacaoCard() + (pedidos ? gap + pedidos : '') + gap + add + gap + list +
-    '<div style="height:18px"></div>' + colabRow() +
     '<div style="height:18px"></div>' + seg + gap + danger;
 }
 
