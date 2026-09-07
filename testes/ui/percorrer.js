@@ -67,22 +67,31 @@ const CENAS = [
     nome: 'selecao-de-movimentos',
     fazer: `go('transactions'); render();
       const l=document.querySelector('#view .txrow');
-      if(l) CW.selEntrar(l.getAttribute('data-lp').replace('tx:',''));`,
+      if(!l) throw new Error('a vista dos Movimentos não tem linhas: a cena não prova nada');
+      CW.selEntrar(l.getAttribute('data-lp').replace('tx:',''));`,
   },
   {
-    /* O caso que nenhum teste apanhava: repintar com a seleção ligada. As
-       decorações das linhas são escritas pela camada da nuvem, e uma
-       repintura que as perca não dá erro nenhum — só deixa de haver caixas. */
-    nome: 'selecao-depois-de-repintar',
+    /* Marcar várias e repintar por OUTRO caminho que não o de entrar em
+       seleção. O selToggle só repinta as marcas (selPintar), sem regerar
+       linha nenhuma; o render a seguir regera-as todas, e as marcas têm de lá
+       estar à mesma. Uma cena que apenas entrasse em seleção não provava
+       nada: o CW.selEntrar já repinta por dentro. */
+    nome: 'selecao-marcada-sobrevive-a-repintura',
     fazer: `go('transactions'); render();
-      const l=document.querySelector('#view .txrow');
-      if(l){ CW.selEntrar(l.getAttribute('data-tx')); render(); }`,
+      const ls=[...document.querySelectorAll('#view .txrow')];
+      if(ls.length<3) throw new Error('sem movimentos que cheguem para marcar (' + ls.length + ')');
+      CW.selEntrar(ls[0].getAttribute('data-tx'));
+      [...document.querySelectorAll('#view .txrow')].slice(1,3)
+        .forEach(l=>CW.selToggle(l.getAttribute('data-tx')));
+      txDir = txDir==='desc' ? 'asc' : 'desc';   // uma repintura que não vem da seleção
+      render();`,
   },
   {
     nome: 'selecao-com-tudo-marcado',
     fazer: `go('transactions'); render();
       const l=document.querySelector('#view .txrow');
-      if(l){ CW.selEntrar(l.getAttribute('data-lp').replace('tx:','')); CW.selTodos(); }`,
+      if(!l) throw new Error('a vista dos Movimentos não tem linhas: a cena não prova nada');
+      CW.selEntrar(l.getAttribute('data-lp').replace('tx:','')); CW.selTodos();`,
   },
 ];
 
@@ -199,12 +208,18 @@ async function confirmar(pagina, onde) {
     // o db é declarado com let: existe no âmbito global mas não em window.db,
     // e olhar para window.db dava sempre "sem dados"
     imoveis: (typeof db !== 'undefined' && db.properties) ? db.properties.length : -1,
+    /* nos Movimentos, uma lista vazia desliga em silêncio a regra das linhas
+       (invariantes.js) e as cenas de seleção: passa a haver verde sem haver
+       verificação nenhuma */
+    movimentos: (typeof tab !== 'undefined' && tab === 'transactions')
+      ? document.querySelectorAll('#view .txrow').length : -1,
   })`);
   const mal = [];
   if (!e.sessao) mal.push('sem sessão');
   if (e.entrada) mal.push('ecrã de entrada à frente');
   if (!e.vista) mal.push('vista vazia');
   if (e.imoveis <= 0) mal.push('sem dados de exemplo');
+  if (e.movimentos === 0) mal.push('nos Movimentos sem uma única linha');
   if (mal.length) throw new Error('estado inválido em "' + onde + '": ' + mal.join(', '));
 }
 

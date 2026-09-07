@@ -946,6 +946,11 @@ let txLinhasPintadas=0;
    nenhuma repintura parcial podia ser segura: quem repintasse uma linha
    sozinha nascia sem as decorações e ninguém dava por isso.
 
+   ATENÇÃO ao attrs: não pode trazer um style. O template já escreve o seu, e
+   com dois atributos iguais o parser fica com o PRIMEIRO — por isso o attrs
+   entra depois, para que um style que venha por engano seja ignorado em vez
+   de apagar o do template. Quem precisar mesmo de estilo, use uma classe.
+
    Recebe: t — o movimento desta linha; mes — o 'AAAA-MM' do bloco onde entra.
    Devolve: {attrs,cls,onclick,caixa,acoes} — attrs são atributos extra da
    linha, cls classes extra, onclick substitui o da linha se não for vazio,
@@ -953,6 +958,8 @@ let txLinhasPintadas=0;
    direita. Tudo opcional; o vazio devolve um objeto sem nada. */
 function txLinhaExtra(t,mes){return {}}
 /* O mesmo para o título de um mês, que em modo de seleção ganha caixa própria.
+   Vale aqui o mesmo aviso do attrs sem style — e aqui doía mais, porque o
+   style do título é o display:flex que põe o saldo do mês à direita.
    Recebe: mes — o mês em 'AAAA-MM'.
    Devolve: {attrs,cls,caixa} — atributos e classes extra do título, e HTML a
    colar antes do nome do mês. Tudo opcional. */
@@ -1008,11 +1015,11 @@ function vTransactions(){
   return head+resumo+balancesCard(txProp||null)+creditorsCard(txProp&&txProp!=='__none__'?txProp:null)+Object.keys(by).map(mo=>{
     const rows=by[mo],net=sum(rows.map(t=>!countsInTotals(t)?0:isIn(t.kind)?t.amount:(isOut(t.kind)?-t.amount:0)));
     const xm=txMesExtra(mo)||{};
-    return `<div class="section-title${xm.cls?' '+xm.cls:''}" ${xm.attrs||''} style="display:flex;justify-content:space-between;text-transform:none">
+    return `<div class="section-title${xm.cls?' '+xm.cls:''}" style="display:flex;justify-content:space-between;text-transform:none" ${xm.attrs||''}>
       ${xm.caixa||''}<span>${mo}</span><span class="${net>=0?'pos':'neg'}">${euro(net)}</span></div>
       <div class="list">${rows.map(t=>{const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null;
       const x=txLinhaExtra(t,mo)||{};
-      return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" ${x.attrs||''} style="padding:13px 15px" onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
+      return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
         ${x.caixa||''}<div style="min-width:0"><div class="title" style="font-size:14.5px">${esc(t.label)}</div>
           <div class="small">${esc(t.date)} · ${k.short}${t.category?' · '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' · '+esc(propName(t.propertyId)):''}${t.creditor?' · '+esc(t.creditor):''}</div>
           ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}
