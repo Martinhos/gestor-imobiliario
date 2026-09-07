@@ -78,7 +78,7 @@ describe('o contrato, em texto', () => {
       'Como dou acesso a um gestor sem o tornar comproprietário?', 'function vColaboradores()']) {
       assert.ok(s.includes(t), 'texto: ' + t);
     }
-    assert.match(s, /go\(\\?'colaboradores\\?'\)/, 'a linha de Conta e partilha vai para o separador');
+    assert.ok(!/function colabRow/.test(s), 'Conta e partilha não tem porta própria para os colaboradores: vivem no menu');
     const sub = /SUBPAGE\.cloud = .*/.exec(s)[0];
     assert.ok(!/colaborador/i.test(sub), 'o subtítulo de Conta e partilha já não fala em colaboradores: ' + sub);
   });
@@ -390,16 +390,17 @@ describe('antes do primeiro sync', () => {
 });
 
 describe('a página Conta e partilha', () => {
-  test('vCloud fica com a partilha entre proprietários e uma linha para os colaboradores', () => {
+  test('vCloud fica só com a partilha entre proprietários', () => {
     const app = comEstado();
     const h = app.vCloud();
     for (const t of ['A minha conta', 'A minha ligação de partilha', 'Pedidos de partilha', 'Ana quer partilhar T2 Porto contigo',
       'Ligar a outro utilizador', 'Ainda não estás ligado a ninguém.', 'Pedidos chegados por aqui', 'CW.ligacaoRodar()',
-      "go('colaboradores')", 'Colaboradores', '1 colaborador · 1 cargo', 'Segurança', 'Apagar a conta']) {
+      'Segurança', 'Apagar a conta']) {
       assert.ok(h.includes(t), 'a página tem: ' + t);
     }
     for (const t of ['Convidar colaborador', 'cw_inv_h_H1', 'Convites por usar', 'Novo cargo', 'O que cada colaborador pode fazer',
-      'Mudar cargo ou imóveis', 'Imóveis onde colaboras', "CW.sairDeImovel('C9')"]) {
+      'Mudar cargo ou imóveis', 'Imóveis onde colaboras', "CW.sairDeImovel('C9')",
+      "go('colaboradores')", 'Colaboradores']) {
       assert.ok(!h.includes(t), 'os cartões dos colaboradores saíram daqui: ' + t);
     }
   });
