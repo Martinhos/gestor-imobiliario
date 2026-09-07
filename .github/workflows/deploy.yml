@@ -126,6 +126,76 @@ jobs:
       - name: Deploy do worker
         run: npx wrangler@4 deploy $ENV_FLAG
 
+      # Os avisos de cada ambiente têm de ir para o servidor de Discord desse
+      # ambiente. Os nomes enganam: DISCORD_DEV_* é o canal de quem programa,
+      # e o sufixo _DEV é o ambiente de dev — um webhook ou canal trocado punha
+      # os erros de produção no Discord de dev sem ninguém dar por isso. Antes
+      # de publicar os segredos, cada webhook e cada canal é resolvido no
+      # Discord e comparado com o servidor esperado (DISCORD_GUILD_ID, ou
+      # DISCORD_GUILD_ID_DEV em dev); um cruzamento recusa o deploy.
+      - name: Conferir o destino dos avisos
+        env:
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          DISCORD_GUILD_ID_DEV: ${{ secrets.DISCORD_GUILD_ID_DEV }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_BOT_TOKEN_DEV: ${{ secrets.DISCORD_BOT_TOKEN_DEV }}
+          DISCORD_DEV_WEBHOOK: ${{ secrets.DISCORD_DEV_WEBHOOK }}
+          DISCORD_DEV_WEBHOOK_DEV: ${{ secrets.DISCORD_DEV_WEBHOOK_DEV }}
+          DISCORD_SUPORTE_WEBHOOK: ${{ secrets.DISCORD_SUPORTE_WEBHOOK }}
+          DISCORD_SUPORTE_WEBHOOK_DEV: ${{ secrets.DISCORD_SUPORTE_WEBHOOK_DEV }}
+          DISCORD_ADMIN_WEBHOOK: ${{ secrets.DISCORD_ADMIN_WEBHOOK }}
+          DISCORD_DEV_CHANNEL: ${{ secrets.DISCORD_DEV_CHANNEL }}
+          DISCORD_DEV_CHANNEL_DEV: ${{ secrets.DISCORD_DEV_CHANNEL_DEV }}
+          DISCORD_SUPORTE_CHANNEL: ${{ secrets.DISCORD_SUPORTE_CHANNEL }}
+          DISCORD_SUPORTE_CHANNEL_DEV: ${{ secrets.DISCORD_SUPORTE_CHANNEL_DEV }}
+          DISCORD_ADMIN_CHANNEL: ${{ secrets.DISCORD_ADMIN_CHANNEL }}
+        run: |
+          set -e
+          # o mesmo critério do passo seguinte: em dev, o _DEV do mesmo nome manda
+          escolhe () {
+            nome="$1"; valor="$2"
+            if [ -z "$IS_PROD" ]; then
+              eval "alt=\"\${${nome}_DEV:-}\""
+              if [ -n "$alt" ]; then valor="$alt"; fi
+            fi
+            printf '%s' "$valor"
+          }
+          GUILD=$(escolhe DISCORD_GUILD_ID "$DISCORD_GUILD_ID")
+          TOKEN=$(escolhe DISCORD_BOT_TOKEN "$DISCORD_BOT_TOKEN")
+          if [ -z "$GUILD" ]; then echo "sem DISCORD_GUILD_ID para $ENV_LABEL: não dá para conferir o destino dos avisos"; exit 0; fi
+          falhas=0
+          # lê guild_id, channel_id e name de uma resposta JSON do Discord
+          campo () { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const o=JSON.parse(s);console.log(String(o['$1']||''))}catch(e){console.log('')}})"; }
+          confere () {
+            rotulo="$1"; guild="$2"; nome="$3"
+            if [ -z "$guild" ]; then echo "$rotulo: o Discord não respondeu (URL ou id inválidos?)"; return; fi
+            if [ "$guild" = "$GUILD" ]; then echo "$rotulo → servidor $GUILD · #$nome ✓"
+            else echo "::error::$rotulo aponta para o servidor $guild (#$nome), mas este deploy é de $ENV_LABEL (servidor $GUILD)"; falhas=$((falhas+1)); fi
+          }
+          webhook () {
+            url=$(escolhe "$1" "$2"); [ -n "$url" ] || { echo "$1: sem valor"; return; }
+            resp=$(curl -s --max-time 15 "$url" || true)
+            confere "$1" "$(printf '%s' "$resp" | campo guild_id)" "$(printf '%s' "$resp" | campo name)"
+          }
+          canal () {
+            id=$(escolhe "$1" "$2"); [ -n "$id" ] || { echo "$1: sem valor"; return; }
+            [ -n "$TOKEN" ] || { echo "$1: sem token do bot para conferir"; return; }
+            resp=$(curl -s --max-time 15 -H "Authorization: Bot $TOKEN" "https://discord.com/api/v10/channels/$id" || true)
+            confere "$1" "$(printf '%s' "$resp" | campo guild_id)" "$(printf '%s' "$resp" | campo name)"
+          }
+          webhook DISCORD_DEV_WEBHOOK "$DISCORD_DEV_WEBHOOK"
+          webhook DISCORD_SUPORTE_WEBHOOK "$DISCORD_SUPORTE_WEBHOOK"
+          canal DISCORD_DEV_CHANNEL "$DISCORD_DEV_CHANNEL"
+          canal DISCORD_SUPORTE_CHANNEL "$DISCORD_SUPORTE_CHANNEL"
+          if [ -n "$IS_PROD" ]; then
+            webhook DISCORD_ADMIN_WEBHOOK "$DISCORD_ADMIN_WEBHOOK"
+            canal DISCORD_ADMIN_CHANNEL "$DISCORD_ADMIN_CHANNEL"
+          fi
+          if [ "$falhas" -gt 0 ]; then
+            echo "::error::$falhas destino(s) de avisos apontam para o servidor errado — corrige os segredos (lembra-te: DISCORD_DEV_* é o canal de quem programa; o sufixo _DEV é o ambiente de dev)"
+            exit 1
+          fi
+
       # Segredos dos avisos. Só se define o que existir — quem não tiver
       # Discord configurado fica sem avisos, e a app funciona à mesma.
       - name: Publicar segredos
