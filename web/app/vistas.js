@@ -637,12 +637,19 @@ function txMatch(t){
   if(txAte&&t.date>txAte)return false;
   return true;
 }
+/* O nome de um tipo de movimento para os resumos de filtro. O 'debt' não é um
+   tipo de movimento — é o pseudo-tipo do filtro que junta as duas dívidas —,
+   por isso não está no KIND, e sem isto aparecia o código cru ao utilizador.
+   Recebe: k — o tipo do filtro ('income', 'owed', 'debt'…).
+   Devolve: o nome a mostrar (texto); o próprio código, se for um desconhecido. */
+function nomeDoTipo(k){return (KIND[k]||{}).short||({debt:'Dívidas'})[k]||k}
+
 // descreve os filtros ativos numa linha legível, para o topo da lista e do modal
 // Devolve: string (já escapada para HTML) com os filtros ativos; vazia sem filtros.
 function filterSummary(){
   const p=[];
   if(txDe||txAte)p.push(txDe&&txAte?txDe+' → '+txAte:txDe?'desde '+txDe:'até '+txAte);
-  if(txFilter)p.push((KIND[txFilter]||{}).short||txFilter);
+  if(txFilter)p.push(nomeDoTipo(txFilter));
   if(txProp==='__none__')p.push('sem imóvel');
   else if(String(txProp||'').startsWith('g:'))p.push('grupo '+((grp(txProp.slice(2))||{}).name||''));
   else if(txProp)p.push(propName(txProp));

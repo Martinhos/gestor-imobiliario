@@ -373,8 +373,21 @@ function comEstado(muda) {
   if (muda) muda(st);
   app.db = app.rebuildDb(st);
   app.CW.state = st;
+  app.CW._pulled = 1;   // como depois de um applyState: o que estiver vazio está mesmo vazio
   return app;
 }
+
+describe('antes do primeiro sync', () => {
+  test('o separador não diz «ainda não tens» a quem só ainda não sincronizou', () => {
+    const app = comEstado((st) => { st.roles = []; st.collaborators = []; st.invites = []; });
+    app.CW._pulled = 0;   // arranque sem rede: o estado do servidor ainda não chegou
+    const html = app.vColaboradores();
+    assert.match(html, /À espera do servidor/);
+    assert.doesNotMatch(html, /Ainda não tens colaboradores/, 'não mente a quem pode ter');
+    app.CW._pulled = 1;
+    assert.match(app.vColaboradores(), /Ainda não tens colaboradores/, 'depois do sync, o vazio é verdade');
+  });
+});
 
 describe('a página Conta e partilha', () => {
   test('vCloud fica com a partilha entre proprietários e uma linha para os colaboradores', () => {

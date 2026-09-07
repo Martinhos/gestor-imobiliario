@@ -29,7 +29,11 @@ function dayInMonth(y,m,d){const last=new Date(y,m+1,0).getDate();return `${y}-$
 /* Mantém a recorrência automática da renda de um contrato: cria-a, atualiza-a
    ou remove-a conforme o contrato esteja ativo, com renda e com o automático
    ligado (autoRec). A janela payDay..payDayTo dá as datas; rendas antecipadas
-   adiam a primeira ocorrência. Mexe em db.recurring — quem chama grava.
+   adiam a primeira ocorrência. A atualização passa pelo aplicaPlanoNaRec, o
+   mesmo das prestações: despejar o modelo inteiro por cima apagava a divisão
+   entre proprietários que o utilizador tinha dado à renda (o modelo traz
+   split:null) e a categoria escolhida à mão. Mexe em db.recurring — quem
+   chama grava.
    Recebe: c — o contrato a sincronizar (objeto de db.contracts).
    Devolve: nada — mexe em db.recurring; quem chama grava. */
 function syncContractRec(c){
@@ -41,7 +45,7 @@ function syncContractRec(c){
   /* rendas antecipadas: a primeira ocorrência só aparece depois desses meses */
   let minNext='';
   if(c.start&&c.advance>0){const d=new Date(c.start+'T00:00:00');let y2=d.getFullYear(),m2=d.getMonth()+c.advance;y2+=Math.floor(m2/12);m2%=12;minNext=dayInMonth(y2,m2,from)}
-  if(r){Object.assign(r.tx,tx);r.name='Renda '+ctName(c);r.end=c.end||'';
+  if(r){aplicaPlanoNaRec(r,tx,tx.label);r.end=c.end||'';
     /* se os dias da janela mudarem no contrato, a janela acompanha (mantendo o mês em curso) */
     if(r.next){const d=new Date(r.next+'T00:00:00');r.next=dayInMonth(d.getFullYear(),d.getMonth(),from);r.until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
     if(minNext&&r.next<minNext){const d=new Date(minNext+'T00:00:00');r.next=minNext;r.until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
@@ -55,7 +59,7 @@ function syncContractRec(c){
     next=dayInMonth(y2,m2,from);until=to>from?dayInMonth(y2,m2,to):'';}
   if(minNext&&next<minNext){const d=new Date(minNext+'T00:00:00');next=minNext;until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
   db.recurring=db.recurring||[];
-  db.recurring.push(normRec({auto:true,name:'Renda '+ctName(c),every:'month',next,until,end:c.end||'',tx}));
+  db.recurring.push(normRec({auto:true,name:tx.label,autoName:tx.label,every:'month',next,until,end:c.end||'',tx}));
 }
 /* Varre as recorrências automáticas de contratos: apaga as órfãs (o contrato
    já não existe) e sincroniza cada contrato com syncContractRec. Uma
@@ -80,8 +84,10 @@ function loanRecOf(l){return (db.recurring||[]).find(r=>r.auto&&r.tx&&r.tx.loanI
    Devolve: nada — mexe em db.recurring; quem chama grava. */
 function syncLoanRec(p,l){
   const r=loanRecOf(l);
-  /* se o utilizador já tem uma recorrência manual para esta hipoteca, não se duplica */
-  const manual=(db.recurring||[]).some(x=>!x.auto&&x.tx&&x.tx.loanId===l.id);
+  /* se o utilizador já tem uma recorrência manual para esta prestação, não se duplica —
+     um planeado da hipoteca que não é a prestação (o seguro de vida, uma amortização)
+     não pode calar a automática, ou o utilizador deixava de ser lembrado dela */
+  const manual=(db.recurring||[]).some(x=>!x.auto&&x.tx&&x.tx.loanId===l.id&&ehPrestacaoDe(x,l));
   const want=l.outstanding>0&&l.autoRec!==false&&!manual;
   if(!want){if(r)db.recurring=db.recurring.filter(x=>x.id!==r.id);return}
   const day=(()=>{const d=l.start?Number(l.start.slice(8,10)):0;return Math.max(1,Math.min(28,d||1))})();
@@ -94,20 +100,21 @@ function syncLoanRec(p,l){
   db.recurring=db.recurring||[];
   db.recurring.push(normRec({auto:true,name,autoName:name,every:'month',next:dayInMonth(y,m,day),tx}));
 }
-/* Passa para uma prestação planeada que já existe só o que é do plano — tipo,
-   montante, imóvel e hipoteca — mais a categoria enquanto ela estiver vazia.
-   O que é do utilizador (quem paga, a divisão, as etiquetas, os comentários)
-   fica como está: o sync despejava o modelo inteiro por cima com
-   Object.assign e apagava a divisão a cada arranque. O nome só se refresca
-   enquanto for o automático — autoName guarda o último que a app escreveu, e
-   uma recorrência antiga (sem autoName) conta como automática, que é como se
-   comportava até aqui.
-   Recebe: r — a prestação planeada já existente (objeto de db.recurring);
-   tx — o modelo do loanRecTx; name — o nome automático correspondente.
+/* Passa para um planeado automático que já existe só o que é do plano — tipo,
+   montante, imóvel e a origem (hipoteca ou contrato) — mais a categoria
+   enquanto ela estiver vazia. O que é do utilizador (quem paga, a divisão, as
+   etiquetas, os comentários) fica como está: o sync despejava o modelo inteiro
+   por cima com Object.assign e apagava a divisão a cada arranque. O nome só se
+   refresca enquanto for o automático — autoName guarda o último que a app
+   escreveu, e uma recorrência antiga (sem autoName) conta como automática, que
+   é como se comportava até aqui. Serve as prestações e as rendas: cada modelo
+   só traz a sua origem (loanId ou contractId), a outra fica intocada.
+   Recebe: r — o planeado já existente (objeto de db.recurring); tx — o modelo
+   do loanRecTx ou o da renda do contrato; name — o nome automático correspondente.
    Devolve: nada — altera r; quem chama grava. */
 function aplicaPlanoNaRec(r,tx,name){
   const t=r.tx;
-  ['kind','amount','propertyId','loanId'].forEach(k=>{if(tx[k]!==undefined)t[k]=tx[k]});
+  ['kind','amount','propertyId','loanId','contractId'].forEach(k=>{if(tx[k]!==undefined)t[k]=tx[k]});
   if(!t.category){t.category=tx.category;t.sub=tx.sub}
   if(r.autoName===undefined||r.autoName===r.name){t.label=name;r.name=name;r.autoName=name}
 }
@@ -120,21 +127,44 @@ function syncAllLoanRecs(){
   repararRecsSemCredito();
   db.properties.forEach(p=>(p.loans||[]).forEach(l=>syncLoanRec(p,l)));
 }
+/* Este planeado é mesmo a prestação mensal da hipoteca l? Um pagamento de
+   crédito mensal, que não é amortização antecipada, com um montante da ordem
+   da prestação calculada. A banda é larga de propósito — de metade ao dobro
+   de loanCalc(l).total: a prestação muda ao longo da vida do crédito (a
+   Euribor sobe e desce, a mista salta de fase, o prazo restante encurta), por
+   isso uma tolerância ao cêntimo rejeitava prestações verdadeiras; mas um
+   seguro de vida ou uma amortização anual estão a uma ordem de grandeza de
+   distância e ficam de fora. Errar por defeito custa um planeado a mais
+   (o automático nasce ao lado do do utilizador); errar por excesso custa a
+   prestação toda — deixa de ser pedida e o que se confirma conta como
+   prestação paga, encurtando o prazo. Daí a mão pesada.
+   Recebe: r — o planeado ({every, tx}); l — a hipoteca.
+   Devolve: true quando o planeado é a prestação mensal daquela hipoteca. */
+function ehPrestacaoDe(r,l){
+  const tx=(r||{}).tx||{};
+  if(tx.kind!=='loan'||tx.payType==='amortizacao'||(r||{}).every!=='month')return false;
+  const alvo=loanCalc(l).total,a=Number(tx.amount)||0;
+  return alvo>0&&a>=alvo/2&&a<=alvo*2;
+}
 /* Reparação no arranque: as prestações planeadas que ficaram sem crédito —
    criadas à mão antes de a hipoteca existir, ou vindas de uma versão que não
    as ligava — ganham a hipoteca do imóvel quando ela é uma só e está viva.
    Sem isto o movimento nascia sem crédito e não abatia capital nenhum, e o
    imóvel ficava com dois planeados para a mesma prestação (o do utilizador e
    o automático, que só se apaga a si próprio quando reconhece o do
-   utilizador). Com duas ou mais hipotecas não se adivinha: fica por escolher
-   e as listas avisam. Corre antes de sincronizar as hipotecas, para o
-   automático já ver o planeado reparado e não duplicar.
+   utilizador). Só se repara o que é mesmo a prestação mensal (ehPrestacaoDe):
+   ligar o «Seguro de vida do crédito» ou uma amortização anual à hipoteca
+   calava a prestação automática e fazia contar como prestação paga o que não
+   é. Com duas ou mais hipotecas não se adivinha: fica por escolher e as listas
+   avisam. Corre antes de sincronizar as hipotecas, para o automático já ver o
+   planeado reparado e não duplicar.
    Devolve: nada — mexe em db.recurring; quem chama grava. */
 function repararRecsSemCredito(){
   (db.recurring||[]).forEach(r=>{
     const tx=r.tx||{};
     if(tx.kind!=='loan'||tx.loanId)return;
-    const id=recLoanId(r);if(id)tx.loanId=id;
+    const id=recLoanId(r),x=id?anyLoan(id):null;
+    if(x&&ehPrestacaoDe(r,x.l))tx.loanId=id;
   });
 }
 /* O movimento-modelo da prestação da hipoteca l do imóvel p — o que a
@@ -300,12 +330,16 @@ function recTermina(r){
   if(r.every==='once')return true;
   return !!(r.end&&r.next&&nextDate(r.next,r.every)>r.end);
 }
-/* O crédito de uma prestação planeada (ou de um modelo): o que ela traz, e
-   quando não traz nenhum — ou traz um que já não é deste imóvel — a única
-   hipoteca viva do imóvel. É a mesma regra do prefill do formulário, aqui em
-   função pura para o recTx e o confirmRec não discordarem: até agora, abrir o
-   planeado associava a hipoteca e o botão «Confirmar» do cartão não, e o
-   movimento saía sem crédito e sem abater capital. Com duas ou mais vivas não
+/* O crédito de uma prestação planeada (ou de um modelo): o que ela traz e,
+   só quando não traz nenhum, a única hipoteca viva do imóvel. É a mesma regra
+   do prefill do formulário, aqui em função pura para o recTx e o confirmRec
+   não discordarem: até agora, abrir o planeado associava a hipoteca e o botão
+   «Confirmar» do cartão não, e o movimento saía sem crédito e sem abater
+   capital. Um planeado que traz uma hipoteca que já não existe naquele imóvel
+   (apagada, ou de outro imóvel) devolve null em vez de cair na única viva:
+   abater capital numa hipoteca que o utilizador nunca escolheu era pior do
+   que pedir-lhe que escolha — é o que o recSemCredito passa a assinalar. Com
+   duas ou mais vivas, ou depois de a hipoteca ter sido apagada (loanOff), não
    se adivinha nenhuma.
    Recebe: r — a prestação planeada ou o modelo ({tx:{kind,propertyId,loanId}}).
    Devolve: o id da hipoteca (texto), ou null quando não há nenhuma sem dúvida. */
@@ -314,19 +348,35 @@ function recLoanId(r){
   if(tx.kind!=='loan')return null;
   const p=prop(tx.propertyId);
   if(!p)return tx.loanId||null;
-  if(tx.loanId&&findLoan(p,tx.loanId))return tx.loanId;
+  if(tx.loanId)return findLoan(p,tx.loanId)?tx.loanId:null;
+  if((r||{}).loanOff)return null;   /* o delMort desligou-o: não se adivinha outra por ele */
   const ls=liveLoans(p);
   return ls.length===1?ls[0].id:null;
 }
-/* Falta escolher o crédito neste planeado? É a prestação de um imóvel com
-   mais do que uma hipoteca viva e sem nenhuma escolhida: ninguém pode
-   adivinhar qual delas, e confirmar às cegas dava um movimento sem crédito.
+/* Falta escolher o crédito neste planeado? É um pagamento de crédito sem
+   hipoteca que se possa apontar sem dúvida (recLoanId) e onde havia por onde
+   escolher: um imóvel com mais do que uma hipoteca viva, um planeado que
+   aponta para uma hipoteca que já não é daquele imóvel, ou um que ficou
+   desligado por a hipoteca ter sido apagada. Confirmar às cegas dava um
+   movimento sem crédito — ou, pior, capital abatido na hipoteca errada.
    Recebe: r — a prestação planeada.
    Devolve: true quando falta escolher a hipoteca. */
 function recSemCredito(r){
   const tx=(r||{}).tx||{};
   if(tx.kind!=='loan'||recLoanId(r))return false;
-  return liveLoans(prop(tx.propertyId)).length>1;
+  return !!tx.loanId||!!(r||{}).loanOff||liveLoans(prop(tx.propertyId)).length>1;
+}
+/* A hipoteca deste planeado já está liquidada? O formulário recusa gravar um
+   pagamento novo numa hipoteca paga (movimento.js), mas o findLoan encontra-a
+   com o capital a 0 e o botão «Confirmar» do cartão registava-o em silêncio —
+   sem abater nada e a contar como prestação paga, o que encurtava o prazo de
+   um crédito já pago. Os dois caminhos passam a dizer o mesmo.
+   Recebe: r — a prestação planeada.
+   Devolve: true quando o planeado aponta para uma hipoteca sem capital em dívida. */
+function recCreditoPago(r){
+  const id=recLoanId(r);if(!id)return false;
+  const x=anyLoan(id);
+  return !!x&&!(Number(x.l.outstanding)>0);
 }
 // Movimento normalizado a partir do tx da recorrência, datado de 'date' (ou da
 // data prevista). Numa prestação, o crédito vem do recLoanId — quem paga e a
@@ -347,6 +397,8 @@ function quickConfirmRec(id){
   const recusa=recusaConfirmar(r);if(recusa)return toast(recusa);
   /* sem saber a que hipoteca abate, o movimento saía sem crédito: abre-se para escolher */
   if(recSemCredito(r))return toast('Sem crédito associado — abre o planeado para escolher a hipoteca.');
+  /* a mesma frase do formulário: confirmar depressa não pode aceitar o que o Guardar recusa */
+  if(recCreditoPago(r))return toast('Esta hipoteca já está paga: não é possível associar novos pagamentos.');
   const t=recTx(r);if(t.kind==='loan')applyLoan(t);
   db.transactions.push(t);recAdvance(r);save();buildNav();render();toast('Movimento confirmado.');
 }
@@ -472,13 +524,14 @@ function pendingCard(all){
   pendAll=!!all;   // para o colapso se redesenhar com a mesma lista
   const pend=all?recPending():recActive();
   if(!pend.length)return '';
-  const row=(r)=>{const late=recIsLate(r),semCred=recSemCredito(r);return `<div class="card tap pend ${late?'late':''}" style="padding:11px 13px" onclick="confirmRec('${r.id}')">
+  const row=(r)=>{const late=recIsLate(r),semCred=recSemCredito(r),pago=!semCred&&recCreditoPago(r);return `<div class="card tap pend ${late?'late':''}" style="padding:11px 13px" onclick="confirmRec('${r.id}')">
     <div class="row-between" style="align-items:center">
       <div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</b>
         <span class="small">${esc(r.next)}${r.until&&r.until!==r.next?' – '+esc(r.until):''}${EVERY[r.every]?' · '+esc(EVERY[r.every]):''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':''} · ${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}</span>
-        ${semCred?'<span class="small"><b class="amber">Sem crédito associado — abre para escolher</b></span>':''}</div>
+        ${semCred?'<span class="small"><b class="amber">Sem crédito associado — abre para escolher</b></span>':''}
+        ${pago?'<span class="small"><b class="amber">Hipoteca já paga — abre para rever</b></span>':''}</div>
       <b style="flex:0 0 auto">${r.tx.amount?euro2(r.tx.amount):''}</b></div>
-    ${(()=>{const ok=podeEditar((r.tx||{}).propertyId,'rec.add',r,'confirmar'),conf=!recusaConfirmar(r)&&!semCred;   /* sem permissão, só a linha */
+    ${(()=>{const ok=podeEditar((r.tx||{}).propertyId,'rec.add',r,'confirmar'),conf=!recusaConfirmar(r)&&!semCred&&!pago;   /* sem permissão, só a linha */
       return ok||conf?`<div class="toolbar" style="margin:9px 0 0">
         ${conf?`<button class="btn sm primary" onclick="${stop}quickConfirmRec('${r.id}')">${ic('check',14)} Confirmar</button>`:''}
         ${ok?`<button class="btn sm" onclick="${stop}skipRec('${r.id}')">${r.muted?'Reativar':'Silenciar'}</button>`:''}</div>`:''})()}</div>`};

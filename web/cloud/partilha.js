@@ -307,6 +307,16 @@ function vColaboradores() {
   var colab = colaboroCard();
   var roles = CW.state.roles || [];
   var temGente = ((CW.state.collaborators || []).length + (CW.state.invites || []).length) > 0;
+  /* «não tens nada» e «ainda não falámos com o servidor» são coisas
+     diferentes: o CW.state não é guardado no aparelho, e num arranque sem
+     rede dizer «ainda não tens colaboradores» a quem tem é mentira que
+     parece perda de dados. Os imóveis onde colaboro vêm do db local e
+     mostram-se na mesma. */
+  if (!CW._pulled) {
+    return intro + card('Cargos e colaboradores', 'À espera do servidor',
+      '<div class="hint">Ainda não recebemos a lista deste dispositivo. Sem ligação, os cargos, os convites e quem colabora aparecem assim que a app voltar a sincronizar.</div>') +
+      (colab ? gap + colab : '');
+  }
   if (!roles.length && !temGente) {
     return intro +
       '<div class="empty"><b>Ainda não tens colaboradores</b>Começa pelo cargo: é ele que diz o que a pessoa vê e o que pode adicionar. ' +
