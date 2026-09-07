@@ -27,8 +27,8 @@ var FUNCIONALIDADES = {
 var AVISOS = [
   {
     v: 30,
-    data: '2026-09-04',
-    titulo: 'Visitas, calendário, e os prazos deixam de se perder',
+    data: '2026-09-07',
+    titulo: 'Visitas, calendário, prazos, um sino, e as contas revistas',
     seccoes: [
       {
         titulo: 'Créditos antigos: as prestações que faltam, na hipoteca certa',
