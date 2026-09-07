@@ -12,13 +12,38 @@
 var LS_VISTO = 'gi_novidades_v';     // última versão cujas novidades já viu
 var SS_RECARGA = 'gi_recarga_para';  // para não entrar em ciclo de recargas
 
+// Se algum dos cargos abre esta permissão (temPerm de acessos.js, com as
+// implicações; sem ela, a lista tal e qual).
+// Recebe: cargos — o CW.cargos ({houseId: {dono, perms}}); perm — a chave.
+// Devolve: true/false.
+function algumCargoAbre(cargos, perm) {
+  return Object.keys(cargos).some(function (id) {
+    var c = cargos[id];
+    if (!c || c.dono) return false;
+    try { if (typeof temPerm === 'function') return !!temPerm(c.perms, perm); } catch (e) {}
+    var ps = c.perms || [];
+    return Array.isArray(ps) ? ps.indexOf(perm) > -1 : !!ps[perm];
+  });
+}
+
 /* Que funcionalidades esta pessoa usa.
-   Hoje toda a gente tem todas — não há ainda permissões parciais. Quando
-   houver, é esta função que passa a devolver só as que a pessoa tem, e tudo
-   o resto (avisos, modal, secção de novidades) acompanha sem mudar.
-   Devolve: array com as chaves das funcionalidades desta pessoa (hoje, todas). */
+   Quem é dono (ou comproprietário) de algum imóvel — ou não tem sessão nem
+   imóveis — tem todas. Quem é só colaborador tem a união do que os cargos
+   abrem: movimentos com tx/rec, contratos com contract/tenant, créditos com
+   loan, anexos com file; imóveis, a app, a conta e o suporte sempre; a
+   partilha entre proprietários nunca.
+   Devolve: array com as chaves das funcionalidades desta pessoa. */
 function funcsDoUtilizador() {
-  return Object.keys(FUNCIONALIDADES);
+  var todas = Object.keys(FUNCIONALIDADES);
+  var cargos = (window.CW && CW.cargos) || {};
+  var ids = Object.keys(cargos);
+  if (!ids.length || ids.some(function (id) { return cargos[id] && cargos[id].dono; })) return todas;
+  var out = ['app', 'conta', 'suporte', 'imoveis', 'colaboradores'];
+  if (algumCargoAbre(cargos, 'tx.view') || algumCargoAbre(cargos, 'rec.view')) out.push('movimentos');
+  if (algumCargoAbre(cargos, 'contract.view') || algumCargoAbre(cargos, 'tenant.view')) out.push('contratos');
+  if (algumCargoAbre(cargos, 'loan.view')) out.push('creditos');
+  if (algumCargoAbre(cargos, 'file.view')) out.push('anexos');
+  return out.filter(function (f) { return todas.indexOf(f) > -1; });
 }
 
 // Diz se uma secção de novidades toca nalguma funcionalidade desta pessoa.

@@ -442,20 +442,35 @@ lpMenu = function (v) {
     menuOption({ icon: 'x', danger: true, label: 'Recusar desta vez',
       sub: 'não cria o movimento e passa à data seguinte', act: function () { CW.rejectRec(a[1]); } });
   } else if (a[0] === 'prop') {
-    menuOption({ icon: 'swap', label: 'Ver movimentos', sub: 'lista filtrada por este imóvel', first: true,
-      act: function () { CW.txOfProp(a[1]); } });
+    // num imóvel onde sou colaborador, só com o cargo a deixar ver movimentos
+    if (cwPode(a[1], 'tx.view')) {
+      menuOption({ icon: 'swap', label: 'Ver movimentos', sub: 'lista filtrada por este imóvel', first: true,
+        act: function () { CW.txOfProp(a[1]); } });
+    }
   } else if (a[0] === 'ct') {
     var c = contract(a[1]);
-    if (c && c.propertyId) {
+    if (c && c.propertyId && cwPode(c.propertyId, 'tx.view')) {
       menuOption({ icon: 'swap', label: 'Ver movimentos', sub: 'lista filtrada pelo imóvel do contrato', first: true,
         act: function () { CW.txOfProp(c.propertyId); } });
     }
   }
 };
 
+// Se posso isto neste imóvel: pode() de web/app/acessos.js quando existe;
+// sem ela, só nos imóveis que não são de colaboração.
+// Recebe: pid — o id do imóvel (vazio conta como meu); perm — a chave da permissão.
+// Devolve: true/false.
+function cwPode(pid, perm) {
+  if (!pid) return true;
+  try { if (typeof pode === 'function') return !!pode(pid, perm); } catch (e) {}
+  var p = (db.properties || []).find(function (x) { return x.id === pid; });
+  return !(p && p._cargo);
+}
+
 /* ------- pendentes dentro de cada imóvel e de cada contrato ------- */
 
-// o HTML da lista "por confirmar" que se pendura no cartão de um imóvel ou contrato
+// o HTML da lista "por confirmar" que se pendura no cartão de um imóvel ou
+// contrato; os botões só onde o cargo deixa confirmar planeados (rec.add)
 // Recebe: list — array de planos recorrentes por confirmar (cada um com id, name, next, tx…).
 // Devolve: o HTML (string) do bloco, com os botões Confirmar/Silenciar/Recusar em cada linha.
 function pendBlock(list) {
@@ -464,15 +479,18 @@ function pendBlock(list) {
     list.length + ' movimento' + (list.length === 1 ? '' : 's') + ' por confirmar</div>' +
     list.map(function (r) {
       var late = recIsLate(r);
+      var botoes = cwPode(r.tx && r.tx.propertyId, 'rec.add')
+        ? '<div class="toolbar" style="margin:8px 0 0">' +
+          '<button class="btn sm primary" onclick="event.stopPropagation();quickConfirmRec(\'' + r.id + '\')">' + ic('check', 13) + ' Confirmar</button>' +
+          '<button class="btn sm" onclick="event.stopPropagation();skipRec(\'' + r.id + '\')">Silenciar</button>' +
+          REJECT_BTN(r.id) + '</div>'
+        : '';
       return '<div class="card pend ' + (late ? 'late' : '') + '" style="padding:9px 11px;margin-bottom:6px">' +
         '<div class="row-between" style="align-items:center;gap:9px">' +
         '<div style="min-width:0"><b style="display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.name) + '</b>' +
         '<span class="small">' + r.next + (late ? ' · <b class="neg">em atraso</b>' : ' · por confirmar') + '</span></div>' +
         '<b style="flex:0 0 auto">' + (r.tx.amount ? euro2(r.tx.amount) : '') + '</b></div>' +
-        '<div class="toolbar" style="margin:8px 0 0">' +
-        '<button class="btn sm primary" onclick="event.stopPropagation();quickConfirmRec(\'' + r.id + '\')">' + ic('check', 13) + ' Confirmar</button>' +
-        '<button class="btn sm" onclick="event.stopPropagation();skipRec(\'' + r.id + '\')">Silenciar</button>' +
-        REJECT_BTN(r.id) + '</div></div>';
+        botoes + '</div>';
     }).join('') + '</div>';
 }
 

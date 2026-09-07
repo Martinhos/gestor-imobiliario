@@ -241,23 +241,37 @@ function euSou() {
   return (db.owners || []).find(function (o) { return o.id === id; }) || null;
 }
 
+// Se esta conta é só colaboradora (não é dona de nenhum imóvel, mas colabora
+// nalgum): os primeiros passos de dono não lhe dizem respeito.
+// Devolve: true/false.
+function soColaborador() {
+  try { if (typeof souSoColaborador === 'function') return !!souSoColaborador(); } catch (e) {}
+  var ps = db.properties || [];
+  return !!(CW.user && ps.length && ps.every(function (p) { return p._cargo; }));
+}
+
 /* A lista de primeiros passos com o estado calculado da base local: perfil
    (há NIF?), imóveis, contratos e movimentos. O passo dos contratos salta
-   quando não há imóveis para arrendar. Cada passo traz o porquê e a ação
-   (act) que o botão "Fazer agora" dispara.
+   quando não há imóveis para arrendar; quem é só colaborador salta os de
+   dono (perfil, imóveis, contratos) e o dos movimentos se nenhum cargo lhos
+   deixa adicionar. Cada passo traz o porquê e a ação (act) que o botão
+   "Fazer agora" dispara.
    Devolve: os passos aplicáveis (array de {id, titulo, porque, feito, act}). */
 function passos() {
   var eu = euSou();
-  var arrendar = (db.properties || []).filter(function (p) { return p.use === 'investimento'; });
+  var colab = soColaborador();
+  var arrendar = (db.properties || []).filter(function (p) { return p.use === 'investimento' && !p._cargo; });
   var semContrato = arrendar.filter(function (p) {
     return !(db.contracts || []).some(function (c) { return c.propertyId === p.id; });
   });
+  var podeMovimentos = !colab || (typeof casasComo === 'function' && casasComo('tx.add').length > 0);
   return [
     {
       id: 'perfil',
       titulo: 'Preenche o teu perfil',
       porque: 'Os teus dados entram nos contratos que a app gera.',
       feito: !!(eu && eu.nif),
+      salta: colab,
       act: 'CW.editProfile()',
     },
     {
@@ -265,6 +279,7 @@ function passos() {
       titulo: 'Adiciona os teus imóveis',
       porque: 'É a base de tudo o resto.',
       feito: (db.properties || []).length > 0,
+      salta: colab,
       act: 'propModal()',
     },
     {
@@ -274,7 +289,7 @@ function passos() {
         ? semContrato.length + (semContrato.length === 1 ? ' imóvel para arrendar ainda sem contrato.' : ' imóveis para arrendar ainda sem contrato.')
         : 'Para as rendas passarem a aparecer sozinhas.',
       feito: (db.properties || []).length > 0 && !semContrato.length,
-      salta: !arrendar.length,   // só para uso próprio: este passo não se aplica
+      salta: colab || !arrendar.length,   // só para uso próprio, ou só colaborador: não se aplica
       act: 'ctModal()',
     },
     {
@@ -282,6 +297,7 @@ function passos() {
       titulo: 'Confirma os primeiros movimentos',
       porque: 'É daqui que saem os números da vista geral.',
       feito: (db.transactions || []).length > 0,
+      salta: !podeMovimentos,
       act: "go('transactions')",
     },
   ].filter(function (p) { return !p.salta; });
