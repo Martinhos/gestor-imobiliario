@@ -87,7 +87,7 @@ kpiModal = function (id) {
 // Recebe: id — o id (string) do movimento a abrir.
 // Devolve: nada — abre o modal do movimento, se ele ainda existir.
 CW.openTx = function (id) {
-  if ((db.transactions || []).some(function (x) { return x.id === id; })) txModal(id);
+  if ((db.transactions || []).some(function (x) { return x.id === id; })) txView(id);
 };
 
 // salta para os Movimentos já com os filtros do indicador aplicados

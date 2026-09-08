@@ -25,35 +25,54 @@ function propModal(id){
     perguntarPrestacoesEmFalta(pForm,antes);
   };
 }
-/* A ficha de um imóvel só de leitura, para quem colabora nele sem poder
-   editar: o que é sempre visível (nome, morada, destino, quartos, donos) e o
-   resto conforme o cargo — fotos com file.view, valores com report.view,
-   hipotecas com loan.view. Nunca o bloco de quotas nem os comentários dos
-   donos (o servidor já não os manda). Rodapé «Fechar».
+/* O corpo da ficha de um imóvel: o que se sabe sobre ele, para ler.
+
+   O que é sempre visível (morada, destino, quartos, donos) e o resto conforme
+   o cargo — fotos com file.view, valores com report.view, hipotecas com
+   loan.view. Nunca o bloco de quotas nem os comentários dos donos: o servidor
+   já não os manda a quem colabora.
+   Recebe: id — o id do imóvel.
+   Devolve: o HTML do corpo, ou vazio se o imóvel já não existir. */
+function propFicha(id){
+  const p=prop(id);if(!p)return '';
+  const st=pode(id,'contract.view')?propStatus(p):null,ls=loansOf(p),c=cargoDe(id);
+  const dono=p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):''),ac=pode(id,'contract.view')?activeContracts(id):[];
+  const reg=[p.freguesia||p.parish,p.concelho,p.fraction?'fração '+p.fraction:'',p.floor,p.registry?'n.º '+p.registry:'',p.matrix?'artigo '+p.matrix:'',p.energyClass?'classe '+p.energyClass:''].filter(Boolean).map(esc).join(' · ');
+  return ficha([
+    c.dono?null:{tipo:'nota',valor:`${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}És colaborador${c.nome?' como <b>'+esc(c.nome)+'</b>':''} — a ficha é só de leitura.`},
+    {rotulo:'Morada',valor:esc(p.address||'')},
+    {rotulo:'Destino',valor:p.use==='proprio'?'Uso próprio':'Arrendamento'+(p.rentalMode==='quartos'?' · por quartos':' · imóvel inteiro')},
+    st?{rotulo:'Estado',valor:esc(st.label)}:null,
+    (p.rooms||[]).length?{rotulo:'Quartos',valor:(p.rooms||[]).map(r=>esc(r.name)).join(', ')}:null,
+    {rotulo:'Proprietários',valor:esc(ownerNames(p))},
+    ac.length?{tipo:'bloco',rotulo:'Contratos ativos',valor:ac.map(x=>`${x.roomId?esc(roomName(p,x.roomId))+': ':''}${esc(ctNames(x))} · ${euro(x.rent)}`).join('<br>')}:null,
+    pode(id,'report.view')?{rotulo:'Valor de mercado',valor:euro(p.value)}:null,
+    pode(id,'report.view')?{rotulo:'Valor de aquisição',valor:euro(p.purchase)}:null,
+    pode(id,'loan.view')&&ls.length?{tipo:'bloco',rotulo:'Hipotecas',
+      valor:ls.map(l=>`${esc(loanName(l))} · ${euro2(loanCalc(l).total)}/mês · ${euro(l.outstanding)} em dívida`).join('<br>')}:null,
+    pode(id,'file.view')&&(p.photos||[]).length?{tipo:'bloco',rotulo:'Fotos',
+      valor:`<div style="display:flex;flex-wrap:wrap;gap:8px">${(p.photos||[]).map(f=>`<div class="pcover" id="th_${esc(f.id)}" style="width:84px;height:66px;border-radius:10px;background:var(--chip);overflow:hidden"></div>`).join('')}</div>`}:null,
+    reg?{tipo:'bloco',rotulo:'Dados registais',valor:reg}:null,
+    p.listing?{tipo:'bloco',rotulo:'Anúncio',valor:esc(p.listing)}:null,
+  ]);
+}
+/* A ficha de um imóvel: o que tocar num imóvel passa a abrir.
+
+   Era só para quem colabora sem poder editar; toda a gente apanhava, ao
+   tocar, um formulário de vinte e um campos com o «Apagar imóvel» encostado
+   ao título. Agora tocar lê, e editar é um passo deliberado — o botão do
+   rodapé, que só existe para quem pode.
    Recebe: id — o id do imóvel.
    Devolve: nada — abre a janela. */
 function propView(id){
   const p=prop(id);if(!p)return;
-  const st=pode(id,'contract.view')?propStatus(p):null,ls=loansOf(p),c=cargoDe(id);
-  const dono=p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):''),ac=pode(id,'contract.view')?activeContracts(id):[];
-  const stat=(k,v)=>v?`<div class="stat"><span>${k}</span><b>${v}</b></div>`:'';
-  const reg=[p.freguesia||p.parish,p.concelho,p.fraction?'fração '+p.fraction:'',p.floor,p.registry?'n.º '+p.registry:'',p.matrix?'artigo '+p.matrix:'',p.energyClass?'classe '+p.energyClass:''].filter(Boolean).map(esc).join(' · ');
-  const body=`<div class="form">
-    ${c.dono?'':`<div class="hint">${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}És colaborador${c.nome?' como <b>'+esc(c.nome)+'</b>':''} — a ficha é só de leitura.</div>`}
-    ${stat('Morada',esc(p.address||''))}
-    ${stat('Destino',p.use==='proprio'?'Uso próprio':'Arrendamento'+(p.rentalMode==='quartos'?' · por quartos':' · imóvel inteiro'))}
-    ${st?stat('Estado',esc(st.label)):''}
-    ${(p.rooms||[]).length?stat('Quartos',(p.rooms||[]).map(r=>esc(r.name)).join(', ')):''}
-    ${stat('Proprietários',esc(ownerNames(p)))}
-    ${ac.length?`<div><div class="flabel">Contratos ativos</div><div class="small">${ac.map(x=>`${x.roomId?esc(roomName(p,x.roomId))+': ':''}${esc(ctNames(x))} · ${euro(x.rent)}`).join('<br>')}</div></div>`:''}
-    ${pode(id,'report.view')?stat('Valor de mercado',euro(p.value))+stat('Valor de aquisição',euro(p.purchase)):''}
-    ${pode(id,'loan.view')&&ls.length?`<div><div class="flabel">Hipotecas</div><div class="small">${ls.map(l=>`${esc(loanName(l))} · ${euro2(loanCalc(l).total)}/mês · ${euro(l.outstanding)} em dívida`).join('<br>')}</div></div>`:''}
-    ${pode(id,'file.view')&&(p.photos||[]).length?`<div><div class="flabel">Fotos</div><div style="display:flex;flex-wrap:wrap;gap:8px">${(p.photos||[]).map(f=>`<div class="pcover" id="th_${esc(f.id)}" style="width:84px;height:66px;border-radius:10px;background:var(--chip);overflow:hidden"></div>`).join('')}</div></div>`:''}
-    ${reg?`<div><div class="flabel">Dados registais</div><div class="small">${reg}</div></div>`:''}
-    ${p.listing?`<div><div class="flabel">Anúncio</div><div class="small">${esc(p.listing)}</div></div>`:''}
-  </div>`;
-  openModal(p.name,body,`<button class="btn" data-toca="camada" onclick="closeModal()">Fechar</button>`);
-  if(pode(id,'file.view'))paintThumbs(p.photos);
+  abrirFicha({
+    titulo:()=>{const x=prop(id);return x?x.name:'Imóvel'},
+    corpo:()=>propFicha(id),
+    menu:()=>souCriador(id)?menu('fichaProp',[{label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${jsq(id)}')`}]):'',
+    editar:pode(id,'house.edit')?{rotulo:'Editar',act:`propModal('${jsq(id)}')`}:null,
+    depois:()=>{if(pode(id,'file.view')){const x=prop(id);if(x)paintThumbs(x.photos)}},
+  });
 }
 /* Constrói o HTML do formulário do imóvel a partir de pForm: proprietários e
    quotas-partes, destino, quartos, valores, fotos, dados registais, hipotecas

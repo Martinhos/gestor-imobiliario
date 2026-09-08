@@ -475,7 +475,7 @@ function balancesDetail(pid){
   const run={};ids.forEach(o=>run[o]=0);
   openModal('Como se chega aos saldos',`<div class="form">
     <div class="hint">Quem paga fica a crédito; quem recebe fica a dever a parte dos outros. Positivo: a receber. Negativo: a pagar.</div>
-    <div class="list" style="gap:7px">${lines.map(l=>{ids.forEach(o=>run[o]+=(l.eff[o]||0));return `<div class="card tap" style="padding:10px 12px" onclick="txModal('${l.t.id}')">
+    <div class="list" style="gap:7px">${lines.map(l=>{ids.forEach(o=>run[o]+=(l.eff[o]||0));return `<div class="card tap" style="padding:10px 12px" onclick="txView('${l.t.id}')">
       <div class="row-between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.t.label)}</b><span class="small" style="flex:0 0 auto">${l.t.date}</span></div>
       <div class="small">${l.t.kind==='settle'?nm(l.t.paidBy)+' → '+nm(l.t.toId):(KIND[l.t.kind]||{}).short+' · '+(isIn(l.t.kind)?'recebeu ':'pagou ')+nm(l.t.paidBy)+(splitLabel(l.t)?' · '+splitLabel(l.t):' · quotas')}${!pid?' · '+esc(l.p.name):''} · <b>${euro2(l.t.amount)}</b></div>
       <div class="chips" style="margin-top:6px">${ids.map(o=>`<span class="badge grey">${nm(o)} <b class="${l.eff[o]>0?'pos':l.eff[o]<0?'neg':''}">${l.eff[o]?(l.eff[o]>0?'+':'−')+euro2(Math.abs(l.eff[o])/100):'—'}</b> · saldo ${euro2(run[o]/100)}</span>`).join('')}</div></div>`}).join('')}</div>

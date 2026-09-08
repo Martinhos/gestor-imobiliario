@@ -100,7 +100,7 @@ function visCard(v){
   }
   if(pode(v.propertyId,'tenant.add'))acoes.push({label:'Converter em inquilino',icon:'users',act:`visConverte('${v.id}')`});
   if(ok)acoes.push({label:'Apagar visita',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`visApaga('${v.id}')`});
-  return `<div class="card tap" data-lp="vis:${esc(v.id)}" data-fk="vis:${esc(v.id)}" data-toca="camada" onclick="visitModal('${v.id}')">
+  return `<div class="card tap" data-lp="vis:${esc(v.id)}" data-fk="vis:${esc(v.id)}" data-toca="camada" onclick="visView('${v.id}')">
     <div class="row-between" style="align-items:flex-start;gap:8px">
       <div style="min-width:0">
         <b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.nomes||'(sem nome)')}</b>
@@ -111,6 +111,72 @@ function visCard(v){
         ${acoes.length?`<span onclick="event.stopPropagation()">${menu('vis'+v.id,acoes)}</span>`:''}</span></div></div>`;
 }
 
+/* O corpo da ficha de uma visita.
+
+   Abre-se por duas razões, e em momentos diferentes: na véspera, para
+   confirmar a hora e ter o contacto à mão; depois, para reler o que ficou
+   combinado e decidir a quem ligar.
+
+   A data leva o «daqui a três dias» colado, que é o que a data sozinha não
+   diz. E o imóvel tem um valor de recurso: o delProp apaga contratos e
+   movimentos em cascata mas não as visitas, e uma visita órfã tem de dizer
+   que o imóvel desapareceu, em vez de ficar sem sítio.
+   Recebe: id — o id da visita.
+   Devolve: o HTML do corpo, ou vazio se a visita já não existir. */
+function visFicha(id){
+  const v=(db.visits||[]).find(x=>x.id===id);if(!v)return '';
+  const p=prop(v.propertyId);
+  const quando=(function(){
+    if(!v.date)return '';
+    const h=v.start?' · '+esc(v.start)+(v.end?'–'+esc(v.end):''):'';
+    const d=pzDias(v.date);
+    const rel=d===0?'hoje':d===1?'amanhã':d===-1?'ontem':(d>0?'daqui a '+d+' dias':'há '+(-d)+' dias');
+    return esc(v.date)+h+' · '+rel;
+  })();
+  return ficha([
+    {tipo:'nota',valor:esc(motivoRecusa(v.propertyId,'visit.add',v))},
+    {rotulo:'Quando',valor:quando},
+    {rotulo:'Imóvel',valor:esc(p?p.name:'imóvel apagado')},
+    v.roomId&&p?{rotulo:'Quarto',valor:esc(roomName(p,v.roomId))}:null,
+    {rotulo:'Quem vem',valor:esc(v.nomes||'')},
+    {rotulo:'Contacto',valor:esc(v.contacto||'')},
+    {rotulo:'Estado',valor:esc(VESTADO[v.estado]||v.estado||'')},
+    v.estado==='realizada'&&v.resultado?{rotulo:'Desfecho',valor:esc(VDESFECHO[v.resultado]||'')}:null,
+    String(v.notas||'').trim()?{tipo:'bloco',rotulo:'Comentários',valor:esc(v.notas).replace(/\n/g,'<br>')}:null,
+    v._createdBy&&v._createdBy!==meuId()?{rotulo:'Marcada por',valor:esc(nomeUtilizador(v._createdBy))}:null,
+  ]);
+}
+/* As opções de uma visita, iguais na ficha e no toque longo.
+   Recebe: v — a visita.
+   Devolve: a lista de itens {label,icon,toca,risco,danger,act} para o menu. */
+function visOpcoes(v){
+  const id=v.id,ok=podeEditar(v.propertyId,'visit.add',v),it=[];
+  if(v.estado==='agendada'&&ok)it.push(
+    {label:'Marcar realizada',icon:'check',toca:'dados',act:`visEstado('${jsq(id)}','realizada')`},
+    {label:'Marcar falta',icon:'x',toca:'dados',act:`visEstado('${jsq(id)}','faltou')`});
+  if(pode(v.propertyId,'tenant.add'))it.push({label:'Converter em inquilino',icon:'users',toca:'camada',act:`visConverte('${jsq(id)}')`});
+  /* o visApaga não fecha janelas: sem o closeModal ficava uma ficha vazia
+     aberta por cima de uma visita apagada */
+  if(ok)it.push({label:'Apagar visita',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`closeModal();visApaga('${jsq(id)}')`});
+  return it;
+}
+/* A ficha de uma visita: o que tocar numa visita passa a abrir.
+
+   O visitModal abria o formulário a toda a gente e só recusava no Guardar:
+   quem não pode alterar via os campos editáveis e levava com a recusa no
+   fim. Agora fica na ficha, sem «Editar», com a nota a dizer porquê.
+   Recebe: id — o id da visita.
+   Devolve: nada — abre a janela. */
+function visView(id){
+  const v=(db.visits||[]).find(x=>x.id===id);if(!v)return;
+  abrirFicha({
+    titulo:()=>{const x=(db.visits||[]).find(y=>y.id===id);return x?(x.nomes||'Visita'):'Visita'},
+    corpo:()=>visFicha(id),
+    menu:()=>{const x=(db.visits||[]).find(y=>y.id===id);if(!x)return '';
+      const it=visOpcoes(x);return it.length?menu('fichaVis',it):''},
+    editar:podeEditar(v.propertyId,'visit.add',v)?{rotulo:'Editar',act:`visitModal('${jsq(id)}')`}:null,
+  });
+}
 /* O formulário de uma visita — novo ou edição — no modal da casa: imóvel e
    quarto (quando o imóvel é por quartos) nos menus da app, data e horas
    nativas, estado e desfecho, nomes e contacto livres.

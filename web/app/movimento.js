@@ -131,6 +131,94 @@ function prefill(){
 // descrição/montante se ainda forem as sugestões automáticas — o que foi escrito à mão fica.
 // Devolve: nada — só mexe no tForm.
 function keepTyped(){collectTx();if(tForm.label===tForm._aL)tForm.label='';if(tForm.amount===tForm._aA)tForm.amount=''}
+/* O corpo da ficha de um movimento: o que se sabe sobre ele, para ler.
+
+   Pela ordem da pergunta que traz alguém aqui — vi esta linha na lista: o
+   que foi, de quanto, quando, de que imóvel, quem pagou, e quanto disto é
+   meu. O resto (a hipoteca, a dívida a terceiros, a categoria) só aparece
+   quando é deste movimento.
+   Recebe: id — o id do movimento.
+   Devolve: o HTML do corpo, ou vazio se o movimento já não existir. */
+function txFicha(id){
+  const t=(db.transactions||[]).find(x=>x.id===id);if(!t)return '';
+  const K=KIND[t.kind]||KIND.expense,p=prop(t.propertyId);
+  const l=t.kind==='loan'&&pode(t.propertyId,'loan.view')?findLoan(p,t.loanId):null;
+  const os=p?ownersOfProp(p):[];
+  const ct=t.contractId?contract(t.contractId):null;
+  const cred=(t.creditor||'').trim();
+  const nome=o=>esc((owner(o)||{}).name||'?');
+  /* A divisão entre proprietários só na minha casa: num imóvel de
+     colaboração o servidor apaga as quotas, e o que sobrava era uma
+     repartição por igual — um número inventado com ar de combinado. */
+  const verDivisao=countsBetweenOwners(t)&&p&&souDono(t.propertyId)&&os.length>1;
+  const modo=(lista,m,def)=>{const x=lista.find(y=>y[0]===(m||def));return x?x[1]:''};
+  return ficha([
+    {tipo:'nota',valor:esc(motivoRecusa(t.propertyId,'tx.add',t))},
+    {rotulo:'Montante',valor:`<span class="${K.color}">${K.sign}${euro2(t.amount)}</span>`},
+    {rotulo:'Tipo',valor:esc(K.short)+(t.kind==='loan'?(t.payType==='amortizacao'?' · amortização':' · prestação'):'')},
+    {rotulo:'Data',valor:esc(t.date)},
+    {rotulo:'Imóvel',valor:t.propertyId?esc(propName(t.propertyId)):(t.groupId?esc('Grupo '+((grp(t.groupId)||{}).name||'')):'Todos os imóveis')},
+    ct&&pode(t.propertyId,'contract.view')?{rotulo:'Contrato',valor:esc(ctName(ct))}:null,
+    t.kind==='settle'?{rotulo:'Transferência',valor:nome(t.paidBy)+' → '+nome(t.toId)}:null,
+    t.kind!=='settle'&&owner(t.paidBy)?{rotulo:isIn(t.kind)?'Recebido por':'Pago por',valor:nome(t.paidBy)}:null,
+    verDivisao?{tipo:'bloco',rotulo:'Divisão entre proprietários',valor:(function(){
+      const c=txSplitCents(t,p,os);
+      return esc(modo(SPLIT_MODES,(t.split||{}).mode,'quota'))+'<br>'+
+        os.map(o=>esc(o.name)+' · '+euro2((c[o.id]||0)/100)).join('<br>');
+    })()}:null,
+    t.groupId&&txProps(t).length>1?{tipo:'bloco',rotulo:'Divisão entre imóveis',valor:(function(){
+      const ps=txProps(t),c=psplitCents(t,ps,Math.abs(Math.round((Number(t.amount)||0)*100)));
+      return esc(modo(PSPLIT_MODES,(t.psplit||{}).mode,'equal'))+'<br>'+
+        ps.map(x=>esc(x.name)+' · '+euro2((c[x.id]||0)/100)).join('<br>');
+    })()}:null,
+    l?{rotulo:'Hipoteca',valor:esc(loanName(l))}:null,
+    /* os juros e o capital vivem no próprio movimento e chegam inteiros a
+       quem tem tx.view: pedir loan.view aqui escondia-os a quem tem direito */
+    t.kind==='loan'&&(t.principal||t.interest||t.fee)?{tipo:'bloco',rotulo:'Distribuição do pagamento',
+      valor:t.payType==='amortizacao'
+        ?'Abate ao capital <b>'+euro2(t.principal||0)+'</b>'+(t.fee?' · comissão <b>'+euro2(t.fee)+'</b>':'')
+        :'Juros <b>'+euro2(t.interest||0)+'</b> · capital <b>'+euro2(t.principal||0)+'</b>'+(t.stamp?' · imposto do selo <b>'+euro2(t.stamp)+'</b>':'')}:null,
+    /* o saldo é o de HOJE, já com este pagamento abatido — não é um retrato
+       à data do movimento, e o rótulo tem de o dizer */
+    l?{rotulo:'Capital ainda em dívida',valor:euro(l.outstanding)}:null,
+    t.kind==='owed'&&cred?{rotulo:'De quem recebi',valor:esc(cred)}:null,
+    t.kind==='repay'&&cred?{rotulo:'A quem devolvi',valor:esc(cred)}:null,
+    /* só com imóvel: sem ele, creditorBalances filtra pelo âmbito e pelo
+       filtro de proprietário da vista que está por trás da janela, e o saldo
+       mudava conforme o filtro que por acaso estivesse ligado */
+    (t.kind==='owed'||t.kind==='repay')&&t.propertyId&&cred?{tipo:'bloco',rotulo:'Conta com esta pessoa',
+      valor:(function(){const r=creditorBalances(t.propertyId).find(x=>x.creditor===cred);
+        return r?'Recebido '+euro2(r.received)+' · devolvido '+euro2(r.repaid)+' · falta <b>'+euro2(r.due)+'</b>':''})()}:null,
+    {rotulo:'Categoria',valor:esc([t.category,t.sub].filter(Boolean).join(' / '))},
+    (t.tags||[]).length?{rotulo:'Etiquetas',valor:(t.tags||[]).map(esc).join(' · ')}:null,
+    !countsInTotals(t)?{tipo:'nota',valor:isPassivo(t)
+      ?'Não entra nos totais nem no resultado: é dinheiro que se devolve — uma caução ou um empréstimo recebido.'
+      :'Não entra nos totais nem no resultado.'}:null,
+    String(t.notes||'').trim()?{tipo:'bloco',rotulo:'Comentários',valor:rich(t.notes)}:null,
+  ]);
+}
+/* A ficha de um movimento: o que tocar numa linha de movimento passa a abrir.
+   Recebe: id — o id do movimento.
+   Devolve: nada — abre a janela. */
+function txView(id){
+  const t=(db.transactions||[]).find(x=>x.id===id);if(!t)return;
+  const ok=podeEditar(t.propertyId,'tx.add',t);
+  abrirFicha({
+    titulo:()=>{const x=(db.transactions||[]).find(y=>y.id===id);return x?(x.label||'Movimento'):'Movimento'},
+    corpo:()=>txFicha(id),
+    menu:()=>{
+      const x=(db.transactions||[]).find(y=>y.id===id);if(!x)return '';
+      const it=[];
+      if(x.propertyId&&prop(x.propertyId))it.push({label:'Ver imóvel',icon:'building',toca:'camada',act:`propView('${jsq(x.propertyId)}')`});
+      if(x.contractId&&contract(x.contractId)&&pode(x.propertyId,'contract.view'))
+        it.push({label:'Ver contrato',icon:'contract',toca:'camada',act:`ctView('${jsq(x.contractId)}')`});
+      if(ok)it.push({label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${jsq(id)}')`});
+      return it.length?menu('fichaTx',it):'';
+    },
+    editar:ok?{rotulo:'Editar',act:`txModal('${jsq(id)}')`}:null,
+  });
+}
+
 const SPLIT_MODES=[['equal','Partes iguais','o mesmo para cada proprietário'],['quota','Quotas do imóvel','pela quota-parte de cada um'],['pct','Quotas a definir','em partes: quem tem 2 paga o dobro de quem tem 1 (2 e 1 → 2/3 e 1/3)'],['percent','Percentagem','percentagem de cada um; devem somar 100'],['amount','Valor certo','montante de cada um; têm de somar o total'],['adjust','Ajuste','um extra por cima da parte igual: tira-se ao total o extra de cada um, o resto divide-se em partes iguais por todos e cada um soma o seu (15 € com 5 de extra para um de dois → 10 € e 5 €)']];
 /* Monta o HTML do formulário do movimento a partir do tForm. Os campos variam com o tipo
    (contrato nas rendas, hipoteca e distribuição nos créditos, credor nas dívidas a terceiros,

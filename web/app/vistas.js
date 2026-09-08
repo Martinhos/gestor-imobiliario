@@ -135,6 +135,7 @@ function render(){
   if(typeof requestIdleCallback==='function')requestIdleCallback(pintarSeriesKpi,{timeout:400});
   else setTimeout(pintarSeriesKpi,0);
   contarValores();
+  refrescarFichas();               // uma ficha aberta por baixo de um formulário não fica a mentir
 }
 let kpiN=0;const KPI_REG={};
 /* Há movimentos do ano passado?
@@ -639,7 +640,7 @@ function vProperties(){
     const y=rent&&p.value?rent*12/p.value:NaN,own=ownerNames(p);
     /* num imóvel onde só colaboro, cada chip pede a sua permissão; o que o servidor não mandou não se inventa */
     const vCt=pode(p.id,'contract.view'),vRep=pode(p.id,'report.view'),vLoan=pode(p.id,'loan.view'),vFile=pode(p.id,'file.view');
-    return `<div class="card tap" data-lp="prop:${esc(p.id)}" data-fk="prop:${esc(p.id)}" data-toca="camada" onclick="propModal('${jsq(p.id)}')">
+    return `<div class="card tap" data-lp="prop:${esc(p.id)}" data-fk="prop:${esc(p.id)}" data-toca="camada" onclick="propView('${jsq(p.id)}')">
       <div class="row-between">
         <div style="min-width:0"><div class="title">${esc(p.name)}${seloCargo(p)}</div>
           <div class="small">${esc(p.address||'Sem morada')}${own?' · '+esc(own):''}${ownerFilter&&sh(p)<1?' · <b>'+shareText(p)+'</b>':''}</div></div>
@@ -692,7 +693,7 @@ function vContracts(){
       <span>${esc(p.name)}</span><span>${euroS(rentOf(p))}/mês</span></div>
       <div class="list">${cs.map(c=>{
         const on=isActive(c),ts=ctTenants(c);
-        return `<div class="card tap" data-lp="ct:${esc(c.id)}" data-fk="ct:${esc(c.id)}" data-toca="camada" onclick="ctModal('${jsq(c.id)}')">
+        return `<div class="card tap" data-lp="ct:${esc(c.id)}" data-fk="ct:${esc(c.id)}" data-toca="camada" onclick="ctView('${jsq(c.id)}')">
         <div class="row-between">
           <div style="min-width:0">
             <div class="title">${esc(ctName(c))} ${on?'':'<span class="badge grey">terminado</span>'}</div>
@@ -730,7 +731,7 @@ function ctFMatch(c,s){
    Devolve: string HTML do cartão. */
 function personCard(pp,kind){
   const cs=kind==='tenant'?contractsOfTenant(pp.id).filter(isActive):propsOf(pp.id);
-  return `<div class="card tap" data-lp="per:${esc(kind)}:${esc(pp.id)}" data-fk="per:${esc(kind)}:${esc(pp.id)}" data-toca="camada" onclick="personModal('${jsq(kind)}','${jsq(pp.id)}')"><div class="row-between">
+  return `<div class="card tap" data-lp="per:${esc(kind)}:${esc(pp.id)}" data-fk="per:${esc(kind)}:${esc(pp.id)}" data-toca="camada" onclick="personView('${jsq(kind)}','${jsq(pp.id)}')"><div class="row-between">
     <div style="display:flex;gap:12px;min-width:0">
       <div class="avatar">${esc(initials(pp.name))}</div>
       <div style="min-width:0"><div class="title">${esc(pp.name)}</div>
@@ -1258,7 +1259,7 @@ function txQuem(t){
 function txLinhaHtml(t,mo){
   const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null;
   const x=txLinhaExtra(t,mo)||{};
-  return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} data-toca="camada" onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
+  return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} data-toca="camada" onclick="${x.onclick||`txView('${jsq(t.id)}')`}"><div class="row-between">
     ${x.caixa||''}<div style="min-width:0"><div class="title" style="font-size:14.5px">${esc(t.label)}</div>
       <div class="small">${esc(t.date)} \u00b7 ${k.short}${t.category?' \u00b7 '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' \u00b7 '+esc(propName(t.propertyId)):''}${t.creditor?' \u00b7 '+esc(t.creditor):''}</div>
       ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}

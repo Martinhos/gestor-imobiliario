@@ -741,6 +741,62 @@ deitado sobre a barra escura do aviso — e é a única saída de uma ação que
 já aconteceu. O que desfaz o que se acabou de fazer não pode parecer
 texto: passa a botão, com fundo e caixa (index.html:.toast .toastbtn).
 
+## Tocar num registo é lê-lo
+Tocar num contrato abria um formulário com quarenta campos editáveis. Num
+imóvel, vinte e um. Quem só queria saber quando acaba o contrato tinha de o
+procurar dentro de um formulário, e o «Apagar contrato» estava encostado ao
+título de uma janela que ninguém tinha pedido para abrir.
+
+Havia uma ficha de leitura no código inteiro, e só a via quem **não podia**
+editar (imovel.js:propView). Para todos os outros, a app não tinha modo de
+leitura nenhum: o que existia era o formulário com os campos desativados
+(componentes.js:modalSoLeitura) — um formulário a fingir de ficha.
+
+Agora tocar lê, e editar é um passo deliberado: o botão do rodapé, que só
+existe para quem pode (componentes.js:fichaRodape).
+
+As peças são uma só, para não nascerem sete desenhos de ficha como tinham
+nascido três desenhos de porta. O corpo escreve-se com componentes.js:ficha,
+que recebe linhas e deita fora as que não têm valor — uma ficha mostra o que
+se sabe, e um rótulo com um traço à frente é ruído a fingir que é informação.
+As linhas são as mesmas `.stat` que a app já usa em toda a parte
+(index.html:.stat).
+
+O título e o corpo são **funções**, e não texto (componentes.js:abrirFicha).
+O formulário abre-se por cima da ficha, e quem guarda por cima deixava-a a
+dizer o que já não é verdade. Assim a ficha volta a ler a base sozinha
+(componentes.js:refrescarFichas, chamada no fim de cada render — o sinal que
+a app já dá quando alguma coisa mudou): ver, editar, e voltar ao que se
+estava a ver, já mudado.
+
+E uma janela ou se lê ou se edita, nunca as duas coisas: uma janela com
+«Editar» no rodapé não pode ter campos (testes/ui/invariantes.js). Sem essa
+regra, o caminho mais curto de acrescentar mais um campo à ficha é escrever
+lá um input, e ao fim de uns meses está tudo como estava.
+
+Há seis fichas, uma por registo: o imóvel (imovel.js:propFicha), o contrato
+(contrato.js:ctFicha), o movimento (movimento.js:txFicha), a pessoa
+(pessoas.js:personFicha), a visita (visitas.js:visFicha), a hipoteca
+(creditos.js:mortFicha) e o planeado com o seu modelo
+(planeados.js:recFicha, planeados.js:tplFicha). Cada uma abre pela pergunta
+que traz alguém lá: um contrato pergunta-se se ainda está em vigor e quando
+acaba; um movimento, o que foi e quanto disto é meu; uma visita, quem vem e
+quando; uma hipoteca, quanto falta e a que taxa.
+
+O botão do rodapé é sempre «Editar» — menos em duas fichas, e as duas
+dizem porquê. No planeado por confirmar é «Confirmar», porque é o que se
+quer a seguir a ler; no modelo é «Usar modelo», que é a pergunta que traz
+lá alguém.
+
+E o TOQUE LONGO ficou só com o que se pode FAZER. Antes da ficha, o «Ver
+movimento» do toque longo era a única maneira de ver um movimento sem o
+editar — abria o formulário com os campos desligados
+(componentes.js:modalSoLeitura). Agora tocar no cartão lê, e essa entrada
+passou a ser um caminho a mais para o mesmo sítio. Quando não há nada a
+fazer, o menu fica vazio, e é o menu vazio que faz aparecer o aviso «Só
+podes ver este registo» (componentes.js:lpShow) — uma decisão que já lá
+estava e que um «Ver» lá dentro tinha desfeito.
+
 ## Navegação
 Treze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e
 subtítulo. A gaveta agrupa-os em quatro (navegacao.js:NAV_GROUPS):

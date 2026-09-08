@@ -434,6 +434,97 @@ function confirmRec(id){
   txModal(null,r.tx.kind,r.tx.propertyId,null,r.tx.contractId,Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:r.next,label:r.tx.label||r.name}));
   tForm._recConfirm=id;const h=modalTop().el.querySelector('.head h2');if(h)h.textContent='Confirmar movimento';
 }
+/* O corpo da ficha de um movimento planeado.
+
+   «O que é isto que me estão a pedir para confirmar, de quanto, de onde vem,
+   e desde quando está à espera?» O «de onde vem» é o que explica porque é
+   que um planeado automático volta sozinho depois de apagado.
+   Recebe: id — o id do planeado.
+   Devolve: o HTML do corpo, ou vazio se o planeado já não existir. */
+function recFicha(id){
+  const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return '';
+  const t=r.tx||{};
+  const vem=r.auto?(t.loanId?'Prestação da hipoteca '+esc(loanName(((anyLoan(t.loanId)||{}).l)||null))
+    :(t.contractId&&contract(t.contractId)?'Renda do contrato '+esc(ctName(contract(t.contractId))):'')):'';
+  return ficha([
+    {tipo:'nota',valor:esc(motivoRecusa(t.propertyId,'rec.add',r))},
+    t.amount?{rotulo:'Montante',valor:euro2(t.amount)}:null,
+    {rotulo:'Quando',valor:esc(r.next||'')+(r.until&&r.until!==r.next?' a '+esc(r.until):'')+(r.every?' · '+esc(EVERY[r.every]||r.every):'')},
+    {rotulo:'Estado',valor:(recIsLate(r)?'<span class="neg">Em atraso</span> desde '+esc(r.until||r.next||'')
+      :(r.next&&r.next<=today()?'Por confirmar':'Em dia'))+(r.muted?' · silenciada':'')},
+    {rotulo:'Tipo',valor:esc((KIND[t.kind]||{}).short||'')},
+    /* um planeado pode estar num grupo de imóveis em vez de num imóvel */
+    {rotulo:'Imóvel',valor:esc(propName(t.propertyId)||((grp(t.groupId)||{}).name||''))},
+    vem?{tipo:'bloco',rotulo:'De onde vem',valor:vem}:null,
+    {rotulo:'Categoria',valor:esc([t.category,t.sub].filter(Boolean).join(' / '))},
+    (t.tags||[]).length?{rotulo:'Etiquetas',valor:(t.tags||[]).map(esc).join(' · ')}:null,
+    owner(t.paidBy)?{rotulo:isIn(t.kind)?'Recebido por':'Pago por',valor:esc((owner(t.paidBy)||{}).name||'')}:null,
+    String(t.notes||'').trim()?{tipo:'bloco',rotulo:'Comentários',valor:rich(t.notes)}:null,
+  ]);
+}
+/* A ficha de um planeado: o que tocar num planeado passa a abrir.
+
+   É a única ficha em que o botão do rodapé muda: quando há uma data por
+   confirmar, o que se quer a seguir a ler é confirmar, e não editar. O
+   «Confirmar» deixa de ser o efeito de tocar no cartão e passa a ser um
+   botão que se carrega depois de se ver o que se está a confirmar.
+   Recebe: id — o id do planeado.
+   Devolve: nada — abre a janela. */
+function recView(id){
+  const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
+  const hid=(r.tx||{}).propertyId;
+  const podeConf=r.next&&r.next<=today()&&!recusaConfirmar(r)&&!recSemCredito(r)&&!recCreditoPago(r);
+  const podeEd=podeEditar(hid,'rec.add',r);
+  abrirFicha({
+    titulo:()=>{const x=(db.recurring||[]).find(y=>y.id===id);return x?x.name:'Planeado'},
+    corpo:()=>recFicha(id),
+    menu:()=>{const x=(db.recurring||[]).find(y=>y.id===id);if(!x)return '';
+      const it=[];
+      if(podeConf)it.push({label:'Confirmar sem rever',icon:'check',toca:'dados',act:`quickConfirmRec('${jsq(id)}')`});
+      if(podeEditar(hid,'rec.add',x,'confirmar'))it.push({label:x.muted?'Reativar avisos':'Silenciar',icon:'clock',toca:'dados',act:`skipRec('${jsq(id)}')`});
+      if(podeConf&&podeEd)it.push({label:'Editar',icon:'pen',toca:'camada',act:`editRec('${jsq(id)}')`});
+      if(podeEditar(hid,'rec.add',x,true))it.push({label:'Apagar',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delRec('${jsq(id)}')`});
+      return it.length?menu('fichaRec',it):''},
+    editar:podeConf?{rotulo:'Confirmar',act:`confirmRec('${jsq(id)}')`}
+      :(podeEd?{rotulo:'Editar',act:`editRec('${jsq(id)}')`}:null),
+  });
+}
+/* O corpo da ficha de um modelo.
+
+   Sem data, sem estado e sem periodicidade — é isso que distingue um modelo
+   de um planeado, e a ficha deixa-o ver.
+   Recebe: id — o id do modelo.
+   Devolve: o HTML do corpo, ou vazio se o modelo já não existir. */
+function tplFicha(id){
+  const x=(db.templates||[]).find(y=>y.id===id);if(!x)return '';
+  const t=x.tx||{};
+  return ficha([
+    t.amount?{rotulo:'Montante',valor:euro2(t.amount)}:null,
+    {rotulo:'Tipo',valor:esc((KIND[t.kind]||{}).short||'')},
+    t.label&&t.label!==x.name?{rotulo:'Descrição',valor:esc(t.label)}:null,
+    {rotulo:'Imóvel',valor:esc(propName(t.propertyId)||((grp(t.groupId)||{}).name||''))},
+    {rotulo:'Categoria',valor:esc([t.category,t.sub].filter(Boolean).join(' / '))},
+    (t.tags||[]).length?{rotulo:'Etiquetas',valor:(t.tags||[]).map(esc).join(' · ')}:null,
+    owner(t.paidBy)?{rotulo:isIn(t.kind)?'Recebido por':'Pago por',valor:esc((owner(t.paidBy)||{}).name||'')}:null,
+    (t.split||{}).mode?{rotulo:'Divisão entre proprietários',
+      valor:esc(((SPLIT_MODES.find(m=>m[0]===(t.split||{}).mode)||[])[1])||'')}:null,
+    String(t.notes||'').trim()?{tipo:'bloco',rotulo:'Comentários',valor:rich(t.notes)}:null,
+  ]);
+}
+/* A ficha de um modelo: o que tocar num modelo passa a abrir.
+   O primário do rodapé é «Usar modelo», que é a pergunta que traz cá alguém.
+   Recebe: id — o id do modelo.
+   Devolve: nada — abre a janela. */
+function tplView(id){
+  const x=(db.templates||[]).find(y=>y.id===id);if(!x)return;
+  abrirFicha({
+    titulo:()=>{const y=(db.templates||[]).find(z=>z.id===id);return y?y.name:'Modelo'},
+    corpo:()=>tplFicha(id),
+    menu:()=>menu('fichaTpl',[{label:'Editar',icon:'pen',toca:'camada',act:`editTpl('${jsq(id)}')`},
+      {label:'Apagar',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTpl('${jsq(id)}')`}]),
+    editar:{rotulo:'Usar modelo',act:`newFromTemplate('${jsq(id)}')`},
+  });
+}
 /* Abre o formulário de movimento carregado com a recorrência, em modo de
    edição: guardar altera a recorrência em vez de criar um movimento. Um
    planeado que não posso alterar (alheio, num imóvel onde só colaboro — os
@@ -591,7 +682,7 @@ function vRecurring(){
       rc.length+tp.length,
       {defLabel:'Ordenar pela próxima data',opts:[{v:'data',label:'Ordenar por data'},{v:'valor',label:'Ordenar por valor'},{v:'nome',label:'Ordenar por nome'}]})
     +((podeSemImovel()||casasComo('rec.add').length)?fab([{label:'Novo mov. recorrente',icon:'clock',act:'newRec()'},{label:'Novo modelo',icon:'file',act:'newTpl()'}]):'');
-  const recs=rcS.length?`<div class="list" style="gap:8px">${rcS.map(r=>{const late=recIsLate(r),pend=r.next<=today();return `<div class="card tap ${pend?'pend':''} ${late?'late':''}" data-lp="rec:${esc(r.id)}" data-fk="recl:${esc(r.id)}" data-toca="camada" onclick="editRec('${jsq(r.id)}')">
+  const recs=rcS.length?`<div class="list" style="gap:8px">${rcS.map(r=>{const late=recIsLate(r),pend=r.next<=today();return `<div class="card tap ${pend?'pend':''} ${late?'late':''}" data-lp="rec:${esc(r.id)}" data-fk="recl:${esc(r.id)}" data-toca="camada" onclick="recView('${jsq(r.id)}')">
       <div class="row-between" style="align-items:center">
         <div style="min-width:0"><div class="title">${esc(r.name)}</div>
           <div class="small">${r.auto?'<span class="badge grey" style="margin-right:4px">'+((r.tx||{}).loanId?'da hipoteca':'do contrato')+'</span>':''}${esc(EVERY[r.every]||r.every)} · ${esc(r.next)}${r.until&&r.until!==r.next?' – '+esc(r.until):''} · ${pend?(r.muted?'silenciada · por confirmar':late?'<b class="neg">em atraso</b>':'<b class="amber">por confirmar</b>'):'em dia'}${r.end?' · termina '+esc(r.end):''}</div>
@@ -600,7 +691,7 @@ function vRecurring(){
         <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
           <b style="font-size:16px">${r.tx.amount?euro2(r.tx.amount):'—'}</b>${kebab('rec:'+r.id)}</div></div></div>`}).join('')}</div>`
     :`<div class="empty" style="padding:24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem movimentos recorrentes'}</b>${lfCount('lrec')?'':'Repete-se sozinho e pede confirmação todos os meses. As rendas e as prestações criam um sem tu fazeres nada.'}</div>`;
-  const tpls=tp.length?`<div class="list" style="gap:8px">${tp.map(x=>`<div class="card tap" data-lp="tpl:${esc(x.id)}" data-fk="tpl:${esc(x.id)}" data-toca="camada" onclick="editTpl('${jsq(x.id)}')">
+  const tpls=tp.length?`<div class="list" style="gap:8px">${tp.map(x=>`<div class="card tap" data-lp="tpl:${esc(x.id)}" data-fk="tpl:${esc(x.id)}" data-toca="camada" onclick="tplView('${jsq(x.id)}')">
       <div class="row-between" style="align-items:center">
         <div style="min-width:0"><div class="title">${esc(x.name)}</div>
           <div class="small">${(KIND[x.tx.kind]||{}).short}${x.tx.propertyId?' · '+esc(propName(x.tx.propertyId)):''}${x.tx.category?' · '+esc(x.tx.category):''}</div></div>

@@ -376,6 +376,92 @@ function fillModal(el,title,body,foot,menuHtml){
   el.querySelector('.head span').innerHTML=menuHtml||'';
   el.querySelector('.foot').innerHTML=foot||`<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" onclick="onSave&&onSave()">Guardar</button>`;
 }
+
+/* ================= A FICHA DE LEITURA =================
+   Tocar num registo LÊ; editar é um passo deliberado.
+
+   Antes, tocar abria o formulário: quarenta campos num contrato, vinte e um
+   num imóvel, e o «Apagar» encostado ao título de uma janela que ninguém
+   tinha pedido para abrir. Quem só queria saber quando acaba o contrato tinha
+   de o procurar dentro de um formulário.
+
+   Havia uma ficha só no código — propView, para quem colabora num imóvel sem
+   poder editar. Isto é a generalização dela: um molde só, para não nascerem
+   sete desenhos de ficha como tinham nascido três desenhos de porta. */
+
+/* O corpo de uma ficha, a partir das linhas que lhe der quem a escreve.
+
+   Uma linha sem valor não aparece — uma ficha mostra o que se sabe, e um
+   rótulo com um traço à frente é ruído a fingir que é informação.
+   Recebe: linhas — [{rotulo, valor, tipo}], com o valor já escrito e escapado
+   por quem chama (é ele que sabe se é dinheiro, data ou nome). O tipo é
+   'stat' (uma linha rótulo/valor, o normal), 'bloco' (o rótulo por cima e o
+   valor por baixo, para texto comprido ou várias linhas) ou 'nota' (só texto,
+   sem rótulo). Aceita nulos e falsos no meio, para quem monta a lista poder
+   escrever condições sem filtrar antes.
+   Devolve: o HTML do corpo da ficha. */
+function ficha(linhas){
+  const html=(linhas||[]).filter(Boolean).map(function(l){
+    const v=(l.valor==null?'':String(l.valor)).trim();
+    if(!v)return '';
+    if(l.tipo==='nota')return `<div class="hint">${v}</div>`;
+    if(l.tipo==='bloco')return `<div><div class="flabel">${esc(l.rotulo||'')}</div><div class="small">${v}</div></div>`;
+    return `<div class="stat"><span>${esc(l.rotulo||'')}</span><b>${v}</b></div>`;
+  }).join('');
+  return `<div class="form">${html}</div>`;
+}
+
+/* O rodapé de uma ficha: fechar, e editar quando se pode.
+
+   O «Editar» é primário porque é o que se quer a seguir a ler; e quando não
+   se pode editar não há botão nenhum a prometê-lo.
+   Recebe: o descritor da ficha (o mesmo de abrirFicha).
+   Devolve: o HTML do rodapé. */
+function fichaRodape(o){
+  return `<button type="button" class="btn" data-toca="camada" onclick="closeModal()">Fechar</button>`+
+    (o.editar?`<button type="button" class="btn primary" data-toca="camada" onclick="${o.editar.act}">${esc(o.editar.rotulo||'Editar')}</button>`:'');
+}
+
+/* Abre a ficha de leitura de um registo.
+
+   O corpo e o título são FUNÇÕES, e não texto: quem guarda por cima da ficha
+   (o formulário abre-se em cima dela) deixa-a a dizer o que já não é verdade.
+   Assim a ficha volta a ler a base sozinha — ver, editar, e voltar ao que se
+   estava a ver, já mudado.
+   Recebe: o — {titulo, corpo, menu (opcional), editar (opcional) com
+   {rotulo, act}, depois (opcional)}, onde titulo, corpo e menu podem ser texto
+   ou função, e depois é chamada com o corpo já no ecrã — é onde se pintam as
+   coisas que o HTML sozinho não traz, como as miniaturas das fotos.
+   Devolve: a camada aberta. */
+function abrirFicha(o){
+  const t=x=>(typeof x==='function'?x():x)||'';
+  const L=openModal(t(o.titulo),t(o.corpo),fichaRodape(o),t(o.menu));
+  if(L)L.ficha=o;                  // é o que marca a camada como ficha, para o refrescarFichas a repintar
+  if(o.depois)try{o.depois()}catch(e){}
+  return L;
+}
+
+/* Repinta as fichas abertas, para não ficarem a dizer o que já não é verdade.
+
+   Corre no fim de cada render, que é o sinal que a app já dá quando alguma
+   coisa mudou: guardar um formulário aberto por cima de uma ficha deixava-a
+   com os valores de antes por baixo.
+   Devolve: nada. */
+function refrescarFichas(){
+  if(typeof modalStack==='undefined')return;
+  const t=x=>(typeof x==='function'?x():x)||'';
+  modalStack.forEach(function(L){
+    if(!L||!L.ficha)return;
+    let corpo='';
+    /* o registo pode ter sido apagado por baixo da ficha; quem apaga já fecha
+       a janela, e aqui basta não repintar por cima do que está a sair */
+    try{corpo=t(L.ficha.corpo)}catch(e){return}
+    if(!corpo)return;
+    fillModal(L.el,t(L.ficha.titulo),corpo,fichaRodape(L.ficha),t(L.ficha.menu));
+    if(L.ficha.depois)try{L.ficha.depois()}catch(e){}
+  });
+}
+
 /* o botão “voltar” do Android fecha primeiro o que estiver aberto (janela ou menu).
    Uma única sentinela no histórico enquanto houver camadas: voltar fecha a de cima
    e volta a armar a sentinela se ainda restarem; sem nada aberto, sai da app. */
@@ -620,7 +706,10 @@ function lpShow(title,opts){
 function lpMenu(v){
   const a=String(v||'').split(':'),k=a[0],id=a[1];
   if(k==='prop'){const p=prop(id);if(!p)return;
-    const opts=[pode(id,'house.edit')?{label:'Editar imóvel',icon:'building',act:()=>propModal(id)}:{label:'Ver imóvel',icon:'building',act:()=>propView(id)}];
+    /* o toque longo é para AGIR: ler é o toque simples, que abre a ficha.
+       Um «Ver» aqui duplicava-o e nunca mais deixava o menu ficar vazio — e é
+       o menu vazio que faz aparecer o aviso «só podes ver este registo». */
+    const opts=pode(id,'house.edit')?[{label:'Editar imóvel',icon:'pen',act:()=>propModal(id)}]:[];
     if(p.use==='investimento'&&pode(id,'contract.add'))opts.push({label:'Novo contrato',icon:'contract',act:()=>ctModal(null,id)});
     if(pode(id,'tx.add'))opts.push({label:'Registar despesa',icon:'dn',act:()=>txModal(null,'expense',id)});
     /* pagar crédito abate capital à hipoteca, que vive na ficha do imóvel: pede também «Editar a ficha» (motivoCredito) */
@@ -629,10 +718,11 @@ function lpMenu(v){
     return lpShow(p.name,opts);}
   if(k==='tx'){const t=db.transactions.find(x=>x.id===id);if(!t)return;
     const ok=podeEditar(t.propertyId,'tx.add',t);
-    return lpShow(t.label,[{label:ok?'Editar movimento':'Ver movimento',icon:'swap',act:()=>txModal(id)}].concat(ok?[{label:'Apagar movimento',icon:'trash',act:()=>delTx(id)}]:[]));}
+    return lpShow(t.label,ok?[{label:'Editar movimento',icon:'pen',act:()=>txModal(id)},
+      {label:'Apagar movimento',icon:'trash',act:()=>delTx(id)}]:[]);}
   if(k==='ct'){const c=contract(id);if(!c)return;
     const ok=podeEditar(c.propertyId,'contract.add',c);
-    const opts=[{label:ok?'Editar contrato':'Ver contrato',icon:'contract',act:()=>ctModal(id)}];
+    const opts=ok?[{label:'Editar contrato',icon:'pen',act:()=>ctModal(id)}]:[];
     if(isActive(c)&&pode(c.propertyId,'tx.add'))opts.push({label:'Registar renda',icon:'up',act:()=>txModal(null,'income',c.propertyId,null,id)});
     opts.push({label:'Gerar contrato em PDF',icon:'pen',act:()=>generateContractPdf(id)});
     if(ok)opts.push(isActive(c)?{label:'Terminar contrato',icon:'x',act:()=>endContract(id)}:{label:'Reativar contrato',icon:'check',act:()=>reactivateContract(id)},
@@ -640,7 +730,15 @@ function lpMenu(v){
     return lpShow(ctName(c),opts);}
   if(k==='per'){const kind=a[1],pid=a[2],list=kind==='owner'?db.owners:db.tenants,pp=list.find(x=>x.id===pid);if(!pp)return;
     const ok=kind==='owner'||podeEditarInquilino(pp);
-    return lpShow(pp.name,[{label:ok?'Editar ficha':'Ver ficha',icon:'users',act:()=>personModal(kind,pid)}].concat(ok?[{label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)}]:[]));}
+    return lpShow(pp.name,ok?[{label:'Editar ficha',icon:'pen',act:()=>personModal(kind,pid)},
+      {label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)}]:[]);}
+  /* Os cartões de visita têm data-lp desde sempre, e o toque longo não fazia
+     nada: vibrava, enchia a barra da espera e acabava em silêncio, porque
+     este ramo não existia. */
+  if(k==='vis'){const v=(db.visits||[]).find(x=>x.id===id);if(!v)return;
+    const opts=podeEditar(v.propertyId,'visit.add',v)?[{label:'Editar visita',icon:'pen',act:()=>visitModal(id)}]:[];
+    visOpcoes(v).forEach(it=>opts.push({label:it.label,icon:it.icon,act:new Function(it.act)}));
+    return lpShow(v.nomes||'Visita',opts);}
   if(k==='rec'){const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
     /* com rec.add confirmo e silencio qualquer planeado (o servidor só lhe funde next, until e muted);
        editar os campos e apagar é só o que eu criei — o alheio que termina ao confirmar apaga-se
@@ -648,12 +746,12 @@ function lpMenu(v){
     const hid=(r.tx||{}).propertyId,conf=podeEditar(hid,'rec.add',r,'confirmar'),edita=podeEditar(hid,'rec.add',r),opts=[];
     if(r.next&&r.next<=today()&&!recusaConfirmar(r))opts.push({label:'Confirmar',icon:'check',act:()=>quickConfirmRec(id)});
     if(conf)opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)});
-    if(edita)opts.push({label:'Editar',icon:'swap',act:()=>editRec(id)},{label:'Apagar',icon:'trash',act:()=>delRec(id)});
+    if(edita)opts.push({label:'Editar',icon:'pen',act:()=>editRec(id)},{label:'Apagar',icon:'trash',act:()=>delRec(id)});
     return lpShow(r.name,opts);}
   if(k==='tpl'){const x=(db.templates||[]).find(y=>y.id===id);if(!x)return;
-    return lpShow(x.name,[{label:'Usar modelo',icon:'plus',act:()=>newFromTemplate(id)},{label:'Editar',icon:'file',act:()=>editTpl(id)},{label:'Apagar',icon:'trash',act:()=>delTpl(id)}]);}
+    return lpShow(x.name,[{label:'Usar modelo',icon:'plus',act:()=>newFromTemplate(id)},{label:'Editar',icon:'pen',act:()=>editTpl(id)},{label:'Apagar',icon:'trash',act:()=>delTpl(id)}]);}
   if(k==='mort'){const pid=a[1],lid=a[2],p=prop(pid),l=findLoan(p,lid);if(!l)return;
-    const opts=pode(pid,'house.edit')?[{label:'Editar hipoteca',icon:'bank',act:()=>mortModal(pid,lid)}]:[];
+    const opts=pode(pid,'house.edit')?[{label:'Editar hipoteca',icon:'pen',act:()=>mortModal(pid,lid)}]:[];
     if(Number(l.outstanding)>0&&!motivoCredito(pid))opts.push({label:'Pagamento de crédito',icon:'bank',act:()=>txModal(null,'loan',pid,null,null,{loanId:lid})},{label:'Amortização',icon:'trend',act:()=>amortModal(pid,lid)});
     if(pode(pid,'house.edit'))opts.push({label:'Apagar hipoteca',icon:'trash',act:()=>delMortFrom(pid,lid)});
     return lpShow(loanName(l),opts);}
