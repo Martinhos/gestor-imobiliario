@@ -94,6 +94,9 @@ function camadaDeSaida(){
    Devolve: nada — mete o nó na camada de saída e remove-o no fim. */
 function sairDoEcra(a){
   const e=a.el,dur=msDoToken('--lento',340);
+  /* a camada e position:fixed, portanto o que se lhe da sao coordenadas da
+     JANELA — que sao as que foram medidas, e nao as do documento */
+  a=({x:(a.ecra?a.ecra.left:a.x),y:(a.ecra?a.ecra.top:a.y),w:a.w,el:e});
   /* sem id: durante estes 340ms o nó ainda está no documento, e um
      getElementById que passasse por aqui podia apanhar o que já saiu */
   semIds(e);
@@ -122,7 +125,14 @@ function sairDoEcra(a){
    próprio elemento.
    Devolve: o que a função pintar devolver. */
 /* Está à vista, ou perto?
-   Recebe: r — um retângulo do ecrã (getBoundingClientRect).
+
+   Só decide se vale a pena ANIMAR — nunca se a peça existe. Foram coisas
+   diferentes durante um tempo, e o resultado foi mau: quem não tinha sido
+   medido por estar fora da janela parecia ter chegado agora e entrava a
+   desvanecer, e quem tinha sido medido e saía da janela parecia ter saído do
+   ecrã e deixava um fantasma fixo por cima do conteúdo — tudo sem nada ter
+   mudado, só por se ter rolado a página.
+   Recebe: r — um retângulo do getBoundingClientRect.
    Devolve: verdadeiro se está na janela, com um ecrã de folga para cada lado. */
 function porPerto(r){
   if(!r.width&&!r.height)return false;
@@ -130,17 +140,34 @@ function porPerto(r){
   return r.bottom>-h&&r.top<h*2;
 }
 
+/* Onde está uma peça, contada a partir do DOCUMENTO e não da janela.
+
+   O getBoundingClientRect conta a partir do canto do ecrã, por isso qualquer
+   scroll entre a medição e a aplicação vira um deslocamento que nunca
+   aconteceu. E há um mesmo no meio: o go() faz scrollTo(0,0) DEPOIS do render
+   e ANTES da microtarefa que aplica. Medido: tocar no separador em que já se
+   está, com a página a 600, punha os blocos da visão geral a deslizar 606px
+   sem nada ter mudado. Com o scroll somado, rolar deixa de ser uma mudança.
+   Recebe: e — o elemento.
+   Devolve: {r,x,y,w} — o retângulo tal e qual, e a posição no documento. */
+function ondeEsta(e){
+  const r=e.getBoundingClientRect();
+  return {r:r,x:r.left+(window.pageXOffset||0),y:r.top+(window.pageYOffset||0),w:r.width};
+}
+
 /* Onde estão agora as peças com chave, para se poder comparar depois.
+   Mede-se TUDO o que tem chave, esteja à vista ou não: quem decide o que se
+   anima é o porPerto, mais tarde, e quem decide o que existe é o documento.
    Recebe: raiz — o elemento onde procurar (com null devolve vazio).
-   Devolve: objeto {chave:{el,x,y,w}} com as peças à vista, ou null se não há
-   nada a medir (sem raiz, ou porque o sistema pediu menos movimento). */
+   Devolve: objeto {chave:{el,x,y,w}}, ou null se não há nada a medir (sem
+   raiz, ou porque o sistema pediu menos movimento). */
 function medirContinuidade(raiz){
   if(semMovimento()||!raiz||!raiz.querySelectorAll||!raiz.animate)return null;
   const antes={};
   [].slice.call(raiz.querySelectorAll(SEL_CHAVE)).forEach(function(e){
     const k=chaveDe(e);if(!k)return;
-    const r=e.getBoundingClientRect();
-    if(porPerto(r))antes[k]={el:e,x:r.left,y:r.top,w:r.width};
+    const p=ondeEsta(e);
+    if(p.r.width||p.r.height)antes[k]={el:e,x:p.x,y:p.y,w:p.w,ecra:p.r};
   });
   return antes;
 }
@@ -160,12 +187,14 @@ function aplicarContinuidade(antes,raiz){
   const vistos={};
   [].slice.call(raiz.querySelectorAll(SEL_CHAVE)).forEach(function(e){
     const k=chaveDe(e);if(!k)return;
+    /* existir é uma pergunta ao documento, e é respondida para TODAS — só
+       depois é que se vê se vale a pena animar esta */
     vistos[k]=1;
-    const a=antes[k],r=e.getBoundingClientRect();
-    if(!porPerto(r))return;
+    const a=antes[k],p=ondeEsta(e);
+    if(!porPerto(p.r))return;
     if(!a){e.animate([{opacity:0,transform:'translateY(-6px)'},{opacity:1,transform:'none'}],
       {duration:dur,easing:curva});return}
-    const dx=a.x-r.left,dy=a.y-r.top;
+    const dx=a.x-p.x,dy=a.y-p.y;
     /* menos de um pixel não é um movimento, é ruído de arredondamento — e uma
        animação por linha que não sai do sítio custa o mesmo que uma que sai */
     if(Math.abs(dx)<1&&Math.abs(dy)<1)return;

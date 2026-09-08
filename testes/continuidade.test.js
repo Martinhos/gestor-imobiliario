@@ -40,6 +40,36 @@ describe('a repintura acontece sempre', () => {
   });
 });
 
+describe('rolar a pagina nao e uma mudanca', () => {
+  const cont = readFileSync(new URL('../web/app/continuidade.js', import.meta.url), 'utf8');
+
+  /* Medido: tocar no separador em que ja se esta, com a pagina a 600, punha os
+     blocos da visao geral a deslizar 606px sem nada ter mudado. O
+     getBoundingClientRect conta a partir da janela, e o go() faz scrollTo(0,0)
+     DEPOIS do render e ANTES da microtarefa que aplica — o scroll perdido
+     virava deslocamento. */
+  test('as posicoes sao contadas a partir do documento, e nao da janela', () => {
+    assert.match(cont, /function ondeEsta\(e\)\{/, 'ha um so sitio a converter');
+    assert.match(cont, /r\.left\+\(window\.pageXOffset\|\|0\)/);
+    assert.match(cont, /r\.top\+\(window\.pageYOffset\|\|0\)/);
+    // e ninguem compara rects crus a seguir
+    assert.doesNotMatch(cont, /a\.y-r\.top|a\.x-r\.left/,
+      'comparar rects da janela era o defeito');
+  });
+
+  /* A janela de vista so decide o que vale a pena animar. Quando decidia
+     tambem o que EXISTE, uma peca fora da janela parecia ter chegado agora
+     (entrava a desvanecer) ou ter saido do ecra (ficava um fantasma fixo por
+     cima do conteudo), so por se ter rolado a pagina. */
+  test('estar por perto nao decide se a peca existe', () => {
+    const corpo = cont.slice(cont.indexOf('function aplicarContinuidade'));
+    const marca = corpo.indexOf('vistos[k]=1');
+    const filtro = corpo.indexOf('porPerto');
+    assert.ok(marca > -1 && filtro > -1, 'os dois estao la');
+    assert.ok(marca < filtro, 'marca-se como vista ANTES de perguntar se esta por perto');
+  });
+});
+
 describe('menos movimento', () => {
   /* A regra de CSS que anula animações não apanha estas: são feitas pela API
      do JavaScript, que o @media não vê. Tem de se perguntar à mão — e sem
