@@ -315,7 +315,11 @@ html.dark .badge.red{color:var(--danger)}
    um gráfico não pode mudar de altura só por alguém lhe tocar. E a faixa fica
    no topo, fixa — debaixo do dedo era onde o balão antigo estava, e é onde a
    mão tapa o que se quer ler. */
-.chartbox{position:relative;touch-action:pan-y}
+/* Sem seleção nem callout: os rótulos do eixo são <text> a sério dentro do
+   SVG, e segurar o dedo caía no gesto de selecionar palavra do browser — que
+   escolhia o mês e, ao começar, roubava o ponteiro e cancelava a leitura. É a
+   mesma proteção que a app já dá a [data-lp], o outro gesto de segurar. */
+.chartbox{position:relative;touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .chartguia,.chartlido{opacity:0;pointer-events:none;transition:opacity var(--rapido) var(--curva)}
 .chartbox.a-ler .chartguia,.chartbox.a-ler .chartlido{opacity:1}
 .chartguia{position:absolute;top:0;bottom:13px;width:1.5px;margin-left:-.75px;background:var(--line2);border-radius:2px}

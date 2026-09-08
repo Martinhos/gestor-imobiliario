@@ -145,14 +145,24 @@ function largarLeitura(caixa){
 document.addEventListener('pointerdown',function(e){
   const caixa=e.target.closest&&e.target.closest('.chartbox[data-lido]');
   if(!caixa)return;
+  /* o gesto passa a ser da caixa do princípio ao fim: sem isto, o ponteiro
+     anda a saltar de forma em forma e há quem lhe queira pegar pelo caminho */
+  try{caixa.setPointerCapture(e.pointerId)}catch(x){}
   mostrarColuna(caixa,colunaSobODedo(caixa,JSON.parse(caixa.getAttribute('data-lido')),e.clientX));
 },true);
+/* segurar num gráfico é ler, não é pedir um menu */
+document.addEventListener('contextmenu',function(e){
+  if(e.target&&e.target.closest&&e.target.closest('.chartbox[data-lido]'))e.preventDefault();
+});
 document.addEventListener('pointermove',function(e){
   const caixa=document.querySelector('.chartbox.a-ler[data-lido]');
   if(!caixa||e.buttons===0&&e.pointerType!=='touch')return;
   mostrarColuna(caixa,colunaSobODedo(caixa,JSON.parse(caixa.getAttribute('data-lido')),e.clientX));
 },true);
-['pointerup','pointercancel','pointerleave'].forEach(t=>document.addEventListener(t,function(){
+/* Só o dedo a levantar acaba a leitura. O pointerleave saiu da lista: ouvido
+   em captura no documento, dispara ao passar de uma barra para a seguinte
+   DENTRO do próprio gráfico, e a leitura piscava a meio do arrasto. */
+['pointerup','pointercancel'].forEach(t=>document.addEventListener(t,function(){
   largarLeitura(document.querySelector('.chartbox.a-ler'));
 },true));
 

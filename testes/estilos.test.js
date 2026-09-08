@@ -175,8 +175,15 @@ describe('movimento', () => {
     assert.ok(g, 'a regra da guia e da faixa existe');
     assert.match(cssLimpo, /\.chartguia\{position:absolute/);
     assert.match(cssLimpo, /\.chartlido\{position:absolute[^}]*top:0/, 'a faixa fica no topo, fora do dedo');
-    assert.match(cssLimpo, /\.chartbox\{position:relative;touch-action:pan-y\}/,
-      'e o gesto horizontal lê sem impedir o scroll vertical');
+    const cb = /\.chartbox\{([^}]*)\}/.exec(cssLimpo);
+    assert.ok(cb, 'a regra da caixa existe');
+    assert.match(cb[1], /position:relative/);
+    assert.match(cb[1], /touch-action:pan-y/, 'o gesto horizontal lê sem impedir o scroll vertical');
+    /* Segurar o dedo num gráfico caía no gesto de selecionar palavra do
+       browser — escolhia o mês e, ao começar, roubava o ponteiro e cancelava
+       a leitura. É a mesma proteção que [data-lp] já tem. */
+    assert.match(cb[1], /user-select:none/, 'segurar num gráfico não seleciona os rótulos');
+    assert.match(cb[1], /-webkit-touch-callout:none/, 'nem abre o callout do iOS');
     assert.match(graficos, /closest\('\.chartbox\[data-lido\]'\)\)return/,
       'onde já se lê com o dedo, o balão antigo cala-se');
   });
