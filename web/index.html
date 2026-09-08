@@ -70,9 +70,9 @@
      página sabe apresentar-se clara e escura. Quem escolhe é o applyTheme(),
      que estreita isto para um dos dois com um estilo em linha. */
   color-scheme:light dark;
-  --bg:#f7f8fa; --card:#fff; --field:#fff; --chip:#f2f4f3; --tint:#f6faf8;
+  --bg:#f7f8fa; --card:#fff; --field:#fff; --chip:#f2f4f3; --tint:#f6faf8; --press:#e4e9e6;
   --ink:#17221d; --muted:#5a635e; --line:#e7ebe8; --line2:#cfd8d3;
-  --accent:#244c3b; --accent-ink:#fff; --accent-soft:#dfece6; --accent-press:#1c3d2f;
+  --accent:#244c3b; --accent-ink:#fff; --accent-soft:#dfece6; --accent-press:#1c3d2f; --accent-fundo:#132a20;
   --danger:#b94a48; --danger-soft:#f7e8e7; --warn:#9a6400; --warn-soft:#f6eeda;
   --side:#1a3a2c; --side-ink:#dfece6; --side-muted:#9dbdae; --side-hover:rgba(255,255,255,.07); --side-on:rgba(255,255,255,.13);
   --track:#dfe3e1; --blur:rgba(247,248,250,.94); --shadow:0 24px 60px rgba(0,0,0,.28);
@@ -81,20 +81,33 @@
      folha, para nada aqui ser um número escolhido à sorte. --curva arranca
      depressa e chega devagar — é a de quem entra em cena; --curva-sai faz o
      inverso, e serve o que se fecha ou desaparece. */
-  --rapido:.12s; --medio:.2s; --lento:.26s;
+  /* O --lento é o degrau de quem atravessa distância — a folha da janela. A
+     .26s não chegava: com a curva certa, uma folha que sobe o ecrã inteiro
+     precisa de tempo para se ver subir. */
+  --rapido:.12s; --medio:.2s; --lento:.34s;
   /* fora da escala porque não são reações: --desenho é um gráfico a
-     desenhar-se, que se vê acontecer, e --pulso é um crachá a saltar */
+     desenhar-se e --pulso é um crachá a saltar */
   --desenho:.5s; --pulso:.18s;
-  --curva:cubic-bezier(.22,1,.36,1); --curva-sai:cubic-bezier(.4,0,1,1);
+  /* DUAS curvas de entrada, e a diferença é a distância percorrida.
+     A --curva é um estalido: medida, faz 83% do caminho em 30% do tempo. É o
+     que se quer num botão que encolhe 3% — a reação tem de parecer imediata.
+     Numa folha que atravessa o ecrã, quer dizer 83% da altura em 78 ms: a
+     janela teleporta-se e passa o resto do tempo a assentar os últimos 4%.
+     A --curva-entra faz 64% em 30% e é a de quem ATRAVESSA distância: a folha
+     da janela, a gaveta, as barras de um gráfico a crescer, o conteúdo de uma
+     dobra. Quem estiver na dúvida: se o que se move percorre mais do que uns
+     poucos pixeis, é a --curva-entra. */
+  --curva:cubic-bezier(.22,1,.36,1); --curva-entra:cubic-bezier(0,0,.2,1);
+  --curva-sai:cubic-bezier(.4,0,1,1);
   --safe:env(safe-area-inset-top,0px);
   --inset-top:var(--safe); --inset-bottom:env(safe-area-inset-bottom,0px);
   --inset-left:env(safe-area-inset-left,0px); --inset-right:env(safe-area-inset-right,0px);
 }
 :root.dark{
   color-scheme:dark;
-  --bg:#12141b; --card:#1b1e28; --field:#20242f; --chip:#272b38; --tint:#1f2330;
+  --bg:#12141b; --card:#1b1e28; --field:#20242f; --chip:#272b38; --tint:#1f2330; --press:#333949;
   --ink:#eef0f6; --muted:#9aa3b8; --line:#2b3040; --line2:#3a4054;
-  --accent:#5ee0a8; --accent-ink:#0b1410; --accent-soft:#1c3a33; --accent-press:#7ceabb;
+  --accent:#5ee0a8; --accent-ink:#0b1410; --accent-soft:#1c3a33; --accent-press:#7ceabb; --accent-fundo:#9df0cd;
   --danger:#ff8a80; --danger-soft:#3a2326; --warn:#ffc35c; --warn-soft:#3a2f14;
   --side:#161a3a; --side-ink:#e3e6ff; --side-muted:#9aa0d6; --side-hover:rgba(255,255,255,.07); --side-on:rgba(94,224,168,.18);
   --track:#3a4054; --blur:rgba(18,20,27,.92); --shadow:0 24px 60px rgba(0,0,0,.6);
@@ -115,7 +128,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .value,.table td,.table th,.stat b{font-variant-numeric:tabular-nums}
 
 .app{display:flex;min-height:100%}
-aside{width:var(--rail);flex:0 0 var(--rail);background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;height:100dvh;transition:width var(--medio) var(--curva),flex-basis var(--medio) var(--curva),transform var(--medio) var(--curva);z-index:62}
+aside{width:var(--rail);flex:0 0 var(--rail);background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;height:100dvh;transition:width var(--medio) var(--curva-entra),flex-basis var(--medio) var(--curva-entra),transform var(--medio) var(--curva-entra);z-index:62}
 body.rail aside{width:var(--rail-min);flex-basis:var(--rail-min)}
 .brand{display:flex;align-items:center;gap:11px;padding:calc(18px + var(--inset-top)) 18px 14px;min-height:60px}
 .brand .mark{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.12);display:grid;place-items:center;flex:0 0 34px}
@@ -170,7 +183,9 @@ header.top .sub{color:var(--muted);font-size:12px;margin-top:2px}
 .card.tap{cursor:pointer;position:relative;overflow:hidden;transition:border-color var(--rapido) var(--curva),transform var(--rapido) var(--curva),background var(--rapido) var(--curva)}
 .card.tap::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);opacity:.5}
 .card.tap:hover{border-color:var(--line2);background:var(--tint)}
-.card.tap:active{transform:scale(.99);background:var(--chip)}
+/* 1% não se vê: era a queixa de «não reage ao toque, só muda de cor». As
+   linhas de lista são a superfície que mais se toca na app. */
+.card.tap:active{transform:scale(.98);background:var(--press)}
 .card.tap.pend::before,.card.kpi::before{display:none}
 [data-lp]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 *{-webkit-tap-highlight-color:transparent}
@@ -305,7 +320,7 @@ nav a .cnt{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px
    reconstrói tudo) fazia o conteúdo piscar a cada escolha. */
 .fold-body{display:none;padding:2px 14px 14px;gap:13px}
 .fold.open>.fold-body{display:grid}
-.fold.entra.open>.fold-body{animation:foldEntra var(--medio) var(--curva)}
+.fold.entra.open>.fold-body{animation:foldEntra var(--medio) var(--curva-entra)}
 @keyframes foldEntra{from{opacity:0;transform:translateY(-6px)}}
 .pend{border-left:3px solid var(--warn)}
 .pend.late{border-left-color:var(--danger)}
@@ -550,18 +565,33 @@ textarea{min-height:90px;resize:vertical}
    ao que lá está, senão saltavam do sítio ao serem premidos */
 .totop:active{transform:translateX(-50%) scale(.94)}
 .qclear:active{transform:translateY(-50%) scale(.9)}
-/* o fundo premido só onde há fundo neutro para escurecer: quem já está ativo
-   (.on) fica com o seu, e a gaveta tem paleta própria */
+/* O fundo premido é o --press, e nunca o --chip: medido, cinco pares
+   :hover/:active pintavam-se da mesma cor (.iconbtn, .selopt, .menupop
+   button, .legend .li.tap e .btn.primary). Com rato, o ponteiro fica em cima
+   depois do clique, o :hover mantém a cor, e o toque seguinte não muda nada —
+   a app parecia deixar de responder ao segundo toque. Com uma cor própria,
+   premido nunca pode ser igual a passar por cima.
+   Só onde há fundo neutro para escurecer: quem já está ativo (.on) fica com o
+   seu, e a gaveta tem paleta própria. */
 .btn:active,.iconbtn:active,.selbtn:active,.selopt:active,.menupop button:active,
 .addbox:active,.fold-head:active,.tagadd:active,.legend .li.tap:active,
 .rich-tools button:active,.burger:active,.totop:active,.qclear:active,
-.tabbar a:not(.on):active,.calday.tap:not(.on):active,.opt:not(.on):active{background:var(--chip)}
-.btn.primary:active{background:var(--accent-press);border-color:var(--accent-press)}
+.tabbar a:not(.on):active,.calday.tap:not(.on):active,.opt:not(.on):active{background:var(--press)}
+/* o :hover já usava o --accent-press: sem uma cor mais funda, premir um
+   botão primário com o rato em cima não mudava nada */
+.btn.primary:active{background:var(--accent-fundo);border-color:var(--accent-fundo)}
 .btn.danger:active{background:var(--danger-soft)}
 nav a:active,.railbtn:active{background:var(--side-on);color:#fff}
 /* o FAB tinha o scale(.96) declarado e nenhuma transição para o executar:
    descia e subia em zero frames, na peça mais tocada da app */
 .fab{transition:transform var(--rapido) var(--curva)}
+
+/* Rede do premido, a par da do foco: o tornarFocavel dá role=button a tudo o
+   que tem onclick, e medi cinco sítios só na visão geral que reagiam ao toque
+   com nada. Fica por baixo das regras de cima na especificidade, por isso
+   quem já tem o seu (o .card.tap, por exemplo) mantém-no. */
+[role="button"]:active,.tap:active{transform:scale(.98)}
+[role="button"]:not(.on):active,.tap:not(.card):not(.on):active{background:var(--press)}
 
 /* --- O foco desenha-se ---
    O tornarFocavel() dá tabindex e role=button a todos os cartões com onclick, e
@@ -597,11 +627,11 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
 @keyframes folhaEntra{from{opacity:0;transform:translate(-50%,-50%) translateY(14px) scale(.98)}}
 @keyframes folhaSobe{from{transform:translateY(100%)}}
 @keyframes popEntra{from{opacity:0;transform:scale(.96)}}
-.modal.open .bg{animation:veuEntra var(--medio) var(--curva)}
-.modal.open .sheet{animation:folhaEntra var(--lento) var(--curva)}
+.modal.open .bg{animation:veuEntra var(--lento) var(--curva-entra)}
+.modal.open .sheet{animation:folhaEntra var(--lento) var(--curva-entra)}
 /* abaixo dos 520px a janela é uma folha encostada em baixo: o gesto que o
    sistema ensina é subir, e até aqui ela materializava-se feita */
-@media(max-width:520px){.modal.open .sheet{animation:folhaSobe var(--lento) var(--curva)}}
+@media(max-width:520px){.modal.open .sheet{animation:folhaSobe var(--lento) var(--curva-entra)}}
 /* a origem é o lado por onde o menu nasce: o do sel() cai do botão, o das
    ações abre do canto direito e o do FAB sobe do canto de baixo */
 .selpop.on{transform-origin:top center;animation:popEntra var(--rapido) var(--curva)}
@@ -658,9 +688,9 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
    são irmãs dos onze elementos do eixo, e um nth-child contava-os a todos (a
    primeira barra ficava com o último degrau); nas horizontais o .ghbar é
    sempre filho único, e nenhuma regra chegava a casar. */
-#view.entra .gbar{transform-box:fill-box;transform-origin:bottom;animation:gbar var(--desenho) var(--curva) both}
-#view.entra .ghbar{transform-origin:left;animation:ghbar var(--desenho) var(--curva) both}
-#view.entra .gdonut{stroke-dasharray:1;animation:gdonut var(--desenho) var(--curva) both}
+#view.entra .gbar{transform-box:fill-box;transform-origin:bottom;animation:gbar var(--desenho) var(--curva-entra) both}
+#view.entra .ghbar{transform-origin:left;animation:ghbar var(--desenho) var(--curva-entra) both}
+#view.entra .gdonut{stroke-dasharray:1;animation:gdonut var(--desenho) var(--curva-entra) both}
 </style>
 </head>
 <body>

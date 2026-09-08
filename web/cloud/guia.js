@@ -410,11 +410,19 @@ css.textContent =
   /* Acima do botão flutuante e não por cima dele: o tutorial manda carregar
      nesse botão, e estava a tapá-lo. */
   '#cwGuia{position:fixed;left:12px;right:12px;bottom:calc(88px + var(--inset-bottom));z-index:59;' +
-    'pointer-events:none;display:flex;justify-content:center}' +
+    'pointer-events:none;display:flex;justify-content:center;' +
+    /* Entra em vez de aparecer. O cartão nasce logo a seguir a uma mudança de
+       ecrã — o passo leva a pessoa às Definições e a vista inteira é
+       repintada no mesmo instante — e um cartão parado no canto de baixo
+       perde-se nisso tudo, ainda por cima quando o texto manda olhar para o
+       topo. Sobe de fora do ecrã, com a curva de quem atravessa distância. */
+    'animation:guiaEntra var(--lento) var(--curva-entra)}' +
+  '@keyframes guiaEntra{from{opacity:0;transform:translateY(28px)}}' +
   '#cwGuia .guia-cartao{pointer-events:auto;width:100%;max-width:420px;padding:14px 16px;' +
     'box-shadow:var(--shadow);border-color:var(--accent)}' +
   // por cima de uma janela aberta (60) e encostado ao topo, longe dos botões
-  '#cwGuia.sobre-janela{z-index:61;bottom:auto;top:calc(12px + var(--inset-top))}' +
+  '#cwGuia.sobre-janela{z-index:61;bottom:auto;top:calc(12px + var(--inset-top));' +
+    'animation:guiaEntra var(--lento) var(--curva-entra)}' +
   '@media(min-width:900px){#cwGuia{left:auto;right:22px;max-width:420px;bottom:calc(22px + var(--inset-bottom))}' +
     '#cwGuia.sobre-janela{top:calc(16px + var(--inset-top))}}';
 document.head.appendChild(css);

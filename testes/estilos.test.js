@@ -124,6 +124,49 @@ describe('movimento', () => {
     assert.match(cssLimpo, /\.qclear:active\{transform:translateY\(-50%\) scale/);
   });
 
+  /* Do uso real: «muitos botões ficam brancos quando clico, mas depois volto a
+     clicar e já não fica». Cinco pares :hover/:active pintavam-se da MESMA cor
+     (.iconbtn, .selopt, .menupop button, .legend .li.tap e .btn.primary). Com
+     rato, o ponteiro fica em cima depois do clique, o :hover mantém a cor, e o
+     toque seguinte não muda coisa nenhuma. */
+  test('premido nunca é da mesma cor que passar por cima', () => {
+    const fundo = (corpo) => (corpo.match(/background(?:-color)?:\s*([^;]+)/) || [])[1];
+    const porEstado = (estado) => {
+      const m = {};
+      for (const r of cssLimpo.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+        if (!r[1].includes(estado)) continue;
+        const cor = fundo(r[2]);
+        if (!cor) continue;
+        r[1].split(',').map((x) => x.trim()).forEach((sel) => {
+          if (sel.includes(estado)) m[sel.split(estado)[0].trim()] = cor.trim();
+        });
+      }
+      return m;
+    };
+    const passa = porEstado(':hover'), preme = porEstado(':active');
+    const iguais = Object.keys(preme).filter((k) => passa[k] && passa[k] === preme[k]);
+    assert.deepEqual(iguais, [], 'premido igual a hover: o segundo toque não muda nada');
+  });
+
+  /* Medido no browser: a --curva faz 83% do caminho em 30% do tempo. Num botão
+     que encolhe 3% é o estalido que se quer; numa folha que sobe o ecrã
+     inteiro, são 83% da altura em 78ms — «nem se percebe que deslizou». */
+  test('o que atravessa distância não usa a curva do estalido', () => {
+    ['--curva-entra'].forEach((t) => {
+      assert.match(cssLimpo, new RegExp(t + '\\s*:\\s*[^;]'), t + ' declarado no :root');
+      assert.ok(cssLimpo.includes('var(' + t + ')'), t + ' declarado mas nunca citado');
+    });
+    // a folha, o véu, a gaveta e as formas dos gráficos: tudo o que percorre caminho
+    [/\.modal\.open \.sheet\{animation:folhaEntra var\(--lento\) var\(--curva-entra\)/,
+      /\.modal\.open \.sheet\{animation:folhaSobe var\(--lento\) var\(--curva-entra\)/,
+      /#view\.entra \.gbar\{[^}]*var\(--curva-entra\)/,
+      /#view\.entra \.gdonut\{[^}]*var\(--curva-entra\)/,
+      /aside\{[^}]*transition:width var\(--medio\) var\(--curva-entra\)/]
+      .forEach((r) => assert.match(cssLimpo, r, 'ainda com a curva do estalido: ' + r));
+    // e a folha teve de ganhar tempo: a .26s não chegava para se ver subir
+    assert.match(cssLimpo, /--lento:\.3\ds/, 'o degrau longo cresceu');
+  });
+
   /* Medido: o --accent (#244c3b) sobre o --side (#1a3a2c) da gaveta dá 1.29:1
      — o anel existia e não se via. */
   test('o anel de foco na gaveta escura vem da paleta da gaveta', () => {
