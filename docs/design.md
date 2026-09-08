@@ -221,10 +221,33 @@ dos elementos do eixo, e um :nth-child conta-os a eles também. São seis
 degraus de 30ms e depois pára — com mais, um gráfico de doze barras
 demora mais a desenhar-se do que a ser lido.
 
-Anima-se a entrada, não a saída. Fechar uma janela tira-lhe o nó
-(componentes.js:closeModal): animar a saída obrigava a adiar essa remoção
-e a mexer na pilha de janelas, e a app fecharia mais devagar do que a
-pessoa quer que feche.
+Anima-se a entrada, não a saída — com uma exceção, e é a que se vê a
+seguir. Fechar uma janela tira-lhe o nó (componentes.js:closeModal): animar
+a saída obrigava a adiar essa remoção e a mexer na pilha de janelas, e a
+app fecharia mais devagar do que a pessoa quer que feche.
+
+A exceção é quando alguma coisa sai de UMA LISTA, e aí a saída é metade do
+que se está a dizer. Confirmar um planeado fazia o cartão desaparecer e as
+linhas de baixo aparecerem mais acima — não porque tenham subido, mas
+porque são nós novos que nasceram noutro sítio. Nada se moveu, e por isso
+nada se via mover. O continuidade.js:pintarComContinuidade mede onde cada
+peça está antes de repintar, repinta, e depois desliza as que mudaram de
+lugar, faz entrar as que chegaram e desvanecer as que saíram — o nó que
+saiu não é clonado, é o próprio, que continua vivo depois de o documento o
+deitar fora. Quem participa traz um atributo data-fk com uma chave estável — é
+por ele que o continuidade.js:pintarComContinuidade acompanha as peças; sem
+chave não há como saber se a terceira linha de agora é a terceira de antes.
+
+Onde não há peças a acompanhar mas há uma direção — o mês seguinte do
+calendário, entrar numa categoria do gráfico — usa-se o
+continuidade.js:deslizarEntre, que faz o que sai e o que entra deslizarem
+para o mesmo lado, como uma página a virar.
+
+Estas animações são feitas pela API do JavaScript, e o
+index.html:@media(prefers-reduced-motion:reduce) NÃO as apanha: cada uma
+pergunta primeiro pelo continuidade.js:semMovimento. E nenhuma delas pode
+ficar com a repintura — se não puder animar, chama e sai da frente
+(testes/continuidade.test.js).
 
 O que se toca afunda-se: sempre :active e nunca :hover, que no iOS fica
 preso depois do toque, e num telemóvel é o único sinal que existe entre o

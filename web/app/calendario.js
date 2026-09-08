@@ -33,11 +33,18 @@ function calSelDia(){
    Devolve: nada — limpa calDiaSel, atualiza calMes e chama render(). */
 function calNav(delta){
   calDiaSel='';
-  if(!delta){calMes='';render();return}
+  /* A grelha do mês vira como uma página, para o lado a que se foi. Sem isto
+     o mês trocava de números no sítio e ninguém via para onde tinha andado. */
+  const grelha=()=>document.getElementById('calCard');
+  const antes=calMes;
+  if(!delta){
+    if(!antes)return render();
+    const paraTras=(antes>pzHoje().slice(0,7));
+    return deslizarEntre(grelha,()=>{calMes='';render()},paraTras?-1:1);
+  }
   const d=new Date(calInicio()+'T00:00:00');
   d.setMonth(d.getMonth()+delta);
-  calMes=pzIso(d).slice(0,7);
-  render();
+  deslizarEntre(grelha,()=>{calMes=pzIso(d).slice(0,7);render()},delta>0?1:-1);
 }
 
 /* As ocorrências dos movimentos planeados dentro de um intervalo de dias,
@@ -98,8 +105,8 @@ function vCalendar(){
       <b style="flex:1;text-align:center">${esc(nome)}</b>
       <button class="btn" style="transform:scaleX(-1)" onclick="calNav(1)" aria-label="Mês seguinte">${ic('chev',18)}</button>
       ${calMes?`<button class="btn" onclick="calNav(0)">Hoje</button>`:''}</div>
-    <div class="card" style="padding:12px">
-      <div class="calgrid calhead">${['S','T','Q','Q','S','S','D'].map(x=>`<span>${x}</span>`).join('')}</div>
+    <div class="card" id="calCard" style="padding:12px">
+      <div class="calgrid calhead" id="calGrelha0">${['S','T','Q','Q','S','S','D'].map(x=>`<span>${x}</span>`).join('')}</div>
       <div class="calgrid">${celulas}</div></div>
     ${calDiaPanel(sel)}
     <div class="hint" style="margin-top:10px"><i class="pt vis" style="vertical-align:middle"></i> visitas${total?' ('+total+' este mês)':''} · <i class="pt pla" style="vertical-align:middle"></i> movimentos planeados · toca num dia para veres o que tem</div>`;

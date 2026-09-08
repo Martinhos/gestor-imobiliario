@@ -297,9 +297,15 @@ function donutCard(){
 // Recebe: cat — o nome da categoria a abrir; vazio ('') volta às categorias de topo.
 // Devolve: nada — repinta o cartão do donut (ou a vista toda, se o cartão não estiver no DOM).
 function donutDrill(cat){
+  const entrando=!!(cat||'')&&!donutCat;   // entrar numa categoria é ir para a frente
   donutCat=cat||'';
   const e=document.getElementById('donutCard');if(!e)return render();
-  e.outerHTML=donutCard();
+  /* Trocar o cartão de golpe lia-se como «mudou a vista», e não como «entrei
+     nesta categoria»: os arcos redesenhavam-se mas tudo o resto aparecia
+     feito, sem ligação nenhuma ao que lá estava antes. */
+  deslizarEntre(()=>document.getElementById('donutCard'),
+    ()=>{const el=document.getElementById('donutCard');if(el)el.outerHTML=donutCard()},
+    entrando?1:-1);
 }
 /* despesas sem imóvel atribuído: contam no total mas não aparecem em nenhuma avaliação
    Recebe: y — o ano a filtrar (número ou texto de 4 dígitos).
@@ -1019,7 +1025,7 @@ function vTransactions(){
       ${xm.caixa||''}<span>${mo}</span><span class="${net>=0?'pos':'neg'}">${euro(net)}</span></div>
       <div class="list">${rows.map(t=>{const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null;
       const x=txLinhaExtra(t,mo)||{};
-      return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
+      return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
         ${x.caixa||''}<div style="min-width:0"><div class="title" style="font-size:14.5px">${esc(t.label)}</div>
           <div class="small">${esc(t.date)} · ${k.short}${t.category?' · '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' · '+esc(propName(t.propertyId)):''}${t.creditor?' · '+esc(t.creditor):''}</div>
           ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}

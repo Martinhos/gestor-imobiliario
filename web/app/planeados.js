@@ -400,7 +400,11 @@ function quickConfirmRec(id){
   /* a mesma frase do formulário: confirmar depressa não pode aceitar o que o Guardar recusa */
   if(recCreditoPago(r))return toast('Esta hipoteca já está paga: não é possível associar novos pagamentos.');
   const t=recTx(r);if(t.kind==='loan')applyLoan(t);
-  db.transactions.push(t);recAdvance(r);save();buildNav();render();toast('Movimento confirmado.');
+  db.transactions.push(t);recAdvance(r);save();buildNav();
+  /* A linha confirmada some-se e as de baixo sobem para o lugar dela, em vez
+     de a vista inteira ser trocada por outra igual menos uma linha. */
+  pintarComContinuidade(render);
+  toast('Movimento confirmado.');
 }
 // Silencia ou reativa a recorrência: silenciada fica em Planeados à espera de
 // confirmação, mas sem avisos nem contagem no menu. Grava e redesenha.
@@ -524,7 +528,7 @@ function pendingCard(all){
   pendAll=!!all;   // para o colapso se redesenhar com a mesma lista
   const pend=all?recPending():recActive();
   if(!pend.length)return '';
-  const row=(r)=>{const late=recIsLate(r),semCred=recSemCredito(r),pago=!semCred&&recCreditoPago(r);return `<div class="card tap pend ${late?'late':''}" style="padding:11px 13px" onclick="confirmRec('${r.id}')">
+  const row=(r)=>{const late=recIsLate(r),semCred=recSemCredito(r),pago=!semCred&&recCreditoPago(r);return `<div class="card tap pend ${late?'late':''}" data-fk="rec:${esc(r.id)}" style="padding:11px 13px" onclick="confirmRec('${r.id}')">
     <div class="row-between" style="align-items:center">
       <div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</b>
         <span class="small">${esc(r.next)}${r.until&&r.until!==r.next?' – '+esc(r.until):''}${EVERY[r.every]?' · '+esc(EVERY[r.every]):''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':''} · ${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}</span>
