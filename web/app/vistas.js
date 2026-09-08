@@ -161,6 +161,27 @@ function silhuetaKpi(vals){
   return `<svg class="ksilhueta" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
     <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
 }
+/* O número que o cartão mostra é o mesmo que a série diz deste ano?
+
+   É a pergunta que faltava, e sem ela a app dizia uma coisa falsa. Na visão
+   geral o número do cartão é o do ano corrente e a comparação entre anos bate
+   certo; nos Movimentos, o Saldo soma o FILTRO INTEIRO — todos os anos — e
+   mostrava −17 000 € com uma comparação a falar de −3 400 €. Uma variação
+   pendurada num número que não é de um ano não quer dizer nada.
+
+   Compara-se pelo texto já formatado, com o formatador da própria série: se os
+   dois não derem exatamente a mesma string, não estão a falar da mesma coisa e
+   a faixa cala-se.
+   Recebe: cx — a caixa da série, que vive dentro do cartão; s — a série; ano —
+   a entrada do ano corrente ({label,value}).
+   Devolve: verdadeiro se o cartão mostra o valor deste ano. */
+function falaDoMesmo(cx,s,ano){
+  const cartao=cx.closest?cx.closest('.card.kpi'):null;
+  const alvo=cartao&&cartao.querySelector('.value');
+  if(!alvo||!s.fmt)return false;
+  const limpa=t=>String(t==null?'':t).replace(/\s+/g,' ').trim();
+  return limpa(alvo.textContent)===limpa(s.fmt(ano.value));
+}
 /* Enche as caixas de série dos indicadores que estão no ecrã.
 
    Corre DEPOIS da pintura e fora do caminho dela: medido com 500 movimentos,
@@ -179,14 +200,18 @@ function pintarSeriesKpi(){
     const anos=(s.yearly||[]).slice().sort((a,b)=>Number(a.label)-Number(b.label));
     const hoje=anos[anos.length-1],antes=anos[anos.length-2];
     let txt='';
-    if(hoje&&antes&&Number(hoje.label)===YEAR&&Number(antes.label)===YEAR-1){
+    if(hoje&&antes&&Number(hoje.label)===YEAR&&Number(antes.label)===YEAR-1&&falaDoMesmo(cx,s,hoje)){
       const a=Number(antes.value)||0,h=Number(hoje.value)||0,d=h-a;
+      /* dois zeros nao se comparam: «igual» entre nada e nada e ruido */
+      if(!a&&!h){cx.innerHTML='';return}
       /* sem ano anterior com valor não há percentagem que signifique alguma
          coisa: diz-se o que se sabe, que é que antes não havia nada */
       const pct=a?Math.round(Math.abs(d)/Math.abs(a)*100):null;
       const sinal=d>0?'pos':d<0?'neg':'';
+      /* diz-se o termo de comparação, e não só a mudança: «face a 2025» nomeia
+         o ano mas não o número, e sem o número não se percebe do que se fala */
       txt=`<span class="kvar ${sinal}">${d>0?'▲':d<0?'▼':'='} ${pct===null?(h?'novo':'igual'):pct+'%'}</span>
-        <span class="kvsub">face a ${antes.label}</span>`;
+        <span class="kvsub">${antes.label}: ${s.fmt?s.fmt(a):a}</span>`;
     }
     cx.innerHTML=silhuetaKpi(s.monthly)+txt;
   });
@@ -195,6 +220,9 @@ function pintarSeriesKpi(){
    Recebe: l — o rótulo do cartão; v — o valor já formatado (string); c (opcional) — classe de cor ('pos', 'neg',
    'amber' ou vazio); f (opcional) — texto do rodapé; why (opcional) — explicação que abre ao toque;
    evo (opcional) — função sem argumentos que devolve a série ({monthly, yearly, fmt, …}) para a janela de evolução;
+   com evo.anual verdadeiro, o cartão abre espaço para a faixa da série, o que
+   só é honesto quando o valor mostrado É o do ano corrente — nos Movimentos o
+   valor é a soma do filtro inteiro e a faixa não tem do que falar;
    acao (opcional) — {label, act} de um botão que a janela oferece no rodapé (ex.: filtrar por este tipo).
    Devolve: string HTML do cartão KPI. */
 const kpi=(l,v,c,f,why,evo,acao)=>{
@@ -205,7 +233,7 @@ const kpi=(l,v,c,f,why,evo,acao)=>{
        ainda não tem altura faria saltar tudo o que está por baixo, que foi
        precisamente a queixa dos «quadrados que aparecem desalinhados». */
     return `<div class="card kpi evo" id="${id}" data-toca="camada" onclick="kpiModal('${id}')"><span class="kic">${ic('trend',11)}</span>
-      <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${haAnoAnterior()?`<div class="kserie" data-kpi="${id}"></div>`:''}${f?`<div class="foot">${f}</div>`:''}</div>`}
+      <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${(evo.anual&&haAnoAnterior())?`<div class="kserie" data-kpi="${id}"></div>`:''}${f?`<div class="foot">${f}</div>`:''}</div>`}
   return `<div class="card kpi ${why?'why':''}" id="${id}" ${why?`data-toca="nada" onclick="document.getElementById('${id}').classList.toggle('open')"`:''}>
     <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${f?`<div class="foot">${f}</div>`:''}
     ${why?`<div class="expl">${why}</div>`:''}</div>`;
@@ -343,7 +371,9 @@ function vDashboard(){
   const act=db.contracts.filter(c=>isActive(c)&&inScope(c.propertyId)&&(!pid||pidProps(pid).some(p=>p.id===c.propertyId)));
   const cs=c=>sh(prop(c.propertyId));
   const quota=ownerFilter?(ownerIsGrp()?`<div class="hint" style="margin:-4px 0 12px">A ver os imóveis do grupo <b>${esc(ownerFilterName())}</b>.</div>`:`<div class="hint" style="margin:-4px 0 12px">Valores na quota-parte de <b>${esc(ownerFilterName())}</b>: receitas, despesas e prestações entram pela divisão de cada movimento; valor, aquisição e dívida pela quota do imóvel.</div>`):'';
-  const E=(field,fmt)=>()=>evoMoney(field,pid,fmt);
+  /* a marca diz que o numero destes cartoes E o do ano corrente — e por isso
+     que a variacao face ao ano anterior pode falar deles (vistas.js:kpi) */
+  const E=(field,fmt)=>{const f=()=>evoMoney(field,pid,fmt);f.anual=true;return f};
   return dashBar()+quota+colabHint+pendingCard()+prazosCard()+`<div class="grid">
     ${kpi('Receita',euro(m.income),'pos',YEAR+' · rendas e outros',WHY.receita,E('income'))}
     ${kpi('Despesas',euro(m.op),'neg','impostos, condomínio, obras…',WHY.despesas,E('op'))}
