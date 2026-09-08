@@ -94,6 +94,9 @@ function camadaDeSaida(){
    Devolve: nada — mete o nó na camada de saída e remove-o no fim. */
 function sairDoEcra(a){
   const e=a.el,dur=msDoToken('--lento',340);
+  /* sem id: durante estes 340ms o nó ainda está no documento, e um
+     getElementById que passasse por aqui podia apanhar o que já saiu */
+  semIds(e);
   e.style.position='fixed';e.style.left=a.x+'px';e.style.top=a.y+'px';
   e.style.width=a.w+'px';e.style.margin='0';e.style.pointerEvents='none';
   camadaDeSaida().appendChild(e);
@@ -188,51 +191,83 @@ function pintarComContinuidade(pintar,o){
   return res;
 }
 
-/* Troca o que está num sítio fazendo o que sai e o que entra deslizarem para
-   o mesmo lado — o gesto de virar uma página.
+/* Troca o que está num sítio como quem vira uma página: o que sai e o que
+   entra correm a largura toda, lado a lado, dentro de uma caixa que os corta.
 
-   Serve onde não há peças a acompanhar de um lado para o outro, mas há uma
-   direção: o mês seguinte do calendário, entrar numa categoria do gráfico. O
-   deslocamento é uma fração da largura e não a largura toda, para não precisar
-   de recorte: com o desvanecer, lê-se como uma página a virar sem que nada
-   ande a voar pelo ecrã.
+   A diferença entre isto e um desvanecimento não é de grau. Um cartão que
+   desvanece diz «trocou»; dois cartões a correrem juntos dizem «andei para o
+   lado» — que é o que um mês seguinte é. Para isso o deslocamento tem de ser a
+   largura inteira: a meio caminho lê-se como um estremeção.
+
+   E a largura inteira obriga a recortar, senão o mês que sai atravessa o resto
+   da página a caminho da margem. Daí uma caixa do tamanho exato do sítio, com
+   os dois lá dentro.
+
+   O que entra é um CLONE, e o verdadeiro fica no sítio à espera, invisível: a
+   alternativa era mexer na árvore viva a meio de uma animação, e uma repintura
+   que chegasse entretanto apanhava-a a meio. Os dois perdem os ids ao entrar na
+   caixa — com dois #calCard no documento, o getElementById podia devolver o
+   errado a quem passasse por ali nesses 340ms.
 
    Recebe: obter — função que devolve o elemento (chamada antes e depois de
-   pintar); pintar — a função que repinta; dir — +1 para a frente (o novo entra
-   pela direita), -1 para trás, 0 só desvanece.
+   pintar); pintar — a função que repinta; dir — +1 para a frente (o novo vem
+   da direita), -1 para trás.
    Devolve: o que a função pintar devolver. */
 function deslizarEntre(obter,pintar,dir){
   const a=obter();
   if(semMovimento()||!a||!a.animate)return pintar();
+  const r0=a.getBoundingClientRect();
   /* Lá dentro há um render, e o render acompanha as peças por sua conta. Duas
      animações sobre a mesma coisa — a página a virar e as linhas a deslizar —
      lêem-se como uma confusão, não como duas ideias. */
+  let res;
   contSuspensa=true;
-  try{return deslizarEntre_(obter,pintar,dir,a)}finally{contSuspensa=false}
-}
-/* o corpo do deslize, à parte só para a suspensão acima ter um try/finally
-   limpo à volta dele
-   Recebe: obter, pintar, dir — como no deslizarEntre; a — o elemento medido
-   antes de pintar.
-   Devolve: o que a função pintar devolver. */
-function deslizarEntre_(obter,pintar,dir,a){
-  const r=a.getBoundingClientRect();
-  const dur=msDoToken('--lento',340),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
-  const salto=Math.round(Math.min(r.width*.18,90))*(dir||0);
-  const res=pintar();
+  try{res=pintar()}finally{contSuspensa=false}
   const b=obter();
-  /* o nó antigo saiu do documento com a repintura, mas continua vivo aqui: é
-     ele que se põe de volta, no sítio onde estava, a sair */
-  if(r.width&&!a.isConnected){
-    a.style.position='fixed';a.style.left=r.left+'px';a.style.top=r.top+'px';
-    a.style.width=r.width+'px';a.style.margin='0';a.style.pointerEvents='none';
-    camadaDeSaida().appendChild(a);
-    const sai=a.animate([{opacity:1,transform:'none'},{opacity:0,transform:'translateX('+(-salto)+'px)'}],
-      {duration:dur,easing:tokenTexto('--curva-sai','cubic-bezier(.4,0,1,1)'),fill:'forwards'});
-    const fora=function(){try{a.remove()}catch(x){}};
-    sai.onfinish=fora;setTimeout(fora,dur+600);
-  }
-  if(b&&b.animate)b.animate([{opacity:0,transform:'translateX('+salto+'px)'},{opacity:1,transform:'none'}],
-    {duration:dur,easing:curva});
+  /* sem largura, ou se o nó antigo não chegou a sair do documento, não houve
+     troca nenhuma para mostrar */
+  if(!b||!b.animate||!r0.width||a.isConnected)return res;
+  correrAFita(a,b,r0,dir<0?-1:1);
   return res;
+}
+
+/* Tira o id a um nó e a tudo o que ele tem dentro.
+   Recebe: e — o elemento.
+   Devolve: nada — mexe nos atributos do próprio nó. */
+function semIds(e){
+  try{e.removeAttribute('id');
+    [].slice.call(e.querySelectorAll('[id]')).forEach(function(x){x.removeAttribute('id')})}catch(x){}
+}
+
+/* Põe o que saiu e o que entrou a correr lado a lado, recortados.
+   Recebe: a — o nó antigo (já fora do documento); b — o nó novo, no seu lugar;
+   r0 — o retângulo que o antigo ocupava; d — +1 para a frente, -1 para trás.
+   Devolve: nada — anima e limpa no fim. */
+function correrAFita(a,b,r0,d){
+  const r=b.getBoundingClientRect();
+  const w=Math.round(r.width)||Math.round(r0.width);
+  const caixa=document.createElement('div');
+  caixa.style.cssText='position:fixed;left:'+r.left+'px;top:'+r.top+'px;width:'+w+'px;'+
+    'height:'+Math.round(Math.max(r.height,r0.height))+'px;overflow:hidden;pointer-events:none';
+  camadaDeSaida().appendChild(caixa);
+  const deitar=function(el,largura){
+    semIds(el);
+    el.style.position='absolute';el.style.left='0';el.style.top='0';
+    el.style.width=largura+'px';el.style.margin='0';
+    caixa.appendChild(el);
+  };
+  const clone=b.cloneNode(true);
+  deitar(clone,w);
+  deitar(a,Math.round(r0.width)||w);
+  b.style.visibility='hidden';
+  const dur=msDoToken('--lento',340),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
+  a.animate([{transform:'none'},{transform:'translateX('+(-d*w)+'px)'}],
+    {duration:dur,easing:curva,fill:'forwards'});
+  const an=clone.animate([{transform:'translateX('+(d*w)+'px)'},{transform:'none'}],
+    {duration:dur,easing:curva,fill:'backwards'});
+  const fim=function(){try{b.style.visibility='';caixa.remove()}catch(x){}};
+  an.onfinish=fim;
+  /* rede: num separador escondido a animação não corre e o onfinish nunca
+     chega — o cartão ficava invisível para sempre */
+  setTimeout(fim,dur+600);
 }
