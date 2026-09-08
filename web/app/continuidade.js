@@ -256,6 +256,10 @@ function deslizarEntre(obter,pintar,dir){
   /* sem largura, ou se o nó antigo não chegou a sair do documento, não houve
      troca nenhuma para mostrar */
   if(!b||!b.animate||!r0.width||a.isConnected)return res;
+  /* E não se vira a página para a mesma página. Se o que entrou é igual ao que
+     saiu, houve uma repintura mas não houve troca — e uma fita a correr para
+     mostrar o mesmo lê-se como a app a fazer um gesto que ninguém pediu. */
+  if(a.outerHTML===b.outerHTML)return res;
   correrAFita(a,b,r0,dir<0?-1:1);
   return res;
 }

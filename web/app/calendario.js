@@ -27,6 +27,12 @@ function calSelDia(){
   return hoje.slice(0,7)===mes?hoje:mes+'-01';
 }
 
+/* O mês que está no ecrã, em 'AAAA-MM'. O calMes vazio quer dizer «o de
+   hoje», e vem posto de duas maneiras diferentes: pode estar vazio, ou pode
+   estar posto COM o mês de hoje, por se ter voltado até cá pelas setas. Quem
+   perguntar «estou no mês de hoje?» tem de as tratar às duas por igual.
+   Devolve: o mês em vista, em 'AAAA-MM'. */
+function calMesEmVista(){return calMes||pzHoje().slice(0,7)}
 /* Anda com o mês em vista (ou volta a hoje) e redesenha; o dia escolhido
    fica para trás — no mês novo o foco cai em hoje ou no dia 1.
    Recebe: delta — meses a andar (+1/-1), ou 0 para voltar ao mês de hoje.
@@ -36,11 +42,12 @@ function calNav(delta){
   /* A grelha do mês vira como uma página, para o lado a que se foi. Sem isto
      o mês trocava de números no sítio e ninguém via para onde tinha andado. */
   const grelha=()=>document.getElementById('calCard');
-  const antes=calMes;
+  const hoje=pzHoje().slice(0,7),emVista=calMesEmVista();
   if(!delta){
-    if(!antes)return render();
-    const paraTras=(antes>pzHoje().slice(0,7));
-    return deslizarEntre(grelha,()=>{calMes='';render()},paraTras?-1:1);
+    /* já se está no mês de hoje: não há para onde rodar. O calMes podia estar
+       posto — com o valor do mês de hoje — por se ter voltado pela seta. */
+    if(emVista===hoje){calMes='';return render()}
+    return deslizarEntre(grelha,()=>{calMes='';render()},emVista>hoje?-1:1);
   }
   const d=new Date(calInicio()+'T00:00:00');
   d.setMonth(d.getMonth()+delta);
@@ -103,7 +110,7 @@ function vCalendar(){
   return `<div class="toolbar" style="align-items:center;margin-bottom:12px">
       <button class="btn" onclick="calNav(-1)" aria-label="Mês anterior">${ic('chev',18)}</button>
       <b style="flex:1;text-align:center">${esc(nome)}</b>
-      ${calMes?`<button class="btn" onclick="calNav(0)">Hoje</button>`:''}
+      ${calMesEmVista()!==pzHoje().slice(0,7)?`<button class="btn" onclick="calNav(0)">Hoje</button>`:''}
       <button class="btn" style="transform:scaleX(-1)" onclick="calNav(1)" aria-label="Mês seguinte">${ic('chev',18)}</button></div>
     <div class="card" id="calCard" style="padding:12px">
       <div class="calgrid calhead" id="calGrelha0">${['S','T','Q','Q','S','S','D'].map(x=>`<span>${x}</span>`).join('')}</div>
