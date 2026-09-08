@@ -142,7 +142,10 @@ function cBars(groups,labels,o){
       if(seg.value>0)up=b;else dn=b;
       const ya=Y(Math.max(a,b)),yb=Y(Math.min(a,b));
       const tip=`${labels[i]} · ${seg.label}: ${euro(Math.abs(seg.value))}`;
-      g+=`<rect class="gbar" x="${(cx-w/2).toFixed(1)}" y="${ya.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1,yb-ya).toFixed(1)}" rx="2" fill="${seg.color}" ${hit(tip,atraso)}><title>${esc(tip)}</title></rect>`;
+      /* «desce» = está abaixo da linha do zero, e por isso cresce a partir do
+         TOPO. Sem isto crescia a partir do fundo do gráfico para cima, solta
+         do eixo, e só assentava no fim (index.html:.gbar.desce). */
+      g+=`<rect class="gbar${seg.value<0?' desce':''}" x="${(cx-w/2).toFixed(1)}" y="${ya.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1,yb-ya).toFixed(1)}" rx="2" fill="${seg.color}" ${hit(tip,atraso)}><title>${esc(tip)}</title></rect>`;
     });
   });
   const names=[];groups.forEach(g2=>g2.forEach(s=>{if(!names.some(n=>n.label===s.label))names.push({label:s.label,color:s.color})}));

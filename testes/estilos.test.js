@@ -160,7 +160,7 @@ describe('movimento', () => {
     [/\.modal\.open \.sheet\{animation:folhaEntra var\(--lento\) var\(--curva-entra\)/,
       /\.modal\.open \.sheet\{animation:folhaSobe var\(--lento\) var\(--curva-entra\)/,
       /#view\.entra \.gbar\{[^}]*var\(--curva-entra\)/,
-      /#view\.entra \.gdonut\{[^}]*var\(--curva-entra\)/,
+      /#view\.entra \.gdonut,#donutCard\.redesenha \.gdonut\{[^}]*var\(--curva-entra\)/,
       /aside\{[^}]*transition:width var\(--medio\) var\(--curva-entra\)/]
       .forEach((r) => assert.match(cssLimpo, r, 'ainda com a curva do estalido: ' + r));
     // e a folha teve de ganhar tempo: a .26s não chegava para se ver subir
@@ -228,7 +228,15 @@ describe('movimento', () => {
   test('os gráficos só se desenham para quem chega ao ecrã', () => {
     assert.match(cssLimpo, /#view\.entra \.gbar\{[^}]*transform-box:fill-box[^}]*transform-origin:bottom/);
     assert.match(cssLimpo, /#view\.entra \.ghbar\{[^}]*transform-origin:left/);
-    assert.match(cssLimpo, /#view\.entra \.gdonut\{[^}]*stroke-dasharray:1/);
+    assert.match(cssLimpo, /#view\.entra \.gdonut,#donutCard\.redesenha \.gdonut\{[^}]*stroke-dasharray:1/,
+      'e a roda tambem se redesenha quando e ela a mudar de reparto, sem passar pelo render');
+    /* Medido: a linha do zero a y=90.9 e uma barra de despesa de 90.9 a 141.5.
+       Com a origem no fundo da propria caixa, ela nascia la em baixo, solta do
+       eixo, e subia ate la — «primeiro aparecem desalinhados». */
+    assert.match(cssLimpo, /#view\.entra \.gbar\.desce\{transform-origin:top\}/,
+      'a barra que desce cresce a partir do eixo, que e o topo da caixa dela');
+    assert.match(graficos, /class="gbar\$\{seg\.value<0\?' desce':''\}"/,
+      'e é o graficos.js que sabe qual delas desce');
     assert.doesNotMatch(cssLimpo, /(?:^|[,}])\s*\.(?:gbar|ghbar|gdonut)\{[^}]*animation:/,
       'sem o portão, animava em qualquer repintura');
     assert.match(vistas, /view\(\)\.classList\.toggle\('entra',!!_entrar\);_entrar=0/, 'o render gasta a marca');
@@ -248,7 +256,7 @@ describe('movimento', () => {
       'o corte aos seis degraus partia o gráfico ao meio: onda à esquerda, salto à direita');
     assert.match(graficos, /const atraso=grp\.some\(s=>s\.value\)\?atrasoEntrada\(col\+\+,colunas\):''/,
       'conta as colunas desenhadas, não os meses vazios');
-    assert.match(graficos, /class="gbar"[^`]*\$\{hit\(tip,atraso\)\}/, 'a barra vertical, pela coluna');
+    assert.match(graficos, /class="gbar\$\{[^}]*\}"[^`]*\$\{hit\(tip,atraso\)\}/, 'a barra vertical, pela coluna');
     assert.match(graficos, /const colunas=groups\.filter/, 'e sabe quantas colunas desenham');
     assert.match(graficos, /class="ghbar"[^`]*\$\{atrasoEntrada\(i,items\.length\)\}/, 'a barra horizontal, pelo item');
   });

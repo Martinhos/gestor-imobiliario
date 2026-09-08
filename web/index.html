@@ -690,7 +690,13 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
    sempre filho único, e nenhuma regra chegava a casar. */
 #view.entra .gbar{transform-box:fill-box;transform-origin:bottom;animation:gbar var(--desenho) var(--curva-entra) both}
 #view.entra .ghbar{transform-origin:left;animation:ghbar var(--desenho) var(--curva-entra) both}
-#view.entra .gdonut{stroke-dasharray:1;animation:gdonut var(--desenho) var(--curva-entra) both}
+/* A barra que desce cresce a partir do eixo, e o eixo é o topo da caixa dela.
+   Medido: a linha do zero a y=90.9, uma barra de despesa de 90.9 a 141.5 — com
+   a origem no fundo, ela nascia em baixo, longe do eixo, e subia até lá. */
+#view.entra .gbar.desce{transform-origin:top}
+/* o .redesenha é para quando é a própria roda a mudar de reparto (o donutDrill)
+   e não a vista a chegar: os arcos traçam-se outra vez sem passar pelo render */
+#view.entra .gdonut,#donutCard.redesenha .gdonut{stroke-dasharray:1;animation:gdonut var(--desenho) var(--curva-entra) both}
 </style>
 </head>
 <body>
