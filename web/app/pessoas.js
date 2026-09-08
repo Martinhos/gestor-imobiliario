@@ -32,7 +32,7 @@ function personFicha(kind,id){
   const casa=kind==='tenant'?casaDoInquilino(p):null;
   const verPessoa=kind==='owner'||pode(casa,'tenant.view');
   const cts=kind==='tenant'?contractsOfTenant(p.id):[];
-  const ativos=cts.filter(isActive),findos=cts.filter(c=>!isActive(c));
+  const ativos=cts.filter(isActive),futuros=cts.filter(c=>ctEstado(c)==='futuro'),findos=cts.filter(c=>ctEstado(c)==='terminado');
   const casas=kind==='owner'?propsOf(p.id):[];
   const ident=verPessoa?[p.nif?'NIF '+esc(fmtNIF(p.nif)):'',
     p.cc?'CC '+esc(fmtCC(p.cc))+(p.ccValid?(pzDias(p.ccValid)<0?' · caducou a '+esc(p.ccValid):' · válido até '+esc(p.ccValid)):''):'',
@@ -61,6 +61,10 @@ function personFicha(kind,id){
     renda>0?{rotulo:'Renda mensal que lhe toca',valor:euro(renda)}:null,
     ident?{tipo:'bloco',rotulo:'Identificação',valor:ident}:null,
     verPessoa&&p.taxAddress?{tipo:'bloco',rotulo:'Morada fiscal',valor:esc(p.taxAddress).replace(/\n/g,'<br>')}:null,
+    /* «Vai morar em», e não «Contratos anteriores» a dizer «terminou a
+       2031-01-01» — uma data no futuro dada como o dia em que acabou */
+    kind==='tenant'&&futuros.length?{tipo:'bloco',rotulo:'Vai morar em',
+      valor:futuros.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.start?' · a partir de '+esc(c.start):'')).join('<br>')}:null,
     kind==='tenant'&&findos.length?{tipo:'bloco',rotulo:'Contratos anteriores',
       valor:findos.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.end?' · terminou a '+esc(c.end):'')).join('<br>')}:null,
     /* os anexos de um inquilino pedem tenant.view E file.view no servidor:
@@ -97,7 +101,7 @@ function personView(kind,id){
     menu:()=>{
       const it=[];
       if(kind==='tenant'){
-        const c=contractsOfTenant(id).filter(isActive)[0];
+        const c=contractsOfTenant(id).filter(ctVivo)[0];   // o em vigor, ou o que ainda não começou
         if(c&&pode(c.propertyId,'contract.view'))it.push({label:'Ver contrato',icon:'contract',toca:'camada',act:`ctView('${jsq(c.id)}')`});
       }
       /* apagar um proprietário com conta não é apagar um registo meu: é

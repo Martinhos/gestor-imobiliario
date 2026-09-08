@@ -702,7 +702,7 @@ function vContracts(){
   const K='lcts',s=lf(K),cgs=grpsOf('contract');
   const head=lfBar(K,[
       lfSel(K,'p',lfPropOpts()),
-      lfSel(K,'st',[{v:'',label:'Ativos e terminados'},{v:'on',label:'Ativos'},{v:'off',label:'Terminados'}])]
+      lfSel(K,'st',[{v:'',label:'Todos os estados'},{v:'on',label:'Em vigor'},{v:'fut',label:'Por começar'},{v:'off',label:'Terminados'}])]
       .concat(cgs.length?[lfSel(K,'g',[{v:'',label:'Todos os grupos'}].concat(cgs.map(g=>({v:g.id,label:'Grupo · '+g.name}))))]:[]),
       db.contracts.filter(c=>ctFMatch(c,s)).length,
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'renda',label:'Ordenar por renda'},{v:'inicio',label:'Ordenar por início'}]})
@@ -718,11 +718,11 @@ function vContracts(){
     return `<div class="section-title" style="display:flex;justify-content:space-between;text-transform:none">
       <span>${esc(p.name)}</span><span>${euroS(rentOf(p))}/mês</span></div>
       <div class="list">${cs.map(c=>{
-        const on=isActive(c),ts=ctTenants(c);
+        const on=ctEstado(c),ts=ctTenants(c);
         return `<div class="card tap" data-lp="ct:${esc(c.id)}" data-fk="ct:${esc(c.id)}" data-toca="camada" onclick="ctView('${jsq(c.id)}')">
         <div class="row-between">
           <div style="min-width:0">
-            <div class="title">${esc(ctName(c))} ${on?'':'<span class="badge grey">terminado</span>'}</div>
+            <div class="title">${esc(ctName(c))} ${on==='ativo'?'':`<span class="badge ${on==='futuro'?'amber':'grey'}">${on==='futuro'?'por começar':'terminado'}</span>`}</div>
             <div class="small">${c.roomId?esc(roomName(p,c.roomId)):'Imóvel inteiro'} · ${c.start?'De '+c.start:'Sem data de início'}${c.end?' a '+c.end:''}</div>
           </div>
           <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
@@ -743,8 +743,12 @@ function vContracts(){
 // Devolve: true se o contrato passa em todos os filtros, false caso contrário.
 function ctFMatch(c,s){
   if(s.p&&c.propertyId!==s.p)return false;
-  if(s.st==='on'&&!isActive(c))return false;
-  if(s.st==='off'&&isActive(c))return false;
+  /* três ramos e não a negação de um booleano: com dois, um contrato que
+     ainda não começou caía em «Terminados», que é o separador errado com o
+     rótulo errado */
+  if(s.st==='on'&&ctEstado(c)!=='ativo')return false;
+  if(s.st==='fut'&&ctEstado(c)!=='futuro')return false;
+  if(s.st==='off'&&ctEstado(c)!=='terminado')return false;
   if(s.g){const g=grp(s.g);if(!g||(g.ids||[]).indexOf(c.id)<0)return false}
   const p=prop(c.propertyId),ts=ctTenants(c);
   return lfHit('lcts',[ctName(c),c.name,p?p.name:'',c.roomId&&p?roomName(p,c.roomId):'',c.iban,c.notes,String(c.rent),
@@ -756,14 +760,14 @@ function ctFMatch(c,s){
    Recebe: pp — a pessoa (objeto de inquilino ou de proprietário); kind — 'tenant' ou 'owner'.
    Devolve: string HTML do cartão. */
 function personCard(pp,kind){
-  const cs=kind==='tenant'?contractsOfTenant(pp.id).filter(isActive):propsOf(pp.id);
+  const cs=kind==='tenant'?contractsOfTenant(pp.id).filter(ctVivo):propsOf(pp.id);
   return `<div class="card tap" data-lp="per:${esc(kind)}:${esc(pp.id)}" data-fk="per:${esc(kind)}:${esc(pp.id)}" data-toca="camada" onclick="personView('${jsq(kind)}','${jsq(pp.id)}')"><div class="row-between">
     <div style="display:flex;gap:12px;min-width:0">
       <div class="avatar">${esc(initials(pp.name))}</div>
       <div style="min-width:0"><div class="title">${esc(pp.name)}</div>
         <div class="small">${[pp.phone?fmtPhone(pp.phone):'',pp.email].filter(Boolean).map(esc).join(' · ')||'Sem contacto'}${pp.nif?' · NIF '+esc(fmtNIF(pp.nif)):''}</div>
         <div class="small">${kind==='tenant'
-          ?(cs.length?cs.map(c=>esc(ctName(c))+' · '+euro(c.rent)).join('<br>'):'Sem contrato ativo')
+          ?(cs.length?cs.map(c=>esc(ctName(c))+' · '+euro(c.rent)+(ctEstado(c)==='futuro'&&c.start?' · a partir de '+esc(c.start):'')).join('<br>'):'Sem contrato ativo')
           :(cs.length?cs.map(x=>esc(x.name)).join(', '):'Sem imóveis')}</div></div></div>
     <div style="flex:0 0 auto;display:flex;gap:6px;align-items:flex-start">
       ${kind==='tenant'&&(pp.files||[]).length?`<span class="badge grey">${ic('clip',12)} ${pp.files.length}</span>`:''}
@@ -1429,7 +1433,11 @@ function mesesEmVigor(c,ano){
    debtY a dívida no fim de cada ano; base o {op, year, anualizado} de opBase. */
 function projRows(pid){
   const s=db.settings,n=Math.max(1,Math.round(s.years)),pps=pidProps(pid);
-  const act=db.contracts.filter(c=>isActive(c)&&inScope(c.propertyId)&&pps.some(p=>p.id===c.propertyId));
+  /* ctVivo: quem corta por datas é o mesesEmVigor, ano a ano. Filtrar à
+     entrada com o isActive apagava o contrato de 2028 de TODOS os anos do
+     horizonte, incluindo 2028 — e um portefólio só com ele dizia «Nenhum
+     contrato ativo» e não mostrava projeção nenhuma. */
+  const act=db.contracts.filter(c=>ctVivo(c)&&inScope(c.propertyId)&&pps.some(p=>p.id===c.propertyId));
   const base=opBase(pid),rows=[];
   /* prestações previstas: vêm do plano de cada hipoteca e param quando o crédito acaba */
   const sched=[...Array(n)].map((_,i)=>sum(pps.map(p=>sh(p)*sum(liveLoans(p).map(l=>{

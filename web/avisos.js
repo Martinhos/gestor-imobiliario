@@ -74,6 +74,15 @@ var AVISOS = [
         ],
       },
       {
+        titulo: 'Um contrato que ainda não começou',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'Um contrato assinado para começar mais tarde deixa de contar como se já estivesse em vigor: não soma à renda do imóvel, não põe o imóvel como arrendado e não entra no yield nem na avaliação. Nas projeções conta a partir do mês em que começa — e um contrato que acaba a meio do horizonte deixa de contar depois disso.',
+          'E passa a ver-se: leva o selo «por começar» na lista, tem filtro próprio, a ficha diz «Por começar · a 15-03-2028», e na ficha do inquilino aparece em «Vai morar em» em vez de «Contratos anteriores».',
+          'A renda dele fica planeada para o mês e dia certos, e se mudares a data de início para mais tarde a renda planeada vai com ela.',
+        ],
+      },
+      {
         titulo: 'As opções estão sempre no mesmo sítio',
         afeta: ['app'],
         itens: [

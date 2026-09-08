@@ -725,7 +725,7 @@ function lpMenu(v){
     const opts=ok?[{label:'Editar contrato',icon:'pen',act:()=>ctModal(id)}]:[];
     if(isActive(c)&&pode(c.propertyId,'tx.add'))opts.push({label:'Registar renda',icon:'up',act:()=>txModal(null,'income',c.propertyId,null,id)});
     opts.push({label:'Gerar contrato em PDF',icon:'pen',act:()=>generateContractPdf(id)});
-    if(ok)opts.push(isActive(c)?{label:'Terminar contrato',icon:'x',act:()=>endContract(id)}:{label:'Reativar contrato',icon:'check',act:()=>reactivateContract(id)},
+    if(ok)opts.push(ctEstado(c)!=='terminado'?{label:'Terminar contrato',icon:'x',act:()=>endContract(id)}:{label:'Reativar contrato',icon:'check',act:()=>reactivateContract(id)},
       {label:'Apagar contrato',icon:'trash',act:()=>delContract(id)});
     return lpShow(ctName(c),opts);}
   if(k==='per'){const kind=a[1],pid=a[2],list=kind==='owner'?db.owners:db.tenants,pp=list.find(x=>x.id===pid);if(!pp)return;

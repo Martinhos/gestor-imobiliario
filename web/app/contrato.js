@@ -31,7 +31,11 @@ function ctFicha(id){
        alterar». Quem tem contract.add mas não criou este contrato lia uma
        frase que não era a sua. A app já sabe dizer a certa. */
     recusa?{tipo:'nota',valor:esc(recusa)}:null,
-    {rotulo:'Estado',valor:isActive(c)?'Em vigor':'Terminado'},
+    /* três estados: dizer «Terminado» três linhas acima do campo «Início»,
+       num contrato que começa em 2028, é uma afirmação falsa sobre um
+       documento legal, no ecrã onde a pessoa a foi confirmar */
+    {rotulo:'Estado',valor:ctEstado(c)==='ativo'?'Em vigor'
+      :(ctEstado(c)==='futuro'?'Por começar'+(c.start?' · a '+esc(c.start):''):'Terminado')},
     /* só quando o imóvel existe mesmo: sem ele o ctLabel escreve «?», e um
        ponto de interrogação numa ficha é pior do que a linha não estar lá */
     p?{rotulo:'Imóvel',valor:esc(ctLabel(c))}:null,
@@ -89,7 +93,10 @@ function ctView(id){
       const it=[];
       if(isActive(c)&&pode(pid,'tx.add'))it.push({label:'Registar renda',icon:'up',toca:'camada',act:`txModal(null,'income','${jsq(pid)}',null,'${jsq(id)}')`});
       it.push({label:'Gerar contrato em PDF',icon:'pen',toca:'camada',act:`generateContractPdf('${jsq(id)}')`});
-      if(ok)it.push(isActive(c)?{label:'Terminar contrato',icon:'x',toca:'dados',act:`endContract('${jsq(id)}')`}
+      /* o «Reativar» apaga o c.end, e por isso só se oferece a quem
+         terminou mesmo: num contrato por começar, um clique destruía a data
+         de fim e o menu voltava a oferecê-lo, para sempre */
+      if(ok)it.push(ctEstado(c)!=='terminado'?{label:'Terminar contrato',icon:'x',toca:'dados',act:`endContract('${jsq(id)}')`}
         :{label:'Reativar contrato',icon:'check',toca:'dados',act:`reactivateContract('${jsq(id)}')`},
         {label:'Apagar contrato',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delContract('${jsq(id)}')`});
       return it.length?menu('fichaCt',it):'';
@@ -117,7 +124,7 @@ function ctModal(id,pid){
   if(!id)fillOwnerContact();
   const ok=!!id&&podeEditar(cForm.propertyId,'contract.add',contract(id));
   const m=id?menu('ct',[{label:'Gerar contrato em PDF',icon:'pen',act:`generateContractPdf('${id}')`}].concat(ok?[
-    isActive(cForm)?{label:'Terminar contrato',icon:'x',act:`endContract('${id}')`}:{label:'Reativar contrato',icon:'check',act:`reactivateContract('${id}')`},
+    ctEstado(cForm)!=='terminado'?{label:'Terminar contrato',icon:'x',act:`endContract('${id}')`}:{label:'Reativar contrato',icon:'check',act:`reactivateContract('${id}')`},
     {label:'Apagar contrato',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delContract('${id}')`}]:[])):'';
   openModal(id?(ok?'Editar contrato':'Contrato'):'Novo contrato',ctBody(),null,m);
   const p=prop(cForm.propertyId);if(p)paintThumbs(p.photos);
@@ -151,7 +158,9 @@ function ctSaver(){
 // Devolve: string com o HTML do formulário do contrato.
 function ctBody(){
   const c=cForm,p=prop(c.propertyId),rooms=(p&&p.rentalMode==='quartos')?(p.rooms||[]):[];
-  const taken=db.contracts.filter(x=>x.id!==c.id&&x.propertyId===c.propertyId&&isActive(x)).map(x=>x.roomId);
+  /* ctVivo: é o único aviso contra assinar dois contratos para o mesmo
+     quarto, e um quarto prometido para 2028 já está prometido */
+  const taken=db.contracts.filter(x=>x.id!==c.id&&x.propertyId===c.propertyId&&ctVivo(x)).map(x=>x.roomId);
   const tags=ctTenants(c).map(t=>({id:t.id,label:t.name}));
   const inv=c.inventory||[];
   const nSum=(c.keys||[]).length?sum(c.keys.map(k=>k.qty))+' chaves':'';

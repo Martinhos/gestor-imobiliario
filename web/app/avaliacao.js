@@ -182,7 +182,9 @@ function evoRatio(field,pid){
   const value=sum(ps.map(p=>p.value*sh(p)));
   /* o mesmo conjunto das métricas: renda e valor só dos imóveis com contrato ativo */
   const rented=ps.filter(p=>isRented(p)||activeContracts(p.id).length>0);
-  const act=db.contracts.filter(c=>isActive(c)&&rented.some(p=>p.id===c.propertyId));
+  /* ctVivo: é uma projeção de anos, e não a pergunta de hoje — com o
+     isActive, um contrato que começa em 2028 sumia da série toda */
+  const act=db.contracts.filter(c=>ctVivo(c)&&rented.some(p=>p.id===c.propertyId));
   const rv=sum(rented.map(p=>p.value*sh(p)));
   const out=[];
   for(let i=0;i<n;i++){
