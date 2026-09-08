@@ -3,25 +3,49 @@
 
 /* ---------------- indicador de sincronização ---------------- */
 
-// Selo fixo no canto superior direito: 'off' mostra o aviso de falta de ligação,
-// qualquer outro estado esconde-o. Cria o elemento na primeira chamada.
-// Recebe: state — 'off' para mostrar o aviso; qualquer outro valor esconde o selo.
-// Devolve: nada — mexe só no elemento #cwSync.
-function setSyncBadge(state) {
+/* O selo que diz onde estão as alterações.
+
+   Falava só quando corria mal, e ficava calado no resto do tempo. Numa app que
+   guarda no aparelho e sincroniza depois, o silêncio quer dizer «está tudo
+   enviado» e também «ainda não tentei» — e são coisas diferentes. Quem acabou
+   de escrever alguma coisa não tinha como saber se já tinha subido.
+
+   Três estados, e o que muda entre eles é quanto tempo ficam:
+     'ok'   — «Guardado», e sai sozinho ao fim de dois segundos. É um recibo,
+              não um letreiro: se ficasse, deixava de se ler.
+     'pend' — «N por enviar», e FICA enquanto houver. É o estado que faltava.
+     'off'  — «Sem ligação», e fica até haver.
+
+   E saiu de cima do sino, que vive no canto direito do cabeçalho: desce para
+   debaixo dele.
+   Recebe: state — 'ok', 'pend' ou 'off'; n (opcional) — quantas alterações
+   estão por enviar, para o 'pend' as poder contar.
+   Devolve: nada — mexe só no elemento #cwSync. */
+function setSyncBadge(state, n) {
   var el = document.getElementById('cwSync');
   if (!el) {
     el = document.createElement('div');
     el.id = 'cwSync';
-    el.style.cssText = 'position:fixed;z-index:60;right:14px;top:calc(var(--inset-top,0px) + 10px);' +
-      'font-size:11px;padding:4px 9px;border-radius:99px;pointer-events:none;opacity:0;transition:opacity .3s';
+    el.style.cssText = 'position:fixed;z-index:59;right:14px;top:calc(var(--inset-top,0px) + 62px);' +
+      'font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;pointer-events:none;' +
+      'opacity:0;transition:opacity var(--medio) var(--curva);box-shadow:var(--shadow)';
     document.body.appendChild(el);
   }
+  clearTimeout(setSyncBadge._t);
+  var põe = function (txto, fundo, cor) {
+    el.textContent = txto; el.style.background = fundo; el.style.color = cor; el.style.opacity = '1';
+  };
   if (state === 'off') {
-    el.textContent = 'Sem ligação — as alterações sincronizam mais tarde';
-    el.style.background = 'var(--warn-soft)'; el.style.color = 'var(--warn)';
-    el.style.opacity = '1';
+    põe('Sem ligação — sincroniza mais tarde', 'var(--warn-soft)', 'var(--warn)');
+  } else if (state === 'pend') {
+    var q = Number(n) || 0;
+    if (!q) { el.style.opacity = '0'; return; }
+    põe(q === 1 ? '1 alteração por enviar' : q + ' alterações por enviar',
+      'var(--chip)', 'var(--muted)');
   } else {
-    el.style.opacity = '0';
+    põe('Guardado', 'var(--accent-soft)', 'var(--accent)');
+    /* um recibo, não um letreiro: fica o tempo de se ler e sai */
+    setSyncBadge._t = setTimeout(function () { el.style.opacity = '0'; }, 2000);
   }
 }
 

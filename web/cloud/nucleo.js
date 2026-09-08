@@ -345,6 +345,9 @@ function pushNow() {
   });
   var sharedHouses = {};
   (CW.state.houses || []).forEach(function (h) { if (!h.mine) sharedHouses[h.id] = 1; });
+  /* o que vai subir agora e o que a pessoa tem por enviar: diz-se, em vez de
+     ficar em silencio ate correr mal */
+  if (ops.length) setSyncBadge('pend', ops.length);
   Object.keys(snap).forEach(function (k) {
     if (k in map) return;
     // o perfil nunca é apagado por diff (um restauro de cópia local não o traz)

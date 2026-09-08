@@ -601,6 +601,24 @@ vistas.js:donutDrill, planeados.js:pendToggle e o dia do calendário
 de calendario.js:calDiaPanel). render() substitui o innerHTML de #view e
 perde o estado do DOM (vistas.js:render; index.html:#view).
 
+## O que a app diz sobre o que guardou
+A app escreve no aparelho e sincroniza depois. Quem acaba de escrever alguma
+coisa tem de poder saber se ela já subiu, e o silêncio não serve para isso:
+o silêncio quer dizer «está tudo enviado» e quer dizer «ainda não tentei», e
+são coisas diferentes.
+
+O selo (cloud/entrada.js:setSyncBadge) tem três estados, e o que os separa é
+quanto tempo ficam. «Guardado» é um recibo: aparece e sai ao fim de dois
+segundos, porque um letreiro permanente deixa de se ler. «N alterações por
+enviar» fica enquanto houver — é o estado que faltava, e o número é o das
+operações que o próximo envio vai levar (cloud/nucleo.js:pushNow), não uma
+estimativa. «Sem ligação» fica até haver.
+
+E vive por baixo do cabeçalho, não em cima dele: estava no canto superior
+direito, que é onde o sino mora, e ninguém tinha dado por isso porque nenhuma
+cena do percurso o mostrava — só aparecia quando a ligação caía. Agora há uma
+cena por estado e uma regra que guarda o sítio (testes/ui/invariantes.js).
+
 ## Navegação
 Treze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e
 subtítulo. A gaveta agrupa-os em quatro (navegacao.js:NAV_GROUPS):
