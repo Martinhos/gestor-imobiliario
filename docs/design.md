@@ -699,6 +699,48 @@ direito, que é onde o sino mora, e ninguém tinha dado por isso porque nenhuma
 cena do percurso o mostrava — só aparecia quando a ligação caía. Agora há uma
 cena por estado e uma regra que guarda o sítio (testes/ui/invariantes.js).
 
+## Uma porta, e nenhum beco
+As opções de um registo — editar, duplicar, apagar, selecionar vários —
+chegam por três caminhos no código: o kebab das listas
+(vistas.js:kebab), o dos movimentos (cloud/selecao.js) e o menu de ações
+(componentes.js:menu). Davam três desenhos: 44×44 com o nome «Opções» nos
+movimentos, 36×40 **sem nome nenhum** nas listas de imóveis, inquilinos e
+planeados, e 44×44 com o nome «Mais» nas visitas. O mais usado era o que
+não tinha rótulo, e um leitor de ecrã anunciava «botão» e mais nada.
+
+Passam a ser a mesma classe (index.html:.opcoes): o mesmo ícone, o mesmo
+nome e uma caixa **dada**, 44×44, não calculada — com padding, o alvo
+saía do tamanho do ícone mais a entrelinha do texto à volta, e dava 36×40
+sem ninguém ter pedido nada disso. O percurso mede-o em cada cena: quem
+chama lpMenu, menuOpen ou CW.txOpcoes tem de ser esta porta
+(testes/ui/invariantes.js). Sem essa regra, a próxima lista nasce com o
+quarto desenho e ninguém dá por ela até alguém tentar usar a app sem
+saber que o toque longo existe.
+
+O botão redondo do canto também ganhou nome (vistas.js:fab). Tinha
+`title`, que o rato mostra e o teclado não, e quando havia várias ações
+nem isso — o botão que abre o leque anunciava-se «botão».
+
+Um ecrã que diz «não há nada» e não diz por onde se começa é um beco.
+Onde há FAB, o FAB é o caminho; havia quatro sítios onde não havia
+caminho nenhum: avaliação sem imóveis (avaliacao.js:vReports), contratos
+sem imóveis e projeções sem contratos (vistas.js:vContracts,
+vistas.js:vProjections) e hipotecas sem imóveis (creditos.js:vCredits) —
+esta última com um botão que só dava um aviso a dizer que faltava um
+imóvel, e um caminho que acaba num aviso não é um caminho. Todos ganham
+o mesmo botão (vistas.js:saida), pelo molde que as visitas já usavam.
+
+## Um aviso não tapa o que se pede para carregar
+O toast mora a 22px do fundo, que é exatamente onde o rodapé de um modal
+está: com um modal aberto, caía em cima de «Guardar» e «Cancelar». Sobe
+a altura do rodapé que está aberto, medida e não adivinhada — há rodapés
+de duas linhas (auxiliares.js:toast; index.html:.toast, o --acima).
+
+E «Anular» deixou de ser um link. Estava sublinhado, com cor de link,
+deitado sobre a barra escura do aviso — e é a única saída de uma ação que
+já aconteceu. O que desfaz o que se acabou de fazer não pode parecer
+texto: passa a botão, com fundo e caixa (index.html:.toast .toastbtn).
+
 ## Navegação
 Treze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e
 subtítulo. A gaveta agrupa-os em quatro (navegacao.js:NAV_GROUPS):

@@ -166,7 +166,7 @@ txLinhaExtra = function (t, mes) {
        continua a existir, mas passa a entrar em seleção — e sem o kebab as
        opções de um movimento sozinho ficavam sem porta nenhuma. */
     x.acoes = (x.acoes || '') +
-      '<button type="button" class="iconbtn txkebab" aria-label="Opções"' +
+      '<button type="button" class="iconbtn opcoes txkebab" aria-label="Opções"' +
       ' data-toca="camada" onclick="event.stopPropagation();CW.txOpcoes(\'' + jsq(id) + '\')">' + ic('dots', 18) + '</button>';
   }
   return x;
@@ -436,7 +436,7 @@ css.textContent =
     'align-items:center;padding:7px 0;margin-top:14px;cursor:pointer}' +
   '.section-title.sel-mes .selbox{padding-right:9px}' +
   // o kebab de cada linha, discreto até se lhe tocar
-  '.txkebab{margin:0 0 0 4px;padding:9px;color:var(--muted)}' +
+  '.txkebab{margin:0 0 0 4px}' +
   '.sel-fundo{position:fixed;left:0;right:0;bottom:0;z-index:45;display:flex;gap:8px;align-items:center;' +
     'background:var(--card);border-top:1px solid var(--line);' +
     'padding:8px calc(10px + var(--inset-right)) calc(8px + var(--inset-bottom)) calc(10px + var(--inset-left))}' +

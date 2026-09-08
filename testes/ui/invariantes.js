@@ -362,6 +362,34 @@ function dentroDaPagina() {
         (e.getAttribute('class') || '').split(' ')[0]))].join(', '));
   }
 
+  /* A porta das opcoes de um registo e UMA, em toda a app. Eram tres moldes —
+     lpMenu nas listas, CW.txOpcoes nos movimentos, menuOpen no menu de acoes —
+     e davam tres desenhos, tres tamanhos e tres nomes: 44x44 «Opcoes» nos
+     movimentos, 37x40 SEM NOME nas listas, 44x44 «Mais» nas visitas. O que
+     nao tinha nome era o mais usado, e um leitor de ecra anunciava «botao» e
+     mais nada; o que tinha 37px estava abaixo do minimo de alvo.
+
+     A regra olha para o que a porta FAZ (chama um destes tres) e exige que
+     seja sempre a mesma coisa. Sem isto, a proxima lista nasce com o quarto
+     desenho e ninguem da por ela ate alguem tentar usar a app sem saber que o
+     toque longo existe. */
+  const abrePorta = /(^|[^\w.])(lpMenu|menuOpen)\(|CW\.txOpcoes\(/;
+  const portas = pontos.filter((e) => abrePorta.test(e.getAttribute('onclick') || ''));
+  const foraDoMolde = portas.filter((e) => {
+    const r = e.getBoundingClientRect();
+    return !e.classList.contains('opcoes') || e.getAttribute('aria-label') !== 'Op\u00e7\u00f5es' ||
+      r.width < 40 || r.height < 40;
+  });
+  medidas.portasDeOpcoes = portas.length;
+  if (foraDoMolde.length) {
+    const e = foraDoMolde[0], r = e.getBoundingClientRect();
+    falhar('a porta das opcoes e sempre a mesma',
+      foraDoMolde.length + ' de ' + portas.length + ' fora do molde - ex.: .' +
+      (e.getAttribute('class') || '(sem classe)').split(' ').join('.') + ' ' +
+      Math.round(r.width) + 'x' + Math.round(r.height) + ' nome=' +
+      (e.getAttribute('aria-label') || '(sem nome)'));
+  }
+
   /* 7. Texto que sai da sua caixa — normalmente uma coluna estreita demais. */
   const rebentam = [...document.querySelectorAll('#view *')]
     .filter((e) => e.children.length === 0 && e.textContent.trim())

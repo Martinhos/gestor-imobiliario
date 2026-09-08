@@ -74,6 +74,15 @@ var AVISOS = [
         ],
       },
       {
+        titulo: 'As opções estão sempre no mesmo sítio',
+        afeta: ['app'],
+        itens: [
+          'O botão que abre as opções de um registo — editar, duplicar, apagar, selecionar vários — é agora o mesmo em todas as listas: o mesmo desenho, o mesmo sítio e um alvo maior. Nos imóveis, inquilinos e planeados era mais pequeno e diferente do dos movimentos; não é preciso descobrir o toque longo para lá chegar.',
+          'Os ecrãs que ainda não têm nada passam a dizer por onde se começa, com um botão: a avaliação e as projeções sem imóveis, os contratos e as hipotecas antes do primeiro imóvel.',
+          'Um aviso já não tapa os botões de uma janela aberta, e o «Anular» que aparece depois de apagar alguma coisa é agora um botão a sério, e não texto sublinhado.',
+        ],
+      },
+      {
         titulo: 'Se és colaborador',
         afeta: ['colaboradores'],
         itens: [

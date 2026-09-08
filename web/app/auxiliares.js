@@ -629,6 +629,12 @@ function toast(m,op){const t=document.getElementById('toast');
   t.textContent=m;
   if(op&&op.rotulo&&op.fn){const b=document.createElement('button');b.type='button';b.className='toastbtn';
     b.textContent=op.rotulo;b.onclick=()=>{clearTimeout(t._h);t.classList.remove('on');op.fn()};t.appendChild(b)}
+  /* Com um modal aberto, o aviso sobe acima do rodape. Mora a 22px do fundo,
+     que e onde o rodape do modal esta, e caia em cima de «Guardar» — os
+     botoes que se esta precisamente a pedir para carregar. A altura e medida
+     e nao adivinhada: ha rodapes de duas linhas. */
+  const pes=document.querySelector('.modal.open .foot');
+  t.style.setProperty('--acima',pes?(Math.ceil(pes.getBoundingClientRect().height)+12)+'px':'0px');
   t.classList.add('on');clearTimeout(t._h);
   t._h=setTimeout(()=>t.classList.remove('on'),(op&&op.ms)||2800)}
 

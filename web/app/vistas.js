@@ -375,7 +375,16 @@ const WHY={
 const card=(t,s,b)=>`<div class="card"><div><div class="title">${t}</div>${s?`<div class="small">${s}</div>`:''}</div><div style="margin-top:13px">${b}</div></div>`;
 const stop='event.stopPropagation();';
 /* botão "⋮" dos cartões: abre o mesmo menu do toque longo */
-const kebab=v=>`<button class="btn sm" style="flex:0 0 auto;padding:7px 9px;align-self:flex-start" data-toca="camada" onclick="${stop}lpMenu('${v}')">${ic('dots',17)}</button>`;
+/* A porta das opções de um registo, e é a MESMA em toda a app.
+
+   Eram três: um .iconbtn de 44px nos Movimentos, este, que era um .btn.sm de
+   37x40 e sem rótulo nenhum, e um terceiro nas Visitas com o nome «Mais».
+   Três formas, três tamanhos e três nomes para a mesma ideia — quem aprende a
+   reconhecer a porta numa lista não a reconhece na seguinte, e é por isso que
+   o toque longo continua a parecer a única maneira de lá chegar.
+   Recebe: v — a chave do registo, a mesma do toque longo ('prop:ID', 'ct:ID'…).
+   Devolve: o HTML do botão de opções. */
+const kebab=v=>`<button type="button" class="iconbtn opcoes" aria-label="Opções" data-toca="camada" onclick="${stop}lpMenu('${v}')">${ic('dots',18)}</button>`;
 let _lockY=0;
 /* trava o scroll do fundo enquanto houver um modal ou o menu lateral aberto,
    e repõe a posição ao destravar. Corre a cada abrir/fechar (componentes.js e
@@ -671,7 +680,8 @@ function vContracts(){
       db.contracts.filter(c=>ctFMatch(c,s)).length,
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'renda',label:'Ordenar por renda'},{v:'inicio',label:'Ordenar por início'}]})
     +(casasComo('contract.add').length?fab([{label:'Novo contrato',act:'ctModal()'}]):'');
-  if(!db.properties.length)return head+`<div class="empty"><b>Cria primeiro um imóvel</b>Um contrato liga um imóvel a um ou mais inquilinos.</div>`;
+  if(!db.properties.length)return head+`<div class="empty"><b>Cria primeiro um imóvel</b>Um contrato liga um imóvel a um ou mais inquilinos.
+    ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`;
   if(!db.contracts.length)return head+`<div class="empty"><b>Sem contratos</b>O contrato é onde vive a renda: podes arrendar o imóvel inteiro, ou um contrato por quarto.</div>`;
   let any=false;
   const body=visiveis().map(p=>{
@@ -1097,9 +1107,27 @@ function lfSort(k,list,keys){
    com vários sai também o menu.
    Devolve: string HTML do botão (e do menu, quando há vários). */
 function fab(actions){
-  if(actions.length===1)return `<button class="fab" data-toca="camada" onclick="${actions[0].act}" title="${esc(actions[0].label||'')}">${ic('plus',26)}</button>`;
+  /* com nome: o + é um desenho, e um leitor de ecrã não lê desenhos. Tinha
+     `title`, que o rato mostra e o teclado não, e quando havia várias ações
+     nem isso — o botão que abre o leque anunciava-se «botão» e mais nada. */
+  if(actions.length===1)return `<button class="fab" data-toca="camada" onclick="${actions[0].act}" aria-label="${esc(actions[0].label||'')}" title="${esc(actions[0].label||'')}">${ic('plus',26)}</button>`;
   return `<div class="fabmenu" id="fabMenu">${actions.map(a=>`<button class="btn primary" data-toca="camada" onclick="document.getElementById('fabMenu').classList.remove('on');${a.act}">${ic(a.icon||'plus',15)} ${esc(a.label)}</button>`).join('')}</div>
-  <button class="fab" data-toca="nada" onclick="document.getElementById('fabMenu').classList.toggle('on')">${ic('plus',26)}</button>`;
+  <button class="fab" data-toca="nada" aria-label="Adicionar" title="Adicionar" onclick="document.getElementById('fabMenu').classList.toggle('on')">${ic('plus',26)}</button>`;
+}
+/* A saída de um ecrã vazio: um botão, no meio, dentro da própria caixa.
+
+   Um ecrã que diz «não há nada» e não diz por onde se começa é um beco. Onde
+   há FAB, o FAB é o caminho — isto é para os quatro sítios onde não havia
+   caminho nenhum: avaliação sem imóveis, contratos sem imóveis, hipotecas sem
+   imóveis e projeções sem contratos. O molde é o que as visitas já usavam,
+   para não nascer aqui um quinto desenho de botão.
+   Recebe: label — o que o botão faz, escrito como verbo; act — o JavaScript do
+   toque; toca — a família do ponto (ecra se muda de ecrã, camada se abre um
+   modal).
+   Devolve: o HTML do botão dentro da sua barra, para colar dentro do .empty. */
+function saida(label,act,toca){
+  return `<div class="toolbar" style="justify-content:center;margin-top:16px">
+    <button type="button" class="btn primary" data-toca="${toca}" onclick="${act}">${esc(label)}</button></div>`;
 }
 // opções de imóvel para os seletores das listas: "Todos os imóveis" + um por imóvel
 // Recebe: withAll (opcional) — sem efeito atual: as opções saem sempre com "Todos os imóveis" à cabeça.
@@ -1367,7 +1395,8 @@ function vProjections(){
     <label>Inflação das despesas (%)<input type="text" inputmode="decimal" value="${dec(s.inflation)}" onchange="setSet('inflation',num(this.value))"></label></div>
     <div class="hint" style="margin-top:9px">Cada contrato tem o seu aumento. Em Portugal há um coeficiente máximo publicado todos os anos.</div>
     <div class="hint" style="margin-top:6px">Despesas: <b>${euro(base.op)}/ano</b> — ${base.anualizado?'o ano corrente anualizado, porque ainda não há um ano completo com despesas':'as de '+base.year+', o último ano completo com despesas'}; crescem com a inflação.</div>`);
-  if(!act.length)return head+`<div class="empty" style="margin-top:14px"><b>Nenhum contrato ativo</b>As projeções partem das rendas contratadas.</div>`;
+  if(!act.length)return head+`<div class="empty" style="margin-top:14px"><b>Nenhum contrato ativo</b>As projeções partem das rendas contratadas.
+    ${db.properties.length?saida('Ver contratos',"go('contracts')",'ecra'):saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`;
   const first=rows[0],last=rows[rows.length-1],labels=rows.map(r=>String(r.yr).slice(2));
   const baseTxt=' Aqui: '+euro(base.op)+'/ano, '+(base.anualizado?'o ano corrente anualizado.':'base '+base.year+'.');
   const varRenda=first.rent?last.rent/first.rent-1:0;

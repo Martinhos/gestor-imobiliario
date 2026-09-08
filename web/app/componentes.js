@@ -155,7 +155,7 @@ function selPick(e,id,i){
    apaga alguma coisa.
    Devolve: string de HTML do botão ⋯ com o menu, pronta a inserir com innerHTML. */
 function menu(id,items){
-  return `<span class="menuwrap"><button type="button" class="iconbtn" data-toca="camada" onclick="menuOpen(event,'${id}')" aria-label="Mais">${ic('dots',20)}</button>
+  return `<span class="menuwrap"><button type="button" class="iconbtn opcoes" data-toca="camada" onclick="menuOpen(event,'${id}')" aria-label="Opções">${ic('dots',18)}</button>
     <div class="menupop" id="menu_${id}">${items.map(it=>
       `<button type="button" class="${it.danger?'danger':''}"${it.toca?` data-toca="${it.toca}"`:''}${it.risco==='destroi'?' data-risco="destroi"':''} onclick="closePops();${it.act}">${ic(it.icon||'dots',17)} ${esc(it.label)}</button>`).join('')}</div></span>`;
 }
