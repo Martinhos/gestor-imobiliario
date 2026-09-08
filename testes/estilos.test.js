@@ -170,13 +170,36 @@ describe('movimento', () => {
   /* Um gráfico não pode mudar de altura só por alguém lhe tocar: a guia e a
      faixa de leitura são sobrepostas, e a faixa fica no TOPO — debaixo do dedo
      era onde o balão antigo estava, e é onde a mão tapa o que se quer ler. */
+  /* O «modal preto» que ficava por trás de uma ficha não era um modal: era a
+     página a deixar de ser pintada. O body tem uma altura de ecrã
+     (html,body{height:100%}); trancado em position:fixed com top:-scrollY, um
+     overflow:hidden fazia-o recortar o próprio conteúdo a uma caixa de um
+     ecrã ancorada no INÍCIO do documento — e essa caixa está fora da vista
+     quando a página está rolada. O .modal escapava por ser fixed, e por isso
+     a folha e o véu ficavam certos: o que desaparecia era tudo o resto. */
+  test('a página trancada continua a ser pintada por trás da janela', () => {
+    const m = /html\.noscroll body\{([^}]*)\}/.exec(cssLimpo);
+    assert.ok(m, 'a regra da página trancada existe');
+    assert.match(m[1], /position:fixed/, 'é o fixed que a trava no sítio');
+    assert.doesNotMatch(m[1], /overflow:hidden/,
+      'e nunca overflow:hidden: com top negativo, recorta a página toda para fora do ecrã');
+    assert.match(cssLimpo, /html\.noscroll\{overflow:hidden\}/, 'quem tranca o scroll é o html');
+  });
+
   test('ler um gráfico não lhe mexe na altura', () => {
     const g = /\.chartguia,\.chartlido\{([^}]*)\}/.exec(cssLimpo);
     assert.ok(g, 'a regra da guia e da faixa existe');
     assert.match(cssLimpo, /\.chartguia\{position:absolute/);
     assert.match(cssLimpo, /\.chartlido\{position:absolute[^}]*top:0/, 'a faixa fica no topo, fora do dedo');
-    assert.match(cssLimpo, /\.chartbox\{position:relative;touch-action:pan-y\}/,
-      'e o gesto horizontal lê sem impedir o scroll vertical');
+    const cb = /\.chartbox\{([^}]*)\}/.exec(cssLimpo);
+    assert.ok(cb, 'a regra da caixa existe');
+    assert.match(cb[1], /position:relative/);
+    assert.match(cb[1], /touch-action:pan-y/, 'o gesto horizontal lê sem impedir o scroll vertical');
+    /* Segurar o dedo num gráfico caía no gesto de selecionar palavra do
+       browser — escolhia o mês e, ao começar, roubava o ponteiro e cancelava
+       a leitura. É a mesma proteção que [data-lp] já tem. */
+    assert.match(cb[1], /user-select:none/, 'segurar num gráfico não seleciona os rótulos');
+    assert.match(cb[1], /-webkit-touch-callout:none/, 'nem abre o callout do iOS');
     assert.match(graficos, /closest\('\.chartbox\[data-lido\]'\)\)return/,
       'onde já se lê com o dedo, o balão antigo cala-se');
   });

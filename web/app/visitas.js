@@ -92,14 +92,14 @@ function visCard(v){
   const hora=v.start?v.start+(v.end?'–'+v.end:''):'';
   const seloCls=v.estado==='realizada'?'':v.estado==='faltou'||v.estado==='cancelada'?'grey':'amber';
   const desf=v.estado==='realizada'&&v.resultado?' · '+VDESFECHO[v.resultado]:'';
-  /* cada ação pede a sua permissão no imóvel da visita; sem nenhuma, o menu não aparece */
-  const acoes=[],ok=podeEditar(v.propertyId,'visit.add',v);
-  if(v.estado==='agendada'&&ok){
-    acoes.push({label:'Marcar realizada',icon:'check',act:`visEstado('${v.id}','realizada')`});
-    acoes.push({label:'Marcar falta',icon:'clock',act:`visEstado('${v.id}','faltou')`});
-  }
-  if(pode(v.propertyId,'tenant.add'))acoes.push({label:'Converter em inquilino',icon:'users',act:`visConverte('${v.id}')`});
-  if(ok)acoes.push({label:'Apagar visita',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`visApaga('${v.id}')`});
+  /* A porta é a mesma de todas as outras listas. Era o único cartão da app a
+     plantar um menu() dentro de si próprio, e o .card.tap tem overflow:hidden:
+     o menu ficava recortado pelo cartão e o ajustarPop ainda o encolhia ao
+     mínimo, por eleger esse mesmo cartão como o primeiro antepassado que
+     corta — «fica contido dentro do cartão e o resto desaparece».
+     As ações vêm do visOpcoes, que é onde já vivem para a ficha e para o
+     toque longo. */
+  const acoes=visOpcoes(v);
   return `<div class="card tap" data-lp="vis:${esc(v.id)}" data-fk="vis:${esc(v.id)}" data-toca="camada" onclick="visView('${v.id}')">
     <div class="row-between" style="align-items:flex-start;gap:8px">
       <div style="min-width:0">
@@ -108,7 +108,7 @@ function visCard(v){
         ${v.notas?`<span class="small" style="display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.notas)}</span>`:''}</div>
       <span style="flex:0 0 auto;display:inline-flex;align-items:center;gap:4px">
         <span class="badge ${seloCls}">${VESTADO[v.estado]||v.estado}</span>
-        ${acoes.length?`<span onclick="event.stopPropagation()">${menu('vis'+v.id,acoes)}</span>`:''}</span></div></div>`;
+        ${acoes.length?kebab('vis:'+v.id):''}</span></div></div>`;
 }
 
 /* O corpo da ficha de uma visita.

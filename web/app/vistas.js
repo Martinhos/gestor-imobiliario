@@ -1,6 +1,11 @@
 /* ================= VISTAS ================= */
 /* botão de filtros no cabeçalho: análise, registos e movimentos */
 let anaOpen={};
+/* Os filtros dos movimentos abrem um painel, como todos os outros. Abriam uma
+   janela por cima de tudo — eram os únicos —, e uma janela esconde a lista
+   que se está a filtrar, que é precisamente o que se quer ver a mudar
+   enquanto se mexe nos filtros. */
+let txFiltAberto=false;
 const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',recurring:'lrec',credits:'lcred',visits:'lvis'};
 /* toque no botão de filtros do cabeçalho: abre o painel certo consoante o
    separador — dropdown nas listas de registos, modal nos movimentos, painel
@@ -8,7 +13,7 @@ const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',rec
    Devolve: nada — abre/fecha o painel respetivo e redesenha a vista. */
 function hdrFiltToggle(){
   if(LFK[tab])return lfToggle(LFK[tab]);
-  if(tab==='transactions')return txFilterModal();
+  if(tab==='transactions'){txFiltAberto=!txFiltAberto;return render()}
   anaOpen[tab]=!anaOpen[tab];render();
 }
 // nº de filtros ativos no separador atual — decide o ponto no botão do cabeçalho
@@ -948,8 +953,11 @@ function newTplForTx(){
    Devolve: nada — redesenha a vista e, se estiver aberto, o modal de filtros. */
 function txRerender(){
   refrescarMovimentos();
-  const top=modalTop();
-  if(top&&top.title==='Filtros'){modalBodyEl().innerHTML=txFilterBody();const f=document.getElementById('modalFoot');if(f)f.innerHTML=txFilterFoot()}
+  /* o painel repinta-se no sítio, para os seletores dependentes (a
+     subcategoria depende da categoria) acompanharem sem fechar nada */
+  const p=document.getElementById('txFpanel');
+  if(p&&txFiltAberto){const c=p.querySelector('.card');
+    if(c)c.innerHTML=txFilterBody()+`<div class="toolbar" style="margin:12px 0 0">${txFilterFoot()}</div>`}
 }
 /* corpo do modal de filtros dos movimentos: pesquisa, tipo, imóvel,
    categoria/subcategoria, pessoas, datas e ordenação. Cada controlo aplica
@@ -990,10 +998,20 @@ function onTxSort(){txSort=val('txSortF')||'date';txRerender()}
 function onTxDir(){txDir=val('txDirF')||'desc';txRerender()}
 // rodapé do modal de filtros: Limpar (só quando há filtros) e Fechar
 // Devolve: string HTML do rodapé.
-function txFilterFoot(){return `${txFilterCount()?`<button class="btn" data-toca="vista" onclick="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" data-toca="camada" onclick="closeModal()">${ic('check',15)} Fechar</button>`}
+function txFilterFoot(){return `${txFilterCount()?`<button class="btn" data-toca="vista" onclick="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" data-toca="camada" onclick="txFilterFechar()">${ic('check',15)} Fechar</button>`}
 // abre o modal de filtros dos movimentos
 // Devolve: nada — abre o modal.
-function txFilterModal(){openModal('Filtros',txFilterBody(),txFilterFoot())}
+/* O painel de filtros dos movimentos, ancorado ao botão do cabeçalho — o
+   mesmo .fwrap/.fpanel das outras listas.
+   Devolve: o HTML do painel, ou vazio quando está fechado. */
+function txFilterPainel(){
+  return `<div class="fwrap" style="height:0"><div class="fpanel ${txFiltAberto?'on':''}" style="top:0" id="txFpanel">
+    <div class="card" style="padding:12px">${txFilterBody()}
+      <div class="toolbar" style="margin:12px 0 0">${txFilterFoot()}</div></div></div></div>`;
+}
+// fecha o painel de filtros dos movimentos (os filtros aplicam-se logo ao mexer)
+// Devolve: nada — fecha o painel e redesenha a vista.
+function txFilterFechar(){txFiltAberto=false;closePops();render()}
 // muda o filtro de imóvel/grupo dos movimentos
 // Devolve: nada — redesenha a lista e o modal.
 function onTxProp(){txProp=val('txPropF')||'';txRerender()}
@@ -1228,7 +1246,8 @@ function vTransactions(){
   const subsF=txCat&&txCat!=='__none__'?(tree[txCat]||[]):[];
   const subOpts=[{v:'',label:'Todas as subcategorias'},{v:'__none__',label:'Sem subcategoria'}].concat(subsF.map(x=>({v:x,label:x})));
   const nF=txFilterCount();
-  const head=`${nF||txSearch.trim()?`<div class="small" style="margin:2px 0 10px">${filterSummary()}${txSearch.trim()?(nF?' · ':'')+'pesquisa: “'+esc(txSearch.trim())+'”':''}</div>`:''}`
+  const head=txFilterPainel()
+  +`${nF||txSearch.trim()?`<div class="small" style="margin:2px 0 10px">${filterSummary()}${txSearch.trim()?(nF?' · ':'')+'pesquisa: “'+esc(txSearch.trim())+'”':''}</div>`:''}`
   +((podeSemImovel()||casasComo('tx.add').length)?fab([{label:'Novo movimento',act:'newTxPick()'}]):'');
   txLinhasPintadas=0;
   if(!db.transactions.length)return head+`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.</div>`;
@@ -1374,6 +1393,32 @@ let projProp='';
 // muda o imóvel (ou grupo) em foco nas projeções
 // Devolve: nada — redesenha a vista.
 function onProjProp(){projProp=val('projSel')||'';render()}
+/* Quantos meses de um ano é que este contrato está em vigor.
+
+   A projeção somava a renda cheia a todos os anos do horizonte, sem olhar às
+   datas: um contrato que só começa em 2028 rendia em 2026 e 2027, e um que
+   acaba em 2027 continuava a render em 2030.
+
+   Conta-se por meses e não por anos inteiros — um contrato que começa em
+   julho rende meio ano nesse ano.
+   Recebe: c — o contrato; ano — o ano a contar (número).
+   Devolve: 0 a 12. */
+function mesesEmVigor(c,ano){
+  const mes=(iso,fim)=>{
+    if(!iso)return fim?12:0;
+    const y=Number(String(iso).slice(0,4)),m=Number(String(iso).slice(5,7))||1;
+    if(y<ano)return fim?12:0;
+    if(y>ano)return fim?12:12;      /* fora do ano: o corte faz-se abaixo */
+    return fim?m:m-1;
+  };
+  const y0=c.start?Number(String(c.start).slice(0,4)):null;
+  const y1=c.end?Number(String(c.end).slice(0,4)):null;
+  if(y0!=null&&y0>ano)return 0;     /* ainda não começou */
+  if(y1!=null&&y1<ano)return 0;     /* já acabou */
+  const de=(y0===ano)?mes(c.start,false):0;
+  const ate=(y1===ano)?mes(c.end,true):12;
+  return Math.max(0,ate-de);
+}
 /* Os números da projeção, sem HTML: por ano do horizonte (s.years), as rendas
    dos contratos ativos com o aumento anual de cada um, as despesas a partir da
    base de opBase com a inflação, as prestações segundo o plano de cada hipoteca
@@ -1393,7 +1438,16 @@ function projRows(pid){
     return t;
   })))));
   for(let i=0;i<n;i++){
-    const per=act.map(c=>c.rent*sh(prop(c.propertyId))*12*Math.pow(1+((c.increase==null?s.growth:c.increase)/100),i));
+    const yr=YEAR+i;
+    const per=act.map(c=>{
+      const meses=mesesEmVigor(c,yr);
+      if(!meses)return 0;
+      /* o aumento conta a partir do ano em que o contrato começa: um que só
+         arranca em 2028 não pode aparecer com dois aumentos já aplicados */
+      const desde=Math.max(YEAR,c.start?Number(String(c.start).slice(0,4)):YEAR);
+      const anos=Math.max(0,yr-desde);
+      return c.rent*sh(prop(c.propertyId))*meses*Math.pow(1+((c.increase==null?s.growth:c.increase)/100),anos);
+    });
     const rent=sum(per),exp=base.op*Math.pow(1+s.inflation/100,i),ln=sched[i];
     rows.push({yr:YEAR+i,rent,exp,loan:ln,cf:rent-exp-ln,per});
   }
