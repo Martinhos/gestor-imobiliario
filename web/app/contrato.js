@@ -19,16 +19,25 @@ function ctFicha(id){
   const ultima=rendas.map(t=>t.date).sort().pop();
   const dias=c.end?pzDias(c.end):null;
   const contacto=(tel,email)=>[tel?fmtPhone(tel):'',email||''].filter(Boolean).join(' · ');
+  /* O contacto do inquilino está escrito no CONTRATO, e o servidor manda o
+     contrato inteiro a quem tem contract.view. O cargo «Contabilista», que a
+     app traz de fábrica, tem contract.view e não tem tenant.view — sem esta
+     guarda lia o contacto de quem não pode sequer abrir a ficha da pessoa. */
+  const verPessoas=pode(pid,'tenant.view');
+  const recusa=motivoRecusa(pid,'contract.add',c);
   return ficha([
-    podeEditar(pid,'contract.add',c)?null:{tipo:'nota',
-      valor:'Contrato de um imóvel onde colaboras'+(cargoDe(pid).nome?' como <b>'+esc(cargoDe(pid).nome)+'</b>':'')+' — a ficha é só de leitura.'},
+    /* Sem botão «Editar» no rodapé, a ficha tem de dizer porquê — e não há
+       uma só razão: há «não tens permissão» e há «só quem o adicionou pode
+       alterar». Quem tem contract.add mas não criou este contrato lia uma
+       frase que não era a sua. A app já sabe dizer a certa. */
+    recusa?{tipo:'nota',valor:esc(recusa)}:null,
     {rotulo:'Estado',valor:isActive(c)?'Em vigor':'Terminado'},
     /* só quando o imóvel existe mesmo: sem ele o ctLabel escreve «?», e um
        ponto de interrogação numa ficha é pior do que a linha não estar lá */
     p?{rotulo:'Imóvel',valor:esc(ctLabel(c))}:null,
     p&&p.rentalMode==='quartos'?{rotulo:'Parte arrendada',valor:c.roomId?esc(roomName(p,c.roomId)):'Imóvel inteiro'}:null,
     ts.length?{tipo:'bloco',rotulo:ts.length>1?'Inquilinos':'Inquilino',
-      valor:ts.map(t=>[esc(t.name),esc(contacto(t.phone,t.email))].filter(Boolean).join(' · ')).join('<br>')}:null,
+      valor:ts.map(t=>[esc(t.name),verPessoas?esc(contacto(t.phone,t.email)):''].filter(Boolean).join(' · ')).join('<br>')}:null,
     c.rent>0?{rotulo:'Renda mensal',valor:euroS(c.rent)}:null,
     /* o bruto engana, e a marca de «estimado» é a mesma que os cartões já dão:
        o formulário guarda 0 para «em branco», e escrever «0%» era mentira */
@@ -48,7 +57,7 @@ function ctFicha(id){
     c.advance>0?{rotulo:'Rendas antecipadas',valor:c.advance+(Number(c.advance)===1?' mês':' meses')}:null,
     c.iban?{rotulo:'IBAN',valor:esc(fmtIBAN(c.iban))}:null,
     (c.ownerPhone||c.ownerEmail)?{rotulo:'Contacto do senhorio',valor:esc(contacto(c.ownerPhone,c.ownerEmail))}:null,
-    (c.tenantPhone||c.tenantEmail)?{rotulo:'Contacto do inquilino',valor:esc(contacto(c.tenantPhone,c.tenantEmail))}:null,
+    verPessoas&&(c.tenantPhone||c.tenantEmail)?{rotulo:'Contacto do inquilino',valor:esc(contacto(c.tenantPhone,c.tenantEmail))}:null,
     inv.length?{tipo:'bloco',rotulo:'Inventário',
       valor:inv.map(i=>esc((i.qty||1)+'× '+(i.name||'artigo'))+(i.state==='novo'?' · novo':'')).join('<br>')}:null,
     chaves.length?{tipo:'bloco',rotulo:'Chaves entregues',

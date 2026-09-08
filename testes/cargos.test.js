@@ -453,6 +453,31 @@ describe('o que se esconde', () => {
     assert.doesNotMatch(aberto.b, /Valor de mercado/, 'o gestor de visitas não');
   });
 
+  /* O contacto do inquilino está escrito no CONTRATO, e o servidor manda o
+     contrato inteiro a quem tem contract.view. O «Contabilista», que a app
+     traz de fábrica, tem contract.view e NÃO tem tenant.view: sem guarda, a
+     ficha do contrato dava-lhe o telefone e o email de quem ele não pode
+     sequer abrir. Foi a auditoria de permissões que o apanhou, já depois de
+     escrito. */
+  test('a ficha do contrato não dá o contacto do inquilino a quem não vê inquilinos', () => {
+    tresCasas();
+    app.db.tenants = [app.normPerson({ id: 'T', name: 'Ana', phone: '912000001', email: 'ana@x.pt' })];
+    app.db.contracts = [app.normContract({
+      id: 'C1', propertyId: 'P2', tenantIds: ['T'], rent: 500,
+      tenantPhone: '912000001', tenantEmail: 'ana@x.pt', ownerPhone: '913000002',
+    })];
+
+    const corpo = app.ctFicha('C1');
+    assert.match(corpo, /Ana/, 'o nome fica — o servidor manda-o');
+    assert.doesNotMatch(corpo, /912 ?000 ?001/, 'o telefone do inquilino não');
+    assert.doesNotMatch(corpo, /ana@x\.pt/, 'nem o email');
+    assert.match(corpo, /913 ?000 ?002/, 'o contacto do senhorio é do contrato e fica');
+
+    // e com tenant.view, o mesmo contrato mostra-o
+    sessao({ P2: { dono: false, nome: 'Ver tudo', perms: CONTAB.concat(['tenant.view']) } });
+    assert.match(app.ctFicha('C1'), /ana@x\.pt/);
+  });
+
   test('guardar sem permissão recusa com a frase, antes de gravar', () => {
     tresCasas();
     let msg = '';
