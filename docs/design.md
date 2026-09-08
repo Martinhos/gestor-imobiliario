@@ -689,6 +689,11 @@ index.html:.sheet, o .body) e a página tranca por baixo de uma janela ou
 da gaveta, repondo a posição ao destrancar (vistas.js:lockPage).
 
 ## O que não se faz
+Não se dá a uma forma de gráfico o estado premido de um botão. O
+tornarFocavel marca-as com role=button para o teclado lá chegar, mas num
+SVG um transform não é uma reação — é o desenho a mudar de sítio, e a
+origem não é o centro da forma (index.html:svg [role="button"]:active).
+
 Não se decora uma vista pegando no HTML que ela acabou de gerar, metendo-o
 num nó avulso e mexendo-lhe: pede-se um ponto de extensão à vista, e ela
 chama-o enquanto se escreve (vistas.js:txLinhaExtra e vistas.js:txMesExtra

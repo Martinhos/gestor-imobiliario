@@ -176,6 +176,18 @@ describe('movimento', () => {
       cssLimpo.indexOf('.rich-tools button:focus-visible'), 'a seguir à regra que corrige');
   });
 
+  /* O tornarFocavel dá role=button às formas dos gráficos, e a rede do premido
+     apanhava-as: medido, as barras saltavam ao serem tocadas e o ponto de uma
+     linha afastava-se na proporção da distância à origem do desenho — em SVG a
+     origem de um transform não é o centro da forma. */
+  test('uma forma de gráfico não se afunda ao ser tocada', () => {
+    assert.match(cssLimpo, /svg \[role="button"\]:active,svg \.tap:active\{transform:none\}/);
+    // e depois da regra que apanha, senão não a ganhava
+    assert.ok(cssLimpo.indexOf('svg [role="button"]:active') >
+      cssLimpo.indexOf('[role="button"]:active,.tap:active{transform:scale'),
+      'vem a seguir à rede que corrige');
+  });
+
   /* Medido na visão geral: 39 sítios alcançáveis pelo Tab, 19 deles sem anel
      nenhum, por não caberem em nenhuma classe da lista. */
   test('a rede apanha o que o tornarFocavel torna alcançável', () => {
