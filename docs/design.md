@@ -256,8 +256,20 @@ medir posições que ainda vão mudar.
 
 Onde não há peças a acompanhar mas há uma direção — o mês seguinte do
 calendário, entrar numa categoria do gráfico — usa-se o
-continuidade.js:deslizarEntre, que faz o que sai e o que entra deslizarem
-para o mesmo lado, como uma página a virar.
+continuidade.js:deslizarEntre, e o deslocamento é a largura INTEIRA, não uma
+fração dela. A diferença não é de grau: um cartão que desvanece diz
+«trocou», dois cartões a correrem juntos a largura toda dizem «andei para o
+lado», que é o que um mês seguinte é. A meio caminho lê-se como um
+estremeção — foi assim que ficou à primeira, e não passou no uso.
+
+A largura inteira obriga a recortar, senão o que sai atravessa o resto da
+página a caminho da margem: os dois correm dentro de uma caixa do tamanho
+exato do sítio (continuidade.js:correrAFita). O que entra é um clone e o
+verdadeiro fica no lugar, invisível, até a fita acabar — mexer na árvore
+viva a meio de uma animação deixava-a a meio se chegasse uma repintura. E
+tudo o que entra na caixa perde os ids: durante esses 340ms o nó antigo
+ainda está no documento, e um getElementById que passasse por ali podia
+apanhar o que já saiu (continuidade.js:semIds).
 
 Estas animações são feitas pela API do JavaScript, e o
 index.html:@media(prefers-reduced-motion:reduce) NÃO as apanha: cada uma
