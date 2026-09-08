@@ -82,13 +82,22 @@ function descricaoDoGrafico(titulo,labels){
    linhas — onde os pontos se espalham de ponta a ponta. Num histograma as
    colunas ficam no meio de faixas iguais, que e outra conta, e a guia aparecia
    ao lado da coluna. Cada grafico ja sabe onde poe as suas colunas: passa-as.
+   Guardam-se os valores JA ESCRITOS, e nao os numeros. A faixa escrevia tudo
+   em euros, e o LTV e o «Sobre a aquisicao» sao racios: euro(0,42) arredonda
+   para «0 €», e a leitura dizia zero em todos os pontos de um grafico que
+   claramente nao dizia zero. Quem desenha e o unico que sabe se aquilo sao
+   euros, uma percentagem ou uma contagem — e a funcao de formatar nao pode
+   viajar, porque isto vai dentro de um atributo do HTML.
    Recebe: labels — as etiquetas do eixo; series — [{nome,cor,vals}]; xs — a
-   posicao de cada coluna, em unidades do viewBox.
+   posicao de cada coluna, em unidades do viewBox; fmt (opcional) — como
+   escrever um valor, o mesmo que o grafico usa no eixo.
    Devolve: o atributo data-lido pronto a colar na tag, ou '' sem series. */
-function dadosParaLer(labels,series,xs){
+function dadosParaLer(labels,series,xs,fmt){
   if(!labels||!labels.length||!series||!series.length||!xs||!xs.length)return '';
+  const F=fmt||euro;
+  const escreve=v=>{try{return String(F(+v||0))}catch(e){return String(euro(+v||0))}};
   const d={W:W,xs:xs.map(x=>+x.toFixed(1)),rot:labels,
-    s:series.map(x=>({n:x.nome||'',c:x.cor||'',v:(x.vals||[]).map(v=>+v||0)}))};
+    s:series.map(x=>({n:x.nome||'',c:x.cor||'',v:(x.vals||[]).map(escreve)}))};
   return ` data-lido="${esc(JSON.stringify(d))}"`;
 }
 
@@ -120,7 +129,7 @@ function mostrarColuna(caixa,i){
   if(x==null)return;
   guia.style.left=(x/d.W*100).toFixed(2)+'%';
   faixa.innerHTML=`<b>${esc(d.rot[i]||'')}</b>`+d.s.map(x=>
-    `<span><i style="background:${esc(x.c)}"></i>${x.n?esc(x.n)+' ':''}${esc(euro(x.v[i]||0))}</span>`).join('');
+    `<span><i style="background:${esc(x.c)}"></i>${x.n?esc(x.n)+' ':''}${esc(String(x.v[i]==null?'':x.v[i]))}</span>`).join('');
   caixa.classList.add('a-ler');
 }
 
@@ -211,7 +220,7 @@ function cLine(series,labels,o){
     if(l==='')return;
     g+=`<text x="${X(i).toFixed(1)}" y="${h+8}" font-size="9" fill="var(--muted)" text-anchor="middle">${esc(l)}</text>`;
   });
-  return `<div class="chartbox"${dadosParaLer(labels,series.map((s,i)=>({nome:series.length>1?s.name:'',cor:s.color||PAL[i%PAL.length],vals:s.values})),labels.map((_,i)=>X(i)))}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Evolução',labels)}>${g}</svg></div>
+  return `<div class="chartbox"${dadosParaLer(labels,series.map((s,i)=>({nome:series.length>1?s.name:'',cor:s.color||PAL[i%PAL.length],vals:s.values})),labels.map((_,i)=>X(i)),F)}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Evolução',labels)}>${g}</svg></div>
     ${series.length>1?legend(series.map((s,i)=>({label:s.name,color:s.color||PAL[i%PAL.length]})),false):''}`;
 }
 /* Barras empilhadas: cada grupo é um array de segmentos {label,value,color}, com os
@@ -259,7 +268,7 @@ function cBars(groups,labels,o){
     g+=`<text x="${(x0+bw*i+bw/2).toFixed(1)}" y="${h+8}" font-size="9" fill="var(--muted)" text-anchor="middle">${esc(l)}</text>`;
   });
   return `<div class="chartbox"${dadosParaLer(labels,names.map(nm=>({nome:nm.label,cor:nm.color,
-    vals:groups.map(gr=>sum(gr.filter(x=>x.label===nm.label).map(x=>x.value)))})),groups.map((_,i)=>x0+bw*i+bw/2))}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Entradas e saídas',labels)}>${g}</svg></div>${legend(names,false)}`;
+    vals:groups.map(gr=>sum(gr.filter(x=>x.label===nm.label).map(x=>x.value)))})),groups.map((_,i)=>x0+bw*i+bw/2),o.fmt)}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Entradas e saídas',labels)}>${g}</svg></div>${legend(names,false)}`;
 }
 /* Anel de proporções com o total ao centro. items=[{label,value,color}] — valores ≤ 0
    ficam de fora. o: center substitui o texto central, sub é a linha pequena por baixo,
