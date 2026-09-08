@@ -614,7 +614,7 @@ function vRecurring(){
 function recSect(){
   const t=tForm,every=t._every||'month';
   const body=`
-    <label>Repetir${sel('t_every',every,Object.keys(EVERY).map(k=>({v:k,label:EVERY[k]})))}</label>
+    <label>Repetir${sel('t_every',every,Object.keys(EVERY).map(k=>({v:k,label:EVERY[k]})),'','rascunho')}</label>
     <div class="row">
       <label>Entre<input id="t_date" type="date" value="${esc(t.date)}"></label>
       <label>e<input id="t_until" type="date" value="${t._until||''}"></label></div>

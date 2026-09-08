@@ -6,8 +6,8 @@ function vReports(){
   /* um imóvel onde só colaboro sem «Ver valores e avaliação» não tem cartão: o servidor não manda os valores */
   const list=pidProps(repProp).filter(p=>pode(p.id,'report.view'));
   const panel=anaPanel(`<div style="display:flex;flex-direction:column;gap:9px">
-    ${db.owners.length?`<div style="width:100%">${sel('ownerSel',ownerFilter,[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner'))),'onOwnerFilter')}</div>`:''}
-    <div style="width:100%">${sel('repSel',repProp,[{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop'))),'onRepSel')}</div></div>
+    ${db.owners.length?`<div style="width:100%">${sel('ownerSel',ownerFilter,[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner'))),'onOwnerFilter','vista')}</div>`:''}
+    <div style="width:100%">${sel('repSel',repProp,[{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop'))),'onRepSel','vista')}</div></div>
     <label style="margin-top:10px;max-width:220px">Yield exigido (%)<input type="text" inputmode="decimal" value="${dec(db.settings.capTarget)}" onchange="capTargetSet(this.value)"></label>
     <div class="hint" style="margin-top:9px">A avaliação por rendimento capitaliza o resultado líquido anual ao yield exigido. No ano corrente, o resultado até hoje é anualizado (×12 sobre os meses decorridos).${ownerFilter&&!ownerIsGrp()?' Valores na quota-parte de <b>'+esc(ownerFilterName())+'</b>.':''}</div>`);
   if(!list.length)return panel+`<div class="empty"><b>Sem imóveis para avaliar</b>Adiciona um imóvel primeiro.</div>`;

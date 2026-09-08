@@ -58,8 +58,8 @@ function ctBody(){
   return `<div class="form">
     <label>Nome do contrato<input id="c_name" value="${esc(c.name||'')}" placeholder="${esc(ctPick(c)||'Ex.: Ana · T2 Lisboa')}" autocomplete="off"></label>
     <div class="hint" style="margin-top:-6px">É por este nome que o contrato aparece nos movimentos e nas listas. Sem nome, usa-se o dos inquilinos.</div>
-    <label>Imóvel${sel('c_prop',c.propertyId,propOptsPara('contract.add',c.propertyId).filter(o=>{const x=prop(o.v);return x&&(x.use==='investimento'||x.id===c.propertyId)}),'onCtProp')}</label>
-    ${rooms.length?`<label>Quarto${sel('c_room',c.roomId||'',[{v:'',label:'— sem quarto —'}].concat(rooms.map(r=>({v:r.id,label:r.name+(taken.indexOf(r.id)>-1?' (já arrendado)':'')}))))}</label>`
+    <label>Imóvel${sel('c_prop',c.propertyId,propOptsPara('contract.add',c.propertyId).filter(o=>{const x=prop(o.v);return x&&(x.use==='investimento'||x.id===c.propertyId)}),'onCtProp','rascunho')}</label>
+    ${rooms.length?`<label>Quarto${sel('c_room',c.roomId||'',[{v:'',label:'— sem quarto —'}].concat(rooms.map(r=>({v:r.id,label:r.name+(taken.indexOf(r.id)>-1?' (já arrendado)':'')}))),'','rascunho')}</label>`
      :(p&&p.use==='investimento'?`<div class="hint">Este imóvel está definido como arrendado por inteiro. Para arrendar por quartos, muda isso na ficha do imóvel.</div>`:'')}
     <div><div class="flabel">Inquilinos</div>${tagField(tags,'Adicionar','addCtTenant()','delCtTenant','','camada')}</div>
     <div class="row">
@@ -88,7 +88,7 @@ function ctBody(){
           <input type="checkbox" class="i-c" id="invc_${it.id}">
           <input class="i-n" id="invn_${it.id}" value="${esc(it.name)}" placeholder="Artigo">
           <input class="i-q" id="invq_${it.id}" type="text" inputmode="numeric" value="${it.qty}" placeholder="1">
-          <span class="i-s">${sel('invs_'+it.id,it.state,[{v:'novo',label:'Novo'},{v:'usado',label:'Usado'}])}</span>
+          <span class="i-s">${sel('invs_'+it.id,it.state,[{v:'novo',label:'Novo'},{v:'usado',label:'Usado'}],'','rascunho')}</span>
           <button type="button" class="btn sm danger" data-toca="rascunho" onclick="delInv('${it.id}')">${ic('trash',14)}</button></div>`).join('')}
         <div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn sm danger" data-toca="rascunho" onclick="delInvSelected()">Remover selecionados</button></div>
       </div>`:`<div class="hint"></div>`}
@@ -205,7 +205,7 @@ function contactSect(kind,c,p){
   return `<div class="sect">
     <div class="sect-head"><span class="ic">${ic(owners?'crown':'users',18)}</span><b>Contacto do ${owners?'senhorio':'inquilino'}</b></div>
     <div class="hint" style="margin:-4px 0 0">${owners?'O que o inquilino usa para vos contactar.':'Ponto de contacto deste contrato.'}</div>
-    ${gente.length?`<label>Usar o contacto de${sel(owners?'c_ocid':'c_tcid',cur||'',opts,owners?'onOwnerContact':'onTenantContact')}</label>`:''}
+    ${gente.length?`<label>Usar o contacto de${sel(owners?'c_ocid':'c_tcid',cur||'',opts,owners?'onOwnerContact':'onTenantContact','rascunho')}</label>`:''}
     ${chosen?`<div class="stat" style="border:0;padding:4px 0"><span>${esc(chosen.name)}</span>
         <b>${esc([chosen.phone?fmtPhone(chosen.phone):'',chosen.email].filter(Boolean).join(' · ')||'sem contacto na ficha')}</b></div>`
       :`<div class="row">

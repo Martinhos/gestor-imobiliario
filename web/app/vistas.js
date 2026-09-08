@@ -130,8 +130,67 @@ function render(){
      cadeia toda e ainda antes de o browser pintar, que é a janela de que esta
      técnica precisa. */
   if(antes)Promise.resolve().then(()=>aplicarContinuidade(antes,view()));
+  /* fora do caminho da pintura: a caixa já tem a altura certa e vazia, por isso
+     enchê-la mais tarde não faz nada saltar */
+  if(typeof requestIdleCallback==='function')requestIdleCallback(pintarSeriesKpi,{timeout:400});
+  else setTimeout(pintarSeriesKpi,0);
 }
 let kpiN=0;const KPI_REG={};
+/* Há movimentos do ano passado?
+
+   Decide se os cartões abrem espaço para a série. Uma faixa vazia em todos os
+   cartões de quem começou a usar a app este mês seria pior do que não ter
+   nada — e a pergunta responde-se com uma passagem pelos dados, uma vez por
+   pintura, em vez de uma por indicador.
+   Devolve: verdadeiro se há pelo menos um movimento do ano anterior. */
+function haAnoAnterior(){
+  const ant=String(YEAR-1);
+  return (db.transactions||[]).some(t=>String(t.date||'').startsWith(ant));
+}
+/* Desenha a linha dos doze meses, pequena, para se ler a forma e não os
+   valores: é uma silhueta, não um gráfico.
+   Recebe: vals — os doze valores do ano (números).
+   Devolve: o HTML do SVG, ou '' se não há nada que se veja. */
+function silhuetaKpi(vals){
+  const v=(vals||[]).map(x=>+x||0);
+  if(v.length<2)return '';
+  const min=Math.min(...v),max=Math.max(...v);
+  if(max===min)return '';
+  const W=100,H=16;
+  const pts=v.map((x,i)=>`${(i/(v.length-1)*W).toFixed(1)},${(H-((x-min)/(max-min))*H).toFixed(1)}`).join(' ');
+  return `<svg class="ksilhueta" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+/* Enche as caixas de série dos indicadores que estão no ecrã.
+
+   Corre DEPOIS da pintura e fora do caminho dela: medido com 500 movimentos,
+   correr as séries de todos os indicadores custa 24ms, que é metade de uma
+   pintura inteira. E só os que estão à vista — os registos antigos do KPI_REG
+   ficam lá para trás e não interessam a ninguém.
+   Devolve: nada — escreve dentro das caixas que já lá estavam. */
+function pintarSeriesKpi(){
+  const caixas=[].slice.call((view()||document).querySelectorAll('.kserie[data-kpi]'));
+  caixas.forEach(function(cx){
+    if(cx.dataset.feito)return;
+    cx.dataset.feito='1';
+    const reg=KPI_REG[cx.getAttribute('data-kpi')];if(!reg||!reg.evo)return;
+    let s;try{s=reg.evo()}catch(e){return}
+    if(!s)return;
+    const anos=(s.yearly||[]).slice().sort((a,b)=>Number(a.label)-Number(b.label));
+    const hoje=anos[anos.length-1],antes=anos[anos.length-2];
+    let txt='';
+    if(hoje&&antes&&Number(hoje.label)===YEAR&&Number(antes.label)===YEAR-1){
+      const a=Number(antes.value)||0,h=Number(hoje.value)||0,d=h-a;
+      /* sem ano anterior com valor não há percentagem que signifique alguma
+         coisa: diz-se o que se sabe, que é que antes não havia nada */
+      const pct=a?Math.round(Math.abs(d)/Math.abs(a)*100):null;
+      const sinal=d>0?'pos':d<0?'neg':'';
+      txt=`<span class="kvar ${sinal}">${d>0?'▲':d<0?'▼':'='} ${pct===null?(h?'novo':'igual'):pct+'%'}</span>
+        <span class="kvsub">face a ${antes.label}</span>`;
+    }
+    cx.innerHTML=silhuetaKpi(s.monthly)+txt;
+  });
+}
 /* evo: função que devolve a série do indicador ao longo do tempo; ao tocar abre-se uma janela com a evolução
    Recebe: l — o rótulo do cartão; v — o valor já formatado (string); c (opcional) — classe de cor ('pos', 'neg',
    'amber' ou vazio); f (opcional) — texto do rodapé; why (opcional) — explicação que abre ao toque;
@@ -141,8 +200,12 @@ let kpiN=0;const KPI_REG={};
 const kpi=(l,v,c,f,why,evo,acao)=>{
   const id='k'+(++kpiN);
   if(evo){KPI_REG[id]={title:l,why:why||'',evo,acao:acao||null};
+    /* A caixa da série nasce VAZIA e com a altura certa. Quem a enche é o
+       pintarSeriesKpi, depois de a página estar pintada — encher uma caixa que
+       ainda não tem altura faria saltar tudo o que está por baixo, que foi
+       precisamente a queixa dos «quadrados que aparecem desalinhados». */
     return `<div class="card kpi evo" id="${id}" data-toca="camada" onclick="kpiModal('${id}')"><span class="kic">${ic('trend',11)}</span>
-      <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${f?`<div class="foot">${f}</div>`:''}</div>`}
+      <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${haAnoAnterior()?`<div class="kserie" data-kpi="${id}"></div>`:''}${f?`<div class="foot">${f}</div>`:''}</div>`}
   return `<div class="card kpi ${why?'why':''}" id="${id}" ${why?`data-toca="nada" onclick="document.getElementById('${id}').classList.toggle('open')"`:''}>
     <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${f?`<div class="foot">${f}</div>`:''}
     ${why?`<div class="expl">${why}</div>`:''}</div>`;
@@ -233,7 +296,7 @@ function lockPage(){try{
 function ownerBar(){
   if(!db.owners.length)return '';
   const opts=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')));
-  return `<div class="toolbar"><div style="min-width:230px;max-width:320px">${sel('ownerSel',ownerFilter,opts,'onOwnerFilter')}</div></div>`;
+  return `<div class="toolbar"><div style="min-width:230px;max-width:320px">${sel('ownerSel',ownerFilter,opts,'onOwnerFilter','vista')}</div></div>`;
 }
 // muda o filtro global de proprietário; se o imóvel em foco sair do âmbito, larga-o
 // Devolve: nada — redesenha a vista.
@@ -244,8 +307,8 @@ function dashBar(){
   const oo=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')));
   const po=[{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
   return anaPanel(`<div style="display:flex;flex-direction:column;gap:9px">
-    ${db.owners.length?`<div style="width:100%">${sel('ownerSel',ownerFilter,oo,'onOwnerFilter')}</div>`:''}
-    <div style="width:100%">${sel('dashPropSel',dashProp,po,'onDashProp')}</div></div>`);
+    ${db.owners.length?`<div style="width:100%">${sel('ownerSel',ownerFilter,oo,'onOwnerFilter','vista')}</div>`:''}
+    <div style="width:100%">${sel('dashPropSel',dashProp,po,'onDashProp','vista')}</div></div>`);
 }
 // muda o imóvel (ou grupo) em foco na visão geral
 // Devolve: nada — redesenha a vista.
@@ -776,17 +839,17 @@ function txFilterBody(){
     <div class="qwrap"><input id="tx_q" class="txq" type="search" value="${esc(txSearch)}" placeholder="Pesquisar…" autocomplete="off"
       oninput="onTxSearch(this.value);this.nextElementSibling.style.display=this.value?'':'none'">
       <button class="qclear" style="display:${txSearch?'':'none'}" data-toca="vista" onclick="const i=this.previousElementSibling;i.value='';onTxSearch('');this.style.display='none';i.focus()">✕</button></div>
-    <label>Tipo${sel('txKind',txFilter,kinds.map(k=>({v:k[0],label:k[1]})),'onTxFilter')}</label>
-    <label>Imóvel${sel('txPropF',txProp,props,'onTxProp')}</label>
-    <div class="row"><label>Categoria${sel('txCatF',txCat,catOpts,'onTxCat')}</label>
-      ${txCat&&txCat!=='__none__'?`<label>Subcategoria${sel('txSubF',txSub,subOpts,'onTxSub')}</label>`:''}</div>
-    ${db.owners.length?`<label>Proprietário${sel('txOwnerF',ownerFilter,owners,'onTxOwner')}</label>
-    <label>Pago / recebido por${sel('txPaidF',txPaid,payers,'onTxPaid')}</label>
+    <label>Tipo${sel('txKind',txFilter,kinds.map(k=>({v:k[0],label:k[1]})),'onTxFilter','vista')}</label>
+    <label>Imóvel${sel('txPropF',txProp,props,'onTxProp','vista')}</label>
+    <div class="row"><label>Categoria${sel('txCatF',txCat,catOpts,'onTxCat','vista')}</label>
+      ${txCat&&txCat!=='__none__'?`<label>Subcategoria${sel('txSubF',txSub,subOpts,'onTxSub','vista')}</label>`:''}</div>
+    ${db.owners.length?`<label>Proprietário${sel('txOwnerF',ownerFilter,owners,'onTxOwner','vista')}</label>
+    <label>Pago / recebido por${sel('txPaidF',txPaid,payers,'onTxPaid','vista')}</label>
     <label class="check"><input type="checkbox" id="txNoPayer" ${txNoPayer?'checked':''} onchange="onTxNoPayer()"> Incluir movimentos sem pessoa atribuída</label>`:''}
     <div class="row lado-a-lado"><label>De<input id="txDeF" type="date" value="${txDe}" onchange="onTxDatas()"></label>
       <label>Até<input id="txAteF" type="date" value="${txAte}" onchange="onTxDatas()"></label></div>
-    <div class="row"><label>Ordenar por${sel('txSortF',txSort,[{v:'date',label:'Data'},{v:'amount',label:'Valor'}],'onTxSort')}</label>
-      <label>Ordem${sel('txDirF',txDir,[{v:'desc',label:'Descendente'},{v:'asc',label:'Ascendente'}],'onTxDir')}</label></div>
+    <div class="row"><label>Ordenar por${sel('txSortF',txSort,[{v:'date',label:'Data'},{v:'amount',label:'Valor'}],'onTxSort','vista')}</label>
+      <label>Ordem${sel('txDirF',txDir,[{v:'desc',label:'Descendente'},{v:'asc',label:'Ascendente'}],'onTxDir','vista')}</label></div>
     <div class="hint">${txFilterCount()?filterSummary()+' · '+db.transactions.filter(txMatch).length+' movimentos':'Sem filtros: a lista mostra tudo.'}</div></div>`;
 }
 // muda o campo de ordenação dos movimentos (data ou valor)
@@ -884,7 +947,7 @@ function lfHit(k,hay){const q=String(lf(k).q||'');if(!q.trim())return true;
 function lfSel(k,key,opts){
   const id='lfsel_'+k+'_'+key,fn='onlf_'+k+'_'+key;
   window[fn]=()=>{lf(k)[key]=val(id)||'';if(k==='lprops')ownerFilter=lf(k).own||'';render()};
-  return `<div style="width:100%">${sel(id,lf(k)[key]||'',opts,fn)}</div>`;
+  return `<div style="width:100%">${sel(id,lf(k)[key]||'',opts,fn,'vista')}</div>`;
 }
 // abre/fecha o painel de filtros da lista k
 // Recebe: k — a chave da lista.
@@ -1198,8 +1261,8 @@ function vProjections(){
   if(projProp&&!pidProps(projProp).length)projProp='';
   const s=db.settings,{rows,act,debtY,base}=projRows(projProp||null),n=rows.length;
   const head=anaPanel(`<div style="display:flex;flex-direction:column;gap:9px">
-    ${db.owners.length?`<div style="width:100%">${sel('ownerSel',ownerFilter,[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner'))),'onOwnerFilter')}</div>`:''}
-    <div style="width:100%">${sel('projSel',projProp,[{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop'))),'onProjProp')}</div></div>
+    ${db.owners.length?`<div style="width:100%">${sel('ownerSel',ownerFilter,[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner'))),'onOwnerFilter','vista')}</div>`:''}
+    <div style="width:100%">${sel('projSel',projProp,[{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop'))),'onProjProp','vista')}</div></div>
     <div class="row3" style="margin-top:10px">
     <label>Horizonte (anos)<input type="text" inputmode="numeric" value="${s.years}" onchange="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label>
     <label>Aumento anual (%)<input type="text" inputmode="decimal" value="${dec(s.growth)}" onchange="setSet('growth',num(this.value))"></label>

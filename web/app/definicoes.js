@@ -423,11 +423,11 @@ function fcCorpo(){
   const subs=fcForm.cat?(tree[fcForm.cat]||[]):[];
   return `<div class="form">
     <label>Nome <span class="req">*</span><input id="fc_name" value="${esc(fcForm.name)}" placeholder="T2 Lisboa · rendas" autocomplete="off" oninput="fcColher(1)"></label>
-    <div class="row"><label>Tipo${sel('fc_kind',fcForm.kind,kinds,'fcColher')}</label>
-      <label>Imóvel${sel('fc_prop',fcForm.prop,props,'fcColher')}</label></div>
-    <div class="row"><label>Proprietário${sel('fc_owner',fcForm.owner,owners,'fcColher')}</label>
-      <label>Categoria${sel('fc_cat',fcForm.cat,catOpts,'fcColher')}</label></div>
-    ${subs.length?`<label>Subcategoria${sel('fc_sub',fcForm.sub,[{v:'',label:'Todas'}].concat(subs.map(x=>({v:x,label:x}))),'fcColher')}</label>`:''}
+    <div class="row"><label>Tipo${sel('fc_kind',fcForm.kind,kinds,'fcColher','rascunho')}</label>
+      <label>Imóvel${sel('fc_prop',fcForm.prop,props,'fcColher','rascunho')}</label></div>
+    <div class="row"><label>Proprietário${sel('fc_owner',fcForm.owner,owners,'fcColher','rascunho')}</label>
+      <label>Categoria${sel('fc_cat',fcForm.cat,catOpts,'fcColher','rascunho')}</label></div>
+    ${subs.length?`<label>Subcategoria${sel('fc_sub',fcForm.sub,[{v:'',label:'Todas'}].concat(subs.map(x=>({v:x,label:x}))),'fcColher','rascunho')}</label>`:''}
     <div class="row lado-a-lado"><label>De<input id="fc_de" type="date" value="${fcForm.de||''}" onchange="fcColher()"></label>
       <label>Até<input id="fc_ate" type="date" value="${fcForm.ate||''}" onchange="fcColher()"></label></div>
     <div class="hint">Deixa em branco o que não quiseres fixar. Cada vista aplica só o que lhe diz respeito.</div>
@@ -496,7 +496,7 @@ function aplicarFiltroComum(id){
 function fcSelector(fn){
   const list=filtrosComuns();
   if(!list.length)return '';
-  return `<label>Filtro comum${sel('fcAplicar','',[{v:'',label:'— aplicar um filtro comum —'}].concat(list.map(f=>({v:f.id,label:f.name}))),fn||'onFcAplicar')}</label>`;
+  return `<label>Filtro comum${sel('fcAplicar','',[{v:'',label:'— aplicar um filtro comum —'}].concat(list.map(f=>({v:f.id,label:f.name}))),fn||'onFcAplicar','vista')}</label>`;
 }
 // onchange do selector: aplica o filtro escolhido (a opção vazia não faz nada).
 // Devolve: nada — aplica o filtro escolhido na vista ativa.

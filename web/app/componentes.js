@@ -5,20 +5,29 @@ window.__sel={};
    val(id) lê o valor; `options` é [{v,label}] (ou {div:true} para uma linha
    separadora); `onchange` é o NOME de uma função global, chamada quando se
    escolhe. Regista as opções em window.__sel para o selPick as encontrar.
+
+   O `toca` é a família das OPÇÕES (docs/design.md), e tem de vir de quem cria
+   o menu: daqui não há como sabê-la. A mesma opção, com o mesmo aspeto, ora
+   muda o que se vê — um filtro —, ora mexe no formulário que se está a
+   preencher, ora grava. Era a última fábrica da app a montar pontos de
+   interação sem saber para que servem, e a razão de 16 pontos ficarem fora das
+   verificações sempre que um destes menus estava aberto.
    Recebe: id — identificador único do campo (o valor escolhido fica no input
    escondido com este id, de onde val(id) o lê); value — o valor pré-selecionado
    (comparado como string; pode vir null ou vazio); options — lista [{v,label}]
    das opções, com {div:true} no lugar de uma linha separadora; onchange
-   (opcional) — o nome de uma função global a chamar quando se escolhe.
+   (opcional) — o nome de uma função global a chamar quando se escolhe; toca
+   (opcional) — a família das opções: 'vista' num filtro, 'rascunho' num
+   formulário, 'dados' se a escolha grava logo.
    Devolve: string de HTML do menu, pronta a inserir com innerHTML. */
-function sel(id,value,options,onchange){
+function sel(id,value,options,onchange,toca){
   window.__sel[id]={options:options,onchange:onchange||''};
   const cur=options.find(o=>!o.div&&String(o.v)===String(value))||options.find(o=>!o.div)||{v:'',label:'—'};
   return `<div class="sel" id="sel_${id}">
     <input type="hidden" id="${id}" value="${esc(value==null?'':value)}">
     <button type="button" class="selbtn" data-toca="camada" onclick="selOpen(event,'${id}')"><span id="lab_${id}">${esc(cur.label)}</span>${ic('chevD',16)}</button>
     <div class="selpop" id="pop_${id}">
-      ${options.map((o,i)=>o.div?'<div class="sdiv"></div>':`<button type="button" class="selopt ${String(o.v)===String(value)?'on':''}" onclick="selPick(event,'${id}',${i})">
+      ${options.map((o,i)=>o.div?'<div class="sdiv"></div>':`<button type="button" class="selopt ${String(o.v)===String(value)?'on':''}"${toca?` data-toca="${toca}"`:''} onclick="selPick(event,'${id}',${i})">
         <span>${esc(o.label)}</span>${String(o.v)===String(value)?ic('check',16):''}</button>`).join('')}
     </div></div>`;
 }

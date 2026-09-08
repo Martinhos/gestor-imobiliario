@@ -216,13 +216,13 @@ function convidarCard() {
   else {
     var grupos = typeof gOpts === 'function' ? gOpts('prop') : [];
     form = '<div class="form">' +
-      '<label>Cargo' + sel('cw_inv_cargo', roles[0].id, roles.map(function (r) { return { v: r.id, label: r.name }; })) + '</label>' +
+      '<label>Cargo' + sel('cw_inv_cargo', roles[0].id, roles.map(function (r) { return { v: r.id, label: r.name }; }), '', 'rascunho') + '</label>' +
       '<div><div class="flabel">Imóveis</div><div class="list" style="gap:7px">' + meus.map(function (p) {
         return '<label class="check"><input type="checkbox" id="cw_inv_h_' + p.id + '"><span style="min-width:0"><b>' + esc(p.name || 'Sem nome') + '</b>' +
           (p.address ? ' <span class="small">' + esc(p.address) + '</span>' : '') + '</span></label>';
       }).join('') + '</div>' +
       (grupos.length
-        ? '<div style="margin-top:9px">' + sel('cw_inv_grupo', '', [{ v: '', label: 'Escolher pelo grupo…' }].concat(grupos), 'cwInvGrupo') +
+        ? '<div style="margin-top:9px">' + sel('cw_inv_grupo', '', [{ v: '', label: 'Escolher pelo grupo…' }].concat(grupos), 'cwInvGrupo', 'rascunho') +
           '<div class="hint" style="margin-top:6px">Imóveis que juntares ao grupo depois não entram — edita o colaborador.</div></div>'
         : '') + '</div>' +
       '<label>Nota para ti (opcional)<input id="cw_inv_label" maxlength="60" placeholder="Ex.: para a Ana, contabilidade" autocomplete="off"></label>' +

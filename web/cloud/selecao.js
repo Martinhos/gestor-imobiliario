@@ -306,9 +306,9 @@ CW.selEditar = function () {
   openModal('Editar ' + ids.length + (ids.length === 1 ? ' movimento' : ' movimentos'),
     '<div class="form">' +
       '<div class="hint">Só se altera o que preencheres. O resto de cada movimento fica como está.</div>' +
-      '<label>Categoria' + sel('selCat', '', cats, 'CW.selCatMudou') + '</label>' +
+      '<label>Categoria' + sel('selCat', '', cats, 'CW.selCatMudou', 'rascunho') + '</label>' +
       '<div id="selSubBox"><label>Subcategoria' +
-        sel('selSub', '', [{ v: '', label: '— não mexer —' }], '') + '</label></div>' +
+        sel('selSub', '', [{ v: '', label: '— não mexer —' }], '', 'rascunho') + '</label></div>' +
       (tags.length
         ? '<div><div class="flabel">Etiquetas</div>' +
           '<div class="chips" id="selTags">' + tags.map(function (g) {
@@ -331,7 +331,7 @@ CW.selCatMudou = function () {
   var box = document.getElementById('selSubBox');
   if (!box) return;
   box.innerHTML = '<label>Subcategoria' + sel('selSub', '',
-    [{ v: '', label: '— não mexer —' }].concat(subs.map(function (x) { return { v: x, label: x }; })), '') + '</label>';
+    [{ v: '', label: '— não mexer —' }].concat(subs.map(function (x) { return { v: x, label: x }; })), '', 'rascunho') + '</label>';
 };
 
 // liga/desliga uma etiqueta na edição em massa (o estado vive na classe do próprio botão)

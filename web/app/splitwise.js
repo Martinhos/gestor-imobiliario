@@ -56,7 +56,7 @@ function swMapModal(){
   window._swCols=[iDate,iDesc,iCost,iCat];
   openModal('Importar do Splitwise',`<div class="form">
     <div class="hint">Encontrei <b>${swRows.length}</b> linhas. Colunas: data → <b>${esc(swHead[iDate]||'?')}</b>, descrição → <b>${esc(swHead[iDesc]||'?')}</b>, custo → <b>${esc(swHead[iCost]||'?')}</b>.</div>
-    <label>Lançar em que imóvel?${sel('sw_prop',(db.properties[0]||{}).id||'',db.properties.map(p=>({v:p.id,label:p.name})))}</label>
+    <label>Lançar em que imóvel?${sel('sw_prop',(db.properties[0]||{}).id||'',db.properties.map(p=>({v:p.id,label:p.name})),'','rascunho')}</label>
     <label>A minha quota-parte (%)<input id="sw_quota" type="text" inputmode="decimal" value="${dec(db.settings.quota||100)}" oninput="swRefresh()"></label>
     <div class="hint">O Splitwise exporta o custo total. Se divides a casa a meias, põe 50 e a app lança só metade.</div>
     <div class="divider"></div><div id="swPrev">${swPrevHtml(swPrepare(iDate,iDesc,iCost,iCat,100,db.settings.quota||100))}</div></div>`,
