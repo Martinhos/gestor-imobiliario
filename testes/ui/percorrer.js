@@ -63,6 +63,9 @@ const CENAS = [
     fazer: `localStorage.removeItem('gi_passos_fora'); go('dashboard'); render();`,
   },
   { nome: 'edicao-dos-cartoes', fazer: `go('dashboard'); render(); CW.enterEdit()` },
+  { nome: 'selo-por-enviar', fazer: `go('dashboard'); render(); setSyncBadge('pend',3)` },
+  { nome: 'selo-sem-ligacao', fazer: `go('dashboard'); render(); setSyncBadge('off')` },
+  { nome: 'selo-guardado', fazer: `go('dashboard'); render(); setSyncBadge('ok')` },
   {
     /* Andar no calendario, que e o gesto desta vista. O percurso passava por
        ca e nunca mudava de mes: tres defeitos seguidos nesta zona nao podiam

@@ -254,6 +254,24 @@ function dentroDaPagina() {
     if (!noMesDeHoje && !temBotao) falhar('o «Hoje» aparece fora do mês de hoje', mes + ' sem botão');
   }
 
+  /* 6b. O selo da sincronizacao nao se poe em cima do sino.
+
+     Vivia no canto superior direito, que e onde o sino esta, e ninguem tinha
+     dado por isso porque nenhuma cena o mostrava — ele so aparecia quando a
+     ligacao caia. Agora ha uma cena por estado, e esta regra guarda o sitio. */
+  const selo = document.getElementById('cwSync');
+  if (selo && getComputedStyle(selo).opacity !== '0') {
+    const rs = selo.getBoundingClientRect();
+    ['hdrBell', 'hdrFilt'].forEach((id) => {
+      const outro = document.getElementById(id);
+      if (!outro) return;
+      const ro = outro.getBoundingClientRect();
+      if (!ro.height) return;
+      const bate = !(rs.top >= ro.bottom || rs.bottom <= ro.top || rs.left >= ro.right || rs.right <= ro.left);
+      if (bate) falhar('o selo da sincronizacao nao tapa o cabecalho', 'sobrepoe #' + id);
+    });
+  }
+
   /* 7. As familias dos pontos de interacao (docs/design.md).
 
      Dois eixos, e so um se declara. O «o que toca» vem num data-toca, porque
