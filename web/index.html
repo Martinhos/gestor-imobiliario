@@ -241,6 +241,12 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
 html.dark .badge.amber{color:var(--warn)}
 html.dark .badge.red{color:var(--danger)}
 .title{font-weight:700;letter-spacing:-.01em}
+/* Um título que divide a linha com um valor e com a porta das opções tem de
+   cortar: a coluna dele encolhe, e o que sobra sai da caixa. Três cartões
+   escreviam isto à mão no style de cada um — passou a ser a regra do padrão.
+   Só neste padrão: um .title que é o cabeçalho de uma folha pode embrulhar. */
+.card .row-between>div:first-child{min-width:0}
+.card .row-between>div:first-child>.title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .small{font-size:12px;color:var(--muted)}
 .empty{padding:38px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:16px;background:var(--card)}
 /* o calendário: sete colunas, células quadradas-ish, pontos por tipo */

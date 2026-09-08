@@ -629,14 +629,35 @@ function toast(m,op){const t=document.getElementById('toast');
   t.textContent=m;
   if(op&&op.rotulo&&op.fn){const b=document.createElement('button');b.type='button';b.className='toastbtn';
     b.textContent=op.rotulo;b.onclick=()=>{clearTimeout(t._h);t.classList.remove('on');op.fn()};t.appendChild(b)}
-  /* Com um modal aberto, o aviso sobe acima do rodape. Mora a 22px do fundo,
-     que e onde o rodape do modal esta, e caia em cima de «Guardar» — os
-     botoes que se esta precisamente a pedir para carregar. A altura e medida
-     e nao adivinhada: ha rodapes de duas linhas. */
-  const pes=document.querySelector('.modal.open .foot');
-  t.style.setProperty('--acima',pes?(Math.ceil(pes.getBoundingClientRect().height)+12)+'px':'0px');
+  avisoAcimaDoRodape();
   t.classList.add('on');clearTimeout(t._h);
   t._h=setTimeout(()=>t.classList.remove('on'),(op&&op.ms)||2800)}
+
+/* Põe o aviso acima do rodapé da janela que estiver aberta.
+
+   O aviso mora a 22px do fundo, que é exatamente onde o rodapé de um modal
+   está: caía em cima de «Guardar» e «Cancelar» — os botões que se está
+   precisamente a pedir à pessoa para carregar.
+
+   Corre nas duas ordens, e a segunda foi a que faltou à primeira tentativa:
+   o aviso a aparecer com uma janela já aberta, e a janela a abrir com um
+   aviso ainda no ecrã — o aviso fica quase três segundos, e nesses segundos
+   abre-se uma janela por cima. Por isso é chamada também do openModal e do
+   closeModal, e não só daqui.
+
+   A altura é medida e não adivinhada (há rodapés de duas linhas), e é a do
+   rodapé mais alto de todas as janelas abertas: com janelas empilhadas, a de
+   cima é a última.
+   Devolve: nada — escreve a variável --acima no aviso. */
+function avisoAcimaDoRodape(){
+  const t=document.getElementById('toast');
+  if(!t||!t.style||!t.style.setProperty)return;
+  let h=0;
+  [].slice.call(document.querySelectorAll('.modal.open .foot')).forEach(function(pes){
+    h=Math.max(h,Math.ceil(pes.getBoundingClientRect().height));
+  });
+  t.style.setProperty('--acima',h?(h+12)+'px':'0px');
+}
 
 const KIND={income:{short:'Receita',sign:'+',color:'pos',flow:'in'},expense:{short:'Despesa',sign:'−',color:'neg',flow:'out'},
   loan:{short:'Pagamento de crédito',sign:'−',color:'amber',flow:'out'},owed:{short:'Dívida recebida',sign:'+',color:'amber',flow:'in'},

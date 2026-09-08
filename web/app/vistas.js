@@ -489,7 +489,7 @@ function donutCard(){
   const items=byCategory(YEAR,dashProp||null,true,donutCat||null);
   return `<div class="card" id="donutCard">
     <div class="row-between" style="align-items:center">
-      <div style="min-width:0"><div class="title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${donutCat?esc(donutCat):'Despesas por categoria'}</div>
+      <div style="min-width:0"><div class="title">${donutCat?esc(donutCat):'Despesas por categoria'}</div>
         <div class="small">${donutCat?'Subcategorias em '+YEAR:'Onde foi parar o dinheiro em '+YEAR}</div></div>
       ${donutCat?`<button class="btn sm" style="flex:0 0 auto" data-toca="vista" onclick="donutDrill('')">${ic('chev',14)} Voltar</button>`:''}</div>
     <div style="margin-top:13px">${cDonut(items,{sub:donutCat?'total da categoria':'total de despesas',onPick:donutCat?'':'donutDrill'})}</div>

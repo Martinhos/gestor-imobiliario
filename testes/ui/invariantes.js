@@ -131,15 +131,26 @@ function dentroDaPagina() {
          precisamente aquilo que se pede à pessoa para carregar. */
       const avisa = /toast|tip/.test(el.className) || el.id === 'cwDoc' ||
         /^cw(Legal|Terms|Upd|Auth|Guia)/.test(el.id || '');
-      if (z > zModal && r.width > 0 && r.height > 0) {
+      /* Uma coisa invisivel e que nao recebe toques nao tapa nada. O aviso
+         esconde-se com opacidade zero e um empurrao de 80px para baixo — a
+         posicao de onde desliza quando aparece —, e era essa caixa, que
+         ninguem ve, que a regra media por cima do rodape. Oito cenas a
+         falhar, todas pelo mesmo engano. O caso a serio — um aviso VISIVEL
+         com uma janela aberta — tem cena propria (percorrer.js). */
+      const seVe = cs.opacity !== '0' && cs.visibility !== 'hidden' && cs.pointerEvents !== 'none';
+      if (z > zModal && r.width > 0 && r.height > 0 && seVe) {
         if (!avisa) {
           falhar('nada tapa um modal', (el.id || el.className || el.tagName) + ' está em z-index ' + z + ', acima de ' + zModal);
         } else {
           const pes = document.querySelector('.modal.open .foot');
           const pr = pes && pes.getBoundingClientRect();
           if (pr && pr.height && !(r.bottom < pr.top || r.top > pr.bottom || r.right < pr.left || r.left > pr.right)) {
+            /* com os numeros: sem eles, a falha nao diz se quem tapa esta
+               dois pixeis a mais ou cem, nem de que lado */
+            const cx = (a) => Math.round(a.top) + '-' + Math.round(a.bottom) +
+              ' x ' + Math.round(a.left) + '-' + Math.round(a.right);
             falhar('o que passa por cima não tapa os botões',
-              (el.id || el.className) + ' cobre o rodapé do modal');
+              (el.id || el.className) + ' em ' + cx(r) + ' cobre o rodapé em ' + cx(pr));
           }
         }
       }
