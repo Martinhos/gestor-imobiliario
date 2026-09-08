@@ -731,7 +731,7 @@ function ctFMatch(c,s){
    Devolve: string HTML do cartão. */
 function personCard(pp,kind){
   const cs=kind==='tenant'?contractsOfTenant(pp.id).filter(isActive):propsOf(pp.id);
-  return `<div class="card tap" data-lp="per:${esc(kind)}:${esc(pp.id)}" data-fk="per:${esc(kind)}:${esc(pp.id)}" data-toca="camada" onclick="personModal('${jsq(kind)}','${jsq(pp.id)}')"><div class="row-between">
+  return `<div class="card tap" data-lp="per:${esc(kind)}:${esc(pp.id)}" data-fk="per:${esc(kind)}:${esc(pp.id)}" data-toca="camada" onclick="personView('${jsq(kind)}','${jsq(pp.id)}')"><div class="row-between">
     <div style="display:flex;gap:12px;min-width:0">
       <div class="avatar">${esc(initials(pp.name))}</div>
       <div style="min-width:0"><div class="title">${esc(pp.name)}</div>

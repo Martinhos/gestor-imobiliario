@@ -731,7 +731,8 @@ function lpMenu(v){
     return lpShow(ctName(c),opts);}
   if(k==='per'){const kind=a[1],pid=a[2],list=kind==='owner'?db.owners:db.tenants,pp=list.find(x=>x.id===pid);if(!pp)return;
     const ok=kind==='owner'||podeEditarInquilino(pp);
-    return lpShow(pp.name,[{label:ok?'Editar ficha':'Ver ficha',icon:'users',act:()=>personModal(kind,pid)}].concat(ok?[{label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)}]:[]));}
+    return lpShow(pp.name,[{label:'Ver ficha',icon:'users',act:()=>personView(kind,pid)}]
+      .concat(ok?[{label:'Editar ficha',icon:'pen',act:()=>personModal(kind,pid)},{label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)}]:[]));}
   if(k==='rec'){const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
     /* com rec.add confirmo e silencio qualquer planeado (o servidor só lhe funde next, until e muted);
        editar os campos e apagar é só o que eu criei — o alheio que termina ao confirmar apaga-se

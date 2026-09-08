@@ -1,5 +1,114 @@
 /* ================= PESSOAS (inquilinos e proprietários) ================= */
 let perForm={},perKind='tenant',perAfter=null;
+/* Posso mesmo alterar a ficha desta pessoa?
+
+   Num inquilino é a regra de sempre: quem o adicionou, ou o dono. Num
+   proprietário é outra coisa — o db.owners é reconstruído a partir dos
+   perfis do servidor a cada sincronização, e só o meu perfil é exportado.
+   Editar a ficha de outro proprietário COM conta gravava localmente e
+   desaparecia no pull seguinte; um proprietário sem conta é um registo meu
+   como outro qualquer.
+   Recebe: kind — 'tenant' ou 'owner'; p — a pessoa.
+   Devolve: true se o «Editar» deve existir. */
+function personEditavel(kind,p){
+  if(!p)return false;
+  if(kind==='tenant')return podeEditarInquilino(p);
+  return !p._userId||!!(window.CW&&CW.user&&CW.user.id===p.id);
+}
+/* O corpo da ficha de uma pessoa: o que se sabe sobre ela, para ler.
+
+   Um inquilino e um proprietário partilham o formulário, mas lêem-se por
+   razões diferentes: de um inquilino quer-se o contacto, onde mora, desde
+   quando e até quando; de um proprietário, a quota-parte e se estamos em dia.
+
+   As guardas dizem o kind ANTES da permissão, e não é estilo: pode(null,perm)
+   devolve sempre true, e num proprietário não há casa nenhuma — uma guarda
+   escrita só como pode(casa,'tenant.view') não guardava nada.
+   Recebe: kind — 'tenant' ou 'owner'; id — o id da pessoa.
+   Devolve: o HTML do corpo, ou vazio se a pessoa já não existir. */
+function personFicha(kind,id){
+  const lista=kind==='owner'?db.owners:db.tenants;
+  const p=(lista||[]).find(x=>x.id===id);if(!p)return '';
+  const casa=kind==='tenant'?casaDoInquilino(p):null;
+  const verPessoa=kind==='owner'||pode(casa,'tenant.view');
+  const cts=kind==='tenant'?contractsOfTenant(p.id):[];
+  const ativos=cts.filter(isActive),findos=cts.filter(c=>!isActive(c));
+  const casas=kind==='owner'?propsOf(p.id):[];
+  const ident=verPessoa?[p.nif?'NIF '+esc(fmtNIF(p.nif)):'',
+    p.cc?'CC '+esc(fmtCC(p.cc))+(p.ccValid?(pzDias(p.ccValid)<0?' · caducou a '+esc(p.ccValid):' · válido até '+esc(p.ccValid)):''):'',
+    p.nationality&&p.nationality!=='Portuguesa'?esc(p.nationality):''].filter(Boolean).join('<br>'):'';
+  /* a quota-parte só na minha casa: o servidor apaga as quotas de uma casa de
+     colaboração, e o sharesOf reparte por igual quando não há percentagens —
+     mostrá-la ali era publicar um número inventado */
+  const minhas=casas.filter(x=>souDono(x.id));
+  const renda=sum(minhas.filter(x=>pode(x.id,'contract.view')).map(x=>rentOf(x)*shareOf(x,p.id)));
+  const saldo=kind==='owner'&&!ownerFilter?ownerBalances(null)[p.id]:undefined;
+  const vazia=!p.phone&&!p.email&&!ident&&!p.taxAddress&&!(p.files||[]).length&&
+    !(kind==='tenant'?cts.length:casas.length);
+  return ficha([
+    kind==='tenant'&&p._sharedFrom?{tipo:'nota',valor:'Ficha de <b>'+esc(p._sharedFrom)+'</b>.'}:null,
+    kind==='tenant'&&!verPessoa?{tipo:'nota',valor:'O teu cargo mostra só o nome desta pessoa.'}:null,
+    verPessoa&&p.phone?{rotulo:'Telemóvel',valor:esc(fmtPhone(p.phone))}:null,
+    verPessoa&&p.email?{rotulo:'Email',valor:esc(p.email)}:null,
+    kind==='tenant'&&ativos.length?{tipo:'bloco',rotulo:'Mora em',
+      valor:ativos.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.start?' · desde '+esc(c.start):'')+(c.end?' · até '+esc(c.end):'')).join('<br>')}:null,
+    kind==='owner'&&casas.length?{tipo:'bloco',rotulo:'Imóveis e quota-parte',
+      valor:casas.map(x=>esc(x.name||x.address||'imóvel')+(souDono(x.id)?' · '+pct(shareOf(x,p.id),0):'')).join('<br>')}:null,
+    /* o saldo só sem filtro de proprietário ligado: com ele, o ownerBalances
+       ignora os movimentos sem imóvel e devolvia meia verdade */
+    saldo!==undefined?{rotulo:'Contas entre proprietários',
+      valor:Math.abs(saldo)<0.01?'em dia':(saldo>0?'a receber '+euro2(saldo):'a pagar '+euro2(-saldo))}:null,
+    renda>0?{rotulo:'Renda mensal que lhe toca',valor:euro(renda)}:null,
+    ident?{tipo:'bloco',rotulo:'Identificação',valor:ident}:null,
+    verPessoa&&p.taxAddress?{tipo:'bloco',rotulo:'Morada fiscal',valor:esc(p.taxAddress).replace(/\n/g,'<br>')}:null,
+    kind==='tenant'&&findos.length?{tipo:'bloco',rotulo:'Contratos anteriores',
+      valor:findos.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.end?' · terminou a '+esc(c.end):'')).join('<br>')}:null,
+    /* os anexos de um inquilino pedem tenant.view E file.view no servidor:
+       listar os nomes sem ambas dava linhas que rebentam ao toque */
+    kind==='tenant'&&verPessoa&&pode(casa,'file.view')&&(p.files||[]).length?{tipo:'bloco',rotulo:'Documentos',
+      valor:(p.files||[]).map(f=>`<span role="button" tabindex="0" data-toca="camada" style="cursor:pointer;text-decoration:underline" onclick="openMeta('${jsq(f.id)}')">${esc(f.name||'ficheiro')}</span>`).join('<br>')}:null,
+    kind==='tenant'&&verPessoa&&String(p.notes||'').trim()?{tipo:'bloco',rotulo:'Notas',valor:rich(p.notes)}:null,
+    /* a frase segue quem MANDA na ficha, e não o tipo: um proprietário sem
+       conta é um registo meu como outro qualquer, e mandá-lo esperar por
+       «quem tem a conta» era mandá-lo esperar por ninguém */
+    vazia?{tipo:'nota',valor:'Esta ficha só tem o nome. '+(personEditavel(kind,p)
+      ?'Toca em «Editar» para juntar contacto e identificação.'
+      :'O perfil é mantido por quem tem a conta.')}:null,
+  ]);
+}
+/* A ficha de uma pessoa: o que tocar num inquilino ou num proprietário abre.
+
+   Um proprietário com conta não tem «Editar», e não é uma limitação de
+   feitio: o db.owners é reconstruído a partir dos perfis do servidor a cada
+   sincronização, e só o meu perfil é exportado — editar a ficha de outro
+   gravava localmente e desaparecia na sincronização seguinte. No meu próprio
+   perfil, o «Editar» vai ao editProfile da nuvem, que é quem sabe guardar.
+   Recebe: kind — 'tenant' ou 'owner'; id — o id da pessoa.
+   Devolve: nada — abre a janela. */
+function personView(kind,id){
+  const lista=kind==='owner'?db.owners:db.tenants;
+  const p=(lista||[]).find(x=>x.id===id);if(!p)return;
+  const euSou=kind==='owner'&&window.CW&&CW.user&&CW.user.id===p.id;
+  const ok=personEditavel(kind,p);
+  const act=euSou&&window.CW&&CW.editProfile?'CW.editProfile()':`personModal('${jsq(kind)}','${jsq(id)}')`;
+  abrirFicha({
+    titulo:()=>{const x=(kind==='owner'?db.owners:db.tenants||[]).find(y=>y.id===id);return x?x.name:'Ficha'},
+    corpo:()=>personFicha(kind,id),
+    menu:()=>{
+      const it=[];
+      if(kind==='tenant'){
+        const c=contractsOfTenant(id).filter(isActive)[0];
+        if(c&&pode(c.propertyId,'contract.view'))it.push({label:'Ver contrato',icon:'contract',toca:'camada',act:`ctView('${jsq(c.id)}')`});
+      }
+      /* apagar um proprietário com conta não é apagar um registo meu: é
+         mexer numa pessoa que o servidor volta a mandar no pull seguinte */
+      if(ok)it.push({label:kind==='owner'?'Apagar proprietário':'Apagar inquilino',
+        icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${jsq(kind)}','${jsq(id)}')`});
+      return it.length?menu('fichaPer',it):'';
+    },
+    editar:ok?{rotulo:'Editar',act:act}:null,
+  });
+}
 /* Abre a ficha de pessoa (kind 'owner' ou 'tenant'); sem id cria uma nova.
    after, se vier, é chamado com o id da ficha depois de guardar, em vez do
    fecho normal — é assim que o contrato cria um inquilino sem perder o fluxo.
