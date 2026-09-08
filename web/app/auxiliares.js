@@ -652,11 +652,17 @@ function toast(m,op){const t=document.getElementById('toast');
 function avisoAcimaDoRodape(){
   const t=document.getElementById('toast');
   if(!t||!t.style||!t.style.setProperty)return;
-  let h=0;
+  /* Mede-se até ao TOPO do rodapé, e não a altura dele. No telemóvel a folha
+     encosta ao fundo e dá no mesmo; no computador a janela está ao meio do
+     ecrã, e subir só a altura do rodapé deixava o aviso a tapá-lo à mesma —
+     foi o que a cena nova apanhou, com 21px de sobreposição. */
+  const H=window.innerHeight||0;
+  let acima=0;
   [].slice.call(document.querySelectorAll('.modal.open .foot')).forEach(function(pes){
-    h=Math.max(h,Math.ceil(pes.getBoundingClientRect().height));
+    const r=pes.getBoundingClientRect();
+    if(r.height)acima=Math.max(acima,H-r.top);
   });
-  t.style.setProperty('--acima',h?(h+12)+'px':'0px');
+  t.style.setProperty('--acima',acima>0?Math.ceil(acima+12)+'px':'0px');
 }
 
 const KIND={income:{short:'Receita',sign:'+',color:'pos',flow:'in'},expense:{short:'Despesa',sign:'−',color:'neg',flow:'out'},
