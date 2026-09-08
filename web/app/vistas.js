@@ -329,15 +329,17 @@ function donutCard(){
 // Recebe: cat — o nome da categoria a abrir; vazio ('') volta às categorias de topo.
 // Devolve: nada — repinta o cartão do donut (ou a vista toda, se o cartão não estiver no DOM).
 function donutDrill(cat){
-  const entrando=!!(cat||'')&&!donutCat;   // entrar numa categoria é ir para a frente
   donutCat=cat||'';
   const e=document.getElementById('donutCard');if(!e)return render();
-  /* Trocar o cartão de golpe lia-se como «mudou a vista», e não como «entrei
-     nesta categoria»: os arcos redesenhavam-se mas tudo o resto aparecia
-     feito, sem ligação nenhuma ao que lá estava antes. */
-  deslizarEntre(()=>document.getElementById('donutCard'),
-    ()=>{const el=document.getElementById('donutCard');if(el)el.outerHTML=donutCard()},
-    entrando?1:-1);
+  e.outerHTML=donutCard();
+  /* A roda redesenha-se, e o cartão fica quieto. Chegou a levar a fita de
+     virar a página, e era a metáfora errada: entrar numa categoria não é ir
+     para outra página — é a MESMA roda a repartir-se de outra maneira, e o que
+     se quer ver é os arcos a serem traçados. A marca liga a animação que os
+     arcos já sabem fazer, sem depender de a vista ter acabado de chegar
+     (index.html:.redesenha). */
+  const novo=document.getElementById('donutCard');
+  if(novo)novo.classList.add('redesenha');
 }
 /* despesas sem imóvel atribuído: contam no total mas não aparecem em nenhuma avaliação
    Recebe: y — o ano a filtrar (número ou texto de 4 dígitos).
