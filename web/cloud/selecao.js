@@ -95,6 +95,12 @@ function selIdsDoMes(mo) {
     .map(function (e) { return e.getAttribute('data-tx'); });
 }
 
+/* A lista viva (vistas.js:pintarListaTx) refaz linhas sem passar pelo render,
+   e uma linha refeita nasce sem a marca que tinha. Fica exposto para ela o
+   poder repor — é a mesma função que o render já chamava no fim. */
+// Recebe: nada.
+// Devolve: nada — repinta as marcas no DOM que estiver no ecra.
+CW.selPintar = function () { selPintar(); };
 // Repõe as marcas e as contagens a partir do estado, sem redesenhar a vista.
 // Devolve: nada — mexe diretamente no DOM (caixas, contagem e cabeçalho).
 function selPintar() {

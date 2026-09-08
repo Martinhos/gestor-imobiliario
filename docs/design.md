@@ -426,6 +426,49 @@ tipo de movimento (index.html:.opt, index.html:.seg), .empty para o
 estado vazio (index.html:.empty), .tip para a dica dos gráficos
 (index.html:.tip; graficos.js:chartTip).
 
+## O motor das listas
+A app pinta trocando o innerHTML: a vista é gerada em texto e o browser
+volta a construir tudo. Medido com 500 movimentos, são 6 110 nós e ~48ms
+por pintura, e a maior parte disso é o browser a ler HTML que descreve
+linhas iguais às que já lá estavam. Escrever uma letra na pesquisa pagava
+esse preço por tecla.
+
+Os Movimentos são a primeira vista com motor próprio, e o motor entra ao
+lado do antigo em vez de o substituir. A vista devolve a MOLDURA —
+indicadores, saldos, dívidas, uns cem nós que não custam nada — e um
+vistas.js:pintarListaTx enche a lista por chave: cada linha traz o id do
+registo, guarda-se o HTML com que foi feita, e na pintura seguinte
+compara-se texto com texto (lista.js:reconciliar). Igual, não se toca —
+o nó fica com o scroll, o foco e as marcas de seleção que tinha.
+Diferente, refaz-se só essa. A ordem acerta-se com insertBefore, que é
+mover e não recriar.
+
+Comparar o HTML e não os dados é de propósito. Uma linha não depende só do
+movimento: depende do nome do imóvel, do contrato, de quem pagou, do modo
+de seleção, do cargo de quem está a ver. Uma assinatura feita à mão sobre
+os dados esquecer-se-ia de um desses e a linha ficava velha sem se saber
+porquê. Gerar o texto é a parte barata — 3ms para as 500 linhas todas; o
+que custa é o browser lê-lo.
+
+O que muda tem de ficar FORA da assinatura de quem o contém. O saldo do
+mês estava dentro do bloco do mês, e medimos o resultado: filtrar refazia
+três meses inteiros e recriava as 63 linhas que sobravam, com zero nós
+reaproveitados. O saldo passou a ser escrito depois de reconciliar
+(vistas.js:txMesHtml deixa um span vazio).
+
+E os caminhos que só mexem no que se vê deixaram de chamar o render:
+escrever na pesquisa, mudar um filtro e trocar a ordenação passam pelo
+vistas.js:refrescarMovimentos. Medido com 501 movimentos: uma tecla passou
+de ~48ms e 6 110 nós refeitos para 4–12ms, com zero linhas recriadas e
+zero movidas — só saem as que deixaram de servir.
+
+Quem migrar a vista seguinte tem três coisas a respeitar: a chave é o id
+do registo e vive num data-chave que o reconciliar escreve; quem refaz
+linhas sem passar pelo render tem de repor o que vive no DOM (o
+tornarFocavel e as marcas da seleção, CW.selPintar); e o caminho curto tem
+de acertar o que está fora do #view — o botão dos filtros
+(vistas.js:pintarBotaoFiltros).
+
 ## Padrões de página
 O cabeçalho é o header.top (index.html:header.top): título e subtítulo
 vêm de TABS (navegacao.js:TABS; vistas.js:render). O sino das

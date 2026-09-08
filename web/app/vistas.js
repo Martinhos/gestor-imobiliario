@@ -67,6 +67,20 @@ let _entrar=1;
    ecrãs diferentes: mudar de separador troca tudo o que lá está, e animar
    isso seria uma revoada de linhas a atravessar a página */
 let _ecraPintado='';
+/* O botão de filtros do cabeçalho: se aparece, se tem o ponto de «há filtros
+   postos», e se está aceso. Sai do render porque o caminho curto — mudar um
+   filtro sem repintar a página — também tem de o acertar, e o ponto conta a
+   pesquisa (hdrFiltN).
+   Devolve: nada — escreve no #hdrFilt, que vive fora do #view. */
+function pintarBotaoFiltros(){
+  const hb=document.getElementById('hdrFilt');if(!hb)return;
+  const isAna=['dashboard','projections','reports'].indexOf(tab)>-1,
+    hasFilt=isAna||LFK[tab]||tab==='transactions';
+  hb.style.display=hasFilt?'':'none';
+  if(!hasFilt)return;
+  hb.innerHTML=ic('filter',16)+(hdrFiltN()?'<span class="dot"></span>':'');
+  hb.classList.toggle('primary',isAna?!!anaOpen[tab]:(LFK[tab]?!!lf(LFK[tab])._open:false));
+}
 /* Redesenha a página inteira: título e subtítulo, botão de filtros do
    cabeçalho, e o HTML da vista do separador atual (vDashboard, vProperties…).
    Substitui o innerHTML de #view, por isso o estado do DOM anterior perde-se;
@@ -83,12 +97,8 @@ function render(){
   const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
   document.getElementById('pageTitle').textContent=meta.label;
   document.getElementById('pageSub').textContent=meta.sub;
-  const hb=document.getElementById('hdrFilt'),isAna=['dashboard','projections','reports'].indexOf(tab)>-1,
-    hasFilt=isAna||LFK[tab]||tab==='transactions';
   if(typeof notifSino==='function')notifSino();
-  if(hb){hb.style.display=hasFilt?'':'none';
-    if(hasFilt){hb.innerHTML=ic('filter',16)+(hdrFiltN()?'<span class="dot"></span>':'');
-      hb.classList.toggle('primary',isAna?!!anaOpen[tab]:(LFK[tab]?!!lf(LFK[tab])._open:false))}}
+  pintarBotaoFiltros();
   let html=({dashboard:vDashboard,visits:vVisits,calendar:vCalendar,properties:vProperties,contracts:vContracts,tenants:vTenants,owners:vOwners,
     colaboradores:vColabTab,transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
@@ -99,6 +109,10 @@ function render(){
      acontecem lá dentro (o donutDrill) são de quem tocou no gráfico. */
   view().classList.toggle('entra',!!_entrar);_entrar=0;
   view().innerHTML=html;
+  /* A lista dos movimentos e a primeira vista com motor proprio: o innerHTML
+     traz a moldura e o #txLista vazio, e quem o enche e o pintarListaTx, que
+     e o mesmo que depois o acerta linha a linha sem passar por aqui. */
+  if(tab==='transactions')pintarListaTx();
   /* A visão geral era o único ecrã sem criação rápida: registar uma renda
      avulsa custava quatro toques de viagem. Entra aqui, depois do painel
      rearranjar os cartões, para não virar um cartão arrastável. */
@@ -639,7 +653,7 @@ let _qT=null;
    Devolve: nada — agenda o redesenho da vista. */
 function onTxSearch(v){
   clearTimeout(_qT);
-  _qT=setTimeout(()=>{txSearch=v;render();
+  _qT=setTimeout(()=>{txSearch=v;refrescarMovimentos();
     const i=document.getElementById('tx_q');
     if(i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}}},280);
 }
@@ -738,7 +752,7 @@ function newTplForTx(){
 /* os filtros vivem numa janela por cima da lista: mudar um filtro atualiza a lista e a própria janela
    Devolve: nada — redesenha a vista e, se estiver aberto, o modal de filtros. */
 function txRerender(){
-  render();
+  refrescarMovimentos();
   const top=modalTop();
   if(top&&top.title==='Filtros'){modalBodyEl().innerHTML=txFilterBody();const f=document.getElementById('modalFoot');if(f)f.innerHTML=txFilterFoot()}
 }
@@ -1030,29 +1044,108 @@ function vTransactions(){
     ${tot.owed?kpi('Dívidas recebidas',euro(tot.owed),'amber','de terceiros','Dinheiro recebido de terceiros.',evoTx('owed'),jaSo('owed')?null:ver('owed','Ver só as dívidas recebidas')):''}
     ${tot.repay?kpi('Dívidas pagas',euro(tot.repay),'neg','a terceiros','Devoluções a terceiros.',evoTx('repay'),jaSo('repay')?null:ver('repay','Ver só as dívidas pagas')):''}
     ${kpi('Saldo',euro(saldo),saldo>=0?'pos':'neg',list.length+' movimentos','Entradas menos saídas dos movimentos que passam no filtro.',evoTx('saldo'),txFilter?ver('','Ver todos os tipos'):null)}</div>`;
-  const by={};list.forEach(t=>{const k=String(t.date).slice(0,7);(by[k]=by[k]||[]).push(t)});
-  const who=t=>{
-    if(t.kind==='settle')return `<div class="small"><b>${esc((owner(t.paidBy)||{}).name||'?')}</b> → <b>${esc((owner(t.toId)||{}).name||'?')}</b></div>`;
-    if(!(t.paidBy&&owner(t.paidBy)))return '';
-    return `<div class="small">${isIn(t.kind)?'Recebido por':'Pago por'} <b>${esc(owner(t.paidBy).name)}</b>${splitLabel(t)?' · dividido '+splitLabel(t):''}</div>`;
-  };
-  return head+resumo+balancesCard(txProp||null)+creditorsCard(txProp&&txProp!=='__none__'?txProp:null)+Object.keys(by).map(mo=>{
-    const rows=by[mo],net=sum(rows.map(t=>!countsInTotals(t)?0:isIn(t.kind)?t.amount:(isOut(t.kind)?-t.amount:0)));
-    const xm=txMesExtra(mo)||{};
-    return `<div class="section-title${xm.cls?' '+xm.cls:''}" style="display:flex;justify-content:space-between;text-transform:none" ${xm.attrs||''}>
-      ${xm.caixa||''}<span>${mo}</span><span class="${net>=0?'pos':'neg'}">${euro(net)}</span></div>
-      <div class="list">${rows.map(t=>{const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null;
-      const x=txLinhaExtra(t,mo)||{};
-      return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
-        ${x.caixa||''}<div style="min-width:0"><div class="title" style="font-size:14.5px">${esc(t.label)}</div>
-          <div class="small">${esc(t.date)} · ${k.short}${t.category?' · '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' · '+esc(propName(t.propertyId)):''}${t.creditor?' · '+esc(t.creditor):''}</div>
-          ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}
-          ${who(t)}
-          ${t.kind==='loan'&&(t.principal||t.interest||t.fee)?`<div class="small">${t.payType==='amortizacao'?`Amortização · capital ${euro2(t.principal||0)} · comissão ${euro2(t.fee||0)}`:`Capital ${euro2(t.principal||0)} · juros ${euro2(t.interest||0)} · selo ${euro2(t.stamp||0)}`}</div>`:''}
-          ${(!countsInTotals(t)||(t.tags||[]).length)?`<div class="chips">${countsInTotals(t)?'':'<span class="badge grey">fora dos totais</span>'}${(t.tags||[]).map(g=>`<span class="badge grey">${esc(g)}</span>`).join('')}</div>`:''}</div>
-        <div style="text-align:right;flex:0 0 auto"><div class="${k.color}" style="font-weight:750${t.kind==='settle'?';color:var(--muted)':''}">${k.sign}${euro2(t.amount)}</div>
-          ${t.notes?`<div class="small" style="margin-top:3px" title="Tem comentários">${ic('pen',12)}</div>`:''}${x.acoes||''}</div>
-      </div></div>`}).join('')}</div>`}).join('');
+  txLista=list;
+  return head+resumo+balancesCard(txProp||null)+creditorsCard(txProp&&txProp!=='__none__'?txProp:null)
+    +`<div id="txLista"></div>`;
+}
+/* Os movimentos que a última pintura da vista escolheu, para a lista se poder
+   repintar sozinha sem voltar a filtrar e a ordenar tudo. */
+let txLista=[];
+/* Quem pagou (ou recebeu) e como se dividiu, na linha de um movimento.
+   Recebe: t — o movimento.
+   Devolve: HTML da linha pequena, ou '' quando nao ha pagador. */
+function txQuem(t){
+  if(t.kind==='settle')return `<div class="small"><b>${esc((owner(t.paidBy)||{}).name||'?')}</b> \u2192 <b>${esc((owner(t.toId)||{}).name||'?')}</b></div>`;
+  if(!(t.paidBy&&owner(t.paidBy)))return '';
+  return `<div class="small">${isIn(t.kind)?'Recebido por':'Pago por'} <b>${esc(owner(t.paidBy).name)}</b>${splitLabel(t)?' \u00b7 dividido '+splitLabel(t):''}</div>`;
+}
+/* O HTML de UMA linha de movimento. Esta a parte porque e a peca que a lista
+   viva compara consigo propria: o texto que sai daqui e a assinatura da linha
+   (lista.js), e e por ele que se sabe se ha alguma coisa a refazer.
+   Recebe: t — o movimento; mo — o mes 'AAAA-MM' do bloco onde a linha entra.
+   Devolve: o HTML da linha (string). */
+function txLinhaHtml(t,mo){
+  const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null;
+  const x=txLinhaExtra(t,mo)||{};
+  return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
+    ${x.caixa||''}<div style="min-width:0"><div class="title" style="font-size:14.5px">${esc(t.label)}</div>
+      <div class="small">${esc(t.date)} \u00b7 ${k.short}${t.category?' \u00b7 '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' \u00b7 '+esc(propName(t.propertyId)):''}${t.creditor?' \u00b7 '+esc(t.creditor):''}</div>
+      ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}
+      ${txQuem(t)}
+      ${t.kind==='loan'&&(t.principal||t.interest||t.fee)?`<div class="small">${t.payType==='amortizacao'?`Amortiza\u00e7\u00e3o \u00b7 capital ${euro2(t.principal||0)} \u00b7 comiss\u00e3o ${euro2(t.fee||0)}`:`Capital ${euro2(t.principal||0)} \u00b7 juros ${euro2(t.interest||0)} \u00b7 selo ${euro2(t.stamp||0)}`}</div>`:''}
+      ${(!countsInTotals(t)||(t.tags||[]).length)?`<div class="chips">${countsInTotals(t)?'':'<span class="badge grey">fora dos totais</span>'}${(t.tags||[]).map(g=>`<span class="badge grey">${esc(g)}</span>`).join('')}</div>`:''}</div>
+    <div style="text-align:right;flex:0 0 auto"><div class="${k.color}" style="font-weight:750${t.kind==='settle'?';color:var(--muted)':''}">${k.sign}${euro2(t.amount)}</div>
+      ${t.notes?`<div class="small" style="margin-top:3px" title="Tem coment\u00e1rios">${ic('pen',12)}</div>`:''}${x.acoes||''}</div>
+  </div></div>`;
+}
+/* O bloco de um mes: o titulo, e a caixa das linhas VAZIA — quem a enche e o
+   pintarListaTx, para as linhas serem comparadas uma a uma em vez de o mes
+   inteiro ser refeito por causa de uma.
+
+   O saldo do mes NAO vem aqui, e a razao e a mesma: medido, com o saldo dentro
+   da assinatura, filtrar refazia tres meses inteiros e recriava as 63 linhas
+   que sobravam, com zero nos reaproveitados — porque o numero muda com o
+   filtro e o texto do bloco deixava de bater certo. Fica um <span> vazio, que
+   o pintarListaTx enche depois de reconciliar.
+   Recebe: mo — o mes 'AAAA-MM'.
+   Devolve: o HTML do bloco (string). */
+function txMesHtml(mo){
+  const xm=txMesExtra(mo)||{};
+  return `<div class="txmes"><div class="section-title${xm.cls?' '+xm.cls:''}" style="display:flex;justify-content:space-between;text-transform:none" ${xm.attrs||''}>
+    ${xm.caixa||''}<span>${mo}</span><span class="txnet"></span></div>
+    <div class="list"></div></div>`;
+}
+/* Enche (ou acerta) a lista dos movimentos dentro do #txLista, mexendo so no
+   que mudou. Dois niveis: os meses, e as linhas de cada mes — assim uma linha
+   que muda nao obriga a refazer o mes, e um mes que desaparece leva as linhas
+   dele sem as comparar uma a uma.
+   Devolve: {meses,linhas} — o que aconteceu em cada nivel (lista.js diz o
+   formato), ou null se nao estamos na vista dos movimentos. */
+function pintarListaTx(){
+  const alvo=document.getElementById('txLista');if(!alvo)return null;
+  const by={};txLista.forEach(t=>{const k=String(t.date).slice(0,7);(by[k]=by[k]||[]).push(t)});
+  const meses=Object.keys(by);
+  const cMes=reconciliar(alvo,meses.map(mo=>({chave:'mes:'+mo,html:txMesHtml(mo)})));
+  const cLin={mantidas:0,refeitas:0,criadas:0,movidas:0,removidas:0};
+  meses.forEach(mo=>{
+    const bl=alvo.querySelector('[data-chave="mes:'+mo+'"]');if(!bl)return;
+    const c=reconciliar(bl.querySelector('.list'),by[mo].map(t=>({chave:'tx:'+t.id,html:txLinhaHtml(t,mo)})));
+    Object.keys(cLin).forEach(k=>cLin[k]+=c[k]);
+    /* o saldo do mes escreve-se aqui, e nao na assinatura do bloco */
+    const net=sum(by[mo].map(t=>!countsInTotals(t)?0:isIn(t.kind)?t.amount:(isOut(t.kind)?-t.amount:0)));
+    const sp=bl.querySelector('.txnet');
+    if(sp){sp.textContent=euro(net);sp.className='txnet '+(net>=0?'pos':'neg')}
+  });
+  tornarFocavel(alvo);
+  /* as marcas da selecao vivem no DOM, e as linhas refeitas nasceram sem elas */
+  try{if(window.CW&&CW.selMode&&CW.selPintar)CW.selPintar()}catch(e){}
+  return {meses:cMes,linhas:cLin};
+}
+/* Repinta so o que a lista dos movimentos precisa: a moldura (indicadores,
+   saldos e dividas, que sao cem nos e nao custam nada) e a lista, linha a
+   linha. Nao passa pelo render — e esse o ponto.
+
+   Serve os caminhos que so mexem no que se ve e nao no ecra em que se esta:
+   escrever na pesquisa, mudar um filtro, trocar a ordenacao. Fora da vista dos
+   movimentos, ou se a moldura ainda nao existe, cai para o render de sempre.
+   Devolve: o que o pintarListaTx devolver, ou null se caiu para o render. */
+function refrescarMovimentos(){
+  const antigaLista=document.getElementById('txLista');
+  if(tab!=='transactions'||!antigaLista){render();return null}
+  const v=view();
+  const molde=document.createElement('div');molde.innerHTML=vTransactions();
+  const novaLista=molde.querySelector('#txLista');
+  if(!novaLista){render();return null}
+  /* a moldura e tudo o que vem antes da lista: troca-se de uma vez, que e
+     barato, e a lista fica de fora para ser comparada peca a peca */
+  for(let n=antigaLista.previousElementSibling;n;){const p=n.previousElementSibling;n.remove();n=p}
+  const nova=[];
+  for(let n=novaLista.previousElementSibling;n;n=n.previousElementSibling)nova.unshift(n);
+  nova.forEach(n=>v.insertBefore(n,antigaLista));
+  const r=pintarListaTx();
+  tornarFocavel(v);
+  pintarBotaoFiltros();
+  return r;
 }
 // muda o filtro de tipo; categoria e subcategoria caem porque a árvore muda com o tipo
 // Devolve: nada — redesenha a lista e o modal.

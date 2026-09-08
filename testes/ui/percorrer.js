@@ -64,6 +64,29 @@ const CENAS = [
   },
   { nome: 'edicao-dos-cartoes', fazer: `go('dashboard'); render(); CW.enterEdit()` },
   {
+    /* O caminho curto: mudar o que se ve sem passar pelo render. E aqui que
+       uma linha pode ficar sem as decoracoes da nuvem e ninguem dar por isso —
+       a lista fica certa a olho e o kebab desapareceu. */
+    nome: 'movimentos-filtrados-sem-render',
+    fazer: `go('transactions'); render();
+      const n0=document.querySelectorAll('#view .txrow').length;
+      if(!n0) throw new Error('a vista dos Movimentos nao tem linhas');
+      txSearch='a'; refrescarMovimentos();
+      const n1=document.querySelectorAll('#view .txrow').length;
+      if(n1===0) throw new Error('a pesquisa deixou a lista vazia: a cena nao prova nada');
+      if(n1>n0) throw new Error('a pesquisa devolveu mais linhas do que havia');`,
+  },
+  {
+    /* E o mesmo com a selecao ligada: as linhas refeitas nascem sem a marca, e
+       e o motor que tem de a repor. */
+    nome: 'movimentos-filtrados-em-selecao',
+    fazer: `go('transactions'); render();
+      const l=document.querySelector('#view .txrow');
+      if(!l) throw new Error('a vista dos Movimentos nao tem linhas');
+      CW.selEntrar(l.getAttribute('data-tx'));
+      txSearch='a'; refrescarMovimentos();`,
+  },
+  {
     nome: 'selecao-de-movimentos',
     fazer: `go('transactions'); render();
       const l=document.querySelector('#view .txrow');
