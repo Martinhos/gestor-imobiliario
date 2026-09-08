@@ -245,6 +245,22 @@ A chave não é inventada: as linhas de lista já trazem data-lp, que é por
 onde o toque longo as encontra e já é o id do registo (onde não houver,
 vale um data-fk). Sem chave, uma peça é só «mais uma».
 
+Duas coisas que esta técnica não perdoa, e que custaram as duas um defeito
+que só se viu a usar. A primeira: as posições contam-se a partir do
+DOCUMENTO e não da janela (continuidade.js:ondeEsta). O
+getBoundingClientRect conta a partir do canto do ecrã, e qualquer scroll
+entre a medição e a aplicação vira um deslocamento que nunca aconteceu —
+há um mesmo no meio, porque o navegacao.js:go faz scrollTo(0,0) depois do
+render e antes da microtarefa. Medido: tocar no separador em que já se
+está, com a página a 600, punha os blocos da visão geral a deslizar 606px
+sem nada ter mudado.
+
+A segunda: estar à vista decide o que vale a pena ANIMAR, nunca o que
+EXISTE (continuidade.js:porPerto). Quando decidia as duas coisas, uma peça
+fora da janela parecia ter chegado agora — entrava a desvanecer — ou ter
+saído do ecrã, e ficava um fantasma fixo por cima do conteúdo. Existir é
+uma pergunta ao documento.
+
 Três limites que a regra tem de respeitar, e que são a razão de ela não ser
 um simples embrulho: só dentro do MESMO ecrã, porque mudar de separador
 troca tudo o que lá está e animar isso seria uma revoada; só o que está à
