@@ -216,7 +216,29 @@ function dentroDaPagina() {
     }
   }
 
-  /* 6. Texto que sai da sua caixa — normalmente uma coluna estreita demais. */
+  /* 6. O «Hoje» do calendario aparece exatamente quando ha para onde voltar.
+
+     O botao dependia de «o calMes esta posto», e nao de «o mes que estou a ver
+     nao e o de hoje» — que sao coisas diferentes: voltar ao mes de hoje pela
+     seta deixa o calMes posto, com o mes de hoje la dentro, e o botao ficava
+     no ecra sem nada para fazer. Le-se o mes pelo TITULO, que e o que a pessoa
+     ve, e nao pela variavel, que e o que estava errado. */
+  const barraCal = document.querySelector('#view .calgrid') && document.querySelector('#view .toolbar b');
+  if (barraCal) {
+    const mes = barraCal.textContent.trim();
+    const hoje = new Date();
+    const nomes = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho',
+      'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+    const semAcento = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const noMesDeHoje = semAcento(mes) === nomes[hoje.getMonth()] + ' de ' + hoje.getFullYear();
+    const temBotao = [...document.querySelectorAll('#view .toolbar .btn')]
+      .some((b) => b.textContent.trim() === 'Hoje');
+    medidas.calendarioMes = mes;
+    if (noMesDeHoje && temBotao) falhar('o «Hoje» não fica no mês de hoje', mes + ' com botão');
+    if (!noMesDeHoje && !temBotao) falhar('o «Hoje» aparece fora do mês de hoje', mes + ' sem botão');
+  }
+
+  /* 7. Texto que sai da sua caixa — normalmente uma coluna estreita demais. */
   const rebentam = [...document.querySelectorAll('#view *')]
     .filter((e) => e.children.length === 0 && e.textContent.trim())
     .filter((e) => e.scrollWidth > e.clientWidth + 4 && getComputedStyle(e).overflow === 'visible')

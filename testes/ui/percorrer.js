@@ -64,6 +64,44 @@ const CENAS = [
   },
   { nome: 'edicao-dos-cartoes', fazer: `go('dashboard'); render(); CW.enterEdit()` },
   {
+    /* Andar no calendario, que e o gesto desta vista. O percurso passava por
+       ca e nunca mudava de mes: tres defeitos seguidos nesta zona nao podiam
+       falhar em CI, porque o ecra estava coberto e os gestos nao. */
+    nome: 'calendario-mes-seguinte',
+    fazer: `go('calendar'); render();
+      const m0=document.querySelector('#view .toolbar b').textContent.trim();
+      calNav(1);
+      const m1=document.querySelector('#view .toolbar b').textContent.trim();
+      if(m0===m1) throw new Error('o mes nao mudou: ' + m0);`,
+  },
+  {
+    /* O caso que falhou a serio: voltar ao mes de hoje pela SETA deixa o calMes
+       posto (com o mes de hoje la dentro), e o botao ficava no ecra sem nada
+       para fazer. Duas voltas, uma para cada lado. */
+    nome: 'calendario-voltar-pela-seta',
+    fazer: `go('calendar'); render();
+      calNav(1); calNav(-1);
+      calNav(-1); calNav(1);`,
+  },
+  {
+    nome: 'calendario-botao-hoje',
+    fazer: `go('calendar'); render();
+      calNav(2);
+      const b=[...document.querySelectorAll('#view .toolbar .btn')].find(x=>x.textContent.trim()==='Hoje');
+      if(!b) throw new Error('dois meses a frente e sem botao Hoje');
+      b.click();`,
+  },
+  {
+    /* Escolher um dia repinta so o painel de baixo (calSel), sem passar pelo
+       render — e um dos tres repintes locais da app. */
+    nome: 'calendario-dia-escolhido',
+    fazer: `go('calendar'); render();
+      const d=[...document.querySelectorAll('#view .calday.tap')];
+      if(d.length<8) throw new Error('a grelha do mes tem ' + d.length + ' dias tocaveis');
+      d[7].click();
+      if(!document.querySelector('#view .calday.on')) throw new Error('nenhum dia ficou escolhido');`,
+  },
+  {
     /* O caminho curto: mudar o que se ve sem passar pelo render. E aqui que
        uma linha pode ficar sem as decoracoes da nuvem e ninguem dar por isso —
        a lista fica certa a olho e o kebab desapareceu. */
