@@ -194,6 +194,15 @@ header.top .sub{color:var(--muted);font-size:12px;margin-top:2px}
 [data-lp]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 *{-webkit-tap-highlight-color:transparent}
 button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* Segurar o dedo sobre uma superfície que reage ao toque não é selecionar
+   texto. A lista dos movimentos MEXE-SE por baixo do dedo ao entrar em modo
+   de seleção — nasce a barra acima de tudo, o título do mês cresce e cola-se
+   ao topo —, e o dedo acaba sobre o cabeçalho do mês, que não tem data-lp e
+   escapava às duas regras de cima. Casa pelo comportamento e não pelo
+   elemento: o tornarFocavel carimba role="button" em tudo o que tem onclick,
+   e é por aí que se apanha também o que ainda não existe. O que se copia — o
+   IBAN, as notas, os valores das fichas — não tem onclick nenhum. */
+[role="button"],.section-title,.selbox,.sel-bar{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .grid{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(158px,1fr))}
 .cols{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));margin-top:14px}
 .kpi .label{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}

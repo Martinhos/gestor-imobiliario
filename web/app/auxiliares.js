@@ -202,7 +202,33 @@ const owner=id=>db.owners.find(o=>o.id===id);
 const tenant=id=>db.tenants.find(t=>t.id===id);
 const contract=id=>db.contracts.find(c=>c.id===id);
 const contractsOf=pid=>db.contracts.filter(c=>c.propertyId===pid);
-const isActive=c=>c&&c.active!==false&&(!c.end||c.end>=today());
+/* O estado de um contrato, que são TRÊS e não dois.
+
+   A app sabia só «ativo» e «não ativo», e um contrato assinado que ainda não
+   começou caía no segundo — passava a exibir o selo «terminado» ao lado da
+   data de início, e o menu oferecia «Reativar», que apaga a data de fim.
+   «Ainda não começou» não é «acabou».
+   Recebe: c — o contrato.
+   Devolve: 'terminado', 'futuro' ou 'ativo'. */
+function ctEstado(c){
+  if(!c||c.active===false)return 'terminado';
+  const h=today();
+  if(c.end&&c.end<h)return 'terminado';
+  if(c.start&&c.start>h)return 'futuro';
+  return 'ativo';
+}
+/* Está em vigor HOJE — entre o início e o fim. É a pergunta das contas: a
+   renda que se recebe este mês, o imóvel que está arrendado, o yield.
+   Recebe: c — o contrato.
+   Devolve: true se está em vigor hoje. */
+const isActive=c=>ctEstado(c)==='ativo';
+/* Ainda não acabou — inclui o que ainda não começou. É a pergunta do que há
+   para PLANEAR e para AVISAR: a renda recorrente de um contrato que começa
+   daqui a um ano tem de continuar marcada, e o prazo da oposição à renovação
+   pode cair antes do início num contrato curto.
+   Recebe: c — o contrato.
+   Devolve: true se o contrato ainda conta para o futuro. */
+const ctVivo=c=>ctEstado(c)!=='terminado';
 const activeContracts=pid=>contractsOf(pid).filter(isActive);
 const ctTenants=c=>(c.tenantIds||[]).map(tenant).filter(Boolean);
 const ctNames=c=>ctTenants(c).map(t=>t.name).join(', ')||'Sem inquilino';

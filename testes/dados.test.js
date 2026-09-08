@@ -186,6 +186,46 @@ describe('métricas do ano', () => {
   });
 });
 
+/* Um contrato tem três estados, e a app sabia dois: «ainda não começou» caía
+   em «acabou». Além de mentir por escrito no ecrã, isso apagava a renda
+   planeada de um contrato assinado para o futuro — e com ela a divisão entre
+   proprietários e a categoria que a pessoa lhe tinha dado. */
+describe('um contrato que ainda não começou', () => {
+  const ano = Number(app.today().slice(0, 4));
+
+  test('os três estados, e o que cada um responde', () => {
+    assert.equal(app.ctEstado({}), 'ativo', 'sem datas, está em vigor');
+    assert.equal(app.ctEstado({ start: (ano - 1) + '-01-01' }), 'ativo');
+    assert.equal(app.ctEstado({ start: (ano + 2) + '-01-01' }), 'futuro');
+    assert.equal(app.ctEstado({ end: (ano - 1) + '-12-31' }), 'terminado');
+    assert.equal(app.ctEstado({ active: false }), 'terminado');
+    // e o que cada predicado responde a partir daí
+    const fut = { start: (ano + 2) + '-01-01' };
+    assert.equal(app.isActive(fut), false, 'não está em vigor hoje: não conta para as rendas');
+    assert.equal(app.ctVivo(fut), true, 'mas ainda não acabou: continua a haver o que planear');
+  });
+
+  test('a renda fica planeada, e para o mês e dia em que o contrato começa', () => {
+    app.limparBase ? app.limparBase() : null;
+    app.db.recurring = [];
+    app.db.properties = [app.normProp({ id: 'casa', name: 'Casa' })];
+    const c = app.normContract({
+      id: 'C1', propertyId: 'casa', rent: 800, payDay: 5, start: (ano + 2) + '-03-15',
+    });
+    app.db.contracts = [c];
+    app.syncContractRec(c);
+    const r = (app.db.recurring || []).find((x) => x.tx && x.tx.contractId === 'C1');
+    assert.ok(r, 'a recorrência existe — não foi apagada por o contrato ainda não ter começado');
+    assert.equal(r.next, (ano + 2) + '-04-05', 'o dia 5 de março já passou quando o contrato começa a 15');
+
+    // e mudar o início para a frente leva a renda planeada com ele
+    c.start = (ano + 3) + '-07-01';
+    app.syncContractRec(c);
+    const r2 = (app.db.recurring || []).find((x) => x.tx && x.tx.contractId === 'C1');
+    assert.equal(r2.next, (ano + 3) + '-07-05');
+  });
+});
+
 describe('movimentos planeados', () => {
   const hoje = app.today();
   const rec = (extra = {}) => app.normRec(Object.assign({

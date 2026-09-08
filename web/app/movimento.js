@@ -230,7 +230,10 @@ const SPLIT_MODES=[['equal','Partes iguais','o mesmo para cada proprietário'],[
    Só devolve a string; quem a põe no DOM é o openModal ou o repaintTx.
    Devolve: o HTML do formulário (string). */
 function txBody(){
-  const t=tForm,p=prop(t.propertyId),acs=t.propertyId?activeContracts(t.propertyId):[];
+  /* os contratos que ainda não acabaram, e não só os em vigor: a caução e as
+     rendas antecipadas de um contrato recebem-se ANTES de ele começar, e sem
+     isto esse dinheiro não tinha a que se ligar */
+  const t=tForm,p=prop(t.propertyId),acs=t.propertyId?contractsOf(t.propertyId).filter(ctVivo):[];
   const lns=liveLoans(p);
   const curLoan=t.kind==='loan'&&t.loanId?findLoan(p,t.loanId):null;
   /* com várias vivas e nenhuma escolhida, a primeira opção pede a escolha; uma hipoteca que não
@@ -260,7 +263,7 @@ function txBody(){
         <button type="button" class="btn sm primary" id="amt_reset" style="flex:0 0 auto;padding:9px 12px;display:${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':'none'}" title="Repor a prestação calculada" data-toca="rascunho" onclick="onAmtReset()">Repor</button></div></label>
       ${(t._recId||t._recNew)?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}"></label>`}</div>
     <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),(podeSemImovel()?[{v:'',label:'Todos os imóveis'}]:[]).concat(propOptsPara((t._recId||t._recNew)?'rec.add':'tx.add',t.propertyId)).concat(podeSemImovel()?gdiv(gOpts('prop')):[]),'onPropChange','rascunho')}</label>
-    ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)}))),'onCtChange','rascunho')}</label>`:''}
+    ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+c.start:'')}))),'onCtChange','rascunho')}</label>`:''}
     ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange','rascunho')}</label>`:''}
     ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'}<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Pai, amigo, empreiteiro…" autocomplete="off" list="creditorList" oninput="refreshCredHint()">
         <datalist id="creditorList">${knownCreditors().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>

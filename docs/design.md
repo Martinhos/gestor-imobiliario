@@ -813,6 +813,57 @@ fazer, o menu fica vazio, e é o menu vazio que faz aparecer o aviso «Só
 podes ver este registo» (componentes.js:lpShow) — uma decisão que já lá
 estava e que um «Ver» lá dentro tinha desfeito.
 
+## Um contrato tem três estados
+A app sabia dois — ativo e não ativo — e um contrato assinado que ainda não
+começou caía no segundo. Bastava acrescentar o início ao `isActive` para as
+contas ficarem certas, e isso teria feito a app **mentir por escrito**: o
+cartão ganhava o selo «terminado» ao lado de «De 2028-01-01 a 2031-01-01», a
+ficha dizia «Estado: Terminado» três linhas acima do campo «Início», a ficha
+do inquilino arrumava-o em «Contratos anteriores» a dizer «terminou a
+2031-01-01», e o menu deixava de oferecer «Terminar contrato» e passava a
+oferecer «Reativar» — que apaga o `c.end`. Um clique destruía a data de fim,
+e como o contrato continuava não-ativo, o menu voltava a oferecê-lo, para
+sempre.
+
+São três (auxiliares.js:ctEstado): **terminado**, **futuro**, **ativo**. E há
+duas perguntas diferentes a fazer-lhes, que é o que estava a ser confundido:
+
+- `isActive(c)` — **está em vigor hoje?** É a pergunta das contas: a renda
+  deste mês, o imóvel arrendado, o yield, a avaliação.
+- `ctVivo(c)` — **ainda não acabou?** É a pergunta do que há para **planear**
+  e para **avisar**: a renda recorrente de um contrato que começa daqui a um
+  ano tem de continuar marcada (planeados.js:syncContractRec), o prazo da
+  oposição à renovação pode cair antes do início num contrato curto
+  (prazos.js), o quarto já prometido continua prometido (contrato.js:ctBody),
+  a caução recebe-se antes de começar (movimento.js:txBody), e uma projeção
+  de dez anos não pode apagar à entrada o contrato que só começa no terceiro
+  (vistas.js:projRows, avaliacao.js:evoRatio) — aí quem corta por datas é o
+  `mesesEmVigor`, ano a ano.
+
+E o terceiro estado **vê-se**, senão o contrato desaparece dos ecrãs onde a
+pessoa o foi procurar: selo «por começar» na lista, «Por começar · a
+2028-03-15» na ficha, um filtro próprio, «Vai morar em» na ficha do
+inquilino, e a data de início ao lado da renda no cartão dele.
+
+A renda planeada acompanha o início: mudá-lo para a frente leva-a com ele
+(planeados.js:syncContractRec). Só para a frente — puxar a data de volta era
+arriscar ressuscitar meses já confirmados, porque o `next` é o cursor do que
+falta confirmar. O preço é corrigir um início de 2028 para 2025 deixar o
+planeado em 2028, e ter de se acertar à mão.
+
+## Segurar não é selecionar
+A lista dos movimentos mexe-se por baixo do dedo: o toque longo entra em modo
+de seleção, nasce uma barra acima de tudo e o título do mês cresce e cola-se
+ao topo. O dedo, que não se mexeu, acaba sobre o cabeçalho do mês — e o
+browser faz o que faz a um dedo parado sobre texto.
+
+A regra casa pelo **comportamento**, não pelo elemento
+(index.html:[role="button"]): o `tornarFocavel` carimba `role="button"` em
+tudo o que tem onclick e não é controlo nativo, e repõe-no a cada repintura,
+por isso apanha também o chrome que ainda não existe. O que se copia — o
+IBAN, as notas, os valores das fichas — não tem onclick nenhum e continua
+selecionável. É a mesma correção que o gráfico levou.
+
 ## Navegação
 Treze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e
 subtítulo. A gaveta agrupa-os em quatro (navegacao.js:NAV_GROUPS):

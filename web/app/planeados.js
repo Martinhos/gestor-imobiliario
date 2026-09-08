@@ -37,26 +37,45 @@ function dayInMonth(y,m,d){const last=new Date(y,m+1,0).getDate();return `${y}-$
    Recebe: c — o contrato a sincronizar (objeto de db.contracts).
    Devolve: nada — mexe em db.recurring; quem chama grava. */
 function syncContractRec(c){
-  const r=ctRecOf(c),want=isActive(c)&&c.rent>0&&c.autoRec!==false;
+  /* ctVivo e não isActive: um contrato que só começa daqui a um ano tem de
+     ter a renda marcada desde já. Com o isActive, ela era apagada no arranque
+     seguinte — e com ela a divisão entre proprietários e a categoria que a
+     pessoa lhe tinha dado. O cálculo do «next», logo abaixo, já nunca marca
+     nada antes do início. */
+  const r=ctRecOf(c),want=ctVivo(c)&&c.rent>0&&c.autoRec!==false;
   if(!want){if(r)db.recurring=db.recurring.filter(x=>x.id!==r.id);return}
   const from=Math.max(1,Math.min(31,c.payDay||1)),to=Math.max(from,Math.min(31,c.payDayTo||from));
   const inc=catsIn(),cat='Rendas' in inc?'Rendas':'',sub=cat&&(inc[cat]||[]).indexOf('Renda mensal')>-1?'Renda mensal':'';
   const tx={kind:'income',label:'Renda '+ctName(c),amount:c.rent,propertyId:c.propertyId,contractId:c.id,category:cat,sub,split:null};
-  /* rendas antecipadas: a primeira ocorrência só aparece depois desses meses */
+  /* A primeira ocorrência nunca é antes do início do contrato — nem antes dos
+     meses de renda antecipada, quando os há. Vale para os dois ramos abaixo:
+     o que cria a recorrência e o que atualiza uma que já existe. Só o
+     primeiro é que respeitava o início, e por isso mudar a data de início
+     para a frente deixava o planeado a pedir a renda no mês antigo, de um
+     contrato que ainda não tinha começado. */
   let minNext='';
-  if(c.start&&c.advance>0){const d=new Date(c.start+'T00:00:00');let y2=d.getFullYear(),m2=d.getMonth()+c.advance;y2+=Math.floor(m2/12);m2%=12;minNext=dayInMonth(y2,m2,from)}
+  if(c.start){
+    const d=new Date(c.start+'T00:00:00');
+    let y2=d.getFullYear(),m2=d.getMonth()+(c.advance>0?c.advance:0);
+    y2+=Math.floor(m2/12);m2%=12;
+    /* sem antecipadas, um início depois da janela desse mês salta para o mês seguinte */
+    if(!(c.advance>0)&&c.start>dayInMonth(y2,m2,to)){m2++;if(m2>11){m2=0;y2++}}
+    minNext=dayInMonth(y2,m2,from);
+  }
   if(r){aplicaPlanoNaRec(r,tx,tx.label);r.end=c.end||'';
     /* se os dias da janela mudarem no contrato, a janela acompanha (mantendo o mês em curso) */
     if(r.next){const d=new Date(r.next+'T00:00:00');r.next=dayInMonth(d.getFullYear(),d.getMonth(),from);r.until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
+    /* Só empurra para a FRENTE, nunca para trás. Puxar a data de volta era
+       arriscar ressuscitar meses que já foram confirmados — o «next» é o
+       cursor do que falta confirmar, e ele avança sozinho a cada confirmação.
+       O preço é este: corrigir um início de 2028 para 2025 deixa a renda
+       planeada em 2028, e tem de se acertar à mão. */
     if(minNext&&r.next<minNext){const d=new Date(minNext+'T00:00:00');r.next=minNext;r.until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
     return}
   /* primeira janela: este mês se ainda não passou; senão o mês que vem; nunca antes do início do contrato */
   const t=new Date(today()+'T00:00:00');let y=t.getFullYear(),m=t.getMonth();
   if(today()>dayInMonth(y,m,to)){m++;if(m>11){m=0;y++}}
   let next=dayInMonth(y,m,from),until=to>from?dayInMonth(y,m,to):'';
-  if(c.start&&next<c.start){const d=new Date(c.start+'T00:00:00');let y2=d.getFullYear(),m2=d.getMonth();
-    if(c.start>dayInMonth(y2,m2,to)){m2++;if(m2>11){m2=0;y2++}}
-    next=dayInMonth(y2,m2,from);until=to>from?dayInMonth(y2,m2,to):'';}
   if(minNext&&next<minNext){const d=new Date(minNext+'T00:00:00');next=minNext;until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
   db.recurring=db.recurring||[];
   db.recurring.push(normRec({auto:true,name:tx.label,autoName:tx.label,every:'month',next,until,end:c.end||'',tx}));

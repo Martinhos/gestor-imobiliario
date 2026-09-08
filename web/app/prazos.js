@@ -83,7 +83,9 @@ function prazosDe(hoje){
   };
 
   (db.contracts||[]).forEach(c=>{
-    if(!isActive(c))return;
+    /* ctVivo: num contrato curto com início futuro, o aviso de oposição à
+       renovação cai ANTES do início — calá-lo até lá é perdê-lo de vez */
+    if(!ctVivo(c))return;
     const nome=c.name||propName(c.propertyId)||'contrato';
     const abrir=`ctModal('${c.id}')`;
     if(c.end){
@@ -102,7 +104,7 @@ function prazosDe(hoje){
   });
 
   // pessoas: inquilinos de contratos ativos + proprietários, com CC datado
-  const ativos={};(db.contracts||[]).forEach(c=>{if(isActive(c))(c.tenantIds||[]).forEach(t=>{ativos[t]=1})});
+  const ativos={};(db.contracts||[]).forEach(c=>{if(ctVivo(c))(c.tenantIds||[]).forEach(t=>{ativos[t]=1})});
   const vistos={};
   const pessoa=(p,papel)=>{
     if(!p||!p.ccValid||vistos[p.id])return;vistos[p.id]=1;
