@@ -151,6 +151,25 @@ function dentroDaPagina() {
      acontecer é uma linha aparecer sem nada disto: não dá erro nenhum, e a
      seleção e as opções desaparecem em silêncio. Nada disto tinha teste — o
      arnês de Node não carrega web/cloud/*. */
+  /* A lista dos movimentos tem motor proprio (vistas.js:pintarListaTx): as
+     linhas sao comparadas por chave e so as que mudaram sao refeitas. Uma
+     linha sem chave e uma linha que o motor nao reconhece — na pintura
+     seguinte deita-a fora e faz outra, e ficamos com o custo de antes sem
+     saber porque. */
+  const meses = [...document.querySelectorAll('#view .txmes')];
+  if (meses.length) {
+    medidas.mesesDeMovimento = meses.length;
+    const semChave = meses.filter((m) => !m.getAttribute('data-chave'));
+    if (semChave.length) falhar('cada mes traz a sua chave', semChave.length + ' de ' + meses.length);
+    /* o saldo do mes e escrito depois de reconciliar, e nao vem na assinatura
+       do bloco — se viesse, mudar um filtro refazia o mes inteiro */
+    const semTotal = meses.filter((m) => {
+      const s = m.querySelector('.txnet');
+      return !s || !s.textContent.trim() || !/pos|neg/.test(s.className);
+    });
+    if (semTotal.length) falhar('cada mes mostra o seu saldo', semTotal.length + ' sem .txnet preenchido');
+  }
+
   const linhas = [...document.querySelectorAll('#view .txrow')];
   /* Sempre, mesmo a zero: só com o número escrito é que se vê no resumo que a
      regra não correu. Sem isto, uma lista vazia (ou um .txrow renomeado)
@@ -158,6 +177,8 @@ function dentroDaPagina() {
      para apanhar. */
   medidas.linhasDeMovimento = linhas.length;
   if (linhas.length) {
+    const semChave = linhas.filter((l) => !l.getAttribute('data-chave'));
+    if (semChave.length) falhar('cada linha traz a chave do motor', semChave.length + ' de ' + linhas.length + ' sem data-chave');
     const semId = linhas.filter((l) => !l.getAttribute('data-tx'));
     const semMes = linhas.filter((l) => !l.getAttribute('data-mes'));
     if (semId.length) falhar('cada linha traz o seu id', semId.length + ' de ' + linhas.length + ' sem data-tx');
