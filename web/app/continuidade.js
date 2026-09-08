@@ -315,3 +315,72 @@ function correrAFita(a,b,r0,d){
      chega — o cartão ficava invisível para sempre */
   setTimeout(fim,dur+600);
 }
+
+let _fimPainel=null;
+/* Vira o PAINEL inteiro, como a fita dos separadores da barra de baixo.
+
+   O deslizarEntre não serve aqui, por duas razões. Uma: ele espera que a
+   repintura DEITE FORA o nó, e o painel não é deitado fora — o render só lhe
+   troca o innerHTML, portanto o a.isConnected devolvia já ali sem animar
+   nada. Outra: o correrAFita clona quem entra, e clonar um painel de
+   quinhentas linhas é a árvore inteira que o motor com chave existe para não
+   pagar.
+
+   Aqui, quem sai são os nós VERDADEIROS, movidos para uma caixa fixa
+   recortada à faixa que se vê — um painel pode ter seis mil pixéis de altura
+   e vê-se um ecrã deles —, e quem entra é o próprio #view, sem clone.
+
+   O preço de não clonar é que o #view corre EM FLUXO: o que lhe passa da
+   margem direita dava régua horizontal durante a viagem. Corta-se com
+   overflow-x:clip no pai. Clip, e não hidden: o hidden fá-lo contentor de
+   rolamento e o cabeçalho pegajoso deixa de colar.
+   Recebe: pintar — repinta a app no separador novo; d — +1 se o novo vem da
+   direita, -1 se vem da esquerda.
+   Devolve: o que o pintar devolver. */
+function deslizarPainel(pintar,d){
+  const v=document.getElementById('view'),m=v&&v.parentNode;
+  const corta=!!(window.CSS&&CSS.supports&&CSS.supports('overflow-x','clip'));
+  const alt=window.innerHeight||0,r=v?v.getBoundingClientRect():null;
+  if(semMovimento()||!v||!v.animate||!v.firstChild||!m||!corta||!alt||!r.width
+     ||r.bottom<=0||r.top>=alt)return pintar();
+  if(_fimPainel)_fimPainel();      // duas fitas ao mesmo tempo lêem-se como uma confusão
+  const topo=Math.max(r.top,0),h=Math.round(Math.min(r.bottom,alt)-topo),w=Math.round(r.width);
+  if(h<=0)return pintar();
+  const caixa=document.createElement('div');
+  caixa.style.cssText='position:fixed;left:'+r.left+'px;top:'+topo+'px;width:'+w+'px;height:'+h+
+    'px;overflow:hidden;pointer-events:none';
+  const velho=document.createElement('div');
+  velho.style.cssText='position:absolute;left:0;top:'+Math.round(r.top-topo)+'px;width:'+w+'px';
+  while(v.firstChild)velho.appendChild(v.firstChild);
+  semIds(velho);                   // dois #txLista no documento davam um getElementById errado
+  /* o botão flutuante do ecrã que sai não viaja: o do ecrã novo nasce no
+     mesmo canto, e dois botões iguais no mesmo sítio lêem-se como um erro */
+  [].slice.call(velho.querySelectorAll('.fab,.fabmenu')).forEach(e=>e.remove());
+  caixa.appendChild(velho);camadaDeSaida().appendChild(caixa);
+  let res;
+  contSuspensa=true;               // lá dentro há um render, e ele acompanha peças por conta própria
+  try{res=pintar()}
+  catch(err){                      // a repintura falhou: mais vale o ecrã de antes do que um branco
+    while(velho.firstChild)v.appendChild(velho.firstChild);
+    caixa.remove();contSuspensa=false;throw err}
+  contSuspensa=false;
+  const dur=msDoToken('--lento',340),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
+  const clipAntes=m.style.overflowX;m.style.overflowX='clip';
+  /* o transform do #view faz dele o bloco de referência de quem lá dentro é
+     position:fixed — o botão flutuante novo ia parar ao fundo de um painel de
+     seis mil pixéis. Fica escondido enquanto a fita corre. */
+  const fixos=[].slice.call(v.querySelectorAll('.fab,.fabmenu'));
+  fixos.forEach(e=>{e.style.visibility='hidden'});
+  velho.animate([{transform:'none'},{transform:'translateX('+(-d*w)+'px)'}],
+    {duration:dur,easing:curva,fill:'forwards'});
+  const an=v.animate([{transform:'translateX('+(d*w)+'px)'},{transform:'none'}],
+    {duration:dur,easing:curva});
+  const fim=function(){
+    if(_fimPainel!==fim)return;_fimPainel=null;
+    try{m.style.overflowX=clipAntes;fixos.forEach(e=>{e.style.visibility=''});caixa.remove()}catch(x){}};
+  _fimPainel=fim;an.onfinish=fim;
+  /* rede: num separador escondido a animação não corre e o onfinish nunca
+     chega — o pai ficava cortado e o painel velho por cima do novo */
+  setTimeout(fim,dur+600);
+  return res;
+}

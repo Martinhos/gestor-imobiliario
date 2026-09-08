@@ -864,6 +864,36 @@ por isso apanha também o chrome que ainda não existe. O que se copia — o
 IBAN, as notas, os valores das fichas — não tem onclick nenhum e continua
 selecionável. É a mesma correção que o gráfico levou.
 
+## A fita da barra de baixo
+Mudar de separador trocava o conteúdo de golpe. Passa a virar como uma fita —
+mas **só na barra de baixo**, e só quando o toque veio de lá
+(navegacao.js:goBarra).
+
+A barra tem quatro destinos e uma ordem à vista: ir dos Movimentos para os
+Imóveis é andar um lugar para a direita, e a pessoa viu o lugar antes de lá
+tocar. A gaveta são treze destinos agrupados por assunto — da «Visão geral»
+para as «Definições» não há lado nenhum, e uma fita a correr ali inventava
+uma vizinhança que não existe. Também não desliza para o separador onde já se
+está: tocar no separador aceso é «leva-me ao topo», não uma travessia.
+
+O lado é uma **variável**, e não um segundo argumento do `go`: dois dos
+embrulhos da nuvem chamam-no com um argumento só, e um `go(id,lado)` chegava
+cá sem o lado — o deslize nunca acontecia, sem erro nenhum, que é o pior
+sítio onde isto podia falhar.
+
+E não é o `deslizarEntre` que faz o trabalho (continuidade.js:deslizarPainel).
+Aquele espera que a repintura deite fora o nó, e o painel não é deitado fora —
+o render só lhe troca o `innerHTML`. E clona quem entra, que num painel de
+quinhentas linhas é a árvore inteira que o motor com chave existe para não
+pagar. Aqui quem sai são os nós **verdadeiros**, movidos para uma caixa fixa
+recortada à faixa que se vê — um painel pode ter seis mil pixéis de altura e
+vê-se um ecrã deles —, e quem entra é o próprio `#view`, sem clone.
+
+O preço de não clonar é o `#view` correr em fluxo: o que lhe passa da margem
+dava régua horizontal durante a viagem. Corta-se com `overflow-x:clip` no
+pai, reposto no fim. Clip, e não hidden: o hidden fá-lo contentor de
+rolamento e o cabeçalho pegajoso deixa de colar.
+
 ## Navegação
 Treze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e
 subtítulo. A gaveta agrupa-os em quatro (navegacao.js:NAV_GROUPS):
