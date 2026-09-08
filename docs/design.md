@@ -621,10 +621,24 @@ Os dados de que a leitura precisa vivem no próprio elemento
 nascem e morrem a cada repintura, e ouvintes pendurados neles morriam com
 eles.
 
-Onde já se lê com o dedo, o balão cala-se — seriam duas respostas ao mesmo
-toque, e uma delas é a que se queria substituir. Onde não há leitor, o
-donut e as barras horizontais, o balão continua a ser a única maneira de
-ver um valor e fica.
+A guia usa as POSIÇÕES que cada gráfico já calculou, e não uma fórmula
+(graficos.js:dadosParaLer). Chegou a guardar só os limites do desenho e a
+calcular o resto como se fosse um gráfico de linhas — onde os pontos se
+espalham de ponta a ponta. Num histograma as colunas ficam no meio de
+faixas iguais, que é outra conta, e a guia aparecia ao lado da coluna.
+Quem sabe onde pôs as colunas é quem as desenhou.
+
+E o balão desapareceu de vez. No donut, a legenda ao lado já tem o rótulo,
+o valor e a percentagem de cada fatia; nas barras horizontais, cada linha já
+tem o nome e o número escritos por cima. O balão repetia o que já se lia e
+cobrava caro: roubava o toque — no donut há uma ação a sério, entrar na
+categoria — e, por ser um onclick, fazia de cada forma uma paragem do Tab
+sem destino.
+
+Foi o que fechou a dívida das «paragens do Tab»: as formas deixaram de ter
+toque próprio e o gráfico ganhou uma descrição só
+(graficos.js:descricaoDoGrafico), que era exatamente o que a dívida pedia.
+Medido: de 37 formas alcançáveis pelo Tab para zero.
 
 ## Uma comparação diz de que números fala
 Uma variação («▲ 18%») pendurada num número que não é da mesma natureza é
@@ -645,6 +659,27 @@ da marca.
 
 E diz o número de que fala. «face a 2025» nomeia o ano e não o termo de
 comparação; «2025: 4 400 €» ao lado de 2 200 € dispensa a pergunta.
+
+## Um número que chega a contar
+Os valores dos indicadores contam até ao número, ao CHEGAR a um ecrã. É uma
+escolha de gosto — mas há três coisas nela que não são de gosto.
+
+Só a chegar, e nunca a cada repintura: o render corre também na
+sincronização de fundo, e um número a contar de três em três minutos não é
+vida, é ruído. É a mesma marca que os gráficos usam.
+
+Não inventa o formato. O texto final é o que a app já formatou — com o
+espaço a separar milhares, o sinal de menos próprio e o símbolo da moeda — e
+a contagem lê a FORMA do original e troca só os dígitos
+(vistas.js:comAFormaDe). No fim escreve de volta o texto original, tal e
+qual: assim não há maneira de a animação deixar o número diferente do que
+devia ser.
+
+E nada salta: a largura fica presa no valor final antes de começar, porque
+um número que ganha dígitos ganha largura e empurra o que está ao lado. Com
+uma rede por tempo a devolvê-la, porque num separador escondido o
+requestAnimationFrame não corre — e aí a contagem nem começa, o que é o lado
+bom da falha: o texto de partida já é o final.
 
 ## O que a app diz sobre o que guardou
 A app escreve no aparelho e sincroniza depois. Quem acaba de escrever alguma

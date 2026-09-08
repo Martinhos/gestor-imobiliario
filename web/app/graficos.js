@@ -61,14 +61,33 @@ const atrasoEntrada=(i,n)=>{
    mao nao esta, e sem sair enquanto o dedo nao sair. A faixa e sobreposta:
    um grafico nao muda de altura so por alguem lhe tocar. */
 
+/* Uma frase que diz o que o grafico mostra, para quem nao o ve.
+
+   E a outra metade do que a divida das «paragens do Tab» pedia: em vez de
+   vinte e quatro formas alcancaveis uma a uma e sem destino, o desenho tem uma
+   descricao so.
+   Recebe: titulo — o que o grafico mostra; labels — as etiquetas do eixo.
+   Devolve: o atributo aria-label pronto a colar na tag do <svg>. */
+function descricaoDoGrafico(titulo,labels){
+  const n=(labels||[]).length;
+  if(!n)return '';
+  return ` aria-label="${esc(titulo+', de '+labels[0]+' a '+labels[n-1]+'. Percorre com o dedo para ler cada valor.')}"`;
+}
+
 /* O que o leitor precisa de saber sobre um grafico, guardado no proprio
    elemento para nao haver estado a viver noutro sitio.
-   Recebe: labels — as etiquetas do eixo; series — [{nome,cor,vals}]; x0,x1 —
-   os limites do desenho em unidades do viewBox; fmt — como formatar um valor.
+
+   Guardam-se as POSICOES de cada coluna, e nao os limites do desenho. Chegou a
+   guardar os limites, e a guia calculava o resto com a formula do grafico de
+   linhas — onde os pontos se espalham de ponta a ponta. Num histograma as
+   colunas ficam no meio de faixas iguais, que e outra conta, e a guia aparecia
+   ao lado da coluna. Cada grafico ja sabe onde poe as suas colunas: passa-as.
+   Recebe: labels — as etiquetas do eixo; series — [{nome,cor,vals}]; xs — a
+   posicao de cada coluna, em unidades do viewBox.
    Devolve: o atributo data-lido pronto a colar na tag, ou '' sem series. */
-function dadosParaLer(labels,series,x0,x1,fmt){
-  if(!labels||!labels.length||!series||!series.length)return '';
-  const d={W:W,x0:x0,x1:x1,rot:labels,
+function dadosParaLer(labels,series,xs){
+  if(!labels||!labels.length||!series||!series.length||!xs||!xs.length)return '';
+  const d={W:W,xs:xs.map(x=>+x.toFixed(1)),rot:labels,
     s:series.map(x=>({n:x.nome||'',c:x.cor||'',v:(x.vals||[]).map(v=>+v||0)}))};
   return ` data-lido="${esc(JSON.stringify(d))}"`;
 }
@@ -81,10 +100,11 @@ function colunaSobODedo(caixa,d,cx){
   const r=caixa.getBoundingClientRect();
   if(!r.width)return 0;
   const vx=(cx-r.left)/r.width*d.W;                 // pixeis do ecra -> unidades do desenho
-  const n=d.rot.length;
-  if(n<2)return 0;
-  const f=(vx-d.x0)/(d.x1-d.x0);
-  return Math.max(0,Math.min(n-1,Math.round(f*(n-1))));
+  /* a mais proxima, e nao uma conta sobre os limites: as colunas de um
+     histograma nao estao onde os pontos de uma linha estariam */
+  let melhor=0,dist=Infinity;
+  (d.xs||[]).forEach(function(x,i){const p=Math.abs(x-vx);if(p<dist){dist=p;melhor=i}});
+  return melhor;
 }
 
 /* Mostra a coluna que o dedo escolheu: a guia e a faixa.
@@ -96,9 +116,9 @@ function mostrarColuna(caixa,i){
   let guia=caixa.querySelector('.chartguia'),faixa=caixa.querySelector('.chartlido');
   if(!guia){guia=document.createElement('i');guia.className='chartguia';caixa.appendChild(guia)}
   if(!faixa){faixa=document.createElement('div');faixa.className='chartlido';caixa.appendChild(faixa)}
-  const n=d.rot.length;
-  const f=n<2?.5:(d.x0+(d.x1-d.x0)*(i/(n-1)))/d.W;
-  guia.style.left=(f*100).toFixed(2)+'%';
+  const x=(d.xs||[])[i];
+  if(x==null)return;
+  guia.style.left=(x/d.W*100).toFixed(2)+'%';
   faixa.innerHTML=`<b>${esc(d.rot[i]||'')}</b>`+d.s.map(x=>
     `<span><i style="background:${esc(x.c)}"></i>${x.n?esc(x.n)+' ':''}${esc(euro(x.v[i]||0))}</span>`).join('');
   caixa.classList.add('a-ler');
@@ -183,8 +203,7 @@ function cLine(series,labels,o){
     g+=`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
     s.values.forEach((v,i)=>{
       const tip=`${labels[i]}${series.length>1?' · '+s.name:''}: ${F(v)}`;
-      if(s.values.length<=26)g+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="2.6" fill="var(--card)" stroke="${c}" stroke-width="1.8"/>`;
-      g+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="10" fill="transparent" ${hit(tip)}><title>${esc(tip)}</title></circle>`;
+      if(s.values.length<=26)g+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="2.6" fill="var(--card)" stroke="${c}" stroke-width="1.8"><title>${esc(tip)}</title></circle>`;
     });
   });
   /* rótulos do eixo X no próprio SVG, alinhados com os pontos (a régua HTML ficava desalinhada) */
@@ -192,7 +211,7 @@ function cLine(series,labels,o){
     if(l==='')return;
     g+=`<text x="${X(i).toFixed(1)}" y="${h+8}" font-size="9" fill="var(--muted)" text-anchor="middle">${esc(l)}</text>`;
   });
-  return `<div class="chartbox"${dadosParaLer(labels,series.map((s,i)=>({nome:series.length>1?s.name:'',cor:s.color||PAL[i%PAL.length],vals:s.values})),x0,x1)}><svg viewBox="0 0 ${W} ${h+13}" role="img">${g}</svg></div>
+  return `<div class="chartbox"${dadosParaLer(labels,series.map((s,i)=>({nome:series.length>1?s.name:'',cor:s.color||PAL[i%PAL.length],vals:s.values})),labels.map((_,i)=>X(i)))}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Evolução',labels)}>${g}</svg></div>
     ${series.length>1?legend(series.map((s,i)=>({label:s.name,color:s.color||PAL[i%PAL.length]})),false):''}`;
 }
 /* Barras empilhadas: cada grupo é um array de segmentos {label,value,color}, com os
@@ -229,7 +248,9 @@ function cBars(groups,labels,o){
       /* «desce» = está abaixo da linha do zero, e por isso cresce a partir do
          TOPO. Sem isto crescia a partir do fundo do gráfico para cima, solta
          do eixo, e só assentava no fim (index.html:.gbar.desce). */
-      g+=`<rect class="gbar${seg.value<0?' desce':''}" x="${(cx-w/2).toFixed(1)}" y="${ya.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1,yb-ya).toFixed(1)}" rx="2" fill="${seg.color}" ${hit(tip,atraso)}><title>${esc(tip)}</title></rect>`;
+      /* sem onclick: quem le o valor e o dedo a percorrer o grafico, e cada
+         forma com um toque proprio era mais uma paragem do Tab sem destino */
+      g+=`<rect class="gbar${seg.value<0?' desce':''}" x="${(cx-w/2).toFixed(1)}" y="${ya.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1,yb-ya).toFixed(1)}" rx="2" fill="${seg.color}"${atraso?` style="${atraso}"`:''}><title>${esc(tip)}</title></rect>`;
     });
   });
   const names=[];groups.forEach(g2=>g2.forEach(s=>{if(!names.some(n=>n.label===s.label))names.push({label:s.label,color:s.color})}));
@@ -238,7 +259,7 @@ function cBars(groups,labels,o){
     g+=`<text x="${(x0+bw*i+bw/2).toFixed(1)}" y="${h+8}" font-size="9" fill="var(--muted)" text-anchor="middle">${esc(l)}</text>`;
   });
   return `<div class="chartbox"${dadosParaLer(labels,names.map(nm=>({nome:nm.label,cor:nm.color,
-    vals:groups.map(gr=>sum(gr.filter(x=>x.label===nm.label).map(x=>x.value)))})),x0,x1)}><svg viewBox="0 0 ${W} ${h+13}" role="img">${g}</svg></div>${legend(names,false)}`;
+    vals:groups.map(gr=>sum(gr.filter(x=>x.label===nm.label).map(x=>x.value)))})),groups.map((_,i)=>x0+bw*i+bw/2))}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Entradas e saídas',labels)}>${g}</svg></div>${legend(names,false)}`;
 }
 /* Anel de proporções com o total ao centro. items=[{label,value,color}] — valores ≤ 0
    ficam de fora. o: center substitui o texto central, sub é a linha pequena por baixo,
@@ -258,7 +279,11 @@ function cDonut(items,o){
     if(ang>=Math.PI*2-1e-6){g+=`<circle class="gdonut" pathLength="1" cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${col}" stroke-width="${th}" ${o.onPick?`data-toca="vista" onclick="${o.onPick}('${jsq(it.label)}')" style="cursor:pointer"`:''}/>`;return}
     const b=a+ang,L=ang>Math.PI?1:0;
     const tip=`${it.label}: ${euro(it.value)} (${pct(it.value/tot,0)})`;
-    const act=o.onPick?`data-toca="vista" onclick="${o.onPick}('${jsq(it.label)}')" onmouseenter="chartTip(event,'${jsq(tip)}')" style="cursor:pointer"`:hit(tip);
+    /* Sem balao: a legenda ao lado ja tem o rotulo, o valor e a percentagem
+       de cada fatia, e o balao repetia-o a roubar o toque — que aqui tem uma
+       acao a serio, entrar na categoria. E cada fatia com onclick era mais uma
+       paragem do Tab que nao leva a lado nenhum. */
+    const act=o.onPick?`data-toca="vista" onclick="${o.onPick}('${jsq(it.label)}')" style="cursor:pointer"`:'';
     g+=`<path class="gdonut" pathLength="1" d="M${(c+r*Math.cos(a)).toFixed(2)} ${(c+r*Math.sin(a)).toFixed(2)} A${r} ${r} 0 ${L} 1 ${(c+r*Math.cos(b)).toFixed(2)} ${(c+r*Math.sin(b)).toFixed(2)}" fill="none" stroke="${col}" stroke-width="${th}" ${act}><title>${esc(tip)}</title></path>`;
     a=b;
   });
@@ -277,9 +302,12 @@ function cDonut(items,o){
 function cHBars(items,o){
   o=o||{};if(!items.length)return `<div class="hint">Sem dados.</div>`;
   const max=Math.max(...items.map(i=>Math.abs(i.value)))||1;
+  /* Sem balao: cada linha ja tem o nome e o valor escritos por cima da barra.
+     O balao repetia-os, e o onclick que o trazia fazia de cada linha uma
+     paragem do Tab sem destino. */
   return `<div class="legend" style="gap:11px">${items.map((it,i)=>{
     const neg=it.value<0,col=it.color||(neg?'var(--danger)':PAL[i%PAL.length]);
-    return `<div ${hit(it.label+': '+(o.fmt?o.fmt(it.value):euro(it.value)))}><div class="li" style="margin-bottom:4px"><span class="nm" style="color:var(--ink)">${esc(it.label)}</span>
+    return `<div><div class="li" style="margin-bottom:4px"><span class="nm" style="color:var(--ink)">${esc(it.label)}</span>
       <span class="vl ${neg?'neg':''}">${o.fmt?o.fmt(it.value):euro(it.value)}</span></div>
       <div style="height:8px;border-radius:99px;background:var(--chip);overflow:hidden">
       <i class="ghbar" style="display:block;height:100%;width:${(Math.abs(it.value)/max*100).toFixed(1)}%;background:${col};border-radius:99px;${atrasoEntrada(i,items.length)}"></i></div></div>`}).join('')}</div>`;

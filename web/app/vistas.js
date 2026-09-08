@@ -134,6 +134,7 @@ function render(){
      enchê-la mais tarde não faz nada saltar */
   if(typeof requestIdleCallback==='function')requestIdleCallback(pintarSeriesKpi,{timeout:400});
   else setTimeout(pintarSeriesKpi,0);
+  contarValores();
 }
 let kpiN=0;const KPI_REG={};
 /* Há movimentos do ano passado?
@@ -181,6 +182,73 @@ function falaDoMesmo(cx,s,ano){
   if(!alvo||!s.fmt)return false;
   const limpa=t=>String(t==null?'':t).replace(/\s+/g,' ').trim();
   return limpa(alvo.textContent)===limpa(s.fmt(ano.value));
+}
+/* Um número que chega a contar.
+
+   Só a CHEGAR a um ecrã: o render corre também na sincronização de fundo e a
+   cada gesto que repinta, e um número a contar de dois em dois minutos não é
+   vida, é ruído. A marca é a mesma que os gráficos usam (#view.entra).
+
+   Não inventa o formato. O texto final é o que a app já formatou — com o
+   espaço a separar milhares, o sinal de menos próprio e o símbolo da moeda —
+   e a contagem lê a forma do original e troca só os dígitos. No fim escreve de
+   volta o texto original, tal e qual: assim não há maneira de a animação
+   deixar o número diferente do que devia ser.
+
+   E nada salta: a largura é fixada antes de começar, porque um número que
+   ganha dígitos ganha largura e empurra o que está ao lado.
+   Devolve: nada — anima os valores dos cartões que estão no ecrã. */
+function contarValores(){
+  const raiz=view();
+  if(!raiz||!raiz.classList.contains('entra')||semMovimento())return;
+  const dur=msDoToken('--desenho',500),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
+  [].slice.call(raiz.querySelectorAll('.card.kpi .value')).forEach(function(el){
+    if(el.dataset.contou)return;
+    el.dataset.contou='1';
+    const texto=el.textContent;
+    const m=texto.match(/-?\u2212?[\d\s\u00a0.,]*\d/);       // o número dentro do texto
+    if(!m)return;
+    const cru=m[0];
+    const alvo=Number(cru.replace(/[\s\u00a0]/g,'').replace(/\u2212/g,'-').replace(',','.'));
+    if(!isFinite(alvo)||!alvo)return;
+    /* a largura fica presa no valor final: sem isto, os dígitos a entrarem um
+       a um empurravam o cartão e os vizinhos */
+    try{el.style.minWidth=Math.ceil(el.getBoundingClientRect().width)+'px'}catch(e){}
+    const casas=(cru.split(/[.,]/)[1]||'').length;
+    /* Rede: num separador escondido o requestAnimationFrame nao corre, e a
+       contagem nunca comeca. O numero fica certo — o texto de partida ja e o
+       final —, mas a largura presa ficaria presa para sempre. */
+    const acabar=function(){el.textContent=texto;el.style.minWidth=''};
+    setTimeout(acabar,dur+400);
+    const t0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+    const passo=function(){
+      const agora=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+      const p=Math.min(1,(agora-t0)/dur);
+      if(p>=1){acabar();return}
+      /* a mesma curva de quem entra em cena, para o número acompanhar o resto */
+      const e=1-Math.pow(1-p,3);
+      el.textContent=texto.replace(cru,comAFormaDe(cru,alvo*e,casas));
+      requestAnimationFrame(passo);
+    };
+    requestAnimationFrame(passo);
+  });
+}
+/* Escreve um número com a MESMA forma de outro: os mesmos separadores, as
+   mesmas casas, o mesmo sinal de menos. Não é um formatador — é um decalque,
+   para a contagem nunca inventar um formato que a app não usa.
+   Recebe: modelo — o texto do número final; v — o valor a escrever; casas — as
+   casas decimais do modelo.
+   Devolve: o número escrito à maneira do modelo. */
+function comAFormaDe(modelo,v,casas){
+  const sep=/\u00a0/.test(modelo)?'\u00a0':' ';
+  const menos=/\u2212/.test(modelo)?'\u2212':'-';
+  const dec=modelo.indexOf(',')>-1?',':'.';
+  const neg=v<0;v=Math.abs(v);
+  let txt=casas?v.toFixed(casas):String(Math.round(v));
+  let inteiro=casas?txt.slice(0,txt.length-casas-1):txt;
+  const resto=casas?dec+txt.slice(-casas):'';
+  if(/[\s\u00a0]/.test(modelo))inteiro=inteiro.replace(/\B(?=(\d{3})+(?!\d))/g,sep);
+  return (neg?menos:'')+inteiro+resto;
 }
 /* Enche as caixas de série dos indicadores que estão no ecrã.
 
