@@ -103,8 +103,8 @@ function vCalendar(){
   return `<div class="toolbar" style="align-items:center;margin-bottom:12px">
       <button class="btn" onclick="calNav(-1)" aria-label="Mês anterior">${ic('chev',18)}</button>
       <b style="flex:1;text-align:center">${esc(nome)}</b>
-      <button class="btn" style="transform:scaleX(-1)" onclick="calNav(1)" aria-label="Mês seguinte">${ic('chev',18)}</button>
-      ${calMes?`<button class="btn" onclick="calNav(0)">Hoje</button>`:''}</div>
+      ${calMes?`<button class="btn" onclick="calNav(0)">Hoje</button>`:''}
+      <button class="btn" style="transform:scaleX(-1)" onclick="calNav(1)" aria-label="Mês seguinte">${ic('chev',18)}</button></div>
     <div class="card" id="calCard" style="padding:12px">
       <div class="calgrid calhead" id="calGrelha0">${['S','T','Q','Q','S','S','D'].map(x=>`<span>${x}</span>`).join('')}</div>
       <div class="calgrid">${celulas}</div></div>
