@@ -212,6 +212,10 @@ function txView(id){
       if(x.propertyId&&prop(x.propertyId))it.push({label:'Ver imóvel',icon:'building',toca:'camada',act:`propView('${jsq(x.propertyId)}')`});
       if(x.contractId&&contract(x.contractId)&&pode(x.propertyId,'contract.view'))
         it.push({label:'Ver contrato',icon:'contract',toca:'camada',act:`ctView('${jsq(x.contractId)}')`});
+      /* num pagamento de crédito a pergunta seguinte é «quanto é que ainda
+         falta», e a ficha da hipoteca é onde isso está por inteiro */
+      if(x.kind==='loan'&&pode(x.propertyId,'loan.view')&&findLoan(prop(x.propertyId),x.loanId))
+        it.push({label:'Ver hipoteca',icon:'bank',toca:'camada',act:`mortView('${jsq(x.propertyId)}','${jsq(x.loanId)}')`});
       if(ok)it.push({label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${jsq(id)}')`});
       return it.length?menu('fichaTx',it):'';
     },
