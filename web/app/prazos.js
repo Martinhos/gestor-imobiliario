@@ -175,15 +175,15 @@ function prazosCard(){
     const txt=p.dias<0?('há '+(-p.dias)+' d'):p.dias===0?'hoje':(p.dias+' d');
     return `<span class="badge ${cls}" style="flex:0 0 auto">${txt}</span>`;
   };
-  const row=p=>`<div class="card tap" style="padding:11px 13px" onclick="${p.abrir}">
+  const row=p=>`<div class="card tap" style="padding:11px 13px" data-toca="camada" onclick="${p.abrir}">
     <div class="row-between" style="align-items:center;gap:10px">
       <div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.titulo)}</b>
         <span class="small">${esc(p.sub)}</span></div>${selo(p)}</div>
     <div class="toolbar" style="margin:9px 0 0">
-      <button class="btn sm" onclick="${stop}pzSilencia('${jsq(p.chave)}')">Silenciar</button></div></div>`;
+      <button class="btn sm" data-toca="dados" onclick="${stop}pzSilencia('${jsq(p.chave)}')">Silenciar</button></div></div>`;
   const urgentes=lista.filter(p=>p.dias<=7).length,open=!pzShut();
   return `<div class="card" id="pzCard" style="margin-bottom:14px">
-    <div class="row-between tap" style="align-items:center;cursor:pointer;margin:-16px;padding:16px" onclick="pzToggle()">
+    <div class="row-between tap" style="align-items:center;cursor:pointer;margin:-16px;padding:16px" data-toca="vista" onclick="pzToggle()">
       <div style="min-width:0"><div class="title">Prazos</div>
         <div class="small">${lista.length} na janela de aviso${urgentes?' · <b class="neg">'+urgentes+' com 7 dias ou menos</b>':''}${open?'':' · toca para ver'}</div></div>
       <span style="flex:0 0 auto;display:inline-flex;transform:rotate(${open?'90':'-90'}deg)">${ic('chev',20)}</span></div>

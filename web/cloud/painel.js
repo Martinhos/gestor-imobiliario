@@ -57,7 +57,7 @@ kpiModal = function (id) {
     (rows.length
       ? '<div class="list" style="gap:7px">' + show.map(function (r) {
           var t = r.t, col = t.kind === 'income' ? 'pos' : (t.kind === 'loan' ? 'amber' : 'neg');
-          return '<div class="card tap" style="padding:10px 12px" onclick="CW.openTx(\'' + t.id + '\')">' +
+          return '<div class="card tap" style="padding:10px 12px" data-toca="camada" onclick="CW.openTx(\'' + t.id + '\')">' +
             '<div class="row-between" style="align-items:center;gap:10px">' +
             '<div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.label) + '</b>' +
             '<span class="small">' + esc(t.date) + ' · ' + esc((KIND[t.kind] || {}).short || '') +
@@ -77,8 +77,8 @@ kpiModal = function (id) {
   var foot = top.el.querySelector('.foot');
   if (foot) {
     foot.innerHTML =
-      '<button class="btn" onclick="CW.backToDash(1)">' + ic('chev', 15) + ' Visão geral</button>' +
-      '<button class="btn primary" onclick="CW.kpiToTx()">' + ic('swap', 15) + ' Ver nos movimentos</button>';
+      '<button class="btn" data-toca="ecra" onclick="CW.backToDash(1)">' + ic('chev', 15) + ' Visão geral</button>' +
+      '<button class="btn primary" data-toca="ecra" onclick="CW.kpiToTx()">' + ic('swap', 15) + ' Ver nos movimentos</button>';
   }
   CW._kpiQ = { field: q.field, pid: q.pid, year: q.year, title: k.title };
 };
@@ -129,7 +129,7 @@ vTransactions = function () {
   if (!f) return h;
   return '<div class="card" style="margin-bottom:12px;padding:11px 13px;display:flex;align-items:center;gap:11px">' +
     '<span class="small" style="flex:1;min-width:0">Movimentos de <b>' + esc(f.title) + '</b> em ' + f.year + ', vindos da visão geral.</span>' +
-    '<button class="btn sm" style="flex:0 0 auto" onclick="CW.backToDash()">' + ic('chev', 14) + ' Visão geral</button></div>' + h;
+    '<button class="btn sm" style="flex:0 0 auto" data-toca="ecra" onclick="CW.backToDash()">' + ic('chev', 14) + ' Visão geral</button></div>' + h;
 };
 
 /* ---------------- recusar um movimento planeado ---------------- */
@@ -232,8 +232,8 @@ CW.fillMissed = function (id) {
       '<div class="stat" style="margin-top:6px"><span>Total a registar</span><b>' + euro2(val0 * n) + '</b></div></div>';
   }
   openModal('Preencher ' + n + ' ' + (n === 1 ? 'período' : 'períodos'), body,
-    '<button class="btn" onclick="CW.fillNext()">Cancelar</button>' +
-    '<button class="btn primary" onclick="CW.doFillMissed(\'' + id + '\')">Registar estimativa</button>');
+    '<button class="btn" data-toca="camada" onclick="CW.fillNext()">Cancelar</button>' +
+    '<button class="btn primary" data-toca="dados" onclick="CW.doFillMissed(\'' + id + '\')">Registar estimativa</button>');
 };
 
 /* Cria de facto os movimentos em falta. Numa hipoteca entrega a lista
@@ -371,7 +371,7 @@ function offerFill() {
 }
 
 var REJECT_BTN = function (id) {
-  return '<button class="btn sm danger" onclick="event.stopPropagation();CW.rejectRec(\'' + id + '\')">Recusar</button>';
+  return '<button class="btn sm danger" data-toca="dados" onclick="event.stopPropagation();CW.rejectRec(\'' + id + '\')">Recusar</button>';
 };
 
 // acrescenta "Recusar" a cada linha do cartão de pendentes (e, com períodos
@@ -384,7 +384,7 @@ pendingCard = function (all) {
     var n = r ? datasEmFalta(r).length : 0;
     // com vários períodos em atraso, confirmar um a um não é opção
     var fill = n >= 2
-      ? '<button class="btn sm" onclick="event.stopPropagation();CW.fillMissed(\'' + id + '\')">' +
+      ? '<button class="btn sm" data-toca="camada" onclick="event.stopPropagation();CW.fillMissed(\'' + id + '\')">' +
         'Preencher ' + n + ' em falta</button>'
       : '';
     return m + REJECT_BTN(id) + fill;
@@ -481,8 +481,8 @@ function pendBlock(list) {
       var late = recIsLate(r);
       var botoes = cwPode(r.tx && r.tx.propertyId, 'rec.add')
         ? '<div class="toolbar" style="margin:8px 0 0">' +
-          '<button class="btn sm primary" onclick="event.stopPropagation();quickConfirmRec(\'' + r.id + '\')">' + ic('check', 13) + ' Confirmar</button>' +
-          '<button class="btn sm" onclick="event.stopPropagation();skipRec(\'' + r.id + '\')">Silenciar</button>' +
+          '<button class="btn sm primary" data-toca="dados" onclick="event.stopPropagation();quickConfirmRec(\'' + r.id + '\')">' + ic('check', 13) + ' Confirmar</button>' +
+          '<button class="btn sm" data-toca="dados" onclick="event.stopPropagation();skipRec(\'' + r.id + '\')">Silenciar</button>' +
           REJECT_BTN(r.id) + '</div>'
         : '';
       return '<div class="card pend ' + (late ? 'late' : '') + '" style="padding:9px 11px;margin-bottom:6px">' +
@@ -629,8 +629,8 @@ function editBar() {
   el.className = 'card';
   el.style.cssText = 'margin-bottom:12px;padding:11px 13px;display:flex;align-items:center;gap:11px;flex-wrap:wrap';
   el.innerHTML = '<span class="small" style="flex:1;min-width:140px">Arrasta os cartões para mudar a ordem.</span>' +
-    '<button class="btn sm" onclick="CW.resetDashOrder()">Repor ordem</button>' +
-    '<button class="btn sm primary" onclick="CW.exitEdit()">' + ic('check', 14) + ' Concluir</button>';
+    '<button class="btn sm" data-toca="dados" onclick="CW.resetDashOrder()">Repor ordem</button>' +
+    '<button class="btn sm primary" data-toca="modo" onclick="CW.exitEdit()">' + ic('check', 14) + ' Concluir</button>';
   var grid = v.querySelector('.cw-cont');
   v.insertBefore(el, grid || v.firstChild);
 }

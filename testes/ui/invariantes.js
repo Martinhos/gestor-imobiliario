@@ -14,6 +14,18 @@ module.exports.fonte = function () {
 function dentroDaPagina() {
   const N = (x) => Math.round(x);
 
+  /* Quantos pontos de interacao ainda nao declaram a familia a que pertencem.
+     E um tecto, nao uma meta: baixa-se quando se anota mais uma zona, e nunca
+     sobe. E o que impede a taxonomia de ficar a validar meia duzia de pontos
+     enquanto o resto da app segue sem ela. */
+  /* Medido ecra a ecra e com janelas abertas: o que sobra sao os moldes que
+     servem duas familias ao mesmo tempo (o «Fazer agora» do tutorial, que ora
+     abre uma janela ora muda de ecra) e as opcoes de um sel(), cujo efeito
+     depende do onchange que lhes registaram pelo nome. Sao 2 a 5 por estado.
+     O tecto comeca com folga para os estados que ainda nao medi, e desce a
+     cada zona arrumada. */
+  const TETO_SEM_FAMILIA = 12;
+
   /* O que corta um elemento. Um `position:fixed` só é preso por um
      antepassado com transform/filter — o overflow dos outros não lhe toca.
      Ignorar isto dava-me dez falsos positivos numa varredura anterior. */
@@ -236,6 +248,90 @@ function dentroDaPagina() {
     medidas.calendarioMes = mes;
     if (noMesDeHoje && temBotao) falhar('o «Hoje» não fica no mês de hoje', mes + ' com botão');
     if (!noMesDeHoje && !temBotao) falhar('o «Hoje» aparece fora do mês de hoje', mes + ' sem botão');
+  }
+
+  /* 7. As familias dos pontos de interacao (docs/design.md).
+
+     Dois eixos, e so um se declara. O «o que toca» vem num data-toca, porque
+     nao ha como adivinha-lo de fora. O «como se alcanca» le-se aqui, do
+     proprio DOM: um <button> ou <a> e nativo, um <div role=button> e um alvo
+     promovido pelo tornarFocavel, o que esta dentro de um <svg> e uma forma.
+     Um atributo a mais seria uma segunda verdade a dessincronizar-se da
+     primeira — foi isso que aconteceu quando o data-lp passou a valer tambem
+     como chave de animacao. */
+  const FAMILIAS = ['nada', 'vista', 'camada', 'rascunho', 'dados', 'modo', 'ecra'];
+  const pontos = [...document.querySelectorAll(
+    '#view [onclick],#view button,#view a[href],#view [role=button],#view [data-toca],' +
+    '.modal.open [onclick],.modal.open button,.modal.open [role=button],.modal.open [data-toca]')]
+    .filter((e) => e.offsetParent || e.ownerSVGElement)
+    /* um <span onclick="event.stopPropagation()"> nao e um ponto de interacao:
+       e um guarda para o cartao por baixo nao abrir. Conta-lo obrigava a
+       inventar-lhe uma familia. */
+    .filter((e) => !/^event\.stopPropagation\(\);?$/.test((e.getAttribute('onclick') || '').trim()));
+  const familia = (e) => e.getAttribute('data-toca') || '';
+  const eForma = (e) => !!e.ownerSVGElement;
+  const temNome = (e) => !!((e.textContent || '').trim() || e.getAttribute('aria-label') ||
+    e.getAttribute('title') || e.querySelector('title'));
+
+  const invalidas = pontos.filter((e) => familia(e) && FAMILIAS.indexOf(familia(e)) < 0);
+  if (invalidas.length) {
+    falhar('a familia declarada existe',
+      [...new Set(invalidas.map((e) => familia(e)))].join(', ') + ' - as boas sao ' + FAMILIAS.join('/'));
+  }
+
+  /* Uma forma de grafico reage com o DESENHO, nunca com o afundar de um botao,
+     e nunca escreve nem navega. Foi a familia que custou dois defeitos: as
+     barras a saltarem ao toque e a fita de virar pagina posta no donut. */
+  const formasQueEscrevem = pontos.filter((e) => eForma(e) &&
+    ['dados', 'ecra', 'modo', 'rascunho'].indexOf(familia(e)) > -1);
+  if (formasQueEscrevem.length) {
+    falhar('uma forma de grafico nao escreve nem navega',
+      formasQueEscrevem.length + ' formas com data-toca=' + familia(formasQueEscrevem[0]));
+  }
+
+  /* Quem escreve tem de ter nome. Um alvo mudo que grava nao ha maneira de o
+     explicar a ninguem — nem a quem la chega pelo teclado, nem a quem usa um
+     leitor de ecra, nem a quem escreve o texto do aviso. */
+  const escrevemSemNome = pontos.filter((e) => familia(e) === 'dados' && !temNome(e));
+  if (escrevemSemNome.length) {
+    falhar('quem escreve tem nome', escrevemSemNome.length + ' pontos de dados sem texto nem aria-label');
+  }
+
+  /* Quem destroi declara-o. E o que faz com que o texto do aviso e a
+     existencia de «Anular» deixem de ser escolhas de habito. */
+  const riscoSemDados = pontos.filter((e) => e.getAttribute('data-risco') === 'destroi' && familia(e) !== 'dados');
+  if (riscoSemDados.length) falhar('quem destroi toca nos dados', riscoSemDados.length + ' com data-risco e sem data-toca=dados');
+
+  /* Tudo o que se alcanca por gesto alcanca-se tambem por um caminho visivel.
+     O toque longo e uma porta que ninguem descobre sozinho, e o data-lp nao e
+     neutro: bloqueia a selecao de texto, vibra e engole o toque seguinte. Cada
+     linha que o tem precisa de um botao com foco de teclado la dentro — que e
+     o que o kebab e. */
+  /* So as LINHAS DE REGISTO. O data-lp «dash:» e do modo de edicao do painel,
+     nao das opcoes de um registo, e a porta visivel dele e o botao
+     «Personalizar painel» — que esta no ecra, fora do bloco. Escrita como
+     estava, a regra passava por acidente em seis dos sete blocos, por eles
+     terem la dentro um botao que existe para outra coisa. */
+  const comGesto = [...document.querySelectorAll('#view [data-lp]')]
+    .filter((e) => e.offsetParent && !/^dash:/.test(e.getAttribute('data-lp') || ''));
+  const semPortaVisivel = comGesto.filter((e) => !e.querySelector('button,[role=button],a[href]'));
+  medidas.linhasComGesto = comGesto.length;
+  if (comGesto.length && semPortaVisivel.length) {
+    falhar('o gesto tem sempre um caminho visivel ao lado',
+      semPortaVisivel.length + ' de ' + comGesto.length + ' com toque longo e sem botao dentro - ex.: ' +
+      (semPortaVisivel[0].getAttribute('data-lp') || ''));
+  }
+
+  /* A cobertura mede-se e so pode subir. Sem isto, a taxonomia era um
+     documento: valida o que esta declarado e cala-se sobre o que nao esta. */
+  const semFamilia = pontos.filter((e) => !familia(e));
+  medidas.pontosDeInteracao = pontos.length;
+  medidas.pontosSemFamilia = semFamilia.length;
+  if (semFamilia.length > TETO_SEM_FAMILIA) {
+    falhar('a cobertura das familias nao desce',
+      semFamilia.length + ' sem familia, e o tecto e ' + TETO_SEM_FAMILIA + ' - ex.: ' +
+      [...new Set(semFamilia.slice(0, 4).map((e) => e.tagName.toLowerCase() + '.' +
+        (e.getAttribute('class') || '').split(' ')[0]))].join(', '));
   }
 
   /* 7. Texto que sai da sua caixa — normalmente uma coluna estreita demais. */

@@ -122,16 +122,16 @@ function guiaPintar() {
           '<div class="small" style="color:var(--accent);font-weight:600">Passo ' + (guia.i + 1) + ' de ' + n + '</div>' +
           '<div class="title" style="margin-top:2px">' + esc(p.titulo) + '</div>' +
         '</div>' +
-        '<button type="button" class="iconbtn" aria-label="Fechar" onclick="CW.guiaFechar()">' + ic('x', 18) + '</button>' +
+        '<button type="button" class="iconbtn" aria-label="Fechar" data-toca="camada" onclick="CW.guiaFechar()">' + ic('x', 18) + '</button>' +
       '</div>' +
       '<div class="hint" style="margin-top:9px">' + p.texto + '</div>' +
       '<div class="toolbar" style="margin-top:13px">' +
         (guia.i > 0
-          ? '<button class="btn sm" onclick="CW.guiaAnterior()">' + ic('chev', 14) + ' Anterior</button>'
+          ? '<button class="btn sm" data-toca="vista" onclick="CW.guiaAnterior()">' + ic('chev', 14) + ' Anterior</button>'
           : '') +
-        '<button class="btn sm primary" onclick="CW.guiaSeguinte()">' +
+        '<button class="btn sm primary" data-toca="vista" onclick="CW.guiaSeguinte()">' +
           (guia.i < n - 1 ? 'Seguinte' : 'Terminar') + '</button>' +
-        '<button class="btn sm" style="margin-left:auto" onclick="CW.guiaFechar()">Fechar</button>' +
+        '<button class="btn sm" style="margin-left:auto" data-toca="camada" onclick="CW.guiaFechar()">Fechar</button>' +
       '</div>' +
     '</div>';
 }
@@ -334,7 +334,7 @@ function cartaoPassos() {
       '<div><div class="title">Primeiros passos</div>' +
       '<div class="small">' + (ps.length - faltam.length) + ' de ' + ps.length + ' feitos · ' +
       'sugestões, não obrigações</div></div>' +
-      '<button type="button" class="iconbtn" aria-label="Dispensar" onclick="CW.passosFora()">' + ic('x', 18) + '</button>' +
+      '<button type="button" class="iconbtn" aria-label="Dispensar" data-toca="vista" onclick="CW.passosFora()">' + ic('x', 18) + '</button>' +
     '</div>' +
     '<div class="list" style="gap:8px;margin-top:12px">' +
     ps.map(function (p) {
@@ -350,7 +350,7 @@ function cartaoPassos() {
         (p.feito ? '' :
           '<div class="toolbar" style="margin:9px 0 0">' +
             '<button class="btn sm primary" onclick="' + p.act + '">Fazer agora</button>' +
-            '<button class="btn sm" onclick="CW.guiaAbrir(\'' + p.id + '\')">' +
+            '<button class="btn sm" data-toca="ecra" onclick="CW.guiaAbrir(\'' + p.id + '\')">' +
               (f[p.id] ? 'Rever o tutorial' : 'Como se faz') + '</button>' +
           '</div>') +
         '</div>';

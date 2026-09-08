@@ -24,7 +24,7 @@ function chartTip(e,txt){
    na mesma etiqueta style (é por aqui que passa o atraso do escalonamento,
    para não ficarem dois style no mesmo elemento).
    Devolve: string com os atributos, para colar dentro da tag. */
-const hit=(txt,estilo)=>{const j=jsq(txt);return `onclick="chartTip(event,'${j}')" onmouseenter="chartTip(event,'${j}')" style="cursor:pointer${estilo?';'+estilo:''}"`};
+const hit=(txt,estilo)=>{const j=jsq(txt);return `data-toca="nada" onclick="chartTip(event,'${j}')" onmouseenter="chartTip(event,'${j}')" style="cursor:pointer${estilo?';'+estilo:''}"`};
 /* Atraso da entrada de uma forma do gráfico, pelo seu lugar na fila.
 
    O orçamento é sempre o mesmo — 150ms entre a primeira e a última, porque um
@@ -170,10 +170,10 @@ function cDonut(items,o){
   let a=-Math.PI/2,g='';
   items.forEach((it,idx)=>{
     const col=it.color||PAL[idx%PAL.length],ang=it.value/tot*Math.PI*2;
-    if(ang>=Math.PI*2-1e-6){g+=`<circle class="gdonut" pathLength="1" cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${col}" stroke-width="${th}" ${o.onPick?`onclick="${o.onPick}('${jsq(it.label)}')" style="cursor:pointer"`:''}/>`;return}
+    if(ang>=Math.PI*2-1e-6){g+=`<circle class="gdonut" pathLength="1" cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${col}" stroke-width="${th}" ${o.onPick?`data-toca="vista" onclick="${o.onPick}('${jsq(it.label)}')" style="cursor:pointer"`:''}/>`;return}
     const b=a+ang,L=ang>Math.PI?1:0;
     const tip=`${it.label}: ${euro(it.value)} (${pct(it.value/tot,0)})`;
-    const act=o.onPick?`onclick="${o.onPick}('${jsq(it.label)}')" onmouseenter="chartTip(event,'${jsq(tip)}')" style="cursor:pointer"`:hit(tip);
+    const act=o.onPick?`data-toca="vista" onclick="${o.onPick}('${jsq(it.label)}')" onmouseenter="chartTip(event,'${jsq(tip)}')" style="cursor:pointer"`:hit(tip);
     g+=`<path class="gdonut" pathLength="1" d="M${(c+r*Math.cos(a)).toFixed(2)} ${(c+r*Math.sin(a)).toFixed(2)} A${r} ${r} 0 ${L} 1 ${(c+r*Math.cos(b)).toFixed(2)} ${(c+r*Math.sin(b)).toFixed(2)}" fill="none" stroke="${col}" stroke-width="${th}" ${act}><title>${esc(tip)}</title></path>`;
     a=b;
   });
@@ -205,6 +205,6 @@ function cHBars(items,o){
 // withVal — verdadeiro para mostrar value e extra.
 // Devolve: HTML (string) da legenda.
 function legend(items,withVal){
-  return `<div class="legend">${items.map(i=>`<div class="li ${i.act?'tap':''}" ${i.act?`onclick="${i.act}"`:''}><span class="dot" style="background:${i.color}"></span>
+  return `<div class="legend">${items.map(i=>`<div class="li ${i.act?'tap':''}" ${i.act?`data-toca="vista" onclick="${i.act}"`:''}><span class="dot" style="background:${i.color}"></span>
     <span class="nm">${esc(i.label)}</span>${withVal?`<span class="vl">${i.value||''}</span>${i.extra?`<span class="small" style="min-width:38px;text-align:right">${i.extra}</span>`:''}`:''}</div>`).join('')}</div>`;
 }

@@ -27,7 +27,7 @@ function personModal(kind,id,after,houseId){
   const word=kind==='owner'?'proprietário':'inquilino';
   /* a ficha de um inquilino de um imóvel onde só colaboro abre em leitura sem «Adicionar inquilinos» */
   const soLer=kind==='tenant'&&!!orig&&!podeEditarInquilino(orig);
-  const m=id&&!soLer?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,act:`delPerson('${kind}','${id}')`}]):'';
+  const m=id&&!soLer?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${kind}','${id}')`}]):'';
   openModal((id?(soLer?'':'Editar '):'Novo ')+(soLer?'Ficha de '+word:word),personBody(),null,m);
   if(soLer)return modalSoLeitura('Ficha de um imóvel onde colaboras — só de leitura.');
   onSave=()=>{

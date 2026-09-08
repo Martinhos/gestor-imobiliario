@@ -43,8 +43,8 @@ const ANA_N=()=>tab==='dashboard'?((ownerFilter?1:0)+(dashProp?1:0))
 function anaPanel(inner){return `<div class="fwrap" style="height:0"><div class="fpanel ${anaOpen[tab]?'on':''}" style="top:0"><div class="card" style="padding:12px">
   ${typeof fcSelector==='function'?fcSelector():''}${inner}
   <div class="toolbar" style="margin:12px 0 0">
-    <button class="btn" onclick="anaClear()">${ic('x',15)} Limpar</button>
-    <button class="btn primary" onclick="anaApply()">${ic('check',15)} Fechar</button>
+    <button class="btn" data-toca="vista" onclick="anaClear()">${ic('x',15)} Limpar</button>
+    <button class="btn primary" data-toca="camada" onclick="anaApply()">${ic('check',15)} Fechar</button>
   </div></div></div></div>`}
 /* Cartões e afins são divs com onclick: sem isto, o teclado não chega a
    nenhuma lista — nem um leitor de ecrã os anuncia como acionáveis. Corre
@@ -118,7 +118,7 @@ function render(){
      rearranjar os cartões, para não virar um cartão arrastável. */
   if(tab==='dashboard'&&!view().querySelector('.fab')&&(podeSemImovel()||casasComo('tx.add').length)){
     view().insertAdjacentHTML('beforeend',
-      '<div style="text-align:center;margin:2px 0 0"><button type="button" class="btn sm" onclick="window.CW&&CW.enterEdit&&CW.enterEdit()">'+ic('grip',13)+' Personalizar painel</button></div>'+
+      '<div style="text-align:center;margin:2px 0 0"><button type="button" class="btn sm" data-toca="modo" onclick="window.CW&&CW.enterEdit&&CW.enterEdit()">'+ic('grip',13)+' Personalizar painel</button></div>'+
       fab([{act:'newTxPick()',label:'Novo movimento'}])+'<div class="fabpad"></div>');
   }
   tornarFocavel(view());
@@ -141,9 +141,9 @@ let kpiN=0;const KPI_REG={};
 const kpi=(l,v,c,f,why,evo,acao)=>{
   const id='k'+(++kpiN);
   if(evo){KPI_REG[id]={title:l,why:why||'',evo,acao:acao||null};
-    return `<div class="card kpi evo" id="${id}" onclick="kpiModal('${id}')"><span class="kic">${ic('trend',11)}</span>
+    return `<div class="card kpi evo" id="${id}" data-toca="camada" onclick="kpiModal('${id}')"><span class="kic">${ic('trend',11)}</span>
       <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${f?`<div class="foot">${f}</div>`:''}</div>`}
-  return `<div class="card kpi ${why?'why':''}" id="${id}" ${why?`onclick="document.getElementById('${id}').classList.toggle('open')"`:''}>
+  return `<div class="card kpi ${why?'why':''}" id="${id}" ${why?`data-toca="nada" onclick="document.getElementById('${id}').classList.toggle('open')"`:''}>
     <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${f?`<div class="foot">${f}</div>`:''}
     ${why?`<div class="expl">${why}</div>`:''}</div>`;
 };
@@ -165,8 +165,8 @@ function kpiModal(id){
     ${(d.yearly||[]).length?`<div class="tablewrap"><table class="table"><thead><tr><th>${d.yearlyTitle?'Período':'Ano'}</th><th>${esc(k.title)}</th>${d.yearly[0].extra!==undefined?'<th>'+esc(d.extraTitle||'')+'</th>':''}</tr></thead><tbody>
       ${d.yearly.map(y=>`<tr><td><b>${esc(String(y.label))}</b></td><td>${fmt(y.value)}</td>${y.extra!==undefined?`<td>${y.extra}</td>`:''}</tr>`).join('')}</tbody></table></div>`:''}
     ${d.note?`<div class="hint">${d.note}</div>`:''}</div>`;
-  openModal(k.title,body,`<button class="btn" onclick="closeModal()">Fechar</button>`+
-    (k.acao?`<button class="btn primary" onclick="closeModal();${k.acao.act}">${esc(k.acao.label)}</button>`:''));
+  openModal(k.title,body,`<button class="btn" data-toca="camada" onclick="closeModal()">Fechar</button>`+
+    (k.acao?`<button class="btn primary" data-toca="vista" onclick="closeModal();${k.acao.act}">${esc(k.acao.label)}</button>`:''));
 }
 /* anos com movimentos que contam nesta vista (o mesmo peso das métricas: imóvel,
    grupo ou âmbito todo), mais o corrente
@@ -216,7 +216,7 @@ const WHY={
 const card=(t,s,b)=>`<div class="card"><div><div class="title">${t}</div>${s?`<div class="small">${s}</div>`:''}</div><div style="margin-top:13px">${b}</div></div>`;
 const stop='event.stopPropagation();';
 /* botão "⋮" dos cartões: abre o mesmo menu do toque longo */
-const kebab=v=>`<button class="btn sm" style="flex:0 0 auto;padding:7px 9px;align-self:flex-start" onclick="${stop}lpMenu('${v}')">${ic('dots',17)}</button>`;
+const kebab=v=>`<button class="btn sm" style="flex:0 0 auto;padding:7px 9px;align-self:flex-start" data-toca="camada" onclick="${stop}lpMenu('${v}')">${ic('dots',17)}</button>`;
 let _lockY=0;
 /* trava o scroll do fundo enquanto houver um modal ou o menu lateral aberto,
    e repõe a posição ao destravar. Corre a cada abrir/fechar (componentes.js e
@@ -264,13 +264,13 @@ function vDashboard(){
   if(!db.properties.length&&!db.transactions.length)
     return `<div class="empty"><b>Ainda não há nada registado</b>Começa por adicionar um imóvel, ou carrega dados de exemplo.
       <div class="toolbar" style="justify-content:center;margin-top:16px">
-      <button class="btn primary" onclick="propModal()">Adicionar imóvel</button>
-      <button class="btn" onclick="seed()">Carregar exemplo</button></div></div>`;
+      <button class="btn primary" data-toca="camada" onclick="propModal()">Adicionar imóvel</button>
+      <button class="btn" data-toca="dados" onclick="seed()">Carregar exemplo</button></div></div>`;
   /* quem só colabora e cujo cargo não abre as finanças não tem nada para somar aqui */
   if(souSoColaborador()&&!scope().length)
     return `<div class="empty"><b>${fraseColaborador()}</b>O teu cargo não abre as finanças destes imóveis — a vista geral não tem nada para somar.
       <div class="toolbar" style="justify-content:center;margin-top:16px">
-      <button class="btn primary" onclick="go('properties')">Ver os imóveis</button></div></div>`;
+      <button class="btn primary" data-toca="ecra" onclick="go('properties')">Ver os imóveis</button></div></div>`;
   const nColab=scope().filter(p=>!souDono(p.id)).length;
   const colabHint=nColab?`<div class="hint" style="margin:-4px 0 12px">Inclui ${nColab} ${nColab===1?'imóvel':'imóveis'} onde és colaborador (valores por inteiro).</div>`:'';
   const inc=monthly(YEAR,pid,'income',true),exp=monthly(YEAR,pid,'expense',true),ln=monthly(YEAR,pid,'loan',true),am=monthly(YEAR,pid,'amort',true);
@@ -321,7 +321,7 @@ function donutCard(){
     <div class="row-between" style="align-items:center">
       <div style="min-width:0"><div class="title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${donutCat?esc(donutCat):'Despesas por categoria'}</div>
         <div class="small">${donutCat?'Subcategorias em '+YEAR:'Onde foi parar o dinheiro em '+YEAR}</div></div>
-      ${donutCat?`<button class="btn sm" style="flex:0 0 auto" onclick="donutDrill('')">${ic('chev',14)} Voltar</button>`:''}</div>
+      ${donutCat?`<button class="btn sm" style="flex:0 0 auto" data-toca="vista" onclick="donutDrill('')">${ic('chev',14)} Voltar</button>`:''}</div>
     <div style="margin-top:13px">${cDonut(items,{sub:donutCat?'total da categoria':'total de despesas',onPick:donutCat?'':'donutDrill'})}</div>
     ${donutCat||!items.length?'':'<div class="hint" style="margin-top:10px">Toca numa categoria para veres as subcategorias.</div>'}</div>`;
 }
@@ -358,7 +358,7 @@ function orphanCard(){
     <div class="row-between"><div><div class="title">Despesas sem imóvel</div>
       <div class="small">${o.length} movimento${o.length===1?'':'s'} · ${euro(sum(o.map(x=>x.amount)))}</div></div>${ic('swap',22)}</div>
     <div class="hint" style="margin-top:12px">Entram aqui mas não na Avaliação — não estão atribuídas a nenhum imóvel. É por isto que os totais divergem.</div>
-    <div class="toolbar" style="margin:13px 0 0"><button class="btn" onclick="go('transactions');setTimeout(()=>{txProp='__none__';render()},0)">Ver esses movimentos</button></div>
+    <div class="toolbar" style="margin:13px 0 0"><button class="btn" data-toca="ecra" onclick="go('transactions');setTimeout(()=>{txProp='__none__';render()},0)">Ver esses movimentos</button></div>
   </div></div>`;
 }
 
@@ -375,14 +375,14 @@ function balancesCard(pid){
   return `<div class="cols"><div class="card">
     <div class="row-between"><div><div class="title">Contas entre proprietários</div>
       <div class="small">${pid?'Neste imóvel':'Todos os imóveis'} · receitas, despesas e prestações com pessoa indicada; dívidas a terceiros não contam</div></div>
-      <button class="btn sm" style="flex:0 0 auto;padding:7px" title="Como se chega aos saldos" onclick="${stop}balancesDetail(${pid?`'${pid}'`:'null'})">${ic('info',16)}</button></div>
+      <button class="btn sm" style="flex:0 0 auto;padding:7px" title="Como se chega aos saldos" data-toca="camada" onclick="${stop}balancesDetail(${pid?`'${pid}'`:'null'})">${ic('info',16)}</button></div>
     <div style="margin-top:13px">
       ${rows.map(r=>`<div class="stat"><span style="display:flex;align-items:center;gap:9px">
         <span class="avatar" style="width:28px;height:28px;font-size:11px;flex:0 0 28px">${esc(initials(r.name))}</span>${esc(r.name)}</span>
         <b class="${Math.abs(r.v)<0.01?'':(r.v>0?'pos':'neg')}">${Math.abs(r.v)<0.01?'em dia':(r.v>0?'a receber '+euro2(r.v):'a pagar '+euro2(-r.v))}</b></div>`).join('')}
       ${tot>0.005?`<div class="divider"></div>
         <div class="hint">${plan.map(x=>`<b>${esc((owner(x.from)||{}).name)}</b> paga <b>${euro2(x.amount)}</b> a <b>${esc((owner(x.to)||{}).name)}</b>`).join('<br>')}</div>
-        <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" onclick="settleModal(${pid?`'${pid}'`:'null'})">
+        <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" data-toca="camada" onclick="settleModal(${pid?`'${pid}'`:'null'})">
           ${ic('check',16)} Pagar todas as dívidas</button></div>`
         :`<div class="hint" style="margin-top:11px">Está tudo liquidado.</div>`}
     </div></div></div>`;
@@ -425,7 +425,7 @@ function settleModal(pid){
       ${hist.map(h=>`<div class="stat"><span class="small">${h.date} · ${esc(h.propertyId?propName(h.propertyId):'Todos os imóveis')} · ${esc((owner(h.paidBy)||{}).name)} → ${esc((owner(h.toId)||{}).name)}</span><b>${euro2(h.amount)}</b></div>`).join('')}
       <div class="hint">Os acertos ficam nos movimentos, onde podem ser editados.</div>`:''}
     </div>`,
-    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="doSettle(${pid?`'${pid}'`:'null'})">Registar pagamentos</button>`);
+    `<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" onclick="doSettle(${pid?`'${pid}'`:'null'})">Registar pagamentos</button>`);
 }
 /* regista o plano de liquidação (settleTargets) como movimentos "settle" e grava —
    os saldos entre proprietários ficam a zero. Os acertos do resto global ficam sem
@@ -460,7 +460,7 @@ function vProperties(){
       lfSel(K,'st',[{v:'',label:'Todos os estados'},{v:'arrendado',label:'Arrendados'},{v:'parcial',label:'Parcialmente arrendados'},{v:'vago',label:'Vagos'},{v:'proprio',label:'Uso próprio'}]),
       lfSel(K,'md',[{v:'',label:'Todos os arrendamentos'},{v:'inteiro',label:'Imóvel inteiro'},{v:'quartos',label:'Por quartos'}])],list.length,
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'valor',label:'Ordenar por valor'},{v:'renda',label:'Ordenar por renda'},{v:'divida',label:'Ordenar por dívida'},{v:'yield',label:'Ordenar por yield'}]})
-    +(db.properties.length?'':`<div class="toolbar"><button class="btn" onclick="seed()">Carregar exemplo</button></div>`)
+    +(db.properties.length?'':`<div class="toolbar"><button class="btn" data-toca="dados" onclick="seed()">Carregar exemplo</button></div>`)
     +fab([{label:'Adicionar imóvel',act:'propModal()'}]);
   list=lfSort(K,list,{nome:p=>p.name,valor:p=>p.value,renda:p=>rentOf(p),divida:p=>debtOf(p),yield:p=>{const r=rentOf(p);return r&&p.value?r*12/p.value:0}});
   if(!list.length)return head+`<div class="empty"><b>${lfCount(K)?'Nada neste filtro':'Sem imóveis'}</b>${lfCount(K)?'':(db.properties.length?'Nenhum imóvel deste proprietário.':'Adiciona o primeiro para começares a acompanhar o investimento.')}</div>`;
@@ -469,7 +469,7 @@ function vProperties(){
     const y=rent&&p.value?rent*12/p.value:NaN,own=ownerNames(p);
     /* num imóvel onde só colaboro, cada chip pede a sua permissão; o que o servidor não mandou não se inventa */
     const vCt=pode(p.id,'contract.view'),vRep=pode(p.id,'report.view'),vLoan=pode(p.id,'loan.view'),vFile=pode(p.id,'file.view');
-    return `<div class="card tap" data-lp="prop:${esc(p.id)}" data-fk="prop:${esc(p.id)}" onclick="propModal('${jsq(p.id)}')">
+    return `<div class="card tap" data-lp="prop:${esc(p.id)}" data-fk="prop:${esc(p.id)}" data-toca="camada" onclick="propModal('${jsq(p.id)}')">
       <div class="row-between">
         <div style="min-width:0"><div class="title">${esc(p.name)}${seloCargo(p)}</div>
           <div class="small">${esc(p.address||'Sem morada')}${own?' · '+esc(own):''}${ownerFilter&&sh(p)<1?' · <b>'+shareText(p)+'</b>':''}</div></div>
@@ -521,7 +521,7 @@ function vContracts(){
       <span>${esc(p.name)}</span><span>${euroS(rentOf(p))}/mês</span></div>
       <div class="list">${cs.map(c=>{
         const on=isActive(c),ts=ctTenants(c);
-        return `<div class="card tap" data-lp="ct:${esc(c.id)}" data-fk="ct:${esc(c.id)}" onclick="ctModal('${jsq(c.id)}')">
+        return `<div class="card tap" data-lp="ct:${esc(c.id)}" data-fk="ct:${esc(c.id)}" data-toca="camada" onclick="ctModal('${jsq(c.id)}')">
         <div class="row-between">
           <div style="min-width:0">
             <div class="title">${esc(ctName(c))} ${on?'':'<span class="badge grey">terminado</span>'}</div>
@@ -538,7 +538,7 @@ function vContracts(){
           ${(c.files||[]).length?`<span class="badge grey">${ic('clip',12)} ${c.files.length}</span>`:''}
           ${(c.inventory||[]).length?`<span class="badge grey">${ic('box',12)} ${c.inventory.length} artigos</span>`:''}</div>
 </div>`}).join('')}</div>`}).join('');
-  return head+(any?body:`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`);
+  return head+(any?body:`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`);
 }
 // um contrato passa nos filtros da lista? imóvel, estado, grupo e pesquisa por texto (nome, inquilinos, IBAN, notas…)
 // Recebe: c — o contrato (objeto); s — o estado dos filtros da lista (lf('lcts'): campos p, st, g e a pesquisa).
@@ -559,7 +559,7 @@ function ctFMatch(c,s){
    Devolve: string HTML do cartão. */
 function personCard(pp,kind){
   const cs=kind==='tenant'?contractsOfTenant(pp.id).filter(isActive):propsOf(pp.id);
-  return `<div class="card tap" data-lp="per:${esc(kind)}:${esc(pp.id)}" data-fk="per:${esc(kind)}:${esc(pp.id)}" onclick="personModal('${jsq(kind)}','${jsq(pp.id)}')"><div class="row-between">
+  return `<div class="card tap" data-lp="per:${esc(kind)}:${esc(pp.id)}" data-fk="per:${esc(kind)}:${esc(pp.id)}" data-toca="camada" onclick="personModal('${jsq(kind)}','${jsq(pp.id)}')"><div class="row-between">
     <div style="display:flex;gap:12px;min-width:0">
       <div class="avatar">${esc(initials(pp.name))}</div>
       <div style="min-width:0"><div class="title">${esc(pp.name)}</div>
@@ -590,7 +590,7 @@ function vTenants(){
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'contratos',label:'Ordenar por nº de contratos'},{v:'renda',label:'Ordenar por renda'}]})
     +((!souSoColaborador()||casasComo('tenant.add').length)?fab([{label:'Adicionar inquilino',act:"personModal('tenant')"}]):'');
   if(!db.tenants.length)return head+`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.</div>`;
-  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
+  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   return head+`<div class="list">${list.map(t=>personCard(t,'tenant')).join('')}</div>`;
 }
 /* Lista de proprietários, filtrável por imóvel, com/sem imóveis e pesquisa;
@@ -611,7 +611,7 @@ function vOwners(){
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'imoveis',label:'Ordenar por nº de imóveis'}]})
     +fab([{label:'Adicionar proprietário',act:"personModal('owner')"}]);
   if(!db.owners.length)return head+`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.</div>`;
-  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
+  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   return head+`<div class="list">${list.map(o=>personCard(o,'owner')).join('')}</div>`;
 }
 
@@ -742,7 +742,7 @@ function useTemplateNew(){
   if(!tp.length)return newTplForTx();
   pickModal('Usar modelo',tp.map(x=>({v:x.id,label:x.name,sub:(KIND[x.tx.kind]||{}).short+(x.tx.amount?' · '+euro2(x.tx.amount):'')+(x.tx.propertyId?' · '+propName(x.tx.propertyId):''),icon:'file'})),
     o=>{newFromTemplate(o.v)},
-    `<button type="button" class="btn" style="width:100%;justify-content:center" onclick="newTplForTx()">${ic('plus',15)} Criar modelo novo</button>
+    `<button type="button" class="btn" style="width:100%;justify-content:center" data-toca="camada" onclick="newTplForTx()">${ic('plus',15)} Criar modelo novo</button>
      <div class="hint" style="margin-top:8px">Ao guardar, o modelo fica criado e o movimento é registado. Os modelos gerem-se em Finanças → Planeados.</div>`);
 }
 /* criar um modelo a meio de “novo movimento”: guarda o modelo E regista o movimento
@@ -775,7 +775,7 @@ function txFilterBody(){
     ${typeof fcSelector==='function'?fcSelector():''}
     <div class="qwrap"><input id="tx_q" class="txq" type="search" value="${esc(txSearch)}" placeholder="Pesquisar…" autocomplete="off"
       oninput="onTxSearch(this.value);this.nextElementSibling.style.display=this.value?'':'none'">
-      <button class="qclear" style="display:${txSearch?'':'none'}" onclick="const i=this.previousElementSibling;i.value='';onTxSearch('');this.style.display='none';i.focus()">✕</button></div>
+      <button class="qclear" style="display:${txSearch?'':'none'}" data-toca="vista" onclick="const i=this.previousElementSibling;i.value='';onTxSearch('');this.style.display='none';i.focus()">✕</button></div>
     <label>Tipo${sel('txKind',txFilter,kinds.map(k=>({v:k[0],label:k[1]})),'onTxFilter')}</label>
     <label>Imóvel${sel('txPropF',txProp,props,'onTxProp')}</label>
     <div class="row"><label>Categoria${sel('txCatF',txCat,catOpts,'onTxCat')}</label>
@@ -797,7 +797,7 @@ function onTxSort(){txSort=val('txSortF')||'date';txRerender()}
 function onTxDir(){txDir=val('txDirF')||'desc';txRerender()}
 // rodapé do modal de filtros: Limpar (só quando há filtros) e Fechar
 // Devolve: string HTML do rodapé.
-function txFilterFoot(){return `${txFilterCount()?`<button class="btn" onclick="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" onclick="closeModal()">${ic('check',15)} Fechar</button>`}
+function txFilterFoot(){return `${txFilterCount()?`<button class="btn" data-toca="vista" onclick="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" data-toca="camada" onclick="closeModal()">${ic('check',15)} Fechar</button>`}
 // abre o modal de filtros dos movimentos
 // Devolve: nada — abre o modal.
 function txFilterModal(){openModal('Filtros',txFilterBody(),txFilterFoot())}
@@ -911,12 +911,12 @@ function lfBar(k,sels,found,sorts){
     ${k==='lprops'&&typeof fcSelector==='function'?fcSelector():''}
     <div class="qwrap"><input id="lq_${k}" class="txq" type="search" value="${esc(lf(k).q||'')}" placeholder="Pesquisar…" autocomplete="off"
       oninput="lfSearch('${k}',this.value);this.nextElementSibling.style.display=this.value?'':'none'">
-      <button class="qclear" style="display:${(lf(k).q||'')?'':'none'}" onclick="const i=this.previousElementSibling;i.value='';lfSearch('${k}','');this.style.display='none';i.focus()">✕</button></div>
+      <button class="qclear" style="display:${(lf(k).q||'')?'':'none'}" data-toca="vista" onclick="const i=this.previousElementSibling;i.value='';lfSearch('${k}','');this.style.display='none';i.focus()">✕</button></div>
     <div style="display:flex;flex-direction:column;gap:9px;margin-top:9px">${sels.join('')}</div>
     ${sortRow}
     <div class="toolbar" style="margin:12px 0 0">
-      <button class="btn" onclick="lfClear('${k}')">${ic('x',15)} Limpar</button>
-      <button class="btn primary" onclick="lfApply('${k}')">${ic('check',15)} Fechar</button>
+      <button class="btn" data-toca="vista" onclick="lfClear('${k}')">${ic('x',15)} Limpar</button>
+      <button class="btn primary" data-toca="camada" onclick="lfApply('${k}')">${ic('check',15)} Fechar</button>
     </div>
   </div></div></div>
   ${n?`<div class="small" style="margin:2px 0 10px">${found} resultado${found===1?'':'s'} com os filtros ativos${String(s.q||'').trim()?' · pesquisa: “'+esc(s.q.trim())+'”':''}.</div>`:''}`;
@@ -936,9 +936,9 @@ function lfSort(k,list,keys){
    com vários sai também o menu.
    Devolve: string HTML do botão (e do menu, quando há vários). */
 function fab(actions){
-  if(actions.length===1)return `<button class="fab" onclick="${actions[0].act}" title="${esc(actions[0].label||'')}">${ic('plus',26)}</button>`;
-  return `<div class="fabmenu" id="fabMenu">${actions.map(a=>`<button class="btn primary" onclick="document.getElementById('fabMenu').classList.remove('on');${a.act}">${ic(a.icon||'plus',15)} ${esc(a.label)}</button>`).join('')}</div>
-  <button class="fab" onclick="document.getElementById('fabMenu').classList.toggle('on')">${ic('plus',26)}</button>`;
+  if(actions.length===1)return `<button class="fab" data-toca="camada" onclick="${actions[0].act}" title="${esc(actions[0].label||'')}">${ic('plus',26)}</button>`;
+  return `<div class="fabmenu" id="fabMenu">${actions.map(a=>`<button class="btn primary" data-toca="camada" onclick="document.getElementById('fabMenu').classList.remove('on');${a.act}">${ic(a.icon||'plus',15)} ${esc(a.label)}</button>`).join('')}</div>
+  <button class="fab" data-toca="nada" onclick="document.getElementById('fabMenu').classList.toggle('on')">${ic('plus',26)}</button>`;
 }
 // opções de imóvel para os seletores das listas: "Todos os imóveis" + um por imóvel
 // Recebe: withAll (opcional) — sem efeito atual: as opções saem sempre com "Todos os imóveis" à cabeça.
@@ -957,7 +957,7 @@ function creditorsCard(pid){
       ${rows.map(r=>`<div class="stat" style="align-items:center"><span style="min-width:0"><b>${esc(r.creditor)}</b>${r.propertyId?` <span class="small">· ${esc(propName(r.propertyId))}</span>`:''}
           <div class="small">recebido ${euro2(r.received)} · devolvido ${euro2(r.repaid)}</div></span>
         <span style="display:flex;align-items:center;gap:8px;flex:0 0 auto"><b class="${r.due>0.005?'neg':'pos'}">${r.due>0.005?euro2(r.due):'liquidado'}</b>
-          ${r.due>0.005?`<button class="btn sm" onclick="${stop}txModal(null,'repay',${r.propertyId?`'${r.propertyId}'`:'null'},null,null,{creditor:'${jsq(r.creditor==='—'?'':r.creditor)}',amount:${r.due}})">Pagar</button>`:''}</span></div>`).join('')}
+          ${r.due>0.005?`<button class="btn sm" data-toca="camada" onclick="${stop}txModal(null,'repay',${r.propertyId?`'${r.propertyId}'`:'null'},null,null,{creditor:'${jsq(r.creditor==='—'?'':r.creditor)}',amount:${r.due}})">Pagar</button>`:''}</span></div>`).join('')}
     </div></div></div>`;
 }
 /* O separador dos Colaboradores: a vista vive na camada da nuvem
@@ -969,7 +969,7 @@ function vColabTab(){
   if(typeof vColaboradores==='function')return vColaboradores();
   return `<div class="empty"><b>Precisas de uma conta</b>Os colaboradores são pessoas que entram nos teus imóveis com um cargo — isso vive na tua conta, não só neste aparelho.
     <div class="toolbar" style="justify-content:center;margin-top:16px">
-    <button class="btn primary" onclick="goSet('cloud')">Criar conta ou entrar</button></div></div>`;
+    <button class="btn primary" data-toca="ecra" onclick="goSet('cloud')">Criar conta ou entrar</button></div></div>`;
 }
 
 /* Quantas linhas a última pintura dos Movimentos desenhou. A camada da nuvem
@@ -1024,7 +1024,7 @@ function vTransactions(){
   const list=db.transactions.filter(txMatch).sort((a,b)=>{const d=txDir==='desc'?-1:1;
     if(txSort==='amount')return d*((a.amount||0)-(b.amount||0))||String(a.date).localeCompare(String(b.date));
     return d*String(a.date).localeCompare(String(b.date))});
-  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`
+  if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`
     +balancesCard(txProp||null);   /* pode não haver movimentos e haver contas por acertar */
   txLinhasPintadas=list.length;
   const tot={income:0,expense:0,loan:0,owed:0,repay:0,settle:0};list.forEach(t=>{if(countsInTotals(t))tot[t.kind]=(tot[t.kind]||0)+t.amount});
@@ -1069,7 +1069,7 @@ function txQuem(t){
 function txLinhaHtml(t,mo){
   const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null;
   const x=txLinhaExtra(t,mo)||{};
-  return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
+  return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} data-toca="camada" onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
     ${x.caixa||''}<div style="min-width:0"><div class="title" style="font-size:14.5px">${esc(t.label)}</div>
       <div class="small">${esc(t.date)} \u00b7 ${k.short}${t.category?' \u00b7 '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' \u00b7 '+esc(propName(t.propertyId)):''}${t.creditor?' \u00b7 '+esc(t.creditor):''}</div>
       ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}

@@ -22,9 +22,9 @@ function vCredits(){
     ${kpi('Prestações',euro2(pay),'neg','por mês, no total')}
     ${kpi('Juros até ao fim',euro(sum(live.map(x=>{const a=amort(x.l);return a.totInt+a.totStamp}))),'neg','com imposto do selo')}</div>`;
   if(!rows.length)return head+`<div class="empty"><b>Sem hipotecas</b>Uma hipoteca está sempre associada a um imóvel. Cria a primeira aqui ou na ficha do imóvel.</div>`;
-  if(!shown.length)return head+kpis+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
+  if(!shown.length)return head+kpis+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   const mortCard=({p,l})=>{const live2=Number(l.outstanding)>0,c=live2?loanCalc(l):null;
-    return `<div class="card tap" data-lp="mort:${esc(p.id)}:${esc(l.id)}" data-fk="mort:${esc(p.id)}:${esc(l.id)}" onclick="mortModal('${jsq(p.id)}','${jsq(l.id)}')">
+    return `<div class="card tap" data-lp="mort:${esc(p.id)}:${esc(l.id)}" data-fk="mort:${esc(p.id)}:${esc(l.id)}" data-toca="camada" onclick="mortModal('${jsq(p.id)}','${jsq(l.id)}')">
       <div class="row-between"><div style="min-width:0"><div class="title">${esc(loanName(l))} ${live2?'':'<span class="badge grey">liquidada</span>'}</div>
         <div class="small">${esc(p.name)} · ${RATE[l.type]} · ${rateLabel(l)}${(l.files||[]).length?' · '+l.files.length+' doc.':''}</div></div>
         <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
@@ -33,7 +33,7 @@ function vCredits(){
   const aviso=creditosOrfaos().filter(x=>!motivoCredito(x.p.id)).map(({p,l,txs})=>`<div class="card" style="margin-bottom:14px">
     <div class="title">${txs.length===1?'1 pagamento sem crédito associado':txs.length+' pagamentos sem crédito associado'}</div>
     <div class="small">${esc(p.name)} · ${euro2(sum(txs.map(t=>t.amount||0)))} · ${txs.length===1?'não abateu':'não abateram'} capital nenhum a ${esc(loanName(l))}.</div>
-    <div class="toolbar" style="margin:9px 0 0"><button class="btn sm primary" onclick="associarOrfaos('${jsq(p.id)}','${jsq(l.id)}')">Associar à hipoteca ${esc(loanName(l))}</button></div></div>`).join('');
+    <div class="toolbar" style="margin:9px 0 0"><button class="btn sm primary" data-toca="dados" onclick="associarOrfaos('${jsq(p.id)}','${jsq(l.id)}')">Associar à hipoteca ${esc(loanName(l))}</button></div></div>`).join('');
   const act=shown.filter(x=>Number(x.l.outstanding)>0),paid=shown.filter(x=>!(Number(x.l.outstanding)>0));
   const list=aviso+(act.length?`<div class="list">${act.map(mortCard).join('')}</div>`:'')
     +(paid.length?`<div class="section-title" style="margin-top:${act.length?18:0}px">Créditos antigos já pagos</div>
@@ -157,7 +157,7 @@ function mortModal(pid,lid){
 function mortOpen(lid,isNew){
   foldState={};
   _propPaint=()=>mortBody(lid);
-  const m=!isNew?menu('mort',[{label:'Apagar hipoteca',icon:'trash',danger:true,act:`delMort('${lid}')`}]):'';
+  const m=!isNew?menu('mort',[{label:'Apagar hipoteca',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delMort('${lid}')`}]):'';
   openModal(isNew?'Nova hipoteca':'Editar hipoteca',mortBody(lid),null,m);
   onSave=()=>{collectProp();
     const l=findLoan(pForm,lid);

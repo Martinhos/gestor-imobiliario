@@ -159,6 +159,7 @@ txLinhaExtra = function (t, mes) {
     // a caixa entra à esquerda e o toque na linha passa a marcar
     x.caixa = (x.caixa || '') + '<span class="selbox">' + caixa(selTem(id)) + '</span>';
     x.onclick = 'CW.selToggle(\'' + jsq(id) + '\',event)';
+    x.attrs += ' data-toca="vista"';
     if (selTem(id)) x.cls = ((x.cls || '') + ' sel-on').trim();
   } else {
     /* Fora da seleção, um kebab com o que o toque longo dava. O toque longo
@@ -166,7 +167,7 @@ txLinhaExtra = function (t, mes) {
        opções de um movimento sozinho ficavam sem porta nenhuma. */
     x.acoes = (x.acoes || '') +
       '<button type="button" class="iconbtn txkebab" aria-label="Opções"' +
-      ' onclick="event.stopPropagation();CW.txOpcoes(\'' + jsq(id) + '\')">' + ic('dots', 18) + '</button>';
+      ' data-toca="camada" onclick="event.stopPropagation();CW.txOpcoes(\'' + jsq(id) + '\')">' + ic('dots', 18) + '</button>';
   }
   return x;
 };
@@ -179,9 +180,9 @@ txMesExtra = function (mes) {
   /* SEM style aqui: o título já leva um no template (vistas.js) e, com dois,
      o parser fica com o primeiro — o meu — e o display:flex morria. O cursor
      vai na folha, com o resto da regra .sel-mes. */
-  x.attrs = (x.attrs || '') + ' onclick="CW.selMes(\'' + jsq(mes) + '\',event)"';
+  x.attrs = (x.attrs || '') + ' data-toca="vista" onclick="CW.selMes(\'' + jsq(mes) + '\',event)"';
   x.caixa = (x.caixa || '') +
-    '<span class="selbox mes" data-mes-box="' + esc(mes) + '" onclick="CW.selMes(\'' + jsq(mes) + '\',event)"></span>';
+    '<span class="selbox mes" data-mes-box="' + esc(mes) + '" data-toca="vista" onclick="CW.selMes(\'' + jsq(mes) + '\',event)"></span>';
   return x;
 };
 
@@ -202,15 +203,15 @@ vTransactions = function () {
      caminho antigo para quem já o conhece. */
   var fundo =
     '<div class="sel-fundo">' +
-      '<button type="button" class="btn" onclick="CW.selSair()">' + ic('x', 15) + ' Cancelar</button>' +
+      '<button type="button" class="btn" data-toca="modo" onclick="CW.selSair()">' + ic('x', 15) + ' Cancelar</button>' +
       '<span style="flex:1"></span>' +
-      '<button type="button" class="btn" onclick="CW.selEditar()">' + ic('pen', 15) + ' Editar</button>' +
-      '<button type="button" class="btn danger" onclick="CW.selApagar()">' + ic('trash', 15) + ' Eliminar</button>' +
+      '<button type="button" class="btn" data-toca="camada" onclick="CW.selEditar()">' + ic('pen', 15) + ' Editar</button>' +
+      '<button type="button" class="btn danger" data-toca="dados" data-risco="destroi" onclick="CW.selApagar()">' + ic('trash', 15) + ' Eliminar</button>' +
     '</div>';
   var barra =
     '<div class="sel-bar">' +
-      '<span class="selbox" id="selGlobal" onclick="CW.selTodos(event)">' + caixa(false) + '</span>' +
-      '<span style="flex:1;min-width:0;cursor:pointer" onclick="CW.selTodos(event)"><b id="selConta">nenhum movimento</b>' +
+      '<span class="selbox" id="selGlobal" data-toca="vista" onclick="CW.selTodos(event)">' + caixa(false) + '</span>' +
+      '<span style="flex:1;min-width:0;cursor:pointer" data-toca="vista" onclick="CW.selTodos(event)"><b id="selConta">nenhum movimento</b>' +
       '<span class="small" style="display:block">toca para marcar ou desmarcar tudo</span></span>' +
     '</div>';
   return barra + html + fundo;
@@ -263,6 +264,7 @@ function patchHdrSel() {
     x.className = 'btn';
     x.style.cssText = 'flex:0 0 auto;margin-left:7px';
     x.title = 'Sair da seleção';
+    x.setAttribute('data-toca', 'modo');
     x.setAttribute('onclick', 'CW.selSair()');
     x.innerHTML = ic('x', 18);
     hb.parentNode.insertBefore(x, hb.nextSibling);
@@ -311,14 +313,14 @@ CW.selEditar = function () {
         ? '<div><div class="flabel">Etiquetas</div>' +
           '<div class="chips" id="selTags">' + tags.map(function (g) {
             return '<button type="button" class="tag grey" data-tag="' + esc(g) +
-              '" onclick="CW.selTagToggle(this)">' + esc(g) + '</button>';
+              '" data-toca="nada" onclick="CW.selTagToggle(this)">' + esc(g) + '</button>';
           }).join('') + '</div>' +
           '<div class="hint" style="margin-top:7px">As que marcares são <b>acrescentadas</b>. ' +
           'Nenhuma etiqueta é removida.</div></div>'
         : '') +
     '</div>',
-    '<button class="btn" onclick="closeAllModals()">Cancelar</button>' +
-    '<button class="btn primary" onclick="CW.selGravar()">Aplicar</button>');
+    '<button class="btn" data-toca="camada" onclick="closeAllModals()">Cancelar</button>' +
+    '<button class="btn primary" data-toca="dados" onclick="CW.selGravar()">Aplicar</button>');
 };
 
 // ao mudar a categoria na edição em massa, refaz o menu de subcategorias com as dessa categoria
