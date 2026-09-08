@@ -1,6 +1,11 @@
 /* ================= VISTAS ================= */
 /* botão de filtros no cabeçalho: análise, registos e movimentos */
 let anaOpen={};
+/* Os filtros dos movimentos abrem um painel, como todos os outros. Abriam uma
+   janela por cima de tudo — eram os únicos —, e uma janela esconde a lista
+   que se está a filtrar, que é precisamente o que se quer ver a mudar
+   enquanto se mexe nos filtros. */
+let txFiltAberto=false;
 const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',recurring:'lrec',credits:'lcred',visits:'lvis'};
 /* toque no botão de filtros do cabeçalho: abre o painel certo consoante o
    separador — dropdown nas listas de registos, modal nos movimentos, painel
@@ -8,7 +13,7 @@ const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',rec
    Devolve: nada — abre/fecha o painel respetivo e redesenha a vista. */
 function hdrFiltToggle(){
   if(LFK[tab])return lfToggle(LFK[tab]);
-  if(tab==='transactions')return txFilterModal();
+  if(tab==='transactions'){txFiltAberto=!txFiltAberto;return render()}
   anaOpen[tab]=!anaOpen[tab];render();
 }
 // nº de filtros ativos no separador atual — decide o ponto no botão do cabeçalho
@@ -948,8 +953,11 @@ function newTplForTx(){
    Devolve: nada — redesenha a vista e, se estiver aberto, o modal de filtros. */
 function txRerender(){
   refrescarMovimentos();
-  const top=modalTop();
-  if(top&&top.title==='Filtros'){modalBodyEl().innerHTML=txFilterBody();const f=document.getElementById('modalFoot');if(f)f.innerHTML=txFilterFoot()}
+  /* o painel repinta-se no sítio, para os seletores dependentes (a
+     subcategoria depende da categoria) acompanharem sem fechar nada */
+  const p=document.getElementById('txFpanel');
+  if(p&&txFiltAberto){const c=p.querySelector('.card');
+    if(c)c.innerHTML=txFilterBody()+`<div class="toolbar" style="margin:12px 0 0">${txFilterFoot()}</div>`}
 }
 /* corpo do modal de filtros dos movimentos: pesquisa, tipo, imóvel,
    categoria/subcategoria, pessoas, datas e ordenação. Cada controlo aplica
@@ -990,10 +998,20 @@ function onTxSort(){txSort=val('txSortF')||'date';txRerender()}
 function onTxDir(){txDir=val('txDirF')||'desc';txRerender()}
 // rodapé do modal de filtros: Limpar (só quando há filtros) e Fechar
 // Devolve: string HTML do rodapé.
-function txFilterFoot(){return `${txFilterCount()?`<button class="btn" data-toca="vista" onclick="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" data-toca="camada" onclick="closeModal()">${ic('check',15)} Fechar</button>`}
+function txFilterFoot(){return `${txFilterCount()?`<button class="btn" data-toca="vista" onclick="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" data-toca="camada" onclick="txFilterFechar()">${ic('check',15)} Fechar</button>`}
 // abre o modal de filtros dos movimentos
 // Devolve: nada — abre o modal.
-function txFilterModal(){openModal('Filtros',txFilterBody(),txFilterFoot())}
+/* O painel de filtros dos movimentos, ancorado ao botão do cabeçalho — o
+   mesmo .fwrap/.fpanel das outras listas.
+   Devolve: o HTML do painel, ou vazio quando está fechado. */
+function txFilterPainel(){
+  return `<div class="fwrap" style="height:0"><div class="fpanel ${txFiltAberto?'on':''}" style="top:0" id="txFpanel">
+    <div class="card" style="padding:12px">${txFilterBody()}
+      <div class="toolbar" style="margin:12px 0 0">${txFilterFoot()}</div></div></div></div>`;
+}
+// fecha o painel de filtros dos movimentos (os filtros aplicam-se logo ao mexer)
+// Devolve: nada — fecha o painel e redesenha a vista.
+function txFilterFechar(){txFiltAberto=false;closePops();render()}
 // muda o filtro de imóvel/grupo dos movimentos
 // Devolve: nada — redesenha a lista e o modal.
 function onTxProp(){txProp=val('txPropF')||'';txRerender()}
@@ -1228,7 +1246,8 @@ function vTransactions(){
   const subsF=txCat&&txCat!=='__none__'?(tree[txCat]||[]):[];
   const subOpts=[{v:'',label:'Todas as subcategorias'},{v:'__none__',label:'Sem subcategoria'}].concat(subsF.map(x=>({v:x,label:x})));
   const nF=txFilterCount();
-  const head=`${nF||txSearch.trim()?`<div class="small" style="margin:2px 0 10px">${filterSummary()}${txSearch.trim()?(nF?' · ':'')+'pesquisa: “'+esc(txSearch.trim())+'”':''}</div>`:''}`
+  const head=txFilterPainel()
+  +`${nF||txSearch.trim()?`<div class="small" style="margin:2px 0 10px">${filterSummary()}${txSearch.trim()?(nF?' · ':'')+'pesquisa: “'+esc(txSearch.trim())+'”':''}</div>`:''}`
   +((podeSemImovel()||casasComo('tx.add').length)?fab([{label:'Novo movimento',act:'newTxPick()'}]):'');
   txLinhasPintadas=0;
   if(!db.transactions.length)return head+`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.</div>`;
