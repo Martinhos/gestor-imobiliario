@@ -640,6 +640,22 @@ toque próprio e o gráfico ganhou uma descrição só
 (graficos.js:descricaoDoGrafico), que era exatamente o que a dívida pedia.
 Medido: de 37 formas alcançáveis pelo Tab para zero.
 
+## Uma tabela só quando diz o que o gráfico não diz
+A janela de um indicador (vistas.js:kpiModal) mostrava sempre a tabela do
+ano a ano — e, na visão geral, essa tabela era o segundo gráfico escrito por
+extenso: os mesmos anos, os mesmos valores, mais nada. Ler duas vezes a
+mesma coisa não é ler melhor.
+
+Fica quando há uma **segunda coluna**, que o gráfico não pode mostrar e que
+quase sempre está noutra unidade: o Yield bruto traz a renda anual em euros,
+o LTV e o Equity trazem a dívida, a avaliação traz o NOI. E fica quando não
+há gráfico nenhum para repetir — com um ano só não se desenha uma linha, e
+sem a tabela o bloco desaparecia (vistas.js:tabelaDoKpi).
+
+Medido: na visão geral, quatro cartões e nenhum com segunda coluna — a
+tabela sai dos quatro. Na Avaliação e nas Projeções, seis cartões trazem-na
+e ficam com ela; cinco não, e perdem-na.
+
 ## Uma comparação diz de que números fala
 Uma variação («▲ 18%») pendurada num número que não é da mesma natureza é
 uma afirmação falsa, e das que ninguém deteta a olho. Aconteceu: a faixa dos
