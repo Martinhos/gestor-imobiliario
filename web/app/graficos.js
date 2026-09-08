@@ -5,6 +5,10 @@ const W=360;
    faltar: a dica cai então a meio do ecrã); txt — o texto a mostrar.
    Devolve: nada — mostra a dica por cima da página durante ~2 segundos. */
 function chartTip(e,txt){
+  /* num grafico que se le com o dedo, o balao seria uma segunda resposta ao
+     mesmo toque — e logo a que se queria substituir. Cala-se ali e continua a
+     servir onde nao ha leitor: o donut e as barras horizontais. */
+  try{if(e&&e.target&&e.target.closest&&e.target.closest('.chartbox[data-lido]'))return}catch(x){}
   const t=document.getElementById('tip');if(!t)return;
   t.textContent=txt;t.classList.add('on');
   const x=(e&&(e.clientX||(e.touches&&e.touches[0]&&e.touches[0].clientX)))||window.innerWidth/2;
@@ -43,6 +47,86 @@ const atrasoEntrada=(i,n)=>{
   if(!i||!(n>1))return '';
   return `animation-delay:${Math.round(i*Math.min(30,150/(n-1)))}ms`;
 };
+
+/* ================= LER COM O DEDO =================
+   Um grafico que se le arrastando, em vez de um balao que foge.
+
+   O balao (chartTip) aparecia debaixo do dedo e ia-se embora ao fim de 2,2s:
+   a mao tapava o que se queria ler, o valor desaparecia antes de se poder
+   comparar com o do lado, e ver outro mes obrigava a outro toque com o
+   primeiro ja esquecido.
+
+   Aqui o dedo percorre o grafico, uma guia acompanha a coluna mais proxima e
+   os valores dessa coluna aparecem numa faixa FIXA no topo — no sitio onde a
+   mao nao esta, e sem sair enquanto o dedo nao sair. A faixa e sobreposta:
+   um grafico nao muda de altura so por alguem lhe tocar. */
+
+/* O que o leitor precisa de saber sobre um grafico, guardado no proprio
+   elemento para nao haver estado a viver noutro sitio.
+   Recebe: labels — as etiquetas do eixo; series — [{nome,cor,vals}]; x0,x1 —
+   os limites do desenho em unidades do viewBox; fmt — como formatar um valor.
+   Devolve: o atributo data-lido pronto a colar na tag, ou '' sem series. */
+function dadosParaLer(labels,series,x0,x1,fmt){
+  if(!labels||!labels.length||!series||!series.length)return '';
+  const d={W:W,x0:x0,x1:x1,rot:labels,
+    s:series.map(x=>({n:x.nome||'',c:x.cor||'',v:(x.vals||[]).map(v=>+v||0)}))};
+  return ` data-lido="${esc(JSON.stringify(d))}"`;
+}
+
+/* Onde e que o dedo esta, em indice de coluna.
+   Recebe: caixa — o .chartbox; d — os dados guardados; cx — o x do ponteiro em
+   pixeis do ecra.
+   Devolve: o indice da coluna mais proxima, dentro dos limites. */
+function colunaSobODedo(caixa,d,cx){
+  const r=caixa.getBoundingClientRect();
+  if(!r.width)return 0;
+  const vx=(cx-r.left)/r.width*d.W;                 // pixeis do ecra -> unidades do desenho
+  const n=d.rot.length;
+  if(n<2)return 0;
+  const f=(vx-d.x0)/(d.x1-d.x0);
+  return Math.max(0,Math.min(n-1,Math.round(f*(n-1))));
+}
+
+/* Mostra a coluna que o dedo escolheu: a guia e a faixa.
+   Recebe: caixa — o .chartbox; i — o indice da coluna.
+   Devolve: nada — mexe na guia e na faixa dentro da caixa. */
+function mostrarColuna(caixa,i){
+  let d;try{d=JSON.parse(caixa.getAttribute('data-lido')||'')}catch(e){return}
+  if(!d)return;
+  let guia=caixa.querySelector('.chartguia'),faixa=caixa.querySelector('.chartlido');
+  if(!guia){guia=document.createElement('i');guia.className='chartguia';caixa.appendChild(guia)}
+  if(!faixa){faixa=document.createElement('div');faixa.className='chartlido';caixa.appendChild(faixa)}
+  const n=d.rot.length;
+  const f=n<2?.5:(d.x0+(d.x1-d.x0)*(i/(n-1)))/d.W;
+  guia.style.left=(f*100).toFixed(2)+'%';
+  faixa.innerHTML=`<b>${esc(d.rot[i]||'')}</b>`+d.s.map(x=>
+    `<span><i style="background:${esc(x.c)}"></i>${x.n?esc(x.n)+' ':''}${esc(euro(x.v[i]||0))}</span>`).join('');
+  caixa.classList.add('a-ler');
+}
+
+/* Larga a leitura: a guia e a faixa saem, e o grafico volta ao que era.
+   Recebe: caixa — o .chartbox (com null nao faz nada).
+   Devolve: nada. */
+function largarLeitura(caixa){
+  if(caixa)caixa.classList.remove('a-ler');
+}
+
+/* Os gestos de ler, registados uma vez no documento: os graficos nascem e
+   morrem a cada repintura, e ouvintes pendurados neles morriam com eles. */
+document.addEventListener('pointerdown',function(e){
+  const caixa=e.target.closest&&e.target.closest('.chartbox[data-lido]');
+  if(!caixa)return;
+  mostrarColuna(caixa,colunaSobODedo(caixa,JSON.parse(caixa.getAttribute('data-lido')),e.clientX));
+},true);
+document.addEventListener('pointermove',function(e){
+  const caixa=document.querySelector('.chartbox.a-ler[data-lido]');
+  if(!caixa||e.buttons===0&&e.pointerType!=='touch')return;
+  mostrarColuna(caixa,colunaSobODedo(caixa,JSON.parse(caixa.getAttribute('data-lido')),e.clientX));
+},true);
+['pointerup','pointercancel','pointerleave'].forEach(t=>document.addEventListener(t,function(){
+  largarLeitura(document.querySelector('.chartbox.a-ler'));
+},true));
+
 /* mostra no máximo ~13 etiquetas para não ficarem ilegíveis
    Recebe: labels — array das etiquetas (strings) do eixo X.
    Devolve: novo array do mesmo tamanho, com '' nas posições que se escondem
@@ -108,7 +192,7 @@ function cLine(series,labels,o){
     if(l==='')return;
     g+=`<text x="${X(i).toFixed(1)}" y="${h+8}" font-size="9" fill="var(--muted)" text-anchor="middle">${esc(l)}</text>`;
   });
-  return `<div class="chartbox"><svg viewBox="0 0 ${W} ${h+13}" role="img">${g}</svg></div>
+  return `<div class="chartbox"${dadosParaLer(labels,series.map((s,i)=>({nome:series.length>1?s.name:'',cor:s.color||PAL[i%PAL.length],vals:s.values})),x0,x1)}><svg viewBox="0 0 ${W} ${h+13}" role="img">${g}</svg></div>
     ${series.length>1?legend(series.map((s,i)=>({label:s.name,color:s.color||PAL[i%PAL.length]})),false):''}`;
 }
 /* Barras empilhadas: cada grupo é um array de segmentos {label,value,color}, com os
@@ -153,7 +237,8 @@ function cBars(groups,labels,o){
     if(l==='')return;
     g+=`<text x="${(x0+bw*i+bw/2).toFixed(1)}" y="${h+8}" font-size="9" fill="var(--muted)" text-anchor="middle">${esc(l)}</text>`;
   });
-  return `<div class="chartbox"><svg viewBox="0 0 ${W} ${h+13}" role="img">${g}</svg></div>${legend(names,false)}`;
+  return `<div class="chartbox"${dadosParaLer(labels,names.map(nm=>({nome:nm.label,cor:nm.color,
+    vals:groups.map(gr=>sum(gr.filter(x=>x.label===nm.label).map(x=>x.value)))})),x0,x1)}><svg viewBox="0 0 ${W} ${h+13}" role="img">${g}</svg></div>${legend(names,false)}`;
 }
 /* Anel de proporções com o total ao centro. items=[{label,value,color}] — valores ≤ 0
    ficam de fora. o: center substitui o texto central, sub é a linha pequena por baixo,

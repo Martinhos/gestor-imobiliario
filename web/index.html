@@ -305,6 +305,20 @@ html.dark .badge.red{color:var(--danger)}
 .ownrow .pc{color:var(--muted);font-size:12px}
 
 .chartbox svg{width:100%;height:auto;display:block;overflow:visible}
+/* Ler um gráfico com o dedo (graficos.js). A guia e a faixa são SOBREPOSTAS:
+   um gráfico não pode mudar de altura só por alguém lhe tocar. E a faixa fica
+   no topo, fixa — debaixo do dedo era onde o balão antigo estava, e é onde a
+   mão tapa o que se quer ler. */
+.chartbox{position:relative;touch-action:pan-y}
+.chartguia,.chartlido{opacity:0;pointer-events:none;transition:opacity var(--rapido) var(--curva)}
+.chartbox.a-ler .chartguia,.chartbox.a-ler .chartlido{opacity:1}
+.chartguia{position:absolute;top:0;bottom:13px;width:1.5px;margin-left:-.75px;background:var(--line2);border-radius:2px}
+.chartlido{position:absolute;left:0;right:0;top:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;
+  padding:5px 8px;border-radius:10px;background:var(--card);border:1px solid var(--line);
+  box-shadow:var(--shadow);font-size:11.5px;line-height:1.3}
+.chartlido b{font-weight:700}
+.chartlido span{display:inline-flex;align-items:center;gap:5px;color:var(--muted);white-space:nowrap}
+.chartlido span i{width:8px;height:8px;border-radius:3px;flex:0 0 8px}
 html.noscroll{overflow:hidden}
 html.noscroll body{overflow:hidden;position:fixed;left:0;right:0;width:100%}
 .navh{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--side-muted);padding:14px 12px 4px;opacity:.85;white-space:nowrap}

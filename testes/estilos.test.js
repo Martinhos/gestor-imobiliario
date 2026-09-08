@@ -167,6 +167,20 @@ describe('movimento', () => {
     assert.match(cssLimpo, /--lento:\.3\ds/, 'o degrau longo cresceu');
   });
 
+  /* Um gráfico não pode mudar de altura só por alguém lhe tocar: a guia e a
+     faixa de leitura são sobrepostas, e a faixa fica no TOPO — debaixo do dedo
+     era onde o balão antigo estava, e é onde a mão tapa o que se quer ler. */
+  test('ler um gráfico não lhe mexe na altura', () => {
+    const g = /\.chartguia,\.chartlido\{([^}]*)\}/.exec(cssLimpo);
+    assert.ok(g, 'a regra da guia e da faixa existe');
+    assert.match(cssLimpo, /\.chartguia\{position:absolute/);
+    assert.match(cssLimpo, /\.chartlido\{position:absolute[^}]*top:0/, 'a faixa fica no topo, fora do dedo');
+    assert.match(cssLimpo, /\.chartbox\{position:relative;touch-action:pan-y\}/,
+      'e o gesto horizontal lê sem impedir o scroll vertical');
+    assert.match(graficos, /closest\('\.chartbox\[data-lido\]'\)\)return/,
+      'onde já se lê com o dedo, o balão antigo cala-se');
+  });
+
   /* A faixa da série de um indicador é enchida DEPOIS de a página estar
      pintada — correr as séries de todos custa 24ms com 500 movimentos, que é
      metade de uma pintura. Por isso a altura tem de vir do CSS: sem ela, tudo

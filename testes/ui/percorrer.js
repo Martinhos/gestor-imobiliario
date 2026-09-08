@@ -63,6 +63,21 @@ const CENAS = [
     fazer: `localStorage.removeItem('gi_passos_fora'); go('dashboard'); render();`,
   },
   { nome: 'edicao-dos-cartoes', fazer: `go('dashboard'); render(); CW.enterEdit()` },
+  {
+    /* Ler um grafico com o dedo: o gesto novo desta fase. Sem uma cena, o que
+       so aparece enquanto se arrasta nao e visto por ninguem — foi assim que o
+       selo da sincronizacao viveu em cima do sino sem ninguem dar por isso. */
+    nome: 'grafico-lido-com-o-dedo',
+    fazer: `go('dashboard'); render();
+      const c=document.querySelector('#view .chartbox[data-lido]');
+      if(!c) throw new Error('nenhum grafico se deixa ler');
+      const r=c.getBoundingClientRect();
+      const ev=(t,x)=>new PointerEvent(t,{bubbles:true,cancelable:true,pointerId:1,
+        pointerType:'touch',isPrimary:true,clientX:x,clientY:r.top+r.height/2,buttons:1});
+      c.dispatchEvent(ev('pointerdown', r.left+r.width*0.45));
+      document.dispatchEvent(ev('pointermove', r.left+r.width*0.7));
+      if(!c.classList.contains('a-ler')) throw new Error('arrastar nao poe o grafico a ler');`,
+  },
   { nome: 'selo-por-enviar', fazer: `go('dashboard'); render(); setSyncBadge('pend',3)` },
   { nome: 'selo-sem-ligacao', fazer: `go('dashboard'); render(); setSyncBadge('off')` },
   { nome: 'selo-guardado', fazer: `go('dashboard'); render(); setSyncBadge('ok')` },

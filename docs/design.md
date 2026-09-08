@@ -601,6 +601,31 @@ vistas.js:donutDrill, planeados.js:pendToggle e o dia do calendário
 de calendario.js:calDiaPanel). render() substitui o innerHTML de #view e
 perde o estado do DOM (vistas.js:render; index.html:#view).
 
+## Um gráfico lê-se com o dedo
+Tocar numa barra cuspia um balão que aparecia DEBAIXO DO DEDO e ia-se
+embora ao fim de 2,2 segundos. Três coisas mal, e todas se veem a usar: a
+mão tapa o que se quer ler; o valor desaparece antes de se poder comparar
+com o do lado; e ver outro mês obriga a outro toque, com o primeiro já
+esquecido.
+
+Agora o dedo percorre o gráfico, uma guia acompanha a coluna mais próxima e
+os valores dessa coluna aparecem numa faixa FIXA no topo do próprio
+gráfico — no sítio onde a mão não está, e sem sair enquanto o dedo não sair
+(graficos.js:mostrarColuna). A faixa e a guia são sobrepostas: um gráfico
+não pode mudar de altura só por alguém lhe tocar. E o gesto é horizontal
+(index.html:.chartbox com touch-action), para o scroll vertical continuar a
+funcionar por cima dele.
+
+Os dados de que a leitura precisa vivem no próprio elemento
+(graficos.js:dadosParaLer), e os ouvintes vivem no documento: os gráficos
+nascem e morrem a cada repintura, e ouvintes pendurados neles morriam com
+eles.
+
+Onde já se lê com o dedo, o balão cala-se — seriam duas respostas ao mesmo
+toque, e uma delas é a que se queria substituir. Onde não há leitor, o
+donut e as barras horizontais, o balão continua a ser a única maneira de
+ver um valor e fica.
+
 ## Uma comparação diz de que números fala
 Uma variação («▲ 18%») pendurada num número que não é da mesma natureza é
 uma afirmação falsa, e das que ninguém deteta a olho. Aconteceu: a faixa dos
