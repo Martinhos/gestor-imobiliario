@@ -425,6 +425,7 @@ function openModal(title,body,foot,menuHtml){
   el.addEventListener('change',e=>{if(e.isTrusted)L.tocado=true},true);
   focarModal(el);                  // o foco entra na janela, não fica atrás do véu
   avisoAcimaDoRodape();            // um aviso ainda no ecrã sobe, para não tapar o rodapé
+  avisoQuandoAssentar();           // e outra vez quando a folha parar de deslizar
   return L;
 }
 // leva o foco para dentro da janela, para o teclado e os leitores de ecrã não ficarem atrás do véu
@@ -475,6 +476,7 @@ function closeModal(origem){
   const M=modalStack.pop();lockPage();if(!M)return;
   M.el.remove();
   avisoAcimaDoRodape();            // sem rodapé por baixo, o aviso volta ao sítio
+  avisoQuandoAssentar();
   const top=modalTop();
   if(top){promote(top.el);focarModal(top.el)}
   else{try{M.gatilho&&M.gatilho.focus&&M.gatilho.focus()}catch(e){}}

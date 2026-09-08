@@ -659,26 +659,25 @@ function avisoAcimaDoRodape(){
   const H=window.innerHeight||0;
   let acima=0;
   [].slice.call(document.querySelectorAll('.modal.open .foot')).forEach(function(pes){
-    if(!pes.offsetHeight)return;
-    acima=Math.max(acima,H-emRepouso(pes));
+    const r=pes.getBoundingClientRect();
+    if(r.height)acima=Math.max(acima,H-r.top);
   });
   t.style.setProperty('--acima',acima>0?Math.ceil(acima+12)+'px':'0px');
 }
-/* Onde é que este elemento fica QUANDO PARAR de se mexer.
+/* Mede outra vez quando a folha tiver assentado.
 
-   Um getBoundingClientRect apanha o transform, e no telemóvel a folha de um
-   modal entra a deslizar de baixo: medida no instante em que abre, ela ainda
-   está fora do ecrã, e o aviso concluía que não havia rodapé nenhum por cima
-   de quem subir. O offsetTop não vê transforms — é a caixa de maquetização,
-   que já está no sítio final. Somam-se os do caminho até acima porque o
-   offsetTop de cada um é relativo ao seu offsetParent, e o de um elemento
-   fixo é relativo ao ecrã, que é onde queremos chegar.
-   Recebe: el — o elemento a medir.
-   Devolve: a distância do topo do ecrã ao topo do elemento, já parado. */
-function emRepouso(el){
-  let y=0,n=el;
-  while(n){y+=n.offsetTop||0;n=n.offsetParent}
-  return y;
+   Uma janela não está no sítio no instante em que abre: no telemóvel entra a
+   deslizar de baixo, e medida aí o rodapé ainda está fora do ecrã — o aviso
+   concluía que não havia rodapé nenhum por cima de quem subir.
+
+   Cheguei a medir sem transform (offsetTop) para não esperar por nada, e
+   estava errado do outro lado: no computador a janela está centrada POR um
+   transform, e ignorá-lo punha o rodapé onde ele nunca esteve. O rect é a
+   única medida verdadeira nos dois sítios — só tem de ser lida depois de a
+   folha parar.
+   Devolve: nada — remede daqui a um pouco mais do que dura a entrada. */
+function avisoQuandoAssentar(){
+  setTimeout(avisoAcimaDoRodape,msDoToken('--medio',200)+120);
 }
 
 const KIND={income:{short:'Receita',sign:'+',color:'pos',flow:'in'},expense:{short:'Despesa',sign:'−',color:'neg',flow:'out'},
