@@ -22,9 +22,12 @@ function dentroDaPagina() {
      servem duas familias ao mesmo tempo (o «Fazer agora» do tutorial, que ora
      abre uma janela ora muda de ecra) e as opcoes de um sel(), cujo efeito
      depende do onchange que lhes registaram pelo nome. Sao 2 a 5 por estado.
-     O tecto comeca com folga para os estados que ainda nao medi, e desce a
-     cada zona arrumada. */
-  const TETO_SEM_FAMILIA = 12;
+     Medido pela CI, nos 84 estados e nos tres ecras: o pior caso sao 16, numa
+     cena com um menu de escolha aberto — sao as OPCOES do sel(). O tecto e
+     esse numero, e desce a cada zona arrumada. A saida para as opcoes e a
+     mesma que se deu ao menu(): a fabrica recebe a familia de quem a chama,
+     em vez de lhe inventar uma. */
+  const TETO_SEM_FAMILIA = 16;
 
   /* O que corta um elemento. Um `position:fixed` só é preso por um
      antepassado com transform/filter — o overflow dos outros não lhe toca.
@@ -312,7 +315,13 @@ function dentroDaPagina() {
      «Personalizar painel» — que esta no ecra, fora do bloco. Escrita como
      estava, a regra passava por acidente em seis dos sete blocos, por eles
      terem la dentro um botao que existe para outra coisa. */
-  const comGesto = [...document.querySelectorAll('#view [data-lp]')]
+  /* Em modo de selecao a regra nao se aplica, e nao e uma excecao de
+     conveniencia: o kebab sai de proposito para dar lugar a caixa de marcar, e
+     o caminho visivel passa a ser a barra do fundo, com o Editar e o Eliminar.
+     A regra dizia «um botao DENTRO da linha» quando queria dizer «um caminho
+     visivel no ECRA» — e em selecao o ecra inteiro e outro. */
+  const emSelecao = !!document.querySelector('.sel-bar,.sel-fundo');
+  const comGesto = emSelecao ? [] : [...document.querySelectorAll('#view [data-lp]')]
     .filter((e) => e.offsetParent && !/^dash:/.test(e.getAttribute('data-lp') || ''));
   const semPortaVisivel = comGesto.filter((e) => !e.querySelector('button,[role=button],a[href]'));
   medidas.linhasComGesto = comGesto.length;
