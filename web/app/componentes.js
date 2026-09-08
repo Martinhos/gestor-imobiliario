@@ -563,10 +563,23 @@ document.addEventListener('pointerdown',e=>{
   clearTimeout(_lpT);if(!c)return;
   _lpX=e.clientX;_lpY=e.clientY;
   const v=c.getAttribute('data-lp');
+  /* A espera vê-se encher. O estado premido foi feito para um toque, que dura
+     um instante; num toque longo ficava meio segundo uma laje cinzenta parada
+     e depois saltava para a cor da seleção — lia-se como um erro, e não como
+     «estou a registar que estás a segurar». Agora a cor vai subindo ao longo
+     dos mesmos 480ms, e a seleção é a conclusão daquilo e não um salto. */
+  c.classList.add('lp-espera');
   _lpT=setTimeout(()=>{_lpFired=true;_lpAt=Date.now();try{navigator.vibrate&&navigator.vibrate(12)}catch(x){}(window.lpLongo||lpMenu)(v)},480);
 },true);
-document.addEventListener('pointermove',e=>{if(_lpT&&(Math.abs(e.clientX-_lpX)>12||Math.abs(e.clientY-_lpY)>12)){clearTimeout(_lpT);_lpT=null}},true);
-['pointerup','pointercancel'].forEach(t=>document.addEventListener(t,()=>{clearTimeout(_lpT);_lpT=null},true));
+document.addEventListener('pointermove',e=>{if(_lpT&&(Math.abs(e.clientX-_lpX)>12||Math.abs(e.clientY-_lpY)>12)){clearTimeout(_lpT);_lpT=null;lpLimpaEspera()}},true);
+['pointerup','pointercancel'].forEach(t=>document.addEventListener(t,()=>{clearTimeout(_lpT);_lpT=null;lpLimpaEspera()},true));
+/* Tira a marca da espera a quem a tiver. Passa por todos de propósito: o nó
+   pode ter sido substituído por uma repintura a meio do gesto, e nesse caso o
+   que ficou no ecrã é outro.
+   Devolve: nada — tira a classe .lp-espera do documento. */
+function lpLimpaEspera(){
+  try{[].slice.call(document.querySelectorAll('.lp-espera')).forEach(e=>e.classList.remove('lp-espera'))}catch(e){}
+}
 document.addEventListener('click',e=>{if(_lpFired){_lpFired=false;if(Date.now()-_lpAt<700){e.stopPropagation();e.preventDefault()}}},true);
 document.addEventListener('contextmenu',e=>{if(e.target&&e.target.closest&&e.target.closest('[data-lp]'))e.preventDefault()});
 window.addEventListener('scroll',()=>{const b=document.getElementById('toTop');if(b)b.classList.toggle('on',window.scrollY>420)},{passive:true});
