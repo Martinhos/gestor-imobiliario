@@ -100,7 +100,7 @@ function visCard(v){
   }
   if(pode(v.propertyId,'tenant.add'))acoes.push({label:'Converter em inquilino',icon:'users',act:`visConverte('${v.id}')`});
   if(ok)acoes.push({label:'Apagar visita',icon:'trash',danger:true,act:`visApaga('${v.id}')`});
-  return `<div class="card tap" onclick="visitModal('${v.id}')">
+  return `<div class="card tap" data-lp="vis:${esc(v.id)}" onclick="visitModal('${v.id}')">
     <div class="row-between" style="align-items:flex-start;gap:8px">
       <div style="min-width:0">
         <b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.nomes||'(sem nome)')}</b>
