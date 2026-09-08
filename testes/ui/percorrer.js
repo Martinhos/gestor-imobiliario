@@ -66,6 +66,15 @@ const CENAS = [
     fazer: `propView(db.properties[0].id)`,
   },
   { nome: 'ficha-de-contrato', fazer: `ctView(db.contracts[0].id)` },
+  {
+    /* Uma janela aberta com a PAGINA ROLADA. Era o estado em que a pagina
+       deixava de ser pintada por tras — e nenhuma cena o mostrava, porque
+       todas abrem as janelas no topo, onde o recorte coincidia com o visivel
+       e o defeito era invisivel. */
+    nome: 'ficha-com-a-pagina-rolada',
+    fazer: `go('transactions'); render(); window.scrollTo(0, 700);
+      txView(db.transactions[0].id)`,
+  },
   { nome: 'ficha-de-movimento', fazer: `txView(db.transactions[0].id)` },
   { nome: 'ficha-de-inquilino', fazer: `personView('tenant', db.tenants[0].id)` },
   { nome: 'ficha-de-planeado', fazer: `recView(db.recurring[0].id)` },

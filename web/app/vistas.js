@@ -1374,6 +1374,32 @@ let projProp='';
 // muda o imóvel (ou grupo) em foco nas projeções
 // Devolve: nada — redesenha a vista.
 function onProjProp(){projProp=val('projSel')||'';render()}
+/* Quantos meses de um ano é que este contrato está em vigor.
+
+   A projeção somava a renda cheia a todos os anos do horizonte, sem olhar às
+   datas: um contrato que só começa em 2028 rendia em 2026 e 2027, e um que
+   acaba em 2027 continuava a render em 2030.
+
+   Conta-se por meses e não por anos inteiros — um contrato que começa em
+   julho rende meio ano nesse ano.
+   Recebe: c — o contrato; ano — o ano a contar (número).
+   Devolve: 0 a 12. */
+function mesesEmVigor(c,ano){
+  const mes=(iso,fim)=>{
+    if(!iso)return fim?12:0;
+    const y=Number(String(iso).slice(0,4)),m=Number(String(iso).slice(5,7))||1;
+    if(y<ano)return fim?12:0;
+    if(y>ano)return fim?12:12;      /* fora do ano: o corte faz-se abaixo */
+    return fim?m:m-1;
+  };
+  const y0=c.start?Number(String(c.start).slice(0,4)):null;
+  const y1=c.end?Number(String(c.end).slice(0,4)):null;
+  if(y0!=null&&y0>ano)return 0;     /* ainda não começou */
+  if(y1!=null&&y1<ano)return 0;     /* já acabou */
+  const de=(y0===ano)?mes(c.start,false):0;
+  const ate=(y1===ano)?mes(c.end,true):12;
+  return Math.max(0,ate-de);
+}
 /* Os números da projeção, sem HTML: por ano do horizonte (s.years), as rendas
    dos contratos ativos com o aumento anual de cada um, as despesas a partir da
    base de opBase com a inflação, as prestações segundo o plano de cada hipoteca
@@ -1393,7 +1419,16 @@ function projRows(pid){
     return t;
   })))));
   for(let i=0;i<n;i++){
-    const per=act.map(c=>c.rent*sh(prop(c.propertyId))*12*Math.pow(1+((c.increase==null?s.growth:c.increase)/100),i));
+    const yr=YEAR+i;
+    const per=act.map(c=>{
+      const meses=mesesEmVigor(c,yr);
+      if(!meses)return 0;
+      /* o aumento conta a partir do ano em que o contrato começa: um que só
+         arranca em 2028 não pode aparecer com dois aumentos já aplicados */
+      const desde=Math.max(YEAR,c.start?Number(String(c.start).slice(0,4)):YEAR);
+      const anos=Math.max(0,yr-desde);
+      return c.rent*sh(prop(c.propertyId))*meses*Math.pow(1+((c.increase==null?s.growth:c.increase)/100),anos);
+    });
     const rent=sum(per),exp=base.op*Math.pow(1+s.inflation/100,i),ln=sched[i];
     rows.push({yr:YEAR+i,rent,exp,loan:ln,cf:rent-exp-ln,per});
   }

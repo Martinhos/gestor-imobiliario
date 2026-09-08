@@ -184,6 +184,38 @@ describe('projeção', () => {
     app.db.contracts.push(app.normContract({ propertyId: 'casa', rent: 1000, active: true, increase: 2 }));
   });
 
+  /* A projeção somava a renda cheia a todos os anos do horizonte, sem olhar
+     às datas de cada contrato: um que só começa em 2028 rendia já em 2026, e
+     um que acaba em 2027 continuava a render em 2030. Relatado em uso, e
+     medido nos dados de dev: três contratos começados a meio de 2026
+     contavam doze meses, e o ano vinha 8 180 € acima do que devia. */
+  test('a projeção conta só os meses em que cada contrato está em vigor', () => {
+    assert.equal(app.mesesEmVigor({}, ANO), 12, 'sem datas, o ano inteiro');
+    assert.equal(app.mesesEmVigor({ start: (ANO - 3) + '-01-01' }, ANO), 12, 'já começado');
+    assert.equal(app.mesesEmVigor({ start: (ANO + 2) + '-01-01' }, ANO), 0, 'ainda não começou');
+    assert.equal(app.mesesEmVigor({ start: ANO + '-07-01' }, ANO), 6, 'começa a meio: meio ano');
+    assert.equal(app.mesesEmVigor({ start: ANO + '-09-01' }, ANO), 4);
+    assert.equal(app.mesesEmVigor({ end: (ANO - 1) + '-12-31' }, ANO), 0, 'já acabou');
+    assert.equal(app.mesesEmVigor({ end: ANO + '-06-30' }, ANO), 6, 'acaba a meio');
+    assert.equal(app.mesesEmVigor({ start: ANO + '-04-01', end: ANO + '-09-30' }, ANO), 6, 'começa e acaba no mesmo ano');
+
+    // e na projeção a sério: um contrato que só começa daqui a dois anos
+    app.db.contracts = [app.normContract({
+      propertyId: 'casa', rent: 1000, active: true, increase: 0, start: (ANO + 2) + '-01-01',
+    })];
+    const r = app.projRows(null);
+    perto(r.rows[0].rent, 0, 0.001);
+    perto(r.rows[1].rent, 0, 0.001);
+    perto(r.rows[2].rent, 12000, 0.001);
+    // o aumento conta a partir do ano em que começa, não desde hoje
+    app.db.contracts = [app.normContract({
+      propertyId: 'casa', rent: 1000, active: true, increase: 10, start: (ANO + 2) + '-01-01',
+    })];
+    const g = app.projRows(null);
+    perto(g.rows[2].rent, 12000, 0.001, 'no primeiro ano do contrato ainda não houve aumento');
+    perto(g.rows[3].rent, 13200, 0.001);
+  });
+
   test('as despesas partem do último ano completo com despesas', () => {
     mov({ amount: 2400, propertyId: 'casa', date: (ANO - 1) + '-06-01' });
     mov({ amount: 300, propertyId: 'casa', date: ANO + '-02-01' });

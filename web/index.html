@@ -329,8 +329,18 @@ html.dark .badge.red{color:var(--danger)}
 .chartlido b{font-weight:700}
 .chartlido span{display:inline-flex;align-items:center;gap:5px;color:var(--muted);white-space:nowrap}
 .chartlido span i{width:8px;height:8px;border-radius:3px;flex:0 0 8px}
+/* A página trancada por baixo de uma janela. Quem tranca é o overflow do
+   html e o position:fixed do body — o body NÃO leva overflow:hidden.
+
+   Levava, e o body tem uma altura de ecrã (html,body{height:100%}): trancado
+   em position:fixed com top:-scrollY, passava a recortar o próprio conteúdo a
+   uma caixa de um ecrã ancorada no INÍCIO do documento, e essa caixa está
+   empurrada para fora da vista pelo valor do scroll. Com a página rolada, não
+   se pintava nada por trás da janela — um retângulo escuro parado, que parecia
+   um véu descolado do scroll e era a página a desaparecer. O .modal escapava
+   ao recorte por ser fixed, e por isso a folha e o véu ficavam certos. */
 html.noscroll{overflow:hidden}
-html.noscroll body{overflow:hidden;position:fixed;left:0;right:0;width:100%}
+html.noscroll body{position:fixed;left:0;right:0;width:100%}
 .navh{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--side-muted);padding:14px 12px 4px;opacity:.85;white-space:nowrap}
 nav a .cnt{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px}
 .kpi.evo{cursor:pointer}
