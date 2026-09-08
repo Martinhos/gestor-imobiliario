@@ -663,6 +663,10 @@ function vProperties(){
   if(!list.length)return head+`<div class="empty"><b>${lfCount(K)?'Nada neste filtro':'Sem imóveis'}</b>${lfCount(K)?'':(db.properties.length?'Nenhum imóvel deste proprietário.':'Adiciona o primeiro para começares a acompanhar o investimento.')}</div>`;
   return head+`<div class="list">${list.map(p=>{
     const st=propStatus(p),ls=liveLoans(p),ac=activeContracts(p.id),rent=rentOf(p);
+    /* um imóvel já prometido tem de o dizer: sem isto o cartão mostra «Vago»,
+       sem renda e sem inquilino, e quem olha para a lista pode anunciá-lo ou
+       arrendá-lo outra vez */
+    const futuros=contractsOf(p.id).filter(c2=>ctEstado(c2)==='futuro');
     const y=rent&&p.value?rent*12/p.value:NaN,own=ownerNames(p);
     /* num imóvel onde só colaboro, cada chip pede a sua permissão; o que o servidor não mandou não se inventa */
     const vCt=pode(p.id,'contract.view'),vRep=pode(p.id,'report.view'),vLoan=pode(p.id,'loan.view'),vFile=pode(p.id,'file.view');
@@ -683,8 +687,9 @@ function vProperties(){
         ${ls.length&&vLoan?`<span class="badge amber">Dívida ${euro(debtOf(p))}${ls.length>1?' · '+ls.length+' hipotecas':''}</span>`:''}
         ${souDono(p.id)&&propDebt(p.id)>0.005?`<span class="badge red">${ic('users',12)} ${euro(propDebt(p.id))} entre proprietários</span>`:''}
         ${(p.photos||[]).length&&vFile?`<span class="badge grey">${ic('photo',12)} ${p.photos.length}</span>`:''}
+        ${futuros.length&&vCt?`<span class="badge amber">${futuros.length===1?'1 contrato por começar':futuros.length+' contratos por começar'}</span>`:''}
         ${seloColaboradores(p)}</div>
-      ${ac.length&&vCt?`<div class="small" style="margin-top:10px">${ac.map(c2=>`${c2.roomId?esc(roomName(p,c2.roomId))+': ':''}${esc(ctNames(c2))} · ${euro(c2.rent)}`).join('<br>')}</div>`:''}
+      ${(ac.length||futuros.length)&&vCt?`<div class="small" style="margin-top:10px">${ac.concat(futuros).map(c2=>`${c2.roomId?esc(roomName(p,c2.roomId))+': ':''}${esc(ctNames(c2))} · ${euro(c2.rent)}${ctEstado(c2)==='futuro'&&c2.start?' · a partir de '+esc(c2.start):''}`).join('<br>')}</div>`:''}
       ${ls.length&&vLoan?`<div class="small" style="margin-top:9px">${ls.map(l=>`${esc(loanName(l))} · ${RATE[l.type]} · ${euro2(loanCalc(l).total)}/mês${(l.files||[]).length?' · '+l.files.length+' doc.':''}`).join('<br>')}
         ${ls.length>1?`<br><b>Total ${euro2(payOf(p))}/mês</b>`:''}</div>`:''}
       </div>`}).join('')}</div>`;
@@ -781,14 +786,19 @@ function vTenants(){
   const K='lten',s=lf(K);
   let list=db.tenants.filter(t=>{
     const cs=contractsOfTenant(t.id).filter(isActive);
+    const fut=contractsOfTenant(t.id).filter(c=>ctEstado(c)==='futuro');
+    /* três ramos: com dois, quem assinou para 2028 caía em «Sem contrato
+       ativo» ao lado de um cartão que mostra o contrato e a data em que
+       começa — o ecrã contradizia-se */
     if(s.ct==='com'&&!cs.length)return false;
-    if(s.ct==='sem'&&cs.length)return false;
+    if(s.ct==='fut'&&!fut.length)return false;
+    if(s.ct==='sem'&&(cs.length||fut.length))return false;
     return lfHit(K,[t.name,t.phone,t.email,t.nif,t.notes,t.nationality,
       contractsOfTenant(t.id).map(c=>ctName(c)+' '+propName(c.propertyId)).join(' ')].join(' '));
   });
   list=lfSort(K,list,{nome:t=>t.name,contratos:t=>contractsOfTenant(t.id).filter(isActive).length,
     renda:t=>sum(contractsOfTenant(t.id).filter(isActive).map(c=>c.rent))});
-  const head=lfBar(K,[lfSel(K,'ct',[{v:'',label:'Todos os inquilinos'},{v:'com',label:'Com contrato ativo'},{v:'sem',label:'Sem contrato ativo'}])],list.length,
+  const head=lfBar(K,[lfSel(K,'ct',[{v:'',label:'Todos os inquilinos'},{v:'com',label:'Com contrato ativo'},{v:'fut',label:'Com contrato por começar'},{v:'sem',label:'Sem contrato'}])],list.length,
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'contratos',label:'Ordenar por nº de contratos'},{v:'renda',label:'Ordenar por renda'}]})
     +((!souSoColaborador()||casasComo('tenant.add').length)?fab([{label:'Adicionar inquilino',act:"personModal('tenant')"}]):'');
   if(!db.tenants.length)return head+`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.</div>`;
