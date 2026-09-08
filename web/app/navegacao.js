@@ -65,13 +65,48 @@ const TABBAR=['dashboard','transactions','properties','calendar'];
 function buildTabbar(late,fora){
   const el=document.getElementById('tabbar');if(!el)return;
   el.innerHTML=TABBAR.filter(id=>(fora||[]).indexOf(id)<0).map(id=>{const t=TABS.find(x=>x.id===id);
-    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} data-toca="ecra" onclick="go('${id}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${id==='calendar'&&late?`<span class="cnt${cntNovo('calendar',late)}">${late}</span>`:''}</a>`}).join('');
+    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} data-toca="ecra" onclick="goBarra('${id}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${id==='calendar'&&late?`<span class="cnt${cntNovo('calendar',late)}">${late}</span>`:''}</a>`}).join('');
 }
 // Muda de separador: limpa a subpágina das Definições e o donut, fecha a
 // gaveta, refaz a navegação e repinta, com scroll para o topo.
 // Recebe: id — o separador de destino (um id de TABS, ex.: 'transactions').
 // Devolve: nada — redesenha a vista.
-function go(id){tab=id;setPage='';donutCat='';closeDrawer();_entrar=1;buildNav();render();try{window.scrollTo(0,0)}catch(e){}}
+/* De onde veio a mudança de separador, e para que lado.
+
+   A barra de baixo é uma fita com quatro destinos e uma ordem À VISTA: ir dos
+   Movimentos para os Imóveis é andar um lugar para a direita, e a pessoa viu
+   o lugar antes de lá tocar. A gaveta são treze destinos agrupados por
+   assunto — da «Visão geral» para as «Definições» não há lado nenhum, e uma
+   fita a correr ali inventava uma vizinhança que não existe.
+
+   É uma variável, e não um segundo argumento do go: dois dos embrulhos da
+   nuvem chamam-no com um argumento só (cloud/anexos.js, cloud/selecao.js), e
+   um go(id,lado) chegava cá sem o lado — o deslize nunca acontecia, sem erro
+   nenhum, que é o pior sítio onde isto podia falhar. */
+let _ladoSep=0;
+/* Um toque na barra de baixo. Só este caminho desliza.
+   Recebe: id — o separador de destino.
+   Devolve: nada — navega, com a fita a correr para o lado certo. */
+function goBarra(id){
+  const i=TABBAR.indexOf(tab),j=TABBAR.indexOf(id);
+  /* esconder separadores tira itens da fita mas não lhes troca a ordem */
+  _ladoSep=(i>-1&&j>-1&&i!==j)?(j>i?1:-1):0;
+  try{go(id)}finally{_ladoSep=0}   // o go GLOBAL: a nuvem embrulha-o
+}
+/* Muda de separador: limpa a subpágina das Definições e o donut, fecha a
+   gaveta, refaz a navegação e repinta, com scroll para o topo. Vindo da barra
+   de baixo (goBarra), o painel vira como uma fita para o lado certo.
+   Recebe: id — o separador de destino (um id de TABS, ex.: 'transactions').
+   Devolve: nada — redesenha a vista. */
+function go(id){
+  const lado=_ladoSep;_ladoSep=0;
+  const pintar=()=>{tab=id;setPage='';donutCat='';closeDrawer();_entrar=1;buildNav();render();
+    try{window.scrollTo(0,0)}catch(e){}};
+  /* tocar no separador aceso não é uma travessia, é uma repintura — e essa já
+     tem o acompanhamento das peças */
+  if(!lado||id===tab||typeof deslizarPainel!=='function')return pintar();
+  return deslizarPainel(pintar,lado);
+}
 // Navega dentro das Definições: p é a subpágina ('' volta ao menu). Entrar
 // numa subpágina arma o histórico, para o voltar do sistema subir a Definições.
 // Recebe: p — a subpágina das Definições (uma chave de SUBPAGE; '' volta ao menu).
