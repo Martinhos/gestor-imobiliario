@@ -307,6 +307,28 @@ const kpi=(l,v,c,f,why,evo,acao)=>{
     <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${f?`<div class="foot">${f}</div>`:''}
     ${why?`<div class="expl">${why}</div>`:''}</div>`;
 };
+/* A tabela da janela de um indicador — só quando diz o que o gráfico não diz.
+
+   Na visão geral, os quatro cartões abriam com dois gráficos e uma tabela, e
+   a tabela era o segundo gráfico escrito por extenso: os mesmos anos, os
+   mesmos valores, mais nada. Ler duas vezes a mesma coisa não é ler melhor.
+
+   Fica quando há uma SEGUNDA coluna, que o gráfico não pode mostrar — e que
+   quase sempre está noutra unidade: o Yield bruto traz a renda anual em
+   euros, o LTV e o Equity trazem a dívida, a avaliação traz o NOI. E fica
+   quando não há gráfico nenhum para repetir: com um ano só não se desenha
+   uma linha, e sem a tabela o bloco desaparecia.
+   Recebe: k — o registo do cartão ({title,…}); d — o que o evo() devolveu;
+   fmt — como formatar cada valor.
+   Devolve: o HTML da tabela, ou vazio quando ela só repetiria o gráfico. */
+function tabelaDoKpi(k,d,fmt){
+  const anos=d.yearly||[];
+  if(!anos.length)return '';
+  const extra=anos[0].extra!==undefined;
+  if(!extra&&anos.length>1)return '';
+  return `<div class="tablewrap"><table class="table"><thead><tr><th>${d.yearlyTitle?'Período':'Ano'}</th><th>${esc(k.title)}</th>${extra?'<th>'+esc(d.extraTitle||'')+'</th>':''}</tr></thead><tbody>
+    ${anos.map(y=>`<tr><td><b>${esc(String(y.label))}</b></td><td>${fmt(y.value)}</td>${y.extra!==undefined?`<td>${y.extra}</td>`:''}</tr>`).join('')}</tbody></table></div>`;
+}
 /* abre a janela de evolução de um KPI: corre o evo() registado no cartão e
    mostra a série mês a mês, a ano a ano e a tabela. Se o evo falhar ou não
    devolver nada, simplesmente não abre.
@@ -322,8 +344,7 @@ function kpiModal(id){
     ${k.why?`<div class="hint">${k.why}</div>`:''}
     ${d.monthly?`<div><div class="flabel">Mês a mês em ${YEAR}</div>${cLine([{name:k.title,values:d.monthly,color:PAL[0]}],MES,{h:170,fmt})}</div>`:''}
     ${(d.yearly||[]).length>1?`<div><div class="flabel">${d.yearlyTitle||'Ano a ano'}</div>${cLine([{name:k.title,values:vals,color:PAL[1]}],d.yearly.map(y=>String(y.label)),{h:170,fmt,marks:d.marks})}</div>`:''}
-    ${(d.yearly||[]).length?`<div class="tablewrap"><table class="table"><thead><tr><th>${d.yearlyTitle?'Período':'Ano'}</th><th>${esc(k.title)}</th>${d.yearly[0].extra!==undefined?'<th>'+esc(d.extraTitle||'')+'</th>':''}</tr></thead><tbody>
-      ${d.yearly.map(y=>`<tr><td><b>${esc(String(y.label))}</b></td><td>${fmt(y.value)}</td>${y.extra!==undefined?`<td>${y.extra}</td>`:''}</tr>`).join('')}</tbody></table></div>`:''}
+    ${tabelaDoKpi(k,d,fmt)}
     ${d.note?`<div class="hint">${d.note}</div>`:''}</div>`;
   openModal(k.title,body,`<button class="btn" data-toca="camada" onclick="closeModal()">Fechar</button>`+
     (k.acao?`<button class="btn primary" data-toca="vista" onclick="closeModal();${k.acao.act}">${esc(k.acao.label)}</button>`:''));
