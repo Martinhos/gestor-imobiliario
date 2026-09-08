@@ -395,7 +395,7 @@ CW.mudarColaborador = function (id) {
   var tem = (c.houses || []).map(function (h) { return h.id; });
   var body = '<div class="form">' +
     '<div class="hint"><b>' + esc(c.name || '') + '</b> — escolhe o cargo e os imóveis onde colabora.</div>' +
-    '<label>Cargo' + sel('cw_col_cargo', c.roleId, cargos) + '</label>' +
+    '<label>Cargo' + sel('cw_col_cargo', c.roleId, cargos, '', 'rascunho') + '</label>' +
     '<div><div class="flabel">Imóveis</div><div class="list" style="gap:7px">' +
     imoveisMeus().map(function (p) {
       return '<label class="check"><input type="checkbox" id="cw_col_h_' + p.id + '"' + (tem.indexOf(p.id) > -1 ? ' checked' : '') + '>' +

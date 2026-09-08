@@ -535,6 +535,13 @@ que grava não tem como ser explicado a ninguém; e quem destrói declara-o, com
 um data-risco, para o texto do aviso e a existência de Anular deixarem de ser
 escolhas de hábito.
 
+E a regra que sai de tudo isto, e que já foi aprendida duas vezes: uma
+fábrica de botões não inventa a família — recebe-a de quem a chama. Era
+assim que os pontos mais perigosos da app (apagar um imóvel, um contrato,
+uma hipoteca) e todas as opções dos menus de escolha ficavam fora das
+verificações. O mesmo botão, com o mesmo aspeto, ora filtra, ora mexe no
+formulário, ora grava: só quem o cria sabe qual é.
+
 A cobertura é medida e só pode subir: o percurso conta os pontos sem família
 e falha se passarem do que estava. Uma taxonomia que só vive num documento
 apodrece — e temos a prova, porque o data-lp ERA a categoria «linha com toque

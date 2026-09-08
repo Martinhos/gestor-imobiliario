@@ -22,12 +22,13 @@ function dentroDaPagina() {
      servem duas familias ao mesmo tempo (o «Fazer agora» do tutorial, que ora
      abre uma janela ora muda de ecra) e as opcoes de um sel(), cujo efeito
      depende do onchange que lhes registaram pelo nome. Sao 2 a 5 por estado.
-     Medido pela CI, nos 84 estados e nos tres ecras: o pior caso sao 16, numa
-     cena com um menu de escolha aberto — sao as OPCOES do sel(). O tecto e
-     esse numero, e desce a cada zona arrumada. A saida para as opcoes e a
-     mesma que se deu ao menu(): a fabrica recebe a familia de quem a chama,
-     em vez de lhe inventar uma. */
-  const TETO_SEM_FAMILIA = 16;
+     Os menus de escolha ja responderam — a fabrica recebe a familia de quem a
+     chama, como o menu() —, e a cena que rebentava o tecto passou de 16 para
+     ZERO em 57 pontos. O que sobra sao os moldes que servem duas familias ao
+     mesmo tempo: o «Fazer agora» do tutorial, que ora abre uma janela ora muda
+     de ecra conforme o passo, e as linhas do sino. A saida e a mesma de sempre:
+     quem cria o botao diz o que ele faz. */
+  const TETO_SEM_FAMILIA = 8;
 
   /* O que corta um elemento. Um `position:fixed` só é preso por um
      antepassado com transform/filter — o overflow dos outros não lhe toca.

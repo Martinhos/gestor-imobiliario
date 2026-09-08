@@ -55,8 +55,8 @@ function personBody(){
       <label>Email<input id="pe_mail" value="${esc(t.email)}" placeholder="Opcional" autocomplete="off"></label></div>
     ${fold('ident','Identificação',`
     <div class="row">
-      <label>Género${sel('pe_gender',t.gender,GENDER.map(g=>({v:g[0],label:g[1]})))}</label>
-      <label>Estado civil${sel('pe_marital',t.marital,MARITAL.map(x=>({v:x,label:x||'—'})))}</label></div>
+      <label>Género${sel('pe_gender',t.gender,GENDER.map(g=>({v:g[0],label:g[1]})),'','rascunho')}</label>
+      <label>Estado civil${sel('pe_marital',t.marital,MARITAL.map(x=>({v:x,label:x||'—'})),'','rascunho')}</label></div>
     <div class="row">
       <label>Nacionalidade<input id="pe_nat" value="${esc(t.nationality)}" placeholder="Portuguesa" autocomplete="off"></label>
       <label>Data de nascimento<input id="pe_birth" type="date" value="${t.birth||''}"></label></div>

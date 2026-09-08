@@ -167,6 +167,19 @@ describe('movimento', () => {
     assert.match(cssLimpo, /--lento:\.3\ds/, 'o degrau longo cresceu');
   });
 
+  /* A faixa da série de um indicador é enchida DEPOIS de a página estar
+     pintada — correr as séries de todos custa 24ms com 500 movimentos, que é
+     metade de uma pintura. Por isso a altura tem de vir do CSS: sem ela, tudo
+     o que está por baixo saltava quando a faixa aparecesse, que é a queixa dos
+     «quadrados que aparecem desalinhados» outra vez. */
+  test('a faixa da série tem altura antes de ter conteúdo', () => {
+    const m = /\.kserie\{([^}]*)\}/.exec(cssLimpo);
+    assert.ok(m, 'a regra da faixa existe');
+    assert.match(m[1], /height:\d+px/, 'altura fixa, e não a do conteúdo');
+    assert.match(vistas, /class="kserie" data-kpi="\$\{id\}"><\/div>/, 'e nasce vazia');
+    assert.match(vistas, /if\(cx\.dataset\.feito\)return/, 'e enche-se uma vez só');
+  });
+
   /* Medido: o --accent (#244c3b) sobre o --side (#1a3a2c) da gaveta dá 1.29:1
      — o anel existia e não se via. */
   test('o anel de foco na gaveta escura vem da paleta da gaveta', () => {

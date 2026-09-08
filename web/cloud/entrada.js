@@ -270,7 +270,7 @@ CW.esqueci = function (e) {
           });
       };
       brand.innerHTML = '<div style="flex:1;min-width:0">' +
-        window.sel('cwContas', atual.id, opcoes, 'cwTrocaConta') + '</div>';
+        window.sel('cwContas', atual.id, opcoes, 'cwTrocaConta', 'dados') + '</div>';
     })
     .catch(function () { /* sem seletor, fica a marca */ });
 })();
