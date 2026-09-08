@@ -100,12 +100,41 @@ describe('acompanhar peças é a regra, não um pedido', () => {
     assert.match(vistas, /_ecraPintado=ecra/);
   });
 
-  /* A chave não é inventada: as linhas de lista já trazem data-lp, que é por
-     onde o toque longo as encontra, e já é o id do registo. */
-  test('a chave é a que a app já tinha', () => {
+  /* Uma chave, um dono. O data-lp é do TOQUE LONGO; aceitá-lo aqui fazia com
+     que quem o punha para ganhar a folha de opções se inscrevesse sem saber no
+     deslizar entre repinturas — os blocos da visão geral deslizavam 606px por
+     terem data-lp para o modo de edição. Quem quer ser acompanhado di-lo. */
+  test('a chave da continuidade é só a dela', () => {
     const cont = readFileSync(new URL('../web/app/continuidade.js', import.meta.url), 'utf8');
-    assert.match(cont, /const SEL_CHAVE='\[data-fk\],\[data-lp\]'/);
-    assert.match(cont, /getAttribute\('data-fk'\)\|\|e\.getAttribute\('data-lp'\)/);
+    assert.match(cont, /const SEL_CHAVE='\[data-fk\]'/);
+    assert.doesNotMatch(cont, /getAttribute\('data-lp'\)/, 'o data-lp é do gesto, não da animação');
+  });
+
+  /* E as linhas que QUEREM ser acompanhadas passam a dizê-lo. Sem isto, a
+     correção acima tirava-lhes o deslizar sem ninguém dar por isso. */
+  test('as linhas de lista pedem as duas chaves', () => {
+    const pares = [
+      ['../web/app/vistas.js', /data-lp="tx:[^"]*" data-fk="tx:/],
+      ['../web/app/vistas.js', /data-lp="prop:[^"]*" data-fk="prop:/],
+      ['../web/app/vistas.js', /data-lp="ct:[^"]*" data-fk="ct:/],
+      ['../web/app/vistas.js', /data-lp="per:[^"]*" data-fk="per:/],
+      ['../web/app/visitas.js', /data-lp="vis:[^"]*" data-fk="vis:/],
+      ['../web/app/creditos.js', /data-lp="mort:[^"]*" data-fk="mort:/],
+      ['../web/app/planeados.js', /data-lp="tpl:[^"]*" data-fk="tpl:/],
+    ];
+    for (const [f, re] of pares) {
+      assert.match(readFileSync(new URL(f, import.meta.url), 'utf8'), re, f + ' sem as duas chaves');
+    }
+  });
+
+  /* Apanhado a medir, e não por relato: com a janela sem altura (separador
+     escondido, webview a ser redimensionada, painel do browser recolhido) o
+     porPerto dizia que nada estava por perto, e ficavam as saídas sem os
+     deslizes — meia animação, sem erro nenhum. */
+  test('sem altura de janela, não se filtra por estar à vista', () => {
+    const cont = readFileSync(new URL('../web/app/continuidade.js', import.meta.url), 'utf8');
+    const corpo = cont.slice(cont.indexOf('function porPerto'), cont.indexOf('function ondeEsta'));
+    assert.match(corpo, /if\(!h\)return true;/, 'sem janela, tudo conta como perto');
   });
 
   test('sem nada medido, aplicar não rebenta', () => {

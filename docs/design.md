@@ -241,9 +241,11 @@ três chamadas escolhidas à mão, todas as outras listas — inquilinos,
 movimentos, visitas — continuavam a trocar de golpe, e ninguém tinha por
 onde dar por isso. Quem repinta não se pode ter de lembrar.
 
-A chave não é inventada: as linhas de lista já trazem data-lp, que é por
-onde o toque longo as encontra e já é o id do registo (onde não houver,
-vale um data-fk). Sem chave, uma peça é só «mais uma».
+Uma chave, um dono. O data-lp é do TOQUE LONGO e o data-fk é da
+continuidade; uma linha que quer os dois põe os dois. Aceitar o data-lp
+aqui pareceu economia e não era: os blocos da visão geral têm-no para o
+modo de edição, e passaram a deslizar sozinhos — 606px, medidos. Sem
+chave, uma peça é só «mais uma».
 
 Duas coisas que esta técnica não perdoa, e que custaram as duas um defeito
 que só se viu a usar. A primeira: as posições contam-se a partir do
