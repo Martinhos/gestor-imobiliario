@@ -280,7 +280,10 @@ estremeção — foi assim que ficou à primeira, e não passou no uso.
 
 A largura inteira obriga a recortar, senão o que sai atravessa o resto da
 página a caminho da margem: os dois correm dentro de uma caixa do tamanho
-exato do sítio (continuidade.js:correrAFita). O que entra é um clone e o
+exato do sítio (continuidade.js:correrAFita). E não se vira a página para a mesma página: se o que entrou é igual
+ao que saiu, houve uma repintura mas não houve troca, e uma fita a correr
+para mostrar o mesmo lê-se como a app a fazer um gesto que ninguém pediu.
+O que entra é um clone e o
 verdadeiro fica no lugar, invisível, até a fita acabar — mexer na árvore
 viva a meio de uma animação deixava-a a meio se chegasse uma repintura. E
 tudo o que entra na caixa perde os ids: durante esses 340ms o nó antigo
