@@ -20,12 +20,17 @@
    mesmo, com o conteúdo que a pessoa estava a ver, que se volta a pôr por
    cima a desvanecer. Sai mais barato do que clonar e não pode divergir.
 
-   As peças que participam trazem uma chave estável. Não se inventou atributo
-   novo para isso: a app já marca as linhas de lista com data-lp — é por aí
-   que o toque longo as encontra —, e essa chave já é o id do registo. Onde
-   não houver data-lp, vale um data-fk. Sem chave, uma peça é só «mais uma»:
-   não há como saber se a terceira linha de agora é a terceira de antes ou
-   outra que lhe tomou o lugar.
+   As peças que participam trazem um data-fk com uma chave estável — o id do
+   registo. Sem chave, uma peça é só «mais uma»: não há como saber se a
+   terceira linha de agora é a terceira de antes ou outra que lhe tomou o
+   lugar.
+
+   Chegou a aceitar-se também o data-lp, que as linhas de lista já traziam, e
+   pareceu economia. Não era: o data-lp é a chave do TOQUE LONGO, e quem o
+   punha para ganhar a folha de opções inscrevia-se sem saber nisto. Os blocos
+   da visão geral têm-no para o modo de edição, e passaram a deslizar sozinhos
+   — 606px, medidos. Uma chave, um dono: quem quer gesto põe data-lp, quem
+   quer ser acompanhado põe data-fk, e quem quer os dois põe os dois.
 
    Só se acompanha o que está à vista, com um ecrã de folga para cada lado.
    Numa lista de quinhentos movimentos, medir e animar as quatrocentas linhas
@@ -35,10 +40,10 @@
    para o render não pôr uma segunda por cima. */
 let contSuspensa=false;
 /* as peças que sabem quem são, e a chave de cada uma */
-const SEL_CHAVE='[data-fk],[data-lp]';
+const SEL_CHAVE='[data-fk]';
 /* Recebe: e — um elemento.
    Devolve: a chave de continuidade do elemento, ou '' se não tiver. */
-function chaveDe(e){return e.getAttribute('data-fk')||e.getAttribute('data-lp')||''}
+function chaveDe(e){return e.getAttribute('data-fk')||''}
 
 /* Quem pediu menos movimento ao sistema não recebe nenhum.
 
@@ -137,6 +142,12 @@ function sairDoEcra(a){
 function porPerto(r){
   if(!r.width&&!r.height)return false;
   const h=window.innerHeight||0;
+  /* Sem altura de janela não há «perto» nem «longe» — e é um estado real: um
+     separador escondido, uma webview a ser redimensionada, o painel do browser
+     recolhido. Medido nesse estado: as saídas aconteciam (dependem de existir,
+     não de estar à vista) e os deslizes não, o que dá meia animação sem erro
+     nenhum. Quem não sabe onde é a janela não filtra. */
+  if(!h)return true;
   return r.bottom>-h&&r.top<h*2;
 }
 
