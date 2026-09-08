@@ -741,6 +741,39 @@ deitado sobre a barra escura do aviso — e é a única saída de uma ação que
 já aconteceu. O que desfaz o que se acabou de fazer não pode parecer
 texto: passa a botão, com fundo e caixa (index.html:.toast .toastbtn).
 
+## Tocar num registo é lê-lo
+Tocar num contrato abria um formulário com quarenta campos editáveis. Num
+imóvel, vinte e um. Quem só queria saber quando acaba o contrato tinha de o
+procurar dentro de um formulário, e o «Apagar contrato» estava encostado ao
+título de uma janela que ninguém tinha pedido para abrir.
+
+Havia uma ficha de leitura no código inteiro, e só a via quem **não podia**
+editar (imovel.js:propView). Para todos os outros, a app não tinha modo de
+leitura nenhum: o que existia era o formulário com os campos desativados
+(componentes.js:modalSoLeitura) — um formulário a fingir de ficha.
+
+Agora tocar lê, e editar é um passo deliberado: o botão do rodapé, que só
+existe para quem pode (componentes.js:fichaRodape).
+
+As peças são uma só, para não nascerem sete desenhos de ficha como tinham
+nascido três desenhos de porta. O corpo escreve-se com componentes.js:ficha,
+que recebe linhas e deita fora as que não têm valor — uma ficha mostra o que
+se sabe, e um rótulo com um traço à frente é ruído a fingir que é informação.
+As linhas são as mesmas `.stat` que a app já usa em toda a parte
+(index.html:.stat).
+
+O título e o corpo são **funções**, e não texto (componentes.js:abrirFicha).
+O formulário abre-se por cima da ficha, e quem guarda por cima deixava-a a
+dizer o que já não é verdade. Assim a ficha volta a ler a base sozinha
+(componentes.js:refrescarFichas, chamada no fim de cada render — o sinal que
+a app já dá quando alguma coisa mudou): ver, editar, e voltar ao que se
+estava a ver, já mudado.
+
+E uma janela ou se lê ou se edita, nunca as duas coisas: uma janela com
+«Editar» no rodapé não pode ter campos (testes/ui/invariantes.js). Sem essa
+regra, o caminho mais curto de acrescentar mais um campo à ficha é escrever
+lá um input, e ao fim de uns meses está tudo como estava.
+
 ## Navegação
 Treze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e
 subtítulo. A gaveta agrupa-os em quatro (navegacao.js:NAV_GROUPS):

@@ -1,5 +1,96 @@
 /* ================= CONTRATO ================= */
 let cForm={};
+/* O corpo da ficha de um contrato: o que se sabe sobre ele, para ler.
+
+   Pela ordem das perguntas que trazem alguém aqui: ainda está em vigor, quem
+   lá mora, quanto paga, quando acaba — e só depois o que ficou combinado (dia
+   de pagamento, caução, aumento, chaves e recheio).
+
+   As datas ficam como a app as escreve em todo o lado. Um formato português
+   só aqui dava duas maneiras de escrever a mesma data no mesmo ecrã.
+   Recebe: id — o id do contrato.
+   Devolve: o HTML do corpo, ou vazio se o contrato já não existir. */
+function ctFicha(id){
+  const c=contract(id);if(!c)return '';
+  const pid=c.propertyId,p=prop(pid),ts=ctTenants(c);
+  const inv=c.inventory||[],chaves=c.keys||[],rec=ctRecOf(c);
+  const fotos=((p&&p.photos)||[]).filter(f=>(c.photoIds||[]).indexOf(f.id)>-1);
+  const rendas=(db.transactions||[]).filter(t=>t.contractId===c.id&&t.kind==='income');
+  const ultima=rendas.map(t=>t.date).sort().pop();
+  const dias=c.end?pzDias(c.end):null;
+  const contacto=(tel,email)=>[tel?fmtPhone(tel):'',email||''].filter(Boolean).join(' · ');
+  return ficha([
+    podeEditar(pid,'contract.add',c)?null:{tipo:'nota',
+      valor:'Contrato de um imóvel onde colaboras'+(cargoDe(pid).nome?' como <b>'+esc(cargoDe(pid).nome)+'</b>':'')+' — a ficha é só de leitura.'},
+    {rotulo:'Estado',valor:isActive(c)?'Em vigor':'Terminado'},
+    /* só quando o imóvel existe mesmo: sem ele o ctLabel escreve «?», e um
+       ponto de interrogação numa ficha é pior do que a linha não estar lá */
+    p?{rotulo:'Imóvel',valor:esc(ctLabel(c))}:null,
+    p&&p.rentalMode==='quartos'?{rotulo:'Parte arrendada',valor:c.roomId?esc(roomName(p,c.roomId)):'Imóvel inteiro'}:null,
+    ts.length?{tipo:'bloco',rotulo:ts.length>1?'Inquilinos':'Inquilino',
+      valor:ts.map(t=>[esc(t.name),esc(contacto(t.phone,t.email))].filter(Boolean).join(' · ')).join('<br>')}:null,
+    c.rent>0?{rotulo:'Renda mensal',valor:euroS(c.rent)}:null,
+    /* o bruto engana, e a marca de «estimado» é a mesma que os cartões já dão:
+       o formulário guarda 0 para «em branco», e escrever «0%» era mentira */
+    c.rent>0?{rotulo:'Imposto sobre a renda',valor:dec(taxRateOf(c))+'%'+(Number(c.taxRate)>0?'':' (estimado pela duração)')}:null,
+    c.rent>0?{rotulo:'Renda líquida',valor:euroS(netRent(c))}:null,
+    c.payDay?{rotulo:'Renda paga',valor:(c.payDayTo&&c.payDayTo>c.payDay)?('entre o dia '+c.payDay+' e o dia '+c.payDayTo):('no dia '+c.payDay)}:null,
+    isActive(c)&&rec&&rec.next&&pode(pid,'rec.view')?{rotulo:'Próxima renda',valor:esc(rec.next)}:null,
+    c.start?{rotulo:'Início',valor:esc(c.start)}:null,
+    /* a contagem só quando já é acionável, senão é decoração */
+    c.end?{rotulo:'Fim',valor:esc(c.end)+(dias>=0&&dias<=180?' · faltam '+dias+' dias':'')}:null,
+    /* o prazo que custa um ano de contrato se passar: a app já o calcula nos
+       prazos, e a ficha di-lo onde a pessoa está mesmo a olhar */
+    isActive(c)&&c.end&&dias>=0&&dias<=150?{tipo:'nota',
+      valor:'Para o contrato não renovar a '+esc(c.end)+', o aviso ao inquilino tem de seguir até <b>'+esc(pzAddDias(c.end,-120))+'</b> (120 dias).'}:null,
+    c.increase!=null&&c.increase!==''?{rotulo:'Aumento anual',valor:dec(c.increase)+'%'+(c.start?' · próximo a '+esc(pzAniversario(c.start)):'')}:null,
+    c.deposit>0?{rotulo:'Caução',valor:euroS(c.deposit)}:null,
+    c.advance>0?{rotulo:'Rendas antecipadas',valor:c.advance+(Number(c.advance)===1?' mês':' meses')}:null,
+    c.iban?{rotulo:'IBAN',valor:esc(fmtIBAN(c.iban))}:null,
+    (c.ownerPhone||c.ownerEmail)?{rotulo:'Contacto do senhorio',valor:esc(contacto(c.ownerPhone,c.ownerEmail))}:null,
+    (c.tenantPhone||c.tenantEmail)?{rotulo:'Contacto do inquilino',valor:esc(contacto(c.tenantPhone,c.tenantEmail))}:null,
+    inv.length?{tipo:'bloco',rotulo:'Inventário',
+      valor:inv.map(i=>esc((i.qty||1)+'× '+(i.name||'artigo'))+(i.state==='novo'?' · novo':'')).join('<br>')}:null,
+    chaves.length?{tipo:'bloco',rotulo:'Chaves entregues',
+      valor:chaves.map(k=>esc((k.qty||1)+'× '+(k.name||'chave'))).join('<br>')}:null,
+    pode(pid,'file.view')&&fotos.length?{tipo:'bloco',rotulo:'Registo fotográfico',
+      valor:`<div style="display:flex;flex-wrap:wrap;gap:8px">${fotos.map(f=>`<div class="pcover" id="th_${esc(f.id)}" style="width:84px;height:66px;border-radius:10px;background:var(--chip);overflow:hidden"></div>`).join('')}</div>`}:null,
+    pode(pid,'file.view')&&(c.files||[]).length?{tipo:'bloco',rotulo:'Anexos',
+      valor:(c.files||[]).map(f=>`<span role="button" tabindex="0" data-toca="camada" style="cursor:pointer;text-decoration:underline" onclick="openMeta('${jsq(f.id)}')">${esc(f.name||'ficheiro')}</span>`).join('<br>')}:null,
+    /* a pergunta a seguir a «quanto paga» é «já pagou» */
+    pode(pid,'tx.view')&&rendas.length?{rotulo:'Rendas registadas',valor:rendas.length+(ultima?' · última a '+esc(ultima):'')}:null,
+    String(c.notes||'').trim()?{tipo:'bloco',rotulo:'Notas',valor:rich(c.notes)}:null,
+  ]);
+}
+/* A ficha de um contrato: o que tocar num contrato passa a abrir.
+
+   Era um formulário de quarenta campos, com o «Apagar contrato» encostado ao
+   título. Agora tocar lê, e editar é um passo — e as ações que não são ler
+   nem editar (registar a renda, gerar o PDF, terminar, apagar) ficam no menu
+   do cabeçalho, que é onde vivem as opções de um registo.
+   Recebe: id — o id do contrato.
+   Devolve: nada — abre a janela. */
+function ctView(id){
+  const c=contract(id);if(!c)return;
+  const pid=c.propertyId,ok=podeEditar(pid,'contract.add',c);
+  abrirFicha({
+    titulo:()=>{const x=contract(id);return x?ctName(x):'Contrato'},
+    corpo:()=>ctFicha(id),
+    menu:()=>{
+      const it=[];
+      if(isActive(c)&&pode(pid,'tx.add'))it.push({label:'Registar renda',icon:'up',toca:'camada',act:`txModal(null,'income','${jsq(pid)}',null,'${jsq(id)}')`});
+      it.push({label:'Gerar contrato em PDF',icon:'pen',toca:'camada',act:`generateContractPdf('${jsq(id)}')`});
+      if(ok)it.push(isActive(c)?{label:'Terminar contrato',icon:'x',toca:'dados',act:`endContract('${jsq(id)}')`}
+        :{label:'Reativar contrato',icon:'check',toca:'dados',act:`reactivateContract('${jsq(id)}')`},
+        {label:'Apagar contrato',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delContract('${jsq(id)}')`});
+      return it.length?menu('fichaCt',it):'';
+    },
+    editar:ok?{rotulo:'Editar',act:`ctModal('${jsq(id)}')`}:null,
+    depois:()=>{const x=contract(id);if(!x||!pode(pid,'file.view'))return;
+      const q=prop(x.propertyId);paintThumbs(((q&&q.photos)||[]).filter(f=>(x.photoIds||[]).indexOf(f.id)>-1))},
+  });
+}
+
 /* Abre o modal de criar/editar contrato. Sem id é um contrato novo; pid
    pré-escolhe o imóvel (só se for de investimento, senão cai no primeiro
    arrendável). Trabalha sobre uma cópia em cForm — nada toca na base até

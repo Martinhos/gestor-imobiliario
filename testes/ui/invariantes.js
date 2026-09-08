@@ -401,6 +401,26 @@ function dentroDaPagina() {
       (e.getAttribute('aria-label') || '(sem nome)'));
   }
 
+  /* Uma janela ou se LE ou se EDITA, nunca as duas coisas.
+
+     A ficha de leitura tem «Editar» no rodape. Se tiver campos, nao e uma
+     ficha — e um formulario com um botao a prometer outro, que e exatamente
+     o que havia antes: tocar num contrato abria quarenta campos editaveis.
+     Sem esta regra, o caminho mais curto de acrescentar «mais um campo» a
+     ficha e escrever la um input, e ao fim de uns meses esta tudo como
+     estava. */
+  const fichasAbertas = [...document.querySelectorAll('.modal.open')].filter((m) =>
+    [...m.querySelectorAll('.foot button')].some((b) => /^Editar/.test((b.textContent || '').trim())));
+  medidas.fichasAbertas = fichasAbertas.length;
+  fichasAbertas.forEach((m) => {
+    const campos = [...m.querySelectorAll('.body input,.body textarea,.body select')];
+    if (campos.length) {
+      falhar('uma ficha lê-se, não se edita',
+        campos.length + ' campos numa janela com «Editar» no rodapé - ex.: ' +
+        (campos[0].id || campos[0].tagName.toLowerCase()));
+    }
+  });
+
   /* 7. Texto que sai da sua caixa — normalmente uma coluna estreita demais. */
   const rebentam = [...document.querySelectorAll('#view *')]
     .filter((e) => e.children.length === 0 && e.textContent.trim())

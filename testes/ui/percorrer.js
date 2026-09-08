@@ -59,6 +59,13 @@ const CENAS = [
     fazer: `CW.guiaAbrir('perfil'); propModal();`,
   },
   {
+    /* A ficha de leitura: o que tocar num registo passa a abrir. Antes disto,
+       tocar num imovel abria um formulario de vinte e um campos com o
+       «Apagar imovel» encostado ao titulo. */
+    nome: 'ficha-de-imovel',
+    fazer: `propView(db.properties[0].id)`,
+  },
+  {
     /* Um aviso VISIVEL com uma janela aberta. O aviso mora a 22px do fundo,
        que e onde o rodape do modal esta, e caia em cima de «Guardar» — os
        botoes que se esta precisamente a pedir para carregar. A ordem importa,

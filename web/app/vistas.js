@@ -135,6 +135,7 @@ function render(){
   if(typeof requestIdleCallback==='function')requestIdleCallback(pintarSeriesKpi,{timeout:400});
   else setTimeout(pintarSeriesKpi,0);
   contarValores();
+  refrescarFichas();               // uma ficha aberta por baixo de um formulário não fica a mentir
 }
 let kpiN=0;const KPI_REG={};
 /* Há movimentos do ano passado?
@@ -639,7 +640,7 @@ function vProperties(){
     const y=rent&&p.value?rent*12/p.value:NaN,own=ownerNames(p);
     /* num imóvel onde só colaboro, cada chip pede a sua permissão; o que o servidor não mandou não se inventa */
     const vCt=pode(p.id,'contract.view'),vRep=pode(p.id,'report.view'),vLoan=pode(p.id,'loan.view'),vFile=pode(p.id,'file.view');
-    return `<div class="card tap" data-lp="prop:${esc(p.id)}" data-fk="prop:${esc(p.id)}" data-toca="camada" onclick="propModal('${jsq(p.id)}')">
+    return `<div class="card tap" data-lp="prop:${esc(p.id)}" data-fk="prop:${esc(p.id)}" data-toca="camada" onclick="propView('${jsq(p.id)}')">
       <div class="row-between">
         <div style="min-width:0"><div class="title">${esc(p.name)}${seloCargo(p)}</div>
           <div class="small">${esc(p.address||'Sem morada')}${own?' · '+esc(own):''}${ownerFilter&&sh(p)<1?' · <b>'+shareText(p)+'</b>':''}</div></div>
@@ -692,7 +693,7 @@ function vContracts(){
       <span>${esc(p.name)}</span><span>${euroS(rentOf(p))}/mês</span></div>
       <div class="list">${cs.map(c=>{
         const on=isActive(c),ts=ctTenants(c);
-        return `<div class="card tap" data-lp="ct:${esc(c.id)}" data-fk="ct:${esc(c.id)}" data-toca="camada" onclick="ctModal('${jsq(c.id)}')">
+        return `<div class="card tap" data-lp="ct:${esc(c.id)}" data-fk="ct:${esc(c.id)}" data-toca="camada" onclick="ctView('${jsq(c.id)}')">
         <div class="row-between">
           <div style="min-width:0">
             <div class="title">${esc(ctName(c))} ${on?'':'<span class="badge grey">terminado</span>'}</div>
