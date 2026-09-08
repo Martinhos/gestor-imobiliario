@@ -601,6 +601,26 @@ vistas.js:donutDrill, planeados.js:pendToggle e o dia do calendário
 de calendario.js:calDiaPanel). render() substitui o innerHTML de #view e
 perde o estado do DOM (vistas.js:render; index.html:#view).
 
+## Uma comparação diz de que números fala
+Uma variação («▲ 18%») pendurada num número que não é da mesma natureza é
+uma afirmação falsa, e das que ninguém deteta a olho. Aconteceu: a faixa dos
+indicadores comparava anos por cima do Saldo dos Movimentos, que soma o
+filtro inteiro — o cartão mostrava −17 000 € e a variação falava de
+−3 400 €, o valor de 2026. Quem lê vê uma percentagem ao lado de um número
+e assume que é dele.
+
+Duas guardas, e são de naturezas diferentes de propósito. A faixa só NASCE
+onde o valor é anual, e é quem cria os cartões que o declara
+(vistas.js:vDashboard marca a série; vistas.js:kpi lê a marca) — na visão
+geral o valor é o do ano, nos Movimentos é a soma do filtro. E, mesmo aí,
+só FALA se o texto do cartão for exatamente igual ao do ano formatado pela
+própria série (vistas.js:falaDoMesmo): a segunda guarda é a que se verifica
+a si própria, e apanha o caso em que alguém mude um cartão sem se lembrar
+da marca.
+
+E diz o número de que fala. «face a 2025» nomeia o ano e não o termo de
+comparação; «2025: 4 400 €» ao lado de 2 200 € dispensa a pergunta.
+
 ## O que a app diz sobre o que guardou
 A app escreve no aparelho e sincroniza depois. Quem acaba de escrever alguma
 coisa tem de poder saber se ela já subiu, e o silêncio não serve para isso:

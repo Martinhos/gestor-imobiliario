@@ -180,6 +180,23 @@ describe('movimento', () => {
     assert.match(vistas, /if\(cx\.dataset\.feito\)return/, 'e enche-se uma vez só');
   });
 
+  /* A faixa comparava anos por cima de um número que não era de um ano. Na
+     visão geral o valor do cartão É o do ano corrente; nos Movimentos é a soma
+     do filtro inteiro — mostrava −17 000 € com uma variação a falar de
+     −3 400 €. Duas guardas: a faixa só NASCE onde o valor é anual, e mesmo aí
+     só FALA se o texto do cartão for igual ao do ano, formatado pela própria
+     série. */
+  test('a variação só fala do número que o cartão mostra', () => {
+    assert.match(vistas, /evo\.anual&&haAnoAnterior\(\)/, 'a faixa só nasce onde o valor é anual');
+    assert.match(vistas, /f\.anual=true/, 'e é quem cria os cartões que o declara');
+    assert.match(vistas, /function falaDoMesmo\(cx,s,ano\)/);
+    assert.match(vistas, /limpa\(alvo\.textContent\)===limpa\(s\.fmt\(ano\.value\)\)/,
+      'compara o texto formatado pela própria série');
+    assert.match(vistas, /if\(!a&&!h\)\{cx\.innerHTML='';return\}/, 'dois zeros não se comparam');
+    assert.match(vistas, /\$\{antes\.label\}: \$\{s\.fmt\?s\.fmt\(a\):a\}/,
+      'e diz o número de que fala, não só o ano');
+  });
+
   /* Medido: o --accent (#244c3b) sobre o --side (#1a3a2c) da gaveta dá 1.29:1
      — o anel existia e não se via. */
   test('o anel de foco na gaveta escura vem da paleta da gaveta', () => {
