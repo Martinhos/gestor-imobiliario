@@ -774,6 +774,29 @@ E uma janela ou se lê ou se edita, nunca as duas coisas: uma janela com
 regra, o caminho mais curto de acrescentar mais um campo à ficha é escrever
 lá um input, e ao fim de uns meses está tudo como estava.
 
+Há seis fichas, uma por registo: o imóvel (imovel.js:propFicha), o contrato
+(contrato.js:ctFicha), o movimento (movimento.js:txFicha), a pessoa
+(pessoas.js:personFicha), a visita (visitas.js:visFicha), a hipoteca
+(creditos.js:mortFicha) e o planeado com o seu modelo
+(planeados.js:recFicha, planeados.js:tplFicha). Cada uma abre pela pergunta
+que traz alguém lá: um contrato pergunta-se se ainda está em vigor e quando
+acaba; um movimento, o que foi e quanto disto é meu; uma visita, quem vem e
+quando; uma hipoteca, quanto falta e a que taxa.
+
+O botão do rodapé é sempre «Editar» — menos em duas fichas, e as duas
+dizem porquê. No planeado por confirmar é «Confirmar», porque é o que se
+quer a seguir a ler; no modelo é «Usar modelo», que é a pergunta que traz
+lá alguém.
+
+E o TOQUE LONGO ficou só com o que se pode FAZER. Antes da ficha, o «Ver
+movimento» do toque longo era a única maneira de ver um movimento sem o
+editar — abria o formulário com os campos desligados
+(componentes.js:modalSoLeitura). Agora tocar no cartão lê, e essa entrada
+passou a ser um caminho a mais para o mesmo sítio. Quando não há nada a
+fazer, o menu fica vazio, e é o menu vazio que faz aparecer o aviso «Só
+podes ver este registo» (componentes.js:lpShow) — uma decisão que já lá
+estava e que um «Ver» lá dentro tinha desfeito.
+
 ## Navegação
 Treze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e
 subtítulo. A gaveta agrupa-os em quatro (navegacao.js:NAV_GROUPS):

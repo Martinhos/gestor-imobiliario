@@ -28,7 +28,7 @@ function vCredits(){
     :'Uma hipoteca está sempre associada a um imóvel, e ainda não há nenhum.'+saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`;
   if(!shown.length)return head+kpis+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   const mortCard=({p,l})=>{const live2=Number(l.outstanding)>0,c=live2?loanCalc(l):null;
-    return `<div class="card tap" data-lp="mort:${esc(p.id)}:${esc(l.id)}" data-fk="mort:${esc(p.id)}:${esc(l.id)}" data-toca="camada" onclick="mortModal('${jsq(p.id)}','${jsq(l.id)}')">
+    return `<div class="card tap" data-lp="mort:${esc(p.id)}:${esc(l.id)}" data-fk="mort:${esc(p.id)}:${esc(l.id)}" data-toca="camada" onclick="mortView('${jsq(p.id)}','${jsq(l.id)}')">
       <div class="row-between"><div style="min-width:0"><div class="title">${esc(loanName(l))} ${live2?'':'<span class="badge grey">liquidada</span>'}</div>
         <div class="small">${esc(p.name)} · ${RATE[l.type]} · ${rateLabel(l)}${(l.files||[]).length?' · '+l.files.length+' doc.':''}</div></div>
         <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
@@ -143,6 +143,57 @@ function newMort(){
       mortOpen(l.id,true);
     });
 }
+/* O corpo da ficha de uma hipoteca.
+
+   «Quanto falta pagar, quanto sai por mês, a que taxa e até quando — e
+   quanto me custa até ao fim.» A taxa vai inteira numa linha (o rateLabel já
+   escreve «fixa 3,2%» ou «Euribor 6m 2,1% + 1% = 3,1%»): a ficha diz a taxa,
+   não os campos que a compõem.
+   Recebe: pid — o id do imóvel; lid — o id da hipoteca.
+   Devolve: o HTML do corpo, ou vazio se a hipoteca já não existir. */
+function mortFicha(pid,lid){
+  const p=prop(pid),l=p?findLoan(p,lid):null;if(!l)return '';
+  const viva=Number(l.outstanding)>0;
+  const c=(viva&&Number(l.years)>0)?loanCalc(l):null;
+  const a=c?amort(l):null;
+  const faseFixa=l.type==='mista'?Math.round((Number(l.fixedYears)||0)*12)-loanMes(l):0;
+  const depois=(a&&faseFixa>0)?a.rows[faseFixa]:null;
+  return ficha([
+    pode(pid,'house.edit')?null:{tipo:'nota',valor:'Hipoteca de <b>'+esc(p.name)+'</b>, um imóvel onde colaboras — a ficha é só de leitura.'},
+    viva?null:{tipo:'nota',valor:'Crédito liquidado: já não há capital em dívida.'},
+    viva?{rotulo:'Em dívida',valor:euro(l.outstanding)}:null,
+    c?{rotulo:'Prestação mensal',valor:euro2(c.total)}:null,
+    /* é o que explica porque é que a dívida desce tão devagar */
+    c?{tipo:'bloco',rotulo:'A prestação por dentro',
+      valor:'capital '+euro2(c.principal)+' · juros '+euro2(c.interest)+(l.stampTax===false?'':' · selo '+euro2(c.stamp))}:null,
+    depois?{rotulo:'Depois da fase fixa',valor:euro2(depois.pay+depois.st)}:null,
+    {rotulo:'Taxa',valor:esc(rateLabel(l))},
+    l.start?{rotulo:'Início',valor:esc(l.start)}:null,
+    Number(l.years)>0?{rotulo:'Prazo',valor:l.years+(Number(l.years)===1?' ano':' anos')}:null,
+    a?{rotulo:'Juros até ao fim',valor:euro(a.totInt+a.totStamp)}:null,
+    l.stampTax===false?{tipo:'nota',valor:'Sem imposto do selo.'}:null,
+    l.autoRec===false?{tipo:'nota',valor:'Não cria o movimento recorrente da prestação.'}:null,
+  ]);
+}
+/* A ficha de uma hipoteca: o que tocar numa hipoteca passa a abrir.
+   Recebe: pid — o id do imóvel; lid — o id da hipoteca.
+   Devolve: nada — abre a janela. */
+function mortView(pid,lid){
+  const p=prop(pid),l=p?findLoan(p,lid):null;if(!l)return;
+  if(!pode(pid,'loan.view'))return;
+  abrirFicha({
+    titulo:()=>{const q=prop(pid),x=q?findLoan(q,lid):null;return x?loanName(x):'Hipoteca'},
+    corpo:()=>mortFicha(pid,lid),
+    menu:()=>{const q=prop(pid),x=q?findLoan(q,lid):null;if(!x)return '';
+      const it=[];
+      if(Number(x.outstanding)>0&&!motivoCredito(pid))it.push(
+        {label:'Pagamento de crédito',icon:'bank',toca:'camada',act:`txModal(null,'loan','${jsq(pid)}',null,null,{loanId:'${jsq(lid)}'})`},
+        {label:'Amortização',icon:'trend',toca:'camada',act:`amortModal('${jsq(pid)}','${jsq(lid)}')`});
+      if(pode(pid,'house.edit'))it.push({label:'Apagar hipoteca',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delMortFrom('${jsq(pid)}','${jsq(lid)}')`});
+      return it.length?menu('fichaMort',it):''},
+    editar:pode(pid,'house.edit')?{rotulo:'Editar',act:`mortModal('${jsq(pid)}','${jsq(lid)}')`}:null,
+  });
+}
 /* editar uma hipoteca num modal próprio, gravando no imóvel
    Recebe: pid — o id do imóvel; lid — o id da hipoteca dentro dele.
    Devolve: nada — carrega o imóvel em pForm e abre o modal. */
@@ -163,7 +214,11 @@ function mortOpen(lid,isNew){
   _propPaint=()=>mortBody(lid);
   const m=!isNew?menu('mort',[{label:'Apagar hipoteca',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delMort('${lid}')`}]):'';
   openModal(isNew?'Nova hipoteca':'Editar hipoteca',mortBody(lid),null,m);
-  onSave=()=>{collectProp();
+  onSave=()=>{
+    /* o propModal testa isto antes de gravar e este não testava: escondia-se
+       o «Editar» e ficava o buraco, para quem lá chegasse por outro caminho */
+    if(pForm.id&&prop(pForm.id)&&!pode(pForm.id,'house.edit'))return toast(fraseSemPerm('house.edit'));
+    collectProp();
     const l=findLoan(pForm,lid);
     if(l&&!(l.outstanding>0)&&isNew)return toast('Indica o capital em dívida.');
     if(l)l.name=l.name||l.bank||'Hipoteca';   /* a recorrência identifica-se pelo nome */

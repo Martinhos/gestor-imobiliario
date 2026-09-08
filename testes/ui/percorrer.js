@@ -65,6 +65,10 @@ const CENAS = [
     nome: 'ficha-de-imovel',
     fazer: `propView(db.properties[0].id)`,
   },
+  { nome: 'ficha-de-contrato', fazer: `ctView(db.contracts[0].id)` },
+  { nome: 'ficha-de-movimento', fazer: `txView(db.transactions[0].id)` },
+  { nome: 'ficha-de-inquilino', fazer: `personView('tenant', db.tenants[0].id)` },
+  { nome: 'ficha-de-planeado', fazer: `recView(db.recurring[0].id)` },
   {
     /* Um aviso VISIVEL com uma janela aberta. O aviso mora a 22px do fundo,
        que e onde o rodape do modal esta, e caia em cima de «Guardar» — os

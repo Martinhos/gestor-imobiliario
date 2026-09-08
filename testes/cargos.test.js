@@ -326,7 +326,9 @@ describe('o que se esconde', () => {
   test('o menu do imóvel filtra por permissão', () => {
     tresCasas();
     const cont = menuDe('prop:P2').labels;
-    assert.ok(cont.includes('Ver imóvel') && cont.includes('Registar despesa'), cont.join(', '));
+    /* «Ver imóvel» saiu daqui: tocar no cartão abre a ficha, e o toque longo
+       ficou com o que se pode FAZER. O que fica é a ação que o cargo abre. */
+    assert.ok(!cont.includes('Ver imóvel') && cont.includes('Registar despesa'), cont.join(', '));
     assert.ok(!cont.includes('Editar imóvel') && !cont.includes('Apagar imóvel') && !cont.includes('Novo contrato'), cont.join(', '));
     const meu = menuDe('prop:P1').labels;
     assert.ok(meu.includes('Editar imóvel') && meu.includes('Apagar imóvel'), meu.join(', '));
@@ -336,13 +338,19 @@ describe('o que se esconde', () => {
     tresCasas();
     app.db.contracts = [app.normContract({ id: 'C1', propertyId: 'P3', rent: 500, tenantIds: [] }), app.normContract({ id: 'C2', propertyId: 'P1', rent: 500, tenantIds: [] })];
     const c1 = menuDe('ct:C1').labels;
-    assert.ok(c1.includes('Ver contrato') && !c1.includes('Apagar contrato') && !c1.includes('Registar renda'), c1.join(', '));
+    /* sem «Ver contrato», pela mesma razão: fica o que se pode fazer — e
+       gerar o PDF pode-se sempre */
+    assert.ok(!c1.includes('Ver contrato') && c1.includes('Gerar contrato em PDF')
+      && !c1.includes('Apagar contrato') && !c1.includes('Registar renda'), c1.join(', '));
     assert.ok(menuDe('ct:C2').labels.includes('Apagar contrato'));
     const t1 = app.normTx({ id: 'T1', label: 'Obra', propertyId: 'P2', amount: 10 }); t1._createdBy = 'rui';
     const t2 = app.normTx({ id: 'T2', label: 'Luz', propertyId: 'P2', amount: 10 }); t2._createdBy = 'eu';
     app.db.transactions = [t1, t2];
     const m1 = menuDe('tx:T1').labels;
-    assert.ok(m1.includes('Ver movimento') && !m1.includes('Apagar movimento'), m1.join(', '));
+    /* Era «Ver movimento», e era a única maneira de ver um movimento sem o
+       editar. Agora tocar no cartão abre a ficha, e o toque longo ficou só
+       com o que se pode FAZER: aqui, nada. */
+    assert.deepEqual(Array.from(m1), [], m1.join(', '));
     const m2 = menuDe('tx:T2').labels;
     assert.ok(m2.includes('Editar movimento') && m2.includes('Apagar movimento'), m2.join(', '));
   });
@@ -351,7 +359,7 @@ describe('o que se esconde', () => {
     tresCasas();
     const t1 = app.normTx({ id: 'T1', label: 'Obra', propertyId: 'P2', amount: 10 }); t1._atServidor = 5;
     app.db.transactions = [t1];
-    assert.deepEqual(Array.from(menuDe('tx:T1').labels), ['Ver movimento']);
+    assert.deepEqual(Array.from(menuDe('tx:T1').labels), []);
     let msg = '';
     app.toast = (m) => { msg = m; };
     app.delTx('T1');

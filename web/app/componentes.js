@@ -706,10 +706,10 @@ function lpShow(title,opts){
 function lpMenu(v){
   const a=String(v||'').split(':'),k=a[0],id=a[1];
   if(k==='prop'){const p=prop(id);if(!p)return;
-    /* ver e editar são duas coisas, e agora dizem-se as duas: tocar no cartão
-       lê, e daqui chega-se ao formulário sem passar pela ficha */
-    const opts=[{label:'Ver imóvel',icon:'building',act:()=>propView(id)}];
-    if(pode(id,'house.edit'))opts.push({label:'Editar imóvel',icon:'pen',act:()=>propModal(id)});
+    /* o toque longo é para AGIR: ler é o toque simples, que abre a ficha.
+       Um «Ver» aqui duplicava-o e nunca mais deixava o menu ficar vazio — e é
+       o menu vazio que faz aparecer o aviso «só podes ver este registo». */
+    const opts=pode(id,'house.edit')?[{label:'Editar imóvel',icon:'pen',act:()=>propModal(id)}]:[];
     if(p.use==='investimento'&&pode(id,'contract.add'))opts.push({label:'Novo contrato',icon:'contract',act:()=>ctModal(null,id)});
     if(pode(id,'tx.add'))opts.push({label:'Registar despesa',icon:'dn',act:()=>txModal(null,'expense',id)});
     /* pagar crédito abate capital à hipoteca, que vive na ficha do imóvel: pede também «Editar a ficha» (motivoCredito) */
@@ -718,12 +718,11 @@ function lpMenu(v){
     return lpShow(p.name,opts);}
   if(k==='tx'){const t=db.transactions.find(x=>x.id===id);if(!t)return;
     const ok=podeEditar(t.propertyId,'tx.add',t);
-    return lpShow(t.label,[{label:'Ver movimento',icon:'swap',act:()=>txView(id)}]
-      .concat(ok?[{label:'Editar movimento',icon:'pen',act:()=>txModal(id)},{label:'Apagar movimento',icon:'trash',act:()=>delTx(id)}]:[]));}
+    return lpShow(t.label,ok?[{label:'Editar movimento',icon:'pen',act:()=>txModal(id)},
+      {label:'Apagar movimento',icon:'trash',act:()=>delTx(id)}]:[]);}
   if(k==='ct'){const c=contract(id);if(!c)return;
     const ok=podeEditar(c.propertyId,'contract.add',c);
-    const opts=[{label:'Ver contrato',icon:'contract',act:()=>ctView(id)}];
-    if(ok)opts.push({label:'Editar contrato',icon:'pen',act:()=>ctModal(id)});
+    const opts=ok?[{label:'Editar contrato',icon:'pen',act:()=>ctModal(id)}]:[];
     if(isActive(c)&&pode(c.propertyId,'tx.add'))opts.push({label:'Registar renda',icon:'up',act:()=>txModal(null,'income',c.propertyId,null,id)});
     opts.push({label:'Gerar contrato em PDF',icon:'pen',act:()=>generateContractPdf(id)});
     if(ok)opts.push(isActive(c)?{label:'Terminar contrato',icon:'x',act:()=>endContract(id)}:{label:'Reativar contrato',icon:'check',act:()=>reactivateContract(id)},
@@ -731,8 +730,15 @@ function lpMenu(v){
     return lpShow(ctName(c),opts);}
   if(k==='per'){const kind=a[1],pid=a[2],list=kind==='owner'?db.owners:db.tenants,pp=list.find(x=>x.id===pid);if(!pp)return;
     const ok=kind==='owner'||podeEditarInquilino(pp);
-    return lpShow(pp.name,[{label:'Ver ficha',icon:'users',act:()=>personView(kind,pid)}]
-      .concat(ok?[{label:'Editar ficha',icon:'pen',act:()=>personModal(kind,pid)},{label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)}]:[]));}
+    return lpShow(pp.name,ok?[{label:'Editar ficha',icon:'pen',act:()=>personModal(kind,pid)},
+      {label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)}]:[]);}
+  /* Os cartões de visita têm data-lp desde sempre, e o toque longo não fazia
+     nada: vibrava, enchia a barra da espera e acabava em silêncio, porque
+     este ramo não existia. */
+  if(k==='vis'){const v=(db.visits||[]).find(x=>x.id===id);if(!v)return;
+    const opts=podeEditar(v.propertyId,'visit.add',v)?[{label:'Editar visita',icon:'pen',act:()=>visitModal(id)}]:[];
+    visOpcoes(v).forEach(it=>opts.push({label:it.label,icon:it.icon,act:new Function(it.act)}));
+    return lpShow(v.nomes||'Visita',opts);}
   if(k==='rec'){const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
     /* com rec.add confirmo e silencio qualquer planeado (o servidor só lhe funde next, until e muted);
        editar os campos e apagar é só o que eu criei — o alheio que termina ao confirmar apaga-se
@@ -740,12 +746,12 @@ function lpMenu(v){
     const hid=(r.tx||{}).propertyId,conf=podeEditar(hid,'rec.add',r,'confirmar'),edita=podeEditar(hid,'rec.add',r),opts=[];
     if(r.next&&r.next<=today()&&!recusaConfirmar(r))opts.push({label:'Confirmar',icon:'check',act:()=>quickConfirmRec(id)});
     if(conf)opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)});
-    if(edita)opts.push({label:'Editar',icon:'swap',act:()=>editRec(id)},{label:'Apagar',icon:'trash',act:()=>delRec(id)});
+    if(edita)opts.push({label:'Editar',icon:'pen',act:()=>editRec(id)},{label:'Apagar',icon:'trash',act:()=>delRec(id)});
     return lpShow(r.name,opts);}
   if(k==='tpl'){const x=(db.templates||[]).find(y=>y.id===id);if(!x)return;
-    return lpShow(x.name,[{label:'Usar modelo',icon:'plus',act:()=>newFromTemplate(id)},{label:'Editar',icon:'file',act:()=>editTpl(id)},{label:'Apagar',icon:'trash',act:()=>delTpl(id)}]);}
+    return lpShow(x.name,[{label:'Usar modelo',icon:'plus',act:()=>newFromTemplate(id)},{label:'Editar',icon:'pen',act:()=>editTpl(id)},{label:'Apagar',icon:'trash',act:()=>delTpl(id)}]);}
   if(k==='mort'){const pid=a[1],lid=a[2],p=prop(pid),l=findLoan(p,lid);if(!l)return;
-    const opts=pode(pid,'house.edit')?[{label:'Editar hipoteca',icon:'bank',act:()=>mortModal(pid,lid)}]:[];
+    const opts=pode(pid,'house.edit')?[{label:'Editar hipoteca',icon:'pen',act:()=>mortModal(pid,lid)}]:[];
     if(Number(l.outstanding)>0&&!motivoCredito(pid))opts.push({label:'Pagamento de crédito',icon:'bank',act:()=>txModal(null,'loan',pid,null,null,{loanId:lid})},{label:'Amortização',icon:'trend',act:()=>amortModal(pid,lid)});
     if(pode(pid,'house.edit'))opts.push({label:'Apagar hipoteca',icon:'trash',act:()=>delMortFrom(pid,lid)});
     return lpShow(loanName(l),opts);}
