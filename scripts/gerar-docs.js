@@ -49,7 +49,7 @@ const MAPA = [
   { id: 'notif', titulo: 'Notificações e sino',
     ficheiros: ['web/app/notificacoes.js'] },
   { id: 'vistas', titulo: 'Métricas, gráficos e filtros',
-    ficheiros: ['web/app/metricas.js', 'web/app/graficos.js', 'web/app/vistas.js',
+    ficheiros: ['web/app/metricas.js', 'web/app/graficos.js', 'web/app/continuidade.js', 'web/app/vistas.js',
       'web/cloud/painel.js', 'web/cloud/filtros.js'] },
   { id: 'ui', titulo: 'Componentes e navegação',
     ficheiros: ['web/app/componentes.js', 'web/app/navegacao.js', 'web/app/auxiliares.js',
