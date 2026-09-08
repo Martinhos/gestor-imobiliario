@@ -1259,7 +1259,7 @@ function txQuem(t){
 function txLinhaHtml(t,mo){
   const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null;
   const x=txLinhaExtra(t,mo)||{};
-  return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} data-toca="camada" onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
+  return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} data-toca="camada" onclick="${x.onclick||`txView('${jsq(t.id)}')`}"><div class="row-between">
     ${x.caixa||''}<div style="min-width:0"><div class="title" style="font-size:14.5px">${esc(t.label)}</div>
       <div class="small">${esc(t.date)} \u00b7 ${k.short}${t.category?' \u00b7 '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' \u00b7 '+esc(propName(t.propertyId)):''}${t.creditor?' \u00b7 '+esc(t.creditor):''}</div>
       ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}

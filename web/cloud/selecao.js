@@ -226,7 +226,8 @@ CW.txOpcoes = function (id) {
   var t = (db.transactions || []).find(function (x) { return x.id === id; });
   if (!t) return;
   lpShow(t.label, [
-    { label: 'Editar movimento', icon: 'swap', act: function () { txModal(id); } },
+    { label: 'Ver movimento', icon: 'swap', act: function () { txView(id); } },
+    { label: 'Editar movimento', icon: 'pen', act: function () { txModal(id); } },
     { label: 'Selecionar vários', icon: 'check', act: function () { CW.selEntrar(id); } },
     { label: 'Apagar movimento', icon: 'trash', act: function () { delTx(id); } },
   ]);

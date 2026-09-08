@@ -718,7 +718,8 @@ function lpMenu(v){
     return lpShow(p.name,opts);}
   if(k==='tx'){const t=db.transactions.find(x=>x.id===id);if(!t)return;
     const ok=podeEditar(t.propertyId,'tx.add',t);
-    return lpShow(t.label,[{label:ok?'Editar movimento':'Ver movimento',icon:'swap',act:()=>txModal(id)}].concat(ok?[{label:'Apagar movimento',icon:'trash',act:()=>delTx(id)}]:[]));}
+    return lpShow(t.label,[{label:'Ver movimento',icon:'swap',act:()=>txView(id)}]
+      .concat(ok?[{label:'Editar movimento',icon:'pen',act:()=>txModal(id)},{label:'Apagar movimento',icon:'trash',act:()=>delTx(id)}]:[]));}
   if(k==='ct'){const c=contract(id);if(!c)return;
     const ok=podeEditar(c.propertyId,'contract.add',c);
     const opts=[{label:'Ver contrato',icon:'contract',act:()=>ctView(id)}];
