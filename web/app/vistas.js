@@ -86,6 +86,136 @@ function pintarBotaoFiltros(){
   hb.innerHTML=ic('filter',16)+(hdrFiltN()?'<span class="dot"></span>':'');
   hb.classList.toggle('primary',isAna?!!anaOpen[tab]:(LFK[tab]?!!lf(LFK[tab])._open:false));
 }
+/* ================= LISTAS VIVAS =================
+   Uma lista que se acerta em vez de se refazer.
+
+   O motor com chave (lista.js) chegou com os movimentos e ficou só neles: as
+   outras listas eram deitadas fora e refeitas por inteiro a cada repintura —
+   a cada tecla da pesquisa, a cada filtro, a cada sincronização de fundo. É
+   também por isso que não deslizam entre estados: não há nós para animar,
+   porque são todos novos.
+
+   Escreve-se como quem escreve HTML; o que sai é a moldura vazia, e os itens
+   ficam registados para o pintarListasVivas os reconciliar depois de o ecrã
+   estar posto — que é quando o contentor existe mesmo. */
+let _listasVivas=[];
+/* Uma lista com chave, para a vista escrever no meio do seu HTML.
+
+   A chave de cada item tem de ser ÚNICA e ESTÁVEL: é o id do registo, e não a
+   posição. E o html do item não pode trazer na assinatura nada que mude sem o
+   registo ter mudado — um total, uma contagem, o estado de um filtro —, senão
+   o motor refaz tudo à mesma e não serviu de nada. Foi a lição do saldo do
+   mês nos movimentos, que saiu da assinatura do bloco para um span preenchido
+   depois de reconciliar.
+   Recebe: id — nome único desta lista no ecrã; itens — [{chave, html}]; cls
+   (opcional) — classes a juntar ao contentor; estilo (opcional) — style.
+   Devolve: o HTML do contentor vazio, pronto a colar. */
+function listaViva(id,itens,cls,estilo){
+  itens=(itens||[]).filter(x=>x&&x.chave);
+  _listasVivas.push({id:id,itens:itens});
+  /* nasce CHEIA: uma vista tem de devolver o ecrã inteiro, e quem a lê — um
+     teste, o indexOf do fab, o próximo render — tem de lá encontrar tudo */
+  const dentro=itens.map(it=>comChave(it.html,it.chave)).join('');
+  return `<div class="list${cls?' '+cls:''}" data-listaviva="${esc(id)}"${estilo?` style="${estilo}"`:''}>${dentro}</div>`;
+}
+/* Põe a chave no elemento de topo de um pedaço de HTML, sem passar pelo DOM.
+
+   O pecaDe (lista.js) faz o mesmo com um elemento já construído; aqui é ainda
+   texto, e construir um nó por item só para lhe pôr um atributo custava uma
+   árvore inteira a cada pintura.
+   Recebe: html — o HTML do item; chave — a chave a marcar.
+   Devolve: o mesmo HTML com data-chave no primeiro elemento. */
+function comChave(html,chave){
+  return String(html).replace(/^(\s*<[a-zA-Z][\w-]*)/,`$1 data-chave="${esc(chave)}"`);
+}
+/* Enche as listas vivas que o ecrã acabou de escrever.
+
+   Corre depois do innerHTML, como o pintarListaTx: antes disso o contentor
+   ainda não existe. Esvazia o registo no fim, para uma vista construída e não
+   usada (um teste que chama vProperties() à mão) não deixar lixo para a
+   pintura seguinte.
+   Devolve: nada — reconcilia cada contentor com os seus itens. */
+function pintarListasVivas(){
+  const raiz=view();
+  if(raiz)_listasVivas.forEach(function(l){
+    const el=raiz.querySelector('[data-listaviva="'+String(l.id).replace(/"/g,'')+'"]');
+    if(!el)return;
+    /* contentor acabado de nascer: os itens já vieram no HTML, e só falta
+       dizer ao motor o que lá está. Um que já tem cache veio da via parcial,
+       e esse compara-se peça a peça. */
+    if(el[CHAVE_CACHE])reconciliar(el,l.itens);else semear(el,l.itens);
+  });
+  _listasVivas=[];
+}
+/* Esta repintura só tira e reordena, ou também faz nascer?
+
+   A via parcial só é segura quando nada nasce: as decorações da nuvem — o
+   selo de partilhado, o bloco «N por confirmar», as caixas de marcar — são
+   todas embrulhos do render e funcões locais dos módulos, e dali não há como
+   as chamar. Um nó mantido fica com as suas; um nó criado nascia sem elas e
+   assim ficava até à pintura inteira seguinte.
+   Recebe: alvo — o contentor vivo; itens — [{chave, html}].
+   Devolve: true se tudo o que se pede já está lá, igual. */
+function soTiraOuReordena(alvo,itens){
+  if(!alvo)return false;
+  const cache=alvo[CHAVE_CACHE];
+  if(!cache)return false;
+  return (itens||[]).every(function(it){return it&&it.chave&&cache[it.chave]===it.html});
+}
+/* Repinta as listas do ecrã sem refazer o ecrã.
+
+   É aqui que o motor com chave paga. A pesquisa e os filtros chamavam o
+   render, e o render deita fora tudo e volta a construir: com 500 movimentos
+   media 48ms e 6110 nós recriados a cada tecla. A via parcial troca a moldura
+   — que é barata — e deixa as listas serem comparadas peça a peça.
+
+   Anda pelos filhos do ecrã e pelos do molde ao mesmo tempo: onde os dois são
+   a mesma lista viva, reconcilia; onde não são, troca o nó. Se as duas
+   árvores não baterem certo, não inventa — devolve false e quem chamou faz
+   um render normal.
+   Devolve: true se repintou por esta via; false se não deu. */
+function refrescarListasVivas(){
+  const v=view();if(!v)return false;
+  const fn=({dashboard:vDashboard,visits:vVisits,calendar:vCalendar,properties:vProperties,contracts:vContracts,
+    tenants:vTenants,owners:vOwners,colaboradores:vColabTab,transactions:vTransactions,recurring:vRecurring,
+    credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab];
+  if(!fn)return false;
+  _listasVivas=[];
+  let html;try{html=fn()}catch(e){_listasVivas=[];return false}
+  if(!_listasVivas.length){_listasVivas=[];return false}
+  /* o molde tem de ficar igual ao que o render produziria, senão as duas
+     árvores não batem certo e cai-se fora por nada — foi o que o fabpad fez */
+  if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
+  const registo={};_listasVivas.forEach(l=>{registo[l.id]=l.itens});
+  _listasVivas=[];
+  const molde=document.createElement('div');molde.innerHTML=html;
+  const id=e=>(e.getAttribute&&e.getAttribute('data-listaviva'))||'';
+  /* As listas VIVAS ficam; a moldura à volta é refeita. Não se compara filho
+     a filho pela posição: a moldura muda de forma sozinha — a linha dos «N
+     resultados» nasce quando um filtro fica ativo —, e uma comparação por
+     posição desistia exatamente no caso mais comum. */
+  const vivas={};
+  [].slice.call(v.querySelectorAll('[data-listaviva]')).forEach(function(e){vivas[id(e)]=e});
+  const querem=[].slice.call(molde.querySelectorAll('[data-listaviva]')).map(id);
+  if(!querem.length||querem.some(k=>!vivas[k])){return false}
+  /* se alguma lista precisa de fazer nascer um cartão, não é por aqui */
+  if(querem.some(k=>!soTiraOuReordena(vivas[k],registo[k]||[])))return false;
+  const contas={mantidas:0,refeitas:0,criadas:0,movidas:0,removidas:0};
+  querem.forEach(function(k){
+    const c=reconciliar(vivas[k],registo[k]||[]);
+    Object.keys(contas).forEach(x=>{contas[x]+=c[x]||0});
+    /* o contentor vivo toma o lugar do novo dentro do molde, e a árvore
+       inteira do molde entra de uma vez — as listas viajam com os seus nós */
+    const novo=molde.querySelector('[data-listaviva="'+k.replace(/"/g,'')+'"]');
+    if(novo&&novo.parentNode)novo.parentNode.replaceChild(vivas[k],novo);
+  });
+  v.replaceChildren.apply(v,[].slice.call(molde.children));
+  tornarFocavel(v);
+  pintarBotaoFiltros();
+  _ultimaRepintura=contas;         // para se poder medir o que foi reaproveitado
+  return true;
+}
+let _ultimaRepintura=null;
 /* Redesenha a página inteira: título e subtítulo, botão de filtros do
    cabeçalho, e o HTML da vista do separador atual (vDashboard, vProperties…).
    Substitui o innerHTML de #view, por isso o estado do DOM anterior perde-se;
@@ -104,6 +234,7 @@ function render(){
   document.getElementById('pageSub').textContent=meta.sub;
   if(typeof notifSino==='function')notifSino();
   pintarBotaoFiltros();
+  _listasVivas=[];                 // o que sobrou de uma vista construída e não usada não conta
   let html=({dashboard:vDashboard,visits:vVisits,calendar:vCalendar,properties:vProperties,contracts:vContracts,tenants:vTenants,owners:vOwners,
     colaboradores:vColabTab,transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
@@ -118,6 +249,7 @@ function render(){
      traz a moldura e o #txLista vazio, e quem o enche e o pintarListaTx, que
      e o mesmo que depois o acerta linha a linha sem passar por aqui. */
   if(tab==='transactions')pintarListaTx();
+  pintarListasVivas();             // e as outras listas, pela mesma via
   /* A visão geral era o único ecrã sem criação rápida: registar uma renda
      avulsa custava quatro toques de viagem. Entra aqui, depois do painel
      rearranjar os cartões, para não virar um cartão arrastável. */
@@ -661,7 +793,7 @@ function vProperties(){
     +fab([{label:'Adicionar imóvel',act:'propModal()'}]);
   list=lfSort(K,list,{nome:p=>p.name,valor:p=>p.value,renda:p=>rentOf(p),divida:p=>debtOf(p),yield:p=>{const r=rentOf(p);return r&&p.value?r*12/p.value:0}});
   if(!list.length)return head+`<div class="empty"><b>${lfCount(K)?'Nada neste filtro':'Sem imóveis'}</b>${lfCount(K)?'':(db.properties.length?'Nenhum imóvel deste proprietário.':'Adiciona o primeiro para começares a acompanhar o investimento.')}</div>`;
-  return head+`<div class="list">${list.map(p=>{
+  return head+listaViva('imoveis',list.map(p=>({chave:'prop:'+p.id,html:(p=>{
     const st=propStatus(p),ls=liveLoans(p),ac=activeContracts(p.id),rent=rentOf(p);
     /* um imóvel já prometido tem de o dizer: sem isto o cartão mostra «Vago»,
        sem renda e sem inquilino, e quem olha para a lista pode anunciá-lo ou
@@ -692,7 +824,7 @@ function vProperties(){
       ${(ac.length||futuros.length)&&vCt?`<div class="small" style="margin-top:10px">${ac.concat(futuros).map(c2=>`${c2.roomId?esc(roomName(p,c2.roomId))+': ':''}${esc(ctNames(c2))} · ${euro(c2.rent)}${ctEstado(c2)==='futuro'&&c2.start?' · a partir de '+esc(c2.start):''}`).join('<br>')}</div>`:''}
       ${ls.length&&vLoan?`<div class="small" style="margin-top:9px">${ls.map(l=>`${esc(loanName(l))} · ${RATE[l.type]} · ${euro2(loanCalc(l).total)}/mês${(l.files||[]).length?' · '+l.files.length+' doc.':''}`).join('<br>')}
         ${ls.length>1?`<br><b>Total ${euro2(payOf(p))}/mês</b>`:''}</div>`:''}
-      </div>`}).join('')}</div>`;
+      </div>`})(p)})));
 }
 
 let ctGroupF='';
@@ -803,7 +935,7 @@ function vTenants(){
     +((!souSoColaborador()||casasComo('tenant.add').length)?fab([{label:'Adicionar inquilino',act:"personModal('tenant')"}]):'');
   if(!db.tenants.length)return head+`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.</div>`;
   if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
-  return head+`<div class="list">${list.map(t=>personCard(t,'tenant')).join('')}</div>`;
+  return head+listaViva('inquilinos',list.map(t=>({chave:'ten:'+t.id,html:personCard(t,'tenant')})));
 }
 /* Lista de proprietários, filtrável por imóvel, com/sem imóveis e pesquisa;
    ordenação por nome ou nº de imóveis.
@@ -824,7 +956,7 @@ function vOwners(){
     +fab([{label:'Adicionar proprietário',act:"personModal('owner')"}]);
   if(!db.owners.length)return head+`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.</div>`;
   if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
-  return head+`<div class="list">${list.map(o=>personCard(o,'owner')).join('')}</div>`;
+  return head+listaViva('proprietarios',list.map(o=>({chave:'own:'+o.id,html:personCard(o,'owner')})));
 }
 
 // nº de filtros ativos nos movimentos (a pesquisa não conta: soma-se à parte no cabeçalho)
@@ -1065,7 +1197,9 @@ let _lqT=null;
    Devolve: nada — agenda o redesenho da vista. */
 function lfSearch(k,v){
   clearTimeout(_lqT);
-  _lqT=setTimeout(()=>{lf(k).q=v;render();
+  _lqT=setTimeout(()=>{lf(k).q=v;
+    /* a via parcial primeiro: escrever na pesquisa não tem de refazer o ecrã */
+    if(!refrescarListasVivas())render();
     const i=document.getElementById('lq_'+k);
     if(i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}}},280);
 }
