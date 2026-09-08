@@ -97,7 +97,7 @@ function secHtml(sec, chave) {
   var aberta = novAbertas[chave] !== false;   // por omissão, abertas
   return '<div class="card" style="padding:0;overflow:hidden">' +
     '<div class="row-between tap" style="align-items:center;padding:13px 15px;cursor:pointer" ' +
-      'onclick="CW.novToggle(\'' + chave + '\')">' +
+      'data-toca="vista" onclick="CW.novToggle(\'' + chave + '\')">' +
       '<b style="min-width:0">' + esc(sec.titulo) + '</b>' +
       '<span style="flex:0 0 auto;display:inline-flex;color:var(--muted);' +
         'transform:rotate(' + (aberta ? '90' : '-90') + 'deg)">' +
@@ -155,7 +155,7 @@ CW.verNovidades = function (avisos, aoFechar) {
   CW._novAvisos = avisos;
   novAbertas = {};
   openModal('O que há de novo', novHtml(avisos),
-    '<button class="btn primary" onclick="CW.novFechar()">Continuar</button>');
+    '<button class="btn primary" data-toca="camada" onclick="CW.novFechar()">Continuar</button>');
   CW._novFecho = aoFechar;
 };
 
@@ -199,7 +199,7 @@ function gateAtualizar(minima) {
       '<div class="hint">A versão que tens (' + VERSAO + ') deixou de ser aceite; a mais antiga que serve é a ' +
       minima + '. Atualizar demora um instante e não perdes nada — os teus dados estão na tua conta.</div>' +
       '<div class="toolbar" style="margin:15px 0 0">' +
-      '<button class="btn primary" onclick="CW.atualizarAgora()">Atualizar agora</button></div>') +
+      '<button class="btn primary" data-toca="ecra" onclick="CW.atualizarAgora()">Atualizar agora</button></div>') +
     '</div>';
   document.body.appendChild(el);
 }
@@ -269,8 +269,8 @@ function bannerAtualizar(v) {
   el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + var(--inset-bottom));z-index:59;' +
     'display:flex;align-items:center;gap:11px;padding:11px 13px;box-shadow:var(--shadow)';
   el.innerHTML = '<span class="small" style="flex:1;min-width:0">Está disponível a versão ' + v + '.</span>' +
-    '<button class="btn sm primary" style="flex:0 0 auto" onclick="CW.atualizarAgora()">Atualizar</button>' +
-    '<button class="btn sm" style="flex:0 0 auto" onclick="this.parentNode.remove()">Depois</button>';
+    '<button class="btn sm primary" style="flex:0 0 auto" data-toca="ecra" onclick="CW.atualizarAgora()">Atualizar</button>' +
+    '<button class="btn sm" style="flex:0 0 auto" data-toca="vista" onclick="this.parentNode.remove()">Depois</button>';
   document.body.appendChild(el);
 }
 

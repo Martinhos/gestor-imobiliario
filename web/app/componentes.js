@@ -155,7 +155,7 @@ function selPick(e,id,i){
    apaga alguma coisa.
    Devolve: string de HTML do botão ⋯ com o menu, pronta a inserir com innerHTML. */
 function menu(id,items){
-  return `<span class="menuwrap"><button type="button" class="iconbtn" data-toca="camada" onclick="menuOpen(event,'${id}')" aria-label="Mais">${ic('dots',20)}</button>
+  return `<span class="menuwrap"><button type="button" class="iconbtn opcoes" data-toca="camada" onclick="menuOpen(event,'${id}')" aria-label="Opções">${ic('dots',18)}</button>
     <div class="menupop" id="menu_${id}">${items.map(it=>
       `<button type="button" class="${it.danger?'danger':''}"${it.toca?` data-toca="${it.toca}"`:''}${it.risco==='destroi'?' data-risco="destroi"':''} onclick="closePops();${it.act}">${ic(it.icon||'dots',17)} ${esc(it.label)}</button>`).join('')}</div></span>`;
 }
@@ -424,6 +424,8 @@ function openModal(title,body,foot,menuHtml){
   el.addEventListener('input',e=>{if(e.isTrusted)L.tocado=true},true);
   el.addEventListener('change',e=>{if(e.isTrusted)L.tocado=true},true);
   focarModal(el);                  // o foco entra na janela, não fica atrás do véu
+  avisoAcimaDoRodape();            // um aviso ainda no ecrã sobe, para não tapar o rodapé
+  avisoQuandoAssentar();           // e outra vez quando a folha parar de deslizar
   return L;
 }
 // leva o foco para dentro da janela, para o teclado e os leitores de ecrã não ficarem atrás do véu
@@ -473,6 +475,8 @@ function closeModal(origem){
   }
   const M=modalStack.pop();lockPage();if(!M)return;
   M.el.remove();
+  avisoAcimaDoRodape();            // sem rodapé por baixo, o aviso volta ao sítio
+  avisoQuandoAssentar();
   const top=modalTop();
   if(top){promote(top.el);focarModal(top.el)}
   else{try{M.gatilho&&M.gatilho.focus&&M.gatilho.focus()}catch(e){}}

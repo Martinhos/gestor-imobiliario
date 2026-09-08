@@ -59,6 +59,14 @@ const CENAS = [
     fazer: `CW.guiaAbrir('perfil'); propModal();`,
   },
   {
+    /* Um aviso VISIVEL com uma janela aberta. O aviso mora a 22px do fundo,
+       que e onde o rodape do modal esta, e caia em cima de «Guardar» — os
+       botoes que se esta precisamente a pedir para carregar. A ordem importa,
+       e e esta a que faltava: a janela abre com um aviso ja no ecra. */
+    nome: 'aviso-sobre-janela',
+    fazer: `toast('Guardado.', {rotulo:'Anular', fn(){}, ms:60000}); propModal();`,
+  },
+  {
     nome: 'primeiros-passos',
     fazer: `localStorage.removeItem('gi_passos_fora'); go('dashboard'); render();`,
   },

@@ -629,8 +629,56 @@ function toast(m,op){const t=document.getElementById('toast');
   t.textContent=m;
   if(op&&op.rotulo&&op.fn){const b=document.createElement('button');b.type='button';b.className='toastbtn';
     b.textContent=op.rotulo;b.onclick=()=>{clearTimeout(t._h);t.classList.remove('on');op.fn()};t.appendChild(b)}
+  avisoAcimaDoRodape();
   t.classList.add('on');clearTimeout(t._h);
   t._h=setTimeout(()=>t.classList.remove('on'),(op&&op.ms)||2800)}
+
+/* Põe o aviso acima do rodapé da janela que estiver aberta.
+
+   O aviso mora a 22px do fundo, que é exatamente onde o rodapé de um modal
+   está: caía em cima de «Guardar» e «Cancelar» — os botões que se está
+   precisamente a pedir à pessoa para carregar.
+
+   Corre nas duas ordens, e a segunda foi a que faltou à primeira tentativa:
+   o aviso a aparecer com uma janela já aberta, e a janela a abrir com um
+   aviso ainda no ecrã — o aviso fica quase três segundos, e nesses segundos
+   abre-se uma janela por cima. Por isso é chamada também do openModal e do
+   closeModal, e não só daqui.
+
+   A altura é medida e não adivinhada (há rodapés de duas linhas), e é a do
+   rodapé mais alto de todas as janelas abertas: com janelas empilhadas, a de
+   cima é a última.
+   Devolve: nada — escreve a variável --acima no aviso. */
+function avisoAcimaDoRodape(){
+  const t=document.getElementById('toast');
+  if(!t||!t.style||!t.style.setProperty)return;
+  /* Mede-se até ao TOPO do rodapé, e não a altura dele. No telemóvel a folha
+     encosta ao fundo e dá no mesmo; no computador a janela está ao meio do
+     ecrã, e subir só a altura do rodapé deixava o aviso a tapá-lo à mesma —
+     foi o que a cena nova apanhou, com 21px de sobreposição. */
+  const H=window.innerHeight||0;
+  let acima=0;
+  [].slice.call(document.querySelectorAll('.modal.open .foot')).forEach(function(pes){
+    const r=pes.getBoundingClientRect();
+    if(r.height)acima=Math.max(acima,H-r.top);
+  });
+  t.style.setProperty('--acima',acima>0?Math.ceil(acima+12)+'px':'0px');
+}
+/* Mede outra vez quando a folha tiver assentado.
+
+   Uma janela não está no sítio no instante em que abre: no telemóvel entra a
+   deslizar de baixo, e medida aí o rodapé ainda está fora do ecrã — o aviso
+   concluía que não havia rodapé nenhum por cima de quem subir.
+
+   Cheguei a medir sem transform (offsetTop) para não esperar por nada, e
+   estava errado do outro lado: no computador a janela está centrada POR um
+   transform, e ignorá-lo punha o rodapé onde ele nunca esteve. O rect é a
+   única medida verdadeira nos dois sítios — só tem de ser lida depois de a
+   folha parar.
+   Devolve: nada — remede daqui a um pouco mais do que dura a entrada. */
+function avisoQuandoAssentar(){
+  setTimeout(avisoAcimaDoRodape,msDoToken('--medio',200)+120);
+}
 
 const KIND={income:{short:'Receita',sign:'+',color:'pos',flow:'in'},expense:{short:'Despesa',sign:'−',color:'neg',flow:'out'},
   loan:{short:'Pagamento de crédito',sign:'−',color:'amber',flow:'out'},owed:{short:'Dívida recebida',sign:'+',color:'amber',flow:'in'},

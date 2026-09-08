@@ -10,7 +10,8 @@ function vReports(){
     <div style="width:100%">${sel('repSel',repProp,[{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop'))),'onRepSel','vista')}</div></div>
     <label style="margin-top:10px;max-width:220px">Yield exigido (%)<input type="text" inputmode="decimal" value="${dec(db.settings.capTarget)}" onchange="capTargetSet(this.value)"></label>
     <div class="hint" style="margin-top:9px">A avaliação por rendimento capitaliza o resultado líquido anual ao yield exigido. No ano corrente, o resultado até hoje é anualizado (×12 sobre os meses decorridos).${ownerFilter&&!ownerIsGrp()?' Valores na quota-parte de <b>'+esc(ownerFilterName())+'</b>.':''}</div>`);
-  if(!list.length)return panel+`<div class="empty"><b>Sem imóveis para avaliar</b>Adiciona um imóvel primeiro.</div>`;
+  if(!list.length)return panel+`<div class="empty"><b>Sem imóveis para avaliar</b>A avaliação parte do que cada imóvel rende.
+    ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`;
   return panel+`<div class="toolbar">
     <button class="btn" onclick="shareReport()">Partilhar</button>
     <button class="btn" onclick="downloadCsv()">CSV</button></div>`

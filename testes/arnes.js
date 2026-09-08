@@ -23,7 +23,11 @@ export const MODULOS = [
 
 function elementoFalso() {
   const el = {
-    style: {}, dataset: {}, classList: {
+    /* o style guarda o que lhe escrevem, incluindo as variaveis de CSS: sem
+       setProperty, quem escreve uma (o aviso, que sobe acima do rodape do
+       modal) rebentava aqui e em lado nenhum no browser */
+    style: { setProperty(k, v) { this[k] = v; }, removeProperty(k) { delete this[k]; } },
+    dataset: {}, classList: {
       add() {}, remove() {}, toggle() {}, contains: () => false,
     },
     children: [], attributes: {},

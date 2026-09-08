@@ -21,7 +21,11 @@ function vCredits(){
     ${kpi('Em dívida',euro(tot),'amber',live.length+(live.length===1?' hipoteca ativa':' hipotecas ativas'))}
     ${kpi('Prestações',euro2(pay),'neg','por mês, no total')}
     ${kpi('Juros até ao fim',euro(sum(live.map(x=>{const a=amort(x.l);return a.totInt+a.totStamp}))),'neg','com imposto do selo')}</div>`;
-  if(!rows.length)return head+`<div class="empty"><b>Sem hipotecas</b>Uma hipoteca está sempre associada a um imóvel. Cria a primeira aqui ou na ficha do imóvel.</div>`;
+  /* sem imóveis, o botão do canto só dava um aviso a dizer que faltava um
+     imóvel: um caminho que acaba num aviso não é um caminho */
+  if(!rows.length)return head+`<div class="empty"><b>Sem hipotecas</b>${db.properties.length
+    ?'Uma hipoteca está sempre associada a um imóvel. Cria a primeira aqui ou na ficha do imóvel.'
+    :'Uma hipoteca está sempre associada a um imóvel, e ainda não há nenhum.'+saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`;
   if(!shown.length)return head+kpis+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   const mortCard=({p,l})=>{const live2=Number(l.outstanding)>0,c=live2?loanCalc(l):null;
     return `<div class="card tap" data-lp="mort:${esc(p.id)}:${esc(l.id)}" data-fk="mort:${esc(p.id)}:${esc(l.id)}" data-toca="camada" onclick="mortModal('${jsq(p.id)}','${jsq(l.id)}')">

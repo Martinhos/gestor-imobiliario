@@ -131,15 +131,26 @@ function dentroDaPagina() {
          precisamente aquilo que se pede à pessoa para carregar. */
       const avisa = /toast|tip/.test(el.className) || el.id === 'cwDoc' ||
         /^cw(Legal|Terms|Upd|Auth|Guia)/.test(el.id || '');
-      if (z > zModal && r.width > 0 && r.height > 0) {
+      /* Uma coisa invisivel e que nao recebe toques nao tapa nada. O aviso
+         esconde-se com opacidade zero e um empurrao de 80px para baixo — a
+         posicao de onde desliza quando aparece —, e era essa caixa, que
+         ninguem ve, que a regra media por cima do rodape. Oito cenas a
+         falhar, todas pelo mesmo engano. O caso a serio — um aviso VISIVEL
+         com uma janela aberta — tem cena propria (percorrer.js). */
+      const seVe = cs.opacity !== '0' && cs.visibility !== 'hidden' && cs.pointerEvents !== 'none';
+      if (z > zModal && r.width > 0 && r.height > 0 && seVe) {
         if (!avisa) {
           falhar('nada tapa um modal', (el.id || el.className || el.tagName) + ' está em z-index ' + z + ', acima de ' + zModal);
         } else {
           const pes = document.querySelector('.modal.open .foot');
           const pr = pes && pes.getBoundingClientRect();
           if (pr && pr.height && !(r.bottom < pr.top || r.top > pr.bottom || r.right < pr.left || r.left > pr.right)) {
+            /* com os numeros: sem eles, a falha nao diz se quem tapa esta
+               dois pixeis a mais ou cem, nem de que lado */
+            const cx = (a) => Math.round(a.top) + '-' + Math.round(a.bottom) +
+              ' x ' + Math.round(a.left) + '-' + Math.round(a.right);
             falhar('o que passa por cima não tapa os botões',
-              (el.id || el.className) + ' cobre o rodapé do modal');
+              (el.id || el.className) + ' em ' + cx(r) + ' cobre o rodapé em ' + cx(pr));
           }
         }
       }
@@ -360,6 +371,34 @@ function dentroDaPagina() {
       semFamilia.length + ' sem familia, e o tecto e ' + TETO_SEM_FAMILIA + ' - ex.: ' +
       [...new Set(semFamilia.slice(0, 4).map((e) => e.tagName.toLowerCase() + '.' +
         (e.getAttribute('class') || '').split(' ')[0]))].join(', '));
+  }
+
+  /* A porta das opcoes de um registo e UMA, em toda a app. Eram tres moldes —
+     lpMenu nas listas, CW.txOpcoes nos movimentos, menuOpen no menu de acoes —
+     e davam tres desenhos, tres tamanhos e tres nomes: 44x44 «Opcoes» nos
+     movimentos, 37x40 SEM NOME nas listas, 44x44 «Mais» nas visitas. O que
+     nao tinha nome era o mais usado, e um leitor de ecra anunciava «botao» e
+     mais nada; o que tinha 37px estava abaixo do minimo de alvo.
+
+     A regra olha para o que a porta FAZ (chama um destes tres) e exige que
+     seja sempre a mesma coisa. Sem isto, a proxima lista nasce com o quarto
+     desenho e ninguem da por ela ate alguem tentar usar a app sem saber que o
+     toque longo existe. */
+  const abrePorta = /(^|[^\w.])(lpMenu|menuOpen)\(|CW\.txOpcoes\(/;
+  const portas = pontos.filter((e) => abrePorta.test(e.getAttribute('onclick') || ''));
+  const foraDoMolde = portas.filter((e) => {
+    const r = e.getBoundingClientRect();
+    return !e.classList.contains('opcoes') || e.getAttribute('aria-label') !== 'Op\u00e7\u00f5es' ||
+      r.width < 40 || r.height < 40;
+  });
+  medidas.portasDeOpcoes = portas.length;
+  if (foraDoMolde.length) {
+    const e = foraDoMolde[0], r = e.getBoundingClientRect();
+    falhar('a porta das opcoes e sempre a mesma',
+      foraDoMolde.length + ' de ' + portas.length + ' fora do molde - ex.: .' +
+      (e.getAttribute('class') || '(sem classe)').split(' ').join('.') + ' ' +
+      Math.round(r.width) + 'x' + Math.round(r.height) + ' nome=' +
+      (e.getAttribute('aria-label') || '(sem nome)'));
   }
 
   /* 7. Texto que sai da sua caixa — normalmente uma coluna estreita demais. */
