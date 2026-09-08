@@ -16,7 +16,7 @@ function sel(id,value,options,onchange){
   const cur=options.find(o=>!o.div&&String(o.v)===String(value))||options.find(o=>!o.div)||{v:'',label:'—'};
   return `<div class="sel" id="sel_${id}">
     <input type="hidden" id="${id}" value="${esc(value==null?'':value)}">
-    <button type="button" class="selbtn" onclick="selOpen(event,'${id}')"><span id="lab_${id}">${esc(cur.label)}</span>${ic('chevD',16)}</button>
+    <button type="button" class="selbtn" data-toca="camada" onclick="selOpen(event,'${id}')"><span id="lab_${id}">${esc(cur.label)}</span>${ic('chevD',16)}</button>
     <div class="selpop" id="pop_${id}">
       ${options.map((o,i)=>o.div?'<div class="sdiv"></div>':`<button type="button" class="selopt ${String(o.v)===String(value)?'on':''}" onclick="selPick(event,'${id}',${i})">
         <span>${esc(o.label)}</span>${String(o.v)===String(value)?ic('check',16):''}</button>`).join('')}
@@ -130,14 +130,25 @@ function selPick(e,id,i){
   if(cfg.onchange&&window[cfg.onchange])window[cfg.onchange]();
 }
 /* menu de ações (⋯)
+
+   A família de cada opção vem de QUEM CHAMA, e não daqui: uma fábrica que
+   inventasse a família mentiria, porque o mesmo menu serve opções que abrem
+   uma janela, opções que gravam e opções que destroem. Era este o buraco que
+   deixava os pontos mais perigosos da app — apagar um imóvel, um contrato,
+   uma hipoteca, um cargo — sem maneira de se declararem.
+
+   E não se deriva do `danger`, que só quer dizer «pinta de vermelho»: o
+   «Recusar desta vez» é vermelho e não destrói nada.
    Recebe: id — sufixo único do menu (o pop fica em menu_<id>); items — lista de
-   {label,act,icon,danger}: act é o código inline do onclick, icon (opcional) o
-   nome do ícone e danger (opcional) pinta a opção de vermelho.
+   {label,act,icon,danger,toca,risco}: act é o código inline do onclick, icon
+   (opcional) o nome do ícone, danger (opcional) pinta a opção de vermelho,
+   toca é a família do ponto (docs/design.md) e risco='destroi' marca o que
+   apaga alguma coisa.
    Devolve: string de HTML do botão ⋯ com o menu, pronta a inserir com innerHTML. */
 function menu(id,items){
-  return `<span class="menuwrap"><button type="button" class="iconbtn" onclick="menuOpen(event,'${id}')" aria-label="Mais">${ic('dots',20)}</button>
+  return `<span class="menuwrap"><button type="button" class="iconbtn" data-toca="camada" onclick="menuOpen(event,'${id}')" aria-label="Mais">${ic('dots',20)}</button>
     <div class="menupop" id="menu_${id}">${items.map(it=>
-      `<button type="button" class="${it.danger?'danger':''}" onclick="closePops();${it.act}">${ic(it.icon||'dots',17)} ${esc(it.label)}</button>`).join('')}</div></span>`;
+      `<button type="button" class="${it.danger?'danger':''}"${it.toca?` data-toca="${it.toca}"`:''}${it.risco==='destroi'?' data-risco="destroi"':''} onclick="closePops();${it.act}">${ic(it.icon||'dots',17)} ${esc(it.label)}</button>`).join('')}</div></span>`;
 }
 // Abre/fecha o menu de ações (⋯) criado por menu(), com o mesmo ajuste de posição dos sel().
 // Recebe: e — o evento do clique (pode vir null); id — o id dado ao menu() (abre menu_<id>).
@@ -151,13 +162,15 @@ function menuOpen(e,id){
    Recebe: items — lista de {id,label} das etiquetas a mostrar; addLabel — o texto
    do botão de adicionar; addAct — o código inline do onclick desse botão;
    removeAct — o nome de uma função global, chamada com o id da etiqueta a remover;
-   cls (opcional) — classe CSS extra para cada etiqueta.
+   cls (opcional) — classe CSS extra para cada etiqueta; tocaAdd (opcional) — a
+   família do botão de acrescentar, porque nem sempre é a mesma: aqui mexe no
+   rascunho, no contrato abre um pickModal para escolher o inquilino.
    Devolve: string de HTML da caixa de etiquetas, pronta a inserir com innerHTML. */
-function tagField(items,addLabel,addAct,removeAct,cls){
+function tagField(items,addLabel,addAct,removeAct,cls,tocaAdd){
   return `<div class="tagbox">
     ${items.map(it=>`<span class="tag ${cls||''}">${esc(it.label)}
-      <button type="button" onclick="${removeAct}('${jsq(it.id)}')" aria-label="Remover">${ic('x',13)}</button></span>`).join('')}
-    <button type="button" class="tagadd" onclick="${addAct}">+ ${esc(addLabel)}</button></div>`;
+      <button type="button" data-toca="rascunho" onclick="${removeAct}('${jsq(it.id)}')" aria-label="Remover">${ic('x',13)}</button></span>`).join('')}
+    <button type="button" class="tagadd" data-toca="${tocaAdd||'rascunho'}" onclick="${addAct}">+ ${esc(addLabel)}</button></div>`;
 }
 /* secção que abre e fecha; o estado dura enquanto a janela estiver aberta */
 let foldState={};
@@ -171,7 +184,7 @@ let foldState={};
 function fold(id,title,body,o){
   o=o||{};const open=foldState[id]===undefined?!!o.open:foldState[id];
   return `<div class="sect fold ${open?'open':''}" id="fold_${id}">
-    <button type="button" class="fold-head" onclick="toggleFold('${id}')"><span class="ic">${ic(o.icon||'dots',17)}</span><b>${title}</b>
+    <button type="button" class="fold-head" data-toca="nada" onclick="toggleFold('${id}')"><span class="ic">${ic(o.icon||'dots',17)}</span><b>${title}</b>
       ${o.summary?`<span class="fsum">${o.summary}</span>`:''}<span class="chev">${ic('chevD',16)}</span></button>
     <div class="fold-body">${body}</div></div>`;
 }
@@ -310,9 +323,9 @@ Object.defineProperty(window,'onSave',{configurable:true,
 // Devolve: o elemento DOM da janela (div.modal.open), ainda por pendurar no documento.
 function modalLayer(){
   const m=document.createElement('div');m.className='modal open';
-  m.innerHTML=`<div class="bg" onclick="closeModal('fundo')"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
+  m.innerHTML=`<div class="bg" data-toca="camada" onclick="closeModal('fundo')"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
     <div class="head"><h2 id="modalTitle"></h2><div class="spacer"></div><span id="modalMenu"></span>
-      <button class="iconbtn" onclick="closeModal('x')" aria-label="Fechar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <button class="iconbtn" data-toca="camada" onclick="closeModal('x')" aria-label="Fechar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="body" id="modalBody"></div><div class="foot" id="modalFoot"></div></div>`;
   return m;
 }
@@ -352,7 +365,7 @@ function fillModal(el,title,body,foot,menuHtml){
   el.querySelector('.body').innerHTML=body;
   if(typeof tornarFocavel==='function')tornarFocavel(el.querySelector('.body'));
   el.querySelector('.head span').innerHTML=menuHtml||'';
-  el.querySelector('.foot').innerHTML=foot||`<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="onSave&&onSave()">Guardar</button>`;
+  el.querySelector('.foot').innerHTML=foot||`<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" onclick="onSave&&onSave()">Guardar</button>`;
 }
 /* o botão “voltar” do Android fecha primeiro o que estiver aberto (janela ou menu).
    Uma única sentinela no histórico enquanto houver camadas: voltar fecha a de cima

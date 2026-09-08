@@ -490,6 +490,57 @@ tornarFocavel e as marcas da seleção, CW.selPintar); e o caminho curto tem
 de acertar o que está fora do #view — o botão dos filtros
 (vistas.js:pintarBotaoFiltros).
 
+## As famílias dos pontos de interação
+A app tem 233 pontos em que alguém toca, escreve, arrasta ou chega pelo
+teclado. Quase todos os defeitos de interface desta fase foram erros de
+CATEGORIA — uma regra pensada para uma família aplicada a outra: o afundar
+de um botão posto nas formas de um gráfico (as barras saltavam ao toque), a
+chave do toque longo reaproveitada como chave de animação (a visão geral
+deslizava 606px sozinha), a fita de virar a página posta num gráfico que só
+devia redesenhar-se. Nenhum foi um erro de lógica.
+
+São dois eixos, e só um se declara.
+
+**O que o ponto toca** — declara-se num data-toca, porque não há como
+adivinhá-lo de fora:
+
+- nada — responde e acaba em si (uma dica, abrir uma dobra, copiar para a
+  área de transferência). Repintar aqui É o erro: apaga o estado que se
+  acabou de pôr.
+- vista — muda o que se vê e não escreve nada (filtrar, pesquisar, ordenar,
+  escolher o âmbito, redesenhar uma peça, virar a página). A posição de
+  leitura e o foco do teclado têm de sobreviver.
+- camada — abre uma janela por cima. O ecrã de baixo fica exatamente como
+  estava; um render() aqui é um defeito.
+- rascunho — muda o formulário em memória. Ritual obrigatório: colher antes
+  de repintar, senão o que a pessoa escreveu desaparece.
+- dados — escreve, na base ou no servidor. Recibo obrigatório, e a permissão
+  reverificada no momento de gravar e não só no de abrir.
+- modo — muda o significado de todos os outros pontos do ecrã (a seleção, a
+  edição do painel). Precisa de saída garantida por todos os caminhos.
+- ecra — leva a outro ecrã. É a única família a que a animação de chegada
+  pertence.
+
+**Como se alcança** — NÃO se declara: lê-se do DOM (testes/ui/invariantes.js).
+Um button ou um a é nativo; um div com role=button é um alvo promovido pelo
+vistas.js:tornarFocavel; o que está dentro de um svg é uma forma; o que só
+existe por data-lp é um gesto. Um atributo a mais seria uma segunda verdade
+a dessincronizar-se da primeira — foi exatamente isso que aconteceu quando o
+data-lp passou a valer também como chave de animação.
+
+Os contratos que se verificam no browser, a cada cena do percurso: uma forma
+de gráfico nunca escreve nem navega (é a família do «reage com o desenho, não
+com o afundar de um botão»); quem escreve tem de ter nome, porque um alvo mudo
+que grava não tem como ser explicado a ninguém; e quem destrói declara-o, com
+um data-risco, para o texto do aviso e a existência de Anular deixarem de ser
+escolhas de hábito.
+
+A cobertura é medida e só pode subir: o percurso conta os pontos sem família
+e falha se passarem do que estava. Uma taxonomia que só vive num documento
+apodrece — e temos a prova, porque o data-lp ERA a categoria «linha com toque
+longo», estava escrito, e foi reaproveitado na semana seguinte sem que nada
+travasse.
+
 ## Padrões de página
 O cabeçalho é o header.top (index.html:header.top): título e subtítulo
 vêm de TABS (navegacao.js:TABS; vistas.js:render). O sino das

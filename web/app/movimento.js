@@ -23,7 +23,7 @@ function txModal(id,kind,propId,_x,ctId,preset){
   prefill();
   /* «Ver movimento»: o que não posso alterar num imóvel onde colaboro abre só de leitura */
   const ok=!id||podeEditar(tForm.propertyId,'tx.add',db.transactions.find(x=>x.id===id));
-  const m=id&&ok?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,act:`delTx('${id}')`}]):'';
+  const m=id&&ok?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${id}')`}]):'';
   const nome=txTypeName(tForm.kind);
   openModal(id?(ok?'Editar '+nome:nome.charAt(0).toUpperCase()+nome.slice(1)):txNewWord(tForm.kind)+nome,txBody(),null,m);
   if(!ok){onSave=null;return modalSoLeitura('Movimento de um imóvel onde colaboras — só de leitura.')}
@@ -160,12 +160,12 @@ function txBody(){
   const catSum=[t.category,t.sub].filter(Boolean).join(' / ')+((t.tags||[]).length?(t.category?' · ':'')+t.tags.length+' etiqueta'+(t.tags.length===1?'':'s'):'');
   return `<div class="form">
     ${(t._tplId||t._tplNew)?`<label>Nome do modelo<input id="t_tplName" value="${esc(t._tplName||'')}" placeholder="Ex.: Renda mensal T2" autocomplete="off"></label>`:''}
-    ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" onclick="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
+    ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" data-toca="rascunho" onclick="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
     <label>Descrição <span class="req">*</span><input id="t_label" value="${esc(t.label)}" placeholder="${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
     <div class="row">
       <label>Montante (€) <span class="req">*</span><div style="display:flex;gap:7px;align-items:center">
         <input id="t_amount" type="text" inputmode="decimal" style="flex:1;min-width:0" value="${t.amount||''}" placeholder="900" oninput="tForm.amount=num(this.value);refreshLoanHint();refreshSplit();amtResetSync()">
-        <button type="button" class="btn sm primary" id="amt_reset" style="flex:0 0 auto;padding:9px 12px;display:${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':'none'}" title="Repor a prestação calculada" onclick="onAmtReset()">Repor</button></div></label>
+        <button type="button" class="btn sm primary" id="amt_reset" style="flex:0 0 auto;padding:9px 12px;display:${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':'none'}" title="Repor a prestação calculada" data-toca="rascunho" onclick="onAmtReset()">Repor</button></div></label>
       ${(t._recId||t._recNew)?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}"></label>`}</div>
     <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),(podeSemImovel()?[{v:'',label:'Todos os imóveis'}]:[]).concat(propOptsPara((t._recId||t._recNew)?'rec.add':'tx.add',t.propertyId)).concat(podeSemImovel()?gdiv(gOpts('prop')):[]),'onPropChange')}</label>
     ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)}))),'onCtChange')}</label>`:''}
@@ -371,8 +371,8 @@ function loanHint(){
   const amt=num(t.amount)||(amort?0:c.total);
   const seg=`<div style="margin-bottom:10px"><div class="flabel">Tipo de pagamento</div>
     <div class="seg c2">
-      <button type="button" class="opt ${!amort?'on':''}" onclick="setPayType('prestacao')"><span class="ic">${ic('bank',18)}</span><b>Prestação</b><small>juros, selo e capital</small></button>
-      <button type="button" class="opt ${amort?'on':''}" onclick="setPayType('amortizacao')"><span class="ic">${ic('trend',18)}</span><b>Amortização</b><small>capital e comissão</small></button></div></div>`;
+      <button type="button" class="opt ${!amort?'on':''}" data-toca="rascunho" onclick="setPayType('prestacao')"><span class="ic">${ic('bank',18)}</span><b>Prestação</b><small>juros, selo e capital</small></button>
+      <button type="button" class="opt ${amort?'on':''}" data-toca="rascunho" onclick="setPayType('amortizacao')"><span class="ic">${ic('trend',18)}</span><b>Amortização</b><small>capital e comissão</small></button></div></div>`;
   if(amort){
     /* amortização antecipada: sem juros nem selo — só capital e a comissão definida na hipoteca */
     const cap=r2(amt/(1+fr)),fee=r2(amt-cap);
@@ -391,7 +391,7 @@ function loanHint(){
   t.interest=int;t.stamp=st;t.principal=cap;t.fee=0;
   return seg+`<div class="card" style="background:var(--tint);padding:13px">
     <div class="row-between" style="align-items:center;margin-bottom:2px"><span class="small"><b>Distribuição do montante</b></span>
-      <button class="btn sm" id="lh_reset" style="flex:0 0 auto;padding:6px 9px;display:${t._splitTouched?'':'none'}" onclick="onLoanReset()" title="Repor a prestação calculada na hipoteca">${ic('clock',14)} Repor</button></div>
+      <button class="btn sm" id="lh_reset" style="flex:0 0 auto;padding:6px 9px;display:${t._splitTouched?'':'none'}" data-toca="rascunho" onclick="onLoanReset()" title="Repor a prestação calculada na hipoteca">${ic('clock',14)} Repor</button></div>
     <div class="stat" style="align-items:center"><span>Juros (€)</span>
       <input class="statin" id="t_int" type="text" inputmode="decimal" value="${dec(int.toFixed(2))}" oninput="onLoanSplit('int')"></div>
     <div class="stat" style="align-items:center"><span>Imposto do selo (${dec(db.settings.stampPct??4)}%)</span><b id="lh_stamp">${euro2(st)}</b></div>
@@ -576,7 +576,7 @@ function addTxTag(){
   const free=(db.settings.tags||[]).filter(g=>(tForm.tags||[]).indexOf(g)<0);
   pickModal('Escolher etiqueta',free.map(g=>({v:g,label:g})),
     g=>{tForm.tags.push(g.v);closeModal();repaintTx()},
-    `<button type="button" class="btn" style="width:100%;justify-content:center" onclick="newTagFromTx()">${ic('plus',15)} Criar etiqueta nova</button>
+    `<button type="button" class="btn" style="width:100%;justify-content:center" data-toca="camada" onclick="newTagFromTx()">${ic('plus',15)} Criar etiqueta nova</button>
      <div class="hint" style="margin-top:8px">Podes gerir a lista em Definições → Etiquetas.</div>`);
 }
 // Cria uma etiqueta nova a partir do modal do movimento: entra na lista global
@@ -690,7 +690,7 @@ function amortModal(pid,lid){
   }
   (lid===undefined?openModal:setModal)('Amortização · '+p.name,`<div class="form">
     ${ls.length>1?`<label>Ver${sel('amSel',amortLid,opts,'onAmortSel')}</label>`:''}
-    ${body}</div>`,`<button class="btn" onclick="closeModal()">Fechar</button>`);
+    ${body}</div>`,`<button class="btn" data-toca="camada" onclick="closeModal()">Fechar</button>`);
 }
 // Mudou a hipoteca no select do modal da amortização: reconstrói o conteúdo.
 // Devolve: nada — reconstrói o modal via amortModal.

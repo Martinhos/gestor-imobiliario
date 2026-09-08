@@ -18,7 +18,7 @@ function ctModal(id,pid){
   const ok=!!id&&podeEditar(cForm.propertyId,'contract.add',contract(id));
   const m=id?menu('ct',[{label:'Gerar contrato em PDF',icon:'pen',act:`generateContractPdf('${id}')`}].concat(ok?[
     isActive(cForm)?{label:'Terminar contrato',icon:'x',act:`endContract('${id}')`}:{label:'Reativar contrato',icon:'check',act:`reactivateContract('${id}')`},
-    {label:'Apagar contrato',icon:'trash',danger:true,act:`delContract('${id}')`}]:[])):'';
+    {label:'Apagar contrato',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delContract('${id}')`}]:[])):'';
   openModal(id?(ok?'Editar contrato':'Contrato'):'Novo contrato',ctBody(),null,m);
   const p=prop(cForm.propertyId);if(p)paintThumbs(p.photos);
   /* «Ver contrato»: um contrato de um imóvel onde colaboro que não posso alterar
@@ -61,7 +61,7 @@ function ctBody(){
     <label>Imóvel${sel('c_prop',c.propertyId,propOptsPara('contract.add',c.propertyId).filter(o=>{const x=prop(o.v);return x&&(x.use==='investimento'||x.id===c.propertyId)}),'onCtProp')}</label>
     ${rooms.length?`<label>Quarto${sel('c_room',c.roomId||'',[{v:'',label:'— sem quarto —'}].concat(rooms.map(r=>({v:r.id,label:r.name+(taken.indexOf(r.id)>-1?' (já arrendado)':'')}))))}</label>`
      :(p&&p.use==='investimento'?`<div class="hint">Este imóvel está definido como arrendado por inteiro. Para arrendar por quartos, muda isso na ficha do imóvel.</div>`:'')}
-    <div><div class="flabel">Inquilinos</div>${tagField(tags,'Adicionar','addCtTenant()','delCtTenant')}</div>
+    <div><div class="flabel">Inquilinos</div>${tagField(tags,'Adicionar','addCtTenant()','delCtTenant','','camada')}</div>
     <div class="row">
       <label>Renda mensal (€) <span class="req">*</span><input id="c_rent" type="text" inputmode="decimal" value="${c.rent||''}" placeholder="450" oninput="liveNet()"></label>
       <label>Imposto sobre a renda (%)<input id="c_tax" type="text" inputmode="decimal" value="${c.taxRate?dec(c.taxRate):''}" placeholder="${dec(irsRate(c))}" oninput="liveNet()"></label></div>
@@ -89,23 +89,23 @@ function ctBody(){
           <input class="i-n" id="invn_${it.id}" value="${esc(it.name)}" placeholder="Artigo">
           <input class="i-q" id="invq_${it.id}" type="text" inputmode="numeric" value="${it.qty}" placeholder="1">
           <span class="i-s">${sel('invs_'+it.id,it.state,[{v:'novo',label:'Novo'},{v:'usado',label:'Usado'}])}</span>
-          <button type="button" class="btn sm danger" onclick="delInv('${it.id}')">${ic('trash',14)}</button></div>`).join('')}
-        <div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn sm danger" onclick="delInvSelected()">Remover selecionados</button></div>
+          <button type="button" class="btn sm danger" data-toca="rascunho" onclick="delInv('${it.id}')">${ic('trash',14)}</button></div>`).join('')}
+        <div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn sm danger" data-toca="rascunho" onclick="delInvSelected()">Remover selecionados</button></div>
       </div>`:`<div class="hint"></div>`}
       <div class="toolbar" style="margin:0">
-        <button type="button" class="btn sm" onclick="addInv()">${ic('plus',14)} Adicionar artigo</button>
-        <button type="button" class="btn sm" onclick="addInvBulk()">Adicionar vários</button></div>`,
+        <button type="button" class="btn sm" data-toca="rascunho" onclick="addInv()">${ic('plus',14)} Adicionar artigo</button>
+        <button type="button" class="btn sm" data-toca="camada" onclick="addInvBulk()">Adicionar vários</button></div>`,
       {icon:'box',summary:inv.length?inv.length+' artigos':''})}
     ${fold('photos','Registo fotográfico',`
       ${(p&&(p.photos||[]).length)?`
         <div class="hint" style="margin:-4px 0 0">Escolhe quais das fotos do imóvel entram neste contrato.</div>
         <div class="thumbs">${p.photos.map(f=>{const on=(c.photoIds||[]).indexOf(f.id)>-1;
-          return `<div class="thumb" style="${on?'border-color:var(--accent);border-width:2px':'opacity:.55'}" onclick="togCtPhoto('${f.id}')">
+          return `<div class="thumb" style="${on?'border-color:var(--accent);border-width:2px':'opacity:.55'}" data-toca="rascunho" onclick="togCtPhoto('${f.id}')">
             <div id="th_${f.id}" style="height:76px;background:var(--chip)"></div>
             <div class="nm">${on?'✓ ':''}${esc(f.name||'sem nome')}</div></div>`}).join('')}</div>
         <div class="toolbar" style="margin:11px 0 0">
-          <button type="button" class="btn sm" onclick="allCtPhotos(1)">Selecionar todas</button>
-          <button type="button" class="btn sm" onclick="allCtPhotos(0)">Nenhuma</button></div>`
+          <button type="button" class="btn sm" data-toca="rascunho" onclick="allCtPhotos(1)">Selecionar todas</button>
+          <button type="button" class="btn sm" data-toca="rascunho" onclick="allCtPhotos(0)">Nenhuma</button></div>`
         :`<div class="hint">Este imóvel ainda não tem fotos. Adiciona-as na ficha do imóvel.</div>`}`,
       {icon:'photo',summary:`${(c.photoIds||[]).length} de ${(p&&p.photos||[]).length}`})}
     ${fold('keys','Chaves entregues',`
@@ -115,12 +115,12 @@ function ctBody(){
           <input type="checkbox" id="keyc_${k.id}">
           <input class="i-n" id="keyn_${k.id}" value="${esc(k.name)}" placeholder="Chave de casa">
           <input class="i-q" id="keyq_${k.id}" type="text" inputmode="numeric" value="${k.qty}" placeholder="1">
-          <button type="button" class="btn sm danger" onclick="delKey('${k.id}')">${ic('trash',14)}</button></div>`).join('')}
-        <div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn sm danger" onclick="delKeySelected()">Remover selecionadas</button></div>
+          <button type="button" class="btn sm danger" data-toca="rascunho" onclick="delKey('${k.id}')">${ic('trash',14)}</button></div>`).join('')}
+        <div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn sm danger" data-toca="rascunho" onclick="delKeySelected()">Remover selecionadas</button></div>
       </div>`:`<div class="hint"></div>`}
       <div class="toolbar" style="margin:0">
-        <button type="button" class="btn sm" onclick="addKey()">${ic('plus',14)} Adicionar tipo de chave</button>
-        <button type="button" class="btn sm" onclick="addKeyBulk()">Adicionar várias</button></div>`,
+        <button type="button" class="btn sm" data-toca="rascunho" onclick="addKey()">${ic('plus',14)} Adicionar tipo de chave</button>
+        <button type="button" class="btn sm" data-toca="camada" onclick="addKeyBulk()">Adicionar várias</button></div>`,
       {icon:'key',summary:nSum})}
     ${fold('files','Anexos',fileBlock('',c.files||[],'c_filein','ctAddFiles','ctDelFile',{hint:'PDF do contrato assinado, recibos, comunicações. Ficam no dispositivo e não entram na cópia em JSON.'}),
       {icon:'clip',summary:(c.files||[]).length?c.files.length+' anexo'+(c.files.length===1?'':'s'):''})}
@@ -277,7 +277,7 @@ function addKeyBulk(){
   openModal('Adicionar várias chaves',`<div class="form">
     <div class="hint">Uma por linha, com a quantidade: <b>Chave de casa; 2</b></div>
     <textarea id="keybulk" style="min-height:130px;font:13px/1.6 ui-monospace,Menlo,monospace" placeholder="Chave de casa; 2&#10;Chave do correio; 1&#10;Comando do portão"></textarea></div>`,
-    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="doKeyBulk()">Adicionar</button>`);
+    `<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="rascunho" onclick="doKeyBulk()">Adicionar</button>`);
 }
 // Lê o textarea do addKeyBulk: uma chave por linha, nome e quantidade
 // separados por ;, | ou tab. Sem quantidade, fica 1.
@@ -319,7 +319,7 @@ function addCtTenant(){
   const free=db.tenants.filter(t=>(cForm.tenantIds||[]).indexOf(t.id)<0);
   pickModal('Escolher inquilino',free.map(t=>({v:t.id,label:t.name,sub:[t.phone,t.email].filter(Boolean).join(' · '),avatar:true})),
     t=>{cForm.tenantIds.push(t.v);fillTenantContact(t.v);closeModal();repaintCt()},
-    `<button type="button" class="btn" style="width:100%;justify-content:center" onclick="newTenantFromCt()">${ic('plus',15)} Criar inquilino novo</button>`);
+    `<button type="button" class="btn" style="width:100%;justify-content:center" data-toca="camada" onclick="newTenantFromCt()">${ic('plus',15)} Criar inquilino novo</button>`);
 }
 // Tira um inquilino do contrato — a ficha da pessoa fica intacta.
 // Recebe: tid — id do inquilino a tirar do contrato.
@@ -373,7 +373,7 @@ function addInvBulk(){
   openModal('Adicionar vários artigos',`<div class="form">
     <div class="hint">Um artigo por linha. Podes indicar quantidade e estado: <b>Cadeira; 4; usado</b></div>
     <textarea id="invbulk" style="min-height:150px;font:13px/1.6 ui-monospace,Menlo,monospace" placeholder="Sofá; 1; novo&#10;Cadeira; 4; usado&#10;Frigorífico"></textarea></div>`,
-    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="doInvBulk()">Adicionar</button>`);
+    `<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="rascunho" onclick="doInvBulk()">Adicionar</button>`);
 }
 // Lê o textarea do addInvBulk: um artigo por linha, campos separados por ;,
 // | ou tab. Sem quantidade fica 1; o estado só é "novo" se a linha o disser.

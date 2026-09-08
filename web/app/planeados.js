@@ -524,7 +524,7 @@ function pendingCard(all){
   pendAll=!!all;   // para o colapso se redesenhar com a mesma lista
   const pend=all?recPending():recActive();
   if(!pend.length)return '';
-  const row=(r)=>{const late=recIsLate(r),semCred=recSemCredito(r),pago=!semCred&&recCreditoPago(r);return `<div class="card tap pend ${late?'late':''}" data-fk="rec:${esc(r.id)}" style="padding:11px 13px" onclick="confirmRec('${r.id}')">
+  const row=(r)=>{const late=recIsLate(r),semCred=recSemCredito(r),pago=!semCred&&recCreditoPago(r);return `<div class="card tap pend ${late?'late':''}" data-fk="rec:${esc(r.id)}" style="padding:11px 13px" data-toca="camada" onclick="confirmRec('${r.id}')">
     <div class="row-between" style="align-items:center">
       <div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</b>
         <span class="small">${esc(r.next)}${r.until&&r.until!==r.next?' – '+esc(r.until):''}${EVERY[r.every]?' · '+esc(EVERY[r.every]):''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':''} · ${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}</span>
@@ -533,11 +533,11 @@ function pendingCard(all){
       <b style="flex:0 0 auto">${r.tx.amount?euro2(r.tx.amount):''}</b></div>
     ${(()=>{const ok=podeEditar((r.tx||{}).propertyId,'rec.add',r,'confirmar'),conf=!recusaConfirmar(r)&&!semCred&&!pago;   /* sem permissão, só a linha */
       return ok||conf?`<div class="toolbar" style="margin:9px 0 0">
-        ${conf?`<button class="btn sm primary" onclick="${stop}quickConfirmRec('${r.id}')">${ic('check',14)} Confirmar</button>`:''}
-        ${ok?`<button class="btn sm" onclick="${stop}skipRec('${r.id}')">${r.muted?'Reativar':'Silenciar'}</button>`:''}</div>`:''})()}</div>`};
+        ${conf?`<button class="btn sm primary" data-toca="dados" onclick="${stop}quickConfirmRec('${r.id}')">${ic('check',14)} Confirmar</button>`:''}
+        ${ok?`<button class="btn sm" data-toca="dados" onclick="${stop}skipRec('${r.id}')">${r.muted?'Reativar':'Silenciar'}</button>`:''}</div>`:''})()}</div>`};
   const nl=pend.filter(recIsLate).length,open=!pendShut();
   return `<div class="card" id="pendCard" style="margin-bottom:14px">
-    <div class="row-between tap" style="align-items:center;cursor:pointer;margin:-16px;padding:16px" onclick="pendToggle()">
+    <div class="row-between tap" style="align-items:center;cursor:pointer;margin:-16px;padding:16px" data-toca="vista" onclick="pendToggle()">
       <div style="min-width:0"><div class="title">Movimentos por confirmar</div>
         <div class="small">${pend.length} à espera${nl?' · <b class="neg">'+nl+' em atraso</b>':''} · ${euro(sum(pend.map(r=>r.tx.amount||0)))}${open?'':' · toca para ver'}</div></div>
       <span style="flex:0 0 auto;display:inline-flex;transform:rotate(${open?'90':'-90'}deg)">${ic('chev',20)}</span></div>
@@ -591,7 +591,7 @@ function vRecurring(){
       rc.length+tp.length,
       {defLabel:'Ordenar pela próxima data',opts:[{v:'data',label:'Ordenar por data'},{v:'valor',label:'Ordenar por valor'},{v:'nome',label:'Ordenar por nome'}]})
     +((podeSemImovel()||casasComo('rec.add').length)?fab([{label:'Novo mov. recorrente',icon:'clock',act:'newRec()'},{label:'Novo modelo',icon:'file',act:'newTpl()'}]):'');
-  const recs=rcS.length?`<div class="list" style="gap:8px">${rcS.map(r=>{const late=recIsLate(r),pend=r.next<=today();return `<div class="card tap ${pend?'pend':''} ${late?'late':''}" data-lp="rec:${esc(r.id)}" data-fk="recl:${esc(r.id)}" onclick="editRec('${jsq(r.id)}')">
+  const recs=rcS.length?`<div class="list" style="gap:8px">${rcS.map(r=>{const late=recIsLate(r),pend=r.next<=today();return `<div class="card tap ${pend?'pend':''} ${late?'late':''}" data-lp="rec:${esc(r.id)}" data-fk="recl:${esc(r.id)}" data-toca="camada" onclick="editRec('${jsq(r.id)}')">
       <div class="row-between" style="align-items:center">
         <div style="min-width:0"><div class="title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</div>
           <div class="small">${r.auto?'<span class="badge grey" style="margin-right:4px">'+((r.tx||{}).loanId?'da hipoteca':'do contrato')+'</span>':''}${esc(EVERY[r.every]||r.every)} · ${esc(r.next)}${r.until&&r.until!==r.next?' – '+esc(r.until):''} · ${pend?(r.muted?'silenciada · por confirmar':late?'<b class="neg">em atraso</b>':'<b class="amber">por confirmar</b>'):'em dia'}${r.end?' · termina '+esc(r.end):''}</div>
@@ -600,7 +600,7 @@ function vRecurring(){
         <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
           <b style="font-size:16px">${r.tx.amount?euro2(r.tx.amount):'—'}</b>${kebab('rec:'+r.id)}</div></div></div>`}).join('')}</div>`
     :`<div class="empty" style="padding:24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem movimentos recorrentes'}</b>${lfCount('lrec')?'':'Repete-se sozinho e pede confirmação todos os meses. As rendas e as prestações criam um sem tu fazeres nada.'}</div>`;
-  const tpls=tp.length?`<div class="list" style="gap:8px">${tp.map(x=>`<div class="card tap" data-lp="tpl:${esc(x.id)}" data-fk="tpl:${esc(x.id)}" onclick="editTpl('${jsq(x.id)}')">
+  const tpls=tp.length?`<div class="list" style="gap:8px">${tp.map(x=>`<div class="card tap" data-lp="tpl:${esc(x.id)}" data-fk="tpl:${esc(x.id)}" data-toca="camada" onclick="editTpl('${jsq(x.id)}')">
       <div class="row-between" style="align-items:center">
         <div style="min-width:0"><div class="title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.name)}</div>
           <div class="small">${(KIND[x.tx.kind]||{}).short}${x.tx.propertyId?' · '+esc(propName(x.tx.propertyId)):''}${x.tx.category?' · '+esc(x.tx.category):''}</div></div>

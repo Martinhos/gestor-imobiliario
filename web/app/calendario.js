@@ -103,15 +103,15 @@ function vCalendar(){
     const pontos=vs.slice(0,3).map(()=>'<i class="pt vis"></i>').join('')+
       ps.slice(0,3).map(()=>'<i class="pt pla"></i>').join('')+
       (vs.length+ps.length>6?'<i class="pt mais"></i>':'');
-    celulas+=`<div class="calday tap${iso===hoje?' hoje':''}${iso===sel?' on':''}" data-d="${iso}" tabindex="0" aria-pressed="${iso===sel?'true':'false'}" onclick="calSel('${iso}')">
+    celulas+=`<div class="calday tap${iso===hoje?' hoje':''}${iso===sel?' on':''}" data-d="${iso}" tabindex="0" aria-pressed="${iso===sel?'true':'false'}" data-toca="vista" onclick="calSel('${iso}')">
       <span class="n">${dia}</span><span class="pts">${pontos}</span></div>`;
   }
   const total=Object.values(visitas).reduce((n,l)=>n+l.length,0);
   return `<div class="toolbar" style="align-items:center;margin-bottom:12px">
-      <button class="btn" onclick="calNav(-1)" aria-label="Mês anterior">${ic('chev',18)}</button>
+      <button class="btn" data-toca="vista" onclick="calNav(-1)" aria-label="Mês anterior">${ic('chev',18)}</button>
       <b style="flex:1;text-align:center">${esc(nome)}</b>
-      ${calMesEmVista()!==pzHoje().slice(0,7)?`<button class="btn" onclick="calNav(0)">Hoje</button>`:''}
-      <button class="btn" style="transform:scaleX(-1)" onclick="calNav(1)" aria-label="Mês seguinte">${ic('chev',18)}</button></div>
+      ${calMesEmVista()!==pzHoje().slice(0,7)?`<button class="btn" data-toca="vista" onclick="calNav(0)">Hoje</button>`:''}
+      <button class="btn" style="transform:scaleX(-1)" data-toca="vista" onclick="calNav(1)" aria-label="Mês seguinte">${ic('chev',18)}</button></div>
     <div class="card" id="calCard" style="padding:12px">
       <div class="calgrid calhead" id="calGrelha0">${['S','T','Q','Q','S','S','D'].map(x=>`<span>${x}</span>`).join('')}</div>
       <div class="calgrid">${celulas}</div></div>
@@ -129,12 +129,12 @@ function calDiaPanel(iso){
     .sort((a,b)=>(a.start||'')<(b.start||'')?-1:1);
   const ps=calPlaneados(iso,iso);
   const linhaV=v=>{const p=prop(v.propertyId);
-    return `<div class="card tap" style="padding:10px 13px" onclick="visitModal('${v.id}')">
+    return `<div class="card tap" style="padding:10px 13px" data-toca="camada" onclick="visitModal('${v.id}')">
       <div class="row-between" style="align-items:center"><div style="min-width:0">
         <b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.nomes||'(sem nome)')}</b>
         <span class="small">${v.start?esc(v.start)+(v.end?'–'+esc(v.end):'')+' · ':''}${esc(p?(p.name||p.address):'')}</span></div>
         <span class="badge ${v.estado==='realizada'?'':'amber'}">${VESTADO[v.estado]||''}</span></div></div>`};
-  const linhaP=o=>`<div class="card tap" style="padding:10px 13px" onclick="go('recurring')">
+  const linhaP=o=>`<div class="card tap" style="padding:10px 13px" data-toca="ecra" onclick="go('recurring')">
       <div class="row-between" style="align-items:center"><div style="min-width:0">
         <b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.rec.name)}</b>
         <span class="small">${(KIND[o.rec.tx.kind]||{}).short||''}${o.rec.tx.propertyId?' · '+esc(propName(o.rec.tx.propertyId)):''}</span></div>
@@ -148,7 +148,7 @@ function calDiaPanel(iso){
       ${ps.length?`<div class="flabel" style="margin:0">Planeados</div>${ps.map(linhaP).join('')}`:''}
       ${!vs.length&&!ps.length?'<div class="hint">Nada marcado para este dia.</div>':''}
       <div class="toolbar" style="justify-content:center;margin-top:6px">
-        <button class="btn primary" onclick="visitModal(null,{date:'${iso}'})">Marcar visita neste dia</button></div></div></div>`;
+        <button class="btn primary" data-toca="camada" onclick="visitModal(null,{date:'${iso}'})">Marcar visita neste dia</button></div></div></div>`;
 }
 
 /* Muda o dia em foco sem redesenhar a página: troca a classe .on na grelha

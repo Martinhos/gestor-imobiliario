@@ -99,8 +99,8 @@ function notifModal(){
   const pedido=n=>`<div class="card" style="padding:10px 13px">
     <b style="display:block">${esc(n.titulo)}</b><span class="small">${esc(n.sub)}</span>
     <div class="toolbar" style="margin:9px 0 0">
-      <button class="btn sm primary" onclick="closeModal();window.CW&&CW.pedidoAceitar&&CW.pedidoAceitar('${jsq(n.id)}')">Aceitar</button>
-      <button class="btn sm" onclick="closeModal();window.CW&&CW.pedidoRecusar&&CW.pedidoRecusar('${jsq(n.id)}')">Recusar</button></div></div>`;
+      <button class="btn sm primary" data-toca="dados" onclick="closeModal();window.CW&&CW.pedidoAceitar&&CW.pedidoAceitar('${jsq(n.id)}')">Aceitar</button>
+      <button class="btn sm" data-toca="dados" onclick="closeModal();window.CW&&CW.pedidoRecusar&&CW.pedidoRecusar('${jsq(n.id)}')">Recusar</button></div></div>`;
   const bloco=(titulo,linhas)=>linhas.length?`<div class="navh">${titulo}</div>${linhas.join('')}`:'';
   const corpo=`<div class="list" style="gap:8px">
     ${bloco('Pedidos de partilha',pedidos.map(pedido))}
@@ -111,8 +111,8 @@ function notifModal(){
     ${!atrasados.length&&!pendentes.length&&!prazos.length&&!partilha.length&&!pedidos.length?'<div class="empty">Tudo em dia — nada a pedir atenção.</div>':''}
   </div>`;
   openModal('Notificações',corpo,
-    `<button class="btn" onclick="closeModal()">Fechar</button>`+
-    (partilha.length?`<button class="btn primary" onclick="notifLido()">Marcar tudo como lido</button>`:''));
+    `<button class="btn" data-toca="camada" onclick="closeModal()">Fechar</button>`+
+    (partilha.length?`<button class="btn primary" data-toca="dados" onclick="notifLido()">Marcar tudo como lido</button>`:''));
 }
 
 /* Marca a atividade partilhada como lida até agora: a marca vive nas

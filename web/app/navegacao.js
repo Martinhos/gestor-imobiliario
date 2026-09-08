@@ -49,7 +49,7 @@ function buildNav(){
   const late=recActive().length,fora=typeof separadoresEscondidos==='function'?separadoresEscondidos():[];
   document.getElementById('nav').innerHTML=NAV_GROUPS.map(g=>{const ids=g.ids.filter(id=>fora.indexOf(id)<0);if(!ids.length)return '';
     return `<div class="navh">${g.label}</div>`+ids.map(id=>{const t=TABS.find(x=>x.id===id);
-    return `<a class="${t.id===tab?'on':''}" tabindex="0" ${t.id===tab?'aria-current="page"':''} onclick="go('${t.id}')">${ic(t.icon)}<span class="txt">${t.label}</span>${t.id==='recurring'&&late?`<span class="cnt${cntNovo('recurring',late)}" ${recLate().length?'':'style="background:var(--warn)"'}>${late}</span>`:''}</a>`}).join('')}).join('');
+    return `<a class="${t.id===tab?'on':''}" tabindex="0" ${t.id===tab?'aria-current="page"':''} data-toca="ecra" onclick="go('${t.id}')">${ic(t.icon)}<span class="txt">${t.label}</span>${t.id==='recurring'&&late?`<span class="cnt${cntNovo('recurring',late)}" ${recLate().length?'':'style="background:var(--warn)"'}>${late}</span>`:''}</a>`}).join('')}).join('');
   buildTabbar(late,fora);
 }
 /* Os quatro destinos quentes, a um toque no telemóvel. A auditoria mediu:
@@ -65,7 +65,7 @@ const TABBAR=['dashboard','transactions','properties','calendar'];
 function buildTabbar(late,fora){
   const el=document.getElementById('tabbar');if(!el)return;
   el.innerHTML=TABBAR.filter(id=>(fora||[]).indexOf(id)<0).map(id=>{const t=TABS.find(x=>x.id===id);
-    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} onclick="go('${id}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${id==='calendar'&&late?`<span class="cnt${cntNovo('calendar',late)}">${late}</span>`:''}</a>`}).join('');
+    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} data-toca="ecra" onclick="go('${id}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${id==='calendar'&&late?`<span class="cnt${cntNovo('calendar',late)}">${late}</span>`:''}</a>`}).join('');
 }
 // Muda de separador: limpa a subpágina das Definições e o donut, fecha a
 // gaveta, refaz a navegação e repinta, com scroll para o topo.

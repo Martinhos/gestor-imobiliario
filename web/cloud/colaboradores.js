@@ -169,7 +169,7 @@ function nomesDeCasas(casas) {
 // Devolve: o HTML do <label class="check">.
 function caixaPerm(perm, rotulo, on) {
   return '<label class="check" style="gap:6px;font-size:13px"><input type="checkbox" data-perm="' + perm + '" id="cg_' + perm.replace('.', '_') + '"' +
-    (on ? ' checked' : '') + ' onchange="CW.cargoImplica()"><span>' + esc(rotulo) + '</span></label>';
+    (on ? ' checked' : '') + ' data-toca="rascunho" onchange="CW.cargoImplica()"><span>' + esc(rotulo) + '</span></label>';
 }
 
 /* Abre o modal de criar ou editar um cargo: o nome e uma linha por entidade
@@ -183,7 +183,7 @@ CW.cargoModal = function (id) {
   var exemplos = r ? '' :
     '<div><div class="flabel">Começar por um cargo pronto</div><div class="list" style="gap:8px">' +
     cargosExemplo().map(function (c, i) {
-      return '<button type="button" class="card tap" style="padding:11px 13px;text-align:left" onclick="CW.cargoExemplo(' + i + ')">' +
+      return '<button type="button" class="card tap" style="padding:11px 13px;text-align:left" data-toca="rascunho" onclick="CW.cargoExemplo(' + i + ')">' +
         '<div class="row-between" style="align-items:center;gap:10px"><span style="min-width:0"><b style="display:block">' + esc(c.nome) + '</b>' +
         '<span class="small">' + esc(c.sub) + '</span></span><span class="badge" style="flex:0 0 auto">Usar este</span></div></button>';
     }).join('') + '</div></div>';
@@ -199,7 +199,7 @@ CW.cargoModal = function (id) {
     '<div class="hint" style="margin-top:8px">«Adicionar» inclui ver, e editar ou apagar só o que o próprio criar. ' +
     'Editar a ficha do imóvel traz as hipotecas e os documentos; adicionar contratos traz os planeados. ' +
     'Um colaborador nunca tem quota-parte nem entra nas contas entre proprietários.</div></div></div>';
-  var m = r ? menu('cargo', [{ label: 'Apagar cargo', icon: 'trash', danger: true, act: "CW.apagarCargo('" + jsq(id) + "')" }]) : '';
+  var m = r ? menu('cargo', [{ label: 'Apagar cargo', icon: 'trash', danger: true, toca: 'dados', risco: 'destroi', act: "CW.apagarCargo('" + jsq(id) + "')" }]) : '';
   openModal(r ? 'Editar cargo' : 'Novo cargo', body, null, m);
   CW._cargoId = r ? id : null;
   CW.cargoImplica();
@@ -311,11 +311,11 @@ window.cwInvGrupo = function () {
 function ligacaoModal(titulo, url, hint) {
   var podePartilhar = !!(navigator.share);
   openModal(titulo,
-    '<div class="form"><input id="cw_lig_url" readonly value="' + esc(url) + '" onclick="this.select()" style="font-family:monospace;font-size:12.5px">' +
+    '<div class="form"><input id="cw_lig_url" readonly value="' + esc(url) + '" data-toca="nada" onclick="this.select()" style="font-family:monospace;font-size:12.5px">' +
     '<div class="hint">' + hint + '</div></div>',
-    '<button class="btn" onclick="closeModal()">Fechar</button>' +
-    (podePartilhar ? '<button class="btn" onclick="CW.partilharLigacao(\'' + jsq(url) + '\')">Partilhar…</button>' : '') +
-    '<button class="btn primary" onclick="CW.copiar(\'' + jsq(url) + '\')">Copiar ligação</button>');
+    '<button class="btn" data-toca="camada" onclick="closeModal()">Fechar</button>' +
+    (podePartilhar ? '<button class="btn" data-toca="nada" onclick="CW.partilharLigacao(\'' + jsq(url) + '\')">Partilhar…</button>' : '') +
+    '<button class="btn primary" data-toca="nada" onclick="CW.copiar(\'' + jsq(url) + '\')">Copiar ligação</button>');
 }
 
 /* Cria uma ligação de convite com o cargo e os imóveis marcados no cartão
@@ -585,7 +585,7 @@ CW.aceitarConvite = function (token) {
         (saltadas.length ? '<div class="hint">Já eras comproprietário de ' + esc(saltadas.join(', ')) + ' — aí fica tudo como estava.</div>' : '') +
         '<div class="hint">Os cartões desses imóveis levam o selo «de ' + esc(r.ownerName || prev.ownerName || '') + ' · ' + esc(r.roleName || prev.roleName || '') +
         '». Podes sair quando quiseres no menu, em Pessoas → Colaboradores.</div></div>',
-        '<button class="btn primary" onclick="closeAllModals();go(\'properties\')">Ver os imóveis</button>');
+        '<button class="btn primary" data-toca="ecra" onclick="closeAllModals();go(\'properties\')">Ver os imóveis</button>');
     })
     .catch(function (e) {
       if (e && (e.status === 404 || e.status === 400 || e.status === 410)) {
@@ -658,8 +658,8 @@ function pedidosRecebidos() {
     w.innerHTML = '<div class="navh">Pedidos de partilha</div>' + lista.map(function (p) {
       return '<div class="card cw-pedido" style="padding:10px 13px"><b style="display:block">' + esc(p.fromName || '') + ' quer partilhar ' + esc(p.houseName || 'um imóvel') + ' contigo</b>' +
         '<span class="small">Se aceitares, passas a comproprietário desse imóvel.</span>' +
-        '<div class="toolbar" style="margin-top:8px"><button class="btn sm primary" onclick="closeModal();CW.pedidoAceitar(\'' + jsq(p.id) + '\')">Aceitar</button>' +
-        '<button class="btn sm danger" onclick="closeModal();CW.pedidoRecusar(\'' + jsq(p.id) + '\')">Recusar</button></div></div>';
+        '<div class="toolbar" style="margin-top:8px"><button class="btn sm primary" data-toca="dados" onclick="closeModal();CW.pedidoAceitar(\'' + jsq(p.id) + '\')">Aceitar</button>' +
+        '<button class="btn sm danger" data-toca="dados" onclick="closeModal();CW.pedidoRecusar(\'' + jsq(p.id) + '\')">Recusar</button></div></div>';
     }).join('');
     var ref = corpo.firstChild;   // no topo, pela ordem em que foram escritos
     while (w.firstChild) corpo.insertBefore(w.firstChild, ref);

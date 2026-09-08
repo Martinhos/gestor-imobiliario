@@ -6,20 +6,20 @@ function vImport(){
     <div class="hint">No Splitwise: abre o grupo → <b>Export as spreadsheet</b> → guarda o CSV.</div>
     <div class="toolbar" style="margin:14px 0 0">
       <input type="file" id="swFile" style="display:none" onchange="swPick(this)">
-      <button class="btn primary" onclick="swPasteBox()">Colar o texto do CSV</button>
-      <button class="btn" onclick="document.getElementById('swFile').click()">Escolher ficheiro</button></div>
+      <button class="btn primary" data-toca="camada" onclick="swPasteBox()">Colar o texto do CSV</button>
+      <button class="btn" data-toca="camada" onclick="document.getElementById('swFile').click()">Escolher ficheiro</button></div>
     <div class="hint" style="margin-top:11px">Se o botão de escolher ficheiro não abrir nada, estás a ver a app fora do telemóvel — usa a opção de colar o texto.</div>
-    ${db.transactions.some(t=>t.batch)?`<div class="divider"></div><button class="btn sm danger" onclick="undoImport()">Anular a última importação</button>`:''}`)}
+    ${db.transactions.some(t=>t.batch)?`<div class="divider"></div><button class="btn sm danger" data-toca="dados" data-risco="destroi" onclick="undoImport()">Anular a última importação</button>`:''}`)}
   <div style="height:14px"></div>
   ${card('Guardar ficheiros','',`
     <div class="toolbar" style="margin:0">
-      <button class="btn" onclick="exportarSoMeu(driveSave)">Guardar cópia</button>
-      <button class="btn" onclick="driveOpen()">Abrir cópia</button>
-      <button class="btn" onclick="exportarSoMeu(downloadCsv)">Exportar CSV</button>
-      <button class="btn" onclick="bkPasteBox()">Colar cópia</button></div>
+      <button class="btn" data-toca="nada" onclick="exportarSoMeu(driveSave)">Guardar cópia</button>
+      <button class="btn" data-toca="camada" onclick="driveOpen()">Abrir cópia</button>
+      <button class="btn" data-toca="nada" onclick="exportarSoMeu(downloadCsv)">Exportar CSV</button>
+      <button class="btn" data-toca="camada" onclick="bkPasteBox()">Colar cópia</button></div>
     ${casasDeColaboracao().length?'<div class="hint" style="margin-top:11px">As cópias levam só o que é teu — os imóveis onde colaboras ficam de fora.</div>':''}`)}
   <div style="height:14px"></div>
-  ${card('Recomeçar','Apaga tudo o que está guardado neste dispositivo',`<button class="btn danger" onclick="wipe()">Apagar todos os dados</button>`)}
+  ${card('Recomeçar','Apaga tudo o que está guardado neste dispositivo',`<button class="btn danger" data-toca="dados" data-risco="destroi" onclick="wipe()">Apagar todos os dados</button>`)}
   <div class="hint" style="text-align:center;margin-top:18px">Fotos e documentos ficam no dispositivo e não entram na cópia em JSON.</div>`;
 }
 
@@ -41,7 +41,7 @@ function exportarSoMeu(fn){
 // nome do ícone (para ic); page — a chave da subpágina a abrir com goSet
 // ('defaults', 'cats', 'tags', 'groups', 'filtros' ou 'dados').
 // Devolve: o HTML (texto) de uma linha de navegação das Definições.
-const navRow=(title,sub,icon,page)=>`<div class="card tap" onclick="goSet('${page}')" style="display:flex;align-items:center;gap:13px">
+const navRow=(title,sub,icon,page)=>`<div class="card tap" data-toca="ecra" onclick="goSet('${page}')" style="display:flex;align-items:center;gap:13px">
   <span class="avatar">${ic(icon,18)}</span>
   <span style="flex:1;min-width:0"><b style="display:block">${esc(title)}</b><span class="small">${esc(sub)}</span></span>
   <span style="color:var(--muted);transform:rotate(180deg)">${ic('chev',18)}</span></div>`;
@@ -50,7 +50,7 @@ const navRow=(title,sub,icon,page)=>`<div class="card tap" onclick="goSet('${pag
    havia porta de saída à vista. O do fundo já dizia Voltar; agora dizem o
    mesmo e um deles está sempre presente. */
 const backRow=`<div class="toolbar" style="position:sticky;top:calc(57px + var(--inset-top));z-index:20;background:var(--bg);padding:8px 0;margin:-6px 0 6px">
-  <button class="btn" onclick="goSet('')">${ic('chev',15)} Voltar</button></div>`;
+  <button class="btn" data-toca="ecra" onclick="goSet('')">${ic('chev',15)} Voltar</button></div>`;
 
 // Subpágina "Valores por omissão": crescimento das rendas, inflação, horizonte,
 // yield de avaliação e imposto do selo. Cada campo grava logo ao sair (setSet).
@@ -85,7 +85,7 @@ function vSettings(){
   if(setPage==='dados')return backRow+vImport();
   return `${card('Tema','Como a app se apresenta',`<div class="seg c3">
       ${[['auto','auto','Automático','segue o telemóvel'],['light','sun','Claro',''],['dark','moon','Escuro','']]
-        .map(([k,i,l,sb])=>`<button type="button" class="opt ${t===k?'on':''}" onclick="setTheme('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b>${sb?`<small>${sb}</small>`:''}</button>`).join('')}</div>`)}
+        .map(([k,i,l,sb])=>`<button type="button" class="opt ${t===k?'on':''}" data-toca="dados" onclick="setTheme('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b>${sb?`<small>${sb}</small>`:''}</button>`).join('')}</div>`)}
   <div style="height:14px"></div>
   ${navRow('Valores por omissão','Projeções, avaliação e imposto do selo','trend','defaults')}
   <div style="height:14px"></div>
@@ -121,16 +121,16 @@ function catTree(tk,title,sub){
           <input value="${esc(k)}" onchange="renameCat('${tk}','${jsq(k)}',this.value)" style="font-weight:650;border:0;padding:4px 0;background:transparent">
           <div style="display:flex;gap:5px;flex:0 0 auto">
             <span class="badge grey">${txs.filter(t=>t.category===k).length}</span>
-            <button class="btn sm ${db.settings.exclude[excKey(tk,k)]?'danger':''}" title="Contar (ou não) nos totais" onclick="toggleExc('${tk}','${jsq(k)}')">€</button>
-            <button class="btn sm danger" onclick="delCat('${tk}','${jsq(k)}')">${ic('trash',14)}</button></div></div>
+            <button class="btn sm ${db.settings.exclude[excKey(tk,k)]?'danger':''}" title="Contar (ou não) nos totais" data-toca="dados" onclick="toggleExc('${tk}','${jsq(k)}')">€</button>
+            <button class="btn sm danger" data-toca="dados" data-risco="destroi" onclick="delCat('${tk}','${jsq(k)}')">${ic('trash',14)}</button></div></div>
         ${db.settings.exclude[excKey(tk,k)]?'<div class="small" style="margin-top:2px"><b class="neg">Fora dos totais</b> — os movimentos ficam na lista mas não somam.</div>':''}
         <div class="chips">${(cs[k]||[]).map(sb=>{const off=db.settings.exclude[excKey(tk,k,sb)]||db.settings.exclude[excKey(tk,k)];return `<span class="tag grey" style="${off?'opacity:.55':''}">
-          <span onclick="renameSub('${tk}','${jsq(k)}','${jsq(sb)}')" style="cursor:pointer;${off?'text-decoration:line-through':''}" title="Mudar o nome">${esc(sb)}</span>
-          <button type="button" onclick="toggleExc('${tk}','${jsq(k)}','${jsq(sb)}')" title="Contar (ou não) nos totais" style="font-weight:800;font-size:11px">€</button>
-          <button type="button" onclick="delSub('${tk}','${jsq(k)}','${jsq(sb)}')">${ic('x',13)}</button></span>`}).join('')}
-          <button type="button" class="tagadd" onclick="addSub('${tk}','${jsq(k)}')">+ subcategoria</button></div>
+          <span data-toca="camada" onclick="renameSub('${tk}','${jsq(k)}','${jsq(sb)}')" style="cursor:pointer;${off?'text-decoration:line-through':''}" title="Mudar o nome">${esc(sb)}</span>
+          <button type="button" data-toca="dados" onclick="toggleExc('${tk}','${jsq(k)}','${jsq(sb)}')" title="Contar (ou não) nos totais" style="font-weight:800;font-size:11px">€</button>
+          <button type="button" data-toca="dados" data-risco="destroi" onclick="delSub('${tk}','${jsq(k)}','${jsq(sb)}')">${ic('x',13)}</button></span>`}).join('')}
+          <button type="button" class="tagadd" data-toca="camada" onclick="addSub('${tk}','${jsq(k)}')">+ subcategoria</button></div>
       </div>`).join('')}</div>
-    <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" onclick="addCat('${tk}')">${ic('plus',15)} Nova categoria</button></div>`);
+    <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" data-toca="camada" onclick="addCat('${tk}')">${ic('plus',15)} Nova categoria</button></div>`);
 }
 // Subpágina "Tipos de movimento": as duas árvores (receitas e pagamentos) em
 // dobras, mais o botão de repor as listas de origem.
@@ -140,7 +140,7 @@ function vCats(){
   return `<div class="form">
     ${fold('catsIn','Receitas',catTree('catsIn','','Rendas, reembolsos e dinheiro recebido de terceiros'),{icon:'up',open:true,summary:n('catsIn')})}
     ${fold('cats','Pagamentos',catTree('cats','','Despesas, prestações e dívidas pagas a terceiros'),{icon:'dn',summary:n('cats')})}</div>`
-    +`<div class="toolbar" style="margin:13px 0 0"><button class="btn" onclick="resetCats()">Repor as de origem</button></div>
+    +`<div class="toolbar" style="margin:13px 0 0"><button class="btn" data-toca="dados" data-risco="destroi" onclick="resetCats()">Repor as de origem</button></div>
   <div class="hint" style="margin-top:14px">O número é quantos movimentos usam a categoria. Apagá-la não apaga movimentos — ficam sem categoria. O botão € tira-a dos totais, sem sair da lista.</div>`;
 }
 // Subpágina "Etiquetas": cada uma com o número de movimentos que a usam,
@@ -155,9 +155,9 @@ function vTags(){
         <span class="tag grey" style="padding:5px 11px">${esc(g)}</span>
         <span class="spacer"></span>
         <span class="small">${usage(g)} movimento${usage(g)===1?'':'s'}</span>
-        <button class="btn sm danger" onclick="delTag('${jsq(g)}')">${ic('trash',14)}</button></div>`).join('')}</div>`
+        <button class="btn sm danger" data-toca="dados" data-risco="destroi" onclick="delTag('${jsq(g)}')">${ic('trash',14)}</button></div>`).join('')}</div>`
     :`<div class="hint"></div>`)}
-  <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" onclick="addTag()">${ic('plus',15)} Nova etiqueta</button></div>`;
+  <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" data-toca="camada" onclick="addTag()">${ic('plus',15)} Nova etiqueta</button></div>`;
 }
 /* ===== grupos ===== */
 const GKIND={prop:{label:'Imóveis',icon:'building',one:'imóvel'},owner:{label:'Proprietários',icon:'crown',one:'proprietário'},contract:{label:'Contratos',icon:'contract',one:'contrato'}};
@@ -176,14 +176,14 @@ function vGroups(){
   const secs=['prop','owner','contract'].map(kind=>{
     const gs=grpsOf(kind);
     return `<div class="section-title">${GKIND[kind].label}</div>
-      ${gs.length?`<div class="list">${gs.map(g=>`<div class="card tap" onclick="groupModal('${kind}','${g.id}')">
+      ${gs.length?`<div class="list">${gs.map(g=>`<div class="card tap" data-toca="camada" onclick="groupModal('${kind}','${g.id}')">
         <div class="row-between" style="align-items:center">
           <div style="display:flex;gap:11px;align-items:center;min-width:0"><span class="avatar">${ic(GKIND[kind].icon,17)}</span>
             <div style="min-width:0"><div class="title">${esc(g.name)}</div>
             <div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.ids.length} ${g.ids.length===1?GKIND[kind].one:GKIND[kind].label.toLowerCase()} · ${esc(g.ids.map(id=>gMemberName(kind,id)).filter(Boolean).join(', '))||'sem membros'}</div></div></div>
           <span style="color:var(--muted);transform:rotate(180deg);flex:0 0 auto">${ic('chev',17)}</span></div></div>`).join('')}</div>`
       :`<div class="hint">Ainda não há grupos de ${GKIND[kind].label.toLowerCase()}.</div>`}
-      <div class="toolbar" style="margin:11px 0 0"><button class="btn sm" onclick="groupModal('${kind}')">${ic('plus',14)} Novo grupo de ${GKIND[kind].label.toLowerCase()}</button></div>`;
+      <div class="toolbar" style="margin:11px 0 0"><button class="btn sm" data-toca="camada" onclick="groupModal('${kind}')">${ic('plus',14)} Novo grupo de ${GKIND[kind].label.toLowerCase()}</button></div>`;
   }).join('');
   return secs+`<div class="hint" style="margin-top:16px">Servem de filtro em toda a app. Um movimento atribuído a um grupo de imóveis divide-se por eles.</div>`;
 }
@@ -196,7 +196,7 @@ let gForm=null;
    Devolve: nada — abre o modal. */
 function groupModal(kind,id){
   gForm=normGroup(id?JSON.parse(JSON.stringify(grp(id))):{kind});
-  const m=id?menu('grp',[{label:'Apagar grupo',icon:'trash',danger:true,act:`delGroup('${id}')`}]):'';
+  const m=id?menu('grp',[{label:'Apagar grupo',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delGroup('${id}')`}]):'';
   openModal(id?'Editar grupo':'Novo grupo de '+GKIND[kind].label.toLowerCase(),groupBody(),null,m);
   onSave=()=>{
     gForm.name=val('g_name').trim();
@@ -260,7 +260,7 @@ function delGroup(id){
    Devolve: nada — abre o modal. */
 function promptModal(title,label,value,cb){
   openModal(title,`<div class="form"><label>${esc(label)}<input id="pm_v" value="${esc(value||'')}" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();_pm()}"></label></div>`,
-    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="_pm()">Guardar</button>`);
+    `<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" onclick="_pm()">Guardar</button>`);
   window._pm=()=>{const v=val('pm_v').trim();closeModal();if(v)cb(v)};
   setTimeout(()=>{const e=document.getElementById('pm_v');if(e)e.focus()},50);
 }
@@ -375,13 +375,13 @@ function vFiltrosComuns(){
   return card('Filtros comuns','Aplicam-se no funil de cada vista',`
     ${list.length?`<div class="list" style="gap:8px">${list.map(f=>`
       <div class="card" style="padding:11px 13px"><div class="row-between" style="align-items:center">
-        <div style="min-width:0;cursor:pointer" onclick="fcModal('${jsq(f.id)}')">
+        <div style="min-width:0;cursor:pointer" data-toca="camada" onclick="fcModal('${jsq(f.id)}')">
           <b style="font-size:14px">${esc(f.name)}</b>
           <div class="small">${esc(fcResumo(f)||'sem escolhas — aplica-lo limpa os filtros')}</div></div>
-        <button type="button" class="btn sm danger" aria-label="Apagar" style="min-width:40px;min-height:40px" onclick="delFiltroComum('${jsq(f.id)}')">${ic('trash',14)}</button>
+        <button type="button" class="btn sm danger" aria-label="Apagar" style="min-width:40px;min-height:40px" data-toca="dados" data-risco="destroi" onclick="delFiltroComum('${jsq(f.id)}')">${ic('trash',14)}</button>
       </div></div>`).join('')}</div>`
       :'<div class="hint">Ainda não tens nenhum. Um filtro comum guarda um conjunto de escolhas — imóvel, proprietário, tipo, categoria, datas — para aplicares num toque.</div>'}
-    <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" onclick="fcModal()">${ic('plus',15)} Novo filtro comum</button></div>`);
+    <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" data-toca="camada" onclick="fcModal()">${ic('plus',15)} Novo filtro comum</button></div>`);
 }
 
 // Resumo das escolhas de um filtro numa linha, separadas por «·»;
@@ -408,7 +408,7 @@ function fcModal(id){
   const f=filtrosComuns().find(x=>x.id===id);
   fcForm=f?JSON.parse(JSON.stringify(f)):{id:uid(),name:'',kind:'',prop:'',owner:'',cat:'',sub:'',de:'',ate:''};
   openModal(f?'Editar filtro comum':'Novo filtro comum',fcCorpo(),
-    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="fcGuardar()">Guardar</button>`);
+    `<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" onclick="fcGuardar()">Guardar</button>`);
 }
 /* Corpo do modal do filtro: nome, tipo, imóvel, proprietário, categoria,
    subcategoria e datas. As categorias dependem do tipo escolhido (as dívidas

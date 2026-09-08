@@ -65,7 +65,7 @@ function vVisits(){
   if(!(db.visits||[]).length)
     return `<div class="empty"><b>Ainda não há visitas</b>${marca?'Marca a primeira: quem vem, a que imóvel, e quando.':'As visitas aos imóveis onde colaboras aparecem aqui.'}
       ${marca?`<div class="toolbar" style="justify-content:center;margin-top:16px">
-      <button class="btn primary" onclick="visitModal()">Marcar visita</button></div>`:''}</div>`;
+      <button class="btn primary" data-toca="camada" onclick="visitModal()">Marcar visita</button></div>`:''}</div>`;
   const head=lfBar(K,[
     lfSel(K,'pr',[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p=>({v:p.id,label:p.name||p.address||'imóvel'})))),
     lfSel(K,'es',[{v:'',label:'Todos os estados'}].concat(Object.keys(VESTADO).map(x=>({v:x,label:VESTADO[x]})))),
@@ -78,7 +78,7 @@ function vVisits(){
     <div class="list" style="margin-bottom:16px">${vs.map(visCard).join('')}</div>`:'';
   return head+bloco('Próximas',futuras)+bloco('Passadas',passadas)+
     (lista.length?'':'<div class="empty">Nada com estes filtros.</div>')+
-    (marca?`<button class="fab" onclick="visitModal()" aria-label="Marcar visita">${ic('plus',22)}</button>`:'');
+    (marca?`<button class="fab" data-toca="camada" onclick="visitModal()" aria-label="Marcar visita">${ic('plus',22)}</button>`:'');
 }
 
 /* O cartão de uma visita na lista: quem, onde e quando à esquerda, o selo
@@ -99,8 +99,8 @@ function visCard(v){
     acoes.push({label:'Marcar falta',icon:'clock',act:`visEstado('${v.id}','faltou')`});
   }
   if(pode(v.propertyId,'tenant.add'))acoes.push({label:'Converter em inquilino',icon:'users',act:`visConverte('${v.id}')`});
-  if(ok)acoes.push({label:'Apagar visita',icon:'trash',danger:true,act:`visApaga('${v.id}')`});
-  return `<div class="card tap" data-lp="vis:${esc(v.id)}" data-fk="vis:${esc(v.id)}" onclick="visitModal('${v.id}')">
+  if(ok)acoes.push({label:'Apagar visita',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`visApaga('${v.id}')`});
+  return `<div class="card tap" data-lp="vis:${esc(v.id)}" data-fk="vis:${esc(v.id)}" data-toca="camada" onclick="visitModal('${v.id}')">
     <div class="row-between" style="align-items:flex-start;gap:8px">
       <div style="min-width:0">
         <b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.nomes||'(sem nome)')}</b>

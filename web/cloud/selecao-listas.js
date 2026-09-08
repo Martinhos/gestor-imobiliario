@@ -70,15 +70,16 @@
         var alvo = c.querySelector('.row-between') || c;
         alvo.insertBefore(b, alvo.firstChild);
       }
+      c.setAttribute('data-toca', 'vista');
       c.setAttribute('onclick', 'CW.selLToggle(\'' + id + '\')');
     });
     if (!document.querySelector('.sel-fundo')) {
       var f = document.createElement('div');
       f.className = 'sel-fundo';
       f.innerHTML =
-        '<button type="button" class="btn" onclick="CW.selLSair()">' + ic('x', 15) + ' Cancelar</button>' +
+        '<button type="button" class="btn" data-toca="modo" onclick="CW.selLSair()">' + ic('x', 15) + ' Cancelar</button>' +
         '<b id="selLConta" style="flex:1;text-align:center"></b>' +
-        '<button type="button" class="btn danger" onclick="CW.selLApagar()">' + ic('trash', 15) + ' Eliminar</button>';
+        '<button type="button" class="btn danger" data-toca="dados" data-risco="destroi" onclick="CW.selLApagar()">' + ic('trash', 15) + ' Eliminar</button>';
       document.body.appendChild(f);
     }
     pintar();
@@ -175,6 +176,7 @@
         btn.type = 'button';
         btn.className = 'card tap';
         btn.setAttribute('data-sel-varios', '1');
+        btn.setAttribute('data-toca', 'modo');
         btn.style.cssText = 'padding:12px 14px;display:flex;align-items:center;gap:11px';
         btn.innerHTML = '<span class="ic" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex:0 0 34px">' + ic('check', 18) + '</span>' +
           '<span style="flex:1;min-width:0;text-align:left"><b style="display:block;font-size:14px">Selecionar vários</b></span>';

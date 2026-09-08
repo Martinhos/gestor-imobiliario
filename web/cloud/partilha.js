@@ -22,7 +22,7 @@ vSettings = function () {
       [['auto', 'auto', 'Automático', 'agora: ' + (mq().matches ? 'escuro' : 'claro')],
         ['light', 'sun', 'Claro', ''], ['dark', 'moon', 'Escuro', '']]
         .map(function (o) {
-          return '<button type="button" class="opt ' + (t === o[0] ? 'on' : '') + '" onclick="setTheme(\'' + o[0] + '\')">' +
+          return '<button type="button" class="opt ' + (t === o[0] ? 'on' : '') + '" data-toca="dados" onclick="setTheme(\'' + o[0] + '\')">' +
             '<span class="ic">' + ic(o[1], 18) + '</span><b>' + o[2] + '</b>' +
             (o[3] ? '<small>' + o[3] + '</small>' : '') + '</button>';
         }).join('') + '</div>' +
@@ -49,7 +49,7 @@ vSettings = function () {
     var tema = { auto: 'Automático', light: 'Claro', dark: 'Escuro' }[db.settings.theme] || 'Automático';
 
     h = sect('Conta') +
-      '<div class="card tap" onclick="CW.editProfile()" style="display:flex;align-items:center;gap:13px">' +
+      '<div class="card tap" data-toca="camada" onclick="CW.editProfile()" style="display:flex;align-items:center;gap:13px">' +
       '<span class="avatar">' + ic('crown', 18) + '</span>' +
       '<span style="flex:1;min-width:0"><b style="display:block">O meu perfil</b><span class="small">' + psub + '</span></span>' +
       '<span style="color:var(--muted);transform:rotate(180deg)">' + ic('chev', 18) + '</span></div>' + gap +
@@ -92,7 +92,7 @@ vSettings = function () {
       h += '<div style="height:14px"></div>' +
         card('App para Android', 'A mesma app no telemóvel',
           '<div class="hint">Instala a app nativa: é o mesmo gestor, com notificações dos movimentos por confirmar e o seletor de ficheiros do Android (Google Drive incluído). Ao abrir o APK, o Android pede para autorizares a instalação de apps fora da Play Store — é normal.</div>' +
-          '<div class="toolbar" style="margin-top:11px"><a class="btn primary" href="/gestor-imobiliario.apk" download style="text-decoration:none">' + ic('down', 16) + ' Descarregar APK</a></div>');
+          '<div class="toolbar" style="margin-top:11px"><a class="btn primary" href="/gestor-imobiliario.apk" download style="text-decoration:none" data-toca="nada">' + ic('down', 16) + ' Descarregar APK</a></div>');
     }
   }
   return h;
@@ -110,17 +110,17 @@ function connCard(c) {
   var btns = '';
   if (c.status === 'pending' && c.incoming) {
     lines = '<div class="small">Quer ligar-se a ti. Se aceitares, cada um pode escolher que casas partilha com o outro.</div>';
-    btns = '<button class="btn primary sm" onclick="CW.acceptConn(\'' + c.id + '\')">Aceitar</button>' +
-      '<button class="btn sm danger" onclick="CW.delConn(\'' + c.id + '\',1)">Recusar</button>';
+    btns = '<button class="btn primary sm" data-toca="dados" onclick="CW.acceptConn(\'' + c.id + '\')">Aceitar</button>' +
+      '<button class="btn sm danger" data-toca="dados" onclick="CW.delConn(\'' + c.id + '\',1)">Recusar</button>';
   } else if (c.status === 'pending') {
     lines = '<div class="small">À espera que aceite o convite.</div>';
-    btns = '<button class="btn sm danger" onclick="CW.delConn(\'' + c.id + '\',1)">Cancelar</button>';
+    btns = '<button class="btn sm danger" data-toca="dados" onclick="CW.delConn(\'' + c.id + '\',1)">Cancelar</button>';
   } else {
     var mine = (c.myShares || []).length, theirs = (c.peerShares || []).length;
     lines = '<div class="small">Partilhas <b>' + mine + '</b> casa' + (mine === 1 ? '' : 's') +
       ' · recebe' + 's' + ' <b>' + theirs + '</b> casa' + (theirs === 1 ? '' : 's') + ' de ' + peer + '</div>';
-    btns = '<button class="btn primary sm" onclick="CW.sharesModal(\'' + c.id + '\')">Escolher casas</button>' +
-      '<button class="btn sm danger" onclick="CW.delConn(\'' + c.id + '\')">Remover</button>';
+    btns = '<button class="btn primary sm" data-toca="camada" onclick="CW.sharesModal(\'' + c.id + '\')">Escolher casas</button>' +
+      '<button class="btn sm danger" data-toca="dados" data-risco="destroi" onclick="CW.delConn(\'' + c.id + '\')">Remover</button>';
   }
   // os botões ficam numa linha própria: encostados ao texto, tapavam-no em ecrãs estreitos
   return '<div class="card" style="padding:13px 14px">' +
@@ -150,10 +150,10 @@ function ligacaoCard() {
     ? '<div class="stat"><span>Estado</span><b>Ativa</b></div>' +
       '<div class="stat" style="border:0"><span>Pedidos chegados por aqui</span><b>' + usos + '</b></div>' +
       '<div class="toolbar" style="margin-top:11px">' +
-      '<button class="btn primary" onclick="CW.ligacaoCopiar()">Copiar ligação</button>' +
-      '<button class="btn" onclick="CW.ligacaoRodar()">Rodar</button>' +
-      '<button class="btn danger" onclick="CW.ligacaoDesativar()">Desativar</button></div>'
-    : '<div class="toolbar"><button class="btn primary" onclick="CW.ligacaoCriar()">' + ic('key', 15) + ' Criar ligação</button></div>';
+      '<button class="btn primary" data-toca="nada" onclick="CW.ligacaoCopiar()">Copiar ligação</button>' +
+      '<button class="btn" data-toca="dados" onclick="CW.ligacaoRodar()">Rodar</button>' +
+      '<button class="btn danger" data-toca="dados" onclick="CW.ligacaoDesativar()">Desativar</button></div>'
+    : '<div class="toolbar"><button class="btn primary" data-toca="dados" onclick="CW.ligacaoCriar()">' + ic('key', 15) + ' Criar ligação</button></div>';
   return card('A minha ligação de partilha', 'Uma ligação tua, em vez do id',
     corpo +
     '<div class="hint" style="margin-top:11px">Quem a abrir escolhe que imóveis partilha contigo; tu aceitas ou recusas cada pedido. ' +
@@ -170,12 +170,12 @@ function pedidosCard() {
   var linhas = inc.map(function (p) {
     return '<div class="card" style="padding:12px 13px"><b style="display:block">' + esc(p.fromName || '') + ' quer partilhar ' + esc(p.houseName || 'um imóvel') + ' contigo</b>' +
       '<span class="small">Se aceitares, passas a comproprietário desse imóvel — vês contratos, movimentos e pessoas.</span>' +
-      '<div class="toolbar" style="margin-top:9px"><button class="btn primary sm" onclick="CW.pedidoAceitar(\'' + jsq(p.id) + '\')">Aceitar</button>' +
-      '<button class="btn sm danger" onclick="CW.pedidoRecusar(\'' + jsq(p.id) + '\')">Recusar</button></div></div>';
+      '<div class="toolbar" style="margin-top:9px"><button class="btn primary sm" data-toca="dados" onclick="CW.pedidoAceitar(\'' + jsq(p.id) + '\')">Aceitar</button>' +
+      '<button class="btn sm danger" data-toca="dados" onclick="CW.pedidoRecusar(\'' + jsq(p.id) + '\')">Recusar</button></div></div>';
   }).concat(out.map(function (p) {
     return '<div class="card" style="padding:12px 13px"><b style="display:block">' + esc(p.houseName || 'Imóvel') + ' · à espera de ' + esc(p.toName || '') + '</b>' +
       '<span class="small">Pediste que passasse a comproprietário. Fica pendente até responder.</span>' +
-      '<div class="toolbar" style="margin-top:9px"><button class="btn sm" onclick="CW.pedidoCancelar(\'' + jsq(p.id) + '\')">Cancelar pedido</button></div></div>';
+      '<div class="toolbar" style="margin-top:9px"><button class="btn sm" data-toca="dados" onclick="CW.pedidoCancelar(\'' + jsq(p.id) + '\')">Cancelar pedido</button></div></div>';
   })).join('');
   return card('Pedidos de partilha', inc.length ? inc.length + ' por responder' : 'À espera de resposta',
     '<div class="list" style="gap:9px">' + linhas + '</div>');
@@ -199,7 +199,7 @@ function cargosCard() {
       }).join('') + '</div>'
     : '<div class="hint">Cria um cargo para dizeres o que um colaborador pode ver e adicionar — ou começa por um dos três prontos: Gestor de visitas, Contabilista, Ver tudo.</div>';
   return card('Cargos', 'O que cada colaborador pode fazer',
-    lista + '<div class="toolbar" style="margin-top:11px"><button class="btn" onclick="CW.cargoModal()">' + ic('plus', 15) + ' Novo cargo</button></div>');
+    lista + '<div class="toolbar" style="margin-top:11px"><button class="btn" data-toca="camada" onclick="CW.cargoModal()">' + ic('plus', 15) + ' Novo cargo</button></div>');
 }
 
 /* O cartão «Convidar colaborador»: o cargo, as caixas dos meus imóveis (com o
@@ -226,7 +226,7 @@ function convidarCard() {
           '<div class="hint" style="margin-top:6px">Imóveis que juntares ao grupo depois não entram — edita o colaborador.</div></div>'
         : '') + '</div>' +
       '<label>Nota para ti (opcional)<input id="cw_inv_label" maxlength="60" placeholder="Ex.: para a Ana, contabilidade" autocomplete="off"></label>' +
-      '<div class="toolbar"><button class="btn primary" onclick="CW.criarConvite()">' + ic('key', 15) + ' Criar ligação de convite</button></div>' +
+      '<div class="toolbar"><button class="btn primary" data-toca="dados" onclick="CW.criarConvite()">' + ic('key', 15) + ' Criar ligação de convite</button></div>' +
       '<div class="hint">Vale 7 dias e uma só utilização. Quem a abrir entra (ou cria conta) e fica com o cargo nesses imóveis — sem quota-parte.</div></div>';
   }
   var pendentes = invites.length
@@ -236,7 +236,7 @@ function convidarCard() {
         return '<div class="card" style="padding:11px 13px;display:flex;align-items:center;gap:10px">' +
           '<span style="flex:1;min-width:0"><b style="display:block">' + esc(i.roleName || 'Cargo') + (i.label ? ' · ' + esc(i.label) : '') + '</b>' +
           '<span class="small">' + esc(casas) + (expira ? ' · expira a ' + esc(expira) : '') + '</span></span>' +
-          '<button class="btn sm danger" style="flex:0 0 auto" onclick="CW.revogarConvite(\'' + jsq(i.id) + '\')">Revogar</button></div>';
+          '<button class="btn sm danger" style="flex:0 0 auto" data-toca="dados" onclick="CW.revogarConvite(\'' + jsq(i.id) + '\')">Revogar</button></div>';
       }).join('') + '</div>'
     : '';
   return card('Convidar colaborador', 'Uma ligação de uso único, com um cargo', form + pendentes);
@@ -258,8 +258,8 @@ function colaboradoresCard() {
               esc(typeof initials === 'function' ? initials(c.name) : (c.name || '?').slice(0, 2)) + '</span>' +
               '<span style="flex:1;min-width:0"><b style="display:block">' + esc(c.name || c.userId || '') + '</b>' +
               '<span class="badge grey">' + esc(c.roleName || 'Colaborador') + '</span></span></div>' +
-              '<div class="toolbar" style="margin-top:9px"><button class="btn sm" onclick="CW.mudarColaborador(\'' + jsq(c.id) + '\')">Mudar cargo ou imóveis</button>' +
-              '<button class="btn sm danger" onclick="CW.removerColaborador(\'' + jsq(c.id) + '\')">Remover</button></div></div>';
+              '<div class="toolbar" style="margin-top:9px"><button class="btn sm" data-toca="camada" onclick="CW.mudarColaborador(\'' + jsq(c.id) + '\')">Mudar cargo ou imóveis</button>' +
+              '<button class="btn sm danger" data-toca="dados" data-risco="destroi" onclick="CW.removerColaborador(\'' + jsq(c.id) + '\')">Remover</button></div></div>';
           }).join('') + '</div>';
       }).join('')
     : '<div class="hint">Ainda não tens colaboradores. Cria uma ligação de convite em cima.</div>';
@@ -280,7 +280,7 @@ function colaboroCard() {
       '<span style="flex:1;min-width:0"><b style="display:block">' + esc(p.name || 'Sem nome') + '</b>' +
       '<span class="small">de ' + esc(p._sharedFrom || '') + ' · </span><span class="badge grey">' + esc(p._cargo) + '</span></span>' +
       (p._collabId
-        ? '<button class="btn sm danger" style="flex:0 0 auto" onclick="CW.sairDeImovel(\'' + jsq(p._collabId) + '\')">Sair</button>'
+        ? '<button class="btn sm danger" style="flex:0 0 auto" data-toca="dados" data-risco="destroi" onclick="CW.sairDeImovel(\'' + jsq(p._collabId) + '\')">Sair</button>'
         : '') + '</div>';
   }).join('');
   return card('Imóveis onde colaboras', 'Como colaborador, não como dono',
@@ -299,7 +299,7 @@ function vColaboradores() {
   if (!CW.user) {
     return card('Colaboradores', 'Sem sessão iniciada',
       '<div class="hint">Convidar quem ajuda a gerir precisa de conta: é ela que guarda os cargos e os convites.</div>' +
-      '<div class="toolbar" style="margin-top:11px"><button class="btn primary" onclick="CW.showAuth()">Iniciar sessão</button></div>');
+      '<div class="toolbar" style="margin-top:11px"><button class="btn primary" data-toca="camada" onclick="CW.showAuth()">Iniciar sessão</button></div>');
   }
   var gap = '<div style="height:14px"></div>';
   var intro = '<div class="hint" style="margin:0 0 12px">Um colaborador entra nos imóveis que lhe deres, com um cargo que diz o que pode ver e adicionar — ' +
@@ -321,7 +321,7 @@ function vColaboradores() {
     return intro +
       '<div class="empty"><b>Ainda não tens colaboradores</b>Começa pelo cargo: é ele que diz o que a pessoa vê e o que pode adicionar. ' +
       'Depois convida-a com uma ligação de uso único.' +
-      '<div style="margin-top:10px"><button type="button" class="btn primary sm" onclick="CW.cargoModal()">' + ic('plus', 13) + ' Novo cargo</button></div></div>' +
+      '<div style="margin-top:10px"><button type="button" class="btn primary sm" data-toca="camada" onclick="CW.cargoModal()">' + ic('plus', 13) + ' Novo cargo</button></div></div>' +
       (colab ? gap + colab : '');
   }
   return intro + convidarCard() + gap + colaboradoresCard() + gap + cargosCard() + (colab ? gap + colab : '');
@@ -335,7 +335,7 @@ function vColaboradores() {
 // convite para entrar.
 // Devolve: string de HTML da página, pronta a inserir com innerHTML.
 function vCloud() {
-  if (!CW.user) return card('Conta', 'Sem sessão iniciada', '<button class="btn primary" onclick="CW.showAuth()">Iniciar sessão</button>');
+  if (!CW.user) return card('Conta', 'Sem sessão iniciada', '<button class="btn primary" data-toca="camada" onclick="CW.showAuth()">Iniciar sessão</button>');
   var conns = (CW.state.connections || []).slice();
   var gap = '<div style="height:14px"></div>';
   var pedidos = pedidosCard();
@@ -344,13 +344,13 @@ function vCloud() {
     '<div class="stat"><span>Email</span><b>' + esc(CW.user.email) + '</b></div>' +
     '<div class="stat" style="border:0"><span>O meu id</span><b style="font-family:monospace;letter-spacing:2px;font-size:16px">' + esc(CW.user.id) + '</b></div>' +
     '<div class="toolbar" style="margin-top:11px">' +
-    '<button class="btn" onclick="CW.copyId()">Copiar id</button>' +
-    '<button class="btn" onclick="CW.logout()">Terminar sessão</button></div>' +
+    '<button class="btn" data-toca="nada" onclick="CW.copyId()">Copiar id</button>' +
+    '<button class="btn" data-toca="dados" onclick="CW.logout()">Terminar sessão</button></div>' +
     '<div class="hint" style="margin-top:11px">Dá este id a outro utilizador para ele te adicionar — ou adiciona tu o id dele em baixo. Depois de aceite, cada um escolhe que casas quer partilhar.</div>');
   var add = card('Ligar a outro utilizador', 'Escreve o id que ele te deu',
     '<div style="display:flex;gap:9px">' +
     '<input id="cw_peer" placeholder="Ex.: A7KQ2MPX" style="flex:1;text-transform:uppercase;font-family:monospace;letter-spacing:2px" maxlength="8">' +
-    '<button class="btn primary" style="flex:0 0 auto" onclick="CW.addConn()">Adicionar</button></div>');
+    '<button class="btn primary" style="flex:0 0 auto" data-toca="dados" onclick="CW.addConn()">Adicionar</button></div>');
   var list = conns.length
     ? '<div class="section-title">Utilizadores ligados</div><div class="list" style="gap:10px">' + conns.map(connCard).join('') + '</div>'
     : '<div class="hint">Ainda não estás ligado a ninguém.</div>';
@@ -359,13 +359,13 @@ function vCloud() {
     'muda a palavra-passe ou fecha as outras sessões — em qualquer dos casos, todos os outros aparelhos passam a ' +
     'ter de entrar de novo.</div>' +
     '<div class="toolbar" style="margin-top:11px">' +
-    '<button class="btn" onclick="CW.passwordModal()">' + ic('lock', 15) + ' Mudar palavra-passe</button>' +
-    '<button class="btn" onclick="CW.revokeSessions()">Terminar sessão nos outros aparelhos</button></div>');
+    '<button class="btn" data-toca="camada" onclick="CW.passwordModal()">' + ic('lock', 15) + ' Mudar palavra-passe</button>' +
+    '<button class="btn" data-toca="dados" onclick="CW.revokeSessions()">Terminar sessão nos outros aparelhos</button></div>');
   var danger = card('Apagar a conta', 'Não há volta atrás',
     '<div class="hint">Apaga a tua conta e <b>todos os teus dados</b>: imóveis, contratos, movimentos, pessoas e ligações. ' +
     'Nas casas de outras pessoas onde tenhas ficado registado (num movimento pago por ti, por exemplo), o teu nome passa a ' +
     'aparecer como <b>[deleted]</b>. As casas que os outros partilharam contigo deixam de estar ligadas a ti — os dados deles não são apagados.</div>' +
-    '<div class="toolbar" style="margin-top:11px"><button class="btn danger" onclick="CW.deleteAccount()">' +
+    '<div class="toolbar" style="margin-top:11px"><button class="btn danger" data-toca="dados" data-risco="destroi" onclick="CW.deleteAccount()">' +
     ic('trash', 15) + ' Apagar a minha conta</button></div>');
   return acc + gap + ligacaoCard() + (pedidos ? gap + pedidos : '') + gap + add + gap + list +
     '<div style="height:18px"></div>' + seg + gap + danger;
