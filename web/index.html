@@ -88,6 +88,10 @@
   /* fora da escala porque não são reações: --desenho é um gráfico a
      desenhar-se e --pulso é um crachá a saltar */
   --desenho:.5s; --pulso:.18s;
+  /* o tempo que o toque longo espera antes de disparar (componentes.js): a
+     animação da espera tem de durar exatamente o mesmo, senão promete uma
+     coisa e faz outra */
+  --espera:.48s;
   /* DUAS curvas de entrada, e a diferença é a distância percorrida.
      A --curva é um estalido: medida, faz 83% do caminho em 30% do tempo. É o
      que se quer num botão que encolhe 3% — a reação tem de parecer imediata.
@@ -595,6 +599,12 @@ nav a:active,.railbtn:active{background:var(--side-on);color:#fff}
 /* o FAB tinha o scale(.96) declarado e nenhuma transição para o executar:
    descia e subia em zero frames, na peça mais tocada da app */
 .fab{transition:transform var(--rapido) var(--curva)}
+
+/* A espera de um toque longo, que se vê encher. Sem isto ficava meio segundo
+   uma laje cinzenta parada — o estado premido foi feito para um toque, que
+   dura um instante — e a cor da seleção chegava como um salto. */
+@keyframes lpEspera{from{background:var(--card)}to{background:var(--press)}}
+.lp-espera{animation:lpEspera var(--espera) linear both}
 
 /* Rede do premido, a par da do foco: o tornarFocavel dá role=button a tudo o
    que tem onclick, e medi cinco sítios só na visão geral que reagiam ao toque

@@ -97,12 +97,23 @@ CW.kpiToTx = function () {
   if (!q) return;
   CW._fromKpi = {
     title: q.title, year: q.year,
-    prev: { f: txFilter, p: txProp, c: txCat, s: txSub, pd: txPaid, np: txNoPayer, q: txSearch },
+    /* as datas entram no que se guarda: o salto passou a mexer-lhes, e sem
+       isto voltar a visao geral deixava lá as do salto por cima das que a
+       pessoa tinha posto */
+    prev: { f: txFilter, p: txProp, c: txCat, s: txSub, pd: txPaid, np: txNoPayer, q: txSearch,
+      de: txDe, ate: txAte },
   };
   txFilter = q.field === 'income' ? 'income' : q.field === 'op' ? 'expense' : q.field === 'loan' ? 'loan' : '';
   txProp = q.pid || '';
   txCat = ''; txSub = ''; txPaid = ''; txNoPayer = true;
-  txSearch = String(q.year) + '-';   // o ano vive na data de cada movimento
+  /* O ano diz-se com o filtro de datas, que e o que existe para isso. Estava a
+     ser dito com a PESQUISA — «2026-» — e isso era errado de duas maneiras: o
+     resumo dos filtros mostrava «pesquisa: "2026-"», que nao quer dizer nada a
+     quem le, e a pesquisa varre o texto todo do movimento, por isso um titulo
+     ou uma nota com «2026-» la dentro entrava na lista sem ser desse ano. */
+  txSearch = '';
+  txDe = String(q.year) + '-01-01';
+  txAte = String(q.year) + '-12-31';
   closeAllModals();
   go('transactions');
 };
@@ -115,6 +126,7 @@ CW.backToDash = function (fromModal) {
   if (f && f.prev) {
     txFilter = f.prev.f; txProp = f.prev.p; txCat = f.prev.c; txSub = f.prev.s;
     txPaid = f.prev.pd; txNoPayer = f.prev.np; txSearch = f.prev.q;
+    txDe = f.prev.de || ''; txAte = f.prev.ate || '';
   }
   CW._fromKpi = null;
   if (fromModal) closeAllModals();
