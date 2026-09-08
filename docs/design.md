@@ -230,13 +230,29 @@ A exceção é quando alguma coisa sai de UMA LISTA, e aí a saída é metade do
 que se está a dizer. Confirmar um planeado fazia o cartão desaparecer e as
 linhas de baixo aparecerem mais acima — não porque tenham subido, mas
 porque são nós novos que nasceram noutro sítio. Nada se moveu, e por isso
-nada se via mover. O continuidade.js:pintarComContinuidade mede onde cada
-peça está antes de repintar, repinta, e depois desliza as que mudaram de
-lugar, faz entrar as que chegaram e desvanecer as que saíram — o nó que
-saiu não é clonado, é o próprio, que continua vivo depois de o documento o
-deitar fora. Quem participa traz um atributo data-fk com uma chave estável — é
-por ele que o continuidade.js:pintarComContinuidade acompanha as peças; sem
-chave não há como saber se a terceira linha de agora é a terceira de antes.
+nada se via mover. O vistas.js:render mede onde cada peça está antes de
+repintar e, depois, desliza as que mudaram de lugar, faz entrar as que
+chegaram e desvanecer as que saíram (continuidade.js:medirContinuidade e
+continuidade.js:aplicarContinuidade) — o nó que saiu não é clonado, é o
+próprio, que continua vivo depois de o documento o deitar fora.
+
+É o render que o faz, e não cada sítio a pedir: quando isto estava ligado a
+três chamadas escolhidas à mão, todas as outras listas — inquilinos,
+movimentos, visitas — continuavam a trocar de golpe, e ninguém tinha por
+onde dar por isso. Quem repinta não se pode ter de lembrar.
+
+A chave não é inventada: as linhas de lista já trazem data-lp, que é por
+onde o toque longo as encontra e já é o id do registo (onde não houver,
+vale um data-fk). Sem chave, uma peça é só «mais uma».
+
+Três limites que a regra tem de respeitar, e que são a razão de ela não ser
+um simples embrulho: só dentro do MESMO ecrã, porque mudar de separador
+troca tudo o que lá está e animar isso seria uma revoada; só o que está à
+vista, com um ecrã de folga, porque animar quatrocentas linhas que ninguém
+vê é trabalho para ninguém ver; e a aplicação fica para uma microtarefa,
+porque o render é embrulhado quatro vezes pela camada da nuvem e são esses
+embrulhos que acrescentam as caixas e os kebabs — medir antes deles seria
+medir posições que ainda vão mudar.
 
 Onde não há peças a acompanhar mas há uma direção — o mês seguinte do
 calendário, entrar numa categoria do gráfico — usa-se o

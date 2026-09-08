@@ -400,11 +400,7 @@ function quickConfirmRec(id){
   /* a mesma frase do formulário: confirmar depressa não pode aceitar o que o Guardar recusa */
   if(recCreditoPago(r))return toast('Esta hipoteca já está paga: não é possível associar novos pagamentos.');
   const t=recTx(r);if(t.kind==='loan')applyLoan(t);
-  db.transactions.push(t);recAdvance(r);save();buildNav();
-  /* A linha confirmada some-se e as de baixo sobem para o lugar dela, em vez
-     de a vista inteira ser trocada por outra igual menos uma linha. */
-  pintarComContinuidade(render);
-  toast('Movimento confirmado.');
+  db.transactions.push(t);recAdvance(r);save();buildNav();render();toast('Movimento confirmado.');
 }
 // Silencia ou reativa a recorrência: silenciada fica em Planeados à espera de
 // confirmação, mas sem avisos nem contagem no menu. Grava e redesenha.

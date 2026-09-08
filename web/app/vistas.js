@@ -63,12 +63,23 @@ function tornarFocavel(raiz){
    render logo a seguir. Arranca ligado: a primeira pintura da app é uma
    chegada como as outras. */
 let _entrar=1;
+/* o ecrã que a última pintura mostrou, para não se acompanhar peças entre
+   ecrãs diferentes: mudar de separador troca tudo o que lá está, e animar
+   isso seria uma revoada de linhas a atravessar a página */
+let _ecraPintado='';
 /* Redesenha a página inteira: título e subtítulo, botão de filtros do
    cabeçalho, e o HTML da vista do separador atual (vDashboard, vProperties…).
    Substitui o innerHTML de #view, por isso o estado do DOM anterior perde-se;
    no fim torna os cartões focáveis e repinta as miniaturas dos imóveis.
    Devolve: nada — redesenha a vista no DOM. */
 function render(){
+  /* Acompanhar as peças é a REGRA, e não um pedido de cada sítio: era assim
+     que os inquilinos, os movimentos e tudo o resto continuavam a trocar de
+     golpe enquanto só três chamadas se lembravam de pedir. Só no mesmo ecrã —
+     ver continuidade.js. */
+  const ecra=tab+'|'+(setPage||'');
+  const antes=(ecra===_ecraPintado&&!contSuspensa)?medirContinuidade(view()):null;
+  _ecraPintado=ecra;
   const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
   document.getElementById('pageTitle').textContent=meta.label;
   document.getElementById('pageSub').textContent=meta.sub;
@@ -98,6 +109,13 @@ function render(){
   }
   tornarFocavel(view());
   if(tab==='properties')db.properties.forEach(p=>paintThumbs(p.photos,view()));
+  /* Numa microtarefa, e não já: o render é embrulhado quatro vezes pela camada
+     da nuvem, e são esses embrulhos que acrescentam as caixas de seleção, os
+     kebabs e as barras — tudo coisas que mexem no sítio das linhas. Medir aqui
+     era medir posições que ainda iam mudar. A microtarefa corre depois da
+     cadeia toda e ainda antes de o browser pintar, que é a janela de que esta
+     técnica precisa. */
+  if(antes)Promise.resolve().then(()=>aplicarContinuidade(antes,view()));
 }
 let kpiN=0;const KPI_REG={};
 /* evo: função que devolve a série do indicador ao longo do tempo; ao tocar abre-se uma janela com a evolução
@@ -1025,7 +1043,7 @@ function vTransactions(){
       ${xm.caixa||''}<span>${mo}</span><span class="${net>=0?'pos':'neg'}">${euro(net)}</span></div>
       <div class="list">${rows.map(t=>{const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null;
       const x=txLinhaExtra(t,mo)||{};
-      return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
+      return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} onclick="${x.onclick||`txModal('${jsq(t.id)}')`}"><div class="row-between">
         ${x.caixa||''}<div style="min-width:0"><div class="title" style="font-size:14.5px">${esc(t.label)}</div>
           <div class="small">${esc(t.date)} · ${k.short}${t.category?' · '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' · '+esc(propName(t.propertyId)):''}${t.creditor?' · '+esc(t.creditor):''}</div>
           ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}

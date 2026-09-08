@@ -20,10 +20,25 @@
    mesmo, com o conteúdo que a pessoa estava a ver, que se volta a pôr por
    cima a desvanecer. Sai mais barato do que clonar e não pode divergir.
 
-   As peças que participam trazem data-fk com uma chave estável (o id do
-   registo). Sem chave, uma peça é só «mais uma»: não há como saber se a
-   terceira linha de agora é a terceira de antes ou outra que lhe tomou o
-   lugar. */
+   As peças que participam trazem uma chave estável. Não se inventou atributo
+   novo para isso: a app já marca as linhas de lista com data-lp — é por aí
+   que o toque longo as encontra —, e essa chave já é o id do registo. Onde
+   não houver data-lp, vale um data-fk. Sem chave, uma peça é só «mais uma»:
+   não há como saber se a terceira linha de agora é a terceira de antes ou
+   outra que lhe tomou o lugar.
+
+   Só se acompanha o que está à vista, com um ecrã de folga para cada lado.
+   Numa lista de quinhentos movimentos, medir e animar as quatrocentas linhas
+   que ninguém vê é trabalho para ninguém ver. */
+
+/* Ligada enquanto outra animação está a tratar do mesmo ecrã (o deslizarEntre),
+   para o render não pôr uma segunda por cima. */
+let contSuspensa=false;
+/* as peças que sabem quem são, e a chave de cada uma */
+const SEL_CHAVE='[data-fk],[data-lp]';
+/* Recebe: e — um elemento.
+   Devolve: a chave de continuidade do elemento, ou '' se não tiver. */
+function chaveDe(e){return e.getAttribute('data-fk')||e.getAttribute('data-lp')||''}
 
 /* Quem pediu menos movimento ao sistema não recebe nenhum.
 
@@ -78,7 +93,7 @@ function camadaDeSaida(){
    Recebe: a — {el,x,y,w}: o nó e o retângulo que ocupava (coordenadas do ecrã).
    Devolve: nada — mete o nó na camada de saída e remove-o no fim. */
 function sairDoEcra(a){
-  const e=a.el,dur=msDoToken('--medio',200);
+  const e=a.el,dur=msDoToken('--lento',340);
   e.style.position='fixed';e.style.left=a.x+'px';e.style.top=a.y+'px';
   e.style.width=a.w+'px';e.style.margin='0';e.style.pointerEvents='none';
   camadaDeSaida().appendChild(e);
@@ -103,25 +118,48 @@ function sairDoEcra(a){
    chamada ANTES e DEPOIS de pintar, porque a repintura pode ter substituído o
    próprio elemento.
    Devolve: o que a função pintar devolver. */
-function pintarComContinuidade(pintar,o){
-  o=o||{};
-  const obter=o.raiz||function(){return document.getElementById('view')};
-  const r0=obter();
-  if(semMovimento()||!r0||!r0.animate||!r0.querySelectorAll)return pintar();
-  const dur=msDoToken('--medio',200),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
+/* Está à vista, ou perto?
+   Recebe: r — um retângulo do ecrã (getBoundingClientRect).
+   Devolve: verdadeiro se está na janela, com um ecrã de folga para cada lado. */
+function porPerto(r){
+  if(!r.width&&!r.height)return false;
+  const h=window.innerHeight||0;
+  return r.bottom>-h&&r.top<h*2;
+}
+
+/* Onde estão agora as peças com chave, para se poder comparar depois.
+   Recebe: raiz — o elemento onde procurar (com null devolve vazio).
+   Devolve: objeto {chave:{el,x,y,w}} com as peças à vista, ou null se não há
+   nada a medir (sem raiz, ou porque o sistema pediu menos movimento). */
+function medirContinuidade(raiz){
+  if(semMovimento()||!raiz||!raiz.querySelectorAll||!raiz.animate)return null;
   const antes={};
-  [].slice.call(r0.querySelectorAll('[data-fk]')).forEach(function(e){
+  [].slice.call(raiz.querySelectorAll(SEL_CHAVE)).forEach(function(e){
+    const k=chaveDe(e);if(!k)return;
     const r=e.getBoundingClientRect();
-    if(r.width||r.height)antes[e.getAttribute('data-fk')]={el:e,x:r.left,y:r.top,w:r.width};
+    if(porPerto(r))antes[k]={el:e,x:r.left,y:r.top,w:r.width};
   });
-  const res=pintar();
-  const r1=obter();
-  if(!r1||!r1.querySelectorAll)return res;
+  return antes;
+}
+
+/* Compara com o que se mediu antes e anima a diferença: quem mudou de sítio
+   desliza para lá, quem chegou entra, quem saiu desvanece no lugar onde
+   estava.
+   Recebe: antes — o resultado de medirContinuidade (null não faz nada);
+   raiz — o elemento depois de repintado.
+   Devolve: nada — anima o que houver a animar. */
+function aplicarContinuidade(antes,raiz){
+  if(!antes||!raiz||!raiz.querySelectorAll)return;
+  /* o --lento, e não o --medio: uma linha que percorre mais de cem pixeis é
+     das coisas que atravessam distância, e a essas o tempo curto tira-lhes o
+     movimento todo — foi a mesma queixa que a folha da janela teve */
+  const dur=msDoToken('--lento',340),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
   const vistos={};
-  [].slice.call(r1.querySelectorAll('[data-fk]')).forEach(function(e){
-    const k=e.getAttribute('data-fk');vistos[k]=1;
+  [].slice.call(raiz.querySelectorAll(SEL_CHAVE)).forEach(function(e){
+    const k=chaveDe(e);if(!k)return;
+    vistos[k]=1;
     const a=antes[k],r=e.getBoundingClientRect();
-    if(!r.width&&!r.height)return;
+    if(!porPerto(r))return;
     if(!a){e.animate([{opacity:0,transform:'translateY(-6px)'},{opacity:1,transform:'none'}],
       {duration:dur,easing:curva});return}
     const dx=a.x-r.left,dy=a.y-r.top;
@@ -132,6 +170,21 @@ function pintarComContinuidade(pintar,o){
       {duration:dur,easing:curva});
   });
   Object.keys(antes).forEach(function(k){if(!vistos[k])sairDoEcra(antes[k])});
+}
+
+/* Repinta, e faz o que mudou parecer que se moveu. É o medir e o aplicar num
+   só gesto, para quem repinta de uma vez.
+   Recebe: pintar — a função que repinta; o (opcional) — {raiz} é uma função
+   que devolve o elemento onde procurar as peças (por omissão o #view), e é
+   chamada ANTES e DEPOIS de pintar, porque a repintura pode ter substituído o
+   próprio elemento.
+   Devolve: o que a função pintar devolver. */
+function pintarComContinuidade(pintar,o){
+  o=o||{};
+  const obter=o.raiz||function(){return document.getElementById('view')};
+  const antes=medirContinuidade(obter());
+  const res=pintar();
+  aplicarContinuidade(antes,obter());
   return res;
 }
 
@@ -151,6 +204,18 @@ function pintarComContinuidade(pintar,o){
 function deslizarEntre(obter,pintar,dir){
   const a=obter();
   if(semMovimento()||!a||!a.animate)return pintar();
+  /* Lá dentro há um render, e o render acompanha as peças por sua conta. Duas
+     animações sobre a mesma coisa — a página a virar e as linhas a deslizar —
+     lêem-se como uma confusão, não como duas ideias. */
+  contSuspensa=true;
+  try{return deslizarEntre_(obter,pintar,dir,a)}finally{contSuspensa=false}
+}
+/* o corpo do deslize, à parte só para a suspensão acima ter um try/finally
+   limpo à volta dele
+   Recebe: obter, pintar, dir — como no deslizarEntre; a — o elemento medido
+   antes de pintar.
+   Devolve: o que a função pintar devolver. */
+function deslizarEntre_(obter,pintar,dir,a){
   const r=a.getBoundingClientRect();
   const dur=msDoToken('--lento',340),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
   const salto=Math.round(Math.min(r.width*.18,90))*(dir||0);

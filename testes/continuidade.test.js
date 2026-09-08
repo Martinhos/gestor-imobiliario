@@ -7,10 +7,12 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { carregarApp } from './arnes.js';
 
 const app = carregarApp();
-const { pintarComContinuidade, deslizarEntre, semMovimento, msDoToken, tokenTexto } = app;
+const { pintarComContinuidade, deslizarEntre, semMovimento, msDoToken, tokenTexto,
+  medirContinuidade, aplicarContinuidade } = app;
 
 describe('a repintura acontece sempre', () => {
   /* O DOM do arnês não tem animate(): é exatamente o caso «não dá para
@@ -44,6 +46,41 @@ describe('menos movimento', () => {
      matchMedia (numa vm, num browser antigo) a resposta é «não pediu». */
   test('sem matchMedia não rebenta, e assume que ninguém pediu', () => {
     assert.equal(semMovimento(), false);
+  });
+});
+
+describe('acompanhar peças é a regra, não um pedido', () => {
+  /* Liguei isto primeiro a três sítios, e o resultado foi o esperado: todas as
+     outras listas continuaram a trocar de golpe. Quem repinta não se pode ter
+     de lembrar — quem repinta é o render, e é ele que acompanha. */
+  const vistas = readFileSync(new URL('../web/app/vistas.js', import.meta.url), 'utf8');
+
+  test('é o render que mede e aplica, e mais ninguém tem de pedir', () => {
+    assert.match(vistas, /const antes=\(ecra===_ecraPintado&&!contSuspensa\)\?medirContinuidade\(view\(\)\):null/,
+      'mede no princípio da pintura');
+    assert.match(vistas, /Promise\.resolve\(\)\.then\(\(\)=>aplicarContinuidade\(antes,view\(\)\)\)/,
+      'e aplica depois, numa microtarefa');
+  });
+
+  /* O render corre também ao mudar de separador, e aí não há peça nenhuma a
+     acompanhar: é outro ecrã. Sem esta guarda, mudar de separador deitava
+     todas as linhas do ecrã anterior para a camada de saída ao mesmo tempo. */
+  test('só dentro do mesmo ecrã', () => {
+    assert.match(vistas, /const ecra=tab\+'\|'\+\(setPage\|\|''\)/);
+    assert.match(vistas, /_ecraPintado=ecra/);
+  });
+
+  /* A chave não é inventada: as linhas de lista já trazem data-lp, que é por
+     onde o toque longo as encontra, e já é o id do registo. */
+  test('a chave é a que a app já tinha', () => {
+    const cont = readFileSync(new URL('../web/app/continuidade.js', import.meta.url), 'utf8');
+    assert.match(cont, /const SEL_CHAVE='\[data-fk\],\[data-lp\]'/);
+    assert.match(cont, /getAttribute\('data-fk'\)\|\|e\.getAttribute\('data-lp'\)/);
+  });
+
+  test('sem nada medido, aplicar não rebenta', () => {
+    assert.equal(medirContinuidade(null), null);
+    assert.doesNotThrow(() => aplicarContinuidade(null, {}));
   });
 });
 
