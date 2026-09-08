@@ -241,11 +241,16 @@ describe('movimento', () => {
      chegava a casar. O atraso passa a ser escrito onde o índice se sabe. */
   test('o escalonamento vem do graficos.js e não de um nth-child', () => {
     assert.doesNotMatch(cssLimpo, /\.(?:gbar|ghbar):nth-child/, 'o nth-child contava o eixo');
-    assert.match(graficos, /const atrasoEntrada=i=>i\?`animation-delay:\$\{Math\.min\(i,5\)\*30\}ms`:''/);
-    assert.match(graficos, /const atraso=grp\.some\(s=>s\.value\)\?atrasoEntrada\(col\+\+\):''/,
+    assert.match(graficos, /const atrasoEntrada=\(i,n\)=>\{/, 'a onda conta as formas todas');
+    assert.match(graficos, /Math\.round\(i\*Math\.min\(30,150\/\(n-1\)\)\)/,
+      'o orçamento é 150ms repartido por todas, com o degrau a não passar de 30');
+    assert.doesNotMatch(graficos, /Math\.min\(i,5\)/,
+      'o corte aos seis degraus partia o gráfico ao meio: onda à esquerda, salto à direita');
+    assert.match(graficos, /const atraso=grp\.some\(s=>s\.value\)\?atrasoEntrada\(col\+\+,colunas\):''/,
       'conta as colunas desenhadas, não os meses vazios');
     assert.match(graficos, /class="gbar"[^`]*\$\{hit\(tip,atraso\)\}/, 'a barra vertical, pela coluna');
-    assert.match(graficos, /class="ghbar"[^`]*\$\{atrasoEntrada\(i\)\}/, 'a barra horizontal, pelo item');
+    assert.match(graficos, /const colunas=groups\.filter/, 'e sabe quantas colunas desenham');
+    assert.match(graficos, /class="ghbar"[^`]*\$\{atrasoEntrada\(i,items\.length\)\}/, 'a barra horizontal, pelo item');
   });
 
   /* A gaveta deslizava .22s e o véu era display:none→block: o escurecido
