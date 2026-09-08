@@ -659,10 +659,26 @@ function avisoAcimaDoRodape(){
   const H=window.innerHeight||0;
   let acima=0;
   [].slice.call(document.querySelectorAll('.modal.open .foot')).forEach(function(pes){
-    const r=pes.getBoundingClientRect();
-    if(r.height)acima=Math.max(acima,H-r.top);
+    if(!pes.offsetHeight)return;
+    acima=Math.max(acima,H-emRepouso(pes));
   });
   t.style.setProperty('--acima',acima>0?Math.ceil(acima+12)+'px':'0px');
+}
+/* Onde é que este elemento fica QUANDO PARAR de se mexer.
+
+   Um getBoundingClientRect apanha o transform, e no telemóvel a folha de um
+   modal entra a deslizar de baixo: medida no instante em que abre, ela ainda
+   está fora do ecrã, e o aviso concluía que não havia rodapé nenhum por cima
+   de quem subir. O offsetTop não vê transforms — é a caixa de maquetização,
+   que já está no sítio final. Somam-se os do caminho até acima porque o
+   offsetTop de cada um é relativo ao seu offsetParent, e o de um elemento
+   fixo é relativo ao ecrã, que é onde queremos chegar.
+   Recebe: el — o elemento a medir.
+   Devolve: a distância do topo do ecrã ao topo do elemento, já parado. */
+function emRepouso(el){
+  let y=0,n=el;
+  while(n){y+=n.offsetTop||0;n=n.offsetParent}
+  return y;
 }
 
 const KIND={income:{short:'Receita',sign:'+',color:'pos',flow:'in'},expense:{short:'Despesa',sign:'−',color:'neg',flow:'out'},
