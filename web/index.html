@@ -591,6 +591,15 @@ nav a:active,.railbtn:active{background:var(--side-on);color:#fff}
    com nada. Fica por baixo das regras de cima na especificidade, por isso
    quem já tem o seu (o .card.tap, por exemplo) mantém-no. */
 [role="button"]:active,.tap:active{transform:scale(.98)}
+/* Uma forma de gráfico não é um botão que se afunda. O tornarFocavel dá-lhes
+   role=button para o teclado lá chegar, e a regra de cima apanhava-as: num
+   SVG, um transform não é uma reação — é o desenho a mudar de sítio. E a
+   origem não é o centro da forma: a barra encolhe a partir do eixo e a ponta
+   livre anda; o ponto de uma linha tem a origem em 0,0 do desenho inteiro e
+   afasta-se na proporção da distância a que está dela. Medido: as barras
+   saltavam ao serem tocadas, e a dica que aparece a seguir ficava ancorada à
+   forma já deslocada, a assentar só quando o dedo saía. */
+svg [role="button"]:active,svg .tap:active{transform:none}
 [role="button"]:not(.on):active,.tap:not(.card):not(.on):active{background:var(--press)}
 
 /* --- O foco desenha-se ---
