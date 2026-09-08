@@ -25,14 +25,24 @@ function chartTip(e,txt){
    para não ficarem dois style no mesmo elemento).
    Devolve: string com os atributos, para colar dentro da tag. */
 const hit=(txt,estilo)=>{const j=jsq(txt);return `onclick="chartTip(event,'${j}')" onmouseenter="chartTip(event,'${j}')" style="cursor:pointer${estilo?';'+estilo:''}"`};
-/* Atraso da entrada de uma forma do gráfico, pelo seu lugar na fila: seis
-   degraus de 30ms e depois pára (150ms no último). Com mais degraus, um
-   gráfico de doze barras demorava mais a desenhar-se do que a ser lido.
+/* Atraso da entrada de uma forma do gráfico, pelo seu lugar na fila.
+
+   O orçamento é sempre o mesmo — 150ms entre a primeira e a última, porque um
+   gráfico não pode demorar mais a desenhar-se do que a ser lido — e reparte-se
+   por TODAS as formas. Antes eram seis degraus de 30ms e depois parava: com
+   doze colunas, metade do gráfico subia em onda e a outra metade saltava toda
+   junta no fim, e via-se — o lado direito comportava-se de outra maneira.
+   O degrau nunca passa de 30ms, para uma lista curta não ficar preguiçosa.
+
    Vai escrito em cada forma porque em SVG as barras são irmãs dos elementos do
    eixo — um nth-child contava-os a eles também.
-   Recebe: i — o índice da forma (0 é a primeira).
+   Recebe: i — o índice da forma (0 é a primeira); n — quantas formas há ao
+   todo (com menos de 2 não há onda nenhuma).
    Devolve: o pedaço de CSS 'animation-delay:NNms', ou '' para a primeira. */
-const atrasoEntrada=i=>i?`animation-delay:${Math.min(i,5)*30}ms`:'';
+const atrasoEntrada=(i,n)=>{
+  if(!i||!(n>1))return '';
+  return `animation-delay:${Math.round(i*Math.min(30,150/(n-1)))}ms`;
+};
 /* mostra no máximo ~13 etiquetas para não ficarem ilegíveis
    Recebe: labels — array das etiquetas (strings) do eixo X.
    Devolve: novo array do mesmo tamanho, com '' nas posições que se escondem
@@ -120,11 +130,12 @@ function cBars(groups,labels,o){
      ano com uma só despesa em dezembro, o índice do grupo dava-lhe o último
      degrau e a barra ficava 150ms invisível à espera de nada */
   let col=0;
+  const colunas=groups.filter(g=>g.some(s=>s.value)).length;
   groups.forEach((grp,i)=>{
     const cx=x0+bw*i+bw/2;let up=0,dn=0;
     /* o atraso é da coluna e não do segmento: as parcelas de uma mesma coluna
        sobem juntas, senão a barra empilhada crescia aos bocados */
-    const atraso=grp.some(s=>s.value)?atrasoEntrada(col++):'';
+    const atraso=grp.some(s=>s.value)?atrasoEntrada(col++,colunas):'';
     grp.forEach(seg=>{
       if(!seg.value)return;
       const a=seg.value>0?up:dn,b=a+seg.value;
@@ -183,7 +194,7 @@ function cHBars(items,o){
     return `<div ${hit(it.label+': '+(o.fmt?o.fmt(it.value):euro(it.value)))}><div class="li" style="margin-bottom:4px"><span class="nm" style="color:var(--ink)">${esc(it.label)}</span>
       <span class="vl ${neg?'neg':''}">${o.fmt?o.fmt(it.value):euro(it.value)}</span></div>
       <div style="height:8px;border-radius:99px;background:var(--chip);overflow:hidden">
-      <i class="ghbar" style="display:block;height:100%;width:${(Math.abs(it.value)/max*100).toFixed(1)}%;background:${col};border-radius:99px;${atrasoEntrada(i)}"></i></div></div>`}).join('')}</div>`;
+      <i class="ghbar" style="display:block;height:100%;width:${(Math.abs(it.value)/max*100).toFixed(1)}%;background:${col};border-radius:99px;${atrasoEntrada(i,items.length)}"></i></div></div>`}).join('')}</div>`;
 }
 // Legenda com bolinha de cor. withVal acrescenta valor e percentagem; itens com "act" ficam clicáveis.
 // Recebe: items — array de {label, color} e, conforme o caso, value (texto já
