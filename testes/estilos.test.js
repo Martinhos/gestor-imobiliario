@@ -312,7 +312,12 @@ describe('movimento', () => {
       'o corte aos seis degraus partia o gráfico ao meio: onda à esquerda, salto à direita');
     assert.match(graficos, /const atraso=grp\.some\(s=>s\.value\)\?atrasoEntrada\(col\+\+,colunas\):''/,
       'conta as colunas desenhadas, não os meses vazios');
-    assert.match(graficos, /class="gbar\$\{[^}]*\}"[^`]*\$\{hit\(tip,atraso\)\}/, 'a barra vertical, pela coluna');
+    /* o atraso viaja no style da própria barra: o hit() deixou de lá estar
+       quando o gráfico passou a ler-se com o dedo e as formas saíram do Tab */
+    assert.match(graficos, /class="gbar\$\{[^}]*\}"[^`]*\$\{atraso\?` style="\$\{atraso\}"`:''\}/,
+      'a barra vertical, pela coluna');
+    assert.doesNotMatch(graficos, /class="gbar[^`]*hit\(/,
+      'e sem toque próprio: cada forma com onclick era uma paragem do Tab sem destino');
     assert.match(graficos, /const colunas=groups\.filter/, 'e sabe quantas colunas desenham');
     assert.match(graficos, /class="ghbar"[^`]*\$\{atrasoEntrada\(i,items\.length\)\}/, 'a barra horizontal, pelo item');
   });
