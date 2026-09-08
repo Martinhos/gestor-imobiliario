@@ -40,6 +40,20 @@ function pecaDe(html,chave){
   return n;
 }
 
+/* Semeia o cache de um contentor cujos itens já vieram no HTML.
+
+   Numa pintura inteira o contentor é um nó acabado de nascer: os itens já lá
+   estão, com a chave, e não há nada de antes com que os comparar. Reconciliar
+   ali era deitar fora e refazer tudo o que o innerHTML tinha acabado de pôr.
+   Semeia-se o que ficou, e o motor entra em ação na repintura seguinte — que
+   é a via onde ele paga, a da pesquisa e a dos filtros.
+   Recebe: alvo — o contentor; itens — [{chave, html}].
+   Devolve: nada — só escreve o cache. */
+function semear(alvo,itens){
+  if(!alvo)return;
+  const cache=alvo[CHAVE_CACHE]||(alvo[CHAVE_CACHE]={});
+  (itens||[]).forEach(function(it){if(it&&it.chave)cache[it.chave]=it.html});
+}
 /* Põe o conteúdo de um contentor igual à lista pedida, mexendo o menos
    possível.
 

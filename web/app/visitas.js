@@ -74,8 +74,10 @@ function vVisits(){
     visIntervalo(K,'time','h1','h2','Hora de início'),
   ],lista.length);
   const futuras=lista.filter(v=>!visPassada(v)),passadas=lista.filter(visPassada).reverse();
-  const bloco=(titulo,vs)=>vs.length?`<div class="navh" style="margin:4px 0 8px">${titulo}</div>
-    <div class="list" style="margin-bottom:16px">${vs.map(visCard).join('')}</div>`:'';
+  /* o título do grupo fica FORA do contentor: o motor deita fora tudo o que
+     não seja um item com chave */
+  const bloco=(titulo,vs)=>vs.length?`<div class="navh" style="margin:4px 0 8px">${titulo}</div>`
+    +listaViva('visitas:'+titulo,vs.map(v=>({chave:'vis:'+v.id,html:visCard(v)})),'','margin-bottom:16px'):'';
   return head+bloco('Próximas',futuras)+bloco('Passadas',passadas)+
     (lista.length?'':'<div class="empty">Nada com estes filtros.</div>')+
     (marca?`<button class="fab" data-toca="camada" onclick="visitModal()" aria-label="Marcar visita">${ic('plus',22)}</button>`:'');

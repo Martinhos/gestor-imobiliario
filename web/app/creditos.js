@@ -39,10 +39,11 @@ function vCredits(){
     <div class="small">${esc(p.name)} · ${euro2(sum(txs.map(t=>t.amount||0)))} · ${txs.length===1?'não abateu':'não abateram'} capital nenhum a ${esc(loanName(l))}.</div>
     <div class="toolbar" style="margin:9px 0 0"><button class="btn sm primary" data-toca="dados" onclick="associarOrfaos('${jsq(p.id)}','${jsq(l.id)}')">Associar à hipoteca ${esc(loanName(l))}</button></div></div>`).join('');
   const act=shown.filter(x=>Number(x.l.outstanding)>0),paid=shown.filter(x=>!(Number(x.l.outstanding)>0));
-  const list=aviso+(act.length?`<div class="list">${act.map(mortCard).join('')}</div>`:'')
-    +(paid.length?`<div class="section-title" style="margin-top:${act.length?18:0}px">Créditos antigos já pagos</div>
-      <div class="list">${paid.map(mortCard).join('')}</div>
-      <div class="hint" style="margin-top:10px">Se editares um pagamento e a dívida voltar a subir, o crédito volta para a lista de cima.</div>`:'');
+  const emLista=(id,xs)=>listaViva(id,xs.map(x=>({chave:'mort:'+x.p.id+':'+x.l.id,html:mortCard(x)})));
+  const list=aviso+(act.length?emLista('creditos-ativos',act):'')
+    +(paid.length?`<div class="section-title" style="margin-top:${act.length?18:0}px">Créditos antigos já pagos</div>`
+      +emLista('creditos-pagos',paid)
+      +`<div class="hint" style="margin-top:10px">Se editares um pagamento e a dívida voltar a subir, o crédito volta para a lista de cima.</div>`:'');
   return head+kpis+list+`<div class="hint" style="margin-top:12px">Também podes geri-las na ficha de cada imóvel.</div>`;
 }
 /* Os pagamentos de crédito de um imóvel que estão à espera de hipoteca: os que
