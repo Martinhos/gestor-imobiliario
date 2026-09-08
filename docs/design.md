@@ -162,12 +162,24 @@ a barra de baixo (index.html:.tabbar), 45 e 46 o painel de filtros
 (index.html:.toast), 95 a dica dos gráficos (index.html:.tip).
 
 ## Movimento
-Três durações e duas curvas, e nada fora disso: --rapido .12s para o que
-responde ao dedo, --medio .2s para o que aparece e desaparece, --lento
-.26s para a janela, que é a peça maior (index.html:--rapido). A --curva
-arranca depressa e chega devagar — é a de quem entra em cena; a
---curva-sai faz o inverso e serve o que se fecha (index.html:--curva). Um
-tempo escrito à mão numa regra nova é uma decisão que ninguém tomou.
+Três durações: --rapido .12s para o que responde ao dedo, --medio .2s para
+o que aparece e desaparece, --lento .34s para o que atravessa distância —
+a folha da janela (index.html:--rapido). Um tempo escrito à mão numa regra
+nova é uma decisão que ninguém tomou.
+
+E três curvas, sendo que a escolha entre as duas de entrada é pela
+DISTÂNCIA percorrida, e não pelo gosto. A --curva é um estalido: medida no
+browser, faz 83% do caminho em 30% do tempo. Num botão que encolhe 3% é
+exatamente o que se quer — a reação tem de parecer imediata. Numa folha
+que sobe o ecrã inteiro em 260ms, quer dizer 83% da altura nos primeiros
+78ms: a janela teleporta-se e passa o resto do tempo a assentar os últimos
+4%. Foi o que nos disseram a usar a app — «nem se percebe que deslizou» —
+e foi também porque os gráficos «apareciam» em vez de se desenharem. A
+--curva-entra faz 64% em 30% e é a de quem percorre caminho: a folha, a
+gaveta, as barras a crescer, o conteúdo de uma dobra (index.html:--curva-entra).
+A --curva-sai faz o inverso das duas e serve o que se fecha
+(index.html:--curva-sai). Na dúvida: se o que se move percorre mais do que
+uns poucos pixeis, é a --curva-entra.
 
 A escolha entre transition e animation não é de gosto: é a arquitetura da
 app. O render() troca o #view.innerHTML inteiro (vistas.js:render), o
@@ -216,7 +228,11 @@ pessoa quer que feche.
 
 O que se toca afunda-se: sempre :active e nunca :hover, que no iOS fica
 preso depois do toque, e num telemóvel é o único sinal que existe entre o
-dedo e o resultado. A régua é a superfície: scale(.97) nos botões, opções
+dedo e o resultado. E o premido tem cor PRÓPRIA — o index.html:--press,
+mais fundo do que o --chip de passar por cima. Não é preciosismo: quando
+as duas coincidiam, com rato o ponteiro ficava em cima depois do clique, o
+:hover mantinha a cor, e o toque seguinte não mudava nada. A app parecia
+deixar de responder à segunda vez. A régua é a superfície: scale(.97) nos botões, opções
 e separadores, .98 no que é grande (index.html:.addbox, a dobra, a
 legenda), .99 no cartão (index.html:.card.tap). Quem já usa o transform
 para se colocar leva o scale a seguir ao que lá está, senão salta do
@@ -574,6 +590,11 @@ decorações e ninguém dá por isso.
 
 Não se escreve uma duração ou uma curva à mão: cita-se o token
 (index.html:--medio, index.html:--curva).
+
+Não se pinta o premido com a cor do :hover: com rato, o ponteiro fica em
+cima depois do clique e o toque seguinte deixa de mudar coisa nenhuma
+(index.html:--press; testes/estilos.test.js varre a folha à procura de
+pares iguais).
 
 Não se anima a altura de uma dobra: foi tentado com grid-template-rows
 0fr→1fr e a dobra ficou presa aberta (index.html:.fold.entra.open>.fold-body,
