@@ -28,7 +28,7 @@ var FUNCIONALIDADES = {
 var AVISOS = [
   {
     v: 31,
-    data: '2026-09-07',
+    data: '2026-09-09',
     titulo: 'Colaboradores com cargos, e uma ligação em vez do id',
     seccoes: [
       {
@@ -80,6 +80,50 @@ var AVISOS = [
           'Um contrato assinado para começar mais tarde deixa de contar como se já estivesse em vigor: não soma à renda do imóvel, não põe o imóvel como arrendado e não entra no yield nem na avaliação. Nas projeções conta a partir do mês em que começa — e um contrato que acaba a meio do horizonte deixa de contar depois disso.',
           'E passa a ver-se: leva o selo «por começar» na lista, tem filtro próprio, a ficha diz «Por começar · a 15-03-2028», e na ficha do inquilino aparece em «Vai morar em» em vez de «Contratos anteriores».',
           'A renda dele fica planeada para o mês e dia certos, e se mudares a data de início para mais tarde a renda planeada vai com ela.',
+          'O cartão do imóvel deixa de dizer só «Vago» quando já está prometido: leva o selo «1 contrato por começar», com o inquilino, a renda e a data em que começa. Quem olha para a lista tem como saber antes de o anunciar outra vez.',
+          'E o filtro dos inquilinos passa a ter três estados, em vez de dois: com contrato, com contrato por começar, e sem contrato. Quem assinou para 2028 caía em «Sem contrato», ao lado de um cartão que mostrava o contrato.',
+        ],
+      },
+      {
+        titulo: 'A renda acompanha o contrato',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'Se corrigires as datas de um contrato, a renda planeada acompanha-o nos dois sentidos — para a frente e para trás — e nunca volta a pedir um mês que já tem um movimento desse contrato.',
+          'Confirmar um planeado num mês que já foi lançado deixa de criar um movimento repetido: salta para o mês seguinte e diz que saltou.',
+          'Os movimentos já confirmados não se mexem com o contrato — a data de um movimento diz quando o dinheiro entrou, e mudá-la mudava a receita do ano. Se algum ficar fora das datas novas, antes do início ou depois do fim, a app aponta-os para os poderes rever um a um.',
+        ],
+      },
+      {
+        titulo: 'Ver sem editar',
+        afeta: ['app', 'colaboradores'],
+        itens: [
+          'O que não podes alterar abre agora numa ficha de leitura, com os dados escritos por extenso e um botão para editar quando tens permissão. Antes abria o formulário de edição com os campos apagados: mostrava tudo o que não podias fazer, e chamava-lhe leitura.',
+          'São seis: o movimento, o contrato, o imóvel, a pessoa, a hipoteca e o planeado.',
+        ],
+      },
+      {
+        titulo: 'As datas leem-se como cá se escrevem',
+        afeta: ['app'],
+        itens: [
+          'Em toda a app, 09/09/2026 — dia, mês e ano, por essa ordem. Nas listas, nas fichas, nos avisos, nos balões dos gráficos e na data que fica escrita nas notas de uma visita. Antes apareciam em vários sítios ao contrário, com o ano à frente.',
+        ],
+      },
+      {
+        titulo: 'Mudar de ecrã',
+        afeta: ['app'],
+        itens: [
+          'Tocar num separador da barra de baixo vira o painel para o lado — para a direita se o separador está à direita, para a esquerda se está à esquerda. A gaveta não faz isso: ali os treze destinos estão agrupados por assunto e não têm lado.',
+          'As listas deixaram de se refazer inteiras. Escrever na pesquisa, mudar um filtro ou confirmar um movimento mexe só nas linhas que mudaram — o resto fica quieto, e o que estavas a ler não salta.',
+        ],
+      },
+      {
+        titulo: 'A visão geral abre com tudo no sítio',
+        afeta: ['app', 'movimentos'],
+        itens: [
+          'A variação face ao ano anterior aparece logo ao abrir, em vez de chegar um segundo depois, e o ano a que se refere passou para uma linha própria, onde cabe.',
+          'O sino, o cartão dos movimentos por confirmar, o número nos Planeados e o cartão dos prazos deixaram de contar antes de o servidor responder. Havia cerca de um segundo em que apareciam notificações e movimentos por confirmar que não existiam — e num deles dava para carregar em «Confirmar» e criar a renda duas vezes.',
+          'Num aparelho onde os teus dados ainda não chegaram — o primeiro acesso, uma janela anónima, ou uma segunda conta no mesmo aparelho — a app diz que está à espera do servidor, em vez de dizer que não tens nada registado.',
+          'E os lembretes do telemóvel passam a ser refeitos com o que vem do servidor: uma renda confirmada no computador já não te avisa no telemóvel no dia seguinte.',
         ],
       },
       {
