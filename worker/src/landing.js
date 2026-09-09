@@ -89,11 +89,11 @@ ${cabecaRaiz}
 <style>
 :root{color-scheme:light dark;
   --bg:#f7f8fa;--card:#fff;--ink:#17221d;--muted:#5a635e;--line:#e7ebe8;
-  --accent:#244c3b;--accent-ink:#fff;--tint:#eef4f0;
+  --accent:#244c3b;--accent-ink:#fff;--tint:#eef4f0;--blur:rgba(247,248,250,.94);
   --sombra:0 1px 2px rgba(16,32,24,.04),0 12px 32px -12px rgba(16,32,24,.16)}
 @media(prefers-color-scheme:dark){:root{
   --bg:#12141b;--card:#1b1e28;--ink:#eef0f6;--muted:#9aa3b8;--line:#2b3040;
-  --accent:#5ee0a8;--accent-ink:#0b1410;--tint:#18211c;
+  --accent:#5ee0a8;--accent-ink:#0b1410;--tint:#18211c;--blur:rgba(18,20,27,.92);
   --sombra:0 1px 2px rgba(0,0,0,.3),0 16px 40px -14px rgba(0,0,0,.55)}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
@@ -103,7 +103,14 @@ img{max-width:100%;height:auto;display:block}
 .wrap{max-width:1080px;margin:0 auto;padding:0 22px}
 .prosa{max-width:62ch}
 
-header{display:flex;align-items:center;gap:11px;padding:18px 0}
+/* acompanha o scroll, como o cabeçalho da app (index.html:header.top): a
+   página tem mais de quatro mil pixéis, e a marca e a porta de entrada não
+   podem ficar lá em cima. O vidro é o mesmo --blur, e a risca só aparece
+   quando há conteúdo por baixo dela para separar. */
+.faixa-topo{position:sticky;top:0;z-index:20;background:var(--blur);
+  backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+/* as mesmas medidas do .wrap, para a marca ficar na prumada do texto */
+header{display:flex;align-items:center;gap:11px;max-width:1080px;margin:0 auto;padding:14px 22px}
 .logo{width:36px;height:36px;border-radius:11px;background:var(--accent);color:var(--accent-ink);
   display:grid;place-items:center;font-weight:800;font-size:18px;flex:0 0 auto}
 .marca{font-weight:750;font-size:17px;letter-spacing:-.01em}
@@ -179,12 +186,14 @@ footer a:hover{color:var(--ink)}
 
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style></head><body>
-<div class="wrap">
+<div class="faixa-topo">
   <header>
     <span class="logo">R</span><span class="marca">Rendorium</span>
     <span class="spacer"></span>
     <a class="btn" href="${APP}">Abrir a app</a>
   </header>
+</div>
+<div class="wrap">
 
   <div class="hero">
     <div>
@@ -192,7 +201,7 @@ footer a:hover{color:var(--ink)}
       <p class="sub">Imóveis, contratos, rendas, créditos e o IRS num só sítio — para quem
       hoje gere tudo em Excel, papel e memória.</p>
       <div class="cta">
-        <a class="btn primary" href="${APP}">Criar conta</a>
+        <a class="btn primary" href="${APP}/?criar=1">Criar conta</a>
         <a class="btn" href="${APP}">Já tenho conta</a>
       </div>
       <div class="faixa"><b>Grátis, sem planos e sem cartão.</b> Funciona no browser,
@@ -273,7 +282,7 @@ footer a:hover{color:var(--ink)}
   <div class="fecho">
     <h2>Começa pelo primeiro imóvel</h2>
     <p>Leva dois minutos, e a partir daí é só confirmar as rendas.</p>
-    <div class="cta"><a class="btn primary" href="${APP}">Criar conta</a></div>
+    <div class="cta"><a class="btn primary" href="${APP}/?criar=1">Criar conta</a></div>
   </div>
 
   <footer>
@@ -287,8 +296,10 @@ footer a:hover{color:var(--ink)}
   return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      // a landing pode viver em cache: muda quando se publica, não por pedido
-      'Cache-Control': 'public, max-age=3600',
+      // a página muda quando se publica, não por pedido — mas a
+      // pré-visualização existe precisamente para ver alterações, e uma hora
+      // de cache fazia-a mentir durante uma hora
+      'Cache-Control': raiz ? 'public, max-age=3600' : 'no-store',
     },
   });
 }

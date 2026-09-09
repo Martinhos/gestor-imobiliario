@@ -59,16 +59,20 @@ ${cabecaRaiz}
 <style>
 :root{color-scheme:light dark;
   --bg:#f7f8fa;--card:#fff;--ink:#17221d;--muted:#5a635e;--line:#e7ebe8;
-  --accent:#244c3b;--accent-ink:#fff}
+  --accent:#244c3b;--accent-ink:#fff;--blur:rgba(247,248,250,.94)}
 @media(prefers-color-scheme:dark){:root{
   --bg:#12141b;--card:#1b1e28;--ink:#eef0f6;--muted:#9aa3b8;--line:#2b3040;
-  --accent:#5ee0a8;--accent-ink:#0b1410}}
+  --accent:#5ee0a8;--accent-ink:#0b1410;--blur:rgba(18,20,27,.92)}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
   font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   font-size:16px;line-height:1.6;-webkit-text-size-adjust:100%}
 .wrap{max-width:760px;margin:0 auto;padding:0 22px}
-header{display:flex;align-items:center;gap:11px;padding:18px 0;border-bottom:1px solid var(--line)}
+/* acompanha o scroll, como na montra e como o cabeçalho da app: um documento
+   legal é comprido, e a saída não pode ficar no princípio */
+header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:11px;
+  padding:14px 0;border-bottom:1px solid var(--line);background:var(--blur);
+  backdrop-filter:blur(12px)}
 .logo{width:34px;height:34px;border-radius:10px;background:var(--accent);color:var(--accent-ink);
   display:grid;place-items:center;font-weight:800;font-size:17px;flex:0 0 auto}
 .marca{font-weight:750;font-size:16px;letter-spacing:-.01em}
@@ -131,8 +135,10 @@ footer a:hover{color:var(--ink)}
   return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      // como a landing: muda quando se publica, não por pedido
-      'Cache-Control': 'public, max-age=3600',
+      // a página muda quando se publica, não por pedido — mas a
+      // pré-visualização existe precisamente para ver alterações, e uma hora
+      // de cache fazia-a mentir durante uma hora
+      'Cache-Control': raiz ? 'public, max-age=3600' : 'no-store',
     },
   });
 }
