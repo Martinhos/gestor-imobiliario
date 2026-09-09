@@ -994,6 +994,29 @@ que sobe para o servidor. O que já está escrito nas fichas antigas fica como
 estava; só o que se escreve de agora em diante leva a forma nova. É o preço
 de escrever a data dentro de uma frase em vez de a guardar num campo.
 
+## A caixa de quem sai é a mesma caixa
+
+A fita dos separadores saltava antes de deslizar: o ecrã dava um pulo, parecia
+assentar um pouco mais abaixo, e só depois começava a correr para o lado.
+
+Medido no browser, no instante zero da travessia: um cartão que estava em
+y=282 aparecia em y=252, 15px mais à esquerda e 30px mais largo. A causa é o
+`velho` — a caixa para onde os filhos do `#view` são mudados enquanto ele
+repinta. Era um `<div>` pelado, e o `#view` tem a classe `.wrap`, que é quem
+lhe dá o espaçamento lateral. Sem ela o conteúdo estica-se de encosto a
+encosto, as linhas voltam a partir noutro sítio, os blocos encurtam, e tudo o
+que está em baixo sobe. O olho lê isso como um salto — e o deslize, que só
+começa no quadro seguinte, aparece depois dele.
+
+A classe vai copiada do próprio `#view`, e não escrita à mão: se um dia o
+`.wrap` mudar de nome ou ganhar companhia, isto acompanha. Menos o `.entra` —
+essa é a que manda os gráficos desenharem-se de novo, e quem está a sair não
+volta a entrar em cena. A largura leva `box-sizing:border-box`, senão o
+espaçamento reposto empurrava o conteúdo para fora da medida que foi tirada.
+
+Depois da correção, o mesmo cartão fica em y=282, x=15, com 345px — salto zero
+nos três eixos.
+
 ## O que aparece tarde, e o que não devia aparecer já
 Ao abrir a visão geral havia cerca de um segundo em que o ecrã dizia duas
 coisas erradas.

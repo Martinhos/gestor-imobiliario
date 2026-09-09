@@ -149,3 +149,32 @@ describe('os tempos vêm dos tokens, não de números à parte', () => {
     assert.equal(tokenTexto('--curva-entra', 'cubic-bezier(0,0,.2,1)'), 'cubic-bezier(0,0,.2,1)');
   });
 });
+
+/* Medido no browser, no instante zero da travessia entre separadores: um
+   cartão que estava em y=282 aparecia em y=252, 15px mais à esquerda e 30px
+   mais largo. O `velho` — a caixa para onde os filhos do #view são mudados —
+   era um <div> pelado, e o #view tem a classe .wrap, que lhe dá o
+   espaçamento. Sem ela o conteúdo estica-se de encosto a encosto, as linhas
+   voltam a partir noutro sítio, os blocos encurtam, e tudo o que está em
+   baixo sobe. Lê-se como um salto antes do deslize. */
+describe('a caixa de quem sai é a mesma caixa', () => {
+  const fonte = readFileSync(new URL('../web/app/continuidade.js', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+
+  test('o #view tem mesmo espaçamento a perder — é por isso que a classe importa', () => {
+    assert.match(html, /<div class="wrap" id="view">/, 'o #view é um .wrap');
+    assert.match(html, /\.wrap\{padding:/, 'e o .wrap é quem dá o espaçamento');
+  });
+
+  test('o velho leva as classes do próprio #view, menos o entra', () => {
+    const i = fonte.indexOf("const velho=document.createElement('div')");
+    assert.ok(i > -1, 'a caixa de quem sai existe');
+    const corpo = fonte.slice(i, i + 900);
+    assert.match(corpo, /velho\.className=String\(v\.className\|\|''\)/,
+      'copiadas do #view, não escritas à mão');
+    assert.match(corpo, /c!=='entra'/,
+      'menos a que manda os gráficos desenharem-se de novo: quem sai não entra em cena');
+    assert.match(corpo, /box-sizing:border-box/,
+      'e a largura medida conta o espaçamento, senão o conteúdo estica na mesma');
+  });
+});

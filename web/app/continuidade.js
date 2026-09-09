@@ -350,7 +350,17 @@ function deslizarPainel(pintar,d){
   caixa.style.cssText='position:fixed;left:'+r.left+'px;top:'+topo+'px;width:'+w+'px;height:'+h+
     'px;overflow:hidden;pointer-events:none';
   const velho=document.createElement('div');
-  velho.style.cssText='position:absolute;left:0;top:'+Math.round(r.top-topo)+'px;width:'+w+'px';
+  /* A caixa de quem sai tem de ser a MESMA caixa. O #view tem a classe .wrap,
+     que lhe dá o espaçamento lateral; num <div> pelado o conteúdo estica-se de
+     encosto a encosto, as linhas voltam a partir noutro sítio, os blocos
+     encurtam e tudo o que está em baixo sobe. Medido: um cartão em y=282
+     aparecia em y=252, 15px mais à esquerda e 30px mais largo — um salto, e só
+     depois o deslize. A classe vem do próprio #view para acompanhar o que lá
+     mudar, menos o .entra: essa manda os gráficos desenharem-se de novo, e
+     quem está a sair não volta a entrar em cena. */
+  velho.className=String(v.className||'').split(/\s+/).filter(c=>c&&c!=='entra').join(' ');
+  velho.style.cssText='position:absolute;left:0;top:'+Math.round(r.top-topo)+
+    'px;width:'+w+'px;box-sizing:border-box;max-width:none;margin:0';
   while(v.firstChild)velho.appendChild(v.firstChild);
   semIds(velho);                   // dois #txLista no documento davam um getElementById errado
   /* o botão flutuante do ecrã que sai não viaja: o do ecrã novo nasce no
