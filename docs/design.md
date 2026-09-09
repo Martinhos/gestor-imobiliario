@@ -157,9 +157,18 @@ cabeçalho (index.html:header.top), 25 a barra pegajosa
 (index.html:.toolbar.stick), 30 o menu de ações (index.html:.menupop), 40
 a barra de baixo (index.html:.tabbar), 45 e 46 o painel de filtros
 (index.html:.fpanel, index.html:.fwrap), 57 o «topo» (index.html:.totop),
-58 o FAB (index.html:.fab), 60 a janela (index.html:.modal), 61 o véu
-(index.html:.scrim), 62 a gaveta (index.html:aside), 90 o toast
-(index.html:.toast), 95 a dica dos gráficos (index.html:.tip).
+58 o FAB (index.html:.fab), 59 o cartão dos primeiros passos
+(cloud/guia.js:#cwGuia), 61 o véu da gaveta (index.html:.scrim), 62 a gaveta
+(index.html:aside), 70 a janela (index.html:.modal), 71 o mesmo cartão dos
+primeiros passos quando há uma janela aberta (cloud/guia.js:.sobre-janela),
+90 o toast (index.html:.toast), 95 a dica dos gráficos (index.html:.tip).
+
+A janela está acima da navegação de propósito, e é a partir dela que se
+escolhe um número novo: o que tiver de aparecer por cima de uma janela aberta
+fica acima de 70, e o resto abaixo. Esta lista é o sítio onde se vai buscar
+esse número — quando ela mente, o erro sai daqui. Foi o que aconteceu ao
+cartão dos primeiros passos: o 61 dele foi escolhido contra um 60 que já não
+era verdade.
 
 ## Movimento
 Três durações: --rapido .12s para o que responde ao dedo, --medio .2s para
