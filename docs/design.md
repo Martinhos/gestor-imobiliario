@@ -954,12 +954,15 @@ em ISO volta ao ecrã na próxima função que alguém escrever, e ninguém dá 
 isso — um `2028-03-15` no meio de uma lista não parece um defeito, parece uma
 data.
 
-Duas coisas ficam de fora, de propósito. O **PDF do contrato** tem regras
+Uma coisa fica de fora, de propósito: o **PDF do contrato** tem regras
 próprias e já escreve por extenso («5 de março de 2026»,
-contrato-pdf.js:dataLonga). E a data que a conversão de uma visita escreve
-**dentro das notas** de um inquilino (visitas.js:visConverte) é prosa
-gravada, que sobe para o servidor: formatá-la agora deixava as fichas antigas
-com uma forma e as novas com outra, para sempre.
+contrato-pdf.js:dataLonga).
+
+A data que a conversão de uma visita escreve **dentro das notas** de um
+inquilino (visitas.js:visConverte) também mudou, e essa é prosa **gravada**,
+que sobe para o servidor. O que já está escrito nas fichas antigas fica como
+estava; só o que se escreve de agora em diante leva a forma nova. É o preço
+de escrever a data dentro de uma frase em vez de a guardar num campo.
 
 ## Navegação
 Treze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e

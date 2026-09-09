@@ -288,7 +288,10 @@ function visConverte(id){
   if(!pode(v.propertyId,'tenant.add'))return toast(fraseSemPerm('tenant.add'));
   const c=(v.contacto||'').trim();
   const novo=normPerson({name:v.nomes,phone:/@/.test(c)?'':c,email:/@/.test(c)?c:'',houseId:souDono(v.propertyId)?'':(v.propertyId||''),
-    notes:v.notas?'Da visita de '+(v.date||'?')+': '+v.notas:''});
+    /* a data vai na forma que se le. E prosa gravada: o que ja esta escrito
+       nas fichas antigas fica como estava, e so o que se escreve de agora em
+       diante e que leva a forma nova */
+    notes:v.notas?'Da visita de '+(dPT(v.date)||'?')+': '+v.notas:''});
   db.tenants.push(novo);save();
   personModal('tenant',novo.id);
   toast('Ficha criada a partir da visita — completa o que faltar.');
