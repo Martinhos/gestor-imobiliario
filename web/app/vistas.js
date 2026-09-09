@@ -609,10 +609,10 @@ function vDashboard(){
   const dp=pid&&!String(pid).startsWith('g:')?prop(pid):null;
   const dpName=pid?(dp?dp.name:'Grupo · '+((grp(String(pid).slice(2))||{}).name||'')):'';
   if(!db.properties.length&&!db.transactions.length)
-    return `<div class="empty"><b>Ainda não há nada registado</b>Começa por adicionar um imóvel, ou carrega dados de exemplo.
+    return esperaDoServidor()||`<div class="empty"><b>Ainda não há nada registado</b>Começa por adicionar um imóvel${podeExemplo()?', ou carrega dados de exemplo':''}.
       <div class="toolbar" style="justify-content:center;margin-top:16px">
       <button class="btn primary" data-toca="camada" onclick="propModal()">Adicionar imóvel</button>
-      <button class="btn" data-toca="dados" onclick="seed()">Carregar exemplo</button></div></div>`;
+      ${podeExemplo()?`<button class="btn" data-toca="dados" onclick="seed()">Carregar exemplo</button>`:''}</div></div>`;
   /* quem só colabora e cujo cargo não abre as finanças não tem nada para somar aqui */
   if(souSoColaborador()&&!scope().length)
     return `<div class="empty"><b>${fraseColaborador()}</b>O teu cargo não abre as finanças destes imóveis — a vista geral não tem nada para somar.
@@ -809,10 +809,10 @@ function vProperties(){
       lfSel(K,'st',[{v:'',label:'Todos os estados'},{v:'arrendado',label:'Arrendados'},{v:'parcial',label:'Parcialmente arrendados'},{v:'vago',label:'Vagos'},{v:'proprio',label:'Uso próprio'}]),
       lfSel(K,'md',[{v:'',label:'Todos os arrendamentos'},{v:'inteiro',label:'Imóvel inteiro'},{v:'quartos',label:'Por quartos'}])],list.length,
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'valor',label:'Ordenar por valor'},{v:'renda',label:'Ordenar por renda'},{v:'divida',label:'Ordenar por dívida'},{v:'yield',label:'Ordenar por yield'}]})
-    +(db.properties.length?'':`<div class="toolbar"><button class="btn" data-toca="dados" onclick="seed()">Carregar exemplo</button></div>`)
+    +(db.properties.length||!podeExemplo()?'':`<div class="toolbar"><button class="btn" data-toca="dados" onclick="seed()">Carregar exemplo</button></div>`)
     +fab([{label:'Adicionar imóvel',act:'propModal()'}]);
   list=lfSort(K,list,{nome:p=>p.name,valor:p=>p.value,renda:p=>rentOf(p),divida:p=>debtOf(p),yield:p=>{const r=rentOf(p);return r&&p.value?r*12/p.value:0}});
-  if(!list.length)return head+`<div class="empty"><b>${lfCount(K)?'Nada neste filtro':'Sem imóveis'}</b>${lfCount(K)?'':(db.properties.length?'Nenhum imóvel deste proprietário.':'Adiciona o primeiro para começares a acompanhar o investimento.')}</div>`;
+  if(!list.length)return head+(esperaDoServidor()||`<div class="empty"><b>${lfCount(K)?'Nada neste filtro':'Sem imóveis'}</b>${lfCount(K)?'':(db.properties.length?'Nenhum imóvel deste proprietário.':'Adiciona o primeiro para começares a acompanhar o investimento.')}</div>`);
   return head+listaViva('imoveis',list.map(p=>({chave:'prop:'+p.id,html:(p=>{
     const st=propStatus(p),ls=liveLoans(p),ac=activeContracts(p.id),rent=rentOf(p);
     /* um imóvel já prometido tem de o dizer: sem isto o cartão mostra «Vago»,
@@ -880,8 +880,8 @@ function vContracts(){
       db.contracts.filter(c=>ctFMatch(c,s)).length,
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'renda',label:'Ordenar por renda'},{v:'inicio',label:'Ordenar por início'}]})
     +(casasComo('contract.add').length?fab([{label:'Novo contrato',act:'ctModal()'}]):'');
-  if(!db.properties.length)return head+`<div class="empty"><b>Cria primeiro um imóvel</b>Um contrato liga um imóvel a um ou mais inquilinos.
-    ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`;
+  if(!db.properties.length)return head+(esperaDoServidor()||`<div class="empty"><b>Cria primeiro um imóvel</b>Um contrato liga um imóvel a um ou mais inquilinos.
+    ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`);
   if(!db.contracts.length)return head+`<div class="empty"><b>Sem contratos</b>O contrato é onde vive a renda: podes arrendar o imóvel inteiro, ou um contrato por quarto.</div>`;
   let any=false;
   const grupos=[];
@@ -978,7 +978,7 @@ function vTenants(){
   const head=lfBar(K,[lfSel(K,'ct',[{v:'',label:'Todos os inquilinos'},{v:'com',label:'Com contrato ativo'},{v:'fut',label:'Com contrato por começar'},{v:'sem',label:'Sem contrato'}])],list.length,
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'contratos',label:'Ordenar por nº de contratos'},{v:'renda',label:'Ordenar por renda'}]})
     +((!souSoColaborador()||casasComo('tenant.add').length)?fab([{label:'Adicionar inquilino',act:"personModal('tenant')"}]):'');
-  if(!db.tenants.length)return head+`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.</div>`;
+  if(!db.tenants.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.</div>`);
   if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   return head+listaViva('inquilinos',list.map(t=>({chave:'ten:'+t.id,html:personCard(t,'tenant')})));
 }
@@ -999,7 +999,7 @@ function vOwners(){
       lfSel(K,'pr',[{v:'',label:'Todos os proprietários'},{v:'com',label:'Com imóveis'},{v:'sem',label:'Sem imóveis'}])],list.length,
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'imoveis',label:'Ordenar por nº de imóveis'}]})
     +fab([{label:'Adicionar proprietário',act:"personModal('owner')"}]);
-  if(!db.owners.length)return head+`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.</div>`;
+  if(!db.owners.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.</div>`);
   if(!list.length)return head+`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`;
   return head+listaViva('proprietarios',list.map(o=>({chave:'own:'+o.id,html:personCard(o,'owner')})));
 }
@@ -1443,7 +1443,7 @@ function vTransactions(){
   +`${nF||txSearch.trim()?`<div class="small" style="margin:2px 0 10px">${filterSummary()}${txSearch.trim()?(nF?' · ':'')+'pesquisa: “'+esc(txSearch.trim())+'”':''}</div>`:''}`
   +((podeSemImovel()||casasComo('tx.add').length)?fab([{label:'Novo movimento',act:'newTxPick()'}]):'');
   txLinhasPintadas=0;
-  if(!db.transactions.length)return head+`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.</div>`;
+  if(!db.transactions.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.</div>`);
   const list=db.transactions.filter(txMatch).sort((a,b)=>{const d=txDir==='desc'?-1:1;
     if(txSort==='amount')return d*((a.amount||0)-(b.amount||0))||String(a.date).localeCompare(String(b.date));
     return d*String(a.date).localeCompare(String(b.date))});

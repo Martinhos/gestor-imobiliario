@@ -1,7 +1,7 @@
 /* Sessao, sincronizacao com o servidor e reconstrucao dos dados locais. */
 'use strict';
 
-var LS_USER = 'gi_cloud_user';   // sessão {id,name,email,token}
+var LS_USER = LS_SESSAO;   // sessão {id,name,email,token} — a chave vive em app/dados.js
 var LS_OWNER = 'gi_cloud_owner'; // id do utilizador dono da cache local
 // 3 minutos entre leituras: com 90 segundos, uma app aberta o dia todo
 // sozinha consumia uma fatia enorme do plano gratuito da base de dados.
@@ -14,6 +14,12 @@ CW.cargos = {};    // por imóvel: {dono, nome, perms} — vem de cargosDoEstado
 CW.pessoas = {};   // por id de utilizador: {name, kind, roleName} — quem não é proprietário mas tem nome
 
 try { CW.user = JSON.parse(localStorage.getItem(LS_USER) || 'null'); } catch (e) {}
+/* O tecto da espera arma-se AQUI, e não no startSync: o startSync só corre
+   depois de o GET /api/me responder (cloud/entrada.js), e um pedido pendurado
+   nunca chegava a armá-lo — a app ficava calada sem limite sobre o que já
+   sabia. Com sessão, o primeiro estado tem seis segundos; passados eles, o que
+   está no aparelho é o que há, e diz-se. */
+if (CW.user) setTimeout(function () { fimDaEspera(); }, 6000);
 
 // Fora do wrapper Android, o browser já desconta a barra de estado — o
 // palpite de 28px do fitInsets() (pensado para o WebView antigo em ecrã
@@ -720,9 +726,6 @@ function startSync() {
       applyState(st);
     }
   }).catch(function () { setSyncBadge('off'); fimDaEspera(); });
-  /* e se o pedido nem falhar nem responder — uma rede que fica pendurada —, a
-     espera acaba na mesma: o que está no aparelho é o que há */
-  setTimeout(fimDaEspera, 6000);
   setInterval(syncCycle, 30000);
   window.addEventListener('online', syncCycle);
   document.addEventListener('visibilitychange', function () {

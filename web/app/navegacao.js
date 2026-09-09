@@ -46,7 +46,10 @@ function cntNovo(chave,n){
    grupo que fique vazio desaparece com o título.
    Devolve: nada — reescreve o HTML de #nav e chama buildTabbar. */
 function buildNav(){
-  const late=recActive().length,fora=typeof separadoresEscondidos==='function'?separadoresEscondidos():[];
+  /* o crachá dos «Planeados» é a mesma afirmação do sino, e espera pelo mesmo
+     (auxiliares.js:sabemosOEstado): antes do primeiro estado do servidor
+     contava rendas já confirmadas noutro aparelho */
+  const late=sabemosOEstado()?recActive().length:0,fora=typeof separadoresEscondidos==='function'?separadoresEscondidos():[];
   document.getElementById('nav').innerHTML=NAV_GROUPS.map(g=>{const ids=g.ids.filter(id=>fora.indexOf(id)<0);if(!ids.length)return '';
     return `<div class="navh">${g.label}</div>`+ids.map(id=>{const t=TABS.find(x=>x.id===id);
     return `<a class="${t.id===tab?'on':''}" tabindex="0" ${t.id===tab?'aria-current="page"':''} data-toca="ecra" onclick="go('${t.id}')">${ic(t.icon)}<span class="txt">${t.label}</span>${t.id==='recurring'&&late?`<span class="cnt${cntNovo('recurring',late)}" ${recLate().length?'':'style="background:var(--warn)"'}>${late}</span>`:''}</a>`}).join('')}).join('');

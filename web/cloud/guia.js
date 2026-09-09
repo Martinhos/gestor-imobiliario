@@ -16,9 +16,18 @@
 var LS_GUIA = 'gi_guia_feitos';       // tutoriais já vistos até ao fim
 var LS_PASSOS = 'gi_passos_fora';     // o cartão de primeiros passos foi dispensado
 
+/* Até o servidor responder vale 'producao': é o lado seguro, e é o que
+   esconde os dados de exemplo onde eles não devem estar. A resposta chega
+   depois da primeira pintura, e por isso repinta-se quando ela muda alguma
+   coisa — sem sessão iniciada não há sincronização nenhuma a fazê-lo, e em
+   dev o botão do exemplo nunca chegava a aparecer. */
 CW.ambiente = 'producao';
 api('GET', '/api/auth/config')
-  .then(function (c) { if (c && c.ambiente) CW.ambiente = c.ambiente; })
+  .then(function (c) {
+    if (!c || !c.ambiente || c.ambiente === CW.ambiente) return;
+    CW.ambiente = c.ambiente;
+    try { render(); } catch (e) {}
+  })
   .catch(function () {});
 
 // os tutoriais já vistos até ao fim, lidos do localStorage ({id: 1});
@@ -382,25 +391,18 @@ vDashboard = function () {
 
 /* Em produção não se carregam dados de exemplo. Quem chega deve encontrar a
    app vazia e ser levado pelos primeiros passos — dados de brincar por cima
-   dos verdadeiros são um estorvo, e apagá-los à mão é trabalho. */
+   dos verdadeiros são um estorvo, e apagá-los à mão é trabalho.
+
+   Este é o fecho, e não a fechadura: o botão já nem chega a ser escrito
+   (auxiliares.js:podeExemplo). Chegou a ser apagado do DOM depois de cada
+   render, e isso tinha um furo — a pesquisa das listas repinta pela via
+   parcial (vistas.js:refrescarListasVivas), que não passa por aqui, e o botão
+   voltava. Perguntar antes de escrever não tem furos; isto fica para o caso
+   de o seed ser chamado por outro caminho. */
 var _seed_guia = seed;
 seed = function () {
   if (CW.ambiente === 'producao') return toast('Os dados de exemplo só existem no ambiente de desenvolvimento.');
   return _seed_guia.apply(this, arguments);
-};
-
-// e o botão desaparece, em vez de estar lá para dizer que não
-var _render_guia = render;
-render = function () {
-  var r = _render_guia.apply(this, arguments);
-  if (CW.ambiente === 'producao') {
-    [].slice.call(document.querySelectorAll('#view [onclick="seed()"]')).forEach(function (b) {
-      var barra = b.parentNode;
-      b.remove();
-      if (barra && barra.classList.contains('toolbar') && !barra.children.length) barra.remove();
-    });
-  }
-  return r;
 };
 
 var css = document.createElement('style');

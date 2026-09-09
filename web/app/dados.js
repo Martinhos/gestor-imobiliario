@@ -1,4 +1,9 @@
 /* ================= ARMAZENAMENTO ================= */
+/* Onde a nuvem guarda a sessão. Vive aqui, e não só lá, porque o guarda da
+   espera (auxiliares.js:sabemosOEstado) tem de saber se há sessão ANTES de a
+   nuvem carregar: os ficheiros de web/app correm todos primeiro. O
+   cloud/nucleo.js usa esta mesma constante, para não haver duas verdades. */
+const LS_SESSAO='gi_cloud_user';
 const KEY='gi_v13', OLDS=['gi_v12','gi_v11','gi_v10','gi_v9','gi_v8','gi_v6','gi_v5','gi_v4','gi_v3','gi_v2','gi_v1'];
 let mem={};
 /* lê do localStorage; se estiver bloqueado (modo privado), vale a cópia em memória desta sessão

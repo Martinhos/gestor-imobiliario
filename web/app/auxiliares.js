@@ -32,6 +32,47 @@ const fmtIBAN=v=>{const t=String(v||'').replace(/\s+/g,'').toUpperCase();
    escrever «//» nem «NaN» no meio de uma frase.
    Recebe: iso — a data em AAAA-MM-DD (aguenta vazio, nulo e lixo).
    Devolve: a data em dd/mm/aaaa, ou '' se não for uma data. */
+/* O painel de «à espera do servidor», ou nada.
+
+   Vem a par do sabemosOEstado, e resolve o outro lado do mesmo problema. A
+   base local vive numa chave só (dados.js:KEY), e não uma por conta: sair não
+   a limpa, e por isso o finishLogin apaga-a quando quem entra é outra pessoa
+   (entrada.js) — senão mostravam-se os imóveis de um a outro. Está certo. Só
+   que a app pintava logo essa base vazia e afirmava «Ainda não há nada
+   registado» a quem tem doze imóveis, com um botão de carregar dados de
+   exemplo ao lado. Não é uma vez por aparelho: é em todos os logins de quem
+   partilha o aparelho com outra conta, mais a navegação privada, o
+   armazenamento limpo pelo browser e a app reinstalada.
+
+   Só fala quando não se sabe MESMO nada: com uma sessão à espera do primeiro
+   estado e a base local inteiramente vazia. Quem tem dados cá nunca vê isto,
+   e uma conta nova vê-o um instante antes do «ainda não há nada registado»
+   verdadeiro — duas frases certas, em vez de uma errada.
+
+   É o mesmo que a página dos cargos já fazia (partilha.js), e pela mesma
+   razão: dizer «não tens» a quem tem parece perda de dados.
+   Devolve: o HTML do painel de espera, ou '' quando há alguma coisa a dizer. */
+function esperaDoServidor(){
+  const nada=!(db.properties||[]).length&&!(db.transactions||[]).length&&
+    !(db.contracts||[]).length&&!(db.tenants||[]).length&&
+    !(db.owners||[]).length&&!(db.visits||[]).length;
+  if(sabemosOEstado()||!nada)return '';
+  return `<div class="empty"><b>À espera do servidor</b>Os dados desta conta ainda não chegaram a este aparelho. Aparecem assim que a app sincronizar.</div>`;
+}
+/* Este ambiente pode carregar dados de exemplo?
+
+   Só fora de produção. Quem chega à app a sério deve encontrá-la vazia e ser
+   levado pelos primeiros passos — dados de brincar por cima dos verdadeiros
+   são um estorvo, e apagá-los à mão é trabalho. O ambiente vem do servidor
+   (rotas/auth.js, em /api/auth/config, que devolve env.ENV_NAME ou
+   'producao') e até a resposta chegar vale 'producao': o lado seguro.
+
+   Pergunta-se ANTES de escrever o botão, e não se apaga o botão depois de o
+   escrever. A app tem uma via de repintura parcial que não passa pelo render
+   (vistas.js:refrescarListasVivas, usada pela pesquisa das listas), e por lá
+   um botão apagado à posteriori voltava.
+   Devolve: true onde os dados de exemplo fazem sentido. */
+const podeExemplo=()=>!!(window.CW&&CW.ambiente&&CW.ambiente!=='producao');
 /* Já se pode afirmar o que o aparelho sabe?
 
    Ao arrancar, a app trabalha com o que está guardado cá: corre o
@@ -49,7 +90,20 @@ const fmtIBAN=v=>{const t=String(v||'').replace(/\s+/g,'').toUpperCase();
    permanente era pior negócio. Sem nuvem, ou sem sessão, não há espera
    nenhuma.
    Devolve: true quando o que se sabe já se pode dizer em voz alta. */
-const sabemosOEstado=()=>!(window.CW&&CW.user)||!!CW._esperaFim;
+const sabemosOEstado=()=>!haSessao()||!!(window.CW&&CW._esperaFim);
+/* Há uma sessão iniciada neste aparelho?
+
+   Pergunta-se ao aparelho, e não à nuvem, por causa da ordem de carregamento:
+   o app/arranque.js corre ANTES do cloud/nucleo.js (index.html), e na primeira
+   pintura — a única que a pessoa vê antes de o servidor falar — o window.CW
+   ainda não existe. Um guarda que perguntasse «a nuvem já carregou?» respondia
+   «não há nuvem, diz tudo» exatamente no instante em que devia calar-se.
+   Devolve: true se há sessão — pela nuvem, se já carregou, senão pelo aparelho. */
+function haSessao(){
+  if(window.CW&&CW.user)return true;
+  const v=rawGet(LS_SESSAO);
+  return !!v&&v!=='null';
+}
 const dPT=iso=>{const t=String(iso||'').slice(0,10);
   return /^\d{4}-\d{2}-\d{2}$/.test(t)?t.slice(8,10)+'/'+t.slice(5,7)+'/'+t.slice(0,4):''};
 const fmtNIF=v=>{const t=String(v||'').replace(/\D/g,'');
