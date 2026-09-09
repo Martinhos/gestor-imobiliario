@@ -27,6 +27,27 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 33,
+    data: '2026-09-09',
+    titulo: 'Dois defeitos de ecrã grande',
+    seccoes: [
+      {
+        titulo: 'As janelas deixaram de aparecer por trás do menu',
+        afeta: ['app'],
+        itens: [
+          'Em ecrã grande, onde o menu lateral está sempre à vista, as janelas — confirmar um movimento, as novidades, adicionar um registo — apareciam por trás dele: o título ficava cortado e metade do conteúdo escondido. Agora ficam por cima, e o menu escurece enquanto a janela está aberta.',
+        ],
+      },
+      {
+        titulo: 'E o botão do menu deixou de trancar a página',
+        afeta: ['app'],
+        itens: [
+          'Num telemóvel ou tablet a pedir a versão para computador, aparecia um botão de menu que não abria nada — e que deixava a página sem se poder deslizar. Nesses ecrãs o menu já está à vista, portanto o botão deixou de existir.',
+        ],
+      },
+    ],
+  },
+  {
     v: 32,
     data: '2026-09-09',
     titulo: 'Uma correção de arranque, e os documentos com nome',

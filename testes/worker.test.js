@@ -4,6 +4,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 import {
   badId, cleanData, weakPassword, tooBig, json, err, TERMS_VERSION, CATEGORIAS,
@@ -226,5 +227,47 @@ describe('constantes do serviço', () => {
 
   test('a versão dos termos tem forma de data', () => {
     assert.match(TERMS_VERSION, /^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+/* O Discord corta uma interação aos 3 segundos. O /uso faz seis consultas à
+   base, lista as cópias no R2 e pergunta o consumo à API da Cloudflare — tudo
+   antes de responder. Passou dos 3s em produção e o Discord disse «o
+   aplicativo não respondeu», que é o que ele diz quando ninguém lhe responde. */
+describe('os comandos que demoram adiam a resposta', () => {
+  const disc = readFileSync(new URL('../worker/src/discord.js', import.meta.url), 'utf8');
+
+  test('há maneira de adiar, e ela escreve por cima da mensagem certa', () => {
+    assert.match(disc, /const ADIADO = 5;/, 'o tipo que diz «estou a tratar disso»');
+    const i = disc.indexOf('function adiar(');
+    assert.ok(i > -1, 'o ajudante existe');
+    const corpo = disc.slice(i, disc.indexOf('// Resposta à vista de todos', i));
+    assert.match(corpo, /webhooks\/' \+\s*i\.application_id \+ '\/' \+ i\.token/,
+      'pelo webhook da própria interação — o token dela é a credencial');
+    assert.match(corpo, /messages\/@original/, 'por cima da mensagem já mandada');
+    assert.match(corpo, /method: 'PATCH'/);
+    assert.match(corpo, /ctx\.waitUntil/,
+      'o trabalho tem de sobreviver à resposta imediata');
+    assert.match(corpo, /type: ADIADO/, 'e responde-se já');
+  });
+
+  test('os três que vão fora do worker adiam; os que só leem a base, não', () => {
+    // comparação de texto e não expressão: o que se procura tem parênteses
+    const adia = (c) => disc.includes("nome === '" + c + "') return json(adiar(");
+    ['uso', 'copias', 'resumo'].forEach((c) => {
+      assert.ok(adia(c), '/' + c + ' adia: vai fora do worker antes de responder');
+    });
+    ['pedidos', 'erros', 'comandos'].forEach((c) => {
+      assert.ok(!adia(c), '/' + c + ' responde já: só lê a base');
+    });
+  });
+
+  test('e o consumo da Cloudflare tem prazo', () => {
+    const nt = readFileSync(new URL('../worker/src/notify.js', import.meta.url), 'utf8');
+    const i = nt.indexOf('async function cloudflareUsage');
+    const corpo = nt.slice(i, nt.indexOf(String.fromCharCode(10) + '}', i));
+    assert.match(corpo, /AbortController/, 'a chamada é cortável');
+    assert.match(corpo, /signal:/, 'e o corte chega ao fetch');
+    assert.match(corpo, /clearTimeout\(prazo\)/, 'e o temporizador não fica pendurado');
   });
 });

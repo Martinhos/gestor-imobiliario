@@ -184,7 +184,7 @@ header.top .sub{color:var(--muted);font-size:12px;margin-top:2px}
   body.rail .brand .txt,body.rail nav a .txt,body.rail .railbtn .txt{display:block}
   body.rail nav a,body.rail .railbtn{justify-content:flex-start;padding:11px 12px}
   body.open .scrim{opacity:1;visibility:visible;transition:opacity var(--medio) var(--curva),visibility 0s}
-  .burger{display:block}
+  .burger{display:inline-flex;align-items:center;justify-content:center}
   .wrap{padding:14px calc(15px + var(--inset-right)) calc(44px + var(--inset-bottom)) calc(15px + var(--inset-left))}
   header.top{padding:calc(11px + var(--inset-top)) calc(15px + var(--inset-right)) 11px calc(15px + var(--inset-left))}
 }
@@ -409,7 +409,13 @@ nav a .cnt{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px
 @media(pointer:coarse){
   .btn{min-height:44px}
   .btn.sm{min-height:40px}
-  .iconbtn,.burger{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  .iconbtn{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  /* o hambúrguer leva a MEDIDA do toque, mas não o display: quem decide se ele
+     existe é a largura (abaixo de 900px), não o dedo. Levava, e isso
+     ressuscitava-o em qualquer ecrã tátil — num telemóvel em «modo PC» ficava
+     um botão à vista que não abria gaveta nenhuma (acima de 900px o aside é
+     uma coluna, não uma gaveta) e que trancava o scroll ao ser tocado. */
+  .burger{min-width:44px;min-height:44px}
   #nav a{min-height:44px}
   .legend .li.tap{min-height:40px;padding:8px 6px;margin:0 -6px}
   .tag button{min-width:28px;min-height:28px;display:inline-flex;align-items:center;justify-content:center}
@@ -589,7 +595,16 @@ textarea{min-height:90px;resize:vertical}
 /* height em dvh: com as barras do browser à mostra, o inset:0 dava a altura
    do ecrã SEM elas, e o modal ficava centrado num espaço maior do que o
    visível — o topo saía por cima e não havia como lá chegar. */
-.modal{position:fixed;inset:0;height:100dvh;z-index:60;display:none}
+/* A ESCADA: o modal está acima de TUDO o que é navegação — do menu lateral
+   (aside, 62) e do véu da gaveta (scrim, 61). Esteve abaixo, em 60, e em ecrã
+   largo, onde o menu é permanente, isso cortava os modais ao meio: o título
+   não se lia. Pior, o véu do modal (inset:0) ficava por baixo do menu, que
+   assim não escurecia e continuava clicável — dava para navegar para outro
+   ecrã com um formulário aberto.
+   Um modal é um MODO: enquanto está aberto, o resto da app está suspenso, e
+   tem de o parecer. Acima ficam só o toast (90) e o balão (95), que são avisos
+   e leituras — nunca escondem nada com que se possa interagir. */
+.modal{position:fixed;inset:0;height:100dvh;z-index:70;display:none}
 .modal.open{display:block}
 .modal.under .sheet{pointer-events:none}
 .modal.under .bg{background:rgba(6,12,9,.35)}

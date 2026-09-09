@@ -13,6 +13,29 @@ try { importScripts('/avisos.js'); } catch (e) { /* sem ele, cache genérica */ 
    Sem versão, este worker não guarda nem apaga — deixa passar tudo à rede. */
 const VER = typeof VERSAO === 'number' ? VERSAO : null;
 const CACHE = 'gi-shell-v' + VER;
+
+/* Só produção guarda. A cache leva o nome da VERSÃO, e fora de produção a
+   versão não muda entre publicações — o dev publica dezenas de vezes com a
+   mesma. Com a cache a responder primeiro, o ambiente congelava no primeiro
+   carregamento dessa versão e atualizar a página não adiantava nada.
+
+   Fora de produção o worker existe (o PWA instala-se, o manifesto vale), mas
+   deixa passar tudo à rede: sempre fresco, e sem poder misturar versões porque
+   não guarda nenhuma.
+
+   E diz-se quem NÃO é produção, não quem é. Chegou a estar ao contrário
+   (`hostname === 'app.rendorium.com'`), e isso deixava de fora gente que está
+   mesmo em produção: o wrangler.toml liga o workers.dev à mão, com o
+   comentário de que as instalações antigas — PWA e APK — apontam para lá e não
+   podem partir. Essas perderiam o offline, em silêncio. Os ambientes que não
+   são produção sabem-se todos; os endereços de produção, não. */
+const SEM_CACHE = [
+  'localhost', '127.0.0.1', '[::1]',
+  'dev.rendorium.com',
+];
+const hn = String(self.location.hostname || '').toLowerCase();
+// o worker de dev também tem endereço em workers.dev, e leva o nome no início
+const GUARDA = SEM_CACHE.indexOf(hn) < 0 && hn.indexOf('gestor-imobiliario-dev.') !== 0;
 // A app passou a viver em módulos: guardam-se todos, senão abre offline
 // com metade do código.
 const APP = ['dados', 'anexos', 'auxiliares', 'lista', 'continuidade', 'graficos', 'credito', 'componentes',
@@ -35,11 +58,23 @@ const SHELL = ['/', '/index.html', '/avisos.js', '/legal.js', '/manifest.webmani
    esse caminho: o verificarVersao lê o /versao.json, limpa as caches e
    recarrega uma vez, à vista (cloud/novidades.js). */
 self.addEventListener('install', (e) => {
+  /* fora de produção assume-se já: não há cache a proteger, portanto não há
+     carregamento a meio que se possa partir — e é isto que tira do caminho um
+     worker antigo que ainda esteja a servir da cache */
+  if (!GUARDA) { self.skipWaiting(); return; }
   if (VER == null) return;
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
 });
 
 self.addEventListener('activate', (e) => {
+  /* fora de produção limpa-se TUDO: é o que desenrasca quem ficou com uma
+     cache de uma publicação anterior e não tinha como sair dela */
+  if (!GUARDA) {
+    e.waitUntil(caches.keys()
+      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()));
+    return;
+  }
   if (VER == null) return;
   e.waitUntil(
     caches.keys().then((keys) =>
@@ -54,7 +89,7 @@ self.addEventListener('fetch', (e) => {
   // a resposta a "que versão é a de agora?" nunca pode vir da cache
   if (url.pathname === '/versao.json') return;
 
-  if (VER == null) return;   // sem versão, não se serve nada da cache
+  if (!GUARDA || VER == null) return;   // fora de produção, e sem versão, vai tudo à rede
 
   /* CACHE primeiro, e só desta versão. Era rede primeiro com a cache como
      recurso, e isso não tem atomicidade nenhuma: um ficheiro que falhasse

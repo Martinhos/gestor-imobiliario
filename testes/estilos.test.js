@@ -70,6 +70,97 @@ const notificacoes = readFileSync(new URL('../web/app/notificacoes.js', import.m
 const vistas = readFileSync(new URL('../web/app/vistas.js', import.meta.url), 'utf8');
 const graficos = readFileSync(new URL('../web/app/graficos.js', import.meta.url), 'utf8');
 
+/* Num telemóvel em «modo PC» o viewport é largo — sem gaveta, porque acima de
+   900px o aside é uma coluna — mas o ecrã continua a ser de dedo. A regra do
+   alvo de toque punha display no hambúrguer, e ele reaparecia: um botão que
+   não abria nada e trancava o scroll ao ser tocado. */
+describe('o hambúrguer só existe onde há gaveta', () => {
+  // o corpo de uma media query, do início dela até ao fecho na margem
+  const fatia = (t, i) => {
+    const fim = t.indexOf(String.fromCharCode(10) + '}', i);
+    return t.slice(i, fim > -1 ? fim : i + 4000);
+  };
+
+  test('a regra do toque mede, não mostra', () => {
+    const i = css.indexOf('@media(pointer:coarse)');
+    assert.ok(i > -1, 'a regra do alvo de toque existe');
+    const bloco = fatia(css, i);
+    const burger = /\.burger\{([^}]*)\}/.exec(bloco);
+    assert.ok(burger, 'o hambúrguer leva a medida do toque');
+    assert.match(burger[1], /min-height:44px/, 'a medida fica');
+    assert.ok(!/display:/.test(burger[1]),
+      'mas o display não: quem decide se ele existe é a largura, não o dedo');
+  });
+
+  test('quem o mostra é a largura, e centra-o lá', () => {
+    const i = css.indexOf('@media(max-width:900px)');
+    const bloco = fatia(css, i);
+    assert.match(bloco, /\.burger\{display:inline-flex/, 'aparece abaixo de 900px, centrado');
+    assert.match(css, /^\.burger\{display:none/m, 'e por omissão não existe');
+  });
+
+  test('e abrir a gaveta onde não há gaveta não tranca a página', () => {
+    const nav = readFileSync(new URL('../web/app/navegacao.js', import.meta.url), 'utf8');
+    const i = nav.indexOf('function openDrawer()');
+    const corpo = nav.slice(i, nav.indexOf('function closeFilterPanels', i));
+    assert.match(corpo, /getComputedStyle/, 'pergunta ao próprio elemento');
+    assert.match(corpo, /pos!=='fixed'\)return/, 'e sai antes de trancar');
+    assert.ok(corpo.indexOf("pos!=='fixed'") < corpo.indexOf('lockPage()'),
+      'a saída vem ANTES do lockPage, senão o estrago já está feito');
+  });
+});
+
+/* A escada das camadas. O modal esteve abaixo do menu lateral, e em ecrã largo
+   isso cortava-o ao meio — e deixava o menu clicável por baixo de um véu que
+   não o tapava. É invisível no telemóvel, onde a gaveta está fora do ecrã, e
+   por isso passou despercebido: fica guardado. */
+describe('a escada das camadas', () => {
+  /* por indexOf e não por expressão: os seletores levam pontos, e escapá-los
+     dava mais barras invertidas do que regra */
+  /* o mesmo seletor aparece em várias regras (a do fundo, a da media query, a
+     do movimento): procura-se a que declara mesmo o z-index, e só dentro do
+     bloco dela — não na seguinte */
+  const zDe = (sel) => {
+    let i = -1;
+    while ((i = cssLimpo.indexOf(sel + '{', i + 1)) > -1) {
+      const m = /z-index:(\d+)/.exec(cssLimpo.slice(i, cssLimpo.indexOf('}', i)));
+      if (m) return Number(m[1]);
+    }
+    assert.fail(sel + ' não declara z-index em regra nenhuma');
+    return 0;
+  };
+
+  test('um modal está acima de toda a navegação', () => {
+    const modal = zDe('.modal');
+    assert.ok(modal > zDe('aside'), 'acima do menu lateral');
+    assert.ok(modal > zDe('.scrim'), 'e do véu da gaveta');
+    assert.ok(modal > zDe('.tabbar'), 'e da barra de baixo');
+    assert.ok(modal > zDe('.fab'), 'e do botão flutuante');
+  });
+
+  /* O que fica ACIMA do modal só pode ser o que não esconde nada com que se
+     interaja: um aviso que passa e um balão de leitura. */
+  /* O cartão do tutorial tem de ficar ACIMA de uma janela aberta: sem isso,
+     entrar nas definições para preencher o perfil fazia o tutorial sumir, sem
+     forma de continuar. O número dele foi escolhido contra o do modal — e
+     quando o modal subiu, ficou por baixo. Fica preso aos dois. */
+  test('o cartão do tutorial fica acima de uma janela aberta', () => {
+    const guia = readFileSync(new URL('../web/cloud/guia.js', import.meta.url), 'utf8');
+    const m = /#cwGuia\.sobre-janela\{z-index:(\d+)/.exec(guia);
+    assert.ok(m, 'o cartão sobe quando há uma janela aberta');
+    assert.ok(Number(m[1]) > zDe('.modal'),
+      'e sobe acima dela: ' + m[1] + ' contra ' + zDe('.modal'));
+    const base = /#cwGuia\{[^']*z-index:(\d+)/.exec(guia);
+    assert.ok(Number(base[1]) < zDe('.modal'), 'em repouso fica abaixo, como deve');
+  });
+
+  test('e só o aviso e o balão ficam acima dele', () => {
+    const modal = zDe('.modal');
+    assert.ok(zDe('.toast') > modal, 'o aviso vê-se por cima de um modal');
+    assert.ok(zDe('.tip') > modal, 'e o balão também');
+  });
+});
+
 describe('movimento', () => {
   /* A folha tinha oito declarações de movimento, cada uma com a sua duração
      escrita à mão e nenhuma com curva. Os tokens são o que impede a nona de

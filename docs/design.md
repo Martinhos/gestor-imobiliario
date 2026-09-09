@@ -994,6 +994,58 @@ que sobe para o servidor. O que já está escrito nas fichas antigas fica como
 estava; só o que se escreve de agora em diante leva a forma nova. É o preço
 de escrever a data dentro de uma frase em vez de a guardar num campo.
 
+## Um modal está acima de toda a navegação
+
+Os modais apareciam **por trás do menu lateral**. Em ecrã largo, onde o menu é
+permanente, o título ficava cortado e metade do conteúdo escondido.
+
+A escada estava invertida: `.modal` em 60, o véu da gaveta (`.scrim`) em 61 e o
+`aside` em 62. E como o véu do modal é `inset:0`, ele também ficava por baixo
+do menu — que assim **não escurecia e continuava clicável**. Dava para navegar
+para outro ecrã com um formulário aberto.
+
+O modal sobe para 70. Um modal é um MODO: enquanto está aberto, o resto da app
+está suspenso e tem de o parecer. Acima dele ficam só o aviso (90) e o balão
+(95), que não escondem nada com que se possa interagir.
+
+**Centrado no ecrã, e não na área que sobra do menu.** A alternativa foi
+considerada e não vale: a largura do menu muda (`--rail` e `--rail-min`),
+portanto um modal centrado no que sobra saltaria de sítio quando o menu
+encolhesse; no telemóvel não há menu nenhum, o que daria duas regras onde basta
+uma; e deixar a navegação à vista e por iluminar, ao lado de um modal aberto,
+convida a cliques que ou não fazem nada ou levam a pessoa para fora do que
+estava a fazer.
+
+Era invisível no telemóvel, onde a gaveta está fora do ecrã — por isso durou.
+Fica um teste sobre a escada inteira.
+
+## O hambúrguer só existe onde há gaveta
+
+A mesma família do modal, e encontrado pela mesma via: uma regra que faz duas
+coisas e vaza para onde não devia.
+
+O `.burger` é `display:none` por omissão e só aparece abaixo de 900px, que é
+onde o `aside` deixa de ser uma coluna e passa a ser gaveta. Mas a regra do
+**alvo de toque** — `@media(pointer:coarse)` — dava-lhe
+`display:inline-flex` ao pôr-lhe os 44px mínimos. Ela existe para MEDIR, e
+estava também a MOSTRAR.
+
+Num telemóvel em «modo PC» isso encontra-se: o viewport é largo (sem gaveta) e
+o ecrã é de dedo (botão à vista). Tocar nele chamava o `openDrawer`, que punha
+`body.open` — que acima de 900px não mexe em nada, porque o
+`body.open aside{transform:none}` só existe dentro da media query estreita — e
+chamava o `lockPage`, que **trancava o scroll**. Um botão que não fazia nada e
+deixava a página presa.
+
+A regra do toque passa a só medir; quem mostra o botão, e o centra, é a largura.
+E o `openDrawer` ganha uma rede: pergunta ao próprio `aside` se ele está
+`fixed`, e sai antes do `lockPage` se não estiver. Pergunta-se ao elemento e não
+à largura para não haver dois sítios a saber onde é o corte.
+
+Medido: a 1100px, forçar o `openDrawer` não põe `body.open` nem tranca nada; a
+375px o botão aparece, a gaveta abre encostada à esquerda, tranca ao abrir e
+destranca ao fechar.
+
 ## Um carregamento não pode misturar versões
 
 A v31 chegou a produção e a app **não arrancava**: `ReferenceError` em cadeia —
@@ -1039,8 +1091,41 @@ recarregou, e a app arrancou.
 
 Uma consequência a registar: com cache primeiro, um servidor local serviria
 ficheiros velhos até a versão mudar. O service worker deixa de se registar em
-`localhost` — localhost não é uma publicação. No dev fica, que é onde as
-travessias entre versões a sério se exercitam antes de irem para produção.
+`localhost` — localhost não é uma publicação.
+
+### E a mesma consequência apanhou o dev — só produção guarda
+
+Ficou escrito aqui que o dev mantinha a cache «que é onde as travessias entre
+versões a sério se exercitam». **O raciocínio estava errado**, e custou um dia
+de trabalho invisível: as travessias acontecem quando a VERSÃO muda, e no dev
+ela não muda — publica-se dezenas de vezes com a mesma. A cache chama-se pela
+versão, portanto nunca rodava, e o ambiente congelava no primeiro carregamento
+dessa versão. Publicava-se, atualizava-se a página, e não acontecia nada: a
+cache respondia antes da rede.
+
+Agora só produção guarda. Fora dela o worker existe — o PWA instala-se, o
+manifesto vale — mas deixa passar tudo à rede: sempre fresco, e sem poder
+misturar versões porque não guarda nenhuma. O caminho da cache exercita-se onde
+importa, que é onde há utilizadores e onde a versão sobe a cada publicação.
+
+E a regra diz quem **não** é produção, não quem é. Esteve ao contrário —
+`hostname === 'app.rendorium.com'` — e uma auditoria antes de promover apanhou
+o que isso deixava de fora: o `wrangler.toml` liga o `workers.dev` **à mão**,
+com o comentário de que as instalações antigas (PWA e APK) apontam para lá e
+não podem partir. Essas pessoas estão em produção, e a regra tratava-as como se
+não estivessem: perderiam o offline, em silêncio.
+
+Os ambientes que **não** são produção sabem-se todos — o localhost, o
+`dev.rendorium.com` e o endereço do worker de dev. Os de produção, não: há os
+de hoje e os que ficaram de ontem. Por isso a lista é a dos primeiros. E o
+teste passou a correr a regra em vez de fixar o literal, porque fixar o literal
+foi precisamente o que não apanhou a omissão.
+
+E a transição desenrasca-se sozinha: fora de produção o worker novo assume já
+(`skipWaiting`, seguro aqui porque não há cache a proteger) e apaga **todas** as
+caches no `activate`. Quem ficou preso numa publicação anterior sai na primeira
+navegação, sem ter de limpar nada à mão. Medido: duas caches com ficheiros
+envenenados, uma navegação, e ficam zero.
 
 ## Ver a montra antes de a publicar
 

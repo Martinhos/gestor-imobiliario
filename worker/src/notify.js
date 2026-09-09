@@ -306,11 +306,19 @@ async function cloudflareUsage(env) {
       workersInvocationsAdaptive(limit:1000, filter:{datetime_geq:$desde}){
         sum{ requests errors } }
     } } }`;
+  /* Com prazo. Isto é a API de outra gente, e um pedido sem fim pendurava o
+     que estivesse à espera dele — foi o que fez o /uso passar dos três
+     segundos que o Discord dá e responder «o aplicativo não respondeu». Sem
+     resposta a tempo, o consumo fica de fora e o resto do quadro aparece na
+     mesma: é melhor um número a menos do que quadro nenhum. */
+  const corta = typeof AbortController === 'function' ? new AbortController() : null;
+  const prazo = corta ? setTimeout(() => { try { corta.abort(); } catch (e) {} }, 4000) : null;
   try {
     const r = await fetch('https://api.cloudflare.com/client/v4/graphql', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, variables: { acc, desde } }),
+      signal: corta ? corta.signal : undefined,
     });
     const j = await r.json();
     const a = j && j.data && j.data.viewer && j.data.viewer.accounts && j.data.viewer.accounts[0];
@@ -323,6 +331,8 @@ async function cloudflareUsage(env) {
       'Workers · pedidos': soma(a.workersInvocationsAdaptive, 'requests'),
     };
   } catch (e) {
-    return null;
+    return null;   // sem resposta a tempo, ou resposta que não se entende
+  } finally {
+    if (prazo) clearTimeout(prazo);
   }
 }
