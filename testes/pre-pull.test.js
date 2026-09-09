@@ -63,6 +63,38 @@ describe('arrumar a despensa não apaga na nuvem', () => {
   });
 });
 
+describe('as derivações do arranque esperam por saber', () => {
+  /* O syncAllContractRecs e o syncAllLoanRecs não são leituras: escrevem em
+     db.recurring, e APAGAM as recorrências automáticas cujo contrato ou
+     hipoteca já não aparecem no db. No arranque, «já não aparece» quer muitas
+     vezes dizer «ainda não sei que existe». */
+  test('o arranque não deriva nem grava antes do primeiro estado', () => {
+    const s = le('web/app/arranque.js');
+    assert.match(s, /function derivarDoArranque\(\)\{\s*if\(!sabemosOEstado\(\)\)return void setTimeout\(derivarDoArranque/,
+      'a derivação espera, e volta a tentar');
+    const i = s.indexOf('function derivarDoArranque()');
+    const corpo = s.slice(i, s.indexOf('}', s.indexOf('save();', i)));
+    for (const f of ['syncAllContractRecs()', 'syncAllLoanRecs()', 'save()']) {
+      assert.ok(corpo.includes(f), f + ' vive dentro do guarda');
+    }
+    /* e nenhuma delas fica solta na linha do arranque: uma chamada de topo
+       corria antes de a nuvem sequer carregar */
+    const fora = s.replace(corpo, '');
+    for (const f of ['syncAllContractRecs()', 'syncAllLoanRecs()']) {
+      assert.ok(!new RegExp('^' + f.replace(/[()]/g, '\$&'), 'm').test(fora),
+        f + ' não corre à solta no arranque');
+    }
+  });
+
+  test('as duas derivações apagam mesmo — é por isso que esperam', () => {
+    const s = le('web/app/planeados.js');
+    assert.match(s, /function syncAllContractRecs\(\)\{[\s\S]{0,400}?db\.recurring=db\.recurring\.filter/,
+      'o sync dos contratos deita fora recorrências');
+    assert.match(s, /function syncAllLoanRecs\(\)\{[\s\S]{0,400}?db\.recurring=db\.recurring\.filter/,
+      'o das hipotecas também');
+  });
+});
+
 describe('o cartão do contrato não deixa confirmar um fantasma', () => {
   test('o decoratePending espera, como o sino', () => {
     const s = le('web/cloud/painel.js');

@@ -125,7 +125,28 @@ document.addEventListener('focusout',()=>{
     [].slice.call(document.querySelectorAll('.sheet.kb')).forEach(x=>x.classList.remove('kb'));
   },120);
 });
-syncAllContractRecs();syncAllLoanRecs();save();scheduleReminders();
+/* As derivações do arranque, quando já se souber o que o servidor tem.
+
+   O syncAllContractRecs e o syncAllLoanRecs não são leituras: escrevem em
+   db.recurring. Criam a renda planeada, movem o cursor — e APAGAM: as duas
+   deitam fora as recorrências automáticas cujo contrato ou cuja hipoteca já
+   não aparecem no db (planeados.js). No arranque, o db é o que está neste
+   aparelho, e aí «já não aparece» quer muitas vezes dizer «ainda não sei que
+   existe»: o estado do servidor não chegou, ou chegou sem os movimentos de um
+   imóvel onde o cargo não abre as finanças. O save() a seguir grava isso no
+   disco e agenda um envio, e a decisão tomada às escuras sobe.
+
+   Adiar não custa nada a quem está sem rede, porque a espera tem tecto
+   (auxiliares.js:sabemosOEstado): sem rede o pedido falha depressa e a espera
+   acaba logo, no pior caso — a rede pendurada — são seis segundos, e sem
+   sessão nenhuma isto corre já, na mesma linha.
+   Devolve: nada — deriva os planeados e grava, assim que houver por que se
+   guiar. */
+function derivarDoArranque(){
+  if(!sabemosOEstado())return void setTimeout(derivarDoArranque,300);
+  syncAllContractRecs();syncAllLoanRecs();save();
+}
+derivarDoArranque();
 fitInsets();applyTheme();buildNav();render();cleanFiles();migrateInline();
 /* O aviso do arranque espera por saber, e conta as rendas só nessa altura:
    antes do primeiro estado do servidor, anunciava movimentos por confirmar

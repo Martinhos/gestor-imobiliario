@@ -1120,6 +1120,31 @@ arranque, e o `applyState` grava com `rawSet` — que não passa pelo `save()`,
 onde o `scheduleReminders` vive. Uma renda confirmada no computador continuava
 a tocar no telemóvel no dia certo. Passa a reagendar-se a seguir ao db novo.
 
+**E o arranque derivava às escuras.** O `syncAllContractRecs` e o
+`syncAllLoanRecs` não são leituras: escrevem em `db.recurring`. Criam a renda
+planeada, movem o cursor — e **apagam**: as duas deitam fora as recorrências
+automáticas cujo contrato ou cuja hipoteca já não aparecem no db. No arranque o
+db é o que está neste aparelho, e aí «já não aparece» quer muitas vezes dizer
+«ainda não sei que existe»: o estado do servidor não chegou, ou chegou sem os
+movimentos de um imóvel onde o cargo não abre as finanças. O `save()` a seguir
+gravava isso no disco e agendava um envio — e um colaborador com `rec.add`
+pode gravar o `next` de um planeado alheio, portanto a decisão tomada às
+escuras subia.
+
+Chegou a pôr-se a hipótese de a app ficar **só de leitura sem rede**. Não é a
+regra certa, por três razões. Não é o problema: a escrita é automática, não é
+de ninguém, e acontece com rede e sem rede. O `navigator.onLine` mente
+exatamente no caso que interessa — wifi de hotel com portal cativo, TCP aceite,
+resposta que nunca chega. E o `web/sw.js` promete o contrário logo na primeira
+linha: «a app abre offline (a API sincroniza quando voltar a rede)» — é offline
+que mais se precisa de escrever, na cave do prédio ou no imóvel sem cobertura.
+
+O estado em que a app não deve **decidir** não é «sem rede»: é «antes de
+saber». As derivações passam para o `derivarDoArranque` (arranque.js), atrás do
+mesmo guarda. E adiar não custa nada offline, porque a espera tem tecto: sem
+rede o pedido falha depressa e a espera acaba logo; no pior caso são seis
+segundos; sem sessão nenhuma, corre na mesma linha.
+
 E dois ecrãs continuavam a afirmar o que o sino já calava: o cartão dos
 **Prazos** (um aviso silenciado noutro aparelho reaparecia, com selo vermelho)
 e o `decoratePending`, que escreve «1 movimento por confirmar» nos cartões dos
