@@ -118,7 +118,7 @@ function novHtml(avisos) {
   return '<div class="form" id="novLista">' + avisos.map(function (a) {
     return '<div>' +
       '<div class="section-title" style="margin-top:0">' + esc(a.titulo) + '</div>' +
-      '<div class="small" style="margin:-6px 0 10px">versão ' + a.v + ' · ' + esc(a.data) + '</div>' +
+      '<div class="small" style="margin:-6px 0 10px">versão ' + a.v + ' · ' + dPT(a.data) + '</div>' +
       '<div class="list" style="gap:9px">' +
       a.seccoes.map(function (s, i) { return secHtml(s, a.v + ':' + i); }).join('') +
       '</div></div>';
