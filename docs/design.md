@@ -894,6 +894,34 @@ dava régua horizontal durante a viagem. Corta-se com `overflow-x:clip` no
 pai, reposto no fim. Clip, e não hidden: o hidden fá-lo contentor de
 rolamento e o cabeçalho pegajoso deixa de colar.
 
+## A renda planeada e as rendas já lançadas
+Uma recorrência é um **cursor**, e não um histórico: guarda uma data só, a
+próxima ocorrência (planeados.js:syncContractRec). Quem guarda o que já
+aconteceu são os **movimentos**, registos próprios em `db.transactions` —
+confirmar faz duas coisas independentes: cria o movimento e empurra o cursor.
+
+Daí a regra, e é uma só: **o cursor acompanha o contrato nos dois sentidos,
+mas nunca passa por cima de um mês que já tem movimento deste contrato**
+(planeados.js:cursorDaRenda). Adiar o início leva a renda planeada com ele;
+corrigir um início de 2028 para 2025 traz o cursor de volta — mas ele pára no
+primeiro mês por confirmar, e não em janeiro. É a mesma regra que faz o
+confirmar não duplicar: o cursor nunca aterra num mês já lançado, e quando
+lá chega por outro caminho (uma renda lançada à mão), salta e di-lo.
+
+Chegou a empurrar só para a frente, com medo de ressuscitar confirmações. Era
+um medo mal posto: uma confirmação não é um estado do planeado, é um
+movimento com registo próprio — o cursor não lhe toca. O único mal era voltar
+a pedir um mês já lançado, e é isso que a regra impede.
+
+**O que é previsão acompanha o contrato; o que é facto fica onde está.** A
+data de um movimento diz que o dinheiro entrou naquele dia, e mudá-la era
+dizer que entrou noutro: mudava a receita do ano, a estimativa de IRS, o
+cashflow e as contas entre proprietários, e deixava de bater com o extrato.
+Por isso os movimentos não se movem com o contrato — a app **aponta**. Ao
+guardar um contrato, os que caem fora das datas dele, de um lado e do outro,
+são contados e mostram-se um a um, para se abrir cada um e decidir
+(contrato.js:movimentosForaDoContrato, contrato.js:verMovimentosFora).
+
 ## Navegação
 Treze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e
 subtítulo. A gaveta agrupa-os em quatro (navegacao.js:NAV_GROUPS):

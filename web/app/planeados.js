@@ -26,6 +26,51 @@ function ctRecOf(c){return (db.recurring||[]).find(r=>r.auto&&r.tx&&r.tx.contrac
 // Recebe: y — ano (número); m — mês 0-11 (número); d — dia pretendido (número).
 // Devolve: a data em AAAA-MM-DD (texto), com o dia preso ao último do mês.
 function dayInMonth(y,m,d){const last=new Date(y,m+1,0).getDate();return `${y}-${String(m+1).padStart(2,'0')}-${String(Math.min(d,last)).padStart(2,'0')}`}
+/* Já há um movimento deste contrato neste mês?
+
+   Ao mês, e não ao dia: a renda pode entrar no dia 3 ou no dia 9 e é a mesma
+   renda. É o que impede o cursor de voltar a pedir o que já foi confirmado —
+   e o que distingue «ainda não foi paga» de «já foi».
+   Recebe: c — o contrato; iso — uma data AAAA-MM-DD.
+   Devolve: true se já existe um movimento desse contrato nesse mês. */
+function rendaJaLancada(c,iso){
+  if(!c||!iso)return false;
+  const mes=String(iso).slice(0,7);
+  return (db.transactions||[]).some(t=>t.contractId===c.id&&String(t.date||'').slice(0,7)===mes);
+}
+/* Onde é que o cursor da renda deve estar.
+
+   O cursor anda para onde tiver de andar — para a frente quando o contrato
+   começa mais tarde, para trás quando o início é corrigido para antes —, mas
+   NUNCA passa por cima de um mês que já tem movimento deste contrato. É essa
+   regra que faz as duas coisas ao mesmo tempo: acompanha o contrato nos dois
+   sentidos, e não há duplicado nenhum a inventar, porque ele nunca aterra num
+   mês já lançado.
+   Recebe: c — o contrato; next — o cursor atual; minNext — a primeira
+   ocorrência que o contrato permite; from — o dia de pagamento.
+   Devolve: a data do cursor, ou '' se já passou do fim do contrato. */
+function cursorDaRenda(c,next,minNext,from){
+  const passo=(iso,n)=>{const d=new Date(iso+'T00:00:00');let y=d.getFullYear(),m=d.getMonth()+n;
+    y+=Math.floor(m/12);m=((m%12)+12)%12;return dayInMonth(y,m,from)};
+  let x=next||minNext;
+  if(!x)return '';
+  /* para a frente: enquanto for cedo de mais, ou enquanto o mês já estiver
+     lançado — é aqui que o confirmar deixa de poder duplicar */
+  let guarda=0;
+  while(guarda++<600&&((minNext&&x<minNext)||rendaJaLancada(c,x)))x=passo(x,1);
+  /* para trás: enquanto o mês anterior ainda couber no contrato e não tiver
+     movimento nenhum. Pára no primeiro mês lançado, e por isso nunca volta a
+     pedir o que já foi confirmado. */
+  guarda=0;
+  while(guarda++<600){
+    const ant=passo(x,-1);
+    if(minNext&&ant<minNext)break;
+    if(rendaJaLancada(c,ant))break;
+    x=ant;
+  }
+  if(c.end&&x>c.end)return '';     // já não há renda nenhuma a pedir
+  return x;
+}
 /* Mantém a recorrência automática da renda de um contrato: cria-a, atualiza-a
    ou remove-a conforme o contrato esteja ativo, com renda e com o automático
    ligado (autoRec). A janela payDay..payDayTo dá as datas; rendas antecipadas
@@ -65,18 +110,23 @@ function syncContractRec(c){
   if(r){aplicaPlanoNaRec(r,tx,tx.label);r.end=c.end||'';
     /* se os dias da janela mudarem no contrato, a janela acompanha (mantendo o mês em curso) */
     if(r.next){const d=new Date(r.next+'T00:00:00');r.next=dayInMonth(d.getFullYear(),d.getMonth(),from);r.until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
-    /* Só empurra para a FRENTE, nunca para trás. Puxar a data de volta era
-       arriscar ressuscitar meses que já foram confirmados — o «next» é o
-       cursor do que falta confirmar, e ele avança sozinho a cada confirmação.
-       O preço é este: corrigir um início de 2028 para 2025 deixa a renda
-       planeada em 2028, e tem de se acertar à mão. */
-    if(minNext&&r.next<minNext){const d=new Date(minNext+'T00:00:00');r.next=minNext;r.until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
+    /* O cursor acompanha o contrato nos DOIS sentidos, e nunca passa por cima
+       de um mês já lançado. Chegou a empurrar só para a frente, com medo de
+       ressuscitar confirmações — mas uma confirmação não é um estado do
+       planeado, é um movimento com registo próprio: o cursor não lhe toca. O
+       único mal era voltar a pedir um mês já lançado, e é precisamente isso
+       que o cursorDaRenda não deixa acontecer. */
+    const x=cursorDaRenda(c,r.next,minNext,from);
+    if(!x){db.recurring=db.recurring.filter(y=>y.id!==r.id);return}
+    if(x!==r.next){const d=new Date(x+'T00:00:00');r.next=x;r.until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
     return}
   /* primeira janela: este mês se ainda não passou; senão o mês que vem; nunca antes do início do contrato */
   const t=new Date(today()+'T00:00:00');let y=t.getFullYear(),m=t.getMonth();
   if(today()>dayInMonth(y,m,to)){m++;if(m>11){m=0;y++}}
   let next=dayInMonth(y,m,from),until=to>from?dayInMonth(y,m,to):'';
-  if(minNext&&next<minNext){const d=new Date(minNext+'T00:00:00');next=minNext;until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
+  const x0=cursorDaRenda(c,next,minNext,from);
+  if(!x0)return;                   // um contrato que já acabou não estreia planeado nenhum
+  if(x0!==next){const d=new Date(x0+'T00:00:00');next=x0;until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
   db.recurring=db.recurring||[];
   db.recurring.push(normRec({auto:true,name:tx.label,autoName:tx.label,every:'month',next,until,end:c.end||'',tx}));
 }
@@ -418,6 +468,14 @@ function quickConfirmRec(id){
   if(recSemCredito(r))return toast('Sem crédito associado — abre o planeado para escolher a hipoteca.');
   /* a mesma frase do formulário: confirmar depressa não pode aceitar o que o Guardar recusa */
   if(recCreditoPago(r))return toast('Esta hipoteca já está paga: não é possível associar novos pagamentos.');
+  /* Um mês que já tem movimento deste contrato não se lança outra vez: salta
+     e diz que saltou. Acontece quando a renda foi registada à mão, ou quando
+     o cursor recuou com o contrato para um mês já pago. */
+  const ct=r.tx&&r.tx.contractId?contract(r.tx.contractId):null;
+  if(ct&&rendaJaLancada(ct,r.next)){
+    const mes=r.next;recAdvance(r);save();buildNav();render();
+    return toast('Já havia um movimento deste contrato em '+String(mes).slice(0,7)+' — o planeado saltou para o seguinte.');
+  }
   const t=recTx(r);if(t.kind==='loan')applyLoan(t);
   db.transactions.push(t);recAdvance(r);save();buildNav();render();toast('Movimento confirmado.');
 }
