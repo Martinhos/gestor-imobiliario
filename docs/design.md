@@ -1033,6 +1033,77 @@ para não confundir «não tens colaboradores» com «ainda não sabemos», e a�
 resposta certa é dizer que se está à espera — coisa que um crachá não sabe
 fazer. Numa app sem nuvem, ou sem sessão iniciada, não há espera nenhuma.
 
+### E o guarda não valia na pintura que interessa
+
+A primeira versão do guarda perguntava «há `window.CW`?». O `app/arranque.js`
+corre **antes** do `cloud/nucleo.js` (é a ordem do index.html), e na primeira
+pintura — a única que se vê antes de o servidor falar — o `CW` ainda não
+existe. O guarda respondia «não há nuvem, diz tudo» exatamente no instante em
+que devia calar-se, e o sintoma continuava lá, intacto.
+
+A pergunta certa não é «a nuvem já carregou?», é **«há sessão?»** — e isso
+sabe-se do aparelho, sem depender de ordem nenhuma: a sessão está no
+localStorage muito antes de a nuvem a ler (auxiliares.js:haSessao). A chave
+passou a viver em dados.js, com o resto do armazenamento, e o cloud/nucleo.js
+usa a mesma — duas verdades sobre onde está a sessão seria pior do que o
+problema.
+
+Pelo caminho, mais dois do mesmo: o crachá dos «Planeados» no menu e na barra
+de baixo contava a mesma lista velha (navegacao.js:buildNav), e o tecto de seis
+segundos estava armado dentro do `startSync`, que só corre depois de o
+`GET /api/me` responder — com esse pedido pendurado, o tecto nunca chegava a
+existir. Passa a armar-se onde a sessão se lê, que é onde se sabe que há por
+que esperar.
+
+## «Não tens nada» e «ainda não sabemos» são coisas diferentes
+
+A base local vive numa chave só — `gi_v13` (dados.js) —, e não uma por conta.
+Terminar sessão não a limpa, e por isso o `finishLogin` tem de a apagar quando
+quem entra é outra pessoa (entrada.js): a alternativa era mostrar os imóveis de
+um a outro. Está certo.
+
+O que estava errado era o que vinha a seguir. A app pintava essa base vazia e
+afirmava **«Ainda não há nada registado»** a quem tem doze imóveis, com um
+botão de **«Carregar exemplo»** ao lado — e o `seed()` não acrescenta:
+substitui a base inteira e acaba em `save()`, que a nuvem embrulha para agendar
+um envio (anexos.js). A frase era falsa e o botão era uma armadilha.
+
+E não é «uma vez por aparelho», como cheguei a dizer: é em **todos os logins**
+de quem partilha o aparelho com outra conta, mais a navegação privada, o
+armazenamento limpo pelo browser, a app reinstalada, e todos os arranques num
+aparelho onde o armazenamento está cheio ou vedado.
+
+Nove ecrãs afirmavam o vazio: a visão geral, os imóveis, os contratos, os
+inquilinos, os proprietários, os movimentos, as visitas, os créditos e a
+avaliação. Passam todos pelo `esperaDoServidor()` (auxiliares.js), que só fala
+quando não se sabe **mesmo** nada — sessão à espera do primeiro estado e base
+local inteiramente vazia. Quem tem dados cá nunca o vê; uma conta nova vê-o um
+instante antes do «ainda não há nada registado» verdadeiro. Duas frases certas,
+em vez de uma errada.
+
+É o molde que a página dos cargos já usava (partilha.js), e pela mesma razão:
+dizer «não tens» a quem tem parece perda de dados.
+
+Junto com isto, o `finishLogin` passou a limpar o `CW.state`: ele não está
+guardado no aparelho, mas sobrevivia a uma troca de conta na mesma página, e
+quem entrava a seguir via os cargos, os colaboradores e as ligações de quem
+saiu até o primeiro estado chegar.
+
+## Os dados de exemplo, só onde fazem sentido
+
+Em produção não se carregam dados de exemplo: quem chega à app a sério deve
+encontrá-la vazia e ser levado pelos primeiros passos. O ambiente vem do
+servidor (`/api/auth/config` devolve `env.ENV_NAME` ou `'producao'`), e até a
+resposta chegar vale `'producao'` — o lado seguro.
+
+O que mudou foi **onde** se decide. O botão chegou a ser apagado do DOM depois
+de cada `render`, e isso tinha um furo: a pesquisa das listas repinta pela via
+parcial (vistas.js:refrescarListasVivas), que não passa pelo `render`, e por lá
+o botão voltava — bastava escrever uma letra na pesquisa dos imóveis. Agora
+pergunta-se **antes de escrever** (auxiliares.js:podeExemplo). Perguntar antes
+de escrever não tem furos; o embrulho do `seed` fica como fecho, para o caso de
+alguém lá chegar por outro caminho.
+
 **A variação do ano anterior chegava tarde.** Estava à espera de tempo morto —
 `requestIdleCallback` com 400 ms de tecto — e num arranque cheio o tempo morto
 não chega. Passa para o **quadro seguinte**: não bloqueia a primeira pintura e

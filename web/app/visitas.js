@@ -63,7 +63,7 @@ function vVisits(){
   });
   const marca=casasComo('visit.add').length>0;   /* sem imóvel onde possa marcar, não há botão */
   if(!(db.visits||[]).length)
-    return `<div class="empty"><b>Ainda não há visitas</b>${marca?'Marca a primeira: quem vem, a que imóvel, e quando.':'As visitas aos imóveis onde colaboras aparecem aqui.'}
+    return esperaDoServidor()||`<div class="empty"><b>Ainda não há visitas</b>${marca?'Marca a primeira: quem vem, a que imóvel, e quando.':'As visitas aos imóveis onde colaboras aparecem aqui.'}
       ${marca?`<div class="toolbar" style="justify-content:center;margin-top:16px">
       <button class="btn primary" data-toca="camada" onclick="visitModal()">Marcar visita</button></div>`:''}</div>`;
   const head=lfBar(K,[

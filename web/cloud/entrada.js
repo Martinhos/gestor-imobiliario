@@ -184,6 +184,12 @@ function finishLogin(u) {
     db = JSON.parse(JSON.stringify(blank));
     rawSet(KEY, JSON.stringify(db));
   }
+  /* O CW.state não está guardado no aparelho, mas sobrevive a uma troca de
+     conta na mesma página: sem isto, quem entrava a seguir via os cargos, os
+     colaboradores e as ligações de quem saiu, até o primeiro estado chegar. */
+  CW.state = { connections: [], roles: [], collaborators: [], invites: [], people: [], shareLink: null, shareRequests: { incoming: [], outgoing: [] } };
+  CW.cargos = {}; CW.pessoas = {}; CW._pulled = 0; CW._esperaFim = 0;
+  setTimeout(function () { fimDaEspera(); }, 6000);
   hideAuth();
   tab = 'dashboard'; setPage = '';   // entrar leva sempre à visão geral
   buildNav(); render();
