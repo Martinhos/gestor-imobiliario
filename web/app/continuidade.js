@@ -304,7 +304,9 @@ function correrAFita(a,b,r0,d){
   deitar(clone,w);
   deitar(a,Math.round(r0.width)||w);
   b.style.visibility='hidden';
-  const dur=msDoToken('--lento',340),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
+  /* a --curva-fita, e não a --curva-entra: esta fita estava parada, e a curva
+     de quem chega arranca à velocidade máxima (index.html) */
+  const dur=msDoToken('--lento',340),curva=tokenTexto('--curva-fita','cubic-bezier(.4,0,.2,1)');
   a.animate([{transform:'none'},{transform:'translateX('+(-d*w)+'px)'}],
     {duration:dur,easing:curva,fill:'forwards'});
   const an=clone.animate([{transform:'translateX('+(d*w)+'px)'},{transform:'none'}],
@@ -374,7 +376,9 @@ function deslizarPainel(pintar,d){
     while(velho.firstChild)v.appendChild(velho.firstChild);
     caixa.remove();contSuspensa=false;throw err}
   contSuspensa=false;
-  const dur=msDoToken('--lento',340),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
+  /* a --curva-fita, e não a --curva-entra: esta fita estava parada, e a curva
+     de quem chega arranca à velocidade máxima (index.html) */
+  const dur=msDoToken('--lento',340),curva=tokenTexto('--curva-fita','cubic-bezier(.4,0,.2,1)');
   const clipAntes=m.style.overflowX;m.style.overflowX='clip';
   /* o transform do #view faz dele o bloco de referência de quem lá dentro é
      position:fixed — o botão flutuante novo ia parar ao fundo de um painel de

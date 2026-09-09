@@ -994,6 +994,37 @@ que sobe para o servidor. O que já está escrito nas fichas antigas fica como
 estava; só o que se escreve de agora em diante leva a forma nova. É o preço
 de escrever a data dentro de uma frase em vez de a guardar num campo.
 
+## A fita arranca do sítio
+
+Corrigido o salto, ficava o arranque: a travessia entrava a andar, sem
+aceleração nenhuma.
+
+As duas fitas — a dos separadores (`deslizarPainel`) e a das listas
+(`correrAFita`) — usavam a `--curva-entra`, que é a curva de quem **chega**:
+sai à velocidade máxima e vai abrandando. Num elemento que aparece, está
+certo. Numa fita que estava parada, não. Medido no browser, na mesma animação,
+com uma curva e com a outra:
+
+| tempo | `--curva-entra` | `--curva-fita` |
+|---|---|---|
+| 17 ms | **17%** do caminho | 1% |
+| 34 ms | **30%** | 3% |
+| 68 ms | 50% | 13% |
+| 102 ms | 64% | 37% |
+
+Trinta por cento do percurso em dois fotogramas: é isso que se lê como um
+empurrão.
+
+A curva nova sai das duas que já existiam — o arranque da `--curva-sai`
+(`.4,0`) com a chegada da `--curva-entra` (`.2,1`) —, o que lhe dá velocidade
+zero à partida **e** à chegada. E é **uma só** para os dois painéis de
+propósito: eles viajam agarrados, e curvas diferentes abriam uma fenda entre
+eles a meio do caminho.
+
+O `aplicarContinuidade` fica com a `--curva-entra`: as peças soltas que se
+acompanham entre repinturas estão mesmo a chegar a um sítio, e para essas a
+curva de chegada é a certa.
+
 ## A caixa de quem sai é a mesma caixa
 
 A fita dos separadores saltava antes de deslizar: o ecrã dava um pulo, parecia

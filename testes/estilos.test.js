@@ -81,6 +81,42 @@ describe('movimento', () => {
     });
   });
 
+  /* A --curva-fita não é citada por nenhuma regra CSS: quem a usa são as duas
+     fitas, em JS, pelo tokenTexto. Por isso fica fora da lista acima — mas tem
+     de estar declarada, senão o valor de recurso do tokenTexto passava a ser a
+     verdade e o token deixava de mandar em coisa nenhuma. */
+  test('a curva de quem atravessa em bloco existe, e sai das outras duas', () => {
+    assert.match(cssLimpo, /--curva-fita\s*:\s*cubic-bezier\(\.4,0,\.2,1\)/, 'declarada no :root');
+    /* o arranque da --curva-sai com a chegada da --curva-entra: é isso que lhe
+       dá velocidade zero à partida e à chegada */
+    assert.match(cssLimpo, /--curva-sai\s*:\s*cubic-bezier\(\.4,0,/, 'o arranque vem daqui');
+    assert.match(cssLimpo, /--curva-entra\s*:\s*cubic-bezier\(0,0,\.2,1\)/, 'a chegada daqui');
+  });
+
+  /* As duas fitas — a dos separadores e a das listas — têm o que sai e o que
+     entra agarrados um ao outro. A curva de quem CHEGA arranca à velocidade
+     máxima: medido no browser, fazia 30% do caminho nos primeiros 34 ms, e
+     lia-se como um empurrão. E tem de ser a MESMA curva nos dois painéis: com
+     curvas diferentes abria-se uma fenda entre eles a meio do caminho. */
+  test('as fitas usam a curva da fita; as peças soltas a de quem chega', () => {
+    const cont = readFileSync(new URL('../web/app/continuidade.js', import.meta.url), 'utf8');
+    ['correrAFita', 'deslizarPainel'].forEach((f) => {
+      const i = cont.indexOf('function ' + f + '(');
+      assert.ok(i > -1, f + ' existe');
+      /* até à declaração de topo seguinte: estas funções levam comentários
+         longos, e uma janela de tamanho fixo cortava-as a meio */
+      const fim = cont.indexOf('\nfunction ', i + 1);
+      const corpo = cont.slice(i, fim > -1 ? fim : cont.length);
+      assert.match(corpo, /tokenTexto\('--curva-fita'/, f + ' cita a --curva-fita');
+      assert.ok(!/tokenTexto\('--curva-entra'/.test(corpo), f + ' já não usa a de quem chega');
+      assert.equal((corpo.match(/easing:\s*curva/g) || []).length, 2,
+        f + ': a mesma curva nos dois painéis, senão abre fenda');
+    });
+    const j = cont.indexOf('function aplicarContinuidade(');
+    assert.match(cont.slice(j, j + 900), /tokenTexto\('--curva-entra'/,
+      'as peças soltas continuam a CHEGAR, e essa curva está certa para elas');
+  });
+
   /* Uma lista de seletores dava a ilusão de cobrir a regra e não cobria: o
      regex do .card.tap pedia UM dígito antes do «s» e o valor lá era .12s, por
      isso nunca podia falhar. Varre-se a folha inteira: qualquer transition ou

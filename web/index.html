@@ -92,7 +92,7 @@
      animação da espera tem de durar exatamente o mesmo, senão promete uma
      coisa e faz outra */
   --espera:.48s;
-  /* DUAS curvas de entrada, e a diferença é a distância percorrida.
+  /* TRÊS curvas de entrada, e a diferença é a distância percorrida.
      A --curva é um estalido: medida, faz 83% do caminho em 30% do tempo. É o
      que se quer num botão que encolhe 3% — a reação tem de parecer imediata.
      Numa folha que atravessa o ecrã, quer dizer 83% da altura em 78 ms: a
@@ -100,9 +100,18 @@
      A --curva-entra faz 64% em 30% e é a de quem ATRAVESSA distância: a folha
      da janela, a gaveta, as barras de um gráfico a crescer, o conteúdo de uma
      dobra. Quem estiver na dúvida: se o que se move percorre mais do que uns
-     poucos pixeis, é a --curva-entra. */
+     poucos pixeis, é a --curva-entra.
+     A --curva-fita é para o que atravessa EM BLOCO: as duas fitas — a dos
+     separadores e a das listas — em que o que sai e o que entra viajam
+     agarrados. Ali a --curva-entra estava errada por ser a de quem CHEGA:
+     arranca à velocidade máxima, e uma fita que estava parada não pode ter o
+     primeiro fotograma já a toda a brida — lê-se como um empurrão. Esta sai
+     das outras duas: o arranque da --curva-sai (.4,0) com a chegada da
+     --curva-entra (.2,1). Parte do sítio, ganha velocidade, chega devagar. E
+     é uma só para os dois painéis de propósito: com curvas diferentes
+     abria-se uma fenda entre eles a meio do caminho. */
   --curva:cubic-bezier(.22,1,.36,1); --curva-entra:cubic-bezier(0,0,.2,1);
-  --curva-sai:cubic-bezier(.4,0,1,1);
+  --curva-sai:cubic-bezier(.4,0,1,1); --curva-fita:cubic-bezier(.4,0,.2,1);
   --safe:env(safe-area-inset-top,0px);
   --inset-top:var(--safe); --inset-bottom:env(safe-area-inset-bottom,0px);
   --inset-left:env(safe-area-inset-left,0px); --inset-right:env(safe-area-inset-right,0px);
