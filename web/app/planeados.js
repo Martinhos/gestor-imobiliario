@@ -474,7 +474,7 @@ function quickConfirmRec(id){
   const ct=r.tx&&r.tx.contractId?contract(r.tx.contractId):null;
   if(ct&&rendaJaLancada(ct,r.next)){
     const mes=r.next;recAdvance(r);save();buildNav();render();
-    return toast('Já havia um movimento deste contrato em '+String(mes).slice(0,7)+' — o planeado saltou para o seguinte.');
+    return toast('Já havia um movimento deste contrato em '+mesPt(mes)+' — o planeado saltou para o seguinte.');
   }
   const t=recTx(r);if(t.kind==='loan')applyLoan(t);
   db.transactions.push(t);recAdvance(r);save();buildNav();render();toast('Movimento confirmado.');
@@ -526,8 +526,8 @@ function recFicha(id){
   return ficha([
     {tipo:'nota',valor:esc(motivoRecusa(t.propertyId,'rec.add',r))},
     t.amount?{rotulo:'Montante',valor:euro2(t.amount)}:null,
-    {rotulo:'Quando',valor:esc(r.next||'')+(r.until&&r.until!==r.next?' a '+esc(r.until):'')+(r.every?' · '+esc(EVERY[r.every]||r.every):'')},
-    {rotulo:'Estado',valor:(recIsLate(r)?'<span class="neg">Em atraso</span> desde '+esc(r.until||r.next||'')
+    {rotulo:'Quando',valor:dPT(r.next||'')+(r.until&&r.until!==r.next?' a '+dPT(r.until):'')+(r.every?' · '+esc(EVERY[r.every]||r.every):'')},
+    {rotulo:'Estado',valor:(recIsLate(r)?'<span class="neg">Em atraso</span> desde '+dPT(r.until||r.next||'')
       :(r.next&&r.next<=today()?'Por confirmar':'Em dia'))+(r.muted?' · silenciada':'')},
     {rotulo:'Tipo',valor:esc((KIND[t.kind]||{}).short||'')},
     /* um planeado pode estar num grupo de imóveis em vez de num imóvel */
@@ -697,7 +697,7 @@ function pendingCard(all){
   const row=(r)=>{const late=recIsLate(r),semCred=recSemCredito(r),pago=!semCred&&recCreditoPago(r);return `<div class="card tap pend ${late?'late':''}" data-fk="rec:${esc(r.id)}" style="padding:11px 13px" data-toca="camada" onclick="confirmRec('${r.id}')">
     <div class="row-between" style="align-items:center">
       <div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</b>
-        <span class="small">${esc(r.next)}${r.until&&r.until!==r.next?' – '+esc(r.until):''}${EVERY[r.every]?' · '+esc(EVERY[r.every]):''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':''} · ${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}</span>
+        <span class="small">${dPT(r.next)}${r.until&&r.until!==r.next?' – '+dPT(r.until):''}${EVERY[r.every]?' · '+esc(EVERY[r.every]):''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':''} · ${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}</span>
         ${semCred?'<span class="small"><b class="amber">Sem crédito associado — abre para escolher</b></span>':''}
         ${pago?'<span class="small"><b class="amber">Hipoteca já paga — abre para rever</b></span>':''}</div>
       <b style="flex:0 0 auto">${r.tx.amount?euro2(r.tx.amount):''}</b></div>
@@ -764,7 +764,7 @@ function vRecurring(){
   const recs=rcS.length?listaViva('recorrentes',rcS.map(r=>({chave:'rec:'+r.id,html:(r=>{const late=recIsLate(r),pend=r.next<=today();return `<div class="card tap ${pend?'pend':''} ${late?'late':''}" data-lp="rec:${esc(r.id)}" data-fk="recl:${esc(r.id)}" data-toca="camada" onclick="recView('${jsq(r.id)}')">
       <div class="row-between" style="align-items:center">
         <div style="min-width:0"><div class="title">${esc(r.name)}</div>
-          <div class="small">${r.auto?'<span class="badge grey" style="margin-right:4px">'+((r.tx||{}).loanId?'da hipoteca':'do contrato')+'</span>':''}${esc(EVERY[r.every]||r.every)} · ${esc(r.next)}${r.until&&r.until!==r.next?' – '+esc(r.until):''} · ${pend?(r.muted?'silenciada · por confirmar':late?'<b class="neg">em atraso</b>':'<b class="amber">por confirmar</b>'):'em dia'}${r.end?' · termina '+esc(r.end):''}</div>
+          <div class="small">${r.auto?'<span class="badge grey" style="margin-right:4px">'+((r.tx||{}).loanId?'da hipoteca':'do contrato')+'</span>':''}${esc(EVERY[r.every]||r.every)} · ${dPT(r.next)}${r.until&&r.until!==r.next?' – '+dPT(r.until):''} · ${pend?(r.muted?'silenciada · por confirmar':late?'<b class="neg">em atraso</b>':'<b class="amber">por confirmar</b>'):'em dia'}${r.end?' · termina '+dPT(r.end):''}</div>
           <div class="small">${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}${r.tx.category?' · '+esc(r.tx.category):''}</div>
           ${recSemCredito(r)?'<div class="small"><b class="amber">Sem crédito associado — abre para escolher</b></div>':''}</div>
         <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">

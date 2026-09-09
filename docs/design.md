@@ -929,6 +929,38 @@ guardar um contrato, os que caem fora das datas dele, de um lado e do outro,
 são contados e mostram-se um a um, para se abrir cada um e decidir
 (contrato.js:movimentosForaDoContrato, contrato.js:verMovimentosFora).
 
+## As datas leem-se como se escrevem em Portugal
+O ecrã dizia `2028-03-15`. Passa a dizer **15/03/2028** (auxiliares.js:dPT), e
+os meses soltos dizem «ago 2026» (planeados.js:mesPt) — a mesma forma nas
+listas e nas fichas, porque um formato longo lê-se bem numa ficha e mal numa
+tabela, e dois formatos ao mesmo tempo eram pior do que um estrangeiro.
+
+O ISO fica onde é **dado**, e nunca se lhe toca: na base, nos
+`<input type="date">` (o HTML exige-o e o browser já o mostra na forma local),
+nas comparações e ordenações (a comparação de texto só funciona em ISO), nas
+chaves, no CSV e no que sai para o servidor. Há sítios onde a mesma variável
+faz as duas coisas — o cabeçalho de mês dos movimentos é ao mesmo tempo o
+texto que se lê e a **chave** da lista viva (vistas.js:txMesHtml), e o
+intervalo do filtro é texto no resumo e `value=` nos campos — e aí muda-se só
+o que se lê.
+
+A pesquisa dos movimentos leva a data nas **duas** formas (vistas.js:txHay):
+sem a que se lê, quem visse `15/03/2028` na linha e a escrevesse não
+encontrava nada; sem a ISO, perdia-se quem escreve o ano primeiro.
+
+E há uma regra do percurso que não deixa isto ficar a meio: **nenhum texto
+visível pode ter uma data ISO** (testes/ui/invariantes.js). Sem ela, uma data
+em ISO volta ao ecrã na próxima função que alguém escrever, e ninguém dá por
+isso — um `2028-03-15` no meio de uma lista não parece um defeito, parece uma
+data.
+
+Duas coisas ficam de fora, de propósito. O **PDF do contrato** tem regras
+próprias e já escreve por extenso («5 de março de 2026»,
+contrato-pdf.js:dataLonga). E a data que a conversão de uma visita escreve
+**dentro das notas** de um inquilino (visitas.js:visConverte) é prosa
+gravada, que sobe para o servidor: formatá-la agora deixava as fichas antigas
+com uma forma e as novas com outra, para sempre.
+
 ## Navegação
 Treze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e
 subtítulo. A gaveta agrupa-os em quatro (navegacao.js:NAV_GROUPS):

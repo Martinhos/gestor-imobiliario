@@ -751,7 +751,7 @@ function settleModal(pid){
       ${x.plan.map(y=>`<div class="stat"><span>${esc((owner(y.from)||{}).name)} → ${esc((owner(y.to)||{}).name)}</span><b>${euro2(y.amount)}</b></div>`).join('')}
     </div>`).join('')}
     ${hist.length?`<div class="divider"></div><div class="flabel">Liquidações anteriores</div>
-      ${hist.map(h=>`<div class="stat"><span class="small">${h.date} · ${esc(h.propertyId?propName(h.propertyId):'Todos os imóveis')} · ${esc((owner(h.paidBy)||{}).name)} → ${esc((owner(h.toId)||{}).name)}</span><b>${euro2(h.amount)}</b></div>`).join('')}
+      ${hist.map(h=>`<div class="stat"><span class="small">${dPT(h.date)} · ${esc(h.propertyId?propName(h.propertyId):'Todos os imóveis')} · ${esc((owner(h.paidBy)||{}).name)} → ${esc((owner(h.toId)||{}).name)}</span><b>${euro2(h.amount)}</b></div>`).join('')}
       <div class="hint">Os acertos ficam nos movimentos, onde podem ser editados.</div>`:''}
     </div>`,
     `<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" onclick="doSettle(${pid?`'${pid}'`:'null'})">Registar pagamentos</button>`);
@@ -821,7 +821,7 @@ function vProperties(){
         ${(p.photos||[]).length&&vFile?`<span class="badge grey">${ic('photo',12)} ${p.photos.length}</span>`:''}
         ${futuros.length&&vCt?`<span class="badge amber">${futuros.length===1?'1 contrato por começar':futuros.length+' contratos por começar'}</span>`:''}
         ${seloColaboradores(p)}</div>
-      ${(ac.length||futuros.length)&&vCt?`<div class="small" style="margin-top:10px">${ac.concat(futuros).map(c2=>`${c2.roomId?esc(roomName(p,c2.roomId))+': ':''}${esc(ctNames(c2))} · ${euro(c2.rent)}${ctEstado(c2)==='futuro'&&c2.start?' · a partir de '+esc(c2.start):''}`).join('<br>')}</div>`:''}
+      ${(ac.length||futuros.length)&&vCt?`<div class="small" style="margin-top:10px">${ac.concat(futuros).map(c2=>`${c2.roomId?esc(roomName(p,c2.roomId))+': ':''}${esc(ctNames(c2))} · ${euro(c2.rent)}${ctEstado(c2)==='futuro'&&c2.start?' · a partir de '+dPT(c2.start):''}`).join('<br>')}</div>`:''}
       ${ls.length&&vLoan?`<div class="small" style="margin-top:9px">${ls.map(l=>`${esc(loanName(l))} · ${RATE[l.type]} · ${euro2(loanCalc(l).total)}/mês${(l.files||[]).length?' · '+l.files.length+' doc.':''}`).join('<br>')}
         ${ls.length>1?`<br><b>Total ${euro2(payOf(p))}/mês</b>`:''}</div>`:''}
       </div>`})(p)})));
@@ -860,7 +860,7 @@ function vContracts(){
         <div class="row-between">
           <div style="min-width:0">
             <div class="title">${esc(ctName(c))} ${on==='ativo'?'':`<span class="badge ${on==='futuro'?'amber':'grey'}">${on==='futuro'?'por começar':'terminado'}</span>`}</div>
-            <div class="small">${c.roomId?esc(roomName(p,c.roomId)):'Imóvel inteiro'} · ${c.start?'De '+c.start:'Sem data de início'}${c.end?' a '+c.end:''}</div>
+            <div class="small">${c.roomId?esc(roomName(p,c.roomId)):'Imóvel inteiro'} · ${c.start?'De '+dPT(c.start):'Sem data de início'}${c.end?' a '+dPT(c.end):''}</div>
           </div>
           <div style="display:flex;gap:8px;flex:0 0 auto;align-items:flex-start">
             <div style="text-align:right"><div style="font-weight:750;font-size:16px">${euro(c.rent)}</div>
@@ -904,7 +904,7 @@ function personCard(pp,kind){
       <div style="min-width:0"><div class="title">${esc(pp.name)}</div>
         <div class="small">${[pp.phone?fmtPhone(pp.phone):'',pp.email].filter(Boolean).map(esc).join(' · ')||'Sem contacto'}${pp.nif?' · NIF '+esc(fmtNIF(pp.nif)):''}</div>
         <div class="small">${kind==='tenant'
-          ?(cs.length?cs.map(c=>esc(ctName(c))+' · '+euro(c.rent)+(ctEstado(c)==='futuro'&&c.start?' · a partir de '+esc(c.start):'')).join('<br>'):'Sem contrato ativo')
+          ?(cs.length?cs.map(c=>esc(ctName(c))+' · '+euro(c.rent)+(ctEstado(c)==='futuro'&&c.start?' · a partir de '+dPT(c.start):'')).join('<br>'):'Sem contrato ativo')
           :(cs.length?cs.map(x=>esc(x.name)).join(', '):'Sem imóveis')}</div></div></div>
     <div style="flex:0 0 auto;display:flex;gap:6px;align-items:flex-start">
       ${kind==='tenant'&&(pp.files||[]).length?`<span class="badge grey">${ic('clip',12)} ${pp.files.length}</span>`:''}
@@ -987,7 +987,7 @@ function txTerms(){
    Devolve: string única, desacentuada, com todos os campos pesquisáveis. */
 function txHay(t){
   const c=t.contractId?contract(t.contractId):null;
-  return deacc([t.label,t.notes,t.category,t.sub,(t.tags||[]).join(' '),t.creditor,t.date,
+  return deacc([t.label,t.notes,t.category,t.sub,(t.tags||[]).join(' '),t.creditor,t.date,dPT(t.date),
     propName(t.propertyId),t.groupId?((grp(t.groupId)||{}).name||''):'',c?ctName(c):'',
     t.paidBy&&owner(t.paidBy)?owner(t.paidBy).name:'',t.toId&&owner(t.toId)?owner(t.toId).name:'',
     String(t.amount),euro2(t.amount)].join(' '));
@@ -1042,7 +1042,7 @@ function nomeDoTipo(k){return (KIND[k]||{}).short||({debt:'Dívidas'})[k]||k}
 // Devolve: string (já escapada para HTML) com os filtros ativos; vazia sem filtros.
 function filterSummary(){
   const p=[];
-  if(txDe||txAte)p.push(txDe&&txAte?txDe+' → '+txAte:txDe?'desde '+txDe:'até '+txAte);
+  if(txDe||txAte)p.push(txDe&&txAte?dPT(txDe)+' → '+dPT(txAte):txDe?'desde '+dPT(txDe):'até '+dPT(txAte));
   if(txFilter)p.push(nomeDoTipo(txFilter));
   if(txProp==='__none__')p.push('sem imóvel');
   else if(String(txProp||'').startsWith('g:'))p.push('grupo '+((grp(txProp.slice(2))||{}).name||''));
@@ -1449,7 +1449,7 @@ function txLinhaHtml(t,mo){
   const x=txLinhaExtra(t,mo)||{};
   return `<div class="card tap txrow${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" style="padding:13px 15px" ${x.attrs||''} data-toca="camada" onclick="${x.onclick||`txView('${jsq(t.id)}')`}"><div class="row-between">
     ${x.caixa||''}<div style="min-width:0"><div class="title" style="font-size:14.5px">${esc(t.label)}</div>
-      <div class="small">${esc(t.date)} \u00b7 ${k.short}${t.category?' \u00b7 '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' \u00b7 '+esc(propName(t.propertyId)):''}${t.creditor?' \u00b7 '+esc(t.creditor):''}</div>
+      <div class="small">${dPT(t.date)} \u00b7 ${k.short}${t.category?' \u00b7 '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' \u00b7 '+esc(propName(t.propertyId)):''}${t.creditor?' \u00b7 '+esc(t.creditor):''}</div>
       ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}
       ${txQuem(t)}
       ${t.kind==='loan'&&(t.principal||t.interest||t.fee)?`<div class="small">${t.payType==='amortizacao'?`Amortiza\u00e7\u00e3o \u00b7 capital ${euro2(t.principal||0)} \u00b7 comiss\u00e3o ${euro2(t.fee||0)}`:`Capital ${euro2(t.principal||0)} \u00b7 juros ${euro2(t.interest||0)} \u00b7 selo ${euro2(t.stamp||0)}`}</div>`:''}
@@ -1472,7 +1472,7 @@ function txLinhaHtml(t,mo){
 function txMesHtml(mo){
   const xm=txMesExtra(mo)||{};
   return `<div class="txmes"><div class="section-title${xm.cls?' '+xm.cls:''}" style="display:flex;justify-content:space-between;text-transform:none" ${xm.attrs||''}>
-    ${xm.caixa||''}<span>${mo}</span><span class="txnet"></span></div>
+    ${xm.caixa||''}<span>${esc(mesPt(mo))}</span><span class="txnet"></span></div>
     <div class="list"></div></div>`;
 }
 /* Enche (ou acerta) a lista dos movimentos dentro do #txLista, mexendo so no

@@ -104,8 +104,8 @@ function notifModal(){
   const bloco=(titulo,linhas)=>linhas.length?`<div class="navh">${titulo}</div>${linhas.join('')}`:'';
   const corpo=`<div class="list" style="gap:8px">
     ${bloco('Pedidos de partilha',pedidos.map(pedido))}
-    ${bloco('Em atraso',atrasados.map(r=>linha(r.name,'devia ter sido confirmado a '+r.next+(r.tx.amount?' · '+euro2(r.tx.amount):''),"go('recurring')",'red')))}
-    ${bloco('Por confirmar',pendentes.slice(0,6).map(r=>linha(r.name,r.next+(r.tx.amount?' · '+euro2(r.tx.amount):''),"go('recurring')")))}
+    ${bloco('Em atraso',atrasados.map(r=>linha(r.name,'devia ter sido confirmado a '+dPT(r.next)+(r.tx.amount?' · '+euro2(r.tx.amount):''),"go('recurring')",'red')))}
+    ${bloco('Por confirmar',pendentes.slice(0,6).map(r=>linha(r.name,dPT(r.next)+(r.tx.amount?' · '+euro2(r.tx.amount):''),"go('recurring')")))}
     ${bloco('Prazos',prazos.map(p=>linha(p.titulo,(p.dias<0?'há '+(-p.dias)+' dias':p.dias===0?'hoje':'em '+p.dias+' dias'),p.abrir,p.urg==='urgente'||p.urg==='passado'?'red':p.urg==='breve'?'amber':'')))}
     ${bloco('Nas casas partilhadas',partilha.map(n=>linha(n.titulo,n.sub,n.ir)))}
     ${!atrasados.length&&!pendentes.length&&!prazos.length&&!partilha.length&&!pedidos.length?'<div class="empty">Tudo em dia — nada a pedir atenção.</div>':''}

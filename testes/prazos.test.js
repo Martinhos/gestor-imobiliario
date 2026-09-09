@@ -30,7 +30,7 @@ describe('a janela de oposição e o fim do contrato', () => {
     assert.equal(op.alvo, '2026-09-12', 'o alvo é end − 120 dias');
     assert.equal(op.dias, 10);
     assert.equal(op.urg, 'breve');
-    assert.match(op.sub, /até 2026-09-12/);
+    assert.match(op.sub, /até 12\/09\/2026/, 'a data que se lê é a forma portuguesa');
     assert.ok(!l.find((p) => p.tipo === 'fim'), 'o fim só entra a 60 dias');
   });
 
@@ -59,7 +59,7 @@ describe('o aumento anual', () => {
     const a = l.find((p) => p.tipo === 'aumento');
     assert.ok(a, 'a 40 dias do limite (45 de antecedência) está na janela');
     assert.equal(a.alvo, '2027-01-30', 'o alvo é o aniversário − 30 dias');
-    assert.match(a.sub, /2027-03-01/);
+    assert.match(a.sub, /01\/03\/2027/);
     assert.match(a.sub, /\+2\.5%/);
   });
 

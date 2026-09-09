@@ -233,7 +233,7 @@ function fileBlock(label,list,inputId,onPick,delFn,opts){
         <div class="card" style="padding:10px 12px"><div class="row-between" style="align-items:center">
           <div style="min-width:0;cursor:pointer" onclick="openMeta('${f.id}')">
             <div style="font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name)}</div>
-            <div class="small">${kb(f.size)}${f.added?' · '+f.added:''}</div></div>
+            <div class="small">${kb(f.size)}${f.added?' · '+dPT(f.added):''}</div></div>
           <button type="button" class="btn sm danger" aria-label="Apagar o ficheiro" style="min-width:40px;min-height:40px" onclick="delFileConfirm('${delFn}','${f.id}','ficheiro')">${ic('trash',14)}</button>
         </div></div>`).join('')}</div>`):''}
     <input type="file" id="${inputId}" multiple ${photos?'accept="image/*"':''} style="display:none" onchange="${onPick}(this${opts.arg?",'"+opts.arg+"'":''})">
