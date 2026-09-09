@@ -52,7 +52,7 @@ function pecaDe(html,chave){
 function semear(alvo,itens){
   if(!alvo)return;
   const cache=alvo[CHAVE_CACHE]||(alvo[CHAVE_CACHE]={});
-  (itens||[]).forEach(function(it){if(it&&it.chave)cache[it.chave]=it.html});
+  (itens||[]).forEach(function(it){if(it&&it.chave)cache[it.chave]=it.sig!=null?it.sig:it.html});
 }
 /* Põe o conteúdo de um contentor igual à lista pedida, mexendo o menos
    possível.
@@ -90,7 +90,13 @@ function reconciliar(alvo,itens){
     if(!it||!it.chave||vistas[it.chave])return;
     vistas[it.chave]=1;
     let el=antigas[it.chave];
-    if(el&&cache[it.chave]===it.html){conta.mantidas++}
+    /* A assinatura pode ser outra coisa que não o html, e é isso que salva as
+       listas ANINHADAS: o html de um grupo traz os filhos dentro, e comparar
+       por ele fazia qualquer filtro reescrever todos os grupos — refazendo o
+       contentor interior e o cache dele, e não se reaproveitava nada. O
+       interior já se compara a si próprio; o exterior compara o que é DELE. */
+    const sig=it.sig!=null?it.sig:it.html;
+    if(el&&cache[it.chave]===sig){conta.mantidas++}
     else{
       const nova=pecaDe(it.html,it.chave);
       if(!nova)return;
@@ -98,7 +104,7 @@ function reconciliar(alvo,itens){
       else conta.criadas++;
       el=nova;novas[it.chave]=el;
     }
-    cache[it.chave]=it.html;
+    cache[it.chave]=sig;
     delete antigas[it.chave];
     /* a ordem certa é «a seguir à anterior»; se já lá está, não se lhe toca —
        um insertBefore no sítio onde o nó já está continua a ser uma mudança

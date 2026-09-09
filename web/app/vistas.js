@@ -137,7 +137,12 @@ function comChave(html,chave){
    Devolve: nada — reconcilia cada contentor com os seus itens. */
 function pintarListasVivas(){
   const raiz=view();
-  if(raiz)_listasVivas.forEach(function(l){
+  /* de fora para dentro: as listas registam-se de DENTRO para fora, porque o
+     html do interior tem de estar pronto antes de o exterior o receber — e
+     nessa ordem o contentor interior ainda não existe no DOM quando lhe
+     chega a vez. Invertida, o exterior é pintado primeiro e o interior já lá
+     está para ser encontrado. */
+  if(raiz)_listasVivas.slice().reverse().forEach(function(l){
     const el=raiz.querySelector('[data-listaviva="'+String(l.id).replace(/"/g,'')+'"]');
     if(!el)return;
     /* contentor acabado de nascer: os itens já vieram no HTML, e só falta
@@ -160,7 +165,9 @@ function soTiraOuReordena(alvo,itens){
   if(!alvo)return false;
   const cache=alvo[CHAVE_CACHE];
   if(!cache)return false;
-  return (itens||[]).every(function(it){return it&&it.chave&&cache[it.chave]===it.html});
+  return (itens||[]).every(function(it){
+    return it&&it.chave&&cache[it.chave]===(it.sig!=null?it.sig:it.html);
+  });
 }
 /* Repinta as listas do ecrã sem refazer o ecrã.
 
@@ -212,6 +219,9 @@ function refrescarListasVivas(){
   v.replaceChildren.apply(v,[].slice.call(molde.children));
   tornarFocavel(v);
   pintarBotaoFiltros();
+  /* o que o render repõe depois de pintar, esta via tem de repor também:
+     senão um grupo mantido fica com o total de antes */
+  if(tab==='contracts')pintarRendasDosGrupos();
   _ultimaRepintura=contas;         // para se poder medir o que foi reaproveitado
   return true;
 }
@@ -250,6 +260,7 @@ function render(){
      e o mesmo que depois o acerta linha a linha sem passar por aqui. */
   if(tab==='transactions')pintarListaTx();
   pintarListasVivas();             // e as outras listas, pela mesma via
+  if(tab==='contracts')pintarRendasDosGrupos();
   /* A visão geral era o único ecrã sem criação rápida: registar uma renda
      avulsa custava quatro toques de viagem. Entra aqui, depois do painel
      rearranjar os cartões, para não virar um cartão arrastável. */
@@ -831,6 +842,22 @@ let ctGroupF='';
 // handler do antigo seletor de grupo ('ctGroupSel'); a vista atual filtra grupos via lfSel, por isso só dispara se esse seletor existir no DOM
 // Devolve: nada — redesenha a vista.
 function onCtGroupF(){ctGroupF=val('ctGroupSel')||'';render()}
+/* O total de cada imóvel, escrito depois de a lista estar reconciliada.
+
+   Fica fora da assinatura do grupo de propósito: o rentOf(p) muda sempre que
+   um contrato daquele imóvel muda de renda ou de datas, e dentro dela isso
+   refazia o grupo inteiro — e com ele todos os cartões, que é o contrário do
+   que este motor existe para fazer. É a mesma solução do saldo do mês nos
+   movimentos.
+   Devolve: nada — enche os spans dos títulos dos grupos. */
+function pintarRendasDosGrupos(){
+  const raiz=view();if(!raiz)return;
+  [].slice.call(raiz.querySelectorAll('[data-chave^="imovel:"]')).forEach(function(g){
+    const p=prop(String(g.getAttribute('data-chave')).slice(7));
+    const sp=g.querySelector('.ctrenda');
+    if(p&&sp)sp.textContent=euroS(rentOf(p))+'/mês';
+  });
+}
 /* Contratos agrupados por imóvel, com a renda mensal de cada um no cabeçalho
    da secção. Filtros: imóvel, ativos/terminados, grupo e pesquisa; ordenação
    por nome, renda ou data de início.
@@ -848,13 +875,21 @@ function vContracts(){
     ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`;
   if(!db.contracts.length)return head+`<div class="empty"><b>Sem contratos</b>O contrato é onde vive a renda: podes arrendar o imóvel inteiro, ou um contrato por quarto.</div>`;
   let any=false;
-  const body=visiveis().map(p=>{
-    if(s.p&&p.id!==s.p)return '';
-    const cs=lfSort(K,contractsOf(p.id).filter(c=>ctFMatch(c,s)),{nome:c=>ctName(c),renda:c=>c.rent,inicio:c=>c.start||''});if(!cs.length)return '';
+  const grupos=[];
+  visiveis().forEach(p=>{
+    if(s.p&&p.id!==s.p)return;
+    const cs=lfSort(K,contractsOf(p.id).filter(c=>ctFMatch(c,s)),{nome:c=>ctName(c),renda:c=>c.rent,inicio:c=>c.start||''});if(!cs.length)return;
     any=true;
-    return `<div class="section-title" style="display:flex;justify-content:space-between;text-transform:none">
-      <span>${esc(p.name)}</span><span>${euroS(rentOf(p))}/mês</span></div>
-      <div class="list">${cs.map(c=>{
+    /* Um grupo é UM elemento: o pecaDe fica com o primeiro filho do html de
+       cada item, e dois irmãos — o título e a lista — perdiam o segundo em
+       silêncio. E o total do imóvel sai da assinatura para um span vazio,
+       preenchido depois de reconciliar: dentro dela, mudar uma renda refazia
+       o grupo inteiro e com ele todos os cartões, que é o contrário do que
+       este motor existe para fazer. */
+    grupos.push({chave:'imovel:'+p.id,sig:'imovel|'+p.id+'|'+p.name,html:`<div class="ctgrupo">
+      <div class="section-title" style="display:flex;justify-content:space-between;text-transform:none">
+      <span>${esc(p.name)}</span><span class="ctrenda"></span></div>
+      `+listaViva('cts:'+p.id,cs.map(c=>({chave:'ct:'+c.id,html:((c)=>{
         const on=ctEstado(c),ts=ctTenants(c);
         return `<div class="card tap" data-lp="ct:${esc(c.id)}" data-fk="ct:${esc(c.id)}" data-toca="camada" onclick="ctView('${jsq(c.id)}')">
         <div class="row-between">
@@ -872,8 +907,9 @@ function vContracts(){
         <div class="chips">
           ${(c.files||[]).length?`<span class="badge grey">${ic('clip',12)} ${c.files.length}</span>`:''}
           ${(c.inventory||[]).length?`<span class="badge grey">${ic('box',12)} ${c.inventory.length} artigos</span>`:''}</div>
-</div>`}).join('')}</div>`}).join('');
-  return head+(any?body:`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`);
+</div>`})(c)})))+`</div>`});
+  });
+  return head+(any?listaViva('contratos',grupos):`<div class="empty"><b>Nada neste filtro</b><div style="margin-top:10px"><button type="button" class="btn sm" data-toca="vista" onclick="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`);
 }
 // um contrato passa nos filtros da lista? imóvel, estado, grupo e pesquisa por texto (nome, inquilinos, IBAN, notas…)
 // Recebe: c — o contrato (objeto); s — o estado dos filtros da lista (lf('lcts'): campos p, st, g e a pesquisa).

@@ -798,6 +798,36 @@ E uma janela ou se lê ou se edita, nunca as duas coisas: uma janela com
 regra, o caminho mais curto de acrescentar mais um campo à ficha é escrever
 lá um input, e ao fim de uns meses está tudo como estava.
 
+### A lista agrupada
+Os contratos são a única lista agrupada — um título por imóvel, e os contratos
+desse imóvel por baixo. Entrar no motor pediu quatro coisas, e são as quatro
+que qualquer outra lista agrupada vai pedir:
+
+1. **O grupo é UM elemento.** O `pecaDe` fica com o primeiro filho do html de
+   cada item; dois irmãos — o título e a lista — perdiam o segundo em
+   silêncio, e apareciam os títulos sem contratos nenhuns.
+2. **Os grupos precisam de contentor próprio.** Eram filhos diretos do
+   `#view`; reconciliar contra ele deitava fora o painel de filtros, a linha
+   de resultados e o botão flutuante — o motor tira todo o filho sem chave.
+   (Medido: o `#view` passou de 28 filhos diretos para 4.)
+3. **O total do imóvel sai da assinatura** para um span preenchido depois
+   (vistas.js:pintarRendasDosGrupos). Lá dentro, mudar uma renda refazia o
+   grupo inteiro e com ele todos os cartões — o contrário do que o motor
+   existe para fazer. É a mesma solução do saldo do mês nos movimentos.
+4. **A assinatura de um grupo não pode ser o html dele**, porque esse html
+   traz os filhos dentro: qualquer filtro reescrevia todos os grupos. O item
+   passa a poder trazer uma `sig` própria (lista.js) — no grupo, o imóvel e o
+   nome. O interior já se compara a si próprio; o exterior compara o que é
+   dele.
+
+E o ajudante pinta **de fora para dentro**: as listas registam-se de dentro
+para fora, porque o html do interior tem de estar pronto antes de o exterior
+o receber, e nessa ordem o contentor interior ainda não existe no DOM quando
+lhe chega a vez.
+
+Medido com 12 imóveis e 120 contratos, a filtrar: 70 mantidas, 62 removidas,
+**0 criadas e 0 refeitas** — e 33,6 ms contra 59,8 ms do render.
+
 Há seis fichas, uma por registo: o imóvel (imovel.js:propFicha), o contrato
 (contrato.js:ctFicha), o movimento (movimento.js:txFicha), a pessoa
 (pessoas.js:personFicha), a visita (visitas.js:visFicha), a hipoteca
