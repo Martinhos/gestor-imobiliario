@@ -46,6 +46,46 @@ describe('a atividade partilhada', () => {
     assert.ok(app.db.settings.notifLidoAte > 0, 'a marca ficou posta');
   });
 
+  /* Parte da conta vem do aparelho e parte do servidor. Ao abrir, a app pinta
+     com o que tem em casa — e se esses planeados já foram confirmados noutro
+     lado, o sino anunciava um atraso que já não existe e corrigia-se um
+     segundo depois. Um número errado durante um segundo é pior do que
+     nenhum. */
+  test('o crachá espera por saber: nada até o servidor ter falado', () => {
+    monta();
+    app.tab = 'dashboard';
+    // um planeado em atraso, do que está guardado no aparelho
+    app.db.recurring = [app.normRec({
+      id: 'R1', name: 'Renda', every: 'month', next: '2000-01-01',
+      tx: { kind: 'income', amount: 500, propertyId: 'P1' },
+    })];
+    assert.equal(app.notifConta(), 1, 'a conta em si sabe que há um atrasado');
+
+    /* o arnês devolve um elemento novo a cada getElementById: para se ver o
+       que o sino escreveu, o #hdrBell tem de ser sempre o mesmo */
+    const sino = { style: {}, innerHTML: '' };
+    const orig = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'hdrBell' ? sino : orig(id));
+
+    // ainda não falámos com o servidor
+    delete app.CW._pulled;
+    app.notifSino();
+    assert.doesNotMatch(sino.innerHTML, /class="cnt/, 'sem crachá enquanto não se sabe');
+
+    // e depois de o estado chegar
+    app.CW._pulled = 1;
+    app.notifSino();
+    assert.match(sino.innerHTML, /class="cnt/, 'agora sim');
+    assert.match(sino.innerHTML, />1</, 'e com o número certo');
+
+    // sem nuvem nenhuma, não há nada por que esperar
+    app.window.CW = undefined; app.CW = undefined;
+    app.notifSino();
+    assert.match(sino.innerHTML, /class="cnt/, 'numa app sem nuvem, aparece logo');
+    app.document.getElementById = orig;
+    monta();
+  });
+
   test('o crachá soma atrasados e partilha; marcar lido cala a partilha', () => {
     monta();
     const dela = app.normVisit({ id: 'V1', nomes: 'Ana', propertyId: 'P1', date: '2999-01-01' });

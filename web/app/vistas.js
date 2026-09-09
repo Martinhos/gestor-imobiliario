@@ -280,8 +280,17 @@ function render(){
   if(antes)Promise.resolve().then(()=>aplicarContinuidade(antes,view()));
   /* fora do caminho da pintura: a caixa já tem a altura certa e vazia, por isso
      enchê-la mais tarde não faz nada saltar */
-  if(typeof requestIdleCallback==='function')requestIdleCallback(pintarSeriesKpi,{timeout:400});
+  /* No quadro seguinte, e não à espera de tempo morto: com um
+     requestIdleCallback de 400ms de tecto, um arranque cheio deixava a caixa
+     da variação vazia quase um segundo. Assim não bloqueia a primeira pintura
+     e ninguém vê a espera. O setTimeout é para o separador escondido, onde o
+     requestAnimationFrame não corre — e onde também ninguém está a ver. */
+  if(typeof requestAnimationFrame==='function')requestAnimationFrame(pintarSeriesKpi);
   else setTimeout(pintarSeriesKpi,0);
+  /* Num separador escondido o quadro NUNCA corre — e sem esta rede a caixa
+     ficava vazia até alguém voltar ao separador. Aí não custa nada fazê-lo
+     já: ninguém está a ver, e não há pintura nenhuma para atrasar. */
+  setTimeout(function(){if(document.hidden)pintarSeriesKpi()},0);
   contarValores();
   refrescarFichas();               // uma ficha aberta por baixo de um formulário não fica a mentir
 }

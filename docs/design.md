@@ -994,6 +994,41 @@ que sobe para o servidor. O que já está escrito nas fichas antigas fica como
 estava; só o que se escreve de agora em diante leva a forma nova. É o preço
 de escrever a data dentro de uma frase em vez de a guardar num campo.
 
+## O que aparece tarde, e o que não devia aparecer já
+Ao abrir a visão geral havia cerca de um segundo em que o ecrã dizia duas
+coisas erradas.
+
+**O sino anunciava um número que ainda não sabia.** A conta sai em parte do
+que está guardado no aparelho e em parte do que o servidor manda
+(notificacoes.js:notifConta). Ao abrir, a app pinta com o que tem em casa — e
+se esses planeados já foram confirmados noutro lado, o sino anuncia um atraso
+que já não existe, e corrige-se um segundo depois. Um número errado durante
+um segundo é pior do que nenhum, pela mesma razão que o selo de sincronização
+tem três estados: o silêncio era ambíguo.
+
+A marca já existia (`CW._pulled`, «já falámos com o servidor»), e o crachá
+passa a esperar por ela (notificacoes.js:notifSino). Numa app sem nuvem não há
+nada por que esperar, e aparece logo.
+
+**A variação do ano anterior chegava tarde.** Estava à espera de tempo morto —
+`requestIdleCallback` com 400 ms de tecto — e num arranque cheio o tempo morto
+não chega. Passa para o **quadro seguinte**: não bloqueia a primeira pintura e
+ninguém vê a espera. Num separador escondido o quadro nunca corre, e aí
+pinta-se já: não há pintura nenhuma para atrasar e ninguém está a ver.
+
+**E o ano não cabia.** A silhueta, a percentagem e o «2025: 8 100 €» numa
+linha de 22px: o terceiro era o último a caber e o primeiro a ser cortado
+pelas reticências — desaparecia, e sem ele a percentagem não diz de que
+números fala (é o mesmo princípio do «face a»). Passa para a linha de baixo, e
+o cartão cresce com ele (index.html:.kserie). A altura continua **dada**, e
+não a do conteúdo: a caixa nasce vazia e é enchida depois, e sem uma altura
+fixa tudo o que está por baixo saltava quando a variação aparecesse.
+
+Medido depois, em 375px: a caixa com 38px, a silhueta e a percentagem em cima,
+o ano e o valor em baixo, nada cortado. E em cinco separadores, entre os 30ms
+e os 1230ms depois de pintar, mais nada muda — o único movimento tardio que
+resta é a contagem dos números, que é deliberada.
+
 ## Navegação
 Treze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e
 subtítulo. A gaveta agrupa-os em quatro (navegacao.js:NAV_GROUPS):
