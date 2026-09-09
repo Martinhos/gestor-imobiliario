@@ -105,7 +105,7 @@ var AVISOS = [
         titulo: 'As datas leem-se como cá se escrevem',
         afeta: ['app'],
         itens: [
-          'Em toda a app, 09/09/2026 e não 2026-09-09 — nas listas, nas fichas, nos avisos, nos balões dos gráficos e na data que fica escrita nas notas de uma visita.',
+          'Em toda a app, 09/09/2026 — dia, mês e ano, por essa ordem. Nas listas, nas fichas, nos avisos, nos balões dos gráficos e na data que fica escrita nas notas de uma visita. Antes apareciam em vários sítios ao contrário, com o ano à frente.',
         ],
       },
       {
