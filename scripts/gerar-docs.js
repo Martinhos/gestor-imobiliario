@@ -74,6 +74,7 @@ const MAPA = [
     ficheiros: ['worker/src/files.js', 'worker/src/rotas/anexos.js', 'web/cloud/anexos.js', 'web/app/anexos.js'] },
   { id: 'infra', titulo: 'Infraestrutura',
     ficheiros: ['worker/src/index.js', 'worker/src/api.js', 'worker/src/landing.js',
+      'worker/src/legal-vista.js',
       'worker/src/salvaguarda.js', 'worker/src/lib/http.js', 'worker/src/lib/auditoria.js',
       'web/sw.js', 'scripts/gerar-docs.js', 'scripts/make-icons.js', 'scripts/restaurar.js', 'scripts/versao.js'] },
 ];

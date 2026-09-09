@@ -126,6 +126,14 @@ export default {
         const { paginaLanding } = await import('./landing.js');
         return harden(paginaLanding());
       }
+      /* Os documentos legais vivem aqui fora, e não só dentro da app: quem
+         quer saber a quem entrega os dados dos seus inquilinos faz essa
+         pergunta ANTES de criar conta, e não depois. */
+      const doc = url.pathname.replace(/^\/|\/$/g, '');
+      if (doc === 'termos' || doc === 'privacidade') {
+        const { paginaLegal } = await import('./legal-vista.js');
+        return harden(paginaLegal(doc));
+      }
       return Response.redirect('https://app.rendorium.com' + url.pathname + url.search, 302);
     }
 

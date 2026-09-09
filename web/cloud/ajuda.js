@@ -230,13 +230,16 @@ function vDoc(html) {
     '<button class="btn" onclick="goSet(\'legal\')">' + ic('chev', 15) + ' Voltar</button></div>';
 }
 
-var LEGAL_UPDATED = '2 de setembro de 2026';
+/* A data sai dos próprios documentos (legal.js:VERSION), e não escrita à mão
+   ao lado deles: estavam desencontradas — aqui dizia 2 de setembro e os
+   documentos diziam 4. E lê-se como as outras datas da app, em dd/mm/aaaa. */
+var LEGAL_UPDATED = dPT(L.version) || L.version;
 
 // O aviso prático não repete os documentos: os Termos e a Política dizem-no
 // com valor legal, aqui fica só o essencial.
 // Devolve: o HTML da página legal das Definições, como string.
 function vLegal() {
-  return navRow('Termos e Condições', 'Em vigor desde ' + L.version, 'contract', 'termos') +
+  return navRow('Termos e Condições', 'Em vigor desde ' + LEGAL_UPDATED, 'contract', 'termos') +
     '<div style="height:10px"></div>' +
     navRow('Política de Privacidade', 'Dados, direitos e subcontratação', 'lock', 'privacidade') +
     '<div style="height:16px"></div>' +
