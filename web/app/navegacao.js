@@ -118,7 +118,18 @@ function goSet(p){setPage=p;if(p)pushHist();_entrar=1;render();try{window.scroll
 /* Abre a gaveta de navegação: fecha primeiro os painéis de filtros, arma o
    histórico (o voltar do sistema fecha-a) e trava o scroll do fundo.
    Devolve: nada — abre a gaveta e passa o foco para dentro dela. */
-function openDrawer(){if(document.body.classList.contains('open'))return;closeFilterPanels();document.body.classList.add('open');pushHist();lockPage();
+function openDrawer(){if(document.body.classList.contains('open'))return;
+  /* Sem gaveta não há nada para abrir. Acima de 900px o aside é uma coluna do
+     ecrã, e o body.open não lhe mexe — mas o lockPage tranca a página na
+     mesma. Dava um toque que não fazia nada e deixava o ecrã preso.
+     Pergunta-se ao próprio elemento, e não à largura, para não haver dois
+     sítios a saber onde é o corte. */
+  const gav=document.querySelector('aside');
+  if(gav&&typeof getComputedStyle==='function'){
+    const pos=(getComputedStyle(gav)||{}).position;
+    if(pos&&pos!=='fixed')return;
+  }
+  closeFilterPanels();document.body.classList.add('open');pushHist();lockPage();
   const b=document.querySelector('.burger');if(b)b.setAttribute('aria-expanded','true');
   // o foco entra na gaveta: sem isto, o teclado continuava atrás do véu
   const a=document.querySelector('#nav a');try{if(a)a.focus()}catch(e){}}
