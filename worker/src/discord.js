@@ -7,6 +7,7 @@ import { lerAcessos, guardarAcessos, origemDoAcesso, excecoesDoMenu } from './ac
 
 const PONG = { type: 1 };
 const MSG = 4;            // responder com mensagem
+const ADIADO = 5;         // «estou a tratar disso» — a resposta vem a seguir
 const UPDATE = 7;         // substituir a mensagem do botão
 
 // Converte uma string hexadecimal (chave pública, assinatura) nos bytes correspondentes.
@@ -48,6 +49,40 @@ const reply = (content, embeds) => ({
   type: MSG,
   data: { content: content || '', embeds: embeds || [], flags: 64 },   // 64 = só quem escreveu vê
 });
+/* Uma resposta que demora mais do que o Discord espera.
+
+   O Discord corta a interação aos 3 segundos, e há comandos que não cabem lá:
+   o /uso faz seis consultas à base, lista as cópias no R2 e ainda pergunta o
+   consumo à API da Cloudflare. Passou dos 3s e o Discord respondeu «o
+   aplicativo não respondeu» — que é o que ele diz quando ninguém lhe responde.
+
+   Adiar é o caminho previsto para isto: responde-se já um «estou a tratar
+   disso» (type 5), e a resposta verdadeira escreve-se depois POR CIMA dessa
+   mensagem, pelo webhook da própria interação — que não precisa de token de
+   bot, porque o token da interação é a credencial.
+
+   O trabalho corre no ctx.waitUntil: sem isso o worker podia ser desligado
+   assim que devolvesse a resposta imediata.
+   Recebe: ctx — o contexto de execução do worker; i — a interação (traz o
+   application_id e o token); trabalho — função que devolve a resposta final
+   (o mesmo formato do reply).
+   Devolve: a resposta imediata a mandar ao Discord. */
+function adiar(ctx, i, trabalho) {
+  const url = 'https://discord.com/api/v10/webhooks/' +
+    i.application_id + '/' + i.token + '/messages/@original';
+  const escrever = (corpo) => fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpo),
+  }).catch(() => {});
+  const feito = Promise.resolve().then(trabalho)
+    .then((r) => escrever((r && r.data) || { content: 'Feito.' }))
+    .catch((e) => escrever({ content: 'Correu mal: ' + cut((e && e.message) || e, 300) }));
+  if (ctx && ctx.waitUntil) ctx.waitUntil(feito);
+  // as flags vêm daqui: depois de adiada, a mensagem não pode mudar de efémera
+  return { type: ADIADO, data: { flags: 64 } };
+}
+
 // Resposta à vista de todos no canal, com botões opcionais.
 // Recebe: content (opcional) — o texto; embeds (opcional) — lista de embeds;
 // components (opcional) — as action rows com botões ou menus.
@@ -960,9 +995,9 @@ export async function handleInteraction(request, env, ctx) {
       if (nome === 'responder') return json(await cmdResponder(env, opts, pap, quemFala(i, pap)));
       if (nome === 'fechar') return json(await cmdFechar(env, opts, pap, quemFala(i, pap)));
       if (nome === 'erros') return json(await cmdErros(env, opts));
-      if (nome === 'uso') return json(await cmdUso(env));
-      if (nome === 'copias') return json(await cmdCopias(env, opts));
-      if (nome === 'resumo') return json(await cmdResumo(env, ctx));
+      if (nome === 'uso') return json(adiar(ctx, i, () => cmdUso(env)));
+      if (nome === 'copias') return json(adiar(ctx, i, () => cmdCopias(env, opts)));
+      if (nome === 'resumo') return json(adiar(ctx, i, () => cmdResumo(env, ctx)));
     } catch (e) {
       return json(reply('Correu mal: ' + cut(e.message, 300)));
     }
