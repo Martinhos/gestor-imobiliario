@@ -994,6 +994,30 @@ que sobe para o servidor. O que já está escrito nas fichas antigas fica como
 estava; só o que se escreve de agora em diante leva a forma nova. É o preço
 de escrever a data dentro de uma frase em vez de a guardar num campo.
 
+## Ver a montra antes de a publicar
+
+A página de entrada só era servida no domínio raiz, portanto a única maneira de
+a ver era **publicá-la**: o `dev.rendorium.com` servia a app, e o servidor local
+também. Quem lhe mexesse escrevia às cegas.
+
+Passa a haver **`/montra`** em qualquer endereço. Em produção é um atalho
+inofensivo para o que já está em «/»; fora dela é a única porta, porque a raiz
+do dev tem de continuar a ser a app — é para isso que esse ambiente serve. Os
+documentos legais respondem em todo o lado pela mesma razão, e não colidem com
+nada: a app é uma página só, sem rotas.
+
+Fora do domínio raiz as duas páginas levam `noindex` e não declaram `canonical`
+nem `og`. Duas cópias da mesma página indexadas são uma a competir com a outra,
+e um `og` que aponta para produção a partir do dev mente a quem partilhar a
+ligação. Nos documentos, o «início» aponta para `/montra` em vez de «/» — ali a
+raiz é a app.
+
+Chegou a pôr-se a hipótese de um comando do Discord para isto. Não é a forma
+certa: o problema não era faltar um atalho, era não haver **para onde apontar**.
+Os comandos do bot existem para o que precisa de identidade ou de estado — uma
+sessão de teste com um token por pessoa; uma página pública é um endereço, e um
+endereço que nunca muda é um favorito.
+
 ## Não há planos
 
 Havia três escalões — `free` (3 imóveis, sem contratos nem planeados), `plus`

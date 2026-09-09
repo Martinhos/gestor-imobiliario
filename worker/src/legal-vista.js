@@ -32,11 +32,21 @@ const DOCS = {
 };
 
 /* A página de um dos dois documentos.
-   Recebe: qual — 'termos' ou 'privacidade'.
+
+   Fora do domínio raiz é uma pré-visualização: leva `noindex`, não declara
+   canonical, e o «início» aponta para /montra — ali a raiz é a app.
+   Recebe: qual — 'termos' ou 'privacidade'; op — {raiz: true} quando está a
+   ser servido em rendorium.com.
    Devolve: uma Response HTML, ou undefined se o nome não for de nenhum deles. */
-export function paginaLegal(qual) {
+export function paginaLegal(qual, op) {
   const d = DOCS[qual];
   if (!d) return undefined;
+  const raiz = !!(op && op.raiz);
+  const inicio = raiz ? '/' : '/montra';
+  const cabecaRaiz = raiz
+    ? `<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://rendorium.com/${qual}">`
+    : '<meta name="robots" content="noindex,nofollow">';
   const html = `<!doctype html>
 <html lang="pt"><head>
 <meta charset="utf-8">
@@ -44,9 +54,8 @@ export function paginaLegal(qual) {
 <meta name="color-scheme" content="light dark">
 <title>${d.titulo} — Rendorium</title>
 <meta name="description" content="${d.sub}. Rendorium, gestão de arrendamento para senhorios portugueses.">
-<meta name="robots" content="index,follow">
+${cabecaRaiz}
 <link rel="icon" href="/icon-192.png">
-<link rel="canonical" href="https://rendorium.com/${qual}">
 <style>
 :root{color-scheme:light dark;
   --bg:#f7f8fa;--card:#fff;--ink:#17221d;--muted:#5a635e;--line:#e7ebe8;
@@ -86,7 +95,7 @@ footer a:hover{color:var(--ink)}
 </style></head><body>
 <div class="wrap">
   <header>
-    <span class="logo">R</span><span class="marca"><a href="/">Rendorium</a></span>
+    <span class="logo">R</span><span class="marca"><a href="${inicio}">Rendorium</a></span>
     <span class="spacer"></span>
     <a class="btn" href="${APP}">Abrir a app</a>
   </header>
@@ -104,7 +113,7 @@ footer a:hover{color:var(--ink)}
 
   <footer>
     <span>© ${new Date().getFullYear()} Rendorium</span>
-    <a href="/">Início</a>
+    <a href="${inicio}">Início</a>
     <a href="${d.outro[0]}">${d.outro[1]}</a>
     <a href="${APP}">Abrir a app</a>
   </footer>

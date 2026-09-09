@@ -60,21 +60,21 @@ describe('os documentos legais', () => {
 describe('as páginas públicas dos documentos', () => {
   test('há uma para cada, e mais nenhuma', async () => {
     for (const q of ['termos', 'privacidade']) {
-      const r = paginaLegal(q);
+      const r = paginaLegal(q, { raiz: true });
       assert.ok(r, q + ' tem página');
       assert.equal(r.headers.get('Content-Type'), 'text/html; charset=utf-8');
       const html = await r.text();
       assert.match(html, new RegExp('<link rel="canonical" href="https://rendorium.com/' + q + '">'));
       assert.ok(!html.includes('${'), 'nada por interpolar');
     }
-    assert.equal(paginaLegal('outra-coisa'), undefined, 'um nome que não é de um documento não dá página');
+    assert.equal(paginaLegal('outra-coisa', { raiz: true }), undefined, 'um nome que não é de um documento não dá página');
   });
 
   /* O texto não é copiado para a página: ela carrega o MESMO ficheiro que a
      app carrega. Duas cópias do mesmo contrato divergem em silêncio, e a que
      está errada é sempre a que a pessoa leu. */
   test('mostram o documento da app, e não uma cópia dele', async () => {
-    const html = await paginaLegal('termos').text();
+    const html = await paginaLegal('termos', { raiz: true }).text();
     assert.match(html, /<script src="\/legal\.js"><\/script>/, 'carrega a fonte única');
     assert.match(html, /L\.termos/, 'e escreve o que ela traz');
     // um pedaço do texto verdadeiro não pode estar embutido na página
@@ -83,16 +83,16 @@ describe('as páginas públicas dos documentos', () => {
   });
 
   test('quem não tem JavaScript fica a saber onde o encontrar', async () => {
-    const html = await paginaLegal('privacidade').text();
+    const html = await paginaLegal('privacidade', { raiz: true }).text();
     assert.match(html, /<noscript>/);
     assert.match(html, /Definições → Aviso legal/);
   });
 
   test('uma leva à outra, e as duas ao início', async () => {
-    const t = await paginaLegal('termos').text();
+    const t = await paginaLegal('termos', { raiz: true }).text();
     assert.match(t, /href="\/privacidade"/);
     assert.match(t, /href="\/"/);
-    const p = await paginaLegal('privacidade').text();
+    const p = await paginaLegal('privacidade', { raiz: true }).text();
     assert.match(p, /href="\/termos"/);
   });
 });
