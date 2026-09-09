@@ -994,6 +994,54 @@ que sobe para o servidor. O que já está escrito nas fichas antigas fica como
 estava; só o que se escreve de agora em diante leva a forma nova. É o preço
 de escrever a data dentro de uma frase em vez de a guardar num campo.
 
+## Um carregamento não pode misturar versões
+
+A v31 chegou a produção e a app **não arrancava**: `ReferenceError` em cadeia —
+`LS_SESSAO`, `CW`, `ic`, `go`, `idbPut` — e um ecrã em branco.
+
+A prova de que era mistura de versões está numa linha só. O
+`LS_SESSAO is not defined` em `cloud/nucleo.js:4` só é possível com o
+`nucleo.js` da **v31** (a única versão com `var LS_USER = LS_SESSAO`) e o
+`dados.js` da **v30** (a única sem a constante) — no mesmo carregamento.
+
+Duas causas, ambas no service worker:
+
+**O `skipWaiting()`.** O worker novo assumia o controlo a meio do
+carregamento: os primeiros `<script>` vinham do worker antigo, servidos da
+cache da versão anterior; os seguintes do novo. Como os endereços dos
+ficheiros não levam versão no nome, nada detetava a troca. É o motivo pelo
+qual não se chama `skipWaiting()` sem ficheiros versionados no endereço.
+
+**O `caches.match(pedido)` sem `cacheName`.** Procura em *todas* as caches. Um
+`fetch` que falhasse era respondido com o ficheiro da versão anterior, em
+silêncio, enquanto os irmãos vinham da rede já com a nova.
+
+O worker passa a servir tudo da **mesma cache**, cheia de uma vez no
+`install`, e o worker novo **espera**. Quem manda na altura de trocar é a app,
+que já tinha esse caminho: o `verificarVersao` lê o `/versao.json`, limpa as
+caches e recarrega uma vez, à vista.
+
+### E quem já estava partido não se curava sozinho
+
+Esta é a metade que importa mais. Um arranque que falha assim é um ecrã em
+branco — e o código que sabe atualizar a app é precisamente o que não chegou a
+carregar. Sem mais nada, essas pessoas ficavam presas até fecharem tudo.
+
+Por isso o `index.html` ganhou uma rede de segurança **inline e antes de todos
+os `<script>`**, que não depende de ficheiro nenhum: um `<script>` que não
+carrega, ou um símbolo que devia existir e não existe, limpam o que está
+guardado, largam o service worker e recarregam. Uma vez por sessão — uma
+recarga que não resolve não se repete.
+
+Testado como se testa uma cura: envenenou-se a cache com um `dados.js` sem a
+constante, reproduzindo a avaria exata de produção. A rede apanhou-a, limpou,
+recarregou, e a app arrancou.
+
+Uma consequência a registar: com cache primeiro, um servidor local serviria
+ficheiros velhos até a versão mudar. O service worker deixa de se registar em
+`localhost` — localhost não é uma publicação. No dev fica, que é onde as
+travessias entre versões a sério se exercitam antes de irem para produção.
+
 ## Ver a montra antes de a publicar
 
 A página de entrada só era servida no domínio raiz, portanto a única maneira de
