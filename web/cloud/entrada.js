@@ -655,7 +655,12 @@ function hideAuth() {
 
 /* ---------------- PWA ---------------- */
 
-if ('serviceWorker' in navigator) {
+/* O service worker serve a app toda da MESMA cache, de propósito: é isso que
+   impede um carregamento de misturar versões (web/sw.js). O preço é que, num
+   servidor local, uma alteração a um ficheiro só se veria depois de mudar a
+   versão — e localhost não é uma publicação. No dev fica, que é onde as
+   travessias entre versões a sério se exercitam antes de irem para produção. */
+if ('serviceWorker' in navigator && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
   try { navigator.serviceWorker.register('sw.js'); } catch (e) {}
 }
 

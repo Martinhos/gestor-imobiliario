@@ -103,7 +103,28 @@ describe('o service worker', () => {
 
   test('traz a versão de avisos.js em vez de a repetir', () => {
     assert.match(sw, /importScripts\('\/avisos\.js'\)/);
-    assert.match(sw, /'gi-shell-v' \+ \(typeof VERSAO/);
+    assert.match(sw, /typeof VERSAO === 'number'/, 'a versão vem de lá');
+    assert.match(sw, /const CACHE = 'gi-shell-v' \+ VER/, 'e dá o nome à cache');
+  });
+
+  /* A v31 partiu em produção com ReferenceError em cadeia — LS_SESSAO, CW,
+     ic, go — porque este ficheiro deixava uma página carregar metade de cada
+     versão. Duas causas, as duas aqui guardadas. */
+  test('não troca de versão a meio de um carregamento', () => {
+    assert.doesNotMatch(sw, /self\.skipWaiting\(\)/,
+      'o worker novo espera: com skipWaiting assumia o controlo a meio da página');
+  });
+
+  test('a alternativa à rede é só da cache desta versão', () => {
+    assert.doesNotMatch(sw, /caches\.match\(/,
+      'o caches.match sem cacheName procura em TODAS as caches, incluindo a da versão anterior');
+    assert.match(sw, /caches\.open\(CACHE\)[\s\S]{0,80}?\.match\(/,
+      'serve-se da cache desta versão, e só dela');
+  });
+
+  test('sem versão não guarda nem apaga nada', () => {
+    assert.match(sw, /const VER = typeof VERSAO/, 'a versão pode faltar');
+    assert.match(sw, /if \(VER == null\) return;/, 'e nesse caso este worker não manda em nada');
   });
 
   test('não declara VERSAO, que colidiria com a do ficheiro importado', () => {
@@ -116,6 +137,42 @@ describe('o service worker', () => {
 
   test('nunca serve a versão da cache', () => {
     assert.match(sw, /versao\.json/);
+  });
+});
+
+/* Um arranque que falha é um ecrã em branco — e o código que sabe atualizar a
+   app (cloud/novidades.js:verificarVersao) é precisamente o que não chegou a
+   carregar. Quem ficasse partido não se curava sozinho. */
+describe('a rede de segurança do arranque', () => {
+  const html = ler('web/index.html');
+  const i = html.indexOf("var CHAVE = 'gi_arranque_curado'");
+  const bloco = i > -1 ? html.slice(html.lastIndexOf('<script>', i), html.indexOf('</script>', i)) : '';
+
+  test('existe, e antes de tudo o que pode falhar', () => {
+    assert.ok(i > -1, 'a rede existe');
+    assert.ok(i < html.indexOf('<script src="app/dados.js">'),
+      'antes do primeiro ficheiro do arranque, senão não o apanha');
+  });
+
+  test('não depende de nada — se dependesse, falhava com o resto', () => {
+    assert.ok(!/<script src=/.test(bloco), 'é inline');
+    ['ic(', 'toast(', 'render(', 'CW.'].forEach((f) => {
+      assert.ok(!bloco.includes(f), 'não usa ' + f + ', que pode não existir');
+    });
+  });
+
+  test('apanha as duas maneiras de o arranque partir', () => {
+    assert.match(bloco, /tagName === 'SCRIPT'/, 'um ficheiro que não carrega');
+    assert.match(bloco, /is not defined/, 'e um símbolo que devia existir e não existe');
+    assert.match(bloco, /addEventListener\('error'[\s\S]{0,200}?true\)/,
+      'o erro de um <script> não sobe: ouve-se na descida');
+  });
+
+  test('cura uma vez, não em ciclo', () => {
+    assert.match(bloco, /sessionStorage\.getItem\(CHAVE\)/, 'lembra-se de já ter tentado');
+    assert.match(bloco, /document\.readyState === 'complete'/, 'e só durante o arranque');
+    assert.match(bloco, /caches\.delete/, 'limpa o que está guardado');
+    assert.match(bloco, /unregister\(\)/, 'e larga o service worker');
   });
 });
 

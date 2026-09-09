@@ -8,7 +8,11 @@
    `var`, e uma declaração nossa colidiria com ele — partindo o service
    worker inteiro, e com ele o arranque offline. */
 try { importScripts('/avisos.js'); } catch (e) { /* sem ele, cache genérica */ }
-const CACHE = 'gi-shell-v' + (typeof VERSAO === 'number' ? VERSAO : 0);
+/* Sem o avisos.js não há versão, e uma cache chamada «v0» seria pior do que
+   nenhuma: o activate apagava a cache verdadeira e ficávamos sem nada offline.
+   Sem versão, este worker não guarda nem apaga — deixa passar tudo à rede. */
+const VER = typeof VERSAO === 'number' ? VERSAO : null;
+const CACHE = 'gi-shell-v' + VER;
 // A app passou a viver em módulos: guardam-se todos, senão abre offline
 // com metade do código.
 const APP = ['dados', 'anexos', 'auxiliares', 'lista', 'continuidade', 'graficos', 'credito', 'componentes',
@@ -20,11 +24,23 @@ const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 
 const SHELL = ['/', '/index.html', '/avisos.js', '/legal.js', '/manifest.webmanifest',
   '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'].concat(APP, NUVEM);
 
+/* NÃO se chama skipWaiting(). Chamava-se, e foi por isso que a v31 partiu em
+   produção: o worker novo assumia o controlo a meio de um carregamento, e a
+   mesma página ficava com os primeiros <script> servidos pelo worker antigo
+   (da cache da versão anterior) e os seguintes pelo novo. Como os endereços
+   dos ficheiros não levam versão no nome, nada detetava a troca — e um
+   nucleo.js novo com um dados.js velho não arranca.
+
+   O worker novo espera. Quem manda na altura de trocar é a app, que já tem
+   esse caminho: o verificarVersao lê o /versao.json, limpa as caches e
+   recarrega uma vez, à vista (cloud/novidades.js). */
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  if (VER == null) return;
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
 });
 
 self.addEventListener('activate', (e) => {
+  if (VER == null) return;
   e.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
@@ -38,16 +54,25 @@ self.addEventListener('fetch', (e) => {
   // a resposta a "que versão é a de agora?" nunca pode vir da cache
   if (url.pathname === '/versao.json') return;
 
-  // rede primeiro (para apanhar versões novas), cache como recurso offline
+  if (VER == null) return;   // sem versão, não se serve nada da cache
+
+  /* CACHE primeiro, e só desta versão. Era rede primeiro com a cache como
+     recurso, e isso não tem atomicidade nenhuma: um ficheiro que falhasse
+     vinha da cache — de QUALQUER cache, porque o caches.match sem cacheName
+     procura em todas — enquanto os irmãos vinham da rede já com a versão
+     nova. Uma página com metade de cada não arranca.
+
+     Assim, um carregamento serve-se todo da mesma cache, que foi enchida de
+     uma vez no install. É também mais rápido. A versão nova entra quando a
+     app decidir trocar, não a meio de uma leitura. */
   e.respondWith(
-    fetch(e.request)
-      .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+    caches.open(CACHE)
+      .then((c) => c.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
+        if (res && res.ok && res.type === 'basic') { try { c.put(e.request, res.clone()); } catch (x) {} }
         return res;
-      })
-      .catch(() =>
-        caches.match(e.request).then((hit) => hit || (e.request.mode === 'navigate' ? caches.match('/index.html') : undefined))
-      )
+      })))
+      .catch(() => caches.open(CACHE)
+        .then((c) => c.match(e.request.mode === 'navigate' ? '/index.html' : e.request))
+        .catch(() => undefined))
   );
 });
