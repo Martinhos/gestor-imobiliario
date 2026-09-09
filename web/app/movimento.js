@@ -10,6 +10,11 @@ let tForm={};
    Devolve: nada — abre o modal do movimento e prepara o guardar. */
 function txModal(id,kind,propId,_x,ctId,preset){
   foldState={};
+  /* Quem não pode alterar recebe a FICHA, e não este formulário com os campos
+     apagados. E antes do openModal: não se decora uma janela já aberta,
+     escolhe-se qual é a janela a abrir. */
+  const _t=id?(db.transactions||[]).find(x=>x.id===id):null;
+  if(_t&&!podeEditar(_t.propertyId,'tx.add',_t))return txView(id);
   /* sem imóvel escolhido: com um só imóvel onde posso adicionar fica esse; quem não
      é dono de nenhum não tem «Todos os imóveis» e fica com o primeiro permitido —
      senão o seletor mostrava o primeiro e o movimento gravava-se sem imóvel */
@@ -21,12 +26,9 @@ function txModal(id,kind,propId,_x,ctId,preset){
   tForm._edit=!!id;
   if(!id&&tForm.amount){tForm._aA=tForm.amount}
   prefill();
-  /* «Ver movimento»: o que não posso alterar num imóvel onde colaboro abre só de leitura */
-  const ok=!id||podeEditar(tForm.propertyId,'tx.add',db.transactions.find(x=>x.id===id));
-  const m=id&&ok?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${id}')`}]):'';
+  const m=id?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${id}')`}]):'';
   const nome=txTypeName(tForm.kind);
-  openModal(id?(ok?'Editar '+nome:nome.charAt(0).toUpperCase()+nome.slice(1)):txNewWord(tForm.kind)+nome,txBody(),null,m);
-  if(!ok){onSave=null;return modalSoLeitura('Movimento de um imóvel onde colaboras — só de leitura.')}
+  openModal(id?'Editar '+nome:txNewWord(tForm.kind)+nome,txBody(),null,m);
   tForm._saver=()=>{
     collectTx();
     /* a primeira barreira: o servidor recusaria na mesma, mas aqui diz-se porquê antes de gravar.

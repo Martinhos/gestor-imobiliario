@@ -133,16 +133,17 @@ function personModal(kind,id,after,houseId){
     houseId=cs[0].id;
   }
   foldState={};
+  /* Quem não pode alterar a ficha de um inquilino recebe a FICHA de leitura,
+     e não este formulário com os campos apagados. */
+  const _p=id?((kind==='owner'?db.owners:db.tenants)||[]).find(x=>x.id===id):null;
+  if(kind==='tenant'&&_p&&!podeEditarInquilino(_p))return personView(kind,id);
   perKind=kind;perAfter=after||null;
   const listOf=kind==='owner'?db.owners:db.tenants,orig=id?listOf.find(x=>x.id===id):null;
   perForm=normPerson(orig?JSON.parse(JSON.stringify(orig)):null);
   if(!orig&&houseId&&kind==='tenant')perForm.houseId=houseId;
   const word=kind==='owner'?'proprietário':'inquilino';
-  /* a ficha de um inquilino de um imóvel onde só colaboro abre em leitura sem «Adicionar inquilinos» */
-  const soLer=kind==='tenant'&&!!orig&&!podeEditarInquilino(orig);
-  const m=id&&!soLer?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${kind}','${id}')`}]):'';
-  openModal((id?(soLer?'':'Editar '):'Novo ')+(soLer?'Ficha de '+word:word),personBody(),null,m);
-  if(soLer)return modalSoLeitura('Ficha de um imóvel onde colaboras — só de leitura.');
+  const m=id?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${kind}','${id}')`}]):'';
+  openModal((id?'Editar ':'Novo ')+word,personBody(),null,m);
   onSave=()=>{
     collectPerson();
     if(!perForm.name.trim())return toast('Escreve o nome.');

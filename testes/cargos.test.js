@@ -594,16 +594,17 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     const t1 = app.normTx({ id: 'T1', label: 'Obra', kind: 'expense', propertyId: 'P2', amount: 10 }); t1._createdBy = 'rui';
     const t2 = app.normTx({ id: 'T2', label: 'Luz', kind: 'expense', propertyId: 'P2', amount: 10 }); t2._createdBy = 'eu';
     app.db.transactions = [t1, t2];
+    /* Quem não pode alterar recebe a FICHA. Era o formulário com os campos
+       apagados um a um — mostrava tudo o que não se pode fazer, cinzento, e
+       chamava-lhe leitura. */
     app.txModal('T1');
     let L = abertas[0];
-    assert.equal(L.t, 'Despesa', 'o título não diz editar');
-    assert.equal(L.m, '', 'sem menu de apagar');
-    assert.ok(L.campos.every((c) => c.disabled), 'campos desativados');
-    assert.match(L.foot.innerHTML, /Fechar/);
-    assert.doesNotMatch(L.foot.innerHTML, /Guardar/);
-    assert.match(L.body.hint, /só de leitura/);
-    assert.equal(L.soLeitura, true);
-    assert.equal(app.onSave, null, 'nada por guardar');
+    assert.equal(L.t, 'Obra', 'é a ficha, e o título é o do movimento');
+    assert.doesNotMatch(L.b, /id="t_amount"/, 'não é o formulário');
+    assert.match(L.b, /Montante/, 'é a ficha do movimento');
+    assert.match(L.f, /Fechar/);
+    assert.doesNotMatch(L.f, /Editar/, 'sem «Editar»: não pode');
+    assert.doesNotMatch(L.f, /Guardar/);
     app.txModal('T2');
     L = abertas[1];
     assert.equal(L.t, 'Editar despesa');
@@ -614,18 +615,14 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     app.db.contracts = [app.normContract({ id: 'C1', propertyId: 'P2', rent: 500, tenantIds: [] })];
     app.ctModal('C1');
     L = abertas[2];
-    assert.equal(L.t, 'Contrato');
+    assert.doesNotMatch(L.b, /id="c_rent"/, 'é a ficha, não o formulário');
     assert.match(L.m, /Gerar contrato em PDF/);
     assert.doesNotMatch(L.m, /Apagar contrato/);
-    assert.ok(L.campos.every((c) => c.disabled));
-    assert.match(L.foot.innerHTML, /Fechar/);
-    assert.match(L.body.hint, /só de leitura/);
-    assert.equal(app.onSave, null);
-    // a miniatura do registo fotográfico é um div: em leitura não repinta (repintar reativava os campos)
-    let repintou = false;
-    app.repaintCt = () => { repintou = true; };
-    app.togCtPhoto('f1');
-    assert.equal(repintou, false);
+    assert.match(L.f, /Fechar/);
+    assert.doesNotMatch(L.f, /Editar/);
+    /* e diz porquê com a frase da permissão que falta, que é melhor do que o
+       «só de leitura» genérico do formulário apagado */
+    assert.match(L.b, /pede ao dono/, 'a ficha diz qual é a permissão que falta');
     // no meu imóvel o contrato abre para editar
     app.db.contracts.push(app.normContract({ id: 'C2', propertyId: 'P1', rent: 500, tenantIds: [] }));
     app.ctModal('C2');
@@ -778,10 +775,10 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     // o do Rui abre só de leitura: os campos são de quem o criou
     app.editRec('R2');
     const L = abertas[abertas.length - 1];
-    assert.equal(L.soLeitura, true);
-    assert.equal(app.onSave, null);
-    assert.match(L.body.hint, /só de leitura/);
-    assert.match(L.foot.innerHTML, /Fechar/);
+    assert.doesNotMatch(L.b, /id="t_amount"/, 'é a ficha do planeado, não o formulário');
+    assert.match(L.f, /Fechar/);
+    assert.doesNotMatch(L.f, /Editar/, 'sem «Editar»: os campos são de quem o criou');
+    assert.match(L.b, /pede ao dono|Só quem o adicionou/, 'e diz porquê');
     // confirmar continua a pedir tx.add — cria um movimento
     assert.equal(app.recusaConfirmar(r2), app.fraseSemPerm('tx.add'));
     // e sem rec.add nenhum, o guardar de um planeado recusa com a frase certa

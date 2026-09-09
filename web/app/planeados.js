@@ -612,11 +612,13 @@ function tplView(id){
 function editRec(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   const recusa=motivoRecusa((r.tx||{}).propertyId,'rec.add',r);
+  /* Quem não pode alterar recebe a FICHA, e não o formulário do movimento com
+     os campos apagados por cima. */
+  if(recusa)return recView(id);
   txModal(null,r.tx.kind,r.tx.propertyId,null,r.tx.contractId,Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:r.next,label:r.tx.label||r.name}));
   tForm._recId=id;tForm._every=r.every;tForm._recEnd=r.end||'';tForm._until=r.until||'';
-  const h=modalTop().el.querySelector('.head h2');if(h)h.textContent=recusa?'Movimento recorrente':'Editar movimento recorrente';
+  const h=modalTop().el.querySelector('.head h2');if(h)h.textContent='Editar movimento recorrente';
   foldState.rec=true;repaintTx();
-  if(recusa){onSave=null;modalSoLeitura('Planeado de um imóvel onde colaboras — só de leitura.')}
 }
 // Novo movimento recorrente: pergunta o tipo e abre o formulário já em modo
 // recorrente (mensal por omissão), com a secção de repetição aberta.

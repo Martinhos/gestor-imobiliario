@@ -116,6 +116,11 @@ function ctView(id){
    Devolve: nada — abre o modal do contrato. */
 function ctModal(id,pid){
   foldState={};
+  /* Quem não pode alterar recebe a FICHA, e não este formulário com os campos
+     apagados. E antes do openModal: não se decora uma janela já aberta,
+     escolhe-se qual é a janela a abrir. */
+  const _c=id?contract(id):null;
+  if(_c&&!podeEditar(_c.propertyId,'contract.add',_c))return ctView(id);
   if(!db.properties.length)return toast('Cria primeiro um imóvel.');
   /* só onde posso adicionar contratos: os meus imóveis e os de colaboração com o cargo certo */
   const rentables=casasComo('contract.add').filter(p=>p.use==='investimento');
@@ -126,11 +131,8 @@ function ctModal(id,pid){
   const m=id?menu('ct',[{label:'Gerar contrato em PDF',icon:'pen',act:`generateContractPdf('${id}')`}].concat(ok?[
     ctEstado(cForm)!=='terminado'?{label:'Terminar contrato',icon:'x',act:`endContract('${id}')`}:{label:'Reativar contrato',icon:'check',act:`reactivateContract('${id}')`},
     {label:'Apagar contrato',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delContract('${id}')`}]:[])):'';
-  openModal(id?(ok?'Editar contrato':'Contrato'):'Novo contrato',ctBody(),null,m);
+  openModal(id?'Editar contrato':'Novo contrato',ctBody(),null,m);
   const p=prop(cForm.propertyId);if(p)paintThumbs(p.photos);
-  /* «Ver contrato»: um contrato de um imóvel onde colaboro que não posso alterar
-     abre só de leitura — o rótulo diz ver, o ecrã não pode dizer editar */
-  if(id&&!ok){onSave=null;return modalSoLeitura('Contrato de um imóvel onde colaboras — só de leitura.')}
   onSave=ctSaver();
 }
 /* Os movimentos confirmados que caem FORA das datas do contrato.
@@ -380,7 +382,6 @@ function onTenantContact(){
 // Recebe: fid — id da foto (uma das fotos do imóvel).
 // Devolve: nada — repinta o formulário.
 function togCtPhoto(fid){
-  if((modalTop()||{}).soLeitura)return;   /* a miniatura é um div: o modo de leitura não a desativa */
   collectCt();
   const l=cForm.photoIds||(cForm.photoIds=[]),i=l.indexOf(fid);
   if(i>-1)l.splice(i,1);else l.push(fid);

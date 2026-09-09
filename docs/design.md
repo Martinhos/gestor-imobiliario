@@ -359,7 +359,7 @@ os seletores de imóvel dos formulários só listam onde se pode adicionar
 (acessos.js:casasComo, acessos.js:propOptsPara; movimento.js:txBody), a
 ficha do imóvel abre só de leitura sem «Editar a ficha»
 (imovel.js:propView), uma ficha de inquilino idem
-(componentes.js:modalSoLeitura), e as contas entre proprietários são dos
+(pessoas.js:personView), e as contas entre proprietários são dos
 proprietários (vistas.js:balancesCard, acessos.js:souDono). Editar e apagar
 é só o que o próprio adicionou (acessos.js:podeEditar); quando a ação
 chega mesmo a um guardar sem permissão, recusa-se com a frase de
@@ -765,8 +765,16 @@ título de uma janela que ninguém tinha pedido para abrir.
 
 Havia uma ficha de leitura no código inteiro, e só a via quem **não podia**
 editar (imovel.js:propView). Para todos os outros, a app não tinha modo de
-leitura nenhum: o que existia era o formulário com os campos desativados
-(componentes.js:modalSoLeitura) — um formulário a fingir de ficha.
+leitura nenhum: o que existia era o formulário com os campos desativados um a
+um — um formulário a fingir de ficha, que mostrava a alguém tudo o que não
+pode fazer, cinzento, e chamava-lhe leitura.
+
+Esse já não existe. Quem não pode alterar recebe a ficha, e a verificação
+está **antes** de abrir a janela (contrato.js:ctModal, movimento.js:txModal,
+pessoas.js:personModal, planeados.js:editRec): não se decora uma janela já
+aberta, escolhe-se qual é a janela a abrir. E a ficha diz porquê com a frase
+da permissão que falta (acessos.js:motivoRecusa), que é melhor do que o «só
+de leitura» genérico que o formulário apagado dava.
 
 Agora tocar lê, e editar é um passo deliberado: o botão do rodapé, que só
 existe para quem pode (componentes.js:fichaRodape).
@@ -806,8 +814,7 @@ lá alguém.
 
 E o TOQUE LONGO ficou só com o que se pode FAZER. Antes da ficha, o «Ver
 movimento» do toque longo era a única maneira de ver um movimento sem o
-editar — abria o formulário com os campos desligados
-(componentes.js:modalSoLeitura). Agora tocar no cartão lê, e essa entrada
+editar — abria o formulário com os campos desligados. Agora tocar no cartão lê, e essa entrada
 passou a ser um caminho a mais para o mesmo sítio. Quando não há nada a
 fazer, o menu fica vazio, e é o menu vazio que faz aparecer o aviso «Só
 podes ver este registo» (componentes.js:lpShow) — uma decisão que já lá

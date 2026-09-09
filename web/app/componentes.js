@@ -756,22 +756,4 @@ function lpMenu(v){
     if(pode(pid,'house.edit'))opts.push({label:'Apagar hipoteca',icon:'trash',act:()=>delMortFrom(pid,lid)});
     return lpShow(loanName(l),opts);}
 }
-/* Põe a janela de cima em modo só de leitura: desativa os campos e os botões
-   do corpo (as dobras continuam a abrir) e troca o rodapé por «Fechar». É o
-   que uma ficha de inquilino, um movimento ou um contrato de um imóvel onde
-   só colaboro mostram quando o cargo não deixa alterar. A camada fica
-   marcada (soLeitura), para o que repinta o corpo a partir de um div
-   clicável (as miniaturas do contrato) saber que não deve.
-   Recebe: msg (opcional) — um hint a pôr no topo do corpo, a dizer porquê.
-   Devolve: nada — mexe na janela de cima. */
-function modalSoLeitura(msg){
-  const t=modalTop();if(!t)return;
-  t.onSave=null;t.soLeitura=true;
-  const b=t.el.querySelector('.body');
-  if(b){
-    [].slice.call(b.querySelectorAll('input,textarea,select,button:not(.fold-head)')).forEach(e=>{e.disabled=true});
-    if(msg)b.insertAdjacentHTML('afterbegin',`<div class="hint" style="margin-bottom:12px">${msg}</div>`);
-  }
-  const f=t.el.querySelector('.foot');if(f)f.innerHTML=`<button class="btn" onclick="closeModal()">Fechar</button>`;
-  t.snap=modalSnap(t.el);t.tocado=false;   /* nada por guardar: fechar nunca pergunta */
-}
+
