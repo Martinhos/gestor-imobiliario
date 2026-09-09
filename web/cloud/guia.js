@@ -408,7 +408,8 @@ seed = function () {
 var css = document.createElement('style');
 css.textContent =
   /* flutua, não é modal: quem segue os passos tem de poder mexer na app por
-     baixo enquanto lê. Acima do botão flutuante, abaixo dos modais. */
+     baixo enquanto lê. Acima do botão flutuante, abaixo dos modais — menos
+     quando um está aberto, e aí sobe acima dele (sobre-janela). */
   /* Acima do botão flutuante e não por cima dele: o tutorial manda carregar
      nesse botão, e estava a tapá-lo. */
   '#cwGuia{position:fixed;left:12px;right:12px;bottom:calc(88px + var(--inset-bottom));z-index:59;' +
@@ -422,8 +423,11 @@ css.textContent =
   '@keyframes guiaEntra{from{opacity:0;transform:translateY(28px)}}' +
   '#cwGuia .guia-cartao{pointer-events:auto;width:100%;max-width:420px;padding:14px 16px;' +
     'box-shadow:var(--shadow);border-color:var(--accent)}' +
-  // por cima de uma janela aberta (60) e encostado ao topo, longe dos botões
-  '#cwGuia.sobre-janela{z-index:61;bottom:auto;top:calc(12px + var(--inset-top));' +
+  /* Por cima de uma janela aberta, e encostado ao topo, longe dos botões.
+     O número segue o do .modal (index.html): esteve em 61 contra os 60 de
+     então, e quando o modal subiu para 70 o cartão ficou por baixo — que é
+     exatamente o defeito que este ajuste existe para não deixar acontecer. */
+  '#cwGuia.sobre-janela{z-index:71;bottom:auto;top:calc(12px + var(--inset-top));' +
     'animation:guiaEntra var(--lento) var(--curva-entra)}' +
   '@media(min-width:900px){#cwGuia{left:auto;right:22px;max-width:420px;bottom:calc(22px + var(--inset-bottom))}' +
     '#cwGuia.sobre-janela{top:calc(16px + var(--inset-top))}}';
