@@ -9,7 +9,6 @@
 // consultam. Um colaborador nunca entra em participants.
 
 import { now } from './http.js';
-import { podeCriar } from './planos.js';
 import { normalizarPerms, permDoKind, podeAddKind, fraseRecusa, fundirPlaneado, planeadoTermina } from './permissoes.js';
 
 // O dono acede sempre; outro utilizador só se a casa estiver partilhada consigo
@@ -152,24 +151,6 @@ export async function casasDeColaborador(env, userId) {
   return out;
 }
 
-// O plano que manda nos registos de uma casa é o do DONO da casa, não o de
-// quem escreve. Isto dá uma função com cache para um pedido inteiro: o
-// /api/sync pergunta muitas vezes pela mesma meia dúzia de donos.
-// Recebe: env — o ambiente do worker (a base D1); me — o utilizador com
-// sessão (o plano dele já vem na sessão).
-// Devolve: função assíncrona ownerId → promessa do plano ('free' por omissão).
-export function planoDosDonos(env, me) {
-  const cache = new Map();
-  return async (ownerId) => {
-    if (ownerId === me.id) return me.plan || 'free';
-    if (!cache.has(ownerId)) {
-      const u = await env.DB.prepare('SELECT plan FROM users WHERE id = ?').bind(ownerId).first();
-      cache.set(ownerId, (u && u.plan) || 'free');
-    }
-    return cache.get(ownerId);
-  };
-}
-
 // A regra única de escrita num registo de casa, partilhada pelo /api/sync e
 // pelas rotas PUT/DELETE de casas.js: acesso à casa; para colaboradores, o
 // kind tem de ter cargo, o cargo tem de ter o .add, e editar/apagar só o que
@@ -186,11 +167,10 @@ export function planoDosDonos(env, me) {
 // Os anexos que a escrita junta têm regra própria (regraDosAnexos, files.js).
 // Recebe: env — o ambiente do worker; me — o utilizador com sessão; acesso —
 // o objeto de acessoACasa; houseId, kind, recordId — a linha; put — true a
-// gravar, false a apagar; demo — true em modo de demonstração (sem limites);
-// planoDe — a função de planoDosDonos.
+// gravar, false a apagar.
 // Devolve: promessa de null quando pode, { gone: true } quando não há nada a
-// apagar, ou { status, error } com o 403/402 e a frase para o cliente.
-export async function regraDoRegisto(env, me, acesso, houseId, kind, recordId, put, demo, planoDe) {
+// apagar, ou { status, error } com o 403 e a frase para o cliente.
+export async function regraDoRegisto(env, me, acesso, houseId, kind, recordId, put) {
   if (!acesso.ok) return put ? { status: 403, error: fraseRecusa('acesso') } : { gone: true };
   const row = await env.DB.prepare(
     'SELECT deleted, created_by, data FROM records WHERE house_id = ? AND kind = ? AND id = ?'
@@ -208,11 +188,6 @@ export async function regraDoRegisto(env, me, acesso, houseId, kind, recordId, p
     }
   }
   if (!put) return row ? null : { gone: true };
-  // só a criação é travada pelo plano; o que existe edita-se sempre
-  if (!demo && !row && (kind === 'contract' || kind === 'rec')) {
-    const nao = podeCriar(await planoDe(acesso.ownerId), kind, 0);
-    if (nao) return { status: 402, error: nao };
-  }
   return null;
 }
 

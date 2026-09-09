@@ -281,21 +281,6 @@ function schedulePush() {
   pushTimer = setTimeout(function () { pushNow(); }, 1200);
 }
 
-/* O que o plano recusou (402) fica marcado e não se reenvia: sem isto, a
-   mesma operação voltava a cada 30 segundos para sempre, a queimar quota.
-   A marca vive só nesta sessão — mudar de plano ou o master desligar o
-   modo demo e recarregar volta a tentar tudo. */
-var _plano402 = {};
-var _avisosPlano = {};
-// Cada aviso de limite do plano aparece uma única vez por sessão (toast de 6s).
-// Recebe: msg — o texto do aviso vindo do servidor (vazio: não faz nada).
-// Devolve: nada — mostra o toast à primeira e ignora as repetições.
-function avisoPlano(msg) {
-  if (!msg || _avisosPlano[msg]) return;
-  _avisosPlano[msg] = 1;
-  try { toast(msg, { ms: 6000 }); } catch (e) {}
-}
-
 // A descrição curta de um registo, para os avisos («Renda de março», «T2 — Ana»).
 // Recebe: kind — o tipo ('tx', 'contract', 'rec', 'visit', 'tenant'); data — o registo.
 // Devolve: um texto curto; o tipo por extenso quando o registo não tem nome.
@@ -329,8 +314,7 @@ function recusaRegisto(o, erro) {
 /* Envia ao servidor a diferença entre o estado local e o retrato: 'put' do que
    mudou (casas primeiro, que os registos dependem delas) e 'del' do que
    desapareceu, em lotes de 200. Atualiza o retrato à medida que o servidor
-   aceita, marca as recusas do plano (402) para não reinsistir e acerta o selo
-   de sincronização. Reentrante: se já está a enviar, fica marcado um novo
+   aceita e acerta o selo de sincronização. Reentrante: se já está a enviar, fica marcado um novo
    envio para o fim. A Promise devolvida nunca rejeita.
    Devolve: Promise que resolve quando o envio terminar (nunca rejeita). */
 function pushNow() {
@@ -341,7 +325,6 @@ function pushNow() {
   var ops = [];
   // casas primeiro (os registos precisam da casa), remoções no fim
   Object.keys(map).forEach(function (k) {
-    if (_plano402[k]) return;   // o plano já disse que não; não se insiste
     var j = JSON.stringify(map[k].data);
     if (snap[k] !== j) ops.push(Object.assign({ _key: k, _json: j, op: 'put' }, map[k]));
   });
@@ -390,7 +373,6 @@ function pushNow() {
             if (!o) return;
             if (o.op === 'put' && r.ok) snap[o._key] = o._json;
             else if (o.op === 'del' && (r.ok || r.status === 403 || r.status === 404)) delete snap[o._key];
-            else if (r.status === 402) { _plano402[o._key] = 1; avisoPlano(r.error); }
             // sem permissão num imóvel de colaboração: o registo não fica a fingir que subiu
             else if (o.op === 'put' && o.scope === 'record' && r.status === 403) recusaRegisto(o, r.error);
             else pushNow._recusadas = (pushNow._recusadas || 0) + 1;

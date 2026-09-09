@@ -144,27 +144,6 @@ describe('ações sobre contas', () => {
     assert.equal(r.status, 400);
   });
 
-  test('mudar o plano persiste e deixa rasto duplo: a intenção e o feito', async () => {
-    const env = ambiente();
-    const id = await novaConta(env);
-    const r = await corpoDe(await chamar(env, MASTER, 'POST', '/api/equipa/pessoas/' + id + '/acao',
-      { acao: 'plano', valor: 'plus', motivo: 'pagou o Plus por transferência' }));
-    assert.equal(r.status, 200);
-    assert.equal(r.quem.plano, 'plus');
-    const rasto = await auditoria(env);
-    assert.deepEqual(rasto.map((x) => x.acao), ['conta.plano', 'conta.plano.feito']);
-    assert.match(rasto[0].detalhe, /transferência/);
-  });
-
-  test('um plano inventado é recusado, e o rasto mostra a falha', async () => {
-    const env = ambiente();
-    const id = await novaConta(env);
-    const r = await chamar(env, MASTER, 'POST', '/api/equipa/pessoas/' + id + '/acao',
-      { acao: 'plano', valor: 'platina', motivo: 'engano meu' });
-    assert.equal(r.status, 400);
-    assert.equal((await auditoria(env)).pop().acao, 'conta.plano.falhou');
-  });
-
   test('definir palavra-passe: fraca é recusada, boa entra e mata as sessões antigas', async () => {
     const env = ambiente();
     const id = await novaConta(env);
@@ -520,48 +499,6 @@ describe('a operação', () => {
 });
 
 /* --------------------------- a conta suspensa ---------------------------- */
-
-describe('o interruptor do modo de demonstracao', () => {
-  test('e so do master, pede motivo, e fica no rasto antes de mudar', async () => {
-    const { esquecerCache } = await import('../worker/src/lib/planos.js');
-    const env = ambiente(); esquecerCache();
-    assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/operacao/demo',
-      { ligado: false, motivo: 'os planos entram em vigor' })).status, 403);
-    assert.equal((await chamar(env, MASTER, 'POST', '/api/equipa/operacao/demo',
-      { ligado: false, motivo: 'ok' })).status, 400);
-    const r = await corpoDe(await chamar(env, MASTER, 'POST', '/api/equipa/operacao/demo',
-      { ligado: false, motivo: 'os planos entram em vigor' }));
-    assert.equal(r.status, 200);
-    assert.ok(r.fim > Date.now() + 29 * 86400000, 'marca uma data um mês à frente');
-    assert.ok(env.SESSIONS.m.get('config:demo_fim'), 'a data fica no KV');
-    const rasto = await auditoria(env);
-    assert.equal(rasto[0].acao, 'operacao.demo');
-    assert.match(rasto[0].detalhe, /30 dias/);
-    esquecerCache();
-  });
-
-  test('fora de produção pode-se encurtar; em produção os 30 dias são lei', async () => {
-    const { esquecerCache } = await import('../worker/src/lib/planos.js');
-    const env = ambiente(); esquecerCache();
-    assert.equal((await chamar(env, MASTER, 'POST', '/api/equipa/operacao/demo',
-      { ligado: false, dias: 0, motivo: 'teste imediato' })).status, 200);
-    const prod = Object.assign({}, ambiente(), { ENV_NAME: '' });
-    assert.equal((await chamar(prod, MASTER, 'POST', '/api/equipa/operacao/demo',
-      { ligado: false, dias: 5, motivo: 'atalho proibido' })).status, 400,
-      'os termos prometem 30 dias e o código cumpre-os');
-    esquecerCache();
-  });
-
-  test('o painel de operacao diz o estado', async () => {
-    const { esquecerCache } = await import('../worker/src/lib/planos.js');
-    esquecerCache();
-    const env = ambiente();
-    const r = await corpoDe(await chamar(env, MASTER, 'GET', '/api/equipa/operacao'));
-    assert.equal(r.demo, true);
-    assert.equal(r.master, true);
-    esquecerCache();
-  });
-});
 
 describe('a conta suspensa vista da app', () => {
   test('o login diz que está suspensa — mas só depois da password certa', async () => {

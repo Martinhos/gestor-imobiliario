@@ -45,14 +45,14 @@ const eMaster = (eu) => ((eu.papeis || [eu.papel]).indexOf('master') > -1);
 /* A ficha de quem escreveu. É a mesma informação que o bot mostra, e pela
    mesma razão: responder sem saber quem é a pessoa é responder às cegas.
    Recebe: env — o ambiente do worker (a base em env.DB); userId — o id da conta.
-   Devolve: promessa da ficha ({id, nome, email, plano, desde, apagada,
+   Devolve: promessa da ficha ({id, nome, email, desde, apagada,
    suspensa, aceitouTermos, termos, entrada, e as contagens casas, registos,
    pedidos, errosApanhados}); de { id, desconhecido: true } quando a conta não
    existe; de null sem userId. */
 async function ficha(env, userId) {
   if (!userId) return null;
   const u = await env.DB.prepare(
-    `SELECT id, name, email, plan, created_at, deleted_at, suspended_at,
+    `SELECT id, name, email, created_at, deleted_at, suspended_at,
             terms_version, terms_at, pass_hash, google_sub
        FROM users WHERE id = ?`
   ).bind(userId).first();
@@ -62,7 +62,6 @@ async function ficha(env, userId) {
     id: u.id,
     nome: u.name || '',
     email: u.email,
-    plano: u.plan,
     desde: u.created_at,
     apagada: !!u.deleted_at,
     suspensa: u.suspended_at || null,
@@ -146,11 +145,6 @@ const ACOES_DE_CONTA = {
     const r = await env.DB.prepare("DELETE FROM rate_limits WHERE k LIKE '%' || ? || '%'")
       .bind(u.id).run();
     return 'limites limpos (' + (((r || {}).meta || {}).changes || 0) + ')';
-  },
-  async plano(env, u, valor) {
-    if (['free', 'plus', 'pro'].indexOf(valor) < 0) throw new Error('Plano desconhecido: usa free, plus ou pro.');
-    await env.DB.prepare('UPDATE users SET plan = ? WHERE id = ?').bind(valor, u.id).run();
-    return 'plano: ' + u.plan + ' → ' + valor;
   },
   /* Suspender também termina as sessões: uma suspensão com as sessões vivas
      só travava a pessoa no próximo login, que podia ser daqui a um mês. */
@@ -452,7 +446,7 @@ export async function rotasEquipaApi(c) {
     if (q.length < 3) return err(400, 'Escreve pelo menos três caracteres.');
     const p = '%' + q + '%';
     const rows = (await env.DB.prepare(
-      `SELECT id, name, email, plan, created_at, deleted_at, suspended_at FROM users
+      `SELECT id, name, email, created_at, deleted_at, suspended_at FROM users
         WHERE email LIKE ? OR name LIKE ? OR id = ?
         ORDER BY created_at DESC LIMIT 20`
     ).bind(p, p, q.toUpperCase()).all()).results;
@@ -556,7 +550,6 @@ export async function rotasEquipaApi(c) {
     if (path === '/api/equipa/operacao' && method === 'GET') {
       const { usageFields } = await import('./notify.js');
       const { listar, estado } = await import('./salvaguarda.js');
-      const { modoDemo, fimDemo } = await import('./lib/planos.js');
       // o batimento: a última execução de cada operação agendada.
       // O alarme é a ausência — a idade calcula-se do lado de quem vê.
       const crons = (await env.DB.prepare(
@@ -581,34 +574,8 @@ export async function rotasEquipaApi(c) {
         estadoCopias,
         crons,
         historico,
-        demo: await modoDemo(env),
-        fimDemo: await fimDemo(env),
         master: eMaster(eu),
       });
-    }
-
-    /* Ligar ou desligar o modo de demonstração. Desligá-lo é o momento em
-       que os limites dos planos passam a valer para toda a gente — por isso
-       é só do master, pede motivo, e fica no rasto antes de acontecer. */
-    if (path === '/api/equipa/operacao/demo' && method === 'POST') {
-      if (!eMaster(eu)) return err(403, 'O modo de demonstração é só do master.');
-      const b = await body(request);
-      const ligar = !!(b && b.ligado);
-      // os 30 dias são a regra; o parâmetro existe para os testes e para um
-      // adiamento consciente — nunca menos aviso do que os termos prometem,
-      // exceto em ambientes que não são produção
-      let dias = b && b.dias != null ? Number(b.dias) : 30;
-      if (!isFinite(dias) || dias < 0) dias = 30;
-      if (dias < 30 && !env.ENV_NAME) return err(400, 'Em produção o aviso é de pelo menos 30 dias — é o que os termos prometem.');
-      const motivo = String((b && b.motivo) || '').trim().slice(0, 300);
-      if (motivo.length < 5) return err(400, 'Escreve o motivo — fica no rasto.');
-      const { definirDemo } = await import('./lib/planos.js');
-      const registado = await auditar(env, eu, 'operacao.demo', null,
-        (ligar ? 'religado — a data marcada foi apagada'
-               : 'fim marcado para daqui a ' + dias + ' dias — a app passa a avisar toda a gente') + ' · ' + motivo);
-      if (!registado) return err(500, 'A auditoria não está a escrever — sem rasto não se muda isto.');
-      const fim = await definirDemo(env, ligar, dias);
-      return json({ demo: ligar, fim });
     }
 
     /* A mesma ligação que o /test do Discord dá, sem sair daqui. Só existe

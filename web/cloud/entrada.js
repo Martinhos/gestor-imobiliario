@@ -587,38 +587,6 @@ CW.reporConfirmar = function () {
     .catch(function (e) { errEl.textContent = e.message || 'Essa ligação já não serve.'; });
 };
 
-/* O aviso dos 30 dias: quando o master marca o fim da demonstração, toda a
-   gente fica a saber — uma vez por aparelho e por data marcada, com a data
-   concreta e o que muda. É este aviso que os termos prometem.
-   Recebe: fim — o instante do fim da demonstração, em milissegundos (como Date.now()).
-   Devolve: nada — abre o modal do aviso (ou nada, se já entrou em vigor ou já foi visto). */
-function avisoFimDemo(fim) {
-  if (Date.now() >= fim) return;   // já entrou em vigor: os limites falam por si
-  var chave = 'gi_aviso_fim_' + fim;
-  try { if (localStorage.getItem(chave)) return; } catch (e) {}
-  var data = new Date(fim).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' });
-  var dias = Math.ceil((fim - Date.now()) / 86400000);
-  setTimeout(function () {
-    openModal('A fase experimental termina a ' + data,
-      '<div class="hint" style="font-size:14.5px;line-height:1.65">' +
-      '<p style="margin:0 0 10px">Faltam <b>' + dias + ' dias</b>. A partir dessa data entram em vigor os planos ' +
-      'descritos nos Termos e Condições:</p>' +
-      '<ul style="margin:0 0 10px;padding-left:18px">' +
-      '<li style="margin-bottom:4px"><b>Gratuito</b> — até 3 imóveis; sem criar contratos novos nem movimentos planeados.</li>' +
-      '<li style="margin-bottom:4px"><b>Plus</b> — até 10 imóveis, com tudo.</li></ul>' +
-      '<p style="margin:0"><b>Nada do que já criaste é apagado nem fica inacessível</b> — os limites valem só ' +
-      'para criar registos novos. Podes ver os termos completos em Definições → Aviso legal.</p></div>',
-      '<button class="btn primary" onclick="CW.fimDemoVisto(\'' + chave + '\')">Percebi</button>');
-  }, 1200);
-}
-// o "Percebi" do aviso: marca-o como visto neste aparelho e fecha o modal
-// Recebe: chave — a chave do localStorage que identifica este aviso (inclui a data marcada).
-// Devolve: nada — grava a marca e fecha o modal.
-CW.fimDemoVisto = function (chave) {
-  try { localStorage.setItem(chave, '1'); } catch (e) {}
-  closeModal();
-};
-
 /* ---- entrada com Google / Apple (aparece quando configurada) ---- */
 
 // carrega um script externo uma única vez; se já estiver na página, só espera pelo load
@@ -692,11 +660,10 @@ if (CW.user) {
   try { restorePage(); } catch (e) {}
   showLegalGate();
   api('GET', '/api/me').then(function (u) {
-    CW.user = Object.assign({}, CW.user, { id: u.id, name: u.name, email: u.email, plan: u.plan });
+    CW.user = Object.assign({}, CW.user, { id: u.id, name: u.name, email: u.email });
     try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
     // conta anterior a estes documentos: pedir a aceitação antes de continuar
     if (u.termsCurrent && u.terms !== u.termsCurrent) showTermsGate();
-    if (u.fimDemo) avisoFimDemo(u.fimDemo);
     try {
       if (sessionStorage.getItem('gi_exemplo') === '1') {
         sessionStorage.removeItem('gi_exemplo');

@@ -994,6 +994,43 @@ que sobe para o servidor. O que já está escrito nas fichas antigas fica como
 estava; só o que se escreve de agora em diante leva a forma nova. É o preço
 de escrever a data dentro de uma frase em vez de a guardar num campo.
 
+## Não há planos
+
+Havia três escalões — `free` (3 imóveis, sem contratos nem planeados), `plus`
+(10) e `pro` (sem limite) —, um interruptor no back office que marcava a data
+em que passavam a valer, e um aviso de 30 dias que os Termos prometiam. Estava
+tudo escrito e suspenso pelo modo de demonstração.
+
+A intenção mudou: é um projeto pessoal, e a utilização é gratuita sem escalões
+nem limites. Saiu tudo.
+
+**A remoção espalhou-se por quinze ficheiros**, e a ordem importava: o módulo
+dos planos era importado estaticamente por `lib/acesso.js`, `rotas/casas.js` e
+`rotas/sync.js`, portanto apagá-lo primeiro rebentava o arranque do worker. Primeiro o back office, depois os chamadores e o cliente, e só no fim o
+ficheiro.
+
+Três coisas que valem a regra, e que um levantamento cuidadoso apanhou antes de
+partirem alguma coisa:
+
+**A coluna `users.plan` não se apaga.** A D1 não tem `DROP COLUMN` reversível, e
+o `restaurar.js` constrói o `INSERT` com as colunas do despejo — uma coluna a
+menos partia a reposição de qualquer cópia tirada antes disto. Deixa de se ler,
+que custa zero e mantém a porta aberta.
+
+**O 403 fica.** O ramo do 402 vivia colado ao do 403 na mesma cadeia de
+`else-if`, e o do 403 é o que diz a quem escreve num imóvel de colaboração sem
+permissão que o registo não subiu. Levá-lo à frente devolvia o bug que o
+comentário do `recusaRegisto` diz ter sido corrigido.
+
+**O `lib/limites.js` não é dos planos.** Estava arrumado no mesmo capítulo da
+documentação, mas é o travão contra força bruta. O capítulo passou a chamar-se
+o que é.
+
+E os Termos deixaram de prometer o que já não existe: a §3 perdeu a suspensão
+dos limites e o aviso dos 30 dias, e a §6 passou de «Utilização gratuita e
+limites» a «Utilização gratuita», com os três marcadores substituídos pela
+única frase que continua verdadeira.
+
 ## A fita arranca do sítio
 
 Corrigido o salto, ficava o arranque: a travessia entrava a andar, sem
