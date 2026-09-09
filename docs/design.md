@@ -1019,6 +1019,33 @@ estava a fazer.
 Era invisível no telemóvel, onde a gaveta está fora do ecrã — por isso durou.
 Fica um teste sobre a escada inteira.
 
+## O hambúrguer só existe onde há gaveta
+
+A mesma família do modal, e encontrado pela mesma via: uma regra que faz duas
+coisas e vaza para onde não devia.
+
+O `.burger` é `display:none` por omissão e só aparece abaixo de 900px, que é
+onde o `aside` deixa de ser uma coluna e passa a ser gaveta. Mas a regra do
+**alvo de toque** — `@media(pointer:coarse)` — dava-lhe
+`display:inline-flex` ao pôr-lhe os 44px mínimos. Ela existe para MEDIR, e
+estava também a MOSTRAR.
+
+Num telemóvel em «modo PC» isso encontra-se: o viewport é largo (sem gaveta) e
+o ecrã é de dedo (botão à vista). Tocar nele chamava o `openDrawer`, que punha
+`body.open` — que acima de 900px não mexe em nada, porque o
+`body.open aside{transform:none}` só existe dentro da media query estreita — e
+chamava o `lockPage`, que **trancava o scroll**. Um botão que não fazia nada e
+deixava a página presa.
+
+A regra do toque passa a só medir; quem mostra o botão, e o centra, é a largura.
+E o `openDrawer` ganha uma rede: pergunta ao próprio `aside` se ele está
+`fixed`, e sai antes do `lockPage` se não estiver. Pergunta-se ao elemento e não
+à largura para não haver dois sítios a saber onde é o corte.
+
+Medido: a 1100px, forçar o `openDrawer` não põe `body.open` nem tranca nada; a
+375px o botão aparece, a gaveta abre encostada à esquerda, tranca ao abrir e
+destranca ao fechar.
+
 ## Um carregamento não pode misturar versões
 
 A v31 chegou a produção e a app **não arrancava**: `ReferenceError` em cadeia —

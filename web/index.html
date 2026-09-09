@@ -184,7 +184,7 @@ header.top .sub{color:var(--muted);font-size:12px;margin-top:2px}
   body.rail .brand .txt,body.rail nav a .txt,body.rail .railbtn .txt{display:block}
   body.rail nav a,body.rail .railbtn{justify-content:flex-start;padding:11px 12px}
   body.open .scrim{opacity:1;visibility:visible;transition:opacity var(--medio) var(--curva),visibility 0s}
-  .burger{display:block}
+  .burger{display:inline-flex;align-items:center;justify-content:center}
   .wrap{padding:14px calc(15px + var(--inset-right)) calc(44px + var(--inset-bottom)) calc(15px + var(--inset-left))}
   header.top{padding:calc(11px + var(--inset-top)) calc(15px + var(--inset-right)) 11px calc(15px + var(--inset-left))}
 }
@@ -409,7 +409,13 @@ nav a .cnt{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px
 @media(pointer:coarse){
   .btn{min-height:44px}
   .btn.sm{min-height:40px}
-  .iconbtn,.burger{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  .iconbtn{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  /* o hambúrguer leva a MEDIDA do toque, mas não o display: quem decide se ele
+     existe é a largura (abaixo de 900px), não o dedo. Levava, e isso
+     ressuscitava-o em qualquer ecrã tátil — num telemóvel em «modo PC» ficava
+     um botão à vista que não abria gaveta nenhuma (acima de 900px o aside é
+     uma coluna, não uma gaveta) e que trancava o scroll ao ser tocado. */
+  .burger{min-width:44px;min-height:44px}
   #nav a{min-height:44px}
   .legend .li.tap{min-height:40px;padding:8px 6px;margin:0 -6px}
   .tag button{min-width:28px;min-height:28px;display:inline-flex;align-items:center;justify-content:center}
