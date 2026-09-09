@@ -140,6 +140,20 @@ describe('a escada das camadas', () => {
 
   /* O que fica ACIMA do modal só pode ser o que não esconde nada com que se
      interaja: um aviso que passa e um balão de leitura. */
+  /* O cartão do tutorial tem de ficar ACIMA de uma janela aberta: sem isso,
+     entrar nas definições para preencher o perfil fazia o tutorial sumir, sem
+     forma de continuar. O número dele foi escolhido contra o do modal — e
+     quando o modal subiu, ficou por baixo. Fica preso aos dois. */
+  test('o cartão do tutorial fica acima de uma janela aberta', () => {
+    const guia = readFileSync(new URL('../web/cloud/guia.js', import.meta.url), 'utf8');
+    const m = /#cwGuia\.sobre-janela\{z-index:(\d+)/.exec(guia);
+    assert.ok(m, 'o cartão sobe quando há uma janela aberta');
+    assert.ok(Number(m[1]) > zDe('.modal'),
+      'e sobe acima dela: ' + m[1] + ' contra ' + zDe('.modal'));
+    const base = /#cwGuia\{[^']*z-index:(\d+)/.exec(guia);
+    assert.ok(Number(base[1]) < zDe('.modal'), 'em repouso fica abaixo, como deve');
+  });
+
   test('e só o aviso e o balão ficam acima dele', () => {
     const modal = zDe('.modal');
     assert.ok(zDe('.toast') > modal, 'o aviso vê-se por cima de um modal');

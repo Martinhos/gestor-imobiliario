@@ -263,7 +263,7 @@ function bannerAtualizar(v) {
   if (document.getElementById('cwUpdBar')) return;
   var el = document.createElement('div');
   el.id = 'cwUpdBar';
-  // 59: acima do botão flutuante (58), abaixo dos modais (60) — senão
+  // 59: acima do botão flutuante (58) e abaixo dos modais — senão
   // tapava o rodapé de um modal aberto
   el.className = 'card';
   el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + var(--inset-bottom));z-index:59;' +
