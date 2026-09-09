@@ -70,6 +70,43 @@ const notificacoes = readFileSync(new URL('../web/app/notificacoes.js', import.m
 const vistas = readFileSync(new URL('../web/app/vistas.js', import.meta.url), 'utf8');
 const graficos = readFileSync(new URL('../web/app/graficos.js', import.meta.url), 'utf8');
 
+/* A escada das camadas. O modal esteve abaixo do menu lateral, e em ecrã largo
+   isso cortava-o ao meio — e deixava o menu clicável por baixo de um véu que
+   não o tapava. É invisível no telemóvel, onde a gaveta está fora do ecrã, e
+   por isso passou despercebido: fica guardado. */
+describe('a escada das camadas', () => {
+  // por indexOf e não por expressão: os seletores levam pontos, e escapá-los
+  // dava mais barras invertidas do que regra
+  /* o mesmo seletor aparece em várias regras (a do fundo, a da media query, a
+     do movimento): procura-se a que declara mesmo o z-index, e só dentro do
+     bloco dela — não na seguinte */
+  const zDe = (sel) => {
+    let i = -1;
+    while ((i = cssLimpo.indexOf(sel + '{', i + 1)) > -1) {
+      const m = /z-index:(\d+)/.exec(cssLimpo.slice(i, cssLimpo.indexOf('}', i)));
+      if (m) return Number(m[1]);
+    }
+    assert.fail(sel + ' não declara z-index em regra nenhuma');
+    return 0;
+  };
+
+  test('um modal está acima de toda a navegação', () => {
+    const modal = zDe('.modal');
+    assert.ok(modal > zDe('aside'), 'acima do menu lateral');
+    assert.ok(modal > zDe('.scrim'), 'e do véu da gaveta');
+    assert.ok(modal > zDe('.tabbar'), 'e da barra de baixo');
+    assert.ok(modal > zDe('.fab'), 'e do botão flutuante');
+  });
+
+  /* O que fica ACIMA do modal só pode ser o que não esconde nada com que se
+     interaja: um aviso que passa e um balão de leitura. */
+  test('e só o aviso e o balão ficam acima dele', () => {
+    const modal = zDe('.modal');
+    assert.ok(zDe('.toast') > modal, 'o aviso vê-se por cima de um modal');
+    assert.ok(zDe('.tip') > modal, 'e o balão também');
+  });
+});
+
 describe('movimento', () => {
   /* A folha tinha oito declarações de movimento, cada uma com a sua duração
      escrita à mão e nenhuma com curva. Os tokens são o que impede a nona de
