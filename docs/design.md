@@ -1006,9 +1006,32 @@ que já não existe, e corrige-se um segundo depois. Um número errado durante
 um segundo é pior do que nenhum, pela mesma razão que o selo de sincronização
 tem três estados: o silêncio era ambíguo.
 
-A marca já existia (`CW._pulled`, «já falámos com o servidor»), e o crachá
-passa a esperar por ela (notificacoes.js:notifSino). Numa app sem nuvem não há
-nada por que esperar, e aparece logo.
+A primeira tentativa fez o crachá esperar pelo `CW._pulled` («já falámos com o
+servidor»), e não chegou: **a raiz não era o sino**. Está em arranque.js, antes
+de haver servidor nenhum. A app corre o `syncAllContractRecs` sobre o que está
+guardado no aparelho e decide dali o que falta confirmar; se essa renda já foi
+confirmada noutro lado, o aparelho ainda não sabe. Nasce um «por confirmar» que
+não existe — e **três sítios** o afirmavam: o crachá do sino, o cartão dos
+movimentos por confirmar (planeados.js:pendingCard) e o aviso dos 600 ms do
+arranque. Um segundo depois o estado chega, o `render` refaz tudo, e as três
+coisas desaparecem à frente de quem estava a olhar.
+
+O trabalho do arranque fica: é preciso, e o pull corrige-o. O que passa a
+esperar é o que a app **afirma**, pela mesma regra nos três sítios
+(auxiliares.js:sabemosOEstado). O aviso do arranque, além de esperar, só conta
+as rendas nessa altura — contá-las antes era guardar o número errado.
+
+**E a espera tem de acabar.** Medir «o servidor já falou» era o erro seguinte:
+sem rede isso nunca acontece, e o sino ficava calado *para sempre* num aparelho
+offline — trocar um erro de um segundo por um silêncio permanente é mau
+negócio. Acaba em três alturas (nucleo.js:fimDaEspera): o servidor falou, o
+pedido falhou, ou já passaram seis segundos e a rede ficou pendurada. Nas duas
+últimas o que está no aparelho é tudo o que há, e diz-se.
+
+O `CW._pulled` fica como está, e distinto: a página dos cargos precisa dele
+para não confundir «não tens colaboradores» com «ainda não sabemos», e aí a
+resposta certa é dizer que se está à espera — coisa que um crachá não sabe
+fazer. Numa app sem nuvem, ou sem sessão iniciada, não há espera nenhuma.
 
 **A variação do ano anterior chegava tarde.** Estava à espera de tempo morto —
 `requestIdleCallback` com 400 ms de tecto — e num arranque cheio o tempo morto

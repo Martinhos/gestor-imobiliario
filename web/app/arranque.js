@@ -127,6 +127,15 @@ document.addEventListener('focusout',()=>{
 });
 syncAllContractRecs();syncAllLoanRecs();save();scheduleReminders();
 fitInsets();applyTheme();buildNav();render();cleanFiles();migrateInline();
-(function(){const n=recLate().length,p=recActive().length;if(n)setTimeout(()=>toast(n===1?'Atenção: há 1 movimento em atraso por confirmar.':'Atenção: há '+n+' movimentos em atraso por confirmar.'),600);
-  else if(p)setTimeout(()=>toast(p===1?'Há 1 movimento por confirmar.':'Há '+p+' movimentos por confirmar.'),600)})();
+/* O aviso do arranque espera por saber, e conta as rendas só nessa altura:
+   antes do primeiro estado do servidor, anunciava movimentos por confirmar
+   que já tinham sido confirmados noutro aparelho. Se ao fim de dois segundos
+   ainda não houver estado, cala-se — mais vale não avisar do que avisar mal. */
+(function(){
+  const diz=()=>{const n=recLate().length,p=recActive().length;
+    if(n)toast(n===1?'Atenção: há 1 movimento em atraso por confirmar.':'Atenção: há '+n+' movimentos em atraso por confirmar.');
+    else if(p)toast(p===1?'Há 1 movimento por confirmar.':'Há '+p+' movimentos por confirmar.')};
+  setTimeout(()=>{if(sabemosOEstado())return diz();
+    setTimeout(()=>{if(sabemosOEstado())diz()},1400)},600);
+})();
 try{window.addEventListener('resize',fitInsets)}catch(e){}

@@ -608,6 +608,25 @@ function rebuildDb(st) {
   return dropUnsafe(d);
 }
 
+/* Acabou a espera pelo primeiro estado do servidor.
+
+   Enquanto ela dura, a app não afirma nada que o servidor possa desmentir a
+   seguir: sem isto, o sino contava rendas já confirmadas noutro aparelho e o
+   cartão dos «por confirmar» anunciava-as, tudo a desaparecer um segundo
+   depois (auxiliares.js:sabemosOEstado). Mas a espera tem de ACABAR, e não só
+   quando o servidor responde: sem rede, o que está no aparelho é tudo o que
+   há, e calar o sino para sempre era trocar um erro de um segundo por um
+   silêncio permanente.
+
+   Distinto do CW._pulled de propósito: esse continua a dizer «o servidor
+   falou», que é o que a página dos cargos precisa de saber para não confundir
+   «não tens colaboradores» com «ainda não sabemos».
+   Devolve: nada — levanta a espera e repinta, uma vez só. */
+function fimDaEspera() {
+  if (CW._esperaFim) return;
+  CW._esperaFim = 1;
+  try { buildNav(); render(); } catch (e) {}
+}
 /* Adota o estado do servidor: substitui o db local, refaz o retrato (o que o
    servidor não tem fica de fora, para o próximo push o enviar; o que só ele
    tem fica marcado para apagar), grava tudo no aparelho e redesenha a app.
@@ -615,6 +634,7 @@ function rebuildDb(st) {
    Devolve: nada — substitui db e snap, grava no aparelho e redesenha. */
 function applyState(st) {
   CW._pulled = 1;   // já falámos com o servidor: o que estiver vazio está mesmo vazio
+  CW._esperaFim = 1;   // e por isso a app já pode afirmar o que sabe
   // os campos novos do estado (cargos, colaboradores, convites, ligação,
   // pedidos, pessoas) ficam sempre com forma, venham ou não do servidor
   ['roles', 'collaborators', 'invites', 'people', 'connections'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = []; });
@@ -663,7 +683,7 @@ function pullNow(force) {
   return api('GET', '/api/state').then(function (st) {
     lastPull = Date.now();
     applyState(st);
-  }).catch(function () { setSyncBadge('off'); });
+  }).catch(function () { setSyncBadge('off'); fimDaEspera(); });
 }
 
 // Um ciclo: envia o que houver e, se a última leitura já passou PULL_MS e
@@ -699,7 +719,10 @@ function startSync() {
       lastPull = Date.now();
       applyState(st);
     }
-  }).catch(function () { setSyncBadge('off'); });
+  }).catch(function () { setSyncBadge('off'); fimDaEspera(); });
+  /* e se o pedido nem falhar nem responder — uma rede que fica pendurada —, a
+     espera acaba na mesma: o que está no aparelho é o que há */
+  setTimeout(fimDaEspera, 6000);
   setInterval(syncCycle, 30000);
   window.addEventListener('online', syncCycle);
   document.addEventListener('visibilitychange', function () {

@@ -692,6 +692,11 @@ let pendAll=false;
    Devolve: o HTML do cartão (texto), ou '' quando não há nada por confirmar. */
 function pendingCard(all){
   pendAll=!!all;   // para o colapso se redesenhar com a mesma lista
+  /* Nada por confirmar enquanto não se sabe (auxiliares.js:sabemosOEstado):
+     antes do primeiro estado do servidor, este cartão anunciava rendas já
+     confirmadas noutro aparelho — apareciam e desapareciam um segundo
+     depois. */
+  if(!sabemosOEstado())return '';
   const pend=all?recPending():recActive();
   if(!pend.length)return '';
   const row=(r)=>{const late=recIsLate(r),semCred=recSemCredito(r),pago=!semCred&&recCreditoPago(r);return `<div class="card tap pend ${late?'late':''}" data-fk="rec:${esc(r.id)}" style="padding:11px 13px" data-toca="camada" onclick="confirmRec('${r.id}')">

@@ -32,6 +32,24 @@ const fmtIBAN=v=>{const t=String(v||'').replace(/\s+/g,'').toUpperCase();
    escrever «//» nem «NaN» no meio de uma frase.
    Recebe: iso — a data em AAAA-MM-DD (aguenta vazio, nulo e lixo).
    Devolve: a data em dd/mm/aaaa, ou '' se não for uma data. */
+/* Já se pode afirmar o que o aparelho sabe?
+
+   Ao arrancar, a app trabalha com o que está guardado cá: corre o
+   syncAllContractRecs, decide o que está por confirmar, e pinta. Se uma
+   dessas rendas já foi confirmada noutro aparelho, isto aqui ainda não sabe —
+   e afirmava-o na mesma: um «por confirmar» que não existe, um número no
+   sino, um aviso. Um segundo depois o estado chega e as três coisas
+   desaparecem.
+
+   O trabalho do arranque fica: é preciso, e o pull corrige-o. O que espera é
+   o que a app AFIRMA — e espera pouco. A espera acaba em três alturas: o
+   servidor falou (CW._pulled), o pedido falhou, ou já demorou de mais
+   (nucleo.js:fimDaEspera). As duas últimas contam: sem rede, o que está no
+   aparelho é tudo o que há, e trocar um erro de um segundo por um silêncio
+   permanente era pior negócio. Sem nuvem, ou sem sessão, não há espera
+   nenhuma.
+   Devolve: true quando o que se sabe já se pode dizer em voz alta. */
+const sabemosOEstado=()=>!(window.CW&&CW.user)||!!CW._esperaFim;
 const dPT=iso=>{const t=String(iso||'').slice(0,10);
   return /^\d{4}-\d{2}-\d{2}$/.test(t)?t.slice(8,10)+'/'+t.slice(5,7)+'/'+t.slice(0,4):''};
 const fmtNIF=v=>{const t=String(v||'').replace(/\D/g,'');
