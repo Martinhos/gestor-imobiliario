@@ -27,6 +27,36 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 32,
+    data: '2026-09-09',
+    titulo: 'Uma correção de arranque, e os documentos com nome',
+    seccoes: [
+      {
+        titulo: 'A app voltou a abrir',
+        afeta: ['app'],
+        itens: [
+          'Houve arranques em que a app ficava num ecrã em branco, sem chegar a abrir. Acontecia quando uma atualização apanhava a app a meio de carregar: metade dos ficheiros vinha da versão nova e metade da anterior, e as duas metades não se entendem.',
+          'Deixou de poder acontecer: uma atualização só entra quando está inteira. E se alguma vez o arranque falhar por outra razão, a app limpa o que tem guardado e recarrega sozinha, em vez de ficar em branco.',
+        ],
+      },
+      {
+        titulo: 'Os documentos dizem quem opera o serviço',
+        afeta: ['conta'],
+        itens: [
+          'Os Termos e Condições e a Política de Privacidade passam a identificar quem trata os teus dados e como falar com essa pessoa — é o que a lei pede, e é o que te permite exercer os direitos que os próprios documentos prometem. Por isso a app pede a aceitação outra vez.',
+          'E deixaram de viver só dentro da app: estão em rendorium.com/termos e rendorium.com/privacidade, para se poderem ler antes de criar conta.',
+        ],
+      },
+      {
+        titulo: 'Não há planos',
+        afeta: ['app'],
+        itens: [
+          'A app deixou de ter escalões. Não há limites ao número de imóveis, contratos ou movimentos que podes criar, não há subscrições e não há cartão para pôr — e os Termos deixaram de prometer limites que não existem.',
+        ],
+      },
+    ],
+  },
+  {
     v: 31,
     data: '2026-09-09',
     titulo: 'Colaboradores com cargos, e uma ligação em vez do id',
