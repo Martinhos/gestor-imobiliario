@@ -1004,10 +1004,9 @@ tudo escrito e suspenso pelo modo de demonstração.
 A intenção mudou: é um projeto pessoal, e a utilização é gratuita sem escalões
 nem limites. Saiu tudo.
 
-**A remoção espalhou-se por quinze ficheiros**, e a ordem importava: os
-`import` de `planos.js` em `lib/acesso.js`, `rotas/casas.js` e `rotas/sync.js`
-são estáticos, portanto apagar o módulo primeiro rebentava o arranque do
-worker. Primeiro o back office, depois os chamadores e o cliente, e só no fim o
+**A remoção espalhou-se por quinze ficheiros**, e a ordem importava: o módulo
+dos planos era importado estaticamente por `lib/acesso.js`, `rotas/casas.js` e
+`rotas/sync.js`, portanto apagá-lo primeiro rebentava o arranque do worker. Primeiro o back office, depois os chamadores e o cliente, e só no fim o
 ficheiro.
 
 Três coisas que valem a regra, e que um levantamento cuidadoso apanhou antes de
