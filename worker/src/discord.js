@@ -373,7 +373,7 @@ async function fichaDe(env, userId) {
   if (!userId) return null;
   try {
     const u = await env.DB.prepare(
-      `SELECT id, name, email, plan, created_at, deleted_at, terms_version FROM users WHERE id = ?`
+      `SELECT id, name, email, created_at, deleted_at, terms_version FROM users WHERE id = ?`
     ).bind(userId).first();
     if (!u) return { desconhecido: true };
     const q = async (sql) => ((await env.DB.prepare(sql).bind(userId).first()) || {}).n || 0;
@@ -398,11 +398,10 @@ function campoDaFicha(f) {
   if (f.desconhecido) return { name: 'Quem escreveu', value: 'conta já não existe', inline: false };
   const u = f.u;
   const dias = Math.max(0, Math.round((Date.now() - u.created_at) / 86400000));
-  const PLANOS = { free: 'gratuito', plus: 'Plus', pro: 'Pro' };
   const linhas = [
     '**' + (u.name || 'sem nome') + '** · `' + u.id + '`',
     u.email,
-    'Plano ' + (PLANOS[u.plan] || u.plan) + ' · na app há ' + (dias < 1 ? 'menos de um dia' : dias + ' dias'),
+    'Na app há ' + (dias < 1 ? 'menos de um dia' : dias + ' dias'),
     f.casas + ' casas · ' + f.registos + ' registos',
   ];
   // o que faz a diferença ao responder: já escreveu antes? tem apanhado erros?

@@ -994,6 +994,115 @@ que sobe para o servidor. O que já está escrito nas fichas antigas fica como
 estava; só o que se escreve de agora em diante leva a forma nova. É o preço
 de escrever a data dentro de uma frase em vez de a guardar num campo.
 
+## Um carregamento não pode misturar versões
+
+A v31 chegou a produção e a app **não arrancava**: `ReferenceError` em cadeia —
+`LS_SESSAO`, `CW`, `ic`, `go`, `idbPut` — e um ecrã em branco.
+
+A prova de que era mistura de versões está numa linha só. O
+`LS_SESSAO is not defined` em `cloud/nucleo.js:4` só é possível com o
+`nucleo.js` da **v31** (a única versão com `var LS_USER = LS_SESSAO`) e o
+`dados.js` da **v30** (a única sem a constante) — no mesmo carregamento.
+
+Duas causas, ambas no service worker:
+
+**O `skipWaiting()`.** O worker novo assumia o controlo a meio do
+carregamento: os primeiros `<script>` vinham do worker antigo, servidos da
+cache da versão anterior; os seguintes do novo. Como os endereços dos
+ficheiros não levam versão no nome, nada detetava a troca. É o motivo pelo
+qual não se chama `skipWaiting()` sem ficheiros versionados no endereço.
+
+**O `caches.match(pedido)` sem `cacheName`.** Procura em *todas* as caches. Um
+`fetch` que falhasse era respondido com o ficheiro da versão anterior, em
+silêncio, enquanto os irmãos vinham da rede já com a nova.
+
+O worker passa a servir tudo da **mesma cache**, cheia de uma vez no
+`install`, e o worker novo **espera**. Quem manda na altura de trocar é a app,
+que já tinha esse caminho: o `verificarVersao` lê o `/versao.json`, limpa as
+caches e recarrega uma vez, à vista.
+
+### E quem já estava partido não se curava sozinho
+
+Esta é a metade que importa mais. Um arranque que falha assim é um ecrã em
+branco — e o código que sabe atualizar a app é precisamente o que não chegou a
+carregar. Sem mais nada, essas pessoas ficavam presas até fecharem tudo.
+
+Por isso o `index.html` ganhou uma rede de segurança **inline e antes de todos
+os `<script>`**, que não depende de ficheiro nenhum: um `<script>` que não
+carrega, ou um símbolo que devia existir e não existe, limpam o que está
+guardado, largam o service worker e recarregam. Uma vez por sessão — uma
+recarga que não resolve não se repete.
+
+Testado como se testa uma cura: envenenou-se a cache com um `dados.js` sem a
+constante, reproduzindo a avaria exata de produção. A rede apanhou-a, limpou,
+recarregou, e a app arrancou.
+
+Uma consequência a registar: com cache primeiro, um servidor local serviria
+ficheiros velhos até a versão mudar. O service worker deixa de se registar em
+`localhost` — localhost não é uma publicação. No dev fica, que é onde as
+travessias entre versões a sério se exercitam antes de irem para produção.
+
+## Ver a montra antes de a publicar
+
+A página de entrada só era servida no domínio raiz, portanto a única maneira de
+a ver era **publicá-la**: o `dev.rendorium.com` servia a app, e o servidor local
+também. Quem lhe mexesse escrevia às cegas.
+
+Passa a haver **`/montra`** em qualquer endereço. Em produção é um atalho
+inofensivo para o que já está em «/»; fora dela é a única porta, porque a raiz
+do dev tem de continuar a ser a app — é para isso que esse ambiente serve. Os
+documentos legais respondem em todo o lado pela mesma razão, e não colidem com
+nada: a app é uma página só, sem rotas.
+
+Fora do domínio raiz as duas páginas levam `noindex` e não declaram `canonical`
+nem `og`. Duas cópias da mesma página indexadas são uma a competir com a outra,
+e um `og` que aponta para produção a partir do dev mente a quem partilhar a
+ligação. Nos documentos, o «início» aponta para `/montra` em vez de «/» — ali a
+raiz é a app.
+
+Chegou a pôr-se a hipótese de um comando do Discord para isto. Não é a forma
+certa: o problema não era faltar um atalho, era não haver **para onde apontar**.
+Os comandos do bot existem para o que precisa de identidade ou de estado — uma
+sessão de teste com um token por pessoa; uma página pública é um endereço, e um
+endereço que nunca muda é um favorito.
+
+## Não há planos
+
+Havia três escalões — `free` (3 imóveis, sem contratos nem planeados), `plus`
+(10) e `pro` (sem limite) —, um interruptor no back office que marcava a data
+em que passavam a valer, e um aviso de 30 dias que os Termos prometiam. Estava
+tudo escrito e suspenso pelo modo de demonstração.
+
+A intenção mudou: é um projeto pessoal, e a utilização é gratuita sem escalões
+nem limites. Saiu tudo.
+
+**A remoção espalhou-se por quinze ficheiros**, e a ordem importava: o módulo
+dos planos era importado estaticamente por `lib/acesso.js`, `rotas/casas.js` e
+`rotas/sync.js`, portanto apagá-lo primeiro rebentava o arranque do worker. Primeiro o back office, depois os chamadores e o cliente, e só no fim o
+ficheiro.
+
+Três coisas que valem a regra, e que um levantamento cuidadoso apanhou antes de
+partirem alguma coisa:
+
+**A coluna `users.plan` não se apaga.** A D1 não tem `DROP COLUMN` reversível, e
+o `restaurar.js` constrói o `INSERT` com as colunas do despejo — uma coluna a
+menos partia a reposição de qualquer cópia tirada antes disto. Deixa de se ler,
+que custa zero e mantém a porta aberta.
+
+**O 403 fica.** O ramo do 402 vivia colado ao do 403 na mesma cadeia de
+`else-if`, e o do 403 é o que diz a quem escreve num imóvel de colaboração sem
+permissão que o registo não subiu. Levá-lo à frente devolvia o bug que o
+comentário do `recusaRegisto` diz ter sido corrigido.
+
+**O `lib/limites.js` não é dos planos.** Estava arrumado no mesmo capítulo da
+documentação, mas é o travão contra força bruta. O capítulo passou a chamar-se
+o que é.
+
+E os Termos deixaram de prometer o que já não existe: a §3 perdeu a suspensão
+dos limites e o aviso dos 30 dias, e a §6 passou de «Utilização gratuita e
+limites» a «Utilização gratuita», com os três marcadores substituídos pela
+única frase que continua verdadeira.
+
 ## A fita arranca do sítio
 
 Corrigido o salto, ficava o arranque: a travessia entrava a andar, sem

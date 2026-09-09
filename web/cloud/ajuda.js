@@ -230,13 +230,16 @@ function vDoc(html) {
     '<button class="btn" onclick="goSet(\'legal\')">' + ic('chev', 15) + ' Voltar</button></div>';
 }
 
-var LEGAL_UPDATED = '2 de setembro de 2026';
+/* A data sai dos próprios documentos (legal.js:VERSION), e não escrita à mão
+   ao lado deles: estavam desencontradas — aqui dizia 2 de setembro e os
+   documentos diziam 4. E lê-se como as outras datas da app, em dd/mm/aaaa. */
+var LEGAL_UPDATED = dPT(L.version) || L.version;
 
 // O aviso prático não repete os documentos: os Termos e a Política dizem-no
 // com valor legal, aqui fica só o essencial.
 // Devolve: o HTML da página legal das Definições, como string.
 function vLegal() {
-  return navRow('Termos e Condições', 'Em vigor desde ' + L.version, 'contract', 'termos') +
+  return navRow('Termos e Condições', 'Em vigor desde ' + LEGAL_UPDATED, 'contract', 'termos') +
     '<div style="height:10px"></div>' +
     navRow('Política de Privacidade', 'Dados, direitos e subcontratação', 'lock', 'privacidade') +
     '<div style="height:16px"></div>' +
@@ -408,8 +411,7 @@ function showTermsGate() {
     '<div class="small">Precisamos da tua aceitação para continuar</div></div></div>' +
     '<div class="hint" style="font-size:14px;line-height:1.6;margin-top:14px">' +
     '<p style="margin:0 0 10px">Os <b>Termos e Condições</b> e a <b>Política de Privacidade</b> foram ' +
-    '<b>atualizados</b> desde a versão que aceitaste. Vale a pena ler o que mudou — os planos e a fase ' +
-    'experimental estão descritos lá.</p>' +
+    '<b>atualizados</b> desde a versão que aceitaste. Vale a pena ler o que mudou.</p>' +
     '<p style="margin:0">Sem a tua aceitação não podemos continuar a guardar os teus dados. Se recusares, ' +
     '<b>a conta e tudo o que lá está serão apagados</b>.</p></div>' +
     '<div class="toolbar" style="margin-top:14px;flex-direction:column;gap:8px">' +

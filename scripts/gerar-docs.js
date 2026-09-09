@@ -68,14 +68,16 @@ const MAPA = [
       'worker/src/docs-vista.js'] },
   { id: 'teste', titulo: 'Ambiente de teste (/test)',
     ficheiros: ['worker/src/teste.js'] },
-  { id: 'planos', titulo: 'Limites e fim da demonstração',
-    ficheiros: ['worker/src/lib/planos.js', 'worker/src/lib/limites.js'] },
+  { id: 'limites', titulo: 'Travões contra abuso',
+    ficheiros: ['worker/src/lib/limites.js'] },
   { id: 'anexos', titulo: 'Anexos e ficheiros',
     ficheiros: ['worker/src/files.js', 'worker/src/rotas/anexos.js', 'web/cloud/anexos.js', 'web/app/anexos.js'] },
   { id: 'infra', titulo: 'Infraestrutura',
     ficheiros: ['worker/src/index.js', 'worker/src/api.js', 'worker/src/landing.js',
+      'worker/src/legal-vista.js',
       'worker/src/salvaguarda.js', 'worker/src/lib/http.js', 'worker/src/lib/auditoria.js',
-      'web/sw.js', 'scripts/gerar-docs.js', 'scripts/make-icons.js', 'scripts/restaurar.js', 'scripts/versao.js'] },
+      'web/sw.js', 'scripts/gerar-docs.js', 'scripts/make-icons.js', 'scripts/restaurar.js', 'scripts/versao.js',
+      'scripts/capturas.js'] },
 ];
 
 /* ------------------------- extração ------------------------------------- */

@@ -1,7 +1,6 @@
 // Casas, quotas, registos de cada casa e dados globais do utilizador.
 import { linkFiles, regraDosAnexos } from '../files.js';
-import { modoDemo, podeCriar } from '../lib/planos.js';
-import { acessoACasa, planoDosDonos, regraDoRegisto, planeadoAGravar, apagarCasa } from '../lib/acesso.js';
+import { acessoACasa, regraDoRegisto, planeadoAGravar, apagarCasa } from '../lib/acesso.js';
 import { fundirCasa, fraseRecusa } from '../lib/permissoes.js';
 
 /* Rotas das casas e do que vive dentro delas: criar/atualizar e apagar uma
@@ -49,15 +48,6 @@ export async function rotasCasas(c) {
         .bind(JSON.stringify(preserveOwnership('', b.data)), now(), houseId)
         .run();
     } else {
-      // uma casa nova conta para o plano, como no /api/sync: só a criação é
-      // travada; editar e reativar o que existe passa sempre (fora de demo)
-      if (!(await modoDemo(env))) {
-        const n = ((await env.DB.prepare(
-          'SELECT COUNT(*) AS n FROM houses WHERE owner_id = ? AND deleted = 0'
-        ).bind(me.id).first()) || {}).n || 0;
-        const nao = podeCriar(me.plan, 'imovel', n);
-        if (nao) return err(402, nao);
-      }
       await env.DB.prepare(
         'INSERT INTO houses (id, owner_id, data, updated_at, deleted) VALUES (?, ?, ?, ?, 0)'
       )
@@ -153,9 +143,8 @@ export async function rotasCasas(c) {
     if (badId(houseId) || badId(kind) || badId(recordId)) return err(400, 'Identificador inválido.');
     const access = await acessoACasa(env, me.id, houseId);
     if (!access.ok) return err(403, 'Sem acesso a esta casa.');
-    // a mesma regra do /api/sync (kind com cargo, .add, só o que criou, plano do dono)
-    const veredicto = await regraDoRegisto(env, me, access, houseId, kind, recordId, method === 'PUT',
-      await modoDemo(env), planoDosDonos(env, me));
+    // a mesma regra do /api/sync (kind com cargo, .add, só o que criou)
+    const veredicto = await regraDoRegisto(env, me, access, houseId, kind, recordId, method === 'PUT');
     if (veredicto && veredicto.gone) return json({ ok: true, gone: true });
     if (veredicto) return err(veredicto.status, veredicto.error);
     if (method === 'PUT') {

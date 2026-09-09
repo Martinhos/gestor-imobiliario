@@ -833,6 +833,60 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
 <button class="totop" id="toTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Topo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="tip" id="tip"></div>
+<!-- Rede de segurança do arranque.
+
+     Em produção a v31 apareceu com ReferenceError em cadeia — LS_SESSAO, CW,
+     ic, go, idbPut — e a app não arrancava. A causa era o service worker a
+     misturar versões a meio do carregamento (web/sw.js, corrigido), mas a
+     lição fica: um arranque que falha assim é UM ECRÃ EM BRANCO, e o código
+     que sabe atualizar a app (cloud/novidades.js:verificarVersao) é
+     precisamente o que não chegou a carregar. Ninguém se cura sozinho.
+
+     Por isso isto vive aqui, inline e antes de tudo, sem depender de ficheiro
+     nenhum: se um script do arranque falhar a carregar ou rebentar com um
+     símbolo que devia existir, limpa-se o que está guardado, larga-se o
+     service worker e recarrega-se. Uma vez por sessão — uma recarga que não
+     resolve não se repete, senão é um ciclo. -->
+<script>
+(function () {
+  var CHAVE = 'gi_arranque_curado';
+  var aCurar = false;
+  var PARTIU = /is not defined|Cannot (?:set|read) propert(?:y|ies) of undefined/;
+
+  function curar(porque) {
+    if (aCurar || document.readyState === 'complete') return;
+    try { if (sessionStorage.getItem(CHAVE)) return; } catch (e) {}
+    aCurar = true;
+    try { sessionStorage.setItem(CHAVE, porque.slice(0, 120)); } catch (e) {}
+    var passos = [];
+    try { if (window.caches && caches.keys) passos.push(caches.keys().then(function (ks) {
+      return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+    })); } catch (e) {}
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        passos.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+          return Promise.all(rs.map(function (r) { return r.unregister(); }));
+        }));
+      }
+    } catch (e) {}
+    var recarrega = function () { try { location.reload(); } catch (e) {} };
+    Promise.all(passos.map(function (p) { return p.catch(function () {}); })).then(recarrega, recarrega);
+    setTimeout(recarrega, 4000);   // se alguma das promessas ficar pendurada
+  }
+
+  // um <script> que não chega a carregar: o erro é do elemento e não sobe,
+  // por isso ouve-se na descida
+  window.addEventListener('error', function (e) {
+    var alvo = e && e.target;
+    if (alvo && alvo !== window && alvo.tagName === 'SCRIPT') curar('script: ' + (alvo.src || ''));
+  }, true);
+
+  // e um que carrega mas rebenta por lhe faltar o que outro ficheiro devia ter
+  window.addEventListener('error', function (e) {
+    if (e && e.message && PARTIU.test(String(e.message))) curar(String(e.message));
+  });
+})();
+</script>
 <script src="app/dados.js"></script>
 <script src="app/anexos.js"></script>
 <script src="app/auxiliares.js"></script>

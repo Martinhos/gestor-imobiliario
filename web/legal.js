@@ -2,7 +2,9 @@
    Termos e Condições e Política de Privacidade.
    Ficam num ficheiro à parte por serem longos e mudarem por outras razões
    que não o código. Ao alterá-los, muda também TERMS_VERSION no worker
-   (worker/src/api.js) para a app voltar a pedir a aceitação a toda a gente.
+   (worker/src/lib/http.js — o api.js só a reexporta) para a app voltar a pedir
+   a aceitação a toda a gente. As duas têm de ficar iguais; há um teste que o
+   verifica (testes/legal.test.js).
 
    ATENÇÃO: preenche a identificação de quem opera o serviço.
 
@@ -20,11 +22,18 @@
 window.LEGAL = (function () {
   'use strict';
 
-  var VERSION = '2026-09-04';
-  var OPERADOR = '[O TEU NOME OU O DA EMPRESA]';
+  var VERSION = '2026-09-09';
+  var OPERADOR = 'Martinho Fé Santos';
   var MORADA = '';                       // apartado, escritório virtual ou sede
   var NIF = '';                          // obrigatório quando houver cobrança
-  var EMAIL = '[EMAIL DE CONTACTO]';
+  var EMAIL = 'general@rendorium.com';
+
+  /* A VERSION é uma CHAVE: é ela que o servidor compara com a TERMS_VERSION
+     para saber se alguém já aceitou esta versão, e por isso fica em ISO. O que
+     se ESCREVE nos documentos é outra coisa — lê-se como as outras datas da
+     app, em dd/mm/aaaa (a regra vem de auxiliares.js:dPT, que aqui não se pode
+     chamar: este ficheiro é lido pelo service worker, sem a app carregada). */
+  var DATA = VERSION.slice(8, 10) + '/' + VERSION.slice(5, 7) + '/' + VERSION.slice(0, 4);
 
   // monta a identificação com o que estiver preenchido, sem linhas vazias
   var ident = function () {
@@ -43,7 +52,7 @@ window.LEGAL = (function () {
   /* ---------------------- TERMOS E CONDIÇÕES ---------------------- */
 
   var TERMOS =
-    p('<b>Em vigor desde ' + VERSION + '.</b> Estes termos regulam a utilização do Rendorium ' +
+    p('<b>Em vigor desde ' + DATA + '.</b> Estes termos regulam a utilização do Rendorium ' +
       '(“a aplicação”), um serviço acessível em app.rendorium.com.') +
 
     h('1. Quem opera o serviço') +
@@ -74,9 +83,7 @@ window.LEGAL = (function () {
 
     h('3. Fase experimental (demonstração)') +
     p('A aplicação encontra-se em <b>fase experimental</b>: é uma versão de demonstração, disponibilizada ' +
-      'tal como está, e evolui continuamente — funcionalidades podem mudar ou ser descontinuadas. ' +
-      'Enquanto esta fase durar, os limites de utilização descritos na secção 6 estão suspensos. O fim da ' +
-      'fase experimental é anunciado na própria aplicação com pelo menos 30 dias de antecedência.') +
+      'tal como está, e evolui continuamente — funcionalidades podem mudar ou ser descontinuadas.') +
     p('Fazemos cópias de segurança diárias, mas deves manter as tuas próprias cópias dos dados que te ' +
       'importam (Definições → Importar e cópias).') +
 
@@ -100,17 +107,10 @@ window.LEGAL = (function () {
     p('A partilha é uma decisão tua e da tua responsabilidade, incluindo quanto aos dados de terceiros ' +
       'que essa casa contenha.') +
 
-    h('6. Utilização gratuita e limites') +
+    h('6. Utilização gratuita') +
     p('O Rendorium é um <b>projeto pessoal</b> e a utilização é <b>gratuita</b>: não há subscrições, ' +
-      'pagamentos nem publicidade.') +
-    ul([
-      'Para manter o serviço sustentável, podem existir <b>limites técnicos de utilização</b> — por ' +
-      'exemplo, ao número de imóveis por conta.',
-      'Os limites aplicam-se à <b>criação de novos registos</b>: nada do que já existe é apagado ou ' +
-      'fica inacessível por causa deles.',
-      'A entrada em vigor de limites novos é anunciada <b>na própria aplicação com pelo menos 30 dias ' +
-      'de antecedência</b>.',
-    ]) +
+      'pagamentos, escalões nem publicidade, e não há limites ao número de imóveis, contratos ou ' +
+      'movimentos que podes criar.') +
 
     h('7. Utilização aceitável') +
     p('Não podes usar a aplicação para atividades ilegais, para guardar conteúdos que não tens direito de ' +
@@ -154,7 +154,7 @@ window.LEGAL = (function () {
   /* ------------------- POLÍTICA DE PRIVACIDADE ------------------- */
 
   var PRIVACIDADE =
-    p('<b>Em vigor desde ' + VERSION + '.</b> Esta política explica que dados pessoais tratamos, porquê, ' +
+    p('<b>Em vigor desde ' + DATA + '.</b> Esta política explica que dados pessoais tratamos, porquê, ' +
       'durante quanto tempo e que direitos tens.') +
 
     h('1. Responsável pelo tratamento') +
