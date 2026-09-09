@@ -57,10 +57,10 @@ kpiModal = function (id) {
     (rows.length
       ? '<div class="list" style="gap:7px">' + show.map(function (r) {
           var t = r.t, col = t.kind === 'income' ? 'pos' : (t.kind === 'loan' ? 'amber' : 'neg');
-          return '<div class="card tap" style="padding:10px 12px" onclick="CW.openTx(\'' + t.id + '\')">' +
+          return '<div class="card tap" style="padding:10px 12px" data-toca="camada" onclick="CW.openTx(\'' + t.id + '\')">' +
             '<div class="row-between" style="align-items:center;gap:10px">' +
             '<div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.label) + '</b>' +
-            '<span class="small">' + esc(t.date) + ' · ' + esc((KIND[t.kind] || {}).short || '') +
+            '<span class="small">' + dPT(t.date) + ' · ' + esc((KIND[t.kind] || {}).short || '') +
             (t.category ? ' · ' + esc(t.category) : '') +
             (t.propertyId ? ' · ' + esc(propName(t.propertyId)) : '') + '</span></div>' +
             '<b class="' + col + '" style="flex:0 0 auto">' + euro2(r.v) + '</b></div></div>';
@@ -77,8 +77,8 @@ kpiModal = function (id) {
   var foot = top.el.querySelector('.foot');
   if (foot) {
     foot.innerHTML =
-      '<button class="btn" onclick="CW.backToDash(1)">' + ic('chev', 15) + ' Visão geral</button>' +
-      '<button class="btn primary" onclick="CW.kpiToTx()">' + ic('swap', 15) + ' Ver nos movimentos</button>';
+      '<button class="btn" data-toca="ecra" onclick="CW.backToDash(1)">' + ic('chev', 15) + ' Visão geral</button>' +
+      '<button class="btn primary" data-toca="ecra" onclick="CW.kpiToTx()">' + ic('swap', 15) + ' Ver nos movimentos</button>';
   }
   CW._kpiQ = { field: q.field, pid: q.pid, year: q.year, title: k.title };
 };
@@ -87,7 +87,7 @@ kpiModal = function (id) {
 // Recebe: id — o id (string) do movimento a abrir.
 // Devolve: nada — abre o modal do movimento, se ele ainda existir.
 CW.openTx = function (id) {
-  if ((db.transactions || []).some(function (x) { return x.id === id; })) txModal(id);
+  if ((db.transactions || []).some(function (x) { return x.id === id; })) txView(id);
 };
 
 // salta para os Movimentos já com os filtros do indicador aplicados
@@ -97,12 +97,23 @@ CW.kpiToTx = function () {
   if (!q) return;
   CW._fromKpi = {
     title: q.title, year: q.year,
-    prev: { f: txFilter, p: txProp, c: txCat, s: txSub, pd: txPaid, np: txNoPayer, q: txSearch },
+    /* as datas entram no que se guarda: o salto passou a mexer-lhes, e sem
+       isto voltar a visao geral deixava lá as do salto por cima das que a
+       pessoa tinha posto */
+    prev: { f: txFilter, p: txProp, c: txCat, s: txSub, pd: txPaid, np: txNoPayer, q: txSearch,
+      de: txDe, ate: txAte },
   };
   txFilter = q.field === 'income' ? 'income' : q.field === 'op' ? 'expense' : q.field === 'loan' ? 'loan' : '';
   txProp = q.pid || '';
   txCat = ''; txSub = ''; txPaid = ''; txNoPayer = true;
-  txSearch = String(q.year) + '-';   // o ano vive na data de cada movimento
+  /* O ano diz-se com o filtro de datas, que e o que existe para isso. Estava a
+     ser dito com a PESQUISA — «2026-» — e isso era errado de duas maneiras: o
+     resumo dos filtros mostrava «pesquisa: "2026-"», que nao quer dizer nada a
+     quem le, e a pesquisa varre o texto todo do movimento, por isso um titulo
+     ou uma nota com «2026-» la dentro entrava na lista sem ser desse ano. */
+  txSearch = '';
+  txDe = String(q.year) + '-01-01';
+  txAte = String(q.year) + '-12-31';
   closeAllModals();
   go('transactions');
 };
@@ -115,6 +126,7 @@ CW.backToDash = function (fromModal) {
   if (f && f.prev) {
     txFilter = f.prev.f; txProp = f.prev.p; txCat = f.prev.c; txSub = f.prev.s;
     txPaid = f.prev.pd; txNoPayer = f.prev.np; txSearch = f.prev.q;
+    txDe = f.prev.de || ''; txAte = f.prev.ate || '';
   }
   CW._fromKpi = null;
   if (fromModal) closeAllModals();
@@ -129,7 +141,7 @@ vTransactions = function () {
   if (!f) return h;
   return '<div class="card" style="margin-bottom:12px;padding:11px 13px;display:flex;align-items:center;gap:11px">' +
     '<span class="small" style="flex:1;min-width:0">Movimentos de <b>' + esc(f.title) + '</b> em ' + f.year + ', vindos da visão geral.</span>' +
-    '<button class="btn sm" style="flex:0 0 auto" onclick="CW.backToDash()">' + ic('chev', 14) + ' Visão geral</button></div>' + h;
+    '<button class="btn sm" style="flex:0 0 auto" data-toca="ecra" onclick="CW.backToDash()">' + ic('chev', 14) + ' Visão geral</button></div>' + h;
 };
 
 /* ---------------- recusar um movimento planeado ---------------- */
@@ -174,13 +186,13 @@ function planoQuem(r) {
     var x = anyLoan(tx.loanId);
     if (!x) return '';
     return '<div class="hint">Hipoteca: <b>' + esc(loanName(x.l)) + '</b>' +
-      (x.l.start ? ' · início ' + esc(x.l.start) : '') + ' · ' + euro(x.l.outstanding) + ' em dívida · ' + esc(x.p.name) + '</div>';
+      (x.l.start ? ' · início ' + dPT(x.l.start) : '') + ' · ' + euro(x.l.outstanding) + ' em dívida · ' + esc(x.p.name) + '</div>';
   }
   if (tx.contractId) {
     var c = contract(tx.contractId);
     if (!c) return '';
     return '<div class="hint">Contrato: <b>' + esc(ctName(c)) + '</b> · ' + euro2(c.rent) + '/mês' +
-      (c.start ? ' · início ' + esc(c.start) : '') + (c.propertyId ? ' · ' + esc(propName(c.propertyId)) : '') + '</div>';
+      (c.start ? ' · início ' + dPT(c.start) : '') + (c.propertyId ? ' · ' + esc(propName(c.propertyId)) : '') + '</div>';
   }
   return '';
 }
@@ -204,7 +216,7 @@ CW.fillMissed = function (id) {
     var x0 = anyLoan(r.tx.loanId), fim = lista[n - 1].bal;
     body = '<div class="form">' +
       '<div class="hint">Vais registar <b>' + n + '</b> prestaç' + (n === 1 ? 'ão' : 'ões') + ' de <b>' + esc(r.name) + '</b>, de <b>' +
-      lista[0].date + '</b> a <b>' + lista[n - 1].date + '</b>, com os juros, o selo e o capital do plano da hipoteca.</div>' +
+      dPT(lista[0].date) + '</b> a <b>' + dPT(lista[n - 1].date) + '</b>, com os juros, o selo e o capital do plano da hipoteca.</div>' +
       planoQuem(r) +
       '<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px">' +
       '<b>O capital em dívida desce com cada uma</b>, como se as confirmasses uma a uma' +
@@ -221,7 +233,7 @@ CW.fillMissed = function (id) {
     var per = EVERY_WORD[r.every] || 'período';
     body = '<div class="form">' +
       '<div class="hint">Vais registar <b>' + n + '</b> movimento' + (n === 1 ? '' : 's') +
-      ' de <b>' + esc(r.name) + '</b>, de <b>' + dates[0] + '</b> a <b>' + dates[n - 1] + '</b>, ' +
+      ' de <b>' + esc(r.name) + '</b>, de <b>' + dPT(dates[0]) + '</b> a <b>' + dPT(dates[n - 1]) + '</b>, ' +
       'todos com o valor atual de <b>' + euro2(val0) + '</b> por ' + per + '.</div>' +
       planoQuem(r) +
       '<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px">' +
@@ -232,8 +244,8 @@ CW.fillMissed = function (id) {
       '<div class="stat" style="margin-top:6px"><span>Total a registar</span><b>' + euro2(val0 * n) + '</b></div></div>';
   }
   openModal('Preencher ' + n + ' ' + (n === 1 ? 'período' : 'períodos'), body,
-    '<button class="btn" onclick="CW.fillNext()">Cancelar</button>' +
-    '<button class="btn primary" onclick="CW.doFillMissed(\'' + id + '\')">Registar estimativa</button>');
+    '<button class="btn" data-toca="camada" onclick="CW.fillNext()">Cancelar</button>' +
+    '<button class="btn primary" data-toca="dados" onclick="CW.doFillMissed(\'' + id + '\')">Registar estimativa</button>');
 };
 
 /* Cria de facto os movimentos em falta. Numa hipoteca entrega a lista
@@ -371,7 +383,7 @@ function offerFill() {
 }
 
 var REJECT_BTN = function (id) {
-  return '<button class="btn sm danger" onclick="event.stopPropagation();CW.rejectRec(\'' + id + '\')">Recusar</button>';
+  return '<button class="btn sm danger" data-toca="dados" onclick="event.stopPropagation();CW.rejectRec(\'' + id + '\')">Recusar</button>';
 };
 
 // acrescenta "Recusar" a cada linha do cartão de pendentes (e, com períodos
@@ -384,7 +396,7 @@ pendingCard = function (all) {
     var n = r ? datasEmFalta(r).length : 0;
     // com vários períodos em atraso, confirmar um a um não é opção
     var fill = n >= 2
-      ? '<button class="btn sm" onclick="event.stopPropagation();CW.fillMissed(\'' + id + '\')">' +
+      ? '<button class="btn sm" data-toca="camada" onclick="event.stopPropagation();CW.fillMissed(\'' + id + '\')">' +
         'Preencher ' + n + ' em falta</button>'
       : '';
     return m + REJECT_BTN(id) + fill;
@@ -442,20 +454,35 @@ lpMenu = function (v) {
     menuOption({ icon: 'x', danger: true, label: 'Recusar desta vez',
       sub: 'não cria o movimento e passa à data seguinte', act: function () { CW.rejectRec(a[1]); } });
   } else if (a[0] === 'prop') {
-    menuOption({ icon: 'swap', label: 'Ver movimentos', sub: 'lista filtrada por este imóvel', first: true,
-      act: function () { CW.txOfProp(a[1]); } });
+    // num imóvel onde sou colaborador, só com o cargo a deixar ver movimentos
+    if (cwPode(a[1], 'tx.view')) {
+      menuOption({ icon: 'swap', label: 'Ver movimentos', sub: 'lista filtrada por este imóvel', first: true,
+        act: function () { CW.txOfProp(a[1]); } });
+    }
   } else if (a[0] === 'ct') {
     var c = contract(a[1]);
-    if (c && c.propertyId) {
+    if (c && c.propertyId && cwPode(c.propertyId, 'tx.view')) {
       menuOption({ icon: 'swap', label: 'Ver movimentos', sub: 'lista filtrada pelo imóvel do contrato', first: true,
         act: function () { CW.txOfProp(c.propertyId); } });
     }
   }
 };
 
+// Se posso isto neste imóvel: pode() de web/app/acessos.js quando existe;
+// sem ela, só nos imóveis que não são de colaboração.
+// Recebe: pid — o id do imóvel (vazio conta como meu); perm — a chave da permissão.
+// Devolve: true/false.
+function cwPode(pid, perm) {
+  if (!pid) return true;
+  try { if (typeof pode === 'function') return !!pode(pid, perm); } catch (e) {}
+  var p = (db.properties || []).find(function (x) { return x.id === pid; });
+  return !(p && p._cargo);
+}
+
 /* ------- pendentes dentro de cada imóvel e de cada contrato ------- */
 
-// o HTML da lista "por confirmar" que se pendura no cartão de um imóvel ou contrato
+// o HTML da lista "por confirmar" que se pendura no cartão de um imóvel ou
+// contrato; os botões só onde o cargo deixa confirmar planeados (rec.add)
 // Recebe: list — array de planos recorrentes por confirmar (cada um com id, name, next, tx…).
 // Devolve: o HTML (string) do bloco, com os botões Confirmar/Silenciar/Recusar em cada linha.
 function pendBlock(list) {
@@ -464,15 +491,18 @@ function pendBlock(list) {
     list.length + ' movimento' + (list.length === 1 ? '' : 's') + ' por confirmar</div>' +
     list.map(function (r) {
       var late = recIsLate(r);
+      var botoes = cwPode(r.tx && r.tx.propertyId, 'rec.add')
+        ? '<div class="toolbar" style="margin:8px 0 0">' +
+          '<button class="btn sm primary" data-toca="dados" onclick="event.stopPropagation();quickConfirmRec(\'' + r.id + '\')">' + ic('check', 13) + ' Confirmar</button>' +
+          '<button class="btn sm" data-toca="dados" onclick="event.stopPropagation();skipRec(\'' + r.id + '\')">Silenciar</button>' +
+          REJECT_BTN(r.id) + '</div>'
+        : '';
       return '<div class="card pend ' + (late ? 'late' : '') + '" style="padding:9px 11px;margin-bottom:6px">' +
         '<div class="row-between" style="align-items:center;gap:9px">' +
         '<div style="min-width:0"><b style="display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.name) + '</b>' +
-        '<span class="small">' + r.next + (late ? ' · <b class="neg">em atraso</b>' : ' · por confirmar') + '</span></div>' +
+        '<span class="small">' + dPT(r.next) + (late ? ' · <b class="neg">em atraso</b>' : ' · por confirmar') + '</span></div>' +
         '<b style="flex:0 0 auto">' + (r.tx.amount ? euro2(r.tx.amount) : '') + '</b></div>' +
-        '<div class="toolbar" style="margin:8px 0 0">' +
-        '<button class="btn sm primary" onclick="event.stopPropagation();quickConfirmRec(\'' + r.id + '\')">' + ic('check', 13) + ' Confirmar</button>' +
-        '<button class="btn sm" onclick="event.stopPropagation();skipRec(\'' + r.id + '\')">Silenciar</button>' +
-        REJECT_BTN(r.id) + '</div></div>';
+        botoes + '</div>';
     }).join('') + '</div>';
 }
 
@@ -482,6 +512,11 @@ function pendBlock(list) {
 // Devolve: nada — pendura os blocos diretamente nos cartões do DOM.
 function decoratePending() {
   if (tab !== 'properties' && tab !== 'contracts') return;
+  /* Este é o pior dos três: além de afirmar «1 movimento por confirmar» a
+     partir do que está no aparelho, punha lá o botão de Confirmar. Confirmar
+     um fantasma criava a renda em duplicado — o rendaJaLancada não a via,
+     porque o movimento verdadeiro ainda não tinha chegado do servidor. */
+  if (!sabemosOEstado()) return;
   var pend = recActive();
   if (!pend.length) return;
   var pref = tab === 'properties' ? 'prop:' : 'ct:';
@@ -611,8 +646,8 @@ function editBar() {
   el.className = 'card';
   el.style.cssText = 'margin-bottom:12px;padding:11px 13px;display:flex;align-items:center;gap:11px;flex-wrap:wrap';
   el.innerHTML = '<span class="small" style="flex:1;min-width:140px">Arrasta os cartões para mudar a ordem.</span>' +
-    '<button class="btn sm" onclick="CW.resetDashOrder()">Repor ordem</button>' +
-    '<button class="btn sm primary" onclick="CW.exitEdit()">' + ic('check', 14) + ' Concluir</button>';
+    '<button class="btn sm" data-toca="dados" onclick="CW.resetDashOrder()">Repor ordem</button>' +
+    '<button class="btn sm primary" data-toca="modo" onclick="CW.exitEdit()">' + ic('check', 14) + ' Concluir</button>';
   var grid = v.querySelector('.cw-cont');
   v.insertBefore(el, grid || v.firstChild);
 }

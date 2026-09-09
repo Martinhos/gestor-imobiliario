@@ -33,7 +33,9 @@ function vAjuda() {
   var linha = function (x) {
     var st = TK_STATUS[x.status] || TK_STATUS.criado;
     var d = new Date(x.created_at);
-    var data = d.toISOString().slice(0, 10);
+    /* o dia LOCAL, e nao o de UTC: um pedido das 23h30 de Lisboa aparecia com
+     o dia seguinte */
+    var data = dPT(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
     return '<div class="card" style="padding:12px 13px">' +
       '<div class="row-between" style="align-items:flex-start;gap:10px">' +
       '<div style="min-width:0"><b style="display:block">' + esc(x.subject) + '</b>' +
@@ -585,7 +587,8 @@ CW.delConn = function (id, isPending) {
 CW.sharesModal = function (connId) {
   var c = (CW.state.connections || []).find(function (x) { return x.id === connId; });
   if (!c) return;
-  var myHouses = (db.properties || []).filter(function (p) { return !p._sharedFrom; });
+  // só os imóveis que criei eu: nunca os de colaboração nem os que outro partilhou comigo
+  var myHouses = (db.properties || []).filter(function (p) { return cwMinha(p); });
   var body = myHouses.length
     ? '<div class="form"><div class="hint">Casas que partilhas com ' + esc(c.peer.name || c.peer.id) + '. Ele passa a ver e editar tudo o que pertence a estas casas: contratos, movimentos e pessoas associadas.</div>' +
       '<div class="list" style="gap:8px">' + myHouses.map(function (p) {
@@ -704,7 +707,7 @@ CW.revokeSessions = function () {
 // exige escrever APAGAR e a palavra-passe (vazia para quem entra com Google).
 // Devolve: nada — abre o modal de confirmação.
 CW.deleteAccount = function () {
-  var mine = (db.properties || []).filter(function (p) { return !p._sharedFrom; }).length;
+  var mine = (db.properties || []).filter(function (p) { return cwMinha(p); }).length;
   var body = '<div class="form">' +
     '<div class="hint" style="color:var(--danger)"><b>Isto não se pode desfazer.</b> Vais apagar ' + mine +
     ' imóvel' + (mine === 1 ? '' : 'is') + ', com os contratos, movimentos e pessoas que lhes pertencem, ' +

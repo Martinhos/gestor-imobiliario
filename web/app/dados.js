@@ -1,4 +1,9 @@
 /* ================= ARMAZENAMENTO ================= */
+/* Onde a nuvem guarda a sessão. Vive aqui, e não só lá, porque o guarda da
+   espera (auxiliares.js:sabemosOEstado) tem de saber se há sessão ANTES de a
+   nuvem carregar: os ficheiros de web/app correm todos primeiro. O
+   cloud/nucleo.js usa esta mesma constante, para não haver duas verdades. */
+const LS_SESSAO='gi_cloud_user';
 const KEY='gi_v13', OLDS=['gi_v12','gi_v11','gi_v10','gi_v9','gi_v8','gi_v6','gi_v5','gi_v4','gi_v3','gi_v2','gi_v1'];
 let mem={};
 /* lê do localStorage; se estiver bloqueado (modo privado), vale a cópia em memória desta sessão
@@ -102,11 +107,14 @@ function normLoan(l){const o=Object.assign({id:uid(),name:'',bank:'',outstanding
    Devolve: um objeto novo com todos os campos da visita preenchidos. */
 function normVisit(v){return Object.assign({id:uid(),propertyId:'',roomId:'',nomes:'',contacto:'',
   date:'',start:'',end:'',estado:'agendada',resultado:'',notas:''},v||{})}
-/* normaliza uma ficha de pessoa (dono ou inquilino): campos em falta ficam vazios, anexos pelo normFile
+/* normaliza uma ficha de pessoa (dono ou inquilino): campos em falta ficam vazios, anexos pelo normFile.
+   houseId é o imóvel a que a ficha está presa (vazio numa ficha só minha): é
+   com ele que a ficha de um inquilino criada por um colaborador sobe como
+   registo desse imóvel, mesmo sem contrato — persiste e mantém o que vier.
    Recebe: p — a ficha em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos da ficha preenchidos. */
 function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:'',nif:'',gender:'',marital:'',
-  nationality:'Portuguesa',birth:'',cc:'',ccValid:'',taxAddress:'',notes:'',files:[]},p||{});
+  nationality:'Portuguesa',birth:'',cc:'',ccValid:'',taxAddress:'',notes:'',files:[],houseId:''},p||{});
   o.files=(o.files||[]).map(normFile);return o}
 /* normaliza um imóvel e migra o que mudou entre versões: equity passa a purchase, o crédito único
    vira lista de hipotecas, quartos em texto ganham id, e quotas de donos removidos são descartadas

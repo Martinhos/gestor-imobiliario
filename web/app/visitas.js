@@ -61,10 +61,11 @@ function vVisits(){
     if(s.h2&&(v.start||'99:99')>s.h2)return false;
     return lfHit(K,[v.nomes,v.contacto,v.notas,propName(v.propertyId)].join(' '));
   });
+  const marca=casasComo('visit.add').length>0;   /* sem imóvel onde possa marcar, não há botão */
   if(!(db.visits||[]).length)
-    return `<div class="empty"><b>Ainda não há visitas</b>Marca a primeira: quem vem, a que imóvel, e quando.
-      <div class="toolbar" style="justify-content:center;margin-top:16px">
-      <button class="btn primary" onclick="visitModal()">Marcar visita</button></div></div>`;
+    return esperaDoServidor()||`<div class="empty"><b>Ainda não há visitas</b>${marca?'Marca a primeira: quem vem, a que imóvel, e quando.':'As visitas aos imóveis onde colaboras aparecem aqui.'}
+      ${marca?`<div class="toolbar" style="justify-content:center;margin-top:16px">
+      <button class="btn primary" data-toca="camada" onclick="visitModal()">Marcar visita</button></div>`:''}</div>`;
   const head=lfBar(K,[
     lfSel(K,'pr',[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p=>({v:p.id,label:p.name||p.address||'imóvel'})))),
     lfSel(K,'es',[{v:'',label:'Todos os estados'}].concat(Object.keys(VESTADO).map(x=>({v:x,label:VESTADO[x]})))),
@@ -73,11 +74,13 @@ function vVisits(){
     visIntervalo(K,'time','h1','h2','Hora de início'),
   ],lista.length);
   const futuras=lista.filter(v=>!visPassada(v)),passadas=lista.filter(visPassada).reverse();
-  const bloco=(titulo,vs)=>vs.length?`<div class="navh" style="margin:4px 0 8px">${titulo}</div>
-    <div class="list" style="margin-bottom:16px">${vs.map(visCard).join('')}</div>`:'';
+  /* o título do grupo fica FORA do contentor: o motor deita fora tudo o que
+     não seja um item com chave */
+  const bloco=(titulo,vs)=>vs.length?`<div class="navh" style="margin:4px 0 8px">${titulo}</div>`
+    +listaViva('visitas:'+titulo,vs.map(v=>({chave:'vis:'+v.id,html:visCard(v)})),'','margin-bottom:16px'):'';
   return head+bloco('Próximas',futuras)+bloco('Passadas',passadas)+
     (lista.length?'':'<div class="empty">Nada com estes filtros.</div>')+
-    `<button class="fab" onclick="visitModal()" aria-label="Marcar visita">${ic('plus',22)}</button>`;
+    (marca?`<button class="fab" data-toca="camada" onclick="visitModal()" aria-label="Marcar visita">${ic('plus',22)}</button>`:'');
 }
 
 /* O cartão de uma visita na lista: quem, onde e quando à esquerda, o selo
@@ -91,24 +94,91 @@ function visCard(v){
   const hora=v.start?v.start+(v.end?'–'+v.end:''):'';
   const seloCls=v.estado==='realizada'?'':v.estado==='faltou'||v.estado==='cancelada'?'grey':'amber';
   const desf=v.estado==='realizada'&&v.resultado?' · '+VDESFECHO[v.resultado]:'';
-  const acoes=[];
-  if(v.estado==='agendada'){
-    acoes.push({label:'Marcar realizada',icon:'check',act:`visEstado('${v.id}','realizada')`});
-    acoes.push({label:'Marcar falta',icon:'clock',act:`visEstado('${v.id}','faltou')`});
-  }
-  acoes.push({label:'Converter em inquilino',icon:'users',act:`visConverte('${v.id}')`});
-  acoes.push({label:'Apagar visita',icon:'trash',danger:true,act:`visApaga('${v.id}')`});
-  return `<div class="card tap" onclick="visitModal('${v.id}')">
+  /* A porta é a mesma de todas as outras listas. Era o único cartão da app a
+     plantar um menu() dentro de si próprio, e o .card.tap tem overflow:hidden:
+     o menu ficava recortado pelo cartão e o ajustarPop ainda o encolhia ao
+     mínimo, por eleger esse mesmo cartão como o primeiro antepassado que
+     corta — «fica contido dentro do cartão e o resto desaparece».
+     As ações vêm do visOpcoes, que é onde já vivem para a ficha e para o
+     toque longo. */
+  const acoes=visOpcoes(v);
+  return `<div class="card tap" data-lp="vis:${esc(v.id)}" data-fk="vis:${esc(v.id)}" data-toca="camada" onclick="visView('${v.id}')">
     <div class="row-between" style="align-items:flex-start;gap:8px">
       <div style="min-width:0">
         <b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.nomes||'(sem nome)')}</b>
-        <span class="small">${esc(p?(p.name||p.address):'imóvel?')}${quarto?' · '+esc(quarto):''} · ${esc(v.date||'sem data')}${hora?' · '+esc(hora):''}${desf}</span>
+        <span class="small">${esc(p?(p.name||p.address):'imóvel?')}${quarto?' · '+esc(quarto):''} · ${v.date?esc(dPT(v.date)):'sem data'}${hora?' · '+esc(hora):''}${desf}</span>
         ${v.notas?`<span class="small" style="display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.notas)}</span>`:''}</div>
       <span style="flex:0 0 auto;display:inline-flex;align-items:center;gap:4px">
         <span class="badge ${seloCls}">${VESTADO[v.estado]||v.estado}</span>
-        <span onclick="event.stopPropagation()">${menu('vis'+v.id,acoes)}</span></span></div></div>`;
+        ${acoes.length?kebab('vis:'+v.id):''}</span></div></div>`;
 }
 
+/* O corpo da ficha de uma visita.
+
+   Abre-se por duas razões, e em momentos diferentes: na véspera, para
+   confirmar a hora e ter o contacto à mão; depois, para reler o que ficou
+   combinado e decidir a quem ligar.
+
+   A data leva o «daqui a três dias» colado, que é o que a data sozinha não
+   diz. E o imóvel tem um valor de recurso: o delProp apaga contratos e
+   movimentos em cascata mas não as visitas, e uma visita órfã tem de dizer
+   que o imóvel desapareceu, em vez de ficar sem sítio.
+   Recebe: id — o id da visita.
+   Devolve: o HTML do corpo, ou vazio se a visita já não existir. */
+function visFicha(id){
+  const v=(db.visits||[]).find(x=>x.id===id);if(!v)return '';
+  const p=prop(v.propertyId);
+  const quando=(function(){
+    if(!v.date)return '';
+    const h=v.start?' · '+esc(v.start)+(v.end?'–'+esc(v.end):''):'';
+    const d=pzDias(v.date);
+    const rel=d===0?'hoje':d===1?'amanhã':d===-1?'ontem':(d>0?'daqui a '+d+' dias':'há '+(-d)+' dias');
+    return esc(dPT(v.date))+h+' · '+rel;
+  })();
+  return ficha([
+    {tipo:'nota',valor:esc(motivoRecusa(v.propertyId,'visit.add',v))},
+    {rotulo:'Quando',valor:quando},
+    {rotulo:'Imóvel',valor:esc(p?p.name:'imóvel apagado')},
+    v.roomId&&p?{rotulo:'Quarto',valor:esc(roomName(p,v.roomId))}:null,
+    {rotulo:'Quem vem',valor:esc(v.nomes||'')},
+    {rotulo:'Contacto',valor:esc(v.contacto||'')},
+    {rotulo:'Estado',valor:esc(VESTADO[v.estado]||v.estado||'')},
+    v.estado==='realizada'&&v.resultado?{rotulo:'Desfecho',valor:esc(VDESFECHO[v.resultado]||'')}:null,
+    String(v.notas||'').trim()?{tipo:'bloco',rotulo:'Comentários',valor:esc(v.notas).replace(/\n/g,'<br>')}:null,
+    v._createdBy&&v._createdBy!==meuId()?{rotulo:'Marcada por',valor:esc(nomeUtilizador(v._createdBy))}:null,
+  ]);
+}
+/* As opções de uma visita, iguais na ficha e no toque longo.
+   Recebe: v — a visita.
+   Devolve: a lista de itens {label,icon,toca,risco,danger,act} para o menu. */
+function visOpcoes(v){
+  const id=v.id,ok=podeEditar(v.propertyId,'visit.add',v),it=[];
+  if(v.estado==='agendada'&&ok)it.push(
+    {label:'Marcar realizada',icon:'check',toca:'dados',act:`visEstado('${jsq(id)}','realizada')`},
+    {label:'Marcar falta',icon:'x',toca:'dados',act:`visEstado('${jsq(id)}','faltou')`});
+  if(pode(v.propertyId,'tenant.add'))it.push({label:'Converter em inquilino',icon:'users',toca:'camada',act:`visConverte('${jsq(id)}')`});
+  /* o visApaga não fecha janelas: sem o closeModal ficava uma ficha vazia
+     aberta por cima de uma visita apagada */
+  if(ok)it.push({label:'Apagar visita',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`closeModal();visApaga('${jsq(id)}')`});
+  return it;
+}
+/* A ficha de uma visita: o que tocar numa visita passa a abrir.
+
+   O visitModal abria o formulário a toda a gente e só recusava no Guardar:
+   quem não pode alterar via os campos editáveis e levava com a recusa no
+   fim. Agora fica na ficha, sem «Editar», com a nota a dizer porquê.
+   Recebe: id — o id da visita.
+   Devolve: nada — abre a janela. */
+function visView(id){
+  const v=(db.visits||[]).find(x=>x.id===id);if(!v)return;
+  abrirFicha({
+    titulo:()=>{const x=(db.visits||[]).find(y=>y.id===id);return x?(x.nomes||'Visita'):'Visita'},
+    corpo:()=>visFicha(id),
+    menu:()=>{const x=(db.visits||[]).find(y=>y.id===id);if(!x)return '';
+      const it=visOpcoes(x);return it.length?menu('fichaVis',it):''},
+    editar:podeEditar(v.propertyId,'visit.add',v)?{rotulo:'Editar',act:`visitModal('${jsq(id)}')`}:null,
+  });
+}
 /* O formulário de uma visita — novo ou edição — no modal da casa: imóvel e
    quarto (quando o imóvel é por quartos) nos menus da app, data e horas
    nativas, estado e desfecho, nomes e contacto livres.
@@ -117,12 +187,16 @@ function visCard(v){
    do calendário).
    Devolve: nada — abre o modal e liga o onSave. */
 function visitModal(id,extra){
-  visForm=normVisit(id?JSON.parse(JSON.stringify((db.visits||[]).find(x=>x.id===id))):
-    Object.assign({propertyId:lf('lvis').pr||(db.properties[0]||{}).id||'',date:pzHoje()},extra||{}));
-  const m=id?menu('vism',[{label:'Apagar visita',icon:'trash',danger:true,act:`closeModal();visApaga('${id}')`}]):'';
-  openModal(id?'Editar visita':'Marcar visita',visBody(),null,m);
+  const orig=id?(db.visits||[]).find(x=>x.id===id):null;
+  const pr=lf('lvis').pr;
+  visForm=normVisit(orig?JSON.parse(JSON.stringify(orig)):
+    Object.assign({propertyId:(pr&&pode(pr,'visit.add')?pr:(casasComo('visit.add')[0]||{}).id)||'',date:pzHoje()},extra||{}));
+  const ok=!orig||podeEditar(orig.propertyId,'visit.add',orig);
+  const m=id&&ok?menu('vism',[{label:'Apagar visita',icon:'trash',danger:true,act:`closeModal();visApaga('${id}')`}]):'';
+  openModal(id?(ok?'Editar visita':'Visita'):'Marcar visita',visBody(),null,m);
   onSave=()=>{
     visColhe();
+    const recusa=motivoRecusa(visForm.propertyId,'visit.add',orig);if(recusa)return toast(recusa);
     if(!visForm.nomes.trim())return toast('Escreve quem vem à visita.');
     if(!visForm.propertyId)return toast('Escolhe o imóvel.');
     if(!visForm.date)return toast('Escolhe a data.');
@@ -138,7 +212,7 @@ function visitModal(id,extra){
    Devolve: o HTML do formulário (texto). */
 function visBody(){
   const v=visForm;
-  const props=db.properties.map(p=>({v:p.id,label:p.name||p.address||'imóvel'}));
+  const props=propOptsPara('visit.add',v.propertyId);
   const p=prop(v.propertyId);
   const quartos=p&&p.rentalMode==='quartos'&&(p.rooms||[]).length
     ?[{v:'',label:'Casa inteira'}].concat(p.rooms.map(r=>({v:r.id,label:r.name||'quarto'})))
@@ -147,15 +221,15 @@ function visBody(){
     <label>Quem vem<input id="vi_nomes" value="${esc(v.nomes)}" placeholder="Ana Rodrigues (e o irmão)" autocomplete="off"></label>
     <label>Contacto<input id="vi_contacto" value="${esc(v.contacto)}" placeholder="Telemóvel ou email (opcional)" autocomplete="off"></label>
     <div class="hint" style="margin:-4px 0 0">Para confirmar ou remarcar — segue para a ficha se a visita virar inquilino.</div>
-    <label>Imóvel${sel('vi_prop',v.propertyId,props,'visPropMudou')}</label>
-    ${quartos?`<label>Quarto${sel('vi_room',v.roomId,quartos)}</label>`:''}
+    <label>Imóvel${sel('vi_prop',v.propertyId,props,'visPropMudou','rascunho')}</label>
+    ${quartos?`<label>Quarto${sel('vi_room',v.roomId,quartos,'','rascunho')}</label>`:''}
     <label>Data<input id="vi_date" type="date" value="${v.date||''}"></label>
     <div class="row">
       <label>Início<input id="vi_start" type="time" value="${v.start||''}"></label>
       <label>Fim<input id="vi_end" type="time" value="${v.end||''}"></label></div>
     <div class="row">
-      <label>Estado${sel('vi_estado',v.estado,Object.keys(VESTADO).map(k=>({v:k,label:VESTADO[k]})))}</label>
-      <label>Desfecho${sel('vi_res',v.resultado,Object.keys(VDESFECHO).map(k=>({v:k,label:VDESFECHO[k]})))}</label></div>
+      <label>Estado${sel('vi_estado',v.estado,Object.keys(VESTADO).map(k=>({v:k,label:VESTADO[k]})),'','rascunho')}</label>
+      <label>Desfecho${sel('vi_res',v.resultado,Object.keys(VDESFECHO).map(k=>({v:k,label:VDESFECHO[k]})),'','rascunho')}</label></div>
     <label>Comentários<textarea id="vi_notas" placeholder="Primeiras impressões, perguntas que fizeram, o que ficou combinado…">${esc(v.notas)}</textarea></label>
     <div class="hint">O desfecho preenche-se depois da visita — é o que separa um «talvez» de um «liga já».</div></div>`;
 }
@@ -184,6 +258,7 @@ function visColhe(){
    Devolve: nada — grava e redesenha, com um toast a dizer o que ficou. */
 function visEstado(id,estado){
   const v=(db.visits||[]).find(x=>x.id===id);if(!v)return;
+  const recusa=motivoRecusa(v.propertyId,'visit.add',v);if(recusa)return toast(recusa);
   v.estado=estado;save();render();
   toast(estado==='realizada'?'Realizada — preenche o desfecho quando souberes.':'Ficou registado.');
 }
@@ -194,20 +269,29 @@ function visEstado(id,estado){
 function visApaga(id){
   const i=(db.visits||[]).findIndex(x=>x.id===id);if(i<0)return;
   const copia=db.visits[i];
+  const recusa=motivoRecusa(copia.propertyId,'visit.add',copia,true);if(recusa)return toast(recusa);
   db.visits.splice(i,1);save();render();
   comDesfazer('Visita apagada.',()=>{db.visits.splice(i,0,copia);save();render()});
 }
 
 /* Converte a visita numa ficha de inquilino: abre a ficha nova já com o nome
    e o contacto preenchidos (telefone ou email, conforme o que lá estiver) —
-   o resto preenche-se quando o contrato for a sério.
+   o resto preenche-se quando o contrato for a sério. Num imóvel onde só
+   colaboro a ficha fica presa a ele (houseId): é assim que sobe como registo
+   desse imóvel e chega ao dono mesmo sem contrato. Num imóvel meu é uma
+   ficha minha, como as do FAB (o critério de newTenantFromCt) — presa ao
+   imóvel, perdia-se com ele.
    Recebe: id — a visita a converter.
    Devolve: nada — abre o personModal de um inquilino novo pré-preenchido. */
 function visConverte(id){
   const v=(db.visits||[]).find(x=>x.id===id);if(!v)return;
+  if(!pode(v.propertyId,'tenant.add'))return toast(fraseSemPerm('tenant.add'));
   const c=(v.contacto||'').trim();
-  const novo=normPerson({name:v.nomes,phone:/@/.test(c)?'':c,email:/@/.test(c)?c:'',
-    notes:v.notas?'Da visita de '+(v.date||'?')+': '+v.notas:''});
+  const novo=normPerson({name:v.nomes,phone:/@/.test(c)?'':c,email:/@/.test(c)?c:'',houseId:souDono(v.propertyId)?'':(v.propertyId||''),
+    /* a data vai na forma que se le. E prosa gravada: o que ja esta escrito
+       nas fichas antigas fica como estava, e so o que se escreve de agora em
+       diante e que leva a forma nova */
+    notes:v.notas?'Da visita de '+(dPT(v.date)||'?')+': '+v.notas:''});
   db.tenants.push(novo);save();
   personModal('tenant',novo.id);
   toast('Ficha criada a partir da visita — completa o que faltar.');

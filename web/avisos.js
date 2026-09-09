@@ -19,12 +19,131 @@ var FUNCIONALIDADES = {
   movimentos: 'Movimentos e planeados',
   creditos: 'Créditos à habitação',
   partilha: 'Partilha entre proprietários',
+  colaboradores: 'Colaboradores e cargos',
   anexos: 'Fotos e documentos',
   conta: 'Conta e entrada',
   suporte: 'Pedidos de ajuda',
 };
 
 var AVISOS = [
+  {
+    v: 31,
+    data: '2026-09-09',
+    titulo: 'Colaboradores com cargos, e uma ligação em vez do id',
+    seccoes: [
+      {
+        titulo: 'Convida quem te ajuda a gerir',
+        afeta: ['colaboradores', 'partilha'],
+        itens: [
+          'Podes dar acesso a um imóvel, ou a vários, a quem não é dono: um contabilista, quem faz as visitas, um familiar que só quer ver. Não têm quota-parte nem entram nas contas entre proprietários.',
+          'Cada colaborador tem um cargo, e cada cargo diz o que se pode ver e adicionar — movimentos, planeados, visitas, contratos, inquilinos, hipotecas, documentos, avaliação. Crias os cargos que quiseres, ou começas por um dos três prontos: Gestor de visitas, Contabilista, Ver tudo.',
+          'O convite é uma ligação de uso único: escolhes o cargo e os imóveis, copias, envias. Quem a abrir entra (ou cria conta) e fica logo com o acesso. Tudo no menu, em Pessoas → Colaboradores.',
+          'Quem adiciona um registo pode editá-lo e apagá-lo; o que é teu, só tu e os comproprietários mexem. O sino diz quem fez o quê, e com que cargo.',
+        ],
+      },
+      {
+        titulo: 'Partilhar por ligação',
+        afeta: ['partilha'],
+        itens: [
+          'Em Definições → Conta e partilha há agora uma ligação permanente tua: quem a abrir escolhe que imóveis quer partilhar contigo e tu aceitas ou recusas cada pedido — sem escrever o id. Podes desativá-la quando quiseres.',
+        ],
+      },
+      {
+        titulo: 'As prestações reconhecem o crédito',
+        afeta: ['creditos', 'movimentos'],
+        itens: [
+          'Um movimento criado a partir de uma prestação planeada já vem com a hipoteca certa preenchida — antes ficava sem crédito atribuído e tinhas de o escolher a cada mês.',
+          'A prestação segue a divisão que puseste no planeado: quem paga e por quem se divide passam para o movimento como estão.',
+        ],
+      },
+      {
+        titulo: 'Os cartões dos movimentos levam ao filtro',
+        afeta: ['movimentos'],
+        itens: [
+          'Abrir um dos seis cartões de resumo — receitas, despesas, prestações, dívidas pagas e recebidas, saldo — dá-te agora o botão para ver só esses movimentos. O saldo mostra tudo.',
+        ],
+      },
+      {
+        titulo: 'A app responde ao toque',
+        afeta: ['app'],
+        itens: [
+          'Tudo o que se toca reage: os botões, as opções, os separadores e os cartões afundam-se enquanto tens o dedo em cima. No telemóvel não havia sinal nenhum entre o toque e o resultado.',
+          'As janelas sobem em vez de aparecerem feitas, os menus abrem do lado por onde nascem, as secções que abres deixam o conteúdo entrar e os gráficos desenham-se em vez de surgirem prontos.',
+          'A navegação por teclado passa a mostrar onde está: o que se alcança com Tab ganha um contorno visível, também dentro da gaveta escura.',
+          'Se pediste ao teu sistema menos movimento, não recebes nenhum — a app respeita essa definição em toda a parte.',
+        ],
+      },
+      {
+        titulo: 'Um contrato que ainda não começou',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'Um contrato assinado para começar mais tarde deixa de contar como se já estivesse em vigor: não soma à renda do imóvel, não põe o imóvel como arrendado e não entra no yield nem na avaliação. Nas projeções conta a partir do mês em que começa — e um contrato que acaba a meio do horizonte deixa de contar depois disso.',
+          'E passa a ver-se: leva o selo «por começar» na lista, tem filtro próprio, a ficha diz «Por começar · a 15-03-2028», e na ficha do inquilino aparece em «Vai morar em» em vez de «Contratos anteriores».',
+          'A renda dele fica planeada para o mês e dia certos, e se mudares a data de início para mais tarde a renda planeada vai com ela.',
+          'O cartão do imóvel deixa de dizer só «Vago» quando já está prometido: leva o selo «1 contrato por começar», com o inquilino, a renda e a data em que começa. Quem olha para a lista tem como saber antes de o anunciar outra vez.',
+          'E o filtro dos inquilinos passa a ter três estados, em vez de dois: com contrato, com contrato por começar, e sem contrato. Quem assinou para 2028 caía em «Sem contrato», ao lado de um cartão que mostrava o contrato.',
+        ],
+      },
+      {
+        titulo: 'A renda acompanha o contrato',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'Se corrigires as datas de um contrato, a renda planeada acompanha-o nos dois sentidos — para a frente e para trás — e nunca volta a pedir um mês que já tem um movimento desse contrato.',
+          'Confirmar um planeado num mês que já foi lançado deixa de criar um movimento repetido: salta para o mês seguinte e diz que saltou.',
+          'Os movimentos já confirmados não se mexem com o contrato — a data de um movimento diz quando o dinheiro entrou, e mudá-la mudava a receita do ano. Se algum ficar fora das datas novas, antes do início ou depois do fim, a app aponta-os para os poderes rever um a um.',
+        ],
+      },
+      {
+        titulo: 'Ver sem editar',
+        afeta: ['app', 'colaboradores'],
+        itens: [
+          'O que não podes alterar abre agora numa ficha de leitura, com os dados escritos por extenso e um botão para editar quando tens permissão. Antes abria o formulário de edição com os campos apagados: mostrava tudo o que não podias fazer, e chamava-lhe leitura.',
+          'São seis: o movimento, o contrato, o imóvel, a pessoa, a hipoteca e o planeado.',
+        ],
+      },
+      {
+        titulo: 'As datas leem-se como cá se escrevem',
+        afeta: ['app'],
+        itens: [
+          'Em toda a app, 09/09/2026 — dia, mês e ano, por essa ordem. Nas listas, nas fichas, nos avisos, nos balões dos gráficos e na data que fica escrita nas notas de uma visita. Antes apareciam em vários sítios ao contrário, com o ano à frente.',
+        ],
+      },
+      {
+        titulo: 'Mudar de ecrã',
+        afeta: ['app'],
+        itens: [
+          'Tocar num separador da barra de baixo vira o painel para o lado — para a direita se o separador está à direita, para a esquerda se está à esquerda. A gaveta não faz isso: ali os treze destinos estão agrupados por assunto e não têm lado.',
+          'As listas deixaram de se refazer inteiras. Escrever na pesquisa, mudar um filtro ou confirmar um movimento mexe só nas linhas que mudaram — o resto fica quieto, e o que estavas a ler não salta.',
+        ],
+      },
+      {
+        titulo: 'A visão geral abre com tudo no sítio',
+        afeta: ['app', 'movimentos'],
+        itens: [
+          'A variação face ao ano anterior aparece logo ao abrir, em vez de chegar um segundo depois, e o ano a que se refere passou para uma linha própria, onde cabe.',
+          'O sino, o cartão dos movimentos por confirmar, o número nos Planeados e o cartão dos prazos deixaram de contar antes de o servidor responder. Havia cerca de um segundo em que apareciam notificações e movimentos por confirmar que não existiam — e num deles dava para carregar em «Confirmar» e criar a renda duas vezes.',
+          'Num aparelho onde os teus dados ainda não chegaram — o primeiro acesso, uma janela anónima, ou uma segunda conta no mesmo aparelho — a app diz que está à espera do servidor, em vez de dizer que não tens nada registado.',
+          'E os lembretes do telemóvel passam a ser refeitos com o que vem do servidor: uma renda confirmada no computador já não te avisa no telemóvel no dia seguinte.',
+        ],
+      },
+      {
+        titulo: 'As opções estão sempre no mesmo sítio',
+        afeta: ['app'],
+        itens: [
+          'O botão que abre as opções de um registo — editar, duplicar, apagar, selecionar vários — é agora o mesmo em todas as listas: o mesmo desenho, o mesmo sítio e um alvo maior. Nos imóveis, inquilinos e planeados era mais pequeno e diferente do dos movimentos; não é preciso descobrir o toque longo para lá chegar.',
+          'Os ecrãs que ainda não têm nada passam a dizer por onde se começa, com um botão: a avaliação e as projeções sem imóveis, os contratos e as hipotecas antes do primeiro imóvel.',
+          'Um aviso já não tapa os botões de uma janela aberta, e o «Anular» que aparece depois de apagar alguma coisa é agora um botão a sério, e não texto sublinhado.',
+        ],
+      },
+      {
+        titulo: 'Se és colaborador',
+        afeta: ['colaboradores'],
+        itens: [
+          'Ao entrar, a app diz de quem és colaborador, em que imóveis e com que cargo. Os cartões desses imóveis levam o selo «de Maria · Contabilista», e a vista geral avisa que os inclui, por inteiro.',
+        ],
+      },
+    ],
+  },
   {
     v: 30,
     data: '2026-09-07',

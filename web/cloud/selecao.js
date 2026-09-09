@@ -95,6 +95,12 @@ function selIdsDoMes(mo) {
     .map(function (e) { return e.getAttribute('data-tx'); });
 }
 
+/* A lista viva (vistas.js:pintarListaTx) refaz linhas sem passar pelo render,
+   e uma linha refeita nasce sem a marca que tinha. Fica exposto para ela o
+   poder repor — é a mesma função que o render já chamava no fim. */
+// Recebe: nada.
+// Devolve: nada — repinta as marcas no DOM que estiver no ecra.
+CW.selPintar = function () { selPintar(); };
 // Repõe as marcas e as contagens a partir do estado, sem redesenhar a vista.
 // Devolve: nada — mexe diretamente no DOM (caixas, contagem e cabeçalho).
 function selPintar() {
@@ -130,70 +136,65 @@ function caixa(marcada, parcial) {
 
 /* ------------------------------------------------ a vista, com as caixas */
 
+/* A decoração das linhas é GERADA com a vista, e não colada em cima dela.
+
+   Até aqui este ficheiro pegava no HTML já pronto dos Movimentos, metia-o num
+   <div> avulso, punha data-tx, data-mes, a caixa de marcar e o kebab em cada
+   linha, e serializava tudo de volta. Medido com 500 movimentos: 42 dos 58 ms
+   de cada repintura, dentro e fora do modo de seleção — 72% do custo, para um
+   trabalho que a vista podia ter feito de uma vez enquanto se escrevia a si
+   própria. E enquanto fosse assim, nenhuma repintura parcial podia ser
+   segura: uma linha repintada sozinha nascia sem nada disto.
+
+   Agora substitui-se o ponto de extensão da linha (vistas.js:txLinhaExtra) e
+   o do mês (vistas.js:txMesExtra). O que aparece no ecrã é exatamente o
+   mesmo. */
+
+var _txLinhaExtra = txLinhaExtra;
+txLinhaExtra = function (t, mes) {
+  var x = _txLinhaExtra(t, mes) || {};
+  var id = t.id;
+  x.attrs = (x.attrs || '') + ' data-tx="' + esc(id) + '" data-mes="' + esc(mes || '') + '"';
+  if (CW.selMode) {
+    // a caixa entra à esquerda e o toque na linha passa a marcar
+    x.caixa = (x.caixa || '') + '<span class="selbox">' + caixa(selTem(id)) + '</span>';
+    x.onclick = 'CW.selToggle(\'' + jsq(id) + '\',event)';
+    x.attrs += ' data-toca="vista"';
+    if (selTem(id)) x.cls = ((x.cls || '') + ' sel-on').trim();
+  } else {
+    /* Fora da seleção, um kebab com o que o toque longo dava. O toque longo
+       continua a existir, mas passa a entrar em seleção — e sem o kebab as
+       opções de um movimento sozinho ficavam sem porta nenhuma. */
+    x.acoes = (x.acoes || '') +
+      '<button type="button" class="iconbtn opcoes txkebab" aria-label="Opções"' +
+      ' data-toca="camada" onclick="event.stopPropagation();CW.txOpcoes(\'' + jsq(id) + '\')">' + ic('dots', 18) + '</button>';
+  }
+  return x;
+};
+
+var _txMesExtra = txMesExtra;
+txMesExtra = function (mes) {
+  var x = _txMesExtra(mes) || {};
+  if (!CW.selMode || !mes) return x;
+  x.cls = ((x.cls || '') + ' sel-mes').trim();
+  /* SEM style aqui: o título já leva um no template (vistas.js) e, com dois,
+     o parser fica com o primeiro — o meu — e o display:flex morria. O cursor
+     vai na folha, com o resto da regra .sel-mes. */
+  x.attrs = (x.attrs || '') + ' data-toca="vista" onclick="CW.selMes(\'' + jsq(mes) + '\',event)"';
+  x.caixa = (x.caixa || '') +
+    '<span class="selbox mes" data-mes-box="' + esc(mes) + '" data-toca="vista" onclick="CW.selMes(\'' + jsq(mes) + '\',event)"></span>';
+  return x;
+};
+
+/* ------------------------------------------------ a vista, com as barras */
+
 var _vTransactions_sel = vTransactions;
 vTransactions = function () {
   var html = _vTransactions_sel();
-  var tmp = document.createElement('div');
-  tmp.innerHTML = html;
-
-  var linhas = [].slice.call(tmp.querySelectorAll('.txrow'));
-  if (!linhas.length) { CW.selMode = false; return html; }
-
-  // o mês de cada linha vem do título de secção que a precede
-  var mo = '';
-  [].slice.call(tmp.children).forEach(function (n) {
-    if (n.classList && n.classList.contains('section-title')) {
-      var s = n.querySelector('span');
-      if (s && /^\d{4}-\d{2}$/.test(s.textContent.trim())) mo = s.textContent.trim();
-      if (mo && CW.selMode) {
-        var b = document.createElement('span');
-        b.className = 'selbox mes';
-        b.setAttribute('data-mes-box', mo);
-        b.setAttribute('onclick', 'CW.selMes(\'' + mo + '\',event)');
-        n.insertBefore(b, n.firstChild);
-        n.classList.add('sel-mes');
-        n.setAttribute('onclick', 'CW.selMes(\'' + mo + '\',event)');
-        n.style.cursor = 'pointer';
-      }
-      return;
-    }
-    [].slice.call(n.querySelectorAll ? n.querySelectorAll('.txrow') : []).forEach(function (l) {
-      var id = (l.getAttribute('data-lp') || '').replace(/^tx:/, '');
-      l.setAttribute('data-tx', id);
-      l.setAttribute('data-mes', mo);
-    });
-  });
-
-  linhas.forEach(function (l) {
-    var id = l.getAttribute('data-tx');
-    if (!id) return;
-    var dentro = l.querySelector('.row-between');
-    if (!dentro) return;
-
-    if (CW.selMode) {
-      // a caixa entra à esquerda e o toque na linha passa a marcar
-      var c = document.createElement('span');
-      c.className = 'selbox';
-      c.innerHTML = caixa(selTem(id));
-      dentro.insertBefore(c, dentro.firstChild);
-      l.setAttribute('onclick', 'CW.selToggle(\'' + id + '\',event)');
-      l.classList.toggle('sel-on', selTem(id));
-    } else {
-      /* Fora da seleção, um kebab com o que o toque longo dava. O toque longo
-         continua a existir, mas passa a entrar em seleção — e sem o kebab as
-         opções de um movimento sozinho ficavam sem porta nenhuma. */
-      var k = document.createElement('button');
-      k.type = 'button';
-      k.className = 'iconbtn txkebab';
-      k.setAttribute('aria-label', 'Opções');
-      k.setAttribute('onclick', 'event.stopPropagation();CW.txOpcoes(\'' + id + '\')');
-      k.innerHTML = ic('dots', 18);
-      var dir = dentro.lastElementChild;
-      if (dir) dir.appendChild(k);
-    }
-  });
-
-  if (!CW.selMode) return tmp.innerHTML;
+  /* sem linhas não há nada para marcar — e sair daqui evita ficar com a barra
+     de seleção viva por cima de um ecrã vazio */
+  if (!txLinhasPintadas) { CW.selMode = false; return html; }
+  if (!CW.selMode) return html;
 
   // a barra global fica colada ao topo, para se poder marcar tudo a meio da lista
   /* As ações descem para onde está o polegar: quem acabou de marcar linhas
@@ -202,18 +203,18 @@ vTransactions = function () {
      caminho antigo para quem já o conhece. */
   var fundo =
     '<div class="sel-fundo">' +
-      '<button type="button" class="btn" onclick="CW.selSair()">' + ic('x', 15) + ' Cancelar</button>' +
+      '<button type="button" class="btn" data-toca="modo" onclick="CW.selSair()">' + ic('x', 15) + ' Cancelar</button>' +
       '<span style="flex:1"></span>' +
-      '<button type="button" class="btn" onclick="CW.selEditar()">' + ic('pen', 15) + ' Editar</button>' +
-      '<button type="button" class="btn danger" onclick="CW.selApagar()">' + ic('trash', 15) + ' Eliminar</button>' +
+      '<button type="button" class="btn" data-toca="camada" onclick="CW.selEditar()">' + ic('pen', 15) + ' Editar</button>' +
+      '<button type="button" class="btn danger" data-toca="dados" data-risco="destroi" onclick="CW.selApagar()">' + ic('trash', 15) + ' Eliminar</button>' +
     '</div>';
   var barra =
     '<div class="sel-bar">' +
-      '<span class="selbox" id="selGlobal" onclick="CW.selTodos(event)">' + caixa(false) + '</span>' +
-      '<span style="flex:1;min-width:0;cursor:pointer" onclick="CW.selTodos(event)"><b id="selConta">nenhum movimento</b>' +
+      '<span class="selbox" id="selGlobal" data-toca="vista" onclick="CW.selTodos(event)">' + caixa(false) + '</span>' +
+      '<span style="flex:1;min-width:0;cursor:pointer" data-toca="vista" onclick="CW.selTodos(event)"><b id="selConta">nenhum movimento</b>' +
       '<span class="small" style="display:block">toca para marcar ou desmarcar tudo</span></span>' +
     '</div>';
-  return barra + tmp.innerHTML + fundo;
+  return barra + html + fundo;
 };
 
 /* ------------------------------------------ o toque longo e o kebab da linha */
@@ -225,7 +226,7 @@ CW.txOpcoes = function (id) {
   var t = (db.transactions || []).find(function (x) { return x.id === id; });
   if (!t) return;
   lpShow(t.label, [
-    { label: 'Editar movimento', icon: 'swap', act: function () { txModal(id); } },
+    { label: 'Editar movimento', icon: 'pen', act: function () { txModal(id); } },
     { label: 'Selecionar vários', icon: 'check', act: function () { CW.selEntrar(id); } },
     { label: 'Apagar movimento', icon: 'trash', act: function () { delTx(id); } },
   ]);
@@ -263,6 +264,7 @@ function patchHdrSel() {
     x.className = 'btn';
     x.style.cssText = 'flex:0 0 auto;margin-left:7px';
     x.title = 'Sair da seleção';
+    x.setAttribute('data-toca', 'modo');
     x.setAttribute('onclick', 'CW.selSair()');
     x.innerHTML = ic('x', 18);
     hb.parentNode.insertBefore(x, hb.nextSibling);
@@ -304,21 +306,21 @@ CW.selEditar = function () {
   openModal('Editar ' + ids.length + (ids.length === 1 ? ' movimento' : ' movimentos'),
     '<div class="form">' +
       '<div class="hint">Só se altera o que preencheres. O resto de cada movimento fica como está.</div>' +
-      '<label>Categoria' + sel('selCat', '', cats, 'CW.selCatMudou') + '</label>' +
+      '<label>Categoria' + sel('selCat', '', cats, 'CW.selCatMudou', 'rascunho') + '</label>' +
       '<div id="selSubBox"><label>Subcategoria' +
-        sel('selSub', '', [{ v: '', label: '— não mexer —' }], '') + '</label></div>' +
+        sel('selSub', '', [{ v: '', label: '— não mexer —' }], '', 'rascunho') + '</label></div>' +
       (tags.length
         ? '<div><div class="flabel">Etiquetas</div>' +
           '<div class="chips" id="selTags">' + tags.map(function (g) {
             return '<button type="button" class="tag grey" data-tag="' + esc(g) +
-              '" onclick="CW.selTagToggle(this)">' + esc(g) + '</button>';
+              '" data-toca="nada" onclick="CW.selTagToggle(this)">' + esc(g) + '</button>';
           }).join('') + '</div>' +
           '<div class="hint" style="margin-top:7px">As que marcares são <b>acrescentadas</b>. ' +
           'Nenhuma etiqueta é removida.</div></div>'
         : '') +
     '</div>',
-    '<button class="btn" onclick="closeAllModals()">Cancelar</button>' +
-    '<button class="btn primary" onclick="CW.selGravar()">Aplicar</button>');
+    '<button class="btn" data-toca="camada" onclick="closeAllModals()">Cancelar</button>' +
+    '<button class="btn primary" data-toca="dados" onclick="CW.selGravar()">Aplicar</button>');
 };
 
 // ao mudar a categoria na edição em massa, refaz o menu de subcategorias com as dessa categoria
@@ -329,7 +331,7 @@ CW.selCatMudou = function () {
   var box = document.getElementById('selSubBox');
   if (!box) return;
   box.innerHTML = '<label>Subcategoria' + sel('selSub', '',
-    [{ v: '', label: '— não mexer —' }].concat(subs.map(function (x) { return { v: x, label: x }; })), '') + '</label>';
+    [{ v: '', label: '— não mexer —' }].concat(subs.map(function (x) { return { v: x, label: x }; })), '', 'rascunho') + '</label>';
 };
 
 // liga/desliga uma etiqueta na edição em massa (o estado vive na classe do próprio botão)
@@ -431,10 +433,10 @@ css.textContent =
   '.sel-bar{position:sticky;top:calc(57px + var(--inset-top));z-index:26;display:flex;align-items:center;' +
     'gap:2px;background:var(--bg);padding:10px 0;margin:-4px 0 6px;box-shadow:0 8px 10px -10px rgba(0,0,0,.3)}' +
   '.section-title.sel-mes{position:sticky;top:calc(114px + var(--inset-top));z-index:25;background:var(--bg);' +
-    'align-items:center;padding:7px 0;margin-top:14px}' +
+    'align-items:center;padding:7px 0;margin-top:14px;cursor:pointer}' +
   '.section-title.sel-mes .selbox{padding-right:9px}' +
   // o kebab de cada linha, discreto até se lhe tocar
-  '.txkebab{margin:0 0 0 4px;padding:9px;color:var(--muted)}' +
+  '.txkebab{margin:0 0 0 4px}' +
   '.sel-fundo{position:fixed;left:0;right:0;bottom:0;z-index:45;display:flex;gap:8px;align-items:center;' +
     'background:var(--card);border-top:1px solid var(--line);' +
     'padding:8px calc(10px + var(--inset-right)) calc(8px + var(--inset-bottom)) calc(10px + var(--inset-left))}' +

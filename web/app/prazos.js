@@ -83,31 +83,33 @@ function prazosDe(hoje){
   };
 
   (db.contracts||[]).forEach(c=>{
-    if(!isActive(c))return;
+    /* ctVivo: num contrato curto com início futuro, o aviso de oposição à
+       renovação cai ANTES do início — calá-lo até lá é perdê-lo de vez */
+    if(!ctVivo(c))return;
     const nome=c.name||propName(c.propertyId)||'contrato';
     const abrir=`ctModal('${c.id}')`;
     if(c.end){
       const oposicao=pzAddDias(c.end,-120);
       poe('oposicao',c.id+':'+c.end,oposicao,'Oposição à renovação — '+nome,
-        'Para o contrato não renovar a '+c.end+', o aviso ao inquilino tem de seguir até '+oposicao+' (120 dias).',abrir,false);
+        'Para o contrato não renovar a '+dPT(c.end)+', o aviso ao inquilino tem de seguir até '+dPT(oposicao)+' (120 dias).',abrir,false);
       poe('fim',c.id+':'+c.end,c.end,'Fim do prazo do contrato — '+nome,
-        'Termina a '+c.end+'. Sem oposição, renova-se automaticamente pelo período legal — atualiza o fim para o novo prazo.',abrir,true);
+        'Termina a '+dPT(c.end)+'. Sem oposição, renova-se automaticamente pelo período legal — atualiza o fim para o novo prazo.',abrir,true);
     }
     if(c.increase!=null&&c.start){
       const aniv=pzAniversario(c.start,h);
       const aviso=pzAddDias(aniv,-30);
       poe('aumento',c.id+':'+aniv,aviso,'Aumento anual da renda — '+nome,
-        'Para valer a '+aniv+', o aviso ao inquilino (30 dias) segue até '+aviso+'. Renda '+euro(c.rent)+' '+(c.increase>0?'+':'')+c.increase+'%.',abrir,false);
+        'Para valer a '+dPT(aniv)+', o aviso ao inquilino (30 dias) segue até '+dPT(aviso)+'. Renda '+euro(c.rent)+' '+(c.increase>0?'+':'')+c.increase+'%.',abrir,false);
     }
   });
 
   // pessoas: inquilinos de contratos ativos + proprietários, com CC datado
-  const ativos={};(db.contracts||[]).forEach(c=>{if(isActive(c))(c.tenantIds||[]).forEach(t=>{ativos[t]=1})});
+  const ativos={};(db.contracts||[]).forEach(c=>{if(ctVivo(c))(c.tenantIds||[]).forEach(t=>{ativos[t]=1})});
   const vistos={};
   const pessoa=(p,papel)=>{
     if(!p||!p.ccValid||vistos[p.id])return;vistos[p.id]=1;
     poe('cc',p.id+':'+p.ccValid,p.ccValid,'Cartão de cidadão — '+(p.name||'pessoa'),
-      'Caduca a '+p.ccValid+'. Um contrato novo (ou renovado) precisa do documento válido.',
+      'Caduca a '+dPT(p.ccValid)+'. Um contrato novo (ou renovado) precisa do documento válido.',
       `personModal('${papel}','${p.id}')`,true);
   };
   (db.tenants||[]).forEach(t=>{if(ativos[t.id])pessoa(t,'tenant')});
@@ -116,7 +118,7 @@ function prazosDe(hoje){
   (db.properties||[]).forEach(p=>{
     if(p.energyValid){
       poe('energia',p.id+':'+p.energyValid,p.energyValid,'Certificado energético — '+(p.name||'imóvel'),
-        'Expira a '+p.energyValid+'. É obrigatório para anunciar e celebrar arrendamentos.',
+        'Expira a '+dPT(p.energyValid)+'. É obrigatório para anunciar e celebrar arrendamentos.',
         `propModal('${p.id}')`,true);
     }
     (p.loans||[]).forEach(l=>{
@@ -124,7 +126,7 @@ function prazosDe(hoje){
       const fim=pzAddAnos(l.start,Number(l.fixedYears));
       const depois=(Number(l.euribor)||0)+(Number(l.spread)||0);
       poe('taxa',l.id+':'+fim,fim,'Fim da taxa fixa — '+(l.name||l.bank||'crédito')+' ('+(p.name||'imóvel')+')',
-        'A '+fim+' a taxa passa de '+dec(l.rate)+'% para Euribor+spread (hoje ~'+dec(depois)+'%). Bom momento para comparar propostas.',
+        'A '+dPT(fim)+' a taxa passa de '+dec(l.rate)+'% para Euribor+spread (hoje ~'+dec(depois)+'%). Bom momento para comparar propostas.',
         `propModal('${p.id}')`,false);
     });
   });
@@ -167,6 +169,9 @@ function pzToggle(){try{localStorage.setItem('gi_pz_shut',pzShut()?'0':'1')}catc
    pessoa, o imóvel) e um «Silenciar» com rede.
    Devolve: o HTML do cartão (texto), ou '' quando não há prazos na janela. */
 function prazosCard(){
+  /* o mesmo guarda do sino (auxiliares.js:sabemosOEstado): um prazo silenciado
+     noutro aparelho reaparecia aqui, com selo vermelho, até o estado chegar */
+  if(!sabemosOEstado())return '';
   const lista=prazosAtivos();
   if(!lista.length)return '';
   const stop='event.stopPropagation();';
@@ -175,18 +180,18 @@ function prazosCard(){
     const txt=p.dias<0?('há '+(-p.dias)+' d'):p.dias===0?'hoje':(p.dias+' d');
     return `<span class="badge ${cls}" style="flex:0 0 auto">${txt}</span>`;
   };
-  const row=p=>`<div class="card tap" style="padding:11px 13px" onclick="${p.abrir}">
+  const row=p=>`<div class="card tap" style="padding:11px 13px" data-toca="camada" onclick="${p.abrir}">
     <div class="row-between" style="align-items:center;gap:10px">
       <div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.titulo)}</b>
         <span class="small">${esc(p.sub)}</span></div>${selo(p)}</div>
     <div class="toolbar" style="margin:9px 0 0">
-      <button class="btn sm" onclick="${stop}pzSilencia('${jsq(p.chave)}')">Silenciar</button></div></div>`;
+      <button class="btn sm" data-toca="dados" onclick="${stop}pzSilencia('${jsq(p.chave)}')">Silenciar</button></div></div>`;
   const urgentes=lista.filter(p=>p.dias<=7).length,open=!pzShut();
   return `<div class="card" id="pzCard" style="margin-bottom:14px">
-    <div class="row-between tap" style="align-items:center;cursor:pointer;margin:-16px;padding:16px" onclick="pzToggle()">
+    <div class="row-between tap" style="align-items:center;cursor:pointer;margin:-16px;padding:16px" data-toca="vista" onclick="pzToggle()">
       <div style="min-width:0"><div class="title">Prazos</div>
         <div class="small">${lista.length} na janela de aviso${urgentes?' · <b class="neg">'+urgentes+' com 7 dias ou menos</b>':''}${open?'':' · toca para ver'}</div></div>
-      <span style="flex:0 0 auto;display:inline-flex;transform:rotate(${open?'90':'-90'}deg);transition:transform .15s">${ic('chev',20)}</span></div>
+      <span style="flex:0 0 auto;display:inline-flex;transform:rotate(${open?'90':'-90'}deg)">${ic('chev',20)}</span></div>
     ${open?`<div class="list" style="gap:8px;margin-top:12px">${lista.map(row).join('')}</div>
     <div class="hint" style="margin-top:9px">Silenciar cala esta ocorrência; quando a data mudar, o aviso volta sozinho.</div>`:''}</div>`;
 }

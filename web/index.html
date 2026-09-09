@@ -70,22 +70,57 @@
      página sabe apresentar-se clara e escura. Quem escolhe é o applyTheme(),
      que estreita isto para um dos dois com um estilo em linha. */
   color-scheme:light dark;
-  --bg:#f7f8fa; --card:#fff; --field:#fff; --chip:#f2f4f3; --tint:#f6faf8;
+  --bg:#f7f8fa; --card:#fff; --field:#fff; --chip:#f2f4f3; --tint:#f6faf8; --press:#e4e9e6;
   --ink:#17221d; --muted:#5a635e; --line:#e7ebe8; --line2:#cfd8d3;
-  --accent:#244c3b; --accent-ink:#fff; --accent-soft:#dfece6; --accent-press:#1c3d2f;
+  --accent:#244c3b; --accent-ink:#fff; --accent-soft:#dfece6; --accent-press:#1c3d2f; --accent-fundo:#132a20;
   --danger:#b94a48; --danger-soft:#f7e8e7; --warn:#9a6400; --warn-soft:#f6eeda;
   --side:#1a3a2c; --side-ink:#dfece6; --side-muted:#9dbdae; --side-hover:rgba(255,255,255,.07); --side-on:rgba(255,255,255,.13);
   --track:#dfe3e1; --blur:rgba(247,248,250,.94); --shadow:0 24px 60px rgba(0,0,0,.28);
   --rail:264px; --rail-min:76px;
+  /* Movimento: uma só escala de durações e duas curvas, citadas por toda a
+     folha, para nada aqui ser um número escolhido à sorte. --curva arranca
+     depressa e chega devagar — é a de quem entra em cena; --curva-sai faz o
+     inverso, e serve o que se fecha ou desaparece. */
+  /* O --lento é o degrau de quem atravessa distância — a folha da janela. A
+     .26s não chegava: com a curva certa, uma folha que sobe o ecrã inteiro
+     precisa de tempo para se ver subir. */
+  --rapido:.12s; --medio:.2s; --lento:.34s;
+  /* fora da escala porque não são reações: --desenho é um gráfico a
+     desenhar-se e --pulso é um crachá a saltar */
+  --desenho:.5s; --pulso:.18s;
+  /* o tempo que o toque longo espera antes de disparar (componentes.js): a
+     animação da espera tem de durar exatamente o mesmo, senão promete uma
+     coisa e faz outra */
+  --espera:.48s;
+  /* TRÊS curvas de entrada, e a diferença é a distância percorrida.
+     A --curva é um estalido: medida, faz 83% do caminho em 30% do tempo. É o
+     que se quer num botão que encolhe 3% — a reação tem de parecer imediata.
+     Numa folha que atravessa o ecrã, quer dizer 83% da altura em 78 ms: a
+     janela teleporta-se e passa o resto do tempo a assentar os últimos 4%.
+     A --curva-entra faz 64% em 30% e é a de quem ATRAVESSA distância: a folha
+     da janela, a gaveta, as barras de um gráfico a crescer, o conteúdo de uma
+     dobra. Quem estiver na dúvida: se o que se move percorre mais do que uns
+     poucos pixeis, é a --curva-entra.
+     A --curva-fita é para o que atravessa EM BLOCO: as duas fitas — a dos
+     separadores e a das listas — em que o que sai e o que entra viajam
+     agarrados. Ali a --curva-entra estava errada por ser a de quem CHEGA:
+     arranca à velocidade máxima, e uma fita que estava parada não pode ter o
+     primeiro fotograma já a toda a brida — lê-se como um empurrão. Esta sai
+     das outras duas: o arranque da --curva-sai (.4,0) com a chegada da
+     --curva-entra (.2,1). Parte do sítio, ganha velocidade, chega devagar. E
+     é uma só para os dois painéis de propósito: com curvas diferentes
+     abria-se uma fenda entre eles a meio do caminho. */
+  --curva:cubic-bezier(.22,1,.36,1); --curva-entra:cubic-bezier(0,0,.2,1);
+  --curva-sai:cubic-bezier(.4,0,1,1); --curva-fita:cubic-bezier(.4,0,.2,1);
   --safe:env(safe-area-inset-top,0px);
   --inset-top:var(--safe); --inset-bottom:env(safe-area-inset-bottom,0px);
   --inset-left:env(safe-area-inset-left,0px); --inset-right:env(safe-area-inset-right,0px);
 }
 :root.dark{
   color-scheme:dark;
-  --bg:#12141b; --card:#1b1e28; --field:#20242f; --chip:#272b38; --tint:#1f2330;
+  --bg:#12141b; --card:#1b1e28; --field:#20242f; --chip:#272b38; --tint:#1f2330; --press:#333949;
   --ink:#eef0f6; --muted:#9aa3b8; --line:#2b3040; --line2:#3a4054;
-  --accent:#5ee0a8; --accent-ink:#0b1410; --accent-soft:#1c3a33; --accent-press:#7ceabb;
+  --accent:#5ee0a8; --accent-ink:#0b1410; --accent-soft:#1c3a33; --accent-press:#7ceabb; --accent-fundo:#9df0cd;
   --danger:#ff8a80; --danger-soft:#3a2326; --warn:#ffc35c; --warn-soft:#3a2f14;
   --side:#161a3a; --side-ink:#e3e6ff; --side-muted:#9aa0d6; --side-hover:rgba(255,255,255,.07); --side-on:rgba(94,224,168,.18);
   --track:#3a4054; --blur:rgba(18,20,27,.92); --shadow:0 24px 60px rgba(0,0,0,.6);
@@ -106,7 +141,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .value,.table td,.table th,.stat b{font-variant-numeric:tabular-nums}
 
 .app{display:flex;min-height:100%}
-aside{width:var(--rail);flex:0 0 var(--rail);background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;height:100dvh;transition:width .18s,flex-basis .18s,transform .22s;z-index:62}
+aside{width:var(--rail);flex:0 0 var(--rail);background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;height:100dvh;transition:width var(--medio) var(--curva-entra),flex-basis var(--medio) var(--curva-entra),transform var(--medio) var(--curva-entra);z-index:62}
 body.rail aside{width:var(--rail-min);flex-basis:var(--rail-min)}
 .brand{display:flex;align-items:center;gap:11px;padding:calc(18px + var(--inset-top)) 18px 14px;min-height:60px}
 .brand .mark{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.12);display:grid;place-items:center;flex:0 0 34px}
@@ -126,7 +161,13 @@ body.rail nav a{justify-content:center;padding:11px 0}
 .railbtn:hover{background:var(--side-hover);color:#fff}
 body.rail .railbtn{justify-content:center;padding:10px 0}
 body.rail .railbtn .txt{display:none}
-.scrim{display:none;position:fixed;inset:0;background:rgba(6,12,9,.55);z-index:61}
+/* O véu acompanha a gaveta em vez de chegar inteiro no primeiro frame: a
+   mesma duração e a mesma curva do aside, aqui em cima. O display fica de fora
+   de propósito — com opacity:0 e display:block o véu continuava a apanhar os
+   toques com a gaveta fechada; é o visibility que o tira da frente, e o atraso
+   de --medio só o esconde depois de ele ter acabado de desvanecer. */
+.scrim{position:fixed;inset:0;background:rgba(6,12,9,.55);z-index:61;opacity:0;visibility:hidden;
+  transition:opacity var(--medio) var(--curva-sai),visibility 0s var(--medio)}
 main{flex:1;min-width:0;display:flex;flex-direction:column}
 header.top{position:sticky;top:0;z-index:20;background:var(--blur);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);
   padding:calc(13px + var(--inset-top)) calc(22px + var(--inset-right)) 13px calc(22px + var(--inset-left));
@@ -142,7 +183,7 @@ header.top .sub{color:var(--muted);font-size:12px;margin-top:2px}
   body.rail aside{width:var(--rail);flex-basis:var(--rail)}
   body.rail .brand .txt,body.rail nav a .txt,body.rail .railbtn .txt{display:block}
   body.rail nav a,body.rail .railbtn{justify-content:flex-start;padding:11px 12px}
-  body.open .scrim{display:block}
+  body.open .scrim{opacity:1;visibility:visible;transition:opacity var(--medio) var(--curva),visibility 0s}
   .burger{display:block}
   .wrap{padding:14px calc(15px + var(--inset-right)) calc(44px + var(--inset-bottom)) calc(15px + var(--inset-left))}
   header.top{padding:calc(11px + var(--inset-top)) calc(15px + var(--inset-right)) 11px calc(15px + var(--inset-left))}
@@ -152,18 +193,46 @@ header.top .sub{color:var(--muted);font-size:12px;margin-top:2px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;min-width:0;max-width:100%}
 .cols>*{min-width:0}
 /* clicavel: risco de acento a esquerda + reacao ao toque; informativo fica liso */
-.card.tap{cursor:pointer;position:relative;overflow:hidden;transition:border-color .12s,transform .06s,background .12s}
+.card.tap{cursor:pointer;position:relative;overflow:hidden;transition:border-color var(--rapido) var(--curva),transform var(--rapido) var(--curva),background var(--rapido) var(--curva)}
 .card.tap::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);opacity:.5}
 .card.tap:hover{border-color:var(--line2);background:var(--tint)}
-.card.tap:active{transform:scale(.99);background:var(--chip)}
+/* 1% não se vê: era a queixa de «não reage ao toque, só muda de cor». As
+   linhas de lista são a superfície que mais se toca na app. */
+.card.tap:active{transform:scale(.98);background:var(--press)}
 .card.tap.pend::before,.card.kpi::before{display:none}
 [data-lp]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 *{-webkit-tap-highlight-color:transparent}
 button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* Segurar o dedo sobre uma superfície que reage ao toque não é selecionar
+   texto. A lista dos movimentos MEXE-SE por baixo do dedo ao entrar em modo
+   de seleção — nasce a barra acima de tudo, o título do mês cresce e cola-se
+   ao topo —, e o dedo acaba sobre o cabeçalho do mês, que não tem data-lp e
+   escapava às duas regras de cima. Casa pelo comportamento e não pelo
+   elemento: o tornarFocavel carimba role="button" em tudo o que tem onclick,
+   e é por aí que se apanha também o que ainda não existe. O que se copia — o
+   IBAN, as notas, os valores das fichas — não tem onclick nenhum. */
+[role="button"],.section-title,.selbox,.sel-bar{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .grid{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(158px,1fr))}
 .cols{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));margin-top:14px}
 .kpi .label{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
 .kpi .value{font-size:22px;font-weight:750;margin-top:6px;letter-spacing:-.025em}
+/* A faixa da série de um indicador: a silhueta dos doze meses e a variação
+   face ao ano anterior. A ALTURA E FIXA de propósito — a caixa nasce vazia
+   com o render e só depois é enchida (vistas.js:pintarSeriesKpi), e sem altura
+   reservada tudo o que está por baixo saltava quando ela aparecesse. */
+/* Duas linhas: a silhueta e a variação em cima, o ano e o valor em baixo.
+   Numa linha só, «2025: 8 500 €» era o terceiro a caber e o primeiro a ser
+   cortado pelas reticências — desaparecia, e sem ele a percentagem não diz de
+   que números fala. A altura é dada (e não a do conteúdo) porque a caixa
+   nasce vazia e é enchida depois: sem ela, tudo o que está por baixo saltava
+   quando a variação aparecesse. */
+.kserie{min-height:38px;margin:5px 0 1px;display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;min-width:0}
+.kserie .ksilhueta{width:46px;height:16px;flex:0 0 46px;color:var(--line2);opacity:.9}
+.kserie .kvar{font-size:11.5px;font-weight:700;white-space:nowrap;color:var(--muted)}
+.kserie .kvar.pos{color:var(--accent)}
+.kserie .kvar.neg{color:var(--danger)}
+.kserie .kvsub{font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  flex:1 0 100%;min-width:0}
 .kpi .foot{font-size:11.5px;color:var(--muted);margin-top:3px}
 .kpi.why{cursor:pointer}
 .kpi .expl{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);line-height:1.5}
@@ -175,7 +244,7 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
 
 /* dica dos gráficos */
 .tip{position:fixed;z-index:95;background:var(--ink);color:var(--bg);padding:7px 11px;border-radius:9px;
-  font-size:12.5px;font-weight:600;pointer-events:none;opacity:0;transition:opacity .12s;max-width:calc(100vw - 16px);text-align:center;line-height:1.35}
+  font-size:12.5px;font-weight:600;pointer-events:none;opacity:0;transition:opacity var(--rapido) var(--curva);max-width:calc(100vw - 16px);text-align:center;line-height:1.35}
 .tip.on{opacity:1}
 .pos{color:var(--accent)}.neg{color:var(--danger)}.amber{color:var(--warn)}
 .section-title{font-size:13px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:22px 0 10px}
@@ -197,6 +266,12 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
 html.dark .badge.amber{color:var(--warn)}
 html.dark .badge.red{color:var(--danger)}
 .title{font-weight:700;letter-spacing:-.01em}
+/* Um título que divide a linha com um valor e com a porta das opções tem de
+   cortar: a coluna dele encolhe, e o que sobra sai da caixa. Três cartões
+   escreviam isto à mão no style de cada um — passou a ser a regra do padrão.
+   Só neste padrão: um .title que é o cabeçalho de uma folha pode embrulhar. */
+.card .row-between>div:first-child{min-width:0}
+.card .row-between>div:first-child>.title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .small{font-size:12px;color:var(--muted)}
 .empty{padding:38px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:16px;background:var(--card)}
 /* o calendário: sete colunas, células quadradas-ish, pontos por tipo */
@@ -251,7 +326,7 @@ html.dark .badge.red{color:var(--danger)}
 .prow .pnm{flex:1;min-width:0}
 .pgrab{width:34px;height:40px;border:1px solid var(--line);background:var(--field);border-radius:9px;display:grid;place-items:center;color:var(--muted);cursor:grab;flex:0 0 34px;touch-action:none}
 .prow.drag{position:relative;z-index:5;box-shadow:0 10px 26px rgba(0,0,0,.25);background:var(--card);border-radius:12px}
-.prow{transition:transform .12s}
+.prow{transition:transform var(--rapido) var(--curva)}
 .prow.drag{transition:none}
 .pcover img{width:100%;height:100%;object-fit:cover;display:block}
 .thumb input.nm:focus{outline:2px solid var(--accent-soft);outline-offset:-2px}
@@ -261,8 +336,36 @@ html.dark .badge.red{color:var(--danger)}
 .ownrow .pc{color:var(--muted);font-size:12px}
 
 .chartbox svg{width:100%;height:auto;display:block;overflow:visible}
+/* Ler um gráfico com o dedo (graficos.js). A guia e a faixa são SOBREPOSTAS:
+   um gráfico não pode mudar de altura só por alguém lhe tocar. E a faixa fica
+   no topo, fixa — debaixo do dedo era onde o balão antigo estava, e é onde a
+   mão tapa o que se quer ler. */
+/* Sem seleção nem callout: os rótulos do eixo são <text> a sério dentro do
+   SVG, e segurar o dedo caía no gesto de selecionar palavra do browser — que
+   escolhia o mês e, ao começar, roubava o ponteiro e cancelava a leitura. É a
+   mesma proteção que a app já dá a [data-lp], o outro gesto de segurar. */
+.chartbox{position:relative;touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.chartguia,.chartlido{opacity:0;pointer-events:none;transition:opacity var(--rapido) var(--curva)}
+.chartbox.a-ler .chartguia,.chartbox.a-ler .chartlido{opacity:1}
+.chartguia{position:absolute;top:0;bottom:13px;width:1.5px;margin-left:-.75px;background:var(--line2);border-radius:2px}
+.chartlido{position:absolute;left:0;right:0;top:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;
+  padding:5px 8px;border-radius:10px;background:var(--card);border:1px solid var(--line);
+  box-shadow:var(--shadow);font-size:11.5px;line-height:1.3}
+.chartlido b{font-weight:700}
+.chartlido span{display:inline-flex;align-items:center;gap:5px;color:var(--muted);white-space:nowrap}
+.chartlido span i{width:8px;height:8px;border-radius:3px;flex:0 0 8px}
+/* A página trancada por baixo de uma janela. Quem tranca é o overflow do
+   html e o position:fixed do body — o body NÃO leva overflow:hidden.
+
+   Levava, e o body tem uma altura de ecrã (html,body{height:100%}): trancado
+   em position:fixed com top:-scrollY, passava a recortar o próprio conteúdo a
+   uma caixa de um ecrã ancorada no INÍCIO do documento, e essa caixa está
+   empurrada para fora da vista pelo valor do scroll. Com a página rolada, não
+   se pintava nada por trás da janela — um retângulo escuro parado, que parecia
+   um véu descolado do scroll e era a página a desaparecer. O .modal escapava
+   ao recorte por ser fixed, e por isso a folha e o véu ficavam certos. */
 html.noscroll{overflow:hidden}
-html.noscroll body{overflow:hidden;position:fixed;left:0;right:0;width:100%}
+html.noscroll body{position:fixed;left:0;right:0;width:100%}
 .navh{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--side-muted);padding:14px 12px 4px;opacity:.85;white-space:nowrap}
 nav a .cnt{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px}
 .kpi.evo{cursor:pointer}
@@ -275,10 +378,23 @@ nav a .cnt{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px
 .fold-head b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
 .form>*{min-width:0}.sect{min-width:0}
 .fold-head .fsum{margin-left:auto;color:var(--muted);font-size:12px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
-.fold-head .chev{flex:0 0 auto;color:var(--muted);transition:transform .15s}
+.fold-head .chev{flex:0 0 auto;color:var(--muted);transition:transform var(--medio) var(--curva)}
 .fold.open>.fold-head .chev{transform:rotate(180deg)}
+/* A dobra abre e fecha com o display, como sempre; o que é novo é o conteúdo
+   entrar. Tem de ser @keyframes e não transition: um elemento que acaba de sair
+   do display:none não tem valor antigo de onde partir.
+   Animar a ALTURA (grid-template-rows 0fr→1fr) foi tentado e desfeito: medida
+   no browser, a linha dimensionada por max-content não interpolava — a dobra
+   ficava presa na altura do conteúdo e não chegava a fechar — e o
+   overflow:hidden que a técnica obriga recortava os menus dos sel() lá dentro.
+   Uma dobra que abre de golpe custa menos do que uma dobra que não fecha.
+   A entrada é de quem ABRE: a classe .entra só o toggleFold a põe. Sem ela,
+   re-renderizar a janela com a dobra já aberta (escolher uma categoria
+   reconstrói tudo) fazia o conteúdo piscar a cada escolha. */
 .fold-body{display:none;padding:2px 14px 14px;gap:13px}
 .fold.open>.fold-body{display:grid}
+.fold.entra.open>.fold-body{animation:foldEntra var(--medio) var(--curva-entra)}
+@keyframes foldEntra{from{opacity:0;transform:translateY(-6px)}}
 .pend{border-left:3px solid var(--warn)}
 .pend.late{border-left-color:var(--danger)}
 .legend{display:grid;gap:7px;margin-top:12px;grid-template-columns:minmax(0,1fr)}
@@ -300,6 +416,9 @@ nav a .cnt{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px
   .qclear{min-width:36px;min-height:36px}
   .rich-tools button{min-width:38px;min-height:36px}
   .fold-head{min-height:44px}
+  /* o «Anular» de um aviso é a única saída de uma ação já feita, e o aviso
+     sai do ecrã ao fim de segundos: não é sítio para falhar a pontaria */
+  .toast .toastbtn{min-height:44px}
 }
 /* um campo com erro aponta para si próprio, em vez de só um toast longe dele */
 .err{border-color:var(--danger)!important;box-shadow:0 0 0 2px var(--danger-soft)}
@@ -453,7 +572,7 @@ textarea{min-height:90px;resize:vertical}
 .sect-head .ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex:0 0 30px}
 .seg{display:grid;gap:8px}.seg.c3{grid-template-columns:repeat(3,1fr)}.seg.c2{grid-template-columns:repeat(2,1fr)}.seg.c4{grid-template-columns:repeat(4,1fr)}
 @media(max-width:520px){.seg.c4{grid-template-columns:repeat(2,1fr)}}
-.opt{border:1.5px solid var(--line);background:var(--card);border-radius:13px;padding:12px 9px;cursor:pointer;display:grid;gap:6px;justify-items:center;text-align:center;transition:.12s}
+.opt{border:1.5px solid var(--line);background:var(--card);border-radius:13px;padding:12px 9px;cursor:pointer;display:grid;gap:6px;justify-items:center;text-align:center;transition:border-color var(--rapido) var(--curva),background-color var(--rapido) var(--curva),transform var(--rapido) var(--curva)}
 .opt .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--chip);color:var(--muted)}
 .opt b{font-size:12.5px;font-weight:650}
 .opt small{font-size:10.5px;color:var(--muted);line-height:1.3}
@@ -484,15 +603,210 @@ textarea{min-height:90px;resize:vertical}
 .sheet .foot .btn{flex:1;justify-content:center}
 .iconbtn{border:0;background:transparent;padding:7px;border-radius:9px;cursor:pointer;color:var(--muted)}
 .iconbtn:hover{background:var(--chip);color:var(--ink)}
+/* A porta das opções de um registo, e é a mesma em toda a app: o kebab das
+   listas (vistas.js), o dos movimentos (cloud/selecao.js) e o do menu de ações
+   (componentes.js). Eram três desenhos, três tamanhos e três nomes — o mais
+   usado tinha 37px de largura, abaixo do mínimo de alvo, e nenhum rótulo. Quem
+   aprende a reconhecer a porta numa lista tem de a reconhecer na seguinte,
+   senão o toque longo continua a parecer a única maneira de lá chegar.
+   O alinhamento vem para aqui porque era um style= repetido em cada linha.
+   A caixa é dada, não calculada: com padding, o alvo saía do tamanho do ícone
+   mais a entrelinha do texto à volta, e dava 36x40 — abaixo do mínimo — sem
+   ninguém ter pedido nada disso. */
+.opcoes{display:inline-flex;align-items:center;justify-content:center;
+  width:44px;height:44px;padding:0;color:var(--muted);flex:0 0 auto;align-self:flex-start}
 /* A folha de baixo, no telemovel. O max-height tem de vir em dvh como o de
    cima: esta regra vem depois e, so com vh, desfazia-o. E vh e a altura com
    as barras do browser recolhidas — com a barra de endereco e a de comandos
    a mostra, a folha crescia para alem do que se ve e o topo ficava cortado,
    fora de alcance, porque esta encostada em baixo. */
 @media(max-width:520px){.sheet{top:auto;bottom:0;left:0;transform:none;width:100%;max-height:93vh;max-height:93dvh;border-radius:20px 20px 0 0}}
-.toast{position:fixed;left:50%;bottom:calc(22px + var(--inset-bottom));transform:translateX(-50%) translateY(80px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;z-index:90;font-size:13.5px;font-weight:550;opacity:0;transition:.22s;pointer-events:none;max-width:90vw;text-align:center}
+.toast{position:fixed;left:50%;bottom:calc(22px + var(--inset-bottom) + var(--acima,0px));transform:translateX(-50%) translateY(80px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;z-index:90;font-size:13.5px;font-weight:550;opacity:0;transition:opacity var(--medio) var(--curva),transform var(--medio) var(--curva);pointer-events:none;max-width:90vw;text-align:center;
+  display:flex;align-items:center;justify-content:center;gap:12px}
 .toast.on{opacity:1;transform:translateX(-50%);pointer-events:auto}
-.toast .toastbtn{margin-left:12px;background:none;border:0;color:var(--accent);font:inherit;font-weight:750;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+/* O que desfaz o que acabou de acontecer não pode parecer texto: estava
+   sublinhado, com cor de link, deitado sobre a barra escura do aviso. É a
+   única saída de uma ação já feita, e uma saída quer-se com caixa e com um
+   alvo que se acerta sem pontaria. */
+.toast .toastbtn{margin:0;background:var(--bg);border:0;color:var(--ink);font:inherit;font-weight:750;
+  cursor:pointer;padding:8px 14px;border-radius:9px;min-height:36px;flex:0 0 auto}
+.toast .toastbtn:hover{background:var(--chip)}
+
+/* ======================= MOVIMENTO =======================
+   Fundações. Tudo o que se mexe cita os tokens do :root (--rapido, --medio,
+   --lento, --curva, --curva-sai). O bloco fica no fim da folha de propósito:
+   assim os :active e os :focus-visible ganham os empates com os :hover
+   declarados acima, sem precisarem de especificidade a mais.
+
+   --- O que se toca reage ao dedo ---
+   A app desliga o realce nativo do toque em tudo (o -webkit-tap-highlight-color
+   transparente, lá em cima) e até aqui só o .card.tap e o .fab o devolviam. No
+   telemóvel não há :hover: sem isto, tocar em «Guardar», numa opção de menu ou
+   num separador da barra de baixo não dá sinal nenhum entre o dedo e o
+   resultado — lê-se como app parada, e é o que provoca o segundo toque.
+   Sempre :active e nunca :hover, que no iOS fica preso depois do toque. */
+.btn,.iconbtn,.selbtn,.selopt,.menupop button,.tabbar a,.addbox,.fold-head,
+.tagadd,.tag button,.railbtn,nav a,.legend .li.tap,.card.kpi.why,.card.kpi.evo,
+.rich-tools button,.qclear,.burger,.totop,.thumb{
+  transition:background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva),
+    color var(--rapido) var(--curva),transform var(--rapido) var(--curva)}
+.btn:active,.iconbtn:active,.selbtn:active,.selopt:active,.menupop button:active,
+.tabbar a:active,.tagadd:active,.tag button:active,.railbtn:active,nav a:active,
+.rich-tools button:active,.burger:active,.opt:active{transform:scale(.97)}
+/* as superfícies grandes afundam menos — a .99 do .card.tap é a régua */
+.addbox:active,.fold-head:active,.legend .li.tap:active,.calday.tap:active,
+.card.kpi.why:active,.card.kpi.evo:active{transform:scale(.98)}
+/* estes dois já usam o transform para se posicionarem: o scale entra a seguir
+   ao que lá está, senão saltavam do sítio ao serem premidos */
+.totop:active{transform:translateX(-50%) scale(.94)}
+.qclear:active{transform:translateY(-50%) scale(.9)}
+/* O fundo premido é o --press, e nunca o --chip: medido, cinco pares
+   :hover/:active pintavam-se da mesma cor (.iconbtn, .selopt, .menupop
+   button, .legend .li.tap e .btn.primary). Com rato, o ponteiro fica em cima
+   depois do clique, o :hover mantém a cor, e o toque seguinte não muda nada —
+   a app parecia deixar de responder ao segundo toque. Com uma cor própria,
+   premido nunca pode ser igual a passar por cima.
+   Só onde há fundo neutro para escurecer: quem já está ativo (.on) fica com o
+   seu, e a gaveta tem paleta própria. */
+.btn:active,.iconbtn:active,.selbtn:active,.selopt:active,.menupop button:active,
+.addbox:active,.fold-head:active,.tagadd:active,.legend .li.tap:active,
+.rich-tools button:active,.burger:active,.totop:active,.qclear:active,
+.tabbar a:not(.on):active,.calday.tap:not(.on):active,.opt:not(.on):active{background:var(--press)}
+/* o :hover já usava o --accent-press: sem uma cor mais funda, premir um
+   botão primário com o rato em cima não mudava nada */
+.btn.primary:active{background:var(--accent-fundo);border-color:var(--accent-fundo)}
+.btn.danger:active{background:var(--danger-soft)}
+nav a:active,.railbtn:active{background:var(--side-on);color:#fff}
+/* o FAB tinha o scale(.96) declarado e nenhuma transição para o executar:
+   descia e subia em zero frames, na peça mais tocada da app */
+.fab{transition:transform var(--rapido) var(--curva)}
+
+/* A espera de um toque longo, que se vê encher. Sem isto ficava meio segundo
+   uma laje cinzenta parada — o estado premido foi feito para um toque, que
+   dura um instante — e a cor da seleção chegava como um salto. */
+@keyframes lpEspera{from{background:var(--card)}to{background:var(--press)}}
+.lp-espera{animation:lpEspera var(--espera) linear both}
+
+/* Rede do premido, a par da do foco: o tornarFocavel dá role=button a tudo o
+   que tem onclick, e medi cinco sítios só na visão geral que reagiam ao toque
+   com nada. Fica por baixo das regras de cima na especificidade, por isso
+   quem já tem o seu (o .card.tap, por exemplo) mantém-no. */
+[role="button"]:active,.tap:active{transform:scale(.98)}
+/* Uma forma de gráfico não é um botão que se afunda. O tornarFocavel dá-lhes
+   role=button para o teclado lá chegar, e a regra de cima apanhava-as: num
+   SVG, um transform não é uma reação — é o desenho a mudar de sítio. E a
+   origem não é o centro da forma: a barra encolhe a partir do eixo e a ponta
+   livre anda; o ponto de uma linha tem a origem em 0,0 do desenho inteiro e
+   afasta-se na proporção da distância a que está dela. Medido: as barras
+   saltavam ao serem tocadas, e a dica que aparece a seguir ficava ancorada à
+   forma já deslocada, a assentar só quando o dedo saía. */
+svg [role="button"]:active,svg .tap:active{transform:none}
+[role="button"]:not(.on):active,.tap:not(.card):not(.on):active{background:var(--press)}
+
+/* --- O foco desenha-se ---
+   O tornarFocavel() dá tabindex e role=button a todos os cartões com onclick, e
+   até aqui só os campos e os dias do calendário tinham anel. :focus-visible e
+   nunca :focus: quem chega de rato não pode deixar anéis por onde passa. */
+.btn:focus-visible,.iconbtn:focus-visible,.selbtn:focus-visible,.selopt:focus-visible,
+.menupop button:focus-visible,.tabbar a:focus-visible,nav a:focus-visible,
+.railbtn:focus-visible,.opt:focus-visible,.fold-head:focus-visible,
+.addbox:focus-visible,.tagadd:focus-visible,.tag button:focus-visible,
+.card.tap:focus-visible,.card.kpi.why:focus-visible,.card.kpi.evo:focus-visible,
+.legend .li.tap:focus-visible,.thumb:focus-visible,.fab:focus-visible,
+.burger:focus-visible,.totop:focus-visible,.qclear:focus-visible,
+.rich-tools button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* Rede de segurança, e não repetição: o tornarFocavel (vistas.js:tornarFocavel)
+   põe tabindex e role=button em TUDO o que tem onclick — cartões, linhas de
+   lista, e até as formas dos gráficos. Medido na visão geral: dezanove dos
+   trinta e nove sítios que o Tab alcança não tinham anel nenhum, por não
+   caberem em nenhuma das classes acima. */
+[role="button"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* A gaveta tem fundo próprio e escuro: medido, o --accent (#244c3b) sobre o
+   --side (#1a3a2c) dá 1.29:1 — o anel existia e não se via. Aqui o contraste
+   vem da paleta da própria gaveta. */
+nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
+
+/* --- Janelas, folhas e menus entram ---
+   O modal é criado e recebe .open no mesmo instante (componentes.js:modalLayer
+   escreve className='modal open' e só depois é que o openModal faz o
+   appendChild): uma transition não tem valor antigo de onde partir num nó
+   acabado de inserir, e por isso a entrada escreve-se em @keyframes. Só a
+   entrada — animar a saída obriga a adiar o M.el.remove() do closeModal e a
+   mexer na pilha de janelas, e isso é outra conversa. */
+@keyframes veuEntra{from{opacity:0}}
+@keyframes folhaEntra{from{opacity:0;transform:translate(-50%,-50%) translateY(14px) scale(.98)}}
+@keyframes folhaSobe{from{transform:translateY(100%)}}
+@keyframes popEntra{from{opacity:0;transform:scale(.96)}}
+.modal.open .bg{animation:veuEntra var(--lento) var(--curva-entra)}
+.modal.open .sheet{animation:folhaEntra var(--lento) var(--curva-entra)}
+/* abaixo dos 520px a janela é uma folha encostada em baixo: o gesto que o
+   sistema ensina é subir, e até aqui ela materializava-se feita */
+@media(max-width:520px){.modal.open .sheet{animation:folhaSobe var(--lento) var(--curva-entra)}}
+/* a origem é o lado por onde o menu nasce: o do sel() cai do botão, o das
+   ações abre do canto direito e o do FAB sobe do canto de baixo */
+.selpop.on{transform-origin:top center;animation:popEntra var(--rapido) var(--curva)}
+.menupop.on{transform-origin:top right;animation:popEntra var(--rapido) var(--curva)}
+.fabmenu.on{transform-origin:bottom right;animation:popEntra var(--rapido) var(--curva)}
+
+/* --- O que muda num nó vivo ---
+   Os casos raros em que a classe troca sem o nó ser recriado, e portanto os
+   únicos em que uma transition dispara mesmo: o dia escolhido do calendário
+   (calendario.js:calSel troca o .on sem redesenhar a grelha) e o separador
+   ativo da barra de baixo. */
+.calday{transition:background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva),
+  color var(--rapido) var(--curva),transform var(--rapido) var(--curva)}
+.calday .n{transition:color var(--rapido) var(--curva)}
+/* o âmbar→vermelho do planeado em atraso e o selo: hoje o nó é sempre outro
+   (o render recria a lista), mas a regra fica escrita para quando não for */
+.pend{transition:border-left-color var(--medio) var(--curva)}
+.badge{transition:background-color var(--medio) var(--curva),color var(--medio) var(--curva)}
+/* o «porquê» do KPI é display:none→block e o texto vem solto dentro do .expl,
+   sem elemento onde pendurar o 0fr→1fr da grelha (o vistas.js:kpi escreve-o
+   assim); a alternativa era um max-height adivinhado, e o WHY mais longo já
+   passa das doze linhas num cartão de 158px. Daí uma entrada em @keyframes,
+   que num display a acender dispara à mesma. */
+@keyframes explEntra{from{opacity:0;transform:translateY(-4px)}}
+.kpi.open .expl{animation:explEntra var(--medio) var(--curva)}
+
+/* --- Crachás que aparecem com um pulso ---
+   O .cnt é recriado a cada buildNav/buildTabbar/notifSino, portanto uma
+   transition nunca chegaria a disparar — um @keyframes de entrada dispara
+   sempre, que é precisamente quando a contagem muda. */
+@keyframes selo{from{transform:scale(.6);opacity:0}60%{transform:scale(1.06);opacity:1}}
+/* só quando o número MUDA. O buildNav corre a cada render, e o render corre
+   também na sincronização de fundo (cloud/nucleo.js:applyState, de 3 em 3
+   minutos): sem o .novo, a app dava um pulso sozinha sem nada ter acontecido.
+   Quem decide é o navegacao.js:cntNovo, que guarda a contagem anterior. */
+.cnt.novo{animation:selo var(--pulso) var(--curva) both}
+
+/* --- Os gráficos desenham-se ---
+   As classes são postas pelo graficos.js; aqui ficam só as regras. O
+   transform-box:fill-box é o que faz o transform-origin de um <rect> em SVG
+   valer sobre a própria forma, e não sobre o sistema de coordenadas todo; sem
+   ele a barra crescia a partir do canto do viewBox. O .gdonut conta com
+   pathLength="1" nos paths, que é o que torna o dashoffset independente do
+   comprimento real do arco. */
+@keyframes gbar{from{transform:scaleY(0)}}
+@keyframes ghbar{from{transform:scaleX(0)}}
+@keyframes gdonut{from{stroke-dashoffset:1}}
+/* Só quem CHEGA ao ecrã vê os gráficos desenharem-se: a marca .entra é posta
+   pelo vistas.js:render e só quando foi uma navegação a pedir a repintura.
+   Sem este portão, a sincronização de fundo (cloud/nucleo.js:applyState) e
+   qualquer gesto que repinte a vista — fechar o cartão dos prazos, mudar um
+   filtro — mandavam os gráficos redesenharem-se a meio de uma leitura.
+   O escalonamento é escrito pelo graficos.js em cada barra: em SVG as barras
+   são irmãs dos onze elementos do eixo, e um nth-child contava-os a todos (a
+   primeira barra ficava com o último degrau); nas horizontais o .ghbar é
+   sempre filho único, e nenhuma regra chegava a casar. */
+#view.entra .gbar{transform-box:fill-box;transform-origin:bottom;animation:gbar var(--desenho) var(--curva-entra) both}
+#view.entra .ghbar{transform-origin:left;animation:ghbar var(--desenho) var(--curva-entra) both}
+/* A barra que desce cresce a partir do eixo, e o eixo é o topo da caixa dela.
+   Medido: a linha do zero a y=90.9, uma barra de despesa de 90.9 a 141.5 — com
+   a origem no fundo, ela nascia em baixo, longe do eixo, e subia até lá. */
+#view.entra .gbar.desce{transform-origin:top}
+/* o .redesenha é para quando é a própria roda a mudar de reparto (o donutDrill)
+   e não a vista a chegar: os arcos traçam-se outra vez sem passar pelo render */
+#view.entra .gdonut,#donutCard.redesenha .gdonut{stroke-dasharray:1;animation:gdonut var(--desenho) var(--curva-entra) both}
 </style>
 </head>
 <body>
@@ -522,11 +836,14 @@ textarea{min-height:90px;resize:vertical}
 <script src="app/dados.js"></script>
 <script src="app/anexos.js"></script>
 <script src="app/auxiliares.js"></script>
+<script src="app/lista.js"></script>
+<script src="app/continuidade.js"></script>
 <script src="app/graficos.js"></script>
 <script src="app/credito.js"></script>
 <script src="app/componentes.js"></script>
 <script src="app/metricas.js"></script>
 <script src="app/navegacao.js"></script>
+<script src="app/acessos.js"></script>
 <script src="app/vistas.js"></script>
 <script src="app/imovel.js"></script>
 <script src="app/pessoas.js"></script>
@@ -550,6 +867,7 @@ textarea{min-height:90px;resize:vertical}
 <script src="cloud/anexos.js"></script>
 <script src="cloud/utilizadores.js"></script>
 <script src="cloud/partilha.js"></script>
+<script src="cloud/colaboradores.js"></script>
 <script src="cloud/ajuda.js"></script>
 <script src="cloud/painel.js"></script>
 <script src="cloud/filtros.js"></script>

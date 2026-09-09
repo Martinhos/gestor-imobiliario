@@ -21,6 +21,91 @@ const euro=v=>money(v,false);
 const euro2=v=>money(v,true);
 const fmtIBAN=v=>{const t=String(v||'').replace(/\s+/g,'').toUpperCase();
   return t?t.replace(/(.{4})/g,'$1 ').trim():''};
+/* Uma data como se escreve em Portugal: 2028-03-15 vira 15/03/2028.
+
+   O ISO fica onde é DADO — na base, nos <input type="date"> (o HTML exige-o e
+   o browser já o mostra na forma local), nas comparações e ordenações (a
+   comparação de texto só funciona em ISO), nas chaves e no que sai para o
+   servidor e para o CSV. Isto é só para o que se lê.
+
+   Devolve vazio para o que não é uma data: uma data por preencher não deve
+   escrever «//» nem «NaN» no meio de uma frase.
+   Recebe: iso — a data em AAAA-MM-DD (aguenta vazio, nulo e lixo).
+   Devolve: a data em dd/mm/aaaa, ou '' se não for uma data. */
+/* O painel de «à espera do servidor», ou nada.
+
+   Vem a par do sabemosOEstado, e resolve o outro lado do mesmo problema. A
+   base local vive numa chave só (dados.js:KEY), e não uma por conta: sair não
+   a limpa, e por isso o finishLogin apaga-a quando quem entra é outra pessoa
+   (entrada.js) — senão mostravam-se os imóveis de um a outro. Está certo. Só
+   que a app pintava logo essa base vazia e afirmava «Ainda não há nada
+   registado» a quem tem doze imóveis, com um botão de carregar dados de
+   exemplo ao lado. Não é uma vez por aparelho: é em todos os logins de quem
+   partilha o aparelho com outra conta, mais a navegação privada, o
+   armazenamento limpo pelo browser e a app reinstalada.
+
+   Só fala quando não se sabe MESMO nada: com uma sessão à espera do primeiro
+   estado e a base local inteiramente vazia. Quem tem dados cá nunca vê isto,
+   e uma conta nova vê-o um instante antes do «ainda não há nada registado»
+   verdadeiro — duas frases certas, em vez de uma errada.
+
+   É o mesmo que a página dos cargos já fazia (partilha.js), e pela mesma
+   razão: dizer «não tens» a quem tem parece perda de dados.
+   Devolve: o HTML do painel de espera, ou '' quando há alguma coisa a dizer. */
+function esperaDoServidor(){
+  const nada=!(db.properties||[]).length&&!(db.transactions||[]).length&&
+    !(db.contracts||[]).length&&!(db.tenants||[]).length&&
+    !(db.owners||[]).length&&!(db.visits||[]).length;
+  if(sabemosOEstado()||!nada)return '';
+  return `<div class="empty"><b>À espera do servidor</b>Os dados desta conta ainda não chegaram a este aparelho. Aparecem assim que a app sincronizar.</div>`;
+}
+/* Este ambiente pode carregar dados de exemplo?
+
+   Só fora de produção. Quem chega à app a sério deve encontrá-la vazia e ser
+   levado pelos primeiros passos — dados de brincar por cima dos verdadeiros
+   são um estorvo, e apagá-los à mão é trabalho. O ambiente vem do servidor
+   (rotas/auth.js, em /api/auth/config, que devolve env.ENV_NAME ou
+   'producao') e até a resposta chegar vale 'producao': o lado seguro.
+
+   Pergunta-se ANTES de escrever o botão, e não se apaga o botão depois de o
+   escrever. A app tem uma via de repintura parcial que não passa pelo render
+   (vistas.js:refrescarListasVivas, usada pela pesquisa das listas), e por lá
+   um botão apagado à posteriori voltava.
+   Devolve: true onde os dados de exemplo fazem sentido. */
+const podeExemplo=()=>!!(window.CW&&CW.ambiente&&CW.ambiente!=='producao');
+/* Já se pode afirmar o que o aparelho sabe?
+
+   Ao arrancar, a app trabalha com o que está guardado cá: corre o
+   syncAllContractRecs, decide o que está por confirmar, e pinta. Se uma
+   dessas rendas já foi confirmada noutro aparelho, isto aqui ainda não sabe —
+   e afirmava-o na mesma: um «por confirmar» que não existe, um número no
+   sino, um aviso. Um segundo depois o estado chega e as três coisas
+   desaparecem.
+
+   O trabalho do arranque fica: é preciso, e o pull corrige-o. O que espera é
+   o que a app AFIRMA — e espera pouco. A espera acaba em três alturas: o
+   servidor falou (CW._pulled), o pedido falhou, ou já demorou de mais
+   (nucleo.js:fimDaEspera). As duas últimas contam: sem rede, o que está no
+   aparelho é tudo o que há, e trocar um erro de um segundo por um silêncio
+   permanente era pior negócio. Sem nuvem, ou sem sessão, não há espera
+   nenhuma.
+   Devolve: true quando o que se sabe já se pode dizer em voz alta. */
+const sabemosOEstado=()=>!haSessao()||!!(window.CW&&CW._esperaFim);
+/* Há uma sessão iniciada neste aparelho?
+
+   Pergunta-se ao aparelho, e não à nuvem, por causa da ordem de carregamento:
+   o app/arranque.js corre ANTES do cloud/nucleo.js (index.html), e na primeira
+   pintura — a única que a pessoa vê antes de o servidor falar — o window.CW
+   ainda não existe. Um guarda que perguntasse «a nuvem já carregou?» respondia
+   «não há nuvem, diz tudo» exatamente no instante em que devia calar-se.
+   Devolve: true se há sessão — pela nuvem, se já carregou, senão pelo aparelho. */
+function haSessao(){
+  if(window.CW&&CW.user)return true;
+  const v=rawGet(LS_SESSAO);
+  return !!v&&v!=='null';
+}
+const dPT=iso=>{const t=String(iso||'').slice(0,10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(t)?t.slice(8,10)+'/'+t.slice(5,7)+'/'+t.slice(0,4):''};
 const fmtNIF=v=>{const t=String(v||'').replace(/\D/g,'');
   return t.length===9?t.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3'):String(v||'')};
 const fmtCC=v=>{const t=String(v||'').replace(/\s+/g,'').toUpperCase();
@@ -202,7 +287,33 @@ const owner=id=>db.owners.find(o=>o.id===id);
 const tenant=id=>db.tenants.find(t=>t.id===id);
 const contract=id=>db.contracts.find(c=>c.id===id);
 const contractsOf=pid=>db.contracts.filter(c=>c.propertyId===pid);
-const isActive=c=>c&&c.active!==false&&(!c.end||c.end>=today());
+/* O estado de um contrato, que são TRÊS e não dois.
+
+   A app sabia só «ativo» e «não ativo», e um contrato assinado que ainda não
+   começou caía no segundo — passava a exibir o selo «terminado» ao lado da
+   data de início, e o menu oferecia «Reativar», que apaga a data de fim.
+   «Ainda não começou» não é «acabou».
+   Recebe: c — o contrato.
+   Devolve: 'terminado', 'futuro' ou 'ativo'. */
+function ctEstado(c){
+  if(!c||c.active===false)return 'terminado';
+  const h=today();
+  if(c.end&&c.end<h)return 'terminado';
+  if(c.start&&c.start>h)return 'futuro';
+  return 'ativo';
+}
+/* Está em vigor HOJE — entre o início e o fim. É a pergunta das contas: a
+   renda que se recebe este mês, o imóvel que está arrendado, o yield.
+   Recebe: c — o contrato.
+   Devolve: true se está em vigor hoje. */
+const isActive=c=>ctEstado(c)==='ativo';
+/* Ainda não acabou — inclui o que ainda não começou. É a pergunta do que há
+   para PLANEAR e para AVISAR: a renda recorrente de um contrato que começa
+   daqui a um ano tem de continuar marcada, e o prazo da oposição à renovação
+   pode cair antes do início num contrato curto.
+   Recebe: c — o contrato.
+   Devolve: true se o contrato ainda conta para o futuro. */
+const ctVivo=c=>ctEstado(c)!=='terminado';
 const activeContracts=pid=>contractsOf(pid).filter(isActive);
 const ctTenants=c=>(c.tenantIds||[]).map(tenant).filter(Boolean);
 const ctNames=c=>ctTenants(c).map(t=>t.name).join(', ')||'Sem inquilino';
@@ -417,7 +528,8 @@ const countsBetweenOwners=t=>!!t.paidBy&&(t.kind==='income'||t.kind==='expense'|
    Devolve: array de {t, p, os, eff}, ordenado por data — o movimento, o imóvel (ou só
    {name:…} nos movimentos de grupo/globais), os ids dos donos e o efeito em cêntimos por dono. */
 function balanceLines(pid){
-  const props=pidProps(pid),out=[];
+  /* as contas entre proprietários são dos proprietários: um imóvel onde só colaboro fica de fora */
+  const props=pidProps(pid).filter(p=>souDono(p.id)),out=[];
   props.forEach(p=>{
     const os=ownersOfProp(p).slice().sort();
     /* os acertos deste imóvel contam sempre — com um só dono, ou entre quem não é dono dele:
@@ -448,7 +560,7 @@ function balanceLines(pid){
         txSplitCents(Object.assign({},t,{amount:cP/100}),p2,os2).forEach((part,i)=>add(os2[i],-part*sign));
       });
     }else{
-      const os2=db.owners.map(o=>o.id).sort();if(!os2.length)return;
+      const os2=donosGlobais().map(o=>o.id).sort();if(!os2.length)return;
       add(t.paidBy,total*sign);
       txSplitCents(t,null,os2).forEach((part,i)=>add(os2[i],-part*sign));
     }
@@ -474,8 +586,8 @@ function balancesDetail(pid){
   const run={};ids.forEach(o=>run[o]=0);
   openModal('Como se chega aos saldos',`<div class="form">
     <div class="hint">Quem paga fica a crédito; quem recebe fica a dever a parte dos outros. Positivo: a receber. Negativo: a pagar.</div>
-    <div class="list" style="gap:7px">${lines.map(l=>{ids.forEach(o=>run[o]+=(l.eff[o]||0));return `<div class="card tap" style="padding:10px 12px" onclick="txModal('${l.t.id}')">
-      <div class="row-between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.t.label)}</b><span class="small" style="flex:0 0 auto">${l.t.date}</span></div>
+    <div class="list" style="gap:7px">${lines.map(l=>{ids.forEach(o=>run[o]+=(l.eff[o]||0));return `<div class="card tap" style="padding:10px 12px" onclick="txView('${l.t.id}')">
+      <div class="row-between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.t.label)}</b><span class="small" style="flex:0 0 auto">${dPT(l.t.date)}</span></div>
       <div class="small">${l.t.kind==='settle'?nm(l.t.paidBy)+' → '+nm(l.t.toId):(KIND[l.t.kind]||{}).short+' · '+(isIn(l.t.kind)?'recebeu ':'pagou ')+nm(l.t.paidBy)+(splitLabel(l.t)?' · '+splitLabel(l.t):' · quotas')}${!pid?' · '+esc(l.p.name):''} · <b>${euro2(l.t.amount)}</b></div>
       <div class="chips" style="margin-top:6px">${ids.map(o=>`<span class="badge grey">${nm(o)} <b class="${l.eff[o]>0?'pos':l.eff[o]<0?'neg':''}">${l.eff[o]?(l.eff[o]>0?'+':'−')+euro2(Math.abs(l.eff[o])/100):'—'}</b> · saldo ${euro2(run[o]/100)}</span>`).join('')}</div></div>`}).join('')}</div>
     <div class="hint">"Saldo" é o acumulado até esse movimento: positivo a receber, negativo a pagar. Toca num movimento para o editar.</div></div>`,
@@ -488,7 +600,8 @@ function balancesDetail(pid){
    Recebe: pid (opcional) — o id de um imóvel ou 'g:ID' de um grupo; vazio vale o âmbito atual.
    Devolve: objeto {idDoDono: saldo em euros} — positivo a receber, negativo a pagar. */
 function ownerBalances(pid){
-  const props=pidProps(pid),cents={};
+  /* as contas entre proprietários são dos proprietários: um imóvel onde só colaboro fica de fora */
+  const props=pidProps(pid).filter(p=>souDono(p.id)),cents={};
   props.forEach(p=>{
     const os=ownersOfProp(p).slice().sort();
     /* os acertos deste imóvel contam sempre — com um só dono, ou entre quem não é dono dele
@@ -521,7 +634,7 @@ function ownerBalances(pid){
         txSplitCents(Object.assign({},t,{amount:cP/100}),p2,os).forEach((part,i)=>add(os[i],-part*sign));
       });
     }else if(!pid&&!ownerFilter){
-      const os=db.owners.map(o=>o.id).sort();if(!os.length)return;
+      const os=donosGlobais().map(o=>o.id).sort();if(!os.length)return;
       add(t.paidBy,total*sign);
       txSplitCents(t,null,os).forEach((part,i)=>add(os[i],-part*sign));
     }
@@ -570,9 +683,16 @@ function ownerFilterName(){
 }
 /* imóveis da vista atual: todos sem filtro de proprietário; com filtro, os que
    pertencem a quem foi escolhido (e, para uma pessoa, só onde a quota é > 0).
+   É o âmbito das listas (Imóveis, Contratos); o das contas é scope().
    Devolve: os imóveis da vista atual (array de objetos). */
-const scope=()=>{if(!ownerFilter)return db.properties;const ids=ownerFilterIds();
+const visiveis=()=>{if(!ownerFilter)return db.properties;const ids=ownerFilterIds();
   return db.properties.filter(p=>(p.ownerIds||[]).some(o=>ids.indexOf(o)>-1)&&(ownerIsGrp()||shareOf(p,ownerFilter)>0))};
+/* o âmbito das contas: os imóveis visíveis onde o meu cargo abre as finanças —
+   movimentos, valores ou hipotecas. Nos meus imóveis é tudo; num imóvel onde
+   só colaboro sem nenhuma destas, os KPIs, a Avaliação e os Créditos não o contam
+   (o servidor já não manda esses dados; aqui evita-se somar zeros e listá-lo).
+   Devolve: os imóveis do âmbito financeiro (array de objetos). */
+const scope=()=>visiveis().filter(p=>pode(p.id,'tx.view')||pode(p.id,'report.view')||pode(p.id,'loan.view'));
 const inScope=pid=>!ownerFilter||scope().some(p=>p.id===pid);
 
 /* estado de ocupação de um imóvel, para cartões e filtros: devolve {key,label,badge}
@@ -620,8 +740,56 @@ function toast(m,op){const t=document.getElementById('toast');
   t.textContent=m;
   if(op&&op.rotulo&&op.fn){const b=document.createElement('button');b.type='button';b.className='toastbtn';
     b.textContent=op.rotulo;b.onclick=()=>{clearTimeout(t._h);t.classList.remove('on');op.fn()};t.appendChild(b)}
+  avisoAcimaDoRodape();
   t.classList.add('on');clearTimeout(t._h);
   t._h=setTimeout(()=>t.classList.remove('on'),(op&&op.ms)||2800)}
+
+/* Põe o aviso acima do rodapé da janela que estiver aberta.
+
+   O aviso mora a 22px do fundo, que é exatamente onde o rodapé de um modal
+   está: caía em cima de «Guardar» e «Cancelar» — os botões que se está
+   precisamente a pedir à pessoa para carregar.
+
+   Corre nas duas ordens, e a segunda foi a que faltou à primeira tentativa:
+   o aviso a aparecer com uma janela já aberta, e a janela a abrir com um
+   aviso ainda no ecrã — o aviso fica quase três segundos, e nesses segundos
+   abre-se uma janela por cima. Por isso é chamada também do openModal e do
+   closeModal, e não só daqui.
+
+   A altura é medida e não adivinhada (há rodapés de duas linhas), e é a do
+   rodapé mais alto de todas as janelas abertas: com janelas empilhadas, a de
+   cima é a última.
+   Devolve: nada — escreve a variável --acima no aviso. */
+function avisoAcimaDoRodape(){
+  const t=document.getElementById('toast');
+  if(!t||!t.style||!t.style.setProperty)return;
+  /* Mede-se até ao TOPO do rodapé, e não a altura dele. No telemóvel a folha
+     encosta ao fundo e dá no mesmo; no computador a janela está ao meio do
+     ecrã, e subir só a altura do rodapé deixava o aviso a tapá-lo à mesma —
+     foi o que a cena nova apanhou, com 21px de sobreposição. */
+  const H=window.innerHeight||0;
+  let acima=0;
+  [].slice.call(document.querySelectorAll('.modal.open .foot')).forEach(function(pes){
+    const r=pes.getBoundingClientRect();
+    if(r.height)acima=Math.max(acima,H-r.top);
+  });
+  t.style.setProperty('--acima',acima>0?Math.ceil(acima+12)+'px':'0px');
+}
+/* Mede outra vez quando a folha tiver assentado.
+
+   Uma janela não está no sítio no instante em que abre: no telemóvel entra a
+   deslizar de baixo, e medida aí o rodapé ainda está fora do ecrã — o aviso
+   concluía que não havia rodapé nenhum por cima de quem subir.
+
+   Cheguei a medir sem transform (offsetTop) para não esperar por nada, e
+   estava errado do outro lado: no computador a janela está centrada POR um
+   transform, e ignorá-lo punha o rodapé onde ele nunca esteve. O rect é a
+   única medida verdadeira nos dois sítios — só tem de ser lida depois de a
+   folha parar.
+   Devolve: nada — remede daqui a um pouco mais do que dura a entrada. */
+function avisoQuandoAssentar(){
+  setTimeout(avisoAcimaDoRodape,msDoToken('--medio',200)+120);
+}
 
 const KIND={income:{short:'Receita',sign:'+',color:'pos',flow:'in'},expense:{short:'Despesa',sign:'−',color:'neg',flow:'out'},
   loan:{short:'Pagamento de crédito',sign:'−',color:'amber',flow:'out'},owed:{short:'Dívida recebida',sign:'+',color:'amber',flow:'in'},

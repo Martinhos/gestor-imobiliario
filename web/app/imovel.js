@@ -6,13 +6,16 @@ let pForm={};
    Recebe: id (opcional) — o id do imóvel a editar; sem id, cria um imóvel novo.
    Devolve: nada — abre o modal e deixa a gravação pendurada em onSave. */
 function propModal(id){
+  /* num imóvel onde só colaboro sem «Editar a ficha», a ficha é só de leitura */
+  if(id&&!pode(id,'house.edit'))return propView(id);
   foldState={};_propPaint=null;
   pForm=normProp(id?JSON.parse(JSON.stringify(prop(id))):null);
-  const m=id?menu('prop',[{label:'Apagar imóvel',icon:'trash',danger:true,act:`delProp('${id}')`}]):'';
+  const m=id&&souCriador(id)?menu('prop',[{label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${id}')`}]):'';
   openModal(id?'Editar imóvel':'Novo imóvel',propBody(),null,m);
   paintThumbs(pForm.photos);
   onSave=()=>{
     collectProp();
+    if(pForm.id&&prop(pForm.id)&&!pode(pForm.id,'house.edit'))return toast(fraseSemPerm('house.edit'));
     if(!pForm.name.trim())return falhaCampo('p_name','Dá um nome ao imóvel.');
     (pForm.loans||[]).forEach(l=>{l.name=l.name||l.bank||'Hipoteca'});   /* a recorrência identifica-se pelo nome */
     const antes=loanStartsAntes(prop(pForm.id));   /* antes de trocar o objeto na db */
@@ -21,6 +24,55 @@ function propModal(id){
     syncAllLoanRecs();save();closeModal();render();toast(id?'Imóvel atualizado.':'Imóvel adicionado.');
     perguntarPrestacoesEmFalta(pForm,antes);
   };
+}
+/* O corpo da ficha de um imóvel: o que se sabe sobre ele, para ler.
+
+   O que é sempre visível (morada, destino, quartos, donos) e o resto conforme
+   o cargo — fotos com file.view, valores com report.view, hipotecas com
+   loan.view. Nunca o bloco de quotas nem os comentários dos donos: o servidor
+   já não os manda a quem colabora.
+   Recebe: id — o id do imóvel.
+   Devolve: o HTML do corpo, ou vazio se o imóvel já não existir. */
+function propFicha(id){
+  const p=prop(id);if(!p)return '';
+  const st=pode(id,'contract.view')?propStatus(p):null,ls=loansOf(p),c=cargoDe(id);
+  const dono=p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):''),ac=pode(id,'contract.view')?activeContracts(id):[];
+  const reg=[p.freguesia||p.parish,p.concelho,p.fraction?'fração '+p.fraction:'',p.floor,p.registry?'n.º '+p.registry:'',p.matrix?'artigo '+p.matrix:'',p.energyClass?'classe '+p.energyClass:''].filter(Boolean).map(esc).join(' · ');
+  return ficha([
+    c.dono?null:{tipo:'nota',valor:`${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}És colaborador${c.nome?' como <b>'+esc(c.nome)+'</b>':''} — a ficha é só de leitura.`},
+    {rotulo:'Morada',valor:esc(p.address||'')},
+    {rotulo:'Destino',valor:p.use==='proprio'?'Uso próprio':'Arrendamento'+(p.rentalMode==='quartos'?' · por quartos':' · imóvel inteiro')},
+    st?{rotulo:'Estado',valor:esc(st.label)}:null,
+    (p.rooms||[]).length?{rotulo:'Quartos',valor:(p.rooms||[]).map(r=>esc(r.name)).join(', ')}:null,
+    {rotulo:'Proprietários',valor:esc(ownerNames(p))},
+    ac.length?{tipo:'bloco',rotulo:'Contratos ativos',valor:ac.map(x=>`${x.roomId?esc(roomName(p,x.roomId))+': ':''}${esc(ctNames(x))} · ${euro(x.rent)}`).join('<br>')}:null,
+    pode(id,'report.view')?{rotulo:'Valor de mercado',valor:euro(p.value)}:null,
+    pode(id,'report.view')?{rotulo:'Valor de aquisição',valor:euro(p.purchase)}:null,
+    pode(id,'loan.view')&&ls.length?{tipo:'bloco',rotulo:'Hipotecas',
+      valor:ls.map(l=>`${esc(loanName(l))} · ${euro2(loanCalc(l).total)}/mês · ${euro(l.outstanding)} em dívida`).join('<br>')}:null,
+    pode(id,'file.view')&&(p.photos||[]).length?{tipo:'bloco',rotulo:'Fotos',
+      valor:`<div style="display:flex;flex-wrap:wrap;gap:8px">${(p.photos||[]).map(f=>`<div class="pcover" id="th_${esc(f.id)}" style="width:84px;height:66px;border-radius:10px;background:var(--chip);overflow:hidden"></div>`).join('')}</div>`}:null,
+    reg?{tipo:'bloco',rotulo:'Dados registais',valor:reg}:null,
+    p.listing?{tipo:'bloco',rotulo:'Anúncio',valor:esc(p.listing)}:null,
+  ]);
+}
+/* A ficha de um imóvel: o que tocar num imóvel passa a abrir.
+
+   Era só para quem colabora sem poder editar; toda a gente apanhava, ao
+   tocar, um formulário de vinte e um campos com o «Apagar imóvel» encostado
+   ao título. Agora tocar lê, e editar é um passo deliberado — o botão do
+   rodapé, que só existe para quem pode.
+   Recebe: id — o id do imóvel.
+   Devolve: nada — abre a janela. */
+function propView(id){
+  const p=prop(id);if(!p)return;
+  abrirFicha({
+    titulo:()=>{const x=prop(id);return x?x.name:'Imóvel'},
+    corpo:()=>propFicha(id),
+    menu:()=>souCriador(id)?menu('fichaProp',[{label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${jsq(id)}')`}]):'',
+    editar:pode(id,'house.edit')?{rotulo:'Editar',act:`propModal('${jsq(id)}')`}:null,
+    depois:()=>{if(pode(id,'file.view')){const x=prop(id);if(x)paintThumbs(x.photos)}},
+  });
 }
 /* Constrói o HTML do formulário do imóvel a partir de pForm: proprietários e
    quotas-partes, destino, quartos, valores, fotos, dados registais, hipotecas
@@ -40,21 +92,21 @@ function propBody(){
           <span class="nm">${esc(o.name)}</span>
           <input id="p_share_${o.id}" type="text" inputmode="decimal" value="${(p.ownerShares||{})[o.id]!=null?dec(p.ownerShares[o.id]):''}" placeholder="${dec(Math.round(shares[o.id]*1000)/10)}" oninput="liveShares()">
           <span class="pc">%</span>
-          <button type="button" class="btn sm danger" onclick="delPropOwner('${o.id}')">${ic('x',13)}</button></div>`).join('')}
-        <button type="button" class="tagadd" style="justify-self:start" onclick="addPropOwner()">+ Adicionar proprietário</button></div>
+          <button type="button" class="btn sm danger" data-toca="rascunho" onclick="delPropOwner('${o.id}')">${ic('x',13)}</button></div>`).join('')}
+        <button type="button" class="tagadd" style="justify-self:start" data-toca="camada" onclick="addPropOwner()">+ Adicionar proprietário</button></div>
       <div class="hint" id="shareHint" style="margin-top:7px">${shareHint(owners,custom,sumSh)}</div></div>
     <div><div class="flabel">Destino do imóvel</div>
       <div class="seg c2">${[['investimento','key','Arrendamento','para render'],['proprio','home','Uso próprio','vivo cá']]
-        .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.use===k?'on':''}" onclick="setUse('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
+        .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.use===k?'on':''}" data-toca="rascunho" onclick="setUse('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
     ${p.use==='investimento'?`
       <div><div class="flabel">Tipo de arrendamento</div>
         <div class="seg c2">${[['inteiro','building','Imóvel inteiro','um contrato só'],['quartos','door','Por quartos','um contrato por quarto']]
-          .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.rentalMode===k?'on':''}" onclick="setMode('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
+          .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.rentalMode===k?'on':''}" data-toca="rascunho" onclick="setMode('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
       ${p.rentalMode==='quartos'?`<div><div class="flabel">Quartos</div>
         <div class="form" style="gap:8px">${(p.rooms||[]).map(r=>`<div class="roomrow">
           <input id="p_room_${r.id}" value="${esc(r.name)}" placeholder="Quarto" autocomplete="off">
-          <button type="button" class="btn sm danger" onclick="delRoom('${r.id}')">${ic('trash',14)}</button></div>`).join('')}
-          <button type="button" class="btn sm" onclick="addRoom()">${ic('plus',14)} Adicionar quarto</button></div></div>`:''}`:''}
+          <button type="button" class="btn sm danger" data-toca="rascunho" onclick="delRoom('${r.id}')">${ic('trash',14)}</button></div>`).join('')}
+          <button type="button" class="btn sm" data-toca="rascunho" onclick="addRoom()">${ic('plus',14)} Adicionar quarto</button></div></div>`:''}`:''}
     <div class="row">
       <label>Valor de mercado (€)<input id="p_value" type="text" inputmode="decimal" value="${p.value||''}" placeholder="180000"></label>
       <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${p.purchase||''}" placeholder="150000"></label></div>
@@ -86,7 +138,7 @@ function propBody(){
         ${ls.length>1?`<div class="card" style="background:var(--tint);padding:12px">
           <div class="stat" style="padding-top:0;border:0"><span>Total das prestações</span><b style="font-size:16px">${euro2(payOf(p))}/mês</b></div>
           <div class="hint">${euro(debtOf(p))} em dívida no total.</div></div>`:''}
-        <button type="button" class="addbox" onclick="addLoan()">
+        <button type="button" class="addbox" data-toca="rascunho" onclick="addLoan()">
           <span class="ic">${ic('bank',20)}</span>
           <span><b>${ls.length?'Adicionar outra hipoteca':'Adicionar hipoteca'}</b><small>${ls.length?'crédito para obras, consolidação, segunda hipoteca…':'crédito à aquisição ou outro'}</small></span>
           <span class="plus">${ic('plus',18)}</span></button>
@@ -105,7 +157,7 @@ function propBody(){
 function loanSect(l,i){
   return `<div class="sect">
     <div class="sect-head"><span class="ic">${ic('bank',18)}</span><b>${esc(l.name||'Hipoteca '+(i+1))}</b><span class="spacer"></span>
-      <button type="button" class="btn sm danger" onclick="delLoan('${l.id}')">${ic('trash',14)}</button></div>
+      <button type="button" class="btn sm danger" data-toca="dados" data-risco="destroi" onclick="delLoan('${l.id}')">${ic('trash',14)}</button></div>
     <div class="row">
       <label>Finalidade<input id="l_name_${l.id}" value="${esc(l.name)}" placeholder="Aquisição" autocomplete="off" oninput="liveLoan('${l.id}')"></label>
       <label>Banco<input id="l_bank_${l.id}" value="${esc(l.bank)}" placeholder="Millennium" autocomplete="off"></label></div>
@@ -116,7 +168,7 @@ function loanSect(l,i){
     <div class="hint" style="margin-top:-4px">À data de início. Se o crédito já vem de trás, ao guardar a app propõe registar as prestações desde então — e o capital desce com elas.</div>
     <div><div class="flabel">Tipo de taxa</div>
       <div class="seg c3">${[['fixa','lock','Fixa','não muda'],['mista','split','Mista','fixa e depois variável'],['variavel','wave','Variável','Euribor + spread']]
-        .map(([k,ico,lb,sb])=>`<button type="button" class="opt ${l.type===k?'on':''}" onclick="setLType('${l.id}','${k}')"><span class="ic">${ic(ico,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>
+        .map(([k,ico,lb,sb])=>`<button type="button" class="opt ${l.type===k?'on':''}" data-toca="rascunho" onclick="setLType('${l.id}','${k}')"><span class="ic">${ic(ico,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>
     ${l.type==='fixa'?`<div class="row">
       <label>Taxa anual TAN (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="3,2" oninput="liveLoan('${l.id}')"></label>
       <label>Comissão de amortização (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="2"></label></div>`:''}
@@ -124,7 +176,7 @@ function loanSect(l,i){
         <label>Anos com taxa fixa<input id="l_fy_${l.id}" type="text" inputmode="numeric" value="${l.fixedYears||''}" placeholder="5" oninput="liveLoan('${l.id}')"></label>
         <label>Taxa fixa (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="3,1" oninput="liveLoan('${l.id}')"></label></div>`:''}
     ${l.type!=='fixa'?`<div class="row3">
-      <label>Indexante${sel('l_index_'+l.id,l.index,['3m','6m','12m'].map(x=>({v:x,label:'Euribor '+x})),'liveLoanAll')}</label>
+      <label>Indexante${sel('l_index_'+l.id,l.index,['3m','6m','12m'].map(x=>({v:x,label:'Euribor '+x})),'liveLoanAll','rascunho')}</label>
       <label>Indexante (%)<input id="l_eur_${l.id}" type="text" inputmode="decimal" value="${l.euribor?dec(l.euribor):''}" placeholder="2,1" oninput="liveLoan('${l.id}')"></label>
       <label>Spread (%)<input id="l_spr_${l.id}" type="text" inputmode="decimal" value="${l.spread?dec(l.spread):''}" placeholder="1,0" oninput="liveLoan('${l.id}')"></label></div>
     <div class="row">
@@ -418,7 +470,7 @@ function addPropOwner(){
   const free=db.owners.filter(o=>(pForm.ownerIds||[]).indexOf(o.id)<0);
   pickModal('Escolher proprietário',free.map(o=>({v:o.id,label:o.name,sub:[o.phone,o.email].filter(Boolean).join(' · '),avatar:true})),
     o=>{pForm.ownerIds.push(o.v);closeModal();repaintProp()},
-    `<button type="button" class="btn" style="width:100%;justify-content:center" onclick="newOwnerFromProp()">${ic('plus',15)} Criar proprietário novo</button>`);
+    `<button type="button" class="btn" style="width:100%;justify-content:center" data-toca="camada" onclick="newOwnerFromProp()">${ic('plus',15)} Criar proprietário novo</button>`);
 }
 // Desassocia um proprietário do imóvel e esquece a quota-parte dele.
 // Recebe: oid — o id do proprietário a desassociar.
@@ -438,6 +490,9 @@ function newOwnerFromProp(){
    Devolve: nada — abre a confirmação; só se apaga depois do sim. */
 function delProp(id){
   const p=prop(id),n=contractsOf(id).length;
+  if(!p)return;
+  /* só quem criou o imóvel o apaga: nem comproprietários, nem colaboradores */
+  if(!souCriador(id))return toast('Só quem criou o imóvel o pode apagar.');
   confirmModal('Apagar imóvel',`Apagar “${esc(p.name)}”${n?`, os seus ${n} contratos`:''} e todos os movimentos associados?`,()=>{
     /* a cópia primeiro, os blobs só quando o Anular expirar: uma cascata
        destas confirmada por hábito era irrecuperável */

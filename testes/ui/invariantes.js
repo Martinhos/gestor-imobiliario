@@ -14,6 +14,22 @@ module.exports.fonte = function () {
 function dentroDaPagina() {
   const N = (x) => Math.round(x);
 
+  /* Quantos pontos de interacao ainda nao declaram a familia a que pertencem.
+     E um tecto, nao uma meta: baixa-se quando se anota mais uma zona, e nunca
+     sobe. E o que impede a taxonomia de ficar a validar meia duzia de pontos
+     enquanto o resto da app segue sem ela. */
+  /* Medido ecra a ecra e com janelas abertas: o que sobra sao os moldes que
+     servem duas familias ao mesmo tempo (o «Fazer agora» do tutorial, que ora
+     abre uma janela ora muda de ecra) e as opcoes de um sel(), cujo efeito
+     depende do onchange que lhes registaram pelo nome. Sao 2 a 5 por estado.
+     Os menus de escolha ja responderam — a fabrica recebe a familia de quem a
+     chama, como o menu() —, e a cena que rebentava o tecto passou de 16 para
+     ZERO em 57 pontos. O que sobra sao os moldes que servem duas familias ao
+     mesmo tempo: o «Fazer agora» do tutorial, que ora abre uma janela ora muda
+     de ecra conforme o passo, e as linhas do sino. A saida e a mesma de sempre:
+     quem cria o botao diz o que ele faz. */
+  const TETO_SEM_FAMILIA = 8;
+
   /* O que corta um elemento. Um `position:fixed` só é preso por um
      antepassado com transform/filter — o overflow dos outros não lhe toca.
      Ignorar isto dava-me dez falsos positivos numa varredura anterior. */
@@ -115,15 +131,26 @@ function dentroDaPagina() {
          precisamente aquilo que se pede à pessoa para carregar. */
       const avisa = /toast|tip/.test(el.className) || el.id === 'cwDoc' ||
         /^cw(Legal|Terms|Upd|Auth|Guia)/.test(el.id || '');
-      if (z > zModal && r.width > 0 && r.height > 0) {
+      /* Uma coisa invisivel e que nao recebe toques nao tapa nada. O aviso
+         esconde-se com opacidade zero e um empurrao de 80px para baixo — a
+         posicao de onde desliza quando aparece —, e era essa caixa, que
+         ninguem ve, que a regra media por cima do rodape. Oito cenas a
+         falhar, todas pelo mesmo engano. O caso a serio — um aviso VISIVEL
+         com uma janela aberta — tem cena propria (percorrer.js). */
+      const seVe = cs.opacity !== '0' && cs.visibility !== 'hidden' && cs.pointerEvents !== 'none';
+      if (z > zModal && r.width > 0 && r.height > 0 && seVe) {
         if (!avisa) {
           falhar('nada tapa um modal', (el.id || el.className || el.tagName) + ' está em z-index ' + z + ', acima de ' + zModal);
         } else {
           const pes = document.querySelector('.modal.open .foot');
           const pr = pes && pes.getBoundingClientRect();
           if (pr && pr.height && !(r.bottom < pr.top || r.top > pr.bottom || r.right < pr.left || r.left > pr.right)) {
+            /* com os numeros: sem eles, a falha nao diz se quem tapa esta
+               dois pixeis a mais ou cem, nem de que lado */
+            const cx = (a) => Math.round(a.top) + '-' + Math.round(a.bottom) +
+              ' x ' + Math.round(a.left) + '-' + Math.round(a.right);
             falhar('o que passa por cima não tapa os botões',
-              (el.id || el.className) + ' cobre o rodapé do modal');
+              (el.id || el.className) + ' em ' + cx(r) + ' cobre o rodapé em ' + cx(pr));
           }
         }
       }
@@ -139,7 +166,287 @@ function dentroDaPagina() {
   medidas.alvosPequenos = pequenos.length;
   if (pequenos.length) medidas.exemplosPequenos = pequenos.slice(0, 6);
 
-  /* 5. Texto que sai da sua caixa — normalmente uma coluna estreita demais. */
+  /* 5. As linhas dos movimentos nascem decoradas.
+
+     A camada da nuvem (cloud/selecao.js) acrescenta a cada linha o data-tx e
+     o data-mes — de onde saem os ids que o «marcar tudo» e o «marcar o mês»
+     leem — e, conforme o modo, o kebab (a única porta para as opções de um
+     movimento sozinho, sem toque longo) ou a caixa de marcar.
+
+     Até aqui isto era colado por cima do HTML já gerado, e agora é gerado com
+     ele (vistas.js:txLinhaExtra). De qualquer das formas, o que não pode
+     acontecer é uma linha aparecer sem nada disto: não dá erro nenhum, e a
+     seleção e as opções desaparecem em silêncio. Nada disto tinha teste — o
+     arnês de Node não carrega web/cloud/*. */
+  /* A lista dos movimentos tem motor proprio (vistas.js:pintarListaTx): as
+     linhas sao comparadas por chave e so as que mudaram sao refeitas. Uma
+     linha sem chave e uma linha que o motor nao reconhece — na pintura
+     seguinte deita-a fora e faz outra, e ficamos com o custo de antes sem
+     saber porque. */
+  const meses = [...document.querySelectorAll('#view .txmes')];
+  if (meses.length) {
+    medidas.mesesDeMovimento = meses.length;
+    const semChave = meses.filter((m) => !m.getAttribute('data-chave'));
+    if (semChave.length) falhar('cada mes traz a sua chave', semChave.length + ' de ' + meses.length);
+    /* o saldo do mes e escrito depois de reconciliar, e nao vem na assinatura
+       do bloco — se viesse, mudar um filtro refazia o mes inteiro */
+    const semTotal = meses.filter((m) => {
+      const s = m.querySelector('.txnet');
+      return !s || !s.textContent.trim() || !/pos|neg/.test(s.className);
+    });
+    if (semTotal.length) falhar('cada mes mostra o seu saldo', semTotal.length + ' sem .txnet preenchido');
+  }
+
+  const linhas = [...document.querySelectorAll('#view .txrow')];
+  /* Sempre, mesmo a zero: só com o número escrito é que se vê no resumo que a
+     regra não correu. Sem isto, uma lista vazia (ou um .txrow renomeado)
+     desligava a rede toda em silêncio — que é o modo de falha que ela existe
+     para apanhar. */
+  medidas.linhasDeMovimento = linhas.length;
+  if (linhas.length) {
+    const semChave = linhas.filter((l) => !l.getAttribute('data-chave'));
+    if (semChave.length) falhar('cada linha traz a chave do motor', semChave.length + ' de ' + linhas.length + ' sem data-chave');
+    const semId = linhas.filter((l) => !l.getAttribute('data-tx'));
+    const semMes = linhas.filter((l) => !l.getAttribute('data-mes'));
+    if (semId.length) falhar('cada linha traz o seu id', semId.length + ' de ' + linhas.length + ' sem data-tx');
+    if (semMes.length) falhar('cada linha sabe o seu mês', semMes.length + ' de ' + linhas.length + ' sem data-mes');
+    const selecao = !!document.querySelector('.sel-bar');
+    if (selecao) {
+      const semCaixa = linhas.filter((l) => !l.querySelector('.selbox'));
+      if (semCaixa.length) falhar('em seleção, cada linha tem caixa', semCaixa.length + ' de ' + linhas.length + ' sem .selbox');
+      const abrem = linhas.filter((l) => !/selToggle/.test(l.getAttribute('onclick') || ''));
+      if (abrem.length) falhar('em seleção, tocar marca em vez de abrir', abrem.length + ' linhas ainda abrem o movimento');
+
+      /* As marcas sobrevivem a uma repintura. É o que o ponto de extensão tem
+         de garantir e o que nenhuma contagem de caixas apanha: o DOM tem de
+         concordar com o estado, linha a linha. */
+      const marcados = typeof selIds === 'object' && selIds ? selIds : null;
+      if (marcados) {
+        const deviam = linhas.filter((l) => marcados[l.getAttribute('data-tx')]).length;
+        const estao = linhas.filter((l) => l.classList.contains('sel-on')).length;
+        if (deviam !== estao) falhar('as marcas concordam com o estado', deviam + ' marcados, ' + estao + ' com marca no ecrã');
+      }
+
+      /* O título do mês é o que permite marcar um mês inteiro, e é um ponto de
+         extensão à parte do da linha: sem isto, neutralizá-lo deixava a suite
+         verde. Parte-se dos meses que as LINHAS dizem ter — assim a regra não
+         pode ficar vazia por a decoração ter desaparecido. */
+      const mesesDasLinhas = [...new Set(linhas.map((l) => l.getAttribute('data-mes')).filter(Boolean))];
+      const semTitulo = mesesDasLinhas.filter((m) => !document.querySelector('#view .section-title.sel-mes [data-mes-box="' + m + '"]'));
+      if (semTitulo.length) falhar('em seleção, cada mês tem a sua caixa', semTitulo.join(', ') + ' sem [data-mes-box]');
+      const chatos = [...document.querySelectorAll('#view .section-title.sel-mes')]
+        .filter((m) => getComputedStyle(m).display !== 'flex');
+      if (chatos.length) falhar('o título do mês continua em flex', chatos.length + ' títulos deixaram de o ser');
+    } else {
+      const semKebab = linhas.filter((l) => !l.querySelector('.txkebab'));
+      if (semKebab.length) falhar('fora da seleção, cada linha tem o seu kebab', semKebab.length + ' de ' + linhas.length + ' sem .txkebab');
+    }
+  }
+
+  /* 6. O «Hoje» do calendario aparece exatamente quando ha para onde voltar.
+
+     O botao dependia de «o calMes esta posto», e nao de «o mes que estou a ver
+     nao e o de hoje» — que sao coisas diferentes: voltar ao mes de hoje pela
+     seta deixa o calMes posto, com o mes de hoje la dentro, e o botao ficava
+     no ecra sem nada para fazer. Le-se o mes pelo TITULO, que e o que a pessoa
+     ve, e nao pela variavel, que e o que estava errado. */
+  const barraCal = document.querySelector('#view .calgrid') && document.querySelector('#view .toolbar b');
+  if (barraCal) {
+    const mes = barraCal.textContent.trim();
+    const hoje = new Date();
+    const nomes = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho',
+      'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+    const semAcento = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const noMesDeHoje = semAcento(mes) === nomes[hoje.getMonth()] + ' de ' + hoje.getFullYear();
+    const temBotao = [...document.querySelectorAll('#view .toolbar .btn')]
+      .some((b) => b.textContent.trim() === 'Hoje');
+    medidas.calendarioMes = mes;
+    if (noMesDeHoje && temBotao) falhar('o «Hoje» não fica no mês de hoje', mes + ' com botão');
+    if (!noMesDeHoje && !temBotao) falhar('o «Hoje» aparece fora do mês de hoje', mes + ' sem botão');
+  }
+
+  /* 6b. O selo da sincronizacao nao se poe em cima do sino.
+
+     Vivia no canto superior direito, que e onde o sino esta, e ninguem tinha
+     dado por isso porque nenhuma cena o mostrava — ele so aparecia quando a
+     ligacao caia. Agora ha uma cena por estado, e esta regra guarda o sitio. */
+  const selo = document.getElementById('cwSync');
+  if (selo && getComputedStyle(selo).opacity !== '0') {
+    const rs = selo.getBoundingClientRect();
+    ['hdrBell', 'hdrFilt'].forEach((id) => {
+      const outro = document.getElementById(id);
+      if (!outro) return;
+      const ro = outro.getBoundingClientRect();
+      if (!ro.height) return;
+      const bate = !(rs.top >= ro.bottom || rs.bottom <= ro.top || rs.left >= ro.right || rs.right <= ro.left);
+      if (bate) falhar('o selo da sincronizacao nao tapa o cabecalho', 'sobrepoe #' + id);
+    });
+  }
+
+  /* 7. As familias dos pontos de interacao (docs/design.md).
+
+     Dois eixos, e so um se declara. O «o que toca» vem num data-toca, porque
+     nao ha como adivinha-lo de fora. O «como se alcanca» le-se aqui, do
+     proprio DOM: um <button> ou <a> e nativo, um <div role=button> e um alvo
+     promovido pelo tornarFocavel, o que esta dentro de um <svg> e uma forma.
+     Um atributo a mais seria uma segunda verdade a dessincronizar-se da
+     primeira — foi isso que aconteceu quando o data-lp passou a valer tambem
+     como chave de animacao. */
+  const FAMILIAS = ['nada', 'vista', 'camada', 'rascunho', 'dados', 'modo', 'ecra'];
+  const pontos = [...document.querySelectorAll(
+    '#view [onclick],#view button,#view a[href],#view [role=button],#view [data-toca],' +
+    '.modal.open [onclick],.modal.open button,.modal.open [role=button],.modal.open [data-toca]')]
+    .filter((e) => e.offsetParent || e.ownerSVGElement)
+    /* um <span onclick="event.stopPropagation()"> nao e um ponto de interacao:
+       e um guarda para o cartao por baixo nao abrir. Conta-lo obrigava a
+       inventar-lhe uma familia. */
+    .filter((e) => !/^event\.stopPropagation\(\);?$/.test((e.getAttribute('onclick') || '').trim()));
+  const familia = (e) => e.getAttribute('data-toca') || '';
+  const eForma = (e) => !!e.ownerSVGElement;
+  const temNome = (e) => !!((e.textContent || '').trim() || e.getAttribute('aria-label') ||
+    e.getAttribute('title') || e.querySelector('title'));
+
+  const invalidas = pontos.filter((e) => familia(e) && FAMILIAS.indexOf(familia(e)) < 0);
+  if (invalidas.length) {
+    falhar('a familia declarada existe',
+      [...new Set(invalidas.map((e) => familia(e)))].join(', ') + ' - as boas sao ' + FAMILIAS.join('/'));
+  }
+
+  /* Uma forma de grafico reage com o DESENHO, nunca com o afundar de um botao,
+     e nunca escreve nem navega. Foi a familia que custou dois defeitos: as
+     barras a saltarem ao toque e a fita de virar pagina posta no donut. */
+  const formasQueEscrevem = pontos.filter((e) => eForma(e) &&
+    ['dados', 'ecra', 'modo', 'rascunho'].indexOf(familia(e)) > -1);
+  if (formasQueEscrevem.length) {
+    falhar('uma forma de grafico nao escreve nem navega',
+      formasQueEscrevem.length + ' formas com data-toca=' + familia(formasQueEscrevem[0]));
+  }
+
+  /* Quem escreve tem de ter nome. Um alvo mudo que grava nao ha maneira de o
+     explicar a ninguem — nem a quem la chega pelo teclado, nem a quem usa um
+     leitor de ecra, nem a quem escreve o texto do aviso. */
+  const escrevemSemNome = pontos.filter((e) => familia(e) === 'dados' && !temNome(e));
+  if (escrevemSemNome.length) {
+    falhar('quem escreve tem nome', escrevemSemNome.length + ' pontos de dados sem texto nem aria-label');
+  }
+
+  /* Quem destroi declara-o. E o que faz com que o texto do aviso e a
+     existencia de «Anular» deixem de ser escolhas de habito. */
+  const riscoSemDados = pontos.filter((e) => e.getAttribute('data-risco') === 'destroi' && familia(e) !== 'dados');
+  if (riscoSemDados.length) falhar('quem destroi toca nos dados', riscoSemDados.length + ' com data-risco e sem data-toca=dados');
+
+  /* Tudo o que se alcanca por gesto alcanca-se tambem por um caminho visivel.
+     O toque longo e uma porta que ninguem descobre sozinho, e o data-lp nao e
+     neutro: bloqueia a selecao de texto, vibra e engole o toque seguinte. Cada
+     linha que o tem precisa de um botao com foco de teclado la dentro — que e
+     o que o kebab e. */
+  /* So as LINHAS DE REGISTO. O data-lp «dash:» e do modo de edicao do painel,
+     nao das opcoes de um registo, e a porta visivel dele e o botao
+     «Personalizar painel» — que esta no ecra, fora do bloco. Escrita como
+     estava, a regra passava por acidente em seis dos sete blocos, por eles
+     terem la dentro um botao que existe para outra coisa. */
+  /* Em modo de selecao a regra nao se aplica, e nao e uma excecao de
+     conveniencia: o kebab sai de proposito para dar lugar a caixa de marcar, e
+     o caminho visivel passa a ser a barra do fundo, com o Editar e o Eliminar.
+     A regra dizia «um botao DENTRO da linha» quando queria dizer «um caminho
+     visivel no ECRA» — e em selecao o ecra inteiro e outro. */
+  const emSelecao = !!document.querySelector('.sel-bar,.sel-fundo');
+  const comGesto = emSelecao ? [] : [...document.querySelectorAll('#view [data-lp]')]
+    .filter((e) => e.offsetParent && !/^dash:/.test(e.getAttribute('data-lp') || ''));
+  const semPortaVisivel = comGesto.filter((e) => !e.querySelector('button,[role=button],a[href]'));
+  medidas.linhasComGesto = comGesto.length;
+  if (comGesto.length && semPortaVisivel.length) {
+    falhar('o gesto tem sempre um caminho visivel ao lado',
+      semPortaVisivel.length + ' de ' + comGesto.length + ' com toque longo e sem botao dentro - ex.: ' +
+      (semPortaVisivel[0].getAttribute('data-lp') || ''));
+  }
+
+  /* A cobertura mede-se e so pode subir. Sem isto, a taxonomia era um
+     documento: valida o que esta declarado e cala-se sobre o que nao esta. */
+  const semFamilia = pontos.filter((e) => !familia(e));
+  medidas.pontosDeInteracao = pontos.length;
+  medidas.pontosSemFamilia = semFamilia.length;
+  if (semFamilia.length > TETO_SEM_FAMILIA) {
+    falhar('a cobertura das familias nao desce',
+      semFamilia.length + ' sem familia, e o tecto e ' + TETO_SEM_FAMILIA + ' - ex.: ' +
+      [...new Set(semFamilia.slice(0, 4).map((e) => e.tagName.toLowerCase() + '.' +
+        (e.getAttribute('class') || '').split(' ')[0]))].join(', '));
+  }
+
+  /* A porta das opcoes de um registo e UMA, em toda a app. Eram tres moldes —
+     lpMenu nas listas, CW.txOpcoes nos movimentos, menuOpen no menu de acoes —
+     e davam tres desenhos, tres tamanhos e tres nomes: 44x44 «Opcoes» nos
+     movimentos, 37x40 SEM NOME nas listas, 44x44 «Mais» nas visitas. O que
+     nao tinha nome era o mais usado, e um leitor de ecra anunciava «botao» e
+     mais nada; o que tinha 37px estava abaixo do minimo de alvo.
+
+     A regra olha para o que a porta FAZ (chama um destes tres) e exige que
+     seja sempre a mesma coisa. Sem isto, a proxima lista nasce com o quarto
+     desenho e ninguem da por ela ate alguem tentar usar a app sem saber que o
+     toque longo existe. */
+  const abrePorta = /(^|[^\w.])(lpMenu|menuOpen)\(|CW\.txOpcoes\(/;
+  const portas = pontos.filter((e) => abrePorta.test(e.getAttribute('onclick') || ''));
+  const foraDoMolde = portas.filter((e) => {
+    const r = e.getBoundingClientRect();
+    return !e.classList.contains('opcoes') || e.getAttribute('aria-label') !== 'Op\u00e7\u00f5es' ||
+      r.width < 40 || r.height < 40;
+  });
+  medidas.portasDeOpcoes = portas.length;
+  if (foraDoMolde.length) {
+    const e = foraDoMolde[0], r = e.getBoundingClientRect();
+    falhar('a porta das opcoes e sempre a mesma',
+      foraDoMolde.length + ' de ' + portas.length + ' fora do molde - ex.: .' +
+      (e.getAttribute('class') || '(sem classe)').split(' ').join('.') + ' ' +
+      Math.round(r.width) + 'x' + Math.round(r.height) + ' nome=' +
+      (e.getAttribute('aria-label') || '(sem nome)'));
+  }
+
+  /* Uma janela ou se LE ou se EDITA, nunca as duas coisas.
+
+     A ficha de leitura tem «Editar» no rodape. Se tiver campos, nao e uma
+     ficha — e um formulario com um botao a prometer outro, que e exatamente
+     o que havia antes: tocar num contrato abria quarenta campos editaveis.
+     Sem esta regra, o caminho mais curto de acrescentar «mais um campo» a
+     ficha e escrever la um input, e ao fim de uns meses esta tudo como
+     estava. */
+  const fichasAbertas = [...document.querySelectorAll('.modal.open')].filter((m) =>
+    [...m.querySelectorAll('.foot button')].some((b) => /^Editar/.test((b.textContent || '').trim())));
+  medidas.fichasAbertas = fichasAbertas.length;
+  fichasAbertas.forEach((m) => {
+    const campos = [...m.querySelectorAll('.body input,.body textarea,.body select')];
+    if (campos.length) {
+      falhar('uma ficha lê-se, não se edita',
+        campos.length + ' campos numa janela com «Editar» no rodapé - ex.: ' +
+        (campos[0].id || campos[0].tagName.toLowerCase()));
+    }
+  });
+
+  /* Nenhuma data ISO no que se le.
+
+     As datas que uma pessoa le escrevem-se como se escrevem em Portugal
+     (auxiliares.js:dPT): 15/03/2028. O ISO fica onde e DADO — na base, nos
+     <input type=date>, nas comparacoes, nas chaves e no que sai para o
+     servidor —, e por isso esta regra olha so para o TEXTO visivel, nunca
+     para atributos nem para valores de campos.
+
+     Sem ela a mudanca ficava a meio: uma data em ISO volta ao ecra na
+     proxima funcao que alguem escrever, e ninguem da por isso, porque um
+     2028-03-15 no meio de uma lista nao parece um defeito — parece uma data. */
+  const ISO = /(^|[^\d])\d{4}-\d{2}-\d{2}([^\d]|$)/;
+  const comIso = [...document.querySelectorAll('#view *,.modal.open *')]
+    .filter((e) => e.children.length === 0 && (e.offsetParent || e.ownerSVGElement))
+    /* o valor de um campo nao e texto lido: o browser mostra-o na forma local */
+    .filter((e) => !/^(INPUT|TEXTAREA|SELECT|OPTION)$/.test(e.tagName))
+    .filter((e) => ISO.test(e.textContent || ''));
+  medidas.datasIso = comIso.length;
+  if (comIso.length) {
+    const ex = comIso[0];
+    falhar('as datas leem-se como em Portugal',
+      comIso.length + ' com data ISO no ecra - ex.: ' +
+      (ex.textContent || '').trim().slice(0, 60));
+  }
+
+  /* 7. Texto que sai da sua caixa — normalmente uma coluna estreita demais. */
   const rebentam = [...document.querySelectorAll('#view *')]
     .filter((e) => e.children.length === 0 && e.textContent.trim())
     .filter((e) => e.scrollWidth > e.clientWidth + 4 && getComputedStyle(e).overflow === 'visible')

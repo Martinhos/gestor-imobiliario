@@ -1,5 +1,112 @@
 /* ================= CONTRATO ================= */
 let cForm={};
+/* O corpo da ficha de um contrato: o que se sabe sobre ele, para ler.
+
+   Pela ordem das perguntas que trazem alguém aqui: ainda está em vigor, quem
+   lá mora, quanto paga, quando acaba — e só depois o que ficou combinado (dia
+   de pagamento, caução, aumento, chaves e recheio).
+
+   As datas ficam como a app as escreve em todo o lado. Um formato português
+   só aqui dava duas maneiras de escrever a mesma data no mesmo ecrã.
+   Recebe: id — o id do contrato.
+   Devolve: o HTML do corpo, ou vazio se o contrato já não existir. */
+function ctFicha(id){
+  const c=contract(id);if(!c)return '';
+  const pid=c.propertyId,p=prop(pid),ts=ctTenants(c);
+  const inv=c.inventory||[],chaves=c.keys||[],rec=ctRecOf(c);
+  const fotos=((p&&p.photos)||[]).filter(f=>(c.photoIds||[]).indexOf(f.id)>-1);
+  const rendas=(db.transactions||[]).filter(t=>t.contractId===c.id&&t.kind==='income');
+  const ultima=rendas.map(t=>t.date).sort().pop();
+  const dias=c.end?pzDias(c.end):null;
+  const contacto=(tel,email)=>[tel?fmtPhone(tel):'',email||''].filter(Boolean).join(' · ');
+  /* O contacto do inquilino está escrito no CONTRATO, e o servidor manda o
+     contrato inteiro a quem tem contract.view. O cargo «Contabilista», que a
+     app traz de fábrica, tem contract.view e não tem tenant.view — sem esta
+     guarda lia o contacto de quem não pode sequer abrir a ficha da pessoa. */
+  const verPessoas=pode(pid,'tenant.view');
+  const recusa=motivoRecusa(pid,'contract.add',c);
+  return ficha([
+    /* Sem botão «Editar» no rodapé, a ficha tem de dizer porquê — e não há
+       uma só razão: há «não tens permissão» e há «só quem o adicionou pode
+       alterar». Quem tem contract.add mas não criou este contrato lia uma
+       frase que não era a sua. A app já sabe dizer a certa. */
+    recusa?{tipo:'nota',valor:esc(recusa)}:null,
+    /* três estados: dizer «Terminado» três linhas acima do campo «Início»,
+       num contrato que começa em 2028, é uma afirmação falsa sobre um
+       documento legal, no ecrã onde a pessoa a foi confirmar */
+    {rotulo:'Estado',valor:ctEstado(c)==='ativo'?'Em vigor'
+      :(ctEstado(c)==='futuro'?'Por começar'+(c.start?' · a '+dPT(c.start):''):'Terminado')},
+    /* só quando o imóvel existe mesmo: sem ele o ctLabel escreve «?», e um
+       ponto de interrogação numa ficha é pior do que a linha não estar lá */
+    p?{rotulo:'Imóvel',valor:esc(ctLabel(c))}:null,
+    p&&p.rentalMode==='quartos'?{rotulo:'Parte arrendada',valor:c.roomId?esc(roomName(p,c.roomId)):'Imóvel inteiro'}:null,
+    ts.length?{tipo:'bloco',rotulo:ts.length>1?'Inquilinos':'Inquilino',
+      valor:ts.map(t=>[esc(t.name),verPessoas?esc(contacto(t.phone,t.email)):''].filter(Boolean).join(' · ')).join('<br>')}:null,
+    c.rent>0?{rotulo:'Renda mensal',valor:euroS(c.rent)}:null,
+    /* o bruto engana, e a marca de «estimado» é a mesma que os cartões já dão:
+       o formulário guarda 0 para «em branco», e escrever «0%» era mentira */
+    c.rent>0?{rotulo:'Imposto sobre a renda',valor:dec(taxRateOf(c))+'%'+(Number(c.taxRate)>0?'':' (estimado pela duração)')}:null,
+    c.rent>0?{rotulo:'Renda líquida',valor:euroS(netRent(c))}:null,
+    c.payDay?{rotulo:'Renda paga',valor:(c.payDayTo&&c.payDayTo>c.payDay)?('entre o dia '+c.payDay+' e o dia '+c.payDayTo):('no dia '+c.payDay)}:null,
+    isActive(c)&&rec&&rec.next&&pode(pid,'rec.view')?{rotulo:'Próxima renda',valor:dPT(rec.next)}:null,
+    c.start?{rotulo:'Início',valor:dPT(c.start)}:null,
+    /* a contagem só quando já é acionável, senão é decoração */
+    c.end?{rotulo:'Fim',valor:dPT(c.end)+(dias>=0&&dias<=180?' · faltam '+dias+' dias':'')}:null,
+    /* o prazo que custa um ano de contrato se passar: a app já o calcula nos
+       prazos, e a ficha di-lo onde a pessoa está mesmo a olhar */
+    isActive(c)&&c.end&&dias>=0&&dias<=150?{tipo:'nota',
+      valor:'Para o contrato não renovar a '+dPT(c.end)+', o aviso ao inquilino tem de seguir até <b>'+dPT(pzAddDias(c.end,-120))+'</b> (120 dias).'}:null,
+    c.increase!=null&&c.increase!==''?{rotulo:'Aumento anual',valor:dec(c.increase)+'%'+(c.start?' · próximo a '+dPT(pzAniversario(c.start)):'')}:null,
+    c.deposit>0?{rotulo:'Caução',valor:euroS(c.deposit)}:null,
+    c.advance>0?{rotulo:'Rendas antecipadas',valor:c.advance+(Number(c.advance)===1?' mês':' meses')}:null,
+    c.iban?{rotulo:'IBAN',valor:esc(fmtIBAN(c.iban))}:null,
+    (c.ownerPhone||c.ownerEmail)?{rotulo:'Contacto do senhorio',valor:esc(contacto(c.ownerPhone,c.ownerEmail))}:null,
+    verPessoas&&(c.tenantPhone||c.tenantEmail)?{rotulo:'Contacto do inquilino',valor:esc(contacto(c.tenantPhone,c.tenantEmail))}:null,
+    inv.length?{tipo:'bloco',rotulo:'Inventário',
+      valor:inv.map(i=>esc((i.qty||1)+'× '+(i.name||'artigo'))+(i.state==='novo'?' · novo':'')).join('<br>')}:null,
+    chaves.length?{tipo:'bloco',rotulo:'Chaves entregues',
+      valor:chaves.map(k=>esc((k.qty||1)+'× '+(k.name||'chave'))).join('<br>')}:null,
+    pode(pid,'file.view')&&fotos.length?{tipo:'bloco',rotulo:'Registo fotográfico',
+      valor:`<div style="display:flex;flex-wrap:wrap;gap:8px">${fotos.map(f=>`<div class="pcover" id="th_${esc(f.id)}" style="width:84px;height:66px;border-radius:10px;background:var(--chip);overflow:hidden"></div>`).join('')}</div>`}:null,
+    pode(pid,'file.view')&&(c.files||[]).length?{tipo:'bloco',rotulo:'Anexos',
+      valor:(c.files||[]).map(f=>`<span role="button" tabindex="0" data-toca="camada" style="cursor:pointer;text-decoration:underline" onclick="openMeta('${jsq(f.id)}')">${esc(f.name||'ficheiro')}</span>`).join('<br>')}:null,
+    /* a pergunta a seguir a «quanto paga» é «já pagou» */
+    pode(pid,'tx.view')&&rendas.length?{rotulo:'Rendas registadas',valor:rendas.length+(ultima?' · última a '+dPT(ultima):'')}:null,
+    String(c.notes||'').trim()?{tipo:'bloco',rotulo:'Notas',valor:rich(c.notes)}:null,
+  ]);
+}
+/* A ficha de um contrato: o que tocar num contrato passa a abrir.
+
+   Era um formulário de quarenta campos, com o «Apagar contrato» encostado ao
+   título. Agora tocar lê, e editar é um passo — e as ações que não são ler
+   nem editar (registar a renda, gerar o PDF, terminar, apagar) ficam no menu
+   do cabeçalho, que é onde vivem as opções de um registo.
+   Recebe: id — o id do contrato.
+   Devolve: nada — abre a janela. */
+function ctView(id){
+  const c=contract(id);if(!c)return;
+  const pid=c.propertyId,ok=podeEditar(pid,'contract.add',c);
+  abrirFicha({
+    titulo:()=>{const x=contract(id);return x?ctName(x):'Contrato'},
+    corpo:()=>ctFicha(id),
+    menu:()=>{
+      const it=[];
+      if(isActive(c)&&pode(pid,'tx.add'))it.push({label:'Registar renda',icon:'up',toca:'camada',act:`txModal(null,'income','${jsq(pid)}',null,'${jsq(id)}')`});
+      it.push({label:'Gerar contrato em PDF',icon:'pen',toca:'camada',act:`generateContractPdf('${jsq(id)}')`});
+      /* o «Reativar» apaga o c.end, e por isso só se oferece a quem
+         terminou mesmo: num contrato por começar, um clique destruía a data
+         de fim e o menu voltava a oferecê-lo, para sempre */
+      if(ok)it.push(ctEstado(c)!=='terminado'?{label:'Terminar contrato',icon:'x',toca:'dados',act:`endContract('${jsq(id)}')`}
+        :{label:'Reativar contrato',icon:'check',toca:'dados',act:`reactivateContract('${jsq(id)}')`},
+        {label:'Apagar contrato',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delContract('${jsq(id)}')`});
+      return it.length?menu('fichaCt',it):'';
+    },
+    editar:ok?{rotulo:'Editar',act:`ctModal('${jsq(id)}')`}:null,
+    depois:()=>{const x=contract(id);if(!x||!pode(pid,'file.view'))return;
+      const q=prop(x.propertyId);paintThumbs(((q&&q.photos)||[]).filter(f=>(x.photoIds||[]).indexOf(f.id)>-1))},
+  });
+}
+
 /* Abre o modal de criar/editar contrato. Sem id é um contrato novo; pid
    pré-escolhe o imóvel (só se for de investimento, senão cai no primeiro
    arrendável). Trabalha sobre uma cópia em cForm — nada toca na base até
@@ -9,18 +116,51 @@ let cForm={};
    Devolve: nada — abre o modal do contrato. */
 function ctModal(id,pid){
   foldState={};
+  /* Quem não pode alterar recebe a FICHA, e não este formulário com os campos
+     apagados. E antes do openModal: não se decora uma janela já aberta,
+     escolhe-se qual é a janela a abrir. */
+  const _c=id?contract(id):null;
+  if(_c&&!podeEditar(_c.propertyId,'contract.add',_c))return ctView(id);
   if(!db.properties.length)return toast('Cria primeiro um imóvel.');
-  const rentables=db.properties.filter(p=>p.use==='investimento');
-  if(!id&&!rentables.length)return toast('Nenhum imóvel de arrendamento. Muda o uso na ficha do imóvel para criar contratos.');
-  cForm=normContract(id?JSON.parse(JSON.stringify(contract(id))):{propertyId:(pid&&(prop(pid)||{}).use==='investimento'?pid:rentables[0].id),start:today()});
+  /* só onde posso adicionar contratos: os meus imóveis e os de colaboração com o cargo certo */
+  const rentables=casasComo('contract.add').filter(p=>p.use==='investimento');
+  if(!id&&!rentables.length)return toast(db.properties.some(p=>p.use==='investimento')?fraseSemPerm('contract.add'):'Nenhum imóvel de arrendamento. Muda o uso na ficha do imóvel para criar contratos.');
+  cForm=normContract(id?JSON.parse(JSON.stringify(contract(id))):{propertyId:(pid&&(prop(pid)||{}).use==='investimento'&&pode(pid,'contract.add')?pid:rentables[0].id),start:today()});
   if(!id)fillOwnerContact();
-  const m=id?menu('ct',[
-    {label:'Gerar contrato em PDF',icon:'pen',act:`generateContractPdf('${id}')`},
-    isActive(cForm)?{label:'Terminar contrato',icon:'x',act:`endContract('${id}')`}:{label:'Reativar contrato',icon:'check',act:`reactivateContract('${id}')`},
-    {label:'Apagar contrato',icon:'trash',danger:true,act:`delContract('${id}')`}]):'';
+  const ok=!!id&&podeEditar(cForm.propertyId,'contract.add',contract(id));
+  const m=id?menu('ct',[{label:'Gerar contrato em PDF',icon:'pen',act:`generateContractPdf('${id}')`}].concat(ok?[
+    ctEstado(cForm)!=='terminado'?{label:'Terminar contrato',icon:'x',act:`endContract('${id}')`}:{label:'Reativar contrato',icon:'check',act:`reactivateContract('${id}')`},
+    {label:'Apagar contrato',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delContract('${id}')`}]:[])):'';
   openModal(id?'Editar contrato':'Novo contrato',ctBody(),null,m);
   const p=prop(cForm.propertyId);if(p)paintThumbs(p.photos);
   onSave=ctSaver();
+}
+/* Os movimentos confirmados que caem FORA das datas do contrato.
+
+   De um lado e do outro: antes do início e depois do fim. São factos — o
+   dinheiro entrou naquele dia — e por isso não se mexem nem se movem com o
+   contrato; o que a app faz é dizer que deixaram de bater certo, para alguém
+   olhar para eles um a um.
+   Recebe: c — o contrato.
+   Devolve: os movimentos fora da janela, por ordem de data. */
+function movimentosForaDoContrato(c){
+  if(!c||!c.id)return [];
+  return (db.transactions||[]).filter(t=>t.contractId===c.id&&
+    ((c.start&&t.date<c.start)||(c.end&&t.date>c.end)))
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+}
+/* Mostra-os, um a um, para se poder abrir cada um e decidir.
+   Recebe: id — o id do contrato.
+   Devolve: nada — abre a lista de escolha. */
+function verMovimentosFora(id){
+  const c=contract(id);if(!c)return;
+  const fora=movimentosForaDoContrato(c);
+  if(!fora.length)return;
+  pickModal('Fora das datas do contrato',fora.map(t=>({v:t.id,
+    label:(t.label||'Movimento')+' · '+euro2(t.amount),
+    sub:dPT(t.date)+' · '+(c.start&&t.date<c.start?'antes do início ('+dPT(c.start)+')':'depois do fim ('+dPT(c.end)+')'),
+    icon:'swap'})),o=>{closeModal();txView(o.v)},
+    `<div class="hint" style="margin-top:12px">As datas destes movimentos não se mexem: dizem quando o dinheiro entrou. Abre cada um para corrigir o que for preciso.</div>`);
 }
 /* Devolve o handler que o modal usa ao guardar: valida imóvel, renda,
    inquilinos e datas, insere ou substitui o contrato em db.contracts,
@@ -30,6 +170,7 @@ function ctSaver(){
   return ()=>{
     collectCt();
     if(!cForm.propertyId)return toast('Escolhe o imóvel.');
+    const recusa=motivoRecusa(cForm.propertyId,'contract.add',contract(cForm.id));if(recusa)return toast(recusa);
     if(!(cForm.rent>0))return falhaCampo('c_rent','Indica a renda mensal.');
     if(!cForm.tenantIds.length)return toast('Escolhe pelo menos um inquilino.');
     /* um fim antes do início guardava sem aviso e o contrato sumia das
@@ -38,7 +179,16 @@ function ctSaver(){
     const i=db.contracts.findIndex(x=>x.id===cForm.id);
     if(i<0)db.contracts.push(cForm);else db.contracts[i]=cForm;
     syncContractRec(cForm);
-    save();closeModal();buildNav();render();toast('Contrato guardado.');
+    save();closeModal();buildNav();render();
+    /* O que é previsão acompanha o contrato; o que é FACTO fica onde está. A
+       data de um movimento diz que o dinheiro entrou naquele dia, e mudá-la
+       era dizer que entrou noutro — muda a receita do ano, o IRS, o cashflow
+       e as contas entre proprietários. A app aponta, e a pessoa decide. */
+    const fora=movimentosForaDoContrato(cForm);
+    if(fora.length)return toast(fora.length===1?'1 movimento deste contrato está fora das datas dele.'
+      :fora.length+' movimentos deste contrato estão fora das datas dele.',
+      {rotulo:'Ver',ms:9000,fn:()=>verMovimentosFora(cForm.id)});
+    toast('Contrato guardado.');
   };
 }
 // HTML do formulário do contrato, montado a partir de cForm. Só devolve a
@@ -46,17 +196,19 @@ function ctSaver(){
 // Devolve: string com o HTML do formulário do contrato.
 function ctBody(){
   const c=cForm,p=prop(c.propertyId),rooms=(p&&p.rentalMode==='quartos')?(p.rooms||[]):[];
-  const taken=db.contracts.filter(x=>x.id!==c.id&&x.propertyId===c.propertyId&&isActive(x)).map(x=>x.roomId);
+  /* ctVivo: é o único aviso contra assinar dois contratos para o mesmo
+     quarto, e um quarto prometido para 2028 já está prometido */
+  const taken=db.contracts.filter(x=>x.id!==c.id&&x.propertyId===c.propertyId&&ctVivo(x)).map(x=>x.roomId);
   const tags=ctTenants(c).map(t=>({id:t.id,label:t.name}));
   const inv=c.inventory||[];
   const nSum=(c.keys||[]).length?sum(c.keys.map(k=>k.qty))+' chaves':'';
   return `<div class="form">
     <label>Nome do contrato<input id="c_name" value="${esc(c.name||'')}" placeholder="${esc(ctPick(c)||'Ex.: Ana · T2 Lisboa')}" autocomplete="off"></label>
     <div class="hint" style="margin-top:-6px">É por este nome que o contrato aparece nos movimentos e nas listas. Sem nome, usa-se o dos inquilinos.</div>
-    <label>Imóvel${sel('c_prop',c.propertyId,db.properties.filter(x=>x.use==='investimento'||x.id===c.propertyId).map(x=>({v:x.id,label:x.name})),'onCtProp')}</label>
-    ${rooms.length?`<label>Quarto${sel('c_room',c.roomId||'',[{v:'',label:'— sem quarto —'}].concat(rooms.map(r=>({v:r.id,label:r.name+(taken.indexOf(r.id)>-1?' (já arrendado)':'')}))))}</label>`
+    <label>Imóvel${sel('c_prop',c.propertyId,propOptsPara('contract.add',c.propertyId).filter(o=>{const x=prop(o.v);return x&&(x.use==='investimento'||x.id===c.propertyId)}),'onCtProp','rascunho')}</label>
+    ${rooms.length?`<label>Quarto${sel('c_room',c.roomId||'',[{v:'',label:'— sem quarto —'}].concat(rooms.map(r=>({v:r.id,label:r.name+(taken.indexOf(r.id)>-1?' (já arrendado)':'')}))),'','rascunho')}</label>`
      :(p&&p.use==='investimento'?`<div class="hint">Este imóvel está definido como arrendado por inteiro. Para arrendar por quartos, muda isso na ficha do imóvel.</div>`:'')}
-    <div><div class="flabel">Inquilinos</div>${tagField(tags,'Adicionar','addCtTenant()','delCtTenant')}</div>
+    <div><div class="flabel">Inquilinos</div>${tagField(tags,'Adicionar','addCtTenant()','delCtTenant','','camada')}</div>
     <div class="row">
       <label>Renda mensal (€) <span class="req">*</span><input id="c_rent" type="text" inputmode="decimal" value="${c.rent||''}" placeholder="450" oninput="liveNet()"></label>
       <label>Imposto sobre a renda (%)<input id="c_tax" type="text" inputmode="decimal" value="${c.taxRate?dec(c.taxRate):''}" placeholder="${dec(irsRate(c))}" oninput="liveNet()"></label></div>
@@ -74,7 +226,7 @@ function ctBody(){
       <label>Rendas antecipadas (meses)<input id="c_adv" type="text" inputmode="numeric" value="${c.advance||''}" placeholder="0"></label></div>
     <div class="hint" style="margin-top:-6px">A renda cria um movimento recorrente todos os meses. Com rendas antecipadas, arranca depois dos meses pagos à cabeça.</div>
     <label>IBAN para pagamento das rendas<input id="c_iban" value="${esc(c.iban)}" placeholder="PT50 0000 0000 0000 0000 0000 0" autocomplete="off"></label>`,
-      {icon:'contract',open:false,summary:[c.start?'de '+c.start:'',c.end?'a '+c.end:'',c.deposit?'caução '+euro(c.deposit):''].filter(Boolean).join(' ')})}
+      {icon:'contract',open:false,summary:[c.start?'de '+dPT(c.start):'',c.end?'a '+dPT(c.end):'',c.deposit?'caução '+euro(c.deposit):''].filter(Boolean).join(' ')})}
     ${fold('contacts','Contactos',contactSect('owner',c,p)+contactSect('tenant',c,p),{icon:'users',summary:[c.ownerPhone||c.ownerEmail?'senhorio':'',c.tenantPhone||c.tenantEmail?'inquilino':''].filter(Boolean).join(' · ')})}
     ${fold('inv','Inventário',`
       ${inv.length?`<div class="form" style="gap:7px">
@@ -83,24 +235,24 @@ function ctBody(){
           <input type="checkbox" class="i-c" id="invc_${it.id}">
           <input class="i-n" id="invn_${it.id}" value="${esc(it.name)}" placeholder="Artigo">
           <input class="i-q" id="invq_${it.id}" type="text" inputmode="numeric" value="${it.qty}" placeholder="1">
-          <span class="i-s">${sel('invs_'+it.id,it.state,[{v:'novo',label:'Novo'},{v:'usado',label:'Usado'}])}</span>
-          <button type="button" class="btn sm danger" onclick="delInv('${it.id}')">${ic('trash',14)}</button></div>`).join('')}
-        <div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn sm danger" onclick="delInvSelected()">Remover selecionados</button></div>
+          <span class="i-s">${sel('invs_'+it.id,it.state,[{v:'novo',label:'Novo'},{v:'usado',label:'Usado'}],'','rascunho')}</span>
+          <button type="button" class="btn sm danger" data-toca="rascunho" onclick="delInv('${it.id}')">${ic('trash',14)}</button></div>`).join('')}
+        <div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn sm danger" data-toca="rascunho" onclick="delInvSelected()">Remover selecionados</button></div>
       </div>`:`<div class="hint"></div>`}
       <div class="toolbar" style="margin:0">
-        <button type="button" class="btn sm" onclick="addInv()">${ic('plus',14)} Adicionar artigo</button>
-        <button type="button" class="btn sm" onclick="addInvBulk()">Adicionar vários</button></div>`,
+        <button type="button" class="btn sm" data-toca="rascunho" onclick="addInv()">${ic('plus',14)} Adicionar artigo</button>
+        <button type="button" class="btn sm" data-toca="camada" onclick="addInvBulk()">Adicionar vários</button></div>`,
       {icon:'box',summary:inv.length?inv.length+' artigos':''})}
     ${fold('photos','Registo fotográfico',`
       ${(p&&(p.photos||[]).length)?`
         <div class="hint" style="margin:-4px 0 0">Escolhe quais das fotos do imóvel entram neste contrato.</div>
         <div class="thumbs">${p.photos.map(f=>{const on=(c.photoIds||[]).indexOf(f.id)>-1;
-          return `<div class="thumb" style="${on?'border-color:var(--accent);border-width:2px':'opacity:.55'}" onclick="togCtPhoto('${f.id}')">
+          return `<div class="thumb" style="${on?'border-color:var(--accent);border-width:2px':'opacity:.55'}" data-toca="rascunho" onclick="togCtPhoto('${f.id}')">
             <div id="th_${f.id}" style="height:76px;background:var(--chip)"></div>
             <div class="nm">${on?'✓ ':''}${esc(f.name||'sem nome')}</div></div>`}).join('')}</div>
         <div class="toolbar" style="margin:11px 0 0">
-          <button type="button" class="btn sm" onclick="allCtPhotos(1)">Selecionar todas</button>
-          <button type="button" class="btn sm" onclick="allCtPhotos(0)">Nenhuma</button></div>`
+          <button type="button" class="btn sm" data-toca="rascunho" onclick="allCtPhotos(1)">Selecionar todas</button>
+          <button type="button" class="btn sm" data-toca="rascunho" onclick="allCtPhotos(0)">Nenhuma</button></div>`
         :`<div class="hint">Este imóvel ainda não tem fotos. Adiciona-as na ficha do imóvel.</div>`}`,
       {icon:'photo',summary:`${(c.photoIds||[]).length} de ${(p&&p.photos||[]).length}`})}
     ${fold('keys','Chaves entregues',`
@@ -110,12 +262,12 @@ function ctBody(){
           <input type="checkbox" id="keyc_${k.id}">
           <input class="i-n" id="keyn_${k.id}" value="${esc(k.name)}" placeholder="Chave de casa">
           <input class="i-q" id="keyq_${k.id}" type="text" inputmode="numeric" value="${k.qty}" placeholder="1">
-          <button type="button" class="btn sm danger" onclick="delKey('${k.id}')">${ic('trash',14)}</button></div>`).join('')}
-        <div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn sm danger" onclick="delKeySelected()">Remover selecionadas</button></div>
+          <button type="button" class="btn sm danger" data-toca="rascunho" onclick="delKey('${k.id}')">${ic('trash',14)}</button></div>`).join('')}
+        <div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn sm danger" data-toca="rascunho" onclick="delKeySelected()">Remover selecionadas</button></div>
       </div>`:`<div class="hint"></div>`}
       <div class="toolbar" style="margin:0">
-        <button type="button" class="btn sm" onclick="addKey()">${ic('plus',14)} Adicionar tipo de chave</button>
-        <button type="button" class="btn sm" onclick="addKeyBulk()">Adicionar várias</button></div>`,
+        <button type="button" class="btn sm" data-toca="rascunho" onclick="addKey()">${ic('plus',14)} Adicionar tipo de chave</button>
+        <button type="button" class="btn sm" data-toca="camada" onclick="addKeyBulk()">Adicionar várias</button></div>`,
       {icon:'key',summary:nSum})}
     ${fold('files','Anexos',fileBlock('',c.files||[],'c_filein','ctAddFiles','ctDelFile',{hint:'PDF do contrato assinado, recibos, comunicações. Ficam no dispositivo e não entram na cópia em JSON.'}),
       {icon:'clip',summary:(c.files||[]).length?c.files.length+' anexo'+(c.files.length===1?'':'s'):''})}
@@ -200,7 +352,7 @@ function contactSect(kind,c,p){
   return `<div class="sect">
     <div class="sect-head"><span class="ic">${ic(owners?'crown':'users',18)}</span><b>Contacto do ${owners?'senhorio':'inquilino'}</b></div>
     <div class="hint" style="margin:-4px 0 0">${owners?'O que o inquilino usa para vos contactar.':'Ponto de contacto deste contrato.'}</div>
-    ${gente.length?`<label>Usar o contacto de${sel(owners?'c_ocid':'c_tcid',cur||'',opts,owners?'onOwnerContact':'onTenantContact')}</label>`:''}
+    ${gente.length?`<label>Usar o contacto de${sel(owners?'c_ocid':'c_tcid',cur||'',opts,owners?'onOwnerContact':'onTenantContact','rascunho')}</label>`:''}
     ${chosen?`<div class="stat" style="border:0;padding:4px 0"><span>${esc(chosen.name)}</span>
         <b>${esc([chosen.phone?fmtPhone(chosen.phone):'',chosen.email].filter(Boolean).join(' · ')||'sem contacto na ficha')}</b></div>`
       :`<div class="row">
@@ -271,7 +423,7 @@ function addKeyBulk(){
   openModal('Adicionar várias chaves',`<div class="form">
     <div class="hint">Uma por linha, com a quantidade: <b>Chave de casa; 2</b></div>
     <textarea id="keybulk" style="min-height:130px;font:13px/1.6 ui-monospace,Menlo,monospace" placeholder="Chave de casa; 2&#10;Chave do correio; 1&#10;Comando do portão"></textarea></div>`,
-    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="doKeyBulk()">Adicionar</button>`);
+    `<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="rascunho" onclick="doKeyBulk()">Adicionar</button>`);
 }
 // Lê o textarea do addKeyBulk: uma chave por linha, nome e quantidade
 // separados por ;, | ou tab. Sem quantidade, fica 1.
@@ -313,7 +465,7 @@ function addCtTenant(){
   const free=db.tenants.filter(t=>(cForm.tenantIds||[]).indexOf(t.id)<0);
   pickModal('Escolher inquilino',free.map(t=>({v:t.id,label:t.name,sub:[t.phone,t.email].filter(Boolean).join(' · '),avatar:true})),
     t=>{cForm.tenantIds.push(t.v);fillTenantContact(t.v);closeModal();repaintCt()},
-    `<button type="button" class="btn" style="width:100%;justify-content:center" onclick="newTenantFromCt()">${ic('plus',15)} Criar inquilino novo</button>`);
+    `<button type="button" class="btn" style="width:100%;justify-content:center" data-toca="camada" onclick="newTenantFromCt()">${ic('plus',15)} Criar inquilino novo</button>`);
 }
 // Tira um inquilino do contrato — a ficha da pessoa fica intacta.
 // Recebe: tid — id do inquilino a tirar do contrato.
@@ -324,13 +476,17 @@ function delCtTenant(tid){collectCt();cForm.tenantIds=(cForm.tenantIds||[]).filt
    contrato já com o inquilino adicionado e o contacto preenchido.
    Devolve: nada — abre a ficha de pessoa nova. */
 function newTenantFromCt(){
+  /* a ficha nova vai subir como registo deste imóvel: sem «Adicionar inquilinos» o servidor recusava-a */
+  if(!pode(cForm.propertyId,'tenant.add'))return toast(fraseSemPerm('tenant.add'));
   closeModal();
+  /* num imóvel onde só colaboro a ficha fica presa ao imóvel (houseId): se o
+     contrato ficar por guardar, sobe na mesma como registo dele, não privada */
   personModal('tenant',null,nid=>{
     if(cForm.tenantIds.indexOf(nid)<0)cForm.tenantIds.push(nid);
     fillTenantContact(nid);
     closeModal();render();repaintCt();
     toast('Inquilino criado e adicionado ao contrato.');
-  });
+  },souDono(cForm.propertyId)?'':cForm.propertyId);
 }
 // Acrescenta um artigo vazio ao inventário (quantidade 1, usado) e repinta.
 // Devolve: nada — repinta o formulário.
@@ -363,7 +519,7 @@ function addInvBulk(){
   openModal('Adicionar vários artigos',`<div class="form">
     <div class="hint">Um artigo por linha. Podes indicar quantidade e estado: <b>Cadeira; 4; usado</b></div>
     <textarea id="invbulk" style="min-height:150px;font:13px/1.6 ui-monospace,Menlo,monospace" placeholder="Sofá; 1; novo&#10;Cadeira; 4; usado&#10;Frigorífico"></textarea></div>`,
-    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="doInvBulk()">Adicionar</button>`);
+    `<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="rascunho" onclick="doInvBulk()">Adicionar</button>`);
 }
 // Lê o textarea do addInvBulk: um artigo por linha, campos separados por ;,
 // | ou tab. Sem quantidade fica 1; o estado só é "novo" se a linha o disser.
@@ -400,7 +556,8 @@ function ctDelFile(fid){collectCt();cForm.files=(cForm.files||[]).filter(f=>f.id
 // Recebe: id — id do contrato.
 // Devolve: nada — pede confirmação e, se aceite, grava e redesenha a vista.
 function endContract(id){
-  const c=contract(id);
+  const c=contract(id);if(!c)return;
+  const recusa=motivoRecusa(c.propertyId,'contract.add',c);if(recusa)return toast(recusa);
   confirmModal('Terminar contrato',`Marcar o contrato de ${esc(ctNames(c))} como terminado? Deixa de contar para as rendas e projeções.`,()=>{
     c.active=false;if(!c.end)c.end=today();syncContractRec(c);save();closeAllModals();buildNav();render();toast('Contrato terminado.');
   });
@@ -410,7 +567,8 @@ function endContract(id){
 // Recebe: id — id do contrato.
 // Devolve: nada — pede confirmação e, se aceite, grava e redesenha a vista.
 function reactivateContract(id){
-  const c=contract(id);
+  const c=contract(id);if(!c)return;
+  const recusa=motivoRecusa(c.propertyId,'contract.add',c);if(recusa)return toast(recusa);
   confirmModal('Reativar contrato',`Voltar a pôr o contrato de ${esc(ctNames(c))} ativo? Volta a contar para as rendas e projeções.`,()=>{
     c.active=true;c.end='';syncContractRec(c);save();closeAllModals();buildNav();render();toast('Contrato reativado.');
   });
@@ -422,7 +580,8 @@ function reactivateContract(id){
    Recebe: id — id do contrato a apagar.
    Devolve: nada — pede confirmação e, se aceite, grava e redesenha a vista. */
 function delContract(id){
-  const c=contract(id);
+  const c=contract(id);if(!c)return;
+  const recusa=motivoRecusa(c.propertyId,'contract.add',c,true);if(recusa)return toast(recusa);
   confirmModal('Apagar contrato',`Apagar o contrato de ${esc(ctNames(c))}? Os movimentos ficam, mas deixam de estar ligados a ele.`,()=>{
     const copia=JSON.parse(JSON.stringify(c));
     const recs=JSON.parse(JSON.stringify((db.recurring||[]).filter(r=>r.auto&&r.tx&&r.tx.contractId===id)));

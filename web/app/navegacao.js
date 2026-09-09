@@ -6,6 +6,7 @@ const TABS=[
   {id:'visits',icon:'door',label:'Visitas',sub:'Quem vem ver as casas'},
   {id:'tenants',icon:'users',label:'Inquilinos',sub:'Ficha e documentos de cada pessoa'},
   {id:'owners',icon:'crown',label:'Proprietários',sub:'Quem é dono de quê'},
+  {id:'colaboradores',icon:'shield',label:'Colaboradores',sub:'Quem ajuda a gerir, e com que cargo'},
   {id:'transactions',icon:'swap',label:'Movimentos',sub:'Rendas, despesas e prestações'},
   {id:'recurring',icon:'clock',label:'Planeados',sub:'Movimentos recorrentes e modelos'},
   {id:'calendar',icon:'cal',label:'Calendário',sub:'Visitas e planeados, dia a dia'},
@@ -23,17 +24,36 @@ const SUBPAGE={cats:{label:'Tipos de movimento',sub:'Como classificas o que entr
 // O contentor onde cada vista é desenhada (o elemento #view).
 // Devolve: o elemento #view do DOM (ou null se ainda não existir).
 const view=()=>document.getElementById('view');
-const NAV_GROUPS=[{label:'Património',ids:['dashboard','calendar','properties','contracts']},{label:'Pessoas',ids:['visits','tenants','owners']},
+const NAV_GROUPS=[{label:'Património',ids:['dashboard','calendar','properties','contracts']},{label:'Pessoas',ids:['visits','tenants','owners','colaboradores']},
   {label:'Finanças',ids:['transactions','recurring','credits','projections','reports']},{label:'Aplicação',ids:['settings']}];
+/* contagem que cada crachá mostrava da última vez */
+let _cntAnt={};
+/* Diz se um crachá deve dar o pulso de entrada (index.html:.cnt.novo). Só
+   quando o número MUDA: o buildNav corre a cada render, e o render corre
+   também na sincronização de fundo — sem esta memória a app pulsava de 3 em 3
+   minutos sem nada ter acontecido. A primeira vez não pulsa: ao abrir a app
+   está tudo a aparecer, e um salto por cima disso é ruído.
+   Recebe: chave — qual o crachá (ex.: 'recurring'); n — a contagem a mostrar.
+   Devolve: ' novo' (com o espaço, para colar à classe) quando mudou; '' senão. */
+function cntNovo(chave,n){
+  const antes=_cntAnt[chave];_cntAnt[chave]=n;
+  return antes!==undefined&&antes!==n?' novo':'';
+}
 /* Reconstrói a navegação da gaveta (agrupada por NAV_GROUPS), marcando o
    separador atual e o crachá dos planeados pendentes — na cor de aviso quando
-   nenhum passou do prazo. Refaz também a barra de baixo.
+   nenhum passou do prazo. Refaz também a barra de baixo. Quem só colabora
+   não vê os separadores que o cargo não abre (separadoresEscondidos): um
+   grupo que fique vazio desaparece com o título.
    Devolve: nada — reescreve o HTML de #nav e chama buildTabbar. */
 function buildNav(){
-  const late=recActive().length;
-  document.getElementById('nav').innerHTML=NAV_GROUPS.map(g=>`<div class="navh">${g.label}</div>`+g.ids.map(id=>{const t=TABS.find(x=>x.id===id);
-    return `<a class="${t.id===tab?'on':''}" tabindex="0" ${t.id===tab?'aria-current="page"':''} onclick="go('${t.id}')">${ic(t.icon)}<span class="txt">${t.label}</span>${t.id==='recurring'&&late?`<span class="cnt" ${recLate().length?'':'style="background:var(--warn)"'}>${late}</span>`:''}</a>`}).join('')).join('');
-  buildTabbar(late);
+  /* o crachá dos «Planeados» é a mesma afirmação do sino, e espera pelo mesmo
+     (auxiliares.js:sabemosOEstado): antes do primeiro estado do servidor
+     contava rendas já confirmadas noutro aparelho */
+  const late=sabemosOEstado()?recActive().length:0,fora=typeof separadoresEscondidos==='function'?separadoresEscondidos():[];
+  document.getElementById('nav').innerHTML=NAV_GROUPS.map(g=>{const ids=g.ids.filter(id=>fora.indexOf(id)<0);if(!ids.length)return '';
+    return `<div class="navh">${g.label}</div>`+ids.map(id=>{const t=TABS.find(x=>x.id===id);
+    return `<a class="${t.id===tab?'on':''}" tabindex="0" ${t.id===tab?'aria-current="page"':''} data-toca="ecra" onclick="go('${t.id}')">${ic(t.icon)}<span class="txt">${t.label}</span>${t.id==='recurring'&&late?`<span class="cnt${cntNovo('recurring',late)}" ${recLate().length?'':'style="background:var(--warn)"'}>${late}</span>`:''}</a>`}).join('')}).join('');
+  buildTabbar(late,fora);
 }
 /* Os quatro destinos quentes, a um toque no telemóvel. A auditoria mediu:
    com tudo atrás da gaveta, qualquer mudança de ecrã custava dois. O
@@ -42,23 +62,59 @@ function buildNav(){
 const TABBAR=['dashboard','transactions','properties','calendar'];
 // Reconstrói a barra de baixo do telemóvel com os destinos de TABBAR;
 // late é a contagem de planeados pendentes para o crachá.
-// Recebe: late — a contagem de planeados pendentes (número), para o crachá.
+// Recebe: late — a contagem de planeados pendentes (número), para o crachá;
+// fora (opcional) — ids de separadores a esconder (os de separadoresEscondidos).
 // Devolve: nada — reescreve o HTML de #tabbar (se o elemento existir).
-function buildTabbar(late){
+function buildTabbar(late,fora){
   const el=document.getElementById('tabbar');if(!el)return;
-  el.innerHTML=TABBAR.map(id=>{const t=TABS.find(x=>x.id===id);
-    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} onclick="go('${id}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${id==='calendar'&&late?`<span class="cnt">${late}</span>`:''}</a>`}).join('');
+  el.innerHTML=TABBAR.filter(id=>(fora||[]).indexOf(id)<0).map(id=>{const t=TABS.find(x=>x.id===id);
+    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} data-toca="ecra" onclick="goBarra('${id}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${id==='calendar'&&late?`<span class="cnt${cntNovo('calendar',late)}">${late}</span>`:''}</a>`}).join('');
 }
 // Muda de separador: limpa a subpágina das Definições e o donut, fecha a
 // gaveta, refaz a navegação e repinta, com scroll para o topo.
 // Recebe: id — o separador de destino (um id de TABS, ex.: 'transactions').
 // Devolve: nada — redesenha a vista.
-function go(id){tab=id;setPage='';donutCat='';closeDrawer();buildNav();render();try{window.scrollTo(0,0)}catch(e){}}
+/* De onde veio a mudança de separador, e para que lado.
+
+   A barra de baixo é uma fita com quatro destinos e uma ordem À VISTA: ir dos
+   Movimentos para os Imóveis é andar um lugar para a direita, e a pessoa viu
+   o lugar antes de lá tocar. A gaveta são treze destinos agrupados por
+   assunto — da «Visão geral» para as «Definições» não há lado nenhum, e uma
+   fita a correr ali inventava uma vizinhança que não existe.
+
+   É uma variável, e não um segundo argumento do go: dois dos embrulhos da
+   nuvem chamam-no com um argumento só (cloud/anexos.js, cloud/selecao.js), e
+   um go(id,lado) chegava cá sem o lado — o deslize nunca acontecia, sem erro
+   nenhum, que é o pior sítio onde isto podia falhar. */
+let _ladoSep=0;
+/* Um toque na barra de baixo. Só este caminho desliza.
+   Recebe: id — o separador de destino.
+   Devolve: nada — navega, com a fita a correr para o lado certo. */
+function goBarra(id){
+  const i=TABBAR.indexOf(tab),j=TABBAR.indexOf(id);
+  /* esconder separadores tira itens da fita mas não lhes troca a ordem */
+  _ladoSep=(i>-1&&j>-1&&i!==j)?(j>i?1:-1):0;
+  try{go(id)}finally{_ladoSep=0}   // o go GLOBAL: a nuvem embrulha-o
+}
+/* Muda de separador: limpa a subpágina das Definições e o donut, fecha a
+   gaveta, refaz a navegação e repinta, com scroll para o topo. Vindo da barra
+   de baixo (goBarra), o painel vira como uma fita para o lado certo.
+   Recebe: id — o separador de destino (um id de TABS, ex.: 'transactions').
+   Devolve: nada — redesenha a vista. */
+function go(id){
+  const lado=_ladoSep;_ladoSep=0;
+  const pintar=()=>{tab=id;setPage='';donutCat='';closeDrawer();_entrar=1;buildNav();render();
+    try{window.scrollTo(0,0)}catch(e){}};
+  /* tocar no separador aceso não é uma travessia, é uma repintura — e essa já
+     tem o acompanhamento das peças */
+  if(!lado||id===tab||typeof deslizarPainel!=='function')return pintar();
+  return deslizarPainel(pintar,lado);
+}
 // Navega dentro das Definições: p é a subpágina ('' volta ao menu). Entrar
 // numa subpágina arma o histórico, para o voltar do sistema subir a Definições.
 // Recebe: p — a subpágina das Definições (uma chave de SUBPAGE; '' volta ao menu).
 // Devolve: nada — redesenha a vista.
-function goSet(p){setPage=p;if(p)pushHist();render();try{window.scrollTo(0,0)}catch(e){}}
+function goSet(p){setPage=p;if(p)pushHist();_entrar=1;render();try{window.scrollTo(0,0)}catch(e){}}
 /* Abre a gaveta de navegação: fecha primeiro os painéis de filtros, arma o
    histórico (o voltar do sistema fecha-a) e trava o scroll do fundo.
    Devolve: nada — abre a gaveta e passa o foco para dentro dela. */

@@ -10,16 +10,37 @@ let tForm={};
    Devolve: nada — abre o modal do movimento e prepara o guardar. */
 function txModal(id,kind,propId,_x,ctId,preset){
   foldState={};
+  /* Quem não pode alterar recebe a FICHA, e não este formulário com os campos
+     apagados. E antes do openModal: não se decora uma janela já aberta,
+     escolhe-se qual é a janela a abrir. */
+  const _t=id?(db.transactions||[]).find(x=>x.id===id):null;
+  if(_t&&!podeEditar(_t.propertyId,'tx.add',_t))return txView(id);
+  /* sem imóvel escolhido: com um só imóvel onde posso adicionar fica esse; quem não
+     é dono de nenhum não tem «Todos os imóveis» e fica com o primeiro permitido —
+     senão o seletor mostrava o primeiro e o movimento gravava-se sem imóvel */
+  const auto=(db.properties.length===1||!podeSemImovel())?((casasComo('tx.add')[0]||{}).id||null):null;
   tForm=id?normTx(JSON.parse(JSON.stringify(db.transactions.find(x=>x.id===id)))):
-    normTx(Object.assign({kind:kind||'income',date:today(),amount:'',propertyId:propId||(db.properties.length===1?db.properties[0].id:null),contractId:ctId||null,split:null},preset||{}));
+    normTx(Object.assign({kind:kind||'income',date:today(),amount:'',propertyId:propId||auto,contractId:ctId||null,split:null},preset||{}));
   if(tForm.contractId&&!tForm.propertyId){const c=contract(tForm.contractId);if(c)tForm.propertyId=c.propertyId}
+  if(!id&&!tForm.propertyId&&!tForm.groupId&&!podeSemImovel())tForm.propertyId=auto;   /* um preset sem imóvel (modelo) também */
   tForm._edit=!!id;
   if(!id&&tForm.amount){tForm._aA=tForm.amount}
   prefill();
-  const m=id?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,act:`delTx('${id}')`}]):'';
-  openModal((id?'Editar ':txNewWord(tForm.kind))+txTypeName(tForm.kind),txBody(),null,m);
+  const m=id?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${id}')`}]):'';
+  const nome=txTypeName(tForm.kind);
+  openModal(id?'Editar '+nome:txNewWord(tForm.kind)+nome,txBody(),null,m);
   tForm._saver=()=>{
     collectTx();
+    /* a primeira barreira: o servidor recusaria na mesma, mas aqui diz-se porquê antes de gravar.
+       Criar ou alterar um planeado não cria movimentos: pede «Adicionar e confirmar planeados»
+       (e, a alterar, ser quem o criou); o resto — movimentos, e o Confirmar — pede «Adicionar movimentos» */
+    const recusa=(tForm._recId||tForm._recNew)?motivoRecusa(tForm.propertyId,'rec.add',tForm._recId?(db.recurring||[]).find(x=>x.id===tForm._recId):null)
+      :motivoRecusa(tForm.propertyId,'tx.add',id?db.transactions.find(x=>x.id===id):null);
+    if(recusa)return toast(recusa);
+    if(!tForm.propertyId&&!podeSemImovel())return toast('Escolhe o imóvel.');
+    /* um pagamento de crédito a sério (não um planeado nem um modelo só) abate capital
+       na ficha do imóvel: sem «Editar a ficha» o movimento subia e a dívida não */
+    if(tForm.kind==='loan'&&!(tForm._recId||tForm._recNew)&&(!(tForm._tplId||tForm._tplNew)||tForm._alsoTx)){const rc=motivoCredito(tForm.propertyId);if(rc)return toast(rc)}
     if(!tForm.label.trim())return falhaCampo('t_label','Escreve uma descrição.');
     if(!(tForm.amount>0))return falhaCampo('t_amount','Indica um montante.');
     /* com hipotecas vivas, um pagamento de crédito sem hipoteca ia parar à conta errada ou a nenhuma */
@@ -45,7 +66,8 @@ function txModal(id,kind,propId,_x,ctId,preset){
     if(tForm._recId||tForm._recNew){   /* recorrência: só ela muda; não cria movimentos */
       const every=val('t_every')||'month',recEnd=val('t_recEnd')||'';let until=val('t_until')||'';if(until&&until<tForm.date)until='';
       if(tForm._recNew){db.recurring=db.recurring||[];db.recurring.push(normRec({name:tForm.label,every,next:tForm.date,until,end:recEnd,tx:txSnapshot(tForm)}))}
-      else{const r=(db.recurring||[]).find(x=>x.id===tForm._recId);if(r){r.tx=txSnapshot(tForm);r.name=tForm.label;r.every=every;r.next=tForm.date;r.until=until;r.end=recEnd}}
+      else{const r=(db.recurring||[]).find(x=>x.id===tForm._recId);if(r){r.tx=txSnapshot(tForm);r.name=tForm.label;r.every=every;r.next=tForm.date;r.until=until;r.end=recEnd;
+        if(r.tx.loanId)delete r.loanOff}}   /* escolheu a hipoteca à mão: a marca do delMort deixa de fazer sentido */
       save();closeModal();buildNav();render();toast(tForm._recNew?'Movimento recorrente criado.':'Movimento recorrente atualizado.');return;
     }
     if(tForm._tplId||tForm._tplNew){
@@ -81,7 +103,7 @@ function txModal(id,kind,propId,_x,ctId,preset){
    Devolve: nada — só mexe no tForm; quem chama repinta depois. */
 function prefill(){
   const p=prop(tForm.propertyId);
-  const ows=p?ownersOfProp(p).slice():(tForm.groupId?txGroupOwners(tForm).map(o=>o.id):db.owners.map(o=>o.id));
+  const ows=p?ownersOfProp(p).slice():(tForm.groupId?txGroupOwners(tForm).map(o=>o.id):donosGlobais().map(o=>o.id));
   /* num acerto, quem já lá está fica — pode não ser dono do imóvel (dívida de grupo paga por outro) */
   if(tForm.kind==='settle')[tForm.paidBy,tForm.toId].forEach(o=>{if(o&&ows.indexOf(o)<0&&owner(o))ows.push(o)});
   if(tForm.paidBy&&ows.indexOf(tForm.paidBy)<0)tForm.paidBy=null;
@@ -111,6 +133,98 @@ function prefill(){
 // descrição/montante se ainda forem as sugestões automáticas — o que foi escrito à mão fica.
 // Devolve: nada — só mexe no tForm.
 function keepTyped(){collectTx();if(tForm.label===tForm._aL)tForm.label='';if(tForm.amount===tForm._aA)tForm.amount=''}
+/* O corpo da ficha de um movimento: o que se sabe sobre ele, para ler.
+
+   Pela ordem da pergunta que traz alguém aqui — vi esta linha na lista: o
+   que foi, de quanto, quando, de que imóvel, quem pagou, e quanto disto é
+   meu. O resto (a hipoteca, a dívida a terceiros, a categoria) só aparece
+   quando é deste movimento.
+   Recebe: id — o id do movimento.
+   Devolve: o HTML do corpo, ou vazio se o movimento já não existir. */
+function txFicha(id){
+  const t=(db.transactions||[]).find(x=>x.id===id);if(!t)return '';
+  const K=KIND[t.kind]||KIND.expense,p=prop(t.propertyId);
+  const l=t.kind==='loan'&&pode(t.propertyId,'loan.view')?findLoan(p,t.loanId):null;
+  const os=p?ownersOfProp(p):[];
+  const ct=t.contractId?contract(t.contractId):null;
+  const cred=(t.creditor||'').trim();
+  const nome=o=>esc((owner(o)||{}).name||'?');
+  /* A divisão entre proprietários só na minha casa: num imóvel de
+     colaboração o servidor apaga as quotas, e o que sobrava era uma
+     repartição por igual — um número inventado com ar de combinado. */
+  const verDivisao=countsBetweenOwners(t)&&p&&souDono(t.propertyId)&&os.length>1;
+  const modo=(lista,m,def)=>{const x=lista.find(y=>y[0]===(m||def));return x?x[1]:''};
+  return ficha([
+    {tipo:'nota',valor:esc(motivoRecusa(t.propertyId,'tx.add',t))},
+    {rotulo:'Montante',valor:`<span class="${K.color}">${K.sign}${euro2(t.amount)}</span>`},
+    {rotulo:'Tipo',valor:esc(K.short)+(t.kind==='loan'?(t.payType==='amortizacao'?' · amortização':' · prestação'):'')},
+    {rotulo:'Data',valor:dPT(t.date)},
+    {rotulo:'Imóvel',valor:t.propertyId?esc(propName(t.propertyId)):(t.groupId?esc('Grupo '+((grp(t.groupId)||{}).name||'')):'Todos os imóveis')},
+    ct&&pode(t.propertyId,'contract.view')?{rotulo:'Contrato',valor:esc(ctName(ct))}:null,
+    t.kind==='settle'?{rotulo:'Transferência',valor:nome(t.paidBy)+' → '+nome(t.toId)}:null,
+    t.kind!=='settle'&&owner(t.paidBy)?{rotulo:isIn(t.kind)?'Recebido por':'Pago por',valor:nome(t.paidBy)}:null,
+    verDivisao?{tipo:'bloco',rotulo:'Divisão entre proprietários',valor:(function(){
+      const c=txSplitCents(t,p,os);
+      return esc(modo(SPLIT_MODES,(t.split||{}).mode,'quota'))+'<br>'+
+        os.map(o=>esc(o.name)+' · '+euro2((c[o.id]||0)/100)).join('<br>');
+    })()}:null,
+    t.groupId&&txProps(t).length>1?{tipo:'bloco',rotulo:'Divisão entre imóveis',valor:(function(){
+      const ps=txProps(t),c=psplitCents(t,ps,Math.abs(Math.round((Number(t.amount)||0)*100)));
+      return esc(modo(PSPLIT_MODES,(t.psplit||{}).mode,'equal'))+'<br>'+
+        ps.map(x=>esc(x.name)+' · '+euro2((c[x.id]||0)/100)).join('<br>');
+    })()}:null,
+    l?{rotulo:'Hipoteca',valor:esc(loanName(l))}:null,
+    /* os juros e o capital vivem no próprio movimento e chegam inteiros a
+       quem tem tx.view: pedir loan.view aqui escondia-os a quem tem direito */
+    t.kind==='loan'&&(t.principal||t.interest||t.fee)?{tipo:'bloco',rotulo:'Distribuição do pagamento',
+      valor:t.payType==='amortizacao'
+        ?'Abate ao capital <b>'+euro2(t.principal||0)+'</b>'+(t.fee?' · comissão <b>'+euro2(t.fee)+'</b>':'')
+        :'Juros <b>'+euro2(t.interest||0)+'</b> · capital <b>'+euro2(t.principal||0)+'</b>'+(t.stamp?' · imposto do selo <b>'+euro2(t.stamp)+'</b>':'')}:null,
+    /* o saldo é o de HOJE, já com este pagamento abatido — não é um retrato
+       à data do movimento, e o rótulo tem de o dizer */
+    l?{rotulo:'Capital ainda em dívida',valor:euro(l.outstanding)}:null,
+    t.kind==='owed'&&cred?{rotulo:'De quem recebi',valor:esc(cred)}:null,
+    t.kind==='repay'&&cred?{rotulo:'A quem devolvi',valor:esc(cred)}:null,
+    /* só com imóvel: sem ele, creditorBalances filtra pelo âmbito e pelo
+       filtro de proprietário da vista que está por trás da janela, e o saldo
+       mudava conforme o filtro que por acaso estivesse ligado */
+    (t.kind==='owed'||t.kind==='repay')&&t.propertyId&&cred?{tipo:'bloco',rotulo:'Conta com esta pessoa',
+      valor:(function(){const r=creditorBalances(t.propertyId).find(x=>x.creditor===cred);
+        return r?'Recebido '+euro2(r.received)+' · devolvido '+euro2(r.repaid)+' · falta <b>'+euro2(r.due)+'</b>':''})()}:null,
+    {rotulo:'Categoria',valor:esc([t.category,t.sub].filter(Boolean).join(' / '))},
+    (t.tags||[]).length?{rotulo:'Etiquetas',valor:(t.tags||[]).map(esc).join(' · ')}:null,
+    !countsInTotals(t)?{tipo:'nota',valor:isPassivo(t)
+      ?'Não entra nos totais nem no resultado: é dinheiro que se devolve — uma caução ou um empréstimo recebido.'
+      :'Não entra nos totais nem no resultado.'}:null,
+    String(t.notes||'').trim()?{tipo:'bloco',rotulo:'Comentários',valor:rich(t.notes)}:null,
+  ]);
+}
+/* A ficha de um movimento: o que tocar numa linha de movimento passa a abrir.
+   Recebe: id — o id do movimento.
+   Devolve: nada — abre a janela. */
+function txView(id){
+  const t=(db.transactions||[]).find(x=>x.id===id);if(!t)return;
+  const ok=podeEditar(t.propertyId,'tx.add',t);
+  abrirFicha({
+    titulo:()=>{const x=(db.transactions||[]).find(y=>y.id===id);return x?(x.label||'Movimento'):'Movimento'},
+    corpo:()=>txFicha(id),
+    menu:()=>{
+      const x=(db.transactions||[]).find(y=>y.id===id);if(!x)return '';
+      const it=[];
+      if(x.propertyId&&prop(x.propertyId))it.push({label:'Ver imóvel',icon:'building',toca:'camada',act:`propView('${jsq(x.propertyId)}')`});
+      if(x.contractId&&contract(x.contractId)&&pode(x.propertyId,'contract.view'))
+        it.push({label:'Ver contrato',icon:'contract',toca:'camada',act:`ctView('${jsq(x.contractId)}')`});
+      /* num pagamento de crédito a pergunta seguinte é «quanto é que ainda
+         falta», e a ficha da hipoteca é onde isso está por inteiro */
+      if(x.kind==='loan'&&pode(x.propertyId,'loan.view')&&findLoan(prop(x.propertyId),x.loanId))
+        it.push({label:'Ver hipoteca',icon:'bank',toca:'camada',act:`mortView('${jsq(x.propertyId)}','${jsq(x.loanId)}')`});
+      if(ok)it.push({label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${jsq(id)}')`});
+      return it.length?menu('fichaTx',it):'';
+    },
+    editar:ok?{rotulo:'Editar',act:`txModal('${jsq(id)}')`}:null,
+  });
+}
+
 const SPLIT_MODES=[['equal','Partes iguais','o mesmo para cada proprietário'],['quota','Quotas do imóvel','pela quota-parte de cada um'],['pct','Quotas a definir','em partes: quem tem 2 paga o dobro de quem tem 1 (2 e 1 → 2/3 e 1/3)'],['percent','Percentagem','percentagem de cada um; devem somar 100'],['amount','Valor certo','montante de cada um; têm de somar o total'],['adjust','Ajuste','um extra por cima da parte igual: tira-se ao total o extra de cada um, o resto divide-se em partes iguais por todos e cada um soma o seu (15 € com 5 de extra para um de dois → 10 € e 5 €)']];
 /* Monta o HTML do formulário do movimento a partir do tForm. Os campos variam com o tipo
    (contrato nas rendas, hipoteca e distribuição nos créditos, credor nas dívidas a terceiros,
@@ -118,7 +232,10 @@ const SPLIT_MODES=[['equal','Partes iguais','o mesmo para cada proprietário'],[
    Só devolve a string; quem a põe no DOM é o openModal ou o repaintTx.
    Devolve: o HTML do formulário (string). */
 function txBody(){
-  const t=tForm,p=prop(t.propertyId),acs=t.propertyId?activeContracts(t.propertyId):[];
+  /* os contratos que ainda não acabaram, e não só os em vigor: a caução e as
+     rendas antecipadas de um contrato recebem-se ANTES de ele começar, e sem
+     isto esse dinheiro não tinha a que se ligar */
+  const t=tForm,p=prop(t.propertyId),acs=t.propertyId?contractsOf(t.propertyId).filter(ctVivo):[];
   const lns=liveLoans(p);
   const curLoan=t.kind==='loan'&&t.loanId?findLoan(p,t.loanId):null;
   /* com várias vivas e nenhuma escolhida, a primeira opção pede a escolha; uma hipoteca que não
@@ -128,7 +245,7 @@ function txBody(){
     .concat(curLoan&&!(Number(curLoan.outstanding)>0)?[{v:curLoan.id,label:loanName(curLoan)+' · liquidada'}]:[])
     .concat(t.kind==='loan'&&t.loanId&&!curLoan?[{v:t.loanId,label:'Hipoteca desconhecida (outro imóvel)'}]:[]);
   /* sem imóvel, a despesa pode na mesma ser paga por alguém; num grupo, pelos donos dos imóveis do grupo */
-  const ows=(p?ownersOfProp(p).map(owner):(t.groupId?txGroupOwners(t):db.owners.map(o=>o.id).map(owner))).filter(Boolean);
+  const ows=(p?ownersOfProp(p).map(owner):(t.groupId?txGroupOwners(t):donosGlobais())).filter(Boolean);
   if(t.kind==='settle')[t.paidBy,t.toId].forEach(o=>{const x=o&&owner(o);if(x&&!ows.some(y=>y.id===o))ows.push(x)});
   const cs=catsFor(t.kind)||{},subs=(cs[t.category]||[]).slice();
   if(t.sub&&subs.indexOf(t.sub)<0)subs.unshift(t.sub);
@@ -140,29 +257,29 @@ function txBody(){
   const catSum=[t.category,t.sub].filter(Boolean).join(' / ')+((t.tags||[]).length?(t.category?' · ':'')+t.tags.length+' etiqueta'+(t.tags.length===1?'':'s'):'');
   return `<div class="form">
     ${(t._tplId||t._tplNew)?`<label>Nome do modelo<input id="t_tplName" value="${esc(t._tplName||'')}" placeholder="Ex.: Renda mensal T2" autocomplete="off"></label>`:''}
-    ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" onclick="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
+    ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" data-toca="rascunho" onclick="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
     <label>Descrição <span class="req">*</span><input id="t_label" value="${esc(t.label)}" placeholder="${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
     <div class="row">
       <label>Montante (€) <span class="req">*</span><div style="display:flex;gap:7px;align-items:center">
         <input id="t_amount" type="text" inputmode="decimal" style="flex:1;min-width:0" value="${t.amount||''}" placeholder="900" oninput="tForm.amount=num(this.value);refreshLoanHint();refreshSplit();amtResetSync()">
-        <button type="button" class="btn sm primary" id="amt_reset" style="flex:0 0 auto;padding:9px 12px;display:${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':'none'}" title="Repor a prestação calculada" onclick="onAmtReset()">Repor</button></div></label>
+        <button type="button" class="btn sm primary" id="amt_reset" style="flex:0 0 auto;padding:9px 12px;display:${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':'none'}" title="Repor a prestação calculada" data-toca="rascunho" onclick="onAmtReset()">Repor</button></div></label>
       ${(t._recId||t._recNew)?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}"></label>`}</div>
-    <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p2=>({v:p2.id,label:p2.name}))).concat(gdiv(gOpts('prop'))),'onPropChange')}</label>
-    ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)}))),'onCtChange')}</label>`:''}
-    ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange')}</label>`:''}
+    <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),(podeSemImovel()?[{v:'',label:'Todos os imóveis'}]:[]).concat(propOptsPara((t._recId||t._recNew)?'rec.add':'tx.add',t.propertyId)).concat(podeSemImovel()?gdiv(gOpts('prop')):[]),'onPropChange','rascunho')}</label>
+    ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+dPT(c.start):'')}))),'onCtChange','rascunho')}</label>`:''}
+    ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange','rascunho')}</label>`:''}
     ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'}<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Pai, amigo, empreiteiro…" autocomplete="off" list="creditorList" oninput="refreshCredHint()">
         <datalist id="creditorList">${knownCreditors().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
       <div class="hint" id="credHint">${credHint()}</div>`:''}
     ${settle?(ows.length>1?`<div class="row">
-        <label>Quem paga${sel('t_paid',t.paidBy||'',owOpts)}</label>
-        <label>Quem recebe${sel('t_to',t.toId||'',owOpts)}</label></div>
+        <label>Quem paga${sel('t_paid',t.paidBy||'',owOpts,'','rascunho')}</label>
+        <label>Quem recebe${sel('t_to',t.toId||'',owOpts,'','rascunho')}</label></div>
       <div class="hint">Transferência entre proprietários deste imóvel: acerta as contas entre donos e não conta como receita nem despesa.</div>`
       :`<div class="hint">Escolhe um imóvel com pelo menos dois proprietários.</div>`)
-    :(ows.length?`<label>${isIn(t.kind)?'Recebido por':'Pago por'}${sel('t_paid',t.paidBy||'',owOpts)}</label>`:'')}
+    :(ows.length?`<label>${isIn(t.kind)?'Recebido por':'Pago por'}${sel('t_paid',t.paidBy||'',owOpts,'','rascunho')}</label>`:'')}
     <div id="loanHint">${loanHint()}</div>
     ${settle?'':fold('cat','Categoria e etiquetas',`<div class="${subs.length||t.category?'row':''}">
-      <label>Categoria${sel('t_cat',t.category,[{v:'',label:'— sem categoria —'}].concat(catKeys.map(c=>({v:c,label:c}))).concat([{v:'__new__',label:'+ Criar categoria…'}]),'onCatChange')}</label>
-      ${subs.length||t.category?`<label>Subcategoria${sel('t_sub',t.sub,[{v:'',label:'— indiferente —'}].concat(subs.map(x=>({v:x,label:x}))).concat([{v:'__new__',label:'+ Criar subcategoria…'}]),'onSubChange')}</label>`:''}</div>
+      <label>Categoria${sel('t_cat',t.category,[{v:'',label:'— sem categoria —'}].concat(catKeys.map(c=>({v:c,label:c}))).concat([{v:'__new__',label:'+ Criar categoria…'}]),'onCatChange','rascunho')}</label>
+      ${subs.length||t.category?`<label>Subcategoria${sel('t_sub',t.sub,[{v:'',label:'— indiferente —'}].concat(subs.map(x=>({v:x,label:x}))).concat([{v:'__new__',label:'+ Criar subcategoria…'}]),'onSubChange','rascunho')}</label>`:''}</div>
       <div><div class="flabel">Etiquetas</div>${tagField((t.tags||[]).map(g=>({id:g,label:g})),'Adicionar','addTxTag()','delTxTag','grey')}</div>`,
       {icon:'tag',open:!!(t.category||(t.tags||[]).length),summary:catSum||'sem categoria'})}
     ${(!settle&&t.groupId&&txProps(t).length>1)?psplitSect():''}
@@ -191,7 +308,7 @@ function splitSect(ows){
   const t=tForm,sp=t.split||{mode:'quota',parts:{}},mode=sp.mode||'quota',parts=sp.parts||{};
   const lab=(SPLIT_MODES.find(m=>m[0]===mode)||[])[1]||'';
   return fold('split','Divisão entre proprietários',`
-    <label>Como se divide${sel('t_split',mode,SPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onSplitSel')}</label>
+    <label>Como se divide${sel('t_split',mode,SPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onSplitSel','rascunho')}</label>
     ${(mode==='quota'||mode==='equal')?'':`<div class="form" style="gap:7px">${ows.map(o=>`<div class="ownrow"><span class="avatar" style="width:30px;height:30px;font-size:11px;flex:0 0 30px">${esc(initials(o.name))}</span>
       <span class="nm">${esc(o.name)}</span>
       <input id="t_sp_${o.id}" type="text" inputmode="decimal" style="width:84px;flex:0 0 84px" value="${parts[o.id]!=null&&parts[o.id]!==''?dec(parts[o.id]):''}" placeholder="0" oninput="refreshSplit()">
@@ -259,7 +376,7 @@ function psplitSect(){
   const t=tForm,ps=txProps(t),sp=t.psplit||{mode:'equal',parts:{}},mode=sp.mode||'equal',parts=sp.parts||{};
   const lab=(PSPLIT_MODES.find(m=>m[0]===mode)||[])[1]||'';
   return fold('psplit','Divisão entre imóveis',`
-    <label>Como se divide${sel('t_psplit',mode,PSPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onPsplitSel')}</label>
+    <label>Como se divide${sel('t_psplit',mode,PSPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onPsplitSel','rascunho')}</label>
     ${['equal','value','purchase'].indexOf(mode)>-1?'':`<div class="form" style="gap:7px">${ps.map(p=>`<div class="ownrow"><span class="avatar" style="width:30px;height:30px;font-size:11px;flex:0 0 30px">${ic('building',15)}</span>
       <span class="nm">${esc(p.name)}</span>
       <input id="t_pp_${p.id}" type="text" inputmode="decimal" style="width:84px;flex:0 0 84px" value="${parts[p.id]!=null&&parts[p.id]!==''?dec(parts[p.id]):''}" placeholder="0" oninput="refreshPsplit()">
@@ -351,8 +468,8 @@ function loanHint(){
   const amt=num(t.amount)||(amort?0:c.total);
   const seg=`<div style="margin-bottom:10px"><div class="flabel">Tipo de pagamento</div>
     <div class="seg c2">
-      <button type="button" class="opt ${!amort?'on':''}" onclick="setPayType('prestacao')"><span class="ic">${ic('bank',18)}</span><b>Prestação</b><small>juros, selo e capital</small></button>
-      <button type="button" class="opt ${amort?'on':''}" onclick="setPayType('amortizacao')"><span class="ic">${ic('trend',18)}</span><b>Amortização</b><small>capital e comissão</small></button></div></div>`;
+      <button type="button" class="opt ${!amort?'on':''}" data-toca="rascunho" onclick="setPayType('prestacao')"><span class="ic">${ic('bank',18)}</span><b>Prestação</b><small>juros, selo e capital</small></button>
+      <button type="button" class="opt ${amort?'on':''}" data-toca="rascunho" onclick="setPayType('amortizacao')"><span class="ic">${ic('trend',18)}</span><b>Amortização</b><small>capital e comissão</small></button></div></div>`;
   if(amort){
     /* amortização antecipada: sem juros nem selo — só capital e a comissão definida na hipoteca */
     const cap=r2(amt/(1+fr)),fee=r2(amt-cap);
@@ -371,7 +488,7 @@ function loanHint(){
   t.interest=int;t.stamp=st;t.principal=cap;t.fee=0;
   return seg+`<div class="card" style="background:var(--tint);padding:13px">
     <div class="row-between" style="align-items:center;margin-bottom:2px"><span class="small"><b>Distribuição do montante</b></span>
-      <button class="btn sm" id="lh_reset" style="flex:0 0 auto;padding:6px 9px;display:${t._splitTouched?'':'none'}" onclick="onLoanReset()" title="Repor a prestação calculada na hipoteca">${ic('clock',14)} Repor</button></div>
+      <button class="btn sm" id="lh_reset" style="flex:0 0 auto;padding:6px 9px;display:${t._splitTouched?'':'none'}" data-toca="rascunho" onclick="onLoanReset()" title="Repor a prestação calculada na hipoteca">${ic('clock',14)} Repor</button></div>
     <div class="stat" style="align-items:center"><span>Juros (€)</span>
       <input class="statin" id="t_int" type="text" inputmode="decimal" value="${dec(int.toFixed(2))}" oninput="onLoanSplit('int')"></div>
     <div class="stat" style="align-items:center"><span>Imposto do selo (${dec(db.settings.stampPct??4)}%)</span><b id="lh_stamp">${euro2(st)}</b></div>
@@ -556,7 +673,7 @@ function addTxTag(){
   const free=(db.settings.tags||[]).filter(g=>(tForm.tags||[]).indexOf(g)<0);
   pickModal('Escolher etiqueta',free.map(g=>({v:g,label:g})),
     g=>{tForm.tags.push(g.v);closeModal();repaintTx()},
-    `<button type="button" class="btn" style="width:100%;justify-content:center" onclick="newTagFromTx()">${ic('plus',15)} Criar etiqueta nova</button>
+    `<button type="button" class="btn" style="width:100%;justify-content:center" data-toca="camada" onclick="newTagFromTx()">${ic('plus',15)} Criar etiqueta nova</button>
      <div class="hint" style="margin-top:8px">Podes gerir a lista em Definições → Etiquetas.</div>`);
 }
 // Cria uma etiqueta nova a partir do modal do movimento: entra na lista global
@@ -585,6 +702,7 @@ function delTxTag(g){collectTx();tForm.tags=(tForm.tags||[]).filter(x=>x!==g);re
    Devolve: nada — acerta a distribuição no próprio t e abate o capital na db. */
 function applyLoan(t){
   const p=prop(t.propertyId),l=t.loanId?findLoan(p,t.loanId):null;if(!l)return;
+  if(t.loanOff)delete t.loanOff;   /* volta a ter hipoteca: a marca do delMort deixa de fazer sentido */
   /* amortização: capital + comissão da hipoteca; prestação: juros + selo + capital (sem comissão) */
   let int=Number(t.interest),st=Number(t.stamp),cap=Number(t.principal),fee=Number(t.fee||0);
   if(t.payType==='amortizacao'){
@@ -612,6 +730,7 @@ function delTx(id){
   /* sem confirmação, com Anular: é a eliminação mais frequente da app, e a
      pergunta constante ensinava o dedo a confirmar sem ler */
   const t=db.transactions.find(x=>x.id===id);if(!t)return;
+  const recusa=motivoRecusa(t.propertyId,'tx.add',t,true);if(recusa)return toast(recusa);
   const copia=JSON.parse(JSON.stringify(t));
   if(t.kind==='loan'&&t.principal&&t.loanId){
     const l=findLoan(prop(t.propertyId),t.loanId);
@@ -667,8 +786,8 @@ function amortModal(pid,lid){
       </tbody></table></div>`;
   }
   (lid===undefined?openModal:setModal)('Amortização · '+p.name,`<div class="form">
-    ${ls.length>1?`<label>Ver${sel('amSel',amortLid,opts,'onAmortSel')}</label>`:''}
-    ${body}</div>`,`<button class="btn" onclick="closeModal()">Fechar</button>`);
+    ${ls.length>1?`<label>Ver${sel('amSel',amortLid,opts,'onAmortSel','vista')}</label>`:''}
+    ${body}</div>`,`<button class="btn" data-toca="camada" onclick="closeModal()">Fechar</button>`);
 }
 // Mudou a hipoteca no select do modal da amortização: reconstrói o conteúdo.
 // Devolve: nada — reconstrói o modal via amortModal.

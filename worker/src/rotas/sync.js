@@ -1,6 +1,8 @@
 // Sincronizacao em lote das alteracoes pendentes do cliente.
-import { linkFiles } from '../files.js';
+import { linkFiles, regraDosAnexos } from '../files.js';
 import { modoDemo, podeCriar } from '../lib/planos.js';
+import { acessoACasa, planoDosDonos, regraDoRegisto, planeadoAGravar, apagarCasa } from '../lib/acesso.js';
+import { fundirCasa, fraseRecusa } from '../lib/permissoes.js';
 
 /* Rota do POST /api/sync: aplica as operações pendentes do cliente (put/del
    de casas, registos e dados globais) uma a uma, com validação e controlo de
@@ -41,11 +43,15 @@ export async function rotasSync(c) {
       }
       return nImoveis;
     };
+    /* o acesso a cada casa resolve-se uma vez por pedido, com o grau
+       (dono, comproprietário ou colaborador com cargo): é o que decide
+       registo a registo o que passa */
     const accessCache = new Map();
     const access = async (hid) => {
-      if (!accessCache.has(hid)) accessCache.set(hid, (await canAccessHouse(env, me.id, hid)).ok);
+      if (!accessCache.has(hid)) accessCache.set(hid, await acessoACasa(env, me.id, hid));
       return accessCache.get(hid);
     };
+    const planoDe = planoDosDonos(env, me);
     const results = [];
     for (const op of ops) {
       try {
@@ -65,14 +71,28 @@ export async function rotasSync(c) {
             .bind(houseId).first();
           if (put) {
             if (existing && !existing.deleted) {
-              if (!(await access(houseId))) { results.push({ ok: false, status: 403 }); continue; }
+              const a = await access(houseId);
+              if (!a.ok) { results.push({ ok: false, status: 403, error: fraseRecusa('acesso') }); continue; }
+              let dados = op.data;
+              if (a.collab) {
+                /* um colaborador só toca na ficha com house.edit, e mesmo
+                   assim só nos campos que o cargo lhe deixa ver: o cliente
+                   dele não tem hipotecas nem valor, e gravar por cima
+                   apagava o que o dono escreveu */
+                if (!a.collab.perms.has('house.edit')) {
+                  results.push({ ok: false, status: 403, error: fraseRecusa('casa') }); continue;
+                }
+                dados = fundirCasa(existing.data, op.data, a.collab.perms);
+              }
               await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
-                .bind(JSON.stringify(preserveOwnership(existing.data, op.data)), now(), houseId).run();
+                .bind(JSON.stringify(preserveOwnership(existing.data, dados)), now(), houseId).run();
+              await linkFiles(env, houseId, dados, 'house', houseId, me.id, !!a.collab);
             } else if (existing) {
               if (existing.owner_id !== me.id) { results.push({ ok: false, status: 403 }); continue; }
               await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ?, deleted = 0 WHERE id = ?')
                 .bind(JSON.stringify(preserveOwnership('', op.data)), now(), houseId).run();
-              accessCache.set(houseId, true);
+              accessCache.set(houseId, { ok: true, owner: true, coowner: false, collab: null, ownerId: me.id });
+              await linkFiles(env, houseId, op.data, 'house', houseId, me.id);
             } else {
               if (!demo) {
                 const nao = podeCriar(me.plan, 'imovel', await imoveisDe());
@@ -81,50 +101,49 @@ export async function rotasSync(c) {
               await env.DB.prepare('INSERT INTO houses (id, owner_id, data, updated_at, deleted) VALUES (?, ?, ?, ?, 0)')
                 .bind(houseId, me.id, JSON.stringify(preserveOwnership('', op.data)), now()).run();
               if (nImoveis != null) nImoveis++;
-              accessCache.set(houseId, true);
+              accessCache.set(houseId, { ok: true, owner: true, coowner: false, collab: null, ownerId: me.id });
+              await linkFiles(env, houseId, op.data, 'house', houseId, me.id);
             }
-            await linkFiles(env, houseId, op.data);
           } else {
             if (!existing || existing.deleted) { results.push({ ok: true, gone: true }); continue; }
             if (existing.owner_id !== me.id) { results.push({ ok: false, status: 403 }); continue; }
-            await env.DB.batch([
-              env.DB.prepare('UPDATE houses SET deleted = 1, updated_at = ? WHERE id = ?').bind(now(), houseId),
-              env.DB.prepare('UPDATE records SET deleted = 1, updated_at = ? WHERE house_id = ?').bind(now(), houseId),
-              env.DB.prepare('DELETE FROM shares WHERE house_id = ?').bind(houseId),
-              env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(houseId),
-            ]);
+            await apagarCasa(env, houseId, me.id);
             accessCache.delete(houseId);
           }
           results.push({ ok: true });
         } else if (op.scope === 'record') {
           const houseId = String(op.houseId || '');
-          if (!(await access(houseId))) {
-            // ao apagar, uma casa inacessível conta como "já não existe"
-            results.push(put ? { ok: false, status: 403 } : { ok: true, gone: true });
+          const tipo = String(op.kind), rid = String(op.id);
+          const a = await access(houseId);
+          // ao apagar, uma casa inacessível conta como "já não existe"
+          const veredicto = await regraDoRegisto(env, me, a, houseId, tipo, rid, put, demo, planoDe);
+          if (veredicto) {
+            results.push(veredicto.gone ? { ok: true, gone: true }
+              : { ok: false, status: veredicto.status, error: veredicto.error });
             continue;
           }
           if (put) {
-            const tipo = String(op.kind);
-            if (!demo && (tipo === 'contract' || tipo === 'rec')) {
-              const ja = await env.DB.prepare(
-                'SELECT deleted FROM records WHERE house_id = ? AND kind = ? AND id = ?'
-              ).bind(houseId, tipo, String(op.id)).first();
-              if (!ja) {   // só a criação é travada; o que existe edita-se sempre
-                const nao = podeCriar(me.plan, tipo, 0);
-                if (nao) { results.push({ ok: false, status: 402, error: nao }); continue; }
-              }
-            }
+            // um colaborador a confirmar o planeado do dono só muda next,
+            // until e muted: o resto fica como estava (fundirPlaneado)
+            const dados = await planeadoAGravar(env, me, a, houseId, tipo, rid, op.data);
+            // os anexos que a escrita junta têm regra própria: um colaborador
+            // só os junta com file.add (o que já estava preso ao registo não conta)
+            const anexos = await regraDosAnexos(env, a, houseId, tipo, rid, dados);
+            if (anexos) { results.push({ ok: false, status: anexos.status, error: anexos.error }); continue; }
+            // author é o último a escrever (o sino usa-o); created_by é o
+            // criador e nunca muda — é o que decide «só o que criou»
             await env.DB.prepare(
-              `INSERT INTO records (house_id, kind, id, data, updated_at, deleted, author)
-               VALUES (?, ?, ?, ?, ?, 0, ?)
+              `INSERT INTO records (house_id, kind, id, data, updated_at, deleted, author, created_by)
+               VALUES (?, ?, ?, ?, ?, 0, ?, ?)
                ON CONFLICT (house_id, kind, id)
-               DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0, author = excluded.author`
-            ).bind(houseId, String(op.kind), String(op.id), JSON.stringify(op.data), now(), me.id).run();
-            await linkFiles(env, houseId, op.data);
+               DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0,
+                 author = excluded.author, created_by = COALESCE(records.created_by, excluded.created_by)`
+            ).bind(houseId, tipo, rid, JSON.stringify(dados), now(), me.id, me.id).run();
+            await linkFiles(env, houseId, dados, tipo, rid, me.id, !!a.collab);
           } else {
             await env.DB.prepare(
               'UPDATE records SET deleted = 1, updated_at = ? WHERE house_id = ? AND kind = ? AND id = ?'
-            ).bind(now(), houseId, String(op.kind), String(op.id)).run();
+            ).bind(now(), houseId, tipo, rid).run();
           }
           results.push({ ok: true });
         } else if (op.scope === 'user') {

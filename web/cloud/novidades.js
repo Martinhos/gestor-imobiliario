@@ -12,13 +12,38 @@
 var LS_VISTO = 'gi_novidades_v';     // última versão cujas novidades já viu
 var SS_RECARGA = 'gi_recarga_para';  // para não entrar em ciclo de recargas
 
+// Se algum dos cargos abre esta permissão (temPerm de acessos.js, com as
+// implicações; sem ela, a lista tal e qual).
+// Recebe: cargos — o CW.cargos ({houseId: {dono, perms}}); perm — a chave.
+// Devolve: true/false.
+function algumCargoAbre(cargos, perm) {
+  return Object.keys(cargos).some(function (id) {
+    var c = cargos[id];
+    if (!c || c.dono) return false;
+    try { if (typeof temPerm === 'function') return !!temPerm(c.perms, perm); } catch (e) {}
+    var ps = c.perms || [];
+    return Array.isArray(ps) ? ps.indexOf(perm) > -1 : !!ps[perm];
+  });
+}
+
 /* Que funcionalidades esta pessoa usa.
-   Hoje toda a gente tem todas — não há ainda permissões parciais. Quando
-   houver, é esta função que passa a devolver só as que a pessoa tem, e tudo
-   o resto (avisos, modal, secção de novidades) acompanha sem mudar.
-   Devolve: array com as chaves das funcionalidades desta pessoa (hoje, todas). */
+   Quem é dono (ou comproprietário) de algum imóvel — ou não tem sessão nem
+   imóveis — tem todas. Quem é só colaborador tem a união do que os cargos
+   abrem: movimentos com tx/rec, contratos com contract/tenant, créditos com
+   loan, anexos com file; imóveis, a app, a conta e o suporte sempre; a
+   partilha entre proprietários nunca.
+   Devolve: array com as chaves das funcionalidades desta pessoa. */
 function funcsDoUtilizador() {
-  return Object.keys(FUNCIONALIDADES);
+  var todas = Object.keys(FUNCIONALIDADES);
+  var cargos = (window.CW && CW.cargos) || {};
+  var ids = Object.keys(cargos);
+  if (!ids.length || ids.some(function (id) { return cargos[id] && cargos[id].dono; })) return todas;
+  var out = ['app', 'conta', 'suporte', 'imoveis', 'colaboradores'];
+  if (algumCargoAbre(cargos, 'tx.view') || algumCargoAbre(cargos, 'rec.view')) out.push('movimentos');
+  if (algumCargoAbre(cargos, 'contract.view') || algumCargoAbre(cargos, 'tenant.view')) out.push('contratos');
+  if (algumCargoAbre(cargos, 'loan.view')) out.push('creditos');
+  if (algumCargoAbre(cargos, 'file.view')) out.push('anexos');
+  return out.filter(function (f) { return todas.indexOf(f) > -1; });
 }
 
 // Diz se uma secção de novidades toca nalguma funcionalidade desta pessoa.
@@ -72,10 +97,10 @@ function secHtml(sec, chave) {
   var aberta = novAbertas[chave] !== false;   // por omissão, abertas
   return '<div class="card" style="padding:0;overflow:hidden">' +
     '<div class="row-between tap" style="align-items:center;padding:13px 15px;cursor:pointer" ' +
-      'onclick="CW.novToggle(\'' + chave + '\')">' +
+      'data-toca="vista" onclick="CW.novToggle(\'' + chave + '\')">' +
       '<b style="min-width:0">' + esc(sec.titulo) + '</b>' +
       '<span style="flex:0 0 auto;display:inline-flex;color:var(--muted);' +
-        'transform:rotate(' + (aberta ? '90' : '-90') + 'deg);transition:transform .15s">' +
+        'transform:rotate(' + (aberta ? '90' : '-90') + 'deg)">' +
         ic('chev', 18) + '</span></div>' +
     (aberta
       ? '<div style="padding:0 15px 14px"><ul style="margin:0;padding-left:18px;color:var(--muted);font-size:14px">' +
@@ -93,7 +118,7 @@ function novHtml(avisos) {
   return '<div class="form" id="novLista">' + avisos.map(function (a) {
     return '<div>' +
       '<div class="section-title" style="margin-top:0">' + esc(a.titulo) + '</div>' +
-      '<div class="small" style="margin:-6px 0 10px">versão ' + a.v + ' · ' + esc(a.data) + '</div>' +
+      '<div class="small" style="margin:-6px 0 10px">versão ' + a.v + ' · ' + dPT(a.data) + '</div>' +
       '<div class="list" style="gap:9px">' +
       a.seccoes.map(function (s, i) { return secHtml(s, a.v + ':' + i); }).join('') +
       '</div></div>';
@@ -130,7 +155,7 @@ CW.verNovidades = function (avisos, aoFechar) {
   CW._novAvisos = avisos;
   novAbertas = {};
   openModal('O que há de novo', novHtml(avisos),
-    '<button class="btn primary" onclick="CW.novFechar()">Continuar</button>');
+    '<button class="btn primary" data-toca="camada" onclick="CW.novFechar()">Continuar</button>');
   CW._novFecho = aoFechar;
 };
 
@@ -174,7 +199,7 @@ function gateAtualizar(minima) {
       '<div class="hint">A versão que tens (' + VERSAO + ') deixou de ser aceite; a mais antiga que serve é a ' +
       minima + '. Atualizar demora um instante e não perdes nada — os teus dados estão na tua conta.</div>' +
       '<div class="toolbar" style="margin:15px 0 0">' +
-      '<button class="btn primary" onclick="CW.atualizarAgora()">Atualizar agora</button></div>') +
+      '<button class="btn primary" data-toca="ecra" onclick="CW.atualizarAgora()">Atualizar agora</button></div>') +
     '</div>';
   document.body.appendChild(el);
 }
@@ -244,8 +269,8 @@ function bannerAtualizar(v) {
   el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + var(--inset-bottom));z-index:59;' +
     'display:flex;align-items:center;gap:11px;padding:11px 13px;box-shadow:var(--shadow)';
   el.innerHTML = '<span class="small" style="flex:1;min-width:0">Está disponível a versão ' + v + '.</span>' +
-    '<button class="btn sm primary" style="flex:0 0 auto" onclick="CW.atualizarAgora()">Atualizar</button>' +
-    '<button class="btn sm" style="flex:0 0 auto" onclick="this.parentNode.remove()">Depois</button>';
+    '<button class="btn sm primary" style="flex:0 0 auto" data-toca="ecra" onclick="CW.atualizarAgora()">Atualizar</button>' +
+    '<button class="btn sm" style="flex:0 0 auto" data-toca="vista" onclick="this.parentNode.remove()">Depois</button>';
   document.body.appendChild(el);
 }
 

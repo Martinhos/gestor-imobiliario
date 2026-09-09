@@ -59,21 +59,146 @@ const CENAS = [
     fazer: `CW.guiaAbrir('perfil'); propModal();`,
   },
   {
+    /* A ficha de leitura: o que tocar num registo passa a abrir. Antes disto,
+       tocar num imovel abria um formulario de vinte e um campos com o
+       «Apagar imovel» encostado ao titulo. */
+    nome: 'ficha-de-imovel',
+    fazer: `propView(db.properties[0].id)`,
+  },
+  { nome: 'ficha-de-contrato', fazer: `ctView(db.contracts[0].id)` },
+  {
+    /* Uma janela aberta com a PAGINA ROLADA. Era o estado em que a pagina
+       deixava de ser pintada por tras — e nenhuma cena o mostrava, porque
+       todas abrem as janelas no topo, onde o recorte coincidia com o visivel
+       e o defeito era invisivel. */
+    nome: 'ficha-com-a-pagina-rolada',
+    fazer: `go('transactions'); render(); window.scrollTo(0, 700);
+      txView(db.transactions[0].id)`,
+  },
+  { nome: 'ficha-de-movimento', fazer: `txView(db.transactions[0].id)` },
+  { nome: 'ficha-de-inquilino', fazer: `personView('tenant', db.tenants[0].id)` },
+  { nome: 'ficha-de-planeado', fazer: `recView(db.recurring[0].id)` },
+  {
+    /* Um aviso VISIVEL com uma janela aberta. O aviso mora a 22px do fundo,
+       que e onde o rodape do modal esta, e caia em cima de «Guardar» — os
+       botoes que se esta precisamente a pedir para carregar. A ordem importa,
+       e e esta a que faltava: a janela abre com um aviso ja no ecra. */
+    nome: 'aviso-sobre-janela',
+    fazer: `toast('Guardado.', {rotulo:'Anular', fn(){}, ms:60000}); propModal();`,
+  },
+  {
     nome: 'primeiros-passos',
     fazer: `localStorage.removeItem('gi_passos_fora'); go('dashboard'); render();`,
   },
   { nome: 'edicao-dos-cartoes', fazer: `go('dashboard'); render(); CW.enterEdit()` },
   {
+    /* Ler um grafico com o dedo: o gesto novo desta fase. Sem uma cena, o que
+       so aparece enquanto se arrasta nao e visto por ninguem — foi assim que o
+       selo da sincronizacao viveu em cima do sino sem ninguem dar por isso. */
+    nome: 'grafico-lido-com-o-dedo',
+    fazer: `go('dashboard'); render();
+      const c=document.querySelector('#view .chartbox[data-lido]');
+      if(!c) throw new Error('nenhum grafico se deixa ler');
+      const r=c.getBoundingClientRect();
+      const ev=(t,x)=>new PointerEvent(t,{bubbles:true,cancelable:true,pointerId:1,
+        pointerType:'touch',isPrimary:true,clientX:x,clientY:r.top+r.height/2,buttons:1});
+      c.dispatchEvent(ev('pointerdown', r.left+r.width*0.45));
+      document.dispatchEvent(ev('pointermove', r.left+r.width*0.7));
+      if(!c.classList.contains('a-ler')) throw new Error('arrastar nao poe o grafico a ler');`,
+  },
+  { nome: 'selo-por-enviar', fazer: `go('dashboard'); render(); setSyncBadge('pend',3)` },
+  { nome: 'selo-sem-ligacao', fazer: `go('dashboard'); render(); setSyncBadge('off')` },
+  { nome: 'selo-guardado', fazer: `go('dashboard'); render(); setSyncBadge('ok')` },
+  {
+    /* Andar no calendario, que e o gesto desta vista. O percurso passava por
+       ca e nunca mudava de mes: tres defeitos seguidos nesta zona nao podiam
+       falhar em CI, porque o ecra estava coberto e os gestos nao. */
+    nome: 'calendario-mes-seguinte',
+    fazer: `go('calendar'); render();
+      const m0=document.querySelector('#view .toolbar b').textContent.trim();
+      calNav(1);
+      const m1=document.querySelector('#view .toolbar b').textContent.trim();
+      if(m0===m1) throw new Error('o mes nao mudou: ' + m0);`,
+  },
+  {
+    /* O caso que falhou a serio: voltar ao mes de hoje pela SETA deixa o calMes
+       posto (com o mes de hoje la dentro), e o botao ficava no ecra sem nada
+       para fazer. Duas voltas, uma para cada lado. */
+    nome: 'calendario-voltar-pela-seta',
+    fazer: `go('calendar'); render();
+      calNav(1); calNav(-1);
+      calNav(-1); calNav(1);`,
+  },
+  {
+    nome: 'calendario-botao-hoje',
+    fazer: `go('calendar'); render();
+      calNav(2);
+      const b=[...document.querySelectorAll('#view .toolbar .btn')].find(x=>x.textContent.trim()==='Hoje');
+      if(!b) throw new Error('dois meses a frente e sem botao Hoje');
+      b.click();`,
+  },
+  {
+    /* Escolher um dia repinta so o painel de baixo (calSel), sem passar pelo
+       render — e um dos tres repintes locais da app. */
+    nome: 'calendario-dia-escolhido',
+    fazer: `go('calendar'); render();
+      const d=[...document.querySelectorAll('#view .calday.tap')];
+      if(d.length<8) throw new Error('a grelha do mes tem ' + d.length + ' dias tocaveis');
+      d[7].click();
+      if(!document.querySelector('#view .calday.on')) throw new Error('nenhum dia ficou escolhido');`,
+  },
+  {
+    /* O caminho curto: mudar o que se ve sem passar pelo render. E aqui que
+       uma linha pode ficar sem as decoracoes da nuvem e ninguem dar por isso —
+       a lista fica certa a olho e o kebab desapareceu. */
+    nome: 'movimentos-filtrados-sem-render',
+    fazer: `go('transactions'); render();
+      const n0=document.querySelectorAll('#view .txrow').length;
+      if(!n0) throw new Error('a vista dos Movimentos nao tem linhas');
+      txSearch='a'; refrescarMovimentos();
+      const n1=document.querySelectorAll('#view .txrow').length;
+      if(n1===0) throw new Error('a pesquisa deixou a lista vazia: a cena nao prova nada');
+      if(n1>n0) throw new Error('a pesquisa devolveu mais linhas do que havia');`,
+  },
+  {
+    /* E o mesmo com a selecao ligada: as linhas refeitas nascem sem a marca, e
+       e o motor que tem de a repor. */
+    nome: 'movimentos-filtrados-em-selecao',
+    fazer: `go('transactions'); render();
+      const l=document.querySelector('#view .txrow');
+      if(!l) throw new Error('a vista dos Movimentos nao tem linhas');
+      CW.selEntrar(l.getAttribute('data-tx'));
+      txSearch='a'; refrescarMovimentos();`,
+  },
+  {
     nome: 'selecao-de-movimentos',
     fazer: `go('transactions'); render();
       const l=document.querySelector('#view .txrow');
-      if(l) CW.selEntrar(l.getAttribute('data-lp').replace('tx:',''));`,
+      if(!l) throw new Error('a vista dos Movimentos não tem linhas: a cena não prova nada');
+      CW.selEntrar(l.getAttribute('data-lp').replace('tx:',''));`,
+  },
+  {
+    /* Marcar várias e repintar por OUTRO caminho que não o de entrar em
+       seleção. O selToggle só repinta as marcas (selPintar), sem regerar
+       linha nenhuma; o render a seguir regera-as todas, e as marcas têm de lá
+       estar à mesma. Uma cena que apenas entrasse em seleção não provava
+       nada: o CW.selEntrar já repinta por dentro. */
+    nome: 'selecao-marcada-sobrevive-a-repintura',
+    fazer: `go('transactions'); render();
+      const ls=[...document.querySelectorAll('#view .txrow')];
+      if(ls.length<3) throw new Error('sem movimentos que cheguem para marcar (' + ls.length + ')');
+      CW.selEntrar(ls[0].getAttribute('data-tx'));
+      [...document.querySelectorAll('#view .txrow')].slice(1,3)
+        .forEach(l=>CW.selToggle(l.getAttribute('data-tx')));
+      txDir = txDir==='desc' ? 'asc' : 'desc';   // uma repintura que não vem da seleção
+      render();`,
   },
   {
     nome: 'selecao-com-tudo-marcado',
     fazer: `go('transactions'); render();
       const l=document.querySelector('#view .txrow');
-      if(l){ CW.selEntrar(l.getAttribute('data-lp').replace('tx:','')); CW.selTodos(); }`,
+      if(!l) throw new Error('a vista dos Movimentos não tem linhas: a cena não prova nada');
+      CW.selEntrar(l.getAttribute('data-lp').replace('tx:','')); CW.selTodos();`,
   },
 ];
 
@@ -190,12 +315,18 @@ async function confirmar(pagina, onde) {
     // o db é declarado com let: existe no âmbito global mas não em window.db,
     // e olhar para window.db dava sempre "sem dados"
     imoveis: (typeof db !== 'undefined' && db.properties) ? db.properties.length : -1,
+    /* nos Movimentos, uma lista vazia desliga em silêncio a regra das linhas
+       (invariantes.js) e as cenas de seleção: passa a haver verde sem haver
+       verificação nenhuma */
+    movimentos: (typeof tab !== 'undefined' && tab === 'transactions')
+      ? document.querySelectorAll('#view .txrow').length : -1,
   })`);
   const mal = [];
   if (!e.sessao) mal.push('sem sessão');
   if (e.entrada) mal.push('ecrã de entrada à frente');
   if (!e.vista) mal.push('vista vazia');
   if (e.imoveis <= 0) mal.push('sem dados de exemplo');
+  if (e.movimentos === 0) mal.push('nos Movimentos sem uma única linha');
   if (mal.length) throw new Error('estado inválido em "' + onde + '": ' + mal.join(', '));
 }
 

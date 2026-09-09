@@ -63,7 +63,8 @@ jobs:
           }
 
           # por ordem de dependência; audit_log e op_log ficam de propósito
-          for t in user_records records shares share_proposals connections \
+          for t in user_records records shares share_proposals share_requests connections \
+                   collaborator_houses collaborators collab_invites roles share_links \
                    ticket_msgs ticket_users tickets files rate_limits houses users; do
             echo "DELETE FROM $t"
             executa "DELETE FROM $t"

@@ -15,15 +15,19 @@ const WEB = path.join(AQUI, '..', 'web');
 
 // Ordem igual à do index.html. O arranque fica de fora: só liga a interface.
 export const MODULOS = [
-  'dados', 'anexos', 'auxiliares', 'graficos', 'credito', 'componentes',
-  'metricas', 'navegacao', 'vistas', 'imovel', 'pessoas', 'contrato',
+  'dados', 'anexos', 'auxiliares', 'lista', 'continuidade', 'graficos', 'credito', 'componentes',
+  'metricas', 'navegacao', 'acessos', 'vistas', 'imovel', 'pessoas', 'contrato',
   'planeados', 'prazos', 'notificacoes', 'visitas', 'calendario', 'movimento', 'creditos', 'splitwise', 'contrato-pdf',
   'avaliacao', 'definicoes', 'copias',
 ];
 
 function elementoFalso() {
   const el = {
-    style: {}, dataset: {}, classList: {
+    /* o style guarda o que lhe escrevem, incluindo as variaveis de CSS: sem
+       setProperty, quem escreve uma (o aviso, que sobe acima do rodape do
+       modal) rebentava aqui e em lado nenhum no browser */
+    style: { setProperty(k, v) { this[k] = v; }, removeProperty(k) { delete this[k]; } },
+    dataset: {}, classList: {
       add() {}, remove() {}, toggle() {}, contains: () => false,
     },
     children: [], attributes: {},

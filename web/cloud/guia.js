@@ -16,9 +16,18 @@
 var LS_GUIA = 'gi_guia_feitos';       // tutoriais já vistos até ao fim
 var LS_PASSOS = 'gi_passos_fora';     // o cartão de primeiros passos foi dispensado
 
+/* Até o servidor responder vale 'producao': é o lado seguro, e é o que
+   esconde os dados de exemplo onde eles não devem estar. A resposta chega
+   depois da primeira pintura, e por isso repinta-se quando ela muda alguma
+   coisa — sem sessão iniciada não há sincronização nenhuma a fazê-lo, e em
+   dev o botão do exemplo nunca chegava a aparecer. */
 CW.ambiente = 'producao';
 api('GET', '/api/auth/config')
-  .then(function (c) { if (c && c.ambiente) CW.ambiente = c.ambiente; })
+  .then(function (c) {
+    if (!c || !c.ambiente || c.ambiente === CW.ambiente) return;
+    CW.ambiente = c.ambiente;
+    try { render(); } catch (e) {}
+  })
   .catch(function () {});
 
 // os tutoriais já vistos até ao fim, lidos do localStorage ({id: 1});
@@ -122,16 +131,16 @@ function guiaPintar() {
           '<div class="small" style="color:var(--accent);font-weight:600">Passo ' + (guia.i + 1) + ' de ' + n + '</div>' +
           '<div class="title" style="margin-top:2px">' + esc(p.titulo) + '</div>' +
         '</div>' +
-        '<button type="button" class="iconbtn" aria-label="Fechar" onclick="CW.guiaFechar()">' + ic('x', 18) + '</button>' +
+        '<button type="button" class="iconbtn" aria-label="Fechar" data-toca="camada" onclick="CW.guiaFechar()">' + ic('x', 18) + '</button>' +
       '</div>' +
       '<div class="hint" style="margin-top:9px">' + p.texto + '</div>' +
       '<div class="toolbar" style="margin-top:13px">' +
         (guia.i > 0
-          ? '<button class="btn sm" onclick="CW.guiaAnterior()">' + ic('chev', 14) + ' Anterior</button>'
+          ? '<button class="btn sm" data-toca="vista" onclick="CW.guiaAnterior()">' + ic('chev', 14) + ' Anterior</button>'
           : '') +
-        '<button class="btn sm primary" onclick="CW.guiaSeguinte()">' +
+        '<button class="btn sm primary" data-toca="vista" onclick="CW.guiaSeguinte()">' +
           (guia.i < n - 1 ? 'Seguinte' : 'Terminar') + '</button>' +
-        '<button class="btn sm" style="margin-left:auto" onclick="CW.guiaFechar()">Fechar</button>' +
+        '<button class="btn sm" style="margin-left:auto" data-toca="camada" onclick="CW.guiaFechar()">Fechar</button>' +
       '</div>' +
     '</div>';
 }
@@ -241,23 +250,37 @@ function euSou() {
   return (db.owners || []).find(function (o) { return o.id === id; }) || null;
 }
 
+// Se esta conta é só colaboradora (não é dona de nenhum imóvel, mas colabora
+// nalgum): os primeiros passos de dono não lhe dizem respeito.
+// Devolve: true/false.
+function soColaborador() {
+  try { if (typeof souSoColaborador === 'function') return !!souSoColaborador(); } catch (e) {}
+  var ps = db.properties || [];
+  return !!(CW.user && ps.length && ps.every(function (p) { return p._cargo; }));
+}
+
 /* A lista de primeiros passos com o estado calculado da base local: perfil
    (há NIF?), imóveis, contratos e movimentos. O passo dos contratos salta
-   quando não há imóveis para arrendar. Cada passo traz o porquê e a ação
-   (act) que o botão "Fazer agora" dispara.
+   quando não há imóveis para arrendar; quem é só colaborador salta os de
+   dono (perfil, imóveis, contratos) e o dos movimentos se nenhum cargo lhos
+   deixa adicionar. Cada passo traz o porquê e a ação (act) que o botão
+   "Fazer agora" dispara.
    Devolve: os passos aplicáveis (array de {id, titulo, porque, feito, act}). */
 function passos() {
   var eu = euSou();
-  var arrendar = (db.properties || []).filter(function (p) { return p.use === 'investimento'; });
+  var colab = soColaborador();
+  var arrendar = (db.properties || []).filter(function (p) { return p.use === 'investimento' && !p._cargo; });
   var semContrato = arrendar.filter(function (p) {
     return !(db.contracts || []).some(function (c) { return c.propertyId === p.id; });
   });
+  var podeMovimentos = !colab || (typeof casasComo === 'function' && casasComo('tx.add').length > 0);
   return [
     {
       id: 'perfil',
       titulo: 'Preenche o teu perfil',
       porque: 'Os teus dados entram nos contratos que a app gera.',
       feito: !!(eu && eu.nif),
+      salta: colab,
       act: 'CW.editProfile()',
     },
     {
@@ -265,6 +288,7 @@ function passos() {
       titulo: 'Adiciona os teus imóveis',
       porque: 'É a base de tudo o resto.',
       feito: (db.properties || []).length > 0,
+      salta: colab,
       act: 'propModal()',
     },
     {
@@ -274,7 +298,7 @@ function passos() {
         ? semContrato.length + (semContrato.length === 1 ? ' imóvel para arrendar ainda sem contrato.' : ' imóveis para arrendar ainda sem contrato.')
         : 'Para as rendas passarem a aparecer sozinhas.',
       feito: (db.properties || []).length > 0 && !semContrato.length,
-      salta: !arrendar.length,   // só para uso próprio: este passo não se aplica
+      salta: colab || !arrendar.length,   // só para uso próprio, ou só colaborador: não se aplica
       act: 'ctModal()',
     },
     {
@@ -282,6 +306,7 @@ function passos() {
       titulo: 'Confirma os primeiros movimentos',
       porque: 'É daqui que saem os números da vista geral.',
       feito: (db.transactions || []).length > 0,
+      salta: !podeMovimentos,
       act: "go('transactions')",
     },
   ].filter(function (p) { return !p.salta; });
@@ -318,7 +343,7 @@ function cartaoPassos() {
       '<div><div class="title">Primeiros passos</div>' +
       '<div class="small">' + (ps.length - faltam.length) + ' de ' + ps.length + ' feitos · ' +
       'sugestões, não obrigações</div></div>' +
-      '<button type="button" class="iconbtn" aria-label="Dispensar" onclick="CW.passosFora()">' + ic('x', 18) + '</button>' +
+      '<button type="button" class="iconbtn" aria-label="Dispensar" data-toca="vista" onclick="CW.passosFora()">' + ic('x', 18) + '</button>' +
     '</div>' +
     '<div class="list" style="gap:8px;margin-top:12px">' +
     ps.map(function (p) {
@@ -334,7 +359,7 @@ function cartaoPassos() {
         (p.feito ? '' :
           '<div class="toolbar" style="margin:9px 0 0">' +
             '<button class="btn sm primary" onclick="' + p.act + '">Fazer agora</button>' +
-            '<button class="btn sm" onclick="CW.guiaAbrir(\'' + p.id + '\')">' +
+            '<button class="btn sm" data-toca="ecra" onclick="CW.guiaAbrir(\'' + p.id + '\')">' +
               (f[p.id] ? 'Rever o tutorial' : 'Como se faz') + '</button>' +
           '</div>') +
         '</div>';
@@ -366,25 +391,18 @@ vDashboard = function () {
 
 /* Em produção não se carregam dados de exemplo. Quem chega deve encontrar a
    app vazia e ser levado pelos primeiros passos — dados de brincar por cima
-   dos verdadeiros são um estorvo, e apagá-los à mão é trabalho. */
+   dos verdadeiros são um estorvo, e apagá-los à mão é trabalho.
+
+   Este é o fecho, e não a fechadura: o botão já nem chega a ser escrito
+   (auxiliares.js:podeExemplo). Chegou a ser apagado do DOM depois de cada
+   render, e isso tinha um furo — a pesquisa das listas repinta pela via
+   parcial (vistas.js:refrescarListasVivas), que não passa por aqui, e o botão
+   voltava. Perguntar antes de escrever não tem furos; isto fica para o caso
+   de o seed ser chamado por outro caminho. */
 var _seed_guia = seed;
 seed = function () {
   if (CW.ambiente === 'producao') return toast('Os dados de exemplo só existem no ambiente de desenvolvimento.');
   return _seed_guia.apply(this, arguments);
-};
-
-// e o botão desaparece, em vez de estar lá para dizer que não
-var _render_guia = render;
-render = function () {
-  var r = _render_guia.apply(this, arguments);
-  if (CW.ambiente === 'producao') {
-    [].slice.call(document.querySelectorAll('#view [onclick="seed()"]')).forEach(function (b) {
-      var barra = b.parentNode;
-      b.remove();
-      if (barra && barra.classList.contains('toolbar') && !barra.children.length) barra.remove();
-    });
-  }
-  return r;
 };
 
 var css = document.createElement('style');
@@ -394,11 +412,19 @@ css.textContent =
   /* Acima do botão flutuante e não por cima dele: o tutorial manda carregar
      nesse botão, e estava a tapá-lo. */
   '#cwGuia{position:fixed;left:12px;right:12px;bottom:calc(88px + var(--inset-bottom));z-index:59;' +
-    'pointer-events:none;display:flex;justify-content:center}' +
+    'pointer-events:none;display:flex;justify-content:center;' +
+    /* Entra em vez de aparecer. O cartão nasce logo a seguir a uma mudança de
+       ecrã — o passo leva a pessoa às Definições e a vista inteira é
+       repintada no mesmo instante — e um cartão parado no canto de baixo
+       perde-se nisso tudo, ainda por cima quando o texto manda olhar para o
+       topo. Sobe de fora do ecrã, com a curva de quem atravessa distância. */
+    'animation:guiaEntra var(--lento) var(--curva-entra)}' +
+  '@keyframes guiaEntra{from{opacity:0;transform:translateY(28px)}}' +
   '#cwGuia .guia-cartao{pointer-events:auto;width:100%;max-width:420px;padding:14px 16px;' +
     'box-shadow:var(--shadow);border-color:var(--accent)}' +
   // por cima de uma janela aberta (60) e encostado ao topo, longe dos botões
-  '#cwGuia.sobre-janela{z-index:61;bottom:auto;top:calc(12px + var(--inset-top))}' +
+  '#cwGuia.sobre-janela{z-index:61;bottom:auto;top:calc(12px + var(--inset-top));' +
+    'animation:guiaEntra var(--lento) var(--curva-entra)}' +
   '@media(min-width:900px){#cwGuia{left:auto;right:22px;max-width:420px;bottom:calc(22px + var(--inset-bottom))}' +
     '#cwGuia.sobre-janela{top:calc(16px + var(--inset-top))}}';
 document.head.appendChild(css);

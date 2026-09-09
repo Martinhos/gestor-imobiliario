@@ -118,9 +118,21 @@ function cwOwnersBlock() {
   var live = (db.properties || []).find(function (x) { return x.id === p.id; }) || p;
   var parts = live.ownerIds || [];
   var myId = CW.user ? CW.user.id : '';
+  // quem não é comproprietário (um colaborador com house.edit) não vê quotas
+  // nem propostas: são dos donos
+  if (myId && parts.length && parts.indexOf(myId) < 0) {
+    return '<div><div class="flabel">Proprietários</div><div class="hint">Imóvel de <b>' + esc(live._sharedFrom || '') +
+      '</b> — as quotas são dos comproprietários.' + (live._cargo ? ' Colaboras aqui como <b>' + esc(live._cargo) + '</b>.' : '') + '</div></div>';
+  }
+  // ao dono, quem colabora neste imóvel (a gestão fica em Conta e partilha)
+  var colabs = (live._colaboradores || []);
+  var colabHtml = colabs.length
+    ? '<div class="hint" style="margin-top:8px">Colaboradores: ' + esc(colabs.map(function (c) { return c.name + (c.roleName ? ' (' + c.roleName + ')' : ''); }).join(', ')) +
+      '. <a href="#" onclick="event.preventDefault();closeAllModals();go(\'colaboradores\')" style="color:var(--accent)">Gerir</a></div>'
+    : '';
   if (parts.length < 2) {
     return '<div><div class="flabel">Proprietários</div><div class="hint">Este imóvel é só teu (100%). ' +
-      'Para o teres em compropriedade, partilha-o com outro utilizador em <b>Definições → Conta e partilha</b>.</div></div>';
+      'Para o teres em compropriedade, partilha-o com outro utilizador em <b>Definições → Conta e partilha</b>.</div>' + colabHtml + '</div>';
   }
   var shares = sharesOf(live);
   var prp = (CW.state.proposals || []).filter(function (x) { return x.houseId === p.id; })[0];
@@ -149,7 +161,7 @@ function cwOwnersBlock() {
     foot = '<div class="toolbar" style="margin-top:8px"><button type="button" class="btn sm" onclick="CW.proposeShares(\'' + p.id + '\')">Propor nova divisão</button></div>' +
       '<div class="hint" style="margin-top:6px">Mudar as percentagens só entra em vigor depois de todos os comproprietários confirmarem.</div>';
   }
-  return '<div><div class="flabel">Proprietários e quota-parte</div>' + rows + foot + '</div>';
+  return '<div><div class="flabel">Proprietários e quota-parte</div>' + rows + foot + colabHtml + '</div>';
 }
 
 // se o modal do imóvel hid estiver aberto, recolhe o que está escrito e repinta-o —
