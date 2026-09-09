@@ -1,7 +1,6 @@
 // Sincronizacao em lote das alteracoes pendentes do cliente.
 import { linkFiles, regraDosAnexos } from '../files.js';
-import { modoDemo, podeCriar } from '../lib/planos.js';
-import { acessoACasa, planoDosDonos, regraDoRegisto, planeadoAGravar, apagarCasa } from '../lib/acesso.js';
+import { acessoACasa, regraDoRegisto, planeadoAGravar, apagarCasa } from '../lib/acesso.js';
 import { fundirCasa, fraseRecusa } from '../lib/permissoes.js';
 
 /* Rota do POST /api/sync: aplica as operações pendentes do cliente (put/del
@@ -29,20 +28,6 @@ export async function rotasSync(c) {
     if (!(await rateLimit(env, 'w:' + me.id, 60, 900))) {
       return err(429, 'Demasiadas gravações seguidas. Espera um pouco — os dados não se perdem.');
     }
-    /* Os limites do plano aplicam-se à CRIAÇÃO: uma linha nova de imóvel,
-       contrato ou planeado. Atualizar, apagar e reativar o que já existe
-       passa sempre — os termos prometem que nada do que existe fica
-       inacessível. Em modo de demonstração não há limites nenhuns. */
-    const demo = await modoDemo(env);
-    let nImoveis = null;
-    const imoveisDe = async () => {
-      if (nImoveis == null) {
-        nImoveis = ((await env.DB.prepare(
-          'SELECT COUNT(*) AS n FROM houses WHERE owner_id = ? AND deleted = 0'
-        ).bind(me.id).first()) || {}).n || 0;
-      }
-      return nImoveis;
-    };
     /* o acesso a cada casa resolve-se uma vez por pedido, com o grau
        (dono, comproprietário ou colaborador com cargo): é o que decide
        registo a registo o que passa */
@@ -51,7 +36,6 @@ export async function rotasSync(c) {
       if (!accessCache.has(hid)) accessCache.set(hid, await acessoACasa(env, me.id, hid));
       return accessCache.get(hid);
     };
-    const planoDe = planoDosDonos(env, me);
     const results = [];
     for (const op of ops) {
       try {
@@ -94,13 +78,8 @@ export async function rotasSync(c) {
               accessCache.set(houseId, { ok: true, owner: true, coowner: false, collab: null, ownerId: me.id });
               await linkFiles(env, houseId, op.data, 'house', houseId, me.id);
             } else {
-              if (!demo) {
-                const nao = podeCriar(me.plan, 'imovel', await imoveisDe());
-                if (nao) { results.push({ ok: false, status: 402, error: nao }); continue; }
-              }
               await env.DB.prepare('INSERT INTO houses (id, owner_id, data, updated_at, deleted) VALUES (?, ?, ?, ?, 0)')
                 .bind(houseId, me.id, JSON.stringify(preserveOwnership('', op.data)), now()).run();
-              if (nImoveis != null) nImoveis++;
               accessCache.set(houseId, { ok: true, owner: true, coowner: false, collab: null, ownerId: me.id });
               await linkFiles(env, houseId, op.data, 'house', houseId, me.id);
             }
@@ -116,7 +95,7 @@ export async function rotasSync(c) {
           const tipo = String(op.kind), rid = String(op.id);
           const a = await access(houseId);
           // ao apagar, uma casa inacessível conta como "já não existe"
-          const veredicto = await regraDoRegisto(env, me, a, houseId, tipo, rid, put, demo, planoDe);
+          const veredicto = await regraDoRegisto(env, me, a, houseId, tipo, rid, put);
           if (veredicto) {
             results.push(veredicto.gone ? { ok: true, gone: true }
               : { ok: false, status: veredicto.status, error: veredicto.error });

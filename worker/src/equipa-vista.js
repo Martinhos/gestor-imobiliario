@@ -289,7 +289,6 @@ function verPedido(id) {
       fichaHtml = '<div class="card"><b>Quem escreveu</b>' +
         '<div class="stat"><span>Nome</span><b>' + esc(q.nome || '—') + '</b></div>' +
         '<div class="stat"><span>Email</span><b>' + esc(q.email) + '</b></div>' +
-        '<div class="stat"><span>Plano</span><b>' + esc(q.plano) + '</b></div>' +
         '<div class="stat"><span>Na app desde</span><b>' + data(q.desde).slice(0, 10) + '</b></div>' +
         '<div class="stat"><span>Casas · registos</span><b>' + q.casas + ' · ' + q.registos + '</b></div>' +
         (q.errosApanhados ? '<div class="stat"><span>Erros que apanhou</span><b>' + q.errosApanhados + '</b></div>' : '') +
@@ -428,7 +427,7 @@ function verPessoas(q) {
       : d.pessoas.map(function (u) {
           return '<div class="card tap" onclick="verPessoa(\\'' + esc(u.id) + '\\')"><div class="row">' +
             '<div style="min-width:0"><b>' + esc(u.name || u.email) + '</b>' +
-            '<div class="small">' + esc(u.email) + ' · ' + esc(u.id) + ' · ' + esc(u.plan) + '</div></div>' +
+            '<div class="small">' + esc(u.email) + ' · ' + esc(u.id) + '</div></div>' +
             (u.deleted_at ? '<span class="badge dg">apagada</span>'
               : u.suspended_at ? '<span class="badge dg">suspensa</span>' : '') +
             '</div></div>';
@@ -493,7 +492,6 @@ function verPessoa(id) {
       '<div class="small">' + esc(q.email) + ' · ' + esc(q.id) + '</div></div>' +
       (q.suspensa ? '<span class="badge dg">suspensa</span>' : q.apagada ? '<span class="badge dg">apagada</span>' : '<span class="badge ok">ativa</span>') +
       '</div>' +
-      '<div class="stat"><span>Plano</span><b>' + esc(q.plano) + '</b></div>' +
       '<div class="stat"><span>Entra com</span><b>' + esc(q.entrada) + '</b></div>' +
       '<div class="stat"><span>Na app desde</span><b>' + data(q.desde).slice(0, 10) + '</b></div>' +
       '<div class="stat"><span>Última atividade</span><b>' + idade(q.ultimaAtividade) + '</b></div>' +
@@ -519,7 +517,6 @@ function cartaoAcoes(q) {
     'Tudo isto fica no rasto, com o motivo.</div><div class="acoes">' +
     b('sessoes', 'Terminar sessões') +
     b('limpar-limites', 'Limpar limites') +
-    b('plano', 'Mudar plano') +
     b('email', 'Mudar email') +
     b('password', 'Definir palavra-passe') +
     (q.entrada.indexOf('google') > -1 ? b('desligar-google', 'Desligar Google') : '') +
@@ -529,18 +526,15 @@ function cartaoAcoes(q) {
 }
 
 /* Dispara uma ação de master sobre a conta. Umas pedem primeiro um valor
-   (plano, email, palavra-passe; apagar pede o email exato da conta como
+   (email, palavra-passe; apagar pede o email exato da conta como
    confirmação) e todas pedem o motivo — sem motivo não acontece nada.
    Recebe: id — o id da conta (string); acao — a ação (string: sessoes,
-   limpar-limites, plano, email, password, desligar-google, suspender,
+   limpar-limites, email, password, desligar-google, suspender,
    reativar ou apagar).
    Devolve: nada — executa no servidor e recarrega a ficha. */
 function acaoConta(id, acao) {
   var valor;
-  if (acao === 'plano') {
-    valor = prompt('Novo plano (free, plus ou pro):');
-    if (!valor) return;
-  } else if (acao === 'email') {
+  if (acao === 'email') {
     valor = prompt('Novo email desta conta:');
     if (!valor) return;
   } else if (acao === 'password') {
@@ -564,7 +558,7 @@ function acaoConta(id, acao) {
 var CADENCIA = { copia: 26, vigia: 2, resumo: 26 };   // horas
 var OPS = { copia: 'Cópia diária', vigia: 'Vigia dos limites', resumo: 'Resumo diário' };
 
-/* O painel de operação inteiro: modo de demonstração, sessão de teste (fora
+/* O painel de operação inteiro: sessão de teste (fora
    de produção), o batimento das operações agendadas, os endereços de email,
    as cópias no R2 com o histórico e o consumo. Os endereços chegam à parte,
    por verEnderecos — o resto do painel não fica à espera do Cloudflare.
@@ -587,21 +581,6 @@ function verOperacao() {
         var texto = !c ? 'nunca correu' : idade(c.at) + (c.ok ? '' : ' · falhou');
         return '<div class="stat"><span>' + OPS[op] + '</span><b><span class="badge ' + classe + '">' + texto + '</span></b></div>';
       }).join('') + '</div>';
-
-    var fimTxt = d.fimDemo ? new Date(d.fimDemo).toISOString().slice(0, 10) : null;
-    var faltam = d.fimDemo ? Math.ceil((d.fimDemo - Date.now()) / 86400000) : null;
-    var estadoDemo = !d.fimDemo
-      ? 'Ligado — os limites dos planos estão suspensos, sem data marcada.'
-      : d.demo
-        ? 'A terminar — os planos entram em vigor a ' + fimTxt + ' (faltam ' + faltam + ' dias). A app está a avisar toda a gente.'
-        : 'Terminado a ' + fimTxt + ' — os planos estão em vigor (free: 3 imóveis, sem contratos nem planeados novos).';
-    var botaoDemo = !d.master
-      ? '<span class="badge">' + (d.demo ? 'ligado' : 'em vigor') + '</span>'
-      : !d.fimDemo
-        ? '<button class="btn mini danger" onclick="mudarDemo(false)">Marcar o fim</button>'
-        : '<button class="btn mini" onclick="mudarDemo(true)">' + (d.demo ? 'Cancelar' : 'Voltar ao demo') + '</button>';
-    var demo = '<div class="card"><div class="row"><div style="min-width:0"><b>Modo de demonstração</b>' +
-      '<div class="small">' + estadoDemo + '</div></div>' + botaoDemo + '</div></div>';
 
     var copias = '<div class="card"><div class="row"><b>Cópias no R2</b>' +
       '<button class="btn mini" onclick="copiarAgora()">Copiar agora</button></div>' +
@@ -643,23 +622,9 @@ function verOperacao() {
       (d.master ? '<button class="btn mini" onclick="criarEndereco()">Criar endereço</button>' : '') +
       '</div><div id="emailCard" class="small" style="margin-top:8px">A carregar…</div></div>';
 
-    el('conteudo').innerHTML = demo + teste + batimento + enderecos + copias + '<div id="resumoCopia"></div>' + historico + consumo;
+    el('conteudo').innerHTML = teste + batimento + enderecos + copias + '<div id="resumoCopia"></div>' + historico + consumo;
     verEnderecos();
   }).catch(falha);
-}
-
-// ligar=true volta ao modo demo (ou cancela o fim marcado); false marca o
-// fim, com confirmação — a app passa logo a avisar toda a gente. O motivo
-// fica no rasto.
-// Recebe: ligar — booleano (o que cada valor faz está dito acima).
-// Devolve: nada — grava no servidor e recarrega o painel.
-function mudarDemo(ligar) {
-  if (!ligar && !confirm('Marcar o fim da demonstração? A app passa JÁ a avisar toda a gente de que os planos entram em vigor daqui a 30 dias — e nessa data o free fica por 3 imóveis, sem criar contratos nem planeados.')) return;
-  var motivo = prompt('Motivo (fica no rasto):');
-  if (!motivo) return;
-  enviar('/api/equipa/operacao/demo', { ligado: ligar, motivo: motivo })
-    .then(function () { verOperacao(); })
-    .catch(function (e) { alert(e.message); });
 }
 
 /* Preenche o cartão dos endereços de email: cada um com o destino para onde

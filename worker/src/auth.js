@@ -117,7 +117,7 @@ export function readSessionToken(request) {
    Request recebido, de onde sai o token.
    Devolve: null se faltar qualquer elo, se a conta estiver
    apagada ou suspensa, ou se o sess_epoch já rodou (sessões revogadas);
-   caso contrário devolve o utilizador (id, email, name, sess_epoch, plan,
+   caso contrário devolve o utilizador (id, email, name, sess_epoch,
    terms_version) com o token anexado. */
 export async function getSessionUser(env, request) {
   const token = readSessionToken(request);
@@ -128,7 +128,7 @@ export async function getSessionUser(env, request) {
   // contas apagadas ou suspensas deixam de ter sessão válida, mesmo com o
   // token na mão (suspender também sobe o sess_epoch, mas isto é a rede)
   const user = await env.DB.prepare(
-    'SELECT id, email, name, sess_epoch, plan, terms_version FROM users WHERE id = ? AND deleted_at IS NULL AND suspended_at IS NULL'
+    'SELECT id, email, name, sess_epoch, terms_version FROM users WHERE id = ? AND deleted_at IS NULL AND suspended_at IS NULL'
   )
     .bind(userId)
     .first();

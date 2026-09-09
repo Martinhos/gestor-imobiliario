@@ -20,7 +20,6 @@ import {
   PERMS, IMPLICA, KIND_PERM, CARGOS_EXEMPLO, normalizarPerms, projetarCasa, projetarRegisto,
   fundirCasa, podeVerKind, podeAddKind, kindsVisiveis, fundirPlaneado, proximaData, planeadoTermina,
 } from '../worker/src/lib/permissoes.js';
-import { definirDemo, esquecerCache } from '../worker/src/lib/planos.js';
 import { mascararTokens } from '../worker/src/lib/relatos.js';
 
 /* ------------------------------ armações ------------------------------- */
@@ -635,68 +634,6 @@ describe('POST /api/sync com cargo', () => {
     assert.equal(s[0].status, 403);
     assert.equal(s[0].error, 'Sem permissão para adicionar planeados neste imóvel.');
     assert.equal((await linha(env, 'H1', 'rec', 'r_once3')).deleted, 0);
-  });
-});
-
-describe('o plano do dono da casa é o que manda', () => {
-  test('dono free + colaborador pro → 402; dono plus + colaborador free → ok (fora de demo)', async () => {
-    const a = await armar('free', 'pro');
-    try {
-      await definirDemo(a.env, false, 0);
-      esquecerCache();
-      // o contabilista de exemplo só VÊ contratos; para o plano contar é preciso um cargo que os crie
-      const contratos = await cargo(a.env, a.D, 'Contratos', ['contract.add'], 'R_CTR');
-      await darCargo(a.env, a.D, a.C, contratos, ['H1']);
-      let r = await sync(a.env, a.C, [{ op: 'put', scope: 'record', houseId: 'H1', kind: 'contract', id: 'c2', data: { name: 'novo' } }]);
-      assert.equal(r[0].status, 402, JSON.stringify(r));
-      assert.equal(await linha(a.env, 'H1', 'contract', 'c2'), null);
-      r = await sync(a.env, a.C, [{ op: 'put', scope: 'record', houseId: 'H1', kind: 'contract', id: 'c1', data: { name: 'existe' } }]);
-      assert.equal(r[0].status, 403, 'editar o do dono continua a ser 403 — não é o plano que o trava');
-      const rest = await resp(pedir(a.env, a.C, '/api/houses/H1/records/contract/c3', 'PUT', { data: { name: 'x' } }));
-      assert.equal(rest.status, 402, 'a rota unitária também aplica o plano');
-      // o comproprietário pro também esbarra no plano do dono
-      const p = await resp(pedir(a.env, a.P, '/api/houses/H1/records/rec/r9', 'PUT', { data: { label: 'x' } }));
-      assert.equal(p.status, 402);
-
-      const b = await armar('plus', 'free');
-      await definirDemo(b.env, false, 0);
-      esquecerCache();
-      await darCargo(b.env, b.D, b.C, await cargo(b.env, b.D, 'Contratos', ['contract.add'], 'R_CTR'), ['H1']);
-      r = await sync(b.env, b.C, [{ op: 'put', scope: 'record', houseId: 'H1', kind: 'contract', id: 'c2', data: { name: 'novo' } }]);
-      assert.deepEqual(r[0], { ok: true });
-    } finally {
-      await definirDemo(a.env, true);
-      esquecerCache();
-    }
-  });
-
-  test('PUT /api/houses/:id de casa nova respeita o plano, como o sync (fora de demo)', async () => {
-    const env = ambiente();
-    const A = await conta(env, 'A', 'free');
-    for (let i = 1; i <= 3; i++) await casa(env, A, 'HA' + i, { name: 'A' + i });
-    try {
-      await definirDemo(env, false, 0);
-      esquecerCache();
-      const r = await resp(pedir(env, A, '/api/houses/HA4', 'PUT', { data: { name: 'quarta' } }));
-      assert.equal(r.status, 402);
-      assert.equal(r.error, 'O plano free vai até 3 imóveis. O que criaste fica neste aparelho até mudares de plano.');
-      assert.equal(await env.DB.prepare("SELECT 1 FROM houses WHERE id = 'HA4'").first(), null, 'a 4.ª casa não ficou');
-      const s = await sync(env, A, [{ op: 'put', scope: 'house', houseId: 'HA4', data: { name: 'quarta' } }]);
-      assert.equal(s[0].status, 402);
-      assert.equal(s[0].error, r.error, 'a mesma frase pelos dois caminhos');
-      // só a criação é travada: editar e reativar o que existe passa
-      assert.equal((await resp(pedir(env, A, '/api/houses/HA1', 'PUT', { data: { name: 'editada' } }))).status, 200);
-      await resp(pedir(env, A, '/api/houses/HA1', 'DELETE'));
-      assert.equal((await resp(pedir(env, A, '/api/houses/HA1', 'PUT', { data: { name: 'de volta' } }))).status, 200, 'reativar');
-      assert.equal((await resp(pedir(env, A, '/api/houses/HA4', 'PUT', { data: { name: 'quarta' } }))).status, 402, 'e continua a contar 3');
-      // com plano plus, a 4.ª entra
-      await env.DB.prepare("UPDATE users SET plan = 'plus' WHERE id = ?").bind(A.id).run();
-      const Ap = { id: A.id, token: await createSession(env, A.id, 0) };
-      assert.equal((await resp(pedir(env, Ap, '/api/houses/HA4', 'PUT', { data: { name: 'quarta' } }))).status, 200);
-    } finally {
-      await definirDemo(env, true);
-      esquecerCache();
-    }
   });
 });
 

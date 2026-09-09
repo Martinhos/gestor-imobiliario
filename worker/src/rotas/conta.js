@@ -18,10 +18,8 @@ export async function rotasConta(c) {
   if (path === '/api/me' && method === 'GET') {
     return json({
       id: me.id, email: me.email, name: me.name,
-      plan: me.plan || 'free',
       terms: me.terms_version || null,
       termsCurrent: TERMS_VERSION,
-      fimDemo: await (await import('../lib/planos.js')).fimDemo(env),
     });
   }
 
