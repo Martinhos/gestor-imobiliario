@@ -130,11 +130,29 @@ describe('o service worker', () => {
      publicações — o dev publica dezenas de vezes com a mesma. Com a cache a
      responder primeiro, o ambiente congelava no primeiro carregamento dessa
      versão, e atualizar a página não adiantava. */
-  test('só produção guarda; o resto vai à rede', () => {
-    assert.match(sw, /const GUARDA = self\.location\.hostname === 'app\.rendorium\.com'/,
-      'quem guarda é só produção');
-    assert.match(sw, /if \(!GUARDA \|\| VER == null\) return;/,
-      'fora dela o fetch não toca na cache');
+  /* A regra diz quem NÃO é produção, e não quem é. Esteve ao contrário
+     (`hostname === 'app.rendorium.com'`), e isso deixava de fora gente que
+     está mesmo em produção: o wrangler.toml liga o workers.dev à mão porque as
+     instalações antigas — PWA e APK — apontam para lá. Perderiam o offline em
+     silêncio. E fixar o literal no teste foi exatamente o que não apanhou a
+     omissão, por isso agora testa-se a regra a correr. */
+  test('quem não guarda são os ambientes conhecidos; o resto é produção', () => {
+    const m = /const SEM_CACHE = \[([\s\S]*?)\];/.exec(sw);
+    assert.ok(m, 'a lista de quem NÃO guarda existe — a regra é por exclusão');
+    const lista = m[1].match(/'([^']+)'/g).map((x) => x.replace(/'/g, ''));
+    ['localhost', '127.0.0.1', 'dev.rendorium.com'].forEach((h) => {
+      assert.ok(lista.includes(h), h + ' não pode guardar');
+    });
+    assert.match(sw, /SEM_CACHE\.indexOf\(hn\) < 0/, 'é uma exclusão, não uma permissão');
+    assert.match(sw, /gestor-imobiliario-dev\./,
+      'o worker de dev também tem endereço em workers.dev');
+    // e o inverso, que é o que se perdeu antes: nada exclui os endereços antigos
+    assert.ok(!lista.some((h) => /workers\.dev$/.test(h)),
+      'os endereços antigos de produção (PWA e APK) continuam a guardar');
+  });
+
+  test('fora de produção o fetch não toca na cache', () => {
+    assert.match(sw, /if \(!GUARDA \|\| VER == null\) return;/);
   });
 
   /* E a transição tem de se desenrascar: quem já tem uma cache de uma

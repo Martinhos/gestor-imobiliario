@@ -1103,11 +1103,23 @@ versão, portanto nunca rodava, e o ambiente congelava no primeiro carregamento
 dessa versão. Publicava-se, atualizava-se a página, e não acontecia nada: a
 cache respondia antes da rede.
 
-Agora só `app.rendorium.com` guarda. Fora de produção o worker existe — o PWA
-instala-se, o manifesto vale — mas deixa passar tudo à rede: sempre fresco, e
-sem poder misturar versões porque não guarda nenhuma. O caminho da cache
-exercita-se onde importa, que é onde há utilizadores e onde a versão sobe a
-cada publicação.
+Agora só produção guarda. Fora dela o worker existe — o PWA instala-se, o
+manifesto vale — mas deixa passar tudo à rede: sempre fresco, e sem poder
+misturar versões porque não guarda nenhuma. O caminho da cache exercita-se onde
+importa, que é onde há utilizadores e onde a versão sobe a cada publicação.
+
+E a regra diz quem **não** é produção, não quem é. Esteve ao contrário —
+`hostname === 'app.rendorium.com'` — e uma auditoria antes de promover apanhou
+o que isso deixava de fora: o `wrangler.toml` liga o `workers.dev` **à mão**,
+com o comentário de que as instalações antigas (PWA e APK) apontam para lá e
+não podem partir. Essas pessoas estão em produção, e a regra tratava-as como se
+não estivessem: perderiam o offline, em silêncio.
+
+Os ambientes que **não** são produção sabem-se todos — o localhost, o
+`dev.rendorium.com` e o endereço do worker de dev. Os de produção, não: há os
+de hoje e os que ficaram de ontem. Por isso a lista é a dos primeiros. E o
+teste passou a correr a regra em vez de fixar o literal, porque fixar o literal
+foi precisamente o que não apanhou a omissão.
 
 E a transição desenrasca-se sozinha: fora de produção o worker novo assume já
 (`skipWaiting`, seguro aqui porque não há cache a proteger) e apaga **todas** as

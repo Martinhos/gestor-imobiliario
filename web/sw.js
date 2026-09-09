@@ -19,11 +19,23 @@ const CACHE = 'gi-shell-v' + VER;
    mesma. Com a cache a responder primeiro, o ambiente congelava no primeiro
    carregamento dessa versão e atualizar a página não adiantava nada.
 
-   Aqui o worker existe (o PWA instala-se, o manifesto vale), mas deixa passar
-   tudo à rede: sempre fresco, e sem poder misturar versões porque não guarda
-   nenhuma. O caminho da cache exercita-se onde ele importa, que é onde há
-   utilizadores e onde a versão sobe a cada publicação. */
-const GUARDA = self.location.hostname === 'app.rendorium.com';
+   Fora de produção o worker existe (o PWA instala-se, o manifesto vale), mas
+   deixa passar tudo à rede: sempre fresco, e sem poder misturar versões porque
+   não guarda nenhuma.
+
+   E diz-se quem NÃO é produção, não quem é. Chegou a estar ao contrário
+   (`hostname === 'app.rendorium.com'`), e isso deixava de fora gente que está
+   mesmo em produção: o wrangler.toml liga o workers.dev à mão, com o
+   comentário de que as instalações antigas — PWA e APK — apontam para lá e não
+   podem partir. Essas perderiam o offline, em silêncio. Os ambientes que não
+   são produção sabem-se todos; os endereços de produção, não. */
+const SEM_CACHE = [
+  'localhost', '127.0.0.1', '[::1]',
+  'dev.rendorium.com',
+];
+const hn = String(self.location.hostname || '').toLowerCase();
+// o worker de dev também tem endereço em workers.dev, e leva o nome no início
+const GUARDA = SEM_CACHE.indexOf(hn) < 0 && hn.indexOf('gestor-imobiliario-dev.') !== 0;
 // A app passou a viver em módulos: guardam-se todos, senão abre offline
 // com metade do código.
 const APP = ['dados', 'anexos', 'auxiliares', 'lista', 'continuidade', 'graficos', 'credito', 'componentes',
