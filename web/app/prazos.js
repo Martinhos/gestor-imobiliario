@@ -91,15 +91,15 @@ function prazosDe(hoje){
     if(c.end){
       const oposicao=pzAddDias(c.end,-120);
       poe('oposicao',c.id+':'+c.end,oposicao,'Oposição à renovação — '+nome,
-        'Para o contrato não renovar a '+c.end+', o aviso ao inquilino tem de seguir até '+oposicao+' (120 dias).',abrir,false);
+        'Para o contrato não renovar a '+dPT(c.end)+', o aviso ao inquilino tem de seguir até '+dPT(oposicao)+' (120 dias).',abrir,false);
       poe('fim',c.id+':'+c.end,c.end,'Fim do prazo do contrato — '+nome,
-        'Termina a '+c.end+'. Sem oposição, renova-se automaticamente pelo período legal — atualiza o fim para o novo prazo.',abrir,true);
+        'Termina a '+dPT(c.end)+'. Sem oposição, renova-se automaticamente pelo período legal — atualiza o fim para o novo prazo.',abrir,true);
     }
     if(c.increase!=null&&c.start){
       const aniv=pzAniversario(c.start,h);
       const aviso=pzAddDias(aniv,-30);
       poe('aumento',c.id+':'+aniv,aviso,'Aumento anual da renda — '+nome,
-        'Para valer a '+aniv+', o aviso ao inquilino (30 dias) segue até '+aviso+'. Renda '+euro(c.rent)+' '+(c.increase>0?'+':'')+c.increase+'%.',abrir,false);
+        'Para valer a '+dPT(aniv)+', o aviso ao inquilino (30 dias) segue até '+dPT(aviso)+'. Renda '+euro(c.rent)+' '+(c.increase>0?'+':'')+c.increase+'%.',abrir,false);
     }
   });
 
@@ -109,7 +109,7 @@ function prazosDe(hoje){
   const pessoa=(p,papel)=>{
     if(!p||!p.ccValid||vistos[p.id])return;vistos[p.id]=1;
     poe('cc',p.id+':'+p.ccValid,p.ccValid,'Cartão de cidadão — '+(p.name||'pessoa'),
-      'Caduca a '+p.ccValid+'. Um contrato novo (ou renovado) precisa do documento válido.',
+      'Caduca a '+dPT(p.ccValid)+'. Um contrato novo (ou renovado) precisa do documento válido.',
       `personModal('${papel}','${p.id}')`,true);
   };
   (db.tenants||[]).forEach(t=>{if(ativos[t.id])pessoa(t,'tenant')});
@@ -118,7 +118,7 @@ function prazosDe(hoje){
   (db.properties||[]).forEach(p=>{
     if(p.energyValid){
       poe('energia',p.id+':'+p.energyValid,p.energyValid,'Certificado energético — '+(p.name||'imóvel'),
-        'Expira a '+p.energyValid+'. É obrigatório para anunciar e celebrar arrendamentos.',
+        'Expira a '+dPT(p.energyValid)+'. É obrigatório para anunciar e celebrar arrendamentos.',
         `propModal('${p.id}')`,true);
     }
     (p.loans||[]).forEach(l=>{
@@ -126,7 +126,7 @@ function prazosDe(hoje){
       const fim=pzAddAnos(l.start,Number(l.fixedYears));
       const depois=(Number(l.euribor)||0)+(Number(l.spread)||0);
       poe('taxa',l.id+':'+fim,fim,'Fim da taxa fixa — '+(l.name||l.bank||'crédito')+' ('+(p.name||'imóvel')+')',
-        'A '+fim+' a taxa passa de '+dec(l.rate)+'% para Euribor+spread (hoje ~'+dec(depois)+'%). Bom momento para comparar propostas.',
+        'A '+dPT(fim)+' a taxa passa de '+dec(l.rate)+'% para Euribor+spread (hoje ~'+dec(depois)+'%). Bom momento para comparar propostas.',
         `propModal('${p.id}')`,false);
     });
   });

@@ -60,7 +60,7 @@ kpiModal = function (id) {
           return '<div class="card tap" style="padding:10px 12px" data-toca="camada" onclick="CW.openTx(\'' + t.id + '\')">' +
             '<div class="row-between" style="align-items:center;gap:10px">' +
             '<div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.label) + '</b>' +
-            '<span class="small">' + esc(t.date) + ' · ' + esc((KIND[t.kind] || {}).short || '') +
+            '<span class="small">' + dPT(t.date) + ' · ' + esc((KIND[t.kind] || {}).short || '') +
             (t.category ? ' · ' + esc(t.category) : '') +
             (t.propertyId ? ' · ' + esc(propName(t.propertyId)) : '') + '</span></div>' +
             '<b class="' + col + '" style="flex:0 0 auto">' + euro2(r.v) + '</b></div></div>';
@@ -186,13 +186,13 @@ function planoQuem(r) {
     var x = anyLoan(tx.loanId);
     if (!x) return '';
     return '<div class="hint">Hipoteca: <b>' + esc(loanName(x.l)) + '</b>' +
-      (x.l.start ? ' · início ' + esc(x.l.start) : '') + ' · ' + euro(x.l.outstanding) + ' em dívida · ' + esc(x.p.name) + '</div>';
+      (x.l.start ? ' · início ' + dPT(x.l.start) : '') + ' · ' + euro(x.l.outstanding) + ' em dívida · ' + esc(x.p.name) + '</div>';
   }
   if (tx.contractId) {
     var c = contract(tx.contractId);
     if (!c) return '';
     return '<div class="hint">Contrato: <b>' + esc(ctName(c)) + '</b> · ' + euro2(c.rent) + '/mês' +
-      (c.start ? ' · início ' + esc(c.start) : '') + (c.propertyId ? ' · ' + esc(propName(c.propertyId)) : '') + '</div>';
+      (c.start ? ' · início ' + dPT(c.start) : '') + (c.propertyId ? ' · ' + esc(propName(c.propertyId)) : '') + '</div>';
   }
   return '';
 }
@@ -216,7 +216,7 @@ CW.fillMissed = function (id) {
     var x0 = anyLoan(r.tx.loanId), fim = lista[n - 1].bal;
     body = '<div class="form">' +
       '<div class="hint">Vais registar <b>' + n + '</b> prestaç' + (n === 1 ? 'ão' : 'ões') + ' de <b>' + esc(r.name) + '</b>, de <b>' +
-      lista[0].date + '</b> a <b>' + lista[n - 1].date + '</b>, com os juros, o selo e o capital do plano da hipoteca.</div>' +
+      dPT(lista[0].date) + '</b> a <b>' + dPT(lista[n - 1].date) + '</b>, com os juros, o selo e o capital do plano da hipoteca.</div>' +
       planoQuem(r) +
       '<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px">' +
       '<b>O capital em dívida desce com cada uma</b>, como se as confirmasses uma a uma' +
@@ -233,7 +233,7 @@ CW.fillMissed = function (id) {
     var per = EVERY_WORD[r.every] || 'período';
     body = '<div class="form">' +
       '<div class="hint">Vais registar <b>' + n + '</b> movimento' + (n === 1 ? '' : 's') +
-      ' de <b>' + esc(r.name) + '</b>, de <b>' + dates[0] + '</b> a <b>' + dates[n - 1] + '</b>, ' +
+      ' de <b>' + esc(r.name) + '</b>, de <b>' + dPT(dates[0]) + '</b> a <b>' + dPT(dates[n - 1]) + '</b>, ' +
       'todos com o valor atual de <b>' + euro2(val0) + '</b> por ' + per + '.</div>' +
       planoQuem(r) +
       '<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px">' +
@@ -500,7 +500,7 @@ function pendBlock(list) {
       return '<div class="card pend ' + (late ? 'late' : '') + '" style="padding:9px 11px;margin-bottom:6px">' +
         '<div class="row-between" style="align-items:center;gap:9px">' +
         '<div style="min-width:0"><b style="display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.name) + '</b>' +
-        '<span class="small">' + r.next + (late ? ' · <b class="neg">em atraso</b>' : ' · por confirmar') + '</span></div>' +
+        '<span class="small">' + dPT(r.next) + (late ? ' · <b class="neg">em atraso</b>' : ' · por confirmar') + '</span></div>' +
         '<b style="flex:0 0 auto">' + (r.tx.amount ? euro2(r.tx.amount) : '') + '</b></div>' +
         botoes + '</div>';
     }).join('') + '</div>';

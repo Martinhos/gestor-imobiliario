@@ -33,7 +33,9 @@ function vAjuda() {
   var linha = function (x) {
     var st = TK_STATUS[x.status] || TK_STATUS.criado;
     var d = new Date(x.created_at);
-    var data = d.toISOString().slice(0, 10);
+    /* o dia LOCAL, e nao o de UTC: um pedido das 23h30 de Lisboa aparecia com
+     o dia seguinte */
+    var data = dPT(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
     return '<div class="card" style="padding:12px 13px">' +
       '<div class="row-between" style="align-items:flex-start;gap:10px">' +
       '<div style="min-width:0"><b style="display:block">' + esc(x.subject) + '</b>' +

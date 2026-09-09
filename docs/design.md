@@ -359,7 +359,7 @@ os seletores de imóvel dos formulários só listam onde se pode adicionar
 (acessos.js:casasComo, acessos.js:propOptsPara; movimento.js:txBody), a
 ficha do imóvel abre só de leitura sem «Editar a ficha»
 (imovel.js:propView), uma ficha de inquilino idem
-(componentes.js:modalSoLeitura), e as contas entre proprietários são dos
+(pessoas.js:personView), e as contas entre proprietários são dos
 proprietários (vistas.js:balancesCard, acessos.js:souDono). Editar e apagar
 é só o que o próprio adicionou (acessos.js:podeEditar); quando a ação
 chega mesmo a um guardar sem permissão, recusa-se com a frase de
@@ -765,8 +765,16 @@ título de uma janela que ninguém tinha pedido para abrir.
 
 Havia uma ficha de leitura no código inteiro, e só a via quem **não podia**
 editar (imovel.js:propView). Para todos os outros, a app não tinha modo de
-leitura nenhum: o que existia era o formulário com os campos desativados
-(componentes.js:modalSoLeitura) — um formulário a fingir de ficha.
+leitura nenhum: o que existia era o formulário com os campos desativados um a
+um — um formulário a fingir de ficha, que mostrava a alguém tudo o que não
+pode fazer, cinzento, e chamava-lhe leitura.
+
+Esse já não existe. Quem não pode alterar recebe a ficha, e a verificação
+está **antes** de abrir a janela (contrato.js:ctModal, movimento.js:txModal,
+pessoas.js:personModal, planeados.js:editRec): não se decora uma janela já
+aberta, escolhe-se qual é a janela a abrir. E a ficha diz porquê com a frase
+da permissão que falta (acessos.js:motivoRecusa), que é melhor do que o «só
+de leitura» genérico que o formulário apagado dava.
 
 Agora tocar lê, e editar é um passo deliberado: o botão do rodapé, que só
 existe para quem pode (componentes.js:fichaRodape).
@@ -806,8 +814,7 @@ lá alguém.
 
 E o TOQUE LONGO ficou só com o que se pode FAZER. Antes da ficha, o «Ver
 movimento» do toque longo era a única maneira de ver um movimento sem o
-editar — abria o formulário com os campos desligados
-(componentes.js:modalSoLeitura). Agora tocar no cartão lê, e essa entrada
+editar — abria o formulário com os campos desligados. Agora tocar no cartão lê, e essa entrada
 passou a ser um caminho a mais para o mesmo sítio. Quando não há nada a
 fazer, o menu fica vazio, e é o menu vazio que faz aparecer o aviso «Só
 podes ver este registo» (componentes.js:lpShow) — uma decisão que já lá
@@ -921,6 +928,41 @@ Por isso os movimentos não se movem com o contrato — a app **aponta**. Ao
 guardar um contrato, os que caem fora das datas dele, de um lado e do outro,
 são contados e mostram-se um a um, para se abrir cada um e decidir
 (contrato.js:movimentosForaDoContrato, contrato.js:verMovimentosFora).
+
+## As datas leem-se como se escrevem em Portugal
+O ecrã dizia `2028-03-15`. Passa a dizer **15/03/2028** (auxiliares.js:dPT), e
+os meses soltos dizem «ago 2026» (planeados.js:mesPt) — a mesma forma nas
+listas e nas fichas, porque um formato longo lê-se bem numa ficha e mal numa
+tabela, e dois formatos ao mesmo tempo eram pior do que um estrangeiro.
+
+O ISO fica onde é **dado**, e nunca se lhe toca: na base, nos
+`<input type="date">` (o HTML exige-o e o browser já o mostra na forma local),
+nas comparações e ordenações (a comparação de texto só funciona em ISO), nas
+chaves, no CSV e no que sai para o servidor. Há sítios onde a mesma variável
+faz as duas coisas — o cabeçalho de mês dos movimentos é ao mesmo tempo o
+texto que se lê e a **chave** da lista viva (vistas.js:txMesHtml), e o
+intervalo do filtro é texto no resumo e `value=` nos campos — e aí muda-se só
+o que se lê.
+
+A pesquisa dos movimentos leva a data nas **duas** formas (vistas.js:txHay):
+sem a que se lê, quem visse `15/03/2028` na linha e a escrevesse não
+encontrava nada; sem a ISO, perdia-se quem escreve o ano primeiro.
+
+E há uma regra do percurso que não deixa isto ficar a meio: **nenhum texto
+visível pode ter uma data ISO** (testes/ui/invariantes.js). Sem ela, uma data
+em ISO volta ao ecrã na próxima função que alguém escrever, e ninguém dá por
+isso — um `2028-03-15` no meio de uma lista não parece um defeito, parece uma
+data.
+
+Uma coisa fica de fora, de propósito: o **PDF do contrato** tem regras
+próprias e já escreve por extenso («5 de março de 2026»,
+contrato-pdf.js:dataLonga).
+
+A data que a conversão de uma visita escreve **dentro das notas** de um
+inquilino (visitas.js:visConverte) também mudou, e essa é prosa **gravada**,
+que sobe para o servidor. O que já está escrito nas fichas antigas fica como
+estava; só o que se escreve de agora em diante leva a forma nova. É o preço
+de escrever a data dentro de uma frase em vez de a guardar num campo.
 
 ## Navegação
 Treze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e

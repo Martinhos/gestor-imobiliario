@@ -395,7 +395,7 @@ function fcResumo(f){
   if(f.owner){const o=db.owners.find(x=>x.id===f.owner);p.push(o?o.name:f.owner)}
   if(f.cat)p.push(f.cat);
   if(f.sub)p.push(f.sub);
-  if(f.de||f.ate)p.push(f.de&&f.ate?f.de+' → '+f.ate:f.de?'desde '+f.de:'até '+f.ate);
+  if(f.de||f.ate)p.push(f.de&&f.ate?dPT(f.de)+' → '+dPT(f.ate):f.de?'desde '+dPT(f.de):'até '+dPT(f.ate));
   return p.join(' · ');
 }
 

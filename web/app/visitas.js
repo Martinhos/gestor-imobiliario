@@ -106,7 +106,7 @@ function visCard(v){
     <div class="row-between" style="align-items:flex-start;gap:8px">
       <div style="min-width:0">
         <b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.nomes||'(sem nome)')}</b>
-        <span class="small">${esc(p?(p.name||p.address):'imóvel?')}${quarto?' · '+esc(quarto):''} · ${esc(v.date||'sem data')}${hora?' · '+esc(hora):''}${desf}</span>
+        <span class="small">${esc(p?(p.name||p.address):'imóvel?')}${quarto?' · '+esc(quarto):''} · ${v.date?esc(dPT(v.date)):'sem data'}${hora?' · '+esc(hora):''}${desf}</span>
         ${v.notas?`<span class="small" style="display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.notas)}</span>`:''}</div>
       <span style="flex:0 0 auto;display:inline-flex;align-items:center;gap:4px">
         <span class="badge ${seloCls}">${VESTADO[v.estado]||v.estado}</span>
@@ -133,7 +133,7 @@ function visFicha(id){
     const h=v.start?' · '+esc(v.start)+(v.end?'–'+esc(v.end):''):'';
     const d=pzDias(v.date);
     const rel=d===0?'hoje':d===1?'amanhã':d===-1?'ontem':(d>0?'daqui a '+d+' dias':'há '+(-d)+' dias');
-    return esc(v.date)+h+' · '+rel;
+    return esc(dPT(v.date))+h+' · '+rel;
   })();
   return ficha([
     {tipo:'nota',valor:esc(motivoRecusa(v.propertyId,'visit.add',v))},
@@ -288,7 +288,10 @@ function visConverte(id){
   if(!pode(v.propertyId,'tenant.add'))return toast(fraseSemPerm('tenant.add'));
   const c=(v.contacto||'').trim();
   const novo=normPerson({name:v.nomes,phone:/@/.test(c)?'':c,email:/@/.test(c)?c:'',houseId:souDono(v.propertyId)?'':(v.propertyId||''),
-    notes:v.notas?'Da visita de '+(v.date||'?')+': '+v.notas:''});
+    /* a data vai na forma que se le. E prosa gravada: o que ja esta escrito
+       nas fichas antigas fica como estava, e so o que se escreve de agora em
+       diante e que leva a forma nova */
+    notes:v.notas?'Da visita de '+(dPT(v.date)||'?')+': '+v.notas:''});
   db.tenants.push(novo);save();
   personModal('tenant',novo.id);
   toast('Ficha criada a partir da visita — completa o que faltar.');

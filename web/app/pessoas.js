@@ -35,7 +35,7 @@ function personFicha(kind,id){
   const ativos=cts.filter(isActive),futuros=cts.filter(c=>ctEstado(c)==='futuro'),findos=cts.filter(c=>ctEstado(c)==='terminado');
   const casas=kind==='owner'?propsOf(p.id):[];
   const ident=verPessoa?[p.nif?'NIF '+esc(fmtNIF(p.nif)):'',
-    p.cc?'CC '+esc(fmtCC(p.cc))+(p.ccValid?(pzDias(p.ccValid)<0?' · caducou a '+esc(p.ccValid):' · válido até '+esc(p.ccValid)):''):'',
+    p.cc?'CC '+esc(fmtCC(p.cc))+(p.ccValid?(pzDias(p.ccValid)<0?' · caducou a '+dPT(p.ccValid):' · válido até '+dPT(p.ccValid)):''):'',
     p.nationality&&p.nationality!=='Portuguesa'?esc(p.nationality):''].filter(Boolean).join('<br>'):'';
   /* a quota-parte só na minha casa: o servidor apaga as quotas de uma casa de
      colaboração, e o sharesOf reparte por igual quando não há percentagens —
@@ -51,7 +51,7 @@ function personFicha(kind,id){
     verPessoa&&p.phone?{rotulo:'Telemóvel',valor:esc(fmtPhone(p.phone))}:null,
     verPessoa&&p.email?{rotulo:'Email',valor:esc(p.email)}:null,
     kind==='tenant'&&ativos.length?{tipo:'bloco',rotulo:'Mora em',
-      valor:ativos.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.start?' · desde '+esc(c.start):'')+(c.end?' · até '+esc(c.end):'')).join('<br>')}:null,
+      valor:ativos.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.start?' · desde '+dPT(c.start):'')+(c.end?' · até '+dPT(c.end):'')).join('<br>')}:null,
     kind==='owner'&&casas.length?{tipo:'bloco',rotulo:'Imóveis e quota-parte',
       valor:casas.map(x=>esc(x.name||x.address||'imóvel')+(souDono(x.id)?' · '+pct(shareOf(x,p.id),0):'')).join('<br>')}:null,
     /* o saldo só sem filtro de proprietário ligado: com ele, o ownerBalances
@@ -64,9 +64,9 @@ function personFicha(kind,id){
     /* «Vai morar em», e não «Contratos anteriores» a dizer «terminou a
        2031-01-01» — uma data no futuro dada como o dia em que acabou */
     kind==='tenant'&&futuros.length?{tipo:'bloco',rotulo:'Vai morar em',
-      valor:futuros.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.start?' · a partir de '+esc(c.start):'')).join('<br>')}:null,
+      valor:futuros.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.start?' · a partir de '+dPT(c.start):'')).join('<br>')}:null,
     kind==='tenant'&&findos.length?{tipo:'bloco',rotulo:'Contratos anteriores',
-      valor:findos.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.end?' · terminou a '+esc(c.end):'')).join('<br>')}:null,
+      valor:findos.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.end?' · terminou a '+dPT(c.end):'')).join('<br>')}:null,
     /* os anexos de um inquilino pedem tenant.view E file.view no servidor:
        listar os nomes sem ambas dava linhas que rebentam ao toque */
     kind==='tenant'&&verPessoa&&pode(casa,'file.view')&&(p.files||[]).length?{tipo:'bloco',rotulo:'Documentos',
@@ -133,16 +133,17 @@ function personModal(kind,id,after,houseId){
     houseId=cs[0].id;
   }
   foldState={};
+  /* Quem não pode alterar a ficha de um inquilino recebe a FICHA de leitura,
+     e não este formulário com os campos apagados. */
+  const _p=id?((kind==='owner'?db.owners:db.tenants)||[]).find(x=>x.id===id):null;
+  if(kind==='tenant'&&_p&&!podeEditarInquilino(_p))return personView(kind,id);
   perKind=kind;perAfter=after||null;
   const listOf=kind==='owner'?db.owners:db.tenants,orig=id?listOf.find(x=>x.id===id):null;
   perForm=normPerson(orig?JSON.parse(JSON.stringify(orig)):null);
   if(!orig&&houseId&&kind==='tenant')perForm.houseId=houseId;
   const word=kind==='owner'?'proprietário':'inquilino';
-  /* a ficha de um inquilino de um imóvel onde só colaboro abre em leitura sem «Adicionar inquilinos» */
-  const soLer=kind==='tenant'&&!!orig&&!podeEditarInquilino(orig);
-  const m=id&&!soLer?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${kind}','${id}')`}]):'';
-  openModal((id?(soLer?'':'Editar '):'Novo ')+(soLer?'Ficha de '+word:word),personBody(),null,m);
-  if(soLer)return modalSoLeitura('Ficha de um imóvel onde colaboras — só de leitura.');
+  const m=id?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${kind}','${id}')`}]):'';
+  openModal((id?'Editar ':'Novo ')+word,personBody(),null,m);
   onSave=()=>{
     collectPerson();
     if(!perForm.name.trim())return toast('Escreve o nome.');

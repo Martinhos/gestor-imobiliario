@@ -10,6 +10,11 @@ let tForm={};
    Devolve: nada — abre o modal do movimento e prepara o guardar. */
 function txModal(id,kind,propId,_x,ctId,preset){
   foldState={};
+  /* Quem não pode alterar recebe a FICHA, e não este formulário com os campos
+     apagados. E antes do openModal: não se decora uma janela já aberta,
+     escolhe-se qual é a janela a abrir. */
+  const _t=id?(db.transactions||[]).find(x=>x.id===id):null;
+  if(_t&&!podeEditar(_t.propertyId,'tx.add',_t))return txView(id);
   /* sem imóvel escolhido: com um só imóvel onde posso adicionar fica esse; quem não
      é dono de nenhum não tem «Todos os imóveis» e fica com o primeiro permitido —
      senão o seletor mostrava o primeiro e o movimento gravava-se sem imóvel */
@@ -21,12 +26,9 @@ function txModal(id,kind,propId,_x,ctId,preset){
   tForm._edit=!!id;
   if(!id&&tForm.amount){tForm._aA=tForm.amount}
   prefill();
-  /* «Ver movimento»: o que não posso alterar num imóvel onde colaboro abre só de leitura */
-  const ok=!id||podeEditar(tForm.propertyId,'tx.add',db.transactions.find(x=>x.id===id));
-  const m=id&&ok?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${id}')`}]):'';
+  const m=id?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${id}')`}]):'';
   const nome=txTypeName(tForm.kind);
-  openModal(id?(ok?'Editar '+nome:nome.charAt(0).toUpperCase()+nome.slice(1)):txNewWord(tForm.kind)+nome,txBody(),null,m);
-  if(!ok){onSave=null;return modalSoLeitura('Movimento de um imóvel onde colaboras — só de leitura.')}
+  openModal(id?'Editar '+nome:txNewWord(tForm.kind)+nome,txBody(),null,m);
   tForm._saver=()=>{
     collectTx();
     /* a primeira barreira: o servidor recusaria na mesma, mas aqui diz-se porquê antes de gravar.
@@ -156,7 +158,7 @@ function txFicha(id){
     {tipo:'nota',valor:esc(motivoRecusa(t.propertyId,'tx.add',t))},
     {rotulo:'Montante',valor:`<span class="${K.color}">${K.sign}${euro2(t.amount)}</span>`},
     {rotulo:'Tipo',valor:esc(K.short)+(t.kind==='loan'?(t.payType==='amortizacao'?' · amortização':' · prestação'):'')},
-    {rotulo:'Data',valor:esc(t.date)},
+    {rotulo:'Data',valor:dPT(t.date)},
     {rotulo:'Imóvel',valor:t.propertyId?esc(propName(t.propertyId)):(t.groupId?esc('Grupo '+((grp(t.groupId)||{}).name||'')):'Todos os imóveis')},
     ct&&pode(t.propertyId,'contract.view')?{rotulo:'Contrato',valor:esc(ctName(ct))}:null,
     t.kind==='settle'?{rotulo:'Transferência',valor:nome(t.paidBy)+' → '+nome(t.toId)}:null,
@@ -263,7 +265,7 @@ function txBody(){
         <button type="button" class="btn sm primary" id="amt_reset" style="flex:0 0 auto;padding:9px 12px;display:${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':'none'}" title="Repor a prestação calculada" data-toca="rascunho" onclick="onAmtReset()">Repor</button></div></label>
       ${(t._recId||t._recNew)?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}"></label>`}</div>
     <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),(podeSemImovel()?[{v:'',label:'Todos os imóveis'}]:[]).concat(propOptsPara((t._recId||t._recNew)?'rec.add':'tx.add',t.propertyId)).concat(podeSemImovel()?gdiv(gOpts('prop')):[]),'onPropChange','rascunho')}</label>
-    ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+c.start:'')}))),'onCtChange','rascunho')}</label>`:''}
+    ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+dPT(c.start):'')}))),'onCtChange','rascunho')}</label>`:''}
     ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange','rascunho')}</label>`:''}
     ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'}<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Pai, amigo, empreiteiro…" autocomplete="off" list="creditorList" oninput="refreshCredHint()">
         <datalist id="creditorList">${knownCreditors().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>

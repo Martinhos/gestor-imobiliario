@@ -81,7 +81,7 @@ function openFileMeta(meta){
     if(isImg(meta.type)){
       const url=URL.createObjectURL(blob);
       openModal(meta.name||'Imagem',`<div class="form"><img src="${url}" alt="" style="width:100%;border-radius:12px">
-        <div class="hint">${kb(meta.size)}${meta.added?' · '+meta.added:''}</div></div>`,
+        <div class="hint">${kb(meta.size)}${meta.added?' · '+dPT(meta.added):''}</div></div>`,
         `<button class="btn" onclick="closeModal()">Voltar</button><button class="btn primary" onclick="downloadMeta('${meta.id}')">Guardar</button>`);
     }else downloadMeta(meta.id);
   }).catch(()=>toast('Não foi possível abrir o anexo.'));

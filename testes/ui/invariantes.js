@@ -421,6 +421,31 @@ function dentroDaPagina() {
     }
   });
 
+  /* Nenhuma data ISO no que se le.
+
+     As datas que uma pessoa le escrevem-se como se escrevem em Portugal
+     (auxiliares.js:dPT): 15/03/2028. O ISO fica onde e DADO — na base, nos
+     <input type=date>, nas comparacoes, nas chaves e no que sai para o
+     servidor —, e por isso esta regra olha so para o TEXTO visivel, nunca
+     para atributos nem para valores de campos.
+
+     Sem ela a mudanca ficava a meio: uma data em ISO volta ao ecra na
+     proxima funcao que alguem escrever, e ninguem da por isso, porque um
+     2028-03-15 no meio de uma lista nao parece um defeito — parece uma data. */
+  const ISO = /(^|[^\d])\d{4}-\d{2}-\d{2}([^\d]|$)/;
+  const comIso = [...document.querySelectorAll('#view *,.modal.open *')]
+    .filter((e) => e.children.length === 0 && (e.offsetParent || e.ownerSVGElement))
+    /* o valor de um campo nao e texto lido: o browser mostra-o na forma local */
+    .filter((e) => !/^(INPUT|TEXTAREA|SELECT|OPTION)$/.test(e.tagName))
+    .filter((e) => ISO.test(e.textContent || ''));
+  medidas.datasIso = comIso.length;
+  if (comIso.length) {
+    const ex = comIso[0];
+    falhar('as datas leem-se como em Portugal',
+      comIso.length + ' com data ISO no ecra - ex.: ' +
+      (ex.textContent || '').trim().slice(0, 60));
+  }
+
   /* 7. Texto que sai da sua caixa — normalmente uma coluna estreita demais. */
   const rebentam = [...document.querySelectorAll('#view *')]
     .filter((e) => e.children.length === 0 && e.textContent.trim())

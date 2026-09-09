@@ -169,7 +169,7 @@ function mortFicha(pid,lid){
       valor:'capital '+euro2(c.principal)+' · juros '+euro2(c.interest)+(l.stampTax===false?'':' · selo '+euro2(c.stamp))}:null,
     depois?{rotulo:'Depois da fase fixa',valor:euro2(depois.pay+depois.st)}:null,
     {rotulo:'Taxa',valor:esc(rateLabel(l))},
-    l.start?{rotulo:'Início',valor:esc(l.start)}:null,
+    l.start?{rotulo:'Início',valor:dPT(l.start)}:null,
     Number(l.years)>0?{rotulo:'Prazo',valor:l.years+(Number(l.years)===1?' ano':' anos')}:null,
     a?{rotulo:'Juros até ao fim',valor:euro(a.totInt+a.totStamp)}:null,
     l.stampTax===false?{tipo:'nota',valor:'Sem imposto do selo.'}:null,

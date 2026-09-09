@@ -35,7 +35,7 @@ function ctFicha(id){
        num contrato que começa em 2028, é uma afirmação falsa sobre um
        documento legal, no ecrã onde a pessoa a foi confirmar */
     {rotulo:'Estado',valor:ctEstado(c)==='ativo'?'Em vigor'
-      :(ctEstado(c)==='futuro'?'Por começar'+(c.start?' · a '+esc(c.start):''):'Terminado')},
+      :(ctEstado(c)==='futuro'?'Por começar'+(c.start?' · a '+dPT(c.start):''):'Terminado')},
     /* só quando o imóvel existe mesmo: sem ele o ctLabel escreve «?», e um
        ponto de interrogação numa ficha é pior do que a linha não estar lá */
     p?{rotulo:'Imóvel',valor:esc(ctLabel(c))}:null,
@@ -48,15 +48,15 @@ function ctFicha(id){
     c.rent>0?{rotulo:'Imposto sobre a renda',valor:dec(taxRateOf(c))+'%'+(Number(c.taxRate)>0?'':' (estimado pela duração)')}:null,
     c.rent>0?{rotulo:'Renda líquida',valor:euroS(netRent(c))}:null,
     c.payDay?{rotulo:'Renda paga',valor:(c.payDayTo&&c.payDayTo>c.payDay)?('entre o dia '+c.payDay+' e o dia '+c.payDayTo):('no dia '+c.payDay)}:null,
-    isActive(c)&&rec&&rec.next&&pode(pid,'rec.view')?{rotulo:'Próxima renda',valor:esc(rec.next)}:null,
-    c.start?{rotulo:'Início',valor:esc(c.start)}:null,
+    isActive(c)&&rec&&rec.next&&pode(pid,'rec.view')?{rotulo:'Próxima renda',valor:dPT(rec.next)}:null,
+    c.start?{rotulo:'Início',valor:dPT(c.start)}:null,
     /* a contagem só quando já é acionável, senão é decoração */
-    c.end?{rotulo:'Fim',valor:esc(c.end)+(dias>=0&&dias<=180?' · faltam '+dias+' dias':'')}:null,
+    c.end?{rotulo:'Fim',valor:dPT(c.end)+(dias>=0&&dias<=180?' · faltam '+dias+' dias':'')}:null,
     /* o prazo que custa um ano de contrato se passar: a app já o calcula nos
        prazos, e a ficha di-lo onde a pessoa está mesmo a olhar */
     isActive(c)&&c.end&&dias>=0&&dias<=150?{tipo:'nota',
-      valor:'Para o contrato não renovar a '+esc(c.end)+', o aviso ao inquilino tem de seguir até <b>'+esc(pzAddDias(c.end,-120))+'</b> (120 dias).'}:null,
-    c.increase!=null&&c.increase!==''?{rotulo:'Aumento anual',valor:dec(c.increase)+'%'+(c.start?' · próximo a '+esc(pzAniversario(c.start)):'')}:null,
+      valor:'Para o contrato não renovar a '+dPT(c.end)+', o aviso ao inquilino tem de seguir até <b>'+dPT(pzAddDias(c.end,-120))+'</b> (120 dias).'}:null,
+    c.increase!=null&&c.increase!==''?{rotulo:'Aumento anual',valor:dec(c.increase)+'%'+(c.start?' · próximo a '+dPT(pzAniversario(c.start)):'')}:null,
     c.deposit>0?{rotulo:'Caução',valor:euroS(c.deposit)}:null,
     c.advance>0?{rotulo:'Rendas antecipadas',valor:c.advance+(Number(c.advance)===1?' mês':' meses')}:null,
     c.iban?{rotulo:'IBAN',valor:esc(fmtIBAN(c.iban))}:null,
@@ -71,7 +71,7 @@ function ctFicha(id){
     pode(pid,'file.view')&&(c.files||[]).length?{tipo:'bloco',rotulo:'Anexos',
       valor:(c.files||[]).map(f=>`<span role="button" tabindex="0" data-toca="camada" style="cursor:pointer;text-decoration:underline" onclick="openMeta('${jsq(f.id)}')">${esc(f.name||'ficheiro')}</span>`).join('<br>')}:null,
     /* a pergunta a seguir a «quanto paga» é «já pagou» */
-    pode(pid,'tx.view')&&rendas.length?{rotulo:'Rendas registadas',valor:rendas.length+(ultima?' · última a '+esc(ultima):'')}:null,
+    pode(pid,'tx.view')&&rendas.length?{rotulo:'Rendas registadas',valor:rendas.length+(ultima?' · última a '+dPT(ultima):'')}:null,
     String(c.notes||'').trim()?{tipo:'bloco',rotulo:'Notas',valor:rich(c.notes)}:null,
   ]);
 }
@@ -116,6 +116,11 @@ function ctView(id){
    Devolve: nada — abre o modal do contrato. */
 function ctModal(id,pid){
   foldState={};
+  /* Quem não pode alterar recebe a FICHA, e não este formulário com os campos
+     apagados. E antes do openModal: não se decora uma janela já aberta,
+     escolhe-se qual é a janela a abrir. */
+  const _c=id?contract(id):null;
+  if(_c&&!podeEditar(_c.propertyId,'contract.add',_c))return ctView(id);
   if(!db.properties.length)return toast('Cria primeiro um imóvel.');
   /* só onde posso adicionar contratos: os meus imóveis e os de colaboração com o cargo certo */
   const rentables=casasComo('contract.add').filter(p=>p.use==='investimento');
@@ -126,11 +131,8 @@ function ctModal(id,pid){
   const m=id?menu('ct',[{label:'Gerar contrato em PDF',icon:'pen',act:`generateContractPdf('${id}')`}].concat(ok?[
     ctEstado(cForm)!=='terminado'?{label:'Terminar contrato',icon:'x',act:`endContract('${id}')`}:{label:'Reativar contrato',icon:'check',act:`reactivateContract('${id}')`},
     {label:'Apagar contrato',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delContract('${id}')`}]:[])):'';
-  openModal(id?(ok?'Editar contrato':'Contrato'):'Novo contrato',ctBody(),null,m);
+  openModal(id?'Editar contrato':'Novo contrato',ctBody(),null,m);
   const p=prop(cForm.propertyId);if(p)paintThumbs(p.photos);
-  /* «Ver contrato»: um contrato de um imóvel onde colaboro que não posso alterar
-     abre só de leitura — o rótulo diz ver, o ecrã não pode dizer editar */
-  if(id&&!ok){onSave=null;return modalSoLeitura('Contrato de um imóvel onde colaboras — só de leitura.')}
   onSave=ctSaver();
 }
 /* Os movimentos confirmados que caem FORA das datas do contrato.
@@ -156,7 +158,7 @@ function verMovimentosFora(id){
   if(!fora.length)return;
   pickModal('Fora das datas do contrato',fora.map(t=>({v:t.id,
     label:(t.label||'Movimento')+' · '+euro2(t.amount),
-    sub:t.date+' · '+(c.start&&t.date<c.start?'antes do início ('+c.start+')':'depois do fim ('+c.end+')'),
+    sub:dPT(t.date)+' · '+(c.start&&t.date<c.start?'antes do início ('+dPT(c.start)+')':'depois do fim ('+dPT(c.end)+')'),
     icon:'swap'})),o=>{closeModal();txView(o.v)},
     `<div class="hint" style="margin-top:12px">As datas destes movimentos não se mexem: dizem quando o dinheiro entrou. Abre cada um para corrigir o que for preciso.</div>`);
 }
@@ -224,7 +226,7 @@ function ctBody(){
       <label>Rendas antecipadas (meses)<input id="c_adv" type="text" inputmode="numeric" value="${c.advance||''}" placeholder="0"></label></div>
     <div class="hint" style="margin-top:-6px">A renda cria um movimento recorrente todos os meses. Com rendas antecipadas, arranca depois dos meses pagos à cabeça.</div>
     <label>IBAN para pagamento das rendas<input id="c_iban" value="${esc(c.iban)}" placeholder="PT50 0000 0000 0000 0000 0000 0" autocomplete="off"></label>`,
-      {icon:'contract',open:false,summary:[c.start?'de '+c.start:'',c.end?'a '+c.end:'',c.deposit?'caução '+euro(c.deposit):''].filter(Boolean).join(' ')})}
+      {icon:'contract',open:false,summary:[c.start?'de '+dPT(c.start):'',c.end?'a '+dPT(c.end):'',c.deposit?'caução '+euro(c.deposit):''].filter(Boolean).join(' ')})}
     ${fold('contacts','Contactos',contactSect('owner',c,p)+contactSect('tenant',c,p),{icon:'users',summary:[c.ownerPhone||c.ownerEmail?'senhorio':'',c.tenantPhone||c.tenantEmail?'inquilino':''].filter(Boolean).join(' · ')})}
     ${fold('inv','Inventário',`
       ${inv.length?`<div class="form" style="gap:7px">
@@ -380,7 +382,6 @@ function onTenantContact(){
 // Recebe: fid — id da foto (uma das fotos do imóvel).
 // Devolve: nada — repinta o formulário.
 function togCtPhoto(fid){
-  if((modalTop()||{}).soLeitura)return;   /* a miniatura é um div: o modo de leitura não a desativa */
   collectCt();
   const l=cForm.photoIds||(cForm.photoIds=[]),i=l.indexOf(fid);
   if(i>-1)l.splice(i,1);else l.push(fid);
