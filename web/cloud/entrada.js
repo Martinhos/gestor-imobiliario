@@ -183,6 +183,11 @@ function finishLogin(u) {
     // dados locais de outra conta: não misturar
     db = JSON.parse(JSON.stringify(blank));
     rawSet(KEY, JSON.stringify(db));
+    /* e o retrato vai atrás. Ele é por utilizador e sobrevive a uma saída, por
+       isso quem já usou este aparelho tem cá o retrato completo da conta — com
+       o db em branco, o push lia a diferença como «apagou tudo». O travão do
+       pushNow chega, mas sem retrato não há sequer o que comparar. */
+    try { snap = {}; localStorage.removeItem(snapKey()); } catch (e) {}
   }
   /* O CW.state não está guardado no aparelho, mas sobrevive a uma troca de
      conta na mesma página: sem isto, quem entrava a seguir via os cargos, os
