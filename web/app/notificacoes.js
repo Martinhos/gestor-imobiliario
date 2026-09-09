@@ -75,14 +75,9 @@ function notifConta(){
 function notifSino(){
   const b=document.getElementById('hdrBell');if(!b)return;
   if(tab!=='dashboard'){b.style.display='none';return}
-  /* O crachá espera por saber. Parte da conta vem do aparelho e parte do
-     servidor: ao abrir, a app pinta com o que tem em casa, e se esses
-     planeados já foram confirmados noutro lado o sino anuncia um atraso que
-     já não existe — e corrige-se um segundo depois. Um número errado durante
-     um segundo é pior do que nenhum. A marca já existia: o CW._pulled diz
-     «já falámos com o servidor». Sem nuvem, não há nada por que esperar. */
-  const sabemos=!window.CW||CW._pulled;
-  const n=sabemos?notifConta():0;
+  /* O crachá espera por saber (auxiliares.js:sabemosOEstado): um número
+     errado durante um segundo é pior do que nenhum. */
+  const n=sabemosOEstado()?notifConta():0;
   b.style.display='';
   b.innerHTML=ic('bell',16)+(n?`<span class="cnt${cntNovo('sino',n)}">${n>9?'9+':n}</span>`:'');
 }
