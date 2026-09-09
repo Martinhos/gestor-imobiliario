@@ -589,7 +589,16 @@ textarea{min-height:90px;resize:vertical}
 /* height em dvh: com as barras do browser à mostra, o inset:0 dava a altura
    do ecrã SEM elas, e o modal ficava centrado num espaço maior do que o
    visível — o topo saía por cima e não havia como lá chegar. */
-.modal{position:fixed;inset:0;height:100dvh;z-index:60;display:none}
+/* A ESCADA: o modal está acima de TUDO o que é navegação — do menu lateral
+   (aside, 62) e do véu da gaveta (scrim, 61). Esteve abaixo, em 60, e em ecrã
+   largo, onde o menu é permanente, isso cortava os modais ao meio: o título
+   não se lia. Pior, o véu do modal (inset:0) ficava por baixo do menu, que
+   assim não escurecia e continuava clicável — dava para navegar para outro
+   ecrã com um formulário aberto.
+   Um modal é um MODO: enquanto está aberto, o resto da app está suspenso, e
+   tem de o parecer. Acima ficam só o toast (90) e o balão (95), que são avisos
+   e leituras — nunca escondem nada com que se possa interagir. */
+.modal{position:fixed;inset:0;height:100dvh;z-index:70;display:none}
 .modal.open{display:block}
 .modal.under .sheet{pointer-events:none}
 .modal.under .bg{background:rgba(6,12,9,.35)}

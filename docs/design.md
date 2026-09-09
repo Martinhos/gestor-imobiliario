@@ -994,6 +994,31 @@ que sobe para o servidor. O que já está escrito nas fichas antigas fica como
 estava; só o que se escreve de agora em diante leva a forma nova. É o preço
 de escrever a data dentro de uma frase em vez de a guardar num campo.
 
+## Um modal está acima de toda a navegação
+
+Os modais apareciam **por trás do menu lateral**. Em ecrã largo, onde o menu é
+permanente, o título ficava cortado e metade do conteúdo escondido.
+
+A escada estava invertida: `.modal` em 60, o véu da gaveta (`.scrim`) em 61 e o
+`aside` em 62. E como o véu do modal é `inset:0`, ele também ficava por baixo
+do menu — que assim **não escurecia e continuava clicável**. Dava para navegar
+para outro ecrã com um formulário aberto.
+
+O modal sobe para 70. Um modal é um MODO: enquanto está aberto, o resto da app
+está suspenso e tem de o parecer. Acima dele ficam só o aviso (90) e o balão
+(95), que não escondem nada com que se possa interagir.
+
+**Centrado no ecrã, e não na área que sobra do menu.** A alternativa foi
+considerada e não vale: a largura do menu muda (`--rail` e `--rail-min`),
+portanto um modal centrado no que sobra saltaria de sítio quando o menu
+encolhesse; no telemóvel não há menu nenhum, o que daria duas regras onde basta
+uma; e deixar a navegação à vista e por iluminar, ao lado de um modal aberto,
+convida a cliques que ou não fazem nada ou levam a pessoa para fora do que
+estava a fazer.
+
+Era invisível no telemóvel, onde a gaveta está fora do ecrã — por isso durou.
+Fica um teste sobre a escada inteira.
+
 ## Um carregamento não pode misturar versões
 
 A v31 chegou a produção e a app **não arrancava**: `ReferenceError` em cadeia —
