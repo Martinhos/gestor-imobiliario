@@ -77,6 +77,12 @@ function passProblem(p) {
    (opcional) — verdadeiro para a mostrar como nota e não como erro.
    Devolve: nada — redesenha o ecrã de entrada. */
 function showAuth(msg, nota) {
+  /* «Criar conta» na página de entrada traz ?criar=1: sem isto, esse botão e o
+     «Já tenho conta» iam ao mesmo ecrã e a escolha era um adorno. Só vale à
+     primeira — a partir daí manda o que a pessoa escolher nos separadores. */
+  if (!CW.showAuthMode) {
+    try { if (/[?&]criar=1\b/.test(location.search)) CW.showAuthMode = 'register'; } catch (e) {}
+  }
   CW.showAuthMode = CW.showAuthMode || 'login';
   // quem chegou por uma ligação e ainda não entrou vê sempre o porquê
   if (!msg && CW._chegadaMsg) { msg = CW._chegadaMsg; nota = true; }
