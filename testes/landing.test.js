@@ -80,6 +80,15 @@ describe('a página de entrada', () => {
 
   /* A decisão de setembro de 2026: deixou de haver planos. A página diz-o, e
      este teste existe para ninguém a deixar a prometer o contrário. */
+  /* O rodapé dizia «Termos e privacidade: dentro da app». Quem quer saber a
+     quem entrega os dados dos inquilinos faz a pergunta antes de criar conta —
+     agora há para onde apontar (worker/src/legal-vista.js). */
+  test('o rodapé leva aos documentos, em vez de dizer onde eles estão', () => {
+    assert.match(html, /href="\/termos"/, 'os Termos');
+    assert.match(html, /href="\/privacidade"/, 'a Privacidade');
+    assert.ok(!/dentro da app, em Definições/.test(html), 'já não manda procurar');
+  });
+
   test('diz que é grátis e sem planos', () => {
     assert.match(html, /sem planos/i);
     assert.ok(!/plano (plus|pro)|subscri|mensalidade|€\s*\/\s*m[êe]s/i.test(html),

@@ -267,8 +267,9 @@ footer a:hover{color:var(--ink)}
 
   <footer>
     <span>© ${new Date().getFullYear()} Rendorium</span>
+    <a href="/termos">Termos e Condições</a>
+    <a href="/privacidade">Política de Privacidade</a>
     <a href="${APP}">Abrir a app</a>
-    <span>Termos e privacidade: dentro da app, em Definições → Aviso legal</span>
   </footer>
 </div>
 </body></html>`;
