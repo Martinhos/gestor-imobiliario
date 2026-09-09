@@ -110,9 +110,13 @@ describe('o service worker', () => {
   /* A v31 partiu em produção com ReferenceError em cadeia — LS_SESSAO, CW,
      ic, go — porque este ficheiro deixava uma página carregar metade de cada
      versão. Duas causas, as duas aqui guardadas. */
-  test('não troca de versão a meio de um carregamento', () => {
-    assert.doesNotMatch(sw, /self\.skipWaiting\(\)/,
-      'o worker novo espera: com skipWaiting assumia o controlo a meio da página');
+  test('em produção não troca de versão a meio de um carregamento', () => {
+    // sem os comentários: eles falam do skipWaiting para explicar porque não se usa
+    const codigo = sw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const linhas = codigo.split('\n').filter((l) => l.includes('skipWaiting'));
+    assert.equal(linhas.length, 1, 'há um só skipWaiting em todo o worker');
+    assert.match(linhas[0], /!GUARDA/,
+      'e só fora de produção, onde não há cache a proteger — em produção o worker novo espera');
   });
 
   test('a alternativa à rede é só da cache desta versão', () => {
@@ -120,6 +124,30 @@ describe('o service worker', () => {
       'o caches.match sem cacheName procura em TODAS as caches, incluindo a da versão anterior');
     assert.match(sw, /caches\.open\(CACHE\)[\s\S]{0,80}?\.match\(/,
       'serve-se da cache desta versão, e só dela');
+  });
+
+  /* A cache leva o nome da VERSÃO, e fora de produção a versão não muda entre
+     publicações — o dev publica dezenas de vezes com a mesma. Com a cache a
+     responder primeiro, o ambiente congelava no primeiro carregamento dessa
+     versão, e atualizar a página não adiantava. */
+  test('só produção guarda; o resto vai à rede', () => {
+    assert.match(sw, /const GUARDA = self\.location\.hostname === 'app\.rendorium\.com'/,
+      'quem guarda é só produção');
+    assert.match(sw, /if \(!GUARDA \|\| VER == null\) return;/,
+      'fora dela o fetch não toca na cache');
+  });
+
+  /* E a transição tem de se desenrascar: quem já tem uma cache de uma
+     publicação anterior não tinha como sair dela — o worker novo esperava, e o
+     antigo continuava a servir o que estava guardado. */
+  test('fora de produção assume já e limpa o que estava guardado', () => {
+    const inst = sw.slice(sw.indexOf("addEventListener('install'"), sw.indexOf("addEventListener('activate'"));
+    assert.match(inst, /if \(!GUARDA\) \{ self\.skipWaiting\(\); return; \}/,
+      'assume já: não há cache a proteger, logo não há carregamento a partir');
+    const act = sw.slice(sw.indexOf("addEventListener('activate'"), sw.indexOf("addEventListener('fetch'"));
+    const forcaDeProd = act.slice(act.indexOf('if (!GUARDA)'), act.indexOf('if (VER == null)'));
+    assert.match(forcaDeProd, /keys\.map\(\(k\) => caches\.delete\(k\)\)/,
+      'apaga TODAS as caches, e não só as de outras versões');
   });
 
   test('sem versão não guarda nem apaga nada', () => {

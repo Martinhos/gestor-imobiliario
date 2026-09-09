@@ -1091,8 +1091,29 @@ recarregou, e a app arrancou.
 
 Uma consequência a registar: com cache primeiro, um servidor local serviria
 ficheiros velhos até a versão mudar. O service worker deixa de se registar em
-`localhost` — localhost não é uma publicação. No dev fica, que é onde as
-travessias entre versões a sério se exercitam antes de irem para produção.
+`localhost` — localhost não é uma publicação.
+
+### E a mesma consequência apanhou o dev — só produção guarda
+
+Ficou escrito aqui que o dev mantinha a cache «que é onde as travessias entre
+versões a sério se exercitam». **O raciocínio estava errado**, e custou um dia
+de trabalho invisível: as travessias acontecem quando a VERSÃO muda, e no dev
+ela não muda — publica-se dezenas de vezes com a mesma. A cache chama-se pela
+versão, portanto nunca rodava, e o ambiente congelava no primeiro carregamento
+dessa versão. Publicava-se, atualizava-se a página, e não acontecia nada: a
+cache respondia antes da rede.
+
+Agora só `app.rendorium.com` guarda. Fora de produção o worker existe — o PWA
+instala-se, o manifesto vale — mas deixa passar tudo à rede: sempre fresco, e
+sem poder misturar versões porque não guarda nenhuma. O caminho da cache
+exercita-se onde importa, que é onde há utilizadores e onde a versão sobe a
+cada publicação.
+
+E a transição desenrasca-se sozinha: fora de produção o worker novo assume já
+(`skipWaiting`, seguro aqui porque não há cache a proteger) e apaga **todas** as
+caches no `activate`. Quem ficou preso numa publicação anterior sai na primeira
+navegação, sem ter de limpar nada à mão. Medido: duas caches com ficheiros
+envenenados, uma navegação, e ficam zero.
 
 ## Ver a montra antes de a publicar
 
