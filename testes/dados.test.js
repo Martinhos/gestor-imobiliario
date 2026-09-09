@@ -205,6 +205,71 @@ describe('um contrato que ainda não começou', () => {
     assert.equal(app.ctVivo(fut), true, 'mas ainda não acabou: continua a haver o que planear');
   });
 
+  /* Uma recorrência é um CURSOR, não um histórico: guarda uma data só. Quem
+     guarda o que já aconteceu são os movimentos, registos próprios. Por isso
+     o cursor pode andar nos dois sentidos — o que ele não pode é passar por
+     cima de um mês que já tem movimento deste contrato. */
+  test('o cursor da renda acompanha o contrato nos dois sentidos, sem passar por cima do que já foi lançado', () => {
+    app.db.recurring = [];
+    app.db.properties = [app.normProp({ id: 'casa', name: 'Casa' })];
+    const c = app.normContract({ id: 'C1', propertyId: 'casa', rent: 800, payDay: 5, start: (ano - 1) + '-01-01' });
+    app.db.contracts = [c];
+    app.db.transactions = [];
+    app.syncContractRec(c);
+    const cursor = () => (app.ctRecOf(c) || {}).next;
+    assert.equal(cursor(), (ano - 1) + '-01-05');
+
+    // três meses confirmados: são movimentos, com registo próprio
+    const rd = app.render, bn = app.buildNav, sv = app.save, ts = app.toast;
+    app.render = () => {}; app.buildNav = () => {}; app.save = () => {}; app.toast = () => {};
+    for (let i = 0; i < 3; i++) app.quickConfirmRec(app.ctRecOf(c).id);
+    app.render = rd; app.buildNav = bn; app.save = sv; app.toast = ts;
+    assert.equal(app.db.transactions.length, 3);
+    assert.equal(cursor(), (ano - 1) + '-04-05');
+
+    // o início vai por engano para daqui a uns anos: o cursor vai com ele
+    c.start = (ano + 2) + '-03-15';
+    app.syncContractRec(c);
+    assert.equal(cursor(), (ano + 2) + '-04-05', 'o dia 5 de março já passou quando começa a 15');
+    assert.equal(app.db.transactions.length, 3, 'as confirmadas não se mexem');
+
+    // e a correção: volta, mas PÁRA no primeiro mês por confirmar
+    c.start = (ano - 1) + '-01-01';
+    app.syncContractRec(c);
+    assert.equal(cursor(), (ano - 1) + '-04-05', 'não volta a janeiro: janeiro, fevereiro e março já têm movimento');
+    assert.equal(app.db.transactions.length, 3);
+  });
+
+  test('confirmar um mês que já tem movimento salta em vez de duplicar', () => {
+    app.db.recurring = [];
+    app.db.properties = [app.normProp({ id: 'casa', name: 'Casa' })];
+    const c = app.normContract({ id: 'C1', propertyId: 'casa', rent: 800, payDay: 5, start: (ano - 1) + '-01-01' });
+    app.db.contracts = [c];
+    // a renda de janeiro foi lançada à mão
+    app.db.transactions = [app.normTx({
+      id: 'M1', kind: 'income', label: 'Renda de janeiro', amount: 800,
+      date: (ano - 1) + '-01-20', propertyId: 'casa', contractId: 'C1',
+    })];
+    app.syncContractRec(c);
+    // o cursor nem sequer aterra em janeiro
+    assert.equal((app.ctRecOf(c) || {}).next, (ano - 1) + '-02-05');
+    assert.equal(app.db.transactions.length, 1, 'e nada foi criado a mais');
+  });
+
+  /* A data de um movimento é um FACTO: diz que o dinheiro entrou naquele dia.
+     Não se move com o contrato — a app aponta, e a pessoa decide. */
+  test('os movimentos fora das datas do contrato são apontados, dos dois lados', () => {
+    const c = app.normContract({ id: 'C1', propertyId: 'casa', rent: 800, start: ano + '-01-01', end: ano + '-01-31' });
+    app.db.contracts = [c];
+    app.db.transactions = [
+      app.normTx({ id: 'A', kind: 'income', amount: 800, date: (ano - 1) + '-12-20', propertyId: 'casa', contractId: 'C1' }),
+      app.normTx({ id: 'B', kind: 'income', amount: 800, date: ano + '-01-20', propertyId: 'casa', contractId: 'C1' }),
+      app.normTx({ id: 'C', kind: 'income', amount: 800, date: ano + '-03-20', propertyId: 'casa', contractId: 'C1' }),
+    ];
+    const fora = app.movimentosForaDoContrato(c);
+    assert.deepEqual(fora.map((t) => t.id), ['A', 'C'], 'o de dentro fica de fora da lista');
+  });
+
   test('a renda fica planeada, e para o mês e dia em que o contrato começa', () => {
     app.limparBase ? app.limparBase() : null;
     app.db.recurring = [];

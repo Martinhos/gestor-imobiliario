@@ -133,6 +133,33 @@ function ctModal(id,pid){
   if(id&&!ok){onSave=null;return modalSoLeitura('Contrato de um imóvel onde colaboras — só de leitura.')}
   onSave=ctSaver();
 }
+/* Os movimentos confirmados que caem FORA das datas do contrato.
+
+   De um lado e do outro: antes do início e depois do fim. São factos — o
+   dinheiro entrou naquele dia — e por isso não se mexem nem se movem com o
+   contrato; o que a app faz é dizer que deixaram de bater certo, para alguém
+   olhar para eles um a um.
+   Recebe: c — o contrato.
+   Devolve: os movimentos fora da janela, por ordem de data. */
+function movimentosForaDoContrato(c){
+  if(!c||!c.id)return [];
+  return (db.transactions||[]).filter(t=>t.contractId===c.id&&
+    ((c.start&&t.date<c.start)||(c.end&&t.date>c.end)))
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+}
+/* Mostra-os, um a um, para se poder abrir cada um e decidir.
+   Recebe: id — o id do contrato.
+   Devolve: nada — abre a lista de escolha. */
+function verMovimentosFora(id){
+  const c=contract(id);if(!c)return;
+  const fora=movimentosForaDoContrato(c);
+  if(!fora.length)return;
+  pickModal('Fora das datas do contrato',fora.map(t=>({v:t.id,
+    label:(t.label||'Movimento')+' · '+euro2(t.amount),
+    sub:t.date+' · '+(c.start&&t.date<c.start?'antes do início ('+c.start+')':'depois do fim ('+c.end+')'),
+    icon:'swap'})),o=>{closeModal();txView(o.v)},
+    `<div class="hint" style="margin-top:12px">As datas destes movimentos não se mexem: dizem quando o dinheiro entrou. Abre cada um para corrigir o que for preciso.</div>`);
+}
 /* Devolve o handler que o modal usa ao guardar: valida imóvel, renda,
    inquilinos e datas, insere ou substitui o contrato em db.contracts,
    sincroniza o movimento recorrente da renda e persiste tudo.
@@ -150,7 +177,16 @@ function ctSaver(){
     const i=db.contracts.findIndex(x=>x.id===cForm.id);
     if(i<0)db.contracts.push(cForm);else db.contracts[i]=cForm;
     syncContractRec(cForm);
-    save();closeModal();buildNav();render();toast('Contrato guardado.');
+    save();closeModal();buildNav();render();
+    /* O que é previsão acompanha o contrato; o que é FACTO fica onde está. A
+       data de um movimento diz que o dinheiro entrou naquele dia, e mudá-la
+       era dizer que entrou noutro — muda a receita do ano, o IRS, o cashflow
+       e as contas entre proprietários. A app aponta, e a pessoa decide. */
+    const fora=movimentosForaDoContrato(cForm);
+    if(fora.length)return toast(fora.length===1?'1 movimento deste contrato está fora das datas dele.'
+      :fora.length+' movimentos deste contrato estão fora das datas dele.',
+      {rotulo:'Ver',ms:9000,fn:()=>verMovimentosFora(cForm.id)});
+    toast('Contrato guardado.');
   };
 }
 // HTML do formulário do contrato, montado a partir de cForm. Só devolve a
