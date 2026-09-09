@@ -116,24 +116,31 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    /* O domínio raiz é a montra; a app vive em app.rendorium.com. Quem
-       chegar a rendorium.com vê a landing, e qualquer outro caminho na
-       raiz é reencaminhado para a app — os endereços antigos (workers.dev)
-       continuam a servir a app diretamente, porque as instalações feitas
-       lá não podem partir. */
-    if (url.hostname === 'rendorium.com' || url.hostname === 'www.rendorium.com') {
-      if (url.pathname === '/') {
-        const { paginaLanding } = await import('./landing.js');
-        return harden(paginaLanding());
-      }
-      /* Os documentos legais vivem aqui fora, e não só dentro da app: quem
-         quer saber a quem entrega os dados dos seus inquilinos faz essa
-         pergunta ANTES de criar conta, e não depois. */
-      const doc = url.pathname.replace(/^\/|\/$/g, '');
-      if (doc === 'termos' || doc === 'privacidade') {
-        const { paginaLegal } = await import('./legal-vista.js');
-        return harden(paginaLegal(doc));
-      }
+    const caminho = url.pathname.replace(/^\/|\/$/g, '');
+    const naRaiz = url.hostname === 'rendorium.com' || url.hostname === 'www.rendorium.com';
+
+    /* Os documentos legais respondem em QUALQUER endereço. São os mesmos
+       documentos em todo o lado, não colidem com nada (a app é uma página só,
+       sem rotas), e sem isto não havia como os ver sem ser em produção. */
+    if (caminho === 'termos' || caminho === 'privacidade') {
+      const { paginaLegal } = await import('./legal-vista.js');
+      return harden(paginaLegal(caminho, { raiz: naRaiz }));
+    }
+
+    /* A montra tem de poder ver-se ANTES de ser publicada. Fora do domínio
+       raiz é o /montra que a serve — a raiz do dev continua a ser a app, que é
+       para isso que esse ambiente serve. Em produção o /montra é só um atalho
+       para o que já está em «/». */
+    if (caminho === 'montra' || (naRaiz && url.pathname === '/')) {
+      const { paginaLanding } = await import('./landing.js');
+      return harden(paginaLanding({ raiz: naRaiz }));
+    }
+
+    /* O domínio raiz é a montra; a app vive em app.rendorium.com. Qualquer
+       outro caminho na raiz é reencaminhado para a app — os endereços antigos
+       (workers.dev) continuam a servir a app diretamente, porque as
+       instalações feitas lá não podem partir. */
+    if (naRaiz) {
       return Response.redirect('https://app.rendorium.com' + url.pathname + url.search, 302);
     }
 

@@ -52,18 +52,20 @@ const CAPACIDADES = [
     'Quem vem ver que imóvel, e quando. E um aviso antes de um contrato acabar, em vez de o descobrires tarde.'],
 ];
 
-// Constrói a página inteira (HTML e estilos inline) e devolve-a como Response
-// com uma hora de cache — a página muda quando se publica, não por pedido.
-// Devolve: uma Response HTML com a página completa e uma hora de cache.
-export function paginaLanding() {
-  const html = `<!doctype html>
-<html lang="pt"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
-<title>Rendorium — o teu portefólio de arrendamento, arrumado</title>
-<meta name="description" content="Imóveis, contratos, rendas, créditos e IRS num só sítio. Grátis, sem planos. Um projeto pessoal para senhorios portugueses.">
-<meta property="og:type" content="website">
+/* Constrói a página inteira (HTML e estilos inline) e devolve-a como Response
+   com uma hora de cache — a página muda quando se publica, não por pedido.
+
+   Fora do domínio raiz isto é uma pré-visualização (dev.rendorium.com/montra,
+   ou o servidor local): leva `noindex` e não declara canonical nem og. Duas
+   cópias da mesma página indexadas são uma a competir com a outra, e um og que
+   aponta para produção a partir de um sítio que não é produção mente a quem
+   partilhar a ligação.
+   Recebe: op — {raiz: true} quando isto está mesmo a ser servido em
+   rendorium.com; qualquer outra coisa vale pré-visualização.
+   Devolve: uma Response HTML com a página completa e uma hora de cache. */
+export function paginaLanding(op) {
+  const raiz = !!(op && op.raiz);
+  const cabecaRaiz = raiz ? `<meta property="og:type" content="website">
 <meta property="og:title" content="Rendorium — o teu portefólio de arrendamento, arrumado">
 <meta property="og:description" content="Imóveis, contratos, rendas, créditos e o IRS num só sítio. Grátis, sem planos e sem cartão.">
 <meta property="og:url" content="https://rendorium.com">
@@ -72,9 +74,18 @@ export function paginaLanding() {
 <meta property="og:image:height" content="630">
 <meta property="og:locale" content="pt_PT">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://rendorium.com">`
+    : '<meta name="robots" content="noindex,nofollow">';
+  const html = `<!doctype html>
+<html lang="pt"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Rendorium — o teu portefólio de arrendamento, arrumado</title>
+<meta name="description" content="Imóveis, contratos, rendas, créditos e IRS num só sítio. Grátis, sem planos. Um projeto pessoal para senhorios portugueses.">
+${cabecaRaiz}
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="canonical" href="https://rendorium.com">
 <style>
 :root{color-scheme:light dark;
   --bg:#f7f8fa;--card:#fff;--ink:#17221d;--muted:#5a635e;--line:#e7ebe8;

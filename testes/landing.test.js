@@ -15,7 +15,9 @@ import { paginaLanding } from '../worker/src/landing.js';
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const raiz = (p) => path.join(AQUI, '..', p);
 
-const resposta = paginaLanding();
+/* Em produção. Fora do domínio raiz a mesma função devolve uma
+   pré-visualização, com noindex e sem og — testado mais abaixo. */
+const resposta = paginaLanding({ raiz: true });
 const html = await resposta.text();
 
 describe('a página de entrada', () => {
