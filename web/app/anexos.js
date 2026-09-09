@@ -23,9 +23,17 @@ let idbPut=(id,blob)=>idb().then(d=>new Promise((res,rej)=>{
 let idbGet=id=>idb().then(d=>new Promise((res,rej)=>{
   const r=d.transaction('files','readonly').objectStore('files').get(id);
   r.onsuccess=()=>res(r.result||memFiles[id]);r.onerror=()=>rej(r.error)})).catch(()=>memFiles[id]);
-let idbDel=id=>{delete memFiles[id];return idb().then(d=>new Promise((res,rej)=>{
+/* Deitar fora o blob deste aparelho, e mais nada.
+
+   Distinto do idbDel de propósito: a nuvem embrulha o idbDel para mandar
+   também um DELETE ao servidor, porque «apagar o anexo» é apagá-lo em todo o
+   lado. Arrumar a despensa local é outra coisa, e não pode ter esse efeito.
+   Recebe: id — o id do anexo.
+   Devolve: promessa que resolve quando o blob sai deste aparelho. */
+const idbDelLocal=id=>{delete memFiles[id];return idb().then(d=>new Promise((res,rej)=>{
   const t=d.transaction('files','readwrite');t.objectStore('files').delete(id);
   t.oncomplete=()=>res();t.onerror=()=>rej(t.error)}))};
+let idbDel=id=>idbDelLocal(id);
 const pendingFiles={},thumbCache={};
 // Os metadados de todos os anexos referidos nos dados gravados: contratos, fotos e
 // hipotecas dos imóveis, documentos de pessoas. É a lista do que deve existir em disco.
@@ -42,12 +50,21 @@ function allFileMetas(){
 // formulários ainda abertos. Corre em fundo e falha em silêncio.
 // Devolve: nada — a limpeza segue em fundo.
 function cleanFiles(){
+  /* Espera por saber. Isto decide o que é órfão a partir do db, e no arranque
+     o db é o que está no aparelho: com uma conta partilhada, o armazenamento
+     cheio ou um estado do servidor ainda por chegar, «órfão» queria dizer
+     «ainda não sei que existe». A espera acaba sempre (auxiliares.js), por
+     isso isto não fica a tentar para sempre. */
+  if(!sabemosOEstado())return void setTimeout(cleanFiles,1500);
   idb().then(d=>{
     const r=d.transaction('files','readonly').objectStore('files').getAllKeys();
     r.onsuccess=()=>{
       const keep=Object.assign({},pendingFiles);
       allFileMetas().forEach(f=>keep[f.id]=1);
-      (r.result||[]).forEach(k=>{if(!keep[k])idbDel(k)});
+      /* e apaga SÓ daqui: o idbDel está embrulhado pela nuvem para mandar um
+         DELETE ao servidor, e uma arrumação local nunca deve destruir o
+         anexo dos outros aparelhos */
+      (r.result||[]).forEach(k=>{if(!keep[k])idbDelLocal(k)});
     };
   }).catch(()=>{});
 }

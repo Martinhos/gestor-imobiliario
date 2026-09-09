@@ -512,6 +512,11 @@ function pendBlock(list) {
 // Devolve: nada — pendura os blocos diretamente nos cartões do DOM.
 function decoratePending() {
   if (tab !== 'properties' && tab !== 'contracts') return;
+  /* Este é o pior dos três: além de afirmar «1 movimento por confirmar» a
+     partir do que está no aparelho, punha lá o botão de Confirmar. Confirmar
+     um fantasma criava a renda em duplicado — o rendaJaLancada não a via,
+     porque o movimento verdadeiro ainda não tinha chegado do servidor. */
+  if (!sabemosOEstado()) return;
   var pend = recActive();
   if (!pend.length) return;
   var pref = tab === 'properties' ? 'prop:' : 'ct:';

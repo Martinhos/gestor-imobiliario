@@ -1089,6 +1089,44 @@ guardado no aparelho, mas sobrevivia a uma troca de conta na mesma página, e
 quem entrava a seguir via os cargos, os colaboradores e as ligações de quem
 saiu até o primeiro estado chegar.
 
+## E o que a app FAZ antes de saber
+
+Calar o que a app afirma resolveu metade. A outra metade é o que ela **faz** a
+partir do mesmo estado pré-pull — e aí três coisas eram irreversíveis. Vieram
+todas de uma auditoria em paralelo, com cada achado posto à prova por dois
+céticos; sete sobreviveram, de dezasseis levantados.
+
+**O push apagava por diferença.** O retrato do servidor (`snap`) é por
+utilizador e **não** se apaga ao sair; o db é apagado no `finishLogin` quando
+quem entra é outra conta. Base vazia mais retrato cheio lê-se como «apagou
+tudo», e o `pushNow` gerava um `del` para cada chave. Bastava um `save()` na
+janela entre entrar e o estado chegar — o `notifPartilha` grava a marca de
+leitura logo na primeira contagem — para o envio partir. As remoções por
+diferença passam a esperar pelo primeiro estado (nucleo.js:pushNow); os `put`
+seguem, porque acrescentar não destrói nada. E o `finishLogin` larga também o
+retrato: sem retrato não há sequer diferença para ler.
+
+**Arrumar a despensa chegava à nuvem.** O `cleanFiles` decide o que é órfão a
+partir do db, e no arranque o db é o que está no aparelho. Pior: o `idbDel`
+está embrulhado pela nuvem para mandar um `DELETE /api/files/:id`, porque
+«apagar o anexo» é apagá-lo em todo o lado. Uma arrumação local podia assim
+destruir no servidor fotos, PDF de contratos e documentos de hipotecas que este
+aparelho ainda não sabia que existiam. Separaram-se as duas operações: o
+`idbDelLocal` deita fora o blob **daqui**, e é esse que a limpeza usa; e a
+limpeza espera por saber antes de decidir o que é lixo.
+
+**Os lembretes do telemóvel ficavam com a versão velha.** São agendados no
+arranque, e o `applyState` grava com `rawSet` — que não passa pelo `save()`,
+onde o `scheduleReminders` vive. Uma renda confirmada no computador continuava
+a tocar no telemóvel no dia certo. Passa a reagendar-se a seguir ao db novo.
+
+E dois ecrãs continuavam a afirmar o que o sino já calava: o cartão dos
+**Prazos** (um aviso silenciado noutro aparelho reaparecia, com selo vermelho)
+e o `decoratePending`, que escreve «1 movimento por confirmar» nos cartões dos
+contratos. Este último era o pior de todos: tinha lá o botão **Confirmar**, e
+confirmar um fantasma criava a renda em duplicado — o `rendaJaLancada` não via
+o movimento verdadeiro, porque ele ainda não tinha chegado.
+
 ## Os dados de exemplo, só onde fazem sentido
 
 Em produção não se carregam dados de exemplo: quem chega à app a sério deve

@@ -354,8 +354,17 @@ function pushNow() {
   /* o que vai subir agora e o que a pessoa tem por enviar: diz-se, em vez de
      ficar em silencio ate correr mal */
   if (ops.length) setSyncBadge('pend', ops.length);
+  /* As remoções por diferença esperam pelo primeiro estado. O retrato é por
+     utilizador e não se apaga ao sair; o db é apagado no finishLogin quando
+     quem entra é outra conta. Base vazia mais retrato cheio dava um «del»
+     para tudo o que a conta tem no servidor — e bastava um save() na janela
+     entre entrar e o estado chegar (o notifPartilha grava a marca de leitura
+     logo na primeira contagem) para o push partir. Os «put» seguem: o que
+     desapareceu espera pelo applyState, que refaz o retrato por inteiro. */
+  var sabeOServidor = !!CW._pulled;
   Object.keys(snap).forEach(function (k) {
     if (k in map) return;
+    if (!sabeOServidor) return;
     // o perfil nunca é apagado por diff (um restauro de cópia local não o traz)
     if (k === 'u:profile:main') { delete snap[k]; return; }
     var pk = parseKey(k);
@@ -674,6 +683,11 @@ function applyState(st) {
   saveSnap();
   try { localStorage.setItem(LS_OWNER, CW.user.id); } catch (e) {}
   rawSet(KEY, JSON.stringify(db));
+  /* os lembretes do telemóvel foram agendados no arranque, com o que estava
+     no aparelho: uma renda confirmada noutro lado ainda avisava no dia certo,
+     porque isto grava com rawSet e não com save(). Refazem-se com o estado
+     que acabou de chegar (é adiado 400 ms lá dentro, não custa nada). */
+  try { scheduleReminders(); } catch (e) {}
   applyLocalTheme(); buildNav(); render();
   setSyncBadge('ok');
   schedulePush(); // envia o que ainda faltar no servidor

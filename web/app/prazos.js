@@ -169,6 +169,9 @@ function pzToggle(){try{localStorage.setItem('gi_pz_shut',pzShut()?'0':'1')}catc
    pessoa, o imóvel) e um «Silenciar» com rede.
    Devolve: o HTML do cartão (texto), ou '' quando não há prazos na janela. */
 function prazosCard(){
+  /* o mesmo guarda do sino (auxiliares.js:sabemosOEstado): um prazo silenciado
+     noutro aparelho reaparecia aqui, com selo vermelho, até o estado chegar */
+  if(!sabemosOEstado())return '';
   const lista=prazosAtivos();
   if(!lista.length)return '';
   const stop='event.stopPropagation();';
