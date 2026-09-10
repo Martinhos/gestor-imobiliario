@@ -667,7 +667,12 @@ function hideAuth() {
    que muda é precisamente o /avisos.js que ele importa. Com o valor por
    omissão, a deteção da versão nova ficava a depender dos cabeçalhos de cache
    de um ficheiro. Uma palavra tira essa decisão do caminho. */
-if ('serviceWorker' in navigator && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
+/* E não se regista no domínio raiz. A app existe lá — só o «/» passa pelo
+   worker, portanto o rendorium.com/index.html e os /app/*.js vêm dos
+   ficheiros e o redirecionamento nunca corre —, mas o «/» dali é a montra, e
+   um service worker com âmbito «/» acabaria a servi-la da cache da app. */
+if ('serviceWorker' in navigator &&
+    !/^(localhost|127\.0\.0\.1|\[::1\]|(www\.)?rendorium\.com)$/.test(location.hostname)) {
   try { navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }); } catch (e) {}
 }
 

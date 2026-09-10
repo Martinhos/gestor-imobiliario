@@ -1197,6 +1197,75 @@ Uma nota sobre o registo: passou a `updateViaCache: 'none'`. O valor por omissã
 `/avisos.js` que ele importa. Detetar a versão nova ficava a depender dos
 cabeçalhos de cache de um ficheiro.
 
+### E a cache guardava coisas que não são a app
+
+A mesma auditoria trouxe um segundo grupo de achados, todos com a mesma raiz: a
+regra do `fetch` era uma **lista de exclusões** — guardava-se tudo o que não
+fosse `/api/`, `/versao.json` ou de outro método. O que passa por lá é mais do
+que parece, porque o Cache API **não lê `Cache-Control` nenhum**: um
+`no-store` do servidor não impede nada.
+
+O caso que dói: o back office `/equipa` responde no mesmo endereço da app e está
+dentro do âmbito do worker. A página do já autenticado sai com 200 e ia para a
+cache **com a sessão da equipa lá dentro**, para depois ser servida do disco sem
+o servidor ser consultado — e, quando a sessão expirasse, um ciclo de recargas.
+Ironicamente a página do não autenticado escapava por acaso, porque sai com 401.
+Pelo mesmo caminho entravam o `/termos`, o `/privacidade`, a montra e o APK, e
+nada tinha tecto: a cache crescia até a quota estoirar, que é exatamente onde o
+`install` do worker seguinte deixa de caber.
+
+Agora é uma **lista de permissão**: `SHELL.indexOf(url.pathname) < 0` e sai. A
+cache tem o tamanho que o `install` lhe deu e mais nada. Acrescentou-se também
+uma verificação de origem, que faltava — o filtro era só por caminho.
+
+E há um segundo defeito, este independente de tudo o resto e sem precisar de
+worker nenhum a trocar. O `Cache.match` compara o **URL inteiro, query
+incluída**, e a `SHELL` só tem `/` e `/index.html`. Qualquer aterragem com
+parâmetros — e são as ligações que o produto envia por email: `?entrar=`,
+`?repor=`, `?convite=`, `?ligar=`, `?criar=1` — falhava **sempre** na cache e ia
+buscar o `index.html` à rede, enquanto os `<script src>` que ele referencia,
+sendo caminhos sem query, acertavam na cache da versão antiga. Metade de cada
+versão na mesma página: a avaria da v31, por uma porta que ninguém tinha olhado.
+Bastava uma cache coerente e uma publicação pelo meio.
+
+A chave de uma navegação passa a ser sempre `/index.html`, seja qual for o
+endereço que a pessoa clicou. De caminho, deixam de ficar gravados em disco, como
+chaves de cache, endereços que levam segredos lá dentro — o contrário do que o
+resto do código faz de propósito (o `history.replaceState` que tira o token da
+barra, o `mascararTokens` dos relatos, o `Referrer-Policy: no-referrer`).
+
+Dois pormenores da mesma leva: guarda-se só `status === 200` (o `res.ok` abrange
+o 206, e uma resposta parcial guardada é uma resposta partida), e o falhanço do
+`put` passa a ser apanhado — ele comunica-o devolvendo uma promessa rejeitada, e
+o `try/catch` que lá estava não apanhava nada.
+
+### Dois hostnames que caíam do lado errado
+
+O `run_worker_first = ["/"]` faz com que só a raiz passe pelo worker: o
+`rendorium.com/index.html` e os `/app/*.js` são servidos direto dos ficheiros, e
+o redirecionamento para o `app.rendorium.com` nunca chega a correr para esses
+caminhos. Ou seja, **a app existe no domínio da montra** — e o domínio da montra
+não estava no `SEM_CACHE`. Um service worker com âmbito `/` acabaria a servir a
+montra da cache da app. Agora o apex e o `www` não guardam, e a app nem sequer
+regista lá o worker.
+
+O outro é o `hn.indexOf('gestor-imobiliario-dev.') !== 0`. Os endereços de
+pré-visualização de versão do Cloudflare levam o nome do worker **a seguir a um
+prefixo** (`<versão>-gestor-imobiliario-dev.…`), portanto o `indexOf` devolvia 9
+e eles caíam do lado de produção. Testa-se o nome como rótulo, e o teste corre a
+regra com os três casos — o endereço normal do dev, o de pré-visualização, e o
+de produção, que tem de continuar a guardar.
+
+### A lista SHELL, amarrada nos dois sentidos
+
+O CI já confirmava um dos sentidos, e só para os módulos: cada `web/app/*.js` e
+`web/cloud/*.js` tem de aparecer no `index.html` **e** no `sw.js`. Faltava o
+resto — o `avisos.js`, o `legal.js`, o manifesto, os ícones — e faltava o sentido
+contrário: uma entrada na `SHELL` que não corresponda a ficheiro nenhum rebenta
+o `addAll` **inteiro**, porque o `addAll` é tudo ou nada, e a cache fica vazia.
+Agora que a `SHELL` é também a lista de permissão do `fetch`, uma omissão passou
+a tirar um ficheiro da cache em silêncio — razão a mais para a prender.
+
 ## Ver a montra antes de a publicar
 
 A página de entrada só era servida no domínio raiz, portanto a única maneira de
