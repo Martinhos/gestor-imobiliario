@@ -57,7 +57,7 @@ const MAPA = [
       'web/avisos.js', 'web/legal.js'] },
   { id: 'pedidos', titulo: 'Pedidos de ajuda e erros',
     ficheiros: ['worker/src/rotas/tickets.js', 'worker/src/rotas/relatos.js',
-      'worker/src/lib/relatos.js', 'worker/src/notify.js', 'web/cloud/ajuda.js'] },
+      'worker/src/lib/relatos.js', 'worker/src/lib/medidas.js', 'worker/src/notify.js', 'web/cloud/ajuda.js'] },
   { id: 'correio', titulo: 'Correio (Resend e Email Routing)',
     ficheiros: ['worker/src/lib/correio.js', 'worker/src/lib/enderecos.js'] },
   { id: 'discord', titulo: 'Discord (bot e papéis)',

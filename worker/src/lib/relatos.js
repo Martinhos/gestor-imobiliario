@@ -3,6 +3,7 @@
 
 import { now } from './http.js';
 import { notifyDev, errorEmbed } from '../notify.js';
+import { medirRelato } from './medidas.js';
 
 /* Quantas pessoas distintas apanharam esta assinatura.
 
@@ -70,6 +71,7 @@ export async function recordReport(env, ctx, categoria, message, detail, userId,
      vai tudo já mascarado, e como objeto e não como texto: fica pesquisável
      por campo no painel, e o Discord continua a receber o embed. */
   console.error({ relato: categoria, msg: msg.slice(0, 300), contexto, versao, quem: userId || null });
+  medirRelato(env, categoria, fp);
   try {
     const ex = await env.DB.prepare('SELECT * FROM tickets WHERE fingerprint = ?').bind(fp).first();
     if (ex) {

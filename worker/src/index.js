@@ -3,6 +3,7 @@
 
 import { handleApi, recordReport } from './api.js';
 import { mascararTokens } from './lib/relatos.js';
+import { medirPedido, pulsar } from './lib/medidas.js';
 import { dailyReport, watchLimits } from './notify.js';
 import { copiar } from './salvaguarda.js';
 
@@ -75,6 +76,11 @@ export default {
         try {
           await watchLimits(env, ctx);
           await registarOp(env, 'vigia', true);
+          /* O batimento para fora, e só depois de a vigia ter corrido: o
+             alarme da casa é a ausência de linhas no op_log, mas quem deteta
+             a ausência é este cron. Se ele morrer, ninguém dá por isso — o
+             URL vive num segredo (HEARTBEAT_URL); sem ele, não bate. */
+          await pulsar(env.HEARTBEAT_URL);
         } catch (e) {
           await registarOp(env, 'vigia', false, String((e && e.message) || e));
           await recordReport(env, ctx, 'infra', 'Vigia dos limites falhou',
@@ -82,8 +88,10 @@ export default {
         }
         return;
       }
+      let copiaOk = false;
       try {
         const r = await copiar(env);
+        copiaOk = !r.erro;
         await registarOp(env, 'copia', !r.erro, JSON.stringify(r).slice(0, 490));
         if (r.erro) await recordReport(env, ctx, 'infra', 'Cópia de segurança falhou', r.erro);
       } catch (e) {
@@ -97,6 +105,8 @@ export default {
       try { entregue = await dailyReport(env, ctx); } catch (e) { entregue = false; }
       await registarOp(env, 'resumo', entregue !== false,
         entregue === null ? 'sem canal configurado' : null);
+      // o batimento do dia: só com a cópia feita E o resumo entregue
+      if (copiaOk && entregue !== false) await pulsar(env.HEARTBEAT_COPIA_URL);
     })());
   },
 
@@ -212,11 +222,15 @@ export default {
           headers: { 'Content-Type': 'application/json; charset=utf-8' },
         });
       }
+      const t0 = Date.now();
       try {
         const res = await handleApi(request, env, ctx);
         res.headers.set('Cache-Control', 'no-store');
+        // um ponto por pedido: rota genérica, estado, duração — nunca o caminho tal e qual
+        medirPedido(env, request.method, url.pathname, res.status, Date.now() - t0);
         return harden(res);
       } catch (e) {
+        medirPedido(env, request.method, url.pathname, 500, Date.now() - t0);
         console.error('API error', e);
         // quem programa fica a saber, sem o utilizador ter de reportar — mas
         // o caminho de um convite ou da ligação de partilha leva o token, e
