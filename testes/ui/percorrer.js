@@ -332,6 +332,13 @@ async function confirmar(pagina, onde) {
 
 async function verificar(pagina, estado, ecra) {
   await confirmar(pagina, ecra + ' · ' + estado);
+  /* Mede-se em repouso. Um modal a meio de entrar está dois píxeis abaixo do
+     sítio, e o invariante «modal dentro do ecrã» apanhava-o assim — «814 em
+     812», ora num estado ora noutro, sem nada no código ter mudado. Dois
+     frames para as transições arrancarem, e depois espera-se que todas as
+     animações acabem; só então se olha. */
+  await pagina.evaluate(() => new Promise((fim) => requestAnimationFrame(() => requestAnimationFrame(fim))));
+  await pagina.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))));
   const r = await pagina.evaluate(invariantes.fonte());
   const nome = ecra + '__' + estado;
   if (!SEM_FOTOS) {
