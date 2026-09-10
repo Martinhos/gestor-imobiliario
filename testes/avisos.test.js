@@ -137,6 +137,30 @@ describe('o service worker', () => {
   /* O install corre uma vez por worker, e o caches.open sobre um nome apagado
      devolve uma cache nova e VAZIA sem se queixar. Quem apagasse a cache por
      baixo de um worker deixava-a assim para sempre. */
+  /* Uma cache com conteúdo e este nome é a que o worker que está a servir tem
+     entre mãos — o nome é a versão, logo a versão não mudou. Um addAll por
+     cima sobrepõe-lhe as entradas por baixo, e a página que começou a carregar
+     com os ficheiros velhos passa a receber os novos a meio. É a avaria da
+     v31, pela porta de uma publicação sem versão nova. */
+  test('o install nunca enche por cima da cache de quem está a servir', () => {
+    // sem os comentários: eles falam do addAll para explicar porque não está cá
+    const codigo = sw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const inst = codigo.slice(codigo.indexOf("addEventListener('install'"), codigo.indexOf("addEventListener('activate'"));
+    assert.match(inst, /e\.waitUntil\(encherSeVazia\(\)\);/, 'só enche se estiver vazia');
+    assert.doesNotMatch(inst, /addAll/, 'não há um addAll incondicional aqui');
+  });
+
+  /* «Este worker chegou a estar em espera» é a prova de que a versão nova está
+     inteira em disco, e é dela que o trocarDeWorker se serve para trocar em vez
+     de apagar caches. Um install que engula o falhanço do addAll destrói a
+     prova sem se notar. */
+  test('e um install que falhe a descarregar não fica em espera a fingir', () => {
+    const f = sw.slice(sw.indexOf('function encherSeVazia'), sw.indexOf('function garantirShell'));
+    assert.doesNotMatch(f, /\.catch\(/, 'o encherSeVazia deixa o falhanço passar');
+    assert.match(sw, /function garantirShell\(\) \{\s*return encherSeVazia\(\)\.catch\(/,
+      'quem não pode falhar é o activate, e apanha-o lá');
+  });
+
   test('um worker que ativa com a cache vazia volta a enchê-la de uma vez', () => {
     assert.match(sw, /function garantirShell/, 'sabe reconstruir a shell');
     assert.match(sw, /ks\.length \? null : c\.addAll\(SHELL\)/,

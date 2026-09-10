@@ -77,7 +77,7 @@ const MAPA = [
       'worker/src/legal-vista.js',
       'worker/src/salvaguarda.js', 'worker/src/lib/http.js', 'worker/src/lib/auditoria.js',
       'web/sw.js', 'scripts/gerar-docs.js', 'scripts/make-icons.js', 'scripts/restaurar.js', 'scripts/versao.js',
-      'scripts/capturas.js'] },
+      'scripts/capturas.js', 'scripts/chegada.js'] },
 ];
 
 /* ------------------------- extração ------------------------------------- */

@@ -83,18 +83,35 @@ self.addEventListener('message', (e) => {
   if (e.data && e.data.tipo === 'assumir') self.skipWaiting();
 });
 
-/* Enche a shell se a cache desta versão estiver vazia.
-   O install corre uma vez só por worker — passar de espera a ativo não o
-   repete — e o caches.open sobre um nome apagado devolve uma cache NOVA e
-   vazia, sem se queixar. Quem apaga caches por baixo de um worker (o
-   limparCaches da app, a rede de segurança do arranque) deixava-a assim para
-   sempre, e a app abria offline com metade do código ou com nenhum.
-   Devolve: Promise que resolve quando a cache tiver conteúdo; sem rede
-   resolve na mesma, sem encher nada. */
+/* Enche a shell, mas SÓ se a cache desta versão estiver vazia.
+   Duas razões, uma de cada lado:
+
+   Encher quando está vazia, porque o install corre uma vez só por worker
+   — passar de espera a ativo não o repete — e o caches.open sobre um nome
+   apagado devolve uma cache NOVA e vazia, sem se queixar. Quem apaga caches
+   por baixo de um worker (o limparCaches da app, a rede de segurança do
+   arranque) deixava-a assim para sempre, e a app abria offline com metade do
+   código ou com nenhum.
+
+   E NÃO encher quando já tem conteúdo, porque uma cache com conteúdo e este
+   nome é a que o worker que está a servir tem entre mãos: o nome é a versão,
+   logo a versão não mudou. Um addAll por cima sobrepõe-lhe as entradas por
+   baixo, e uma página que começou a carregar com os ficheiros velhos passa a
+   receber os novos a meio — a avaria da v31, pela porta do lado. O CI recusa
+   publicar sem subir a versão (scripts/chegada.js), mas isto não pode depender
+   de um passo do CI.
+
+   Devolve: Promise que resolve quando a cache tiver conteúdo. Rejeita se o
+   addAll falhar, e é de propósito — ver o install. */
+function encherSeVazia() {
+  return caches.open(CACHE).then((c) => c.keys().then((ks) => (ks.length ? null : c.addAll(SHELL))));
+}
+
+/* O mesmo, para quem não pode falhar: no activate já não há install para
+   abortar, e sem rede não se enche nada — mas o worker tem de ativar na mesma.
+   Devolve: Promise que resolve sempre. */
 function garantirShell() {
-  return caches.open(CACHE)
-    .then((c) => c.keys().then((ks) => (ks.length ? null : c.addAll(SHELL))))
-    .catch(() => {});
+  return encherSeVazia().catch(() => {});
 }
 
 self.addEventListener('install', (e) => {
@@ -103,7 +120,11 @@ self.addEventListener('install', (e) => {
      worker antigo que ainda esteja a servir da cache */
   if (!GUARDA) { self.skipWaiting(); return; }
   if (VER == null) return;
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
+  /* Sem .catch(): um addAll que falha tem de abortar o install. É isso que faz
+     de «este worker chegou a estar em espera» a prova de que a versão nova está
+     inteira em disco — a prova de que o trocarDeWorker (cloud/novidades.js) se
+     serve para decidir trocar em vez de apagar caches. */
+  e.waitUntil(encherSeVazia());
 });
 
 self.addEventListener('activate', (e) => {

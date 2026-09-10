@@ -12,7 +12,11 @@ jobs:
   testes:
     runs-on: ubuntu-latest
     steps:
+      # histórico todo: o guarda da chegada compara esta árvore com a da
+      # publicação anterior, e um checkout raso não tem com o que comparar
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -78,6 +82,21 @@ jobs:
       # propria uma atualizacao que nunca chega.
       - name: Confirmar que a versao publicada esta em dia
         run: node scripts/versao.js --check
+
+      # Uma publicação que não suba a VERSÃO não chega a quem tem a app
+      # instalada: a cache offline chama-se pela versão (web/sw.js) e o
+      # /versao.json responde o mesmo número, portanto nem o worker troca nem a
+      # app pergunta. E chegar a meio é pior do que não chegar — o install do
+      # worker novo abre a cache com o MESMO nome e sobrepõe-lhe as entradas
+      # por baixo de quem está a ler, que é a avaria da v31.
+      #
+      # Só nas promoções: nos ramos de trabalho a versão sobe uma vez, no fim,
+      # e não a cada alteração.
+      - name: Confirmar que esta promoção chega a quem tem a app
+        if: github.base_ref == 'main'
+        run: |
+          git fetch --no-tags origin main
+          node scripts/chegada.js origin/main
 
       - name: Validar as migrações da base de dados
         run: |

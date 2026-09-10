@@ -1286,6 +1286,48 @@ visita: o `sessionStorage` sobrevive a recargas e a janela pode ficar aberta
 semanas. Uma cura gasta numa segunda-feira desarmava a rede de segurança para o
 resto da vida daquele separador. Dez minutos, e volta a armar-se.
 
+### Publicar sem subir a versão é publicar para meio de um carregamento
+
+O maior dos achados que tinham ficado por verificar, e que ao ser verificado se
+revelou pior do que estava escrito.
+
+A premissa é o desenho: a cache offline **chama-se pela versão**
+(`gi-shell-v<VERSAO>`), e a versão sai da primeira entrada do `web/avisos.js`.
+Isso trocou uma dependência humana por outra — já não é preciso lembrar-se de
+subir um número dentro do `sw.js`, mas passou a ser preciso lembrar-se de
+escrever uma entrada nas novidades. E **nada o obrigava**.
+
+Publicar sem subir a versão parecia ser apenas «não chega a ninguém»: quem tem a
+app instalada continua a ser servido da cache que já tem, e a app nunca pergunta
+nada, porque o `/versao.json` responde o mesmo número. Mau, mas silencioso.
+
+Não é isso. É pior. O `install` do worker novo faz
+`caches.open(CACHE).then((c) => c.addAll(SHELL))` — e com a versão na mesma,
+`CACHE` é **o nome da cache que o worker antigo está a usar neste momento**. O
+`addAll` sobrepõe-lhe as entradas por baixo. Uma página que começou a carregar
+com os ficheiros velhos passa a receber os novos a meio do carregamento. É
+exatamente a avaria da v31, por uma porta que não tem nada a ver com trocas de
+worker.
+
+Duas medidas, e as duas fazem falta:
+
+**O `install` deixa de encher por cima.** Só enche uma cache vazia. Uma cache com
+conteúdo e este nome é a de quem está a servir, e não se toca. Assim a falha
+volta a ser silenciosa em vez de destrutiva — que é o pior que ela pode ser sem
+depender de um passo do CI. O `install` mantém-se **sem `.catch()`**, de
+propósito: é o falhanço do `addAll` a abortar o `install` que faz de «este worker
+chegou a estar em espera» a prova de que a versão nova está inteira em disco.
+
+**E o CI recusa a publicação** (`scripts/chegada.js`). Compara os ficheiros que a
+cache guarda — a lista sai do `SHELL` do próprio `sw.js`, mais o `sw.js`, que
+manda nela — entre esta árvore e a da publicação anterior. Se algum mudou e a
+versão não subiu, não sai, e diz quais e o que fazer. Corre em dois sítios: no
+*pull request* de promoção, que avisa cedo, e no `deploy`, imediatamente antes de
+publicar, que é o que conta.
+
+A regra só se aplica às promoções. Nos ramos de trabalho a versão sobe uma vez, no
+fim, e não a cada alteração — que é como a casa já trabalhava.
+
 ### E o ecrã que tranca a app não trancava nada
 
 O último dos oito, e o mais fácil de ver depois de apontado. O ecrã que tranca a
