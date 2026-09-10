@@ -266,6 +266,9 @@ jobs:
           CF_EMAIL_TOKEN: ${{ secrets.CF_EMAIL_TOKEN }}
           DESTINO_CORREIO_TESTE: ${{ secrets.DESTINO_CORREIO_TESTE }}
           CF_ANALYTICS_TOKEN: ${{ secrets.CF_ANALYTICS_TOKEN }}
+          # os batimentos para fora (lib/medidas.js): só produção os bate
+          HEARTBEAT_URL: ${{ secrets.HEARTBEAT_URL }}
+          HEARTBEAT_COPIA_URL: ${{ secrets.HEARTBEAT_COPIA_URL }}
         run: |
           set -e
           put () {
@@ -306,6 +309,11 @@ jobs:
             put CF_EMAIL_TOKEN "$CF_EMAIL_TOKEN"
             put DESTINO_CORREIO_TESTE "$DESTINO_CORREIO_TESTE"
             put CF_ACCOUNT_ID "$TF_VAR_cloudflare_account_id"
+            # nunca no dev: a função put dá-lhe o mesmo valor quando não há _DEV, e
+            # um dev a bater no heartbeat de produção era um cron de produção
+            # morto com o alarme a dizer que está tudo bem
+            put HEARTBEAT_URL "$HEARTBEAT_URL"
+            put HEARTBEAT_COPIA_URL "$HEARTBEAT_COPIA_URL"
           fi
 
       # Comandos do bot: só a produção os regista, para os dois ambientes não
