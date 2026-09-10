@@ -189,6 +189,11 @@ export async function usageFields(env) {
       inline: false,
     });
   }
+  // o «qual» ao lado do «quantas»: quando as linhas lidas sobem, é aqui que se vê onde
+  const pesadas = await consultasPesadas(env);
+  if (pesadas && pesadas.length) {
+    fields.push({ name: 'D1 · consultas mais pesadas (24h)', value: textoDasConsultas(pesadas), inline: false });
+  }
   return fields;
 }
 
@@ -335,4 +340,59 @@ async function cloudflareUsage(env) {
   } finally {
     if (prazo) clearTimeout(prazo);
   }
+}
+
+/* As consultas à D1 que mais linhas leram nas últimas 24 horas.
+   O «quantas» já vinha (d1AnalyticsAdaptiveGroups, acima); isto é o «qual».
+   Importa mais desde 2026-09-01: passar dos 5M de linhas lidas por dia já
+   não é um aviso — as consultas passam a falhar até à meia-noite UTC, e a
+   app fica em baixo. Quando a vigia toca, é aqui que se vê onde mexer.
+   Pedido à parte, com prazo próprio: se o esquema deste conjunto mudar, o
+   resumo perde esta secção e mais nada.
+   Recebe: env — o ambiente do worker (CF_ANALYTICS_TOKEN e CF_ACCOUNT_ID).
+   Devolve: Promise com lista de {consulta, linhas, vezes} das cinco mais
+   pesadas, por ordem; ou null sem configuração ou sem resposta. */
+export async function consultasPesadas(env) {
+  const token = env.CF_ANALYTICS_TOKEN, acc = env.CF_ACCOUNT_ID;
+  if (!token || !acc) return null;
+  const desde = new Date(Date.now() - 86400000).toISOString();
+  const query = `query($acc:String!,$desde:Time!){
+    viewer{ accounts(filter:{accountTag:$acc}){
+      d1QueriesAdaptiveGroups(limit:5, filter:{datetime_geq:$desde}, orderBy:[sum_rowsRead_DESC]){
+        dimensions{ query } sum{ rowsRead } count } } } }`;
+  const corta = typeof AbortController === 'function' ? new AbortController() : null;
+  const prazo = corta ? setTimeout(() => { try { corta.abort(); } catch (e) {} }, 4000) : null;
+  try {
+    const r = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables: { acc, desde } }),
+      signal: corta ? corta.signal : undefined,
+    });
+    const j = await r.json();
+    const a = j && j.data && j.data.viewer && j.data.viewer.accounts && j.data.viewer.accounts[0];
+    if (!a || !Array.isArray(a.d1QueriesAdaptiveGroups)) return null;
+    return a.d1QueriesAdaptiveGroups.map((x) => ({
+      consulta: (x.dimensions && x.dimensions.query) || '',
+      linhas: (x.sum && x.sum.rowsRead) || 0,
+      vezes: x.count || 0,
+    }));
+  } catch (e) {
+    return null;
+  } finally {
+    if (prazo) clearTimeout(prazo);
+  }
+}
+
+// A lista das consultas pesadas em texto, uma por linha, para o embed.
+// Recebe: lista — o que consultasPesadas devolve ({consulta, linhas, vezes}).
+// Devolve: texto com uma linha por consulta: linhas lidas, vezes, e a
+// consulta cortada — os parâmetros não vêm (a D1 não os guarda), portanto
+// não há valores de ninguém aqui.
+export function textoDasConsultas(lista) {
+  return (lista || []).map((c) => {
+    const sql = String(c.consulta || '').replace(/\s+/g, ' ').trim();
+    return '`' + Number(c.linhas || 0).toLocaleString('pt-PT') + '` · ' + (c.vezes || 0) + '× · ' +
+      (sql.length > 70 ? sql.slice(0, 69) + '…' : sql);
+  }).join('\n') || '—';
 }

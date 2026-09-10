@@ -40,6 +40,14 @@ id = "PLACEHOLDER_KV_ID"
 binding = "FILES"
 bucket_name = "gestor-imobiliario"
 
+# O que o worker mede sobre si próprio (lib/medidas.js): um ponto por pedido
+# e um por relato, sem dados de pessoas. Três meses de retenção, consulta por
+# SQL, e no plano gratuito: 100.000 pontos por dia — o projeto não chega a um
+# décimo disso.
+[[analytics_engine_datasets]]
+binding = "MEDIDAS"
+dataset = "rendorium"
+
 [observability]
 enabled = true
 
@@ -117,6 +125,11 @@ id = "PLACEHOLDER_KV_DEV_ID"
 [[env.dev.r2_buckets]]
 binding = "FILES"
 bucket_name = "gestor-imobiliario-dev"
+
+# as medidas do dev vão para um conjunto à parte, para não se somarem às de produção
+[[env.dev.analytics_engine_datasets]]
+binding = "MEDIDAS"
+dataset = "rendorium_dev"
 
 [env.dev.observability]
 enabled = true
