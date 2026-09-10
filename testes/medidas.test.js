@@ -71,14 +71,9 @@ describe('os pontos', () => {
     assert.match(idx, /medirPedido\(env, request\.method, url\.pathname, 500, Date\.now\(\) - t0\)/, 'e o que rebentou');
   });
 
-  test('a ligação existe nos dois ambientes, com conjuntos separados', () => {
-    const w = ler('wrangler.toml');
-    const prod = w.slice(0, w.indexOf('[env.dev'));
-    assert.match(prod, /\[\[analytics_engine_datasets\]\]\s*\nbinding = "MEDIDAS"\s*\ndataset = "rendorium"/);
-    const dev = w.slice(w.indexOf('[env.dev'));
-    assert.match(dev, /\[\[env\.dev\.analytics_engine_datasets\]\]\s*\nbinding = "MEDIDAS"\s*\ndataset = "rendorium_dev"/,
-      'o dev não se soma à produção');
-  });
+  /* A ligação ao Analytics Engine está à espera de ser ligada no painel da conta
+     (wrangler.toml); até lá o código é inerte, e é isso que o teste acima guarda.
+     O teste da ligação nos dois ambientes volta com ela. */
 });
 
 describe('as consultas mais pesadas', () => {

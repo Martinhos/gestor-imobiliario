@@ -44,9 +44,15 @@ bucket_name = "gestor-imobiliario"
 # e um por relato, sem dados de pessoas. Três meses de retenção, consulta por
 # SQL, e no plano gratuito: 100.000 pontos por dia — o projeto não chega a um
 # décimo disso.
-[[analytics_engine_datasets]]
-binding = "MEDIDAS"
-dataset = "rendorium"
+#
+# À ESPERA DO PAINEL. O Analytics Engine tem de ser ligado uma vez na conta
+# (Workers & Pages → Analytics Engine → Enable); com a ligação declarada antes
+# disso o deploy é recusado com o código 10089, e foi o que aconteceu ao dev. O
+# código (lib/medidas.js) é inerte sem env.MEDIDAS. Depois de ligar, é tirar o
+# cardinal a estas três linhas e às três do dev.
+# [[analytics_engine_datasets]]
+# binding = "MEDIDAS"
+# dataset = "rendorium"
 
 [observability]
 enabled = true
@@ -127,9 +133,9 @@ binding = "FILES"
 bucket_name = "gestor-imobiliario-dev"
 
 # as medidas do dev vão para um conjunto à parte, para não se somarem às de produção
-[[env.dev.analytics_engine_datasets]]
-binding = "MEDIDAS"
-dataset = "rendorium_dev"
+# [[env.dev.analytics_engine_datasets]]
+# binding = "MEDIDAS"
+# dataset = "rendorium_dev"
 
 [env.dev.observability]
 enabled = true
