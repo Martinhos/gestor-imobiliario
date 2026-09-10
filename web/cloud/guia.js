@@ -405,8 +405,8 @@ seed = function () {
   return _seed_guia.apply(this, arguments);
 };
 
-var css = document.createElement('style');
-css.textContent =
+var cssGuia = document.createElement('style');
+cssGuia.textContent =
   /* flutua, não é modal: quem segue os passos tem de poder mexer na app por
      baixo enquanto lê. Acima do botão flutuante, abaixo dos modais — menos
      quando um está aberto, e aí sobe acima dele (sobre-janela). */
@@ -431,4 +431,4 @@ css.textContent =
     'animation:guiaEntra var(--lento) var(--curva-entra)}' +
   '@media(min-width:900px){#cwGuia{left:auto;right:22px;max-width:420px;bottom:calc(22px + var(--inset-bottom))}' +
     '#cwGuia.sobre-janela{top:calc(16px + var(--inset-top))}}';
-document.head.appendChild(css);
+document.head.appendChild(cssGuia);
