@@ -660,8 +660,15 @@ function hideAuth() {
    servidor local, uma alteração a um ficheiro só se veria depois de mudar a
    versão — e localhost não é uma publicação. No dev fica, que é onde as
    travessias entre versões a sério se exercitam antes de irem para produção. */
+/* O updateViaCache: 'none' não é decorativo. Por omissão ele vale 'imports', e
+   isso quer dizer que o browser vai buscar o sw.js à rede mas deixa os
+   importScripts virem da cache HTTP. O sw.js não muda de bytes entre versões
+   — de propósito, para não depender de alguém subir um número lá dentro — e o
+   que muda é precisamente o /avisos.js que ele importa. Com o valor por
+   omissão, a deteção da versão nova ficava a depender dos cabeçalhos de cache
+   de um ficheiro. Uma palavra tira essa decisão do caminho. */
 if ('serviceWorker' in navigator && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
-  try { navigator.serviceWorker.register('sw.js'); } catch (e) {}
+  try { navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }); } catch (e) {}
 }
 
 /* ---------------- arranque ---------------- */

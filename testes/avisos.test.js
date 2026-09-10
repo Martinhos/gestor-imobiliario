@@ -111,12 +111,40 @@ describe('o service worker', () => {
      ic, go — porque este ficheiro deixava uma página carregar metade de cada
      versão. Duas causas, as duas aqui guardadas. */
   test('em produção não troca de versão a meio de um carregamento', () => {
-    // sem os comentários: eles falam do skipWaiting para explicar porque não se usa
+    // sem os comentários: eles falam do skipWaiting para explicar quando se usa
     const codigo = sw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-    const linhas = codigo.split('\n').filter((l) => l.includes('skipWaiting'));
-    assert.equal(linhas.length, 1, 'há um só skipWaiting em todo o worker');
+    const inst = codigo.slice(codigo.indexOf("addEventListener('install'"), codigo.indexOf("addEventListener('activate'"));
+    const linhas = inst.split('\n').filter((l) => l.includes('skipWaiting'));
+    assert.equal(linhas.length, 1, 'no install há um só skipWaiting');
     assert.match(linhas[0], /!GUARDA/,
       'e só fora de produção, onde não há cache a proteger — em produção o worker novo espera');
+  });
+
+  /* O worker novo espera, e um location.reload() NÃO o promove: o documento
+     antigo e o novo sobrepõem-se e o registo nunca fica sem clientes. Sem um
+     canal, «quem manda na altura de trocar é a app» era só uma frase, e a
+     versão nova chegava pelo efeito lateral de lhe apagarem as caches. */
+  test('atende o pedido de troca da app, e só esse', () => {
+    const codigo = sw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const msg = codigo.slice(codigo.indexOf("addEventListener('message'"));
+    assert.ok(msg.startsWith("addEventListener('message'"), 'o worker ouve mensagens');
+    const linha = msg.split('\n').find((l) => l.includes('skipWaiting'));
+    assert.ok(linha, 'e é aí que assume');
+    assert.ok(linha.includes("tipo === 'assumir'"),
+      'nunca por iniciativa própria: só quando a app pede, com a recarga já decidida');
+  });
+
+  /* O install corre uma vez por worker, e o caches.open sobre um nome apagado
+     devolve uma cache nova e VAZIA sem se queixar. Quem apagasse a cache por
+     baixo de um worker deixava-a assim para sempre. */
+  test('um worker que ativa com a cache vazia volta a enchê-la de uma vez', () => {
+    assert.match(sw, /function garantirShell/, 'sabe reconstruir a shell');
+    assert.match(sw, /ks\.length \? null : c\.addAll\(SHELL\)/,
+      'e só quando ela está vazia — encher por cima a cada ativação era um download por publicação');
+    const act = sw.slice(sw.indexOf("addEventListener('activate'"), sw.indexOf("addEventListener('fetch'"));
+    const prod = act.slice(act.indexOf('if (VER == null) return;'));
+    assert.ok(prod.indexOf('garantirShell') < prod.indexOf('clients.claim'),
+      'antes de assumir os clientes, senão assume-os com a cache vazia');
   });
 
   test('a alternativa à rede é só da cache desta versão', () => {
@@ -183,6 +211,60 @@ describe('o service worker', () => {
 
   test('nunca serve a versão da cache', () => {
     assert.match(sw, /versao\.json/);
+  });
+});
+
+/* A travessia entre versões, do lado da app. Foi aqui que a v31 se resolveu
+   pela metade: tirou-se o skipWaiting do install (bem) e escreveu-se que a app
+   passava a mandar na troca (mal — não tinha como). O que a app fazia era
+   apagar TODAS as caches, incluindo a que o worker em espera acabara de
+   encher, e recarregar à espera de que a versão nova viesse da rede. */
+describe('a troca de versão', () => {
+  const nov = ler('web/cloud/novidades.js');
+  const entrada = ler('web/cloud/entrada.js');
+
+  test('a app pede a troca e espera pela confirmação', () => {
+    assert.match(nov, /function trocarDeWorker/);
+    assert.match(nov, /postMessage\(\{ tipo: 'assumir' \}\)/, 'o pedido');
+    assert.match(nov, /addEventListener\('controllerchange'/,
+      'e a confirmação: sem ela não se sabe se trocou, e o resto da decisão depende disso');
+    assert.match(nov, /setTimeout\(function \(\) \{ fim\(false\); \}, 4000\)/,
+      'com tecto — uma troca que não vem não pode prender o ecrã de progresso');
+  });
+
+  test('nunca se apaga a cache da versão para onde se vai', () => {
+    const f = nov.slice(nov.indexOf('function limparCaches'), nov.indexOf('function limparCaches') + 900);
+    assert.match(f, /function limparCaches\(guardar\)/, 'sabe qual é a versão-alvo');
+    assert.match(f, /k !== poupada/, 'e poupa-a: é o addAll do worker em espera, a versão nova inteira');
+    assert.doesNotMatch(f, /r\.update\(\)/,
+      'e já não fica pendurada num update() sem tecto — quem atualiza o worker é o trocarDeWorker');
+  });
+
+  test('a troca vem primeiro, o machado só quando ela falha', () => {
+    const ver = nov.slice(nov.indexOf('CW.verificarVersao'));
+    assert.ok(ver.indexOf('trocarDeWorker') < ver.indexOf('limparCaches'), 'por esta ordem');
+    assert.match(ver, /if \(trocou\) \{ location\.reload\(\); return; \}/,
+      'trocou: a cache do worker novo é a boa, limpá-la seria desfazê-la');
+    assert.match(ver, /limparCaches\(nova\)/, 'não trocou: apaga o resto, poupando a da versão nova');
+  });
+
+  /* Apagar as caches é destruir a única cópia local da app. Fazê-lo sem nada
+     do outro lado deixa a pessoa sem app até haver rede — e o botão que a leva
+     ali é, muitas vezes, o do ecrã que a tranca por a versão ser velha demais. */
+  test('o botão Atualizar não destrói a cópia local sem servidor do outro lado', () => {
+    const f = nov.slice(nov.indexOf('CW.atualizarAgora'), nov.indexOf('function limparCaches'));
+    assert.ok(f.indexOf('trocarDeWorker') < f.indexOf('servidorResponde'), 'primeiro tenta trocar');
+    assert.ok(f.indexOf('servidorResponde') < f.indexOf('limparCaches'), 'e só apaga depois de o servidor responder');
+    assert.match(f, /Sem ligação ao servidor/, 'e quando não responde, diz — em vez de recarregar para o nada');
+    const sonda = nov.slice(nov.indexOf('function servidorResponde'), nov.indexOf('/* O caminho de todos os botões'));
+    assert.match(sonda, /fetch\('\/versao\.json', \{ cache: 'no-store' \}\)/, 'pergunta ao servidor');
+    assert.match(sonda, /setTimeout\(function \(\) \{ diz\(false\); \}, 4000\)/,
+      'com tempo-limite: uma rede pendurada não é uma rede, e é o caso do portal cativo');
+  });
+
+  test('o registo não deixa o avisos.js vir da cache do browser', () => {
+    assert.match(entrada, /register\('sw\.js', \{ updateViaCache: 'none' \}\)/,
+      'o sw.js é igual entre versões; o que muda é o avisos.js que ele importa');
   });
 });
 
