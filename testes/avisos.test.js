@@ -5,7 +5,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -154,6 +154,38 @@ describe('o service worker', () => {
       'serve-se da cache desta versão, e só dela');
   });
 
+  /* A regra esteve ao contrário — guardava-se tudo o que não estivesse numa
+     lista de exclusões — e o Cache API não lê Cache-Control nenhum. Passavam
+     por lá páginas feitas à medida de quem as pede: o /equipa com a sessão da
+     equipa lá dentro, o /equipa/entrar com o bilhete no endereço, o /termos, a
+     montra, o APK. E a cache não tinha tecto nenhum. */
+  test('só entra na cache o que o install lá pôs', () => {
+    assert.match(sw, /if \(SHELL\.indexOf\(url\.pathname\) < 0\) return;/,
+      'lista de permissão, não de exclusões — senão anda-se a acrescentar exceções para sempre');
+    assert.match(sw, /if \(url\.origin !== self\.location\.origin\) return;/,
+      'e nada de outra origem: o filtro era só por caminho');
+  });
+
+  /* O Cache.match compara o URL inteiro, query incluída, e a app manda por
+     email endereços com parâmetros. Cada um deles falhava sempre na cache e
+     ia buscar o index.html à REDE, enquanto os <script src> dele, sem query,
+     acertavam na cache da versão antiga — a avaria da v31 sem worker nenhum
+     trocar. */
+  test('uma navegação serve-se sempre pela mesma chave', () => {
+    assert.match(sw, /const chave = e\.request\.mode === 'navigate' \? '\/index\.html' : e\.request;/);
+    const f = sw.slice(sw.indexOf("addEventListener('fetch'"));
+    assert.doesNotMatch(f, /\.match\(e\.request\)/, 'nunca pela chave que a pessoa clicou');
+    assert.doesNotMatch(f, /c\.put\(e\.request/,
+      'nem se grava por ela: essas ligações levam segredos no endereço');
+  });
+
+  test('não se guarda o que não é uma resposta inteira, nem se cala o falhanço', () => {
+    assert.match(sw, /res\.status === 200 && res\.type === 'basic'/,
+      'o res.ok abrange o 206, e uma resposta parcial guardada é uma resposta partida');
+    assert.match(sw, /c\.put\(chave, res\.clone\(\)\)\.catch\(/,
+      'o put comunica os falhanços numa promessa rejeitada — um try/catch não apanha nada');
+  });
+
   /* A cache leva o nome da VERSÃO, e fora de produção a versão não muda entre
      publicações — o dev publica dezenas de vezes com a mesma. Com a cache a
      responder primeiro, o ambiente congelava no primeiro carregamento dessa
@@ -171,9 +203,23 @@ describe('o service worker', () => {
     ['localhost', '127.0.0.1', 'dev.rendorium.com'].forEach((h) => {
       assert.ok(lista.includes(h), h + ' não pode guardar');
     });
+    ['rendorium.com', 'www.rendorium.com'].forEach((h) => {
+      assert.ok(lista.includes(h),
+        h + ' é a montra — e a app existe lá, porque só o «/» passa pelo worker');
+    });
     assert.match(sw, /SEM_CACHE\.indexOf\(hn\) < 0/, 'é uma exclusão, não uma permissão');
     assert.match(sw, /gestor-imobiliario-dev\./,
       'o worker de dev também tem endereço em workers.dev');
+    /* Os endereços de pré-visualização de versão do Cloudflare levam o nome do
+       worker a seguir a um prefixo, e um indexOf === 0 deixava-os cair do lado
+       de produção. Testa-se a regra a correr, com os dois casos. */
+    const re = /const DEV_WD = (\/.*\/)\.test\(hn\)/.exec(sw);
+    assert.ok(re, 'o nome do worker de dev é um rótulo, não um prefixo do hostname');
+    const dev = new RegExp(re[1].slice(1, -1));
+    assert.ok(dev.test('gestor-imobiliario-dev.abc.workers.dev'), 'o endereço normal do dev');
+    assert.ok(dev.test('a1b2-gestor-imobiliario-dev.abc.workers.dev'), 'e o de pré-visualização');
+    assert.ok(!dev.test('gestor-imobiliario.abc.workers.dev'),
+      'mas o de produção continua a guardar — é onde estão as instalações antigas');
     // e o inverso, que é o que se perdeu antes: nada exclui os endereços antigos
     assert.ok(!lista.some((h) => /workers\.dev$/.test(h)),
       'os endereços antigos de produção (PWA e APK) continuam a guardar');
@@ -313,5 +359,41 @@ describe('a app carrega as peças novas', () => {
       html.indexOf('src="avisos.js"') < html.indexOf('src="cloud/novidades.js"'),
       'e antes de quem o usa'
     );
+  });
+
+  /* A lista SHELL e os <script src> do index.html são duas listas escritas à
+     mão que têm de dizer o mesmo. O CI já confirma um dos sentidos, e só para
+     os módulos: que cada web/app/*.js e web/cloud/*.js aparece nos dois. Falta
+     o resto — o avisos.js, o legal.js, o manifesto, os ícones — e falta o
+     sentido contrário, que é uma entrada na SHELL que não corresponde a
+     ficheiro nenhum. Uma delas rebenta o addAll INTEIRO (o addAll é tudo ou
+     nada), portanto a cache fica vazia e a app não abre offline. E agora que
+     a SHELL é também a lista de permissão do fetch, uma omissão tira um
+     ficheiro da cache em silêncio. */
+  const sw = ler('web/sw.js');
+  const lista = (nome) => {
+    const m = new RegExp('const ' + nome + ' = \\[([\\s\\S]*?)\\]').exec(sw);
+    assert.ok(m, 'a lista ' + nome + ' existe no sw.js');
+    return m[1].match(/'([^']+)'/g).map((s) => s.slice(1, -1));
+  };
+  const SHELL = lista('SHELL')
+    .concat(lista('APP').map((n) => '/app/' + n + '.js'))
+    .concat(lista('NUVEM').map((n) => '/cloud/' + n + '.js'));
+
+  test('tudo o que o index.html carrega está na shell offline', () => {
+    const srcs = (html.match(/src="([^"]+\.js)"/g) || []).map((s) => '/' + s.slice(5, -1));
+    assert.ok(srcs.length > 40, 'apanhou os <script src> todos: ' + srcs.length);
+    srcs.forEach((s) => assert.ok(SHELL.includes(s), s + ' não está na SHELL do sw.js'));
+  });
+
+  test('e tudo o que está na shell existe mesmo', () => {
+    SHELL.filter((p) => p !== '/').forEach((p) => {
+      assert.ok(existsSync(new URL('../web' + p, import.meta.url)),
+        p + ' está na SHELL e não existe — o addAll é tudo ou nada, e falha inteiro');
+    });
+  });
+
+  test('sem repetições, que escondem uma troca', () => {
+    assert.equal(new Set(SHELL).size, SHELL.length, SHELL.join(' '));
   });
 });
