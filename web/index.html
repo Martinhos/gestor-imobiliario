@@ -860,8 +860,12 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
      Por isso isto vive aqui, inline e antes de tudo, sem depender de ficheiro
      nenhum: se um script do arranque falhar a carregar ou rebentar com um
      símbolo que devia existir, limpa-se o que está guardado, larga-se o
-     service worker e recarrega-se. Uma vez por sessão — uma recarga que não
-     resolve não se repete, senão é um ciclo. -->
+     service worker e recarrega-se. Uma vez de dez em dez minutos — uma recarga
+     que não resolve não se repete a seguir, senão é um ciclo; mas também não
+     pode desarmar-se para sempre, que é o que acontecia.
+
+     E nunca sem rede: o que está guardado é a única cópia da app que existe, e
+     apagá-la offline troca «meia app partida» por «nenhuma app». -->
 <script>
 (function () {
   var CHAVE = 'gi_arranque_curado';
@@ -870,9 +874,25 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
 
   function curar(porque) {
     if (aCurar || document.readyState === 'complete') return;
-    try { if (sessionStorage.getItem(CHAVE)) return; } catch (e) {}
+    /* Sem rede não se cura: o que está guardado é a ÚNICA cópia da app que
+       existe, e apagá-la troca «meia app partida» por «nenhuma app», sem
+       volta enquanto a rede não voltar. Sai-se sem marcar nada — a cura fica
+       disponível para quando houver rede. Só o === false é de confiança: o
+       navigator.onLine a true mente com frequência, e é por isso que ele
+       trava mas não autoriza. */
+    if (navigator.onLine === false) return;
+    /* Quando se curou, e não só que se curou. Isto guardava um motivo e nunca
+       mais o largava, e numa app instalada a «sessão» não é uma visita: o
+       sessionStorage sobrevive a recargas e a janela pode ficar aberta
+       semanas. Uma cura gasta numa segunda-feira desarmava a rede de
+       segurança para o resto da vida daquele separador. */
+    try {
+      var antes = Number(sessionStorage.getItem(CHAVE));
+      if (antes && Date.now() - antes < 6e5) return;   // dez minutos
+    } catch (e) {}
     aCurar = true;
-    try { sessionStorage.setItem(CHAVE, porque.slice(0, 120)); } catch (e) {}
+    try { sessionStorage.setItem(CHAVE, String(Date.now())); } catch (e) {}
+    try { sessionStorage.setItem(CHAVE + '_porque', porque.slice(0, 120)); } catch (e) {}
     var passos = [];
     try { if (window.caches && caches.keys) passos.push(caches.keys().then(function (ks) {
       return Promise.all(ks.map(function (k) { return caches.delete(k); }));

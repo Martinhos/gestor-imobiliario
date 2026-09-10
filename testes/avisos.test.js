@@ -348,6 +348,26 @@ describe('a rede de segurança do arranque', () => {
     assert.match(bloco, /caches\.delete/, 'limpa o que está guardado');
     assert.match(bloco, /unregister\(\)/, 'e larga o service worker');
   });
+
+  /* A cura é a ação mais destrutiva da app: apaga a única cópia local e larga
+     o service worker. Offline, isso troca «meia app partida» por «nenhuma
+     app», e sem volta enquanto a rede não voltar. */
+  test('não se cura sem rede, e sai sem gastar a tentativa', () => {
+    assert.match(bloco, /if \(navigator\.onLine === false\) return;/,
+      'só o === false é de confiança: o true mente com portal cativo e afins');
+    assert.ok(bloco.indexOf('navigator.onLine') < bloco.indexOf('aCurar = true'),
+      'antes de marcar seja o que for, senão gasta a cura da sessão sem fazer nada');
+    assert.ok(bloco.indexOf('navigator.onLine') < bloco.indexOf('setTimeout'),
+      'e antes do temporizador que recarrega de qualquer maneira');
+  });
+
+  /* Numa app instalada a «sessão» não é uma visita: o sessionStorage
+     sobrevive a recargas e a janela pode ficar aberta semanas. Guardar só QUE
+     se curou desarmava a rede de segurança para o resto da vida do separador. */
+  test('a rede de segurança volta a armar-se', () => {
+    assert.match(bloco, /Date\.now\(\) - antes < 6e5/, 'dez minutos, e não para sempre');
+    assert.match(bloco, /setItem\(CHAVE, String\(Date\.now\(\)\)\)/, 'guarda quando, não só que');
+  });
 });
 
 describe('a app carrega as peças novas', () => {
