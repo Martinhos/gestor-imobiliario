@@ -43,6 +43,16 @@ bucket_name = "gestor-imobiliario"
 [observability]
 enabled = true
 
+# Sem a linha automática por pedido. Ela grava o URL em bruto — e as ligações
+# que se entregam às pessoas levam o segredo no endereço: /?convite=<token> e
+# /?ligar=<token>, na raiz, que passa pelo worker (run_worker_first). O código
+# mascara os tokens em tudo o que escreve (mascararTokens, lib/relatos.js),
+# mas esta linha passava por fora e deixava-os em claro três dias. Ficam os
+# console.* próprios, que já vêm mascarados — e o recordReport escreve um por
+# relato, estruturado, para o dev não ficar às escuras.
+[observability.logs]
+invocation_logs = false
+
 # Duas rotinas: a cópia da base e o resumo do consumo às 09:00, e uma vigia
 # dos limites de hora a hora — um pico às 10:00 só aparecia no resumo da
 # manhã seguinte, quando já não havia nada a fazer.
@@ -110,6 +120,11 @@ bucket_name = "gestor-imobiliario-dev"
 
 [env.dev.observability]
 enabled = true
+
+# a observabilidade não é herdável entre ambientes: sem isto aqui, o dev
+# continuava a guardar os tokens (a mesma regra que a de produção, acima)
+[env.dev.observability.logs]
+invocation_logs = false
 
 [env.dev.vars]
 # O mesmo cliente OAuth da produção: a consola da Google aceita várias origens
