@@ -183,6 +183,39 @@ describe('as peças estão ligadas', () => {
     assert.match(h, /versao: typeof VERSAO/, 'a armadilha do arranque também');
   });
 
+  /* A linha automática de invocação dos Workers Logs grava o URL em bruto —
+     e as ligações que se entregam às pessoas levam o segredo no endereço
+     (/?convite=…, /?ligar=…). O código mascara tokens em tudo o que escreve;
+     esta linha passava por fora e deixava-os em claro três dias. */
+  test('os logs não guardam a linha por pedido, nos dois ambientes', () => {
+    const w = ler('wrangler.toml');
+    const prod = w.slice(w.indexOf('[observability]'), w.indexOf('[env.dev'));
+    assert.match(prod, /\[observability\.logs\]\s*\ninvocation_logs = false/, 'produção');
+    const dev = w.slice(w.indexOf('[env.dev.observability]'));
+    assert.match(dev, /\[env\.dev\.observability\.logs\]\s*\ninvocation_logs = false/,
+      'e dev — a observabilidade não é herdável, e sem isto o dev continuava a guardar os tokens');
+  });
+
+  /* Desligar sem substituir trocava uma fuga por cegueira: o worker tem cinco
+     console.* e todos em ramos de erro. Cada relato passa a deixar um registo
+     estruturado, já mascarado, pesquisável por campo nos Workers Logs. */
+  test('cada relato deixa um registo estruturado e mascarado nos logs', async () => {
+    const vistos = [];
+    const antes = console.error;
+    console.error = (x) => vistos.push(x);
+    try {
+      const env = { DB: { prepare: () => ({ bind: () => ({ first: async () => null, run: async () => ({}) }), first: async () => null }) } };
+      await recordReport(env, { waitUntil() {} }, 'server', 'falhou /api/convite/' + 'a'.repeat(64), 'detalhe', null,
+        { versao: 33, contexto: 'GET /?ligar=' + 'b'.repeat(64) });
+    } finally { console.error = antes; }
+    const reg = vistos.find((x) => x && typeof x === 'object' && x.relato);
+    assert.ok(reg, 'há um registo, e é um objeto — não uma string');
+    assert.equal(reg.relato, 'server');
+    assert.ok(!/a{64}/.test(reg.msg) && /convite\/…/.test(reg.msg), 'a mensagem vai mascarada');
+    assert.ok(!/b{64}/.test(reg.contexto) && /ligar=…/.test(reg.contexto), 'e o contexto também');
+    assert.equal(reg.versao, '33');
+  });
+
   test('a migração do contexto existe e cria o que é usado', () => {
     const m = ler('migrations/0009_contexto_dos_erros.sql');
     assert.match(m, /CREATE TABLE IF NOT EXISTS ticket_users/);
