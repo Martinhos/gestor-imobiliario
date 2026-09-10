@@ -1,0 +1,28 @@
+# Vigia as duas devDependencies (playwright, wrangler) e as versões das
+# actions dos workflows. Corre fora da quota de minutos das Actions.
+#
+# Mensal, e não semanal: para duas dependências, semanal é ruído. E para o
+# ramo dev, nunca para main — um bump de ferramenta não é uma promoção, e um
+# PR contra main disparava um deploy de produção ao ser fundido.
+#
+# Sem bloco terraform, de propósito: subir o provider da Cloudflare mexe no
+# terraform apply que corre contra a conta de produção no deploy.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "ci"
