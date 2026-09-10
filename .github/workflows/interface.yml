@@ -5,16 +5,26 @@ name: Interface
 # porque falha por razões diferentes: ali é a lógica, aqui é o que se vê.
 on:
   pull_request:
-    paths: ['web/**', 'testes/ui/**', '.github/workflows/interface.yml']
+    # o package.json entra para um bump do playwright ser exercitado antes de
+    # se fundir — o Dependabot abre esses PRs e sem isto passavam sem percurso
+    paths: ['web/**', 'testes/ui/**', '.github/workflows/interface.yml', 'package.json', 'package-lock.json']
   push:
     branches: [main, dev]
-    paths: ['web/**', 'testes/ui/**']
+    paths: ['web/**', 'testes/ui/**', 'package.json', 'package-lock.json']
   workflow_dispatch:
     inputs:
       avaliar:
         description: Pedir também um parecer do modelo sobre a qualidade
         type: boolean
         default: false
+
+# Três pushes seguidos ao mesmo ramo pagavam três corridas inteiras. Cancela-se
+# a anterior — mas só em pull request: um push a main ou a dev é uma promoção
+# ou uma publicação, e essas têm de acabar, senão fica um check «cancelled»
+# precisamente onde o guarda da chegada corre.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   percurso:
@@ -24,12 +34,29 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.18.0
 
       - run: npm ci --no-audit --no-fund
 
+      # O browser são ~150 MB por corrida, e não muda entre corridas. A cache
+      # das Actions é uma verba à parte (10 GB por repositório) que não conta
+      # para os 500 MB dos artefactos. O --with-deps instala também pacotes
+      # apt que não vivem nesta pasta, por isso com a cache a acertar só se
+      # repõem esses.
+      - name: Cache do browser
+        id: browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Instalar o browser
+        if: steps.browser.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+
+      - name: Repor as dependências do sistema
+        if: steps.browser.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       # Base local: o percurso cria a conta e semeia os dados, e não toca em
       # nada que esteja publicado.
@@ -61,12 +88,16 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: node testes/ui/avaliar.js
 
-      # Falhando, as capturas dizem mais do que qualquer mensagem de erro.
+      # Falhando, as capturas dizem mais do que qualquer mensagem de erro. E
+      # só aí: guardavam-se em TODAS as corridas, catorze dias, 11 MB cada —
+      # 1,9 GB contra os 500 MB do plano. Numa corrida verde ninguém as abre.
+      # A exceção é a avaliação pedida à mão, que acaba verde e cujo parecer
+      # (relatorio/avaliacao.md) é o que se quer ler.
       - name: Guardar as capturas
-        if: always()
+        if: failure() || (github.event_name == 'workflow_dispatch' && inputs.avaliar)
         uses: actions/upload-artifact@v4
         with:
           name: interface-${{ github.run_id }}
           path: testes/ui/relatorio/
-          retention-days: 14
+          retention-days: 3
           if-no-files-found: warn

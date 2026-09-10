@@ -8,6 +8,14 @@ on:
     branches: [main, dev]
   workflow_dispatch:   # para correr a suite a pedido, em qualquer ramo
 
+# Três pushes seguidos ao mesmo ramo pagavam três corridas inteiras. Cancela-se
+# a anterior — mas só em pull request: um push a main ou a dev é uma promoção
+# ou uma publicação, e essas têm de acabar, senão fica um check «cancelled»
+# precisamente onde o guarda da chegada corre.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   testes:
     runs-on: ubuntu-latest
@@ -18,9 +26,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      # fixo ao patch: a cobertura é experimental no Node e um número que
+      # flutua entre corridas não serve de limiar
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.18.0
 
       - name: Correr os testes
         run: node --test "testes/*.test.js"
