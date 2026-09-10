@@ -61,7 +61,7 @@ const MAPA = [
   { id: 'correio', titulo: 'Correio (Resend e Email Routing)',
     ficheiros: ['worker/src/lib/correio.js', 'worker/src/lib/enderecos.js'] },
   { id: 'discord', titulo: 'Discord (bot e papéis)',
-    ficheiros: ['worker/src/discord.js', 'worker/src/acessos.js', 'scripts/discord-register.js',
+    ficheiros: ['worker/src/discord.js', 'worker/src/lib/papeis.js', 'worker/src/lib/bot.js', 'worker/src/acessos.js', 'scripts/discord-register.js',
       'scripts/discord-comandos.js'] },
   { id: 'equipa', titulo: 'Back office (/equipa)',
     ficheiros: ['worker/src/equipa.js', 'worker/src/equipa-api.js', 'worker/src/equipa-vista.js',
@@ -237,10 +237,10 @@ function guiaDosComandos() {
   return guia;
 }
 
-// o mapa PERMISSOES de worker/src/discord.js, lido do próprio código: comando → papéis que o podem correr
+// o mapa PERMISSOES de worker/src/lib/papeis.js, lido do próprio código: comando → papéis que o podem correr
 // Devolve: mapa {comando: [papéis]}; array vazio quer dizer só o master.
 function permissoes() {
-  const src = ler('worker/src/discord.js');
+  const src = ler('worker/src/lib/papeis.js');
   const bloco = (src.match(/export const PERMISSOES = \{([\s\S]*?)\};/) || [])[1] || '';
   const mapa = {};
   const re = /(\w+): \[([^\]]*)\]/g;

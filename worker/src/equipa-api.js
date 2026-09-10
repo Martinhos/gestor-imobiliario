@@ -16,7 +16,7 @@
    género de atalho que só se nota quando já ninguém sabe o que se passou. */
 
 import { json, err, body, now, badId, CATEGORIAS } from './lib/http.js';
-import { catsDe } from './discord.js';
+import { catsDe } from './lib/papeis.js';
 import { auditar, registarOp } from './lib/auditoria.js';
 
 // Corta a `n` caracteres com reticências — para os resumos que vão para o rasto.

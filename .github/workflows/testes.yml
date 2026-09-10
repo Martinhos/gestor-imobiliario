@@ -45,6 +45,48 @@ jobs:
           --test-coverage-lines=84 --test-coverage-branches=78 --test-coverage-functions=79
           "testes/*.test.js"
 
+      # Dois binários, fixados à versão e ao byte. Preferem-se às actions
+      # deles: a do gitleaks pede uma chave de licença a organizações, a do
+      # actionlint muda de runtime entre versões, e um checksum conferido
+      # aqui não depende de servidor nenhum de terceiros.
+      #
+      # gitleaks: o secret scanning do GitHub está fechado em repositório
+      # privado, portanto o varrimento corre dentro do runner. Sobre a
+      # árvore em cada push (segundos); o histórico inteiro fica para uma
+      # corrida à mão. Bloqueante desde o primeiro dia — varreu-se o
+      # repositório e não há um único falso positivo.
+      #
+      # actionlint: os workflows são quase todo bash dentro de YAML, e um
+      # erro aí só aparecia a meio de um deploy. Passa shellcheck a cada
+      # bloco run: e confere os tipos das expressões ${{ }}.
+      - name: Descarregar os binários de verificação
+        run: |
+          set -e
+          GITLEAKS_VERSAO=8.30.1
+          GITLEAKS_SHA256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          ACTIONLINT_VERSAO=1.7.12
+          ACTIONLINT_SHA256=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          mkdir -p /tmp/bin && cd /tmp/bin
+          curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSAO}/gitleaks_${GITLEAKS_VERSAO}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+          curl -sSfL -o actionlint.tgz "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSAO}/actionlint_${ACTIONLINT_VERSAO}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tgz" | sha256sum -c -
+          tar -xzf actionlint.tgz actionlint
+          echo "/tmp/bin" >> "$GITHUB_PATH"
+
+      - name: Procurar segredos na árvore
+        run: gitleaks dir . --no-banner --redact
+
+      - name: Verificar os workflows
+        env:
+          # só a partir de aviso. O bash do deploy tem o $ENV_FLAG sem aspas de
+          # propósito (é zero ou duas palavras: «--env dev»), e os «info» e
+          # «style» do shellcheck sobre isso não são erros — os avisos e os
+          # erros a sério continuam a travar
+          SHELLCHECK_OPTS: -S warning
+        run: actionlint -color
+
       # Um erro de sintaxe num módulo do cliente só se via ao abrir a app:
       # aqui aparece no pull request.
       - name: Verificar a sintaxe de todos os módulos
