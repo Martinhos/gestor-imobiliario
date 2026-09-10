@@ -50,13 +50,27 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
+      # Os dois passos fazem apt-get update, que puxa TODOS os repositórios do
+      # runner — incluindo um da Microsoft que não usamos e que às vezes responde
+      # 403. Com ~230 corridas por mês, um apt que espirra custava uma reexecução
+      # de cada vez. Três tentativas com quinze segundos entre elas.
       - name: Instalar o browser
         if: steps.browser.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
+        run: |
+          for tentativa in 1 2 3; do
+            npx playwright install --with-deps chromium && exit 0
+            echo "o apt falhou (tentativa $tentativa) — a repetir"; sleep 15
+          done
+          exit 1
 
       - name: Repor as dependências do sistema
         if: steps.browser.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+        run: |
+          for tentativa in 1 2 3; do
+            npx playwright install-deps chromium && exit 0
+            echo "o apt falhou (tentativa $tentativa) — a repetir"; sleep 15
+          done
+          exit 1
 
       # Base local: o percurso cria a conta e semeia os dados, e não toca em
       # nada que esteja publicado.
