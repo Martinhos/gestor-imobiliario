@@ -21,6 +21,22 @@ export const MODULOS = [
   'avaliacao', 'definicoes', 'copias',
 ];
 
+/* A camada da nuvem, pela ordem do index.html. Carrega inteira neste contexto
+   sem fingir mais nada — confirmou-se um a um. Fica separada do MODULOS de
+   propósito: a nuvem embrulha o save, o render e o go por reatribuição, e os
+   testes de lógica que já existem contam com as versões sem nuvem. */
+export const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'ajuda', 'painel',
+  'filtros', 'entrada', 'novidades', 'selecao', 'selecao-listas', 'guia'];
+
+/* Tudo o que o index.html carrega, pela ordem dele, como caminhos relativos a
+   web/. É esta a lista que interessa a quem procura colisões de nomes: dois
+   ficheiros a declarar o mesmo nome no mesmo âmbito só se veem juntos. Aqui
+   o arranque entra: a nuvem embrulha funções dele (o seed, no guia.js), e no
+   browser ele está carregado quando ela chega. */
+export const TUDO = MODULOS.map((n) => 'app/' + n + '.js')
+  .concat(['app/arranque.js', 'avisos.js', 'legal.js'])
+  .concat(NUVEM.map((n) => 'cloud/' + n + '.js'));
+
 function elementoFalso() {
   const el = {
     /* o style guarda o que lhe escrevem, incluindo as variaveis de CSS: sem
@@ -39,7 +55,7 @@ function elementoFalso() {
     addEventListener() {}, removeEventListener() {}, setAttribute() {},
     getAttribute: () => null, removeAttribute() {}, focus() {}, blur() {}, click() {},
     getBoundingClientRect: () => ({ top: 0, left: 0, width: 0, height: 0, bottom: 0, right: 0 }),
-    scrollIntoView() {}, insertAdjacentElement() {},
+    scrollIntoView() {}, insertAdjacentElement() {}, insertAdjacentHTML() {},
   };
   return el;
 }
@@ -90,16 +106,38 @@ export function carregarApp() {
   janela.self = janela;
 
   const ctx = vm.createContext(janela);
-  for (const nome of MODULOS) {
-    const ficheiro = path.join(WEB, 'app', nome + '.js');
-    const codigo = fs.readFileSync(ficheiro, 'utf8');
-    try {
-      vm.runInContext(codigo, ctx, { filename: 'app/' + nome + '.js' });
-    } catch (e) {
-      throw new Error('falhou a carregar app/' + nome + '.js: ' + e.message);
-    }
-  }
+  for (const nome of MODULOS) carregarEm(ctx, 'app/' + nome + '.js');
+  return proxyDe(ctx);
+}
 
+/* Avalia um ficheiro de web/ dentro do contexto, como o browser faria com um
+   <script src>: no mesmo âmbito que os anteriores.
+   Recebe: ctx — o contexto de vm; rel — o caminho relativo a web/.
+   Devolve: nada — o ficheiro fica avaliado no contexto; rebenta com o nome do
+   ficheiro à frente se ele não carregar. */
+function carregarEm(ctx, rel) {
+  const codigo = fs.readFileSync(path.join(WEB, rel), 'utf8');
+  try {
+    vm.runInContext(codigo, ctx, { filename: rel });
+  } catch (e) {
+    throw new Error('falhou a carregar ' + rel + ': ' + e.message);
+  }
+}
+
+/** A app inteira, nuvem incluída — o que o browser tem depois de carregar o
+    index.html todo. É onde uma redeclaração de const/let/class entre dois
+    ficheiros quaisquer rebenta, porque estão finalmente no mesmo âmbito. */
+export function carregarTudo() {
+  const app = carregarApp();
+  const ctx = app.__ctx;
+  for (const rel of TUDO.slice(MODULOS.length)) carregarEm(ctx, rel);
+  return app;
+}
+
+/* O proxy que dá acesso ao que vive no âmbito lexico do contexto.
+   Recebe: ctx — o contexto de vm com a app carregada.
+   Devolve: um Proxy sobre o contexto que resolve nomes avaliando-os. */
+function proxyDe(ctx) {
   // As declaracoes de topo (const, let, function) vivem no ambito lexico da
   // linguagem, nao no objeto global: chega-se-lhes avaliando o nome. O proxy
   // faz isso, para os testes escreverem app.euro2(...) como se fosse normal.

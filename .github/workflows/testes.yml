@@ -32,8 +32,18 @@ jobs:
         with:
           node-version: 22.18.0
 
+      # Com limiares, e inteiros: 84/78/79 são os números do dia em que isto
+      # entrou, arredondados para baixo. Sobem-se à medida que se escreve
+      # teste, e assim nunca descem. Aviso sério sobre o que o número mede: o
+      # arnês carrega os módulos de web/ num contexto de vm e a cobertura não
+      # os vê — isto é sobre worker/ e scripts/, cerca de um terço do código,
+      # não sobre o repositório.
       - name: Correr os testes
-        run: node --test "testes/*.test.js"
+        run: >-
+          node --test --experimental-test-coverage
+          --test-coverage-exclude="testes/**"
+          --test-coverage-lines=84 --test-coverage-branches=78 --test-coverage-functions=79
+          "testes/*.test.js"
 
       # Um erro de sintaxe num módulo do cliente só se via ao abrir a app:
       # aqui aparece no pull request.

@@ -391,7 +391,7 @@ const BASE={192:'A',193:'A',194:'A',195:'A',196:'A',197:'A',199:'C',200:'E',201:
   217:'U',218:'U',219:'U',220:'U',221:'Y',224:'a',225:'a',226:'a',227:'a',228:'a',229:'a',
   231:'c',232:'e',233:'e',234:'e',235:'e',236:'i',237:'i',238:'i',239:'i',241:'n',242:'o',
   243:'o',244:'o',245:'o',246:'o',249:'u',250:'u',251:'u',252:'u',253:'y',186:'o',170:'a',
-  8364:'E',8220:'"',8221:'"',8216:"'",8217:"'",8212:'-',8211:'-',183:'.',176:'o',186:'o'};
+  8364:'E',8220:'"',8221:'"',8216:"'",8217:"'",8212:'-',8211:'-',183:'.',176:'o'};
 // Largura de um carácter (milésimos de em) na fonte pedida; acentuados usam a letra base, desconhecidos levam uma largura média.
 // Recebe: code — o código do carácter (charCodeAt); bold — true para a Helvetica-Bold.
 // Devolve: a largura em milésimos de em (número).

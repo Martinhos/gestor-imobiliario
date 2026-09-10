@@ -417,8 +417,8 @@ render = function () {
   return r;
 };
 
-var css = document.createElement('style');
-css.textContent =
+var cssSelecao = document.createElement('style');
+cssSelecao.textContent =
   // a caixa de marcar, desenhada e não <input>: um checkbox do sistema
   // destoava de tudo o resto e não aceita o tamanho que aqui é preciso
   '.selbox{flex:0 0 auto;display:inline-flex;align-items:center;padding:10px 12px 10px 2px;cursor:pointer}' +
@@ -443,4 +443,4 @@ css.textContent =
   'body.sel-on .tabbar{display:none!important}' +
   'body.sel-on .wrap{padding-bottom:calc(120px + var(--inset-bottom))}' +
   '.txkebab:hover{color:var(--ink);background:var(--chip)}';
-document.head.appendChild(css);
+document.head.appendChild(cssSelecao);
