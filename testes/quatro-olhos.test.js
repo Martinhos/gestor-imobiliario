@@ -13,6 +13,14 @@ import { fileURLToPath } from 'node:url';
 const RAIZ = new URL('../', import.meta.url);
 const ler = (p) => readFileSync(new URL(p, RAIZ), 'utf8');
 
+/* Estes guardas leem o TEXTO dos ficheiros. Dentro da sandbox do Stryker
+   (npm run test:mutacao) esse texto está instrumentado — um «export const
+   PERMISSOES = {» passa a «= stryMutAct(...) ? {} : ...» — e falhariam sem
+   dizer nada sobre os testes de comportamento, que são os que interessam
+   medir. Saltam-se lá, e só lá. */
+const NA_SANDBOX = /\.stryker-tmp/.test(import.meta.url);
+const SO_FORA = { skip: NA_SANDBOX ? 'lê o texto dos ficheiros, e na sandbox do Stryker ele está instrumentado' : false };
+
 /* Um ciclo de importação em módulos ES pode dar zona morta temporal em
    runtime, e num Worker isso aparece como um 500 sem explicação nenhuma.
    Havia dois quando isto entrou (medidos com madge --circular):
@@ -20,7 +28,7 @@ const ler = (p) => readFileSync(new URL(p, RAIZ), 'utf8');
    notify.js → discord.js → notify.js. Resolvidos ao tirar de discord.js o
    que era lido de mais do que um lado — o bloco dos papéis e o envio pelo
    bot — para lib/. Fica aqui para não voltarem, sem download nenhum. */
-describe('as importações do worker', () => {
+describe('as importações do worker', SO_FORA, () => {
   // fileURLToPath e não .pathname: o caminho tem espaços, e o pathname vem com %20
   const base = fileURLToPath(new URL('worker/src/', RAIZ));
   const ficheiros = [];
@@ -82,7 +90,7 @@ describe('as importações do worker', () => {
    aparece a meio de um deploy. Os dois binários entram fixados à versão e ao
    byte: uma versão que mude sem ninguém dar por isso, ou um ficheiro que não
    bata certo com o checksum, não corre. */
-describe('os binários do CI', () => {
+describe('os binários do CI', SO_FORA, () => {
   const ci = ler('.github/workflows/testes.yml');
 
   const pinado = (nome) => {

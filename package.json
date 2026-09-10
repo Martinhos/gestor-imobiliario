@@ -12,7 +12,8 @@
     "test": "node --test \"testes/*.test.js\"",
     "test:watch": "node --test --watch \"testes/*.test.js\"",
     "test:ui": "node testes/ui/percorrer.js",
-    "test:ui:avaliar": "node testes/ui/avaliar.js"
+    "test:ui:avaliar": "node testes/ui/avaliar.js",
+    "test:mutacao": "npm install --no-save --no-audit --no-fund @stryker-mutator/core@9 @stryker-mutator/tap-runner@9 && npx stryker run"
   },
   "devDependencies": {
     "playwright": "^1.62.1",

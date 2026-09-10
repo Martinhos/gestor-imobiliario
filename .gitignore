@@ -11,3 +11,7 @@ web/gestor-imobiliario.apk
 # capturas do percurso de interface: pesam e refazem-se a cada corrida
 testes/ui/relatorio/
 .claude/worktrees/
+
+# testes de mutacao (npm run test:mutacao): a pasta de trabalho e o relatorio sao artefactos, nao codigo
+.stryker-tmp/
+testes/mutacao/
