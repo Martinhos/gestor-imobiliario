@@ -31,7 +31,11 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
+      # histórico todo: o guarda da chegada compara esta árvore com a da
+      # publicação anterior, que é o commit anterior deste ramo
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -58,6 +62,24 @@ jobs:
 
       - name: Onde vai isto
         run: echo "A publicar para **$ENV_LABEL**" >> $GITHUB_STEP_SUMMARY
+
+      # O último guarda antes de produção, e o que conta: o do pull request
+      # avisa cedo, mas nem toda a promoção passa por um.
+      #
+      # O HEAD^1 é a publicação anterior — o primeiro pai, e não um pai
+      # qualquer: produção sai deste ramo e só por merge, e seguir a primeira
+      # linha atravessa também os commits que o próprio deploy escreve aqui (o
+      # estado do terraform), que não tocam em web/ e portanto não contam.
+      #
+      # O workflow_dispatch fica de fora de propósito: é a saída de emergência
+      # para voltar a publicar o mesmo conteúdo — recuperar um deploy que
+      # falhou a meio, por exemplo —, e aí não há versão nenhuma para subir.
+      #
+      # Em dev não se aplica: lá não há cache a proteger, e a versão sobe uma
+      # vez por promoção e não a cada publicação.
+      - name: Confirmar que esta publicação chega a quem tem a app
+        if: env.IS_PROD && github.event_name == 'push'
+        run: node scripts/chegada.js HEAD^1
 
       # APK só na produção: leva o endereço da app lá dentro.
       - uses: actions/setup-java@v4
