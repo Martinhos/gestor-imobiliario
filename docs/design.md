@@ -1082,6 +1082,11 @@ O worker passa a servir tudo da **mesma cache**, cheia de uma vez no
 que já tinha esse caminho: o `verificarVersao` lê o `/versao.json`, limpa as
 caches e recarrega uma vez, à vista.
 
+> Este último parágrafo estava errado quando se escreveu, e ficou assim uma
+> semana: a app não tinha canal nenhum para mandar o worker trocar, e a versão
+> nova chegava por um efeito lateral. Está corrigido mais abaixo, em «Quem manda
+> na altura de trocar é a app — só que a app não tinha como».
+
 ### E quem já estava partido não se curava sozinho
 
 Esta é a metade que importa mais. Um arranque que falha assim é um ecrã em
@@ -1135,6 +1140,62 @@ E a transição desenrasca-se sozinha: fora de produção o worker novo assume j
 caches no `activate`. Quem ficou preso numa publicação anterior sai na primeira
 navegação, sem ter de limpar nada à mão. Medido: duas caches com ficheiros
 envenenados, uma navegação, e ficam zero.
+
+### «Quem manda na altura de trocar é a app» — só que a app não tinha como
+
+Ficou escrito aqui, e no `web/sw.js`, que tirar o `skipWaiting()` era seguro
+porque a app decidia a troca. **Metade disso não existia.** Uma auditoria
+adversarial ao caminho inteiro — seis levantamentos independentes, cada achado
+entregue a um cético com o ónus de o derrubar — foi buscar a frase ao código e
+não a encontrou: em todo o `web/` não havia um `postMessage`, um
+`registration.waiting`, um `controllerchange` nem um ouvinte de `message` no
+worker. As únicas chamadas ao service worker eram registar, `update()` e
+`unregister()`.
+
+E o passo que faltava não é acessório: **um `location.reload()` não promove um
+worker em espera.** O documento antigo e o novo sobrepõem-se, o registo nunca
+fica sem clientes, e o passo de ativação não corre — é a razão de existir do
+`skipWaiting` e do «Update on reload» das ferramentas do browser.
+
+O que a app fazia era outra coisa, por efeito lateral: apagava **todas** as
+caches e recarregava. Como o worker antigo continuava a mandar e a cache dele
+tinha desaparecido, tudo ia à rede, e da rede vinha a versão nova. Funcionava,
+e trazia três consequências que ninguém tinha visto:
+
+- a cache que se apagava incluía a que o worker em espera **acabara de encher**
+  no `install` dele — a versão nova inteira, gravada de uma vez. O `install`
+  corre uma só vez por worker, e um `caches.open` sobre um nome apagado devolve
+  uma cache nova e vazia, sem se queixar;
+- o worker antigo recriava a cache com o nome da versão **antiga** e enchia-a
+  ficheiro a ficheiro com o que a rede desse, que já era a versão nova. A
+  atomicidade do `addAll` — a invariante que resolveu a v31 — deixava de valer
+  para lá do primeiro carregamento;
+- e o botão «Atualizar» destruía a única cópia local **antes** de saber se havia
+  substituta. Sem rede, quem lhe carregasse ficava sem app. O ecrã que tranca a
+  app por a versão ser velha demais leva a esse botão, e não a mais nenhum.
+
+Agora pede-se. O worker atende um `{tipo:'assumir'}` e só nessa mensagem chama
+`skipWaiting()`. A diferença para o que partiu a v31 é toda: aquele acontecia a
+meio de um carregamento; este só acontece depois de a app já ter decidido
+recarregar, portanto não há carregamento nenhum para partir.
+
+E a troca vale mais do que evitar o estrago. Um worker que chega a «em espera» é
+a **prova** de que a versão nova está inteira em disco, porque o `install` dele é
+um `addAll`, que só termina com todos os ficheiros lá dentro. Trocar por ali é
+arrancar de uma cache construída de uma vez — que era, desde o início, a razão de
+o desenho ser este.
+
+O machado fica, porque continua a ser preciso: quando não há worker em espera, é
+ele que faz a versão nova chegar a um separador que ficou aberto. Mas passa a
+poupar a cache da versão para onde se vai, deixa de ficar pendurado num `update()`
+sem tecto, e no botão só corre depois de o servidor responder — com uma sonda
+curta, porque uma rede que fica à espera não é uma rede. E o `activate` de
+qualquer worker que ative com a cache vazia volta a enchê-la, de uma vez.
+
+Uma nota sobre o registo: passou a `updateViaCache: 'none'`. O valor por omissão
+é `'imports'`, e o `sw.js` é igual entre versões de propósito — o que muda é o
+`/avisos.js` que ele importa. Detetar a versão nova ficava a depender dos
+cabeçalhos de cache de um ficheiro.
 
 ## Ver a montra antes de a publicar
 

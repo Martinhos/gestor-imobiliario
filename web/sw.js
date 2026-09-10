@@ -47,16 +47,43 @@ const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 
 const SHELL = ['/', '/index.html', '/avisos.js', '/legal.js', '/manifest.webmanifest',
   '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'].concat(APP, NUVEM);
 
-/* NÃO se chama skipWaiting(). Chamava-se, e foi por isso que a v31 partiu em
-   produção: o worker novo assumia o controlo a meio de um carregamento, e a
-   mesma página ficava com os primeiros <script> servidos pelo worker antigo
-   (da cache da versão anterior) e os seguintes pelo novo. Como os endereços
-   dos ficheiros não levam versão no nome, nada detetava a troca — e um
-   nucleo.js novo com um dados.js velho não arranca.
+/* NÃO se chama skipWaiting() no install. Chamava-se, e foi por isso que a v31
+   partiu em produção: o worker novo assumia o controlo a meio de um
+   carregamento, e a mesma página ficava com os primeiros <script> servidos
+   pelo worker antigo (da cache da versão anterior) e os seguintes pelo novo.
+   Como os endereços dos ficheiros não levam versão no nome, nada detetava a
+   troca — e um nucleo.js novo com um dados.js velho não arranca.
 
-   O worker novo espera. Quem manda na altura de trocar é a app, que já tem
-   esse caminho: o verificarVersao lê o /versao.json, limpa as caches e
-   recarrega uma vez, à vista (cloud/novidades.js). */
+   O worker novo espera, e quem manda na altura de trocar é a app. Isto esteve
+   escrito aqui antes de ser verdade: a app não tinha canal nenhum para o
+   dizer, e um location.reload() NÃO promove um worker em espera — o documento
+   antigo e o novo sobrepõem-se, o registo nunca fica sem clientes, e o passo
+   de ativação não corre. O que a app fazia era apagar as caches por baixo do
+   worker antigo e recarregar, e a versão nova chegava por esse efeito lateral.
+
+   Agora pede-se, e é aqui que se atende. A diferença para o skipWaiting que
+   partiu a v31 é toda: aquele acontecia a meio de um carregamento; este só
+   acontece depois de a app já ter decidido recarregar, portanto não há
+   carregamento nenhum para partir. Do outro lado: trocarDeWorker, em
+   cloud/novidades.js. */
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.tipo === 'assumir') self.skipWaiting();
+});
+
+/* Enche a shell se a cache desta versão estiver vazia.
+   O install corre uma vez só por worker — passar de espera a ativo não o
+   repete — e o caches.open sobre um nome apagado devolve uma cache NOVA e
+   vazia, sem se queixar. Quem apaga caches por baixo de um worker (o
+   limparCaches da app, a rede de segurança do arranque) deixava-a assim para
+   sempre, e a app abria offline com metade do código ou com nenhum.
+   Devolve: Promise que resolve quando a cache tiver conteúdo; sem rede
+   resolve na mesma, sem encher nada. */
+function garantirShell() {
+  return caches.open(CACHE)
+    .then((c) => c.keys().then((ks) => (ks.length ? null : c.addAll(SHELL))))
+    .catch(() => {});
+}
+
 self.addEventListener('install', (e) => {
   /* fora de produção assume-se já: não há cache a proteger, portanto não há
      carregamento a meio que se possa partir — e é isto que tira do caminho um
@@ -79,7 +106,7 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    ).then(garantirShell).then(() => self.clients.claim())
   );
 });
 
