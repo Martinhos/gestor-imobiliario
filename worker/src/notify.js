@@ -52,7 +52,7 @@ function avisar(env, ctx, embed, components, canal, webhook, reserva) {
   }
   const p = (async () => {
     if (env.DISCORD_BOT_TOKEN && canal) {
-      const { postAsBot } = await import('./discord.js');
+      const { postAsBot } = await import('./lib/bot.js');
       if (await postAsBot(env, canal, { embeds: [embed], components: components || [] })) return true;
     }
     if (webhook && await post(webhook, { embeds: [embed] })) return true;
@@ -249,7 +249,7 @@ export async function watchLimits(env, ctx) {
   };
   const enviar = (async () => {
     if (env.DISCORD_BOT_TOKEN && canal) {
-      const { postAsBot } = await import('./discord.js');
+      const { postAsBot } = await import('./lib/bot.js');
       if (await postAsBot(env, canal, payload)) return true;
     }
     return post(url, payload);
@@ -284,7 +284,7 @@ export async function dailyReport(env, ctx) {
     }],
   };
   if (env.DISCORD_BOT_TOKEN && canal) {
-    const { postAsBot } = await import('./discord.js');
+    const { postAsBot } = await import('./lib/bot.js');
     if (await postAsBot(env, canal, payload)) return true;
   }
   return post(url, payload);   // diz se chegou: o batimento depende disto

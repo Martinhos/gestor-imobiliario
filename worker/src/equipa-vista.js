@@ -10,7 +10,7 @@
    princípio mantém-se: uma ferramenta usada por meia dúzia de pessoas não
    justifica mais do que isto. */
 
-import { catsDe } from './discord.js';
+import { catsDe } from './lib/papeis.js';
 
 const ESTADOS = { criado: 'Recebido', resolucao: 'Em resolução', concluido: 'Concluído' };
 const CATS = {

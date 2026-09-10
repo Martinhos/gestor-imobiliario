@@ -1,0 +1,14 @@
+# O gitleaks corre no CI sobre a árvore (gitleaks dir .) e lê este ficheiro
+# sozinho. As regras são as de origem; só se tira do caminho o que não é
+# código nosso e não vai para o git: os artefactos locais do wrangler (o
+# worker empacotado com as variáveis lá dentro — treze achados, todos aí) e
+# o node_modules. No CI nenhuma das pastas existe; isto é para quem o corra
+# no portátil ter o mesmo resultado.
+[extend]
+useDefault = true
+
+[[allowlists]]
+paths = [
+  '''^\.wrangler/''',
+  '''^node_modules/''',
+]
