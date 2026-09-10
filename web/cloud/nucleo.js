@@ -693,6 +693,9 @@ function pullNow(force) {
 // Devolve: nada — dispara o push (e talvez o pull) e segue.
 function syncCycle() {
   if (!CW.user) return;
+  // trancado pelo ecrã de atualização forçada: uma versão velha demais para
+  // se usar é velha demais para escrever (cloud/novidades.js:gateAtualizar)
+  if (CW.trancado) return;
   pushNow().then(function () {
     if (Date.now() - lastPull > PULL_MS && !modalStack.length) pullNow();
   });

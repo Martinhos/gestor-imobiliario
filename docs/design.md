@@ -1286,6 +1286,30 @@ visita: o `sessionStorage` sobrevive a recargas e a janela pode ficar aberta
 semanas. Uma cura gasta numa segunda-feira desarmava a rede de segurança para o
 resto da vida daquele separador. Dez minutos, e volta a armar-se.
 
+### E o ecrã que tranca a app não trancava nada
+
+O último dos oito, e o mais fácil de ver depois de apontado. O ecrã que tranca a
+app quando a versão desce abaixo da mínima nascia com `z-index: 198` — **por
+baixo** do ecrã de entrada, que é 200. Invisível a quem ainda não entrou; e é
+justamente por causa dessas pessoas que a versão se verifica de propósito sem
+sessão, como o comentário do fim do `novidades.js` diz: «quem está preso no ecrã
+de entrada por causa de um erro já corrigido também precisa».
+
+O mais dado a pensar é que este bug já tinha sido encontrado e corrigido ao lado,
+no ecrã de reposição de palavra-passe, e o comentário dele di-lo em três linhas:
+«abria por baixo do ecrã de entrada e ninguém o via — a ligação do email parecia
+não fazer nada. **O mesmo bug do ecrã de atualização, o mesmo remédio.**» O
+remédio foi aplicado a um e não ao outro.
+
+Os portões vivem em JS, com o `z-index` escrito à mão em cada um, e por isso não
+passavam por nenhuma das regras da escada das camadas, que lê o CSS. Agora
+passam: um teste lê os números dos quatro e prende a ordem.
+
+E, já que o ecrã diz que a app não pode ser usada: o ciclo de sincronização de
+30 segundos continuava armado por trás dele, a empurrar o estado local para o
+servidor a partir de uma versão declarada inutilizável. Se ela é velha demais
+para se usar, é velha demais para escrever.
+
 ## Ver a montra antes de a publicar
 
 A página de entrada só era servida no domínio raiz, portanto a única maneira de

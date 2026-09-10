@@ -190,9 +190,21 @@ function mostrarNovidadesSeHouver() {
    Devolve: nada — acrescenta o ecrã ao body (ou nada, se já lá estiver). */
 function gateAtualizar(minima) {
   if (document.getElementById('cwUpd')) return;
+  /* Trancado quer dizer trancado: o ciclo de sincronização de 30 segundos
+     (nucleo.js:startSync) continuava armado por trás deste ecrã, a empurrar o
+     estado local para o servidor a partir de uma versão que acabámos de
+     declarar inutilizável. Se ela é velha demais para se usar, é velha demais
+     para escrever. */
+  CW.trancado = true;
+  try { lockScroll(true); } catch (e) {}
   var el = document.createElement('div');
   el.id = 'cwUpd';
-  el.style.cssText = 'position:fixed;inset:0;z-index:198;background:var(--bg);overflow:auto;' +
+  /* 235: acima do portão de login (200) e da reposição de palavra-passe (230),
+     abaixo do ecrã de progresso (240). Esteve em 198, ou seja POR BAIXO da
+     entrada, e portanto invisível a quem ainda não entrou — que é justamente
+     quem o comentário do fim deste ficheiro diz que ele existe para servir:
+     quem está preso no ecrã de entrada por causa de um erro já corrigido. */
+  el.style.cssText = 'position:fixed;inset:0;z-index:235;background:var(--bg);overflow:auto;' +
     'padding:calc(28px + var(--inset-top)) 18px calc(28px + var(--inset-bottom));display:flex;justify-content:center';
   el.innerHTML = '<div style="max-width:420px;width:100%;margin:auto">' +
     card('Há uma versão nova', 'Esta já não pode ser usada',
