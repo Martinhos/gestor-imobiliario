@@ -1898,6 +1898,101 @@ Não se mostra uma ação que o cargo não permite: pergunta-se pode() antes
 (acessos.js:pode; componentes.js:lpMenu), e um colaborador nunca entra em
 ownerIds, quotas ou contas entre proprietários (acessos.js:souDono).
 
+## As ferramentas, e o que ficou de fora
+
+Perguntou-se que ferramentas gratuitas se podiam trazer para facilitar a vida
+de quem programa, opera, atende e usa. A resposta veio de um levantamento por
+seis lentes com um cético por recomendação, e as três perguntas do cético eram
+as que decidem tudo aqui: **é mesmo gratuito, e permanente? funciona com
+repositório privado? encaixa num projeto sem passo de compilação, com 43
+globais, e sem servidor sempre ligado?** A maior parte do que toda a gente
+recomenda cai na segunda pergunta — CodeQL, o secret scanning do GitHub, o
+`dependency-review`, o Codecov acima de 250 envios por mês — porque só é grátis
+em repositórios públicos, e o Rendorium não é.
+
+O que entrou, por ordem de proveito a dividir pelo custo de entrada:
+
+**A fatura, primeiro.** Medido pela API do GitHub: 226 artefactos vivos, 1,9 GB
+contra os 500 MB do plano, todos capturas do percurso guardadas em corridas
+verdes que ninguém abre. E ~1 300 dos 2 000 minutos por mês, sem `concurrency`
+em dois dos três workflows. Quatro linhas de YAML. O `cancel-in-progress` é só
+em *pull request*, porque um push a `main` é uma promoção e tem de acabar —
+senão fica um check «cancelled» precisamente onde o guarda da chegada corre.
+
+**Os tokens saíam nos logs.** A linha automática de invocação dos Workers Logs
+grava o URL em bruto, e as ligações que se entregam às pessoas levam o segredo
+no endereço (`/?convite=…`, `/?ligar=…`). O código mascara tokens em tudo o que
+escreve; esta linha passava por fora. `invocation_logs = false` nos dois
+ambientes — a observabilidade não é herdável entre eles —, e cada relato passa
+a deixar um registo estruturado e mascarado, para o `dev` não ficar às escuras.
+
+**Os testes dizem o que cobrem e o que colide.** Cobertura nativa do
+`node:test` com limiares inteiros, e uma verdade sobre o que o número mede: o
+arnês carrega o `web/` em `vm` e a cobertura não o vê — é sobre `worker/` e
+`scripts/`, um terço do código. E o guarda de globais, nos dois sentidos: a
+leitura do texto apanha `var` e `function` duplicados entre os 43 ficheiros; o
+`carregarTudo()` avalia a app inteira, nuvem incluída, no mesmo contexto — onde
+um `const` repetido rebenta como no browser. Havia uma colisão real, `var css`
+em três ficheiros de `cloud/`, precisamente a parte que o arnês não carregava.
+
+**Quatro olhos.** `gitleaks` e `actionlint` como binários fixados à versão e ao
+byte, com o checksum conferido antes de correr — não pelas *actions* deles, que
+pedem chaves de licença ou mudam de runtime. O `shellcheck` do runner apontou
+catorze coisas de nível *info* e *style* no bash do deploy, e uma a sério; a
+resposta certa foi travar só a partir de *warning*, não reescrever 18 KB que
+funcionam para calar sugestões. Um `madge --circular` encontrou dois ciclos no
+worker; a causa era a mesma nos dois — o `worker/src/discord.js` tinha coisas
+lidas de mais do que um lado — e saíram para `worker/src/lib/papeis.js` e
+`worker/src/lib/bot.js`. O guarda dos ciclos ficou como teste, sem download.
+
+**O worker mede-se.** As cinco consultas D1 mais pesadas no resumo diário — e
+importa mais desde 2026-09-01, porque passar dos 5M de linhas lidas deixou de
+ser um aviso e passou a ser a app em baixo até à meia-noite. O Analytics Engine,
+que está no plano gratuito, com um ponto por pedido e um por relato, sempre com
+a rota genérica e nunca com um id de pessoa — o código ficou, a ligação espera:
+o Analytics Engine tem de ser ligado uma vez na conta, à mão, e com a ligação
+declarada antes disso o deploy é recusado (código 10089), como aconteceu ao dev
+à primeira. E o batimento para fora: o alarme
+da casa é a ausência de linhas no `op_log`, mas quem deteta a ausência é o
+próprio cron — se ele morrer, ninguém dá por isso. Um GET a um URL opaco, só
+depois de o trabalho ter corrido bem, é a única peça que não pode ser feita de
+dentro da Cloudflare.
+
+**Os testes à prova de mutação.** Com ~800 testes verdes, a pergunta que fica é
+se eles verificam alguma coisa ou se só passam por lá. O Stryker altera o código
+de propósito e vê se algum teste se queixa. Corre à mão, nunca no CI, sobre o
+que é lógica pura e bem coberta — o worker inteiro levaria horas a medir
+sobretudo ficheiros que falam com a D1 e o Discord, onde um mutante sobreviver
+diz pouco.
+
+A primeira corrida, sobre `worker/src/lib`, a salvaguarda e o guarda da chegada:
+2 023 mutantes, **70,7 % mortos** (77,8 % entre o código coberto), em 15
+minutos. O número que interessa não é esse — é a lista. O
+`worker/src/lib/relatos.js` fica em **38,7 %**: o caminho que recebe um erro,
+decide se abre um pedido ou engorda o que existe, e se avisa quem programa, tem
+64 mutantes a sobreviver — os testes tocam-lhe, mas não o verificam. O
+`worker/src/lib/bot.js` em 0 %, sem teste nenhum, como se esperava de uma
+chamada HTTP. Do outro lado, `worker/src/lib/permissoes.js` e
+`worker/src/lib/medidas.js` acima de 84 %. É por aqui que se escreve o próximo
+teste — e não por onde a cobertura de linhas manda, que dava o
+`worker/src/lib/relatos.js` como bem coberto.
+
+### O que ficou de fora, e porquê
+
+**`tsc --noEmit`** com `jsconfig.json`: 474 erros, 470 dos quais são a
+arquitetura — as guardas `module.exports` fazem-no ler módulos onde há scripts
+(237 «cannot find name»), o `CW` é um saco (165), e o embrulhar por reatribuição
+dá 35 «cannot assign to function». Ferramenta que luta contra a casa. Apanhou
+uma chave duplicada num literal, que se corrigiu, e ficou por aí.
+
+**Sentry** é genuinamente grátis e até encaixa sem *build* — descartado por ser
+o item que mais facilmente derrama dados pessoais numa app cheia de nomes de
+inquilinos e valores de renda; a região UE só se escolhe na criação da
+organização. **SonarQube Cloud** é grátis até 50 000 linhas e há 40 244: a
+margem acaba a curto prazo, e é o único caso em que o código privado passaria a
+ser analisado fora da máquina. **Codecov** dá repositórios privados mas 250
+envios por mês, e o `Testes` correu 319 vezes em 30 dias.
+
 ## Dívidas de design conhecidas
 O que já está fora destas regras, por ordem de gravidade. Não está
 corrigido: cada uma tem o sítio, para quem lhe pegar.

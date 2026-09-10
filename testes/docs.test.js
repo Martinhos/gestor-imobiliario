@@ -56,7 +56,12 @@ function limpaSimbolo(sim) {
   return s;
 }
 
-describe('gerar-docs', () => {
+/* Dentro da sandbox do Stryker (npm run test:mutacao) os ficheiros mutados
+   levam funções auxiliares injetadas (stryMutAct_…, stryCov_…) sem comentário
+   nenhum, e o gerador acusá-las-ia como nuas. Isto é um guarda sobre o texto,
+   não sobre comportamento: salta-se lá, e só lá. */
+const NA_SANDBOX = /\.stryker-tmp/.test(import.meta.url);
+describe('gerar-docs', { skip: NA_SANDBOX ? 'lê o texto dos ficheiros, e na sandbox do Stryker ele está instrumentado' : false }, () => {
   test('corre, cobre o codigo todo, e a vista compila com o resultado', async () => {
     execFileSync(process.execPath, [fileURLToPath(new URL('../scripts/gerar-docs.js', import.meta.url))], { stdio: 'pipe' });
     const { DOCS } = await import('../worker/src/docs-gerados.js?' + Date.now());

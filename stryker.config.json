@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-js/master/packages/core/schema/stryker-schema.json",
+  "porque_comment": [
+    "Testes de mutação: o Stryker altera o código de propósito (troca um < por <=, apaga um ramo, inverte uma condição)",
+    "e vê se algum teste se queixa. Com ~800 testes verdes e 84% de linhas, é a única maneira de saber se os testes",
+    "VERIFICAM alguma coisa ou se só passam por lá. Corre à mão, nunca no CI — demora minutos a horas e o resultado é",
+    "para ler, não para travar. Como correr: npm run test:mutacao (instala o Stryker sem o guardar no package.json).",
+    "O alvo está limitado ao que é lógica pura e bem coberta; o worker inteiro levaria horas e mediria sobretudo",
+    "ficheiros que falam com a D1 e o Discord, onde um mutante sobreviver diz pouco.",
+    "Os guardas que leem o TEXTO dos ficheiros mutados (testes/quatro-olhos.test.js) saltam-se a si próprios",
+    "quando correm dentro da sandbox — o executor tap não aceita negações no testFiles — porque lá o texto está",
+    "instrumentado e falhariam sem dizer nada sobre os testes de comportamento."
+  ],
+  "testRunner": "tap",
+  "tap": {
+    "testFiles": ["testes/*.test.js"],
+    "forceBail": true
+  },
+  "mutate": [
+    "worker/src/lib/*.js",
+    "worker/src/salvaguarda.js",
+    "scripts/chegada.js"
+  ],
+  "coverageAnalysis": "perTest",
+  "reporters": ["clear-text", "progress", "html"],
+  "htmlReporter": { "fileName": "testes/mutacao/relatorio.html" },
+  "tempDirName": ".stryker-tmp",
+  "cleanTempDir": true,
+  "concurrency": 3,
+  "timeoutMS": 20000,
+  "thresholds": { "high": 80, "low": 60, "break": null }
+}
