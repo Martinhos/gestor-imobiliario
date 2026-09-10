@@ -1266,6 +1266,26 @@ o `addAll` **inteiro**, porque o `addAll` é tudo ou nada, e a cache fica vazia.
 Agora que a `SHELL` é também a lista de permissão do `fetch`, uma omissão passou
 a tirar um ficheiro da cache em silêncio — razão a mais para a prender.
 
+### A cura não pode curar offline
+
+A rede de segurança do arranque é a ação mais destrutiva que a app tem: apaga
+**todas** as caches e faz `unregister` de **todos** os service workers. Fazia-o
+sem perguntar se havia rede — e sem rede o que está guardado é a única cópia da
+app que existe. O que era «meia app partida» passava a «nenhuma app», sem volta
+enquanto a rede não voltasse. Os dois guardas que lá estavam não travavam nada:
+o `readyState` ainda é `loading`, porque os `<script>` estão no fim do `body`.
+
+Agora sai à porta com `navigator.onLine === false`, **antes de marcar seja o que
+for** — sair sem gastar a tentativa é o que deixa a cura disponível para quando
+houver rede. Só o `=== false` é de confiança: o `onLine` a `true` mente com
+frequência (portal cativo, wifi sem rota), por isso ele trava mas não autoriza.
+
+E a marca passa a guardar **quando** se curou, não só **que** se curou. O
+comentário dizia «uma vez por sessão», mas numa app instalada a sessão não é uma
+visita: o `sessionStorage` sobrevive a recargas e a janela pode ficar aberta
+semanas. Uma cura gasta numa segunda-feira desarmava a rede de segurança para o
+resto da vida daquele separador. Dez minutos, e volta a armar-se.
+
 ## Ver a montra antes de a publicar
 
 A página de entrada só era servida no domínio raiz, portanto a única maneira de
