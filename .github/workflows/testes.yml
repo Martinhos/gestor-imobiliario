@@ -79,6 +79,12 @@ jobs:
         run: gitleaks dir . --no-banner --redact
 
       - name: Verificar os workflows
+        env:
+          # só a partir de aviso. O bash do deploy tem o $ENV_FLAG sem aspas de
+          # propósito (é zero ou duas palavras: «--env dev»), e os «info» e
+          # «style» do shellcheck sobre isso não são erros — os avisos e os
+          # erros a sério continuam a travar
+          SHELLCHECK_OPTS: -S warning
         run: actionlint -color
 
       # Um erro de sintaxe num módulo do cliente só se via ao abrir a app:
