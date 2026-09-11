@@ -777,8 +777,15 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
 /* o painel de filtros é da família dos menus e entra como eles; a marca
    .entra é posta por quem o abre (vistas.js:fpanelEntra) e não sobrevive
    ao render seguinte — o painel já aberto não pisca a cada filtro mexido,
-   que é o mesmo desenho da dobra (.fold.entra) */
-.fpanel.on.entra{transform-origin:top center;animation:popEntra var(--rapido) var(--curva)}
+   que é o mesmo desenho da dobra (.fold.entra).
+   Mas NÃO leva o tempo nem a curva dos outros menus, e a diferença é o
+   tamanho: o sel() e o kebab são caixas de umas centenas de pixeis, este
+   painel ocupa a largura do conteúdo — 1132px medidos em ecrã de 1440. Os
+   4% do popEntra são ali 10px e aqui 45px, e a régua das curvas lá em cima
+   é a distância percorrida, não a família do componente: com a --curva em
+   --rapido, 83% do caminho fazia-se em 36ms e o painel aparecia feito.
+   Daí o --medio com a curva de quem atravessa distância. */
+.fpanel.on.entra{transform-origin:top center;animation:popEntra var(--medio) var(--curva-entra)}
 /* --- E saem ---
    Mais curta do que a entrada (--medio contra --lento): o que se fecha já
    foi decidido e não pode prender a mão. O closeModal TROCA .open por .sai:
