@@ -42,16 +42,28 @@ function calNav(delta){
   /* A grelha do mês vira como uma página, para o lado a que se foi. Sem isto
      o mês trocava de números no sítio e ninguém via para onde tinha andado. */
   const grelha=()=>document.getElementById('calCard');
+  /* E o painel do dia cresce até ao tamanho do mês novo, em vez de o tomar de
+     um fotograma para o outro: o dia em foco muda com o mês, e com ele o que
+     lá está escrito — medido, 149px em setembro e 426px em outubro, com a
+     legenda por baixo a saltar 279px.
+
+     Mexe no #calDiaPanel, que é OUTRO elemento do que o deslizarEntre anima
+     (o #calCard): as duas animações não disputam a mesma caixa, e o painel
+     está por baixo da grelha, portanto a altura dele também não mexe com o
+     retângulo que a fita mede. No --lento da fita, para o ecrã todo assentar
+     de uma vez em vez de a caixa parar antes de a página acabar de virar. */
+  const comPainel=(pintar)=>()=>crescerEmAltura(
+    ()=>document.getElementById('calDiaPanel'),pintar,'--lento');
   const hoje=pzHoje().slice(0,7),emVista=calMesEmVista();
   if(!delta){
     /* já se está no mês de hoje: não há para onde rodar. O calMes podia estar
        posto — com o valor do mês de hoje — por se ter voltado pela seta. */
-    if(emVista===hoje){calMes='';return render()}
-    return deslizarEntre(grelha,()=>{calMes='';render()},emVista>hoje?-1:1);
+    if(emVista===hoje)return comPainel(()=>{calMes='';render()})();
+    return deslizarEntre(grelha,comPainel(()=>{calMes='';render()}),emVista>hoje?-1:1);
   }
   const d=new Date(calInicio()+'T00:00:00');
   d.setMonth(d.getMonth()+delta);
-  deslizarEntre(grelha,()=>{calMes=pzIso(d).slice(0,7);render()},delta>0?1:-1);
+  deslizarEntre(grelha,comPainel(()=>{calMes=pzIso(d).slice(0,7);render()}),delta>0?1:-1);
 }
 
 /* As ocorrências dos movimentos planeados dentro de um intervalo de dias,

@@ -98,9 +98,11 @@ function msDoToken(nome,porOmissao){
    que o que leva dentro — e este painel não tem menus de sel() lá dentro para
    serem recortados.
    Recebe: obter — função que devolve a caixa (chamada antes e depois de pintar);
-   pintar — função que troca o conteúdo.
+   pintar — função que troca o conteúdo; token (opcional) — o degrau de duração
+   a usar, '--medio' por omissão (o calNav pede o '--lento' para a caixa
+   assentar no mesmo tempo que a grelha leva a virar a página).
    Devolve: nada — pinta sempre, e anima só quando há diferença de altura. */
-function crescerEmAltura(obter,pintar){
+function crescerEmAltura(obter,pintar,token){
   const a=obter();
   if(!a||!a.animate||semMovimento()){pintar();return}
   const h0=a.getBoundingClientRect().height;
@@ -110,7 +112,7 @@ function crescerEmAltura(obter,pintar){
   const h1=b.getBoundingClientRect().height;
   // menos de um pixel não é crescimento nenhum, e custa o mesmo que um a sério
   if(Math.abs(h1-h0)<1)return;
-  const dur=msDoToken('--medio',200),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
+  const dur=msDoToken(token||'--medio',200),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
   const antes=b.style.overflow;
   b.style.overflow='hidden';
   const an=b.animate([{height:h0+'px'},{height:h1+'px'}],{duration:dur,easing:curva});
