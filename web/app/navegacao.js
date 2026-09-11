@@ -103,7 +103,7 @@ function goBarra(id){
    Devolve: nada — redesenha a vista. */
 function go(id){
   const lado=_ladoSep;_ladoSep=0;
-  const pintar=()=>{tab=id;setPage='';donutCat='';closeDrawer();_entrar=1;buildNav();render();
+  const pintar=()=>{tab=id;setPage='';donutCat='';closeDrawer();fecharFiltros();_entrar=1;buildNav();render();
     try{window.scrollTo(0,0)}catch(e){}};
   /* tocar no separador aceso não é uma travessia, é uma repintura — e essa já
      tem o acompanhamento das peças */

@@ -27,6 +27,39 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 34,
+    data: '2026-09-11',
+    titulo: 'A app mexe-se melhor, e arranca mais segura',
+    seccoes: [
+      {
+        titulo: 'As janelas fecham-se, em vez de desaparecerem',
+        afeta: ['app'],
+        itens: [
+          'Uma janela — um formulário, a ficha de um registo, uma pergunta — entrava a deslizar e depois desaparecia de repente. Agora sai como entrou: desvanece-se, e no telemóvel desce por onde tinha subido.',
+          'O painel dos filtros passa a abrir-se a partir do botão, como os outros menus, e fecha-se sozinho quando mudas de ecrã — deixou de ficar aberto por cima da lista quando voltavas. Os filtros que escolheste continuam lá; o que se fecha é só o painel.',
+          'O botão de voltar ao topo aparece e sai a desvanecer, em vez de surgir e sumir de repente a meio da página a deslizar.',
+        ],
+      },
+      {
+        titulo: 'O calendário deixou de saltar',
+        afeta: ['app'],
+        itens: [
+          'Tocar noutro dia trocava o cartão do que está marcado de um instante para o outro, e tudo o que estava por baixo saltava com ele. Agora o cartão cresce ou encolhe até ao tamanho do dia que escolheste.',
+          'Ao mudar de mês, os dias viram a página para o lado a que foste e o cartão cresce para acolher o mês novo — incluindo os meses que precisam de uma sexta semana, que antes davam um salto.',
+        ],
+      },
+      {
+        titulo: 'E arranca mais segura',
+        afeta: ['app'],
+        itens: [
+          'Quando a app se repara sozinha depois de um arranque falhado, passa a confirmar primeiro que há rede. Sem rede, o que está guardado no aparelho é a única cópia que existe, e apagá-la deixava-te sem app nenhuma até a ligação voltar.',
+          'O aviso de atualização voltou a aparecer a quem está no ecrã de entrada — que é precisamente quem mais precisa dele, se ficou preso por causa de um erro entretanto corrigido.',
+          'Uma atualização só entra quando chega inteira, e as duas primeiras leituras ao servidor passaram a partir ao mesmo tempo: a app fica pronta um pouco mais cedo.',
+        ],
+      },
+    ],
+  },
+  {
     v: 33,
     data: '2026-09-09',
     titulo: 'Dois defeitos de ecrã grande',

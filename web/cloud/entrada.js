@@ -660,8 +660,20 @@ function hideAuth() {
    servidor local, uma alteração a um ficheiro só se veria depois de mudar a
    versão — e localhost não é uma publicação. No dev fica, que é onde as
    travessias entre versões a sério se exercitam antes de irem para produção. */
-if ('serviceWorker' in navigator && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
-  try { navigator.serviceWorker.register('sw.js'); } catch (e) {}
+/* O updateViaCache: 'none' não é decorativo. Por omissão ele vale 'imports', e
+   isso quer dizer que o browser vai buscar o sw.js à rede mas deixa os
+   importScripts virem da cache HTTP. O sw.js não muda de bytes entre versões
+   — de propósito, para não depender de alguém subir um número lá dentro — e o
+   que muda é precisamente o /avisos.js que ele importa. Com o valor por
+   omissão, a deteção da versão nova ficava a depender dos cabeçalhos de cache
+   de um ficheiro. Uma palavra tira essa decisão do caminho. */
+/* E não se regista no domínio raiz. A app existe lá — só o «/» passa pelo
+   worker, portanto o rendorium.com/index.html e os /app/*.js vêm dos
+   ficheiros e o redirecionamento nunca corre —, mas o «/» dali é a montra, e
+   um service worker com âmbito «/» acabaria a servi-la da cache da app. */
+if ('serviceWorker' in navigator &&
+    !/^(localhost|127\.0\.0\.1|\[::1\]|(www\.)?rendorium\.com)$/.test(location.hostname)) {
+  try { navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }); } catch (e) {}
 }
 
 /* ---------------- arranque ---------------- */
@@ -670,6 +682,24 @@ if (CW.user) {
   // sessão em cache: volta à página onde estava e sincroniza em fundo
   try { restorePage(); } catch (e) {}
   showLegalGate();
+  /* As duas leituras do arranque partem JUNTAS. O /api/state estava dentro do
+     .then do /api/me e pagava-lhe a ida e volta inteira antes de sequer sair —
+     e é ele que destranca os contadores (o sabemosOEstado), portanto essa
+     espera era a que se via no crachá dos movimentos por confirmar.
+
+     O que se adianta é o PEDIDO, não a aplicação: a resposta só é tratada
+     dentro do startSync, lá em baixo, no mesmo sítio de sempre. A ordem que
+     interessa fica intacta — o seed() dos dados de exemplo continua a correr
+     antes de o estado do servidor ser aplicado, e sem isso um servidor vazio
+     apagava o exemplo acabado de criar, dentro da janela em que ele ainda não
+     tinha subido.
+
+     O .catch vazio não trata nada: quem trata é o startSync. Serve só para o
+     motor não dar a promessa por órfã enquanto o /api/me não volta — uma
+     rejeição sem ouvinte no mesmo instante é um unhandledrejection, e este
+     projeto relata-os. */
+  var pEstado = api('GET', '/api/state');
+  pEstado.catch(function () {});
   api('GET', '/api/me').then(function (u) {
     CW.user = Object.assign({}, CW.user, { id: u.id, name: u.name, email: u.email });
     try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
@@ -685,11 +715,14 @@ if (CW.user) {
         }
       }
     } catch (e) {}
-    startSync();
+    startSync(pEstado);
     CW.resgatarChegada();   // uma ligação de convite ou de partilha à espera
   }).catch(function (e) {
     if (e && e.status === 401) sessionLost();
-    else { setSyncBadge('off'); startSync(); } // offline: continua local
+    // offline: continua local — e com a MESMA leitura já disparada, senão
+    // este caminho abria um segundo /api/state, sem nada que trave dois
+    // applyState a chegarem fora de ordem
+    else { setSyncBadge('off'); startSync(pEstado); }
   });
 } else {
   showAuth();

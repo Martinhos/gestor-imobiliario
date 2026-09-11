@@ -159,6 +159,51 @@ describe('a escada das camadas', () => {
     assert.ok(zDe('.toast') > modal, 'o aviso vê-se por cima de um modal');
     assert.ok(zDe('.tip') > modal, 'e o balão também');
   });
+
+  /* Os portões vivem em JS, com o z-index escrito à mão em cada um, e por isso
+     não passam por nenhuma das regras acima — cada número foi escolhido contra
+     o vizinho do momento. O ecrã que tranca a app por a versão ser velha demais
+     esteve em 198, POR BAIXO do ecrã de entrada, e portanto invisível a quem
+     ainda não entrou: exatamente quem ele existe para servir, porque a versão
+     verifica-se de propósito sem sessão, para desbloquear quem está preso na
+     entrada por causa de um erro já corrigido. O cwRepor tinha tido o mesmo bug
+     e o mesmo remédio, e o comentário dele já o dizia. */
+  test('os portões estão por ordem, e o que tranca fica acima do login', () => {
+    const nov = readFileSync(new URL('../web/cloud/novidades.js', import.meta.url), 'utf8');
+    const ent = readFileSync(new URL('../web/cloud/entrada.js', import.meta.url), 'utf8');
+    const zP = (txt, id) => {
+      const i = txt.indexOf(".id = '" + id + "'");
+      assert.ok(i > -1, 'o portão ' + id + ' existe');
+      const m = /z-index:(\d+)/.exec(txt.slice(i, i + 1200));
+      assert.ok(m, id + ' devia declarar z-index');
+      return Number(m[1]);
+    };
+    const tranca = zP(nov, 'cwUpd');
+    assert.ok(tranca > zP(ent, 'cwAuth'), 'acima da entrada: ' + tranca + ' contra ' + zP(ent, 'cwAuth'));
+    assert.ok(tranca > zP(ent, 'cwRepor'), 'e da reposição de palavra-passe');
+    assert.ok(zP(nov, 'cwUpd2') > tranca,
+      'e o ecrã de progresso acima dele, senão a atualização acontece por trás do aviso');
+    assert.ok(zP(nov, 'cwUpdBar') < zDe('.modal'),
+      'a faixa discreta é a exceção: fica abaixo, senão tapava o rodapé de um modal aberto');
+  });
+});
+
+/* Trancado quer dizer trancado. O ciclo de sincronização de 30 segundos ficava
+   armado por trás do ecrã de atualização forçada, a empurrar o estado local
+   para o servidor a partir de uma versão que a app acabara de declarar
+   inutilizável. */
+describe('o ecrã que tranca a app', () => {
+  const nov = readFileSync(new URL('../web/cloud/novidades.js', import.meta.url), 'utf8');
+  const nucleo = readFileSync(new URL('../web/cloud/nucleo.js', import.meta.url), 'utf8');
+
+  test('trava a sincronização, e não só a vista', () => {
+    const gate = nov.slice(nov.indexOf('function gateAtualizar'), nov.indexOf("el.innerHTML"));
+    assert.match(gate, /CW\.trancado = true;/, 'o ecrã diz que está trancado');
+    assert.match(gate, /lockScroll\(true\)/, 'e prende a página por trás');
+    const ciclo = nucleo.slice(nucleo.indexOf('function syncCycle'), nucleo.indexOf('function syncCycle') + 400);
+    assert.match(ciclo, /if \(CW\.trancado\) return;/,
+      'e o ciclo respeita-o: se a versão é velha demais para se usar, é velha demais para escrever');
+  });
 });
 
 describe('movimento', () => {

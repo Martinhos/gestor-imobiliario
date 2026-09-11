@@ -8,18 +8,84 @@ on:
     branches: [main, dev]
   workflow_dispatch:   # para correr a suite a pedido, em qualquer ramo
 
+# Três pushes seguidos ao mesmo ramo pagavam três corridas inteiras. Cancela-se
+# a anterior — mas só em pull request: um push a main ou a dev é uma promoção
+# ou uma publicação, e essas têm de acabar, senão fica um check «cancelled»
+# precisamente onde o guarda da chegada corre.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   testes:
     runs-on: ubuntu-latest
     steps:
+      # histórico todo: o guarda da chegada compara esta árvore com a da
+      # publicação anterior, e um checkout raso não tem com o que comparar
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      # fixo ao patch: a cobertura é experimental no Node e um número que
+      # flutua entre corridas não serve de limiar
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.18.0
 
+      # Com limiares, e inteiros: 84/78/79 são os números do dia em que isto
+      # entrou, arredondados para baixo. Sobem-se à medida que se escreve
+      # teste, e assim nunca descem. Aviso sério sobre o que o número mede: o
+      # arnês carrega os módulos de web/ num contexto de vm e a cobertura não
+      # os vê — isto é sobre worker/ e scripts/, cerca de um terço do código,
+      # não sobre o repositório.
       - name: Correr os testes
-        run: node --test "testes/*.test.js"
+        run: >-
+          node --test --experimental-test-coverage
+          --test-coverage-exclude="testes/**"
+          --test-coverage-lines=84 --test-coverage-branches=78 --test-coverage-functions=79
+          "testes/*.test.js"
+
+      # Dois binários, fixados à versão e ao byte. Preferem-se às actions
+      # deles: a do gitleaks pede uma chave de licença a organizações, a do
+      # actionlint muda de runtime entre versões, e um checksum conferido
+      # aqui não depende de servidor nenhum de terceiros.
+      #
+      # gitleaks: o secret scanning do GitHub está fechado em repositório
+      # privado, portanto o varrimento corre dentro do runner. Sobre a
+      # árvore em cada push (segundos); o histórico inteiro fica para uma
+      # corrida à mão. Bloqueante desde o primeiro dia — varreu-se o
+      # repositório e não há um único falso positivo.
+      #
+      # actionlint: os workflows são quase todo bash dentro de YAML, e um
+      # erro aí só aparecia a meio de um deploy. Passa shellcheck a cada
+      # bloco run: e confere os tipos das expressões ${{ }}.
+      - name: Descarregar os binários de verificação
+        run: |
+          set -e
+          GITLEAKS_VERSAO=8.30.1
+          GITLEAKS_SHA256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          ACTIONLINT_VERSAO=1.7.12
+          ACTIONLINT_SHA256=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          mkdir -p /tmp/bin && cd /tmp/bin
+          curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSAO}/gitleaks_${GITLEAKS_VERSAO}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+          curl -sSfL -o actionlint.tgz "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSAO}/actionlint_${ACTIONLINT_VERSAO}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tgz" | sha256sum -c -
+          tar -xzf actionlint.tgz actionlint
+          echo "/tmp/bin" >> "$GITHUB_PATH"
+
+      - name: Procurar segredos na árvore
+        run: gitleaks dir . --no-banner --redact
+
+      - name: Verificar os workflows
+        env:
+          # só a partir de aviso. O bash do deploy tem o $ENV_FLAG sem aspas de
+          # propósito (é zero ou duas palavras: «--env dev»), e os «info» e
+          # «style» do shellcheck sobre isso não são erros — os avisos e os
+          # erros a sério continuam a travar
+          SHELLCHECK_OPTS: -S warning
+        run: actionlint -color
 
       # Um erro de sintaxe num módulo do cliente só se via ao abrir a app:
       # aqui aparece no pull request.
@@ -78,6 +144,21 @@ jobs:
       # propria uma atualizacao que nunca chega.
       - name: Confirmar que a versao publicada esta em dia
         run: node scripts/versao.js --check
+
+      # Uma publicação que não suba a VERSÃO não chega a quem tem a app
+      # instalada: a cache offline chama-se pela versão (web/sw.js) e o
+      # /versao.json responde o mesmo número, portanto nem o worker troca nem a
+      # app pergunta. E chegar a meio é pior do que não chegar — o install do
+      # worker novo abre a cache com o MESMO nome e sobrepõe-lhe as entradas
+      # por baixo de quem está a ler, que é a avaria da v31.
+      #
+      # Só nas promoções: nos ramos de trabalho a versão sobe uma vez, no fim,
+      # e não a cada alteração.
+      - name: Confirmar que esta promoção chega a quem tem a app
+        if: github.base_ref == 'main'
+        run: |
+          git fetch --no-tags origin main
+          node scripts/chegada.js origin/main
 
       - name: Validar as migrações da base de dados
         run: |

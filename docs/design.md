@@ -157,9 +157,18 @@ cabeçalho (index.html:header.top), 25 a barra pegajosa
 (index.html:.toolbar.stick), 30 o menu de ações (index.html:.menupop), 40
 a barra de baixo (index.html:.tabbar), 45 e 46 o painel de filtros
 (index.html:.fpanel, index.html:.fwrap), 57 o «topo» (index.html:.totop),
-58 o FAB (index.html:.fab), 60 a janela (index.html:.modal), 61 o véu
-(index.html:.scrim), 62 a gaveta (index.html:aside), 90 o toast
-(index.html:.toast), 95 a dica dos gráficos (index.html:.tip).
+58 o FAB (index.html:.fab), 59 o cartão dos primeiros passos
+(cloud/guia.js:#cwGuia), 61 o véu da gaveta (index.html:.scrim), 62 a gaveta
+(index.html:aside), 70 a janela (index.html:.modal), 71 o mesmo cartão dos
+primeiros passos quando há uma janela aberta (cloud/guia.js:.sobre-janela),
+90 o toast (index.html:.toast), 95 a dica dos gráficos (index.html:.tip).
+
+A janela está acima da navegação de propósito, e é a partir dela que se
+escolhe um número novo: o que tiver de aparecer por cima de uma janela aberta
+fica acima de 70, e o resto abaixo. Esta lista é o sítio onde se vai buscar
+esse número — quando ela mente, o erro sai daqui. Foi o que aconteceu ao
+cartão dos primeiros passos: o 61 dele foi escolhido contra um 60 que já não
+era verdade.
 
 ## Movimento
 Três durações: --rapido .12s para o que responde ao dedo, --medio .2s para
@@ -1073,6 +1082,11 @@ O worker passa a servir tudo da **mesma cache**, cheia de uma vez no
 que já tinha esse caminho: o `verificarVersao` lê o `/versao.json`, limpa as
 caches e recarrega uma vez, à vista.
 
+> Este último parágrafo estava errado quando se escreveu, e ficou assim uma
+> semana: a app não tinha canal nenhum para mandar o worker trocar, e a versão
+> nova chegava por um efeito lateral. Está corrigido mais abaixo, em «Quem manda
+> na altura de trocar é a app — só que a app não tinha como».
+
 ### E quem já estava partido não se curava sozinho
 
 Esta é a metade que importa mais. Um arranque que falha assim é um ecrã em
@@ -1126,6 +1140,217 @@ E a transição desenrasca-se sozinha: fora de produção o worker novo assume j
 caches no `activate`. Quem ficou preso numa publicação anterior sai na primeira
 navegação, sem ter de limpar nada à mão. Medido: duas caches com ficheiros
 envenenados, uma navegação, e ficam zero.
+
+### «Quem manda na altura de trocar é a app» — só que a app não tinha como
+
+Ficou escrito aqui, e no `web/sw.js`, que tirar o `skipWaiting()` era seguro
+porque a app decidia a troca. **Metade disso não existia.** Uma auditoria
+adversarial ao caminho inteiro — seis levantamentos independentes, cada achado
+entregue a um cético com o ónus de o derrubar — foi buscar a frase ao código e
+não a encontrou: em todo o `web/` não havia um `postMessage`, um
+`registration.waiting`, um `controllerchange` nem um ouvinte de `message` no
+worker. As únicas chamadas ao service worker eram registar, `update()` e
+`unregister()`.
+
+E o passo que faltava não é acessório: **um `location.reload()` não promove um
+worker em espera.** O documento antigo e o novo sobrepõem-se, o registo nunca
+fica sem clientes, e o passo de ativação não corre — é a razão de existir do
+`skipWaiting` e do «Update on reload» das ferramentas do browser.
+
+O que a app fazia era outra coisa, por efeito lateral: apagava **todas** as
+caches e recarregava. Como o worker antigo continuava a mandar e a cache dele
+tinha desaparecido, tudo ia à rede, e da rede vinha a versão nova. Funcionava,
+e trazia três consequências que ninguém tinha visto:
+
+- a cache que se apagava incluía a que o worker em espera **acabara de encher**
+  no `install` dele — a versão nova inteira, gravada de uma vez. O `install`
+  corre uma só vez por worker, e um `caches.open` sobre um nome apagado devolve
+  uma cache nova e vazia, sem se queixar;
+- o worker antigo recriava a cache com o nome da versão **antiga** e enchia-a
+  ficheiro a ficheiro com o que a rede desse, que já era a versão nova. A
+  atomicidade do `addAll` — a invariante que resolveu a v31 — deixava de valer
+  para lá do primeiro carregamento;
+- e o botão «Atualizar» destruía a única cópia local **antes** de saber se havia
+  substituta. Sem rede, quem lhe carregasse ficava sem app. O ecrã que tranca a
+  app por a versão ser velha demais leva a esse botão, e não a mais nenhum.
+
+Agora pede-se. O worker atende um `{tipo:'assumir'}` e só nessa mensagem chama
+`skipWaiting()`. A diferença para o que partiu a v31 é toda: aquele acontecia a
+meio de um carregamento; este só acontece depois de a app já ter decidido
+recarregar, portanto não há carregamento nenhum para partir.
+
+E a troca vale mais do que evitar o estrago. Um worker que chega a «em espera» é
+a **prova** de que a versão nova está inteira em disco, porque o `install` dele é
+um `addAll`, que só termina com todos os ficheiros lá dentro. Trocar por ali é
+arrancar de uma cache construída de uma vez — que era, desde o início, a razão de
+o desenho ser este.
+
+O machado fica, porque continua a ser preciso: quando não há worker em espera, é
+ele que faz a versão nova chegar a um separador que ficou aberto. Mas passa a
+poupar a cache da versão para onde se vai, deixa de ficar pendurado num `update()`
+sem tecto, e no botão só corre depois de o servidor responder — com uma sonda
+curta, porque uma rede que fica à espera não é uma rede. E o `activate` de
+qualquer worker que ative com a cache vazia volta a enchê-la, de uma vez.
+
+Uma nota sobre o registo: passou a `updateViaCache: 'none'`. O valor por omissão
+é `'imports'`, e o `sw.js` é igual entre versões de propósito — o que muda é o
+`/avisos.js` que ele importa. Detetar a versão nova ficava a depender dos
+cabeçalhos de cache de um ficheiro.
+
+### E a cache guardava coisas que não são a app
+
+A mesma auditoria trouxe um segundo grupo de achados, todos com a mesma raiz: a
+regra do `fetch` era uma **lista de exclusões** — guardava-se tudo o que não
+fosse `/api/`, `/versao.json` ou de outro método. O que passa por lá é mais do
+que parece, porque o Cache API **não lê `Cache-Control` nenhum**: um
+`no-store` do servidor não impede nada.
+
+O caso que dói: o back office `/equipa` responde no mesmo endereço da app e está
+dentro do âmbito do worker. A página do já autenticado sai com 200 e ia para a
+cache **com a sessão da equipa lá dentro**, para depois ser servida do disco sem
+o servidor ser consultado — e, quando a sessão expirasse, um ciclo de recargas.
+Ironicamente a página do não autenticado escapava por acaso, porque sai com 401.
+Pelo mesmo caminho entravam o `/termos`, o `/privacidade`, a montra e o APK, e
+nada tinha tecto: a cache crescia até a quota estoirar, que é exatamente onde o
+`install` do worker seguinte deixa de caber.
+
+Agora é uma **lista de permissão**: `SHELL.indexOf(url.pathname) < 0` e sai. A
+cache tem o tamanho que o `install` lhe deu e mais nada. Acrescentou-se também
+uma verificação de origem, que faltava — o filtro era só por caminho.
+
+E há um segundo defeito, este independente de tudo o resto e sem precisar de
+worker nenhum a trocar. O `Cache.match` compara o **URL inteiro, query
+incluída**, e a `SHELL` só tem `/` e `/index.html`. Qualquer aterragem com
+parâmetros — e são as ligações que o produto envia por email: `?entrar=`,
+`?repor=`, `?convite=`, `?ligar=`, `?criar=1` — falhava **sempre** na cache e ia
+buscar o `index.html` à rede, enquanto os `<script src>` que ele referencia,
+sendo caminhos sem query, acertavam na cache da versão antiga. Metade de cada
+versão na mesma página: a avaria da v31, por uma porta que ninguém tinha olhado.
+Bastava uma cache coerente e uma publicação pelo meio.
+
+A chave de uma navegação passa a ser sempre `/index.html`, seja qual for o
+endereço que a pessoa clicou. De caminho, deixam de ficar gravados em disco, como
+chaves de cache, endereços que levam segredos lá dentro — o contrário do que o
+resto do código faz de propósito (o `history.replaceState` que tira o token da
+barra, o `mascararTokens` dos relatos, o `Referrer-Policy: no-referrer`).
+
+Dois pormenores da mesma leva: guarda-se só `status === 200` (o `res.ok` abrange
+o 206, e uma resposta parcial guardada é uma resposta partida), e o falhanço do
+`put` passa a ser apanhado — ele comunica-o devolvendo uma promessa rejeitada, e
+o `try/catch` que lá estava não apanhava nada.
+
+### Dois hostnames que caíam do lado errado
+
+O `run_worker_first = ["/"]` faz com que só a raiz passe pelo worker: o
+`rendorium.com/index.html` e os `/app/*.js` são servidos direto dos ficheiros, e
+o redirecionamento para o `app.rendorium.com` nunca chega a correr para esses
+caminhos. Ou seja, **a app existe no domínio da montra** — e o domínio da montra
+não estava no `SEM_CACHE`. Um service worker com âmbito `/` acabaria a servir a
+montra da cache da app. Agora o apex e o `www` não guardam, e a app nem sequer
+regista lá o worker.
+
+O outro é o `hn.indexOf('gestor-imobiliario-dev.') !== 0`. Os endereços de
+pré-visualização de versão do Cloudflare levam o nome do worker **a seguir a um
+prefixo** (`<versão>-gestor-imobiliario-dev.…`), portanto o `indexOf` devolvia 9
+e eles caíam do lado de produção. Testa-se o nome como rótulo, e o teste corre a
+regra com os três casos — o endereço normal do dev, o de pré-visualização, e o
+de produção, que tem de continuar a guardar.
+
+### A lista SHELL, amarrada nos dois sentidos
+
+O CI já confirmava um dos sentidos, e só para os módulos: cada `web/app/*.js` e
+`web/cloud/*.js` tem de aparecer no `index.html` **e** no `sw.js`. Faltava o
+resto — o `avisos.js`, o `legal.js`, o manifesto, os ícones — e faltava o sentido
+contrário: uma entrada na `SHELL` que não corresponda a ficheiro nenhum rebenta
+o `addAll` **inteiro**, porque o `addAll` é tudo ou nada, e a cache fica vazia.
+Agora que a `SHELL` é também a lista de permissão do `fetch`, uma omissão passou
+a tirar um ficheiro da cache em silêncio — razão a mais para a prender.
+
+### A cura não pode curar offline
+
+A rede de segurança do arranque é a ação mais destrutiva que a app tem: apaga
+**todas** as caches e faz `unregister` de **todos** os service workers. Fazia-o
+sem perguntar se havia rede — e sem rede o que está guardado é a única cópia da
+app que existe. O que era «meia app partida» passava a «nenhuma app», sem volta
+enquanto a rede não voltasse. Os dois guardas que lá estavam não travavam nada:
+o `readyState` ainda é `loading`, porque os `<script>` estão no fim do `body`.
+
+Agora sai à porta com `navigator.onLine === false`, **antes de marcar seja o que
+for** — sair sem gastar a tentativa é o que deixa a cura disponível para quando
+houver rede. Só o `=== false` é de confiança: o `onLine` a `true` mente com
+frequência (portal cativo, wifi sem rota), por isso ele trava mas não autoriza.
+
+E a marca passa a guardar **quando** se curou, não só **que** se curou. O
+comentário dizia «uma vez por sessão», mas numa app instalada a sessão não é uma
+visita: o `sessionStorage` sobrevive a recargas e a janela pode ficar aberta
+semanas. Uma cura gasta numa segunda-feira desarmava a rede de segurança para o
+resto da vida daquele separador. Dez minutos, e volta a armar-se.
+
+### Publicar sem subir a versão é publicar para meio de um carregamento
+
+O maior dos achados que tinham ficado por verificar, e que ao ser verificado se
+revelou pior do que estava escrito.
+
+A premissa é o desenho: a cache offline **chama-se pela versão**
+(`gi-shell-v<VERSAO>`), e a versão sai da primeira entrada do `web/avisos.js`.
+Isso trocou uma dependência humana por outra — já não é preciso lembrar-se de
+subir um número dentro do `sw.js`, mas passou a ser preciso lembrar-se de
+escrever uma entrada nas novidades. E **nada o obrigava**.
+
+Publicar sem subir a versão parecia ser apenas «não chega a ninguém»: quem tem a
+app instalada continua a ser servido da cache que já tem, e a app nunca pergunta
+nada, porque o `/versao.json` responde o mesmo número. Mau, mas silencioso.
+
+Não é isso. É pior. O `install` do worker novo faz
+`caches.open(CACHE).then((c) => c.addAll(SHELL))` — e com a versão na mesma,
+`CACHE` é **o nome da cache que o worker antigo está a usar neste momento**. O
+`addAll` sobrepõe-lhe as entradas por baixo. Uma página que começou a carregar
+com os ficheiros velhos passa a receber os novos a meio do carregamento. É
+exatamente a avaria da v31, por uma porta que não tem nada a ver com trocas de
+worker.
+
+Duas medidas, e as duas fazem falta:
+
+**O `install` deixa de encher por cima.** Só enche uma cache vazia. Uma cache com
+conteúdo e este nome é a de quem está a servir, e não se toca. Assim a falha
+volta a ser silenciosa em vez de destrutiva — que é o pior que ela pode ser sem
+depender de um passo do CI. O `install` mantém-se **sem `.catch()`**, de
+propósito: é o falhanço do `addAll` a abortar o `install` que faz de «este worker
+chegou a estar em espera» a prova de que a versão nova está inteira em disco.
+
+**E o CI recusa a publicação** (`scripts/chegada.js`). Compara os ficheiros que a
+cache guarda — a lista sai do `SHELL` do próprio `sw.js`, mais o `sw.js`, que
+manda nela — entre esta árvore e a da publicação anterior. Se algum mudou e a
+versão não subiu, não sai, e diz quais e o que fazer. Corre em dois sítios: no
+*pull request* de promoção, que avisa cedo, e no `deploy`, imediatamente antes de
+publicar, que é o que conta.
+
+A regra só se aplica às promoções. Nos ramos de trabalho a versão sobe uma vez, no
+fim, e não a cada alteração — que é como a casa já trabalhava.
+
+### E o ecrã que tranca a app não trancava nada
+
+O último dos oito, e o mais fácil de ver depois de apontado. O ecrã que tranca a
+app quando a versão desce abaixo da mínima nascia com `z-index: 198` — **por
+baixo** do ecrã de entrada, que é 200. Invisível a quem ainda não entrou; e é
+justamente por causa dessas pessoas que a versão se verifica de propósito sem
+sessão, como o comentário do fim do `novidades.js` diz: «quem está preso no ecrã
+de entrada por causa de um erro já corrigido também precisa».
+
+O mais dado a pensar é que este bug já tinha sido encontrado e corrigido ao lado,
+no ecrã de reposição de palavra-passe, e o comentário dele di-lo em três linhas:
+«abria por baixo do ecrã de entrada e ninguém o via — a ligação do email parecia
+não fazer nada. **O mesmo bug do ecrã de atualização, o mesmo remédio.**» O
+remédio foi aplicado a um e não ao outro.
+
+Os portões vivem em JS, com o `z-index` escrito à mão em cada um, e por isso não
+passavam por nenhuma das regras da escada das camadas, que lê o CSS. Agora
+passam: um teste lê os números dos quatro e prende a ordem.
+
+E, já que o ecrã diz que a app não pode ser usada: o ciclo de sincronização de
+30 segundos continuava armado por trás dele, a empurrar o estado local para o
+servidor a partir de uma versão declarada inutilizável. Se ela é velha demais
+para se usar, é velha demais para escrever.
 
 ## Ver a montra antes de a publicar
 
@@ -1672,6 +1897,101 @@ de docs rebenta (scripts/gerar-docs.js).
 Não se mostra uma ação que o cargo não permite: pergunta-se pode() antes
 (acessos.js:pode; componentes.js:lpMenu), e um colaborador nunca entra em
 ownerIds, quotas ou contas entre proprietários (acessos.js:souDono).
+
+## As ferramentas, e o que ficou de fora
+
+Perguntou-se que ferramentas gratuitas se podiam trazer para facilitar a vida
+de quem programa, opera, atende e usa. A resposta veio de um levantamento por
+seis lentes com um cético por recomendação, e as três perguntas do cético eram
+as que decidem tudo aqui: **é mesmo gratuito, e permanente? funciona com
+repositório privado? encaixa num projeto sem passo de compilação, com 43
+globais, e sem servidor sempre ligado?** A maior parte do que toda a gente
+recomenda cai na segunda pergunta — CodeQL, o secret scanning do GitHub, o
+`dependency-review`, o Codecov acima de 250 envios por mês — porque só é grátis
+em repositórios públicos, e o Rendorium não é.
+
+O que entrou, por ordem de proveito a dividir pelo custo de entrada:
+
+**A fatura, primeiro.** Medido pela API do GitHub: 226 artefactos vivos, 1,9 GB
+contra os 500 MB do plano, todos capturas do percurso guardadas em corridas
+verdes que ninguém abre. E ~1 300 dos 2 000 minutos por mês, sem `concurrency`
+em dois dos três workflows. Quatro linhas de YAML. O `cancel-in-progress` é só
+em *pull request*, porque um push a `main` é uma promoção e tem de acabar —
+senão fica um check «cancelled» precisamente onde o guarda da chegada corre.
+
+**Os tokens saíam nos logs.** A linha automática de invocação dos Workers Logs
+grava o URL em bruto, e as ligações que se entregam às pessoas levam o segredo
+no endereço (`/?convite=…`, `/?ligar=…`). O código mascara tokens em tudo o que
+escreve; esta linha passava por fora. `invocation_logs = false` nos dois
+ambientes — a observabilidade não é herdável entre eles —, e cada relato passa
+a deixar um registo estruturado e mascarado, para o `dev` não ficar às escuras.
+
+**Os testes dizem o que cobrem e o que colide.** Cobertura nativa do
+`node:test` com limiares inteiros, e uma verdade sobre o que o número mede: o
+arnês carrega o `web/` em `vm` e a cobertura não o vê — é sobre `worker/` e
+`scripts/`, um terço do código. E o guarda de globais, nos dois sentidos: a
+leitura do texto apanha `var` e `function` duplicados entre os 43 ficheiros; o
+`carregarTudo()` avalia a app inteira, nuvem incluída, no mesmo contexto — onde
+um `const` repetido rebenta como no browser. Havia uma colisão real, `var css`
+em três ficheiros de `cloud/`, precisamente a parte que o arnês não carregava.
+
+**Quatro olhos.** `gitleaks` e `actionlint` como binários fixados à versão e ao
+byte, com o checksum conferido antes de correr — não pelas *actions* deles, que
+pedem chaves de licença ou mudam de runtime. O `shellcheck` do runner apontou
+catorze coisas de nível *info* e *style* no bash do deploy, e uma a sério; a
+resposta certa foi travar só a partir de *warning*, não reescrever 18 KB que
+funcionam para calar sugestões. Um `madge --circular` encontrou dois ciclos no
+worker; a causa era a mesma nos dois — o `worker/src/discord.js` tinha coisas
+lidas de mais do que um lado — e saíram para `worker/src/lib/papeis.js` e
+`worker/src/lib/bot.js`. O guarda dos ciclos ficou como teste, sem download.
+
+**O worker mede-se.** As cinco consultas D1 mais pesadas no resumo diário — e
+importa mais desde 2026-09-01, porque passar dos 5M de linhas lidas deixou de
+ser um aviso e passou a ser a app em baixo até à meia-noite. O Analytics Engine,
+que está no plano gratuito, com um ponto por pedido e um por relato, sempre com
+a rota genérica e nunca com um id de pessoa — o código ficou, a ligação espera:
+o Analytics Engine tem de ser ligado uma vez na conta, à mão, e com a ligação
+declarada antes disso o deploy é recusado (código 10089), como aconteceu ao dev
+à primeira. E o batimento para fora: o alarme
+da casa é a ausência de linhas no `op_log`, mas quem deteta a ausência é o
+próprio cron — se ele morrer, ninguém dá por isso. Um GET a um URL opaco, só
+depois de o trabalho ter corrido bem, é a única peça que não pode ser feita de
+dentro da Cloudflare.
+
+**Os testes à prova de mutação.** Com ~800 testes verdes, a pergunta que fica é
+se eles verificam alguma coisa ou se só passam por lá. O Stryker altera o código
+de propósito e vê se algum teste se queixa. Corre à mão, nunca no CI, sobre o
+que é lógica pura e bem coberta — o worker inteiro levaria horas a medir
+sobretudo ficheiros que falam com a D1 e o Discord, onde um mutante sobreviver
+diz pouco.
+
+A primeira corrida, sobre `worker/src/lib`, a salvaguarda e o guarda da chegada:
+2 023 mutantes, **70,7 % mortos** (77,8 % entre o código coberto), em 15
+minutos. O número que interessa não é esse — é a lista. O
+`worker/src/lib/relatos.js` fica em **38,7 %**: o caminho que recebe um erro,
+decide se abre um pedido ou engorda o que existe, e se avisa quem programa, tem
+64 mutantes a sobreviver — os testes tocam-lhe, mas não o verificam. O
+`worker/src/lib/bot.js` em 0 %, sem teste nenhum, como se esperava de uma
+chamada HTTP. Do outro lado, `worker/src/lib/permissoes.js` e
+`worker/src/lib/medidas.js` acima de 84 %. É por aqui que se escreve o próximo
+teste — e não por onde a cobertura de linhas manda, que dava o
+`worker/src/lib/relatos.js` como bem coberto.
+
+### O que ficou de fora, e porquê
+
+**`tsc --noEmit`** com `jsconfig.json`: 474 erros, 470 dos quais são a
+arquitetura — as guardas `module.exports` fazem-no ler módulos onde há scripts
+(237 «cannot find name»), o `CW` é um saco (165), e o embrulhar por reatribuição
+dá 35 «cannot assign to function». Ferramenta que luta contra a casa. Apanhou
+uma chave duplicada num literal, que se corrigiu, e ficou por aí.
+
+**Sentry** é genuinamente grátis e até encaixa sem *build* — descartado por ser
+o item que mais facilmente derrama dados pessoais numa app cheia de nomes de
+inquilinos e valores de renda; a região UE só se escolhe na criação da
+organização. **SonarQube Cloud** é grátis até 50 000 linhas e há 40 244: a
+margem acaba a curto prazo, e é o único caso em que o código privado passaria a
+ser analisado fora da máquina. **Codecov** dá repositórios privados mas 250
+envios por mês, e o `Testes` correu 319 vezes em 30 dias.
 
 ## Dívidas de design conhecidas
 O que já está fora destas regras, por ordem de gravidade. Não está

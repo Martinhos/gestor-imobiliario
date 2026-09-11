@@ -841,8 +841,8 @@ function endDrag() {
   document.addEventListener(t, function () { pointerDown = false; endDrag(); }, true);
 });
 
-var css = document.createElement('style');
-css.textContent =
+var cssPainel = document.createElement('style');
+cssPainel.textContent =
   // Duas colunas no telemóvel, quatro no computador — número fixo, não
   // auto-fit: com colunas a aparecer e a desaparecer conforme a largura, os
   // cartões nunca caíam onde se esperava.
@@ -892,4 +892,4 @@ css.textContent =
     'border-radius:9px;background:var(--chip);color:var(--muted)}' +
   '#view.cw-edit .cw-blk.cw-drag{cursor:grabbing;box-shadow:var(--shadow);border-color:var(--accent);' +
     'position:relative;z-index:70;opacity:.97}';
-document.head.appendChild(css);
+document.head.appendChild(cssPainel);

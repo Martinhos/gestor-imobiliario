@@ -693,6 +693,9 @@ function pullNow(force) {
 // Devolve: nada — dispara o push (e talvez o pull) e segue.
 function syncCycle() {
   if (!CW.user) return;
+  // trancado pelo ecrã de atualização forçada: uma versão velha demais para
+  // se usar é velha demais para escrever (cloud/novidades.js:gateAtualizar)
+  if (CW.trancado) return;
   pushNow().then(function () {
     if (Date.now() - lastPull > PULL_MS && !modalStack.length) pullNow();
   });
@@ -704,10 +707,22 @@ function syncCycle() {
    dados locais deste utilizador (primeira sessão de quem já usava a app sem
    conta), sobem primeiro; caso contrário o servidor manda. Liga o ciclo de
    30s e as sincronizações ao voltar online ou ao regressar à frente.
+
+   O `pedido` é a leitura já em curso, quando quem chama a mandou adiantar (o
+   entrada.js dispara-a ao mesmo tempo que o /api/me, em vez de esperar por
+   ele). Adianta-se o PEDIDO e não a APLICAÇÃO: o corpo do .then continua a
+   correr onde sempre correu, depois do /api/me e depois do seed() dos dados
+   de exemplo. É essa distinção que torna isto seguro — aplicar mais cedo
+   apanhava o exemplo por gravar e deitava-o fora sem deixar rasto, e o ramo
+   de migração aqui em baixo (servidor vazio, dados locais) decidia com uma
+   fotografia do db anterior ao seed, adotando o servidor vazio em vez de
+   subir o que a pessoa tinha.
+   Recebe: pedido (opcional) — a promessa do GET /api/state já disparada; sem
+   ela, pede aqui como sempre.
    Devolve: nada — dispara a primeira leitura e deixa os ciclos armados. */
-function startSync() {
+function startSync(pedido) {
   loadSnap();
-  api('GET', '/api/state').then(function (st) {
+  (pedido || api('GET', '/api/state')).then(function (st) {
     var serverEmpty = !(st.houses || []).length && !(st.userRecords || []).length && !(st.records || []).length;
     var localContent = (db.properties || []).length || (db.transactions || []).length ||
       (db.contracts || []).length || (db.tenants || []).length || (db.owners || []).length;

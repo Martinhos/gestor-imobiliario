@@ -190,9 +190,21 @@ function mostrarNovidadesSeHouver() {
    Devolve: nada — acrescenta o ecrã ao body (ou nada, se já lá estiver). */
 function gateAtualizar(minima) {
   if (document.getElementById('cwUpd')) return;
+  /* Trancado quer dizer trancado: o ciclo de sincronização de 30 segundos
+     (nucleo.js:startSync) continuava armado por trás deste ecrã, a empurrar o
+     estado local para o servidor a partir de uma versão que acabámos de
+     declarar inutilizável. Se ela é velha demais para se usar, é velha demais
+     para escrever. */
+  CW.trancado = true;
+  try { lockScroll(true); } catch (e) {}
   var el = document.createElement('div');
   el.id = 'cwUpd';
-  el.style.cssText = 'position:fixed;inset:0;z-index:198;background:var(--bg);overflow:auto;' +
+  /* 235: acima do portão de login (200) e da reposição de palavra-passe (230),
+     abaixo do ecrã de progresso (240). Esteve em 198, ou seja POR BAIXO da
+     entrada, e portanto invisível a quem ainda não entrou — que é justamente
+     quem o comentário do fim deste ficheiro diz que ele existe para servir:
+     quem está preso no ecrã de entrada por causa de um erro já corrigido. */
+  el.style.cssText = 'position:fixed;inset:0;z-index:235;background:var(--bg);overflow:auto;' +
     'padding:calc(28px + var(--inset-top)) 18px calc(28px + var(--inset-bottom));display:flex;justify-content:center';
   el.innerHTML = '<div style="max-width:420px;width:100%;margin:auto">' +
     card('Há uma versão nova', 'Esta já não pode ser usada',
@@ -204,38 +216,131 @@ function gateAtualizar(minima) {
   document.body.appendChild(el);
 }
 
-// Limpa as caches com o passo a passo à vista e recarrega a página — é o
-// caminho de todos os botões "Atualizar".
-// Devolve: nada — termina a recarregar a página.
+/* Espera que apareça um worker em espera. Depois de um update() o worker novo
+   pode ainda estar a instalar-se — e o install dele é o addAll da shell
+   inteira, que demora. Se não houver nada a instalar-se, não vale a pena
+   esperar: desiste já.
+   Recebe: r — a ServiceWorkerRegistration; ate — quanto esperar, em ms.
+   Devolve: Promise com o worker em espera, ou null se não aparecer a tempo. */
+function esperarEmEspera(r, ate) {
+  return new Promise(function (ok) {
+    if (r.waiting) return ok(r.waiting);
+    if (!r.installing) return ok(null);
+    var passado = 0;
+    var passo = setInterval(function () {
+      passado += 250;
+      if (r.waiting) { clearInterval(passo); return ok(r.waiting); }
+      if (passado >= ate || (!r.installing && !r.waiting)) { clearInterval(passo); ok(null); }
+    }, 250);
+  });
+}
+
+/* Pede ao worker em espera que assuma, e confirma que assumiu mesmo.
+   Um location.reload() não promove um worker em espera (o documento antigo e o
+   novo sobrepõem-se, o registo nunca fica sem clientes), por isso é preciso
+   pedir. Vale a pena porque um worker que chega a "em espera" é a PROVA de que
+   a versão nova está inteira em disco: o install dele é um addAll, que só
+   termina com todos os ficheiros lá dentro. Trocando por aqui, a app arranca
+   de uma cache construída de uma vez — que é a invariante que a v31 partiu.
+   Devolve: Promise com true se o worker trocou, false se não havia nenhum em
+   espera ou se a troca não chegou a tempo (nunca rejeita). */
+function trocarDeWorker() {
+  var sw = navigator.serviceWorker;
+  if (!sw || !sw.getRegistration) return Promise.resolve(false);
+  return sw.getRegistration().then(function (r) {
+    if (!r) return false;
+    return Promise.resolve(r.update()).catch(function () {})
+      .then(function () { return esperarEmEspera(r, 15000); })
+      .then(function (w) {
+        if (!w) return false;
+        // o controllerchange é a confirmação: o worker novo está a mandar
+        var trocou = new Promise(function (ok) {
+          var feito = false;
+          var fim = function (v) { if (!feito) { feito = true; ok(v); } };
+          sw.addEventListener('controllerchange', function () { fim(true); }, { once: true });
+          setTimeout(function () { fim(false); }, 4000);
+        });
+        w.postMessage({ tipo: 'assumir' });
+        return trocou;
+      });
+  }).catch(function () { return false; });
+}
+
+/* Pergunta ao servidor se ele responde, com tempo-limite curto. É a condição
+   mínima para valer a pena apagar a cópia local: sem servidor do outro lado,
+   apagar não atualiza nada e só deixa a pessoa sem app. O /versao.json nunca é
+   servido da cache (web/sw.js), portanto a resposta é sempre da rede.
+   Devolve: Promise com true se o servidor respondeu (nunca rejeita). */
+function servidorResponde() {
+  return new Promise(function (ok) {
+    var feito = false;
+    var diz = function (v) { if (!feito) { feito = true; ok(v); } };
+    setTimeout(function () { diz(false); }, 4000);
+    fetch('/versao.json', { cache: 'no-store' }).then(
+      function (r) { diz(!!(r && r.ok)); },
+      function () { diz(false); }
+    );
+  });
+}
+
+/* O caminho de todos os botões "Atualizar", com o passo a passo à vista.
+   Tenta primeiro a troca de worker, que é a boa: a versão nova entra inteira,
+   de uma cache já construída. Só se ela não acontecer é que se pega no machado
+   — e aí confirma-se que o servidor responde antes de apagar a única cópia
+   local que existe.
+   Devolve: Promise que resolve quando não houver mais nada a fazer; no caminho
+   feliz não chega a resolver, porque a página recarrega. */
 CW.atualizarAgora = function () {
-  ecraAtualizar('nova', 'a limpar a versão antiga…');
-  limparCaches().then(function () {
-    ecraAtualizar('nova', 'a reiniciar…');
-    location.reload();
+  ecraAtualizar('nova', 'a procurar a versão nova…');
+  return trocarDeWorker().then(function (trocou) {
+    if (trocou) { ecraAtualizar('nova', 'a reiniciar…'); location.reload(); return; }
+    return servidorResponde().then(function (ha) {
+      if (!ha) {
+        var el = document.getElementById('cwUpd2');
+        if (el) el.remove();
+        toast('Sem ligação ao servidor. A atualização fica para quando houver rede.');
+        return;
+      }
+      ecraAtualizar('nova', 'a limpar a versão antiga…');
+      return limparCaches().then(function () {
+        ecraAtualizar('nova', 'a reiniciar…');
+        location.reload();
+      });
+    });
   });
 };
 
-/* Apaga as caches do browser e pede ao service worker para se atualizar.
-   Nunca rejeita: sem caches ou sem service worker resolve na mesma, porque o
-   que importa é a recarga que vem a seguir.
-   Devolve: Promise que resolve quando as limpezas acabarem (nunca rejeita). */
-function limparCaches() {
-  var p = [];
+/* Apaga as caches do browser. É o machado: serve para quando a troca de worker
+   não acontece e a única maneira de a versão nova chegar é tirar a antiga da
+   frente do worker que está a servir.
+
+   O que NÃO se apaga é a cache da versão para onde se vai. Ela é o addAll que
+   o worker em espera acabou de fazer — a versão nova inteira, gravada de uma
+   vez. Apagá-la (era o que acontecia: apagavam-se todas, sem filtro) obrigava
+   a app a voltar a buscar a shell ficheiro a ficheiro, que é exatamente como
+   se misturam versões.
+
+   Nunca rejeita nem fica pendurada: o que importa é a recarga que vem a
+   seguir, e uma limpeza que não acaba não a pode impedir.
+   Recebe: guardar (opcional) — número da versão cuja cache fica de pé.
+   Devolve: Promise que resolve quando as limpezas acabarem, ou ao fim de
+   quatro segundos, o que vier primeiro. */
+function limparCaches(guardar) {
+  var poupada = guardar ? 'gi-shell-v' + guardar : null;
+  var limpeza = Promise.resolve();
   try {
     if (window.caches && caches.keys) {
-      p.push(caches.keys().then(function (ks) {
-        return Promise.all(ks.map(function (k) { return caches.delete(k); }));
-      }));
+      limpeza = caches.keys().then(function (ks) {
+        return Promise.all(ks
+          .filter(function (k) { return k !== poupada; })
+          .map(function (k) { return caches.delete(k); }));
+      });
     }
   } catch (e) {}
-  try {
-    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
-      p.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
-        return Promise.all(rs.map(function (r) { return r.update().catch(function () {}); }));
-      }));
-    }
-  } catch (e) {}
-  return Promise.all(p).catch(function () {});
+  return Promise.race([
+    limpeza.catch(function () {}),
+    new Promise(function (ok) { setTimeout(ok, 4000); }),
+  ]);
 }
 
 /* --------------------------------------------------- verificação ao arrancar */
@@ -323,12 +428,19 @@ CW.verificarVersao = function () {
       if (Number(d.minima) > VERSAO) { gateAtualizar(Number(d.minima)); return; }
       if (!(Number(d.versao) > VERSAO)) return;
       // há versão nova: buscar sozinho e recarregar, uma vez — à vista
-      if (jaRecarreguei(Number(d.versao))) { bannerAtualizar(Number(d.versao)); return; }
-      marcarRecarga(Number(d.versao));
-      ecraAtualizar(Number(d.versao), 'a descarregar a versão nova…');
-      return limparCaches().then(function () {
-        ecraAtualizar(Number(d.versao), 'a reiniciar…');
-        location.reload();
+      var nova = Number(d.versao);
+      if (jaRecarreguei(nova)) { bannerAtualizar(nova); return; }
+      marcarRecarga(nova);
+      ecraAtualizar(nova, 'a descarregar a versão nova…');
+      return trocarDeWorker().then(function (trocou) {
+        ecraAtualizar(nova, 'a reiniciar…');
+        /* Trocou: o worker novo já está a mandar, com a shell inteira na cache
+           dele — não há nada para limpar, e limpar seria desfazê-la.
+           Não trocou: resta o machado, que é o que faz a versão nova chegar a
+           um separador que ficou aberto — menos a cache da versão nova, se
+           ela chegou a existir. */
+        if (trocou) { location.reload(); return; }
+        return limparCaches(nova).then(function () { location.reload(); });
       });
     })
     .catch(function () { /* sem rede: fica com o que tem */ });

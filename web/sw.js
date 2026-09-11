@@ -32,10 +32,23 @@ const CACHE = 'gi-shell-v' + VER;
 const SEM_CACHE = [
   'localhost', '127.0.0.1', '[::1]',
   'dev.rendorium.com',
+  /* O domínio raiz é a montra, mas só o «/» passa pelo worker
+     (run_worker_first no wrangler.toml): o rendorium.com/index.html e os
+     /app/*.js são servidos direto dos ficheiros, portanto a app existe ali e
+     o redirecionamento para o app.rendorium.com nunca chega a correr. Uma
+     cache com o nome da versão da app não pode mandar num domínio onde o «/»
+     é outra coisa — congelava a montra. */
+  'rendorium.com', 'www.rendorium.com',
 ];
 const hn = String(self.location.hostname || '').toLowerCase();
-// o worker de dev também tem endereço em workers.dev, e leva o nome no início
-const GUARDA = SEM_CACHE.indexOf(hn) < 0 && hn.indexOf('gestor-imobiliario-dev.') !== 0;
+/* O worker de dev também tem endereço em workers.dev. Testa-se o nome como
+   rótulo e não como prefixo do hostname: os endereços de pré-visualização de
+   versão do Cloudflare levam-no a seguir a um prefixo
+   (<versão>-gestor-imobiliario-dev.<sub>.workers.dev), e um indexOf === 0
+   deixava-os cair do lado de produção — a guardar cache com o nome de uma
+   versão que não é a de produção nenhuma. */
+const DEV_WD = /(^|-)gestor-imobiliario-dev\./.test(hn);
+const GUARDA = SEM_CACHE.indexOf(hn) < 0 && !DEV_WD;
 // A app passou a viver em módulos: guardam-se todos, senão abre offline
 // com metade do código.
 const APP = ['dados', 'anexos', 'auxiliares', 'lista', 'continuidade', 'graficos', 'credito', 'componentes',
@@ -47,23 +60,71 @@ const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 
 const SHELL = ['/', '/index.html', '/avisos.js', '/legal.js', '/manifest.webmanifest',
   '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'].concat(APP, NUVEM);
 
-/* NÃO se chama skipWaiting(). Chamava-se, e foi por isso que a v31 partiu em
-   produção: o worker novo assumia o controlo a meio de um carregamento, e a
-   mesma página ficava com os primeiros <script> servidos pelo worker antigo
-   (da cache da versão anterior) e os seguintes pelo novo. Como os endereços
-   dos ficheiros não levam versão no nome, nada detetava a troca — e um
-   nucleo.js novo com um dados.js velho não arranca.
+/* NÃO se chama skipWaiting() no install. Chamava-se, e foi por isso que a v31
+   partiu em produção: o worker novo assumia o controlo a meio de um
+   carregamento, e a mesma página ficava com os primeiros <script> servidos
+   pelo worker antigo (da cache da versão anterior) e os seguintes pelo novo.
+   Como os endereços dos ficheiros não levam versão no nome, nada detetava a
+   troca — e um nucleo.js novo com um dados.js velho não arranca.
 
-   O worker novo espera. Quem manda na altura de trocar é a app, que já tem
-   esse caminho: o verificarVersao lê o /versao.json, limpa as caches e
-   recarrega uma vez, à vista (cloud/novidades.js). */
+   O worker novo espera, e quem manda na altura de trocar é a app. Isto esteve
+   escrito aqui antes de ser verdade: a app não tinha canal nenhum para o
+   dizer, e um location.reload() NÃO promove um worker em espera — o documento
+   antigo e o novo sobrepõem-se, o registo nunca fica sem clientes, e o passo
+   de ativação não corre. O que a app fazia era apagar as caches por baixo do
+   worker antigo e recarregar, e a versão nova chegava por esse efeito lateral.
+
+   Agora pede-se, e é aqui que se atende. A diferença para o skipWaiting que
+   partiu a v31 é toda: aquele acontecia a meio de um carregamento; este só
+   acontece depois de a app já ter decidido recarregar, portanto não há
+   carregamento nenhum para partir. Do outro lado: trocarDeWorker, em
+   cloud/novidades.js. */
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.tipo === 'assumir') self.skipWaiting();
+});
+
+/* Enche a shell, mas SÓ se a cache desta versão estiver vazia.
+   Duas razões, uma de cada lado:
+
+   Encher quando está vazia, porque o install corre uma vez só por worker
+   — passar de espera a ativo não o repete — e o caches.open sobre um nome
+   apagado devolve uma cache NOVA e vazia, sem se queixar. Quem apaga caches
+   por baixo de um worker (o limparCaches da app, a rede de segurança do
+   arranque) deixava-a assim para sempre, e a app abria offline com metade do
+   código ou com nenhum.
+
+   E NÃO encher quando já tem conteúdo, porque uma cache com conteúdo e este
+   nome é a que o worker que está a servir tem entre mãos: o nome é a versão,
+   logo a versão não mudou. Um addAll por cima sobrepõe-lhe as entradas por
+   baixo, e uma página que começou a carregar com os ficheiros velhos passa a
+   receber os novos a meio — a avaria da v31, pela porta do lado. O CI recusa
+   publicar sem subir a versão (scripts/chegada.js), mas isto não pode depender
+   de um passo do CI.
+
+   Devolve: Promise que resolve quando a cache tiver conteúdo. Rejeita se o
+   addAll falhar, e é de propósito — ver o install. */
+function encherSeVazia() {
+  return caches.open(CACHE).then((c) => c.keys().then((ks) => (ks.length ? null : c.addAll(SHELL))));
+}
+
+/* O mesmo, para quem não pode falhar: no activate já não há install para
+   abortar, e sem rede não se enche nada — mas o worker tem de ativar na mesma.
+   Devolve: Promise que resolve sempre. */
+function garantirShell() {
+  return encherSeVazia().catch(() => {});
+}
+
 self.addEventListener('install', (e) => {
   /* fora de produção assume-se já: não há cache a proteger, portanto não há
      carregamento a meio que se possa partir — e é isto que tira do caminho um
      worker antigo que ainda esteja a servir da cache */
   if (!GUARDA) { self.skipWaiting(); return; }
   if (VER == null) return;
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
+  /* Sem .catch(): um addAll que falha tem de abortar o install. É isso que faz
+     de «este worker chegou a estar em espera» a prova de que a versão nova está
+     inteira em disco — a prova de que o trocarDeWorker (cloud/novidades.js) se
+     serve para decidir trocar em vez de apagar caches. */
+  e.waitUntil(encherSeVazia());
 });
 
 self.addEventListener('activate', (e) => {
@@ -79,7 +140,7 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    ).then(garantirShell).then(() => self.clients.claim())
   );
 });
 
@@ -89,7 +150,30 @@ self.addEventListener('fetch', (e) => {
   // a resposta a "que versão é a de agora?" nunca pode vir da cache
   if (url.pathname === '/versao.json') return;
 
+  if (url.origin !== self.location.origin) return;   // outra origem não é a app
   if (!GUARDA || VER == null) return;   // fora de produção, e sem versão, vai tudo à rede
+
+  /* Só se serve da cache, e só se guarda, o que o install lá pôs. A regra era
+     ao contrário — guardava-se tudo o que não estivesse numa lista de exclusões
+     — e o Cache API não lê Cache-Control nenhum, portanto passavam por aqui
+     coisas que não são a app e são feitas à medida de quem as pede: o /equipa
+     com a sessão da equipa lá dentro (que depois era servida do disco sem o
+     servidor ser consultado, e que ao expirar prendia a ferramenta num ciclo
+     de recargas), o /equipa/entrar com o bilhete no endereço, o /termos, o
+     /privacidade, a montra, o APK. E nada tinha tecto: a cache crescia até a
+     quota estoirar, que é onde o install do worker seguinte deixa de caber. */
+  if (SHELL.indexOf(url.pathname) < 0) return;
+
+  /* Uma navegação guarda-se e serve-se sempre pela mesma chave, seja qual for
+     o endereço que a pessoa clicou. O Cache.match compara o URL inteiro, query
+     incluída, e a app manda por email e por convite endereços com parâmetros
+     — ?entrar=, ?repor=, ?convite=, ?ligar=, ?criar=1. Cada um deles falhava
+     sempre na cache e ia buscar o index.html à REDE, enquanto os <script src>
+     que ele referencia, sendo caminhos sem query, acertavam na cache da versão
+     antiga: metade de cada versão na mesma página, que é a avaria da v31, sem
+     ser preciso worker nenhum trocar. E, de caminho, deixam de ficar gravados
+     em disco endereços que levam segredos lá dentro. */
+  const chave = e.request.mode === 'navigate' ? '/index.html' : e.request;
 
   /* CACHE primeiro, e só desta versão. Era rede primeiro com a cache como
      recurso, e isso não tem atomicidade nenhuma: um ficheiro que falhasse
@@ -101,13 +185,16 @@ self.addEventListener('fetch', (e) => {
      uma vez no install. É também mais rápido. A versão nova entra quando a
      app decidir trocar, não a meio de uma leitura. */
   e.respondWith(
-    caches.open(CACHE)
-      .then((c) => c.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-        if (res && res.ok && res.type === 'basic') { try { c.put(e.request, res.clone()); } catch (x) {} }
-        return res;
-      })))
-      .catch(() => caches.open(CACHE)
-        .then((c) => c.match(e.request.mode === 'navigate' ? '/index.html' : e.request))
-        .catch(() => undefined))
+    caches.open(CACHE).then((c) => c.match(chave).then((hit) => hit || fetch(e.request).then((res) => {
+      /* status 200 e não res.ok: o ok abrange o 206, e uma resposta parcial
+         guardada é uma resposta partida. O put comunica os falhanços dele
+         devolvendo uma promessa rejeitada — o try/catch de antes não apanhava
+         nada e ficava uma rejeição por tratar dentro do worker. */
+      if (res && res.status === 200 && res.type === 'basic') {
+        const grava = c.put(chave, res.clone()).catch(() => {});
+        try { e.waitUntil(grava); } catch (x) { /* evento já fechado */ }
+      }
+      return res;
+    })))
   );
 });
