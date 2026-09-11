@@ -682,6 +682,24 @@ if (CW.user) {
   // sessão em cache: volta à página onde estava e sincroniza em fundo
   try { restorePage(); } catch (e) {}
   showLegalGate();
+  /* As duas leituras do arranque partem JUNTAS. O /api/state estava dentro do
+     .then do /api/me e pagava-lhe a ida e volta inteira antes de sequer sair —
+     e é ele que destranca os contadores (o sabemosOEstado), portanto essa
+     espera era a que se via no crachá dos movimentos por confirmar.
+
+     O que se adianta é o PEDIDO, não a aplicação: a resposta só é tratada
+     dentro do startSync, lá em baixo, no mesmo sítio de sempre. A ordem que
+     interessa fica intacta — o seed() dos dados de exemplo continua a correr
+     antes de o estado do servidor ser aplicado, e sem isso um servidor vazio
+     apagava o exemplo acabado de criar, dentro da janela em que ele ainda não
+     tinha subido.
+
+     O .catch vazio não trata nada: quem trata é o startSync. Serve só para o
+     motor não dar a promessa por órfã enquanto o /api/me não volta — uma
+     rejeição sem ouvinte no mesmo instante é um unhandledrejection, e este
+     projeto relata-os. */
+  var pEstado = api('GET', '/api/state');
+  pEstado.catch(function () {});
   api('GET', '/api/me').then(function (u) {
     CW.user = Object.assign({}, CW.user, { id: u.id, name: u.name, email: u.email });
     try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
@@ -697,11 +715,14 @@ if (CW.user) {
         }
       }
     } catch (e) {}
-    startSync();
+    startSync(pEstado);
     CW.resgatarChegada();   // uma ligação de convite ou de partilha à espera
   }).catch(function (e) {
     if (e && e.status === 401) sessionLost();
-    else { setSyncBadge('off'); startSync(); } // offline: continua local
+    // offline: continua local — e com a MESMA leitura já disparada, senão
+    // este caminho abria um segundo /api/state, sem nada que trave dois
+    // applyState a chegarem fora de ordem
+    else { setSyncBadge('off'); startSync(pEstado); }
   });
 } else {
   showAuth();
