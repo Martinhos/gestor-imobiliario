@@ -154,6 +154,11 @@ function calDiaPanel(iso){
 /* Muda o dia em foco sem redesenhar a página: troca a classe .on na grelha
    e repinta só o painel (o padrão do donutDrill). Sem painel no DOM,
    redesenha a vista toda.
+
+   O painel muda de ALTURA com o dia — um dia cheio tem mais do dobro de um
+   dia vazio —, e trocá-lo de repente fazia a legenda por baixo saltar até
+   207px. Por isso passa pelo crescerEmAltura (continuidade.js), que o deixa
+   crescer ou encolher até ao tamanho novo.
    Recebe: iso — o dia, em 'AAAA-MM-DD'.
    Devolve: nada — atualiza calDiaSel e o DOM. */
 function calSel(iso){
@@ -164,6 +169,8 @@ function calSel(iso){
     const on=c.getAttribute('data-d')===iso;
     c.classList.toggle('on',on);c.setAttribute('aria-pressed',on?'true':'false');
   });
-  painel.outerHTML=calDiaPanel(iso);
-  tornarFocavel(document.getElementById('calDiaPanel'));
+  crescerEmAltura(()=>document.getElementById('calDiaPanel'),()=>{
+    painel.outerHTML=calDiaPanel(iso);
+    tornarFocavel(document.getElementById('calDiaPanel'));
+  });
 }

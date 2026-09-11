@@ -76,6 +76,51 @@ function msDoToken(nome,porOmissao){
   return porOmissao;
 }
 
+/* Uma caixa que troca de conteúdo e, com ele, de altura.
+
+   É a exceção declarada à regra desta folha, e vale a pena dizer porquê. O
+   FLIP anima a diferença de POSIÇÃO de peças que existem dos dois lados; aqui
+   o que muda é o tamanho da própria caixa, e não há posição nenhuma para
+   interpolar. Medido no calendário: o cartão do dia tem 149px vazio, 216px
+   com uma marcação e 356px cheio — mudar de dia crescia ou encolhia até 207px
+   de um fotograma para o outro, e a legenda por baixo saltava com ele.
+
+   Anima-se a altura, que custa um layout por fotograma. O que o torna
+   aceitável é ser UMA caixa: a objeção escrita no topo deste ficheiro é a
+   outra — «uma animação de altura por linha» numa lista de quinhentas —, e
+   não se aplica a uma só. A do fold (index.html) também não: ali o que falhou
+   foi o grid-template-rows 0fr→1fr, que não interpola contra max-content;
+   duas alturas medidas em pixeis interpolam sempre.
+
+   Parte da altura RENDERIZADA e não da final: um segundo toque a meio do
+   caminho continua de onde o primeiro ia, em vez de recomeçar do princípio.
+   O overflow fecha-se só durante a viagem, enquanto a caixa é mais curta do
+   que o que leva dentro — e este painel não tem menus de sel() lá dentro para
+   serem recortados.
+   Recebe: obter — função que devolve a caixa (chamada antes e depois de pintar);
+   pintar — função que troca o conteúdo.
+   Devolve: nada — pinta sempre, e anima só quando há diferença de altura. */
+function crescerEmAltura(obter,pintar){
+  const a=obter();
+  if(!a||!a.animate||semMovimento()){pintar();return}
+  const h0=a.getBoundingClientRect().height;
+  pintar();
+  const b=obter();
+  if(!b||!b.animate)return;
+  const h1=b.getBoundingClientRect().height;
+  // menos de um pixel não é crescimento nenhum, e custa o mesmo que um a sério
+  if(Math.abs(h1-h0)<1)return;
+  const dur=msDoToken('--medio',200),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
+  const antes=b.style.overflow;
+  b.style.overflow='hidden';
+  const an=b.animate([{height:h0+'px'},{height:h1+'px'}],{duration:dur,easing:curva});
+  const fim=function(){try{b.style.overflow=antes}catch(x){}};
+  an.onfinish=fim;
+  /* rede: num separador escondido a animação não corre e o onfinish nunca
+     chega — sem isto a caixa ficava com o overflow fechado para sempre */
+  setTimeout(fim,dur+120);
+}
+
 /* A camada onde ficam, por um instante, os nós que a repintura deitou fora.
 
    Fixa e surda ao toque. O z-index é 19 de propósito: por baixo do cabeçalho
