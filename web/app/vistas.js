@@ -27,6 +27,23 @@ function fpanelEntra(aberto){
   const p=document.querySelector('.fpanel.on');
   if(p)p.classList.add('entra');
 }
+/* Fecha os painéis de filtros todos — os das listas, o dos movimentos e os de
+   análise.
+
+   Quem chama é o go(), ao mudar de separador. O painel é uma superfície
+   passageira, ancorada ao botão do cabeçalho, e o go() já fazia isto à gaveta
+   (closeDrawer) — aos filtros é que faltava. Sem isto, filtrar os imóveis,
+   sair para os movimentos e voltar devolvia o painel aberto por cima da lista
+   que se ia ler, sem ninguém o ter pedido.
+
+   Os VALORES dos filtros não se tocam, e é a diferença que importa: esses são
+   para durar de uma visita à outra, e o que se fecha aqui é só a porta.
+   Devolve: nada — fecha os painéis no estado; o render seguinte pinta-os fechados. */
+function fecharFiltros(){
+  anaOpen={};
+  txFiltAberto=false;
+  Object.keys(listF).forEach(k=>{listF[k]._open=false});
+}
 // nº de filtros ativos no separador atual — decide o ponto no botão do cabeçalho
 // Devolve: número de filtros ativos no separador atual.
 function hdrFiltN(){
