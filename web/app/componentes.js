@@ -539,6 +539,26 @@ function setModal(title,body,foot,menuHtml){
    (Sob automação, navigator.webdriver salta a pergunta: o percurso de
    testes não tem dedos mal postos.) */
 let _forcaFecho=false;
+/* Tira uma janela do ecrã com a saída desenhada (index.html:.modal.sai).
+   Troca .open por .sai — as consultas a .modal.open deixam de a ver no
+   mesmo instante — e remove o nó quando a animação acabar. Os ids saem já:
+   o promote devolve os da janela de baixo, e duas janelas com #modalBody
+   durante 200ms davam um getElementById errado. A rede do setTimeout é a
+   de sempre: num separador escondido a animação não corre e o
+   animationend nunca chega.
+   Recebe: el — o elemento .modal a tirar do ecrã.
+   Devolve: nada — anima a saída e remove o nó do documento no fim. */
+function fecharComSaida(el){
+  if(typeof semIds==='function')semIds(el);
+  if(typeof semMovimento==='function'&&semMovimento()){el.remove();return}
+  el.classList.remove('open');el.classList.add('sai');
+  el.setAttribute('aria-hidden','true');try{el.inert=true}catch(e){}
+  let feito=false;
+  const fora=()=>{if(feito)return;feito=true;try{el.remove()}catch(x){}};
+  const s=el.querySelector('.sheet');
+  if(s)s.addEventListener('animationend',fora,{once:true});
+  setTimeout(fora,(typeof msDoToken==='function'?msDoToken('--medio',200):200)+120);
+}
 /* Fecha a janela de cima. `origem` diz por onde se saiu ('fundo', 'x',
    'voltar'…): esses caminhos de abandono, com alterações por guardar,
    abrem primeiro a pergunta "Sair sem guardar?". Sem origem (Guardar,
@@ -560,7 +580,7 @@ function closeModal(origem){
     return;
   }
   const M=modalStack.pop();lockPage();if(!M)return;
-  M.el.remove();
+  fecharComSaida(M.el);
   avisoAcimaDoRodape();            // sem rodapé por baixo, o aviso volta ao sítio
   avisoQuandoAssentar();
   const top=modalTop();

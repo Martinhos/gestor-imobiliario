@@ -141,7 +141,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .value,.table td,.table th,.stat b{font-variant-numeric:tabular-nums}
 
 .app{display:flex;min-height:100%}
-aside{width:var(--rail);flex:0 0 var(--rail);background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;height:100dvh;transition:width var(--medio) var(--curva-entra),flex-basis var(--medio) var(--curva-entra),transform var(--medio) var(--curva-entra);z-index:62}
+aside{width:var(--rail);flex:0 0 var(--rail);background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;height:100dvh;transition:width var(--medio) var(--curva-entra),flex-basis var(--medio) var(--curva-entra),transform var(--medio) var(--curva-sai);z-index:62}
 body.rail aside{width:var(--rail-min);flex-basis:var(--rail-min)}
 .brand{display:flex;align-items:center;gap:11px;padding:calc(18px + var(--inset-top)) 18px 14px;min-height:60px}
 .brand .mark{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.12);display:grid;place-items:center;flex:0 0 34px}
@@ -179,11 +179,12 @@ header.top .sub{color:var(--muted);font-size:12px;margin-top:2px}
 .wrap{padding:18px calc(22px + var(--inset-right)) calc(44px + var(--inset-bottom)) calc(22px + var(--inset-left));max-width:1180px;width:100%}
 @media(max-width:900px){
   aside{position:fixed;left:0;top:0;transform:translateX(-100%);width:var(--rail);flex-basis:var(--rail)}
-  body.open aside{transform:none;box-shadow:0 0 40px rgba(0,0,0,.4)}
+  body.open aside{transform:none;box-shadow:0 0 40px rgba(0,0,0,.4);
+    transition:width var(--medio) var(--curva-entra),flex-basis var(--medio) var(--curva-entra),transform var(--medio) var(--curva-entra)}
   body.rail aside{width:var(--rail);flex-basis:var(--rail)}
   body.rail .brand .txt,body.rail nav a .txt,body.rail .railbtn .txt{display:block}
   body.rail nav a,body.rail .railbtn{justify-content:flex-start;padding:11px 12px}
-  body.open .scrim{opacity:1;visibility:visible;transition:opacity var(--medio) var(--curva),visibility 0s}
+  body.open .scrim{opacity:1;visibility:visible;transition:opacity var(--medio) var(--curva-entra),visibility 0s}
   .burger{display:inline-flex;align-items:center;justify-content:center}
   .wrap{padding:14px calc(15px + var(--inset-right)) calc(44px + var(--inset-bottom)) calc(15px + var(--inset-left))}
   header.top{padding:calc(11px + var(--inset-top)) calc(15px + var(--inset-right)) 11px calc(15px + var(--inset-left))}
@@ -547,10 +548,10 @@ textarea{min-height:90px;resize:vertical}
 .fpanel.on{display:block}
 .fpanel>.card{box-shadow:0 16px 38px rgba(0,0,0,.30);max-height:min(72vh,560px);max-height:min(72dvh,560px);overflow:auto;overscroll-behavior:contain}
 .fabpad{height:84px}
-.totop{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + var(--inset-bottom));z-index:57;width:44px;height:44px;
-  border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);display:none;align-items:center;justify-content:center;
-  box-shadow:0 8px 22px rgba(0,0,0,.24);cursor:pointer}
-.totop.on{display:flex}
+.totop{position:fixed;left:50%;transform:translateX(-50%) scale(.9);bottom:calc(20px + var(--inset-bottom));z-index:57;width:44px;height:44px;
+  border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 22px rgba(0,0,0,.24);cursor:pointer;opacity:0;visibility:hidden}
+.totop.on{opacity:1;visibility:visible;transform:translateX(-50%)}
 .qwrap{position:relative;width:100%}
 .qwrap .txq{width:100%;padding-right:36px}
 .qclear{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:26px;height:26px;border:0;border-radius:50%;
@@ -636,9 +637,10 @@ textarea{min-height:90px;resize:vertical}
    a mostra, a folha crescia para alem do que se ve e o topo ficava cortado,
    fora de alcance, porque esta encostada em baixo. */
 @media(max-width:520px){.sheet{top:auto;bottom:0;left:0;transform:none;width:100%;max-height:93vh;max-height:93dvh;border-radius:20px 20px 0 0}}
-.toast{position:fixed;left:50%;bottom:calc(22px + var(--inset-bottom) + var(--acima,0px));transform:translateX(-50%) translateY(80px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;z-index:90;font-size:13.5px;font-weight:550;opacity:0;transition:opacity var(--medio) var(--curva),transform var(--medio) var(--curva);pointer-events:none;max-width:90vw;text-align:center;
+.toast{position:fixed;left:50%;bottom:calc(22px + var(--inset-bottom) + var(--acima,0px));transform:translateX(-50%) translateY(80px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;z-index:90;font-size:13.5px;font-weight:550;opacity:0;transition:opacity var(--medio) var(--curva-sai),transform var(--medio) var(--curva-sai);pointer-events:none;max-width:90vw;text-align:center;
   display:flex;align-items:center;justify-content:center;gap:12px}
-.toast.on{opacity:1;transform:translateX(-50%);pointer-events:auto}
+.toast.on{opacity:1;transform:translateX(-50%);pointer-events:auto;
+  transition:opacity var(--medio) var(--curva),transform var(--medio) var(--curva)}
 /* O que desfaz o que acabou de acontecer não pode parecer texto: estava
    sublinhado, com cor de link, deitado sobre a barra escura do aviso. É a
    única saída de uma ação já feita, e uma saída quer-se com caixa e com um
@@ -662,7 +664,7 @@ textarea{min-height:90px;resize:vertical}
    Sempre :active e nunca :hover, que no iOS fica preso depois do toque. */
 .btn,.iconbtn,.selbtn,.selopt,.menupop button,.tabbar a,.addbox,.fold-head,
 .tagadd,.tag button,.railbtn,nav a,.legend .li.tap,.card.kpi.why,.card.kpi.evo,
-.rich-tools button,.qclear,.burger,.totop,.thumb{
+.rich-tools button,.qclear,.burger,.thumb{
   transition:background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva),
     color var(--rapido) var(--curva),transform var(--rapido) var(--curva)}
 .btn:active,.iconbtn:active,.selbtn:active,.selopt:active,.menupop button:active,
@@ -671,6 +673,16 @@ textarea{min-height:90px;resize:vertical}
 /* as superfícies grandes afundam menos — a .99 do .card.tap é a régua */
 .addbox:active,.fold-head:active,.legend .li.tap:active,.calday.tap:active,
 .card.kpi.why:active,.card.kpi.evo:active{transform:scale(.98)}
+/* O botão do topo aparece e some a meio de um scroll: entra e sai a
+   desvanecer com um resto de escala, como o véu da gaveta — o display já
+   não entra nisto, e a visibility só se esconde no fim. Transição, e não
+   keyframes: o vaivém à volta dos 420px retarga a meio em vez de piscar. */
+.totop{transition:opacity var(--medio) var(--curva-sai),transform var(--medio) var(--curva-sai),
+  background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva),color var(--rapido) var(--curva),
+  visibility 0s var(--medio)}
+.totop.on{transition:opacity var(--medio) var(--curva),transform var(--medio) var(--curva),
+  background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva),color var(--rapido) var(--curva),
+  visibility 0s}
 /* estes dois já usam o transform para se posicionarem: o scale entra a seguir
    ao que lá está, senão saltavam do sítio ao serem premidos */
 .totop:active{transform:translateX(-50%) scale(.94)}
@@ -762,6 +774,23 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
 .selpop.on{transform-origin:top center;animation:popEntra var(--rapido) var(--curva)}
 .menupop.on{transform-origin:top right;animation:popEntra var(--rapido) var(--curva)}
 .fabmenu.on{transform-origin:bottom right;animation:popEntra var(--rapido) var(--curva)}
+/* o painel de filtros é da família dos menus e entra como eles; a marca
+   .entra é posta por quem o abre (vistas.js:fpanelEntra) e não sobrevive
+   ao render seguinte — o painel já aberto não pisca a cada filtro mexido,
+   que é o mesmo desenho da dobra (.fold.entra) */
+.fpanel.on.entra{transform-origin:top center;animation:popEntra var(--rapido) var(--curva)}
+/* --- E saem ---
+   Mais curta do que a entrada (--medio contra --lento): o que se fecha já
+   foi decidido e não pode prender a mão. O closeModal TROCA .open por .sai:
+   as consultas a .modal.open (o aviso, o guia, a selecao-listas) deixam de
+   ver a janela que sai sem mudarem, e o display vem por isso repetido aqui. */
+@keyframes veuSai{to{opacity:0}}
+@keyframes folhaSai{to{opacity:0;transform:translate(-50%,-50%) translateY(10px) scale(.98)}}
+@keyframes folhaDesce{to{transform:translateY(100%)}}
+.modal.sai{display:block;pointer-events:none}
+.modal.sai .bg{animation:veuSai var(--medio) var(--curva-sai) both}
+.modal.sai .sheet{animation:folhaSai var(--medio) var(--curva-sai) both}
+@media(max-width:520px){.modal.sai .sheet{animation:folhaDesce var(--medio) var(--curva-sai) both}}
 
 /* --- O que muda num nó vivo ---
    Os casos raros em que a classe troca sem o nó ser recriado, e portanto os

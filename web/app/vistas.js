@@ -13,8 +13,19 @@ const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',rec
    Devolve: nada — abre/fecha o painel respetivo e redesenha a vista. */
 function hdrFiltToggle(){
   if(LFK[tab])return lfToggle(LFK[tab]);
-  if(tab==='transactions'){txFiltAberto=!txFiltAberto;return render()}
-  anaOpen[tab]=!anaOpen[tab];render();
+  if(tab==='transactions'){txFiltAberto=!txFiltAberto;render();fpanelEntra(txFiltAberto);return}
+  anaOpen[tab]=!anaOpen[tab];render();fpanelEntra(anaOpen[tab]);
+}
+/* Marca o painel de filtros acabado de abrir para a entrada
+   (index.html:.fpanel.on.entra). Corre DEPOIS do render que o pôs no
+   documento; a marca morre com o nó no render seguinte, e é isso que
+   impede o painel já aberto de voltar a entrar — o desenho do toggleFold.
+   Recebe: aberto — o estado novo do painel; com false não faz nada.
+   Devolve: nada — põe a classe .entra no painel aberto, no próprio DOM. */
+function fpanelEntra(aberto){
+  if(!aberto)return;
+  const p=document.querySelector('.fpanel.on');
+  if(p)p.classList.add('entra');
 }
 // nº de filtros ativos no separador atual — decide o ponto no botão do cabeçalho
 // Devolve: número de filtros ativos no separador atual.
@@ -1294,7 +1305,7 @@ function lfSel(k,key,opts){
 // Recebe: k — a chave da lista.
 // Devolve: nada — redesenha a vista.
 function lfToggle(k){
-  const s=lf(k);s._open=!s._open;render();
+  const s=lf(k);s._open=!s._open;render();fpanelEntra(s._open);
 }
 // fecha o painel da lista k (os filtros aplicam-se logo ao mexer)
 // Recebe: k — a chave da lista.
