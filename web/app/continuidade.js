@@ -298,12 +298,16 @@ function pintarComContinuidade(pintar,o){
 
    Recebe: obter — função que devolve o elemento (chamada antes e depois de
    pintar); pintar — a função que repinta; dir — +1 para a frente (o novo vem
-   da direita), -1 para trás.
+   da direita), -1 para trás; moldura (opcional) — função que devolve a caixa
+   que ENVOLVE a fita e que tem de crescer com ela (o cartão do calendário,
+   que muda de altura entre um mês de cinco e um de seis semanas).
    Devolve: o que a função pintar devolver. */
-function deslizarEntre(obter,pintar,dir){
+function deslizarEntre(obter,pintar,dir,moldura){
   const a=obter();
   if(semMovimento()||!a||!a.animate)return pintar();
   const r0=a.getBoundingClientRect();
+  const m0=moldura?moldura():null;
+  const hm0=m0?m0.getBoundingClientRect().height:null;
   /* Lá dentro há um render, e o render acompanha as peças por sua conta. Duas
      animações sobre a mesma coisa — a página a virar e as linhas a deslizar —
      lêem-se como uma confusão, não como duas ideias. */
@@ -318,7 +322,7 @@ function deslizarEntre(obter,pintar,dir){
      saiu, houve uma repintura mas não houve troca — e uma fita a correr para
      mostrar o mesmo lê-se como a app a fazer um gesto que ninguém pediu. */
   if(a.outerHTML===b.outerHTML)return res;
-  correrAFita(a,b,r0,dir<0?-1:1);
+  correrAFita(a,b,r0,dir<0?-1:1,moldura?moldura():null,hm0);
   return res;
 }
 
@@ -332,9 +336,11 @@ function semIds(e){
 
 /* Põe o que saiu e o que entrou a correr lado a lado, recortados.
    Recebe: a — o nó antigo (já fora do documento); b — o nó novo, no seu lugar;
-   r0 — o retângulo que o antigo ocupava; d — +1 para a frente, -1 para trás.
+   r0 — o retângulo que o antigo ocupava; d — +1 para a frente, -1 para trás;
+   moldura (opcional) — a caixa que envolve a fita e cresce com ela; hm0 — a
+   altura dessa caixa antes da repintura.
    Devolve: nada — anima e limpa no fim. */
-function correrAFita(a,b,r0,d){
+function correrAFita(a,b,r0,d,moldura,hm0){
   const r=b.getBoundingClientRect();
   const w=Math.round(r.width)||Math.round(r0.width);
   const caixa=document.createElement('div');
@@ -362,6 +368,44 @@ function correrAFita(a,b,r0,d){
   an.onfinish=fim;
   /* rede: num separador escondido a animação não corre e o onfinish nunca
      chega — o cartão ficava invisível para sempre */
+  setTimeout(fim,dur+600);
+  aFitaAbreEspaco(caixa,r0.height,r.height,moldura,hm0,dur,curva);
+}
+
+/* A fita abre espaço para o que entra, em vez de o deixar sair da moldura.
+
+   No calendário a fita corre DENTRO do cartão que envolve os dias, e um mês
+   tem cinco ou seis semanas. Sem isto, a caixa que recorta a fita nascia já
+   com a altura do maior dos dois: um mês de seis linhas entrava com a última
+   linha fora do cartão, pousada sobre o painel de baixo, durante os 340ms da
+   viagem — e o cartão só a acolhia no fim, de um fotograma para o outro.
+
+   A caixa e a moldura crescem com a MESMA duração e a MESMA curva da fita, e
+   é essa a razão de serem parâmetros em vez de as ir buscar: basta uma delas
+   ir por outro caminho para se abrir uma fenda entre a borda do cartão e a
+   última linha do mês, que é o defeito que isto existe para não ter.
+
+   Recebe: caixa — a caixa que recorta a fita; h0, h1 — a altura da fita antes
+   e depois; moldura — a caixa que a envolve (pode ser nula); hm0 — a altura
+   da moldura antes da repintura; dur — a duração em ms; curva — a curva, em
+   texto.
+   Devolve: nada — anima as duas alturas e repõe o overflow da moldura no fim. */
+function aFitaAbreEspaco(caixa,h0,h1,moldura,hm0,dur,curva){
+  const a0=Math.round(h0),a1=Math.round(h1);
+  if(a0!==a1){
+    caixa.style.height=a0+'px';
+    caixa.animate([{height:a0+'px'},{height:a1+'px'}],{duration:dur,easing:curva,fill:'forwards'});
+  }
+  if(!moldura||!moldura.animate||hm0==null)return;
+  const m1=moldura.getBoundingClientRect().height;
+  // menos de um pixel não é crescimento nenhum (a mesma régua do crescerEmAltura)
+  if(Math.abs(m1-hm0)<1)return;
+  const antes=moldura.style.overflow;
+  moldura.style.overflow='hidden';
+  const an=moldura.animate([{height:hm0+'px'},{height:m1+'px'}],{duration:dur,easing:curva});
+  const fim=function(){try{moldura.style.overflow=antes}catch(x){}};
+  an.onfinish=fim;
+  // a mesma rede do resto: num separador escondido a animação não corre
   setTimeout(fim,dur+600);
 }
 

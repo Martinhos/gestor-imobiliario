@@ -40,18 +40,30 @@ function calMesEmVista(){return calMes||pzHoje().slice(0,7)}
 function calNav(delta){
   calDiaSel='';
   /* A grelha do mês vira como uma página, para o lado a que se foi. Sem isto
-     o mês trocava de números no sítio e ninguém via para onde tinha andado. */
-  const grelha=()=>document.getElementById('calCard');
+     o mês trocava de números no sítio e ninguém via para onde tinha andado.
+
+     Quem vira são os DIAS, e não o cartão que os envolve. Esteve ao contrário,
+     com o #calCard inteiro dentro da fita, e isso obrigava o cartão a ter a
+     altura das duas páginas ao mesmo tempo: um mês de seis semanas a seguir a
+     um de cinco fazia o cartão saltar 56px de um fotograma para o outro,
+     porque a moldura não tinha maneira de crescer a meio de uma viagem em que
+     ela própria era o que viajava. Com só os dias na fita, o cartão fica
+     parado a fazer de moldura e cresce até ao tamanho do mês que entra — e o
+     cabeçalho dos dias da semana, que é igual nos dois meses, deixa de andar
+     para trás e para a frente sem razão. */
+  const grelha=()=>document.getElementById('calDias');
+  const moldura=()=>document.getElementById('calCard');
   /* E o painel do dia cresce até ao tamanho do mês novo, em vez de o tomar de
      um fotograma para o outro: o dia em foco muda com o mês, e com ele o que
      lá está escrito — medido, 149px em setembro e 426px em outubro, com a
      legenda por baixo a saltar 279px.
 
      Mexe no #calDiaPanel, que é OUTRO elemento do que o deslizarEntre anima
-     (o #calCard): as duas animações não disputam a mesma caixa, e o painel
-     está por baixo da grelha, portanto a altura dele também não mexe com o
-     retângulo que a fita mede. No --lento da fita, para o ecrã todo assentar
-     de uma vez em vez de a caixa parar antes de a página acabar de virar. */
+     (os #calDias) e do que lhe serve de moldura (o #calCard): as três
+     animações não disputam a mesma caixa, e o painel está por baixo de todas,
+     portanto a altura dele não mexe com o retângulo que a fita mede. No
+     --lento da fita, para o ecrã todo assentar de uma vez em vez de a caixa
+     parar antes de a página acabar de virar. */
   const comPainel=(pintar)=>()=>crescerEmAltura(
     ()=>document.getElementById('calDiaPanel'),pintar,'--lento');
   const hoje=pzHoje().slice(0,7),emVista=calMesEmVista();
@@ -59,11 +71,11 @@ function calNav(delta){
     /* já se está no mês de hoje: não há para onde rodar. O calMes podia estar
        posto — com o valor do mês de hoje — por se ter voltado pela seta. */
     if(emVista===hoje)return comPainel(()=>{calMes='';render()})();
-    return deslizarEntre(grelha,comPainel(()=>{calMes='';render()}),emVista>hoje?-1:1);
+    return deslizarEntre(grelha,comPainel(()=>{calMes='';render()}),emVista>hoje?-1:1,moldura);
   }
   const d=new Date(calInicio()+'T00:00:00');
   d.setMonth(d.getMonth()+delta);
-  deslizarEntre(grelha,comPainel(()=>{calMes=pzIso(d).slice(0,7);render()}),delta>0?1:-1);
+  deslizarEntre(grelha,comPainel(()=>{calMes=pzIso(d).slice(0,7);render()}),delta>0?1:-1,moldura);
 }
 
 /* As ocorrências dos movimentos planeados dentro de um intervalo de dias,
@@ -126,7 +138,7 @@ function vCalendar(){
       <button class="btn" style="transform:scaleX(-1)" data-toca="vista" onclick="calNav(1)" aria-label="Mês seguinte">${ic('chev',18)}</button></div>
     <div class="card" id="calCard" style="padding:12px">
       <div class="calgrid calhead" id="calGrelha0">${['S','T','Q','Q','S','S','D'].map(x=>`<span>${x}</span>`).join('')}</div>
-      <div class="calgrid">${celulas}</div></div>
+      <div class="calgrid" id="calDias">${celulas}</div></div>
     ${calDiaPanel(sel)}
     <div class="hint" style="margin-top:10px"><i class="pt vis" style="vertical-align:middle"></i> visitas${total?' ('+total+' este mês)':''} · <i class="pt pla" style="vertical-align:middle"></i> movimentos planeados · toca num dia para veres o que tem</div>`;
 }
