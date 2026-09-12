@@ -918,6 +918,37 @@ arriscar ressuscitar meses já confirmados, porque o `next` é o cursor do que
 falta confirmar. O preço é corrigir um início de 2028 para 2025 deixar o
 planeado em 2028, e ter de se acertar à mão.
 
+## A Declaração resume, não declara
+À pergunta «este contrato foi comunicado à AT?» há três respostas, não duas:
+por indicar, declarado, não declarado (dados.js:normFisco, o `estado`). A
+terceira é uma escolha de quem assina, e a ficha apresenta-a como as outras
+duas — sem selo vermelho, sem aviso, sem «devias» (contrato.js:ctBody). Um
+selo ali não mudava a escolha de ninguém; só afastava quem a fez. O que a
+escolha muda é o que a app faz com o contrato: um não declarado sai do
+resumo do Anexo F e fica listado à parte, com as suas rendas e em linguagem
+neutra, «fora da declaração» (fisco.js:resumoFiscal, a lista `fora`), e não
+gera nenhum prazo da AT — nem Modelo 2, nem recibos, nem 15 de fevereiro
+(prazos.js:prazosDe). Lembrar a alguém um prazo que decidiu não cumprir não
+é ajudar: é insistir.
+
+A página Declaração mostra as linhas do quadro 4.1 com o que a app sabe e aponta
+o que falta — o código da freguesia, o número do contrato na AT, o NIF de um
+inquilino — em vez de deixar a célula em branco ou, pior, de a preencher
+(fisco.js:vFisco). Nunca se inventa um código nem um número: o que não está
+nos dados não está na página. E o que é conta da app vem dito como tal: os
+gastos de um imóvel com vários contratos repartem-se pelas linhas na
+proporção das rendas de cada uma, e a página chama-lhe estimativa, porque é
+uma. Quem declara é a pessoa, no Portal das Finanças; a app poupa-lhe a soma
+e a procura, não a assinatura.
+
+A coluna onde um gasto cai sai de uma regra que se vê e se muda: o mapa
+categoria → coluna vive nas definições, por categoria ou por «categoria /
+subcategoria», e repõe-se num toque (definicoes.js:vIrsMapa). A escolha
+feita no próprio movimento manda sobre a regra, a subcategoria manda sobre a
+categoria, e o que não tem regra cai em «outros gastos» com a origem à vista
+(auxiliares.js:irsColunaDe) — para o resumo poder dizer «isto foi por
+omissão» em vez de o esconder num total.
+
 ## Segurar não é selecionar
 A lista dos movimentos mexe-se por baixo do dedo: o toque longo entra em modo
 de seleção, nasce uma barra acima de tudo e o título do mês cresce e cola-se

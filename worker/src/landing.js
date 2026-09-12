@@ -54,8 +54,8 @@ const CAPACIDADES = [
     'Casa herdada a meias? Quotas por imóvel, quem pagou o quê, e quanto falta acertar entre vocês — sem folhas de cálculo à parte.'],
   ['Créditos à habitação',
     'Prestações com capital, juros e imposto do selo separados, amortizações, e o plano de pagamentos até ao fim.'],
-  ['Pronto para o IRS',
-    'Rendas e despesas organizadas por imóvel ao longo do ano. Quando chegar o Anexo F, está tudo à mão.'],
+  ['O Anexo F, linha a linha',
+    'O quadro 4.1 por ano e por dono, com o que falta apontado; os prazos da AT — Modelo 2, recibos, 15 de fevereiro, IRS — lembrados a tempo; cada contrato declarado ou não, à tua escolha. Entregar às Finanças é contigo: a app resume, não declara.'],
   ['Visitas e prazos',
     'Quem vem ver que imóvel, e quando. E um aviso antes de um contrato acabar, em vez de o descobrires tarde.'],
 ];

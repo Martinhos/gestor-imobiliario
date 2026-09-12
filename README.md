@@ -112,3 +112,5 @@ os dados são carregados e sincronizados para a tua conta.
 - Anexos (fotos e documentos) ficam apenas no aparelho onde foram adicionados (IndexedDB);
   não são sincronizados entre aparelhos nem incluídos na partilha (passar para R2 é o próximo passo).
 - Notificações de movimentos por confirmar existiam via alarmes Android; na web o aviso aparece ao abrir a app.
+- A página Declaração resume o Anexo F (quadro 4.1) e lembra os prazos da AT, mas não entrega nada à AT
+  nem lê o Portal das Finanças — o Modelo 2, os recibos eletrónicos e a declaração fazem-se lá.

@@ -77,15 +77,23 @@ function downloadBytes(name,mime,bin){
 }
 /* Exporta todos os movimentos para CSV (ponto e vírgula, campos entre aspas), com
    as colunas já traduzidas para nomes legíveis — imóvel, quem pagou, inquilinos,
-   categoria. Pensado para abrir diretamente no Excel.
+   categoria. Pensado para abrir diretamente no Excel. No fim vai o que o IRS
+   pede: o mês a que a renda respeita, a retenção na fonte, se o recibo
+   eletrónico foi emitido (só nas rendas), a coluna do Anexo F (só nas despesas,
+   pela mesma regra do resumo: auxiliares.js:irsColunaDe), e o estado fiscal e o
+   número na AT do contrato a que o movimento está preso.
    Devolve: nada — dispara a descarga do CSV. */
 function downloadCsv(){
-  const rows=[['data','descricao','tipo','valor','imovel','pago_por','recebido_por','divisao','quarto','inquilinos','categoria','subcategoria','etiquetas','credor','comentarios','capital','juros','selo'],
+  const estadoFisco=c=>!c?'':ctDeclarado(c)?'declarado':ctNaoDeclarado(c)?'nao declarado':'por indicar';
+  const rows=[['data','descricao','tipo','valor','imovel','pago_por','recebido_por','divisao','quarto','inquilinos','categoria','subcategoria','etiquetas','credor','comentarios','capital','juros','selo',
+      'mes_renda','retencao','recibo','coluna_irs','contrato_fisco','contrato_at'],
     ...db.transactions.map(t=>{const c=t.contractId?contract(t.contractId):null,p=prop(t.propertyId);
       return [t.date,t.label,(KIND[t.kind]||{}).short||t.kind,t.amount,propName(t.propertyId),
         t.paidBy&&owner(t.paidBy)?owner(t.paidBy).name:'',t.toId&&owner(t.toId)?owner(t.toId).name:'',splitLabel(t),
         c&&c.roomId?roomName(p,c.roomId):'',c?ctNames(c):'',t.category||'',t.sub||'',(t.tags||[]).join(' / '),
-        t.creditor||'',t.notes||'',t.principal||'',t.interest||'',t.stamp||'']})];
+        t.creditor||'',t.notes||'',t.principal||'',t.interest||'',t.stamp||'',
+        t.periodo||'',t.retencao||'',ehRenda(t)?(t.recibo?'sim':'nao'):'',t.kind==='expense'?irsColunaNome(irsColunaDe(t).col):'',
+        estadoFisco(c),c?fiscoDe(c).numero:'']})];
   download('movimentos-imobiliarios.csv','text/csv;charset=utf-8',rows.map(r=>r.map(x=>'"'+String(x).split('"').join('""')+'"').join(';')).join('\n'));
   toast('CSV exportado.');
 }
