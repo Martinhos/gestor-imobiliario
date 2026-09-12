@@ -18,7 +18,7 @@ export const MODULOS = [
   'dados', 'anexos', 'auxiliares', 'lista', 'continuidade', 'graficos', 'credito', 'componentes',
   'metricas', 'navegacao', 'acessos', 'vistas', 'imovel', 'pessoas', 'contrato',
   'planeados', 'prazos', 'notificacoes', 'visitas', 'calendario', 'movimento', 'creditos', 'splitwise', 'contrato-pdf',
-  'avaliacao', 'definicoes', 'copias',
+  'avaliacao', 'fisco', 'definicoes', 'copias',
 ];
 
 /* A camada da nuvem, pela ordem do index.html. Carrega inteira neste contexto

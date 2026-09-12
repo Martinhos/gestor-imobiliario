@@ -72,6 +72,8 @@ const MAPA = [
     ficheiros: ['worker/src/lib/limites.js'] },
   { id: 'anexos', titulo: 'Anexos e ficheiros',
     ficheiros: ['worker/src/files.js', 'worker/src/rotas/anexos.js', 'web/cloud/anexos.js', 'web/app/anexos.js'] },
+  { id: 'fisco', titulo: 'Declaração e IRS',
+    ficheiros: ['web/app/fisco.js'] },
   { id: 'infra', titulo: 'Infraestrutura',
     ficheiros: ['worker/src/index.js', 'worker/src/api.js', 'worker/src/landing.js',
       'worker/src/legal-vista.js',

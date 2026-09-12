@@ -13,6 +13,7 @@ const TABS=[
   {id:'credits',icon:'bank',label:'Créditos',sub:'Hipotecas de todos os imóveis'},
   {id:'projections',icon:'trend',label:'Projeções',sub:'Rendas futuras e aumentos anuais'},
   {id:'reports',icon:'file',label:'Avaliação',sub:'Análise imóvel a imóvel'},
+  {id:'fisco',icon:'shield',label:'Declaração',sub:'O Anexo F, os recibos e os prazos da AT'},
   {id:'settings',icon:'gear',label:'Definições',sub:'Tema, categorias e etiquetas'}
 ];
 let tab='dashboard',txFilter='',txProp='',txPaid='',txCat='',txSub='',txNoPayer=true,txSearch='',txDe='',txAte='',txSort='date',txDir='desc',repProp='',setPage='';
@@ -20,12 +21,13 @@ const SUBPAGE={cats:{label:'Tipos de movimento',sub:'Como classificas o que entr
                filtros:{label:'Filtros comuns',sub:'Define uma vez, aplica em qualquer vista'},
                tags:{label:'Etiquetas',sub:'Para marcar movimentos'},
                groups:{label:'Grupos',sub:'Conjuntos de imóveis, proprietários e contratos'},
+               irs:{label:'IRS e dedução',sub:'Que despesas entram em cada coluna do Anexo F'},
                dados:{label:'Dados',sub:'Splitwise e cópias de segurança'}};
 // O contentor onde cada vista é desenhada (o elemento #view).
 // Devolve: o elemento #view do DOM (ou null se ainda não existir).
 const view=()=>document.getElementById('view');
 const NAV_GROUPS=[{label:'Património',ids:['dashboard','calendar','properties','contracts']},{label:'Pessoas',ids:['visits','tenants','owners','colaboradores']},
-  {label:'Finanças',ids:['transactions','recurring','credits','projections','reports']},{label:'Aplicação',ids:['settings']}];
+  {label:'Finanças',ids:['transactions','recurring','credits','projections','reports','fisco']},{label:'Aplicação',ids:['settings']}];
 /* contagem que cada crachá mostrava da última vez */
 let _cntAnt={};
 /* Diz se um crachá deve dar o pulso de entrada (index.html:.cnt.novo). Só

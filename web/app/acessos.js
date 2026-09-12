@@ -35,7 +35,7 @@ const ROTULOS={
   'loan.view':{rotulo:'Ver hipotecas',hint:'Créditos, banco, capital, plano e documentos da hipoteca. Editar hipotecas é editar a ficha do imóvel.',grupo:'Hipotecas'},
   'file.view':{rotulo:'Ver fotos e documentos',hint:'As fotos do imóvel e os anexos dos registos.',grupo:'Anexos'},
   'file.add':{rotulo:'Adicionar fotos e documentos',hint:'Nos registos que pode adicionar.',grupo:'Anexos'},
-  'report.view':{rotulo:'Ver valores e avaliação',hint:'Valor de mercado, aquisição, dívida, património, Avaliação, Projeções e mais-valias.',grupo:'Avaliação'},
+  'report.view':{rotulo:'Ver valores e avaliação',hint:'Valor de mercado, aquisição, dívida, património, Avaliação, Projeções, mais-valias e a Declaração (o resumo do Anexo F).',grupo:'Avaliação'},
   'house.edit':{rotulo:'Editar a ficha do imóvel',hint:'Nome, morada, quartos, dados registais, hipotecas, fotos e anúncio. Nunca donos, quotas nem apagar.',grupo:'Imóvel'}
 };
 /* Os três cargos prontos do modal «Novo cargo» — iguais aos do servidor. */
@@ -285,7 +285,7 @@ function separadoresEscondidos(){
      tem o que mostrar (a vista explica-o, mas não vale ocupar o menu) */
   if(!(typeof window!=='undefined'&&window.CW&&CW.user))out.push('colaboradores');
   if(!souSoColaborador())return out;
-  if(!scope().length){out.push('credits','projections','reports');
+  if(!scope().length){out.push('credits','projections','reports','fisco');
     if(nada('tx.view')&&!db.transactions.length)out.push('transactions');
     if(nada('rec.view')&&!(db.recurring||[]).length)out.push('recurring')}
   if(nada('contract.view'))out.push('contracts');

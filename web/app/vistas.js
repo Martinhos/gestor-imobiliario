@@ -61,13 +61,16 @@ function anaClear(){
   if(tab==='dashboard')dashProp='';
   if(tab==='projections')projProp='';
   if(tab==='reports')repProp='';
+  if(tab==='fisco')fiscoAno='';
   closePops();render();
 }
 // nº de filtros ativos nos separadores de análise: proprietário e imóvel em foco
+// (na Declaração só o proprietário: o ano é o assunto da página, não um filtro)
 // Devolve: número de filtros ativos (0 a 2; 0 fora dos separadores de análise).
 const ANA_N=()=>tab==='dashboard'?((ownerFilter?1:0)+(dashProp?1:0))
   :tab==='projections'?((ownerFilter?1:0)+(projProp?1:0))
-  :tab==='reports'?((ownerFilter?1:0)+(repProp?1:0)):0;
+  :tab==='reports'?((ownerFilter?1:0)+(repProp?1:0))
+  :tab==='fisco'?(ownerFilter?1:0):0;
 /* embrulha os controlos de análise (inner, já em HTML) no painel dropdown do
    cabeçalho, com os botões Limpar/Fechar; o wrapper tem altura 0 para o
    painel flutuar por cima da página em vez de a empurrar.
@@ -107,7 +110,7 @@ let _ecraPintado='';
    Devolve: nada — escreve no #hdrFilt, que vive fora do #view. */
 function pintarBotaoFiltros(){
   const hb=document.getElementById('hdrFilt');if(!hb)return;
-  const isAna=['dashboard','projections','reports'].indexOf(tab)>-1,
+  const isAna=['dashboard','projections','reports','fisco'].indexOf(tab)>-1,
     hasFilt=isAna||LFK[tab]||tab==='transactions';
   hb.style.display=hasFilt?'':'none';
   if(!hasFilt)return;
@@ -213,7 +216,7 @@ function refrescarListasVivas(){
   const v=view();if(!v)return false;
   const fn=({dashboard:vDashboard,visits:vVisits,calendar:vCalendar,properties:vProperties,contracts:vContracts,
     tenants:vTenants,owners:vOwners,colaboradores:vColabTab,transactions:vTransactions,recurring:vRecurring,
-    credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab];
+    credits:vCredits,projections:vProjections,reports:vReports,fisco:vFisco,settings:vSettings})[tab];
   if(!fn)return false;
   _listasVivas=[];
   let html;try{html=fn()}catch(e){_listasVivas=[];return false}
@@ -274,7 +277,7 @@ function render(){
   pintarBotaoFiltros();
   _listasVivas=[];                 // o que sobrou de uma vista construída e não usada não conta
   let html=({dashboard:vDashboard,visits:vVisits,calendar:vCalendar,properties:vProperties,contracts:vContracts,tenants:vTenants,owners:vOwners,
-    colaboradores:vColabTab,transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,settings:vSettings})[tab]();
+    colaboradores:vColabTab,transactions:vTransactions,recurring:vRecurring,credits:vCredits,projections:vProjections,reports:vReports,fisco:vFisco,settings:vSettings})[tab]();
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
   /* A entrada dos gráficos é de quem chega ao ecrã, não de cada repintura: o
      render corre também quando a sincronização adota o estado do servidor de 3

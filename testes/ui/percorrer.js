@@ -30,7 +30,7 @@ const ECRAS = [
   { nome: 'computador', width: 1440, height: 900 },
 ];
 
-const VISTAS = ['dashboard', 'properties', 'contracts', 'transactions', 'recurring', 'tenants', 'settings'];
+const VISTAS = ['dashboard', 'properties', 'contracts', 'transactions', 'recurring', 'tenants', 'fisco', 'settings'];
 
 // Estados que só existem depois de mexer: modais, menus abertos, modo de edição.
 const CENAS = [

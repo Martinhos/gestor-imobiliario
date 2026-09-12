@@ -53,7 +53,7 @@ const GUARDA = SEM_CACHE.indexOf(hn) < 0 && !DEV_WD;
 // com metade do código.
 const APP = ['dados', 'anexos', 'auxiliares', 'lista', 'continuidade', 'graficos', 'credito', 'componentes',
   'metricas', 'navegacao', 'acessos', 'vistas', 'imovel', 'pessoas', 'contrato', 'planeados', 'prazos', 'notificacoes', 'visitas', 'calendario',
-  'movimento', 'creditos', 'splitwise', 'contrato-pdf', 'avaliacao', 'definicoes',
+  'movimento', 'creditos', 'splitwise', 'contrato-pdf', 'avaliacao', 'fisco', 'definicoes',
   'copias', 'arranque'].map((n) => '/app/' + n + '.js');
 const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'ajuda', 'painel',
   'filtros', 'entrada', 'novidades', 'selecao', 'selecao-listas', 'guia'].map((n) => '/cloud/' + n + '.js');
