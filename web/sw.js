@@ -57,7 +57,12 @@ const APP = ['dados', 'anexos', 'auxiliares', 'lista', 'continuidade', 'graficos
   'copias', 'arranque'].map((n) => '/app/' + n + '.js');
 const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'ajuda', 'painel',
   'filtros', 'entrada', 'novidades', 'selecao', 'selecao-listas', 'guia'].map((n) => '/cloud/' + n + '.js');
-const SHELL = ['/', '/index.html', '/avisos.js', '/legal.js', '/manifest.webmanifest',
+/* O «/» e NÃO o «/index.html». O Cloudflare responde ao /index.html com um 307
+   para «/» (o tratamento de HTML dos assets), o addAll segue o
+   redirecionamento, e o que ficava guardado era uma resposta marcada como
+   redirecionada — que o browser recusa entregar a uma navegação. O «/» é o
+   mesmo documento e responde direto. */
+const SHELL = ['/', '/avisos.js', '/legal.js', '/manifest.webmanifest',
   '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'].concat(APP, NUVEM);
 
 /* NÃO se chama skipWaiting() no install. Chamava-se, e foi por isso que a v31
@@ -172,8 +177,15 @@ self.addEventListener('fetch', (e) => {
      que ele referencia, sendo caminhos sem query, acertavam na cache da versão
      antiga: metade de cada versão na mesma página, que é a avaria da v31, sem
      ser preciso worker nenhum trocar. E, de caminho, deixam de ficar gravados
-     em disco endereços que levam segredos lá dentro. */
-  const chave = e.request.mode === 'navigate' ? '/index.html' : e.request;
+     em disco endereços que levam segredos lá dentro.
+
+     A chave é o «/». Foi o «/index.html» de 9 a 12 de setembro, e isso partiu
+     a app em produção a quem já tinha o worker: o /index.html redireciona para
+     «/», a resposta guardada vinha marcada como redirecionada, e o browser
+     recusa-a numa navegação — o Chrome mostra «Não é possível aceder a este
+     site», sem uma linha na consola da página. Fora de produção o worker não
+     guarda nada, e por isso nem o dev nem o percurso do CI o viam. */
+  const chave = e.request.mode === 'navigate' ? '/' : e.request;
 
   /* CACHE primeiro, e só desta versão. Era rede primeiro com a cache como
      recurso, e isso não tem atomicidade nenhuma: um ficheiro que falhasse
@@ -185,7 +197,7 @@ self.addEventListener('fetch', (e) => {
      uma vez no install. É também mais rápido. A versão nova entra quando a
      app decidir trocar, não a meio de uma leitura. */
   e.respondWith(
-    caches.open(CACHE).then((c) => c.match(chave).then((hit) => hit || fetch(e.request).then((res) => {
+    caches.open(CACHE).then((c) => c.match(chave).then((hit) => (hit ? inteira(hit) : fetch(e.request).then((res) => {
       /* status 200 e não res.ok: o ok abrange o 206, e uma resposta parcial
          guardada é uma resposta partida. O put comunica os falhanços dele
          devolvendo uma promessa rejeitada — o try/catch de antes não apanhava
@@ -195,6 +207,19 @@ self.addEventListener('fetch', (e) => {
         try { e.waitUntil(grava); } catch (x) { /* evento já fechado */ }
       }
       return res;
-    })))
+    }))))
   );
 });
+
+/* Uma resposta que o browser aceite entregar a uma navegação. Uma resposta
+   marcada como redirecionada é recusada numa navegação — o pedido de navegar
+   não deixa o worker seguir redirecionamentos por ele — e a página falha
+   inteira. Refaz-se com o mesmo corpo, estado e cabeçalhos, já sem a marca.
+   É a rede de segurança para uma cache que a tenha guardado, venha de onde
+   vier; nos scripts e nas imagens não muda nada.
+   Recebe: res — a resposta tirada da cache.
+   Devolve: a própria, quando não vem redirecionada; senão uma cópia sem a marca. */
+function inteira(res) {
+  if (!res || !res.redirected) return res;
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: res.headers });
+}

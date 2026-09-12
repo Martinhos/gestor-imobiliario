@@ -196,11 +196,25 @@ describe('o service worker', () => {
      acertavam na cache da versão antiga — a avaria da v31 sem worker nenhum
      trocar. */
   test('uma navegação serve-se sempre pela mesma chave', () => {
-    assert.match(sw, /const chave = e\.request\.mode === 'navigate' \? '\/index\.html' : e\.request;/);
+    assert.match(sw, /const chave = e\.request\.mode === 'navigate' \? '\/' : e\.request;/);
     const f = sw.slice(sw.indexOf("addEventListener('fetch'"));
     assert.doesNotMatch(f, /\.match\(e\.request\)/, 'nunca pela chave que a pessoa clicou');
     assert.doesNotMatch(f, /c\.put\(e\.request/,
       'nem se grava por ela: essas ligações levam segredos no endereço');
+  });
+
+  /* A chave foi o /index.html, e o Cloudflare responde a esse endereço com um
+     307 para «/». O addAll seguia-o e guardava a resposta marcada como
+     redirecionada; o browser recusa-a numa navegação, e a app deixou de abrir
+     em produção a quem já tinha o worker (9 a 12 de setembro). O teste que
+     corre o worker a sério está em sw.test.js; este guarda o texto. */
+  test('a shell não guarda o que redireciona, e uma resposta redirecionada nunca chega a uma navegação', () => {
+    const m = /const SHELL = \[([\s\S]*?)\]/.exec(sw);
+    assert.ok(m, 'a lista SHELL existe');
+    assert.doesNotMatch(m[1], /'\/index\.html'/, 'o /index.html redireciona para «/» — a raiz já é o mesmo documento');
+    assert.match(sw, /function inteira\(res\) \{\s*if \(!res \|\| !res\.redirected\) return res;/,
+      'uma resposta redirecionada refaz-se sem a marca');
+    assert.match(sw, /hit \? inteira\(hit\)/, 'e é assim que se serve o que vem da cache');
   });
 
   test('não se guarda o que não é uma resposta inteira, nem se cala o falhanço', () => {
