@@ -82,6 +82,7 @@ function vSettings(){
   if(setPage==='tags')return backRow+vTags();
   if(setPage==='groups')return backRow+vGroups();
   if(setPage==='filtros')return backRow+vFiltrosComuns();
+  if(setPage==='irs')return backRow+vIrsMapa();
   if(setPage==='dados')return backRow+vImport();
   return `${card('Tema','Como a app se apresenta',`<div class="seg c3">
       ${[['auto','auto','Automático','segue o telemóvel'],['light','sun','Claro',''],['dark','moon','Escuro','']]
@@ -90,6 +91,8 @@ function vSettings(){
   ${navRow('Valores por omissão','Projeções, avaliação e imposto do selo','trend','defaults')}
   <div style="height:14px"></div>
   ${navRow('Tipos de movimento',(Object.keys(cs).length+Object.keys(catsIn()).length)+' categorias · '+sum(Object.keys(cs).map(k=>cs[k].length).concat(Object.keys(catsIn()).map(k=>catsIn()[k].length)))+' subtipos','swap','cats')}
+  <div style="height:14px"></div>
+  ${navRow('IRS e dedução','Que despesas entram em cada coluna do Anexo F','file','irs')}
   <div style="height:14px"></div>
   ${navRow('Etiquetas',(s.tags||[]).length+' etiquetas','tag','tags')}
   <div style="height:14px"></div>
@@ -336,6 +339,68 @@ function delSub(tk,k,sb){
 function resetCats(){
   confirmModal('Repor categorias','Volta às listas de origem (receitas e pagamentos). As categorias que criaste desaparecem; os movimentos mantêm o texto.',()=>{
     db.settings.cats=JSON.parse(JSON.stringify(CATS0));db.settings.catsIn=JSON.parse(JSON.stringify(CATS_IN0));save();render();toast('Categorias repostas.');
+  });
+}
+/* ===== IRS e dedução ===== */
+/* As chaves do mapa categoria → coluna, pela ordem em que a subpágina as
+   desenha: a categoria, e logo a seguir cada «Categoria / Sub». É a mesma
+   lista dos dois lados (vIrsMapa desenha um menu por chave, setIrsMapa lê-os
+   pela posição), porque o sel chama o onchange pelo nome e sem dizer qual foi.
+   Devolve: a lista de chaves (array de strings), pela ordem das categorias de pagamentos. */
+const irsMapaChaves=()=>{const cs=cats(),l=[];Object.keys(cs).forEach(k=>{l.push(k);(cs[k]||[]).forEach(sb=>l.push(k+' / '+sb))});return l};
+/* Subpágina «IRS e dedução»: o que o artigo 41.º do CIRS deixa deduzir, e um
+   menu por categoria e por subcategoria de pagamentos a dizer em que coluna
+   do Anexo F cai. É a regra por omissão: a coluna escolhida na ficha de uma
+   despesa manda sobre isto (auxiliares.js:irsColunaDe).
+   Devolve: o HTML (texto) da subpágina. */
+function vIrsMapa(){
+  const m=irsMapa(),cs=cats(),chaves=irsMapaChaves();
+  const cols=IRS_COLUNAS.map(([v,label])=>({v,label}));
+  const optCat=[{v:'',label:'Outros gastos (por omissão)'}].concat(cols);
+  const optSub=[{v:'',label:'Como a categoria'}].concat(cols);
+  const menu=(rotulo,chave,opts)=>`<label>${esc(rotulo)}${sel('irsm_'+chaves.indexOf(chave),m[chave]||'',opts,'setIrsMapa','dados')}</label>`;
+  const cartoes=Object.keys(cs).map(k=>card(esc(k),'',`<div class="form">
+      ${menu('Coluna do Anexo F',k,optCat)}
+      ${(cs[k]||[]).length?`<div class="flabel" style="margin-top:4px">Subcategorias</div>${cs[k].map(sb=>menu(sb,k+' / '+sb,optSub)).join('')}`:''}</div>`))
+    .join('<div style="height:14px"></div>');
+  return `${card('O que o Anexo F deixa deduzir','Artigo 41.º do CIRS, em poucas linhas',`
+    <div class="hint">Entra o que pagaste para obter a renda: conservação e manutenção, condomínio, taxas autárquicas, seguros, gestão, água e luz quando são tuas. O IMI e o imposto do selo têm coluna própria.</div>
+    <div class="hint" style="margin-top:8px">Ficam de fora, por lei: os juros e os gastos financeiros do crédito, as depreciações, o mobiliário, os eletrodomésticos e a decoração. Conservar é dedutível; beneficiar — uma cozinha nova, uma remodelação que acrescenta valor — não é.</div>
+    <div class="hint" style="margin-top:8px">Aqui dizes em que coluna cai cada categoria. A subcategoria pode ter regra própria; sem ela, segue a categoria.</div>`)}
+  <div style="height:14px"></div>
+  ${cartoes}
+  <div class="toolbar" style="margin:13px 0 0"><button class="btn" data-toca="dados" data-risco="destroi" onclick="resetIrsMapa()">Repor as de origem</button></div>
+  <div class="hint" style="margin-top:14px">A coluna escolhida na ficha de uma despesa manda sobre estas regras — muda-a lá quando um gasto é a exceção. A página Declaração diz quais caíram em «Outros gastos» só por omissão.</div>`;
+}
+/* Grava a coluna do Anexo F de uma categoria ou subcategoria no mapa das
+   definições. Vazio apaga a regra: a categoria volta a «Outros gastos», a
+   subcategoria volta a seguir a categoria. Sem argumentos — é assim que os
+   menus da subpágina chamam, porque o sel chama o onchange pelo nome e sem
+   dizer qual foi (componentes.js:selPick) — lê todos os menus pela posição
+   (irsMapaChaves) e grava o que mudou, como imovel.js:liveLoanAll faz com as
+   hipotecas. Só toca nos menus que existem no ecrã: fora da subpágina não
+   apaga nada.
+   Recebe: chave (opcional) — 'Categoria' ou 'Categoria / Sub'; col (opcional)
+   — o id da coluna (de IRS_COLUNAS), ou '' para apagar a regra.
+   Devolve: nada — grava em db.settings.irsMapa e redesenha. */
+function setIrsMapa(chave,col){
+  db.settings.irsMapa=db.settings.irsMapa||JSON.parse(JSON.stringify(IRS_MAPA0));
+  const m=db.settings.irsMapa,valida=v=>!v||IRS_COLUNAS.some(c=>c[0]===v);
+  const poe=(k,v)=>{if(v)m[k]=v;else delete m[k]};
+  if(chave!==undefined){if(!valida(col))return;poe(chave,col||'')}
+  else irsMapaChaves().forEach((k,i)=>{
+    const e=document.getElementById('irsm_'+i);if(!e)return;
+    const v=e.value||'';if(valida(v)&&(m[k]||'')!==v)poe(k,v);
+  });
+  save();render();
+}
+/* Repõe o mapa de origem (IRS_MAPA0) depois de confirmar: as regras que
+   mudaste aqui desaparecem; as colunas escolhidas na ficha de cada despesa
+   ficam, porque são do movimento e não do mapa.
+   Devolve: nada — abre a confirmação; só ao confirmar repõe e grava. */
+function resetIrsMapa(){
+  confirmModal('Repor colunas','Volta às regras de origem do Anexo F. As colunas que mudaste aqui desaparecem; as escolhidas na ficha de cada despesa ficam.',()=>{
+    db.settings.irsMapa=JSON.parse(JSON.stringify(IRS_MAPA0));save();render();toast('Colunas repostas.');
   });
 }
 // Pede o nome e cria uma etiqueta (ignora repetidas); grava e repinta.

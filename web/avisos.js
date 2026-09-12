@@ -27,6 +27,70 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 36,
+    data: '2026-09-12',
+    titulo: 'O IRS deixa de ser uma promessa',
+    seccoes: [
+      {
+        titulo: 'Declaração: o Anexo F, linha a linha',
+        afeta: ['app', 'contratos', 'movimentos'],
+        itens: [
+          'Há uma página nova, Declaração, em Finanças. Por cada ano e por cada proprietário, mostra as linhas do quadro 4.1 do Anexo F tal como a AT as pede: o contrato, o imóvel, os inquilinos, as rendas e as retenções na fonte.',
+          'Os gastos do imóvel aparecem já repartidos pelas colunas do Anexo F — conservação, condomínio, IMI, selo, taxas e outros — a partir da categoria de cada despesa.',
+          'As obras feitas nos 24 meses antes de o contrato começar, com a casa vazia, ficam à parte: são a coluna própria que o Anexo F lhes reserva.',
+          'O que ainda falta para a declaração — um NIF, o código da freguesia, um estado por indicar — fica apontado linha a linha, em vez de se descobrir no Portal das Finanças.',
+          'Podes exportar o resumo em CSV ou em texto, para o contabilista ou para ti.',
+        ],
+      },
+      {
+        titulo: 'O contrato diz o que é perante a AT',
+        afeta: ['contratos'],
+        itens: [
+          'Cada contrato tem agora um estado perante a AT, com três respostas: por indicar, declarado, ou não declarado. A escolha é tua.',
+          'Um contrato não declarado fica fora do resumo do Anexo F e dos prazos da AT, listado à parte, sem mais. A app não julga nem lembra.',
+          'Um contrato declarado guarda o número que a AT lhe deu, a finalidade, a data de celebração e as renovações — o que o Modelo 2 e o quadro 4.2A do Anexo F pedem.',
+        ],
+      },
+      {
+        titulo: 'Imóveis e pessoas com o que a AT pergunta',
+        afeta: ['imoveis', 'contratos'],
+        itens: [
+          'A ficha do imóvel ganha o código da freguesia, o tipo de prédio, a tipologia, o valor patrimonial tributário e a data de aquisição. É o que identifica o prédio no Anexo F.',
+          'A ficha de uma pessoa ganha o país, para quem não tem NIF português, e a marca de reter na fonte, para os inquilinos que são empresas.',
+          'Um NIF que não bate certo com o dígito de controlo avisa logo ao escrever, antes de ir para o contrato ou para a declaração.',
+        ],
+      },
+      {
+        titulo: 'Os movimentos sabem de IRS',
+        afeta: ['movimentos'],
+        itens: [
+          'Uma renda pode dizer a que mês respeita e quanto o inquilino reteve na fonte — o que entrou e a renda ilíquida deixam de se confundir.',
+          'Numa renda de contrato declarado marcas se o recibo eletrónico já foi emitido. Enquanto não estiver, a app lembra-te.',
+          'Numa despesa podes escolher à mão a coluna do Anexo F, quando a categoria não chega. Essa escolha manda sobre a regra geral.',
+        ],
+      },
+      {
+        titulo: 'Os prazos da AT',
+        afeta: ['app', 'contratos'],
+        itens: [
+          'Um contrato por indicar lembra o Modelo 2 até ao fim do mês seguinte ao início — e diz como calar o aviso: marca-o como declarado, ou como não declarado, na ficha.',
+          'Um contrato declarado que terminou lembra a cessação, até ao fim do mês seguinte ao fim.',
+          'As rendas dos últimos três meses sem recibo eletrónico avisam até ao fim do mês seguinte, e abrem o movimento para o marcares.',
+          'De 1 de abril a 30 de junho, o aviso do IRS leva-te à página Declaração com o Anexo F do ano anterior.',
+          'Nos contratos declarados com taxa reduzida, o 15 de fevereiro avisa a tempo de comunicar a duração e as renovações. Sem isso perde-se a redução.',
+        ],
+      },
+      {
+        titulo: 'IRS e dedução, nas Definições',
+        afeta: ['app', 'movimentos'],
+        itens: [
+          'Em Definições → IRS e dedução dizes em que coluna do Anexo F cai cada categoria e subcategoria de pagamentos, com o que o artigo 41.º do CIRS deixa deduzir explicado em poucas linhas.',
+          'As regras de origem já separam o que a lei deixa de fora — juros, mobiliário, eletrodomésticos, beneficiações — e podes repô-las quando quiseres.',
+        ],
+      },
+    ],
+  },
+  {
     v: 35,
     data: '2026-09-12',
     titulo: 'A barra de baixo passa a vidro',

@@ -11,10 +11,19 @@
 
    Cada aviso tem uma chave que inclui a data-alvo: silenciar cala ESTA
    ocorrência; quando a data mudar (o contrato renova, o CC renova-se),
-   a chave muda e o aviso volta sozinho. */
+   a chave muda e o aviso volta sozinho.
+
+   E os prazos da AT, que a lei mede em meses e a app conta em dias: o
+   Modelo 2 (comunicar o contrato até ao fim do mês seguinte ao início, e
+   a cessação até ao fim do mês seguinte ao fim), o recibo eletrónico de
+   cada renda (até ao fim do mês seguinte), o Anexo F (de 1 de abril a 30
+   de junho) e a comunicação de 15 de fevereiro dos contratos com taxa
+   reduzida. Um contrato que o senhorio marcou como «não declarado» é uma
+   escolha dele: nenhum destes prazos nasce dele, e nenhum texto o julga. */
 
 // dias de antecedência com que cada tipo de prazo começa a avisar
-const PZ_ANTECEDENCIA = { oposicao: 150, fim: 60, aumento: 45, cc: 60, energia: 90, taxa: 90 };
+const PZ_ANTECEDENCIA = { oposicao: 150, fim: 60, aumento: 45, cc: 60, energia: 90, taxa: 90,
+  modelo2: 45, cessacao: 45, recibos: 40, irs: 90, fev15: 45 };
 
 /* Uma data local como 'AAAA-MM-DD', sem passar pelo toISOString: esse
    converte para UTC e, com o horário de verão, meia-noite local vira o dia
@@ -60,6 +69,16 @@ function pzAniversario(startIso,hoje){
    Devolve: 'passado' (já foi), 'urgente' (≤7), 'breve' (≤30) ou 'info'. */
 function pzUrg(dias){return dias<0?'passado':dias<=7?'urgente':dias<=30?'breve':'info'}
 
+/* O mês por extenso de uma data ou de um período, como se diz a meio de uma
+   frase («Renda de junho de 2026»): o nome vem do pt-PT do aparelho, em
+   minúsculas, que é como o português o escreve.
+   Recebe: iso — 'AAAA-MM-DD' ou 'AAAA-MM' (aguenta vazio).
+   Devolve: 'junho de 2026' (texto); '' sem data válida. */
+function pzMes(iso){
+  const m=/^(\d{4})-(\d{2})/.exec(String(iso||''));if(!m)return '';
+  return new Date(Number(m[1]),Number(m[2])-1,1).toLocaleDateString('pt-PT',{month:'long',year:'numeric'});
+}
+
 /* Todos os prazos do portefólio que já entraram na janela de aviso, do mais
    urgente para o menos. É função pura sobre o db: quem quiser outra data
    de referência (os testes) passa-a.
@@ -68,6 +87,13 @@ function pzUrg(dias){return dias<0?'passado':dias<=7?'urgente':dias<=30?'breve':
    próprio fim), contratos com aumento anual configurado (o aviso de 30 dias
    ao inquilino), cartões de cidadão de inquilinos ativos e de proprietários,
    certificados energéticos dos imóveis, e o fim da fase fixa das mistas.
+   E a AT: o Modelo 2 dos contratos por indicar (fim do mês seguinte ao
+   início), a cessação dos declarados que terminaram (fim do mês seguinte ao
+   fim), os recibos por emitir das rendas dos últimos três meses (fim do mês
+   seguinte à renda), o Anexo F do ano anterior (30 de junho) quando houve
+   rendas, e o 15 de fevereiro dos declarados com taxa reduzida. Nada disto
+   nasce de um contrato «não declarado». O `hoje` manda em tudo, incluindo
+   no «ano anterior» e nos «últimos três meses».
 
    Recebe: hoje (opcional) — data ISO de referência; sem ela usa o dia real.
    Devolve: lista de {chave, tipo, titulo, sub, alvo, dias, urg, abrir},
@@ -83,9 +109,14 @@ function prazosDe(hoje){
   };
 
   (db.contracts||[]).forEach(c=>{
-    /* ctVivo: num contrato curto com início futuro, o aviso de oposição à
-       renovação cai ANTES do início — calá-lo até lá é perdê-lo de vez */
-    if(!ctVivo(c))return;
+    /* Só o que foi terminado à mão fica de fora. Um contrato com início futuro
+       entra: num contrato curto o aviso de oposição à renovação cai ANTES do
+       início, e calá-lo até lá é perdê-lo de vez. E um contrato cujo fim já
+       passou sem ninguém o terminar entra também: é precisamente o caso do
+       «fim» que aguenta depois de passar (renovou-se sozinho; atualiza a data).
+       Era o ctVivo que decidia isto, pelo dia REAL — o «fim» morria no próprio
+       dia em que passava, e um teste com hoje fingido só passava por acaso. */
+    if(c.active===false)return;
     const nome=c.name||propName(c.propertyId)||'contrato';
     const abrir=`ctModal('${c.id}')`;
     if(c.end){
@@ -99,9 +130,66 @@ function prazosDe(hoje){
       const aniv=pzAniversario(c.start,h);
       const aviso=pzAddDias(aniv,-30);
       poe('aumento',c.id+':'+aniv,aviso,'Aumento anual da renda — '+nome,
-        'Para valer a '+dPT(aniv)+', o aviso ao inquilino (30 dias) segue até '+dPT(aviso)+'. Renda '+euro(c.rent)+' '+(c.increase>0?'+':'')+c.increase+'%.',abrir,false);
+        'Para valer a '+dPT(aniv)+', o aviso ao inquilino (30 dias) segue até '+dPT(aviso)+'. Renda '+euro(c.rent)+' '+(c.increase>0?'+':'')+c.increase+'%.'
+        +(ctDeclarado(c)?' Depois de a atualizar, comunica a nova renda à AT (Modelo 2).':''),abrir,false);
     }
   });
+
+  /* ---- a AT. Só de contratos que o senhorio não marcou como «não declarado»:
+     essa marca é uma escolha, e não há aviso nenhum a discuti-la. O ano de
+     referência (Y) é o anterior ao de `hoje`: é o que se entrega em junho e o
+     que se comunica em fevereiro. */
+  const ano=Number(h.slice(0,4)),Y=ano-1;
+  const nomeDe=c=>c.name||propName(c.propertyId)||'contrato';
+  /* vivo em `hoje` (e não no dia real, como o ctVivo): um contrato que já
+     terminou não pede o Modelo 2 do início */
+  const vivoEm=c=>c.active!==false&&!(c.end&&c.end<h);
+  const desde=pzIso(new Date(ano,Number(h.slice(5,7))-1-3,1));   // primeiro dia de há três meses
+  const comRendasEmY={};
+  let houveRendasEmY=false;
+  (db.transactions||[]).forEach(t=>{
+    if(!ehRenda(t)||!t.date)return;
+    const c=t.contractId?contract(t.contractId):null;
+    if(c&&ctNaoDeclarado(c))return;
+    /* uma renda sem contrato (ou de contrato entretanto apagado) é renda na
+       mesma: conta para o Anexo F, e a página Declaração lista-a à parte */
+    if(t.date.slice(0,4)===String(Y)){houveRendasEmY=true;if(c)comRendasEmY[c.id]=1}
+    if(c&&ctDeclarado(c)&&!t.recibo&&t.date>=desde){
+      const alvo=fimDoMesSeguinte(t.date);
+      poe('recibos',t.id+':'+alvo,alvo,'Recibo de renda por emitir — '+nomeDe(c),
+        'Renda de '+pzMes(t.periodo||t.date)+' recebida a '+dPT(t.date)+': emite o recibo eletrónico no Portal das Finanças e marca-o no movimento.',
+        `txModal('${t.id}')`,true);
+    }
+  });
+  (db.contracts||[]).forEach(c=>{
+    if(ctNaoDeclarado(c))return;
+    const nome=nomeDe(c),abrir=`ctModal('${c.id}')`;
+    if(ctFiscoPorIndicar(c)&&c.start&&vivoEm(c)){
+      const alvo=fimDoMesSeguinte(c.start);
+      poe('modelo2',c.id+':'+alvo,alvo,'Comunicar o contrato à AT (Modelo 2) — '+nome,
+        'Até '+dPT(alvo)+', o fim do mês seguinte ao início. Se já o comunicaste, ou se não vais declarar este contrato, marca-o na ficha e este aviso desaparece.',
+        abrir,true);
+    }
+    if(!ctDeclarado(c))return;
+    if(c.end&&(c.end<h||c.active===false)){
+      const alvo=fimDoMesSeguinte(c.end);
+      poe('cessacao',c.id+':'+alvo,alvo,'Comunicar a cessação à AT — '+nome,
+        'Até '+dPT(alvo)+', o fim do mês seguinte ao fim do contrato. O Modelo 2 também serve para a cessação; até 15 de fevereiro a AT pede ainda o motivo, nos contratos com taxa reduzida. Depois de a comunicares, silencia este aviso.',
+        abrir,true);
+    }
+    if(irsRate(c)<25&&comRendasEmY[c.id]){
+      const alvo=(Y+1)+'-02-15';
+      poe('fev15',c.id+':'+alvo,alvo,'Comunicar a duração do contrato à AT — '+nome,
+        'Nos contratos com taxa reduzida, até '+dPT(alvo)+' comunica-se no Portal das Finanças o contrato, a duração e as renovações. Sem isto perde-se a redução.',
+        abrir,true);
+    }
+  });
+  if(houveRendasEmY){
+    const alvo=(Y+1)+'-06-30';
+    poe('irs',String(Y),alvo,'Entregar o IRS — Anexo F de '+Y,
+      'De 1 de abril a 30 de junho. A página Declaração tem as linhas do quadro 4.1 e o que ainda falta.',
+      "go('fisco')",false);
+  }
 
   // pessoas: inquilinos de contratos ativos + proprietários, com CC datado
   const ativos={};(db.contracts||[]).forEach(c=>{if(ctVivo(c))(c.tenantIds||[]).forEach(t=>{ativos[t]=1})});
