@@ -25,6 +25,15 @@ function ctFicha(id){
      guarda lia o contacto de quem não pode sequer abrir a ficha da pessoa. */
   const verPessoas=pode(pid,'tenant.view');
   const recusa=motivoRecusa(pid,'contract.add',c);
+  /* O estado perante a AT numa linha só, com o que se sabe: o número que a AT
+     deu ao contrato e a finalidade. «Não declarado» é uma escolha do senhorio,
+     e escreve-se como se escreve «Em vigor»: sem cor, sem aviso. */
+  const fisc=fiscoDe(c),fin=(FISCO_FINALIDADES.find(x=>x[0]===fisc.finalidade)||[])[1]||'';
+  const fiscoTxt=fisc.estado==='declarado'?['Declarado à AT',fisc.numero?'n.º '+esc(fisc.numero):'sem n.º',fin.toLowerCase()].filter(Boolean).join(' · ')
+    :fisc.estado==='naoDeclarado'?'Não declarado':'Por indicar';
+  /* a taxa reduzida pela duração é só dos contratos de habitação permanente:
+     com a finalidade a dizer outra coisa, a nota era falsa */
+  const taxaReduzida=fisc.estado==='declarado'&&irsRate(c)<25&&(!fisc.finalidade||fisc.finalidade==='hp');
   return ficha([
     /* Sem botão «Editar» no rodapé, a ficha tem de dizer porquê — e não há
        uma só razão: há «não tens permissão» e há «só quem o adicionou pode
@@ -46,6 +55,8 @@ function ctFicha(id){
     /* o bruto engana, e a marca de «estimado» é a mesma que os cartões já dão:
        o formulário guarda 0 para «em branco», e escrever «0%» era mentira */
     c.rent>0?{rotulo:'Imposto sobre a renda',valor:dec(taxRateOf(c))+'%'+(Number(c.taxRate)>0?'':' (estimado pela duração)')}:null,
+    {rotulo:'Declaração',valor:fiscoTxt},
+    taxaReduzida?{tipo:'nota',valor:'Pela duração, este contrato beneficia da taxa reduzida de '+dec(irsRate(c))+' %. Isso pede duas coisas: o quadro 4.2 do Anexo F preenchido, e a duração e as renovações comunicadas no Portal das Finanças até 15 de fevereiro.'}:null,
     c.rent>0?{rotulo:'Renda líquida',valor:euroS(netRent(c))}:null,
     c.payDay?{rotulo:'Renda paga',valor:(c.payDayTo&&c.payDayTo>c.payDay)?('entre o dia '+c.payDay+' e o dia '+c.payDayTo):('no dia '+c.payDay)}:null,
     isActive(c)&&rec&&rec.next&&pode(pid,'rec.view')?{rotulo:'Próxima renda',valor:dPT(rec.next)}:null,
@@ -202,6 +213,7 @@ function ctBody(){
   const tags=ctTenants(c).map(t=>({id:t.id,label:t.name}));
   const inv=c.inventory||[];
   const nSum=(c.keys||[]).length?sum(c.keys.map(k=>k.qty))+' chaves':'';
+  const fisc=fiscoDe(c),fsum=fisc.estado==='declarado'?'Declarado'+(fisc.numero?' · n.º '+esc(fisc.numero):''):fisc.estado==='naoDeclarado'?'Não declarado':'por indicar';
   return `<div class="form">
     <label>Nome do contrato<input id="c_name" value="${esc(c.name||'')}" placeholder="${esc(ctPick(c)||'Ex.: Ana · T2 Lisboa')}" autocomplete="off"></label>
     <div class="hint" style="margin-top:-6px">É por este nome que o contrato aparece nos movimentos e nas listas. Sem nome, usa-se o dos inquilinos.</div>
@@ -227,6 +239,7 @@ function ctBody(){
     <div class="hint" style="margin-top:-6px">A renda cria um movimento recorrente todos os meses. Com rendas antecipadas, arranca depois dos meses pagos à cabeça.</div>
     <label>IBAN para pagamento das rendas<input id="c_iban" value="${esc(c.iban)}" placeholder="PT50 0000 0000 0000 0000 0000 0" autocomplete="off"></label>`,
       {icon:'contract',open:false,summary:[c.start?'de '+dPT(c.start):'',c.end?'a '+dPT(c.end):'',c.deposit?'caução '+euro(c.deposit):''].filter(Boolean).join(' ')})}
+    ${fold('fisco','Declaração',fiscoSect(),{icon:'file',summary:fsum})}
     ${fold('contacts','Contactos',contactSect('owner',c,p)+contactSect('tenant',c,p),{icon:'users',summary:[c.ownerPhone||c.ownerEmail?'senhorio':'',c.tenantPhone||c.tenantEmail?'inquilino':''].filter(Boolean).join(' · ')})}
     ${fold('inv','Inventário',`
       ${inv.length?`<div class="form" style="gap:7px">
@@ -331,12 +344,83 @@ function collectCt(){
   });
   if(document.getElementById('c_ocid'))c.ownerContactId=val('c_ocid')||'';
   if(document.getElementById('c_tcid'))c.tenantContactId=val('c_tcid')||'';
+  /* o bloco fiscal: cada campo só quando está no ecrã (só o contrato declarado
+     os tem), e o estado nunca daqui — muda-se pelos botões (setFiscoEstado).
+     No fim passa pelo normFisco, que guarda os ids das renovações que já lá
+     estavam: é por eles que os campos c_rini_/c_rfim_ se voltam a encontrar. */
+  const f=c.fisco=fiscoDe(c);
+  if(document.getElementById('c_fnum'))f.numero=val('c_fnum');
+  if(document.getElementById('c_ffin'))f.finalidade=val('c_ffin');
+  if(document.getElementById('c_fcel'))f.celebracao=val('c_fcel');
+  if(document.getElementById('c_fren')){const r=val('c_fren');f.renovavel=r==='1'?true:r==='0'?false:null}
+  (f.renovacoes||[]).forEach(r=>{
+    const a=document.getElementById('c_rini_'+r.id);if(a)r.inicio=a.value;
+    const b=document.getElementById('c_rfim_'+r.id);if(b)r.fim=b.value;
+  });
+  if(document.getElementById('c_fces'))f.cessacaoMotivo=val('c_fces');
+  c.fisco=normFisco(f);
 }
 // Repinta o corpo do modal a partir de cForm e recarrega as miniaturas das
 // fotos. Não recolhe os campos — chama collectCt() antes, se for preciso.
 // Devolve: nada — redesenha o corpo do modal.
 function repaintCt(){const b=modalBodyEl();if(!b)return;b.innerHTML=ctBody();
   const p=prop(cForm.propertyId);if(p)paintThumbs(p.photos)}
+
+/* A secção «Declaração» do formulário: o estado do contrato perante a AT, e o que
+   a AT pergunta quando está declarado.
+
+   Três botões, e os três são escolhas — «não declarado» é uma decisão do
+   senhorio, não um erro da app: escreve-se com a mesma cor e a mesma letra
+   que os outros dois, e a frase por baixo diz só o que muda (fica fora do
+   resumo e dos prazos). O que se pede ao contrato declarado é o que o Anexo F
+   e o Modelo 2 pedem, campo a campo, com a razão à frente de cada um: o
+   número da AT vai em cada linha do quadro 4.1, a celebração no 4.2, as
+   renovações no 4.2A, o motivo da cessação na comunicação à AT.
+   Devolve: string com o HTML da secção. */
+function fiscoSect(){
+  const c=cForm,f=fiscoDe(c),renovs=f.renovacoes||[];
+  const seg=`<div><div class="flabel">Perante a AT</div>
+    <div class="seg c3">${[['','dots','Por indicar','ainda não disse'],['declarado','bank','Declarado à AT','Modelo 2 entregue'],['naoDeclarado','home','Não declarado','fica fora do IRS']]
+      .map(([k,i,lb,sb])=>`<button type="button" class="opt ${f.estado===k?'on':''}" data-toca="rascunho" onclick="setFiscoEstado('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>`;
+  if(f.estado==='naoDeclarado')return seg+`<div class="hint">Este contrato fica fora do resumo do Anexo F e dos prazos da AT. Podes mudar isto quando quiseres.</div>`;
+  if(f.estado!=='declarado')return seg+`<div class="hint">Comunicaste este contrato às Finanças (Modelo 2)? Marca aqui: o resumo do Anexo F e os prazos da AT dependem disso.</div>`;
+  /* a cessação só faz sentido num contrato que acaba ou já acabou */
+  const cessa=!!c.end||c.active===false;
+  /* a taxa reduzida pela duração é só dos contratos de habitação permanente */
+  const reduzida=irsRate(c)<25&&(!f.finalidade||f.finalidade==='hp');
+  return seg+`
+    <div class="row">
+      <label>N.º do contrato na AT<input id="c_fnum" type="text" inputmode="numeric" value="${esc(f.numero)}" placeholder="1234567" autocomplete="off"></label>
+      <label>Finalidade${sel('c_ffin',f.finalidade,[{v:'',label:'—'}].concat(FISCO_FINALIDADES.map(x=>({v:x[0],label:x[1]}))),'','rascunho')}</label></div>
+    <div class="hint" style="margin-top:-6px">Vem no comprovativo do Modelo 2; o Anexo F pede-o em cada linha.</div>
+    <div class="row">
+      <label>Data de celebração<input id="c_fcel" type="date" value="${esc(f.celebracao)}"></label>
+      <label>Renovável${sel('c_fren',f.renovavel===true?'1':f.renovavel===false?'0':'',[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'','rascunho')}</label></div>
+    <div class="hint" style="margin-top:-6px">O dia em que assinaram: o quadro 4.2 do Anexo F pede-o nos contratos de longa duração.</div>
+    <div><div class="flabel">Renovações</div>
+      ${renovs.length?`<div class="form" style="gap:9px">${renovs.map(r=>`<div class="invrow" style="grid-template-columns:1fr 1fr auto;align-items:end">
+        <label>Início<input id="c_rini_${esc(r.id)}" type="date" value="${esc(r.inicio)}"></label>
+        <label>Fim<input id="c_rfim_${esc(r.id)}" type="date" value="${esc(r.fim)}"></label>
+        <button type="button" class="btn sm danger" data-toca="rascunho" onclick="delRenov('${jsq(r.id)}')" aria-label="Tirar renovação">${ic('trash',14)}</button></div>`).join('')}</div>`:''}
+      <div class="toolbar" style="margin:${renovs.length?'4px':'0'} 0 0"><button type="button" class="btn sm" data-toca="rascunho" onclick="addRenov()">${ic('plus',14)} Adicionar renovação</button></div>
+      <div class="hint">Início e fim de cada renovação. O quadro 4.2A do Anexo F pede os da última.</div></div>
+    ${cessa?`<label>Motivo da cessação<input id="c_fces" value="${esc(f.cessacaoMotivo)}" placeholder="Ex.: fim do prazo, acordo, denúncia" autocomplete="off"></label>
+    <div class="hint" style="margin-top:-6px">A AT pergunta-o ao comunicar o fim do contrato.</div>`:''}
+    ${reduzida?`<div class="hint">Taxa reduzida pela duração: vai ao quadro 4.2 do Anexo F, e até 15 de fevereiro comunica-se a duração e as renovações no Portal das Finanças.</div>`:''}`;
+}
+/* Muda o estado do contrato perante a AT e repinta, para os campos do
+   declarado aparecerem ou sumirem. Colhe antes: o que estava escrito nos
+   outros campos não se perde.
+   Recebe: v — o estado ('', 'declarado' ou 'naoDeclarado').
+   Devolve: nada — atualiza cForm.fisco.estado e repinta o formulário. */
+function setFiscoEstado(v){collectCt();cForm.fisco.estado=FISCO_ESTADOS.indexOf(v)>-1?v:'';repaintCt()}
+/* Acrescenta uma renovação vazia (início e fim por escrever) e repinta.
+   Devolve: nada — repinta o formulário. */
+function addRenov(){collectCt();cForm.fisco.renovacoes.push({id:uid(),inicio:'',fim:''});repaintCt()}
+/* Tira uma renovação pelo id e repinta.
+   Recebe: rid — o id da renovação a tirar.
+   Devolve: nada — repinta o formulário. */
+function delRenov(rid){collectCt();cForm.fisco.renovacoes=cForm.fisco.renovacoes.filter(r=>r.id!==rid);repaintCt()}
 
 /* contacto: escolher de uma pessoa conhecida, ou escrever outro
    Recebe: kind — 'owner' ou 'tenant', diz de que lado é a secção; c — o

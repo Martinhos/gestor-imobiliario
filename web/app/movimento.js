@@ -117,6 +117,9 @@ function prefill(){
     const ls=liveLoans(p);
     if(!tForm.loanId||!findLoan(p,tForm.loanId))tForm.loanId=ls.length===1?ls[0].id:null;
   }
+  /* numa renda nova o mês a que respeita é, quase sempre, o mês em que entra:
+     sugere-se, e quem recebe em atraso corrige o campo */
+  if(tForm.kind==='income'&&!tForm._edit&&tForm.contractId&&!tForm.periodo&&/^\d{4}-\d{2}/.test(String(tForm.date||'')))tForm.periodo=String(tForm.date).slice(0,7);
   if(tForm.amount)return;
   const set=(a,l)=>{tForm.amount=Math.round(a*100)/100;tForm._aA=tForm.amount;if(!tForm.label){tForm.label=l;tForm._aL=l}};
   if(tForm.kind==='income'&&p){
@@ -154,6 +157,14 @@ function txFicha(id){
      repartição por igual — um número inventado com ar de combinado. */
   const verDivisao=countsBetweenOwners(t)&&p&&souDono(t.propertyId)&&os.length>1;
   const modo=(lista,m,def)=>{const x=lista.find(y=>y[0]===(m||def));return x?x[1]:''};
+  /* O que o IRS pergunta a este movimento. Numa renda: o mês a que respeita,
+     o que ficou retido na fonte (e a renda bruta, que é o que o Anexo F quer)
+     e o recibo eletrónico — este só num contrato declarado, porque só aí a AT
+     o espera. Numa despesa: a coluna do Anexo F, e de onde veio a decisão. */
+  const renda=t.kind==='income',recibo=renda&&ehRenda(t)&&ctDeclarado(ct);
+  const col=t.kind==='expense'?irsColunaDe(t):null;
+  const origem=col?({movimento:'escolhida neste movimento',sub:'pela subcategoria',categoria:'pela categoria',
+    omissao:'sem regra, cai em Outros',excluido:'não conta: categoria fora dos totais'}[col.origem]||''):'';
   return ficha([
     {tipo:'nota',valor:esc(motivoRecusa(t.propertyId,'tx.add',t))},
     {rotulo:'Montante',valor:`<span class="${K.color}">${K.sign}${euro2(t.amount)}</span>`},
@@ -161,6 +172,10 @@ function txFicha(id){
     {rotulo:'Data',valor:dPT(t.date)},
     {rotulo:'Imóvel',valor:t.propertyId?esc(propName(t.propertyId)):(t.groupId?esc('Grupo '+((grp(t.groupId)||{}).name||'')):'Todos os imóveis')},
     ct&&pode(t.propertyId,'contract.view')?{rotulo:'Contrato',valor:esc(ctName(ct))}:null,
+    renda&&ehRenda(t)&&t.periodo?{rotulo:'Mês da renda',valor:esc(mesPt(t.periodo))}:null,
+    renda&&t.retencao>0?{rotulo:'Retido na fonte',valor:euro2(t.retencao)}:null,
+    renda&&t.retencao>0?{rotulo:'Renda bruta',valor:euro2(rendaBruta(t))}:null,
+    recibo?{rotulo:'Recibo eletrónico',valor:t.recibo?'Emitido':'Por emitir'}:null,
     t.kind==='settle'?{rotulo:'Transferência',valor:nome(t.paidBy)+' → '+nome(t.toId)}:null,
     t.kind!=='settle'&&owner(t.paidBy)?{rotulo:isIn(t.kind)?'Recebido por':'Pago por',valor:nome(t.paidBy)}:null,
     verDivisao?{tipo:'bloco',rotulo:'Divisão entre proprietários',valor:(function(){
@@ -192,6 +207,7 @@ function txFicha(id){
       valor:(function(){const r=creditorBalances(t.propertyId).find(x=>x.creditor===cred);
         return r?'Recebido '+euro2(r.received)+' · devolvido '+euro2(r.repaid)+' · falta <b>'+euro2(r.due)+'</b>':''})()}:null,
     {rotulo:'Categoria',valor:esc([t.category,t.sub].filter(Boolean).join(' / '))},
+    col?{rotulo:'Anexo F',valor:esc(irsColunaNome(col.col))+(origem?' <span class="small" style="font-weight:400">'+esc(origem)+'</span>':'')}:null,
     (t.tags||[]).length?{rotulo:'Etiquetas',valor:(t.tags||[]).map(esc).join(' · ')}:null,
     !countsInTotals(t)?{tipo:'nota',valor:isPassivo(t)
       ?'Não entra nos totais nem no resultado: é dinheiro que se devolve — uma caução ou um empréstimo recebido.'
@@ -266,6 +282,7 @@ function txBody(){
       ${(t._recId||t._recNew)?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}"></label>`}</div>
     <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),(podeSemImovel()?[{v:'',label:'Todos os imóveis'}]:[]).concat(propOptsPara((t._recId||t._recNew)?'rec.add':'tx.add',t.propertyId)).concat(podeSemImovel()?gdiv(gOpts('prop')):[]),'onPropChange','rascunho')}</label>
     ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+dPT(c.start):'')}))),'onCtChange','rascunho')}</label>`:''}
+    ${t.kind==='income'&&(t.contractId||t.category==='Rendas')?txFiscoSect():''}
     ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange','rascunho')}</label>`:''}
     ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'}<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Pai, amigo, empreiteiro…" autocomplete="off" list="creditorList" oninput="refreshCredHint()">
         <datalist id="creditorList">${knownCreditors().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
@@ -280,6 +297,8 @@ function txBody(){
     ${settle?'':fold('cat','Categoria e etiquetas',`<div class="${subs.length||t.category?'row':''}">
       <label>Categoria${sel('t_cat',t.category,[{v:'',label:'— sem categoria —'}].concat(catKeys.map(c=>({v:c,label:c}))).concat([{v:'__new__',label:'+ Criar categoria…'}]),'onCatChange','rascunho')}</label>
       ${subs.length||t.category?`<label>Subcategoria${sel('t_sub',t.sub,[{v:'',label:'— indiferente —'}].concat(subs.map(x=>({v:x,label:x}))).concat([{v:'__new__',label:'+ Criar subcategoria…'}]),'onSubChange','rascunho')}</label>`:''}</div>
+      ${t.kind==='expense'?`<label>Coluna no Anexo F${sel('t_irscol',t.irsCol||'',[{v:'',label:'Pela categoria: '+irsColunaNome(irsColunaDe(Object.assign({},t,{irsCol:''})).col)}].concat(IRS_COLUNAS.map(x=>({v:x[0],label:x[1]}))),'onIrsCol','rascunho')}</label>
+      <div class="hint" style="margin-top:-6px">Só o que pagaste para obter a renda entra. Juros, mobiliário, eletrodomésticos e obras que acrescentam valor ficam de fora.</div>`:''}
       <div><div class="flabel">Etiquetas</div>${tagField((t.tags||[]).map(g=>({id:g,label:g})),'Adicionar','addTxTag()','delTxTag','grey')}</div>`,
       {icon:'tag',open:!!(t.category||(t.tags||[]).length),summary:catSum||'sem categoria'})}
     ${(!settle&&t.groupId&&txProps(t).length>1)?psplitSect():''}
@@ -301,6 +320,29 @@ function credHint(){
 // Ao escrever o nome do credor: atualiza tForm.creditor e repinta só a dica do saldo.
 // Devolve: nada — repinta a dica no DOM.
 function refreshCredHint(){const e=document.getElementById('credHint');if(e){tForm.creditor=val('t_creditor');e.innerHTML=credHint()}}
+/* O que o IRS pergunta a uma renda: o mês a que respeita (uma renda de agosto
+   paga em setembro é de agosto), o que o inquilino reteve na fonte (o
+   montante é o que entrou; a renda bruta é a soma), e — só num contrato
+   declarado à AT, porque só aí ela o espera — se o recibo eletrónico já foi
+   emitido. Vai logo a seguir ao contrato, porque é dele que depende.
+   Devolve: string com o HTML da secção. */
+function txFiscoSect(){
+  const t=tForm,c=t.contractId?contract(t.contractId):null;
+  /* um modelo ou uma recorrência repete a retenção, mas o mês e o recibo são
+     de cada renda (não estão em TX_TPL_KEYS): mostrá-los aqui era um campo
+     que não grava. Ficam para o movimento que se confirma. */
+  const fixo=!(t._recId||t._recNew||t._tplId||t._tplNew);
+  return `<div class="${fixo?'row':''}">
+      ${fixo?`<label>Mês a que respeita<input id="t_periodo" type="month" value="${esc(t.periodo||'')}" placeholder="AAAA-MM"></label>`:''}
+      <label>Retido na fonte (€)<input id="t_retencao" type="text" inputmode="decimal" value="${t.retencao?dec(t.retencao):''}" placeholder="0"></label></div>
+    <div class="hint" style="margin-top:-6px">Se o inquilino é uma empresa que retém IRS, escreve o que ficou retido: a renda bruta é o montante mais isto.</div>
+    ${fixo&&ctDeclarado(c)?`<label class="check"><input type="checkbox" id="t_recibo" ${t.recibo?'checked':''}> Recibo de renda eletrónico emitido</label>
+    <div class="hint" style="margin-top:-4px">Emite-se no Portal das Finanças quando a renda entra; marcar aqui cala o aviso.</div>`:''}`;
+}
+// Mudou a coluna do Anexo F escolhida à mão: guarda-a no tForm. Vazio é
+// «pela categoria», e o seletor já mostra o rótulo novo — não há que repintar.
+// Devolve: nada — atualiza tForm.irsCol.
+function onIrsCol(){collectTx();tForm.irsCol=val('t_irscol')||''}
 /* divisão entre proprietários: quotas, percentagem, valor certo ou ajuste
    Recebe: ows — os proprietários a listar (objetos com id e name, já resolvidos).
    Devolve: o HTML da secção dobrável (string). */
@@ -620,7 +662,8 @@ function onCatChange(){
   tForm.category=v;tForm.sub='';repaintTx();
 }
 // Mudou a subcategoria; "__new__" abre o prompt para criar uma nova dentro da categoria atual.
-// Devolve: nada — atualiza tForm.sub (com "__new__" abre o prompt e repinta).
+// Numa despesa repinta, porque a coluna do Anexo F por omissão pode depender da subcategoria.
+// Devolve: nada — atualiza tForm.sub (com "__new__" abre o prompt; numa despesa repinta).
 function onSubChange(){
   collectTx();
   const v=val('t_sub');
@@ -631,6 +674,9 @@ function onSubChange(){
     toast('Subcategoria criada.');
   })}
   tForm.sub=v;
+  /* numa despesa a subcategoria muda a coluna do Anexo F («Impostos / IMI»
+     tem regra própria): a primeira opção do seletor tem de a dizer */
+  if(tForm.kind==='expense')repaintTx();
 }
 /* Recolhe do DOM para o tForm tudo o que estiver presente no modal: campos base, distribuição
    da hipoteca, quem paga/recebe, credor, divisões, categoria e opções de recorrência/modelo.
@@ -659,6 +705,16 @@ function collectTx(){
   if(document.getElementById('t_cat')){const v=val('t_cat');if(v!=='__new__')t.category=v}
   if(document.getElementById('t_sub')){const v=val('t_sub');if(v!=='__new__')t.sub=v}
   if(document.getElementById('t_ct'))t.contractId=val('t_ct')||null;
+  /* o que o IRS pergunta: cada campo só quando está no ecrã, e no formato do
+     normTx — o mês aceita 'AAAA-MM' (o input de mês) e 'MM/AAAA' (onde o
+     browser o dá como texto); o resto fica vazio, e não uma data inventada */
+  if(document.getElementById('t_periodo')){
+    const s=String(val('t_periodo')||'').trim(),m=/^(\d{1,2})\/(\d{4})$/.exec(s);
+    t.periodo=/^\d{4}-\d{2}$/.test(s)?s:(m?m[2]+'-'+m[1].padStart(2,'0'):'');
+  }
+  if(document.getElementById('t_retencao'))t.retencao=Math.max(0,num(val('t_retencao'))||0);
+  if(document.getElementById('t_recibo'))t.recibo=chk('t_recibo');
+  if(document.getElementById('t_irscol'))t.irsCol=val('t_irscol')||'';
   if(document.getElementById('t_every'))t._every=val('t_every')||'';
   if(document.getElementById('t_tplName'))t._tplName=val('t_tplName');
   if(document.getElementById('t_until'))t._until=val('t_until')||'';
