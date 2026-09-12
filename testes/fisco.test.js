@@ -243,6 +243,12 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(html, /fiscoPartilhar\(\)/);
     assert.match(html, /fiscoCsv\(\)/);
     assert.match(html, /class="tablewrap"><table class="table"/);
+    /* os cartões vinham somados um a seguir ao outro e ficavam colados: vivem
+       numa pilha com intervalo, e a coluna encolhe para a tabela rolar */
+    const pilha = html.indexOf('class="fiscoPilha" style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px"');
+    assert.ok(pilha > -1, 'os cartões estão numa pilha com intervalo');
+    assert.ok(html.indexOf('Obrigações de 2024') > pilha && html.indexOf('Anexo F · quadro 4.1') > pilha && html.indexOf('Obras antes do arrendamento') > pilha,
+      'as obrigações, o quadro e as obras vivem todos dentro da pilha');
     assert.match(html, /1234567/);
     assert.match(html, /110623 · U · art\. 4651 · fr\. A/);
     assert.match(html, /ctView\('C1'\)/, 'a linha abre a ficha do contrato');

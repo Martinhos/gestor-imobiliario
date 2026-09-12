@@ -301,10 +301,17 @@ function vFisco(){
     return panel+`<div class="empty"><b>Sem rendas em ${ano}</b>${outros.length?'Há rendas em '+esc(outros.join(', '))+'. ':''}Uma renda entra aqui quando o movimento é da categoria Rendas e está ligado ao contrato.
       ${saida('Escolher outro ano','hdrFiltToggle()','vista')}</div>`;
   }
+  /* Os cartões empilham-se numa grelha de uma coluna com o mesmo intervalo
+     que as colunas da casa (index.html:.cols, 14px). O card() não traz margem
+     própria, e somados um a seguir ao outro ficavam colados. A coluna é
+     minmax(0,1fr) e não 1fr: um item de grelha não encolhe abaixo do seu
+     conteúdo, e a tabela do quadro 4.1, mais larga do que o ecrã, alargava a
+     página em vez de rolar dentro do .tablewrap. */
   return panel+`<div class="toolbar">
     <button class="btn" data-toca="nada" onclick="fiscoPartilhar()">Partilhar</button>
     <button class="btn" data-toca="nada" onclick="fiscoCsv()">CSV</button></div>`
-    +fiscoKpis(r)+fiscoObrigacoesCard(r)+fiscoQuadroCard(r)+fiscoObrasCard(r)+fiscoForaCard(r)+fiscoSemContratoCard(r);
+    +fiscoKpis(r)+`<div class="fiscoPilha" style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px">`
+    +fiscoObrigacoesCard(r)+fiscoQuadroCard(r)+fiscoObrasCard(r)+fiscoForaCard(r)+fiscoSemContratoCard(r)+`</div>`;
 }
 /* Os quatro números do ano à cabeça, em cartões com explicação ao toque:
    rendas ilíquidas, retenções, gastos dedutíveis e obras dos 24 meses — os
