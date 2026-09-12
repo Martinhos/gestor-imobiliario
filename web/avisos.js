@@ -27,6 +27,29 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 35,
+    data: '2026-09-12',
+    titulo: 'A barra de baixo passa a vidro',
+    seccoes: [
+      {
+        titulo: 'Vidro por cima da página',
+        afeta: ['app'],
+        itens: [
+          'No telemóvel, a barra de baixo passa a ser de vidro, como o cabeçalho: deixa ver, desfocado, o que vai passando por baixo. E os dois deixam atravessar as cores vivas, em vez de acinzentadas.',
+          'A linha por baixo do cabeçalho só aparece quando já desceste na página. No topo não há nada por baixo dela para separar.',
+        ],
+      },
+      {
+        titulo: 'E segue o que pediste ao aparelho',
+        afeta: ['app'],
+        itens: [
+          'Se pediste menos transparência nas definições do aparelho, o cabeçalho e a barra de baixo ficam sólidos.',
+          'Se pediste mais contraste, as linhas que separam cartões, listas e campos ficam mais marcadas.',
+        ],
+      },
+    ],
+  },
+  {
     v: 34,
     data: '2026-09-11',
     titulo: 'A app mexe-se melhor, e arranca mais segura',

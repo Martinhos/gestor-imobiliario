@@ -48,7 +48,14 @@ nada passou do prazo (navegacao.js:buildNav). --warn-soft #f6eeda →
 
 --side #1a3a2c → #161a3a é a gaveta (index.html:aside), com --side-ink,
 --side-muted, --side-hover e --side-on só para ela. --blur é o fundo
-translúcido do cabeçalho (index.html:header.top). --shadow (0 24px 60px
+translúcido do cabeçalho e da barra de baixo (index.html:header.top,
+index.html:.tabbar) — vidro com blur(12px) saturate(140%), a saturação
+para as cores de baixo atravessarem vivas em vez de acinzentadas, e o
+prefixo -webkit- porque o iOS antigo só lê esse. A risca de baixo do
+cabeçalho nasce transparente e só se acende com a página rolada
+(index.html:body.rolada, posta pelo mesmo ouvinte de scroll do toTop em
+componentes.js): no topo não há conteúdo por baixo dela para separar.
+--shadow (0 24px 60px
 rgba(0,0,0,.28) → .6) é a sombra dos menus e das janelas. --track, --rail
 264px, --rail-min 76px e os --inset-* da área segura fecham a lista.
 
@@ -91,8 +98,14 @@ recurso (a IIFE que fecha web/app/auxiliares.js, a seguir a
 auxiliares.js:setTheme).
 
 ## Tipografia
-Inter, system-ui, -apple-system, Segoe UI, Roboto; 15px de base
-(index.html:body). Os números alinham em tabular-nums nos valores, nas
+system-ui, -apple-system, Segoe UI, Roboto; 15px de base
+(index.html:body). A letra é a do sistema de quem lê — SF no iPhone e no
+Mac, Segoe no Windows. A Inter saiu da frente da pilha: nunca foi
+carregada como webfont, só aparecia a quem a tivesse instalada, e a letra
+da plataforma já traz o desenho ótico e o espaçamento afinados por
+tamanho. A landing fez a mesma mudança (worker/src/landing.js), porque
+quem clica em «Abrir a app» não pode sentir que mudou de produto. Os
+números alinham em tabular-nums nos valores, nas
 tabelas e nas estatísticas (index.html:.value, a regra partilhada com
 .table td e .stat b), para as colunas não dançarem.
 
@@ -336,6 +349,14 @@ apaga animação e transição em tudo
 (index.html:@media(prefers-reduced-motion:reduce)). É por isso que
 nenhuma entrada pode ser a única coisa que torna um conteúdo visível — o
 estado final tem de ser o que se vê sem animação nenhuma.
+
+E os outros dois pedidos do sistema têm o seu recuo: quem pediu menos
+transparência recebe o vidro sólido — o cabeçalho com o fundo da página,
+a barra de baixo com o do cartão
+(index.html:@media(prefers-reduced-transparency:reduce)) — e quem pediu
+mais contraste recebe contornos mais fundos, só pelos tokens das linhas,
+para tudo o que os cita mudar com eles
+(index.html:@media(prefers-contrast:more)).
 
 ## Componentes da casa, e quando usar cada um
 sel(id,value,options,onchange) (componentes.js:sel) é O menu de escolha.
