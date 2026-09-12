@@ -34,16 +34,20 @@ function personFicha(kind,id){
   const cts=kind==='tenant'?contractsOfTenant(p.id):[];
   const ativos=cts.filter(isActive),futuros=cts.filter(c=>ctEstado(c)==='futuro'),findos=cts.filter(c=>ctEstado(c)==='terminado');
   const casas=kind==='owner'?propsOf(p.id):[];
-  const ident=verPessoa?[p.nif?'NIF '+esc(fmtNIF(p.nif)):'',
+  /* um NIF que não bate certo diz-se aqui, ao lado do número: é onde se lê antes
+     de ir para o contrato em PDF ou para o Anexo F */
+  const ident=verPessoa?[p.nif?'NIF '+esc(fmtNIF(p.nif))+(nifValido(p.nif)===false?' · não bate certo':''):'',
     p.cc?'CC '+esc(fmtCC(p.cc))+(p.ccValid?(pzDias(p.ccValid)<0?' · caducou a '+dPT(p.ccValid):' · válido até '+dPT(p.ccValid)):''):'',
-    p.nationality&&p.nationality!=='Portuguesa'?esc(p.nationality):''].filter(Boolean).join('<br>'):'';
+    p.nationality&&p.nationality!=='Portuguesa'?esc(p.nationality):'',
+    p.pais?'País: '+esc(p.pais):''].filter(Boolean).join('<br>'):'';
+  const retem=kind==='tenant'&&verPessoa&&!!p.retem;
   /* a quota-parte só na minha casa: o servidor apaga as quotas de uma casa de
      colaboração, e o sharesOf reparte por igual quando não há percentagens —
      mostrá-la ali era publicar um número inventado */
   const minhas=casas.filter(x=>souDono(x.id));
   const renda=sum(minhas.filter(x=>pode(x.id,'contract.view')).map(x=>rentOf(x)*shareOf(x,p.id)));
   const saldo=kind==='owner'&&!ownerFilter?ownerBalances(null)[p.id]:undefined;
-  const vazia=!p.phone&&!p.email&&!ident&&!p.taxAddress&&!(p.files||[]).length&&
+  const vazia=!p.phone&&!p.email&&!ident&&!retem&&!p.taxAddress&&!(p.files||[]).length&&
     !(kind==='tenant'?cts.length:casas.length);
   return ficha([
     kind==='tenant'&&p._sharedFrom?{tipo:'nota',valor:'Ficha de <b>'+esc(p._sharedFrom)+'</b>.'}:null,
@@ -60,6 +64,7 @@ function personFicha(kind,id){
       valor:Math.abs(saldo)<0.01?'em dia':(saldo>0?'a receber '+euro2(saldo):'a pagar '+euro2(-saldo))}:null,
     renda>0?{rotulo:'Renda mensal que lhe toca',valor:euro(renda)}:null,
     ident?{tipo:'bloco',rotulo:'Identificação',valor:ident}:null,
+    retem?{rotulo:'Retenção na fonte',valor:'retém IRS ao pagar a renda'}:null,
     verPessoa&&p.taxAddress?{tipo:'bloco',rotulo:'Morada fiscal',valor:esc(p.taxAddress).replace(/\n/g,'<br>')}:null,
     /* «Vai morar em», e não «Contratos anteriores» a dizer «terminou a
        2031-01-01» — uma data no futuro dada como o dia em que acabou */
@@ -177,14 +182,32 @@ function personBody(){
     <div class="row">
       <label>N.º do Cartão de Cidadão<input id="pe_cc" value="${esc(t.cc)}" placeholder="00000000 0 ZZ0" autocomplete="off"></label>
       <label>Validade do CC<input id="pe_ccv" type="date" value="${t.ccValid||''}"></label></div>
-    <label>NIF<input id="pe_nif" value="${esc(t.nif)}" placeholder="Opcional" inputmode="numeric"></label>
+    <label>NIF<input id="pe_nif" value="${esc(t.nif)}" placeholder="Opcional" inputmode="numeric" oninput="pessoaNifHint()"></label>
+    <div class="hint" id="pe_nifHint" style="margin-top:-4px"${pessoaNifHint(t.nif)?'':' hidden'}>${esc(pessoaNifHint(t.nif))}</div>
+    <label>País<input id="pe_pais" value="${esc(t.pais)}" placeholder="Só se não tem NIF português" autocomplete="off"></label>
+    <div class="hint" style="margin-top:-4px">Sem NIF português, o Anexo F identifica a pessoa pelo país.</div>
+    ${perKind==='tenant'?`<label class="check"><input type="checkbox" id="pe_retem" ${t.retem?'checked':''}> Retém IRS na fonte</label>
+    <div class="hint" style="margin-top:-4px">Uma empresa com contabilidade organizada retém IRS ao pagar a renda. A retenção regista-se em cada renda; aqui fica só o aviso.</div>`:''}
     <label>Morada fiscal<textarea id="pe_addr" style="min-height:66px" placeholder="Rua, número, código postal, localidade">${esc(t.taxAddress)}</textarea></label>
-    <div class="hint">Usado na identificação das partes no contrato em PDF.</div>`,
+    <div class="hint">Usado na identificação das partes no contrato em PDF; o NIF e o país entram no resumo do Anexo F.</div>`,
       {icon:'contract',summary:[t.nif?'NIF '+fmtNIF(t.nif):'',t.cc?'CC':''].filter(Boolean).join(' · ')||'para o contrato'})}
     ${perKind==='owner'?'':fold('docs','Documentos',
       fileBlock('',t.files||[],'pe_filein','personAddFiles','delPersonFile',{hint:'Cartão de cidadão, contrato de trabalho, comprovativo de morada, recibos de vencimento.'}),
       {icon:'clip',open:!!(t.files||[]).length,summary:(t.files||[]).length?t.files.length+' doc.':''})
       +`<label>Notas<textarea id="pe_notes" placeholder="Fiador, referências, observações…">${esc(t.notes)}</textarea></label>`}</div>`;
+}
+/* A dica por baixo do NIF: avisa quando o dígito de controlo não bate certo — um
+   erro de dedo apanhado antes de ir para o contrato em PDF ou para o Anexo F.
+   Vazio não se julga: pode não haver NIF, ou a pessoa ser de fora. Serve nos dois
+   momentos: ao montar o formulário (com o NIF, devolve o texto) e a cada tecla no
+   campo (sem argumento: lê o campo e reescreve a dica no ecrã).
+   Recebe: nif (opcional) — o NIF a avaliar; sem ele, lê o campo pe_nif.
+   Devolve: o texto da dica, ou '' quando não há nada a dizer. */
+function pessoaNifHint(nif){
+  const txt=nifValido(nif===undefined?val('pe_nif'):nif)===false?'Este NIF não bate certo: confere os dígitos.':'';
+  /* vazia, a dica esconde-se: um div sem nada ainda abria o gap do formulário */
+  if(nif===undefined){const e=document.getElementById('pe_nifHint');if(e){e.textContent=txt;e.hidden=!txt}}
+  return txt;
 }
 // Copia os campos do modal para perForm. Chamar antes de repintar ou de
 // mexer nos documentos, senão perde-se o que o utilizador escreveu.
@@ -194,7 +217,8 @@ function collectPerson(){
   t.name=val('pe_name');t.phone=val('pe_phone');t.email=val('pe_mail');
   t.gender=val('pe_gender');t.marital=val('pe_marital');t.nationality=val('pe_nat');
   t.birth=val('pe_birth');t.cc=val('pe_cc');t.ccValid=val('pe_ccv');
-  t.nif=val('pe_nif');t.taxAddress=val('pe_addr');
+  t.nif=val('pe_nif');t.taxAddress=val('pe_addr');t.pais=val('pe_pais');
+  if(document.getElementById('pe_retem'))t.retem=chk('pe_retem');   /* só o inquilino tem a caixa; num proprietário fica o que estava */
   if(document.getElementById('pe_notes'))t.notes=val('pe_notes');
   (t.files||[]).forEach(f=>{const e=document.getElementById('fn_'+f.id);if(e)f.name=e.value});
 }

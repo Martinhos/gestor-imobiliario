@@ -17,6 +17,12 @@ function propModal(id){
     collectProp();
     if(pForm.id&&prop(pForm.id)&&!pode(pForm.id,'house.edit'))return toast(fraseSemPerm('house.edit'));
     if(!pForm.name.trim())return falhaCampo('p_name','Dá um nome ao imóvel.');
+    /* o campo vive numa dobra que pode estar fechada (display:none): o falhaCampo
+       não chega a um campo escondido, por isso abre-se a dobra primeiro */
+    if(pForm.freguesiaCodigo&&!/^\d{6}$/.test(pForm.freguesiaCodigo)){
+      const f=document.getElementById('fold_reg');if(f&&!f.classList.contains('open'))toggleFold('reg');
+      return falhaCampo('p_freguesiaCodigo','O código da freguesia tem 6 dígitos.');
+    }
     (pForm.loans||[]).forEach(l=>{l.name=l.name||l.bank||'Hipoteca'});   /* a recorrência identifica-se pelo nome */
     const antes=loanStartsAntes(prop(pForm.id));   /* antes de trocar o objeto na db */
     const i=db.properties.findIndex(x=>x.id===pForm.id);
@@ -28,8 +34,8 @@ function propModal(id){
 /* O corpo da ficha de um imóvel: o que se sabe sobre ele, para ler.
 
    O que é sempre visível (morada, destino, quartos, donos) e o resto conforme
-   o cargo — fotos com file.view, valores com report.view, hipotecas com
-   loan.view. Nunca o bloco de quotas nem os comentários dos donos: o servidor
+   o cargo — fotos com file.view, valores e a linha fiscal com report.view,
+   hipotecas com loan.view. Nunca o bloco de quotas nem os comentários dos donos: o servidor
    já não os manda a quem colabora.
    Recebe: id — o id do imóvel.
    Devolve: o HTML do corpo, ou vazio se o imóvel já não existir. */
@@ -37,7 +43,12 @@ function propFicha(id){
   const p=prop(id);if(!p)return '';
   const st=pode(id,'contract.view')?propStatus(p):null,ls=loansOf(p),c=cargoDe(id);
   const dono=p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):''),ac=pode(id,'contract.view')?activeContracts(id):[];
-  const reg=[p.freguesia||p.parish,p.concelho,p.fraction?'fração '+p.fraction:'',p.floor,p.registry?'n.º '+p.registry:'',p.matrix?'artigo '+p.matrix:'',p.energyClass?'classe '+p.energyClass:''].filter(Boolean).map(esc).join(' · ');
+  const reg=[p.freguesia||p.parish,p.freguesiaCodigo?'freguesia n.º '+p.freguesiaCodigo:'',p.concelho,p.distrito,
+    p.tipoPredio==='U'?'urbano':p.tipoPredio==='R'?'rústico':'',p.tipologia,
+    p.fraction?'fração '+p.fraction:'',p.floor,p.registry?'n.º '+p.registry:'',p.matrix?'artigo '+p.matrix:'',p.energyClass?'classe '+p.energyClass:''].filter(Boolean).map(esc).join(' · ');
+  /* o que o Anexo F e o Anexo G pedem e não é dado registal: o VPT (reparte os gastos
+     quando só se arrenda parte do imóvel) e o dia em que o imóvel foi comprado */
+  const fisco=[p.vpt?'VPT '+euro(p.vpt):'',p.purchaseDate?'adquirido a '+dPT(p.purchaseDate):''].filter(Boolean).join(' · ');
   return ficha([
     c.dono?null:{tipo:'nota',valor:`${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}És colaborador${c.nome?' como <b>'+esc(c.nome)+'</b>':''} — a ficha é só de leitura.`},
     {rotulo:'Morada',valor:esc(p.address||'')},
@@ -48,6 +59,7 @@ function propFicha(id){
     ac.length?{tipo:'bloco',rotulo:'Contratos ativos',valor:ac.map(x=>`${x.roomId?esc(roomName(p,x.roomId))+': ':''}${esc(ctNames(x))} · ${euro(x.rent)}`).join('<br>')}:null,
     pode(id,'report.view')?{rotulo:'Valor de mercado',valor:euro(p.value)}:null,
     pode(id,'report.view')?{rotulo:'Valor de aquisição',valor:euro(p.purchase)}:null,
+    pode(id,'report.view')&&fisco?{rotulo:'Fiscal',valor:fisco}:null,
     pode(id,'loan.view')&&ls.length?{tipo:'bloco',rotulo:'Hipotecas',
       valor:ls.map(l=>`${esc(loanName(l))} · ${euro2(loanCalc(l).total)}/mês · ${euro(l.outstanding)} em dívida`).join('<br>')}:null,
     pode(id,'file.view')&&(p.photos||[]).length?{tipo:'bloco',rotulo:'Fotos',
@@ -107,14 +119,22 @@ function propBody(){
           <input id="p_room_${r.id}" value="${esc(r.name)}" placeholder="Quarto" autocomplete="off">
           <button type="button" class="btn sm danger" data-toca="rascunho" onclick="delRoom('${r.id}')">${ic('trash',14)}</button></div>`).join('')}
           <button type="button" class="btn sm" data-toca="rascunho" onclick="addRoom()">${ic('plus',14)} Adicionar quarto</button></div></div>`:''}`:''}
-    <div class="row">
+    <div class="row3">
       <label>Valor de mercado (€)<input id="p_value" type="text" inputmode="decimal" value="${p.value||''}" placeholder="180000"></label>
-      <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${p.purchase||''}" placeholder="150000"></label></div>
+      <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${p.purchase||''}" placeholder="150000"></label>
+      <label>Data de aquisição<input id="p_purchaseDate" type="date" value="${p.purchaseDate||''}"></label></div>
     ${fold('photos','Fotos',fileBlock('',p.photos||[],'p_photoin','propAddPhotos','delPropPhoto',{photos:true,move:1,hint:'A primeira foto é a capa do imóvel. Arrasta pelo puxador para reordenar.'}),{icon:'photo',open:!!(p.photos||[]).length,summary:(p.photos||[]).length?p.photos.length+' foto'+(p.photos.length===1?'':'s'):'nenhuma'})}
     ${fold('reg','Dados registais',`
       <div class="row">
         <label>Freguesia<input id="p_freguesia" value="${esc(p.freguesia||p.parish||'')}" placeholder="Soure"></label>
         <label>Concelho<input id="p_concelho" value="${esc(p.concelho||'')}" placeholder="Soure"></label></div>
+      <div class="row3">
+        <label>Distrito<input id="p_distrito" value="${esc(p.distrito||'')}" placeholder="Coimbra"></label>
+        <label>Código da freguesia<input id="p_freguesiaCodigo" value="${esc(p.freguesiaCodigo||'')}" inputmode="numeric" maxlength="6" placeholder="110623" autocomplete="off"></label>
+        <label>Tipo de prédio${sel('p_tipoPredio',p.tipoPredio||'',[{v:'',label:'—'},{v:'U',label:'Urbano'},{v:'R',label:'Rústico'}],'','rascunho')}</label></div>
+      <div class="row">
+        <label>Tipologia${sel('p_tipologia',p.tipologia||'',[{v:'',label:'—'}].concat(['T0','T1','T2','T3','T4','T5','T6'].map(x=>({v:x,label:x}))),'','rascunho')}</label>
+        <label>VPT (€)<input id="p_vpt" type="text" inputmode="decimal" value="${p.vpt||''}" placeholder="85000"></label></div>
       <div class="row3">
         <label>Fração autónoma<input id="p_fraction" value="${esc(p.fraction||'')}" placeholder="A"></label>
         <label>Andar<input id="p_floor" value="${esc(p.floor||'')}" placeholder="2.º"></label>
@@ -131,8 +151,10 @@ function propBody(){
         <label>Certificado energético<input id="p_energyCert" value="${esc(p.energyCert)}" placeholder="SCE395442330"></label>
         <label>Classe<input id="p_energyClass" value="${esc(p.energyClass)}" placeholder="D"></label>
         <label>Válido até<input id="p_energyValid" type="date" value="${p.energyValid||''}"></label></div>
-      <div class="hint">Usados nas cláusulas do contrato em PDF. Deixa em branco o que não se aplicar — as frases correspondentes são omitidas.</div>`,
-      {icon:'contract',summary:[p.freguesia||p.parish,p.registry?'n.º '+p.registry:''].filter(Boolean).join(' · ')||'para o contrato'})}
+      <div class="hint">Usados nas cláusulas do contrato em PDF e no resumo do Anexo F. Deixa em branco o que não se aplicar — as frases correspondentes são omitidas.
+        O código da freguesia (6 dígitos), o tipo de prédio e o artigo vêm da caderneta predial ou da nota de cobrança do IMI; o Anexo F pede-os em cada linha do quadro das rendas.
+        O VPT serve para repartir os gastos quando só se arrenda parte do imóvel. A data de aquisição fica guardada para o dia em que venderes (Anexo G).</div>`,
+      {icon:'contract',summary:[esc(p.freguesia||p.parish||''),p.freguesiaCodigo?'freguesia n.º '+esc(p.freguesiaCodigo):'',p.registry?'n.º '+esc(p.registry):''].filter(Boolean).join(' · ')||'para o contrato'})}
     ${fold('loans','Hipotecas',`
         ${ls.map((l,i)=>loanSect(l,i)).join('')}
         ${ls.length>1?`<div class="card" style="background:var(--tint);padding:12px">
@@ -202,8 +224,10 @@ function collectProp(){
   if(has('p_addr'))p.address=val('p_addr');
   if(has('p_value'))p.value=num(val('p_value'));
   if(has('p_purchase'))p.purchase=num(val('p_purchase'));
-  ['parish','freguesia','concelho','fraction','floor','street','doorNumber','postalCode','locality','registry','matrix','licence','energyCert','energyClass','energyValid'].forEach(k=>{
+  if(has('p_vpt'))p.vpt=Math.max(0,num(val('p_vpt')));
+  ['parish','freguesia','concelho','distrito','freguesiaCodigo','tipoPredio','tipologia','purchaseDate','fraction','floor','street','doorNumber','postalCode','locality','registry','matrix','licence','energyCert','energyClass','energyValid'].forEach(k=>{
     const e=document.getElementById('p_'+k);if(e)p[k]=e.value});
+  p.freguesiaCodigo=String(p.freguesiaCodigo||'').trim();   /* a validação ao guardar conta dígitos, não espaços */
   if(document.getElementById('p_notes'))p.notes=richVal('p_notes');
   if(has('p_listing'))p.listing=val('p_listing');
   (p.rooms||[]).forEach(r=>{const e=document.getElementById('p_room_'+r.id);if(e)r.name=e.value});
