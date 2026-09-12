@@ -556,3 +556,61 @@ describe('movimento', () => {
     assert.match(m[1], /transition:none!important/);
   });
 });
+
+describe('materiais', () => {
+  /* Vidro à Apple: o cabeçalho e a barra de baixo são translúcidos, com a
+     saturação que deixa as cores de baixo atravessar vivas e o prefixo
+     -webkit- que o iOS antigo lê. Sem o prefixo, o iPhone via um retângulo
+     baço onde devia haver vidro. */
+  test('o cabeçalho e a barra de baixo são vidro saturado, com prefixo webkit', () => {
+    const header = /header\.top\{[^}]*\}/.exec(cssLimpo);
+    assert.ok(header, 'a regra do cabeçalho existe');
+    assert.match(header[0], /-webkit-backdrop-filter:blur\(12px\) saturate\(140%\)/);
+    assert.match(header[0], /;backdrop-filter:blur\(12px\) saturate\(140%\)/, 'e a sem prefixo');
+    const tab = /\.tabbar\{[^}]*\}/.exec(cssLimpo);
+    assert.ok(tab, 'a regra da barra de baixo existe');
+    assert.match(tab[0], /background:var\(--blur\)/, 'o fundo é o vidro, não o cartão');
+    assert.match(tab[0], /-webkit-backdrop-filter:blur\(12px\) saturate\(140%\)/);
+  });
+
+  /* O vidro tem recuo: quem pediu menos transparência ao sistema recebe as
+     superfícies sólidas, com a cor que cada uma fingia ter por trás. */
+  test('com menos transparência, o vidro fica sólido', () => {
+    const m = /@media\(prefers-reduced-transparency:reduce\)\{([\s\S]*?)\n\}/.exec(cssLimpo);
+    assert.ok(m, 'o recuo existe');
+    assert.match(m[1], /header\.top\{background:var\(--bg\);[^}]*backdrop-filter:none\}/);
+    assert.match(m[1], /\.tabbar\{background:var\(--card\);[^}]*backdrop-filter:none\}/);
+  });
+
+  /* E quem pediu mais contraste recebe contornos que se veem — só os tokens
+     das linhas mudam, para tudo o que os cita mudar com eles. */
+  test('com mais contraste, os contornos descem só pelos tokens', () => {
+    const m = /@media\(prefers-contrast:more\)\{([\s\S]*?)\n\}/.exec(cssLimpo);
+    assert.ok(m, 'o recuo existe');
+    assert.match(m[1], /:root\{--line:#[0-9a-f]{6};--line2:#[0-9a-f]{6}\}/);
+    assert.match(m[1], /:root\.dark\{--line:#[0-9a-f]{6};--line2:#[0-9a-f]{6}\}/);
+  });
+
+  /* A risca do cabeçalho nasce transparente e é o scroll que a acende: no
+     topo da página não há conteúdo por baixo dela para separar. O ouvinte é
+     o mesmo do toTop — um scroll, um ouvinte. */
+  test('a risca do cabeçalho só aparece com a página rolada', () => {
+    const header = /header\.top\{[^}]*\}/.exec(cssLimpo)[0];
+    assert.match(header, /border-bottom:1px solid transparent/);
+    assert.match(header, /transition:border-bottom-color var\(--rapido\) var\(--curva\)/,
+      'e acende-se a desvanecer, pelos tokens');
+    assert.match(cssLimpo, /body\.rolada header\.top\{border-bottom-color:var\(--line\)\}/);
+    assert.match(componentes, /classList\.toggle\('rolada',window\.scrollY>8\)/,
+      'quem a põe é o ouvinte de scroll');
+  });
+
+  /* A letra é a do sistema de quem lê: SF no iPhone e no Mac, Segoe no
+     Windows. A Inter nunca foi carregada como webfont — só aparecia a quem
+     a tivesse instalada, e era uma cara diferente por acaso. */
+  test('a letra é a do sistema, sem webfont fantasma à frente', () => {
+    const body = /\nbody\{[^}]*\}/.exec(cssLimpo);
+    assert.ok(body, 'a regra do body existe');
+    assert.match(body[0], /font-family:system-ui,-apple-system/);
+    assert.doesNotMatch(cssLimpo, /font-family:Inter/, 'a Inter saiu da frente');
+  });
+});

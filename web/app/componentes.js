@@ -692,7 +692,11 @@ function lpLimpaEspera(){
 }
 document.addEventListener('click',e=>{if(_lpFired){_lpFired=false;if(Date.now()-_lpAt<700){e.stopPropagation();e.preventDefault()}}},true);
 document.addEventListener('contextmenu',e=>{if(e.target&&e.target.closest&&e.target.closest('[data-lp]'))e.preventDefault()});
-window.addEventListener('scroll',()=>{const b=document.getElementById('toTop');if(b)b.classList.toggle('on',window.scrollY>420)},{passive:true});
+/* O mesmo ouvinte serve o botão do topo e a risca do cabeçalho: body.rolada
+   é o que acende o border-bottom (index.html:body.rolada) — no topo da
+   página não há conteúdo por baixo dele para separar. */
+window.addEventListener('scroll',()=>{const b=document.getElementById('toTop');if(b)b.classList.toggle('on',window.scrollY>420);
+  document.body.classList.toggle('rolada',window.scrollY>8)},{passive:true});
 /* A folha de opções do toque longo: fecha o que estiver aberto e mostra a
    lista num pickModal. Cada opção é {label, icon, act} — o act corre depois
    de fechar tudo. Os rótulos destrutivos (Apagar/Remover/…) pintam-se de
