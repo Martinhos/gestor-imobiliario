@@ -15,3 +15,6 @@ testes/ui/relatorio/
 # testes de mutacao (npm run test:mutacao): a pasta de trabalho e o relatorio sao artefactos, nao codigo
 .stryker-tmp/
 testes/mutacao/
+
+# pipeline unlazy (coordenacao local, nunca versionada)
+.unlazy/

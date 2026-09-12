@@ -20,9 +20,10 @@ describe('normalização', () => {
     assert.equal(p.value, 0);
   });
 
-  test('campos de versões antigas são limpos', () => {
-    const p = app.normProp({ id: 'p', name: 'X', vpt: 1000, monthlyRent: 500, tenant: 'alguém' });
-    assert.equal(p.vpt, undefined);
+  test('campos de versões antigas são limpos — o VPT fica, que o Anexo F o pede', () => {
+    const p = app.normProp({ id: 'p', name: 'X', vpt: 1000, imiRate: 0.3, monthlyRent: 500, tenant: 'alguém' });
+    assert.equal(p.vpt, 1000, 'o valor patrimonial tributário é o mesmo de sempre e volta a ter uso');
+    assert.equal(p.imiRate, undefined);
     assert.equal(p.monthlyRent, undefined);
     assert.equal(p.tenant, undefined);
   });

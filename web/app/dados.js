@@ -71,9 +71,37 @@ const CATS_IN0={
   'Outras receitas':[]
 };
 const TAGS0=['Urgente','A reembolsar','Recorrente','Dedutível','Em disputa'];
+/* ---- fiscal: o que o Anexo F e o Modelo 2 pedem, na forma em que a app o guarda ----
+   A app resume, não declara: guarda o que a AT pergunta e aponta o que falta. */
+/* o estado de um contrato perante a AT: por indicar (vazio), comunicado pelo Modelo 2
+   («declarado»), ou «naoDeclarado» — uma escolha do senhorio, sem juízo da app */
+const FISCO_ESTADOS=['','declarado','naoDeclarado'];
+/* a finalidade do arrendamento, como o Modelo 2 a pergunta (a natureza no Anexo F sai daqui) */
+const FISCO_FINALIDADES=[['hp','Habitação permanente'],['hnp','Habitação não permanente'],['nh','Não habitacional']];
+/* as colunas de gastos do quadro 4.1 do Anexo F, a das obras dos 24 meses anteriores ao
+   arrendamento, e «não dedutível» — o que o artigo 41.º do CIRS deixa de fora */
+const IRS_COLUNAS=[['conservacao','Conservação e manutenção'],['condominio','Condomínio'],['imi','IMI'],['selo','Imposto do selo'],
+  ['taxas','Taxas autárquicas'],['outros','Outros gastos'],['obras24','Obras antes do arrendamento (24 meses)'],['nao','Não dedutível']];
+/* de cada categoria de origem (ou «Categoria / Sub») à coluna do Anexo F. Fora, por lei: os
+   gastos financeiros (juros, comissões, seguro de vida do crédito), as depreciações, o
+   mobiliário, os eletrodomésticos e a decoração; e o que acrescenta valor (beneficiação:
+   uma cozinha nova, uma remodelação) não é conservação. O IMI e o selo têm coluna própria.
+   O que aqui não está cai em «outros», e o resumo diz que foi por omissão. */
+const IRS_MAPA0={
+  'Impostos':'taxas','Impostos / IMI':'imi','Impostos / AIMI':'nao','Impostos / IRS sobre rendas':'nao',
+  'Impostos / Imposto do selo':'selo','Impostos / Mais-valias':'nao','Impostos / Outro imposto':'taxas',
+  'Condomínio':'condominio',
+  'Seguros':'outros','Seguros / Vida (crédito)':'nao',
+  'Obras e benfeitorias':'conservacao','Obras e benfeitorias / Remodelação':'nao','Obras e benfeitorias / Cozinha':'nao','Obras e benfeitorias / Casa de banho':'nao',
+  'Manutenção e reparações':'conservacao',
+  'Água, luz e gás':'outros','Gestão e mediação':'outros','Serviços profissionais':'outros',
+  'Mobiliário e equipamento':'nao','Limpeza e jardim':'outros','Custos bancários':'nao',
+  'Crédito à habitação':'nao','Dívidas a terceiros':'nao','Outros':'outros'
+};
 const blank={v:13,properties:[],owners:[],tenants:[],contracts:[],transactions:[],settlements:[],templates:[],recurring:[],groups:[],visits:[],
   settings:{growth:2,inflation:2,years:10,theme:'auto',capTarget:5,quota:100,payTax:true,stampPct:4,
-            cats:JSON.parse(JSON.stringify(CATS0)),catsIn:JSON.parse(JSON.stringify(CATS_IN0)),tags:TAGS0.slice()}};
+            cats:JSON.parse(JSON.stringify(CATS0)),catsIn:JSON.parse(JSON.stringify(CATS_IN0)),tags:TAGS0.slice(),
+            irsMapa:JSON.parse(JSON.stringify(IRS_MAPA0))}};
 
 /* id único para qualquer registo novo; onde não há crypto.randomUUID, serve data + aleatório
    Devolve: uma string única (UUID, ou 'id' + data + aleatório como recurso). */
@@ -111,40 +139,75 @@ function normVisit(v){return Object.assign({id:uid(),propertyId:'',roomId:'',nom
    houseId é o imóvel a que a ficha está presa (vazio numa ficha só minha): é
    com ele que a ficha de um inquilino criada por um colaborador sobe como
    registo desse imóvel, mesmo sem contrato — persiste e mantém o que vier.
+   pais é o país de residência de quem não tem NIF português (o Anexo F pede o
+   código do país nesse caso); retem diz que o inquilino retém IRS na fonte
+   (uma empresa com contabilidade organizada) — a app não decide isso, regista.
    Recebe: p — a ficha em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos da ficha preenchidos. */
 function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:'',nif:'',gender:'',marital:'',
-  nationality:'Portuguesa',birth:'',cc:'',ccValid:'',taxAddress:'',notes:'',files:[],houseId:''},p||{});
+  nationality:'Portuguesa',birth:'',cc:'',ccValid:'',taxAddress:'',notes:'',files:[],houseId:'',pais:'',retem:false},p||{});
+  o.pais=String(o.pais||'');o.retem=!!o.retem;
   o.files=(o.files||[]).map(normFile);return o}
 /* normaliza um imóvel e migra o que mudou entre versões: equity passa a purchase, o crédito único
-   vira lista de hipotecas, quartos em texto ganham id, e quotas de donos removidos são descartadas
+   vira lista de hipotecas, quartos em texto ganham id, e quotas de donos removidos são descartadas.
+   Os campos fiscais (o que o Anexo F e o Modelo 2 pedem por imóvel): distrito, código da
+   freguesia (seis dígitos, da caderneta ou da nota do IMI), tipo de prédio (U/R), tipologia,
+   VPT e data de aquisição. O vpt das versões antigas deixou de ser apagado — é o mesmo valor,
+   e o rateio dos gastos num imóvel arrendado por partes faz-se por ele.
    Recebe: p — o imóvel em bruto, de qualquer versão dos dados (ou nada).
    Devolve: um objeto novo com o imóvel completo e já migrado. */
 function normProp(p){
   const o=Object.assign({id:uid(),name:'',address:'',use:'investimento',rentalMode:'inteiro',rooms:[],
     value:0,purchase:0,ownerIds:[],ownerShares:{},notes:'',listing:'',photos:[],loans:[],
-    parish:'',concelho:'',freguesia:'',fraction:'',floor:'',street:'',doorNumber:'',postalCode:'',locality:'',registry:'',matrix:'',licence:'',energyCert:'',energyClass:'',energyValid:''},p||{});
+    parish:'',concelho:'',freguesia:'',fraction:'',floor:'',street:'',doorNumber:'',postalCode:'',locality:'',registry:'',matrix:'',licence:'',energyCert:'',energyClass:'',energyValid:'',
+    distrito:'',freguesiaCodigo:'',tipoPredio:'',tipologia:'',vpt:0,purchaseDate:''},p||{});
   if(!o.purchase&&p&&p.equity)o.purchase=p.equity;   /* v12 chamava-lhe capital próprio */
   delete o.equity;
   /* v8 tinha um crédito único; passa a ser a primeira hipoteca da lista */
   if(!o.loans.length&&o.loan&&o.loan.active)o.loans=[Object.assign({},o.loan,{name:'Aquisição'})];
   if(!o.loans.length&&Array.isArray(p&&p.loans))o.loans=p.loans.slice();
   o.loans=(o.loans||[]).map(normLoan).map(l=>Object.assign(l,{name:l.name||l.bank||'Hipoteca'}));
-  ['vpt','imiRate','status','monthlyRent','rentIncrease','tenant','loan','loanId'].forEach(k=>{delete o[k]});
+  ['imiRate','status','monthlyRent','rentIncrease','tenant','loan','loanId'].forEach(k=>{delete o[k]});
+  o.distrito=String(o.distrito||'');
+  o.freguesiaCodigo=String(o.freguesiaCodigo||'').replace(/\D/g,'').slice(0,6);
+  o.tipoPredio=(o.tipoPredio==='U'||o.tipoPredio==='R')?o.tipoPredio:'';
+  o.tipologia=/^T\d$/.test(String(o.tipologia||''))?String(o.tipologia):'';
+  o.vpt=Math.max(0,Number(o.vpt)||0);
+  o.purchaseDate=/^\d{4}-\d{2}-\d{2}$/.test(String(o.purchaseDate||''))?String(o.purchaseDate):'';
   o.rooms=(o.rooms||[]).map(r=>typeof r==='string'?{id:uid(),name:r}:Object.assign({id:uid(),name:''},r));
   o.photos=(o.photos||[]).map(normFile);
   const sh={};Object.keys(o.ownerShares||{}).forEach(k=>{const v=Number(o.ownerShares[k]);if((o.ownerIds||[]).indexOf(k)>-1&&isFinite(v)&&v>=0)sh[k]=v});
   o.ownerShares=sh;
   return o;
 }
-/* normaliza um contrato: omissões preenchidas; itens do inventário e chaves ganham id próprio
+/* normaliza o bloco fiscal de um contrato: o estado perante a AT (FISCO_ESTADOS — o vazio
+   é «por indicar»; «naoDeclarado» é uma escolha do senhorio, não um erro da app), o número
+   que a AT atribui ao contrato na entrega do Modelo 2, a finalidade, a data de celebração,
+   se é renovável, as renovações (cada uma com id, início e fim — o quadro 4.2A do Anexo F
+   pede as datas da última) e o motivo da cessação (que a AT pede ao comunicá-la).
+   Recebe: f — o bloco em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo com todos os campos do bloco preenchidos. */
+function normFisco(f){
+  const o=Object.assign({estado:'',numero:'',finalidade:'',celebracao:'',renovavel:null,renovacoes:[],cessacaoMotivo:''},f||{});
+  if(FISCO_ESTADOS.indexOf(o.estado)<0)o.estado='';
+  if(!FISCO_FINALIDADES.some(x=>x[0]===o.finalidade))o.finalidade='';
+  o.numero=String(o.numero||'').trim();
+  o.celebracao=/^\d{4}-\d{2}-\d{2}$/.test(String(o.celebracao||''))?String(o.celebracao):'';
+  o.renovavel=(o.renovavel===true||o.renovavel===false)?o.renovavel:null;
+  o.renovacoes=(Array.isArray(o.renovacoes)?o.renovacoes:[]).map(r=>Object.assign({id:uid(),inicio:'',fim:''},r||{}));
+  o.cessacaoMotivo=String(o.cessacaoMotivo||'');
+  return o;
+}
+/* normaliza um contrato: omissões preenchidas; itens do inventário e chaves ganham id próprio;
+   o bloco fiscal passa por normFisco (um contrato antigo ganha-o vazio: «por indicar»)
    Recebe: c — o contrato em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos do contrato preenchidos. */
 function normContract(c){
   const o=Object.assign({id:uid(),name:'',propertyId:null,roomId:null,tenantIds:[],rent:0,taxRate:0,iban:'',
     ownerEmail:'',ownerPhone:'',tenantEmail:'',tenantPhone:'',ownerContactId:'',tenantContactId:'',
-    photoIds:[],keys:[],
+    photoIds:[],keys:[],fisco:null,
     deposit:0,payDay:1,payDayTo:0,advance:0,autoRec:true,start:'',end:'',increase:null,active:true,notes:'',files:[],inventory:[]},c||{});
+  o.fisco=normFisco(o.fisco);
   o.files=(o.files||[]).map(normFile);
   o.inventory=(o.inventory||[]).map(i=>Object.assign({id:uid(),name:'',qty:1,state:'usado'},i));
   o.keys=(o.keys||[]).map(i=>Object.assign({id:uid(),name:'',qty:1},i));
@@ -153,9 +216,18 @@ function normContract(c){
 /* kind: income (renda), expense (despesa), loan (prestação), owed (dívida recebida de terceiro),
    repay (pagamento dessa dívida), settle (acerto entre proprietários: paidBy → toId).
    split: como o valor se divide entre os donos — {mode:'equal'|'quota'|'pct'|'percent'|'amount'|'adjust',parts:{ownerId:n}};
-   em 'adjust', parts é o extra de cada um por cima da parte igual */
+   em 'adjust', parts é o extra de cada um por cima da parte igual.
+   O que o IRS pede a um movimento: numa renda, retencao (o que o inquilino reteve na fonte —
+   o amount é o que entrou, e a renda ilíquida é a soma), periodo (o mês 'AAAA-MM' a que a
+   renda respeita) e recibo (o recibo eletrónico já foi emitido); numa despesa, irsCol (a
+   coluna do Anexo F escolhida à mão, um id de IRS_COLUNAS; vazio = pela categoria) */
 const normTx=t=>{const o=Object.assign({id:uid(),kind:'expense',label:'',amount:0,date:'',propertyId:null,contractId:null,
-  loanId:null,payType:'prestacao',paidBy:null,toId:null,creditor:'',category:'',sub:'',tags:[],notes:'',split:null,groupId:null,psplit:null},t||{});
+  loanId:null,payType:'prestacao',paidBy:null,toId:null,creditor:'',category:'',sub:'',tags:[],notes:'',split:null,groupId:null,psplit:null,
+  retencao:0,periodo:'',recibo:false,irsCol:''},t||{});
+  o.retencao=Math.max(0,Number(o.retencao)||0);
+  o.periodo=/^\d{4}-\d{2}$/.test(String(o.periodo||''))?String(o.periodo):'';
+  o.recibo=!!o.recibo;
+  if(!IRS_COLUNAS.some(c=>c[0]===o.irsCol))o.irsCol='';
   if(o.split&&(!o.split.mode||o.split.mode==='quota'))o.split=null;
   if(o.split){o.split={mode:o.split.mode,parts:Object.assign({},o.split.parts||{})}}
   if(o.propertyId)o.groupId=null;
@@ -174,18 +246,20 @@ function migrateSettlements(d){
   });
   d.settlements=[];
 }
-/* categorias novas que uma base antiga ainda não tem
+/* categorias novas que uma base antiga ainda não tem; e o mapa categoria → coluna do
+   Anexo F, completado com as regras de origem que faltem sem pisar as que a pessoa mudou
    Recebe: st — o objeto settings da base.
-   Devolve: nada — completa st.cats, st.catsIn e st.exclude no próprio objeto. */
+   Devolve: nada — completa st.cats, st.catsIn, st.exclude e st.irsMapa no próprio objeto. */
 function fillCats(st){
   st.exclude=st.exclude||{};
   if(!st.cats||!Object.keys(st.cats).length)st.cats=JSON.parse(JSON.stringify(CATS0));
   else['Crédito à habitação','Dívidas a terceiros'].forEach(k=>{if(!(k in st.cats))st.cats[k]=CATS0[k].slice()});
   if(!st.catsIn||!Object.keys(st.catsIn).length)st.catsIn=JSON.parse(JSON.stringify(CATS_IN0));
+  st.irsMapa=Object.assign({},IRS_MAPA0,(st.irsMapa&&typeof st.irsMapa==='object')?st.irsMapa:{});
 }
 const normSettle=x=>Object.assign({id:uid(),date:'',propertyId:null,fromId:null,toId:null,amount:0},x||{});
 /* modelo: um movimento guardado para repetir à mão; recorrência: repete-se sozinho e pede confirmação */
-const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType'];
+const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType','retencao','irsCol'];
 /* cópia profunda de um movimento só com os campos que fazem sentido repetir (TX_TPL_KEYS):
    é o que os modelos e as recorrências guardam — data e id ficam de fora de propósito
    Recebe: t — o movimento a copiar.
