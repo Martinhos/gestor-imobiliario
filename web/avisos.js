@@ -27,7 +27,7 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
-    v: 36,
+    v: 37,
     data: '2026-09-12',
     titulo: 'O IRS deixa de ser uma promessa',
     seccoes: [
@@ -86,6 +86,21 @@ var AVISOS = [
         itens: [
           'Em Definições → IRS e dedução dizes em que coluna do Anexo F cai cada categoria e subcategoria de pagamentos, com o que o artigo 41.º do CIRS deixa deduzir explicado em poucas linhas.',
           'As regras de origem já separam o que a lei deixa de fora — juros, mobiliário, eletrodomésticos, beneficiações — e podes repô-las quando quiseres.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 36,
+    data: '2026-09-12',
+    titulo: 'A app volta a abrir para quem já a tinha',
+    seccoes: [
+      {
+        titulo: 'O erro ao abrir a app',
+        afeta: ['app'],
+        itens: [
+          'Quem já tinha usado a app neste aparelho podia dar com a página «Não é possível aceder a este site» ao abri-la. O defeito estava na forma como a app se guarda para abrir sem rede, e não nos teus dados: nada se perdeu.',
+          'Se a app deste aparelho ainda mostrar esse erro, recarrega a página: a versão corrigida instala-se sozinha.',
         ],
       },
     ],
