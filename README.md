@@ -108,8 +108,9 @@ R2 e não no repositório (ver **Deploy (uma vez)**, ponto 3).
    os do correio e o `PASS_PEPPER` (o pepper das palavras-passe; `PASS_PEPPER_DEV` para o dev) são
    opcionais — o deploy publica os que existirem. O pepper é um valor aleatório comprido e, uma vez
    publicado, **nunca se muda nem se apaga**: as palavras-passe guardadas com ele deixavam de entrar.
-   A chave de assinatura do APK vive nos segredos `ANDROID_KEYSTORE_B64` e `ANDROID_KEYSTORE_PASS`
-   ([`android/README.md`](android/README.md)).
+   A chave de assinatura do APK vive nos segredos `ANDROID_KEYSTORE_B64` e `ANDROID_KEYSTORE_PASS`;
+   a do APK de dev, opcional, em `ANDROID_KEYSTORE_DEV_B64` e `ANDROID_KEYSTORE_DEV_PASS` — sem ela o
+   dev assina com a mesma ([`android/README.md`](android/README.md)).
 3. O estado do Terraform vive num balde R2 só dele, e **não** no repositório — este é público, e um
    estado acaba sempre por apanhar atributos sensíveis. Uma vez, a partir de uma cópia local:
 

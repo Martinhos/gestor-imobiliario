@@ -15,6 +15,26 @@ def senhaDaChaveInterna = System.getenv('ANDROID_KEY_PASS') ?: propsDaChave.getP
 def ficheiroDaChave = caminhoDaChave ? rootProject.file(caminhoDaChave) : null
 def temChave = ficheiroDaChave != null && ficheiroDaChave.exists() && senhaDaChave
 
+/* A chave de dev, opcional: o flavor dev assina com ela quando existe e cai na
+   fixa quando nao. As duas apps coexistem no telemovel pelo applicationId (o
+   sufixo .dev), nao pela chave — uma chave so para o dev serve para nao andar
+   a usar a de producao em cada push ao dev, e pode tratar-se como descartavel
+   (perde-se, faz-se outra, reinstala-se o dev). No CI vem de
+   ANDROID_KEYSTORE_DEV_FILE e ANDROID_KEYSTORE_DEV_PASS (que o deploy so
+   escreve quando ha os segredos _DEV); nesta maquina de devStoreFile,
+   devStorePassword, devKeyAlias e devKeyPassword do keystore.properties. */
+def caminhoDaChaveDev = System.getenv('ANDROID_KEYSTORE_DEV_FILE') ?: propsDaChave.getProperty('devStoreFile')
+def senhaDaChaveDev = System.getenv('ANDROID_KEYSTORE_DEV_PASS') ?: propsDaChave.getProperty('devStorePassword')
+def aliasDaChaveDev = System.getenv('ANDROID_KEYSTORE_DEV_ALIAS') ?: propsDaChave.getProperty('devKeyAlias') ?: 'dev'
+def senhaDaChaveDevInterna = System.getenv('ANDROID_KEY_DEV_PASS') ?: propsDaChave.getProperty('devKeyPassword') ?: senhaDaChaveDev
+def ficheiroDaChaveDev = caminhoDaChaveDev ? rootProject.file(caminhoDaChaveDev) : null
+def temChaveDev = ficheiroDaChaveDev != null && ficheiroDaChaveDev.exists() && senhaDaChaveDev
+
+// Dito em voz alta em cada corrida, para nunca se descobrir tarde que o APK de
+// dev saiu com a chave de producao — ou que a de producao nem existia.
+println "Assinatura: producao -> ${temChave ? 'chave fixa' : 'SEM CHAVE'}; " +
+    "dev -> ${temChaveDev ? 'chave de dev' : (temChave ? 'chave fixa (sem chave de dev)' : 'SEM CHAVE')}"
+
 android {
     namespace 'pt.gestorimobiliario.app'
     compileSdk 35
@@ -27,6 +47,61 @@ android {
         versionName "23.0"
     }
 
+    // O endereco que a MainActivity carrega vem daqui (BuildConfig.HOST), um
+    // por flavor, em vez de estar escrito no Java.
+    buildFeatures {
+        buildConfig true
+    }
+
+    // As configuracoes de assinatura vem antes de quem as usa: no DSL Groovy,
+    // signingConfigs.fixa so existe depois de este bloco correr.
+    signingConfigs {
+        fixa {
+            if (temChave) {
+                storeFile ficheiroDaChave
+                storePassword senhaDaChave
+                keyAlias aliasDaChave
+                keyPassword senhaDaChaveInterna
+            }
+        }
+        dev {
+            if (temChaveDev) {
+                storeFile ficheiroDaChaveDev
+                storePassword senhaDaChaveDev
+                keyAlias aliasDaChaveDev
+                keyPassword senhaDaChaveDevInterna
+            }
+        }
+    }
+
+    // Dois flavors, um por ambiente, para a app de dev se instalar AO LADO da
+    // de producao no mesmo telemovel: o Android distingue apps pelo
+    // applicationId, por isso o dev leva o sufixo .dev (e -dev no nome da
+    // versao, para se ver nas definicoes do sistema). Cada um carrega o seu
+    // dominio, e o dev tem nome e icone proprios em src/dev/res, que se
+    // sobrepoem aos de src/main pelo nome do recurso.
+    //
+    // A assinatura decide-se aqui, por flavor, e nao no buildType: no AGP o
+    // signingConfig do buildType manda sobre o do flavor, e um so buildType
+    // release nao podia dar chaves diferentes aos dois.
+    flavorDimensions 'ambiente'
+    productFlavors {
+        producao {
+            dimension 'ambiente'
+            buildConfigField 'String', 'HOST', '"app.rendorium.com"'
+            if (temChave) signingConfig signingConfigs.fixa
+        }
+        dev {
+            dimension 'ambiente'
+            applicationIdSuffix '.dev'
+            versionNameSuffix '-dev'
+            buildConfigField 'String', 'HOST', '"dev.rendorium.com"'
+            // com chave de dev assina com ela; sem ela cai na fixa (ver acima)
+            if (temChaveDev) signingConfig signingConfigs.dev
+            else if (temChave) signingConfig signingConfigs.fixa
+        }
+    }
+
     // A chave e fixa (sem ela cada compilacao usaria uma chave de debug
     // diferente e o Android recusaria instalar a atualizacao por cima da
     // anterior), mas NAO vive no repositorio: a antiga esteve aqui com a
@@ -37,24 +112,13 @@ android {
     //     deploy escreve a partir dos segredos do GitHub.
     // Sem chave, o debug compila com a chave automatica e o assembleRelease
     // para com uma mensagem, em vez de sair um APK que ninguem consegue
-    // instalar por cima do que ja tem.
+    // instalar por cima do que ja tem. O release nao diz aqui com que chave
+    // assina: isso e de cada flavor (productFlavors, acima).
     buildTypes {
         debug   { if (temChave) signingConfig signingConfigs.fixa }
         release {
-            signingConfig temChave ? signingConfigs.fixa : null
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-    }
-
-    signingConfigs {
-        fixa {
-            if (temChave) {
-                storeFile ficheiroDaChave
-                storePassword senhaDaChave
-                keyAlias aliasDaChave
-                keyPassword senhaDaChaveInterna
-            }
         }
     }
 
@@ -66,12 +130,16 @@ android {
 
 /* Um APK de release sem a chave certa nao instala por cima do que as pessoas
    ja tem: mais vale parar aqui, com o que falta escrito, do que publicar um
-   ficheiro que ninguem consegue instalar. */
-tasks.matching { it.name.startsWith('assemble') && it.name.contains('Release') }.configureEach {
+   ficheiro que ninguem consegue instalar. O flavor dev contenta-se com a chave
+   de dev; tudo o resto (o producao, e o assembleRelease que junta os dois)
+   precisa da fixa. */
+tasks.matching { it.name.startsWith('assemble') && it.name.contains('Release') }.configureEach { tarefa ->
     doFirst {
-        if (!temChave) {
-            throw new GradleException('Sem chave de assinatura. Nesta maquina: cria o android/keystore.properties ' +
-                '(ver android/README.md). No CI: define ANDROID_KEYSTORE_FILE e ANDROID_KEYSTORE_PASS.')
+        def assinada = tarefa.name.contains('Dev') ? (temChaveDev || temChave) : temChave
+        if (!assinada) {
+            throw new GradleException('Sem chave de assinatura para ' + tarefa.name + '. Nesta maquina: cria o ' +
+                'android/keystore.properties (ver android/README.md). No CI: define ANDROID_KEYSTORE_FILE e ' +
+                'ANDROID_KEYSTORE_PASS (ou, so para o flavor dev, ANDROID_KEYSTORE_DEV_FILE e ANDROID_KEYSTORE_DEV_PASS).')
         }
     }
 }

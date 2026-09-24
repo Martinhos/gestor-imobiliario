@@ -30,11 +30,18 @@ function cartaoDoPerfil() {
 
 /* O cartão da app no telemóvel, no fim da raiz das Definições: no iPhone,
    como se instala pelo Safari (não aparece aviso nenhum sozinho); fora da
-   app Android, o APK. Dentro dela não há nada a dizer.
+   app Android, o APK. Dentro dela não há nada a dizer. Fora de produção
+   (CW.ambiente, que vem do servidor em guia.js) o APK que se descarrega é o
+   de desenvolvimento — «Rendorium DEV», com outro applicationId —, e
+   instala-se ao lado do de produção sem o substituir; diz-se.
    Devolve: o HTML do cartão (texto), ou '' dentro da app Android. */
 function cartaoDaAppNoTelemovel() {
   var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   var standalone = false;
+  var emDev = !!(window.CW && CW.ambiente && CW.ambiente !== 'producao');
+  var notaDev = emDev
+    ? '<div class="hint u-mt-9px"><b>Ambiente de desenvolvimento:</b> este APK é o <b>Rendorium DEV</b>. Instala-se ao lado da app de produção, sem a substituir, e liga-se a este ambiente.</div>'
+    : '';
   try { standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches; } catch (e) {}
   if (isIOS) {
     return card('App no iPhone', 'Adicionar ao ecrã principal', standalone
@@ -49,6 +56,7 @@ function cartaoDaAppNoTelemovel() {
   if (!window.Android) {
     return card('App para Android', 'A mesma app no telemóvel',
         '<div class="hint">Instala a app nativa: é o mesmo gestor, com notificações dos movimentos por confirmar e o seletor de ficheiros do Android (Google Drive incluído). Ao abrir o APK, o Android pede para autorizares a instalação de apps fora da Play Store — é normal.</div>' +
+        notaDev +
         '<div class="hint u-mt-9px">Se já tinhas a app instalada de antes de setembro de 2026, <b>desinstala-a primeiro</b>: a chave de assinatura mudou e o Android recusa a instalação por cima. Antes de desinstalar, entra com a tua conta para os dados ficarem na nuvem, ou guarda uma cópia em <b>Definições → Importar e cópias</b>.</div>' +
         '<div class="toolbar u-mt-11px"><a class="btn primary u-td-none" href="/gestor-imobiliario.apk" download data-toca="nada">' + ic('down', 16) + ' Descarregar APK</a></div>');
   }

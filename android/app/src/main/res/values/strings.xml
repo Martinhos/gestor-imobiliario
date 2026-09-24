@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Gestor Imobiliário</string>
+    <!-- o nome do produto, o mesmo da PWA (web/manifest.webmanifest); o de dev
+         vive em src/dev/res e sobrepoe-se a este pelo nome do recurso -->
+    <string name="app_name">Rendorium</string>
 </resources>

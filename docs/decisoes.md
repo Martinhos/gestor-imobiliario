@@ -34,6 +34,7 @@ confere que cada uma aponta para código que existe.
 - 2026-09-15 · A avaliação de 2026-09-14, e o que ela mudou nas regras
 - 2026-09-15 · A CSP sem «unsafe-inline»: os eventos e os estilos saem do HTML
 - 2026-09-24 · O repositório passou a público
+- 2026-09-24 · A app de dev instala-se ao lado da de produção
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -924,3 +925,46 @@ antes do Terraform e volta a guardá-lo depois de um apply que mude alguma
 coisa, com uma cópia datada ao lado. Se o estado não estiver lá, o deploy para
 em vez de continuar: sem ele, o plano proporia criar de novo a base e os baldes,
 e o que protege os dados é precisamente o estado saber que eles já existem.
+
+## 2026-09-24 · A app de dev instala-se ao lado da de produção
+
+O ambiente de dev existia para se testar no browser, mas no telemóvel não
+havia como o ter: o APK só saía do `main`, com o domínio de produção escrito
+na concha, e a PWA de dev.rendorium.com instalava-se com o mesmo nome e o
+mesmo ícone da de produção — dois ícones iguais no ecrã inicial, sem se saber
+qual era qual. Passa a haver uma app de dev com a sua cara, que se instala AO
+LADO da de produção, e nunca por cima.
+
+**O que separa as duas.** No Android é o `applicationId`, não a assinatura: o
+flavor `dev` tem o sufixo `.dev`, e dois pacotes diferentes coexistem seja qual
+for a chave. O HOST deixa de estar escrito na `MainActivity` e vem do
+`BuildConfig` de cada flavor; o nome é «Rendorium DEV» e o ícone é âmbar, com
+«DEV» a traço por baixo da casa, no source set do flavor. Na PWA é a origem: o
+`id` do manifesto é «/», que resolve contra app.rendorium.com num caso e
+dev.rendorium.com no outro, e o browser trata-as como duas apps.
+
+**A identidade de dev nasce no worker, não em ficheiros à parte.** Os
+ficheiros de web/ são os mesmos nos dois ambientes; fora de produção o worker
+reescreve ao passar o manifesto e a página «/» — o nome, o título, o nome no
+iPhone e os ícones (worker/src/lib/identidade.js:identidadeDeDev). O manifesto
+passou a entrar no `run_worker_first` para chegar ao worker. Só o `<head>`
+declarativo muda: os scripts em linha ficam iguais, e os sha256 da CSP
+continuam a bater. Em produção não muda um byte, e um teste lê os dois casos
+de ponta a ponta (testes/app-dev-web.test.js). Os ícones de dev saem do mesmo
+desenho que os de produção (make-icons.js:makeIcon), com a geometria do vetor
+Android replicada em píxeis, para a PWA e o APK de dev terem a mesma cara.
+
+**A assinatura.** Não é preciso uma chave diferente para as apps coexistirem,
+mas o APK de dev passou a compilar-se a cada push ao `dev`, e assinar isso com
+a chave de produção era pô-la a rodar no runner dezenas de vezes por semana
+sem necessidade. O flavor `dev` aceita uma chave própria — os segredos
+`ANDROID_KEYSTORE_DEV_B64` e `ANDROID_KEYSTORE_DEV_PASS`, ou as entradas
+`dev*` do keystore.properties — e cai na fixa quando ela não existe, dizendo-o
+no resumo do deploy. Uma chave de dev conta-se como descartável: perdê-la
+custa uma desinstalação da app de dev, e mais nada.
+
+**O que se diz a quem descarrega.** O cartão «App para Android» das
+Definições (cloud/partilha.js:cartaoDaAppNoTelemovel) explica, fora de
+produção, que o APK é o Rendorium DEV e que se instala ao lado. A regra do
+service worker não muda: fora de produção não guarda nada (sw.js:GUARDA), por
+isso os ícones de dev não entram na SHELL nem contam para a chegada.

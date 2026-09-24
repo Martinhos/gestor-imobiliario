@@ -658,9 +658,18 @@ describe('os segredos', () => {
 describe('o README do Android', () => {
   // achado A.7-13
   test('diz o endereço que a concha carrega de facto, e como uma publicação lá chega', () => {
-    const java = readFileSync(new URL('android/app/src/main/java/pt/gestorimobiliario/app/MainActivity.java', RAIZ), 'utf8');
-    const host = (java.match(/HOST = "([^"]+)"/) || [])[1];
-    assert.ok(host, 'a MainActivity tem o HOST');
+    /* o HOST vem do flavor (build.gradle → BuildConfig.HOST), um por
+       ambiente: a MainActivity já não o tem escrito */
+    const java = ler('android/app/src/main/java/pt/gestorimobiliario/app/MainActivity.java');
+    assert.match(java, /HOST = BuildConfig\.HOST;/, 'a MainActivity lê o HOST do BuildConfig');
+    const gradle = ler('android/app/build.gradle');
+    const flavors = gradle.slice(gradle.indexOf('productFlavors {'));
+    // Recebe: flavor — o nome do flavor (dentro de productFlavors; há um «dev» também em signingConfigs).
+    // Devolve: o HOST que o buildConfigField lhe dá.
+    const hostDe = (flavor) => (flavors.match(new RegExp('\\n\\s*' + flavor + ' \\{[^}]*buildConfigField \'String\', \'HOST\', \'"([^"]+)"\'')) || [])[1];
+    const host = hostDe('producao');
+    assert.ok(host, 'o flavor producao tem o HOST');
+    assert.equal(hostDe('dev'), 'dev.rendorium.com', 'e o flavor dev aponta para o ambiente de dev');
     const r = ler('android/README.md');
     assert.ok(r.includes('https://' + host), 'o README diz https://' + host);
     assert.doesNotMatch(r.slice(0, r.indexOf('## ')), /workers\.dev/, 'e não o endereço antigo como o que se carrega');

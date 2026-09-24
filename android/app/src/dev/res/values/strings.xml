@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Só do flavor dev: sobrepõe-se ao app_name de src/main pelo nome do recurso.
+     É este nome que distingue a app de dev da de produção no ecrã inicial. -->
+<resources>
+    <string name="app_name">Rendorium DEV</string>
+</resources>

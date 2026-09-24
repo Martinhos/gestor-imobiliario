@@ -24,8 +24,10 @@ binding = "ASSETS"
 # Os assets respondem ANTES do worker por omissao — e "/" batia no
 # index.html da app em qualquer hostname, tapando a landing do apex/www.
 # So a raiz passa pelo worker (que decide landing ou app); o resto dos
-# ficheiros continua a servir-se direto.
-run_worker_first = ["/"]
+# ficheiros continua a servir-se direto. O manifesto tambem passa: fora de
+# producao o worker reescreve-o com o nome e os icones de dev
+# (worker/src/lib/identidade.js); em producao sai tal e qual.
+run_worker_first = ["/", "/manifest.webmanifest"]
 
 [[d1_databases]]
 binding = "DB"
@@ -118,7 +120,7 @@ routes = [
 [env.dev.assets]
 directory = "web"
 binding = "ASSETS"
-run_worker_first = ["/"]
+run_worker_first = ["/", "/manifest.webmanifest"]
 
 [[env.dev.d1_databases]]
 binding = "DB"

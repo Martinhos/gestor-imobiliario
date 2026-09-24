@@ -101,42 +101,68 @@ jobs:
         if: env.IS_PROD
         run: node scripts/chegada.js refs/tags/publicado HEAD^1
 
-      # APK só na produção: leva o endereço da app lá dentro.
+      # O APK compila-se nos dois ambientes, cada um o seu flavor
+      # (android/app/build.gradle): o de produção leva app.rendorium.com lá
+      # dentro; o de dev leva dev.rendorium.com, chama-se «Rendorium DEV» e
+      # instala-se ao lado do de produção. Fica aqui, antes de «Esperar pelos
+      # testes», de propósito: é só do runner, e compila enquanto eles correm.
       - uses: actions/setup-java@v4
-        if: github.ref_name == 'main'
         with:
           distribution: temurin
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@v4
-        if: github.ref_name == 'main'
 
       # A chave de assinatura vive aqui, e não no repositório: a anterior esteve
       # versionada com a palavra-passe em claro e, com o repositório público,
       # conta-se como comprometida (android/README.md). Escreve-se no disco do
       # runner, que morre com o trabalho, e nunca no diretório do projeto.
+      #
+      # Em dev prefere-se a chave de dev (segredos ANDROID_KEYSTORE_DEV_B64 e
+      # ANDROID_KEYSTORE_DEV_PASS), e a de produção nem se escreve no disco;
+      # sem esses segredos cai-se na de produção, e o resumo di-lo. O Gradle
+      # escolhe pelo flavor: lê ANDROID_KEYSTORE_DEV_FILE para o dev e
+      # ANDROID_KEYSTORE_FILE para o resto (e para o dev quando não há a dele).
       - name: Escrever a chave de assinatura
-        if: github.ref_name == 'main'
         env:
           CHAVE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          CHAVE_DEV_B64: ${{ secrets.ANDROID_KEYSTORE_DEV_B64 }}
+          CHAVE_DEV_PASS: ${{ secrets.ANDROID_KEYSTORE_DEV_PASS }}
         run: |
           set -e
+          if [ -z "$IS_PROD" ] && [ -n "$CHAVE_DEV_B64" ] && [ -n "$CHAVE_DEV_PASS" ]; then
+            printf '%s' "$CHAVE_DEV_B64" | base64 -d > "$RUNNER_TEMP/dev.keystore"
+            echo "ANDROID_KEYSTORE_DEV_FILE=$RUNNER_TEMP/dev.keystore" >> "$GITHUB_ENV"
+            echo "O APK de dev vai assinado com a chave de dev."
+            exit 0
+          fi
           if [ -z "$CHAVE_B64" ]; then
             echo "Falta o segredo ANDROID_KEYSTORE_B64 — sem ele o APK sairia com outra chave e ninguém o instalava por cima." >&2
             exit 1
           fi
           printf '%s' "$CHAVE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
           echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+          if [ -z "$IS_PROD" ]; then
+            echo "O APK de dev vai assinado com a chave de produção: faltam os segredos ANDROID_KEYSTORE_DEV_B64 e ANDROID_KEYSTORE_DEV_PASS (android/README.md, «Chave de dev»)." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
+      # A tarefa é a do flavor do ambiente; o ficheiro vai sempre para o mesmo
+      # sítio, porque as Definições da app apontam para /gestor-imobiliario.apk
+      # — em dev.rendorium.com é o APK de dev que lá está.
       - name: Compilar APK
-        if: github.ref_name == 'main'
         working-directory: android
         env:
           ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEYSTORE_DEV_PASS: ${{ secrets.ANDROID_KEYSTORE_DEV_PASS }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk ../web/gestor-imobiliario.apk
+          if [ -n "$IS_PROD" ]; then
+            ./gradlew --no-daemon assembleProducaoRelease
+            cp app/build/outputs/apk/producao/release/app-producao-release.apk ../web/gestor-imobiliario.apk
+          else
+            ./gradlew --no-daemon assembleDevRelease
+            cp app/build/outputs/apk/dev/release/app-dev-release.apk ../web/gestor-imobiliario.apk
+          fi
 
       - uses: hashicorp/setup-terraform@v3
         with:

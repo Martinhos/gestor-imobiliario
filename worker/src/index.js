@@ -11,6 +11,7 @@ import { varrerAnexos } from './files.js';
 import { dailyReport, watchLimits } from './notify.js';
 import { copiar } from './salvaguarda.js';
 import { recursoDePagina } from './paginas-recursos.js';
+import { CAMINHOS_DE_IDENTIDADE, identidadeDeDev } from './lib/identidade.js';
 
 /* Os dois scripts em linha do web/index.html — a armadilha de erros e a cura
    do arranque — têm de correr antes de qualquer ficheiro, e por isso não podem
@@ -306,6 +307,14 @@ export default {
           headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
         });
       }
+    }
+    /* Fora de produção a app chama-se «Rendorium DEV» e tem ícones âmbar
+       (lib/identidade.js): o manifesto e a página «/» reescrevem-se ao
+       passar, para a PWA de dev se instalar ao lado da de produção sem se
+       confundirem. Os dois caminhos passam pelo worker nos dois ambientes
+       (run_worker_first no wrangler.toml); em produção seguem direitos. */
+    if (env.ENV_NAME && CAMINHOS_DE_IDENTIDADE.indexOf(url.pathname) > -1) {
+      return harden(await identidadeDeDev(await env.ASSETS.fetch(request), url.pathname));
     }
     return harden(await env.ASSETS.fetch(request));
   },
