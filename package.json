@@ -17,7 +17,7 @@
     "test:mutacao": "npm install --no-save --no-audit --no-fund @stryker-mutator/core@9 @stryker-mutator/tap-runner@9 && npx stryker run"
   },
   "devDependencies": {
-    "playwright": "^1.62.1",
+    "playwright": "^1.63.0",
     "wrangler": "^4.138.0"
   }
 }
