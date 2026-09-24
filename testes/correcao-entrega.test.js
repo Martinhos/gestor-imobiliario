@@ -386,8 +386,11 @@ describe('o módulo gerado', () => {
     assert.equal(pkg.scripts.predev, 'node scripts/gerar-docs.js', 'o npm run dev gera-o antes do wrangler dev');
     assert.equal(pkg.scripts.prepare, 'node scripts/gerar-docs.js', 'o npm install e o npm ci também');
 
-    // em qualquer workflow, um passo que levante ou publique o worker tem de
-    // ter antes, no mesmo job, o gerador — ou um npm ci/install, que corre o prepare
+    /* Em qualquer workflow, um passo que levante ou publique o worker — ou que
+       corra a bateria — tem de ter antes, no mesmo job, o gerador ou um
+       npm ci/install, que o corre pelo prepare. A bateria entrou nesta regra
+       depois de o deploy de 2026-09-24 parar: três testes importam o ficheiro
+       gerado, e no runner dos testes não há npm ci que o crie. */
     const pasta = new URL('.github/workflows/', RAIZ);
     let vistos = 0;
     for (const f of readdirSync(pasta).filter((n) => n.endsWith('.yml'))) {
@@ -395,14 +398,14 @@ describe('o módulo gerado', () => {
       for (const job of jobsDe(yml)) {
         const ps = passos(yml, job);
         ps.forEach((p, i) => {
-          if (!/wrangler(?:@4)? (?:dev|deploy)\b/.test(p.run || '')) return;
+          if (!/wrangler(?:@4)? (?:dev|deploy)\b|node --test/.test(p.run || '')) return;
           vistos++;
           const gerou = ps.slice(0, i).some((q) => /node scripts\/gerar-docs\.js|\bnpm (?:ci|install)\b/.test(q.run || ''));
-          assert.ok(gerou, f + ' › ' + job + ' › «' + p.name + '» corre o wrangler sem gerar os docs antes');
+          assert.ok(gerou, f + ' › ' + job + ' › «' + p.name + '» corre sem gerar os docs antes');
         });
       }
     }
-    assert.ok(vistos >= 2, 'viu o deploy e o percurso (' + vistos + ')');
+    assert.ok(vistos >= 3, 'viu o deploy, o percurso e a bateria (' + vistos + ')');
 
     const gd = ler('scripts/gerar-docs.js');
     assert.doesNotMatch(gd, /o resultado vai\s+(?:\/\/\s*)?no repositório/, 'o comentário deixou de dizer que vai no git');

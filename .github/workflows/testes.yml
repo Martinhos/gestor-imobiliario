@@ -41,6 +41,12 @@ jobs:
       # que um teste importa). Medidos a 2026-09-15 com o web/ dentro: 83,92
       # linhas, 74,27 ramos, 74,36 funções — abaixo dos 84/78/79 de quando só o
       # worker/ e os scripts/ contavam, e é este o número verdadeiro.
+      # O worker/src/docs-gerados.js é gerado e não vai no git: sem isto, os
+      # testes que o importam não o encontram no runner (aqui não há npm ci,
+      # que é o que o gera pelo prepare — a bateria não tem dependências).
+      - name: Gerar a documentação
+        run: node scripts/gerar-docs.js
+
       - name: Correr os testes
         run: >-
           node --test --experimental-test-coverage
