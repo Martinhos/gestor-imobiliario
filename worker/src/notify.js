@@ -2,13 +2,41 @@
 // outro para quem opera (consumo da infraestrutura). Sem webhook configurado,
 // tudo isto não faz nada — a app funciona à mesma.
 
-const LIMITS = {
+/* Os tectos do plano gratuito que a vigia e o /uso medem. Cada chave tem de
+   sair medida do cloudflareUsage, e há um teste que o confere: um tecto
+   declarado e nunca medido fazia o resumo parecer completo sem o ser — o KV
+   esteve assim, e é o mais apertado (mil escritas por dia: cada entrada na
+   app, cada /entrar e cada exceção de acesso gasta uma).
+   O D1 e os Workers contam as últimas 24 horas; o KV conta o dia UTC, que é
+   quando o tecto dele volta a zero; o R2 conta o espaço ocupado agora (os
+   dois buckets somados, porque o tecto é da conta; 10 GB contados em 10⁹
+   bytes, o lado prudente) e as operações de classe A desde o dia 1 do mês,
+   que é a janela em que o plano as limita. */
+export const LIMITS = {
   'D1 · linhas lidas': 5000000,
   'D1 · linhas escritas': 100000,
   'Workers · pedidos': 100000,
   'KV · leituras': 100000,
   'KV · escritas': 1000,
+  'R2 · armazenamento': 10e9,
+  'R2 · operações de classe A (mês)': 1000000,
 };
+// Os que se medem em bytes: leem-se em GB, não em dígitos.
+const EM_BYTES = ['R2 · armazenamento'];
+// R2: as operações de classe B e as gratuitas. Classe A é o resto, de
+// propósito — uma operação nova da Cloudflare conta no tecto mais apertado
+// até alguém a arrumar aqui.
+const R2_CLASSE_B = ['HeadBucket', 'HeadObject', 'GetObject', 'UsageSummary', 'GetBucketEncryption',
+  'GetBucketLocation', 'GetBucketCors', 'GetBucketLifecycleConfiguration'];
+const R2_GRATIS = ['DeleteObject', 'DeleteBucket', 'AbortMultipartUpload'];
+
+// Um valor medido como se lê: os bytes em GB, com a vírgula portuguesa; o resto em número inteiro.
+// Recebe: k — o nome do tecto (uma chave de LIMITS); v — o valor (número).
+// Devolve: o texto do valor.
+function medida(k, v) {
+  if (EM_BYTES.indexOf(k) > -1) return (v / 1e9).toFixed(2).replace('.', ',') + ' GB';
+  return v.toLocaleString('pt-PT');
+}
 
 // POST de JSON para um webhook. Devolve true/false e nunca lança:
 // um Discord em baixo não pode partir o resto do pedido.
@@ -138,17 +166,21 @@ export function errorEmbed(r) {
 // Recebe: env — o ambiente do worker (DB, MAX_USERS e as credenciais da Cloudflare).
 // Devolve: Promise com a lista de campos { name, value, inline } para um embed.
 export async function usageFields(env) {
-  const q = async (sql) => {
-    try { return (await env.DB.prepare(sql).first()) || {}; } catch (e) { return {}; }
+  // os valores vão por bind, como no resto do worker: no texto do SQL só vai SQL
+  const q = async (sql, ...valores) => {
+    try {
+      const st = env.DB.prepare(sql);
+      return (await (valores.length ? st.bind(...valores) : st).first()) || {};
+    } catch (e) { return {}; }
   };
   const dia = Date.now() - 86400000;
   const contas = await q('SELECT COUNT(*) AS n FROM users WHERE deleted_at IS NULL');
-  const ativos = await q(`SELECT COUNT(DISTINCT owner_id) AS n FROM houses WHERE updated_at > ${dia}`);
+  const ativos = await q('SELECT COUNT(DISTINCT owner_id) AS n FROM houses WHERE updated_at > ?', dia);
   const casas = await q('SELECT COUNT(*) AS n FROM houses WHERE deleted = 0');
   const registos = await q('SELECT COUNT(*) AS n FROM records WHERE deleted = 0');
   const abertos = await q("SELECT COUNT(*) AS n FROM tickets WHERE status <> 'concluido'");
-  const erros = await q(`SELECT COUNT(*) AS n FROM tickets
-     WHERE category IN ('client', 'server') AND updated_at > ${dia}`);
+  const erros = await q(
+    "SELECT COUNT(*) AS n FROM tickets WHERE category IN ('client', 'server') AND updated_at > ?", dia);
 
   const max = Number(env.MAX_USERS || 0);
   const pctContas = max ? Math.round(((contas.n || 0) / max) * 100) : null;
@@ -173,11 +205,15 @@ export async function usageFields(env) {
   if (uso) {
     Object.keys(LIMITS).forEach((k) => {
       const v = uso[k];
-      if (v == null) return;
+      // um tecto sem número diz que não o tem: calado, o resumo parecia completo
+      if (v == null) {
+        fields.push({ name: k, value: 'sem medida — a API de análise não devolveu esta parte', inline: false });
+        return;
+      }
       const pct = Math.round((v / LIMITS[k]) * 100);
       fields.push({
         name: k,
-        value: v.toLocaleString('pt-PT') + ' / ' + LIMITS[k].toLocaleString('pt-PT') +
+        value: medida(k, v) + ' / ' + medida(k, LIMITS[k]) +
           '  (' + pct + '%)' + (pct >= 90 ? '  🔴' : pct >= 70 ? '  ⚠️' : ''),
         inline: false,
       });
@@ -245,7 +281,7 @@ export async function watchLimits(env, ctx) {
       color: grave ? 0xb94a48 : 0xd6a34a,
       fields: apertados.map((a) => ({
         name: a.nome,
-        value: a.valor.toLocaleString('pt-PT') + ' de ' + a.tecto.toLocaleString('pt-PT') + '  (' + a.pct + '%)',
+        value: medida(a.nome, a.valor) + ' de ' + medida(a.nome, a.tecto) + '  (' + a.pct + '%)',
         inline: false,
       })),
       footer: { text: 'avisa-se uma vez por dia por limite' },
@@ -295,51 +331,93 @@ export async function dailyReport(env, ctx) {
   return post(url, payload);   // diz se chegou: o batimento depende disto
 }
 
-// API de análise da Cloudflare (GraphQL). Devolve null se não der.
+// API de análise da Cloudflare (GraphQL), uma pergunta por conjunto de dados.
 // Recebe: env — o ambiente do worker (CF_ANALYTICS_TOKEN e CF_ACCOUNT_ID).
-// Devolve: Promise com os totais das últimas 24 horas por nome de limite
-// ('D1 · linhas lidas', 'D1 · linhas escritas', 'Workers · pedidos'),
-// ou null quando falta configuração ou a API não responde.
+// Devolve: Promise com os valores medidos por nome de tecto (as chaves de
+// LIMITS) — só os que a API devolveu; ou null quando falta configuração ou
+// não veio nada.
 async function cloudflareUsage(env) {
   const token = env.CF_ANALYTICS_TOKEN, acc = env.CF_ACCOUNT_ID;
   if (!token || !acc) return null;
-  const desde = new Date(Date.now() - 86400000).toISOString();
-  const query = `query($acc:String!,$desde:Time!){
+  const agora = new Date();
+  const desde = new Date(agora.getTime() - 86400000).toISOString();
+  const hoje = agora.toISOString().slice(0, 10);
+  const mes = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1)).toISOString();
+  /* Com prazo. Isto é a API de outra gente, e um pedido sem fim pendurava o
+     que estivesse à espera dele — foi o que fez o /uso passar dos três
+     segundos que o Discord dá e responder «o aplicativo não respondeu». Sem
+     resposta a tempo, o consumo fica de fora e o resto do quadro aparece na
+     mesma: é melhor um número a menos do que quadro nenhum.
+     E uma pergunta por conjunto, todas ao mesmo tempo: um campo que a
+     Cloudflare mude num conjunto faz a resposta inteira vir com erro, e
+     assim o KV ou o R2 a falhar não levam o D1, que é o tecto que deita a
+     app abaixo. O que falhar aparece no /uso como «sem medida». */
+  const pergunta = async (query, variaveis) => {
+    const corta = typeof AbortController === 'function' ? new AbortController() : null;
+    const prazo = corta ? setTimeout(() => { try { corta.abort(); } catch (e) {} }, 4000) : null;
+    try {
+      const r = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables: Object.assign({ acc }, variaveis) }),
+        signal: corta ? corta.signal : undefined,
+      });
+      const j = await r.json();
+      return (j && j.data && j.data.viewer && j.data.viewer.accounts && j.data.viewer.accounts[0]) || null;
+    } catch (e) {
+      return null;   // sem resposta a tempo, ou resposta que não se entende
+    } finally {
+      if (prazo) clearTimeout(prazo);
+    }
+  };
+  const [base, kv, r2ops, r2espaco] = await Promise.all([
+    pergunta(`query($acc:String!,$desde:Time!){
     viewer{ accounts(filter:{accountTag:$acc}){
       d1AnalyticsAdaptiveGroups(limit:1000, filter:{datetime_geq:$desde}){
         sum{ readQueries writeQueries rowsRead rowsWritten } }
       workersInvocationsAdaptive(limit:1000, filter:{datetime_geq:$desde}){
         sum{ requests errors } }
-    } } }`;
-  /* Com prazo. Isto é a API de outra gente, e um pedido sem fim pendurava o
-     que estivesse à espera dele — foi o que fez o /uso passar dos três
-     segundos que o Discord dá e responder «o aplicativo não respondeu». Sem
-     resposta a tempo, o consumo fica de fora e o resto do quadro aparece na
-     mesma: é melhor um número a menos do que quadro nenhum. */
-  const corta = typeof AbortController === 'function' ? new AbortController() : null;
-  const prazo = corta ? setTimeout(() => { try { corta.abort(); } catch (e) {} }, 4000) : null;
-  try {
-    const r = await fetch('https://api.cloudflare.com/client/v4/graphql', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, variables: { acc, desde } }),
-      signal: corta ? corta.signal : undefined,
-    });
-    const j = await r.json();
-    const a = j && j.data && j.data.viewer && j.data.viewer.accounts && j.data.viewer.accounts[0];
-    if (!a) return null;
-    const soma = (arr, campo) =>
-      (arr || []).reduce((t, x) => t + ((x.sum && x.sum[campo]) || 0), 0);
-    return {
-      'D1 · linhas lidas': soma(a.d1AnalyticsAdaptiveGroups, 'rowsRead'),
-      'D1 · linhas escritas': soma(a.d1AnalyticsAdaptiveGroups, 'rowsWritten'),
-      'Workers · pedidos': soma(a.workersInvocationsAdaptive, 'requests'),
-    };
-  } catch (e) {
-    return null;   // sem resposta a tempo, ou resposta que não se entende
-  } finally {
-    if (prazo) clearTimeout(prazo);
+    } } }`, { desde }),
+    pergunta(`query($acc:String!,$hoje:Date!){
+    viewer{ accounts(filter:{accountTag:$acc}){
+      kvOperationsAdaptiveGroups(limit:1000, filter:{date_geq:$hoje}){
+        sum{ requests } dimensions{ actionType } }
+    } } }`, { hoje }),
+    pergunta(`query($acc:String!,$mes:Time!){
+    viewer{ accounts(filter:{accountTag:$acc}){
+      r2OperationsAdaptiveGroups(limit:1000, filter:{datetime_geq:$mes}){
+        sum{ requests } dimensions{ actionType } }
+    } } }`, { mes }),
+    pergunta(`query($acc:String!,$desde:Time!){
+    viewer{ accounts(filter:{accountTag:$acc}){
+      r2StorageAdaptiveGroups(limit:100, filter:{datetime_geq:$desde}){
+        max{ payloadSize metadataSize } dimensions{ bucketName } }
+    } } }`, { desde }),
+  ]);
+  const soma = (arr, valor) => (arr || []).reduce((t, x) => t + (valor(x) || 0), 0);
+  const pedidos = (x) => x.sum && x.sum.requests;
+  const tipo = (x) => String((x.dimensions && x.dimensions.actionType) || '');
+  const out = {};
+  if (base) {
+    out['D1 · linhas lidas'] = soma(base.d1AnalyticsAdaptiveGroups, (x) => x.sum && x.sum.rowsRead);
+    out['D1 · linhas escritas'] = soma(base.d1AnalyticsAdaptiveGroups, (x) => x.sum && x.sum.rowsWritten);
+    out['Workers · pedidos'] = soma(base.workersInvocationsAdaptive, pedidos);
   }
+  if (kv && Array.isArray(kv.kvOperationsAdaptiveGroups)) {
+    const deTipo = (t) => soma(kv.kvOperationsAdaptiveGroups.filter((x) => tipo(x).toLowerCase() === t), pedidos);
+    out['KV · leituras'] = deTipo('read');
+    out['KV · escritas'] = deTipo('write');
+  }
+  if (r2ops && Array.isArray(r2ops.r2OperationsAdaptiveGroups)) {
+    out['R2 · operações de classe A (mês)'] = soma(r2ops.r2OperationsAdaptiveGroups
+      .filter((x) => R2_CLASSE_B.indexOf(tipo(x)) < 0 && R2_GRATIS.indexOf(tipo(x)) < 0), pedidos);
+  }
+  if (r2espaco && Array.isArray(r2espaco.r2StorageAdaptiveGroups)) {
+    // o máximo de cada bucket na janela é o que ele ocupa agora; o tecto é da conta, somam-se
+    out['R2 · armazenamento'] = soma(r2espaco.r2StorageAdaptiveGroups,
+      (x) => x.max && ((x.max.payloadSize || 0) + (x.max.metadataSize || 0)));
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /* As consultas à D1 que mais linhas leram nas últimas 24 horas.

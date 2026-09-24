@@ -7,32 +7,17 @@ import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { carregarApp, limpar, igual } from './arnes.js';
+import { carregarApp, limpar, igual, repor } from './arnes.js';
+// as janelas abrem numa pilha observável de camadas falsas (o modo só de
+// leitura desativa os campos do corpo e troca o rodapé por «Fechar»)
+import { janelasFalsas } from './lib/dom.js';
 
 const require = createRequire(import.meta.url);
 const acessos = require('../web/app/acessos.js');
 const app = carregarApp();
 const lpShowReal = app.lpShow;   // guardado antes de qualquer stub
 const personModalReal = app.personModal;
-
-/* uma camada de janela falsa, com corpo e rodapé observáveis: o modo só de
-   leitura desativa os campos do corpo e troca o rodapé por «Fechar» */
-function camadaFalsa() {
-  const campos = [{ disabled: false, type: 'text', value: 'a' }, { disabled: false, type: 'text', value: 'b' }];
-  const body = { innerHTML: '', hint: '', querySelectorAll: () => campos, insertAdjacentHTML: (w, h) => { body.hint += h; } };
-  const foot = { innerHTML: '' };
-  const el = { querySelector: (s) => (s === '.body' ? body : s === '.foot' ? foot : null), querySelectorAll: () => [] };
-  return { el, body, foot, campos, onSave: null };
-}
-// abre janelas numa pilha observável: cada openModal empilha uma camadaFalsa e guarda o que recebeu
-function janelasFalsas() {
-  const abertas = [];
-  app.openModal = (t, b, f, m) => { const L = camadaFalsa(); L.t = t; L.b = b; L.f = f; L.m = m || ''; app.modalStack.push(L); abertas.push(L); return L; };
-  app.closeModal = () => { app.modalStack.pop(); };
-  app.closeAllModals = () => { app.modalStack.length = 0; };
-  app.paintThumbs = () => {}; app.render = () => {}; app.buildNav = () => {}; app.save = () => {};
-  return abertas;
-}
+afterEach(() => repor(app));
 
 const GESTOR = ['visit.view', 'visit.add', 'tenant.view', 'tenant.add'];
 const CONTAB = ['tx.view', 'tx.add', 'rec.view', 'rec.add', 'contract.view', 'loan.view', 'file.view', 'file.add', 'report.view'];
@@ -556,11 +541,14 @@ describe('nomes, estado e a porta do URL', () => {
     app.openModal = (t, b) => { corpo = b; };
     app.notifModal();
     assert.match(corpo, /Ana quer partilhar T4 Porto contigo/);
-    assert.match(corpo, /CW\.pedidoAceitar\('q1'\)/);
-    assert.match(corpo, /CW\.pedidoRecusar\('q1'\)/);
-    // responder fecha o sino primeiro: o cartão não fica a repetir o pedido já respondido
-    assert.match(corpo, /onclick="closeModal\(\);window\.CW&&CW\.pedidoAceitar&&CW\.pedidoAceitar\('q1'\)"/);
-    assert.match(corpo, /onclick="closeModal\(\);window\.CW&&CW\.pedidoRecusar&&CW\.pedidoRecusar\('q1'\)"/);
+    assert.match(corpo, /data-click="notifPedidoAceitar\('q1'\)"/);
+    assert.match(corpo, /data-click="notifPedidoRecusar\('q1'\)"/);
+    /* responder fecha o sino primeiro: o cartão não fica a repetir o pedido já
+       respondido. A ordem saiu do atributo para a função com nome que ele
+       chama — «window.CW&&…» não se escreve numa ação declarada —, e é lá que
+       se prende, com as mesmas guardas. */
+    assert.match(String(app.notifPedidoAceitar), /closeModal\(\);window\.CW&&CW\.pedidoAceitar&&CW\.pedidoAceitar\(id\)/);
+    assert.match(String(app.notifPedidoRecusar), /closeModal\(\);window\.CW&&CW\.pedidoRecusar&&CW\.pedidoRecusar\(id\)/);
   });
 
   test('a cópia leva só o que é meu', () => {
@@ -590,7 +578,7 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
 
   test('«Ver movimento» e «Ver contrato» abrem só de leitura; o que é meu abre para editar', () => {
     tresCasas();
-    const abertas = janelasFalsas();
+    const abertas = janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     const t1 = app.normTx({ id: 'T1', label: 'Obra', kind: 'expense', propertyId: 'P2', amount: 10 }); t1._createdBy = 'rui';
     const t2 = app.normTx({ id: 'T2', label: 'Luz', kind: 'expense', propertyId: 'P2', amount: 10 }); t2._createdBy = 'eu';
     app.db.transactions = [t1, t2];
@@ -647,10 +635,10 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     const r = app.normRec({ id: 'R1', name: 'Prestação', next: '2000-01-01', tx: { kind: 'loan', propertyId: 'P2', loanId: 'L1', amount: 400 } });
     assert.equal(app.recusaConfirmar(r), FRASE);
     // o formulário aberto por outro caminho recusa ao guardar, antes de mexer em nada
-    janelasFalsas();
+    janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     let msg = '';
     app.toast = (m) => { msg = m; };
-    app.txModal(null, 'loan', 'P2');
+    app.txModal({ kind: 'loan', propId: 'P2' });
     app.collectTx = () => {};
     Object.assign(app.tForm, { propertyId: 'P2', label: 'Prestação', amount: 400, loanId: 'L1' });
     app.onSave();
@@ -676,12 +664,12 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     tresCasas();
     app.window.CW.cargos.P1 = { dono: false, nome: 'Gestor', perms: ['contract.add', 'tx.add'] };   // P1 e P2 dão tx.add
     assert.equal(app.souSoColaborador(), true);
-    janelasFalsas();
-    app.txModal(null, 'expense', null);
+    janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
+    app.txModal({ kind: 'expense' });
     assert.equal(app.tForm.propertyId, 'P1');
-    app.txModal(null, 'expense', null, null, null, { propertyId: null, label: 'De um modelo' });
+    app.txModal({ kind: 'expense', preset: { propertyId: null, label: 'De um modelo' } });
     assert.equal(app.tForm.propertyId, 'P1', 'um preset sem imóvel também');
-    app.txModal(null, 'expense', 'P2');
+    app.txModal({ kind: 'expense', propId: 'P2' });
     assert.equal(app.tForm.propertyId, 'P2', 'o que vem escolhido fica');
     // e sem imóvel não grava
     let msg = '';
@@ -698,7 +686,7 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     assert.equal(app.visForm.propertyId, 'P3');
     // um dono sem imóvel escolhido fica em «Todos os imóveis», como sempre
     sessao();
-    app.txModal(null, 'expense', null);
+    app.txModal({ kind: 'expense' });
     assert.equal(app.tForm.propertyId, null);
   });
 
@@ -743,14 +731,14 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     const r2 = app.normRec({ id: 'R2', name: 'Renda', next: '2026-09-01', tx: { kind: 'income', propertyId: 'P2', amount: 700 } });
     r2._createdBy = 'rui'; r2._atServidor = 5;
     app.db.recurring = [r1, r2];
-    const abertas = janelasFalsas();
+    const abertas = janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     let msg = '';
     app.toast = (m) => { msg = m; };
     app.collectTx = () => {};
     // o meu: abre para editar e grava sem «Adicionar movimentos»
     app.editRec('R1');
     assert.equal(abertas.length, 1);
-    assert.equal(app.tForm._recId, 'R1');
+    assert.equal(app.txModo.recId, 'R1');
     assert.equal(typeof app.onSave, 'function');
     assert.ok(app.window.__sel.t_prop.options.some((o) => o.label === 'T2 Rui'), 'o seletor tem o imóvel onde tenho rec.add');
     Object.assign(app.tForm, { label: 'IMI 2026', amount: 520, propertyId: 'P2' });
@@ -759,10 +747,10 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     assert.equal(app.db.recurring[0].tx.amount, 520);
     assert.equal(app.db.recurring[0].name, 'IMI 2026');
     // um planeado novo: o seletor lista P1 e P2 (rec.add), enquanto um movimento novo só lista P1 (tx.add)
-    app.txModal(null, 'expense', null);
+    app.txModal({ kind: 'expense' });
     const opcoes = () => Array.from(app.window.__sel.t_prop.options).filter((o) => !o.div).map((o) => o.label);
     assert.deepEqual(opcoes(), ['Todos os imóveis', 'T1 Meu']);
-    app.tForm._recNew = true; app.tForm._every = 'month';
+    app.txModo = { modo: 'rec', every: 'month' };
     app.repaintTx();
     assert.deepEqual(opcoes(), ['Todos os imóveis', 'T1 Meu', 'T2 Rui']);
     Object.assign(app.tForm, { label: 'Seguro', amount: 30, propertyId: 'P2' });
@@ -783,8 +771,8 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     assert.equal(app.recusaConfirmar(r2), app.fraseSemPerm('tx.add'));
     // e sem rec.add nenhum, o guardar de um planeado recusa com a frase certa
     app.window.CW.cargos.P2 = { dono: false, nome: 'Contab. sem planeados', perms: ['tx.add'] };
-    app.txModal(null, 'expense', 'P2');
-    app.tForm._recNew = true;
+    app.txModal({ kind: 'expense', propId: 'P2' });
+    app.txModo = { modo: 'rec' };
     Object.assign(app.tForm, { label: 'Água', amount: 20, propertyId: 'P2' });
     app.onSave();
     assert.equal(msg, app.fraseSemPerm('rec.add'));
@@ -794,7 +782,7 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
   test('o FAB «Adicionar inquilino» de quem só colabora pede o imóvel', () => {
     tresCasas();
     app.window.CW.cargos.P1 = { dono: false, nome: 'Gestor de visitas', perms: GESTOR };   // P1 e P3 dão tenant.add
-    const abertas = janelasFalsas();
+    const abertas = janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     let escolha = null;
     app.pickModal = (t, opts, onPick) => { escolha = { t, opts, onPick }; };
     app.personModal('tenant');

@@ -7,10 +7,27 @@ android/.gradle/
 android/build/
 android/app/build/
 android/local.properties
+# o estado do terraform vive no R2 (balde gestor-imobiliario-infra), nunca aqui:
+# o repositório é público e um estado acaba sempre por apanhar atributos sensíveis
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform/
+terraform/*.tfplan
+# a chave de assinatura do APK e a sua palavra-passe: vivem nos segredos do
+# GitHub (ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASS), nunca no repositório
+android/keystore.properties
+android/app/*.keystore
 web/gestor-imobiliario.apk
 # capturas do percurso de interface: pesam e refazem-se a cada corrida
 testes/ui/relatorio/
 .claude/worktrees/
+# o painel de pré-visualização das sessões do Claude escreve aqui caminhos
+# temporários da sessão dele, que não existem noutra máquina nem uma semana depois
+.claude/launch.json
+
+# gerado por scripts/gerar-docs.js no deploy, no npm install/ci (prepare) e no
+# npm run dev (predev); no git era um diff de centenas de KB a cada `node --test`
+worker/src/docs-gerados.js
 
 # testes de mutacao (npm run test:mutacao): a pasta de trabalho e o relatorio sao artefactos, nao codigo
 .stryker-tmp/

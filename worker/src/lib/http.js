@@ -12,7 +12,47 @@ export const TERMS_VERSION = '2026-09-09';
 // pessoa e um erro apanhado sozinho vivem na mesma fila.
 export const CATEGORIAS = ['user', 'client', 'server', 'infra', 'seguranca'];
 
+// O instante de agora, com um nome só para todo o worker.
+// Devolve: milissegundos de época (número).
 export const now = () => Date.now();
+
+/* A CSP de um anexo servido pelo GET /api/files/:id. É conteúdo de terceiros
+   (quem o carregou pode ser um comproprietário ou um colaborador) servido na
+   origem da app: com `sandbox` corre numa origem opaca, sem scripts nem
+   formulários, mesmo aberto por navegação direta — e o resto é a CSP geral
+   apertada (nada de fora, nenhum script). O index.js deixa passar este valor
+   exato pelo harden() (PODE_APERTAR), e nenhum outro. */
+export const CSP_ANEXO = "default-src 'none'; img-src 'self' data: blob:; style-src 'unsafe-inline'; " +
+  "frame-ancestors 'none'; base-uri 'none'; form-action 'none'; sandbox";
+
+/* A CSP das páginas que o próprio worker escreve: a landing, os documentos
+   legais, os docs, o back office e a entrada de teste. É a CSP geral do
+   index.js sem os sha256 da app nem o da folha do Google — nenhuma destas
+   páginas traz script em linha nem desenha o botão de entrada com Google, por
+   isso nenhum dos três aqui é preciso —, e mais nada diferente: nenhuma das
+   duas tem 'unsafe-inline', e
+   estas páginas não trazem script nem folha escritos no HTML, nem on…= nem
+   atributo de estilo. O JavaScript e o CSS vêm de ficheiros da mesma origem,
+   servidos pelo worker (paginas-recursos.js). O index.js deixa passar este
+   valor exato pelo harden() (PODE_APERTAR): é apertar a geral, não
+   afrouxá-la. */
+export const CSP_ESTRITA = [
+  "default-src 'self'",
+  "script-src 'self' https://accounts.google.com/gsi/client",
+  "style-src 'self' https://accounts.google.com",
+  "img-src 'self' data: blob: https://*.googleusercontent.com",
+  "connect-src 'self' https://accounts.google.com",
+  "frame-src https://accounts.google.com",
+  "font-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+// Quantas casas uma lista vinda do cliente pode ter (convites, pedidos,
+// colaboradores, partilha numa conexão) — o mesmo tecto do /api/sync.
+const MAX_CASAS = 200;
 
 // Uma Response JSON com o charset certo; headers extra somam-se aos nossos.
 // Recebe: data — o que vai no corpo (qualquer valor serializável em JSON);
@@ -50,6 +90,9 @@ export async function body(request) {
   }
 }
 
+// Um registo grande de mais para guardar: o JSON dele passa de MAX_RECORD caracteres.
+// Recebe: data — o registo (qualquer valor).
+// Devolve: true quando é grande de mais, ou quando nem se deixa passar a JSON.
 export const tooBig = (data) => {
   try { return JSON.stringify(data).length > MAX_RECORD; } catch (e) { return true; }
 };
@@ -58,7 +101,26 @@ export const tooBig = (data) => {
 // Sem isto, um id com aspas ou < > escapava para o HTML de quem recebe a
 // casa partilhada — era o caminho para roubar a sessão de outro utilizador.
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+// Um id que não tem a forma do ID_RE — e que por isso se recusa.
+// Recebe: v — o id (qualquer valor; null e undefined contam como vazio).
+// Devolve: true quando NÃO tem a forma de um id da app.
 export const badId = (v) => !ID_RE.test(String(v == null ? '' : v));
+
+// Lê e valida uma lista de ids de casas vinda do cliente: até MAX_CASAS,
+// cada um com a forma de badId, sem repetidos. É a mesma porta para todas as
+// listas de casas — sem ela, uma lista de 100 mil ids era 100 mil consultas.
+// Recebe: v — o que veio no corpo (devia ser um array de ids); vazia
+// (opcional) — true quando a lista vazia é válida (partilhar nenhuma casa).
+// Devolve: array de ids únicos (strings), ou null quando não é uma lista válida.
+export function idsDeCasas(v, vazia) {
+  if (!Array.isArray(v) || v.length > MAX_CASAS || (!v.length && !vazia)) return null;
+  const out = [];
+  for (const x of v) {
+    if (badId(x)) return null;
+    if (!out.includes(String(x))) out.push(String(x));
+  }
+  return out;
+}
 
 // O corpo de um registo tem de ser um objeto simples, sem tentativas de
 // poluir o protótipo, sem chaves de trabalho (prefixo '_', que são metadados
@@ -85,4 +147,7 @@ export function weakPassword(p) {
   return p.length < 8 || !/[a-z]/.test(p) || !/[A-Z]/.test(p) || !/[0-9]/.test(p) || !/[^A-Za-z0-9]/.test(p);
 }
 
+// O IP de quem pede, como a Cloudflare o diz (CF-Connecting-IP).
+// Recebe: request — o pedido (Request).
+// Devolve: o IP (texto), ou 'desconhecido' quando o cabeçalho não vem (fora da Cloudflare).
 export const clientIp = (request) => request.headers.get('CF-Connecting-IP') || 'desconhecido';

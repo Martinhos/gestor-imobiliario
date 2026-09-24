@@ -2,6 +2,19 @@ plugins {
     id 'com.android.application'
 }
 
+/* De onde vem a chave de assinatura (ver o comentario em buildTypes, abaixo).
+   Fora do git: nesta maquina do android/keystore.properties, no CI das
+   variaveis que o deploy escreve a partir dos segredos do GitHub. */
+def propsDaChave = new Properties()
+def ficheiroDeProps = rootProject.file('keystore.properties')
+if (ficheiroDeProps.exists()) ficheiroDeProps.withInputStream { propsDaChave.load(it) }
+def caminhoDaChave = System.getenv('ANDROID_KEYSTORE_FILE') ?: propsDaChave.getProperty('storeFile')
+def senhaDaChave = System.getenv('ANDROID_KEYSTORE_PASS') ?: propsDaChave.getProperty('storePassword')
+def aliasDaChave = System.getenv('ANDROID_KEYSTORE_ALIAS') ?: propsDaChave.getProperty('keyAlias') ?: 'gestor'
+def senhaDaChaveInterna = System.getenv('ANDROID_KEY_PASS') ?: propsDaChave.getProperty('keyPassword') ?: senhaDaChave
+def ficheiroDaChave = caminhoDaChave ? rootProject.file(caminhoDaChave) : null
+def temChave = ficheiroDaChave != null && ficheiroDaChave.exists() && senhaDaChave
+
 android {
     namespace 'pt.gestorimobiliario.app'
     compileSdk 35
@@ -14,31 +27,52 @@ android {
         versionName "23.0"
     }
 
-    // Chave fixa, versionada de proposito: sem ela cada compilacao usaria uma
-    // chave de debug diferente e o Android recusaria instalar a atualizacao por
-    // cima da anterior, obrigando a desinstalar e a perder os dados.
-    // Serve para uso pessoal / sideload, nao para a Play Store.
-    signingConfigs {
-        fixa {
-            storeFile file('gestor.keystore')
-            storePassword 'gestor2026'
-            keyAlias 'gestor'
-            keyPassword 'gestor2026'
+    // A chave e fixa (sem ela cada compilacao usaria uma chave de debug
+    // diferente e o Android recusaria instalar a atualizacao por cima da
+    // anterior), mas NAO vive no repositorio: a antiga esteve aqui com a
+    // palavra-passe em claro e, com o repositorio publico, conta-se como
+    // comprometida. A de agora vem de dois sitios (android/README.md):
+    //   - nesta maquina, do android/keystore.properties, fora do git;
+    //   - no CI, de ANDROID_KEYSTORE_FILE e ANDROID_KEYSTORE_PASS, que o
+    //     deploy escreve a partir dos segredos do GitHub.
+    // Sem chave, o debug compila com a chave automatica e o assembleRelease
+    // para com uma mensagem, em vez de sair um APK que ninguem consegue
+    // instalar por cima do que ja tem.
+    buildTypes {
+        debug   { if (temChave) signingConfig signingConfigs.fixa }
+        release {
+            signingConfig temChave ? signingConfigs.fixa : null
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
-    buildTypes {
-        debug   { signingConfig signingConfigs.fixa }
-        release {
-            signingConfig signingConfigs.fixa
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+    signingConfigs {
+        fixa {
+            if (temChave) {
+                storeFile ficheiroDaChave
+                storePassword senhaDaChave
+                keyAlias aliasDaChave
+                keyPassword senhaDaChaveInterna
+            }
         }
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+/* Um APK de release sem a chave certa nao instala por cima do que as pessoas
+   ja tem: mais vale parar aqui, com o que falta escrito, do que publicar um
+   ficheiro que ninguem consegue instalar. */
+tasks.matching { it.name.startsWith('assemble') && it.name.contains('Release') }.configureEach {
+    doFirst {
+        if (!temChave) {
+            throw new GradleException('Sem chave de assinatura. Nesta maquina: cria o android/keystore.properties ' +
+                '(ver android/README.md). No CI: define ANDROID_KEYSTORE_FILE e ANDROID_KEYSTORE_PASS.')
+        }
     }
 }
 

@@ -1,9 +1,12 @@
 # Gestor Imobiliário — app Android
 
 Concha nativa (WebView) que carrega a **versão web** publicada em
-`https://gestor-imobiliario.martinhos.workers.dev` — multi-utilizador, com
-sincronização e partilha de casas. A app está sempre atualizada sem reinstalar:
-cada deploy da web chega logo ao telemóvel.
+`https://app.rendorium.com` (o `HOST` da `MainActivity.java`) — multi-utilizador,
+com sincronização e partilha de casas. A app atualiza-se sem reinstalar: ao
+abrir, pergunta ao `/versao.json` que versão está publicada e, havendo uma mais
+nova, recarrega-se com ela. Por isso uma publicação da web só chega ao telemóvel
+quando sobe a versão (a primeira entrada de `web/avisos.js`) — a cache offline
+tem o nome da versão.
 
 O que a concha nativa acrescenta ao site:
 
@@ -31,10 +34,40 @@ O APK fica em `app/build/outputs/apk/release/app-release.apk`.
 
 ## Assinatura
 
-O projeto inclui `app/gestor.keystore`, uma chave fixa versionada de propósito:
-sem ela, cada compilação usaria uma chave diferente e o Android recusaria
-instalar a atualização por cima da anterior. Serve para uso pessoal / sideload —
-para a Play Store, gera uma chave tua e substitui o bloco `signingConfigs`.
+A chave é fixa — sem isso cada compilação usaria uma chave diferente e o Android
+recusaria instalar a atualização por cima da anterior —, mas **não vive no
+repositório**. Vive em dois sítios:
+
+- **No CI**, nos segredos `ANDROID_KEYSTORE_B64` (a chave em base64) e
+  `ANDROID_KEYSTORE_PASS`. O deploy escreve-a no disco do runner antes de
+  compilar, e o runner morre com o trabalho.
+- **Nesta máquina**, em `android/keystore.properties`, que o `.gitignore` cobre:
+
+```properties
+storeFile=app/release.keystore
+storePassword=…
+keyAlias=gestor
+keyPassword=…
+```
+
+Sem chave, o `assembleDebug` compila com a chave automática do Android e o
+`assembleRelease` para com uma mensagem a dizer o que falta.
+
+### A chave anterior está comprometida
+
+Até setembro de 2026 a chave e a palavra-passe estavam neste repositório. Quando
+ele passou a público, qualquer pessoa ficou a poder assinar um APK com a
+identidade da app — e o Android aceitaria esse APK como atualização por cima do
+que as pessoas têm instalado. Por isso a chave foi substituída.
+
+Reescrever o histórico não resolveria nada: a chave antiga já esteve exposta e
+conta-se como perdida para sempre. O que muda é que a nova nunca lá entra.
+
+**Consequência para quem já tem a app:** o próximo APK não instala por cima. É
+preciso desinstalar e voltar a instalar. Quem tiver conta na nuvem recupera tudo
+ao entrar; quem usa a app só neste aparelho deve guardar uma cópia antes, em
+**Definições → Importar e cópias**. O aviso está no botão de descarregar, dentro
+da app.
 
 ## Especificações
 

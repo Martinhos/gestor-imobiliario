@@ -126,21 +126,21 @@ function guiaPintar() {
   guiaAjustar();
   el.innerHTML =
     '<div class="card guia-cartao">' +
-      '<div class="row-between" style="align-items:flex-start;gap:10px">' +
-        '<div style="min-width:0">' +
-          '<div class="small" style="color:var(--accent);font-weight:600">Passo ' + (guia.i + 1) + ' de ' + n + '</div>' +
-          '<div class="title" style="margin-top:2px">' + esc(p.titulo) + '</div>' +
+      '<div class="row-between u-ai-flex-start u-g-10px">' +
+        '<div class="u-minw-0">' +
+          '<div class="small u-c-v-accent u-fw-600">Passo ' + (guia.i + 1) + ' de ' + n + '</div>' +
+          '<div class="title u-mt-2px">' + esc(p.titulo) + '</div>' +
         '</div>' +
-        '<button type="button" class="iconbtn" aria-label="Fechar" data-toca="camada" onclick="CW.guiaFechar()">' + ic('x', 18) + '</button>' +
+        '<button type="button" class="iconbtn" aria-label="Fechar" data-toca="camada" data-click="CW.guiaFechar()">' + ic('x', 18) + '</button>' +
       '</div>' +
-      '<div class="hint" style="margin-top:9px">' + p.texto + '</div>' +
-      '<div class="toolbar" style="margin-top:13px">' +
+      '<div class="hint u-mt-9px">' + p.texto + '</div>' +
+      '<div class="toolbar u-mt-13px">' +
         (guia.i > 0
-          ? '<button class="btn sm" data-toca="vista" onclick="CW.guiaAnterior()">' + ic('chev', 14) + ' Anterior</button>'
+          ? '<button class="btn sm" data-toca="vista" data-click="CW.guiaAnterior()">' + ic('chev', 14) + ' Anterior</button>'
           : '') +
-        '<button class="btn sm primary" data-toca="vista" onclick="CW.guiaSeguinte()">' +
+        '<button class="btn sm primary" data-toca="vista" data-click="CW.guiaSeguinte()">' +
           (guia.i < n - 1 ? 'Seguinte' : 'Terminar') + '</button>' +
-        '<button class="btn sm" style="margin-left:auto" data-toca="camada" onclick="CW.guiaFechar()">Fechar</button>' +
+        '<button class="btn sm u-ml-auto" data-toca="camada" data-click="CW.guiaFechar()">Fechar</button>' +
       '</div>' +
     '</div>';
 }
@@ -250,15 +250,6 @@ function euSou() {
   return (db.owners || []).find(function (o) { return o.id === id; }) || null;
 }
 
-// Se esta conta é só colaboradora (não é dona de nenhum imóvel, mas colabora
-// nalgum): os primeiros passos de dono não lhe dizem respeito.
-// Devolve: true/false.
-function soColaborador() {
-  try { if (typeof souSoColaborador === 'function') return !!souSoColaborador(); } catch (e) {}
-  var ps = db.properties || [];
-  return !!(CW.user && ps.length && ps.every(function (p) { return p._cargo; }));
-}
-
 /* A lista de primeiros passos com o estado calculado da base local: perfil
    (há NIF?), imóveis, contratos e movimentos. O passo dos contratos salta
    quando não há imóveis para arrendar; quem é só colaborador salta os de
@@ -268,12 +259,13 @@ function soColaborador() {
    Devolve: os passos aplicáveis (array de {id, titulo, porque, feito, act}). */
 function passos() {
   var eu = euSou();
-  var colab = soColaborador();
+  // só colaboradora (souSoColaborador, web/app/acessos.js): os passos de dono não lhe dizem respeito
+  var colab = souSoColaborador();
   var arrendar = (db.properties || []).filter(function (p) { return p.use === 'investimento' && !p._cargo; });
   var semContrato = arrendar.filter(function (p) {
     return !(db.contracts || []).some(function (c) { return c.propertyId === p.id; });
   });
-  var podeMovimentos = !colab || (typeof casasComo === 'function' && casasComo('tx.add').length > 0);
+  var podeMovimentos = !colab || casasComo('tx.add').length > 0;
   return [
     {
       id: 'perfil',
@@ -288,7 +280,8 @@ function passos() {
       titulo: 'Adiciona os teus imóveis',
       porque: 'É a base de tudo o resto.',
       feito: (db.properties || []).length > 0,
-      salta: colab,
+      // um passo de um serviço desligado nesta conta não se propõe: abriria um formulário que o servidor recusa
+      salta: colab || !servicoLigado('properties'),
       act: 'propModal()',
     },
     {
@@ -298,7 +291,7 @@ function passos() {
         ? semContrato.length + (semContrato.length === 1 ? ' imóvel para arrendar ainda sem contrato.' : ' imóveis para arrendar ainda sem contrato.')
         : 'Para as rendas passarem a aparecer sozinhas.',
       feito: (db.properties || []).length > 0 && !semContrato.length,
-      salta: colab || !arrendar.length,   // só para uso próprio, ou só colaborador: não se aplica
+      salta: colab || !arrendar.length || !servicoLigado('contracts'),   // só para uso próprio, só colaborador, ou sem os Contratos: não se aplica
       act: 'ctModal()',
     },
     {
@@ -306,7 +299,7 @@ function passos() {
       titulo: 'Confirma os primeiros movimentos',
       porque: 'É daqui que saem os números da vista geral.',
       feito: (db.transactions || []).length > 0,
-      salta: !podeMovimentos,
+      salta: !podeMovimentos || !servicoLigado('transactions'),
       act: "go('transactions')",
     },
   ].filter(function (p) { return !p.salta; });
@@ -338,28 +331,28 @@ function cartaoPassos() {
   if (!faltam.length) return '';
   var f = feitos();
 
-  return '<div class="card" style="margin-bottom:14px">' +
-    '<div class="row-between" style="align-items:flex-start">' +
+  return '<div class="card u-mb-14px">' +
+    '<div class="row-between u-ai-flex-start">' +
       '<div><div class="title">Primeiros passos</div>' +
       '<div class="small">' + (ps.length - faltam.length) + ' de ' + ps.length + ' feitos · ' +
       'sugestões, não obrigações</div></div>' +
-      '<button type="button" class="iconbtn" aria-label="Dispensar" data-toca="vista" onclick="CW.passosFora()">' + ic('x', 18) + '</button>' +
+      '<button type="button" class="iconbtn" aria-label="Dispensar" data-toca="vista" data-click="CW.passosFora()">' + ic('x', 18) + '</button>' +
     '</div>' +
-    '<div class="list" style="gap:8px;margin-top:12px">' +
+    '<div class="list u-g-8px u-mt-12px">' +
     ps.map(function (p) {
-      return '<div class="card" style="padding:11px 13px;' + (p.feito ? 'opacity:.55' : '') + '">' +
-        '<div class="row-between" style="align-items:center;gap:10px">' +
-          '<span style="display:flex;align-items:center;gap:10px;min-width:0">' +
-            '<span class="selck' + (p.feito ? ' on' : '') + '" style="flex:0 0 auto">' +
+      return '<div class="card u-p-11px-13px' + (p.feito ? ' u-op-055' : '') + '">' +
+        '<div class="row-between u-ai-center u-g-10px">' +
+          '<span class="u-d-flex u-ai-center u-g-10px u-minw-0">' +
+            '<span class="selck' + (p.feito ? ' on' : '') + ' u-fx-0-0-auto">' +
               (p.feito ? ic('check', 13) : '') + '</span>' +
-            '<span style="min-width:0"><b>' + esc(p.titulo) + '</b>' +
-            '<span class="small" style="display:block">' + esc(p.porque) + '</span></span>' +
+            '<span class="u-minw-0"><b>' + esc(p.titulo) + '</b>' +
+            '<span class="small u-d-block">' + esc(p.porque) + '</span></span>' +
           '</span>' +
         '</div>' +
         (p.feito ? '' :
-          '<div class="toolbar" style="margin:9px 0 0">' +
-            '<button class="btn sm primary" onclick="' + p.act + '">Fazer agora</button>' +
-            '<button class="btn sm" data-toca="ecra" onclick="CW.guiaAbrir(\'' + p.id + '\')">' +
+          '<div class="toolbar u-m-9px-0-0">' +
+            '<button class="btn sm primary" data-click="' + p.act + '">Fazer agora</button>' +
+            '<button class="btn sm" data-toca="ecra" data-click="CW.guiaAbrir(\'' + p.id + '\')">' +
               (f[p.id] ? 'Rever o tutorial' : 'Como se faz') + '</button>' +
           '</div>') +
         '</div>';
@@ -394,7 +387,7 @@ vDashboard = function () {
    dos verdadeiros são um estorvo, e apagá-los à mão é trabalho.
 
    Este é o fecho, e não a fechadura: o botão já nem chega a ser escrito
-   (auxiliares.js:podeExemplo). Chegou a ser apagado do DOM depois de cada
+   (espera.js:podeExemplo). Chegou a ser apagado do DOM depois de cada
    render, e isso tinha um furo — a pesquisa das listas repinta pela via
    parcial (vistas.js:refrescarListasVivas), que não passa por aqui, e o botão
    voltava. Perguntar antes de escrever não tem furos; isto fica para o caso
@@ -405,30 +398,10 @@ seed = function () {
   return _seed_guia.apply(this, arguments);
 };
 
-var cssGuia = document.createElement('style');
-cssGuia.textContent =
-  /* flutua, não é modal: quem segue os passos tem de poder mexer na app por
-     baixo enquanto lê. Acima do botão flutuante, abaixo dos modais — menos
-     quando um está aberto, e aí sobe acima dele (sobre-janela). */
-  /* Acima do botão flutuante e não por cima dele: o tutorial manda carregar
-     nesse botão, e estava a tapá-lo. */
-  '#cwGuia{position:fixed;left:12px;right:12px;bottom:calc(88px + var(--inset-bottom));z-index:59;' +
-    'pointer-events:none;display:flex;justify-content:center;' +
-    /* Entra em vez de aparecer. O cartão nasce logo a seguir a uma mudança de
-       ecrã — o passo leva a pessoa às Definições e a vista inteira é
-       repintada no mesmo instante — e um cartão parado no canto de baixo
-       perde-se nisso tudo, ainda por cima quando o texto manda olhar para o
-       topo. Sobe de fora do ecrã, com a curva de quem atravessa distância. */
-    'animation:guiaEntra var(--lento) var(--curva-entra)}' +
-  '@keyframes guiaEntra{from{opacity:0;transform:translateY(28px)}}' +
-  '#cwGuia .guia-cartao{pointer-events:auto;width:100%;max-width:420px;padding:14px 16px;' +
-    'box-shadow:var(--shadow);border-color:var(--accent)}' +
-  /* Por cima de uma janela aberta, e encostado ao topo, longe dos botões.
-     O número segue o do .modal (index.html): esteve em 61 contra os 60 de
-     então, e quando o modal subiu para 70 o cartão ficou por baixo — que é
-     exatamente o defeito que este ajuste existe para não deixar acontecer. */
-  '#cwGuia.sobre-janela{z-index:71;bottom:auto;top:calc(12px + var(--inset-top));' +
-    'animation:guiaEntra var(--lento) var(--curva-entra)}' +
-  '@media(min-width:900px){#cwGuia{left:auto;right:22px;max-width:420px;bottom:calc(22px + var(--inset-bottom))}' +
-    '#cwGuia.sobre-janela{top:calc(16px + var(--inset-top))}}';
-document.head.appendChild(cssGuia);
+/* A folha do cartão flutuante (#cwGuia, .guia-cartao, o guiaEntra e a regra
+   do ecrã largo) era feita aqui, num elemento de folha criado por JavaScript e
+   pendurado na cabeça do documento. Isso é CSS em linha, que a CSP sem
+   'unsafe-inline' recusa tal como recusa um atributo de estilo, por isso as
+   regras passaram para o web/estilos.css, na secção «g12-novidades» das
+   classes dos módulos — tal e qual, pela mesma ordem e com os mesmos
+   comentários. */

@@ -1,9 +1,16 @@
 # Limpar as contas do ambiente de DEV — e só do dev.
 #
 # Apaga todas as contas de utilizador e o que lhes pertence (casas, registos,
-# ligações, partilhas, pedidos, ficheiros, contadores). O rasto fica: o
-# audit_log e o op_log não se tocam — a história do que a equipa fez não
-# se apaga com os dados de quem testou.
+# ligações, partilhas, pedidos, relatos de erro, serviços, ficheiros,
+# contadores). O rasto fica: o audit_log e o op_log não se tocam — a história
+# do que a equipa fez não se apaga com os dados de quem testou. E fica o que é
+# da equipa e não de uma conta: as reply_templates (as respostas-tipo) e as
+# team_links (as ligações de entrada no /equipa, que expiram sozinhas).
+#
+# A lista das tabelas é conferida contra as migrações por um teste
+# (testes/correcao-entrega.test.js): uma tabela nova que não esteja nem na
+# lista nem aqui em cima, com a razão, rebenta-o — e a ordem tem de respeitar
+# as chaves estrangeiras.
 #
 # Corre-se à mão, e obriga a escrever "limpar" de propósito: uma limpeza
 # total não pode estar a um clique distraído de distância. O UUID da base
@@ -62,10 +69,12 @@ jobs:
               print('  →', m.get('changes', '?'), 'linhas')"
           }
 
-          # por ordem de dependência; audit_log e op_log ficam de propósito
+          # por ordem de dependência (quem aponta para uma tabela sai antes
+          # dela); o que fica de propósito está no cabeçalho
           for t in user_records records shares share_proposals share_requests connections \
                    collaborator_houses collaborators collab_invites roles share_links \
-                   ticket_msgs ticket_users tickets files rate_limits houses users; do
+                   ticket_msgs ticket_users tickets reports user_services password_resets files rate_limits \
+                   houses users; do
             echo "DELETE FROM $t"
             executa "DELETE FROM $t"
           done

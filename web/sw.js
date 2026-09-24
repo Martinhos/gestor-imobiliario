@@ -7,7 +7,7 @@
    Não se declara aqui nenhum VERSAO: o ficheiro importado traz o seu com
    `var`, e uma declaração nossa colidiria com ele — partindo o service
    worker inteiro, e com ele o arranque offline. */
-try { importScripts('/avisos.js'); } catch (e) { /* sem ele, cache genérica */ }
+try { importScripts('/avisos.js'); } catch (e) { /* sem ele não há versão: este worker não guarda nada */ }
 /* Sem o avisos.js não há versão, e uma cache chamada «v0» seria pior do que
    nenhuma: o activate apagava a cache verdadeira e ficávamos sem nada offline.
    Sem versão, este worker não guarda nem apaga — deixa passar tudo à rede. */
@@ -49,12 +49,27 @@ const hn = String(self.location.hostname || '').toLowerCase();
    versão que não é a de produção nenhuma. */
 const DEV_WD = /(^|-)gestor-imobiliario-dev\./.test(hn);
 const GUARDA = SEM_CACHE.indexOf(hn) < 0 && !DEV_WD;
-// A app passou a viver em módulos: guardam-se todos, senão abre offline
-// com metade do código.
-const APP = ['dados', 'anexos', 'auxiliares', 'lista', 'continuidade', 'graficos', 'credito', 'componentes',
-  'metricas', 'navegacao', 'acessos', 'vistas', 'imovel', 'pessoas', 'contrato', 'planeados', 'prazos', 'notificacoes', 'visitas', 'calendario',
-  'movimento', 'creditos', 'splitwise', 'contrato-pdf', 'avaliacao', 'fisco', 'definicoes',
-  'copias', 'arranque'].map((n) => '/app/' + n + '.js');
+/* A app vive em módulos, e guardam-se todos: sem um, abre offline com metade
+   do código. A lista diz-os pelo nome e em dois grupos, os mesmos do arnês dos
+   testes (testes/arnes.js:BASE e o catálogo): primeiro a base — o que não é de
+   serviço nenhum, e que todos os serviços têm por garantido —, depois os
+   ficheiros de app/ dos serviços (os `ficheiros` de cada um no catálogo,
+   web/app/servicos.js). A base diz-se pelo nome, e não «o que sobra» dos
+   serviços: os prazos, o sino (notificacoes), a importação do Splitwise e as
+   contas das hipotecas (credito) são da base por decisão, e ninguém tem de o
+   deduzir. Um teste confere os dois grupos contra o arnês e o catálogo
+   (testes/correcao-estrutura.test.js). É uma lista literal só, e sem plicas
+   nos comentários de dentro: o scripts/chegada.js lê-a pelo texto. */
+const APP = [
+  // a base
+  'eventos', 'estilos-calculados', 'dados', 'anexos', 'formato', 'espera', 'registos', 'tipos', 'irs', 'saldos', 'ambito', 'icones', 'tema',
+  'lista', 'continuidade', 'graficos', 'credito', 'componentes', 'metricas', 'navegacao', 'servicos', 'acessos', 'vistas',
+  'prazos', 'notificacoes', 'splitwise', 'definicoes', 'copias', 'arranque',
+  // os serviços
+  'painel-geral', 'lista-imoveis', 'lista-contratos', 'lista-pessoas', 'lista-colaboradores',
+  'lista-movimentos', 'projecoes', 'imovel', 'pessoas', 'contrato', 'planeados', 'visitas', 'calendario', 'movimento',
+  'creditos', 'contrato-pdf', 'avaliacao', 'fisco',
+].map((n) => '/app/' + n + '.js');
 const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'ajuda', 'painel',
   'filtros', 'entrada', 'novidades', 'selecao', 'selecao-listas', 'guia'].map((n) => '/cloud/' + n + '.js');
 /* O «/» e NÃO o «/index.html». O Cloudflare responde ao /index.html com um 307
@@ -62,7 +77,7 @@ const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 
    redirecionamento, e o que ficava guardado era uma resposta marcada como
    redirecionada — que o browser recusa entregar a uma navegação. O «/» é o
    mesmo documento e responde direto. */
-const SHELL = ['/', '/avisos.js', '/legal.js', '/manifest.webmanifest',
+const SHELL = ['/', '/estilos.css', '/avisos.js', '/legal.js', '/manifest.webmanifest',
   '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'].concat(APP, NUVEM);
 
 /* NÃO se chama skipWaiting() no install. Chamava-se, e foi por isso que a v31

@@ -31,9 +31,12 @@ function personFicha(kind,id){
   const p=(lista||[]).find(x=>x.id===id);if(!p)return '';
   const casa=kind==='tenant'?casaDoInquilino(p):null;
   const verPessoa=kind==='owner'||pode(casa,'tenant.view');
-  const cts=kind==='tenant'?contractsOfTenant(p.id):[];
+  /* os contratos de um inquilino e os imóveis de um proprietário só com o
+     serviço que os traz ligado nesta conta: desligado, a ficha fica com a
+     pessoa e mais nada — sem «Mora em» nem «Imóveis e quota-parte» */
+  const cts=kind==='tenant'&&servicoLigado('contracts')?contractsOfTenant(p.id):[];
   const ativos=cts.filter(isActive),futuros=cts.filter(c=>ctEstado(c)==='futuro'),findos=cts.filter(c=>ctEstado(c)==='terminado');
-  const casas=kind==='owner'?propsOf(p.id):[];
+  const casas=kind==='owner'&&servicoLigado('properties')?propsOf(p.id):[];
   /* um NIF que não bate certo diz-se aqui, ao lado do número: é onde se lê antes
      de ir para o contrato em PDF ou para o Anexo F */
   const ident=verPessoa?[p.nif?'NIF '+esc(fmtNIF(p.nif))+(nifValido(p.nif)===false?' · não bate certo':''):'',
@@ -45,8 +48,10 @@ function personFicha(kind,id){
      colaboração, e o sharesOf reparte por igual quando não há percentagens —
      mostrá-la ali era publicar um número inventado */
   const minhas=casas.filter(x=>souDono(x.id));
-  const renda=sum(minhas.filter(x=>pode(x.id,'contract.view')).map(x=>rentOf(x)*shareOf(x,p.id)));
-  const saldo=kind==='owner'&&!ownerFilter?ownerBalances(null)[p.id]:undefined;
+  /* a renda vem dos contratos e o saldo dos movimentos: sem esses serviços
+     ligados não se diz «em dia» nem «0 €» sobre o que a conta não vê */
+  const renda=servicoLigado('contracts')?sum(minhas.filter(x=>pode(x.id,'contract.view')).map(x=>rentOf(x)*shareOf(x,p.id))):0;
+  const saldo=kind==='owner'&&!ownerFilter&&servicoLigado('transactions')?ownerBalances(null)[p.id]:undefined;
   const vazia=!p.phone&&!p.email&&!ident&&!retem&&!p.taxAddress&&!(p.files||[]).length&&
     !(kind==='tenant'?cts.length:casas.length);
   return ficha([
@@ -75,7 +80,7 @@ function personFicha(kind,id){
     /* os anexos de um inquilino pedem tenant.view E file.view no servidor:
        listar os nomes sem ambas dava linhas que rebentam ao toque */
     kind==='tenant'&&verPessoa&&pode(casa,'file.view')&&(p.files||[]).length?{tipo:'bloco',rotulo:'Documentos',
-      valor:(p.files||[]).map(f=>`<span role="button" tabindex="0" data-toca="camada" style="cursor:pointer;text-decoration:underline" onclick="openMeta('${jsq(f.id)}')">${esc(f.name||'ficheiro')}</span>`).join('<br>')}:null,
+      valor:(p.files||[]).map(f=>`<span role="button" tabindex="0" data-toca="camada" class="u-cur-pointer u-td-underline" data-click="openMeta('${jsq(f.id)}')">${esc(f.name||'ficheiro')}</span>`).join('<br>')}:null,
     kind==='tenant'&&verPessoa&&String(p.notes||'').trim()?{tipo:'bloco',rotulo:'Notas',valor:rich(p.notes)}:null,
     /* a frase segue quem MANDA na ficha, e não o tipo: um proprietário sem
        conta é um registo meu como outro qualquer, e mandá-lo esperar por
@@ -105,7 +110,8 @@ function personView(kind,id){
     corpo:()=>personFicha(kind,id),
     menu:()=>{
       const it=[];
-      if(kind==='tenant'){
+      /* «Ver contrato» é dos Contratos: desligados nesta conta, não se promete */
+      if(kind==='tenant'&&servicoLigado('contracts')){
         const c=contractsOfTenant(id).filter(ctVivo)[0];   // o em vigor, ou o que ainda não começou
         if(c&&pode(c.propertyId,'contract.view'))it.push({label:'Ver contrato',icon:'contract',toca:'camada',act:`ctView('${jsq(c.id)}')`});
       }
@@ -182,15 +188,15 @@ function personBody(){
     <div class="row">
       <label>N.º do Cartão de Cidadão<input id="pe_cc" value="${esc(t.cc)}" placeholder="00000000 0 ZZ0" autocomplete="off"></label>
       <label>Validade do CC<input id="pe_ccv" type="date" value="${t.ccValid||''}"></label></div>
-    <label>NIF<input id="pe_nif" value="${esc(t.nif)}" placeholder="Opcional" inputmode="numeric" oninput="pessoaNifHint()"></label>
-    <div class="hint" id="pe_nifHint" style="margin-top:-4px"${pessoaNifHint(t.nif)?'':' hidden'}>${esc(pessoaNifHint(t.nif))}</div>
+    <label>NIF<input id="pe_nif" value="${esc(t.nif)}" placeholder="Opcional" inputmode="numeric" data-input="pessoaNifHint()"></label>
+    <div class="hint u-mt-n4px" id="pe_nifHint"${pessoaNifHint(t.nif)?'':' hidden'}>${esc(pessoaNifHint(t.nif))}</div>
     <label>País<input id="pe_pais" value="${esc(t.pais)}" placeholder="Só se não tem NIF português" autocomplete="off"></label>
-    <div class="hint" style="margin-top:-4px">Sem NIF português, o Anexo F identifica a pessoa pelo país.</div>
+    <div class="hint u-mt-n4px">Sem NIF português, o Anexo F identifica a pessoa pelo país.</div>
     ${perKind==='tenant'?`<label class="check"><input type="checkbox" id="pe_retem" ${t.retem?'checked':''}> Retém IRS na fonte</label>
-    <div class="hint" style="margin-top:-4px">Uma empresa com contabilidade organizada retém IRS ao pagar a renda. A retenção regista-se em cada renda; aqui fica só o aviso.</div>`:''}
-    <label>Morada fiscal<textarea id="pe_addr" style="min-height:66px" placeholder="Rua, número, código postal, localidade">${esc(t.taxAddress)}</textarea></label>
+    <div class="hint u-mt-n4px">Uma empresa com contabilidade organizada retém IRS ao pagar a renda. A retenção regista-se em cada renda; aqui fica só o aviso.</div>`:''}
+    <label>Morada fiscal<textarea id="pe_addr" class="u-minh-66px" placeholder="Rua, número, código postal, localidade">${esc(t.taxAddress)}</textarea></label>
     <div class="hint">Usado na identificação das partes no contrato em PDF; o NIF e o país entram no resumo do Anexo F.</div>`,
-      {icon:'contract',summary:[t.nif?'NIF '+fmtNIF(t.nif):'',t.cc?'CC':''].filter(Boolean).join(' · ')||'para o contrato'})}
+      {icon:'contract',summary:[t.nif?'NIF '+esc(fmtNIF(t.nif)):'',t.cc?'CC':''].filter(Boolean).join(' · ')||'para o contrato'})}
     ${perKind==='owner'?'':fold('docs','Documentos',
       fileBlock('',t.files||[],'pe_filein','personAddFiles','delPersonFile',{hint:'Cartão de cidadão, contrato de trabalho, comprovativo de morada, recibos de vencimento.'}),
       {icon:'clip',open:!!(t.files||[]).length,summary:(t.files||[]).length?t.files.length+' doc.':''})
@@ -250,7 +256,9 @@ function delPerson(kind,id){
   const p=list.find(x=>x.id===id),word=kind==='owner'?'proprietário':'inquilino';
   if(!p)return;
   if(kind==='tenant'){const recusa=motivoRecusa(casaDoInquilino(p),'tenant.add',p,true);if(recusa)return toast(recusa)}
-  const used=kind==='owner'?propsOf(id).length:contractsOfTenant(id).length;
+  /* a contagem só fala do que a conta vê: com os Imóveis ou os Contratos
+     desligados, o id sai deles na mesma, mas a pergunta não os nomeia */
+  const used=kind==='owner'?(servicoLigado('properties')?propsOf(id).length:0):(servicoLigado('contracts')?contractsOfTenant(id).length:0);
   confirmModal('Apagar '+word,`Apagar “${esc(p.name)}”?${used?` Sai de ${used} ${kind==='owner'?'imóvel(is)':'contrato(s)'}, que se mantêm.`:''}`,()=>{
     (p.files||[]).forEach(f=>idbDel(f.id).catch(()=>{}));
     if(kind==='owner'){db.owners=db.owners.filter(x=>x.id!==id);db.properties.forEach(x=>{x.ownerIds=(x.ownerIds||[]).filter(o=>o!==id)});if(ownerFilter===id)ownerFilter=''}

@@ -10,13 +10,22 @@ on:
         type: choice
         options: [producao, dev]
         default: producao
+      aceitar_destruicao:
+        description: "Só para um plano do terraform que destrói ou substitui recursos: os endereços aceites, separados por espaços (ex. cloudflare_r2_bucket.files_dev). Vazio num deploy normal."
+        type: string
+        default: ""
+      terraform_sem_estado:
+        description: "Continuar mesmo que o estado do terraform não esteja no R2. Só na primeira corrida depois de o estado ser posto lá, ou para o recriar de propósito — sem ele, o plano propõe criar de novo a base e os baldes."
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
-  contents: write # para commitar o terraform.tfstate atualizado
+  contents: write # para mover a etiqueta «publicado»
+  actions: read # para ver se o «Testes» deste commit passou
 
 jobs:
   deploy:
@@ -29,10 +38,13 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # o balde onde vive o estado do terraform (nunca no repositório)
+      TF_BALDE: gestor-imobiliario-infra
     steps:
-      # histórico todo: o guarda da chegada compara esta árvore com a da
-      # publicação anterior, que é o commit anterior deste ramo
+      # histórico todo, e as etiquetas: o guarda da chegada compara esta
+      # árvore com a da publicação anterior (a etiqueta «publicado»)
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -53,11 +65,13 @@ jobs:
             echo "DB_NAME=gestor-imobiliario" >> $GITHUB_ENV
             echo "ENV_LABEL=produção" >> $GITHUB_ENV
             echo "IS_PROD=1" >> $GITHUB_ENV
+            echo "APP_URL=https://app.rendorium.com" >> $GITHUB_ENV
           else
             echo "ENV_FLAG=--env dev" >> $GITHUB_ENV
             echo "DB_NAME=gestor-imobiliario-dev" >> $GITHUB_ENV
             echo "ENV_LABEL=dev" >> $GITHUB_ENV
             echo "IS_PROD=" >> $GITHUB_ENV
+            echo "APP_URL=https://dev.rendorium.com" >> $GITHUB_ENV
           fi
 
       - name: Onde vai isto
@@ -66,20 +80,26 @@ jobs:
       # O último guarda antes de produção, e o que conta: o do pull request
       # avisa cedo, mas nem toda a promoção passa por um.
       #
-      # O HEAD^1 é a publicação anterior — o primeiro pai, e não um pai
-      # qualquer: produção sai deste ramo e só por merge, e seguir a primeira
-      # linha atravessa também os commits que o próprio deploy escreve aqui (o
-      # estado do terraform), que não tocam em web/ e portanto não contam.
+      # Compara com a PUBLICAÇÃO ANTERIOR, que é a etiqueta «publicado»: o
+      # deploy move-a no fim, só depois de confirmar que o worker novo
+      # responde (passo «Marcar o que está em produção»). Não se tira do
+      # histórico: o HEAD^1 só é a publicação anterior quando a promoção é um
+      # merge — e era-o por acidente, porque o commit do estado do terraform
+      # fazia o main divergir do dev a cada deploy. Num avanço rápido, o
+      # HEAD^1 é o penúltimo commit do dev, e uma alteração à web sem versão
+      # nova seguida de outra só no worker passava (testes/chegada.test.js).
+      # O HEAD^1 fica atrás da etiqueta só para a primeira vez, antes de ela
+      # existir — e aí o main ainda diverge, a promoção é um merge.
       #
-      # O workflow_dispatch fica de fora de propósito: é a saída de emergência
-      # para voltar a publicar o mesmo conteúdo — recuperar um deploy que
-      # falhou a meio, por exemplo —, e aí não há versão nenhuma para subir.
+      # Corre também no workflow_dispatch: a saída de emergência para voltar a
+      # publicar o mesmo conteúdo compara-se com a etiqueta e não encontra
+      # nada mudado; um conteúdo que o guarda recusou num push não sai por ela.
       #
       # Em dev não se aplica: lá não há cache a proteger, e a versão sobe uma
       # vez por promoção e não a cada publicação.
       - name: Confirmar que esta publicação chega a quem tem a app
-        if: env.IS_PROD && github.event_name == 'push'
-        run: node scripts/chegada.js HEAD^1
+        if: env.IS_PROD
+        run: node scripts/chegada.js refs/tags/publicado HEAD^1
 
       # APK só na produção: leva o endereço da app lá dentro.
       - uses: actions/setup-java@v4
@@ -91,9 +111,28 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         if: github.ref_name == 'main'
 
+      # A chave de assinatura vive aqui, e não no repositório: a anterior esteve
+      # versionada com a palavra-passe em claro e, com o repositório público,
+      # conta-se como comprometida (android/README.md). Escreve-se no disco do
+      # runner, que morre com o trabalho, e nunca no diretório do projeto.
+      - name: Escrever a chave de assinatura
+        if: github.ref_name == 'main'
+        env:
+          CHAVE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          set -e
+          if [ -z "$CHAVE_B64" ]; then
+            echo "Falta o segredo ANDROID_KEYSTORE_B64 — sem ele o APK sairia com outra chave e ninguém o instalava por cima." >&2
+            exit 1
+          fi
+          printf '%s' "$CHAVE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
       - name: Compilar APK
         if: github.ref_name == 'main'
         working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
@@ -103,14 +142,90 @@ jobs:
         with:
           terraform_wrapper: false
 
+      # Só se publica com os testes verdes. O «Testes» (testes.yml) corre no
+      # mesmo push, em paralelo e sem dependência nenhuma deste — e sem
+      # proteção de ramo no plano gratuito, nada o fazia travar a publicação.
+      # Este passo espera pela corrida DESTE commit (basta uma verde: num
+      # avanço rápido do dev para o main o mesmo commit tem duas) e fica antes
+      # do primeiro passo que mexe em alguma coisa lá fora, o terraform. O que
+      # vem antes é só do runner: o APK compila enquanto os testes correm.
+      #
+      # O workflow_dispatch passa pela mesma porta — republica um commit que
+      # já teve os testes verdes. Um commit sem corrida (o do estado do
+      # terraform, que não dispara workflows) pede o «Testes» à mão primeiro;
+      # a mensagem diz como.
+      - name: Esperar pelos testes deste commit
+        timeout-minutes: 45
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/entrega.js testes
+
       # A infraestrutura dos dois ambientes é criada a partir do main, que é
       # quem manda no estado. O ramo dev só lê os ids que já lá estão.
+      #
+      # Em produção, nunca às cegas: o plano sai para um ficheiro, o
+      # entrega.js lê-o e recusa-o se destruir ou substituir alguma coisa (uma
+      # D1 substituída é a base de produção a nascer vazia), e só depois se
+      # aplica ESSE plano — o que se leu é o que corre. As bases e os baldes
+      # têm ainda prevent_destroy no main.tf. Para destruir de propósito: tirar
+      # o prevent_destroy num commit e correr este workflow à mão com os
+      # endereços em «aceitar_destruicao».
+      #
+      # Um plano sem mudanças não se aplica: o apply só refrescava o file_size
+      # da D1 (que cresce com os dados) e deixava um commit do estado por
+      # deploy. TF_MUDOU diz ao passo seguinte que há estado novo a guardar.
+      # O estado do terraform vive no R2, e não no repositório: o repositório é
+      # público, e um estado é por natureza um ficheiro que acaba por apanhar
+      # atributos sensíveis. Vai para um balde só dele, com o mesmo token que
+      # publica o worker, e o bloqueio é o concurrency deste workflow — só corre
+      # um deploy de cada vez, por ramo.
+      #
+      # Se o estado não estiver lá, PARA-SE. Sem ele o plano proporia criar de
+      # novo a base, os baldes e as sessões, e o que protege os dados é
+      # precisamente o estado saber que eles já existem.
+      - name: Trazer o estado do terraform
+        env:
+          SEM_ESTADO: ${{ inputs.terraform_sem_estado }}
+        run: |
+          set -e
+          if npx wrangler@4 r2 object get "$TF_BALDE/terraform.tfstate" \
+               --file terraform/terraform.tfstate --remote >/dev/null 2>&1; then
+            echo "estado trazido do R2: $(wc -c < terraform/terraform.tfstate) bytes"
+          elif [ -s terraform/terraform.tfstate ]; then
+            # a mudança do repositório para o R2 faz-se sem parar nada: enquanto o
+            # estado ainda estiver versionado, é esse que vale. No primeiro apply
+            # depois disto, o passo do fim guarda-o no R2 e passa a ser de lá que vem.
+            echo "::warning::O estado do terraform ainda vem do repositório. Põe-o no R2 (README, «Deploy (uma vez)») e tira-o do git."
+          elif [ "$SEM_ESTADO" = "true" ]; then
+            echo "Sem estado no R2, e foi pedido de propósito: o terraform vai tratar o que existe como novo."
+          else
+            {
+              echo "O estado do terraform não está em r2://$TF_BALDE/terraform.tfstate."
+              echo "Põe-o lá uma vez (a partir de uma cópia local do terraform/terraform.tfstate):"
+              echo "  npx wrangler@4 r2 bucket create $TF_BALDE --remote"
+              echo "  npx wrangler@4 r2 object put $TF_BALDE/terraform.tfstate --file terraform/terraform.tfstate --remote"
+              echo "Ou volta a correr este workflow com «terraform_sem_estado» ligado, sabendo que o plano"
+              echo "vai propor criar de novo a base, os baldes e as sessões."
+            } >&2
+            exit 1
+          fi
+
       - name: Terraform
         working-directory: terraform
+        env:
+          ACEITAR_DESTRUICAO: ${{ inputs.aceitar_destruicao }}
         run: |
           terraform init -input=false
           if [ -n "$IS_PROD" ]; then
-            terraform apply -auto-approve -input=false
+            terraform plan -input=false -out="$RUNNER_TEMP/plano.tfplan"
+            terraform show -json "$RUNNER_TEMP/plano.tfplan" > "$RUNNER_TEMP/plano.json"
+            veredicto=$(node ../scripts/entrega.js plano "$RUNNER_TEMP/plano.json")
+            if [ "$veredicto" = muda ]; then
+              terraform apply -input=false "$RUNNER_TEMP/plano.tfplan"
+              echo "TF_MUDOU=1" >> "$GITHUB_ENV"
+            else
+              echo "O plano não muda nada: não se aplica, e o estado no repositório fica como está."
+            fi
           else
             terraform output -raw d1_dev_id > /dev/null || {
               echo "Os recursos de dev ainda não existem. Publica o main uma vez primeiro." >&2
@@ -118,16 +233,19 @@ jobs:
             }
           fi
 
-      - name: Commit terraform state (se mudou)
-        if: env.IS_PROD
+      # Só quando o apply mudou alguma coisa: aí o estado tem ids ou atributos
+      # novos que o próximo deploy tem de ler. Vai para o R2, não para o
+      # repositório — e guarda-se uma cópia datada, para se poder voltar atrás
+      # se um apply deixar o estado a dizer o que não é.
+      - name: Guardar o estado do terraform no R2
+        if: env.IS_PROD && env.TF_MUDOU
         run: |
-          if [ -n "$(git status --porcelain terraform/)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add terraform/terraform.tfstate terraform/.terraform.lock.hcl
-            git commit -m "ci: atualizar estado do terraform" || true
-            git push
-          fi
+          set -e
+          npx wrangler@4 r2 object put "$TF_BALDE/historico/$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_SHA::7}.tfstate" \
+            --file terraform/terraform.tfstate --remote
+          npx wrangler@4 r2 object put "$TF_BALDE/terraform.tfstate" \
+            --file terraform/terraform.tfstate --remote
+          echo "estado guardado em r2://$TF_BALDE/terraform.tfstate"
 
       - name: Configurar wrangler.toml
         run: |
@@ -170,7 +288,7 @@ jobs:
           DISCORD_ADMIN_CHANNEL: ${{ secrets.DISCORD_ADMIN_CHANNEL }}
         run: |
           set -e
-          # o mesmo critério de «Publicar segredos»: em dev, o _DEV do mesmo nome
+          # o mesmo critério de «Juntar os segredos»: em dev, o _DEV do mesmo nome
           # manda; sem ele vale o partilhado. ESC_USADO diz qual dos dois se leu —
           # é esse que a mensagem de erro nomeia.
           escolhe () {
@@ -225,12 +343,11 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy do worker
-        run: npx wrangler@4 deploy $ENV_FLAG
-
-      # Segredos dos avisos. Só se define o que existir — quem não tiver
-      # Discord configurado fica sem avisos, e a app funciona à mesma.
-      - name: Publicar segredos
+      # Os segredos juntam-se num ficheiro que sai com o worker, no passo
+      # seguinte. Só entra o que existir — quem não tiver Discord configurado
+      # fica sem avisos, e a app funciona à mesma; um segredo sem valor não se
+      # apaga no worker, fica lá o que já estava.
+      - name: Juntar os segredos
         env:
           DISCORD_DEV_WEBHOOK: ${{ secrets.DISCORD_DEV_WEBHOOK }}
           DISCORD_ADMIN_WEBHOOK: ${{ secrets.DISCORD_ADMIN_WEBHOOK }}
@@ -269,8 +386,16 @@ jobs:
           # os batimentos para fora (lib/medidas.js): só produção os bate
           HEARTBEAT_URL: ${{ secrets.HEARTBEAT_URL }}
           HEARTBEAT_COPIA_URL: ${{ secrets.HEARTBEAT_COPIA_URL }}
+          # o pepper das palavras-passe (worker/src/auth.js): cada ambiente o seu
+          PASS_PEPPER: ${{ secrets.PASS_PEPPER }}
+          PASS_PEPPER_DEV: ${{ secrets.PASS_PEPPER_DEV }}
         run: |
           set -e
+          # só o runner lê o ficheiro, e o passo seguinte apaga-o
+          umask 077
+          SEGREDOS="$RUNNER_TEMP/segredos.json"
+          echo '{}' > "$SEGREDOS"
+          echo "SEGREDOS=$SEGREDOS" >> "$GITHUB_ENV"
           put () {
             nome="$1"; valor="$2"
             # no dev, o segredo _DEV do mesmo nome tem precedência
@@ -279,10 +404,17 @@ jobs:
               if [ -n "$alt" ]; then valor="$alt"; echo "(a usar ${nome}_DEV)"; fi
             fi
             if [ -n "$valor" ]; then
-              printf '%s' "$valor" | npx wrangler@4 secret put "$nome" $ENV_FLAG
-              echo "definido: $nome"
+              # pelo ambiente e não pela linha de comandos: o valor passa tal e
+              # qual (aspas, barras, cifrões) e não fica na lista de processos
+              SEGREDOS="$SEGREDOS" NOME="$nome" VALOR="$valor" node -e '
+                const fs = require("fs"), f = process.env.SEGREDOS;
+                const o = JSON.parse(fs.readFileSync(f, "utf8"));
+                o[process.env.NOME] = process.env.VALOR;
+                fs.writeFileSync(f, JSON.stringify(o));
+              '
+              echo "a publicar: $nome"
             else
-              echo "sem valor: $nome (ignorado)"
+              echo "sem valor: $nome (ignorado — no worker fica o que lá estava)"
             fi
           }
           put DISCORD_DEV_WEBHOOK "$DISCORD_DEV_WEBHOOK"
@@ -315,6 +447,60 @@ jobs:
             put HEARTBEAT_URL "$HEARTBEAT_URL"
             put HEARTBEAT_COPIA_URL "$HEARTBEAT_COPIA_URL"
           fi
+          # O pepper das palavras-passe, cada ambiente o seu: no dev, sem
+          # PASS_PEPPER_DEV não há pepper — a função put dar-lhe-ia o de
+          # produção, e o worker de dev corre código ainda não promovido.
+          # Um pepper, uma vez publicado, nunca se muda nem se apaga: as
+          # palavras-passe guardadas com ele deixavam de entrar (e sem valor o
+          # put não apaga nada — fica o que o worker já tem).
+          if [ -n "$IS_PROD" ]; then
+            put PASS_PEPPER "$PASS_PEPPER"
+          else
+            put PASS_PEPPER ""
+          fi
+
+      # Uma versão só, com o código e os segredos juntos: o worker novo nunca
+      # corre sem um segredo que já lê, e a lista de versões fica com uma por
+      # deploy — antes eram até 21, um `secret put` por segredo e cada um uma
+      # versão, e o recuo lê essa lista. O --secrets-file junta-os aos que o
+      # worker já tem; não apaga os que ficaram de fora.
+      - name: Publicar o worker e os segredos
+        run: |
+          trap 'rm -f "$SEGREDOS"' EXIT
+          npx wrangler@4 deploy $ENV_FLAG --secrets-file "$SEGREDOS"
+
+      # O que se acabou de publicar tem de estar a responder: o /versao.json
+      # do ambiente igual ao que o versao.js gerou neste deploy, e a raiz (que
+      # passa pelo worker, run_worker_first) com 200. Doze tentativas, dez
+      # segundos entre elas. O veredicto vai para o passo seguinte.
+      - name: Confirmar que a publicação responde
+        id: confirmar
+        run: node scripts/entrega.js publicacao "$APP_URL"
+
+      # O caminho de recuo, escrito aqui e no README («Se uma publicação
+      # correu mal»). Automático só quando o worker novo responde com erro
+      # (5xx) do princípio ao fim: volta a versão anterior, que tem o código
+      # de antes e os segredos de agora. Uma resposta com a versão antiga, ou
+      # nenhuma resposta, não prova avaria — o deploy falha, o aviso vai para
+      # o Discord, e decide uma pessoa. As migrações da D1 não recuam: o
+      # código anterior vive com o esquema novo (as migrações só acrescentam).
+      - name: Recuar para a versão anterior
+        if: failure() && steps.confirmar.outputs.veredicto == 'avaria'
+        run: |
+          npx wrangler@4 rollback --yes --message "recuo automático: ${GITHUB_SHA::7} respondia com erro" $ENV_FLAG
+          {
+            echo "### Recuou-se para a versão anterior do worker"
+            echo ""
+            echo "O worker de ${GITHUB_SHA::7} respondia com erro em $APP_URL. Voltou a versão anterior — o código de antes, com os segredos de agora. As migrações da D1 não recuam."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # A etiqueta «publicado» é o que o guarda da chegada compara no próximo
+      # deploy de produção. Move-se só aqui, depois de a publicação responder.
+      - name: Marcar o que está em produção
+        if: env.IS_PROD
+        run: |
+          git tag -f publicado "$GITHUB_SHA"
+          git push -f origin refs/tags/publicado
 
       # Comandos do bot: só a produção os regista, para os dois ambientes não
       # andarem a sobrepor-se no mesmo servidor de Discord.

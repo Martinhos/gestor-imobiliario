@@ -1,7 +1,7 @@
 /* ================= EXEMPLO =================
    Os dados de exemplo contam também a história do IRS: os imóveis trazem o que
    o Anexo F pede (distrito, código da freguesia, tipo, tipologia, VPT, data de
-   aquisição), os NIFs passam o dígito de controlo (auxiliares.js:nifValido —
+   aquisição), os NIFs passam o dígito de controlo (irs.js:nifValido —
    são inventados, nunca de pessoas reais), três contratos estão declarados
    com o número que a AT lhes deu e um fica por indicar (é ele que faz aparecer
    o prazo do Modelo 2); nenhum é «não declarado», porque essa é uma escolha
@@ -106,19 +106,22 @@ function seed(){
   db.templates=[normTpl({name:'Quota do condomínio',tx:{kind:'expense',label:'Quota do condomínio',amount:55,propertyId:p1,category:'Condomínio',sub:'Quota mensal',tags:['Recorrente'],split:{mode:'equal',parts:{}}}})];
   db.recurring=[normRec({name:'Prestação aquisição · T2 Lisboa',every:'month',next:addDays(today(),3),
       tx:{kind:'loan',label:'Prestação aquisição · T2 Lisboa',amount:Math.round(k1.total*100)/100,propertyId:p1,loanId:l1.id,paidBy:o1.id,split:{mode:'equal',parts:{}}}})];
-  syncAllContractRecs();syncAllLoanRecs();
+  if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs()}   // os planeados automáticos são dos Planeados
   save();buildNav();render();toast('Dados de exemplo carregados.');
 }
 
 /* ================= ARRANQUE ================= */
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal('esc')});
+/* O teclado de um menu de escolha vem primeiro (componentes.js:selTecla): as
+   setas andam pelas opções, e o Escape com um menu aberto fecha o menu — não
+   a janela que está por baixo dele. */
+document.addEventListener('keydown',e=>{if(selTecla(e))return;if(e.key==='Escape')closeModal('esc')});
 document.addEventListener('click',()=>closePops());
 /* Enter ativa o que é clicável mas não é botão nativo (cartões, itens do
    menu): é o que falta para a app inteira andar a teclado. */
 document.addEventListener('keydown',e=>{
   if(e.key!=='Enter'&&e.key!==' ')return;
   const t=e.target;
-  if(!t||!t.hasAttribute||!t.hasAttribute('onclick'))return;
+  if(!t||!t.hasAttribute||!t.hasAttribute('data-click'))return;
   if(/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName)&&e.key===' ')return;
   if(/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))return;
   e.preventDefault();t.click();
@@ -136,7 +139,10 @@ document.addEventListener('keydown',e=>{
   if(e.shiftKey&&ativo===primeiro){e.preventDefault();ultimo.focus()}
   else if(!e.shiftKey&&ativo===ultimo){e.preventDefault();primeiro.focus()}
 });
-/* o teclado tapava as caixas de texto no fundo do ecrã */
+/* o teclado tapava as caixas de texto no fundo do ecrã
+   Recebe: t — o elemento com o foco (aguenta null).
+   Devolve: true se é um campo onde se escreve (não uma data, um mês, uma hora, uma
+   caixa de marcar nem um ficheiro). */
 const typing=t=>!!t&&((/^(INPUT|TEXTAREA)$/.test(t.tagName||'')&&!/^(date|month|time|checkbox|file)$/.test(t.type||''))||t.isContentEditable);
 /* o seletor de data é uma janela do sistema: ao escolher, larga o foco para o ecrã voltar ao sítio */
 document.addEventListener('change',e=>{const t=e.target;if(t&&t.tagName==='INPUT'&&/^(date|month|time)$/.test(t.type||'')){try{t.blur()}catch(x){}
@@ -168,23 +174,31 @@ document.addEventListener('focusout',()=>{
    disco e agenda um envio, e a decisão tomada às escuras sobe.
 
    Adiar não custa nada a quem está sem rede, porque a espera tem tecto
-   (auxiliares.js:sabemosOEstado): sem rede o pedido falha depressa e a espera
+   (espera.js:sabemosOEstado): sem rede o pedido falha depressa e a espera
    acaba logo, no pior caso — a rede pendurada — são seis segundos, e sem
    sessão nenhuma isto corre já, na mesma linha.
    Devolve: nada — deriva os planeados e grava, assim que houver por que se
    guiar. */
 function derivarDoArranque(){
   if(!sabemosOEstado())return void setTimeout(derivarDoArranque,300);
-  syncAllContractRecs();syncAllLoanRecs();save();
+  /* os planeados automáticos (renda e prestação) são dos Planeados: sem esse
+     serviço nesta conta não há o que derivar */
+  if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs()}
+  save();
 }
 derivarDoArranque();
+/* o separador inicial pode estar desligado nesta conta (a lista fica no
+   aparelho): a primeira pintura abre no primeiro que abre, em vez do ecrã
+   «está desligado» à espera do estado do servidor — que offline nunca vem */
+if(!separadorLigado(tab)){tab=primeiroSeparadorLigado();setPage=''}
 fitInsets();applyTheme();buildNav();render();cleanFiles();migrateInline();
 /* O aviso do arranque espera por saber, e conta as rendas só nessa altura:
    antes do primeiro estado do servidor, anunciava movimentos por confirmar
    que já tinham sido confirmados noutro aparelho. Se ao fim de dois segundos
    ainda não houver estado, cala-se — mais vale não avisar do que avisar mal. */
 (function(){
-  const diz=()=>{const n=recLate().length,p=recActive().length;
+  // sem Planeados nesta conta não há o que confirmar
+  const diz=()=>{const n=servicoLigado('recurring')?recLate().length:0,p=servicoLigado('recurring')?recActive().length:0;
     if(n)toast(n===1?'Atenção: há 1 movimento em atraso por confirmar.':'Atenção: há '+n+' movimentos em atraso por confirmar.');
     else if(p)toast(p===1?'Há 1 movimento por confirmar.':'Há '+p+' movimentos por confirmar.')};
   setTimeout(()=>{if(sabemosOEstado())return diz();

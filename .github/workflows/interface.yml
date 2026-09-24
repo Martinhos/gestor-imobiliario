@@ -6,11 +6,15 @@ name: Interface
 on:
   pull_request:
     # o package.json entra para um bump do playwright ser exercitado antes de
-    # se fundir — o Dependabot abre esses PRs e sem isto passavam sem percurso
-    paths: ['web/**', 'testes/ui/**', '.github/workflows/interface.yml', 'package.json', 'package-lock.json']
+    # se fundir — o Dependabot abre esses PRs e sem isto passavam sem percurso.
+    # O worker, as migrações e o wrangler.toml entram porque o percurso corre
+    # contra um wrangler dev a sério e entra pela API — cria a conta, semeia,
+    # lê o estado: uma alteração ao registo, ao /api/state ou uma migração que
+    # partisse o arranque passavam sem ele. As duas listas são a mesma.
+    paths: ['web/**', 'worker/**', 'migrations/**', 'wrangler.toml', 'testes/ui/**', '.github/workflows/interface.yml', 'package.json', 'package-lock.json']
   push:
     branches: [main, dev]
-    paths: ['web/**', 'testes/ui/**', 'package.json', 'package-lock.json']
+    paths: ['web/**', 'worker/**', 'migrations/**', 'wrangler.toml', 'testes/ui/**', '.github/workflows/interface.yml', 'package.json', 'package-lock.json']
   workflow_dispatch:
     inputs:
       avaliar:
@@ -89,7 +93,9 @@ jobs:
           done
           echo "a app não arrancou"; tail -40 /tmp/app.log; exit 1
 
-      # É isto que trava o processo: regras duras sobre o que se vê.
+      # É isto que trava o processo: regras duras sobre o que se vê, e também
+      # uma cena que não se monta, um erro na página e um erro na consola fora
+      # do ruído conhecido do Google Sign-In (testes/ui/percorrer.js:veredicto).
       - name: Percorrer e verificar
         run: node testes/ui/percorrer.js
 

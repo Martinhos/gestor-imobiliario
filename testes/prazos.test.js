@@ -3,11 +3,12 @@
 // com data de referência fingida — um teste de calendário que depende do
 // dia em que corre não é um teste.
 
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp } from './arnes.js';
+import { carregarApp, repor } from './arnes.js';
 
 const app = carregarApp();
+afterEach(() => repor(app));
 
 // uma base limpa com um contrato ativo parametrizável
 function monta(extra) {
@@ -97,15 +98,24 @@ describe('documentos e taxa fixa', () => {
     monta({});
     app.db.properties[0].energyValid = '2026-11-15';
     app.db.properties[0].loans = [app.normLoan({
-      id: 'L1', name: 'Aquisição', type: 'mista', rate: 3.0, fixedYears: 2,
+      id: 'L1', name: 'Aquisição', type: 'mista', rate: 3.0, fixedYears: 2, outstanding: 90000,
       start: '2024-12-01', euribor: 2.1, spread: 1.0,
     })];
+    /* a fase da taxa conta pelas prestações registadas, o relógio da simulação
+       (credito.js:fimDaFaseFixa): com as 21 de dezembro de 2024 a agosto de 2026
+       em dia, a primeira à taxa variável é a 25.ª — a de dezembro de 2026 */
+    for (let k = 0; k < 21; k++) {
+      const y = 2024 + Math.floor((11 + k) / 12), m = ((11 + k) % 12) + 1;
+      app.db.transactions.push(app.normTx({ kind: 'loan', loanId: 'L1', propertyId: 'P1', amount: 400, principal: 200, date: y + '-' + String(m).padStart(2, '0') + '-01' }));
+    }
     const l = app.prazosDe('2026-09-10');
     const en = l.find((p) => p.tipo === 'energia');
     assert.ok(en && en.dias === 66, 'energia na janela dos 90 dias');
+    assert.equal(en.abrir, "propView('P1')", 'e abre a ficha do imóvel');
     const tx = l.find((p) => p.tipo === 'taxa');
-    assert.equal(tx.alvo, '2026-12-01', 'fim da fase fixa = start + fixedYears');
+    assert.equal(tx.alvo, '2026-12-01', 'fim da fase fixa: fixedYears × 12 − registadas prestações depois da próxima por pagar');
     assert.match(tx.sub, /3%.*3,1%/s);
+    assert.equal(tx.abrir, "mortView('P1','L1')", 'e abre a ficha da hipoteca');
   });
 });
 
@@ -122,7 +132,7 @@ describe('os prazos da AT', () => {
     assert.match(m2.titulo, /Modelo 2.*Ana · T2/);
     assert.match(m2.sub, /até 30\/04\/2025/i, 'diz a data-limite');
     assert.match(m2.sub, /marca-o na ficha e este aviso desaparece/, 'e como o calar, sem julgar');
-    assert.equal(m2.abrir, "ctModal('C1')");
+    assert.equal(m2.abrir, "ctView('C1')", 'tocar lê a ficha do contrato');
     assert.ok(m2.chave.includes('2025-04-30'), 'a chave leva a data-alvo');
     assert.ok(!app.prazosDe('2025-02-01').find((p) => p.tipo === 'modelo2'), 'a 88 dias ainda não');
     const tarde = app.prazosDe('2025-09-10').find((p) => p.tipo === 'modelo2');
@@ -148,7 +158,7 @@ describe('os prazos da AT', () => {
     assert.match(c.sub, /até 31\/07\/2026/i);
     assert.match(c.sub, /Modelo 2 também serve para a cessação/);
     assert.match(c.sub, /15 de fevereiro/);
-    assert.equal(c.abrir, "ctModal('C1')");
+    assert.equal(c.abrir, "ctView('C1')");
     assert.ok(!app.prazosDe('2026-06-20').find((p) => p.tipo === 'cessacao'), 'antes do fim não há cessação a comunicar');
     monta({ end: '2026-06-30' });                    // por indicar
     assert.ok(!app.prazosDe('2026-07-05').find((p) => p.tipo === 'cessacao'), 'por indicar: não se sabe se a AT o conhece');
@@ -166,7 +176,7 @@ describe('os prazos da AT', () => {
     assert.match(r.titulo, /Recibo de renda por emitir — Ana · T2/);
     assert.match(r.sub, /Renda de agosto de 2026 recebida a 05\/08\/2026/);
     assert.match(r.sub, /marca-o no movimento/);
-    assert.equal(r.abrir, "txModal('R1')");
+    assert.equal(r.abrir, "txView('R1')", 'a ficha do movimento, onde está o «Editar»');
     assert.ok(r.chave.startsWith('recibos:R1'), 'a chave é a do movimento');
     app.db.transactions[0].periodo = '2026-07';
     assert.match(app.prazosDe('2026-09-12').find((p) => p.tipo === 'recibos').sub, /Renda de julho de 2026/, 'o mês é o da renda, quando se disse qual é');
@@ -235,7 +245,7 @@ describe('os prazos da AT', () => {
     assert.match(f.titulo, /duração do contrato.*Ana · T2/);
     assert.match(f.sub, /até 15\/02\/2026/i);
     assert.match(f.sub, /perde-se a redução/);
-    assert.equal(f.abrir, "ctModal('C1')");
+    assert.equal(f.abrir, "ctView('C1')");
     assert.ok(!app.prazosDe('2025-12-20').find((p) => p.tipo === 'fev15'), 'a 57 dias ainda não');
     assert.ok(app.prazosDe('2026-03-01').find((p) => p.tipo === 'fev15'), 'passado o dia continua, até se comunicar');
     monta({ fisco: { estado: 'declarado' } });        // sem fim: 25 %
@@ -271,7 +281,7 @@ describe('os prazos da AT', () => {
     const l = daAT(app.prazosDe('2026-07-05'));
     assert.ok(l.length >= 2, 'cessação e recibo, pelo menos');
     l.forEach((p) => {
-      assert.match(p.abrir, /^(ctModal|txModal|go)\('/, p.tipo + ' abre alguma coisa');
+      assert.match(p.abrir, /^(ctView|txView|go)\('/, p.tipo + ' abre alguma coisa');
       assert.ok(p.chave.startsWith(p.tipo + ':'), p.tipo + ' tem chave com o tipo');
       assert.match(p.alvo, /^\d{4}-\d{2}-\d{2}$/, p.tipo + ' tem alvo ISO');
     });

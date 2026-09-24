@@ -6,15 +6,15 @@
    nova, e entra com ela — com ou sem dados de exemplo.
 
    A ligação é um bilhete ASSINADO, não um estado: HMAC sobre a validade e
-   as opções, com uma chave derivada do token do bot do Discord — o único
-   segredo que os dois ambientes já partilham. Assim o worker de produção
-   (que é quem responde ao Discord depois da promoção) consegue emitir
-   ligações para o dev sem os dois falarem um com o outro.
+   as opções, com a TESTE_CHAVE — o segredo que os dois ambientes partilham
+   (docs/armadilhas.md, «Bots separados, chave partilhada»). Assim o worker
+   de produção (que é quem responde ao Discord depois da promoção) consegue
+   emitir ligações para o dev sem os dois falarem um com o outro.
 
    Nada disto existe em produção: sem ENV_NAME, a rota é um 404 e ponto —
    produção nunca cria contas de teste, venha a assinatura de onde vier. */
 
-import { now, TERMS_VERSION } from './lib/http.js';
+import { now, TERMS_VERSION, CSP_ESTRITA } from './lib/http.js';
 import { purgeAccount } from './lib/acesso.js';
 import { newUserId, createSession, sessionCookie } from './auth.js';
 import { auditar } from './lib/auditoria.js';
@@ -22,18 +22,44 @@ import { auditar } from './lib/auditoria.js';
 const DOMINIO_TESTE = '@teste.rendorium.com';
 const VALIDADE_MIN = 10;
 
+// Uma conta é de teste pelo domínio do email (DOMINIO_TESTE, o das contas que o /test cria).
+// Recebe: email — o email da conta (texto; null e undefined contam como vazio).
+// Devolve: true quando o email acaba nesse domínio.
 export const eContaDeTeste = (email) => String(email || '').endsWith(DOMINIO_TESTE);
 
-/* A chave das ligações de teste. Com os bots de dev e produção separados,
+/* O segredo das ligações de teste. Com os bots de dev e produção separados,
    o token do bot deixou de ser partilhado — a TESTE_CHAVE (a mesma nos dois
    ambientes) é o que deixa o /test de qualquer servidor assinar ligações
    que o worker de dev aceita. Sem ela, vale o token do bot, como dantes.
-   Recebe: env — o ambiente do worker, de onde sai a TESTE_CHAVE (ou, na
-   falta dela, o token do bot).
-   Devolve: promessa de uma CryptoKey HMAC-SHA256, só para assinar. */
+   Sem nenhum dos dois não há segredo, e não se assina nem se aceita nada:
+   uma chave escrita no código é uma chave que qualquer pessoa conhece, e um
+   HMAC com ela não prova nada — num dev com os segredos por pôr, qualquer um
+   criava contas de teste e apagava as órfãs.
+   Recebe: env — o ambiente do worker.
+   Devolve: o segredo (texto), ou null quando não há nenhum. */
+function segredoDoTeste(env) {
+  return env.TESTE_CHAVE || env.DISCORD_BOT_TOKEN || null;
+}
+
+// O que se diz quando falta o segredo: no Discord, no back office e na rota.
+export const SEM_CHAVE = 'O ambiente de teste não tem chave: falta a TESTE_CHAVE (ou o token do bot) neste worker. ' +
+  'Põe o segredo e corre o deploy.';
+
+// Se este worker tem com que assinar e verificar ligações de teste.
+// Recebe: env — o ambiente do worker.
+// Devolve: true quando há TESTE_CHAVE ou token do bot.
+export function temChaveDeTeste(env) {
+  return !!segredoDoTeste(env);
+}
+
+// A chave HMAC das ligações de teste, feita do segredo.
+// Recebe: env — o ambiente do worker, de onde sai o segredo.
+// Devolve: promessa de uma CryptoKey HMAC-SHA256, só para assinar; rejeita
+// com SEM_CHAVE quando não há segredo.
 async function chave(env) {
-  return crypto.subtle.importKey('raw',
-    new TextEncoder().encode('teste:' + (env.TESTE_CHAVE || env.DISCORD_BOT_TOKEN || 'sem-chave')),
+  const segredo = segredoDoTeste(env);
+  if (!segredo) throw new Error(SEM_CHAVE);
+  return crypto.subtle.importKey('raw', new TextEncoder().encode('teste:' + segredo),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 }
 
@@ -54,21 +80,22 @@ export async function assinarTeste(env, exp, dados, manter, quem, limpar, email)
 }
 
 /* A ligação completa, para o bot e para o back office. `base` é o worker de
-   destino: o de dev aponta a si próprio; o de produção aponta ao dev. */
-/* `manter` cria uma conta EXTRA sem apagar as existentes — é o que permite
-   testar partilhas e ligações entre duas contas de teste ao mesmo tempo. */
-/* As contas de teste são PERSISTENTES: por omissão a ligação retoma a conta
+   destino: o de dev aponta a si próprio; o de produção aponta ao dev.
+   As contas de teste são PERSISTENTES: por omissão a ligação retoma a conta
    mais recente do dono (os dados ficam de um dia para o outro); `manter`
-   cria uma extra; `limpar` é a única coisa que apaga. O `email` do dev vai
-   assinado dentro da ligação — quem a abre grava-o no KV do ambiente de
-   teste, e é para lá que segue o correio das contas dele.
+   cria uma EXTRA sem apagar as existentes — é o que permite testar
+   partilhas e ligações entre duas contas de teste ao mesmo tempo; `limpar`
+   é a única coisa que apaga. O `email` do dev vai assinado dentro da
+   ligação — quem a abre grava-o no KV do ambiente de teste, e é para lá que
+   segue o correio das contas dele.
    Recebe: env — o ambiente do worker; base — o URL do worker de destino, sem
    barra final; comExemplo — verdadeiro para a conta nascer com dados de
    exemplo; manter (opcional) — verdadeiro para uma conta extra; quem
    (opcional) — o id do dev dono; limpar (opcional) — verdadeiro para apagar
    as contas do dono; email (opcional) — o email do dev (ignorado se não
    parecer um email).
-   Devolve: promessa do URL de /t/entrar, assinado e válido 10 minutos. */
+   Devolve: promessa do URL de /t/entrar, assinado e válido 10 minutos;
+   rejeita com SEM_CHAVE quando o worker não tem com que assinar. */
 export async function ligacaoTeste(env, base, comExemplo, manter, quem, limpar, email) {
   const exp = String(now() + VALIDADE_MIN * 60000);
   const dados = comExemplo ? '1' : '0';
@@ -83,6 +110,8 @@ export async function ligacaoTeste(env, base, comExemplo, manter, quem, limpar, 
 }
 
 // o correio das contas deste dev vai para aqui (gravado pela ligação)
+// Recebe: quem — o dev que pediu a ligação (o identificador que ela traz assinado).
+// Devolve: a chave no KV (SESSIONS) onde fica o email dele (texto).
 export const chaveEmailDev = (quem) => 'teste:email:' + quem;
 
 /* A conta de teste em si: email no subdomínio, palavra-passe impossível,
@@ -111,15 +140,30 @@ function pagina(status, titulo, texto) {
   return new Response('<!doctype html><html lang="pt"><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>' + titulo + '</title>' +
-    '<body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#12141b;color:#eef0f6;' +
-    'font:16px/1.6 system-ui,sans-serif"><div style="max-width:420px;padding:28px;text-align:center">' +
-    '<div style="font-size:38px;margin-bottom:10px">🧪</div>' +
-    '<h1 style="font-size:19px;margin:0 0 8px">' + titulo + '</h1>' +
-    '<p style="margin:0;color:#9aa3b8;font-size:14.5px">' + texto + '</p></div></body></html>', {
+    '<link rel="stylesheet" href="/paginas/teste.css">' +
+    '<body><div class="caixa">' +
+    '<div class="icone">🧪</div>' +
+    '<h1>' + titulo + '</h1>' +
+    '<p>' + texto + '</p></div></body></html>', {
     status,
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Content-Security-Policy': CSP_ESTRITA,
+    },
   });
 }
+
+/* Os estilos das páginas de erro do /t/entrar, servidos à parte em
+   /paginas/teste.css (paginas-recursos.js): a página vai com a CSP_ESTRITA,
+   que não aplica estilos escritos dentro do HTML. */
+export const CSS_TESTE = `body{margin:0;display:grid;place-items:center;min-height:100vh;background:#12141b;color:#eef0f6;
+  font:16px/1.6 system-ui,sans-serif}
+.caixa{max-width:420px;padding:28px;text-align:center}
+.icone{font-size:38px;margin-bottom:10px}
+h1{font-size:19px;margin:0 0 8px}
+p{margin:0;color:#9aa3b8;font-size:14.5px}
+`;
 
 /* A rota /t/entrar: valida a validade e a assinatura e, conforme as opções
    da ligação, limpa as contas do dono, retoma a mais recente ou cria uma
@@ -129,11 +173,16 @@ function pagina(status, titulo, texto) {
    Recebe: c — o contexto do pedido, com env e url (as opções vêm todas da
    query string da ligação).
    Devolve: promessa de uma Response — o 302 com cookie de sessão quando tudo
-   bate certo, ou uma página de erro (400/403/404/410). */
+   bate certo, ou uma página de erro (400/403/404/410, e 503 sem chave). */
 export async function rotaTeste(c) {
   const { env, url } = c;
   // produção nunca cria contas de teste — nem com assinatura boa
   if (!env.ENV_NAME) return pagina(404, 'Não há ambiente de teste aqui', 'Isto é produção. O /test do Discord dá ligações para o ambiente de desenvolvimento.');
+  // sem segredo, nenhuma assinatura prova nada: falha alto em vez de aceitar
+  if (!temChaveDeTeste(env)) {
+    return pagina(503, 'Ambiente de teste sem chave',
+      'Falta a TESTE_CHAVE neste ambiente — sem ela ninguém consegue assinar uma ligação que valha. Põe o segredo e corre o deploy do dev.');
+  }
 
   const exp = url.searchParams.get('exp') || '';
   const dados = url.searchParams.get('dados') === '1' ? '1' : '0';

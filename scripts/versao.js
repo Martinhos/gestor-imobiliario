@@ -14,24 +14,45 @@ const raiz = path.join(__dirname, '..');
 const fonte = path.join(raiz, 'web', 'avisos.js');
 const destino = path.join(raiz, 'web', 'versao.json');
 
-const dados = require(fonte);
-const conteudo = JSON.stringify({
-  versao: dados.VERSAO,
-  minima: dados.VERSAO_MINIMA,
-  data: dados.AVISOS[0].data,
-}, null, 2) + '\n';
-
-if (process.argv.includes('--check')) {
-  const atual = fs.existsSync(destino) ? fs.readFileSync(destino, 'utf8') : '';
-  if (atual !== conteudo) {
-    console.error('web/versao.json está desatualizado. Corre: node scripts/versao.js');
-    console.error('esperado:\n' + conteudo);
-    process.exit(1);
-  }
-  console.log('versao.json em dia (versão ' + dados.VERSAO + ')');
-  process.exit(0);
+/* O conteúdo do versao.json, sempre com \n — é o que se escreve.
+   Recebe: dados — o módulo web/avisos.js ({VERSAO, VERSAO_MINIMA, AVISOS}).
+   Devolve: o texto JSON, com o fim de linha. */
+function conteudoDe(dados) {
+  return JSON.stringify({
+    versao: dados.VERSAO,
+    minima: dados.VERSAO_MINIMA,
+    data: dados.AVISOS[0].data,
+  }, null, 2) + '\n';
 }
 
-fs.writeFileSync(destino, conteudo);
-console.log('web/versao.json escrito — versão ' + dados.VERSAO +
-  ', mínima ' + dados.VERSAO_MINIMA);
+/* O ficheiro está em dia? Compara o texto sem olhar aos fins de linha: num
+   Windows com core.autocrlf=true o checkout trazia CRLF, e comparar bytes dava
+   falso alarme no portátil e verde no CI — um guarda que ensina a ignorá-lo. O
+   .gitattributes já pede LF; isto cobre as cópias de trabalho de antes dele.
+   Recebe: atual — o texto que está no disco; esperado — o de conteudoDe.
+   Devolve: true se só diferirem nos fins de linha. */
+function emDia(atual, esperado) {
+  return atual.replace(/\r\n/g, '\n') === esperado.replace(/\r\n/g, '\n');
+}
+
+if (require.main === module) {
+  const dados = require(fonte);
+  const conteudo = conteudoDe(dados);
+
+  if (process.argv.includes('--check')) {
+    const atual = fs.existsSync(destino) ? fs.readFileSync(destino, 'utf8') : '';
+    if (!emDia(atual, conteudo)) {
+      console.error('web/versao.json está desatualizado. Corre: node scripts/versao.js');
+      console.error('esperado:\n' + conteudo);
+      process.exit(1);
+    }
+    console.log('versao.json em dia (versão ' + dados.VERSAO + ')');
+    process.exit(0);
+  }
+
+  fs.writeFileSync(destino, conteudo);
+  console.log('web/versao.json escrito — versão ' + dados.VERSAO +
+    ', mínima ' + dados.VERSAO_MINIMA);
+}
+
+module.exports = { conteudoDe, emDia };

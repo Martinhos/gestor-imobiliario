@@ -96,32 +96,32 @@ function showAuth(msg, nota) {
   var login = CW.showAuthMode === 'login';
   authEl.style.display = 'flex';
   authEl.innerHTML =
-    '<div class="card" style="max-width:400px;width:100%;padding:24px;margin:auto">' +
-    '<div style="display:flex;gap:12px;align-items:center;margin-bottom:6px">' +
-    '<span class="avatar" style="background:var(--accent);color:var(--accent-ink)">' + (typeof ic === 'function' ? ic('building', 20) : '') + '</span>' +
-    '<div><div class="title" style="font-size:18px">Rendorium</div>' +
+    '<div class="card u-maxw-400px u-w-100pc u-p-24px u-m-auto">' +
+    '<div class="u-d-flex u-g-12px u-ai-center u-mb-6px">' +
+    '<span class="avatar u-bg-v-accent u-c-v-accent-ink">' + (typeof ic === 'function' ? ic('building', 20) : '') + '</span>' +
+    '<div><div class="title u-fs-18px">Rendorium</div>' +
     '<div class="small">' + (login ? 'Inicia sessão para continuar' : 'Cria a tua conta') + '</div></div></div>' +
-    (msg ? '<div class="hint" id="cwa_msg" style="' + (nota ? 'color:var(--ink);border-left:3px solid var(--accent);padding-left:10px' : 'color:var(--danger)') + ';margin:8px 0">' + esc(msg) + '</div>' : '') +
-    '<div class="form" style="margin-top:12px;display:grid;gap:10px">' +
+    (msg ? '<div class="hint u-m-8px-0 ' + (nota ? 'u-c-v-ink u-bl-3px-solid-v-accent u-pl-10px' : 'u-c-v-danger') + '" id="cwa_msg">' + esc(msg) + '</div>' : '') +
+    '<div class="form u-mt-12px u-d-grid u-g-10px">' +
     (login ? '' : '<input id="cwa_name" placeholder="Nome" autocomplete="name">') +
     '<input id="cwa_email" type="email" placeholder="Email" autocomplete="email">' +
     '<input id="cwa_pass" type="password" placeholder="Palavra-passe" autocomplete="' + (login ? 'current-password' : 'new-password') + '">' +
     (login ? '' :
-      '<div id="cwa_passreq" class="small" style="margin:-4px 0 0;display:flex;flex-wrap:wrap;gap:3px 12px"></div>' +
+      '<div id="cwa_passreq" class="small u-m-n4px-0-0 u-d-flex u-fxw-wrap u-g-3px-12px"></div>' +
       '<input id="cwa_pass2" type="password" placeholder="Confirmar palavra-passe" autocomplete="new-password">' +
-      '<label class="check" style="align-items:flex-start;gap:9px;margin-top:2px">' +
-      '<input type="checkbox" id="cwa_terms" style="margin-top:2px">' +
-      '<span class="small">Li e aceito os <a href="#" onclick="CW.readDoc(event,\'termos\')" style="color:var(--accent)">Termos e Condições</a> ' +
-      'e a <a href="#" onclick="CW.readDoc(event,\'privacidade\')" style="color:var(--accent)">Política de Privacidade</a>.</span></label>') +
-    '<div id="cwa_err" class="small" style="color:var(--danger)"></div>' +
-    '<button class="btn primary" style="width:100%;justify-content:center" onclick="CW.submitAuth()">' + (login ? 'Entrar' : 'Criar conta') + '</button>' +
-    '<button class="btn" style="width:100%;justify-content:center" onclick="CW.toggleAuth()">' +
+      '<label class="check u-ai-flex-start u-g-9px u-mt-2px">' +
+      '<input type="checkbox" id="cwa_terms" class="u-mt-2px">' +
+      '<span class="small">Li e aceito os <a href="#" class="u-c-v-accent" data-click="CW.readDoc(event,\'termos\')">Termos e Condições</a> ' +
+      'e a <a href="#" class="u-c-v-accent" data-click="CW.readDoc(event,\'privacidade\')">Política de Privacidade</a>.</span></label>') +
+    '<div id="cwa_err" class="small u-c-v-danger"></div>' +
+    '<button class="btn primary u-w-100pc u-jc-center" data-click="CW.submitAuth()">' + (login ? 'Entrar' : 'Criar conta') + '</button>' +
+    '<button class="btn u-w-100pc u-jc-center" data-click="CW.toggleAuth()">' +
     (login ? 'Ainda não tenho conta' : 'Já tenho conta') + '</button>' +
-    (login ? '<div style="text-align:center;margin-top:2px"><a href="#" class="small" style="color:var(--muted)" onclick="CW.esqueci(event)">Esqueci-me da palavra-passe</a></div>' : '') +
-    '<div id="cwa_social" style="display:none">' +
-    '<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="flex:1;height:1px;background:var(--line)"></span>' +
-    '<span class="small">ou</span><span style="flex:1;height:1px;background:var(--line)"></span></div>' +
-    '<div id="cwa_gbtn" style="display:flex;justify-content:center;margin-bottom:8px"></div>' +
+    (login ? '<div class="u-ta-center u-mt-2px"><a href="#" class="small u-c-v-muted" data-click="CW.esqueci(event)">Esqueci-me da palavra-passe</a></div>' : '') +
+    '<div id="cwa_social" class="u-d-none">' +
+    '<div class="u-d-flex u-ai-center u-g-10px u-m-4px-0"><span class="u-fx-1 u-h-1px u-bg-v-line"></span>' +
+    '<span class="small">ou</span><span class="u-fx-1 u-h-1px u-bg-v-line"></span></div>' +
+    '<div id="cwa_gbtn" class="u-d-flex u-jc-center u-mb-8px"></div>' +
     '</div></div></div>';
   lockScroll(true);
   var last = document.getElementById(login ? 'cwa_pass' : 'cwa_pass2');
@@ -178,28 +178,38 @@ CW.toggleAuth = function () {
 /* O fecho de qualquer entrada bem-sucedida (formulário, Google, ligação por
    email): guarda a sessão, descarta a cache local se pertencia a outra conta,
    volta à visão geral, mostra os portões legais que faltem e arranca o sync.
-   Recebe: u — a resposta da API com a sessão: {id, name, email, token}.
+   A sessão vive no cookie HttpOnly que o servidor acabou de pôr; o token não
+   se guarda no aparelho, venha ou não na resposta — guardado, qualquer script
+   na página o lia e o levava para usar noutro sítio durante 30 dias.
+   Recebe: u — a resposta da API com a sessão: {id, name, email}.
    Devolve: nada — guarda a sessão, repinta a app e arranca o sync. */
 function finishLogin(u) {
-  CW.user = { id: u.id, name: u.name, email: u.email, token: u.token };
-  try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
+  CW.user = { id: u.id, name: u.name, email: u.email };
+  guardarSessao();
   var prevOwner = null;
   try { prevOwner = localStorage.getItem(LS_OWNER); } catch (e) {}
   if (prevOwner && prevOwner !== u.id) {
-    // dados locais de outra conta: não misturar
+    // dados locais de outra conta: não misturar — nem os serviços desligados dela
     db = JSON.parse(JSON.stringify(blank));
     rawSet(KEY, JSON.stringify(db));
+    try { definirServicosDesligados([]); } catch (e) {}
     /* e o retrato vai atrás. Ele é por utilizador e sobrevive a uma saída, por
        isso quem já usou este aparelho tem cá o retrato completo da conta — com
        o db em branco, o push lia a diferença como «apagou tudo». O travão do
        pushNow chega, mas sem retrato não há sequer o que comparar. */
     try { snap = {}; localStorage.removeItem(snapKey()); } catch (e) {}
   }
+  /* a base local passa a ser desta conta já agora, e não só quando o primeiro
+     estado chegar: o que se registar antes dele (sem rede logo a seguir a
+     entrar) é desta conta, e o applyState funde-o em vez de o tomar por dados
+     de outra (nucleo.js:applyState) */
+  try { localStorage.setItem(LS_OWNER, u.id); } catch (e) {}
   /* O CW.state não está guardado no aparelho, mas sobrevive a uma troca de
      conta na mesma página: sem isto, quem entrava a seguir via os cargos, os
      colaboradores e as ligações de quem saiu, até o primeiro estado chegar. */
-  CW.state = { connections: [], roles: [], collaborators: [], invites: [], people: [], shareLink: null, shareRequests: { incoming: [], outgoing: [] } };
+  CW.state = estadoVazio();
   CW.cargos = {}; CW.pessoas = {}; CW._pulled = 0; CW._esperaFim = 0;
+  seloAplicado = ''; resumoAplicado = '';   // o selo do estado era da sessão anterior
   setTimeout(function () { fimDaEspera(); }, 6000);
   hideAuth();
   tab = 'dashboard'; setPage = '';   // entrar leva sempre à visão geral
@@ -242,7 +252,7 @@ CW.submitAuth = function () {
   }
   /* numa rede lenta não acontecia nada visível: o segundo toque disparava
      um segundo pedido */
-  var b = document.querySelector('button[onclick="CW.submitAuth()"]');
+  var b = document.querySelector('button[data-click="CW.submitAuth()"]');
   if (b) { b.disabled = true; b._rotulo = b.textContent; b.textContent = login ? 'A entrar…' : 'A criar a conta…'; }
   var repor = function () { if (b) { b.disabled = false; b.textContent = b._rotulo; } };
   api('POST', login ? '/api/auth/login' : '/api/auth/register', payload)
@@ -268,12 +278,17 @@ CW.esqueci = function (e) {
 /* No ambiente de dev, numa conta de teste, a marca do topo dá lugar a um
    seletor: as contas de teste DESTE dev, trocáveis a um toque, mais a opção
    de criar uma extra. A cache local não se mistura — o sync deteta a troca
-   de dono (LS_OWNER) e substitui tudo pelo estado da conta nova. */
+   de dono (LS_OWNER) e substitui tudo pelo estado da conta nova. É um fluxo
+   de teste: pede o token da conta nova com o X-Rendorium-Token (o servidor
+   só o devolve fora de produção) e guarda-o, porque troca a sessão sem que o
+   cookie seja o dela; o arranque seguinte larga-o se o cookie servir
+   (nucleo.js:largarTokenAntigo). */
 (function () {
   var u = CW.user;
   if (!u || !/@teste\.rendorium\.com$/.test(u.email || '')) return;
   if (!/^dev\.rendorium\.com$|^gestor-imobiliario-dev\.|^localhost$|^127\./.test(location.hostname)) return;
-  fetch('/api/teste/contas', { headers: { Authorization: 'Bearer ' + u.token } })
+  var sessao = u.token ? { Authorization: 'Bearer ' + u.token } : {};   // sem token, vale o cookie
+  fetch('/api/teste/contas', { headers: sessao, credentials: 'same-origin' })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (d) {
       if (!d || !d.contas || !d.contas.length) return;
@@ -286,7 +301,9 @@ CW.esqueci = function (e) {
       var rotulo = function (ct) { return '\uD83E\uDDEA ' + ct.email.split('@')[0].replace('teste-', '#'); };
       var opcoes = d.contas.map(function (ct) { return { v: ct.id, label: rotulo(ct) }; });
       opcoes.push({ div: true }, { v: '+nova', label: '\uFF0B Nova conta de teste' });
-      window.cwTrocaConta = function () {
+      /* vai como função para o sel(): um window.x posto aqui, depois do
+         arranque, fica fora da lista dos nomes da app (eventos.js) */
+      var cwTrocaConta = function () {
         var inp = document.getElementById('cwContas');
         var v = inp && inp.value;
         if (!v || v === atual.id || window._cwTroca) return;
@@ -294,12 +311,15 @@ CW.esqueci = function (e) {
         var alvo = v === '+nova' ? ['/api/teste/nova', {}] : ['/api/teste/trocar', { para: v }];
         fetch(alvo[0], {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + u.token },
+          headers: Object.assign({ 'Content-Type': 'application/json', 'X-Rendorium-Token': '1' }, sessao),
           body: JSON.stringify(alvo[1]),
+          credentials: 'same-origin',
         })
           .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('troca recusada')); })
           .then(function (n) {
-            try { localStorage.setItem(LS_USER, JSON.stringify({ id: n.id, email: n.email, name: n.name, token: n.token })); } catch (e) {}
+            var nova = { id: n.id, email: n.email, name: n.name };
+            if (n.token) nova.token = n.token;
+            try { localStorage.setItem(LS_USER, JSON.stringify(nova)); } catch (e) {}
             location.reload();
           })
           .catch(function () {
@@ -310,15 +330,17 @@ CW.esqueci = function (e) {
             toast('Não deu para trocar de conta.');
           });
       };
-      brand.innerHTML = '<div style="flex:1;min-width:0">' +
-        window.sel('cwContas', atual.id, opcoes, 'cwTrocaConta', 'dados') + '</div>';
+      brand.innerHTML = '<div class="u-fx-1 u-minw-0">' +
+        window.sel('cwContas', atual.id, opcoes, cwTrocaConta, 'dados') + '</div>';
     })
     .catch(function () { /* sem seletor, fica a marca */ });
 })();
 
 /* Entrar com um token no endereço: é a porta do ambiente de teste (/test)
    e de qualquer ligação de sessão emitida pelo servidor. O token sai já da
-   URL, valida-se contra /api/me, e a app recarrega com a sessão posta. */
+   URL, valida-se contra /api/me, e a app recarrega com a sessão posta — um
+   fluxo de teste, que vive do token (Bearer) até o arranque confirmar que o
+   cookie posto pelo /t/entrar é da mesma conta (nucleo.js:largarTokenAntigo). */
 (function () {
   var m = /[?&]entrar=([a-f0-9]{64})/.exec(location.search);
   if (!m) return;
@@ -338,6 +360,15 @@ CW.esqueci = function (e) {
     .catch(function () { toast('Não deu para entrar por essa ligação.'); });
 })();
 
+/* O «Cancelar» da sobreposição da palavra-passe nova: tira o #cwRepor do
+   documento. Era o document.getElementById('cwRepor').remove() escrito no
+   on…=, e a gramática das ações não tem o document (não é um nome da app).
+   Recebe: nada.
+   Devolve: nada — tira o #cwRepor do documento. */
+function fecharRepor() {
+  document.getElementById('cwRepor').remove();
+}
+
 (function () {
   var m = /[?&]repor=([a-f0-9]{64})/.exec(location.search);
   if (!m) return;
@@ -354,16 +385,16 @@ CW.esqueci = function (e) {
     el.style.cssText = 'position:fixed;inset:0;z-index:230;background:var(--bg);overflow:auto;' +
       'display:flex;justify-content:center;padding:22px';
     el.innerHTML =
-      '<div class="card" style="max-width:420px;width:100%;padding:24px;margin:auto">' +
-      '<div class="title" style="font-size:18px;margin-bottom:12px">Palavra-passe nova</div>' +
+      '<div class="card u-maxw-420px u-w-100pc u-p-24px u-m-auto">' +
+      '<div class="title u-fs-18px u-mb-12px">Palavra-passe nova</div>' +
       '<div class="form">' +
       '<label>Nova palavra-passe<input id="rp_1" type="password" autocomplete="new-password"></label>' +
       '<label>Repete-a<input id="rp_2" type="password" autocomplete="new-password"></label>' +
       '<div class="hint">8+ caracteres, com maiúscula, minúscula, número e símbolo.</div>' +
-      '<div id="rp_err" class="small" style="color:var(--danger)"></div></div>' +
-      '<div class="toolbar" style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">' +
-      '<button class="btn" onclick="document.getElementById(\'cwRepor\').remove()">Cancelar</button>' +
-      '<button class="btn primary" onclick="CW.reporConfirmar()">Guardar</button></div></div>';
+      '<div id="rp_err" class="small u-c-v-danger"></div></div>' +
+      '<div class="toolbar u-mt-14px u-d-flex u-g-8px u-jc-flex-end">' +
+      '<button class="btn" data-click="fecharRepor()">Cancelar</button>' +
+      '<button class="btn primary" data-click="CW.reporConfirmar()">Guardar</button></div></div>';
     document.body.appendChild(el);
     try { document.getElementById('rp_1').focus(); } catch (e) {}
   }, 700);
@@ -377,14 +408,12 @@ CW.esqueci = function (e) {
    Sem sessão, o ecrã de entrada diz porquê e o resgate acontece depois de
    finishLogin; com sessão, no arranque, mal os avisos de entrada saiam. */
 
-// Lê o endereço à procura de um token de convite ou de partilha (64 hex):
-// parseConvite (web/app/acessos.js) quando existe, senão o mesmo à mão.
+// Lê o endereço à procura de um token de convite ou de partilha (64 hex),
+// com o parseConvite de web/app/acessos.js.
 // Recebe: search — o location.search.
 // Devolve: {tipo:'convite'|'ligar', token} ou null.
 function chegadaNoEndereco(search) {
-  try { if (typeof parseConvite === 'function') return parseConvite(search) || null; } catch (e) {}
-  var m = /[?&](convite|ligar)=([a-f0-9]{64})\b/.exec(search || '');
-  return m ? { tipo: m[1], token: m[2] } : null;
+  return parseConvite(search) || null;
 }
 
 // O que ficou guardado nesta sessão do browser à espera de resgate.
@@ -454,17 +483,10 @@ function fraseDaChegada(ch, prev) {
 // Devolve: nada — termina a sessão e mostra o ecrã de entrada.
 CW.naoSouEu = function (e) {
   if (e && e.preventDefault) e.preventDefault();
-  closeAllModals();
-  api('POST', '/api/auth/logout').catch(function () {});
-  CW.user = null;
-  CW.tickets = null;
-  try { localStorage.removeItem(LS_USER); localStorage.removeItem(LS_PAGE); } catch (x) {}
-  tab = 'dashboard'; setPage = '';
-  buildNav(); render();
-  CW.showAuthMode = 'login';
+  // a frase da ligação guardada é a nota do ecrã de entrada (showAuth sem mensagem)
   var ch = chegadaGuardada();
   CW._chegadaMsg = ch ? fraseDaChegada(ch, ch.tipo === 'ligar' ? CW._ligarPrev : CW._convitePrev) : '';
-  showAuth();
+  encerrarSessao({ avisarServidor: true });
 };
 
 // «Agora não»: fecha o modal e esquece a ligação nesta sessão (a ligação em
@@ -492,7 +514,7 @@ CW.enviarPedido = function (token) {
 // Devolve: o HTML (texto).
 function entrasComo() {
   return '<div class="hint">Entras como <b>' + esc(CW.user.email || CW.user.name || '') + '</b>. ' +
-    '<a href="#" onclick="CW.naoSouEu(event)" style="color:var(--accent)">Não sou eu</a></div>';
+    '<a href="#" class="u-c-v-accent" data-click="CW.naoSouEu(event)">Não sou eu</a></div>';
 }
 
 // O modal do convite: quem convida, o cargo, os imóveis, o que vai poder, e
@@ -502,20 +524,20 @@ function entrasComo() {
 function modalConvite(token, prev) {
   CW._convitePrev = prev;
   var casas = (prev.houses || []).map(function (h) {
-    return '<div class="card" style="padding:10px 13px"><b>' + esc(h.name || 'Sem nome') + '</b></div>';
+    return '<div class="card u-p-10px-13px"><b>' + esc(h.name || 'Sem nome') + '</b></div>';
   }).join('');
-  var perms = typeof permsFechadas === 'function' ? permsFechadas(prev.perms || []) : (prev.perms || []);
-  var pode = perms.map(function (p) { return typeof rotuloDe === 'function' ? rotuloDe(p) : p; })
+  // os rótulos são do serviço Colaboradores (colaboradores.js); desligado, o convite não se aceita e o «Vais poder» sai
+  var pode = (servicoLigado('colaboradores') ? permsFechadas(prev.perms || []).map(rotuloDe) : [])
     .map(function (t) { return t.charAt(0).toLowerCase() + t.slice(1); });
   openModal('Convite de ' + (prev.ownerName || ''),
     '<div class="form">' +
-    '<div class="hint" style="font-size:14px"><b>' + esc(prev.ownerName || 'Alguém') + '</b> convida-te para colaborar como <b>' + esc(prev.roleName || 'colaborador') + '</b>.</div>' +
-    (casas ? '<div><div class="flabel">Imóveis</div><div class="list" style="gap:7px">' + casas + '</div></div>' : '') +
+    '<div class="hint u-fs-14px"><b>' + esc(prev.ownerName || 'Alguém') + '</b> convida-te para colaborar como <b>' + esc(prev.roleName || 'colaborador') + '</b>.</div>' +
+    (casas ? '<div><div class="flabel">Imóveis</div><div class="list u-g-7px">' + casas + '</div></div>' : '') +
     (pode.length ? '<div><div class="flabel">Vais poder</div><div class="hint">' + esc(pode.join(', ')) + '.</div></div>' : '') +
     '<div class="hint">Não ficas comproprietário: as quotas e as contas entre donos não te incluem. Podes sair quando quiseres no menu, em Pessoas → Colaboradores.</div>' +
     entrasComo() + '</div>',
-    '<button class="btn" onclick="CW.chegadaDepois(\'convite\')">Agora não</button>' +
-    '<button class="btn primary" onclick="CW.aceitarConvite(\'' + jsq(token) + '\')">Aceitar</button>');
+    '<button class="btn" data-click="CW.chegadaDepois(\'convite\')">Agora não</button>' +
+    '<button class="btn primary" data-click="CW.aceitarConvite(\'' + jsq(token) + '\')">Aceitar</button>');
 }
 
 // O modal da ligação de partilha: quem pede, as caixas dos meus imóveis, e
@@ -527,17 +549,17 @@ function modalLigar(token, prev) {
   var dono = esc(prev.ownerName || 'Alguém');
   var meus = (db.properties || []).filter(function (p) { return cwMinha(p); });
   var caixas = meus.length
-    ? '<div><div class="flabel">Escolhe quais</div><div class="list" style="gap:7px">' + meus.map(function (p) {
-        return '<label class="check"><input type="checkbox" id="cw_lig_h_' + p.id + '"><span style="min-width:0"><b>' + esc(p.name || 'Sem nome') + '</b>' +
+    ? '<div><div class="flabel">Escolhe quais</div><div class="list u-g-7px">' + meus.map(function (p) {
+        return '<label class="check"><input type="checkbox" id="cw_lig_h_' + p.id + '"><span class="u-minw-0"><b>' + esc(p.name || 'Sem nome') + '</b>' +
           (p.address ? ' <span class="small">' + esc(p.address) + '</span>' : '') + '</span></label>';
       }).join('') + '</div></div>'
     : '<div class="hint">Ainda não tens imóveis para partilhar — cria um primeiro e volta a abrir a ligação.</div>';
   openModal('Pedido de ' + (prev.ownerName || ''),
-    '<div class="form"><div class="hint" style="font-size:14px"><b>' + dono + '</b> pede que partilhes imóveis com ele.</div>' + caixas +
+    '<div class="form"><div class="hint u-fs-14px"><b>' + dono + '</b> pede que partilhes imóveis com ele.</div>' + caixas +
     '<div class="hint">' + dono + ' passa a comproprietário dos imóveis que escolheres — vê contratos, movimentos e pessoas desses imóveis. Cada pedido fica à espera que ele aceite.</div>' +
     entrasComo() + '</div>',
-    '<button class="btn" onclick="CW.chegadaDepois(\'ligar\')">Agora não</button>' +
-    (meus.length ? '<button class="btn primary" onclick="CW.enviarPedido(\'' + jsq(token) + '\')">Enviar pedido</button>' : ''));
+    '<button class="btn" data-click="CW.chegadaDepois(\'ligar\')">Agora não</button>' +
+    (meus.length ? '<button class="btn primary" data-click="CW.enviarPedido(\'' + jsq(token) + '\')">Enviar pedido</button>' : ''));
 }
 
 /* Resgata a ligação guardada, com sessão: espera que os avisos de entrada
@@ -566,8 +588,8 @@ CW.resgatarChegada = function () {
       CW._chegadaEmCurso = false;
       esquecerChegada(ch.tipo);
       openModal(ch.tipo === 'ligar' ? 'Esta ligação não serve' : 'Este convite já não vale',
-        '<div class="hint" style="font-size:14px">' + esc(e.message || 'Essa ligação não serve.') + '</div>',
-        '<button class="btn primary" onclick="closeModal()">Fechar</button>');
+        '<div class="hint u-fs-14px">' + esc(e.message || 'Essa ligação não serve.') + '</div>',
+        '<button class="btn primary" data-click="closeModal()">Fechar</button>');
     });
   };
   setTimeout(tentar, 400);
@@ -595,24 +617,26 @@ CW.reporConfirmar = function () {
 
 /* ---- entrada com Google / Apple (aparece quando configurada) ---- */
 
-// carrega um script externo uma única vez; se já estiver na página, só espera pelo load
-// Recebe: src — o URL do script; cb — função chamada (sem argumentos) quando ele estiver carregado.
-// Devolve: nada — o sinal de pronto chega pelo cb.
-function loadScript(src, cb) {
-  var s = document.querySelector('script[src="' + src + '"]');
-  if (s) { if (s._loaded) cb(); else s.addEventListener('load', cb); return; }
-  s = document.createElement('script');
-  s.src = src;
-  s.async = true;
-  s.onload = function () { s._loaded = 1; cb(); };
-  document.head.appendChild(s);
-}
-
 // Monta a zona "ou continua com…" do ecrã de entrada: pede /api/auth/config
 // (fica em cache) e, se houver id do Google, carrega o SDK e desenha o botão.
 // Sem configuração — ou sem rede — a zona simplesmente não aparece.
 // Devolve: nada — mostra e preenche a zona #cwa_social quando há configuração.
 function loadSocial() {
+  // Carrega um script externo uma única vez; se já estiver na página, só espera pelo load.
+  // Fica aqui dentro, e não no topo, de propósito: uma função de topo está na
+  // lista da app do eventos.js, e uma ação injetada chamá-la-ia com o src que
+  // quisesse (um <script src> corre). Aqui só carrega o URL fixo do Google.
+  // Recebe: src — o URL do script; cb — função chamada (sem argumentos) quando ele estiver carregado.
+  // Devolve: nada — o sinal de pronto chega pelo cb.
+  function loadScript(src, cb) {
+    var s = document.querySelector('script[src="' + src + '"]');
+    if (s) { if (s._loaded) cb(); else s.addEventListener('load', cb); return; }
+    s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = function () { s._loaded = 1; cb(); };
+    document.head.appendChild(s);
+  }
   var mount = document.getElementById('cwa_social');
   if (!mount) return;
   (authCfg !== undefined
@@ -620,7 +644,10 @@ function loadSocial() {
     : api('GET', '/api/auth/config').then(function (c) { authCfg = c; return c; }).catch(function () { return null; })
   ).then(function (cfg) {
     if (!cfg || !cfg.google) return;
-    mount.style.display = '';
+    /* a zona nasce escondida pela classe u-d-none (era um display:none em
+       linha), e por isso mostra-se tirando a classe: um mount.style.display
+       = '' já não chegava para lhe ganhar */
+    mount.classList.remove('u-d-none');
     loadScript('https://accounts.google.com/gsi/client', function () {
       try {
         google.accounts.id.initialize({
@@ -698,11 +725,14 @@ if (CW.user) {
      motor não dar a promessa por órfã enquanto o /api/me não volta — uma
      rejeição sem ouvinte no mesmo instante é um unhandledrejection, e este
      projeto relata-os. */
-  var pEstado = api('GET', '/api/state');
+  var pEstado = pedirEstado(false);
   pEstado.catch(function () {});
+  // uma sessão guardada com o token (de antes de ele sair das respostas):
+  // passa a viver do cookie, se o cookie for desta conta
+  largarTokenAntigo();
   api('GET', '/api/me').then(function (u) {
     CW.user = Object.assign({}, CW.user, { id: u.id, name: u.name, email: u.email });
-    try { localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
+    guardarSessao();
     // conta anterior a estes documentos: pedir a aceitação antes de continuar
     if (u.termsCurrent && u.terms !== u.termsCurrent) showTermsGate();
     try {

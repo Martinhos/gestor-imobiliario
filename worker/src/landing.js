@@ -27,6 +27,8 @@
    di-lo por palavras — é a pergunta que qualquer pessoa faz a seguir a «o que
    é isto?». */
 
+import { CSP_ESTRITA } from './lib/http.js';
+
 const APP = 'https://app.rendorium.com';
 const IMG = '/img/landing';
 
@@ -60,8 +62,10 @@ const CAPACIDADES = [
     'Quem vem ver que imóvel, e quando. E um aviso antes de um contrato acabar, em vez de o descobrires tarde.'],
 ];
 
-/* Constrói a página inteira (HTML e estilos inline) e devolve-a como Response
-   com uma hora de cache — a página muda quando se publica, não por pedido.
+/* Constrói a página inteira e devolve-a como Response com uma hora de cache —
+   a página muda quando se publica, não por pedido. Os estilos não vão dentro
+   dela: estão no CSS_LANDING, servido em /paginas/landing.css, e a página
+   vai com a CSP_ESTRITA.
 
    Fora do domínio raiz isto é uma pré-visualização (dev.rendorium.com/montra,
    ou o servidor local): leva `noindex` e não declara canonical nem og. Duas
@@ -94,8 +98,131 @@ export function paginaLanding(op) {
 ${cabecaRaiz}
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<style>
-:root{color-scheme:light dark;
+<link rel="stylesheet" href="/paginas/landing.css">
+</head><body>
+<div class="faixa-topo">
+  <header>
+    <span class="logo">R</span><span class="marca">Rendorium</span>
+    <span class="spacer"></span>
+    <a class="btn" href="${APP}">Abrir a app</a>
+  </header>
+</div>
+<div class="wrap">
+
+  <div class="hero">
+    <div>
+      <h1>O teu portefólio de arrendamento, arrumado.</h1>
+      <p class="sub">Imóveis, contratos, rendas, créditos e o IRS num só sítio — para quem
+      hoje gere tudo em Excel, papel e memória.</p>
+      <div class="cta">
+        <a class="btn primary" href="${APP}/?criar=1">Criar conta</a>
+        <a class="btn" href="${APP}">Já tenho conta</a>
+      </div>
+      <div class="faixa"><b>Grátis, sem planos e sem cartão.</b> Funciona no browser,
+      no telemóvel e como app instalada.</div>
+    </div>
+    <div class="telemovel">
+      ${figura('visao-geral', 'A visão geral do Rendorium no telemóvel: receita, despesas, prestações e cashflow do ano, e o gráfico de entradas e saídas mês a mês.', 390, 800, 'ecra')}
+    </div>
+  </div>
+
+  <section>
+    <h2>O que faz</h2>
+    <p class="lead">Seis coisas que um senhorio faz todos os meses, e que a app faz por ti
+    ou contigo.</p>
+    <div class="grelha">
+      ${CAPACIDADES.map(([t, d]) => `<div class="cartao"><b>${t}</b><p>${d}</p></div>`).join('\n      ')}
+    </div>
+  </section>
+
+  <hr class="risca">
+
+  <section>
+    <h2>No computador, o portefólio inteiro à vista</h2>
+    <p class="lead">A mesma app, sem instalar nada: receita, despesas, prestações e cashflow
+    do ano, mês a mês e por imóvel.</p>
+    <div class="janela">
+      ${figura('computador', 'O Rendorium num computador: a barra lateral com imóveis, contratos, movimentos e créditos, quatro indicadores do ano e dois gráficos — entradas e saídas mês a mês, e o cashflow acumulado.', 1180, 760, 'ecra', true)}
+    </div>
+  </section>
+
+  <hr class="risca">
+
+  <section>
+    <div class="par trocado">
+      <div class="janela">
+        ${figura('movimentos', 'O ecrã de movimentos: receitas, despesas, prestações e saldo, e o cartão das contas entre proprietários a dizer quem paga a quem.', 390, 800, 'ecra', true)}
+      </div>
+      <div class="texto">
+        <h2>As contas entre quem é dono</h2>
+        <p>Cada movimento sabe quem o pagou e por quem se divide. A app faz a conta ao longo
+        do ano e diz quem paga a quem — e liquida tudo num botão.</p>
+        <p>Quotas por imóvel, despesas divididas por valor ou por partes iguais, e dívidas a
+        terceiros à parte, sem entrarem nas contas entre vocês.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="risca">
+
+  <section>
+    <h2>Os dados são teus</h2>
+    <ul class="lista">
+      <li><b>Cópia de segurança num toque</b>, e exportação em CSV quando quiseres — os
+      números saem daqui para onde precisares deles.</li>
+      <li><b>A conta apaga-se dentro da app</b>, sem pedir a ninguém e sem esperar por
+      resposta.</li>
+      <li><b>Funciona sem rede.</b> O que registas offline sobe assim que a ligação voltar,
+      e podes trabalhar em vários aparelhos.</li>
+      <li><b>Partilhas só o que quiseres.</b> Um comproprietário vê as contas do imóvel; um
+      contabilista vê os movimentos e mais nada.</li>
+    </ul>
+  </section>
+
+  <hr class="risca">
+
+  <section>
+    <div class="nota">
+      <h2>Um projeto pessoal</h2>
+      <p>O Rendorium nasceu para gerir o meu próprio portefólio e está aberto a quem lhe
+      quiser dar uso. É grátis: não há planos, não há limites de imóveis e não há cartão
+      para pôr.</p>
+      <p>Está em evolução constante — o que muda em cada versão fica escrito dentro da app,
+      em Novidades. Se alguma coisa importante mudar, é avisada com antecedência e ninguém
+      perde o que registou.</p>
+    </div>
+  </section>
+
+  <div class="fecho">
+    <h2>Começa pelo primeiro imóvel</h2>
+    <p>Leva dois minutos, e a partir daí é só confirmar as rendas.</p>
+    <div class="cta"><a class="btn primary" href="${APP}/?criar=1">Criar conta</a></div>
+  </div>
+
+  <footer>
+    <span>© ${new Date().getFullYear()} Rendorium</span>
+    <a href="/termos">Termos e Condições</a>
+    <a href="/privacidade">Política de Privacidade</a>
+    <a href="${APP}">Abrir a app</a>
+  </footer>
+</div>
+</body></html>`;
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      // a página muda quando se publica, não por pedido — mas a
+      // pré-visualização existe precisamente para ver alterações, e uma hora
+      // de cache fazia-a mentir durante uma hora
+      'Cache-Control': raiz ? 'public, max-age=3600' : 'no-store',
+      'Content-Security-Policy': CSP_ESTRITA,
+    },
+  });
+}
+
+/* Os estilos da página, servidos à parte em /paginas/landing.css
+   (paginas-recursos.js): a página vai com a CSP_ESTRITA, que não aplica uma
+   folha escrita dentro do próprio HTML (a etiqueta de estilo em linha). */
+export const CSS_LANDING = `:root{color-scheme:light dark;
   --bg:#f7f8fa;--card:#fff;--ink:#17221d;--muted:#5a635e;--line:#e7ebe8;
   --accent:#244c3b;--accent-ink:#fff;--accent-press:#1c3d2f;--tint:#eef4f0;--blur:rgba(247,248,250,.94);
   --sombra:0 1px 2px rgba(16,32,24,.04),0 12px 32px -12px rgba(16,32,24,.16);
@@ -281,121 +408,4 @@ footer a:hover{color:var(--ink)}
 /* e quem pediu mais contraste recebe contornos que se veem */
 @media(prefers-contrast:more){:root{--line:#9aa39d}}
 @media(prefers-contrast:more) and (prefers-color-scheme:dark){:root{--line:#525a70}}
-</style></head><body>
-<div class="faixa-topo">
-  <header>
-    <span class="logo">R</span><span class="marca">Rendorium</span>
-    <span class="spacer"></span>
-    <a class="btn" href="${APP}">Abrir a app</a>
-  </header>
-</div>
-<div class="wrap">
-
-  <div class="hero">
-    <div>
-      <h1>O teu portefólio de arrendamento, arrumado.</h1>
-      <p class="sub">Imóveis, contratos, rendas, créditos e o IRS num só sítio — para quem
-      hoje gere tudo em Excel, papel e memória.</p>
-      <div class="cta">
-        <a class="btn primary" href="${APP}/?criar=1">Criar conta</a>
-        <a class="btn" href="${APP}">Já tenho conta</a>
-      </div>
-      <div class="faixa"><b>Grátis, sem planos e sem cartão.</b> Funciona no browser,
-      no telemóvel e como app instalada.</div>
-    </div>
-    <div class="telemovel">
-      ${figura('visao-geral', 'A visão geral do Rendorium no telemóvel: receita, despesas, prestações e cashflow do ano, e o gráfico de entradas e saídas mês a mês.', 390, 800, 'ecra')}
-    </div>
-  </div>
-
-  <section>
-    <h2>O que faz</h2>
-    <p class="lead">Seis coisas que um senhorio faz todos os meses, e que a app faz por ti
-    ou contigo.</p>
-    <div class="grelha">
-      ${CAPACIDADES.map(([t, d]) => `<div class="cartao"><b>${t}</b><p>${d}</p></div>`).join('\n      ')}
-    </div>
-  </section>
-
-  <hr class="risca">
-
-  <section>
-    <h2>No computador, o portefólio inteiro à vista</h2>
-    <p class="lead">A mesma app, sem instalar nada: receita, despesas, prestações e cashflow
-    do ano, mês a mês e por imóvel.</p>
-    <div class="janela">
-      ${figura('computador', 'O Rendorium num computador: a barra lateral com imóveis, contratos, movimentos e créditos, quatro indicadores do ano e dois gráficos — entradas e saídas mês a mês, e o cashflow acumulado.', 1180, 760, 'ecra', true)}
-    </div>
-  </section>
-
-  <hr class="risca">
-
-  <section>
-    <div class="par trocado">
-      <div class="janela">
-        ${figura('movimentos', 'O ecrã de movimentos: receitas, despesas, prestações e saldo, e o cartão das contas entre proprietários a dizer quem paga a quem.', 390, 800, 'ecra', true)}
-      </div>
-      <div class="texto">
-        <h2>As contas entre quem é dono</h2>
-        <p>Cada movimento sabe quem o pagou e por quem se divide. A app faz a conta ao longo
-        do ano e diz quem paga a quem — e liquida tudo num botão.</p>
-        <p>Quotas por imóvel, despesas divididas por valor ou por partes iguais, e dívidas a
-        terceiros à parte, sem entrarem nas contas entre vocês.</p>
-      </div>
-    </div>
-  </section>
-
-  <hr class="risca">
-
-  <section>
-    <h2>Os dados são teus</h2>
-    <ul class="lista">
-      <li><b>Cópia de segurança num toque</b>, e exportação em CSV quando quiseres — os
-      números saem daqui para onde precisares deles.</li>
-      <li><b>A conta apaga-se dentro da app</b>, sem pedir a ninguém e sem esperar por
-      resposta.</li>
-      <li><b>Funciona sem rede.</b> O que registas offline sobe assim que a ligação voltar,
-      e podes trabalhar em vários aparelhos.</li>
-      <li><b>Partilhas só o que quiseres.</b> Um comproprietário vê as contas do imóvel; um
-      contabilista vê os movimentos e mais nada.</li>
-    </ul>
-  </section>
-
-  <hr class="risca">
-
-  <section>
-    <div class="nota">
-      <h2>Um projeto pessoal</h2>
-      <p>O Rendorium nasceu para gerir o meu próprio portefólio e está aberto a quem lhe
-      quiser dar uso. É grátis: não há planos, não há limites de imóveis e não há cartão
-      para pôr.</p>
-      <p>Está em evolução constante — o que muda em cada versão fica escrito dentro da app,
-      em Novidades. Se alguma coisa importante mudar, é avisada com antecedência e ninguém
-      perde o que registou.</p>
-    </div>
-  </section>
-
-  <div class="fecho">
-    <h2>Começa pelo primeiro imóvel</h2>
-    <p>Leva dois minutos, e a partir daí é só confirmar as rendas.</p>
-    <div class="cta"><a class="btn primary" href="${APP}/?criar=1">Criar conta</a></div>
-  </div>
-
-  <footer>
-    <span>© ${new Date().getFullYear()} Rendorium</span>
-    <a href="/termos">Termos e Condições</a>
-    <a href="/privacidade">Política de Privacidade</a>
-    <a href="${APP}">Abrir a app</a>
-  </footer>
-</div>
-</body></html>`;
-  return new Response(html, {
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      // a página muda quando se publica, não por pedido — mas a
-      // pré-visualização existe precisamente para ver alterações, e uma hora
-      // de cache fazia-a mentir durante uma hora
-      'Cache-Control': raiz ? 'public, max-age=3600' : 'no-store',
-    },
-  });
-}
+`;

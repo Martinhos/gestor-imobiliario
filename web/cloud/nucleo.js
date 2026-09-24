@@ -1,15 +1,25 @@
-/* Sessao, sincronizacao com o servidor e reconstrucao dos dados locais. */
+/* Sessao, sincronizacao com o servidor e reconstrucao dos dados locais — e,
+   no fim, os embrulhos que ligam a base a isto (save, render, go, goSet). */
 'use strict';
 
-var LS_USER = LS_SESSAO;   // sessão {id,name,email,token} — a chave vive em app/dados.js
+// sessão {id,name,email} — a chave vive em app/dados.js. A sessão em si vive no
+// cookie HttpOnly; um token só fica cá nos fluxos de teste (api, largarTokenAntigo)
+var LS_USER = LS_SESSAO;
 var LS_OWNER = 'gi_cloud_owner'; // id do utilizador dono da cache local
+var LS_LIGACAO = 'gi_ligacao_url';   // + '_<id>': o URL da ligação permanente, por conta (chaveDaLigacao)
 // 3 minutos entre leituras: com 90 segundos, uma app aberta o dia todo
 // sozinha consumia uma fatia enorme do plano gratuito da base de dados.
 var PULL_MS = 180000;
 
+// O CW.state de quem ainda não recebeu nenhum estado: as listas todas com forma, vazias.
+// Devolve: um objeto novo com a forma do estado.
+function estadoVazio() {
+  return { connections: [], roles: [], collaborators: [], invites: [], people: [], shareLink: null, shareRequests: { incoming: [], outgoing: [] } };
+}
+
 var CW = (window.CW = {});
 CW.user = null;
-CW.state = { connections: [], roles: [], collaborators: [], invites: [], people: [], shareLink: null, shareRequests: { incoming: [], outgoing: [] } };
+CW.state = estadoVazio();
 CW.cargos = {};    // por imóvel: {dono, nome, perms} — vem de cargosDoEstado (web/app/acessos.js)
 CW.pessoas = {};   // por id de utilizador: {name, kind, roleName} — quem não é proprietário mas tem nome
 
@@ -53,64 +63,298 @@ setTheme = function (t) {
 };
 applyLocalTheme();
 
+/* O retrato do servidor: chave -> resumo do JSON do que já lá está (ou
+   '__obsoleto__', para o push seguinte apagar). É a base da diferença que o
+   pushNow envia e da fusão que o applyState faz. Guardava o JSON inteiro — o
+   localStorage levava tudo duas vezes (110 % da base, medido com 5000
+   movimentos), e quando a quota rebentava o retrato vinha vazio no arranque
+   seguinte: subia tudo outra vez e as remoções deixavam de se propagar. Para
+   saber se uma entidade mudou chega a igualdade, e para isso chega o resumo. */
 var snap = {};
 var snapKey = function () { return 'gi_cloud_snap_' + (CW.user ? CW.user.id : ''); };
-// Carrega do aparelho o retrato do servidor (chave -> JSON do que já lá está).
+
+/* O resumo de um texto: 53 bits de mistura (duas somas multiplicativas
+   entrelaçadas) mais o comprimento, com um '#' à frente para se distinguir
+   do JSON dos retratos antigos. Duas versões diferentes de uma entidade darem
+   o mesmo resumo é da ordem de uma em 2^53.
+   Recebe: s — o texto (o JSON de uma entidade, ou a resposta do estado).
+   Devolve: o resumo, em texto curto ('#…:…'). */
+function resumoDeTexto(s) {
+  s = String(s);
+  var h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return '#' + ((h2 & 0x1fffff) >>> 0).toString(36) + (h1 >>> 0).toString(36) + ':' + s.length.toString(36);
+}
+
+// Carrega do aparelho o retrato do servidor. Um retrato de uma versão anterior
+// (com o JSON inteiro de cada entidade) passa a resumos aqui mesmo: o resumo
+// do JSON guardado é o mesmo que o do JSON atual, se nada mudou.
 // Devolve: nada — preenche a variável snap ({} se nada houver ou a leitura falhar).
-function loadSnap() { try { snap = JSON.parse(localStorage.getItem(snapKey()) || '{}'); } catch (e) { snap = {}; } }
-// Guarda o retrato no aparelho; se o localStorage falhar, refaz-se no próximo pull.
+function loadSnap() {
+  try { snap = JSON.parse(localStorage.getItem(snapKey()) || '{}') || {}; } catch (e) { snap = {}; }
+  Object.keys(snap).forEach(function (k) {
+    var v = snap[k];
+    if (typeof v === 'string' && v !== '__obsoleto__' && v.charAt(0) !== '#') snap[k] = resumoDeTexto(v);
+  });
+}
+// Guarda o retrato no aparelho. Se o localStorage recusar, a sincronização
+// continua (o retrato vive em memória até ao fecho), mas não se cala: vai uma
+// vez para o rasto e para o relato de erro — sem retrato no arranque seguinte,
+// sobe tudo outra vez e as remoções feitas entretanto não se propagam.
+// Sem sessão (um 401 a meio de um envio acabou com ela) não grava: a chave
+// seria a de ninguém.
 // Devolve: nada — grava snap no localStorage.
-function saveSnap() { try { localStorage.setItem(snapKey(), JSON.stringify(snap)); } catch (e) {} }
+function saveSnap() {
+  if (!CW.user) return;
+  try { localStorage.setItem(snapKey(), JSON.stringify(snap)); } catch (e) {
+    if (saveSnap._avisado) return;
+    saveSnap._avisado = 1;
+    rastoPoe('retrato por gravar: ' + ((e && e.name) || 'erro'));
+    try { if (typeof reportErr === 'function') reportErr('O retrato da sincronização não coube no aparelho', String((e && e.message) || e)); } catch (x) {}
+  }
+}
 
 /* ---------------- API ---------------- */
 
-/* Chamada à API: junta o token da sessão, serializa 'data' em JSON e devolve
-   a resposta já decomposta. Um 401 fora de /api/auth/ encerra a sessão local
-   (sessionLost). Resposta não-ok rejeita com um Error cuja mensagem vem do
-   servidor e com .status preenchido.
+/* Quanto se espera por cada chamada, em ms. Sem tecto, um pedido pendurado (o
+   wifi do hotel com portal cativo: o TCP aceita e a resposta não chega)
+   trancava o envio até se recarregar a app — o pushNow só larga o `pushing`
+   quando a cadeia acaba, e o syncCycle espera por ele para ler. O estado e o
+   envio são os pedidos maiores (uma conta com anos de movimentos são MB, num
+   telemóvel em 3G): têm mais margem — o tecto existe para largar, não para
+   apressar. */
+var TEMPO_API = { estado: 45000, sync: 45000, outros: 20000 };
+/* O que ainda pode sair com a app trancada pela versão mínima
+   (novidades.js:gateAtualizar): o relato de erro e o terminar sessão, que não
+   escrevem dados. */
+var LIVRES_DA_TRANCA = { '/api/reports': 1, '/api/auth/logout': 1 };
+
+/* Chamada à API. A sessão vai no cookie HttpOnly que o servidor põe ao entrar
+   (credentials: 'same-origin'), e o token não se guarda no aparelho: um script
+   na página não o lê. O Bearer só segue quando há um token cá — os fluxos de
+   teste (?entrar=, o seletor de contas de teste) e as sessões guardadas antes
+   de o token sair das respostas (largarTokenAntigo) — e com ele o
+   X-Rendorium-Token: 1, para o servidor de teste devolver o token novo quando
+   roda a sessão (sessaoRodada). Serializa 'data' em JSON, tem tempo-limite
+   (TEMPO_API), e com a app trancada recusa o que escreve. Um 401 de sessão
+   encerra a sessão local (sessaoCaiu). Resposta não-ok rejeita com um Error
+   cuja mensagem vem do servidor e com .status preenchido.
    Recebe: method — o verbo HTTP ('GET', 'POST', …); path — o caminho do pedido
-   (ex.: '/api/state'); data (opcional) — corpo do pedido, serializado em JSON.
-   Devolve: Promise com o JSON da resposta ({} se o corpo não for JSON); rejeita
-   com esse Error quando a resposta não é ok. */
-function api(method, path, data) {
+   (ex.: '/api/state'); data (opcional) — corpo do pedido, serializado em JSON;
+   opcoes (opcional) — {headers: cabeçalhos a juntar; comSelo: true na leitura
+   do estado, que devolve o selo (ETag) e o resumo da resposta e aceita um 304}.
+   Devolve: Promise com o JSON da resposta ({} se o corpo não for JSON) — com
+   comSelo, {estado, selo, resumo}, ou {naoMudou: true} num 304; rejeita com
+   esse Error quando a resposta não é ok, e sem .status quando não há
+   resposta (sem rede, ou o tempo acabou). */
+function api(method, path, data, opcoes) {
+  opcoes = opcoes || {};
+  if (CW.trancado && method !== 'GET' && !LIVRES_DA_TRANCA[path]) {
+    var tr = new Error('Esta versão da app tem de ser atualizada antes de guardar.');
+    tr.trancado = true;
+    return Promise.reject(tr);
+  }
   var opts = { method: method, headers: {}, credentials: 'same-origin' };
-  if (CW.user && CW.user.token) opts.headers['Authorization'] = 'Bearer ' + CW.user.token;
+  if (CW.user && CW.user.token) {
+    opts.headers['Authorization'] = 'Bearer ' + CW.user.token;
+    opts.headers['X-Rendorium-Token'] = '1';
+  }
+  var extra = opcoes.headers || {};
+  Object.keys(extra).forEach(function (k) { opts.headers[k] = extra[k]; });
+  if (opcoes.comSelo) opts.cache = 'no-store';   // quem decide é o selo, não a cache HTTP do browser
   if (data !== undefined) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(data);
   }
-  return fetch(path, opts).catch(function (e) { rastoPoe(method + ' ' + path + ' → sem rede'); throw e; }).then(function (r) {
+  var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  if (ctl) opts.signal = ctl.signal;
+  var ms = path === '/api/state' ? TEMPO_API.estado : path === '/api/sync' ? TEMPO_API.sync : TEMPO_API.outros;
+  var pedido = fetch(path, opts).catch(function (e) { rastoPoe(method + ' ' + path + ' → sem rede'); throw e; }).then(function (r) {
     rastoPoe(method + ' ' + path + ' → ' + r.status);
-    return r.json().catch(function () { return {}; }).then(function (j) {
-      if (r.status === 401 && CW.user && path.indexOf('/api/auth/') !== 0) {
-        sessionLost();
-      }
+    // um 304 não traz corpo: não há nada para ler, e nada para aplicar
+    if (r.status === 304 && opcoes.comSelo) return { naoMudou: true };
+    return lerCorpo(r, opcoes.comSelo).then(function (lido) {
+      var j = lido.json;
+      if (r.status === 401 && CW.user && sessaoCaiu(method, path, j)) sessionLost();
       if (!r.ok) { var e = new Error(j.error || ('Erro ' + r.status)); e.status = r.status; throw e; }
-      return j;
+      if (!opcoes.comSelo) return j;
+      var selo = '';
+      try { selo = (r.headers && typeof r.headers.get === 'function' && r.headers.get('ETag')) || ''; } catch (x) {}
+      return { estado: j, selo: selo, resumo: lido.resumo };
     });
+  });
+  return comTempoLimite(pedido, ms, ctl, method + ' ' + path);
+}
+
+/* O corpo de uma resposta, decomposto. Na leitura do estado lê-se o texto,
+   porque é dele que sai o resumo que diz se alguma coisa mudou desde o último
+   estado aplicado; nas outras, o JSON direto.
+   Recebe: r — a resposta do fetch; comResumo — verdadeiro para calcular o resumo.
+   Devolve: Promise com {json, resumo} — json é {} quando o corpo não é JSON. */
+function lerCorpo(r, comResumo) {
+  if (comResumo && typeof r.text === 'function') {
+    return r.text().then(function (t) {
+      var j = null;
+      try { j = JSON.parse(t); } catch (e) {}
+      return { json: j || {}, resumo: t ? resumoDeTexto(t) : '' };
+    }, function () { return { json: {}, resumo: '' }; });
+  }
+  return r.json().catch(function () { return {}; }).then(function (j) { return { json: j || {}, resumo: '' }; });
+}
+
+/* Se um 401 quer dizer que a sessão acabou. Nas rotas de entrada nunca (aí é
+   «email ou palavra-passe errados»); na mudança de palavra-passe e no apagar
+   da conta, só com a frase da sessão — a palavra-passe atual errada também é
+   um 401 (rotas/conta.js), e pôr alguém fora com «a sessão expirou» por se
+   ter enganado nela era falso e deixava-o sem saber se a conta se apagou.
+   Recebe: method, path — o pedido; j — o corpo da resposta.
+   Devolve: true se a sessão caiu. */
+function sessaoCaiu(method, path, j) {
+  if (path.indexOf('/api/auth/') === 0) return false;
+  var comPalavraPasse = path === '/api/me/password' || (method === 'DELETE' && path === '/api/me');
+  return !comPalavraPasse || /^Sessão inválida/.test(String((j && j.error) || ''));
+}
+
+/* Dá um tecto a um pedido: passado o tempo, aborta o fetch (onde o browser
+   sabe) e rejeita com um erro sem .status — que quem chama trata como falta
+   de rede, porque para a pessoa é o que é. O temporizador sai assim que o
+   pedido acaba.
+   Recebe: pedido — a Promise do pedido; ms — o tecto; ctl — o AbortController
+   (ou null); onde — 'MÉTODO caminho', para o rasto.
+   Devolve: Promise que acaba como o pedido, ou rejeita no tecto. */
+function comTempoLimite(pedido, ms, ctl, onde) {
+  return new Promise(function (ok, falha) {
+    var t = setTimeout(function () {
+      rastoPoe(onde + ' → sem resposta');
+      try { if (ctl) ctl.abort(); } catch (e) {}
+      var e = new Error('O servidor não respondeu a tempo.');
+      e.semResposta = true;
+      falha(e);
+    }, ms);
+    pedido.then(function (v) { clearTimeout(t); ok(v); }, function (e) { clearTimeout(t); falha(e); });
   });
 }
 
 // O rasto do que a pessoa andava a fazer: as últimas chamadas à API e
 // mudanças de ecrã, num anel de 10 entradas em memória. Vai no relato de
 // cada erro — «rebentou em Movimentos» diz pouco; «depois de POST /api/sync
-// → 500» diz onde procurar.
+// → 500» diz onde procurar. Os segredos saem antes: um token (64
+// hexadecimais — ligação de partilha, convite, entrada) no caminho fica
+// mascarado. O relato fica na base e é anunciado no canal da equipa; a
+// ligação permanente é justamente o que a app não volta a mostrar, e o
+// servidor já a mascara nos relatos dele.
 // Recebe: s — a entrada a registar (texto; corta-se a 80 caracteres).
 // Devolve: nada — acrescenta ao anel CW._rasto.
 function rastoPoe(s) {
   try {
     CW._rasto = CW._rasto || [];
-    CW._rasto.push(String(s).slice(0, 80));
+    CW._rasto.push(String(s).replace(/[A-Fa-f0-9]{32,}/g, '…').slice(0, 80));
     if (CW._rasto.length > 10) CW._rasto.shift();
   } catch (e) {}
 }
 
-// Deita fora a sessão local e volta ao ecrã de entrada, com aviso de expiração.
-// Devolve: nada — limpa CW.user e mostra o ecrã de entrada.
-function sessionLost() {
+/* ---------------- sessão ---------------- */
+
+// Grava a sessão (CW.user) no aparelho; sem sessão não faz nada.
+// Devolve: nada — escreve LS_USER (e engole a recusa do localStorage).
+function guardarSessao() {
+  try { if (CW.user) localStorage.setItem(LS_USER, JSON.stringify(CW.user)); } catch (e) {}
+}
+
+// A chave do URL da ligação permanente de uma conta — por utilizador, como o
+// retrato: num aparelho partilhado, a ligação de uma conta não pode ser a que
+// a conta seguinte copia (colaboradores.js:ligacaoCopiar).
+// Recebe: id (opcional) — o id da conta; sem ele, o da sessão.
+// Devolve: a chave (texto).
+function chaveDaLigacao(id) {
+  return LS_LIGACAO + '_' + (id || (CW.user ? CW.user.id : ''));
+}
+
+/* O único ritual de saída: expirar, «Não sou eu», terminar sessão, recusar
+   os termos e apagar a conta passam todos por aqui. Eram cinco listas de
+   limpeza diferentes, e cada chave nova tinha de ser lembrada em cinco sítios
+   — já faltava em dois (a ligação de partilha, os planeados perguntados).
+   Sai sempre: a sessão, a página guardada, os planeados já perguntados, a
+   ligação desta conta, o rasto, o estado em memória e os serviços desligados
+   (eram desta conta). A base local e o retrato ficam, de propósito
+   (docs/design.md, «A app não afirma nem decide antes de saber»): quem volta a entrar encontra o que
+   deixou, e o finishLogin larga-os quando entra outra conta. Com apagarDados
+   (a conta deixou de existir) vão também a base, o dono dela e o retrato.
+   Recebe: o (opcional) — {avisarServidor: chamar o logout, que apaga o
+   cookie; apagarDados: ver acima; mensagem: o que o ecrã de entrada diz}.
+   Devolve: nada — limpa a sessão e mostra o ecrã de entrada. */
+function encerrarSessao(o) {
+  o = o || {};
+  if (o.avisarServidor && CW.user) api('POST', '/api/auth/logout').catch(function () {});
+  clearTimeout(pushTimer);
+  pushTimer = null;
+  // 'gi_est_asked' é o LS_ASKED de painel.js (os planeados por que já se perguntou)
+  var chaves = [LS_USER, LS_PAGE, 'gi_est_asked', chaveDaLigacao()];
+  if (o.apagarDados) chaves.push(LS_OWNER, snapKey());
+  chaves.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+  if (o.apagarDados) {
+    db = JSON.parse(JSON.stringify(blank));
+    rawSet(KEY, JSON.stringify(db));
+    snap = {};
+  }
   CW.user = null;
-  try { localStorage.removeItem(LS_USER); } catch (e) {}
-  showAuth('A sessão expirou — inicia sessão de novo.');
+  CW.tickets = null; CW._ticketsFalhou = false;
+  CW._rasto = [];
+  CW.state = estadoVazio(); CW.cargos = {}; CW.pessoas = {}; CW._pulled = 0;
+  seloAplicado = ''; resumoAplicado = '';
+  try { definirServicosDesligados([]); } catch (e) {}
+  try { closeAllModals(); } catch (e) {}
+  // a próxima entrada começa na visão geral, não onde se saiu
+  tab = 'dashboard'; setPage = '';
+  try { buildNav(); render(); } catch (e) {}
+  CW.showAuthMode = 'login';
+  showAuth(o.mensagem);
+}
+
+// Deita fora a sessão local e volta ao ecrã de entrada, com aviso de expiração.
+// Devolve: nada — o encerrarSessao limpa e mostra o ecrã de entrada.
+function sessionLost() {
+  encerrarSessao({ mensagem: 'A sessão expirou — inicia sessão de novo.' });
+}
+
+/* Depois de o servidor rodar a sessão (palavra-passe nova, terminar as
+   outras sessões), o cookie já traz a nova. Um token no aparelho só se mantém
+   se a sessão era de token e o servidor devolveu o novo (fora de produção,
+   pedido com o X-Rendorium-Token); senão sai — o antigo deixou de valer e, com
+   o Bearer à frente do cookie no servidor, punha a pessoa fora.
+   Recebe: r — a resposta do servidor ({ok, token?}).
+   Devolve: nada — acerta CW.user e grava-o. */
+function sessaoRodada(r) {
+  if (!CW.user) return;
+  if (CW.user.token && r && r.token) CW.user.token = r.token;
+  else delete CW.user.token;
+  guardarSessao();
+}
+
+/* As sessões guardadas antes de o token sair das respostas trazem-no no
+   aparelho, legível por qualquer script da página. No arranque pergunta-se
+   ao servidor, só com o cookie, quem somos: se o cookie é da mesma conta, o
+   token sai e a sessão passa a viver dele. Se não for (o seletor de contas de
+   teste troca a sessão sem trocar o cookie) ou se não houver resposta, fica.
+   Devolve: Promise com true quando o token saiu (nunca rejeita). */
+function largarTokenAntigo() {
+  if (!CW.user || !CW.user.token) return Promise.resolve(false);
+  var id = CW.user.id;
+  return fetch('/api/me', { credentials: 'same-origin', cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (u) {
+      if (!u || u.id !== id || !CW.user || CW.user.id !== id) return false;
+      delete CW.user.token;
+      guardarSessao();
+      return true;
+    })
+    .catch(function () { return false; });
 }
 
 /* ---------------- exportação: db -> entidades do servidor ------------- */
@@ -138,37 +382,28 @@ function stripHouse(p) {
 
 /* Um imóvel que é meu de raiz (criei-o eu): nem partilhado por outro nem de
    colaboração. É o critério de quem gere partilha, colaboradores, quotas e
-   apagar — a decisão pura (souCriador) vive em web/app/acessos.js; sem ela,
-   valem as marcas.
+   apagar — a decisão pura (souCriador) vive em web/app/acessos.js, que o
+   index.html carrega sempre antes desta camada.
    Recebe: p — o imóvel (objeto de db.properties; aguenta null).
    Devolve: true se o imóvel é meu de raiz; false caso contrário. */
 function cwMinha(p) {
   if (!p || p._sharedFrom || p._cargo) return false;
-  if (typeof souCriador === 'function') return !!souCriador(p.id);
-  return typeof souDono === 'function' ? !!souDono(p.id) : true;
+  return !!souCriador(p.id);
 }
-
-// Os tipos de registo com uma família de permissões (a cópia de recurso de
-// KIND_PERM, em web/app/acessos.js); o que não está aqui nunca sobe de um
-// imóvel de colaboração.
-var KIND_PERM_LOCAL = { contract: 'contract', tx: 'tx', rec: 'rec', visit: 'visit', tenant: 'tenant' };
 
 /* Se este utilizador pode enviar esta entidade ao servidor. Nos imóveis
    próprios ou em compropriedade, tudo; nos de colaboração, a ficha do imóvel
-   só com house.edit e os registos só dos tipos cujo cargo dá «.add». Sem a
-   função pode() (acessos.js por carregar), nada sobe desses imóveis — o
-   servidor recusava na mesma, mas poupa-se o pedido.
+   só com house.edit e os registos só dos tipos cujo cargo dá «.add» (pode e
+   KIND_PERM, de web/app/acessos.js) — o servidor recusava na mesma, mas
+   poupa-se o pedido. Um tipo sem família de permissões nunca sobe dali.
    Recebe: houseId — o id do imóvel; kind (opcional) — o tipo do registo
    ('contract', 'tx', …); sem ele avalia-se a ficha do imóvel.
    Devolve: true se pode subir; false se não. */
 function podeExportar(houseId, kind) {
   var p = (db.properties || []).find(function (x) { return x.id === houseId; });
   if (!p || !p._cargo) return true;
-  if (typeof pode !== 'function') return false;
   if (!kind) return !!pode(houseId, 'house.edit');
-  var fam = null;
-  try { if (typeof KIND_PERM !== 'undefined' && KIND_PERM) fam = KIND_PERM[kind]; } catch (e) {}
-  if (!fam) fam = KIND_PERM_LOCAL[kind];
+  var fam = KIND_PERM[kind];
   return !!fam && !!pode(houseId, fam + '.add');
 }
 
@@ -184,17 +419,21 @@ function casaDaFicha(t) {
 
 /* Mapa completo do que este utilizador deve ter no servidor.
    chave -> {scope, houseId?, kind?, id?, data}
-   Uma ficha de inquilino presa a um imóvel (casaDaFicha) é um registo desse
-   imóvel — r:<casa>:tenant:<id> — com ou sem contrato, tal como as ligadas por
-   contrato. Presa a um imóvel de colaboração, é só isso: é assim que a ficha
-   que um colaborador com tenant.add cria («Converter em inquilino») chega ao
-   dono. Presa a um imóvel meu, ou a um que já não existe, sobe também como
-   u:tenant — uma ficha do dono nunca fica sem chave (era assim que se perdia
-   ao apagar o imóvel).
+   Uma ficha de inquilino tem uma chave só. Presa a um imóvel (casaDaFicha, ou
+   ligada por contrato) é um registo desse imóvel — r:<casa>:tenant:<id> — e é
+   assim que a ficha que um colaborador com tenant.add cria («Converter em
+   inquilino») chega ao dono, e as correções dele também. Sem imóvel, ou presa
+   a um que já não está em db.properties (apagado — a ficha fica), é minha:
+   u:tenant. Subia também como u:tenant quando presa a um imóvel meu, para não
+   se perder ao apagar o imóvel; mas a cópia ganhava ao registo da casa no
+   rebuildDb — o dono via sempre a versão velha do que o colaborador corrigia,
+   e o que o colaborador apagava voltava a subir. Apagar o imóvel já a passa a
+   u:tenant pela regra do imóvel que não existe.
    Devolve: esse mapa (objeto), montado a partir do db local já limpo por strip. */
 function exportEntities() {
   var map = {};
   var owners = db.owners || [], tenants = db.tenants || [];
+  var emImovel = {};   // as fichas que já sobem como registo de um imóvel
   (db.properties || []).forEach(function (p) {
     // num imóvel de colaboração só sobe o que o cargo deixa (podeExportar)
     if (podeExportar(p.id)) map['h:' + p.id] = { scope: 'house', houseId: p.id, data: stripHouse(p) };
@@ -227,6 +466,7 @@ function exportEntities() {
       var kind = k.split(':')[0], id = k.split(':')[1];
       if (!podeExportar(p.id, kind)) return;
       map['r:' + p.id + ':' + kind + ':' + id] = { scope: 'record', houseId: p.id, kind: kind, id: id, data: strip(persons[k]) };
+      emImovel[id] = 1;
     });
   });
   (db.transactions || []).forEach(function (t) {
@@ -242,12 +482,12 @@ function exportEntities() {
   // os "proprietários" são os utilizadores: só o meu perfil é exportado
   var meOwner = CW.user && owners.find(function (o) { return o.id === CW.user.id; });
   if (meOwner) map['u:profile:main'] = { scope: 'user', kind: 'profile', id: 'main', data: strip(meOwner) };
-  // as fichas minhas sobem como registo de utilizador; as presas a um imóvel
-  // de colaboração já subiram (ou não podem subir) como registo dessa casa.
-  // Uma presa a um imóvel meu sobe também aqui, e uma presa a um imóvel que
-  // já não está em db.properties (apagado) só aqui — nunca fica sem chave
+  // as fichas minhas sobem como registo de utilizador — as que já subiram
+  // como registo de um imóvel não (uma ficha, uma chave), nem as presas a um
+  // imóvel de colaboração cujo cargo não as deixa subir: não são minhas. Uma
+  // presa a um imóvel que já não está em db.properties (apagado) sobe aqui
   tenants.forEach(function (t) {
-    if (t._sharedFrom) return;
+    if (t._sharedFrom || emImovel[t.id]) return;
     var h = casaDaFicha(t);
     if (h && !souDono(h) && prop(h)) return;
     map['u:tenant:' + t.id] = { scope: 'user', kind: 'tenant', id: t.id, data: strip(t) };
@@ -255,7 +495,23 @@ function exportEntities() {
   var st = strip(db.settings);
   delete st.theme;   // preferência do aparelho: fica de fora da sincronização
   map['u:settings:main'] = { scope: 'user', kind: 'settings', id: 'main', data: st };
+  /* um serviço desligado nesta conta congela as chaves dele: nem sobem (o
+     servidor recusava-as) nem se apagam (o pushNow salta-as também) — o
+     estado do servidor manda, e volta a trazê-las quando o serviço religar */
+  Object.keys(map).forEach(function (k) { if (chaveCongelada(map[k])) delete map[k]; });
   return map;
+}
+
+/* Uma entidade (ou uma chave do retrato, decomposta) de um serviço desligado
+   nesta conta? Sem os Imóveis, as casas e os registos delas todos; senão, os
+   kinds do serviço (web/app/servicos.js:kindDesligado).
+   Recebe: e — {scope, kind} (uma entrada do mapa ou o resultado de parseKey).
+   Devolve: true se está congelada, false se pode seguir. */
+function chaveCongelada(e) {
+  if (typeof kindDesligado !== 'function' || !e) return false;
+  if (e.scope === 'house') return !servicoLigado('properties');
+  if (e.scope === 'record') return !servicoLigado('properties') || kindDesligado(e.kind, 'record');
+  return kindDesligado(e.kind, 'user');
 }
 
 // Decompõe uma chave do retrato ('h:...', 'r:...', 'u:...') em {scope, houseId?,
@@ -272,13 +528,33 @@ function parseKey(k) {
 /* ---------------- push ---------------- */
 
 var pushing = false, pushAgain = false, pushTimer = null;
+/* O selo (ETag) e o resumo do último estado aplicado nesta página. Dizem
+   «o servidor está como estava quando o apliquei» — e deixam de o dizer
+   assim que se envia alguma coisa, ou quando a sessão muda: aí a leitura
+   seguinte é inteira. Não se guardam no aparelho: o CW.state (cargos,
+   ligações, pedidos) só vive em memória, e a primeira leitura da página tem
+   de o trazer. */
+var seloAplicado = '', resumoAplicado = '';
+var semLigacao = false;   // a última conversa com o servidor falhou por falta de rede
 
 // Agenda um envio daqui a 1,2s, juntando alterações seguidas num só push.
+// Com a app trancada pela versão mínima não arma nada.
 // Devolve: nada — (re)arma o temporizador que chama pushNow.
 function schedulePush() {
-  if (!CW.user) return;
+  if (!CW.user || CW.trancado) return;
   clearTimeout(pushTimer);
-  pushTimer = setTimeout(function () { pushNow(); }, 1200);
+  pushTimer = setTimeout(function () { pushTimer = null; pushNow(); }, 1200);
+}
+
+// Manda já o envio que estava agendado — a app vai para segundo plano, e os
+// 1,2 s podiam não chegar. O que não sair fica na base e no arranque seguinte
+// sobe (o applyState funde-o), por isso isto é pressa, não rede de segurança.
+// Devolve: nada — dispara o pushNow se havia um envio à espera.
+function despacharJa() {
+  if (!pushTimer) return;
+  clearTimeout(pushTimer);
+  pushTimer = null;
+  pushNow();
 }
 
 // A descrição curta de um registo, para os avisos («Renda de março», «T2 — Ana»).
@@ -292,41 +568,114 @@ function descricaoDe(kind, data) {
 }
 
 /* O servidor recusou um registo por falta de permissão (403 num put de
-   registo, num imóvel onde sou colaborador): sai da base local — o próximo
-   pull traz a versão dele, se existir —, fica em db._recusados para
-   consulta, e diz-se na hora. Sem isto a pessoa via o registo «guardado» e
-   ele nunca subia.
+   registo, num imóvel onde sou colaborador): sai da base local e diz-se na
+   hora. Sem isto a pessoa via o registo «guardado» e ele nunca subia. Sai
+   também do retrato: o que falta cá não é uma remoção por enviar, e o
+   próximo estado traz a versão do servidor, se existir.
    Recebe: o — a operação do push ({kind, id, houseId, data, _key}); erro — a
-   frase do servidor (pode vir vazia).
+   frase do servidor (pode vir vazia; o toast diz a razão pela sua voz).
    Devolve: nada — mexe em db e junta a descrição à lista para o toast. */
 function recusaRegisto(o, erro) {
-  var listas = { contract: 'contracts', tx: 'transactions', rec: 'recurring', visit: 'visits', tenant: 'tenants' };
-  var lista = db[listas[o.kind]] || [];
+  var lista = listaDe(o) || [];
   var i = -1;
   for (var k = 0; k < lista.length; k++) if (lista[k].id === o.id) { i = k; break; }
   var reg = i > -1 ? lista.splice(i, 1)[0] : null;
-  db._recusados = db._recusados || [];
-  db._recusados.push({ kind: o.kind, id: o.id, houseId: o.houseId, erro: erro || '', data: reg || o.data, at: Date.now() });
-  if (db._recusados.length > 50) db._recusados.shift();
+  delete snap[o._key];
   pushNow._recusadosAgora = (pushNow._recusadosAgora || []).concat([descricaoDe(o.kind, reg || o.data)]);
+}
+
+/* O 403 de um serviço desligado nesta conta, distinguido do 403 de permissão
+   num imóvel de colaboração: o servidor manda `servico` (rotas/sync.js), e a
+   frase serve de rede para uma resposta sem ele.
+   Recebe: r — o resultado de uma op do /api/sync ({ok, status, error, servico?}).
+   Devolve: o id do serviço (string), ou '' quando não é uma recusa de serviço. */
+function servicoRecusado(r) {
+  if (!r || r.ok || r.status !== 403 || typeof servicoDe !== 'function') return '';
+  if (r.servico && servicoDe(r.servico)) return r.servico;
+  var frase = String(r.error || '');
+  if (frase.indexOf('está desligado nesta conta') < 0) return '';
+  var s = SERVICOS.find(function (x) { return frase.indexOf('O serviço ' + x.nome + ' ') > -1; });
+  return s ? s.id : '';
+}
+
+/* A lista onde vive uma entidade do push (ou de uma chave do retrato,
+   decomposta), pelo scope e pelo kind.
+   Recebe: o — a operação do push, ou o resultado de parseKey ({scope, kind});
+   d (opcional) — a base onde procurar (db por omissão).
+   Devolve: o array da base (ou null para o que não é lista, como as definições). */
+function listaDe(o, d) {
+  d = d || db;
+  if (o.scope === 'house') return d.properties;
+  var listas = { contract: 'contracts', tx: 'transactions', rec: 'recurring', visit: 'visits', tenant: 'tenants', tpl: 'templates', group: 'groups' };
+  return listas[o.kind] ? (d[listas[o.kind]] = d[listas[o.kind]] || []) : null;
+}
+
+/* O servidor recusou uma operação porque o serviço dela está desligado nesta
+   conta — a pessoa escreveu (ou apagou) na janela entre o suporte desligar e
+   o estado chegar. Um «put» sai da base local (o servidor nunca o teria;
+   deixá-lo ficar era reenviá-lo a cada gravação e perdê-lo em silêncio no
+   estado seguinte); um «del» não passa por feito — o registo continua no
+   servidor, e volta ao aparelho com o estado em que o serviço religar (o
+   retrato guarda resumos, não o registo, para o repor já). Em ambos, o
+   serviço fica desligado já no aparelho (o estado seguinte confirma) e
+   diz-se a razão certa, uma vez por serviço, no fim do envio.
+   Recebe: o — a operação do push ({op, scope, kind, id, houseId, data, _key});
+   sid — o id do serviço desligado.
+   Devolve: nada — mexe em db e junta o aviso à lista do fim do envio. */
+function recusaPorServico(o, sid) {
+  var lista = listaDe(o);
+  var i = -1;
+  var id = o.scope === 'house' ? o.houseId : o.id;
+  if (lista) for (var k = 0; k < lista.length; k++) if (lista[k].id === id) { i = k; break; }
+  var nome;
+  if (o.op === 'put') {
+    var reg = i > -1 ? lista.splice(i, 1)[0] : null;
+    delete snap[o._key];
+    nome = o.scope === 'house' ? (((reg || o.data) || {}).name || 'O imóvel') : descricaoDe(o.kind, reg || o.data);
+  } else {
+    nome = o.scope === 'house' ? 'O imóvel' : descricaoDe(o.kind, {});
+  }
+  pushNow._servicoAgora = (pushNow._servicoAgora || []).concat([{ servico: sid, nome: nome, op: o.op }]);
+}
+
+/* Quantas operações de um envio ainda não chegaram ao servidor: os «put»
+   cujo resumo o retrato ainda não tem, e os «del» que ainda lá estão.
+   Recebe: ops — as operações do envio.
+   Devolve: o número (para o selo «N por enviar»). */
+function porEnviar(ops) {
+  return ops.filter(function (o) { return o.op === 'put' ? snap[o._key] !== o._res : (o._key in snap); }).length;
+}
+
+/* Diz a frase do servidor quando ele recusou o envio inteiro (429: demasiadas
+   gravações seguidas; 5xx) — a mesma frase uma vez em cada cinco minutos: o
+   ciclo volta a tentar de 30 em 30 segundos, e repeti-la era ruído.
+   Recebe: msg — a frase (pode vir vazia).
+   Devolve: nada — mostra o toast, ou não. */
+function avisoDoServidor(msg) {
+  var m = String(msg || ''), agora = Date.now();
+  if (avisoDoServidor._m === m && agora - (avisoDoServidor._t || 0) < 300000) return;
+  avisoDoServidor._m = m; avisoDoServidor._t = agora;
+  try { toast(m || 'O servidor não aceitou o envio agora. Fica neste aparelho e segue depois.', { ms: 6000 }); } catch (e) {}
 }
 
 /* Envia ao servidor a diferença entre o estado local e o retrato: 'put' do que
    mudou (casas primeiro, que os registos dependem delas) e 'del' do que
    desapareceu, em lotes de 200. Atualiza o retrato à medida que o servidor
    aceita e acerta o selo de sincronização. Reentrante: se já está a enviar, fica marcado um novo
-   envio para o fim. A Promise devolvida nunca rejeita.
+   envio para o fim. Com a app trancada pela versão mínima não envia nada — uma
+   versão velha demais para se usar é velha demais para escrever, e este é o
+   ponto único de escrita dos dados. A Promise devolvida nunca rejeita.
    Devolve: Promise que resolve quando o envio terminar (nunca rejeita). */
 function pushNow() {
-  if (!CW.user) return Promise.resolve();
+  if (!CW.user || CW.trancado) return Promise.resolve();
   if (pushing) { pushAgain = true; return Promise.resolve(); }
   pushing = true;
   var map = exportEntities();
   var ops = [];
   // casas primeiro (os registos precisam da casa), remoções no fim
   Object.keys(map).forEach(function (k) {
-    var j = JSON.stringify(map[k].data);
-    if (snap[k] !== j) ops.push(Object.assign({ _key: k, _json: j, op: 'put' }, map[k]));
+    var rs = resumoDeTexto(JSON.stringify(map[k].data));
+    if (snap[k] !== rs) ops.push(Object.assign({ _key: k, _res: rs, op: 'put' }, map[k]));
   });
   ops.sort(function (a, b) {
     var w = function (o) { return o.scope === 'house' ? 0 : 1; };
@@ -351,6 +700,9 @@ function pushNow() {
     // o perfil nunca é apagado por diff (um restauro de cópia local não o traz)
     if (k === 'u:profile:main') { delete snap[k]; return; }
     var pk = parseKey(k);
+    // uma chave de um serviço desligado nesta conta está congelada: não é o
+    // cliente que a apaga — o applyState refaz o retrato pelo que o servidor tem
+    if (chaveCongelada(pk)) return;
     // proteção contra "Recomeçar"/restauros: não apagar em bloco os dados de
     // casas dos outros — só remoções pontuais (a casa continua presente)
     var houseGone = pk.houseId && !('h:' + pk.houseId in map);
@@ -358,6 +710,8 @@ function pushNow() {
     ops.push(Object.assign({ _key: k, op: 'del' }, pk));
   });
   if (!ops.length) { pushing = false; return Promise.resolve(); }
+  // enviar muda o servidor (ou tenta): o selo do último estado deixa de valer
+  seloAplicado = ''; resumoAplicado = '';
 
   var chain = Promise.resolve();
   for (var i = 0; i < ops.length; i += 200) {
@@ -371,7 +725,10 @@ function pushNow() {
           (res.results || []).forEach(function (r, idx) {
             var o = chunk[idx];
             if (!o) return;
-            if (o.op === 'put' && r.ok) snap[o._key] = o._json;
+            var sid = servicoRecusado(r);
+            if (o.op === 'put' && r.ok) snap[o._key] = o._res;
+            // um serviço desligado nesta conta: diz-se a razão certa, e não se insiste
+            else if (sid) recusaPorServico(o, sid);
             else if (o.op === 'del' && (r.ok || r.status === 403 || r.status === 404)) delete snap[o._key];
             // sem permissão num imóvel de colaboração: o registo não fica a fingir que subiu
             else if (o.op === 'put' && o.scope === 'record' && r.status === 403) recusaRegisto(o, r.error);
@@ -384,10 +741,12 @@ function pushNow() {
   return chain
     .then(function () {
       saveSnap();
+      semLigacao = false;
       /* um 200 com operações recusadas lá dentro ficava 'ok' para sempre,
-         com o selo verde e os dados sem subir */
+         com o selo verde e os dados sem subir — e «Sem ligação» também não
+         é: o servidor respondeu. Ficam por enviar, e o ciclo volta a tentar */
       var recusadas = pushNow._recusadas || 0; pushNow._recusadas = 0;
-      setSyncBadge(recusadas ? 'off' : 'ok');
+      setSyncBadge(recusadas ? 'pend' : 'ok', recusadas);
       var fora = pushNow._recusadosAgora || []; pushNow._recusadosAgora = [];
       if (fora.length) {
         try { rawSet(KEY, JSON.stringify(db)); render(); } catch (e) {}
@@ -396,9 +755,41 @@ function pushNow() {
             (fora.length > 1 ? ' E mais ' + (fora.length - 1) + '.' : ''), { ms: 6000 });
         } catch (e) {}
       }
+      /* o que um serviço desligado recusou: o serviço fica desligado já no
+         aparelho (o separador some, e não se volta a tentar), a base local
+         acompanha, e diz-se a razão — uma vez por serviço */
+      var porServico = pushNow._servicoAgora || []; pushNow._servicoAgora = [];
+      if (porServico.length) {
+        var ids = porServico.map(function (x) { return x.servico; });
+        try { definirServicosDesligados(servicosDesligados().concat(ids)); } catch (e) {}
+        try { if (!separadorLigado(tab)) { tab = primeiroSeparadorLigado(); setPage = ''; } } catch (e) {}
+        try { rawSet(KEY, JSON.stringify(db)); buildNav(); render(); } catch (e) {}
+        ids.filter(function (id, n) { return ids.indexOf(id) === n; }).forEach(function (id) {
+          var dele = porServico.filter(function (x) { return x.servico === id; });
+          var verbo = dele[0].op === 'del' ? ' não foi apagado' : ' não foi guardado';
+          try {
+            toast(dele[0].nome + verbo + ': o serviço ' + nomeDoServico(id) + ' está desligado nesta conta.' +
+              (dele.length > 1 ? ' E mais ' + (dele.length - 1) + '.' : ''), { ms: 7000 });
+          } catch (e) {}
+        });
+      }
       try { subirPendentes(); } catch (e) {}
     })
-    .catch(function () { pushNow._recusadas = 0; setSyncBadge('off'); })
+    .catch(function (e) {
+      pushNow._recusadas = 0;
+      saveSnap();   // o que um lote anterior já fez subir fica marcado
+      if (e && e.status) {
+        /* o servidor respondeu e recusou o envio inteiro — 429 («Demasiadas
+           gravações seguidas… os dados não se perdem»), 5xx. Não é falta de
+           rede: o selo fica em «N por enviar» e a frase dele chega à pessoa */
+        semLigacao = false;
+        setSyncBadge('pend', porEnviar(ops));
+        avisoDoServidor(e.message);
+      } else {
+        semLigacao = true;   // sem rede, ou sem resposta a tempo
+        setSyncBadge('off');
+      }
+    })
     .then(function () {
       pushing = false;
       if (pushAgain) { pushAgain = false; schedulePush(); }
@@ -418,24 +809,6 @@ function temId(conj, id) {
   if (typeof conj.has === 'function') return conj.has(id);
   if (Array.isArray(conj)) return conj.indexOf(id) > -1;
   return !!conj[id];
-}
-
-/* Quem conta como proprietário para a base local: eu, quem está em
-   participants de algum imóvel e quem tem ligação aceite comigo. É a cópia
-   de recurso do ownersIds de cargosDoEstado (web/app/acessos.js), para o
-   rebuildDb nunca meter um colaborador em db.owners.
-   Recebe: st — o estado de GET /api/state; myId — o meu id.
-   Devolve: objeto {id: true} com os ids. */
-function donosDoEstado(st, myId) {
-  var out = {};
-  if (myId) out[myId] = true;
-  (st.houses || []).forEach(function (h) {
-    (h.participants || [h.ownerId]).forEach(function (u) { if (u) out[u] = true; });
-  });
-  (st.connections || []).forEach(function (c) {
-    if (c.status === 'accepted' && c.peer && c.peer.id) out[c.peer.id] = true;
-  });
-  return out;
 }
 
 // Os colaboradores de um imóvel meu, lidos de st.collaborators (que só o dono recebe).
@@ -490,17 +863,13 @@ function colaboradorPuro(uid) {
 function rebuildDb(st) {
   var d = JSON.parse(JSON.stringify(blank));
   var myId = CW.user ? CW.user.id : '';
-  var tenants = {};
+  var tenants = {}, tenantsAt = {}, tenantsMeus = {};
   var myProfile = null;
   // quem é o quê em cada imóvel: a parte pura vive em web/app/acessos.js
-  var acessos = null;
-  try { if (typeof cargosDoEstado === 'function') acessos = cargosDoEstado(st, myId); } catch (e) { acessos = null; }
-  CW.cargos = (acessos && acessos.cargos) || {};
-  CW.pessoas = (acessos && acessos.pessoas) || {};
-  var ownersIds = (acessos && acessos.ownersIds) || donosDoEstado(st, myId);
-  if (!acessos) {
-    (st.people || []).forEach(function (u) { if (u && u.id) CW.pessoas[u.id] = { name: u.name || '', kind: u.kind || '', roleName: u.roleName || '' }; });
-  }
+  var acessos = cargosDoEstado(st, myId);
+  CW.cargos = acessos.cargos;
+  CW.pessoas = acessos.pessoas;
+  var ownersIds = acessos.ownersIds;
   (st.userRecords || []).forEach(function (r) {
     try {
       if (r.kind === 'settings') d.settings = Object.assign({}, blank.settings, r.data, { theme: localTheme() });
@@ -509,9 +878,9 @@ function rebuildDb(st) {
       else if (r.kind === 'rec') d.recurring.push(normRec(r.data));
       else if (r.kind === 'tpl') d.templates.push(normTpl(r.data));
       else if (r.kind === 'group') d.groups.push(normGroup(r.data));
-      else if (r.kind === 'tenant') tenants[r.id] = normPerson(r.data);
+      else if (r.kind === 'tenant') { tenants[r.id] = normPerson(r.data); tenantsAt[r.id] = r.updatedAt || 0; tenantsMeus[r.id] = 1; }
       // kind 'owner' (modelo antigo) é ignorado: os proprietários são os utilizadores
-    } catch (e) {}
+    } catch (e) { relatarIlegivel('u', r, e); }
   });
   var houseOwner = {};
   (st.houses || []).forEach(function (h) {
@@ -523,8 +892,7 @@ function rebuildDb(st) {
       if (h.collab) {
         p._cargo = h.collab.roleName || 'Colaborador';
         if (h.collab.id) p._collabId = h.collab.id;
-        if (!acessos) CW.cargos[h.id] = { dono: false, nome: p._cargo, perms: h.collab.perms || [] };
-      } else if (!acessos) CW.cargos[h.id] = { dono: true };
+      }
       if (!h.collab) p._colaboradores = colaboradoresDaCasa(st, h);
       // os donos do imóvel são os utilizadores com acesso (dono + partilhas);
       // as quotas vêm do servidor e só mudam por proposta confirmada. Um
@@ -537,7 +905,7 @@ function rebuildDb(st) {
       p.ownerShares = shr;
       houseOwner[h.id] = h;
       d.properties.push(p);
-    } catch (e) {}
+    } catch (e) { relatarIlegivel('h', h, e); }
   });
   (st.records || []).forEach(function (r) {
     try {
@@ -555,19 +923,27 @@ function rebuildDb(st) {
       else if (r.kind === 'rec') d.recurring.push(marca(normRec(r.data)));
       else if (r.kind === 'visit') d.visits.push(marca(normVisit(r.data)));
       else if (r.kind === 'tenant') {
-        if (!tenants[r.id]) {
-          var per = marca(normPerson(r.data));
-          if (!mine) per._sharedFrom = h ? h.ownerName : '';
-          // o imóvel da ficha: é por ele que se decide quem a edita e onde
-          // se mostra. Fica na ficha (houseId, sobe com ela) e na marca do
-          // servidor (_houseId), para o dono e o colaborador a verem no
-          // imóvel certo
-          per.houseId = r.houseId;
-          per._houseId = r.houseId;
-          tenants[r.id] = per;
-        }
+        var per = marca(normPerson(r.data));
+        // de outro dono — a menos que a ficha seja minha (criei-a eu, ou está
+        // também nos meus registos): «Ficha de …» numa ficha minha era falso
+        if (!mine && !tenantsMeus[r.id] && !(myId && r.createdBy === myId)) per._sharedFrom = h ? h.ownerName : '';
+        // o imóvel da ficha: é por ele que se decide quem a edita e onde
+        // se mostra. Fica na ficha (houseId, sobe com ela) e na marca do
+        // servidor (_houseId), para o dono e o colaborador a verem no
+        // imóvel certo
+        per.houseId = r.houseId;
+        per._houseId = r.houseId;
+        /* A mesma ficha pode vir em mais do que uma chave: em dois imóveis
+           (ligada por contratos nos dois), ou em u:tenant e aqui — a dupla que
+           as versões anteriores faziam subir e que o push seguinte desfaz
+           (exportEntities, applyState). Vale a escrita mais recente; quando é
+           a cópia u:tenant, ficam nela as marcas do registo da casa (quem a
+           criou, quem a escreveu), que a cópia não tem. */
+        var antes = tenants[r.id], at = r.updatedAt || 0;
+        if (!antes || at >= (tenantsAt[r.id] || 0)) { tenants[r.id] = per; tenantsAt[r.id] = at; }
+        else ['_author', '_atServidor', '_createdBy'].forEach(function (k) { if (per[k] !== undefined && antes[k] === undefined) antes[k] = per[k]; });
       }
-    } catch (e) {}
+    } catch (e) { relatarIlegivel('r', r, e); }
   });
   // proprietários = utilizadores: eu (com o meu perfil) + os outros com perfil visível
   var ownersOut = {};
@@ -610,7 +986,7 @@ function rebuildDb(st) {
    Enquanto ela dura, a app não afirma nada que o servidor possa desmentir a
    seguir: sem isto, o sino contava rendas já confirmadas noutro aparelho e o
    cartão dos «por confirmar» anunciava-as, tudo a desaparecer um segundo
-   depois (auxiliares.js:sabemosOEstado). Mas a espera tem de ACABAR, e não só
+   depois (espera.js:sabemosOEstado). Mas a espera tem de ACABAR, e não só
    quando o servidor responde: sem rede, o que está no aparelho é tudo o que
    há, e calar o sino para sempre era trocar um erro de um segundo por um
    silêncio permanente.
@@ -624,12 +1000,174 @@ function fimDaEspera() {
   CW._esperaFim = 1;
   try { buildNav(); render(); } catch (e) {}
 }
-/* Adota o estado do servidor: substitui o db local, refaz o retrato (o que o
-   servidor não tem fica de fora, para o próximo push o enviar; o que só ele
-   tem fica marcado para apagar), grava tudo no aparelho e redesenha a app.
-   Recebe: st — o estado vindo de GET /api/state (o mesmo que rebuildDb recebe).
+/* Um registo do servidor que não se deixa ler (a normalização rebentou): não
+   entra na base — nem, por isso, na exportação —, fica congelado no servidor
+   (o applyState não o dá por obsoleto) e vai no relato de erro, com a chave e
+   sem os dados. Um catch vazio engolia-o, e o push seguinte apagava-o.
+   Recebe: onde — 'h', 'r' ou 'u' (casa, registo de casa, registo meu); r —
+   o registo tal como veio; e — o erro.
+   Devolve: nada — relata (e nunca lança). */
+function relatarIlegivel(onde, r, e) {
+  try {
+    if (typeof reportErr !== 'function') return;
+    r = r || {};
+    var chave = onde === 'h' ? 'h:' + r.id : onde === 'r' ? 'r:' + r.houseId + ':' + r.kind + ':' + r.id : 'u:' + r.kind + ':' + r.id;
+    reportErr('Um registo do servidor não se deixou ler (' + (onde === 'h' ? 'house' : r.kind) + ')',
+      chave + ' · ' + String((e && e.message) || e));
+  } catch (x) {}
+}
+
+/* Os kinds que o cliente reconhece e decidiu deixar de exportar: o que o
+   servidor ainda tem deles é apagado pelo push seguinte. 'owner' são os
+   proprietários do modelo antigo — hoje os proprietários são os utilizadores. */
+var KINDS_RETIRADOS = ['owner'];
+
+// A identidade da entidade por trás de uma chave: a casa pelo id, e os
+// registos pelo tipo e pelo id — o mesmo movimento é a mesma entidade em
+// r:<casa>:tx e em u:tx, porque vivem na mesma lista da base.
+// Recebe: pk — o resultado de parseKey.
+// Devolve: um texto ('h:<id>' ou '<kind>:<id>').
+function entidadeDe(pk) {
+  return pk.scope === 'house' ? 'h:' + pk.houseId : pk.kind + ':' + pk.id;
+}
+
+// O objeto da base que uma chave exporta: a casa, o registo, as definições,
+// o meu perfil.
+// Recebe: d — a base; pk — o resultado de parseKey.
+// Devolve: o objeto, ou null se não estiver lá.
+function objetoDaChave(d, pk) {
+  if (pk.scope === 'user' && pk.kind === 'settings') return d.settings || null;
+  var perfil = pk.scope === 'user' && pk.kind === 'profile';
+  var lista = perfil ? d.owners : listaDe(pk, d);
+  var id = pk.scope === 'house' ? pk.houseId : perfil ? (CW.user ? CW.user.id : '') : pk.id;
+  return (lista || []).find(function (x) { return x && x.id === id; }) || null;
+}
+
+/* O que este aparelho tem e o servidor ainda não: a diferença entre a
+   exportação local e o retrato — a conta do pushNow, feita ANTES de o estado
+   novo substituir o db. Uma chave que o retrato não tem é nova daqui só se o
+   servidor também não a tiver (senão, é do servidor: um registo de um imóvel
+   de colaboração que o cargo não deixa subir não está no retrato, e a
+   exportação do arranque, ainda sem os cargos em memória, mostra-o). Uma
+   chave do retrato que a exportação já não tem só conta como remoção se a
+   entidade desapareceu mesmo (não passou para outra chave — a ficha que
+   passou de r: a u:, o movimento que mudou de imóvel), se não está congelada
+   por um serviço desligado, e se não é de uma casa de outro dono que sumiu
+   daqui (a proteção do pushNow contra «Recomeçar» e restauros). E sem nenhum
+   registo na base, nenhuma remoção conta: base vazia com retrato cheio não é
+   «apaguei tudo» (o travão do pushNow, testes/pre-pull.test.js).
+   Recebe: st — o estado que vai ser aplicado; noServidor — {chave: 1} das
+   chaves que ele traz.
+   Devolve: {puts: {chave: cópia do objeto local}, dels: {chave: 1}, n}. */
+function pendentesLocais(st, noServidor) {
+  var map = exportEntities();
+  var puts = {}, dels = {}, n = 0, registos = 0, vivas = {};
+  Object.keys(map).forEach(function (k) {
+    var pk = parseKey(k);
+    vivas[entidadeDe(pk)] = 1;
+    if (k !== 'u:settings:main' && k !== 'u:profile:main') registos++;
+    if (!(k in snap) && noServidor[k]) return;
+    if (snap[k] === resumoDeTexto(JSON.stringify(map[k].data))) return;
+    var obj = objetoDaChave(db, pk);
+    if (obj) { puts[k] = JSON.parse(JSON.stringify(obj)); n++; }
+  });
+  if (!registos) return { puts: puts, dels: dels, n: n };
+  var partilhadas = {};
+  (st.houses || []).forEach(function (h) { if (!h.mine) partilhadas[h.id] = 1; });
+  Object.keys(snap).forEach(function (k) {
+    if (k in map || snap[k] === '__obsoleto__' || k === 'u:profile:main') return;
+    var pk = parseKey(k);
+    if (chaveCongelada(pk) || vivas[entidadeDe(pk)]) return;
+    if (pk.houseId && partilhadas[pk.houseId] && !(('h:' + pk.houseId) in map)) return;
+    dels[k] = 1; n++;
+  });
+  return { puts: puts, dels: dels, n: n };
+}
+
+/* O objeto local com o que é do servidor: as marcas (os campos com '_' —
+   quem escreveu e quando, o cargo, de quem é) e, numa casa, os donos e as
+   quotas, que só mudam por proposta confirmada. O resto é o que foi escrito
+   aqui e ainda não subiu.
+   Recebe: local — o objeto deste aparelho; servidor — a versão da base refeita.
+   Devolve: um objeto novo. */
+function fundidoComServidor(local, servidor) {
+  var doServidor = function (k) { return k.charAt(0) === '_' || k === 'ownerIds' || k === 'ownerShares'; };
+  var c = JSON.parse(JSON.stringify(local));
+  Object.keys(c).forEach(function (k) { if (doServidor(k)) delete c[k]; });
+  Object.keys(servidor || {}).forEach(function (k) { if (doServidor(k)) c[k] = servidor[k]; });
+  return c;
+}
+
+/* Volta a pôr por cima da base refeita a partir do servidor o que ainda não
+   lhe chegou (pendentesLocais): primeiro as remoções, depois o que é novo ou
+   foi mexido aqui — o objeto local, com as marcas do servidor quando ele já o
+   tem.
+   Recebe: d — a base refeita (rebuildDb); pend — o resultado de pendentesLocais.
+   Devolve: nada — mexe em d. */
+function reporPendentes(d, pend) {
+  Object.keys(pend.dels).forEach(function (k) {
+    var pk = parseKey(k), lista = listaDe(pk, d);
+    var id = pk.scope === 'house' ? pk.houseId : pk.id;
+    if (!lista) return;
+    for (var i = lista.length - 1; i >= 0; i--) if (lista[i] && lista[i].id === id) lista.splice(i, 1);
+  });
+  Object.keys(pend.puts).forEach(function (k) {
+    var pk = parseKey(k), local = pend.puts[k];
+    if (pk.scope === 'user' && pk.kind === 'settings') {
+      d.settings = Object.assign({}, local, { theme: localTheme() });
+      return;
+    }
+    var lista = pk.scope === 'user' && pk.kind === 'profile' ? d.owners : listaDe(pk, d);
+    if (!lista) return;
+    for (var i = 0; i < lista.length; i++) {
+      if (lista[i] && lista[i].id === local.id) { lista[i] = fundidoComServidor(local, lista[i]); return; }
+    }
+    lista.push(local);
+  });
+}
+
+/* Adota o estado do servidor sem perder o que este aparelho ainda não lhe
+   enviou. É uma fusão a três, com o retrato como base: o que aqui está igual
+   ao retrato (não foi mexido desde a última conversa) passa a ser o que o
+   servidor tem — incluindo desaparecer, se ele o apagou; o que é novo, foi
+   editado ou foi apagado aqui (pendentesLocais) fica por cima, e o push
+   seguinte envia-o. Substituía o db inteiro pelo do servidor: uma despesa
+   registada sem rede na cave do prédio, o que se gravou nos 1,2 s antes de
+   fechar a app, ou um envio que falhou com 429 ou 5xx desapareciam no
+   arranque (ou na leitura seguinte), com o selo a dizer «Guardado». Numa
+   edição dos dois lados ganha a daqui, que é a última a subir.
+   Duas exceções, onde a base local não tem este retrato por base: se é de
+   outra conta (LS_OWNER), o servidor manda e nada dela sobe; sem retrato (a
+   primeira sessão desta conta no aparelho), os dados locais só sobem se o
+   servidor estiver vazio — a migração de quem já usava a app sem conta —,
+   senão manda o servidor, como sempre. Com retrato e o servidor vazio, o
+   servidor vence o que aqui não mudou: é um «Recomeçar» feito noutro
+   aparelho, que não se desfaz a partir deste.
+   O retrato novo é o que o servidor tem, na forma local. O que o servidor tem
+   e o cliente decidiu deixar de exportar fica marcado para o push apagar: os
+   kinds retirados (KINDS_RETIRADOS) e as chaves antigas de uma entidade que
+   vive noutra chave (a cópia u:tenant de uma ficha de imóvel). O que o
+   cliente não sabe ler — um kind de uma versão mais nova, um registo que não
+   normaliza — nunca: fica congelado, para a versão que o sabe ler. Nem o que
+   não sobe por falta de permissão num imóvel de colaboração: isso é do dono.
+   Grava tudo no aparelho e redesenha.
+   Recebe: st — o estado vindo de GET /api/state (o mesmo que rebuildDb
+   recebe); selo, resumoSt (opcionais) — o ETag e o resumo da resposta, que a
+   leitura seguinte usa para saber se mudou alguma coisa.
    Devolve: nada — substitui db e snap, grava no aparelho e redesenha. */
-function applyState(st) {
+function applyState(st, selo, resumoSt) {
+  var quem = CW.user ? CW.user.id : '';
+  var dono = null;
+  try { dono = localStorage.getItem(LS_OWNER); } catch (e) {}
+  var serverKeys = {};
+  (st.houses || []).forEach(function (h) { serverKeys['h:' + h.id] = 1; });
+  (st.records || []).forEach(function (r) { serverKeys['r:' + r.houseId + ':' + r.kind + ':' + r.id] = 1; });
+  (st.userRecords || []).forEach(function (r) { serverKeys['u:' + r.kind + ':' + r.id] = 1; });
+  var vazio = !Object.keys(serverKeys).length;
+  var comBase = Object.keys(snap).length > 0;
+  // o que fica deste aparelho — antes de o estado novo mudar os cargos, os
+  // serviços e o CW.state com que a exportação local se fez
+  var pend = (dono && dono !== quem) || (!comBase && !vazio) ? null : pendentesLocais(st, serverKeys);
   CW._pulled = 1;   // já falámos com o servidor: o que estiver vazio está mesmo vazio
   CW._esperaFim = 1;   // e por isso a app já pode afirmar o que sabe
   // os campos novos do estado (cargos, colaboradores, convites, ligação,
@@ -640,30 +1178,46 @@ function applyState(st) {
   if (!Array.isArray(st.shareRequests.incoming)) st.shareRequests.incoming = [];
   if (!Array.isArray(st.shareRequests.outgoing)) st.shareRequests.outgoing = [];
   CW.state = st;
+  /* os serviços desligados nesta conta vêm no estado (servicos.desligados);
+     sem o campo, está tudo ligado — e o separador onde estávamos, se ficou
+     desligado, dá lugar ao primeiro que abre */
+  if (typeof definirServicosDesligados === 'function') {
+    definirServicosDesligados(st.servicos && Array.isArray(st.servicos.desligados) ? st.servicos.desligados : []);
+    if (!separadorLigado(tab)) { tab = primeiroSeparadorLigado(); setPage = ''; }
+  }
   db = rebuildDb(st);
-  // snapshot = o que o servidor tem, na forma local normalizada; chaves que
-  // o servidor não tem ficam de fora para serem enviadas no próximo push
-  var serverKeys = {};
-  (st.houses || []).forEach(function (h) { serverKeys['h:' + h.id] = 1; });
-  (st.records || []).forEach(function (r) { serverKeys['r:' + r.houseId + ':' + r.kind + ':' + r.id] = 1; });
-  (st.userRecords || []).forEach(function (r) { serverKeys['u:' + r.kind + ':' + r.id] = 1; });
+  // o retrato novo: o que o servidor tem, na forma local normalizada
   snap = {};
   var map = exportEntities();
+  var vivas = {};
   Object.keys(map).forEach(function (k) {
-    if (serverKeys[k]) snap[k] = JSON.stringify(map[k].data);
+    vivas[entidadeDe(parseKey(k))] = 1;
+    if (serverKeys[k]) snap[k] = resumoDeTexto(JSON.stringify(map[k].data));
   });
-  // o que o servidor tem mas o cliente já não exporta (ex.: proprietários do
-  // modelo antigo) fica marcado para o próximo push apagar — menos o que
-  // não sobe por falta de permissão num imóvel de colaboração: isso não é
-  // obsoleto, é do dono
+  // o que o servidor tem e o cliente decidiu deixar de exportar fica marcado
+  // para o próximo push apagar; o que ele não sabe ler, e o que não sobe por
+  // falta de permissão num imóvel de colaboração (é do dono), não
   Object.keys(serverKeys).forEach(function (k) {
     if (k in map) return;
     var pk = parseKey(k);
     if (pk.houseId && !podeExportar(pk.houseId, pk.kind)) return;
+    var retirado = pk.scope !== 'house' && KINDS_RETIRADOS.indexOf(pk.kind) > -1;
+    if (!retirado && !vivas[entidadeDe(pk)]) return;
     snap[k] = '__obsoleto__';
   });
+  // e por cima, o que este aparelho ainda não enviou
+  if (pend && pend.n) { reporPendentes(db, pend); dropUnsafe(db); }
+  /* O capital em dívida das hipotecas deriva-se do capital do início e dos
+     pagamentos (credito.js:acertarCreditos), e sobre a base já fundida: uma
+     casa gravada por cima noutro aparelho traz o outstanding de antes da
+     prestação que um terceiro registou. O retrato fica com o que o servidor
+     tem, e por isso a casa corrigida sobe no envio seguinte — o servidor
+     também fica certo. */
+  acertarCreditos(db);
+  seloAplicado = selo || ''; resumoAplicado = resumoSt || '';
+  semLigacao = false;
   saveSnap();
-  try { localStorage.setItem(LS_OWNER, CW.user.id); } catch (e) {}
+  try { localStorage.setItem(LS_OWNER, quem); } catch (e) {}
   rawSet(KEY, JSON.stringify(db));
   /* os lembretes do telemóvel foram agendados no arranque, com o que estava
      no aparelho: uma renda confirmada noutro lado ainda avisava no dia certo,
@@ -675,17 +1229,62 @@ function applyState(st) {
   schedulePush(); // envia o que ainda faltar no servidor
 }
 
-// Lê o estado do servidor e adota-o. Com um modal aberto não faz nada (para
-// não pisar uma edição a meio), salvo com force. Falhas põem o selo a 'off'.
+// Se a pessoa está a escrever num campo (de texto, uma área de texto, algo
+// editável): a leitura de fundo não repinta por baixo dela — um campo das
+// Definições, que só grava ao sair, era refeito a meio da frase.
+// Devolve: true/false.
+function aEscreverNumCampo() {
+  try {
+    var el = document.activeElement;
+    if (!el || el === document.body) return false;
+    if (el.isContentEditable) return true;
+    var t = String(el.tagName || '').toUpperCase();
+    if (t === 'TEXTAREA') return true;
+    return t === 'INPUT' && !/^(checkbox|radio|button|submit|reset|range|file|color|image|hidden)$/i.test(el.type || '');
+  } catch (e) { return false; }
+}
+
+/* Pede o estado ao servidor. Com condicional, manda o selo do último estado
+   aplicado (If-None-Match): se nada mudou, o servidor responde 304 sem corpo
+   e poupa a leitura de todas as linhas — a maior despesa do plano, de três em
+   três minutos por aparelho aberto. A primeira leitura da página nunca é
+   condicional: o CW.state (cargos, ligações, pedidos) só vive em memória.
+   Recebe: condicional — verdadeiro para mandar o selo, se o houver.
+   Devolve: Promise com {estado, selo, resumo}, ou {naoMudou: true} num 304. */
+function pedirEstado(condicional) {
+  var cab = {};
+  if (condicional && seloAplicado) cab['If-None-Match'] = seloAplicado;
+  return api('GET', '/api/state', undefined, { headers: cab, comSelo: true });
+}
+
+// O servidor está como estava no último estado aplicado: não há nada para
+// refazer nem para repintar. Se a última conversa tinha falhado por falta de
+// rede, o «Sem ligação» deixou de ser verdade — e vê-se se há por enviar.
+// Devolve: nada.
+function estadoIgual() {
+  if (!semLigacao) return;
+  semLigacao = false;
+  setSyncBadge('ok');
+  schedulePush();
+}
+
+// Lê o estado do servidor e adota-o. Com um modal aberto, ou alguém a
+// escrever num campo, não faz nada (para não pisar uma edição a meio), salvo
+// com force. Se nada mudou — um 304 ao selo, ou a mesma resposta que o
+// último estado aplicado —, não refaz a base nem repinta: conta como leitura.
+// Falhas põem o selo a 'off'.
 // Recebe: force (opcional) — verdadeiro para ler mesmo com um modal aberto.
 // Devolve: Promise que resolve quando a leitura acabar (nunca rejeita).
 function pullNow(force) {
   if (!CW.user) return Promise.resolve();
-  if (!force && modalStack.length) return Promise.resolve(); // não pisar edições abertas
-  return api('GET', '/api/state').then(function (st) {
+  if (!force && (modalStack.length || aEscreverNumCampo())) return Promise.resolve();
+  var quem = CW.user.id;
+  return pedirEstado(true).then(function (x) {
+    if (!CW.user || CW.user.id !== quem) return;   // a sessão mudou entretanto: o estado já não é de ninguém
     lastPull = Date.now();
-    applyState(st);
-  }).catch(function () { setSyncBadge('off'); fimDaEspera(); });
+    if (x.naoMudou || (x.resumo && x.resumo === resumoAplicado)) return estadoIgual();
+    applyState(x.estado, x.selo, x.resumo);
+  }).catch(function () { semLigacao = true; setSyncBadge('off'); fimDaEspera(); });
 }
 
 // Um ciclo: envia o que houver e, se a última leitura já passou PULL_MS e
@@ -697,54 +1296,48 @@ function syncCycle() {
   // se usar é velha demais para escrever (cloud/novidades.js:gateAtualizar)
   if (CW.trancado) return;
   pushNow().then(function () {
-    if (Date.now() - lastPull > PULL_MS && !modalStack.length) pullNow();
+    if (Date.now() - lastPull > PULL_MS && !modalStack.length && !aEscreverNumCampo()) pullNow();
   });
 }
 
 /* ---------------- arranque de sessão ---------------- */
 
-/* Arranque da sessão: primeira leitura ao servidor. Se ele está vazio e há
-   dados locais deste utilizador (primeira sessão de quem já usava a app sem
-   conta), sobem primeiro; caso contrário o servidor manda. Liga o ciclo de
-   30s e as sincronizações ao voltar online ou ao regressar à frente.
+/* Arranque da sessão: a primeira leitura ao servidor, fundida com o que o
+   aparelho tem (applyState: o que ficou por enviar da sessão anterior fica
+   por cima do servidor e sobe a seguir; a migração de quem usava a app sem
+   conta, com o servidor vazio, sobe o que tinha). Liga, uma vez por página,
+   o ciclo de 30s, as sincronizações ao voltar online ou à frente, e o envio
+   imediato do que estava agendado quando a app vai para segundo plano.
 
    O `pedido` é a leitura já em curso, quando quem chama a mandou adiantar (o
    entrada.js dispara-a ao mesmo tempo que o /api/me, em vez de esperar por
    ele). Adianta-se o PEDIDO e não a APLICAÇÃO: o corpo do .then continua a
    correr onde sempre correu, depois do /api/me e depois do seed() dos dados
    de exemplo. É essa distinção que torna isto seguro — aplicar mais cedo
-   apanhava o exemplo por gravar e deitava-o fora sem deixar rasto, e o ramo
-   de migração aqui em baixo (servidor vazio, dados locais) decidia com uma
-   fotografia do db anterior ao seed, adotando o servidor vazio em vez de
-   subir o que a pessoa tinha.
-   Recebe: pedido (opcional) — a promessa do GET /api/state já disparada; sem
-   ela, pede aqui como sempre.
+   apanhava o exemplo por gravar, e a migração do applyState (servidor vazio,
+   dados locais) decidia com uma fotografia do db anterior ao seed.
+   Recebe: pedido (opcional) — a promessa do pedirEstado já disparada; sem
+   ela, pede aqui.
    Devolve: nada — dispara a primeira leitura e deixa os ciclos armados. */
 function startSync(pedido) {
   loadSnap();
-  (pedido || api('GET', '/api/state')).then(function (st) {
-    var serverEmpty = !(st.houses || []).length && !(st.userRecords || []).length && !(st.records || []).length;
-    var localContent = (db.properties || []).length || (db.transactions || []).length ||
-      (db.contracts || []).length || (db.tenants || []).length || (db.owners || []).length;
-    var prevOwner = null;
-    try { prevOwner = localStorage.getItem(LS_OWNER); } catch (e) {}
-    if (serverEmpty && localContent && (!prevOwner || prevOwner === CW.user.id)) {
-      // primeira sessão com dados locais: envia-os para a nuvem
-      snap = {};
-      pushNow().then(function () { return pullNow(true); });
-    } else {
-      lastPull = Date.now();
-      applyState(st);
-    }
-  }).catch(function () { setSyncBadge('off'); fimDaEspera(); });
+  var quem = CW.user ? CW.user.id : '';
+  (pedido || pedirEstado(false)).then(function (x) {
+    if (!CW.user || CW.user.id !== quem || !x || x.naoMudou) return;
+    lastPull = Date.now();
+    applyState(x.estado, x.selo, x.resumo);
+  }).catch(function () { semLigacao = true; setSyncBadge('off'); fimDaEspera(); });
+  if (startSync._armado) return;   // entrar de novo na mesma página não arma um segundo ciclo
+  startSync._armado = 1;
   setInterval(syncCycle, 30000);
   window.addEventListener('online', syncCycle);
+  window.addEventListener('pagehide', despacharJa);
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) syncCycle();
+    if (document.hidden) despacharJa(); else syncCycle();
   });
 }
 
-/* ---------------- embrulhos sobre a app ---------------- */
+/* ---------------- rede de segurança à entrada ---------------- */
 
 /* Rede de segurança contra dados envenenados: a app escreve ids em dezenas
    de atributos e handlers, por isso qualquer registo cujo id não seja o
@@ -786,3 +1379,94 @@ function dropUnsafe(d) {
   return d;
 }
 dropUnsafe(db);
+
+/* ---------------- embrulhos da base ----------------
+   A base não sabe da nuvem: a nuvem embrulha-a por reatribuição (guarda a
+   função anterior e põe outra no nome, que os onclick e o registo dos
+   serviços resolvem na hora). Os que ligam a base à sincronização vivem aqui,
+   no ficheiro dela: gravar agenda o envio, pintar pendura as decorações, e
+   mudar de página lembra-a. */
+
+// Cada gravação da base filtra os ids à entrada, grava e agenda o envio.
+var _save = save;
+save = function () {
+  dropUnsafe(db);
+  _save();
+  schedulePush();
+  // um contrato ou hipoteca que já vem de trás deixa meses por registar —
+  // é dos Planeados (cloud/painel.js), e só com esse serviço ligado nesta conta
+  clearTimeout(save._est);
+  save._est = setTimeout(function () { try { if (servicoLigado('recurring') && typeof offerFill === 'function') offerFill(); } catch (e) {} }, 700);
+};
+
+var _render = render;
+render = function () {
+  _render();
+  try { decorateShared(); } catch (e) {}
+  // os pendentes e a barra do painel vivem em cloud/painel.js (dos Planeados)
+  try { if (servicoLigado('recurring') && typeof decoratePending === 'function') decoratePending(); } catch (e) {}
+  try {
+    if (CW.editMode && tab === 'dashboard' && typeof editBar === 'function') { view().classList.add('cw-edit'); editBar(); }
+    if (typeof patchHdr === 'function') patchHdr();
+  } catch (e) {}
+};
+
+/* Depois de cada render, pendura o selo «de <dono>» nos cartões dos imóveis
+   que outra pessoa partilhou comigo (mexe no DOM já desenhado, sem
+   re-render). Os selos do cargo («de <dono> · <cargo>», onde sou
+   colaborador) e dos colaboradores («N colaboradores», nos meus) desenha-os
+   a própria vista, com seloCargo e seloColaboradores (web/app/acessos.js).
+   Devolve: nada — só acrescenta os selos ao DOM. */
+function decorateShared() {
+  (db.properties || []).forEach(function (p) {
+    if (p._cargo || !p._sharedFrom) return;
+    var texto = 'de ' + p._sharedFrom, titulo = 'Imóvel partilhado por ' + p._sharedFrom;
+    var cards = document.querySelectorAll('[data-lp="prop:' + p.id + '"] .title');
+    [].slice.call(cards).forEach(function (el) {
+      if (el.querySelector('.cw-shared')) return;
+      var b = document.createElement('span');
+      b.className = 'badge grey cw-shared';
+      b.style.marginLeft = '7px';
+      b.textContent = texto;
+      b.title = titulo;
+      el.appendChild(b);
+    });
+  });
+}
+
+// Mudar de página no menu deve fechar qualquer modal aberto (imóvel,
+// movimento, ...) em vez de o deixar por cima da página nova.
+var _go = go;
+go = function (id) {
+  try { if (modalStack.length) closeAllModals(); } catch (e) {}
+  try { if (CW.editMode && id !== 'dashboard') CW.exitEdit(true); } catch (e) {}
+  // a barra de regresso só faz sentido enquanto se está nos Movimentos
+  if (id !== 'transactions') CW._fromKpi = null;
+  _go(id);
+  rememberPage();
+};
+
+// recarregar a página devolve o utilizador ao sítio onde estava
+var LS_PAGE = 'gi_page';
+// Guarda em localStorage o separador atual (e a sub-página das definições), para o restorePage.
+// Devolve: nada — grava no localStorage (e engole o erro, se ele não deixar).
+function rememberPage() {
+  try { localStorage.setItem(LS_PAGE, JSON.stringify({ tab: tab, set: setPage || '' })); } catch (e) {}
+}
+var _goSet = goSet;
+goSet = function (p) { _goSet(p); rememberPage(); };
+
+// No arranque, devolve o utilizador ao separador onde estava; ignora estados
+// guardados que já não existem e não faz nada quando era só o painel inicial.
+// Devolve: nada — repõe o separador e repinta (ou não mexe em nada).
+function restorePage() {
+  var s = null;
+  try { s = JSON.parse(localStorage.getItem(LS_PAGE) || 'null'); } catch (e) {}
+  if (!s || !s.tab || s.tab === 'dashboard' && !s.set) return;
+  if (!TABS.some(function (t) { return t.id === s.tab; })) return;
+  // um separador de um serviço desligado nesta conta não se restaura: fica-se no painel
+  if (typeof separadorLigado === 'function' && !separadorLigado(s.tab)) return;
+  tab = s.tab;
+  setPage = s.tab === 'settings' ? (s.set || '') : '';
+  buildNav(); render();
+}

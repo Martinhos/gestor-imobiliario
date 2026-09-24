@@ -14,6 +14,10 @@
    se confundir com um email a sério. */
 
 const DOMINIO = 'rendorium.com';
+// Quanto se espera pelo Resend. Um envio pendurado segurava quem esperasse
+// por ele — o pedido de repor a palavra-passe, ou o fim de um waitUntil —
+// até a plataforma o matar; passado isto, desiste e diz porquê.
+const PRAZO_CORREIO_MS = 5000;
 export const REMETENTES = {
   maquina: { de: 'Rendorium <no-reply@' + DOMINIO + '>', responderA: 'support@' + DOMINIO },
   suporte: { de: 'Rendorium <support@' + DOMINIO + '>', responderA: 'support@' + DOMINIO },
@@ -85,6 +89,8 @@ export async function enviarEmail(env, { para, assunto, html, texto, remetente }
   }
   const quem = REMETENTES[remetente || 'maquina'] || REMETENTES.maquina;
   const prefixo = env.ENV_NAME ? '[' + env.ENV_NAME + '] ' : '';
+  const corta = typeof AbortController === 'function' ? new AbortController() : null;
+  const prazo = corta ? setTimeout(() => { try { corta.abort(); } catch (e) {} }, PRAZO_CORREIO_MS) : null;
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -100,6 +106,7 @@ export async function enviarEmail(env, { para, assunto, html, texto, remetente }
         html: html || undefined,
         text: texto || undefined,
       }),
+      signal: corta ? corta.signal : undefined,
     });
     if (!r.ok) {
       const corpo = await r.text().catch(() => '');
@@ -107,7 +114,12 @@ export async function enviarEmail(env, { para, assunto, html, texto, remetente }
     }
     return { enviado: true };
   } catch (e) {
+    if (corta && corta.signal.aborted) {
+      return { enviado: false, motivo: 'o Resend não respondeu dentro do prazo (' + PRAZO_CORREIO_MS / 1000 + ' s)' };
+    }
     return { enviado: false, motivo: String((e && e.message) || e) };
+  } finally {
+    if (prazo) clearTimeout(prazo);
   }
 }
 

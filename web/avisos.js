@@ -27,6 +27,64 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 38,
+    data: '2026-09-13',
+    titulo: 'A app passa a ser feita de serviços',
+    seccoes: [
+      {
+        titulo: 'Cada separador é um serviço',
+        afeta: ['app'],
+        itens: [
+          'Por dentro, cada separador da barra lateral — imóveis, contratos, movimentos, planeados, visitas, pessoas, colaboradores, créditos, calendário, projeções, avaliação e declaração — passou a ser um serviço com manifesto próprio. As Definições são a base. Para ti nada muda: os mesmos ecrãs, no mesmo sítio.',
+          'O suporte pode ligar ou desligar um serviço a uma conta. Um serviço desligado sai do menu e os seus dados ficam guardados no servidor, à espera de o voltar a ligar; nada se apaga.',
+          'Se chegares a um separador desligado por um atalho antigo, a app diz-te o nome do serviço e que o suporte o liga — em vez de dar erro.',
+        ],
+      },
+      {
+        titulo: 'Correções que se sentem',
+        afeta: ['app'],
+        itens: [
+          'Com a conta iniciada, voltaram duas portas que tinham desaparecido das Definições: Definições → Filtros comuns e Definições → IRS e dedução.',
+          'O que fizeres sem rede — um movimento novo, uma edição, uma remoção — sobrevive ao arranque seguinte e sobe quando a rede voltar. A primeira leitura do servidor chegava a passar-lhe por cima.',
+          'Quando o servidor recusa um envio por estar ocupado, o selo fica em «por enviar» e diz-te o que ele respondeu, em vez de «Sem ligação».',
+          'Os CSV abrem no Excel com os acentos certos, e uma célula que comece por = já não é lida como fórmula.',
+          'Nos menus de escolha, as setas, o Home e o End andam pelas opções, e o Escape fecha só a lista.',
+          'No iPhone, a app instalada pelo Safari passa a chamar-se Rendorium debaixo do ícone.',
+        ],
+      },
+      {
+        titulo: 'Contratos, visitas e rendas',
+        afeta: ['contratos', 'movimentos', 'imoveis'],
+        itens: [
+          'O contrato em PDF deixou de ter cláusulas inventadas: sem dia de pagamento, sem rendas antecipadas ou sem IBAN, a frase que precisava delas sai; sem início, fim, senhorio ou morada, a app diz o que falta em vez de gerar o PDF.',
+          'A renda do primeiro mês já não é dada como lançada só por haver a caução registada nesse mês — e uma renda paga no mês seguinte conta para o mês a que respeita.',
+          'O menu do toque longo de uma visita agendada volta a abrir.',
+          'No calendário e nos prazos, tocar num aviso abre a ficha do registo, para leres antes de editares.',
+        ],
+      },
+      {
+        titulo: 'Créditos e declaração',
+        afeta: ['creditos', 'contratos', 'movimentos'],
+        itens: [
+          'O capital em dívida de uma hipoteca passa a sair do capital da data de início e dos pagamentos registados: dois aparelhos a gravar ao mesmo tempo já não o deixam errado.',
+          'A amortização abre-se nos Créditos mesmo sem os Movimentos, e o fim da taxa fixa tem uma data só — a mesma no aviso e na simulação.',
+          'O botão «Nova hipoteca» só aparece a quem pode criar uma, e só lista os imóveis onde pode.',
+          'Na Declaração, as obras dos 24 meses antes de um contrato entram no primeiro ano em que ele tem rendas.',
+        ],
+      },
+      {
+        titulo: 'Conta, partilha e pedidos',
+        afeta: ['conta', 'partilha', 'suporte'],
+        itens: [
+          'Errar a palavra-passe atual ao mudá-la já não te põe fora da conta.',
+          'A sessão passa a viver num cookie protegido, que nenhum script da página consegue ler. Se o teu browser bloquear os cookies deste site, vais ter de entrar de cada vez que abrires a app.',
+          'Num aparelho partilhado, a ligação de partilha de uma conta já não fica à vista de quem entrar a seguir.',
+          'Se a lista dos teus pedidos de ajuda não carregar, a app diz-to e dá-te um botão para tentares de novo — em vez de dizer que nunca enviaste nenhum.',
+        ],
+      },
+    ],
+  },
+  {
     v: 37,
     data: '2026-09-12',
     titulo: 'O IRS deixa de ser uma promessa',

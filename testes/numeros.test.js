@@ -1,11 +1,13 @@
-// Formatação e leitura de números, e os números por extenso dos contratos.
+// Formatação e leitura de números, e os números por extenso dos contratos; e
+// a data de hoje, que a app lê em hora local.
 // Um contrato em PDF com o valor escrito por extenso errado é um problema real.
 
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp } from './arnes.js';
+import { carregarApp, repor } from './arnes.js';
 
 const app = carregarApp();
+afterEach(() => repor(app));
 const ESPACO = ' ';   // espaço fino, o separador de milhares da app
 
 describe('mostrar dinheiro', () => {
@@ -74,6 +76,31 @@ describe('ler números escritos por pessoas', () => {
   });
 });
 
+describe('ler taxas escritas por pessoas (numTaxa)', () => {
+  test('três ou mais casas decimais não são milhares', () => {
+    // era um bug: a TAN «1,125» dava 1125 e «0.875» dava 875, porque o num()
+    // lê três casas depois do separador como milhares (certo para euros)
+    assert.equal(app.numTaxa('1,125'), 1.125);
+    assert.equal(app.numTaxa('0.875'), 0.875);
+    assert.equal(app.numTaxa('3,4060'), 3.406);
+  });
+
+  test('as formas simples leem-se como no num()', () => {
+    assert.equal(app.numTaxa('3'), 3);
+    assert.equal(app.numTaxa('1,5'), 1.5);
+    assert.equal(app.numTaxa('2.75 %'), 2.75);
+    assert.equal(app.numTaxa('-0,5'), -0.5);
+    assert.equal(app.numTaxa(1.125), 1.125);
+  });
+
+  test('com os dois separadores vale o último; o que não é número dá 0', () => {
+    assert.equal(app.numTaxa('1.234,56'), 1234.56);
+    assert.equal(app.numTaxa(''), 0);
+    assert.equal(app.numTaxa('abc'), 0);
+    assert.equal(app.numTaxa(null), 0);
+  });
+});
+
 describe('percentagens', () => {
   test('mostra a fração como percentagem', () => {
     assert.equal(app.pct(0.055), '5,5%');
@@ -136,5 +163,17 @@ describe('formatação de identificadores', () => {
 
   test('telemóvel português leva o indicativo', () => {
     assert.equal(app.fmtPhone('912345678'), '+351 912 345 678');
+  });
+});
+
+/* O relógio verdadeiro é o assunto deste teste (os de dinheiro correm num dia
+   fixo): o today() da app lê os campos locais do Date, e não o toISOString,
+   que perto da meia-noite dava o dia UTC. */
+describe('a data de hoje', () => {
+  test('é a data local, não a UTC', () => {
+    const d = new Date();
+    const local = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    assert.match(app.today(), /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(app.today(), local);
   });
 });

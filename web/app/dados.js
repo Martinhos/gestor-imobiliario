@@ -1,6 +1,6 @@
 /* ================= ARMAZENAMENTO ================= */
 /* Onde a nuvem guarda a sessão. Vive aqui, e não só lá, porque o guarda da
-   espera (auxiliares.js:sabemosOEstado) tem de saber se há sessão ANTES de a
+   espera (espera.js:sabemosOEstado) tem de saber se há sessão ANTES de a
    nuvem carregar: os ficheiros de web/app correm todos primeiro. O
    cloud/nucleo.js usa esta mesma constante, para não haver duas verdades. */
 const LS_SESSAO='gi_cloud_user';
@@ -24,6 +24,9 @@ const STAMP=0.04;
 /* taxa do imposto do selo sobre os juros: configurável em Definições, 4% por omissão
    Devolve: a taxa em fração (ex.: 0.04 para 4%). */
 const stampPct=()=>{const v=Number((db&&db.settings||{}).stampPct);return isFinite(v)&&v>=0?v/100:STAMP};
+/* Arredonda ao cêntimo.
+   Recebe: v — o valor em euros (número).
+   Devolve: o número com duas casas, no máximo. */
 const r2=v=>Math.round(v*100)/100;
 /* comissão de amortização antecipada, conforme a fase da taxa (mista: fixa até
    fixedYears, variável depois). A fase vem de loanMes — a mesma conta que o
@@ -106,10 +109,47 @@ const blank={v:13,properties:[],owners:[],tenants:[],contracts:[],transactions:[
 /* id único para qualquer registo novo; onde não há crypto.randomUUID, serve data + aleatório
    Devolve: uma string única (UUID, ou 'id' + data + aleatório como recurso). */
 function uid(){try{return crypto.randomUUID()}catch(e){return 'id'+Date.now()+Math.random().toString(16).slice(2,8)}}
+/* A forma de um id: a mesma que o servidor aceita (worker/src/lib/http.js:badId).
+   O uid() e o servidor só fazem ids assim. Os que fogem a ela só chegam de
+   fora — uma cópia colada ou importada à mão, a ficha que outra pessoa gravou
+   numa casa partilhada —, e um id acaba dentro de uma ação declarada (o
+   data-click de um botão, f('…')): é aqui, à entrada, que se garante que
+   nunca leva uma plica, uma aspa ou um parêntese. */
+const ID_FORMA=/^[A-Za-z0-9_-]{1,64}$/;
+/* Um id com a forma certa passa tal e qual. Um fora dela troca-se por um que a
+   tem — e sempre o MESMO para o mesmo texto (um hash, e não um uid()), para as
+   referências a ele (o propertyId de um movimento, os ownerIds de um imóvel)
+   continuarem a apontar para o mesmo registo sem ninguém as ter de seguir. O
+   vazio fica vazio (é «sem ligação»), e um número passa: não fecha string
+   nenhuma.
+   Recebe: v — o id, ou a referência a um, tal como veio.
+   Devolve: o próprio v quando já serve; senão 'id_' e dezasseis dígitos hexadecimais. */
+function idSeguro(v){
+  if(v==null||v===''||(typeof v==='number'&&isFinite(v)))return v;
+  if(typeof v==='string'&&ID_FORMA.test(v))return v;
+  const s=typeof v==='string'?v:(JSON.stringify(v)||String(v));
+  let a=0x811c9dc5,b=0x9747b28c;
+  for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);a=Math.imul(a^c,0x01000193);b=Math.imul(b^c,0x5bd1e995)}
+  return 'id_'+(a>>>0).toString(16).padStart(8,'0')+(b>>>0).toString(16).padStart(8,'0');
+}
+/* uma lista de ids pelo idSeguro (o que não for lista vira lista vazia)
+   Recebe: l — a lista de ids tal como veio.
+   Devolve: um array novo com cada id pelo idSeguro. */
+const idsSeguros=l=>(Array.isArray(l)?l:[]).map(idSeguro);
+/* um mapa cujas chaves são ids (as quotas por dono, as partes de uma divisão),
+   com as chaves pelo idSeguro
+   Recebe: o — o objeto tal como veio.
+   Devolve: um objeto novo com as mesmas entradas e as chaves pelo idSeguro. */
+const chavesSeguras=o=>{const r={};if(o&&typeof o==='object')Object.keys(o).forEach(k=>{r[idSeguro(k)]=o[k]});return r};
 /* versões anteriores guardavam a imagem em base64 dentro dos dados (rebentava a quota do localStorage);
    agora fica só em IndexedDB. O que vier em "data" é migrado para lá e retirado dos dados. */
 const INLINE_DATA=[];
+/* normaliza os metadados de um anexo: omissões preenchidas, o id pelo idSeguro, e o
+   base64 das versões antigas despachado para o INLINE_DATA
+   Recebe: f — os metadados em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo {id,name,type,size,added}, já sem o "data". */
 const normFile=f=>{const o=Object.assign({id:uid(),name:'',type:'',size:0,added:''},f||{});
+  o.id=idSeguro(o.id);
   if(o.data){INLINE_DATA.push({id:o.id,data:o.data});delete o.data}return o};
 /* despacha para o IndexedDB os anexos que o normFile apanhou em base64 e grava os dados já sem eles;
    o que já existir lá não é reescrito, e uma falha num ficheiro não trava os outros
@@ -125,7 +165,7 @@ function migrateInline(){
    Devolve: um objeto novo com todos os campos da hipoteca preenchidos. */
 function normLoan(l){const o=Object.assign({id:uid(),name:'',bank:'',outstanding:0,years:30,type:'fixa',
   rate:0,fixedYears:5,euribor:0,spread:0,index:'6m',start:'',stampTax:true,amortFeeFix:2,amortFeeVar:0.5,files:[]},l||{});
-  delete o.active;delete o.taeg;delete o.mtic;
+  o.id=idSeguro(o.id);delete o.active;delete o.taeg;delete o.mtic;
   if(o.stampTax===undefined)o.stampTax=true;
   o.files=(o.files||[]).map(normFile);return o}
 /* normaliza uma visita a um imóvel: quem vem (texto livre — ainda não é
@@ -133,8 +173,10 @@ function normLoan(l){const o=Object.assign({id:uid(),name:'',bank:'',outstanding
    e comentários. O contacto é opcional, para confirmar ou remarcar.
    Recebe: v — a visita em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos da visita preenchidos. */
-function normVisit(v){return Object.assign({id:uid(),propertyId:'',roomId:'',nomes:'',contacto:'',
-  date:'',start:'',end:'',estado:'agendada',resultado:'',notas:''},v||{})}
+function normVisit(v){const o=Object.assign({id:uid(),propertyId:'',roomId:'',nomes:'',contacto:'',
+  date:'',start:'',end:'',estado:'agendada',resultado:'',notas:''},v||{});
+  o.id=idSeguro(o.id);o.propertyId=idSeguro(o.propertyId);o.roomId=idSeguro(o.roomId);
+  return o}
 /* normaliza uma ficha de pessoa (dono ou inquilino): campos em falta ficam vazios, anexos pelo normFile.
    houseId é o imóvel a que a ficha está presa (vazio numa ficha só minha): é
    com ele que a ficha de um inquilino criada por um colaborador sobe como
@@ -146,6 +188,7 @@ function normVisit(v){return Object.assign({id:uid(),propertyId:'',roomId:'',nom
    Devolve: um objeto novo com todos os campos da ficha preenchidos. */
 function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:'',nif:'',gender:'',marital:'',
   nationality:'Portuguesa',birth:'',cc:'',ccValid:'',taxAddress:'',notes:'',files:[],houseId:'',pais:'',retem:false},p||{});
+  o.id=idSeguro(o.id);o.houseId=idSeguro(o.houseId);
   o.pais=String(o.pais||'');o.retem=!!o.retem;
   o.files=(o.files||[]).map(normFile);return o}
 /* normaliza um imóvel e migra o que mudou entre versões: equity passa a purchase, o crédito único
@@ -161,6 +204,7 @@ function normProp(p){
     value:0,purchase:0,ownerIds:[],ownerShares:{},notes:'',listing:'',photos:[],loans:[],
     parish:'',concelho:'',freguesia:'',fraction:'',floor:'',street:'',doorNumber:'',postalCode:'',locality:'',registry:'',matrix:'',licence:'',energyCert:'',energyClass:'',energyValid:'',
     distrito:'',freguesiaCodigo:'',tipoPredio:'',tipologia:'',vpt:0,purchaseDate:''},p||{});
+  o.id=idSeguro(o.id);o.ownerIds=idsSeguros(o.ownerIds);
   if(!o.purchase&&p&&p.equity)o.purchase=p.equity;   /* v12 chamava-lhe capital próprio */
   delete o.equity;
   /* v8 tinha um crédito único; passa a ser a primeira hipoteca da lista */
@@ -174,9 +218,11 @@ function normProp(p){
   o.tipologia=/^T\d$/.test(String(o.tipologia||''))?String(o.tipologia):'';
   o.vpt=Math.max(0,Number(o.vpt)||0);
   o.purchaseDate=/^\d{4}-\d{2}-\d{2}$/.test(String(o.purchaseDate||''))?String(o.purchaseDate):'';
-  o.rooms=(o.rooms||[]).map(r=>typeof r==='string'?{id:uid(),name:r}:Object.assign({id:uid(),name:''},r));
+  o.rooms=(o.rooms||[]).map(r=>{const q=typeof r==='string'?{id:uid(),name:r}:Object.assign({id:uid(),name:''},r);q.id=idSeguro(q.id);return q});
   o.photos=(o.photos||[]).map(normFile);
-  const sh={};Object.keys(o.ownerShares||{}).forEach(k=>{const v=Number(o.ownerShares[k]);if((o.ownerIds||[]).indexOf(k)>-1&&isFinite(v)&&v>=0)sh[k]=v});
+  /* as quotas são por dono: as chaves passam pela mesma troca dos ownerIds */
+  const osh=chavesSeguras(o.ownerShares),sh={};
+  Object.keys(osh).forEach(k=>{const v=Number(osh[k]);if(o.ownerIds.indexOf(k)>-1&&isFinite(v)&&v>=0)sh[k]=v});
   o.ownerShares=sh;
   return o;
 }
@@ -194,7 +240,7 @@ function normFisco(f){
   o.numero=String(o.numero||'').trim();
   o.celebracao=/^\d{4}-\d{2}-\d{2}$/.test(String(o.celebracao||''))?String(o.celebracao):'';
   o.renovavel=(o.renovavel===true||o.renovavel===false)?o.renovavel:null;
-  o.renovacoes=(Array.isArray(o.renovacoes)?o.renovacoes:[]).map(r=>Object.assign({id:uid(),inicio:'',fim:''},r||{}));
+  o.renovacoes=(Array.isArray(o.renovacoes)?o.renovacoes:[]).map(r=>{const q=Object.assign({id:uid(),inicio:'',fim:''},r||{});q.id=idSeguro(q.id);return q});
   o.cessacaoMotivo=String(o.cessacaoMotivo||'');
   return o;
 }
@@ -207,10 +253,13 @@ function normContract(c){
     ownerEmail:'',ownerPhone:'',tenantEmail:'',tenantPhone:'',ownerContactId:'',tenantContactId:'',
     photoIds:[],keys:[],fisco:null,
     deposit:0,payDay:1,payDayTo:0,advance:0,autoRec:true,start:'',end:'',increase:null,active:true,notes:'',files:[],inventory:[]},c||{});
+  o.id=idSeguro(o.id);o.propertyId=idSeguro(o.propertyId);o.roomId=idSeguro(o.roomId);
+  o.tenantIds=idsSeguros(o.tenantIds);o.photoIds=idsSeguros(o.photoIds);
+  o.ownerContactId=idSeguro(o.ownerContactId);o.tenantContactId=idSeguro(o.tenantContactId);
   o.fisco=normFisco(o.fisco);
   o.files=(o.files||[]).map(normFile);
-  o.inventory=(o.inventory||[]).map(i=>Object.assign({id:uid(),name:'',qty:1,state:'usado'},i));
-  o.keys=(o.keys||[]).map(i=>Object.assign({id:uid(),name:'',qty:1},i));
+  o.inventory=(o.inventory||[]).map(i=>{const q=Object.assign({id:uid(),name:'',qty:1,state:'usado'},i);q.id=idSeguro(q.id);return q});
+  o.keys=(o.keys||[]).map(i=>{const q=Object.assign({id:uid(),name:'',qty:1},i);q.id=idSeguro(q.id);return q});
   return o;
 }
 /* kind: income (renda), expense (despesa), loan (prestação), owed (dívida recebida de terceiro),
@@ -220,7 +269,11 @@ function normContract(c){
    O que o IRS pede a um movimento: numa renda, retencao (o que o inquilino reteve na fonte —
    o amount é o que entrou, e a renda ilíquida é a soma), periodo (o mês 'AAAA-MM' a que a
    renda respeita) e recibo (o recibo eletrónico já foi emitido); numa despesa, irsCol (a
-   coluna do Anexo F escolhida à mão, um id de IRS_COLUNAS; vazio = pela categoria) */
+   coluna do Anexo F escolhida à mão, um id de IRS_COLUNAS; vazio = pela categoria).
+   Os ids — o do movimento e os que ele refere, e as chaves das divisões — passam
+   pelo idSeguro.
+   Recebe: t — o movimento em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo com todos os campos do movimento preenchidos. */
 const normTx=t=>{const o=Object.assign({id:uid(),kind:'expense',label:'',amount:0,date:'',propertyId:null,contractId:null,
   loanId:null,payType:'prestacao',paidBy:null,toId:null,creditor:'',category:'',sub:'',tags:[],notes:'',split:null,groupId:null,psplit:null,
   retencao:0,periodo:'',recibo:false,irsCol:''},t||{});
@@ -228,12 +281,14 @@ const normTx=t=>{const o=Object.assign({id:uid(),kind:'expense',label:'',amount:
   o.periodo=/^\d{4}-\d{2}$/.test(String(o.periodo||''))?String(o.periodo):'';
   o.recibo=!!o.recibo;
   if(!IRS_COLUNAS.some(c=>c[0]===o.irsCol))o.irsCol='';
+  o.id=idSeguro(o.id);
+  ['propertyId','contractId','loanId','paidBy','toId','groupId'].forEach(k=>{o[k]=idSeguro(o[k])});
   if(o.split&&(!o.split.mode||o.split.mode==='quota'))o.split=null;
-  if(o.split){o.split={mode:o.split.mode,parts:Object.assign({},o.split.parts||{})}}
+  if(o.split){o.split={mode:o.split.mode,parts:chavesSeguras(o.split.parts)}}      // as partes são por dono
   if(o.propertyId)o.groupId=null;
   if(!o.groupId)o.psplit=null;
   if(o.psplit&&!o.psplit.mode)o.psplit=null;
-  if(o.psplit){o.psplit={mode:o.psplit.mode,parts:Object.assign({},o.psplit.parts||{})}}
+  if(o.psplit){o.psplit={mode:o.psplit.mode,parts:chavesSeguras(o.psplit.parts)}}  // e estas por imóvel
   return o};
 /* as liquidações antigas (lista própria) passam a movimentos do tipo "acerto"
    Recebe: d — a base de dados (usa d.settlements e d.transactions).
@@ -251,13 +306,18 @@ function migrateSettlements(d){
    Recebe: st — o objeto settings da base.
    Devolve: nada — completa st.cats, st.catsIn, st.exclude e st.irsMapa no próprio objeto. */
 function fillCats(st){
-  st.exclude=st.exclude||{};
-  if(!st.cats||!Object.keys(st.cats).length)st.cats=JSON.parse(JSON.stringify(CATS0));
+  st.exclude=(st.exclude&&typeof st.exclude==='object')?st.exclude:{};
+  /* uma cópia colada à mão pode trazer um texto onde há uma árvore: o «in» rebentava */
+  if(!st.cats||typeof st.cats!=='object'||!Object.keys(st.cats).length)st.cats=JSON.parse(JSON.stringify(CATS0));
   else['Crédito à habitação','Dívidas a terceiros'].forEach(k=>{if(!(k in st.cats))st.cats[k]=CATS0[k].slice()});
-  if(!st.catsIn||!Object.keys(st.catsIn).length)st.catsIn=JSON.parse(JSON.stringify(CATS_IN0));
+  if(!st.catsIn||typeof st.catsIn!=='object'||!Object.keys(st.catsIn).length)st.catsIn=JSON.parse(JSON.stringify(CATS_IN0));
   st.irsMapa=Object.assign({},IRS_MAPA0,(st.irsMapa&&typeof st.irsMapa==='object')?st.irsMapa:{});
 }
-const normSettle=x=>Object.assign({id:uid(),date:'',propertyId:null,fromId:null,toId:null,amount:0},x||{});
+/* normaliza uma liquidação da lista antiga (de antes de os acertos serem movimentos)
+   Recebe: x — a liquidação em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo com todos os campos, e os ids pelo idSeguro. */
+const normSettle=x=>{const o=Object.assign({id:uid(),date:'',propertyId:null,fromId:null,toId:null,amount:0},x||{});
+  ['id','propertyId','fromId','toId'].forEach(k=>{o[k]=idSeguro(o[k])});return o};
 /* modelo: um movimento guardado para repetir à mão; recorrência: repete-se sozinho e pede confirmação */
 const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType','retencao','irsCol'];
 /* cópia profunda de um movimento só com os campos que fazem sentido repetir (TX_TPL_KEYS):
@@ -265,35 +325,59 @@ const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','psplit','cont
    Recebe: t — o movimento a copiar.
    Devolve: um objeto novo só com os campos de TX_TPL_KEYS presentes em t (cópia profunda). */
 function txSnapshot(t){const o={};TX_TPL_KEYS.forEach(k=>{if(t[k]!==undefined)o[k]=JSON.parse(JSON.stringify(t[k]))});return o}
-const normTpl=x=>{const o=Object.assign({id:uid(),name:''},x||{});o.tx=txSnapshot(normTx(o.tx||{}));return o};
-const normRec=x=>{const o=Object.assign({id:uid(),name:'',every:'month',next:'',until:'',end:'',muted:false,auto:false},x||{});o.tx=txSnapshot(normTx(o.tx||{}));if(o.until&&o.until<o.next)o.until=o.next;return o};
-/* grupo: conjunto de imóveis, proprietários ou contratos com um nome */
-const normGroup=g=>{const o=Object.assign({id:uid(),name:'',kind:'prop',ids:[]},g||{});o.ids=(o.ids||[]).slice();return o};
+/* normaliza um modelo (um movimento guardado para repetir à mão)
+   Recebe: x — o modelo em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo {id,name,tx}, com o tx pelo normTx e pelo txSnapshot. */
+const normTpl=x=>{const o=Object.assign({id:uid(),name:''},x||{});o.id=idSeguro(o.id);o.tx=txSnapshot(normTx(o.tx||{}));return o};
+/* normaliza uma recorrência (um movimento que se repete sozinho e pede confirmação)
+   Recebe: x — a recorrência em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo com todos os campos, o tx pelo normTx e o fim nunca antes da próxima. */
+const normRec=x=>{const o=Object.assign({id:uid(),name:'',every:'month',next:'',until:'',end:'',muted:false,auto:false},x||{});o.id=idSeguro(o.id);o.tx=txSnapshot(normTx(o.tx||{}));if(o.until&&o.until<o.next)o.until=o.next;return o};
+/* grupo: conjunto de imóveis, proprietários ou contratos com um nome
+   Recebe: g — o grupo em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo {id,name,kind,ids}, com os ids pelo idSeguro. */
+const normGroup=g=>{const o=Object.assign({id:uid(),name:'',kind:'prop',ids:[]},g||{});o.id=idSeguro(o.id);o.ids=idsSeguros(o.ids);return o};
 
 const CATMAP={'IMI':['Impostos','IMI'],'Seguro':['Seguros','Multirriscos'],'Água/Luz/Gás':['Água, luz e gás',''],
   'Obras':['Obras e benfeitorias',''],'Manutenção':['Manutenção e reparações',''],'Comissões':['Gestão e mediação','']};
 
 let db=load();
-/* lê os dados guardados (ou a versão antiga mais recente que houver), normaliza tudo e faz as
-   migrações maiores: inquilinos com renda passam a contratos, categorias renomeadas são remapeadas
-   e as liquidações antigas viram movimentos de acerto; devolve sempre uma base utilizável
+/* lê os dados guardados (ou a versão antiga mais recente que houver) e passa-os pelo
+   normalizarBase; devolve sempre uma base utilizável
    Devolve: a base de dados completa e normalizada (o objeto que passa a viver em db). */
 function load(){
   let d=null;
   try{d=JSON.parse(rawGet(KEY)||'null')}catch(e){}
   if(!d)for(const k of OLDS){let o=null;try{o=JSON.parse(rawGet(k)||'null')}catch(e){}if(o){d=o;break}}
-  d=d||{};
-  const out=Object.assign({},blank,d,{settings:Object.assign({},blank.settings,d.settings||{})});
+  return normalizarBase(d);
+}
+/* O único caminho de normalização e de migração de uma base inteira: é por aqui
+   que passa o que está no aparelho (load) e uma cópia de segurança reposta
+   (copias.js:bkLoad). Havia duas cópias disto, e a das cópias ficou para trás.
+   Normaliza cada coleção (e os ids, pelo idSeguro) e faz as migrações maiores:
+   inquilinos com renda passam a contratos, categorias renomeadas são remapeadas, os
+   movimentos presos a um inquilino passam a estar presos ao contrato, e as
+   liquidações antigas viram movimentos de acerto; e o capital em dívida das
+   hipotecas volta a derivar-se dos pagamentos (acertarCreditos), que uma casa
+   gravada por cima noutro aparelho traz de antes. O que numa lista não for um
+   registo (um nulo, um texto, uma lista que não é lista) cai, em vez de rebentar.
+   Recebe: d — a base em bruto, de qualquer versão (o JSON lido; aguenta nulo e lixo).
+   Devolve: a base de dados completa e normalizada. */
+function normalizarBase(d){
+  d=(d&&typeof d==='object'&&!Array.isArray(d))?d:{};
+  const registos=l=>(Array.isArray(l)?l:[]).filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
+  const out=Object.assign({},blank,d,{settings:Object.assign({},blank.settings,(d.settings&&typeof d.settings==='object')?d.settings:{})});
   fillCats(out.settings);
   if(!Array.isArray(out.settings.tags))out.settings.tags=TAGS0.slice();
-  const newContracts=[];
+  const newContracts=[],inquilinosAntigos=registos(d.tenants),semContratos=!registos(d.contracts).length;
 
-  out.properties=(out.properties||[]).map(p=>{
+  out.properties=registos(d.properties).map(p=>{
     const np=normProp(p);
     if(p.use==null)np.use=(p.status==='proprio')?'proprio':'investimento';
-    /* versões antigas guardavam a renda no imóvel ou nos inquilinos */
-    const olds=(d.tenants||[]).filter(t=>t.propertyId===np.id);
-    if(olds.length&&!(d.contracts||[]).length){
+    /* versões antigas guardavam a renda no imóvel ou nos inquilinos (os ids já
+       normalizados dos dois lados, para a ligação bater certo) */
+    const olds=inquilinosAntigos.filter(t=>idSeguro(t.propertyId)===np.id);
+    if(olds.length&&semContratos){
       if(olds.length>1){
         np.rentalMode='quartos';
         olds.forEach((t,i)=>{
@@ -307,30 +391,37 @@ function load(){
         newContracts.push(normContract({propertyId:np.id,tenantIds:[t.id],rent:t.rent||p.monthlyRent||0,
           deposit:t.deposit||0,start:t.start||'',end:t.end||'',increase:p.rentIncrease==null?null:p.rentIncrease,active:t.active!==false}));
       }
-    }else if(!olds.length&&!(d.contracts||[]).length&&Number(p.monthlyRent)>0&&p.status==='arrendado'){
+    }else if(!olds.length&&semContratos&&Number(p.monthlyRent)>0&&p.status==='arrendado'){
       newContracts.push(normContract({propertyId:np.id,rent:Number(p.monthlyRent),increase:p.rentIncrease==null?null:p.rentIncrease}));
     }
     return np;
   });
 
-  out.owners=(out.owners||[]).map(normPerson);
-  out.groups=(out.groups||[]).map(normGroup);
-  out.settlements=(out.settlements||[]).map(normSettle);
-  out.templates=(out.templates||[]).map(normTpl);
-  out.recurring=(out.recurring||[]).map(normRec);
-  out.visits=(out.visits||[]).map(normVisit);
-  out.tenants=(out.tenants||[]).map(normPerson);
-  out.contracts=((out.contracts||[]).map(normContract)).concat(newContracts);
-  out.transactions=(out.transactions||[]).map(t=>{
+  out.owners=registos(d.owners).map(normPerson);
+  out.groups=registos(d.groups).map(normGroup);
+  out.settlements=registos(d.settlements).map(normSettle);
+  out.templates=registos(d.templates).map(normTpl);
+  out.recurring=registos(d.recurring).map(normRec);
+  out.visits=registos(d.visits).map(normVisit);
+  out.tenants=inquilinosAntigos.map(normPerson);
+  out.contracts=registos(d.contracts).map(normContract).concat(newContracts);
+  out.transactions=registos(d.transactions).map(t=>{
     const n=normTx(Object.assign({},t,{kind:t.kind==='debt'?'loan':t.kind}));
     if(n.category&&CATMAP[n.category]){n.sub=n.sub||CATMAP[n.category][1];n.category=CATMAP[n.category][0]}
     if(!n.contractId&&t.tenantId){
-      const c=out.contracts.find(x=>x.propertyId===n.propertyId&&(x.tenantIds||[]).indexOf(t.tenantId)>-1);
+      const tid=idSeguro(t.tenantId);
+      const c=out.contracts.find(x=>x.propertyId===n.propertyId&&x.tenantIds.indexOf(tid)>-1);
       if(c)n.contractId=c.id;
     }
     return n;
   });
   migrateSettlements(out);
+  /* o capital em dívida das hipotecas é derivado (credito.js:acertarCreditos),
+     e acerta-se aqui, por onde passa o que está no aparelho e uma cópia
+     reposta. O typeof é pela ordem de carregamento, e não por um serviço: o
+     primeiro load() corre quando o dados.js carrega, antes do credito.js — que
+     acerta a db ele próprio ao chegar. */
+  if(typeof acertarCreditos==='function')acertarCreditos(out);
   return out;
 }
 /* grava a base inteira no aparelho e reagenda os lembretes no telemóvel

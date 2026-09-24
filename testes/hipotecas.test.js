@@ -2,13 +2,17 @@
 // preenchimento em bloco, apagar), e um crédito antigo — introduzido com o
 // capital em dívida da data de início — fica com o prazo restante certo
 // depois de inseridas as prestações desde então (só as registadas contam).
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar, igual } from './arnes.js';
+import { carregarApp, limpar, igual, perto, repor } from './arnes.js';
 
-const app = carregarApp();
-const perto = (a, b, tol = 0.01) => assert.ok(Math.abs(a - b) <= tol, `esperava ${b} (±${tol}), veio ${a}`);
+/* A app vive num dia fixo: as datas de início das hipotecas e as prestações
+   vencidas contam-se a partir dele, e o que cada teste prova não muda com o
+   dia em que a bateria corre (a regra do prazos.test.js). */
+const HOJE = '2026-09-06';
+const app = carregarApp({ hoje: HOJE });
 beforeEach(() => { limpar(app); app.render = () => {}; app.buildNav = () => {}; app.toast = () => {}; });
+afterEach(() => repor(app));
 
 const hoje = app.today();
 const ANO = Number(hoje.slice(0, 4)), MES = Number(hoje.slice(5, 7)), DIA = Number(hoje.slice(8, 10));
@@ -635,5 +639,32 @@ describe('defeitos da revisão do crédito', () => {
     const card = app.pendingCard(true);
     assert.match(card, /Hipoteca já paga/);
     assert.ok(!/quickConfirmRec/.test(card), 'e sem o botão de confirmar depressa');
+  });
+});
+
+describe('as taxas escrevem-se com as casas decimais todas', () => {
+  /* era um bug: os campos das taxas liam-se pelo num(), que trata três casas
+     depois do separador como milhares (a regra certa para euros) — uma TAN
+     «1,125» gravava 1125. Passaram a ler-se pelo numTaxa (formato.js). */
+  test('«1,125» no formulário da hipoteca grava 1,125 — e os euros continuam a ler milhares', () => {
+    casa([loan('a', { type: 'mista' })]);
+    app.openModal = () => { const L = { el: { querySelector: () => null }, onSave: null }; app.modalStack.push(L); return L; };
+    app.closeModal = () => { app.modalStack.pop(); };
+    app.confirmModal = () => {};
+    app.mortModal('p1', 'a');
+    const el = (k) => app.document.getElementById('l_' + k + '_a');
+    el('rate').value = '1,125';
+    el('eur').value = '3,406';   // a Euribor publica-se com três casas: é o caso real
+    el('spr').value = '0,85';
+    el('fvar').value = '0,25';
+    el('out').value = '250.000';   // dinheiro: aqui as três casas SÃO milhares
+    el('years').value = '30';
+    app.onSave();
+    const l = A();
+    igual(l.rate, 1.125, 'a taxa fixa não vira milhares');
+    igual(l.euribor, 3.406, 'a Euribor com três casas fica inteira');
+    igual(l.spread, 0.85, 'o spread lê a vírgula como decimal');
+    igual(l.amortFeeVar, 0.25, 'a comissão variável é uma percentagem, não euros');
+    igual(l.capitalInicio, 250000, 'e o capital continua a ler «250.000» como duzentos e cinquenta mil');
   });
 });

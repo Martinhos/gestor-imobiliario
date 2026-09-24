@@ -13,15 +13,12 @@ import { rotaTeste, ligacaoTeste, eContaDeTeste } from '../worker/src/teste.js';
 import { handleApi } from '../worker/src/api.js';
 import { createSession, hashPassword } from '../worker/src/auth.js';
 import { TERMS_VERSION } from '../worker/src/lib/http.js';
-import { baseDeTeste, kvFalso, r2Falso } from './lib/bd.js';
+import { ambiente as ambienteDoWorker } from './lib/api.js';
 
-const ambiente = (extra = {}) => Object.assign({
-  DB: baseDeTeste(),
-  SESSIONS: kvFalso(),
-  FILES: r2Falso(),
-  ENV_NAME: 'teste',
-  DISCORD_BOT_TOKEN: 'tok-de-teste',
-}, extra);
+/* O ambiente de testes/lib/api.js, com o token do bot que o /test usa.
+   Recebe: extra (opcional) — o que se troca (ENV_NAME: undefined é produção).
+   Devolve: o env. */
+const ambienteDoTeste = (extra = {}) => ambienteDoWorker(Object.assign({ DISCORD_BOT_TOKEN: 'tok-de-teste' }, extra));
 
 // abre a ligação como um browser abriria: emite-a e entrega-a à rota
 async function abrir(env, comDados, mexe, manter, quem, limpar, email) {
@@ -39,14 +36,14 @@ const contas = async (env) => (await env.DB.prepare(
 
 describe('a porta /t/entrar', () => {
   test('em produção não existe, nem com assinatura boa', async () => {
-    const env = ambiente({ ENV_NAME: undefined });
+    const env = ambienteDoTeste({ ENV_NAME: undefined });
     const r = await abrir(env, false);
     assert.equal(r.status, 404);
     assert.equal((await contas(env)).length, 0, 'produção não criou conta nenhuma');
   });
 
   test('assinatura errada é 403; expirada é 410; incompleta é 400', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     // trocar o primeiro caracter por um DIFERENTE — substituir por um fixo
     // deixava o link intacto 1 vez em 16, e o teste falhava aleatoriamente
     const ma = await abrir(env, false, (l) => l.replace(/sig=(.)/, (m, c) => 'sig=' + (c === 'f' ? '0' : 'f')));
@@ -59,13 +56,13 @@ describe('a porta /t/entrar', () => {
   });
 
   test('mexer no exp para esticar a validade rebenta na assinatura', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     const r = await abrir(env, false, (l) => l.replace(/exp=(\d+)/, (m, e) => 'exp=' + (Number(e) + 86400000)));
     assert.equal(r.status, 403);
   });
 
   test('uma ligação boa entra: conta nova, sessão posta, e a marca de exemplo quando pedida', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     const r = await abrir(env, false);
     assert.equal(r.status, 302);
     const destino = r.headers.get('Location');
@@ -76,13 +73,13 @@ describe('a porta /t/entrar', () => {
     assert.equal(vivas.length, 1);
     assert.ok(eContaDeTeste(vivas[0].email));
 
-    const env2 = ambiente();
+    const env2 = ambienteDoTeste();
     const r2 = await abrir(env2, true);
     assert.match(r2.headers.get('Location'), /&exemplo=1$/, 'com dados, a marca vai no endereço ao criar');
   });
 
   test('por omissão retoma-se a conta com os dados intactos; limpar é que apaga', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     await abrir(env, false, null, false, 'alice');
     const primeira = (await contas(env)).find((u) => !u.deleted_at);
     await env.DB.prepare(
@@ -109,7 +106,7 @@ describe('a porta /t/entrar', () => {
 
 describe('a opção manter: conta extra sem lavar', () => {
   test('duas contas vivas ao mesmo tempo — e mexer no m rebenta a assinatura', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     await abrir(env, false);
     const r2 = await abrir(env, false, null, true);
     assert.equal(r2.status, 302);
@@ -124,13 +121,13 @@ describe('a opção manter: conta extra sem lavar', () => {
 
 describe('a TESTE_CHAVE partilhada manda sobre o token do bot', () => {
   test('dois ambientes com tokens diferentes mas a mesma chave entendem-se', async () => {
-    const prod = ambiente({ DISCORD_BOT_TOKEN: 'tok-prod', TESTE_CHAVE: 'chave-comum' });
-    const dev = ambiente({ DISCORD_BOT_TOKEN: 'tok-dev', TESTE_CHAVE: 'chave-comum' });
+    const prod = ambienteDoTeste({ DISCORD_BOT_TOKEN: 'tok-prod', TESTE_CHAVE: 'chave-comum' });
+    const dev = ambienteDoTeste({ DISCORD_BOT_TOKEN: 'tok-dev', TESTE_CHAVE: 'chave-comum' });
     const lig = await ligacaoTeste(prod, 'https://dev.x.pt', false, false, 'alice');
     const r = await rotaTeste({ env: dev, url: new URL(lig), request: new Request(lig) });
     assert.equal(r.status, 302, 'a ligação de um vale no outro');
 
-    const semChave = ambiente({ DISCORD_BOT_TOKEN: 'tok-dev' });
+    const semChave = ambienteDoTeste({ DISCORD_BOT_TOKEN: 'tok-dev' });
     const r2 = await rotaTeste({ env: semChave, url: new URL(lig), request: new Request(lig) });
     assert.equal(r2.status, 403, 'sem a chave comum, tokens diferentes não se entendem');
   });
@@ -138,7 +135,7 @@ describe('a TESTE_CHAVE partilhada manda sobre o token do bot', () => {
 
 describe('a assinatura antiga (sem manter) ainda vale — só como lavar', () => {
   test('uma ligação assinada à moda da produção atual entra', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     const exp = String(Date.now() + 300000);
     const sig = [...new Uint8Array(await crypto.subtle.sign('HMAC',
       await crypto.subtle.importKey('raw', new TextEncoder().encode('teste:' + env.DISCORD_BOT_TOKEN),
@@ -157,7 +154,7 @@ describe('a assinatura antiga (sem manter) ainda vale — só como lavar', () =>
 
 describe('o email do dev viaja assinado na ligação', () => {
   test('abrir a ligação grava o registo no KV; mexer no email rebenta a assinatura', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     await abrir(env, false, null, false, 'alice', false, 'Alice@Gmail.com');
     assert.equal(await env.SESSIONS.get('teste:email:alice'), 'alice@gmail.com', 'guardado, normalizado');
 
@@ -169,7 +166,7 @@ describe('o email do dev viaja assinado na ligação', () => {
 
 describe('cada dev tem as suas contas', () => {
   test('o dono fica gravado, e a lavagem de um não toca nas do outro', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     await abrir(env, false, null, false, 'alice');
     await abrir(env, false, null, true, 'bob');   // manter: junta-se
     let vivas = (await contas(env)).filter((u) => !u.deleted_at);
@@ -184,7 +181,7 @@ describe('cada dev tem as suas contas', () => {
   });
 
   test('uma conta órfã é adotada pela primeira ligação com dono — não se cria outra ao lado', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     // ligação à moda antiga (sem dono): nasce órfã, com uma casa
     await abrir(env, false);
     const orfa = (await contas(env)).find((u) => !u.deleted_at);
@@ -202,7 +199,7 @@ describe('cada dev tem as suas contas', () => {
   });
 
   test('o seletor: lista só as do próprio, troca dentro delas, e cria extra', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     const tAlice = tokenDe(await abrir(env, false, null, false, 'alice'));
     const tBob = tokenDe(await abrir(env, false, null, true, 'bob'));
     const chama = (token, path, metodo, corpo) => handleApi(new Request('https://dev.x.pt' + path, {
@@ -232,7 +229,7 @@ describe('cada dev tem as suas contas', () => {
   });
 
   test('em produção o seletor nem existe; e uma conta normal não lhe toca', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     const t = tokenDe(await abrir(env, false, null, false, 'alice'));
     const semEnv = Object.assign({}, env, { ENV_NAME: undefined });
     const r = await handleApi(new Request('https://x.pt/api/teste/contas', {
@@ -261,8 +258,8 @@ describe('apagar uma conta de teste entrega logo a próxima', () => {
   }), env, { waitUntil() {} });
 
   test('com irmã, troca para ela; sem nenhuma, cria e entra — sem pedir palavra-passe', async () => {
-    const env = ambiente();
-    const tA = tokenDe(await abrir(env, false, null, false, 'alice'));
+    const env = ambienteDoTeste();
+    tokenDe(await abrir(env, false, null, false, 'alice'));   // a principal: só tem de entrar
     const a1 = (await contas(env)).find((u) => !u.deleted_at);
     const tB = tokenDe(await abrir(env, false, null, true, 'alice'));   // extra
 
@@ -287,7 +284,7 @@ describe('apagar uma conta de teste entrega logo a próxima', () => {
   });
 
   test('uma conta normal continua a exigir a palavra-passe para se apagar', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     const pw = await hashPassword('Descartavel1!');
     await env.DB.prepare(
       `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, terms_version, terms_at)
@@ -307,7 +304,7 @@ describe('sair de uma conta de teste NÃO apaga nada', () => {
     }), env, { waitUntil() {} });
 
   test('logout fecha a sessão e a conta fica — a ligação do dia seguinte retoma-a', async () => {
-    const env = ambiente();
+    const env = ambienteDoTeste();
     const r = await abrir(env, false, null, false, 'alice');
     const token = /entrar=([a-f0-9]{64})/.exec(r.headers.get('Location'))[1];
     const deTeste = (await contas(env)).find((u) => !u.deleted_at);

@@ -4,15 +4,16 @@
 // numa renda o mês, a retenção na fonte e o recibo eletrónico; numa despesa a
 // coluna do Anexo F.
 //
-// O DOM do arnês devolve um elemento vazio novo a cada getElementById, e por
-// isso o collectCt/collectTx nunca leriam nada. Onde interessa ler, troca-se
+// O DOM do arnês lembra-se de cada elemento pelo id, mas cada um nasce vazio:
+// o collectCt/collectTx leriam campos em branco. Onde interessa ler, troca-se
 // o getElementById por um mapa de valores (domCom), e repõe-se no fim.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar, igual } from './arnes.js';
+import { carregarApp, limpar, igual, repor } from './arnes.js';
 
 const app = carregarApp();
+afterEach(() => repor(app));
 const ANO = new Date().getFullYear();
 
 /* um imóvel de arrendamento, um dono, uma inquilina e um contrato em vigor
@@ -126,9 +127,9 @@ describe('o formulário do contrato: a secção Fisco', () => {
 });
 
 describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
-  let repor = null;
+  let desfazerDom = null;
   beforeEach(() => { monta(); });
-  afterEach(() => { if (repor) repor(); repor = null; });
+  afterEach(() => { if (desfazerDom) desfazerDom(); desfazerDom = null; });
 
   test('setFiscoEstado muda o estado e guarda os ids das renovações', () => {
     app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800,
@@ -164,7 +165,7 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
   test('collectCt lê os campos do declarado e grava no formato do normFisco', () => {
     app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800,
       fisco: { estado: 'declarado', renovacoes: [{ id: 'R1' }] } });
-    repor = domCom({ c_fnum: ' 1234567 ', c_ffin: 'hp', c_fcel: '2024-03-01', c_fren: '1',
+    desfazerDom = domCom({ c_fnum: ' 1234567 ', c_ffin: 'hp', c_fcel: '2024-03-01', c_fren: '1',
       c_rini_R1: '2025-03-01', c_rfim_R1: '2026-02-28', c_fces: 'fim do prazo', c_rent: '800', c_active: true });
     app.collectCt();
     const f = app.cForm.fisco;
@@ -180,12 +181,12 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
 
   test('collectCt: «Não» é false, «Não sei» é null, e o que não é válido cai', () => {
     app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800, fisco: { estado: 'declarado', renovavel: true, finalidade: 'hp' } });
-    repor = domCom({ c_fren: '0', c_ffin: 'inventada', c_fcel: 'ontem', c_rent: '800' });
+    desfazerDom = domCom({ c_fren: '0', c_ffin: 'inventada', c_fcel: 'ontem', c_rent: '800' });
     app.collectCt();
     assert.equal(app.cForm.fisco.renovavel, false);
     assert.equal(app.cForm.fisco.finalidade, '', 'uma finalidade fora de FISCO_FINALIDADES não se guarda');
     assert.equal(app.cForm.fisco.celebracao, '', 'só datas ISO');
-    repor(); repor = domCom({ c_fren: '', c_rent: '800' });
+    desfazerDom(); desfazerDom = domCom({ c_fren: '', c_rent: '800' });
     app.collectCt();
     assert.equal(app.cForm.fisco.renovavel, null);
   });
@@ -193,7 +194,7 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
   test('collectCt sem os campos no ecrã (contrato não declarado) não toca no bloco', () => {
     app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800,
       fisco: { estado: 'naoDeclarado', numero: '1234567', finalidade: 'hp', renovavel: true } });
-    repor = domCom({ c_rent: '800' });
+    desfazerDom = domCom({ c_rent: '800' });
     app.collectCt();
     igual(app.cForm.fisco, { estado: 'naoDeclarado', numero: '1234567', finalidade: 'hp', celebracao: '', renovavel: true, renovacoes: [], cessacaoMotivo: '' });
   });
@@ -242,9 +243,9 @@ describe('a ficha do contrato diz o estado fiscal', () => {
 });
 
 describe('o formulário do movimento', () => {
-  let repor = null;
+  let desfazerDom = null;
   beforeEach(() => { monta(); });
-  afterEach(() => { if (repor) repor(); repor = null; });
+  afterEach(() => { if (desfazerDom) desfazerDom(); desfazerDom = null; });
 
   test('uma renda pede o mês e a retenção; o recibo só com contrato declarado', () => {
     app.tForm = app.normTx({ kind: 'income', propertyId: 'P1', contractId: 'C1', date: ANO + '-09-05', periodo: ANO + '-09', retencao: 12.5 });
@@ -267,13 +268,16 @@ describe('o formulário do movimento', () => {
 
   test('num modelo ou numa recorrência fica só a retenção: o mês e o recibo são de cada renda', () => {
     app.db.contracts[0].fisco.estado = 'declarado';
-    for (const marca of ['_tplNew', '_tplId', '_recNew', '_recId']) {
+    /* o modo do formulário vive no txModo (movimento.js), à parte do movimento */
+    for (const modo of [{ modo: 'tpl' }, { modo: 'tpl', tplId: 'X' }, { modo: 'rec' }, { modo: 'rec', recId: 'X' }]) {
       app.tForm = app.normTx({ kind: 'income', propertyId: 'P1', contractId: 'C1' });
-      app.tForm[marca] = marca.endsWith('Id') ? 'X' : true;
+      app.txModo = modo;
+      const nome = modo.modo + (modo.tplId || modo.recId ? ' a alterar' : ' novo');
       const html = app.txBody();
-      assert.match(html, /id="t_retencao"/, marca + ': a retenção repete-se');
-      assert.doesNotMatch(html, /id="t_periodo"|id="t_recibo"/, marca + ': sem campos que não gravam');
+      assert.match(html, /id="t_retencao"/, nome + ': a retenção repete-se');
+      assert.doesNotMatch(html, /id="t_periodo"|id="t_recibo"/, nome + ': sem campos que não gravam');
     }
+    app.txModo = { modo: 'tx' };
   });
 
   test('uma receita sem contrato nem categoria Rendas não tem os campos; com a categoria tem', () => {
@@ -321,22 +325,22 @@ describe('o formulário do movimento', () => {
   test('collectTx lê o mês, a retenção, o recibo e a coluna, no formato do normTx', () => {
     app.db.contracts[0].fisco.estado = 'declarado';
     app.tForm = app.normTx({ kind: 'income', propertyId: 'P1', contractId: 'C1' });
-    repor = domCom({ t_label: 'Renda', t_amount: '800', t_date: ANO + '-09-05', t_periodo: ANO + '-08', t_retencao: '200,5', t_recibo: true });
+    desfazerDom = domCom({ t_label: 'Renda', t_amount: '800', t_date: ANO + '-09-05', t_periodo: ANO + '-08', t_retencao: '200,5', t_recibo: true });
     app.collectTx();
     assert.equal(app.tForm.periodo, ANO + '-08');
     assert.equal(app.tForm.retencao, 200.5);
     assert.equal(app.tForm.recibo, true);
     assert.equal(app.tForm.irsCol, '', 'sem o campo no ecrã, não se toca');
-    repor(); repor = domCom({ t_label: 'Renda', t_amount: '800', t_periodo: '8/' + ANO, t_retencao: '-5', t_recibo: false });
+    desfazerDom(); desfazerDom = domCom({ t_label: 'Renda', t_amount: '800', t_periodo: '8/' + ANO, t_retencao: '-5', t_recibo: false });
     app.collectTx();
     assert.equal(app.tForm.periodo, ANO + '-08', 'MM/AAAA, onde o browser dá o mês como texto');
     assert.equal(app.tForm.retencao, 0, 'nunca negativa');
     assert.equal(app.tForm.recibo, false);
-    repor(); repor = domCom({ t_label: 'Renda', t_amount: '800', t_periodo: 'lixo' });
+    desfazerDom(); desfazerDom = domCom({ t_label: 'Renda', t_amount: '800', t_periodo: 'lixo' });
     app.collectTx();
     assert.equal(app.tForm.periodo, '', 'o que não é um mês fica vazio');
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Impostos' });
-    repor(); repor = domCom({ t_label: 'IMI', t_amount: '300', t_irscol: 'imi' });
+    desfazerDom(); desfazerDom = domCom({ t_label: 'IMI', t_amount: '300', t_irscol: 'imi' });
     app.collectTx();
     assert.equal(app.tForm.irsCol, 'imi');
     assert.equal(app.normTx(app.tForm).irsCol, 'imi', 'o que se grava sobrevive ao normTx');
@@ -344,10 +348,10 @@ describe('o formulário do movimento', () => {
 
   test('onIrsCol guarda a coluna escolhida; vazio é pela categoria', () => {
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Impostos' });
-    repor = domCom({ t_label: 'IMI', t_amount: '300', t_irscol: 'selo' });
+    desfazerDom = domCom({ t_label: 'IMI', t_amount: '300', t_irscol: 'selo' });
     app.onIrsCol();
     assert.equal(app.tForm.irsCol, 'selo');
-    repor(); repor = domCom({ t_label: 'IMI', t_amount: '300', t_irscol: '' });
+    desfazerDom(); desfazerDom = domCom({ t_label: 'IMI', t_amount: '300', t_irscol: '' });
     app.onIrsCol();
     assert.equal(app.tForm.irsCol, '');
   });
@@ -358,12 +362,12 @@ describe('o formulário do movimento', () => {
     app.repaintTx = () => { pintado++; };
     try {
       app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Impostos' });
-      repor = domCom({ t_label: 'IMI', t_amount: '300', t_sub: 'IMI' });
+      desfazerDom = domCom({ t_label: 'IMI', t_amount: '300', t_sub: 'IMI' });
       app.onSubChange();
       assert.equal(app.tForm.sub, 'IMI');
       assert.equal(pintado, 1);
       app.tForm = app.normTx({ kind: 'income', propertyId: 'P1', category: 'Rendas' });
-      repor(); repor = domCom({ t_label: 'Renda', t_amount: '800', t_sub: 'Renda mensal' });
+      desfazerDom(); desfazerDom = domCom({ t_label: 'Renda', t_amount: '800', t_sub: 'Renda mensal' });
       app.onSubChange();
       assert.equal(pintado, 1, 'numa receita nada depende da subcategoria');
     } finally { app.repaintTx = original; }
@@ -405,7 +409,8 @@ describe('a ficha do movimento', () => {
       app.db.transactions = [app.normTx(Object.assign({ id: 'D1', kind: 'expense', label: 'Gasto', amount: 100, propertyId: 'P1', date: ANO + '-03-01' }, extra || {}))];
       return app.txFicha('D1');
     };
-    const linha = (h) => { const m = /<span>Anexo F<\/span><b>([^<]*)(?:<span class="small"[^>]*>([^<]*)<\/span>)?<\/b>/.exec(h); assert.ok(m, 'a linha Anexo F'); return [m[1].trim(), m[2] || '']; };
+    // o font-weight:400 da origem passou à classe utilitária: o atributo é class="small u-fw-400"
+    const linha = (h) => { const m = /<span>Anexo F<\/span><b>([^<]*)(?:<span class="small(?: [^"]*)?"[^>]*>([^<]*)<\/span>)?<\/b>/.exec(h); assert.ok(m, 'a linha Anexo F'); return [m[1].trim(), m[2] || '']; };
     igual(linha(despesa({ category: 'Impostos', sub: 'IMI' })), ['IMI', 'pela subcategoria']);
     igual(linha(despesa({ category: 'Impostos' })), ['Taxas autárquicas', 'pela categoria']);
     igual(linha(despesa({ category: 'Impostos', sub: 'IMI', irsCol: 'obras24' })), ['Obras antes do arrendamento (24 meses)', 'escolhida neste movimento']);

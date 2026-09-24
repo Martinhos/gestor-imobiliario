@@ -1,100 +1,157 @@
 /* ================= MOVIMENTO ================= */
 let tForm={};
-/* preset: valores iniciais (vindos dos filtros ou de um botão "Pagar")
-   Recebe: id — id do movimento a editar (string), ou null para criar um novo;
-   kind (opcional) — tipo do movimento ('income', 'expense', 'loan', 'owed', 'repay' ou 'settle'; por omissão 'income');
-   propId (opcional) — id do imóvel a pré-selecionar (string ou null);
-   _x — ignorado (posição reservada; os chamadores passam null);
-   ctId (opcional) — id do contrato a pré-selecionar (string ou null);
-   preset (opcional) — objeto com campos do movimento para preencher à partida.
-   Devolve: nada — abre o modal do movimento e prepara o guardar. */
-function txModal(id,kind,propId,_x,ctId,preset){
+/* O modo do formulário do movimento aberto, à parte do tForm — que é só o
+   movimento. 'tx' regista ou altera um movimento; 'confirmar' regista o que
+   um planeado pede (recId) e avança-o; 'rec' cria ou altera um planeado
+   (recId; sem ele é novo) sem criar movimento nenhum; 'tpl' cria ou altera um
+   modelo (tplId; sem ele é novo) e, com alsoTx, regista também o movimento.
+   Os campos do planeado (every, until, recEnd) e do modelo (tplName) são
+   daqui, e não do movimento. Viviam no tForm como bandeiras _rec…/_tpl…, que
+   o guardar apagava por prefixo e o applyTemplate tinha de enumerar à mão. */
+let txModo={modo:'tx'};
+/* Abre o formulário do movimento: registar, alterar, confirmar um planeado,
+   criar ou alterar um planeado ou um modelo.
+   A regra de quem chama: um objeto. A única forma curta é txModal(id) — um
+   texto sozinho —, que é o mesmo que txModal({id}): abre esse movimento para o
+   alterar (ou a ficha, a quem não pode). A forma por posições (id, kind,
+   propId, _x, ctId, preset) saiu com o adaptador que a traduzia; mais do que
+   um argumento rebenta, para ninguém a trazer de volta sem dar por isso. Um
+   onclick escrito em texto também leva o objeto: txModal({id:'…'}).
+   Recebe: o — {id, kind, propId, ctId, preset, modo, recId, tplId, alsoTx,
+   every, until, recEnd, tplName}, ou só o id (texto): id do movimento a
+   alterar (sem ele é um novo); kind o tipo ('income', 'expense', 'loan',
+   'owed', 'repay' ou 'settle'; 'income' por omissão); propId e ctId o imóvel e
+   o contrato a pré-escolher; preset os campos do movimento para preencher à
+   partida (dos filtros, de um botão «Pagar», de um planeado ou de um modelo);
+   o resto é o modo (txModo).
+   Devolve: nada — abre o modal do movimento e liga o guardar. */
+function txModal(o){
+  if(arguments.length>1)throw new Error('txModal: passa um objeto ({id, kind, propId, ctId, preset…}); a forma por posições saiu');
+  if(typeof o==='string')o={id:o};
+  else if(!o||typeof o!=='object')o={};
+  const id=o.id||null;
   foldState={};
   /* Quem não pode alterar recebe a FICHA, e não este formulário com os campos
      apagados. E antes do openModal: não se decora uma janela já aberta,
      escolhe-se qual é a janela a abrir. */
   const _t=id?(db.transactions||[]).find(x=>x.id===id):null;
+  if(id&&!_t)return;
   if(_t&&!podeEditar(_t.propertyId,'tx.add',_t))return txView(id);
+  const modo=['confirmar','rec','tpl'].indexOf(o.modo)>-1?o.modo:'tx';
+  txModo={modo,recId:o.recId||null,tplId:o.tplId||null,alsoTx:!!o.alsoTx,every:o.every||'month',until:o.until||'',recEnd:o.recEnd||'',tplName:o.tplName||''};
   /* sem imóvel escolhido: com um só imóvel onde posso adicionar fica esse; quem não
      é dono de nenhum não tem «Todos os imóveis» e fica com o primeiro permitido —
      senão o seletor mostrava o primeiro e o movimento gravava-se sem imóvel */
   const auto=(db.properties.length===1||!podeSemImovel())?((casasComo('tx.add')[0]||{}).id||null):null;
-  tForm=id?normTx(JSON.parse(JSON.stringify(db.transactions.find(x=>x.id===id)))):
-    normTx(Object.assign({kind:kind||'income',date:today(),amount:'',propertyId:propId||auto,contractId:ctId||null,split:null},preset||{}));
+  tForm=_t?normTx(JSON.parse(JSON.stringify(_t))):
+    normTx(Object.assign({kind:o.kind||'income',date:today(),amount:'',propertyId:o.propId||auto,contractId:o.ctId||null,split:null},o.preset||{}));
   if(tForm.contractId&&!tForm.propertyId){const c=contract(tForm.contractId);if(c)tForm.propertyId=c.propertyId}
   if(!id&&!tForm.propertyId&&!tForm.groupId&&!podeSemImovel())tForm.propertyId=auto;   /* um preset sem imóvel (modelo) também */
   tForm._edit=!!id;
   if(!id&&tForm.amount){tForm._aA=tForm.amount}
   prefill();
-  const m=id?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${id}')`}]):'';
+  const m=id?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${jsq(id)}')`}]):'';
+  openModal(txTitulo(),txBody(),null,m);
+  onSave=()=>txGuardar(id);
+}
+/* O título do formulário do movimento, pelo modo e pelo tipo.
+   Devolve: o título (texto). */
+function txTitulo(){
+  const m=txModo;
+  if(m.modo==='confirmar')return 'Confirmar movimento';
+  if(m.modo==='rec')return m.recId?'Editar movimento recorrente':'Novo movimento recorrente';
+  if(m.modo==='tpl')return m.tplId?'Editar modelo':'Novo modelo';
   const nome=txTypeName(tForm.kind);
-  openModal(id?'Editar '+nome:txNewWord(tForm.kind)+nome,txBody(),null,m);
-  tForm._saver=()=>{
-    collectTx();
-    /* a primeira barreira: o servidor recusaria na mesma, mas aqui diz-se porquê antes de gravar.
-       Criar ou alterar um planeado não cria movimentos: pede «Adicionar e confirmar planeados»
-       (e, a alterar, ser quem o criou); o resto — movimentos, e o Confirmar — pede «Adicionar movimentos» */
-    const recusa=(tForm._recId||tForm._recNew)?motivoRecusa(tForm.propertyId,'rec.add',tForm._recId?(db.recurring||[]).find(x=>x.id===tForm._recId):null)
-      :motivoRecusa(tForm.propertyId,'tx.add',id?db.transactions.find(x=>x.id===id):null);
-    if(recusa)return toast(recusa);
-    if(!tForm.propertyId&&!podeSemImovel())return toast('Escolhe o imóvel.');
-    /* um pagamento de crédito a sério (não um planeado nem um modelo só) abate capital
-       na ficha do imóvel: sem «Editar a ficha» o movimento subia e a dívida não */
-    if(tForm.kind==='loan'&&!(tForm._recId||tForm._recNew)&&(!(tForm._tplId||tForm._tplNew)||tForm._alsoTx)){const rc=motivoCredito(tForm.propertyId);if(rc)return toast(rc)}
-    if(!tForm.label.trim())return falhaCampo('t_label','Escreve uma descrição.');
-    if(!(tForm.amount>0))return falhaCampo('t_amount','Indica um montante.');
-    /* com hipotecas vivas, um pagamento de crédito sem hipoteca ia parar à conta errada ou a nenhuma */
-    if(tForm.kind==='loan'&&!tForm.loanId&&liveLoans(prop(tForm.propertyId)).length)return falhaCampo('t_loan','Indica a hipoteca.');
-    if(tForm.kind==='settle'){
-      if(!tForm.propertyId&&tForm.groupId)return toast('Um acerto é de um imóvel ou de todos os imóveis, não de um grupo.');
-      if(!tForm.paidBy||!tForm.toId)return toast('Indica quem paga e quem recebe.');
-      if(tForm.paidBy===tForm.toId)return toast('Quem paga e quem recebe têm de ser pessoas diferentes.');
+  return tForm._edit?'Editar '+nome:txNewWord(tForm.kind)+nome;
+}
+/* O Guardar do formulário do movimento: recolhe o que está no ecrã, valida o
+   que é comum aos modos e entrega ao guardar do modo (txGuardarPlaneado,
+   txGuardarModelo, txGuardarMovimento). A distribuição de um pagamento de
+   crédito sai aqui da função pura (distribuicaoDe), uma vez, com o que está
+   no formulário — pintar o cartão não a escreve.
+   Recebe: id — o id do movimento em edição (null num novo).
+   Devolve: nada — grava e fecha, ou diz o que falta. */
+function txGuardar(id){
+  collectTx();
+  const m=txModo,planeado=m.modo==='rec';
+  /* a primeira barreira: o servidor recusaria na mesma, mas aqui diz-se porquê antes de gravar.
+     Criar ou alterar um planeado não cria movimentos: pede «Adicionar e confirmar planeados»
+     (e, a alterar, ser quem o criou); o resto — movimentos, e o Confirmar — pede «Adicionar movimentos» */
+  const recusa=planeado?motivoRecusa(tForm.propertyId,'rec.add',m.recId?(db.recurring||[]).find(x=>x.id===m.recId):null)
+    :motivoRecusa(tForm.propertyId,'tx.add',id?db.transactions.find(x=>x.id===id):null);
+  if(recusa)return toast(recusa);
+  if(!tForm.propertyId&&!podeSemImovel())return toast('Escolhe o imóvel.');
+  /* um pagamento de crédito a sério (não um planeado nem um modelo só) abate capital
+     na ficha do imóvel: sem «Editar a ficha» o movimento subia e a dívida não */
+  if(tForm.kind==='loan'&&!planeado&&(m.modo!=='tpl'||m.alsoTx)){const rc=motivoCredito(tForm.propertyId);if(rc)return toast(rc)}
+  if(!tForm.label.trim())return falhaCampo('t_label','Escreve uma descrição.');
+  if(!(tForm.amount>0))return falhaCampo('t_amount','Indica um montante.');
+  /* com hipotecas vivas, um pagamento de crédito sem hipoteca ia parar à conta errada ou a nenhuma */
+  if(tForm.kind==='loan'&&!tForm.loanId&&liveLoans(prop(tForm.propertyId)).length)return falhaCampo('t_loan','Indica a hipoteca.');
+  if(tForm.kind==='settle'){
+    if(!tForm.propertyId&&tForm.groupId)return toast('Um acerto é de um imóvel ou de todos os imóveis, não de um grupo.');
+    if(!tForm.paidBy||!tForm.toId)return toast('Indica quem paga e quem recebe.');
+    if(tForm.paidBy===tForm.toId)return toast('Quem paga e quem recebe têm de ser pessoas diferentes.');
+  }
+  const se=splitError();if(se)return toast(se);
+  const pe=psplitError();if(pe)return toast(pe);
+  const lV=tForm.kind==='loan'&&tForm.loanId?findLoan(prop(tForm.propertyId),tForm.loanId):null;
+  if(lV){
+    Object.assign(tForm,distribuicaoDe(tForm,lV));
+    if(tForm.payType!=='amortizacao'){
+      if(Number(tForm.interest)<0||Number(tForm.stamp)<0||Number(tForm.principal)<0)return toast('Juros e selo ultrapassam o montante: baixa os juros na tabela da distribuição.');
+      const s=r2(Number(tForm.interest||0)+Number(tForm.stamp||0)+Number(tForm.principal||0));
+      if(Math.abs(s-tForm.amount)>0.011)return toast('Juros, selo e capital têm de somar o montante ('+euro2(tForm.amount)+').');
     }
-    const se=splitError();if(se)return toast(se);
-    const pe=psplitError();if(pe)return toast(pe);
-    if(tForm.kind==='loan'&&tForm.loanId&&tForm.principal!=null){
-      const lV=findLoan(prop(tForm.propertyId),tForm.loanId);
-      if(tForm.payType!=='amortizacao'){
-        if(Number(tForm.interest)<0||Number(tForm.stamp)<0||Number(tForm.principal)<0)return toast('Juros e selo ultrapassam o montante: baixa os juros na tabela da distribuição.');
-        const s=r2(Number(tForm.interest||0)+Number(tForm.stamp||0)+Number(tForm.principal||0));
-        if(Math.abs(s-tForm.amount)>0.011)return toast('Juros, selo e capital têm de somar o montante ('+euro2(tForm.amount)+').');
-      }
-      if(lV){const av=loanAvail(tForm,lV);
-        if(Number(tForm.principal)>av+0.011)return toast('Só faltam '+euro2(av)+' pagar nesta hipoteca — não podes amortizar mais do que isso.');
-        if(!tForm._edit&&!(Number(lV.outstanding)>0))return toast('Esta hipoteca já está paga: não é possível associar novos pagamentos.');}
-    }
-    if(tForm._recId||tForm._recNew){   /* recorrência: só ela muda; não cria movimentos */
-      const every=val('t_every')||'month',recEnd=val('t_recEnd')||'';let until=val('t_until')||'';if(until&&until<tForm.date)until='';
-      if(tForm._recNew){db.recurring=db.recurring||[];db.recurring.push(normRec({name:tForm.label,every,next:tForm.date,until,end:recEnd,tx:txSnapshot(tForm)}))}
-      else{const r=(db.recurring||[]).find(x=>x.id===tForm._recId);if(r){r.tx=txSnapshot(tForm);r.name=tForm.label;r.every=every;r.next=tForm.date;r.until=until;r.end=recEnd;
-        if(r.tx.loanId)delete r.loanOff}}   /* escolheu a hipoteca à mão: a marca do delMort deixa de fazer sentido */
-      save();closeModal();buildNav();render();toast(tForm._recNew?'Movimento recorrente criado.':'Movimento recorrente atualizado.');return;
-    }
-    if(tForm._tplId||tForm._tplNew){
-      const name=val('t_tplName').trim()||tForm.label,also=!!tForm._alsoTx;
-      if(tForm._tplNew){db.templates=db.templates||[];db.templates.push(normTpl({name,tx:txSnapshot(tForm)}))}
-      else{const x=(db.templates||[]).find(y=>y.id===tForm._tplId);if(x){x.name=name;x.tx=txSnapshot(tForm)}}
-      if(also){const tx=normTx(txSnapshot(tForm));tx.date=tForm.date||today();if(tx.kind==='loan')applyLoan(tx);db.transactions.push(tx)}
-      save();closeModal();buildNav();render();toast(tForm._tplNew?(also?'Modelo criado e movimento registado.':'Modelo criado.'):'Modelo atualizado.');return;
-    }
-    /* sincronizar com a hipoteca: ao editar, repõe-se primeiro o capital do registo antigo;
-       depois aplica-se a distribuição atual (criação ou edição) */
-    if(id){
-      const old=db.transactions.find(x=>x.id===tForm.id);
-      if(old&&old.kind==='loan'&&old.principal){
-        const l0=findLoan(prop(old.propertyId),old.loanId);
-        if(l0)l0.outstanding=Math.round((l0.outstanding+old.principal)*100)/100;
-      }
-    }
-    if(tForm.kind==='loan')applyLoan(tForm);
-    const recId=tForm._recConfirm;
-    Object.keys(tForm).forEach(k=>{if(k[0]==='_')delete tForm[k]});
-    const i=db.transactions.findIndex(x=>x.id===tForm.id);
-    if(i<0)db.transactions.push(tForm);else db.transactions[i]=tForm;
-    if(recId){const r=(db.recurring||[]).find(x=>x.id===recId);if(r)recAdvance(r)}
-    save();closeModal();buildNav();render();refreshDetail();toast(recId?'Movimento confirmado.':'Movimento guardado.');
-  };
-  onSave=tForm._saver;
+    const av=loanAvail(tForm,lV);
+    if(Number(tForm.principal)>av+0.011)return toast('Só faltam '+euro2(av)+' pagar nesta hipoteca — não podes amortizar mais do que isso.');
+    if(!tForm._edit&&!(Number(lV.outstanding)>0))return toast('Esta hipoteca já está paga: não é possível associar novos pagamentos.');
+  }
+  if(planeado)return txGuardarPlaneado();
+  if(m.modo==='tpl')return txGuardarModelo();
+  return txGuardarMovimento(id);
+}
+/* Guardar no modo 'rec': só o planeado muda (ou nasce); não cria movimentos.
+   O txGuardar já validou.
+   Devolve: nada — grava, fecha e redesenha. */
+function txGuardarPlaneado(){
+  const m=txModo,every=m.every||'month',recEnd=m.recEnd||'';
+  let until=m.until||'';if(until&&until<tForm.date)until='';
+  if(!m.recId){db.recurring=db.recurring||[];db.recurring.push(normRec({name:tForm.label,every,next:tForm.date,until,end:recEnd,tx:txSnapshot(tForm)}))}
+  else{const r=(db.recurring||[]).find(x=>x.id===m.recId);if(r){r.tx=txSnapshot(tForm);r.name=tForm.label;r.every=every;r.next=tForm.date;r.until=until;r.end=recEnd;
+    if(r.tx.loanId)delete r.loanOff}}   /* escolheu a hipoteca à mão: a marca do delMort deixa de fazer sentido */
+  save();closeModal();buildNav();render();toast(m.recId?'Movimento recorrente atualizado.':'Movimento recorrente criado.');
+}
+/* Guardar no modo 'tpl': o modelo muda (ou nasce) e, com alsoTx, regista-se
+   também o movimento. O txGuardar já validou.
+   Devolve: nada — grava, fecha e redesenha. */
+function txGuardarModelo(){
+  const m=txModo,name=String(m.tplName||'').trim()||tForm.label;
+  if(!m.tplId){db.templates=db.templates||[];db.templates.push(normTpl({name,tx:txSnapshot(tForm)}))}
+  else{const x=(db.templates||[]).find(y=>y.id===m.tplId);if(x){x.name=name;x.tx=txSnapshot(tForm)}}
+  if(m.alsoTx){const tx=normTx(txSnapshot(tForm));tx.date=tForm.date||today();if(tx.kind==='loan')applyLoan(tx);db.transactions.push(tx)}
+  save();closeModal();buildNav();render();toast(!m.tplId?(m.alsoTx?'Modelo criado e movimento registado.':'Modelo criado.'):'Modelo atualizado.');
+}
+/* Guardar nos modos 'tx' e 'confirmar': o movimento entra (ou substitui o que
+   se editou) e, confirmando um planeado, este avança. Um pagamento de crédito
+   abate na hipoteca pelo applyLoan; a hipoteca de onde um movimento editado
+   saiu (outra, ou já não é pagamento de crédito) volta a derivar o capital
+   em dívida. O txGuardar já validou.
+   Recebe: id — o id do movimento em edição (null num novo).
+   Devolve: nada — grava, fecha e redesenha. */
+function txGuardarMovimento(id){
+  const recId=txModo.modo==='confirmar'?txModo.recId:null;
+  const old=id?db.transactions.find(x=>x.id===id):null;
+  /* as hipotecas tocadas ficam com o capital do início gravado ANTES de os movimentos mudarem */
+  const tocadas=[old&&old.kind==='loan'?old.loanId:null,tForm.kind==='loan'?tForm.loanId:null].filter(Boolean);
+  tocadas.forEach(lid=>{const x=anyLoan(lid);if(x)fixarCapitalInicio(x.l,db.transactions)});
+  if(tForm.kind==='loan')applyLoan(tForm);
+  Object.keys(tForm).forEach(k=>{if(k[0]==='_')delete tForm[k]});
+  const i=db.transactions.findIndex(x=>x.id===tForm.id);
+  if(i<0)db.transactions.push(tForm);else db.transactions[i]=tForm;
+  tocadas.forEach(lid=>{const x=anyLoan(lid);if(x)acertarCapital(x.l)});
+  if(recId&&servicoLigado('recurring')){const r=(db.recurring||[]).find(x=>x.id===recId);if(r)recAdvance(r)}
+  save();closeModal();buildNav();render();refreshDetail();toast(recId?'Movimento confirmado.':'Movimento guardado.');
 }
 /* Afina o tForm depois de mudar o imóvel ou o tipo: limpa quem paga/recebe se já não for dono,
    escolhe a hipoteca viva por defeito e, se o montante ainda estiver vazio, sugere valor e
@@ -178,15 +235,18 @@ function txFicha(id){
     recibo?{rotulo:'Recibo eletrónico',valor:t.recibo?'Emitido':'Por emitir'}:null,
     t.kind==='settle'?{rotulo:'Transferência',valor:nome(t.paidBy)+' → '+nome(t.toId)}:null,
     t.kind!=='settle'&&owner(t.paidBy)?{rotulo:isIn(t.kind)?'Recebido por':'Pago por',valor:nome(t.paidBy)}:null,
+    /* o txSplitCents e o psplitCents devolvem os cêntimos PELA ORDEM da lista
+       que recebem, e não por id: liam-se por chave (c[o.id]) e a ficha dizia
+       0 € a toda a gente — nos donos, o «os» são ids, e nem o nome saía */
     verDivisao?{tipo:'bloco',rotulo:'Divisão entre proprietários',valor:(function(){
       const c=txSplitCents(t,p,os);
       return esc(modo(SPLIT_MODES,(t.split||{}).mode,'quota'))+'<br>'+
-        os.map(o=>esc(o.name)+' · '+euro2((c[o.id]||0)/100)).join('<br>');
+        os.map((o,i)=>nome(o)+' · '+euro2((c[i]||0)/100)).join('<br>');
     })()}:null,
     t.groupId&&txProps(t).length>1?{tipo:'bloco',rotulo:'Divisão entre imóveis',valor:(function(){
       const ps=txProps(t),c=psplitCents(t,ps,Math.abs(Math.round((Number(t.amount)||0)*100)));
       return esc(modo(PSPLIT_MODES,(t.psplit||{}).mode,'equal'))+'<br>'+
-        ps.map(x=>esc(x.name)+' · '+euro2((c[x.id]||0)/100)).join('<br>');
+        ps.map((x,i)=>esc(x.name)+' · '+euro2((c[i]||0)/100)).join('<br>');
     })()}:null,
     l?{rotulo:'Hipoteca',valor:esc(loanName(l))}:null,
     /* os juros e o capital vivem no próprio movimento e chegam inteiros a
@@ -207,13 +267,21 @@ function txFicha(id){
       valor:(function(){const r=creditorBalances(t.propertyId).find(x=>x.creditor===cred);
         return r?'Recebido '+euro2(r.received)+' · devolvido '+euro2(r.repaid)+' · falta <b>'+euro2(r.due)+'</b>':''})()}:null,
     {rotulo:'Categoria',valor:esc([t.category,t.sub].filter(Boolean).join(' / '))},
-    col?{rotulo:'Anexo F',valor:esc(irsColunaNome(col.col))+(origem?' <span class="small" style="font-weight:400">'+esc(origem)+'</span>':'')}:null,
+    col?{rotulo:'Anexo F',valor:esc(irsColunaNome(col.col))+(origem?' <span class="small u-fw-400">'+esc(origem)+'</span>':'')}:null,
     (t.tags||[]).length?{rotulo:'Etiquetas',valor:(t.tags||[]).map(esc).join(' · ')}:null,
     !countsInTotals(t)?{tipo:'nota',valor:isPassivo(t)
       ?'Não entra nos totais nem no resultado: é dinheiro que se devolve — uma caução ou um empréstimo recebido.'
       :'Não entra nos totais nem no resultado.'}:null,
     String(t.notes||'').trim()?{tipo:'bloco',rotulo:'Comentários',valor:rich(t.notes)}:null,
   ]);
+}
+/* O «Editar» da ficha de um movimento. A chamada ao txModal leva um objeto,
+   como todas as outras, e um objeto literal fica fora da gramática das ações:
+   por isso a ação chama esta, e não o txModal diretamente.
+   Recebe: id — o id do movimento a alterar.
+   Devolve: nada — abre o formulário do movimento. */
+function editarMovimento(id){
+  txModal({id:id});
 }
 /* A ficha de um movimento: o que tocar numa linha de movimento passa a abrir.
    Recebe: id — o id do movimento.
@@ -227,17 +295,20 @@ function txView(id){
     menu:()=>{
       const x=(db.transactions||[]).find(y=>y.id===id);if(!x)return '';
       const it=[];
-      if(x.propertyId&&prop(x.propertyId))it.push({label:'Ver imóvel',icon:'building',toca:'camada',act:`propView('${jsq(x.propertyId)}')`});
-      if(x.contractId&&contract(x.contractId)&&pode(x.propertyId,'contract.view'))
+      /* os atalhos para outros serviços só com eles ligados nesta conta:
+         desligados, a ficha continua a dizer o imóvel, o contrato e a
+         hipoteca em texto, mas não promete um ecrã que não existe */
+      if(servicoLigado('properties')&&x.propertyId&&prop(x.propertyId))it.push({label:'Ver imóvel',icon:'building',toca:'camada',act:`propView('${jsq(x.propertyId)}')`});
+      if(servicoLigado('contracts')&&x.contractId&&contract(x.contractId)&&pode(x.propertyId,'contract.view'))
         it.push({label:'Ver contrato',icon:'contract',toca:'camada',act:`ctView('${jsq(x.contractId)}')`});
       /* num pagamento de crédito a pergunta seguinte é «quanto é que ainda
          falta», e a ficha da hipoteca é onde isso está por inteiro */
-      if(x.kind==='loan'&&pode(x.propertyId,'loan.view')&&findLoan(prop(x.propertyId),x.loanId))
+      if(servicoLigado('credits')&&x.kind==='loan'&&pode(x.propertyId,'loan.view')&&findLoan(prop(x.propertyId),x.loanId))
         it.push({label:'Ver hipoteca',icon:'bank',toca:'camada',act:`mortView('${jsq(x.propertyId)}','${jsq(x.loanId)}')`});
       if(ok)it.push({label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${jsq(id)}')`});
       return it.length?menu('fichaTx',it):'';
     },
-    editar:ok?{rotulo:'Editar',act:`txModal('${jsq(id)}')`}:null,
+    editar:ok?{rotulo:'Editar',act:`editarMovimento('${jsq(id)}')`}:null,
   });
 }
 
@@ -251,7 +322,7 @@ function txBody(){
   /* os contratos que ainda não acabaram, e não só os em vigor: a caução e as
      rendas antecipadas de um contrato recebem-se ANTES de ele começar, e sem
      isto esse dinheiro não tinha a que se ligar */
-  const t=tForm,p=prop(t.propertyId),acs=t.propertyId?contractsOf(t.propertyId).filter(ctVivo):[];
+  const t=tForm,p=prop(t.propertyId),acs=servicoLigado('contracts')&&t.propertyId?contractsOf(t.propertyId).filter(ctVivo):[];
   const lns=liveLoans(p);
   const curLoan=t.kind==='loan'&&t.loanId?findLoan(p,t.loanId):null;
   /* com várias vivas e nenhuma escolhida, a primeira opção pede a escolha; uma hipoteca que não
@@ -269,22 +340,23 @@ function txBody(){
   const catKeys=Object.keys(cs).filter(c=>!(t.kind==='expense'&&c==='Crédito à habitação'));if(t.category&&catKeys.indexOf(t.category)<0)catKeys.unshift(t.category);
   const credit=t.kind==='owed'||t.kind==='repay',settle=t.kind==='settle';
   const owOpts=[{v:'',label:'Todos os proprietários'}].concat(ows.map(o=>({v:o.id,label:o.name})));
-  const cred=creditorBalances(t.propertyId||null).find(r=>r.creditor===(t.creditor||'').trim());
-  const catSum=[t.category,t.sub].filter(Boolean).join(' / ')+((t.tags||[]).length?(t.category?' · ':'')+t.tags.length+' etiqueta'+(t.tags.length===1?'':'s'):'');
+  /* a categoria e a subcategoria são texto de quem as escreveu — e o resumo da dobra entra no HTML tal e qual */
+  const catSum=esc([t.category,t.sub].filter(Boolean).join(' / '))+((t.tags||[]).length?(t.category?' · ':'')+t.tags.length+' etiqueta'+(t.tags.length===1?'':'s'):'');
+  const planeado=txModo.modo==='rec',modelo=txModo.modo==='tpl';
   return `<div class="form">
-    ${(t._tplId||t._tplNew)?`<label>Nome do modelo<input id="t_tplName" value="${esc(t._tplName||'')}" placeholder="Ex.: Renda mensal T2" autocomplete="off"></label>`:''}
-    ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" data-toca="rascunho" onclick="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
+    ${modelo?`<label>Nome do modelo<input id="t_tplName" value="${esc(txModo.tplName||'')}" placeholder="Ex.: Renda mensal T2" autocomplete="off"></label>`:''}
+    ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" data-toca="rascunho" data-click="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
     <label>Descrição <span class="req">*</span><input id="t_label" value="${esc(t.label)}" placeholder="${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
     <div class="row">
-      <label>Montante (€) <span class="req">*</span><div style="display:flex;gap:7px;align-items:center">
-        <input id="t_amount" type="text" inputmode="decimal" style="flex:1;min-width:0" value="${t.amount||''}" placeholder="900" oninput="tForm.amount=num(this.value);refreshLoanHint();refreshSplit();amtResetSync()">
-        <button type="button" class="btn sm primary" id="amt_reset" style="flex:0 0 auto;padding:9px 12px;display:${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':'none'}" title="Repor a prestação calculada" data-toca="rascunho" onclick="onAmtReset()">Repor</button></div></label>
-      ${(t._recId||t._recNew)?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}"></label>`}</div>
-    <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),(podeSemImovel()?[{v:'',label:'Todos os imóveis'}]:[]).concat(propOptsPara((t._recId||t._recNew)?'rec.add':'tx.add',t.propertyId)).concat(podeSemImovel()?gdiv(gOpts('prop')):[]),'onPropChange','rascunho')}</label>
+      <label>Montante (€) <span class="req">*</span><div class="u-d-flex u-g-7px u-ai-center">
+        <input id="t_amount" type="text" inputmode="decimal" class="u-fx-1 u-minw-0" value="${t.amount||''}" placeholder="900" data-input="txMontanteEscrito(this.value)">
+        <button type="button" class="btn sm primary${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':' u-d-none'} u-fx-0-0-auto u-p-9px-12px" id="amt_reset" title="Repor a prestação calculada" data-toca="rascunho" data-click="onAmtReset()">Repor</button></div></label>
+      ${planeado?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}"></label>`}</div>
+    <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),(podeSemImovel()?[{v:'',label:'Todos os imóveis'}]:[]).concat(propOptsPara(planeado?'rec.add':'tx.add',t.propertyId)).concat(podeSemImovel()?gdiv(gOpts('prop')):[]),'onPropChange','rascunho')}</label>
     ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+dPT(c.start):'')}))),'onCtChange','rascunho')}</label>`:''}
     ${t.kind==='income'&&(t.contractId||t.category==='Rendas')?txFiscoSect():''}
     ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange','rascunho')}</label>`:''}
-    ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'}<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Pai, amigo, empreiteiro…" autocomplete="off" list="creditorList" oninput="refreshCredHint()">
+    ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'}<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Pai, amigo, empreiteiro…" autocomplete="off" list="creditorList" data-input="refreshCredHint()">
         <datalist id="creditorList">${knownCreditors().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
       <div class="hint" id="credHint">${credHint()}</div>`:''}
     ${settle?(ows.length>1?`<div class="row">
@@ -298,13 +370,13 @@ function txBody(){
       <label>Categoria${sel('t_cat',t.category,[{v:'',label:'— sem categoria —'}].concat(catKeys.map(c=>({v:c,label:c}))).concat([{v:'__new__',label:'+ Criar categoria…'}]),'onCatChange','rascunho')}</label>
       ${subs.length||t.category?`<label>Subcategoria${sel('t_sub',t.sub,[{v:'',label:'— indiferente —'}].concat(subs.map(x=>({v:x,label:x}))).concat([{v:'__new__',label:'+ Criar subcategoria…'}]),'onSubChange','rascunho')}</label>`:''}</div>
       ${t.kind==='expense'?`<label>Coluna no Anexo F${sel('t_irscol',t.irsCol||'',[{v:'',label:'Pela categoria: '+irsColunaNome(irsColunaDe(Object.assign({},t,{irsCol:''})).col)}].concat(IRS_COLUNAS.map(x=>({v:x[0],label:x[1]}))),'onIrsCol','rascunho')}</label>
-      <div class="hint" style="margin-top:-6px">Só o que pagaste para obter a renda entra. Juros, mobiliário, eletrodomésticos e obras que acrescentam valor ficam de fora.</div>`:''}
+      <div class="hint u-mt-n6px">Só o que pagaste para obter a renda entra. Juros, mobiliário, eletrodomésticos e obras que acrescentam valor ficam de fora.</div>`:''}
       <div><div class="flabel">Etiquetas</div>${tagField((t.tags||[]).map(g=>({id:g,label:g})),'Adicionar','addTxTag()','delTxTag','grey')}</div>`,
       {icon:'tag',open:!!(t.category||(t.tags||[]).length),summary:catSum||'sem categoria'})}
     ${(!settle&&t.groupId&&txProps(t).length>1)?psplitSect():''}
     ${(!settle&&!credit&&ows.length>1)?splitSect(ows):''}
     ${credit&&ows.length>1?`<div class="hint">Dívidas a terceiros não entram nas contas entre proprietários: ficam com quem as recebe ou paga.</div>`:''}
-    ${(t._recId||t._recNew)?recSect():''}
+    ${planeado&&servicoLigado('recurring')?recSect():''}
     ${richEditor('Comentários','t_notes',t.notes)}</div>`;
 }
 // Texto por baixo do campo do credor: o saldo corrente com essa pessoa
@@ -331,13 +403,13 @@ function txFiscoSect(){
   /* um modelo ou uma recorrência repete a retenção, mas o mês e o recibo são
      de cada renda (não estão em TX_TPL_KEYS): mostrá-los aqui era um campo
      que não grava. Ficam para o movimento que se confirma. */
-  const fixo=!(t._recId||t._recNew||t._tplId||t._tplNew);
+  const fixo=txModo.modo!=='rec'&&txModo.modo!=='tpl';
   return `<div class="${fixo?'row':''}">
       ${fixo?`<label>Mês a que respeita<input id="t_periodo" type="month" value="${esc(t.periodo||'')}" placeholder="AAAA-MM"></label>`:''}
       <label>Retido na fonte (€)<input id="t_retencao" type="text" inputmode="decimal" value="${t.retencao?dec(t.retencao):''}" placeholder="0"></label></div>
-    <div class="hint" style="margin-top:-6px">Se o inquilino é uma empresa que retém IRS, escreve o que ficou retido: a renda bruta é o montante mais isto.</div>
+    <div class="hint u-mt-n6px">Se o inquilino é uma empresa que retém IRS, escreve o que ficou retido: a renda bruta é o montante mais isto.</div>
     ${fixo&&ctDeclarado(c)?`<label class="check"><input type="checkbox" id="t_recibo" ${t.recibo?'checked':''}> Recibo de renda eletrónico emitido</label>
-    <div class="hint" style="margin-top:-4px">Emite-se no Portal das Finanças quando a renda entra; marcar aqui cala o aviso.</div>`:''}`;
+    <div class="hint u-mt-n4px">Emite-se no Portal das Finanças quando a renda entra; marcar aqui cala o aviso.</div>`:''}`;
 }
 // Mudou a coluna do Anexo F escolhida à mão: guarda-a no tForm. Vazio é
 // «pela categoria», e o seletor já mostra o rótulo novo — não há que repintar.
@@ -351,9 +423,9 @@ function splitSect(ows){
   const lab=(SPLIT_MODES.find(m=>m[0]===mode)||[])[1]||'';
   return fold('split','Divisão entre proprietários',`
     <label>Como se divide${sel('t_split',mode,SPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onSplitSel','rascunho')}</label>
-    ${(mode==='quota'||mode==='equal')?'':`<div class="form" style="gap:7px">${ows.map(o=>`<div class="ownrow"><span class="avatar" style="width:30px;height:30px;font-size:11px;flex:0 0 30px">${esc(initials(o.name))}</span>
+    ${(mode==='quota'||mode==='equal')?'':`<div class="form u-g-7px">${ows.map(o=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${esc(initials(o.name))}</span>
       <span class="nm">${esc(o.name)}</span>
-      <input id="t_sp_${o.id}" type="text" inputmode="decimal" style="width:84px;flex:0 0 84px" value="${parts[o.id]!=null&&parts[o.id]!==''?dec(parts[o.id]):''}" placeholder="0" oninput="refreshSplit()">
+      <input id="t_sp_${o.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[o.id]!=null&&parts[o.id]!==''?dec(parts[o.id]):''}" placeholder="0" data-input="refreshSplit()">
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
     <div class="hint" id="splitHint">${splitHint(ows)}</div>`,{icon:'split',summary:lab});
 }
@@ -406,7 +478,10 @@ function collectSplit(){
   if(m2==='equal'){t.split={mode:'equal',parts:{}};return}
   const p=prop(t.propertyId),parts={};
   const os=p?ownersOfProp(p):(t.groupId?txGroupOwners(t).map(o=>o.id):db.owners.map(o=>o.id));
-  os.forEach(o=>{const e=document.getElementById('t_sp_'+o);if(e&&String(e.value).trim()!=='')parts[o]=num(e.value)});
+  /* percentagens e partes leem-se pelo numTaxa («0,125» é 0,125, não 125); os
+     valores certos e os ajustes são euros, e aí «1.500» são mil e quinhentos */
+  const lerParte=(m2==='amount'||m2==='adjust')?num:numTaxa;
+  os.forEach(o=>{const e=document.getElementById('t_sp_'+o);if(e&&String(e.value).trim()!=='')parts[o]=lerParte(e.value)});
   t.split={mode,parts};
 }
 /* divisão do valor pelos imóveis do grupo */
@@ -419,9 +494,9 @@ function psplitSect(){
   const lab=(PSPLIT_MODES.find(m=>m[0]===mode)||[])[1]||'';
   return fold('psplit','Divisão entre imóveis',`
     <label>Como se divide${sel('t_psplit',mode,PSPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onPsplitSel','rascunho')}</label>
-    ${['equal','value','purchase'].indexOf(mode)>-1?'':`<div class="form" style="gap:7px">${ps.map(p=>`<div class="ownrow"><span class="avatar" style="width:30px;height:30px;font-size:11px;flex:0 0 30px">${ic('building',15)}</span>
+    ${['equal','value','purchase'].indexOf(mode)>-1?'':`<div class="form u-g-7px">${ps.map(p=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${ic('building',15)}</span>
       <span class="nm">${esc(p.name)}</span>
-      <input id="t_pp_${p.id}" type="text" inputmode="decimal" style="width:84px;flex:0 0 84px" value="${parts[p.id]!=null&&parts[p.id]!==''?dec(parts[p.id]):''}" placeholder="0" oninput="refreshPsplit()">
+      <input id="t_pp_${p.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[p.id]!=null&&parts[p.id]!==''?dec(parts[p.id]):''}" placeholder="0" data-input="refreshPsplit()">
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
     <div class="hint" id="psplitHint">${psplitHint()}</div>`,{icon:'building',open:true,summary:lab});
 }
@@ -468,7 +543,9 @@ function collectPsplit(){
   if(!t.groupId){t.psplit=null;return}
   if(document.getElementById('t_psplit'))t.psplit=Object.assign({},t.psplit||{},{mode:val('t_psplit')||'equal'});
   const mode=(t.psplit||{}).mode||'equal',parts={};
-  txProps(t).forEach(p=>{const e=document.getElementById('t_pp_'+p.id);if(e&&String(e.value).trim()!=='')parts[p.id]=num(e.value)});
+  // como na divisão entre donos: percentagens e partes pelo numTaxa, euros pelo num
+  const lerParte=(mode==='amount'||mode==='adjust')?num:numTaxa;
+  txProps(t).forEach(p=>{const e=document.getElementById('t_pp_'+p.id);if(e&&String(e.value).trim()!=='')parts[p.id]=lerParte(e.value)});
   t.psplit={mode,parts};
 }
 // Mudou o modo da divisão entre imóveis: guarda o formulário e repinta para mostrar ou esconder os campos.
@@ -491,10 +568,42 @@ function refreshSplit(){
   const e=document.getElementById('splitHint');if(!e)return;
   e.innerHTML=splitHint(ownersOfProp(prop(tForm.propertyId)||{}).map(owner).filter(Boolean));
 }
+/* A prestação calculada na hipoteca para este movimento: sobre o capital que
+   ainda se pode abater com ele (loanAvail) e, numa edição, sem ele próprio
+   contar nas prestações registadas (_paidOfs=−1).
+   Recebe: t — o movimento; l — a hipoteca.
+   Devolve: o objeto de loanCalc ({base, interest, stamp, principal, total, rate, n, esgotado}). */
+function calculoDaPrestacao(t,l){return loanCalc(Object.assign({},l,{outstanding:loanAvail(t,l)},t._edit?{_paidOfs:-1}:{}))}
+/* O montante que a distribuição reparte: o escrito, ou — numa prestação ainda
+   sem montante — a prestação calculada.
+   Recebe: t — o movimento; l — a hipoteca.
+   Devolve: número em euros. */
+function montanteDoCredito(t,l){return num(t.amount)||(t.payType==='amortizacao'?0:calculoDaPrestacao(t,l).total)}
+/* A distribuição de um pagamento de crédito: quanto é juros, selo, capital e
+   comissão. Uma amortização antecipada é capital e a comissão da hipoteca,
+   sem juros nem selo. Uma prestação leva os juros do plano — ou os escritos à
+   mão, numa edição ou depois de mexer na tabela (_splitTouched) —, o selo dos
+   juros e o capital como resto, sem comissão; um capital escrito à mão que
+   fica a um cêntimo e pouco do montante acerta-se nele, para a soma bater ao
+   cêntimo. Só calcula: o cartão (loanHint) lê-a para pintar e o guardar
+   (txGuardar) para gravar — nenhum dos dois escreve a distribuição por conta
+   própria, e ela já não depende de o cartão ter sido pintado, nem da ordem.
+   Recebe: t — o movimento (amount, payType, _edit, _splitTouched e, quando
+   escritos à mão, interest e principal); l — a hipoteca.
+   Devolve: {interest, stamp, principal, fee} em euros. */
+function distribuicaoDe(t,l){
+  const amt=montanteDoCredito(t,l);
+  if(t.payType==='amortizacao'){const fr=amortFeeRate(l),cap=r2(amt/(1+fr));return {interest:0,stamp:0,principal:cap,fee:r2(amt-cap)}}
+  const rate=l.stampTax===false?0:stampPct(),manual=!!(t._splitTouched||t._edit);
+  const int=manual&&t.interest!=null?Number(t.interest):r2(calculoDaPrestacao(t,l).interest);
+  const st=r2(int*rate);
+  let cap=manual&&t.principal!=null?Number(t.principal):r2(amt-int-st);
+  const d=r2(amt-int-st-cap);if(Math.abs(d)<=0.011&&d!==0)cap=r2(cap+d);
+  return {interest:int,stamp:st,principal:cap,fee:0};
+}
 /* Cartão da distribuição de um pagamento de crédito: o seletor prestação/amortização e,
    conforme o tipo, capital+comissão ou juros editáveis com selo derivado e capital como resto.
-   Atenção: além de devolver HTML, escreve interest/stamp/principal/fee no tForm —
-   é aqui que a distribuição sugerida passa a fazer parte do formulário.
+   Só pinta: os números vêm do distribuicaoDe, e é o guardar que os grava.
    Devolve: o HTML do cartão (string; '' se o movimento não for de crédito). */
 function loanHint(){
   const t=tForm,p=prop(t.propertyId),l=t.loanId?findLoan(p,t.loanId):null;
@@ -502,40 +611,33 @@ function loanHint(){
   if(!l){
     if(!t.loanId&&liveLoans(p).length>1)return `<div class="hint">Escolhe a hipoteca acima: é a ela que este pagamento abate.</div>`;
     if(t.loanId)return `<div class="hint">A hipoteca deste movimento não existe neste imóvel. Escolhe outra acima, ou deixa como está.</div>`;
-    return `<div class="hint">Nenhuma hipoteca associada. Podes registar o pagamento na mesma, ou criar a hipoteca em Finanças → Créditos.</div>`;
+    /* o caminho para criar a hipoteca só se aponta com os Créditos ligados nesta conta */
+    return `<div class="hint">Nenhuma hipoteca associada. Podes registar o pagamento na mesma${servicoLigado('credits')?', ou criar a hipoteca em Finanças → Créditos':''}.</div>`;
   }
-  const avail=loanAvail(t,l);
-  const c=loanCalc(Object.assign({},l,{outstanding:avail},t._edit?{_paidOfs:-1}:{})),rate=l.stampTax===false?0:stampPct();
-  const fr=amortFeeRate(l),amort=t.payType==='amortizacao';
-  const amt=num(t.amount)||(amort?0:c.total);
-  const seg=`<div style="margin-bottom:10px"><div class="flabel">Tipo de pagamento</div>
+  const avail=loanAvail(t,l),fr=amortFeeRate(l),amort=t.payType==='amortizacao';
+  const amt=montanteDoCredito(t,l),dist=distribuicaoDe(t,l);
+  const seg=`<div class="u-mb-10px"><div class="flabel">Tipo de pagamento</div>
     <div class="seg c2">
-      <button type="button" class="opt ${!amort?'on':''}" data-toca="rascunho" onclick="setPayType('prestacao')"><span class="ic">${ic('bank',18)}</span><b>Prestação</b><small>juros, selo e capital</small></button>
-      <button type="button" class="opt ${amort?'on':''}" data-toca="rascunho" onclick="setPayType('amortizacao')"><span class="ic">${ic('trend',18)}</span><b>Amortização</b><small>capital e comissão</small></button></div></div>`;
+      <button type="button" class="opt ${!amort?'on':''}" data-toca="rascunho" data-click="setPayType('prestacao')"><span class="ic">${ic('bank',18)}</span><b>Prestação</b><small>juros, selo e capital</small></button>
+      <button type="button" class="opt ${amort?'on':''}" data-toca="rascunho" data-click="setPayType('amortizacao')"><span class="ic">${ic('trend',18)}</span><b>Amortização</b><small>capital e comissão</small></button></div></div>`;
   if(amort){
     /* amortização antecipada: sem juros nem selo — só capital e a comissão definida na hipoteca */
-    const cap=r2(amt/(1+fr)),fee=r2(amt-cap);
-    t.interest=0;t.stamp=0;t.principal=cap;t.fee=fee;
-    return seg+`<div class="card" style="background:var(--tint);padding:13px">
-      <div class="stat" style="padding-top:0;align-items:center"><span>Abate ao capital</span><b class="pos" id="lh_cap">${euro2(cap)}</b></div>
-      <div class="stat" style="border:0;align-items:center"><span>Comissão de amortização (${dec(r2(fr*100))}%)</span><b class="neg" id="lh_fee">${euro2(fee)}</b></div>
+    const cap=dist.principal,fee=dist.fee;
+    return seg+`<div class="card u-bg-v-tint u-p-13px">
+      <div class="stat u-pt-0 u-ai-center"><span>Abate ao capital</span><b class="pos" id="lh_cap">${euro2(cap)}</b></div>
+      <div class="stat u-b-0 u-ai-center"><span>Comissão de amortização (${dec(r2(fr*100))}%)</span><b class="neg" id="lh_fee">${euro2(fee)}</b></div>
       <div class="hint" id="loanLeft">${cap>avail+0.011?`<b class="neg">Só faltam ${euro2(avail)} pagar — não podes amortizar mais do que isso.</b>`:`Ficam ${euro(Math.max(0,avail-Math.min(cap,avail)))} em dívida.`}</div></div>`;
   }
   /* prestação normal: juros editáveis, selo derivado, capital é o resto — sem comissão */
-  const manual=t._splitTouched||t._edit;
-  let int=manual&&t.interest!=null?Number(t.interest):r2(c.interest);
-  let st=r2(int*rate),cap;
-  if(manual&&t.principal!=null)cap=Number(t.principal);
-  else cap=r2(amt-int-st);
-  t.interest=int;t.stamp=st;t.principal=cap;t.fee=0;
-  return seg+`<div class="card" style="background:var(--tint);padding:13px">
-    <div class="row-between" style="align-items:center;margin-bottom:2px"><span class="small"><b>Distribuição do montante</b></span>
-      <button class="btn sm" id="lh_reset" style="flex:0 0 auto;padding:6px 9px;display:${t._splitTouched?'':'none'}" data-toca="rascunho" onclick="onLoanReset()" title="Repor a prestação calculada na hipoteca">${ic('clock',14)} Repor</button></div>
-    <div class="stat" style="align-items:center"><span>Juros (€)</span>
-      <input class="statin" id="t_int" type="text" inputmode="decimal" value="${dec(int.toFixed(2))}" oninput="onLoanSplit('int')"></div>
-    <div class="stat" style="align-items:center"><span>Imposto do selo (${dec(db.settings.stampPct??4)}%)</span><b id="lh_stamp">${euro2(st)}</b></div>
-    <div class="stat" style="border:0;align-items:center"><span>Abate ao capital (€)</span>
-      <input class="statin pos" id="t_cap" type="text" inputmode="decimal" value="${dec(Math.max(0,cap).toFixed(2))}" oninput="onLoanSplit('cap')"></div>
+  const int=dist.interest,st=dist.stamp,cap=dist.principal;
+  return seg+`<div class="card u-bg-v-tint u-p-13px">
+    <div class="row-between u-ai-center u-mb-2px"><span class="small"><b>Distribuição do montante</b></span>
+      <button class="btn sm${t._splitTouched?'':' u-d-none'} u-fx-0-0-auto u-p-6px-9px" id="lh_reset" data-toca="rascunho" data-click="onLoanReset()" title="Repor a prestação calculada na hipoteca">${ic('clock',14)} Repor</button></div>
+    <div class="stat u-ai-center"><span>Juros (€)</span>
+      <input class="statin" id="t_int" type="text" inputmode="decimal" value="${dec(int.toFixed(2))}" data-input="onLoanSplit('int')"></div>
+    <div class="stat u-ai-center"><span>Imposto do selo (${dec(db.settings.stampPct??4)}%)</span><b id="lh_stamp">${euro2(st)}</b></div>
+    <div class="stat u-b-0 u-ai-center"><span>Abate ao capital (€)</span>
+      <input class="statin pos" id="t_cap" type="text" inputmode="decimal" value="${dec(Math.max(0,cap).toFixed(2))}" data-input="onLoanSplit('cap')"></div>
     <div class="hint" id="loanLeft">${loanLeftTxt(l,int,st,cap,0,amt,avail)}</div></div>`;
 }
 // Linha por baixo da distribuição: quanto fica em dívida depois deste pagamento,
@@ -565,13 +667,23 @@ function calcLoanTotal(){
   const p=prop(t.propertyId),l=p?findLoan(p,t.loanId):null;if(!l)return null;
   return r2(loanCalc(Object.assign({},l,{outstanding:loanAvail(t,l)},t._edit?{_paidOfs:-1}:{})).total);
 }
+/* Escreveu-se no campo do montante: guarda-o no tForm e repinta o que depende
+   dele. Era tudo no atributo, a começar por uma atribuição, que a gramática
+   das ações não tem. Faz o mesmo e pela mesma ordem.
+   Recebe: v — o texto do campo.
+   Devolve: nada — atualiza o tForm e repinta as dicas. */
+function txMontanteEscrito(v){
+  tForm.amount=num(v);
+  refreshLoanHint();refreshSplit();amtResetSync();
+}
 // Mostra o botão "Repor" ao lado do montante só quando o que está escrito
-// difere da prestação calculada na hipoteca.
-// Devolve: nada — mostra ou esconde o botão no DOM.
+// difere da prestação calculada na hipoteca. O estado inicial vem da mesma
+// classe (u-d-none), e não de um style= — por isso é a classe que se troca.
+// Devolve: nada — põe ou tira a classe u-d-none no botão.
 function amtResetSync(){
   const b=document.getElementById('amt_reset');if(!b)return;
   const c=calcLoanTotal();
-  b.style.display=(c!=null&&Math.abs((num(val('t_amount'))||0)-c)>0.011)?'':'none';
+  b.classList.toggle('u-d-none',!(c!=null&&Math.abs((num(val('t_amount'))||0)-c)>0.011));
 }
 // Botão "Repor" do montante: volta a pôr a prestação calculada e refresca distribuição e divisões.
 // Devolve: nada — atualiza tForm.amount e repinta as dicas.
@@ -612,7 +724,7 @@ function onLoanSplit(w){
     put('t_cap',Math.max(0,cap));
   }
   t.interest=int;t.stamp=st;t.principal=cap;t.fee=0;t._splitTouched=true;
-  const rb=document.getElementById('lh_reset');if(rb)rb.style.display='';
+  const rb=document.getElementById('lh_reset');if(rb)rb.classList.remove('u-d-none');   /* o esconder inicial é a classe u-d-none, e não um style= */
   const e2=document.getElementById('lh_stamp');if(e2)e2.textContent=euro2(st);
   const e=document.getElementById('loanLeft');if(e)e.innerHTML=loanLeftTxt(l,int,st,cap,0,amt,avail);
 }
@@ -630,7 +742,7 @@ function repaintTx(){const b=modalBodyEl();if(b)b.innerHTML=txBody()}
 function setKind(k){keepTyped();
   if(treeKey(tForm.kind)!==treeKey(k)){tForm.category='';tForm.sub=''}
   tForm.kind=k;if(k!=='settle'&&tForm.label==='Transferência entre proprietários')tForm.label='';prefill();repaintTx();
-  const h=modalTop()&&modalTop().el.querySelector('.head h2');if(h&&!tForm._recId&&!tForm._recNew&&!tForm._tplId&&!tForm._tplNew)h.textContent=(tForm._edit?'Editar ':txNewWord(k))+txTypeName(k)}
+  const h=modalTop()&&modalTop().el.querySelector('.head h2');if(h)h.textContent=txTitulo()}
 /* Mudou o imóvel (ou grupo, valores "g:id"): limpa tudo o que dependia dele — contrato,
    hipoteca, divisões e distribuição — e volta a sugerir valores para o novo contexto.
    Devolve: nada — atualiza o tForm e repinta o modal. */
@@ -678,25 +790,21 @@ function onSubChange(){
      tem regra própria): a primeira opção do seletor tem de a dizer */
   if(tForm.kind==='expense')repaintTx();
 }
-/* Recolhe do DOM para o tForm tudo o que estiver presente no modal: campos base, distribuição
-   da hipoteca, quem paga/recebe, credor, divisões, categoria e opções de recorrência/modelo.
-   Cada campo só é lido se existir, porque o formulário varia com o tipo de movimento.
-   É o passo obrigatório antes de guardar ou repintar — o que não passar por aqui perde-se.
-   Devolve: nada — escreve tudo no tForm. */
+/* Recolhe do DOM para o tForm tudo o que estiver presente no modal: campos base, os juros e
+   o capital escritos na tabela da distribuição, quem paga/recebe, credor, divisões e
+   categoria — e para o txModo os campos do planeado e do modelo. Cada campo só é lido se
+   existir, porque o formulário varia com o tipo de movimento. É o passo obrigatório antes de
+   guardar ou repintar — o que não passar por aqui perde-se. A distribuição que se grava não
+   se decide aqui: é o distribuicaoDe, no guardar, com o que aqui se recolheu.
+   Devolve: nada — escreve no tForm e no txModo. */
 function collectTx(){
   const t=tForm;
   t.label=val('t_label');t.amount=num(val('t_amount'));t.date=val('t_date')||today();
   if(document.getElementById('t_prop')){const v=val('t_prop')||'';t.groupId=String(v).startsWith('g:')?v.slice(2):null;t.propertyId=t.groupId?null:(v||null)}
   if(document.getElementById('t_notes'))t.notes=richVal('t_notes');
   if(document.getElementById('t_loan'))t.loanId=val('t_loan')||null;
-  if(t.kind==='loan'&&t.loanId){
-    const l2=findLoan(prop(t.propertyId),t.loanId);
-    if(l2&&t.payType==='amortizacao'){const fr=amortFeeRate(l2);t.principal=r2(t.amount/(1+fr));t.fee=r2(t.amount-t.principal);t.interest=0;t.stamp=0}
-    else if(document.getElementById('t_int')){const sr=l2&&l2.stampTax===false?0:stampPct();
-      t.interest=num(val('t_int'));t.principal=num(val('t_cap'));t.stamp=r2(t.interest*sr);t.fee=0;
-      /* o resto vai para o capital para a soma bater certa ao cêntimo */
-      const d=r2(t.amount-t.interest-t.stamp-t.principal);if(Math.abs(d)<=0.011&&d!==0)t.principal=r2(t.principal+d)}
-  }
+  /* os juros e o capital da tabela: contam como escritos à mão numa edição ou depois de lhes mexer */
+  if(t.kind==='loan'&&t.loanId&&t.payType!=='amortizacao'&&document.getElementById('t_int')){t.interest=num(val('t_int'));t.principal=num(val('t_cap'))}
   if(document.getElementById('t_paid'))t.paidBy=val('t_paid')||null;
   if(document.getElementById('t_to'))t.toId=val('t_to')||null;
   if(t.kind!=='settle')t.toId=null;
@@ -715,11 +823,14 @@ function collectTx(){
   if(document.getElementById('t_retencao'))t.retencao=Math.max(0,num(val('t_retencao'))||0);
   if(document.getElementById('t_recibo'))t.recibo=chk('t_recibo');
   if(document.getElementById('t_irscol'))t.irsCol=val('t_irscol')||'';
-  if(document.getElementById('t_every'))t._every=val('t_every')||'';
-  if(document.getElementById('t_tplName'))t._tplName=val('t_tplName');
-  if(document.getElementById('t_until'))t._until=val('t_until')||'';
-  if(document.getElementById('t_next'))t._next=val('t_next')||'';
-  if(document.getElementById('t_recEnd'))t._recEnd=val('t_recEnd')||'';
+  /* os campos do planeado e do modelo são do modo, e não do movimento */
+  const m=txModo;
+  if(m.modo==='rec'){
+    if(document.getElementById('t_every'))m.every=val('t_every')||'month';
+    if(document.getElementById('t_until'))m.until=val('t_until')||'';
+    if(document.getElementById('t_recEnd'))m.recEnd=val('t_recEnd')||'';
+  }
+  if(m.modo==='tpl'&&document.getElementById('t_tplName'))m.tplName=val('t_tplName');
 }
 // Abre o seletor de etiquetas com as que ainda não estão neste movimento,
 // com atalho para criar uma nova.
@@ -729,8 +840,8 @@ function addTxTag(){
   const free=(db.settings.tags||[]).filter(g=>(tForm.tags||[]).indexOf(g)<0);
   pickModal('Escolher etiqueta',free.map(g=>({v:g,label:g})),
     g=>{tForm.tags.push(g.v);closeModal();repaintTx()},
-    `<button type="button" class="btn" style="width:100%;justify-content:center" data-toca="camada" onclick="newTagFromTx()">${ic('plus',15)} Criar etiqueta nova</button>
-     <div class="hint" style="margin-top:8px">Podes gerir a lista em Definições → Etiquetas.</div>`);
+    `<button type="button" class="btn u-w-100pc u-jc-center" data-toca="camada" data-click="newTagFromTx()">${ic('plus',15)} Criar etiqueta nova</button>
+     <div class="hint u-mt-8px">Podes gerir a lista em Definições → Etiquetas.</div>`);
 }
 // Cria uma etiqueta nova a partir do modal do movimento: entra na lista global
 // (Definições → Etiquetas), fica gravada, e aplica-se logo a este movimento.
@@ -751,14 +862,19 @@ function newTagFromTx(){
 function delTxTag(g){collectTx();tForm.tags=(tForm.tags||[]).filter(x=>x!==g);repaintTx()}
 /* Efeito do pagamento na hipoteca, na altura de guardar: valida a distribuição do movimento
    (ou recalcula-a quando não bate certo com o montante — sempre a somar o montante ao cêntimo,
-   com os juros limitados ao que o montante paga) e abate o capital ao que está em dívida.
-   Também acerta a recorrência automática da hipoteca — atualiza a prestação, ou apaga-a
-   quando o crédito fica liquidado. Mexe na db mas não faz save(); isso é de quem chama.
-   Recebe: t — o movimento de crédito (objeto com amount, loanId, payType e a distribuição).
-   Devolve: nada — acerta a distribuição no próprio t e abate o capital na db. */
+   com os juros limitados ao que o montante paga), limita o capital ao que ainda se deve sem
+   contar com este movimento, e deixa o capital em dívida no que sobra — a mesma conta do
+   saldoEmDivida (credito.js), a partir do capital do início: numa edição, o próprio
+   movimento já está nos movimentos com a distribuição antiga, e não conta. Também acerta a
+   recorrência automática da hipoteca — atualiza a prestação, ou apaga-a quando o crédito
+   fica liquidado. Mexe na db mas não faz save(); isso é de quem chama.
+   Recebe: t — o movimento de crédito (objeto com id, amount, loanId, payType e a distribuição).
+   Devolve: nada — acerta a distribuição no próprio t e o capital em dívida na hipoteca. */
 function applyLoan(t){
   const p=prop(t.propertyId),l=t.loanId?findLoan(p,t.loanId):null;if(!l)return;
   if(t.loanOff)delete t.loanOff;   /* volta a ter hipoteca: a marca do delMort deixa de fazer sentido */
+  fixarCapitalInicio(l,db.transactions);   /* os dados antigos: o capital do início, antes de este contar */
+  const disponivel=saldoEmDivida(l,(db.transactions||[]).filter(x=>x.id!==t.id));
   /* amortização: capital + comissão da hipoteca; prestação: juros + selo + capital (sem comissão) */
   let int=Number(t.interest),st=Number(t.stamp),cap=Number(t.principal),fee=Number(t.fee||0);
   if(t.payType==='amortizacao'){
@@ -766,20 +882,21 @@ function applyLoan(t){
     if(!(isFinite(cap)&&isFinite(fee)&&cap>=0&&fee>=0&&Math.abs(cap+fee-t.amount)<=0.011)){cap=r2(t.amount/(1+fr));fee=r2(t.amount-cap)}
     int=0;st=0;
   }else if(!(isFinite(int)&&isFinite(st)&&isFinite(cap)&&int>=0&&st>=0&&cap>=0&&Math.abs(int+st+cap+(fee>0?fee:0)-t.amount)<=0.011)){
-    const c=loanCalc(l),sr=l.stampTax===false?0:stampPct();
+    const c=loanCalc(Object.assign({},l,{outstanding:disponivel})),sr=l.stampTax===false?0:stampPct();
     int=r2(Math.min(c.interest,t.amount/(1+sr)));st=r2(int*sr);fee=0;cap=Math.max(0,r2(t.amount-int-st));
     int=r2(int+r2(t.amount-int-st-cap));   /* os cêntimos do arredondamento vão para os juros: a soma bate com o montante */
   }
-  cap=Math.max(0,Math.min(l.outstanding,cap));
+  cap=Math.max(0,Math.min(disponivel,cap));
   t.interest=r2(int);t.stamp=r2(st);t.principal=r2(cap);t.fee=r2(fee);
-  l.outstanding=Math.max(0,r2(l.outstanding-cap));
+  l.outstanding=Math.max(0,r2(disponivel-cap));
   /* recorrência automática desta hipoteca: acompanha a nova prestação e desaparece quando o crédito acaba */
-  const ar=loanRecOf(l);
+  const ar=servicoLigado('recurring')?loanRecOf(l):null;
   if(ar){if(!(l.outstanding>0))db.recurring=db.recurring.filter(x=>x.id!==ar.id);
     else ar.tx.amount=Math.round(loanCalc(l).total*100)/100}
 }
-/* Apaga o movimento e, se era um pagamento de crédito, repõe o capital na hipoteca
-   e sincroniza a recorrência dela. O toast traz "Anular", que desfaz as duas coisas.
+/* Apaga o movimento e, se era um pagamento de crédito, a hipoteca volta a derivar o
+   capital em dívida sem ele (o capital dele volta) e a recorrência dela sincroniza-se.
+   O toast traz "Anular", que desfaz as duas coisas.
    Recebe: id — o id do movimento a apagar (string).
    Devolve: nada — grava e re-renderiza. */
 function delTx(id){
@@ -788,63 +905,16 @@ function delTx(id){
   const t=db.transactions.find(x=>x.id===id);if(!t)return;
   const recusa=motivoRecusa(t.propertyId,'tx.add',t,true);if(recusa)return toast(recusa);
   const copia=JSON.parse(JSON.stringify(t));
-  if(t.kind==='loan'&&t.principal&&t.loanId){
-    const l=findLoan(prop(t.propertyId),t.loanId);
-    if(l){l.outstanding=Math.round((l.outstanding+t.principal)*100)/100;syncLoanRec(prop(t.propertyId),l)}
-  }
-  db.transactions=db.transactions.filter(x=>x.id!==id);save();closeAllModals();render();
+  const l=t.kind==='loan'&&t.loanId?findLoan(prop(t.propertyId),t.loanId):null;
+  if(l)fixarCapitalInicio(l,db.transactions);   /* os dados antigos: antes de o movimento sair */
+  const capital=l?l.capitalInicio:null;
+  db.transactions=db.transactions.filter(x=>x.id!==id);
+  if(l){acertarCapital(l);if(servicoLigado('recurring'))syncLoanRec(prop(t.propertyId),l)}
+  save();closeAllModals();render();
   comDesfazer('Movimento apagado.',()=>{
     db.transactions.push(copia);
-    if(copia.kind==='loan'&&copia.principal&&copia.loanId){
-      const l=findLoan(prop(copia.propertyId),copia.loanId);
-      if(l){l.outstanding=Math.round((l.outstanding-copia.principal)*100)/100;syncLoanRec(prop(copia.propertyId),l)}
-    }
+    /* volta a procurar a hipoteca: um sync entretanto pode ter trocado os objetos da db */
+    const l2=copia.kind==='loan'&&copia.loanId?findLoan(prop(copia.propertyId),copia.loanId):null;
+    if(l2){if(l2.capitalInicio==null)l2.capitalInicio=capital;acertarCapital(l2);if(servicoLigado('recurring'))syncLoanRec(prop(copia.propertyId),l2)}
   });
 }
-// Agrega o plano de amortização da hipoteca em linhas anuais (capital, juros, selo,
-// taxa e dívida no fim do ano) e devolve também os totais de juros e selo até ao fim.
-// Recebe: l — a hipoteca (objeto).
-// Devolve: {yrs,totInt,totStamp} — yrs é a lista anual de {yr,int,st,cap,bal,rate} (valores em euros, rate em %).
-function yearRows(l){
-  const a=amort(l),yrs=[];let ai=0,as=0,ac=0,bal=l.outstanding,yr=YEAR;
-  a.rows.forEach((r,i)=>{ai+=r.int;as+=r.st;ac+=r.cap;bal=r.bal;
-    if((i+1)%12===0||i===a.rows.length-1){yrs.push({yr:yr++,int:ai,st:as,cap:ac,bal,rate:r.rate});ai=as=ac=0}});
-  return {yrs,totInt:a.totInt,totStamp:a.totStamp};
-}
-let amortPid=null,amortLid='';
-/* Modal da amortização de um imóvel: com uma hipoteca escolhida, gráfico e tabela ano a ano;
-   sem escolha, todas as hipotecas com a linha do total. lid===undefined é a primeira abertura
-   (openModal, e escolhe sozinho se só houver uma); com lid vindo do select só troca o conteúdo.
-   Recebe: pid — o id do imóvel (string); lid (opcional) — o id da hipoteca a mostrar ('' mostra todas; undefined na primeira abertura).
-   Devolve: nada — abre ou atualiza o modal. */
-function amortModal(pid,lid){
-  const p=prop(pid),ls=liveLoans(p);if(!ls.length)return;
-  amortPid=pid;amortLid=lid===undefined?(ls.length===1?ls[0].id:''):lid;
-  const opts=(ls.length>1?[{v:'',label:'Todas as hipotecas'}]:[]).concat(ls.map(l=>({v:l.id,label:loanName(l)})));
-  let body='';
-  if(amortLid){
-    const l=findLoan(p,amortLid),r=yearRows(l);
-    body=`${cLine([{name:'Em dívida',values:r.yrs.map(y=>y.bal),color:'#d6a34a'}],r.yrs.map(y=>String(y.yr)),{h:180,marks:decadeMarks(r.yrs[0]?r.yrs[0].yr:YEAR,r.yrs.length)})}
-      <div class="tablewrap"><table class="table"><thead><tr><th>Ano</th><th>Taxa</th><th>Capital</th><th>Juros</th><th>Selo</th><th>Em dívida</th></tr></thead>
-      <tbody>${r.yrs.map(y=>`<tr><td><b>${y.yr}</b></td><td>${dec(y.rate)}%</td><td>${euro(y.cap)}</td><td class="neg">${euro(y.int)}</td><td class="amber">${euro(y.st)}</td><td>${euro(y.bal)}</td></tr>`).join('')}</tbody></table></div>
-      <div class="hint">Juros ${euro(r.totInt)} + imposto do selo ${euro(r.totStamp)} = <b>${euro(r.totInt+r.totStamp)}</b>.</div>`;
-  }else{
-    const per=ls.map(l=>({l,r:yearRows(l)}));
-    const nY=Math.max(...per.map(x=>x.r.yrs.length));
-    const totals=[...Array(nY)].map((_,i)=>sum(per.map(x=>x.r.yrs[i]?x.r.yrs[i].bal:0)));
-    body=`${cLine(per.map((x,i)=>({name:loanName(x.l),values:[...Array(nY)].map((_,k)=>x.r.yrs[k]?x.r.yrs[k].bal:0),color:PAL[i%PAL.length]}))
-        .concat([{name:'Total',values:totals,color:'#d6a34a'}]),[...Array(nY)].map((_,i)=>String(YEAR+i)),{h:200,marks:decadeMarks(YEAR,nY)})}
-      <div class="tablewrap"><table class="table"><thead><tr><th>Hipoteca</th><th>Em dívida</th><th>Prestação</th><th>Juros até ao fim</th><th>Selo</th></tr></thead>
-      <tbody>${per.map(x=>`<tr><td><b>${esc(loanName(x.l))}</b><div class="small">${RATE[x.l.type]} · ${x.l.years} anos</div></td>
-        <td>${euro(x.l.outstanding)}</td><td>${euro2(loanCalc(x.l).total)}</td><td class="neg">${euro(x.r.totInt)}</td><td class="amber">${euro(x.r.totStamp)}</td></tr>`).join('')}
-        <tr><td><b>Total</b></td><td><b>${euro(debtOf(p))}</b></td><td><b>${euro2(payOf(p))}</b></td>
-          <td class="neg"><b>${euro(sum(per.map(x=>x.r.totInt)))}</b></td><td class="amber"><b>${euro(sum(per.map(x=>x.r.totStamp)))}</b></td></tr>
-      </tbody></table></div>`;
-  }
-  (lid===undefined?openModal:setModal)('Amortização · '+p.name,`<div class="form">
-    ${ls.length>1?`<label>Ver${sel('amSel',amortLid,opts,'onAmortSel','vista')}</label>`:''}
-    ${body}</div>`,`<button class="btn" data-toca="camada" onclick="closeModal()">Fechar</button>`);
-}
-// Mudou a hipoteca no select do modal da amortização: reconstrói o conteúdo.
-// Devolve: nada — reconstrói o modal via amortModal.
-function onAmortSel(){amortModal(amortPid,val('amSel'))}

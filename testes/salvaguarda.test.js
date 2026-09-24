@@ -60,6 +60,9 @@ describe('tamanhos', () => {
 
 // ------------------------------------------------- base e balde de faz-de-conta
 
+// A cópia pagina pelo rowid (a última linha lida é o cursor da seguinte):
+// aqui o rowid de cada linha é a posição dela mais um, como numa tabela
+// acabada de encher, e a coluna auxiliar sai com o nome que a consulta pede.
 function baseFalsa(tabelas) {
   return {
     prepare(sql) {
@@ -71,8 +74,14 @@ function baseFalsa(tabelas) {
             return { results: Object.keys(tabelas).sort().map((name) => ({ name })) };
           }
           const t = /FROM "([^"]+)"/.exec(sql)[1];
-          const [limite, salto] = args;
-          return { results: (tabelas[t] || []).slice(salto, salto + limite) };
+          const cursor = /rowid AS "([^"]+)"/.exec(sql)[1];
+          const [depois, limite] = /rowid > \?/.test(sql) ? args : [-Infinity, args[0]];
+          return {
+            results: (tabelas[t] || [])
+              .map((linha, i) => ({ [cursor]: i + 1, ...linha }))
+              .filter((linha) => linha[cursor] > depois)
+              .slice(0, limite),
+          };
         },
         async first() { return (await self.all()).results[0] || null; },
       };
@@ -178,17 +187,27 @@ describe('fazer a cópia', () => {
     assert.match(r.erro, /R2/);
   });
 
-  test('a cópia do dia poda as que já não são precisas', async () => {
+  /* O copiar() poda pelo relógio de verdade, por isso as datas daqui saem do
+     mesmo relógio. Escritas à mão («2026-08-31» como «ontem») valiam só no
+     dia em que o teste foi escrito: catorze dias depois a de «ontem» caía da
+     janela e a bateria ficou vermelha sem ninguém ter mexido no código. */
+  // achado A.6-2
+  test('a cópia do dia poda pelo relógio que corre: fica a de ontem e a do dia 1, sai a do meio do mês velho', async () => {
+    const agora = Date.now();
+    // o dia 1 e o dia 15 de um mês que já passou dos catorze dias (45 a 75 dias atrás)
+    const mesVelho = dia(agora - 45 * DIA).slice(0, 8);
+    const ontem = dia(agora - DIA), diaUm = mesVelho + '01', meio = mesVelho + '15';
+    const velha = dia(agora - 730 * DIA);
     const FILES = baldeFalso();
-    for (const d of ['2026-08-31', '2026-07-15', '2026-07-01', '2024-01-01']) {
+    for (const d of [ontem, meio, diaUm, velha]) {
       await FILES.put(PREFIXO + d + '.ndjson.gz', new Uint8Array([1]).buffer, {});
     }
     await copiar({ DB: baseFalsa(CONTEUDO), FILES });
     const ficaram = (await listar({ FILES })).map((o) => diaDaChave(o.key));
-    assert.ok(ficaram.includes('2026-08-31'), 'a de ontem fica');
-    assert.ok(ficaram.includes('2026-07-01'), 'a do dia 1 fica');
-    assert.ok(!ficaram.includes('2026-07-15'), 'a do meio do mês sai');
-    assert.ok(!ficaram.includes('2024-01-01'), 'a de há dois anos sai');
+    assert.ok(ficaram.includes(ontem), 'a de ontem fica');
+    assert.ok(ficaram.includes(diaUm), 'a do dia 1 fica');
+    assert.ok(!ficaram.includes(meio), 'a do meio do mês sai');
+    assert.ok(!ficaram.includes(velha), 'a de há dois anos sai');
   });
 
   test('a lista vem da mais recente para a mais antiga', async () => {

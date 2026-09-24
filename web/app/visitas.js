@@ -32,6 +32,17 @@ function visOrdenadas(){
    Devolve: verdadeiro quando a data é anterior a hoje. */
 function visPassada(v){return (v.date||'')<pzHoje()}
 
+/* Um campo do intervalo mudou: guarda no estado da lista o que lá ficou
+   escrito e repinta. Era um onchange com uma atribuição e com o nome do campo
+   interpolado, e nem uma nem o outro cabem na gramática das ações.
+   Recebe: k — a chave da lista ('lvis'); chave — o campo do estado ('d1',
+   'd2', 'h1' ou 'h2'); valor — o que está escrito no campo.
+   Devolve: nada — grava no estado da lista e repinta. */
+function visIntervaloMudou(k,chave,valor){
+  lf(k)[chave]=valor;
+  render();
+}
+
 /* Um par de campos de intervalo (de–até) para o painel de filtros, na
    mesma linha: datas ou horas, guardados no estado da lista.
    Recebe: k — a chave da lista ('lvis'); tipo — 'date' ou 'time';
@@ -39,10 +50,10 @@ function visPassada(v){return (v.date||'')<pzHoje()}
    Devolve: o HTML da linha (texto). */
 function visIntervalo(k,tipo,k1,k2,rotulo){
   const s=lf(k);
-  const campo=(chave)=>`<input type="${tipo}" value="${esc(s[chave]||'')}" style="flex:1;min-width:0"
-    onchange="lf('${k}').${chave}=this.value;render()">`;
-  return `<div><div class="small" style="margin-bottom:4px">${rotulo}</div>
-    <div style="display:flex;gap:8px;align-items:center">${campo(k1)}<span class="small">até</span>${campo(k2)}</div></div>`;
+  const campo=(chave)=>`<input type="${tipo}" value="${esc(s[chave]||'')}" class="u-fx-1 u-minw-0"
+    data-change="visIntervaloMudou('${k}','${chave}',this.value)">`;
+  return `<div><div class="small u-mb-4px">${rotulo}</div>
+    <div class="u-d-flex u-g-8px u-ai-center">${campo(k1)}<span class="small">até</span>${campo(k2)}</div></div>`;
 }
 
 /* A página das visitas: o painel de filtros comum da app (imóvel, estado,
@@ -64,8 +75,8 @@ function vVisits(){
   const marca=casasComo('visit.add').length>0;   /* sem imóvel onde possa marcar, não há botão */
   if(!(db.visits||[]).length)
     return esperaDoServidor()||`<div class="empty"><b>Ainda não há visitas</b>${marca?'Marca a primeira: quem vem, a que imóvel, e quando.':'As visitas aos imóveis onde colaboras aparecem aqui.'}
-      ${marca?`<div class="toolbar" style="justify-content:center;margin-top:16px">
-      <button class="btn primary" data-toca="camada" onclick="visitModal()">Marcar visita</button></div>`:''}</div>`;
+      ${marca?`<div class="toolbar u-jc-center u-mt-16px">
+      <button class="btn primary" data-toca="camada" data-click="visitModal()">Marcar visita</button></div>`:''}</div>`;
   const head=lfBar(K,[
     lfSel(K,'pr',[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p=>({v:p.id,label:p.name||p.address||'imóvel'})))),
     lfSel(K,'es',[{v:'',label:'Todos os estados'}].concat(Object.keys(VESTADO).map(x=>({v:x,label:VESTADO[x]})))),
@@ -76,11 +87,11 @@ function vVisits(){
   const futuras=lista.filter(v=>!visPassada(v)),passadas=lista.filter(visPassada).reverse();
   /* o título do grupo fica FORA do contentor: o motor deita fora tudo o que
      não seja um item com chave */
-  const bloco=(titulo,vs)=>vs.length?`<div class="navh" style="margin:4px 0 8px">${titulo}</div>`
-    +listaViva('visitas:'+titulo,vs.map(v=>({chave:'vis:'+v.id,html:visCard(v)})),'','margin-bottom:16px'):'';
+  const bloco=(titulo,vs)=>vs.length?`<div class="navh u-m-4px-0-8px">${titulo}</div>`
+    +listaViva('visitas:'+titulo,vs.map(v=>({chave:'vis:'+v.id,html:visCard(v)})),'','vis-bloco'):'';
   return head+bloco('Próximas',futuras)+bloco('Passadas',passadas)+
     (lista.length?'':'<div class="empty">Nada com estes filtros.</div>')+
-    (marca?`<button class="fab" data-toca="camada" onclick="visitModal()" aria-label="Marcar visita">${ic('plus',22)}</button>`:'');
+    (marca?`<button class="fab" data-toca="camada" data-click="visitModal()" aria-label="Marcar visita">${ic('plus',22)}</button>`:'');
 }
 
 /* O cartão de uma visita na lista: quem, onde e quando à esquerda, o selo
@@ -102,13 +113,13 @@ function visCard(v){
      As ações vêm do visOpcoes, que é onde já vivem para a ficha e para o
      toque longo. */
   const acoes=visOpcoes(v);
-  return `<div class="card tap" data-lp="vis:${esc(v.id)}" data-fk="vis:${esc(v.id)}" data-toca="camada" onclick="visView('${v.id}')">
-    <div class="row-between" style="align-items:flex-start;gap:8px">
-      <div style="min-width:0">
-        <b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.nomes||'(sem nome)')}</b>
+  return `<div class="card tap" data-lp="vis:${esc(v.id)}" data-fk="vis:${esc(v.id)}" data-toca="camada" data-click="visView('${jsq(v.id)}')">
+    <div class="row-between u-ai-flex-start u-g-8px">
+      <div class="u-minw-0">
+        <b class="u-d-block u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(v.nomes||'(sem nome)')}</b>
         <span class="small">${esc(p?(p.name||p.address):'imóvel?')}${quarto?' · '+esc(quarto):''} · ${v.date?esc(dPT(v.date)):'sem data'}${hora?' · '+esc(hora):''}${desf}</span>
-        ${v.notas?`<span class="small" style="display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.notas)}</span>`:''}</div>
-      <span style="flex:0 0 auto;display:inline-flex;align-items:center;gap:4px">
+        ${v.notas?`<span class="small u-d-block u-mt-3px u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(v.notas)}</span>`:''}</div>
+      <span class="u-fx-0-0-auto u-d-inline-flex u-ai-center u-g-4px">
         <span class="badge ${seloCls}">${VESTADO[v.estado]||v.estado}</span>
         ${acoes.length?kebab('vis:'+v.id):''}</span></div></div>`;
 }
@@ -148,18 +159,28 @@ function visFicha(id){
     v._createdBy&&v._createdBy!==meuId()?{rotulo:'Marcada por',valor:esc(nomeUtilizador(v._createdBy))}:null,
   ]);
 }
-/* As opções de uma visita, iguais na ficha e no toque longo.
-   Recebe: v — a visita.
+/* As opções de uma visita, iguais na ficha, no kebab e no toque longo. A
+   ficha e o kebab põem-nas num menu() de onclick em texto; o toque longo
+   (lpShow) quer funções — e fazê-las a partir do texto com new Function é o
+   que a CSP da app (sem 'unsafe-eval', web/_headers) recusa: o toque longo
+   rebentava antes de abrir. Por isso cada opção vem escrita das duas formas,
+   lado a lado, e sai na que se pede.
+   Recebe: v — a visita; comoFuncao (opcional) — verdadeiro para o act vir como
+   função (o toque longo); falso ou omisso para vir como texto de onclick.
    Devolve: a lista de itens {label,icon,toca,risco,danger,act} para o menu. */
-function visOpcoes(v){
+function visOpcoes(v,comoFuncao){
   const id=v.id,ok=podeEditar(v.propertyId,'visit.add',v),it=[];
-  if(v.estado==='agendada'&&ok)it.push(
-    {label:'Marcar realizada',icon:'check',toca:'dados',act:`visEstado('${jsq(id)}','realizada')`},
-    {label:'Marcar falta',icon:'x',toca:'dados',act:`visEstado('${jsq(id)}','faltou')`});
-  if(pode(v.propertyId,'tenant.add'))it.push({label:'Converter em inquilino',icon:'users',toca:'camada',act:`visConverte('${jsq(id)}')`});
+  const op=(o,texto,fn)=>it.push(Object.assign(o,{act:comoFuncao?fn:texto}));
+  if(v.estado==='agendada'&&ok){
+    op({label:'Marcar realizada',icon:'check',toca:'dados'},`visEstado('${jsq(id)}','realizada')`,()=>visEstado(id,'realizada'));
+    op({label:'Marcar falta',icon:'x',toca:'dados'},`visEstado('${jsq(id)}','faltou')`,()=>visEstado(id,'faltou'));
+  }
+  /* converter é criar uma ficha de inquilino, que é dos Inquilinos: com o
+     serviço desligado nesta conta a opção não aparece */
+  if(servicoLigado('tenants')&&pode(v.propertyId,'tenant.add'))op({label:'Converter em inquilino',icon:'users',toca:'camada'},`visConverte('${jsq(id)}')`,()=>visConverte(id));
   /* o visApaga não fecha janelas: sem o closeModal ficava uma ficha vazia
      aberta por cima de uma visita apagada */
-  if(ok)it.push({label:'Apagar visita',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`closeModal();visApaga('${jsq(id)}')`});
+  if(ok)op({label:'Apagar visita',icon:'trash',danger:true,toca:'dados',risco:'destroi'},`closeModal();visApaga('${jsq(id)}')`,()=>{closeModal();visApaga(id)});
   return it;
 }
 /* A ficha de uma visita: o que tocar numa visita passa a abrir.
@@ -181,19 +202,22 @@ function visView(id){
 }
 /* O formulário de uma visita — novo ou edição — no modal da casa: imóvel e
    quarto (quando o imóvel é por quartos) nos menus da app, data e horas
-   nativas, estado e desfecho, nomes e contacto livres.
+   nativas, estado e desfecho, nomes e contacto livres. Quem não pode alterar
+   a visita recebe a ficha, antes de abrir a janela — como o propModal, o
+   ctModal e o txModal: era o formulário editável com a recusa só no Guardar,
+   e é o que as entradas de lado (o calendário) abriam.
    Recebe: id (opcional) — a visita a editar; sem id, cria-se uma nova;
    extra (opcional) — campos a pré-preencher numa nova (ex.: a data, vinda
    do calendário).
-   Devolve: nada — abre o modal e liga o onSave. */
+   Devolve: nada — abre o modal e liga o onSave (ou a ficha, a quem não pode alterar). */
 function visitModal(id,extra){
   const orig=id?(db.visits||[]).find(x=>x.id===id):null;
+  if(orig&&!podeEditar(orig.propertyId,'visit.add',orig))return visView(id);
   const pr=lf('lvis').pr;
   visForm=normVisit(orig?JSON.parse(JSON.stringify(orig)):
     Object.assign({propertyId:(pr&&pode(pr,'visit.add')?pr:(casasComo('visit.add')[0]||{}).id)||'',date:pzHoje()},extra||{}));
-  const ok=!orig||podeEditar(orig.propertyId,'visit.add',orig);
-  const m=id&&ok?menu('vism',[{label:'Apagar visita',icon:'trash',danger:true,act:`closeModal();visApaga('${id}')`}]):'';
-  openModal(id?(ok?'Editar visita':'Visita'):'Marcar visita',visBody(),null,m);
+  const m=id?menu('vism',[{label:'Apagar visita',icon:'trash',danger:true,act:`closeModal();visApaga('${jsq(id)}')`}]):'';
+  openModal(id?'Editar visita':'Marcar visita',visBody(),null,m);
   onSave=()=>{
     visColhe();
     const recusa=motivoRecusa(visForm.propertyId,'visit.add',orig);if(recusa)return toast(recusa);
@@ -220,7 +244,7 @@ function visBody(){
   return `<div class="form">
     <label>Quem vem<input id="vi_nomes" value="${esc(v.nomes)}" placeholder="Ana Rodrigues (e o irmão)" autocomplete="off"></label>
     <label>Contacto<input id="vi_contacto" value="${esc(v.contacto)}" placeholder="Telemóvel ou email (opcional)" autocomplete="off"></label>
-    <div class="hint" style="margin:-4px 0 0">Para confirmar ou remarcar — segue para a ficha se a visita virar inquilino.</div>
+    <div class="hint u-m-n4px-0-0">Para confirmar ou remarcar — segue para a ficha se a visita virar inquilino.</div>
     <label>Imóvel${sel('vi_prop',v.propertyId,props,'visPropMudou','rascunho')}</label>
     ${quartos?`<label>Quarto${sel('vi_room',v.roomId,quartos,'','rascunho')}</label>`:''}
     <label>Data<input id="vi_date" type="date" value="${v.date||''}"></label>
@@ -285,6 +309,9 @@ function visApaga(id){
    Devolve: nada — abre o personModal de um inquilino novo pré-preenchido. */
 function visConverte(id){
   const v=(db.visits||[]).find(x=>x.id===id);if(!v)return;
+  /* a ficha nova é um registo dos Inquilinos: desligados nesta conta, o
+     servidor recusava-a — diz-se antes de criar o que não ia subir */
+  if(!servicoLigado('tenants'))return toast(hintServicoDesligado('tenants'));
   if(!pode(v.propertyId,'tenant.add'))return toast(fraseSemPerm('tenant.add'));
   const c=(v.contacto||'').trim();
   const novo=normPerson({name:v.nomes,phone:/@/.test(c)?'':c,email:/@/.test(c)?c:'',houseId:souDono(v.propertyId)?'':(v.propertyId||''),
@@ -293,6 +320,22 @@ function visConverte(id){
        diante e que leva a forma nova */
     notes:v.notas?'Da visita de '+(dPT(v.date)||'?')+': '+v.notas:''});
   db.tenants.push(novo);save();
-  personModal('tenant',novo.id);
+  chamarServico('tenants','personModal','tenant',novo.id);
   toast('Ficha criada a partir da visita — completa o que faltar.');
 }
+/* ---- registo do serviço (servicos.js) ---- */
+/* O menu de toque longo de uma visita (data-lp "vis:<id>"). Os cartões de
+   visita têm data-lp desde sempre, e o toque longo não fazia nada: vibrava,
+   enchia a barra da espera e acabava em silêncio, porque o ramo não existia.
+   As opções vêm do visOpcoes já como funções — nunca feitas de texto, que a
+   CSP não deixa avaliar. Os outros serviços acrescentam as suas por lpExtras.
+   Recebe: a — as partes do data-lp (['vis', id]).
+   Devolve: nada — abre a folha de opções (ou nada, se a visita já não existir). */
+function lpVisita(a){
+  const id=a[1],v=(db.visits||[]).find(x=>x.id===id);if(!v)return;
+  const opts=podeEditar(v.propertyId,'visit.add',v)?[{label:'Editar visita',icon:'pen',act:()=>visitModal(id)}]:[];
+  visOpcoes(v,true).forEach(it=>opts.push({label:it.label,icon:it.icon,act:it.act}));
+  lpExtrasDe('vis',a).forEach(o=>opts.push(o));
+  return lpShow(v.nomes||'Visita',opts);
+}
+registarServico({id:'visits',vistas:{visits:'vVisits'},lp:{vis:'lpVisita'}});

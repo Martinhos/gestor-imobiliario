@@ -266,7 +266,7 @@ function seloCargo(p){
   if(souDono(p.id))return '';
   const dono=p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):''),nome=cargoDe(p.id).nome||p._cargo||'';
   const txt=[dono?'de '+dono:'',nome].filter(Boolean).join(' · ');
-  return txt?`<span class="badge grey cw-shared" style="margin-left:7px">${esc(txt)}</span>`:'';
+  return txt?`<span class="badge grey cw-shared u-ml-7px">${esc(txt)}</span>`:'';
 }
 /* O selo «N colaboradores» nos meus imóveis com colaboradores (lido de p._colaboradores).
    Recebe: p — o imóvel.
@@ -281,9 +281,12 @@ function seloColaboradores(p){
    Devolve: array de ids de TABS a esconder. */
 function separadoresEscondidos(){
   const out=[],nada=perm=>!casasComo(perm).length;
+  /* os serviços desligados nesta conta (servicos.js): o separador some do
+     menu, e o resto da app pergunta servicoLigado antes de lhes tocar */
+  if(typeof servicosDesligados==='function')servicosDesligados().forEach(id=>out.push(id));
   /* cargos e convites vivem no servidor: sem conta na nuvem o separador não
      tem o que mostrar (a vista explica-o, mas não vale ocupar o menu) */
-  if(!(typeof window!=='undefined'&&window.CW&&CW.user))out.push('colaboradores');
+  if(!(typeof window!=='undefined'&&window.CW&&CW.user)&&out.indexOf('colaboradores')<0)out.push('colaboradores');
   if(!souSoColaborador())return out;
   if(!scope().length){out.push('credits','projections','reports','fisco');
     if(nada('tx.view')&&!db.transactions.length)out.push('transactions');

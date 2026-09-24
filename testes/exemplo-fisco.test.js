@@ -6,15 +6,16 @@
 // fica desmentida pelo exemplo. O CSV é a saída de quem faz o IRS noutro lado:
 // tem de levar o mês, a retenção, o recibo, a coluna e o estado do contrato.
 
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarTudo, igual } from './arnes.js';
+import { carregarTudo, igual, repor } from './arnes.js';
 
 /* A app inteira: o seed vive no arranque, e a nuvem embrulha-o para recusar
    em produção (cloud/guia.js) — por isso o ambiente finge-se antes. */
 const app = carregarTudo();
 app.CW.ambiente = 'desenvolvimento';
 app.seed();
+afterEach(() => repor(app));
 const db = app.db;
 const YEAR = app.YEAR;
 

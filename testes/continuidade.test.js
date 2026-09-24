@@ -5,12 +5,13 @@
 // Num sítio destes é fácil escrever um invólucro que engole o trabalho que
 // devia embrulhar. Foi o que se testou primeiro.
 
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { carregarApp } from './arnes.js';
+import { carregarApp, repor } from './arnes.js';
 
 const app = carregarApp();
+afterEach(() => repor(app));
 const { pintarComContinuidade, deslizarEntre, semMovimento, msDoToken, tokenTexto,
   medirContinuidade, aplicarContinuidade } = app;
 
@@ -114,10 +115,10 @@ describe('acompanhar peças é a regra, não um pedido', () => {
      correção acima tirava-lhes o deslizar sem ninguém dar por isso. */
   test('as linhas de lista pedem as duas chaves', () => {
     const pares = [
-      ['../web/app/vistas.js', /data-lp="tx:[^"]*" data-fk="tx:/],
-      ['../web/app/vistas.js', /data-lp="prop:[^"]*" data-fk="prop:/],
-      ['../web/app/vistas.js', /data-lp="ct:[^"]*" data-fk="ct:/],
-      ['../web/app/vistas.js', /data-lp="per:[^"]*" data-fk="per:/],
+      ['../web/app/lista-movimentos.js', /data-lp="tx:[^"]*" data-fk="tx:/],
+      ['../web/app/lista-imoveis.js', /data-lp="prop:[^"]*" data-fk="prop:/],
+      ['../web/app/lista-contratos.js', /data-lp="ct:[^"]*" data-fk="ct:/],
+      ['../web/app/lista-pessoas.js', /data-lp="per:[^"]*" data-fk="per:/],
       ['../web/app/visitas.js', /data-lp="vis:[^"]*" data-fk="vis:/],
       ['../web/app/creditos.js', /data-lp="mort:[^"]*" data-fk="mort:/],
       ['../web/app/planeados.js', /data-lp="tpl:[^"]*" data-fk="tpl:/],
@@ -160,10 +161,13 @@ describe('os tempos vêm dos tokens, não de números à parte', () => {
 describe('a caixa de quem sai é a mesma caixa', () => {
   const fonte = readFileSync(new URL('../web/app/continuidade.js', import.meta.url), 'utf8');
   const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  // o CSS da app saiu do <style> do index.html para a folha dela
+  const css = readFileSync(new URL('../web/estilos.css', import.meta.url), 'utf8');
 
   test('o #view tem mesmo espaçamento a perder — é por isso que a classe importa', () => {
     assert.match(html, /<div class="wrap" id="view">/, 'o #view é um .wrap');
-    assert.match(html, /\.wrap\{padding:/, 'e o .wrap é quem dá o espaçamento');
+    assert.match(html, /<link rel="stylesheet" href="estilos\.css">/, 'a página veste-se com o estilos.css');
+    assert.match(css, /\.wrap\{padding:/, 'e o .wrap é quem dá o espaçamento');
   });
 
   test('o velho leva as classes do próprio #view, menos o entra', () => {

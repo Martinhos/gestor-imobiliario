@@ -167,7 +167,7 @@ txLinhaExtra = function (t, mes) {
        opções de um movimento sozinho ficavam sem porta nenhuma. */
     x.acoes = (x.acoes || '') +
       '<button type="button" class="iconbtn opcoes txkebab" aria-label="Opções"' +
-      ' data-toca="camada" onclick="event.stopPropagation();CW.txOpcoes(\'' + jsq(id) + '\')">' + ic('dots', 18) + '</button>';
+      ' data-toca="camada" data-click="event.stopPropagation();CW.txOpcoes(\'' + jsq(id) + '\')">' + ic('dots', 18) + '</button>';
   }
   return x;
 };
@@ -180,9 +180,9 @@ txMesExtra = function (mes) {
   /* SEM style aqui: o título já leva um no template (vistas.js) e, com dois,
      o parser fica com o primeiro — o meu — e o display:flex morria. O cursor
      vai na folha, com o resto da regra .sel-mes. */
-  x.attrs = (x.attrs || '') + ' data-toca="vista" onclick="CW.selMes(\'' + jsq(mes) + '\',event)"';
+  x.attrs = (x.attrs || '') + ' data-toca="vista" data-click="CW.selMes(\'' + jsq(mes) + '\',event)"';
   x.caixa = (x.caixa || '') +
-    '<span class="selbox mes" data-mes-box="' + esc(mes) + '" data-toca="vista" onclick="CW.selMes(\'' + jsq(mes) + '\',event)"></span>';
+    '<span class="selbox mes" data-mes-box="' + esc(mes) + '" data-toca="vista" data-click="CW.selMes(\'' + jsq(mes) + '\',event)"></span>';
   return x;
 };
 
@@ -203,16 +203,16 @@ vTransactions = function () {
      caminho antigo para quem já o conhece. */
   var fundo =
     '<div class="sel-fundo">' +
-      '<button type="button" class="btn" data-toca="modo" onclick="CW.selSair()">' + ic('x', 15) + ' Cancelar</button>' +
-      '<span style="flex:1"></span>' +
-      '<button type="button" class="btn" data-toca="camada" onclick="CW.selEditar()">' + ic('pen', 15) + ' Editar</button>' +
-      '<button type="button" class="btn danger" data-toca="dados" data-risco="destroi" onclick="CW.selApagar()">' + ic('trash', 15) + ' Eliminar</button>' +
+      '<button type="button" class="btn" data-toca="modo" data-click="CW.selSair()">' + ic('x', 15) + ' Cancelar</button>' +
+      '<span class="u-fx-1"></span>' +
+      '<button type="button" class="btn" data-toca="camada" data-click="CW.selEditar()">' + ic('pen', 15) + ' Editar</button>' +
+      '<button type="button" class="btn danger" data-toca="dados" data-risco="destroi" data-click="CW.selApagar()">' + ic('trash', 15) + ' Eliminar</button>' +
     '</div>';
   var barra =
     '<div class="sel-bar">' +
-      '<span class="selbox" id="selGlobal" data-toca="vista" onclick="CW.selTodos(event)">' + caixa(false) + '</span>' +
-      '<span style="flex:1;min-width:0;cursor:pointer" data-toca="vista" onclick="CW.selTodos(event)"><b id="selConta">nenhum movimento</b>' +
-      '<span class="small" style="display:block">toca para marcar ou desmarcar tudo</span></span>' +
+      '<span class="selbox" id="selGlobal" data-toca="vista" data-click="CW.selTodos(event)">' + caixa(false) + '</span>' +
+      '<span class="u-fx-1 u-minw-0 u-cur-pointer" data-toca="vista" data-click="CW.selTodos(event)"><b id="selConta">nenhum movimento</b>' +
+      '<span class="small u-d-block">toca para marcar ou desmarcar tudo</span></span>' +
     '</div>';
   return barra + html + fundo;
 };
@@ -226,7 +226,7 @@ CW.txOpcoes = function (id) {
   var t = (db.transactions || []).find(function (x) { return x.id === id; });
   if (!t) return;
   lpShow(t.label, [
-    { label: 'Editar movimento', icon: 'pen', act: function () { txModal(id); } },
+    { label: 'Editar movimento', icon: 'pen', act: function () { txModal({ id: id }); } },
     { label: 'Selecionar vários', icon: 'check', act: function () { CW.selEntrar(id); } },
     { label: 'Apagar movimento', icon: 'trash', act: function () { delTx(id); } },
   ]);
@@ -265,7 +265,7 @@ function patchHdrSel() {
     x.style.cssText = 'flex:0 0 auto;margin-left:7px';
     x.title = 'Sair da seleção';
     x.setAttribute('data-toca', 'modo');
-    x.setAttribute('onclick', 'CW.selSair()');
+    x.setAttribute('data-click', 'CW.selSair()');
     x.innerHTML = ic('x', 18);
     hb.parentNode.insertBefore(x, hb.nextSibling);
   }
@@ -313,14 +313,14 @@ CW.selEditar = function () {
         ? '<div><div class="flabel">Etiquetas</div>' +
           '<div class="chips" id="selTags">' + tags.map(function (g) {
             return '<button type="button" class="tag grey" data-tag="' + esc(g) +
-              '" data-toca="nada" onclick="CW.selTagToggle(this)">' + esc(g) + '</button>';
+              '" data-toca="nada" data-click="CW.selTagToggle(this)">' + esc(g) + '</button>';
           }).join('') + '</div>' +
-          '<div class="hint" style="margin-top:7px">As que marcares são <b>acrescentadas</b>. ' +
+          '<div class="hint u-mt-7px">As que marcares são <b>acrescentadas</b>. ' +
           'Nenhuma etiqueta é removida.</div></div>'
         : '') +
     '</div>',
-    '<button class="btn" data-toca="camada" onclick="closeAllModals()">Cancelar</button>' +
-    '<button class="btn primary" data-toca="dados" onclick="CW.selGravar()">Aplicar</button>');
+    '<button class="btn" data-toca="camada" data-click="closeAllModals()">Cancelar</button>' +
+    '<button class="btn primary" data-toca="dados" data-click="CW.selGravar()">Aplicar</button>');
 };
 
 // ao mudar a categoria na edição em massa, refaz o menu de subcategorias com as dessa categoria
@@ -348,7 +348,6 @@ CW.selTagToggle = function (b) {
    Devolve: nada — grava, fecha os modais e sai da seleção (ou avisa por
    toast se nada foi preenchido). */
 CW.selGravar = function () {
-  var ids = Object.keys(selIds);
   var cat = val('selCat'), sub = val('selSub');
   var tags = [].slice.call(document.querySelectorAll('#selTags .tag.on'))
     .map(function (b) { return b.getAttribute('data-tag'); });
@@ -417,30 +416,10 @@ render = function () {
   return r;
 };
 
-var cssSelecao = document.createElement('style');
-cssSelecao.textContent =
-  // a caixa de marcar, desenhada e não <input>: um checkbox do sistema
-  // destoava de tudo o resto e não aceita o tamanho que aqui é preciso
-  '.selbox{flex:0 0 auto;display:inline-flex;align-items:center;padding:10px 12px 10px 2px;cursor:pointer}' +
-  '.selck{width:22px;height:22px;border-radius:7px;border:1.8px solid var(--line2);' +
-    'display:grid;place-items:center;color:transparent;background:var(--field)}' +
-  '.selck.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}' +
-  '.selck.meio{border-color:var(--accent)}' +
-  '.selck.meio i{width:10px;height:2.5px;border-radius:2px;background:var(--accent);display:block}' +
-  '.txrow.sel-on{border-color:var(--accent);background:var(--tint)}' +
-  // o mês e o global acompanham o scroll: sem isso, a meio de uma lista longa
-  // deixava de haver como marcar tudo sem voltar ao topo
-  '.sel-bar{position:sticky;top:calc(57px + var(--inset-top));z-index:26;display:flex;align-items:center;' +
-    'gap:2px;background:var(--bg);padding:10px 0;margin:-4px 0 6px;box-shadow:0 8px 10px -10px rgba(0,0,0,.3)}' +
-  '.section-title.sel-mes{position:sticky;top:calc(114px + var(--inset-top));z-index:25;background:var(--bg);' +
-    'align-items:center;padding:7px 0;margin-top:14px;cursor:pointer}' +
-  '.section-title.sel-mes .selbox{padding-right:9px}' +
-  // o kebab de cada linha, discreto até se lhe tocar
-  '.txkebab{margin:0 0 0 4px}' +
-  '.sel-fundo{position:fixed;left:0;right:0;bottom:0;z-index:45;display:flex;gap:8px;align-items:center;' +
-    'background:var(--card);border-top:1px solid var(--line);' +
-    'padding:8px calc(10px + var(--inset-right)) calc(8px + var(--inset-bottom)) calc(10px + var(--inset-left))}' +
-  'body.sel-on .tabbar{display:none!important}' +
-  'body.sel-on .wrap{padding-bottom:calc(120px + var(--inset-bottom))}' +
-  '.txkebab:hover{color:var(--ink);background:var(--chip)}';
-document.head.appendChild(cssSelecao);
+/* A folha da seleção (a caixa de marcar, as barras do topo e do fundo, o
+   kebab da linha) era feita aqui, num elemento de folha criado por JavaScript
+   e pendurado na cabeça do documento. Isso é CSS em linha, que a CSP sem
+   'unsafe-inline' recusa tal como recusa um atributo de estilo, por isso as
+   regras passaram para o web/estilos.css, na secção «g12-novidades» das
+   classes dos módulos — tal e qual, pela mesma ordem e com os mesmos
+   comentários. */

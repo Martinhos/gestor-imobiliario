@@ -38,8 +38,11 @@ if (!fs.existsSync(path.join(SAIDA, 'resumo.json'))) {
 const resumo = JSON.parse(fs.readFileSync(path.join(SAIDA, 'resumo.json'), 'utf8'));
 
 /* Uma imagem por estado seria caro e repetitivo. Escolhem-se os estados que
-   mais dizem sobre o interface, num ecrã de cada — o telemóvel é onde aperta. */
+   mais dizem sobre o interface, num ecrã de cada — o telemóvel é onde aperta —,
+   e dois no tema claro: o contraste e a legibilidade eram julgados só no escuro. */
 const ESCOLHA = [
+  'telemovel-claro__vista-dashboard',
+  'telemovel-claro__modal-movimento',
   'telemovel__vista-dashboard',
   'telemovel__vista-properties',
   'telemovel__vista-transactions',

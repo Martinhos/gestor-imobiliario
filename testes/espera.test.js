@@ -4,11 +4,12 @@
 // diferente da que usou o aparelho recebe-a apagada de propósito — dizer-lhe
 // «Ainda não há nada registado» é mentira que parece perda de dados.
 
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp } from './arnes.js';
+import { carregarApp, repor } from './arnes.js';
 
 const app = carregarApp();
+afterEach(() => repor(app));
 
 // uma sessão iniciada, ainda sem o primeiro estado do servidor
 function aEsperar() {

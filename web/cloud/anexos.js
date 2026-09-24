@@ -121,64 +121,8 @@ function subirPendentes() {
   });
 }
 
-var _save = save;
-save = function () {
-  dropUnsafe(db);
-  _save();
-  schedulePush();
-  // um contrato ou hipoteca que já vem de trás deixa meses por registar
-  clearTimeout(save._est);
-  save._est = setTimeout(function () { try { offerFill(); } catch (e) {} }, 700);
-};
-
-var _render = render;
-render = function () {
-  _render();
-  try { decorateShared(); } catch (e) {}
-  try { decoratePending(); } catch (e) {}
-  try {
-    if (CW.editMode && tab === 'dashboard') { view().classList.add('cw-edit'); editBar(); }
-    patchHdr();
-  } catch (e) {}
-};
-
-/* Depois de cada render, pendura o selo nos cartões dos imóveis (mexe no DOM
-   já desenhado, sem re-render): «de <dono> · <cargo>» onde sou colaborador,
-   «de <dono>» nos que outra pessoa partilhou comigo, e «N colaboradores» nos
-   meus que têm colaboradores. Quando a própria vista já desenha o selo
-   (seloCargo / seloColaboradores em web/app/acessos.js), não se pendura
-   outro por cima.
-   Devolve: nada — só acrescenta os selos ao DOM. */
-function decorateShared() {
-  var appCargo = typeof seloCargo === 'function', appColab = typeof seloColaboradores === 'function';
-  (db.properties || []).forEach(function (p) {
-    var texto = '', titulo = '';
-    if (p._cargo) {
-      if (appCargo) return;
-      texto = 'de ' + p._sharedFrom + ' · ' + p._cargo;
-      titulo = 'És colaborador neste imóvel, como ' + p._cargo;
-    } else if (p._sharedFrom) {
-      texto = 'de ' + p._sharedFrom;
-      titulo = 'Imóvel partilhado por ' + p._sharedFrom;
-    } else if ((p._colaboradores || []).length) {
-      if (appColab) return;
-      var n = p._colaboradores.length;
-      texto = n + (n === 1 ? ' colaborador' : ' colaboradores');
-      titulo = p._colaboradores.map(function (c) { return c.name + (c.roleName ? ' (' + c.roleName + ')' : ''); }).join(', ');
-    }
-    if (!texto) return;
-    var cards = document.querySelectorAll('[data-lp="prop:' + p.id + '"] .title');
-    [].slice.call(cards).forEach(function (el) {
-      if (el.querySelector('.cw-shared')) return;
-      var b = document.createElement('span');
-      b.className = 'badge grey cw-shared';
-      b.style.marginLeft = '7px';
-      b.textContent = texto;
-      b.title = titulo;
-      el.appendChild(b);
-    });
-  });
-}
+// Os embrulhos de save, render, go e goSet — os que ligam a base à
+// sincronização — vivem em cloud/nucleo.js, com ela.
 
 // Na web "Abrir cópia" deve abrir o seletor de ficheiros (o original só
 // tinha o picker nativo do Android e caía para "colar texto" no browser).
@@ -201,41 +145,6 @@ driveOpen = function () {
   };
   inp.click();
 };
-
-// Mudar de página no menu deve fechar qualquer modal aberto (imóvel,
-// movimento, ...) em vez de o deixar por cima da página nova.
-var _go = go;
-go = function (id) {
-  try { if (modalStack.length) closeAllModals(); } catch (e) {}
-  try { if (CW.editMode && id !== 'dashboard') CW.exitEdit(true); } catch (e) {}
-  // a barra de regresso só faz sentido enquanto se está nos Movimentos
-  if (id !== 'transactions') CW._fromKpi = null;
-  _go(id);
-  rememberPage();
-};
-
-// recarregar a página devolve o utilizador ao sítio onde estava
-var LS_PAGE = 'gi_page';
-// Guarda em localStorage o separador atual (e a sub-página das definições), para o restorePage.
-// Devolve: nada — grava no localStorage (e engole o erro, se ele não deixar).
-function rememberPage() {
-  try { localStorage.setItem(LS_PAGE, JSON.stringify({ tab: tab, set: setPage || '' })); } catch (e) {}
-}
-var _goSet = goSet;
-goSet = function (p) { _goSet(p); rememberPage(); };
-
-// No arranque, devolve o utilizador ao separador onde estava; ignora estados
-// guardados que já não existem e não faz nada quando era só o painel inicial.
-// Devolve: nada — repõe o separador e repinta (ou não mexe em nada).
-function restorePage() {
-  var s = null;
-  try { s = JSON.parse(localStorage.getItem(LS_PAGE) || 'null'); } catch (e) {}
-  if (!s || !s.tab || s.tab === 'dashboard' && !s.set) return;
-  if (!TABS.some(function (t) { return t.id === s.tab; })) return;
-  tab = s.tab;
-  setPage = s.tab === 'settings' ? (s.set || '') : '';
-  buildNav(); render();
-}
 
 // A guarda de «só o dono apaga o imóvel» vive agora em web/app/imovel.js
 // (delProp com souDono): o embrulho que aqui havia saiu, para não haver duas.

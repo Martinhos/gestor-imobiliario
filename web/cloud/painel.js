@@ -4,7 +4,7 @@
 /* =====================================================================
    Painel: movimentos por trás de cada indicador, pendentes nas vistas de
    imóveis e contratos, recusa de planeados e ordem dos cartões da visão
-   geral (modo de edição por toque longo).
+   geral (o modo de edição entra pelo botão «Personalizar painel»).
    ===================================================================== */
 
 var KPI_KINDS = { income: ['income'], op: ['expense'], loan: ['loan'], cf: ['income', 'expense', 'loan'] };
@@ -55,20 +55,20 @@ kpiModal = function (id) {
   var total = rows.reduce(function (a, r) { return a + r.v; }, 0);
   var html = '<div><div class="flabel">Movimentos que somam este valor</div>' +
     (rows.length
-      ? '<div class="list" style="gap:7px">' + show.map(function (r) {
+      ? '<div class="list u-g-7px">' + show.map(function (r) {
           var t = r.t, col = t.kind === 'income' ? 'pos' : (t.kind === 'loan' ? 'amber' : 'neg');
-          return '<div class="card tap" style="padding:10px 12px" data-toca="camada" onclick="CW.openTx(\'' + t.id + '\')">' +
-            '<div class="row-between" style="align-items:center;gap:10px">' +
-            '<div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.label) + '</b>' +
+          return '<div class="card tap u-p-10px-12px" data-toca="camada" data-click="CW.openTx(\'' + t.id + '\')">' +
+            '<div class="row-between u-ai-center u-g-10px">' +
+            '<div class="u-minw-0"><b class="u-d-block u-ov-hidden u-to-ellipsis u-ws-nowrap">' + esc(t.label) + '</b>' +
             '<span class="small">' + dPT(t.date) + ' · ' + esc((KIND[t.kind] || {}).short || '') +
             (t.category ? ' · ' + esc(t.category) : '') +
             (t.propertyId ? ' · ' + esc(propName(t.propertyId)) : '') + '</span></div>' +
-            '<b class="' + col + '" style="flex:0 0 auto">' + euro2(r.v) + '</b></div></div>';
+            '<b class="' + col + ' u-fx-0-0-auto">' + euro2(r.v) + '</b></div></div>';
         }).join('') + '</div>' +
         (rows.length > show.length
-          ? '<div class="hint" style="margin-top:8px">A mostrar os ' + show.length + ' mais recentes de ' + rows.length + '. Vê todos em Movimentos.</div>'
+          ? '<div class="hint u-mt-8px">A mostrar os ' + show.length + ' mais recentes de ' + rows.length + '. Vê todos em Movimentos.</div>'
           : '') +
-        '<div class="stat" style="margin-top:8px"><span>Total</span><b>' + euro2(total) + '</b></div>'
+        '<div class="stat u-mt-8px"><span>Total</span><b>' + euro2(total) + '</b></div>'
       : '<div class="hint">Nenhum movimento registado em ' + q.year + '.</div>') +
     '</div>';
 
@@ -77,8 +77,8 @@ kpiModal = function (id) {
   var foot = top.el.querySelector('.foot');
   if (foot) {
     foot.innerHTML =
-      '<button class="btn" data-toca="ecra" onclick="CW.backToDash(1)">' + ic('chev', 15) + ' Visão geral</button>' +
-      '<button class="btn primary" data-toca="ecra" onclick="CW.kpiToTx()">' + ic('swap', 15) + ' Ver nos movimentos</button>';
+      '<button class="btn" data-toca="ecra" data-click="CW.backToDash(1)">' + ic('chev', 15) + ' Visão geral</button>' +
+      '<button class="btn primary" data-toca="ecra" data-click="CW.kpiToTx()">' + ic('swap', 15) + ' Ver nos movimentos</button>';
   }
   CW._kpiQ = { field: q.field, pid: q.pid, year: q.year, title: k.title };
 };
@@ -139,9 +139,9 @@ vTransactions = function () {
   var h = _vTransactions();
   var f = CW._fromKpi;
   if (!f) return h;
-  return '<div class="card" style="margin-bottom:12px;padding:11px 13px;display:flex;align-items:center;gap:11px">' +
-    '<span class="small" style="flex:1;min-width:0">Movimentos de <b>' + esc(f.title) + '</b> em ' + f.year + ', vindos da visão geral.</span>' +
-    '<button class="btn sm" style="flex:0 0 auto" data-toca="ecra" onclick="CW.backToDash()">' + ic('chev', 14) + ' Visão geral</button></div>' + h;
+  return '<div class="card u-mb-12px u-p-11px-13px u-d-flex u-ai-center u-g-11px">' +
+    '<span class="small u-fx-1 u-minw-0">Movimentos de <b>' + esc(f.title) + '</b> em ' + f.year + ', vindos da visão geral.</span>' +
+    '<button class="btn sm u-fx-0-0-auto" data-toca="ecra" data-click="CW.backToDash()">' + ic('chev', 14) + ' Visão geral</button></div>' + h;
 };
 
 /* ---------------- recusar um movimento planeado ---------------- */
@@ -218,13 +218,13 @@ CW.fillMissed = function (id) {
       '<div class="hint">Vais registar <b>' + n + '</b> prestaç' + (n === 1 ? 'ão' : 'ões') + ' de <b>' + esc(r.name) + '</b>, de <b>' +
       dPT(lista[0].date) + '</b> a <b>' + dPT(lista[n - 1].date) + '</b>, com os juros, o selo e o capital do plano da hipoteca.</div>' +
       planoQuem(r) +
-      '<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px">' +
+      '<div class="hint u-bl-3px-solid-v-warn u-pl-10px">' +
       '<b>O capital em dívida desce com cada uma</b>, como se as confirmasses uma a uma' +
       (x0 ? ': de <b>' + euro2(x0.l.outstanding) + '</b> para <b>' + euro2(fim) + '</b>' : '') +
       (fim > 0 ? '' : ' — o crédito fica liquidado') + '. Apagar uma repõe o capital dela. ' +
       '<b>É uma estimativa:</b> o que o banco cobrou pode ter sido diferente. Confere e corrige depois o que não bater certo.</div>' +
       '<div class="hint">Ficam marcadas com a etiqueta <b>Estimativa</b> — procura por “estimativa” nos Movimentos para as veres todas.</div>' +
-      '<div class="stat" style="margin-top:6px"><span>Total a registar</span><b>' + euro2(total) + '</b></div></div>';
+      '<div class="stat u-mt-6px"><span>Total a registar</span><b>' + euro2(total) + '</b></div></div>';
   } else {
     var dates = datasEmFalta(r);
     n = dates.length;
@@ -236,16 +236,16 @@ CW.fillMissed = function (id) {
       ' de <b>' + esc(r.name) + '</b>, de <b>' + dPT(dates[0]) + '</b> a <b>' + dPT(dates[n - 1]) + '</b>, ' +
       'todos com o valor atual de <b>' + euro2(val0) + '</b> por ' + per + '.</div>' +
       planoQuem(r) +
-      '<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px">' +
+      '<div class="hint u-bl-3px-solid-v-warn u-pl-10px">' +
       '<b>Isto é uma estimativa.</b> O valor de cada período pode não corresponder ao que foi realmente pago: ' +
       'não entra em conta com aumentos de renda, meses em falta, atrasos nem valores diferentes. ' +
       'Confere e corrige depois o que não bater certo.</div>' +
       '<div class="hint">Ficam marcados com a etiqueta <b>Estimativa</b> — procura por “estimativa” nos Movimentos para os veres todos.</div>' +
-      '<div class="stat" style="margin-top:6px"><span>Total a registar</span><b>' + euro2(val0 * n) + '</b></div></div>';
+      '<div class="stat u-mt-6px"><span>Total a registar</span><b>' + euro2(val0 * n) + '</b></div></div>';
   }
   openModal('Preencher ' + n + ' ' + (n === 1 ? 'período' : 'períodos'), body,
-    '<button class="btn" data-toca="camada" onclick="CW.fillNext()">Cancelar</button>' +
-    '<button class="btn primary" data-toca="dados" onclick="CW.doFillMissed(\'' + id + '\')">Registar estimativa</button>');
+    '<button class="btn" data-toca="camada" data-click="CW.fillNext()">Cancelar</button>' +
+    '<button class="btn primary" data-toca="dados" data-click="CW.doFillMissed(\'' + id + '\')">Registar estimativa</button>');
 };
 
 /* Cria de facto os movimentos em falta. Numa hipoteca entrega a lista
@@ -383,7 +383,7 @@ function offerFill() {
 }
 
 var REJECT_BTN = function (id) {
-  return '<button class="btn sm danger" data-toca="dados" onclick="event.stopPropagation();CW.rejectRec(\'' + id + '\')">Recusar</button>';
+  return '<button class="btn sm danger" data-toca="dados" data-click="event.stopPropagation();CW.rejectRec(\'' + id + '\')">Recusar</button>';
 };
 
 // acrescenta "Recusar" a cada linha do cartão de pendentes (e, com períodos
@@ -396,7 +396,7 @@ pendingCard = function (all) {
     var n = r ? datasEmFalta(r).length : 0;
     // com vários períodos em atraso, confirmar um a um não é opção
     var fill = n >= 2
-      ? '<button class="btn sm" data-toca="camada" onclick="event.stopPropagation();CW.fillMissed(\'' + id + '\')">' +
+      ? '<button class="btn sm" data-toca="camada" data-click="event.stopPropagation();CW.fillMissed(\'' + id + '\')">' +
         'Preencher ' + n + ' em falta</button>'
       : '';
     return m + REJECT_BTN(id) + fill;
@@ -418,10 +418,13 @@ function menuOption(opts) {
   b.type = 'button';
   b.className = 'card tap';
   b.style.cssText = 'padding:12px 14px;display:flex;align-items:center;gap:11px';
-  b.innerHTML = '<span class="ic" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;' +
-    'background:' + (opts.danger ? 'var(--danger-soft);color:var(--danger)' : 'var(--accent-soft);color:var(--accent)') +
-    ';flex:0 0 34px">' + ic(opts.icon, 18) + '</span>' +
-    '<span style="flex:1;min-width:0;text-align:left"><b style="display:block;font-size:14px">' + esc(opts.label) + '</b>' +
+  /* o par fundo+cor vive numa classe do módulo (estilos.css, g08-painel): o
+     background:var(--danger-soft) não tem utilitário, e partir o par deixava
+     meio estado por escrever */
+  b.innerHTML = '<span class="ic u-w-34px u-h-34px u-br-10px u-d-grid u-pi-center u-fx-0-0-34px ' +
+    (opts.danger ? 'painel-ic-destroi' : 'painel-ic-normal') +
+    '">' + ic(opts.icon, 18) + '</span>' +
+    '<span class="u-fx-1 u-minw-0 u-ta-left"><b class="u-d-block u-fs-14px">' + esc(opts.label) + '</b>' +
     (opts.sub ? '<span class="small">' + esc(opts.sub) + '</span>' : '') + '</span>';
   b.onclick = function () { closeAllModals(); opts.act(); };
   if (opts.first && list.firstChild) list.insertBefore(b, list.firstChild.nextSibling);
@@ -440,7 +443,6 @@ CW.txOfProp = function (pid) {
 var _lpMenu = lpMenu;
 lpMenu = function (v) {
   var s = String(v);
-  if (s.indexOf('dash:') === 0) return CW.enterEdit(s.slice(5));
   _lpMenu(v);
   var a = s.split(':');
   if (a[0] === 'rec') {
@@ -455,29 +457,18 @@ lpMenu = function (v) {
       sub: 'não cria o movimento e passa à data seguinte', act: function () { CW.rejectRec(a[1]); } });
   } else if (a[0] === 'prop') {
     // num imóvel onde sou colaborador, só com o cargo a deixar ver movimentos
-    if (cwPode(a[1], 'tx.view')) {
+    if (pode(a[1], 'tx.view')) {
       menuOption({ icon: 'swap', label: 'Ver movimentos', sub: 'lista filtrada por este imóvel', first: true,
         act: function () { CW.txOfProp(a[1]); } });
     }
   } else if (a[0] === 'ct') {
     var c = contract(a[1]);
-    if (c && c.propertyId && cwPode(c.propertyId, 'tx.view')) {
+    if (c && c.propertyId && pode(c.propertyId, 'tx.view')) {
       menuOption({ icon: 'swap', label: 'Ver movimentos', sub: 'lista filtrada pelo imóvel do contrato', first: true,
         act: function () { CW.txOfProp(c.propertyId); } });
     }
   }
 };
-
-// Se posso isto neste imóvel: pode() de web/app/acessos.js quando existe;
-// sem ela, só nos imóveis que não são de colaboração.
-// Recebe: pid — o id do imóvel (vazio conta como meu); perm — a chave da permissão.
-// Devolve: true/false.
-function cwPode(pid, perm) {
-  if (!pid) return true;
-  try { if (typeof pode === 'function') return !!pode(pid, perm); } catch (e) {}
-  var p = (db.properties || []).find(function (x) { return x.id === pid; });
-  return !(p && p._cargo);
-}
 
 /* ------- pendentes dentro de cada imóvel e de cada contrato ------- */
 
@@ -486,22 +477,22 @@ function cwPode(pid, perm) {
 // Recebe: list — array de planos recorrentes por confirmar (cada um com id, name, next, tx…).
 // Devolve: o HTML (string) do bloco, com os botões Confirmar/Silenciar/Recusar em cada linha.
 function pendBlock(list) {
-  return '<div class="cw-pend" style="margin-top:11px;border-top:1px solid var(--line);padding-top:10px">' +
-    '<div class="small" style="font-weight:650;margin-bottom:7px">' +
+  return '<div class="cw-pend u-mt-11px u-bt-1px-solid-v-line u-pt-10px">' +
+    '<div class="small u-fw-650 u-mb-7px">' +
     list.length + ' movimento' + (list.length === 1 ? '' : 's') + ' por confirmar</div>' +
     list.map(function (r) {
       var late = recIsLate(r);
-      var botoes = cwPode(r.tx && r.tx.propertyId, 'rec.add')
-        ? '<div class="toolbar" style="margin:8px 0 0">' +
-          '<button class="btn sm primary" data-toca="dados" onclick="event.stopPropagation();quickConfirmRec(\'' + r.id + '\')">' + ic('check', 13) + ' Confirmar</button>' +
-          '<button class="btn sm" data-toca="dados" onclick="event.stopPropagation();skipRec(\'' + r.id + '\')">Silenciar</button>' +
+      var botoes = pode(r.tx && r.tx.propertyId, 'rec.add')
+        ? '<div class="toolbar u-m-8px-0-0">' +
+          '<button class="btn sm primary" data-toca="dados" data-click="event.stopPropagation();quickConfirmRec(\'' + r.id + '\')">' + ic('check', 13) + ' Confirmar</button>' +
+          '<button class="btn sm" data-toca="dados" data-click="event.stopPropagation();skipRec(\'' + r.id + '\')">Silenciar</button>' +
           REJECT_BTN(r.id) + '</div>'
         : '';
-      return '<div class="card pend ' + (late ? 'late' : '') + '" style="padding:9px 11px;margin-bottom:6px">' +
-        '<div class="row-between" style="align-items:center;gap:9px">' +
-        '<div style="min-width:0"><b style="display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.name) + '</b>' +
+      return '<div class="card pend ' + (late ? 'late' : '') + ' u-p-9px-11px u-mb-6px">' +
+        '<div class="row-between u-ai-center u-g-9px">' +
+        '<div class="u-minw-0"><b class="u-d-block u-fs-13px u-ov-hidden u-to-ellipsis u-ws-nowrap">' + esc(r.name) + '</b>' +
         '<span class="small">' + dPT(r.next) + (late ? ' · <b class="neg">em atraso</b>' : ' · por confirmar') + '</span></div>' +
-        '<b style="flex:0 0 auto">' + (r.tx.amount ? euro2(r.tx.amount) : '') + '</b></div>' +
+        '<b class="u-fx-0-0-auto">' + (r.tx.amount ? euro2(r.tx.amount) : '') + '</b></div>' +
         botoes + '</div>';
     }).join('') + '</div>';
 }
@@ -604,19 +595,10 @@ vDashboard = function () {
   items.sort(function (a, b) { return a._r - b._r; });
 
   return fixed + '<div class="cw-cont"><div class="cw-dash">' + items.map(function (it) {
-    return '<div class="cw-blk' + (it.larg ? ' cw-' + it.larg : '') + '" data-k="' + esc(it.k) + '" data-lp="dash:' + esc(it.k) + '">' +
+    return '<div class="cw-blk' + (it.larg ? ' cw-' + it.larg : '') + '" data-k="' + esc(it.k) + '">' +
       it.h + '<span class="cw-h">' + ic('grip', 15) + '</span></div>';
   }).join('') + '</div></div>';
 };
-
-// o elemento .cw-blk com esta chave, se estiver no ecrã
-// Recebe: k — a chave (string) do bloco, tal como sai de dashKey.
-// Devolve: o elemento DOM correspondente, ou undefined se não estiver no ecrã.
-function blkByKey(k) {
-  return [].slice.call(document.querySelectorAll('.cw-blk')).filter(function (x) {
-    return x.getAttribute('data-k') === k;
-  })[0];
-}
 
 // grava em db.settings.dashOrder2 a ordem em que os blocos estão agora no DOM
 // Devolve: nada — grava a lista de chaves nas definições (ou não faz nada sem blocos).
@@ -645,9 +627,9 @@ function editBar() {
   el.id = 'cwEditBar';
   el.className = 'card';
   el.style.cssText = 'margin-bottom:12px;padding:11px 13px;display:flex;align-items:center;gap:11px;flex-wrap:wrap';
-  el.innerHTML = '<span class="small" style="flex:1;min-width:140px">Arrasta os cartões para mudar a ordem.</span>' +
-    '<button class="btn sm" data-toca="dados" onclick="CW.resetDashOrder()">Repor ordem</button>' +
-    '<button class="btn sm primary" data-toca="modo" onclick="CW.exitEdit()">' + ic('check', 14) + ' Concluir</button>';
+  el.innerHTML = '<span class="small u-fx-1 u-minw-140px">Arrasta os cartões para mudar a ordem.</span>' +
+    '<button class="btn sm" data-toca="dados" data-click="CW.resetDashOrder()">Repor ordem</button>' +
+    '<button class="btn sm primary" data-toca="modo" data-click="CW.exitEdit()">' + ic('check', 14) + ' Concluir</button>';
   var grid = v.querySelector('.cw-cont');
   v.insertBefore(el, grid || v.firstChild);
 }
@@ -667,21 +649,17 @@ function patchHdr() {
   }
 }
 
-// Entra no modo de edição dos cartões (chega-se cá pelo toque longo). Recebe a
-// chave do bloco tocado para o arrasto poder começar sem levantar o dedo.
-// Recebe: key (opcional) — a chave (data-k) do bloco tocado, tal como sai de dashKey.
+// Entra no modo de edição dos cartões — pelo botão «Personalizar painel»
+// (web/app/painel-geral.js). O toque longo não entra: na app inteira ele só
+// seleciona vários, onde há seleção (cloud/selecao-listas.js). Já em edição,
+// o arrasto começa ao primeiro toque num cartão (o pointerdown, mais abaixo).
 // Devolve: nada — ativa o modo de edição na visão geral.
-CW.enterEdit = function (key) {
+CW.enterEdit = function () {
   if (tab !== 'dashboard' || CW.editMode) return;
   CW.editMode = true;
   var v = view();
   if (v) v.classList.add('cw-edit');
   editBar(); patchHdr();
-  // se o dedo ainda está em cima do cartão, o arrasto começa já
-  if (key && pointerDown) {
-    var el = blkByKey(key);
-    if (el) startDrag(el, lastY);
-  }
 };
 
 // sai do modo de edição: solta o arrasto, re-renderiza e avisa com um toast (salvo silent)
@@ -706,7 +684,7 @@ hdrFiltToggle = function () {
   _hdrFiltToggle();
 };
 
-var drag = null, lastY = 0, lastX = 0, pointerDown = false;
+var drag = null, lastY = 0, lastX = 0;
 
 // começa a arrastar um bloco: marca-o, trava a seleção de texto e liga o scroll automático
 // Recebe: el — o elemento .cw-blk a arrastar; clientY — a posição vertical do dedo
@@ -820,7 +798,6 @@ document.addEventListener('pointermove', function (e) {
 // já em modo de edição, o arrasto começa ao primeiro toque (sem esperar)
 document.addEventListener('pointerdown', function (e) {
   lastY = e.clientY; lastX = e.clientX;
-  pointerDown = true;
   if (!CW.editMode || tab !== 'dashboard') return;
   var blk = e.target && e.target.closest ? e.target.closest('.cw-blk') : null;
   if (blk) startDrag(blk, e.clientY, e.clientX);
@@ -838,58 +815,14 @@ function endDrag() {
   saveDashOrder();
 }
 ['pointerup', 'pointercancel'].forEach(function (t) {
-  document.addEventListener(t, function () { pointerDown = false; endDrag(); }, true);
+  document.addEventListener(t, function () { endDrag(); }, true);
 });
 
-var cssPainel = document.createElement('style');
-cssPainel.textContent =
-  // Duas colunas no telemóvel, quatro no computador — número fixo, não
-  // auto-fit: com colunas a aparecer e a desaparecer conforme a largura, os
-  // cartões nunca caíam onde se esperava.
-  // stretch, não start: cartões da mesma fila com alturas diferentes eram
-  // metade da desarrumação da vista
-  '.cw-dash{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin-top:14px;align-items:stretch}' +
-  '.cw-blk>.card{flex:1}' +
-
-  // Reserva, para quem não tem container queries: corte pela largura do ecrã.
-  // Erra em paisagem no telemóvel, onde a barra lateral aparece e leva 264px
-  // sem a media query saber.
-  '@media(min-width:1000px){.cw-dash{grid-template-columns:repeat(4,1fr);gap:14px}}' +
-  '.cw-dash .grid{grid-template-columns:repeat(2,1fr)}' +
-  '@media(min-width:1000px){.cw-dash .grid{grid-template-columns:repeat(4,1fr)}}' +
-
-  // O que vale de verdade: a grelha responde à largura que tem, não à do
-  // ecrã. É a única forma de o telemóvel deitado dar quatro colunas — e
-  // acompanha a rotação sem recarregar, porque é CSS e não uma decisão
-  // tomada no arranque.
-  '@supports (container-type:inline-size){' +
-    '.cw-cont{container-type:inline-size;container-name:vista}' +
-    '@container vista (max-width:559px){.cw-dash{grid-template-columns:repeat(2,1fr);gap:11px}}' +
-    // a fila de indicadores segue a mesma regra por dentro do seu bloco
-    '@container vista (max-width:559px){.cw-dash .grid{grid-template-columns:repeat(2,1fr);gap:11px}}' +
-    '@container vista (min-width:560px){.cw-dash .grid{grid-template-columns:repeat(4,1fr);gap:11px}}' +
-    '@container vista (min-width:760px){.cw-dash .grid{gap:14px}}' +
-    // 560px é o telemóvel deitado: com a barra lateral a ocupar 264px sobram
-    // ~592px de conteúdo, e quatro colunas dão ~137px a cada indicador. É
-    // abaixo dos 158px que a app usava como mínimo — folga trocada de
-    // propósito por ver os oito indicadores de uma vez em paisagem.
-    '@container vista (min-width:560px){.cw-dash{grid-template-columns:repeat(4,1fr);gap:11px}}' +
-    '@container vista (min-width:760px){.cw-dash{gap:14px}}' +
-  '}' +
-  // os cartões grandes ocupam duas células: a largura toda no telemóvel,
-  // metade no computador
-  '.cw-dash>.cw-wide{grid-column:span 2}' +
-  '.cw-dash>.cw-full{grid-column:1/-1}' +
-  '.cw-dash>.cw-full>.section-title{margin:8px 0 0}' +
-  '.cw-blk{position:relative;min-width:0;display:flex;flex-direction:column}' +
-  '.cw-blk .cw-h{display:none}' +
-  '#view.cw-edit .cw-blk{border:1.5px dashed var(--line2);border-radius:18px;padding:9px;' +
-    'background:var(--tint);touch-action:none;cursor:grab}' +
-  '#view.cw-edit .cw-blk>*{pointer-events:none}' +
-  // a seta do indicador vive no mesmo canto que o punho de arrasto
-  '#view.cw-edit .cw-blk .kic{opacity:0}' +
-  '#view.cw-edit .cw-blk .cw-h{display:grid;place-items:center;position:absolute;top:6px;right:8px;width:26px;height:26px;' +
-    'border-radius:9px;background:var(--chip);color:var(--muted)}' +
-  '#view.cw-edit .cw-blk.cw-drag{cursor:grabbing;box-shadow:var(--shadow);border-color:var(--accent);' +
-    'position:relative;z-index:70;opacity:.97}';
-document.head.appendChild(cssPainel);
+/* A folha da grelha (.cw-dash, .cw-blk, .cw-cont, o modo de edição) era feita
+   aqui, num elemento de folha criado por JavaScript e pendurado na cabeça do
+   documento. Isso é CSS em linha, que a CSP sem 'unsafe-inline' recusa tal
+   como recusa um atributo de estilo, por isso as regras passaram para o
+   web/estilos.css, na secção «g08-painel» das classes dos módulos — tal e
+   qual, pela mesma ordem e com os mesmos comentários. Nenhum nome .cw-…
+   aparece noutra regra da folha, e o «.cw-dash .grid» continua a ganhar ao
+   «.grid» por especificidade. */

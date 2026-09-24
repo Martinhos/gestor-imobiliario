@@ -32,17 +32,20 @@ jobs:
         with:
           node-version: 22.18.0
 
-      # Com limiares, e inteiros: 84/78/79 são os números do dia em que isto
-      # entrou, arredondados para baixo. Sobem-se à medida que se escreve
-      # teste, e assim nunca descem. Aviso sério sobre o que o número mede: o
-      # arnês carrega os módulos de web/ num contexto de vm e a cobertura não
-      # os vê — isto é sobre worker/ e scripts/, cerca de um terço do código,
-      # não sobre o repositório.
+      # Com limiares, e inteiros: os números do dia, arredondados para baixo.
+      # Sobem-se à medida que se escreve teste, e assim nunca descem. O que o
+      # número mede: o worker/, os scripts/ e o cliente (web/) — o arnês avalia
+      # os módulos de web/ com o endereço file:// de cada um
+      # (testes/arnes.js:carregarEm), que é o que a cobertura conta. Ficam de
+      # fora os próprios testes e a configuração do lint (eslint.config.mjs,
+      # que um teste importa). Medidos a 2026-09-15 com o web/ dentro: 83,92
+      # linhas, 74,27 ramos, 74,36 funções — abaixo dos 84/78/79 de quando só o
+      # worker/ e os scripts/ contavam, e é este o número verdadeiro.
       - name: Correr os testes
         run: >-
           node --test --experimental-test-coverage
-          --test-coverage-exclude="testes/**"
-          --test-coverage-lines=84 --test-coverage-branches=78 --test-coverage-functions=79
+          --test-coverage-exclude="testes/**" --test-coverage-exclude="eslint.config.mjs"
+          --test-coverage-lines=83 --test-coverage-branches=74 --test-coverage-functions=74
           "testes/*.test.js"
 
       # Dois binários, fixados à versão e ao byte. Preferem-se às actions
@@ -99,6 +102,35 @@ jobs:
             node --check "$f" || { echo "sintaxe inválida: $f"; erros=1; }
           done
           exit $erros
+
+      # O `node --check` acima só vê sintaxe. Numa app de dezenas de ficheiros num só
+      # âmbito e sem build, um nome mal escrito só aparece quando a linha
+      # corre, e o arnês não dispara onclick nenhum: o no-undef, com a lista
+      # dos globais tirada dos próprios ficheiros do index.html
+      # (eslint.config.mjs, pela regra do testes/globais.test.js), apanha-o no
+      # pull request. Só regras que apanham erros, nenhuma de estilo. O ESLint
+      # instala-se aqui e só aqui, fora do package.json: os testes continuam
+      # sem dependências. O link põe o node_modules na raiz para a
+      # configuração encontrar o pacote globals (sem ele, o document e o
+      # window seriam acusados: um vermelho alto, nunca um verde falso).
+      #
+      # TRAVA, como os outros passos: a primeira leitura (323 acusações) foi
+      # triada até zero — falsos alarmes da configuração corrigidos na raiz,
+      # código morto tirado. Um problema novo parte o build. As versões ficam
+      # fixadas ao patch, como o Node: uma versão nova que mude uma regra não
+      # pode partir o build sem nenhuma mudança no código.
+      - name: Lint (no-undef e companhia)
+        run: |
+          set -e
+          npm install --prefix /tmp/lint --no-save --no-audit --no-fund eslint@10.10.0 globals@16.5.0
+          ln -sfn /tmp/lint/node_modules node_modules
+          node_modules/.bin/eslint .
+          # E aqui, com o globals instalado, corre-se outra vez o teste da
+          # configuração: a metade do browser do teste do NA_PAGINA só vê os
+          # nomes do browser com o pacote presente. No passo da bateria, que
+          # corre antes e sem ele, essa metade passa sem provar nada — o
+          # próprio teste o diz na saída.
+          node --test testes/correcao-testes.test.js
 
       # O `node --check` acima só vê ficheiros .js. Um script escrito dentro do
       # index.html — como a armadilha de erros do arranque — passava-lhe ao
@@ -166,7 +198,18 @@ jobs:
           for f in migrations/*.sql; do
             test -s "$f" || { echo "migração vazia: $f"; exit 1; }
           done
-          # os números têm de ser únicos e seguidos
-          ls migrations/*.sql | sed 's|.*/||' | cut -d_ -f1 | sort -c || {
-            echo "as migrações não estão por ordem"; exit 1; }
-          echo "$(ls migrations/*.sql | wc -l) migrações, por ordem"
+          # Os números têm de ser únicos e seguidos: 0001, 0002, … até ao total.
+          # O wrangler aplica-as pela ordem do nome, e dois ramos que criem
+          # cada um a sua 0016 fundem-se sem conflito no git. Compara-se com a
+          # sequência que devia ser — um `sort -c` sobre a saída do `ls` passava
+          # sempre, porque o `ls` já a devolve ordenada (com repetido e com
+          # salto). O testes/migracoes.test.js corre este mesmo bloco.
+          numeros=$(ls migrations/*.sql | sed 's|.*/||' | cut -d_ -f1)
+          total=$(echo "$numeros" | wc -l)
+          esperados=$(seq -f %04g 1 "$total")
+          if [ "$numeros" != "$esperados" ]; then
+            echo "as migrações não estão numeradas de 0001 a $(printf %04d "$total"), uma a uma:"
+            diff <(echo "$esperados") <(echo "$numeros") || true
+            exit 1
+          fi
+          echo "$total migrações, de 0001 a $(echo "$numeros" | tail -1), sem repetidos nem saltos"

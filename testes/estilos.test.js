@@ -6,7 +6,10 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+/* A folha da app vive no web/estilos.css, para a CSP poder deixar de aceitar
+   estilos em linha: era o <style> do index.html, e passou para lá com o mesmo
+   texto. */
+const folha = readFileSync(new URL('../web/estilos.css', import.meta.url), 'utf8');
 const componentes = readFileSync(new URL('../web/app/componentes.js', import.meta.url), 'utf8');
 
 // o que está entre chavetas, regra a regra
@@ -14,7 +17,7 @@ function blocos(css) {
   return css.split('}').map((b) => b.slice(b.indexOf('{') + 1)).filter(Boolean);
 }
 
-const css = (html.match(/<style[^>]*>([\s\S]*?)<\/style>/g) || []).join('\n');
+const css = folha;
 
 describe('alturas em unidades de ecrã', () => {
   /* vh é a altura com as barras do browser recolhidas. Com a barra de
@@ -68,6 +71,8 @@ const cssLimpo = css.replace(/\/\*[\s\S]*?\*\//g, '');
 const navegacao = readFileSync(new URL('../web/app/navegacao.js', import.meta.url), 'utf8');
 const notificacoes = readFileSync(new URL('../web/app/notificacoes.js', import.meta.url), 'utf8');
 const vistas = readFileSync(new URL('../web/app/vistas.js', import.meta.url), 'utf8');
+// a visão geral (os cartões dos indicadores) saiu de vistas.js para o seu serviço
+const painelGeral = readFileSync(new URL('../web/app/painel-geral.js', import.meta.url), 'utf8');
 const graficos = readFileSync(new URL('../web/app/graficos.js', import.meta.url), 'utf8');
 
 /* Num telemóvel em «modo PC» o viewport é largo — sem gaveta, porque acima de
@@ -115,27 +120,52 @@ describe('o hambúrguer só existe onde há gaveta', () => {
    não o tapava. É invisível no telemóvel, onde a gaveta está fora do ecrã, e
    por isso passou despercebido: fica guardado. */
 describe('a escada das camadas', () => {
-  /* por indexOf e não por expressão: os seletores levam pontos, e escapá-los
-     dava mais barras invertidas do que regra */
-  /* o mesmo seletor aparece em várias regras (a do fundo, a da media query, a
-     do movimento): procura-se a que declara mesmo o z-index, e só dentro do
-     bloco dela — não na seguinte */
-  const zDe = (sel) => {
-    let i = -1;
-    while ((i = cssLimpo.indexOf(sel + '{', i + 1)) > -1) {
-      const m = /z-index:(\d+)/.exec(cssLimpo.slice(i, cssLimpo.indexOf('}', i)));
-      if (m) return Number(m[1]);
+  /* O mesmo seletor aparece em várias regras (a do fundo, a de uma media query,
+     a do movimento, uma lista de seletores). A cascata usa a última de igual
+     peso, e a de uma media query só nessa largura — por isso não se escolhe
+     uma: leem-se TODAS as que declaram z-index, e a escada compara o pior caso
+     (o mais baixo de quem fica acima contra o mais alto de quem fica abaixo).
+     Conta a regra cujo seletor é mesmo este, ou um dos itens da lista: um
+     «.x .modal» é outro elemento. Regra a regra e sem escapar o seletor: os
+     pontos dele dariam mais barras invertidas do que regra.
+     Recebe: sel — o seletor, como está escrito; folha — o CSS (por omissão o
+     da app, sem comentários).
+     Devolve: os z-index declarados, pela ordem da folha; falha se não houver. */
+  const zsDe = (sel, folha = cssLimpo) => {
+    const zs = [];
+    for (const r of folha.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!r[1].split(',').some((s) => s.trim() === sel)) continue;
+      const m = /z-index:\s*(-?\d+)/.exec(r[2]);
+      if (m) zs.push(Number(m[1]));
     }
-    assert.fail(sel + ' não declara z-index em regra nenhuma');
-    return 0;
+    if (!zs.length) assert.fail(sel + ' não declara z-index em regra nenhuma');
+    return zs;
   };
+  // Recebe: sel — o seletor. Devolve: o z-index mais baixo que ele declara.
+  const zBaixo = (sel) => Math.min(...zsDe(sel));
+  // Recebe: sel — o seletor. Devolve: o z-index mais alto que ele declara.
+  const zAlto = (sel) => Math.max(...zsDe(sel));
+  // Recebe: a, b — dois seletores; folha — o CSS. Devolve: true se a fica acima de b em qualquer largura.
+  const acima = (a, b, folha = cssLimpo) => Math.min(...zsDe(a, folha)) > Math.max(...zsDe(b, folha));
+
+  /* A cascata usa a ÚLTIMA de duas regras de igual peso, e uma regra numa media
+     query só vale nessa largura: a escada tem de valer em todas. Lida só a
+     primeira, um «.modal{z-index:10}» acrescentado numa media query mais abaixo
+     punha o modal debaixo do menu nessa largura — e o teste continuava verde. */
+  // achado A.6-6
+  test('a escada lê todas as regras de um seletor, e não só a primeira', () => {
+    const folha = '.modal{position:fixed;z-index:50}\naside{z-index:20}\n.x .modal{z-index:1}\n' +
+      '@media(max-width:900px){.modal,.outra{z-index:10}}';
+    assert.deepEqual(zsDe('.modal', folha), [50, 10], 'as duas regras do .modal (a da lista também), e não a do .x .modal');
+    assert.ok(!acima('.modal', 'aside', folha), 'aos 900px o modal fica abaixo do menu, e a escada tem de o ver');
+    assert.ok(acima('.modal', 'aside', '.modal{z-index:50}aside{z-index:20}'), 'com uma regra de cada, compara-se essa');
+  });
 
   test('um modal está acima de toda a navegação', () => {
-    const modal = zDe('.modal');
-    assert.ok(modal > zDe('aside'), 'acima do menu lateral');
-    assert.ok(modal > zDe('.scrim'), 'e do véu da gaveta');
-    assert.ok(modal > zDe('.tabbar'), 'e da barra de baixo');
-    assert.ok(modal > zDe('.fab'), 'e do botão flutuante');
+    assert.ok(acima('.modal', 'aside'), 'acima do menu lateral');
+    assert.ok(acima('.modal', '.scrim'), 'e do véu da gaveta');
+    assert.ok(acima('.modal', '.tabbar'), 'e da barra de baixo');
+    assert.ok(acima('.modal', '.fab'), 'e do botão flutuante');
   });
 
   /* O que fica ACIMA do modal só pode ser o que não esconde nada com que se
@@ -145,19 +175,22 @@ describe('a escada das camadas', () => {
      forma de continuar. O número dele foi escolhido contra o do modal — e
      quando o modal subiu, ficou por baixo. Fica preso aos dois. */
   test('o cartão do tutorial fica acima de uma janela aberta', () => {
-    const guia = readFileSync(new URL('../web/cloud/guia.js', import.meta.url), 'utf8');
-    const m = /#cwGuia\.sobre-janela\{z-index:(\d+)/.exec(guia);
+    /* as duas regras viviam numa folha que o guia.js criava e pendurava na
+       cabeça — CSS em linha, que a CSP sem 'unsafe-inline' recusa — e passaram
+       para o web/estilos.css, com os mesmos números. O [^}] em vez do [^'] é
+       por isso: atravessava as plicas de uma string de JavaScript, e numa
+       folha atravessaria o fecho da regra e lia o z-index da seguinte. */
+    const m = /#cwGuia\.sobre-janela\{z-index:(\d+)/.exec(cssLimpo);
     assert.ok(m, 'o cartão sobe quando há uma janela aberta');
-    assert.ok(Number(m[1]) > zDe('.modal'),
-      'e sobe acima dela: ' + m[1] + ' contra ' + zDe('.modal'));
-    const base = /#cwGuia\{[^']*z-index:(\d+)/.exec(guia);
-    assert.ok(Number(base[1]) < zDe('.modal'), 'em repouso fica abaixo, como deve');
+    assert.ok(Number(m[1]) > zAlto('.modal'),
+      'e sobe acima dela: ' + m[1] + ' contra ' + zAlto('.modal'));
+    const base = /#cwGuia\{[^}]*z-index:(\d+)/.exec(cssLimpo);
+    assert.ok(Number(base[1]) < zBaixo('.modal'), 'em repouso fica abaixo, como deve');
   });
 
   test('e só o aviso e o balão ficam acima dele', () => {
-    const modal = zDe('.modal');
-    assert.ok(zDe('.toast') > modal, 'o aviso vê-se por cima de um modal');
-    assert.ok(zDe('.tip') > modal, 'e o balão também');
+    assert.ok(acima('.toast', '.modal'), 'o aviso vê-se por cima de um modal');
+    assert.ok(acima('.tip', '.modal'), 'e o balão também');
   });
 
   /* Os portões vivem em JS, com o z-index escrito à mão em cada um, e por isso
@@ -183,7 +216,7 @@ describe('a escada das camadas', () => {
     assert.ok(tranca > zP(ent, 'cwRepor'), 'e da reposição de palavra-passe');
     assert.ok(zP(nov, 'cwUpd2') > tranca,
       'e o ecrã de progresso acima dele, senão a atualização acontece por trás do aviso');
-    assert.ok(zP(nov, 'cwUpdBar') < zDe('.modal'),
+    assert.ok(zP(nov, 'cwUpdBar') < zBaixo('.modal'),
       'a faixa discreta é a exceção: fica abaixo, senão tapava o rodapé de um modal aberto');
   });
 });
@@ -397,7 +430,7 @@ describe('movimento', () => {
      série. */
   test('a variação só fala do número que o cartão mostra', () => {
     assert.match(vistas, /evo\.anual&&haAnoAnterior\(\)/, 'a faixa só nasce onde o valor é anual');
-    assert.match(vistas, /f\.anual=true/, 'e é quem cria os cartões que o declara');
+    assert.match(painelGeral, /f\.anual=true/, 'e é quem cria os cartões que o declara (a visão geral, painel-geral.js)');
     assert.match(vistas, /function falaDoMesmo\(cx,s,ano\)/);
     assert.match(vistas, /limpa\(alvo\.textContent\)===limpa\(s\.fmt\(ano\.value\)\)/,
       'compara o texto formatado pela própria série');
@@ -410,9 +443,13 @@ describe('movimento', () => {
      — o anel existia e não se via. */
   test('o anel de foco na gaveta escura vem da paleta da gaveta', () => {
     assert.match(cssLimpo, /nav a:focus-visible,\.railbtn:focus-visible\{outline-color:var\(--side-ink\)\}/);
-    // e depois da regra geral, senão não a ganhava
-    assert.ok(cssLimpo.indexOf('outline-color:var(--side-ink)') >
-      cssLimpo.indexOf('.rich-tools button:focus-visible'), 'a seguir à regra que corrige');
+    /* e depois da regra geral, senão não a ganhava. A âncora é o FIM da regra
+       geral (a do .qclear); era o botão do editor rico, que saiu com o editor —
+       e um indexOf a -1 fazia a comparação passar sem provar ordem nenhuma. */
+    const geral = cssLimpo.indexOf('.qclear:focus-visible{outline:2px solid var(--accent)');
+    const gaveta = cssLimpo.indexOf('outline-color:var(--side-ink)');
+    assert.ok(geral > -1 && gaveta > -1, 'as duas regras existem — sem elas não há ordem a provar');
+    assert.ok(gaveta > geral, 'a seguir à regra que corrige');
   });
 
   /* O tornarFocavel dá role=button às formas dos gráficos, e a rede do premido
@@ -442,7 +479,7 @@ describe('movimento', () => {
        onde o anel é o próprio desenho do campo, não há licença para ele */
     const soltos = (cssLimpo.match(/[^\s,{};][^,{};\r\n]*:focus(?!-visible)/g) || [])
       .map((s) => s.trim())
-      .filter((s) => !/^(input|textarea|\.rich-content|\.thumb input\.nm)/.test(s));
+      .filter((s) => !/^(input|textarea|\.thumb input\.nm)/.test(s));
     assert.deepEqual(soltos, [], ':focus sem -visible fora dos campos');
   });
 
@@ -467,8 +504,9 @@ describe('movimento', () => {
       'sem o .novo, qualquer crachá recriado pulsava');
     assert.match(navegacao, /function cntNovo\(chave,n\)/, 'a memória da contagem anterior existe');
     assert.match(navegacao, /antes!==undefined&&antes!==n/, 'a primeira vez não pulsa, e o número igual também não');
-    // os três sítios que emitem um crachá passam por ela
-    assert.equal((navegacao.match(/cntNovo\(/g) || []).length, 3, 'a gaveta, a barra de baixo, e a definição');
+    // a gaveta e a barra de baixo pintam o crachá pelo mesmo sítio (crachaHtml), que passa por ela
+    assert.equal((navegacao.match(/cntNovo\(/g) || []).length, 2, 'a definição e o crachaHtml, que serve a gaveta e a barra de baixo');
+    assert.match(navegacao, /function crachaHtml\(id,onde\)/, 'o crachá vem do registo dos serviços, e sabe onde é pedido');
     assert.match(notificacoes, /cntNovo\('sino',n\)/, 'o sino também');
   });
 
@@ -507,14 +545,16 @@ describe('movimento', () => {
       'o corte aos seis degraus partia o gráfico ao meio: onda à esquerda, salto à direita');
     assert.match(graficos, /const atraso=grp\.some\(s=>s\.value\)\?atrasoEntrada\(col\+\+,colunas\):''/,
       'conta as colunas desenhadas, não os meses vazios');
-    /* o atraso viaja no style da própria barra: o hit() deixou de lá estar
+    /* o atraso viaja no data-atraso da própria barra — o caminho dos valores
+       calculados (app/estilos-calculados.js), que tomou o lugar do style= que
+       a CSP sem 'unsafe-inline' deixou de aplicar. O hit() deixou de lá estar
        quando o gráfico passou a ler-se com o dedo e as formas saíram do Tab */
-    assert.match(graficos, /class="gbar\$\{[^}]*\}"[^`]*\$\{atraso\?` style="\$\{atraso\}"`:''\}/,
+    assert.match(graficos, /class="gbar\$\{[^}]*\}"[^`]*\$\{atraso\?` data-atraso="\$\{atraso\}"`:''\}/,
       'a barra vertical, pela coluna');
     assert.doesNotMatch(graficos, /class="gbar[^`]*hit\(/,
       'e sem toque próprio: cada forma com onclick era uma paragem do Tab sem destino');
     assert.match(graficos, /const colunas=groups\.filter/, 'e sabe quantas colunas desenham');
-    assert.match(graficos, /class="ghbar"[^`]*\$\{atrasoEntrada\(i,items\.length\)\}/, 'a barra horizontal, pelo item');
+    assert.match(graficos, /class="ghbar[^"]*"[^`]*\$\{atrasoEntrada\(i,items\.length\)\}/, 'a barra horizontal, pelo item');
   });
 
   /* A gaveta deslizava .22s e o véu era display:none→block: o escurecido

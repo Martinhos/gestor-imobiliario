@@ -22,13 +22,6 @@ function chartTip(e,txt){
   clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2200);
   if(e&&e.stopPropagation)e.stopPropagation();
 }
-/* Atributos que tornam uma forma do gráfico tocável: mostra a dica ao toque e
-   ao rato, e põe o cursor de mão.
-   Recebe: txt — o texto da dica; estilo (opcional) — o que mais houver a pôr
-   na mesma etiqueta style (é por aqui que passa o atraso do escalonamento,
-   para não ficarem dois style no mesmo elemento).
-   Devolve: string com os atributos, para colar dentro da tag. */
-const hit=(txt,estilo)=>{const j=jsq(txt);return `data-toca="nada" onclick="chartTip(event,'${j}')" onmouseenter="chartTip(event,'${j}')" style="cursor:pointer${estilo?';'+estilo:''}"`};
 /* Atraso da entrada de uma forma do gráfico, pelo seu lugar na fila.
 
    O orçamento é sempre o mesmo — 150ms entre a primeira e a última, porque um
@@ -42,10 +35,12 @@ const hit=(txt,estilo)=>{const j=jsq(txt);return `data-toca="nada" onclick="char
    eixo — um nth-child contava-os a eles também.
    Recebe: i — o índice da forma (0 é a primeira); n — quantas formas há ao
    todo (com menos de 2 não há onda nenhuma).
-   Devolve: o pedaço de CSS 'animation-delay:NNms', ou '' para a primeira. */
+   Devolve: os milissegundos do atraso, em texto, para o data-atraso que o
+   web/app/estilos-calculados.js passa a animation-delay no el.style; '' para
+   a primeira, que não espera nada. */
 const atrasoEntrada=(i,n)=>{
   if(!i||!(n>1))return '';
-  return `animation-delay:${Math.round(i*Math.min(30,150/(n-1)))}ms`;
+  return `${Math.round(i*Math.min(30,150/(n-1)))}`;
 };
 
 /* ================= LER COM O DEDO =================
@@ -129,7 +124,7 @@ function mostrarColuna(caixa,i){
   if(x==null)return;
   guia.style.left=(x/d.W*100).toFixed(2)+'%';
   faixa.innerHTML=`<b>${esc(d.rot[i]||'')}</b>`+d.s.map(x=>
-    `<span><i style="background:${esc(x.c)}"></i>${x.n?esc(x.n)+' ':''}${esc(String(x.v[i]==null?'':x.v[i]))}</span>`).join('');
+    `<span><i data-fundo="${esc(x.c)}"></i>${x.n?esc(x.n)+' ':''}${esc(String(x.v[i]==null?'':x.v[i]))}</span>`).join('');
   caixa.classList.add('a-ler');
 }
 
@@ -175,6 +170,9 @@ function thinLabels(labels){
   if(step<=1)return labels.slice();
   return labels.map((l,i)=>((n-1-i)%step===0)?l:'');   /* alinhado ao último: o fim aparece sempre */
 }
+/* Um valor do eixo, curto: os milhares em «k» (1,5k; 12k) e o resto arredondado.
+   Recebe: v — o número.
+   Devolve: o texto. */
 const kfmt=v=>Math.abs(v)>=1000?(v/1000).toFixed(Math.abs(v)>=10000?0:1).replace('.',',')+'k':String(Math.round(v));
 // Grelha e valores do eixo Y: 5 marcas de min a max, formatadas com fmt (ou kfmt).
 // Recebe: min, max — os valores dos extremos do eixo; x0, x1 — os limites
@@ -269,7 +267,7 @@ function cBars(groups,labels,o){
          do eixo, e só assentava no fim (index.html:.gbar.desce). */
       /* sem onclick: quem le o valor e o dedo a percorrer o grafico, e cada
          forma com um toque proprio era mais uma paragem do Tab sem destino */
-      g+=`<rect class="gbar${seg.value<0?' desce':''}" x="${(cx-w/2).toFixed(1)}" y="${ya.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1,yb-ya).toFixed(1)}" rx="2" fill="${seg.color}"${atraso?` style="${atraso}"`:''}><title>${esc(tip)}</title></rect>`;
+      g+=`<rect class="gbar${seg.value<0?' desce':''}" x="${(cx-w/2).toFixed(1)}" y="${ya.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1,yb-ya).toFixed(1)}" rx="2" fill="${seg.color}"${atraso?` data-atraso="${atraso}"`:''}><title>${esc(tip)}</title></rect>`;
     });
   });
   const names=[];groups.forEach(g2=>g2.forEach(s=>{if(!names.some(n=>n.label===s.label))names.push({label:s.label,color:s.color})}));
@@ -295,15 +293,15 @@ function cDonut(items,o){
   let a=-Math.PI/2,g='';
   items.forEach((it,idx)=>{
     const col=it.color||PAL[idx%PAL.length],ang=it.value/tot*Math.PI*2;
-    if(ang>=Math.PI*2-1e-6){g+=`<circle class="gdonut" pathLength="1" cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${col}" stroke-width="${th}" ${o.onPick?`data-toca="vista" onclick="${o.onPick}('${jsq(it.label)}')" style="cursor:pointer"`:''}/>`;return}
+    if(ang>=Math.PI*2-1e-6){g+=`<circle class="gdonut${o.onPick?' u-cur-pointer':''}" pathLength="1" cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${col}" stroke-width="${th}" ${o.onPick?`data-toca="vista" data-click="${o.onPick}('${jsq(it.label)}')"`:''}/>`;return}
     const b=a+ang,L=ang>Math.PI?1:0;
     const tip=`${it.label}: ${euro(it.value)} (${pct(it.value/tot,0)})`;
     /* Sem balao: a legenda ao lado ja tem o rotulo, o valor e a percentagem
        de cada fatia, e o balao repetia-o a roubar o toque — que aqui tem uma
        acao a serio, entrar na categoria. E cada fatia com onclick era mais uma
        paragem do Tab que nao leva a lado nenhum. */
-    const act=o.onPick?`data-toca="vista" onclick="${o.onPick}('${jsq(it.label)}')" style="cursor:pointer"`:'';
-    g+=`<path class="gdonut" pathLength="1" d="M${(c+r*Math.cos(a)).toFixed(2)} ${(c+r*Math.sin(a)).toFixed(2)} A${r} ${r} 0 ${L} 1 ${(c+r*Math.cos(b)).toFixed(2)} ${(c+r*Math.sin(b)).toFixed(2)}" fill="none" stroke="${col}" stroke-width="${th}" ${act}><title>${esc(tip)}</title></path>`;
+    const act=o.onPick?`data-toca="vista" data-click="${o.onPick}('${jsq(it.label)}')"`:'';
+    g+=`<path class="gdonut${o.onPick?' u-cur-pointer':''}" pathLength="1" d="M${(c+r*Math.cos(a)).toFixed(2)} ${(c+r*Math.sin(a)).toFixed(2)} A${r} ${r} 0 ${L} 1 ${(c+r*Math.cos(b)).toFixed(2)} ${(c+r*Math.sin(b)).toFixed(2)}" fill="none" stroke="${col}" stroke-width="${th}" ${act}><title>${esc(tip)}</title></path>`;
     a=b;
   });
   g+=`<text x="${c}" y="${c-1}" text-anchor="middle" font-size="15" font-weight="700" fill="var(--ink)">${o.center||euro(tot)}</text>`;
@@ -324,12 +322,12 @@ function cHBars(items,o){
   /* Sem balao: cada linha ja tem o nome e o valor escritos por cima da barra.
      O balao repetia-os, e o onclick que o trazia fazia de cada linha uma
      paragem do Tab sem destino. */
-  return `<div class="legend" style="gap:11px">${items.map((it,i)=>{
+  return `<div class="legend u-g-11px">${items.map((it,i)=>{
     const neg=it.value<0,col=it.color||(neg?'var(--danger)':PAL[i%PAL.length]);
-    return `<div><div class="li" style="margin-bottom:4px"><span class="nm" style="color:var(--ink)">${esc(it.label)}</span>
+    return `<div><div class="li u-mb-4px"><span class="nm u-c-v-ink">${esc(it.label)}</span>
       <span class="vl ${neg?'neg':''}">${o.fmt?o.fmt(it.value):euro(it.value)}</span></div>
-      <div style="height:8px;border-radius:99px;background:var(--chip);overflow:hidden">
-      <i class="ghbar" style="display:block;height:100%;width:${(Math.abs(it.value)/max*100).toFixed(1)}%;background:${col};border-radius:99px;${atrasoEntrada(i,items.length)}"></i></div></div>`}).join('')}</div>`;
+      <div class="u-h-8px u-br-99px u-bg-v-chip u-ov-hidden">
+      <i class="ghbar u-d-block u-h-100pc u-br-99px" data-largura="${(Math.abs(it.value)/max*100).toFixed(1)}" data-fundo="${col}" data-atraso="${atrasoEntrada(i,items.length)}"></i></div></div>`}).join('')}</div>`;
 }
 // Legenda com bolinha de cor. withVal acrescenta valor e percentagem; itens com "act" ficam clicáveis.
 // Recebe: items — array de {label, color} e, conforme o caso, value (texto já
@@ -337,6 +335,6 @@ function cHBars(items,o){
 // withVal — verdadeiro para mostrar value e extra.
 // Devolve: HTML (string) da legenda.
 function legend(items,withVal){
-  return `<div class="legend">${items.map(i=>`<div class="li ${i.act?'tap':''}" ${i.act?`data-toca="vista" onclick="${i.act}"`:''}><span class="dot" style="background:${i.color}"></span>
-    <span class="nm">${esc(i.label)}</span>${withVal?`<span class="vl">${i.value||''}</span>${i.extra?`<span class="small" style="min-width:38px;text-align:right">${i.extra}</span>`:''}`:''}</div>`).join('')}</div>`;
+  return `<div class="legend">${items.map(i=>`<div class="li ${i.act?'tap':''}" ${i.act?`data-toca="vista" data-click="${i.act}"`:''}><span class="dot" data-fundo="${i.color}"></span>
+    <span class="nm">${esc(i.label)}</span>${withVal?`<span class="vl">${i.value||''}</span>${i.extra?`<span class="small u-minw-38px u-ta-right">${i.extra}</span>`:''}`:''}</div>`).join('')}</div>`;
 }

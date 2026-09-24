@@ -337,6 +337,6 @@ describe('a página da ferramenta', () => {
 
   test('escapa o que vem de fora', () => {
     assert.match(vista, /escapar\(eu\.nome\)/);
-    assert.match(vista, /var esc = function/, 'e do lado do browser também');
+    assert.match(ler('worker/src/equipa-guiao.js'), /var esc = function/, 'e do lado do browser também (o guião)');
   });
 });

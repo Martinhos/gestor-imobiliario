@@ -1,6 +1,16 @@
 /* ================= COMPONENTES ================= */
 /* menu de escolha próprio — substitui o <select> do sistema, que destoava */
 window.__sel={};
+/* O que o botão «Confirmar» (ou o verbo) da janela aberta pelo confirmModal
+   faz: fecha a janela e corre o cb dela. Cada confirmModal troca-o, e o botão
+   chama _ok(). É um var de topo para estar na lista dos nomes da app
+   (eventos.js), que fecha no arranque: um window._ok posto dentro da função
+   era recusado pelas ações. */
+var _ok=null;
+/* O que uma opção da janela aberta pelo pickModal faz: _pick(i) entrega a
+   opção i ao onPick dessa janela. Cada pickModal troca-o; var de topo pela
+   mesma razão do _ok. */
+var _pick=null;
 /* Gera o HTML de um menu de escolha. `id` fica num input escondido, de onde
    val(id) lê o valor; `options` é [{v,label}] (ou {div:true} para uma linha
    separadora); `onchange` é o NOME de uma função global, chamada quando se
@@ -16,31 +26,50 @@ window.__sel={};
    escondido com este id, de onde val(id) o lê); value — o valor pré-selecionado
    (comparado como string; pode vir null ou vazio); options — lista [{v,label}]
    das opções, com {div:true} no lugar de uma linha separadora; onchange
-   (opcional) — o nome de uma função global a chamar quando se escolhe; toca
+   (opcional) — a função a chamar quando se escolhe, ou o nome de uma função
+   de topo da app (o selPick resolve-o pelo funcaoDaApp; um handler feito na
+   hora, como o dos filtros do lfSel, vai como função); toca
    (opcional) — a família das opções: 'vista' num filtro, 'rascunho' num
    formulário, 'dados' se a escolha grava logo.
    Devolve: string de HTML do menu, pronta a inserir com innerHTML. */
 function sel(id,value,options,onchange,toca){
   window.__sel[id]={options:options,onchange:onchange||''};
   const cur=options.find(o=>!o.div&&String(o.v)===String(value))||options.find(o=>!o.div)||{v:'',label:'—'};
-  return `<div class="sel" id="sel_${id}">
-    <input type="hidden" id="${id}" value="${esc(value==null?'':value)}">
-    <button type="button" class="selbtn" data-toca="camada" onclick="selOpen(event,'${id}')"><span id="lab_${id}">${esc(cur.label)}</span>${ic('chevD',16)}</button>
-    <div class="selpop" id="pop_${id}">
-      ${options.map((o,i)=>o.div?'<div class="sdiv"></div>':`<button type="button" class="selopt ${String(o.v)===String(value)?'on':''}"${toca?` data-toca="${toca}"`:''} onclick="selPick(event,'${id}',${i})">
-        <span>${esc(o.label)}</span>${String(o.v)===String(value)?ic('check',16):''}</button>`).join('')}
+  /* O leitor de ecrã tem de saber o que isto é: o botão abre uma lista de
+     escolha (aria-haspopup, aria-expanded, que o selOpen e o closePops
+     acertam), a lista é uma listbox e cada opção diz se é a escolhida. As
+     setas, o Home, o End e o Escape são do selTecla. O rótulo: um <label> à
+     volta do sel() rotula o botão, que é o primeiro elemento rotulável lá
+     dentro (o input escondido não conta). */
+  const e=esc(id);
+  return `<div class="sel" id="sel_${e}">
+    <input type="hidden" id="${e}" value="${esc(value==null?'':value)}">
+    <button type="button" class="selbtn" id="selb_${e}" aria-haspopup="listbox" aria-expanded="false" aria-controls="pop_${e}" data-toca="camada" data-click="selOpen(event,'${jsq(id)}')"><span id="lab_${e}">${esc(cur.label)}</span>${ic('chevD',16)}</button>
+    <div class="selpop" id="pop_${e}" role="listbox">
+      ${options.map((o,i)=>{if(o.div)return '<div class="sdiv" aria-hidden="true"></div>';const sim=String(o.v)===String(value);
+        return `<button type="button" class="selopt ${sim?'on':''}" role="option" aria-selected="${sim}" data-i="${i}"${toca?` data-toca="${toca}"`:''} data-click="selPick(event,'${jsq(id)}',${i})">
+        <span>${esc(o.label)}</span>${sim?ic('check',16):''}</button>`}).join('')}
     </div></div>`;
 }
-/* grupos no fim do dropdown, separados por uma linha */
+/* grupos no fim do dropdown, separados por uma linha
+   Recebe: arr — as opções dos grupos (array).
+   Devolve: as opções com o separador à frente; vazio sem grupos. */
 const gdiv=arr=>arr.length?[{div:true}].concat(arr):[];
+/* As opções de um sel() para os grupos de um tipo, com o valor 'g:ID'.
+   Recebe: kind — o tipo dos grupos ('prop', 'owner'…).
+   Devolve: array de {v, label}. */
 const gOpts=kind=>grpsOf(kind).map(g=>({v:'g:'+g.id,label:'Grupo · '+g.name}));
 /* fecha os menus abertos, excepto os que contêm "keep" (um menu de escolha dentro do menu de filtros
    não pode fechar o menu que o contém)
    Recebe: keep (opcional) — um elemento do DOM; os menus que o contenham ficam abertos.
-   Devolve: nada — tira a classe .on aos menus abertos. */
+   Devolve: nada — tira a classe .on aos menus abertos (e acerta o aria-expanded dos sel()). */
 function closePops(keep){
   const list=document.querySelectorAll('.selpop.on,.menupop.on');
-  [].slice.call(list).forEach(x=>{if(!(keep&&x.contains(keep)))x.classList.remove('on')});
+  [].slice.call(list).forEach(x=>{
+    if(keep&&x.contains(keep))return;
+    x.classList.remove('on');
+    if(x.id&&x.id.indexOf('pop_')===0)selAberto(x.id.slice(4),false);   // o botão do sel() diz que fechou
+  });
 }
 /* Onde cabe um menu que abre a partir de um botão.
 
@@ -116,27 +145,96 @@ function ajustarPop(p){
 
 // Abre o dropdown de um sel() — ou fecha-o, se já estava aberto. Fecha os
 // outros menus primeiro e deixa o ajustarPop virá-lo ou encolhê-lo para caber.
+// Aberto pelo teclado (o Enter e o espaço num botão chegam como um clique com
+// detail 0), o foco entra logo na opção escolhida.
 // Recebe: e — o evento do clique (trava-lhe a propagação; pode vir null); id — o id dado ao sel().
-// Devolve: nada — alterna a classe .on do dropdown no DOM.
+// Devolve: nada — alterna a classe .on do dropdown e o aria-expanded do botão.
 function selOpen(e,id){
   if(e)e.stopPropagation();
   const p=document.getElementById('pop_'+id),was=p&&p.classList.contains('on');
   closePops(p?p.parentNode:null);
-  if(p&&!was){p.classList.add('on');ajustarPop(p);}
+  if(p&&!was){p.classList.add('on');ajustarPop(p);selAberto(id,true);if(e&&e.detail===0)selFocarEscolhida(p);}
+}
+/* O botão de um sel() diz se a lista dele está aberta (aria-expanded).
+   Recebe: id — o id dado ao sel(); aberto — true se a lista ficou aberta.
+   Devolve: nada — escreve o aria-expanded no botão selb_<id>, se existir. */
+function selAberto(id,aberto){const b=document.getElementById('selb_'+id);if(b)b.setAttribute('aria-expanded',aberto?'true':'false')}
+/* Leva o foco à opção escolhida de uma lista aberta (à primeira, se nenhuma o está).
+   Recebe: pop — o elemento .selpop.
+   Devolve: nada — foca uma das opções. */
+function selFocarEscolhida(pop){
+  const opts=[].slice.call(pop.querySelectorAll('.selopt'));
+  const o=opts.find(x=>x.getAttribute('aria-selected')==='true')||opts[0];
+  try{if(o)o.focus()}catch(x){}
+}
+/* A opção seguinte numa lista de n, para uma tecla: as setas andam uma e param
+   nas pontas (uma lista de escolha não dá a volta), Home e End vão às pontas.
+   Sem opção atual (-1), a seta para baixo começa na primeira e a para cima na
+   última.
+   Recebe: i — o índice atual (-1 sem nenhum); n — quantas opções há; tecla — o e.key.
+   Devolve: o índice novo (o mesmo i para outra tecla; -1 sem opções). */
+function selIndiceSeguinte(i,n,tecla){
+  if(n<1)return -1;
+  if(tecla==='Home')return 0;
+  if(tecla==='End')return n-1;
+  if(tecla==='ArrowDown')return i<0?0:Math.min(i+1,n-1);
+  if(tecla==='ArrowUp')return i<0?n-1:Math.max(i-1,0);
+  return i;
+}
+/* O teclado de um sel(), chamado pelo ouvinte de teclas do arranque antes de
+   tudo o resto. No botão, as setas (e o Home e o End) abrem a lista e levam o
+   foco à opção escolhida; numa opção, andam pelas outras; o Escape com a lista
+   aberta fecha-a e devolve o foco ao botão — e é engolido, para não fechar
+   também a janela por baixo. O Enter e o espaço são dos próprios botões.
+   Recebe: e — o evento keydown.
+   Devolve: true se a tecla era do sel() e foi tratada; false para seguir. */
+function selTecla(e){
+  const t=e&&e.target;if(!t||typeof t.closest!=='function')return false;
+  const caixa=t.closest('.sel');if(!caixa)return false;
+  const pop=caixa.querySelector('.selpop'),btn=caixa.querySelector('.selbtn');
+  if(!pop||!btn||!pop.id)return false;
+  const k=e.key,aberto=pop.classList.contains('on');
+  if(k==='Escape'){
+    if(!aberto)return false;
+    if(e.preventDefault)e.preventDefault();
+    closePops();try{btn.focus()}catch(x){}
+    return true;
+  }
+  if(['ArrowDown','ArrowUp','Home','End'].indexOf(k)<0)return false;
+  if(e.preventDefault)e.preventDefault();   // as setas num botão rolavam a página
+  if(t===btn||!aberto){
+    if(!aberto)selOpen(null,pop.id.slice(4));
+    selFocarEscolhida(pop);
+    return true;
+  }
+  const opts=[].slice.call(pop.querySelectorAll('.selopt'));
+  const o=opts[selIndiceSeguinte(opts.indexOf(t),opts.length,k)];
+  try{if(o)o.focus()}catch(x){}
+  return true;
 }
 /* Escolha de uma opção: escreve o valor no input escondido, troca o rótulo do
-   botão, fecha o menu e chama o onchange registado (pelo nome, em window) —
-   é por aí que os formulários reagem à mudança.
+   botão, marca a opção como a escolhida (aria-selected), fecha o menu e chama
+   o onchange registado (pelo nome, em window) — é por aí que os formulários
+   reagem à mudança. Escolhida pelo teclado, o foco volta ao botão.
    Recebe: e — o evento do clique (pode vir null); id — o id dado ao sel();
    i — o índice da opção escolhida em window.__sel[id].options.
-   Devolve: nada — atualiza o input e o rótulo no DOM e chama o onchange. */
+   Devolve: nada — atualiza o input, o rótulo e as opções no DOM e chama o onchange. */
 function selPick(e,id,i){
   if(e)e.stopPropagation();
   const cfg=window.__sel[id]||{options:[]},o=cfg.options[i];if(!o)return;
   const inp=document.getElementById(id);if(inp)inp.value=o.v;
   const lab=document.getElementById('lab_'+id);if(lab)lab.textContent=o.label;
-  const pop=document.getElementById('pop_'+id);if(pop)pop.classList.remove('on');
-  if(cfg.onchange&&window[cfg.onchange])window[cfg.onchange]();
+  const pop=document.getElementById('pop_'+id);
+  if(pop){
+    pop.classList.remove('on');
+    [].slice.call(pop.querySelectorAll('.selopt')).forEach(b=>b.setAttribute('aria-selected',b.getAttribute('data-i')===String(i)?'true':'false'));
+  }
+  selAberto(id,false);
+  if(e&&e.detail===0){const b=document.getElementById('selb_'+id);try{if(b)b.focus()}catch(x){}}
+  /* o onchange é uma função, ou o nome de uma função da app, resolvido pelo
+     funcaoDaApp (eventos.js): um nome do browser ou uma nativa rebenta */
+  const f=typeof cfg.onchange==='function'?cfg.onchange:(cfg.onchange&&typeof funcaoDaApp==='function'?funcaoDaApp(cfg.onchange,true):null);
+  if(f)f();
 }
 /* menu de ações (⋯)
 
@@ -155,9 +253,9 @@ function selPick(e,id,i){
    apaga alguma coisa.
    Devolve: string de HTML do botão ⋯ com o menu, pronta a inserir com innerHTML. */
 function menu(id,items){
-  return `<span class="menuwrap"><button type="button" class="iconbtn opcoes" data-toca="camada" onclick="menuOpen(event,'${id}')" aria-label="Opções">${ic('dots',18)}</button>
-    <div class="menupop" id="menu_${id}">${items.map(it=>
-      `<button type="button" class="${it.danger?'danger':''}"${it.toca?` data-toca="${it.toca}"`:''}${it.risco==='destroi'?' data-risco="destroi"':''} onclick="closePops();${it.act}">${ic(it.icon||'dots',17)} ${esc(it.label)}</button>`).join('')}</div></span>`;
+  return `<span class="menuwrap"><button type="button" class="iconbtn opcoes" data-toca="camada" data-click="menuOpen(event,'${jsq(id)}')" aria-label="Opções">${ic('dots',18)}</button>
+    <div class="menupop" id="menu_${esc(id)}">${items.map(it=>
+      `<button type="button" class="${it.danger?'danger':''}"${it.toca?` data-toca="${it.toca}"`:''}${it.risco==='destroi'?' data-risco="destroi"':''} data-click="closePops();${it.act}">${ic(it.icon||'dots',17)} ${esc(it.label)}</button>`).join('')}</div></span>`;
 }
 // Abre/fecha o menu de ações (⋯) criado por menu(), com o mesmo ajuste de posição dos sel().
 // Recebe: e — o evento do clique (pode vir null); id — o id dado ao menu() (abre menu_<id>).
@@ -178,8 +276,8 @@ function menuOpen(e,id){
 function tagField(items,addLabel,addAct,removeAct,cls,tocaAdd){
   return `<div class="tagbox">
     ${items.map(it=>`<span class="tag ${cls||''}">${esc(it.label)}
-      <button type="button" data-toca="rascunho" onclick="${removeAct}('${jsq(it.id)}')" aria-label="Remover">${ic('x',13)}</button></span>`).join('')}
-    <button type="button" class="tagadd" data-toca="${tocaAdd||'rascunho'}" onclick="${addAct}">+ ${esc(addLabel)}</button></div>`;
+      <button type="button" data-toca="rascunho" data-click="${removeAct}('${jsq(it.id)}')" aria-label="Remover">${ic('x',13)}</button></span>`).join('')}
+    <button type="button" class="tagadd" data-toca="${tocaAdd||'rascunho'}" data-click="${addAct}">+ ${esc(addLabel)}</button></div>`;
 }
 /* secção que abre e fecha; o estado dura enquanto a janela estiver aberta */
 let foldState={};
@@ -192,8 +290,8 @@ let foldState={};
    Devolve: string de HTML da secção dobrável, pronta a inserir com innerHTML. */
 function fold(id,title,body,o){
   o=o||{};const open=foldState[id]===undefined?!!o.open:foldState[id];
-  return `<div class="sect fold ${open?'open':''}" id="fold_${id}">
-    <button type="button" class="fold-head" data-toca="nada" onclick="toggleFold('${id}')"><span class="ic">${ic(o.icon||'dots',17)}</span><b>${title}</b>
+  return `<div class="sect fold ${open?'open':''}" id="fold_${esc(id)}">
+    <button type="button" class="fold-head" data-toca="nada" data-click="toggleFold('${jsq(id)}')"><span class="ic">${ic(o.icon||'dots',17)}</span><b>${title}</b>
       ${o.summary?`<span class="fsum">${o.summary}</span>`:''}<span class="chev">${ic('chevD',16)}</span></button>
     <div class="fold-body">${body}</div></div>`;
 }
@@ -208,6 +306,34 @@ function toggleFold(id){
      Fica lá: um re-render deita o nó fora e o próximo nasce sem ela — que é o
      que faz a dobra já aberta não voltar a piscar. */
   if(on)el.classList.add('entra');
+}
+/* Os ficheiros escolhidos no <input type="file"> do fileBlock, entregues a
+   quem os pediu. Era o onchange em linha «${onPick}(this)» (com o argumento
+   extra, «${onPick}(this,'arg')»), que a gramática das ações não escreve: o
+   nome da função vinha de um ${…} no lugar do nome.
+   O nome vem de uma ação, que pode ser injetada: resolve-se pelo funcaoDaApp
+   (eventos.js), que só devolve funções da app — como no delFileConfirm.
+   Recebe: input — o <input type="file"> onde se escolheram os ficheiros (o
+   this da ação); fn — o nome da função da app que os recebe; arg — o
+   argumento extra do fileBlock (opts.arg), ou vazio quando não há nenhum: a
+   ação escreve-o sempre, porque um ${…} entre argumentos não passa na
+   gramática, e é aqui que o vazio volta a querer dizer «sem argumento».
+   Devolve: nada — chama a função da app com (input), ou com (input, arg)
+   quando o argumento extra existe; rebenta se o nome não é de uma função da
+   app (o alert, o fetch…), e não faz nada se o nome não existir. */
+function escolherFicheirosDoBloco(input,fn,arg){
+  const f=typeof funcaoDaApp==='function'?funcaoDaApp(fn,true):null;
+  if(!f)return;
+  if(arg)f(input,arg);else f(input);
+}
+/* Abre o seletor de ficheiros do fileBlock: o botão «Adicionar…» passa o
+   clique ao <input type="file"> escondido. Era o onclick em linha
+   «document.getElementById('…').click()», que a gramática das ações não
+   escreve: o document não é um nome da app.
+   Recebe: id — o id do input escondido do bloco.
+   Devolve: nada — clica no input. */
+function abrirSeletorFicheiros(id){
+  document.getElementById(id).click();
 }
 /* bloco de ficheiros reutilizável
    Recebe: label — título por cima da lista (vazio para não mostrar); list — lista
@@ -224,33 +350,39 @@ function fileBlock(label,list,inputId,onPick,delFn,opts){
   const photos=opts.photos;
   return `<div>${label?`<div class="flabel">${esc(label)}</div>`:''}
     ${list.length?(photos?
-      `<div class="list" style="gap:8px">${list.map((f,i)=>`<div class="prow">
-         <div class="pth pcover" id="th_${f.id}" onclick="openMeta('${f.id}')">${i===0?'<span class="capa">capa</span>':''}</div>
-         <input class="pnm" id="fn_${f.id}" value="${esc(f.name)}" placeholder="Nome da foto" autocomplete="off" oninput="livePhotoName('${f.id}',this.value)">
-         ${opts.move?`<button type="button" class="pgrab" aria-label="Arrastar para reordenar" onpointerdown="photoDrag(event,this,${i})">${ic('grip',16)}</button>`:''}
-         <button type="button" class="btn sm danger" aria-label="Apagar a fotografia" style="flex:0 0 auto;min-width:40px;min-height:40px;margin-left:8px" onclick="delFileConfirm('${delFn}','${f.id}','fotografia')">${ic('trash',14)}</button></div>`).join('')}</div>`
-      :`<div class="list" style="gap:8px;margin-bottom:9px">${list.map(f=>`
-        <div class="card" style="padding:10px 12px"><div class="row-between" style="align-items:center">
-          <div style="min-width:0;cursor:pointer" onclick="openMeta('${f.id}')">
-            <div style="font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name)}</div>
+      `<div class="list u-g-8px">${list.map((f,i)=>`<div class="prow">
+         <div class="pth pcover" id="th_${esc(f.id)}" data-click="openMeta('${jsq(f.id)}')">${i===0?'<span class="capa">capa</span>':''}</div>
+         <input class="pnm" id="fn_${esc(f.id)}" value="${esc(f.name)}" placeholder="Nome da foto" autocomplete="off" data-input="livePhotoName('${jsq(f.id)}',this.value)">
+         ${opts.move?`<button type="button" class="pgrab" aria-label="Arrastar para reordenar" data-pointerdown="photoDrag(event,this,${i})">${ic('grip',16)}</button>`:''}
+         <button type="button" class="btn sm danger u-fx-0-0-auto u-minw-40px u-minh-40px u-ml-8px" aria-label="Apagar a fotografia" data-click="delFileConfirm('${jsq(delFn)}','${jsq(f.id)}','fotografia')">${ic('trash',14)}</button></div>`).join('')}</div>`
+      :`<div class="list u-g-8px u-mb-9px">${list.map(f=>`
+        <div class="card u-p-10px-12px"><div class="row-between u-ai-center">
+          <div class="u-minw-0 u-cur-pointer" data-click="openMeta('${jsq(f.id)}')">
+            <div class="u-fw-600 u-fs-13p5px u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(f.name)}</div>
             <div class="small">${kb(f.size)}${f.added?' · '+dPT(f.added):''}</div></div>
-          <button type="button" class="btn sm danger" aria-label="Apagar o ficheiro" style="min-width:40px;min-height:40px" onclick="delFileConfirm('${delFn}','${f.id}','ficheiro')">${ic('trash',14)}</button>
+          <button type="button" class="btn sm danger u-minw-40px u-minh-40px" aria-label="Apagar o ficheiro" data-click="delFileConfirm('${jsq(delFn)}','${jsq(f.id)}','ficheiro')">${ic('trash',14)}</button>
         </div></div>`).join('')}</div>`):''}
-    <input type="file" id="${inputId}" multiple ${photos?'accept="image/*"':''} style="display:none" onchange="${onPick}(this${opts.arg?",'"+opts.arg+"'":''})">
-    <button type="button" class="btn sm" style="margin-top:9px" onclick="document.getElementById('${inputId}').click()">${ic(photos?'photo':'clip',14)} ${opts.addLabel||(photos?'Adicionar fotos':'Adicionar ficheiro')}</button>
-    ${opts.hint?`<div class="hint" style="margin-top:8px">${opts.hint}</div>`:''}</div>`;
+    <input type="file" id="${esc(inputId)}" multiple ${photos?'accept="image/*"':''} class="u-d-none" data-change="escolherFicheirosDoBloco(this,'${jsq(onPick)}','${jsq(opts.arg||'')}')">
+    <button type="button" class="btn sm u-mt-9px" data-click="abrirSeletorFicheiros('${jsq(inputId)}')">${ic(photos?'photo':'clip',14)} ${opts.addLabel||(photos?'Adicionar fotos':'Adicionar ficheiro')}</button>
+    ${opts.hint?`<div class="hint u-mt-8px">${opts.hint}</div>`:''}</div>`;
 }
 /* A confirmação que faltava: o apagar ficava a 8px do puxador de arrastar,
    ambos pequenos, e o toque falhado destruía o ficheiro no ato — do
    IndexedDB, sem undo. Agora pergunta, e diz o que se perde.
-   Recebe: fn — o nome (em window) da função que apaga; fid — o id do ficheiro,
+   O nome vem de uma ação, que pode ser injetada: resolve-se pelo funcaoDaApp
+   (eventos.js), que só devolve funções da app.
+   Recebe: fn — o nome da função da app que apaga; fid — o id do ficheiro,
    passado a essa função; tipo — 'fotografia' ou 'ficheiro', para o texto da pergunta.
-   Devolve: nada — abre a janela de confirmação; só se apaga depois do sim. */
+   Devolve: nada — abre a janela de confirmação; só se apaga depois do sim;
+   rebenta logo, sem perguntar, se o nome não é de uma função da app (o alert,
+   o fetch…). */
 function delFileConfirm(fn,fid,tipo){
+  const daApp=nome=>typeof funcaoDaApp==='function'?funcaoDaApp(nome,true):null;
+  daApp(fn);
   const foto=tipo==='fotografia';
   confirmModal(foto?'Apagar a fotografia':'Apagar o ficheiro',
     (foto?'A fotografia':'O ficheiro')+' desaparece já daqui e do armazenamento. Não há como desfazer.',
-    ()=>{const f=window[fn];if(typeof f==='function')f(fid)});
+    ()=>{const f=daApp(fn);if(f)f(fid)});
 }
 // Abre a ficha do ficheiro `fid` (nome, tamanho, pré-visualização), procurando-o
 // entre os metadados já guardados e os pendentes do formulário aberto.
@@ -264,15 +396,16 @@ function openMeta(fid){openFileMeta(allFileMetas().concat(pendingMetas()).find(f
    Devolve: Promise que resolve para um object URL da miniatura (ou do original,
    se a miniatura não se conseguir criar), ou null quando o blob não existe. */
 function thumbSrc(id){
-  if(thumbCache[id])return Promise.resolve(thumbCache[id]);
+  /* o thumbCache tem teto (anexos.js:guardarMiniatura): usar uma marca-a como recente */
+  if(thumbCache[id]){usarMiniatura(id);return Promise.resolve(thumbCache[id])}
   return idbGet('tn_'+id).then(tb=>{
-    if(tb){thumbCache[id]=URL.createObjectURL(tb);return thumbCache[id]}
+    if(tb)return guardarMiniatura(id,URL.createObjectURL(tb));
     return idbGet(id).then(b=>{
       if(!b)return null;
       return makeThumb(b).then(tb2=>{
         if(tb2)idbPut('tn_'+id,tb2).catch(()=>{});
-        thumbCache[id]=URL.createObjectURL(tb2||b);return thumbCache[id];
-      }).catch(()=>{thumbCache[id]=URL.createObjectURL(b);return thumbCache[id]});
+        return guardarMiniatura(id,URL.createObjectURL(tb2||b));
+      }).catch(()=>guardarMiniatura(id,URL.createObjectURL(b)));
     });
   });
 }
@@ -332,9 +465,9 @@ Object.defineProperty(window,'onSave',{configurable:true,
 // Devolve: o elemento DOM da janela (div.modal.open), ainda por pendurar no documento.
 function modalLayer(){
   const m=document.createElement('div');m.className='modal open';
-  m.innerHTML=`<div class="bg" data-toca="camada" onclick="closeModal('fundo')"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
+  m.innerHTML=`<div class="bg" data-toca="camada" data-click="closeModal('fundo')"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
     <div class="head"><h2 id="modalTitle"></h2><div class="spacer"></div><span id="modalMenu"></span>
-      <button class="iconbtn" data-toca="camada" onclick="closeModal('x')" aria-label="Fechar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <button class="iconbtn" data-toca="camada" data-click="closeModal('x')" aria-label="Fechar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="body" id="modalBody"></div><div class="foot" id="modalFoot"></div></div>`;
   return m;
 }
@@ -363,6 +496,22 @@ function promote(el){
   [].slice.call(el.querySelectorAll('[data-mid]')).forEach(x=>{x.id=x.getAttribute('data-mid');x.removeAttribute('data-mid')});
   el.classList.remove('under');el.removeAttribute('aria-hidden');try{el.inert=false}catch(e){}
 }
+/* As etiquetas que se tiram de todo o HTML que entra numa janela, por mais
+   nenhuma razão senão defesa em profundidade: uma ação declarada chega às
+   funções que recebem HTML (openModal, fillModal, confirmModal, pickModal), e
+   quem conseguisse injetar HTML tinha nelas uma porta. Um <iframe srcdoc>
+   corre qualquer script desta origem com acesso ao parent e ao armazenamento,
+   e a CSP não o trava — o srcdoc herda-a e o script-src 'self' aceita os
+   ficheiros da app; um http-equiv=refresh e um <base> navegam ou mudam o
+   destino de todas as ligações; um object e um embed correm conteúdo. Nenhuma
+   janela da app põe qualquer uma delas de propósito (procurado em web/), por
+   isso tirá-las não muda nada do que se vê — e fecha a porta. A primeira
+   defesa continua a ser o escape (formato.js:esc, formato.js:jsq). */
+const ETIQUETAS_QUE_CORREM=/<\/?(?:iframe|meta|base|object|embed)\b[^>]*>/gi;
+/* Tira de um HTML as etiquetas de cima.
+   Recebe: h — o HTML (nulo vale vazio).
+   Devolve: o mesmo HTML sem essas etiquetas. */
+function semEtiquetasQueCorrem(h){return String(h==null?'':h).replace(ETIQUETAS_QUE_CORREM,'')}
 // Preenche uma janela já criada: título, corpo, menu do cabeçalho e rodapé —
 // por omissão, Cancelar + Guardar (que chama o onSave da janela de cima).
 // Recebe: el — o elemento da janela (vindo do modalLayer); title — o texto do título;
@@ -371,10 +520,10 @@ function promote(el){
 // Devolve: nada — preenche a janela no DOM.
 function fillModal(el,title,body,foot,menuHtml){
   el.querySelector('.head h2').textContent=title;
-  el.querySelector('.body').innerHTML=body;
+  el.querySelector('.body').innerHTML=semEtiquetasQueCorrem(body);
   if(typeof tornarFocavel==='function')tornarFocavel(el.querySelector('.body'));
-  el.querySelector('.head span').innerHTML=menuHtml||'';
-  el.querySelector('.foot').innerHTML=foot||`<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" onclick="onSave&&onSave()">Guardar</button>`;
+  el.querySelector('.head span').innerHTML=semEtiquetasQueCorrem(menuHtml||'');
+  el.querySelector('.foot').innerHTML=semEtiquetasQueCorrem(foot||`<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="onSave&&onSave()">Guardar</button>`);
 }
 
 /* ================= A FICHA DE LEITURA =================
@@ -418,8 +567,8 @@ function ficha(linhas){
    Recebe: o descritor da ficha (o mesmo de abrirFicha).
    Devolve: o HTML do rodapé. */
 function fichaRodape(o){
-  return `<button type="button" class="btn" data-toca="camada" onclick="closeModal()">Fechar</button>`+
-    (o.editar?`<button type="button" class="btn primary" data-toca="camada" onclick="${o.editar.act}">${esc(o.editar.rotulo||'Editar')}</button>`:'');
+  return `<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`+
+    (o.editar?`<button type="button" class="btn primary" data-toca="camada" data-click="${o.editar.act}">${esc(o.editar.rotulo||'Editar')}</button>`:'');
 }
 
 /* Abre a ficha de leitura de um registo.
@@ -494,7 +643,8 @@ window.addEventListener('popstate',()=>{
    HTML do rodapé (por omissão Cancelar+Guardar); menuHtml (opcional) — HTML do
    menu do cabeçalho.
    Devolve: a camada criada ({el,title,onSave,snap,tocado,gatilho}), com onSave
-   a null — quem chama define-o. */
+   a null — quem chama define-o, e pode pôr-lhe um aoFechar, que o closeModal
+   corre quando ela sai. */
 function openModal(title,body,foot,menuHtml){
   closePops();
   const top=modalTop();if(top)demote(top.el);
@@ -574,12 +724,18 @@ function closeModal(origem){
        por cima também rearma o histórico (openModal→pushHist), por isso o
        "voltar" que trouxe até aqui fica tratado sozinho. */
     openModal('Sair sem guardar?',
-      `<div class="hint" style="font-size:14px">Tens alterações por guardar nesta janela. Se saíres, perdem-se.</div>`,
-      `<button class="btn" onclick="closeModal()">Continuar a editar</button>
-       <button class="btn danger" onclick="_sairSemGuardar()">Sair sem guardar</button>`);
+      `<div class="hint u-fs-14px">Tens alterações por guardar nesta janela. Se saíres, perdem-se.</div>`,
+      `<button class="btn" data-click="closeModal()">Continuar a editar</button>
+       <button class="btn danger" data-click="_sairSemGuardar()">Sair sem guardar</button>`);
     return;
   }
   const M=modalStack.pop();lockPage();if(!M)return;
+  /* o que a camada prendeu enquanto esteve aberta (o object URL de uma imagem,
+     anexos.js:openFileMeta) solta-se com ela */
+  if(typeof M.aoFechar==='function')try{M.aoFechar()}catch(e){}
+  /* sem janela nenhuma não há formulário: os anexos pendentes deixam de ser
+     poupados (anexos.js:esquecerPendentes) */
+  if(!modalStack.length)esquecerPendentes();
   fecharComSaida(M.el);
   avisoAcimaDoRodape();            // sem rodapé por baixo, o aviso volta ao sítio
   avisoQuandoAssentar();
@@ -596,7 +752,13 @@ function _sairSemGuardar(){
 // despeja a pilha inteira de janelas (closeModal sem origem: fecha sem perguntar)
 // Devolve: nada — fecha todas as janelas da pilha.
 function closeAllModals(){while(modalStack.length)closeModal()}
+/* O valor de um campo do formulário, pelo id.
+   Recebe: id — o id do campo.
+   Devolve: o valor (texto); '' se o campo não existir. */
 const val=id=>{const e=document.getElementById(id);return e?e.value:''};
+/* A caixa de marcar está marcada?
+   Recebe: id — o id da caixa.
+   Devolve: true/false; false se não existir. */
 const chk=id=>{const e=document.getElementById(id);return e?!!e.checked:false};
 /* O botão diz o verbo da ação e veste-se de perigo quando destrói: um
    "Confirmar" primário igual ao Guardar convidava ao reflexo justamente
@@ -607,9 +769,9 @@ const chk=id=>{const e=document.getElementById(id);return e?!!e.checked:false};
    Devolve: nada — abre a janela de confirmação. */
 function confirmModal(title,text,cb){
   const verbo=(/^(Apagar|Remover|Eliminar|Terminar)\b/.exec(title)||[])[1];
-  openModal(title,`<div class="hint" style="font-size:14px">${text}</div>`,
-    `<button class="btn" onclick="closeModal()">Cancelar</button><button class="btn ${verbo?'danger':'primary'}" onclick="_ok()">${verbo||'Confirmar'}</button>`);
-  window._ok=()=>{closeModal();cb()};
+  openModal(title,`<div class="hint u-fs-14px">${text}</div>`,
+    `<button class="btn" data-click="closeModal()">Cancelar</button><button class="btn ${verbo?'danger':'primary'}" data-click="_ok()">${verbo||'Confirmar'}</button>`);
+  _ok=()=>{closeModal();cb()};
 }
 /* Desfazer em vez de (ou além de) confirmar. A confirmação trava o engano
    de quem lê; o Anular salva o engano de quem confirmou por hábito. O
@@ -655,14 +817,14 @@ function falhaCampo(id,msg){
    Devolve: nada — abre a janela de escolha. */
 function pickModal(title,options,onPick,extra){
   openModal(title,`<div class="form">
-    ${options.length?`<div class="list" style="gap:7px">${options.map((o,i)=>
-      `<button type="button" class="card tap" style="padding:12px 14px;display:flex;align-items:center;gap:11px" onclick="_pick(${i})">
-        ${o.icon?`<span class="ic" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:${o.icon==='trash'?'var(--danger-soft)':'var(--accent-soft)'};color:${o.icon==='trash'?'var(--danger)':'var(--accent)'};flex:0 0 34px">${ic(o.icon,18)}</span>`:o.avatar?`<span class="avatar">${esc(initials(o.label))}</span>`:''}
-        <span style="flex:1;min-width:0;text-align:left"><b style="display:block;font-size:14px">${esc(o.label)}</b>
+    ${options.length?`<div class="list u-g-7px">${options.map((o,i)=>
+      `<button type="button" class="card tap u-p-12px-14px u-d-flex u-ai-center u-g-11px" data-click="_pick(${i})">
+        ${o.icon?`<span class="ic u-w-34px u-h-34px u-br-10px u-d-grid u-pi-center u-fx-0-0-34px ${o.icon==='trash'?'comp-pick-ic-destroi':'comp-pick-ic-normal'}">${ic(o.icon,18)}</span>`:o.avatar?`<span class="avatar">${esc(initials(o.label))}</span>`:''}
+        <span class="u-fx-1 u-minw-0 u-ta-left"><b class="u-d-block u-fs-14px">${esc(o.label)}</b>
         ${o.sub?`<span class="small">${esc(o.sub)}</span>`:''}</span></button>`).join('')}</div>`
       :`<div class="hint">Não há nada para escolher.</div>`}
-    ${extra||''}</div>`,`<button class="btn" onclick="closeModal()">Voltar</button>`);
-  window._pick=i=>onPick(options[i]);
+    ${extra||''}</div>`,`<button class="btn" data-click="closeModal()">Voltar</button>`);
+  _pick=i=>onPick(options[i]);
 }
 
 /* ================= PRESSIONAR E SEGURAR: opções do cartão ================= */
@@ -716,68 +878,84 @@ function lpShow(title,opts){
   });
 }
 /* O menu por omissão do toque longo: descodifica o data-lp ("tipo:id", ex.
-   "prop:abc") e mostra as ações que fazem sentido para esse cartão — imóvel,
-   movimento, contrato, pessoa, recorrente, modelo ou hipoteca. A seleção em
-   massa (cloud/selecao.js) embrulha-o para tratar dos movimentos à maneira dela.
-   Cada ação passa primeiro por pode()/podeEditar(): num imóvel onde só
-   colaboro, só aparece o que o cargo permite (e editar/apagar só o que eu
-   próprio adicionei); um cargo que só vê fica com «Ver …» ou com o toast do
-   lpShow.
+   "prop:abc") e entrega-o ao serviço que registou esse prefixo
+   (servicos.js:lpDe) — imóveis, movimentos, contratos, pessoas, visitas,
+   planeados, modelos ou hipotecas. Um prefixo de um serviço desligado nesta
+   conta não abre nada. A seleção em massa (cloud/selecao.js) embrulha-o para
+   tratar dos movimentos à maneira dela. Cada handler passa as ações por
+   pode()/podeEditar(): num imóvel onde só colaboro, só aparece o que o cargo
+   permite (e editar/apagar só o que eu próprio adicionei); um cargo que só
+   vê fica com o toast do lpShow.
    Recebe: v — o valor do data-lp do cartão, no formato "tipo:id" (pessoas e
    hipotecas levam dois ids: "per:owner:<id>" ou "per:tenant:<id>", e
    "mort:<idImovel>:<idHipoteca>").
-   Devolve: nada — abre a folha de opções (ou não faz nada, se o alvo já não existir). */
+   Devolve: nada — abre a folha de opções (ou não faz nada, se o alvo já não
+   existir ou o serviço estiver desligado). */
 function lpMenu(v){
-  const a=String(v||'').split(':'),k=a[0],id=a[1];
-  if(k==='prop'){const p=prop(id);if(!p)return;
-    /* o toque longo é para AGIR: ler é o toque simples, que abre a ficha.
-       Um «Ver» aqui duplicava-o e nunca mais deixava o menu ficar vazio — e é
-       o menu vazio que faz aparecer o aviso «só podes ver este registo». */
-    const opts=pode(id,'house.edit')?[{label:'Editar imóvel',icon:'pen',act:()=>propModal(id)}]:[];
-    if(p.use==='investimento'&&pode(id,'contract.add'))opts.push({label:'Novo contrato',icon:'contract',act:()=>ctModal(null,id)});
-    if(pode(id,'tx.add'))opts.push({label:'Registar despesa',icon:'dn',act:()=>txModal(null,'expense',id)});
-    /* pagar crédito abate capital à hipoteca, que vive na ficha do imóvel: pede também «Editar a ficha» (motivoCredito) */
-    if(liveLoans(p).length&&!motivoCredito(id))opts.push({label:'Pagamento de crédito',icon:'bank',act:()=>txModal(null,'loan',id)},{label:'Amortização',icon:'trend',act:()=>amortModal(id)});
-    if(souCriador(id))opts.push({label:'Apagar imóvel',icon:'trash',act:()=>delProp(id)});
-    return lpShow(p.name,opts);}
-  if(k==='tx'){const t=db.transactions.find(x=>x.id===id);if(!t)return;
-    const ok=podeEditar(t.propertyId,'tx.add',t);
-    return lpShow(t.label,ok?[{label:'Editar movimento',icon:'pen',act:()=>txModal(id)},
-      {label:'Apagar movimento',icon:'trash',act:()=>delTx(id)}]:[]);}
-  if(k==='ct'){const c=contract(id);if(!c)return;
-    const ok=podeEditar(c.propertyId,'contract.add',c);
-    const opts=ok?[{label:'Editar contrato',icon:'pen',act:()=>ctModal(id)}]:[];
-    if(isActive(c)&&pode(c.propertyId,'tx.add'))opts.push({label:'Registar renda',icon:'up',act:()=>txModal(null,'income',c.propertyId,null,id)});
-    opts.push({label:'Gerar contrato em PDF',icon:'pen',act:()=>generateContractPdf(id)});
-    if(ok)opts.push(ctEstado(c)!=='terminado'?{label:'Terminar contrato',icon:'x',act:()=>endContract(id)}:{label:'Reativar contrato',icon:'check',act:()=>reactivateContract(id)},
-      {label:'Apagar contrato',icon:'trash',act:()=>delContract(id)});
-    return lpShow(ctName(c),opts);}
-  if(k==='per'){const kind=a[1],pid=a[2],list=kind==='owner'?db.owners:db.tenants,pp=list.find(x=>x.id===pid);if(!pp)return;
-    const ok=kind==='owner'||podeEditarInquilino(pp);
-    return lpShow(pp.name,ok?[{label:'Editar ficha',icon:'pen',act:()=>personModal(kind,pid)},
-      {label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)}]:[]);}
-  /* Os cartões de visita têm data-lp desde sempre, e o toque longo não fazia
-     nada: vibrava, enchia a barra da espera e acabava em silêncio, porque
-     este ramo não existia. */
-  if(k==='vis'){const v=(db.visits||[]).find(x=>x.id===id);if(!v)return;
-    const opts=podeEditar(v.propertyId,'visit.add',v)?[{label:'Editar visita',icon:'pen',act:()=>visitModal(id)}]:[];
-    visOpcoes(v).forEach(it=>opts.push({label:it.label,icon:it.icon,act:new Function(it.act)}));
-    return lpShow(v.nomes||'Visita',opts);}
-  if(k==='rec'){const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
-    /* com rec.add confirmo e silencio qualquer planeado (o servidor só lhe funde next, until e muted);
-       editar os campos e apagar é só o que eu criei — o alheio que termina ao confirmar apaga-se
-       pelo Confirmar, não por aqui */
-    const hid=(r.tx||{}).propertyId,conf=podeEditar(hid,'rec.add',r,'confirmar'),edita=podeEditar(hid,'rec.add',r),opts=[];
-    if(r.next&&r.next<=today()&&!recusaConfirmar(r))opts.push({label:'Confirmar',icon:'check',act:()=>quickConfirmRec(id)});
-    if(conf)opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)});
-    if(edita)opts.push({label:'Editar',icon:'pen',act:()=>editRec(id)},{label:'Apagar',icon:'trash',act:()=>delRec(id)});
-    return lpShow(r.name,opts);}
-  if(k==='tpl'){const x=(db.templates||[]).find(y=>y.id===id);if(!x)return;
-    return lpShow(x.name,[{label:'Usar modelo',icon:'plus',act:()=>newFromTemplate(id)},{label:'Editar',icon:'pen',act:()=>editTpl(id)},{label:'Apagar',icon:'trash',act:()=>delTpl(id)}]);}
-  if(k==='mort'){const pid=a[1],lid=a[2],p=prop(pid),l=findLoan(p,lid);if(!l)return;
-    const opts=pode(pid,'house.edit')?[{label:'Editar hipoteca',icon:'pen',act:()=>mortModal(pid,lid)}]:[];
-    if(Number(l.outstanding)>0&&!motivoCredito(pid))opts.push({label:'Pagamento de crédito',icon:'bank',act:()=>txModal(null,'loan',pid,null,null,{loanId:lid})},{label:'Amortização',icon:'trend',act:()=>amortModal(pid,lid)});
-    if(pode(pid,'house.edit'))opts.push({label:'Apagar hipoteca',icon:'trash',act:()=>delMortFrom(pid,lid)});
-    return lpShow(loanName(l),opts);}
+  const a=String(v||'').split(':'),f=lpDe(a[0]);
+  if(!f)return;
+  return f(a);
 }
 
+/* ================= AVISO =================
+   O aviso do fundo do ecrã (toast), com o botão opcional que faz o Anular, e a
+   medição que o põe acima do rodapé da janela que estiver aberta. */
+/* op: {rotulo, fn, ms} poe um botao no toast — e a peca que faz o Anular
+   possivel. Sem op, comporta-se exatamente como sempre.
+   Recebe: m — a mensagem a mostrar (texto); op (opcional) — {rotulo, fn, ms}: o texto do botão,
+   o que ele faz ao ser tocado e quanto tempo o aviso fica no ecrã (ms; 2800 por omissão).
+   Devolve: nada — mostra o aviso no fundo do ecrã. */
+function toast(m,op){const t=document.getElementById('toast');
+  t.textContent=m;
+  if(op&&op.rotulo&&op.fn){const b=document.createElement('button');b.type='button';b.className='toastbtn';
+    b.textContent=op.rotulo;b.onclick=()=>{clearTimeout(t._h);t.classList.remove('on');op.fn()};t.appendChild(b)}
+  avisoAcimaDoRodape();
+  t.classList.add('on');clearTimeout(t._h);
+  t._h=setTimeout(()=>t.classList.remove('on'),(op&&op.ms)||2800)}
+
+/* Põe o aviso acima do rodapé da janela que estiver aberta.
+
+   O aviso mora a 22px do fundo, que é exatamente onde o rodapé de um modal
+   está: caía em cima de «Guardar» e «Cancelar» — os botões que se está
+   precisamente a pedir à pessoa para carregar.
+
+   Corre nas duas ordens, e a segunda foi a que faltou à primeira tentativa:
+   o aviso a aparecer com uma janela já aberta, e a janela a abrir com um
+   aviso ainda no ecrã — o aviso fica quase três segundos, e nesses segundos
+   abre-se uma janela por cima. Por isso é chamada também do openModal e do
+   closeModal, e não só daqui.
+
+   A altura é medida e não adivinhada (há rodapés de duas linhas), e é a do
+   rodapé mais alto de todas as janelas abertas: com janelas empilhadas, a de
+   cima é a última.
+   Devolve: nada — escreve a variável --acima no aviso. */
+function avisoAcimaDoRodape(){
+  const t=document.getElementById('toast');
+  if(!t||!t.style||!t.style.setProperty)return;
+  /* Mede-se até ao TOPO do rodapé, e não a altura dele. No telemóvel a folha
+     encosta ao fundo e dá no mesmo; no computador a janela está ao meio do
+     ecrã, e subir só a altura do rodapé deixava o aviso a tapá-lo à mesma —
+     foi o que a cena nova apanhou, com 21px de sobreposição. */
+  const H=window.innerHeight||0;
+  let acima=0;
+  [].slice.call(document.querySelectorAll('.modal.open .foot')).forEach(function(pes){
+    const r=pes.getBoundingClientRect();
+    if(r.height)acima=Math.max(acima,H-r.top);
+  });
+  t.style.setProperty('--acima',acima>0?Math.ceil(acima+12)+'px':'0px');
+}
+/* Mede outra vez quando a folha tiver assentado.
+
+   Uma janela não está no sítio no instante em que abre: no telemóvel entra a
+   deslizar de baixo, e medida aí o rodapé ainda está fora do ecrã — o aviso
+   concluía que não havia rodapé nenhum por cima de quem subir.
+
+   Cheguei a medir sem transform (offsetTop) para não esperar por nada, e
+   estava errado do outro lado: no computador a janela está centrada POR um
+   transform, e ignorá-lo punha o rodapé onde ele nunca esteve. O rect é a
+   única medida verdadeira nos dois sítios — só tem de ser lida depois de a
+   folha parar.
+   Devolve: nada — remede daqui a um pouco mais do que dura a entrada. */
+function avisoQuandoAssentar(){
+  setTimeout(avisoAcimaDoRodape,msDoToken('--medio',200)+120);
+}

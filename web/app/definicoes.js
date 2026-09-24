@@ -1,26 +1,39 @@
 /* ================= DADOS ================= */
+/* O que o «Guardar» (e o Enter) da janela aberta pelo promptModal faz: lê o
+   campo, fecha a janela e entrega o texto ao cb dela. Cada promptModal
+   troca-o, e o botão chama _pm(). É um var de topo para estar na lista dos
+   nomes da app (eventos.js), que fecha no arranque: um window._pm posto
+   dentro da função era recusado pelas ações. */
+var _pm=null;
+/* O «Escolher ficheiro» abre o seletor de ficheiros escondido (#swFile). Era
+   um onclick com document.getElementById('swFile').click(), e o document não
+   é um nome da app: fica fora da gramática das ações (eventos.js). Faz o
+   mesmo, com o mesmo id fixo — sem o elemento, rebenta como rebentava.
+   Recebe: nada.
+   Devolve: nada — abre o seletor de ficheiros do sistema. */
+function swEscolherFicheiro(){document.getElementById('swFile').click()}
 // Devolve: o HTML (texto) da subpágina "Dados": importação do Splitwise,
 // cópias de segurança e o botão de recomeçar.
 function vImport(){
   return `${card('Importar do Splitwise','Despesas partilhadas de uma casa',`
     <div class="hint">No Splitwise: abre o grupo → <b>Export as spreadsheet</b> → guarda o CSV.</div>
-    <div class="toolbar" style="margin:14px 0 0">
-      <input type="file" id="swFile" style="display:none" onchange="swPick(this)">
-      <button class="btn primary" data-toca="camada" onclick="swPasteBox()">Colar o texto do CSV</button>
-      <button class="btn" data-toca="camada" onclick="document.getElementById('swFile').click()">Escolher ficheiro</button></div>
-    <div class="hint" style="margin-top:11px">Se o botão de escolher ficheiro não abrir nada, estás a ver a app fora do telemóvel — usa a opção de colar o texto.</div>
-    ${db.transactions.some(t=>t.batch)?`<div class="divider"></div><button class="btn sm danger" data-toca="dados" data-risco="destroi" onclick="undoImport()">Anular a última importação</button>`:''}`)}
-  <div style="height:14px"></div>
+    <div class="toolbar u-m-14px-0-0">
+      <input type="file" id="swFile" class="u-d-none" data-change="swPick(this)">
+      <button class="btn primary" data-toca="camada" data-click="swPasteBox()">Colar o texto do CSV</button>
+      <button class="btn" data-toca="camada" data-click="swEscolherFicheiro()">Escolher ficheiro</button></div>
+    <div class="hint u-mt-11px">Se o botão de escolher ficheiro não abrir nada, estás a ver a app fora do telemóvel — usa a opção de colar o texto.</div>
+    ${db.transactions.some(t=>t.batch)?`<div class="divider"></div><button class="btn sm danger" data-toca="dados" data-risco="destroi" data-click="undoImport()">Anular a última importação</button>`:''}`)}
+  <div class="u-h-14px"></div>
   ${card('Guardar ficheiros','',`
-    <div class="toolbar" style="margin:0">
-      <button class="btn" data-toca="nada" onclick="exportarSoMeu(driveSave)">Guardar cópia</button>
-      <button class="btn" data-toca="camada" onclick="driveOpen()">Abrir cópia</button>
-      <button class="btn" data-toca="nada" onclick="exportarSoMeu(downloadCsv)">Exportar CSV</button>
-      <button class="btn" data-toca="camada" onclick="bkPasteBox()">Colar cópia</button></div>
-    ${casasDeColaboracao().length?'<div class="hint" style="margin-top:11px">As cópias levam só o que é teu — os imóveis onde colaboras ficam de fora.</div>':''}`)}
-  <div style="height:14px"></div>
-  ${card('Recomeçar','Apaga tudo o que está guardado neste dispositivo',`<button class="btn danger" data-toca="dados" data-risco="destroi" onclick="wipe()">Apagar todos os dados</button>`)}
-  <div class="hint" style="text-align:center;margin-top:18px">Fotos e documentos ficam no dispositivo e não entram na cópia em JSON.</div>`;
+    <div class="toolbar u-m-0">
+      <button class="btn" data-toca="nada" data-click="exportarSoMeu(driveSave)">Guardar cópia</button>
+      <button class="btn" data-toca="camada" data-click="driveOpen()">Abrir cópia</button>
+      <button class="btn" data-toca="nada" data-click="exportarSoMeu(downloadCsv)">Exportar CSV</button>
+      <button class="btn" data-toca="camada" data-click="bkPasteBox()">Colar cópia</button></div>
+    ${casasDeColaboracao().length?'<div class="hint u-mt-11px">As cópias levam só o que é teu — os imóveis onde colaboras ficam de fora.</div>':''}`)}
+  <div class="u-h-14px"></div>
+  ${card('Recomeçar','Apaga tudo o que está guardado neste dispositivo',`<button class="btn danger" data-toca="dados" data-risco="destroi" data-click="wipe()">Apagar todos os dados</button>`)}
+  <div class="hint u-ta-center u-mt-18px">Fotos e documentos ficam no dispositivo e não entram na cópia em JSON.</div>`;
 }
 
 /* Corre uma exportação (cópia de segurança, CSV) sobre a base só com o que é
@@ -39,18 +52,18 @@ function exportarSoMeu(fn){
 /* ================= DEFINIÇÕES ================= */
 // Recebe: title — o título da linha; sub — a linha pequena por baixo; icon — o
 // nome do ícone (para ic); page — a chave da subpágina a abrir com goSet
-// ('defaults', 'cats', 'tags', 'groups', 'filtros' ou 'dados').
+// ('defaults', ou uma de SUBPAGE — as da base e as que a nuvem lhe junta).
 // Devolve: o HTML (texto) de uma linha de navegação das Definições.
-const navRow=(title,sub,icon,page)=>`<div class="card tap" data-toca="ecra" onclick="goSet('${page}')" style="display:flex;align-items:center;gap:13px">
+const navRow=(title,sub,icon,page)=>`<div class="card tap u-d-flex u-ai-center u-g-13px" data-toca="ecra" data-click="goSet('${jsq(page)}')">
   <span class="avatar">${ic(icon,18)}</span>
-  <span style="flex:1;min-width:0"><b style="display:block">${esc(title)}</b><span class="small">${esc(sub)}</span></span>
-  <span style="color:var(--muted);transform:rotate(180deg)">${ic('chev',18)}</span></div>`;
+  <span class="u-fx-1 u-minw-0"><b class="u-d-block">${esc(title)}</b><span class="small">${esc(sub)}</span></span>
+  <span class="u-c-v-muted u-tf-rotate-180deg">${ic('chev',18)}</span></div>`;
 /* Voltar, colado ao topo: nos documentos longos (termos, política) o botão
    dizia "Definições" e desaparecia com o scroll — a meio de 300 linhas não
    havia porta de saída à vista. O do fundo já dizia Voltar; agora dizem o
    mesmo e um deles está sempre presente. */
-const backRow=`<div class="toolbar" style="position:sticky;top:calc(57px + var(--inset-top));z-index:20;background:var(--bg);padding:8px 0;margin:-6px 0 6px">
-  <button class="btn" data-toca="ecra" onclick="goSet('')">${ic('chev',15)} Voltar</button></div>`;
+const backRow=`<div class="toolbar u-pos-sticky u-t-calc-57px-v-inset-top u-z-20 u-bg-v-bg u-p-8px-0 u-m-n6px-0-6px">
+  <button class="btn" data-toca="ecra" data-click="goSet('')">${ic('chev',15)} Voltar</button></div>`;
 
 // Subpágina "Valores por omissão": crescimento das rendas, inflação, horizonte,
 // yield de avaliação e imposto do selo. Cada campo grava logo ao sair (setSet).
@@ -59,24 +72,100 @@ function vDefaults(){
   const s=db.settings;
   return `${card('Projeções','Como rendas e despesas evoluem nos gráficos de futuro',`
     <div class="row3">
-      <label>Aumento anual das rendas (%)<input type="text" inputmode="decimal" value="${dec(s.growth)}" onchange="setSet('growth',num(this.value))"></label>
-      <label>Inflação das despesas (%)<input type="text" inputmode="decimal" value="${dec(s.inflation)}" onchange="setSet('inflation',num(this.value))"></label>
-      <label>Horizonte (anos)<input type="text" inputmode="numeric" value="${s.years}" onchange="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label></div>`)}
-  <div style="height:14px"></div>
+      <label>Aumento anual das rendas (%)<input type="text" inputmode="decimal" value="${dec(s.growth)}" data-change="setSet('growth',numTaxa(this.value))"></label>
+      <label>Inflação das despesas (%)<input type="text" inputmode="decimal" value="${dec(s.inflation)}" data-change="setSet('inflation',numTaxa(this.value))"></label>
+      <label>Horizonte (anos)<input type="text" inputmode="numeric" value="${s.years}" data-change="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label></div>`)}
+  ${servicoLigado('reports')?`<div class="u-h-14px"></div>
   ${card('Avaliação','Usado ao avaliar os imóveis pelo rendimento',`
-    <label>Yield exigido na avaliação (%)<input type="text" inputmode="decimal" value="${dec(s.capTarget)}" onchange="capTargetSet(this.value)"></label>
-    <div class="hint">O resultado anual de cada imóvel dividido por este yield dá o valor por rendimento. Tem de ser maior que zero; em branco volta aos 5 %.</div>`)}
-  <div style="height:14px"></div>
+    <label>Yield exigido na avaliação (%)<input type="text" inputmode="decimal" value="${dec(s.capTarget)}" data-change="capTargetSet(this.value)"></label>
+    <div class="hint">O resultado anual de cada imóvel dividido por este yield dá o valor por rendimento. Tem de ser maior que zero; em branco volta aos 5 %.</div>`)}`:''}
+  <div class="u-h-14px"></div>
   ${card('Crédito à habitação','Usado nas prestações e nos planos das hipotecas',`
-    <label>Imposto do selo sobre juros (%)<input type="text" inputmode="decimal" value="${dec(s.stampPct??4)}" onchange="setSet('stampPct',Math.max(0,num(this.value)))"></label>
+    <label>Imposto do selo sobre juros (%)<input type="text" inputmode="decimal" value="${dec(s.stampPct??4)}" data-change="setSet('stampPct',Math.max(0,numTaxa(this.value)))"></label>
     <div class="hint">Percentagem cobrada sobre os juros de cada prestação. Em Portugal é 4%. As hipotecas com o imposto do selo desligado não são afetadas.</div>`)}`;
 }
+/* A raiz das Definições, como dados. É uma só: a base declara as secções e as
+   linhas dela, e a nuvem acrescenta as suas (linhaDefinicoes) — o perfil e a
+   conta, a ajuda, as perguntas frequentes, as novidades, o aviso legal e a app
+   no telemóvel. Chegou a haver duas: a da base e uma que a nuvem escrevia por
+   cima dela; a da nuvem esqueceu «IRS e dedução» e «Filtros comuns», e a
+   página dos filtros comuns ficou sem porta nenhuma na app a sério.
+   Uma linha é {sec, ordem, page, label, icon, sub} — abre a subpágina page, e
+   sub pode ser uma função, lida a cada pintura — ou {sec, ordem, html}, um
+   cartão inteiro (html é uma função que pode devolver ''). A versão do cartão
+   Sobre é a VERSAO do avisos.js (a primeira entrada, que nunca se escreve à
+   mão); ele só carrega depois da primeira pintura do arranque (index.html), e
+   até lá fica um traço. */
+const DEF_SECCOES=[['conta','Conta'],['aplicacao','Aplicação'],['dados','Dados'],['ajuda','Ajuda'],['sobre','Sobre']];
+const DEF_LINHAS=[
+  {sec:'aplicacao',ordem:10,page:'tema',label:'Tema',icon:'sun',sub:()=>({auto:'Automático',light:'Claro',dark:'Escuro'})[db.settings.theme]||'Automático'},
+  {sec:'aplicacao',ordem:20,page:'defaults',label:'Valores por omissão',icon:'trend',sub:'Aumentos, inflação e imposto do selo'},
+  {sec:'dados',ordem:10,page:'cats',label:'Tipos de movimento',icon:'swap',sub:()=>{const cs=cats(),ci=catsIn();
+    return (Object.keys(cs).length+Object.keys(ci).length)+' categorias · '+sum(Object.keys(cs).map(k=>cs[k].length).concat(Object.keys(ci).map(k=>ci[k].length)))+' subtipos'}},
+  {sec:'dados',ordem:20,page:'irs',label:'IRS e dedução',icon:'file',sub:'Que despesas entram em cada coluna do Anexo F'},
+  {sec:'dados',ordem:30,page:'tags',label:'Etiquetas',icon:'tag',sub:()=>(db.settings.tags||[]).length+' etiquetas'},
+  {sec:'dados',ordem:40,page:'groups',label:'Grupos',icon:'users',sub:()=>(db.groups||[]).length+' grupos'},
+  {sec:'dados',ordem:50,page:'filtros',label:'Filtros comuns',icon:'filter',sub:()=>(db.settings.filters||[]).length+' filtros'},
+  {sec:'dados',ordem:60,page:'dados',label:'Importar e cópias',icon:'down',sub:'Splitwise, cópias de segurança e recomeçar'},
+  {sec:'sobre',ordem:50,html:()=>card('Rendorium','',`<div class="stat"><span>Versão</span><b>${typeof VERSAO!=='undefined'?esc(VERSAO):'—'}</b></div>
+    <div class="stat"><span>Imóveis · contratos</span><b>${db.properties.length} · ${db.contracts.length}</b></div>
+    <div class="stat"><span>Inquilinos · proprietários</span><b>${db.tenants.length} · ${db.owners.length}</b></div>
+    <div class="stat u-b-0"><span>Movimentos</span><b>${db.transactions.length}</b></div>`)},
+];
+/* Acrescenta uma linha à raiz das Definições. É a porta da nuvem (e de quem
+   vier depois): a linha entra na secção dela, pela ordem, sem reescrever a
+   página de ninguém.
+   Recebe: l — {sec, ordem, page, label, icon, sub} ou {sec, ordem, html}.
+   Devolve: nada. */
+function linhaDefinicoes(l){DEF_LINHAS.push(l)}
+/* A raiz das Definições: as secções pela ordem de DEF_SECCOES, cada uma com o
+   título e as linhas pela ordem delas; uma secção sem nada para mostrar não
+   aparece (sem a nuvem, a Conta e a Ajuda).
+   Devolve: o HTML (texto). */
+function raizDasDefinicoes(){
+  const gap='<div class="u-h-10px"></div>';
+  return DEF_SECCOES.map(([id,titulo])=>{
+    const ls=DEF_LINHAS.filter(l=>l.sec===id).sort((a,b)=>a.ordem-b.ordem)
+      .map(l=>l.html?l.html():navRow(l.label,typeof l.sub==='function'?l.sub():l.sub,l.icon,l.page)).filter(Boolean);
+    return ls.length?`<div class="section-title">${esc(titulo)}</div>`+ls.join(gap):'';
+  }).join('');
+}
+/* A subpágina do Tema: claro, escuro ou o do telemóvel. O subtítulo do
+   automático diz o que ele está a resolver agora — sem isso, um browser que
+   não passa a preferência do sistema parece um erro da app —, e quando o
+   browser diz «claro» explica onde se muda no da Samsung. Vale só neste
+   aparelho. Viveu na nuvem, e é da base: o tema não precisa de conta.
+   Devolve: o HTML (texto) da subpágina, sem o Voltar. */
+function vTema() {
+  var t = db.settings.theme;
+  return card('Tema', 'Como a app se apresenta',
+    '<div class="seg c3">' +
+    // o subtítulo do automático diz o que ele está a resolver agora: sem
+    // isso, um browser que não passa a preferência do sistema parece um
+    // erro da app
+    [['auto', 'auto', 'Automático', 'agora: ' + (mq().matches ? 'escuro' : 'claro')],
+      ['light', 'sun', 'Claro', ''], ['dark', 'moon', 'Escuro', '']]
+      .map(function (o) {
+        return '<button type="button" class="opt ' + (t === o[0] ? 'on' : '') + '" data-toca="dados" data-click="setTheme(\'' + o[0] + '\')">' +
+          '<span class="ic">' + ic(o[1], 18) + '</span><b>' + o[2] + '</b>' +
+          (o[3] ? '<small>' + o[3] + '</small>' : '') + '</button>';
+      }).join('') + '</div>' +
+    '<div class="hint u-mt-11px">Vale só neste aparelho.</div>' +
+    (t === 'auto' && !mq().matches
+      ? '<div class="hint u-mt-9px">O automático segue o que o browser diz preferir, e este está a dizer <b>claro</b>. ' +
+        'Se tens o aparelho em escuro, é o browser que não está a passar a preferência. No browser da Samsung há duas opções, ' +
+        'e o modo escuro sozinho pode não chegar: <b>Definições → Visualização e deslocamento de página → Modo escuro</b>, e ' +
+        '<b>Definições → Labs → Usar tema escuro do site</b>. Se mesmo assim ficar em claro, escolhe <b>Escuro</b> aqui — ' +
+        'essa opção não depende do browser e funciona sempre.</div>'
+      : ''));
+}
 /* Vista principal das Definições: com setPage preenchido devolve a subpágina
-   respetiva (com o Voltar colado ao topo); sem ele, o menu — tema, linhas de
-   navegação com contagens e o cartão "Sobre".
-   Devolve: o HTML (texto) do menu ou da subpágina ativa. */
+   respetiva (com o Voltar colado ao topo); sem ele, a raiz
+   (raizDasDefinicoes). A nuvem embrulha esta função só para as subpáginas
+   dela (cloud/partilha.js, cloud/novidades.js).
+   Devolve: o HTML (texto) da raiz ou da subpágina ativa. */
 function vSettings(){
-  const t=db.settings.theme,s=db.settings,cs=cats();
+  if(setPage==='tema')return backRow+vTema();
   if(setPage==='defaults')return backRow+vDefaults();
   if(setPage==='cats')return backRow+vCats();
   if(setPage==='tags')return backRow+vTags();
@@ -84,30 +173,11 @@ function vSettings(){
   if(setPage==='filtros')return backRow+vFiltrosComuns();
   if(setPage==='irs')return backRow+vIrsMapa();
   if(setPage==='dados')return backRow+vImport();
-  return `${card('Tema','Como a app se apresenta',`<div class="seg c3">
-      ${[['auto','auto','Automático','segue o telemóvel'],['light','sun','Claro',''],['dark','moon','Escuro','']]
-        .map(([k,i,l,sb])=>`<button type="button" class="opt ${t===k?'on':''}" data-toca="dados" onclick="setTheme('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b>${sb?`<small>${sb}</small>`:''}</button>`).join('')}</div>`)}
-  <div style="height:14px"></div>
-  ${navRow('Valores por omissão','Projeções, avaliação e imposto do selo','trend','defaults')}
-  <div style="height:14px"></div>
-  ${navRow('Tipos de movimento',(Object.keys(cs).length+Object.keys(catsIn()).length)+' categorias · '+sum(Object.keys(cs).map(k=>cs[k].length).concat(Object.keys(catsIn()).map(k=>catsIn()[k].length)))+' subtipos','swap','cats')}
-  <div style="height:14px"></div>
-  ${navRow('IRS e dedução','Que despesas entram em cada coluna do Anexo F','file','irs')}
-  <div style="height:14px"></div>
-  ${navRow('Etiquetas',(s.tags||[]).length+' etiquetas','tag','tags')}
-  <div style="height:14px"></div>
-  ${navRow('Grupos',(db.groups||[]).length+' grupos','users','groups')}
-  <div style="height:14px"></div>
-  ${navRow('Filtros comuns',(db.settings.filters||[]).length+' filtros','filter','filtros')}
-  <div style="height:14px"></div>
-  ${navRow('Dados','Splitwise, Google Drive e cópias de segurança','down','dados')}
-  <div style="height:14px"></div>
-  ${card('Sobre','',`<div class="stat"><span>Versão</span><b>22</b></div>
-    <div class="stat"><span>Imóveis · contratos</span><b>${db.properties.length} · ${db.contracts.length}</b></div>
-    <div class="stat"><span>Inquilinos · proprietários</span><b>${db.tenants.length} · ${db.owners.length}</b></div>
-    <div class="stat" style="border:0"><span>Movimentos</span><b>${db.transactions.length}</b></div>`)}`;
+  return raizDasDefinicoes();
 }
-/* cada árvore serve um grupo de tipos: receitas (rendas, dívidas recebidas) ou pagamentos (despesas, prestações, dívidas pagas) */
+/* cada árvore serve um grupo de tipos: receitas (rendas, dívidas recebidas) ou pagamentos (despesas, prestações, dívidas pagas)
+   Recebe: tk — a árvore ('cats' ou 'catsIn').
+   Devolve: os movimentos cujo tipo usa essa árvore (array). */
 const treeTx=tk=>db.transactions.filter(t=>treeKey(t.kind)===tk);
 /* Cartão editável de uma árvore de categorias (tk: 'cats' ou 'catsIn'):
    renomear escrevendo no próprio nome, apagar, tirar dos totais (botão €)
@@ -118,22 +188,22 @@ const treeTx=tk=>db.transactions.filter(t=>treeKey(t.kind)===tk);
 function catTree(tk,title,sub){
   const cs=db.settings[tk]||{},txs=treeTx(tk);
   return card(title,sub,`
-    <div class="list" style="gap:9px">${Object.keys(cs).map(k=>`
-      <div class="card" style="padding:12px 13px">
-        <div class="row-between" style="align-items:center">
-          <input value="${esc(k)}" onchange="renameCat('${tk}','${jsq(k)}',this.value)" style="font-weight:650;border:0;padding:4px 0;background:transparent">
-          <div style="display:flex;gap:5px;flex:0 0 auto">
+    <div class="list u-g-9px">${Object.keys(cs).map(k=>`
+      <div class="card u-p-12px-13px">
+        <div class="row-between u-ai-center">
+          <input value="${esc(k)}" class="u-fw-650 u-b-0 u-p-4px-0 u-bg-transparent" data-change="renameCat('${jsq(tk)}','${jsq(k)}',this.value)">
+          <div class="u-d-flex u-g-5px u-fx-0-0-auto">
             <span class="badge grey">${txs.filter(t=>t.category===k).length}</span>
-            <button class="btn sm ${db.settings.exclude[excKey(tk,k)]?'danger':''}" title="Contar (ou não) nos totais" data-toca="dados" onclick="toggleExc('${tk}','${jsq(k)}')">€</button>
-            <button class="btn sm danger" data-toca="dados" data-risco="destroi" onclick="delCat('${tk}','${jsq(k)}')">${ic('trash',14)}</button></div></div>
-        ${db.settings.exclude[excKey(tk,k)]?'<div class="small" style="margin-top:2px"><b class="neg">Fora dos totais</b> — os movimentos ficam na lista mas não somam.</div>':''}
-        <div class="chips">${(cs[k]||[]).map(sb=>{const off=db.settings.exclude[excKey(tk,k,sb)]||db.settings.exclude[excKey(tk,k)];return `<span class="tag grey" style="${off?'opacity:.55':''}">
-          <span data-toca="camada" onclick="renameSub('${tk}','${jsq(k)}','${jsq(sb)}')" style="cursor:pointer;${off?'text-decoration:line-through':''}" title="Mudar o nome">${esc(sb)}</span>
-          <button type="button" data-toca="dados" onclick="toggleExc('${tk}','${jsq(k)}','${jsq(sb)}')" title="Contar (ou não) nos totais" style="font-weight:800;font-size:11px">€</button>
-          <button type="button" data-toca="dados" data-risco="destroi" onclick="delSub('${tk}','${jsq(k)}','${jsq(sb)}')">${ic('x',13)}</button></span>`}).join('')}
-          <button type="button" class="tagadd" data-toca="camada" onclick="addSub('${tk}','${jsq(k)}')">+ subcategoria</button></div>
+            <button class="btn sm ${db.settings.exclude[excKey(tk,k)]?'danger':''}" title="Contar (ou não) nos totais" data-toca="dados" data-click="toggleExc('${jsq(tk)}','${jsq(k)}')">€</button>
+            <button class="btn sm danger" data-toca="dados" data-risco="destroi" data-click="delCat('${jsq(tk)}','${jsq(k)}')">${ic('trash',14)}</button></div></div>
+        ${db.settings.exclude[excKey(tk,k)]?'<div class="small u-mt-2px"><b class="neg">Fora dos totais</b> — os movimentos ficam na lista mas não somam.</div>':''}
+        <div class="chips">${(cs[k]||[]).map(sb=>{const off=db.settings.exclude[excKey(tk,k,sb)]||db.settings.exclude[excKey(tk,k)];return `<span class="tag grey ${off?'u-op-055':''}">
+          <span class="u-cur-pointer ${off?'u-td-line-through':''}" data-toca="camada" data-click="renameSub('${jsq(tk)}','${jsq(k)}','${jsq(sb)}')" title="Mudar o nome">${esc(sb)}</span>
+          <button type="button" class="u-fw-800 u-fs-11px" data-toca="dados" data-click="toggleExc('${jsq(tk)}','${jsq(k)}','${jsq(sb)}')" title="Contar (ou não) nos totais">€</button>
+          <button type="button" data-toca="dados" data-risco="destroi" data-click="delSub('${jsq(tk)}','${jsq(k)}','${jsq(sb)}')">${ic('x',13)}</button></span>`}).join('')}
+          <button type="button" class="tagadd" data-toca="camada" data-click="addSub('${jsq(tk)}','${jsq(k)}')">+ subcategoria</button></div>
       </div>`).join('')}</div>
-    <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" data-toca="camada" onclick="addCat('${tk}')">${ic('plus',15)} Nova categoria</button></div>`);
+    <div class="toolbar u-m-13px-0-0"><button class="btn primary" data-toca="camada" data-click="addCat('${jsq(tk)}')">${ic('plus',15)} Nova categoria</button></div>`);
 }
 // Subpágina "Tipos de movimento": as duas árvores (receitas e pagamentos) em
 // dobras, mais o botão de repor as listas de origem.
@@ -143,8 +213,8 @@ function vCats(){
   return `<div class="form">
     ${fold('catsIn','Receitas',catTree('catsIn','','Rendas, reembolsos e dinheiro recebido de terceiros'),{icon:'up',open:true,summary:n('catsIn')})}
     ${fold('cats','Pagamentos',catTree('cats','','Despesas, prestações e dívidas pagas a terceiros'),{icon:'dn',summary:n('cats')})}</div>`
-    +`<div class="toolbar" style="margin:13px 0 0"><button class="btn" data-toca="dados" data-risco="destroi" onclick="resetCats()">Repor as de origem</button></div>
-  <div class="hint" style="margin-top:14px">O número é quantos movimentos usam a categoria. Apagá-la não apaga movimentos — ficam sem categoria. O botão € tira-a dos totais, sem sair da lista.</div>`;
+    +`<div class="toolbar u-m-13px-0-0"><button class="btn" data-toca="dados" data-risco="destroi" data-click="resetCats()">Repor as de origem</button></div>
+  <div class="hint u-mt-14px">O número é quantos movimentos usam a categoria. Apagá-la não apaga movimentos — ficam sem categoria. O botão € tira-a dos totais, sem sair da lista.</div>`;
 }
 // Subpágina "Etiquetas": cada uma com o número de movimentos que a usam,
 // botão de apagar e botão de criar nova.
@@ -153,14 +223,14 @@ function vTags(){
   const tg=db.settings.tags||[];
   const usage=g=>db.transactions.filter(t=>(t.tags||[]).indexOf(g)>-1).length;
   return `${card('Etiquetas','Marcas livres para cruzares com qualquer categoria',
-    tg.length?`<div class="list" style="gap:8px">${tg.map(g=>`
-      <div class="card" style="padding:11px 13px;display:flex;align-items:center;gap:11px">
-        <span class="tag grey" style="padding:5px 11px">${esc(g)}</span>
+    tg.length?`<div class="list u-g-8px">${tg.map(g=>`
+      <div class="card u-p-11px-13px u-d-flex u-ai-center u-g-11px">
+        <span class="tag grey u-p-5px-11px">${esc(g)}</span>
         <span class="spacer"></span>
         <span class="small">${usage(g)} movimento${usage(g)===1?'':'s'}</span>
-        <button class="btn sm danger" data-toca="dados" data-risco="destroi" onclick="delTag('${jsq(g)}')">${ic('trash',14)}</button></div>`).join('')}</div>`
+        <button class="btn sm danger" data-toca="dados" data-risco="destroi" data-click="delTag('${jsq(g)}')">${ic('trash',14)}</button></div>`).join('')}</div>`
     :`<div class="hint"></div>`)}
-  <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" data-toca="camada" onclick="addTag()">${ic('plus',15)} Nova etiqueta</button></div>`;
+  <div class="toolbar u-m-13px-0-0"><button class="btn primary" data-toca="camada" data-click="addTag()">${ic('plus',15)} Nova etiqueta</button></div>`;
 }
 /* ===== grupos ===== */
 const GKIND={prop:{label:'Imóveis',icon:'building',one:'imóvel'},owner:{label:'Proprietários',icon:'crown',one:'proprietário'},contract:{label:'Contratos',icon:'contract',one:'contrato'}};
@@ -179,16 +249,16 @@ function vGroups(){
   const secs=['prop','owner','contract'].map(kind=>{
     const gs=grpsOf(kind);
     return `<div class="section-title">${GKIND[kind].label}</div>
-      ${gs.length?`<div class="list">${gs.map(g=>`<div class="card tap" data-toca="camada" onclick="groupModal('${kind}','${g.id}')">
-        <div class="row-between" style="align-items:center">
-          <div style="display:flex;gap:11px;align-items:center;min-width:0"><span class="avatar">${ic(GKIND[kind].icon,17)}</span>
-            <div style="min-width:0"><div class="title">${esc(g.name)}</div>
-            <div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.ids.length} ${g.ids.length===1?GKIND[kind].one:GKIND[kind].label.toLowerCase()} · ${esc(g.ids.map(id=>gMemberName(kind,id)).filter(Boolean).join(', '))||'sem membros'}</div></div></div>
-          <span style="color:var(--muted);transform:rotate(180deg);flex:0 0 auto">${ic('chev',17)}</span></div></div>`).join('')}</div>`
+      ${gs.length?`<div class="list">${gs.map(g=>`<div class="card tap" data-toca="camada" data-click="groupModal('${jsq(kind)}','${jsq(g.id)}')">
+        <div class="row-between u-ai-center">
+          <div class="u-d-flex u-g-11px u-ai-center u-minw-0"><span class="avatar">${ic(GKIND[kind].icon,17)}</span>
+            <div class="u-minw-0"><div class="title">${esc(g.name)}</div>
+            <div class="small u-ov-hidden u-to-ellipsis u-ws-nowrap">${g.ids.length} ${g.ids.length===1?GKIND[kind].one:GKIND[kind].label.toLowerCase()} · ${esc(g.ids.map(id=>gMemberName(kind,id)).filter(Boolean).join(', '))||'sem membros'}</div></div></div>
+          <span class="u-c-v-muted u-tf-rotate-180deg u-fx-0-0-auto">${ic('chev',17)}</span></div></div>`).join('')}</div>`
       :`<div class="hint">Ainda não há grupos de ${GKIND[kind].label.toLowerCase()}.</div>`}
-      <div class="toolbar" style="margin:11px 0 0"><button class="btn sm" data-toca="camada" onclick="groupModal('${kind}')">${ic('plus',14)} Novo grupo de ${GKIND[kind].label.toLowerCase()}</button></div>`;
+      <div class="toolbar u-m-11px-0-0"><button class="btn sm" data-toca="camada" data-click="groupModal('${jsq(kind)}')">${ic('plus',14)} Novo grupo de ${GKIND[kind].label.toLowerCase()}</button></div>`;
   }).join('');
-  return secs+`<div class="hint" style="margin-top:16px">Servem de filtro em toda a app. Um movimento atribuído a um grupo de imóveis divide-se por eles.</div>`;
+  return secs+`<div class="hint u-mt-16px">Servem de filtro em toda a app. Um movimento atribuído a um grupo de imóveis divide-se por eles.</div>`;
 }
 let gForm=null;
 /* Abre o modal de criar (só kind) ou editar (com id) um grupo. Trabalha numa
@@ -199,7 +269,7 @@ let gForm=null;
    Devolve: nada — abre o modal. */
 function groupModal(kind,id){
   gForm=normGroup(id?JSON.parse(JSON.stringify(grp(id))):{kind});
-  const m=id?menu('grp',[{label:'Apagar grupo',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delGroup('${id}')`}]):'';
+  const m=id?menu('grp',[{label:'Apagar grupo',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delGroup('${jsq(id)}')`}]):'';
   openModal(id?'Editar grupo':'Novo grupo de '+GKIND[kind].label.toLowerCase(),groupBody(),null,m);
   onSave=()=>{
     gForm.name=val('g_name').trim();
@@ -255,6 +325,12 @@ function delGroup(id){
     save();closeAllModals();render();toast('Grupo apagado.');
   });
 }
+/* O Enter no campo do promptModal vale por Guardar. Era um onkeydown com um
+   if, que fica fora da gramática das ações (eventos.js); a ação passa-lhe o
+   event e ela faz o mesmo, pela mesma ordem.
+   Recebe: ev — o evento de teclado.
+   Devolve: nada — no Enter, trava o comportamento do browser e guarda. */
+function pmTecla(ev){if(ev.key==='Enter'){ev.preventDefault();_pm()}}
 /* Modal genérico de um só campo de texto. Enter equivale a Guardar; o cb só é
    chamado se sobrar texto depois do trim. Foca o campo ao abrir.
    Recebe: title — o título do modal; label — o rótulo do campo; value — o
@@ -262,9 +338,9 @@ function delGroup(id){
    trim) quando se guarda com algo escrito.
    Devolve: nada — abre o modal. */
 function promptModal(title,label,value,cb){
-  openModal(title,`<div class="form"><label>${esc(label)}<input id="pm_v" value="${esc(value||'')}" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();_pm()}"></label></div>`,
-    `<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" onclick="_pm()">Guardar</button>`);
-  window._pm=()=>{const v=val('pm_v').trim();closeModal();if(v)cb(v)};
+  openModal(title,`<div class="form"><label>${esc(label)}<input id="pm_v" value="${esc(value||'')}" autocomplete="off" data-keydown="pmTecla(event)"></label></div>`,
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="_pm()">Guardar</button>`);
+  _pm=()=>{const v=val('pm_v').trim();closeModal();if(v)cb(v)};
   setTimeout(()=>{const e=document.getElementById('pm_v');if(e)e.focus()},50);
 }
 // Pede o nome e cria uma categoria vazia na árvore tk; grava e repinta.
@@ -351,7 +427,7 @@ const irsMapaChaves=()=>{const cs=cats(),l=[];Object.keys(cs).forEach(k=>{l.push
 /* Subpágina «IRS e dedução»: o que o artigo 41.º do CIRS deixa deduzir, e um
    menu por categoria e por subcategoria de pagamentos a dizer em que coluna
    do Anexo F cai. É a regra por omissão: a coluna escolhida na ficha de uma
-   despesa manda sobre isto (auxiliares.js:irsColunaDe).
+   despesa manda sobre isto (irs.js:irsColunaDe).
    Devolve: o HTML (texto) da subpágina. */
 function vIrsMapa(){
   const m=irsMapa(),cs=cats(),chaves=irsMapaChaves();
@@ -361,16 +437,16 @@ function vIrsMapa(){
   const menu=(rotulo,chave,opts)=>`<label>${esc(rotulo)}${sel('irsm_'+chaves.indexOf(chave),m[chave]||'',opts,'setIrsMapa','dados')}</label>`;
   const cartoes=Object.keys(cs).map(k=>card(esc(k),'',`<div class="form">
       ${menu('Coluna do Anexo F',k,optCat)}
-      ${(cs[k]||[]).length?`<div class="flabel" style="margin-top:4px">Subcategorias</div>${cs[k].map(sb=>menu(sb,k+' / '+sb,optSub)).join('')}`:''}</div>`))
-    .join('<div style="height:14px"></div>');
+      ${(cs[k]||[]).length?`<div class="flabel u-mt-4px">Subcategorias</div>${cs[k].map(sb=>menu(sb,k+' / '+sb,optSub)).join('')}`:''}</div>`))
+    .join('<div class="u-h-14px"></div>');
   return `${card('O que o Anexo F deixa deduzir','Artigo 41.º do CIRS, em poucas linhas',`
     <div class="hint">Entra o que pagaste para obter a renda: conservação e manutenção, condomínio, taxas autárquicas, seguros, gestão, água e luz quando são tuas. O IMI e o imposto do selo têm coluna própria.</div>
-    <div class="hint" style="margin-top:8px">Ficam de fora, por lei: os juros e os gastos financeiros do crédito, as depreciações, o mobiliário, os eletrodomésticos e a decoração. Conservar é dedutível; beneficiar — uma cozinha nova, uma remodelação que acrescenta valor — não é.</div>
-    <div class="hint" style="margin-top:8px">Aqui dizes em que coluna cai cada categoria. A subcategoria pode ter regra própria; sem ela, segue a categoria.</div>`)}
-  <div style="height:14px"></div>
+    <div class="hint u-mt-8px">Ficam de fora, por lei: os juros e os gastos financeiros do crédito, as depreciações, o mobiliário, os eletrodomésticos e a decoração. Conservar é dedutível; beneficiar — uma cozinha nova, uma remodelação que acrescenta valor — não é.</div>
+    <div class="hint u-mt-8px">Aqui dizes em que coluna cai cada categoria. A subcategoria pode ter regra própria; sem ela, segue a categoria.</div>`)}
+  <div class="u-h-14px"></div>
   ${cartoes}
-  <div class="toolbar" style="margin:13px 0 0"><button class="btn" data-toca="dados" data-risco="destroi" onclick="resetIrsMapa()">Repor as de origem</button></div>
-  <div class="hint" style="margin-top:14px">A coluna escolhida na ficha de uma despesa manda sobre estas regras — muda-a lá quando um gasto é a exceção. A página Declaração diz quais caíram em «Outros gastos» só por omissão.</div>`;
+  <div class="toolbar u-m-13px-0-0"><button class="btn" data-toca="dados" data-risco="destroi" data-click="resetIrsMapa()">Repor as de origem</button></div>
+  <div class="hint u-mt-14px">A coluna escolhida na ficha de uma despesa manda sobre estas regras — muda-a lá quando um gasto é a exceção. A página Declaração diz quais caíram em «Outros gastos» só por omissão.</div>`;
 }
 /* Grava a coluna do Anexo F de uma categoria ou subcategoria no mapa das
    definições. Vazio apaga a regra: a categoria volta a «Outros gastos», a
@@ -438,15 +514,15 @@ function filtrosComuns(){return db.settings.filters||[]}
 function vFiltrosComuns(){
   const list=filtrosComuns();
   return card('Filtros comuns','Aplicam-se no funil de cada vista',`
-    ${list.length?`<div class="list" style="gap:8px">${list.map(f=>`
-      <div class="card" style="padding:11px 13px"><div class="row-between" style="align-items:center">
-        <div style="min-width:0;cursor:pointer" data-toca="camada" onclick="fcModal('${jsq(f.id)}')">
-          <b style="font-size:14px">${esc(f.name)}</b>
+    ${list.length?`<div class="list u-g-8px">${list.map(f=>`
+      <div class="card u-p-11px-13px"><div class="row-between u-ai-center">
+        <div class="u-minw-0 u-cur-pointer" data-toca="camada" data-click="fcModal('${jsq(f.id)}')">
+          <b class="u-fs-14px">${esc(f.name)}</b>
           <div class="small">${esc(fcResumo(f)||'sem escolhas — aplica-lo limpa os filtros')}</div></div>
-        <button type="button" class="btn sm danger" aria-label="Apagar" style="min-width:40px;min-height:40px" data-toca="dados" data-risco="destroi" onclick="delFiltroComum('${jsq(f.id)}')">${ic('trash',14)}</button>
+        <button type="button" class="btn sm danger u-minw-40px u-minh-40px" aria-label="Apagar" data-toca="dados" data-risco="destroi" data-click="delFiltroComum('${jsq(f.id)}')">${ic('trash',14)}</button>
       </div></div>`).join('')}</div>`
       :'<div class="hint">Ainda não tens nenhum. Um filtro comum guarda um conjunto de escolhas — imóvel, proprietário, tipo, categoria, datas — para aplicares num toque.</div>'}
-    <div class="toolbar" style="margin:13px 0 0"><button class="btn primary" data-toca="camada" onclick="fcModal()">${ic('plus',15)} Novo filtro comum</button></div>`);
+    <div class="toolbar u-m-13px-0-0"><button class="btn primary" data-toca="camada" data-click="fcModal()">${ic('plus',15)} Novo filtro comum</button></div>`);
 }
 
 // Resumo das escolhas de um filtro numa linha, separadas por «·»;
@@ -473,7 +549,7 @@ function fcModal(id){
   const f=filtrosComuns().find(x=>x.id===id);
   fcForm=f?JSON.parse(JSON.stringify(f)):{id:uid(),name:'',kind:'',prop:'',owner:'',cat:'',sub:'',de:'',ate:''};
   openModal(f?'Editar filtro comum':'Novo filtro comum',fcCorpo(),
-    `<button class="btn" data-toca="camada" onclick="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" onclick="fcGuardar()">Guardar</button>`);
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="fcGuardar()">Guardar</button>`);
 }
 /* Corpo do modal do filtro: nome, tipo, imóvel, proprietário, categoria,
    subcategoria e datas. As categorias dependem do tipo escolhido (as dívidas
@@ -487,14 +563,14 @@ function fcCorpo(){
   const catOpts=[{v:'',label:'Todas as categorias'}].concat(Object.keys(tree).map(c=>({v:c,label:c})));
   const subs=fcForm.cat?(tree[fcForm.cat]||[]):[];
   return `<div class="form">
-    <label>Nome <span class="req">*</span><input id="fc_name" value="${esc(fcForm.name)}" placeholder="T2 Lisboa · rendas" autocomplete="off" oninput="fcColher(1)"></label>
+    <label>Nome <span class="req">*</span><input id="fc_name" value="${esc(fcForm.name)}" placeholder="T2 Lisboa · rendas" autocomplete="off" data-input="fcColher(1)"></label>
     <div class="row"><label>Tipo${sel('fc_kind',fcForm.kind,kinds,'fcColher','rascunho')}</label>
       <label>Imóvel${sel('fc_prop',fcForm.prop,props,'fcColher','rascunho')}</label></div>
     <div class="row"><label>Proprietário${sel('fc_owner',fcForm.owner,owners,'fcColher','rascunho')}</label>
       <label>Categoria${sel('fc_cat',fcForm.cat,catOpts,'fcColher','rascunho')}</label></div>
     ${subs.length?`<label>Subcategoria${sel('fc_sub',fcForm.sub,[{v:'',label:'Todas'}].concat(subs.map(x=>({v:x,label:x}))),'fcColher','rascunho')}</label>`:''}
-    <div class="row lado-a-lado"><label>De<input id="fc_de" type="date" value="${fcForm.de||''}" onchange="fcColher()"></label>
-      <label>Até<input id="fc_ate" type="date" value="${fcForm.ate||''}" onchange="fcColher()"></label></div>
+    <div class="row lado-a-lado"><label>De<input id="fc_de" type="date" value="${fcForm.de||''}" data-change="fcColher()"></label>
+      <label>Até<input id="fc_ate" type="date" value="${fcForm.ate||''}" data-change="fcColher()"></label></div>
     <div class="hint">Deixa em branco o que não quiseres fixar. Cada vista aplica só o que lhe diz respeito.</div>
   </div>`;
 }
@@ -543,7 +619,8 @@ function aplicarFiltroComum(id){
   if(tab==='transactions'){
     txFilter=f.kind||'';txProp=f.prop||'';ownerFilter=f.owner||'';
     txCat=f.cat||'';txSub=f.sub||'';txDe=f.de||'';txAte=f.ate||'';
-    txRerender();toast('Filtro «'+f.name+'» aplicado.');return;
+    if(typeof txRerender==='function')txRerender();else render();   // a repintura curta é dos Movimentos
+    toast('Filtro «'+f.name+'» aplicado.');return;
   }
   // vistas de análise e listas: aplica-se o imóvel e o proprietário
   if(tab==='dashboard')dashProp=f.prop||'';

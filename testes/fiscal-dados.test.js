@@ -3,12 +3,13 @@
 // o que é renda, o estado de um contrato perante a AT, se um NIF bate certo e
 // quando acaba «o mês seguinte». Tudo sem browser: é lógica pura sobre o db.
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar, igual } from './arnes.js';
+import { carregarApp, limpar, igual, repor } from './arnes.js';
 
 const app = carregarApp();
 beforeEach(() => limpar(app));
+afterEach(() => repor(app));
 
 describe('o imóvel guarda o que a AT pergunta', () => {
   test('omissões vazias, e o que vem torto é normalizado', () => {

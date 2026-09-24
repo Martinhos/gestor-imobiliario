@@ -241,7 +241,8 @@ describe('os comandos que demoram adiam a resposta', () => {
     assert.match(disc, /const ADIADO = 5;/, 'o tipo que diz «estou a tratar disso»');
     const i = disc.indexOf('function adiar(');
     assert.ok(i > -1, 'o ajudante existe');
-    const corpo = disc.slice(i, disc.indexOf('// Resposta à vista de todos', i));
+    // até ao fim da função (a primeira chaveta na coluna zero depois dela)
+    const corpo = disc.slice(i, disc.indexOf('\n}', i));
     assert.match(corpo, /webhooks\/' \+\s*i\.application_id \+ '\/' \+ i\.token/,
       'pelo webhook da própria interação — o token dela é a credencial');
     assert.match(corpo, /messages\/@original/, 'por cima da mensagem já mandada');

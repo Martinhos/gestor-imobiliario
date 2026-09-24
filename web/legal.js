@@ -31,8 +31,9 @@ window.LEGAL = (function () {
   /* A VERSION é uma CHAVE: é ela que o servidor compara com a TERMS_VERSION
      para saber se alguém já aceitou esta versão, e por isso fica em ISO. O que
      se ESCREVE nos documentos é outra coisa — lê-se como as outras datas da
-     app, em dd/mm/aaaa (a regra vem de auxiliares.js:dPT, que aqui não se pode
-     chamar: este ficheiro é lido pelo service worker, sem a app carregada). */
+     app, em dd/mm/aaaa (a regra vem de formato.js:dPT, que aqui não se pode
+     chamar: este ficheiro é lido também pela página /termos e /privacidade do
+     worker, worker/src/legal-vista.js, sem a app carregada). */
   var DATA = VERSION.slice(8, 10) + '/' + VERSION.slice(5, 7) + '/' + VERSION.slice(0, 4);
 
   // monta a identificação com o que estiver preenchido, sem linhas vazias

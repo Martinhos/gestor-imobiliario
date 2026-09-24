@@ -13,28 +13,82 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { TUDO, carregarTudo } from './arnes.js';
+import { lerDeclaracoes } from '../eslint.config.mjs';
 
 const ler = (rel) => readFileSync(new URL('../web/' + rel, import.meta.url), 'utf8');
 
 const FICHEIROS = TUDO;
 
-/* As declarações de topo de um ficheiro, lidas do texto. Só o que começa na
-   coluna zero: o que está dentro de uma função é local e não colide com nada.
-   Os comentários saem primeiro, com as linhas no sítio, para um exemplo num
-   comentário não contar como declaração.
+/* As declarações de topo de um ficheiro, lidas do texto com a mesma regra do
+   ESLint (eslint.config.mjs:lerDeclaracoes): o que começa na coluna zero, fora
+   de funções, textos e comentários, com TODOS os nomes de uma declaração com
+   vários. A leitura antiga ficava pelo primeiro nome de cada linha — num
+   «let tab='',txFilter='',…» só via o tab, e uma repetição de qualquer dos
+   outros passava calada.
    Recebe: rel — o caminho relativo a web/.
-   Devolve: lista de nomes declarados no topo desse ficheiro. */
+   Devolve: lista de nomes declarados no topo desse ficheiro. O que só se
+   pendura no window (window.x = …) fica de fora: é uma atribuição, e dois
+   ficheiros podem fazê-la de propósito. */
 function declaracoesDeTopo(rel) {
-  const semComentarios = ler(rel)
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    .replace(/^[ \t]*\/\/.*$/gm, '');
-  const nomes = [];
-  for (const linha of semComentarios.split('\n')) {
-    const m = /^(?:var|let|const|function|class|async function)\s+([A-Za-z_$][\w$]*)/.exec(linha);
-    if (m) nomes.push(m[1]);
-  }
-  return nomes;
+  return lerDeclaracoes(ler(rel), 'web/' + rel).filter(([, forma]) => forma !== 'window').map(([nome]) => nome);
 }
+
+describe('a leitura das declarações de topo', () => {
+  // Recebe: src — um bocado de código. Devolve: os nomes que a leitura dá.
+  const nomes = (src) => lerDeclaracoes(src).map(([nome]) => nome);
+
+  test('lê todos os nomes de uma declaração com vários, sem se enganar nas vírgulas de dentro', () => {
+    assert.deepEqual(nomes("let a='x,y',b={p:1,q:[2,3]},c=f(4,5),d=`${g,h}`,e=/,/g,k=(m,n)=>m+n,l;"),
+      ['a', 'b', 'c', 'd', 'e', 'k', 'l']);
+    assert.deepEqual(nomes('let kpiN=0;const KPI_REG={};function f(){}'), ['kpiN', 'KPI_REG', 'f'],
+      'uma segunda instrução de topo na mesma linha também conta');
+    assert.deepEqual(nomes('const A=[1,\n  2],B=3, // um comentário, com vírgula\n  C=4;\nvar D=5'), ['A', 'B', 'C', 'D'],
+      'uma declaração que continua nas linhas seguintes');
+    assert.deepEqual(nomes('const x=1\nfoo(a,b)\nconst y=a\n  ?b:c,z=2'), ['x', 'y', 'z'],
+      'o fim da linha acaba a declaração, a não ser que a expressão continue');
+  });
+
+  test('só o topo: o que está dentro de uma função, de um texto ou de um comentário não conta', () => {
+    assert.deepEqual(nomes('function f(){\nvar dentro=1\n}\nconst t=`\nconst noTexto=1`\n/*\nlet noComentario\n*/\nlet fora=2'),
+      ['f', 't', 'fora']);
+    // lida como regex, a barra de a/2 engolia «2, s=b/» e o s perdia-se
+    assert.deepEqual(nomes('const r=a/2, s=b/2, t=3'), ['r', 's', 't'], 'uma divisão não é uma expressão regular');
+    assert.deepEqual(nomes('const y=a+\n  b,z=2'), ['y', 'z'],
+      'uma linha que acaba num operador continua na de baixo, mesmo que esta comece por um nome');
+    assert.deepEqual(nomes('﻿const a=1'), ['a'], 'o BOM no início do ficheiro não esconde a primeira linha');
+  });
+
+  test('as outras formas de topo: function, class, async e o que se pendura no window', () => {
+    assert.deepEqual(lerDeclaracoes('async function g(){}\nclass K{}\nfunction* h(){}'),
+      [['g', 'function'], ['K', 'class'], ['h', 'function']]);
+    assert.deepEqual(lerDeclaracoes("window.foo=1\nwindow.igual==2\nObject.defineProperty(window,'bar',{})"),
+      [['foo', 'window'], ['bar', 'window']], 'uma comparação com o window não é uma atribuição');
+    assert.deepEqual(lerDeclaracoes('function ação(){}\nclass Situação{}\nwindow.ação=1\nconst preço=1'),
+      [['ação', 'function'], ['Situação', 'class'], ['ação', 'window'], ['preço', 'const']],
+      'os nomes com acentos inteiros, em todas as formas (e não um «a» ou um «Situa» inventados)');
+  });
+
+  // da segunda revisão do lint: cada caso mata uma mutação do leitor que os outros deixavam viva
+  test('os acentos em todas as formas, um nome que só começa por const, a regex depois de return, e um comentário que não prolonga uma declaração', () => {
+    assert.deepEqual(lerDeclaracoes("Object.defineProperty(window,'situação',{})"), [['situação', 'window']],
+      'o nome inteiro, com o acento, também quando se pendura pelo defineProperty');
+    assert.deepEqual(nomes('let a=1;function ação(){}'), ['a', 'ação'],
+      'e numa segunda instrução da mesma linha (e não um «a» inventado)');
+    assert.deepEqual(nomes('constantes.push(1)\nletra=2'), [],
+      'um constantes ou um letra no começo da linha não são um const nem um let');
+    assert.deepEqual(nomes('function f(){return /[(]/.test(x)}'), ['f'],
+      'depois de um return a barra abre uma expressão regular, e o ( lá dentro não abre nada');
+    assert.deepEqual(nomes('const a=1,\n  /* o b */ b=2\n/* já acabou */ f(x),g=3'), ['a', 'b'],
+      'um comentário a meio de uma declaração que continua não a parte, e um comentário depois de ela acabar não a faz continuar');
+  });
+
+  test('rebenta quando perde o fio, em vez de inventar nomes', () => {
+    assert.throws(() => lerDeclaracoes('const a=f(1,2\nconst b=3'), /ficou por fechar/);
+    assert.throws(() => lerDeclaracoes('const {a,b}=o;'), /desestruturação/);
+    assert.throws(() => lerDeclaracoes('const a=(1]'), /«\]» a fechar «\(»/);
+    assert.throws(() => lerDeclaracoes("const a='x\ny'"), /texto sem fim/);
+  });
+});
 
 describe('os nomes globais', () => {
   test('a lista cobre o index.html inteiro, sem repetir ficheiros', () => {

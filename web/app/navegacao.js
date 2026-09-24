@@ -17,7 +17,8 @@ const TABS=[
   {id:'settings',icon:'gear',label:'Definições',sub:'Tema, categorias e etiquetas'}
 ];
 let tab='dashboard',txFilter='',txProp='',txPaid='',txCat='',txSub='',txNoPayer=true,txSearch='',txDe='',txAte='',txSort='date',txDir='desc',repProp='',setPage='';
-const SUBPAGE={cats:{label:'Tipos de movimento',sub:'Como classificas o que entra e sai'},
+const SUBPAGE={tema:{label:'Tema',sub:'Claro, escuro ou o do telemóvel'},
+               cats:{label:'Tipos de movimento',sub:'Como classificas o que entra e sai'},
                filtros:{label:'Filtros comuns',sub:'Define uma vez, aplica em qualquer vista'},
                tags:{label:'Etiquetas',sub:'Para marcar movimentos'},
                groups:{label:'Grupos',sub:'Conjuntos de imóveis, proprietários e contratos'},
@@ -48,29 +49,39 @@ function cntNovo(chave,n){
    grupo que fique vazio desaparece com o título.
    Devolve: nada — reescreve o HTML de #nav e chama buildTabbar. */
 function buildNav(){
-  /* o crachá dos «Planeados» é a mesma afirmação do sino, e espera pelo mesmo
-     (auxiliares.js:sabemosOEstado): antes do primeiro estado do servidor
-     contava rendas já confirmadas noutro aparelho */
-  const late=sabemosOEstado()?recActive().length:0,fora=typeof separadoresEscondidos==='function'?separadoresEscondidos():[];
+  /* os separadores escondidos: os que o cargo não abre e os serviços
+     desligados nesta conta (acessos.js:separadoresEscondidos) */
+  const fora=typeof separadoresEscondidos==='function'?separadoresEscondidos():[];
   document.getElementById('nav').innerHTML=NAV_GROUPS.map(g=>{const ids=g.ids.filter(id=>fora.indexOf(id)<0);if(!ids.length)return '';
     return `<div class="navh">${g.label}</div>`+ids.map(id=>{const t=TABS.find(x=>x.id===id);
-    return `<a class="${t.id===tab?'on':''}" tabindex="0" ${t.id===tab?'aria-current="page"':''} data-toca="ecra" onclick="go('${t.id}')">${ic(t.icon)}<span class="txt">${t.label}</span>${t.id==='recurring'&&late?`<span class="cnt${cntNovo('recurring',late)}" ${recLate().length?'':'style="background:var(--warn)"'}>${late}</span>`:''}</a>`}).join('')}).join('');
-  buildTabbar(late,fora);
+    return `<a class="${t.id===tab?'on':''}" tabindex="0" ${t.id===tab?'aria-current="page"':''} data-toca="ecra" data-click="go('${jsq(t.id)}')">${ic(t.icon)}<span class="txt">${t.label}</span>${crachaHtml(t.id,'gaveta')}</a>`}).join('')}).join('');
+  buildTabbar(fora);
+}
+/* O crachá de um separador, se o serviço dele registou um (os «Planeados»
+   contam os pendentes na gaveta; o «Calendário» mostra o mesmo número só na
+   barra de baixo, onde toma o lugar deles). É o serviço que diz o número, se
+   é de aviso e onde aparece (`so`: 'gaveta' ou 'barra'); a base só pinta — e
+   só pulsa quando o número muda (cntNovo), contado uma vez por sítio.
+   Recebe: id — o separador; onde — 'gaveta' ou 'barra', o sítio que pede.
+   Devolve: o HTML do crachá (string), ou '' sem crachá, com zero, ou fora do sítio dele. */
+function crachaHtml(id,onde){
+  const c=typeof crachaDe==='function'?crachaDe(id):null;
+  if(!c||!c.n||(c.so&&c.so!==onde))return '';
+  return `<span class="cnt${cntNovo(id,c.n)}${c.aviso?' u-bg-v-warn':''}">${c.n}</span>`;
 }
 /* Os quatro destinos quentes, a um toque no telemóvel. A auditoria mediu:
    com tudo atrás da gaveta, qualquer mudança de ecrã custava dois. O
    Calendário tomou o lugar dos Planeados: mostra-os dia a dia (e às
    visitas), e a confirmação rápida continua no cartão da vista geral. */
 const TABBAR=['dashboard','transactions','properties','calendar'];
-// Reconstrói a barra de baixo do telemóvel com os destinos de TABBAR;
-// late é a contagem de planeados pendentes para o crachá.
-// Recebe: late — a contagem de planeados pendentes (número), para o crachá;
-// fora (opcional) — ids de separadores a esconder (os de separadoresEscondidos).
+// Reconstrói a barra de baixo do telemóvel com os destinos de TABBAR; o
+// crachá de cada um vem do serviço que o registou (crachaHtml).
+// Recebe: fora (opcional) — ids de separadores a esconder (os de separadoresEscondidos).
 // Devolve: nada — reescreve o HTML de #tabbar (se o elemento existir).
-function buildTabbar(late,fora){
+function buildTabbar(fora){
   const el=document.getElementById('tabbar');if(!el)return;
   el.innerHTML=TABBAR.filter(id=>(fora||[]).indexOf(id)<0).map(id=>{const t=TABS.find(x=>x.id===id);
-    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} data-toca="ecra" onclick="goBarra('${id}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${id==='calendar'&&late?`<span class="cnt${cntNovo('calendar',late)}">${late}</span>`:''}</a>`}).join('');
+    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} data-toca="ecra" data-click="goBarra('${jsq(id)}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${crachaHtml(id,'barra')}</a>`}).join('');
 }
 // Muda de separador: limpa a subpágina das Definições e o donut, fecha a
 // gaveta, refaz a navegação e repinta, com scroll para o topo.
@@ -105,7 +116,10 @@ function goBarra(id){
    Devolve: nada — redesenha a vista. */
 function go(id){
   const lado=_ladoSep;_ladoSep=0;
-  const pintar=()=>{tab=id;setPage='';donutCat='';closeDrawer();fecharFiltros();_entrar=1;buildNav();render();
+  /* um separador de um serviço desligado nesta conta não abre: diz-se
+     porquê e fica-se onde se está (um atalho antigo, um endereço guardado) */
+  if(typeof separadorLigado==='function'&&!separadorLigado(id)){toast(hintServicoDesligado(servicoDoSeparador(id)));return}
+  const pintar=()=>{tab=id;setPage='';aoMudarDeSeparador();closeDrawer();fecharFiltros();_entrar=1;buildNav();render();
     try{window.scrollTo(0,0)}catch(e){}};
   /* tocar no separador aceso não é uma travessia, é uma repintura — e essa já
      tem o acompanhamento das peças */
@@ -135,13 +149,16 @@ function openDrawer(){if(document.body.classList.contains('open'))return;
   const b=document.querySelector('.burger');if(b)b.setAttribute('aria-expanded','true');
   // o foco entra na gaveta: sem isto, o teclado continuava atrás do véu
   const a=document.querySelector('#nav a');try{if(a)a.focus()}catch(e){}}
-// Fecha os painéis de filtros abertos na vista atual (funil das listas e painel
-// de análise), deitando fora o rascunho; só repinta se algum estava aberto.
-// Devolve: nada — fecha os painéis e repinta quando algum estava aberto.
+/* Abrir a gaveta fecha os painéis de filtros. É o mesmo gesto da mudança de
+   separador, e vai pelo mesmo caminho (vistas.js:fecharFiltros — as listas, o
+   dos movimentos e os de análise, só no estado); eram duas funções com dois
+   nomes a fazer metade cada uma. Aqui só se decide se há que repintar: quando
+   o deste separador estava aberto, que é o que se vê.
+   Devolve: nada — fecha os painéis e repinta quando o do separador atual estava aberto. */
 function closeFilterPanels(){
-  let was=false;
-  if(typeof LFK!=='undefined'&&LFK[tab]&&lf(LFK[tab])._open){lf(LFK[tab])._open=false;lfDraft=null;was=true}
-  if(typeof anaOpen!=='undefined'&&anaOpen[tab]){anaOpen[tab]=false;was=true}
+  const a=analiseDe(tab);
+  const was=!!((LFK[tab]&&lf(LFK[tab])._open)||anaOpen[tab]||(a&&a.aberto&&a.aberto()));
+  fecharFiltros();
   if(was){closePops();render()}
 }
 // Fecha a gaveta se estiver aberta e destrava o scroll do fundo. fromPop marca

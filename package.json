@@ -4,10 +4,11 @@
   "version": "1.0.0",
   "description": "Gestor Imobiliário — PWA multi-utilizador em Cloudflare Workers + D1",
   "scripts": {
+    "prepare": "node scripts/gerar-docs.js",
+    "predev": "node scripts/gerar-docs.js",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "node -e \"console.error('Daqui não se publica: o dev sai por push ao ramo dev, a produção pela promoção para o main (README, Ambientes).'); process.exit(1)\"",
     "db:local": "wrangler d1 migrations apply gestor-imobiliario --local",
-    "db:remote": "wrangler d1 migrations apply gestor-imobiliario --remote",
     "icons": "node scripts/make-icons.js",
     "test": "node --test \"testes/*.test.js\"",
     "test:watch": "node --test --watch \"testes/*.test.js\"",

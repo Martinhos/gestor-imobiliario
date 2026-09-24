@@ -4,14 +4,37 @@
 import { handleApi, recordReport } from './api.js';
 import { mascararTokens } from './lib/relatos.js';
 import { medirPedido, pulsar } from './lib/medidas.js';
+import { CSP_ANEXO, CSP_ESTRITA } from './lib/http.js';
+import { CRON_DIARIO } from './lib/auditoria.js';
+import { limparLimites } from './lib/limites.js';
+import { varrerAnexos } from './files.js';
 import { dailyReport, watchLimits } from './notify.js';
 import { copiar } from './salvaguarda.js';
+import { recursoDePagina } from './paginas-recursos.js';
 
+/* Os dois scripts em linha do web/index.html — a armadilha de erros e a cura
+   do arranque — têm de correr antes de qualquer ficheiro, e por isso não podem
+   sair para um .js. Entram na política pelo sha256 do texto exato entre as
+   etiquetas, com fins de linha LF, que é como o ficheiro vai para produção.
+   Sem o «unsafe-inline» nenhum outro script ou folha em linha corre: o CSS da
+   app vive no web/estilos.css e os eventos em data-click (web/app/eventos.js).
+   O testes/csp.test.js confere que estes hashes continuam a bater com o
+   ficheiro, aqui e no web/_headers, que tem de ficar igual. */
+const HASHES_EM_LINHA = "'sha256-c4UA1V+48Fe1JESBNvW0EoXCeYe6ELM2ka4toVHOtm4=' " +
+  "'sha256-HsQ4A4fIQS7EeV+dfqOKU842TDuuei/KuayNVOc3C4o='";
 // A app não carrega nada de fora, tirando o botão de entrada com Google.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client",
-  "style-src 'self' 'unsafe-inline' https://accounts.google.com",
+  "script-src 'self' " + HASHES_EM_LINHA + " https://accounts.google.com/gsi/client",
+  /* O sha256 não é nosso: é da folha que o botão de entrada com Google injeta
+     na página (accounts.google.com/gsi/client). Sem ele, o browser recusa-a e
+     o botão passa de 72px para 357px de altura — medido —, que é mudar o que a
+     pessoa vê. Um hash é o preço mais baixo: não abre a porta a mais nada, ao
+     contrário do «unsafe-inline». Em troca, é de um terceiro: quando o
+     Google mudar a biblioteca, o hash caduca e o botão volta a crescer. Quem o
+     apanha é o percurso da interface, que falha em qualquer recusa da CSP que
+     não seja das duas conhecidas (testes/ui/percorrer.js:RUIDO_DE_FORA). */
+  "style-src 'self' 'sha256-RU4sU0AaS8IBGZx8XrGt/pa9A5SLA3dQszGeqT5L3Kw=' https://accounts.google.com",
   "img-src 'self' data: blob: https://*.googleusercontent.com",
   "connect-src 'self' https://accounts.google.com",
   "frame-src https://accounts.google.com",
@@ -38,9 +61,15 @@ const SECURITY_HEADERS = {
    do que veio de baixo. A exceção é para apertar, nunca para afrouxar: a
    página que troca a ligação da equipa tem um token no endereço e pede
    'no-referrer', e com um `set` cego ficava com a política geral, que deixa
-   sair a origem. A lista é de valores exactos de propósito — assim uma
+   sair a origem. E um anexo (GET /api/files/:id) vai com a CSP_ANEXO — a
+   geral apertada, mais `sandbox` —, porque é conteúdo de terceiros servido
+   nesta origem. As páginas que o worker escreve (landing, legais, docs,
+   back office, entrada de teste) vão com a CSP_ESTRITA — a geral sem os três
+   hashes: os dois dos scripts em linha da app e o da folha do Google, que
+   nenhuma delas tem nem desenha. A lista é
+   de valores exactos de propósito — assim uma
    rota não consegue afrouxar nada, mesmo por engano. */
-const PODE_APERTAR = { 'Referrer-Policy': ['no-referrer'] };
+const PODE_APERTAR = { 'Referrer-Policy': ['no-referrer'], 'Content-Security-Policy': [CSP_ANEXO, CSP_ESTRITA] };
 
 // Veste uma resposta com os cabeçalhos de segurança antes de sair; só os
 // valores exactos em PODE_APERTAR escapam a ser substituídos. Devolve uma
@@ -65,8 +94,10 @@ export default {
   // uma cópia que deixa de acontecer só dá nas vistas quando é precisa.
   async scheduled(event, env, ctx) {
     // Dois horários. À hora certa olha-se só para os limites, que é barato;
-    // a cópia e o resumo são o trabalho pesado e ficam uma vez por dia.
-    const diario = String(event.cron || '').startsWith('0 9 ');
+    // a cópia e o resumo são o trabalho pesado e ficam uma vez por dia. O
+    // diário reconhece-se pelo horário exato que o wrangler.toml agenda
+    // (CRON_DIARIO) — um teste confere que os dois batem.
+    const diario = event.cron === CRON_DIARIO;
     ctx.waitUntil((async () => {
       /* Cada execução deixa uma linha no op_log. O alarme não é uma linha
          com erro — é a ausência de linhas novas, que era o que ninguém via
@@ -74,6 +105,8 @@ export default {
       const { registarOp } = await import('./lib/auditoria.js');
       if (!diario) {
         try {
+          // os contadores do travão cuja janela acabou (nunca lança)
+          await limparLimites(env);
           await watchLimits(env, ctx);
           await registarOp(env, 'vigia', true);
           /* O batimento para fora, e só depois de a vigia ter corrido: o
@@ -97,6 +130,14 @@ export default {
       } catch (e) {
         await registarOp(env, 'copia', false, String((e && e.message) || e));
         await recordReport(env, ctx, 'infra', 'Cópia de segurança falhou',
+          String((e && e.stack) || (e && e.message) || e).slice(0, 800));
+      }
+      // os anexos que já não pertencem a nada (files.js:varrerAnexos) —
+      // depois da cópia; se falhar, fica um relato e o resumo segue
+      try {
+        await varrerAnexos(env);
+      } catch (e) {
+        await recordReport(env, ctx, 'infra', 'Varredura dos anexos falhou',
           String((e && e.stack) || (e && e.message) || e).slice(0, 800));
       }
       // o resultado é o do envio a sério: um resumo que não chegou a lado
@@ -128,6 +169,16 @@ export default {
 
     const caminho = url.pathname.replace(/^\/|\/$/g, '');
     const naRaiz = url.hostname === 'rendorium.com' || url.hostname === 'www.rendorium.com';
+
+    /* Os CSS e os JavaScript das páginas que o worker escreve, que vão com a
+       CSP_ESTRITA e já não trazem nada em linha (paginas-recursos.js).
+       Antes de tudo: a landing e os documentos legais também os pedem no
+       domínio raiz, onde o resto é reencaminhado para a app. */
+    const recurso = await recursoDePagina(url.pathname, request.method, async () => {
+      const { getEquipa } = await import('./equipa.js');
+      return !!(await getEquipa(env, request));
+    });
+    if (recurso) return harden(recurso);
 
     /* Os documentos legais respondem em QUALQUER endereço. São os mesmos
        documentos em todo o lado, não colidem com nada (a app é uma página só,
@@ -162,10 +213,23 @@ export default {
     }
 
     // Interações do bot do Discord. A autenticação é a assinatura Ed25519
-    // que o Discord envia — não há sessão nem cookies aqui.
+    // que o Discord envia — não há sessão nem cookies aqui. Uma exceção é
+    // tratada como nas outras rotas da API: 500 com relato, em vez de um
+    // erro do worker que o Discord mostra como «esta interação falhou» sem
+    // ninguém saber porquê.
     if (url.pathname === '/api/discord' && request.method === 'POST') {
-      const { handleInteraction } = await import('./discord.js');
-      return handleInteraction(request, env, ctx);
+      try {
+        const { handleInteraction } = await import('./discord.js');
+        return await handleInteraction(request, env, ctx);
+      } catch (e) {
+        console.error('discord', e);
+        ctx.waitUntil(recordReport(env, ctx, 'server', e && e.message,
+          'POST /api/discord\n' + String((e && e.stack) || '').slice(0, 800)));
+        return new Response(JSON.stringify({ error: 'Erro interno do servidor.' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+        });
+      }
     }
 
     /* A ferramenta de equipa. Vive fora da API de quem usa a app e tem a sua

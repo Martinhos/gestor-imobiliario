@@ -94,7 +94,8 @@ MAX_USERS = "2000"
 #
 # Papéis do bot. Cada um aceita ids de pessoa ou ids de cargo do Discord,
 # separados por vírgulas ou espaços — com cargos, entra e sai gente sem tocar
-# nos segredos. Sem nenhum definido, quem tiver acesso ao servidor é admin.
+# nos segredos. Sem nenhum definido, quem tiver acesso ao servidor é master:
+# numa instalação nova, o único que lá chega é quem instalou o bot.
 #   DISCORD_MASTER   · dono: pode tudo, hoje e o que vier a existir
 #   DISCORD_ADMINS   · opera: consumo, cópias, e tudo o que os outros veem
 #   DISCORD_DEVS     · constrói: erros da app e do servidor, infra, segurança

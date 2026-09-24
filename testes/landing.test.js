@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { paginaLanding } from '../worker/src/landing.js';
+import { paginaLanding, CSS_LANDING } from '../worker/src/landing.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const raiz = (p) => path.join(AQUI, '..', p);
@@ -19,6 +19,9 @@ const raiz = (p) => path.join(AQUI, '..', p);
    pré-visualização, com noindex e sem og — testado mais abaixo. */
 const resposta = paginaLanding({ raiz: true });
 const html = await resposta.text();
+/* Os estilos vivem à parte, em /paginas/landing.css: a página vai com a
+   CSP_ESTRITA, que não aplica um <style> escrito dentro do HTML. */
+const css = CSS_LANDING;
 
 describe('a página de entrada', () => {
   test('sai como HTML, em cache, e sem restos de template', () => {
@@ -109,9 +112,10 @@ describe('a página de entrada', () => {
   /* A página tem mais de quatro mil pixéis: a marca e a porta de entrada não
      podem ficar lá em cima. O tratamento é o mesmo do cabeçalho da app. */
   test('o cabeçalho acompanha o scroll', () => {
-    assert.match(html, /\.faixa-topo\{position:sticky;top:0/, 'cola ao topo');
-    assert.match(html, /backdrop-filter:blur\(12px\)/, 'com o mesmo vidro da app');
-    assert.match(html, /--blur:/, 'e o token que o pinta');
+    assert.match(css, /\.faixa-topo\{position:sticky;top:0/, 'cola ao topo');
+    assert.match(css, /backdrop-filter:blur\(12px\)/, 'com o mesmo vidro da app');
+    assert.match(css, /--blur:/, 'e o token que o pinta');
+    assert.match(html, /<link rel="stylesheet" href="\/paginas\/landing\.css">/, 'a folha que o traz');
     assert.match(html, /<div class="faixa-topo">/, 'e a faixa envolve mesmo a marca');
   });
 
@@ -121,27 +125,26 @@ describe('a página de entrada', () => {
      scroll vivem atrás de @supports, para um motor sem animation-timeline
      mostrar a página feita. */
   test('a página anima sem esconder nada a ninguém', () => {
-    assert.match(html, /@keyframes sobe\{from\{opacity:0;transform:translateY\(16px\)\}\}/,
+    assert.match(css, /@keyframes sobe\{from\{opacity:0;transform:translateY\(16px\)\}\}/,
       'uma entrada só, em transform/opacity');
-    assert.match(html, /\.hero h1\{animation:sobe var\(--entrada\) var\(--curva-entra\) backwards\}/,
+    assert.match(css, /\.hero h1\{animation:sobe var\(--entrada\) var\(--curva-entra\) backwards\}/,
       'o hero entra pela curva de quem atravessa distância');
-    assert.match(html, /\.hero \.telemovel\{animation:sobe [^}]*backwards\}/,
+    assert.match(css, /\.hero \.telemovel\{animation:sobe [^}]*backwards\}/,
       'a captura entra com ele');
-    assert.match(html, /\.hero \.sub\{animation:sobe [^}]*\.07s backwards\}/,
+    assert.match(css, /\.hero \.sub\{animation:sobe [^}]*\.07s backwards\}/,
       'e a chegada é escalonada, não em bloco');
-    assert.match(html, /@supports \(animation-timeline: view\(\)\)/,
+    assert.match(css, /@supports \(animation-timeline: view\(\)\)/,
       'as revelações ao scroll estão atrás de @supports');
-    assert.match(html, /animation-range:entry 8% entry 42%/, 'e presas à entrada no ecrã');
+    assert.match(css, /animation-range:entry 8% entry 42%/, 'e presas à entrada no ecrã');
     /* os degraus da grelha seguem as colunas que existem: o padrão de três
        aplicado a duas colunas punha o cartão da direita a entrar antes do
        da esquerda — ordem de leitura invertida na largura de um tablet */
-    assert.match(html, /@media\(min-width:620px\) and \(max-width:939px\)\{\s*\.grelha \.cartao:nth-child\(2n\)/,
+    assert.match(css, /@media\(min-width:620px\) and \(max-width:939px\)\{\s*\.grelha \.cartao:nth-child\(2n\)/,
       'a duas colunas, o degrau é de dois');
-    assert.match(html, /@media\(min-width:940px\)\{\s*\.grelha \.cartao:nth-child\(3n\+2\)/,
+    assert.match(css, /@media\(min-width:940px\)\{\s*\.grelha \.cartao:nth-child\(3n\+2\)/,
       'a três colunas, de três');
-    assert.match(html, /@supports \(animation-timeline: scroll\(\)\)/,
+    assert.match(css, /@supports \(animation-timeline: scroll\(\)\)/,
       'a risca do cabeçalho também');
-    const css = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
     assert.ok(!/transition:[^}]*box-shadow/.test(css),
       'a sombra do hover anima por opacity num ::after, não por box-shadow (repaint)');
     const semKeyframes = css.replace(/@keyframes [\s\S]*?\}\}/g, '');
@@ -160,7 +163,7 @@ describe('a página de entrada', () => {
      pelo scroll: também é só cor, e por isso o override antigo do
      border-bottom-color deixou de ser preciso. */
   test('quem pediu menos movimento recebe fundidos, não deslocações', () => {
-    const bloco = /@media\(prefers-reduced-motion:reduce\)\{([\s\S]*?)\n\}/.exec(html);
+    const bloco = /@media\(prefers-reduced-motion:reduce\)\{([\s\S]*?)\n\}/.exec(css);
     assert.ok(bloco, 'o recuo de menos movimento existe');
     assert.match(bloco[1], /@keyframes sobe\{from\{opacity:0\}\}/,
       'as entradas passam a fundido de opacidade');
@@ -172,14 +175,14 @@ describe('a página de entrada', () => {
   });
 
   test('o vidro tem recuo, e o hover que mexe só existe com rato', () => {
-    assert.match(html, /-webkit-backdrop-filter:blur\(12px\) saturate\(140%\)/,
+    assert.match(css, /-webkit-backdrop-filter:blur\(12px\) saturate\(140%\)/,
       'o prefixo que o iOS antigo lê');
-    assert.match(html, /@media\(prefers-reduced-transparency:reduce\)/, 'o recuo do vidro');
-    assert.match(html, /@media\(prefers-contrast:more\)/, 'e o do contraste');
-    assert.match(html, /@media\(hover:hover\) and \(pointer:fine\)/, 'o portão do rato');
+    assert.match(css, /@media\(prefers-reduced-transparency:reduce\)/, 'o recuo do vidro');
+    assert.match(css, /@media\(prefers-contrast:more\)/, 'e o do contraste');
+    assert.match(css, /@media\(hover:hover\) and \(pointer:fine\)/, 'o portão do rato');
     /* fora do portão, um hover só pode mudar cor: num ecrã de dedo, o toque
        deixava um botão «levantado» até alguém tocar noutro sítio */
-    const semPortao = html.replace(/@media\(hover:hover\) and \(pointer:fine\)\{[\s\S]*?\n\}/g, '');
+    const semPortao = css.replace(/@media\(hover:hover\) and \(pointer:fine\)\{[\s\S]*?\n\}/g, '');
     assert.ok(!/:hover\{[^}]*(?:transform|box-shadow)/.test(semPortao),
       'nenhum hover fora do portão levanta nem sombreia');
   });

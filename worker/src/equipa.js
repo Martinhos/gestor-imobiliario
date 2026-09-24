@@ -16,9 +16,15 @@
 
 import { json, err } from './lib/http.js';
 import { auditar } from './lib/auditoria.js';
+import { papeisDe } from './lib/papeis.js';
+import { cargosDoMembro } from './lib/bot.js';
 
 const BILHETE_TTL = 300;          // 5 minutos para usar a ligação
 const SESSAO_TTL = 8 * 3600;      // 8 horas de sessão, um dia de trabalho
+const INTERVALO_PAPEIS = 15 * 60 * 1000;    // de quanto em quanto se voltam a perguntar os cargos
+const GRAVAR_VERIFICACAO = 60 * 60 * 1000;  // e de quanto em quanto isso se escreve no KV, se nada mudou
+// As verificações que este isolate já fez, token → quando: poupam o KV (ver reverPapeis).
+const verificadas = new Map();
 export const COOKIE = 'gi_equipa';
 
 // 32 bytes de aleatório criptográfico em hexadecimal (64 caracteres):
@@ -30,16 +36,19 @@ function novoToken() {
   return [...a].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/* Um bilhete de uso único, criado a pedido do bot. Guarda quem é e que papel
-   tinha no momento — o papel volta a ser verificado quando a sessão é usada,
-   mas isto deixa o registo do que se passou.
+/* Um bilhete de uso único, criado a pedido do bot. Guarda quem é, que papéis
+   tinha no momento e em que servidor de Discord correu o comando: os papéis
+   voltam a ser perguntados a esse servidor enquanto a sessão dura (ver
+   getEquipa), e isto deixa o registo do que se passou.
 
    Vive na base e não no KV, ao contrário da sessão que dele nasce. É a
    única coisa aqui que se escreve num sítio e se lê noutro: o bot é
    atendido perto do Discord e o clique perto de quem clica. O KV leva algum
    tempo a concordar consigo próprio entre regiões, e nesse intervalo uma
    ligação acabada de criar não existe para quem a abre.
-   Recebe: env — o ambiente do worker (usa env.DB); quem — {discordId, nome, papel, papeis?}, vindo do bot.
+   Recebe: env — o ambiente do worker (usa env.DB); quem — {discordId, nome,
+   papel, papeis?, guildId?}, vindo do bot (guildId é o servidor onde o
+   comando foi corrido).
    Devolve: {token, expiraEm} — o token do bilhete e a validade em segundos. */
 export async function criarBilhete(env, quem) {
   const t = novoToken();
@@ -51,6 +60,7 @@ export async function criarBilhete(env, quem) {
     nome: quem.nome,
     papel: quem.papel,
     papeis: quem.papeis || [quem.papel],   // dois cargos somam, como no bot
+    guildId: quem.guildId || null,
   }), agora, agora + BILHETE_TTL * 1000).run();
 
   // as que já não servem a ninguém não têm de ficar cá para sempre
@@ -110,19 +120,84 @@ function lerCookie(request, nome) {
 
 /* Quem está a usar a ferramenta de equipa, ou null.
    Só lê o cookie da equipa: uma sessão de cliente nunca dá acesso a isto.
-   Recebe: env — o ambiente do worker (usa env.SESSIONS); request — o pedido, de onde sai o cookie.
-   Devolve: a sessão {token, discordId, nome, papel, papeis, desde} ou null. */
+
+   Os papéis não ficam os da entrada durante as oito horas. Passado
+   INTERVALO_PAPEIS desde a última verificação, voltam a ser perguntados ao
+   Discord, com o token do bot, no servidor onde o /entrar foi corrido: tirar
+   o cargo a alguém — que é como se gerem os acessos — tira-lhe o back office
+   no pedido seguinte a esse intervalo, e quem saiu do servidor também sai
+   daqui. Um Discord que não responde não tranca a equipa fora: vale o que se
+   sabia, e volta-se a perguntar um minuto depois. Uma sessão sem servidor
+   guardado (das de antes disto) ou um worker sem token do bot não têm a quem
+   perguntar, e valem até expirar.
+   Recebe: env — o ambiente do worker (usa env.SESSIONS; para a verificação,
+   DISCORD_BOT_TOKEN, as listas DISCORD_* e env.DB para o rasto); request — o
+   pedido, de onde sai o cookie.
+   Devolve: promessa da sessão {token, discordId, nome, papel, papeis, desde,
+   guildId, verificadoEm}, ou de null. */
 export async function getEquipa(env, request) {
   const t = lerCookie(request, COOKIE);
   if (!t) return null;
+  let s;
   try {
     const raw = await env.SESSIONS.get('equipa:' + t);
     if (!raw) return null;
-    const s = JSON.parse(raw);
-    return { token: t, ...s };
+    s = JSON.parse(raw);
   } catch (e) {
     return null;
   }
+  const visto = Math.max(s.verificadoEm || s.desde || 0, verificadas.get(t) || 0);
+  if (Date.now() - visto >= INTERVALO_PAPEIS) {
+    s = await reverPapeis(env, t, s);
+    if (!s) return null;
+  }
+  return { token: t, ...s };
+}
+
+/* Pergunta ao Discord os cargos de quem tem esta sessão, e decide o que ela
+   vale agora (a razão está no getEquipa).
+
+   O custo conta, porque o KV dá mil escritas por dia e é o tecto mais
+   apertado do plano: a verificação fica lembrada neste isolate (verificadas)
+   e só se escreve no KV quando os papéis mudam ou uma vez por hora — uma
+   equipa de cinco num dia inteiro são umas quarenta escritas. Ao Discord
+   vai uma pergunta por sessão a cada INTERVALO_PAPEIS.
+   Recebe: env — o ambiente do worker; token — o token da sessão; s — a
+   sessão, tal como está no KV.
+   Devolve: promessa da sessão com os papéis de agora (a mesma, se não houve
+   a quem perguntar ou o Discord não respondeu), ou de null quando a pessoa
+   ficou sem papel — e aí a sessão já foi apagada e o rasto escrito. */
+async function reverPapeis(env, token, s) {
+  const agora = Date.now();
+  if (verificadas.size > 500) verificadas.clear();   // um teto, para o mapa não crescer sem fim
+  const c = await cargosDoMembro(env, s.guildId, s.discordId);
+  if (!c) {
+    // sem a quem perguntar, ou sem resposta: vale o que se sabia, e tenta-se daqui a um minuto
+    verificadas.set(token, agora - INTERVALO_PAPEIS + 60000);
+    return s;
+  }
+  const antes = s.papeis || [s.papel];
+  const papeis = c.saiu ? [] : papeisDe(env, { member: { user: { id: s.discordId }, roles: c.cargos } });
+  if (!papeis.length) {
+    verificadas.delete(token);
+    await env.SESSIONS.delete('equipa:' + token);
+    await auditar(env, { discordId: s.discordId, nome: s.nome, papeis: antes }, 'equipa.sair', null,
+      c.saiu ? 'saiu do servidor de Discord: sessão terminada' : 'ficou sem cargo no Discord: sessão terminada');
+    return null;
+  }
+  verificadas.set(token, agora);
+  const nova = Object.assign({}, s, { papeis, papel: papeis[0] });
+  const mudou = antes.join(',') !== papeis.join(',');
+  if (mudou || agora - (s.verificadoEm || s.desde || 0) >= GRAVAR_VERIFICACAO) {
+    nova.verificadoEm = agora;
+    const resta = Math.floor(((s.desde || agora) + SESSAO_TTL * 1000 - agora) / 1000);
+    if (resta >= 60) await env.SESSIONS.put('equipa:' + token, JSON.stringify(nova), { expirationTtl: resta });
+  }
+  if (mudou) {
+    await auditar(env, { discordId: s.discordId, nome: s.nome, papeis }, 'equipa.papeis', null,
+      antes.join(' + ') + ' → ' + papeis.join(' + '));
+  }
+  return nova;
 }
 
 /* As rotas de entrar e sair da ferramenta de equipa. Devolve a Response, ou
@@ -172,9 +247,12 @@ export async function rotasEquipa(c) {
     await auditar(env, { discordId: b.discordId, nome: b.nome, papeis: b.papeis || [b.papel] },
       'equipa.entrar', null, null);
     const sessao = novoToken();
+    const agora = Date.now();
     await env.SESSIONS.put('equipa:' + sessao, JSON.stringify({
       discordId: b.discordId, nome: b.nome, papel: b.papel,
-      papeis: b.papeis || [b.papel], desde: Date.now(),
+      papeis: b.papeis || [b.papel], desde: agora,
+      // os papéis do bilhete vieram do Discord há menos de cinco minutos
+      guildId: b.guildId || null, verificadoEm: agora,
     }), { expirationTtl: SESSAO_TTL });
 
     return new Response(null, {

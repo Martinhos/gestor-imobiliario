@@ -53,11 +53,14 @@ function notifPartilha(desde){
     out.push({tipo,at,ir,titulo:rotulo+(nome?' — '+nome:''),
       sub:notifNome(x._author)+(casa?' · '+casa:'')+' · '+new Date(at).toLocaleDateString('pt-PT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})});
   };
-  (db.transactions||[]).forEach(t=>poe('mov','Movimento',t.label||t.category||'',t,"go('transactions')"));
-  (db.recurring||[]).forEach(r=>poe('rec','Planeado',r.name||'',r,"go('recurring')"));
-  (db.contracts||[]).forEach(c=>poe('ct','Contrato',c.name||'',c,"go('contracts')"));
-  (db.visits||[]).forEach(v=>poe('vis','Visita',v.nomes||'',v,"go('visits')"));
-  (db.tenants||[]).forEach(t=>poe('pes','Ficha de inquilino',t.name||'',t,"go('tenants')"));
+  /* cada linha é de um serviço: com ele desligado nesta conta não há registos
+     dele (o servidor não os manda), e mesmo que sobrasse algum no aparelho não
+     se oferece um toque para um separador que não abre */
+  if(servicoLigado('transactions'))(db.transactions||[]).forEach(t=>poe('mov','Movimento',t.label||t.category||'',t,"go('transactions')"));
+  if(servicoLigado('recurring'))(db.recurring||[]).forEach(r=>poe('rec','Planeado',r.name||'',r,"go('recurring')"));
+  if(servicoLigado('contracts'))(db.contracts||[]).forEach(c=>poe('ct','Contrato',c.name||'',c,"go('contracts')"));
+  if(servicoLigado('visits'))(db.visits||[]).forEach(v=>poe('vis','Visita',v.nomes||'',v,"go('visits')"));
+  if(servicoLigado('tenants'))(db.tenants||[]).forEach(t=>poe('pes','Ficha de inquilino',t.name||'',t,"go('tenants')"));
   return out.sort((a,b)=>b.at-a.at).slice(0,40);
 }
 
@@ -67,7 +70,7 @@ function notifPartilha(desde){
    muda decisões.
    Devolve: o número para o crachá do sino (inteiro). */
 function notifConta(){
-  return (typeof recLate==='function'?recLate().length:0)+notifPartilha().length+notifPedidos().length;
+  return (servicoLigado('recurring')?recLate().length:0)+notifPartilha().length+notifPedidos().length;
 }
 
 /* O sino do cabeçalho da vista geral, com o crachá quando há novidades.
@@ -75,11 +78,31 @@ function notifConta(){
 function notifSino(){
   const b=document.getElementById('hdrBell');if(!b)return;
   if(tab!=='dashboard'){b.style.display='none';return}
-  /* O crachá espera por saber (auxiliares.js:sabemosOEstado): um número
+  /* O crachá espera por saber (espera.js:sabemosOEstado): um número
      errado durante um segundo é pior do que nenhum. */
   const n=sabemosOEstado()?notifConta():0;
   b.style.display='';
   b.innerHTML=ic('bell',16)+(n?`<span class="cnt${cntNovo('sino',n)}">${n>9?'9+':n}</span>`:'');
+}
+
+/* Aceitar um pedido de partilha, a partir do sino. Fecha o modal primeiro (o
+   render() não fecha janelas, e o cartão ficava lá com os botões a repetir o
+   pedido já respondido) e só depois pede à nuvem, se ela estiver carregada.
+   Vive numa função com nome porque uma ação declarada não lê propriedades do
+   window (`window.CW&&…` fica fora da gramática do eventos.js); faz
+   exatamente o que o toque fazia, pela mesma ordem.
+   Recebe: id — o id do pedido de partilha.
+   Devolve: nada — fecha o modal e chama o CW.pedidoAceitar. */
+function notifPedidoAceitar(id){
+  closeModal();window.CW&&CW.pedidoAceitar&&CW.pedidoAceitar(id);
+}
+
+/* Recusar um pedido de partilha, a partir do sino. O par do notifPedidoAceitar,
+   com a mesma ordem: fechar o modal e depois responder.
+   Recebe: id — o id do pedido de partilha.
+   Devolve: nada — fecha o modal e chama o CW.pedidoRecusar. */
+function notifPedidoRecusar(id){
+  closeModal();window.CW&&CW.pedidoRecusar&&CW.pedidoRecusar(id);
 }
 
 /* O modal das notificações: as quatro fontes em secções, cada linha a levar
@@ -87,24 +110,26 @@ function notifSino(){
    coisas novas (a marca sincroniza entre aparelhos).
    Devolve: nada — abre o modal da casa com as listas. */
 function notifModal(){
-  const atrasados=typeof recLate==='function'?recLate():[];
-  const pendentes=(typeof recActive==='function'?recActive():[]).filter(r=>!recIsLate(r));
-  const prazos=typeof prazosAtivos==='function'?prazosAtivos().slice(0,6):[];
+  /* os planeados são dos Planeados (servicoLigado); os prazos são da base e estão sempre */
+  const atrasados=servicoLigado('recurring')?recLate():[];
+  const pendentes=(servicoLigado('recurring')?recActive():[]).filter(r=>!recIsLate(r));
+  const prazos=prazosAtivos().slice(0,6);
   const partilha=notifPartilha(),pedidos=notifPedidos();
-  const linha=(titulo,sub,ir,cls)=>`<div class="card tap" style="padding:10px 13px" onclick="closeModal();${ir}">
-    <div class="row-between" style="align-items:center;gap:8px"><div style="min-width:0">
-      <b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(titulo)}</b>
-      <span class="small">${esc(sub)}</span></div>${cls?`<span class="badge ${cls}" style="flex:0 0 auto">!</span>`:''}</div></div>`;
+  const linha=(titulo,sub,ir,cls)=>`<div class="card tap u-p-10px-13px" data-click="closeModal();${ir}">
+    <div class="row-between u-ai-center u-g-8px"><div class="u-minw-0">
+      <b class="u-d-block u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(titulo)}</b>
+      <span class="small">${esc(sub)}</span></div>${cls?`<span class="badge ${cls} u-fx-0-0-auto">!</span>`:''}</div></div>`;
   /* um pedido de partilha responde-se aqui mesmo: a nuvem define CW.pedidoAceitar(id)
-     e CW.pedidoRecusar(id). O modal fecha-se primeiro — o render() não fecha
-     janelas, e o cartão ficava lá com os botões a repetir o pedido já respondido */
-  const pedido=n=>`<div class="card" style="padding:10px 13px">
-    <b style="display:block">${esc(n.titulo)}</b><span class="small">${esc(n.sub)}</span>
-    <div class="toolbar" style="margin:9px 0 0">
-      <button class="btn sm primary" data-toca="dados" onclick="closeModal();window.CW&&CW.pedidoAceitar&&CW.pedidoAceitar('${jsq(n.id)}')">Aceitar</button>
-      <button class="btn sm" data-toca="dados" onclick="closeModal();window.CW&&CW.pedidoRecusar&&CW.pedidoRecusar('${jsq(n.id)}')">Recusar</button></div></div>`;
+     e CW.pedidoRecusar(id), e o notifPedidoAceitar/notifPedidoRecusar (acima)
+     chamam-nas. O modal fecha-se primeiro — o render() não fecha janelas, e o
+     cartão ficava lá com os botões a repetir o pedido já respondido */
+  const pedido=n=>`<div class="card u-p-10px-13px">
+    <b class="u-d-block">${esc(n.titulo)}</b><span class="small">${esc(n.sub)}</span>
+    <div class="toolbar u-m-9px-0-0">
+      <button class="btn sm primary" data-toca="dados" data-click="notifPedidoAceitar('${jsq(n.id)}')">Aceitar</button>
+      <button class="btn sm" data-toca="dados" data-click="notifPedidoRecusar('${jsq(n.id)}')">Recusar</button></div></div>`;
   const bloco=(titulo,linhas)=>linhas.length?`<div class="navh">${titulo}</div>${linhas.join('')}`:'';
-  const corpo=`<div class="list" style="gap:8px">
+  const corpo=`<div class="list u-g-8px">
     ${bloco('Pedidos de partilha',pedidos.map(pedido))}
     ${bloco('Em atraso',atrasados.map(r=>linha(r.name,'devia ter sido confirmado a '+dPT(r.next)+(r.tx.amount?' · '+euro2(r.tx.amount):''),"go('recurring')",'red')))}
     ${bloco('Por confirmar',pendentes.slice(0,6).map(r=>linha(r.name,dPT(r.next)+(r.tx.amount?' · '+euro2(r.tx.amount):''),"go('recurring')")))}
@@ -113,8 +138,8 @@ function notifModal(){
     ${!atrasados.length&&!pendentes.length&&!prazos.length&&!partilha.length&&!pedidos.length?'<div class="empty">Tudo em dia — nada a pedir atenção.</div>':''}
   </div>`;
   openModal('Notificações',corpo,
-    `<button class="btn" data-toca="camada" onclick="closeModal()">Fechar</button>`+
-    (partilha.length?`<button class="btn primary" data-toca="dados" onclick="notifLido()">Marcar tudo como lido</button>`:''));
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`+
+    (partilha.length?`<button class="btn primary" data-toca="dados" data-click="notifLido()">Marcar tudo como lido</button>`:''));
 }
 
 /* Marca a atividade partilhada como lida até agora: a marca vive nas

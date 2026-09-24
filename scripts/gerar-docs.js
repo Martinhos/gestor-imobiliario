@@ -5,18 +5,24 @@
 // guião junta tudo por FUNCIONALIDADE (não por pasta): o cabeçalho de cada
 // ficheiro, a assinatura de cada função com a documentação adjacente, os
 // comandos do Discord com quem os pode correr, as regras de design
-// (docs/design.md) e as armadilhas conhecidas (docs/armadilhas.md).
+// (docs/design.md), o diário das decisões (docs/decisoes.md) e as
+// armadilhas conhecidas (docs/armadilhas.md).
 // Escreve worker/src/docs-gerados.js, que o worker
 // serve em /equipa/docs — com gaveta de navegação e pesquisa.
 //
-// Corre no deploy (a página nunca fica atrás do código) e o resultado vai
-// no repositório, para o wrangler local e os testes terem sempre o módulo.
+// O resultado NÃO vai no repositório (.gitignore): era um diff de centenas de
+// KB a cada corrida dos testes, e a cópia versionada nunca foi a autoridade.
+// Gera-se onde é lido — o wrangler não arranca sem ele: no deploy (a página
+// nunca fica atrás do código), no `npm install`/`npm ci` (o prepare do
+// package.json), no `npm run dev` (o predev) e no teste dos docs, antes de o ler.
 //
 //   node scripts/gerar-docs.js
 
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 
 const raiz = new URL('../', import.meta.url);
+const exigir = createRequire(import.meta.url);
 // lê um ficheiro do repositório (caminho relativo à raiz) como UTF-8
 // Recebe: p — caminho do ficheiro relativo à raiz do repositório (texto).
 // Devolve: o conteúdo do ficheiro (texto UTF-8).
@@ -30,31 +36,33 @@ const MAPA = [
     ficheiros: ['worker/src/auth.js', 'worker/src/oauth.js', 'worker/src/rotas/auth.js',
       'worker/src/rotas/conta.js', 'web/cloud/entrada.js'] },
   { id: 'sync', titulo: 'Sincronização e estado',
-    ficheiros: ['worker/src/rotas/sync.js', 'worker/src/rotas/estado.js', 'web/cloud/nucleo.js',
-      'web/app/dados.js', 'web/app/arranque.js', 'web/app/copias.js'] },
+    ficheiros: ['worker/src/rotas/sync.js', 'worker/src/rotas/estado.js', 'worker/src/lib/escritas.js', 'web/cloud/nucleo.js',
+      'web/app/dados.js', 'web/app/espera.js', 'web/app/arranque.js', 'web/app/copias.js'] },
   { id: 'partilha', titulo: 'Casas, partilha e ligações',
     ficheiros: ['worker/src/rotas/casas.js', 'worker/src/rotas/conexoes.js', 'worker/src/lib/acesso.js',
       'worker/src/lib/permissoes.js', 'worker/src/rotas/colaboradores.js', 'web/app/acessos.js',
       'web/cloud/colaboradores.js',
-      'web/cloud/partilha.js', 'web/cloud/utilizadores.js', 'web/app/splitwise.js'] },
+      'web/cloud/partilha.js', 'web/cloud/utilizadores.js', 'web/app/saldos.js', 'web/app/splitwise.js'] },
+  { id: 'servicos', titulo: 'A app em serviços',
+    ficheiros: ['web/app/servicos.js', 'worker/src/lib/servicos.js'] },
   { id: 'imoveis', titulo: 'Imóveis, contratos e pessoas',
-    ficheiros: ['web/app/imovel.js', 'web/app/contrato.js', 'web/app/contrato-pdf.js',
-      'web/app/pessoas.js', 'web/app/avaliacao.js', 'web/app/prazos.js',
+    ficheiros: ['web/app/registos.js', 'web/app/lista-imoveis.js', 'web/app/imovel.js', 'web/app/lista-contratos.js', 'web/app/contrato.js', 'web/app/contrato-pdf.js',
+      'web/app/lista-pessoas.js', 'web/app/pessoas.js', 'web/app/lista-colaboradores.js', 'web/app/avaliacao.js', 'web/app/prazos.js',
       'web/app/visitas.js', 'web/app/calendario.js'] },
   { id: 'movimentos', titulo: 'Movimentos e seleção em massa',
-    ficheiros: ['web/app/movimento.js', 'web/app/planeados.js', 'web/cloud/selecao.js',
+    ficheiros: ['web/app/tipos.js', 'web/app/lista-movimentos.js', 'web/app/movimento.js', 'web/app/planeados.js', 'web/cloud/selecao.js',
       'web/cloud/selecao-listas.js'] },
   { id: 'creditos', titulo: 'Créditos à habitação',
     ficheiros: ['web/app/credito.js', 'web/app/creditos.js'] },
   { id: 'notif', titulo: 'Notificações e sino',
     ficheiros: ['web/app/notificacoes.js'] },
   { id: 'vistas', titulo: 'Métricas, gráficos e filtros',
-    ficheiros: ['web/app/metricas.js', 'web/app/graficos.js', 'web/app/lista.js', 'web/app/continuidade.js', 'web/app/vistas.js',
-      'web/cloud/painel.js', 'web/cloud/filtros.js'] },
+    ficheiros: ['web/app/metricas.js', 'web/app/graficos.js', 'web/app/lista.js', 'web/app/continuidade.js', 'web/app/ambito.js', 'web/app/vistas.js',
+      'web/app/painel-geral.js', 'web/app/projecoes.js', 'web/cloud/painel.js', 'web/cloud/filtros.js'] },
   { id: 'ui', titulo: 'Componentes e navegação',
-    ficheiros: ['web/app/componentes.js', 'web/app/navegacao.js', 'web/app/auxiliares.js',
+    ficheiros: ['web/app/componentes.js', 'web/app/navegacao.js', 'web/app/formato.js', 'web/app/icones.js', 'web/app/tema.js',
       'web/app/definicoes.js', 'web/cloud/guia.js', 'web/cloud/novidades.js',
-      'web/avisos.js', 'web/legal.js'] },
+      'web/avisos.js', 'web/legal.js', 'web/app/eventos.js', 'web/app/estilos-calculados.js'] },
   { id: 'pedidos', titulo: 'Pedidos de ajuda e erros',
     ficheiros: ['worker/src/rotas/tickets.js', 'worker/src/rotas/relatos.js',
       'worker/src/lib/relatos.js', 'worker/src/lib/medidas.js', 'worker/src/notify.js', 'web/cloud/ajuda.js'] },
@@ -62,10 +70,10 @@ const MAPA = [
     ficheiros: ['worker/src/lib/correio.js', 'worker/src/lib/enderecos.js'] },
   { id: 'discord', titulo: 'Discord (bot e papéis)',
     ficheiros: ['worker/src/discord.js', 'worker/src/lib/papeis.js', 'worker/src/lib/bot.js', 'worker/src/acessos.js', 'scripts/discord-register.js',
-      'scripts/discord-comandos.js'] },
+      'scripts/discord-comandos-lista.js', 'scripts/discord-comandos.js'] },
   { id: 'equipa', titulo: 'Back office (/equipa)',
     ficheiros: ['worker/src/equipa.js', 'worker/src/equipa-api.js', 'worker/src/equipa-vista.js',
-      'worker/src/docs-vista.js'] },
+      'worker/src/equipa-guiao.js', 'worker/src/docs-vista.js'] },
   { id: 'teste', titulo: 'Ambiente de teste (/test)',
     ficheiros: ['worker/src/teste.js'] },
   { id: 'limites', titulo: 'Travões contra abuso',
@@ -73,13 +81,13 @@ const MAPA = [
   { id: 'anexos', titulo: 'Anexos e ficheiros',
     ficheiros: ['worker/src/files.js', 'worker/src/rotas/anexos.js', 'web/cloud/anexos.js', 'web/app/anexos.js'] },
   { id: 'fisco', titulo: 'Declaração e IRS',
-    ficheiros: ['web/app/fisco.js'] },
+    ficheiros: ['web/app/irs.js', 'web/app/fisco.js'] },
   { id: 'infra', titulo: 'Infraestrutura',
     ficheiros: ['worker/src/index.js', 'worker/src/api.js', 'worker/src/landing.js',
-      'worker/src/legal-vista.js',
+      'worker/src/legal-vista.js', 'worker/src/paginas-recursos.js',
       'worker/src/salvaguarda.js', 'worker/src/lib/http.js', 'worker/src/lib/auditoria.js',
       'web/sw.js', 'scripts/gerar-docs.js', 'scripts/make-icons.js', 'scripts/restaurar.js', 'scripts/versao.js',
-      'scripts/capturas.js', 'scripts/chegada.js'] },
+      'scripts/capturas.js', 'scripts/chegada.js', 'scripts/entrega.js'] },
 ];
 
 /* ------------------------- extração ------------------------------------- */
@@ -118,13 +126,20 @@ function cabecalho(src) {
 
 /* As funções de um ficheiro: assinatura + o comentário imediatamente acima.
    Só as de topo (sem indentação, mais CW./window.) — as closures internas
-   são detalhe de implementação, não interface. */
+   são detalhe de implementação, não interface. As formas são as que o código
+   escreve: function (com export e async), const x = (…) e const x = function
+   (com export ou sem), window./CW. x = function, e a de um parâmetro sem
+   parênteses, const x = y => — que a base usa às dezenas (formato.js) e que,
+   por não estar aqui, escapava à regra dos comentários sem ninguém dar por
+   isso; o mesmo às export const x = (…) do worker. */
 const FORMAS = [
   /^(?:export )?(?:async )?function (\w+)\s*\(/,
-  /^const (\w+)\s*=\s*(?:async )?\(/,
-  /^const (\w+)\s*=\s*(?:async )?function\s*\(/,
+  /^(?:export )?const (\w+)\s*=\s*(?:async )?\(/,
+  /^(?:export )?const (\w+)\s*=\s*(?:async )?function\s*\(/,
   /^(?:window\.|CW\.)(\w+)\s*=\s*(?:async )?function\s*\(/,
 ];
+// a de um parâmetro sem parênteses, à parte: não há «)» onde a assinatura acabe
+const FORMA_SEM_PARENTESES = /^(?:export )?const (\w+)\s*=\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/;
 
 // percorre o ficheiro linha a linha e devolve [{nome, assinatura, doc}] por cada
 // função de topo que case com uma das FORMAS; doc é o comentário adjacente acima
@@ -140,14 +155,20 @@ function funcoesDe(src) {
       const m = l.match(re);
       if (m) { nome = m[1]; break; }
     }
+    const semParenteses = nome ? null : l.match(FORMA_SEM_PARENTESES);
+    if (semParenteses) nome = semParenteses[1];
     if (!nome) continue;
 
-    // a assinatura: até fechar o parêntese (algumas destructuram por várias linhas)
+    // a assinatura: até fechar o parêntese (algumas destructuram por várias linhas);
+    // na forma sem parênteses é o nome e o parâmetro, escritos como as outras
     let ass = l;
-    for (let j = i + 1; j < linhas.length && j < i + 4 && !ass.includes(')'); j++) ass += ' ' + linhas[j].trim();
-    ass = ass.slice(0, ass.indexOf(')') + 1)
-      .replace(/^(export |window\.|CW\.)/, '').replace(/^const /, '').replace(/\s*=\s*(async )?(function\s*)?/, ' ')
-      .replace(/\s+/g, ' ').trim();
+    if (semParenteses) ass = nome + ' (' + semParenteses[2] + ')';
+    else {
+      for (let j = i + 1; j < linhas.length && j < i + 4 && !ass.includes(')'); j++) ass += ' ' + linhas[j].trim();
+      ass = ass.slice(0, ass.indexOf(')') + 1)
+        .replace(/^(export |window\.|CW\.)/, '').replace(/^const /, '').replace(/\s*=\s*(async )?(function\s*)?/, ' ')
+        .replace(/\s+/g, ' ').trim();
+    }
 
     // o comentário acima: um bloco /* */ ou linhas // contíguas
     let doc = '';
@@ -178,59 +199,38 @@ function ficheiro(caminho) {
   return { nome: caminho, texto: cabecalho(src), funcoes: funcoesDe(src) };
 }
 
-/* Os comandos do bot, lidos do registo — nome, descrição E OPÇÕES, com um
-   varrimento por profundidade de chavetas (não depende da formatação). O
-   «o que acontece a seguir» vem do docs/comandos.md, mantido à mão: um
+/* Os comandos do bot, lidos como DADOS do módulo que o registo também usa
+   (scripts/discord-comandos-lista.js): nome, descrição e opções, na forma que
+   o Discord recebe — sem expressões regulares sobre código, portanto a forma
+   de escrever uma opção (numa linha ou em várias, por que ordem) não conta.
+   O «o que acontece a seguir» vem do docs/comandos.md, mantido à mão: um
    comando registado sem secção lá rebenta o build. */
 const TIPOS_DISCORD = { TEXTO: 'texto', INTEIRO: 'número', BOOLEANO: 'sim/não', UTILIZADOR: 'utilizador' };
 
-// os comandos do bot, lidos do registo (o bloco acima explica como)
+// os comandos do bot, lidos da lista partilhada com o registo (o bloco acima explica como)
 // Devolve: array de {nome, descricao, opcoes} por comando registado; cada opção
 // traz {nome, tipo, obrigatoria, descricao, escolhas}.
 function comandosDoDiscord() {
-  const src = ler('scripts/discord-register.js');
-  const ini = src.indexOf('[', src.indexOf('const comandos = ['));
-  // separa as entradas de topo do array pela profundidade
-  const entradas = [];
-  let depth = 0, atual = '';
-  for (let i = ini + 1; i < src.length; i++) {
-    const ch = src[i];
-    if (ch === ']' && depth === 0) break;
-    if ('[{('.includes(ch)) depth++;
-    if (']})'.includes(ch)) depth--;
-    if (ch === ',' && depth === 0) { entradas.push(atual); atual = ''; continue; }
-    atual += ch;
-  }
-  if (atual.trim()) entradas.push(atual);
-
-  return entradas.map((e) => {
-    const nome = (e.match(/name: '([a-z-]+)'/) || [])[1];
-    const descricao = (e.match(/description: '([^']+)'/) || [])[1];
-    if (!nome) return null;
-    // as opções: pedaços entre marcadores «type:» dentro do bloco options
-    const opcoes = [];
-    const soOpts = e.slice(e.indexOf('options:'));
-    const marcas = [...soOpts.matchAll(/type: \w+/g)].map((m) => m.index);
-    marcas.forEach((pos, j) => {
-      const pedaco = soOpts.slice(pos, marcas[j + 1] || soOpts.length);
-      const o = pedaco.match(/type: (\w+), name: '(\w+)', description: '([^']+)'(?:, required: (true|false))?/);
-      if (!o) return;
-      opcoes.push({
-        nome: o[2],
-        tipo: TIPOS_DISCORD[o[1]] || o[1].toLowerCase(),
-        obrigatoria: o[4] === 'true',
-        descricao: o[3],
-        escolhas: [...pedaco.matchAll(/\{ name: '([^']+)', value: '[^']+' \}/g)].map((m) => m[1]),
-      });
-    });
-    return { nome, descricao, opcoes };
-  }).filter(Boolean);
+  const { comandos, TIPOS } = exigir('./discord-comandos-lista.js');
+  // o número do Discord (3, 4…) → o nome que os docs mostram
+  const nomeDoTipo = Object.fromEntries(Object.entries(TIPOS).map(([k, n]) => [n, TIPOS_DISCORD[k] || k.toLowerCase()]));
+  return comandos.map((c) => ({
+    nome: c.name,
+    descricao: c.description,
+    opcoes: (c.options || []).map((o) => ({
+      nome: o.name,
+      tipo: nomeDoTipo[o.type] || String(o.type),
+      obrigatoria: o.required === true,
+      descricao: o.description,
+      escolhas: (o.choices || []).map((e) => e.name),
+    })),
+  }));
 }
 
 // o «o que acontece» de cada comando, do docs/comandos.md (secções por ## )
 // Devolve: mapa {nomeDoComando: texto da secção}.
 function guiaDosComandos() {
-  const md = ler('docs/comandos.md');
+  const md = ler('docs/comandos.md').replace(/\r\n/g, '\n');
   const guia = {};
   for (const p of md.split(/\n## /).slice(1)) {
     const [titulo, ...resto] = p.split('\n');
@@ -253,18 +253,37 @@ function permissoes() {
   return mapa;
 }
 
-// um markdown mantido à mão (as armadilhas, as regras de design), partido
+// um markdown mantido à mão (as regras de design, o diário, as armadilhas), partido
 // por «## »: cada secção vira uma entrada sem assinatura, que a vista pinta pelo nome
 // Recebe: caminho — o ficheiro .md, relativo à raiz do repositório (texto).
 // Devolve: array de {nome, assinatura: '', doc}, uma entrada por secção do markdown.
 function seccoesMd(caminho) {
-  const md = ler(caminho);
+  const md = ler(caminho).replace(/\r\n/g, '\n');
   const partes = md.split(/\n## /).slice(1);
   return partes.map((p) => {
     const [titulo, ...resto] = p.split('\n');
     return { nome: titulo.trim(), assinatura: '', doc: resto.join('\n').trim() };
   });
 }
+
+// o primeiro parágrafo de um markdown depois do título: o que o ficheiro é
+// Recebe: caminho — o ficheiro .md, relativo à raiz do repositório (texto).
+// Devolve: esse parágrafo numa linha só (texto); '' se não houver.
+function abertura(caminho) {
+  const blocos = ler(caminho).replace(/\r\n/g, '\n').split(/\n\s*\n/)
+    .map((b) => b.trim()).filter((b) => b && !b.startsWith('#'));
+  return (blocos[0] || '').replace(/\s*\n\s*/g, ' ');
+}
+
+/* Os markdowns mantidos à mão, um capítulo cada: as regras de design vivas,
+   o diário das decisões (datado) e as armadilhas. Cada «## » é uma entrada, e
+   o texto do capítulo é a abertura do próprio ficheiro. Eram as regras e o
+   diário num ficheiro só, e o capítulo servia os dois como se fossem regras. */
+const MARKDOWNS = [
+  { id: 'design', titulo: 'Regras de design', ficheiro: 'docs/design.md' },
+  { id: 'decisoes', titulo: 'Diário de decisões', ficheiro: 'docs/decisoes.md' },
+  { id: 'armadilhas', titulo: 'Armadilhas conhecidas', ficheiro: 'docs/armadilhas.md' },
+];
 
 /* ------------------------- montagem ------------------------------------- */
 
@@ -303,14 +322,12 @@ capitulos.push({
       return { nome: 'migrations/' + f, texto, funcoes: [] };
     }),
 });
-capitulos.push({
-  id: 'design', titulo: 'Regras de design',
-  itens: [{ nome: 'docs/design.md', texto: 'Como a app se veste e como se comporta: cada regra esteve primeiro no código, com a razão ao lado e o sítio onde está.', funcoes: seccoesMd('docs/design.md') }],
-});
-capitulos.push({
-  id: 'armadilhas', titulo: 'Armadilhas conhecidas',
-  itens: [{ nome: 'docs/armadilhas.md', texto: 'Coisas que já morderam alguém neste projeto. Cada uma custou uma tarde; ler isto custa cinco minutos.', funcoes: seccoesMd('docs/armadilhas.md') }],
-});
+for (const m of MARKDOWNS) {
+  capitulos.push({
+    id: m.id, titulo: m.titulo,
+    itens: [{ nome: m.ficheiro, texto: abertura(m.ficheiro), funcoes: seccoesMd(m.ficheiro) }],
+  });
+}
 
 const guia = guiaDosComandos();
 const DOCS = {
@@ -330,9 +347,18 @@ if (semGuia.length) {
   console.error('Comandos sem secção no docs/comandos.md (escreve o que acontece): ' + semGuia.join(', '));
   process.exit(1);
 }
+/* E o sentido contrário: uma secção do docs/comandos.md que não é de nenhum
+   comando registado nunca chega à página — é texto escrito onde não é lido.
+   Foi o que aconteceu ao cartão dos serviços de uma conta, no back office:
+   estava aqui, e foi viver para «A app em serviços», no design.md. */
+const semComando = Object.keys(guia).filter((t) => !DOCS.comandos.some((c) => c.nome === t));
+if (semComando.length) {
+  console.error('Secções do docs/comandos.md que não são de nenhum comando registado (ninguém as lê: leva-as para onde são servidas): ' + semComando.join(', '));
+  process.exit(1);
+}
 
 writeFileSync(new URL('worker/src/docs-gerados.js', raiz),
-  '// GERADO por scripts/gerar-docs.js — não editar à mão; corre no deploy.\n' +
+  '// GERADO por scripts/gerar-docs.js — não editar à mão nem pôr no git; gera-se no deploy, no npm install e no npm run dev.\n' +
   'export const DOCS = ' + JSON.stringify(DOCS) + ';\n');
 
 const totalF = capitulos.reduce((n, c) => n + c.itens.length, 0);

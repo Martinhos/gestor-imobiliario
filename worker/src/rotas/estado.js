@@ -9,31 +9,80 @@
 // completo de alguém só sai para quem é comproprietário de uma casa comum —
 // uma ligação aceite sem casa comum, um dono de colaboração ou um
 // colaborador levam data: null.
+//
+// Por cima disto, os serviços desligados da conta (lib/servicos.js): a lista
+// sai em `servicos.desligados`, os registos dos kinds desligados e os
+// user_records dos userKinds desligados ficam na base e não saem, sem
+// Imóveis não saem casas nem registos, e sem Colaboradores as tabelas de
+// cargos, convites, ligação, pedidos e conexões vêm vazias.
 
 import { casasDeColaborador } from '../lib/acesso.js';
 import { kindsVisiveis, projetarCasa, projetarRegisto } from '../lib/permissoes.js';
 import {
+  servicosDesligados, kindsDesligados, userKindsDesligados, casaDesligada, colabDesligado,
+} from '../lib/servicos.js';
+import { recordReport } from '../lib/relatos.js';
+import { sha256hex } from '../auth.js';
+import {
   listarCargos, listarColaboradores, listarConvites, estadoDaLigacao, pedidosDePartilha,
 } from './colaboradores.js';
 
-// Rota do GET /api/state: junta numa só resposta tudo o que este utilizador
-// pode ver — casas (próprias, partilhadas e de colaboração), registos, dados
-// globais, conexões, perfis, propostas, e o que geriu como dono (cargos,
-// colaboradores, convites, ligação e pedidos de partilha).
-// Só lê da base; noutros caminhos não devolve nada.
-// Recebe: c — o contexto partilhado montado pelo handleApi (env, request,
-// path, method, o utilizador em c.me e os ajudantes).
-// Devolve: a Response JSON com o estado completo (me, profiles, proposals,
-// houses, records, userRecords, connections, people, roles, collaborators,
-// invites, shareLink, shareRequests) no GET /api/state; nada (undefined)
-// noutros caminhos.
+// O If-None-Match do pedido traz este selo? Aceita uma lista separada por
+// vírgulas e o W/ que a Cloudflare põe num ETag quando comprime a resposta.
+// Recebe: cabecalho — o If-None-Match (ou null); selo — o ETag da resposta.
+// Devolve: true quando o cliente já tem esta resposta.
+function seloIgual(cabecalho, selo) {
+  if (!cabecalho) return false;
+  return cabecalho.split(',').some((s) => s.trim().replace(/^W\//, '') === selo);
+}
+
+/* Rota do GET /api/state: junta numa só resposta tudo o que este utilizador
+   pode ver — casas (próprias, partilhadas e de colaboração), registos, dados
+   globais, conexões, perfis, propostas, e o que geriu como dono (cargos,
+   colaboradores, convites, ligação e pedidos de partilha). Só lê da base.
+
+   A resposta leva um ETag, que é o SHA-256 da própria resposta: com o
+   If-None-Match igual responde 304 sem corpo, e o cliente não volta a
+   aplicar o que já tem. Por ser o hash do que se ia mandar, o 304 nunca sai
+   quando a resposta completa seria diferente — mas as linhas lidas na D1 são
+   as mesmas (um selo mais barato teria de saber de todas as escritas que
+   mudam o estado de alguém, incluindo as do back office).
+
+   Uma linha com JSON estragado (um restauro a meio, uma edição à mão) sai da
+   resposta em vez de a derrubar — a casa estragada leva os registos dela —
+   e fica num relato para quem programa, com a linha.
+   Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
+   ctx, path, method e o utilizador em c.me).
+   Devolve: a Response JSON com o estado completo (me, profiles, proposals,
+   houses, records, userRecords, connections, people, roles, collaborators,
+   invites, shareLink, shareRequests, servicos) e o ETag, ou o 304 sem corpo,
+   no GET /api/state; nada (undefined) noutros caminhos. */
 export async function rotasEstado(c) {
-  const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
+  const { env, request, ctx, path, method, me } = c;
 
   // Estado completo visível por este utilizador: casas próprias + partilhadas
   // comigo, registos dessas casas, dados globais e conexões.
   if (path === '/api/state' && method === 'GET') {
-    const houses = (
+    /* os serviços desligados desta conta, lidos UMA vez por pedido (com o
+       fecho dos que os requerem): decidem o que fica de fora mais abaixo.
+       Uma conta sem linhas em user_services dá [] e recebe tudo como sempre. */
+    const desligados = await servicosDesligados(env, me.id);
+    const kindsOff = kindsDesligados(desligados);
+    const userKindsOff = userKindsDesligados(desligados);
+    const semCasas = casaDesligada(desligados);
+    const semColab = colabDesligado(desligados);
+
+    /* o JSON de cada linha lê-se uma vez, aqui à entrada: uma linha estragada
+       fica em `estragadas` (vai num relato no fim) e sai da lista */
+    const estragadas = [];
+    const lerJSON = (texto, onde) => {
+      try { return JSON.parse(texto); } catch (e) { estragadas.push(onde); return undefined; }
+    };
+    const legiveis = (linhas, onde) => linhas.filter((x) => (x.dados = lerJSON(x.data, onde(x))) !== undefined);
+    const ondeCasa = (h) => 'houses ' + h.id;
+    const ondeRegisto = (r) => 'records ' + r.house_id + '/' + r.kind + '/' + r.id;
+
+    const houses = legiveis((
       await env.DB.prepare(
         `SELECT h.id, h.owner_id, h.data, h.updated_at, u.name AS owner_name
            FROM houses h JOIN users u ON u.id = h.owner_id
@@ -50,9 +99,13 @@ export async function rotasEstado(c) {
       )
         .bind(me.id)
         .all()
-    ).results;
+    ).results, ondeCasa);
 
-    const houseIds = houses.map((h) => h.id);
+    /* sem os Imóveis nesta conta, as casas não vão — e nada do que delas se
+       deriva vai também: os registos, as propostas de quotas e os perfis
+       completos dos comproprietários (a ficha inteira é só para quem partilha
+       comigo uma casa que eu VEJO) */
+    const houseIds = semCasas ? [] : houses.map((h) => h.id);
     // a D1 limita o número de parâmetros por consulta: em blocos, muitas casas
     // partilhadas deixam de conseguir partir a página de quem as recebe
     const chunk = (arr, n) => {
@@ -75,17 +128,17 @@ export async function rotasEstado(c) {
     houseIds.forEach((id) => colab.delete(id));
     const colabIds = [...colab.keys()];
     const colabHouses = colabIds.length
-      ? await inChunks(colabIds,
+      ? legiveis(await inChunks(colabIds,
           `SELECT h.id, h.owner_id, h.data, h.updated_at, u.name AS owner_name
              FROM houses h JOIN users u ON u.id = h.owner_id
-            WHERE h.deleted = 0 AND h.id IN ({IN})`)
+            WHERE h.deleted = 0 AND h.id IN ({IN})`), ondeCasa)
       : [];
     const allIds = houseIds.concat(colabHouses.map((h) => h.id));
 
     let records = houseIds.length
-      ? await inChunks(houseIds,
+      ? legiveis(await inChunks(houseIds,
           `SELECT house_id, kind, id, data, updated_at, author, created_by FROM records
-            WHERE deleted = 0 AND house_id IN ({IN})`)
+            WHERE deleted = 0 AND house_id IN ({IN})`), ondeRegisto)
       : [];
     /* nas casas de colaboração só se vão buscar os kinds que o cargo vê —
        agrupadas pela mesma lista de kinds, uma consulta por grupo — e cada
@@ -105,20 +158,25 @@ export async function rotasEstado(c) {
         `SELECT house_id, kind, id, data, updated_at, author, created_by FROM records
           WHERE deleted = 0 AND kind IN (${lista}) AND house_id IN ({IN})`);
       rows.forEach((r) => {
-        let d = null;
-        try { d = JSON.parse(r.data); } catch (e) { return; }
+        const d = lerJSON(r.data, ondeRegisto(r));
+        if (d === undefined) return;
         const proj = projetarRegisto(r.kind, d, colab.get(r.house_id).perms);
         if (proj) records.push(Object.assign(r, { proj }));
       });
     }
+    /* o que é de um serviço desligado fica na base e não sai: sem Imóveis
+       nenhum registo (vivem todos numa casa); senão, os kinds desligados.
+       Filtra-se aqui, antes dos nomes, para não se ir buscar gente só por
+       causa de um movimento que não vai */
+    records = semCasas ? [] : records.filter((r) => !kindsOff.has(r.kind));
 
-    const userRecords = (
+    const userRecords = legiveis((
       await env.DB.prepare(
         'SELECT kind, id, data, updated_at FROM user_records WHERE user_id = ? AND deleted = 0'
       )
         .bind(me.id)
         .all()
-    ).results;
+    ).results, (r) => 'user_records ' + r.kind + '/' + r.id);
 
     const connections = (
       await env.DB.prepare(
@@ -197,10 +255,8 @@ export async function rotasEstado(c) {
     // "[deleted]" quando a conta se foi.
     records.forEach((r) => {
       [r.author, r.created_by].forEach((u) => { if (u) soNome.add(u); });
-      try {
-        const d = r.proj || JSON.parse(r.data);
-        [d.paidBy, d.toId].forEach((u) => { if (u) soNome.add(u); });
-      } catch (e) {}
+      const d = r.proj || r.dados;
+      if (d && typeof d === 'object') [d.paidBy, d.toId].forEach((u) => { if (u) soNome.add(u); });
     });
 
     const uidArr = [...new Set([...userIdSet, ...soNome])];
@@ -221,7 +277,8 @@ export async function rotasEstado(c) {
       : { id: u.id, name: u.name, kind: 'owner' }));
     const nomeDe = new Map(userRows.map((u) => [u.id, u.name]));
     // os colaboradores de uma casa minha ou partilhada comigo, em leitura
-    const colaboradoresDe = (hid) => (colabPorCasa[hid] || []).map((x) => ({
+    // (nenhuns quando os Colaboradores estão desligados nesta conta)
+    const colaboradoresDe = (hid) => (semColab ? [] : colabPorCasa[hid] || []).map((x) => ({
       id: x.id, userId: x.userId, name: nomeDe.get(x.userId) || '', roleName: x.roleName,
     }));
 
@@ -231,32 +288,42 @@ export async function rotasEstado(c) {
       proposals = (await inChunks(houseIds,
         `SELECT p.house_id, p.proposed_by, p.shares, p.approvals, p.created_at, u.name AS proposer_name
            FROM share_proposals p JOIN users u ON u.id = p.proposed_by
-          WHERE p.house_id IN ({IN})`)).map((p) => ({
-        houseId: p.house_id,
-        proposedBy: p.proposed_by,
-        proposedByName: p.proposer_name,
-        shares: JSON.parse(p.shares),
-        approvals: JSON.parse(p.approvals),
-        createdAt: p.created_at,
-      }));
+          WHERE p.house_id IN ({IN})`)).map((p) => {
+        const onde = 'share_proposals ' + p.house_id;
+        const shares = lerJSON(p.shares, onde);
+        const approvals = shares === undefined ? undefined : lerJSON(p.approvals, onde);
+        if (shares === undefined || approvals === undefined) return null;
+        return {
+          houseId: p.house_id,
+          proposedBy: p.proposed_by,
+          proposedByName: p.proposer_name,
+          shares,
+          approvals,
+          createdAt: p.created_at,
+        };
+      }).filter(Boolean);
     }
 
     // o que geri como dono (vazio para quem não tem nada): cargos,
-    // colaboradores, convites por usar, a ligação e os pedidos de partilha
-    const [roles, collaborators, invites, shareLink, shareRequests] = await Promise.all([
-      listarCargos(env, me.id),
-      listarColaboradores(env, me.id),
-      listarConvites(env, me.id),
-      estadoDaLigacao(env, me.id),
-      pedidosDePartilha(env, me.id),
-    ]);
+    // colaboradores, convites por usar, a ligação e os pedidos de partilha —
+    // e vazio de propósito quando os Colaboradores estão desligados
+    const [roles, collaborators, invites, shareLink, shareRequests] = semColab
+      ? [[], [], [], null, { incoming: [], outgoing: [] }]
+      : await Promise.all([
+        listarCargos(env, me.id),
+        listarColaboradores(env, me.id),
+        listarConvites(env, me.id),
+        estadoDaLigacao(env, me.id),
+        pedidosDePartilha(env, me.id),
+      ]);
 
-    return json({
+    const estado = {
       me: { id: me.id, email: me.email, name: me.name },
+      servicos: { desligados },
       profiles,
       people,
       proposals,
-      houses: houses.map((h) => ({
+      houses: semCasas ? [] : houses.map((h) => ({
         id: h.id,
         ownerId: h.owner_id,
         ownerName: h.owner_name,
@@ -264,7 +331,7 @@ export async function rotasEstado(c) {
         participants: houseParts[h.id] || [h.owner_id],
         collaborators: colaboradoresDe(h.id),
         updatedAt: h.updated_at,
-        data: JSON.parse(h.data),
+        data: h.dados,
       })).concat(colabHouses.map((h) => {
         const cg = colab.get(h.id);
         return {
@@ -275,7 +342,7 @@ export async function rotasEstado(c) {
           participants: houseParts[h.id] || [h.owner_id],
           collab: { id: cg.id, roleId: cg.roleId, roleName: cg.roleName, perms: [...cg.perms] },
           updatedAt: h.updated_at,
-          data: projetarCasa(JSON.parse(h.data), cg.perms),
+          data: projetarCasa(h.dados, cg.perms),
         };
       })),
       records: records.map((r) => ({
@@ -285,20 +352,20 @@ export async function rotasEstado(c) {
         updatedAt: r.updated_at,
         author: r.author || null,
         createdBy: r.created_by || null,
-        data: r.proj || JSON.parse(r.data),
+        data: r.proj || r.dados,
       })),
       roles,
       collaborators,
       invites,
       shareLink,
       shareRequests,
-      userRecords: userRecords.map((r) => ({
+      userRecords: userRecords.filter((r) => !userKindsOff.has(r.kind)).map((r) => ({
         kind: r.kind,
         id: r.id,
         updatedAt: r.updated_at,
-        data: JSON.parse(r.data),
+        data: r.dados,
       })),
-      connections: connections.map((c) => {
+      connections: semColab ? [] : connections.map((c) => {
         const iAmRequester = c.requester_id === me.id;
         // quem convida revela o seu email a quem recebe; o contrário só
         // acontece depois de o convite ser aceite
@@ -316,6 +383,22 @@ export async function rotasEstado(c) {
           peerShares: shares.filter((s) => s.connection_id === c.id && s.owner_id !== me.id).map((s) => s.house_id),
         };
       }),
-    });
+    };
+
+    // as linhas estragadas: um relato por assinatura, com a lista (a pessoa
+    // não tem como saber qual dos seus registos é — quem programa fica a saber)
+    if (estragadas.length) {
+      const relato = recordReport(env, ctx, 'server', 'Linhas com JSON estragado no /api/state',
+        estragadas.slice(0, 30).join('\n'), me.id);
+      if (ctx && ctx.waitUntil) ctx.waitUntil(relato); else await relato;
+    }
+
+    // o selo é o hash do que se ia mandar: igual ao que o cliente tem, 304 sem corpo
+    const corpo = JSON.stringify(estado);
+    const selo = '"' + (await sha256hex(corpo)).slice(0, 32) + '"';
+    if (seloIgual(request.headers.get('If-None-Match'), selo)) {
+      return new Response(null, { status: 304, headers: { ETag: selo } });
+    }
+    return new Response(corpo, { headers: { 'Content-Type': 'application/json; charset=utf-8', ETag: selo } });
   }
 }

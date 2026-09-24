@@ -4,17 +4,18 @@
 // e o aviso de um NIF que não bate certo. É o HTML que as vistas geram e o
 // que os formulários leem de volta, sem browser.
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar } from './arnes.js';
+import { carregarApp, limpar, repor } from './arnes.js';
 
 const app = carregarApp();
 beforeEach(() => limpar(app));
+afterEach(() => repor(app));
 
 /* Lê os campos do formulário como se a pessoa os tivesse escrito: o documento
-   falso do arnês devolve um elemento vazio a cada pedido, e aqui dá-se-lhe o
-   valor (ou o «checked») de cada id que interessa. Devolve a função que repõe
-   o documento como estava. */
+   falso do arnês guarda um elemento por id, e aqui dá-se-lhe o valor (ou o
+   «checked») de cada id que interessa quando o formulário o pede. Devolve a
+   função que repõe o documento como estava. */
 function comCampos(valores) {
   const doc = app.document, original = doc.getElementById;
   doc.getElementById = (id) => {

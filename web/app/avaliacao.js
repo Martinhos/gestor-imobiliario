@@ -5,16 +5,16 @@ function vReports(){
   if(repProp&&!pidProps(repProp).length)repProp='';
   /* um imóvel onde só colaboro sem «Ver valores e avaliação» não tem cartão: o servidor não manda os valores */
   const list=pidProps(repProp).filter(p=>pode(p.id,'report.view'));
-  const panel=anaPanel(`<div style="display:flex;flex-direction:column;gap:9px">
-    ${db.owners.length?`<div style="width:100%">${sel('ownerSel',ownerFilter,[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner'))),'onOwnerFilter','vista')}</div>`:''}
-    <div style="width:100%">${sel('repSel',repProp,[{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop'))),'onRepSel','vista')}</div></div>
-    <label style="margin-top:10px;max-width:220px">Yield exigido (%)<input type="text" inputmode="decimal" value="${dec(db.settings.capTarget)}" onchange="capTargetSet(this.value)"></label>
-    <div class="hint" style="margin-top:9px">A avaliação por rendimento capitaliza o resultado líquido anual ao yield exigido. No ano corrente, o resultado até hoje é anualizado (×12 sobre os meses decorridos).${ownerFilter&&!ownerIsGrp()?' Valores na quota-parte de <b>'+esc(ownerFilterName())+'</b>.':''}</div>`);
+  const panel=anaPanelPadrao('repSel',repProp,'onRepSel',`
+    <label class="u-mt-10px u-maxw-220px">Yield exigido (%)<input type="text" inputmode="decimal" value="${dec(db.settings.capTarget)}" data-change="capTargetSet(this.value)"></label>
+    <div class="hint u-mt-9px">A avaliação por rendimento capitaliza o resultado líquido anual ao yield exigido. No ano corrente, o resultado até hoje é anualizado (×12 sobre os meses decorridos).${ownerFilter&&!ownerIsGrp()?' Valores na quota-parte de <b>'+esc(ownerFilterName())+'</b>.':''}</div>`);
+  /* a saída do vazio leva aos Imóveis: com esse serviço desligado nesta conta
+     o botão não se escreve, e a frase diz quem o liga */
   if(!list.length)return panel+(esperaDoServidor()||`<div class="empty"><b>Sem imóveis para avaliar</b>A avaliação parte do que cada imóvel rende.
-    ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`);
+    ${servicoLigado('properties')?saida('Adicionar imóvel',"go('properties')",'ecra'):vazioServicoDesligado('properties')}</div>`);
   return panel+`<div class="toolbar">
-    <button class="btn" onclick="shareReport()">Partilhar</button>
-    <button class="btn" onclick="downloadCsv()">CSV</button></div>`
+    <button class="btn" data-click="shareReport()">Partilhar</button>
+    <button class="btn" data-click="downloadCsv()">CSV</button></div>`
     +((!repProp||String(repProp).startsWith('g:'))?portCard(repProp||null):'')+list.map(repCard).join('');
 }
 // aplica o imóvel (ou grupo) escolhido no seletor e volta a desenhar
@@ -45,7 +45,7 @@ function diffKpi(diff){
    Recebe: m — as métricas do ano (metrics(), com share); pid — id do imóvel, 'g:ID' ou null (o que evoRatio recebe).
    Devolve: o HTML da grelha (string). */
 function rentGrid(m,pid){
-  return `<div class="grid" style="margin-top:11px">
+  return `<div class="grid u-mt-11px">
     ${kpi('Yield bruto',pct(m.grossYield),'','imóveis com contrato ativo',WHY.yieldBruto,()=>evoRatio('grossYield',pid))}
     ${kpi('Cap rate',pct(m.cap),'','NOI anualizado / valor de mercado',WHY.cap,()=>evoRatio('cap',pid))}
     ${kpi('Sobre a aquisição',pct(m.coc),'','sobre '+euro(m.purchase)+' de aquisição',WHY.aquisicao,()=>evoRatio('coc',pid))}
@@ -73,12 +73,12 @@ function portCard(pid){
   const {valuation,diff}=valuationOf(m.noiAnual,m.value),d=diffKpi(diff);
   const inc=monthly(YEAR,pid||null,'income',true),exp=monthly(YEAR,pid||null,'expense',true),ln=monthly(YEAR,pid||null,'loan',true);
   const cs=byCategory(YEAR,pid||null,true);
-  return `<div class="card" style="margin-bottom:14px;padding:18px;border-width:2px">
-    <div class="row-between"><div style="min-width:0">
-      <div class="title" style="font-size:18px">${pid?'Grupo · '+esc((grp(String(pid).slice(2))||{}).name||''):'Portefólio completo'}</div>
+  return `<div class="card u-mb-14px u-p-18px u-bw-2px">
+    <div class="row-between"><div class="u-minw-0">
+      <div class="title u-fs-18px">${pid?'Grupo · '+esc((grp(String(pid).slice(2))||{}).name||''):'Portefólio completo'}</div>
       <div class="small">${ps.length} ${ps.length===1?'imóvel':'imóveis'}${ownerFilter?' · '+esc(ownerFilterName()):''}</div></div>
       <span class="badge">${YEAR}</span></div>
-    <div class="grid" style="margin-top:14px">
+    <div class="grid u-mt-14px">
       ${kpi('Valor de mercado',euro(m.value),'','soma dos imóveis',WHY.valorIntro)}
       ${kpi('Valor por rendimento',euro(valuation),d.c,`a ${pct(capTargetFrac())} de yield exigido`,WHY.valorRend)}
       ${kpi('Diferença',d.v,d.c,d.f,WHY.diferenca)}
@@ -107,28 +107,33 @@ function repCard(p){
   const {valuation,diff}=valuationOf(m.noiAnual,m.value),d=diffKpi(diff);
   const inc=monthly(YEAR,p.id,'income',true),exp=monthly(YEAR,p.id,'expense',true),ln=monthly(YEAR,p.id,'loan',true);
   const cs=byCategory(YEAR,p.id,true),st=propStatus(p),own=ownerNames(p);
-  return `<div class="card" style="margin-bottom:14px;padding:18px">
-    <div class="row-between"><div style="min-width:0">
-      <div class="title" style="font-size:18px">${esc(p.name)}</div>
+  /* a tabela dos contratos é dos Contratos, e a frase das despesas sem imóvel
+     é da Visão geral (painel-geral.js:orphanExpenses): cada uma só com o seu
+     serviço ligado nesta conta */
+  const comContratos=servicoLigado('contracts')&&ac.length>0;
+  const orfas=servicoLigado('dashboard')?orphanExpenses(YEAR):[];
+  return `<div class="card u-mb-14px u-p-18px">
+    <div class="row-between"><div class="u-minw-0">
+      <div class="title u-fs-18px">${esc(p.name)}</div>
       <div class="small">${esc(p.address||'')} · ${st.label}${own?' · '+esc(own):''}${q<1?' · quota-parte de '+esc(ownerFilterName())+' ('+pct(q,0)+')':''}</div></div>
       <span class="badge ${st.badge}">${YEAR}</span></div>
-    <div class="grid" style="margin-top:14px">
+    <div class="grid u-mt-14px">
       ${kpi('Valor introduzido',euro(m.value),'','valor de mercado',WHY.valorIntro)}
       ${kpi('Valor por rendimento',euro(valuation),d.c,`a ${pct(capTargetFrac())} de yield exigido`,WHY.valorRend,()=>evoValuation(p,'val'))}
       ${kpi('Diferença',d.v,d.c,d.f,WHY.diferenca,()=>evoValuation(p,'diff'))}
       ${kpi('Equity',euro(m.value-m.debt),'','valor menos dívida',WHY.equity,()=>evoValuation(p,'equity'))}</div>
     ${rentGrid(m,p.id)}
-    ${ac.length?card('Contratos ativos','',`<div class="tablewrap"><table class="table"><thead><tr>
+    ${comContratos?card('Contratos ativos','',`<div class="tablewrap"><table class="table"><thead><tr>
       <th>${p.rentalMode==='quartos'?'Quarto':'Contrato'}</th><th>Inquilinos</th><th>Renda</th><th>Imposto</th><th>Líquida</th></tr></thead><tbody>
       ${ac.map(x=>`<tr><td><b>${x.roomId?esc(roomName(p,x.roomId)):'Imóvel inteiro'}</b></td>
-        <td style="text-align:left;white-space:normal">${esc(ctNames(x))}</td><td>${euro(x.rent)}</td>
+        <td class="u-ta-left u-ws-normal">${esc(ctNames(x))}</td><td>${euro(x.rent)}</td>
         <td class="neg">${dec(taxRateOf(x))}%${Number(x.taxRate)>0?'':' <span class="small">estim.</span>'}</td><td><b>${euro(netRent(x))}</b></td></tr>`).join('')}
       <tr><td colspan="2"><b>Total mensal</b></td><td><b>${euro(rentOf(p))}</b></td><td></td><td><b>${euro(netRentOf(p))}</b></td></tr>
       </tbody></table></div>`):''}
     <div class="cols">
       ${card('Rendas e despesas','Mês a mês em '+YEAR,cBars(inc.map((v,i)=>[{label:'Rendas',value:v,color:PAL[0]},{label:'Despesas',value:-exp[i],color:'#c56b68'},{label:'Prestação',value:-ln[i],color:'#d6a34a'}]),MES,{h:190}))}
       ${card('Estrutura de despesas','',cs.length?cDonut(cs,{sub:'gastos do ano'})
-        :`<div class="hint">Não há gastos atribuídos a este imóvel em ${YEAR}.${orphanExpenses(YEAR).length?` Há ${euro(sum(orphanExpenses(YEAR).map(x=>x.amount)))} em despesas sem imóvel atribuído, que aparecem na visão geral mas não aqui.`:''}</div>`)}</div>
+        :`<div class="hint">Não há gastos atribuídos a este imóvel em ${YEAR}.${orfas.length?` Há ${euro(sum(orfas.map(x=>x.amount)))} em despesas sem imóvel atribuído, que aparecem na visão geral mas não aqui.`:''}</div>`)}</div>
     <div class="cols">
       ${contaCard(m)}
       ${card('Indicadores','',`
@@ -143,7 +148,7 @@ function repCard(p){
         return (i+1)*12-1<x.a.rows.length?r.bal:0})));
       return card(ls.length>1?ls.length+' hipotecas':'Hipoteca',ls.map(x=>esc(loanName(x))).join(' · '),
         per.map(x=>`<div class="stat"><span>${esc(loanName(x.l))}<div class="small">${RATE[x.l.type]} · ${x.l.years} anos${(x.l.files||[]).length?' · '+x.l.files.length+' doc.':''}</div></span>
-          <b>${euro(x.l.outstanding)}<div class="small" style="font-weight:500">${euro2(x.c.total)}/mês</div></b></div>`).join('')
+          <b>${euro(x.l.outstanding)}<div class="small u-fw-500">${euro2(x.c.total)}/mês</div></b></div>`).join('')
         +`<div class="stat"><span><b>Total em dívida</b></span><b>${euro(debtOf(p))}</b></div>
           <div class="stat"><span>Prestações mensais</span><b>${euro2(payOf(p))}</b></div>
           <div class="stat"><span>Juros até ao fim</span><b class="neg">${euro(sum(per.map(x=>x.a.totInt)))}</b></div>
@@ -226,3 +231,11 @@ ${m.props.map(p=>{const x=metrics(YEAR,p.id,{share:true}),vp=valuationOf(x.noiAn
 ${activeContracts(p.id).map(c=>`      ${c.roomId?roomName(p,c.roomId):'Imóvel inteiro'}: ${ctNames(c)} — ${euro(c.rent)}`).join('\n')}`}).join('\n')}
 `;
 }
+/* ---- registo do serviço (servicos.js) ---- */
+// nº de filtros ativos no painel de análise da avaliação: proprietário e imóvel em foco
+// Devolve: número de filtros ativos (0 a 2).
+function repAnaN(){return (ownerFilter?1:0)+(repProp?1:0)}
+// limpa o imóvel em foco da avaliação (o proprietário limpa-o a base, anaClear)
+// Devolve: nada — limpa o filtro; quem chama repinta.
+function repAnaLimpar(){repProp=''}
+registarServico({id:'reports',vistas:{reports:'vReports'},analise:{reports:{n:'repAnaN',limpar:'repAnaLimpar'}}});

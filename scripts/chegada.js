@@ -1,6 +1,11 @@
 // Confirma que uma publicação chega a quem já tem a app instalada.
 //
-//   node scripts/chegada.js <ref>   compara o que está aqui com o que estava em <ref>
+//   node scripts/chegada.js <ref> [<ref> …]   compara o que está aqui com o que
+//                                             estava no primeiro <ref> que exista
+//
+// O deploy chama-o com a etiqueta «publicado» e, atrás dela, o HEAD^1: a
+// etiqueta é a publicação anterior por desenho (o deploy move-a quando uma
+// publicação responde), o HEAD^1 só enquanto ela ainda não existe.
 //
 // A cache offline chama-se pela VERSÃO da app (web/sw.js). Publicar sem subir a
 // versão é publicar para ninguém: quem tem a app instalada continua a ser
@@ -72,32 +77,46 @@ function decidir(tocados, antes, agora) {
   };
 }
 
+/* Compara esta árvore (HEAD) com a publicação anterior: o primeiro candidato
+   que o git conheça e que tenha o web/versao.json. Tem de ser a publicação
+   anterior por desenho — o HEAD^1 só o era quando a promoção é um merge, e
+   num avanço rápido é o penúltimo commit do dev (testes/chegada.test.js monta
+   o caso num repositório a sério).
+   Recebe: refs — os candidatos, por ordem de preferência (array de texto);
+   git — função (...args) que corre o git e devolve o stdout (lança em erro);
+   guardados — os caminhos que contam (ficheirosGuardados()); agora — o número
+   da versão desta árvore.
+   Devolve: {ref, ok, motivo} — ref é o candidato usado, ou null se nenhum servia. */
+function verificar(refs, git, guardados, agora) {
+  for (const ref of refs) {
+    let antes;
+    try {
+      antes = Number(JSON.parse(git('show', ref + ':web/versao.json')).versao);
+    } catch (e) {
+      continue;   // um ref que não existe (a etiqueta, antes da primeira vez): o seguinte
+    }
+    const tocados = git('diff', '--name-only', ref, 'HEAD', '--', ...guardados)
+      .split('\n').map((s) => s.trim()).filter(Boolean);
+    return Object.assign({ ref }, decidir(tocados, antes, agora));
+  }
+  // primeira publicação, histórico raso, ou nenhum ref que exista: não há
+  // com o que comparar, e travar aqui seria travar por não saber
+  return { ref: null, ok: true, motivo: 'sem publicação anterior em ' + refs.join(' nem ') + ' — nada a comparar.' };
+}
+
 if (require.main === module) {
-  const ref = process.argv[2];
-  if (!ref) {
-    console.error('uso: node scripts/chegada.js <ref>   (ref = a publicação anterior)');
+  const refs = process.argv.slice(2);
+  if (!refs.length) {
+    console.error('uso: node scripts/chegada.js <ref> [<ref> …]   (a publicação anterior; vale o primeiro que exista)');
     process.exit(2);
   }
-  const git = (...args) => execFileSync('git', args, { cwd: raiz, encoding: 'utf8' });
-  const versaoEm = (texto) => Number(JSON.parse(texto).versao);
+  // o stderr do git fica calado: um candidato que não existe é o caso normal da primeira vez
+  const git = (...args) => execFileSync('git', args, { cwd: raiz, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const agora = Number(JSON.parse(fs.readFileSync(path.join(raiz, 'web', 'versao.json'), 'utf8')).versao);
 
-  let antes;
-  try {
-    antes = versaoEm(git('show', ref + ':web/versao.json'));
-  } catch (e) {
-    // primeira publicação, histórico raso, ou um ref que não existe: não há
-    // com o que comparar, e travar aqui seria travar por não saber
-    console.log('sem publicação anterior em ' + ref + ' — nada a comparar.');
-    process.exit(0);
-  }
-  const agora = versaoEm(fs.readFileSync(path.join(raiz, 'web', 'versao.json'), 'utf8'));
-
-  const tocados = git('diff', '--name-only', ref, 'HEAD', '--', ...ficheirosGuardados())
-    .split('\n').map((s) => s.trim()).filter(Boolean);
-
-  const r = decidir(tocados, antes, agora);
-  console.log((r.ok ? 'chega: ' : 'NÃO CHEGA: ') + r.motivo);
+  const r = verificar(refs, git, ficheirosGuardados(), agora);
+  console.log((r.ok ? 'chega: ' : 'NÃO CHEGA: ') + (r.ref ? '(contra ' + r.ref + ') ' : '') + r.motivo);
   process.exit(r.ok ? 0 : 1);
 }
 
-module.exports = { ficheirosGuardados, decidir };
+module.exports = { ficheirosGuardados, decidir, verificar };

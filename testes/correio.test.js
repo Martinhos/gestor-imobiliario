@@ -3,7 +3,7 @@
 // envelope — remetentes certos, prefixo de ambiente, e a regra de ouro:
 // sem chave, ninguém tenta enviar nada.
 
-import { test, describe, beforeEach, afterEach } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 

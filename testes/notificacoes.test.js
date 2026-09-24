@@ -2,11 +2,12 @@
 // servidor), a contagem do crachá, e a marca de leitura que impede o
 // primeiro arranque de despejar o histórico inteiro.
 
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp } from './arnes.js';
+import { carregarApp, repor } from './arnes.js';
 
 const app = carregarApp();
+afterEach(() => repor(app));
 
 function monta() {
   app.CW = { user: { id: 'EU' } };
@@ -61,11 +62,8 @@ describe('a atividade partilhada', () => {
     })];
     assert.equal(app.notifConta(), 1, 'a conta em si sabe que há um atrasado');
 
-    /* o arnês devolve um elemento novo a cada getElementById: para se ver o
-       que o sino escreveu, o #hdrBell tem de ser sempre o mesmo */
-    const sino = { style: {}, innerHTML: '' };
-    const orig = app.document.getElementById;
-    app.document.getElementById = (id) => (id === 'hdrBell' ? sino : orig(id));
+    // o #hdrBell do arnês é sempre o mesmo elemento: lê-se o que o sino lá escreveu
+    const sino = app.document.getElementById('hdrBell');
 
     // ainda não falámos com o servidor
     delete app.CW._esperaFim;
@@ -82,7 +80,6 @@ describe('a atividade partilhada', () => {
     app.window.CW = undefined; app.CW = undefined;
     app.notifSino();
     assert.match(sino.innerHTML, /class="cnt/, 'numa app sem nuvem, aparece logo');
-    app.document.getElementById = orig;
     monta();
   });
 
@@ -97,9 +94,7 @@ describe('a atividade partilhada', () => {
       id: 'R1', name: 'Renda', every: 'month', next: '2000-01-01',
       tx: { kind: 'income', amount: 500, propertyId: 'P1' },
     })];
-    const sino = { style: {}, innerHTML: '' };
-    const orig = app.document.getElementById;
-    app.document.getElementById = (id) => (id === 'hdrBell' ? sino : orig(id));
+    const sino = app.document.getElementById('hdrBell');
 
     delete app.CW._esperaFim;
     app.notifSino();
@@ -111,7 +106,6 @@ describe('a atividade partilhada', () => {
     app.notifSino();
     assert.ok(!app.CW._pulled, 'sem rede, o servidor continua sem ter falado');
     assert.match(sino.innerHTML, /class="cnt/, 'e mesmo assim o sino conta o que há');
-    app.document.getElementById = orig;
     monta();
   });
 

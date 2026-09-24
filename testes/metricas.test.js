@@ -1,16 +1,18 @@
 // Métricas: o peso de cada movimento na vista por proprietário, as amortizações à parte,
 // o yield sobre o mesmo conjunto, o NOI anualizado, as receitas que não são rendimento,
-// o IRS sobre rendas, a projeção, os acertos globais e a data de hoje em hora local.
+// o IRS sobre rendas, a projeção e os acertos globais. (A data de hoje em hora
+// local prova-se no numeros.test.js, com o relógio verdadeiro.)
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar, igual } from './arnes.js';
+import { carregarApp, limpar, igual, perto, repor } from './arnes.js';
 
-const app = carregarApp();
-const perto = (a, b, tol = 0.01) =>
-  assert.ok(Math.abs(a - b) <= tol, `esperava ${b} (±${tol}), veio ${a}`);
-const ANO = new Date().getFullYear();
-const MES = new Date().getMonth() + 1;
+// a app vive num dia fixo: o NOI e a projeção anualizam-se pelos meses que já
+// passaram do ano, e o que o teste prova não pode mudar com o mês em que corre
+const app = carregarApp({ hoje: '2026-09-06' });
+afterEach(() => repor(app));
+const ANO = Number(app.today().slice(0, 4));
+const MES = Number(app.today().slice(5, 7));
 const soma = (a) => a.reduce((x, y) => x + y, 0);
 
 let casa, casa2;
@@ -313,14 +315,5 @@ describe('contas entre proprietários (grupo e global)', () => {
     const b = app.ownerBalances(null);
     igual(Object.keys(eff).sort(), Object.keys(b).sort());
     Object.keys(b).forEach((k) => perto(eff[k], b[k], 0.001));
-  });
-});
-
-describe('a data de hoje', () => {
-  test('é a data local, não a UTC', () => {
-    const d = new Date();
-    const local = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    assert.match(app.today(), /^\d{4}-\d{2}-\d{2}$/);
-    assert.equal(app.today(), local);
   });
 });

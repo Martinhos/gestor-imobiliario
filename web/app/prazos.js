@@ -118,7 +118,10 @@ function prazosDe(hoje){
        dia em que passava, e um teste com hoje fingido só passava por acaso. */
     if(c.active===false)return;
     const nome=c.name||propName(c.propertyId)||'contrato';
-    const abrir=`ctModal('${c.id}')`;
+    /* o toque abre a ficha do contrato (tocar num registo é lê-lo; o «Editar»
+       está lá para quem pode) — só com os Contratos ligados nesta conta; sem
+       eles o prazo continua a dizer-se, mas não leva a lado nenhum */
+    const abrir=servicoLigado('contracts')?`ctView('${jsq(c.id)}')`:'';
     if(c.end){
       const oposicao=pzAddDias(c.end,-120);
       poe('oposicao',c.id+':'+c.end,oposicao,'Oposição à renovação — '+nome,
@@ -158,12 +161,12 @@ function prazosDe(hoje){
       const alvo=fimDoMesSeguinte(t.date);
       poe('recibos',t.id+':'+alvo,alvo,'Recibo de renda por emitir — '+nomeDe(c),
         'Renda de '+pzMes(t.periodo||t.date)+' recebida a '+dPT(t.date)+': emite o recibo eletrónico no Portal das Finanças e marca-o no movimento.',
-        `txModal('${t.id}')`,true);
+        servicoLigado('transactions')?`txView('${jsq(t.id)}')`:'',true);
     }
   });
   (db.contracts||[]).forEach(c=>{
     if(ctNaoDeclarado(c))return;
-    const nome=nomeDe(c),abrir=`ctModal('${c.id}')`;
+    const nome=nomeDe(c),abrir=servicoLigado('contracts')?`ctView('${jsq(c.id)}')`:'';
     if(ctFiscoPorIndicar(c)&&c.start&&vivoEm(c)){
       const alvo=fimDoMesSeguinte(c.start);
       poe('modelo2',c.id+':'+alvo,alvo,'Comunicar o contrato à AT (Modelo 2) — '+nome,
@@ -188,7 +191,7 @@ function prazosDe(hoje){
     const alvo=(Y+1)+'-06-30';
     poe('irs',String(Y),alvo,'Entregar o IRS — Anexo F de '+Y,
       'De 1 de abril a 30 de junho. A página Declaração tem as linhas do quadro 4.1 e o que ainda falta.',
-      "go('fisco')",false);
+      servicoLigado('fisco')?"go('fisco')":'',false);
   }
 
   // pessoas: inquilinos de contratos ativos + proprietários, com CC datado
@@ -196,9 +199,13 @@ function prazosDe(hoje){
   const vistos={};
   const pessoa=(p,papel)=>{
     if(!p||!p.ccValid||vistos[p.id])return;vistos[p.id]=1;
+    /* a ficha da pessoa é dos Inquilinos ou dos Proprietários: sem o serviço
+       ligado o prazo diz-se na mesma, mas não abre nada. A ficha, e não o
+       formulário: num proprietário com conta ela manda o «Editar» para o perfil
+       dele (pessoas.js:personView), e o formulário gravava só neste aparelho */
     poe('cc',p.id+':'+p.ccValid,p.ccValid,'Cartão de cidadão — '+(p.name||'pessoa'),
       'Caduca a '+dPT(p.ccValid)+'. Um contrato novo (ou renovado) precisa do documento válido.',
-      `personModal('${papel}','${p.id}')`,true);
+      servicoLigado(papel==='owner'?'owners':'tenants')?`personView('${papel}','${jsq(p.id)}')`:'',true);
   };
   (db.tenants||[]).forEach(t=>{if(ativos[t.id])pessoa(t,'tenant')});
   (db.owners||[]).forEach(o=>pessoa(o,'owner'));
@@ -207,15 +214,21 @@ function prazosDe(hoje){
     if(p.energyValid){
       poe('energia',p.id+':'+p.energyValid,p.energyValid,'Certificado energético — '+(p.name||'imóvel'),
         'Expira a '+dPT(p.energyValid)+'. É obrigatório para anunciar e celebrar arrendamentos.',
-        `propModal('${p.id}')`,true);
+        servicoLigado('properties')?`propView('${jsq(p.id)}')`:'',true);
     }
     (p.loans||[]).forEach(l=>{
-      if(l.type!=='mista'||!l.start||!l.fixedYears)return;
-      const fim=pzAddAnos(l.start,Number(l.fixedYears));
+      if(l.type!=='mista'||!l.fixedYears||!(Number(l.outstanding)>0))return;
+      /* o mesmo relógio da simulação (credito.js:fimDaFaseFixa): as prestações
+         registadas, e não o calendário desde o início — os dois discordavam por
+         anos num crédito introduzido a meio, e o aviso dizia uma data que as
+         contas não usavam */
+      const r0=servicoLigado('recurring')?loanRecOf(l):null;
+      const fim=fimDaFaseFixa(l,db.transactions||[],h,r0&&r0.next);
+      if(!fim)return;
       const depois=(Number(l.euribor)||0)+(Number(l.spread)||0);
       poe('taxa',l.id+':'+fim,fim,'Fim da taxa fixa — '+(l.name||l.bank||'crédito')+' ('+(p.name||'imóvel')+')',
         'A '+dPT(fim)+' a taxa passa de '+dec(l.rate)+'% para Euribor+spread (hoje ~'+dec(depois)+'%). Bom momento para comparar propostas.',
-        `propModal('${p.id}')`,false);
+        servicoLigado('credits')?`mortView('${jsq(p.id)}','${jsq(l.id)}')`:(servicoLigado('properties')?`propView('${jsq(p.id)}')`:''),false);
     });
   });
 
@@ -257,31 +270,32 @@ function pzToggle(){try{localStorage.setItem('gi_pz_shut',pzShut()?'0':'1')}catc
    pessoa, o imóvel) e um «Silenciar» com rede.
    Devolve: o HTML do cartão (texto), ou '' quando não há prazos na janela. */
 function prazosCard(){
-  /* o mesmo guarda do sino (auxiliares.js:sabemosOEstado): um prazo silenciado
+  /* o mesmo guarda do sino (espera.js:sabemosOEstado): um prazo silenciado
      noutro aparelho reaparecia aqui, com selo vermelho, até o estado chegar */
   if(!sabemosOEstado())return '';
   const lista=prazosAtivos();
   if(!lista.length)return '';
-  const stop='event.stopPropagation();';
   const selo=p=>{
     const cls=p.urg==='info'?'grey':p.urg==='breve'?'amber':'red';
     const txt=p.dias<0?('há '+(-p.dias)+' d'):p.dias===0?'hoje':(p.dias+' d');
-    return `<span class="badge ${cls}" style="flex:0 0 auto">${txt}</span>`;
+    return `<span class="badge ${cls} u-fx-0-0-auto">${txt}</span>`;
   };
-  const row=p=>`<div class="card tap" style="padding:11px 13px" data-toca="camada" onclick="${p.abrir}">
-    <div class="row-between" style="align-items:center;gap:10px">
-      <div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.titulo)}</b>
+  /* sem «abrir» (o serviço que abria está desligado nesta conta) o cartão não
+     se apresenta como tocável: diz o prazo, e o Silenciar continua a servir */
+  const row=p=>`<div class="card${p.abrir?' tap':''} u-p-11px-13px"${p.abrir?` data-toca="camada" data-click="${p.abrir}"`:''}>
+    <div class="row-between u-ai-center u-g-10px">
+      <div class="u-minw-0"><b class="u-d-block u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(p.titulo)}</b>
         <span class="small">${esc(p.sub)}</span></div>${selo(p)}</div>
-    <div class="toolbar" style="margin:9px 0 0">
-      <button class="btn sm" data-toca="dados" onclick="${stop}pzSilencia('${jsq(p.chave)}')">Silenciar</button></div></div>`;
+    <div class="toolbar u-m-9px-0-0">
+      <button class="btn sm" data-toca="dados" data-click="event.stopPropagation();pzSilencia('${jsq(p.chave)}')">Silenciar</button></div></div>`;
   const urgentes=lista.filter(p=>p.dias<=7).length,open=!pzShut();
-  return `<div class="card" id="pzCard" style="margin-bottom:14px">
-    <div class="row-between tap" style="align-items:center;cursor:pointer;margin:-16px;padding:16px" data-toca="vista" onclick="pzToggle()">
-      <div style="min-width:0"><div class="title">Prazos</div>
+  return `<div class="card u-mb-14px" id="pzCard">
+    <div class="row-between tap u-ai-center u-cur-pointer u-m-n16px u-p-16px" data-toca="vista" data-click="pzToggle()">
+      <div class="u-minw-0"><div class="title">Prazos</div>
         <div class="small">${lista.length} na janela de aviso${urgentes?' · <b class="neg">'+urgentes+' com 7 dias ou menos</b>':''}${open?'':' · toca para ver'}</div></div>
-      <span style="flex:0 0 auto;display:inline-flex;transform:rotate(${open?'90':'-90'}deg)">${ic('chev',20)}</span></div>
-    ${open?`<div class="list" style="gap:8px;margin-top:12px">${lista.map(row).join('')}</div>
-    <div class="hint" style="margin-top:9px">Silenciar cala esta ocorrência; quando a data mudar, o aviso volta sozinho.</div>`:''}</div>`;
+      <span class="u-fx-0-0-auto u-d-inline-flex ${open?'u-tf-rotate-90deg':'u-tf-rotate-n90deg'}">${ic('chev',20)}</span></div>
+    ${open?`<div class="list u-g-8px u-mt-12px">${lista.map(row).join('')}</div>
+    <div class="hint u-mt-9px">Silenciar cala esta ocorrência; quando a data mudar, o aviso volta sozinho.</div>`:''}</div>`;
 }
 
 /* Lembretes de prazos para a ponte Android (o scheduleReminders junta-os aos

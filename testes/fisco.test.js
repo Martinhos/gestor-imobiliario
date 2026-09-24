@@ -3,13 +3,14 @@
 // fora, a quota-parte do titular, as faltas apontadas, o CSV, a vista e o
 // separador na navegação.
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar } from './arnes.js';
+import { carregarApp, limpar, perto, repor } from './arnes.js';
 
-const app = carregarApp();
-const perto = (a, b, tol = 0.01) =>
-  assert.ok(Math.abs(a - b) <= tol, `esperava ${b} (±${tol}), veio ${a}`);
+// a app vive num dia fixo, na primavera a seguir ao ano do resumo — quando se
+// entrega a declaração, e o «ano automático» tem por onde escolher
+const app = carregarApp({ hoje: '2025-03-15' });
+afterEach(() => repor(app));
 const ANO = 2024;   // fixo: o resumo é de um ano, e o teste não pode depender do dia
 
 const mov = (extra) => {
@@ -245,7 +246,7 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(html, /class="tablewrap"><table class="table"/);
     /* os cartões vinham somados um a seguir ao outro e ficavam colados: vivem
        numa pilha com intervalo, e a coluna encolhe para a tabela rolar */
-    const pilha = html.indexOf('class="fiscoPilha" style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px"');
+    const pilha = html.indexOf('class="fiscoPilha u-d-grid u-gtc-minmax-0-1fr u-g-14px"');
     assert.ok(pilha > -1, 'os cartões estão numa pilha com intervalo');
     assert.ok(html.indexOf('Obrigações de 2024') > pilha && html.indexOf('Anexo F · quadro 4.1') > pilha && html.indexOf('Obras antes do arrendamento') > pilha,
       'as obrigações, o quadro e as obras vivem todos dentro da pilha');
@@ -311,7 +312,7 @@ describe('a vista, o texto e o CSV', () => {
 
   test('o ano automático: até junho o anterior, se tiver rendas', () => {
     app.fiscoAno = '';
-    const mes = new Date().getMonth() + 1, Y = app.YEAR;
+    const mes = Number(app.today().slice(5, 7)), Y = app.YEAR;
     const tem = (y) => app.db.transactions.some((t) => app.ehRenda(t) && String(t.date).startsWith(String(y)));
     assert.equal(app.fiscoAnoAtual(), mes <= 6 && tem(Y - 1) ? Y - 1 : Y);
     app.fiscoAno = '2019';

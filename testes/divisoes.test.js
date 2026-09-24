@@ -1,13 +1,17 @@
 // Divisão de despesas entre comproprietários e contas a acertar.
 // Aqui um cêntimo a mais ou a menos é uma discussão entre pessoas.
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar, igual, vazio } from './arnes.js';
+import { carregarApp, limpar, igual, vazio, perto, repor } from './arnes.js';
 
 const app = carregarApp();
-const perto = (a, b, tol = 0.005) =>
-  assert.ok(Math.abs(a - b) <= tol, `esperava ${b} (±${tol}), veio ${a}`);
+afterEach(() => repor(app));
+/* As divisões acertam ao cêntimo: a tolerância aqui é meio cêntimo, mais
+   apertada do que a do perto do arnês.
+   Recebe: a, b, tol (0.005), msg — como o perto.
+   Devolve: nada — falha a asserção com os dois números à vista. */
+const aoMeioCentimo = (a, b, tol = 0.005, msg) => perto(a, b, tol, msg);
 
 let ana, bruno, carla, casa;
 
@@ -24,38 +28,38 @@ beforeEach(() => {
 describe('quota-parte', () => {
   test('sem percentagens, partes iguais', () => {
     const s = app.sharesOf(casa);
-    perto(s.ana, 0.5);
-    perto(s.bruno, 0.5);
+    aoMeioCentimo(s.ana, 0.5);
+    aoMeioCentimo(s.bruno, 0.5);
   });
 
   test('percentagens definidas mandam', () => {
     casa.ownerShares = { ana: 70, bruno: 30 };
     const s = app.sharesOf(casa);
-    perto(s.ana, 0.7);
-    perto(s.bruno, 0.3);
+    aoMeioCentimo(s.ana, 0.7);
+    aoMeioCentimo(s.bruno, 0.3);
   });
 
   test('quem não tem percentagem fica com o que sobra', () => {
     casa.ownerIds = ['ana', 'bruno', 'carla'];
     casa.ownerShares = { ana: 50 };
     const s = app.sharesOf(casa);
-    perto(s.ana, 0.5);
-    perto(s.bruno, 0.25);
-    perto(s.carla, 0.25);
+    aoMeioCentimo(s.ana, 0.5);
+    aoMeioCentimo(s.bruno, 0.25);
+    aoMeioCentimo(s.carla, 0.25);
   });
 
   test('percentagens que não somam 100 são normalizadas', () => {
     casa.ownerShares = { ana: 30, bruno: 30 };
     const s = app.sharesOf(casa);
-    perto(s.ana, 0.5);
-    perto(s.bruno, 0.5);
+    aoMeioCentimo(s.ana, 0.5);
+    aoMeioCentimo(s.bruno, 0.5);
   });
 
   test('as quotas somam sempre um', () => {
     casa.ownerIds = ['ana', 'bruno', 'carla'];
     casa.ownerShares = { ana: 33, bruno: 33, carla: 34 };
     const s = app.sharesOf(casa);
-    perto(Object.values(s).reduce((a, b) => a + b, 0), 1);
+    aoMeioCentimo(Object.values(s).reduce((a, b) => a + b, 0), 1);
   });
 
   test('imóvel sem donos não devolve quotas', () => {
@@ -168,6 +172,42 @@ describe('divisão de um movimento', () => {
   });
 });
 
+describe('a ficha do movimento mostra a divisão', () => {
+  /* era um bug, e estava na versão publicada: o txSplitCents e o psplitCents
+     devolvem os cêntimos pela ORDEM da lista que recebem, e a ficha lia-os
+     por chave (c[o.id]) — dava 0 € a todos os proprietários. */
+  test('cada dono aparece com o seu nome e a sua parte, e não a zero', () => {
+    app.db.transactions.push(app.normTx({ id: 'T1', kind: 'expense', label: 'Obras', amount: 300,
+      propertyId: 'casa', date: '2026-03-10', paidBy: 'ana' }));
+    const html = app.txFicha('T1');
+    assert.match(html, /Divisão entre proprietários/);
+    assert.match(html, /Ana · 150,00/, 'a Ana leva metade, com nome');
+    assert.match(html, /Bruno · 150,00/, 'o Bruno também');
+    assert.ok(!/· 0,00/.test(html), 'e ninguém aparece a zero');
+  });
+
+  test('segue o modo escolhido no movimento', () => {
+    app.db.transactions.push(app.normTx({ id: 'T2', kind: 'expense', label: 'Obras', amount: 300,
+      propertyId: 'casa', date: '2026-03-10', paidBy: 'ana',
+      split: { mode: 'percent', parts: { ana: 70, bruno: 30 } } }));
+    const html = app.txFicha('T2');
+    assert.match(html, /Ana · 210,00/);
+    assert.match(html, /Bruno · 90,00/);
+  });
+
+  test('num movimento de grupo, cada imóvel aparece com a sua parte', () => {
+    const outra = app.normProp({ id: 'casa2', name: 'T3', ownerIds: ['ana'] });
+    app.db.properties.push(outra);
+    app.db.groups.push({ id: 'g1', name: 'Bloco', ids: ['casa', 'casa2'] });
+    app.db.transactions.push(app.normTx({ id: 'T3', kind: 'expense', label: 'Seguro', amount: 200,
+      groupId: 'g1', date: '2026-03-10', paidBy: 'ana' }));
+    const html = app.txFicha('T3');
+    assert.match(html, /Divisão entre imóveis/);
+    assert.match(html, /T2 · 100,00/);
+    assert.match(html, /T3 · 100,00/);
+  });
+});
+
 describe('divisão entre imóveis', () => {
   test('por ajuste segue a mesma regra do extra', () => {
     const p1 = app.normProp({ id: 'p1', name: 'P1' }), p2 = app.normProp({ id: 'p2', name: 'P2' });
@@ -183,8 +223,8 @@ describe('contas entre proprietários', () => {
       kind: 'expense', amount: 100, propertyId: 'casa', paidBy: 'ana', date: '2026-01-10',
     }));
     const b = app.ownerBalances('casa');
-    perto(b.ana, 50);
-    perto(b.bruno, -50);
+    aoMeioCentimo(b.ana, 50);
+    aoMeioCentimo(b.bruno, -50);
   });
 
   test('quem recebe fica a dever a parte dos outros', () => {
@@ -192,8 +232,8 @@ describe('contas entre proprietários', () => {
       kind: 'income', amount: 100, propertyId: 'casa', paidBy: 'ana', date: '2026-01-10',
     }));
     const b = app.ownerBalances('casa');
-    perto(b.ana, -50);
-    perto(b.bruno, 50);
+    aoMeioCentimo(b.ana, -50);
+    aoMeioCentimo(b.bruno, 50);
   });
 
   test('os saldos somam sempre zero', () => {
@@ -205,7 +245,7 @@ describe('contas entre proprietários', () => {
         }));
       });
     const b = app.ownerBalances('casa');
-    perto(Object.values(b).reduce((a, x) => a + x, 0), 0);
+    aoMeioCentimo(Object.values(b).reduce((a, x) => a + x, 0), 0);
   });
 
   test('movimentos sem pessoa indicada não inventam dívidas', () => {
@@ -213,15 +253,15 @@ describe('contas entre proprietários', () => {
       kind: 'expense', amount: 100, propertyId: 'casa', paidBy: null, date: '2026-01-10',
     }));
     const b = app.ownerBalances('casa');
-    perto(b.ana || 0, 0);
-    perto(b.bruno || 0, 0);
+    aoMeioCentimo(b.ana || 0, 0);
+    aoMeioCentimo(b.bruno || 0, 0);
   });
 
   test('dívidas a terceiros ficam de fora', () => {
     app.db.transactions.push(app.normTx({
       kind: 'owed', amount: 500, propertyId: 'casa', paidBy: 'ana', creditor: 'Banco', date: '2026-01-10',
     }));
-    perto(app.ownerBalances('casa').ana || 0, 0);
+    aoMeioCentimo(app.ownerBalances('casa').ana || 0, 0);
   });
 
   test('imóvel com um só dono não gera contas', () => {
@@ -240,8 +280,8 @@ describe('contas entre proprietários', () => {
       kind: 'settle', amount: 50, propertyId: 'casa', paidBy: 'bruno', toId: 'ana', date: '2026-01-20',
     }));
     const b = app.ownerBalances('casa');
-    perto(b.ana, 0);
-    perto(b.bruno, 0);
+    aoMeioCentimo(b.ana, 0);
+    aoMeioCentimo(b.bruno, 0);
   });
 });
 
@@ -249,7 +289,7 @@ describe('plano de acerto', () => {
   test('liga quem deve a quem tem a receber', () => {
     const plano = app.settlePlan({ ana: 100, bruno: -60, carla: -40 });
     assert.equal(plano.length, 2);
-    perto(plano.reduce((t, p) => t + p.amount, 0), 100);
+    aoMeioCentimo(plano.reduce((t, p) => t + p.amount, 0), 100);
     assert.ok(plano.every((p) => p.to === 'ana'));
   });
 

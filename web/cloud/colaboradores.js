@@ -17,14 +17,22 @@
    cartões e a vista (vColaboradores) estão em partilha.js. */
 'use strict';
 
-var LS_LIGACAO = 'gi_ligacao_url';   // o URL da ligação permanente: só se mostra na criação
+/* O URL da ligação permanente só se mostra na criação, e fica guardado no
+   aparelho por conta (nucleo.js:chaveDaLigacao) — a chave sem dono das
+   versões anteriores deixava quem entrasse a seguir copiar a ligação de quem
+   saiu, e não se sabe de quem era: esquece-se.
+   Devolve: nada — apaga a chave antiga do localStorage. */
+function largarLigacaoSemDono() {
+  try { localStorage.removeItem(LS_LIGACAO); } catch (e) {}
+}
+largarLigacaoSemDono();
 
 /* ---------------- as permissões na interface ---------------- */
 
 /* As linhas do modal do cargo: uma por entidade, com o interruptor «Ver» e,
    quando existe, o «Adicionar» (hipotecas e avaliação só se veem; a ficha do
-   imóvel só se edita). A ordem é a do contrato; os rótulos e as dicas vêm de
-   ROTULOS (web/app/acessos.js) quando ele existe — estes são os de recurso. */
+   imóvel só se edita). A ordem é a do contrato; os rótulos vêm de ROTULOS
+   (web/app/acessos.js). */
 var ENTIDADES = [
   { nome: 'Movimentos', ver: 'tx.view', add: 'tx.add' },
   { nome: 'Planeados', ver: 'rec.view', add: 'rec.add' },
@@ -36,67 +44,23 @@ var ENTIDADES = [
   { nome: 'Valores e avaliação', ver: 'report.view' },
   { nome: 'Ficha do imóvel', add: 'house.edit', addRotulo: 'Editar' },
 ];
-var ROTULOS_LOCAL = {
-  'tx.view': 'Ver movimentos', 'tx.add': 'Adicionar movimentos',
-  'rec.view': 'Ver planeados', 'rec.add': 'Adicionar e confirmar planeados',
-  'visit.view': 'Ver visitas', 'visit.add': 'Marcar visitas',
-  'contract.view': 'Ver contratos', 'contract.add': 'Adicionar contratos',
-  'tenant.view': 'Ver fichas de inquilinos', 'tenant.add': 'Adicionar inquilinos',
-  'loan.view': 'Ver hipotecas',
-  'file.view': 'Ver fotos e documentos', 'file.add': 'Adicionar fotos e documentos',
-  'report.view': 'Ver valores e avaliação',
-  'house.edit': 'Editar a ficha do imóvel',
-};
-// as implicações do contrato, iguais às do servidor (X.add ⇒ X.view vale
-// sempre e não precisa de estar aqui) — a cópia de recurso quando IMPLICA
-// (acessos.js) ainda não carregou ou tem outra forma
-var IMPLICA_LOCAL = { 'house.edit': ['loan.view', 'file.view'], 'contract.add': ['rec.add'] };
-// os três cargos prontos do contrato — a cópia de recurso de CARGOS_EXEMPLO
-var CARGOS_LOCAL = [
-  { nome: 'Gestor de visitas', perms: ['visit.view', 'visit.add', 'tenant.view', 'tenant.add'],
-    sub: 'Marca visitas e cria fichas de quem quer arrendar.' },
-  { nome: 'Contabilista', perms: ['tx.view', 'tx.add', 'rec.view', 'rec.add', 'contract.view', 'loan.view', 'file.view', 'file.add', 'report.view'],
-    sub: 'Regista movimentos e vê contratos, hipotecas e avaliação. Não mexe nas fichas.' },
-  { nome: 'Ver tudo', perms: ['tx.view', 'rec.view', 'visit.view', 'contract.view', 'tenant.view', 'loan.view', 'file.view', 'report.view'],
-    sub: 'Vê tudo sobre o imóvel, sem alterar nada.' },
-];
-
-// O rótulo de uma permissão para a interface: o de ROTULOS quando existe, senão o local.
+// O rótulo de uma permissão para a interface, de ROTULOS (web/app/acessos.js).
 // Recebe: perm — a chave da permissão (ex.: 'tx.add').
 // Devolve: o rótulo (texto); a própria chave se ninguém a conhecer.
 function rotuloDe(perm) {
-  try {
-    var r = typeof ROTULOS !== 'undefined' && ROTULOS && ROTULOS[perm];
-    if (r && typeof r === 'string') return r;
-    if (r && r.rotulo) return r.rotulo;
-  } catch (e) {}
-  return ROTULOS_LOCAL[perm] || perm;
+  var r = ROTULOS[perm];
+  return (r && r.rotulo) || perm;
 }
 
-// As permissões que uma permissão arrasta consigo (só o passo direto: quem
-// quer o fecho chama permsFechadas).
-// Recebe: perm — a chave da permissão.
-// Devolve: array de chaves implicadas (vazio quando não implica nenhuma).
-function implicadas(perm) {
-  var out = [];
-  var m = /^(\w+)\.add$/.exec(perm);
-  if (m) out.push(m[1] + '.view');
-  var tab = IMPLICA_LOCAL;
-  try { if (typeof IMPLICA !== 'undefined' && IMPLICA && Array.isArray(IMPLICA[perm])) tab = IMPLICA; } catch (e) {}
-  (tab[perm] || []).forEach(function (p) { if (out.indexOf(p) < 0) out.push(p); });
-  return out;
-}
-
-// O fecho de uma lista de permissões: junta tudo o que as implicações trazem
-// (contract.add ⇒ rec.add ⇒ rec.view), sem repetidos.
-// Recebe: perms — array de chaves (aguenta null e objetos {chave: true}).
+// O fecho de uma lista de permissões (contract.add ⇒ rec.add ⇒ rec.view), em
+// array e pela ordem de PERMS: o fechoPerms de web/app/acessos.js, que é a
+// regra do servidor — sem segunda cópia dela aqui.
+// Recebe: perms — array de chaves (aguenta null, Sets e objetos {chave: true}).
 // Devolve: array de chaves, já fechado.
 function permsFechadas(perms) {
-  var lista = Array.isArray(perms) ? perms.slice()
-    : (perms && typeof perms === 'object') ? Object.keys(perms).filter(function (k) { return perms[k]; }) : [];
-  for (var i = 0; i < lista.length; i++) {
-    implicadas(lista[i]).forEach(function (p) { if (lista.indexOf(p) < 0) lista.push(p); });
-  }
+  var fecho = fechoPerms(perms || []);
+  var lista = PERMS.filter(function (p) { return fecho.has(p); });
+  fecho.forEach(function (p) { if (lista.indexOf(p) < 0) lista.push(p); });
   return lista;
 }
 
@@ -121,14 +85,11 @@ function resumoPerms(perms) {
 }
 
 // Os cargos de exemplo, na forma que o modal usa ({nome, perms, sub}): os de
-// CARGOS_EXEMPLO (acessos.js) quando existem, aceitando as chaves em inglês.
+// CARGOS_EXEMPLO (web/app/acessos.js), com as permissões já fechadas.
 // Devolve: array de {nome, perms, sub}.
 function cargosExemplo() {
-  var lista = null;
-  try { if (typeof CARGOS_EXEMPLO !== 'undefined' && Array.isArray(CARGOS_EXEMPLO) && CARGOS_EXEMPLO.length) lista = CARGOS_EXEMPLO; } catch (e) {}
-  if (!lista) return CARGOS_LOCAL;
-  return lista.map(function (c) {
-    return { nome: c.nome || c.name || '', perms: permsFechadas(c.perms), sub: c.sub || c.desc || c.descricao || c.hint || '' };
+  return CARGOS_EXEMPLO.map(function (c) {
+    return { nome: c.nome, perms: permsFechadas(c.perms), sub: c.sub || '' };
   });
 }
 
@@ -168,8 +129,8 @@ function nomesDeCasas(casas) {
 // Recebe: perm — a chave; rotulo — o texto ao lado; on — se começa marcada.
 // Devolve: o HTML do <label class="check">.
 function caixaPerm(perm, rotulo, on) {
-  return '<label class="check" style="gap:6px;font-size:13px"><input type="checkbox" data-perm="' + perm + '" id="cg_' + perm.replace('.', '_') + '"' +
-    (on ? ' checked' : '') + ' data-toca="rascunho" onchange="CW.cargoImplica()"><span>' + esc(rotulo) + '</span></label>';
+  return '<label class="check u-g-6px u-fs-13px"><input type="checkbox" data-perm="' + perm + '" id="cg_' + perm.replace('.', '_') + '"' +
+    (on ? ' checked' : '') + ' data-toca="rascunho" data-change="CW.cargoImplica()"><span>' + esc(rotulo) + '</span></label>';
 }
 
 /* Abre o modal de criar ou editar um cargo: o nome e uma linha por entidade
@@ -181,22 +142,22 @@ CW.cargoModal = function (id) {
   var r = id ? cargosDoDono().find(function (x) { return x.id === id; }) : null;
   var tem = r ? permsFechadas(r.perms) : [];
   var exemplos = r ? '' :
-    '<div><div class="flabel">Começar por um cargo pronto</div><div class="list" style="gap:8px">' +
+    '<div><div class="flabel">Começar por um cargo pronto</div><div class="list u-g-8px">' +
     cargosExemplo().map(function (c, i) {
-      return '<button type="button" class="card tap" style="padding:11px 13px;text-align:left" data-toca="rascunho" onclick="CW.cargoExemplo(' + i + ')">' +
-        '<div class="row-between" style="align-items:center;gap:10px"><span style="min-width:0"><b style="display:block">' + esc(c.nome) + '</b>' +
-        '<span class="small">' + esc(c.sub) + '</span></span><span class="badge" style="flex:0 0 auto">Usar este</span></div></button>';
+      return '<button type="button" class="card tap u-p-11px-13px u-ta-left" data-toca="rascunho" data-click="CW.cargoExemplo(' + i + ')">' +
+        '<div class="row-between u-ai-center u-g-10px"><span class="u-minw-0"><b class="u-d-block">' + esc(c.nome) + '</b>' +
+        '<span class="small">' + esc(c.sub) + '</span></span><span class="badge u-fx-0-0-auto">Usar este</span></div></button>';
     }).join('') + '</div></div>';
   var linhas = ENTIDADES.map(function (e) {
-    return '<div class="stat" style="align-items:center"><span>' + esc(e.nome) + '</span>' +
-      '<span style="display:flex;gap:14px;flex:0 0 auto">' +
+    return '<div class="stat u-ai-center"><span>' + esc(e.nome) + '</span>' +
+      '<span class="u-d-flex u-g-14px u-fx-0-0-auto">' +
       (e.ver ? caixaPerm(e.ver, 'Ver', tem.indexOf(e.ver) > -1) : '') +
       (e.add ? caixaPerm(e.add, e.addRotulo || 'Adicionar', tem.indexOf(e.add) > -1) : '') + '</span></div>';
   }).join('');
   var body = '<div class="form">' + exemplos +
     '<label>Nome do cargo<input id="cg_nome" maxlength="40" value="' + esc(r ? r.name : '') + '" placeholder="Gestor, contabilista, agente…" autocomplete="off"></label>' +
     '<div><div class="flabel">O que pode fazer</div>' + linhas +
-    '<div class="hint" style="margin-top:8px">«Adicionar» inclui ver, e editar ou apagar só o que o próprio criar. ' +
+    '<div class="hint u-mt-8px">«Adicionar» inclui ver, e editar ou apagar só o que o próprio criar. ' +
     'Editar a ficha do imóvel traz as hipotecas e os documentos; adicionar contratos traz os planeados. ' +
     'Um colaborador nunca tem quota-parte nem entra nas contas entre proprietários.</div></div></div>';
   var m = r ? menu('cargo', [{ label: 'Apagar cargo', icon: 'trash', danger: true, toca: 'dados', risco: 'destroi', act: "CW.apagarCargo('" + jsq(id) + "')" }]) : '';
@@ -304,6 +265,15 @@ window.cwInvGrupo = function () {
   if (lab) lab.textContent = 'Escolher pelo grupo…';
 };
 
+/* Marca todo o texto de um campo. Era o this.select() escrito no on…= do
+   campo da ligação, e o select() não está na lista dos métodos que uma ação
+   chama no this (web/app/eventos.js).
+   Recebe: campo — o campo de texto (o this da ação).
+   Devolve: nada — deixa o texto do campo selecionado. */
+function selecionarCampo(campo) {
+  campo.select();
+}
+
 // O modal que mostra uma ligação acabada de criar, com «Copiar ligação» e
 // «Partilhar…» (só quando o aparelho sabe partilhar).
 // Recebe: titulo — o título do modal; url — a ligação; hint — a nota por baixo.
@@ -311,11 +281,11 @@ window.cwInvGrupo = function () {
 function ligacaoModal(titulo, url, hint) {
   var podePartilhar = !!(navigator.share);
   openModal(titulo,
-    '<div class="form"><input id="cw_lig_url" readonly value="' + esc(url) + '" data-toca="nada" onclick="this.select()" style="font-family:monospace;font-size:12.5px">' +
+    '<div class="form"><input id="cw_lig_url" class="u-ff-monospace u-fs-12p5px" readonly value="' + esc(url) + '" data-toca="nada" data-click="selecionarCampo(this)">' +
     '<div class="hint">' + hint + '</div></div>',
-    '<button class="btn" data-toca="camada" onclick="closeModal()">Fechar</button>' +
-    (podePartilhar ? '<button class="btn" data-toca="nada" onclick="CW.partilharLigacao(\'' + jsq(url) + '\')">Partilhar…</button>' : '') +
-    '<button class="btn primary" data-toca="nada" onclick="CW.copiar(\'' + jsq(url) + '\')">Copiar ligação</button>');
+    '<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>' +
+    (podePartilhar ? '<button class="btn" data-toca="nada" data-click="CW.partilharLigacao(\'' + jsq(url) + '\')">Partilhar…</button>' : '') +
+    '<button class="btn primary" data-toca="nada" data-click="CW.copiar(\'' + jsq(url) + '\')">Copiar ligação</button>');
 }
 
 /* Cria uma ligação de convite com o cargo e os imóveis marcados no cartão
@@ -396,10 +366,10 @@ CW.mudarColaborador = function (id) {
   var body = '<div class="form">' +
     '<div class="hint"><b>' + esc(c.name || '') + '</b> — escolhe o cargo e os imóveis onde colabora.</div>' +
     '<label>Cargo' + sel('cw_col_cargo', c.roleId, cargos, '', 'rascunho') + '</label>' +
-    '<div><div class="flabel">Imóveis</div><div class="list" style="gap:7px">' +
+    '<div><div class="flabel">Imóveis</div><div class="list u-g-7px">' +
     imoveisMeus().map(function (p) {
       return '<label class="check"><input type="checkbox" id="cw_col_h_' + p.id + '"' + (tem.indexOf(p.id) > -1 ? ' checked' : '') + '>' +
-        '<span style="min-width:0"><b>' + esc(p.name || 'Sem nome') + '</b>' + (p.address ? ' <span class="small">' + esc(p.address) + '</span>' : '') + '</span></label>';
+        '<span class="u-minw-0"><b>' + esc(p.name || 'Sem nome') + '</b>' + (p.address ? ' <span class="small">' + esc(p.address) + '</span>' : '') + '</span></label>';
     }).join('') + '</div></div></div>';
   openModal('Mudar cargo ou imóveis', body);
   onSave = function () {
@@ -449,11 +419,12 @@ CW.sairDeImovel = function (collabId) {
 /* ---------------- a ligação de partilha (permanente) ---------------- */
 
 // Guarda no aparelho o URL da ligação permanente, que o servidor só devolve
-// na criação e na rotação — é daqui que o «Copiar ligação» o lê.
+// na criação e na rotação — é daqui que o «Copiar ligação» o lê. Na chave
+// desta conta (chaveDaLigacao), que o ritual de saída apaga.
 // Recebe: url — a ligação (vazio apaga a guardada).
 // Devolve: nada — escreve no localStorage.
 function guardarLigacao(url) {
-  try { if (url) localStorage.setItem(LS_LIGACAO, url); else localStorage.removeItem(LS_LIGACAO); } catch (e) {}
+  try { if (url) localStorage.setItem(chaveDaLigacao(), url); else localStorage.removeItem(chaveDaLigacao()); } catch (e) {}
 }
 
 // O que a criação e a rotação têm em comum: POST /api/share-link, guardar o
@@ -501,12 +472,13 @@ CW.ligacaoDesativar = function () {
   });
 };
 
-// Copia a ligação permanente guardada neste aparelho. Se não houver (foi
-// criada noutro aparelho), diz como a obter — o servidor não a volta a mostrar.
+// Copia a ligação permanente desta conta guardada neste aparelho. Se não
+// houver (foi criada noutro aparelho, ou antes de sair), diz como a obter —
+// o servidor não a volta a mostrar.
 // Devolve: nada — copia e avisa.
 CW.ligacaoCopiar = function () {
   var url = '';
-  try { url = localStorage.getItem(LS_LIGACAO) || ''; } catch (e) {}
+  try { url = localStorage.getItem(chaveDaLigacao()) || ''; } catch (e) {}
   if (!url) return toast('A ligação só se mostra quando é criada. Roda-a para teres uma nova neste aparelho.', { ms: 6000 });
   CW.copiar(url);
 };
@@ -566,6 +538,9 @@ CW.pedidoCancelar = function (id) {
    Recebe: token — o token da ligação de convite (64 hex).
    Devolve: nada — o desfecho aparece num modal ou num toast. */
 CW.aceitarConvite = function (token) {
+  // chega-se aqui por uma ligação, não por um botão que se esconde: com o
+  // serviço desligado nesta conta, diz-se e não se gasta a ligação
+  if (!servicoLigado('colaboradores')) return toast(hintServicoDesligado('colaboradores'), { ms: 6000 });
   var prev = CW._convitePrev || {};
   api('POST', '/api/convite/' + encodeURIComponent(token) + '/aceitar')
     .then(function (r) {
@@ -579,13 +554,13 @@ CW.aceitarConvite = function (token) {
       var pode = perms.map(rotuloDe).map(function (t) { return t.charAt(0).toLowerCase() + t.slice(1); });
       var saltadas = (r.saltadas || []).map(function (s) { return s.name || s; });
       openModal('Agora és colaborador de ' + (r.ownerName || prev.ownerName || ''),
-        '<div class="form"><div class="hint" style="font-size:14px"><b>' + esc(r.roleName || prev.roleName || 'Colaborador') + '</b> em ' +
+        '<div class="form"><div class="hint u-fs-14px"><b>' + esc(r.roleName || prev.roleName || 'Colaborador') + '</b> em ' +
         esc(nomesDeCasas(r.houses || prev.houses || [])) + '.</div>' +
         (pode.length ? '<div class="hint">Podes: ' + esc(pode.join(', ')) + '.</div>' : '') +
         (saltadas.length ? '<div class="hint">Já eras comproprietário de ' + esc(saltadas.join(', ')) + ' — aí fica tudo como estava.</div>' : '') +
         '<div class="hint">Os cartões desses imóveis levam o selo «de ' + esc(r.ownerName || prev.ownerName || '') + ' · ' + esc(r.roleName || prev.roleName || '') +
         '». Podes sair quando quiseres no menu, em Pessoas → Colaboradores.</div></div>',
-        '<button class="btn primary" data-toca="ecra" onclick="closeAllModals();go(\'properties\')">Ver os imóveis</button>');
+        '<button class="btn primary" data-toca="ecra" data-click="closeAllModals();go(\'properties\')">Ver os imóveis</button>');
     })
     .catch(function (e) {
       if (e && (e.status === 404 || e.status === 400 || e.status === 410)) {
@@ -606,6 +581,7 @@ CW.aceitarConvite = function (token) {
    Recebe: token — o token da ligação (64 hex); houseIds — os ids dos meus imóveis.
    Devolve: nada — avisa por toast e sincroniza. */
 CW.pedirPartilha = function (token, houseIds) {
+  if (!servicoLigado('colaboradores')) return toast(hintServicoDesligado('colaboradores'), { ms: 6000 });
   var dono = (CW._ligarPrev && CW._ligarPrev.ownerName) || 'o dono da ligação';
   if (!houseIds || !houseIds.length) return toast('Marca pelo menos um imóvel.');
   api('POST', '/api/ligar/' + encodeURIComponent(token) + '/pedir', { houseIds: houseIds })
@@ -628,40 +604,14 @@ CW.pedirPartilha = function (token, houseIds) {
 
 /* ---------------- o sino: pedidos de partilha recebidos ---------------- */
 
-// Os pedidos de partilha recebidos, para o sino: «<Nome> quer partilhar <imóvel> contigo».
-// Devolve: array de {id, fromName, houseName} (vazio sem estado).
+// Os pedidos de partilha recebidos: «<Nome> quer partilhar <imóvel> contigo».
+// O sino conta-os e mostra-os por conta própria (web/app/notificacoes.js:
+// notifPedidos, que carrega sempre antes); o embrulho que aqui os juntava ao
+// sino, para quando ele ainda não sabia dos pedidos, saiu.
+// Devolve: array de {id, fromName, houseName} (vazio sem estado, ou com o
+// serviço Colaboradores desligado nesta conta — não se conta o que não há).
 function pedidosRecebidos() {
+  if (!servicoLigado('colaboradores')) return [];
   var sr = (CW.state && CW.state.shareRequests) || {};
   return sr.incoming || [];
 }
-
-/* Os pedidos entram no sino da vista geral. O sino vive em
-   web/app/notificacoes.js; se essa camada já souber dos pedidos (tem
-   notifPedidos, ou fala em shareRequests), não se duplica nada — senão
-   embrulha-se aqui o crachá e o modal. */
-(function () {
-  if (typeof notifConta !== 'function' || typeof notifModal !== 'function') return;
-  if (typeof notifPedidos === 'function' || /shareRequests|notifPedidos/.test(String(notifModal) + String(notifConta))) return;
-  var _notifConta = notifConta;
-  notifConta = function () { return _notifConta() + pedidosRecebidos().length; };
-  var _notifModal = notifModal;
-  notifModal = function () {
-    _notifModal();
-    var lista = pedidosRecebidos();
-    if (!lista.length) return;
-    var top = modalTop();
-    var corpo = top && top.el.querySelector('.body .list');
-    if (!corpo) return;
-    var vazio = corpo.querySelector('.empty');
-    if (vazio) vazio.remove();
-    var w = document.createElement('div');
-    w.innerHTML = '<div class="navh">Pedidos de partilha</div>' + lista.map(function (p) {
-      return '<div class="card cw-pedido" style="padding:10px 13px"><b style="display:block">' + esc(p.fromName || '') + ' quer partilhar ' + esc(p.houseName || 'um imóvel') + ' contigo</b>' +
-        '<span class="small">Se aceitares, passas a comproprietário desse imóvel.</span>' +
-        '<div class="toolbar" style="margin-top:8px"><button class="btn sm primary" data-toca="dados" onclick="closeModal();CW.pedidoAceitar(\'' + jsq(p.id) + '\')">Aceitar</button>' +
-        '<button class="btn sm danger" data-toca="dados" onclick="closeModal();CW.pedidoRecusar(\'' + jsq(p.id) + '\')">Recusar</button></div></div>';
-    }).join('');
-    var ref = corpo.firstChild;   // no topo, pela ordem em que foram escritos
-    while (w.firstChild) corpo.insertBefore(w.firstChild, ref);
-  };
-})();

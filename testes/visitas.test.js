@@ -4,11 +4,12 @@
 // dos planeados respeita o passo de cada um, e a conversão em inquilino
 // leva o contacto para o campo certo.
 
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp } from './arnes.js';
+import { carregarApp, repor } from './arnes.js';
 
 const app = carregarApp();
+afterEach(() => repor(app));
 
 function monta() {
   app.db.properties = [app.normProp({ id: 'P1', name: 'T2 Lisboa', rentalMode: 'quartos',
@@ -98,11 +99,12 @@ describe('o calendário', () => {
     const cheio = app.calDiaPanel('2026-09-10');
     assert.match(cheio, /Visitas/); assert.match(cheio, /Ana/); assert.match(cheio, /15:00/);
     assert.match(cheio, /Planeados/); assert.match(cheio, /Renda/);
-    assert.match(cheio, /visitModal\('V1'\)/, 'a visita abre a ficha');
+    assert.match(cheio, /visView\('V1'\)/, 'a visita abre a ficha');
     assert.match(cheio, /go\('recurring'\)/, 'o planeado leva aos Planeados');
     const vazio = app.calDiaPanel('2026-09-11');
     assert.match(vazio, /Nada marcado/);
-    assert.match(vazio, /visitModal\(null,\{date:'2026-09-11'\}\)/, 'marcar visita já com a data');
+    // uma ação declarada não leva objetos: o {date:…} vive no calMarcarVisita(iso)
+    assert.match(vazio, /calMarcarVisita\('2026-09-11'\)/, 'marcar visita já com a data');
     // a célula do dia em foco leva a classe .on e o aria-pressed
     app.calMes = '2026-09'; app.calDiaSel = '2026-09-10';
     const html = app.vCalendar();

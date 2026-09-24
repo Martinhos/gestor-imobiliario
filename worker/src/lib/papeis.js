@@ -108,14 +108,16 @@ function pertence(env, i, chave) {
   return l.indexOf(uid) > -1 || cargos.some((r) => l.indexOf(r) > -1);
 }
 
-// Sem nenhuma lista configurada, quem tiver acesso ao servidor de Discord é
-// admin — é o dono que decide, ao configurar.
+// A variável de ambiente com a lista de cada papel.
 const CHAVE_DO_PAPEL = {
   master: 'DISCORD_MASTER', admin: 'DISCORD_ADMINS',
   dev: 'DISCORD_DEVS', suporte: 'DISCORD_SUPORTE',
 };
 
 // Todos os papéis de quem está a falar, do mais alto para o mais baixo.
+// Sem nenhuma lista configurada, quem tiver acesso ao servidor de Discord é
+// master: numa instalação nova, o único que chega ao bot é quem o instalou —
+// e é ele que decide quem fica com o quê, ao configurar as listas.
 // Recebe: env — variáveis de ambiente (as listas DISCORD_MASTER/ADMINS/DEVS/SUPORTE);
 // i — a interação do Discord.
 // Devolve: lista de papéis do mais alto para o mais baixo; ['master'] quando

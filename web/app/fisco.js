@@ -179,7 +179,16 @@ function resumoFiscal(ano,titularId){
   /* as obras dos 24 meses, de qualquer ano: o que aqui entra fica marcado —
      por imóvel, porque um movimento de grupo pode ser obra num imóvel vago e
      gasto corrente noutro — para não voltar a entrar nas colunas normais, nem
-     sequer quando a linha do contrato a que pertence não é deste ano */
+     sequer quando a linha do contrato a que pertence não é deste ano. A obra
+     entra na linha do contrato no PRIMEIRO ano em que ele tem rendas, e não no
+     ano do início: um contrato que começa em dezembro e recebe a primeira
+     renda em janeiro não tem linha no ano do início, e a obra perdia-se nos dois */
+  const primeiroAno={};
+  (db.transactions||[]).forEach(t=>{
+    if(!ehRenda(t)||!t.contractId)return;
+    const y=String(t.date||'').slice(0,4);
+    if(/^\d{4}$/.test(y)&&(!primeiroAno[t.contractId]||y<primeiroAno[t.contractId]))primeiroAno[t.contractId]=y;
+  });
   const consumidos={};
   (db.transactions||[]).forEach(t=>{
     if(t.kind!=='expense')return;
@@ -190,7 +199,7 @@ function resumoFiscal(ano,titularId){
     const d=String(t.date||'');
     pids.forEach(pid=>{
       const p=props[pid];if(!p)return;
-      const ls=alvo[pid].map(c=>linhas[c.id]).filter(l=>l&&String(l.inicio).startsWith(A));
+      const ls=alvo[pid].map(c=>linhas[c.id]).filter(l=>l&&primeiroAno[l.contratoId]===A);
       if(!ls.length)return;
       const w=txWeight(t,pid,false);if(!(w>0))return;
       fiscoReparte(ls,(Number(t.amount)||0)*w*quotaDe(p),(l,parte)=>{
@@ -239,7 +248,9 @@ function resumoFiscal(ano,titularId){
    rendas sem recibo ou sem contrato, despesas sem regra — cada um com o toque
    que leva ao sítio certo. Os contratos não declarados são o último, sem
    toque e sem pedido: não são uma falta, são uma escolha, e diz-se só que
-   ficam fora.
+   ficam fora. Cada toque abre a ficha de outro serviço (contratos, inquilinos,
+   imóveis, movimentos): com esse serviço desligado nesta conta o aviso fica,
+   que a falta é a mesma, mas sem o toque.
    Recebe: ano — o ano; L — as linhas do resumo; F — os contratos fora; S — as
    rendas sem contrato; semRegra — n.º de despesas sem regra de dedução;
    obrasSoltas — n.º de despesas marcadas como obras24 sem contrato a seguir.
@@ -247,7 +258,9 @@ function resumoFiscal(ano,titularId){
    toca a família do ponto ('camada' abre uma ficha, 'ecra' muda de ecrã). */
 function fiscoAvisos(ano,L,F,S,semRegra,obrasSoltas){
   const out=[],add=(texto,abrir,toca)=>out.push({texto:texto,abrir:abrir||'',toca:toca||''});
-  const umCt=ls=>ls.length===1?[`ctView('${jsq(ls[0].contratoId)}')`,'camada']:["go('contracts')",'ecra'];
+  /* o toque só se o serviço que ele abre está ligado; senão [abrir, toca] vazios */
+  const se=(id,abrir,toca)=>servicoLigado(id)?[abrir,toca]:['',''];
+  const umCt=ls=>ls.length===1?se('contracts',`ctView('${jsq(ls[0].contratoId)}')`,'camada'):se('contracts',"go('contracts')",'ecra');
   const porIndicar=L.filter(l=>!l.estado);
   if(porIndicar.length)add(porIndicar.length===1?'Contrato '+porIndicar[0].nome+': por indicar se foi declarado à AT'
     :porIndicar.length+' contratos com rendas em '+ano+' por indicar se foram declarados à AT',...umCt(porIndicar));
@@ -258,25 +271,25 @@ function fiscoAvisos(ano,L,F,S,semRegra,obrasSoltas){
   L.forEach(l=>l.inquilinos.forEach(t=>{
     if(vistos[t.id])return;vistos[t.id]=1;
     const v=nifValido(t.nif);
-    if(v===false)add('Inquilino '+t.nome+': o NIF não bate certo',`personView('tenant','${jsq(t.id)}')`,'camada');
-    else if(v===null&&!String(t.pais||'').trim())add('Inquilino '+t.nome+': sem NIF nem país de residência',`personView('tenant','${jsq(t.id)}')`,'camada');
+    if(v===false)add('Inquilino '+t.nome+': o NIF não bate certo',...se('tenants',`personView('tenant','${jsq(t.id)}')`,'camada'));
+    else if(v===null&&!String(t.pais||'').trim())add('Inquilino '+t.nome+': sem NIF nem país de residência',...se('tenants',`personView('tenant','${jsq(t.id)}')`,'camada'));
   }));
   const imv={};
   L.forEach(l=>{
     if(!l.propertyId||imv[l.propertyId])return;imv[l.propertyId]=1;
     const falta=[!l.freguesiaCodigo?'código da freguesia':'',!l.tipoPredio?'tipo de prédio':'',!l.artigo?'artigo matricial':''].filter(Boolean);
-    if(falta.length)add('Imóvel '+l.imovel+': sem '+listaE(falta),`propView('${jsq(l.propertyId)}')`,'camada');
+    if(falta.length)add('Imóvel '+l.imovel+': sem '+listaE(falta),...se('properties',`propView('${jsq(l.propertyId)}')`,'camada'));
   });
   const comRecibos=L.filter(l=>l.recibosPorEmitir>0),nRec=sum(comRecibos.map(l=>l.recibosPorEmitir));
   if(nRec)add(fiscoN(nRec,'renda','rendas')+' de '+ano+' sem recibo eletrónico emitido',
-    ...(comRecibos.length===1?umCt(comRecibos):["go('transactions')",'ecra']));
+    ...(comRecibos.length===1?umCt(comRecibos):se('transactions',"go('transactions')",'ecra')));
   const nSem=sum(S.map(s=>s.n));
   if(nSem)add(fiscoN(nSem,'renda','rendas')+' de '+ano+' sem contrato ligado '+(nSem===1?'fica':'ficam')+' fora do quadro',
-    nSem===1?`txView('${jsq(S[0].ids[0])}')`:"go('transactions')",nSem===1?'camada':'ecra');
+    ...(nSem===1?se('transactions',`txView('${jsq(S[0].ids[0])}')`,'camada'):se('transactions',"go('transactions')",'ecra')));
   if(semRegra)add(fiscoN(semRegra,'despesa sem regra de dedução conta','despesas sem regra de dedução contam')+' em Outros: define-a nas Definições → IRS e dedução',
     "go('settings');goSet('irs')",'ecra');
   if(obrasSoltas)add(fiscoN(obrasSoltas,'despesa marcada como obras dos 24 meses','despesas marcadas como obras dos 24 meses')+' de '+ano+' sem contrato a começar depois: '+(obrasSoltas===1?'fica':'ficam')+' fora até o haver',
-    "go('transactions')",'ecra');
+    ...se('transactions',"go('transactions')",'ecra'));
   if(F.length)add(fiscoN(F.length,'contrato marcado como não declarado fica','contratos marcados como não declarados ficam')+' fora deste resumo.','','');
   return out;
 }
@@ -289,13 +302,15 @@ function fiscoAvisos(ano,L,F,S,semRegra,obrasSoltas){
 function vFisco(){
   const ano=fiscoAnoAtual(),auto=!fiscoAno,grupo=ownerIsGrp(),titular=grupo?'':ownerFilter;
   const anos=yearsWithData(null);if(anos.indexOf(ano)<0)anos.push(ano);anos.sort((a,b)=>a-b);
-  const panel=anaPanel(`<div style="display:flex;flex-direction:column;gap:9px">
-    ${db.owners.length?`<div style="width:100%">${sel('ownerSel',titular,[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))),'onOwnerFilter','vista')}</div>`:''}
-    <div style="width:100%">${sel('fiscoSel',String(ano),anos.map(y=>({v:String(y),label:String(y)})),'onFiscoAno','vista')}</div></div>
-    <div class="hint" style="margin-top:9px">O Anexo F é por titular: com um escolhido, rendas e gastos entram na quota-parte dele.${grupo?' Um grupo de proprietários não se aplica aqui — os valores vão por inteiro.':''}${auto&&ano===YEAR-1?' Até junho mostra-se o ano anterior, que é o que se está a declarar.':''}</div>`);
+  const panel=anaPanel(`<div class="u-d-flex u-fxd-column u-g-9px">
+    ${anaSelDono(titular,false)}
+    <div class="u-w-100pc">${sel('fiscoSel',String(ano),anos.map(y=>({v:String(y),label:String(y)})),'onFiscoAno','vista')}</div></div>
+    <div class="hint u-mt-9px">O Anexo F é por titular: com um escolhido, rendas e gastos entram na quota-parte dele.${grupo?' Um grupo de proprietários não se aplica aqui — os valores vão por inteiro.':''}${auto&&ano===YEAR-1?' Até junho mostra-se o ano anterior, que é o que se está a declarar.':''}</div>`);
   const r=resumoFiscal(ano,titular);
+  /* a saída do vazio leva aos Imóveis: com esse serviço desligado nesta conta
+     o botão não se escreve, e a frase diz quem o liga */
   if(!r.imoveis)return panel+(esperaDoServidor()||`<div class="empty"><b>Sem imóveis</b>O Anexo F parte das rendas de cada imóvel.
-    ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`);
+    ${servicoLigado('properties')?saida('Adicionar imóvel',"go('properties')",'ecra'):vazioServicoDesligado('properties')}</div>`);
   if(!r.linhas.length&&!r.fora.length&&!r.semContrato.length){
     const outros=anos.filter(y=>y!==ano&&(db.transactions||[]).some(t=>ehRenda(t)&&String(t.date||'').startsWith(String(y))));
     return panel+`<div class="empty"><b>Sem rendas em ${ano}</b>${outros.length?'Há rendas em '+esc(outros.join(', '))+'. ':''}Uma renda entra aqui quando o movimento é da categoria Rendas e está ligado ao contrato.
@@ -308,9 +323,9 @@ function vFisco(){
      conteúdo, e a tabela do quadro 4.1, mais larga do que o ecrã, alargava a
      página em vez de rolar dentro do .tablewrap. */
   return panel+`<div class="toolbar">
-    <button class="btn" data-toca="nada" onclick="fiscoPartilhar()">Partilhar</button>
-    <button class="btn" data-toca="nada" onclick="fiscoCsv()">CSV</button></div>`
-    +fiscoKpis(r)+`<div class="fiscoPilha" style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px">`
+    <button class="btn" data-toca="nada" data-click="fiscoPartilhar()">Partilhar</button>
+    <button class="btn" data-toca="nada" data-click="fiscoCsv()">CSV</button></div>`
+    +fiscoKpis(r)+`<div class="fiscoPilha u-d-grid u-gtc-minmax-0-1fr u-g-14px">`
     +fiscoObrigacoesCard(r)+fiscoQuadroCard(r)+fiscoObrasCard(r)+fiscoForaCard(r)+fiscoSemContratoCard(r)+`</div>`;
 }
 /* Os quatro números do ano à cabeça, em cartões com explicação ao toque:
@@ -320,7 +335,7 @@ function vFisco(){
    Devolve: o HTML da grelha (string). */
 function fiscoKpis(r){
   const g=sum(fiscoCols.map(k=>r.totais.gastos[k]));
-  return `<div class="grid" style="margin-bottom:14px">
+  return `<div class="grid u-mb-14px">
     ${kpi('Rendas ilíquidas',euro(r.totais.rendas),'',fiscoN(r.linhas.length,'contrato','contratos')+' em '+r.ano,'O que entrou como renda mais o que o inquilino reteve na fonte. É o valor que vai ao quadro 4.1; cauções e empréstimos recebidos ficam de fora.')}
     ${kpi('Retenções na fonte',euro(r.totais.retencoes),'','entregues à AT pelo inquilino','O IRS que um inquilino com contabilidade organizada reteve e entregou por ti. Abate ao imposto a pagar; a renda declara-se pelo valor ilíquido.')}
     ${kpi('Gastos dedutíveis',euro(g),'','conservação, condomínio, IMI, selo, taxas e outros','A soma das seis colunas de gastos do quadro 4.1, pela regra de cada categoria (Definições → IRS e dedução). Ficam fora os juros, o mobiliário e as obras que acrescentam valor.')}
@@ -331,12 +346,12 @@ function fiscoKpis(r){
    Recebe: r — o resumo (resumoFiscal).
    Devolve: o HTML do cartão (string). */
 function fiscoObrigacoesCard(r){
-  const row=a=>a.abrir?`<div class="card tap" style="padding:11px 13px" data-toca="${esc(a.toca||'camada')}" onclick="${a.abrir}"><b style="font-weight:600">${esc(a.texto)}</b></div>`
-    :`<div class="card" style="padding:11px 13px"><span class="small">${esc(a.texto)}</span></div>`;
-  const corpo=r.avisos.length?`<div class="list" style="gap:8px">${r.avisos.map(row).join('')}</div>`
+  const row=a=>a.abrir?`<div class="card tap u-p-11px-13px" data-toca="${esc(a.toca||'camada')}" data-click="${a.abrir}"><b class="u-fw-600">${esc(a.texto)}</b></div>`
+    :`<div class="card u-p-11px-13px"><span class="small">${esc(a.texto)}</span></div>`;
+  const corpo=r.avisos.length?`<div class="list u-g-8px">${r.avisos.map(row).join('')}</div>`
     :`<div class="hint">Com o que a app sabe, não falta nada para preencher o quadro 4.1 de ${r.ano}.</div>`;
   return card('Obrigações de '+r.ano,r.avisos.length?fiscoN(r.avisos.length,'ponto a tratar','pontos a tratar'):'Nada em falta',
-    corpo+`<div class="hint" style="margin-top:9px">A app resume, não declara: o que falta fica escrito aqui e ao pé de cada linha. Os prazos com data — Modelo 2, recibos, entrega do Anexo F — estão nos Prazos da visão geral.</div>`);
+    corpo+`<div class="hint u-mt-9px">A app resume, não declara: o que falta fica escrito aqui e ao pé de cada linha. Os prazos com data — Modelo 2, recibos, entrega do Anexo F — estão nos Prazos da visão geral.</div>`);
 }
 /* O cartão do quadro 4.1: uma tabela com uma linha por contrato e a linha dos
    totais, e o hint que diz o que é estimativa.
@@ -344,28 +359,30 @@ function fiscoObrigacoesCard(r){
    Devolve: o HTML do cartão (string). */
 function fiscoQuadroCard(r){
   const G=r.totais.gastos;
-  const cab=`<thead><tr><th>Contrato</th><th style="text-align:left">Início</th><th style="text-align:left">Imóvel</th><th style="text-align:left">Inquilinos</th><th style="text-align:left">Nat.</th><th>Rendas ilíquidas</th><th>Retenções</th>${fiscoCols.map(k=>`<th>${esc(fiscoColRotulo(k))}</th>`).join('')}</tr></thead>`;
+  const cab=`<thead><tr><th>Contrato</th><th class="u-ta-left">Início</th><th class="u-ta-left">Imóvel</th><th class="u-ta-left">Inquilinos</th><th class="u-ta-left">Nat.</th><th>Rendas ilíquidas</th><th>Retenções</th>${fiscoCols.map(k=>`<th>${esc(fiscoColRotulo(k))}</th>`).join('')}</tr></thead>`;
   const tot=`<tr><td colspan="5"><b>Total</b></td><td><b>${euro2(r.totais.rendas)}</b></td><td><b>${euro2(r.totais.retencoes)}</b></td>${fiscoCols.map(k=>`<td><b>${euro2(G[k])}</b></td>`).join('')}</tr>`;
   return card('Anexo F · quadro 4.1','Rendimentos prediais de '+r.ano+(r.titularId?' · quota-parte de '+esc(ownerFilterName()):' · valores por inteiro'),
     `<div class="tablewrap"><table class="table">${cab}<tbody>${r.linhas.map(fiscoLinhaHtml).join('')}${tot}</tbody></table></div>
-    <div class="hint" style="margin-top:9px">Rendas ilíquidas: o que entrou mais o que o inquilino reteve na fonte. Os gastos de um imóvel com mais do que um contrato no ano repartem-se pelas linhas na proporção das rendas de cada uma — é uma estimativa; o rateio por VPT ou por área, quando o imóvel se arrenda por partes, fica para quem preenche.${r.semRegra?' '+fiscoN(r.semRegra,'despesa sem regra de dedução conta','despesas sem regra de dedução contam')+' em Outros.':''}</div>`);
+    <div class="hint u-mt-9px">Rendas ilíquidas: o que entrou mais o que o inquilino reteve na fonte. Os gastos de um imóvel com mais do que um contrato no ano repartem-se pelas linhas na proporção das rendas de cada uma — é uma estimativa; o rateio por VPT ou por área, quando o imóvel se arrenda por partes, fica para quem preenche.${r.semRegra?' '+fiscoN(r.semRegra,'despesa sem regra de dedução conta','despesas sem regra de dedução contam')+' em Outros.':''}</div>`);
 }
 /* Uma linha da tabela do quadro 4.1: o n.º na AT (ou «—») e o nome, o início,
    o imóvel com os dados matriciais, os inquilinos com NIF ou país, a natureza,
    as rendas, as retenções e as seis colunas de gastos; as faltas em small por
-   baixo do contrato. Tocar abre a ficha do contrato.
+   baixo do contrato. Tocar abre a ficha do contrato — só com o serviço dos
+   Contratos ligado nesta conta; sem ele a linha é só de leitura.
    Recebe: l — a linha do resumo.
    Devolve: o HTML do <tr> (string). */
 function fiscoLinhaHtml(l){
   const inq=l.inquilinos.length?l.inquilinos.map(t=>`${esc(t.nome)}<span class="small"> · ${t.nif?esc(fmtNIF(t.nif)):(t.pais?esc(t.pais):'sem NIF')}</span>`).join('<br>'):'<span class="small">—</span>';
   const im=[l.freguesiaCodigo||'—',l.tipoPredio||'—',l.artigo?'art. '+l.artigo:'—',l.fracao?'fr. '+l.fracao:''].filter(Boolean).map(esc).join(' · ');
   const v=x=>x?euro2(x):'—';
-  return `<tr data-toca="camada" style="cursor:pointer" onclick="ctView('${jsq(l.contratoId)}')">
-    <td style="white-space:normal;min-width:170px"><b>${l.atNumero?esc(l.atNumero):'—'}</b><div class="small">${esc(l.nome)}${!l.estado?' · por indicar':''}</div>${l.faltas.length?`<div class="small">Falta: ${esc(l.faltas.join(', '))}.</div>`:''}</td>
-    <td style="text-align:left">${dPT(l.inicio)||'—'}${l.taxaReduzida?'<div class="small">taxa reduzida</div>':''}</td>
-    <td style="text-align:left">${esc(l.imovel)}<div class="small">${im}</div></td>
-    <td style="text-align:left;white-space:normal;min-width:150px">${inq}</td>
-    <td style="text-align:left">${esc(l.natureza)}</td>
+  const toque=servicoLigado('contracts')?` data-toca="camada" class="u-cur-pointer" data-click="ctView('${jsq(l.contratoId)}')"`:'';
+  return `<tr${toque}>
+    <td class="u-ws-normal u-minw-170px"><b>${l.atNumero?esc(l.atNumero):'—'}</b><div class="small">${esc(l.nome)}${!l.estado?' · por indicar':''}</div>${l.faltas.length?`<div class="small">Falta: ${esc(l.faltas.join(', '))}.</div>`:''}</td>
+    <td class="u-ta-left">${dPT(l.inicio)||'—'}${l.taxaReduzida?'<div class="small">taxa reduzida</div>':''}</td>
+    <td class="u-ta-left">${esc(l.imovel)}<div class="small">${im}</div></td>
+    <td class="u-ta-left u-ws-normal u-minw-150px">${inq}</td>
+    <td class="u-ta-left">${esc(l.natureza)}</td>
     <td>${euro2(l.rendas)}</td><td>${v(l.retencoes)}</td>
     ${fiscoCols.map(k=>`<td>${v(l.gastos[k])}</td>`).join('')}</tr>`;
 }
@@ -377,30 +394,36 @@ function fiscoObrasCard(r){
   return card('Obras antes do arrendamento','Gastos dos 24 meses anteriores ao início, nos contratos que começaram em '+r.ano,
     ls.map(l=>`<div class="stat"><span>${esc(l.nome)}<div class="small">${esc(l.imovel)} · desde ${dPT(l.obras24.inicioGastos)}</div></span><b>${euro2(l.obras24.valor)}</b></div>`).join('')
     +`<div class="stat"><span><b>Total</b></span><b>${euro2(r.totais.obras24)}</b></div>
-    <div class="hint" style="margin-top:9px">Conservação e manutenção pagas antes de o contrato começar, nos 24 meses anteriores, quando o imóvel não tinha contrato em vigor — e o que marcaste à mão como obras dos 24 meses. Entram à parte das outras colunas e não se repetem noutro ano.</div>`);
+    <div class="hint u-mt-9px">Conservação e manutenção pagas antes de o contrato começar, nos 24 meses anteriores, quando o imóvel não tinha contrato em vigor — e o que marcaste à mão como obras dos 24 meses. Entram à parte das outras colunas e não se repetem noutro ano.</div>`);
 }
 /* O cartão «Fora da declaração»: os contratos marcados como não declarados com
-   rendas no ano, com o valor, sem juízo. Tocar abre o contrato.
+   rendas no ano, com o valor, sem juízo. Tocar abre o contrato — com o serviço
+   dos Contratos ligado nesta conta; sem ele a lista é só de leitura e a frase
+   diz quem o liga.
    Recebe: r — o resumo (resumoFiscal).
    Devolve: o HTML do cartão (string), ou '' sem contratos fora. */
 function fiscoForaCard(r){
   if(!r.fora.length)return '';
+  const comContratos=servicoLigado('contracts');
+  const linha=f=>`<div class="card${comContratos?' tap':''} u-p-11px-13px"${comContratos?` data-toca="camada" data-click="ctView('${jsq(f.contratoId)}')"`:''}>
+      <div class="row-between u-ai-center u-g-10px"><div class="u-minw-0"><b>${esc(f.nome)}</b><div class="small">${esc(f.imovel)}${f.imovel?' · ':''}${fiscoN(f.n,'renda','rendas')} em ${r.ano}</div></div><b>${euro2(f.rendas)}</b></div></div>`;
   return card('Fora da declaração',fiscoN(r.fora.length,'contrato marcado como não declarado','contratos marcados como não declarados'),
-    `<div class="list" style="gap:8px">${r.fora.map(f=>`<div class="card tap" style="padding:11px 13px" data-toca="camada" onclick="ctView('${jsq(f.contratoId)}')">
-      <div class="row-between" style="align-items:center;gap:10px"><div style="min-width:0"><b>${esc(f.nome)}</b><div class="small">${esc(f.imovel)}${f.imovel?' · ':''}${fiscoN(f.n,'renda','rendas')} em ${r.ano}</div></div><b>${euro2(f.rendas)}</b></div></div>`).join('')}</div>
-    <div class="hint" style="margin-top:9px">As rendas destes contratos não entram no quadro nem nos totais. O estado muda-se na ficha do contrato.</div>`);
+    `<div class="list u-g-8px">${r.fora.map(linha).join('')}</div>
+    <div class="hint u-mt-9px">As rendas destes contratos não entram no quadro nem nos totais. ${comContratos?'O estado muda-se na ficha do contrato.':fraseServicoDesligado('contracts')}</div>`);
 }
 /* O cartão «Rendas sem contrato»: as rendas do ano que não dizem de que
-   contrato são, por imóvel, com a saída para as ligar.
+   contrato são, por imóvel, com a saída para as ligar — que é dos Movimentos:
+   com esse serviço desligado nesta conta a saída não se escreve, e a frase diz
+   quem o liga.
    Recebe: r — o resumo (resumoFiscal).
    Devolve: o HTML do cartão (string), ou '' sem rendas soltas. */
 function fiscoSemContratoCard(r){
   if(!r.semContrato.length)return '';
-  const n=sum(r.semContrato.map(s=>s.n));
+  const n=sum(r.semContrato.map(s=>s.n)),comMovimentos=servicoLigado('transactions');
   return card('Rendas sem contrato',fiscoN(n,'renda','rendas')+' de '+r.ano+' sem contrato ligado',
     r.semContrato.map(s=>`<div class="stat"><span>${esc(s.imovel)}<div class="small">${fiscoN(s.n,'movimento','movimentos')}</div></span><b>${euro2(s.rendas)}</b></div>`).join('')
-    +`<div class="hint" style="margin-top:9px">Uma renda só entra numa linha do quadro quando o movimento diz de que contrato é. Abre o movimento e liga-o ao contrato.</div>`
-    +(n===1?saida('Abrir o movimento',`txView('${jsq(r.semContrato[0].ids[0])}')`,'camada'):saida('Ver movimentos',"go('transactions')",'ecra')));
+    +`<div class="hint u-mt-9px">Uma renda só entra numa linha do quadro quando o movimento diz de que contrato é. ${comMovimentos?'Abre o movimento e liga-o ao contrato.':fraseServicoDesligado('transactions')}</div>`
+    +(!comMovimentos?'':n===1?saida('Abrir o movimento',`txView('${jsq(r.semContrato[0].ids[0])}')`,'camada'):saida('Ver movimentos',"go('transactions')",'ecra')));
 }
 /* O resumo em texto simples, para partilhar ou copiar: totais, uma entrada por
    contrato com a identificação, os valores e as faltas, e depois o que ficou
@@ -456,3 +479,12 @@ function fiscoCsv(){
 /* aplica o ano escolhido no seletor e volta a desenhar
    Devolve: nada — guarda o ano e redesenha a vista. */
 function onFiscoAno(){fiscoAno=val('fiscoSel')||'';render()}
+/* ---- registo do serviço (servicos.js) ---- */
+// nº de filtros ativos no painel de análise da Declaração: só o proprietário
+// (o ano é o assunto da página, não um filtro)
+// Devolve: número de filtros ativos (0 ou 1).
+function fiscoAnaN(){return ownerFilter?1:0}
+// limpa o ano em foco da Declaração (o proprietário limpa-o a base, anaClear)
+// Devolve: nada — limpa o filtro; quem chama repinta.
+function fiscoAnaLimpar(){fiscoAno=''}
+registarServico({id:'fisco',vistas:{fisco:'vFisco'},analise:{fisco:{n:'fiscoAnaN',limpar:'fiscoAnaLimpar'}}});
