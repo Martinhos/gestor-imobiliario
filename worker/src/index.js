@@ -312,9 +312,12 @@ export default {
        (lib/identidade.js): o manifesto e a página «/» reescrevem-se ao
        passar, para a PWA de dev se instalar ao lado da de produção sem se
        confundirem. Os dois caminhos passam pelo worker nos dois ambientes
-       (run_worker_first no wrangler.toml); em produção seguem direitos. */
+       (run_worker_first no wrangler.toml); em produção seguem direitos. O
+       pedido inteiro vai ao identidadeDeDev, e não só a resposta: é ele que
+       tira as condições antes de ir aos assets, senão um 304 deles saía
+       sem reescrita e a PWA de dev ficava com a cara de produção. */
     if (env.ENV_NAME && CAMINHOS_DE_IDENTIDADE.indexOf(url.pathname) > -1) {
-      return harden(await identidadeDeDev(await env.ASSETS.fetch(request), url.pathname));
+      return harden(await identidadeDeDev(env.ASSETS, request));
     }
     return harden(await env.ASSETS.fetch(request));
   },

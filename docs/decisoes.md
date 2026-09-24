@@ -950,7 +950,14 @@ iPhone e os ícones (worker/src/lib/identidade.js:identidadeDeDev). O manifesto
 passou a entrar no `run_worker_first` para chegar ao worker. Só o `<head>`
 declarativo muda: os scripts em linha ficam iguais, e os sha256 da CSP
 continuam a bater. Em produção não muda um byte, e um teste lê os dois casos
-de ponta a ponta (testes/app-dev-web.test.js). Os ícones de dev saem do mesmo
+de ponta a ponta (testes/app-dev-web.test.js). O pedido vai aos assets sem
+as condições do browser (If-None-Match, If-Modified-Since): o ficheiro do
+manifesto é o de produção e a etiqueta dele também, portanto um browser que
+já o tivesse em cache recebia dos assets um 304 sem corpo, e não havia nada
+para reescrever — a PWA de dev instalava-se «Rendorium» com os ícones verdes,
+e assim ficava, porque o ficheiro não muda entre publicações. A resposta de
+dev leva a sua própria etiqueta (a do ficheiro, com «-dev»), e o 304 faz-se no
+worker contra essa (identidade.js:etiquetaDeDev). Os ícones de dev saem do mesmo
 desenho que os de produção (make-icons.js:makeIcon), com a geometria do vetor
 Android replicada em píxeis, para a PWA e o APK de dev terem a mesma cara.
 

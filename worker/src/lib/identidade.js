@@ -60,21 +60,69 @@ function comSufixoDev(src) {
   return src.replace(/\.([a-z0-9]+)$/i, '-dev.$1');
 }
 
-/* Veste uma resposta dos assets com a identidade de dev, quando é de um dos
-   dois caminhos e vem inteira (200). Qualquer outra — um 304, um erro, um
-   caminho que não é destes — sai como entrou.
-   Recebe: res — a Response dos assets; caminho — o pathname do pedido.
-   Devolve: promessa da Response de dev (nova; a original consome-se), ou da
-   própria res quando não há nada a reescrever. */
-export async function identidadeDeDev(res, caminho) {
-  if (CAMINHOS_DE_IDENTIDADE.indexOf(caminho) < 0 || res.status !== 200) return res;
+/* Serve um pedido pelos assets, vestido com a identidade de dev quando é de
+   um dos dois caminhos. Qualquer outro caminho, e qualquer resposta que não
+   venha inteira (um erro, um 404), sai dos assets como entrou.
+
+   O pedido vai aos assets SEM as condições (If-None-Match, If-Modified-Since).
+   Os ficheiros de web/ são os de produção, e a etiqueta que os assets lhes
+   põem também: um browser que tivesse o manifesto em cache de antes desta
+   reescrita — ou o de produção, que é o mesmo ficheiro — trazia essa etiqueta,
+   os assets respondiam 304 «não mudou», e não havia corpo nenhum para
+   reescrever. A PWA de dev instalava-se «Rendorium», com os ícones verdes, e
+   nunca saía disso, porque o ficheiro do manifesto não muda de uma publicação
+   para a outra. Foi o que aconteceu. Agora a resposta de dev leva a sua
+   própria etiqueta — a do ficheiro, com «-dev» — e o 304 dá-se aqui, contra
+   essa: quem já tem o de dev continua a revalidar de graça.
+   Recebe: assets — o binding ASSETS (tem fetch); request — o pedido tal como
+   chegou ao worker.
+   Devolve: promessa da Response: a de dev (200 com o corpo reescrito, ou 304
+   quando o browser já o tem), ou a dos assets tal e qual. */
+export async function identidadeDeDev(assets, request) {
+  const caminho = new URL(request.url).pathname;
+  if (CAMINHOS_DE_IDENTIDADE.indexOf(caminho) < 0) return assets.fetch(request);
+  const cabecalhos = new Headers(request.headers);
+  cabecalhos.delete('If-None-Match');
+  cabecalhos.delete('If-Modified-Since');
+  const res = await assets.fetch(new Request(request, { headers: cabecalhos }));
+  if (res.status !== 200) return res;
+  const etiqueta = etiquetaDeDev(res.headers.get('ETag'));
+  if (etiqueta && trazEtiqueta(request.headers.get('If-None-Match'), etiqueta)) {
+    const h = new Headers({ ETag: etiqueta });
+    const cc = res.headers.get('Cache-Control');
+    if (cc) h.set('Cache-Control', cc);
+    return new Response(null, { status: 304, headers: h });
+  }
   const texto = await res.text();
   const corpo = caminho === '/' ? paginaDeDev(texto) : manifestoDeDev(texto);
   const out = new Response(corpo, res);
   /* o tamanho, a etiqueta e a codificação eram do corpo antigo: o corpo novo
      vai em claro e a Cloudflare comprime-o à saída como a qualquer outro */
   out.headers.delete('Content-Length');
-  out.headers.delete('ETag');
   out.headers.delete('Content-Encoding');
+  if (etiqueta) out.headers.set('ETag', etiqueta); else out.headers.delete('ETag');
   return out;
+}
+
+/* A etiqueta da resposta de dev: a do ficheiro nos assets, com «-dev» dentro
+   das aspas. Distinta da de produção, para o browser nunca confundir os dois
+   corpos; derivada dela, para mudar quando o ficheiro mudar.
+   Recebe: original — o ETag dos assets (texto), ou null.
+   Devolve: o ETag de dev (texto), ou null quando não havia nenhum. */
+export function etiquetaDeDev(original) {
+  if (typeof original !== 'string' || !original) return null;
+  const m = original.match(/^(W\/)?"(.*)"$/);
+  return m ? (m[1] || '') + '"' + m[2] + '-dev"' : original + '-dev';
+}
+
+/* Se um If-None-Match traz uma dada etiqueta. A lista vem separada por
+   vírgulas, e compara-se sem o W/ dos dois lados (RFC 9110, comparação fraca:
+   a de dev é sempre do mesmo corpo). Um «*» conta como sim.
+   Recebe: ifNoneMatch — o cabeçalho (texto), ou null; etiqueta — o ETag a procurar.
+   Devolve: true quando a etiqueta lá está. */
+export function trazEtiqueta(ifNoneMatch, etiqueta) {
+  if (!ifNoneMatch) return false;
+  if (ifNoneMatch.trim() === '*') return true;
+  const semW = (e) => e.trim().replace(/^W\//, '');
+  return ifNoneMatch.split(',').some((e) => semW(e) === semW(etiqueta));
 }

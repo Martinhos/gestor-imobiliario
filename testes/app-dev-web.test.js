@@ -17,7 +17,7 @@ import { inflateSync } from 'node:zlib';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 import worker from '../worker/src/index.js';
-import { manifestoDeDev, paginaDeDev, identidadeDeDev, NOME_DEV, CAMINHOS_DE_IDENTIDADE } from '../worker/src/lib/identidade.js';
+import { manifestoDeDev, paginaDeDev, identidadeDeDev, etiquetaDeDev, trazEtiqueta, NOME_DEV, CAMINHOS_DE_IDENTIDADE } from '../worker/src/lib/identidade.js';
 import { ambiente } from './lib/api.js';
 
 const require = createRequire(import.meta.url);
@@ -32,34 +32,45 @@ const bytes = (p) => readFileSync(new URL(p, RAIZ));
 const INDEX = ler('web/index.html');
 const MANIFESTO = ler('web/manifest.webmanifest');
 
+// Recebe: p — caminho relativo à raiz. Devolve: a etiqueta que o assetsFalsos põe a esse ficheiro.
+const etiquetaDe = (p) => '"' + createHash('sha256').update(bytes(p)).digest('hex').slice(0, 16) + '"';
+
 /* Os assets como a Cloudflare os serve: os ficheiros de web/ pelo caminho,
-   com um tipo e uma etiqueta, 404 para o que não existe.
-   Devolve: um objeto com fetch(request), como o binding ASSETS. */
+   com um tipo e uma etiqueta, 404 para o que não existe — e 304 sem corpo a
+   quem traz a etiqueta certa no If-None-Match, que é o que a Cloudflare faz e
+   o que deixava a PWA de dev com a cara de produção.
+   Devolve: um objeto com fetch(request), como o binding ASSETS, e a lista
+   `pedidos` dos Request que recebeu, pela ordem. */
 function assetsFalsos() {
   const tipos = { '.html': 'text/html; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.css': 'text/css' };
+  const pedidos = [];
   return {
+    pedidos,
     fetch: async (request) => {
+      pedidos.push(request);
       const url = new URL(request.url);
       const rel = url.pathname === '/' ? '/index.html' : url.pathname;
       if (!existsSync(new URL('web' + rel, RAIZ))) return new Response('Não encontrado', { status: 404 });
       const corpo = bytes('web' + rel);
+      const etag = etiquetaDe('web' + rel);
+      if (request.headers.get('If-None-Match') === etag) return new Response(null, { status: 304, headers: { ETag: etag } });
       const ext = rel.slice(rel.lastIndexOf('.'));
       return new Response(corpo, { status: 200, headers: {
         'Content-Type': tipos[ext] || 'application/octet-stream',
         'Content-Length': String(corpo.length),
         'Content-Encoding': 'identity',
-        ETag: '"' + createHash('sha256').update(corpo).digest('hex').slice(0, 16) + '"',
+        ETag: etag,
       } });
     },
   };
 }
 
 /* Um pedido ao worker inteiro, no domínio de dev, passando pelo harden.
-   Recebe: env; caminho — o pathname a pedir.
+   Recebe: env; caminho — o pathname a pedir; cabecalhos — os do pedido (opcional).
    Devolve: promessa da Response. */
-async function pedirAoWorker(env, caminho) {
+async function pedirAoWorker(env, caminho, cabecalhos) {
   const fundo = [];
-  const r = await worker.fetch(new Request('https://dev.x.pt' + caminho), env, { waitUntil(p) { fundo.push(p); } });
+  const r = await worker.fetch(new Request('https://dev.x.pt' + caminho, { headers: cabecalhos || {} }), env, { waitUntil(p) { fundo.push(p); } });
   await Promise.all(fundo);
   return r;
 }
@@ -148,7 +159,7 @@ describe('o worker, de ponta a ponta', () => {
     assert.equal(html, paginaDeDev(INDEX), 'e é exatamente o que o paginaDeDev dá');
     assert.match(pagina.headers.get('Content-Security-Policy') || '', /script-src 'self'/, 'passou pelo harden');
     assert.equal(pagina.headers.get('Content-Length'), null, 'o tamanho do corpo antigo não fica');
-    assert.equal(pagina.headers.get('ETag'), null, 'nem a etiqueta dele');
+    assert.equal(pagina.headers.get('ETag'), etiquetaDeDev(etiquetaDe('web/index.html')), 'a etiqueta é a de dev, derivada da do ficheiro');
     assert.equal(pagina.headers.get('Content-Encoding'), null, 'nem a codificação dele — o corpo novo vai em claro');
     assert.match(pagina.headers.get('Content-Type') || '', /text\/html/, 'o tipo fica');
 
@@ -182,18 +193,71 @@ describe('o worker, de ponta a ponta', () => {
     assert.equal(icone.headers.get('Content-Type'), 'image/png');
   });
 
-  test('o identidadeDeDev deixa passar o que não é dos dois caminhos ou não vem inteiro', async () => {
-    const r304 = new Response(null, { status: 304 });
-    assert.equal(await identidadeDeDev(r304, '/'), r304);
-    const outro = new Response('x', { status: 200 });
-    assert.equal(await identidadeDeDev(outro, '/estilos.css'), outro);
+  test('um browser que traz a etiqueta de produção no If-None-Match recebe o manifesto de dev inteiro, e não um 304 — era isto que deixava a PWA de dev «Rendorium»', async () => {
+    const assets = assetsFalsos();
+    const env = ambiente({ ENV_NAME: 'dev', ASSETS: assets });
+    const deProducao = etiquetaDe('web/manifest.webmanifest');
+    const man = await pedirAoWorker(env, '/manifest.webmanifest', { 'If-None-Match': deProducao });
+    assert.equal(man.status, 200, 'o 304 dos assets não pode sair: não há corpo para reescrever');
+    assert.equal(JSON.parse(await man.text()).name, NOME_DEV);
+    assert.notEqual(man.headers.get('ETag'), deProducao, 'a etiqueta de dev não é a de produção');
+    const aosAssets = assets.pedidos[assets.pedidos.length - 1];
+    assert.equal(aosAssets.headers.get('If-None-Match'), null, 'o pedido aos assets vai sem condição');
+    assert.equal(aosAssets.headers.get('If-Modified-Since'), null);
+    const pagina = await pedirAoWorker(env, '/', { 'If-None-Match': etiquetaDe('web/index.html') });
+    assert.equal(pagina.status, 200);
+    assert.ok((await pagina.text()).includes('<title>' + NOME_DEV + '</title>'));
+  });
+
+  test('quem já tem o de dev revalida de graça: o If-None-Match com a etiqueta de dev dá 304, com a mesma etiqueta', async () => {
+    const env = ambiente({ ENV_NAME: 'dev', ASSETS: assetsFalsos() });
+    const primeiro = await pedirAoWorker(env, '/manifest.webmanifest');
+    const deDev = primeiro.headers.get('ETag');
+    assert.ok(deDev, 'a resposta de dev leva etiqueta');
+    const segundo = await pedirAoWorker(env, '/manifest.webmanifest', { 'If-None-Match': deDev });
+    assert.equal(segundo.status, 304);
+    assert.equal(segundo.headers.get('ETag'), deDev);
+    assert.equal(await segundo.text(), '');
+    assert.match(segundo.headers.get('Content-Security-Policy') || '', /script-src/, 'passou pelo harden na mesma');
+    const fraco = await pedirAoWorker(env, '/manifest.webmanifest', { 'If-None-Match': 'W/"outra", ' + deDev });
+    assert.equal(fraco.status, 304, 'numa lista, e com W/, também');
+  });
+
+  test('em produção o If-None-Match com a etiqueta dos assets segue para eles e volta 304 — nada muda', async () => {
+    const env = ambiente({ ENV_NAME: undefined, ASSETS: assetsFalsos() });
+    const man = await pedirAoWorker(env, '/manifest.webmanifest', { 'If-None-Match': etiquetaDe('web/manifest.webmanifest') });
+    assert.equal(man.status, 304);
+  });
+
+  test('o identidadeDeDev deixa passar o que não é dos dois caminhos, tal e qual, e o que não vem inteiro', async () => {
+    const assets = assetsFalsos();
+    const css = new Request('https://dev.x.pt/estilos.css', { headers: { 'If-None-Match': etiquetaDe('web/estilos.css') } });
+    const r = await identidadeDeDev(assets, css);
+    assert.equal(r.status, 304, 'o css revalida nos assets, com a condição que trazia');
+    assert.equal(assets.pedidos[0], css, 'o mesmo Request, sem cópia');
+    const nada = await identidadeDeDev(assets, new Request('https://dev.x.pt/nao-existe.webmanifest'));
+    assert.equal(nada.status, 404);
     assert.deepEqual(CAMINHOS_DE_IDENTIDADE, ['/', '/manifest.webmanifest']);
   });
 
-  test('o index.js só reescreve com ENV_NAME e só nos caminhos da identidade; o wrangler.toml passa o manifesto pelo worker nos dois ambientes', () => {
+  test('a etiqueta de dev deriva da do ficheiro, e o If-None-Match lê-se como uma lista', () => {
+    assert.equal(etiquetaDeDev('"abc"'), '"abc-dev"');
+    assert.equal(etiquetaDeDev('W/"abc"'), 'W/"abc-dev"');
+    assert.equal(etiquetaDeDev(null), null);
+    assert.equal(etiquetaDeDev(''), null);
+    assert.equal(etiquetaDeDev('"abc-dev"'), '"abc-dev-dev"', 'deriva sempre, sem adivinhar');
+    assert.ok(trazEtiqueta('"abc-dev"', '"abc-dev"'));
+    assert.ok(trazEtiqueta('"x", "abc-dev"', '"abc-dev"'));
+    assert.ok(trazEtiqueta('W/"abc-dev"', '"abc-dev"'));
+    assert.ok(trazEtiqueta('*', '"abc-dev"'));
+    assert.ok(!trazEtiqueta('"abc"', '"abc-dev"'));
+    assert.ok(!trazEtiqueta(null, '"abc-dev"'));
+  });
+
+  test('o index.js só reescreve com ENV_NAME e só nos caminhos da identidade, e entrega o pedido inteiro; o wrangler.toml passa o manifesto pelo worker nos dois ambientes', () => {
     const src = ler('worker/src/index.js');
     assert.match(src, /env\.ENV_NAME && CAMINHOS_DE_IDENTIDADE\.indexOf\(url\.pathname\) > -1/);
-    assert.match(src, /identidadeDeDev\(await env\.ASSETS\.fetch\(request\), url\.pathname\)/);
+    assert.match(src, /identidadeDeDev\(env\.ASSETS, request\)/);
     const w = ler('wrangler.toml');
     const blocos = w.match(/run_worker_first = \[[^\]]*\]/g) || [];
     assert.equal(blocos.length, 2, 'um por ambiente');
