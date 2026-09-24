@@ -188,8 +188,12 @@ jobs:
           SEM_ESTADO: ${{ inputs.terraform_sem_estado }}
         run: |
           set -e
+          # para um ficheiro à parte, e só se copia por cima com conteúdo: o
+          # wrangler cria o destino vazio quando o objeto não existe, e a
+          # primeira versão disto apagava assim o estado que vinha no checkout
           if npx wrangler@4 r2 object get "$TF_BALDE/terraform.tfstate" \
-               --file terraform/terraform.tfstate --remote >/dev/null 2>&1; then
+               --file "$RUNNER_TEMP/tfstate" --remote >/dev/null 2>&1 && [ -s "$RUNNER_TEMP/tfstate" ]; then
+            cp "$RUNNER_TEMP/tfstate" terraform/terraform.tfstate
             echo "estado trazido do R2: $(wc -c < terraform/terraform.tfstate) bytes"
           elif [ -s terraform/terraform.tfstate ]; then
             # a mudança do repositório para o R2 faz-se sem parar nada: enquanto o

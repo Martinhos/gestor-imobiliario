@@ -10,7 +10,7 @@
 
 import { test, describe, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, readdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -516,9 +516,29 @@ describe('o estado do terraform e a publicação anterior', () => {
     assert.match(PASSOS[trazer].run, /r2 object get .*terraform\.tfstate/, 'traz-se do R2');
     assert.match(PASSOS[trazer].run, /exit 1/, 'e sem estado, sem pedido explícito, o deploy para');
     const guardar = PASSOS[onde(PASSOS, /^Guardar o estado do terraform no R2$/, 'name')];
+    assert.match(PASSOS[trazer].run, /--file "\$RUNNER_TEMP/, 'descarrega para um ficheiro à parte, e não por cima do que veio no checkout');
     assert.match(guardar.run, /r2 object put .*terraform\.tfstate/, 'e volta para lá depois do apply');
     assert.match(guardar.if, /env\.TF_MUDOU/, 'o estado só volta ao R2 quando o apply mudou alguma coisa');
     assert.match(guardar.run, /historico\//, 'e fica também uma cópia datada, para se poder voltar atrás');
+  });
+
+  /* O deploy de 2026-09-24 parou aqui: o wrangler cria o ficheiro de destino
+     vazio quando o objeto não existe, e a primeira versão deste passo
+     descarregava por cima do estado que vinha no checkout — apagava-o, e depois
+     não o encontrava. */
+  test('com o R2 a falhar, o estado que veio no checkout sobrevive e o deploy segue; sem estado nenhum, para', (t) => {
+    if (!BASH) return t.skip('sem um bash que veja o node');
+    const com = trazerEstado(true);
+    assert.equal(com.status, 0, 'segue com o estado do repositório: ' + com.saida);
+    assert.equal(com.bytes, 25, 'e o estado local fica intacto, byte por byte');
+    assert.match(com.saida, /ainda vem do repositório/, 'com o aviso a dizer que falta pô-lo no R2');
+
+    const sem = trazerEstado(false);
+    assert.equal(sem.status, 1, 'sem estado nenhum, o deploy para em vez de propor criar tudo de novo');
+    assert.match(sem.saida, /não está em r2:\/\//);
+
+    const forcado = trazerEstado(false, 'true');
+    assert.equal(forcado.status, 0, 'a não ser que se peça de propósito');
 
     const guarda = PASSOS[onde(PASSOS, /node scripts\/chegada\.js /)];
     assert.match(guarda.run, /^node scripts\/chegada\.js refs\/tags\/publicado HEAD\^1$/, 'a etiqueta primeiro; o HEAD^1 só enquanto ela não existe');
@@ -547,6 +567,35 @@ function bashComNode() {
   return null;
 }
 const BASH = bashComNode();
+
+/* Corre o bash do passo «Trazer o estado do terraform» com um wrangler que
+   falha (o objeto não existe no R2), numa cópia da árvore onde o estado local
+   tem — ou não — conteúdo.
+   Recebe: comEstadoLocal — se o terraform/terraform.tfstate existe e tem bytes;
+   semEstado — o valor da variável SEM_ESTADO do passo.
+   Devolve: {status, saida, bytes} — o código de saída, o que escreveu, e o
+   tamanho do estado local no fim. */
+function trazerEstado(comEstadoLocal, semEstado = '') {
+  const p = PASSOS[onde(PASSOS, /^Trazer o estado do terraform$/, 'name')];
+  const tmp = mkdtempSync(join(tmpdir(), 'tfstate-'));
+  try {
+    const barra = (s) => s.replace(/\\/g, '/');
+    mkdirSync(join(tmp, 'terraform'));
+    mkdirSync(join(tmp, 'bin'));
+    if (comEstadoLocal) writeFileSync(join(tmp, 'terraform', 'terraform.tfstate'), '{"version":4,"serial":33}');
+    // um npx que falha sempre, como falha o get de um objeto que não existe
+    writeFileSync(join(tmp, 'bin', 'npx'), '#!/bin/sh\nexit 1\n');
+    const r = spawnSync(BASH, ['-eo', 'pipefail', '-c', p.run], {
+      cwd: tmp,
+      encoding: 'utf8',
+      env: { ...process.env, PATH: barra(join(tmp, 'bin')) + ':' + process.env.PATH, RUNNER_TEMP: barra(tmp), TF_BALDE: 'balde', SEM_ESTADO: semEstado },
+    });
+    const f = join(tmp, 'terraform', 'terraform.tfstate');
+    return { status: r.status, saida: (r.stdout || '') + (r.stderr || ''), bytes: existsSync(f) ? readFileSync(f).length : 0 };
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
 
 /* Corre o bash do passo «Juntar os segredos» com o ambiente dado e devolve o
    que ficou no ficheiro dos segredos.
