@@ -23,6 +23,7 @@ const SUBPAGE={tema:{label:'Tema',sub:'Claro, escuro ou o do telemóvel'},
                tags:{label:'Etiquetas',sub:'Para marcar movimentos'},
                groups:{label:'Grupos',sub:'Conjuntos de imóveis, proprietários e contratos'},
                irs:{label:'IRS e dedução',sub:'Que despesas entram em cada coluna do Anexo F'},
+               repete:{label:'Despesas que se repetem',sub:'As que entram na projeção das despesas'},
                dados:{label:'Dados',sub:'Splitwise e cópias de segurança'}};
 // O contentor onde cada vista é desenhada (o elemento #view).
 // Devolve: o elemento #view do DOM (ou null se ainda não existir).
@@ -74,13 +75,19 @@ function crachaHtml(id,onde){
    Calendário tomou o lugar dos Planeados: mostra-os dia a dia (e às
    visitas), e a confirmação rápida continua no cartão da vista geral. */
 const TABBAR=['dashboard','transactions','properties','calendar'];
-// Reconstrói a barra de baixo do telemóvel com os destinos de TABBAR; o
-// crachá de cada um vem do serviço que o registou (crachaHtml).
-// Recebe: fora (opcional) — ids de separadores a esconder (os de separadoresEscondidos).
-// Devolve: nada — reescreve o HTML de #tabbar (se o elemento existir).
+/* os destinos que a barra de baixo mostra agora, pela ordem à vista: é por
+   eles que o goBarra sabe para que lado corre a fita */
+let _barraAgora=TABBAR.slice();
+/* Reconstrói a barra de baixo do telemóvel com os destinos de TABBAR; um
+   destino escondido dá o lugar a outro que o cargo abre
+   (acessos.js:barraDeBaixo). O crachá de cada um vem do serviço que o
+   registou (crachaHtml).
+   Recebe: fora (opcional) — ids de separadores a esconder (os de separadoresEscondidos).
+   Devolve: nada — reescreve o HTML de #tabbar (se o elemento existir). */
 function buildTabbar(fora){
   const el=document.getElementById('tabbar');if(!el)return;
-  el.innerHTML=TABBAR.filter(id=>(fora||[]).indexOf(id)<0).map(id=>{const t=TABS.find(x=>x.id===id);
+  _barraAgora=typeof barraDeBaixo==='function'?barraDeBaixo(TABBAR,fora):TABBAR.filter(id=>(fora||[]).indexOf(id)<0);
+  el.innerHTML=_barraAgora.map(id=>{const t=TABS.find(x=>x.id===id);
     return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} data-toca="ecra" data-click="goBarra('${jsq(id)}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${crachaHtml(id,'barra')}</a>`}).join('');
 }
 // Muda de separador: limpa a subpágina das Definições e o donut, fecha a
@@ -104,7 +111,7 @@ let _ladoSep=0;
    Recebe: id — o separador de destino.
    Devolve: nada — navega, com a fita a correr para o lado certo. */
 function goBarra(id){
-  const i=TABBAR.indexOf(tab),j=TABBAR.indexOf(id);
+  const i=_barraAgora.indexOf(tab),j=_barraAgora.indexOf(id);
   /* esconder separadores tira itens da fita mas não lhes troca a ordem */
   _ladoSep=(i>-1&&j>-1&&i!==j)?(j>i?1:-1):0;
   try{go(id)}finally{_ladoSep=0}   // o go GLOBAL: a nuvem embrulha-o

@@ -238,6 +238,27 @@ var TUTORIAIS = {
       },
     ],
   },
+  visitas: {
+    titulo: 'Marcar uma visita',
+    passos: [
+      {
+        titulo: 'Onde se marca',
+        texto: 'Estás nas <b>Visitas</b>. Toca no <b>+</b> (ou em <b>Marcar visita</b>, com a lista vazia). ' +
+          'Quem colabora tem o mesmo botão na vista geral e na ficha do imóvel.',
+        ir: 'visits',
+      },
+      {
+        titulo: 'O que se escreve',
+        texto: 'Quem vem, a que imóvel e em que dia. O contacto e as horas são opcionais — servem para ' +
+          'confirmar ou remarcar. O dono vê a visita assim que a guardas.',
+      },
+      {
+        titulo: 'Depois da visita',
+        texto: 'Marca-a como realizada ou como falta e escolhe o desfecho. Se a pessoa ficar com a casa, ' +
+          'o menu da visita converte-a em ficha de inquilino — se o teu cargo deixar adicionar inquilinos.',
+      },
+    ],
+  },
 };
 
 /* ------------------------------------------------- o que falta a esta conta */
@@ -254,13 +275,16 @@ function euSou() {
    (há NIF?), imóveis, contratos e movimentos. O passo dos contratos salta
    quando não há imóveis para arrendar; quem é só colaborador salta os de
    dono (perfil, imóveis, contratos) e o dos movimentos se nenhum cargo lhos
-   deixa adicionar. Cada passo traz o porquê e a ação (act) que o botão
-   "Fazer agora" dispara.
+   deixa adicionar, e tem o de marcar a primeira visita quando o cargo o
+   deixa (feito quando há uma visita criada por si). Cada passo traz o porquê
+   e a ação (act) que o botão "Fazer agora" dispara.
    Devolve: os passos aplicáveis (array de {id, titulo, porque, feito, act}). */
 function passos() {
   var eu = euSou();
   // só colaboradora (souSoColaborador, web/app/acessos.js): os passos de dono não lhe dizem respeito
   var colab = souSoColaborador();
+  // uma visita é minha se o servidor a marcou como minha, ou se ainda não subiu (acessos.js:podeEditar)
+  var visitaMinha = (db.visits || []).some(function (v) { return v._createdBy ? v._createdBy === meuId() : !v._atServidor; });
   var arrendar = (db.properties || []).filter(function (p) { return p.use === 'investimento' && !p._cargo; });
   var semContrato = arrendar.filter(function (p) {
     return !(db.contracts || []).some(function (c) { return c.propertyId === p.id; });
@@ -293,6 +317,14 @@ function passos() {
       feito: (db.properties || []).length > 0 && !semContrato.length,
       salta: colab || !arrendar.length || !servicoLigado('contracts'),   // só para uso próprio, só colaborador, ou sem os Contratos: não se aplica
       act: 'ctModal()',
+    },
+    {
+      id: 'visitas',
+      titulo: 'Marca a primeira visita',
+      porque: 'Quem vem, a que imóvel e quando — o dono vê-a logo.',
+      feito: visitaMinha,
+      salta: !colab || !casasComo('visit.add').length || !servicoLigado('visits'),
+      act: 'visitModal()',
     },
     {
       id: 'movimentos',
@@ -377,9 +409,16 @@ CW.listaDeTutoriais = function () {
 
 /* --------------------------------------------------------------- ligações */
 
+/* Os primeiros passos vão no topo da vista geral — menos a quem só colabora,
+   onde o topo é do «O que podes fazer» (painel-geral.js:cartaoPodes) e os
+   passos entram logo a seguir, onde o comentário dele marca o fim. */
 var _vDashboard_guia = vDashboard;
 vDashboard = function () {
-  return cartaoPassos() + _vDashboard_guia();
+  var passosHtml = cartaoPassos(), html = _vDashboard_guia();
+  var fim = '<!--fim-podes--></div>', i = passosHtml ? html.indexOf(fim) : -1;
+  if (i < 0) return passosHtml + html;
+  i += fim.length;
+  return html.slice(0, i) + passosHtml + html.slice(i);
 };
 
 /* Em produção não se carregam dados de exemplo. Quem chega deve encontrar a

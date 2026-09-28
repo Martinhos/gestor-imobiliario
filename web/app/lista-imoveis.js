@@ -57,6 +57,7 @@ function vProperties(){
         ${(p.photos||[]).length&&vFile?`<span class="badge grey">${ic('photo',12)} ${p.photos.length}</span>`:''}
         ${futuros.length&&vCt?`<span class="badge amber">${futuros.length===1?'1 contrato por começar':futuros.length+' contratos por começar'}</span>`:''}
         ${seloColaboradores(p)}</div>
+      ${souDono(p.id)?'':`<div class="small u-mt-9px">${esc(fraseCurtaPodes(p.id))}</div>`}
       ${(ac.length||futuros.length)&&vCt?`<div class="small u-mt-10px">${ac.concat(futuros).map(c2=>`${c2.roomId?esc(roomName(p,c2.roomId))+': ':''}${esc(ctNames(c2))} · ${euro(c2.rent)}${ctEstado(c2)==='futuro'&&c2.start?' · a partir de '+dPT(c2.start):''}`).join('<br>')}</div>`:''}
       ${ls.length&&vLoan?`<div class="small u-mt-9px">${ls.map(l=>`${esc(loanName(l))} · ${RATE[l.type]} · ${euro2(loanCalc(l).total)}/mês${(l.files||[]).length?' · '+l.files.length+' doc.':''}`).join('<br>')}
         ${ls.length>1?`<br><b>Total ${euro2(payOf(p))}/mês</b>`:''}</div>`:''}
@@ -91,13 +92,16 @@ function propsDepois(){db.properties.forEach(p=>paintThumbs(p.photos,view()))}
    (editar, apagar); o resto vem dos outros serviços, quando estão ligados, por
    lpExtras (servicos.js:lpExtrasDe): «Novo contrato» dos Contratos, a despesa
    dos Movimentos, «Pagamento de crédito» e «Amortização» dos Créditos
-   (creditos.js:lpExtrasCreditosImovel).
+   (creditos.js:lpExtrasCreditosImovel). Num imóvel onde colaboro entram
+   também as ações do cargo (acessos.js:acoesNoImovel) que ainda lá não estão —
+   as mesmas dos botões da ficha.
    Recebe: a — as partes do data-lp (['prop', id]).
    Devolve: nada — abre a folha de opções (ou nada, se o imóvel já não existir). */
 function lpImovel(a){
   const id=a[1],p=prop(id);if(!p)return;
   const opts=pode(id,'house.edit')?[{label:'Editar imóvel',icon:'pen',act:()=>propModal(id)}]:[];
   lpExtrasDe('prop',a).forEach(o=>opts.push(o));
+  acoesNoImovel(id).forEach(x=>{if(x.perm!=='house.edit'&&!opts.some(o=>o.label===x.rotulo))opts.push({label:x.rotulo,icon:x.icon,act:()=>correrAcao(x.act)})});
   if(souCriador(id))opts.push({label:'Apagar imóvel',icon:'trash',act:()=>delProp(id)});
   return lpShow(p.name,opts);
 }

@@ -275,25 +275,134 @@ function seloColaboradores(p){
   const n=(p._colaboradores||[]).length;
   return n?`<span class="badge grey">${ic('users',12)} ${n} colaborador${n===1?'':'es'}</span>`:'';
 }
+/* As ações de adicionar que um cargo abre, pela ordem em que se oferecem — a
+   das visitas primeiro. Cada uma diz o serviço de que depende e escreve a
+   ação com o imóvel (pid) ou sem ele (o formulário escolhe entre os imóveis
+   onde se pode). A gramática das ações (eventos.js) não tem objetos
+   literais: a visita com o imóvel e o «Novo movimento» com o imóvel posto
+   vão por uma função com nome. */
+const ACOES_DO_CARGO=[
+  {perm:'visit.add',servico:'visits',rotulo:'Marcar visita',icon:'door',toca:'camada',
+    act:pid=>pid?`marcarVisitaNoImovel('${jsq(pid)}')`:'visitModal()'},
+  {perm:'tenant.add',servico:'tenants',rotulo:'Adicionar inquilino',icon:'users',toca:'camada',
+    act:pid=>pid?`personModal('tenant',null,null,'${jsq(pid)}')`:`personModal('tenant')`},
+  {perm:'contract.add',servico:'contracts',rotulo:'Novo contrato',icon:'contract',toca:'camada',
+    act:pid=>pid?`ctModal(null,'${jsq(pid)}')`:'ctModal()'},
+  {perm:'tx.add',servico:'transactions',rotulo:'Registar movimento',icon:'swap',toca:'camada',
+    act:pid=>pid?`registarMovimentoNoImovel('${jsq(pid)}')`:'newTxPick()'},
+  {perm:'rec.add',servico:'recurring',rotulo:'Confirmar planeados',icon:'clock',toca:'ecra',act:()=>"go('recurring')"},
+  {perm:'house.edit',servico:'properties',rotulo:'Editar a ficha',icon:'pen',toca:'camada',
+    act:pid=>pid?`propModal('${jsq(pid)}')`:'editarFichaDeColaboracao()'}
+];
+/* O que o meu cargo me deixa adicionar num imóvel de colaboração, com o
+   imóvel já posto na ação. Só com o serviço ligado nesta conta; o «Novo
+   contrato» só num imóvel de arrendamento (noutro o formulário só avisava).
+   Recebe: pid — o id do imóvel.
+   Devolve: array de {perm, rotulo, icon, toca, act} — vazio para o dono, sem imóvel ou sem nenhuma. */
+function acoesNoImovel(pid){
+  const p=pid?prop(pid):null;
+  if(!p||souDono(pid))return [];
+  return ACOES_DO_CARGO.filter(a=>pode(pid,a.perm)&&servicoLigado(a.servico)&&(a.perm!=='contract.add'||p.use==='investimento'))
+    .map(a=>({perm:a.perm,rotulo:a.rotulo,icon:a.icon,toca:a.toca,act:a.act(pid)}));
+}
+/* As ações de todos os imóveis onde colaboro, sem repetir e pela ordem de
+   ACOES_DO_CARGO, sem imóvel na ação: o formulário escolhe entre os imóveis
+   onde se pode.
+   Devolve: array de {perm, rotulo, icon, toca, act} — vazio sem imóveis de colaboração. */
+function acoesDoColaborador(){
+  const tem=new Set();
+  casasDeColaboracao().forEach(p=>acoesNoImovel(p.id).forEach(a=>tem.add(a.perm)));
+  return ACOES_DO_CARGO.filter(a=>tem.has(a.perm)).map(a=>({perm:a.perm,rotulo:a.rotulo,icon:a.icon,toca:a.toca,act:a.act(null)}));
+}
+/* O que o meu cargo me deixa adicionar num imóvel, em minúsculas e pela
+   ordem de PERMS: os rótulos de ROTULOS das permissões de adicionar do fecho
+   (contract.add traz os planeados), menos as de um serviço desligado.
+   Recebe: pid — o id do imóvel.
+   Devolve: array de textos (ex.: ['marcar visitas', 'adicionar inquilinos']); vazio para o dono. */
+function podesNoImovel(pid){
+  if(!pid||souDono(pid))return [];
+  const f=fechoPerms(cargoDe(pid).perms||[]);
+  const ligada=k=>{const a=ACOES_DO_CARGO.find(x=>x.perm===k);return !a||servicoLigado(a.servico)};
+  return PERMS.filter(k=>(/\.add$/.test(k)||k==='house.edit')&&f.has(k)&&ligada(k))
+    .map(k=>{const r=ROTULOS[k].rotulo;return r.charAt(0).toLowerCase()+r.slice(1)});
+}
+/* «Neste imóvel podes: marcar visitas e adicionar inquilinos.» — a nota da
+   ficha de um imóvel de colaboração.
+   Recebe: pid — o id do imóvel.
+   Devolve: a frase (texto, por escapar), ou '' para o dono ou sem nada para adicionar. */
+function frasePodesNoImovel(pid){const l=podesNoImovel(pid);return l.length?'Neste imóvel podes: '+listaE(l)+'.':''}
+/* A mesma frase, curta, para o cartão do imóvel e para «Imóveis onde
+   colaboras»: «Podes marcar visitas e adicionar inquilinos».
+   Recebe: pid — o id do imóvel.
+   Devolve: o texto (por escapar); «Só podes consultar» num cargo que só vê; '' para o dono. */
+function fraseCurtaPodes(pid){
+  if(!pid||souDono(pid))return '';
+  const l=podesNoImovel(pid);
+  return l.length?'Podes '+listaE(l):'Só podes consultar';
+}
+/* Marca uma visita já com o imóvel escolhido (a ação dos botões de um imóvel).
+   Recebe: pid — o id do imóvel.
+   Devolve: nada — abre o formulário da visita. */
+function marcarVisitaNoImovel(pid){chamarServico('visits','visitModal',null,{propertyId:pid})}
+/* Regista um movimento num imóvel: o caminho do FAB dos Movimentos (primeiro
+   o tipo), com o imóvel posto. O pagamento de crédito abate capital na ficha
+   do imóvel: sem a poder editar, diz-se antes de abrir o formulário.
+   Recebe: pid — o id do imóvel.
+   Devolve: nada — abre a escolha do tipo e, depois, o formulário. */
+function registarMovimentoNoImovel(pid){
+  chamarServico('transactions','newTxPick',k=>{
+    if(k==='loan'){const rc=motivoCredito(pid);if(rc)return toast(rc)}
+    chamarServico('transactions','txModal',{kind:k,propId:pid});
+  });
+}
+/* «Editar a ficha» sem imóvel (o cartão da vista geral): com um só imóvel
+   onde posso, abre esse; com vários, escolhe-se primeiro.
+   Devolve: nada — abre o formulário do imóvel (ou, antes, a escolha). */
+function editarFichaDeColaboracao(){
+  const cs=casasDeColaboracao().filter(p=>pode(p.id,'house.edit'));
+  if(!cs.length)return toast(fraseSemPerm('house.edit'));
+  if(cs.length===1)return chamarServico('properties','propModal',cs[0].id);
+  pickModal('Que imóvel?',cs.map(p=>({v:p.id,label:p.name||p.address||'imóvel',sub:p._sharedFrom?'de '+p._sharedFrom:'',icon:'building'})),
+    o=>{closeModal();chamarServico('properties','propModal',o.v)});
+}
+/* Os destinos da barra de baixo: cada destino escondido dá o lugar ao
+   primeiro visível de visitas, contratos, inquilinos e planeados que ainda
+   não esteja na barra; sem substituto, o lugar some. Quem nada esconde fica
+   com a barra de sempre.
+   Recebe: ids — os destinos de origem (TABBAR); fora (opcional) — os ids escondidos (separadoresEscondidos).
+   Devolve: array de ids, sem repetidos. */
+function barraDeBaixo(ids,fora){
+  const f=fora||[],base=ids||[],out=[];
+  const subs=['visits','contracts','tenants','recurring'].filter(id=>f.indexOf(id)<0&&base.indexOf(id)<0);
+  base.forEach(id=>{
+    const x=f.indexOf(id)<0?id:subs.shift();
+    if(x&&out.indexOf(x)<0)out.push(x);
+  });
+  return out;
+}
 /* Os separadores que não têm nada para mostrar a quem só colabora: os
    financeiros quando nenhum imóvel visível abre as finanças, e os outros
-   quando nenhum cargo os abre. Para quem tem imóveis seus, nada se esconde.
-   Devolve: array de ids de TABS a esconder. */
+   quando nenhum cargo os abre. Movimentos e Planeados escondem-se sem cargo
+   que os abra mesmo quando o âmbito das finanças não está vazio (hipotecas
+   ou valores sem movimentos): eram um separador vazio na barra de baixo.
+   Para quem tem imóveis seus, nada se esconde.
+   Devolve: array de ids de TABS a esconder, sem repetidos. */
 function separadoresEscondidos(){
   const out=[],nada=perm=>!casasComo(perm).length;
+  const poe=id=>{if(out.indexOf(id)<0)out.push(id)};
   /* os serviços desligados nesta conta (servicos.js): o separador some do
      menu, e o resto da app pergunta servicoLigado antes de lhes tocar */
-  if(typeof servicosDesligados==='function')servicosDesligados().forEach(id=>out.push(id));
+  if(typeof servicosDesligados==='function')servicosDesligados().forEach(poe);
   /* cargos e convites vivem no servidor: sem conta na nuvem o separador não
      tem o que mostrar (a vista explica-o, mas não vale ocupar o menu) */
-  if(!(typeof window!=='undefined'&&window.CW&&CW.user)&&out.indexOf('colaboradores')<0)out.push('colaboradores');
+  if(!(typeof window!=='undefined'&&window.CW&&CW.user))poe('colaboradores');
   if(!souSoColaborador())return out;
-  if(!scope().length){out.push('credits','projections','reports','fisco');
-    if(nada('tx.view')&&!db.transactions.length)out.push('transactions');
-    if(nada('rec.view')&&!(db.recurring||[]).length)out.push('recurring')}
-  if(nada('contract.view'))out.push('contracts');
-  if(nada('tenant.view')&&!db.tenants.length)out.push('tenants');
-  if(nada('visit.view')&&!(db.visits||[]).length)out.push('visits');
+  if(!scope().length)['credits','projections','reports','fisco'].forEach(poe);
+  if(nada('tx.view')&&!db.transactions.length)poe('transactions');
+  if(nada('rec.view')&&!(db.recurring||[]).length)poe('recurring');
+  if(nada('contract.view'))poe('contracts');
+  if(nada('tenant.view')&&!db.tenants.length)poe('tenants');
+  if(nada('visit.view')&&!(db.visits||[]).length)poe('visits');
   return out;
 }
 /* Uma cópia da base só com o que é meu: os imóveis de colaboração e os seus

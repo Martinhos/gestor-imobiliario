@@ -971,6 +971,14 @@ body.sel-on .wrap{padding-bottom:calc(120px + var(--inset-bottom))}
 /* app/visitas.js:vVisits — o espaço por baixo de cada bloco de visitas (o
    antigo atributo de estilo que ia no listaViva). Não há utilitário de 16px. */
 #raiz#raiz .vis-bloco{margin-bottom:16px}
+/* ---- web/app/painel-geral.js, web/app/imovel.js ---- */
+/* As ações que o cargo de quem colabora abre (acessos.js:acoesNoImovel), no
+   cartão «O que podes fazer» da vista geral e na ficha do imóvel: botões da
+   largura do dedo, lado a lado enquanto o rótulo couber numa linha e, quando
+   não cabe, cada um na largura toda — quem acabou de aceitar um convite tem
+   de os ler de relance. */
+#raiz#raiz .colab-acoes{display:flex;flex-wrap:wrap;gap:8px}
+#raiz#raiz .colab-acoes .btn{flex:1 1 auto;justify-content:center;min-height:44px;white-space:nowrap}
 /* ---- web/cloud/partilha.js ---- */
 /* A folha dos documentos legais (os termos e a privacidade, que o
    cloud/ajuda.js embrulha numa div .lg): texto corrido, legível, sem cartões.

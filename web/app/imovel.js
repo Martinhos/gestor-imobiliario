@@ -57,8 +57,7 @@ function propFicha(id){
   /* o que o Anexo F e o Anexo G pedem e não é dado registal: o VPT (reparte os gastos
      quando só se arrenda parte do imóvel) e o dia em que o imóvel foi comprado */
   const fisco=[p.vpt?'VPT '+euro(p.vpt):'',p.purchaseDate?'adquirido a '+dPT(p.purchaseDate):''].filter(Boolean).join(' · ');
-  return ficha([
-    c.dono?null:{tipo:'nota',valor:`${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}És colaborador${c.nome?' como <b>'+esc(c.nome)+'</b>':''} — a ficha é só de leitura.`},
+  const corpo=ficha([
     {rotulo:'Morada',valor:esc(p.address||'')},
     {rotulo:'Destino',valor:p.use==='proprio'?'Uso próprio':'Arrendamento'+(p.rentalMode==='quartos'?' · por quartos':' · imóvel inteiro')},
     st?{rotulo:'Estado',valor:esc(st.label)}:null,
@@ -75,6 +74,16 @@ function propFicha(id){
     reg?{tipo:'bloco',rotulo:'Dados registais',valor:reg}:null,
     p.listing?{tipo:'bloco',rotulo:'Anúncio',valor:esc(p.listing)}:null,
   ]);
+  if(c.dono)return corpo;
+  /* quem colabora lê primeiro o que o cargo lhe deixa fazer aqui, e tem os
+     botões à mão; o «Editar a ficha» é o «Editar» do rodapé */
+  const podes=frasePodesNoImovel(id);
+  const acoes=acoesNoImovel(id).filter(a=>a.perm!=='house.edit');
+  const nota=`${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}És colaborador${c.nome?' como <b>'+esc(c.nome)+'</b>':''}${pode(id,'house.edit')?'.':acoes.length?' — os dados do imóvel são só de leitura.':' — a ficha é só de leitura.'}`
+    +(podes?`<span class="u-d-block u-mt-4px">${esc(podes)}</span>`:'');
+  /* um botão que muda de ecrã fecha antes a ficha, senão ela ficava por cima */
+  const botoes=acoes.map((a,i)=>`<button type="button" class="btn${i?'':' primary'}" data-toca="${a.toca}" data-click="${a.toca==='ecra'?'closeAllModals();':''}${a.act}">${ic(a.icon,16)} ${esc(a.rotulo)}</button>`).join('');
+  return ficha([{tipo:'nota',valor:nota}])+(botoes?`<div class="colab-acoes u-mt-12px">${botoes}</div>`:'')+`<div class="u-mt-14px">${corpo}</div>`;
 }
 /* A ficha de um imóvel: o que tocar num imóvel passa a abrir.
 

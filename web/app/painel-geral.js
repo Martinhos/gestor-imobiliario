@@ -25,11 +25,10 @@ function vDashboard(){
       <div class="toolbar u-jc-center u-mt-16px">
       ${servicoLigado('properties')?`<button class="btn primary" data-toca="camada" data-click="propModal()">Adicionar imóvel</button>`:''}
       ${podeExemplo()?`<button class="btn" data-toca="dados" data-click="seed()">Carregar exemplo</button>`:''}</div></div>`;
-  /* quem só colabora e cujo cargo não abre as finanças não tem nada para somar aqui */
-  if(souSoColaborador()&&!scope().length)
-    return `<div class="empty"><b>${fraseColaborador()}</b>O teu cargo não abre as finanças destes imóveis — a vista geral não tem nada para somar.
-      ${servicoLigado('properties')?`<div class="toolbar u-jc-center u-mt-16px">
-      <button class="btn primary" data-toca="ecra" data-click="go('properties')">Ver os imóveis</button></div>`:''}</div>`;
+  /* quem só colabora vê primeiro o que o cargo lhe deixa fazer; sem finanças,
+     é isso (e as próximas visitas) em vez das contas */
+  const podes=cartaoPodes();
+  if(souSoColaborador()&&!scope().length)return podes+proximasVisitasColab();
   const nColab=scope().filter(p=>!souDono(p.id)).length;
   const colabHint=nColab?`<div class="hint u-m-n4px-0-12px">Inclui ${nColab} ${nColab===1?'imóvel':'imóveis'} onde és colaborador (valores por inteiro).</div>`:'';
   const inc=monthly(YEAR,pid,'income',true),exp=monthly(YEAR,pid,'expense',true),ln=monthly(YEAR,pid,'loan',true),am=monthly(YEAR,pid,'amort',true);
@@ -44,7 +43,7 @@ function vDashboard(){
   const E=(field,fmt)=>{const f=()=>evoMoney(field,pid,fmt);f.anual=true;return f};
   /* o cartão dos por confirmar é dos Planeados: só com esse serviço ligado */
   const pendentes=servicoLigado('recurring')?pendingCard():'';
-  return dashBar()+quota+colabHint+pendentes+prazosCard()+`<div class="grid">
+  return podes+proximasVisitasColab()+dashBar()+quota+colabHint+pendentes+prazosCard()+`<div class="grid">
     ${kpi('Receita',euro(m.income),'pos',YEAR+' · rendas e outros',WHY.receita,E('income'))}
     ${kpi('Despesas',euro(m.op),'neg','impostos, condomínio, obras…',WHY.despesas,E('op'))}
     ${kpi('Prestações',euro(m.loan),'amber','capital, juros e selo'+(m.amort?' · +'+euro(m.amort)+' amortizados':''),WHY.prestacoes,E('loan'))}
@@ -72,6 +71,34 @@ function vDashboard(){
     ${card('Renda por contrato','Peso de cada arrendamento',cHBars(act.map(c=>({label:ctName(c),value:c.rent*cs(c)})),{fmt:v=>euro(v)+'/mês'}))}</div>
   ${pid?'':orphanCard()}
   ${balancesCard(pid)}`;
+}
+/* O cartão «O que podes fazer», no topo da vista geral de quem só colabora:
+   quem acabou de aceitar um convite tem de ver logo o que o cargo lhe deixa
+   fazer, sem abrir a gaveta. Um botão por ação (acessos.js:acoesDoColaborador),
+   o primeiro primário. Sem finanças, diz porque não há contas e leva aos
+   imóveis. O comentário no fim marca onde o cartão acaba: é lá que o guia
+   (cloud/guia.js) pendura os primeiros passos, depois deste.
+   Devolve: o HTML do cartão, ou '' a quem tem imóveis seus. */
+function cartaoPodes(){
+  if(!souSoColaborador())return '';
+  const acoes=acoesDoColaborador(),semFin=!scope().length,imoveis=servicoLigado('properties');
+  const botoes=acoes.map((a,i)=>`<button type="button" class="btn${i?'':' primary'}" data-toca="${a.toca}" data-click="${a.act}">${ic(a.icon,16)} ${esc(a.rotulo)}</button>`).join('');
+  return `<div class="card u-mb-14px" id="colabPodes"><div class="title">O que podes fazer</div>
+    <div class="small">${fraseColaborador()}</div>
+    ${acoes.length?`<div class="colab-acoes u-mt-12px">${botoes}</div>`:'<div class="hint u-mt-10px">O teu cargo deixa-te consultar estes imóveis, sem adicionar nada.</div>'}
+    ${semFin?'<div class="hint u-mt-12px">As finanças destes imóveis ficam com o dono: o teu cargo não as abre, e por isso aqui não há contas.</div>':''}
+    ${semFin&&imoveis?`<div class="toolbar u-mt-10px"><button type="button" class="btn${acoes.length?'':' primary'}" data-toca="ecra" data-click="go('properties')">${ic('building',16)} Ver os imóveis</button></div>`:''}<!--fim-podes--></div>`;
+}
+/* As próximas visitas (até 3) de quem só colabora e vê visitas, com a porta
+   para a lista toda. Sem visitas por vir, nada.
+   Devolve: o HTML do cartão, ou ''. */
+function proximasVisitasColab(){
+  if(!souSoColaborador()||!servicoLigado('visits')||!casasComo('visit.view').length)return '';
+  const fut=visOrdenadas().filter(v=>!visPassada(v)&&v.estado!=='cancelada');
+  if(!fut.length)return '';
+  return `<div class="card u-mb-14px"><div class="row-between u-ai-center"><div class="title">Próximas visitas</div>
+      <button type="button" class="btn sm" data-toca="ecra" data-click="go('visits')">Ver todas</button></div>
+    <div class="list u-g-8px u-mt-12px">${fut.slice(0,3).map(visCard).join('')}</div></div>`;
 }
 /* donut das despesas: tocar numa categoria mostra as suas subcategorias */
 let donutCat='';

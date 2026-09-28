@@ -615,3 +615,26 @@ function pedidosRecebidos() {
   var sr = (CW.state && CW.state.shareRequests) || {};
   return sr.incoming || [];
 }
+
+/* ---------------- o que o cargo deixa fazer ---------------- */
+
+/* «Imóveis onde colaboras» (partilha.js:colaboroCard) diz o dono e o nome do
+   cargo, e o nome não diz o que o cargo abre. Aqui acrescenta-se a cada linha
+   a frase de acessos.js:fraseCurtaPodes. As linhas vêm pela ordem de
+   db.properties com _cargo, cada uma a abrir com o seu cartão, e o bloco do
+   texto fecha no primeiro «</span></span>» dela; uma linha com outra forma
+   fica como estava.
+   Devolve: o HTML do cartão (texto), ou '' sem imóveis de colaboração. */
+var _colaboroCard_podes = colaboroCard;
+colaboroCard = function () {
+  var html = _colaboroCard_podes();
+  if (!html) return html;
+  var casas = (db.properties || []).filter(function (p) { return p._cargo; });
+  var linha = '<div class="card u-p-11px-13px';
+  var partes = html.split(linha);
+  for (var i = 1; i < partes.length && i <= casas.length; i++) {
+    var frase = fraseCurtaPodes(casas[i - 1].id);
+    if (frase) partes[i] = partes[i].replace('</span></span>', '</span><span class="small u-d-block u-mt-3px">' + esc(frase) + '</span></span>');
+  }
+  return partes.join(linha);
+};
