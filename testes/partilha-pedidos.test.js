@@ -379,7 +379,7 @@ describe('as quotas ao escolher a casa a partilhar', () => {
   });
 
   test('uma casa que já estava partilhada não envia proposta — só a lista muda', async () => {
-    const { app, esp } = abrir();
+    const { esp } = abrir();
     esp.abertas[0].onSave();   // a Minha continua marcada, a Segunda não
     await espera();
     assert.deepEqual(chamadas(esp), ['PUT /api/connections/K1/shares']);
