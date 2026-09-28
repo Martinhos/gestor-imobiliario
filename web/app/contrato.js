@@ -235,7 +235,7 @@ function ctBody(){
   const nSum=(c.keys||[]).length?sum(c.keys.map(k=>k.qty))+' chaves':'';
   const fisc=fiscoDe(c),fsum=fisc.estado==='declarado'?'Declarado'+(fisc.numero?' · n.º '+esc(fisc.numero):''):fisc.estado==='naoDeclarado'?'Não declarado':'por indicar';
   return `<div class="form">
-    <label>Nome do contrato<input id="c_name" value="${esc(c.name||'')}" placeholder="${esc(ctPick(c)||'Ex.: Ana · T2 Lisboa')}" autocomplete="off"></label>
+    <label>Nome do contrato (opcional)<input id="c_name" value="${esc(c.name||'')}" placeholder="${esc(ctPick(c)||'Ex.: Ana · T2 Lisboa')}" autocomplete="off"></label>
     <div class="hint u-mt-n6px">É por este nome que o contrato aparece nos movimentos e nas listas. Sem nome, usa-se o dos inquilinos.</div>
     <label>Imóvel${sel('c_prop',c.propertyId,propOptsPara('contract.add',c.propertyId).filter(o=>{const x=prop(o.v);return x&&(x.use==='investimento'||x.id===c.propertyId)}),'onCtProp','rascunho')}</label>
     ${rooms.length?`<label>Quarto${sel('c_room',c.roomId||'',[{v:'',label:'— sem quarto —'}].concat(rooms.map(r=>({v:r.id,label:r.name+(taken.indexOf(r.id)>-1?' (já arrendado)':'')}))),'','rascunho')}</label>`
@@ -243,7 +243,7 @@ function ctBody(){
     <div><div class="flabel">Inquilinos</div>${tagField(tags,'Adicionar','addCtTenant()','delCtTenant','','camada')}</div>
     <div class="row">
       <label>Renda mensal (€) <span class="req">*</span><input id="c_rent" type="text" inputmode="decimal" value="${c.rent||''}" placeholder="450" data-input="liveNet()"></label>
-      <label>Imposto sobre a renda (%)<input id="c_tax" type="text" inputmode="decimal" value="${c.taxRate?dec(c.taxRate):''}" placeholder="${dec(irsRate(c))}" data-input="liveNet()"></label></div>
+      <label>Imposto sobre a renda (%, opcional)<input id="c_tax" type="text" inputmode="decimal" value="${c.taxRate?dec(c.taxRate):''}" placeholder="${dec(irsRate(c))}" data-input="liveNet()"></label></div>
     <div class="hint u-mt-n6px">Em branco, estima-se pela duração do contrato: a taxa especial de IRS sobre rendas de habitação é 25 %, e desce para 15 %, 10 % ou 5 % em contratos de 5, 10 ou 20 anos ou mais. Noutros usos é 28 % — escreve-a. É uma estimativa sobre a renda bruta: as despesas dedutíveis (IMI, condomínio, obras) baixam o imposto.</div>
     <div class="card u-bg-v-tint u-p-12px" id="netBox">${netBox()}</div>
     ${fold('terms','Prazo, caução e pagamento',`
@@ -251,13 +251,13 @@ function ctBody(){
       <label>Início<input id="c_start" type="date" value="${c.start||''}" data-change="liveNet()"></label>
       <label>Fim<input id="c_end" type="date" value="${c.end||''}" data-change="liveNet()"></label></div>
     <div class="row3">
-      <label>Renda entre o dia<input id="c_day" type="text" inputmode="numeric" value="${c.payDay||''}" placeholder="1"></label>
-      <label>e o dia<input id="c_dayTo" type="text" inputmode="numeric" value="${c.payDayTo||''}" placeholder="8"></label>
-      <label>Aumento anual (%)<input id="c_inc" type="text" inputmode="decimal" value="${c.increase==null?'':dec(c.increase)}" placeholder="${dec(db.settings.growth)}"></label></div>
+      <label>Renda entre o dia<input id="c_day" type="text" inputmode="numeric" value="${c.payDay||''}" placeholder="Opcional"></label>
+      <label>e o dia<input id="c_dayTo" type="text" inputmode="numeric" value="${c.payDayTo||''}" placeholder="Opcional"></label>
+      <label>Aumento anual (%, opcional)<input id="c_inc" type="text" inputmode="decimal" value="${c.increase==null?'':dec(c.increase)}" placeholder="${dec(db.settings.growth)}"></label></div>
     <div class="row"><label>Caução (€)<input id="c_dep" type="text" inputmode="decimal" value="${c.deposit||''}" placeholder="Opcional"></label>
-      <label>Rendas antecipadas (meses)<input id="c_adv" type="text" inputmode="numeric" value="${c.advance||''}" placeholder="0"></label></div>
+      <label>Rendas antecipadas (meses)<input id="c_adv" type="text" inputmode="numeric" value="${c.advance||''}" placeholder="Opcional"></label></div>
     ${servicoLigado('recurring')?`<div class="hint u-mt-n6px">A renda cria um movimento recorrente todos os meses. Com rendas antecipadas, arranca depois dos meses pagos à cabeça.</div>`:''}
-    <label>IBAN para pagamento das rendas<input id="c_iban" value="${esc(c.iban)}" placeholder="PT50 0000 0000 0000 0000 0000 0" autocomplete="off"></label>`,
+    <label>IBAN para pagamento das rendas (opcional)<input id="c_iban" value="${esc(c.iban)}" placeholder="PT50 0000 0000 0000 0000 0000 0" autocomplete="off"></label>`,
       {icon:'contract',open:false,summary:[c.start?'de '+dPT(c.start):'',c.end?'a '+dPT(c.end):'',c.deposit?'caução '+euro(c.deposit):''].filter(Boolean).join(' ')})}
     ${fold('fisco','Declaração',fiscoSect(),{icon:'file',summary:fsum})}
     ${fold('contacts','Contactos',contactSect('owner',c,p)+contactSect('tenant',c,p),{icon:'users',summary:[c.ownerPhone||c.ownerEmail?'senhorio':'',c.tenantPhone||c.tenantEmail?'inquilino':''].filter(Boolean).join(' · ')})}
@@ -307,7 +307,7 @@ function ctBody(){
     <label class="check"><input type="checkbox" id="c_active" ${c.active!==false?'checked':''}> Contrato em vigor</label>
     ${servicoLigado('recurring')?`<label class="check"><input type="checkbox" id="c_autorec" ${c.autoRec!==false?'checked':''}> Criar movimento recorrente da renda</label>
     <div class="hint u-mt-n4px">Todos os meses a app pede para confirmar a renda em Planeados.</div>`:''}
-    ${richEditor('Notas','c_notes',c.notes)}
+    ${richEditor('Notas','c_notes',c.notes,'Opcional')}
   </div>`;
 }
 // HTML do resumo bruto → imposto → líquido. Lê os campos do formulário se
@@ -383,7 +383,7 @@ function collectCt(){
 // Repinta o corpo do modal a partir de cForm e recarrega as miniaturas das
 // fotos. Não recolhe os campos — chama collectCt() antes, se for preciso.
 // Devolve: nada — redesenha o corpo do modal.
-function repaintCt(){const b=modalBodyEl();if(!b)return;b.innerHTML=ctBody();
+function repaintCt(){const b=modalBodyEl();if(!b)return;b.innerHTML=ctBody();marcarDatasVazias(b);
   const p=prop(cForm.propertyId);if(p)paintThumbs(p.photos)}
 
 /* A secção «Declaração» do formulário: o estado do contrato perante a AT, e o que
@@ -410,7 +410,7 @@ function fiscoSect(){
   const reduzida=irsRate(c)<25&&(!f.finalidade||f.finalidade==='hp');
   return seg+`
     <div class="row">
-      <label>N.º do contrato na AT<input id="c_fnum" type="text" inputmode="numeric" value="${esc(f.numero)}" placeholder="1234567" autocomplete="off"></label>
+      <label>N.º do contrato na AT (opcional)<input id="c_fnum" type="text" inputmode="numeric" value="${esc(f.numero)}" placeholder="1234567" autocomplete="off"></label>
       <label>Finalidade${sel('c_ffin',f.finalidade,[{v:'',label:'—'}].concat(FISCO_FINALIDADES.map(x=>({v:x[0],label:x[1]}))),'','rascunho')}</label></div>
     <div class="hint u-mt-n6px">Vem no comprovativo do Modelo 2; o Anexo F pede-o em cada linha.</div>
     <div class="row">
@@ -424,7 +424,7 @@ function fiscoSect(){
         <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delRenov('${jsq(r.id)}')" aria-label="Tirar renovação">${ic('trash',14)}</button></div>`).join('')}</div>`:''}
       <div class="toolbar ${renovs.length?'u-m-4px-0-0':'u-m-0-0-0'}"><button type="button" class="btn sm" data-toca="rascunho" data-click="addRenov()">${ic('plus',14)} Adicionar renovação</button></div>
       <div class="hint">Início e fim de cada renovação. O quadro 4.2A do Anexo F pede os da última.</div></div>
-    ${cessa?`<label>Motivo da cessação<input id="c_fces" value="${esc(f.cessacaoMotivo)}" placeholder="Ex.: fim do prazo, acordo, denúncia" autocomplete="off"></label>
+    ${cessa?`<label>Motivo da cessação (opcional)<input id="c_fces" value="${esc(f.cessacaoMotivo)}" placeholder="Ex.: fim do prazo, acordo, denúncia" autocomplete="off"></label>
     <div class="hint u-mt-n6px">A AT pergunta-o ao comunicar o fim do contrato.</div>`:''}
     ${reduzida?`<div class="hint">Taxa reduzida pela duração: vai ao quadro 4.2 do Anexo F, e até 15 de fevereiro comunica-se a duração e as renovações no Portal das Finanças.</div>`:''}`;
 }
@@ -460,8 +460,8 @@ function contactSect(kind,c,p){
     ${chosen?`<div class="stat u-b-0 u-p-4px-0"><span>${esc(chosen.name)}</span>
         <b>${esc([chosen.phone?fmtPhone(chosen.phone):'',chosen.email].filter(Boolean).join(' · ')||'sem contacto na ficha')}</b></div>`
       :`<div class="row">
-        <label>Email<input id="${owners?'c_omail':'c_tmail'}" type="email" inputmode="email" value="${esc(owners?c.ownerEmail:c.tenantEmail)}" placeholder="nome@exemplo.pt" autocomplete="off"></label>
-        <label>Telemóvel<input id="${owners?'c_ophone':'c_tphone'}" type="tel" inputmode="tel" value="${esc(owners?c.ownerPhone:c.tenantPhone)}" placeholder="+351 912 000 000" autocomplete="off"></label></div>`}
+        <label>Email (opcional)<input id="${owners?'c_omail':'c_tmail'}" type="email" inputmode="email" value="${esc(owners?c.ownerEmail:c.tenantEmail)}" placeholder="nome@exemplo.pt" autocomplete="off"></label>
+        <label>Telemóvel (opcional)<input id="${owners?'c_ophone':'c_tphone'}" type="tel" inputmode="tel" value="${esc(owners?c.ownerPhone:c.tenantPhone)}" placeholder="+351 912 000 000" autocomplete="off"></label></div>`}
   </div>`;
 }
 // Ao escolher o contacto do senhorio: copia o email/telefone da pessoa

@@ -65,21 +65,6 @@ const CATS0={
   'Dívidas a terceiros':['Reembolso de empréstimo','Juros'],
   'Outros':[]
 };
-/* a regra de origem da projeção das despesas: que categorias (ou «Categoria/Sub») voltam
-   todos os anos. A sub manda sobre a categoria; o que aqui não está não se repete — as
-   categorias que a pessoa cria incluídas. O Crédito à habitação fica de fora porque a
-   projeção tira as prestações do plano de cada hipoteca: contá-las aqui era contar duas vezes. */
-const DESPESAS_REPETEM0={
-  'Impostos':true,'Impostos/Imposto do selo':false,'Impostos/Mais-valias':false,'Impostos/Outro imposto':false,
-  'Condomínio':true,'Condomínio/Quota extraordinária':false,
-  'Seguros':true,'Água, luz e gás':true,
-  'Gestão e mediação':false,'Gestão e mediação/Gestão do imóvel':true,
-  'Serviços profissionais':false,'Serviços profissionais/Contabilidade':true,
-  'Limpeza e jardim':true,
-  'Custos bancários':false,'Custos bancários/Comissões':true,
-  'Obras e benfeitorias':false,'Manutenção e reparações':false,'Mobiliário e equipamento':false,
-  'Crédito à habitação':false,'Dívidas a terceiros':false,'Outros':false
-};
 /* receitas: rendas, reembolsos, empréstimos recebidos… */
 const CATS_IN0={
   'Rendas':['Renda mensal','Renda em atraso','Caução'],
@@ -212,14 +197,19 @@ function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:''
    freguesia (seis dígitos, da caderneta ou da nota do IMI), tipo de prédio (U/R), tipologia,
    VPT e data de aquisição. O vpt das versões antigas deixou de ser apagado — é o mesmo valor,
    e o rateio dos gastos num imóvel arrendado por partes faz-se por ele.
+   As despesas fixas do imóvel, que criam planeados sozinhas (planeados.js:syncPropRecs):
+   imi (€/ano), condominio (€/mês), seguro (€/ano) e seguroMes (1–12; 0 é o mês corrente
+   quando o planeado nasce). Zero é «sem valor»: não há planeado.
    Recebe: p — o imóvel em bruto, de qualquer versão dos dados (ou nada).
    Devolve: um objeto novo com o imóvel completo e já migrado. */
 function normProp(p){
   const o=Object.assign({id:uid(),name:'',address:'',use:'investimento',rentalMode:'inteiro',rooms:[],
     value:0,purchase:0,ownerIds:[],ownerShares:{},notes:'',listing:'',photos:[],loans:[],
     parish:'',concelho:'',freguesia:'',fraction:'',floor:'',street:'',doorNumber:'',postalCode:'',locality:'',registry:'',matrix:'',licence:'',energyCert:'',energyClass:'',energyValid:'',
-    distrito:'',freguesiaCodigo:'',tipoPredio:'',tipologia:'',vpt:0,purchaseDate:''},p||{});
+    distrito:'',freguesiaCodigo:'',tipoPredio:'',tipologia:'',vpt:0,purchaseDate:'',imi:0,condominio:0,seguro:0,seguroMes:0},p||{});
   o.id=idSeguro(o.id);o.ownerIds=idsSeguros(o.ownerIds);
+  ['imi','condominio','seguro'].forEach(k=>{o[k]=Math.max(0,Math.round((Number(o[k])||0)*100)/100)});
+  o.seguroMes=Math.min(12,Math.max(0,Math.round(Number(o.seguroMes)||0)));
   if(!o.purchase&&p&&p.equity)o.purchase=p.equity;   /* v12 chamava-lhe capital próprio */
   delete o.equity;
   /* v8 tinha um crédito único; passa a ser a primeira hipoteca da lista */
@@ -317,12 +307,14 @@ function migrateSettlements(d){
   d.settlements=[];
 }
 /* categorias novas que uma base antiga ainda não tem; e o mapa categoria → coluna do
-   Anexo F, completado com as regras de origem que faltem sem pisar as que a pessoa mudou
+   Anexo F, completado com as regras de origem que faltem sem pisar as que a pessoa mudou.
+   O «repete» (as escolhas da página «Despesas que se repetem», que já não existe: a
+   projeção conta os planeados) sai de uma base que ainda o traga.
    Recebe: st — o objeto settings da base.
-   Devolve: nada — completa st.cats, st.catsIn, st.exclude, st.repete e st.irsMapa no próprio objeto. */
+   Devolve: nada — completa st.cats, st.catsIn, st.exclude e st.irsMapa no próprio objeto. */
 function fillCats(st){
   st.exclude=(st.exclude&&typeof st.exclude==='object')?st.exclude:{};
-  st.repete=(st.repete&&typeof st.repete==='object'&&!Array.isArray(st.repete))?st.repete:{};
+  delete st.repete;
   /* uma cópia colada à mão pode trazer um texto onde há uma árvore: o «in» rebentava */
   if(!st.cats||typeof st.cats!=='object'||!Object.keys(st.cats).length)st.cats=JSON.parse(JSON.stringify(CATS0));
   else['Crédito à habitação','Dívidas a terceiros'].forEach(k=>{if(!(k in st.cats))st.cats[k]=CATS0[k].slice()});
@@ -334,8 +326,11 @@ function fillCats(st){
    Devolve: um objeto novo com todos os campos, e os ids pelo idSeguro. */
 const normSettle=x=>{const o=Object.assign({id:uid(),date:'',propertyId:null,fromId:null,toId:null,amount:0},x||{});
   ['id','propertyId','fromId','toId'].forEach(k=>{o[k]=idSeguro(o[k])});return o};
-/* modelo: um movimento guardado para repetir à mão; recorrência: repete-se sozinho e pede confirmação */
-const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType','retencao','irsCol'];
+/* modelo: um movimento guardado para repetir à mão; recorrência: repete-se sozinho e pede confirmação.
+   propRec e propRecN são a origem de um planeado automático da ficha do imóvel (o IMI e a sua
+   prestação, o condomínio, o seguro — planeados.js:syncPropRecs), como o loanId e o contractId
+   são a das prestações e das rendas. */
+const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType','retencao','irsCol','propRec','propRecN'];
 /* cópia profunda de um movimento só com os campos que fazem sentido repetir (TX_TPL_KEYS):
    é o que os modelos e as recorrências guardam — data e id ficam de fora de propósito
    Recebe: t — o movimento a copiar.

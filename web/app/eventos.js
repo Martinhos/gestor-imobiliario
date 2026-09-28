@@ -612,6 +612,7 @@ function ligarEventosDeclarados(janela) {
   for (const tipo of ACAO_TIPOS) {
     const atributo = 'data-' + tipo;
     const ligados = new WeakSet();
+    const datas = tipo === 'input' || tipo === 'change';
     const corre = (ev) => {
       const el = ev.currentTarget;
       const texto = el.getAttribute(atributo);
@@ -619,6 +620,7 @@ function ligarEventosDeclarados(janela) {
       correrAcao(texto, el, ev);
     };
     janela.addEventListener(tipo, (ev) => {
+      if (datas) datasVaziasDoEvento(ev);
       const caminho = ev && typeof ev.composedPath === 'function' ? ev.composedPath() : [];
       for (const el of caminho) {
         if (!el || typeof el.hasAttribute !== 'function' || ligados.has(el) || !el.hasAttribute(atributo)) continue;
@@ -638,6 +640,21 @@ function ligarEventosDeclarados(janela) {
 function fecharNomesDaApp(janela) {
   if (ACAO_ESTADO.daApp) return;
   ACAO_ESTADO.daApp = new Set(Object.getOwnPropertyNames(janela).filter((n) => !ACAO_ESTADO.doBrowser.has(n) && !ACAO_DE_FORA.test(n)));
+}
+
+/* O que os ouvintes de input e change fazem além das ações: manter em dia a
+   marca dos campos de data vazios (componentes.js:marcarDatasVazias) — é o
+   que tira o «dd/mm/aaaa» do iPhone quando se escolhe uma data e o repõe
+   quando se apaga. Vai no ouvinte de captura das ações, e não num segundo: é
+   um por tipo no window, e como ele lê o alvo quando o evento passa, sem o
+   campo ter de existir antes. O marcador só existe depois de o componentes.js
+   carregar; até lá não há campo nenhum a marcar.
+   Recebe: ev — o evento.
+   Devolve: nada. */
+function datasVaziasDoEvento(ev) {
+  const el = ev && ev.target;
+  if (!el || el.tagName !== 'INPUT' || el.type !== 'date') return;
+  if (typeof marcarDatasVazias === 'function') marcarDatasVazias(el);
 }
 
 /* O botão que volta ao topo (index.html:#toTop). Era um on…= com um objeto

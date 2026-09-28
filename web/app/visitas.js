@@ -242,19 +242,19 @@ function visBody(){
     ?[{v:'',label:'Casa inteira'}].concat(p.rooms.map(r=>({v:r.id,label:r.name||'quarto'})))
     :null;
   return `<div class="form">
-    <label>Quem vem<input id="vi_nomes" value="${esc(v.nomes)}" placeholder="Ana Rodrigues (e o irmão)" autocomplete="off"></label>
-    <label>Contacto<input id="vi_contacto" value="${esc(v.contacto)}" placeholder="Telemóvel ou email (opcional)" autocomplete="off"></label>
+    <label>Quem vem <span class="req">*</span><input id="vi_nomes" value="${esc(v.nomes)}" placeholder="Ana Rodrigues (e o irmão)" autocomplete="off"></label>
+    <label>Contacto (opcional)<input id="vi_contacto" value="${esc(v.contacto)}" placeholder="Telemóvel ou email" autocomplete="off"></label>
     <div class="hint u-m-n4px-0-0">Para confirmar ou remarcar — segue para a ficha se a visita virar inquilino.</div>
     <label>Imóvel${sel('vi_prop',v.propertyId,props,'visPropMudou','rascunho')}</label>
     ${quartos?`<label>Quarto${sel('vi_room',v.roomId,quartos,'','rascunho')}</label>`:''}
-    <label>Data<input id="vi_date" type="date" value="${v.date||''}"></label>
+    <label>Data <span class="req">*</span><input id="vi_date" type="date" value="${v.date||''}"></label>
     <div class="row">
       <label>Início<input id="vi_start" type="time" value="${v.start||''}"></label>
       <label>Fim<input id="vi_end" type="time" value="${v.end||''}"></label></div>
     <div class="row">
       <label>Estado${sel('vi_estado',v.estado,Object.keys(VESTADO).map(k=>({v:k,label:VESTADO[k]})),'','rascunho')}</label>
       <label>Desfecho${sel('vi_res',v.resultado,Object.keys(VDESFECHO).map(k=>({v:k,label:VDESFECHO[k]})),'','rascunho')}</label></div>
-    <label>Comentários<textarea id="vi_notas" placeholder="Primeiras impressões, perguntas que fizeram, o que ficou combinado…">${esc(v.notas)}</textarea></label>
+    <label>Comentários (opcional)<textarea id="vi_notas" placeholder="Primeiras impressões, perguntas que fizeram, o que ficou combinado…">${esc(v.notas)}</textarea></label>
     <div class="hint">O desfecho preenche-se depois da visita — é o que separa um «talvez» de um «liga já».</div></div>`;
 }
 
@@ -265,7 +265,7 @@ function visPropMudou(){
   visColhe();
   visForm.roomId='';
   const t=modalTop();const corpo=t&&t.el.querySelector('.body');
-  if(corpo)corpo.innerHTML=visBody();
+  if(corpo){corpo.innerHTML=visBody();marcarDatasVazias(corpo)}
 }
 
 /* Copia os campos do modal para visForm — chamar antes de repintar ou gravar.

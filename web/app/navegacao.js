@@ -23,7 +23,6 @@ const SUBPAGE={tema:{label:'Tema',sub:'Claro, escuro ou o do telemóvel'},
                tags:{label:'Etiquetas',sub:'Para marcar movimentos'},
                groups:{label:'Grupos',sub:'Conjuntos de imóveis, proprietários e contratos'},
                irs:{label:'IRS e dedução',sub:'Que despesas entram em cada coluna do Anexo F'},
-               repete:{label:'Despesas que se repetem',sub:'As que entram na projeção das despesas'},
                dados:{label:'Dados',sub:'Splitwise e cópias de segurança'}};
 // O contentor onde cada vista é desenhada (o elemento #view).
 // Devolve: o elemento #view do DOM (ou null se ainda não existir).
@@ -81,14 +80,39 @@ let _barraAgora=TABBAR.slice();
 /* Reconstrói a barra de baixo do telemóvel com os destinos de TABBAR; um
    destino escondido dá o lugar a outro que o cargo abre
    (acessos.js:barraDeBaixo). O crachá de cada um vem do serviço que o
-   registou (crachaHtml).
+   registou (crachaHtml). A meio vai o + (abrirAdicionar) — um botão, não um
+   quinto destino: sólido e mais alto —, só quando há alguma coisa para
+   adicionar (acessos.js:acoesDeAdicionar); a barra ganha então a classe
+   `mais` e diz quantos destinos tem (d0…d4), que é o que a grelha do CSS lê
+   para o manter a meio quando quem colabora tem menos. O + não entra em
+   _barraAgora: a fita do goBarra conta só destinos.
    Recebe: fora (opcional) — ids de separadores a esconder (os de separadoresEscondidos).
-   Devolve: nada — reescreve o HTML de #tabbar (se o elemento existir). */
+   Devolve: nada — reescreve o HTML e as classes de #tabbar (se o elemento existir). */
 function buildTabbar(fora){
   const el=document.getElementById('tabbar');if(!el)return;
   _barraAgora=typeof barraDeBaixo==='function'?barraDeBaixo(TABBAR,fora):TABBAR.filter(id=>(fora||[]).indexOf(id)<0);
-  el.innerHTML=_barraAgora.map(id=>{const t=TABS.find(x=>x.id===id);
-    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} data-toca="ecra" data-click="goBarra('${jsq(id)}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${crachaHtml(id,'barra')}</a>`}).join('');
+  const itens=_barraAgora.map(id=>{const t=TABS.find(x=>x.id===id);
+    return `<a class="${id===tab?'on':''}" tabindex="0" ${id===tab?'aria-current="page"':''} data-toca="ecra" data-click="goBarra('${jsq(id)}')">${ic(t.icon,20)}<span>${t.label==='Visão geral'?'Geral':t.label}</span>${crachaHtml(id,'barra')}</a>`});
+  const mais=typeof acoesDeAdicionar==='function'&&acoesDeAdicionar().length>0;
+  if(mais)itens.splice(Math.ceil(itens.length/2),0,`<button type="button" class="tabmais" data-toca="camada" data-click="abrirAdicionar()" aria-label="Adicionar" title="Adicionar">${ic('plus',26)}</button>`);
+  el.className='tabbar'+(mais?' mais d'+_barraAgora.length:'');
+  el.innerHTML=itens.join('');
+}
+/* O + da barra de baixo. Com uma só ação corre-a logo — uma folha com uma
+   opção é um toque a mais; com várias abre a folha com tudo o que se pode
+   adicionar, a ação natural do ecrã onde se está em primeiro e marcada
+   «neste ecrã» (acessos.js:acaoDoSeparador). Escolher fecha a folha e corre
+   a ação pela gramática das ações (eventos.js:correrAcao), como o menu ⋯ dos
+   imóveis: os nomes são de serviços, e é a gramática que os resolve na hora.
+   Devolve: nada — corre a ação, ou abre a folha; sem nada para adicionar não faz nada. */
+function abrirAdicionar(){
+  const todas=acoesDeAdicionar();
+  if(!todas.length)return;
+  if(todas.length===1)return correrAcao(todas[0].act);
+  const aqui=acaoDoSeparador(tab);
+  const lista=todas.filter(a=>a.id===aqui).concat(todas.filter(a=>a.id!==aqui));
+  pickModal('O que queres adicionar?',lista.map(a=>({v:a.id,label:a.label,sub:a.id===aqui?'neste ecrã':'',icon:a.icon,act:a.act})),
+    o=>{closeModal();correrAcao(o.act)});
 }
 // Muda de separador: limpa a subpágina das Definições e o donut, fecha a
 // gaveta, refaz a navegação e repinta, com scroll para o topo.

@@ -390,14 +390,39 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
 .tabbar a:hover{background:var(--accent-soft);color:var(--accent)}
 .tabbar a .cnt{position:absolute;top:1px;left:calc(50% + 7px);background:var(--danger);color:#fff;font-size:10px;min-width:15px;height:15px;border-radius:99px;display:grid;place-items:center;padding:0 3px}
 #hdrBell .cnt{position:absolute;top:1px;right:1px;background:var(--danger);color:#fff;font-size:10px;min-width:15px;height:15px;border-radius:99px;display:grid;place-items:center;padding:0 3px}
+/* O + a meio da barra: no telemóvel é ele o botão de criar, e o FAB com o
+   leque somem (na @media de baixo). A coluna dele é auto e os destinos
+   repartem o resto; com menos de quatro destinos — quem colabora, um serviço
+   desligado — a barra diz quantos são (d0…d3, navegacao.js:buildTabbar) e
+   a grelha mantém o botão no CENTRO DO ECRÃ: com três, o terceiro destino
+   toma a metade direita inteira e centra-se nela com a largura dos outros;
+   com um, sobra uma coluna vazia à direita. */
+.tabbar.mais{grid-template-columns:1fr 1fr auto 1fr 1fr}
+.tabbar.mais.d3{grid-template-columns:1fr 1fr auto 2fr}
+.tabbar.mais.d3 a:last-child{width:50%;justify-self:center}
+.tabbar.mais.d2,.tabbar.mais.d1{grid-template-columns:1fr auto 1fr}
+.tabbar.mais.d0{grid-template-columns:auto;justify-content:center}
+/* Um botão, não um quinto destino: sólido na cor da marca, redondo, 56px
+   contra os 48 dos destinos, a subir 12px acima da borda da barra (a margem
+   negativa leva os 5px de padding mais os 12), com a sombra do FAB. A altura
+   da barra não muda: a linha da grelha continua a ser a dos destinos, e o
+   que sobe é só o botão. O scale e a transição são os do .fab. Sem :hover
+   de propósito — no telemóvel não há. */
+.tabmais{width:56px;height:56px;padding:0;border:0;border-radius:50%;align-self:start;justify-self:center;margin-top:-17px;
+  background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 22px rgba(0,0,0,.28);cursor:pointer;transition:transform var(--rapido) var(--curva)}
+.tabmais:active{transform:scale(.96)}
+.tabmais:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* body à frente: estas regras vivem ANTES das de base do .fab/.totop na
-   folha, e sem mais especificidade perdiam — o FAB ficava em cima da barra */
+   folha, e sem mais especificidade perdiam — o FAB voltava a aparecer */
 @media(max-width:900px){
   .tabbar{display:grid}
   .wrap{padding-bottom:calc(96px + var(--inset-bottom))}
-  body .fab{bottom:calc(76px + var(--inset-bottom))}
-  body .fabmenu{bottom:calc(134px + var(--inset-bottom))}
-  body .totop{bottom:calc(76px + var(--inset-bottom))}
+  /* o + da barra toma o lugar do FAB: o botão, o leque (aberto ou não) e o
+     espaço que o render lhe deixava no fundo somem todos */
+  body .fab,body .fabmenu,body .fabmenu.on,body .fabpad{display:none}
+  /* o «topo» é um círculo ao centro, como o +: a 76px ficava a 6px dele */
+  body .totop{bottom:calc(92px + var(--inset-bottom))}
   body.open .tabbar{display:none}
 }
 .donut{display:flex;gap:14px;align-items:center;flex-wrap:wrap;min-width:0}
@@ -424,6 +449,17 @@ input:disabled{opacity:.6}
 .statin{width:120px;flex:0 0 auto;text-align:right;padding:8px 11px;border:1px solid var(--line);border-radius:12px;background:var(--field);font-weight:700;font-size:13.5px}
 input:focus,textarea:focus{outline:2px solid var(--accent-soft);outline-offset:1px;border-color:var(--accent)}
 textarea{min-height:90px;resize:vertical}
+/* ---- os campos de data vazios no iPhone (componentes.js:marcarDatasVazias) ----
+   Um <input type="date"> ignora o placeholder. O Chrome e o Android escrevem
+   «dd/mm/aaaa» sozinhos; o Safari do iPhone deixa o campo em branco, e quem
+   o vê pela primeira vez não sabe o que ele espera. Só nesse WebKit — o
+   -webkit-touch-callout só existe no iOS —, e só com a marca data-vazio, que
+   o marcarDatasVazias põe e tira: o texto vive num ::before que nunca empurra
+   um valor, porque só existe enquanto o campo está vazio. Sem pointer-events,
+   para o toque cair no campo e abrir o seletor, e não no texto. */
+@supports (-webkit-touch-callout:none){
+  input[type=date][data-vazio]::before{content:'dd/mm/aaaa';color:var(--muted);pointer-events:none}
+}
 /* as notas guardadas com o HTML do antigo editor rico (formato.js:rich) */
 .rich b,.rich strong{font-weight:700}
 .rich i,.rich em{font-style:italic}

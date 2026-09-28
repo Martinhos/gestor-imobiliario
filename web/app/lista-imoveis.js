@@ -25,7 +25,7 @@ function vProperties(){
     +(db.properties.length||!podeExemplo()?'':`<div class="toolbar"><button class="btn" data-toca="dados" data-click="seed()">Carregar exemplo</button></div>`)
     +fab([{label:'Adicionar imóvel',act:'propModal()'}]);
   list=lfSort(K,list,{nome:p=>p.name,valor:p=>p.value,renda:p=>rentOf(p),divida:p=>debtOf(p),yield:p=>{const r=rentOf(p);return r&&p.value?r*12/p.value:0}});
-  if(!list.length)return head+(esperaDoServidor()||`<div class="empty"><b>${lfCount(K)?'Nada neste filtro':'Sem imóveis'}</b>${lfCount(K)?'':(db.properties.length?'Nenhum imóvel deste proprietário.':'Adiciona o primeiro para começares a acompanhar o investimento.')}</div>`);
+  if(!list.length)return head+(esperaDoServidor()||`<div class="empty"><b>${lfCount(K)?'Nada neste filtro':'Sem imóveis'}</b>${lfCount(K)?'':(db.properties.length?'Nenhum imóvel deste proprietário.':'Adiciona o primeiro para começares a acompanhar o investimento.')+saida('Adicionar imóvel','propModal()','camada')}</div>`);
   const dividas=dividasEntreDonos(list);   /* uma passagem pelos movimentos por pintura, e não seis por cartão */
   return head+listaViva('imoveis',list.map(p=>({chave:'prop:'+p.id,html:(p=>{
     const st=propStatus(p),ls=liveLoans(p),ac=activeContracts(p.id),rent=rentOf(p);

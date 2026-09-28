@@ -278,6 +278,7 @@ function refrescarListasVivas(){
   });
   v.replaceChildren.apply(v,[].slice.call(molde.children));
   tornarFocavel(v);
+  marcarDatasVazias(v);
   pintarBotaoFiltros();
   /* o que o render repõe depois de pintar, esta via tem de repor também:
      senão um grupo mantido fica com o total de antes (as rendas dos grupos
@@ -330,6 +331,7 @@ function render(){
      contratos, a criação rápida da visão geral, as miniaturas dos imóveis. */
   const depois=depoisDoSeparador(tab);if(depois)depois();
   tornarFocavel(view());
+  marcarDatasVazias(view());
   /* Numa microtarefa, e não já: o render é embrulhado quatro vezes pela camada
      da nuvem, e são esses embrulhos que acrescentam as caixas de seleção, os
      kebabs e as barras — tudo coisas que mexem no sítio das linhas. Medir aqui
@@ -613,7 +615,7 @@ const WHY={
   rendaHoje:'Soma das rendas anuais dos contratos ativos, aos valores de hoje.',
   rendaFim:'A mesma soma no último ano do horizonte, já com os aumentos anuais aplicados.',
   totalPeriodo:'Soma de todas as rendas do período projetado.',
-  cashflowFim:'Rendas projetadas menos despesas menos as prestações previstas nesse ano. Nas despesas só entram as que se repetem todos os anos (IMI, condomínio, seguros…) — obras, reparações e outras pontuais ficam de fora. Partem do último ano completo com elas (sem nenhum, do ano corrente anualizado) e crescem com a inflação.'
+  cashflowFim:'Rendas projetadas menos o IRS sobre elas, as despesas previstas e as prestações desse ano. As despesas são os planeados de despesa — o IMI, o condomínio e o seguro da ficha de cada imóvel e os que marcaste nos Planeados — levados ao ano e a crescer com a inflação; obras e reparações pagas de uma vez não se projetam. O IRS é a renda à taxa de cada contrato, contado no ano das rendas embora se pague no ano seguinte.'
 };
 // cartão genérico das vistas: título, subtítulo opcional e corpo em HTML
 // Recebe: t — o título; s — o subtítulo (vazio para não aparecer); b — o corpo, em HTML.
@@ -888,11 +890,15 @@ function fab(actions){
 }
 /* A saída de um ecrã vazio: um botão, no meio, dentro da própria caixa.
 
-   Um ecrã que diz «não há nada» e não diz por onde se começa é um beco. Onde
-   há FAB, o FAB é o caminho — isto é para os quatro sítios onde não havia
-   caminho nenhum: avaliação sem imóveis, contratos sem imóveis, hipotecas sem
-   imóveis e projeções sem contratos. O molde é o que as visitas já usavam,
-   para não nascer aqui um quinto desenho de botão.
+   Um ecrã que diz «não há nada» e não diz por onde se começa é um beco.
+   Nasceu para os quatro sítios sem caminho nenhum (avaliação sem imóveis,
+   contratos sem imóveis, hipotecas sem imóveis, projeções sem contratos) e
+   hoje é o botão de TODAS as listas vazias — imóveis, movimentos, pessoas,
+   planeados, modelos, hipotecas, contratos, visitas —, com a mesma condição
+   do FAB de cada uma. O FAB deixou de ser o caminho no telemóvel: abaixo de
+   900px é o + da barra de baixo que o substitui (navegacao.js:abrirAdicionar),
+   e um vazio sem botão obrigava a ir procurá-lo. O molde é o que as visitas
+   já usavam, para não nascer aqui um quinto desenho de botão.
    Recebe: label — o que o botão faz, escrito como verbo; act — o JavaScript do
    toque; toca — a família do ponto (ecra se muda de ecrã, camada se abre um
    modal).

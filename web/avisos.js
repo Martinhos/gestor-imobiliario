@@ -52,13 +52,31 @@ var AVISOS = [
         ],
       },
       {
-        titulo: 'A projeção só conta as despesas que se repetem',
-        afeta: ['movimentos'],
+        titulo: 'O IMI, o condomínio e o seguro vivem na ficha do imóvel',
+        afeta: ['imoveis', 'movimentos'],
         itens: [
-          'As Projeções partiam de todas as despesas do último ano: uma obra aparecia como se voltasse todos os anos. Agora entram só as que se repetem — IMI, condomínio, seguros, água, luz e gás, gestão do imóvel, contabilidade, limpeza e comissões do banco.',
-          'Obras, reparações, mobiliário, comissões de arrendamento, quotas extraordinárias e impostos de uma vez ficam de fora, e a página diz quanto ficou de fora.',
-          'Em Definições → Despesas que se repetem escolhes, categoria a categoria (e subcategoria), o que entra. Uma despesa com a etiqueta «Recorrente», ou da categoria de um planeado no mesmo imóvel, entra sempre.',
+          'A ficha do imóvel ganhou «Despesas fixas do imóvel»: o IMI anual, a quota mensal do condomínio e o seguro anual. Cada valor cria sozinho um planeado que te pede confirmação na data — como a renda de um contrato e a prestação de uma hipoteca já faziam.',
+          'O IMI sai nas prestações da lei: até 100 € numa só, em maio; de 100 a 500 € em maio e novembro; acima de 500 € em maio, agosto e novembro. O condomínio no dia 1 de cada mês; o seguro uma vez por ano, no mês que escolheres.',
+          'As Projeções deixaram de adivinhar as despesas pelo histórico: uma obra de 5 000 € aparecia como se voltasse todos os anos. Agora contam os planeados de despesa (os da ficha e os que marcaste) a crescer com a inflação, e o IRS sobre as rendas à taxa de cada contrato — contado no ano das rendas, pago até 31 de agosto do ano seguinte.',
+          'A página diz quanto gastaste no último ano em despesas de uma vez (obras, reparações), que não se projetam. A vista geral e a Avaliação continuam a somar todas as despesas.',
           'Mudar o nome a uma categoria já não a devolve aos totais nem lhe perde a coluna do IRS, e já não se pode dar a uma categoria o nome de outra.',
+        ],
+      },
+      {
+        titulo: 'Um + a meio da barra de baixo',
+        afeta: ['app'],
+        itens: [
+          'No telemóvel, o botão redondo do canto deu lugar a um + sólido a meio da barra de baixo, sempre no mesmo sítio. Abre a lista do que podes adicionar — movimento, imóvel, contrato, inquilino, visita, planeado, hipoteca — com a ação do ecrã onde estás em primeiro; quem colabora vê só o que o cargo lhe dá.',
+          'No ecrã largo o botão do canto fica como estava.',
+          'Cada lista vazia — imóveis, movimentos, inquilinos, proprietários, planeados, modelos, hipotecas, contratos — tem agora o botão verde da sua ação, como a vista geral já tinha, em vez de contar só com o botão do canto.',
+        ],
+      },
+      {
+        titulo: 'Os formulários dizem o que é opcional',
+        afeta: ['app'],
+        itens: [
+          'Nos formulários, cada campo de texto que podes deixar em branco diz «Opcional»; onde o campo já mostrava um exemplo do formato (o IBAN, o NIF, o código postal), o exemplo fica e o rótulo diz «(opcional)». Os obrigatórios levam o asterisco.',
+          'No iPhone, um campo de data vazio mostra «dd/mm/aaaa» em vez de ficar em branco — no Android e no Chrome já era assim.',
         ],
       },
       {

@@ -52,6 +52,11 @@ function injectPhoneCountry() {
   sel.value = code;
   var row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:8px';
+  /* o placeholder passa a ser o formato do número: o «opcional» que ele dizia
+     sobe para o rótulo, como nos outros campos com exemplo (o rótulo é o texto
+     do <label> que embrulha o campo, e fica onde está) */
+  var lab = inp.parentNode, txt = lab && lab.firstChild;
+  if (txt && txt.nodeType === 3 && txt.nodeValue.indexOf('opcional') < 0) txt.nodeValue = txt.nodeValue.trim() + ' (opcional)';
   inp.parentNode.insertBefore(row, inp);
   row.appendChild(sel);
   row.appendChild(inp);

@@ -311,12 +311,12 @@ function txMesExtra(mes){return {}}
    de cada um. Tudo respeita os filtros e a ordenação escolhidos no modal.
    Devolve: string com o HTML completo da vista. */
 function vTransactions(){
-  const nF=txFilterCount();
+  const nF=txFilterCount(),adiciona=podeSemImovel()||casasComo('tx.add').length;   /* a condição do FAB e do vazio */
   const head=txFilterPainel()
   +`${nF||txSearch.trim()?`<div class="small u-m-2px-0-10px">${filterSummary()}${txSearch.trim()?(nF?' · ':'')+'pesquisa: “'+esc(txSearch.trim())+'”':''}</div>`:''}`
-  +((podeSemImovel()||casasComo('tx.add').length)?fab([{label:'Novo movimento',act:'newTxPick()'}]):'');
+  +(adiciona?fab([{label:'Novo movimento',act:'newTxPick()'}]):'');
   txLinhasPintadas=0;
-  if(!db.transactions.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.</div>`);
+  if(!db.transactions.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.${adiciona?saida('Registar movimento','newTxPick()','camada'):''}</div>`);
   const list=db.transactions.filter(txMatch).sort((a,b)=>{const d=txDir==='desc'?-1:1;
     if(txSort==='amount')return d*((a.amount||0)-(b.amount||0))||String(a.date).localeCompare(String(b.date));
     return d*String(a.date).localeCompare(String(b.date))});

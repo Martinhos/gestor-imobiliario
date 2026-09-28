@@ -106,7 +106,7 @@ function seed(){
   db.templates=[normTpl({name:'Quota do condomínio',tx:{kind:'expense',label:'Quota do condomínio',amount:55,propertyId:p1,category:'Condomínio',sub:'Quota mensal',tags:['Recorrente'],split:{mode:'equal',parts:{}}}})];
   db.recurring=[normRec({name:'Prestação aquisição · T2 Lisboa',every:'month',next:addDays(today(),3),
       tx:{kind:'loan',label:'Prestação aquisição · T2 Lisboa',amount:Math.round(k1.total*100)/100,propertyId:p1,loanId:l1.id,paidBy:o1.id,split:{mode:'equal',parts:{}}}})];
-  if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs()}   // os planeados automáticos são dos Planeados
+  if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs();syncAllPropRecs()}   // os planeados automáticos são dos Planeados
   save();buildNav();render();toast('Dados de exemplo carregados.');
 }
 
@@ -181,9 +181,9 @@ document.addEventListener('focusout',()=>{
    guiar. */
 function derivarDoArranque(){
   if(!sabemosOEstado())return void setTimeout(derivarDoArranque,300);
-  /* os planeados automáticos (renda e prestação) são dos Planeados: sem esse
-     serviço nesta conta não há o que derivar */
-  if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs()}
+  /* os planeados automáticos (renda, prestação e as despesas fixas da ficha do
+     imóvel) são dos Planeados: sem esse serviço nesta conta não há o que derivar */
+  if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs();syncAllPropRecs()}
   save();
 }
 derivarDoArranque();

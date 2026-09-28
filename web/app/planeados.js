@@ -136,12 +136,14 @@ function syncContractRec(c){
    já não existe) e sincroniza cada contrato com syncContractRec. Uma
    prestação automática que ficou sem hipoteca mas se identifica sem dúvida
    (recLoanId) escapa: é o syncAllLoanRecs, logo a seguir, que lha devolve —
-   apagá-la levava com ela a divisão e o pagador que o utilizador lhe deu.
+   apagá-la levava com ela a divisão e o pagador que o utilizador lhe deu. Os
+   planeados da ficha do imóvel (tx.propRec) são do syncAllPropRecs: não são
+   órfãos de contrato nenhum.
    Devolve: nada — mexe em db.recurring; quem chama grava. */
 function syncAllContractRecs(){
   // sem os Contratos nesta conta cada planeado de renda pareceria órfão: não se toca em nada
   if(!servicoLigado('contracts'))return;
-  (db.recurring||[]).slice().forEach(r=>{if(r.auto&&!(r.tx||{}).loanId&&!recLoanId(r)&&(!r.tx.contractId||!db.contracts.some(c=>c.id===r.tx.contractId)))db.recurring=db.recurring.filter(x=>x.id!==r.id)});
+  (db.recurring||[]).slice().forEach(r=>{if(r.auto&&!(r.tx||{}).loanId&&!(r.tx||{}).propRec&&!recLoanId(r)&&(!r.tx.contractId||!db.contracts.some(c=>c.id===r.tx.contractId)))db.recurring=db.recurring.filter(x=>x.id!==r.id)});
   db.contracts.forEach(syncContractRec);
 }
 /* ---- prestações das hipotecas: recorrência automática, tal como as rendas dos contratos ----
@@ -201,6 +203,76 @@ function syncAllLoanRecs(){
   (db.recurring||[]).slice().forEach(r=>{if(r.auto&&(r.tx||{}).loanId&&!live(r.tx.loanId))db.recurring=db.recurring.filter(x=>x.id!==r.id)});
   repararRecsSemCredito();
   db.properties.forEach(p=>(p.loans||[]).forEach(l=>syncLoanRec(p,l)));
+}
+/* ---- despesas fixas da ficha do imóvel: recorrência automática, tal como as rendas e as prestações ----
+   Recebe: p — o imóvel (objeto de db.properties); kind (opcional) — 'imi',
+   'condominio' ou 'seguro', para só os dessa origem.
+   Devolve: os planeados automáticos desse imóvel (array de objetos de
+   db.recurring), as prestações do IMI pela ordem. */
+function propRecsOf(p,kind){return (db.recurring||[]).filter(r=>r.auto&&r.tx&&r.tx.propRec&&(!kind||r.tx.propRec===kind)&&r.tx.propertyId===p.id).sort((a,b)=>(a.tx.propRecN||0)-(b.tx.propRecN||0))}
+/* As prestações do IMI pela lei: até 100 € uma só, em maio; de 100 a 500 €
+   duas, em maio e novembro; acima de 500 € três, em maio, agosto e novembro.
+   Divide-se ao cêntimo, e os cêntimos que sobram ficam na primeira: 1 000 €
+   em três são 333,34 + 333,33 + 333,33.
+   Recebe: imi — o IMI do ano (euros).
+   Devolve: array de {n (1..), mes (1–12), amount}; vazio sem IMI. */
+function imiPrestacoes(imi){
+  const v=Math.round((Number(imi)||0)*100)/100;if(!(v>0))return [];
+  const meses=v<=100?[5]:v<=500?[5,11]:[5,8,11],n=meses.length,cada=Math.round(v/n*100)/100;
+  return meses.map((mes,i)=>({n:i+1,mes,amount:i?cada:Math.round((v-cada*(n-1))*100)/100}));
+}
+/* O último dia de um mês: deste ano, ou do que vem se esse dia já passou.
+   Recebe: mes — o mês (1–12).
+   Devolve: a data em AAAA-MM-DD (texto). */
+function proximoFimDoMes(mes){
+  const y=Number(today().slice(0,4)),d=dayInMonth(y,mes-1,31);
+  return d<today()?dayInMonth(y+1,mes-1,31):d;
+}
+/* Mantém os planeados automáticos de um imóvel — o IMI nas prestações da lei
+   (imiPrestacoes), o condomínio todos os meses no dia 1 e o seguro uma vez
+   por ano no fim do mês escolhido (ou do corrente, quando nasce) — pelo molde
+   das rendas e das prestações: cria os que faltam, passa o valor aos que já
+   existem sem mexer no next que a pessoa acertou (aplicaPlanoNaRec), e apaga
+   os que ficaram sem valor na ficha. Quando o número de prestações do IMI
+   muda, refaz as prestações do zero; quando o mês do seguro muda, o planeado
+   vai para o fim desse mês. A categoria é a da árvore (Impostos / IMI,
+   Condomínio / Quota mensal, Seguros / Multirriscos) enquanto ela lá estiver,
+   como a renda faz com as Rendas. Só nos imóveis de que sou dono: quem
+   colabora recebe os planeados do dono com os registos da casa, e não os
+   cria por ele. Mexe em db.recurring — quem chama grava.
+   Recebe: p — o imóvel (objeto de db.properties).
+   Devolve: nada — mexe em db.recurring; quem chama grava. */
+function syncPropRecs(p){
+  if(!p||!cargoDe(p.id).dono)return;
+  const arv=cats(),catDe=(c,s)=>({category:c in arv?c:'',sub:c in arv&&(arv[c]||[]).indexOf(s)>-1?s:''});
+  const imi=imiPrestacoes(p.imi),quer=imi.map(x=>({propRec:'imi',propRecN:x.n,amount:x.amount,every:'year',next:proximoFimDoMes(x.mes),
+    name:'IMI · '+p.name+(imi.length>1?' ('+x.n+'.ª de '+imi.length+')':''),cat:catDe('Impostos','IMI')}));
+  /* o mês de hoje em 1–12 é, em base 0, o mês seguinte: o dia 1 que vem */
+  if(p.condominio>0){let y=Number(today().slice(0,4)),m=Number(today().slice(5,7));if(m>11){m=0;y++}
+    quer.push({propRec:'condominio',propRecN:0,amount:r2(p.condominio),every:'month',next:dayInMonth(y,m,1),name:'Condomínio · '+p.name,cat:catDe('Condomínio','Quota mensal')})}
+  if(p.seguro>0)quer.push({propRec:'seguro',propRecN:0,amount:r2(p.seguro),every:'year',next:proximoFimDoMes(p.seguroMes||mesAtual()),name:'Seguro · '+p.name,cat:catDe('Seguros','Multirriscos')});
+  /* o número de prestações do IMI mudou: as datas e os valores são outros, refaz-se do zero */
+  const nImi=propRecsOf(p,'imi').length;
+  if(nImi&&nImi!==imi.length)db.recurring=db.recurring.filter(r=>!(r.auto&&r.tx&&r.tx.propRec==='imi'&&r.tx.propertyId===p.id));
+  quer.forEach(q=>{
+    const tx={kind:'expense',label:q.name,amount:q.amount,propertyId:p.id,category:q.cat.category,sub:q.cat.sub,split:null,propRec:q.propRec,propRecN:q.propRecN};
+    const r=propRecsOf(p,q.propRec).find(x=>(x.tx.propRecN||0)===q.propRecN);
+    if(r){aplicaPlanoNaRec(r,tx,q.name);
+      if(q.propRec==='seguro'&&p.seguroMes&&Number(String(r.next).slice(5,7))!==p.seguroMes)r.next=q.next;
+      return}
+    db.recurring=db.recurring||[];
+    db.recurring.push(normRec({auto:true,name:q.name,autoName:q.name,every:q.every,next:q.next,tx}));
+  });
+  propRecsOf(p).forEach(r=>{if(!quer.some(q=>q.propRec===r.tx.propRec&&q.propRecN===(r.tx.propRecN||0)))db.recurring=db.recurring.filter(x=>x.id!==r.id)});
+}
+// Apaga os planeados da ficha de imóveis que já não existem e sincroniza os
+// dos imóveis vivos (syncPropRecs).
+// Devolve: nada — mexe em db.recurring; quem chama grava.
+function syncAllPropRecs(){
+  // sem os Imóveis nesta conta cada planeado da ficha pareceria órfão: não se toca em nada
+  if(!servicoLigado('properties'))return;
+  (db.recurring||[]).slice().forEach(r=>{if(r.auto&&(r.tx||{}).propRec&&!prop(r.tx.propertyId))db.recurring=db.recurring.filter(x=>x.id!==r.id)});
+  db.properties.forEach(syncPropRecs);
 }
 /* Este planeado é mesmo a prestação mensal da hipoteca l? Um pagamento de
    crédito mensal, que não é amortização antecipada, com um montante da ordem
@@ -469,7 +541,8 @@ function recFicha(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return '';
   const t=r.tx||{};
   const vem=r.auto?(t.loanId?'Prestação da hipoteca '+esc(loanName(((anyLoan(t.loanId)||{}).l)||null))
-    :(t.contractId&&contract(t.contractId)?'Renda do contrato '+esc(ctName(contract(t.contractId))):'')):'';
+    :(t.contractId&&contract(t.contractId)?'Renda do contrato '+esc(ctName(contract(t.contractId)))
+    :(t.propRec?({imi:'IMI',condominio:'Condomínio',seguro:'Seguro'})[t.propRec]+' do imóvel '+esc(propName(t.propertyId))+' — o valor vive na ficha do imóvel; apagar este planeado tira-o de lá.':''))):'';
   return ficha([
     {tipo:'nota',valor:esc(motivoRecusa(t.propertyId,'rec.add',r))},
     t.amount?{rotulo:'Montante',valor:euro2(t.amount)}:null,
@@ -587,16 +660,21 @@ function editTpl(id){
 }
 /* Apaga a recorrência, com confirmação. Nas automáticas desliga também o
    autoRec no contrato ou na hipoteca de origem — sem isso, a sincronização
-   voltava a criá-la logo a seguir. Os movimentos já registados ficam.
+   voltava a criá-la logo a seguir. Num planeado da ficha do imóvel (IMI,
+   condomínio, seguro) o campo É o planeado: apagar põe o valor a zero na
+   ficha, e as prestações irmãs do IMI vão com ele — a frase di-lo antes. Os
+   movimentos já registados ficam.
    Recebe: id — o id da recorrência a apagar.
    Devolve: nada — pede confirmação; ao confirmar, apaga, grava e redesenha. */
 function delRec(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   const recusa=motivoRecusa((r.tx||{}).propertyId,'rec.add',r,true);if(recusa)return toast(recusa);
-  const isLoan=r.auto&&(r.tx||{}).loanId;
-  confirmModal('Apagar movimento recorrente',r.auto?(isLoan?`Esta é a prestação de uma hipoteca. Apagar deixa de a pedir todos os meses (podes voltar a ligá-la na hipoteca).`:`Este é a renda de um contrato. Apagar deixa de a pedir todos os meses (podes voltar a ligá-la guardando o contrato de novo).`):`Deixar de repetir “${esc(r.name)}”? Os movimentos já criados ficam.`,()=>{
+  const isLoan=r.auto&&(r.tx||{}).loanId,pr=r.auto?(r.tx||{}).propRec:'';
+  const doImovel=pr?`Este é ${({imi:'o IMI',condominio:'o condomínio',seguro:'o seguro'})[pr]} da ficha do imóvel ${esc(propName(r.tx.propertyId))}. Apagar tira também o valor da ficha${pr==='imi'?' (e as outras prestações)':''}; para voltar, escreve-o de novo no imóvel.`:'';
+  confirmModal('Apagar movimento recorrente',r.auto?(isLoan?`Esta é a prestação de uma hipoteca. Apagar deixa de a pedir todos os meses (podes voltar a ligá-la na hipoteca).`:doImovel||`Este é a renda de um contrato. Apagar deixa de a pedir todos os meses (podes voltar a ligá-la guardando o contrato de novo).`):`Deixar de repetir “${esc(r.name)}”? Os movimentos já criados ficam.`,()=>{
     if(r.auto){const c=contract((r.tx||{}).contractId);if(c)c.autoRec=false;
-      if(isLoan)db.properties.forEach(p=>(p.loans||[]).forEach(l=>{if(l.id===r.tx.loanId)l.autoRec=false}))}
+      if(isLoan)db.properties.forEach(p=>(p.loans||[]).forEach(l=>{if(l.id===r.tx.loanId)l.autoRec=false}));
+      if(pr){const p=prop(r.tx.propertyId);if(p)p[pr]=0;db.recurring=db.recurring.filter(x=>!(x.auto&&x.tx&&x.tx.propRec===pr&&x.tx.propertyId===r.tx.propertyId))}}
     db.recurring=db.recurring.filter(x=>x.id!==id);save();closeAllModals();buildNav();render();toast('Movimento recorrente apagado.');
   });
 }
@@ -686,15 +764,17 @@ function pendToggle(){
   e.outerHTML=pendingCard(pendAll);
 }
 /* A frase do estado vazio sobre quem cria planeados sozinho: as rendas (dos
-   Contratos) e as prestações (dos Créditos) — só as dos serviços ligados nesta
-   conta, para não prometer o que não existe nela.
-   Devolve: a frase com espaço à frente (texto), ou '' sem nenhum dos dois. */
+   Contratos), as prestações (dos Créditos) e o IMI, o condomínio e o seguro da
+   ficha (dos Imóveis) — só os dos serviços ligados nesta conta, para não
+   prometer o que não existe nela.
+   Devolve: a frase com espaço à frente (texto), ou '' sem nenhum dos três. */
 function recOrigensFrase(){
   const o=[];
   if(servicoLigado('contracts'))o.push('as rendas');
   if(servicoLigado('credits'))o.push('as prestações');
+  if(servicoLigado('properties'))o.push('o IMI, o condomínio e o seguro da ficha de cada imóvel');
   if(!o.length)return '';
-  const s=o.join(' e ');
+  const s=listaE(o);
   return ' '+s[0].toUpperCase()+s.slice(1)+' criam um sem tu fazeres nada.';
 }
 /* página das recorrências e modelos
@@ -718,26 +798,27 @@ function vRecurring(){
   const kinds=[{v:'',label:'Todos os tipos'},{v:'income',label:'Receitas'},{v:'expense',label:'Despesas'},{v:'loan',label:'Pagamentos de crédito'},{v:'owed',label:'Dívidas recebidas'},{v:'repay',label:'Pagamentos de dívida'}];
   /* o filtro por imóvel só com os Imóveis ligados nesta conta */
   const head=lfBar(K,[lfSel(K,'k',kinds)].concat(servicoLigado('properties')?[lfSel(K,'p',lfPropOpts())]:[]).concat([
-      lfSel(K,'st',[{v:'',label:'Todos os estados'},{v:'pend',label:'Por confirmar'},{v:'ok',label:'Em dia'},{v:'muted',label:'Silenciados'},{v:'auto',label:'Automáticos (contratos e hipotecas)'},{v:'manual',label:'Criados à mão'}])]),
+      lfSel(K,'st',[{v:'',label:'Todos os estados'},{v:'pend',label:'Por confirmar'},{v:'ok',label:'Em dia'},{v:'muted',label:'Silenciados'},{v:'auto',label:'Automáticos (contratos, hipotecas e imóveis)'},{v:'manual',label:'Criados à mão'}])]),
       rc.length+tp.length,
       {defLabel:'Ordenar pela próxima data',opts:[{v:'data',label:'Ordenar por data'},{v:'valor',label:'Ordenar por valor'},{v:'nome',label:'Ordenar por nome'}]})
     +((podeSemImovel()||casasComo('rec.add').length)?fab([{label:'Novo mov. recorrente',icon:'clock',act:'newRec()'},{label:'Novo modelo',icon:'file',act:'newTpl()'}]):'');
+  const adiciona=podeSemImovel()||casasComo('rec.add').length;   /* a condição do FAB, para os vazios */
   const recs=rcS.length?listaViva('recorrentes',rcS.map(r=>({chave:'rec:'+r.id,html:(r=>{const late=recIsLate(r),pend=r.next<=today();return `<div class="card tap ${pend?'pend':''} ${late?'late':''}" data-lp="rec:${esc(r.id)}" data-fk="recl:${esc(r.id)}" data-toca="camada" data-click="recView('${jsq(r.id)}')">
       <div class="row-between u-ai-center">
         <div class="u-minw-0"><div class="title">${esc(r.name)}</div>
-          <div class="small">${r.auto?'<span class="badge grey u-mr-4px">'+((r.tx||{}).loanId?'da hipoteca':'do contrato')+'</span>':''}${esc(EVERY[r.every]||r.every)} · ${dPT(r.next)}${r.until&&r.until!==r.next?' – '+dPT(r.until):''} · ${pend?(r.muted?'silenciada · por confirmar':late?'<b class="neg">em atraso</b>':'<b class="amber">por confirmar</b>'):'em dia'}${r.end?' · termina '+dPT(r.end):''}</div>
+          <div class="small">${r.auto?'<span class="badge grey u-mr-4px">'+((r.tx||{}).loanId?'da hipoteca':(r.tx||{}).propRec?'do imóvel':'do contrato')+'</span>':''}${esc(EVERY[r.every]||r.every)} · ${dPT(r.next)}${r.until&&r.until!==r.next?' – '+dPT(r.until):''} · ${pend?(r.muted?'silenciada · por confirmar':late?'<b class="neg">em atraso</b>':'<b class="amber">por confirmar</b>'):'em dia'}${r.end?' · termina '+dPT(r.end):''}</div>
           <div class="small">${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}${r.tx.category?' · '+esc(r.tx.category):''}</div>
           ${recSemCredito(r)?'<div class="small"><b class="amber">Sem crédito associado — abre para escolher</b></div>':''}</div>
         <div class="u-d-flex u-g-8px u-fx-0-0-auto u-ai-flex-start">
           <b class="u-fs-16px">${r.tx.amount?euro2(r.tx.amount):'—'}</b>${kebab('rec:'+r.id)}</div></div></div>`})(r)})),'','u-g-8px')
-    :`<div class="empty u-p-24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem movimentos recorrentes'}</b>${lfCount('lrec')?'':'Repete-se sozinho e pede confirmação todos os meses.'+recOrigensFrase()}</div>`;
+    :`<div class="empty u-p-24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem movimentos recorrentes'}</b>${lfCount('lrec')?'':'Repete-se sozinho e pede confirmação todos os meses.'+recOrigensFrase()+(adiciona?saida('Novo movimento recorrente','newRec()','camada'):'')}</div>`;
   const tpls=tp.length?listaViva('modelos',tp.map(x=>({chave:'tpl:'+x.id,html:`<div class="card tap" data-lp="tpl:${esc(x.id)}" data-fk="tpl:${esc(x.id)}" data-toca="camada" data-click="tplView('${jsq(x.id)}')">
       <div class="row-between u-ai-center">
         <div class="u-minw-0"><div class="title">${esc(x.name)}</div>
           <div class="small">${(KIND[x.tx.kind]||{}).short}${x.tx.propertyId?' · '+esc(propName(x.tx.propertyId)):''}${x.tx.category?' · '+esc(x.tx.category):''}</div></div>
         <div class="u-d-flex u-g-8px u-fx-0-0-auto u-ai-flex-start">
           <b class="u-fs-16px">${x.tx.amount?euro2(x.tx.amount):'—'}</b>${kebab('tpl:'+x.id)}</div></div></div>`})),'','u-g-8px')
-    :`<div class="empty u-p-24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem modelos'}</b>${lfCount('lrec')?'':'Um modelo é um movimento guardado para copiar à mão quando precisares.'}</div>`;
+    :`<div class="empty u-p-24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem modelos'}</b>${lfCount('lrec')?'':'Um modelo é um movimento guardado para copiar à mão quando precisares.'+(adiciona?saida('Novo modelo','newTpl()','camada'):'')}</div>`;
   return head+pendingCard(true)+`<div class="section-title">Movimentos recorrentes</div>${recs}<div class="section-title u-mt-18px">Modelos</div>${tpls}`;
 }
 /* secção do formulário de um planeado: a periodicidade, a janela e o fim — os

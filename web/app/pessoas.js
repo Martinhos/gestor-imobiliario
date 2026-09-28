@@ -174,7 +174,7 @@ function personModal(kind,id,after,houseId){
 function personBody(){
   const t=perForm;
   return `<div class="form">
-    <label>Nome completo<input id="pe_name" value="${esc(t.name)}" placeholder="Ana Rodrigues" autocomplete="off"></label>
+    <label>Nome completo <span class="req">*</span><input id="pe_name" value="${esc(t.name)}" placeholder="Ana Rodrigues" autocomplete="off"></label>
     <div class="row">
       <label>Telemóvel<input id="pe_phone" value="${esc(t.phone)}" placeholder="Opcional" autocomplete="off"></label>
       <label>Email<input id="pe_mail" value="${esc(t.email)}" placeholder="Opcional" autocomplete="off"></label></div>
@@ -183,24 +183,24 @@ function personBody(){
       <label>Género${sel('pe_gender',t.gender,GENDER.map(g=>({v:g[0],label:g[1]})),'','rascunho')}</label>
       <label>Estado civil${sel('pe_marital',t.marital,MARITAL.map(x=>({v:x,label:x||'—'})),'','rascunho')}</label></div>
     <div class="row">
-      <label>Nacionalidade<input id="pe_nat" value="${esc(t.nationality)}" placeholder="Portuguesa" autocomplete="off"></label>
+      <label>Nacionalidade<input id="pe_nat" value="${esc(t.nationality)}" placeholder="Opcional" autocomplete="off"></label>
       <label>Data de nascimento<input id="pe_birth" type="date" value="${t.birth||''}"></label></div>
     <div class="row">
-      <label>N.º do Cartão de Cidadão<input id="pe_cc" value="${esc(t.cc)}" placeholder="00000000 0 ZZ0" autocomplete="off"></label>
+      <label>N.º do Cartão de Cidadão (opcional)<input id="pe_cc" value="${esc(t.cc)}" placeholder="00000000 0 ZZ0" autocomplete="off"></label>
       <label>Validade do CC<input id="pe_ccv" type="date" value="${t.ccValid||''}"></label></div>
     <label>NIF<input id="pe_nif" value="${esc(t.nif)}" placeholder="Opcional" inputmode="numeric" data-input="pessoaNifHint()"></label>
     <div class="hint u-mt-n4px" id="pe_nifHint"${pessoaNifHint(t.nif)?'':' hidden'}>${esc(pessoaNifHint(t.nif))}</div>
-    <label>País<input id="pe_pais" value="${esc(t.pais)}" placeholder="Só se não tem NIF português" autocomplete="off"></label>
+    <label>País (opcional)<input id="pe_pais" value="${esc(t.pais)}" placeholder="Só se não tem NIF português" autocomplete="off"></label>
     <div class="hint u-mt-n4px">Sem NIF português, o Anexo F identifica a pessoa pelo país.</div>
     ${perKind==='tenant'?`<label class="check"><input type="checkbox" id="pe_retem" ${t.retem?'checked':''}> Retém IRS na fonte</label>
     <div class="hint u-mt-n4px">Uma empresa com contabilidade organizada retém IRS ao pagar a renda. A retenção regista-se em cada renda; aqui fica só o aviso.</div>`:''}
-    <label>Morada fiscal<textarea id="pe_addr" class="u-minh-66px" placeholder="Rua, número, código postal, localidade">${esc(t.taxAddress)}</textarea></label>
+    <label>Morada fiscal (opcional)<textarea id="pe_addr" class="u-minh-66px" placeholder="Rua, número, código postal, localidade">${esc(t.taxAddress)}</textarea></label>
     <div class="hint">Usado na identificação das partes no contrato em PDF; o NIF e o país entram no resumo do Anexo F.</div>`,
       {icon:'contract',summary:[t.nif?'NIF '+esc(fmtNIF(t.nif)):'',t.cc?'CC':''].filter(Boolean).join(' · ')||'para o contrato'})}
     ${perKind==='owner'?'':fold('docs','Documentos',
       fileBlock('',t.files||[],'pe_filein','personAddFiles','delPersonFile',{hint:'Cartão de cidadão, contrato de trabalho, comprovativo de morada, recibos de vencimento.'}),
       {icon:'clip',open:!!(t.files||[]).length,summary:(t.files||[]).length?t.files.length+' doc.':''})
-      +`<label>Notas<textarea id="pe_notes" placeholder="Fiador, referências, observações…">${esc(t.notes)}</textarea></label>`}</div>`;
+      +`<label>Notas (opcional)<textarea id="pe_notes" placeholder="Fiador, referências, observações…">${esc(t.notes)}</textarea></label>`}</div>`;
 }
 /* A dica por baixo do NIF: avisa quando o dígito de controlo não bate certo — um
    erro de dedo apanhado antes de ir para o contrato em PDF ou para o Anexo F.
@@ -240,7 +240,7 @@ function personAddFiles(input){
 }
 // Repinta o corpo do modal a partir de perForm (sem recolher os campos antes).
 // Devolve: nada — redesenha o corpo do modal.
-function repaintPerson(){const b=modalBodyEl();if(b)b.innerHTML=personBody()}
+function repaintPerson(){const b=modalBodyEl();if(!b)return;b.innerHTML=personBody();marcarDatasVazias(b)}
 // Tira um documento da ficha e apaga logo o conteúdo do IndexedDB — sem desfazer.
 // Recebe: fid — id do documento a remover.
 // Devolve: nada — repinta o formulário.

@@ -365,6 +365,43 @@ function editarFichaDeColaboracao(){
   pickModal('Que imóvel?',cs.map(p=>({v:p.id,label:p.name||p.address||'imóvel',sub:p._sharedFrom?'de '+p._sharedFrom:'',icon:'building'})),
     o=>{closeModal();chamarServico('properties','propModal',o.v)});
 }
+/* Tudo o que se pode adicionar na app, pela ordem em que a folha do + da
+   barra de baixo o oferece (navegacao.js:abrirAdicionar). É para toda a
+   gente, dono incluído — ACOES_DO_CARGO é só de quem colabora. Cada uma diz
+   o serviço de que depende, a condição que a mostra — a MESMA do FAB da
+   lista respetiva, para o + e o FAB nunca discordarem — e a ação, escrita na
+   gramática das ações (os nomes são de serviços: a gramática resolve-os na
+   hora, e só se o serviço estiver ligado é que a ação se oferece). */
+const ACOES_DE_ADICIONAR=[
+  {id:'movimento',label:'Movimento',icon:'swap',servico:'transactions',quando:()=>podeSemImovel()||casasComo('tx.add').length>0,act:'newTxPick()'},
+  {id:'imovel',label:'Imóvel',icon:'building',servico:'properties',quando:()=>!souSoColaborador(),act:'propModal()'},
+  {id:'contrato',label:'Contrato',icon:'contract',servico:'contracts',quando:()=>casasComo('contract.add').length>0,act:'ctModal()'},
+  {id:'inquilino',label:'Inquilino',icon:'users',servico:'tenants',quando:()=>!souSoColaborador()||casasComo('tenant.add').length>0,act:"personModal('tenant')"},
+  {id:'proprietario',label:'Proprietário',icon:'crown',servico:'owners',quando:()=>!souSoColaborador(),act:"personModal('owner')"},
+  {id:'visita',label:'Visita',icon:'door',servico:'visits',quando:()=>casasComo('visit.add').length>0,act:'visitModal()'},
+  {id:'planeado',label:'Movimento recorrente',icon:'clock',servico:'recurring',quando:()=>podeSemImovel()||casasComo('rec.add').length>0,act:'newRec()'},
+  {id:'modelo',label:'Modelo',icon:'file',servico:'recurring',quando:()=>podeSemImovel()||casasComo('rec.add').length>0,act:'newTpl()'},
+  {id:'hipoteca',label:'Hipoteca',icon:'bank',servico:'credits',quando:()=>casasComo('house.edit').length>0,act:'newMort()'}
+];
+/* O que esta pessoa pode adicionar agora: as ações de ACOES_DE_ADICIONAR
+   cujo serviço está ligado nesta conta e cuja condição se cumpre, pela
+   ordem de lá. O dono tem as nove; um gestor de visitas tem a visita e o
+   inquilino; um cargo que só vê não tem nenhuma — e sem nenhuma a barra de
+   baixo não escreve o + (navegacao.js:buildTabbar).
+   Devolve: array de {id, label, icon, act, toca:'camada'} — vazio sem nada para adicionar. */
+function acoesDeAdicionar(){
+  return ACOES_DE_ADICIONAR.filter(a=>servicoLigado(a.servico)&&a.quando()).map(a=>({id:a.id,label:a.label,icon:a.icon,act:a.act,toca:'camada'}));
+}
+/* A ação natural de cada ecrã — a que a folha do + põe em primeiro e marca
+   «neste ecrã»: nos Movimentos e na visão geral o movimento, no Calendário
+   (como nas Visitas) a visita. As Definições, as Projeções, a Avaliação, a
+   Declaração e os Colaboradores não têm: a folha fica pela ordem de sempre.
+   Recebe: tab — o id do separador.
+   Devolve: o id da ação (um de ACOES_DE_ADICIONAR), ou '' num ecrã sem ação natural. */
+function acaoDoSeparador(tab){
+  return ({dashboard:'movimento',transactions:'movimento',properties:'imovel',contracts:'contrato',tenants:'inquilino',owners:'proprietario',
+    visits:'visita',calendar:'visita',recurring:'planeado',credits:'hipoteca'})[tab]||'';
+}
 /* Os destinos da barra de baixo: cada destino escondido dá o lugar ao
    primeiro visível de visitas, contratos, inquilinos e planeados que ainda
    não esteja na barra; sem substituto, o lugar some. Quem nada esconde fica

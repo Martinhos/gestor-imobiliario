@@ -25,16 +25,17 @@ function pintarRendasDosGrupos(){
    Devolve: string com o HTML completo da vista. */
 function vContracts(){
   const K='lcts',s=lf(K),cgs=grpsOf('contract');
+  const adiciona=casasComo('contract.add').length;   /* a condição do FAB e do vazio */
   const head=lfBar(K,[
       lfSel(K,'p',lfPropOpts()),
       lfSel(K,'st',[{v:'',label:'Todos os estados'},{v:'on',label:'Em vigor'},{v:'fut',label:'Por começar'},{v:'off',label:'Terminados'}])]
       .concat(cgs.length?[lfSel(K,'g',[{v:'',label:'Todos os grupos'}].concat(cgs.map(g=>({v:g.id,label:'Grupo · '+g.name}))))]:[]),
       db.contracts.filter(c=>ctFMatch(c,s)).length,
       {opts:[{v:'nome',label:'Ordenar por nome'},{v:'renda',label:'Ordenar por renda'},{v:'inicio',label:'Ordenar por início'}]})
-    +(casasComo('contract.add').length?fab([{label:'Novo contrato',act:'ctModal()'}]):'');
+    +(adiciona?fab([{label:'Novo contrato',act:'ctModal()'}]):'');
   if(!db.properties.length)return head+(esperaDoServidor()||`<div class="empty"><b>Cria primeiro um imóvel</b>Um contrato liga um imóvel a um ou mais inquilinos.
     ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`);
-  if(!db.contracts.length)return head+`<div class="empty"><b>Sem contratos</b>O contrato é onde vive a renda: podes arrendar o imóvel inteiro, ou um contrato por quarto.</div>`;
+  if(!db.contracts.length)return head+`<div class="empty"><b>Sem contratos</b>O contrato é onde vive a renda: podes arrendar o imóvel inteiro, ou um contrato por quarto.${adiciona?saida('Novo contrato','ctModal()','camada'):''}</div>`;
   let any=false;
   const grupos=[];
   visiveis().forEach(p=>{

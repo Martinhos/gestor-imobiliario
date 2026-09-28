@@ -155,7 +155,7 @@ CW.cargoModal = function (id) {
       (e.add ? caixaPerm(e.add, e.addRotulo || 'Adicionar', tem.indexOf(e.add) > -1) : '') + '</span></div>';
   }).join('');
   var body = '<div class="form">' + exemplos +
-    '<label>Nome do cargo<input id="cg_nome" maxlength="40" value="' + esc(r ? r.name : '') + '" placeholder="Gestor, contabilista, agente…" autocomplete="off"></label>' +
+    '<label>Nome do cargo <span class="req">*</span><input id="cg_nome" maxlength="40" value="' + esc(r ? r.name : '') + '" placeholder="Gestor, contabilista, agente…" autocomplete="off"></label>' +
     '<div><div class="flabel">O que pode fazer</div>' + linhas +
     '<div class="hint u-mt-8px">«Adicionar» inclui ver, e editar ou apagar só o que o próprio criar. ' +
     'Editar a ficha do imóvel traz as hipotecas e os documentos; adicionar contratos traz os planeados. ' +

@@ -194,7 +194,8 @@ vazio não se cola aos KPIs que o antecedem (estilos.css:.grid+.empty).
 
 Os raios seguem a hierarquia da peça: 20px a janela (estilos.css:.sheet; 20
 20 0 0 na folha de baixo, a mesma .sheet dentro de
-estilos.css:@media(max-width:520px)), 18 o FAB (estilos.css:.fab), 16 o
+estilos.css:@media(max-width:520px)), 18 o FAB (estilos.css:.fab) e redondo
+o + da barra de baixo (estilos.css:.tabmais), 16 o
 cartão e o vazio (estilos.css:.card, estilos.css:.empty), 14 a secção, a
 dobra e o addbox (estilos.css:.sect, estilos.css:.fold-head,
 estilos.css:.addbox), 13 os menus e as opções .opt (estilos.css:.selpop,
@@ -208,8 +209,8 @@ estilos.css:.tabbar), 9 o .btn.sm, as opções dos menus e o iconbtn
 pílulas: selos, etiquetas, crachás.
 
 Só flutua o que sobe: --shadow nos menus e na janela (estilos.css:.selpop,
-estilos.css:.menupop, estilos.css:.sheet); 0 8px 22px .28 no FAB
-(estilos.css:.fab); 0 16px 38px .30 no painel de filtros
+estilos.css:.menupop, estilos.css:.sheet); 0 8px 22px .28 no FAB e no + da
+barra de baixo (estilos.css:.fab, estilos.css:.tabmais); 0 16px 38px .30 no painel de filtros
 (estilos.css:.fpanel>.card); 0 6px 18px .22 no menu do FAB
 (estilos.css:.fabmenu); a barra pegajosa deixa uma sombra só por baixo
 (estilos.css:.toolbar.stick). Os cartões não têm sombra, têm contorno
@@ -443,9 +444,10 @@ pode(pid,perm) antes de mostrar uma ação (acessos.js:pode). Num imóvel onde
 o utilizador só colabora, o cargo diz o que se vê e o que se adiciona; o
 servidor já despe os dados e recusa as escritas, mas um botão que leva a
 uma recusa é um botão a mais. Por isso cada ação pergunta primeiro: o menu
-do toque longo e do ⋮ filtra as opções (componentes.js:lpMenu), os FABs e
-os seletores de imóvel dos formulários só listam onde se pode adicionar
-(acessos.js:casasComo, acessos.js:propOptsPara; movimento.js:txBody), a
+do toque longo e do ⋮ filtra as opções (componentes.js:lpMenu), os FABs, a
+folha do + da barra de baixo e os seletores de imóvel dos formulários só
+listam onde se pode adicionar (acessos.js:casasComo,
+acessos.js:acoesDeAdicionar, acessos.js:propOptsPara; movimento.js:txBody), a
 ficha do imóvel abre só de leitura sem «Editar a ficha»
 (imovel.js:propView), uma ficha de inquilino idem
 (pessoas.js:personView), e as contas entre proprietários são dos
@@ -510,12 +512,16 @@ cabeçalho, visível mesmo com a secção fechada (estilos.css:.fold-head, o
 .fsum). É HTML: um texto que venha de quem usa — um NIF, uma categoria, a
 taxa de um crédito — entra por esc(), como em todo o lado.
 
-fab(actions) (vistas.js:fab) é o botão de criar: um por página, no canto
-inferior direito; com várias ações sai o menu. O render acrescenta o
-espaço no fundo (vistas.js:render, o .fabpad) e no telemóvel o botão sobe
-acima da barra de baixo (estilos.css:.fab dentro de
-estilos.css:@media(max-width:900px)). A visão geral também tem o seu (no
-mesmo render): registar uma renda avulsa custava quatro toques de viagem.
+fab(actions) (vistas.js:fab) é o botão de criar do ecrã largo: um por
+página, no canto inferior direito; com várias ações sai o menu. O render
+acrescenta o espaço no fundo (vistas.js:render, o .fabpad). Abaixo de 900px
+o FAB, o leque e esse espaço somem (estilos.css:.fab dentro de
+estilos.css:@media(max-width:900px)) e quem cria é o + a meio da barra de
+baixo (estilos.css:.tabmais; navegacao.js:abrirAdicionar — ver «A fita da
+barra de baixo»). Cada lista continua a escrever o seu FAB: é o CSS que o
+esconde, e a folha do + oferece o mesmo, com a mesma condição. A visão geral
+também tem o seu (no mesmo render): registar uma renda avulsa custava quatro
+toques de viagem.
 
 kpi(label,value,cls,foot,why,evo) (vistas.js:kpi) é o cartão indicador:
 rótulo em maiúsculas, valor grande, rodapé em muted. Com why ganha um «?»
@@ -834,13 +840,19 @@ O botão redondo do canto também ganhou nome (vistas.js:fab). Tinha
 nem isso — o botão que abre o leque anunciava-se «botão».
 
 Um ecrã que diz «não há nada» e não diz por onde se começa é um beco.
-Onde há FAB, o FAB é o caminho; havia quatro sítios onde não havia
-caminho nenhum: avaliação sem imóveis (avaliacao.js:vReports), contratos
-sem imóveis e projeções sem contratos (lista-contratos.js:vContracts,
-projecoes.js:vProjections) e hipotecas sem imóveis (creditos.js:vCredits) —
-esta última com um botão que só dava um aviso a dizer que faltava um
-imóvel, e um caminho que acaba num aviso não é um caminho. Todos ganham
-o mesmo botão (vistas.js:saida), pelo molde que as visitas já usavam.
+Cada vazio tem o botão da sua ação, à vista, dentro da própria caixa
+(vistas.js:saida) — o molde que as visitas já usavam. Primeiro foram os
+quatro sítios onde não havia caminho nenhum: avaliação sem imóveis
+(avaliacao.js:vReports), contratos sem imóveis e projeções sem contratos
+(lista-contratos.js:vContracts, projecoes.js:vProjections) e hipotecas sem
+imóveis (creditos.js:vCredits) — esta última com um botão que só dava um
+aviso a dizer que faltava um imóvel, e um caminho que acaba num aviso não
+é um caminho. Depois todas as listas, mesmo as que tinham FAB: o botão do
+canto — e, no telemóvel, o + da barra de baixo (navegacao.js:abrirAdicionar)
+— é um caminho que quem chega de novo não associa ao ecrã vazio, e a vista
+geral já mostrava que um botão verde no meio do vazio é o que se toca. A
+condição é a do FAB dessa lista (acessos.js:casasComo): sem poder adicionar
+não há botão, e «Nada neste filtro» nunca o tem.
 
 ## Um aviso não tapa o que se pede para carregar
 O toast mora a 22px do fundo, que é exatamente onde o rodapé de um modal
@@ -1055,6 +1067,21 @@ tocar. A gaveta são treze destinos agrupados por assunto — da «Visão geral�
 para as «Definições» não há lado nenhum, e uma fita a correr ali inventava
 uma vizinhança que não existe. Também não desliza para o separador onde já se
 está: tocar no separador aceso é «leva-me ao topo», não uma travessia.
+
+A meio da barra vai o + (estilos.css:.tabmais; navegacao.js:buildTabbar):
+um botão, e não um quinto destino — sólido na cor da marca, redondo, 56px
+contra os 48 dos destinos, a subir 12px acima da borda da barra, com a
+sombra do FAB. No telemóvel é ele o botão de criar; o FAB fica só no ecrã
+largo, acima de 900px. Abre a folha com tudo o que a pessoa pode adicionar
+(acessos.js:acoesDeAdicionar — a mesma condição do FAB de cada lista, e só
+com o serviço ligado), com a ação natural do ecrã em primeiro e marcada
+«neste ecrã» (acessos.js:acaoDoSeparador); com uma só ação corre-a logo, e
+sem nenhuma — um cargo que só vê — não há botão
+(navegacao.js:abrirAdicionar). A ação corre pela gramática das ações
+(eventos.js:correrAcao), como as do menu ⋯ dos imóveis. O + não conta para
+a fita: o goBarra calcula o lado só pelos destinos, e a grelha recebe
+quantos são (as classes d0 a d3 em estilos.css:.tabbar.mais) para o manter
+a meio quando quem colabora tem menos de quatro.
 
 O lado é uma **variável**, e não um segundo argumento do `go`: dois dos
 embrulhos da nuvem chamam-no com um argumento só, e um `go(id,lado)` chegava
@@ -1355,7 +1382,9 @@ A barra de baixo tem quatro destinos, a um toque: visão geral («Geral»),
 movimentos, imóveis e calendário (navegacao.js:TABBAR,
 navegacao.js:buildTabbar). A auditoria mediu: com tudo atrás da gaveta,
 qualquer mudança de ecrã custava dois toques. O calendário tomou o lugar
-dos planeados, mostra-os dia a dia e leva o crachá dos pendentes. A barra
+dos planeados, mostra-os dia a dia e leva o crachá dos pendentes. A meio
+vai o +, que abre o que se pode adicionar (estilos.css:.tabmais; ver «A
+fita da barra de baixo»). A barra
 só existe abaixo de 900px e esconde-se com a gaveta aberta
 (estilos.css:.tabbar dentro de estilos.css:@media(max-width:900px)); o traço
 do ativo da gaveta não se aplica nela (estilos.css:.tabbar, o a.on::before).

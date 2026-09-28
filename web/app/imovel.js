@@ -31,7 +31,8 @@ function propModal(id){
     const antes=historia?loanStartsAntes(prop(pForm.id)):null;   /* antes de trocar o objeto na db */
     const i=db.properties.findIndex(x=>x.id===pForm.id);
     if(i<0)db.properties.push(pForm);else db.properties[i]=pForm;
-    if(servicoLigado('recurring'))syncAllLoanRecs();
+    /* os planeados da ficha (IMI, condomínio, seguro) e os das hipotecas são dos Planeados */
+    if(servicoLigado('recurring')){syncPropRecs(pForm);syncAllLoanRecs()}
     save();closeModal();render();toast(id?'Imóvel atualizado.':'Imóvel adicionado.');
     if(historia)perguntarPrestacoesEmFalta(pForm,antes);
   };
@@ -57,6 +58,8 @@ function propFicha(id){
   /* o que o Anexo F e o Anexo G pedem e não é dado registal: o VPT (reparte os gastos
      quando só se arrenda parte do imóvel) e o dia em que o imóvel foi comprado */
   const fisco=[p.vpt?'VPT '+euro(p.vpt):'',p.purchaseDate?'adquirido a '+dPT(p.purchaseDate):''].filter(Boolean).join(' · ');
+  /* as despesas fixas são planeados (dos Planeados): vê-as quem é dono ou vê planeados */
+  const fixas=servicoLigado('recurring')&&(c.dono||pode(id,'rec.view'))?despesasFixasTxt(p):'';
   const corpo=ficha([
     {rotulo:'Morada',valor:esc(p.address||'')},
     {rotulo:'Destino',valor:p.use==='proprio'?'Uso próprio':'Arrendamento'+(p.rentalMode==='quartos'?' · por quartos':' · imóvel inteiro')},
@@ -67,6 +70,7 @@ function propFicha(id){
     pode(id,'report.view')?{rotulo:'Valor de mercado',valor:euro(p.value)}:null,
     pode(id,'report.view')?{rotulo:'Valor de aquisição',valor:euro(p.purchase)}:null,
     pode(id,'report.view')&&fisco?{rotulo:'Fiscal',valor:fisco}:null,
+    fixas?{tipo:'bloco',rotulo:'Despesas fixas',valor:esc(fixas)+'<br><span class="u-c-v-muted">Criam os planeados sozinhas.</span>'}:null,
     vLoan&&ls.length?{tipo:'bloco',rotulo:'Hipotecas',
       valor:ls.map(l=>`${esc(loanName(l))} · ${euro2(loanCalc(l).total)}/mês · ${euro(l.outstanding)} em dívida`).join('<br>')}:null,
     pode(id,'file.view')&&(p.photos||[]).length?{tipo:'bloco',rotulo:'Fotos',
@@ -103,9 +107,41 @@ function propView(id){
     depois:()=>{if(pode(id,'file.view')){const x=prop(id);if(x)paintThumbs(x.photos)}},
   });
 }
+/* O nome de um mês por extenso, para o menu do mês do seguro e a ficha.
+   Recebe: m — o mês (1–12).
+   Devolve: o nome em minúsculas (texto); '' fora de 1–12. */
+function nomeDoMes(m){return ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'][m-1]||''}
+/* As despesas fixas de um imóvel numa linha: «IMI 400,00 €/ano · Condomínio
+   55,00 €/mês · Seguro 96,00 €/ano em agosto». É o resumo da dobra do
+   formulário e a linha da ficha.
+   Recebe: p — o imóvel.
+   Devolve: o texto (sem escapar); '' sem nenhum valor. */
+function despesasFixasTxt(p){
+  return [p.imi>0?'IMI '+euro2(p.imi)+'/ano':'',p.condominio>0?'Condomínio '+euro2(p.condominio)+'/mês':'',
+    p.seguro>0?'Seguro '+euro2(p.seguro)+'/ano'+(p.seguroMes?' em '+nomeDoMes(p.seguroMes):''):''].filter(Boolean).join(' · ');
+}
+/* A dobra «Despesas fixas do imóvel» do formulário: o IMI, o condomínio, o
+   seguro e o mês dele. Cada valor cria um planeado (planeados.js:syncPropRecs),
+   e a explicação diz em que datas — é dos Planeados, e sem esse serviço na
+   conta não se pede o que não criaria nada.
+   Devolve: o HTML da dobra (texto); '' sem os Planeados. */
+function fixasSect(){
+  if(!servicoLigado('recurring'))return '';
+  const p=pForm,meses=[{v:0,label:'O mês em que o guardares'}].concat([...Array(12)].map((_,i)=>({v:i+1,label:nomeDoMes(i+1)})));
+  return fold('fixas','Despesas fixas do imóvel',`
+      <div class="row3">
+        <label>IMI (€/ano)<input id="p_imi" type="text" inputmode="decimal" value="${p.imi||''}" placeholder="Opcional"></label>
+        <label>Condomínio (€/mês)<input id="p_condominio" type="text" inputmode="decimal" value="${p.condominio||''}" placeholder="Opcional"></label>
+        <label>Seguro (€/ano)<input id="p_seguro" type="text" inputmode="decimal" value="${p.seguro||''}" placeholder="Opcional"></label></div>
+      <label>Mês do seguro${sel('p_seguroMes',p.seguroMes||0,meses,'','rascunho')}</label>
+      <div class="hint">Cada valor cria um planeado que pede confirmação na data, e o valor vive aqui: apagar o planeado apaga-o daqui.
+        O IMI sai nas prestações da lei: até 100 € numa só, em maio; de 100 a 500 € em maio e novembro; acima de 500 € em maio, agosto e novembro — no último dia do mês.
+        O condomínio no dia 1 de cada mês; o seguro uma vez por ano, no fim do mês escolhido.</div>`,
+    {icon:'clock',open:!!(p.imi>0||p.condominio>0||p.seguro>0),summary:esc(despesasFixasTxt(p))||'nenhuma'});
+}
 /* Constrói o HTML do formulário do imóvel a partir de pForm: proprietários e
-   quotas-partes, destino, quartos, valores, fotos, dados registais, hipotecas
-   e anúncio. Só lê — quem escreve de volta é collectProp().
+   quotas-partes, destino, quartos, valores, despesas fixas, fotos, dados
+   registais, hipotecas e anúncio. Só lê — quem escreve de volta é collectProp().
    Devolve: string de HTML do formulário, pronta a inserir com innerHTML. */
 function propBody(){
   const p=pForm,ls=p.loans||[];
@@ -137,36 +173,37 @@ function propBody(){
           <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delRoom('${r.id}')">${ic('trash',14)}</button></div>`).join('')}
           <button type="button" class="btn sm" data-toca="rascunho" data-click="addRoom()">${ic('plus',14)} Adicionar quarto</button></div></div>`:''}`:''}
     <div class="row3">
-      <label>Valor de mercado (€)<input id="p_value" type="text" inputmode="decimal" value="${p.value||''}" placeholder="180000"></label>
-      <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${p.purchase||''}" placeholder="150000"></label>
+      <label>Valor de mercado (€)<input id="p_value" type="text" inputmode="decimal" value="${p.value||''}" placeholder="Opcional"></label>
+      <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${p.purchase||''}" placeholder="Opcional"></label>
       <label>Data de aquisição<input id="p_purchaseDate" type="date" value="${p.purchaseDate||''}"></label></div>
+    ${fixasSect()}
     ${fold('photos','Fotos',fileBlock('',p.photos||[],'p_photoin','propAddPhotos','delPropPhoto',{photos:true,move:1,hint:'A primeira foto é a capa do imóvel. Arrasta pelo puxador para reordenar.'}),{icon:'photo',open:!!(p.photos||[]).length,summary:(p.photos||[]).length?p.photos.length+' foto'+(p.photos.length===1?'':'s'):'nenhuma'})}
     ${fold('reg','Dados registais',`
       <div class="row">
-        <label>Freguesia<input id="p_freguesia" value="${esc(p.freguesia||p.parish||'')}" placeholder="Soure"></label>
-        <label>Concelho<input id="p_concelho" value="${esc(p.concelho||'')}" placeholder="Soure"></label></div>
+        <label>Freguesia<input id="p_freguesia" value="${esc(p.freguesia||p.parish||'')}" placeholder="Opcional"></label>
+        <label>Concelho<input id="p_concelho" value="${esc(p.concelho||'')}" placeholder="Opcional"></label></div>
       <div class="row3">
-        <label>Distrito<input id="p_distrito" value="${esc(p.distrito||'')}" placeholder="Coimbra"></label>
-        <label>Código da freguesia<input id="p_freguesiaCodigo" value="${esc(p.freguesiaCodigo||'')}" inputmode="numeric" maxlength="6" placeholder="110623" autocomplete="off"></label>
+        <label>Distrito<input id="p_distrito" value="${esc(p.distrito||'')}" placeholder="Opcional"></label>
+        <label>Código da freguesia (opcional)<input id="p_freguesiaCodigo" value="${esc(p.freguesiaCodigo||'')}" inputmode="numeric" maxlength="6" placeholder="110623" autocomplete="off"></label>
         <label>Tipo de prédio${sel('p_tipoPredio',p.tipoPredio||'',[{v:'',label:'—'},{v:'U',label:'Urbano'},{v:'R',label:'Rústico'}],'','rascunho')}</label></div>
       <div class="row">
         <label>Tipologia${sel('p_tipologia',p.tipologia||'',[{v:'',label:'—'}].concat(['T0','T1','T2','T3','T4','T5','T6'].map(x=>({v:x,label:x}))),'','rascunho')}</label>
-        <label>VPT (€)<input id="p_vpt" type="text" inputmode="decimal" value="${p.vpt||''}" placeholder="85000"></label></div>
+        <label>VPT (€)<input id="p_vpt" type="text" inputmode="decimal" value="${p.vpt||''}" placeholder="Opcional"></label></div>
       <div class="row3">
-        <label>Fração autónoma<input id="p_fraction" value="${esc(p.fraction||'')}" placeholder="A"></label>
-        <label>Andar<input id="p_floor" value="${esc(p.floor||'')}" placeholder="2.º"></label>
-        <label>Descrição predial n.º<input id="p_registry" value="${esc(p.registry)}" placeholder="15937"></label></div>
+        <label>Fração autónoma (opcional)<input id="p_fraction" value="${esc(p.fraction||'')}" placeholder="A"></label>
+        <label>Andar (opcional)<input id="p_floor" value="${esc(p.floor||'')}" placeholder="2.º"></label>
+        <label>Descrição predial n.º (opcional)<input id="p_registry" value="${esc(p.registry)}" placeholder="15937"></label></div>
       <div class="row3">
-        <label>Rua<input id="p_street" value="${esc(p.street||'')}" placeholder="Rua Central"></label>
-        <label>Número da porta<input id="p_doorNumber" value="${esc(p.doorNumber||'')}" placeholder="12"></label>
-        <label>Código postal<input id="p_postalCode" value="${esc(p.postalCode||'')}" placeholder="3130-000"></label></div>
-      <label>Localidade<input id="p_locality" value="${esc(p.locality||'')}" placeholder="Soure"></label>
+        <label>Rua<input id="p_street" value="${esc(p.street||'')}" placeholder="Opcional"></label>
+        <label>Número da porta<input id="p_doorNumber" value="${esc(p.doorNumber||'')}" placeholder="Opcional"></label>
+        <label>Código postal (opcional)<input id="p_postalCode" value="${esc(p.postalCode||'')}" placeholder="3130-000"></label></div>
+      <label>Localidade<input id="p_locality" value="${esc(p.locality||'')}" placeholder="Opcional"></label>
       <div class="row">
-        <label>Artigo matricial<input id="p_matrix" value="${esc(p.matrix)}" placeholder="4651"></label>
-        <label>Licença de utilização<input id="p_licence" value="${esc(p.licence)}" placeholder="Alvará n.º 26/2013"></label></div>
+        <label>Artigo matricial (opcional)<input id="p_matrix" value="${esc(p.matrix)}" placeholder="4651"></label>
+        <label>Licença de utilização (opcional)<input id="p_licence" value="${esc(p.licence)}" placeholder="Alvará n.º 26/2013"></label></div>
       <div class="row3">
-        <label>Certificado energético<input id="p_energyCert" value="${esc(p.energyCert)}" placeholder="SCE395442330"></label>
-        <label>Classe<input id="p_energyClass" value="${esc(p.energyClass)}" placeholder="D"></label>
+        <label>Certificado energético (opcional)<input id="p_energyCert" value="${esc(p.energyCert)}" placeholder="SCE395442330"></label>
+        <label>Classe (opcional)<input id="p_energyClass" value="${esc(p.energyClass)}" placeholder="D"></label>
         <label>Válido até<input id="p_energyValid" type="date" value="${p.energyValid||''}"></label></div>
       <div class="hint">Usados nas cláusulas do contrato em PDF e no resumo do Anexo F. Deixa em branco o que não se aplicar — as frases correspondentes são omitidas.
         O código da freguesia (6 dígitos), o tipo de prédio e o artigo vêm da caderneta predial ou da nota de cobrança do IMI; o Anexo F pede-os em cada linha do quadro das rendas.
@@ -183,10 +220,10 @@ function propBody(){
           <span class="plus">${ic('plus',18)}</span></button>
       ${ls.length?`<div class="hint">Um imóvel pode ter várias hipotecas em simultâneo. Todas contam para a dívida e para o LTV.</div>`:''}`,
       {icon:'bank',open:!!ls.length,summary:ls.length?(ls.length+(ls.length===1?' hipoteca · ':' hipotecas · ')+euro2(payOf(p))+'/mês'):'nenhuma'})}
-    ${fold('text','Anúncio',`<label>Descrição para anúncios<textarea id="p_listing" placeholder="Texto para publicar em portais e redes sociais…">${esc(p.listing||'')}</textarea></label>`,
+    ${fold('text','Anúncio',`<label>Descrição para anúncios<textarea id="p_listing" placeholder="Opcional">${esc(p.listing||'')}</textarea></label>`,
       {icon:'file',open:!!p.listing,summary:p.listing?'com texto':''})}
     <div class="hint">A renda, as datas e os inquilinos ficam no contrato, não aqui.</div>
-    ${richEditor('Comentários dos proprietários','p_notes',p.notes)}</div>`;
+    ${richEditor('Comentários dos proprietários','p_notes',p.notes,'Opcional')}</div>`;
 }
 // Secção de uma hipoteca no formulário: campos consoante o tipo de taxa,
 // caixa de simulação e documentos. O i serve só para o título por omissão.
@@ -198,29 +235,29 @@ function loanSect(l,i){
     <div class="sect-head"><span class="ic">${ic('bank',18)}</span><b>${esc(l.name||'Hipoteca '+(i+1))}</b><span class="spacer"></span>
       <button type="button" class="btn sm danger" data-toca="dados" data-risco="destroi" data-click="delLoan('${l.id}')">${ic('trash',14)}</button></div>
     <div class="row">
-      <label>Finalidade<input id="l_name_${l.id}" value="${esc(l.name)}" placeholder="Aquisição" autocomplete="off" data-input="liveLoan('${l.id}')"></label>
-      <label>Banco<input id="l_bank_${l.id}" value="${esc(l.bank)}" placeholder="Millennium" autocomplete="off"></label></div>
+      <label>Finalidade<input id="l_name_${l.id}" value="${esc(l.name)}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label>
+      <label>Banco<input id="l_bank_${l.id}" value="${esc(l.bank)}" placeholder="Opcional" autocomplete="off"></label></div>
     <div class="row3">
       <label>Capital em dívida (€)<input id="l_out_${l.id}" type="text" inputmode="decimal" value="${capitalDoInicio(l,db.transactions)||''}" placeholder="150000" data-input="liveLoan('${l.id}')"></label>
-      <label>Prazo (anos)<input id="l_years_${l.id}" type="text" inputmode="numeric" value="${esc(l.years||'')}" placeholder="30" data-input="liveLoan('${l.id}')"></label>
+      <label>Prazo (anos)<input id="l_years_${l.id}" type="text" inputmode="numeric" value="${esc(l.years||'')}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
       <label>Início<input id="l_start_${l.id}" type="date" value="${esc(l.start||'')}"></label></div>
     <div class="hint u-mt-n4px">À data de início: as prestações registadas abatem-no, e a caixa abaixo diz o que falta hoje. Se o crédito já vem de trás, ao guardar a app propõe registar as prestações desde então — e o capital desce com elas.</div>
     <div><div class="flabel">Tipo de taxa</div>
       <div class="seg c3">${[['fixa','lock','Fixa','não muda'],['mista','split','Mista','fixa e depois variável'],['variavel','wave','Variável','Euribor + spread']]
         .map(([k,ico,lb,sb])=>`<button type="button" class="opt ${l.type===k?'on':''}" data-toca="rascunho" data-click="setLType('${l.id}','${k}')"><span class="ic">${ic(ico,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>
     ${l.type==='fixa'?`<div class="row">
-      <label>Taxa anual TAN (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="3,2" data-input="liveLoan('${l.id}')"></label>
-      <label>Comissão de amortização (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="2"></label></div>`:''}
+      <label>Taxa anual TAN (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
+      <label>Comissão de amortização (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional"></label></div>`:''}
     ${l.type==='mista'?`<div class="row">
-        <label>Anos com taxa fixa<input id="l_fy_${l.id}" type="text" inputmode="numeric" value="${l.fixedYears||''}" placeholder="5" data-input="liveLoan('${l.id}')"></label>
-        <label>Taxa fixa (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="3,1" data-input="liveLoan('${l.id}')"></label></div>`:''}
+        <label>Anos com taxa fixa<input id="l_fy_${l.id}" type="text" inputmode="numeric" value="${l.fixedYears||''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
+        <label>Taxa fixa (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label></div>`:''}
     ${l.type!=='fixa'?`<div class="row3">
       <label>Indexante${sel('l_index_'+l.id,l.index,['3m','6m','12m'].map(x=>({v:x,label:'Euribor '+x})),'liveLoanAll','rascunho')}</label>
-      <label>Indexante (%)<input id="l_eur_${l.id}" type="text" inputmode="decimal" value="${l.euribor?dec(l.euribor):''}" placeholder="2,1" data-input="liveLoan('${l.id}')"></label>
-      <label>Spread (%)<input id="l_spr_${l.id}" type="text" inputmode="decimal" value="${l.spread?dec(l.spread):''}" placeholder="1,0" data-input="liveLoan('${l.id}')"></label></div>
+      <label>Indexante (%)<input id="l_eur_${l.id}" type="text" inputmode="decimal" value="${l.euribor?dec(l.euribor):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
+      <label>Spread (%)<input id="l_spr_${l.id}" type="text" inputmode="decimal" value="${l.spread?dec(l.spread):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label></div>
     <div class="row">
-      ${l.type==='mista'?`<label>Comissão amort. — fase fixa (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="2"></label>`:''}
-      <label>Comissão amort. — taxa variável (%)<input id="l_fvar_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeVar!=null?dec(l.amortFeeVar):''}" placeholder="0,5"></label></div>`:''}
+      ${l.type==='mista'?`<label>Comissão amort. — fase fixa (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional"></label>`:''}
+      <label>Comissão amort. — taxa variável (%)<input id="l_fvar_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeVar!=null?dec(l.amortFeeVar):''}" placeholder="Opcional"></label></div>`:''}
     <label class="check"><input type="checkbox" id="l_stamp_${l.id}" ${l.stampTax?'checked':''} data-change="toggleStamp('${l.id}')">
       Pagar imposto do selo sobre os juros (${dec(db.settings.stampPct??4)}%)</label>
     <div class="hint u-mt-n4px">Créditos mais antigos podem não o ter. Desliga se a tua prestação não o inclui.</div>
@@ -242,6 +279,8 @@ function collectProp(){
   if(has('p_value'))p.value=num(val('p_value'));
   if(has('p_purchase'))p.purchase=num(val('p_purchase'));
   if(has('p_vpt'))p.vpt=Math.max(0,num(val('p_vpt')));
+  ['imi','condominio','seguro'].forEach(k=>{if(has('p_'+k))p[k]=Math.max(0,Math.round(num(val('p_'+k))*100)/100)});
+  if(has('p_seguroMes'))p.seguroMes=Math.min(12,Math.max(0,Math.round(num(val('p_seguroMes')))));
   ['parish','freguesia','concelho','distrito','freguesiaCodigo','tipoPredio','tipologia','purchaseDate','fraction','floor','street','doorNumber','postalCode','locality','registry','matrix','licence','energyCert','energyClass','energyValid'].forEach(k=>{
     const e=document.getElementById('p_'+k);if(e)p[k]=e.value});
   p.freguesiaCodigo=String(p.freguesiaCodigo||'').trim();   /* a validação ao guardar conta dígitos, não espaços */
@@ -301,7 +340,7 @@ let _propPaint=null;
 // Repinta o corpo do modal a partir de pForm (ou do pintor alternativo em
 // _propPaint) e volta a carregar as miniaturas das fotos.
 // Devolve: nada — redesenha a vista.
-function repaintProp(){const b=modalBodyEl();if(!b)return;b.innerHTML=(_propPaint||propBody)();paintThumbs(pForm.photos)}
+function repaintProp(){const b=modalBodyEl();if(!b)return;b.innerHTML=(_propPaint||propBody)();marcarDatasVazias(b);paintThumbs(pForm.photos)}
 // Muda o destino do imóvel (arrendamento/uso próprio) e repinta — os campos
 // visíveis dependem dele.
 // Recebe: u — o destino: 'investimento' ou 'proprio'.

@@ -3,8 +3,8 @@
    (TX_TYPES), o sentido de cada um (entra, sai ou nenhum), as árvores de
    categorias das receitas e dos pagamentos, o que fica fora dos totais (as
    exclusões escolhidas nas definições e o passivo: a caução e os
-   empréstimos recebidos), as despesas que se repetem (as que a projeção
-   conta), e as dívidas a terceiros por credor. */
+   empréstimos recebidos), as despesas que um planeado já reconhece, e as
+   dívidas a terceiros por credor. */
 const KIND={income:{short:'Receita',sign:'+',color:'pos',flow:'in'},expense:{short:'Despesa',sign:'−',color:'neg',flow:'out'},
   loan:{short:'Pagamento de crédito',sign:'−',color:'amber',flow:'out'},owed:{short:'Dívida recebida',sign:'+',color:'amber',flow:'in'},
   repay:{short:'Pagamento de dívida',sign:'−',color:'neg',flow:'out'},settle:{short:'Transferência',sign:'',color:'',flow:'none'}};
@@ -80,49 +80,19 @@ const isPassivo=t=>t.kind==='income'&&(t.category==='Empréstimos recebidos'||t.
    Recebe: t — o movimento.
    Devolve: true/false. */
 const countsInTotals=t=>!isPassivo(t)&&!((t.kind==='income'||t.kind==='expense')&&isExc(t.kind,t.category,t.sub));
-/* A chave de uma categoria de pagamentos nas escolhas da projeção (settings.repete e
-   DESPESAS_REPETEM0).
-   Recebe: cat — a categoria; sub (opcional) — a subcategoria.
-   Devolve: 'Categoria' ou 'Categoria/Sub'. */
-const repeteChave=(cat,sub)=>cat+(sub?'/'+sub:'');
-/* A escolha guardada para uma chave, só se for própria do objeto: uma categoria chamada
-   «constructor» não pode herdar a do protótipo.
-   Recebe: o — o objeto das escolhas; k — a chave.
-   Devolve: true/false, ou undefined se não houver escolha. */
-const repeteEm=(o,k)=>Object.prototype.hasOwnProperty.call(o,k)?!!o[k]:undefined;
-/* A regra de origem para uma categoria ou subcategoria de pagamentos: a da sub, senão a da
-   categoria; o que DESPESAS_REPETEM0 não conhece não se repete.
-   Recebe: cat — a categoria; sub (opcional) — a subcategoria.
-   Devolve: true/false. */
-function repeteOrigem(cat,sub){
-  const r=DESPESAS_REPETEM0,s=sub?repeteEm(r,repeteChave(cat,sub)):undefined;
-  return s!==undefined?s:!!repeteEm(r,cat);
-}
-/* Se as despesas desta categoria (ou subcategoria) se repetem todos os anos, pelas escolhas
-   das definições e depois pela regra de origem — sub antes de categoria em cada uma. A
-   escolha da pessoa para a categoria manda sobre a regra de origem das subs dela.
-   Recebe: cat — a categoria; sub (opcional) — a subcategoria.
-   Devolve: true/false. */
-function repeteRegra(cat,sub){
-  const e=(db.settings||{}).repete||{};
-  const s=sub?repeteEm(e,repeteChave(cat,sub)):undefined,c=repeteEm(e,cat);
-  return s!==undefined?s:c!==undefined?c:repeteOrigem(cat,sub);
-}
-/* Se uma despesa entra na projeção das despesas, por esta ordem: a etiqueta «Recorrente»;
-   um planeado de despesa da mesma categoria (e da mesma sub, quando o planeado a tem) no
-   mesmo imóvel ou grupo — os movimentos confirmados não guardam o planeado de onde vieram;
-   sem categoria, entra (não há como saber, e era o que a projeção fazia); senão, repeteRegra.
+/* Uma despesa que um planeado já reconhece: tem a etiqueta «Recorrente», ou há um
+   planeado de despesa da mesma categoria (e da mesma sub, quando o planeado a tem) no
+   mesmo imóvel ou grupo — os movimentos confirmados não guardam o planeado de onde
+   vieram. A projeção parte dos planeados (metricas.js:despesasPrevistas); isto serve só
+   para dizer o que ficou de fora, as despesas de uma vez (metricas.js:despesasDeUmaVez).
    Recebe: t — o movimento.
    Devolve: true/false; false para o que não é despesa. */
 function despesaRepete(t){
   if(!t||t.kind!=='expense')return false;
   if((t.tags||[]).indexOf('Recorrente')>-1)return true;
-  const cat=t.category||'',sub=t.sub||'';
-  if(!cat)return true;
-  const mesmo=x=>(x||null);
-  if((db.recurring||[]).some(r=>{const x=r.tx||{};return x.kind==='expense'&&x.category===cat&&(!x.sub||x.sub===sub)
-    &&mesmo(x.propertyId)===mesmo(t.propertyId)&&mesmo(x.groupId)===mesmo(t.groupId)}))return true;
-  return repeteRegra(cat,sub);
+  const cat=t.category||'',sub=t.sub||'',mesmo=x=>(x||null);
+  return (db.recurring||[]).some(r=>{const x=r.tx||{};return x.kind==='expense'&&(x.category||'')===cat&&(!x.sub||x.sub===sub)
+    &&mesmo(x.propertyId)===mesmo(t.propertyId)&&mesmo(x.groupId)===mesmo(t.groupId)});
 }
 /* todas as categorias conhecidas, para o filtro (sem repetir)
    Recebe: kind (opcional) — o tipo de movimento; vazio junta receitas e despesas.

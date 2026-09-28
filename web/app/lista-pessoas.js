@@ -49,10 +49,11 @@ function vTenants(){
   });
   list=lfSort(K,list,{nome:t=>t.name,contratos:t=>contractsOfTenant(t.id).filter(isActive).length,
     renda:t=>sum(contractsOfTenant(t.id).filter(isActive).map(c=>c.rent))});
+  const adiciona=!souSoColaborador()||casasComo('tenant.add').length;   /* a condição do FAB e do vazio */
   const head=lfBar(K,comCt?[lfSel(K,'ct',[{v:'',label:'Todos os inquilinos'},{v:'com',label:'Com contrato ativo'},{v:'fut',label:'Com contrato por começar'},{v:'sem',label:'Sem contrato'}])]:[],list.length,
       {opts:[{v:'nome',label:'Ordenar por nome'}].concat(comCt?[{v:'contratos',label:'Ordenar por nº de contratos'},{v:'renda',label:'Ordenar por renda'}]:[])})
-    +((!souSoColaborador()||casasComo('tenant.add').length)?fab([{label:'Adicionar inquilino',act:"personModal('tenant')"}]):'');
-  if(!db.tenants.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.</div>`);
+    +(adiciona?fab([{label:'Adicionar inquilino',act:"personModal('tenant')"}]):'');
+  if(!db.tenants.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.${adiciona?saida('Adicionar inquilino',"personModal('tenant')",'camada'):''}</div>`);
   if(!list.length)return head+vazioFiltro();
   return head+listaViva('inquilinos',list.map(t=>({chave:'ten:'+t.id,html:personCard(t,'tenant')})));
 }
@@ -76,7 +77,7 @@ function vOwners(){
       lfSel(K,'pr',[{v:'',label:'Todos os proprietários'},{v:'com',label:'Com imóveis'},{v:'sem',label:'Sem imóveis'}])]:[],list.length,
       {opts:[{v:'nome',label:'Ordenar por nome'}].concat(comProp?[{v:'imoveis',label:'Ordenar por nº de imóveis'}]:[])})
     +fab([{label:'Adicionar proprietário',act:"personModal('owner')"}]);
-  if(!db.owners.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.</div>`);
+  if(!db.owners.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.${saida('Adicionar proprietário',"personModal('owner')",'camada')}</div>`);
   if(!list.length)return head+vazioFiltro();
   return head+listaViva('proprietarios',list.map(o=>({chave:'own:'+o.id,html:personCard(o,'owner')})));
 }

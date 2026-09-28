@@ -13,13 +13,14 @@ function vCredits(){
     return lfHit(K,[loanName(l),l.name,l.bank,p.name,RATE[l.type],String(l.outstanding)].join(' '));
   }),{divida:x=>x.l.outstanding,prestacao:x=>Number(x.l.outstanding)>0?loanCalc(x.l).total:0,nome:x=>loanName(x.l),imovel:x=>x.p.name});
   const tot=sum(live.map(x=>x.l.outstanding)),pay=sum(live.map(x=>loanCalc(x.l).total));
+  /* uma hipoteca grava-se na ficha do imóvel: sem «Editar a ficha» em imóvel
+     nenhum (o Contabilista de fábrica vê os créditos e não os edita), o botão
+     — o FAB e o do vazio — só levava a uma recusa no Guardar */
+  const adiciona=casasComo('house.edit').length;
   const head=lfBar(K,[lfSel(K,'p',lfPropOpts()),
       lfSel(K,'st',[{v:'',label:'Ativas e liquidadas'},{v:'on',label:'Ativas'},{v:'off',label:'Liquidadas'}])],shown.length,
       {opts:[{v:'divida',label:'Ordenar por dívida'},{v:'prestacao',label:'Ordenar por prestação'},{v:'nome',label:'Ordenar por nome'},{v:'imovel',label:'Ordenar por imóvel'}]})
-    /* uma hipoteca grava-se na ficha do imóvel: sem «Editar a ficha» em imóvel
-       nenhum (o Contabilista de fábrica vê os créditos e não os edita), o botão
-       só levava a uma recusa no Guardar */
-    +(casasComo('house.edit').length?fab([{label:'Nova hipoteca',act:'newMort()'}]):'');
+    +(adiciona?fab([{label:'Nova hipoteca',act:'newMort()'}]):'');
   const kpis=`<div class="grid u-mb-14px">
     ${kpi('Em dívida',euro(tot),'amber',live.length+(live.length===1?' hipoteca ativa':' hipotecas ativas'))}
     ${kpi('Prestações',euro2(pay),'neg','por mês, no total')}
@@ -27,7 +28,7 @@ function vCredits(){
   /* sem imóveis, o botão do canto só dava um aviso a dizer que faltava um
      imóvel: um caminho que acaba num aviso não é um caminho */
   if(!rows.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem hipotecas</b>${db.properties.length
-    ?'Uma hipoteca está sempre associada a um imóvel.'+(casasComo('house.edit').length?' Cria a primeira aqui ou na ficha do imóvel.':'')
+    ?'Uma hipoteca está sempre associada a um imóvel.'+(adiciona?' Cria a primeira aqui ou na ficha do imóvel.'+saida('Nova hipoteca','newMort()','camada'):'')
     :'Uma hipoteca está sempre associada a um imóvel, e ainda não há nenhum.'+saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`);
   if(!shown.length)return head+kpis+vazioFiltro();
   const mortCard=({p,l})=>{const live2=Number(l.outstanding)>0,c=live2?loanCalc(l):null;

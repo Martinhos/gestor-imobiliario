@@ -32,13 +32,19 @@ function mesesEmVigor(c,ano){
   return Math.max(0,ate-de);
 }
 /* Os números da projeção, sem HTML: por ano do horizonte (s.years), as rendas
-   dos contratos ativos com o aumento anual de cada um, as despesas que se repetem
-   (a base de opBase) com a inflação, as prestações segundo o plano de cada hipoteca
-   (param quando o crédito acaba) e o cashflow; mais a dívida no fim de cada ano.
+   dos contratos ativos com o aumento anual de cada um, o IRS sobre elas à taxa
+   de cada contrato (irs.js:taxRateOf — a mesma da «renda líquida de impostos»;
+   conta no ano das rendas, embora se pague no seguinte), as despesas previstas
+   (metricas.js:despesasPrevistas — os planeados de despesa levados ao ano) com
+   a inflação, as prestações segundo o plano de cada hipoteca (param quando o
+   crédito acaba) e o cashflow; mais a dívida no fim de cada ano e o que ficou
+   de fora (metricas.js:despesasDeUmaVez).
    Recebe: pid — id do imóvel, 'g:ID' de um grupo, ou null/vazio para o âmbito todo.
-   Devolve: {rows, act, debtY, base} — rows é um array de {yr, rent, exp, loan, cf, per}
+   Devolve: {rows, act, debtY, base} — rows é um array de {yr, rent, irs, exp, loan, cf, per}
    (per: a renda de cada contrato, pela ordem de act); act os contratos ativos da vista;
-   debtY a dívida no fim de cada ano; base o que opBase devolve. */
+   debtY a dívida no fim de cada ano; base {op, porCat, n, fora, foraPorCat, foraAno} — as
+   despesas previstas por ano e por categoria, quantos planeados entraram, e as de uma vez
+   do último ano completo (o total, por categoria, e o ano). */
 function projRows(pid){
   const s=db.settings,n=Math.max(1,Math.round(s.years)),pps=pidProps(pid);
   /* ctVivo: quem corta por datas é o mesesEmVigor, ano a ano. Filtrar à
@@ -46,7 +52,8 @@ function projRows(pid){
      horizonte, incluindo 2028 — e um portefólio só com ele dizia «Nenhum
      contrato ativo» e não mostrava projeção nenhuma. */
   const act=db.contracts.filter(c=>ctVivo(c)&&inScope(c.propertyId)&&pps.some(p=>p.id===c.propertyId));
-  const base=opBase(pid),rows=[];
+  const prev=despesasPrevistas(pid),uma=despesasDeUmaVez(pid);
+  const base={op:prev.op,porCat:prev.porCat,n:prev.n,fora:uma.fora,foraPorCat:uma.foraPorCat,foraAno:uma.ano},rows=[];
   /* prestações previstas: vêm do plano de cada hipoteca e param quando o crédito acaba */
   const sched=[...Array(n)].map((_,i)=>sum(pps.map(p=>sh(p)*sum(liveLoans(p).map(l=>{
     const a=amort(l),from=i*12,to=Math.min((i+1)*12,a.rows.length);
@@ -64,8 +71,8 @@ function projRows(pid){
       const anos=Math.max(0,yr-desde);
       return c.rent*sh(prop(c.propertyId))*meses*Math.pow(1+((c.increase==null?s.growth:c.increase)/100),anos);
     });
-    const rent=sum(per),exp=base.op*Math.pow(1+s.inflation/100,i),ln=sched[i];
-    rows.push({yr:YEAR+i,rent,exp,loan:ln,cf:rent-exp-ln,per});
+    const rent=sum(per),irs=sum(per.map((v,j)=>v*taxRateOf(act[j])/100)),exp=base.op*Math.pow(1+s.inflation/100,i),ln=sched[i];
+    rows.push({yr:YEAR+i,rent,irs,exp,loan:ln,cf:rent-irs-exp-ln,per});
   }
   const debtY=[...Array(n)].map((_,i)=>sum(pps.map(p=>sh(p)*sum(liveLoans(p).map(l=>{
     const a=amort(l,(i+1)*12);return a.rows.length?a.rows[a.rows.length-1].bal:0})))));
@@ -80,23 +87,28 @@ function projNomesCats(l){
   const n=l.map(x=>String(x.label));
   return n.length>3?n.slice(0,3).join(', ')+'…':listaE(n);
 }
-/* O que o cabeçalho das Projeções diz das despesas: quanto entra por ano, de que ano
-   e de que categorias; quanto ficou de fora por não se repetir; e a porta para escolher
-   quais se repetem. Sem nenhuma que se repita, diz que a projeção não conta despesas.
-   Recebe: base — o {op, year, anualizado, fora, porCat, foraPorCat} de opBase.
+/* O que o cabeçalho das Projeções diz das despesas e do IRS: quanto entra por ano,
+   de quantos planeados e de que categorias, e de onde vêm (a ficha de cada imóvel e
+   os Planeados); o IRS à taxa de cada contrato e quando se paga; o que ficou de fora
+   por ter sido pago de uma vez; e a porta — para os imóveis enquanto não há nenhum
+   planeado (é lá que o IMI, o condomínio e o seguro se põem), para os Planeados
+   depois — só com esse serviço ligado nesta conta.
+   Recebe: base — o {op, porCat, n, fora, foraPorCat, foraAno} de projRows.
    Devolve: o HTML (texto) das linhas de ajuda. */
 function projDespesasTxt(base){
-  const de=base.anualizado?'as de '+base.year+' até hoje, anualizadas':'as de '+base.year;
-  const dentro=base.op>0
-    ?`Despesas que se repetem: <b>${euro(base.op)}/ano</b> — ${de} (${esc(projNomesCats(base.porCat))}); crescem com a inflação.`
-    :'Ainda não há despesas que se repetem todos os anos (IMI, condomínio, seguros…): a projeção não conta despesas.';
-  const fora=base.fora>0?` Ficam de fora <b>${euro(base.fora)}</b> que não se repetem todos os anos (${esc(projNomesCats(base.foraPorCat))}).`:'';
-  const porta=base.op>0||base.fora>0?`<div class="u-mt-8px"><button type="button" class="btn sm" data-toca="ecra" data-click="go('settings');goSet('repete')">Escolher as que se repetem</button></div>`:'';
-  return `<div class="hint u-mt-12px">${dentro}${fora}</div>${porta}`;
+  const dentro=base.n>0
+    ?`Despesas previstas: <b>${euro(base.op)}/ano</b> — ${base.n} planeado${base.n===1?'':'s'} de despesa (${esc(projNomesCats(base.porCat))}): o IMI, o condomínio e o seguro da ficha de cada imóvel e os que marcaste nos Planeados; crescem com a inflação.`
+    :'Ainda não há despesas previstas, e a projeção não conta despesas: o IMI, o condomínio e o seguro põem-se na ficha de cada imóvel e criam os planeados sozinhos.';
+  const irs=' IRS sobre as rendas à taxa de cada contrato, contado no ano das rendas — a declaração entrega-se de abril a junho e paga-se até 31 de agosto do ano seguinte.';
+  const fora=base.fora>0?` Em ${base.foraAno} gastaste ainda <b>${euro(base.fora)}</b> em despesas de uma vez (${esc(projNomesCats(base.foraPorCat))}), que não se projetam.`:'';
+  const porta=base.n>0?(servicoLigado('recurring')?`<button type="button" class="btn sm" data-toca="ecra" data-click="go('recurring')">Ver planeados</button>`:'')
+    :(servicoLigado('properties')?`<button type="button" class="btn sm" data-toca="ecra" data-click="go('properties')">Ver imóveis</button>`:'');
+  return `<div class="hint u-mt-12px">${dentro}${irs}${fora}</div>${porta?`<div class="u-mt-8px">${porta}</div>`:''}`;
 }
 /* Projeções ao horizonte definido nas definições (s.years), a partir de
-   projRows: KPIs, gráficos e tabela ano a ano com uma coluna por contrato. O
-   cabeçalho diz de onde vem a base das despesas e o que ficou de fora.
+   projRows: KPIs, gráficos e tabela ano a ano com uma coluna por contrato e as
+   colunas das rendas, do IRS, das despesas, das prestações e do cashflow. O
+   cabeçalho diz de onde vêm as despesas previstas, o IRS e o que ficou de fora.
    Devolve: string com o HTML completo da vista. */
 function vProjections(){
   if(projProp&&!pidProps(projProp).length)projProp='';
@@ -113,7 +125,7 @@ function vProjections(){
     ${db.properties.length?(servicoLigado('contracts')?saida('Ver contratos',"go('contracts')",'ecra'):vazioServicoDesligado('contracts'))
       :(servicoLigado('properties')?saida('Adicionar imóvel',"go('properties')",'ecra'):vazioServicoDesligado('properties'))}</div>`;
   const first=rows[0],last=rows[rows.length-1],labels=rows.map(r=>String(r.yr).slice(2));
-  const baseTxt=' Aqui: '+euro(base.op)+'/ano, '+(base.anualizado?'o ano corrente anualizado.':'base '+base.year+'.');
+  const baseTxt=' Aqui: '+euro(base.op)+'/ano de despesas previstas em '+base.n+' planeado'+(base.n===1?'':'s')+'.';
   const varRenda=first.rent?last.rent/first.rent-1:0;
   /* fora do painel de análise: o painel abre-se só a pedido, e o que conta
      como despesa é o que mais muda a leitura da projeção */
@@ -121,16 +133,16 @@ function vProjections(){
     ${kpi('Renda anual hoje',euro(first.rent),'','a preços de '+YEAR,WHY.rendaHoje,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',yearly:rows.map(r=>({label:r.yr,value:r.rent}))}))}
     ${kpi('Renda em '+last.yr,euro(last.rent),varRenda>=0?'pos':'neg',(varRenda>=0?'+':'')+pct(varRenda)+' acumulado',WHY.rendaFim,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',yearly:rows.map(r=>({label:r.yr,value:r.rent}))}))}
     ${kpi('Total do período',euro(sum(rows.map(r=>r.rent))),'',n+' anos de rendas',WHY.totalPeriodo,()=>{let a=0;return {fmt:euro,yearlyTitle:'Acumulado ano a ano',yearly:rows.map(r=>({label:r.yr,value:a+=r.rent}))}})}
-    ${kpi('Cashflow em '+last.yr,euro(last.cf),last.cf>=0?'pos':'neg','com despesas e prestações',WHY.cashflowFim+baseTxt,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',extraTitle:'Prestações',yearly:rows.map(r=>({label:r.yr,value:r.cf,extra:euro(r.loan)}))}))}</div>
+    ${kpi('Cashflow em '+last.yr,euro(last.cf),last.cf>=0?'pos':'neg','com IRS, despesas e prestações',WHY.cashflowFim+baseTxt,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',extraTitle:'Prestações',yearly:rows.map(r=>({label:r.yr,value:r.cf,extra:euro(r.loan)}))}))}</div>
   <div class="cols">
     ${card('Rendas, prestações e cashflow','',cLine([{name:'Rendas',values:rows.map(r=>r.rent),color:PAL[0]},
       {name:'Prestações',values:rows.map(r=>r.loan),color:'#d6a34a'},
       {name:'Cashflow',values:rows.map(r=>r.cf),color:PAL[1]}],labels,{h:210,marks:decadeMarks(YEAR,n)}))}
     ${card('Dívida por amortizar','Somando os créditos em uso',cLine([{name:'Em dívida',values:debtY,color:'#d6a34a'}],labels,{h:200,marks:decadeMarks(YEAR,n)}))}</div>
   <div class="u-mt-14px">${card('Detalhe ano a ano','Uma coluna por contrato ativo',`<div class="tablewrap"><table class="table"><thead><tr>
-    <th>Ano</th>${act.map(c=>`<th>${esc(ctName(c))}</th>`).join('')}<th>Rendas</th><th>Despesas recorrentes</th><th>Prestações</th><th>Cashflow</th></tr></thead><tbody>
+    <th>Ano</th>${act.map(c=>`<th>${esc(ctName(c))}</th>`).join('')}<th>Rendas</th><th>IRS</th><th>Despesas</th><th>Prestações</th><th>Cashflow</th></tr></thead><tbody>
     ${rows.map(r=>`<tr><td><b>${r.yr}</b></td>${r.per.map(v=>`<td>${euro(v)}</td>`).join('')}
-      <td><b>${euro(r.rent)}</b></td><td class="neg">${euro(r.exp)}</td><td class="amber">${euro(r.loan)}</td>
+      <td><b>${euro(r.rent)}</b></td><td class="neg">${euro(r.irs)}</td><td class="neg">${euro(r.exp)}</td><td class="amber">${euro(r.loan)}</td>
       <td class="${r.cf>=0?'pos':'neg'}"><b>${euro(r.cf)}</b></td></tr>`).join('')}</tbody></table></div>`)}</div>`;
 }
 // nº de filtros ativos no painel de análise das projeções: proprietário e imóvel em foco

@@ -512,6 +512,26 @@ const ETIQUETAS_QUE_CORREM=/<\/?(?:iframe|meta|base|object|embed)\b[^>]*>/gi;
    Recebe: h — o HTML (nulo vale vazio).
    Devolve: o mesmo HTML sem essas etiquetas. */
 function semEtiquetasQueCorrem(h){return String(h==null?'':h).replace(ETIQUETAS_QUE_CORREM,'')}
+/* Marca os campos de data vazios com data-vazio, para o Safari do iPhone lhes
+   escrever «dd/mm/aaaa» (estilos.css, dentro de @supports
+   (-webkit-touch-callout:none)). Um <input type="date"> ignora o placeholder:
+   o Chrome e o Android escrevem o formato sozinhos, o iPhone deixa o campo em
+   branco. Corre depois de cada corpo posto no DOM (fillModal, render, os
+   repintes dos formulários) e a cada input/change num campo de data
+   (eventos.js:ligarDatasVazias), que é o que tira a marca quando se escolhe
+   uma data e a repõe quando se apaga.
+   Recebe: raiz — o elemento onde procurar os campos, ou o próprio campo de
+   data; com null não faz nada.
+   Devolve: nada — põe ou tira o atributo data-vazio em cada campo de data
+   (e só neles: o que não é um campo de data com atributos fica como está). */
+function marcarDatasVazias(raiz){
+  if(!raiz)return;
+  const marca=e=>{if(!e||e.type!=='date'||typeof e.setAttribute!=='function')return;
+    if(e.value)e.removeAttribute('data-vazio');else e.setAttribute('data-vazio','')};
+  if(raiz.tagName==='INPUT'){marca(raiz);return}
+  if(typeof raiz.querySelectorAll!=='function')return;
+  [].slice.call(raiz.querySelectorAll('input[type=date]')).forEach(marca);
+}
 // Preenche uma janela já criada: título, corpo, menu do cabeçalho e rodapé —
 // por omissão, Cancelar + Guardar (que chama o onSave da janela de cima).
 // Recebe: el — o elemento da janela (vindo do modalLayer); title — o texto do título;
@@ -522,6 +542,7 @@ function fillModal(el,title,body,foot,menuHtml){
   el.querySelector('.head h2').textContent=title;
   el.querySelector('.body').innerHTML=semEtiquetasQueCorrem(body);
   if(typeof tornarFocavel==='function')tornarFocavel(el.querySelector('.body'));
+  marcarDatasVazias(el.querySelector('.body'));
   el.querySelector('.head span').innerHTML=semEtiquetasQueCorrem(menuHtml||'');
   el.querySelector('.foot').innerHTML=semEtiquetasQueCorrem(foot||`<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="onSave&&onSave()">Guardar</button>`);
 }

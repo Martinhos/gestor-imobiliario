@@ -58,7 +58,7 @@ function bkLoad(text){
   if(!d||!Array.isArray(d.properties)||!Array.isArray(d.transactions))return toast('Falta a lista de imóveis ou de movimentos.');
   confirmModal('Repor cópia',`Substituir os dados atuais por ${d.properties.length} imóveis, ${Array.isArray(d.contracts)?d.contracts.length:0} contratos e ${d.transactions.length} movimentos?`,()=>{
     db=normalizarBase(d);
-    if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs()}   // os planeados automáticos são dos Planeados
+    if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs();syncAllPropRecs()}   // os planeados automáticos são dos Planeados
     save();migrateInline();closeAllModals();applyTheme();buildNav();render();toast('Cópia reposta.');
   });
 }

@@ -344,7 +344,7 @@ function txBody(){
   const catSum=esc([t.category,t.sub].filter(Boolean).join(' / '))+((t.tags||[]).length?(t.category?' · ':'')+t.tags.length+' etiqueta'+(t.tags.length===1?'':'s'):'');
   const planeado=txModo.modo==='rec',modelo=txModo.modo==='tpl';
   return `<div class="form">
-    ${modelo?`<label>Nome do modelo<input id="t_tplName" value="${esc(txModo.tplName||'')}" placeholder="Ex.: Renda mensal T2" autocomplete="off"></label>`:''}
+    ${modelo?`<label>Nome do modelo (opcional)<input id="t_tplName" value="${esc(txModo.tplName||'')}" placeholder="Ex.: Renda mensal T2" autocomplete="off"></label>`:''}
     ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" data-toca="rascunho" data-click="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
     <label>Descrição <span class="req">*</span><input id="t_label" value="${esc(t.label)}" placeholder="${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
     <div class="row">
@@ -356,7 +356,7 @@ function txBody(){
     ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+dPT(c.start):'')}))),'onCtChange','rascunho')}</label>`:''}
     ${t.kind==='income'&&(t.contractId||t.category==='Rendas')?txFiscoSect():''}
     ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange','rascunho')}</label>`:''}
-    ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'}<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Pai, amigo, empreiteiro…" autocomplete="off" list="creditorList" data-input="refreshCredHint()">
+    ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'} (opcional)<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Pai, amigo, empreiteiro…" autocomplete="off" list="creditorList" data-input="refreshCredHint()">
         <datalist id="creditorList">${knownCreditors().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
       <div class="hint" id="credHint">${credHint()}</div>`:''}
     ${settle?(ows.length>1?`<div class="row">
@@ -377,7 +377,7 @@ function txBody(){
     ${(!settle&&!credit&&ows.length>1)?splitSect(ows):''}
     ${credit&&ows.length>1?`<div class="hint">Dívidas a terceiros não entram nas contas entre proprietários: ficam com quem as recebe ou paga.</div>`:''}
     ${planeado&&servicoLigado('recurring')?recSect():''}
-    ${richEditor('Comentários','t_notes',t.notes)}</div>`;
+    ${richEditor('Comentários','t_notes',t.notes,'Opcional')}</div>`;
 }
 // Texto por baixo do campo do credor: o saldo corrente com essa pessoa
 // (recebido, devolvido, o que falta) ou uma orientação se ainda não há registos.
@@ -406,7 +406,7 @@ function txFiscoSect(){
   const fixo=txModo.modo!=='rec'&&txModo.modo!=='tpl';
   return `<div class="${fixo?'row':''}">
       ${fixo?`<label>Mês a que respeita<input id="t_periodo" type="month" value="${esc(t.periodo||'')}" placeholder="AAAA-MM"></label>`:''}
-      <label>Retido na fonte (€)<input id="t_retencao" type="text" inputmode="decimal" value="${t.retencao?dec(t.retencao):''}" placeholder="0"></label></div>
+      <label>Retido na fonte (€)<input id="t_retencao" type="text" inputmode="decimal" value="${t.retencao?dec(t.retencao):''}" placeholder="Opcional"></label></div>
     <div class="hint u-mt-n6px">Se o inquilino é uma empresa que retém IRS, escreve o que ficou retido: a renda bruta é o montante mais isto.</div>
     ${fixo&&ctDeclarado(c)?`<label class="check"><input type="checkbox" id="t_recibo" ${t.recibo?'checked':''}> Recibo de renda eletrónico emitido</label>
     <div class="hint u-mt-n4px">Emite-se no Portal das Finanças quando a renda entra; marcar aqui cala o aviso.</div>`:''}`;
@@ -733,7 +733,7 @@ function onLoanSplit(w){
 function refreshLoanHint(){const e=document.getElementById('loanHint');if(e)e.innerHTML=loanHint();amtResetSync()}
 // Reconstrói o corpo do modal do movimento a partir do tForm — usa-se depois de qualquer mudança estrutural.
 // Devolve: nada — substitui o corpo do modal no DOM.
-function repaintTx(){const b=modalBodyEl();if(b)b.innerHTML=txBody()}
+function repaintTx(){const b=modalBodyEl();if(!b)return;b.innerHTML=txBody();marcarDatasVazias(b)}
 /* Muda o tipo do movimento (ex.: dívida recebida ↔ paga): preserva o que foi escrito à mão,
    limpa categoria/subcategoria se a árvore de categorias do novo tipo for outra,
    e acerta o título do modal quando não é modelo nem recorrência.
