@@ -69,15 +69,39 @@ function metrics(y,pid,opts){
     grossYield:rentedValue?annualRent/rentedValue:NaN,cap:value?noiAnual/value:NaN,
     coc:purchase?cf/purchase:NaN,ltv:value?debt/value:NaN};
 }
-/* a base anual das despesas para projetar: o último ano completo com despesas; sem
-   nenhum, o ano corrente anualizado (o que há até hoje ×12 sobre os meses decorridos)
+/* As despesas de um ano, com o peso das métricas, separadas em as que se repetem
+   (tipos.js:despesaRepete) e as que não, por categoria.
+   Recebe: y — o ano; pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio para o âmbito atual.
+   Devolve: {dentro, fora} — cada um um objeto {categoria: euros}; sem categoria vale 'Sem categoria'. */
+function despesasDoAno(y,pid){
+  const dentro={},fora={};
+  db.transactions.filter(t=>t.kind==='expense'&&countsInTotals(t)&&String(t.date||'').startsWith(String(y))).forEach(t=>{
+    const w=txWeight(t,pid,true);if(!(w>0))return;
+    const m=despesaRepete(t)?dentro:fora,k=t.category||'Sem categoria';
+    m[k]=(m[k]||0)+t.amount*w;
+  });
+  return {dentro,fora};
+}
+/* Um mapa {categoria: euros} em lista, do maior para o menor, multiplicado por f.
+   Recebe: m — o mapa; f — o fator (1 para ficar igual).
+   Devolve: array de {label, value}. */
+const porValor=(m,f)=>Object.keys(m).map(k=>({label:k,value:m[k]*f})).sort((a,b)=>b.value-a.value);
+/* A base anual das despesas para projetar, só com as que se repetem todos os anos: o último
+   ano completo com alguma; sem nenhum, o ano corrente anualizado (×12 sobre os meses
+   decorridos). As que não se repetem (obras, reparações…) somam-se no mesmo ano, para se
+   dizer o que ficou de fora — sem anualizar, porque uma obra paga uma vez não se multiplica.
+   O metrics() continua com as despesas todas.
    Recebe: pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio para o âmbito atual.
-   Devolve: {op, year, anualizado} — as despesas anuais (euros, na quota do proprietário
-   filtrado), o ano de onde vêm e se foram anualizadas. */
+   Devolve: {op, year, anualizado, fora, porCat, foraPorCat} — op as despesas que se repetem,
+   por ano (euros, na quota do proprietário filtrado); year o ano de onde vêm; anualizado se
+   foram anualizadas; fora o total das que não se repetem nesse ano; porCat e foraPorCat os
+   dois por categoria ({label, value}, do maior para o menor). */
 function opBase(pid){
   const anos=[...new Set(db.transactions.map(t=>Number(String(t.date||'').slice(0,4))).filter(y=>y&&y<YEAR))].sort((a,b)=>b-a);
-  for(const y of anos){const op=metrics(y,pid,{share:true}).op;if(op>0)return{op,year:y,anualizado:false}}
-  return{op:metrics(YEAR,pid,{share:true}).op*anualFator(YEAR),year:YEAR,anualizado:true};
+  const monta=(y,d,f)=>{const porCat=porValor(d.dentro,f),foraPorCat=porValor(d.fora,1);
+    return {op:sum(porCat.map(x=>x.value)),year:y,anualizado:y===YEAR,fora:sum(foraPorCat.map(x=>x.value)),porCat,foraPorCat}};
+  for(const y of anos){const d=despesasDoAno(y,pid);if(sum(Object.values(d.dentro))>0)return monta(y,d,1)}
+  return monta(YEAR,despesasDoAno(YEAR,pid),anualFator(YEAR));
 }
 /* fração do movimento que cabe ao proprietário filtrado — só quando se pede share, o filtro é uma
    pessoa (não um grupo) e o movimento tem imóvel; nos restantes casos conta por inteiro

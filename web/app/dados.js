@@ -65,6 +65,21 @@ const CATS0={
   'Dívidas a terceiros':['Reembolso de empréstimo','Juros'],
   'Outros':[]
 };
+/* a regra de origem da projeção das despesas: que categorias (ou «Categoria/Sub») voltam
+   todos os anos. A sub manda sobre a categoria; o que aqui não está não se repete — as
+   categorias que a pessoa cria incluídas. O Crédito à habitação fica de fora porque a
+   projeção tira as prestações do plano de cada hipoteca: contá-las aqui era contar duas vezes. */
+const DESPESAS_REPETEM0={
+  'Impostos':true,'Impostos/Imposto do selo':false,'Impostos/Mais-valias':false,'Impostos/Outro imposto':false,
+  'Condomínio':true,'Condomínio/Quota extraordinária':false,
+  'Seguros':true,'Água, luz e gás':true,
+  'Gestão e mediação':false,'Gestão e mediação/Gestão do imóvel':true,
+  'Serviços profissionais':false,'Serviços profissionais/Contabilidade':true,
+  'Limpeza e jardim':true,
+  'Custos bancários':false,'Custos bancários/Comissões':true,
+  'Obras e benfeitorias':false,'Manutenção e reparações':false,'Mobiliário e equipamento':false,
+  'Crédito à habitação':false,'Dívidas a terceiros':false,'Outros':false
+};
 /* receitas: rendas, reembolsos, empréstimos recebidos… */
 const CATS_IN0={
   'Rendas':['Renda mensal','Renda em atraso','Caução'],
@@ -304,9 +319,10 @@ function migrateSettlements(d){
 /* categorias novas que uma base antiga ainda não tem; e o mapa categoria → coluna do
    Anexo F, completado com as regras de origem que faltem sem pisar as que a pessoa mudou
    Recebe: st — o objeto settings da base.
-   Devolve: nada — completa st.cats, st.catsIn, st.exclude e st.irsMapa no próprio objeto. */
+   Devolve: nada — completa st.cats, st.catsIn, st.exclude, st.repete e st.irsMapa no próprio objeto. */
 function fillCats(st){
   st.exclude=(st.exclude&&typeof st.exclude==='object')?st.exclude:{};
+  st.repete=(st.repete&&typeof st.repete==='object'&&!Array.isArray(st.repete))?st.repete:{};
   /* uma cópia colada à mão pode trazer um texto onde há uma árvore: o «in» rebentava */
   if(!st.cats||typeof st.cats!=='object'||!Object.keys(st.cats).length)st.cats=JSON.parse(JSON.stringify(CATS0));
   else['Crédito à habitação','Dívidas a terceiros'].forEach(k=>{if(!(k in st.cats))st.cats[k]=CATS0[k].slice()});

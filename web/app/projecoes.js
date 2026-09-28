@@ -32,13 +32,13 @@ function mesesEmVigor(c,ano){
   return Math.max(0,ate-de);
 }
 /* Os números da projeção, sem HTML: por ano do horizonte (s.years), as rendas
-   dos contratos ativos com o aumento anual de cada um, as despesas a partir da
-   base de opBase com a inflação, as prestações segundo o plano de cada hipoteca
+   dos contratos ativos com o aumento anual de cada um, as despesas que se repetem
+   (a base de opBase) com a inflação, as prestações segundo o plano de cada hipoteca
    (param quando o crédito acaba) e o cashflow; mais a dívida no fim de cada ano.
    Recebe: pid — id do imóvel, 'g:ID' de um grupo, ou null/vazio para o âmbito todo.
    Devolve: {rows, act, debtY, base} — rows é um array de {yr, rent, exp, loan, cf, per}
    (per: a renda de cada contrato, pela ordem de act); act os contratos ativos da vista;
-   debtY a dívida no fim de cada ano; base o {op, year, anualizado} de opBase. */
+   debtY a dívida no fim de cada ano; base o que opBase devolve. */
 function projRows(pid){
   const s=db.settings,n=Math.max(1,Math.round(s.years)),pps=pidProps(pid);
   /* ctVivo: quem corta por datas é o mesesEmVigor, ano a ano. Filtrar à
@@ -71,9 +71,32 @@ function projRows(pid){
     const a=amort(l,(i+1)*12);return a.rows.length?a.rows[a.rows.length-1].bal:0})))));
   return {rows,act,debtY,base};
 }
+/* Os nomes das categorias que mais pesam, para o meio de uma frase: as três
+   primeiras e reticências se houver mais. Ficam com a maiúscula: «Água, luz e gás»
+   tem vírgulas, e em minúsculas não se via onde acabava uma e começava a outra.
+   Recebe: l — array de {label, value}, do maior para o menor.
+   Devolve: o texto, ex.: «Impostos, Condomínio, Seguros…»; '' sem categorias. */
+function projNomesCats(l){
+  const n=l.map(x=>String(x.label));
+  return n.length>3?n.slice(0,3).join(', ')+'…':listaE(n);
+}
+/* O que o cabeçalho das Projeções diz das despesas: quanto entra por ano, de que ano
+   e de que categorias; quanto ficou de fora por não se repetir; e a porta para escolher
+   quais se repetem. Sem nenhuma que se repita, diz que a projeção não conta despesas.
+   Recebe: base — o {op, year, anualizado, fora, porCat, foraPorCat} de opBase.
+   Devolve: o HTML (texto) das linhas de ajuda. */
+function projDespesasTxt(base){
+  const de=base.anualizado?'as de '+base.year+' até hoje, anualizadas':'as de '+base.year;
+  const dentro=base.op>0
+    ?`Despesas que se repetem: <b>${euro(base.op)}/ano</b> — ${de} (${esc(projNomesCats(base.porCat))}); crescem com a inflação.`
+    :'Ainda não há despesas que se repetem todos os anos (IMI, condomínio, seguros…): a projeção não conta despesas.';
+  const fora=base.fora>0?` Ficam de fora <b>${euro(base.fora)}</b> que não se repetem todos os anos (${esc(projNomesCats(base.foraPorCat))}).`:'';
+  const porta=base.op>0||base.fora>0?`<div class="u-mt-8px"><button type="button" class="btn sm" data-toca="ecra" data-click="go('settings');goSet('repete')">Escolher as que se repetem</button></div>`:'';
+  return `<div class="hint u-mt-12px">${dentro}${fora}</div>${porta}`;
+}
 /* Projeções ao horizonte definido nas definições (s.years), a partir de
    projRows: KPIs, gráficos e tabela ano a ano com uma coluna por contrato. O
-   cabeçalho diz de onde vem a base das despesas.
+   cabeçalho diz de onde vem a base das despesas e o que ficou de fora.
    Devolve: string com o HTML completo da vista. */
 function vProjections(){
   if(projProp&&!pidProps(projProp).length)projProp='';
@@ -83,8 +106,7 @@ function vProjections(){
     <label>Horizonte (anos)<input type="text" inputmode="numeric" value="${s.years}" data-change="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label>
     <label>Aumento anual (%)<input type="text" inputmode="decimal" value="${dec(s.growth)}" data-change="setSet('growth',numTaxa(this.value))"></label>
     <label>Inflação das despesas (%)<input type="text" inputmode="decimal" value="${dec(s.inflation)}" data-change="setSet('inflation',numTaxa(this.value))"></label></div>
-    <div class="hint u-mt-9px">Cada contrato tem o seu aumento. Em Portugal há um coeficiente máximo publicado todos os anos.</div>
-    <div class="hint u-mt-6px">Despesas: <b>${euro(base.op)}/ano</b> — ${base.anualizado?'o ano corrente anualizado, porque ainda não há um ano completo com despesas':'as de '+base.year+', o último ano completo com despesas'}; crescem com a inflação.</div>`);
+    <div class="hint u-mt-9px">Cada contrato tem o seu aumento. Em Portugal há um coeficiente máximo publicado todos os anos.</div>`);
   /* a saída do vazio leva aos Contratos ou aos Imóveis: com esse serviço
      desligado nesta conta o botão não se escreve, e a frase diz quem o liga */
   if(!act.length)return head+`<div class="empty u-mt-14px"><b>Nenhum contrato ativo</b>As projeções partem das rendas contratadas.
@@ -93,7 +115,9 @@ function vProjections(){
   const first=rows[0],last=rows[rows.length-1],labels=rows.map(r=>String(r.yr).slice(2));
   const baseTxt=' Aqui: '+euro(base.op)+'/ano, '+(base.anualizado?'o ano corrente anualizado.':'base '+base.year+'.');
   const varRenda=first.rent?last.rent/first.rent-1:0;
-  return head+(ownerFilter&&!ownerIsGrp()?`<div class="hint u-mt-12px">Valores na quota-parte de <b>${esc(ownerFilterName())}</b>.</div>`:'')+`<div class="grid u-mt-14px">
+  /* fora do painel de análise: o painel abre-se só a pedido, e o que conta
+     como despesa é o que mais muda a leitura da projeção */
+  return head+(ownerFilter&&!ownerIsGrp()?`<div class="hint u-mt-12px">Valores na quota-parte de <b>${esc(ownerFilterName())}</b>.</div>`:'')+projDespesasTxt(base)+`<div class="grid u-mt-14px">
     ${kpi('Renda anual hoje',euro(first.rent),'','a preços de '+YEAR,WHY.rendaHoje,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',yearly:rows.map(r=>({label:r.yr,value:r.rent}))}))}
     ${kpi('Renda em '+last.yr,euro(last.rent),varRenda>=0?'pos':'neg',(varRenda>=0?'+':'')+pct(varRenda)+' acumulado',WHY.rendaFim,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',yearly:rows.map(r=>({label:r.yr,value:r.rent}))}))}
     ${kpi('Total do período',euro(sum(rows.map(r=>r.rent))),'',n+' anos de rendas',WHY.totalPeriodo,()=>{let a=0;return {fmt:euro,yearlyTitle:'Acumulado ano a ano',yearly:rows.map(r=>({label:r.yr,value:a+=r.rent}))}})}
@@ -104,7 +128,7 @@ function vProjections(){
       {name:'Cashflow',values:rows.map(r=>r.cf),color:PAL[1]}],labels,{h:210,marks:decadeMarks(YEAR,n)}))}
     ${card('Dívida por amortizar','Somando os créditos em uso',cLine([{name:'Em dívida',values:debtY,color:'#d6a34a'}],labels,{h:200,marks:decadeMarks(YEAR,n)}))}</div>
   <div class="u-mt-14px">${card('Detalhe ano a ano','Uma coluna por contrato ativo',`<div class="tablewrap"><table class="table"><thead><tr>
-    <th>Ano</th>${act.map(c=>`<th>${esc(ctName(c))}</th>`).join('')}<th>Rendas</th><th>Despesas</th><th>Prestações</th><th>Cashflow</th></tr></thead><tbody>
+    <th>Ano</th>${act.map(c=>`<th>${esc(ctName(c))}</th>`).join('')}<th>Rendas</th><th>Despesas recorrentes</th><th>Prestações</th><th>Cashflow</th></tr></thead><tbody>
     ${rows.map(r=>`<tr><td><b>${r.yr}</b></td>${r.per.map(v=>`<td>${euro(v)}</td>`).join('')}
       <td><b>${euro(r.rent)}</b></td><td class="neg">${euro(r.exp)}</td><td class="amber">${euro(r.loan)}</td>
       <td class="${r.cf>=0?'pos':'neg'}"><b>${euro(r.cf)}</b></td></tr>`).join('')}</tbody></table></div>`)}</div>`;

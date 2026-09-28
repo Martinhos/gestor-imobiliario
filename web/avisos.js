@@ -41,6 +41,27 @@ var AVISOS = [
         ],
       },
       {
+        titulo: 'Quem colabora vê logo o que pode fazer',
+        afeta: ['colaboradores'],
+        itens: [
+          'A visão geral de quem colabora abre com «O que podes fazer»: um botão por cada coisa que o cargo deixa — marcar visita, adicionar inquilino, novo contrato, registar movimento, confirmar planeados, editar a ficha — e as próximas visitas.',
+          'No telemóvel, a barra de baixo dá o lugar dos separadores que o cargo não abre aos que abre: um gestor de visitas tem as Visitas a um toque.',
+          'A ficha do imóvel diz o que podes fazer nele e tem os botões; já não diz «só de leitura» a quem a pode editar. O cartão do imóvel, o menu ⋯ e «Imóveis onde colaboras» dizem o mesmo.',
+          'Quem marca visitas tem nos primeiros passos «Marca a primeira visita», com o tutorial.',
+          'Os Movimentos e os Planeados já não aparecem vazios a quem só vê hipotecas ou valores.',
+        ],
+      },
+      {
+        titulo: 'A projeção só conta as despesas que se repetem',
+        afeta: ['movimentos'],
+        itens: [
+          'As Projeções partiam de todas as despesas do último ano: uma obra aparecia como se voltasse todos os anos. Agora entram só as que se repetem — IMI, condomínio, seguros, água, luz e gás, gestão do imóvel, contabilidade, limpeza e comissões do banco.',
+          'Obras, reparações, mobiliário, comissões de arrendamento, quotas extraordinárias e impostos de uma vez ficam de fora, e a página diz quanto ficou de fora.',
+          'Em Definições → Despesas que se repetem escolhes, categoria a categoria (e subcategoria), o que entra. Uma despesa com a etiqueta «Recorrente», ou da categoria de um planeado no mesmo imóvel, entra sempre.',
+          'Mudar o nome a uma categoria já não a devolve aos totais nem lhe perde a coluna do IRS, e já não se pode dar a uma categoria o nome de outra.',
+        ],
+      },
+      {
         titulo: 'Correções que se sentem',
         afeta: ['app'],
         itens: [

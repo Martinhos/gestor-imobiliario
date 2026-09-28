@@ -613,7 +613,7 @@ const WHY={
   rendaHoje:'Soma das rendas anuais dos contratos ativos, aos valores de hoje.',
   rendaFim:'A mesma soma no último ano do horizonte, já com os aumentos anuais aplicados.',
   totalPeriodo:'Soma de todas as rendas do período projetado.',
-  cashflowFim:'Rendas projetadas menos despesas menos as prestações previstas nesse ano. As despesas partem do último ano completo com despesas (sem nenhum, do ano corrente anualizado) e crescem com a inflação.'
+  cashflowFim:'Rendas projetadas menos despesas menos as prestações previstas nesse ano. Nas despesas só entram as que se repetem todos os anos (IMI, condomínio, seguros…) — obras, reparações e outras pontuais ficam de fora. Partem do último ano completo com elas (sem nenhum, do ano corrente anualizado) e crescem com a inflação.'
 };
 // cartão genérico das vistas: título, subtítulo opcional e corpo em HTML
 // Recebe: t — o título; s — o subtítulo (vazio para não aparecer); b — o corpo, em HTML.

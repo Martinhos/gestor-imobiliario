@@ -103,6 +103,7 @@ const DEF_LINHAS=[
   {sec:'dados',ordem:10,page:'cats',label:'Tipos de movimento',icon:'swap',sub:()=>{const cs=cats(),ci=catsIn();
     return (Object.keys(cs).length+Object.keys(ci).length)+' categorias · '+sum(Object.keys(cs).map(k=>cs[k].length).concat(Object.keys(ci).map(k=>ci[k].length)))+' subtipos'}},
   {sec:'dados',ordem:20,page:'irs',label:'IRS e dedução',icon:'file',sub:'Que despesas entram em cada coluna do Anexo F'},
+  {sec:'dados',ordem:25,html:()=>servicoLigado('projections')?navRow(SUBPAGE.repete.label,SUBPAGE.repete.sub,'clock','repete'):''},
   {sec:'dados',ordem:30,page:'tags',label:'Etiquetas',icon:'tag',sub:()=>(db.settings.tags||[]).length+' etiquetas'},
   {sec:'dados',ordem:40,page:'groups',label:'Grupos',icon:'users',sub:()=>(db.groups||[]).length+' grupos'},
   {sec:'dados',ordem:50,page:'filtros',label:'Filtros comuns',icon:'filter',sub:()=>(db.settings.filters||[]).length+' filtros'},
@@ -172,6 +173,7 @@ function vSettings(){
   if(setPage==='groups')return backRow+vGroups();
   if(setPage==='filtros')return backRow+vFiltrosComuns();
   if(setPage==='irs')return backRow+vIrsMapa();
+  if(setPage==='repete')return backRow+vRepete();
   if(setPage==='dados')return backRow+vImport();
   return raizDasDefinicoes();
 }
@@ -347,8 +349,39 @@ function promptModal(title,label,value,cb){
 // Recebe: tk — a árvore: 'cats' (pagamentos) ou 'catsIn' (receitas).
 // Devolve: nada — abre o prompt; só ao guardar cria e grava.
 function addCat(tk){promptModal('Nova categoria','Nome',null,v=>{const cs=db.settings[tk]||(db.settings[tk]={});if(!cs[v])cs[v]=[];save();render();toast('Categoria criada.')})}
+/* Leva as escolhas guardadas por categoria (as exclusões dos totais, as despesas que
+   se repetem, as colunas do Anexo F) das chaves antigas para as novas, ou tira-as.
+   Vai chave a chave, e não por prefixo: «Obras/» apanhava também uma categoria
+   chamada «Obras/Casa», que é outra.
+   Recebe: o — o objeto das escolhas (pode faltar); pares — array de [antiga, nova],
+   com nova null para tirar.
+   Devolve: nada — muda o objeto. */
+function moverChaves(o,pares){
+  if(!o)return;
+  pares.forEach(([a,n])=>{if(!Object.prototype.hasOwnProperty.call(o,a))return;if(n!=null)o[n]=o[a];delete o[a]});
+}
+/* Leva as escolhas de categorias e subcategorias para os nomes novos, ou tira-as, em
+   cada objeto de escolhas pela chave dele. As despesas que se repetem e o Anexo F só
+   existem na árvore dos pagamentos.
+   Recebe: tk — a árvore ('cats' ou 'catsIn'); pares — array de [de, para], cada um
+   [categoria] ou [categoria, sub], com para null para tirar.
+   Devolve: nada — muda db.settings.exclude, .repete e .irsMapa. */
+function moverEscolhas(tk,pares){
+  const st=db.settings,com=f=>pares.map(([a,n])=>[f(a[0],a[1]),n?f(n[0],n[1]):null]);
+  moverChaves(st.exclude,com((c,sb)=>excKey(tk,c,sb)));
+  if(tk!=='cats')return;
+  moverChaves(st.repete,com(repeteChave));
+  moverChaves(st.irsMapa,com((c,sb)=>c+(sb?' / '+sb:'')));
+}
+/* Os pares de moverEscolhas para uma categoria inteira: ela e cada subcategoria dela.
+   Recebe: tk — a árvore; cat — a categoria; nova — o nome novo, ou null para tirar.
+   Devolve: array de [de, para]. */
+const paresDaCategoria=(tk,cat,nova)=>[[[cat],nova==null?null:[nova]]]
+  .concat(((db.settings[tk]||{})[cat]||[]).map(sb=>[[cat,sb],nova==null?null:[nova,sb]]));
 /* Renomeia uma categoria mantendo a ordem (reconstrói o objeto) e atualiza os
-   movimentos dessa árvore que a usavam. Nome vazio ou igual só repinta.
+   movimentos dessa árvore que a usavam e as escolhas guardadas por nome (fora dos
+   totais, repete-se, coluna do Anexo F). Nome vazio ou igual só repinta; o nome de
+   outra categoria que já existe não se aceita — fundia as duas e perdia as subcategorias.
    Recebe: tk — a árvore: 'cats' ou 'catsIn'; oldName — o nome atual;
    newName — o nome novo, tal como vem do campo (é-lhe feito trim).
    Devolve: nada — grava e repinta. */
@@ -356,18 +389,22 @@ function renameCat(tk,oldName,newName){
   newName=String(newName||'').trim();
   if(!newName||newName===oldName)return render();
   const cs=db.settings[tk]||{},out={};
+  if(Object.prototype.hasOwnProperty.call(cs,newName)){render();return toast('Já há uma categoria com esse nome.')}
+  moverEscolhas(tk,paresDaCategoria(tk,oldName,newName));
   Object.keys(cs).forEach(k=>{out[k===oldName?newName:k]=cs[k]});
   db.settings[tk]=out;
   treeTx(tk).forEach(t=>{if(t.category===oldName)t.category=newName});
   save();render();toast('Categoria renomeada.');
 }
 // Apaga a categoria depois de confirmar com o impacto: os movimentos que a
-// usavam ficam sem categoria nem subcategoria (não se apagam).
+// usavam ficam sem categoria nem subcategoria (não se apagam), e as escolhas
+// dela (fora dos totais, repete-se, coluna do Anexo F) saem com ela.
 // Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria.
 // Devolve: nada — abre a confirmação; só ao confirmar apaga e grava.
 function delCat(tk,k){
   const used=treeTx(tk).filter(t=>t.category===k).length;
   confirmModal('Apagar categoria',`Apagar “${esc(k)}”?${used?` ${used} movimento(s) ficam sem categoria.`:''}`,()=>{
+    moverEscolhas(tk,paresDaCategoria(tk,k,null));
     delete db.settings[tk][k];
     treeTx(tk).forEach(t=>{if(t.category===k){t.category='';t.sub=''}});
     save();render();toast('Categoria apagada.');
@@ -380,7 +417,9 @@ function addSub(tk,k){promptModal('Nova subcategoria','Nome',null,v=>{
   const cs=db.settings[tk]||(db.settings[tk]={}),l=cs[k]||(cs[k]=[]);
   if(l.indexOf(v)<0)l.push(v);save();render();toast('Subcategoria criada.')})}
 /* Muda o nome de uma subcategoria via prompt: atualiza a lista, os movimentos
-   que a usavam e migra a marca de exclusão dos totais para o nome novo.
+   que a usavam e leva as escolhas dela (fora dos totais, repete-se, coluna do
+   Anexo F) para o nome novo. O nome de outra subcategoria da mesma categoria
+   não se aceita: ficavam duas iguais.
    Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria;
    old — o nome atual da subcategoria.
    Devolve: nada — abre o prompt; só ao guardar renomeia e grava. */
@@ -388,14 +427,15 @@ function renameSub(tk,k,old){
   promptModal('Mudar o nome da subcategoria','Nome',old,nn=>{
     nn=String(nn||'').trim();if(!nn||nn===old)return;
     const cs2=db.settings[tk]||{},l=cs2[k]||[];
+    if(l.indexOf(nn)>-1)return toast('Já há uma subcategoria com esse nome.');
     const i=l.indexOf(old);if(i>-1)l[i]=nn;
     treeTx(tk).forEach(t=>{if(t.category===k&&t.sub===old)t.sub=nn});
-    const e=db.settings.exclude||{};if(e[excKey(tk,k,old)]){e[excKey(tk,k,nn)]=true;delete e[excKey(tk,k,old)]}
+    moverEscolhas(tk,[[[k,old],[k,nn]]]);
     save();render();toast('Subcategoria renomeada.');
   });
 }
-// Apaga a subcategoria depois de confirmar com o impacto: sai da lista e dos
-// movimentos que a usavam (ficam só sem subcategoria).
+// Apaga a subcategoria depois de confirmar com o impacto: sai da lista, dos
+// movimentos que a usavam (ficam só sem subcategoria) e das escolhas guardadas.
 // Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria;
 // sb — o nome da subcategoria.
 // Devolve: nada — abre a confirmação; só ao confirmar apaga e grava.
@@ -404,6 +444,7 @@ function delSub(tk,k,sb){
      executava logo — a mesma ação, na mesma página, ora protegia ora não */
   const usados=treeTx(tk).filter(t=>t.category===k&&t.sub===sb).length;
   confirmModal('Apagar subcategoria',`“${esc(sb)}” sai de ${k}${usados?` e de ${usados} movimento(s) que a usam`:''}.`,()=>{
+    moverEscolhas(tk,[[[k,sb],null]]);
     const cs=db.settings[tk]||{};cs[k]=(cs[k]||[]).filter(x=>x!==sb);
     treeTx(tk).forEach(t=>{if(t.category===k&&t.sub===sb)t.sub=''});
     save();render();toast('Subcategoria apagada.');
@@ -477,6 +518,61 @@ function setIrsMapa(chave,col){
 function resetIrsMapa(){
   confirmModal('Repor colunas','Volta às regras de origem do Anexo F. As colunas que mudaste aqui desaparecem; as escolhidas na ficha de cada despesa ficam.',()=>{
     db.settings.irsMapa=JSON.parse(JSON.stringify(IRS_MAPA0));save();render();toast('Colunas repostas.');
+  });
+}
+/* ===== Despesas que se repetem ===== */
+/* Subpágina «Despesas que se repetem»: o que a projeção das despesas conta, e um
+   interruptor por categoria de pagamentos com as subcategorias por baixo. Cada uma diz
+   quanto se gastou nela no ano-base da projeção (opBase, sem anualizar), e onde a pessoa
+   mudou a regra de origem diz qual era.
+   Devolve: o HTML (texto) da subpágina. */
+function vRepete(){
+  const cs=cats(),e=db.settings.repete||{},b=opBase(null),d=despesasDoAno(b.year,null);
+  const de=' em '+b.year+(b.anualizado?' até hoje':''),valor=Object.assign({},d.fora);
+  Object.keys(d.dentro).forEach(k=>{valor[k]=(valor[k]||0)+d.dentro[k]});
+  const mudou=k=>Object.prototype.hasOwnProperty.call(e,k);
+  const origem=v=>'escolha tua; de origem, '+(v?'entra':'fica de fora');
+  const chkRepete=(on,act,rotulo)=>`<label class="check"><input type="checkbox" ${on?'checked':''} data-change="${act}"> ${rotulo}</label>`;
+  const cartoes=Object.keys(cs).map(k=>{
+    const on=repeteRegra(k),subs=cs[k]||[],subOn=subs.map(sb=>repeteRegra(k,sb));
+    const misto=subOn.some(v=>v!==on);
+    const estado=(on?'Entra na projeção':'Fica de fora')+(misto?(on?', menos as subcategorias desmarcadas':', menos as subcategorias marcadas'):'')+'.';
+    return `<div class="card u-p-12px-13px">
+      <div class="row-between u-ai-center u-g-8px">
+        <b>${esc(k)}</b>${valor[k]?`<span class="badge grey">${euro(valor[k])}${esc(de)}</span>`:''}</div>
+      <div class="u-mt-8px">${chkRepete(on,`toggleRepete('${jsq(k)}')`,'Repete-se todos os anos')}</div>
+      <div class="small u-mt-2px">${estado}${mudou(k)?' <b>'+origem(repeteOrigem(k))+'.</b>':''}</div>
+      ${subs.length?`<div class="list u-g-6px u-mt-8px u-pl-18px">${subs.map((sb,i)=>`<div>${chkRepete(subOn[i],`toggleRepete('${jsq(k)}','${jsq(sb)}')`,esc(sb))}${mudou(repeteChave(k,sb))?`<div class="small">${origem(repeteOrigem(k,sb))}.</div>`:''}</div>`).join('')}</div>`:''}
+    </div>`;
+  }).join('<div class="u-h-10px"></div>');
+  return `${card('O que a projeção conta','As despesas que voltam todos os anos',`
+    <div class="hint">A projeção das despesas parte do último ano completo e faz crescer com a inflação só as que voltam todos os anos: IMI, condomínio, seguros, água e luz, gestão do imóvel, contabilidade, limpeza. Obras, reparações, mobiliário, comissões de arrendamento, mais-valias e o imposto do selo pagam-se de vez em quando e ficam de fora.</div>
+    <div class="hint u-mt-8px">As prestações do crédito também não entram aqui: a projeção tira-as do plano de cada hipoteca.</div>
+    <div class="hint u-mt-8px">Uma despesa com a etiqueta «Recorrente», ou com um planeado da mesma categoria no mesmo imóvel, entra sempre. As que não têm categoria entram, porque não há como saber. A vista geral e a avaliação continuam a contar as despesas todas.</div>`)}
+  <div class="u-h-14px"></div>
+  ${cartoes}
+  <div class="toolbar u-m-13px-0-0"><button class="btn" data-toca="dados" data-risco="destroi" data-click="resetRepete()">Repor a regra de origem</button></div>`;
+}
+/* Liga ou desliga «repete-se» numa categoria ou subcategoria de pagamentos. Só se guarda
+   o que difere do que já valeria sem esta escolha — voltar ao de origem apaga-a, e as
+   subs voltam à regra delas (a Quota extraordinária fica de fora outra vez). Mudar a
+   categoria leva as subs com ela: as escolhas que a pessoa fez nas subs dessa categoria saem.
+   Recebe: cat — a categoria; sub (opcional) — a subcategoria.
+   Devolve: nada — grava em db.settings.repete e redesenha. */
+function toggleRepete(cat,sub){
+  const st=db.settings,e=st.repete=(st.repete&&typeof st.repete==='object')?st.repete:{};
+  const k=repeteChave(cat,sub),novo=!repeteRegra(cat,sub);
+  if(!sub)(cats()[cat]||[]).forEach(sb=>{delete e[repeteChave(cat,sb)]});
+  delete e[k];
+  if(repeteRegra(cat,sub)!==novo)e[k]=novo;
+  save();render();
+}
+/* Repõe a regra de origem (DESPESAS_REPETEM0) depois de confirmar: as escolhas feitas
+   aqui desaparecem; a etiqueta «Recorrente» e os planeados continuam a pôr despesas dentro.
+   Devolve: nada — abre a confirmação; só ao confirmar repõe e grava. */
+function resetRepete(){
+  confirmModal('Repor a regra de origem','Volta à regra de origem das despesas que se repetem. As escolhas que fizeste aqui desaparecem; a etiqueta «Recorrente» e os planeados continuam a contar.',()=>{
+    db.settings.repete={};save();render();toast('Regra de origem reposta.');
   });
 }
 // Pede o nome e cria uma etiqueta (ignora repetidas); grava e repinta.
