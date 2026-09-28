@@ -5,7 +5,7 @@
   color-scheme:light dark;
   --bg:#f7f8fa; --card:#fff; --field:#fff; --chip:#f2f4f3; --tint:#f6faf8; --press:#e4e9e6;
   --ink:#17221d; --muted:#5a635e; --line:#e7ebe8; --line2:#cfd8d3;
-  --accent:#244c3b; --accent-ink:#fff; --accent-soft:#dfece6; --accent-press:#1c3d2f; --accent-fundo:#132a20;
+  --accent:#244c3b; --accent-ink:#fff; --accent-soft:#dfece6; --accent-press:#1c3d2f; --accent-fundo:#132a20; --accent-relevo:#15302a;
   --danger:#b94a48; --danger-soft:#f7e8e7; --warn:#9a6400; --warn-soft:#f6eeda;
   --side:#1a3a2c; --side-ink:#dfece6; --side-muted:#9dbdae; --side-hover:rgba(255,255,255,.07); --side-on:rgba(255,255,255,.13);
   --track:#dfe3e1; --blur:rgba(247,248,250,.94); --shadow:0 24px 60px rgba(0,0,0,.28);
@@ -53,7 +53,7 @@
   color-scheme:dark;
   --bg:#12141b; --card:#1b1e28; --field:#20242f; --chip:#272b38; --tint:#1f2330; --press:#333949;
   --ink:#eef0f6; --muted:#9aa3b8; --line:#2b3040; --line2:#3a4054;
-  --accent:#5ee0a8; --accent-ink:#0b1410; --accent-soft:#1c3a33; --accent-press:#7ceabb; --accent-fundo:#9df0cd;
+  --accent:#5ee0a8; --accent-ink:#0b1410; --accent-soft:#1c3a33; --accent-press:#7ceabb; --accent-fundo:#9df0cd; --accent-relevo:#2e9b70;
   --danger:#ff8a80; --danger-soft:#3a2326; --warn:#ffc35c; --warn-soft:#3a2f14;
   --side:#161a3a; --side-ink:#e3e6ff; --side-muted:#9aa0d6; --side-hover:rgba(255,255,255,.07); --side-on:rgba(94,224,168,.18);
   --track:#3a4054; --blur:rgba(18,20,27,.92); --shadow:0 24px 60px rgba(0,0,0,.6);
@@ -402,17 +402,26 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
 .tabbar.mais.d3 a:last-child{width:50%;justify-self:center}
 .tabbar.mais.d2,.tabbar.mais.d1{grid-template-columns:1fr auto 1fr}
 .tabbar.mais.d0{grid-template-columns:auto;justify-content:center}
-/* Um botão, não um quinto destino: sólido na cor da marca, redondo, 56px
-   contra os 48 dos destinos, a subir 12px acima da borda da barra (a margem
-   negativa leva os 5px de padding mais os 12), com a sombra do FAB. A altura
-   da barra não muda: a linha da grelha continua a ser a dos destinos, e o
-   que sobe é só o botão. O scale e a transição são os do .fab. Sem :hover
-   de propósito — no telemóvel não há. */
-.tabmais{width:56px;height:56px;padding:0;border:0;border-radius:50%;align-self:start;justify-self:center;margin-top:-17px;
+/* Um botão, não um quinto destino: uma tecla em relevo, retangular de cantos
+   arredondados, sólida na cor da marca, 50px contra os 48 dos destinos — e
+   INTEIRA dentro da barra. A primeira versão era um círculo a subir 12px
+   acima da borda, e no telemóvel saía cortado: o que ultrapassa a barra
+   fica à mercê de quem recorta. O relevo é uma aresta de 3px por baixo
+   (--accent-relevo, mais escura nos dois temas) mais a sombra difusa, e um
+   fio de luz no topo; carregar afunda a tecla — desce 3px e a aresta some.
+   Centrada na linha dos destinos, com margem de -1px em cima e em baixo: a
+   caixa de margem fica nos 48 da linha, os 2px a mais pintam-se no padding
+   da barra, e nem a barra nem os destinos crescem (sem a margem, a linha da
+   grelha subia para 50 e esticava os destinos com ela). Sem :hover de
+   propósito — no telemóvel não há. */
+.tabmais{width:64px;height:50px;margin:-1px 0;padding:0;border:0;border-radius:14px;align-self:center;justify-self:center;
   background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;
-  box-shadow:0 8px 22px rgba(0,0,0,.28);cursor:pointer;transition:transform var(--rapido) var(--curva)}
-.tabmais:active{transform:scale(.96)}
+  box-shadow:0 3px 0 var(--accent-relevo),0 6px 14px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.22);
+  cursor:pointer;transition:transform var(--rapido) var(--curva),box-shadow var(--rapido) var(--curva)}
+.tabmais:active{transform:translateY(3px);box-shadow:0 0 0 var(--accent-relevo),0 2px 6px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.22)}
 .tabmais:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* nos ecrãs mais estreitos os quatro rótulos precisam da largura: a tecla encolhe */
+@media(max-width:340px){.tabmais{width:56px}}
 /* body à frente: estas regras vivem ANTES das de base do .fab/.totop na
    folha, e sem mais especificidade perdiam — o FAB voltava a aparecer */
 @media(max-width:900px){

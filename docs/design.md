@@ -194,11 +194,11 @@ vazio não se cola aos KPIs que o antecedem (estilos.css:.grid+.empty).
 
 Os raios seguem a hierarquia da peça: 20px a janela (estilos.css:.sheet; 20
 20 0 0 na folha de baixo, a mesma .sheet dentro de
-estilos.css:@media(max-width:520px)), 18 o FAB (estilos.css:.fab) e redondo
-o + da barra de baixo (estilos.css:.tabmais), 16 o
+estilos.css:@media(max-width:520px)), 18 o FAB (estilos.css:.fab), 16 o
 cartão e o vazio (estilos.css:.card, estilos.css:.empty), 14 a secção, a
 dobra e o addbox (estilos.css:.sect, estilos.css:.fold-head,
-estilos.css:.addbox), 13 os menus e as opções .opt (estilos.css:.selpop,
+estilos.css:.addbox) e a tecla + da barra de baixo (estilos.css:.tabmais),
+13 os menus e as opções .opt (estilos.css:.selpop,
 estilos.css:.menupop, estilos.css:.opt), 12 o toast, a caixa das etiquetas
 e as miniaturas (estilos.css:.toast, estilos.css:.tagbox,
 estilos.css:.thumb), 11 os botões, os campos, os itens da gaveta e o avatar
@@ -209,8 +209,10 @@ estilos.css:.tabbar), 9 o .btn.sm, as opções dos menus e o iconbtn
 pílulas: selos, etiquetas, crachás.
 
 Só flutua o que sobe: --shadow nos menus e na janela (estilos.css:.selpop,
-estilos.css:.menupop, estilos.css:.sheet); 0 8px 22px .28 no FAB e no + da
-barra de baixo (estilos.css:.fab, estilos.css:.tabmais); 0 16px 38px .30 no painel de filtros
+estilos.css:.menupop, estilos.css:.sheet); 0 8px 22px .28 no FAB
+(estilos.css:.fab); na tecla + da barra de baixo o relevo é outra coisa —
+uma aresta dura de 3px por baixo na cor --accent-relevo mais 0 6px 14px .22
+(estilos.css:.tabmais), e carregar afunda-a; 0 16px 38px .30 no painel de filtros
 (estilos.css:.fpanel>.card); 0 6px 18px .22 no menu do FAB
 (estilos.css:.fabmenu); a barra pegajosa deixa uma sombra só por baixo
 (estilos.css:.toolbar.stick). Os cartões não têm sombra, têm contorno
@@ -1069,10 +1071,13 @@ uma vizinhança que não existe. Também não desliza para o separador onde já 
 está: tocar no separador aceso é «leva-me ao topo», não uma travessia.
 
 A meio da barra vai o + (estilos.css:.tabmais; navegacao.js:buildTabbar):
-um botão, e não um quinto destino — sólido na cor da marca, redondo, 56px
-contra os 48 dos destinos, a subir 12px acima da borda da barra, com a
-sombra do FAB. No telemóvel é ele o botão de criar; o FAB fica só no ecrã
-largo, acima de 900px. Abre a folha com tudo o que a pessoa pode adicionar
+um botão, e não um quinto destino — uma tecla em relevo, retangular de
+cantos arredondados, sólida na cor da marca, 50px contra os 48 dos destinos,
+com a aresta por baixo que afunda ao carregar. Fica **inteira dentro da
+barra**: a primeira versão era um círculo a subir 12px acima da borda e no
+telemóvel saía cortado — o que ultrapassa a barra fica à mercê de quem
+recorta. No telemóvel é ela o botão de criar; o FAB fica só no ecrã largo,
+acima de 900px. Abre a folha com tudo o que a pessoa pode adicionar
 (acessos.js:acoesDeAdicionar — a mesma condição do FAB de cada lista, e só
 com o serviço ligado), com a ação natural do ecrã em primeiro e marcada
 «neste ecrã» (acessos.js:acaoDoSeparador); com uma só ação corre-a logo, e

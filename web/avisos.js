@@ -66,7 +66,7 @@ var AVISOS = [
         titulo: 'Um + a meio da barra de baixo',
         afeta: ['app'],
         itens: [
-          'No telemóvel, o botão redondo do canto deu lugar a um + sólido a meio da barra de baixo, sempre no mesmo sítio. Abre a lista do que podes adicionar — movimento, imóvel, contrato, inquilino, visita, planeado, hipoteca — com a ação do ecrã onde estás em primeiro; quem colabora vê só o que o cargo lhe dá.',
+          'No telemóvel, o botão redondo do canto deu lugar a uma tecla + em relevo a meio da barra de baixo, sempre no mesmo sítio. Abre a lista do que podes adicionar — movimento, imóvel, contrato, inquilino, visita, planeado, hipoteca — com a ação do ecrã onde estás em primeiro; quem colabora vê só o que o cargo lhe dá.',
           'No ecrã largo o botão do canto fica como estava.',
           'Cada lista vazia — imóveis, movimentos, inquilinos, proprietários, planeados, modelos, hipotecas, contratos — tem agora o botão verde da sua ação, como a vista geral já tinha, em vez de contar só com o botão do canto.',
         ],

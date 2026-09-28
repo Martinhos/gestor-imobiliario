@@ -228,24 +228,34 @@ describe('a folha de estilos e o design', () => {
     assert.match(css, /\.tabbar\.mais\.d0\{grid-template-columns:auto;justify-content:center\}/);
   });
 
-  test('o + é sólido, redondo, mais alto do que os destinos e sobe acima da barra, com o :active e a transição do FAB', () => {
+  /* A primeira versão era um círculo a subir 12px acima da borda da barra e
+     no telemóvel saía cortado. Agora é uma tecla em relevo, retangular, mais
+     alta do que os destinos mas inteira dentro da barra: sem margem negativa,
+     centrada na linha. */
+  test('o + é uma tecla em relevo: retangular de cantos arredondados, sólida, mais alta do que os destinos e dentro da barra; carregar afunda-a', () => {
     const m = /\.tabmais\{([^}]*)\}/.exec(css);
     assert.ok(m, 'a regra existe');
     const r = m[1];
-    assert.match(r, /width:56px/); assert.match(r, /height:56px/);
-    assert.match(r, /border-radius:50%/);
+    assert.match(r, /width:64px/); assert.match(r, /height:50px/);
+    assert.match(r, /border-radius:14px/, 'cantos ligeiramente arredondados, não um círculo');
     assert.match(r, /background:var\(--accent\)/, 'cor sólida, a da marca');
     assert.match(r, /color:var\(--accent-ink\)/);
-    assert.match(r, /margin-top:-\d+px/, 'sobe com margem negativa: a altura da barra não muda');
-    assert.match(r, /align-self:start/);
-    const fab = /\.fab\{([^}]*)\}/.exec(css)[1];
-    const sombra = (s) => (/box-shadow:([^;]+)/.exec(s) || [])[1];
-    assert.equal(sombra(r), sombra(fab), 'a sombra é a do FAB');
+    assert.doesNotMatch(r, /margin-top:-/, 'não sai da barra: sem a margem negativa que a fazia subir');
+    assert.match(r, /margin:-1px 0/, 'os 2px a mais entram no padding da barra: a linha da grelha fica nos 48 e os destinos não esticam');
+    assert.match(r, /align-self:center/, 'centrada na linha dos destinos');
+    assert.match(r, /box-shadow:0 3px 0 var\(--accent-relevo\),/, 'a aresta de 3px por baixo é o relevo');
+    assert.match(r, /inset 0 1px 0 rgba\(255,255,255,\.22\)/, 'o fio de luz no topo');
     assert.ok(/min-height:48px/.test(/\.tabbar a\{([^}]*)\}/.exec(css)[1]), 'controlo: os destinos têm 48px');
-    assert.match(r, /transition:transform var\(--rapido\) var\(--curva\)/);
-    assert.match(css, /\.tabmais:active\{transform:scale\(\.96\)\}/);
+    assert.match(r, /transition:transform var\(--rapido\) var\(--curva\),box-shadow var\(--rapido\) var\(--curva\)/);
+    assert.match(css, /\.tabmais:active\{transform:translateY\(3px\);box-shadow:0 0 0 var\(--accent-relevo\),/, 'carregar afunda a tecla e a aresta some');
     assert.match(css, /\.tabmais:focus-visible\{outline:2px solid var\(--accent\);outline-offset:2px\}/, 'o teclado vê onde está');
     assert.doesNotMatch(css, /\.tabmais:hover/, 'sem hover: no telemóvel não há');
+    assert.match(css, /@media\(max-width:340px\)\{\.tabmais\{width:56px\}\}/, 'nos ecrãs estreitos encolhe para os rótulos caberem');
+    // a aresta existe nos dois temas e é mais escura do que a face nos dois
+    const tokens = [...css.matchAll(/--accent:(#[0-9a-f]{6});[^\n]*--accent-relevo:(#[0-9a-f]{6})/g)].map((x) => [x[1], x[2]]);
+    assert.equal(tokens.length, 2, 'claro e escuro');
+    const luz = (h) => parseInt(h.slice(1, 3), 16) + parseInt(h.slice(3, 5), 16) + parseInt(h.slice(5, 7), 16);
+    tokens.forEach(([face, aresta]) => assert.ok(luz(aresta) < luz(face), 'a aresta ' + aresta + ' é mais escura do que a face ' + face));
   });
 
   test('até 900px o FAB, o leque e o fabpad somem; acima ficam como estavam', () => {
