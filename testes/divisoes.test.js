@@ -209,11 +209,30 @@ describe('a ficha do movimento mostra a divisão', () => {
 });
 
 describe('divisão entre imóveis', () => {
+  const p1 = app.normProp({ id: 'p1', name: 'P1', value: 300000, purchase: 100000 }), p2 = app.normProp({ id: 'p2', name: 'P2', value: 100000, purchase: 100000 });
+  const g = (amount, psplit) => app.normTx({ kind: 'expense', amount, groupId: 'g', date: '2026-01-01', psplit });
+
   test('por ajuste segue a mesma regra do extra', () => {
-    const p1 = app.normProp({ id: 'p1', name: 'P1' }), p2 = app.normProp({ id: 'p2', name: 'P2' });
-    const g = (amount, parts) => app.normTx({ kind: 'expense', amount, groupId: 'g', date: '2026-01-01', psplit: { mode: 'adjust', parts } });
-    igual(app.psplitCents(g(15, { p1: 5 }), [p1, p2], 1500), [1000, 500]);
-    igual(app.psplitCents(g(10, { p1: 20, p2: 20 }), [p1, p2], 1000), [500, 500]);
+    igual(app.psplitCents(g(15, { mode: 'adjust', parts: { p1: 5 } }), [p1, p2], 1500), [1000, 500]);
+    igual(app.psplitCents(g(10, { mode: 'adjust', parts: { p1: 20, p2: 20 } }), [p1, p2], 1000), [500, 500]);
+  });
+
+  test('cada modo divide como promete e soma o total', () => {
+    igual(app.psplitCents(g(100, null), [p1, p2], 10000), [5000, 5000]);
+    igual(app.psplitCents(g(100, { mode: 'pct', parts: { p1: 1, p2: 3 } }), [p1, p2], 10000), [2500, 7500]);
+    igual(app.psplitCents(g(100, { mode: 'percent', parts: { p1: 60, p2: 40 } }), [p1, p2], 10000), [6000, 4000]);
+    igual(app.psplitCents(g(100, { mode: 'amount', parts: { p1: 30.5 } }), [p1, p2], 10000), [6525, 3475]);   // 30,50 seus mais metade do resto
+    igual(app.psplitCents(g(100, { mode: 'value', parts: {} }), [p1, p2], 10000), [7500, 2500]);
+    igual(app.psplitCents(g(100, { mode: 'purchase', parts: {} }), [p1, p2], 10000), [5000, 5000]);
+    igual(app.psplitCents(g(0.01, { mode: 'pct', parts: { p1: 1, p2: 1 } }), [p1, p2], 1), [1, 0]);   // um cêntimo não se parte
+  });
+
+  test('por valor certo, acima do total, reparte o total ao cêntimo', () => {
+    // 10,01 com 6,67 + 6,67 pedidos: à escala, cada um arredondava a 5,01 e a soma passava a 10,02
+    const r = app.psplitCents(g(10.01, { mode: 'amount', parts: { p1: 6.67, p2: 6.67 } }), [p1, p2], 1001);
+    assert.equal(r[0] + r[1], 1001);
+    const s = app.txSplitCents(app.normTx({ kind: 'expense', amount: 10.01, propertyId: 'casa', split: { mode: 'amount', parts: { ana: 6.67, bruno: 6.67 } } }), casa, ['ana', 'bruno']);
+    assert.equal(s[0] + s[1], 1001);
   });
 });
 

@@ -188,6 +188,16 @@ function refreshPropModal(hid) {
   } catch (e) {}
 }
 
+/* Envia a proposta de divisão de quotas da casa hid: só entra em vigor quando
+   todos os comproprietários confirmarem. É o único sítio que fala com a rota
+   da proposta — a ficha do imóvel (CW.proposeShares) e o modal das partilhas
+   (partilha.js:CW.sharesModal) passam por aqui.
+   Recebe: hid — o id da casa; shares — {userId: percentagem}, a somar 100.
+   Devolve: a promessa da API (POST /api/houses/:hid/proposal). */
+function enviarProposta(hid, shares) {
+  return api('POST', '/api/houses/' + hid + '/proposal', { shares: shares });
+}
+
 /* modal para propor nova divisão de quotas da casa hid: valida que as percentagens
    somam 100 e envia a proposta para a API — só entra em vigor quando todos os
    comproprietários confirmarem. Uma divisão igual à atual não gera proposta.
@@ -228,7 +238,7 @@ CW.proposeShares = function (hid, fromShare) {
       toast('A divisão fica como está.');
       return nextShareProposal();
     }
-    api('POST', '/api/houses/' + hid + '/proposal', { shares: shares })
+    enviarProposta(hid, shares)
       .then(function () { closeModal(); toast('Proposta enviada — falta a confirmação dos outros comproprietários.'); return pullNow(true); })
       .then(function () { refreshPropModal(hid); nextShareProposal(); })
       .catch(function (e) { toast(e.message); });

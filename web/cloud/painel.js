@@ -546,16 +546,21 @@ function dashKey(el) {
   return titles.length ? 'card:' + titles[0] : '';
 }
 
+/* Os pedidos por responder (partilha.js:pedidosDashCard) vão à cabeça da
+   vista geral em todos os estados dela — também nos vazios, que é onde uma
+   conta nova que recebeu um pedido está — e nunca entram na ordenação dos
+   cartões. */
 var _vDashboard = vDashboard;
 vDashboard = function () {
+  var pedidos = pedidosDashCard();
   var html = _vDashboard();
   var tmp = document.createElement('div');
   tmp.innerHTML = html;
   var kids = [].slice.call(tmp.children), first = -1;
   for (var i = 0; i < kids.length; i++) if (kids[i].classList.contains('grid')) { first = i; break; }
-  if (first < 0) return html; // estado vazio: nada para ordenar
+  if (first < 0) return pedidos + html; // estado vazio: nada para ordenar
 
-  var fixed = kids.slice(0, first).map(function (n) { return n.outerHTML; }).join('');
+  var fixed = pedidos + kids.slice(0, first).map(function (n) { return n.outerHTML; }).join('');
   var items = [], j = first;
   // largura: 'full' atravessa a grelha toda, 'wide' ocupa duas células (no
   // telemóvel são as duas colunas, no computador metade das quatro), e o resto

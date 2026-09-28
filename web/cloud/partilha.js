@@ -76,6 +76,18 @@ linhaDefinicoes({ sec: 'sobre', ordem: 10, page: 'faq', label: 'Perguntas freque
 linhaDefinicoes({ sec: 'sobre', ordem: 30, page: 'legal', label: 'Aviso legal', icon: 'contract', sub: 'Termos e privacidade' });
 linhaDefinicoes({ sec: 'sobre', ordem: 60, html: cartaoDaAppNoTelemovel });
 
+// o que aceitar um convite de ligação dá — no cartão da ligação e no aviso da vista geral
+var CONVITE_SE_ACEITARES = 'Se aceitares, cada um pode escolher que casas partilha com o outro.';
+
+/* Os botões de um convite de ligação recebido: aceitar e recusar. Servem o
+   cartão da ligação (connCard) e o aviso da vista geral (pedidosDashCard).
+   Recebe: c — a ligação, com id.
+   Devolve: o HTML dos dois botões (texto). */
+function botoesConvite(c) {
+  return '<button class="btn primary sm" data-toca="dados" data-click="CW.acceptConn(\'' + jsq(c.id) + '\')">Aceitar</button>' +
+    '<button class="btn sm danger" data-toca="dados" data-click="CW.delConn(\'' + jsq(c.id) + '\',1)">Recusar</button>';
+}
+
 /* O cartão de uma ligação a outro utilizador, com os botões certos para o
    estado dela: convite recebido (aceitar/recusar), convite enviado (cancelar)
    ou ligação ativa, com a contagem de casas partilhadas em cada sentido.
@@ -87,9 +99,8 @@ function connCard(c) {
   var lines = '';
   var btns = '';
   if (c.status === 'pending' && c.incoming) {
-    lines = '<div class="small">Quer ligar-se a ti. Se aceitares, cada um pode escolher que casas partilha com o outro.</div>';
-    btns = '<button class="btn primary sm" data-toca="dados" data-click="CW.acceptConn(\'' + c.id + '\')">Aceitar</button>' +
-      '<button class="btn sm danger" data-toca="dados" data-click="CW.delConn(\'' + c.id + '\',1)">Recusar</button>';
+    lines = '<div class="small">Quer ligar-se a ti. ' + CONVITE_SE_ACEITARES + '</div>';
+    btns = botoesConvite(c);
   } else if (c.status === 'pending') {
     lines = '<div class="small">À espera que aceite o convite.</div>';
     btns = '<button class="btn sm danger" data-toca="dados" data-click="CW.delConn(\'' + c.id + '\',1)">Cancelar</button>';
@@ -139,6 +150,42 @@ function ligacaoCard() {
     'Não tem prazo: podes rodá-la ou desativá-la quando quiseres.</div>');
 }
 
+/* A linha de um pedido de partilha recebido: quem quer partilhar o quê, o que
+   aceitar implica, e os botões de aceitar e recusar. Serve o cartão dos
+   pedidos (pedidosCard) e o aviso da vista geral (pedidosDashCard).
+   Recebe: p — o pedido, com id, fromName e houseName.
+   Devolve: o HTML da linha (texto). */
+function pedidoRecebidoHtml(p) {
+  return '<div class="card u-p-12px-13px"><b class="u-d-block">' + esc(p.fromName || '') + ' quer partilhar ' + esc(p.houseName || 'um imóvel') + ' contigo</b>' +
+    '<span class="small">Se aceitares, passas a comproprietário desse imóvel — vês contratos, movimentos e pessoas.</span>' +
+    '<div class="toolbar u-mt-9px"><button class="btn primary sm" data-toca="dados" data-click="CW.pedidoAceitar(\'' + jsq(p.id) + '\')">Aceitar</button>' +
+    '<button class="btn sm danger" data-toca="dados" data-click="CW.pedidoRecusar(\'' + jsq(p.id) + '\')">Recusar</button></div></div>';
+}
+
+/* O cartão «Pedidos por responder», para o topo da vista geral: os pedidos de
+   partilha recebidos (do serviço Colaboradores) e os convites de ligação
+   recebidos (da partilha entre contas, sempre), cada um com aceitar e
+   recusar. Os que enviei ficam de fora — não são para responder. Quem recebe
+   é muitas vezes uma conta nova, sem imóveis: sem isto só via o vazio.
+   Devolve: o HTML do cartão com o espaço até ao cartão seguinte (texto), ou
+   '' sem nada por responder. */
+function pedidosDashCard() {
+  var st = CW.state || {};
+  var inc = servicoLigado('colaboradores') ? ((st.shareRequests || {}).incoming || []) : [];
+  var convites = (st.connections || []).filter(function (c) { return c.status === 'pending' && c.incoming; });
+  var n = inc.length + convites.length;
+  if (!n) return '';
+  var linhas = inc.map(pedidoRecebidoHtml).concat(convites.map(function (c) {
+    return '<div class="card u-p-12px-13px"><b class="u-d-block">' + esc(c.peer.name || c.peer.email || c.peer.id) + ' quer ligar-se a ti</b>' +
+      '<span class="small">' + CONVITE_SE_ACEITARES + '</span>' +
+      '<div class="toolbar u-mt-9px">' + botoesConvite(c) + '</div></div>';
+  })).join('');
+  /* a marca no fim é para o guia: os «Primeiros passos» entram DEPOIS dos
+     pedidos (cloud/guia.js), que são a coisa mais urgente da vista geral */
+  return card('Pedidos por responder', n + ' por responder', '<div class="list u-g-9px">' + linhas + '</div>') +
+    '<div class="u-h-14px"></div><!--fim-pedidos-->';
+}
+
 // O cartão «Pedidos de partilha»: os recebidos, com aceitar e recusar, e os
 // que enviei e ainda esperam. Vazio quando não há nenhum.
 // Devolve: o HTML do cartão (texto), ou '' sem pedidos.
@@ -147,12 +194,7 @@ function pedidosCard() {
   var sr = CW.state.shareRequests || {};
   var inc = sr.incoming || [], out = sr.outgoing || [];
   if (!inc.length && !out.length) return '';
-  var linhas = inc.map(function (p) {
-    return '<div class="card u-p-12px-13px"><b class="u-d-block">' + esc(p.fromName || '') + ' quer partilhar ' + esc(p.houseName || 'um imóvel') + ' contigo</b>' +
-      '<span class="small">Se aceitares, passas a comproprietário desse imóvel — vês contratos, movimentos e pessoas.</span>' +
-      '<div class="toolbar u-mt-9px"><button class="btn primary sm" data-toca="dados" data-click="CW.pedidoAceitar(\'' + jsq(p.id) + '\')">Aceitar</button>' +
-      '<button class="btn sm danger" data-toca="dados" data-click="CW.pedidoRecusar(\'' + jsq(p.id) + '\')">Recusar</button></div></div>';
-  }).concat(out.map(function (p) {
+  var linhas = inc.map(pedidoRecebidoHtml).concat(out.map(function (p) {
     return '<div class="card u-p-12px-13px"><b class="u-d-block">' + esc(p.houseName || 'Imóvel') + ' · à espera de ' + esc(p.toName || '') + '</b>' +
       '<span class="small">Pediste que passasse a comproprietário. Fica pendente até responder.</span>' +
       '<div class="toolbar u-mt-9px"><button class="btn sm" data-toca="dados" data-click="CW.pedidoCancelar(\'' + jsq(p.id) + '\')">Cancelar pedido</button></div></div>';
@@ -193,9 +235,12 @@ function convidarCard() {
   var meus = cwImoveisMeus();
   var invites = CW.state.invites || [];
   var form;
-  if (!roles.length) form = '<div class="hint">Cria primeiro um cargo, no cartão «Cargos» em baixo.</div>';
-  else if (!meus.length) form = '<div class="hint">Ainda não tens imóveis para partilhar — cria um primeiro.</div>';
-  else {
+  if (!roles.length) form = '<div class="hint">Cria primeiro um cargo, no cartão «Cargos» em baixo.</div>' + saida('Novo cargo', 'CW.cargoModal()', 'camada');
+  else if (!meus.length) {
+    // o formulário do imóvel é do serviço dos Imóveis: desligado, a nota diz quem o liga
+    form = '<div class="hint">Ainda não tens imóveis para partilhar — cria um primeiro.</div>' +
+      (servicoLigado('properties') ? saida('Adicionar imóvel', 'propModal()', 'camada') : vazioServicoDesligado('properties'));
+  } else {
     var grupos = typeof gOpts === 'function' ? gOpts('prop') : [];
     form = '<div class="form">' +
       '<label>Cargo' + sel('cw_inv_cargo', roles[0].id, roles.map(function (r) { return { v: r.id, label: r.name }; }), '', 'rascunho') + '</label>' +
@@ -414,9 +459,78 @@ CW.delConn = function (id, isPending) {
   confirmModal('Remover conexão', 'Deixam ambos de ver as casas partilhadas um do outro. Os dados de cada um não são apagados.', doDel);
 };
 
-/* Modal para escolher que casas se partilham com a conexão connId. Ao guardar
-   envia a lista à API e, para cada casa partilhada pela primeira vez, abre de
-   seguida a proposta de divisão de quotas, uma de cada vez (fila _shareQueue).
+/* Quem entra na divisão de uma casa que se vai partilhar: os comproprietários
+   atuais (como CW.proposeShares os lê, pelos ownerIds) e o par com quem se
+   partilha, no fim.
+   Recebe: p — o imóvel; peer — o outro utilizador da ligação {id, name, email}.
+   Devolve: array de {id, nome}, com «(tu)» no meu. */
+function quotasDe(p, peer) {
+  var meu = CW.user ? CW.user.id : '';
+  var quem = ((p && p.ownerIds) || []).map(function (u) {
+    var o = owner(u) || { name: u };
+    return { id: u, nome: (o.name || u) + (u === meu ? ' (tu)' : '') };
+  });
+  if (!quem.some(function (x) { return x.id === peer.id; })) quem.push({ id: peer.id, nome: peer.name || peer.email || peer.id });
+  return quem;
+}
+
+/* O bloco das quotas de uma casa que se vai partilhar, debaixo da caixa dela
+   no modal das partilhas: um campo por comproprietário mais o par, a começar
+   em partes iguais, e a frase de que só entra em vigor depois de o outro
+   confirmar.
+   Recebe: hid — o id da casa; peer — o outro utilizador {id, name, email};
+   valores (opcional) — {userId: texto} escrito antes, para repor.
+   Devolve: o HTML do bloco (texto). */
+function quotasHtml(hid, peer, valores) {
+  var p = (db.properties || []).find(function (x) { return x.id === hid; });
+  var quem = quotasDe(p, peer);
+  var igual = dec(Math.round(1000 / quem.length) / 10);
+  return '<div class="form u-mt-10px">' + quem.map(function (u) {
+    var v = valores && valores[u.id] != null ? valores[u.id] : igual;
+    return '<label>' + esc(u.nome) + ' (%)<input id="cw_q_' + hid + '_' + u.id + '" type="text" inputmode="decimal" value="' + esc(v) + '"></label>';
+  }).join('') +
+    '<div class="hint">A divisão só entra em vigor depois de o outro confirmar; até lá fica em partes iguais.</div></div>';
+}
+
+/* O que está escrito nos campos das quotas de uma casa no modal das partilhas.
+   Recebe: hid — o id da casa; quem — os comproprietários ({id, nome}), como
+   quotasDe os dá.
+   Devolve: {texto: {userId: o texto tal qual}, shares: {userId: número},
+   total, invalida} — invalida quando algum campo não é um número ≥ 0. */
+function quotasEscritas(hid, quem) {
+  var out = { texto: {}, shares: {}, total: 0, invalida: false };
+  quem.forEach(function (u) {
+    var t = val('cw_q_' + hid + '_' + u.id);
+    var v = numTaxa(t);   // é uma percentagem: «33,3» são 33,3, não 333
+    if (!isFinite(v) || v < 0) out.invalida = true;
+    out.texto[u.id] = t;
+    out.shares[u.id] = v;
+    out.total += v;
+  });
+  return out;
+}
+
+/* Ao marcar ou desmarcar, no modal das partilhas, uma casa ainda não
+   partilhada com este par: marcada, o bloco das quotas aparece debaixo dela
+   (com o que lá estava escrito, se já tinha sido marcada); desmarcada, some,
+   e o que estava escrito guarda-se para o caso de voltar.
+   Recebe: hid — o id da casa.
+   Devolve: nada — escreve ou esvazia o bloco das quotas dessa casa. */
+CW.shareCasaMudou = function (hid) {
+  var em = CW._partilha, caixa = document.getElementById('cw_sh_' + hid), bloco = document.getElementById('cw_qb_' + hid);
+  if (!em || !caixa || !bloco) return;
+  if (caixa.checked) { bloco.innerHTML = quotasHtml(hid, em.peer, em.escrito[hid]); return; }
+  var p = (db.properties || []).find(function (x) { return x.id === hid; });
+  em.escrito[hid] = quotasEscritas(hid, quotasDe(p, em.peer)).texto;
+  bloco.innerHTML = '';
+};
+
+/* Modal para escolher que casas se partilham com a conexão connId. Debaixo
+   de cada casa ainda não partilhada com este par, ao marcá-la aparecem as
+   quotas (CW.shareCasaMudou). Ao guardar valida as quotas das casas novas,
+   envia a lista à API e, para cada casa nova cuja divisão não seja em partes
+   iguais, segue a proposta (enviarProposta) — sem passar pela fila
+   _shareQueue, que fica para a ficha do imóvel.
    Recebe: connId — o id da conexão cujas partilhas se editam.
    Devolve: nada — abre o modal; o guardar acontece no onSave. */
 CW.sharesModal = function (connId) {
@@ -424,39 +538,68 @@ CW.sharesModal = function (connId) {
   if (!c) return;
   // só os imóveis que criei eu: nunca os de colaboração nem os que outro partilhou comigo
   var myHouses = (db.properties || []).filter(function (p) { return cwMinha(p); });
+  var before = (c.myShares || []).slice();
+  CW._partilha = { peer: c.peer, escrito: {} };   // o que o shareCasaMudou precisa: o par, e as quotas de uma casa desmarcada
   var body = myHouses.length
     ? '<div class="form"><div class="hint">Casas que partilhas com ' + esc(c.peer.name || c.peer.id) + '. Ele passa a ver e editar tudo o que pertence a estas casas: contratos, movimentos e pessoas associadas.</div>' +
       '<div class="list u-g-8px">' + myHouses.map(function (p) {
-        var on = (c.myShares || []).indexOf(p.id) > -1;
-        return '<label class="card u-p-12px-13px u-d-flex u-g-11px u-ai-center u-cur-pointer">' +
-          '<input type="checkbox" class="u-w-18px u-h-18px" id="cw_sh_' + p.id + '" ' + (on ? 'checked' : '') + '>' +
+        var on = before.indexOf(p.id) > -1;
+        // uma casa já partilhada não ganha quotas por aqui: mudam-se na ficha do imóvel
+        return '<div class="card u-p-12px-13px"><label class="u-d-flex u-g-11px u-ai-center u-cur-pointer">' +
+          '<input type="checkbox" class="u-w-18px u-h-18px" id="cw_sh_' + p.id + '" ' +
+          (on ? 'checked' : 'data-toca="rascunho" data-change="CW.shareCasaMudou(\'' + jsq(p.id) + '\')"') + '>' +
           '<span class="u-minw-0"><b class="u-d-block">' + esc(p.name || 'Sem nome') + '</b>' +
-          '<span class="small">' + esc(p.address || '') + '</span></span></label>';
+          '<span class="small">' + esc(p.address || '') + '</span></span></label>' +
+          (on ? '' : '<div id="cw_qb_' + p.id + '"></div>') + '</div>';
       }).join('') + '</div></div>'
     : '<div class="hint">Ainda não tens casas para partilhar.</div>';
   openModal('Partilhar casas', body);
   onSave = function () {
-    var before = (c.myShares || []).slice();
     var ids = myHouses.filter(function (p) {
       var e = document.getElementById('cw_sh_' + p.id);
       return e && e.checked;
     }).map(function (p) { return p.id; });
+    // as casas partilhadas agora pela primeira vez: as quotas validam-se antes de gravar o que quer que seja
+    var propostas = [];
+    for (var i = 0; i < ids.length; i++) {
+      if (before.indexOf(ids[i]) > -1) continue;
+      var p = myHouses.find(function (x) { return x.id === ids[i]; });
+      var nome = p.name || 'Sem nome', quem = quotasDe(p, c.peer), q = quotasEscritas(p.id, quem);
+      if (q.invalida) return toast('Percentagens inválidas em ' + nome + '.');
+      if (Math.abs(q.total - 100) > 0.5) return toast('As percentagens de ' + nome + ' têm de somar 100 (agora somam ' + dec(Math.round(q.total * 100) / 100) + ').');
+      // em partes iguais não há nada para o outro confirmar
+      var igual = 100 / quem.length;
+      var diferente = quem.some(function (u) { return Math.abs(q.shares[u.id] - igual) >= 0.1; });
+      if (diferente) propostas.push({ hid: p.id, nome: nome, shares: q.shares });
+    }
+    var falhas = [];
     api('PUT', '/api/connections/' + connId + '/shares', { houseIds: ids })
-      .then(function () { closeModal(); toast('Partilha atualizada.'); return pullNow(true); })
+      .then(function () { closeModal(); return pullNow(true); })
+      .then(function () {
+        // as propostas seguem uma a uma, já com a partilha no servidor; uma que falhe não trava as outras
+        return propostas.reduce(function (seq, pr) {
+          return seq.then(function () {
+            return enviarProposta(pr.hid, pr.shares).catch(function (e) { falhas.push(pr.nome + ': ' + String(e.message || 'não seguiu').replace(/\.$/, '')); });
+          });
+        }, Promise.resolve());
+      })
+      .then(function () { return propostas.length > falhas.length ? pullNow(true) : null; })
       .then(function () {
         render();
-        // casas partilhadas agora pela primeira vez: pede logo a divisão de quotas
-        var added = ids.filter(function (id) { return before.indexOf(id) < 0; });
-        if (added.length) {
-          CW._shareQueue = added.slice(1);
-          CW.proposeShares(added[0], true);
-        }
+        var n = propostas.length - falhas.length;
+        if (falhas.length) {
+          toast('Partilha atualizada, mas a proposta de divisão não seguiu — ' + falhas.join('; ') + '. Podes propô-la na ficha do imóvel.', { ms: 7000 });
+        } else if (n) {
+          toast('Partilha atualizada. ' + (n === 1 ? 'A proposta de divisão seguiu — falta a confirmação do outro comproprietário.'
+            : n + ' propostas de divisão seguiram — falta a confirmação dos outros comproprietários.'), { ms: 5000 });
+        } else toast('Partilha atualizada.');
       })
       .catch(function (e) { toast(e.message); });
   };
 };
 
-// Passa à casa seguinte na fila de propostas de quotas que o sharesModal deixou.
+// Passa à casa seguinte na fila de propostas de quotas que a ficha do imóvel
+// (CW.proposeShares) deixou; o sharesModal já não a usa.
 // Devolve: nada — abre a proposta seguinte, se a houver.
 function nextShareProposal() {
   var nxt = (CW._shareQueue || []).shift();

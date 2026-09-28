@@ -97,6 +97,39 @@ function txMatch(t){
   if(txAte&&t.date>txAte)return false;
   return true;
 }
+/* O valor de um movimento como os filtros o veem: a parte que cabe ao imóvel
+   filtrado, ao grupo ou ao proprietário em foco, pesada pelo txWeight — o
+   mesmo peso das métricas — e ao cêntimo. Vale por inteiro o que não tem por
+   onde se cortar: um acerto, um movimento sem imóvel nem grupo (o filtro por
+   imóvel deixa-o entrar: é de todos) e um de grupo cujo grupo já não tem
+   imóveis — aí o peso dava 0 e a linha dizia 0 € de um movimento que existe.
+   Recebe: t — o movimento.
+   Devolve: euros (número, 2 casas). */
+function valorNaVista(t){
+  const v=Math.round((Number(t.amount)||0)*100)/100;   /* cêntimos também por inteiro: é com isto que a frase da parte compara */
+  if(t.kind==='settle'||!(t.propertyId||t.groupId)||(t.groupId&&!txProps(t).length))return v;
+  return Math.round(v*txWeight(t,txProp&&txProp!=='__none__'?txProp:null,true)*100)/100;
+}
+/* A linha pequena de um movimento cortado pelos filtros: de que é parte e
+   qual é o total. Corta o filtro por imóvel (a parte de um movimento de grupo
+   nesse imóvel, ou no âmbito: «parte de <grupo>»), a quota do proprietário em
+   foco («a tua parte»), ou os dois («a tua parte em <imóvel>»).
+   Recebe: t — o movimento.
+   Devolve: o texto, já escapado; '' quando o valor na vista é o total. */
+function fraseDaParte(t){
+  const v=valorNaVista(t),tot=Math.round((Number(t.amount)||0)*100)/100;
+  if(v===tot)return '';
+  const pid=txProp&&txProp!=='__none__'?txProp:null,total=' · total '+euro2(tot);
+  /* o que o imóvel ou o âmbito deixam passar, ainda sem a quota do dono */
+  const semDono=Math.round(tot*txWeight(t,pid,false)*100)/100;
+  if(v===semDono)return 'parte de '+esc((grp(t.groupId)||{}).name||'')+total;
+  return 'a tua parte'+(semDono!==tot&&pid&&!String(pid).startsWith('g:')?' em '+esc(propName(pid)):'')+total;
+}
+/* O que um movimento pesa no saldo da vista: a entrada positiva, a saída
+   negativa; nada num acerto ou fora dos totais.
+   Recebe: t — o movimento.
+   Devolve: euros (número), com sinal. */
+function saldoNaVista(t){return !countsInTotals(t)?0:isIn(t.kind)?valorNaVista(t):isOut(t.kind)?-valorNaVista(t):0}
 // descreve os filtros ativos numa linha legível, para o topo da lista e do modal
 // Devolve: string (já escapada para HTML) com os filtros ativos; vazia sem filtros.
 function filterSummary(){
@@ -317,16 +350,18 @@ function vTransactions(){
   +(adiciona?fab([{label:'Novo movimento',act:'newTxPick()'}]):'');
   txLinhasPintadas=0;
   if(!db.transactions.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.${adiciona?saida('Registar movimento','newTxPick()','camada'):''}</div>`);
-  const list=db.transactions.filter(txMatch).sort((a,b)=>{const d=txDir==='desc'?-1:1;
-    if(txSort==='amount')return d*((a.amount||0)-(b.amount||0))||String(a.date).localeCompare(String(b.date));
+  const list=db.transactions.filter(txMatch),vv={};   /* o valor na vista uma vez por movimento: o comparador pede-o vezes sem conta */
+  if(txSort==='amount')list.forEach(t=>{vv[t.id]=valorNaVista(t)});
+  list.sort((a,b)=>{const d=txDir==='desc'?-1:1;
+    if(txSort==='amount')return d*(vv[a.id]-vv[b.id])||String(a.date).localeCompare(String(b.date));
     return d*String(a.date).localeCompare(String(b.date))});
   if(!list.length)return head+vazioFiltro()
     +balancesCard(txProp||null);   /* pode não haver movimentos e haver contas por acertar */
   txLinhasPintadas=list.length;
-  const tot={income:0,expense:0,loan:0,owed:0,repay:0,settle:0};list.forEach(t=>{if(countsInTotals(t))tot[t.kind]=(tot[t.kind]||0)+t.amount});
+  const tot={income:0,expense:0,loan:0,owed:0,repay:0,settle:0};list.forEach(t=>{if(countsInTotals(t))tot[t.kind]=(tot[t.kind]||0)+valorNaVista(t)});
   const saldo=tot.income+tot.owed-tot.expense-tot.loan-tot.repay;
   const evoTx=k=>()=>{
-    const L=db.transactions.filter(txMatch).filter(countsInTotals),f=t=>k==='saldo'?(isIn(t.kind)?t.amount:isOut(t.kind)?-t.amount:0):(t.kind===k?t.amount:0);
+    const L=db.transactions.filter(txMatch).filter(countsInTotals),f=t=>k==='saldo'?saldoNaVista(t):(t.kind===k?valorNaVista(t):0);
     const ys={};ys[YEAR]=1;L.forEach(t=>{const y=Number(String(t.date).slice(0,4));if(y)ys[y]=1});
     return {fmt:euro,monthly:[...Array(12)].map((_,i)=>sum(L.filter(t=>String(t.date).startsWith(`${YEAR}-${String(i+1).padStart(2,'0')}`)).map(f))),
       yearly:Object.keys(ys).map(Number).sort().map(y=>({label:y,value:sum(L.filter(t=>String(t.date).startsWith(String(y))).map(f))}))};
@@ -359,20 +394,23 @@ function txQuem(t){
 }
 /* O HTML de UMA linha de movimento. Esta a parte porque e a peca que a lista
    viva compara consigo propria: o texto que sai daqui e a assinatura da linha
-   (lista.js), e e por ele que se sabe se ha alguma coisa a refazer.
+   (lista.js), e e por ele que se sabe se ha alguma coisa a refazer. O valor
+   e a frase da parte mudam com o filtro, por isso entram aqui e nao noutro
+   sitio: e assim que a linha se refaz quando o filtro muda.
    Recebe: t — o movimento; mo — o mes 'AAAA-MM' do bloco onde a linha entra.
    Devolve: o HTML da linha (string). */
 function txLinhaHtml(t,mo){
-  const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null;
+  const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null,parte=fraseDaParte(t);
   const x=txLinhaExtra(t,mo)||{};
   return `<div class="card tap txrow${x.cls?' '+x.cls:''} u-p-13px-15px" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" ${x.attrs||''} data-toca="camada" data-click="${x.onclick||`txView('${jsq(t.id)}')`}"><div class="row-between">
     ${x.caixa||''}<div class="u-minw-0"><div class="title u-fs-14p5px">${esc(t.label)}</div>
       <div class="small">${dPT(t.date)} \u00b7 ${k.short}${t.category?' \u00b7 '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' \u00b7 '+esc(propName(t.propertyId)):''}${t.creditor?' \u00b7 '+esc(t.creditor):''}</div>
       ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}
       ${txQuem(t)}
+      ${parte?`<div class="small">${parte}</div>`:''}
       ${t.kind==='loan'&&(t.principal||t.interest||t.fee)?`<div class="small">${t.payType==='amortizacao'?`Amortiza\u00e7\u00e3o \u00b7 capital ${euro2(t.principal||0)} \u00b7 comiss\u00e3o ${euro2(t.fee||0)}`:`Capital ${euro2(t.principal||0)} \u00b7 juros ${euro2(t.interest||0)} \u00b7 selo ${euro2(t.stamp||0)}`}</div>`:''}
       ${(!countsInTotals(t)||(t.tags||[]).length)?`<div class="chips">${countsInTotals(t)?'':'<span class="badge grey">fora dos totais</span>'}${(t.tags||[]).map(g=>`<span class="badge grey">${esc(g)}</span>`).join('')}</div>`:''}</div>
-    <div class="u-ta-right u-fx-0-0-auto"><div class="${k.color}${t.kind==='settle'?' u-c-v-muted':''} u-fw-750">${k.sign}${euro2(t.amount)}</div>
+    <div class="u-ta-right u-fx-0-0-auto"><div class="${k.color}${t.kind==='settle'?' u-c-v-muted':''} u-fw-750">${k.sign}${euro2(valorNaVista(t))}</div>
       ${t.notes?`<div class="small u-mt-3px" title="Tem coment\u00e1rios">${ic('pen',12)}</div>`:''}${x.acoes||''}</div>
   </div></div>`;
 }
@@ -416,7 +454,7 @@ function pintarListaTx(){
     const c=reconciliar(bl.querySelector('.list'),by[mo].map(t=>({chave:'tx:'+t.id,html:txLinhaHtml(t,mo)})));
     Object.keys(cLin).forEach(k=>cLin[k]+=c[k]);
     /* o saldo do mes escreve-se aqui, e nao na assinatura do bloco */
-    const net=sum(by[mo].map(t=>!countsInTotals(t)?0:isIn(t.kind)?t.amount:(isOut(t.kind)?-t.amount:0)));
+    const net=sum(by[mo].map(saldoNaVista));
     const sp=bl.querySelector('.txnet');
     if(sp){sp.textContent=euro(net);sp.className='txnet '+(net>=0?'pos':'neg')}
   });

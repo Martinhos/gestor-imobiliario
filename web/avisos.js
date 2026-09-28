@@ -72,6 +72,23 @@ var AVISOS = [
         ],
       },
       {
+        titulo: 'A partilha com portas à vista',
+        afeta: ['partilha', 'colaboradores'],
+        itens: [
+          'Um pedido de partilha ou um convite de ligação que recebas aparece no topo da vista geral — mesmo numa conta acabada de criar — em «Pedidos por responder», com Aceitar e Recusar ali mesmo. Antes só se via em Definições → Conta e partilha.',
+          'Ao escolher uma casa para partilhar com outro proprietário, as quotas de cada um definem-se na própria escolha, e a proposta de divisão segue logo com a partilha; ficam em partes iguais até o outro confirmar. Antes a pergunta só vinha depois, casa a casa.',
+          'Em Colaboradores, quando ainda não há imóveis (ou cargos), o botão para os criar está ali.',
+        ],
+      },
+      {
+        titulo: 'Um movimento de grupo mostra a parte, não o total',
+        afeta: ['movimentos', 'partilha'],
+        itens: [
+          'Um movimento de um grupo de imóveis, visto com o filtro num imóvel do grupo ou num proprietário, mostrava o valor inteiro. Agora a lista mostra a parte que cabe a essa vista — e diz «parte de <grupo> · total …» — e o saldo do mês, os indicadores e a ordenação por montante contam a parte.',
+          'A divisão entre os imóveis de um grupo e entre proprietários foi confirmada modo a modo. Dois arredondamentos corrigidos: a parte de um dono sem divisão escolhida podia diferir um cêntimo da ficha, e uma divisão «por valor» com valores acima do total somava um cêntimo a mais.',
+        ],
+      },
+      {
         titulo: 'Os formulários dizem o que é opcional',
         afeta: ['app'],
         itens: [

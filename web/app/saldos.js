@@ -70,9 +70,11 @@ function txSplitCents(t,p,os){
   if(sp.mode==='equal')return splitShares(total,eq);
   if(sp.mode==='pct'||sp.mode==='percent'){const w=os.map(get),tw=sum(w);return splitShares(total,tw>0?w.map(x=>x/tw):eq)}
   if(sp.mode==='amount'){
-    const c=os.map(o=>Math.round(get(o)*100));let rem=total-sum(c);
-    if(rem<0){const k=total/Math.max(1,sum(c));return c.map(x=>Math.round(x*k))}
-    const rest=splitShares(Math.max(0,rem),eq);return c.map((x,i)=>x+rest[i]);
+    const c=os.map(o=>Math.round(get(o)*100)),tc=sum(c),rem=total-tc;
+    /* valores acima do total (dados antigos; o formulário recusa) repartem o total na
+       proporção deles, ao cêntimo — arredondar cada um à escala perdia ou inventava um */
+    if(rem<0)return splitShares(total,c.map(x=>x/tc));
+    const rest=splitShares(rem,eq);return c.map((x,i)=>x+rest[i]);
   }
   if(sp.mode==='adjust'){
     /* o ajuste é um extra por cima da parte igual: tira-se ao total a soma dos ajustes,
@@ -88,11 +90,13 @@ function txSplitCents(t,p,os){
 }
 /* fração de um movimento que cabe a um dono (para a vista filtrada por proprietário)
    Recebe: t — o movimento (objeto); oid — o id do proprietário.
-   Devolve: a fração 0–1 do valor do movimento que cabe a esse dono; 0 se não for dono do imóvel. */
+   Devolve: a fração 0–1 do valor do movimento que cabe a esse dono (a parte em cêntimos
+   sobre o total); 0 se não for dono do imóvel. */
 function txOwnerFrac(t,oid){
   const p=prop(t.propertyId);if(!p)return 0;
   const os=ownersOfProp(p);if(os.indexOf(oid)<0)return 0;
-  if(!t.split||!t.split.mode)return shareOf(p,oid);
+  /* sempre pelos cêntimos da divisão, também sem modo escolhido: a quota em fração
+     (1/3 de 100 €) dava 33,33 a quem a ficha e as contas entre donos dão 33,34 */
   const total=Math.abs(Math.round((Number(t.amount)||0)*100));if(!total)return shareOf(p,oid);
   return txSplitCents(t,p,os)[os.indexOf(oid)]/total;
 }
@@ -121,9 +125,9 @@ function psplitCents(t,ps,total){
   if(sp.mode==='purchase')return by(p=>Number(p.purchase)||0);
   if(sp.mode==='pct')return by(get);
   if(sp.mode==='percent')return by(get);
-  if(sp.mode==='amount'){const c=ps.map(p=>Math.round(get(p)*100));let rem=total-sum(c);
-    if(rem<0){const k=total/Math.max(1,sum(c));return c.map(x=>Math.round(x*k))}
-    const rest=splitShares(Math.max(0,rem),eq);return c.map((x,i)=>x+rest[i]);}
+  if(sp.mode==='amount'){const c=ps.map(p=>Math.round(get(p)*100)),tc=sum(c),rem=total-tc;
+    if(rem<0)return splitShares(total,c.map(x=>x/tc));   /* acima do total: a mesma regra do txSplitCents */
+    const rest=splitShares(rem,eq);return c.map((x,i)=>x+rest[i]);}
   if(sp.mode==='adjust'){/* extra por cima da parte igual — a mesma regra do txSplitCents */
     const adj=ps.map(p=>Math.round(get(p)*100)),ta=sum(adj),rem=total-ta;
     if(rem<0)return splitShares(total,adj.map(x=>x/ta));

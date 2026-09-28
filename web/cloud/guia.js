@@ -415,7 +415,12 @@ CW.listaDeTutoriais = function () {
 var _vDashboard_guia = vDashboard;
 vDashboard = function () {
   var passosHtml = cartaoPassos(), html = _vDashboard_guia();
-  var fim = '<!--fim-podes--></div>', i = passosHtml ? html.indexOf(fim) : -1;
+  if (!passosHtml) return html;
+  /* os passos entram depois do «O que podes fazer» de quem colabora e, numa
+     conta que tem pedidos por responder (partilha.js:pedidosDashCard), depois
+     desses pedidos — um convite recebido é mais urgente do que o tutorial */
+  var fim = '<!--fim-podes--></div>', i = html.indexOf(fim);
+  if (i < 0) { fim = '<!--fim-pedidos-->'; i = html.indexOf(fim); }
   if (i < 0) return passosHtml + html;
   i += fim.length;
   return html.slice(0, i) + passosHtml + html.slice(i);
