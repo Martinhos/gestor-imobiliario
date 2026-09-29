@@ -28,7 +28,7 @@ jobs:
 
       # fixo ao patch: a cobertura é experimental no Node e um número que
       # flutua entre corridas não serve de limiar
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22.18.0
 
