@@ -267,6 +267,31 @@ function normContract(c){
   o.keys=(o.keys||[]).map(i=>{const q=Object.assign({id:uid(),name:'',qty:1},i);q.id=idSeguro(q.id);return q});
   return o;
 }
+/* Os modos de dividir um valor pelos imóveis (o psplit de um movimento de
+   grupo ou de «Todos os imóveis», e o modo gravado no lote das partes):
+   [chave, nome, explicação]. Vive aqui, e não no formulário (movimento.js),
+   porque o normTx só deixa passar um destes — e o normTx corre quando este
+   ficheiro carrega, antes de haver formulário.
+   O custo: o formulário lê daqui os nomes e as explicações. */
+const PSPLIT_MODES=[['equal','Partes iguais','o mesmo para cada imóvel'],['value','Pelo valor de mercado','proporcional ao valor atual'],['purchase','Pelo valor de aquisição','proporcional ao que custou'],['pct','Quotas a definir','em partes: 2 e 1 → 2/3 e 1/3'],['percent','Percentagem','de cada imóvel; devem somar 100'],['amount','Valor certo','montante de cada imóvel; têm de somar o total'],['adjust','Ajuste','um extra por cima da parte igual: o total menos os extras divide-se em partes iguais por todos os imóveis e cada um soma o seu']];
+/* A marca de uma parte de um lote (um movimento de vários imóveis partido por
+   imóvel ao guardar): {id, n, total, alvo, modo, partes} — o id do lote, de
+   quantas partes é, o valor do lote inteiro (euros), 'todos' ou 'g:<grupo>',
+   o modo da divisão (PSPLIT_MODES) e os valores da divisão por imóvel ({} nos
+   modos sem valores). Uma marca que não se perceba cai inteira: a parte fica
+   um movimento normal do seu imóvel, que é o que ela é de qualquer forma — o
+   custo é deixar de a ver como parte do lote (e de a editar com ele).
+   Recebe: l — a marca tal como veio.
+   Devolve: a marca limpa (objeto novo), ou null quando não serve. */
+function normLote(l){
+  if(!l||typeof l!=='object'||Array.isArray(l))return null;
+  const id=idSeguro(l.id),n=Number(l.n),total=Number(l.total),alvo=String(l.alvo||'');
+  if(id==null||id===''||!Number.isInteger(n)||n<1||!isFinite(total))return null;
+  const g=/^g:./.test(alvo)?idSeguro(alvo.slice(2)):'';
+  if(alvo!=='todos'&&!g)return null;
+  const modo=PSPLIT_MODES.some(m=>m[0]===l.modo)?l.modo:'equal';
+  return {id,n,total,alvo:alvo==='todos'?'todos':'g:'+g,modo,partes:chavesSeguras(l.partes)};
+}
 /* kind: income (renda), expense (despesa), loan (prestação), owed (dívida recebida de terceiro),
    repay (pagamento dessa dívida), settle (acerto entre proprietários: paidBy → toId).
    split: como o valor se divide entre os donos — {mode:'equal'|'quota'|'pct'|'percent'|'amount'|'adjust',parts:{ownerId:n}};
@@ -275,13 +300,18 @@ function normContract(c){
    o amount é o que entrou, e a renda ilíquida é a soma), periodo (o mês 'AAAA-MM' a que a
    renda respeita) e recibo (o recibo eletrónico já foi emitido); numa despesa, irsCol (a
    coluna do Anexo F escolhida à mão, um id de IRS_COLUNAS; vazio = pela categoria).
+   Onde o movimento vive: propertyId (um imóvel), ou — só num molde (planeado ou
+   modelo) e nos antigos — groupId (um grupo) ou todos (todos os meus imóveis à
+   data, só numa receita ou despesa), com o psplit a dizer como se divide; um e
+   só um dos três ganha, por esta ordem. lote marca uma parte de um movimento de
+   vários imóveis (normLote) e só existe com imóvel, numa receita ou despesa.
    Os ids — o do movimento e os que ele refere, e as chaves das divisões — passam
    pelo idSeguro.
    Recebe: t — o movimento em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos do movimento preenchidos. */
 const normTx=t=>{const o=Object.assign({id:uid(),kind:'expense',label:'',amount:0,date:'',propertyId:null,contractId:null,
   loanId:null,payType:'prestacao',paidBy:null,toId:null,creditor:'',category:'',sub:'',tags:[],notes:'',split:null,groupId:null,psplit:null,
-  retencao:0,periodo:'',recibo:false,irsCol:''},t||{});
+  todos:false,lote:null,retencao:0,periodo:'',recibo:false,irsCol:''},t||{});
   o.retencao=Math.max(0,Number(o.retencao)||0);
   o.periodo=/^\d{4}-\d{2}$/.test(String(o.periodo||''))?String(o.periodo):'';
   o.recibo=!!o.recibo;
@@ -290,10 +320,13 @@ const normTx=t=>{const o=Object.assign({id:uid(),kind:'expense',label:'',amount:
   ['propertyId','contractId','loanId','paidBy','toId','groupId'].forEach(k=>{o[k]=idSeguro(o[k])});
   if(o.split&&(!o.split.mode||o.split.mode==='quota'))o.split=null;
   if(o.split){o.split={mode:o.split.mode,parts:chavesSeguras(o.split.parts)}}      // as partes são por dono
+  const deLote=o.kind==='income'||o.kind==='expense';
   if(o.propertyId)o.groupId=null;
-  if(!o.groupId)o.psplit=null;
+  o.todos=!!o.todos&&!o.propertyId&&!o.groupId&&deLote;
+  if(!o.groupId&&!o.todos)o.psplit=null;
   if(o.psplit&&!o.psplit.mode)o.psplit=null;
   if(o.psplit){o.psplit={mode:o.psplit.mode,parts:chavesSeguras(o.psplit.parts)}}  // e estas por imóvel
+  o.lote=o.propertyId&&deLote?normLote(o.lote):null;
   return o};
 /* as liquidações antigas (lista própria) passam a movimentos do tipo "acerto"
    Recebe: d — a base de dados (usa d.settlements e d.transactions).
@@ -330,7 +363,7 @@ const normSettle=x=>{const o=Object.assign({id:uid(),date:'',propertyId:null,fro
    propRec e propRecN são a origem de um planeado automático da ficha do imóvel (o IMI e a sua
    prestação, o condomínio, o seguro — planeados.js:syncPropRecs), como o loanId e o contractId
    são a das prestações e das rendas. */
-const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType','retencao','irsCol','propRec','propRecN'];
+const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','todos','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType','retencao','irsCol','propRec','propRecN'];
 /* cópia profunda de um movimento só com os campos que fazem sentido repetir (TX_TPL_KEYS):
    é o que os modelos e as recorrências guardam — data e id ficam de fora de propósito
    Recebe: t — o movimento a copiar.

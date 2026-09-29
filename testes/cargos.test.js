@@ -684,7 +684,7 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     assert.equal(app.cForm.propertyId, 'P1');
     app.visitModal(null);
     assert.equal(app.visForm.propertyId, 'P3');
-    // um dono sem imóvel escolhido fica em «Todos os imóveis», como sempre
+    // um dono sem imóvel escolhido fica em «Sem imóvel», como sempre
     sessao();
     app.txModal({ kind: 'expense' });
     assert.equal(app.tForm.propertyId, null);
@@ -749,10 +749,10 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     // um planeado novo: o seletor lista P1 e P2 (rec.add), enquanto um movimento novo só lista P1 (tx.add)
     app.txModal({ kind: 'expense' });
     const opcoes = () => Array.from(app.window.__sel.t_prop.options).filter((o) => !o.div).map((o) => o.label);
-    assert.deepEqual(opcoes(), ['Todos os imóveis', 'T1 Meu']);
+    assert.deepEqual(opcoes(), ['Sem imóvel', 'T1 Meu']);
     app.txModo = { modo: 'rec', every: 'month' };
     app.repaintTx();
-    assert.deepEqual(opcoes(), ['Todos os imóveis', 'T1 Meu', 'T2 Rui']);
+    assert.deepEqual(opcoes(), ['Sem imóvel', 'T1 Meu', 'T2 Rui']);
     Object.assign(app.tForm, { label: 'Seguro', amount: 30, propertyId: 'P2' });
     app.onSave();
     assert.equal(msg, 'Movimento recorrente criado.');

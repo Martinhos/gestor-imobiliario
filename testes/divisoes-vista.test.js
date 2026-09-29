@@ -92,14 +92,20 @@ describe('valorNaVista: o valor como os filtros o veem', () => {
     cent(app.valorNaVista(t), 70);
   });
 
-  test('«sem imóvel» fica como está, e um movimento de todos os imóveis não se corta', () => {
+  test('«sem imóvel» é mesmo sem imóvel: passa sem filtro e em «Sem imóvel atribuído», inteiro, e um filtro por imóvel deixa-o de fora', () => {
     const t = mov({ amount: 50, paidBy: null });   // sem imóvel nem grupo
     app.txProp = '__none__';
     assert.ok(app.txMatch(t), 'passa no filtro «sem imóvel»');
     assert.equal(app.valorNaVista(t), 50);
-    app.txProp = 'casa';
-    assert.ok(app.txMatch(t), 'um filtro por imóvel deixa-o entrar: é de todos');
+    app.txProp = '';
+    assert.ok(app.txMatch(t), 'e sem filtro');
     assert.equal(app.valorNaVista(t), 50, 'e vale por inteiro — não há por onde o dividir');
+    app.txProp = 'casa';
+    assert.ok(!app.txMatch(t), 'um filtro por imóvel deixa-o de fora: não é de nenhum imóvel');
+    app.txProp = 'g:G';
+    assert.ok(!app.txMatch(t), 'nem o filtro pelo grupo');
+    app.txProp = ''; app.ownerFilter = 'ana';
+    assert.ok(!app.txMatch(t), 'nem o de um proprietário: não é de nenhum imóvel dele');
   });
 
   test('um acerto vale sempre por inteiro', () => {

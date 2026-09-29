@@ -162,20 +162,45 @@ function pedidoRecebidoHtml(p) {
     '<button class="btn sm danger" data-toca="dados" data-click="CW.pedidoRecusar(\'' + jsq(p.id) + '\')">Recusar</button></div></div>';
 }
 
+/* A linha de um pedido para entrar num grupo partilhado meu: quem quer
+   entrar em que grupo, o que aceitar implica, e os botões de aceitar e
+   recusar (cloud/grupos.js: CW.grupoAceitarPedido / CW.grupoRecusarPedido —
+   ações declaradas, que só correm com o ficheiro do serviço carregado). Só
+   chegam pedidos dos grupos de que sou dono: o servidor não os manda a mais
+   ninguém.
+   Recebe: p — o pedido, com groupId, groupName, userId e name.
+   Devolve: o HTML da linha (texto). */
+function pedidoDeGrupoHtml(p) {
+  var gid = jsq(p.groupId), uid = jsq(p.userId);
+  return '<div class="card u-p-12px-13px"><b class="u-d-block">' + esc(p.name || 'Alguém') + ' quer entrar no grupo «' + esc(p.groupName || 'sem nome') + '»</b>' +
+    '<span class="small">Se aceitares, passa a comproprietário dos imóveis do grupo.</span>' +
+    '<div class="toolbar u-mt-9px"><button class="btn primary sm" data-toca="dados" data-click="CW.grupoAceitarPedido(\'' + gid + '\',\'' + uid + '\')">Aceitar</button>' +
+    '<button class="btn sm danger" data-toca="dados" data-click="CW.grupoRecusarPedido(\'' + gid + '\',\'' + uid + '\')">Recusar</button></div></div>';
+}
+
 /* O cartão «Pedidos por responder», para o topo da vista geral: os pedidos de
-   partilha recebidos (do serviço Colaboradores) e os convites de ligação
-   recebidos (da partilha entre contas, sempre), cada um com aceitar e
-   recusar. Os que enviei ficam de fora — não são para responder. Quem recebe
-   é muitas vezes uma conta nova, sem imóveis: sem isto só via o vazio.
+   partilha recebidos e os pedidos para entrar num grupo meu (os dois do
+   serviço Colaboradores) e os convites de ligação recebidos (da partilha
+   entre contas, sempre), cada um com aceitar e recusar. Os que enviei ficam
+   de fora — não são para responder. Quem recebe é muitas vezes uma conta
+   nova, sem imóveis: sem isto só via o vazio.
    Devolve: o HTML do cartão com o espaço até ao cartão seguinte (texto), ou
    '' sem nada por responder. */
 function pedidosDashCard() {
   var st = CW.state || {};
-  var inc = servicoLigado('colaboradores') ? ((st.shareRequests || {}).incoming || []) : [];
+  var colab = servicoLigado('colaboradores');
+  var inc = colab ? ((st.shareRequests || {}).incoming || []) : [];
+  /* o servidor só manda os pedidos dos grupos de que sou dono; um grupo que
+     está na base e não é meu (um estado trocado, uma resposta estranha) não
+     ganha botões de aceitar a quem não o pode fazer */
+  var grupos = !colab ? [] : ((st.sharedGroupRequests || {}).incoming || []).filter(function (p) {
+    var g = p && grp(p.groupId);
+    return p && p.groupId && p.userId && !(g && g._partilhado && !g._meu);
+  });
   var convites = (st.connections || []).filter(function (c) { return c.status === 'pending' && c.incoming; });
-  var n = inc.length + convites.length;
+  var n = inc.length + grupos.length + convites.length;
   if (!n) return '';
-  var linhas = inc.map(pedidoRecebidoHtml).concat(convites.map(function (c) {
+  var linhas = inc.map(pedidoRecebidoHtml).concat(grupos.map(pedidoDeGrupoHtml), convites.map(function (c) {
     return '<div class="card u-p-12px-13px"><b class="u-d-block">' + esc(c.peer.name || c.peer.email || c.peer.id) + ' quer ligar-se a ti</b>' +
       '<span class="small">' + CONVITE_SE_ACEITARES + '</span>' +
       '<div class="toolbar u-mt-9px">' + botoesConvite(c) + '</div></div>';
@@ -271,12 +296,16 @@ function convidarCard() {
 
 /* O cartão «Colaboradores»: por imóvel meu, quem colabora, com o cargo e os
    botões de mudar e remover. Só quem criou o imóvel gere colaboradores —
-   nos imóveis em compropriedade fica a dica.
-   Devolve: o HTML do cartão (texto). */
+   nos imóveis em compropriedade fica a dica. Sem imóvel nenhum (nem meu nem
+   partilhado comigo) não há cartão: o vazio dele mandava «criar uma ligação
+   de convite em cima», e sem imóveis não há convite que se possa criar — o
+   cartão de cima já diz que o primeiro passo é o imóvel.
+   Devolve: o HTML do cartão (texto), ou '' sem imóveis. */
 function colaboradoresCard() {
   if (!servicoLigado('colaboradores')) return '';
   var meus = cwImoveisMeus().filter(function (p) { return (p._colaboradores || []).length; });
   var partilhados = (db.properties || []).filter(function (p) { return p._sharedFrom && !p._cargo; });
+  if (!cwImoveisMeus().length && !partilhados.length) return '';
   var corpo = meus.length
     ? meus.map(function (p) {
         return '<div class="section-title u-mt-14px">' + esc(p.name || 'Sem nome') + '</div><div class="list u-g-8px">' +
@@ -356,17 +385,21 @@ function vColaboradores() {
       '<div class="u-mt-10px"><button type="button" class="btn primary sm" data-toca="camada" data-click="CW.cargoModal()">' + ic('plus', 13) + ' Novo cargo</button></div></div>' +
       (colab ? gap + colab : '');
   }
-  return intro + convidarCard() + gap + colaboradoresCard() + gap + cargosCard() + (colab ? gap + colab : '');
+  // sem imóveis o cartão «Colaboradores» não se escreve (colaboradoresCard), e o espaço dele também não
+  var colaboradores = colaboradoresCard();
+  return intro + convidarCard() + (colaboradores ? gap + colaboradores : '') + gap + cargosCard() + (colab ? gap + colab : '');
 }
 
 // O HTML da página "Conta e partilha": a conta e o id para dar a outros, a
 // ligação de partilha e os pedidos, o campo para adicionar uma ligação, a
-// lista de utilizadores ligados, a segurança e o apagar da conta. Os
-// colaboradores vivem no menu (Pessoas → Colaboradores) e não têm aqui
-// segunda porta. Sem sessão iniciada, mostra apenas o
-// convite para entrar. A partilha entre contas — a ligação, os pedidos e os
-// utilizadores ligados — é do serviço Colaboradores: desligado nesta conta,
-// ficam a conta, a segurança e o apagar, e uma frase a dizer quem o liga.
+// lista de utilizadores ligados, os grupos partilhados (cloud/grupos.js:
+// gruposCard, que carrega depois deste ficheiro — daí o typeof), a segurança
+// e o apagar da conta. Os colaboradores vivem no menu (Pessoas →
+// Colaboradores) e não têm aqui segunda porta. Sem sessão iniciada, mostra
+// apenas o convite para entrar. A partilha entre contas — a ligação, os
+// pedidos, os utilizadores ligados e os grupos — é do serviço Colaboradores:
+// desligado nesta conta, ficam a conta, a segurança e o apagar, e uma frase
+// a dizer quem o liga.
 // Devolve: string de HTML da página, pronta a inserir com innerHTML.
 function vCloud() {
   if (!CW.user) return card('Conta', 'Sem sessão iniciada', '<button class="btn primary" data-toca="camada" data-click="CW.showAuth()">Iniciar sessão</button>');
@@ -405,8 +438,9 @@ function vCloud() {
     '<div class="toolbar u-mt-11px"><button class="btn danger" data-toca="dados" data-risco="destroi" data-click="CW.deleteAccount()">' +
     ic('trash', 15) + ' Apagar a minha conta</button></div>');
   var ligacao = ligacaoCard();
+  var grupos = partilha && typeof gruposCard === 'function' ? gruposCard() : '';
   return acc + (ligacao ? gap + ligacao : '') + (pedidos ? gap + pedidos : '') + (add ? gap + add : '') + (list ? gap + list : '') +
-    '<div class="u-h-18px"></div>' + seg + gap + danger;
+    (grupos ? gap + grupos : '') + '<div class="u-h-18px"></div>' + seg + gap + danger;
 }
 
 /* ---------------- ações da página "Conta e partilha" ---------------- */

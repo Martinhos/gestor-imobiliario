@@ -8,6 +8,10 @@
    O global e o do mês acompanham o scroll, senão a meio de uma lista de
    duzentos movimentos deixa de haver como marcar tudo sem voltar ao topo.
 
+   Um movimento de vários imóveis (um lote, guardado como uma parte por
+   imóvel) é uma linha só, e marca-se, edita-se e elimina-se inteiro: as
+   partes todas que estão na base, pelo lote.id, e nunca as de outro lote.
+
    Este ficheiro transforma o HTML que o vTransactions devolve, em vez de o
    reescrever. É o mesmo caminho que o painel.js já usava para os cartões da
    vista geral: a vista continua a ser de quem a escreveu, e isto acrescenta. */
@@ -15,10 +19,62 @@
 'use strict';
 
 CW.selMode = false;
-var selIds = {};                      // ids marcados, como conjunto
+/* Os ids marcados, como conjunto. Um movimento de vários imóveis (um lote) é
+   uma linha só na lista e as partes dele (uma por imóvel, com o mesmo
+   lote.id) marcam-se e desmarcam-se juntas: estão TODAS aqui. Assim a linha
+   do lote fica marcada seja qual for a parte que a representa com os filtros
+   de agora (o data-tx é o da primeira parte que passou), e a marca nunca
+   apanha partes de outro lote. */
+var selIds = {};
 
-var selN = function () { return Object.keys(selIds).length; };
+// quantos movimentos estão marcados, como a lista os mostra: um lote conta uma vez
+var selN = function () { return selContar(); };
 var selTem = function (id) { return !!selIds[id]; };
+
+/* O lote de um movimento, como chave de texto.
+   Recebe: t — o movimento (objeto da base).
+   Devolve: o lote.id em texto, ou null num movimento que não é parte de um lote. */
+function selLoteDe(t) {
+  var l = t && t.lote;
+  return l && l.id != null && l.id !== '' ? String(l.id) : null;
+}
+
+/* Quantos movimentos estão marcados: os soltos um a um, e cada lote uma vez,
+   tenha as partes que tiver. Um id que já não está na base (apagado noutro
+   aparelho enquanto se marcava) não conta: não há nada que editar nem apagar.
+   Devolve: o número (inteiro). */
+function selContar() {
+  var porId = {}, vistos = {};
+  (db.transactions || []).forEach(function (t) { porId[t.id] = t; });
+  Object.keys(selIds).forEach(function (id) {
+    if (!porId[id]) return;
+    var k = selLoteDe(porId[id]);
+    vistos[k !== null ? 'lote:' + k : 'tx:' + id] = 1;
+  });
+  return Object.keys(vistos).length;
+}
+
+/* Marca ou desmarca linhas: cada id leva consigo as partes todas do lote dele
+   que estão na base (pelo lote.id); um movimento que não é de lote vai sozinho.
+   O índice faz-se uma vez por chamada — marcar um mês ou tudo pede-o por cada
+   linha.
+   Recebe: ids — os ids das linhas (o data-tx de cada uma); on — true para
+   marcar, false para desmarcar.
+   Devolve: nada — só mexe no estado (selIds). */
+function selMarcar(ids, on) {
+  var porId = {}, porLote = {};
+  (db.transactions || []).forEach(function (t) {
+    porId[t.id] = t;
+    var k = selLoteDe(t);
+    if (k !== null) (porLote[k] = porLote[k] || []).push(t.id);
+  });
+  ids.forEach(function (id) {
+    var k = selLoteDe(porId[id]);
+    (k !== null ? porLote[k] : [id]).forEach(function (x) {
+      if (on) selIds[x] = 1; else delete selIds[x];
+    });
+  });
+}
 
 /* ------------------------------------------------------------- entrar e sair */
 
@@ -28,7 +84,7 @@ var selTem = function (id) { return !!selIds[id]; };
 CW.selEntrar = function (id) {
   CW.selMode = true;
   selIds = {};
-  if (id) selIds[id] = 1;
+  if (id) selMarcar([id], true);   // a linha de um lote entra com o lote inteiro
   render();
 };
 
@@ -53,7 +109,7 @@ CW.selSair = function () {
    Devolve: nada — repinta só as marcas. */
 CW.selToggle = function (id, ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
-  if (selIds[id]) delete selIds[id]; else selIds[id] = 1;
+  selMarcar([id], !selIds[id]);
   selPintar();
 };
 
@@ -66,7 +122,7 @@ CW.selMes = function (mo, ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   var ids = selIdsDoMes(mo);
   var todos = ids.length && ids.every(selTem);
-  ids.forEach(function (id) { if (todos) delete selIds[id]; else selIds[id] = 1; });
+  selMarcar(ids, !todos);
   selPintar();
 };
 
@@ -77,7 +133,7 @@ CW.selTodos = function (ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   var ids = selIdsVisiveis();
   var todos = ids.length && ids.every(selTem);
-  ids.forEach(function (id) { if (todos) delete selIds[id]; else selIds[id] = 1; });
+  selMarcar(ids, !todos);
   selPintar();
 };
 
@@ -153,6 +209,8 @@ function caixa(marcada, parcial) {
 var _txLinhaExtra = txLinhaExtra;
 txLinhaExtra = function (t, mes) {
   var x = _txLinhaExtra(t, mes) || {};
+  /* a linha de um lote chega com o id da primeira parte que passou no filtro:
+     é esse o data-tx, e marcá-la marca o lote inteiro (selMarcar) */
   var id = t.id;
   x.attrs = (x.attrs || '') + ' data-tx="' + esc(id) + '" data-mes="' + esc(mes || '') + '"';
   if (CW.selMode) {
@@ -295,15 +353,15 @@ CW.selAcoes = function () {
    está, e as etiquetas só se acrescentam. O Aplicar é o selGravar.
    Devolve: nada — abre o modal de edição em massa (ou nada, sem marcas). */
 CW.selEditar = function () {
-  var ids = Object.keys(selIds);
-  if (!ids.length) return;
+  var n = selN();
+  if (!n) return;
   var tree = allCats('');
   var cats = [{ v: '', label: '— não mexer —' }].concat(
     Object.keys(tree).map(function (c) { return { v: c, label: c }; })
   );
   var tags = (db.settings.tags || []);
 
-  openModal('Editar ' + ids.length + (ids.length === 1 ? ' movimento' : ' movimentos'),
+  openModal('Editar ' + n + (n === 1 ? ' movimento' : ' movimentos'),
     '<div class="form">' +
       '<div class="hint">Só se altera o que preencheres. O resto de cada movimento fica como está.</div>' +
       '<label>Categoria' + sel('selCat', '', cats, 'CW.selCatMudou', 'rascunho') + '</label>' +
@@ -341,10 +399,51 @@ CW.selTagToggle = function (b) {
   b.classList.toggle('on');
 };
 
+/* O que as ações da seleção tocam: os movimentos marcados e, de cada lote
+   marcado, as partes todas que estão na base, pelo lote.id — também as que
+   tenham chegado depois de se marcar. Um lote incompleto nesta base (menos
+   partes do que o lote.n, porque há imóveis dele que não vês) fica de fora
+   inteiro: mexer só nas partes que se veem partia-o, e só quem vê os imóveis
+   todos o altera, como na ficha.
+   Devolve: {txs, n, fora} — os movimentos a tocar (os objetos da base), quantos
+   movimentos são para quem os vê (um lote conta um) e quantos lotes ficaram de
+   fora. */
+function selAlvos() {
+  var L = db.transactions || [], marcados = {}, partes = {};
+  L.forEach(function (t) {
+    var k = selLoteDe(t);
+    if (k === null) return;
+    partes[k] = (partes[k] || 0) + 1;
+    if (selIds[t.id]) marcados[k] = 1;
+  });
+  var txs = [], contados = {}, fora = {};
+  L.forEach(function (t) {
+    var k = selLoteDe(t);
+    if (k === null) {
+      if (selIds[t.id]) { txs.push(t); contados['tx:' + t.id] = 1; }
+      return;
+    }
+    if (!marcados[k]) return;
+    if (partes[k] < (Number(t.lote.n) || 0)) { fora[k] = 1; return; }
+    txs.push(t); contados['lote:' + k] = 1;
+  });
+  return { txs: txs, n: Object.keys(contados).length, fora: Object.keys(fora).length };
+}
+
+/* A frase dos lotes que as ações da seleção deixaram de fora.
+   Recebe: k — quantos lotes ficaram de fora (selAlvos).
+   Devolve: o texto; '' quando não ficou nenhum. */
+function selForaFrase(k) {
+  if (!k) return '';
+  return (k === 1 ? 'Um movimento dividido ficou de fora' : k + ' movimentos divididos ficaram de fora') +
+    ': tem partes em imóveis que não vês, e só quem os vê a todos o altera.';
+}
+
 /* Aplica a edição em massa aos movimentos marcados e grava na base. Uma
    categoria nova sem subcategoria escolhida limpa a antiga — ficava a
-   apontar para a árvore errada. Etiquetas só entram, nunca saem. No fim
-   fecha tudo e sai da seleção.
+   apontar para a árvore errada. Etiquetas só entram, nunca saem. Um lote
+   marcado muda em todas as partes (selAlvos), e conta como um movimento. No
+   fim fecha tudo e sai da seleção.
    Devolve: nada — grava, fecha os modais e sai da seleção (ou avisa por
    toast se nada foi preenchido). */
 CW.selGravar = function () {
@@ -353,39 +452,40 @@ CW.selGravar = function () {
     .map(function (b) { return b.getAttribute('data-tag'); });
   if (!cat && !sub && !tags.length) return toast('Não escolheste nada para alterar.');
 
-  var n = 0;
-  (db.transactions || []).forEach(function (t) {
-    if (!selIds[t.id]) return;
+  var alvo = selAlvos(), n = alvo.n;
+  alvo.txs.forEach(function (t) {
     if (cat) { t.category = cat; if (!sub) t.sub = ''; }   // categoria nova, subcategoria antiga não serve
     if (sub) t.sub = sub;
     if (tags.length) {
       t.tags = (t.tags || []).slice();
       tags.forEach(function (g) { if (t.tags.indexOf(g) < 0) t.tags.push(g); });
     }
-    n++;
   });
-  save(); closeAllModals(); CW.selSair();
-  toast(n + (n === 1 ? ' movimento alterado.' : ' movimentos alterados.'));
+  if (alvo.txs.length) save();
+  closeAllModals(); CW.selSair();
+  toast(((n ? n + (n === 1 ? ' movimento alterado.' : ' movimentos alterados.') : '') + ' ' + selForaFrase(alvo.fora)).trim());
 };
 
-/* Elimina os movimentos marcados: a confirmação diz quanto somam, e à saída
+/* Elimina os movimentos marcados: a confirmação diz quantos são e quanto
+   somam — de um lote, o total das partes todas, que saem juntas —, e à saída
    fica um "Anular" de seis segundos (comDesfazer) — a cópia é tirada antes
    do corte e volta inteira se o anular for clicado.
    Devolve: nada — se for confirmado, grava e sai da seleção. */
 CW.selApagar = function () {
-  var ids = Object.keys(selIds);
-  if (!ids.length) return;
-  var total = sum(ids.map(function (id) {
-    var t = (db.transactions || []).find(function (x) { return x.id === id; });
-    return t ? t.amount || 0 : 0;
-  }));
-  confirmModal('Eliminar ' + ids.length + (ids.length === 1 ? ' movimento' : ' movimentos'),
-    'Somam ' + euro2(total) + '.',
+  if (!selN()) return;
+  var alvo = selAlvos();
+  if (!alvo.txs.length) return toast(selForaFrase(alvo.fora));
+  var total = sum(alvo.txs.map(function (t) { return t.amount || 0; }));
+  confirmModal('Eliminar ' + alvo.n + (alvo.n === 1 ? ' movimento' : ' movimentos'),
+    'Somam ' + euro2(total) + '.' + (alvo.fora ? ' ' + selForaFrase(alvo.fora) : ''),
     function () {
-      var copia = JSON.parse(JSON.stringify((db.transactions || []).filter(function (t) { return selIds[t.id]; })));
-      db.transactions = (db.transactions || []).filter(function (t) { return !selIds[t.id]; });
+      /* outra vez aqui: entre a pergunta e o sim pode ter chegado uma parte */
+      var agora = selAlvos(), sai = {};
+      agora.txs.forEach(function (t) { sai[t.id] = 1; });
+      var copia = JSON.parse(JSON.stringify(agora.txs));
+      db.transactions = (db.transactions || []).filter(function (t) { return !sai[t.id]; });
       save(); buildNav(); CW.selSair();
-      comDesfazer(ids.length + (ids.length === 1 ? ' movimento eliminado.' : ' movimentos eliminados.'), function () {
+      comDesfazer(agora.n + (agora.n === 1 ? ' movimento eliminado.' : ' movimentos eliminados.'), function () {
         db.transactions = (db.transactions || []).concat(copia);
       });
     });

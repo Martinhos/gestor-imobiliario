@@ -32,6 +32,41 @@ var AVISOS = [
     titulo: 'A app passa a ser feita de serviços',
     seccoes: [
       {
+        titulo: 'Um grupo de casas partilha-se como grupo',
+        afeta: ['partilha', 'imoveis'],
+        itens: [
+          'Em Definições → Grupos, um grupo de imóveis pode passar a grupo partilhado: quem está no grupo é comproprietário de todas as casas dele — vê e edita contratos, movimentos e pessoas, e entra nas quotas — e uma casa que entre no grupo mais tarde chega logo a toda a gente. Antes partilhava-se casa a casa.',
+          'Entra-se por uma ligação do dono do grupo, que vale sete dias e serve várias pessoas — mas ninguém entra sem o dono aceitar. Quem abre a ligação pede para entrar; o pedido aparece ao dono em «Pedidos por responder», no sino e na janela do grupo, com Aceitar e Recusar. Uma ligação enviada à pessoa errada já não dá acesso a nada.',
+          'O dono vê quem entrou, remove, roda ou desativa a ligação, e apaga o grupo (as casas ficam). Cada membro pode pôr no grupo casas suas, e tirá-las; sair do grupo leva as casas que pôs. O cartão «Grupos partilhados» em Conta e partilha lista os teus, os em que entraste e os pedidos à espera.',
+        ],
+      },
+      {
+        titulo: 'Um movimento de vários imóveis fica em cada imóvel',
+        afeta: ['movimentos', 'partilha'],
+        itens: [
+          'Um movimento de um grupo de imóveis, ou de «Todos os imóveis», passa a ser guardado em partes, uma por imóvel, com a divisão que escolheste. Cada parte vive no seu imóvel, e por isso quem partilha esse imóvel contigo vê-a — nos movimentos, nos totais e nas contas entre proprietários. Antes ficava só contigo, e as contas de cada um não batiam certo.',
+          'Na lista continua a ser uma linha só, com o total e «dividido por N imóveis»; com o filtro num imóvel, vês a parte dele e o total. Editar ou apagar mexe no movimento inteiro.',
+          'As contas já gravadas deixam de mudar quando um grupo ganha ou perde um imóvel. Os movimentos de grupo que já tinhas partem-se sozinhos da próxima vez que abrires a app, com os mesmos valores.',
+        ],
+      },
+      {
+        titulo: 'A vista geral começa pela jornada',
+        afeta: ['app'],
+        itens: [
+          'Enquanto não tens movimentos, a vista geral mostra a jornada — os primeiros passos numa fita, com o passo em que estás em destaque e o botão dele — e o portefólio quando já há imóveis, em vez de quatro indicadores a 0 € e dois gráficos vazios. O primeiro movimento traz os números.',
+          'A jornada aparece também sem conta; com conta, o passo do perfil entra.',
+        ],
+      },
+      {
+        titulo: 'O movimento diz quem és e pode ficar sem imóvel',
+        afeta: ['movimentos'],
+        itens: [
+          'Ao registar um movimento com mais do que um proprietário à escolha, o teu nome leva «(eu)» no fim — em «Pago por», «Recebido por», «Quem paga», «Quem recebe» e na divisão entre proprietários.',
+          '«Todos os imóveis» e «Sem imóvel» passam a ser duas opções. «Todos os imóveis» divide o valor pelos imóveis que tinhas na data do movimento, e conta na avaliação de cada um. «Sem imóvel» conta só nos totais da vista geral, nunca num imóvel, e deixa de aparecer quando filtras os movimentos por um imóvel. Os movimentos sem imóvel que já tinhas ficam «Sem imóvel», e nenhum número muda.',
+          'Num acerto entre proprietários, «Todos os imóveis» continua a ser o acerto de todas as contas.',
+        ],
+      },
+      {
         titulo: 'Cada separador é um serviço',
         afeta: ['app'],
         itens: [
@@ -77,7 +112,7 @@ var AVISOS = [
         itens: [
           'Um pedido de partilha ou um convite de ligação que recebas aparece no topo da vista geral — mesmo numa conta acabada de criar — em «Pedidos por responder», com Aceitar e Recusar ali mesmo. Antes só se via em Definições → Conta e partilha.',
           'Ao escolher uma casa para partilhar com outro proprietário, as quotas de cada um definem-se na própria escolha, e a proposta de divisão segue logo com a partilha; ficam em partes iguais até o outro confirmar. Antes a pergunta só vinha depois, casa a casa.',
-          'Em Colaboradores, quando ainda não há imóveis (ou cargos), o botão para os criar está ali.',
+          'Em Colaboradores, quando ainda não há imóveis (ou cargos), o botão para os criar está ali — e sem imóveis o cartão «Colaboradores», que mandava criar uma ligação de convite que ainda não se pode criar, deixa de aparecer.',
         ],
       },
       {

@@ -7,9 +7,41 @@
 // + comproprietários (é o que conta nas quotas e nas propostas); acessoACasa
 // junta o colaborador com o seu cargo, e é o que as escritas e os anexos
 // consultam. Um colaborador nunca entra em participants.
+//
+// Comproprietário é quem tem a casa partilhada consigo numa conexão aceite
+// OU quem é membro de um grupo partilhado vivo que a contém (migração 0017,
+// rotas/grupos.js) — e não é o dono dela. As duas portas dão o mesmo grau,
+// e um membro que também tenha um cargo é comproprietário (a precedência).
 
 import { now } from './http.js';
 import { normalizarPerms, permDoKind, podeAddKind, fraseRecusa, fundirPlaneado, planeadoTermina } from './permissoes.js';
+
+/* A pergunta da compropriedade sem o dono, numa consulta só: a casa (?1)
+   está partilhada com este utilizador (?2) numa conexão aceite, ou ele é
+   membro de um grupo partilhado vivo que a contém. Quem chama já pôs o dono
+   de parte — e uma casa do próprio num grupo seu não o torna comproprietário
+   de si mesmo porque o dono responde antes. */
+const COMPROPRIETARIO_SQL = `
+  SELECT 1 FROM shares s
+    JOIN connections c ON c.id = s.connection_id
+   WHERE s.house_id = ?1 AND c.status = 'accepted'
+     AND (c.requester_id = ?2 OR c.target_id = ?2) AND s.owner_id <> ?2
+  UNION ALL
+  SELECT 1 FROM shared_group_houses gh
+    JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
+    JOIN shared_group_members m ON m.group_id = gh.group_id
+   WHERE gh.house_id = ?1 AND m.user_id = ?2
+   LIMIT 1`;
+
+// Os membros dos grupos partilhados vivos que contêm a casa, pela ordem em
+// que entraram (um membro de dois grupos com a mesma casa vem duas vezes:
+// quem chama tira os repetidos).
+const MEMBROS_DA_CASA_SQL = `
+  SELECT m.user_id FROM shared_group_houses gh
+    JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
+    JOIN shared_group_members m ON m.group_id = gh.group_id
+   WHERE gh.house_id = ?
+   ORDER BY m.joined_at, m.user_id`;
 
 // Apaga objetos do R2 em listas de até mil chaves, o máximo que o delete
 // aceita. Vive aqui e não em files.js — que também o usa, na varredura —
@@ -20,8 +52,9 @@ export async function apagarDoR2(env, ids) {
   for (let i = 0; i < ids.length; i += 1000) await env.FILES.delete(ids.slice(i, i + 1000));
 }
 
-// O dono acede sempre; outro utilizador só se a casa estiver partilhada consigo
-// numa conexão aceite.
+// O dono acede sempre; outro utilizador só se for comproprietário — a casa
+// partilhada consigo numa conexão aceite, ou membro de um grupo partilhado
+// vivo que a contém.
 // Recebe: env — o ambiente do worker (a base D1); userId — o id do
 // utilizador, vindo da sessão; houseId — o id da casa.
 // Devolve: promessa de { ok, owner } — ok diz se pode entrar, owner se é o
@@ -32,20 +65,13 @@ export async function canAccessHouse(env, userId, houseId) {
     .first();
   if (!house) return { ok: false };
   if (house.owner_id === userId) return { ok: true, owner: true };
-  const shared = await env.DB.prepare(
-    `SELECT 1 FROM shares s
-       JOIN connections c ON c.id = s.connection_id
-      WHERE s.house_id = ? AND c.status = 'accepted'
-        AND (c.requester_id = ? OR c.target_id = ?)
-        AND s.owner_id <> ?`
-  )
-    .bind(houseId, userId, userId, userId)
-    .first();
+  const shared = await env.DB.prepare(COMPROPRIETARIO_SQL).bind(houseId, userId).first();
   return { ok: !!shared, owner: false };
 }
 
-// Comproprietários de uma casa: o dono + todos os utilizadores com quem a
-// casa está partilhada através de conexões aceites.
+// Comproprietários de uma casa: o dono, depois todos os utilizadores com quem
+// a casa está partilhada através de conexões aceites, depois os membros dos
+// grupos partilhados vivos que a contêm — sem repetidos.
 // Recebe: env — o ambiente do worker (a base D1); houseId — o id da casa.
 // Devolve: promessa da lista de ids de utilizadores (o dono primeiro, sem
 // repetidos), ou de null se a casa não existir.
@@ -68,13 +94,16 @@ export async function participantsOf(env, houseId) {
     const other = r.requester_id === r.owner_id ? r.target_id : r.requester_id;
     if (!parts.includes(other)) parts.push(other);
   });
+  const membros = (await env.DB.prepare(MEMBROS_DA_CASA_SQL).bind(houseId).all()).results;
+  membros.forEach((m) => { if (!parts.includes(m.user_id)) parts.push(m.user_id); });
   return parts;
 }
 
 // O acesso completo de um utilizador a uma casa, com o grau: dono,
-// comproprietário (share numa conexão aceite) ou colaborador (cargo do dono
-// numa lista de casas). Por esta precedência — quem é participante nunca é
-// tratado como colaborador, mesmo que tenha um cargo por engano.
+// comproprietário (share numa conexão aceite, ou membro de um grupo
+// partilhado vivo com a casa) ou colaborador (cargo do dono numa lista de
+// casas). Por esta precedência — quem é participante nunca é tratado como
+// colaborador, mesmo que tenha um cargo por engano.
 // Recebe: env — o ambiente do worker (a base D1); userId — o id do
 // utilizador, vindo da sessão; houseId — o id da casa.
 // Devolve: promessa de { ok, owner, coowner, collab, ownerId } — collab é
@@ -88,15 +117,7 @@ export async function acessoACasa(env, userId, houseId) {
   if (!house) return nada;
   const base = { ok: true, owner: false, coowner: false, collab: null, ownerId: house.owner_id };
   if (house.owner_id === userId) return { ...base, owner: true };
-  const shared = await env.DB.prepare(
-    `SELECT 1 FROM shares s
-       JOIN connections c ON c.id = s.connection_id
-      WHERE s.house_id = ? AND c.status = 'accepted'
-        AND (c.requester_id = ? OR c.target_id = ?)
-        AND s.owner_id <> ?`
-  )
-    .bind(houseId, userId, userId, userId)
-    .first();
+  const shared = await env.DB.prepare(COMPROPRIETARIO_SQL).bind(houseId, userId).first();
   if (shared) return { ...base, coowner: true };
   const cargo = await env.DB.prepare(
     `SELECT r.id, r.name, r.perms
@@ -220,9 +241,10 @@ export async function planeadoAGravar(env, me, acesso, houseId, kind, recordId, 
 }
 
 // Apagar uma casa, com tudo o que lhe está preso: os registos ficam marcados
-// (lápide), as partilhas, propostas, atribuições de colaboradores e pedidos
-// de partilha desaparecem, e os convites por usar deixam de a incluir (um
-// convite que ficasse sem casas fica revogado). Os anexos ficam presos à
+// (lápide), as partilhas, propostas, atribuições de colaboradores, pedidos
+// de partilha e a presença em grupos partilhados desaparecem, e os convites
+// por usar deixam de a incluir (um convite que ficasse sem casas fica
+// revogado). Os anexos ficam presos à
 // casa por agora: a app deixa desfazer o apagar, e o desfazer volta a gravar
 // a casa e os registos com os mesmos anexos; a varredura do cron diário
 // leva-os da D1 e do R2 passado o prazo (files.js:varrerAnexos).
@@ -241,6 +263,7 @@ export async function apagarCasa(env, houseId, ownerId) {
       'DELETE FROM collaborators WHERE owner_id = ? AND id NOT IN (SELECT collaborator_id FROM collaborator_houses)'
     ).bind(ownerId),
     env.DB.prepare('DELETE FROM share_requests WHERE house_id = ?').bind(houseId),
+    env.DB.prepare('DELETE FROM shared_group_houses WHERE house_id = ?').bind(houseId),
   ];
   const convites = (
     await env.DB.prepare(
@@ -314,12 +337,19 @@ const ANEXO_DE_OUTRO = 'owner_id = ?1 AND house_id IN (SELECT id FROM houses WHE
 // Recebe: env — o ambiente do worker (a base D1 e o R2); uid — o id da conta a apagar.
 // Devolve: nada — o efeito é o lote de escritas na base, lápide incluída.
 export async function purgeAccount(env, uid) {
-    // casas de outros onde este utilizador constava como comproprietário
+    // casas de outros onde este utilizador constava como comproprietário —
+    // por uma conexão aceite ou por um grupo partilhado vivo
     const foreign = (
       await env.DB.prepare(
         `SELECT DISTINCT s.house_id FROM shares s
            JOIN connections c ON c.id = s.connection_id
-          WHERE (c.requester_id = ?1 OR c.target_id = ?1) AND s.owner_id <> ?1`
+          WHERE (c.requester_id = ?1 OR c.target_id = ?1) AND s.owner_id <> ?1
+         UNION
+         SELECT gh.house_id FROM shared_group_houses gh
+           JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
+           JOIN shared_group_members m ON m.group_id = gh.group_id
+           JOIN houses h ON h.id = gh.house_id
+          WHERE m.user_id = ?1 AND h.owner_id <> ?1`
       )
         .bind(uid)
         .all()
@@ -355,6 +385,18 @@ export async function purgeAccount(env, uid) {
     );
 
     stmts.push(
+      // grupos partilhados: os de que é dono vão inteiros (membros, casas,
+      // ligação e os pedidos para entrar); nos dos outros saem a sua linha de
+      // membro, os pedidos que fez e as casas que lá pôs — antes das casas,
+      // de que a última condição depende
+      env.DB.prepare('DELETE FROM shared_group_members WHERE group_id IN (SELECT id FROM shared_groups WHERE owner_id = ?)').bind(uid),
+      env.DB.prepare('DELETE FROM shared_group_houses WHERE group_id IN (SELECT id FROM shared_groups WHERE owner_id = ?)').bind(uid),
+      env.DB.prepare('DELETE FROM shared_group_links WHERE group_id IN (SELECT id FROM shared_groups WHERE owner_id = ?)').bind(uid),
+      env.DB.prepare('DELETE FROM shared_group_requests WHERE group_id IN (SELECT id FROM shared_groups WHERE owner_id = ?)').bind(uid),
+      env.DB.prepare('DELETE FROM shared_groups WHERE owner_id = ?').bind(uid),
+      env.DB.prepare('DELETE FROM shared_group_members WHERE user_id = ?').bind(uid),
+      env.DB.prepare('DELETE FROM shared_group_requests WHERE user_id = ?').bind(uid),
+      env.DB.prepare('DELETE FROM shared_group_houses WHERE added_by = ?1 OR house_id IN (SELECT id FROM houses WHERE owner_id = ?1)').bind(uid),
       // dados próprios
       env.DB.prepare('DELETE FROM records WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(uid),
       env.DB.prepare('DELETE FROM shares WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(uid),

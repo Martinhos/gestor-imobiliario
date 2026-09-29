@@ -177,6 +177,13 @@ document.addEventListener('focusout',()=>{
    (espera.js:sabemosOEstado): sem rede o pedido falha depressa e a espera
    acaba logo, no pior caso — a rede pendurada — são seis segundos, e sem
    sessão nenhuma isto corre já, na mesma linha.
+
+   E parte por imóvel os movimentos de grupo do formato antigo (um registo só,
+   dividido na hora pelos imóveis que o grupo tivesse): é dos Movimentos
+   (movimento.js:migrarMovimentosDeGrupo), e com sessão só depois de o estado
+   do servidor ter chegado mesmo — uma espera que acabou pelo tecto não chega,
+   porque partir um movimento que outro aparelho já partiu é escrever às
+   escuras.
    Devolve: nada — deriva os planeados e grava, assim que houver por que se
    guiar. */
 function derivarDoArranque(){
@@ -184,6 +191,8 @@ function derivarDoArranque(){
   /* os planeados automáticos (renda, prestação e as despesas fixas da ficha do
      imóvel) são dos Planeados: sem esse serviço nesta conta não há o que derivar */
   if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs();syncAllPropRecs()}
+  const comEstado=!haSessao()||!!(window.CW&&CW._pulled);
+  if(comEstado&&servicoLigado('transactions')&&typeof migrarMovimentosDeGrupo==='function')migrarMovimentosDeGrupo();
   save();
 }
 derivarDoArranque();

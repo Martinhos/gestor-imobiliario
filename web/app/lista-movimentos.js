@@ -30,14 +30,18 @@ function txTerms(){
 }
 /* o "palheiro" onde a pesquisa procura: rótulo, notas, categorias, etiquetas,
    imóvel, contrato, pessoas, data e valor do movimento, tudo desacentuado.
+   Numa parte de um lote o valor é o total do lote — o que se escreveu, como
+   num movimento de grupo — e o grupo do lote entra pelo nome.
    Recebe: t — o movimento (objeto de transação).
    Devolve: string única, desacentuada, com todos os campos pesquisáveis. */
 function txHay(t){
-  const c=t.contractId?contract(t.contractId):null;
+  const c=t.contractId?contract(t.contractId):null,l=t.lote||null;
+  const gl=l&&String(l.alvo||'').startsWith('g:')?grp(String(l.alvo).slice(2)):null;
+  const v=l&&isFinite(Number(l.total))?Number(l.total):t.amount;
   return deacc([t.label,t.notes,t.category,t.sub,(t.tags||[]).join(' '),t.creditor,t.date,dPT(t.date),
-    propName(t.propertyId),t.groupId?((grp(t.groupId)||{}).name||''):'',c?ctName(c):'',
+    propName(t.propertyId),t.groupId?((grp(t.groupId)||{}).name||''):'',gl?gl.name||'':'',c?ctName(c):'',
     t.paidBy&&owner(t.paidBy)?owner(t.paidBy).name:'',t.toId&&owner(t.toId)?owner(t.toId).name:'',
-    String(t.amount),euro2(t.amount)].join(' '));
+    String(v),euro2(v)].join(' '));
 }
 let _qT=null;
 /* pesquisa dos movimentos com atraso de 280 ms para não redesenhar a cada
@@ -70,20 +74,26 @@ function txqLimpar(botao){
   i.focus();
 }
 /* um movimento passa em TODOS os filtros ativos? Tipo ('debt' junta owed e
-   repay), imóvel/grupo ('__none__' = sem imóvel; um imóvel apanha também os
-   movimentos de grupo com quota nele), âmbito do proprietário, pessoa que
+   repay), imóvel/grupo ('__none__' = sem imóvel atribuído; um imóvel apanha
+   os movimentos dele, as partes dos lotes que lhe cabem e os movimentos de
+   grupo antigos com quota nele), âmbito do proprietário, pessoa que
    pagou/recebeu, pesquisa, categoria/subcategoria e intervalo de datas.
+   «Sem imóvel» quer dizer mesmo sem imóvel: um movimento sem imóvel, sem
+   grupo e sem «Todos os imóveis» não é de nenhum imóvel, e um filtro por
+   imóvel deixa-o de fora (entrava, como se fosse de todos). Passa sem filtro
+   e em «Sem imóvel atribuído».
    Recebe: t — o movimento (objeto de transação).
    Devolve: true se passa em todos os filtros ativos, false caso contrário. */
 function txMatch(t){
   if(txFilter==='debt'){if(t.kind!=='owed'&&t.kind!=='repay')return false}
   else if(txFilter&&t.kind!==txFilter)return false;
-  if(txProp==='__none__'){if(t.propertyId||t.groupId)return false}
+  if(txProp==='__none__'){if(t.propertyId||t.groupId||t.todos)return false}
   else if(String(txProp||'').startsWith('g:')){const gid=txProp.slice(2),g=grp(gid),gids=(g||{}).ids||[];
     if(!(t.groupId===gid||(t.propertyId&&gids.indexOf(t.propertyId)>-1)))return false}
-  else if(txProp){if(t.propertyId){if(t.propertyId!==txProp)return false}else if(t.groupId&&txPropShare(t,txProp)<=0)return false}   /* sem imóvel = de todos */
+  else if(txProp){if(t.propertyId){if(t.propertyId!==txProp)return false}
+    else if(!(t.groupId||t.todos)||txPropShare(t,txProp)<=0)return false}   /* sem imóvel não é de nenhum imóvel */
   if(t.propertyId){if(!inScope(t.propertyId))return false}
-  else if(t.groupId){if(ownerFilter&&!txProps(t).some(p=>inScope(p.id)))return false}
+  else if(t.groupId||t.todos){if(ownerFilter&&!txProps(t).some(p=>inScope(p.id)))return false}
   else if(ownerFilter)return false;
   if(txPaid&&!(t.paidBy===txPaid||t.toId===txPaid||(!t.paidBy&&txNoPayer)))return false;
   if(!txNoPayer&&!t.paidBy)return false;
@@ -100,23 +110,29 @@ function txMatch(t){
 /* O valor de um movimento como os filtros o veem: a parte que cabe ao imóvel
    filtrado, ao grupo ou ao proprietário em foco, pesada pelo txWeight — o
    mesmo peso das métricas — e ao cêntimo. Vale por inteiro o que não tem por
-   onde se cortar: um acerto, um movimento sem imóvel nem grupo (o filtro por
-   imóvel deixa-o entrar: é de todos) e um de grupo cujo grupo já não tem
-   imóveis — aí o peso dava 0 e a linha dizia 0 € de um movimento que existe.
-   Recebe: t — o movimento.
+   onde se cortar: um acerto, um movimento sem imóvel nem grupo (só se vê sem
+   filtro ou em «Sem imóvel atribuído»: um filtro por imóvel já não o deixa
+   entrar) e um de grupo cujo grupo já não tem imóveis — aí o peso dava 0 e a
+   linha dizia 0 € de um movimento que existe.
+   A linha de um lote (linhasDaLista: a primeira parte com _partes) vale a
+   soma das partes que passaram no filtro, cada uma pesada como as outras.
+   Recebe: t — o movimento, ou a linha de um lote.
    Devolve: euros (número, 2 casas). */
 function valorNaVista(t){
+  if(t._partes)return Math.round(sum(t._partes.map(valorNaVista))*100)/100;
   const v=Math.round((Number(t.amount)||0)*100)/100;   /* cêntimos também por inteiro: é com isto que a frase da parte compara */
-  if(t.kind==='settle'||!(t.propertyId||t.groupId)||(t.groupId&&!txProps(t).length))return v;
+  if(t.kind==='settle'||!(t.propertyId||t.groupId||t.todos)||((t.groupId||t.todos)&&!txProps(t).length))return v;
   return Math.round(v*txWeight(t,txProp&&txProp!=='__none__'?txProp:null,true)*100)/100;
 }
 /* A linha pequena de um movimento cortado pelos filtros: de que é parte e
    qual é o total. Corta o filtro por imóvel (a parte de um movimento de grupo
    nesse imóvel, ou no âmbito: «parte de <grupo>»), a quota do proprietário em
-   foco («a tua parte»), ou os dois («a tua parte em <imóvel>»).
-   Recebe: t — o movimento.
+   foco («a tua parte»), ou os dois («a tua parte em <imóvel>»). A linha de um
+   lote tem a sua (fraseDoLoteNaLista).
+   Recebe: t — o movimento, ou a linha de um lote.
    Devolve: o texto, já escapado; '' quando o valor na vista é o total. */
 function fraseDaParte(t){
+  if(t._partes)return fraseDoLoteNaLista(t);
   const v=valorNaVista(t),tot=Math.round((Number(t.amount)||0)*100)/100;
   if(v===tot)return '';
   const pid=txProp&&txProp!=='__none__'?txProp:null,total=' · total '+euro2(tot);
@@ -130,6 +146,68 @@ function fraseDaParte(t){
    Recebe: t — o movimento.
    Devolve: euros (número), com sinal. */
 function saldoNaVista(t){return !countsInTotals(t)?0:isIn(t.kind)?valorNaVista(t):isOut(t.kind)?-valorNaVista(t):0}
+/* As linhas da lista: um movimento de vários imóveis (um lote) é guardado
+   como uma parte por imóvel, e na lista volta a ser UMA linha — sem filtro, o
+   lote inteiro; com o filtro num imóvel, a parte desse imóvel. Só a forma dos
+   dados conta (t.lote.id): as partes de um lote que passaram no filtro juntam-se
+   na linha, que é uma cópia da primeira delas pela ordem dos imóveis (a mesma
+   da ficha) com _partes. A cópia é da linha e não da base: o _partes nunca
+   chega a ser gravado. O id da linha é o da primeira parte — é a chave da
+   lista viva ('tx:'+id), o data-lp, o txView e o data-tx da seleção — e o
+   valor, a frase e o sítio mudam com o filtro, que é o que refaz a linha.
+   Um movimento sem lote (os normais e os de grupo antigos) passa tal e qual.
+   Recebe: lista — os movimentos que passaram nos filtros (array).
+   Devolve: as linhas (array), pela ordem da lista: cada lote no lugar da
+   primeira parte dele que lá aparece. */
+function linhasDaLista(lista){
+  const out=[],lotes=Object.create(null),ordem=Object.create(null);
+  (db.properties||[]).forEach((p,i)=>{ordem[p.id]=i});
+  const pos=t=>t.propertyId!=null&&t.propertyId in ordem?ordem[t.propertyId]:Infinity;
+  (lista||[]).forEach(t=>{
+    const lid=t&&t.lote?t.lote.id:null;
+    if(lid==null||lid===''){out.push(t);return}
+    if(!lotes[lid]){lotes[lid]=[];out.push(lotes[lid])}
+    lotes[lid].push(t);
+  });
+  return out.map(x=>{
+    if(!Array.isArray(x))return x;
+    const ps=x.slice().sort((a,b)=>(pos(a)-pos(b))||String(a.id).localeCompare(String(b.id)));
+    return Object.assign({},ps[0],{_partes:ps});
+  });
+}
+/* O total de um lote, ao cêntimo: o que se escreveu no movimento (lote.total);
+   sem ele, a soma das partes que a linha tem.
+   Recebe: t — a linha de um lote (linhasDaLista).
+   Devolve: euros (número, 2 casas). */
+function totalDoLoteNaLista(t){
+  const l=t.lote||{},ps=t._partes||[t];
+  const v=l.total!=null&&l.total!==''&&isFinite(Number(l.total))?Number(l.total):sum(ps.map(p=>p.amount));
+  return Math.round(v*100)/100;
+}
+/* A linha pequena de um lote: todas as partes na vista — «dividido por N
+   imóveis» (e, se o proprietário em foco só leva uma quota, «a tua parte» e o
+   total); só algumas, porque o filtro cortou as outras ou porque há imóveis
+   do lote que não vês — «parte de «<rótulo>» · total <total do lote>».
+   Recebe: t — a linha de um lote (linhasDaLista).
+   Devolve: o texto, já escapado. */
+function fraseDoLoteNaLista(t){
+  const l=t.lote||{},ps=t._partes||[t],n=Math.max(Number(l.n)||0,ps.length);
+  const tot=totalDoLoteNaLista(t),total=' · total '+euro2(tot);
+  if(ps.length<n)return 'parte de «'+esc(t.label)+'»'+total;
+  return 'dividido por '+n+(n===1?' imóvel':' imóveis')+(valorNaVista(t)!==tot?' · a tua parte'+total:'');
+}
+/* Onde é um lote, no lugar do nome do imóvel na linha: o nome do grupo (se
+   ainda existir nesta base) ou «Todos os imóveis», e por quantos imóveis se
+   dividiu. De um grupo que já não existe, só quantos são — dizer «Todos os
+   imóveis» seria mentir.
+   Recebe: t — a linha de um lote (linhasDaLista).
+   Devolve: o texto, já escapado (ex.: «Bloco · 3 imóveis»). */
+function ondeDoLoteNaLista(t){
+  const l=t.lote||{},n=Math.max(Number(l.n)||0,(t._partes||[t]).length),alvo=String(l.alvo||'');
+  const g=alvo.startsWith('g:')?grp(alvo.slice(2)):null;
+  const nome=alvo==='todos'?'Todos os imóveis':g&&g.name?g.name:'';
+  return (nome?esc(nome)+' · ':'')+n+(n===1?' imóvel':' imóveis');
+}
 // descreve os filtros ativos numa linha legível, para o topo da lista e do modal
 // Devolve: string (já escapada para HTML) com os filtros ativos; vazia sem filtros.
 function filterSummary(){
@@ -227,7 +305,7 @@ function txFilterBody(){
       <label>Até<input id="txAteF" type="date" value="${txAte}" data-change="onTxDatas()"></label></div>
     <div class="row"><label>Ordenar por${sel('txSortF',txSort,[{v:'date',label:'Data'},{v:'amount',label:'Valor'}],'onTxSort','vista')}</label>
       <label>Ordem${sel('txDirF',txDir,[{v:'desc',label:'Descendente'},{v:'asc',label:'Ascendente'}],'onTxDir','vista')}</label></div>
-    <div class="hint">${txFilterCount()?filterSummary()+' · '+db.transactions.filter(txMatch).length+' movimentos':'Sem filtros: a lista mostra tudo.'}</div></div>`;
+    <div class="hint">${txFilterCount()?filterSummary()+' · '+linhasDaLista(db.transactions.filter(txMatch)).length+' movimentos':'Sem filtros: a lista mostra tudo.'}</div></div>`;
 }
 // muda o campo de ordenação dos movimentos (data ou valor)
 // Devolve: nada — redesenha a lista e o modal.
@@ -342,23 +420,26 @@ function txMesExtra(mes){return {}}
 /* Movimentos: KPIs do filtro atual (com evolução ao toque), saldos entre
    proprietários, dívidas a terceiros e a lista agrupada por mês com o saldo
    de cada um. Tudo respeita os filtros e a ordenação escolhidos no modal.
+   A lista é de linhas (linhasDaLista: um lote é uma só), e é pelas linhas
+   que se ordena e se contam «N movimentos»; os indicadores somam as partes,
+   uma vez cada — dá o mesmo total, sem depender de como se juntaram.
    Devolve: string com o HTML completo da vista. */
 function vTransactions(){
   const nF=txFilterCount(),adiciona=podeSemImovel()||casasComo('tx.add').length;   /* a condição do FAB e do vazio */
   const head=txFilterPainel()
   +`${nF||txSearch.trim()?`<div class="small u-m-2px-0-10px">${filterSummary()}${txSearch.trim()?(nF?' · ':'')+'pesquisa: “'+esc(txSearch.trim())+'”':''}</div>`:''}`
   +(adiciona?fab([{label:'Novo movimento',act:'newTxPick()'}]):'');
-  txLinhasPintadas=0;
+  txLinhasPintadas=0;txLista=[];   /* sem linhas, nenhuma: a lista de uma pintura anterior não fica a fingir que ainda se vê */
   if(!db.transactions.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.${adiciona?saida('Registar movimento','newTxPick()','camada'):''}</div>`);
-  const list=db.transactions.filter(txMatch),vv={};   /* o valor na vista uma vez por movimento: o comparador pede-o vezes sem conta */
-  if(txSort==='amount')list.forEach(t=>{vv[t.id]=valorNaVista(t)});
+  const partes=db.transactions.filter(txMatch),list=linhasDaLista(partes),vv={};   /* o valor na vista uma vez por linha: o comparador pede-o vezes sem conta */
+  if(txSort==='amount')list.forEach(t=>{vv[t.id]=valorNaVista(t)});   /* a linha de um lote vale a soma das partes */
   list.sort((a,b)=>{const d=txDir==='desc'?-1:1;
     if(txSort==='amount')return d*(vv[a.id]-vv[b.id])||String(a.date).localeCompare(String(b.date));
     return d*String(a.date).localeCompare(String(b.date))});
   if(!list.length)return head+vazioFiltro()
     +balancesCard(txProp||null);   /* pode não haver movimentos e haver contas por acertar */
   txLinhasPintadas=list.length;
-  const tot={income:0,expense:0,loan:0,owed:0,repay:0,settle:0};list.forEach(t=>{if(countsInTotals(t))tot[t.kind]=(tot[t.kind]||0)+valorNaVista(t)});
+  const tot={income:0,expense:0,loan:0,owed:0,repay:0,settle:0};partes.forEach(t=>{if(countsInTotals(t))tot[t.kind]=(tot[t.kind]||0)+valorNaVista(t)});
   const saldo=tot.income+tot.owed-tot.expense-tot.loan-tot.repay;
   const evoTx=k=>()=>{
     const L=db.transactions.filter(txMatch).filter(countsInTotals),f=t=>k==='saldo'?saldoNaVista(t):(t.kind===k?valorNaVista(t):0);
@@ -381,8 +462,9 @@ function vTransactions(){
   return head+resumo+balancesCard(txProp||null)+creditorsCard(txProp&&txProp!=='__none__'?txProp:null)
     +`<div id="txLista"></div>`;
 }
-/* Os movimentos que a última pintura da vista escolheu, para a lista se poder
-   repintar sozinha sem voltar a filtrar e a ordenar tudo. */
+/* As linhas que a última pintura da vista escolheu (linhasDaLista: os
+   movimentos e, por lote, a primeira parte com _partes), para a lista se
+   poder repintar sozinha sem voltar a filtrar e a ordenar tudo. */
 let txLista=[];
 /* Quem pagou (ou recebeu) e como se dividiu, na linha de um movimento.
    Recebe: t — o movimento.
@@ -397,14 +479,19 @@ function txQuem(t){
    (lista.js), e e por ele que se sabe se ha alguma coisa a refazer. O valor
    e a frase da parte mudam com o filtro, por isso entram aqui e nao noutro
    sitio: e assim que a linha se refaz quando o filtro muda.
-   Recebe: t — o movimento; mo — o mes 'AAAA-MM' do bloco onde a linha entra.
+   A linha de um lote (linhasDaLista) leva o id da primeira parte — no data-lp,
+   no txView e no data-tx da seleção —, no lugar do imóvel o grupo ou «Todos
+   os imóveis» com «· N imóveis», e o valor e a frase das partes que passaram.
+   Recebe: t — o movimento, ou a linha de um lote; mo — o mes 'AAAA-MM' do
+   bloco onde a linha entra.
    Devolve: o HTML da linha (string). */
 function txLinhaHtml(t,mo){
   const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null,parte=fraseDaParte(t);
   const x=txLinhaExtra(t,mo)||{};
+  const onde=t._partes?' · '+ondeDoLoteNaLista(t):t.propertyId?' · '+esc(propName(t.propertyId)):'';
   return `<div class="card tap txrow${x.cls?' '+x.cls:''} u-p-13px-15px" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" ${x.attrs||''} data-toca="camada" data-click="${x.onclick||`txView('${jsq(t.id)}')`}"><div class="row-between">
     ${x.caixa||''}<div class="u-minw-0"><div class="title u-fs-14p5px">${esc(t.label)}</div>
-      <div class="small">${dPT(t.date)} \u00b7 ${k.short}${t.category?' \u00b7 '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${t.propertyId?' \u00b7 '+esc(propName(t.propertyId)):''}${t.creditor?' \u00b7 '+esc(t.creditor):''}</div>
+      <div class="small">${dPT(t.date)} \u00b7 ${k.short}${t.category?' \u00b7 '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${onde}${t.creditor?' \u00b7 '+esc(t.creditor):''}</div>
       ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}
       ${txQuem(t)}
       ${parte?`<div class="small">${parte}</div>`:''}

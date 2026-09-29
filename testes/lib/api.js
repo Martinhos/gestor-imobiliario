@@ -181,6 +181,7 @@ export const ligarTudo = (env, quem) => env.DB.prepare('DELETE FROM user_service
 export const TABELAS = [
   'houses', 'records', 'user_records', 'roles', 'collaborators', 'collaborator_houses', 'collab_invites',
   'share_links', 'share_requests', 'connections', 'shares', 'share_proposals', 'audit_log', 'files',
+  'shared_groups', 'shared_group_members', 'shared_group_houses', 'shared_group_links', 'shared_group_requests',
 ];
 
 /* A fotografia dessas tabelas. Duas iguais provam que uma recusa não deixou

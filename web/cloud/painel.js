@@ -292,7 +292,11 @@ CW.doFillMissed = function (id) {
     t.label = (t.label || r.name) + ' (estimativa)';
     t.tags = (t.tags || []).concat(['Estimativa']);
     if (t.kind === 'loan') applyLoan(t);
-    db.transactions.push(t);
+    /* um planeado de grupo ou de «Todos os imóveis» entra partido por imóvel,
+       como no Confirmar (movimento.js:registarMolde); sem os Movimentos, ou se
+       não se partir, entra como sempre, e o arranque seguinte parte-o */
+    var reg = typeof registarMolde === 'function' ? registarMolde(t) : null;
+    (reg && reg.partes ? reg.partes : [t]).forEach(function (x) { db.transactions.push(x); });
     n++;
   }
   // as ocorrências já vencidas ficam saldadas: empurra o plano para a frente

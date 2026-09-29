@@ -990,6 +990,36 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
    exatamente o defeito que este ajuste existe para não deixar acontecer. */
 #cwGuia.sobre-janela{z-index:71;bottom:auto;top:calc(12px + var(--inset-top));animation:guiaEntra var(--lento) var(--curva-entra)}
 @media(min-width:900px){#cwGuia{left:auto;right:22px;max-width:420px;bottom:calc(22px + var(--inset-bottom))}#cwGuia.sobre-janela{top:calc(16px + var(--inset-top))}}
+/* cloud/guia.js:cartaoPassos — a fita da jornada dos primeiros passos.
+   Uma <ol> e não um desenho: um leitor de ecrã lê «lista, 4 itens» e o passo
+   atual leva aria-current. Os passos dividem a largura em partes iguais
+   (flex:1 1 0), e é isso que põe cinco a caberem num telemóvel de 375px: a
+   página tira 15px de cada lado abaixo dos 900px (.wrap) e o cartão 16px
+   mais a borda, sobram 311px, 62px a cada passo; o rótulo de 11px cabe —
+   «Movimentos», o mais comprido, mede 58 — e o ellipsis segura o que um dia
+   não couber, em vez de partir a fita.
+   O traço entre círculos é o ::before de cada passo menos o primeiro, do
+   meio do anterior ao meio deste (left:-50% e right:50% da própria caixa,
+   que são todas da mesma largura); fica a 13px do topo, que é o meio de um
+   círculo de 28 com a borda contada (box-sizing:border-box), e o círculo,
+   com o fundo do cartão, tapa-o por cima. Acende-se com a marca nos feitos e
+   no atual — é até onde se chegou; daí para a frente é --line.
+   Sem transição nem animação, de propósito: o cartão nasce novo a cada
+   render (design.md, Movimento) e uma transition não teria de onde partir. */
+.jornada{list-style:none;margin:14px 0 0;padding:0;display:flex;align-items:flex-start}
+.jornada-passo{position:relative;flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center}
+.jornada-passo::before{content:"";position:absolute;top:13px;left:-50%;right:50%;height:2px;background:var(--line)}
+.jornada-passo:first-child::before{display:none}
+.jornada-passo.feito::before,.jornada-passo.atual::before{background:var(--accent)}
+.jornada-n{position:relative;width:28px;height:28px;border-radius:50%;border:2px solid var(--line2);background:var(--card);display:grid;place-items:center;font-size:12px;font-weight:600;color:var(--muted)}
+.jornada-passo.feito .jornada-n{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.jornada-passo.atual .jornada-n{border-color:var(--accent);color:var(--accent);font-weight:700}
+.jornada-l{max-width:100%;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jornada-passo.atual .jornada-l{color:var(--ink);font-weight:600}
+/* o passo atual, por baixo da fita: um traço separa-o dela, como o painel de
+   detalhe do que está escolhido em cima — e não mais um cartão dentro do
+   cartão, que era o desenho antigo (quatro cartões, oito botões) */
+.jornada-agora{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 /* cloud/selecao.js — a seleção de vários movimentos.
    A caixa de marcar, desenhada e não um campo do sistema: um checkbox do
    sistema destoava de tudo o resto e não aceita o tamanho que aqui é preciso. */

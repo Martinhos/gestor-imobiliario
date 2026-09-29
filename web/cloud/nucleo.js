@@ -14,7 +14,8 @@ var PULL_MS = 180000;
 // O CW.state de quem ainda não recebeu nenhum estado: as listas todas com forma, vazias.
 // Devolve: um objeto novo com a forma do estado.
 function estadoVazio() {
-  return { connections: [], roles: [], collaborators: [], invites: [], people: [], shareLink: null, shareRequests: { incoming: [], outgoing: [] } };
+  return { connections: [], roles: [], collaborators: [], invites: [], people: [], sharedGroups: [], shareLink: null, shareRequests: { incoming: [], outgoing: [] },
+    sharedGroupRequests: { incoming: [], outgoing: [] } };
 }
 
 var CW = (window.CW = {});
@@ -478,7 +479,13 @@ function exportEntities() {
     map['u:rec:' + r.id] = { scope: 'user', kind: 'rec', id: r.id, data: strip(r) };
   });
   (db.templates || []).forEach(function (x) { map['u:tpl:' + x.id] = { scope: 'user', kind: 'tpl', id: x.id, data: strip(x) }; });
-  (db.groups || []).forEach(function (x) { map['u:group:' + x.id] = { scope: 'user', kind: 'group', id: x.id, data: strip(x) }; });
+  // um grupo partilhado vive no servidor nas tabelas dele (cloud/grupos.js),
+  // nunca como registo meu: subi-lo como u:group era duplicá-lo — e o
+  // u:group antigo de um grupo que se partilhou sai por diferença (applyState)
+  (db.groups || []).forEach(function (x) {
+    if (x._partilhado) return;
+    map['u:group:' + x.id] = { scope: 'user', kind: 'group', id: x.id, data: strip(x) };
+  });
   // os "proprietários" são os utilizadores: só o meu perfil é exportado
   var meOwner = CW.user && owners.find(function (o) { return o.id === CW.user.id; });
   if (meOwner) map['u:profile:main'] = { scope: 'user', kind: 'profile', id: 'main', data: strip(meOwner) };
@@ -847,6 +854,48 @@ function colaboradorPuro(uid) {
   return !!(pe && pe.kind === 'collab');
 }
 
+/* Os grupos partilhados do estado (st.sharedGroups, rotas/estado.js) entram
+   na base como grupos de imóveis (kind 'prop') marcados _partilhado, com o
+   que a janela do grupo precisa: o dono (_dono, _donoNome), se é meu (_meu),
+   os membros (_membros: [{id, name}]) e a ligação de convite (_ligacao:
+   {ativo, expiresAt, uses}, só nos meus; null nos outros). As marcas começam
+   por '_' e nunca sobem (strip); o grupo em si também não (exportEntities).
+   Um grupo local (u:group) com o mesmo id cede ao partilhado: é a transição
+   de um grupo privado que se partilhou (CW.grupoPartilhar) — o id fica, e os
+   movimentos com groupId continuam a apontar para ele.
+   Recebe: d — a base em construção (d.groups já com os u:group); st — o estado.
+   Devolve: nada — mexe em d.groups. */
+function gruposPartilhadosEm(d, st) {
+  (st.sharedGroups || []).forEach(function (sg) {
+    try {
+      if (!sg || !sg.id) return;
+      var casas = (sg.houses || []).map(function (h) { return h && h.id; }).filter(Boolean);
+      var g = Object.assign(normGroup({ id: sg.id, kind: 'prop', name: sg.name || '', ids: casas }), {
+        _partilhado: true, _dono: sg.ownerId || '', _donoNome: sg.ownerName || '', _meu: !!sg.mine,
+        _membros: (sg.members || []).map(function (m) { return { id: m.id, name: m.name || '' }; }),
+        _ligacao: sg.link || null,
+      });
+      var i = -1;
+      for (var k = 0; k < d.groups.length; k++) if (d.groups[k].id === g.id) { i = k; break; }
+      if (i < 0) d.groups.push(g); else d.groups[i] = g;
+    } catch (e) { relatarIlegivel('u', { kind: 'group', id: sg && sg.id }, e); }
+  });
+}
+
+/* As entidades dos grupos partilhados de uma base, na forma de entidadeDe
+   ('group:<id>'). Um grupo partilhado está vivo mas não está na exportação:
+   sem isto, o u:group antigo de um grupo que se partilhou parecia uma
+   entidade que desapareceu — o pendentesLocais dava-o por remoção local e
+   tirava da base o grupo partilhado com o mesmo id; e o applyState nunca o
+   marcava obsoleto, e o registo velho ficava no servidor para sempre.
+   Recebe: d — a base (db ou a refeita).
+   Devolve: {'group:<id>': 1} para cada grupo _partilhado. */
+function entidadesDosGruposPartilhados(d) {
+  var out = {};
+  ((d && d.groups) || []).forEach(function (g) { if (g && g._partilhado) out['group:' + g.id] = 1; });
+  return out;
+}
+
 /* Reconstrói a base local inteira a partir do estado do servidor: casas com
    donos e quotas vindas de lá, registos por casa, dados do utilizador e
    perfis — os "proprietários" passam a ser os utilizadores com acesso.
@@ -882,6 +931,8 @@ function rebuildDb(st) {
       // kind 'owner' (modelo antigo) é ignorado: os proprietários são os utilizadores
     } catch (e) { relatarIlegivel('u', r, e); }
   });
+  // os grupos partilhados, por cima dos u:group (um com o mesmo id cede)
+  gruposPartilhadosEm(d, st);
   var houseOwner = {};
   (st.houses || []).forEach(function (h) {
     try {
@@ -1061,7 +1112,8 @@ function objetoDaChave(d, pk) {
    Devolve: {puts: {chave: cópia do objeto local}, dels: {chave: 1}, n}. */
 function pendentesLocais(st, noServidor) {
   var map = exportEntities();
-  var puts = {}, dels = {}, n = 0, registos = 0, vivas = {};
+  // os grupos partilhados estão vivos sem estar na exportação (entidadesDosGruposPartilhados)
+  var puts = {}, dels = {}, n = 0, registos = 0, vivas = entidadesDosGruposPartilhados(db);
   Object.keys(map).forEach(function (k) {
     var pk = parseKey(k);
     vivas[entidadeDe(pk)] = 1;
@@ -1172,11 +1224,15 @@ function applyState(st, selo, resumoSt) {
   CW._esperaFim = 1;   // e por isso a app já pode afirmar o que sabe
   // os campos novos do estado (cargos, colaboradores, convites, ligação,
   // pedidos, pessoas) ficam sempre com forma, venham ou não do servidor
-  ['roles', 'collaborators', 'invites', 'people', 'connections'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = []; });
+  ['roles', 'collaborators', 'invites', 'people', 'connections', 'sharedGroups'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = []; });
   if (!st.shareLink || typeof st.shareLink !== 'object') st.shareLink = null;
   if (!st.shareRequests || typeof st.shareRequests !== 'object') st.shareRequests = {};
   if (!Array.isArray(st.shareRequests.incoming)) st.shareRequests.incoming = [];
   if (!Array.isArray(st.shareRequests.outgoing)) st.shareRequests.outgoing = [];
+  // os pedidos para entrar num grupo partilhado (rotas/grupos.js): os que me chegam, como dono, e os que fiz
+  if (!st.sharedGroupRequests || typeof st.sharedGroupRequests !== 'object') st.sharedGroupRequests = {};
+  if (!Array.isArray(st.sharedGroupRequests.incoming)) st.sharedGroupRequests.incoming = [];
+  if (!Array.isArray(st.sharedGroupRequests.outgoing)) st.sharedGroupRequests.outgoing = [];
   CW.state = st;
   /* os serviços desligados nesta conta vêm no estado (servicos.desligados);
      sem o campo, está tudo ligado — e o separador onde estávamos, se ficou
@@ -1189,7 +1245,10 @@ function applyState(st, selo, resumoSt) {
   // o retrato novo: o que o servidor tem, na forma local normalizada
   snap = {};
   var map = exportEntities();
-  var vivas = {};
+  // um grupo partilhado está vivo sem estar na exportação: o u:group antigo
+  // de um grupo que se partilhou é a chave velha de uma entidade que passou a
+  // viver noutra, e fica obsoleta (entidadesDosGruposPartilhados)
+  var vivas = entidadesDosGruposPartilhados(db);
   Object.keys(map).forEach(function (k) {
     vivas[entidadeDe(parseKey(k))] = 1;
     if (serverKeys[k]) snap[k] = resumoDeTexto(JSON.stringify(map[k].data));

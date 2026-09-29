@@ -35,6 +35,7 @@ confere que cada uma aponta para código que existe.
 - 2026-09-15 · A CSP sem «unsafe-inline»: os eventos e os estilos saem do HTML
 - 2026-09-24 · O repositório passou a público
 - 2026-09-24 · A app de dev instala-se ao lado da de produção
+- 2026-09-29 · Um grupo partilha-se como grupo, e a vista geral começa pela jornada
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -975,3 +976,61 @@ Definições (cloud/partilha.js:cartaoDaAppNoTelemovel) explica, fora de
 produção, que o APK é o Rendorium DEV e que se instala ao lado. A regra do
 service worker não muda: fora de produção não guarda nada (sw.js:GUARDA), por
 isso os ícones de dev não entram na SHELL nem contam para a chegada.
+
+## 2026-09-29 · Um grupo partilha-se como grupo, e a vista geral começa pela jornada
+
+Seis pedidos do Martinho num só dia, e duas decisões de produto que ficam
+aqui com o porquê.
+
+**Os grupos partilhados.** A partilha era casa a casa, dentro de uma ligação
+aceite entre duas contas. Um grupo de casas que se quer partilhar com a
+família obrigava a N escolhas de casas com N pessoas, e uma casa nova no
+grupo não chegava a ninguém. Passa a haver grupos partilhados: quem está no
+grupo é comproprietário de todas as casas dele, e a regra entra no mesmo
+sítio que já decidia as partilhas por ligação (worker/src/lib/acesso.js:participantsOf),
+por isso as quotas, as propostas, o sino e o cliente inteiro não souberam de
+nada. Três escolhas: (1) entra-se por uma ligação multi-uso com prazo de
+sete dias, e quem a abre fica com um pedido que o dono aceita ou recusa (a
+migração 0018; web/cloud/grupos.js:CW.grupoAceitarPedido); (2) qualquer
+membro põe no grupo casas suas, porque um grupo em que só o dono põe casas é
+uma partilha por ligação com outro nome — e quem entra aceita no modal que as
+casas que puser ficam com todos; (3) um movimento atribuído a um grupo
+parte-se por imóvel ao guardar, e cada parte vive no seu imóvel
+(movimento.js:parteId). Um grupo privado que se partilha mantém o id
+(web/cloud/grupos.js:CW.grupoPartilhar), para os planeados e os modelos que o
+apontam continuarem a apontar.
+
+A primeira versão, no mesmo dia, fazia as duas coisas ao contrário, e o
+Martinho corrigiu-as. Entrava-se SEM o dono aceitar, com o argumento de que é
+o dono que distribui a ligação; mas uma ligação enviada à pessoa errada dava
+logo as casas todas, e um pedido pendente custa ao dono um toque. E o
+movimento de grupo ficava inteiro nos registos de quem o registou: os outros
+membros não o viam, e os saldos entre proprietários de cada um discordavam.
+Partido por imóvel, cada parte chega a quem partilha esse imóvel; as partes
+levam o lote (o id, quantas são, o total, o alvo e a divisão), a lista mostra
+o lote numa linha (lista-movimentos.js:linhasDaLista), e as contas de um lote
+ficam como foram gravadas mesmo que o grupo mude depois. Os movimentos de
+grupo antigos partem-se no arranque com os mesmos números
+(movimento.js:migrarMovimentosDeGrupo); uma renda de grupo com retenção passa
+a contar no Anexo F de cada imóvel, pelo titular dele.
+
+**A jornada.** A vista geral pedia um imóvel e, criado ele, mostrava quatro
+indicadores a 0 € e dois gráficos vazios com o cartão dos primeiros passos por
+cima. O Martinho perguntou se fazia sentido pedir os movimentos antes de
+mostrar cartões a zero, e não faz: enquanto não há movimentos a vista geral é
+a jornada — a fita dos passos com o atual em destaque
+(guia.js:cartaoPassos) — mais o portefólio quando já há imóveis
+(painel-geral.js:vDashboard). O primeiro movimento traz os números.
+
+**O resto, mais pequeno.** No formulário do movimento, com mais do que um
+proprietário à escolha, o meu nome leva «(eu)» (movimento.js:rotuloDoDono).
+O imóvel de um movimento tem duas opções que antes eram uma: «Sem imóvel»,
+que não é de imóvel nenhum e conta só nos totais da vista geral, e «Todos os
+imóveis», que se parte pelos imóveis que eu tinha na data do movimento
+(saldos.js:imoveisDeTodos) e conta em cada um. A opção vazia chamava-se
+«Todos os imóveis» e servia para as duas; os movimentos que já a tinham ficam
+«Sem imóvel», para nenhum número antigo mudar. Num acerto a opção vazia
+continua «Todos os imóveis», porque um acerto sem imóvel é mesmo de todos. E
+nos Colaboradores sem imóveis o cartão «Colaboradores», cujo vazio mandava
+criar uma ligação de convite que não se pode criar, deixa de se escrever
+(partilha.js:colaboradoresCard).

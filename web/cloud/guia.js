@@ -276,9 +276,13 @@ function euSou() {
    quando não há imóveis para arrendar; quem é só colaborador salta os de
    dono (perfil, imóveis, contratos) e o dos movimentos se nenhum cargo lhos
    deixa adicionar, e tem o de marcar a primeira visita quando o cargo o
-   deixa (feito quando há uma visita criada por si). Cada passo traz o porquê
-   e a ação (act) que o botão "Fazer agora" dispara.
-   Devolve: os passos aplicáveis (array de {id, titulo, porque, feito, act}). */
+   deixa (feito quando há uma visita criada por si). Sem sessão o passo do
+   perfil salta — não há perfil de ninguém para preencher — e os outros
+   ficam: a jornada da vista geral (jornadaInicial) serve quem ainda não
+   entrou. Cada passo traz o rótulo curto da fita (rotulo), o porquê, a
+   ação (act) que o botão "Fazer agora" dispara e a família dela (toca:
+   'camada' abre uma janela, 'ecra' muda de ecrã).
+   Devolve: os passos aplicáveis (array de {id, rotulo, titulo, porque, feito, toca, act}). */
 function passos() {
   var eu = euSou();
   // só colaboradora (souSoColaborador, web/app/acessos.js): os passos de dono não lhe dizem respeito
@@ -293,45 +297,55 @@ function passos() {
   return [
     {
       id: 'perfil',
+      rotulo: 'Perfil',
       titulo: 'Preenche o teu perfil',
       porque: 'Os teus dados entram nos contratos que a app gera.',
       feito: !!(eu && eu.nif),
-      salta: colab,
+      salta: colab || !CW.user,
+      toca: 'camada',
       act: 'CW.editProfile()',
     },
     {
       id: 'imoveis',
+      rotulo: 'Imóveis',
       titulo: 'Adiciona os teus imóveis',
       porque: 'É a base de tudo o resto.',
       feito: (db.properties || []).length > 0,
       // um passo de um serviço desligado nesta conta não se propõe: abriria um formulário que o servidor recusa
       salta: colab || !servicoLigado('properties'),
+      toca: 'camada',
       act: 'propModal()',
     },
     {
       id: 'contratos',
+      rotulo: 'Contratos',
       titulo: 'Regista os contratos',
       porque: semContrato.length
         ? semContrato.length + (semContrato.length === 1 ? ' imóvel para arrendar ainda sem contrato.' : ' imóveis para arrendar ainda sem contrato.')
         : 'Para as rendas passarem a aparecer sozinhas.',
       feito: (db.properties || []).length > 0 && !semContrato.length,
       salta: colab || !arrendar.length || !servicoLigado('contracts'),   // só para uso próprio, só colaborador, ou sem os Contratos: não se aplica
+      toca: 'camada',
       act: 'ctModal()',
     },
     {
       id: 'visitas',
+      rotulo: 'Visita',
       titulo: 'Marca a primeira visita',
       porque: 'Quem vem, a que imóvel e quando — o dono vê-a logo.',
       feito: visitaMinha,
       salta: !colab || !casasComo('visit.add').length || !servicoLigado('visits'),
+      toca: 'camada',
       act: 'visitModal()',
     },
     {
       id: 'movimentos',
+      rotulo: 'Movimentos',
       titulo: 'Confirma os primeiros movimentos',
       porque: 'É daqui que saem os números da vista geral.',
       feito: (db.transactions || []).length > 0,
       salta: !podeMovimentos || !servicoLigado('transactions'),
+      toca: 'ecra',
       act: "go('transactions')",
     },
   ].filter(function (p) { return !p.salta; });
@@ -351,45 +365,69 @@ function passosDispensados() {
   try { return localStorage.getItem(LS_PASSOS) === '1'; } catch (e) { return false; }
 }
 
-/* O HTML do cartão de primeiros passos que a vista geral mostra no topo —
-   ou '' quando foi dispensado, não há sessão, ou já está tudo feito (o
-   cartão não fica pendurado a dar os parabéns). Cada passo por fazer tem
-   o "Fazer agora" e o botão do tutorial respetivo.
+/* O cartão de primeiros passos, que é a jornada: a fita dos passos — um
+   círculo por passo, com o visto nos feitos e o número nos outros, e o
+   rótulo curto por baixo — e, por baixo dela, SÓ o passo atual (o primeiro
+   por fazer), com o título, o porquê, o "Fazer agora" e o botão do tutorial.
+   Era uma lista de quatro cartões, cada um com os seus dois botões, e numa
+   conta nova ocupava o ecrã inteiro antes de se ver fosse o que fosse: a
+   fita diz o mesmo em duas linhas, e a pessoa só tem de decidir uma coisa.
+   Vai ao topo da vista geral e, enquanto não há movimentos, É a vista
+   (jornadaInicial). Devolve '' quando foi dispensado ou já está tudo feito
+   (o cartão não fica pendurado a dar os parabéns). Não exige sessão: sem
+   ela os passos são os mesmos menos o do perfil (passos).
+   A fita é uma <ol> e não um desenho: um leitor de ecrã lê «lista, 4
+   itens», o passo atual leva aria-current="step", e o círculo de um passo
+   feito anuncia-se «Feito» (role="img") — o número dos outros lê-se tal
+   e qual, e o rótulo a seguir.
    Devolve: o HTML do cartão (string); '' quando não há nada a mostrar. */
 function cartaoPassos() {
-  if (passosDispensados() || !CW.user) return '';
-  var ps = passos();
-  var faltam = ps.filter(function (p) { return !p.feito; });
-  if (!faltam.length) return '';
-  var f = feitos();
+  if (passosDispensados()) return '';
+  var ps = passos(), atual = -1;
+  for (var k = 0; k < ps.length; k++) if (!ps[k].feito) { atual = k; break; }
+  if (atual < 0) return '';
+  var p = ps[atual], f = feitos();
 
   return '<div class="card u-mb-14px">' +
     '<div class="row-between u-ai-flex-start">' +
       '<div><div class="title">Primeiros passos</div>' +
-      '<div class="small">' + (ps.length - faltam.length) + ' de ' + ps.length + ' feitos · ' +
-      'sugestões, não obrigações</div></div>' +
+      '<div class="small">Passo ' + (atual + 1) + ' de ' + ps.length + ' · sugestões, não obrigações</div></div>' +
       '<button type="button" class="iconbtn" aria-label="Dispensar" data-toca="vista" data-click="CW.passosFora()">' + ic('x', 18) + '</button>' +
     '</div>' +
-    '<div class="list u-g-8px u-mt-12px">' +
-    ps.map(function (p) {
-      return '<div class="card u-p-11px-13px' + (p.feito ? ' u-op-055' : '') + '">' +
-        '<div class="row-between u-ai-center u-g-10px">' +
-          '<span class="u-d-flex u-ai-center u-g-10px u-minw-0">' +
-            '<span class="selck' + (p.feito ? ' on' : '') + ' u-fx-0-0-auto">' +
-              (p.feito ? ic('check', 13) : '') + '</span>' +
-            '<span class="u-minw-0"><b>' + esc(p.titulo) + '</b>' +
-            '<span class="small u-d-block">' + esc(p.porque) + '</span></span>' +
-          '</span>' +
-        '</div>' +
-        (p.feito ? '' :
-          '<div class="toolbar u-m-9px-0-0">' +
-            '<button class="btn sm primary" data-click="' + p.act + '">Fazer agora</button>' +
-            '<button class="btn sm" data-toca="ecra" data-click="CW.guiaAbrir(\'' + p.id + '\')">' +
-              (f[p.id] ? 'Rever o tutorial' : 'Como se faz') + '</button>' +
-          '</div>') +
-        '</div>';
+    '<ol class="jornada" role="list">' +
+    ps.map(function (q, i) {
+      var estado = q.feito ? ' feito' : (i === atual ? ' atual' : '');
+      return '<li class="jornada-passo' + estado + '"' + (i === atual ? ' aria-current="step"' : '') + '>' +
+        (q.feito
+          ? '<span class="jornada-n" role="img" aria-label="Feito">' + ic('check', 13) + '</span>'
+          : '<span class="jornada-n">' + (i + 1) + '</span>') +
+        '<span class="jornada-l">' + esc(q.rotulo) + '</span>' +
+        '</li>';
     }).join('') +
-    '</div></div>';
+    '</ol>' +
+    '<div class="jornada-agora"><b>' + esc(p.titulo) + '</b>' +
+      '<span class="small u-d-block">' + esc(p.porque) + '</span>' +
+      '<div class="toolbar u-m-9px-0-0">' +
+        '<button class="btn sm primary" data-toca="' + p.toca + '" data-click="' + p.act + '">Fazer agora</button>' +
+        '<button class="btn sm" data-toca="ecra" data-click="CW.guiaAbrir(\'' + p.id + '\')">' +
+          (f[p.id] ? 'Rever o tutorial' : 'Como se faz') + '</button>' +
+      '</div></div>' +
+    '</div>';
+}
+
+/* A jornada no lugar da vista geral. Enquanto não há movimentos, a vista
+   geral eram quatro indicadores a 0 € e dois gráficos vazios por baixo do
+   cartão dos passos — números que não dizem nada e ocupam o ecrã todo. Sem
+   movimentos, a vista É o cartão dos passos (painel-geral.js:vDashboard
+   pergunta aqui), mais o portefólio quando há imóveis; os indicadores voltam
+   com o primeiro movimento. Não substitui a vista a quem só colabora (o topo
+   dele é o «O que podes fazer», e as contas não são dele), nem a quem
+   dispensou o cartão, nem quando já não há passos por fazer — nesses casos
+   devolve '' e a vista geral fica como sempre.
+   Devolve: o HTML do cartão (string), ou '' quando a jornada não substitui a vista. */
+function jornadaInicial() {
+  if ((db.transactions || []).length || souSoColaborador()) return '';
+  return cartaoPassos();
 }
 
 /* Todos os tutoriais, para quem os quiser rever. Vive aqui e não na ajuda
@@ -411,10 +449,18 @@ CW.listaDeTutoriais = function () {
 
 /* Os primeiros passos vão no topo da vista geral — menos a quem só colabora,
    onde o topo é do «O que podes fazer» (painel-geral.js:cartaoPodes) e os
-   passos entram logo a seguir, onde o comentário dele marca o fim. */
+   passos entram logo a seguir, onde o comentário dele marca o fim. Quando a
+   vista já É a jornada (painel-geral.js:vDashboard, pela jornadaInicial), o
+   HTML traz a marca <!--jornada--> e não se insere o cartão segunda vez. E
+   enquanto a vista é o «À espera do servidor» (espera.js:esperaDoServidor)
+   não se insere nada: os passos calculam-se da base local, e afirmar
+   «imóveis por adicionar» a quem tem doze é o erro que a espera existe
+   para não deixar acontecer. */
 var _vDashboard_guia = vDashboard;
 vDashboard = function () {
-  var passosHtml = cartaoPassos(), html = _vDashboard_guia();
+  var html = _vDashboard_guia();
+  if (html.indexOf('<!--jornada-->') > -1 || esperaDoServidor()) return html;
+  var passosHtml = cartaoPassos();
   if (!passosHtml) return html;
   /* os passos entram depois do «O que podes fazer» de quem colabora e, numa
      conta que tem pedidos por responder (partilha.js:pedidosDashCard), depois

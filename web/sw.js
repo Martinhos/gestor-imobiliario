@@ -70,7 +70,7 @@ const APP = [
   'lista-movimentos', 'projecoes', 'imovel', 'pessoas', 'contrato', 'planeados', 'visitas', 'calendario', 'movimento',
   'creditos', 'contrato-pdf', 'avaliacao', 'fisco',
 ].map((n) => '/app/' + n + '.js');
-const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'ajuda', 'painel',
+const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'grupos', 'ajuda', 'painel',
   'filtros', 'entrada', 'novidades', 'selecao', 'selecao-listas', 'guia'].map((n) => '/cloud/' + n + '.js');
 /* O «/» e NÃO o «/index.html». O Cloudflare responde ao /index.html com um 307
    para «/» (o tratamento de HTML dos assets), o addAll segue o

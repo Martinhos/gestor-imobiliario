@@ -18,6 +18,18 @@ function vDashboard(){
   const pid=dashProp||null,m=metrics(YEAR,pid,{share:true});
   const dp=pid&&!String(pid).startsWith('g:')?prop(pid):null;
   const dpName=pid?(dp?dp.name:'Grupo · '+((grp(String(pid).slice(2))||{}).name||'')):'';
+  /* Sem movimentos, a vista é a jornada (cloud/guia.js:jornadaInicial): os
+     passos com o atual em destaque, mais o portefólio quando há imóveis — em
+     vez de quatro indicadores a 0 € e dois gráficos vazios, que não dizem
+     nada a quem ainda não registou nada, e em vez do vazio de baixo, que só
+     pedia o imóvel. A marca <!--jornada--> diz ao guia que não insira o
+     cartão outra vez. A base não conhece a nuvem por garantia: sem a função
+     (ou com a jornada dispensada, que a faz devolver '') fica o de sempre.
+     A espera do servidor ganha: antes do primeiro estado não se afirma nada. */
+  if(!db.transactions.length&&!souSoColaborador()&&typeof jornadaInicial==='function'){
+    const jornada=jornadaInicial();
+    if(jornada)return esperaDoServidor()||'<!--jornada-->'+jornada+portefolioInicial(m);
+  }
   /* o primeiro passo é um imóvel, e o botão é do serviço dos Imóveis: com ele
      desligado nesta conta o botão não se escreve, e a frase diz quem o liga */
   if(!db.properties.length&&!db.transactions.length)
@@ -71,6 +83,22 @@ function vDashboard(){
     ${card('Renda por contrato','Peso de cada arrendamento',cHBars(act.map(c=>({label:ctName(c),value:c.rent*cs(c)})),{fmt:v=>euro(v)+'/mês'}))}</div>
   ${pid?'':orphanCard()}
   ${balancesCard(pid)}`;
+}
+/* O cartão do portefólio da jornada: o de baixo reduzido ao que tem números
+   antes do primeiro movimento — os imóveis, o valor de mercado, o de
+   aquisição, a dívida e o património líquido. Os contratos ativos, a renda
+   contratada, as mais-valias e a nota fiscal ficam de fora: sem movimentos
+   são zeros e frases sobre zeros. Sem imóveis em foco não há cartão nenhum.
+   Recebe: m — as métricas do ano (metrics), já na quota-parte do filtro.
+   Devolve: string HTML do cartão, ou vazia sem imóveis. */
+function portefolioInicial(m){
+  if(!m.props.length)return '';
+  return card('Portefólio',ownerFilter?(ownerIsGrp()?'grupo '+esc(ownerFilterName()):'quota-parte de '+esc(ownerFilterName())):'',`
+      <div class="stat"><span>Imóveis</span><b>${m.props.length}</b></div>
+      <div class="stat"><span>Valor de mercado</span><b>${euro(m.value)}</b></div>
+      <div class="stat"><span>Valor de aquisição</span><b>${euro(m.purchase)}</b></div>
+      <div class="stat"><span>Em dívida</span><b class="amber">${euro(m.debt)}</b></div>
+      <div class="stat"><span>Património líquido</span><b class="pos">${euro(m.value-m.debt)}</b></div>`);
 }
 /* O cartão «O que podes fazer», no topo da vista geral de quem só colabora:
    quem acabou de aceitar um convite tem de ver logo o que o cargo lhe deixa
@@ -130,11 +158,12 @@ function donutDrill(cat){
   const novo=document.getElementById('donutCard');
   if(novo)novo.classList.add('redesenha');
 }
-/* despesas sem imóvel atribuído: contam no total mas não aparecem em nenhuma avaliação
+/* despesas sem imóvel atribuído: contam no total mas não aparecem em nenhuma avaliação.
+   Uma de «Todos os imóveis» ainda por partir (o arranque parte-a) é de todos, não de nenhum.
    Recebe: y — o ano a filtrar (número ou texto de 4 dígitos).
-   Devolve: array dos movimentos de despesa desse ano sem imóvel nem grupo. */
+   Devolve: array dos movimentos de despesa desse ano sem imóvel, sem grupo e sem «Todos». */
 function orphanExpenses(y){
-  return db.transactions.filter(t=>t.kind==='expense'&&!t.propertyId&&!t.groupId&&String(t.date||'').startsWith(String(y)));
+  return db.transactions.filter(t=>t.kind==='expense'&&!t.propertyId&&!t.groupId&&!t.todos&&String(t.date||'').startsWith(String(y)));
 }
 /* O atalho do aviso das despesas sem imóvel: vai aos Movimentos e, já lá,
    filtra pelos que não têm imóvel. A espera de zero é a de sempre — o filtro
@@ -171,13 +200,17 @@ function dashPersonalizarPainel(){if(window.CW&&CW.enterEdit)CW.enterEdit()}
    avulsa custava quatro toques de viagem. Entra depois de o painel rearranjar
    os cartões, para não virar um cartão arrastável. O FAB abre um movimento
    novo, que é dos Movimentos: com esse serviço desligado nesta conta fica só
-   o botão de personalizar, que é da base.
+   o botão de personalizar, que é da base. Na jornada (a marca <!--jornada-->
+   de vDashboard) não há blocos para arrumar, e um botão que entra num modo
+   de edição sem nada para arrastar é um beco: não se escreve; o FAB fica,
+   que registar o primeiro movimento é precisamente o passo seguinte.
    Devolve: nada — acrescenta o botão e o FAB ao #view quando fazem sentido. */
 function dashDepois(){
   if(view().querySelector('#dashPersonalizar')||!(podeSemImovel()||casasComo('tx.add').length))return;
   const novoTx=servicoLigado('transactions')?fab([{act:'newTxPick()',label:'Novo movimento'}])+'<div class="fabpad"></div>':'';
+  const arrumar=view().innerHTML.indexOf('<!--jornada-->')>-1?'':'<button type="button" class="btn sm" data-toca="modo" data-click="dashPersonalizarPainel()">'+ic('grip',13)+' Personalizar painel</button>';
   view().insertAdjacentHTML('beforeend',
-    '<div id="dashPersonalizar" class="u-ta-center u-m-2px-0-0"><button type="button" class="btn sm" data-toca="modo" data-click="dashPersonalizarPainel()">'+ic('grip',13)+' Personalizar painel</button></div>'+novoTx);
+    '<div id="dashPersonalizar" class="u-ta-center u-m-2px-0-0">'+arrumar+'</div>'+novoTx);
 }
 // nº de filtros ativos no painel de análise da visão geral: proprietário e imóvel em foco
 // Devolve: número de filtros ativos (0 a 2).

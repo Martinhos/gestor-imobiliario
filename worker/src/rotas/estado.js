@@ -10,11 +10,20 @@
 // uma ligação aceite sem casa comum, um dono de colaboração ou um
 // colaborador levam data: null.
 //
+// As casas dos grupos partilhados de que sou membro (rotas/grupos.js, migração
+// 0017) vêm como as partilhadas comigo — inteiras, com os membros do grupo em
+// `participants` —, e a lista `sharedGroups` diz os grupos em que estou, com
+// os membros, as casas e, nos meus, o estado da ligação e os pedidos para
+// entrar. Os pedidos (migração 0018) saem também em `sharedGroupRequests`:
+// os que chegaram aos meus grupos e os que fiz. Quem só pediu não é membro —
+// não recebe as casas nem o grupo, só o seu pedido em `outgoing`.
+//
 // Por cima disto, os serviços desligados da conta (lib/servicos.js): a lista
 // sai em `servicos.desligados`, os registos dos kinds desligados e os
 // user_records dos userKinds desligados ficam na base e não saem, sem
 // Imóveis não saem casas nem registos, e sem Colaboradores as tabelas de
-// cargos, convites, ligação, pedidos e conexões vêm vazias.
+// cargos, convites, ligação, pedidos, conexões e grupos vêm vazias — mas o
+// acesso às casas por grupo mantém-se, como o das partilhas por ligação.
 
 import { casasDeColaborador } from '../lib/acesso.js';
 import { kindsVisiveis, projetarCasa, projetarRegisto } from '../lib/permissoes.js';
@@ -26,6 +35,7 @@ import { sha256hex } from '../auth.js';
 import {
   listarCargos, listarColaboradores, listarConvites, estadoDaLigacao, pedidosDePartilha,
 } from './colaboradores.js';
+import { listarGrupos, pedidosDeGrupo } from './grupos.js';
 
 // O If-None-Match do pedido traz este selo? Aceita uma lista separada por
 // vírgulas e o W/ que a Cloudflare põe num ETag quando comprime a resposta.
@@ -39,7 +49,8 @@ function seloIgual(cabecalho, selo) {
 /* Rota do GET /api/state: junta numa só resposta tudo o que este utilizador
    pode ver — casas (próprias, partilhadas e de colaboração), registos, dados
    globais, conexões, perfis, propostas, e o que geriu como dono (cargos,
-   colaboradores, convites, ligação e pedidos de partilha). Só lê da base.
+   colaboradores, convites, ligação e pedidos de partilha), os grupos
+   partilhados e os pedidos para entrar neles. Só lê da base.
 
    A resposta leva um ETag, que é o SHA-256 da própria resposta: com o
    If-None-Match igual responde 304 sem corpo, e o cliente não volta a
@@ -55,8 +66,9 @@ function seloIgual(cabecalho, selo) {
    ctx, path, method e o utilizador em c.me).
    Devolve: a Response JSON com o estado completo (me, profiles, proposals,
    houses, records, userRecords, connections, people, roles, collaborators,
-   invites, shareLink, shareRequests, servicos) e o ETag, ou o 304 sem corpo,
-   no GET /api/state; nada (undefined) noutros caminhos. */
+   invites, shareLink, shareRequests, sharedGroups, sharedGroupRequests,
+   servicos) e o ETag, ou o
+   304 sem corpo, no GET /api/state; nada (undefined) noutros caminhos. */
 export async function rotasEstado(c) {
   const { env, request, ctx, path, method, me } = c;
 
@@ -94,6 +106,12 @@ export async function rotasEstado(c) {
                WHERE c.status = 'accepted'
                  AND (c.requester_id = ?1 OR c.target_id = ?1)
                  AND s.owner_id <> ?1
+            )
+            OR h.id IN (
+              SELECT gh.house_id FROM shared_group_houses gh
+                JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
+                JOIN shared_group_members m ON m.group_id = gh.group_id
+               WHERE m.user_id = ?1
             )
           )`
       )
@@ -218,7 +236,23 @@ export async function rotasEstado(c) {
         const list = houseParts[r.house_id];
         if (list && !list.includes(other)) list.push(other);
       });
+      // e os membros dos grupos partilhados vivos que contêm cada casa, a
+      // seguir às partilhas por ligação — a mesma ordem de participantsOf
+      const membros = await inChunks(allIds,
+        `SELECT gh.house_id, m.user_id FROM shared_group_houses gh
+           JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
+           JOIN shared_group_members m ON m.group_id = gh.group_id
+          WHERE gh.house_id IN ({IN})
+          ORDER BY m.joined_at, m.user_id`);
+      membros.forEach((r) => {
+        const list = houseParts[r.house_id];
+        if (list && !list.includes(r.user_id)) list.push(r.user_id);
+      });
     }
+
+    // os grupos partilhados em que estou (vazio de propósito com os
+    // Colaboradores desligados — as casas deles continuam a vir por cima)
+    const sharedGroups = semColab ? [] : await listarGrupos(env, me.id);
 
     /* Ficha pessoal completa SÓ para quem partilha comigo uma casa em
        compropriedade. Uma ligação aceite sem casa comum, o dono de uma casa
@@ -233,6 +267,8 @@ export async function rotasEstado(c) {
     const soNome = new Set();
     colabHouses.forEach((h) => (houseParts[h.id] || []).forEach((u) => soNome.add(u)));
     connections.forEach((c) => { soNome.add(c.requester_id); soNome.add(c.target_id); });
+    // os membros dos meus grupos, mesmo num grupo ainda sem casas
+    sharedGroups.forEach((g) => g.members.forEach((m) => soNome.add(m.id)));
     const cargoDe = new Map();   // userId → nome do cargo, para `people`
     const colabPorCasa = {};     // houseId → [{ id, userId, roleName }], para as casas onde sou participante
     if (houseIds.length) {
@@ -305,16 +341,18 @@ export async function rotasEstado(c) {
     }
 
     // o que geri como dono (vazio para quem não tem nada): cargos,
-    // colaboradores, convites por usar, a ligação e os pedidos de partilha —
-    // e vazio de propósito quando os Colaboradores estão desligados
-    const [roles, collaborators, invites, shareLink, shareRequests] = semColab
-      ? [[], [], [], null, { incoming: [], outgoing: [] }]
+    // colaboradores, convites por usar, a ligação, os pedidos de partilha e
+    // os pedidos para entrar nos grupos (os que chegaram e os que fiz) — e
+    // vazio de propósito quando os Colaboradores estão desligados
+    const [roles, collaborators, invites, shareLink, shareRequests, sharedGroupRequests] = semColab
+      ? [[], [], [], null, { incoming: [], outgoing: [] }, { incoming: [], outgoing: [] }]
       : await Promise.all([
         listarCargos(env, me.id),
         listarColaboradores(env, me.id),
         listarConvites(env, me.id),
         estadoDaLigacao(env, me.id),
         pedidosDePartilha(env, me.id),
+        pedidosDeGrupo(env, me.id),
       ]);
 
     const estado = {
@@ -359,6 +397,8 @@ export async function rotasEstado(c) {
       invites,
       shareLink,
       shareRequests,
+      sharedGroups,
+      sharedGroupRequests,
       userRecords: userRecords.filter((r) => !userKindsOff.has(r.kind)).map((r) => ({
         kind: r.kind,
         id: r.id,

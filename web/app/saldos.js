@@ -104,12 +104,25 @@ function txOwnerFrac(t,oid){
    Recebe: t — o movimento.
    Devolve: o texto ('em partes iguais', 'por ajuste'…); '' sem divisão escolhida. */
 const splitLabel=t=>({equal:'em partes iguais',pct:'por quotas a definir',percent:'por percentagem',amount:'por valor',adjust:'por ajuste'})[(t.split||{}).mode]||'';
-/* imóveis abrangidos por um movimento (o próprio, ou os do grupo)
-   Recebe: t — o movimento (objeto; usa t.propertyId ou t.groupId).
+/* Os imóveis de «Todos os imóveis» numa data: os meus (dono ou comproprietário)
+   onde posso adicionar movimentos, e que já eram meus nessa data — comprados
+   até ela, ou sem data de compra. Os de colaboração ficam de fora: um
+   movimento de todos os imóveis é das minhas contas, não das de outro dono.
+   Sem data (um planeado ou um modelo, que só têm data ao registar), todos.
+   Recebe: data (opcional) — 'AAAA-MM-DD'.
+   Devolve: os imóveis (array de objetos de db.properties), pela ordem da base. */
+function imoveisDeTodos(data){
+  const d=String(data||'');
+  return (db.properties||[]).filter(p=>souDono(p.id)&&pode(p.id,'tx.add')&&(!d||!p.purchaseDate||p.purchaseDate<=d));
+}
+/* imóveis abrangidos por um movimento (o próprio, os do grupo, ou os de
+   «Todos os imóveis» à data dele — imoveisDeTodos)
+   Recebe: t — o movimento (objeto; usa t.propertyId, t.groupId ou t.todos com t.date).
    Devolve: os imóveis abrangidos (array de objetos); vazio se não apontar a nenhum. */
 function txProps(t){
   if(t.propertyId){const p=prop(t.propertyId);return p?[p]:[]}
   if(t.groupId){const g=grp(t.groupId);return g?g.ids.map(prop).filter(Boolean):[]}
+  if(t.todos)return imoveisDeTodos(t.date);
   return [];
 }
 /* divide o total (cêntimos) pelos imóveis do grupo, conforme o modo escolhido; em
@@ -134,12 +147,13 @@ function psplitCents(t,ps,total){
     const rest=splitShares(rem,eq);return adj.map((x,i)=>x+rest[i]);}
   return splitShares(total,eq);
 }
-/* fração de um movimento que cabe a um imóvel
+/* fração de um movimento que cabe a um imóvel (num grupo ou em «Todos os
+   imóveis», a parte dele na divisão entre imóveis)
    Recebe: t — o movimento (objeto); pid — o id do imóvel.
    Devolve: a fração 0–1 do valor do movimento que cabe a esse imóvel. */
 function txPropShare(t,pid){
   if(t.propertyId)return t.propertyId===pid?1:0;
-  if(!t.groupId)return 0;
+  if(!t.groupId&&!t.todos)return 0;
   const ps=txProps(t),i=ps.findIndex(p=>p.id===pid);if(i<0)return 0;
   const total=Math.abs(Math.round((Number(t.amount)||0)*100));
   if(!total)return 1/ps.length;
@@ -153,7 +167,7 @@ function txW(t,pid){
   if(String(pid||'').startsWith('g:'))return sum(pidProps(pid).map(p=>txW(t,p.id)));
   if(pid)return txPropShare(t,pid);
   if(t.propertyId)return inScope(t.propertyId)?1:0;
-  if(t.groupId)return sum(txProps(t).filter(p=>inScope(p.id)).map(p=>txPropShare(t,p.id)));
+  if(t.groupId||t.todos)return sum(txProps(t).filter(p=>inScope(p.id)).map(p=>txPropShare(t,p.id)));
   return ownerFilter?0:1;
 }
 /* donos (fichas) dos imóveis do grupo de um movimento, sem repetir
@@ -172,6 +186,34 @@ const psplitLabel=t=>({equal:'em partes iguais',value:'pelo valor de mercado',pu
    Recebe: t — o movimento.
    Devolve: true se conta nas contas entre donos. */
 const countsBetweenOwners=t=>!!t.paidBy&&(t.kind==='income'||t.kind==='expense'||t.kind==='loan');
+/* O efeito de uma parte de um lote nas contas entre donos: o mesmo que o
+   movimento de grupo de onde ela vem tinha neste imóvel — quem pagou fica a
+   crédito da parte inteira, e ela reparte-se pelos donos do imóvel pela
+   divisão escolhida no lote, também com um dono só ou paga por quem não é
+   dono do imóvel. Um movimento normal só conta entre dois ou mais donos e com
+   quem pagou entre eles; a parte não, porque o lote não é deste imóvel, é dos
+   imóveis todos — e partir um movimento de grupo não pode mudar os saldos de
+   ninguém (a Ana paga 1 000 € de seguro a meias entre a casa dela e a da
+   Carla: a Carla fica a dever 500 €, como ficava antes de partir). Uma parte
+   que não mexe em ninguém (paga pelo único dono do imóvel) não entra: um
+   «Todos os imóveis» de quem só tem imóveis seus não inventa um cartão de
+   contas a zero.
+   Recebe: t — a parte (amount, paidBy, kind, split); p — o imóvel dela; os — os
+   ids dos donos do imóvel, ordenados; add — função (id do dono, cêntimos) que
+   soma nas contas.
+   Devolve: true se mexeu nas contas; false sem donos, com a parte a zero, ou
+   quando o efeito é zero para todos. */
+function efeitoDaParte(t,p,os,add){
+  const c=Math.abs(Math.round((Number(t.amount)||0)*100));
+  if(!os.length||!c)return false;
+  const sign=isIn(t.kind)?-1:1,eff={},junta=(o,v)=>{eff[o]=(eff[o]||0)+v};
+  junta(t.paidBy,c*sign);
+  txSplitCents(t,p,os).forEach((x,i)=>junta(os[i],-x*sign));
+  const ks=Object.keys(eff);
+  if(!ks.some(k=>eff[k]))return false;
+  ks.forEach(k=>add(k,eff[k]));
+  return true;
+}
 /* efeito de cada movimento nos saldos (cêntimos por dono), para se poder conferir
    Recebe: pid (opcional) — o id de um imóvel ou 'g:ID' de um grupo; vazio vale o âmbito atual.
    Devolve: array de {t, p, os, eff}, ordenado por data — o movimento, o imóvel (ou só
@@ -189,19 +231,24 @@ function balanceLines(pid){
       add(t.paidBy,v);add(t.toId,-v);
       out.push({t,p,os:Object.keys(eff).sort(),eff});
     });
+    /* as partes de um lote pela regra do ownerBalances (efeitoDaParte) */
+    db.transactions.filter(t=>t.propertyId===p.id&&t.lote&&countsBetweenOwners(t)).forEach(t=>{
+      const eff={};os.forEach(o=>eff[o]=0);
+      if(efeitoDaParte(t,p,os,(o,v)=>{eff[o]=(eff[o]||0)+v}))out.push({t,p,os:Object.keys(eff).sort(),eff});
+    });
     if(os.length<2)return;
-    db.transactions.filter(t=>t.propertyId===p.id&&countsBetweenOwners(t)&&os.indexOf(t.paidBy)>-1).forEach(t=>{
+    db.transactions.filter(t=>t.propertyId===p.id&&!t.lote&&countsBetweenOwners(t)&&os.indexOf(t.paidBy)>-1).forEach(t=>{
       const eff={};os.forEach(o=>eff[o]=0);
       const sign=isIn(t.kind)?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));eff[t.paidBy]+=total*sign;txSplitCents(t,p,os).forEach((part,i)=>{eff[os[i]]-=part*sign});
       out.push({t,p,os,eff});
     });
   });
-  db.transactions.filter(t=>!t.propertyId&&(t.groupId?countsBetweenOwners(t)&&txProps(t).some(p2=>props.some(p3=>p3.id===p2.id)):(countsBetweenOwners(t)||t.kind==='settle')&&!pid&&!ownerFilter)).forEach(t=>{
+  db.transactions.filter(t=>!t.propertyId&&((t.groupId||t.todos)?countsBetweenOwners(t)&&txProps(t).some(p2=>props.some(p3=>p3.id===p2.id)):(countsBetweenOwners(t)||t.kind==='settle')&&!pid&&!ownerFilter)).forEach(t=>{
     const sign=isIn(t.kind)?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));
     const eff={},add=(o,v)=>{eff[o]=(eff[o]||0)+v};
     if(t.kind==='settle'){   /* acerto das dívidas globais (sem imóvel nem grupo): quem paga sobe, quem recebe desce */
       add(t.paidBy,total);add(t.toId,-total);
-    }else if(t.groupId){
+    }else if(t.groupId||t.todos){
       txProps(t).filter(p2=>props.some(p3=>p3.id===p2.id)).forEach(p2=>{
         const cP=Math.round(total*txPropShare(t,p2.id)),os2=ownersOfProp(p2).slice().sort();
         if(!os2.length||!cP)return;
@@ -244,38 +291,43 @@ function balancesDetail(pid){
 }
 /* saldos entre comproprietários, em euros por dono: quem pagou fica a crédito e a
    parte de cada um sai das quotas ou da divisão escolhida no movimento; as
-   transferências acertam contas diretamente. pid limita a um imóvel ou grupo; sem
+   transferências acertam contas diretamente; as partes de um lote contam como
+   o movimento de grupo de onde vêm (efeitoDaParte). pid limita a um imóvel ou grupo; sem
    pid vale o âmbito atual. Positivo é a receber, negativo a pagar.
    Recebe: pid (opcional) — o id de um imóvel ou 'g:ID' de um grupo; vazio vale o âmbito atual.
    Devolve: objeto {idDoDono: saldo em euros} — positivo a receber, negativo a pagar. */
 function ownerBalances(pid){
   /* as contas entre proprietários são dos proprietários: um imóvel onde só colaboro fica de fora */
   const props=pidProps(pid).filter(p=>souDono(p.id)),cents={};
+  const soma=(o,x)=>{if(!o)return;if(cents[o]===undefined)cents[o]=0;cents[o]+=x};
   props.forEach(p=>{
     const os=ownersOfProp(p).slice().sort();
     /* os acertos deste imóvel contam sempre — com um só dono, ou entre quem não é dono dele
        (uma dívida de grupo paga por quem não é dono do imóvel salda-se com um acerto aqui) */
     db.transactions.filter(t=>t.propertyId===p.id&&t.kind==='settle').forEach(t=>{
       const v=Math.round((Number(t.amount)||0)*100);
-      const add=(o,x)=>{if(!o)return;if(cents[o]===undefined)cents[o]=0;cents[o]+=x};
-      add(t.paidBy,v);add(t.toId,-v);
+      soma(t.paidBy,v);soma(t.toId,-v);
     });
+    /* as partes de um lote contam como contava o movimento de grupo de onde vêm
+       (efeitoDaParte) — também num imóvel de um dono só, ou pago por quem não é
+       dono dele */
+    db.transactions.filter(t=>t.propertyId===p.id&&t.lote&&countsBetweenOwners(t)).forEach(t=>efeitoDaParte(t,p,os,soma));
     if(os.length<2)return;
     os.forEach(o=>{if(cents[o]===undefined)cents[o]=0});
-    db.transactions.filter(t=>countsBetweenOwners(t)&&t.propertyId===p.id&&os.indexOf(t.paidBy)>-1).forEach(t=>{
+    db.transactions.filter(t=>countsBetweenOwners(t)&&!t.lote&&t.propertyId===p.id&&os.indexOf(t.paidBy)>-1).forEach(t=>{
       const sign=isIn(t.kind)?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));
       cents[t.paidBy]+=total*sign;
       txSplitCents(t,p,os).forEach((part,i)=>{cents[os[i]]-=part*sign});
     });
   });
   /* sem imóvel: divide-se por todos os proprietários (e os acertos globais saldam-se aqui);
-     com grupo: pelos donos de cada imóvel do grupo */
+     com grupo (ou «Todos os imóveis», num que não se partiu): pelos donos de cada imóvel */
   db.transactions.filter(t=>!t.propertyId&&(countsBetweenOwners(t)||(t.kind==='settle'&&!t.groupId))).forEach(t=>{
     const sign=isIn(t.kind)?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));
     const add=(o,v)=>{if(cents[o]===undefined)cents[o]=0;cents[o]+=v};
     if(t.kind==='settle'){
       if(!pid&&!ownerFilter){add(t.paidBy,total);add(t.toId,-total)}
-    }else if(t.groupId){
+    }else if(t.groupId||t.todos){
       txProps(t).filter(p2=>props.some(p3=>p3.id===p2.id)).forEach(p2=>{
         const cP=Math.round(total*txPropShare(t,p2.id)),os=ownersOfProp(p2).slice().sort();
         if(!os.length||!cP)return;

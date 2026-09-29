@@ -32,6 +32,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - O motor das listas
 - As famílias dos pontos de interação
 - Padrões de página
+- A jornada da vista geral
 - Um gráfico lê-se com o dedo
 - Uma tabela só quando diz o que o gráfico não diz
 - Uma comparação diz de que números fala
@@ -51,6 +52,8 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - O service worker e a versão
 - A app não afirma nem decide antes de saber
 - A sincronização: o que é daqui e o que é do servidor
+- Grupos partilhados
+- Um movimento de vários imóveis parte-se por imóvel
 - O capital em dívida deriva-se
 - Navegação
 - A app em serviços
@@ -701,6 +704,26 @@ painel-geral.js:donutDrill, planeados.js:pendToggle e o dia do calendário
 de calendario.js:calDiaPanel). render() substitui o innerHTML de #view e
 perde o estado do DOM (vistas.js:render; index.html:#view).
 
+## A jornada da vista geral
+A vista geral existe para se ver o património de relance, e enquanto não há
+movimentos não há nada para ver: quatro indicadores a 0 € e dois gráficos
+vazios diziam «não tens nada» com o ar de um relatório, logo a seguir a um
+vazio que só pedia um imóvel. Enquanto não há movimentos — e não se é só
+colaborador, e o cartão não foi dispensado — a vista geral É a jornada
+(painel-geral.js:vDashboard, guia.js:jornadaInicial): a fita dos passos
+(estilos.css:.jornada, estilos.css:.jornada-passo), com os feitos marcados e o
+atual em destaque com o seu botão (guia.js:cartaoPassos, guia.js:passos), e,
+quando já há imóveis, o cartão do portefólio com o que já tem números
+(painel-geral.js:portefolioInicial) — sem o «Personalizar painel», que não
+teria nada para arrumar (painel-geral.js:dashDepois). O
+primeiro movimento traz os indicadores; o cartão dos passos fica no topo até
+estar tudo feito, ou até ser dispensado (guia.js:passosDispensados). Os
+pedidos por responder continuam por cima de tudo (partilha.js:pedidosDashCard).
+
+A jornada não exige sessão: sem ela, o passo do perfil não se propõe, e o
+resto fica igual. E a marca que a vista deixa no HTML (`<!--jornada-->`) é o
+que impede o guia de a inserir segunda vez.
+
 ## Um gráfico lê-se com o dedo
 Tocar numa barra cuspia um balão que aparecia DEBAIXO DO DEDO e ia-se
 embora ao fim de 2,2 segundos. Três coisas mal, e todas se veem a usar: a
@@ -1350,6 +1373,86 @@ token, passa para o cookie no arranque (nucleo.js:largarTokenAntigo). Sair é
 um ritual só (nucleo.js:encerrarSessao): num simples sair a base e o retrato
 ficam, apagar a conta leva-os. E um 401 de uma palavra-passe errada não põe
 ninguém fora (nucleo.js:sessaoCaiu).
+
+## Grupos partilhados
+Um grupo de imóveis partilha-se como grupo, e não casa a casa: quem está no
+grupo é comproprietário de todas as casas dele, com o que isso já significa
+numa casa partilhada por ligação — vê e edita contratos, movimentos e
+pessoas, entra nas quotas e nas propostas (worker/src/lib/acesso.js:participantsOf,
+worker/src/lib/acesso.js:canAccessHouse, worker/src/lib/acesso.js:acessoACasa). A
+regra vive no mesmo sítio que já decidia as partilhas por ligação; o estado
+traz as casas dos grupos com os membros em participants
+(worker/src/rotas/estado.js:rotasEstado), e o cliente não distingue uma casa
+de grupo de uma casa partilhada por ligação.
+
+Um grupo tem um dono, membros e casas (a migração 0017). Cada membro põe no
+grupo casas SUAS — as que criou — e tira-as; o dono tira qualquer casa e
+remove membros; sair leva as casas que se pôs; o dono não sai, apaga
+(worker/src/rotas/grupos.js:rotasGrupos). Entra-se por uma ligação do dono,
+multi-uso e com prazo de sete dias, mas ninguém entra sem o dono aceitar:
+quem a abre fica com um pedido pendente (a migração 0018), e só passa a
+membro quando o dono o aceitar em «Pedidos por responder», no sino ou na
+janela do grupo (web/cloud/grupos.js:CW.grupoAceitarPedido,
+partilha.js:pedidosDashCard, notificacoes.js:notifPedidos). Uma ligação
+enviada à pessoa errada não dá acesso a nada, e enquanto espera, quem pediu
+não vê nem os ids das casas (worker/src/rotas/grupos.js:pedidosDeGrupo). Só o
+SHA-256 do token fica na base, e o 404 da ligação não distingue inválida de
+expirada, revogada ou de grupo apagado
+(worker/src/rotas/grupos.js:rotasPreVisualizacaoGrupo).
+
+No cliente, um grupo partilhado é um grupo de imóveis como os outros — serve
+de filtro, e um movimento atribuído a ele divide-se pelas casas — marcado
+_partilhado, e nunca sobe como registo do utilizador
+(web/cloud/nucleo.js:gruposPartilhadosEm, web/cloud/nucleo.js:exportEntities);
+um grupo partilhado conta como vivo na fusão do estado, para o registo
+antigo ficar obsoleto e sair
+(web/cloud/nucleo.js:entidadesDosGruposPartilhados). Partilhar
+um grupo privado mantém-lhe o id, para os planeados e os modelos que o apontam
+continuarem a apontar (web/cloud/grupos.js:CW.grupoPartilhar). A janela do grupo
+(web/cloud/grupos.js:CW.grupoModal) mostra a cada um só o que o servidor lhe
+deixaria fazer; a aterragem de ?grupo= segue o molde das outras duas ligações
+(acessos.js:parseConvite, entrada.js:modalGrupo,
+web/cloud/grupos.js:CW.entrarNoGrupo); os grupos vivem em Definições › Grupos
+(definicoes.js:vGroups) e no cartão «Grupos partilhados» da Conta e partilha
+(web/cloud/grupos.js:gruposCard).
+
+Um movimento atribuído a um grupo partilhado chega a todos os membros porque
+se parte por imóvel ao guardar (ver «Um movimento de vários imóveis parte-se
+por imóvel»).
+
+## Um movimento de vários imóveis parte-se por imóvel
+Um movimento de vários imóveis — de um grupo, ou de «Todos os imóveis» — não
+se guarda num registo só: parte-se por imóvel ao guardar, e cada parte vive
+no seu imóvel (movimento.js:txGuardarMovimento, movimento.js:parteId). É o
+que o faz chegar a quem partilha esse imóvel comigo, nos movimentos, nos
+totais e nas contas entre proprietários: guardado inteiro, sem imóvel, ficava
+nos meus registos, e num grupo partilhado os saldos de cada um discordavam.
+As partes levam o lote (o id, quantas são, o total, o alvo e a divisão), e o
+id de cada uma sai do lote e do imóvel, igual em qualquer aparelho.
+
+Na lista, as partes de um lote que passam no filtro voltam a ser uma linha
+(lista-movimentos.js:linhasDaLista): sem filtro, o total e «dividido por N
+imóveis»; com o filtro num imóvel, a parte dele e o total. Editar abre o lote
+inteiro, e apagar leva as partes todas (movimento.js:partesDoLote); um lote
+de que não vejo todas as partes (um imóvel que não partilho) não se edita
+daqui (movimento.js:loteCompleto). A seleção marca o lote, e a edição em
+massa e o apagar apanham-lhe as partes (web/cloud/selecao.js).
+
+As contas de um lote ficam como foram gravadas: um grupo que ganha ou perde
+um imóvel depois já não muda o que se dividiu. Os modelos e os planeados
+guardam o molde (o grupo, ou «Todos», e o modo de dividir) e partem-se ao
+registar. Os movimentos de grupo do formato antigo partem-se no arranque,
+com os mesmos valores e o id antigo como id do lote
+(movimento.js:migrarMovimentosDeGrupo).
+
+«Todos os imóveis» e «Sem imóvel» são duas coisas. «Todos» divide pelos
+imóveis que eu tinha na data do movimento — os meus e os que partilho, pela
+data de compra quando a ficha a tem (saldos.js:imoveisDeTodos) — e conta na
+avaliação de cada um. «Sem imóvel» não é de imóvel nenhum: conta nos totais
+da vista geral, não passa no filtro por um imóvel e divide-se, nas contas
+entre proprietários, por todos (metricas.js:txWeight,
+lista-movimentos.js:txMatch). Num acerto, a opção vazia continua a ser
+«Todos os imóveis», porque um acerto sem imóvel é mesmo de todas as contas.
 
 ## O capital em dívida deriva-se
 Uma hipoteca guarda o capital em dívida da DATA DE INÍCIO — é o campo

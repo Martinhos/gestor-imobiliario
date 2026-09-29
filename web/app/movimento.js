@@ -36,17 +36,21 @@ function txModal(o){
      escolhe-se qual é a janela a abrir. */
   const _t=id?(db.transactions||[]).find(x=>x.id===id):null;
   if(id&&!_t)return;
-  if(_t&&!podeEditar(_t.propertyId,'tx.add',_t))return txView(id);
+  /* uma parte de um lote abre o LOTE — e só com ele inteiro nesta base e cada
+     parte dele ao meu alcance; senão a ficha, que diz porquê */
+  if(_t&&(!podeEditar(_t.propertyId,'tx.add',_t)||recusaDoLote(_t)))return txView(id);
   const modo=['confirmar','rec','tpl'].indexOf(o.modo)>-1?o.modo:'tx';
   txModo={modo,recId:o.recId||null,tplId:o.tplId||null,alsoTx:!!o.alsoTx,every:o.every||'month',until:o.until||'',recEnd:o.recEnd||'',tplName:o.tplName||''};
   /* sem imóvel escolhido: com um só imóvel onde posso adicionar fica esse; quem não
-     é dono de nenhum não tem «Todos os imóveis» e fica com o primeiro permitido —
+     é dono de nenhum não tem «Sem imóvel» e fica com o primeiro permitido —
      senão o seletor mostrava o primeiro e o movimento gravava-se sem imóvel */
   const auto=(db.properties.length===1||!podeSemImovel())?((casasComo('tx.add')[0]||{}).id||null):null;
-  tForm=_t?normTx(JSON.parse(JSON.stringify(_t))):
+  tForm=_t?normTx(JSON.parse(JSON.stringify(_t.lote?movimentoDoLote(_t):_t))):
     normTx(Object.assign({kind:o.kind||'income',date:today(),amount:'',propertyId:o.propId||auto,contractId:o.ctId||null,split:null},o.preset||{}));
   if(tForm.contractId&&!tForm.propertyId){const c=contract(tForm.contractId);if(c)tForm.propertyId=c.propertyId}
-  if(!id&&!tForm.propertyId&&!tForm.groupId&&!podeSemImovel())tForm.propertyId=auto;   /* um preset sem imóvel (modelo) também */
+  /* um preset sem imóvel (modelo) também; um de «Todos os imóveis» é dos meus
+     imóveis, e quem não é dono de nenhum não o tem: fica no primeiro permitido */
+  if(!id&&!tForm.propertyId&&!tForm.groupId&&!podeSemImovel()){tForm.propertyId=auto;tForm.todos=false;tForm.psplit=null}
   tForm._edit=!!id;
   if(!id&&tForm.amount){tForm._aA=tForm.amount}
   prefill();
@@ -123,13 +127,20 @@ function txGuardarPlaneado(){
   save();closeModal();buildNav();render();toast(m.recId?'Movimento recorrente atualizado.':'Movimento recorrente criado.');
 }
 /* Guardar no modo 'tpl': o modelo muda (ou nasce) e, com alsoTx, regista-se
-   também o movimento. O txGuardar já validou.
+   também o movimento — o de um grupo ou de «Todos os imóveis» partido por
+   imóvel (registarMolde). O modelo guarda o molde (grupo ou «Todos», sem
+   imóvel); é o movimento que se parte. O txGuardar já validou; o que só se
+   sabe ao partir (um grupo sem imóveis) recusa antes de gravar o que quer
+   que seja.
    Devolve: nada — grava, fecha e redesenha. */
 function txGuardarModelo(){
   const m=txModo,name=String(m.tplName||'').trim()||tForm.label;
+  let novos=null;
+  if(m.alsoTx){const tx=normTx(txSnapshot(tForm));tx.date=tForm.date||today();
+    const r=registarMolde(tx);if(r.erro)return toast(r.erro);novos=r.partes}
   if(!m.tplId){db.templates=db.templates||[];db.templates.push(normTpl({name,tx:txSnapshot(tForm)}))}
   else{const x=(db.templates||[]).find(y=>y.id===m.tplId);if(x){x.name=name;x.tx=txSnapshot(tForm)}}
-  if(m.alsoTx){const tx=normTx(txSnapshot(tForm));tx.date=tForm.date||today();if(tx.kind==='loan')applyLoan(tx);db.transactions.push(tx)}
+  if(novos)novos.forEach(tx=>{if(tx.kind==='loan')applyLoan(tx);db.transactions.push(tx)});
   save();closeModal();buildNav();render();toast(!m.tplId?(m.alsoTx?'Modelo criado e movimento registado.':'Modelo criado.'):'Modelo atualizado.');
 }
 /* Guardar nos modos 'tx' e 'confirmar': o movimento entra (ou substitui o que
@@ -137,18 +148,32 @@ function txGuardarModelo(){
    abate na hipoteca pelo applyLoan; a hipoteca de onde um movimento editado
    saiu (outra, ou já não é pagamento de crédito) volta a derivar o capital
    em dívida. O txGuardar já validou.
-   Recebe: id — o id do movimento em edição (null num novo).
+   Um movimento de um grupo ou de «Todos os imóveis» entra partido por imóvel
+   (partirMovimento), com o id do formulário como id do lote. O id do
+   formulário é também o do lote que se edita (movimentoDoLote): as partes
+   velhas saem todas no mesmo passo em que as novas entram (trocarLote) — um
+   lote que passa a um imóvel só, ou a «Sem imóvel», fica um movimento normal
+   com esse id, e um normal que passa a grupo fica o lote dele. O que só se
+   sabe ao partir (um grupo sem imóveis, um imóvel onde não posso) recusa
+   antes de mexer na base.
+   Recebe: id — o id do movimento em edição (null num novo; numa parte de um
+   lote, o dessa parte).
    Devolve: nada — grava, fecha e redesenha. */
 function txGuardarMovimento(id){
   const recId=txModo.modo==='confirmar'?txModo.recId:null;
   const old=id?db.transactions.find(x=>x.id===id):null;
+  const velhas=partesDoLote(tForm.id),recusa=velhas.length?recusaDoLote(velhas[0]):'';
+  if(recusa)return toast(recusa);
+  let novos=null;
+  if(ehDeVariosImoveis(tForm)){const r=partirMovimento(tForm);if(r.erro)return toast(r.erro);novos=r.partes}
   /* as hipotecas tocadas ficam com o capital do início gravado ANTES de os movimentos mudarem */
   const tocadas=[old&&old.kind==='loan'?old.loanId:null,tForm.kind==='loan'?tForm.loanId:null].filter(Boolean);
   tocadas.forEach(lid=>{const x=anyLoan(lid);if(x)fixarCapitalInicio(x.l,db.transactions)});
   if(tForm.kind==='loan')applyLoan(tForm);
   Object.keys(tForm).forEach(k=>{if(k[0]==='_')delete tForm[k]});
-  const i=db.transactions.findIndex(x=>x.id===tForm.id);
-  if(i<0)db.transactions.push(tForm);else db.transactions[i]=tForm;
+  if(novos||velhas.length)trocarLote(tForm.id,novos||[tForm]);
+  else{const i=db.transactions.findIndex(x=>x.id===tForm.id);
+    if(i<0)db.transactions.push(tForm);else db.transactions[i]=tForm}
   tocadas.forEach(lid=>{const x=anyLoan(lid);if(x)acertarCapital(x.l)});
   if(recId&&servicoLigado('recurring')){const r=(db.recurring||[]).find(x=>x.id===recId);if(r)recAdvance(r)}
   save();closeModal();buildNav();render();refreshDetail();toast(recId?'Movimento confirmado.':'Movimento guardado.');
@@ -160,7 +185,7 @@ function txGuardarMovimento(id){
    Devolve: nada — só mexe no tForm; quem chama repinta depois. */
 function prefill(){
   const p=prop(tForm.propertyId);
-  const ows=p?ownersOfProp(p).slice():(tForm.groupId?txGroupOwners(tForm).map(o=>o.id):donosGlobais().map(o=>o.id));
+  const ows=p?ownersOfProp(p).slice():((tForm.groupId||tForm.todos)?txGroupOwners(tForm).map(o=>o.id):donosGlobais().map(o=>o.id));
   /* num acerto, quem já lá está fica — pode não ser dono do imóvel (dívida de grupo paga por outro) */
   if(tForm.kind==='settle')[tForm.paidBy,tForm.toId].forEach(o=>{if(o&&ows.indexOf(o)<0&&owner(o))ows.push(o)});
   if(tForm.paidBy&&ows.indexOf(tForm.paidBy)<0)tForm.paidBy=null;
@@ -199,11 +224,19 @@ function keepTyped(){collectTx();if(tForm.label===tForm._aL)tForm.label='';if(tF
    que foi, de quanto, quando, de que imóvel, quem pagou, e quanto disto é
    meu. O resto (a hipoteca, a dívida a terceiros, a categoria) só aparece
    quando é deste movimento.
+   Uma parte de um lote mostra o lote: o montante é o total, o imóvel é o grupo
+   (ou «Todos os imóveis») e por quantos se dividiu, e a divisão entre imóveis
+   lista as partes que estão nesta base — com as que não vejo contadas, e a
+   nota a dizer porque não o posso alterar.
    Recebe: id — o id do movimento.
    Devolve: o HTML do corpo, ou vazio se o movimento já não existir. */
 function txFicha(id){
   const t=(db.transactions||[]).find(x=>x.id===id);if(!t)return '';
-  const K=KIND[t.kind]||KIND.expense,p=prop(t.propertyId);
+  const lote=t.lote||null,partes=lote?partesDoLote(lote.id):[],completo=!lote||loteCompleto(t);
+  const montante=lote?Number(lote.total)||0:t.amount;
+  /* a retenção de um lote é a soma das partes, e só se sabe com ele inteiro */
+  const retido=lote?(completo?r2(sum(partes.map(x=>Number(x.retencao)||0))):0):(Number(t.retencao)||0);
+  const K=KIND[t.kind]||KIND.expense,p=lote?null:prop(t.propertyId);
   const l=t.kind==='loan'&&pode(t.propertyId,'loan.view')?findLoan(p,t.loanId):null;
   const os=p?ownersOfProp(p):[];
   const ct=t.contractId?contract(t.contractId):null;
@@ -223,15 +256,17 @@ function txFicha(id){
   const origem=col?({movimento:'escolhida neste movimento',sub:'pela subcategoria',categoria:'pela categoria',
     omissao:'sem regra, cai em Outros',excluido:'não conta: categoria fora dos totais'}[col.origem]||''):'';
   return ficha([
-    {tipo:'nota',valor:esc(motivoRecusa(t.propertyId,'tx.add',t))},
-    {rotulo:'Montante',valor:`<span class="${K.color}">${K.sign}${euro2(t.amount)}</span>`},
+    {tipo:'nota',valor:esc(lote?recusaDoLote(t):motivoRecusa(t.propertyId,'tx.add',t))},
+    {rotulo:'Montante',valor:`<span class="${K.color}">${K.sign}${euro2(montante)}</span>`},
     {rotulo:'Tipo',valor:esc(K.short)+(t.kind==='loan'?(t.payType==='amortizacao'?' · amortização':' · prestação'):'')},
     {rotulo:'Data',valor:dPT(t.date)},
-    {rotulo:'Imóvel',valor:t.propertyId?esc(propName(t.propertyId)):(t.groupId?esc('Grupo '+((grp(t.groupId)||{}).name||'')):'Todos os imóveis')},
+    /* sem imóvel: um acerto é de todos os imóveis; o resto é um movimento avulso,
+       que conta nos totais e não na avaliação de nenhum — a mesma regra do seletor */
+    {rotulo:'Imóvel',valor:lote?ondeDoLote(t):t.propertyId?esc(propName(t.propertyId)):(t.groupId?esc('Grupo '+((grp(t.groupId)||{}).name||'')):((t.todos||t.kind==='settle')?'Todos os imóveis':'Sem imóvel'))},
     ct&&pode(t.propertyId,'contract.view')?{rotulo:'Contrato',valor:esc(ctName(ct))}:null,
     renda&&ehRenda(t)&&t.periodo?{rotulo:'Mês da renda',valor:esc(mesPt(t.periodo))}:null,
-    renda&&t.retencao>0?{rotulo:'Retido na fonte',valor:euro2(t.retencao)}:null,
-    renda&&t.retencao>0?{rotulo:'Renda bruta',valor:euro2(rendaBruta(t))}:null,
+    renda&&retido>0?{rotulo:'Retido na fonte',valor:euro2(retido)}:null,
+    renda&&retido>0?{rotulo:'Renda bruta',valor:euro2(r2((Number(montante)||0)+retido))}:null,
     recibo?{rotulo:'Recibo eletrónico',valor:t.recibo?'Emitido':'Por emitir'}:null,
     t.kind==='settle'?{rotulo:'Transferência',valor:nome(t.paidBy)+' → '+nome(t.toId)}:null,
     t.kind!=='settle'&&owner(t.paidBy)?{rotulo:isIn(t.kind)?'Recebido por':'Pago por',valor:nome(t.paidBy)}:null,
@@ -243,7 +278,17 @@ function txFicha(id){
       return esc(modo(SPLIT_MODES,(t.split||{}).mode,'quota'))+'<br>'+
         os.map((o,i)=>nome(o)+' · '+euro2((c[i]||0)/100)).join('<br>');
     })()}:null,
-    t.groupId&&txProps(t).length>1?{tipo:'bloco',rotulo:'Divisão entre imóveis',valor:(function(){
+    /* um lote: as partes que estão nesta base, pela ordem dos imóveis, e as
+       que não vejo (de imóveis que não tenho) só contadas */
+    lote?{tipo:'bloco',rotulo:'Divisão entre imóveis',valor:(function(){
+      const falta=Math.max(0,(Number(lote.n)||0)-partes.length);
+      return esc(modo(PSPLIT_MODES,lote.modo,'equal'))+'<br>'+
+        partes.map(x=>esc(propName(x.propertyId))+' · '+euro2(x.amount)).join('<br>')+
+        (falta?'<br>e mais '+falta+(falta===1?' imóvel que não vês':' imóveis que não vês'):'');
+    })()}:null,
+    /* um movimento de grupo antigo (por partir), ou um de «Todos» que não se partiu:
+       a divisão feita agora, pelos imóveis de hoje */
+    !lote&&(t.groupId||t.todos)&&txProps(t).length>1?{tipo:'bloco',rotulo:'Divisão entre imóveis',valor:(function(){
       const ps=txProps(t),c=psplitCents(t,ps,Math.abs(Math.round((Number(t.amount)||0)*100)));
       return esc(modo(PSPLIT_MODES,(t.psplit||{}).mode,'equal'))+'<br>'+
         ps.map((x,i)=>esc(x.name)+' · '+euro2((c[i]||0)/100)).join('<br>');
@@ -288,7 +333,8 @@ function editarMovimento(id){
    Devolve: nada — abre a janela. */
 function txView(id){
   const t=(db.transactions||[]).find(x=>x.id===id);if(!t)return;
-  const ok=podeEditar(t.propertyId,'tx.add',t);
+  /* uma parte de um lote edita-se e apaga-se com o lote inteiro (recusaDoLote) */
+  const ok=podeEditar(t.propertyId,'tx.add',t)&&!recusaDoLote(t);
   abrirFicha({
     titulo:()=>{const x=(db.transactions||[]).find(y=>y.id===id);return x?(x.label||'Movimento'):'Movimento'},
     corpo:()=>txFicha(id),
@@ -312,6 +358,58 @@ function txView(id){
   });
 }
 
+/* O nome de um proprietário nas escolhas do formulário: com mais do que um à
+   escolha, o meu leva « (eu)» no fim — numa lista de dois nomes iguais aos da
+   ficha, quem está com sessão não tinha como saber qual era o seu. Sem sessão
+   (meuId vazio) ninguém é «eu», e com um só proprietário não há que distinguir.
+   Recebe: o — o proprietário (ficha com id e name); n — quantos há à escolha.
+   Devolve: o nome (texto, por escapar), com « (eu)» quando é o meu e n > 1. */
+function rotuloDoDono(o,n){
+  const nome=(o&&o.name)||'',eu=meuId();
+  return n>1&&eu&&o&&o.id===eu?nome+' (eu)':nome;
+}
+/* As opções do seletor do imóvel no formulário do movimento. Quem pode
+   registar sem imóvel (podeSemImovel: quem é dono de algum) tem à cabeça
+   «Sem imóvel» ('') — num acerto, «Todos os imóveis», que é o que um acerto
+   sem imóvel é — e, numa receita ou despesa com dois ou mais imóveis meus
+   (imoveisDeTodos à data do movimento; num planeado ou modelo, sem data),
+   «Todos os imóveis» ('*'). Depois os imóveis onde posso adicionar
+   (propOptsPara) e, numa receita ou despesa, os grupos ('g:<id>'): só estas
+   se dividem por vários imóveis. O que o movimento já tem escolhido aparece
+   sempre — um grupo que não está nesta conta (apagado, ou de outra pessoa),
+   «Todos» num molde de quem já só tem um imóvel —, para o seletor não
+   mostrar uma coisa e gravar outra. Quem só
+   colabora não ganha nenhuma opção nova.
+   Recebe: t — o movimento do formulário (tForm).
+   Devolve: array de {v, label}, com {div:true} antes dos grupos, para o sel(). */
+function opcoesDoImovel(t){
+  const settle=t.kind==='settle',deLote=t.kind==='income'||t.kind==='expense',meu=podeSemImovel();
+  const planeado=txModo.modo==='rec',molde=planeado||txModo.modo==='tpl';
+  const todos=!!t.todos||(meu&&deLote&&imoveisDeTodos(molde?'':t.date).length>1);
+  const gs=meu&&deLote?gOpts('prop'):[];
+  if(t.groupId&&!gs.some(o=>o.v==='g:'+t.groupId)){const g=grp(t.groupId);gs.push({v:'g:'+t.groupId,label:g?'Grupo · '+g.name:'Grupo que não está nesta conta'})}
+  return (meu?[{v:'',label:settle?'Todos os imóveis':'Sem imóvel'}]:[])
+    .concat(todos&&!settle?[{v:'*',label:'Todos os imóveis'}]:[])
+    .concat(propOptsPara(planeado?'rec.add':'tx.add',t.propertyId))
+    .concat(gdiv(gs));
+}
+/* A dica por baixo de «Todos os imóveis»: por quantos imóveis se divide, os
+   que eram meus na data do movimento (imoveisDeTodos). Num planeado ou num
+   modelo a data é a de cada movimento que dele se registar.
+   Recebe: t — o movimento do formulário (tForm), com todos.
+   Devolve: o texto da dica (por escapar). */
+function dicaDeTodos(t){
+  if(txModo.modo==='rec'||txModo.modo==='tpl')return 'Divide-se pelos imóveis que tiveres na data de cada movimento.';
+  const n=imoveisDeTodos(t.date).length;
+  if(n>1)return 'Divide-se pelos '+n+' imóveis que tinhas nesta data.';
+  return n?'Nesta data só tinhas um imóvel: o movimento fica nele.':'Nesta data ainda não tinhas imóveis: muda a data, ou escolhe «Sem imóvel».';
+}
+/* Mudou a data do movimento. Com «Todos os imóveis», os imóveis da divisão
+   são os dessa data: a dica, a divisão entre imóveis e quem pagou mudam com
+   ela, e o formulário repinta-se com o que já está escrito. Sem «Todos» a
+   data não mexe em mais nada, e não se repinta.
+   Devolve: nada — repinta o modal (só com «Todos»). */
+function txDataMudou(){if(!tForm.todos)return;collectTx();prefill();repaintTx()}
 const SPLIT_MODES=[['equal','Partes iguais','o mesmo para cada proprietário'],['quota','Quotas do imóvel','pela quota-parte de cada um'],['pct','Quotas a definir','em partes: quem tem 2 paga o dobro de quem tem 1 (2 e 1 → 2/3 e 1/3)'],['percent','Percentagem','percentagem de cada um; devem somar 100'],['amount','Valor certo','montante de cada um; têm de somar o total'],['adjust','Ajuste','um extra por cima da parte igual: tira-se ao total o extra de cada um, o resto divide-se em partes iguais por todos e cada um soma o seu (15 € com 5 de extra para um de dois → 10 € e 5 €)']];
 /* Monta o HTML do formulário do movimento a partir do tForm. Os campos variam com o tipo
    (contrato nas rendas, hipoteca e distribuição nos créditos, credor nas dívidas a terceiros,
@@ -331,15 +429,15 @@ function txBody(){
     .concat(lns.map(l=>({v:l.id,label:loanName(l)+' · '+euro(l.outstanding)})))
     .concat(curLoan&&!(Number(curLoan.outstanding)>0)?[{v:curLoan.id,label:loanName(curLoan)+' · liquidada'}]:[])
     .concat(t.kind==='loan'&&t.loanId&&!curLoan?[{v:t.loanId,label:'Hipoteca desconhecida (outro imóvel)'}]:[]);
-  /* sem imóvel, a despesa pode na mesma ser paga por alguém; num grupo, pelos donos dos imóveis do grupo */
-  const ows=(p?ownersOfProp(p).map(owner):(t.groupId?txGroupOwners(t):donosGlobais())).filter(Boolean);
+  /* sem imóvel, a despesa pode na mesma ser paga por alguém; num grupo (ou em «Todos»), pelos donos dos imóveis dele */
+  const ows=(p?ownersOfProp(p).map(owner):((t.groupId||t.todos)?txGroupOwners(t):donosGlobais())).filter(Boolean);
   if(t.kind==='settle')[t.paidBy,t.toId].forEach(o=>{const x=o&&owner(o);if(x&&!ows.some(y=>y.id===o))ows.push(x)});
   const cs=catsFor(t.kind)||{},subs=(cs[t.category]||[]).slice();
   if(t.sub&&subs.indexOf(t.sub)<0)subs.unshift(t.sub);
   /* «Crédito à habitação» é dos pagamentos de crédito: uma despesa assim classificada contava como despesa e não abatia nada */
   const catKeys=Object.keys(cs).filter(c=>!(t.kind==='expense'&&c==='Crédito à habitação'));if(t.category&&catKeys.indexOf(t.category)<0)catKeys.unshift(t.category);
   const credit=t.kind==='owed'||t.kind==='repay',settle=t.kind==='settle';
-  const owOpts=[{v:'',label:'Todos os proprietários'}].concat(ows.map(o=>({v:o.id,label:o.name})));
+  const owOpts=[{v:'',label:'Todos os proprietários'}].concat(ows.map(o=>({v:o.id,label:rotuloDoDono(o,ows.length)})));
   /* a categoria e a subcategoria são texto de quem as escreveu — e o resumo da dobra entra no HTML tal e qual */
   const catSum=esc([t.category,t.sub].filter(Boolean).join(' / '))+((t.tags||[]).length?(t.category?' · ':'')+t.tags.length+' etiqueta'+(t.tags.length===1?'':'s'):'');
   const planeado=txModo.modo==='rec',modelo=txModo.modo==='tpl';
@@ -351,8 +449,10 @@ function txBody(){
       <label>Montante (€) <span class="req">*</span><div class="u-d-flex u-g-7px u-ai-center">
         <input id="t_amount" type="text" inputmode="decimal" class="u-fx-1 u-minw-0" value="${t.amount||''}" placeholder="900" data-input="txMontanteEscrito(this.value)">
         <button type="button" class="btn sm primary${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':' u-d-none'} u-fx-0-0-auto u-p-9px-12px" id="amt_reset" title="Repor a prestação calculada" data-toca="rascunho" data-click="onAmtReset()">Repor</button></div></label>
-      ${planeado?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}"></label>`}</div>
-    <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:''),(podeSemImovel()?[{v:'',label:'Todos os imóveis'}]:[]).concat(propOptsPara(planeado?'rec.add':'tx.add',t.propertyId)).concat(podeSemImovel()?gdiv(gOpts('prop')):[]),'onPropChange','rascunho')}</label>
+      ${planeado?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}" data-change="txDataMudou()"></label>`}</div>
+    <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:(t.todos?'*':'')),opcoesDoImovel(t),'onPropChange','rascunho')}</label>
+    ${(!settle&&!t.propertyId&&!t.groupId&&!t.todos&&podeSemImovel())?'<div class="hint u-mt-n6px">Conta nos totais, mas não na avaliação de nenhum imóvel.</div>':''}
+    ${t.todos&&!t.propertyId?`<div class="hint u-mt-n6px">${esc(dicaDeTodos(t))}</div>`:''}
     ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+dPT(c.start):'')}))),'onCtChange','rascunho')}</label>`:''}
     ${t.kind==='income'&&(t.contractId||t.category==='Rendas')?txFiscoSect():''}
     ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange','rascunho')}</label>`:''}
@@ -373,7 +473,7 @@ function txBody(){
       <div class="hint u-mt-n6px">Só o que pagaste para obter a renda entra. Juros, mobiliário, eletrodomésticos e obras que acrescentam valor ficam de fora.</div>`:''}
       <div><div class="flabel">Etiquetas</div>${tagField((t.tags||[]).map(g=>({id:g,label:g})),'Adicionar','addTxTag()','delTxTag','grey')}</div>`,
       {icon:'tag',open:!!(t.category||(t.tags||[]).length),summary:catSum||'sem categoria'})}
-    ${(!settle&&t.groupId&&txProps(t).length>1)?psplitSect():''}
+    ${(!settle&&(t.groupId||t.todos)&&txProps(t).length>1)?psplitSect():''}
     ${(!settle&&!credit&&ows.length>1)?splitSect(ows):''}
     ${credit&&ows.length>1?`<div class="hint">Dívidas a terceiros não entram nas contas entre proprietários: ficam com quem as recebe ou paga.</div>`:''}
     ${planeado&&servicoLigado('recurring')?recSect():''}
@@ -424,7 +524,7 @@ function splitSect(ows){
   return fold('split','Divisão entre proprietários',`
     <label>Como se divide${sel('t_split',mode,SPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onSplitSel','rascunho')}</label>
     ${(mode==='quota'||mode==='equal')?'':`<div class="form u-g-7px">${ows.map(o=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${esc(initials(o.name))}</span>
-      <span class="nm">${esc(o.name)}</span>
+      <span class="nm">${esc(rotuloDoDono(o,ows.length))}</span>
       <input id="t_sp_${o.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[o.id]!=null&&parts[o.id]!==''?dec(parts[o.id]):''}" placeholder="0" data-input="refreshSplit()">
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
     <div class="hint" id="splitHint">${splitHint(ows)}</div>`,{icon:'split',summary:lab});
@@ -477,15 +577,15 @@ function collectSplit(){
   if(!m2||m2==='quota'){t.split=null;return}
   if(m2==='equal'){t.split={mode:'equal',parts:{}};return}
   const p=prop(t.propertyId),parts={};
-  const os=p?ownersOfProp(p):(t.groupId?txGroupOwners(t).map(o=>o.id):db.owners.map(o=>o.id));
+  const os=p?ownersOfProp(p):((t.groupId||t.todos)?txGroupOwners(t).map(o=>o.id):db.owners.map(o=>o.id));
   /* percentagens e partes leem-se pelo numTaxa («0,125» é 0,125, não 125); os
      valores certos e os ajustes são euros, e aí «1.500» são mil e quinhentos */
   const lerParte=(m2==='amount'||m2==='adjust')?num:numTaxa;
   os.forEach(o=>{const e=document.getElementById('t_sp_'+o);if(e&&String(e.value).trim()!=='')parts[o]=lerParte(e.value)});
   t.split={mode,parts};
 }
-/* divisão do valor pelos imóveis do grupo */
-const PSPLIT_MODES=[['equal','Partes iguais','o mesmo para cada imóvel'],['value','Pelo valor de mercado','proporcional ao valor atual'],['purchase','Pelo valor de aquisição','proporcional ao que custou'],['pct','Quotas a definir','em partes: 2 e 1 → 2/3 e 1/3'],['percent','Percentagem','de cada imóvel; devem somar 100'],['amount','Valor certo','montante de cada imóvel; têm de somar o total'],['adjust','Ajuste','um extra por cima da parte igual: o total menos os extras divide-se em partes iguais por todos os imóveis e cada um soma o seu']];
+/* a divisão do valor pelos imóveis (de um grupo, ou de «Todos os imóveis»): os
+   modos (PSPLIT_MODES) vivem no dados.js, porque o normTx só aceita um deles */
 // Secção "Divisão entre imóveis" dos movimentos de grupo: escolha do modo e,
 // quando o modo pede valores, um campo por imóvel. Devolve o HTML do fold.
 // Devolve: o HTML do fold (string).
@@ -519,10 +619,10 @@ function psplitHint(){
   return warn+intro+'<br>'+ps.map((p,i)=>`${esc(p.name)} <b>${euro2(c[i]/100)}</b>`).join(' · ');
 }
 // Valida a divisão entre imóveis: devolve a mensagem de erro ou '' se ok.
-// Só se aplica a movimentos de grupo com dois ou mais imóveis.
+// Só se aplica a movimentos de grupo (ou de «Todos os imóveis») com dois ou mais imóveis.
 // Devolve: a mensagem de erro (string) ou '' se está tudo válido.
 function psplitError(){
-  const t=tForm;if(!t.groupId)return '';
+  const t=tForm;if(!t.groupId&&!t.todos)return '';
   const ps=txProps(t),mode=(t.psplit||{}).mode;
   if(ps.length<2||!mode||['equal','value','purchase'].indexOf(mode)>-1)return '';
   const parts=(t.psplit||{}).parts||{},total=Math.abs(Number(t.amount)||0);
@@ -536,11 +636,11 @@ function psplitError(){
   if(mode==='percent'&&Math.abs(s2-100)>0.01)return 'As percentagens por imóvel têm de somar 100 (somam '+dec(Math.round(s2*100)/100)+').';
   return '';
 }
-// Lê do DOM o modo e os valores por imóvel para tForm.psplit (fora de um grupo fica null).
+// Lê do DOM o modo e os valores por imóvel para tForm.psplit (fora de um grupo ou de «Todos» fica null).
 // Devolve: nada — escreve em tForm.psplit.
 function collectPsplit(){
   const t=tForm;
-  if(!t.groupId){t.psplit=null;return}
+  if(!t.groupId&&!t.todos){t.psplit=null;return}
   if(document.getElementById('t_psplit'))t.psplit=Object.assign({},t.psplit||{},{mode:val('t_psplit')||'equal'});
   const mode=(t.psplit||{}).mode||'equal',parts={};
   // como na divisão entre donos: percentagens e partes pelo numTaxa, euros pelo num
@@ -743,16 +843,18 @@ function setKind(k){keepTyped();
   if(treeKey(tForm.kind)!==treeKey(k)){tForm.category='';tForm.sub=''}
   tForm.kind=k;if(k!=='settle'&&tForm.label==='Transferência entre proprietários')tForm.label='';prefill();repaintTx();
   const h=modalTop()&&modalTop().el.querySelector('.head h2');if(h)h.textContent=txTitulo()}
-/* Mudou o imóvel (ou grupo, valores "g:id"): limpa tudo o que dependia dele — contrato,
-   hipoteca, divisões e distribuição — e volta a sugerir valores para o novo contexto.
+/* Mudou o imóvel (ou grupo, valores "g:id", ou «Todos os imóveis», '*'): limpa tudo o que
+   dependia dele — contrato, hipoteca, divisões e distribuição — e volta a sugerir valores
+   para o novo contexto.
    Devolve: nada — atualiza o tForm e repinta o modal. */
 function onPropChange(){keepTyped();
   const v=val('t_prop')||'';
   tForm.groupId=String(v).startsWith('g:')?v.slice(2):null;
-  tForm.propertyId=tForm.groupId?null:(v||null);
+  tForm.todos=v==='*';
+  tForm.propertyId=(tForm.groupId||tForm.todos)?null:(v||null);
   tForm.contractId=null;tForm.loanId=null;tForm.split=null;
   delete tForm.interest;delete tForm.stamp;delete tForm.principal;
-  tForm.psplit=tForm.groupId?{mode:'equal',parts:{}}:null;
+  tForm.psplit=(tForm.groupId||tForm.todos)?{mode:'equal',parts:{}}:null;
   prefill();repaintTx()}
 // Mudou o contrato: volta a sugerir a renda e a descrição do contrato escolhido.
 // Devolve: nada — atualiza o tForm e repinta o modal.
@@ -800,7 +902,7 @@ function onSubChange(){
 function collectTx(){
   const t=tForm;
   t.label=val('t_label');t.amount=num(val('t_amount'));t.date=val('t_date')||today();
-  if(document.getElementById('t_prop')){const v=val('t_prop')||'';t.groupId=String(v).startsWith('g:')?v.slice(2):null;t.propertyId=t.groupId?null:(v||null)}
+  if(document.getElementById('t_prop')){const v=val('t_prop')||'';t.groupId=String(v).startsWith('g:')?v.slice(2):null;t.todos=v==='*';t.propertyId=(t.groupId||t.todos)?null:(v||null)}
   if(document.getElementById('t_notes'))t.notes=richVal('t_notes');
   if(document.getElementById('t_loan'))t.loanId=val('t_loan')||null;
   /* os juros e o capital da tabela: contam como escritos à mão numa edição ou depois de lhes mexer */
@@ -896,13 +998,15 @@ function applyLoan(t){
 }
 /* Apaga o movimento e, se era um pagamento de crédito, a hipoteca volta a derivar o
    capital em dívida sem ele (o capital dele volta) e a recorrência dela sincroniza-se.
-   O toast traz "Anular", que desfaz as duas coisas.
+   O toast traz "Anular", que desfaz as duas coisas. Uma parte de um lote apaga o
+   lote inteiro (apagarLote).
    Recebe: id — o id do movimento a apagar (string).
    Devolve: nada — grava e re-renderiza. */
 function delTx(id){
   /* sem confirmação, com Anular: é a eliminação mais frequente da app, e a
      pergunta constante ensinava o dedo a confirmar sem ler */
   const t=db.transactions.find(x=>x.id===id);if(!t)return;
+  if(t.lote)return apagarLote(t);
   const recusa=motivoRecusa(t.propertyId,'tx.add',t,true);if(recusa)return toast(recusa);
   const copia=JSON.parse(JSON.stringify(t));
   const l=t.kind==='loan'&&t.loanId?findLoan(prop(t.propertyId),t.loanId):null;
@@ -917,4 +1021,211 @@ function delTx(id){
     const l2=copia.kind==='loan'&&copia.loanId?findLoan(prop(copia.propertyId),copia.loanId):null;
     if(l2){if(l2.capitalInicio==null)l2.capitalInicio=capital;acertarCapital(l2);if(servicoLigado('recurring'))syncLoanRec(prop(copia.propertyId),l2)}
   });
+}
+
+/* ================= LOTES =================
+   Um movimento de vários imóveis — de um grupo, ou de «Todos os imóveis» —
+   guarda-se partido por imóvel: cada parte é um movimento normal do seu
+   imóvel (um registo da casa, que vê quem tem o imóvel), com a marca lote
+   {id, n, total, alvo, modo, partes} (dados.js:normLote). Guardava-se como
+   um registo só, nos dados de quem o registou: num grupo partilhado os outros
+   comproprietários não o viam, e as contas mudavam sempre que o grupo ganhava
+   ou perdia um imóvel. O custo é este bloco: editar e apagar tratam o lote
+   inteiro, e um lote de que só vejo parte não se mexe daqui. Os moldes
+   (planeados e modelos) continuam a guardar o grupo ou «Todos»; parte-se ao
+   registar. */
+
+/* O id de uma parte: determinístico — dois aparelhos a partir o mesmo lote
+   dão os mesmos ids, e editar mantém-nos — e dentro da forma que o servidor
+   aceita (40 + 1 + 12 caracteres, só letras, algarismos, _ e -).
+   Recebe: loteId — o id do lote; propId — o id do imóvel da parte.
+   Devolve: o id da parte (texto). */
+function parteId(loteId,propId){return String(loteId).slice(0,40)+'_'+String(propId).replace(/[^A-Za-z0-9]/g,'').slice(0,12)}
+/* As partes de um lote que estão nesta base, pela ordem dos imóveis (a da
+   base; a mesma da lista) e, no mesmo imóvel, pelo id.
+   Recebe: loteId — o id do lote.
+   Devolve: as partes (array de objetos de db.transactions); vazio sem nenhuma. */
+function partesDoLote(loteId){
+  if(loteId==null||loteId==='')return [];
+  const ordem=new Map();(db.properties||[]).forEach((p,i)=>ordem.set(p.id,i));
+  const pos=t=>ordem.has(t.propertyId)?ordem.get(t.propertyId):Infinity;
+  return (db.transactions||[]).filter(t=>t.lote&&t.lote.id===loteId)
+    .sort((a,b)=>(pos(a)-pos(b))||String(a.id).localeCompare(String(b.id)));
+}
+/* O lote desta parte está inteiro nesta base: as n partes, todas a dizer o
+   mesmo n e o mesmo total. Menos (de imóveis que não tenho), ou partes que não
+   batem umas com as outras (um lote refeito noutro aparelho a meio de chegar),
+   é um lote que daqui não se altera nem se apaga — mexer só no que se vê
+   deixava partes velhas e novas misturadas.
+   Recebe: t — o movimento.
+   Devolve: true se t é parte de um lote inteiro nesta base; false se não é
+   parte de lote nenhum, ou se o lote está incompleto. */
+function loteCompleto(t){
+  if(!t||!t.lote)return false;
+  const l=t.lote,ps=partesDoLote(l.id);
+  return ps.length===l.n&&ps.every(x=>x.lote.n===l.n&&x.lote.total===l.total);
+}
+/* A frase de um lote incompleto, para a ficha e para a recusa.
+   Recebe: n — de quantas partes é o lote.
+   Devolve: o texto (por escapar). */
+function fraseDoLoteIncompleto(n){return 'Parte de um movimento dividido por '+n+' imóveis. Só quem vê os '+n+' imóveis o altera.'}
+/* Posso alterar ou apagar o lote desta parte? Só inteiro nesta base
+   (loteCompleto) e com cada parte ao meu alcance (podeEditar, imóvel a imóvel).
+   E um lote de «Todos os imóveis» só por quem o registou: «todos» são os
+   imóveis de quem o registou, e guardá-lo à mão de um comproprietário
+   dividia-o pelos imóveis DELE — que podem incluir casas que não são do
+   autor. A marca do servidor (_createdBy) diz quem foi; sem ela (só neste
+   aparelho, ou sem sessão) é meu.
+   Recebe: t — o movimento; acao (opcional) — true quando é apagar (ver podeEditar).
+   Devolve: a frase da recusa (texto), ou '' quando posso — e '' num movimento
+   que não é parte de lote nenhum. */
+function recusaDoLote(t,acao){
+  if(!t||!t.lote)return '';
+  if(!loteCompleto(t))return fraseDoLoteIncompleto(t.lote.n);
+  const ps=partesDoLote(t.lote.id),eu=meuId();
+  if(t.lote.alvo==='todos'&&eu&&ps.some(y=>y._createdBy&&y._createdBy!==eu))
+    return 'Dividido por todos os imóveis de quem o registou: só essa pessoa o altera.';
+  const x=ps.find(y=>!podeEditar(y.propertyId,'tx.add',y,acao));
+  return x?motivoRecusa(x.propertyId,'tx.add',x,acao):'';
+}
+/* O movimento que o formulário edita a partir de uma parte: o lote inteiro —
+   o id do lote, o total, o grupo ou «Todos», e o modo e os valores da divisão
+   entre imóveis; a retenção na fonte é a soma das partes. O resto (descrição,
+   data, categoria, quem pagou…) é o da parte, que é o do lote. Sem as marcas
+   do servidor (_…): quem guarda tira-as de qualquer forma.
+   Recebe: t — uma parte de um lote inteiro nesta base.
+   Devolve: um objeto novo, por normalizar, com o lote como um movimento de vários imóveis. */
+function movimentoDoLote(t){
+  const l=t.lote,alvo=String(l.alvo||''),g=alvo.startsWith('g:')?alvo.slice(2):null;
+  const o=JSON.parse(JSON.stringify(t));
+  Object.keys(o).forEach(k=>{if(k[0]==='_')delete o[k]});
+  return Object.assign(o,{id:l.id,amount:l.total,propertyId:null,groupId:g,todos:!g,lote:null,
+    psplit:{mode:l.modo,parts:JSON.parse(JSON.stringify(l.partes||{}))},
+    retencao:r2(sum(partesDoLote(l.id).map(x=>Number(x.retencao)||0)))});
+}
+/* Onde é um lote, na ficha: o nome do grupo (se ainda existir) ou «Todos os
+   imóveis», e por quantos imóveis se dividiu. De um grupo que já não existe,
+   só quantos são.
+   Recebe: t — uma parte do lote.
+   Devolve: o texto, já escapado (ex.: «Bloco · 3 imóveis»). */
+function ondeDoLote(t){
+  const l=t.lote,alvo=String(l.alvo||''),n=Number(l.n)||0;
+  const g=alvo.startsWith('g:')?grp(alvo.slice(2)):null,nome=alvo==='todos'?'Todos os imóveis':(g&&g.name)||'';
+  return (nome?esc(nome)+' · ':'')+n+(n===1?' imóvel':' imóveis');
+}
+/* Este movimento divide-se por vários imóveis ao guardar? Uma receita ou
+   despesa de um grupo ou de «Todos os imóveis», sem imóvel. Os outros tipos
+   com grupo (dados antigos) ficam como estão: só receitas e despesas se
+   dividem.
+   Recebe: t — o movimento.
+   Devolve: true/false. */
+function ehDeVariosImoveis(t){return !!t&&!t.propertyId&&(!!t.groupId||!!t.todos)&&(t.kind==='income'||t.kind==='expense')}
+/* Parte um movimento de vários imóveis — os do grupo hoje, ou os de «Todos»
+   na data dele (txProps) — num lote. Os cêntimos saem do psplitCents sobre os
+   cêntimos do total e somam o total ao cêntimo; a retenção na fonte parte-se
+   na mesma proporção, ao cêntimo, em vez de se repetir em cada imóvel (o que
+   multiplicava o retido no Anexo F). Cada parte leva o resto do movimento tal
+   e qual (tipo, descrição, data, categoria, etiquetas, notas, quem pagou, a
+   divisão entre donos, a coluna do Anexo F), sem contrato nem hipoteca — são
+   de um imóvel, não de vários —, e o id parteId(id do movimento, imóvel).
+   Com um imóvel só é um movimento normal nesse imóvel, com o id do movimento.
+   Não mexe na base.
+   Recebe: t — o movimento (com id, amount, groupId ou todos, date, psplit).
+   Devolve: {partes} — os movimentos a pôr na base (normTx), pela ordem dos
+   imóveis —, ou {erro} com a frase: sem imóveis, num imóvel onde não posso
+   registar, ou com ids que colidem com outro movimento. */
+function partirMovimento(t){
+  const vistos=new Set(),ps=txProps(t).filter(p=>!vistos.has(p.id)&&vistos.add(p.id));
+  if(!ps.length)return {erro:t.groupId?(grp(t.groupId)?'O grupo não tem imóveis.':'O grupo deste movimento não está nesta conta: escolhe onde fica.'):'Não havia imóveis nesta data.'};
+  const barrado=ps.find(p=>!pode(p.id,'tx.add'));
+  if(barrado)return {erro:'Não podes adicionar movimentos em «'+(barrado.name||'imóvel')+'» — pede ao dono.'};
+  const base=JSON.parse(JSON.stringify(t));
+  Object.keys(base).forEach(k=>{if(k[0]==='_')delete base[k]});
+  Object.assign(base,{groupId:null,todos:false,psplit:null,lote:null,contractId:null,loanId:null});
+  if(ps.length===1)return {partes:[normTx(Object.assign(base,{propertyId:ps[0].id}))]};
+  const sinal=Number(t.amount)<0?-1:1,total=Math.abs(Math.round((Number(t.amount)||0)*100));
+  const c=psplitCents(t,ps,total),sp=t.psplit||{};
+  const rs=splitShares(Math.round((Number(t.retencao)||0)*100),c.map(x=>total?x/total:1/ps.length));
+  const modo=PSPLIT_MODES.some(m=>m[0]===sp.mode)?sp.mode:'equal';
+  const lote={id:t.id,n:ps.length,total:sinal*total/100,alvo:t.groupId?'g:'+t.groupId:'todos',modo,
+    partes:['equal','value','purchase'].indexOf(modo)>-1?{}:JSON.parse(JSON.stringify(sp.parts||{}))};
+  const partes=ps.map((p,i)=>normTx(Object.assign(JSON.parse(JSON.stringify(base)),
+    {id:parteId(t.id,p.id),propertyId:p.id,amount:sinal*c[i]/100,retencao:rs[i]/100,lote:JSON.parse(JSON.stringify(lote))})));
+  /* os ids têm de ser de um só movimento: dois imóveis com o mesmo começo de
+     id, ou um id de lote comprido que começa como o de outro, davam duas
+     partes com o mesmo id — e uma apagava a outra no servidor */
+  const ids=new Set(partes.map(x=>x.id));
+  if(ids.size<partes.length||(db.transactions||[]).some(x=>ids.has(x.id)&&x.id!==t.id&&!(x.lote&&x.lote.id===t.id)))
+    return {erro:'Não consegui dividir este movimento pelos imóveis (os ids das partes colidem). Regista-o de novo.'};
+  return {partes};
+}
+/* Troca na base tudo o que é deste lote — o movimento com o id do lote e as
+   partes que o têm como lote — pelos movimentos novos, de uma vez, no lugar do
+   primeiro que sai. É por aqui que um lote nunca fica meio gravado: as partes
+   velhas saem todas no mesmo passo em que as novas entram.
+   Recebe: loteId — o id do lote; novos — os movimentos que ficam (array).
+   Devolve: os movimentos que saíram (array). */
+function trocarLote(loteId,novos){
+  const sai=x=>x.id===loteId||(!!x.lote&&x.lote.id===loteId);
+  const lista=db.transactions||[],velhos=lista.filter(sai);
+  let i=lista.findIndex(sai);if(i<0)i=lista.length;
+  db.transactions=lista.slice(0,i).concat(novos,lista.slice(i).filter(x=>!sai(x)));
+  return velhos;
+}
+/* Um movimento pronto a entrar na base a partir de um molde (o tx de um
+   planeado ou de um modelo, já com data): o de um grupo ou de «Todos os
+   imóveis» parte-se por imóvel (partirMovimento); o resto entra tal e qual.
+   É o que o Confirmar de um planeado e o «guardar e registar» de um modelo
+   usam, para um molde de grupo nunca voltar a entrar como um registo só.
+   Recebe: t — o movimento (normTx, com id e data).
+   Devolve: {partes} — os movimentos a juntar à base —, ou {erro} com a frase. */
+function registarMolde(t){return ehDeVariosImoveis(t)?partirMovimento(t):{partes:[t]}}
+/* Apaga um lote inteiro — as partes todas, de uma vez —, com «Anular» a
+   repô-las todas. Só com o lote inteiro nesta base e cada parte ao meu
+   alcance (recusaDoLote): apagar só as partes que vejo deixava os outros
+   imóveis com um pedaço de um movimento que já não existe.
+   Recebe: t — uma parte do lote.
+   Devolve: nada — grava e redesenha (ou diz porque não apagou). */
+function apagarLote(t){
+  const recusa=recusaDoLote(t,true);if(recusa)return toast(recusa);
+  const partes=partesDoLote(t.lote.id),ids=new Set(partes.map(x=>x.id));
+  const copias=JSON.parse(JSON.stringify(partes));
+  db.transactions=db.transactions.filter(x=>!ids.has(x.id));
+  save();closeAllModals();render();
+  comDesfazer('Movimento apagado.',()=>{
+    /* repõe as partes todas — só as que um sync entretanto não trouxe de volta */
+    const ja=new Set(db.transactions.map(x=>x.id));
+    copias.forEach(c=>{if(!ja.has(c.id))db.transactions.push(c)});
+  });
+}
+/* Os movimentos de grupo do formato antigo — um registo só, sem imóvel, nos
+   dados de quem o registou, dividido na hora pelos imóveis que o grupo
+   tivesse — partem-se por imóvel, com o id antigo como id do lote. Só os que
+   se partem sem mudar número nenhum: receita ou despesa; o grupo existe, sem
+   imóveis repetidos, e os imóveis dele estão todos nesta base e com
+   «Adicionar movimentos»; com um imóvel só, quando as contas entre donos
+   ficam iguais (quem pagou é dono dele, ou não há quem pagou). Um de «Todos
+   os imóveis» que tenha entrado como registo só (o preenchimento por
+   estimativa de um planeado) parte-se da mesma maneira, pelos imóveis da data
+   dele. O que não se parte fica como estava, e continua a contar pelo código
+   de sempre (txWeight, ownerBalances). Correr outra vez não faz nada: o que se
+   partiu já não tem grupo.
+   Não grava: quem chama grava (arranque.js:derivarDoArranque).
+   Devolve: quantos movimentos se partiram (número). */
+function migrarMovimentosDeGrupo(){
+  let n=0;
+  (db.transactions||[]).slice().forEach(t=>{
+    if(!ehDeVariosImoveis(t))return;
+    let ps;
+    if(t.groupId){
+      const g=grp(t.groupId),ids=g?g.ids||[]:[];
+      if(!ids.length||new Set(ids).size!==ids.length)return;
+      ps=ids.map(prop);if(ps.some(p=>!p))return;
+    }else ps=imoveisDeTodos(t.date);
+    if(!ps.length||ps.some(p=>!pode(p.id,'tx.add')))return;
+    if(ps.length===1&&countsBetweenOwners(t)){const os=ownersOfProp(ps[0]);if(os.length&&os.indexOf(t.paidBy)<0)return}
+    const r=partirMovimento(t);if(r.erro)return;
+    trocarLote(t.id,r.partes);n++;
+  });
+  return n;
 }

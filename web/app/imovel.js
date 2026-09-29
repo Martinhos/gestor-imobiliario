@@ -573,9 +573,36 @@ function newOwnerFromProp(){
   closeModal();   /* fecha a lista de escolha; a ficha nova abre por cima do imóvel */
   chamarServico('owners','personModal','owner',null,nid=>{if(pForm.ownerIds.indexOf(nid)<0)pForm.ownerIds.push(nid);closeModal();render();repaintProp();toast('Proprietário criado.')});
 }
+/* Um imóvel apagado leva a parte dele de cada movimento de vários imóveis (um
+   lote, movimento.js); as partes que ficam nos outros imóveis passam a ser o
+   lote inteiro — menos uma parte, e o total a soma delas —, e uma só que
+   sobre passa a movimento normal. Sem isto ficavam a dizer «dividido por 3»
+   com duas partes, um lote incompleto para sempre, que ninguém edita nem
+   apaga. Só quando todas as partes que ficam estão ao meu alcance: acertar
+   uma que o servidor me recusa tirava-a da base local. Só dados: não chama os
+   Movimentos (o imóvel é outro serviço).
+   Recebe: id — o id do imóvel que sai; txs — os movimentos dele (as cópias).
+   Devolve: as cópias das partes que mudaram, como estavam, para o Anular. */
+function acertarLotesSemImovel(id,txs){
+  const antes=[];
+  new Set(txs.filter(x=>x.lote&&x.lote.id).map(x=>x.lote.id)).forEach(lid=>{
+    const ficam=db.transactions.filter(x=>x.lote&&x.lote.id===lid&&x.propertyId!==id);
+    if(!ficam.length||ficam.some(x=>!pode(x.propertyId,'tx.add')))return;
+    ficam.forEach(x=>antes.push(JSON.parse(JSON.stringify(x))));
+    if(ficam.length===1){ficam[0].lote=null;return}
+    const total=Math.round(sum(ficam.map(x=>Number(x.amount)||0))*100)/100;
+    ficam.forEach(x=>{
+      const partes=Object.assign({},x.lote.partes||{});delete partes[id];
+      x.lote=Object.assign({},x.lote,{n:ficam.length,total,partes});
+    });
+  });
+  return antes;
+}
 /* Apaga o imóvel e, em cascata, os contratos e os movimentos associados, com
    Anular. A cópia guarda-se antes de apagar; as fotos e os documentos das
-   hipotecas só saem do IndexedDB quando o Anular expira.
+   hipotecas só saem do IndexedDB quando o Anular expira. As partes que o
+   imóvel tinha em movimentos de vários imóveis saem com ele, e o resto desses
+   movimentos acerta-se (acertarLotesSemImovel).
    Recebe: id — o id do imóvel a apagar.
    Devolve: nada — abre a confirmação; só se apaga depois do sim. */
 function delProp(id){
@@ -592,11 +619,14 @@ function delProp(id){
     db.properties=db.properties.filter(x=>x.id!==id);if(dashProp===id)dashProp='';if(txProp===id)txProp='';
     db.contracts=db.contracts.filter(x=>x.propertyId!==id);
     db.transactions=db.transactions.filter(x=>x.propertyId!==id);
+    const lotesAntes=acertarLotesSemImovel(id,copia.txs);
     save();closeAllModals();render();
     comDesfazer('Imóvel apagado.',()=>{
       db.properties.push(copia.p);
       db.contracts=db.contracts.concat(copia.cts);
-      db.transactions=db.transactions.concat(copia.txs);
+      /* as partes que ficaram voltam a ser como eram, e as do imóvel voltam */
+      const volta=new Map(lotesAntes.map(x=>[x.id,x]));
+      db.transactions=db.transactions.map(x=>volta.get(x.id)||x).concat(copia.txs);
     },()=>{
       (copia.p.photos||[]).forEach(f=>{idbDel(f.id).catch(()=>{});idbDel('tn_'+f.id).catch(()=>{})});
       (copia.p.loans||[]).forEach(l=>(l.files||[]).forEach(f=>idbDel(f.id).catch(()=>{})));

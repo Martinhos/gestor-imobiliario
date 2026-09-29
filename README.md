@@ -12,6 +12,13 @@ inquilinos, proprietários, movimentos, créditos à habitação, projeções e 
 3. Dentro da conexão, **cada utilizador escolhe que casas suas partilha** com o outro.
    Uma casa partilhada leva consigo os contratos, movimentos, recorrentes e pessoas associadas,
    e o outro utilizador pode ver e editar; apagar a casa e gerir a partilha é só do dono.
+4. **Um grupo de casas partilha-se como grupo.** Em **Definições → Grupos** (ou em Conta e
+   partilha), um grupo partilhado tem um dono, membros e casas: quem está no grupo é comproprietário
+   de todas as casas dele, cada membro põe no grupo casas suas, e entra-se por uma ligação do dono
+   (multi-uso, válida sete dias) com um pedido que o dono aceita. Um movimento de um grupo, ou de
+   «Todos os imóveis», parte-se por imóvel ao guardar. Sair leva as casas que se pôs; o dono remove membros, roda ou
+   desativa a ligação, e apaga o grupo — as casas ficam. Ver «Grupos partilhados» em
+   [`docs/design.md`](docs/design.md).
 
 **Os proprietários são os utilizadores.** Cada um preenche os seus dados (nome, NIF, CC,
 contactos — usados nos contratos em PDF) em **Definições → O meu perfil**. Uma casa não

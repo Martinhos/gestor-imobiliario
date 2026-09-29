@@ -226,11 +226,12 @@ function cargosDoEstado(st,myId){
 }
 
 /* Lê a porta de entrada do URL: ?convite=<token> (ligação de convite, uso
-   único) ou ?ligar=<token> (ligação de partilha). O token são 64 hex.
+   único), ?ligar=<token> (ligação de partilha) ou ?grupo=<token> (ligação
+   de um grupo partilhado, multi-uso). O token são 64 hex.
    Recebe: search — o location.search (com ou sem o «?»).
-   Devolve: {tipo:'convite'|'ligar', token}, ou null se não há porta válida. */
+   Devolve: {tipo:'convite'|'ligar'|'grupo', token}, ou null se não há porta válida. */
 function parseConvite(search){
-  const m=/(?:^|[?&])(convite|ligar)=([0-9a-fA-F]{64})(?:&|$)/.exec(String(search||''));
+  const m=/(?:^|[?&])(convite|ligar|grupo)=([0-9a-fA-F]{64})(?:&|$)/.exec(String(search||''));
   return m?{tipo:m[1],token:m[2].toLowerCase()}:null;
 }
 

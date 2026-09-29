@@ -3,15 +3,18 @@
    movimento conta. Por imóvel: a fração do imóvel (txW) vezes, com share e uma pessoa
    filtrada, a parte dela na divisão do movimento. De grupo: soma, pelos imóveis do
    grupo que estão na vista, da fração de cada imóvel e, com share, da parte da pessoa
-   dentro desse imóvel (a mesma repartição que ownerBalances faz). Sem imóvel nem
-   grupo: conta por inteiro só no âmbito todo, sem filtro de proprietário.
+   dentro desse imóvel (a mesma repartição que ownerBalances faz). «Todos os
+   imóveis» (um molde com todos) pesa como um grupo dos imóveis de
+   imoveisDeTodos. Uma parte de um lote é um movimento com imóvel e pesa como
+   tal: é a parte que o grupo daria a esse imóvel. Sem imóvel nem grupo: conta
+   por inteiro só no âmbito todo, sem filtro de proprietário.
    Recebe: t — o movimento; pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio para o
    âmbito atual; share — pesar pela quota do proprietário filtrado (booleano).
    Devolve: número 0–1 — a fração do valor do movimento que conta nessa vista. */
 function txWeight(t,pid,share){
   const oid=share&&ownerFilter&&!ownerIsGrp()?ownerFilter:null;
   if(t.propertyId){const w=txW(t,pid);return w*(oid?txOwnerFrac(t,oid):1)}
-  if(t.groupId){
+  if(t.groupId||t.todos){
     return sum(pidProps(pid).map(p=>{const fp=txPropShare(t,p.id);if(!fp||!oid)return fp;
       const os=ownersOfProp(p);if(os.indexOf(oid)<0)return 0;
       const cP=Math.round(Math.abs(Number(t.amount)||0)*100*fp);if(!cP)return fp*shareOf(p,oid);

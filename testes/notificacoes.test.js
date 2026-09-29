@@ -174,3 +174,117 @@ describe('o modal e a tabbar', () => {
     assert.deepEqual(Array.from(app.TABBAR), ['dashboard', 'transactions', 'properties', 'calendar']);
   });
 });
+
+/* Os pedidos para entrar num grupo meu chegam ao sino como os de partilha, e
+   respondem-se ali; e um movimento de varios imoveis (um lote) vive partido
+   numa parte por imovel — o sino conta-o uma vez, pelo lote.id. */
+describe('os pedidos de grupo e os lotes no sino', () => {
+  const cru = (x) => JSON.parse(JSON.stringify(x));
+  const PEDIDOS = () => ({
+    shareRequests: { incoming: [{ id: 'q1', fromName: 'Ana', houseName: 'T4 Porto' }] },
+    sharedGroupRequests: {
+      incoming: [{ groupId: 'G2', groupName: 'Família', userId: 'ZE', name: 'Zé', createdAt: 1 }],
+      outgoing: [{ groupId: 'G7', groupName: 'Casas de Faro', ownerName: 'Tó', createdAt: 1 }],
+    },
+  });
+  // uma parte de um lote, escrita por outra pessoa a uma hora do servidor
+  const parte = (loteId, pid, alvo, n, autor, at, label) => {
+    const t = app.normTx({ id: loteId + '_' + pid, kind: 'expense', label: label || 'Seguro multirriscos', amount: 40, date: '2026-09-01', propertyId: pid });
+    t.lote = { id: loteId, n, total: 40 * n, alvo, modo: 'equal', partes: {} };
+    t._author = autor; t._atServidor = at;
+    return t;
+  };
+
+  test('notifPedidos inclui o pedido de grupo (o que eu fiz não), que conta no crachá, e o modal responde por notifGrupoAceitar/notifGrupoRecusar', () => {
+    monta();
+    app.CW.state = PEDIDOS();
+    const l = cru(app.notifPedidos());
+    assert.equal(l.length, 2, 'o de partilha e o de grupo');
+    assert.deepEqual(l[1], { id: 'grupo:G2:ZE', tipo: 'grupo', gid: 'G2', uid: 'ZE',
+      titulo: 'Zé quer entrar no grupo «Família»', sub: 'Se aceitares, passa a comproprietário dos imóveis do grupo.' });
+    assert.equal(app.notifConta(), 2);
+    let corpo = '';
+    app.openModal = (t, b) => { corpo = b; };
+    app.notifModal();
+    assert.match(corpo, /<div class="navh">Pedidos por responder<\/div>/);
+    assert.match(corpo, /Zé quer entrar no grupo «Família»/);
+    assert.match(corpo, /data-toca="dados" data-click="notifGrupoAceitar\('G2','ZE'\)">Aceitar</);
+    assert.match(corpo, /data-toca="dados" data-click="notifGrupoRecusar\('G2','ZE'\)">Recusar</);
+    assert.match(corpo, /data-click="notifPedidoAceitar\('q1'\)"/, 'o de partilha continua pelo seu');
+    assert.ok(!corpo.includes('Casas de Faro'), 'o pedido que fiz não se responde aqui');
+    assert.ok(!/on[a-z]+=|style=/.test(corpo), 'nada em linha');
+  });
+
+  test('notifGrupoAceitar e notifGrupoRecusar fecham o sino primeiro e respondem pela nuvem; sem ela, só fecham', () => {
+    monta();
+    const ordem = [];
+    app.closeModal = () => { ordem.push('fechar'); };
+    app.CW.grupoAceitarPedido = (g, u) => { ordem.push('aceitar ' + g + ' ' + u); };
+    app.CW.grupoRecusarPedido = (g, u) => { ordem.push('recusar ' + g + ' ' + u); };
+    app.notifGrupoAceitar('G2', 'ZE');
+    app.notifGrupoRecusar('G2', 'LU');
+    assert.deepEqual(ordem, ['fechar', 'aceitar G2 ZE', 'fechar', 'recusar G2 LU']);
+    // a nuvem sem o ficheiro dos grupos, e sem nuvem nenhuma
+    app.CW = { user: { id: 'EU' } }; app.window.CW = app.CW;
+    assert.doesNotThrow(() => app.notifGrupoAceitar('G2', 'ZE'));
+    app.window.CW = undefined; app.CW = undefined;
+    assert.doesNotThrow(() => app.notifGrupoRecusar('G2', 'ZE'));
+    assert.equal(ordem.filter((x) => x === 'fechar').length, 4, 'e fecha sempre');
+    monta();
+  });
+
+  test('com os Colaboradores desligados o pedido de grupo não entra no sino; um estado sem a lista (de antes da regra) também não rebenta', () => {
+    monta();
+    app.CW.state = { sharedGroupRequests: PEDIDOS().sharedGroupRequests };
+    assert.equal(app.notifPedidos().length, 1);
+    app.definirServicosDesligados(['colaboradores']);
+    try {
+      assert.equal(app.notifPedidos().length, 0);
+      assert.equal(app.notifConta(), 0);
+    } finally {
+      app.definirServicosDesligados([]);
+    }
+    app.CW.state = { shareRequests: { incoming: [] } };
+    assert.deepEqual(cru(app.notifPedidos()), []);
+    app.CW.state = { sharedGroupRequests: { incoming: [{ groupId: 'G2' }, null] } };
+    assert.deepEqual(cru(app.notifPedidos()), [], 'sem a pessoa não há o que aceitar');
+    // um grupo partilhado que está na base e não é meu: o sino não oferece aceitar
+    app.db.groups = [Object.assign(app.normGroup({ id: 'G2', kind: 'prop', name: 'Família', ids: [] }), { _partilhado: true, _meu: false })];
+    app.CW.state = { sharedGroupRequests: PEDIDOS().sharedGroupRequests };
+    assert.equal(app.notifPedidos().length, 0, 'nenhum botão de aceitar a quem não é dono');
+    app.db.groups[0]._meu = true;
+    assert.equal(app.notifPedidos().length, 1, 'controlo: sendo meu, entra');
+  });
+
+  test('notifPartilha conta um lote de três partes uma vez, com o título do lote, o grupo e os imóveis, e a hora da parte mais nova', () => {
+    monta();
+    app.db.properties = ['P1', 'P2', 'P3'].map((id, i) => app.normProp({ id, name: 'Casa ' + (i + 1) }));
+    app.db.groups = [app.normGroup({ id: 'G1', kind: 'prop', name: 'Casas do Porto', ids: ['P1', 'P2', 'P3'] })];
+    const solto = app.normTx({ id: 'T9', label: 'Obra', propertyId: 'P1' });
+    solto._author = 'ELA'; solto._atServidor = 5000;
+    app.db.transactions = [parte('L1', 'P1', 'g:G1', 3, 'ELA', 6000), parte('L1', 'P2', 'g:G1', 3, 'ELA', 6000), parte('L1', 'P3', 'g:G1', 3, 'ELA', 7000), solto];
+    const l = cru(app.notifPartilha());
+    assert.equal(l.length, 2, 'o lote uma vez, mais o movimento solto: ' + l.map((n) => n.titulo).join(' | '));
+    assert.equal(l[0].titulo, 'Movimento — Seguro multirriscos');
+    assert.match(l[0].sub, /^Maria Costa · Casas do Porto · 3 imóveis · /);
+    assert.equal(l[0].at, 7000, 'a hora da parte mais nova');
+    assert.match(l[1].sub, /^Maria Costa · Casa 1 · /, 'o solto continua com o imóvel dele');
+    assert.equal(app.notifConta(), 2, 'e o crachá conta o lote uma vez');
+  });
+
+  test('um lote de «Todos os imóveis» diz «Todos os imóveis · N imóveis»; as partes que escrevi e as de antes da marca não contam, e dois lotes contam dois', () => {
+    monta();
+    app.db.properties = ['P1', 'P2'].map((id) => app.normProp({ id, name: id }));
+    app.db.groups = [];
+    app.db.transactions = [
+      parte('L2', 'P1', 'todos', 2, 'ELA', 6000, 'Condomínio'), parte('L2', 'P2', 'todos', 2, 'ELA', 6000, 'Condomínio'),
+      parte('L3', 'P1', 'todos', 2, 'EU', 6000, 'Meu'), parte('L3', 'P2', 'todos', 2, 'EU', 6000, 'Meu'),
+      // uma parte de antes da marca e outra depois: conta, uma vez
+      parte('L4', 'P1', 'g:GX', 2, 'ELA', 500, 'Água'), parte('L4', 'P2', 'g:GX', 2, 'ELA', 6500, 'Água'),
+    ];
+    const l = cru(app.notifPartilha());
+    assert.deepEqual(l.map((n) => n.titulo), ['Movimento — Água', 'Movimento — Condomínio'], 'o meu não conta; os outros dois, uma vez cada');
+    assert.match(l[1].sub, /^Maria Costa · Todos os imóveis · 2 imóveis · /);
+    assert.match(l[0].sub, /^Maria Costa · 2 imóveis · /, 'um grupo que já não está na base fica só com os imóveis');
+  });
+});

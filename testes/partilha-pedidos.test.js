@@ -78,6 +78,13 @@ function comEstado(muda) {
 
 const PEDIDO = (st) => { st.shareRequests.incoming = [{ id: 'p1', fromName: 'Ana', houseName: 'T2 Porto', createdAt: 1 }]; };
 const CONVITE = (st) => { st.connections.push({ id: 'K2', status: 'pending', incoming: true, peer: { id: 'ZE', name: 'Zé', email: 'ze@exemplo.pt' } }); };
+// um pedido para entrar no meu grupo G2 (o Zé) e um que eu fiz para entrar no do Tó
+const GRUPO = (st) => {
+  st.sharedGroupRequests = {
+    incoming: [{ groupId: 'G2', groupName: 'Família', userId: 'ZE', name: 'Zé', createdAt: 1 }],
+    outgoing: [{ groupId: 'G7', groupName: 'Casas de Faro', ownerName: 'Tó', createdAt: 1 }],
+  };
+};
 
 /* ------------------------------------------------ o «Convidar colaborador» nos vazios */
 
@@ -158,6 +165,54 @@ describe('pedidosDashCard', () => {
     assert.match(h, /1 por responder/);
     assert.match(h, /Zé quer ligar-se a ti/);
     assert.ok(!h.includes('Ana quer partilhar'));
+  });
+
+  test('um pedido para entrar num grupo meu: «<nome> quer entrar no grupo «<grupo>»», o que aceitar implica, Aceitar e Recusar com o grupo e a pessoa; o que eu fiz não entra', () => {
+    const { app } = comEstado(GRUPO);
+    const h = app.pedidosDashCard();
+    assert.match(h, /<div class="title">Pedidos por responder<\/div><div class="small">1 por responder<\/div>/);
+    assert.match(h, /<b class="u-d-block">Zé quer entrar no grupo «Família»<\/b><span class="small">Se aceitares, passa a comproprietário dos imóveis do grupo\.<\/span>/);
+    assert.match(h, /data-toca="dados" data-click="CW\.grupoAceitarPedido\('G2','ZE'\)">Aceitar</);
+    assert.match(h, /data-toca="dados" data-click="CW\.grupoRecusarPedido\('G2','ZE'\)">Recusar</);
+    assert.ok(!h.includes('Casas de Faro') && !h.includes('Cancelar'), 'o pedido que fiz não é para responder: ' + h);
+    assert.ok(h.endsWith('<!--fim-pedidos-->'), 'e o guia continua a entrar depois');
+    assert.ok(!/on[a-z]+=|style=/.test(h), 'nada em linha');
+    // os nomes escapam no texto e os ids no data-click
+    const { app: b } = comEstado((st) => { st.sharedGroupRequests = { incoming: [{ groupId: "G'2", groupName: '<i>Casa</i>', userId: "Z'E", name: 'Zé <b>' }], outgoing: [] }; });
+    const e = b.pedidosDashCard();
+    assert.ok(e.includes('Zé &lt;b&gt; quer entrar no grupo «&lt;i&gt;Casa&lt;/i&gt;»'), e);
+    assert.ok(e.includes("CW.grupoAceitarPedido('" + b.jsq("G'2") + "','" + b.jsq("Z'E") + "')"), e);
+    assert.ok(e.includes("'G\\&#039;2'"), 'a plica escapada para o JS e para o atributo: ' + e);
+  });
+
+  test('os três juntos contam-se — partilha, grupo e convite de ligação, por esta ordem', () => {
+    const { app } = comEstado((st) => { PEDIDO(st); GRUPO(st); CONVITE(st); });
+    const h = app.pedidosDashCard();
+    assert.match(h, /3 por responder/);
+    const iP = h.indexOf('Ana quer partilhar'), iG = h.indexOf('Zé quer entrar no grupo'), iC = h.indexOf('Zé quer ligar-se');
+    assert.ok(iP > -1 && iP < iG && iG < iC, [iP, iG, iC].join(', '));
+  });
+
+  test('com os Colaboradores desligados o pedido de grupo não entra nem conta; um estado sem a lista (de antes da regra) ou com pedidos mal formados também não rebenta', () => {
+    const { app } = comEstado(GRUPO);
+    app.definirServicosDesligados(['colaboradores']);
+    assert.equal(app.pedidosDashCard(), '');
+    const { app: b } = comEstado((st) => { GRUPO(st); CONVITE(st); });
+    b.definirServicosDesligados(['colaboradores']);
+    const h = b.pedidosDashCard();
+    assert.match(h, /1 por responder/);
+    assert.ok(!h.includes('quer entrar no grupo') && !h.includes('grupoAceitarPedido'));
+    const { app: c } = comEstado((st) => { delete st.sharedGroupRequests; });
+    assert.equal(c.pedidosDashCard(), '');
+    const { app: d } = comEstado((st) => { st.sharedGroupRequests = { incoming: [{ groupId: 'G2', groupName: 'X' }, null], outgoing: [] }; });
+    assert.equal(d.pedidosDashCard(), '', 'sem a pessoa não há o que aceitar');
+    // um pedido de um grupo que está na base e não é meu nunca ganha botões
+    const { app: f } = comEstado((st) => {
+      st.sharedGroups = [{ id: 'G1', name: 'Casas do Porto', ownerId: 'RUI', ownerName: 'Rui', mine: false, members: [{ id: 'RUI', name: 'Rui' }, { id: 'EU', name: 'Eu' }], houses: [], link: null }];
+      st.sharedGroupRequests = { incoming: [{ groupId: 'G1', groupName: 'Casas do Porto', userId: 'ZE', name: 'Zé' }], outgoing: [] };
+    });
+    assert.equal(f.grp('G1')._meu, false, 'controlo: o grupo está na base e é do Rui');
+    assert.equal(f.pedidosDashCard(), '', 'nenhum botão de aceitar a quem não é dono');
   });
 
   test('o cartão dos pedidos em Conta e partilha e o da ligação usam as mesmas linhas e botões', () => {

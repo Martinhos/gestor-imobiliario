@@ -400,20 +400,28 @@ function fecharRepor() {
   }, 700);
 })();
 
-/* ---------------- aterragem: ?convite=<token> e ?ligar=<token> ----------------
-   A ligação de convite (uso único, com cargo) e a ligação de partilha
-   (permanente) chegam pelo endereço. O token sai já do URL e fica em
-   sessionStorage ('gi_convite' / 'gi_ligar'); o GET de pré-visualização não
-   altera nada — só o «Aceitar» ou o «Enviar pedido» (POST, com sessão) agem.
-   Sem sessão, o ecrã de entrada diz porquê e o resgate acontece depois de
-   finishLogin; com sessão, no arranque, mal os avisos de entrada saiam. */
+/* ---------------- aterragem: ?convite=<token>, ?ligar=<token> e ?grupo=<token> ----------------
+   A ligação de convite (uso único, com cargo), a ligação de partilha
+   (permanente) e a ligação de um grupo partilhado (multi-uso, 7 dias) chegam
+   pelo endereço. O token sai já do URL e fica em sessionStorage ('gi_convite'
+   / 'gi_ligar' / 'gi_grupo'); o GET de pré-visualização não altera nada — só
+   o «Aceitar», o «Enviar pedido» ou o «Pedir para entrar» (POST, com sessão)
+   agem. Sem sessão, o ecrã de entrada diz porquê e o resgate acontece depois
+   de finishLogin; com sessão, no arranque, mal os avisos de entrada saiam. */
 
-// Lê o endereço à procura de um token de convite ou de partilha (64 hex),
-// com o parseConvite de web/app/acessos.js.
+// Lê o endereço à procura de um token de convite, de partilha ou de grupo
+// (64 hex), com o parseConvite de web/app/acessos.js.
 // Recebe: search — o location.search.
-// Devolve: {tipo:'convite'|'ligar', token} ou null.
+// Devolve: {tipo:'convite'|'ligar'|'grupo', token} ou null.
 function chegadaNoEndereco(search) {
   return parseConvite(search) || null;
+}
+
+// A chave do sessionStorage onde o token de cada tipo de chegada espera.
+// Recebe: tipo — 'convite', 'ligar' ou 'grupo'.
+// Devolve: a chave (texto).
+function chaveDaChegada(tipo) {
+  return tipo === 'ligar' ? 'gi_ligar' : tipo === 'grupo' ? 'gi_grupo' : 'gi_convite';
 }
 
 // O que ficou guardado nesta sessão do browser à espera de resgate.
@@ -424,22 +432,34 @@ function chegadaGuardada() {
     if (c) return { tipo: 'convite', token: c };
     var l = sessionStorage.getItem('gi_ligar');
     if (l) return { tipo: 'ligar', token: l };
+    var g = sessionStorage.getItem('gi_grupo');
+    if (g) return { tipo: 'grupo', token: g };
   } catch (e) {}
   return null;
 }
 
 // Esquece o token guardado de um tipo (depois de agir, ou de «Agora não»).
-// Recebe: tipo — 'convite' ou 'ligar'.
+// Recebe: tipo — 'convite', 'ligar' ou 'grupo'.
 // Devolve: nada — limpa o sessionStorage.
 function esquecerChegada(tipo) {
-  try { sessionStorage.removeItem(tipo === 'ligar' ? 'gi_ligar' : 'gi_convite'); } catch (e) {}
+  try { sessionStorage.removeItem(chaveDaChegada(tipo)); } catch (e) {}
 }
 
-// A pré-visualização de uma ligação (GET público): quem convida, o cargo, os imóveis.
+// A pré-visualização de uma ligação (GET público): quem convida, o cargo, os
+// imóveis — num grupo, o nome, o dono, os imóveis e quantos membros tem.
 // Recebe: ch — {tipo, token}.
 // Devolve: Promise com a resposta do servidor ({ownerName, roleName, perms, houses…}).
 function preverChegada(ch) {
-  return api('GET', (ch.tipo === 'ligar' ? '/api/ligar/' : '/api/convite/') + encodeURIComponent(ch.token));
+  var rota = ch.tipo === 'ligar' ? '/api/ligar/' : ch.tipo === 'grupo' ? '/api/grupo/' : '/api/convite/';
+  return api('GET', rota + encodeURIComponent(ch.token));
+}
+
+// A pré-visualização guardada da chegada de um tipo, para a frase do ecrã
+// de entrada quando se sai com «Não sou eu».
+// Recebe: tipo — 'convite', 'ligar' ou 'grupo'.
+// Devolve: a pré-visualização ({ownerName, …}), ou null.
+function prevDaChegada(tipo) {
+  return (tipo === 'ligar' ? CW._ligarPrev : tipo === 'grupo' ? CW._grupoPrev : CW._convitePrev) || null;
 }
 
 // A frase para o ecrã de entrada, a partir da pré-visualização.
@@ -449,6 +469,13 @@ function fraseDaChegada(ch, prev) {
   if (ch.tipo === 'ligar') {
     return (prev && prev.ownerName ? prev.ownerName + ' pede que partilhes imóveis com ele. ' : '') +
       'Entra ou cria conta para responderes.';
+  }
+  if (ch.tipo === 'grupo') {
+    // entrar num grupo é um pedido: o dono aceita (cloud/grupos.js:CW.entrarNoGrupo)
+    if (!prev) return 'Entra ou cria conta para pedires para entrar.';
+    var n = (prev.houses || []).length;
+    return (prev.ownerName || 'Alguém') + ' convida-te para o grupo «' + (prev.name || 'sem nome') + '» (' +
+      (n === 1 ? '1 imóvel' : n + ' imóveis') + '). Entra ou cria conta para pedires para entrar.';
   }
   if (!prev) return 'Entra ou cria conta para aceitares o convite.';
   var casas = (prev.houses || []).map(function (h) { return h.name; }).filter(Boolean).join(', ');
@@ -461,7 +488,7 @@ function fraseDaChegada(ch, prev) {
   if (!ch) return;
   // o token sai já do endereço: não fica no histórico nem em partilhas
   try { history.replaceState(null, '', location.pathname); } catch (e) {}
-  try { sessionStorage.setItem(ch.tipo === 'ligar' ? 'gi_ligar' : 'gi_convite', ch.token); } catch (e) {}
+  try { sessionStorage.setItem(chaveDaChegada(ch.tipo), ch.token); } catch (e) {}
   if (CW.user) return;   // com sessão, o arranque resgata
   CW._chegadaMsg = fraseDaChegada(ch, null);
   preverChegada(ch).then(function (prev) {
@@ -485,17 +512,17 @@ CW.naoSouEu = function (e) {
   if (e && e.preventDefault) e.preventDefault();
   // a frase da ligação guardada é a nota do ecrã de entrada (showAuth sem mensagem)
   var ch = chegadaGuardada();
-  CW._chegadaMsg = ch ? fraseDaChegada(ch, ch.tipo === 'ligar' ? CW._ligarPrev : CW._convitePrev) : '';
+  CW._chegadaMsg = ch ? fraseDaChegada(ch, prevDaChegada(ch.tipo)) : '';
   encerrarSessao({ avisarServidor: true });
 };
 
 // «Agora não»: fecha o modal e esquece a ligação nesta sessão (a ligação em
 // si continua a valer — basta abri-la outra vez).
-// Recebe: tipo — 'convite' ou 'ligar'.
+// Recebe: tipo — 'convite', 'ligar' ou 'grupo'.
 // Devolve: nada — fecha e limpa.
 CW.chegadaDepois = function (tipo) {
   esquecerChegada(tipo);
-  CW._convitePrev = null; CW._ligarPrev = null;
+  CW._convitePrev = null; CW._ligarPrev = null; CW._grupoPrev = null;
   closeAllModals();
 };
 
@@ -510,7 +537,7 @@ CW.enviarPedido = function (token) {
   CW.pedirPartilha(token, ids);
 };
 
-// A linha «Entras como <email>» com o «Não sou eu», para os dois modais.
+// A linha «Entras como <email>» com o «Não sou eu», para os modais da chegada.
 // Devolve: o HTML (texto).
 function entrasComo() {
   return '<div class="hint">Entras como <b>' + esc(CW.user.email || CW.user.name || '') + '</b>. ' +
@@ -562,6 +589,34 @@ function modalLigar(token, prev) {
     (meus.length ? '<button class="btn primary" data-click="CW.enviarPedido(\'' + jsq(token) + '\')">Enviar pedido</button>' : ''));
 }
 
+/* O modal da ligação de um grupo partilhado: quem convida, o nome do grupo,
+   os imóveis que já lá estão, o que entrar implica — é um pedido, que o dono
+   tem de aceitar; depois, comproprietário deles todos, e os que a pessoa
+   puser ficam partilhados — e «Pedir para entrar» / «Agora não». Só o Pedir
+   (POST, cloud/grupos.js:CW.entrarNoGrupo) age.
+   Recebe: token — o token; prev — a pré-visualização ({name, ownerName, houses, members}).
+   Devolve: nada — abre o modal. */
+function modalGrupo(token, prev) {
+  CW._grupoPrev = prev;
+  var dono = esc(prev.ownerName || 'Alguém');
+  var casas = (prev.houses || []).map(function (h) {
+    return '<div class="card u-p-10px-13px"><b>' + esc(h.name || 'Sem nome') + '</b></div>';
+  }).join('');
+  var membros = Number(prev.members) || 0;
+  openModal('Grupo de ' + (prev.ownerName || ''),
+    '<div class="form">' +
+    '<div class="hint u-fs-14px"><b>' + dono + '</b> convida-te para o grupo <b>«' + esc(prev.name || 'sem nome') + '»</b>' +
+    (membros ? ' (' + membros + (membros === 1 ? ' pessoa' : ' pessoas') + ')' : '') + '.</div>' +
+    (casas ? '<div><div class="flabel">Imóveis no grupo</div><div class="list u-g-7px">' + casas + '</div></div>'
+      : '<div class="hint">O grupo ainda não tem imóveis — os que os membros puserem passam a ser partilhados contigo.</div>') +
+    '<div class="hint">Ao pedires para entrar, <b>' + dono + '</b> tem de aceitar. Depois passas a comproprietário ' +
+    (casas ? 'destes imóveis' : 'dos imóveis do grupo') + ' — vês contratos, movimentos e pessoas. ' +
+    'Os imóveis que puseres no grupo ficam partilhados com todos os membros. Podes sair quando quiseres, em Definições → Grupos.</div>' +
+    entrasComo() + '</div>',
+    '<button class="btn" data-toca="camada" data-click="CW.chegadaDepois(\'grupo\')">Agora não</button>' +
+    '<button class="btn primary" data-toca="dados" data-click="CW.entrarNoGrupo(\'' + jsq(token) + '\')">Pedir para entrar</button>');
+}
+
 /* Resgata a ligação guardada, com sessão: espera que os avisos de entrada
    (aviso inicial, termos, atualização) saiam do ecrã, pede a pré-visualização
    e abre o modal certo. Uma ligação que já não serve diz-o e esquece-se.
@@ -583,11 +638,12 @@ CW.resgatarChegada = function () {
       CW._chegadaEmCurso = false;
       if (chegadaGuardada() === null) return;   // entretanto respondida noutro sítio
       if (ch.tipo === 'ligar') modalLigar(ch.token, prev || {});
+      else if (ch.tipo === 'grupo') modalGrupo(ch.token, prev || {});
       else modalConvite(ch.token, prev || {});
     }).catch(function (e) {
       CW._chegadaEmCurso = false;
       esquecerChegada(ch.tipo);
-      openModal(ch.tipo === 'ligar' ? 'Esta ligação não serve' : 'Este convite já não vale',
+      openModal(ch.tipo === 'convite' ? 'Este convite já não vale' : 'Esta ligação não serve',
         '<div class="hint u-fs-14px">' + esc(e.message || 'Essa ligação não serve.') + '</div>',
         '<button class="btn primary" data-click="closeModal()">Fechar</button>');
     });

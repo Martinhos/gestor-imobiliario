@@ -242,34 +242,68 @@ function gMemberName(kind,id){
   if(kind==='owner')return (owner(id)||{}).name||'';
   const c=contract(id);return c?ctName(c):'';
 }
+/* A nuvem dos grupos partilhados está carregada? A base não conhece a nuvem
+   por garantia (cloud/grupos.js carrega depois, e os testes da base correm
+   sem ela): um grupo _partilhado só existe com ela, e as portas para as
+   janelas dela (CW.grupoModal, CW.grupoPartilhar, CW.grupoNovo) só se
+   escrevem quando ela está.
+   Devolve: true com cloud/grupos.js carregado. */
+function nuvemDosGrupos(){return typeof window!=='undefined'&&!!window.CW&&typeof CW.grupoModal==='function'}
+/* Posso partilhar grupos de imóveis agora: com a nuvem dos grupos, com
+   sessão e com o serviço Colaboradores ligado nesta conta — as três
+   condições do servidor (worker/src/rotas/grupos.js), para o botão não
+   levar a um aviso.
+   Devolve: true se posso. */
+function podePartilharGrupos(){return nuvemDosGrupos()&&!!CW.user&&servicoLigado('colaboradores')}
+/* O selo de um grupo partilhado na lista: «Partilhado · N pessoas», e «de
+   <dono>» quando não é meu.
+   Recebe: g — o grupo.
+   Devolve: HTML do selo (texto), ou '' num grupo privado. */
+function seloDoGrupo(g){
+  if(!g||!g._partilhado)return '';
+  const n=(g._membros||[]).length;
+  return `<span class="badge grey u-ml-7px">Partilhado · ${n} ${n===1?'pessoa':'pessoas'}${g._meu?'':' · de '+esc(g._donoNome||'')}</span>`;
+}
 // Subpágina "Grupos": uma secção por tipo (imóveis, proprietários, contratos),
-// cada grupo com os membros em resumo; tocar num abre o modal de edição.
+// cada grupo com os membros em resumo; tocar num abre o modal de edição — ou
+// a janela da nuvem, num grupo partilhado (seloDoGrupo). Nos imóveis, com a
+// nuvem, a sessão e o serviço Colaboradores, há também «Novo grupo partilhado».
 // Devolve: o HTML (texto) da subpágina.
 function vGroups(){
+  const partilha=podePartilharGrupos();
   const secs=['prop','owner','contract'].map(kind=>{
     const gs=grpsOf(kind);
+    const abrir=g=>g._partilhado&&nuvemDosGrupos()?`CW.grupoModal('${jsq(g.id)}')`:`groupModal('${jsq(kind)}','${jsq(g.id)}')`;
     return `<div class="section-title">${GKIND[kind].label}</div>
-      ${gs.length?`<div class="list">${gs.map(g=>`<div class="card tap" data-toca="camada" data-click="groupModal('${jsq(kind)}','${jsq(g.id)}')">
+      ${gs.length?`<div class="list">${gs.map(g=>`<div class="card tap" data-toca="camada" data-click="${abrir(g)}">
         <div class="row-between u-ai-center">
-          <div class="u-d-flex u-g-11px u-ai-center u-minw-0"><span class="avatar">${ic(GKIND[kind].icon,17)}</span>
-            <div class="u-minw-0"><div class="title">${esc(g.name)}</div>
+          <div class="u-d-flex u-g-11px u-ai-center u-minw-0"><span class="avatar">${ic(g._partilhado?'users':GKIND[kind].icon,17)}</span>
+            <div class="u-minw-0"><div class="title">${esc(g.name)}${seloDoGrupo(g)}</div>
             <div class="small u-ov-hidden u-to-ellipsis u-ws-nowrap">${g.ids.length} ${g.ids.length===1?GKIND[kind].one:GKIND[kind].label.toLowerCase()} · ${esc(g.ids.map(id=>gMemberName(kind,id)).filter(Boolean).join(', '))||'sem membros'}</div></div></div>
           <span class="u-c-v-muted u-tf-rotate-180deg u-fx-0-0-auto">${ic('chev',17)}</span></div></div>`).join('')}</div>`
       :`<div class="hint">Ainda não há grupos de ${GKIND[kind].label.toLowerCase()}.</div>`}
-      <div class="toolbar u-m-11px-0-0"><button class="btn sm" data-toca="camada" data-click="groupModal('${jsq(kind)}')">${ic('plus',14)} Novo grupo de ${GKIND[kind].label.toLowerCase()}</button></div>`;
+      <div class="toolbar u-m-11px-0-0"><button class="btn sm" data-toca="camada" data-click="groupModal('${jsq(kind)}')">${ic('plus',14)} Novo grupo de ${GKIND[kind].label.toLowerCase()}</button>${kind==='prop'&&partilha?`<button class="btn sm" data-toca="camada" data-click="CW.grupoNovo()">${ic('users',14)} Novo grupo partilhado</button>`:''}</div>`;
   }).join('');
-  return secs+`<div class="hint u-mt-16px">Servem de filtro em toda a app. Um movimento atribuído a um grupo de imóveis divide-se por eles.</div>`;
+  return secs+`<div class="hint u-mt-16px">Servem de filtro em toda a app. Um movimento atribuído a um grupo de imóveis divide-se por eles.${partilha?' Um grupo de imóveis partilha-se com outras pessoas pelo menu do grupo: quem entrar é comproprietário dos imóveis dele.':''}</div>`;
 }
 let gForm=null;
 /* Abre o modal de criar (só kind) ou editar (com id) um grupo. Trabalha numa
    cópia (gForm) — nada é gravado até Guardar, que exige nome e pelo menos um
-   membro antes de escrever em db.groups.
+   membro antes de escrever em db.groups. Um grupo partilhado não se edita
+   aqui: a janela é a da nuvem (CW.grupoModal). Num grupo de imóveis privado,
+   com a nuvem, a sessão e o serviço Colaboradores, o menu ganha «Partilhar
+   este grupo…».
    Recebe: kind — o tipo do grupo: 'prop', 'owner' ou 'contract'; id (opcional)
    — o id do grupo a editar; sem ele cria um novo.
    Devolve: nada — abre o modal. */
 function groupModal(kind,id){
+  const g0=id?grp(id):null;
+  if(g0&&g0._partilhado&&nuvemDosGrupos())return CW.grupoModal(id);
   gForm=normGroup(id?JSON.parse(JSON.stringify(grp(id))):{kind});
-  const m=id?menu('grp',[{label:'Apagar grupo',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delGroup('${jsq(id)}')`}]):'';
+  const itens=[];
+  if(id&&kind==='prop'&&podePartilharGrupos())itens.push({label:'Partilhar este grupo…',icon:'users',toca:'camada',act:`CW.grupoPartilhar('${jsq(id)}')`});
+  if(id)itens.push({label:'Apagar grupo',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delGroup('${jsq(id)}')`});
+  const m=id?menu('grp',itens):'';
   openModal(id?'Editar grupo':'Novo grupo de '+GKIND[kind].label.toLowerCase(),groupBody(),null,m);
   onSave=()=>{
     gForm.name=val('g_name').trim();
@@ -310,14 +344,23 @@ function addGroupMember(){
 // Recebe: id — o id do membro a tirar.
 // Devolve: nada — atualiza gForm e repinta o corpo do modal.
 function delGroupMember(id){gForm.name=val('g_name');gForm.ids=gForm.ids.filter(x=>x!==id);repaintGroup()}
-/* Apaga o grupo depois de confirmar com o impacto: os movimentos atribuídos
-   ficam sem grupo (voltam a contar para todos) e os filtros ativos que
-   apontavam para ele são limpos. Grava e repinta.
+/* Apaga o grupo depois de confirmar com o impacto. Os movimentos registados no
+   grupo já estão partidos por imóvel (movimento.js:partirMovimento) e ficam
+   como estão, cada parte no seu imóvel; só os do formato antigo, ainda por
+   partir (um registo só, com o grupo), ficam sem grupo — «Sem imóvel», a
+   contar só nos totais — e a frase di-lo antes. Os filtros ativos que
+   apontavam para ele são limpos. Grava e repinta. Um grupo partilhado é do
+   servidor: o dono apaga-o lá (CW.grupoApagar), quem não é dono sai dele
+   (CW.grupoSair).
    Recebe: id — o id do grupo a apagar.
    Devolve: nada — abre a confirmação; só ao confirmar apaga e grava. */
 function delGroup(id){
   const g=grp(id),used=db.transactions.filter(t=>t.groupId===id).length;
-  confirmModal('Apagar grupo',`Apagar o grupo “${esc((g||{}).name||'')}”?${used?` ${used} movimento(s) ficam sem grupo (passam a contar para todos).`:''}`,()=>{
+  const partidos=new Set(db.transactions.filter(t=>t.lote&&t.lote.alvo==='g:'+id).map(t=>t.lote.id)).size;
+  if(g&&g._partilhado&&nuvemDosGrupos())return g._meu?CW.grupoApagar(id):CW.grupoSair(id);
+  confirmModal('Apagar grupo',`Apagar o grupo “${esc((g||{}).name||'')}”?`+
+    (partidos?` ${partidos===1?'O movimento já registado':'Os '+partidos+' movimentos já registados'} neste grupo ${partidos===1?'fica em cada imóvel, como está':'ficam em cada imóvel, como estão'}.`:'')+
+    (used?` ${used===1?'Um movimento antigo, ainda por dividir pelos imóveis, fica':used+' movimentos antigos, ainda por dividir pelos imóveis, ficam'} sem grupo: passa${used===1?'':'m'} a «Sem imóvel» e conta${used===1?'':'m'} só nos totais.`:''),()=>{
     db.transactions.forEach(t=>{if(t.groupId===id){t.groupId=null;t.psplit=null}});
     if(String(txProp).slice(2)===id)txProp='';
     if(String(ownerFilter).slice(2)===id)ownerFilter='';

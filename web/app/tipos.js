@@ -82,17 +82,22 @@ const isPassivo=t=>t.kind==='income'&&(t.category==='Empréstimos recebidos'||t.
 const countsInTotals=t=>!isPassivo(t)&&!((t.kind==='income'||t.kind==='expense')&&isExc(t.kind,t.category,t.sub));
 /* Uma despesa que um planeado já reconhece: tem a etiqueta «Recorrente», ou há um
    planeado de despesa da mesma categoria (e da mesma sub, quando o planeado a tem) no
-   mesmo imóvel ou grupo — os movimentos confirmados não guardam o planeado de onde
-   vieram. A projeção parte dos planeados (metricas.js:despesasPrevistas); isto serve só
+   mesmo imóvel, grupo ou «Todos os imóveis» — os movimentos confirmados não guardam o
+   planeado de onde vieram. Uma parte de um lote reconhece-a o molde de onde o lote veio
+   (o do mesmo grupo, ou um de «Todos»), e não um planeado do imóvel dela: é o que
+   reconhecia o movimento de grupo antes de se partir, e partir não muda o que fica de
+   fora. A projeção parte dos planeados (metricas.js:despesasPrevistas); isto serve só
    para dizer o que ficou de fora, as despesas de uma vez (metricas.js:despesasDeUmaVez).
    Recebe: t — o movimento.
    Devolve: true/false; false para o que não é despesa. */
 function despesaRepete(t){
   if(!t||t.kind!=='expense')return false;
   if((t.tags||[]).indexOf('Recorrente')>-1)return true;
-  const cat=t.category||'',sub=t.sub||'',mesmo=x=>(x||null);
-  return (db.recurring||[]).some(r=>{const x=r.tx||{};return x.kind==='expense'&&(x.category||'')===cat&&(!x.sub||x.sub===sub)
-    &&mesmo(x.propertyId)===mesmo(t.propertyId)&&mesmo(x.groupId)===mesmo(t.groupId)});
+  const cat=t.category||'',sub=t.sub||'',mesmo=x=>(x||null),alvo=t.lote?t.lote.alvo:'';
+  return (db.recurring||[]).some(r=>{const x=r.tx||{};
+    if(x.kind!=='expense'||(x.category||'')!==cat||(x.sub&&x.sub!==sub))return false;
+    if(alvo)return !x.propertyId&&(x.groupId?alvo==='g:'+x.groupId:(!!x.todos&&alvo==='todos'));
+    return mesmo(x.propertyId)===mesmo(t.propertyId)&&mesmo(x.groupId)===mesmo(t.groupId)&&!!x.todos===!!t.todos});
 }
 /* todas as categorias conhecidas, para o filtro (sem repetir)
    Recebe: kind (opcional) — o tipo de movimento; vazio junta receitas e despesas.

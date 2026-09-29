@@ -338,10 +338,14 @@ function origemDoPlano(r){
    Devolve: true/false — se nesse mês o plano já tem o seu movimento. */
 function jaRegistado(r,d){
   const mo=String(d).slice(0,7);
+  /* um planeado de um grupo ou de «Todos»: o movimento dele entra partido por
+     imóvel, e cada parte leva o grupo (ou «Todos») no lote */
+  const alvo=r.tx.groupId?'g:'+r.tx.groupId:(r.tx.todos?'todos':'');
   return (db.transactions||[]).some(t=>{
     if(r.tx.contractId)return t.contractId===r.tx.contractId&&ehRenda(t)&&mesDaRenda(t)===mo;
     if(String(t.date||'').indexOf(mo)!==0)return false;
     if(r.tx.loanId)return t.loanId===r.tx.loanId;
+    if(alvo&&t.lote&&t.lote.alvo===alvo)return t.label===r.tx.label;
     return t.propertyId===r.tx.propertyId&&t.label===r.tx.label;
   });
 }
@@ -495,8 +499,12 @@ function quickConfirmRec(id){
     const mes=r.next;recAdvance(r);save();buildNav();render();
     return toast('Já havia a renda deste contrato de '+mesPt(mes)+' — o planeado saltou para o seguinte.');
   }
-  const t=recTx(r);if(t.kind==='loan')applyLoan(t);
-  db.transactions.push(t);recAdvance(r);save();buildNav();render();toast('Movimento confirmado.');
+  /* um planeado de um grupo ou de «Todos os imóveis» entra partido por imóvel,
+     como pelo formulário (movimento.js:registarMolde); o que não se parte
+     (um grupo sem imóveis) não avança o planeado */
+  const reg=registarMolde(recTx(r));if(reg.erro)return toast(reg.erro);
+  reg.partes.forEach(t=>{if(t.kind==='loan')applyLoan(t);db.transactions.push(t)});
+  recAdvance(r);save();buildNav();render();toast('Movimento confirmado.');
 }
 // Silencia ou reativa a recorrência: silenciada fica em Planeados à espera de
 // confirmação, mas sem avisos nem contagem no menu. Grava e redesenha.
@@ -530,6 +538,19 @@ function confirmRec(id){
   txModal({kind:r.tx.kind,propId:r.tx.propertyId,ctId:r.tx.contractId,
     preset:Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:r.next,label:r.tx.label||r.name}),modo:'confirmar',recId:id});
 }
+/* Onde fica o movimento de um molde (um planeado ou um modelo), na ficha e no
+   cartão: o imóvel; o grupo; «Todos os imóveis» num molde de todos os imóveis
+   (e num acerto sem imóvel, que é de todos); ou «Sem imóvel» — o movimento
+   avulso, que só conta nos totais. Eram o imóvel ou o grupo, e um molde sem
+   nenhum dos dois não dizia nada.
+   Recebe: t — o tx do molde.
+   Devolve: o texto, por escapar; '' com um imóvel que já não está nesta base. */
+function imovelDoMolde(t){
+  t=t||{};
+  if(t.propertyId)return propName(t.propertyId);
+  if(t.groupId){const g=grp(t.groupId);return g?g.name:'Grupo que não está nesta conta'}
+  return t.todos||t.kind==='settle'?'Todos os imóveis':'Sem imóvel';
+}
 /* O corpo da ficha de um movimento planeado.
 
    «O que é isto que me estão a pedir para confirmar, de quanto, de onde vem,
@@ -550,8 +571,8 @@ function recFicha(id){
     {rotulo:'Estado',valor:(recIsLate(r)?'<span class="neg">Em atraso</span> desde '+dPT(r.until||r.next||'')
       :(r.next&&r.next<=today()?'Por confirmar':'Em dia'))+(r.muted?' · silenciada':'')},
     {rotulo:'Tipo',valor:esc((KIND[t.kind]||{}).short||'')},
-    /* um planeado pode estar num grupo de imóveis em vez de num imóvel */
-    {rotulo:'Imóvel',valor:esc(propName(t.propertyId)||((grp(t.groupId)||{}).name||''))},
+    /* um planeado pode estar num grupo de imóveis, ou em «Todos», em vez de num imóvel */
+    {rotulo:'Imóvel',valor:esc(imovelDoMolde(t))},
     vem?{tipo:'bloco',rotulo:'De onde vem',valor:vem}:null,
     {rotulo:'Categoria',valor:esc([t.category,t.sub].filter(Boolean).join(' / '))},
     (t.tags||[]).length?{rotulo:'Etiquetas',valor:(t.tags||[]).map(esc).join(' · ')}:null,
@@ -599,7 +620,7 @@ function tplFicha(id){
     t.amount?{rotulo:'Montante',valor:euro2(t.amount)}:null,
     {rotulo:'Tipo',valor:esc((KIND[t.kind]||{}).short||'')},
     t.label&&t.label!==x.name?{rotulo:'Descrição',valor:esc(t.label)}:null,
-    {rotulo:'Imóvel',valor:esc(propName(t.propertyId)||((grp(t.groupId)||{}).name||''))},
+    {rotulo:'Imóvel',valor:esc(imovelDoMolde(t))},
     {rotulo:'Categoria',valor:esc([t.category,t.sub].filter(Boolean).join(' / '))},
     (t.tags||[]).length?{rotulo:'Etiquetas',valor:(t.tags||[]).map(esc).join(' · ')}:null,
     owner(t.paidBy)?{rotulo:isIn(t.kind)?'Recebido por':'Pago por',valor:esc((owner(t.paidBy)||{}).name||'')}:null,
@@ -723,7 +744,7 @@ function pendingCard(all){
   const row=(r)=>{const late=recIsLate(r),semCred=recSemCredito(r),pago=!semCred&&recCreditoPago(r);return `<div class="card tap pend ${late?'late':''} u-p-11px-13px" data-fk="rec:${esc(r.id)}" data-toca="camada" data-click="confirmRec('${r.id}')">
     <div class="row-between u-ai-center">
       <div class="u-minw-0"><b class="u-d-block u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(r.name)}</b>
-        <span class="small">${dPT(r.next)}${r.until&&r.until!==r.next?' – '+dPT(r.until):''}${EVERY[r.every]?' · '+esc(EVERY[r.every]):''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':''} · ${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}</span>
+        <span class="small">${dPT(r.next)}${r.until&&r.until!==r.next?' – '+dPT(r.until):''}${EVERY[r.every]?' · '+esc(EVERY[r.every]):''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':''} · ${(KIND[r.tx.kind]||{}).short}${imovelDoMolde(r.tx)?' · '+esc(imovelDoMolde(r.tx)):''}</span>
         ${semCred?'<span class="small"><b class="amber">Sem crédito associado — abre para escolher</b></span>':''}
         ${pago?'<span class="small"><b class="amber">Hipoteca já paga — abre para rever</b></span>':''}</div>
       <b class="u-fx-0-0-auto">${r.tx.amount?euro2(r.tx.amount):''}</b></div>
@@ -807,7 +828,7 @@ function vRecurring(){
       <div class="row-between u-ai-center">
         <div class="u-minw-0"><div class="title">${esc(r.name)}</div>
           <div class="small">${r.auto?'<span class="badge grey u-mr-4px">'+((r.tx||{}).loanId?'da hipoteca':(r.tx||{}).propRec?'do imóvel':'do contrato')+'</span>':''}${esc(EVERY[r.every]||r.every)} · ${dPT(r.next)}${r.until&&r.until!==r.next?' – '+dPT(r.until):''} · ${pend?(r.muted?'silenciada · por confirmar':late?'<b class="neg">em atraso</b>':'<b class="amber">por confirmar</b>'):'em dia'}${r.end?' · termina '+dPT(r.end):''}</div>
-          <div class="small">${(KIND[r.tx.kind]||{}).short}${r.tx.propertyId?' · '+esc(propName(r.tx.propertyId)):''}${r.tx.category?' · '+esc(r.tx.category):''}</div>
+          <div class="small">${(KIND[r.tx.kind]||{}).short}${imovelDoMolde(r.tx)?' · '+esc(imovelDoMolde(r.tx)):''}${r.tx.category?' · '+esc(r.tx.category):''}</div>
           ${recSemCredito(r)?'<div class="small"><b class="amber">Sem crédito associado — abre para escolher</b></div>':''}</div>
         <div class="u-d-flex u-g-8px u-fx-0-0-auto u-ai-flex-start">
           <b class="u-fs-16px">${r.tx.amount?euro2(r.tx.amount):'—'}</b>${kebab('rec:'+r.id)}</div></div></div>`})(r)})),'','u-g-8px')
@@ -815,7 +836,7 @@ function vRecurring(){
   const tpls=tp.length?listaViva('modelos',tp.map(x=>({chave:'tpl:'+x.id,html:`<div class="card tap" data-lp="tpl:${esc(x.id)}" data-fk="tpl:${esc(x.id)}" data-toca="camada" data-click="tplView('${jsq(x.id)}')">
       <div class="row-between u-ai-center">
         <div class="u-minw-0"><div class="title">${esc(x.name)}</div>
-          <div class="small">${(KIND[x.tx.kind]||{}).short}${x.tx.propertyId?' · '+esc(propName(x.tx.propertyId)):''}${x.tx.category?' · '+esc(x.tx.category):''}</div></div>
+          <div class="small">${(KIND[x.tx.kind]||{}).short}${imovelDoMolde(x.tx)?' · '+esc(imovelDoMolde(x.tx)):''}${x.tx.category?' · '+esc(x.tx.category):''}</div></div>
         <div class="u-d-flex u-g-8px u-fx-0-0-auto u-ai-flex-start">
           <b class="u-fs-16px">${x.tx.amount?euro2(x.tx.amount):'—'}</b>${kebab('tpl:'+x.id)}</div></div></div>`})),'','u-g-8px')
     :`<div class="empty u-p-24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem modelos'}</b>${lfCount('lrec')?'':'Um modelo é um movimento guardado para copiar à mão quando precisares.'+(adiciona?saida('Novo modelo','newTpl()','camada'):'')}</div>`;

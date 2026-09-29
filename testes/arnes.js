@@ -66,7 +66,7 @@ conferirBase();
    sem fingir mais nada — confirmou-se um a um. Fica separada do MODULOS de
    propósito: a nuvem embrulha o save, o render e o go por reatribuição, e os
    testes de lógica que já existem contam com as versões sem nuvem. */
-export const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'ajuda', 'painel',
+export const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'grupos', 'ajuda', 'painel',
   'filtros', 'entrada', 'novidades', 'selecao', 'selecao-listas', 'guia'];
 
 /* Tudo o que o index.html carrega, pela ordem dele, como caminhos relativos a

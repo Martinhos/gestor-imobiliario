@@ -35,7 +35,7 @@ const SERVICOS=[
   {id:'visits',nome:'Visitas',ficheiros:['app/visitas.js'],kinds:['visit'],userKinds:[],casa:false,colab:false,requer:['properties'],usa:['tenants']},
   {id:'tenants',nome:'Inquilinos',ficheiros:['app/lista-pessoas.js','app/pessoas.js'],kinds:['tenant'],userKinds:['tenant'],casa:false,colab:false,requer:[],usa:['contracts']},
   {id:'owners',nome:'Proprietários',ficheiros:['app/lista-pessoas.js','app/pessoas.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['properties']},
-  {id:'colaboradores',nome:'Colaboradores',ficheiros:['app/lista-colaboradores.js','cloud/colaboradores.js'],kinds:[],userKinds:[],casa:false,colab:true,requer:['properties'],usa:[]},
+  {id:'colaboradores',nome:'Colaboradores',ficheiros:['app/lista-colaboradores.js','cloud/colaboradores.js','cloud/grupos.js'],kinds:[],userKinds:[],casa:false,colab:true,requer:['properties'],usa:[]},
   {id:'transactions',nome:'Movimentos',ficheiros:['app/lista-movimentos.js','app/movimento.js','cloud/selecao.js','cloud/selecao-listas.js'],kinds:['tx'],userKinds:['tx'],casa:false,colab:false,requer:[],usa:['properties','contracts','owners','credits','recurring']},
   {id:'recurring',nome:'Planeados',ficheiros:['app/planeados.js','cloud/painel.js'],kinds:['rec'],userKinds:['rec','tpl'],casa:false,colab:false,requer:['transactions'],usa:['contracts','credits']},
   {id:'calendar',nome:'Calendário',ficheiros:['app/calendario.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['visits','recurring']},
