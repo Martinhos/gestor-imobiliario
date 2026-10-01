@@ -505,6 +505,7 @@ render = function () {
   /* mudar de ecrã sai da seleção: a barra do fundo ficava viva num ecrã
      onde as ações dela já não faziam sentido nenhum */
   if (CW.selMode && tab !== 'transactions') CW.selReset();
+  var antes = selAntesDoDeslize();
   var r = _render_sel.apply(this, arguments);
   patchHdrSel();
   document.body.classList.toggle('sel-on', !!CW.selMode);
@@ -513,8 +514,216 @@ render = function () {
     if (f) f.remove();
   }
   if (CW.selMode) selPintar();
+  selDepoisDoDeslize(antes);
   return r;
 };
+
+/* ------------------------------------------- o deslize de entrar e sair */
+
+/* Entrar na seleção repinta a vista, e o título de cada mês ganha a caixa
+   à esquerda. O «set 2026» SALTAVA da esquerda para o meio de um fotograma
+   para o outro, as caixas apareciam já feitas e o texto de cada linha dava
+   um pulo para a direita. Agora o nome do mês desliza do sítio onde estava
+   até ao meio, o corpo das linhas abre espaço a deslizar e as caixas (e a
+   barra de cima, que leva a caixa de tudo) aparecem a desvanecer. Ao sair,
+   o caminho inverso: o nome volta à esquerda, os corpos voltam ao sítio e
+   as caixas que saíram desvanecem no lugar onde estavam, a acompanhar a
+   linha ou o título de que eram.
+
+   É o FLIP do continuidade.js, feito para estas peças, que não têm data-fk
+   porque não são linhas: mede-se antes do render, repinta-se, e numa
+   microtarefa — depois dos outros embrulhos do render e antes de o browser
+   pintar — põe-se cada peça de volta no sítio antigo com um transform e
+   deixa-se ir. Só transform e opacity, pela API de animações: no fim não
+   fica nada no style de ninguém, nem no do título do mês, que em seleção é
+   sticky; e uma repintura a meio deita fora os nós com as animações dentro.
+   Como se mede o que está no ecrã, e não onde as peças deviam estar, sair a
+   meio de uma entrada continua de onde o nome ia, em vez de saltar.
+
+   Os tempos são os da continuidade (continuidade.js:aplicarContinuidade):
+   o nome atravessa mais de cem pixeis e as linhas à volta dele deslizam com
+   o --lento e a --curva-entra no mesmo render — com outro tempo, o título e
+   as linhas chegavam cada um à sua hora. As caixas desvanecem no --medio.
+
+   Só na MUDANÇA de modo (selModoPintado): marcar uma linha (selPintar), a
+   lista viva (pintarListaTx) e a sincronização de fundo (um render sem
+   mudar de modo) não voltam a animar. Com menos movimento pedido, nada. */
+
+// o modo que a última pintura dos Movimentos mostrou: é a mudança dele que anima, e não cada render
+var selModoPintado = false;
+// as caixas que saíram e ainda desvanecem na camada de saída, para a mudança seguinte as levar já
+var selFantasmas = [];
+
+/* O corpo de uma linha: o que fica à direita da caixa e é empurrado por ela.
+   Recebe: e — a linha (.txrow).
+   Devolve: o elemento .txcorpo (lista-movimentos.js:txLinhaHtml), ou null. */
+function selCorpo(e) {
+  return e && e.querySelector ? e.querySelector('.txcorpo') : null;
+}
+
+/* Está mesmo no ecrã (o porPerto dá um ecrã de folga, e aqui não se quer):
+   um título que estava lá em cima, fora da vista, e passa a colar-se ao topo
+   não atravessa o ecrã para lá chegar. Com a janela sem altura tudo conta,
+   como no porPerto.
+   Recebe: r — um retângulo do getBoundingClientRect.
+   Devolve: true se o retângulo toca na janela. */
+function selNoEcra(r) {
+  if (!r || (!r.width && !r.height)) return false;
+  var h = window.innerHeight || 0;
+  return !h || (r.bottom > 0 && r.top < h);
+}
+
+/* A opacidade a que uma peça está a ser pintada agora — a meio de um
+   desvanecer é menos de 1, e quem sai parte daí.
+   Recebe: e — o elemento.
+   Devolve: um número de 0 a 1 (1 se não se souber). */
+function selOpacidade(e) {
+  try {
+    var o = parseFloat(getComputedStyle(e).opacity);
+    return isNaN(o) ? 1 : o;
+  } catch (x) { return 1; }
+}
+
+/* Onde estão, antes do render, as peças que a mudança de modo mexe: o nome
+   de cada mês (e o título dele, que pode subir ou descer), o corpo de cada
+   linha e — se se está a sair — as caixas e a barra de cima, que vão deixar
+   de existir. Em coordenadas do documento, como o continuidade.js:ondeEsta,
+   para um scroll entre medir e aplicar não virar deslocamento.
+   Devolve: {meses, corpos, caixas} — meses e corpos por chave (o mês, o id
+   da linha), caixas uma lista de {el, x, y, w, h, op, dono}. */
+function selMedirDeslize() {
+  var sy = window.pageYOffset || 0, m = { meses: {}, corpos: {}, caixas: [] };
+  // a caixa que sai, com o dono que ela acompanha ('' para a barra de cima)
+  var guardar = function (el, dono) {
+    var r = el.getBoundingClientRect();
+    if (selNoEcra(r)) m.caixas.push({ el: el, x: r.left, y: r.top + sy, w: r.width, h: r.height, op: selOpacidade(el), dono: dono });
+  };
+  [].slice.call(document.querySelectorAll('#view [data-mes-nome]')).forEach(function (e) {
+    var k = e.getAttribute('data-mes-nome'), t = e.parentNode, rt = t.getBoundingClientRect(), rn = e.getBoundingClientRect();
+    m.meses[k] = { x: rn.left, y: rn.top + rn.height / 2 + sy, vis: selNoEcra(rt) };
+    var cx = selModoPintado && t.querySelector('[data-mes-box]');
+    if (cx) guardar(cx, 'mes:' + k);
+  });
+  [].slice.call(document.querySelectorAll('#view .txrow[data-tx]')).forEach(function (e) {
+    var id = e.getAttribute('data-tx'), c = selCorpo(e);
+    if (c) m.corpos[id] = { x: c.getBoundingClientRect().left, y: e.getBoundingClientRect().top + sy };
+    var cx = selModoPintado && e.querySelector('.selbox');
+    if (cx) guardar(cx, 'tx:' + id);
+  });
+  var barra = selModoPintado && document.querySelector('#view .sel-bar');
+  if (barra) guardar(barra, '');
+  return m;
+}
+
+/* Põe uma caixa que o render deitou fora de volta no ecrã, onde estava, e
+   deixa-a desvanecer — a ir com a linha ou o título de que era, que estão a
+   deslizar para o sítio novo. É o mesmo nó (não um clone), na camada de
+   saída do continuidade.js, sem ids (o #selGlobal ia lá dentro) e surdo ao
+   toque.
+   Recebe: c — {el, x, y, w, h, op} do selMedirDeslize; dy — quanto o dono
+   se moveu (px, 0 se não se move); o — {dur, curva, durF}, os tempos.
+   Devolve: nada — o nó sai do documento quando acaba de desvanecer. */
+function selFantasma(c, dy, o) {
+  var e = c.el;
+  if (!e || !e.animate || e.isConnected) return;
+  semIds(e);
+  e.style.position = 'fixed'; e.style.left = c.x + 'px'; e.style.top = (c.y - (window.pageYOffset || 0)) + 'px';
+  e.style.width = c.w + 'px'; e.style.height = c.h + 'px'; e.style.margin = '0';
+  e.style.boxSizing = 'border-box'; e.style.pointerEvents = 'none';
+  camadaDeSaida().appendChild(e);
+  selFantasmas.push(e);
+  if (dy) e.animate([{ transform: 'none' }, { transform: 'translateY(' + dy + 'px)' }], { duration: o.dur, easing: o.curva, fill: 'forwards' });
+  var an = e.animate([{ opacity: c.op }, { opacity: 0 }],
+    { duration: o.durF, easing: tokenTexto('--curva-sai', 'cubic-bezier(.4,0,1,1)'), fill: 'forwards' });
+  var fora = function () { try { e.remove(); } catch (x) {} };
+  an.onfinish = fora;
+  /* rede: num separador escondido a animação não corre e o onfinish nunca
+     chega — a caixa ficava por cima do ecrã */
+  setTimeout(fora, o.durF + 600);
+}
+
+/* Depois do render, numa microtarefa: cada peça volta ao sítio onde estava
+   e desliza para o novo; ao entrar, as caixas e a barra aparecem; ao sair,
+   as que saíram desvanecem (selFantasma).
+   Recebe: antes — o selMedirDeslize de antes do render; entra — true ao
+   entrar na seleção, false ao sair.
+   Devolve: nada — só anima o que está à vista (continuidade.js:porPerto). */
+function selAplicarDeslize(antes, entra) {
+  if (!antes) return;
+  var sy = window.pageYOffset || 0;
+  var o = { dur: msDoToken('--lento', 340), curva: tokenTexto('--curva-entra', 'cubic-bezier(0,0,.2,1)'), durF: msDoToken('--medio', 200) };
+  // quanto desceu (ou subiu) cada dono de caixa, para a caixa que sai ir com ele
+  var mexeu = {};
+  [].slice.call(document.querySelectorAll('#view [data-mes-nome]')).forEach(function (e) {
+    var k = e.getAttribute('data-mes-nome'), a = antes.meses[k], t = e.parentNode;
+    if (!a || !e.animate) return;
+    var rt = t.getBoundingClientRect(), rn = e.getBoundingClientRect();
+    if (!porPerto(rt)) return;
+    /* a altura é a do NOME, e não a do topo do título: em seleção o título é
+       mais alto (a caixa, o padding do sticky), e alinhado pelo topo o fundo
+       dele tapava o cimo da primeira linha nos primeiros fotogramas */
+    var dx = a.x - rn.left, dy = a.y - (rn.top + rn.height / 2 + sy);
+    if (Math.abs(dx) >= 1) e.animate([{ transform: 'translateX(' + dx + 'px)' }, { transform: 'none' }], { duration: o.dur, easing: o.curva });
+    /* o título acompanha as linhas, que o render já faz deslizar — só se se
+       via antes e se vê agora (selNoEcra) */
+    if (!a.vis || !selNoEcra(rt)) return;
+    mexeu['mes:' + k] = 0;
+    if (Math.abs(dy) >= 1 && t.animate) {
+      t.animate([{ transform: 'translateY(' + dy + 'px)' }, { transform: 'none' }], { duration: o.dur, easing: o.curva });
+      mexeu['mes:' + k] = -dy;
+    }
+  });
+  [].slice.call(document.querySelectorAll('#view .txrow[data-tx]')).forEach(function (e) {
+    var id = e.getAttribute('data-tx'), a = antes.corpos[id], c = selCorpo(e);
+    if (!a || !c || !c.animate) return;
+    var r = e.getBoundingClientRect();
+    if (!porPerto(r)) return;
+    // a linha em si é da continuidade (data-fk); aqui só o corpo, de lado
+    mexeu['tx:' + id] = r.top + sy - a.y;
+    var dx = a.x - c.getBoundingClientRect().left;
+    if (Math.abs(dx) >= 1) c.animate([{ transform: 'translateX(' + dx + 'px)' }, { transform: 'none' }], { duration: o.dur, easing: o.curva });
+  });
+  if (entra) {
+    [].slice.call(document.querySelectorAll('#view .selbox, #view .sel-bar')).forEach(function (e) {
+      // a caixa de tudo vai dentro da barra: desvanecer as duas era desvanecer duas vezes
+      if (e.id === 'selGlobal' || !e.animate || !porPerto(e.getBoundingClientRect())) return;
+      e.animate([{ opacity: 0 }, { opacity: 1 }], { duration: o.durF, easing: o.curva });
+    });
+    return;
+  }
+  antes.caixas.forEach(function (c) {
+    /* uma caixa cujo dono desapareceu (apagado) ou foi para longe sai sem
+       fantasma: o que o dono tinha, a continuidade já o desvanece */
+    if (c.dono && !(c.dono in mexeu)) return;
+    selFantasma(c, c.dono ? mexeu[c.dono] : 0, o);
+  });
+}
+
+/* Antes do render: se o modo que se vai pintar não é o que está no ecrã,
+   mede as peças. Só nos Movimentos e só nessa mudança — nas outras
+   repinturas não mede nada, e assim também não anima nada.
+   Devolve: o selMedirDeslize, ou null quando não há mudança a mostrar. */
+function selAntesDoDeslize() {
+  if (tab !== 'transactions' || !!CW.selMode === selModoPintado || semMovimento()) return null;
+  try { return selMedirDeslize(); } catch (e) { return null; }
+}
+
+/* Depois do render: grava o modo que ficou no ecrã e, se mudou mesmo (o
+   vTransactions sai da seleção sozinho numa lista vazia), anima a mudança
+   numa microtarefa — a mesma janela do render (vistas.js:render), depois de
+   todos os embrulhos e antes de o browser pintar.
+   Recebe: antes — o que o selAntesDoDeslize mediu (ou null).
+   Devolve: nada. */
+function selDepoisDoDeslize(antes) {
+  var agora = !!CW.selMode && tab === 'transactions', mudou = agora !== selModoPintado;
+  selModoPintado = agora;
+  if (!mudou || !antes || tab !== 'transactions') return;
+  // uma mudança nova leva já as caixas da anterior, que ainda desvaneciam
+  selFantasmas.splice(0).forEach(function (e) { try { e.remove(); } catch (x) {} });
+  Promise.resolve().then(function () {
+    try { selAplicarDeslize(antes, agora); } catch (e) { /* animar nunca parte a vista */ }
+  });
+}
 
 /* A folha da seleção (a caixa de marcar, as barras do topo e do fundo, o
    kebab da linha) era feita aqui, num elemento de folha criado por JavaScript

@@ -459,7 +459,12 @@ function vTransactions(){
     ${tot.repay?kpi('Dívidas pagas',euro(tot.repay),'neg','a terceiros','Devoluções a terceiros.',evoTx('repay'),jaSo('repay')?null:ver('repay','Ver só as dívidas pagas')):''}
     ${kpi('Saldo',euro(saldo),saldo>=0?'pos':'neg',list.length+' movimentos','Entradas menos saídas dos movimentos que passam no filtro.',evoTx('saldo'),txFilter?ver('','Ver todos os tipos'):null)}</div>`;
   txLista=list;
-  return head+resumo+balancesCard(txProp||null)+creditorsCard(txProp&&txProp!=='__none__'?txProp:null)
+  /* Os indicadores e os cartões das contas vão juntos numa peça com chave
+     (continuidade.js): entrar na seleção põe a barra dela por cima de tudo,
+     e as linhas e os títulos dos meses deslizavam para baixo enquanto isto
+     saltava de uma vez — o título do mês, a caminho, passava por cima do
+     fundo dos cartões. Um <div> sem nada: as margens de dentro atravessam-no. */
+  return head+`<div data-fk="txresumo">`+resumo+balancesCard(txProp||null)+creditorsCard(txProp&&txProp!=='__none__'?txProp:null)+`</div>`
     +`<div id="txLista"></div>`;
 }
 /* As linhas que a última pintura da vista escolheu (linhasDaLista: os
@@ -490,7 +495,7 @@ function txLinhaHtml(t,mo){
   const x=txLinhaExtra(t,mo)||{};
   const onde=t._partes?' · '+ondeDoLoteNaLista(t):t.propertyId?' · '+esc(propName(t.propertyId)):'';
   return `<div class="card tap txrow${x.cls?' '+x.cls:''} u-p-13px-15px" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" ${x.attrs||''} data-toca="camada" data-click="${x.onclick||`txView('${jsq(t.id)}')`}"><div class="row-between">
-    ${x.caixa||''}<div class="u-minw-0"><div class="title u-fs-14p5px">${esc(t.label)}</div>
+    ${x.caixa||''}<div class="u-minw-0 txcorpo"><div class="title u-fs-14p5px">${esc(t.label)}</div>
       <div class="small">${dPT(t.date)} \u00b7 ${k.short}${t.category?' \u00b7 '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${onde}${t.creditor?' \u00b7 '+esc(t.creditor):''}</div>
       ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}
       ${txQuem(t)}
@@ -516,12 +521,17 @@ const mesPt=iso=>(MES[Number(String(iso).slice(5,7))-1]||'')+' '+String(iso).sli
    que sobravam, com zero nos reaproveitados — porque o numero muda com o
    filtro e o texto do bloco deixava de bater certo. Fica um <span> vazio, que
    o pintarListaTx enche depois de reconciliar.
+
+   O nome do mês leva o mês num data-mes-nome, e o corpo de cada linha a
+   classe txcorpo: são as duas peças que a caixa da seleção empurra, e é por
+   elas que cloud/selecao.js:selMedirDeslize as reencontra depois do render
+   para as fazer deslizar em vez de saltar.
    Recebe: mo — o mes 'AAAA-MM'.
    Devolve: o HTML do bloco (string). */
 function txMesHtml(mo){
   const xm=txMesExtra(mo)||{};
   return `<div class="txmes"><div class="section-title${xm.cls?' '+xm.cls:''} u-d-flex u-jc-space-between u-tt-none" ${xm.attrs||''}>
-    ${xm.caixa||''}<span>${esc(mesPt(mo))}</span><span class="txnet"></span></div>
+    ${xm.caixa||''}<span class="txmes-nome" data-mes-nome="${esc(mo)}">${esc(mesPt(mo))}</span><span class="txnet"></span></div>
     <div class="list"></div></div>`;
 }
 /* Enche (ou acerta) a lista dos movimentos dentro do #txLista, mexendo so no

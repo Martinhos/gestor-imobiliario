@@ -259,7 +259,7 @@ function ctBody(){
     ${servicoLigado('recurring')?`<div class="hint u-mt-n6px">A renda cria um movimento recorrente todos os meses. Com rendas antecipadas, arranca depois dos meses pagos à cabeça.</div>`:''}
     <label>IBAN para pagamento das rendas (opcional)<input id="c_iban" value="${esc(c.iban)}" placeholder="PT50 0000 0000 0000 0000 0000 0" autocomplete="off"></label>`,
       {icon:'contract',open:false,summary:[c.start?'de '+dPT(c.start):'',c.end?'a '+dPT(c.end):'',c.deposit?'caução '+euro(c.deposit):''].filter(Boolean).join(' ')})}
-    ${fold('fisco','Declaração',fiscoSect(),{icon:'file',summary:fsum})}
+    ${fold('fisco','Declaração',fiscoSect(),{icon:'recibo',summary:fsum})}
     ${fold('contacts','Contactos',contactSect('owner',c,p)+contactSect('tenant',c,p),{icon:'users',summary:[c.ownerPhone||c.ownerEmail?'senhorio':'',c.tenantPhone||c.tenantEmail?'inquilino':''].filter(Boolean).join(' · ')})}
     ${fold('inv','Inventário',`
       ${inv.length?`<div class="form u-g-7px">

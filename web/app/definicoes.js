@@ -95,16 +95,17 @@ function vDefaults(){
    cartão inteiro (html é uma função que pode devolver ''). A versão do cartão
    Sobre é a VERSAO do avisos.js (a primeira entrada, que nunca se escreve à
    mão); ele só carrega depois da primeira pintura do arranque (index.html), e
-   até lá fica um traço. */
+   até lá fica um traço. Os Grupos já viveram aqui, em Dados; passaram a
+   separador próprio (vGrupos), ao lado dos Imóveis, quando se passou a poder
+   partilhar um grupo — numa subpágina das Definições ninguém o encontrava. */
 const DEF_SECCOES=[['conta','Conta'],['aplicacao','Aplicação'],['dados','Dados'],['ajuda','Ajuda'],['sobre','Sobre']];
 const DEF_LINHAS=[
   {sec:'aplicacao',ordem:10,page:'tema',label:'Tema',icon:'sun',sub:()=>({auto:'Automático',light:'Claro',dark:'Escuro'})[db.settings.theme]||'Automático'},
   {sec:'aplicacao',ordem:20,page:'defaults',label:'Valores por omissão',icon:'trend',sub:'Aumentos, inflação e imposto do selo'},
   {sec:'dados',ordem:10,page:'cats',label:'Tipos de movimento',icon:'swap',sub:()=>{const cs=cats(),ci=catsIn();
     return (Object.keys(cs).length+Object.keys(ci).length)+' categorias · '+sum(Object.keys(cs).map(k=>cs[k].length).concat(Object.keys(ci).map(k=>ci[k].length)))+' subtipos'}},
-  {sec:'dados',ordem:20,page:'irs',label:'IRS e dedução',icon:'file',sub:'Que despesas entram em cada coluna do Anexo F'},
+  {sec:'dados',ordem:20,page:'irs',label:'IRS e dedução',icon:'recibo',sub:'Que despesas entram em cada coluna do Anexo F'},
   {sec:'dados',ordem:30,page:'tags',label:'Etiquetas',icon:'tag',sub:()=>(db.settings.tags||[]).length+' etiquetas'},
-  {sec:'dados',ordem:40,page:'groups',label:'Grupos',icon:'users',sub:()=>(db.groups||[]).length+' grupos'},
   {sec:'dados',ordem:50,page:'filtros',label:'Filtros comuns',icon:'filter',sub:()=>(db.settings.filters||[]).length+' filtros'},
   {sec:'dados',ordem:60,page:'dados',label:'Importar e cópias',icon:'down',sub:'Splitwise, cópias de segurança e recomeçar'},
   {sec:'sobre',ordem:50,html:()=>card('Rendorium','',`<div class="stat"><span>Versão</span><b>${typeof VERSAO!=='undefined'?esc(VERSAO):'—'}</b></div>
@@ -162,14 +163,17 @@ function vTema() {
 /* Vista principal das Definições: com setPage preenchido devolve a subpágina
    respetiva (com o Voltar colado ao topo); sem ele, a raiz
    (raizDasDefinicoes). A nuvem embrulha esta função só para as subpáginas
-   dela (cloud/partilha.js, cloud/novidades.js).
+   dela (cloud/partilha.js, cloud/novidades.js). A subpágina antiga dos
+   Grupos já não tem porta (são um separador): quem lá chegar por um caminho
+   velho sem a nuvem — que o leva ao separador (cloud/nucleo.js:goSet,
+   restorePage) — vê na mesma os grupos, em vez da raiz sem explicação.
    Devolve: o HTML (texto) da raiz ou da subpágina ativa. */
 function vSettings(){
   if(setPage==='tema')return backRow+vTema();
   if(setPage==='defaults')return backRow+vDefaults();
   if(setPage==='cats')return backRow+vCats();
   if(setPage==='tags')return backRow+vTags();
-  if(setPage==='groups')return backRow+vGroups();
+  if(setPage==='groups')return backRow+vGrupos();
   if(setPage==='filtros')return backRow+vFiltrosComuns();
   if(setPage==='irs')return backRow+vIrsMapa();
   if(setPage==='dados')return backRow+vImport();
@@ -264,15 +268,25 @@ function seloDoGrupo(g){
   const n=(g._membros||[]).length;
   return `<span class="badge grey u-ml-7px">Partilhado · ${n} ${n===1?'pessoa':'pessoas'}${g._meu?'':' · de '+esc(g._donoNome||'')}</span>`;
 }
-// Subpágina "Grupos": uma secção por tipo (imóveis, proprietários, contratos),
-// cada grupo com os membros em resumo; tocar num abre o modal de edição — ou
-// a janela da nuvem, num grupo partilhado (seloDoGrupo). Nos imóveis, com a
-// nuvem, a sessão e o serviço Colaboradores, há também «Novo grupo partilhado».
-// Devolve: o HTML (texto) da subpágina.
-function vGroups(){
+/* Os grupos por tipo (imóveis, proprietários, contratos) — a parte de baixo
+   do separador Grupos (vGrupos). Cada grupo com os membros em resumo; tocar
+   num abre o modal de edição, ou a janela da nuvem num grupo partilhado
+   (seloDoGrupo). Um grupo de imóveis privado que se pode partilhar (com
+   imóveis meus: cloud/grupos.js:gruposParaPartilhar), quando posso
+   partilhar, tem «Partilhar» à vista no próprio cartão: era só um item do ⋯
+   da janela de edição, e ninguém o encontrava. O botão trava o toque
+   (event.stopPropagation), senão abria também a janela de edição por baixo
+   da confirmação. «Novo grupo partilhado» já não vive aqui: está no cartão
+   dos partilhados, em cima, e repeti-lo nos imóveis eram duas portas iguais.
+   Recebe: semPartilhados (opcional) — true para deixar de fora os grupos
+   partilhados, quando o separador já os mostra em cima.
+   Devolve: o HTML (texto). */
+function vGroups(semPartilhados){
   const partilha=podePartilharGrupos();
+  const partilhaveis=partilha&&typeof gruposParaPartilhar==='function'?gruposParaPartilhar().map(g=>g.id):[];
+  const botao=g=>partilhaveis.indexOf(g.id)<0?'':`<button type="button" class="btn sm u-fx-0-0-auto" data-toca="camada" data-click="event.stopPropagation();CW.grupoPartilhar('${jsq(g.id)}')">${ic('users',14)} Partilhar</button>`;
   const secs=['prop','owner','contract'].map(kind=>{
-    const gs=grpsOf(kind);
+    const gs=grpsOf(kind).filter(g=>!(semPartilhados&&g._partilhado));
     const abrir=g=>g._partilhado&&nuvemDosGrupos()?`CW.grupoModal('${jsq(g.id)}')`:`groupModal('${jsq(kind)}','${jsq(g.id)}')`;
     return `<div class="section-title">${GKIND[kind].label}</div>
       ${gs.length?`<div class="list">${gs.map(g=>`<div class="card tap" data-toca="camada" data-click="${abrir(g)}">
@@ -280,19 +294,35 @@ function vGroups(){
           <div class="u-d-flex u-g-11px u-ai-center u-minw-0"><span class="avatar">${ic(g._partilhado?'users':GKIND[kind].icon,17)}</span>
             <div class="u-minw-0"><div class="title">${esc(g.name)}${seloDoGrupo(g)}</div>
             <div class="small u-ov-hidden u-to-ellipsis u-ws-nowrap">${g.ids.length} ${g.ids.length===1?GKIND[kind].one:GKIND[kind].label.toLowerCase()} · ${esc(g.ids.map(id=>gMemberName(kind,id)).filter(Boolean).join(', '))||'sem membros'}</div></div></div>
-          <span class="u-c-v-muted u-tf-rotate-180deg u-fx-0-0-auto">${ic('chev',17)}</span></div></div>`).join('')}</div>`
+          <div class="u-d-flex u-ai-center u-g-8px u-fx-0-0-auto">${botao(g)}<span class="u-c-v-muted u-tf-rotate-180deg u-fx-0-0-auto">${ic('chev',17)}</span></div></div></div>`).join('')}</div>`
       :`<div class="hint">Ainda não há grupos de ${GKIND[kind].label.toLowerCase()}.</div>`}
-      <div class="toolbar u-m-11px-0-0"><button class="btn sm" data-toca="camada" data-click="groupModal('${jsq(kind)}')">${ic('plus',14)} Novo grupo de ${GKIND[kind].label.toLowerCase()}</button>${kind==='prop'&&partilha?`<button class="btn sm" data-toca="camada" data-click="CW.grupoNovo()">${ic('users',14)} Novo grupo partilhado</button>`:''}</div>`;
+      <div class="toolbar u-m-11px-0-0"><button class="btn sm" data-toca="camada" data-click="groupModal('${jsq(kind)}')">${ic('plus',14)} Novo grupo de ${GKIND[kind].label.toLowerCase()}</button></div>`;
   }).join('');
-  return secs+`<div class="hint u-mt-16px">Servem de filtro em toda a app. Um movimento atribuído a um grupo de imóveis divide-se por eles.${partilha?' Um grupo de imóveis partilha-se com outras pessoas pelo menu do grupo: quem entrar é comproprietário dos imóveis dele.':''}</div>`;
+  return secs+`<div class="hint u-mt-16px">Servem de filtro em toda a app. Um movimento atribuído a um grupo de imóveis divide-se por eles.${partilha?' «Partilhar» passa um grupo de imóveis a partilhado: quem entrar, e tu aceitares, fica comproprietário dos imóveis dele. Só entram os imóveis teus.':''}</div>`;
+}
+/* O separador «Grupos» (navegacao.js:TABS), da base como as Definições: os
+   grupos são filtros de toda a app, e só a parte partilhada é do serviço
+   Colaboradores. Em cima, quando posso partilhar (podePartilharGrupos: a
+   nuvem dos grupos, a sessão e o serviço), o cartão «Grupos partilhados» da
+   nuvem (cloud/grupos.js:gruposCard — os meus e os dos outros, os pedidos
+   que fiz, «Novo grupo partilhado» e «Partilhar um grupo que já tens»); por
+   baixo, os grupos por tipo, sem os partilhados, que já estão em cima. Sem
+   poder partilhar, só os grupos por tipo e nenhum botão de partilha — um
+   botão que levasse a um aviso é pior do que nenhum.
+   Devolve: o HTML (texto) da vista. */
+function vGrupos(){
+  const topo=podePartilharGrupos()&&typeof gruposCard==='function'?gruposCard():'';
+  return (topo?topo+'<div class="u-h-14px"></div>':'')+vGroups(!!topo);
 }
 let gForm=null;
 /* Abre o modal de criar (só kind) ou editar (com id) um grupo. Trabalha numa
    cópia (gForm) — nada é gravado até Guardar, que exige nome e pelo menos um
    membro antes de escrever em db.groups. Um grupo partilhado não se edita
-   aqui: a janela é a da nuvem (CW.grupoModal). Num grupo de imóveis privado,
-   com a nuvem, a sessão e o serviço Colaboradores, o menu ganha «Partilhar
-   este grupo…».
+   aqui: a janela é a da nuvem (CW.grupoModal). Num grupo de imóveis privado
+   com imóveis meus, com a nuvem, a sessão e o serviço Colaboradores, o menu
+   ganha «Partilhar este grupo…» — e o corpo o mesmo como botão à vista
+   (groupBody): no ⋯ ninguém o achava. Um grupo só com imóveis dos outros
+   não o oferece: partilhá-lo dava um grupo vazio.
    Recebe: kind — o tipo do grupo: 'prop', 'owner' ou 'contract'; id (opcional)
    — o id do grupo a editar; sem ele cria um novo.
    Devolve: nada — abre o modal. */
@@ -301,7 +331,7 @@ function groupModal(kind,id){
   if(g0&&g0._partilhado&&nuvemDosGrupos())return CW.grupoModal(id);
   gForm=normGroup(id?JSON.parse(JSON.stringify(grp(id))):{kind});
   const itens=[];
-  if(id&&kind==='prop'&&podePartilharGrupos())itens.push({label:'Partilhar este grupo…',icon:'users',toca:'camada',act:`CW.grupoPartilhar('${jsq(id)}')`});
+  if(id&&kind==='prop'&&podePartilharGrupos()&&typeof gruposParaPartilhar==='function'&&gruposParaPartilhar().some(x=>x.id===id))itens.push({label:'Partilhar este grupo…',icon:'users',toca:'camada',act:`CW.grupoPartilhar('${jsq(id)}')`});
   if(id)itens.push({label:'Apagar grupo',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delGroup('${jsq(id)}')`});
   const m=id?menu('grp',itens):'';
   openModal(id?'Editar grupo':'Novo grupo de '+GKIND[kind].label.toLowerCase(),groupBody(),null,m);
@@ -315,14 +345,24 @@ function groupModal(kind,id){
     save();closeModal();render();toast('Grupo guardado.');
   };
 }
-// Corpo do modal do grupo, gerado a partir de gForm: nome e membros em chips.
-// Devolve: o HTML (texto) do corpo do modal.
+/* Corpo do modal do grupo, gerado a partir de gForm: nome e membros em chips.
+   Num grupo de imóveis já guardado que se pode partilhar (com imóveis meus, e
+   eu a poder partilhar), «Partilhar este grupo» à vista no fim, com o que
+   isso quer dizer. Partilha-se o grupo como está guardado: a confirmação
+   (CW.grupoPartilhar) fecha esta janela, e o que se mudou aqui sem guardar
+   fica para trás — a nota di-lo. Um grupo novo ainda não está em db.groups e
+   não tem o botão.
+   Devolve: o HTML (texto) do corpo do modal. */
 function groupBody(){
   const g=gForm,tags=g.ids.map(id=>({id,label:gMemberName(g.kind,id)||'?'}));
+  const partilhar=g.kind==='prop'&&podePartilharGrupos()&&typeof gruposParaPartilhar==='function'&&gruposParaPartilhar().some(x=>x.id===g.id);
   return `<div class="form">
     <label>Nome do grupo<input id="g_name" value="${esc(g.name)}" placeholder="${g.kind==='prop'?'Casas de Lisboa':g.kind==='owner'?'Família':'Contratos T2'}" autocomplete="off"></label>
     <div><div class="flabel">${GKIND[g.kind].label} no grupo</div>${tagField(tags,'Adicionar','addGroupMember()','delGroupMember')}</div>
-    ${g.kind==='prop'?`<div class="hint">Um movimento atribuído a este grupo divide-se pelos imóveis (em partes iguais, pelo valor, por percentagens…).</div>`:''}</div>`;
+    ${g.kind==='prop'?`<div class="hint">Um movimento atribuído a este grupo divide-se pelos imóveis (em partes iguais, pelo valor, por percentagens…).</div>`:''}
+    ${partilhar?`<div><div class="flabel">Partilhar</div>
+      <button type="button" class="btn sm" data-toca="camada" data-click="CW.grupoPartilhar('${jsq(g.id)}')">${ic('users',14)} Partilhar este grupo</button>
+      <div class="hint u-mt-6px">Quem entrar pela ligação, e tu aceitares, fica comproprietário dos imóveis do grupo; só entram os imóveis teus. Partilha-se o grupo como está guardado.</div></div>`:''}</div>`;
 }
 // Redesenha o corpo do modal do grupo depois de mexer nos membros, sem o fechar.
 // Devolve: nada — redesenha o corpo do modal.

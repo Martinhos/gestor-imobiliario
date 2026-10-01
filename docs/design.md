@@ -44,6 +44,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Um contrato tem três estados
 - A Declaração resume, não declara
 - Segurar não é selecionar
+- Entrar na seleção é um deslize, não uma troca
 - A fita da barra de baixo
 - A renda planeada e as rendas já lançadas
 - As datas leem-se como se escrevem em Portugal
@@ -732,12 +733,44 @@ com o do lado; e ver outro mês obriga a outro toque, com o primeiro já
 esquecido.
 
 Agora o dedo percorre o gráfico, uma guia acompanha a coluna mais próxima e
-os valores dessa coluna aparecem numa faixa FIXA no topo do próprio
-gráfico — no sítio onde a mão não está, e sem sair enquanto o dedo não sair
-(graficos.js:mostrarColuna). A faixa e a guia são sobrepostas: um gráfico
-não pode mudar de altura só por alguém lhe tocar. E o gesto é horizontal
-(estilos.css:.chartbox com touch-action), para o scroll vertical continuar a
-funcionar por cima dele.
+os valores dessa coluna aparecem num cartão FIXO no canto inferior direito,
+DEBAIXO do desenho — no sítio onde a mão não está, e sem sair enquanto o dedo
+não sair (graficos.js:mostrarColuna). O gráfico é a caixa do desenho e, por
+baixo, um pé em grelha: a legenda à esquerda e o lugar da leitura à direita,
+os dois num contentor por onde a leitura se encontra
+(graficos.js:peDaLeitura, graficos.js:lugarDaLeitura). Chegou a ser uma faixa
+sobreposta ao topo do desenho, a toda a largura: não mexia na altura, mas
+tapava as barras mais altas e os valores do eixo, enquanto o canto debaixo do
+eixo, ao lado da legenda, ficava vazio — o Martinho apontou-o. Só a guia é
+sobreposta. E o gesto é horizontal (estilos.css:.chartbox com touch-action),
+para o scroll vertical continuar a funcionar por cima dele.
+
+O lugar EXISTE SEMPRE, invisível sem leitura: um gráfico não pode mudar de
+altura só por alguém lhe tocar. Quem lhe dá o tamanho é um molde escondido
+(estilos.css:.chartmolde) com as mesmas linhas que a leitura vai ter — o
+rótulo mais comprido e, por série, o valor escrito mais comprido
+(graficos.js:linhasDaLeitura, graficos.js:maisComprido); a leitura que se vê
+fica por cima dele, em absoluto, e não conta para a largura. Por isso a
+largura é fixa enquanto se lê — não «dança» de mês para mês com o texto — e
+os números vão em tabular-nums. A coluna da leitura nunca passa de 58% do pé
+(estilos.css:.chartpe), para a legenda ter o resto. O valor nunca se corta; o
+nome de uma série, sim, com reticências — o nome inteiro está na legenda, ao
+lado. Com uma série só não há legenda nem nome: a leitura é uma linha (rótulo,
+bolinha, valor), sozinha no canto debaixo do eixo. No computador, dois cartões
+lado a lado esticam à altura do maior; quando o gráfico é o corpo inteiro do
+cartão, o pé estica até ao fundo e a leitura desce ao canto, com a legenda
+colada ao desenho.
+
+Um título de cartão comprido não colide com nada: está noutra linha, lá em
+cima. O que colide são os NOMES DAS SÉRIES — os créditos levam o nome que o
+senhorio lhes deu. Com um nome de mais de 16 letras, ou mais de quatro
+séries, o pé empilha (graficos.js:peEmpilha): a legenda toma a largura toda e
+parte os nomes em linhas, e a leitura fica por baixo dela, no mesmo canto.
+Com muitas séries a leitura mostra-as TODAS, uma por linha: mostrar quatro e
+«+N» escondia o que o gráfico existe para mostrar (a dívida de cada crédito,
+e o Total, que é o último); duas colunas partiam ao meio a largura de nomes
+que já são o problema; e rolar não dá, o dedo está ocupado a percorrer o
+gráfico. O preço é altura, e essa é constante.
 
 Os dados de que a leitura precisa vivem no próprio elemento
 (graficos.js:dadosParaLer), e os ouvintes vivem no documento: os gráficos
@@ -1081,6 +1114,52 @@ por isso apanha também o chrome que ainda não existe. O que se copia — o
 IBAN, as notas, os valores das fichas — não tem ação nenhuma e continua
 selecionável. É a mesma correção que o gráfico levou.
 
+## Entrar na seleção é um deslize, não uma troca
+O toque longo num movimento (ou «Selecionar vários», no kebab) repinta a vista
+inteira, e o título de cada mês ganha a caixa de marcar. Antes o «set 2026»
+saltava da esquerda para o meio de um fotograma para o outro, as caixas
+apareciam já feitas e o texto de cada linha dava um pulo para a direita. O
+Martinho pediu o deslize: o nome do mês desliza do sítio onde estava até ao
+meio do título, o corpo de cada linha abre espaço à caixa a deslizar, e as
+caixas (e a barra de cima, que leva a caixa de tudo) aparecem a desvanecer.
+Ao sair, o caminho inverso: o nome volta à esquerda e as caixas que saíram
+desvanecem no lugar onde estavam, a acompanhar a linha ou o título de que
+eram (selecao.js:selFantasma, na camada de saída da continuidade,
+continuidade.js:camadaDeSaida).
+
+É o FLIP da continuidade, feito à mão para peças que não são linhas e por
+isso não têm data-fk: mede-se antes do render (selecao.js:selMedirDeslize),
+repinta-se, e numa microtarefa põe-se cada peça de volta onde estava e
+deixa-se ir (selecao.js:selAplicarDeslize). Só transform e opacity, pela API
+de animações e sem fill: no fim não fica nada no style de ninguém — e o
+título do mês, que em seleção é sticky (estilos.css:.sel-mes), continua a
+colar-se ao topo. Mede-se o que está no ecrã, e não onde as peças deviam
+estar: sair a meio de uma entrada continua de onde o nome ia, e as caixas
+que saem partem da opacidade a que estavam.
+
+Só na MUDANÇA de modo (selecao.js:selModoPintado): marcar uma linha
+(selecao.js:selPintar), a lista viva (lista-movimentos.js:pintarListaTx) e a
+sincronização de fundo, que é um render sem mudar de modo, não voltam a
+animar. Com menos movimento pedido não se mede nem se anima nada
+(continuidade.js:semMovimento — a regra de CSS não apanha a API de animações).
+
+Os tempos são os da continuidade, e não um número à parte: o nome atravessa
+mais de cem pixeis e as linhas à volta dele deslizam no mesmo render com o
+--lento e a --curva-entra (continuidade.js:aplicarContinuidade); com outro
+tempo, o título e as linhas chegavam cada um à sua hora e o fundo do título
+tapava o cimo da primeira linha. As caixas desvanecem no --medio. O título
+alinha-se pela altura do NOME, e não pelo topo: em seleção é mais alto.
+
+O nome do mês fica mesmo ao meio do título, e não ao meio do que sobra: a
+caixa e o saldo repartem o resto por igual (estilos.css:.txnet), sem padding
+de lado na caixa, que o flex-basis 0 não conta. E os indicadores e os
+cartões das contas vão numa peça com chave (lista-movimentos.js:vTransactions,
+data-fk="txresumo"): a barra da seleção empurra tudo para baixo, e com as
+linhas a deslizar e os indicadores a saltar o título do mês passava por cima
+do fundo dos cartões. Fica por resolver, de propósito: a barra de cima ainda
+empurra a lista ~64px (agora a deslizar), e a altura de cada linha troca no
+primeiro fotograma — animar alturas por linha é o que a continuidade recusa.
+
 ## A fita da barra de baixo
 Mudar de separador trocava o conteúdo de golpe. Passa a virar como uma fita —
 mas **só na barra de baixo**, e só quando o toque veio de lá
@@ -1088,7 +1167,7 @@ mas **só na barra de baixo**, e só quando o toque veio de lá
 
 A barra tem quatro destinos e uma ordem à vista: ir dos Movimentos para os
 Imóveis é andar um lugar para a direita, e a pessoa viu o lugar antes de lá
-tocar. A gaveta são treze destinos agrupados por assunto — da «Visão geral»
+tocar. A gaveta são quinze destinos agrupados por assunto — da «Visão geral»
 para as «Definições» não há lado nenhum, e uma fita a correr ali inventava
 uma vizinhança que não existe. Também não desliza para o separador onde já se
 está: tocar no separador aceso é «leva-me ao topo», não uma travessia.
@@ -1412,9 +1491,44 @@ continuarem a apontar (web/cloud/grupos.js:CW.grupoPartilhar). A janela do grupo
 (web/cloud/grupos.js:CW.grupoModal) mostra a cada um só o que o servidor lhe
 deixaria fazer; a aterragem de ?grupo= segue o molde das outras duas ligações
 (acessos.js:parseConvite, entrada.js:modalGrupo,
-web/cloud/grupos.js:CW.entrarNoGrupo); os grupos vivem em Definições › Grupos
-(definicoes.js:vGroups) e no cartão «Grupos partilhados» da Conta e partilha
-(web/cloud/grupos.js:gruposCard).
+web/cloud/grupos.js:CW.entrarNoGrupo); os grupos vivem no separador Grupos
+(definicoes.js:vGrupos), com o cartão «Grupos partilhados»
+(web/cloud/grupos.js:gruposCard) em cima.
+
+**Onde vivem os grupos.** Os grupos são um separador da base, «Grupos», em
+Património a seguir aos Imóveis (navegacao.js:TABS; servicos.js:vistaDoSeparador
+despacha para definicoes.js:vGrupos). São filtros de toda a app, por isso não
+são um serviço; só a parte partilhada é do serviço Colaboradores. Viveram numa
+subpágina das Definições, e quando passaram a poder partilhar-se ninguém os
+encontrava lá. Em cima, quando posso partilhar (definicoes.js:podePartilharGrupos
+— a nuvem dos grupos, sessão e o serviço ligado), o cartão «Grupos
+partilhados» (os meus e os dos outros, os pedidos que fiz, «Novo grupo
+partilhado» e «Partilhar um grupo que já tens»); em baixo, os grupos por tipo
+(definicoes.js:vGroups), sem os partilhados, que já estão em cima. Sem poder
+partilhar, o separador mostra só os grupos privados e nenhum botão de
+partilha. As Definições já não têm a linha «Grupos»; goSet('groups') e a
+página guardada antiga levam ao separador (navegacao.js:goSet,
+web/cloud/nucleo.js:restorePage).
+Conta e partilha tem só uma linha que leva aos Grupos
+(web/cloud/grupos.js:linhaDosGrupos), com quantos grupos partilhados tenho e
+quantos pedidos esperam resposta. O crachá do separador conta os pedidos para
+entrar nos meus grupos (web/cloud/grupos.js:crachaDosGrupos), registado pelo
+serviço Colaboradores (lista-colaboradores.js:vColabTab, no mesmo
+registarServico): com o serviço desligado, não há crachá.
+
+**Partilhar um grupo que já existe.** Um grupo de imóveis privado partilha-se
+sem ser recriado — o Martinho pediu-o, porque só via «Novo grupo partilhado»:
+o «Partilhar» estava só no ⋯ da janela de edição. Agora há três portas à
+vista: «Partilhar» no cartão de cada grupo (trava o toque, para não abrir
+também a janela de edição), «Partilhar um grupo que já tens» ao lado de «Novo
+grupo partilhado» (web/cloud/grupos.js:CW.grupoEscolherParaPartilhar, que
+lista os privados) e «Partilhar este grupo» no corpo da janela de edição
+(definicoes.js:groupBody). Todas vão dar a web/cloud/grupos.js:CW.grupoPartilhar,
+que confirma e cria o grupo no servidor com o MESMO id. Só se oferece num
+grupo com pelo menos um imóvel meu (web/cloud/grupos.js:gruposParaPartilhar):
+partilhar leva só os imóveis meus, e um grupo só com imóveis dos outros
+ficava um grupo partilhado vazio — o CW.grupoPartilhar recusa esse caso com
+uma frase, venha de onde vier.
 
 Um movimento atribuído a um grupo partilhado chega a todos os membros porque
 se parte por imóvel ao guardar (ver «Um movimento de vários imóveis parte-se
@@ -1476,15 +1590,49 @@ da taxa fixa tem um relógio só, o das prestações registadas
 mesmo dia.
 
 ## Navegação
-Quinze separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo e
-subtítulo — e cada um menos as Definições é um serviço (ver «A app em
-serviços»). A gaveta agrupa-os em quatro (navegacao.js:NAV_GROUPS):
-Património, Pessoas, Finanças e Aplicação; o título do grupo é o .navh
-(estilos.css:.navh). No computador a gaveta é um rail fixo que pode
-colapsar para só ícones (estilos.css:body.rail); abaixo de 900px vira gaveta
-com véu (estilos.css:aside e estilos.css:.scrim dentro de
-estilos.css:@media(max-width:900px)) e o foco entra nela ao abrir
+Dezasseis separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo
+e subtítulo — e cada um menos as Definições e os Grupos é um serviço (ver «A
+app em serviços»; os Grupos são filtros de toda a app, ver «Onde vivem os
+grupos»). A gaveta agrupa-os por assunto (navegacao.js:NAV_GROUPS): ao
+cimo, sem título, as portas de todos os dias (Visão geral e Calendário, que
+não são «património»); depois Património (Imóveis, Grupos, Contratos),
+Pessoas, Finanças (Movimentos, Planeados, Créditos, Declaração) e Análise
+(Projeções e Avaliação — o que olha para a frente e o que avalia o que já
+há, que antes se perdiam no fim de seis Finanças); e ao fundo, outra vez sem
+título, as Definições. Nenhum separador repete o ícone de outro: a
+Avaliação e a Declaração deixaram o «file» e o escudo dos Colaboradores
+pelo «bars» e o «recibo» (icones.js:ic). As regras do rail do computador
+(estilos.css:body.rail) existem, mas nenhum código o liga hoje; abaixo de
+900px a gaveta vira gaveta com véu (estilos.css:aside e estilos.css:.scrim
+dentro de estilos.css:@media(max-width:900px)) e o foco entra nela ao abrir,
+no primeiro sítio alcançável e nunca num item recolhido
 (navegacao.js:openDrawer).
+
+As secções com título recolhem-se (navegacao.js:gavetaHtml,
+navegacao.js:gavetaAlternar) — pedido do Martinho quando o menu passou a
+ter opções a mais. O título é um botão com classe própria
+(estilos.css:.navsec-tit) — aria-expanded e aria-controls para o contentor
+dos itens, seta que roda, alvo de toque de 44px no dedo —, e não o .navh
+(estilos.css:.navh), que continua a ser o título pequeno de listas fora da
+gaveta (os pedidos por responder, as visitas do dia). Recolher muda a classe
+da secção e o aria-expanded do botão no nó vivo: não repinta, não navega e
+não fecha a gaveta. A altura anima por grid-template-rows de 1fr a 0fr com
+os dois valores escritos (estilos.css:.navsec-corpo); o overflow:hidden que
+isso pede vive no estilos.css:.navsec-itens, alargado 10px para cada lado
+para não cortar o traço do ativo. Recolhida, o visibility tira os itens do
+Tab e do leitor de ecrã, só no fim da transição; sem movimento a regra
+geral desliga tudo. O estado é do aparelho (gi_nav_fechadas; sem nada
+guardado está tudo aberto). Chegar a um separador abre a secção dele, por
+qualquer caminho, porque quem o vê é o buildNav quando o separador mudou
+(navegacao.js:gavetaAbrirDoAtual); recolher à mão a secção onde se está vale
+até se sair dela. Uma secção recolhida mostra no título a soma dos crachás
+dos seus itens (navegacao.js:gavetaCracha), vermelha se algum já passou do
+prazo — a cor do mais urgente, para um atraso nunca ficar escondido. O
+buildNav só reescreve o #nav quando o HTML mudou: corre a cada render, e a
+sincronização de fundo recriava a gaveta debaixo do dedo; o gavetaAlternar
+acerta a mesma secção no HTML guardado (navegacao.js:gavetaCabeca), para a
+pintura seguinte não ver diferença. No rail (navegacao.js:gavetaNoRail) não
+há secções a recolher.
 
 A barra de baixo tem quatro destinos, a um toque: visão geral («Geral»),
 movimentos, imóveis e calendário (navegacao.js:TABBAR,

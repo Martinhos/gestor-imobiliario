@@ -21,6 +21,12 @@ function ic(n,s){s=s||20;const I={
   door:'<path d="M4 21V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v17"/><path d="M2 21h20"/><circle cx="13.5" cy="12.5" r="1"/>',
   photo:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="m21 15-5-5L5 19"/>',
   box:'<path d="M3 8 12 4l9 4v8l-9 4-9-4z"/><path d="M3 8l9 4 9-4M12 12v8"/>',
+  layers:'<path d="M12 3 2 8l10 5 10-5z"/><path d="M2 13l10 5 10-5"/>',
+  /* a Avaliação (três barras sobre a linha do chão) e a Declaração (um
+     recibo de bordo picotado com o €): tinham o «file», que parece uma
+     seta a entrar, e o mesmo escudo dos Colaboradores */
+  bars:'<path d="M3 21h18"/><rect x="5" y="12" width="3" height="6" rx="1"/><rect x="10.5" y="8" width="3" height="10" rx="1"/><rect x="16" y="4" width="3" height="14" rx="1"/>',
+  recibo:'<path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z"/><path d="M14.4 9.2a3 3 0 1 0 0 4.6"/><path d="M8.6 10.8h4M8.6 12.3h4"/>',
   tag:'<path d="M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.2"/>',
   up:'<path d="M12 20V6M6 12l6-6 6 6"/>',dn:'<path d="M12 4v14M6 12l6 6 6-6"/>',
   trash:'<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13h10l1-13"/>',

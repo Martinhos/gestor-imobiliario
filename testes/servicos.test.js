@@ -14,14 +14,18 @@ import * as srv from '../worker/src/lib/servicos.js';
 
 const ler = (rel) => readFileSync(new URL('../' + rel, import.meta.url), 'utf8');
 const existe = (rel) => existsSync(new URL('../' + rel, import.meta.url));
-const SEM_SETTINGS = (app) => app.TABS.map((t) => t.id).filter((id) => id !== 'settings');
+// os separadores da base: as Definições e os Grupos (filtros de toda a app)
+const DA_BASE = ['settings', 'groups'];
+const SEM_SETTINGS = (app) => app.TABS.map((t) => t.id).filter((id) => DA_BASE.indexOf(id) < 0);
 
 describe('o catálogo', () => {
-  test('cada separador menos as Definições é um serviço, pela mesma ordem, e cada serviço é um separador', () => {
+  test('cada separador menos os da base (Definições e Grupos) é um serviço, pela mesma ordem, e cada serviço é um separador', () => {
     const app = carregarApp();
     igual(JSON.parse(JSON.stringify(app.SERVICOS)).map((s) => s.id), JSON.parse(JSON.stringify(SEM_SETTINGS(app))));
     assert.equal(app.servicoDoSeparador('settings'), '', 'as Definições são a base');
     assert.equal(app.servicoDe('settings'), null);
+    assert.equal(app.servicoDoSeparador('groups'), '', 'os Grupos são a base');
+    assert.equal(app.separadorLigado('groups'), true);
     assert.equal(app.servicoDoSeparador('contracts'), 'contracts');
     assert.equal(app.nomeDoServico('fisco'), 'Declaração');
     assert.equal(app.nomeDoServico('xyz'), 'xyz');

@@ -321,7 +321,7 @@ describe('a vista, o texto e o CSV', () => {
 });
 
 describe('o separador e o registo', () => {
-  test('a Declaração (id fisco) está em TABS, no grupo Finanças a seguir à Avaliação, e a subpágina irs existe', () => {
+  test('a Declaração (id fisco) está em TABS, no fim do grupo Finanças (a Avaliação passou para a Análise), e a subpágina irs existe', () => {
     const t = app.TABS.find((x) => x.id === 'fisco');
     assert.ok(t, 'TABS tem fisco');
     assert.equal(t.label, 'Declaração', 'o nome que se lê no menu — «Fisco» foi rejeitado como nome');
@@ -329,7 +329,8 @@ describe('o separador e o registo', () => {
     const g = app.NAV_GROUPS.find((x) => x.ids.indexOf('fisco') > -1);
     assert.ok(g, 'um NAV_GROUP contém-no');
     assert.equal(g.label, 'Finanças');
-    assert.equal(g.ids[g.ids.indexOf('fisco') - 1], 'reports');
+    assert.equal(g.ids[g.ids.length - 1], 'fisco');
+    assert.equal(app.NAV_GROUPS.find((x) => x.ids.indexOf('reports') > -1).label, 'Análise');
     assert.equal(app.SUBPAGE.irs.label, 'IRS e dedução');
   });
 

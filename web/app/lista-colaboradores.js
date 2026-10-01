@@ -14,4 +14,8 @@ function vColabTab(){
     <div class="toolbar u-jc-center u-mt-16px">
     <button class="btn primary" data-toca="ecra" data-click="goSet('cloud')">Criar conta ou entrar</button></div></div>`;
 }
-registarServico({id:'colaboradores',vistas:{colaboradores:'vColabTab'}});
+/* O separador Grupos é da base (os grupos são filtros de toda a app), mas o
+   crachá dele é deste serviço: conta os pedidos para entrar nos meus grupos
+   partilhados (cloud/grupos.js:crachaDosGrupos), que só existem com ele
+   ligado. Desligado, o registo não se despacha e o separador fica sem crachá. */
+registarServico({id:'colaboradores',vistas:{colaboradores:'vColabTab'},cracha:{groups:'crachaDosGrupos'}});

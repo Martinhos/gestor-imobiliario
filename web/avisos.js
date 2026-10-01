@@ -35,9 +35,32 @@ var AVISOS = [
         titulo: 'Um grupo de casas partilha-se como grupo',
         afeta: ['partilha', 'imoveis'],
         itens: [
-          'Em Definições → Grupos, um grupo de imóveis pode passar a grupo partilhado: quem está no grupo é comproprietário de todas as casas dele — vê e edita contratos, movimentos e pessoas, e entra nas quotas — e uma casa que entre no grupo mais tarde chega logo a toda a gente. Antes partilhava-se casa a casa.',
+          'No separador Grupos, um grupo de imóveis que já tens passa a grupo partilhado com um toque em «Partilhar» — ou cria-se um novo: quem está no grupo é comproprietário de todas as casas dele — vê e edita contratos, movimentos e pessoas, e entra nas quotas — e uma casa que entre no grupo mais tarde chega logo a toda a gente. Antes partilhava-se casa a casa.',
           'Entra-se por uma ligação do dono do grupo, que vale sete dias e serve várias pessoas — mas ninguém entra sem o dono aceitar. Quem abre a ligação pede para entrar; o pedido aparece ao dono em «Pedidos por responder», no sino e na janela do grupo, com Aceitar e Recusar. Uma ligação enviada à pessoa errada já não dá acesso a nada.',
-          'O dono vê quem entrou, remove, roda ou desativa a ligação, e apaga o grupo (as casas ficam). Cada membro pode pôr no grupo casas suas, e tirá-las; sair do grupo leva as casas que pôs. O cartão «Grupos partilhados» em Conta e partilha lista os teus, os em que entraste e os pedidos à espera.',
+          'O dono vê quem entrou, remove, roda ou desativa a ligação, e apaga o grupo (as casas ficam). Cada membro pode pôr no grupo casas suas, e tirá-las; sair do grupo leva as casas que pôs. O cartão «Grupos partilhados», no cimo do separador Grupos, lista os teus, os em que entraste e os pedidos à espera; o separador leva no menu quantos pedidos esperam a tua resposta.',
+        ],
+      },
+      {
+        titulo: 'O menu lateral arruma-se em secções que se recolhem',
+        afeta: ['app'],
+        itens: [
+          'Património, Pessoas, Finanças e Análise passam a recolher-se com um toque no título, e a app lembra-se do que deixaste recolhido neste aparelho. A secção onde estás abre-se sozinha, e uma secção recolhida mostra no título os avisos que tem lá dentro.',
+          'A Visão geral e o Calendário ficam ao cimo, sem secção, e as Definições ao fundo. Os Grupos saíram das Definições e passaram a separador próprio, em Património, ao lado dos Imóveis.',
+          'Há uma secção nova, Análise, com as Projeções e a Avaliação. As Finanças ficam com os Movimentos, os Planeados, os Créditos e a Declaração. A Avaliação e a Declaração ganharam ícones próprios.',
+        ],
+      },
+      {
+        titulo: 'Os gráficos leem-se no canto, sem tapar o desenho',
+        afeta: ['app'],
+        itens: [
+          'Ao percorrer um gráfico com o dedo, os valores da coluna aparecem num cartão fixo no canto de baixo, à direita, ao lado da legenda — já não tapam as barras mais altas. O cartão não muda de tamanho de mês para mês, e os nomes compridos (de um crédito, por exemplo) levam reticências sem cortar o valor.',
+        ],
+      },
+      {
+        titulo: 'Selecionar vários movimentos desliza',
+        afeta: ['movimentos'],
+        itens: [
+          'Ao segurar num movimento, o mês desliza para o meio do título e as caixas de marcar aparecem a desvanecer; ao cancelar, tudo volta ao sítio pelo mesmo caminho.',
         ],
       },
       {
@@ -70,7 +93,7 @@ var AVISOS = [
         titulo: 'Cada separador é um serviço',
         afeta: ['app'],
         itens: [
-          'Por dentro, cada separador da barra lateral — imóveis, contratos, movimentos, planeados, visitas, pessoas, colaboradores, créditos, calendário, projeções, avaliação e declaração — passou a ser um serviço com manifesto próprio. As Definições são a base. Para ti nada muda: os mesmos ecrãs, no mesmo sítio.',
+          'Por dentro, cada separador da barra lateral — imóveis, contratos, movimentos, planeados, visitas, pessoas, colaboradores, créditos, calendário, projeções, avaliação e declaração — passou a ser um serviço com manifesto próprio. As Definições e os Grupos são a base. Para ti nada muda: os mesmos ecrãs, no mesmo sítio.',
           'O suporte pode ligar ou desligar um serviço a uma conta. Um serviço desligado sai do menu e os seus dados ficam guardados no servidor, à espera de o voltar a ligar; nada se apaga.',
           'Se chegares a um separador desligado por um atalho antigo, a app diz-te o nome do serviço e que o suporte o liga — em vez de dar erro.',
         ],

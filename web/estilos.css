@@ -281,24 +281,61 @@ html.dark .badge.red{color:var(--danger)}
 .ownrow .pc{color:var(--muted);font-size:12px}
 
 .chartbox svg{width:100%;height:auto;display:block;overflow:visible}
-/* Ler um gráfico com o dedo (graficos.js). A guia e a faixa são SOBREPOSTAS:
-   um gráfico não pode mudar de altura só por alguém lhe tocar. E a faixa fica
-   no topo, fixa — debaixo do dedo era onde o balão antigo estava, e é onde a
-   mão tapa o que se quer ler. */
+/* Ler um gráfico com o dedo (graficos.js). A guia é SOBREPOSTA ao desenho; a
+   leitura não: vive no pé, debaixo do eixo, no canto inferior direito — a
+   faixa que ficava no topo do desenho tapava as barras mais altas e o eixo.
+   O lugar dela existe sempre, invisível, com a altura e a largura que o molde
+   lhe dá: um gráfico não pode mudar de altura só por alguém lhe tocar. */
 /* Sem seleção nem callout: os rótulos do eixo são <text> a sério dentro do
    SVG, e segurar o dedo caía no gesto de selecionar palavra do browser — que
    escolhia o mês e, ao começar, roubava o ponteiro e cancelava a leitura. É a
    mesma proteção que a app já dá a [data-lp], o outro gesto de segurar. */
 .chartbox{position:relative;touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .chartguia,.chartlido{opacity:0;pointer-events:none;transition:opacity var(--rapido) var(--curva)}
-.chartbox.a-ler .chartguia,.chartbox.a-ler .chartlido{opacity:1}
+.chartbox.a-ler .chartguia,.chartbox.a-ler+.chartpe .chartlido{opacity:1}
 .chartguia{position:absolute;top:0;bottom:13px;width:1.5px;margin-left:-.75px;background:var(--line2);border-radius:2px}
-.chartlido{position:absolute;left:0;right:0;top:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;
-  padding:5px 8px;border-radius:10px;background:var(--card);border:1px solid var(--line);
-  box-shadow:var(--shadow);font-size:11.5px;line-height:1.3}
-.chartlido b{font-weight:700}
-.chartlido span{display:inline-flex;align-items:center;gap:5px;color:var(--muted);white-space:nowrap}
-.chartlido span i{width:8px;height:8px;border-radius:3px;flex:0 0 8px}
+/* O pé: a legenda à esquerda e o lugar da leitura à direita, numa grelha — a
+   legenda nunca fica por baixo da leitura. A coluna da leitura tem a largura
+   do molde (fit-content) e nunca passa de 58%: num telemóvel a legenda
+   precisa do resto. Sem legenda (.so), o lugar fica sozinho no canto. */
+.chartpe{display:grid;grid-template-columns:minmax(0,1fr) fit-content(58%);gap:10px 12px;align-items:start;margin-top:10px}
+.chartpe>.legend{margin-top:0;grid-column:1;grid-row:1}
+.chartlugar{grid-column:2;grid-row:1;align-self:end;position:relative;min-width:0}
+/* Empilhado (graficos.js:peEmpilha — nomes compridos ou mais de quatro
+   séries): a legenda toma a largura toda e parte os nomes em linhas, que é
+   onde o nome inteiro se lê; a leitura vai para baixo dela, no mesmo canto. */
+.chartpe.empilhado{grid-template-columns:minmax(0,1fr)}
+.chartpe.empilhado .chartlugar{grid-column:1;grid-row:2;justify-self:end;max-width:100%}
+.chartpe.empilhado>.legend{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.chartpe.empilhado>.legend .nm{white-space:normal;overflow-wrap:anywhere}
+/* A leitura: uma grelha de três colunas — bolinha, nome, valor — com o
+   rótulo a negrito por cima, a toda a largura. Os valores alinham pela
+   direita, em algarismos de largura igual, e nunca se cortam; o nome corta
+   com reticências. Uma série sem nome (.uma) é uma linha: rótulo, bolinha,
+   valor. */
+.chartlido{display:grid;grid-template-columns:8px minmax(0,1fr) auto;align-items:center;gap:3px 6px;
+  padding:6px 9px;border-radius:10px;background:var(--chip);color:var(--ink);
+  font-size:11.5px;line-height:1.35;white-space:nowrap;font-variant-numeric:tabular-nums}
+.chartlido.uma{grid-template-columns:minmax(0,1fr) 8px auto}
+.chartlido b{grid-column:1/-1;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.chartlido.uma b{grid-column:auto}
+.chartlido i{width:8px;height:8px;border-radius:3px}
+.chartlido .lnm{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.chartlido .lvl{font-weight:650;text-align:right}
+/* O molde dá o tamanho e não se vê; a leitura que se vê fica por cima dele,
+   em absoluto, e por isso o texto de cada mês não mexe na largura. */
+.chartmolde{visibility:hidden}
+.chartlugar>.chartlido:not(.chartmolde){position:absolute;inset:0}
+/* No computador, dois cartões lado a lado (.cols, e o .cw-blk da vista geral)
+   esticam à altura do maior, e o gráfico do mais baixo deixava a leitura a
+   meio do cartão, com um vazio por baixo. Quando o gráfico é o corpo inteiro
+   do cartão, o pé estica até ao fundo: a legenda fica colada ao desenho e o
+   lugar da leitura desce ao canto. Só aí (:only-child): num corpo com mais
+   coisas, pô-lo em flex mudava o espaçamento delas. */
+.card:has(>div>.chartler:only-child){display:flex;flex-direction:column}
+.card>div:has(>.chartler:only-child),.card>div>.chartler:only-child{flex:1 1 auto;display:flex;flex-direction:column}
+.card>div>.chartler:only-child>.chartpe{flex:1 1 auto;grid-template-rows:1fr}
+.card>div>.chartler:only-child>.chartpe.empilhado{grid-template-rows:auto 1fr}
 /* A página trancada por baixo de uma janela. Quem tranca é o overflow do
    html e o position:fixed do body — o body NÃO leva overflow:hidden.
 
@@ -313,6 +350,41 @@ html.noscroll{overflow:hidden}
 html.noscroll body{position:fixed;left:0;right:0;width:100%}
 .navh{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--side-muted);padding:14px 12px 4px;opacity:.85;white-space:nowrap}
 nav a .cnt{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px}
+/* As secções da gaveta recolhem-se (navegacao.js:gavetaHtml,
+   navegacao.js:gavetaAlternar). O título é um botão com classe própria, e não
+   o .navh: o .navh é também o título pequeno de listas fora da gaveta (os
+   pedidos por responder, as visitas do dia) e esse não muda. Tem a letra do
+   .navh e o alvo de toque de um botão.
+   A altura anima por grid-template-rows, de 1fr a 0fr com os dois valores
+   escritos — a dobra (.fold-body) tentou a partir de uma linha medida pelo
+   conteúdo e não interpolava; entre dois fr interpola. O overflow:hidden que
+   isto pede fica no .navsec-itens, alargado 10px para cada lado para não
+   cortar o traço do ativo (nav a.on::before, a -10px); o anel de foco dos
+   itens passa para dentro pela mesma razão. Recolhida, o visibility tira os
+   itens do Tab e do leitor de ecrã — só no FIM da transição, para se verem a
+   encolher; a abrir, logo no início. Sem movimento (prefers-reduced-motion)
+   a regra geral desliga as transições, e tudo acontece de uma vez. */
+.navsec{display:grid;min-width:0}
+/* o espaço que separa a secção da de cima é MARGEM e não enchimento: com os
+   14px do .navh por dentro do botão, o realce do toque e o anel de foco
+   ficavam com o texto colado ao fundo de uma caixa meio vazia */
+.navsec-tit{display:flex;align-items:center;gap:8px;width:100%;min-height:32px;margin:8px 0 2px;padding:6px 12px;border:0;border-radius:9px;
+  background:transparent;color:var(--side-muted);cursor:pointer;text-align:left;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;
+  transition:background-color var(--rapido) var(--curva),color var(--rapido) var(--curva)}
+.navsec-tit .txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;opacity:.85}
+.navsec-tit .chev{display:flex;opacity:.85;transition:transform var(--medio) var(--curva)}
+.navsec.fechada>.navsec-tit .chev{transform:rotate(-90deg)}
+.navsec-tit .cnt{display:none;background:var(--danger);color:#fff;font-size:10.5px;font-weight:700;letter-spacing:0;padding:2px 7px;border-radius:999px}
+.navsec.fechada>.navsec-tit .cnt{display:inline-block}
+@media(hover:hover){.navsec-tit:hover{background:var(--side-hover);color:#fff}}
+.navsec-tit:active{background:var(--side-on);color:#fff}
+.navsec-tit:focus-visible{outline:2px solid var(--side-ink);outline-offset:-2px}
+.navsec-corpo{display:grid;grid-template-rows:1fr;transition:grid-template-rows var(--medio) var(--curva-entra)}
+.navsec.fechada>.navsec-corpo{grid-template-rows:0fr;transition-timing-function:var(--curva-sai)}
+.navsec-itens{display:grid;gap:2px;min-height:0;overflow:hidden;margin:0 -10px;padding:0 10px;visibility:visible;transition:visibility 0s}
+.navsec.fechada .navsec-itens{visibility:hidden;transition:visibility 0s var(--medio)}
+.navsec-itens a:focus-visible{outline-offset:-2px}
+@media(pointer:coarse){.navsec-tit{min-height:44px}}
 .kpi.evo{cursor:pointer}
 .kpi .kic{position:absolute;top:11px;right:12px;width:18px;height:18px;border-radius:50%;background:var(--chip);color:var(--muted);display:grid;place-items:center}
 /* secções que abrem e fecham */
@@ -1033,7 +1105,18 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
    deixava de haver como marcar tudo sem voltar ao topo */
 .sel-bar{position:sticky;top:calc(57px + var(--inset-top));z-index:26;display:flex;align-items:center;gap:2px;background:var(--bg);padding:10px 0;margin:-4px 0 6px;box-shadow:0 8px 10px -10px rgba(0,0,0,.3)}
 .section-title.sel-mes{position:sticky;top:calc(114px + var(--inset-top));z-index:25;background:var(--bg);align-items:center;padding:7px 0;margin-top:14px;cursor:pointer}
-.section-title.sel-mes .selbox{padding-right:9px}
+/* o nome do mês ao meio do título, e não ao meio do que sobra: com três
+   filhos em space-between ficava entre a caixa e o saldo, que não têm a
+   mesma largura — 10 a 20px ao lado, conforme o saldo. A caixa e o saldo
+   repartem o resto por igual e o nome fica no centro, que é onde o
+   cloud/selecao.js:selAplicarDeslize o faz chegar. Sem padding de lado na
+   caixa: o flex-basis 0 não o conta, e os 11px dela iam todos para um lado
+   (medido: o nome a 5,5px do meio). A caixa fica com a metade do título
+   para o toque, que é também o que o título inteiro faz. */
+.section-title.sel-mes .selbox,.section-title.sel-mes .txnet{flex:1 1 0}
+.section-title.sel-mes .selbox{padding-left:0;padding-right:0}
+.section-title.sel-mes .selck{margin-left:2px}
+.section-title.sel-mes .txnet{text-align:right}
 /* o kebab de cada linha, discreto até se lhe tocar */
 .txkebab{margin:0 0 0 4px}
 .sel-fundo{position:fixed;left:0;right:0;bottom:0;z-index:45;display:flex;gap:8px;align-items:center;background:var(--card);border-top:1px solid var(--line);padding:8px calc(10px + var(--inset-right)) calc(8px + var(--inset-bottom)) calc(10px + var(--inset-left))}

@@ -392,9 +392,10 @@ function vColaboradores() {
 
 // O HTML da página "Conta e partilha": a conta e o id para dar a outros, a
 // ligação de partilha e os pedidos, o campo para adicionar uma ligação, a
-// lista de utilizadores ligados, os grupos partilhados (cloud/grupos.js:
-// gruposCard, que carrega depois deste ficheiro — daí o typeof), a segurança
-// e o apagar da conta. Os colaboradores vivem no menu (Pessoas →
+// lista de utilizadores ligados, uma linha que leva ao separador Grupos — os
+// grupos partilhados vivem lá, ao lado dos privados (cloud/grupos.js:
+// linhaDosGrupos, que carrega depois deste ficheiro — daí o typeof) —, a
+// segurança e o apagar da conta. Os colaboradores vivem no menu (Pessoas →
 // Colaboradores) e não têm aqui segunda porta. Sem sessão iniciada, mostra
 // apenas o convite para entrar. A partilha entre contas — a ligação, os
 // pedidos, os utilizadores ligados e os grupos — é do serviço Colaboradores:
@@ -438,7 +439,7 @@ function vCloud() {
     '<div class="toolbar u-mt-11px"><button class="btn danger" data-toca="dados" data-risco="destroi" data-click="CW.deleteAccount()">' +
     ic('trash', 15) + ' Apagar a minha conta</button></div>');
   var ligacao = ligacaoCard();
-  var grupos = partilha && typeof gruposCard === 'function' ? gruposCard() : '';
+  var grupos = partilha && typeof linhaDosGrupos === 'function' ? linhaDosGrupos() : '';
   return acc + (ligacao ? gap + ligacao : '') + (pedidos ? gap + pedidos : '') + (add ? gap + add : '') + (list ? gap + list : '') +
     (grupos ? gap + grupos : '') + '<div class="u-h-18px"></div>' + seg + gap + danger;
 }

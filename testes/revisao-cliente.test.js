@@ -362,16 +362,19 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     assert.equal(app.nomeDoTipo('xyz'), 'xyz');
   });
 
-  test('as Definições rendem cada subpágina com todos os serviços ligados e com todos desligados', () => {
+  test('as Definições rendem cada subpágina com todos os serviços ligados e com todos desligados, e o separador Grupos também', () => {
     const app = carregarApp();
     semear(app);
     for (const off of [[], SERVICOS_FICHEIROS.map((s) => s.id)]) {
       app.definirServicosDesligados(off);
-      for (const p of ['', 'defaults', 'cats', 'filtros', 'tags', 'groups', 'irs', 'dados']) {
+      for (const p of ['', 'defaults', 'cats', 'filtros', 'tags', 'irs', 'dados']) {
         app.setPage = p;
         const html = app.vSettings();
         assert.ok(typeof html === 'string' && html.length > 0, 'subpágina «' + p + '» com ' + off.length + ' desligados');
       }
+      // os Grupos saíram das Definições para um separador da base, que rende sempre
+      const grupos = app.vistaDoSeparador('groups')();
+      assert.match(grupos, /Novo grupo de imóveis/, 'o separador Grupos com ' + off.length + ' desligados');
     }
     app.definirServicosDesligados([]);
     app.setPage = 'defaults';

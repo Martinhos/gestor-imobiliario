@@ -1513,14 +1513,25 @@ function rememberPage() {
   try { localStorage.setItem(LS_PAGE, JSON.stringify({ tab: tab, set: setPage || '' })); } catch (e) {}
 }
 var _goSet = goSet;
-goSet = function (p) { _goSet(p); rememberPage(); };
+/* Navegar dentro das Definições, a lembrar a página. A subpágina antiga dos
+   Grupos passou a separador próprio: goSet('groups') — de um atalho, de uma
+   ação antiga — vai para o separador, e não para uma subpágina sem porta.
+   Recebe: p — a subpágina das Definições ('' volta ao menu).
+   Devolve: nada — navega e grava a página. */
+goSet = function (p) {
+  if (p === 'groups') return go('groups');
+  _goSet(p); rememberPage();
+};
 
-// No arranque, devolve o utilizador ao separador onde estava; ignora estados
-// guardados que já não existem e não faz nada quando era só o painel inicial.
-// Devolve: nada — repõe o separador e repinta (ou não mexe em nada).
+/* No arranque, devolve o utilizador ao separador onde estava; ignora estados
+   guardados que já não existem e não faz nada quando era só o painel inicial.
+   A página guardada antes de os Grupos serem separador ({tab:'settings',
+   set:'groups'}) abre o separador Grupos.
+   Devolve: nada — repõe o separador e repinta (ou não mexe em nada). */
 function restorePage() {
   var s = null;
   try { s = JSON.parse(localStorage.getItem(LS_PAGE) || 'null'); } catch (e) {}
+  if (s && s.tab === 'settings' && s.set === 'groups') s = { tab: 'groups', set: '' };
   if (!s || !s.tab || s.tab === 'dashboard' && !s.set) return;
   if (!TABS.some(function (t) { return t.id === s.tab; })) return;
   // um separador de um serviço desligado nesta conta não se restaura: fica-se no painel

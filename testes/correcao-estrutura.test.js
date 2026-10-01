@@ -237,10 +237,12 @@ describe('uma raiz só nas Definições', () => {
     app.CW.user = { id: 'EU', name: 'Eu', email: 'eu@x.pt' };
     app.setPage = '';
     const h = app.vSettings(), p = portas(h);
-    for (const x of ['tema', 'defaults', 'cats', 'irs', 'tags', 'groups', 'filtros', 'dados', 'cloud', 'ajuda', 'faq', 'novidades', 'legal']) {
+    for (const x of ['tema', 'defaults', 'cats', 'irs', 'tags', 'filtros', 'dados', 'cloud', 'ajuda', 'faq', 'novidades', 'legal']) {
       assert.ok(p.includes(x), 'a porta de «' + x + '»: ' + p.join(' '));
     }
-    for (const x of Object.keys(copia(app.SUBPAGE))) if (!['termos', 'privacidade'].includes(x)) assert.ok(p.includes(x), 'a subpágina «' + x + '» tem porta');
+    // os Grupos são um separador: a subpágina antiga não tem porta, e o caminho velho leva ao separador
+    assert.ok(!p.includes('groups'), 'sem a porta dos Grupos nas Definições');
+    for (const x of Object.keys(copia(app.SUBPAGE))) if (!['termos', 'privacidade', 'groups'].includes(x)) assert.ok(p.includes(x), 'a subpágina «' + x + '» tem porta');
     assert.equal(p.length, new Set(p).size, 'sem portas repetidas');
     assert.match(h, /CW\.editProfile\(\)/, 'o perfil');
     assert.match(h, /<span>Versão<\/span>/, 'e um cartão Sobre só');
@@ -258,7 +260,8 @@ describe('uma raiz só nas Definições', () => {
     const app = carregarApp();
     app.setPage = '';
     const p = portas(app.vSettings());
-    for (const x of ['tema', 'defaults', 'cats', 'irs', 'tags', 'groups', 'filtros', 'dados']) assert.ok(p.includes(x), x);
+    for (const x of ['tema', 'defaults', 'cats', 'irs', 'tags', 'filtros', 'dados']) assert.ok(p.includes(x), x);
+    assert.ok(!p.includes('groups'), 'os Grupos são um separador, não uma linha das Definições');
     assert.ok(!p.includes('cloud'), 'a conta é da nuvem');
     app.setPage = 'tema';
     assert.match(app.vSettings(), /setTheme\('dark'\)/, 'a subpágina do Tema é da base');

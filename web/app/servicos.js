@@ -80,10 +80,12 @@ function servicosDesligados(){return _servicosDesligados.slice()}
    Devolve: true se pode. */
 function separadorLigado(tab){const s=servicoDoSeparador(tab);return !s||servicoLigado(s)}
 /* O primeiro separador que abre nesta conta, pela ordem do menu: para onde
-   se vai quando o separador onde se estava ficou desligado.
+   se vai quando o separador onde se estava ficou desligado. Só os dos
+   serviços contam: os Grupos também são da base e vêm antes das Definições
+   no menu, mas com tudo desligado é às Definições que se quer chegar.
    Devolve: um id de separador; 'settings' quando está tudo desligado. */
 function primeiroSeparadorLigado(){
-  const t=(typeof TABS!=='undefined'?TABS:[]).find(x=>separadorLigado(x.id));
+  const t=(typeof TABS!=='undefined'?TABS:[]).find(x=>servicoDe(x.id)&&servicoLigado(x.id));
   return t?t.id:'settings';
 }
 /* A lista de desligados mais os que requerem um desligado, transitivamente:
@@ -159,11 +161,14 @@ function registarServico(m){
   return servicoLigado(m.id);
 }
 /* A vista de um separador: a registada pelo serviço, se ele está ligado; as
-   Definições são a base e resolvem sempre para vSettings.
+   Definições e os Grupos são a base e resolvem sempre (vSettings, vGrupos) —
+   os grupos são filtros de toda a app, e só a parte partilhada é do serviço
+   Colaboradores.
    Recebe: tab — o id do separador.
    Devolve: a função da vista, ou null (sem registo, ou serviço desligado). */
 function vistaDoSeparador(tab){
   if(tab==='settings')return funcaoDeTopo('vSettings');
+  if(tab==='groups')return funcaoDeTopo('vGrupos');
   const r=REGISTO.vistas[tab];
   if(!r||!servicoLigado(r.servico))return null;
   return funcaoDeTopo(r.nome);
