@@ -15,6 +15,7 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { carregarApp, limpar, repor } from './arnes.js';
 import { janelasFalsas } from './lib/dom.js';
+import { conferir, EX } from './lib/formularios.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const le = (p) => fs.readFileSync(path.join(AQUI, '..', p), 'utf8');
@@ -22,63 +23,10 @@ const le = (p) => fs.readFileSync(path.join(AQUI, '..', p), 'utf8');
 const app = carregarApp();
 afterEach(() => repor(app));
 
-/* ------------------------------------------------------------ os campos */
-
-/* Os campos de texto de um formulário, lidos do HTML: id, tipo, placeholder
-   e o rótulo (o texto do <label> que embrulha o campo, sem o asterisco dos
-   obrigatórios). Ficam de fora o que não é texto — as caixas, os ficheiros,
-   as datas, as horas, os meses, os inputs escondidos dos sel() e a pesquisa.
-   Recebe: html — o corpo do formulário.
-   Devolve: [{id, type, placeholder, rotulo}]. */
-function campos(html) {
-  const out = [];
-  const re = /<(input|textarea)\b([^>]*)>/g;
-  let m;
-  while ((m = re.exec(html))) {
-    const attrs = m[2];
-    const attr = (n) => { const x = new RegExp('\\b' + n + '="([^"]*)"').exec(attrs); return x ? x[1] : ''; };
-    const type = attr('type') || 'text';
-    if (m[1] === 'input' && !['text', 'email', 'tel'].includes(type)) continue;
-    const antes = html.slice(0, m.index);
-    const abre = antes.lastIndexOf('<label'), fecha = antes.lastIndexOf('</label>');
-    let rotulo = '';
-    if (abre > fecha) rotulo = antes.slice(antes.indexOf('>', abre) + 1).replace(/<[^>]+>/g, '').replace(/\*/g, '').replace(/\s+/g, ' ').trim();
-    out.push({ id: attr('id'), type, placeholder: attr('placeholder'), rotulo });
-  }
-  return out;
-}
-
-/* Confere um formulário contra a sua validação: cada obrigatório sem marca
-   de opcional; cada campo com exemplo mantém o exemplo e tem o rótulo
-   marcado; todos os outros dizem «Opcional» no placeholder.
-   Recebe: nome — para as mensagens; html — o corpo; o — {obrigatorios: ids,
-   exemplos: {id: placeholder esperado, ou true para «qualquer, menos
-   Opcional»}, deixados: prefixos de ids que não se julgam (linhas sem rótulo)}.
-   Devolve: os campos lidos, para quem quiser olhar mais. */
-function conferir(nome, html, o) {
-  const cs = campos(html);
-  const exemplos = o.exemplos || {}, deixados = o.deixados || [];
-  assert.ok(cs.length, nome + ': há campos de texto');
-  for (const id of o.obrigatorios) assert.ok(cs.some((c) => c.id === id), nome + ': o obrigatório ' + id + ' está no formulário');
-  for (const id of Object.keys(exemplos)) assert.ok(cs.some((c) => c.id === id), nome + ': o campo com exemplo ' + id + ' está no formulário');
-  for (const c of cs) {
-    const opc = /\(opcional\)|, opcional\)/.test(c.rotulo);
-    if (o.obrigatorios.includes(c.id)) {
-      assert.notEqual(c.placeholder, 'Opcional', nome + ': ' + c.id + ' é obrigatório e diz «Opcional»');
-      assert.ok(!opc, nome + ': ' + c.id + ' é obrigatório e o rótulo diz «opcional»');
-      continue;
-    }
-    if (deixados.some((p) => c.id.startsWith(p))) continue;
-    if (c.id in exemplos) {
-      if (exemplos[c.id] === true) assert.ok(c.placeholder && c.placeholder !== 'Opcional', nome + ': ' + c.id + ' mantém um exemplo');
-      else assert.equal(c.placeholder, exemplos[c.id], nome + ': ' + c.id + ' mantém o exemplo');
-      assert.ok(opc, nome + ': ' + c.id + ' tem exemplo e o rótulo «' + c.rotulo + '» não diz «(opcional)»');
-      continue;
-    }
-    assert.equal(c.placeholder, 'Opcional', nome + ': ' + c.id + ' («' + c.rotulo + '») é opcional e o placeholder é «' + c.placeholder + '»');
-  }
-  return cs;
-}
+/* Os campos e a regra (o asterisco, o «Opcional», o «Ex: ») vivem em
+   testes/lib/formularios.js, partilhados com os testes dos outros
+   formulários. Aqui, um exemplo «true» quer dizer «um exemplo qualquer, que
+   comece por Ex:» — o texto do exemplo é da ficha, não do teste. */
 
 // uma base com um imóvel de arrendamento meu, um inquilino e um proprietário
 function base() {
@@ -95,14 +43,14 @@ describe('«Opcional» nos formulários', () => {
     app.propModal();
     const cs = conferir('imóvel', abertas[0].b, {
       obrigatorios: ['p_name'],
-      exemplos: { p_freguesiaCodigo: '110623', p_fraction: 'A', p_floor: '2.º', p_registry: '15937', p_postalCode: '3130-000',
-        p_matrix: '4651', p_licence: 'Alvará n.º 26/2013', p_energyCert: 'SCE395442330', p_energyClass: 'D' },
+      exemplos: { p_freguesiaCodigo: true, p_fraction: true, p_floor: true, p_registry: true, p_postalCode: true,
+        p_matrix: true, p_licence: true, p_energyCert: true, p_energyClass: true },
       deixados: ['p_share_', 'p_room_', 'fn_'],
     });
     for (const id of ['p_addr', 'p_value', 'p_purchase', 'p_vpt', 'p_imi', 'p_condominio', 'p_seguro', 'p_listing', 'p_notes', 'p_street', 'p_locality']) {
       assert.equal(cs.find((c) => c.id === id).placeholder, 'Opcional', id);
     }
-    assert.match(abertas[0].b, /Nome <span class="req">\*<\/span><input id="p_name"[^>]*placeholder="T2 Lisboa"/, 'o nome mantém o asterisco e o exemplo');
+    assert.match(abertas[0].b, /Nome <span class="req">\*<\/span><input id="p_name"[^>]*placeholder="Ex: T2 Lisboa"/, 'o nome mantém o asterisco e o exemplo, com «Ex: »');
   });
 
   test('hipoteca: o capital é obrigatório; taxas, prazo, banco e finalidade dizem «Opcional» — nas três formas de taxa', () => {
@@ -116,7 +64,7 @@ describe('«Opcional» nos formulários', () => {
       assert.ok(ids.includes('l_rate_' + l.id) || tipo === 'variavel', tipo + ': tem o campo da taxa');
       if (tipo === 'mista') assert.ok(ids.includes('l_fy_' + l.id) && ids.includes('l_ffix_' + l.id) && ids.includes('l_fvar_' + l.id));
       if (tipo === 'variavel') assert.ok(ids.includes('l_eur_' + l.id) && ids.includes('l_spr_' + l.id));
-      assert.equal(cs.find((c) => c.id === 'l_out_' + l.id).placeholder, '150000', 'o capital fica como estava');
+      assert.equal(cs.find((c) => c.id === 'l_out_' + l.id).placeholder, EX + '150000', 'o capital mostra o exemplo com «Ex: »');
       repor(app);
     }
   });
@@ -126,8 +74,8 @@ describe('«Opcional» nos formulários', () => {
     app.ctModal();
     const cs = conferir('contrato', abertas[0].b, {
       obrigatorios: ['c_rent'],
-      exemplos: { c_name: true, c_tax: true, c_inc: true, c_iban: 'PT50 0000 0000 0000 0000 0000 0',
-        c_omail: 'nome@exemplo.pt', c_ophone: '+351 912 000 000', c_tmail: 'nome@exemplo.pt', c_tphone: '+351 912 000 000' },
+      exemplos: { c_name: true, c_tax: true, c_inc: true, c_iban: true,
+        c_omail: true, c_ophone: true, c_tmail: true, c_tphone: true },
       deixados: ['invn_', 'invq_', 'keyn_', 'keyq_', 'fn_'],
     });
     for (const id of ['c_day', 'c_dayTo', 'c_dep', 'c_adv', 'c_notes']) assert.equal(cs.find((c) => c.id === id).placeholder, 'Opcional', id);
@@ -137,7 +85,7 @@ describe('«Opcional» nos formulários', () => {
     app.cForm.fisco.estado = 'declarado'; app.cForm.end = '2030-01-01';
     conferir('contrato · declaração', app.fiscoSect(), {
       obrigatorios: [],
-      exemplos: { c_fnum: '1234567', c_fces: 'Ex.: fim do prazo, acordo, denúncia' },
+      exemplos: { c_fnum: true, c_fces: true },
     });
   });
 
@@ -149,7 +97,7 @@ describe('«Opcional» nos formulários', () => {
     assert.match(abertas[0].b, /Descrição <span class="req">\*<\/span>/);
     assert.match(abertas[0].b, /Montante \(€\) <span class="req">\*<\/span>/);
     app.txModal({ kind: 'owed' });
-    conferir('dívida recebida', abertas[1].b, { obrigatorios: ['t_label', 't_amount'], exemplos: { t_creditor: 'Pai, amigo, empreiteiro…' }, deixados: ['t_sp_', 't_pp_'] });
+    conferir('dívida recebida', abertas[1].b, { obrigatorios: ['t_label', 't_amount'], exemplos: { t_creditor: true }, deixados: ['t_sp_', 't_pp_'] });
     // uma renda com contrato traz a secção do IRS
     app.db.contracts = [app.normContract({ id: 'C1', propertyId: 'P1', rent: 500, tenantIds: ['I1'], start: '2020-01-01' })];
     app.txModal({ kind: 'income', propId: 'P1', ctId: 'C1' });
@@ -169,7 +117,7 @@ describe('«Opcional» nos formulários', () => {
   test('modelo: o nome do modelo é opcional e mantém o exemplo', () => {
     const abertas = base();
     app.txModal({ kind: 'expense', modo: 'tpl' });
-    conferir('modelo', abertas[0].b, { obrigatorios: ['t_label', 't_amount'], exemplos: { t_tplName: 'Ex.: Renda mensal T2' }, deixados: ['t_sp_', 't_pp_'] });
+    conferir('modelo', abertas[0].b, { obrigatorios: ['t_label', 't_amount'], exemplos: { t_tplName: true }, deixados: ['t_sp_', 't_pp_'] });
   });
 
   test('inquilino: só o nome é obrigatório, e ganhou o asterisco; CC, país, morada e notas guardam o exemplo', () => {
@@ -177,7 +125,7 @@ describe('«Opcional» nos formulários', () => {
     app.personModal('tenant');
     const cs = conferir('inquilino', abertas[0].b, {
       obrigatorios: ['pe_name'],
-      exemplos: { pe_cc: '00000000 0 ZZ0', pe_pais: 'Só se não tem NIF português', pe_addr: 'Rua, número, código postal, localidade', pe_notes: 'Fiador, referências, observações…' },
+      exemplos: { pe_cc: true, pe_pais: true, pe_addr: true, pe_notes: true },
       deixados: ['fn_'],
     });
     for (const id of ['pe_phone', 'pe_mail', 'pe_nif', 'pe_nat']) assert.equal(cs.find((c) => c.id === id).placeholder, 'Opcional', id);
@@ -189,7 +137,7 @@ describe('«Opcional» nos formulários', () => {
     app.personModal('owner');
     const cs = conferir('proprietário', abertas[0].b, {
       obrigatorios: ['pe_name'],
-      exemplos: { pe_cc: '00000000 0 ZZ0', pe_pais: 'Só se não tem NIF português', pe_addr: 'Rua, número, código postal, localidade' },
+      exemplos: { pe_cc: true, pe_pais: true, pe_addr: true },
     });
     assert.ok(!cs.some((c) => c.id === 'pe_notes'), 'sem notas');
   });
@@ -198,8 +146,8 @@ describe('«Opcional» nos formulários', () => {
     const abertas = base();
     app.visitModal();
     conferir('visita', abertas[0].b, {
-      obrigatorios: ['vi_nomes'],
-      exemplos: { vi_contacto: 'Telemóvel ou email', vi_notas: 'Primeiras impressões, perguntas que fizeram, o que ficou combinado…' },
+      obrigatorios: ['vi_nomes', 'vi_date'],
+      exemplos: { vi_contacto: true, vi_notas: true },
     });
     assert.match(abertas[0].b, /Quem vem <span class="req">\*<\/span>/);
     assert.match(abertas[0].b, /Data <span class="req">\*<\/span><input id="vi_date" type="date"/);
@@ -238,7 +186,7 @@ describe('os formulários da nuvem', () => {
     a.document.getElementById = (id) => (id === 'pe_phone' ? inp : id === 'cw_cc' ? null : a.document.createElement('div'));
     a.injectPhoneCountry();
     assert.equal(lab.firstChild.nodeValue, 'Telemóvel (opcional)');
-    assert.equal(inp.placeholder, '912 345 678');
+    assert.equal(inp.placeholder, EX + '912 345 678');
     assert.equal(inp.value, '912 345 678', 'o indicativo saiu para o seletor');
     // segunda passagem não duplica o «(opcional)»
     a.document.getElementById = (id) => (id === 'pe_phone' ? inp : id === 'cw_cc' ? null : a.document.createElement('div'));

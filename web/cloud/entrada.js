@@ -67,6 +67,26 @@ function passProblem(p) {
   return '';
 }
 
+/* Os campos do ecrã de entrada, cada um com o seu rótulo à vista. Eram só
+   placeholders a fazer de rótulo («Email», «Palavra-passe»): mal se escrevia
+   a primeira letra, o campo deixava de dizer o que era. O que o guardar
+   recusa vazio (o email e as palavras-passe; o servidor recusa-os também)
+   leva o asterisco vermelho; o nome do registo é opcional e mostra um
+   exemplo. As palavras-passe não levam exemplo. Os ids, os type e os
+   autocomplete ficam como estavam — é por eles que o gestor de
+   palavras-passe e o submitAuth acham os campos.
+   Recebe: login — verdadeiro no «Entrar», falso no «Criar conta».
+   Devolve: o HTML dos campos (texto), com a caixa dos requisitos da
+   palavra-passe no registo. */
+function camposDaEntrada(login) {
+  return (login ? '' : '<label>Nome (opcional)<input id="cwa_name" placeholder="Ex: Ana Rodrigues" autocomplete="name"></label>') +
+    '<label>Email <span class="req">*</span><input id="cwa_email" type="email" placeholder="Ex: ana@exemplo.pt" autocomplete="email"></label>' +
+    '<label>Palavra-passe <span class="req">*</span><input id="cwa_pass" type="password" autocomplete="' + (login ? 'current-password' : 'new-password') + '"></label>' +
+    (login ? '' :
+      '<div id="cwa_passreq" class="small u-m-n4px-0-0 u-d-flex u-fxw-wrap u-g-3px-12px"></div>' +
+      '<label>Confirmar palavra-passe <span class="req">*</span><input id="cwa_pass2" type="password" autocomplete="new-password"></label>');
+}
+
 /* Desenha o ecrã de entrada por cima de tudo — login ou registo, conforme
    CW.showAuthMode — com msg como erro opcional no topo (ou como nota, quando
    quem chega vem por uma ligação de convite e ainda não errou nada). No
@@ -103,16 +123,12 @@ function showAuth(msg, nota) {
     '<div class="small">' + (login ? 'Inicia sessão para continuar' : 'Cria a tua conta') + '</div></div></div>' +
     (msg ? '<div class="hint u-m-8px-0 ' + (nota ? 'u-c-v-ink u-bl-3px-solid-v-accent u-pl-10px' : 'u-c-v-danger') + '" id="cwa_msg">' + esc(msg) + '</div>' : '') +
     '<div class="form u-mt-12px u-d-grid u-g-10px">' +
-    (login ? '' : '<input id="cwa_name" placeholder="Nome" autocomplete="name">') +
-    '<input id="cwa_email" type="email" placeholder="Email" autocomplete="email">' +
-    '<input id="cwa_pass" type="password" placeholder="Palavra-passe" autocomplete="' + (login ? 'current-password' : 'new-password') + '">' +
+    camposDaEntrada(login) +
     (login ? '' :
-      '<div id="cwa_passreq" class="small u-m-n4px-0-0 u-d-flex u-fxw-wrap u-g-3px-12px"></div>' +
-      '<input id="cwa_pass2" type="password" placeholder="Confirmar palavra-passe" autocomplete="new-password">' +
       '<label class="check u-ai-flex-start u-g-9px u-mt-2px">' +
       '<input type="checkbox" id="cwa_terms" class="u-mt-2px">' +
       '<span class="small">Li e aceito os <a href="#" class="u-c-v-accent" data-click="CW.readDoc(event,\'termos\')">Termos e Condições</a> ' +
-      'e a <a href="#" class="u-c-v-accent" data-click="CW.readDoc(event,\'privacidade\')">Política de Privacidade</a>.</span></label>') +
+      'e a <a href="#" class="u-c-v-accent" data-click="CW.readDoc(event,\'privacidade\')">Política de Privacidade</a>. <span class="req">*</span></span></label>') +
     '<div id="cwa_err" class="small u-c-v-danger"></div>' +
     '<button class="btn primary u-w-100pc u-jc-center" data-click="CW.submitAuth()">' + (login ? 'Entrar' : 'Criar conta') + '</button>' +
     '<button class="btn u-w-100pc u-jc-center" data-click="CW.toggleAuth()">' +
@@ -388,8 +404,8 @@ function fecharRepor() {
       '<div class="card u-maxw-420px u-w-100pc u-p-24px u-m-auto">' +
       '<div class="title u-fs-18px u-mb-12px">Palavra-passe nova</div>' +
       '<div class="form">' +
-      '<label>Nova palavra-passe<input id="rp_1" type="password" autocomplete="new-password"></label>' +
-      '<label>Repete-a<input id="rp_2" type="password" autocomplete="new-password"></label>' +
+      '<label>Nova palavra-passe <span class="req">*</span><input id="rp_1" type="password" autocomplete="new-password"></label>' +
+      '<label>Repete-a <span class="req">*</span><input id="rp_2" type="password" autocomplete="new-password"></label>' +
       '<div class="hint">8+ caracteres, com maiúscula, minúscula, número e símbolo.</div>' +
       '<div id="rp_err" class="small u-c-v-danger"></div></div>' +
       '<div class="toolbar u-mt-14px u-d-flex u-g-8px u-jc-flex-end">' +

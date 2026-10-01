@@ -33,7 +33,7 @@ window.__fileLoaded=function(name,text){
 // Devolve: nada — abre o modal; o Repor chama bkLoad com o que lá estiver.
 function bkPasteBox(){
   openModal('Colar cópia de segurança',`<div class="form">
-    <textarea id="bkText" class="u-minh-130px u-font-13px-1p5-ui-monospace-menlo-monospace" placeholder='{"properties":[…]}'></textarea></div>`,
+    <label>O conteúdo da cópia (.json) <span class="req">*</span><textarea id="bkText" class="u-minh-130px u-font-13px-1p5-ui-monospace-menlo-monospace" placeholder="Ex: {&quot;properties&quot;:[…],&quot;transactions&quot;:[…]}"></textarea></label></div>`,
     `<button class="btn" data-click="closeModal()">Cancelar</button><button class="btn primary" data-click="bkReporColado()">Repor</button>`);
 }
 /* Repõe a cópia colada na caixa do bkPasteBox. Era a ação do botão Repor, escrita

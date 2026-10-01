@@ -35,7 +35,7 @@ var AVISOS = [
         titulo: 'Um grupo de casas partilha-se como grupo',
         afeta: ['partilha', 'imoveis'],
         itens: [
-          'No separador Grupos, um grupo de imóveis que já tens passa a grupo partilhado com um toque em «Partilhar» — ou cria-se um novo: quem está no grupo é comproprietário de todas as casas dele — vê e edita contratos, movimentos e pessoas, e entra nas quotas — e uma casa que entre no grupo mais tarde chega logo a toda a gente. Antes partilhava-se casa a casa.',
+          'No separador Grupos, cada grupo de imóveis que já tens tem o botão «Partilhar» — ou cria-se um novo. Se um grupo ainda não se pode partilhar (está vazio, ou os imóveis são de outra pessoa), a app diz porquê e leva-te a editá-lo. Quem está no grupo é comproprietário de todas as casas dele — vê e edita contratos, movimentos e pessoas, e entra nas quotas — e uma casa que entre no grupo mais tarde chega logo a toda a gente. Antes partilhava-se casa a casa.',
           'Entra-se por uma ligação do dono do grupo, que vale sete dias e serve várias pessoas — mas ninguém entra sem o dono aceitar. Quem abre a ligação pede para entrar; o pedido aparece ao dono em «Pedidos por responder», no sino e na janela do grupo, com Aceitar e Recusar. Uma ligação enviada à pessoa errada já não dá acesso a nada.',
           'O dono vê quem entrou, remove, roda ou desativa a ligação, e apaga o grupo (as casas ficam). Cada membro pode pôr no grupo casas suas, e tirá-las; sair do grupo leva as casas que pôs. O cartão «Grupos partilhados», no cimo do separador Grupos, lista os teus, os em que entraste e os pedidos à espera; o separador leva no menu quantos pedidos esperam a tua resposta.',
         ],
@@ -47,6 +47,16 @@ var AVISOS = [
           'Património, Pessoas, Finanças e Análise passam a recolher-se com um toque no título, e a app lembra-se do que deixaste recolhido neste aparelho. A secção onde estás abre-se sozinha, e uma secção recolhida mostra no título os avisos que tem lá dentro.',
           'A Visão geral e o Calendário ficam ao cimo, sem secção, e as Definições ao fundo. Os Grupos saíram das Definições e passaram a separador próprio, em Património, ao lado dos Imóveis.',
           'Há uma secção nova, Análise, com as Projeções e a Avaliação. As Finanças ficam com os Movimentos, os Planeados, os Créditos e a Declaração. A Avaliação e a Declaração ganharam ícones próprios.',
+        ],
+      },
+      {
+        titulo: 'Os formulários dizem o que é obrigatório',
+        afeta: ['app', 'imoveis', 'contratos', 'movimentos', 'conta'],
+        itens: [
+          'Em todos os formulários, os campos que não podem ficar em branco têm um asterisco vermelho — o nome de um grupo, de um imóvel, de uma pessoa, a renda, o montante de um movimento. Os outros dizem «Opcional».',
+          'Os exemplos dentro dos campos começam por «Ex: » e são exemplos a sério; o que antes era uma instrução dentro do campo passou para o rótulo ou para uma nota por baixo, e os valores que contam quando deixas em branco (o imposto, o aumento, o prazo da hipoteca) estão escritos.',
+          'O ecrã de entrar e de criar conta tem os nomes dos campos à vista, em vez de desaparecerem ao escrever.',
+          'O capital em dívida de uma hipoteca passa a ser pedido também ao editar.',
         ],
       },
       {

@@ -1419,3 +1419,20 @@ body.sel-on .wrap{padding-bottom:calc(120px + var(--inset-bottom))}
 #raiz#raiz .u-z-1{z-index:1}
 #raiz#raiz .u-z-20{z-index:20}
 /* ========================= FIM DOS UTILITÁRIOS ========================= */
+
+/* folha 2.2 (formularios-ex): o asterisco vermelho dos obrigatórios fica na
+   linha do rótulo. O <label> é uma grelha de uma coluna, e o texto e o
+   <span class="req"> caíam em duas linhas («Nome» e, por baixo, «*»): com o
+   asterisco, a primeira linha tem duas colunas e o campo ocupa a linha toda. */
+label:has(>.req){grid-template-columns:minmax(0,max-content) 1fr;column-gap:4px}
+label:has(>.req)>:not(.req){grid-column:1/-1}
+
+/* folha 2.4 (formularios-ex): um campo que escreve em maiúsculas (o id de
+   outro utilizador) não grita o exemplo — o «Ex: A7KQ2MPX» fica como foi
+   escrito, e não «EX: A7KQ2MPX». */
+.u-tt-uppercase::placeholder{text-transform:none}
+/* folha 2.4: um rótulo com marcas lá dentro («Escreve <b>APAGAR</b> para
+   confirmar») vai num <span class="rotulo-txt">, para o texto ser um só
+   item da grelha do rótulo e o asterisco ficar ao lado dele — e não um
+   bocado de texto por linha, com o asterisco no fim. */
+label:has(>.req)>.rotulo-txt{grid-column:1}

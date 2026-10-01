@@ -115,10 +115,10 @@ function vProjections(){
   const s=db.settings,{rows,act,debtY,base}=projRows(projProp||null),n=rows.length;
   const head=anaPanelPadrao('projSel',projProp,'onProjProp',`
     <div class="row3 u-mt-10px">
-    <label>Horizonte (anos)<input type="text" inputmode="numeric" value="${s.years}" data-change="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label>
-    <label>Aumento anual (%)<input type="text" inputmode="decimal" value="${dec(s.growth)}" data-change="setSet('growth',numTaxa(this.value))"></label>
-    <label>Inflação das despesas (%)<input type="text" inputmode="decimal" value="${dec(s.inflation)}" data-change="setSet('inflation',numTaxa(this.value))"></label></div>
-    <div class="hint u-mt-9px">Cada contrato tem o seu aumento. Em Portugal há um coeficiente máximo publicado todos os anos.</div>`);
+    <label>Horizonte (anos)<input type="text" inputmode="numeric" value="${s.years}" placeholder="Opcional" data-change="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label>
+    <label>Aumento anual (%)<input type="text" inputmode="decimal" value="${dec(s.growth)}" placeholder="Opcional" data-change="setSet('growth',numTaxa(this.value))"></label>
+    <label>Inflação das despesas (%)<input type="text" inputmode="decimal" value="${dec(s.inflation)}" placeholder="Opcional" data-change="setSet('inflation',numTaxa(this.value))"></label></div>
+    <div class="hint u-mt-9px">Cada contrato tem o seu aumento. Em Portugal há um coeficiente máximo publicado todos os anos. Em branco: 1 ano, e 0 % de aumento e de inflação.</div>`);
   /* a saída do vazio leva aos Contratos ou aos Imóveis: com esse serviço
      desligado nesta conta o botão não se escreve, e a frase diz quem o liga */
   if(!act.length)return head+`<div class="empty u-mt-14px"><b>Nenhum contrato ativo</b>As projeções partem das rendas contratadas.

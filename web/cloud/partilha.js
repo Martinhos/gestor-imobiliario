@@ -268,8 +268,8 @@ function convidarCard() {
   } else {
     var grupos = typeof gOpts === 'function' ? gOpts('prop') : [];
     form = '<div class="form">' +
-      '<label>Cargo' + sel('cw_inv_cargo', roles[0].id, roles.map(function (r) { return { v: r.id, label: r.name }; }), '', 'rascunho') + '</label>' +
-      '<div><div class="flabel">Imóveis</div><div class="list u-g-7px">' + meus.map(function (p) {
+      '<label>Cargo <span class="req">*</span>' + sel('cw_inv_cargo', roles[0].id, roles.map(function (r) { return { v: r.id, label: r.name }; }), '', 'rascunho') + '</label>' +
+      '<div><div class="flabel">Imóveis <span class="req">*</span></div><div class="list u-g-7px">' + meus.map(function (p) {
         return '<label class="check"><input type="checkbox" id="cw_inv_h_' + p.id + '"><span class="u-minw-0"><b>' + esc(p.name || 'Sem nome') + '</b>' +
           (p.address ? ' <span class="small">' + esc(p.address) + '</span>' : '') + '</span></label>';
       }).join('') + '</div>' +
@@ -277,7 +277,7 @@ function convidarCard() {
         ? '<div class="u-mt-9px">' + sel('cw_inv_grupo', '', [{ v: '', label: 'Escolher pelo grupo…' }].concat(grupos), 'cwInvGrupo', 'rascunho') +
           '<div class="hint u-mt-6px">Imóveis que juntares ao grupo depois não entram — edita o colaborador.</div></div>'
         : '') + '</div>' +
-      '<label>Nota para ti (opcional)<input id="cw_inv_label" maxlength="60" placeholder="Ex.: para a Ana, contabilidade" autocomplete="off"></label>' +
+      '<label>Nota para ti (opcional)<input id="cw_inv_label" maxlength="60" placeholder="Ex: Para a Ana, contabilidade" autocomplete="off"></label>' +
       '<div class="toolbar"><button class="btn primary" data-toca="dados" data-click="CW.criarConvite()">' + ic('key', 15) + ' Criar ligação de convite</button></div>' +
       '<div class="hint">Vale 7 dias e uma só utilização. Quem a abrir entra (ou cria conta) e fica com o cargo nesses imóveis — sem quota-parte.</div></div>';
   }
@@ -419,8 +419,9 @@ function vCloud() {
       ? '<div class="hint u-mt-11px">Dá este id a outro utilizador para ele te adicionar — ou adiciona tu o id dele em baixo. Depois de aceite, cada um escolhe que casas quer partilhar.</div>'
       : '<div class="hint u-mt-11px">' + esc(hintServicoDesligado('colaboradores')) + ' A partilha entre contas fica disponível quando o suporte o ligar.</div>'));
   var add = !partilha ? '' : card('Ligar a outro utilizador', 'Escreve o id que ele te deu',
-    '<div class="u-d-flex u-g-9px">' +
-    '<input id="cw_peer" class="u-fx-1 u-tt-uppercase u-ff-monospace u-ls-2px" placeholder="Ex.: A7KQ2MPX" maxlength="8">' +
+    '<div class="u-d-flex u-g-9px u-ai-end">' +
+    '<label class="u-fx-1 u-minw-0">O id dele <span class="req">*</span>' +
+    '<input id="cw_peer" class="u-tt-uppercase u-ff-monospace u-ls-2px" placeholder="Ex: A7KQ2MPX" maxlength="8" autocomplete="off"></label>' +
     '<button class="btn primary u-fx-0-0-auto" data-toca="dados" data-click="CW.addConn()">Adicionar</button></div>');
   var list = !partilha ? '' : conns.length
     ? '<div class="section-title">Utilizadores ligados</div><div class="list u-g-10px">' + conns.map(connCard).join('') + '</div>'
@@ -648,11 +649,11 @@ CW.passwordModal = function () {
   var body = '<div class="form">' +
     '<div class="hint">Ao mudar a palavra-passe, todos os outros aparelhos têm de iniciar sessão de novo. ' +
     'Este continua ligado.</div>' +
-    '<label>Palavra-passe atual<input id="cw_pw_cur" type="password" autocomplete="current-password" ' +
-    'placeholder="deixa vazio se entras com Google"></label>' +
-    '<label>Nova palavra-passe<input id="cw_pw_new" type="password" autocomplete="new-password"></label>' +
+    '<label>Palavra-passe atual<input id="cw_pw_cur" type="password" autocomplete="current-password" placeholder="Opcional"></label>' +
+    '<div class="hint u-m-n4px-0-0">Só fica vazia se entras com o Google.</div>' +
+    '<label>Nova palavra-passe <span class="req">*</span><input id="cw_pw_new" type="password" autocomplete="new-password"></label>' +
     '<div id="cw_pw_req" class="small u-m-n4px-0-0 u-d-flex u-fxw-wrap u-g-3px-12px"></div>' +
-    '<label>Confirmar nova palavra-passe<input id="cw_pw_new2" type="password" autocomplete="new-password"></label>' +
+    '<label>Confirmar nova palavra-passe <span class="req">*</span><input id="cw_pw_new2" type="password" autocomplete="new-password"></label>' +
     '<div id="cw_pw_err" class="small u-c-v-danger"></div></div>';
   openModal('Mudar palavra-passe', body,
     '<button class="btn" data-click="closeModal()">Cancelar</button>' +
@@ -723,8 +724,9 @@ CW.deleteAccount = function () {
     'e todas as tuas ligações a outros utilizadores.</div>' +
     '<div class="hint">Se quiseres guardar os teus registos, cancela e faz primeiro uma cópia de segurança ' +
     'em Definições → Importar e cópias → Guardar cópia.</div>' +
-    '<label>Escreve <b>APAGAR</b> para confirmar<input id="cw_del_c" class="u-tt-uppercase" placeholder="APAGAR" autocomplete="off"></label>' +
-    '<label>Palavra-passe<input id="cw_del_p" type="password" placeholder="deixa vazio se entras com Google" autocomplete="current-password"></label>' +
+    '<label><span class="rotulo-txt">Escreve <b>APAGAR</b> para confirmar</span> <span class="req">*</span><input id="cw_del_c" class="u-tt-uppercase" placeholder="APAGAR" autocomplete="off"></label>' +
+    '<label>Palavra-passe<input id="cw_del_p" type="password" placeholder="Opcional" autocomplete="current-password"></label>' +
+    '<div class="hint u-m-n4px-0-0">Só fica vazia se entras com o Google.</div>' +
     '<div id="cw_del_e" class="small u-c-v-danger"></div></div>';
   openModal('Apagar a minha conta', body,
     '<button class="btn" data-click="closeModal()">Cancelar</button>' +

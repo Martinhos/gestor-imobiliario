@@ -113,10 +113,13 @@ function rich(s){
 /* caixas de texto simples; o que estava guardado com HTML antigo é convertido em texto ao editar
    Recebe: label — o rótulo a mostrar por cima (texto; pode ser vazio); id — o id a dar ao
    <textarea>; value — o texto guardado (pode trazer HTML antigo); ph (opcional) — o
-   placeholder ("Escreve aqui…" por omissão).
+   placeholder: «Opcional» (o de omissão: as notas nunca são obrigatórias) ou
+   um exemplo, com ou sem o «Ex: » à frente — sai sempre «Ex: <exemplo>».
+   Era «Escreve aqui…», uma instrução no lugar de um exemplo.
    Devolve: o HTML do campo (texto): um <label> com o <textarea> lá dentro. */
 function richEditor(label,id,value,ph){
-  return `<label>${label||''}<textarea id="${id}" placeholder="${esc(ph||'Escreve aqui…')}">${esc(richToText(value||''))}</textarea></label>`;
+  const ex=ph&&ph!=='Opcional'?String(ph).replace(/^Ex: /,''):'';
+  return `<label>${label||''}<textarea id="${id}" ${ex?`placeholder="Ex: ${esc(ex)}"`:'placeholder="Opcional"'}>${esc(richToText(value||''))}</textarea></label>`;
 }
 /* HTML antigo → texto simples: itens de lista viram "• ", blocos viram quebras de
    linha, as restantes marcas caem e as entidades são descodificadas. Texto sem

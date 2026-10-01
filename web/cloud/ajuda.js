@@ -109,13 +109,19 @@ function tutoriaisNaAjuda() {
 // Devolve: nada — abre o modal.
 CW.newTicket = function (kind) {
   var problema = kind === 'problema';
+  /* os dois campos são obrigatórios (o sendTicket recusa-os vazios); os
+     placeholders são exemplos, e o que era instrução («O que estavas a
+     fazer…») passou para a nota debaixo da caixa */
   var body = '<div class="form">' +
-    '<label>Assunto<input id="tk_s" maxlength="140" placeholder="' +
-    (problema ? 'Ex.: o gráfico não aparece' : 'Ex.: poder marcar rendas em atraso') + '" autocomplete="off"></label>' +
-    '<label>' + (problema ? 'O que aconteceu' : 'A tua ideia') +
-    '<textarea id="tk_b" class="u-minh-130px" maxlength="4000" placeholder="' +
-    (problema ? 'O que estavas a fazer, o que esperavas e o que aconteceu.' : 'O que gostavas de conseguir fazer, e porquê.') +
-    '"></textarea></label>' +
+    (problema
+      ? '<label>Assunto <span class="req">*</span><input id="tk_s" maxlength="140" placeholder="Ex: O gráfico das rendas não aparece" autocomplete="off"></label>' +
+        '<label>O que aconteceu <span class="req">*</span><textarea id="tk_b" class="u-minh-130px" maxlength="4000" ' +
+        'placeholder="Ex: Abri as Projeções no telemóvel e o gráfico ficou em branco. Esperava ver as rendas dos próximos anos."></textarea></label>' +
+        '<div class="hint u-m-n4px-0-0">O que estavas a fazer, o que esperavas e o que aconteceu.</div>'
+      : '<label>Assunto <span class="req">*</span><input id="tk_s" maxlength="140" placeholder="Ex: Poder marcar rendas em atraso" autocomplete="off"></label>' +
+        '<label>A tua ideia <span class="req">*</span><textarea id="tk_b" class="u-minh-130px" maxlength="4000" ' +
+        'placeholder="Ex: Marcar uma renda como em atraso, para a ver na visão geral até a receber."></textarea></label>' +
+        '<div class="hint u-m-n4px-0-0">O que gostavas de conseguir fazer, e porquê.</div>') +
     '<div class="hint">Enviamos com a página onde estás e a versão da app. Não enviamos os teus dados.</div>' +
     '<div id="tk_e" class="small u-c-v-danger"></div></div>';
   openModal(problema ? 'Reportar problema' : 'Sugerir melhoria', body,
@@ -404,7 +410,7 @@ CW.refuseTerms = function () {
     'Imóveis, contratos, movimentos, pessoas e ligações a outros utilizadores. Não há volta atrás.</div>' +
     '<div class="hint">Se quiseres ficar com os teus registos, cancela e exporta-os primeiro em ' +
     'Definições → Importar e cópias → Guardar cópia.</div>' +
-    '<label>Escreve <b>APAGAR</b> para confirmar<input id="cw_ref_c" placeholder="APAGAR" autocomplete="off" class="u-tt-uppercase"></label>' +
+    '<label><span class="rotulo-txt">Escreve <b>APAGAR</b> para confirmar</span> <span class="req">*</span><input id="cw_ref_c" placeholder="APAGAR" autocomplete="off" class="u-tt-uppercase"></label>' +
     '<div id="cw_ref_e" class="small u-c-v-danger"></div></div>';
   openModal('Recusar e apagar a conta', body,
     '<button class="btn" data-click="closeModal()">Cancelar</button>' +

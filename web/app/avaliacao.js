@@ -6,8 +6,8 @@ function vReports(){
   /* um imóvel onde só colaboro sem «Ver valores e avaliação» não tem cartão: o servidor não manda os valores */
   const list=pidProps(repProp).filter(p=>pode(p.id,'report.view'));
   const panel=anaPanelPadrao('repSel',repProp,'onRepSel',`
-    <label class="u-mt-10px u-maxw-220px">Yield exigido (%)<input type="text" inputmode="decimal" value="${dec(db.settings.capTarget)}" data-change="capTargetSet(this.value)"></label>
-    <div class="hint u-mt-9px">A avaliação por rendimento capitaliza o resultado líquido anual ao yield exigido. No ano corrente, o resultado até hoje é anualizado (×12 sobre os meses decorridos).${ownerFilter&&!ownerIsGrp()?' Valores na quota-parte de <b>'+esc(ownerFilterName())+'</b>.':''}</div>`);
+    <label class="u-mt-10px u-maxw-220px">Yield exigido (%)<input type="text" inputmode="decimal" value="${dec(db.settings.capTarget)}" placeholder="Opcional" data-change="capTargetSet(this.value)"></label>
+    <div class="hint u-mt-9px">A avaliação por rendimento capitaliza o resultado líquido anual ao yield exigido (em branco: 5 %). No ano corrente, o resultado até hoje é anualizado (×12 sobre os meses decorridos).${ownerFilter&&!ownerIsGrp()?' Valores na quota-parte de <b>'+esc(ownerFilterName())+'</b>.':''}</div>`);
   /* a saída do vazio leva aos Imóveis: com esse serviço desligado nesta conta
      o botão não se escreve, e a frase diz quem o liga */
   if(!list.length)return panel+(esperaDoServidor()||`<div class="empty"><b>Sem imóveis para avaliar</b>A avaliação parte do que cada imóvel rende.

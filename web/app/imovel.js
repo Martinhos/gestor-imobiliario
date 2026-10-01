@@ -23,6 +23,13 @@ function propModal(id){
       const f=document.getElementById('fold_reg');if(f&&!f.classList.contains('open'))toggleFold('reg');
       return falhaCampo('p_freguesiaCodigo','O código da freguesia tem 6 dígitos.');
     }
+    /* o capital de cada hipoteca é obrigatório (o asterisco de loanSect): a
+       dobra pode estar fechada, e abre-se antes de apontar o campo */
+    const semCapital=servicoLigado('credits')?(pForm.loans||[]).find(l=>!(capitalDoInicio(l,db.transactions)>0)):null;
+    if(semCapital){
+      const f=document.getElementById('fold_loans');if(f&&!f.classList.contains('open'))toggleFold('loans');
+      return falhaCampo('l_out_'+semCapital.id,'Indica o capital em dívida.');
+    }
     (pForm.loans||[]).forEach(l=>{l.name=l.name||l.bank||'Hipoteca'});   /* a recorrência identifica-se pelo nome */
     /* a pergunta pelas prestações desde o início (creditos.js) cria movimentos numa hipoteca:
        corre com os Créditos e os Movimentos ligados nesta conta; o planeado da prestação só
@@ -149,13 +156,13 @@ function propBody(){
   const shares=sharesOf(p),custom=hasShares(p);
   const sumSh=sum(owners.map(o=>Number((p.ownerShares||{})[o.id])||0));
   return `<div class="form">
-    <label>Nome <span class="req">*</span><input id="p_name" value="${esc(p.name)}" placeholder="T2 Lisboa" autocomplete="off"></label>
+    <label>Nome <span class="req">*</span><input id="p_name" value="${esc(p.name)}" placeholder="Ex: T2 Lisboa" autocomplete="off"></label>
     <label>Morada<input id="p_addr" value="${esc(p.address)}" placeholder="Opcional" autocomplete="off"></label>
-    <div><div class="flabel">Proprietários e quota-parte</div>
+    <div><div class="flabel">Proprietários e quota-parte (%, opcional)</div>
       <div class="form u-g-7px">
         ${owners.map(o=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${esc(initials(o.name))}</span>
           <span class="nm">${esc(o.name)}</span>
-          <input id="p_share_${o.id}" type="text" inputmode="decimal" value="${(p.ownerShares||{})[o.id]!=null?dec(p.ownerShares[o.id]):''}" placeholder="${dec(Math.round(shares[o.id]*1000)/10)}" data-input="liveShares()">
+          <input id="p_share_${o.id}" type="text" inputmode="decimal" value="${(p.ownerShares||{})[o.id]!=null?dec(p.ownerShares[o.id]):''}" placeholder="Ex: ${dec(Math.round(shares[o.id]*1000)/10)}" data-input="liveShares()">
           <span class="pc">%</span>
           <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delPropOwner('${o.id}')">${ic('x',13)}</button></div>`).join('')}
         <button type="button" class="tagadd u-js-start" data-toca="camada" data-click="addPropOwner()">+ Adicionar proprietário</button></div>
@@ -167,9 +174,9 @@ function propBody(){
       <div><div class="flabel">Tipo de arrendamento</div>
         <div class="seg c2">${[['inteiro','building','Imóvel inteiro','um contrato só'],['quartos','door','Por quartos','um contrato por quarto']]
           .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.rentalMode===k?'on':''}" data-toca="rascunho" data-click="setMode('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
-      ${p.rentalMode==='quartos'?`<div><div class="flabel">Quartos</div>
+      ${p.rentalMode==='quartos'?`<div><div class="flabel">Quartos (nome opcional)</div>
         <div class="form u-g-8px">${(p.rooms||[]).map(r=>`<div class="roomrow">
-          <input id="p_room_${r.id}" value="${esc(r.name)}" placeholder="Quarto" autocomplete="off">
+          <input id="p_room_${r.id}" value="${esc(r.name)}" placeholder="Ex: Quarto da varanda" autocomplete="off">
           <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delRoom('${r.id}')">${ic('trash',14)}</button></div>`).join('')}
           <button type="button" class="btn sm" data-toca="rascunho" data-click="addRoom()">${ic('plus',14)} Adicionar quarto</button></div></div>`:''}`:''}
     <div class="row3">
@@ -184,26 +191,26 @@ function propBody(){
         <label>Concelho<input id="p_concelho" value="${esc(p.concelho||'')}" placeholder="Opcional"></label></div>
       <div class="row3">
         <label>Distrito<input id="p_distrito" value="${esc(p.distrito||'')}" placeholder="Opcional"></label>
-        <label>Código da freguesia (opcional)<input id="p_freguesiaCodigo" value="${esc(p.freguesiaCodigo||'')}" inputmode="numeric" maxlength="6" placeholder="110623" autocomplete="off"></label>
+        <label>Código da freguesia (opcional)<input id="p_freguesiaCodigo" value="${esc(p.freguesiaCodigo||'')}" inputmode="numeric" maxlength="6" placeholder="Ex: 110623" autocomplete="off"></label>
         <label>Tipo de prédio${sel('p_tipoPredio',p.tipoPredio||'',[{v:'',label:'—'},{v:'U',label:'Urbano'},{v:'R',label:'Rústico'}],'','rascunho')}</label></div>
       <div class="row">
         <label>Tipologia${sel('p_tipologia',p.tipologia||'',[{v:'',label:'—'}].concat(['T0','T1','T2','T3','T4','T5','T6'].map(x=>({v:x,label:x}))),'','rascunho')}</label>
         <label>VPT (€)<input id="p_vpt" type="text" inputmode="decimal" value="${p.vpt||''}" placeholder="Opcional"></label></div>
       <div class="row3">
-        <label>Fração autónoma (opcional)<input id="p_fraction" value="${esc(p.fraction||'')}" placeholder="A"></label>
-        <label>Andar (opcional)<input id="p_floor" value="${esc(p.floor||'')}" placeholder="2.º"></label>
-        <label>Descrição predial n.º (opcional)<input id="p_registry" value="${esc(p.registry)}" placeholder="15937"></label></div>
+        <label>Fração autónoma (opcional)<input id="p_fraction" value="${esc(p.fraction||'')}" placeholder="Ex: A"></label>
+        <label>Andar (opcional)<input id="p_floor" value="${esc(p.floor||'')}" placeholder="Ex: 2.º"></label>
+        <label>Descrição predial n.º (opcional)<input id="p_registry" value="${esc(p.registry)}" placeholder="Ex: 15937"></label></div>
       <div class="row3">
         <label>Rua<input id="p_street" value="${esc(p.street||'')}" placeholder="Opcional"></label>
         <label>Número da porta<input id="p_doorNumber" value="${esc(p.doorNumber||'')}" placeholder="Opcional"></label>
-        <label>Código postal (opcional)<input id="p_postalCode" value="${esc(p.postalCode||'')}" placeholder="3130-000"></label></div>
+        <label>Código postal (opcional)<input id="p_postalCode" value="${esc(p.postalCode||'')}" placeholder="Ex: 1200-195"></label></div>
       <label>Localidade<input id="p_locality" value="${esc(p.locality||'')}" placeholder="Opcional"></label>
       <div class="row">
-        <label>Artigo matricial (opcional)<input id="p_matrix" value="${esc(p.matrix)}" placeholder="4651"></label>
-        <label>Licença de utilização (opcional)<input id="p_licence" value="${esc(p.licence)}" placeholder="Alvará n.º 26/2013"></label></div>
+        <label>Artigo matricial (opcional)<input id="p_matrix" value="${esc(p.matrix)}" placeholder="Ex: 4651"></label>
+        <label>Licença de utilização (opcional)<input id="p_licence" value="${esc(p.licence)}" placeholder="Ex: Alvará n.º 26/2013"></label></div>
       <div class="row3">
-        <label>Certificado energético (opcional)<input id="p_energyCert" value="${esc(p.energyCert)}" placeholder="SCE395442330"></label>
-        <label>Classe (opcional)<input id="p_energyClass" value="${esc(p.energyClass)}" placeholder="D"></label>
+        <label>Certificado energético (opcional)<input id="p_energyCert" value="${esc(p.energyCert)}" placeholder="Ex: SCE395442330"></label>
+        <label>Classe (opcional)<input id="p_energyClass" value="${esc(p.energyClass)}" placeholder="Ex: D"></label>
         <label>Válido até<input id="p_energyValid" type="date" value="${p.energyValid||''}"></label></div>
       <div class="hint">Usados nas cláusulas do contrato em PDF e no resumo do Anexo F. Deixa em branco o que não se aplicar — as frases correspondentes são omitidas.
         O código da freguesia (6 dígitos), o tipo de prédio e o artigo vêm da caderneta predial ou da nota de cobrança do IMI; o Anexo F pede-os em cada linha do quadro das rendas.
@@ -238,10 +245,10 @@ function loanSect(l,i){
       <label>Finalidade<input id="l_name_${l.id}" value="${esc(l.name)}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label>
       <label>Banco<input id="l_bank_${l.id}" value="${esc(l.bank)}" placeholder="Opcional" autocomplete="off"></label></div>
     <div class="row3">
-      <label>Capital em dívida (€)<input id="l_out_${l.id}" type="text" inputmode="decimal" value="${capitalDoInicio(l,db.transactions)||''}" placeholder="150000" data-input="liveLoan('${l.id}')"></label>
+      <label>Capital em dívida (€) <span class="req">*</span><input id="l_out_${l.id}" type="text" inputmode="decimal" value="${capitalDoInicio(l,db.transactions)||''}" placeholder="Ex: 150000" data-input="liveLoan('${l.id}')"></label>
       <label>Prazo (anos)<input id="l_years_${l.id}" type="text" inputmode="numeric" value="${esc(l.years||'')}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
       <label>Início<input id="l_start_${l.id}" type="date" value="${esc(l.start||'')}"></label></div>
-    <div class="hint u-mt-n4px">À data de início: as prestações registadas abatem-no, e a caixa abaixo diz o que falta hoje. Se o crédito já vem de trás, ao guardar a app propõe registar as prestações desde então — e o capital desce com elas.</div>
+    <div class="hint u-mt-n4px">À data de início: as prestações registadas abatem-no, e a caixa abaixo diz o que falta hoje. Se o crédito já vem de trás, ao guardar a app propõe registar as prestações desde então — e o capital desce com elas. Prazo em branco: 30 anos.</div>
     <div><div class="flabel">Tipo de taxa</div>
       <div class="seg c3">${[['fixa','lock','Fixa','não muda'],['mista','split','Mista','fixa e depois variável'],['variavel','wave','Variável','Euribor + spread']]
         .map(([k,ico,lb,sb])=>`<button type="button" class="opt ${l.type===k?'on':''}" data-toca="rascunho" data-click="setLType('${l.id}','${k}')"><span class="ic">${ic(ico,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>
@@ -250,7 +257,8 @@ function loanSect(l,i){
       <label>Comissão de amortização (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional"></label></div>`:''}
     ${l.type==='mista'?`<div class="row">
         <label>Anos com taxa fixa<input id="l_fy_${l.id}" type="text" inputmode="numeric" value="${l.fixedYears||''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
-        <label>Taxa fixa (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label></div>`:''}
+        <label>Taxa fixa (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label></div>
+      <div class="hint u-mt-n4px">Anos com taxa fixa em branco: 5.</div>`:''}
     ${l.type!=='fixa'?`<div class="row3">
       <label>Indexante${sel('l_index_'+l.id,l.index,['3m','6m','12m'].map(x=>({v:x,label:'Euribor '+x})),'liveLoanAll','rascunho')}</label>
       <label>Indexante (%)<input id="l_eur_${l.id}" type="text" inputmode="decimal" value="${l.euribor?dec(l.euribor):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>

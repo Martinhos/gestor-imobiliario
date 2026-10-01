@@ -9,7 +9,7 @@ function swPick(input){const f=input.files&&input.files[0];if(!f)return;input.va
 // Devolve: nada — abre o modal.
 function swPasteBox(){
   openModal('Colar CSV do Splitwise',`<div class="form"><div class="hint">Abre o CSV, copia tudo e cola aqui — incluindo a linha dos títulos.</div>
-    <textarea id="swText" class="u-minh-120px u-font-13px-1p5-ui-monospace-menlo-monospace" placeholder="Date,Description,Category,Cost,Currency,..."></textarea></div>`,
+    <label>O CSV <span class="req">*</span><textarea id="swText" class="u-minh-120px u-font-13px-1p5-ui-monospace-menlo-monospace" placeholder="Ex: Date,Description,Category,Cost,Currency"></textarea></label></div>`,
     `<button class="btn" data-click="closeModal()">Cancelar</button><button class="btn primary" data-click="swParseColado()">Continuar</button>`);
 }
 /* O «Continuar» do swPasteBox: lê o textarea e entrega o texto ao swParse.
@@ -62,9 +62,9 @@ function swMapModal(){
   window._swCols=[iDate,iDesc,iCost,iCat];
   openModal('Importar do Splitwise',`<div class="form">
     <div class="hint">Encontrei <b>${swRows.length}</b> linhas. Colunas: data → <b>${esc(swHead[iDate]||'?')}</b>, descrição → <b>${esc(swHead[iDesc]||'?')}</b>, custo → <b>${esc(swHead[iCost]||'?')}</b>.</div>
-    <label>Lançar em que imóvel?${sel('sw_prop',(db.properties[0]||{}).id||'',db.properties.map(p=>({v:p.id,label:p.name})),'','rascunho')}</label>
-    <label>A minha quota-parte (%)<input id="sw_quota" type="text" inputmode="decimal" value="${dec(db.settings.quota||100)}" data-input="swRefresh()"></label>
-    <div class="hint">O Splitwise exporta o custo total. Se divides a casa a meias, põe 50 e a app lança só metade.</div>
+    <label>Lançar em que imóvel? <span class="req">*</span>${sel('sw_prop',(db.properties[0]||{}).id||'',db.properties.map(p=>({v:p.id,label:p.name})),'','rascunho')}</label>
+    <label>A minha quota-parte (%)<input id="sw_quota" type="text" inputmode="decimal" value="${dec(db.settings.quota||100)}" placeholder="Opcional" data-input="swRefresh()"></label>
+    <div class="hint">O Splitwise exporta o custo total. Se divides a casa a meias, põe 50 e a app lança só metade. Em branco: 100 %.</div>
     <div class="divider"></div><div id="swPrev">${swPrevHtml(swPrepare(iDate,iDesc,iCost,iCat,100,db.settings.quota||100))}</div></div>`,
     `<button class="btn" data-click="closeModal()">Cancelar</button><button class="btn primary" data-click="swDo(${iDate},${iDesc},${iCost},${iCat})">Importar</button>`);
 }

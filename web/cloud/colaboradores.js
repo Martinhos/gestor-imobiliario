@@ -155,8 +155,8 @@ CW.cargoModal = function (id) {
       (e.add ? caixaPerm(e.add, e.addRotulo || 'Adicionar', tem.indexOf(e.add) > -1) : '') + '</span></div>';
   }).join('');
   var body = '<div class="form">' + exemplos +
-    '<label>Nome do cargo <span class="req">*</span><input id="cg_nome" maxlength="40" value="' + esc(r ? r.name : '') + '" placeholder="Gestor, contabilista, agente…" autocomplete="off"></label>' +
-    '<div><div class="flabel">O que pode fazer</div>' + linhas +
+    '<label>Nome do cargo <span class="req">*</span><input id="cg_nome" maxlength="40" value="' + esc(r ? r.name : '') + '" placeholder="Ex: Gestor de visitas" autocomplete="off"></label>' +
+    '<div><div class="flabel">O que pode fazer <span class="req">*</span></div>' + linhas +
     '<div class="hint u-mt-8px">«Adicionar» inclui ver, e editar ou apagar só o que o próprio criar. ' +
     'Editar a ficha do imóvel traz as hipotecas e os documentos; adicionar contratos traz os planeados. ' +
     'Um colaborador nunca tem quota-parte nem entra nas contas entre proprietários.</div></div></div>';
@@ -365,8 +365,8 @@ CW.mudarColaborador = function (id) {
   var tem = (c.houses || []).map(function (h) { return h.id; });
   var body = '<div class="form">' +
     '<div class="hint"><b>' + esc(c.name || '') + '</b> — escolhe o cargo e os imóveis onde colabora.</div>' +
-    '<label>Cargo' + sel('cw_col_cargo', c.roleId, cargos, '', 'rascunho') + '</label>' +
-    '<div><div class="flabel">Imóveis</div><div class="list u-g-7px">' +
+    '<label>Cargo <span class="req">*</span>' + sel('cw_col_cargo', c.roleId, cargos, '', 'rascunho') + '</label>' +
+    '<div><div class="flabel">Imóveis <span class="req">*</span></div><div class="list u-g-7px">' +
     imoveisMeus().map(function (p) {
       return '<label class="check"><input type="checkbox" id="cw_col_h_' + p.id + '"' + (tem.indexOf(p.id) > -1 ? ' checked' : '') + '>' +
         '<span class="u-minw-0"><b>' + esc(p.name || 'Sem nome') + '</b>' + (p.address ? ' <span class="small">' + esc(p.address) + '</span>' : '') + '</span></label>';

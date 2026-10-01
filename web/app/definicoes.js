@@ -65,24 +65,28 @@ const navRow=(title,sub,icon,page)=>`<div class="card tap u-d-flex u-ai-center u
 const backRow=`<div class="toolbar u-pos-sticky u-t-calc-57px-v-inset-top u-z-20 u-bg-v-bg u-p-8px-0 u-m-n6px-0-6px">
   <button class="btn" data-toca="ecra" data-click="goSet('')">${ic('chev',15)} Voltar</button></div>`;
 
-// Subpágina "Valores por omissão": crescimento das rendas, inflação, horizonte,
-// yield de avaliação e imposto do selo. Cada campo grava logo ao sair (setSet).
-// Devolve: o HTML (texto) da subpágina.
+/* Subpágina "Valores por omissão": crescimento das rendas, inflação, horizonte,
+   yield de avaliação e imposto do selo. Cada campo grava logo ao sair (setSet)
+   e nenhum recusa o vazio — por isso dizem «Opcional» (a regra dos
+   formulários), e a nota de cada cartão diz o que vale em branco: o aumento,
+   a inflação e o selo contam 0 %, o horizonte 1 ano, o yield volta aos 5 %.
+   Devolve: o HTML (texto) da subpágina. */
 function vDefaults(){
   const s=db.settings;
   return `${card('Projeções','Como rendas e despesas evoluem nos gráficos de futuro',`
     <div class="row3">
-      <label>Aumento anual das rendas (%)<input type="text" inputmode="decimal" value="${dec(s.growth)}" data-change="setSet('growth',numTaxa(this.value))"></label>
-      <label>Inflação das despesas (%)<input type="text" inputmode="decimal" value="${dec(s.inflation)}" data-change="setSet('inflation',numTaxa(this.value))"></label>
-      <label>Horizonte (anos)<input type="text" inputmode="numeric" value="${s.years}" data-change="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label></div>`)}
+      <label>Aumento anual das rendas (%)<input id="def_growth" type="text" inputmode="decimal" value="${dec(s.growth)}" placeholder="Opcional" data-change="setSet('growth',numTaxa(this.value))"></label>
+      <label>Inflação das despesas (%)<input id="def_inflation" type="text" inputmode="decimal" value="${dec(s.inflation)}" placeholder="Opcional" data-change="setSet('inflation',numTaxa(this.value))"></label>
+      <label>Horizonte (anos)<input id="def_years" type="text" inputmode="numeric" value="${s.years}" placeholder="Opcional" data-change="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label></div>
+    <div class="hint">Em branco, o aumento e a inflação contam 0 % e o horizonte 1 ano (no máximo 30).</div>`)}
   ${servicoLigado('reports')?`<div class="u-h-14px"></div>
   ${card('Avaliação','Usado ao avaliar os imóveis pelo rendimento',`
-    <label>Yield exigido na avaliação (%)<input type="text" inputmode="decimal" value="${dec(s.capTarget)}" data-change="capTargetSet(this.value)"></label>
+    <label>Yield exigido na avaliação (%)<input id="def_capTarget" type="text" inputmode="decimal" value="${dec(s.capTarget)}" placeholder="Opcional" data-change="capTargetSet(this.value)"></label>
     <div class="hint">O resultado anual de cada imóvel dividido por este yield dá o valor por rendimento. Tem de ser maior que zero; em branco volta aos 5 %.</div>`)}`:''}
   <div class="u-h-14px"></div>
   ${card('Crédito à habitação','Usado nas prestações e nos planos das hipotecas',`
-    <label>Imposto do selo sobre juros (%)<input type="text" inputmode="decimal" value="${dec(s.stampPct??4)}" data-change="setSet('stampPct',Math.max(0,numTaxa(this.value)))"></label>
-    <div class="hint">Percentagem cobrada sobre os juros de cada prestação. Em Portugal é 4%. As hipotecas com o imposto do selo desligado não são afetadas.</div>`)}`;
+    <label>Imposto do selo sobre juros (%)<input id="def_stamp" type="text" inputmode="decimal" value="${dec(s.stampPct??4)}" placeholder="Opcional" data-change="setSet('stampPct',Math.max(0,numTaxa(this.value)))"></label>
+    <div class="hint">Percentagem cobrada sobre os juros de cada prestação. Em Portugal é 4 %; em branco conta 0 %. As hipotecas com o imposto do selo desligado não são afetadas.</div>`)}`;
 }
 /* A raiz das Definições, como dados. É uma só: a base declara as secções e as
    linhas dela, e a nuvem acrescenta as suas (linhaDefinicoes) — o perfil e a
@@ -186,16 +190,19 @@ const treeTx=tk=>db.transactions.filter(t=>treeKey(t.kind)===tk);
 /* Cartão editável de uma árvore de categorias (tk: 'cats' ou 'catsIn'):
    renomear escrevendo no próprio nome, apagar, tirar dos totais (botão €)
    e gerir subcategorias em chips. O crachá diz quantos movimentos a usam.
+   O nome é obrigatório (renameCat recusa o vazio e volta ao que era), mas
+   não tem rótulo onde pôr o asterisco: diz o que é ao leitor de ecrã
+   (aria-label) e, apagado, mostra um exemplo.
    Recebe: tk — a árvore: 'cats' (pagamentos) ou 'catsIn' (receitas); title — o
    título do cartão (pode ir vazio, dentro das dobras); sub — o subtítulo.
    Devolve: o HTML (texto) do cartão. */
 function catTree(tk,title,sub){
   const cs=db.settings[tk]||{},txs=treeTx(tk);
   return card(title,sub,`
-    <div class="list u-g-9px">${Object.keys(cs).map(k=>`
+    <div class="list u-g-9px">${Object.keys(cs).map((k,i)=>`
       <div class="card u-p-12px-13px">
         <div class="row-between u-ai-center">
-          <input value="${esc(k)}" class="u-fw-650 u-b-0 u-p-4px-0 u-bg-transparent" data-change="renameCat('${jsq(tk)}','${jsq(k)}',this.value)">
+          <input id="catn_${esc(tk)}_${i}" value="${esc(k)}" aria-label="Nome da categoria" placeholder="Ex: ${tk==='catsIn'?'Alojamento local':'Jardim e piscina'}" autocomplete="off" class="u-fw-650 u-b-0 u-p-4px-0 u-bg-transparent" data-change="renameCat('${jsq(tk)}','${jsq(k)}',this.value)">
           <div class="u-d-flex u-g-5px u-fx-0-0-auto">
             <span class="badge grey">${txs.filter(t=>t.category===k).length}</span>
             <button class="btn sm ${db.settings.exclude[excKey(tk,k)]?'danger':''}" title="Contar (ou não) nos totais" data-toca="dados" data-click="toggleExc('${jsq(tk)}','${jsq(k)}')">€</button>
@@ -255,8 +262,10 @@ function gMemberName(kind,id){
 function nuvemDosGrupos(){return typeof window!=='undefined'&&!!window.CW&&typeof CW.grupoModal==='function'}
 /* Posso partilhar grupos de imóveis agora: com a nuvem dos grupos, com
    sessão e com o serviço Colaboradores ligado nesta conta — as três
-   condições do servidor (worker/src/rotas/grupos.js), para o botão não
-   levar a um aviso.
+   condições do servidor (worker/src/rotas/grupos.js). Decide só o cartão
+   «Grupos partilhados» em cima (vGrupos), que lista o que vive no servidor.
+   O «Partilhar» de cada grupo não depende disto: está sempre que a nuvem dos
+   grupos está, e o toque diz o que falta (cloud/grupos.js:CW.grupoPartilhar).
    Devolve: true se posso. */
 function podePartilharGrupos(){return nuvemDosGrupos()&&!!CW.user&&servicoLigado('colaboradores')}
 /* O selo de um grupo partilhado na lista: «Partilhado · N pessoas», e «de
@@ -271,20 +280,23 @@ function seloDoGrupo(g){
 /* Os grupos por tipo (imóveis, proprietários, contratos) — a parte de baixo
    do separador Grupos (vGrupos). Cada grupo com os membros em resumo; tocar
    num abre o modal de edição, ou a janela da nuvem num grupo partilhado
-   (seloDoGrupo). Um grupo de imóveis privado que se pode partilhar (com
-   imóveis meus: cloud/grupos.js:gruposParaPartilhar), quando posso
-   partilhar, tem «Partilhar» à vista no próprio cartão: era só um item do ⋯
-   da janela de edição, e ninguém o encontrava. O botão trava o toque
-   (event.stopPropagation), senão abria também a janela de edição por baixo
-   da confirmação. «Novo grupo partilhado» já não vive aqui: está no cartão
-   dos partilhados, em cima, e repeti-lo nos imóveis eram duas portas iguais.
+   (seloDoGrupo). TODO o grupo de imóveis que não é partilhado tem
+   «Partilhar» à vista no próprio cartão, sempre que a nuvem dos grupos está
+   carregada — com sessão ou sem ela, com imóveis meus ou sem eles. Chegou a
+   esconder-se sem sessão, sem o serviço e num grupo sem imóveis criados por
+   mim (cwMinha), e quem só tinha grupos assim via «Novo grupo partilhado» e
+   nenhum «Partilhar», sem saber porquê; agora o toque
+   (cloud/grupos.js:CW.grupoPartilhar) diz o que falta em cada caso. O botão trava o toque
+   (event.stopPropagation), senão abria também a janela de edição por baixo.
+   «Novo grupo partilhado» não vive aqui: está no cartão dos partilhados, em
+   cima. Sem a nuvem (a base sozinha) não há botão: não haveria quem o
+   atendesse.
    Recebe: semPartilhados (opcional) — true para deixar de fora os grupos
    partilhados, quando o separador já os mostra em cima.
    Devolve: o HTML (texto). */
 function vGroups(semPartilhados){
-  const partilha=podePartilharGrupos();
-  const partilhaveis=partilha&&typeof gruposParaPartilhar==='function'?gruposParaPartilhar().map(g=>g.id):[];
-  const botao=g=>partilhaveis.indexOf(g.id)<0?'':`<button type="button" class="btn sm u-fx-0-0-auto" data-toca="camada" data-click="event.stopPropagation();CW.grupoPartilhar('${jsq(g.id)}')">${ic('users',14)} Partilhar</button>`;
+  const nuvem=nuvemDosGrupos();
+  const botao=g=>nuvemDosGrupos()&&g.kind==='prop'&&!g._partilhado?`<button type="button" class="btn sm u-fx-0-0-auto" data-toca="camada" data-click="event.stopPropagation();CW.grupoPartilhar('${jsq(g.id)}')">${ic('users',14)} Partilhar</button>`:'';
   const secs=['prop','owner','contract'].map(kind=>{
     const gs=grpsOf(kind).filter(g=>!(semPartilhados&&g._partilhado));
     const abrir=g=>g._partilhado&&nuvemDosGrupos()?`CW.grupoModal('${jsq(g.id)}')`:`groupModal('${jsq(kind)}','${jsq(g.id)}')`;
@@ -298,7 +310,7 @@ function vGroups(semPartilhados){
       :`<div class="hint">Ainda não há grupos de ${GKIND[kind].label.toLowerCase()}.</div>`}
       <div class="toolbar u-m-11px-0-0"><button class="btn sm" data-toca="camada" data-click="groupModal('${jsq(kind)}')">${ic('plus',14)} Novo grupo de ${GKIND[kind].label.toLowerCase()}</button></div>`;
   }).join('');
-  return secs+`<div class="hint u-mt-16px">Servem de filtro em toda a app. Um movimento atribuído a um grupo de imóveis divide-se por eles.${partilha?' «Partilhar» passa um grupo de imóveis a partilhado: quem entrar, e tu aceitares, fica comproprietário dos imóveis dele. Só entram os imóveis teus.':''}</div>`;
+  return secs+`<div class="hint u-mt-16px">Servem de filtro em toda a app. Um movimento atribuído a um grupo de imóveis divide-se por eles.${nuvem?' «Partilhar» passa um grupo de imóveis a partilhado: quem entrar, e tu aceitares, fica comproprietário dos imóveis dele. Só entram os imóveis teus.':''}</div>`;
 }
 /* O separador «Grupos» (navegacao.js:TABS), da base como as Definições: os
    grupos são filtros de toda a app, e só a parte partilhada é do serviço
@@ -307,8 +319,9 @@ function vGroups(semPartilhados){
    nuvem (cloud/grupos.js:gruposCard — os meus e os dos outros, os pedidos
    que fiz, «Novo grupo partilhado» e «Partilhar um grupo que já tens»); por
    baixo, os grupos por tipo, sem os partilhados, que já estão em cima. Sem
-   poder partilhar, só os grupos por tipo e nenhum botão de partilha — um
-   botão que levasse a um aviso é pior do que nenhum.
+   poder partilhar não há cartão (não há o que listar do servidor), mas cada
+   grupo de imóveis continua com o «Partilhar» (vGroups), e o toque diz o que
+   falta — entrar, ligar o serviço — em vez de o botão desaparecer.
    Devolve: o HTML (texto) da vista. */
 function vGrupos(){
   const topo=podePartilharGrupos()&&typeof gruposCard==='function'?gruposCard():'';
@@ -319,10 +332,12 @@ let gForm=null;
    cópia (gForm) — nada é gravado até Guardar, que exige nome e pelo menos um
    membro antes de escrever em db.groups. Um grupo partilhado não se edita
    aqui: a janela é a da nuvem (CW.grupoModal). Num grupo de imóveis privado
-   com imóveis meus, com a nuvem, a sessão e o serviço Colaboradores, o menu
-   ganha «Partilhar este grupo…» — e o corpo o mesmo como botão à vista
-   (groupBody): no ⋯ ninguém o achava. Um grupo só com imóveis dos outros
-   não o oferece: partilhá-lo dava um grupo vazio.
+   já guardado, com a nuvem dos grupos, o menu tem sempre «Partilhar este
+   grupo…» — e o corpo o mesmo como botão à vista (groupBody): no ⋯ ninguém
+   o achava. Sem sessão, com o serviço desligado, num grupo vazio ou só com
+   imóveis dos outros, o toque explica (cloud/grupos.js:CW.grupoPartilhar).
+   O guardar recusa o nome vazio e o grupo sem membros: os dois levam o
+   asterisco (groupBody).
    Recebe: kind — o tipo do grupo: 'prop', 'owner' ou 'contract'; id (opcional)
    — o id do grupo a editar; sem ele cria um novo.
    Devolve: nada — abre o modal. */
@@ -331,7 +346,7 @@ function groupModal(kind,id){
   if(g0&&g0._partilhado&&nuvemDosGrupos())return CW.grupoModal(id);
   gForm=normGroup(id?JSON.parse(JSON.stringify(grp(id))):{kind});
   const itens=[];
-  if(id&&kind==='prop'&&podePartilharGrupos()&&typeof gruposParaPartilhar==='function'&&gruposParaPartilhar().some(x=>x.id===id))itens.push({label:'Partilhar este grupo…',icon:'users',toca:'camada',act:`CW.grupoPartilhar('${jsq(id)}')`});
+  if(g0&&g0.kind==='prop'&&!g0._partilhado&&nuvemDosGrupos())itens.push({label:'Partilhar este grupo…',icon:'users',toca:'camada',act:`CW.grupoPartilhar('${jsq(id)}')`});
   if(id)itens.push({label:'Apagar grupo',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delGroup('${jsq(id)}')`});
   const m=id?menu('grp',itens):'';
   openModal(id?'Editar grupo':'Novo grupo de '+GKIND[kind].label.toLowerCase(),groupBody(),null,m);
@@ -345,24 +360,27 @@ function groupModal(kind,id){
     save();closeModal();render();toast('Grupo guardado.');
   };
 }
-/* Corpo do modal do grupo, gerado a partir de gForm: nome e membros em chips.
-   Num grupo de imóveis já guardado que se pode partilhar (com imóveis meus, e
-   eu a poder partilhar), «Partilhar este grupo» à vista no fim, com o que
-   isso quer dizer. Partilha-se o grupo como está guardado: a confirmação
-   (CW.grupoPartilhar) fecha esta janela, e o que se mudou aqui sem guardar
-   fica para trás — a nota di-lo. Um grupo novo ainda não está em db.groups e
-   não tem o botão.
+/* Corpo do modal do grupo, gerado a partir de gForm: nome e membros em chips,
+   os dois com o asterisco vermelho — o guardar recusa um nome vazio e um
+   grupo sem membros (groupModal) — e o nome com um exemplo do tipo dele. Num
+   grupo de imóveis privado já guardado, com a nuvem dos grupos, «Partilhar
+   este grupo» à vista no fim, sempre, com o que isso quer dizer; quando não
+   dá (sem sessão, sem o serviço, sem imóveis meus), o toque explica
+   (CW.grupoPartilhar). Partilha-se o grupo como está guardado: a
+   confirmação fecha esta janela, e o que se mudou aqui sem guardar fica
+   para trás — a nota di-lo. Um grupo novo ainda não está em db.groups e não
+   tem o botão.
    Devolve: o HTML (texto) do corpo do modal. */
 function groupBody(){
   const g=gForm,tags=g.ids.map(id=>({id,label:gMemberName(g.kind,id)||'?'}));
-  const partilhar=g.kind==='prop'&&podePartilharGrupos()&&typeof gruposParaPartilhar==='function'&&gruposParaPartilhar().some(x=>x.id===g.id);
+  const partilhar=g.kind==='prop'&&!g._partilhado&&!!grp(g.id)&&nuvemDosGrupos();
   return `<div class="form">
-    <label>Nome do grupo<input id="g_name" value="${esc(g.name)}" placeholder="${g.kind==='prop'?'Casas de Lisboa':g.kind==='owner'?'Família':'Contratos T2'}" autocomplete="off"></label>
-    <div><div class="flabel">${GKIND[g.kind].label} no grupo</div>${tagField(tags,'Adicionar','addGroupMember()','delGroupMember')}</div>
+    <label>Nome do grupo <span class="req">*</span><input id="g_name" value="${esc(g.name)}" placeholder="Ex: ${g.kind==='prop'?'Casas de Lisboa':g.kind==='owner'?'Família':'Contratos T2'}" autocomplete="off"></label>
+    <div><div class="flabel">${GKIND[g.kind].label} no grupo <span class="req">*</span></div>${tagField(tags,'Adicionar','addGroupMember()','delGroupMember')}</div>
     ${g.kind==='prop'?`<div class="hint">Um movimento atribuído a este grupo divide-se pelos imóveis (em partes iguais, pelo valor, por percentagens…).</div>`:''}
     ${partilhar?`<div><div class="flabel">Partilhar</div>
       <button type="button" class="btn sm" data-toca="camada" data-click="CW.grupoPartilhar('${jsq(g.id)}')">${ic('users',14)} Partilhar este grupo</button>
-      <div class="hint u-mt-6px">Quem entrar pela ligação, e tu aceitares, fica comproprietário dos imóveis do grupo; só entram os imóveis teus. Partilha-se o grupo como está guardado.</div></div>`:''}</div>`;
+      <div class="hint u-mt-6px">Quem entrar pela ligação, e tu aceitares, fica comproprietário dos imóveis do grupo; só entram os imóveis teus — os de outras pessoas ficam de fora. Partilha-se o grupo como está guardado.</div></div>`:''}</div>`;
 }
 // Redesenha o corpo do modal do grupo depois de mexer nos membros, sem o fechar.
 // Devolve: nada — redesenha o corpo do modal.
@@ -415,21 +433,26 @@ function delGroup(id){
    Devolve: nada — no Enter, trava o comportamento do browser e guarda. */
 function pmTecla(ev){if(ev.key==='Enter'){ev.preventDefault();_pm()}}
 /* Modal genérico de um só campo de texto. Enter equivale a Guardar; o cb só é
-   chamado se sobrar texto depois do trim. Foca o campo ao abrir.
+   chamado se sobrar texto depois do trim — o campo é sempre obrigatório, e
+   por isso leva sempre o asterisco vermelho, como os outros formulários. O
+   exemplo, quando o há, começa por «Ex: » (a regra dos placeholders).
+   Foca o campo ao abrir.
    Recebe: title — o título do modal; label — o rótulo do campo; value — o
    texto inicial (pode vir null); cb — a função chamada com o texto (já com
-   trim) quando se guarda com algo escrito.
+   trim) quando se guarda com algo escrito; exemplo (opcional) — o texto do
+   exemplo, sem o «Ex: » (ex.: 'Obras'), para o placeholder.
    Devolve: nada — abre o modal. */
-function promptModal(title,label,value,cb){
-  openModal(title,`<div class="form"><label>${esc(label)}<input id="pm_v" value="${esc(value||'')}" autocomplete="off" data-keydown="pmTecla(event)"></label></div>`,
+function promptModal(title,label,value,cb,exemplo){
+  const ph=exemplo?` placeholder="Ex: ${esc(exemplo)}"`:'';
+  openModal(title,`<div class="form"><label>${esc(label)} <span class="req">*</span><input id="pm_v" value="${esc(value||'')}"${ph} autocomplete="off" data-keydown="pmTecla(event)"></label></div>`,
     `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="_pm()">Guardar</button>`);
   _pm=()=>{const v=val('pm_v').trim();closeModal();if(v)cb(v)};
   setTimeout(()=>{const e=document.getElementById('pm_v');if(e)e.focus()},50);
 }
-// Pede o nome e cria uma categoria vazia na árvore tk; grava e repinta.
+// Pede o nome (com um exemplo da árvore) e cria uma categoria vazia na árvore tk; grava e repinta.
 // Recebe: tk — a árvore: 'cats' (pagamentos) ou 'catsIn' (receitas).
 // Devolve: nada — abre o prompt; só ao guardar cria e grava.
-function addCat(tk){promptModal('Nova categoria','Nome',null,v=>{const cs=db.settings[tk]||(db.settings[tk]={});if(!cs[v])cs[v]=[];save();render();toast('Categoria criada.')})}
+function addCat(tk){promptModal('Nova categoria','Nome da categoria',null,v=>{const cs=db.settings[tk]||(db.settings[tk]={});if(!cs[v])cs[v]=[];save();render();toast('Categoria criada.')},tk==='catsIn'?'Alojamento local':'Jardim e piscina')}
 /* Leva as escolhas guardadas por categoria (as exclusões dos totais, as colunas do
    Anexo F) das chaves antigas para as novas, ou tira-as. Vai chave a chave, e não
    por prefixo: «Obras/» apanhava também uma categoria chamada «Obras/Casa», que é
@@ -493,9 +516,9 @@ function delCat(tk,k){
 // Pede o nome e junta uma subcategoria à categoria k (ignora repetidas); grava e repinta.
 // Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria.
 // Devolve: nada — abre o prompt; só ao guardar cria e grava.
-function addSub(tk,k){promptModal('Nova subcategoria','Nome',null,v=>{
+function addSub(tk,k){promptModal('Nova subcategoria','Nome da subcategoria',null,v=>{
   const cs=db.settings[tk]||(db.settings[tk]={}),l=cs[k]||(cs[k]=[]);
-  if(l.indexOf(v)<0)l.push(v);save();render();toast('Subcategoria criada.')})}
+  if(l.indexOf(v)<0)l.push(v);save();render();toast('Subcategoria criada.')},'Canalização')}
 /* Muda o nome de uma subcategoria via prompt: atualiza a lista, os movimentos
    que a usavam e leva as escolhas dela (fora dos totais, coluna do Anexo F)
    para o nome novo. O nome de outra subcategoria da mesma categoria
@@ -504,7 +527,7 @@ function addSub(tk,k){promptModal('Nova subcategoria','Nome',null,v=>{
    old — o nome atual da subcategoria.
    Devolve: nada — abre o prompt; só ao guardar renomeia e grava. */
 function renameSub(tk,k,old){
-  promptModal('Mudar o nome da subcategoria','Nome',old,nn=>{
+  promptModal('Mudar o nome da subcategoria','Nome da subcategoria',old,nn=>{
     nn=String(nn||'').trim();if(!nn||nn===old)return;
     const cs2=db.settings[tk]||{},l=cs2[k]||[];
     if(l.indexOf(nn)>-1)return toast('Já há uma subcategoria com esse nome.');
@@ -512,7 +535,7 @@ function renameSub(tk,k,old){
     treeTx(tk).forEach(t=>{if(t.category===k&&t.sub===old)t.sub=nn});
     moverEscolhas(tk,[[[k,old],[k,nn]]]);
     save();render();toast('Subcategoria renomeada.');
-  });
+  },'Canalização');
 }
 // Apaga a subcategoria depois de confirmar com o impacto: sai da lista, dos
 // movimentos que a usavam (ficam só sem subcategoria) e das escolhas guardadas.
@@ -602,9 +625,9 @@ function resetIrsMapa(){
 }
 // Pede o nome e cria uma etiqueta (ignora repetidas); grava e repinta.
 // Devolve: nada — abre o prompt; só ao guardar cria e grava.
-function addTag(){promptModal('Nova etiqueta','Nome',null,v=>{
+function addTag(){promptModal('Nova etiqueta','Nome da etiqueta',null,v=>{
   const l=db.settings.tags||(db.settings.tags=[]);
-  if(l.indexOf(v)<0)l.push(v);save();render();toast('Etiqueta criada.')})}
+  if(l.indexOf(v)<0)l.push(v);save();render();toast('Etiqueta criada.')},'Obras de 2026')}
 // Apaga a etiqueta depois de confirmar com o impacto: sai das definições e de
 // todos os movimentos que a tinham.
 // Recebe: g — o nome da etiqueta.
@@ -684,7 +707,7 @@ function fcCorpo(){
   const catOpts=[{v:'',label:'Todas as categorias'}].concat(Object.keys(tree).map(c=>({v:c,label:c})));
   const subs=fcForm.cat?(tree[fcForm.cat]||[]):[];
   return `<div class="form">
-    <label>Nome <span class="req">*</span><input id="fc_name" value="${esc(fcForm.name)}" placeholder="T2 Lisboa · rendas" autocomplete="off" data-input="fcColher(1)"></label>
+    <label>Nome <span class="req">*</span><input id="fc_name" value="${esc(fcForm.name)}" placeholder="Ex: T2 Lisboa · rendas" autocomplete="off" data-input="fcColher(1)"></label>
     <div class="row"><label>Tipo${sel('fc_kind',fcForm.kind,kinds,'fcColher','rascunho')}</label>
       <label>Imóvel${sel('fc_prop',fcForm.prop,props,'fcColher','rascunho')}</label></div>
     <div class="row"><label>Proprietário${sel('fc_owner',fcForm.owner,owners,'fcColher','rascunho')}</label>

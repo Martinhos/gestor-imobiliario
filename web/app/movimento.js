@@ -442,26 +442,27 @@ function txBody(){
   const catSum=esc([t.category,t.sub].filter(Boolean).join(' / '))+((t.tags||[]).length?(t.category?' · ':'')+t.tags.length+' etiqueta'+(t.tags.length===1?'':'s'):'');
   const planeado=txModo.modo==='rec',modelo=txModo.modo==='tpl';
   return `<div class="form">
-    ${modelo?`<label>Nome do modelo (opcional)<input id="t_tplName" value="${esc(txModo.tplName||'')}" placeholder="Ex.: Renda mensal T2" autocomplete="off"></label>`:''}
+    ${modelo?`<label>Nome do modelo (opcional)<input id="t_tplName" value="${esc(txModo.tplName||'')}" placeholder="Ex: Renda mensal T2" autocomplete="off"></label>
+    <div class="hint u-mt-n6px">Em branco, o modelo fica com o nome da descrição.</div>`:''}
     ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" data-toca="rascunho" data-click="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
-    <label>Descrição <span class="req">*</span><input id="t_label" value="${esc(t.label)}" placeholder="${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
+    <label>Descrição <span class="req">*</span><input id="t_label" value="${esc(t.label)}" placeholder="Ex: ${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
     <div class="row">
       <label>Montante (€) <span class="req">*</span><div class="u-d-flex u-g-7px u-ai-center">
-        <input id="t_amount" type="text" inputmode="decimal" class="u-fx-1 u-minw-0" value="${t.amount||''}" placeholder="900" data-input="txMontanteEscrito(this.value)">
+        <input id="t_amount" type="text" inputmode="decimal" class="u-fx-1 u-minw-0" value="${t.amount||''}" placeholder="Ex: ${t.kind==='income'?'900':t.kind==='loan'?'650':t.kind==='settle'?'250':t.kind==='owed'||t.kind==='repay'?'5000':'80'}" data-input="txMontanteEscrito(this.value)">
         <button type="button" class="btn sm primary${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':' u-d-none'} u-fx-0-0-auto u-p-9px-12px" id="amt_reset" title="Repor a prestação calculada" data-toca="rascunho" data-click="onAmtReset()">Repor</button></div></label>
       ${planeado?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}" data-change="txDataMudou()"></label>`}</div>
-    <label>Imóvel${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:(t.todos?'*':'')),opcoesDoImovel(t),'onPropChange','rascunho')}</label>
+    <label>Imóvel${podeSemImovel()?'':' <span class="req">*</span>'}${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:(t.todos?'*':'')),opcoesDoImovel(t),'onPropChange','rascunho')}</label>
     ${(!settle&&!t.propertyId&&!t.groupId&&!t.todos&&podeSemImovel())?'<div class="hint u-mt-n6px">Conta nos totais, mas não na avaliação de nenhum imóvel.</div>':''}
     ${t.todos&&!t.propertyId?`<div class="hint u-mt-n6px">${esc(dicaDeTodos(t))}</div>`:''}
     ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+dPT(c.start):'')}))),'onCtChange','rascunho')}</label>`:''}
     ${t.kind==='income'&&(t.contractId||t.category==='Rendas')?txFiscoSect():''}
-    ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange','rascunho')}</label>`:''}
-    ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'} (opcional)<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Pai, amigo, empreiteiro…" autocomplete="off" list="creditorList" data-input="refreshCredHint()">
+    ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${lns.length?' <span class="req">*</span>':''}${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange','rascunho')}</label>`:''}
+    ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'} (opcional)<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Ex: Pai" autocomplete="off" list="creditorList" data-input="refreshCredHint()">
         <datalist id="creditorList">${knownCreditors().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
       <div class="hint" id="credHint">${credHint()}</div>`:''}
     ${settle?(ows.length>1?`<div class="row">
-        <label>Quem paga${sel('t_paid',t.paidBy||'',owOpts,'','rascunho')}</label>
-        <label>Quem recebe${sel('t_to',t.toId||'',owOpts,'','rascunho')}</label></div>
+        <label>Quem paga <span class="req">*</span>${sel('t_paid',t.paidBy||'',owOpts,'','rascunho')}</label>
+        <label>Quem recebe <span class="req">*</span>${sel('t_to',t.toId||'',owOpts,'','rascunho')}</label></div>
       <div class="hint">Transferência entre proprietários deste imóvel: acerta as contas entre donos e não conta como receita nem despesa.</div>`
       :`<div class="hint">Escolhe um imóvel com pelo menos dois proprietários.</div>`)
     :(ows.length?`<label>${isIn(t.kind)?'Recebido por':'Pago por'}${sel('t_paid',t.paidBy||'',owOpts,'','rascunho')}</label>`:'')}
@@ -505,9 +506,9 @@ function txFiscoSect(){
      que não grava. Ficam para o movimento que se confirma. */
   const fixo=txModo.modo!=='rec'&&txModo.modo!=='tpl';
   return `<div class="${fixo?'row':''}">
-      ${fixo?`<label>Mês a que respeita<input id="t_periodo" type="month" value="${esc(t.periodo||'')}" placeholder="AAAA-MM"></label>`:''}
+      ${fixo?`<label>Mês a que respeita (opcional)<input id="t_periodo" type="month" value="${esc(t.periodo||'')}" placeholder="Ex: 2026-08"></label>`:''}
       <label>Retido na fonte (€)<input id="t_retencao" type="text" inputmode="decimal" value="${t.retencao?dec(t.retencao):''}" placeholder="Opcional"></label></div>
-    <div class="hint u-mt-n6px">Se o inquilino é uma empresa que retém IRS, escreve o que ficou retido: a renda bruta é o montante mais isto.</div>
+    <div class="hint u-mt-n6px">${fixo?'Mês em branco: o da data. ':''}Se o inquilino é uma empresa que retém IRS, escreve o que ficou retido: a renda bruta é o montante mais isto.</div>
     ${fixo&&ctDeclarado(c)?`<label class="check"><input type="checkbox" id="t_recibo" ${t.recibo?'checked':''}> Recibo de renda eletrónico emitido</label>
     <div class="hint u-mt-n4px">Emite-se no Portal das Finanças quando a renda entra; marcar aqui cala o aviso.</div>`:''}`;
 }
@@ -515,6 +516,12 @@ function txFiscoSect(){
 // «pela categoria», e o seletor já mostra o rótulo novo — não há que repintar.
 // Devolve: nada — atualiza tForm.irsCol.
 function onIrsCol(){collectTx();tForm.irsCol=val('t_irscol')||''}
+/* O exemplo de uma parte da divisão (entre proprietários ou entre imóveis),
+   pelo modo: em branco a parte conta 0, e o exemplo mostra o que se escreve
+   ali — partes, percentagem ou euros.
+   Recebe: mode — o modo da divisão ('pct', 'percent', 'amount' ou 'adjust').
+   Devolve: o exemplo (texto), sem o «Ex: », que é o placeholder que o põe. */
+function exemploDaParte(mode){return mode==='pct'?'1':mode==='percent'?'50':mode==='adjust'?'5':'100'}
 /* divisão entre proprietários: quotas, percentagem, valor certo ou ajuste
    Recebe: ows — os proprietários a listar (objetos com id e name, já resolvidos).
    Devolve: o HTML da secção dobrável (string). */
@@ -525,7 +532,7 @@ function splitSect(ows){
     <label>Como se divide${sel('t_split',mode,SPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onSplitSel','rascunho')}</label>
     ${(mode==='quota'||mode==='equal')?'':`<div class="form u-g-7px">${ows.map(o=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${esc(initials(o.name))}</span>
       <span class="nm">${esc(rotuloDoDono(o,ows.length))}</span>
-      <input id="t_sp_${o.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[o.id]!=null&&parts[o.id]!==''?dec(parts[o.id]):''}" placeholder="0" data-input="refreshSplit()">
+      <input id="t_sp_${o.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[o.id]!=null&&parts[o.id]!==''?dec(parts[o.id]):''}" placeholder="Ex: ${exemploDaParte(mode)}" aria-label="Parte de ${esc(o.name)}" data-input="refreshSplit()">
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
     <div class="hint" id="splitHint">${splitHint(ows)}</div>`,{icon:'split',summary:lab});
 }
@@ -596,7 +603,7 @@ function psplitSect(){
     <label>Como se divide${sel('t_psplit',mode,PSPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onPsplitSel','rascunho')}</label>
     ${['equal','value','purchase'].indexOf(mode)>-1?'':`<div class="form u-g-7px">${ps.map(p=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${ic('building',15)}</span>
       <span class="nm">${esc(p.name)}</span>
-      <input id="t_pp_${p.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[p.id]!=null&&parts[p.id]!==''?dec(parts[p.id]):''}" placeholder="0" data-input="refreshPsplit()">
+      <input id="t_pp_${p.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[p.id]!=null&&parts[p.id]!==''?dec(parts[p.id]):''}" placeholder="Ex: ${exemploDaParte(mode)}" aria-label="Parte de ${esc(p.name)}" data-input="refreshPsplit()">
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
     <div class="hint" id="psplitHint">${psplitHint()}</div>`,{icon:'building',open:true,summary:lab});
 }
@@ -872,7 +879,7 @@ function onCatChange(){
     const tr=catsFor(tForm.kind);if(tr&&!tr[nm])tr[nm]=[];
     save();tForm.category=nm;tForm.sub='';repaintTx();
     toast('Categoria criada.');
-  })}
+  },isIn(tForm.kind)?'Alojamento local':'Obras')}
   tForm.category=v;tForm.sub='';repaintTx();
 }
 // Mudou a subcategoria; "__new__" abre o prompt para criar uma nova dentro da categoria atual.
@@ -886,7 +893,7 @@ function onSubChange(){
     if(l.indexOf(nm)<0)l.push(nm);
     save();tForm.sub=nm;repaintTx();
     toast('Subcategoria criada.');
-  })}
+  },isIn(tForm.kind)?'Renda de garagem':'Canalização')}
   tForm.sub=v;
   /* numa despesa a subcategoria muda a coluna do Anexo F («Impostos / IMI»
      tem regra própria): a primeira opção do seletor tem de a dizer */
@@ -956,7 +963,7 @@ function newTagFromTx(){
     if((tForm.tags||[]).indexOf(nm)<0)tForm.tags.push(nm);
     save();repaintTx();
     toast('Etiqueta criada e aplicada.');
-  });
+  },'Obras 2026');
 }
 // Tira uma etiqueta do movimento e repinta o modal.
 // Recebe: g — o nome da etiqueta a tirar (string).

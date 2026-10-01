@@ -354,7 +354,7 @@ function aposAcaoNoGrupo(id) {
 
 /* ---------------- as ações do grupo ---------------- */
 
-// «Mudar o nome…» (só o dono): pede o nome novo e envia PUT /api/shared-groups/:id {name}.
+// «Mudar o nome…» (só o dono): pede o nome novo (obrigatório, com um exemplo) e envia PUT /api/shared-groups/:id {name}.
 // Recebe: id — o id do grupo.
 // Devolve: nada — abre o prompt; só ao guardar chama a API.
 CW.grupoRenomear = function (id) {
@@ -366,7 +366,7 @@ CW.grupoRenomear = function (id) {
     api('PUT', '/api/shared-groups/' + encodeURIComponent(id), { name: nome })
       .then(function () { g.name = nome; toast('Grupo guardado.'); return aposAcaoNoGrupo(id); })
       .catch(function (e) { toast(e.message, { ms: 6000 }); });
-  });
+  }, 'Casas de Lisboa');
 };
 
 /* «Pôr os meus imóveis…»: a janela com as minhas casas (cwMinha) em caixas,
@@ -529,10 +529,10 @@ CW.grupoLigacaoCopiar = function (id) {
 
 /* ---------------- criar e partilhar ---------------- */
 
-/* «Novo grupo partilhado»: pede o nome, cria-o vazio (PUT /api/shared-groups/:id
-   {name}, com um id daqui, como as casas) e abre a janela dele, para pôr
-   imóveis e criar a ligação. O grupo entra já na base (grupoLocalPartilhado),
-   e o estado a seguir confirma-o.
+/* «Novo grupo partilhado»: pede o nome (obrigatório, com um exemplo), cria-o
+   vazio (PUT /api/shared-groups/:id {name}, com um id daqui, como as casas)
+   e abre a janela dele, para pôr imóveis e criar a ligação. O grupo entra já
+   na base (grupoLocalPartilhado), e o estado a seguir confirma-o.
    Devolve: nada — abre o prompt; só ao guardar chama a API. */
 CW.grupoNovo = function () {
   if (!CW.user) return CW.showAuth();
@@ -548,42 +548,124 @@ CW.grupoNovo = function () {
       })
       .then(function () { render(); CW.grupoModal(id); })
       .catch(function (e) { toast(e.message, { ms: 6000 }); });
-  });
+  }, 'Casas de Lisboa');
 };
 
+/* As casas de um grupo privado, vistas por quem o quer partilhar: as minhas
+   (cwMinha — as que criei, as únicas que o servidor aceita num grupo
+   partilhado: 403 «Só podes pôr no grupo imóveis teus.») e as de outras
+   pessoas (partilhadas comigo, de colaboração, em compropriedade de outro
+   criador). Um id que já não está na base (um imóvel apagado) não conta para
+   nenhum lado: fica de fora sem se dizer.
+   Recebe: g — o grupo (objeto de db.groups).
+   Devolve: {minhas, outras} — dois arrays de ids, pela ordem do grupo. */
+function casasDoGrupoPorDono(g) {
+  var minhas = [], outras = [];
+  ((g && g.ids) || []).forEach(function (pid) {
+    var p = prop(pid);
+    if (!p) return;
+    (cwMinha(p) ? minhas : outras).push(pid);
+  });
+  return { minhas: minhas, outras: outras };
+}
+
+/* Os botões do fundo das janelas que explicam porque um grupo não se
+   partilha: «Fechar» e «Editar o grupo», que fecha tudo (a janela de edição
+   do grupo, se se veio de lá) e abre a de edição dele — é lá que se lhe
+   juntam imóveis.
+   Recebe: id — o id do grupo.
+   Devolve: o HTML do rodapé (texto). */
+function rodapeDeGrupoPorPartilhar(id) {
+  return '<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>' +
+    '<button class="btn primary" data-toca="camada" data-click="closeAllModals();groupModal(\'prop\',\'' + jsq(id) + '\')">Editar o grupo</button>';
+}
+
+/* A janela de um grupo que ainda não tem imóveis (ou só ids de imóveis que
+   já não existem): partilhado assim ficava um grupo vazio, e o privado
+   perdia-se. Diz o que fazer, e leva à edição do grupo.
+   Recebe: g — o grupo.
+   Devolve: nada — abre a janela. */
+function explicarGrupoVazio(g) {
+  openModal('Este grupo ainda não tem imóveis',
+    '<div class="form"><div class="hint u-fs-14px">O grupo <b>«' + esc(g.name || 'Sem nome') + '»</b> está vazio. Um grupo partilhado leva os imóveis teus que lá estão: junta-lhe pelo menos um em «Editar o grupo» e volta a tocar em «Partilhar».</div>' +
+    '<div class="hint">Para começar um grupo partilhado do zero, há «Novo grupo partilhado», no cartão «Grupos partilhados».</div></div>',
+    rodapeDeGrupoPorPartilhar(g.id));
+}
+
+/* A janela de um grupo só com imóveis de outras pessoas: diz de quem é cada
+   um («T2 Campo de Ourique é de Ana»), porque não entram — num grupo
+   partilhado cada pessoa só põe imóveis seus, e o servidor recusa os outros
+   — e o que se pode fazer: juntar-lhe um imóvel meu, ou pedir ao dono que
+   crie o grupo. Nunca um botão que não faz nada.
+   Recebe: g — o grupo; outras — os ids dos imóveis (de casasDoGrupoPorDono).
+   Devolve: nada — abre a janela. */
+function explicarGrupoDosOutros(g, outras) {
+  var porDono = {}, donos = [];
+  outras.forEach(function (pid) {
+    var d = donoDoImovelDoGrupo(pid).nome || '';
+    if (!porDono[d]) { porDono[d] = []; donos.push(d); }
+    porDono[d].push(pid);
+  });
+  var frases = donos.map(function (d) {
+    var cs = porDono[d];
+    var nomes = listaE(cs.map(function (pid) { return '<b>' + esc((prop(pid) || {}).name || 'Sem nome') + '</b>'; }));
+    return nomes + (cs.length === 1 ? ' é ' : ' são ') + (d ? 'de ' + esc(d) : 'de outra pessoa') + '.';
+  });
+  var quem = donos.length === 1 && donos[0] ? esc(donos[0]) : 'quem é dono deles';
+  openModal(outras.length === 1 ? 'Este imóvel não é teu' : 'Estes imóveis não são teus',
+    '<div class="form"><div class="hint u-fs-14px">' + frases.join(' ') + '</div>' +
+    '<div class="hint">Num grupo partilhado cada pessoa só põe imóveis seus: quem entra fica comproprietário deles, por isso só o dono de um imóvel o pode pôr no grupo. Partilhado agora, o grupo <b>«' + esc(g.name || 'Sem nome') + '»</b> ficava vazio.</div>' +
+    '<div class="hint">Junta-lhe um imóvel teu em «Editar o grupo» e volta a tocar em «Partilhar» — ' + (outras.length === 1 ? 'esse fica' : 'esses ficam') + ' de fora. Ou pede a ' + quem + ' que crie o grupo partilhado e te convide.</div></div>',
+    rodapeDeGrupoPorPartilhar(g.id));
+}
+
 /* Partilhar um grupo de imóveis privado que já existe. Chega-se aqui pelo
-   separador Grupos — o «Partilhar» de cada grupo, «Partilhar um grupo que já
-   tens» (CW.grupoEscolherParaPartilhar) — e pela janela de edição do grupo
-   (o botão à vista e o ⋯). Diz o que muda e, confirmado, cria o grupo no
-   servidor com o MESMO id (PUT {name}), põe-lhe as casas do grupo que são
-   minhas (PUT …/houses — só as que criei, cwMinha: as dos outros saem do
-   grupo, e o toast diz quais), cria a ligação (POST …/link), marca o grupo
-   local (grupoLocalPartilhado — o id fica, os movimentos com groupId
-   continuam a apontar para ele, e o u:group antigo sai por diferença) e
-   mostra a ligação. Um grupo sem nenhuma casa minha não se partilha: ficava
-   um grupo partilhado vazio, e o privado perdia-se — diz-se porquê.
+   «Partilhar» que cada grupo de imóveis privado tem SEMPRE no separador
+   Grupos (app/definicoes.js:vGroups), por «Partilhar um grupo que já tens»
+   (CW.grupoEscolherParaPartilhar) e pela janela de edição do grupo (o botão
+   à vista e o ⋯). Por isso explica em vez de falhar: sem sessão, o ecrã de
+   entrada com o porquê; com os Colaboradores desligados, a frase do
+   serviço; um grupo vazio ou só com imóveis de outras pessoas, a janela que
+   o diz (explicarGrupoVazio, explicarGrupoDosOutros). Com imóveis meus, diz
+   o que muda e, confirmado, cria o grupo no servidor com o MESMO id (PUT
+   {name}), põe-lhe as casas do grupo que são minhas (PUT …/houses — só as
+   que criei, cwMinha: as dos outros saem do grupo, e o toast diz quais),
+   cria a ligação (POST …/link), marca o grupo local (grupoLocalPartilhado —
+   o id fica, os movimentos com groupId continuam a apontar para ele, e o
+   u:group antigo sai por diferença) e mostra a ligação. Se o servidor
+   recusar a meio (as casas ou a ligação), o grupo acabado de criar lá
+   apaga-se (DELETE): sem isso, a leitura seguinte trocava o privado por um
+   partilhado vazio com o mesmo id, e o grupo sumia da lista dos privados.
    Recebe: id — o id do grupo privado.
-   Devolve: nada — pede confirmação; só depois fala com a API. */
+   Devolve: nada — abre uma janela (a confirmação, ou a que explica); só depois da confirmação fala com a API. */
 CW.grupoPartilhar = function (id) {
   var g = grp(id);
-  if (!g || g.kind !== 'prop') return;
+  if (!g) return toast('Esse grupo já não está na lista.');
+  if (g.kind !== 'prop') return toast('Só os grupos de imóveis se partilham.');
   if (g._partilhado) return CW.grupoModal(id);
-  if (!CW.user) return CW.showAuth();
-  if (!servicoLigado('colaboradores')) return toast(hintServicoDesligado('colaboradores'), { ms: 6000 });
-  var minhas = (g.ids || []).filter(function (pid) { return cwMinha(prop(pid)); });
-  if (!minhas.length) return toast('Este grupo não tem imóveis teus: num grupo partilhado cada pessoa põe imóveis seus.', { ms: 6000 });
-  var fora = (g.ids || []).filter(function (pid) { return minhas.indexOf(pid) < 0; });
-  var nomesFora = nomesDeCasas(fora), nome = String(g.name || '').slice(0, 60);
+  var nome = String(g.name || '').slice(0, 60);
+  if (!CW.user) {
+    var porque = 'Para partilhar o grupo «' + nome + '», entra na tua conta: um grupo partilhado vive no servidor, e é por lá que os outros pedem para entrar.';
+    if (typeof showAuth === 'function') return showAuth(porque, true);
+    return toast(porque, { ms: 6000 });
+  }
+  if (!servicoLigado('colaboradores')) return toast(fraseServicoDesligado('colaboradores'), { ms: 6000 });
+  var casas = casasDoGrupoPorDono(g), minhas = casas.minhas, fora = casas.outras;
+  if (!minhas.length) return fora.length ? explicarGrupoDosOutros(g, fora) : explicarGrupoVazio(g);
+  var nomesFora = nomesDeCasas(fora);
   confirmModal('Partilhar este grupo',
     'O grupo <b>«' + esc(nome) + '»</b> passa a partilhado: quem pedir para entrar pela ligação, e tu aceitares, fica comproprietário dos imóveis dele — vê e edita contratos, movimentos e pessoas — e pode pôr no grupo imóveis seus. ' +
     (fora.length ? 'Só os imóveis teus entram: <b>' + esc(nomesFora) + '</b> ' + (fora.length === 1 ? 'sai' : 'saem') + ' do grupo. ' : '') +
     'Um grupo partilhado não volta a ser privado.',
     function () {
       var rota = '/api/shared-groups/' + encodeURIComponent(id);
+      var criado = false, feito = false;
       api('PUT', rota, { name: nome })
-        .then(function () { return api('PUT', rota + '/houses', { houseIds: minhas }); })
+        .then(function () { criado = true; return api('PUT', rota + '/houses', { houseIds: minhas }); })
         .then(function () { return api('POST', rota + '/link'); })
         .then(function (r) {
+          feito = true;
+          r = r || {};
           var url = r.url || '';
           grupoLocalPartilhado(id, nome, minhas, r.expiresAt);
           guardarLigacaoDoGrupo(id, url);
@@ -597,7 +679,12 @@ CW.grupoPartilhar = function (id) {
           return pullNow(true);
         })
         .then(function () { render(); })
-        .catch(function (e) { toast(e.message, { ms: 6000 }); });
+        .catch(function (e) {
+          var meio = criado && !feito;
+          // a meio: o grupo do servidor sai, e o privado fica como estava
+          if (meio) api('DELETE', rota).catch(function () {});
+          toast(((e && e.message) || 'Não deu para partilhar o grupo.') + (meio ? ' O grupo continua privado.' : ''), { ms: 6000 });
+        });
     });
 };
 
@@ -675,7 +762,7 @@ CW.entrarNoGrupo = function (token) {
    quantos pedidos esperam resposta — a abrir a janela dele; depois, os
    pedidos que fiz para entrar e ainda esperam («<grupo> · à espera de
    <dono>», com «Cancelar pedido»); «Novo grupo partilhado» e, quando há
-   grupos privados que se podem partilhar (gruposParaPartilhar), «Partilhar
+   pelo menos um grupo de imóveis privado (gruposParaPartilhar), «Partilhar
    um grupo que já tens» — um grupo que já existe também se partilha, e não
    só um novo; e a nota do que é. Viveu na página Conta e partilha, onde
    ficou só uma linha que traz aqui (linhaDosGrupos). Só com sessão e com o
@@ -714,41 +801,38 @@ function gruposCard() {
 
 /* ---------------- partilhar um grupo que já existe ---------------- */
 
-/* Os grupos de imóveis privados que posso partilhar: os que têm pelo menos
-   um imóvel meu (cwMinha). Partilhar leva só os meus (CW.grupoPartilhar), e
-   um grupo só com imóveis dos outros dava um grupo partilhado vazio — esse
-   não se oferece. Sem sessão ou com o serviço desligado, nenhum. A base
-   pergunta por aqui antes de pôr «Partilhar» num grupo
-   (app/definicoes.js:vGroups, groupBody, groupModal).
+/* Os grupos de imóveis privados — todos os que se podem tentar partilhar.
+   Já foram só os que tinham um imóvel meu (cwMinha), e com isso o botão
+   escondia-se a quem só tinha grupos de casas que não criou, sem dizer
+   porquê. Agora todos se oferecem, e o CW.grupoPartilhar explica o que não
+   dá (vazio, só imóveis de outras pessoas). O cartão «Grupos partilhados»
+   pergunta por aqui antes de pôr «Partilhar um grupo que já tens».
    Devolve: array de grupos de db.groups, pela ordem da base. */
 function gruposParaPartilhar() {
-  if (!CW.user || !servicoLigado('colaboradores')) return [];
-  return (db.groups || []).filter(function (g) {
-    return g && g.kind === 'prop' && !g._partilhado &&
-      (g.ids || []).some(function (pid) { return cwMinha(prop(pid)); });
-  });
+  return (db.groups || []).filter(function (g) { return g && g.kind === 'prop' && !g._partilhado; });
 }
 
 /* «Partilhar um grupo que já tens», ao lado de «Novo grupo partilhado»: a
-   lista dos grupos privados que se podem partilhar (gruposParaPartilhar),
-   cada um com quantos imóveis teus leva e quantos ficam de fora; escolher
-   fecha a lista e segue o caminho do «Partilhar» de cada grupo
-   (CW.grupoPartilhar, com a confirmação que diz o que muda).
-   Devolve: nada — abre a lista (ou avisa, sem nenhum grupo para partilhar). */
+   lista de todos os grupos de imóveis privados (gruposParaPartilhar), cada
+   um com quantos imóveis teus leva e quantos ficam de fora — ou que não tem
+   imóveis, ou nenhum teu; escolher fecha a lista e segue o caminho do
+   «Partilhar» de cada grupo (CW.grupoPartilhar: a confirmação que diz o que
+   muda, ou a janela que explica porque não dá).
+   Devolve: nada — abre a lista (ou avisa, sem nenhum grupo de imóveis). */
 CW.grupoEscolherParaPartilhar = function () {
   if (!CW.user) return CW.showAuth();
-  if (!servicoLigado('colaboradores')) return toast(hintServicoDesligado('colaboradores'), { ms: 6000 });
+  if (!servicoLigado('colaboradores')) return toast(fraseServicoDesligado('colaboradores'), { ms: 6000 });
   var gs = gruposParaPartilhar();
-  if (!gs.length) return toast('Não tens grupos de imóveis teus por partilhar.');
+  if (!gs.length) return toast('Ainda não tens grupos de imóveis. Cria um em «Novo grupo de imóveis», ou começa um partilhado do zero.', { ms: 6000 });
   pickModal('Partilhar um grupo que já tens', gs.map(function (g) {
-    var meus = g.ids.filter(function (pid) { return cwMinha(prop(pid)); }).length, fora = g.ids.length - meus;
-    return {
-      v: g.id, label: g.name || 'Sem nome', icon: 'building',
-      sub: meus + (meus === 1 ? ' imóvel teu' : ' imóveis teus') +
-        (fora ? ' · ' + fora + (fora === 1 ? ' de outra pessoa fica de fora' : ' de outras pessoas ficam de fora') : ''),
-    };
+    var c = casasDoGrupoPorDono(g), meus = c.minhas.length, fora = c.outras.length;
+    var sub = !meus && !fora ? 'Ainda sem imóveis'
+      : !meus ? 'Nenhum imóvel teu · ' + fora + (fora === 1 ? ' de outra pessoa' : ' de outras pessoas')
+      : meus + (meus === 1 ? ' imóvel teu' : ' imóveis teus') +
+        (fora ? ' · ' + fora + (fora === 1 ? ' de outra pessoa fica de fora' : ' de outras pessoas ficam de fora') : '');
+    return { v: g.id, label: g.name || 'Sem nome', icon: 'building', sub: sub };
   }), function (o) { closeModal(); CW.grupoPartilhar(o.v); },
-  '<div class="hint u-mt-9px">O grupo fica com o mesmo nome e os mesmos imóveis teus. Quem entrar pela ligação, e tu aceitares, fica comproprietário deles.</div>');
+  '<div class="hint u-mt-9px">O grupo fica com o mesmo nome e os mesmos imóveis teus. Quem entrar pela ligação, e tu aceitares, fica comproprietário deles. Num grupo partilhado só entram os imóveis teus.</div>');
 };
 
 /* ---------------- o crachá e a porta em Conta e partilha ---------------- */

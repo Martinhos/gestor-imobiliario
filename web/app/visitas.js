@@ -242,10 +242,10 @@ function visBody(){
     ?[{v:'',label:'Casa inteira'}].concat(p.rooms.map(r=>({v:r.id,label:r.name||'quarto'})))
     :null;
   return `<div class="form">
-    <label>Quem vem <span class="req">*</span><input id="vi_nomes" value="${esc(v.nomes)}" placeholder="Ana Rodrigues (e o irmão)" autocomplete="off"></label>
-    <label>Contacto (opcional)<input id="vi_contacto" value="${esc(v.contacto)}" placeholder="Telemóvel ou email" autocomplete="off"></label>
+    <label>Quem vem <span class="req">*</span><input id="vi_nomes" value="${esc(v.nomes)}" placeholder="Ex: Ana Rodrigues e o irmão" autocomplete="off"></label>
+    <label>Telemóvel ou email (opcional)<input id="vi_contacto" value="${esc(v.contacto)}" placeholder="Ex: 912 345 678" autocomplete="off"></label>
     <div class="hint u-m-n4px-0-0">Para confirmar ou remarcar — segue para a ficha se a visita virar inquilino.</div>
-    <label>Imóvel${sel('vi_prop',v.propertyId,props,'visPropMudou','rascunho')}</label>
+    <label>Imóvel <span class="req">*</span>${sel('vi_prop',v.propertyId,props,'visPropMudou','rascunho')}</label>
     ${quartos?`<label>Quarto${sel('vi_room',v.roomId,quartos,'','rascunho')}</label>`:''}
     <label>Data <span class="req">*</span><input id="vi_date" type="date" value="${v.date||''}"></label>
     <div class="row">
@@ -254,8 +254,8 @@ function visBody(){
     <div class="row">
       <label>Estado${sel('vi_estado',v.estado,Object.keys(VESTADO).map(k=>({v:k,label:VESTADO[k]})),'','rascunho')}</label>
       <label>Desfecho${sel('vi_res',v.resultado,Object.keys(VDESFECHO).map(k=>({v:k,label:VDESFECHO[k]})),'','rascunho')}</label></div>
-    <label>Comentários (opcional)<textarea id="vi_notas" placeholder="Primeiras impressões, perguntas que fizeram, o que ficou combinado…">${esc(v.notas)}</textarea></label>
-    <div class="hint">O desfecho preenche-se depois da visita — é o que separa um «talvez» de um «liga já».</div></div>`;
+    <label>Comentários (opcional)<textarea id="vi_notas" placeholder="Ex: Gostaram da luz; perguntaram se aceita animais.">${esc(v.notas)}</textarea></label>
+    <div class="hint">As primeiras impressões, as perguntas que fizeram, o que ficou combinado. O desfecho preenche-se depois da visita — é o que separa um «talvez» de um «liga já».</div></div>`;
 }
 
 /* O menu do imóvel mudou dentro do formulário: recolhe o que está escrito e

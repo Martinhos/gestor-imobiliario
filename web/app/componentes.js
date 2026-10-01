@@ -352,7 +352,7 @@ function fileBlock(label,list,inputId,onPick,delFn,opts){
     ${list.length?(photos?
       `<div class="list u-g-8px">${list.map((f,i)=>`<div class="prow">
          <div class="pth pcover" id="th_${esc(f.id)}" data-click="openMeta('${jsq(f.id)}')">${i===0?'<span class="capa">capa</span>':''}</div>
-         <input class="pnm" id="fn_${esc(f.id)}" value="${esc(f.name)}" placeholder="Nome da foto" autocomplete="off" data-input="livePhotoName('${jsq(f.id)}',this.value)">
+         <input class="pnm" id="fn_${esc(f.id)}" value="${esc(f.name)}" placeholder="Ex: Sala de estar" aria-label="Nome da fotografia (opcional)" autocomplete="off" data-input="livePhotoName('${jsq(f.id)}',this.value)">
          ${opts.move?`<button type="button" class="pgrab" aria-label="Arrastar para reordenar" data-pointerdown="photoDrag(event,this,${i})">${ic('grip',16)}</button>`:''}
          <button type="button" class="btn sm danger u-fx-0-0-auto u-minw-40px u-minh-40px u-ml-8px" aria-label="Apagar a fotografia" data-click="delFileConfirm('${jsq(delFn)}','${jsq(f.id)}','fotografia')">${ic('trash',14)}</button></div>`).join('')}</div>`
       :`<div class="list u-g-8px u-mb-9px">${list.map(f=>`

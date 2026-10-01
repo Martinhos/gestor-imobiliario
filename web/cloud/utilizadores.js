@@ -52,7 +52,8 @@ function injectPhoneCountry() {
   sel.value = code;
   var row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:8px';
-  /* o placeholder passa a ser o formato do número: o «opcional» que ele dizia
+  /* o placeholder passa a ser um exemplo do número («Ex: …», como todos os
+     exemplos da app): o «opcional» que ele dizia
      sobe para o rótulo, como nos outros campos com exemplo (o rótulo é o texto
      do <label> que embrulha o campo, e fica onde está) */
   var lab = inp.parentNode, txt = lab && lab.firstChild;
@@ -61,7 +62,7 @@ function injectPhoneCountry() {
   row.appendChild(sel);
   row.appendChild(inp);
   inp.value = rest;
-  inp.placeholder = '912 345 678';
+  inp.placeholder = 'Ex: 912 345 678';
   inp.style.flex = '1';
 }
 

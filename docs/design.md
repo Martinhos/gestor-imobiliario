@@ -54,6 +54,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - A app não afirma nem decide antes de saber
 - A sincronização: o que é daqui e o que é do servidor
 - Grupos partilhados
+- Os formulários dizem o que é obrigatório, o que é opcional e dão exemplos
 - Um movimento de vários imóveis parte-se por imóvel
 - O capital em dívida deriva-se
 - Navegação
@@ -1505,8 +1506,9 @@ encontrava lá. Em cima, quando posso partilhar (definicoes.js:podePartilharGrup
 partilhados» (os meus e os dos outros, os pedidos que fiz, «Novo grupo
 partilhado» e «Partilhar um grupo que já tens»); em baixo, os grupos por tipo
 (definicoes.js:vGroups), sem os partilhados, que já estão em cima. Sem poder
-partilhar, o separador mostra só os grupos privados e nenhum botão de
-partilha. As Definições já não têm a linha «Grupos»; goSet('groups') e a
+partilhar (sem sessão ou com o serviço desligado) o cartão dos partilhados não
+aparece — não há o que listar do servidor —, mas cada grupo de imóveis privado
+continua com o «Partilhar», e o toque diz o que falta. As Definições já não têm a linha «Grupos»; goSet('groups') e a
 página guardada antiga levam ao separador (navegacao.js:goSet,
 web/cloud/nucleo.js:restorePage).
 Conta e partilha tem só uma linha que leva aos Grupos
@@ -1522,17 +1524,63 @@ o «Partilhar» estava só no ⋯ da janela de edição. Agora há três portas 
 vista: «Partilhar» no cartão de cada grupo (trava o toque, para não abrir
 também a janela de edição), «Partilhar um grupo que já tens» ao lado de «Novo
 grupo partilhado» (web/cloud/grupos.js:CW.grupoEscolherParaPartilhar, que
-lista os privados) e «Partilhar este grupo» no corpo da janela de edição
-(definicoes.js:groupBody). Todas vão dar a web/cloud/grupos.js:CW.grupoPartilhar,
-que confirma e cria o grupo no servidor com o MESMO id. Só se oferece num
-grupo com pelo menos um imóvel meu (web/cloud/grupos.js:gruposParaPartilhar):
-partilhar leva só os imóveis meus, e um grupo só com imóveis dos outros
-ficava um grupo partilhado vazio — o CW.grupoPartilhar recusa esse caso com
-uma frase, venha de onde vier.
+lista todos os privados e diz quantos imóveis de cada um são meus) e
+«Partilhar este grupo» no corpo e no ⋯ da janela de edição
+(definicoes.js:groupBody). As três estão SEMPRE em cada grupo de imóveis
+privado, desde que a nuvem dos grupos esteja carregada. Chegaram a esconder-se
+num grupo sem imóveis criados por mim (web/cloud/grupos.js:gruposParaPartilhar
+filtrava por eles), e o Martinho via «Novo grupo partilhado» e nenhuma forma
+de partilhar os grupos que tinha — as casas que outra conta lhe partilhou não
+são «dele» para a app. Esconder era o erro: um botão que explica é melhor do
+que um que desaparece sem razão à vista. Todas vão dar a
+web/cloud/grupos.js:CW.grupoPartilhar, que explica em vez de falhar: sem
+sessão, o ecrã de entrada com o porquê; com o serviço desligado, a frase do
+serviço; um grupo vazio, ou só com imóveis de outras pessoas, uma janela que
+diz de quem é cada um e porque não entra (num grupo partilhado cada pessoa só
+põe imóveis seus — o servidor recusa os outros com 403), com «Editar o grupo».
+Com imóveis meus, confirma e cria o grupo no servidor com o MESMO id, só com
+os meus. Se o servidor recusar a meio (as casas ou a ligação), o grupo acabado
+de criar lá apaga-se: sem isso, a leitura seguinte trocava o privado por um
+partilhado vazio com o mesmo id, e o grupo «perdia» o botão.
 
 Um movimento atribuído a um grupo partilhado chega a todos os membros porque
 se parte por imóvel ao guardar (ver «Um movimento de vários imóveis parte-se
 por imóvel»).
+
+## Os formulários dizem o que é obrigatório, o que é opcional e dão exemplos
+Pedido do Martinho (2026-10-01): «Como o nome do grupo é obrigatório, deve ter
+o * vermelho. Faz isso para todos os forms. Os placeholders devem ter "Ex: ".
+Se for opcional, deve dizer opcional como nos imóveis.» A regra, a mesma em
+todos os formulários:
+
+- **Obrigatório** é o que o guardar recusa vazio, e leva o asterisco vermelho
+  no rótulo (estilos.css:.req), na mesma linha do texto: o `<label>` é uma
+  grelha, e com o asterisco a primeira linha tem duas colunas
+  (estilos.css:label:has(>.req)); um rótulo com marcas lá dentro leva o texto
+  num estilos.css:.rotulo-txt. Vale para datas, números e escolhas (no
+  `.flabel`). Um campo obrigatório sem rótulo (o nome de uma categoria escrito
+  no próprio cartão) leva um aria-label. A janela de um só campo
+  (definicoes.js:promptModal) só guarda com texto e leva sempre o asterisco.
+- **Placeholder** é sempre «Opcional» ou «Ex: » seguido de um exemplo
+  concreto e fictício — nunca uma instrução («Telemóvel ou email», «Só se não
+  tem NIF português»): a instrução vai para o rótulo ou para um `.hint` por
+  baixo. Datas e palavras-passe não levam exemplo. As únicas exceções são a
+  pesquisa e a palavra a escrever para confirmar (testes/placeholders.test.js
+  varre web/ inteiro).
+- **Opcional** diz «Opcional» no placeholder; quando o exemplo vale a pena,
+  o placeholder é o exemplo e o rótulo diz «(opcional)».
+- **Um valor por omissão** (o imposto e o aumento do contrato, o prazo da
+  hipoteca, os parâmetros das projeções) diz-se num `.hint` «Em branco: …»,
+  nunca escondido no placeholder.
+
+O ecrã de entrar e criar conta tinha placeholders a fazer de rótulo («Email»,
+«Palavra-passe»), que desaparecem ao escrever; passou a ter rótulos à vista
+(web/cloud/entrada.js:camposDaEntrada), com os ids, os tipos e o autocomplete
+intactos para o gestor de palavras-passe. O capital de uma hipoteca levou o
+asterisco e passou a ser recusado em branco também ao editar e na ficha do
+imóvel (creditos.js:mortOpen, imovel.js:propModal) — o campo dizia
+«obrigatório» e gravava-se vazio. A regra vive num oráculo partilhado pelos
+testes de cada formulário (testes/lib/formularios.js:conferir).
 
 ## Um movimento de vários imóveis parte-se por imóvel
 Um movimento de vários imóveis — de um grupo, ou de «Todos os imóveis» — não

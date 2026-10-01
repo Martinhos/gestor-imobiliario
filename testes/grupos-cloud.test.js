@@ -637,9 +637,9 @@ describe('o cartão «Grupos partilhados» e o separador Grupos', () => {
     assert.equal((h.match(/CW\.grupoPartilhar\(/g) || []).length, 1, 'só no privado: os partilhados não se partilham outra vez');
     assert.match(h, /«Partilhar» passa um grupo de imóveis a partilhado/);
     assert.ok(!h.includes('Novo grupo partilhado'), 'vive no cartão dos partilhados, em cima');
-    // sem sessão: sem «Partilhar», e um partilhado (que não existiria) abriria na base
+    // sem sessão o «Partilhar» fica à vista: o toque é que diz que é preciso entrar
     app.CW.user = null;
-    assert.ok(!app.vGroups().includes('grupoPartilhar'));
+    assert.ok(app.vGroups().includes("CW.grupoPartilhar('GP')"));
   });
 
   test('groupModal e delGroup delegam para a nuvem num grupo partilhado (apagar ao dono, sair a quem não é)', async () => {
@@ -661,7 +661,7 @@ describe('o cartão «Grupos partilhados» e o separador Grupos', () => {
     assert.ok(!app.db.groups.some((g) => g.id === 'GP'));
   });
 
-  test('o menu de um grupo de imóveis privado tem «Partilhar este grupo…» com sessão, e não o tem sem ela nem com os Colaboradores desligados', () => {
+  test('o menu de um grupo de imóveis privado tem sempre «Partilhar este grupo…» — com sessão, sem ela e com os Colaboradores desligados (o toque explica) —, e um grupo novo ou de proprietários não', () => {
     const { app, esp } = comEstado();
     app.groupModal('prop', 'GP');
     assert.equal(esp.abertas[0].t, 'Editar grupo');
@@ -671,16 +671,16 @@ describe('o cartão «Grupos partilhados» e o separador Grupos', () => {
     // um grupo novo (sem id) não tem menu nenhum
     app.groupModal('prop');
     assert.equal(esp.abertas[1].m, '');
-    // sem sessão
+    // sem sessão: fica, e o toque leva à entrada
     app.CW.user = null;
     app.groupModal('prop', 'GP');
-    assert.ok(!esp.abertas[2].m.includes('grupoPartilhar'));
+    assert.ok(esp.abertas[2].m.includes("CW.grupoPartilhar('GP')"));
     assert.match(esp.abertas[2].m, /Apagar grupo/);
-    // com os Colaboradores desligados
+    // com os Colaboradores desligados: fica, e o toque diz a frase do serviço
     app.CW.user = { id: 'EU', name: 'Eu', email: 'eu@exemplo.pt' };
     app.definirServicosDesligados(['colaboradores']);
     app.groupModal('prop', 'GP');
-    assert.ok(!esp.abertas[3].m.includes('grupoPartilhar'));
+    assert.ok(esp.abertas[3].m.includes("CW.grupoPartilhar('GP')"));
     assert.ok(!app.vGroups().includes('Novo grupo partilhado'));
     // e num grupo de proprietários nunca
     app.definirServicosDesligados([]);
