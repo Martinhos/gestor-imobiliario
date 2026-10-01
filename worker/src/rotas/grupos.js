@@ -538,7 +538,7 @@ export async function rotasGrupos(c) {
     const houseIds = idsDeCasas(b && b.houseIds, true);
     if (!houseIds) return err(400, 'Corpo inválido — envia { houseIds: [...] }, com até 200 imóveis.');
     const minhas = await casasVivasDe(env, me.id, houseIds);
-    if (houseIds.some((h) => !minhas.has(h))) return err(403, 'Só podes pôr no grupo imóveis teus.');
+    if (houseIds.some((h) => !minhas.has(h))) return err(403, 'Só podes adicionar ao grupo imóveis teus.');
     // as que já lá estavam guardam a data em que entraram (é a ordem da lista)
     const antes = new Map((
       await env.DB.prepare('SELECT house_id, added_at FROM shared_group_houses WHERE group_id = ? AND added_by = ?')
@@ -569,9 +569,9 @@ export async function rotasGrupos(c) {
     // o dono da casa é o da linha da casa; sem linha (uma casa que já se foi
     // de todo), quem a pôs
     const donoDaCasa = (row.owner_id || row.added_by) === me.id;
-    if (!dono && !donoDaCasa) return err(403, 'Só o dono do grupo ou o dono do imóvel o tiram.');
+    if (!dono && !donoDaCasa) return err(403, 'Só o dono do grupo ou o dono do imóvel o podem remover.');
     await env.DB.prepare('DELETE FROM shared_group_houses WHERE group_id = ? AND house_id = ?').bind(id, hid).run();
-    await auditar(env, eu, 'grupo.tirar-imovel', id, hid);
+    await auditar(env, eu, 'grupo.remover-imovel', id, hid);
     return json({ ok: true });
   }
 

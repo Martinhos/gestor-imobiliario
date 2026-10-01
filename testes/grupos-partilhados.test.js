@@ -890,7 +890,7 @@ describe('as casas do grupo', () => {
     for (const ids of [['H1'], ['HM', 'H2'], ['HX'], ['HMD'], ['NAO']]) {
       const r = await porCasas(env, M, 'G1', ids);
       assert.equal(r.status, 403, JSON.stringify(ids));
-      assert.equal(r.error, 'Só podes pôr no grupo imóveis teus.');
+      assert.equal(r.error, 'Só podes adicionar ao grupo imóveis teus.');
     }
     assert.equal((await porCasas(env, X, 'G1', ['HX'])).status, 404, 'quem não é membro');
     assert.equal((await porCasas(env, M, 'G9', ['HM'])).status, 404, 'um grupo que não existe');
@@ -941,7 +941,7 @@ describe('as casas do grupo', () => {
     const tirar = (quem, hid) => resp(pedir(env, quem, '/api/shared-groups/G1/houses/' + hid, 'DELETE'));
     const foto = await fotografia(env);
     let r = await tirar(T, 'HM');
-    assert.equal(r.status, 403); assert.equal(r.error, 'Só o dono do grupo ou o dono do imóvel o tiram.');
+    assert.equal(r.status, 403); assert.equal(r.error, 'Só o dono do grupo ou o dono do imóvel o podem remover.');
     r = await tirar(M, 'H1');
     assert.equal(r.status, 403, 'a casa do dono do grupo não é do membro');
     r = await tirar(D, 'H9');
@@ -956,7 +956,7 @@ describe('as casas do grupo', () => {
     assert.deepEqual(await tirar(D, 'H1'), { status: 200, ok: true });
     assert.deepEqual((await linhasDoGrupo(env, 'G1')).casas, []);
     assert.equal(await conta1(env, "SELECT COUNT(*) AS n FROM houses WHERE deleted = 0 AND id IN ('H1', 'HM')"), 2, 'as casas em si ficam');
-    assert.equal((await auditoria(env)).filter((x) => x.acao === 'grupo.tirar-imovel').length, 3);
+    assert.equal((await auditoria(env)).filter((x) => x.acao === 'grupo.remover-imovel').length, 3);
   });
 });
 
@@ -1254,7 +1254,7 @@ describe('rasto e travões', () => {
     const acoes = (await auditoria(env)).map((x) => x.acao);
     for (const acao of ['grupo.criar', 'grupo.renomear', 'grupo.apagar', 'grupo.ligacao.criar', 'grupo.ligacao.rodar',
       'grupo.ligacao.revogar', 'grupo.pedido.criar', 'grupo.pedido.aceitar', 'grupo.pedido.recusar', 'grupo.pedido.cancelar',
-      'grupo.imoveis', 'grupo.tirar-imovel', 'grupo.sair', 'grupo.remover']) {
+      'grupo.imoveis', 'grupo.remover-imovel', 'grupo.sair', 'grupo.remover']) {
       assert.ok(acoes.includes(acao), acao);
     }
     assert.ok(!acoes.includes('grupo.entrar'), 'entrar já não é uma escrita: é um pedido');

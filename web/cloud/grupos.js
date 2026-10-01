@@ -243,7 +243,7 @@ CW.grupoCancelarPedido = function (gid) {
 function corpoDoGrupo(g) {
   var eu = meuId(), dono = !!g._meu, gid = jsq(g.id);
   var intro = '<div class="hint u-fs-14px">' + (dono ? 'Grupo <b>teu</b>' : 'Grupo de <b>' + esc(g._donoNome || '') + '</b>') +
-    '. Quem está nele é comproprietário de todos os imóveis do grupo — vê e edita contratos, movimentos e pessoas. Cada membro põe no grupo imóveis seus.</div>';
+    '. Quem está nele é comproprietário de todos os imóveis do grupo — vê e edita contratos, movimentos e pessoas. Cada membro adiciona ao grupo imóveis seus.</div>';
   // pedidosParaEntrar já não devolve nada a quem não é dono; o «dono &&» diz a regra aqui também
   var pedidos = dono ? pedidosParaEntrar(g.id) : [];
   var pedidosHtml = !pedidos.length ? '' :
@@ -271,20 +271,20 @@ function corpoDoGrupo(g) {
   }).join('');
   var sair = dono ? '' :
     '<div class="toolbar u-mt-9px"><button class="btn sm danger" data-toca="dados" data-risco="destroi" data-click="CW.grupoSair(\'' + gid + '\')">Sair do grupo</button></div>' +
-    '<div class="hint u-mt-6px">Ao saíres, os imóveis que puseste saem contigo. Os movimentos já registados ficam em cada imóvel.</div>';
+    '<div class="hint u-mt-6px">Ao saíres, os imóveis que adicionaste são removidos do grupo. Os movimentos já registados ficam em cada imóvel.</div>';
   var casas = (g.ids || []).map(function (pid) {
     var p = prop(pid), d = donoDoImovelDoGrupo(pid);
     return '<div class="card u-p-11px-13px u-d-flex u-ai-center u-g-10px">' +
       '<span class="u-fx-1 u-minw-0"><b class="u-d-block">' + esc(p ? (p.name || 'Sem nome') : 'Imóvel') + '</b>' +
       '<span class="small">' + (d.meu ? 'teu' : d.nome ? 'de ' + esc(d.nome) : '') + '</span></span>' +
       (dono || d.meu
-        ? '<button class="btn sm danger u-fx-0-0-auto" data-toca="dados" data-risco="destroi" data-click="CW.grupoTirarImovel(\'' + gid + '\',\'' + jsq(pid) + '\')">Tirar</button>'
+        ? '<button class="btn sm danger u-fx-0-0-auto" data-toca="dados" data-risco="destroi" data-click="CW.grupoRemoverImovel(\'' + gid + '\',\'' + jsq(pid) + '\')">Remover</button>'
         : '') + '</div>';
   }).join('');
   var meus = imoveisMeus().length;
   var por = meus
-    ? '<div class="toolbar u-mt-9px"><button class="btn sm" data-toca="camada" data-click="CW.grupoImoveis(\'' + gid + '\')">' + ic('building', 14) + ' Pôr os meus imóveis…</button></div>'
-    : '<div class="hint u-mt-9px">Ainda não tens imóveis teus para pôr no grupo.</div>' +
+    ? '<div class="toolbar u-mt-9px"><button class="btn sm" data-toca="camada" data-click="CW.grupoImoveis(\'' + gid + '\')">' + ic('building', 14) + ' Adicionar os meus imóveis…</button></div>'
+    : '<div class="hint u-mt-9px">Ainda não tens imóveis teus para adicionar ao grupo.</div>' +
       (servicoLigado('properties') ? saida('Adicionar imóvel', 'propModal()', 'camada') : vazioServicoDesligado('properties'));
   var ligacao = '';
   if (dono) {
@@ -379,14 +379,14 @@ CW.grupoImoveis = function (id) {
   var g = grupoPartilhado(id);
   if (!g) return;
   var meus = imoveisMeus();
-  if (!meus.length) return toast('Ainda não tens imóveis teus para pôr no grupo.');
+  if (!meus.length) return toast('Ainda não tens imóveis teus para adicionar ao grupo.');
   var body = '<div class="form">' +
-    '<div class="hint">Os imóveis marcados ficam partilhados com todos os membros de <b>«' + esc(g.name) + '»</b> — passam a comproprietários: veem e editam contratos, movimentos e pessoas. Desmarcar tira-os do grupo.</div>' +
+    '<div class="hint">Os imóveis marcados ficam partilhados com todos os membros de <b>«' + esc(g.name) + '»</b> — passam a comproprietários: veem e editam contratos, movimentos e pessoas. Desmarcar remove-os do grupo.</div>' +
     '<div class="list u-g-7px">' + meus.map(function (p) {
       return '<label class="check"><input type="checkbox" id="cwg_h_' + p.id + '"' + ((g.ids || []).indexOf(p.id) > -1 ? ' checked' : '') + '>' +
         '<span class="u-minw-0"><b>' + esc(p.name || 'Sem nome') + '</b>' + (p.address ? ' <span class="small">' + esc(p.address) + '</span>' : '') + '</span></label>';
     }).join('') + '</div></div>';
-  openModal('Pôr os meus imóveis', body);
+  openModal('Adicionar os meus imóveis', body);
   onSave = function () {
     var ids = casasMarcadas('cwg_h_');
     api('PUT', '/api/shared-groups/' + encodeURIComponent(id) + '/houses', { houseIds: ids })
@@ -403,11 +403,11 @@ CW.grupoImoveis = function (id) {
 // DELETE …/houses/:hid depois de confirmar.
 // Recebe: id — o id do grupo; pid — o id do imóvel.
 // Devolve: nada — pede confirmação, chama a API e repinta.
-CW.grupoTirarImovel = function (id, pid) {
+CW.grupoRemoverImovel = function (id, pid) {
   var p = prop(pid), nome = (p && p.name) || 'Este imóvel';
-  confirmModal('Tirar imóvel do grupo', '<b>' + esc(nome) + '</b> deixa de estar partilhado pelo grupo: os outros membros deixam de o ver por ele. Os registos ficam.', function () {
+  confirmModal('Remover imóvel do grupo', '<b>' + esc(nome) + '</b> deixa de estar partilhado pelo grupo: os outros membros deixam de o ver por ele. Os registos ficam.', function () {
     api('DELETE', '/api/shared-groups/' + encodeURIComponent(id) + '/houses/' + encodeURIComponent(pid))
-      .then(function () { toast('Imóvel tirado do grupo.'); return aposAcaoNoGrupo(id); })
+      .then(function () { toast('Imóvel removido do grupo.'); return aposAcaoNoGrupo(id); })
       .catch(function (e) { toast(e.message, { ms: 6000 }); });
   });
 };
@@ -420,7 +420,7 @@ CW.grupoRemoverMembro = function (id, uid) {
   var g = grupoPartilhado(id);
   var m = g && (g._membros || []).find(function (x) { return x.id === uid; });
   var nome = (m && m.name) || nomeUtilizador(uid);
-  confirmModal('Remover do grupo', '<b>' + esc(nome) + '</b> deixa de ver os imóveis do grupo, e os que pôs saem com ele. O que registou fica.', function () {
+  confirmModal('Remover do grupo', '<b>' + esc(nome) + '</b> deixa de ver os imóveis do grupo, e os imóveis que adicionou são removidos dele. O que registou fica.', function () {
     api('DELETE', '/api/shared-groups/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(uid))
       .then(function () { toast('Membro removido.'); return aposAcaoNoGrupo(id); })
       .catch(function (e) { toast(e.message, { ms: 6000 }); });
@@ -434,7 +434,7 @@ CW.grupoRemoverMembro = function (id, uid) {
 // Devolve: nada — pede confirmação, chama a API, fecha as janelas e sincroniza.
 CW.grupoSair = function (id) {
   var g = grupoPartilhado(id), nome = (g && g.name) || 'o grupo';
-  confirmModal('Sair do grupo', 'Deixas de ver os imóveis de <b>«' + esc(nome) + '»</b>, e os que puseste saem contigo. Os movimentos já registados ficam em cada imóvel.', function () {
+  confirmModal('Sair do grupo', 'Deixas de ver os imóveis de <b>«' + esc(nome) + '»</b>, e os imóveis que adicionaste são removidos do grupo. Os movimentos já registados ficam em cada imóvel.', function () {
     api('DELETE', '/api/shared-groups/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(meuId()))
       .then(function () {
         desligarGrupoLocal(id);
@@ -543,7 +543,7 @@ CW.grupoNovo = function () {
     api('PUT', '/api/shared-groups/' + encodeURIComponent(id), { name: nome })
       .then(function () {
         grupoLocalPartilhado(id, nome, []);
-        toast('Grupo criado — põe-lhe imóveis e cria a ligação.');
+        toast('Grupo criado — adiciona-lhe imóveis e cria a ligação.');
         return pullNow(true);
       })
       .then(function () { render(); CW.grupoModal(id); })
@@ -614,7 +614,7 @@ function explicarGrupoDosOutros(g, outras) {
   var quem = donos.length === 1 && donos[0] ? esc(donos[0]) : 'quem é dono deles';
   openModal(outras.length === 1 ? 'Este imóvel não é teu' : 'Estes imóveis não são teus',
     '<div class="form"><div class="hint u-fs-14px">' + frases.join(' ') + '</div>' +
-    '<div class="hint">Num grupo partilhado cada pessoa só põe imóveis seus: quem entra fica comproprietário deles, por isso só o dono de um imóvel o pode pôr no grupo. Partilhado agora, o grupo <b>«' + esc(g.name || 'Sem nome') + '»</b> ficava vazio.</div>' +
+    '<div class="hint">Num grupo partilhado cada pessoa só adiciona imóveis seus: quem entra fica comproprietário deles, por isso só o dono de um imóvel o pode adicionar ao grupo. Partilhado agora, o grupo <b>«' + esc(g.name || 'Sem nome') + '»</b> ficava vazio.</div>' +
     '<div class="hint">Junta-lhe um imóvel teu em «Editar o grupo» e volta a tocar em «Partilhar» — ' + (outras.length === 1 ? 'esse fica' : 'esses ficam') + ' de fora. Ou pede a ' + quem + ' que crie o grupo partilhado e te convide.</div></div>',
     rodapeDeGrupoPorPartilhar(g.id));
 }
@@ -654,7 +654,7 @@ CW.grupoPartilhar = function (id) {
   if (!minhas.length) return fora.length ? explicarGrupoDosOutros(g, fora) : explicarGrupoVazio(g);
   var nomesFora = nomesDeCasas(fora);
   confirmModal('Partilhar este grupo',
-    'O grupo <b>«' + esc(nome) + '»</b> passa a partilhado: quem pedir para entrar pela ligação, e tu aceitares, fica comproprietário dos imóveis dele — vê e edita contratos, movimentos e pessoas — e pode pôr no grupo imóveis seus. ' +
+    'O grupo <b>«' + esc(nome) + '»</b> passa a partilhado: quem pedir para entrar pela ligação, e tu aceitares, fica comproprietário dos imóveis dele — vê e edita contratos, movimentos e pessoas — e pode adicionar ao grupo imóveis seus. ' +
     (fora.length ? 'Só os imóveis teus entram: <b>' + esc(nomesFora) + '</b> ' + (fora.length === 1 ? 'sai' : 'saem') + ' do grupo. ' : '') +
     'Um grupo partilhado não volta a ser privado.',
     function () {
@@ -715,7 +715,7 @@ function desfechoDoGrupo(r, prev) {
     '<div class="form"><div class="hint u-fs-14px">Grupo de <b>' + esc(dono) + '</b>. ' +
     (casas ? 'És comproprietário de <b>' + esc(casas) + '</b>: vês e editas contratos, movimentos e pessoas.'
       : 'O grupo ainda não tem imóveis — os que os membros puserem passam a ser partilhados contigo.') + '</div>' +
-    '<div class="hint">Podes pôr no grupo imóveis teus e sair quando quiseres, em Grupos.</div></div>',
+    '<div class="hint">Podes adicionar ao grupo imóveis teus e sair quando quiseres, em Grupos.</div></div>',
     '<button class="btn primary" data-toca="ecra" data-click="closeAllModals();go(\'properties\')">Ver os imóveis</button>');
 }
 
@@ -796,7 +796,7 @@ function gruposCard() {
   return card('Grupos partilhados', 'Imóveis em conjunto, com quem entrar',
     lista +
     '<div class="toolbar u-mt-11px"><button class="btn" data-toca="camada" data-click="CW.grupoNovo()">' + ic('plus', 15) + ' Novo grupo partilhado</button>' + partilhar + '</div>' +
-    '<div class="hint u-mt-11px">Quem está num grupo é comproprietário de todos os imóveis dele. Cada membro põe no grupo imóveis seus; o dono do grupo cria a ligação por onde os outros pedem para entrar, e aceita ou recusa cada pedido.</div>');
+    '<div class="hint u-mt-11px">Quem está num grupo é comproprietário de todos os imóveis dele. Cada membro adiciona ao grupo imóveis seus; o dono do grupo cria a ligação por onde os outros pedem para entrar, e aceita ou recusa cada pedido.</div>');
 }
 
 /* ---------------- partilhar um grupo que já existe ---------------- */

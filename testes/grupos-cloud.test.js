@@ -240,7 +240,7 @@ describe('a porta ?grupo=<token>', () => {
     assert.match(j.b, /Imóveis no grupo/);
     assert.match(j.b, /<b>Do Rui<\/b>/);
     assert.match(j.b, /<b>Minha<\/b>/);
-    assert.match(j.b, /Ao pedires para entrar, <b>Rui<\/b> tem de aceitar\. Depois passas a comproprietário destes imóveis — vês contratos, movimentos e pessoas\. Os imóveis que puseres no grupo ficam partilhados com todos os membros\. Podes sair quando quiseres, em Grupos\./);
+    assert.match(j.b, /Ao pedires para entrar, <b>Rui<\/b> tem de aceitar\. Depois passas a comproprietário destes imóveis — vês contratos, movimentos e pessoas\. Os imóveis que adicionares ao grupo ficam partilhados com todos os membros\. Podes sair quando quiseres, em Grupos\./);
     assert.ok(!/Ao entrares|Entrar no grupo/.test(j.b + j.f), 'nada de entrar já');
     assert.match(j.b, /Entras como <b>eu@exemplo\.pt<\/b>/);
     assert.match(j.f, /data-toca="camada" data-click="CW\.chegadaDepois\('grupo'\)">Agora não</);
@@ -434,7 +434,7 @@ describe('partilhar um grupo privado e criar um novo', () => {
 /* ------------------------------------------------ a janela do grupo */
 
 describe('a janela do grupo (CW.grupoModal)', () => {
-  test('ao dono: membros com o dono marcado e eu «(eu)», «Remover» nos outros, imóveis com o dono, «Tirar», a ligação com «expira a … · usada N vezes», e no menu «Mudar o nome…» e «Apagar grupo»; sem «Sair do grupo»', () => {
+  test('ao dono: membros com o dono marcado e eu «(eu)», «Remover» nos outros, imóveis com o dono, «Remover» no imóvel, a ligação com «expira a … · usada N vezes», e no menu «Mudar o nome…» e «Apagar grupo»; sem «Sair do grupo»', () => {
     const { app, esp } = comEstado();
     app.CW.grupoModal('G2');
     const j = esp.abertas[0];
@@ -445,8 +445,8 @@ describe('a janela do grupo (CW.grupoModal)', () => {
     assert.match(j.b, /data-risco="destroi" data-click="CW\.grupoRemoverMembro\('G2','ANA'\)">Remover</);
     assert.ok(!j.b.includes("CW.grupoRemoverMembro('G2','EU')"), 'não me removo a mim');
     assert.match(j.b, /<b class="u-d-block">Terceira<\/b><span class="small">teu<\/span>/);
-    assert.match(j.b, /data-click="CW\.grupoTirarImovel\('G2','H3'\)">Tirar</);
-    assert.match(j.b, /data-toca="camada" data-click="CW\.grupoImoveis\('G2'\)">[\s\S]*?Pôr os meus imóveis…</);
+    assert.match(j.b, /data-click="CW\.grupoRemoverImovel\('G2','H3'\)">Remover</);
+    assert.match(j.b, /data-toca="camada" data-click="CW\.grupoImoveis\('G2'\)">[\s\S]*?Adicionar os meus imóveis…</);
     assert.match(j.b, /Ligação de convite/);
     assert.match(j.b, /Ativa · expira a \S+ · usada 3 vezes/, 'a data como o pt-PT do motor a escreve; cada pedido pela ligação é um uso');
     assert.match(j.b, /Quem a abrir pede para entrar, e só entra quando aceitares — os pedidos aparecem em cima\./);
@@ -462,7 +462,7 @@ describe('a janela do grupo (CW.grupoModal)', () => {
     assert.ok(!/on[a-z]+=|style=/.test(j.b + j.f + j.m), 'nada em linha');
   });
 
-  test('a quem não é dono: «Sair do grupo», sem «Remover», sem a ligação e sem «Apagar grupo»; «Tirar» só no imóvel meu', () => {
+  test('a quem não é dono: «Sair do grupo», sem «Remover», sem a ligação e sem «Apagar grupo»; «Remover» só no imóvel meu', () => {
     const { app, esp } = comEstado();
     app.CW.grupoModal('G1');
     const j = esp.abertas[0];
@@ -470,30 +470,30 @@ describe('a janela do grupo (CW.grupoModal)', () => {
     assert.match(j.b, /Grupo de <b>Rui<\/b>\./);
     assert.match(j.b, /<b class="u-d-block">Rui<\/b><span class="badge grey">dono<\/span>/);
     assert.match(j.b, /<b class="u-d-block">Eu \(eu\)<\/b><span class="small">membro<\/span>/);
-    assert.ok(!j.b.includes('Remover'), 'só o dono remove');
+    assert.ok(!j.b.includes('CW.grupoRemoverMembro('), 'só o dono remove membros');
     assert.match(j.b, /data-toca="dados" data-risco="destroi" data-click="CW\.grupoSair\('G1'\)">Sair do grupo</);
-    assert.match(j.b, /Ao saíres, os imóveis que puseste saem contigo\. Os movimentos já registados ficam em cada imóvel\./);
+    assert.match(j.b, /Ao saíres, os imóveis que adicionaste são removidos do grupo\. Os movimentos já registados ficam em cada imóvel\./);
     assert.match(j.b, /<b class="u-d-block">Do Rui<\/b><span class="small">de Rui<\/span>/);
     assert.match(j.b, /<b class="u-d-block">Minha<\/b><span class="small">teu<\/span>/);
-    assert.ok(j.b.includes("CW.grupoTirarImovel('G1','H1')"), 'a minha tiro eu');
-    assert.ok(!j.b.includes("CW.grupoTirarImovel('G1','H2')"), 'a do Rui não');
+    assert.ok(j.b.includes("CW.grupoRemoverImovel('G1','H1')"), 'a minha tiro eu');
+    assert.ok(!j.b.includes("CW.grupoRemoverImovel('G1','H2')"), 'a do Rui não');
     assert.ok(!j.b.includes('Ligação de convite') && !j.b.includes('Criar ligação') && !j.b.includes('grupoLigacao'), 'a ligação é do dono');
     assert.equal(j.m, '', 'sem menu: nem apagar nem renomear');
     // sem imóveis meus, a saída para criar o primeiro em vez do botão
     app.db.properties = app.db.properties.filter((p) => p.id === 'H2');
     app.CW.grupoModal('G1');
     const k = esp.abertas[1];
-    assert.match(k.b, /Ainda não tens imóveis teus para pôr no grupo\./);
+    assert.match(k.b, /Ainda não tens imóveis teus para adicionar ao grupo\./);
     assert.match(k.b, /data-toca="camada" data-click="propModal\(\)">Adicionar imóvel</);
     assert.ok(!k.b.includes('grupoImoveis'));
   });
 
-  test('«Pôr os meus imóveis…» lista só as casas cwMinha, com as do grupo marcadas, e guardar faz o PUT houses com as marcadas', async () => {
+  test('«Adicionar os meus imóveis…» lista só as casas cwMinha, com as do grupo marcadas, e guardar faz o PUT houses com as marcadas', async () => {
     const { app, esp } = comEstado();
     app.CW.grupoModal('G1');
     app.CW.grupoImoveis('G1');
     const j = esp.abertas[1];
-    assert.equal(j.t, 'Pôr os meus imóveis');
+    assert.equal(j.t, 'Adicionar os meus imóveis');
     assert.match(j.b, /ficam partilhados com todos os membros de <b>«Casas do Porto»<\/b> — passam a comproprietários/);
     assert.match(j.b, /id="cwg_h_H1" checked>/);
     assert.match(j.b, /id="cwg_h_H3">/);
@@ -512,20 +512,20 @@ describe('a janela do grupo (CW.grupoModal)', () => {
     assert.match(esp.abertas[0].body.innerHTML, /<b class="u-d-block">Terceira<\/b>/, 'e repintou-se com o estado que a leitura trouxe');
   });
 
-  test('tirar um imóvel, remover um membro e a ligação (criar, rodar, desativar, copiar) falam com as rotas do contrato e repintam a janela', async () => {
+  test('remover um imóvel, remover um membro e a ligação (criar, rodar, desativar, copiar) falam com as rotas do contrato e repintam a janela', async () => {
     const { app, esp } = comEstado();
     const url = 'https://teste.local/?grupo=' + TOKEN;
     esp.resposta = (m, p) => (p.endsWith('/link') && m === 'POST' ? { url, expiresAt: 4102444800000 } : {});
     app.CW.grupoModal('G2');
     esp.aoPuxar = () => { const g = app.db.groups.find((x) => x.id === 'G2'); g.ids = []; g._membros = [{ id: 'EU', name: 'Eu' }]; };
-    app.CW.grupoTirarImovel('G2', 'H3');
+    app.CW.grupoRemoverImovel('G2', 'H3');
     app.CW.grupoRemoverMembro('G2', 'ANA');
     await espera();
-    assert.deepEqual(esp.confirmados.map((c) => c.t), ['Tirar imóvel do grupo', 'Remover do grupo']);
+    assert.deepEqual(esp.confirmados.map((c) => c.t), ['Remover imóvel do grupo', 'Remover do grupo']);
     assert.match(esp.confirmados[0].txt, /<b>Terceira<\/b> deixa de estar partilhado pelo grupo/);
-    assert.match(esp.confirmados[1].txt, /<b>Ana<\/b> deixa de ver os imóveis do grupo, e os que pôs saem com ele/);
+    assert.match(esp.confirmados[1].txt, /<b>Ana<\/b> deixa de ver os imóveis do grupo, e os imóveis que adicionou são removidos dele/);
     assert.deepEqual(esp.chamadas(), ['DELETE /api/shared-groups/G2/houses/H3', 'DELETE /api/shared-groups/G2/members/ANA']);
-    assert.deepEqual(esp.toasts, ['Imóvel tirado do grupo.', 'Membro removido.']);
+    assert.deepEqual(esp.toasts, ['Imóvel removido do grupo.', 'Membro removido.']);
     assert.match(esp.abertas[0].body.innerHTML, /Ainda não há imóveis no grupo/, 'repintou');
     assert.ok(!esp.abertas[0].body.innerHTML.includes('Ana'), 'sem a Ana');
     // a ligação
@@ -583,14 +583,14 @@ describe('a janela do grupo (CW.grupoModal)', () => {
     app.CW.grupoSair('G1');
     await espera();
     assert.equal(esp.confirmados[1].t, 'Sair do grupo');
-    assert.match(esp.confirmados[1].txt, /os que puseste saem contigo\. Os movimentos já registados ficam em cada imóvel\./);
+    assert.match(esp.confirmados[1].txt, /os imóveis que adicionaste são removidos do grupo\. Os movimentos já registados ficam em cada imóvel\./);
     assert.deepEqual(esp.chamadas(), ['DELETE /api/shared-groups/G1/members/EU']);
     assert.ok(!app.db.groups.some((g) => g.id === 'G1'));
     assert.equal(app.modalStack.length, 0);
     assert.ok(esp.toasts.includes('Saíste do grupo «Casas do Porto».'));
     // o servidor que recusa deixa tudo como está
     esp.resposta = () => Object.assign(new Error('Só o dono do grupo ou o dono do imóvel o tiram.'), { status: 403 });
-    app.CW.grupoTirarImovel('GP', 'H3');
+    app.CW.grupoRemoverImovel('GP', 'H3');
     await espera();
     assert.ok(esp.toasts.includes('Só o dono do grupo ou o dono do imóvel o tiram.'));
   });

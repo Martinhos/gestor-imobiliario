@@ -210,7 +210,7 @@ describe('o toque explica cada caso que não dá', () => {
     const j = esp.abertas[0];
     assert.equal(j.t, 'Estes imóveis não são teus');
     assert.match(j.b, /<b>Do Rui<\/b> é de Rui\. <b>Casa da Ana<\/b> é de Ana\./, 'de quem é cada um');
-    assert.match(j.b, /Num grupo partilhado cada pessoa só põe imóveis seus/, 'porque não entram');
+    assert.match(j.b, /Num grupo partilhado cada pessoa só adiciona imóveis seus/, 'porque não entram');
     assert.match(j.b, /o grupo <b>«Dos outros»<\/b> ficava vazio/);
     assert.match(j.b, /pede a quem é dono deles que crie o grupo partilhado/, 'dois donos: sem nome');
     assert.ok(j.f.includes(editar('GR')));
@@ -240,11 +240,11 @@ describe('o toque explica cada caso que não dá', () => {
 
   test('se o servidor recusar as casas a meio, o grupo criado lá apaga-se, o toast diz que continua privado, e o «Partilhar» fica', async () => {
     const { app, esp } = comEstado();
-    esp.resposta = (m, p) => (m === 'PUT' && p.endsWith('/houses') ? Object.assign(new Error('Só podes pôr no grupo imóveis teus.'), { status: 403 }) : {});
+    esp.resposta = (m, p) => (m === 'PUT' && p.endsWith('/houses') ? Object.assign(new Error('Só podes adicionar ao grupo imóveis teus.'), { status: 403 }) : {});
     app.CW.grupoPartilhar('GP');
     await espera();
     assert.deepEqual(esp.chamadas(), ['PUT /api/shared-groups/GP', 'PUT /api/shared-groups/GP/houses', 'DELETE /api/shared-groups/GP']);
-    assert.equal(esp.toasts[esp.toasts.length - 1], 'Só podes pôr no grupo imóveis teus. O grupo continua privado.');
+    assert.equal(esp.toasts[esp.toasts.length - 1], 'Só podes adicionar ao grupo imóveis teus. O grupo continua privado.');
     const g = app.db.groups.find((x) => x.id === 'GP');
     assert.ok(!g._partilhado, 'o privado fica como estava');
     assert.ok(app.vGrupos().includes("CW.grupoPartilhar('GP')"));

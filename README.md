@@ -15,9 +15,9 @@ inquilinos, proprietários, movimentos, créditos à habitação, projeções e 
 4. **Um grupo de casas partilha-se como grupo.** No separador **Grupos** (no menu, em
    Património) — com o «Partilhar» de cada grupo de imóveis que já existe, «Partilhar um grupo
    que já tens» ou «Novo grupo partilhado» —, um grupo partilhado tem um dono, membros e casas: quem está no grupo é comproprietário
-   de todas as casas dele, cada membro põe no grupo casas suas, e entra-se por uma ligação do dono
+   de todas as casas dele, cada membro adiciona ao grupo casas suas, e entra-se por uma ligação do dono
    (multi-uso, válida sete dias) com um pedido que o dono aceita. Um movimento de um grupo, ou de
-   «Todos os imóveis», parte-se por imóvel ao guardar. Sair leva as casas que se pôs; o dono remove membros, roda ou
+   «Todos os imóveis», parte-se por imóvel ao guardar. Ao sair, as casas que se adicionaram são removidas do grupo; o dono remove membros, roda ou
    desativa a ligação, e apaga o grupo — as casas ficam. Ver «Grupos partilhados» em
    [`docs/design.md`](docs/design.md).
 

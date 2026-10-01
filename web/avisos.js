@@ -37,7 +37,7 @@ var AVISOS = [
         itens: [
           'No separador Grupos, cada grupo de imóveis que já tens tem o botão «Partilhar» — ou cria-se um novo. Se um grupo ainda não se pode partilhar (está vazio, ou os imóveis são de outra pessoa), a app diz porquê e leva-te a editá-lo. Quem está no grupo é comproprietário de todas as casas dele — vê e edita contratos, movimentos e pessoas, e entra nas quotas — e uma casa que entre no grupo mais tarde chega logo a toda a gente. Antes partilhava-se casa a casa.',
           'Entra-se por uma ligação do dono do grupo, que vale sete dias e serve várias pessoas — mas ninguém entra sem o dono aceitar. Quem abre a ligação pede para entrar; o pedido aparece ao dono em «Pedidos por responder», no sino e na janela do grupo, com Aceitar e Recusar. Uma ligação enviada à pessoa errada já não dá acesso a nada.',
-          'O dono vê quem entrou, remove, roda ou desativa a ligação, e apaga o grupo (as casas ficam). Cada membro pode pôr no grupo casas suas, e tirá-las; sair do grupo leva as casas que pôs. O cartão «Grupos partilhados», no cimo do separador Grupos, lista os teus, os em que entraste e os pedidos à espera; o separador leva no menu quantos pedidos esperam a tua resposta.',
+          'O dono vê quem entrou, remove, roda ou desativa a ligação, e apaga o grupo (as casas ficam). Cada membro pode adicionar ao grupo casas suas, e removê-las; ao sair do grupo, as casas que adicionou são removidas dele. O cartão «Grupos partilhados», no cimo do separador Grupos, lista os teus, os em que entraste e os pedidos à espera; o separador leva no menu quantos pedidos esperam a tua resposta.',
         ],
       },
       {

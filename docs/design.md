@@ -1466,7 +1466,7 @@ traz as casas dos grupos com os membros em participants
 de grupo de uma casa partilhada por ligação.
 
 Um grupo tem um dono, membros e casas (a migração 0017). Cada membro põe no
-grupo casas SUAS — as que criou — e tira-as; o dono tira qualquer casa e
+grupo casas SUAS — as que criou — e remove-as; o dono remove qualquer casa e
 remove membros; sair leva as casas que se pôs; o dono não sai, apaga
 (worker/src/rotas/grupos.js:rotasGrupos). Entra-se por uma ligação do dono,
 multi-uso e com prazo de sete dias, mas ninguém entra sem o dono aceitar:
