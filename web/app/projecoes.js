@@ -105,6 +105,16 @@ function projDespesasTxt(base){
     :(servicoLigado('properties')?`<button type="button" class="btn sm" data-toca="ecra" data-click="go('properties')">Ver imóveis</button>`:'');
   return `<div class="hint u-mt-12px">${dentro}${irs}${fora}</div>${porta?`<div class="u-mt-8px">${porta}</div>`:''}`;
 }
+/* O cartão da dívida quando não há dívida: em vez de um gráfico com uma linha
+   no zero (e um eixo que, de tão vazio, chegou a dizer «1, 1, 1»), a boa
+   notícia dita por extenso — pedido do Martinho. «Registadas», porque a app
+   só sabe dos créditos que lhe deram.
+   Recebe: nada.
+   Devolve: o HTML do corpo do cartão. */
+function livreDeDividas(){
+  return `<div class="livre"><span class="livre-selo">${ic('check',24)}</span><b>Boa! Não tens dívidas registadas.</b>
+    <span>Nenhum crédito em uso nos imóveis desta vista: não há prestações a abater às rendas.</span></div>`;
+}
 /* Projeções ao horizonte definido nas definições (s.years), a partir de
    projRows: KPIs, gráficos e tabela ano a ano com uma coluna por contrato e as
    colunas das rendas, do IRS, das despesas, das prestações e do cashflow. O
@@ -139,7 +149,9 @@ function vProjections(){
     ${card('Rendas, prestações e cashflow','',cLine([{name:'Rendas',values:rows.map(r=>r.rent),color:PAL[0]},
       {name:'Prestações',values:rows.map(r=>r.loan),color:'#d6a34a'},
       {name:'Cashflow',values:rows.map(r=>r.cf),color:PAL[1]}],labels,{h:210,marks:decadeMarks(YEAR,n),rotulos:anos}))}
-    ${card('Dívida por amortizar','Somando os créditos em uso',cLine([{name:'Em dívida',values:debtY,color:'#d6a34a'}],labels,{h:200,marks:decadeMarks(YEAR,n),rotulos:anos}))}</div>
+    ${pidProps(projProp||null).some(p=>liveLoans(p).length)
+      ?card('Dívida por amortizar','Somando os créditos em uso',cLine([{name:'Em dívida',values:debtY,color:'#d6a34a'}],labels,{h:200,marks:decadeMarks(YEAR,n),rotulos:anos}))
+      :card('Dívida por amortizar','',livreDeDividas())}</div>
   <div class="u-mt-14px">${card('Detalhe ano a ano','Uma coluna por contrato ativo',`<div class="tablewrap"><table class="table"><thead><tr>
     <th>Ano</th>${act.map(c=>`<th>${esc(ctName(c))}</th>`).join('')}<th>Rendas</th><th>IRS</th><th>Despesas</th><th>Prestações</th><th>Cashflow</th></tr></thead><tbody>
     ${rows.map(r=>`<tr><td><b>${r.yr}</b></td>${r.per.map(v=>`<td>${euro(v)}</td>`).join('')}

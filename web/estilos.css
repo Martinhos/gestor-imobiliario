@@ -245,6 +245,12 @@ html.dark .badge.red{color:var(--danger)}
 .pt.pla{background:var(--warn)}
 .pt.mais{background:var(--muted)}
 .empty b{display:block;color:var(--ink);margin-bottom:5px}
+/* Uma boa notícia no lugar de um gráfico vazio (projecoes.js:livreDeDividas):
+   não é um vazio a pedir ação, por isso não leva o tracejado do .empty — um
+   selo com o visto na cor da app, e a frase. */
+.livre{display:flex;flex-direction:column;align-items:center;gap:4px;padding:22px 12px 14px;text-align:center;color:var(--muted);font-size:13.5px}
+.livre b{color:var(--ink);font-size:16px}
+.livre-selo{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;margin-bottom:8px;background:var(--accent-soft);color:var(--accent)}
 .row-between{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;min-width:0}
 .row-between>*{min-width:0}
 .txrow .title,.txrow .small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -914,6 +920,11 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
 /* o .redesenha é para quando é a própria roda a mudar de reparto (o donutDrill)
    e não a vista a chegar: os arcos traçam-se outra vez sem passar pelo render */
 #view.entra .gdonut,#donutCard.redesenha .gdonut{stroke-dasharray:1;animation:gdonut var(--desenho) var(--curva-entra) both}
+/* O selo de «sem dívidas» chega como os gráficos que substitui, e pelo mesmo
+   portão: cresce do centro, com um pequeno passo além do tamanho (a festa é
+   esse passo), só para quem chega ao ecrã. */
+@keyframes livreSelo{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
+#view.entra .livre-selo{animation:livreSelo var(--desenho) var(--curva-entra) both}
 
 /* --- Os recuos do sistema, no FIM da folha de propósito ---
    Estiveram antes da regra base da .tabbar e perderam o empate: à mesma

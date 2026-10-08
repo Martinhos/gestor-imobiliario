@@ -325,13 +325,18 @@ function thinLabels(labels){
    Devolve: o texto. */
 const kfmt=v=>Math.abs(v)>=1000?(v/1000).toFixed(Math.abs(v)>=10000?0:1).replace('.',',')+'k':String(Math.round(v));
 // Grelha e valores do eixo Y: 5 marcas de min a max, formatadas com fmt (ou kfmt).
-// Recebe: min, max — os valores dos extremos do eixo; x0, x1 — os limites
+// Recebe: min, max — os valores dos extremos do eixo (iguais: só a marca do
+// fundo, com esse valor); x0, x1 — os limites
 // horizontais da área do gráfico (unidades do viewBox); y0, y1 — os verticais
 // (y0 em cima, y1 na base); fmt (opcional) — função que formata cada valor
 // (sem ela usa-se kfmt).
 // Devolve: o fragmento SVG (string) que os gráficos de linhas e de barras partilham.
 function axisY(min,max,x0,x1,y0,y1,fmt){
   let g='';
+  /* sem amplitude (uma série toda a zero) não há cinco marcas para dar: as
+     marcas de 0 a 1, arredondadas, diziam «0, 0, 1, 1, 1». Fica o zero. */
+  if(max===min)return `<line x1="${x0}" y1="${y1}" x2="${x1}" y2="${y1}" stroke="var(--line)" stroke-width="1"/>`+
+    `<text x="${x0-6}" y="${(y1+3.2).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmt?esc(fmt(min)):kfmt(min)}</text>`;
   for(let k=0;k<=4;k++){const v=min+(max-min)*k/4,y=y1-(y1-y0)*k/4;
     g+=`<line x1="${x0}" y1="${y.toFixed(1)}" x2="${x1}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`;
     g+=`<text x="${x0-6}" y="${(y+3.2).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmt?esc(fmt(v)):kfmt(v)}</text>`}
@@ -356,11 +361,14 @@ function cLine(series,labels,o){
   series.forEach(s=>{s.values=s.values.map(v=>isFinite(v)?v:0)});
   const all=[].concat(...series.map(s=>s.values));
   let max=Math.max(0,...all),min=Math.min(0,...all);
-  if(max===min){max=max||1;min=Math.min(0,min)}
+  /* tudo a zero: o eixo só tem o zero (graficos.js:axisY), e a escala de 0 a 1
+     serve só para pôr a linha no fundo */
+  const plano=max===min;
+  if(plano){max=max||1;min=Math.min(0,min)}
   const pad=(max-min)*.08;max+=pad;if(min<0)min-=pad;
   const X=i=>x0+(x1-x0)*(labels.length<2?.5:i/(labels.length-1));
   const Y=v=>y1-(y1-y0)*((v-min)/(max-min));
-  let g=axisY(min,max,x0,x1,y0,y1,o.fmt);
+  let g=plano?axisY(0,0,x0,x1,y0,y1,o.fmt):axisY(min,max,x0,x1,y0,y1,o.fmt);
   /* barras verticais no início de cada década */
   (o.marks||[]).forEach(m=>{
     if(m.i<0||m.i>=labels.length)return;
