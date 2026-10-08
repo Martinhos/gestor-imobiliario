@@ -128,13 +128,14 @@ describe('o separador Grupos', () => {
   test('tocar «Partilhar» confirma, partilha com o mesmo id e o grupo passa à secção dos partilhados', async () => {
     const { app, esp } = comEstado();
     const url = 'https://teste.local/?grupo=' + 'b'.repeat(64);
-    esp.resposta = (m, p) => (p.endsWith('/link') ? { url, expiresAt: 4102444800000 } : {});
+    esp.resposta = (m, p) => (p.endsWith('/partilhar') ? { ok: true, url, expiresAt: 4102444800000 } : {});
     app.CW.grupoPartilhar('GP');
     await espera();
     assert.equal(esp.confirmados[0].t, 'Partilhar este grupo');
-    assert.deepEqual(esp.chamadas(), ['PUT /api/shared-groups/GP', 'PUT /api/shared-groups/GP/houses', 'POST /api/shared-groups/GP/link']);
-    assert.equal(esp.abertas[esp.abertas.length - 1].t, 'Ligação do grupo');
-    assert.ok(esp.abertas[esp.abertas.length - 1].b.includes(url), 'a ligação aparece');
+    assert.deepEqual(esp.chamadas(), ['POST /api/shared-groups/GP/partilhar'], 'um pedido só');
+    const j = esp.abertas[esp.abertas.length - 1];
+    assert.equal(j.t, 'Ligação do grupo');
+    assert.ok(j.el.querySelector('.body').innerHTML.includes(url), 'a ligação aparece, na janela que abriu à espera');
     const h = app.vGrupos();
     const iImoveis = h.indexOf('<div class="section-title">Imóveis</div>');
     const iGP = h.indexOf("CW.grupoModal('GP')");
@@ -156,7 +157,7 @@ describe('o separador Grupos', () => {
     app._pick(0);
     await espera();
     assert.equal(esp.confirmados[0].t, 'Partilhar este grupo', 'escolher leva à mesma confirmação');
-    assert.equal(esp.chamadas()[0], 'PUT /api/shared-groups/GP');
+    assert.equal(esp.chamadas()[0], 'POST /api/shared-groups/GP/partilhar');
   });
 
   test('sem grupos de imóveis privados, «Partilhar um grupo que já tens» não aparece; e um grupo só com imóveis dos outros abre a janela que diz de quem são', async () => {

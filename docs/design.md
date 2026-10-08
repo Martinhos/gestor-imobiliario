@@ -1538,10 +1538,20 @@ sessão, o ecrã de entrada com o porquê; com o serviço desligado, a frase do
 serviço; um grupo vazio, ou só com imóveis de outras pessoas, uma janela que
 diz de quem é cada um e porque não entra (num grupo partilhado cada pessoa só
 põe imóveis seus — o servidor recusa os outros com 403), com «Editar o grupo».
-Com imóveis meus, confirma e cria o grupo no servidor com o MESMO id, só com
-os meus. Se o servidor recusar a meio (as casas ou a ligação), o grupo acabado
-de criar lá apaga-se: sem isso, a leitura seguinte trocava o privado por um
-partilhado vazio com o mesmo id, e o grupo «perdia» o botão.
+Com imóveis meus, confirma e partilha-o de uma vez
+(web/cloud/grupos.js:partilharGrupoDeUmaVez): um só pedido, POST
+…/partilhar, em que o servidor cria o grupo com o MESMO id, o dono como
+membro, as casas minhas e a ligação num lote — tudo ou nada. Eram três
+pedidos em fila (criar, casas, ligação), e na Cloudflare cada um é uma ida à
+base: o Martinho via a janela da ligação chegar segundos depois, sem nada no
+ecrã entretanto, e tocava outra vez; e uma falha no segundo deixava um grupo
+partilhado vazio que o cliente tinha de apagar. Agora a janela da ligação
+abre no instante da confirmação, a dizer que está a criar a ligação, e
+preenche-se no sítio quando a resposta chega; um segundo toque enquanto isso
+não começa outra partilha, e um 409 (outro toque ou outro aparelho chegou
+primeiro) abre a janela do grupo já partilhado. Fechar a janela de espera não
+cancela: a ligação fica guardada no aparelho e o «Copiar ligação» está na
+janela do grupo.
 
 Um movimento atribuído a um grupo partilhado chega a todos os membros porque
 se parte por imóvel ao guardar (ver «Um movimento de vários imóveis parte-se

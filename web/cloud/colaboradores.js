@@ -274,18 +274,30 @@ function selecionarCampo(campo) {
   campo.select();
 }
 
+// O corpo da janela de uma ligação: o campo só de leitura com a ligação e a nota.
+// Recebe: url — a ligação; hint — a nota por baixo (HTML).
+// Devolve: o HTML do corpo (texto).
+function ligacaoCorpo(url, hint) {
+  return '<div class="form"><input id="cw_lig_url" class="u-ff-monospace u-fs-12p5px" readonly value="' + esc(url) + '" data-toca="nada" data-click="selecionarCampo(this)">' +
+    '<div class="hint">' + hint + '</div></div>';
+}
+
+// O rodapé da janela de uma ligação: «Fechar», «Partilhar…» (só quando o
+// aparelho sabe partilhar) e «Copiar ligação».
+// Recebe: url — a ligação.
+// Devolve: o HTML do rodapé (texto).
+function ligacaoRodape(url) {
+  return '<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>' +
+    (navigator.share ? '<button class="btn" data-toca="nada" data-click="CW.partilharLigacao(\'' + jsq(url) + '\')">Partilhar…</button>' : '') +
+    '<button class="btn primary" data-toca="nada" data-click="CW.copiar(\'' + jsq(url) + '\')">Copiar ligação</button>';
+}
+
 // O modal que mostra uma ligação acabada de criar, com «Copiar ligação» e
 // «Partilhar…» (só quando o aparelho sabe partilhar).
 // Recebe: titulo — o título do modal; url — a ligação; hint — a nota por baixo.
 // Devolve: nada — abre o modal.
 function ligacaoModal(titulo, url, hint) {
-  var podePartilhar = !!(navigator.share);
-  openModal(titulo,
-    '<div class="form"><input id="cw_lig_url" class="u-ff-monospace u-fs-12p5px" readonly value="' + esc(url) + '" data-toca="nada" data-click="selecionarCampo(this)">' +
-    '<div class="hint">' + hint + '</div></div>',
-    '<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>' +
-    (podePartilhar ? '<button class="btn" data-toca="nada" data-click="CW.partilharLigacao(\'' + jsq(url) + '\')">Partilhar…</button>' : '') +
-    '<button class="btn primary" data-toca="nada" data-click="CW.copiar(\'' + jsq(url) + '\')">Copiar ligação</button>');
+  openModal(titulo, ligacaoCorpo(url, hint), ligacaoRodape(url));
 }
 
 /* Cria uma ligação de convite com o cargo e os imóveis marcados no cartão

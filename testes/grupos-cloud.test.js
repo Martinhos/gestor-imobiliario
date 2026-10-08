@@ -368,19 +368,24 @@ describe('a porta ?grupo=<token>', () => {
 /* ------------------------------------------------ partilhar e criar */
 
 describe('partilhar um grupo privado e criar um novo', () => {
-  test('CW.grupoPartilhar: PUT {name}, PUT houses só com as casas minhas, POST link; marca o grupo local, guarda o URL e mostra a ligação; o toast diz que casa ficou de fora', async () => {
+  test('CW.grupoPartilhar: um só POST …/partilhar com o nome e as casas minhas; a janela da ligação abre logo, à espera, e preenche-se com o URL; marca o grupo local e guarda o URL; o toast diz que casa ficou de fora', async () => {
     const { app, esp } = comEstado();
     const url = 'https://teste.local/?grupo=' + TOKEN;
-    esp.resposta = (m, p) => (p.endsWith('/link') ? { url, expiresAt: 4102444800000 } : {});
+    esp.resposta = (m, p) => (p.endsWith('/partilhar') ? { ok: true, id: 'GP', url, expiresAt: 4102444800000 } : {});
     app.groupModal('prop', 'GP');   // a janela do grupo privado, de onde o menu chama
     app.CW.grupoPartilhar('GP');
+    // antes de o servidor responder, a janela da ligação já está aberta, à espera
+    const espera1 = esp.abertas[esp.abertas.length - 1];
+    assert.equal(espera1.t, 'Ligação do grupo');
+    assert.match(espera1.b, /A criar a ligação…/);
+    assert.match(espera1.b, /A partilhar o grupo <b>«Privado»<\/b>/);
+    assert.match(espera1.f, /<button class="btn primary" disabled>Copiar ligação<\/button>/, 'copiar só depois de haver ligação');
     await espera();
     assert.equal(esp.confirmados[0].t, 'Partilhar este grupo');
     assert.match(esp.confirmados[0].txt, /quem pedir para entrar pela ligação, e tu aceitares, fica comproprietário dos imóveis dele/);
     assert.match(esp.confirmados[0].txt, /Só os imóveis teus entram: <b>Do Rui<\/b> sai do grupo\./);
-    assert.deepEqual(esp.chamadas(), ['PUT /api/shared-groups/GP', 'PUT /api/shared-groups/GP/houses', 'POST /api/shared-groups/GP/link']);
-    assert.deepEqual(esp.api[0].body, { name: 'Privado' });
-    assert.deepEqual(esp.api[1].body, { houseIds: ['H3'] }, 'só a Terceira é minha');
+    assert.deepEqual(esp.chamadas(), ['POST /api/shared-groups/GP/partilhar'], 'um pedido só, e não três em fila');
+    assert.deepEqual(esp.api[0].body, { name: 'Privado', houseIds: ['H3'] }, 'só a Terceira é minha');
     const g = app.db.groups.find((x) => x.id === 'GP');
     assert.equal(g._partilhado, true);
     assert.equal(g._meu, true);
@@ -391,11 +396,13 @@ describe('partilhar um grupo privado e criar um novo', () => {
     assert.equal(app.localStorage.getItem('gi_ligacao_url_grupo_GP_EU'), url, 'o URL fica no aparelho, na chave do grupo e da conta');
     assert.ok(esp.toasts.includes('Grupo partilhado. Do Rui ficou de fora — não é teu.'), esp.toasts.join(' | '));
     const j = esp.abertas[esp.abertas.length - 1];
-    assert.equal(j.t, 'Ligação do grupo');
-    assert.ok(j.b.includes(url));
-    assert.match(j.b, /Vale 7 dias e serve para várias pessoas/);
-    assert.match(j.b, /pede para entrar no grupo <b>«Privado»<\/b>; quando aceitares, passa a comproprietário dos imóveis dele/);
-    assert.ok(!j.b.includes('fica logo no grupo'), 'ninguém entra sem o dono aceitar');
+    assert.equal(j, espera1, 'a mesma janela, preenchida no sítio — não fecha e reabre');
+    const corpo = j.el.querySelector('.body').innerHTML;
+    assert.ok(corpo.includes(url));
+    assert.match(corpo, /Vale 7 dias e serve para várias pessoas/);
+    assert.match(corpo, /pede para entrar no grupo <b>«Privado»<\/b>; quando aceitares, passa a comproprietário dos imóveis dele/);
+    assert.ok(!corpo.includes('fica logo no grupo'), 'ninguém entra sem o dono aceitar');
+    assert.match(j.el.querySelector('.foot').innerHTML, /CW\.copiar\('https:\/\/teste\.local/, 'o «Copiar ligação» já leva o URL');
     assert.equal(app.modalStack.length, 1, 'a janela do grupo privado fechou: o Guardar dela escrevia por cima das marcas');
     assert.equal(esp.puxou, 1);
     assert.ok(!Object.keys(cru(app.exportEntities())).includes('u:group:GP'), 'deixa de subir como u:group');

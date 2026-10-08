@@ -3,10 +3,13 @@
    Um grupo partilhado é um conjunto de casas com membros: quem está no grupo
    é comproprietário (participante) de todas as casas do grupo — vê e edita
    contratos, movimentos e pessoas, entra nas quotas e nas propostas, como
-   numa casa partilhada por ligação. Cada membro pode pôr no grupo casas SUAS
-   (só as que criou); o dono do grupo tira qualquer casa, e o dono de uma casa
-   tira a sua. Sair do grupo, ou ser removido pelo dono, leva as casas que
-   essa pessoa pôs. O dono não sai do grupo: apaga-o, e com ele saem os
+   numa casa partilhada por ligação. Cada membro pode adicionar ao grupo casas
+   SUAS (só as que criou); o dono do grupo remove qualquer casa, e o dono de
+   uma casa remove a sua. Sair do grupo, ou ser removido pelo dono, remove as
+   casas que essa pessoa adicionou. Um grupo privado que já existe partilha-se
+   de uma vez (POST …/partilhar: o grupo, as casas e a ligação num só lote),
+   para a janela da ligação não esperar por três idas à base. O dono não sai
+   do grupo: apaga-o, e com ele saem os
    membros, as casas, a ligação e os pedidos — as casas em si ficam de quem
    são. Um grupo de outrem chega ao cliente como um grupo de imóveis marcado
    _partilhado (web/cloud/grupos.js).
@@ -42,7 +45,7 @@
      em que não sou membro dá o mesmo 404 «Grupo não encontrado.» — aceitar
      e recusar um pedido também, a quem não é o dono;
    - o me.id vem sempre da sessão; os ids pela forma de badId; as listas de
-     casas por idsDeCasas; as casas que um membro põe têm de ser dele e vivas;
+     casas por idsDeCasas; as casas que um membro adiciona têm de ser dele e vivas;
    - tetos e rate limits por IP, por conta e por grupo (os pedidos pendentes);
      auditoria em cada escrita;
    - com o serviço Colaboradores desligado nesta conta (lib/servicos.js),
@@ -451,6 +454,63 @@ export async function rotasGrupos(c) {
     if (!(r.meta && r.meta.changes > 0)) return err(404, ERRO_PEDIDO);
     await auditar(env, eu, 'grupo.pedido.cancelar', id, g ? g.owner_id : null);
     return json({ ok: true });
+  }
+
+  // ---- Partilhar um grupo que já existe, de uma vez (POST …/partilhar) -----
+  // {name, houseIds}: cria o grupo com o id do grupo privado do cliente, mete
+  // o dono como membro, adiciona-lhe as casas (só minhas e vivas) e cria a
+  // ligação — num lote só, tudo ou nada. Eram três pedidos em fila (PUT,
+  // PUT …/houses, POST …/link): na Cloudflare cada um custa uma ida à base,
+  // o Martinho via a janela da ligação chegar segundos depois, sem nada no
+  // ecrã entretanto, e tocava outra vez; e uma falha no segundo deixava um
+  // grupo vazio que o cliente tinha de apagar. Um grupo que já existe dá 409
+  // (um segundo toque, ou outro aparelho, chegou primeiro); de outra pessoa,
+  // ou apagado, o 404 de sempre.
+  if (seg.length === 4 && seg[3] === 'partilhar' && method === 'POST') {
+    const b = await body(request);
+    const name = String((b && b.name) || '').trim();
+    if (!name || name.length > MAX_NOME) return err(400, 'Dá um nome ao grupo (até ' + MAX_NOME + ' caracteres).');
+    const houseIds = idsDeCasas(b && b.houseIds, true);
+    if (!houseIds) return err(400, 'Corpo inválido — envia { name, houseIds: [...] }, com até 200 imóveis.');
+    if (!houseIds.length) return err(400, 'Escolhe pelo menos um imóvel teu para o grupo.');
+    if (g && (g.deleted || g.owner_id !== me.id)) return err(404, ERRO_GRUPO);
+    if (g) return err(409, 'Este grupo já está partilhado.');
+    const minhas = await casasVivasDe(env, me.id, houseIds);
+    if (houseIds.some((h) => !minhas.has(h))) return err(403, 'Só podes adicionar ao grupo imóveis teus.');
+    if (!(await rateLimit(env, 'grpc:' + me.id, 20, 3600))) return err(429, 'Demasiados grupos seguidos. Espera uma hora.');
+    if (!(await rateLimit(env, 'grpl:' + me.id, 10, 3600))) return err(429, 'Demasiadas ligações seguidas. Espera uma hora.');
+    const t = now();
+    const token = randomToken();
+    const hash = await sha256hex(token);
+    const expiresAt = t + LIGACAO_DIAS * 86400000;
+    const stmts = [
+      env.DB.prepare('INSERT INTO shared_groups (id, owner_id, name, created_at, updated_at, deleted) VALUES (?, ?, ?, ?, ?, 0)')
+        .bind(id, me.id, name, t, t),
+      env.DB.prepare('INSERT OR IGNORE INTO shared_group_members (group_id, user_id, joined_at) VALUES (?, ?, ?)').bind(id, me.id, t),
+    ];
+    for (const h of houseIds) {
+      stmts.push(env.DB.prepare('INSERT OR REPLACE INTO shared_group_houses (group_id, house_id, added_by, added_at) VALUES (?, ?, ?, ?)')
+        .bind(id, h, me.id, t));
+    }
+    stmts.push(env.DB.prepare(
+      'INSERT INTO shared_group_links (group_id, token_hash, created_at, expires_at, revoked_at, uses) VALUES (?, ?, ?, ?, NULL, 0)'
+    ).bind(id, hash, t, expiresAt));
+    try {
+      await env.DB.batch(stmts);
+    } catch (e) {
+      // dois pedidos ao mesmo tempo com o mesmo id: o segundo bate na chave
+      // do grupo, e o lote dele não deixa nada
+      if (/UNIQUE|constraint/i.test(String(e && e.message))) return err(409, 'Este grupo já está partilhado.');
+      throw e;
+    }
+    // as três entradas da auditoria, as mesmas dos três pedidos de antes, ao
+    // mesmo tempo: é uma ida à base e não três antes de a ligação chegar
+    await Promise.all([
+      auditar(env, eu, 'grupo.criar', id, name),
+      auditar(env, eu, 'grupo.imoveis', id, houseIds.join(',')),
+      auditar(env, eu, 'grupo.ligacao.criar', id, hash.slice(0, 12)),
+    ]);
+    return json({ ok: true, id, name, url: url.origin + '/?grupo=' + token, expiresAt }, 201, { 'Referrer-Policy': 'no-referrer' });
   }
 
   // daqui para baixo o grupo tem de estar vivo e eu tenho de ser membro — um

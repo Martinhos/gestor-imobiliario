@@ -228,33 +228,76 @@ describe('o toque explica cada caso que não dá', () => {
 
   test('com imóveis meus e de outros: a confirmação diz quais saem, e partilha com o mesmo id só com os meus', async () => {
     const { app, esp } = comEstado();
-    esp.resposta = (m, p) => (p.endsWith('/link') ? { url: 'https://teste.local/?grupo=' + 'c'.repeat(64), expiresAt: 4102444800000 } : {});
+    esp.resposta = (m, p) => (p.endsWith('/partilhar') ? { ok: true, url: 'https://teste.local/?grupo=' + 'c'.repeat(64), expiresAt: 4102444800000 } : {});
     app.CW.grupoPartilhar('GP');
     await espera();
     assert.equal(esp.confirmados[0].t, 'Partilhar este grupo');
     assert.match(esp.confirmados[0].txt, /Só os imóveis teus entram: <b>Do Rui<\/b> sai do grupo\./);
-    assert.deepEqual(esp.chamadas(), ['PUT /api/shared-groups/GP', 'PUT /api/shared-groups/GP/houses', 'POST /api/shared-groups/GP/link']);
-    assert.deepEqual(esp.api[1].body, { houseIds: ['H1'] });
+    assert.deepEqual(esp.chamadas(), ['POST /api/shared-groups/GP/partilhar'], 'um pedido só');
+    assert.deepEqual(esp.api[0].body, { name: 'Lisboa', houseIds: ['H1'] });
     assert.equal(app.db.groups.find((g) => g.id === 'GP')._partilhado, true);
   });
 
-  test('se o servidor recusar as casas a meio, o grupo criado lá apaga-se, o toast diz que continua privado, e o «Partilhar» fica', async () => {
+  test('um segundo toque enquanto a partilha não respondeu não começa outra; acabada, o grupo já é partilhado', async () => {
     const { app, esp } = comEstado();
-    esp.resposta = (m, p) => (m === 'PUT' && p.endsWith('/houses') ? Object.assign(new Error('Só podes adicionar ao grupo imóveis teus.'), { status: 403 }) : {});
+    let responder;
+    esp.resposta = () => new Promise((ok) => { responder = ok; });
     app.CW.grupoPartilhar('GP');
+    app.CW.grupoPartilhar('GP');
+    app.CW.grupoPartilhar('GP');
+    assert.deepEqual(esp.chamadas(), ['POST /api/shared-groups/GP/partilhar'], 'um pedido, por mais toques');
+    assert.equal(esp.confirmados.length, 1, 'e uma confirmação');
+    assert.deepEqual(esp.toasts, ['Já estou a partilhar este grupo — a ligação aparece num instante.', 'Já estou a partilhar este grupo — a ligação aparece num instante.']);
+    responder({ ok: true, url: 'https://teste.local/?grupo=' + 'd'.repeat(64), expiresAt: 4102444800000 });
     await espera();
-    assert.deepEqual(esp.chamadas(), ['PUT /api/shared-groups/GP', 'PUT /api/shared-groups/GP/houses', 'DELETE /api/shared-groups/GP']);
+    assert.equal(app.db.groups.find((g) => g.id === 'GP')._partilhado, true);
+    // partilhado, o toque seguinte abre a janela do grupo em vez de partilhar outra vez
+    esp.api.length = 0;
+    app.CW.grupoPartilhar('GP');
+    assert.deepEqual(esp.chamadas(), []);
+  });
+
+  test('se o servidor recusar, a janela de espera fecha, o toast diz porquê e que o grupo continua privado, e o «Partilhar» fica — sem nada a apagar', async () => {
+    const { app, esp } = comEstado();
+    esp.resposta = () => Object.assign(new Error('Só podes adicionar ao grupo imóveis teus.'), { status: 403 });
+    app.CW.grupoPartilhar('GP');
+    assert.equal(app.modalStack.length, 1, 'a janela de espera abriu');
+    await espera();
+    assert.deepEqual(esp.chamadas(), ['POST /api/shared-groups/GP/partilhar'], 'o servidor não deixou nada: nada a apagar');
+    assert.equal(app.modalStack.length, 0, 'a janela de espera fechou');
     assert.equal(esp.toasts[esp.toasts.length - 1], 'Só podes adicionar ao grupo imóveis teus. O grupo continua privado.');
     const g = app.db.groups.find((x) => x.id === 'GP');
     assert.ok(!g._partilhado, 'o privado fica como estava');
     assert.ok(app.vGrupos().includes("CW.grupoPartilhar('GP')"));
-    // a falha logo no PUT {name} não criou nada: nada a apagar
-    const { app: outra, esp: e2 } = comEstado();
-    e2.resposta = () => Object.assign(new Error('Sem ligação.'), { status: 0 });
-    outra.CW.grupoPartilhar('GP');
+    // e pode tentar-se outra vez
+    esp.api.length = 0;
+    app.CW.grupoPartilhar('GP');
+    assert.deepEqual(esp.chamadas(), ['POST /api/shared-groups/GP/partilhar']);
+  });
+
+  test('um 409 (outro toque ou outro aparelho partilhou primeiro): diz que já estava partilhado, sincroniza e abre a janela do grupo', async () => {
+    const { app, esp } = comEstado();
+    esp.resposta = () => Object.assign(new Error('Este grupo já está partilhado.'), { status: 409 });
+    let abriu = '';
+    app.CW.grupoModal = (id) => { abriu = id; };
+    app.CW.grupoPartilhar('GP');
     await espera();
-    assert.deepEqual(e2.chamadas(), ['PUT /api/shared-groups/GP']);
-    assert.equal(e2.toasts[0], 'Sem ligação.');
+    assert.ok(esp.toasts.includes('Este grupo já estava partilhado.'), esp.toasts.join(' | '));
+    assert.equal(esp.puxou, 1);
+    assert.equal(abriu, 'GP');
+  });
+
+  test('fechar a janela de espera não cancela: a partilha acaba, a ligação fica guardada, e o toast diz onde a achar', async () => {
+    const { app, esp } = comEstado();
+    let responder;
+    esp.resposta = () => new Promise((ok) => { responder = ok; });
+    app.CW.grupoPartilhar('GP');
+    app.closeModal();
+    responder({ ok: true, url: 'https://teste.local/?grupo=' + 'e'.repeat(64), expiresAt: 4102444800000 });
+    await espera();
+    assert.equal(app.db.groups.find((g) => g.id === 'GP')._partilhado, true);
+    assert.ok(esp.toasts.includes('Grupo partilhado. Do Rui ficou de fora — não é teu. A ligação está na janela do grupo.'), esp.toasts.join(' | '));
+    assert.equal(app.modalStack.length, 0, 'não volta a abrir nada por cima');
   });
 
   test('um grupo que não existe, ou que não é de imóveis, diz porquê em vez de não fazer nada', () => {

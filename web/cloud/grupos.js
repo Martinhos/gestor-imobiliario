@@ -627,15 +627,10 @@ function explicarGrupoDosOutros(g, outras) {
    entrada com o porquê; com os Colaboradores desligados, a frase do
    serviço; um grupo vazio ou só com imóveis de outras pessoas, a janela que
    o diz (explicarGrupoVazio, explicarGrupoDosOutros). Com imóveis meus, diz
-   o que muda e, confirmado, cria o grupo no servidor com o MESMO id (PUT
-   {name}), põe-lhe as casas do grupo que são minhas (PUT …/houses — só as
-   que criei, cwMinha: as dos outros saem do grupo, e o toast diz quais),
-   cria a ligação (POST …/link), marca o grupo local (grupoLocalPartilhado —
-   o id fica, os movimentos com groupId continuam a apontar para ele, e o
-   u:group antigo sai por diferença) e mostra a ligação. Se o servidor
-   recusar a meio (as casas ou a ligação), o grupo acabado de criar lá
-   apaga-se (DELETE): sem isso, a leitura seguinte trocava o privado por um
-   partilhado vazio com o mesmo id, e o grupo sumia da lista dos privados.
+   o que muda (só os que criei entram, cwMinha: os dos outros saem do grupo,
+   e a confirmação diz quais) e, confirmado, partilha-o de uma vez
+   (partilharGrupoDeUmaVez). Com uma partilha deste grupo ainda a caminho, um
+   segundo toque não começa outra.
    Recebe: id — o id do grupo privado.
    Devolve: nada — abre uma janela (a confirmação, ou a que explica); só depois da confirmação fala com a API. */
 CW.grupoPartilhar = function (id) {
@@ -652,41 +647,76 @@ CW.grupoPartilhar = function (id) {
   if (!servicoLigado('colaboradores')) return toast(fraseServicoDesligado('colaboradores'), { ms: 6000 });
   var casas = casasDoGrupoPorDono(g), minhas = casas.minhas, fora = casas.outras;
   if (!minhas.length) return fora.length ? explicarGrupoDosOutros(g, fora) : explicarGrupoVazio(g);
+  if (_aPartilhar[id]) return toast('Já estou a partilhar este grupo — a ligação aparece num instante.');
   var nomesFora = nomesDeCasas(fora);
   confirmModal('Partilhar este grupo',
     'O grupo <b>«' + esc(nome) + '»</b> passa a partilhado: quem pedir para entrar pela ligação, e tu aceitares, fica comproprietário dos imóveis dele — vê e edita contratos, movimentos e pessoas — e pode adicionar ao grupo imóveis seus. ' +
     (fora.length ? 'Só os imóveis teus entram: <b>' + esc(nomesFora) + '</b> ' + (fora.length === 1 ? 'sai' : 'saem') + ' do grupo. ' : '') +
     'Um grupo partilhado não volta a ser privado.',
-    function () {
-      var rota = '/api/shared-groups/' + encodeURIComponent(id);
-      var criado = false, feito = false;
-      api('PUT', rota, { name: nome })
-        .then(function () { criado = true; return api('PUT', rota + '/houses', { houseIds: minhas }); })
-        .then(function () { return api('POST', rota + '/link'); })
-        .then(function (r) {
-          feito = true;
-          r = r || {};
-          var url = r.url || '';
-          grupoLocalPartilhado(id, nome, minhas, r.expiresAt);
-          guardarLigacaoDoGrupo(id, url);
-          closeAllModals();   // a janela do grupo privado, se ainda estava aberta: o Guardar dela escrevia por cima das marcas
-          toast(fora.length
-            ? 'Grupo partilhado. ' + nomesFora + (fora.length === 1 ? ' ficou de fora — não é teu.' : ' ficaram de fora — não são teus.')
-            : 'Grupo partilhado — copia a ligação e envia-a.', { ms: 6000 });
-          ligacaoModal('Ligação do grupo', url,
-            'Vale 7 dias e serve para várias pessoas. Quem a abrir entra (ou cria conta) e pede para entrar no grupo <b>«' + esc(nome) +
-            '»</b>; quando aceitares, passa a comproprietário dos imóveis dele. Podes rodá-la ou desativá-la quando quiseres, na janela do grupo.');
-          return pullNow(true);
-        })
-        .then(function () { render(); })
-        .catch(function (e) {
-          var meio = criado && !feito;
-          // a meio: o grupo do servidor sai, e o privado fica como estava
-          if (meio) api('DELETE', rota).catch(function () {});
-          toast(((e && e.message) || 'Não deu para partilhar o grupo.') + (meio ? ' O grupo continua privado.' : ''), { ms: 6000 });
-        });
-    });
+    function () { partilharGrupoDeUmaVez(id, nome, minhas, fora, nomesFora); });
 };
+
+/* Os grupos com uma partilha a caminho do servidor, por id: um segundo
+   toque (no botão do cartão, na janela de edição, ou noutro sítio) enquanto
+   a primeira não respondeu não começa outra. */
+var _aPartilhar = {};
+
+/* A partilha confirmada. A janela da ligação abre JÁ, a dizer que está a
+   criar a ligação, e preenche-se no sítio quando o servidor responder
+   (fillModal) — eram três pedidos em fila e nada no ecrã até ao fim, e o
+   Martinho tocava outra vez. Agora é um pedido só (POST …/partilhar: o
+   grupo, as casas minhas e a ligação num lote do servidor, tudo ou nada),
+   com o MESMO id do grupo privado; marca o grupo local
+   (grupoLocalPartilhado — o id fica, os movimentos com groupId continuam a
+   apontar para ele, e o u:group antigo sai por diferença), guarda a ligação
+   neste aparelho e sincroniza. Fechar a janela de espera não cancela nada:
+   a ligação fica guardada e «Copiar ligação» está na janela do grupo. Um
+   409 (outro toque ou outro aparelho chegou primeiro) abre a janela do
+   grupo já partilhado; outro erro diz porquê, e o grupo fica privado.
+   Recebe: id — o id do grupo; nome — o nome (até 60 caracteres); minhas — os
+   ids dos imóveis meus que entram; fora — os dos outros, que saem; nomesFora
+   — os nomes desses, para o toast.
+   Devolve: nada — abre a janela e fala com a API. */
+function partilharGrupoDeUmaVez(id, nome, minhas, fora, nomesFora) {
+  _aPartilhar[id] = true;
+  closeAllModals();   // a janela do grupo privado, se estava aberta: o Guardar dela escrevia por cima das marcas
+  var hint = 'Vale 7 dias e serve para várias pessoas. Quem a abrir entra (ou cria conta) e pede para entrar no grupo <b>«' + esc(nome) +
+    '»</b>; quando aceitares, passa a comproprietário dos imóveis dele. Podes rodá-la ou desativá-la quando quiseres, na janela do grupo.';
+  var L = openModal('Ligação do grupo',
+    '<div class="form" aria-busy="true"><input id="cw_lig_url" class="u-ff-monospace u-fs-12p5px u-c-v-muted" readonly value="A criar a ligação…" aria-label="Ligação do grupo">' +
+    '<div class="hint">A partilhar o grupo <b>«' + esc(nome) + '»</b> e a criar a ligação para enviares. Demora só um instante.</div></div>',
+    '<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>' +
+    '<button class="btn primary" disabled>Copiar ligação</button>');
+  // a janela de espera ainda é a de cima? fechada, sai da pilha; tapada por
+  // outra, não se lhe mexe por baixo
+  var aindaAberta = function () { return !!L && modalTop() === L; };
+  var acabou = function () { delete _aPartilhar[id]; };
+  api('POST', '/api/shared-groups/' + encodeURIComponent(id) + '/partilhar', { name: nome, houseIds: minhas })
+    .then(function (r) {
+      r = r || {};
+      var url = r.url || '';
+      grupoLocalPartilhado(id, nome, minhas, r.expiresAt);
+      guardarLigacaoDoGrupo(id, url);
+      acabou();
+      var aberta = aindaAberta();
+      if (aberta) fillModal(L.el, 'Ligação do grupo', ligacaoCorpo(url, hint), ligacaoRodape(url));
+      // fechada a espera, a ligação não reabre por cima: diz-se onde está
+      var onde = aberta ? '' : ' A ligação está na janela do grupo.';
+      toast(fora.length
+        ? 'Grupo partilhado. ' + nomesFora + (fora.length === 1 ? ' ficou de fora — não é teu.' : ' ficaram de fora — não são teus.') + onde
+        : aberta ? 'Grupo partilhado — copia a ligação e envia-a.' : 'Grupo partilhado.' + onde, { ms: 6000 });
+      return pullNow(true).then(function () { render(); });
+    }, function (e) {
+      acabou();
+      if (aindaAberta()) closeModal();
+      if (e && e.status === 409) {
+        toast('Este grupo já estava partilhado.');
+        return pullNow(true).then(function () { render(); CW.grupoModal(id); });
+      }
+      toast(((e && e.message) || 'Não deu para partilhar o grupo.') + ' O grupo continua privado.', { ms: 6000 });
+    })
+    .catch(function () {});
+}
 
 /* ---------------- aterragem: entrar num grupo ---------------- */
 
