@@ -43,6 +43,15 @@ function vDashboard(){
   if(souSoColaborador()&&!scope().length)return podes+proximasVisitasColab();
   const nColab=scope().filter(p=>!souDono(p.id)).length;
   const colabHint=nColab?`<div class="hint u-m-n4px-0-12px">Inclui ${nColab} ${nColab===1?'imóvel':'imóveis'} onde és colaborador (valores por inteiro).</div>`:'';
+  /* com imóveis e sem movimentos, quando a jornada não é a vista (dispensada,
+     ou sem passos por fazer): um vazio que diz porque não há números e leva
+     aos Movimentos, mais o portefólio — e não quatro indicadores a 0 € e dois
+     gráficos vazios. Os por confirmar e os prazos ficam por cima: são o
+     caminho mais curto para o primeiro movimento. A marca <!--sem-movimentos-->
+     diz ao dashDepois que não há blocos para personalizar. */
+  if(!db.transactions.length&&!souSoColaborador())
+    return esperaDoServidor()||'<!--sem-movimentos-->'+colabHint+(servicoLigado('recurring')?pendingCard():'')+prazosCard()+`<div class="empty u-mb-14px"><b>Ainda não há dados para mostrar</b>Os indicadores e os gráficos da vista geral saem dos movimentos. Regista a primeira renda recebida ou despesa paga.
+      ${servicoLigado('transactions')?saida('Ir para os movimentos',"go('transactions')",'ecra'):vazioServicoDesligado('transactions')}</div>`+portefolioInicial(m);
   const inc=monthly(YEAR,pid,'income',true),exp=monthly(YEAR,pid,'expense',true),ln=monthly(YEAR,pid,'loan',true),am=monthly(YEAR,pid,'amort',true);
   let acc=0;const cum=inc.map((v,i)=>acc+=v-exp[i]-ln[i]-am[i]);
   const groups=inc.map((v,i)=>[{label:'Receita',value:v,color:PAL[0]},{label:'Despesas',value:-exp[i],color:'#c56b68'},{label:'Prestações',value:-ln[i],color:'#d6a34a'}]);
@@ -200,15 +209,17 @@ function dashPersonalizarPainel(){if(window.CW&&CW.enterEdit)CW.enterEdit()}
    avulsa custava quatro toques de viagem. Entra depois de o painel rearranjar
    os cartões, para não virar um cartão arrastável. O FAB abre um movimento
    novo, que é dos Movimentos: com esse serviço desligado nesta conta fica só
-   o botão de personalizar, que é da base. Na jornada (a marca <!--jornada-->
-   de vDashboard) não há blocos para arrumar, e um botão que entra num modo
+   o botão de personalizar, que é da base. Na jornada e no vazio sem
+   movimentos (as marcas <!--jornada--> e <!--sem-movimentos--> de
+   vDashboard) não há blocos para arrumar, e um botão que entra num modo
    de edição sem nada para arrastar é um beco: não se escreve; o FAB fica,
    que registar o primeiro movimento é precisamente o passo seguinte.
    Devolve: nada — acrescenta o botão e o FAB ao #view quando fazem sentido. */
 function dashDepois(){
   if(view().querySelector('#dashPersonalizar')||!(podeSemImovel()||casasComo('tx.add').length))return;
   const novoTx=servicoLigado('transactions')?fab([{act:'newTxPick()',label:'Novo movimento'}])+'<div class="fabpad"></div>':'';
-  const arrumar=view().innerHTML.indexOf('<!--jornada-->')>-1?'':'<button type="button" class="btn sm" data-toca="modo" data-click="dashPersonalizarPainel()">'+ic('grip',13)+' Personalizar painel</button>';
+  const h=view().innerHTML;
+  const arrumar=h.indexOf('<!--jornada-->')>-1||h.indexOf('<!--sem-movimentos-->')>-1?'':'<button type="button" class="btn sm" data-toca="modo" data-click="dashPersonalizarPainel()">'+ic('grip',13)+' Personalizar painel</button>';
   view().insertAdjacentHTML('beforeend',
     '<div id="dashPersonalizar" class="u-ta-center u-m-2px-0-0">'+arrumar+'</div>'+novoTx);
 }

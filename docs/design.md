@@ -722,6 +722,12 @@ primeiro movimento traz os indicadores; o cartão dos passos fica no topo até
 estar tudo feito, ou até ser dispensado (guia.js:passosDispensados). Os
 pedidos por responder continuam por cima de tudo (partilha.js:pedidosDashCard).
 
+Com o cartão dispensado (ou sem passos por fazer) e ainda sem movimentos, os
+indicadores a 0 € também não voltam: a vista é um vazio, «Ainda não há dados
+para mostrar», com o botão «Ir para os movimentos», mais o mesmo portefólio
+(painel-geral.js:vDashboard, marca `<!--sem-movimentos-->`, também sem o
+«Personalizar painel»).
+
 A jornada não exige sessão: sem ela, o passo do perfil não se propõe, e o
 resto fica igual. E a marca que a vista deixa no HTML (`<!--jornada-->`) é o
 que impede o guia de a inserir segunda vez.

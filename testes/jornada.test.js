@@ -119,16 +119,42 @@ describe('a jornada no lugar da vista geral', () => {
     assert.equal(app.jornadaInicial(), '', 'com movimentos a jornada não substitui a vista');
   });
 
-  test('dispensado (gi_passos_fora), a vista geral é a de sempre, com os indicadores a 0', () => {
+  test('dispensado (gi_passos_fora) e sem movimentos: nem indicadores a 0 nem gráficos — o vazio que leva aos Movimentos, e o portefólio', () => {
     const app = montar();
     semear(app, true);
     app.localStorage.setItem('gi_passos_fora', '1');
     const html = app.vDashboard();
     assert.doesNotMatch(html, /<!--jornada-->|Primeiros passos|jornada-passo/);
-    assert.match(html, /class="grid"/);
-    assert.match(html, /Receita/);
+    assert.doesNotMatch(html, /class="grid"|Receita|Entradas e saídas|chartbox/, 'sem a fila dos indicadores nem os gráficos');
+    assert.match(html, /<!--sem-movimentos-->/);
+    assert.match(html, /<div class="empty[^"]*"><b>Ainda não há dados para mostrar<\/b>/);
+    assert.match(html, /<button type="button" class="btn primary" data-toca="ecra" data-click="go\('transactions'\)">Ir para os movimentos<\/button>/);
+    assert.match(html, /<span>Imóveis<\/span><b>1<\/b>/, 'o portefólio fica');
     assert.equal(app.jornadaInicial(), '');
     assert.equal(app.cartaoPassos(), '');
+    // com os Movimentos desligados nesta conta, o botão não se escreve e a frase diz quem os liga
+    app.definirServicosDesligados(['transactions']);
+    const sem = app.vDashboard();
+    assert.match(sem, /Ainda não há dados para mostrar/);
+    assert.doesNotMatch(sem, /go\('transactions'\)/);
+    assert.match(sem, /O serviço Movimentos está desligado nesta conta\./);
+    // com o primeiro movimento os indicadores voltam
+    app.definirServicosDesligados([]);
+    app.db.transactions.push(app.normTx({ id: 'X1', kind: 'income', category: 'Rendas', amount: 800, propertyId: 'P1', date: app.YEAR + '-01-05' }));
+    const com = app.vDashboard();
+    assert.match(com, /class="grid"/);
+    assert.doesNotMatch(com, /Ainda não há dados para mostrar|<!--sem-movimentos-->/);
+  });
+
+  test('o vazio sem movimentos não escreve o «Personalizar painel», mas escreve o FAB do movimento', () => {
+    const app = montar();
+    semear(app, true);
+    app.localStorage.setItem('gi_passos_fora', '1');
+    const fixos = elementos(app);
+    fixos.view.innerHTML = app.vDashboard();
+    app.dashDepois();
+    assert.doesNotMatch(fixos.view.innerHTML, /Personalizar painel/);
+    assert.match(fixos.view.innerHTML, /newTxPick\(\)/);
   });
 
   test('quem só colabora não vê a jornada no lugar da vista: «O que podes fazer» primeiro, os passos a seguir', () => {
