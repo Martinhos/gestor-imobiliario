@@ -41,7 +41,7 @@ describe('o contrato, em texto', () => {
     }
     for (const t of ['Cargo guardado.', 'Ligação de convite criada — copia-a e envia.', 'Ligação copiada.', 'Convite revogado.',
       'Colaborador removido — deixa de ver estes imóveis.', 'Ligação de partilha desativada — quem já pediu continua à espera da tua resposta.',
-      'Pedido enviado — ', 'Partilha aceite: ', "'gi_ligacao_url'"]) {
+      'Pedido enviado — ', 'Partilha aceite: ', 'chaveDaLigacao()']) {
       assert.ok(s.includes(t), 'texto: ' + t);
     }
     // o fecho das permissões da app (um Set) não pode ser pisado por este módulo
@@ -63,7 +63,7 @@ describe('o contrato, em texto', () => {
 
   test('nucleo.js lê o cargo, os colaboradores e o criador, e trata o 403', () => {
     const s = le('web/cloud/nucleo.js');
-    for (const t of ['cargosDoEstado', '_colaboradores', '_cargo', '_collabId', '_createdBy', '_recusados',
+    for (const t of ['cargosDoEstado', '_colaboradores', '_cargo', '_collabId', '_createdBy',
       'não foi guardado: sem permissão neste imóvel.', 'podeExportar', "'house.edit'"]) {
       assert.ok(s.includes(t), 'texto: ' + t);
     }
@@ -193,15 +193,14 @@ describe('rebuildDb com colaboração', () => {
     assert.ok(!chaves.includes('r:H2:visit:V1'), 'sem visit.add a visita não sobe');
   });
 
-  test('um 403 num put de registo tira-o da base, guarda-o em _recusados e avisa', async () => {
+  test('um 403 num put de registo tira-o da base e do retrato, e avisa', async () => {
     app.db = d;
     esp.resposta = (m, p, body) => ({
       results: body.ops.map((o) => (o.scope === 'record' && o.kind === 'tx' ? { ok: false, status: 403, error: 'Sem permissão para adicionar movimentos neste imóvel.' } : { ok: true })),
     });
     await app.pushNow();
     assert.ok(!app.db.transactions.some((t) => t.id === 'T1'), 'o movimento saiu da base');
-    assert.equal(app.db._recusados.length, 1);
-    assert.equal(app.db._recusados[0].id, 'T1');
+    assert.ok(!('r:H2:tx:T1' in app.snap), 'e do retrato: o que falta não é uma remoção por enviar');
     assert.ok(esp.toasts.some((t) => /Renda não foi guardado: sem permissão neste imóvel\./.test(t)), esp.toasts.join(' | '));
   });
 });
@@ -285,12 +284,12 @@ describe('as ações da nuvem falam com a API do contrato', () => {
     assert.deepEqual(JSON.parse(JSON.stringify(esp.api[0].body)), { roleId: 'R2', houseIds: ['H1'] });
   });
 
-  test('a ligação permanente: criar guarda o URL no aparelho; desativar esquece-o', async () => {
+  test('a ligação permanente: criar guarda o URL no aparelho, na chave da conta; desativar esquece-o', async () => {
     esp.resposta = () => ({ url: 'https://app.rendorium.com/?ligar=' + 'b'.repeat(64) });
     app.CW.ligacaoCriar();
     await espera();
     assert.equal(esp.api[0].method + ' ' + esp.api[0].path, 'POST /api/share-link');
-    assert.match(app.localStorage.getItem('gi_ligacao_url'), /ligar=b{64}/);
+    assert.match(app.localStorage.getItem('gi_ligacao_url_EU'), /ligar=b{64}/);
     assert.equal(esp.modais[0].titulo, 'A minha ligação de partilha');
     app.CW.ligacaoCopiar();
     assert.ok(esp.toasts.includes('Ligação copiada.'));
@@ -299,7 +298,7 @@ describe('as ações da nuvem falam com a API do contrato', () => {
     await espera();
     assert.equal(esp.confirmados[0], 'Desativar a ligação');
     assert.equal(esp.api[1].method + ' ' + esp.api[1].path, 'DELETE /api/share-link');
-    assert.equal(app.localStorage.getItem('gi_ligacao_url'), null);
+    assert.equal(app.localStorage.getItem('gi_ligacao_url_EU'), null);
     assert.ok(esp.toasts.some((t) => t.startsWith('Ligação de partilha desativada — quem já pediu continua à espera da tua resposta.')));
   });
 
@@ -350,10 +349,12 @@ describe('os textos das permissões', () => {
     assert.equal(app.resumoPerms(['house.edit']), 'Vê hipotecas, fotos e documentos · Edita a ficha do imóvel');
     assert.equal(app.resumoPerms([]), 'Sem permissões');
   });
-  test('o fecho local acompanha o da app (IMPLICA de acessos.js)', () => {
-    const meu = JSON.parse(JSON.stringify(app.permsFechadas(['contract.add']))).sort();
-    const deles = Array.from(app.fechoPerms(['contract.add'])).sort();
-    assert.deepEqual(meu, deles);
+  test('o fecho em array é o de acessos.js, pela ordem de PERMS — sem cópia local das implicações', () => {
+    const meu = JSON.parse(JSON.stringify(app.permsFechadas(['contract.add'])));
+    const deles = Array.from(app.fechoPerms(['contract.add']));
+    assert.deepEqual([...meu].sort(), deles.sort());
+    assert.deepEqual(meu, ['rec.view', 'rec.add', 'contract.view', 'contract.add'], 'na ordem canónica');
+    assert.ok(!/IMPLICA_LOCAL|ROTULOS_LOCAL|CARGOS_LOCAL/.test(le('web/cloud/colaboradores.js')));
   });
   test('os cargos de exemplo vêm de acessos.js com nome, permissões e sub', () => {
     const cs = app.cargosExemplo();
@@ -485,7 +486,7 @@ describe('fichas de inquilino presas a um imóvel', () => {
     assert.equal(p1._houseId, 'H2');
   });
 
-  test('com houseId de um imóvel de colaboração a ficha sobe só como registo dessa casa (com tenant.add); presa a um imóvel meu, ou a um apagado, sobe também como u:tenant', () => {
+  test('com houseId de um imóvel de colaboração a ficha sobe só como registo dessa casa (com tenant.add); presa a um imóvel meu também só como registo dele; a um apagado, como u:tenant', () => {
     const ficha = (id, houseId) => { const t = app.normPerson({ id, name: id }); if (houseId) t.houseId = houseId; return t; };
     app.db.tenants.push(ficha('TN', 'H3'));   // criada por mim (Gestor de visitas) a partir de uma visita, sem contrato
     app.db.tenants.push(ficha('TX', 'H2'));   // presa a um imóvel onde sou Contabilista (sem tenant.add)
@@ -498,7 +499,7 @@ describe('fichas de inquilino presas a um imóvel', () => {
     assert.ok(!chaves.includes('r:H2:tenant:TX') && !chaves.includes('u:tenant:TX'), 'sem tenant.add não sobe para lado nenhum');
     assert.ok(!chaves.includes('r:H2:tenant:P1') && !chaves.includes('u:tenant:P1'), 'a ficha do dono (sem tenant.add) não é minha');
     assert.ok(chaves.includes('r:H1:tenant:TM'), 'no imóvel meu é registo da casa (os comproprietários veem-na)');
-    assert.ok(chaves.includes('u:tenant:TM'), 'e também minha: sobrevive ao imóvel');
+    assert.ok(!chaves.includes('u:tenant:TM'), 'e só isso: uma ficha, uma chave (apagar o imóvel passa-a a u:tenant)');
     assert.ok(chaves.includes('u:tenant:TA'), 'a ficha de um imóvel apagado continua a ser minha');
     assert.ok(!chaves.some((k) => k.indexOf(':tenant:TA') > 0 && k[0] === 'r'), 'e não tem casa por onde subir');
     assert.ok(chaves.includes('u:tenant:TU'), 'sem imóvel continua a ser um registo meu');

@@ -1,15 +1,14 @@
 // Crédito à habitação: prestações, plano de amortização e comissões.
 // É a matemática que decide números que vão parar ao IRS de alguém.
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar } from './arnes.js';
+import { carregarApp, limpar, perto, repor } from './arnes.js';
 
 const app = carregarApp();
-const perto = (a, b, tol = 0.01) =>
-  assert.ok(Math.abs(a - b) <= tol, `esperava ${b} (±${tol}), veio ${a}`);
 
 beforeEach(() => limpar(app));
+afterEach(() => repor(app));
 
 const fixa = (extra = {}) => Object.assign({
   id: 'l1', outstanding: 100000, years: 30, type: 'fixa', rate: 3, stampTax: true,

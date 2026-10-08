@@ -13,14 +13,37 @@
    é avisado — o mecanismo de aviso vive dentro da coisa que morreu. Um GET a
    um URL opaco, de fora, é a única peça que não pode ser feita de dentro. */
 
+/* Os recursos da API cujo segmento seguinte é um id, e quantos segmentos se
+   saltam até ele (em /records/:kind/:id e /user-records/:kind/:id o kind
+   fica, que é da app). Mascara-se pela posição e não só pela forma: os ids
+   da app são do cliente (uuid, ou 'id' + Date.now() sem randomUUID) e um
+   convite revoga-se pelo prefixo de 12 hex do hash — com a forma, passavam
+   tal e qual para o índice do Analytics Engine, uma série nova por convite. */
+const POSICAO_DO_ID = {
+  houses: 0, files: 0, roles: 0, 'collab-invites': 0, collaborators: 0, connections: 0,
+  'share-requests': 0, convite: 0, ligar: 0, records: 1, 'user-records': 1,
+};
+// os que levam um token no lugar do id (as ligações que se entregam às pessoas)
+const COM_TOKEN = new Set(['convite', 'ligar']);
+
 // A rota sem o que a torna única: ids, tokens e números viram marcadores.
 // É o que se guarda — nunca o caminho tal e qual, que leva segredos.
 // Recebe: caminho — o pathname do pedido.
 // Devolve: o mesmo caminho com /:token, /:id e /:n no lugar dos valores.
 export function rotaGenerica(caminho) {
-  return String(caminho || '')
+  const partes = String(caminho || '').split('/');
+  for (let i = 0; i < partes.length; i++) {
+    const salto = Object.prototype.hasOwnProperty.call(POSICAO_DO_ID, partes[i]) ? POSICAO_DO_ID[partes[i]] : -1;
+    const j = i + 1 + salto;
+    if (salto < 0 || j >= partes.length || !partes[j]) continue;
+    partes[j] = COM_TOKEN.has(partes[i]) ? ':token' : ':id';
+    i = j;
+  }
+  return partes.join('/')
     .replace(/\/[0-9a-f]{32,}(?=\/|$)/gi, '/:token')
     .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?=\/|$)/gi, '/:id')
+    // o prefixo de 12 hex com que um convite se revoga, onde quer que apareça
+    .replace(/\/[0-9a-f]{12}(?=\/|$)/gi, '/:id')
     .replace(/\/\d+(?=\/|$)/g, '/:n')
     .slice(0, 96);
 }

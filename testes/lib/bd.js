@@ -86,7 +86,8 @@ export function r2Falso() {
       const b = m.get(k);
       return b ? { size: b.length, body: new Response(b).body } : null;
     },
-    async delete(k) { m.delete(k); },
+    // como o R2 verdadeiro: uma chave ou uma lista delas (até 1000)
+    async delete(k) { (Array.isArray(k) ? k : [k]).forEach((x) => m.delete(x)); },
     async list(o) {
       const prefixo = (o && o.prefix) || '';
       return {

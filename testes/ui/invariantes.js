@@ -6,10 +6,15 @@
    Vive num ficheiro à parte porque é injetado no browser — não pode importar
    nada nem tocar em Node. */
 
-// Devolve o texto da função, para o Playwright a injetar na página.
+// Devolve o texto da função, para quem só a pode correr a partir de texto (o
+// testes/correcao-testes.test.js, num vm).
 module.exports.fonte = function () {
   return `(${dentroDaPagina.toString()})()`;
 };
+/* A própria função, para o Playwright a passar à página SEM ser por texto: um
+   predicado em texto é avaliado com eval dentro da página, e a CSP não tem
+   'unsafe-eval'. */
+module.exports.dentroDaPagina = dentroDaPagina;
 
 function dentroDaPagina() {
   const N = (x) => Math.round(x);
@@ -157,14 +162,50 @@ function dentroDaPagina() {
     });
   }
 
-  /* 4. Alvos de toque com pelo menos 40px. Abaixo disso falha-se o botão. */
-  const pequenos = [...document.querySelectorAll('button, a[onclick], .tap, [role=button]')]
+  /* 4. Alvos de toque. Em ecrã de dedo, nada abaixo do mínimo, e só aí: no
+        rato os tamanhos compactos continuam certos (docs/design.md, «Toque e
+        acessibilidade»; index.html:@media(pointer:coarse)). Por isso a regra
+        FALHA onde a página responde a (pointer:coarse) — os telemóveis do
+        percurso nascem com toque — e no computador só mede. Dizia «falha-se o
+        botão» e só contava; e contava num contexto sem toque, os tamanhos do
+        rato, que para o rato são os certos.
+        O mínimo é 40 (o .btn.sm). Abaixo dele só o que a folha declara mais
+        pequeno de propósito, com o número dela: o × de uma etiqueta (28) e o
+        limpar da pesquisa (36).
+        O resto conta-se por TIPO (a tag e as classes), e não por elemento: em
+        seleção há uma caixa de marcar por linha, e um teto sobre elementos
+        dependia de quantos movimentos a conta tem. O teto é o das famílias:
+        baixa-se quando se corrige mais um tipo, e nunca sobe. Medido com
+        toque a 2026-09-15, o que ainda fica abaixo: o .btn.sm só de ícone (32
+        de largura — o toque dá-lhe a altura, não a largura), o «Anular» do
+        aviso (36 de altura, quando a folha lhe pede 44 e não chega lá), o
+        «+ Adicionar» das etiquetas (28), as opções de um sel() (39), e em
+        seleção as caixas de marcar (33 a 36 de largura) e a frase da barra.
+        Os cinco juntam-se num estado só (em seleção, com o aviso à vista): é
+        esse o teto de hoje. */
+  const TETO_ALVOS_PEQUENOS = 5;
+  const aoDedo = matchMedia('(pointer:coarse)').matches;
+  const DE_PROPOSITO = ['.tag button', '.qclear'];
+  // Recebe: e — um elemento. Devolve: o tipo dele — a tag e as classes, sem o «on» de escolhido.
+  const tipoDe = (e) => e.tagName.toLowerCase() + String(e.getAttribute('class') || '').split(' ')
+    .filter((c) => c && c !== 'on').map((c) => '.' + c).join('');
+  const pequenos = [...document.querySelectorAll('button, a[data-click], .tap, [role=button]')]
     .filter((e) => e.offsetParent)
+    .filter((e) => !DE_PROPOSITO.some((s) => e.matches(s)))
     .map((e) => ({ e, r: e.getBoundingClientRect() }))
-    .filter((x) => x.r.width > 0 && (x.r.height < 40 || x.r.width < 40))
-    .map((x) => (x.e.textContent || '').trim().slice(0, 20) + ' (' + N(x.r.width) + 'x' + N(x.r.height) + ')');
+    .filter((x) => x.r.width > 0 && (x.r.height < 40 || x.r.width < 40));
+  const tipos = [...new Set(pequenos.map((x) => tipoDe(x.e)))];
   medidas.alvosPequenos = pequenos.length;
-  if (pequenos.length) medidas.exemplosPequenos = pequenos.slice(0, 6);
+  medidas.aoDedo = aoDedo;
+  if (pequenos.length) {
+    medidas.tiposPequenos = tipos;
+    medidas.exemplosPequenos = pequenos.slice(0, 6).map((x) => tipoDe(x.e) + ' «' +
+      (x.e.textContent || '').trim().slice(0, 20) + '» ' + N(x.r.width) + 'x' + N(x.r.height));
+  }
+  if (aoDedo && tipos.length > TETO_ALVOS_PEQUENOS) {
+    falhar('alvos de toque com 40px no ecrã de dedo',
+      tipos.length + ' tipos de alvo abaixo de 40px, e o teto é ' + TETO_ALVOS_PEQUENOS + ': ' + tipos.join(', '));
+  }
 
   /* 5. As linhas dos movimentos nascem decoradas.
 
@@ -214,7 +255,7 @@ function dentroDaPagina() {
     if (selecao) {
       const semCaixa = linhas.filter((l) => !l.querySelector('.selbox'));
       if (semCaixa.length) falhar('em seleção, cada linha tem caixa', semCaixa.length + ' de ' + linhas.length + ' sem .selbox');
-      const abrem = linhas.filter((l) => !/selToggle/.test(l.getAttribute('onclick') || ''));
+      const abrem = linhas.filter((l) => !/selToggle/.test(l.getAttribute('data-click') || ''));
       if (abrem.length) falhar('em seleção, tocar marca em vez de abrir', abrem.length + ' linhas ainda abrem o movimento');
 
       /* As marcas sobrevivem a uma repintura. É o que o ponto de extensão tem
@@ -294,13 +335,13 @@ function dentroDaPagina() {
      como chave de animacao. */
   const FAMILIAS = ['nada', 'vista', 'camada', 'rascunho', 'dados', 'modo', 'ecra'];
   const pontos = [...document.querySelectorAll(
-    '#view [onclick],#view button,#view a[href],#view [role=button],#view [data-toca],' +
-    '.modal.open [onclick],.modal.open button,.modal.open [role=button],.modal.open [data-toca]')]
+    '#view [data-click],#view button,#view a[href],#view [role=button],#view [data-toca],' +
+    '.modal.open [data-click],.modal.open button,.modal.open [role=button],.modal.open [data-toca]')]
     .filter((e) => e.offsetParent || e.ownerSVGElement)
-    /* um <span onclick="event.stopPropagation()"> nao e um ponto de interacao:
-       e um guarda para o cartao por baixo nao abrir. Conta-lo obrigava a
-       inventar-lhe uma familia. */
-    .filter((e) => !/^event\.stopPropagation\(\);?$/.test((e.getAttribute('onclick') || '').trim()));
+    /* um <span data-click="event.stopPropagation()"> nao e um ponto de
+       interacao: e um guarda para o cartao por baixo nao abrir. Conta-lo
+       obrigava a inventar-lhe uma familia. */
+    .filter((e) => !/^event\.stopPropagation\(\);?$/.test((e.getAttribute('data-click') || '').trim()));
   const familia = (e) => e.getAttribute('data-toca') || '';
   const eForma = (e) => !!e.ownerSVGElement;
   const temNome = (e) => !!((e.textContent || '').trim() || e.getAttribute('aria-label') ||
@@ -340,11 +381,11 @@ function dentroDaPagina() {
      neutro: bloqueia a selecao de texto, vibra e engole o toque seguinte. Cada
      linha que o tem precisa de um botao com foco de teclado la dentro — que e
      o que o kebab e. */
-  /* So as LINHAS DE REGISTO. O data-lp «dash:» e do modo de edicao do painel,
-     nao das opcoes de um registo, e a porta visivel dele e o botao
-     «Personalizar painel» — que esta no ecra, fora do bloco. Escrita como
-     estava, a regra passava por acidente em seis dos sete blocos, por eles
-     terem la dentro um botao que existe para outra coisa. */
+  /* Os data-lp que ficam na vista sao todos de linhas de registo (tx:, prop:,
+     ct:, per:, rec:, tpl:, vis:, mort:). Havia um do painel, o «dash:», que
+     a regra tinha de pôr de fora — era do modo de edicao, e a porta visivel
+     dele era o «Personalizar painel», fora do bloco; saiu quando o painel
+     deixou o toque longo (A.3-14), e o filtro saiu com ele. */
   /* Em modo de selecao a regra nao se aplica, e nao e uma excecao de
      conveniencia: o kebab sai de proposito para dar lugar a caixa de marcar, e
      o caminho visivel passa a ser a barra do fundo, com o Editar e o Eliminar.
@@ -352,7 +393,7 @@ function dentroDaPagina() {
      visivel no ECRA» — e em selecao o ecra inteiro e outro. */
   const emSelecao = !!document.querySelector('.sel-bar,.sel-fundo');
   const comGesto = emSelecao ? [] : [...document.querySelectorAll('#view [data-lp]')]
-    .filter((e) => e.offsetParent && !/^dash:/.test(e.getAttribute('data-lp') || ''));
+    .filter((e) => e.offsetParent);
   const semPortaVisivel = comGesto.filter((e) => !e.querySelector('button,[role=button],a[href]'));
   medidas.linhasComGesto = comGesto.length;
   if (comGesto.length && semPortaVisivel.length) {
@@ -385,7 +426,7 @@ function dentroDaPagina() {
      desenho e ninguem da por ela ate alguem tentar usar a app sem saber que o
      toque longo existe. */
   const abrePorta = /(^|[^\w.])(lpMenu|menuOpen)\(|CW\.txOpcoes\(/;
-  const portas = pontos.filter((e) => abrePorta.test(e.getAttribute('onclick') || ''));
+  const portas = pontos.filter((e) => abrePorta.test(e.getAttribute('data-click') || ''));
   const foraDoMolde = portas.filter((e) => {
     const r = e.getBoundingClientRect();
     return !e.classList.contains('opcoes') || e.getAttribute('aria-label') !== 'Op\u00e7\u00f5es' ||
@@ -424,7 +465,7 @@ function dentroDaPagina() {
   /* Nenhuma data ISO no que se le.
 
      As datas que uma pessoa le escrevem-se como se escrevem em Portugal
-     (auxiliares.js:dPT): 15/03/2028. O ISO fica onde e DADO — na base, nos
+     (formato.js:dPT): 15/03/2028. O ISO fica onde e DADO — na base, nos
      <input type=date>, nas comparacoes, nas chaves e no que sai para o
      servidor —, e por isso esta regra olha so para o TEXTO visivel, nunca
      para atributos nem para valores de campos.
@@ -446,9 +487,14 @@ function dentroDaPagina() {
       (ex.textContent || '').trim().slice(0, 60));
   }
 
-  /* 7. Texto que sai da sua caixa — normalmente uma coluna estreita demais. */
+  /* 7. Texto que sai da sua caixa — normalmente uma coluna estreita demais.
+     Só HTML: um <text> de SVG não tem caixa de CSS (o sítio dele é o x e o
+     text-anchor, e a escala é a do viewBox), e o scrollWidth que o browser
+     lhe dá é um número sem sentido — as etiquetas do eixo de um gráfico
+     («133k») davam aqui um falso alarme quando o percurso passou a visitar a
+     Avaliação. */
   const rebentam = [...document.querySelectorAll('#view *')]
-    .filter((e) => e.children.length === 0 && e.textContent.trim())
+    .filter((e) => e.children.length === 0 && e.textContent.trim() && !e.closest('svg'))
     .filter((e) => e.scrollWidth > e.clientWidth + 4 && getComputedStyle(e).overflow === 'visible')
     .slice(0, 5).map((e) => e.textContent.trim().slice(0, 30));
   if (rebentam.length) falhar('texto dentro da sua caixa', rebentam.join(' | '));

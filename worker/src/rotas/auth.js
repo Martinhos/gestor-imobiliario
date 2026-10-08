@@ -1,20 +1,25 @@
-// Registo, entrada, saida e entrada com Google. Corre antes da sessao.
-import { hashPassword, verifyPassword, newUserId, createSession, destroySession,
-  sessionCookie, readSessionToken } from '../auth.js';
+// Registo, entrada, saída e entrada com Google. Corre antes da sessão.
+import { newUserId, createSession, destroySession, sessionCookie, tokensDoPedido, randomToken, sha256hex,
+  palavraNova, conferePalavra, gastarComoUmaConta, tokenNoCorpo } from '../auth.js';
 import { verifyIdToken } from '../oauth.js';
-import { weakPassword } from '../lib/http.js';
+import { json, err, body, now, clientIp, weakPassword, TERMS_VERSION } from '../lib/http.js';
+import { rateLimit } from '../lib/limites.js';
+
+// Quanto vale uma ligação de reposição da palavra-passe: 1 hora, uma vez.
+const REPOR_VALIDADE = 3600 * 1000;
 
 /* Trata as rotas /api/auth/*: registo, entrada (email e Google), reposição de
    palavra-passe, configuração pública e saída. Recebe o contexto partilhado do
    worker; devolve uma Response quando a rota é dele e undefined para o pedido
    seguir para as rotas com sessão. Os POST (menos o logout) têm limite por IP.
-   Recebe: c — o contexto partilhado montado pelo handleApi (env, request,
-   path, method e os ajudantes; aqui ainda sem `me`, porque corre antes da
-   sessão).
+   Nenhuma resposta leva o token da sessão no corpo em produção: vai no
+   cookie HttpOnly (tokenNoCorpo, auth.js).
+   Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
+   path, method; aqui ainda sem `me`, porque corre antes da sessão).
    Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
    para o pedido seguir para as rotas com sessão. */
 export async function rotasAuth(c) {
-  const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
+  const { env, request, path, method } = c;
 
   // ---- Autenticação (sem sessão) -----------------------------------------
 
@@ -55,18 +60,18 @@ export async function rotasAuth(c) {
     if (String(b.name || '').length > 120) return err(400, 'Nome demasiado longo.');
     const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
     if (existing) return err(409, 'Já existe uma conta com este email.');
-    const { hash, salt } = await hashPassword(String(b.password));
+    const { hash, salt, v } = await palavraNova(env, String(b.password));
     let id = newUserId();
     // colisão de id curto é improvável mas barata de evitar
     while (await env.DB.prepare('SELECT 1 FROM users WHERE id = ?').bind(id).first()) id = newUserId();
     await env.DB.prepare(
-      `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, terms_version, terms_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO users (id, email, name, pass_hash, pass_salt, pass_v, created_at, terms_version, terms_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-      .bind(id, email, String(b.name || '').trim(), hash, salt, now(), TERMS_VERSION, now())
+      .bind(id, email, String(b.name || '').trim(), hash, salt, v, now(), TERMS_VERSION, now())
       .run();
     const token = await createSession(env, id);
-    return json({ id, email, name: String(b.name || '').trim(), token }, 201, {
+    return json({ id, email, name: String(b.name || '').trim(), ...tokenNoCorpo(env, request, token) }, 201, {
       'Set-Cookie': sessionCookie(token),
     });
   }
@@ -76,7 +81,11 @@ export async function rotasAuth(c) {
      sempre a mesma, exista a conta ou não — enumerar emails registados é
      um presente que não se dá. A ligação vale 1 hora e uma só utilização,
      e serve também a quem entrou sempre pela Google e quer uma palavra-
-     passe: é o mesmo gesto. */
+     passe: é o mesmo gesto. O token vive na D1 (password_resets, migração
+     0016), só o hash dele, como os convites: no KV, que é eventualmente
+     consistente, nascia no ponto de presença de quem pediu e era lido no de
+     quem abre o email — noutro aparelho, noutra rede —, e a primeira abertura
+     dava «já foi usada ou expirou», que era falso (a lição da 0010). */
   if (path === '/api/auth/repor' && method === 'POST') {
     const b = await body(request);
     const email = String((b && b.email) || '').trim().toLowerCase();
@@ -84,8 +93,14 @@ export async function rotasAuth(c) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sempre;
     const u = await env.DB.prepare('SELECT id, email FROM users WHERE email = ? AND deleted_at IS NULL').bind(email).first();
     if (u) {
-      const t = [...crypto.getRandomValues(new Uint8Array(32))].map((x) => x.toString(16).padStart(2, '0')).join('');
-      await env.SESSIONS.put('repor:' + t, u.id, { expirationTtl: 3600 });
+      const t = randomToken();
+      const agora = now();
+      await env.DB.batch([
+        // as ligações que já expiraram vão de caminho
+        env.DB.prepare('DELETE FROM password_resets WHERE expires_at < ?').bind(agora),
+        env.DB.prepare('INSERT INTO password_resets (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
+          .bind(await sha256hex(t), u.id, agora, agora + REPOR_VALIDADE),
+      ]);
       const { emailReporPassword } = await import('../lib/correio.js');
       const ligacao = new URL(request.url).origin + '/?repor=' + t;
       const r = await emailReporPassword(env, u.email, ligacao);
@@ -100,15 +115,26 @@ export async function rotasAuth(c) {
     const pass = String((b && b.password) || '');
     if (!/^[a-f0-9]{64}$/.test(t)) return err(400, 'Essa ligação não é válida.');
     if (weakPassword(pass)) return err(400, 'A palavra-passe precisa de 8+ caracteres com maiúscula, minúscula, número e símbolo.');
-    const userId = await env.SESSIONS.get('repor:' + t);
-    if (!userId) return err(410, 'Essa ligação já foi usada ou expirou. Pede outra no ecrã de entrada.');
-    await env.SESSIONS.delete('repor:' + t);   // uso único, antes de mexer
-    const { hash, salt } = await hashPassword(pass);
-    // trocar a palavra-passe termina as sessões todas: se foi um estranho a
-    // pedir a troca, as sessões dele morrem aqui
-    await env.DB.prepare(
-      'UPDATE users SET pass_hash = ?, pass_salt = ?, sess_epoch = COALESCE(sess_epoch, 0) + 1 WHERE id = ?'
-    ).bind(hash, salt, userId).run();
+    // uso único e atómico: um UPDATE condicional que tem de mudar uma linha —
+    // dois cliques ao mesmo tempo, só um troca a palavra-passe
+    const h = await sha256hex(t);
+    const agora = now();
+    const gasto = await env.DB.prepare(
+      'UPDATE password_resets SET used_at = ? WHERE token_hash = ? AND used_at IS NULL AND expires_at >= ?'
+    ).bind(agora, h, agora).run();
+    const linha = gasto.meta && gasto.meta.changes === 1
+      ? await env.DB.prepare('SELECT user_id FROM password_resets WHERE token_hash = ?').bind(h).first()
+      : null;
+    if (!linha) return err(410, 'Essa ligação já foi usada ou expirou. Pede outra no ecrã de entrada.');
+    const { hash, salt, v } = await palavraNova(env, pass);
+    // trocar a palavra-passe termina as sessões todas (se foi um estranho a
+    // pedir a troca, as sessões dele morrem aqui) e as outras ligações por usar
+    await env.DB.batch([
+      env.DB.prepare(
+        'UPDATE users SET pass_hash = ?, pass_salt = ?, pass_v = ?, sess_epoch = COALESCE(sess_epoch, 0) + 1 WHERE id = ?'
+      ).bind(hash, salt, v, linha.user_id),
+      env.DB.prepare('UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL').bind(agora, linha.user_id),
+    ]);
     return json({ ok: true });
   }
 
@@ -123,21 +149,28 @@ export async function rotasAuth(c) {
     }
     if (user && !user.pass_hash) return err(401, 'Esta conta entra com Google — usa esse botão.');
     if (!user) {
-      // gasta o mesmo tempo de um utilizador real: sem isto, a diferença de
-      // resposta dizia a um atacante que emails existem
-      await hashPassword(String(b.password));
+      // gasta o mesmo tempo de uma palavra-passe errada numa conta real: sem
+      // isto, a diferença de resposta dizia a um atacante que emails existem
+      await gastarComoUmaConta(env, String(b.password));
       return err(401, 'Email ou palavra-passe errados.');
     }
-    if (!(await verifyPassword(String(b.password), user.pass_salt, user.pass_hash))) {
-      return err(401, 'Email ou palavra-passe errados.');
-    }
+    const conf = await conferePalavra(env, String(b.password), user);
+    if (!conf.ok) return err(401, 'Email ou palavra-passe errados.');
     /* Depois da password certa, de propósito: dizer "suspensa" a quem não
        provou ser o dono era contar a estranhos o estado da conta. */
     if (user.suspended_at) {
       return err(403, 'Esta conta está suspensa.');
     }
+    // um hash sem pimenta refaz-se agora que se sabe a palavra-passe (fica pass_v 2)
+    if (conf.refazer) {
+      try {
+        const n = await palavraNova(env, String(b.password));
+        await env.DB.prepare('UPDATE users SET pass_hash = ?, pass_salt = ?, pass_v = ? WHERE id = ?')
+          .bind(n.hash, n.salt, n.v, user.id).run();
+      } catch (e) { /* fica para a próxima entrada: entrar não depende disto */ }
+    }
     const token = await createSession(env, user.id, user.sess_epoch || 0);
-    return json({ id: user.id, email: user.email, name: user.name, token }, 200, {
+    return json({ id: user.id, email: user.email, name: user.name, ...tokenNoCorpo(env, request, token) }, 200, {
       'Set-Cookie': sessionCookie(token),
     });
   }
@@ -193,7 +226,7 @@ export async function rotasAuth(c) {
       return err(403, 'Esta conta está suspensa.');
     }
     const token2 = await createSession(env, user.id, user.sess_epoch || 0);
-    return json({ id: user.id, email: user.email, name: user.name, token: token2 }, 200, {
+    return json({ id: user.id, email: user.email, name: user.name, ...tokenNoCorpo(env, request, token2) }, 200, {
       'Set-Cookie': sessionCookie(token2),
     });
   }
@@ -202,7 +235,8 @@ export async function rotasAuth(c) {
     /* As contas de teste são persistentes: sair fecha a sessão e mais nada.
        No dia seguinte, a ligação nova do /test retoma a conta com os dados
        intactos — apagar é só com a opção limpar, de propósito. */
-    await destroySession(env, readSessionToken(request));
+    // o Bearer e o cookie: um aparelho da versão anterior pode trazer os dois, diferentes
+    for (const t of tokensDoPedido(request)) await destroySession(env, t);
     return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', true) });
   }
 }

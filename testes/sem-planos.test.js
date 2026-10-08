@@ -57,7 +57,10 @@ describe('não há planos', () => {
   });
 
   test('o back office não tem interruptor nem ação de plano', () => {
-    const vista = ler('worker/src/equipa-vista.js');
+    // o guião do browser do back office saiu da vista para equipa-guiao.js
+    // (avaliação A.5-8); o que se procura pode estar num ou noutro
+    const guiao = fs.existsSync(raiz('worker/src/equipa-guiao.js')) ? ler('worker/src/equipa-guiao.js') : '';
+    const vista = ler('worker/src/equipa-vista.js') + '\n' + guiao;
     const api = ler('worker/src/equipa-api.js');
     assert.ok(!/mudarDemo|Modo de demonstração|Marcar o fim/.test(vista), 'o cartão saiu da vista');
     assert.ok(!/Mudar plano|acao === 'plano'/.test(vista), 'e o botão do plano também');

@@ -27,6 +27,260 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 38,
+    data: '2026-09-13',
+    titulo: 'A app passa a ser feita de serviços',
+    seccoes: [
+      {
+        titulo: 'Um grupo de casas partilha-se como grupo',
+        afeta: ['partilha', 'imoveis'],
+        itens: [
+          'No separador Grupos, cada grupo de imóveis que já tens tem o botão «Partilhar» — ou cria-se um novo. Se um grupo ainda não se pode partilhar (está vazio, ou os imóveis são de outra pessoa), a app diz porquê e leva-te a editá-lo. Quem está no grupo é comproprietário de todas as casas dele — vê e edita contratos, movimentos e pessoas, e entra nas quotas — e uma casa que entre no grupo mais tarde chega logo a toda a gente. Antes partilhava-se casa a casa.',
+          'Entra-se por uma ligação do dono do grupo, que vale sete dias e serve várias pessoas — mas ninguém entra sem o dono aceitar. Quem abre a ligação pede para entrar; o pedido aparece ao dono em «Pedidos por responder», no sino e na janela do grupo, com Aceitar e Recusar. Uma ligação enviada à pessoa errada já não dá acesso a nada.',
+          'O dono vê quem entrou, remove, roda ou desativa a ligação, e apaga o grupo (as casas ficam). Cada membro pode adicionar ao grupo casas suas, e removê-las; ao sair do grupo, as casas que adicionou são removidas dele. O cartão «Grupos partilhados», no cimo do separador Grupos, lista os teus, os em que entraste e os pedidos à espera; o separador leva no menu quantos pedidos esperam a tua resposta.',
+        ],
+      },
+      {
+        titulo: 'O menu lateral arruma-se em secções que se recolhem',
+        afeta: ['app'],
+        itens: [
+          'Património, Pessoas, Finanças e Análise passam a recolher-se com um toque no título, e a app lembra-se do que deixaste recolhido neste aparelho. A secção onde estás abre-se sozinha, e uma secção recolhida mostra no título os avisos que tem lá dentro.',
+          'A Visão geral e o Calendário ficam ao cimo, sem secção, e as Definições ao fundo. Os Grupos saíram das Definições e passaram a separador próprio, em Património, ao lado dos Imóveis.',
+          'Há uma secção nova, Análise, com as Projeções e a Avaliação. As Finanças ficam com os Movimentos, os Planeados, os Créditos e a Declaração. A Avaliação e a Declaração ganharam ícones próprios.',
+        ],
+      },
+      {
+        titulo: 'Os formulários dizem o que é obrigatório',
+        afeta: ['app', 'imoveis', 'contratos', 'movimentos', 'conta'],
+        itens: [
+          'Em todos os formulários, os campos que não podem ficar em branco têm um asterisco vermelho — o nome de um grupo, de um imóvel, de uma pessoa, a renda, o montante de um movimento. Os outros dizem «Opcional».',
+          'Os exemplos dentro dos campos começam por «Ex: » e são exemplos a sério; o que antes era uma instrução dentro do campo passou para o rótulo ou para uma nota por baixo, e os valores que contam quando deixas em branco (o imposto, o aumento, o prazo da hipoteca) estão escritos.',
+          'O ecrã de entrar e de criar conta tem os nomes dos campos à vista, em vez de desaparecerem ao escrever.',
+          'O capital em dívida de uma hipoteca passa a ser pedido também ao editar.',
+        ],
+      },
+      {
+        titulo: 'Os gráficos leem-se no canto, sem tapar o desenho',
+        afeta: ['app'],
+        itens: [
+          'Ao percorrer um gráfico com o dedo, os valores da coluna aparecem num cartão fixo no canto de baixo, à direita, ao lado da legenda — já não tapam as barras mais altas. O cartão não muda de tamanho de mês para mês, e os nomes compridos (de um crédito, por exemplo) levam reticências sem cortar o valor.',
+        ],
+      },
+      {
+        titulo: 'O calendário arrasta-se e planeia',
+        afeta: ['movimentos'],
+        itens: [
+          'O mês do calendário arrasta-se para os lados com o dedo (ou com o rato): o mês anterior e o seguinte espreitam enquanto arrastas, e um gesto rápido ou um quarto do caminho chegam para virar a página.',
+          'O dia escolhido no calendário tem o botão «Adicionar movimento recorrente», com a primeira vez já nesse dia.',
+        ],
+      },
+      {
+        titulo: 'Selecionar vários movimentos desliza',
+        afeta: ['movimentos'],
+        itens: [
+          'Ao segurar num movimento, o mês desliza para o meio do título e as caixas de marcar aparecem a desvanecer; ao cancelar, tudo volta ao sítio pelo mesmo caminho.',
+        ],
+      },
+      {
+        titulo: 'Um movimento de vários imóveis fica em cada imóvel',
+        afeta: ['movimentos', 'partilha'],
+        itens: [
+          'Um movimento de um grupo de imóveis, ou de «Todos os imóveis», passa a ser guardado em partes, uma por imóvel, com a divisão que escolheste. Cada parte vive no seu imóvel, e por isso quem partilha esse imóvel contigo vê-a — nos movimentos, nos totais e nas contas entre proprietários. Antes ficava só contigo, e as contas de cada um não batiam certo.',
+          'Na lista continua a ser uma linha só, com o total e «dividido por N imóveis»; com o filtro num imóvel, vês a parte dele e o total. Editar ou apagar mexe no movimento inteiro.',
+          'As contas já gravadas deixam de mudar quando um grupo ganha ou perde um imóvel. Os movimentos de grupo que já tinhas partem-se sozinhos da próxima vez que abrires a app, com os mesmos valores.',
+        ],
+      },
+      {
+        titulo: 'A vista geral começa pela jornada',
+        afeta: ['app'],
+        itens: [
+          'Enquanto não tens movimentos, a vista geral mostra a jornada — os primeiros passos numa fita, com o passo em que estás em destaque e o botão dele — e o portefólio quando já há imóveis, em vez de quatro indicadores a 0 € e dois gráficos vazios. O primeiro movimento traz os números.',
+          'A jornada aparece também sem conta; com conta, o passo do perfil entra.',
+        ],
+      },
+      {
+        titulo: 'O movimento diz quem és e pode ficar sem imóvel',
+        afeta: ['movimentos'],
+        itens: [
+          'Ao registar um movimento com mais do que um proprietário à escolha, o teu nome leva «(eu)» no fim — em «Pago por», «Recebido por», «Quem paga», «Quem recebe» e na divisão entre proprietários.',
+          '«Todos os imóveis» e «Sem imóvel» passam a ser duas opções. «Todos os imóveis» divide o valor pelos imóveis que tinhas na data do movimento, e conta na avaliação de cada um. «Sem imóvel» conta só nos totais da vista geral, nunca num imóvel, e deixa de aparecer quando filtras os movimentos por um imóvel. Os movimentos sem imóvel que já tinhas ficam «Sem imóvel», e nenhum número muda.',
+          'Num acerto entre proprietários, «Todos os imóveis» continua a ser o acerto de todas as contas.',
+        ],
+      },
+      {
+        titulo: 'Cada separador é um serviço',
+        afeta: ['app'],
+        itens: [
+          'Por dentro, cada separador da barra lateral — imóveis, contratos, movimentos, planeados, visitas, pessoas, colaboradores, créditos, calendário, projeções, avaliação e declaração — passou a ser um serviço com manifesto próprio. As Definições e os Grupos são a base. Para ti nada muda: os mesmos ecrãs, no mesmo sítio.',
+          'O suporte pode ligar ou desligar um serviço a uma conta. Um serviço desligado sai do menu e os seus dados ficam guardados no servidor, à espera de o voltar a ligar; nada se apaga.',
+          'Se chegares a um separador desligado por um atalho antigo, a app diz-te o nome do serviço e que o suporte o liga — em vez de dar erro.',
+        ],
+      },
+      {
+        titulo: 'Quem colabora vê logo o que pode fazer',
+        afeta: ['colaboradores'],
+        itens: [
+          'A visão geral de quem colabora abre com «O que podes fazer»: um botão por cada coisa que o cargo deixa — marcar visita, adicionar inquilino, novo contrato, registar movimento, confirmar planeados, editar a ficha — e as próximas visitas.',
+          'No telemóvel, a barra de baixo dá o lugar dos separadores que o cargo não abre aos que abre: um gestor de visitas tem as Visitas a um toque.',
+          'A ficha do imóvel diz o que podes fazer nele e tem os botões; já não diz «só de leitura» a quem a pode editar. O cartão do imóvel, o menu ⋯ e «Imóveis onde colaboras» dizem o mesmo.',
+          'Quem marca visitas tem nos primeiros passos «Marca a primeira visita», com o tutorial.',
+          'Os Movimentos e os Planeados já não aparecem vazios a quem só vê hipotecas ou valores.',
+        ],
+      },
+      {
+        titulo: 'O IMI, o condomínio e o seguro vivem na ficha do imóvel',
+        afeta: ['imoveis', 'movimentos'],
+        itens: [
+          'A ficha do imóvel ganhou «Despesas fixas do imóvel»: o IMI anual, a quota mensal do condomínio e o seguro anual. Cada valor cria sozinho um planeado que te pede confirmação na data — como a renda de um contrato e a prestação de uma hipoteca já faziam.',
+          'O IMI sai nas prestações da lei: até 100 € numa só, em maio; de 100 a 500 € em maio e novembro; acima de 500 € em maio, agosto e novembro. O condomínio no dia 1 de cada mês; o seguro uma vez por ano, no mês que escolheres.',
+          'As Projeções deixaram de adivinhar as despesas pelo histórico: uma obra de 5 000 € aparecia como se voltasse todos os anos. Agora contam os planeados de despesa (os da ficha e os que marcaste) a crescer com a inflação, e o IRS sobre as rendas à taxa de cada contrato — contado no ano das rendas, pago até 31 de agosto do ano seguinte.',
+          'A página diz quanto gastaste no último ano em despesas de uma vez (obras, reparações), que não se projetam. A vista geral e a Avaliação continuam a somar todas as despesas.',
+          'Mudar o nome a uma categoria já não a devolve aos totais nem lhe perde a coluna do IRS, e já não se pode dar a uma categoria o nome de outra.',
+        ],
+      },
+      {
+        titulo: 'Um + a meio da barra de baixo',
+        afeta: ['app'],
+        itens: [
+          'No telemóvel, o botão redondo do canto deu lugar a uma tecla + em relevo a meio da barra de baixo, sempre no mesmo sítio. Abre a lista do que podes adicionar — movimento, imóvel, contrato, inquilino, visita, planeado, hipoteca — com a ação do ecrã onde estás em primeiro; quem colabora vê só o que o cargo lhe dá.',
+          'No ecrã largo o botão do canto fica como estava.',
+          'Cada lista vazia — imóveis, movimentos, inquilinos, proprietários, planeados, modelos, hipotecas, contratos — tem agora o botão verde da sua ação, como a vista geral já tinha, em vez de contar só com o botão do canto.',
+        ],
+      },
+      {
+        titulo: 'A partilha com portas à vista',
+        afeta: ['partilha', 'colaboradores'],
+        itens: [
+          'Um pedido de partilha ou um convite de ligação que recebas aparece no topo da vista geral — mesmo numa conta acabada de criar — em «Pedidos por responder», com Aceitar e Recusar ali mesmo. Antes só se via em Definições → Conta e partilha.',
+          'Ao escolher uma casa para partilhar com outro proprietário, as quotas de cada um definem-se na própria escolha, e a proposta de divisão segue logo com a partilha; ficam em partes iguais até o outro confirmar. Antes a pergunta só vinha depois, casa a casa.',
+          'Em Colaboradores, quando ainda não há imóveis (ou cargos), o botão para os criar está ali — e sem imóveis o cartão «Colaboradores», que mandava criar uma ligação de convite que ainda não se pode criar, deixa de aparecer.',
+        ],
+      },
+      {
+        titulo: 'Um movimento de grupo mostra a parte, não o total',
+        afeta: ['movimentos', 'partilha'],
+        itens: [
+          'Um movimento de um grupo de imóveis, visto com o filtro num imóvel do grupo ou num proprietário, mostrava o valor inteiro. Agora a lista mostra a parte que cabe a essa vista — e diz «parte de <grupo> · total …» — e o saldo do mês, os indicadores e a ordenação por montante contam a parte.',
+          'A divisão entre os imóveis de um grupo e entre proprietários foi confirmada modo a modo. Dois arredondamentos corrigidos: a parte de um dono sem divisão escolhida podia diferir um cêntimo da ficha, e uma divisão «por valor» com valores acima do total somava um cêntimo a mais.',
+        ],
+      },
+      {
+        titulo: 'Os formulários dizem o que é opcional',
+        afeta: ['app'],
+        itens: [
+          'Nos formulários, cada campo de texto que podes deixar em branco diz «Opcional»; onde o campo já mostrava um exemplo do formato (o IBAN, o NIF, o código postal), o exemplo fica e o rótulo diz «(opcional)». Os obrigatórios levam o asterisco.',
+          'No iPhone, um campo de data vazio mostra «dd/mm/aaaa» em vez de ficar em branco — no Android e no Chrome já era assim.',
+        ],
+      },
+      {
+        titulo: 'Correções que se sentem',
+        afeta: ['app'],
+        itens: [
+          'Com a conta iniciada, voltaram duas portas que tinham desaparecido das Definições: Definições → Filtros comuns e Definições → IRS e dedução.',
+          'O que fizeres sem rede — um movimento novo, uma edição, uma remoção — sobrevive ao arranque seguinte e sobe quando a rede voltar. A primeira leitura do servidor chegava a passar-lhe por cima.',
+          'Quando o servidor recusa um envio por estar ocupado, o selo fica em «por enviar» e diz-te o que ele respondeu, em vez de «Sem ligação».',
+          'Os CSV abrem no Excel com os acentos certos, e uma célula que comece por = já não é lida como fórmula.',
+          'Nos menus de escolha, as setas, o Home e o End andam pelas opções, e o Escape fecha só a lista.',
+          'No iPhone, a app instalada pelo Safari passa a chamar-se Rendorium debaixo do ícone.',
+        ],
+      },
+      {
+        titulo: 'Contratos, visitas e rendas',
+        afeta: ['contratos', 'movimentos', 'imoveis'],
+        itens: [
+          'O contrato em PDF deixou de ter cláusulas inventadas: sem dia de pagamento, sem rendas antecipadas ou sem IBAN, a frase que precisava delas sai; sem início, fim, senhorio ou morada, a app diz o que falta em vez de gerar o PDF.',
+          'A renda do primeiro mês já não é dada como lançada só por haver a caução registada nesse mês — e uma renda paga no mês seguinte conta para o mês a que respeita.',
+          'O menu do toque longo de uma visita agendada volta a abrir.',
+          'No calendário e nos prazos, tocar num aviso abre a ficha do registo, para leres antes de editares.',
+        ],
+      },
+      {
+        titulo: 'Créditos e declaração',
+        afeta: ['creditos', 'contratos', 'movimentos'],
+        itens: [
+          'O capital em dívida de uma hipoteca passa a sair do capital da data de início e dos pagamentos registados: dois aparelhos a gravar ao mesmo tempo já não o deixam errado.',
+          'A amortização abre-se nos Créditos mesmo sem os Movimentos, e o fim da taxa fixa tem uma data só — a mesma no aviso e na simulação.',
+          'O botão «Nova hipoteca» só aparece a quem pode criar uma, e só lista os imóveis onde pode.',
+          'Na Declaração, as obras dos 24 meses antes de um contrato entram no primeiro ano em que ele tem rendas.',
+        ],
+      },
+      {
+        titulo: 'Conta, partilha e pedidos',
+        afeta: ['conta', 'partilha', 'suporte'],
+        itens: [
+          'Errar a palavra-passe atual ao mudá-la já não te põe fora da conta.',
+          'A sessão passa a viver num cookie protegido, que nenhum script da página consegue ler. Se o teu browser bloquear os cookies deste site, vais ter de entrar de cada vez que abrires a app.',
+          'Num aparelho partilhado, a ligação de partilha de uma conta já não fica à vista de quem entrar a seguir.',
+          'Se a lista dos teus pedidos de ajuda não carregar, a app diz-to e dá-te um botão para tentares de novo — em vez de dizer que nunca enviaste nenhum.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 37,
+    data: '2026-09-12',
+    titulo: 'O IRS deixa de ser uma promessa',
+    seccoes: [
+      {
+        titulo: 'Declaração: o Anexo F, linha a linha',
+        afeta: ['app', 'contratos', 'movimentos'],
+        itens: [
+          'Há uma página nova, Declaração, em Finanças. Por cada ano e por cada proprietário, mostra as linhas do quadro 4.1 do Anexo F tal como a AT as pede: o contrato, o imóvel, os inquilinos, as rendas e as retenções na fonte.',
+          'Os gastos do imóvel aparecem já repartidos pelas colunas do Anexo F — conservação, condomínio, IMI, selo, taxas e outros — a partir da categoria de cada despesa.',
+          'As obras feitas nos 24 meses antes de o contrato começar, com a casa vazia, ficam à parte: são a coluna própria que o Anexo F lhes reserva.',
+          'O que ainda falta para a declaração — um NIF, o código da freguesia, um estado por indicar — fica apontado linha a linha, em vez de se descobrir no Portal das Finanças.',
+          'Podes exportar o resumo em CSV ou em texto, para o contabilista ou para ti.',
+        ],
+      },
+      {
+        titulo: 'O contrato diz o que é perante a AT',
+        afeta: ['contratos'],
+        itens: [
+          'Cada contrato tem agora um estado perante a AT, com três respostas: por indicar, declarado, ou não declarado. A escolha é tua.',
+          'Um contrato não declarado fica fora do resumo do Anexo F e dos prazos da AT, listado à parte, sem mais. A app não julga nem lembra.',
+          'Um contrato declarado guarda o número que a AT lhe deu, a finalidade, a data de celebração e as renovações — o que o Modelo 2 e o quadro 4.2A do Anexo F pedem.',
+        ],
+      },
+      {
+        titulo: 'Imóveis e pessoas com o que a AT pergunta',
+        afeta: ['imoveis', 'contratos'],
+        itens: [
+          'A ficha do imóvel ganha o código da freguesia, o tipo de prédio, a tipologia, o valor patrimonial tributário e a data de aquisição. É o que identifica o prédio no Anexo F.',
+          'A ficha de uma pessoa ganha o país, para quem não tem NIF português, e a marca de reter na fonte, para os inquilinos que são empresas.',
+          'Um NIF que não bate certo com o dígito de controlo avisa logo ao escrever, antes de ir para o contrato ou para a declaração.',
+        ],
+      },
+      {
+        titulo: 'Os movimentos sabem de IRS',
+        afeta: ['movimentos'],
+        itens: [
+          'Uma renda pode dizer a que mês respeita e quanto o inquilino reteve na fonte — o que entrou e a renda ilíquida deixam de se confundir.',
+          'Numa renda de contrato declarado marcas se o recibo eletrónico já foi emitido. Enquanto não estiver, a app lembra-te.',
+          'Numa despesa podes escolher à mão a coluna do Anexo F, quando a categoria não chega. Essa escolha manda sobre a regra geral.',
+        ],
+      },
+      {
+        titulo: 'Os prazos da AT',
+        afeta: ['app', 'contratos'],
+        itens: [
+          'Um contrato por indicar lembra o Modelo 2 até ao fim do mês seguinte ao início — e diz como calar o aviso: marca-o como declarado, ou como não declarado, na ficha.',
+          'Um contrato declarado que terminou lembra a cessação, até ao fim do mês seguinte ao fim.',
+          'As rendas dos últimos três meses sem recibo eletrónico avisam até ao fim do mês seguinte, e abrem o movimento para o marcares.',
+          'De 1 de abril a 30 de junho, o aviso do IRS leva-te à página Declaração com o Anexo F do ano anterior.',
+          'Nos contratos declarados com taxa reduzida, o 15 de fevereiro avisa a tempo de comunicar a duração e as renovações. Sem isso perde-se a redução.',
+        ],
+      },
+      {
+        titulo: 'IRS e dedução, nas Definições',
+        afeta: ['app', 'movimentos'],
+        itens: [
+          'Em Definições → IRS e dedução dizes em que coluna do Anexo F cai cada categoria e subcategoria de pagamentos, com o que o artigo 41.º do CIRS deixa deduzir explicado em poucas linhas.',
+          'As regras de origem já separam o que a lei deixa de fora — juros, mobiliário, eletrodomésticos, beneficiações — e podes repô-las quando quiseres.',
+        ],
+      },
+    ],
+  },
+  {
     v: 36,
     data: '2026-09-12',
     titulo: 'A app volta a abrir para quem já a tinha',

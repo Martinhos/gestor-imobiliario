@@ -1,19 +1,21 @@
-// A conta de quem esta ligado: dados, termos, palavra-passe, sessoes e apagar.
-import { hashPassword, verifyPassword, createSession, destroySession,
-  sessionCookie } from '../auth.js';
-import { weakPassword } from '../lib/http.js';
+// A conta de quem está ligado: dados, termos, palavra-passe, sessões e apagar.
+import { createSession, destroySession, sessionCookie, palavraNova, conferePalavra, tokenNoCorpo } from '../auth.js';
+import { json, err, body, now, weakPassword, TERMS_VERSION } from '../lib/http.js';
+import { rateLimit } from '../lib/limites.js';
+import { purgeAccount } from '../lib/acesso.js';
 
 /* As rotas da própria conta: /api/me (ver e apagar), os termos, a
    palavra-passe e as sessões. Tudo aqui chega já autenticado — o `me` vem no
    contexto. O que mexe em credenciais sobe o sess_epoch, que é o que deita
-   abaixo as sessões dos outros aparelhos, e devolve um token novo para este
-   continuar dentro. Sem rota que sirva não devolve nada, e o worker segue.
-   Recebe: c — o contexto partilhado montado pelo handleApi (env, request,
-   path, method, o utilizador em c.me e os ajudantes).
+   abaixo as sessões dos outros aparelhos, e põe um cookie novo para este
+   continuar dentro (o token só vai no corpo fora de produção, a pedido —
+   tokenNoCorpo, auth.js). Sem rota que sirva não devolve nada, e o worker segue.
+   Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
+   path, method e o utilizador em c.me).
    Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
    para o encaminhador tentar a seguinte. */
 export async function rotasConta(c) {
-  const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
+  const { env, request, path, method, me } = c;
 
   if (path === '/api/me' && method === 'GET') {
     return json({
@@ -56,18 +58,18 @@ export async function rotasConta(c) {
     const full = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(me.id).first();
     if (full.pass_hash) {
       if (!(await rateLimit(env, 'pw:' + me.id, 10, 900))) return err(429, 'Demasiadas tentativas. Espera uns minutos.');
-      if (!b.current || !(await verifyPassword(String(b.current), full.pass_salt, full.pass_hash))) {
+      if (!b.current || !(await conferePalavra(env, String(b.current), full)).ok) {
         return err(401, 'A palavra-passe atual está errada.');
       }
     }
-    const { hash, salt } = await hashPassword(String(b.next));
+    const { hash, salt, v } = await palavraNova(env, String(b.next));
     const epoch = (full.sess_epoch || 0) + 1;
-    await env.DB.prepare('UPDATE users SET pass_hash = ?, pass_salt = ?, sess_epoch = ? WHERE id = ?')
-      .bind(hash, salt, epoch, me.id)
+    await env.DB.prepare('UPDATE users SET pass_hash = ?, pass_salt = ?, pass_v = ?, sess_epoch = ? WHERE id = ?')
+      .bind(hash, salt, v, epoch, me.id)
       .run();
-    // este aparelho continua com sessão; os outros ficam de fora
+    // este aparelho continua com sessão (o cookie novo); os outros ficam de fora
     const token = await createSession(env, me.id, epoch);
-    return json({ ok: true, token }, 200, { 'Set-Cookie': sessionCookie(token) });
+    return json({ ok: true, ...tokenNoCorpo(env, request, token) }, 200, { 'Set-Cookie': sessionCookie(token) });
   }
 
   // Terminar a sessão em todos os outros aparelhos.
@@ -76,7 +78,7 @@ export async function rotasConta(c) {
     const epoch = ((full && full.sess_epoch) || 0) + 1;
     await env.DB.prepare('UPDATE users SET sess_epoch = ? WHERE id = ?').bind(epoch, me.id).run();
     const token = await createSession(env, me.id, epoch);
-    return json({ ok: true, token }, 200, { 'Set-Cookie': sessionCookie(token) });
+    return json({ ok: true, ...tokenNoCorpo(env, request, token) }, 200, { 'Set-Cookie': sessionCookie(token) });
   }
 
   // Apagar a conta: os dados próprios desaparecem e a identidade fica como
@@ -93,7 +95,7 @@ export async function rotasConta(c) {
     // de teste, apaga-se sem ela
     const eDeTeste = env.ENV_NAME && /@teste\.rendorium\.com$/i.test(me.email || '');
     if (full && full.pass_hash && !eDeTeste) {
-      if (!b.password || !(await verifyPassword(String(b.password), full.pass_salt, full.pass_hash))) {
+      if (!b.password || !(await conferePalavra(env, String(b.password), full)).ok) {
         return err(401, 'Palavra-passe errada.');
       }
     }

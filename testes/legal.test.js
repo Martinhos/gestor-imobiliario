@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { paginaLegal } from '../worker/src/legal-vista.js';
+import { paginaLegal, GUIAO_LEGAL } from '../worker/src/legal-vista.js';
 import { TERMS_VERSION } from '../worker/src/lib/http.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
@@ -75,11 +75,28 @@ describe('as páginas públicas dos documentos', () => {
      está errada é sempre a que a pessoa leu. */
   test('mostram o documento da app, e não uma cópia dele', async () => {
     const html = await paginaLegal('termos', { raiz: true }).text();
-    assert.match(html, /<script src="\/legal\.js"><\/script>/, 'carrega a fonte única');
-    assert.match(html, /L\.termos/, 'e escreve o que ela traz');
+    assert.match(html, /<script src="\/legal\.js"><\/script>\s*<script src="\/paginas\/documento\.js"><\/script>/,
+      'carrega a fonte única, e depois o que a escreve');
+    assert.match(html, /id="doc" data-campo="termos"/, 'e diz qual dos dois escrever');
     // um pedaço do texto verdadeiro não pode estar embutido na página
     const pedaco = L.termos.replace(/<[^>]+>/g, '').slice(60, 120).trim();
     assert.ok(pedaco.length > 20 && !html.includes(pedaco), 'o contrato não está copiado para aqui');
+  });
+
+  /* O que escrevia o documento era um <script> em linha; com a CSP_ESTRITA
+     passou ao /paginas/documento.js, que lê o nome do documento do
+     data-campo do #doc — e só aceita os dois nomes. */
+  test('o documento.js escreve o documento que o #doc pede, e só um dos dois', () => {
+    const correr = (campo) => {
+      const doc = { innerHTML: '', getAttribute: (a) => (a === 'data-campo' ? campo : null) };
+      const janela = { LEGAL: L };
+      new Function('window', 'document', GUIAO_LEGAL)(janela, { getElementById: (id) => (id === 'doc' ? doc : null) });
+      return doc.innerHTML;
+    };
+    assert.equal(correr('termos'), L.termos);
+    assert.equal(correr('privacidade'), L.privacidade);
+    assert.equal(correr('version'), '', 'outra propriedade do LEGAL não se escreve');
+    assert.equal(correr('__proto__'), '');
   });
 
   test('quem não tem JavaScript fica a saber onde o encontrar', async () => {

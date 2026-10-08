@@ -14,6 +14,8 @@
    lhe dá (cloud/partilha.js:lgCss) — o mesmo documento não pode ler-se de
    duas maneiras conforme a porta por onde se entra. */
 
+import { CSP_ESTRITA } from './lib/http.js';
+
 const APP = 'https://app.rendorium.com';
 
 const DOCS = {
@@ -56,8 +58,52 @@ export function paginaLegal(qual, op) {
 <meta name="description" content="${d.sub}. Rendorium, gestão de arrendamento para senhorios portugueses.">
 ${cabecaRaiz}
 <link rel="icon" href="/icon-192.png">
-<style>
-:root{color-scheme:light dark;
+<link rel="stylesheet" href="/paginas/legal.css">
+</head><body>
+<div class="wrap">
+  <header>
+    <span class="logo">R</span><span class="marca"><a href="${inicio}">Rendorium</a></span>
+    <span class="spacer"></span>
+    <a class="btn" href="${APP}">Abrir a app</a>
+  </header>
+
+  <h1>${d.titulo}</h1>
+  <p class="sub">${d.sub}</p>
+
+  <div class="lg" id="doc" data-campo="${d.campo}"></div>
+  <noscript>
+    <div class="aviso">Este documento é escrito pelo browser a partir do mesmo ficheiro que a
+    aplicação usa, para não haver duas versões do mesmo contrato. Sem JavaScript não dá para o
+    mostrar aqui — podes lê-lo dentro da app, em <b>Definições → Aviso legal</b>, ou pedir-nos
+    uma cópia por email.</div>
+  </noscript>
+
+  <footer>
+    <span>© ${new Date().getFullYear()} Rendorium</span>
+    <a href="${inicio}">Início</a>
+    <a href="${d.outro[0]}">${d.outro[1]}</a>
+    <a href="${APP}">Abrir a app</a>
+  </footer>
+</div>
+<script src="/legal.js"></script>
+<script src="/paginas/documento.js"></script>
+</body></html>`;
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Security-Policy': CSP_ESTRITA,
+      // a página muda quando se publica, não por pedido — mas a
+      // pré-visualização existe precisamente para ver alterações, e uma hora
+      // de cache fazia-a mentir durante uma hora
+      'Cache-Control': raiz ? 'public, max-age=3600' : 'no-store',
+    },
+  });
+}
+
+/* Os estilos das duas páginas, servidos à parte em /paginas/legal.css
+   (paginas-recursos.js): a página vai com a CSP_ESTRITA, que não aplica uma
+   folha escrita dentro do próprio HTML (a etiqueta de estilo em linha). */
+export const CSS_LEGAL = `:root{color-scheme:light dark;
   --bg:#f7f8fa;--card:#fff;--ink:#17221d;--muted:#5a635e;--line:#e7ebe8;
   --accent:#244c3b;--accent-ink:#fff;--blur:rgba(247,248,250,.94)}
 @media(prefers-color-scheme:dark){:root{
@@ -96,49 +142,19 @@ footer{margin-top:44px;padding:22px 0 44px;border-top:1px solid var(--line);
   font-size:14px;color:var(--muted);display:flex;gap:18px;flex-wrap:wrap;align-items:center}
 footer a{color:var(--muted)}
 footer a:hover{color:var(--ink)}
-</style></head><body>
-<div class="wrap">
-  <header>
-    <span class="logo">R</span><span class="marca"><a href="${inicio}">Rendorium</a></span>
-    <span class="spacer"></span>
-    <a class="btn" href="${APP}">Abrir a app</a>
-  </header>
+`;
 
-  <h1>${d.titulo}</h1>
-  <p class="sub">${d.sub}</p>
-
-  <div class="lg" id="doc"></div>
-  <noscript>
-    <div class="aviso">Este documento é escrito pelo browser a partir do mesmo ficheiro que a
-    aplicação usa, para não haver duas versões do mesmo contrato. Sem JavaScript não dá para o
-    mostrar aqui — podes lê-lo dentro da app, em <b>Definições → Aviso legal</b>, ou pedir-nos
-    uma cópia por email.</div>
-  </noscript>
-
-  <footer>
-    <span>© ${new Date().getFullYear()} Rendorium</span>
-    <a href="${inicio}">Início</a>
-    <a href="${d.outro[0]}">${d.outro[1]}</a>
-    <a href="${APP}">Abrir a app</a>
-  </footer>
-</div>
-<script src="/legal.js"></script>
-<script>
-(function () {
+/* O JavaScript das duas páginas, servido em /paginas/documento.js: escreve
+   no #doc o documento que o /legal.js (o mesmo ficheiro da app, carregado
+   antes) traz. Qual dos dois vai no data-campo do #doc — só estes dois
+   nomes, e nunca uma propriedade qualquer do window.LEGAL. A data não se
+   escreve aqui: o próprio documento abre com «Em vigor desde». */
+export const GUIAO_LEGAL = String.raw`(function () {
   var L = window.LEGAL;
-  if (!L) return;
-  // a data não se escreve aqui: o próprio documento abre com «Em vigor desde»
-  document.getElementById('doc').innerHTML = L.${d.campo} || '';
+  var doc = document.getElementById('doc');
+  if (!L || !doc) return;
+  var campo = doc.getAttribute('data-campo');
+  if (campo !== 'termos' && campo !== 'privacidade') return;
+  doc.innerHTML = L[campo] || '';
 })();
-</script>
-</body></html>`;
-  return new Response(html, {
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      // a página muda quando se publica, não por pedido — mas a
-      // pré-visualização existe precisamente para ver alterações, e uma hora
-      // de cache fazia-a mentir durante uma hora
-      'Cache-Control': raiz ? 'public, max-age=3600' : 'no-store',
-    },
-  });
-}
+`;

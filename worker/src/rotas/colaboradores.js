@@ -15,13 +15,22 @@
    - respostas uniformes: um convite inexistente, usado, expirado, revogado
      ou de dono apagado/suspenso dá o mesmo 404 com a mesma frase;
    - consumo atómico do convite (UPDATE condicional, meta.changes === 1);
-   - tectos e rate limits por IP, por conta e por dono; auditoria em tudo. */
+   - tectos e rate limits por IP, por conta e por dono; auditoria em tudo;
+   - com o serviço Colaboradores desligado nesta conta (lib/servicos.js),
+     tudo o que escreve aqui é 403 com a frase do serviço, à entrada. */
 
-import { randomToken } from '../auth.js';
+import { randomToken, sha256hex } from '../auth.js';
 import { auditar } from '../lib/auditoria.js';
 import { normalizarPerms } from '../lib/permissoes.js';
 import { canAccessHouse } from '../lib/acesso.js';
 import { recordReport } from '../lib/relatos.js';
+import { json, err, body, now, badId, clientIp, idsDeCasas } from '../lib/http.js';
+import { rateLimit } from '../lib/limites.js';
+import { servicosDesligados, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
+
+// Os primeiros segmentos dos caminhos com sessão deste ficheiro (o resto
+// passa adiante sem se ler nada).
+const CAMINHOS_COLAB = ['roles', 'collab-invites', 'convite', 'collaborators', 'share-link', 'ligar', 'share-requests'];
 
 const CONVITE_DIAS = 7;
 const MAX_CONVITES_PENDENTES = 20;
@@ -32,14 +41,6 @@ const MAX_LABEL = 60;
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 const ERRO_CONVITE = 'Essa ligação já foi usada, expirou, ou não existe. Pede outra a quem te convidou.';
 const ERRO_LIGACAO = 'Esta ligação não serve.';
-
-// O SHA-256 de um texto, em hexadecimal — é o que fica na base em vez do token.
-// Recebe: s — o texto (o token em claro).
-// Devolve: promessa da string hexadecimal (64 caracteres).
-async function sha256hex(s) {
-  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(s)));
-  return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
-}
 
 // A identidade com que um utilizador da app assina a auditoria.
 // Recebe: me — o utilizador com sessão.
@@ -246,33 +247,18 @@ async function ligacaoPorToken(env, token) {
   return { ownerId: row.owner_id, ownerName: row.name };
 }
 
-// Lê e valida uma lista de ids de casas vinda do cliente.
-// Recebe: v — o que veio no corpo (devia ser um array de ids); badId — o
-// validador de identificadores do contexto.
-// Devolve: array de ids únicos (strings), ou null quando não é uma lista
-// válida e não vazia.
-function idsDeCasas(v, badId) {
-  if (!Array.isArray(v) || !v.length || v.length > 200) return null;
-  const out = [];
-  for (const x of v) {
-    if (badId(x)) return null;
-    if (!out.includes(String(x))) out.push(String(x));
-  }
-  return out;
-}
-
 /* As pré-visualizações, SEM sessão: o que uma ligação é, antes de a pessoa
    entrar ou criar conta. Nunca escrevem nada — abrir não é usar — e nunca
    revelam mais do que o nome do dono e o que o convite dá. Limitadas por
    IP, para ninguém varrer tokens. Uma exceção lá dentro (a D1 a falhar a
    meio) não sobe ao index.js — o relato dele levaria o caminho, e o caminho
    é o token: fica o mesmo 404 uniforme e um relato com o caminho mascarado.
-   Recebe: c — o contexto do pedido (env, request, ctx, path, method, seg e
-   os ajudantes json/err/rateLimit/clientIp; ainda sem me).
+   Recebe: c — o contexto do pedido (env, request, ctx, method e seg; ainda
+   sem me).
    Devolve: a Response nos GET /api/convite/:token e /api/ligar/:token; nada
    (undefined) noutros caminhos, para o encaminhador seguir. */
 export async function rotasPreVisualizacao(c) {
-  const { env, request, ctx, method, seg, json, err, rateLimit, clientIp } = c;
+  const { env, request, ctx, method, seg } = c;
   if (method !== 'GET' || seg.length !== 3) return;
   if (seg[1] !== 'convite' && seg[1] !== 'ligar') return;
 
@@ -312,13 +298,22 @@ export async function rotasPreVisualizacao(c) {
    criar/rodar, revogar) e os pedidos que chegam por ela (pedir, aceitar,
    recusar, cancelar). Cada uma verifica que quem age é quem pode — o dono
    dos cargos e das casas, o destinatário do pedido, o próprio colaborador.
-   Recebe: c — o contexto partilhado montado pelo handleApi (env, request,
-   url, path, method, seg, o utilizador em c.me e os ajudantes).
+   Com os Colaboradores desligados nesta conta, tudo o que não é GET leva
+   403 com a frase do serviço antes de chegar a qualquer rota.
+   Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
+   url, path, method, seg e o utilizador em c.me).
    Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
    para o encaminhador tentar a seguinte. */
 export async function rotasColaboradores(c) {
-  const { env, request, url, path, method, seg, me, json, err, body, now, rateLimit, badId } = c;
+  const { env, request, url, path, method, seg, me } = c;
   const eu = quemSou(me);
+
+  // só os caminhos deste ficheiro; os serviços desligados desta conta
+  // leem-se UMA vez por pedido — e só quando há uma escrita a guardar
+  if (!CAMINHOS_COLAB.includes(seg[1])) return;
+  if (method !== 'GET' && colabDesligado(await servicosDesligados(env, me.id))) {
+    return err(403, FRASE_DESLIGADO('colaboradores'));
+  }
 
   // ---- Cargos (só os meus) -----------------------------------------------
 
@@ -382,7 +377,7 @@ export async function rotasColaboradores(c) {
     const role = await env.DB.prepare('SELECT name FROM roles WHERE id = ? AND owner_id = ? AND deleted = 0')
       .bind(roleId, me.id).first();
     if (!role) return err(404, 'Cargo não encontrado.');
-    const houseIds = idsDeCasas(b.houseIds, badId);
+    const houseIds = idsDeCasas(b.houseIds);
     if (!houseIds) return err(400, 'Escolhe pelo menos um imóvel.');
     const nomes = await nomesDasCasas(env, me.id, houseIds);
     if (houseIds.some((h) => !nomes.has(h))) return err(403, 'Só podes convidar para imóveis teus.');
@@ -532,7 +527,7 @@ export async function rotasColaboradores(c) {
       }
     }
     if (b.houseIds !== undefined) {
-      const houseIds = idsDeCasas(b.houseIds, badId);
+      const houseIds = idsDeCasas(b.houseIds);
       if (!houseIds) return err(400, 'Escolhe pelo menos um imóvel — ou remove o colaborador.');
       const nomes = await nomesDasCasas(env, me.id, houseIds);
       if (houseIds.some((h) => !nomes.has(h))) return err(403, 'Só podes dar acesso a imóveis teus.');
@@ -595,7 +590,7 @@ export async function rotasColaboradores(c) {
     if (!l) return err(404, ERRO_LIGACAO);
     if (l.ownerId === me.id) return err(400, 'A ligação é tua.');
     const b = await body(request);
-    const houseIds = b && idsDeCasas(b.houseIds, badId);
+    const houseIds = b && idsDeCasas(b.houseIds);
     if (!houseIds) return err(400, 'Escolhe pelo menos um imóvel.');
     const nomes = await nomesDasCasas(env, me.id, houseIds);
     if (houseIds.some((h) => !nomes.has(h))) return err(403, 'Só podes partilhar imóveis teus.');

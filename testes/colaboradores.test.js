@@ -10,9 +10,10 @@ import { webcrypto } from 'node:crypto';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-import { baseDeTeste, kvFalso, r2Falso } from './lib/bd.js';
+import {
+  ambiente, conta, pedir, resp, estado, sync, casa, registo, comproprietario, cargo, convidar, aceitar, darCargo, auditoria,
+} from './lib/api.js';
 import { handleApi } from '../worker/src/api.js';
-import { createSession } from '../worker/src/auth.js';
 import {
   acessoACasa, podeNaCasa, casasDeColaborador, participantsOf, canAccessHouse, purgeAccount,
 } from '../worker/src/lib/acesso.js';
@@ -23,46 +24,7 @@ import {
 import { mascararTokens } from '../worker/src/lib/relatos.js';
 
 /* ------------------------------ armações ------------------------------- */
-
-const ambiente = () => ({ DB: baseDeTeste(), SESSIONS: kvFalso(), FILES: r2Falso(), ENV_NAME: 'teste' });
-
-let seq = 0;
-// uma conta com sessão; o plano por omissão é free
-async function conta(env, nome, plan) {
-  const id = 'U' + String(++seq).padStart(7, '0');
-  await env.DB.prepare(
-    `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, terms_version, terms_at, plan)
-     VALUES (?, ?, ?, 'h', 's', ?, '2026-09-04', 1, ?)`
-  ).bind(id, id.toLowerCase() + '@x.pt', nome, Date.now(), plan || 'free').run();
-  return { id, token: await createSession(env, id, 0), name: nome };
-}
-
-// chama a API como o index.js chama: caminho, método, sessão (Bearer) e corpo JSON
-function pedir(env, quem, path, method = 'GET', corpo, headers = {}) {
-  const h = Object.assign({}, headers);
-  if (quem) h.Authorization = 'Bearer ' + quem.token;
-  if (corpo !== undefined) h['Content-Type'] = 'application/json';
-  return handleApi(new Request('https://app.x.pt' + path, {
-    method, headers: h, body: corpo !== undefined ? JSON.stringify(corpo) : undefined,
-  }), env, { waitUntil() {} });
-}
-async function resp(p) {
-  const r = await p;
-  let j = null;
-  try { j = await r.json(); } catch (e) {}
-  return Object.assign({ status: r.status }, j || {});
-}
-const estado = (env, quem) => resp(pedir(env, quem, '/api/state'));
-const sync = async (env, quem, ops) => (await resp(pedir(env, quem, '/api/sync', 'POST', { ops }))).results;
-
-const casa = (env, dono, id, data) => env.DB.prepare(
-  'INSERT INTO houses (id, owner_id, data, updated_at, deleted) VALUES (?, ?, ?, ?, 0)'
-).bind(id, dono.id, JSON.stringify(Object.assign({ id, rooms: [] }, data)), Date.now()).run();
-
-const registo = (env, houseId, kind, id, data, autor) => env.DB.prepare(
-  `INSERT INTO records (house_id, kind, id, data, updated_at, deleted, author, created_by)
-   VALUES (?, ?, ?, ?, ?, 0, ?, ?)`
-).bind(houseId, kind, id, JSON.stringify(Object.assign({ id }, data)), Date.now(), autor.id, autor.id).run();
+// as de todos os testes do servidor vêm de testes/lib/api.js; estas são deste ficheiro
 
 const linha = (env, houseId, kind, id) => env.DB.prepare(
   'SELECT * FROM records WHERE house_id = ? AND kind = ? AND id = ?'
@@ -80,37 +42,6 @@ async function ficheiro(env, id, dono, houseId, kind, recordId) {
   ).bind(id, dono.id, houseId, Date.now(), kind, recordId).run();
 }
 
-// compropriedade à moda de sempre: conexão aceite + share
-async function comproprietario(env, dono, outro, houseIds) {
-  const cid = crypto.randomUUID();
-  await env.DB.prepare(
-    "INSERT INTO connections (id, requester_id, target_id, status, created_at) VALUES (?, ?, ?, 'accepted', ?)"
-  ).bind(cid, dono.id, outro.id, Date.now()).run();
-  for (const h of houseIds) {
-    await env.DB.prepare('INSERT INTO shares (connection_id, owner_id, house_id) VALUES (?, ?, ?)')
-      .bind(cid, dono.id, h).run();
-  }
-  return cid;
-}
-
-async function cargo(env, dono, name, perms, id) {
-  const r = await resp(pedir(env, dono, '/api/roles/' + id, 'PUT', { name, perms }));
-  assert.ok(r.status === 200 || r.status === 201, 'cargo criado: ' + JSON.stringify(r));
-  return id;
-}
-async function convidar(env, dono, roleId, houseIds, label) {
-  const r = await resp(pedir(env, dono, '/api/collab-invites', 'POST', { roleId, houseIds, label }));
-  assert.equal(r.status, 201, 'convite criado: ' + JSON.stringify(r));
-  return r;
-}
-const aceitar = (env, quem, token) => resp(pedir(env, quem, '/api/convite/' + token + '/aceitar', 'POST', {}));
-async function darCargo(env, dono, quem, roleId, houseIds) {
-  const inv = await convidar(env, dono, roleId, houseIds);
-  const r = await aceitar(env, quem, inv.token);
-  assert.equal(r.status, 200, 'aceite: ' + JSON.stringify(r));
-  return r;
-}
-
 const H1 = {
   name: 'T2 Lisboa', address: 'Rua A', value: 250000, purchase: 200000, notes: 'privado', listing: 'anúncio',
   photos: [{ id: 'f_p' }], loans: [{ id: 'l1', bank: 'BCP', outstanding: 90000, files: [{ id: 'f_l' }] }],
@@ -122,9 +53,9 @@ const H1 = {
    kind e anexos de contrato, inquilino, foto e hipoteca. */
 async function armar(planoDono, planoColab) {
   const env = ambiente();
-  const D = await conta(env, 'Dono', planoDono);
+  const D = await conta(env, 'Dono', { plano: planoDono });
   const P = await conta(env, 'Parceiro');
-  const C = await conta(env, 'Colab', planoColab);
+  const C = await conta(env, 'Colab', { plano: planoColab });
   await casa(env, D, 'H1', H1);
   await casa(env, D, 'H2', { name: 'T1 Porto', address: 'Rua B' });
   await comproprietario(env, D, P, ['H1']);
@@ -149,7 +80,6 @@ async function armar(planoDono, planoColab) {
   return { env, D, P, C, visitas, contab, vertudo };
 }
 
-const auditoria = async (env) => (await env.DB.prepare('SELECT * FROM audit_log ORDER BY id').all()).results;
 const conta1 = async (env, sql, ...args) => ((await env.DB.prepare(sql).bind(...args).first()) || {}).n || 0;
 
 /* ------------------------------ permissões ------------------------------ */
@@ -936,7 +866,7 @@ describe('o convite de uso único', () => {
 
   test('a D1 a falhar na pré-visualização: o mesmo 404, e o relato sem o token', async () => {
     const env = ambiente();
-    await conta(env, 'Alguém');   // o relato pendura-se no primeiro utilizador
+    await conta(env, 'Alguém');   // uma conta viva, que o relato anónimo não pode levar (fica na do sistema)
     const token = 'a'.repeat(64);
     assert.equal(mascararTokens('/api/convite/' + token), '/api/convite/…');
     assert.equal(mascararTokens('POST /api/ligar/' + token + '/pedir'), 'POST /api/ligar/…/pedir');

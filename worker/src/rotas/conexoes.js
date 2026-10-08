@@ -1,15 +1,26 @@
-// Ligacoes entre utilizadores e escolha das casas partilhadas.
+// Ligações entre utilizadores e escolha das casas partilhadas.
+import { json, err, body, now, idsDeCasas } from '../lib/http.js';
+import { rateLimit } from '../lib/limites.js';
+import { connectionForUser } from '../lib/acesso.js';
+import { servicosDesligados, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
 
 /* Rotas das conexões: convidar outro utilizador pelo id curto, aceitar o
    convite, cortar a ligação (leva as partilhas com ela) e escolher que casas
-   minhas ficam partilhadas nessa conexão. Devolve a Response da rota que
-   casar com o pedido, ou nada.
-   Recebe: c — o contexto partilhado montado pelo handleApi (env, request,
-   path, method, seg, o utilizador em c.me e os ajudantes).
+   minhas ficam partilhadas nessa conexão. Todas escrevem: com os
+   Colaboradores desligados nesta conta (lib/servicos.js — o que inclui os
+   Imóveis desligados, por fecho) levam 403 com a frase do serviço, à
+   entrada. Devolve a Response da rota que casar com o pedido, ou nada.
+   Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
+   path, method, seg e o utilizador em c.me).
    Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
    para o encaminhador tentar a seguinte. */
 export async function rotasConexoes(c) {
-  const { env, request, ctx, path, method, seg, me, json, err, body, now, rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser, badId, cleanData, tooBig, clientIp, TERMS_VERSION, purgeAccount } = c;
+  const { env, request, path, method, seg, me } = c;
+
+  // só os caminhos deste ficheiro; os serviços desligados desta conta
+  // leem-se UMA vez por pedido e valem para todas as rotas abaixo
+  if (seg[1] !== 'connections') return;
+  if (colabDesligado(await servicosDesligados(env, me.id))) return err(403, FRASE_DESLIGADO('colaboradores'));
 
   // ---- Conexões e partilha ------------------------------------------------
 
@@ -65,15 +76,21 @@ export async function rotasConexoes(c) {
     if (!conn) return err(404, 'Conexão não encontrada.');
     if (conn.status !== 'accepted') return err(400, 'A conexão ainda não foi aceite.');
     const b = await body(request);
-    const houseIds = Array.isArray(b && b.houseIds) ? b.houseIds.map(String) : null;
-    if (!houseIds) return err(400, 'Corpo inválido — envia { houseIds: [...] }.');
-    // só posso partilhar casas minhas
-    for (const hid of houseIds) {
-      const h = await env.DB.prepare('SELECT owner_id FROM houses WHERE id = ? AND deleted = 0')
-        .bind(hid)
-        .first();
-      if (!h || h.owner_id !== me.id) return err(403, `A casa ${hid} não é tua.`);
+    // a mesma porta das outras listas de casas (até 200, ids válidos, sem
+    // repetidos) — e aqui a lista vazia vale: deixar de partilhar tudo
+    const houseIds = idsDeCasas(b && b.houseIds, true);
+    if (!houseIds) return err(400, 'Corpo inválido — envia { houseIds: [...] }, com até 200 imóveis.');
+    // só posso partilhar casas minhas: uma consulta por cada 50, não uma por casa
+    const minhas = new Set();
+    for (let i = 0; i < houseIds.length; i += 50) {
+      const parte = houseIds.slice(i, i + 50);
+      const rows = (await env.DB.prepare(
+        `SELECT id FROM houses WHERE owner_id = ? AND deleted = 0 AND id IN (${parte.map(() => '?').join(',')})`
+      ).bind(me.id, ...parte).all()).results;
+      rows.forEach((r) => minhas.add(r.id));
     }
+    const alheia = houseIds.find((h) => !minhas.has(h));
+    if (alheia) return err(403, `A casa ${alheia} não é tua.`);
     const stmts = [
       env.DB.prepare('DELETE FROM shares WHERE connection_id = ? AND owner_id = ?').bind(conn.id, me.id),
     ];

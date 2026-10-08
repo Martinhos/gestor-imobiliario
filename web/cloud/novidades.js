@@ -12,17 +12,13 @@
 var LS_VISTO = 'gi_novidades_v';     // última versão cujas novidades já viu
 var SS_RECARGA = 'gi_recarga_para';  // para não entrar em ciclo de recargas
 
-// Se algum dos cargos abre esta permissão (temPerm de acessos.js, com as
-// implicações; sem ela, a lista tal e qual).
+// Se algum dos cargos abre esta permissão (temPerm de acessos.js, com as implicações).
 // Recebe: cargos — o CW.cargos ({houseId: {dono, perms}}); perm — a chave.
 // Devolve: true/false.
 function algumCargoAbre(cargos, perm) {
   return Object.keys(cargos).some(function (id) {
     var c = cargos[id];
-    if (!c || c.dono) return false;
-    try { if (typeof temPerm === 'function') return !!temPerm(c.perms, perm); } catch (e) {}
-    var ps = c.perms || [];
-    return Array.isArray(ps) ? ps.indexOf(perm) > -1 : !!ps[perm];
+    return !!c && !c.dono && temPerm(c.perms || [], perm);
   });
 }
 
@@ -95,16 +91,16 @@ var novAbertas = {};   // que secções estão abertas neste modal
 // Devolve: o HTML do cartão, em texto.
 function secHtml(sec, chave) {
   var aberta = novAbertas[chave] !== false;   // por omissão, abertas
-  return '<div class="card" style="padding:0;overflow:hidden">' +
-    '<div class="row-between tap" style="align-items:center;padding:13px 15px;cursor:pointer" ' +
-      'data-toca="vista" onclick="CW.novToggle(\'' + chave + '\')">' +
-      '<b style="min-width:0">' + esc(sec.titulo) + '</b>' +
-      '<span style="flex:0 0 auto;display:inline-flex;color:var(--muted);' +
-        'transform:rotate(' + (aberta ? '90' : '-90') + 'deg)">' +
+  return '<div class="card u-p-0 u-ov-hidden">' +
+    '<div class="row-between tap u-ai-center u-p-13px-15px u-cur-pointer" ' +
+      'data-toca="vista" data-click="CW.novToggle(\'' + chave + '\')">' +
+      '<b class="u-minw-0">' + esc(sec.titulo) + '</b>' +
+      '<span class="u-fx-0-0-auto u-d-inline-flex u-c-v-muted ' +
+        (aberta ? 'u-tf-rotate-90deg' : 'u-tf-rotate-n90deg') + '">' +
         ic('chev', 18) + '</span></div>' +
     (aberta
-      ? '<div style="padding:0 15px 14px"><ul style="margin:0;padding-left:18px;color:var(--muted);font-size:14px">' +
-        sec.itens.map(function (i) { return '<li style="margin:6px 0">' + esc(i) + '</li>'; }).join('') +
+      ? '<div class="u-p-0-15px-14px"><ul class="u-m-0 u-pl-18px u-c-v-muted u-fs-14px">' +
+        sec.itens.map(function (i) { return '<li class="u-m-6px-0">' + esc(i) + '</li>'; }).join('') +
         '</ul></div>'
       : '') +
     '</div>';
@@ -117,12 +113,12 @@ function novHtml(avisos) {
   // o id permite redesenhar só esta lista, sem a página saltar para o topo
   return '<div class="form" id="novLista">' + avisos.map(function (a) {
     return '<div>' +
-      '<div class="section-title" style="margin-top:0">' + esc(a.titulo) + '</div>' +
-      '<div class="small" style="margin:-6px 0 10px">versão ' + a.v + ' · ' + dPT(a.data) + '</div>' +
-      '<div class="list" style="gap:9px">' +
+      '<div class="section-title u-mt-0">' + esc(a.titulo) + '</div>' +
+      '<div class="small u-m-n6px-0-10px">versão ' + a.v + ' · ' + dPT(a.data) + '</div>' +
+      '<div class="list u-g-9px">' +
       a.seccoes.map(function (s, i) { return secHtml(s, a.v + ':' + i); }).join('') +
       '</div></div>';
-  }).join('<div style="height:16px"></div>') + '</div>';
+  }).join('<div class="u-h-16px"></div>') + '</div>';
 }
 
 /* Abrir e fechar uma secção.
@@ -138,7 +134,7 @@ CW.novToggle = function (chave) {
   if (!CW._novAvisos) return;
   var m = modalTop();
   var corpo = m && m.el.querySelector('.body');
-  if (corpo && corpo.querySelector('[onclick*="novToggle"]')) {
+  if (corpo && corpo.querySelector('[data-click*="novToggle"]')) {
     corpo.innerHTML = novHtml(CW._novAvisos);
     return;
   }
@@ -155,7 +151,7 @@ CW.verNovidades = function (avisos, aoFechar) {
   CW._novAvisos = avisos;
   novAbertas = {};
   openModal('O que há de novo', novHtml(avisos),
-    '<button class="btn primary" data-toca="camada" onclick="CW.novFechar()">Continuar</button>');
+    '<button class="btn primary" data-toca="camada" data-click="CW.novFechar()">Continuar</button>');
   CW._novFecho = aoFechar;
 };
 
@@ -194,8 +190,10 @@ function gateAtualizar(minima) {
      (nucleo.js:startSync) continuava armado por trás deste ecrã, a empurrar o
      estado local para o servidor a partir de uma versão que acabámos de
      declarar inutilizável. Se ela é velha demais para se usar, é velha demais
-     para escrever. */
+     para escrever: o pushNow e a api() olham para a tranca (nada que escreva
+     sai), e o envio que já estava agendado desarma-se aqui. */
   CW.trancado = true;
+  try { clearTimeout(pushTimer); pushTimer = null; } catch (e) {}
   try { lockScroll(true); } catch (e) {}
   var el = document.createElement('div');
   el.id = 'cwUpd';
@@ -206,12 +204,12 @@ function gateAtualizar(minima) {
      quem está preso no ecrã de entrada por causa de um erro já corrigido. */
   el.style.cssText = 'position:fixed;inset:0;z-index:235;background:var(--bg);overflow:auto;' +
     'padding:calc(28px + var(--inset-top)) 18px calc(28px + var(--inset-bottom));display:flex;justify-content:center';
-  el.innerHTML = '<div style="max-width:420px;width:100%;margin:auto">' +
+  el.innerHTML = '<div class="u-maxw-420px u-w-100pc u-m-auto">' +
     card('Há uma versão nova', 'Esta já não pode ser usada',
       '<div class="hint">A versão que tens (' + VERSAO + ') deixou de ser aceite; a mais antiga que serve é a ' +
       minima + '. Atualizar demora um instante e não perdes nada — os teus dados estão na tua conta.</div>' +
-      '<div class="toolbar" style="margin:15px 0 0">' +
-      '<button class="btn primary" data-toca="ecra" onclick="CW.atualizarAgora()">Atualizar agora</button></div>') +
+      '<div class="toolbar u-m-15px-0-0">' +
+      '<button class="btn primary" data-toca="ecra" data-click="CW.atualizarAgora()">Atualizar agora</button></div>') +
     '</div>';
   document.body.appendChild(el);
 }
@@ -360,6 +358,15 @@ function marcarRecarga(alvo) {
   try { sessionStorage.setItem(SS_RECARGA, String(alvo)); } catch (e) {}
 }
 
+/* O «Depois» da faixa: tira do ecrã a faixa inteira, que é o pai do botão.
+   Era um onclick com this.parentNode, que a gramática das ações não tem — o
+   botão passa-se a si próprio e a função faz exatamente o mesmo.
+   Recebe: botao — o botão «Depois» (o this da ação).
+   Devolve: nada — remove do documento a faixa que o contém. */
+function fecharFaixaAtualizar(botao) {
+  botao.parentNode.remove();
+}
+
 // A faixa discreta no fundo do ecrã: há versão nova, atualiza quando quiseres.
 // É o plano B, para quando a recarga automática não chegou à versão nova.
 // Recebe: v — número da versão disponível, para mostrar na faixa.
@@ -373,9 +380,9 @@ function bannerAtualizar(v) {
   el.className = 'card';
   el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + var(--inset-bottom));z-index:59;' +
     'display:flex;align-items:center;gap:11px;padding:11px 13px;box-shadow:var(--shadow)';
-  el.innerHTML = '<span class="small" style="flex:1;min-width:0">Está disponível a versão ' + v + '.</span>' +
-    '<button class="btn sm primary" style="flex:0 0 auto" data-toca="ecra" onclick="CW.atualizarAgora()">Atualizar</button>' +
-    '<button class="btn sm" style="flex:0 0 auto" data-toca="vista" onclick="this.parentNode.remove()">Depois</button>';
+  el.innerHTML = '<span class="small u-fx-1 u-minw-0">Está disponível a versão ' + v + '.</span>' +
+    '<button class="btn sm primary u-fx-0-0-auto" data-toca="ecra" data-click="CW.atualizarAgora()">Atualizar</button>' +
+    '<button class="btn sm u-fx-0-0-auto" data-toca="vista" data-click="fecharFaixaAtualizar(this)">Depois</button>';
   document.body.appendChild(el);
 }
 
@@ -393,15 +400,15 @@ function ecraAtualizar(versao, passo) {
     // acima de tudo, portao de login incluido (z 200): enquanto se atualiza,
     // atualizar E o estado da app
     el.style.cssText = 'position:fixed;inset:0;z-index:240;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px;text-align:center';
-    el.innerHTML = '<div style="max-width:320px">' +
-      '<div id="cwUpdRoda" style="width:34px;height:34px;margin:0 auto 14px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:cwgira .8s linear infinite"></div>' +
-      '<b style="font-size:16px">A atualizar para a versão ' + versao + '</b>' +
-      '<div class="small" id="cwUpdPasso" style="margin-top:7px"></div>' +
-      '<div class="small" style="margin-top:14px;opacity:.7">Não perdes nada — os teus dados ficam onde estão.</div></div>';
-    var st = document.createElement('style');
-    st.textContent = '@keyframes cwgira{to{transform:rotate(360deg)}}' +
-      '@media(prefers-reduced-motion:reduce){#cwUpdRoda{animation:none;border-top-color:var(--line)}}';
-    el.appendChild(st);
+    el.innerHTML = '<div class="u-maxw-320px">' +
+      '<div id="cwUpdRoda" class="nov-roda"></div>' +
+      '<b class="u-fs-16px">A atualizar para a versão ' + versao + '</b>' +
+      '<div class="small u-mt-7px" id="cwUpdPasso"></div>' +
+      '<div class="small u-mt-14px u-op-07">Não perdes nada — os teus dados ficam onde estão.</div></div>';
+    /* A roda e a animação dela viviam numa folha criada aqui por JavaScript,
+       que é CSS em linha e a CSP sem 'unsafe-inline' recusa tal como recusa um
+       atributo de estilo: passaram para o web/estilos.css (secção
+       g12-novidades), tal e qual, na classe .nov-roda. */
     document.body.appendChild(el);
   }
   var p = document.getElementById('cwUpdPasso');
@@ -461,20 +468,17 @@ function vNovidades() {
 var _vSettingsNov = vSettings;
 vSettings = function () {
   if (setPage === 'novidades') return backRow + vNovidades();
-  var h = _vSettingsNov();
-  if (!setPage) {
-    // entra ao lado do aviso legal, que é a outra coisa que se lê e não se mexe
-    var novas = avisosDesde(vistoAte()).length;
-    h = h.replace(
-      navRow('Aviso legal', 'Termos e privacidade', 'contract', 'legal'),
-      navRow('Novidades', novas ? novas + ' por ler · versão ' + VERSAO : 'O que mudou · versão ' + VERSAO,
-        'info', 'novidades') +
-      '<div style="height:10px"></div>' +
-      navRow('Aviso legal', 'Termos e privacidade', 'contract', 'legal')
-    );
-  }
-  return h;
+  return _vSettingsNov();
 };
+
+// A linha das novidades na raiz das Definições: na secção «Sobre», ao lado do
+// aviso legal, que é a outra coisa que se lê e não se mexe. Entra como linha
+// (definicoes.js:linhaDefinicoes), e já não por procura e troca no HTML da
+// raiz — que dependia da forma exata do navRow do aviso legal.
+linhaDefinicoes({ sec: 'sobre', ordem: 20, page: 'novidades', label: 'Novidades', icon: 'info', sub: function () {
+  var novas = avisosDesde(vistoAte()).length;
+  return novas ? novas + ' por ler · versão ' + VERSAO : 'O que mudou · versão ' + VERSAO;
+} });
 
 /* ------------------------------------------------------------- o arranque */
 

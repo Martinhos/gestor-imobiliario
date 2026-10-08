@@ -52,11 +52,17 @@ function injectPhoneCountry() {
   sel.value = code;
   var row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:8px';
+  /* o placeholder passa a ser um exemplo do número («Ex: …», como todos os
+     exemplos da app): o «opcional» que ele dizia
+     sobe para o rótulo, como nos outros campos com exemplo (o rótulo é o texto
+     do <label> que embrulha o campo, e fica onde está) */
+  var lab = inp.parentNode, txt = lab && lab.firstChild;
+  if (txt && txt.nodeType === 3 && txt.nodeValue.indexOf('opcional') < 0) txt.nodeValue = txt.nodeValue.trim() + ' (opcional)';
   inp.parentNode.insertBefore(row, inp);
   row.appendChild(sel);
   row.appendChild(inp);
   inp.value = rest;
-  inp.placeholder = '912 345 678';
+  inp.placeholder = 'Ex: 912 345 678';
   inp.style.flex = '1';
 }
 
@@ -67,6 +73,11 @@ function injectPhoneCountry() {
    Devolve: nada — abre o modal do perfil (ou o ecrã de entrada). */
 CW.editProfile = function () {
   if (!CW.user) return showAuth();
+  /* a ficha de pessoa é dos Inquilinos e dos Proprietários (o mesmo
+     ficheiro): basta um deles ligado nesta conta; com os dois desligados não
+     há formulário para abrir, e diz-se pelo nome de quem guarda o perfil */
+  var fichaDe = servicoLigado('owners') ? 'owners' : 'tenants';
+  if (!servicoLigado(fichaDe)) return toast(hintServicoDesligado('owners'));
   var meP = (db.owners || []).find(function (o) { return o.id === CW.user.id; });
   if (!meP) {
     meP = normPerson({ name: CW.user.name || '' });
@@ -77,7 +88,7 @@ CW.editProfile = function () {
      do Google e o nome entram sozinhos nos campos vazios */
   if (!meP.email && CW.user.email) meP.email = CW.user.email;
   if (!meP.name && CW.user.name) meP.name = CW.user.name;
-  personModal('owner', CW.user.id);
+  chamarServico(fichaDe, 'personModal', 'owner', CW.user.id);
   try { modalTop().el.querySelector('.head h2').textContent = 'O meu perfil'; } catch (e) {}
   injectPhoneCountry();
   // junta indicativo + número antes de o formulário recolher o campo
@@ -120,15 +131,18 @@ function cwOwnersBlock() {
   var myId = CW.user ? CW.user.id : '';
   // quem não é comproprietário (um colaborador com house.edit) não vê quotas
   // nem propostas: são dos donos
+  // o cargo e os colaboradores são do serviço Colaboradores: desligado nesta
+  // conta, a secção fala só das quotas e não aponta para um separador que não há
+  var colab = servicoLigado('colaboradores');
   if (myId && parts.length && parts.indexOf(myId) < 0) {
     return '<div><div class="flabel">Proprietários</div><div class="hint">Imóvel de <b>' + esc(live._sharedFrom || '') +
-      '</b> — as quotas são dos comproprietários.' + (live._cargo ? ' Colaboras aqui como <b>' + esc(live._cargo) + '</b>.' : '') + '</div></div>';
+      '</b> — as quotas são dos comproprietários.' + (colab && live._cargo ? ' Colaboras aqui como <b>' + esc(live._cargo) + '</b>.' : '') + '</div></div>';
   }
-  // ao dono, quem colabora neste imóvel (a gestão fica em Conta e partilha)
-  var colabs = (live._colaboradores || []);
+  // ao dono, quem colabora neste imóvel (a gestão fica no separador Colaboradores)
+  var colabs = colab ? (live._colaboradores || []) : [];
   var colabHtml = colabs.length
-    ? '<div class="hint" style="margin-top:8px">Colaboradores: ' + esc(colabs.map(function (c) { return c.name + (c.roleName ? ' (' + c.roleName + ')' : ''); }).join(', ')) +
-      '. <a href="#" onclick="event.preventDefault();closeAllModals();go(\'colaboradores\')" style="color:var(--accent)">Gerir</a></div>'
+    ? '<div class="hint u-mt-8px">Colaboradores: ' + esc(colabs.map(function (c) { return c.name + (c.roleName ? ' (' + c.roleName + ')' : ''); }).join(', ')) +
+      '. <a href="#" class="u-c-v-accent" data-click="event.preventDefault();closeAllModals();go(\'colaboradores\')">Gerir</a></div>'
     : '';
   if (parts.length < 2) {
     return '<div><div class="flabel">Proprietários</div><div class="hint">Este imóvel é só teu (100%). ' +
@@ -141,7 +155,7 @@ function cwOwnersBlock() {
     var cur = pct(shares[u] || 0, 0);
     var nxt = prp ? dec(Math.round((Number(prp.shares[u]) || 0) * 100) / 100) + '%' : '';
     return '<div class="stat"><span>' + esc(o.name) + (u === myId ? ' (tu)' : '') + '</span>' +
-      '<b>' + cur + (prp ? ' <span style="color:var(--warn)">→ ' + nxt + '</span>' : '') + '</b></div>';
+      '<b>' + cur + (prp ? ' <span class="u-c-v-warn">→ ' + nxt + '</span>' : '') + '</b></div>';
   }).join('');
   var foot;
   if (prp) {
@@ -149,17 +163,17 @@ function cwOwnersBlock() {
     var waiting = parts.filter(function (u) { return prp.approvals.indexOf(u) < 0; })
       .map(function (u) { return esc((owner(u) || { name: u }).name); });
     if (!meOk) {
-      foot = '<div class="hint" style="margin-top:8px"><b>' + esc(prp.proposedByName) + '</b> propôs esta nova divisão. Só entra em vigor quando todos os comproprietários confirmarem.</div>' +
-        '<div class="toolbar" style="margin-top:8px">' +
-        '<button type="button" class="btn primary sm" onclick="CW.answerProposal(\'' + p.id + '\',1)">Confirmar nova divisão</button>' +
-        '<button type="button" class="btn sm danger" onclick="CW.answerProposal(\'' + p.id + '\',0)">Rejeitar</button></div>';
+      foot = '<div class="hint u-mt-8px"><b>' + esc(prp.proposedByName) + '</b> propôs esta nova divisão. Só entra em vigor quando todos os comproprietários confirmarem.</div>' +
+        '<div class="toolbar u-mt-8px">' +
+        '<button type="button" class="btn primary sm" data-click="CW.answerProposal(\'' + p.id + '\',1)">Confirmar nova divisão</button>' +
+        '<button type="button" class="btn sm danger" data-click="CW.answerProposal(\'' + p.id + '\',0)">Rejeitar</button></div>';
     } else {
-      foot = '<div class="hint" style="margin-top:8px">Nova divisão proposta — à espera de: <b>' + waiting.join(', ') + '</b>.</div>' +
-        '<div class="toolbar" style="margin-top:8px"><button type="button" class="btn sm danger" onclick="CW.answerProposal(\'' + p.id + '\',0)">Cancelar proposta</button></div>';
+      foot = '<div class="hint u-mt-8px">Nova divisão proposta — à espera de: <b>' + waiting.join(', ') + '</b>.</div>' +
+        '<div class="toolbar u-mt-8px"><button type="button" class="btn sm danger" data-click="CW.answerProposal(\'' + p.id + '\',0)">Cancelar proposta</button></div>';
     }
   } else {
-    foot = '<div class="toolbar" style="margin-top:8px"><button type="button" class="btn sm" onclick="CW.proposeShares(\'' + p.id + '\')">Propor nova divisão</button></div>' +
-      '<div class="hint" style="margin-top:6px">Mudar as percentagens só entra em vigor depois de todos os comproprietários confirmarem.</div>';
+    foot = '<div class="toolbar u-mt-8px"><button type="button" class="btn sm" data-click="CW.proposeShares(\'' + p.id + '\')">Propor nova divisão</button></div>' +
+      '<div class="hint u-mt-6px">Mudar as percentagens só entra em vigor depois de todos os comproprietários confirmarem.</div>';
   }
   return '<div><div class="flabel">Proprietários e quota-parte</div>' + rows + foot + colabHtml + '</div>';
 }
@@ -170,8 +184,19 @@ function cwOwnersBlock() {
 // Devolve: nada — recolhe e repinta o modal, se for o desse imóvel.
 function refreshPropModal(hid) {
   try {
-    if (modalStack.length && pForm && pForm.id === hid) { collectProp(); repaintProp(); }
+    // o formulário do imóvel é dos Imóveis: só com esse serviço ligado nesta conta
+    if (servicoLigado('properties') && modalStack.length && pForm && pForm.id === hid) { collectProp(); repaintProp(); }
   } catch (e) {}
+}
+
+/* Envia a proposta de divisão de quotas da casa hid: só entra em vigor quando
+   todos os comproprietários confirmarem. É o único sítio que fala com a rota
+   da proposta — a ficha do imóvel (CW.proposeShares) e o modal das partilhas
+   (partilha.js:CW.sharesModal) passam por aqui.
+   Recebe: hid — o id da casa; shares — {userId: percentagem}, a somar 100.
+   Devolve: a promessa da API (POST /api/houses/:hid/proposal). */
+function enviarProposta(hid, shares) {
+  return api('POST', '/api/houses/' + hid + '/proposal', { shares: shares });
 }
 
 /* modal para propor nova divisão de quotas da casa hid: valida que as percentagens
@@ -201,7 +226,7 @@ CW.proposeShares = function (hid, fromShare) {
   onSave = function () {
     var shares = {}, total = 0;
     for (var i = 0; i < parts.length; i++) {
-      var v = num(val('cw_pp_' + parts[i]));
+      var v = numTaxa(val('cw_pp_' + parts[i]));   // é uma percentagem: «33,333» são 33,333, não 33 333
       if (!isFinite(v) || v < 0) return toast('Percentagens inválidas.');
       shares[parts[i]] = v;
       total += v;
@@ -214,7 +239,7 @@ CW.proposeShares = function (hid, fromShare) {
       toast('A divisão fica como está.');
       return nextShareProposal();
     }
-    api('POST', '/api/houses/' + hid + '/proposal', { shares: shares })
+    enviarProposta(hid, shares)
       .then(function () { closeModal(); toast('Proposta enviada — falta a confirmação dos outros comproprietários.'); return pullNow(true); })
       .then(function () { refreshPropModal(hid); nextShareProposal(); })
       .catch(function (e) { toast(e.message); });

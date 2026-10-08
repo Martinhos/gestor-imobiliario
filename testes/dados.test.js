@@ -1,14 +1,15 @@
 // Normalização dos registos, métricas anuais e movimentos planeados.
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar, igual } from './arnes.js';
+import { carregarApp, limpar, igual, perto, repor } from './arnes.js';
 
-const app = carregarApp();
-const perto = (a, b, tol = 0.01) =>
-  assert.ok(Math.abs(a - b) <= tol, `esperava ${b} (±${tol}), veio ${a}`);
+// a app vive num dia fixo: o ano das métricas, os contratos por começar e os
+// planeados vencidos contam-se a partir dele, e não do dia em que a bateria corre
+const app = carregarApp({ hoje: '2026-09-06' });
 
 beforeEach(() => limpar(app));
+afterEach(() => repor(app));
 
 describe('normalização', () => {
   test('um imóvel vazio ganha os valores por omissão', () => {
@@ -20,9 +21,10 @@ describe('normalização', () => {
     assert.equal(p.value, 0);
   });
 
-  test('campos de versões antigas são limpos', () => {
-    const p = app.normProp({ id: 'p', name: 'X', vpt: 1000, monthlyRent: 500, tenant: 'alguém' });
-    assert.equal(p.vpt, undefined);
+  test('campos de versões antigas são limpos — o VPT fica, que o Anexo F o pede', () => {
+    const p = app.normProp({ id: 'p', name: 'X', vpt: 1000, imiRate: 0.3, monthlyRent: 500, tenant: 'alguém' });
+    assert.equal(p.vpt, 1000, 'o valor patrimonial tributário é o mesmo de sempre e volta a ter uso');
+    assert.equal(p.imiRate, undefined);
     assert.equal(p.monthlyRent, undefined);
     assert.equal(p.tenant, undefined);
   });
@@ -115,7 +117,7 @@ describe('estado do imóvel', () => {
 });
 
 describe('métricas do ano', () => {
-  const ANO = new Date().getFullYear();
+  const ANO = Number(app.today().slice(0, 4));
   const mov = (kind, amount, extra = {}) => app.db.transactions.push(app.normTx(Object.assign({
     kind, amount, propertyId: 'p1', date: ANO + '-03-15',
   }, extra)));

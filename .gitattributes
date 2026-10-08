@@ -1,0 +1,18 @@
+# Fins de linha iguais em todas as máquinas: LF no repositório e na cópia de
+# trabalho, seja qual for o core.autocrlf de quem clona. Sem isto, num Windows
+# com autocrlf=true os ficheiros saíam com CRLF: o `versao.js --check`, que
+# compara texto, dava falso alarme no portátil e verde no CI, e dois sistemas
+# diferentes geravam diffs de ficheiro inteiro sem mudar uma linha.
+* text=auto eol=lf
+
+# os .bat do Windows querem CRLF (o cmd tropeça em etiquetas com LF)
+*.bat text eol=crlf
+
+# binários: nem conversão de fins de linha nem diff de texto
+*.png binary
+*.webp binary
+*.jpg binary
+*.ico binary
+*.jar binary
+*.keystore binary
+*.apk binary

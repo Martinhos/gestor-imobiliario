@@ -126,21 +126,21 @@ function guiaPintar() {
   guiaAjustar();
   el.innerHTML =
     '<div class="card guia-cartao">' +
-      '<div class="row-between" style="align-items:flex-start;gap:10px">' +
-        '<div style="min-width:0">' +
-          '<div class="small" style="color:var(--accent);font-weight:600">Passo ' + (guia.i + 1) + ' de ' + n + '</div>' +
-          '<div class="title" style="margin-top:2px">' + esc(p.titulo) + '</div>' +
+      '<div class="row-between u-ai-flex-start u-g-10px">' +
+        '<div class="u-minw-0">' +
+          '<div class="small u-c-v-accent u-fw-600">Passo ' + (guia.i + 1) + ' de ' + n + '</div>' +
+          '<div class="title u-mt-2px">' + esc(p.titulo) + '</div>' +
         '</div>' +
-        '<button type="button" class="iconbtn" aria-label="Fechar" data-toca="camada" onclick="CW.guiaFechar()">' + ic('x', 18) + '</button>' +
+        '<button type="button" class="iconbtn" aria-label="Fechar" data-toca="camada" data-click="CW.guiaFechar()">' + ic('x', 18) + '</button>' +
       '</div>' +
-      '<div class="hint" style="margin-top:9px">' + p.texto + '</div>' +
-      '<div class="toolbar" style="margin-top:13px">' +
+      '<div class="hint u-mt-9px">' + p.texto + '</div>' +
+      '<div class="toolbar u-mt-13px">' +
         (guia.i > 0
-          ? '<button class="btn sm" data-toca="vista" onclick="CW.guiaAnterior()">' + ic('chev', 14) + ' Anterior</button>'
+          ? '<button class="btn sm" data-toca="vista" data-click="CW.guiaAnterior()">' + ic('chev', 14) + ' Anterior</button>'
           : '') +
-        '<button class="btn sm primary" data-toca="vista" onclick="CW.guiaSeguinte()">' +
+        '<button class="btn sm primary" data-toca="vista" data-click="CW.guiaSeguinte()">' +
           (guia.i < n - 1 ? 'Seguinte' : 'Terminar') + '</button>' +
-        '<button class="btn sm" style="margin-left:auto" data-toca="camada" onclick="CW.guiaFechar()">Fechar</button>' +
+        '<button class="btn sm u-ml-auto" data-toca="camada" data-click="CW.guiaFechar()">Fechar</button>' +
       '</div>' +
     '</div>';
 }
@@ -238,6 +238,27 @@ var TUTORIAIS = {
       },
     ],
   },
+  visitas: {
+    titulo: 'Marcar uma visita',
+    passos: [
+      {
+        titulo: 'Onde se marca',
+        texto: 'Estás nas <b>Visitas</b>. Toca no <b>+</b> (ou em <b>Marcar visita</b>, com a lista vazia). ' +
+          'Quem colabora tem o mesmo botão na vista geral e na ficha do imóvel.',
+        ir: 'visits',
+      },
+      {
+        titulo: 'O que se escreve',
+        texto: 'Quem vem, a que imóvel e em que dia. O contacto e as horas são opcionais — servem para ' +
+          'confirmar ou remarcar. O dono vê a visita assim que a guardas.',
+      },
+      {
+        titulo: 'Depois da visita',
+        texto: 'Marca-a como realizada ou como falta e escolhe o desfecho. Se a pessoa ficar com a casa, ' +
+          'o menu da visita converte-a em ficha de inquilino — se o teu cargo deixar adicionar inquilinos.',
+      },
+    ],
+  },
 };
 
 /* ------------------------------------------------- o que falta a esta conta */
@@ -250,63 +271,81 @@ function euSou() {
   return (db.owners || []).find(function (o) { return o.id === id; }) || null;
 }
 
-// Se esta conta é só colaboradora (não é dona de nenhum imóvel, mas colabora
-// nalgum): os primeiros passos de dono não lhe dizem respeito.
-// Devolve: true/false.
-function soColaborador() {
-  try { if (typeof souSoColaborador === 'function') return !!souSoColaborador(); } catch (e) {}
-  var ps = db.properties || [];
-  return !!(CW.user && ps.length && ps.every(function (p) { return p._cargo; }));
-}
-
 /* A lista de primeiros passos com o estado calculado da base local: perfil
    (há NIF?), imóveis, contratos e movimentos. O passo dos contratos salta
    quando não há imóveis para arrendar; quem é só colaborador salta os de
    dono (perfil, imóveis, contratos) e o dos movimentos se nenhum cargo lhos
-   deixa adicionar. Cada passo traz o porquê e a ação (act) que o botão
-   "Fazer agora" dispara.
-   Devolve: os passos aplicáveis (array de {id, titulo, porque, feito, act}). */
+   deixa adicionar, e tem o de marcar a primeira visita quando o cargo o
+   deixa (feito quando há uma visita criada por si). Sem sessão o passo do
+   perfil salta — não há perfil de ninguém para preencher — e os outros
+   ficam: a jornada da vista geral (jornadaInicial) serve quem ainda não
+   entrou. Cada passo traz o rótulo curto da fita (rotulo), o porquê, a
+   ação (act) que o botão "Fazer agora" dispara e a família dela (toca:
+   'camada' abre uma janela, 'ecra' muda de ecrã).
+   Devolve: os passos aplicáveis (array de {id, rotulo, titulo, porque, feito, toca, act}). */
 function passos() {
   var eu = euSou();
-  var colab = soColaborador();
+  // só colaboradora (souSoColaborador, web/app/acessos.js): os passos de dono não lhe dizem respeito
+  var colab = souSoColaborador();
+  // uma visita é minha se o servidor a marcou como minha, ou se ainda não subiu (acessos.js:podeEditar)
+  var visitaMinha = (db.visits || []).some(function (v) { return v._createdBy ? v._createdBy === meuId() : !v._atServidor; });
   var arrendar = (db.properties || []).filter(function (p) { return p.use === 'investimento' && !p._cargo; });
   var semContrato = arrendar.filter(function (p) {
     return !(db.contracts || []).some(function (c) { return c.propertyId === p.id; });
   });
-  var podeMovimentos = !colab || (typeof casasComo === 'function' && casasComo('tx.add').length > 0);
+  var podeMovimentos = !colab || casasComo('tx.add').length > 0;
   return [
     {
       id: 'perfil',
+      rotulo: 'Perfil',
       titulo: 'Preenche o teu perfil',
       porque: 'Os teus dados entram nos contratos que a app gera.',
       feito: !!(eu && eu.nif),
-      salta: colab,
+      salta: colab || !CW.user,
+      toca: 'camada',
       act: 'CW.editProfile()',
     },
     {
       id: 'imoveis',
+      rotulo: 'Imóveis',
       titulo: 'Adiciona os teus imóveis',
       porque: 'É a base de tudo o resto.',
       feito: (db.properties || []).length > 0,
-      salta: colab,
+      // um passo de um serviço desligado nesta conta não se propõe: abriria um formulário que o servidor recusa
+      salta: colab || !servicoLigado('properties'),
+      toca: 'camada',
       act: 'propModal()',
     },
     {
       id: 'contratos',
+      rotulo: 'Contratos',
       titulo: 'Regista os contratos',
       porque: semContrato.length
         ? semContrato.length + (semContrato.length === 1 ? ' imóvel para arrendar ainda sem contrato.' : ' imóveis para arrendar ainda sem contrato.')
         : 'Para as rendas passarem a aparecer sozinhas.',
       feito: (db.properties || []).length > 0 && !semContrato.length,
-      salta: colab || !arrendar.length,   // só para uso próprio, ou só colaborador: não se aplica
+      salta: colab || !arrendar.length || !servicoLigado('contracts'),   // só para uso próprio, só colaborador, ou sem os Contratos: não se aplica
+      toca: 'camada',
       act: 'ctModal()',
     },
     {
+      id: 'visitas',
+      rotulo: 'Visita',
+      titulo: 'Marca a primeira visita',
+      porque: 'Quem vem, a que imóvel e quando — o dono vê-a logo.',
+      feito: visitaMinha,
+      salta: !colab || !casasComo('visit.add').length || !servicoLigado('visits'),
+      toca: 'camada',
+      act: 'visitModal()',
+    },
+    {
       id: 'movimentos',
+      rotulo: 'Movimentos',
       titulo: 'Confirma os primeiros movimentos',
       porque: 'É daqui que saem os números da vista geral.',
       feito: (db.transactions || []).length > 0,
-      salta: !podeMovimentos,
+      salta: !podeMovimentos || !servicoLigado('transactions'),
+      toca: 'ecra',
       act: "go('transactions')",
     },
   ].filter(function (p) { return !p.salta; });
@@ -326,45 +365,69 @@ function passosDispensados() {
   try { return localStorage.getItem(LS_PASSOS) === '1'; } catch (e) { return false; }
 }
 
-/* O HTML do cartão de primeiros passos que a vista geral mostra no topo —
-   ou '' quando foi dispensado, não há sessão, ou já está tudo feito (o
-   cartão não fica pendurado a dar os parabéns). Cada passo por fazer tem
-   o "Fazer agora" e o botão do tutorial respetivo.
+/* O cartão de primeiros passos, que é a jornada: a fita dos passos — um
+   círculo por passo, com o visto nos feitos e o número nos outros, e o
+   rótulo curto por baixo — e, por baixo dela, SÓ o passo atual (o primeiro
+   por fazer), com o título, o porquê, o "Fazer agora" e o botão do tutorial.
+   Era uma lista de quatro cartões, cada um com os seus dois botões, e numa
+   conta nova ocupava o ecrã inteiro antes de se ver fosse o que fosse: a
+   fita diz o mesmo em duas linhas, e a pessoa só tem de decidir uma coisa.
+   Vai ao topo da vista geral e, enquanto não há movimentos, É a vista
+   (jornadaInicial). Devolve '' quando foi dispensado ou já está tudo feito
+   (o cartão não fica pendurado a dar os parabéns). Não exige sessão: sem
+   ela os passos são os mesmos menos o do perfil (passos).
+   A fita é uma <ol> e não um desenho: um leitor de ecrã lê «lista, 4
+   itens», o passo atual leva aria-current="step", e o círculo de um passo
+   feito anuncia-se «Feito» (role="img") — o número dos outros lê-se tal
+   e qual, e o rótulo a seguir.
    Devolve: o HTML do cartão (string); '' quando não há nada a mostrar. */
 function cartaoPassos() {
-  if (passosDispensados() || !CW.user) return '';
-  var ps = passos();
-  var faltam = ps.filter(function (p) { return !p.feito; });
-  if (!faltam.length) return '';
-  var f = feitos();
+  if (passosDispensados()) return '';
+  var ps = passos(), atual = -1;
+  for (var k = 0; k < ps.length; k++) if (!ps[k].feito) { atual = k; break; }
+  if (atual < 0) return '';
+  var p = ps[atual], f = feitos();
 
-  return '<div class="card" style="margin-bottom:14px">' +
-    '<div class="row-between" style="align-items:flex-start">' +
+  return '<div class="card u-mb-14px">' +
+    '<div class="row-between u-ai-flex-start">' +
       '<div><div class="title">Primeiros passos</div>' +
-      '<div class="small">' + (ps.length - faltam.length) + ' de ' + ps.length + ' feitos · ' +
-      'sugestões, não obrigações</div></div>' +
-      '<button type="button" class="iconbtn" aria-label="Dispensar" data-toca="vista" onclick="CW.passosFora()">' + ic('x', 18) + '</button>' +
+      '<div class="small">Passo ' + (atual + 1) + ' de ' + ps.length + ' · sugestões, não obrigações</div></div>' +
+      '<button type="button" class="iconbtn" aria-label="Dispensar" data-toca="vista" data-click="CW.passosFora()">' + ic('x', 18) + '</button>' +
     '</div>' +
-    '<div class="list" style="gap:8px;margin-top:12px">' +
-    ps.map(function (p) {
-      return '<div class="card" style="padding:11px 13px;' + (p.feito ? 'opacity:.55' : '') + '">' +
-        '<div class="row-between" style="align-items:center;gap:10px">' +
-          '<span style="display:flex;align-items:center;gap:10px;min-width:0">' +
-            '<span class="selck' + (p.feito ? ' on' : '') + '" style="flex:0 0 auto">' +
-              (p.feito ? ic('check', 13) : '') + '</span>' +
-            '<span style="min-width:0"><b>' + esc(p.titulo) + '</b>' +
-            '<span class="small" style="display:block">' + esc(p.porque) + '</span></span>' +
-          '</span>' +
-        '</div>' +
-        (p.feito ? '' :
-          '<div class="toolbar" style="margin:9px 0 0">' +
-            '<button class="btn sm primary" onclick="' + p.act + '">Fazer agora</button>' +
-            '<button class="btn sm" data-toca="ecra" onclick="CW.guiaAbrir(\'' + p.id + '\')">' +
-              (f[p.id] ? 'Rever o tutorial' : 'Como se faz') + '</button>' +
-          '</div>') +
-        '</div>';
+    '<ol class="jornada" role="list">' +
+    ps.map(function (q, i) {
+      var estado = q.feito ? ' feito' : (i === atual ? ' atual' : '');
+      return '<li class="jornada-passo' + estado + '"' + (i === atual ? ' aria-current="step"' : '') + '>' +
+        (q.feito
+          ? '<span class="jornada-n" role="img" aria-label="Feito">' + ic('check', 13) + '</span>'
+          : '<span class="jornada-n">' + (i + 1) + '</span>') +
+        '<span class="jornada-l">' + esc(q.rotulo) + '</span>' +
+        '</li>';
     }).join('') +
-    '</div></div>';
+    '</ol>' +
+    '<div class="jornada-agora"><b>' + esc(p.titulo) + '</b>' +
+      '<span class="small u-d-block">' + esc(p.porque) + '</span>' +
+      '<div class="toolbar u-m-9px-0-0">' +
+        '<button class="btn sm primary" data-toca="' + p.toca + '" data-click="' + p.act + '">Fazer agora</button>' +
+        '<button class="btn sm" data-toca="ecra" data-click="CW.guiaAbrir(\'' + p.id + '\')">' +
+          (f[p.id] ? 'Rever o tutorial' : 'Como se faz') + '</button>' +
+      '</div></div>' +
+    '</div>';
+}
+
+/* A jornada no lugar da vista geral. Enquanto não há movimentos, a vista
+   geral eram quatro indicadores a 0 € e dois gráficos vazios por baixo do
+   cartão dos passos — números que não dizem nada e ocupam o ecrã todo. Sem
+   movimentos, a vista É o cartão dos passos (painel-geral.js:vDashboard
+   pergunta aqui), mais o portefólio quando há imóveis; os indicadores voltam
+   com o primeiro movimento. Não substitui a vista a quem só colabora (o topo
+   dele é o «O que podes fazer», e as contas não são dele), nem a quem
+   dispensou o cartão, nem quando já não há passos por fazer — nesses casos
+   devolve '' e a vista geral fica como sempre.
+   Devolve: o HTML do cartão (string), ou '' quando a jornada não substitui a vista. */
+function jornadaInicial() {
+  if ((db.transactions || []).length || souSoColaborador()) return '';
+  return cartaoPassos();
 }
 
 /* Todos os tutoriais, para quem os quiser rever. Vive aqui e não na ajuda
@@ -384,9 +447,29 @@ CW.listaDeTutoriais = function () {
 
 /* --------------------------------------------------------------- ligações */
 
+/* Os primeiros passos vão no topo da vista geral — menos a quem só colabora,
+   onde o topo é do «O que podes fazer» (painel-geral.js:cartaoPodes) e os
+   passos entram logo a seguir, onde o comentário dele marca o fim. Quando a
+   vista já É a jornada (painel-geral.js:vDashboard, pela jornadaInicial), o
+   HTML traz a marca <!--jornada--> e não se insere o cartão segunda vez. E
+   enquanto a vista é o «À espera do servidor» (espera.js:esperaDoServidor)
+   não se insere nada: os passos calculam-se da base local, e afirmar
+   «imóveis por adicionar» a quem tem doze é o erro que a espera existe
+   para não deixar acontecer. */
 var _vDashboard_guia = vDashboard;
 vDashboard = function () {
-  return cartaoPassos() + _vDashboard_guia();
+  var html = _vDashboard_guia();
+  if (html.indexOf('<!--jornada-->') > -1 || esperaDoServidor()) return html;
+  var passosHtml = cartaoPassos();
+  if (!passosHtml) return html;
+  /* os passos entram depois do «O que podes fazer» de quem colabora e, numa
+     conta que tem pedidos por responder (partilha.js:pedidosDashCard), depois
+     desses pedidos — um convite recebido é mais urgente do que o tutorial */
+  var fim = '<!--fim-podes--></div>', i = html.indexOf(fim);
+  if (i < 0) { fim = '<!--fim-pedidos-->'; i = html.indexOf(fim); }
+  if (i < 0) return passosHtml + html;
+  i += fim.length;
+  return html.slice(0, i) + passosHtml + html.slice(i);
 };
 
 /* Em produção não se carregam dados de exemplo. Quem chega deve encontrar a
@@ -394,7 +477,7 @@ vDashboard = function () {
    dos verdadeiros são um estorvo, e apagá-los à mão é trabalho.
 
    Este é o fecho, e não a fechadura: o botão já nem chega a ser escrito
-   (auxiliares.js:podeExemplo). Chegou a ser apagado do DOM depois de cada
+   (espera.js:podeExemplo). Chegou a ser apagado do DOM depois de cada
    render, e isso tinha um furo — a pesquisa das listas repinta pela via
    parcial (vistas.js:refrescarListasVivas), que não passa por aqui, e o botão
    voltava. Perguntar antes de escrever não tem furos; isto fica para o caso
@@ -405,30 +488,10 @@ seed = function () {
   return _seed_guia.apply(this, arguments);
 };
 
-var cssGuia = document.createElement('style');
-cssGuia.textContent =
-  /* flutua, não é modal: quem segue os passos tem de poder mexer na app por
-     baixo enquanto lê. Acima do botão flutuante, abaixo dos modais — menos
-     quando um está aberto, e aí sobe acima dele (sobre-janela). */
-  /* Acima do botão flutuante e não por cima dele: o tutorial manda carregar
-     nesse botão, e estava a tapá-lo. */
-  '#cwGuia{position:fixed;left:12px;right:12px;bottom:calc(88px + var(--inset-bottom));z-index:59;' +
-    'pointer-events:none;display:flex;justify-content:center;' +
-    /* Entra em vez de aparecer. O cartão nasce logo a seguir a uma mudança de
-       ecrã — o passo leva a pessoa às Definições e a vista inteira é
-       repintada no mesmo instante — e um cartão parado no canto de baixo
-       perde-se nisso tudo, ainda por cima quando o texto manda olhar para o
-       topo. Sobe de fora do ecrã, com a curva de quem atravessa distância. */
-    'animation:guiaEntra var(--lento) var(--curva-entra)}' +
-  '@keyframes guiaEntra{from{opacity:0;transform:translateY(28px)}}' +
-  '#cwGuia .guia-cartao{pointer-events:auto;width:100%;max-width:420px;padding:14px 16px;' +
-    'box-shadow:var(--shadow);border-color:var(--accent)}' +
-  /* Por cima de uma janela aberta, e encostado ao topo, longe dos botões.
-     O número segue o do .modal (index.html): esteve em 61 contra os 60 de
-     então, e quando o modal subiu para 70 o cartão ficou por baixo — que é
-     exatamente o defeito que este ajuste existe para não deixar acontecer. */
-  '#cwGuia.sobre-janela{z-index:71;bottom:auto;top:calc(12px + var(--inset-top));' +
-    'animation:guiaEntra var(--lento) var(--curva-entra)}' +
-  '@media(min-width:900px){#cwGuia{left:auto;right:22px;max-width:420px;bottom:calc(22px + var(--inset-bottom))}' +
-    '#cwGuia.sobre-janela{top:calc(16px + var(--inset-top))}}';
-document.head.appendChild(cssGuia);
+/* A folha do cartão flutuante (#cwGuia, .guia-cartao, o guiaEntra e a regra
+   do ecrã largo) era feita aqui, num elemento de folha criado por JavaScript e
+   pendurado na cabeça do documento. Isso é CSS em linha, que a CSP sem
+   'unsafe-inline' recusa tal como recusa um atributo de estilo, por isso as
+   regras passaram para o web/estilos.css, na secção «g12-novidades» das
+   classes dos módulos — tal e qual, pela mesma ordem e com os mesmos
+   comentários. */

@@ -2,15 +2,18 @@
 // para a frente a partir do capital em dívida (que é o da data de início), a
 // pergunta que as insere ao gravar o imóvel ou a hipoteca, e o abate do
 // capital com elas — como se fossem confirmadas uma a uma.
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar } from './arnes.js';
+import { carregarApp, limpar, perto, repor } from './arnes.js';
 
-const app = carregarApp();
-const perto = (a, b, tol = 0.01) => assert.ok(Math.abs(a - b) <= tol, `esperava ${b} (±${tol}), veio ${a}`);
-beforeEach(() => { limpar(app); app.render = () => {}; app.buildNav = () => {}; app.toast = () => {}; });
-
+/* O dia em que a app vive: as funções puras recebem-no, e as outras leem-no
+   do relógio da app — o que cada teste prova não muda com o dia em que a
+   bateria corre. */
 const HOJE = '2026-09-06';
+const app = carregarApp({ hoje: HOJE });
+beforeEach(() => { limpar(app); app.render = () => {}; app.buildNav = () => {}; app.toast = () => {}; });
+afterEach(() => repor(app));
+
 const fixa = (extra = {}) => app.normLoan(Object.assign({
   id: 'l1', name: 'Aquisição', outstanding: 100000, years: 30, type: 'fixa', rate: 3, stampTax: true, start: '2024-01-10',
 }, extra));
@@ -133,10 +136,11 @@ describe('loanPrestacoesEmFalta (pura): a matemática para a frente', () => {
 
   test('as registadas encurtam o prazo e avançam a fase: a prestação é a do que resta', () => {
     const txs = [...Array(12)].map((_, k) => prest(`2025-${mm((k % 12) + 1)}-10`));   // 12 registadas, de 2025
-    const r = app.loanPrestacoesEmFalta(fixa(), txs, HOJE);
+    /* o capital do início é o do formulário (capitalInicio): as que faltam antes das registadas partem dele */
+    const r = app.loanPrestacoesEmFalta(fixa({ capitalInicio: 100000 }), txs, HOJE);
     assert.equal(r.length, 12);                                   // jan … dez/2024
     perto(r[0].interest + r[0].principal, anuidade(100000, 3, 348), 0.011);
-    const mista = fixa({ type: 'mista', rate: 2, fixedYears: 1, euribor: 3, spread: 1 });
+    const mista = fixa({ capitalInicio: 100000, type: 'mista', rate: 2, fixedYears: 1, euribor: 3, spread: 1 });
     assert.equal(app.loanPrestacoesEmFalta(mista, txs, HOJE)[0].rate, 4, 'com 12 registadas a fase fixa já passou');
   });
 

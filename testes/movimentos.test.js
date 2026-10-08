@@ -4,21 +4,14 @@
 //
 // Também aqui: o separador dos Colaboradores, que só aparece com conta.
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar } from './arnes.js';
+import { carregarApp, limpar, repor } from './arnes.js';
+// as janelas abrem numa pilha observável: cada uma guarda título, corpo e rodapé
+import { janelasFalsas } from './lib/dom.js';
 
 const app = carregarApp();
-
-// abre janelas numa pilha observável: guarda título, corpo e rodapé de cada uma
-function janelasFalsas() {
-  const abertas = [];
-  app.openModal = (t, b, f) => { const L = { t, b, f }; abertas.push(L); return L; };
-  app.closeModal = () => {};
-  app.render = () => {};
-  app.toast = () => {};
-  return abertas;
-}
+afterEach(() => repor(app));
 
 function monta() {
   limpar(app);
@@ -42,7 +35,7 @@ function rodapeDe(abertas, titulo) {
 
 // abre a janela de cada cartão de resumo e devolve as janelas abertas
 function abreCartoes() {
-  const abertas = janelasFalsas();
+  const abertas = janelasFalsas(app, 'render', 'toast');
   const html = app.vTransactions();
   const ids = (html.match(/id="(k\d+)"/g) || []).map((m) => m.slice(4, -1));
   ids.forEach((id) => app.kpiModal(id));
@@ -75,7 +68,7 @@ describe('os cartões de resumo levam ao filtro', () => {
   });
 
   test('txVerTipo muda o filtro e limpa a categoria, que era do tipo anterior', () => {
-    janelasFalsas();
+    janelasFalsas(app, 'render', 'toast');
     app.txCat = 'Condomínio'; app.txSub = 'Quota mensal';
     app.txVerTipo('loan');
     assert.equal(app.txFilter, 'loan');
@@ -86,7 +79,7 @@ describe('os cartões de resumo levam ao filtro', () => {
   });
 
   test('o filtro por dívidas recebidas ou pagas separa-as, e o seletor tem as duas', () => {
-    janelasFalsas();
+    janelasFalsas(app, 'render', 'toast');
     const so = (k) => { app.txFilter = k; return app.db.transactions.filter(app.txMatch).map((t) => t.id); };
     assert.deepEqual(Array.from(so('owed')), ['T4']);
     assert.deepEqual(Array.from(so('repay')), ['T5']);

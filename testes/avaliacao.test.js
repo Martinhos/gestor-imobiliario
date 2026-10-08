@@ -1,15 +1,16 @@
 // Avaliação: NOI anualizado, valor por rendimento, diferença sem valor de mercado,
 // yield exigido, equity projetado, o relatório em texto e onde vive a rentabilidade.
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar, igual } from './arnes.js';
+import { carregarApp, limpar, igual, perto, repor } from './arnes.js';
 
-const app = carregarApp();
-const perto = (a, b, tol = 0.01) =>
-  assert.ok(Math.abs(a - b) <= tol, `esperava ${b} (±${tol}), veio ${a}`);
-const ANO = new Date().getFullYear();
-const MES = new Date().getMonth() + 1;
+// a app vive num dia fixo: o NOI anualiza-se pelos meses que já passaram do
+// ano, e o que o teste prova não pode mudar com o mês em que a bateria corre
+const app = carregarApp({ hoje: '2026-09-06' });
+afterEach(() => repor(app));
+const ANO = Number(app.today().slice(0, 4));
+const MES = Number(app.today().slice(5, 7));
 
 let p;
 beforeEach(() => {

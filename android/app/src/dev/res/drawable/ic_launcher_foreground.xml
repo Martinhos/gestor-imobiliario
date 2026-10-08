@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Só do flavor dev: a mesma casa de src/main, mais pequena e mais acima, com
+     as letras «DEV» a traço por baixo — tudo dentro da zona segura do ícone
+     adaptativo (o círculo de raio ~14,7 em torno de (24,24) neste viewport de
+     48; fora dele os launchers cortam). O scripts/make-icons.js replica esta
+     geometria em píxeis para os ícones da PWA de dev, por isso ela fica aqui
+     escrita tal e qual:
+     casa: os três paths de main dentro de group scaleX=0.75 scaleY=0.75
+           translateX=15 translateY=10 (cada ponto p fica em p*0.75+(15,10):
+           a casa ocupa x 17,25..30,75 e y 12,25..25,75), strokeWidth 1.9.
+     letras (coordenadas absolutas, strokeWidth 1.6, só segmentos retos):
+       linhas: D=[M16,29 L16,35 M16,29 L18.5,29 L20,30.5 L20,33.5 L18.5,35 L16,35],
+               E=[M22,29 L22,35 M22,29 L26,29 M22,32 L25,32 M22,35 L26,35],
+               V=[M28,29 L30,35 L32,29] -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <group
+        android:scaleX="0.75"
+        android:scaleY="0.75"
+        android:translateX="15"
+        android:translateY="10">
+        <path
+            android:pathData="M3,10.5 L12,3 L21,10.5"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1.9"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000" />
+        <path
+            android:pathData="M5,9.5 L5,21 L19,21 L19,9.5"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1.9"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000" />
+        <path
+            android:pathData="M9.5,21 L9.5,16 L14.5,16 L14.5,21"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1.9"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000" />
+    </group>
+    <!-- D -->
+    <path
+        android:pathData="M16,29 L16,35 M16,29 L18.5,29 L20,30.5 L20,33.5 L18.5,35 L16,35"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+    <!-- E -->
+    <path
+        android:pathData="M22,29 L22,35 M22,29 L26,29 M22,32 L25,32 M22,35 L26,35"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+    <!-- V -->
+    <path
+        android:pathData="M28,29 L30,35 L32,29"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+</vector>

@@ -15,6 +15,20 @@ function personEditavel(kind,p){
   if(kind==='tenant')return podeEditarInquilino(p);
   return !p._userId||!!(window.CW&&CW.user&&CW.user.id===p.id);
 }
+/* Posso apagar a ficha desta pessoa?
+
+   Como o «Editar», mas mais estreito: o meu perfil edita-se e não se apaga
+   (sou eu), e um proprietário com conta sai desfazendo a partilha, não
+   apagando a ficha — a nuvem recusava os dois com um aviso
+   (cloud/utilizadores.js:delPerson), e um botão que só serve para ouvir
+   «não podes» não se escreve.
+   Recebe: kind — 'tenant' ou 'owner'; p — a pessoa.
+   Devolve: true se o «Apagar» deve existir. */
+function personApagavel(kind,p){
+  if(!personEditavel(kind,p))return false;
+  if(kind==='tenant')return true;
+  return !p._userId&&!(window.CW&&CW.user&&CW.user.id===p.id);
+}
 /* O corpo da ficha de uma pessoa: o que se sabe sobre ela, para ler.
 
    Um inquilino e um proprietário partilham o formulário, mas lêem-se por
@@ -31,19 +45,28 @@ function personFicha(kind,id){
   const p=(lista||[]).find(x=>x.id===id);if(!p)return '';
   const casa=kind==='tenant'?casaDoInquilino(p):null;
   const verPessoa=kind==='owner'||pode(casa,'tenant.view');
-  const cts=kind==='tenant'?contractsOfTenant(p.id):[];
+  /* os contratos de um inquilino e os imóveis de um proprietário só com o
+     serviço que os traz ligado nesta conta: desligado, a ficha fica com a
+     pessoa e mais nada — sem «Mora em» nem «Imóveis e quota-parte» */
+  const cts=kind==='tenant'&&servicoLigado('contracts')?contractsOfTenant(p.id):[];
   const ativos=cts.filter(isActive),futuros=cts.filter(c=>ctEstado(c)==='futuro'),findos=cts.filter(c=>ctEstado(c)==='terminado');
-  const casas=kind==='owner'?propsOf(p.id):[];
-  const ident=verPessoa?[p.nif?'NIF '+esc(fmtNIF(p.nif)):'',
+  const casas=kind==='owner'&&servicoLigado('properties')?propsOf(p.id):[];
+  /* um NIF que não bate certo diz-se aqui, ao lado do número: é onde se lê antes
+     de ir para o contrato em PDF ou para o Anexo F */
+  const ident=verPessoa?[p.nif?'NIF '+esc(fmtNIF(p.nif))+(nifValido(p.nif)===false?' · não bate certo':''):'',
     p.cc?'CC '+esc(fmtCC(p.cc))+(p.ccValid?(pzDias(p.ccValid)<0?' · caducou a '+dPT(p.ccValid):' · válido até '+dPT(p.ccValid)):''):'',
-    p.nationality&&p.nationality!=='Portuguesa'?esc(p.nationality):''].filter(Boolean).join('<br>'):'';
+    p.nationality&&p.nationality!=='Portuguesa'?esc(p.nationality):'',
+    p.pais?'País: '+esc(p.pais):''].filter(Boolean).join('<br>'):'';
+  const retem=kind==='tenant'&&verPessoa&&!!p.retem;
   /* a quota-parte só na minha casa: o servidor apaga as quotas de uma casa de
      colaboração, e o sharesOf reparte por igual quando não há percentagens —
      mostrá-la ali era publicar um número inventado */
   const minhas=casas.filter(x=>souDono(x.id));
-  const renda=sum(minhas.filter(x=>pode(x.id,'contract.view')).map(x=>rentOf(x)*shareOf(x,p.id)));
-  const saldo=kind==='owner'&&!ownerFilter?ownerBalances(null)[p.id]:undefined;
-  const vazia=!p.phone&&!p.email&&!ident&&!p.taxAddress&&!(p.files||[]).length&&
+  /* a renda vem dos contratos e o saldo dos movimentos: sem esses serviços
+     ligados não se diz «em dia» nem «0 €» sobre o que a conta não vê */
+  const renda=servicoLigado('contracts')?sum(minhas.filter(x=>pode(x.id,'contract.view')).map(x=>rentOf(x)*shareOf(x,p.id))):0;
+  const saldo=kind==='owner'&&!ownerFilter&&servicoLigado('transactions')?ownerBalances(null)[p.id]:undefined;
+  const vazia=!p.phone&&!p.email&&!ident&&!retem&&!p.taxAddress&&!(p.files||[]).length&&
     !(kind==='tenant'?cts.length:casas.length);
   return ficha([
     kind==='tenant'&&p._sharedFrom?{tipo:'nota',valor:'Ficha de <b>'+esc(p._sharedFrom)+'</b>.'}:null,
@@ -60,6 +83,7 @@ function personFicha(kind,id){
       valor:Math.abs(saldo)<0.01?'em dia':(saldo>0?'a receber '+euro2(saldo):'a pagar '+euro2(-saldo))}:null,
     renda>0?{rotulo:'Renda mensal que lhe toca',valor:euro(renda)}:null,
     ident?{tipo:'bloco',rotulo:'Identificação',valor:ident}:null,
+    retem?{rotulo:'Retenção na fonte',valor:'retém IRS ao pagar a renda'}:null,
     verPessoa&&p.taxAddress?{tipo:'bloco',rotulo:'Morada fiscal',valor:esc(p.taxAddress).replace(/\n/g,'<br>')}:null,
     /* «Vai morar em», e não «Contratos anteriores» a dizer «terminou a
        2031-01-01» — uma data no futuro dada como o dia em que acabou */
@@ -70,7 +94,7 @@ function personFicha(kind,id){
     /* os anexos de um inquilino pedem tenant.view E file.view no servidor:
        listar os nomes sem ambas dava linhas que rebentam ao toque */
     kind==='tenant'&&verPessoa&&pode(casa,'file.view')&&(p.files||[]).length?{tipo:'bloco',rotulo:'Documentos',
-      valor:(p.files||[]).map(f=>`<span role="button" tabindex="0" data-toca="camada" style="cursor:pointer;text-decoration:underline" onclick="openMeta('${jsq(f.id)}')">${esc(f.name||'ficheiro')}</span>`).join('<br>')}:null,
+      valor:(p.files||[]).map(f=>`<span role="button" tabindex="0" data-toca="camada" class="u-cur-pointer u-td-underline" data-click="openMeta('${jsq(f.id)}')">${esc(f.name||'ficheiro')}</span>`).join('<br>')}:null,
     kind==='tenant'&&verPessoa&&String(p.notes||'').trim()?{tipo:'bloco',rotulo:'Notas',valor:rich(p.notes)}:null,
     /* a frase segue quem MANDA na ficha, e não o tipo: um proprietário sem
        conta é um registo meu como outro qualquer, e mandá-lo esperar por
@@ -100,13 +124,14 @@ function personView(kind,id){
     corpo:()=>personFicha(kind,id),
     menu:()=>{
       const it=[];
-      if(kind==='tenant'){
+      /* «Ver contrato» é dos Contratos: desligados nesta conta, não se promete */
+      if(kind==='tenant'&&servicoLigado('contracts')){
         const c=contractsOfTenant(id).filter(ctVivo)[0];   // o em vigor, ou o que ainda não começou
         if(c&&pode(c.propertyId,'contract.view'))it.push({label:'Ver contrato',icon:'contract',toca:'camada',act:`ctView('${jsq(c.id)}')`});
       }
       /* apagar um proprietário com conta não é apagar um registo meu: é
          mexer numa pessoa que o servidor volta a mandar no pull seguinte */
-      if(ok)it.push({label:kind==='owner'?'Apagar proprietário':'Apagar inquilino',
+      if(personApagavel(kind,p))it.push({label:kind==='owner'?'Apagar proprietário':'Apagar inquilino',
         icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${jsq(kind)}','${jsq(id)}')`});
       return it.length?menu('fichaPer',it):'';
     },
@@ -142,7 +167,7 @@ function personModal(kind,id,after,houseId){
   perForm=normPerson(orig?JSON.parse(JSON.stringify(orig)):null);
   if(!orig&&houseId&&kind==='tenant')perForm.houseId=houseId;
   const word=kind==='owner'?'proprietário':'inquilino';
-  const m=id?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${kind}','${id}')`}]):'';
+  const m=orig&&personApagavel(kind,orig)?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${kind}','${id}')`}]):'';
   openModal((id?'Editar ':'Novo ')+word,personBody(),null,m);
   onSave=()=>{
     collectPerson();
@@ -163,7 +188,7 @@ function personModal(kind,id,after,houseId){
 function personBody(){
   const t=perForm;
   return `<div class="form">
-    <label>Nome completo<input id="pe_name" value="${esc(t.name)}" placeholder="Ana Rodrigues" autocomplete="off"></label>
+    <label>Nome completo <span class="req">*</span><input id="pe_name" value="${esc(t.name)}" placeholder="Ex: Ana Rodrigues" autocomplete="off"></label>
     <div class="row">
       <label>Telemóvel<input id="pe_phone" value="${esc(t.phone)}" placeholder="Opcional" autocomplete="off"></label>
       <label>Email<input id="pe_mail" value="${esc(t.email)}" placeholder="Opcional" autocomplete="off"></label></div>
@@ -172,19 +197,38 @@ function personBody(){
       <label>Género${sel('pe_gender',t.gender,GENDER.map(g=>({v:g[0],label:g[1]})),'','rascunho')}</label>
       <label>Estado civil${sel('pe_marital',t.marital,MARITAL.map(x=>({v:x,label:x||'—'})),'','rascunho')}</label></div>
     <div class="row">
-      <label>Nacionalidade<input id="pe_nat" value="${esc(t.nationality)}" placeholder="Portuguesa" autocomplete="off"></label>
+      <label>Nacionalidade<input id="pe_nat" value="${esc(t.nationality)}" placeholder="Opcional" autocomplete="off"></label>
       <label>Data de nascimento<input id="pe_birth" type="date" value="${t.birth||''}"></label></div>
     <div class="row">
-      <label>N.º do Cartão de Cidadão<input id="pe_cc" value="${esc(t.cc)}" placeholder="00000000 0 ZZ0" autocomplete="off"></label>
+      <label>N.º do Cartão de Cidadão (opcional)<input id="pe_cc" value="${esc(t.cc)}" placeholder="Ex: 12345678 9 ZX4" autocomplete="off"></label>
       <label>Validade do CC<input id="pe_ccv" type="date" value="${t.ccValid||''}"></label></div>
-    <label>NIF<input id="pe_nif" value="${esc(t.nif)}" placeholder="Opcional" inputmode="numeric"></label>
-    <label>Morada fiscal<textarea id="pe_addr" style="min-height:66px" placeholder="Rua, número, código postal, localidade">${esc(t.taxAddress)}</textarea></label>
-    <div class="hint">Usado na identificação das partes no contrato em PDF.</div>`,
-      {icon:'contract',summary:[t.nif?'NIF '+fmtNIF(t.nif):'',t.cc?'CC':''].filter(Boolean).join(' · ')||'para o contrato'})}
+    <label>NIF<input id="pe_nif" value="${esc(t.nif)}" placeholder="Opcional" inputmode="numeric" data-input="pessoaNifHint()"></label>
+    <div class="hint u-mt-n4px" id="pe_nifHint"${pessoaNifHint(t.nif)?'':' hidden'}>${esc(pessoaNifHint(t.nif))}</div>
+    <label>País (opcional; só sem NIF português)<input id="pe_pais" value="${esc(t.pais)}" placeholder="Ex: Espanha" autocomplete="off"></label>
+    <div class="hint u-mt-n4px">Sem NIF português, o Anexo F identifica a pessoa pelo país.</div>
+    ${perKind==='tenant'?`<label class="check"><input type="checkbox" id="pe_retem" ${t.retem?'checked':''}> Retém IRS na fonte</label>
+    <div class="hint u-mt-n4px">Uma empresa com contabilidade organizada retém IRS ao pagar a renda. A retenção regista-se em cada renda; aqui fica só o aviso.</div>`:''}
+    <label>Morada fiscal (opcional)<textarea id="pe_addr" class="u-minh-66px" placeholder="Ex: Rua das Flores 12, 1200-195 Lisboa">${esc(t.taxAddress)}</textarea></label>
+    <div class="hint">A morada com rua, número, código postal e localidade. Estes dados identificam as partes no contrato em PDF; o NIF e o país entram no resumo do Anexo F.</div>`,
+      {icon:'contract',summary:[t.nif?'NIF '+esc(fmtNIF(t.nif)):'',t.cc?'CC':''].filter(Boolean).join(' · ')||'para o contrato'})}
     ${perKind==='owner'?'':fold('docs','Documentos',
       fileBlock('',t.files||[],'pe_filein','personAddFiles','delPersonFile',{hint:'Cartão de cidadão, contrato de trabalho, comprovativo de morada, recibos de vencimento.'}),
       {icon:'clip',open:!!(t.files||[]).length,summary:(t.files||[]).length?t.files.length+' doc.':''})
-      +`<label>Notas<textarea id="pe_notes" placeholder="Fiador, referências, observações…">${esc(t.notes)}</textarea></label>`}</div>`;
+      +`<label>Notas (opcional)<textarea id="pe_notes" placeholder="Ex: Fiador: João Rodrigues, 913 456 789">${esc(t.notes)}</textarea></label>
+    <div class="hint u-mt-n4px">O fiador, as referências, outras observações.</div>`}</div>`;
+}
+/* A dica por baixo do NIF: avisa quando o dígito de controlo não bate certo — um
+   erro de dedo apanhado antes de ir para o contrato em PDF ou para o Anexo F.
+   Vazio não se julga: pode não haver NIF, ou a pessoa ser de fora. Serve nos dois
+   momentos: ao montar o formulário (com o NIF, devolve o texto) e a cada tecla no
+   campo (sem argumento: lê o campo e reescreve a dica no ecrã).
+   Recebe: nif (opcional) — o NIF a avaliar; sem ele, lê o campo pe_nif.
+   Devolve: o texto da dica, ou '' quando não há nada a dizer. */
+function pessoaNifHint(nif){
+  const txt=nifValido(nif===undefined?val('pe_nif'):nif)===false?'Este NIF não bate certo: confere os dígitos.':'';
+  /* vazia, a dica esconde-se: um div sem nada ainda abria o gap do formulário */
+  if(nif===undefined){const e=document.getElementById('pe_nifHint');if(e){e.textContent=txt;e.hidden=!txt}}
+  return txt;
 }
 // Copia os campos do modal para perForm. Chamar antes de repintar ou de
 // mexer nos documentos, senão perde-se o que o utilizador escreveu.
@@ -194,7 +238,8 @@ function collectPerson(){
   t.name=val('pe_name');t.phone=val('pe_phone');t.email=val('pe_mail');
   t.gender=val('pe_gender');t.marital=val('pe_marital');t.nationality=val('pe_nat');
   t.birth=val('pe_birth');t.cc=val('pe_cc');t.ccValid=val('pe_ccv');
-  t.nif=val('pe_nif');t.taxAddress=val('pe_addr');
+  t.nif=val('pe_nif');t.taxAddress=val('pe_addr');t.pais=val('pe_pais');
+  if(document.getElementById('pe_retem'))t.retem=chk('pe_retem');   /* só o inquilino tem a caixa; num proprietário fica o que estava */
   if(document.getElementById('pe_notes'))t.notes=val('pe_notes');
   (t.files||[]).forEach(f=>{const e=document.getElementById('fn_'+f.id);if(e)f.name=e.value});
 }
@@ -210,7 +255,7 @@ function personAddFiles(input){
 }
 // Repinta o corpo do modal a partir de perForm (sem recolher os campos antes).
 // Devolve: nada — redesenha o corpo do modal.
-function repaintPerson(){const b=modalBodyEl();if(b)b.innerHTML=personBody()}
+function repaintPerson(){const b=modalBodyEl();if(!b)return;b.innerHTML=personBody();marcarDatasVazias(b)}
 // Tira um documento da ficha e apaga logo o conteúdo do IndexedDB — sem desfazer.
 // Recebe: fid — id do documento a remover.
 // Devolve: nada — repinta o formulário.
@@ -226,7 +271,9 @@ function delPerson(kind,id){
   const p=list.find(x=>x.id===id),word=kind==='owner'?'proprietário':'inquilino';
   if(!p)return;
   if(kind==='tenant'){const recusa=motivoRecusa(casaDoInquilino(p),'tenant.add',p,true);if(recusa)return toast(recusa)}
-  const used=kind==='owner'?propsOf(id).length:contractsOfTenant(id).length;
+  /* a contagem só fala do que a conta vê: com os Imóveis ou os Contratos
+     desligados, o id sai deles na mesma, mas a pergunta não os nomeia */
+  const used=kind==='owner'?(servicoLigado('properties')?propsOf(id).length:0):(servicoLigado('contracts')?contractsOfTenant(id).length:0);
   confirmModal('Apagar '+word,`Apagar “${esc(p.name)}”?${used?` Sai de ${used} ${kind==='owner'?'imóvel(is)':'contrato(s)'}, que se mantêm.`:''}`,()=>{
     (p.files||[]).forEach(f=>idbDel(f.id).catch(()=>{}));
     if(kind==='owner'){db.owners=db.owners.filter(x=>x.id!==id);db.properties.forEach(x=>{x.ownerIds=(x.ownerIds||[]).filter(o=>o!==id)});if(ownerFilter===id)ownerFilter=''}

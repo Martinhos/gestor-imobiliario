@@ -3,50 +3,22 @@
 // testes correm o SQL a sério contra o esquema a sério (testes/lib/bd.js),
 // porque aqui um JOIN errado não é um bug, é um incidente.
 
-import { test, describe, before } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-import { baseDeTeste, kvFalso, r2Falso } from './lib/bd.js';
-import { rotasEquipaApi } from '../worker/src/equipa-api.js';
+import { ambiente, novaConta, auditoria } from './lib/api.js';
+import { chamar, corpoDe, MASTER, SUPORTE, DEV } from './lib/equipa.js';
 import { auditar, registarOp } from '../worker/src/lib/auditoria.js';
 import { getSessionUser, createSession } from '../worker/src/auth.js';
 
 /* ------------------------------ armações ------------------------------- */
+// a sessão de cada papel e a chamada às rotas vêm de testes/lib/equipa.js; o
+// ambiente, a conta que o back office vê e o rasto, de testes/lib/api.js (o
+// ambiente de lá está fora de produção, ENV_NAME: os testes podem usar dias < 30)
 
-const MASTER = { discordId: 'm1', nome: 'Mestre', papel: 'master', papeis: ['master'] };
-const SUPORTE = { discordId: 's1', nome: 'Sofia', papel: 'suporte', papeis: ['suporte'] };
-const DEV = { discordId: 'd1', nome: 'Dina', papel: 'dev', papeis: ['dev'] };
-
-function ambiente() {
-  // ENV_NAME marca isto como fora de produção: os testes podem usar dias<30
-  return { DB: baseDeTeste(), SESSIONS: kvFalso(), FILES: r2Falso(), ENV_NAME: 'teste' };
-}
-
-// chama a API como o index.js chama: com o caminho, o método e a sessão
-function chamar(env, eu, method, path, corpo, query) {
-  const url = new URL('https://x.pt' + path + (query || ''));
-  const request = new Request(url, corpo
-    ? { method, body: JSON.stringify(corpo), headers: { 'Content-Type': 'application/json' } }
-    : { method });
-  return rotasEquipaApi({ env, request, path, method, url, eu });
-}
-async function corpoDe(resposta) {
-  assert.ok(resposta, 'a rota respondeu');
-  return { status: resposta.status, ...(await resposta.json()) };
-}
-
-let seq = 0;
-async function novaConta(env, extra) {
-  const id = 'U' + String(++seq).padStart(7, '0');
-  const o = Object.assign({ email: id.toLowerCase() + '@x.pt', nome: 'Pessoa', pass: 'h', google: null }, extra);
-  await env.DB.prepare(
-    'INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, google_sub) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, o.email, o.nome, o.pass, o.pass ? 's' : '', Date.now(), o.google).run();
-  return id;
-}
 async function novoPedido(env, userId, extra) {
   const id = crypto.randomUUID();
   const o = Object.assign({ categoria: 'user', assunto: 'Ajuda', corpo: 'Não sei fazer X.' }, extra);
@@ -56,8 +28,6 @@ async function novoPedido(env, userId, extra) {
   ).bind(id, userId, o.assunto, o.corpo, o.categoria, Date.now(), Date.now()).run();
   return id;
 }
-const auditoria = async (env) =>
-  (await env.DB.prepare('SELECT * FROM audit_log ORDER BY id').all()).results;
 
 /* ------------------------------- rasto ---------------------------------- */
 
@@ -306,7 +276,7 @@ describe('o fio dos pedidos', () => {
   test('uma resposta antiga sem fio continua visível na vista', async () => {
     // registos de antes do fio existir vivem só na coluna reply
     const { readFileSync } = await import('node:fs');
-    const vista = readFileSync(new URL('../worker/src/equipa-vista.js', import.meta.url), 'utf8');
+    const vista = readFileSync(new URL('../worker/src/equipa-guiao.js', import.meta.url), 'utf8');   // o guião do browser
     assert.match(vista, /registo antigo/);
   });
 
@@ -419,7 +389,7 @@ describe('o que não pode vazar', () => {
   test('a versão que vem do cliente vai escapada para o HTML da equipa', async () => {
     // a versao entra no ticket a partir do relato do cliente: é input hostil
     const { readFileSync } = await import('node:fs');
-    const vista = readFileSync(new URL('../worker/src/equipa-vista.js', import.meta.url), 'utf8');
+    const vista = readFileSync(new URL('../worker/src/equipa-guiao.js', import.meta.url), 'utf8');   // o guião do browser
     assert.doesNotMatch(vista, /\+ p\.versao/, 'nenhum p.versao sem esc()');
     assert.match(vista, /esc\(p\.versao\)/);
   });
@@ -502,12 +472,14 @@ describe('a operação', () => {
 
 describe('a conta suspensa vista da app', () => {
   test('o login diz que está suspensa — mas só depois da password certa', async () => {
-    // a frase está no rotas/auth.js depois do verifyPassword: dizer
+    // a frase está no rotas/auth.js depois de conferida a palavra-passe: dizer
     // "suspensa" a quem não provou ser o dono era contar o estado da conta
-    // a estranhos. Aqui garante-se a ordem no próprio ficheiro.
+    // a estranhos. Aqui garante-se a ordem no próprio ficheiro. A conferência
+    // chamava-se verifyPassword; com a pimenta (A.4-17) passou a
+    // conferePalavra — a ordem que o teste guarda é a mesma.
     const { readFileSync } = await import('node:fs');
     const fonte = readFileSync(new URL('../worker/src/rotas/auth.js', import.meta.url), 'utf8');
-    const verifica = fonte.indexOf('verifyPassword(String(b.password)');
+    const verifica = fonte.indexOf('conferePalavra(env, String(b.password)');
     const suspensa = fonte.indexOf('está suspensa');
     assert.ok(verifica > -1 && suspensa > verifica, 'a suspensão só se revela a quem tem a password');
   });

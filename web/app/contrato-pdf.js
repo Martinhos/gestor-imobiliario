@@ -52,15 +52,19 @@ function dataLonga(iso){
   const p=String(iso).split('-');if(p.length<3)return iso;
   return `${Number(p[2])} de ${MESES[Number(p[1])-1]||''} de ${p[0]}`;
 }
-// Duração entre duas datas por extenso: anos certos como "2 (dois) anos", o resto em meses arredondados. Sem datas devolve "prazo certo".
-// Recebe: a — a data de início ("AAAA-MM-DD"); b — a data de fim ("AAAA-MM-DD").
-// Devolve: a duração por extenso (string), p. ex. "2 (dois) anos" ou "6 (seis) meses".
+/* Duração entre duas datas por extenso: anos certos como "2 (dois) anos", o
+   resto em meses arredondados, com o singular certo ("1 (um) mês"). Os dias
+   contam-se em hora local (prazos.js:pzDias), como em toda a app. Sem as duas
+   datas devolve vazio — era "prazo certo", e a cláusula dizia «pelo prazo
+   certo de prazo certo»; o PDF já não se gera sem elas.
+   Recebe: a — a data de início ("AAAA-MM-DD"); b — a data de fim ("AAAA-MM-DD").
+   Devolve: a duração por extenso (string), p. ex. "2 (dois) anos" ou "6 (seis) meses"; '' sem datas. */
 function prazoTexto(a,b){
-  if(!a||!b)return 'prazo certo';
-  const d1=new Date(a),d2=new Date(b);
-  const meses=Math.round((d2-d1)/(1000*60*60*24*30.44));
+  const iso=/^\d{4}-\d{2}-\d{2}$/;
+  if(!iso.test(String(a||''))||!iso.test(String(b||'')))return '';
+  const meses=Math.round(pzDias(b,a)/30.44);
   if(meses>=12&&meses%12===0){const y=meses/12;return `${y} (${extenso(y)}) ano${y>1?'s':''}`}
-  return `${meses} (${extenso(meses)}) meses`;
+  return `${meses} (${extenso(meses)}) ${meses===1?'mês':'meses'}`;
 }
 
 /* ================= IDENTIFICAÇÃO DAS PARTES ================= */
@@ -86,9 +90,13 @@ function pessoaTexto(p){
   if(p.birth)b.push((p.gender==='f'?'nascida':'nascido')+' em '+dataLonga(p.birth));
   if(p.cc)b.push('titular do Cartão de Cidadão n.º '+fmtCC(p.cc)+(p.ccValid?', válido até '+dataLonga(p.ccValid):''));
   if(p.nif)b.push('NIF '+fmtNIF(p.nif));
-  if(p.taxAddress)b.push((p.gender==='f'?'residente':'residente')+' em '+p.taxAddress.replace(/\s*\n\s*/g,', '));
+  if(p.taxAddress)b.push('residente em '+p.taxAddress.replace(/\s*\n\s*/g,', '));
   return b.join(', ');
 }
+/* Várias pessoas numa frase do contrato: cada uma pela pessoaTexto, ligadas por «;
+   e».
+   Recebe: arr — as fichas das pessoas (array).
+   Devolve: o texto. */
 const listaPessoas=arr=>arr.map(pessoaTexto).filter(Boolean).join('; e ');
 
 /* ================= GERAR O CONTRATO ================= */
@@ -105,15 +113,19 @@ function fullAddress(p){
 /* Constrói o dicionário de marcadores {{...}} do modelo a partir do contrato, do
    imóvel e das fichas das partes: moradas, identificações, valores por extenso,
    datas longas e o local de assinatura. Um marcador vazio faz o modelo omitir a
-   frase ou a cláusula que o usa.
+   frase ou a cláusula que o usa — por isso nada aqui se inventa: sem dia de
+   pagamento a frase do dia sai (era «até ao dia 8»), e o que se entrega na
+   assinatura são as rendas antecipadas que o contrato pede (c.advance, o
+   campo «Rendas antecipadas (meses)» do formulário) mais a caução.
    Recebe: c — o contrato (objeto da base local).
    Devolve: o dicionário marcador → valor (objeto; strings prontas a inserir, mais
-   'contrato.diaPagamento' numérico e 'fotos' com a contagem de fotografias). */
+   'contrato.diaPagamento' numérico — ou '' sem dia — e 'fotos' com a contagem de fotografias). */
 function contractData(c){
   const p=prop(c.propertyId)||{};
   const owners=ownersOfProp(p).map(owner).filter(Boolean);
   const tenants=ctTenants(c);
-  const total=(Number(c.rent)||0)+(Number(c.deposit)||0);
+  const adv=Math.max(0,Math.round(Number(c.advance)||0)),antecipado=adv*(Number(c.rent)||0),caucao=Number(c.deposit)||0;
+  const total=antecipado+caucao,dia=c.payDayTo||c.payDay||'',iban=fmtIBAN(c.iban);
   const rep=owners[0]||{};
   const freg=p.freguesia||p.parish||'',conc=p.concelho||'';
   const fregTxt=freg&&conc?(freg===conc?`freguesia e concelho de ${freg}`:`freguesia de ${freg}, concelho de ${conc}`):(freg?(/freguesia|concelho/i.test(freg)?freg:'freguesia de '+freg):(conc?'concelho de '+conc:''));
@@ -130,10 +142,16 @@ function contractData(c){
     'contacto.email':c.ownerEmail||rep.email||'',
     'contacto.telefone':fmtPhone(c.ownerPhone||rep.phone||''),
     'contrato.renda':money(c.rent),'contrato.rendaLetras':euroExtenso(c.rent),
-    'contrato.caucao':c.deposit?money(c.deposit):'','contrato.caucaoLetras':c.deposit?euroExtenso(c.deposit):'',
+    'contrato.caucao':caucao?money(caucao):'','contrato.caucaoLetras':caucao?euroExtenso(caucao):'',
+    'contrato.antecipado':antecipado?money(antecipado):'','contrato.antecipadoLetras':antecipado?euroExtenso(antecipado):'',
+    'contrato.antecipadoMeses':antecipado?(adv===1?'à renda do primeiro mês':`às rendas dos primeiros ${adv} (${extenso(adv)}) meses`):'',
+    'contrato.antecipadoApos':antecipado?(adv===1?'o mês abrangido':'os meses abrangidos'):'',
     'contrato.total':total?money(total):'','contrato.totalLetras':total?euroExtenso(total):'',
-    'contrato.iban':fmtIBAN(c.iban),
-    'contrato.diaPagamento':c.payDayTo||c.payDay||8,
+    'contrato.totalDetalhe':[antecipado?money(antecipado)+' de renda antecipada':'',caucao?money(caucao)+' de caução':''].filter(Boolean).join(' + '),
+    'contrato.iban':iban,
+    'contrato.diaPagamento':dia,
+    /* a frase de como se paga só existe com o IBAN ou com o dia */
+    'contrato.pagamento':iban||dia?'sim':'',
     'contrato.inicio':dataLonga(c.start),'contrato.fim':dataLonga(c.end),
     'contrato.prazo':prazoTexto(c.start,c.end),
     'data.hoje':dataLonga(today()),
@@ -153,8 +171,10 @@ const ROMANOS=['','PRIMEIRA','SEGUNDA','TERCEIRA','QUARTA','QUINTA','SEXTA','SÉ
   'DÉCIMA PRIMEIRA','DÉCIMA SEGUNDA','DÉCIMA TERCEIRA','DÉCIMA QUARTA','DÉCIMA QUINTA','DÉCIMA SEXTA',
   'DÉCIMA SÉTIMA','DÉCIMA OITAVA','DÉCIMA NONA','VIGÉSIMA'];
 
-/* Gera e descarrega o PDF do contrato: valida (imóvel e pelo menos um inquilino),
-   lê o modelo CONTRACT_XML, preenche os marcadores com contractData e percorre
+/* Gera e descarrega o PDF do contrato: valida (imóvel, pelo menos um inquilino e
+   um senhorio, a morada do imóvel e as datas de início e de fim — é um contrato
+   com prazo certo, e sem elas as cláusulas ficavam a meio), lê o modelo
+   CONTRACT_XML, preenche os marcadores com contractData e percorre
    cláusulas, secções e anexos a escrever no PDF — incluindo as fotografias
    escolhidas, carregadas do IndexedDB e redimensionadas (daí ser assíncrona).
    No Android entrega o ficheiro ao seletor nativo em vez de descarregar.
@@ -166,6 +186,9 @@ async function generateContractPdf(cid){
   const p=prop(c.propertyId);
   if(!p)return toast('O contrato não tem imóvel.');
   if(!ctTenants(c).length)return toast('Adiciona pelo menos um inquilino antes de gerar o contrato.');
+  if(!ownersOfProp(p).map(owner).filter(Boolean).length)return toast('Associa pelo menos um proprietário ao imóvel antes de gerar o contrato.');
+  if(!fullAddress(p))return toast('Indica a morada do imóvel antes de gerar o contrato.');
+  if(!c.start||!c.end)return toast('Indica o início e o fim do contrato antes de gerar o PDF.');
   let doc;
   try{doc=new DOMParser().parseFromString(CONTRACT_XML,'application/xml')}
   catch(e){return toast('Não foi possível ler o modelo do contrato.')}
@@ -274,4 +297,398 @@ function assinaturas(pdf,parte,c,p){
 function b64Latin1(s){
   try{let out='';for(let i=0;i<s.length;i++)out+=String.fromCharCode(s.charCodeAt(i)&0xFF);return btoa(out)}
   catch(e){return ''}
+}
+
+/* ================= O MODELO DO CONTRATO =================
+   O XML que o generateContractPdf percorre: cláusulas, secções e anexos, com
+   os marcadores {{…}} que o contractData preenche. Um elemento com
+   opcional="marcador" sai quando esse marcador vem vazio; um {{#marcador}}…{{/}}
+   sai quando vem vazio — é assim que o PDF nunca fica com uma frase a meio. */
+const CONTRACT_XML=`<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Modelo de contrato de arrendamento urbano para habitação com prazo certo.
+  Derivado do documento Word fornecido.
+
+  Marcadores {{...}} são substituídos pelos dados da aplicação.
+  Se um marcador não tiver valor, a frase que o contém é omitida (opcional="1")
+  ou o parágrafo inteiro desaparece (quando todo o parágrafo é opcional).
+
+  Marcadores disponíveis:
+    imovel.nome, imovel.morada, imovel.freguesia
+    imovel.registo, imovel.matriz, imovel.licenca
+    imovel.certificado, imovel.classe, imovel.validadeCert
+    senhorios.identificacao   inquilinos.identificacao
+    senhorios.representante   senhorios.morada
+    contacto.email            contacto.telefone
+    contrato.renda            contrato.rendaLetras
+    contrato.caucao           contrato.caucaoLetras
+    contrato.antecipado       contrato.antecipadoLetras
+    contrato.antecipadoMeses  contrato.antecipadoApos
+    contrato.total            contrato.totalLetras    contrato.totalDetalhe
+    contrato.iban             contrato.diaPagamento   contrato.pagamento
+    contrato.inicio           contrato.fim            contrato.prazo
+    data.hoje                 local
+-->
+<contrato tipo="arrendamento-habitacao-prazo-certo">
+
+  <titulo>CONTRATO DE ARRENDAMENTO URBANO PARA HABITAÇÃO COM PRAZO CERTO</titulo>
+  <subtitulo>{{imovel.nome}} · {{imovel.morada}}</subtitulo>
+
+  <secao titulo="IDENTIFICAÇÃO DAS PARTES">
+    <p>SENHORIOS — {{senhorios.identificacao}}, adiante designados conjuntamente por SENHORIOS.</p>
+    <p>INQUILINOS — {{inquilinos.identificacao}}, adiante designados conjuntamente por INQUILINOS.</p>
+    <p>É celebrado o presente contrato de arrendamento urbano para habitação com prazo certo, regido pelo Código Civil, pelo Novo Regime do Arrendamento Urbano (NRAU) e pelas cláusulas seguintes.</p>
+  </secao>
+
+  <clausula titulo="OBJETO">
+    <n>Os SENHORIOS dão de arrendamento aos INQUILINOS, que aceitam, o imóvel destinado a habitação sito em {{imovel.morada}}{{#imovel.freguesia}}, {{imovel.freguesia}}{{/}}.</n>
+    <n opcional="imovel.registo">O imóvel encontra-se descrito na Conservatória do Registo Predial sob o n.º {{imovel.registo}}{{#imovel.matriz}} e inscrito na matriz predial urbana sob o artigo {{imovel.matriz}}{{/}}.</n>
+    <n opcional="imovel.licenca">A utilização para habitação encontra-se titulada por {{imovel.licenca}}.</n>
+    <n opcional="imovel.certificado">O imóvel dispõe do Certificado Energético n.º {{imovel.certificado}}{{#imovel.validadeCert}}, válido até {{imovel.validadeCert}}{{/}}{{#imovel.classe}}, com classe energética {{imovel.classe}}{{/}}.</n>
+    <n>O arrendamento inclui o imóvel, os bens e equipamentos identificados no Inventário e as chaves registadas no Auto de Entrega, anexos ao presente contrato.</n>
+  </clausula>
+
+  <clausula titulo="FINALIDADE E OCUPAÇÃO">
+    <n>O imóvel destina-se exclusivamente à habitação permanente dos INQUILINOS.</n>
+    <n>É proibida a utilização para alojamento local, hospedagem, atividade profissional aberta ao público ou outra finalidade distinta da habitação, salvo autorização prévia e escrita dos SENHORIOS e desde que legalmente admissível.</n>
+    <n>Os INQUILINOS não poderão subarrendar, ceder, emprestar ou dar em comodato, total ou parcialmente, o imóvel, nem permitir a sua ocupação habitual por terceiros não identificados no contrato, sem autorização prévia e escrita dos SENHORIOS.</n>
+  </clausula>
+
+  <clausula titulo="PRAZO, RENOVAÇÃO E CESSAÇÃO">
+    <n>O contrato é celebrado pelo prazo certo de {{contrato.prazo}}, com início em {{contrato.inicio}} e termo em {{contrato.fim}}.</n>
+    <n>No termo do prazo inicial, o contrato renova-se automaticamente pelo período legalmente aplicável. À data da celebração deste contrato, tratando-se de prazo inicial inferior a três anos, a renovação automática opera por períodos de três anos, sem prejuízo de alteração legislativa imperativa que venha a ser aplicável.</n>
+    <n>Os SENHORIOS podem opor-se à renovação mediante comunicação aos INQUILINOS com a antecedência legalmente exigida. Num contrato com prazo inicial de um ano, a antecedência é, à data da celebração, de 120 dias; a oposição à primeira renovação pelo senhorio apenas produz efeitos após decorridos três anos da celebração, salvo as exceções previstas na lei.</n>
+    <n>Os INQUILINOS podem opor-se à renovação do contrato de um ano mediante comunicação aos SENHORIOS com a antecedência legalmente exigida, que à data da celebração é de 90 dias.</n>
+    <n>Decorrido um terço do prazo de duração inicial ou da renovação, os INQUILINOS podem denunciar o contrato a todo o tempo, mediante o pré-aviso legal aplicável. Para prazo igual ou superior a um ano, o pré-aviso é, à data da celebração, de 120 dias.</n>
+    <n>A simples saída ou desocupação do imóvel não faz cessar o contrato nem extingue a obrigação de pagamento de renda. As rendas mantêm-se devidas até à data em que a cessação produza legalmente efeitos. A falta do pré-aviso devido obriga ao pagamento das rendas correspondentes ao período de pré-aviso em falta, sem prejuízo das exceções legalmente previstas.</n>
+  </clausula>
+
+  <clausula titulo="RENDA, PAGAMENTO E ATUALIZAÇÃO">
+    <n>A renda mensal é de {{contrato.renda}} ({{contrato.rendaLetras}}).</n>
+    <n opcional="contrato.pagamento">A renda é paga{{#contrato.iban}} por transferência bancária para o IBAN {{contrato.iban}}{{/}}{{#contrato.diaPagamento}}, devendo o montante estar disponível na conta dos SENHORIOS até ao dia {{contrato.diaPagamento}} do mês a que respeita{{/}}.</n>
+    <n opcional="contrato.antecipado">Na assinatura, os INQUILINOS pagam antecipadamente {{contrato.antecipado}} ({{contrato.antecipadoLetras}}), correspondentes {{contrato.antecipadoMeses}} do arrendamento.</n>
+    <n opcional="contrato.antecipado">Após {{contrato.antecipadoApos}} pelo pagamento antecipado, o pagamento mensal da renda retoma-se nos termos desta cláusula.</n>
+    <n>O comprovativo bancário constitui prova do pagamento, sem prejuízo da emissão do respetivo recibo de renda pelos SENHORIOS.</n>
+    <n>A renda pode ser atualizada anualmente nos termos legais. A primeira atualização só pode ser exigida decorrido um ano de vigência e será comunicada por escrito com a antecedência legalmente exigida.</n>
+  </clausula>
+
+  <clausula titulo="CAUÇÃO" opcional="contrato.caucao">
+    <n>Na assinatura, os INQUILINOS entregam aos SENHORIOS {{contrato.caucao}} ({{contrato.caucaoLetras}}), a título de caução destinada a garantir o cumprimento das obrigações emergentes do contrato.</n>
+    <n>A caução pode ser aplicada a rendas, consumos ou encargos em dívida, indemnizações, despesas de limpeza, substituição de chaves ou fechaduras e reparação de danos imputáveis aos INQUILINOS, sem prejuízo do direito dos SENHORIOS a exigir o remanescente quando a caução seja insuficiente.</n>
+    <n>A caução não substitui o pagamento das últimas rendas, salvo acordo escrito e expresso dos SENHORIOS.</n>
+    <n>Após a restituição do imóvel e das chaves, os SENHORIOS verificarão o estado do imóvel e as obrigações pendentes. O saldo da caução será devolvido depois dessa verificação, deduzidas apenas as quantias identificadas e justificadas.</n>
+    <n>Se existirem faturas de consumos ainda não emitidas, orçamentos pendentes ou danos cujo custo não possa ser apurado de imediato, os SENHORIOS podem reter provisoriamente a quantia razoavelmente necessária, comunicando por escrito a respetiva fundamentação.</n>
+  </clausula>
+
+  <destaque opcional="contrato.total">VALOR TOTAL A ENTREGAR NA ASSINATURA: {{contrato.total}} — {{contrato.totalDetalhe}}</destaque>
+
+  <clausula titulo="ENCARGOS E SERVIÇOS">
+    <n>São da responsabilidade dos INQUILINOS os consumos e contratos de água, eletricidade, gás, telecomunicações e demais serviços utilizados no imóvel durante o arrendamento.</n>
+    <n>Sempre que possível, os contratos de fornecimento serão colocados em nome dos INQUILINOS no prazo de 10 dias após a entrega das chaves.</n>
+    <n>No final do arrendamento, os INQUILINOS apresentarão, quando solicitado, comprovativos de pagamento e de cessação ou transferência dos contratos de fornecimento.</n>
+    <n>O IMI e os encargos relativos à propriedade e à administração, conservação e fruição das partes comuns são suportados pelos SENHORIOS, sem prejuízo dos encargos que a lei ou o presente contrato atribuam ao utilizador.</n>
+  </clausula>
+
+  <clausula titulo="ESTADO, INVENTÁRIO E ENTREGA INICIAL">
+    <n>O imóvel é entregue em condições de habitabilidade e conservação, no estado descrito no Inventário, no Auto de Entrega e no registo fotográfico anexos, que fazem parte integrante do contrato.</n>
+    <n>Os INQUILINOS dispõem de 10 dias após a entrega das chaves para comunicar por escrito anomalias preexistentes não registadas nos anexos, juntando fotografias sempre que possível.</n>
+    <n>A ausência dessa comunicação não impede a invocação de defeitos ocultos, mas presume-se que os elementos visíveis foram recebidos no estado documentado no inventário e nas fotografias.</n>
+    <n>No Auto de Entrega serão registadas as chaves entregues aos INQUILINOS.</n>
+  </clausula>
+
+  <clausula titulo="UTILIZAÇÃO, CONSERVAÇÃO E AVARIAS">
+    <n>Os INQUILINOS obrigam-se a utilizar o imóvel e os equipamentos de forma prudente, diligente e de acordo com a respetiva finalidade.</n>
+    <n>Os INQUILINOS comunicarão de imediato qualquer infiltração, fuga de água, avaria elétrica, risco estrutural ou outra situação suscetível de agravar danos, respondendo pelo prejuízo adicional causado por atraso injustificado nessa comunicação.</n>
+    <n>São da responsabilidade dos INQUILINOS as pequenas reparações decorrentes do uso corrente e a reparação de danos causados por si, pelos visitantes e prestadores por si contratados ou animais autorizados.</n>
+    <n>São da responsabilidade dos SENHORIOS as obras de conservação legalmente a seu cargo e as reparações de avarias não imputáveis aos INQUILINOS.</n>
+  </clausula>
+
+  <clausula titulo="OBRAS, FUROS, PINTURA E ALTERAÇÕES">
+    <n>É expressamente proibido fazer furos nas paredes, azulejos, pedra, caixilharias ou quaisquer outros elementos do imóvel sem autorização prévia e escrita dos SENHORIOS.</n>
+    <n>É igualmente proibido pintar, repintar, aplicar papel de parede ou alterar a cor, acabamento ou revestimento das paredes sem autorização prévia e escrita dos SENHORIOS.</n>
+    <n>Os INQUILINOS não podem realizar obras, instalar equipamentos fixos, alterar fechaduras, redes técnicas, fachadas ou a disposição permanente do imóvel sem autorização prévia e escrita dos SENHORIOS.</n>
+    <n>As benfeitorias autorizadas que não possam ser retiradas sem dano ficam integradas no imóvel, sem direito a indemnização ou retenção, salvo acordo escrito em contrário.</n>
+    <n>Em situação urgente destinada a evitar dano iminente, os INQUILINOS deverão contactar os SENHORIOS e atuar apenas na medida estritamente necessária, conservando comprovativos e documentação da ocorrência.</n>
+  </clausula>
+
+  <clausula titulo="FUMO E ANIMAIS">
+    <n>É proibido fumar no interior da habitação, incluindo cigarros eletrónicos, dispositivos de tabaco aquecido e produtos semelhantes.</n>
+    <n>Os custos de limpeza, desodorização, pintura ou reparação decorrentes do incumprimento são suportados pelos INQUILINOS.</n>
+    <n>A permanência de animais no imóvel depende de autorização prévia e escrita dos SENHORIOS, sem prejuízo das situações legalmente protegidas.</n>
+    <n>Os INQUILINOS respondem pelos danos, ruídos, odores, falta de higiene ou prejuízos causados pelos animais.</n>
+  </clausula>
+
+  <clausula titulo="BOA VIZINHANÇA E SEGURANÇA">
+    <n>Os INQUILINOS comprometem-se a respeitar as regras de boa vizinhança, o descanso dos moradores, as normas de segurança e, quando aplicável, o regulamento do condomínio.</n>
+    <n>É proibido armazenar no imóvel substâncias perigosas ou inflamáveis em quantidade incompatível com o uso doméstico normal.</n>
+    <n>Os INQUILINOS não podem alterar ou inutilizar detetores, ventilação ou equipamentos de segurança existentes.</n>
+  </clausula>
+
+  <clausula titulo="ACESSO, INSPEÇÕES E VISITAS">
+    <n>Mediante marcação prévia, motivo legítimo e horário razoável, os INQUILINOS permitirão o acesso dos SENHORIOS ou de técnicos por estes indicados para verificar o estado do imóvel, executar obras ou realizar reparações necessárias.</n>
+    <n>Em caso de emergência, risco para pessoas ou bens, fuga de água, incêndio ou situação semelhante, deverá ser facultado acesso tão rapidamente quanto razoavelmente possível.</n>
+    <n>Nos três meses anteriores à cessação do contrato, os INQUILINOS permitirão visitas de potenciais arrendatários ou adquirentes, mediante marcação prévia e conciliação razoável de horários.</n>
+    <n>As visitas e inspeções não podem ser utilizadas de forma abusiva nem perturbar injustificadamente a vida privada dos INQUILINOS.</n>
+  </clausula>
+
+  <clausula titulo="RESTITUIÇÃO DO IMÓVEL">
+    <n>Na cessação do contrato, o imóvel será entregue livre de pessoas e bens, limpo, com todos os equipamentos e chaves, e em estado equivalente ao da entrega inicial, ressalvado o desgaste normal de uma utilização prudente.</n>
+    <n>Caso o imóvel não seja entregue com nível de limpeza equivalente ao documentado no início, os SENHORIOS podem contratar a limpeza necessária e imputar o respetivo custo aos INQUILINOS.</n>
+    <n>A entrega será formalizada, sempre que possível, por Auto de Restituição, com registo fotográfico, identificação de danos e entrega das chaves.</n>
+    <n>A perda ou não devolução de chaves obriga ao pagamento da respetiva substituição e, quando razoavelmente necessário por razões de segurança, da substituição das fechaduras.</n>
+    <n>A não restituição atempada do imóvel produz as consequências indemnizatórias previstas na lei.</n>
+  </clausula>
+
+  <clausula titulo="INCUMPRIMENTO E MORA">
+    <n>A falta de pagamento pontual da renda ou de outros valores devidos constitui mora e confere aos SENHORIOS os direitos e indemnizações previstos na lei.</n>
+    <n>O incumprimento grave ou reiterado das obrigações contratuais pode fundamentar a resolução do contrato nos termos legais.</n>
+    <n>A aceitação de pagamentos posteriores não constitui, por si só, renúncia aos direitos relativos a incumprimentos anteriores.</n>
+    <n>Os INQUILINOS suportarão os custos razoáveis e comprovados diretamente causados pelo seu incumprimento, dentro dos limites legalmente admissíveis.</n>
+  </clausula>
+
+  <clausula titulo="COMUNICAÇÕES, DOMICÍLIO E ALTERAÇÕES">
+    <n>Para receção de comunicações dirigidas aos SENHORIOS, estes designam {{senhorios.representante}} como representante comum{{#senhorios.morada}}, no endereço {{senhorios.morada}}{{/}}{{#contacto.email}}, e no e-mail {{contacto.email}}{{/}}{{#contacto.telefone}}. Contacto telefónico: {{contacto.telefone}}{{/}}.</n>
+    <n>Para efeitos de comunicações formais, os INQUILINOS indicam como domicílio o imóvel arrendado, salvo se comunicarem por escrito outro endereço.</n>
+    <n>As comunicações legalmente exigíveis relativas à cessação do arrendamento, atualização da renda e obras serão efetuadas pela forma legalmente prevista, designadamente por escrito assinado e carta registada com aviso de receção quando essa seja a forma exigida pelo NRAU.</n>
+    <n>As comunicações correntes podem ser efetuadas por correio eletrónico. Qualquer alteração ou aditamento ao presente contrato só será válido se reduzido a escrito e expressamente aceite por todas as partes, podendo a aceitação ser comprovada por correio registado ou por correio eletrónico com prova de envio e receção, sem prejuízo de formalidade legal imperativa.</n>
+    <n>Cada parte comunicará por escrito qualquer alteração de morada ou endereço eletrónico. Até essa comunicação, serão utilizados os contactos constantes do contrato.</n>
+  </clausula>
+
+  <clausula titulo="DISPOSIÇÕES FINAIS">
+    <n>A invalidade ou ineficácia de uma disposição não determina a invalidade das restantes, aplicando-se em sua substituição a solução legalmente admissível que mais se aproxime da finalidade pretendida.</n>
+    <n>Em tudo o que esteja omisso aplicam-se o Código Civil, o NRAU e a demais legislação portuguesa em vigor.</n>
+    <n>Os litígios serão submetidos aos tribunais e demais meios legalmente competentes, sem prejuízo de resolução por acordo entre as partes.</n>
+    <n>Os SENHORIOS comunicarão o contrato e os factos legalmente relevantes à Autoridade Tributária e emitirão os recibos de renda nos termos aplicáveis.</n>
+  </clausula>
+
+  <secao titulo="ANEXOS">
+    <lista>
+      <item>Anexo I — Inventário e estado de conservação</item>
+      <item>Anexo II — Registo fotográfico</item>
+      <item>Anexo III — Auto de entrega de chaves</item>
+    </lista>
+  </secao>
+
+  <secao titulo="ASSINATURA E FORMALIZAÇÃO">
+    <p>Celebrado em {{local}}, no dia {{data.hoje}}, em exemplares destinados a cada uma das partes.</p>
+    <assinaturas parte="senhorios"/>
+    <assinaturas parte="inquilinos"/>
+  </secao>
+
+  <anexo titulo="ANEXO I — INVENTÁRIO E ESTADO DE CONSERVAÇÃO">
+    <p>O inventário identifica os bens, equipamentos e principais elementos fixos entregues com o imóvel. O estado deverá ser confirmado na entrega e complementado pelo registo fotográfico anexo. A indicação “Novo” significa que o elemento é entregue sem uso anterior; “Usado” identifica um elemento já utilizado, prevalecendo sempre o estado efetivamente documentado na data da entrega.</p>
+    <tabela fonte="inventario" colunas="N.º|Elemento / equipamento|Qt.|Estado"/>
+  </anexo>
+
+  <anexo titulo="ANEXO II — REGISTO FOTOGRÁFICO" opcional="fotos">
+    <p>As fotografias seguintes integram o presente contrato e documentam o estado geral do imóvel na data da entrega.</p>
+    <tabela fonte="fotos" colunas="N.º|Fotografia"/>
+  </anexo>
+
+  <anexo titulo="ANEXO III — AUTO DE ENTREGA DE CHAVES">
+    <p>Na data de início do contrato, os INQUILINOS declaram receber as seguintes chaves:</p>
+    <tabela fonte="chaves" colunas="Tipo|Quantidade"/>
+    <p opcional="contrato.inicio">Entregue em {{contrato.inicio}}.</p>
+    <assinaturas parte="senhorios"/>
+    <assinaturas parte="inquilinos"/>
+  </anexo>
+
+</contrato>
+`;
+
+/* ================= GERADOR DE PDF =================
+   Escritor de PDF mínimo, sem bibliotecas: fontes Helvetica padrão,
+   codificação WinAnsi (cobre todos os acentos portugueses) e quebra de
+   linha calculada com as larguras reais dos glifos.
+   O HW é a tabela de larguras da Helvetica normal, construída uma vez pelo IIFE.
+   Devolve: objeto {código do carácter → largura em milésimos de em}. */
+const HW=(function(){
+  const w={},a=(s,v)=>{for(const c of s)w[c.charCodeAt(0)]=v};
+  a(' ',278);a('!',278);a('"',355);a('#',556);a('$',556);a('%',889);a('&',667);a("'",191);
+  a('()',333);a('*',389);a('+',584);a(',',278);a('-',333);a('.',278);a('/',278);
+  a('0123456789',556);a(':;',278);a('<=>',584);a('?',556);a('@',1015);
+  a('A',667);a('B',667);a('C',722);a('D',722);a('E',667);a('F',611);a('G',778);a('H',722);
+  a('I',278);a('J',500);a('K',667);a('L',556);a('M',833);a('N',722);a('O',778);a('P',667);
+  a('Q',778);a('R',722);a('S',667);a('T',611);a('U',722);a('V',667);a('W',944);a('X',667);
+  a('Y',667);a('Z',611);a('[]',278);a('\\',278);a('^',469);a('_',556);a('`',333);
+  a('a',556);a('b',556);a('c',500);a('d',556);a('e',556);a('f',278);a('g',556);a('h',556);
+  a('i',222);a('j',222);a('k',500);a('l',222);a('m',833);a('n',556);a('o',556);a('p',556);
+  a('q',556);a('r',333);a('s',500);a('t',278);a('u',556);a('v',500);a('w',722);a('x',500);
+  a('y',500);a('z',500);a('{',334);a('|',260);a('}',334);a('~',584);
+  return w;
+})();
+// Larguras dos glifos da Helvetica-Bold — o par negrito da tabela HW acima.
+// Devolve: objeto {código do carácter → largura em milésimos de em}, construído uma vez pelo IIFE.
+const HWB=(function(){
+  const w={},a=(s,v)=>{for(const c of s)w[c.charCodeAt(0)]=v};
+  a(' ',278);a('!',333);a('"',474);a('#',556);a('$',556);a('%',889);a('&',722);a("'",238);
+  a('()',333);a('*',389);a('+',584);a(',',278);a('-',333);a('.',278);a('/',278);
+  a('0123456789',556);a(':;',333);a('<=>',584);a('?',611);a('@',975);
+  a('A',722);a('B',722);a('C',722);a('D',722);a('E',667);a('F',611);a('G',778);a('H',722);
+  a('I',278);a('J',556);a('K',722);a('L',611);a('M',833);a('N',722);a('O',778);a('P',667);
+  a('Q',778);a('R',722);a('S',667);a('T',611);a('U',722);a('V',667);a('W',944);a('X',667);
+  a('Y',667);a('Z',611);a('[]',333);a('\\',278);a('^',584);a('_',556);a('`',333);
+  a('a',556);a('b',611);a('c',556);a('d',611);a('e',556);a('f',333);a('g',611);a('h',611);
+  a('i',278);a('j',278);a('k',556);a('l',278);a('m',889);a('n',611);a('o',611);a('p',611);
+  a('q',611);a('r',389);a('s',556);a('t',333);a('u',611);a('v',556);a('w',778);a('x',556);
+  a('y',556);a('z',500);a('{',389);a('|',280);a('}',389);a('~',584);
+  return w;
+})();
+/* acentuados: a largura é a da letra base */
+const BASE={192:'A',193:'A',194:'A',195:'A',196:'A',197:'A',199:'C',200:'E',201:'E',202:'E',
+  203:'E',204:'I',205:'I',206:'I',207:'I',209:'N',210:'O',211:'O',212:'O',213:'O',214:'O',
+  217:'U',218:'U',219:'U',220:'U',221:'Y',224:'a',225:'a',226:'a',227:'a',228:'a',229:'a',
+  231:'c',232:'e',233:'e',234:'e',235:'e',236:'i',237:'i',238:'i',239:'i',241:'n',242:'o',
+  243:'o',244:'o',245:'o',246:'o',249:'u',250:'u',251:'u',252:'u',253:'y',186:'o',170:'a',
+  8364:'E',8220:'"',8221:'"',8216:"'",8217:"'",8212:'-',8211:'-',183:'.',176:'o'};
+// Largura de um carácter (milésimos de em) na fonte pedida; acentuados usam a letra base, desconhecidos levam uma largura média.
+// Recebe: code — o código do carácter (charCodeAt); bold — true para a Helvetica-Bold.
+// Devolve: a largura em milésimos de em (número).
+function charW(code,bold){
+  const w=bold?HWB:HW;
+  if(w[code]!==undefined)return w[code];
+  const b=BASE[code];
+  if(b)return w[b.charCodeAt(0)]||500;
+  return bold?611:556;
+}
+// Largura de uma linha de texto em pontos, para o tamanho e peso dados — é isto que decide as quebras de linha.
+// Recebe: s — o texto; size — o tamanho da fonte em pontos; bold — true para negrito.
+// Devolve: a largura do texto em pontos (número).
+const textW=(s,size,bold)=>{let t=0;for(let i=0;i<s.length;i++)t+=charW(s.charCodeAt(i),bold);return t*size/1000};
+
+/* WinAnsi: mapeia o que precisamos e substitui o resto */
+const WIN={8364:128,8218:130,8222:132,8230:133,8224:134,8225:135,8216:145,8217:146,
+  8220:147,8221:148,8226:149,8211:150,8212:151,732:152,8482:153,8250:155};
+/* Prepara texto para uma string literal do PDF: converte os símbolos tipográficos
+   via tabela WIN, reduz o resto do não-latin-1 à letra base (ou "?") e escapa
+   parênteses e barra invertida.
+   Recebe: s — o texto a escrever no PDF.
+   Devolve: a string pronta para o literal do PDF (só latin-1, com escapes). */
+function pdfEsc(s){
+  let out='';
+  for(let i=0;i<s.length;i++){
+    let c=s.charCodeAt(i);
+    if(WIN[c]!==undefined)c=WIN[c];
+    else if(c>255){const b=BASE[c];c=b?b.charCodeAt(0):63}
+    const ch=String.fromCharCode(c);
+    out+=(ch==='('||ch===')'||ch==='\\')?'\\'+ch:ch;
+  }
+  return out;
+}
+
+/* Cria um documento A4 e devolve o escritor: text() escreve parágrafos com quebra
+   de linha calculada e mudança de página automática, line() faz linhas de tabela,
+   photo() coloca um JPEG com legenda, rule()/gap() separam, e build() devolve o
+   ficheiro completo como string latin-1 (um carácter = um byte).
+   Devolve: o objeto escritor, com esses métodos (e image/draw/need/newPage/gap),
+   já com a primeira página aberta. */
+function PDF(){
+  const P={pages:[],cur:null,y:0,W:595.28,H:841.89,ML:56,MR:56,MT:64,MB:64,images:[]};
+  P.newPage=()=>{P.cur=[];P.pages.push(P.cur);P.y=P.H-P.MT};
+  /* imagem JPEG (bytes numa string latin-1); devolve o número para desenhar */
+  P.image=(bin,w,h)=>{P.images.push({bin,w,h});return P.images.length};
+  P.draw=(n,x,y,w,h)=>{P.cur.push(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /Im${n} Do Q`)};
+  /* desenha uma fotografia com legenda, ajustada à largura e a uma altura máxima */
+  P.photo=(n,iw,ih,caption,maxH)=>{
+    const full=P.W-P.ML-P.MR,k=Math.min(full/iw,(maxH||300)/ih),w=iw*k,h=ih*k;
+    P.need(h+24);
+    P.draw(n,P.ML,P.y-h,w,h);P.y-=h+4;
+    P.text(caption,{size:9.5,after:10});
+  };
+  P.space=()=>P.y-P.MB;
+  P.need=h=>{if(P.y-h<P.MB)P.newPage()};
+  P.text=(s,o)=>{
+    o=o||{};
+    const size=o.size||10,bold=!!o.bold,lead=o.lead||size*1.42;
+    const x0=P.ML+(o.indent||0),maxW=P.W-P.ML-P.MR-(o.indent||0)-(o.right||0);
+    const words=String(s).split(/\s+/).filter(Boolean);
+    const lines=[];let line='';
+    words.forEach(w=>{
+      const cand=line?line+' '+w:w;
+      if(textW(cand,size,bold)>maxW&&line){lines.push(line);line=w}else line=cand;
+    });
+    if(line)lines.push(line);
+    lines.forEach((ln,i)=>{
+      P.need(lead);
+      let x=x0;
+      if(o.center)x=(P.W-textW(ln,size,bold))/2;
+      P.cur.push(`BT /${bold?'F2':'F1'} ${size} Tf ${x.toFixed(2)} ${(P.y-size).toFixed(2)} Td (${pdfEsc(ln)}) Tj ET`);
+      P.y-=lead;
+    });
+    if(o.after)P.y-=o.after;
+  };
+  P.rule=(o)=>{o=o||{};P.need(6);
+    P.cur.push(`0.75 w 0.7 0.7 0.7 RG ${(P.ML+(o.indent||0)).toFixed(2)} ${P.y.toFixed(2)} m ${(P.W-P.MR).toFixed(2)} ${P.y.toFixed(2)} l S`);
+    P.y-=(o.after===undefined?8:o.after);};
+  P.gap=h=>{P.y-=h};
+  P.line=(cols,widths,o)=>{                        /* linha de tabela */
+    o=o||{};const size=o.size||9.5,lead=size*1.5;
+    P.need(lead+2);
+    let x=P.ML;
+    cols.forEach((c,i)=>{
+      const w=widths[i];
+      let s=String(c==null?'':c);
+      while(textW(s,size,o.bold)>w-6&&s.length>1)s=s.slice(0,-1);
+      const tx=o.right&&o.right.indexOf(i)>-1?x+w-6-textW(s,size,o.bold):x+3;
+      P.cur.push(`BT /${o.bold?'F2':'F1'} ${size} Tf ${tx.toFixed(2)} ${(P.y-size).toFixed(2)} Td (${pdfEsc(s)}) Tj ET`);
+      x+=w;
+    });
+    P.y-=lead;
+    if(o.rule)P.rule({after:3});
+  };
+  P.build=()=>{
+    const objs=[];
+    const push=s=>{objs.push(s);return objs.length};
+    const kids=[];
+    const fontA=push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+    const fontB=push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+    const imIds=P.images.map(im=>push(`<< /Type /XObject /Subtype /Image /Width ${im.w} /Height ${im.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.bin.length} >>\nstream\n${im.bin}\nendstream`));
+    const xobj=imIds.length?` /XObject << ${imIds.map((id,i)=>`/Im${i+1} ${id} 0 R`).join(' ')} >>`:'';
+    const pagesId=push('');                        /* reservado */
+    P.pages.forEach(ops=>{
+      const stream=ops.join('\n');
+      const cid=push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+      const pid=push(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${P.W.toFixed(2)} ${P.H.toFixed(2)}] `+
+        `/Resources << /Font << /F1 ${fontA} 0 R /F2 ${fontB} 0 R >>${xobj} >> /Contents ${cid} 0 R >>`);
+      kids.push(pid);
+    });
+    objs[pagesId-1]=`<< /Type /Pages /Count ${kids.length} /Kids [${kids.map(k=>k+' 0 R').join(' ')}] >>`;
+    const catId=push(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`);
+    let out='%PDF-1.4\n';const offs=[];
+    objs.forEach((o,i)=>{offs.push(out.length);out+=`${i+1} 0 obj\n${o}\nendobj\n`});
+    const xref=out.length;
+    out+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`;
+    offs.forEach(o=>{out+=String(o).padStart(10,'0')+' 00000 n \n'});
+    out+=`trailer\n<< /Size ${objs.length+1} /Root ${catId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    return out;
+  };
+  P.newPage();
+  return P;
+}
+
+/* fotografia guardada em IndexedDB -> JPEG redimensionado, em string de bytes (para o PDF)
+   Recebe: meta — os metadados da fotografia (usa meta.id como chave no IndexedDB);
+   maxPx (opcional) — lado máximo da imagem em píxeis (por omissão 1200).
+   Devolve: Promise de {bin, w, h} — os bytes JPEG numa string latin-1 e as
+   dimensões em píxeis — ou de null se a foto faltar ou a conversão falhar. */
+function photoJpeg(meta,maxPx){
+  return idbGet(meta.id).then(blob=>{
+    if(!blob)return null;
+    return new Promise(res=>{
+      const url=URL.createObjectURL(blob),img=new Image();
+      const done=v=>{try{URL.revokeObjectURL(url)}catch(e){}res(v)};
+      img.onload=()=>{
+        try{
+          const k=Math.min(1,(maxPx||1200)/Math.max(1,img.naturalWidth,img.naturalHeight));
+          const w=Math.max(1,Math.round(img.naturalWidth*k)),h=Math.max(1,Math.round(img.naturalHeight*k));
+          const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+          const ctx=cv.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
+          const b64=cv.toDataURL('image/jpeg',0.82).split(',')[1];
+          done({bin:atob(b64),w,h});
+        }catch(e){done(null)}
+      };
+      img.onerror=()=>done(null);
+      img.src=url;
+    });
+  }).catch(()=>null);
 }

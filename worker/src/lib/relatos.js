@@ -35,6 +35,27 @@ async function marcarPessoa(env, fp, userId, t) {
   }
 }
 
+/* A conta do sistema: o dono dos pedidos que nenhuma pessoa abriu — um erro
+   do servidor, da infraestrutura, um relato do browser sem sessão.
+   tickets.user_id é NOT NULL REFERENCES users(id), e pendurá-los na conta viva
+   mais antiga fazia essa pessoa «ter» erros que nunca viu (e mudava de dono no
+   dia em que ela se apagasse). Nasce apagada — não entra, não conta nas
+   contas, não recebe correio —, com o nome que o back office mostra, e com um
+   email sem ponto no domínio, que o registo recusa (ninguém o toma antes).
+   A migração 0016 devolve-lhe os pedidos antigos. */
+export const CONTA_SISTEMA = 'SISTEMA';
+
+// Garante a linha da conta do sistema (cria-a na primeira vez).
+// Recebe: env — o ambiente do worker (D1 em env.DB).
+// Devolve: promessa do id da conta do sistema.
+async function contaDoSistema(env) {
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO users (id, email, name, pass_hash, pass_salt, created_at, deleted_at)
+     VALUES (?, 'sistema@invalido', 'Sem utilizador', '', '', 0, 1)`
+  ).bind(CONTA_SISTEMA).run();
+  return CONTA_SISTEMA;
+}
+
 // Os tokens de convite e da ligação de partilha nunca podem ficar num relato
 // (as tabelas leem-se no back office e o Discord recebe o embed): um caminho
 // /api/convite/<64 hex>, /api/ligar/<64 hex> ou um ?convite=<64 hex> perde o
@@ -96,10 +117,8 @@ export async function recordReport(env, ctx, categoria, message, detail, userId,
       return;
     }
     const id = crypto.randomUUID();
-    const dono = userId || (await env.DB.prepare(
-      'SELECT id FROM users WHERE deleted_at IS NULL ORDER BY created_at LIMIT 1'
-    ).first() || {}).id;
-    if (!dono) return;   // sem contas ainda, não há onde pendurar o pedido
+    // sem pessoa, o pedido é da conta do sistema — nunca de alguém que não o viu
+    const dono = userId || (await contaDoSistema(env));
     const detalhe = mascararTokens(detail).slice(0, 4000);
     await env.DB.prepare(
       `INSERT INTO tickets (id, user_id, kind, subject, body, status, category, fingerprint, n, versao, context, created_at, updated_at)

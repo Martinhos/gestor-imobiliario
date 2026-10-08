@@ -3,15 +3,18 @@
    movimento conta. Por imóvel: a fração do imóvel (txW) vezes, com share e uma pessoa
    filtrada, a parte dela na divisão do movimento. De grupo: soma, pelos imóveis do
    grupo que estão na vista, da fração de cada imóvel e, com share, da parte da pessoa
-   dentro desse imóvel (a mesma repartição que ownerBalances faz). Sem imóvel nem
-   grupo: conta por inteiro só no âmbito todo, sem filtro de proprietário.
+   dentro desse imóvel (a mesma repartição que ownerBalances faz). «Todos os
+   imóveis» (um molde com todos) pesa como um grupo dos imóveis de
+   imoveisDeTodos. Uma parte de um lote é um movimento com imóvel e pesa como
+   tal: é a parte que o grupo daria a esse imóvel. Sem imóvel nem grupo: conta
+   por inteiro só no âmbito todo, sem filtro de proprietário.
    Recebe: t — o movimento; pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio para o
    âmbito atual; share — pesar pela quota do proprietário filtrado (booleano).
    Devolve: número 0–1 — a fração do valor do movimento que conta nessa vista. */
 function txWeight(t,pid,share){
   const oid=share&&ownerFilter&&!ownerIsGrp()?ownerFilter:null;
   if(t.propertyId){const w=txW(t,pid);return w*(oid?txOwnerFrac(t,oid):1)}
-  if(t.groupId){
+  if(t.groupId||t.todos){
     return sum(pidProps(pid).map(p=>{const fp=txPropShare(t,p.id);if(!fp||!oid)return fp;
       const os=ownersOfProp(p);if(os.indexOf(oid)<0)return 0;
       const cP=Math.round(Math.abs(Number(t.amount)||0)*100*fp);if(!cP)return fp*shareOf(p,oid);
@@ -69,15 +72,47 @@ function metrics(y,pid,opts){
     grossYield:rentedValue?annualRent/rentedValue:NaN,cap:value?noiAnual/value:NaN,
     coc:purchase?cf/purchase:NaN,ltv:value?debt/value:NaN};
 }
-/* a base anual das despesas para projetar: o último ano completo com despesas; sem
-   nenhum, o ano corrente anualizado (o que há até hoje ×12 sobre os meses decorridos)
+/* As despesas previstas para um ano, a partir dos planeados de despesa: cada um levado
+   ao ano pela periodicidade (semanal ×52, mensal ×12, trimestral ×4, anual ×1; «uma só
+   vez» não se repete e fica de fora) e pesado como as métricas (txWeight, na quota do
+   proprietário filtrado). Ficam de fora os que não contam nos totais (countsInTotals)
+   e os que já acabaram: com o fim passado, ou a terminar na próxima confirmação
+   (planeados.js:recTermina — só quando os Planeados estão carregados; sem eles não há
+   quem os confirme). É a base da projeção: o que está marcado para se repetir — o IMI,
+   o condomínio e o seguro da ficha de cada imóvel e o que a pessoa marcou —, e não o
+   que se gastou no passado. O metrics() continua com as despesas todas.
    Recebe: pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio para o âmbito atual.
-   Devolve: {op, year, anualizado} — as despesas anuais (euros, na quota do proprietário
-   filtrado), o ano de onde vêm e se foram anualizadas. */
-function opBase(pid){
-  const anos=[...new Set(db.transactions.map(t=>Number(String(t.date||'').slice(0,4))).filter(y=>y&&y<YEAR))].sort((a,b)=>b-a);
-  for(const y of anos){const op=metrics(y,pid,{share:true}).op;if(op>0)return{op,year:y,anualizado:false}}
-  return{op:metrics(YEAR,pid,{share:true}).op*anualFator(YEAR),year:YEAR,anualizado:true};
+   Devolve: {op, porCat, n} — op o total por ano (euros); porCat por categoria ({label,
+   value}, do maior para o menor; sem categoria vale 'Sem categoria'); n quantos
+   planeados entraram. */
+function despesasPrevistas(pid){
+  const porAno={week:52,month:12,quarter:4,year:1},m={};let n=0;
+  const acabou=r=>!!(r.end&&r.end<today())||(typeof recTermina==='function'&&recTermina(r));
+  (db.recurring||[]).forEach(r=>{
+    const t=r.tx||{},f=porAno[r.every]||0;
+    if(t.kind!=='expense'||!f||!countsInTotals(t)||acabou(r))return;
+    const w=txWeight(t,pid,true);if(!(w>0))return;
+    const k=t.category||'Sem categoria';m[k]=(m[k]||0)+(Number(t.amount)||0)*f*w;n++;
+  });
+  const porCat=Object.keys(m).map(k=>({label:k,value:m[k]})).sort((a,b)=>b.value-a.value);
+  return {op:sum(porCat.map(x=>x.value)),porCat,n};
+}
+/* As despesas de uma vez do último ano completo (antes do corrente) com despesas na
+   vista: as que despesaRepete não reconhece — sem a etiqueta «Recorrente» e sem um
+   planeado da mesma categoria no mesmo imóvel. Só informativo: a projeção diz o que
+   ficou de fora e não as multiplica, porque uma obra paga uma vez não volta.
+   Recebe: pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio para o âmbito atual.
+   Devolve: {fora, foraPorCat, ano} — fora o total (euros, na quota do proprietário
+   filtrado); foraPorCat por categoria ({label, value}, do maior para o menor; sem
+   categoria vale 'Sem categoria'); ano o ano de onde vêm (0 sem nenhum ano completo). */
+function despesasDeUmaVez(pid){
+  const conta=t=>t.kind==='expense'&&countsInTotals(t)&&txWeight(t,pid,true)>0;
+  const ano=db.transactions.filter(conta).map(t=>Number(String(t.date||'').slice(0,4))).filter(y=>y&&y<YEAR).reduce((a,b)=>Math.max(a,b),0);
+  const m={};
+  if(ano)db.transactions.filter(t=>conta(t)&&String(t.date||'').startsWith(String(ano))&&!despesaRepete(t)).forEach(t=>{
+    const k=t.category||'Sem categoria';m[k]=(m[k]||0)+t.amount*txWeight(t,pid,true)});
+  const foraPorCat=Object.keys(m).map(k=>({label:k,value:m[k]})).sort((a,b)=>b.value-a.value);
+  return {fora:sum(foraPorCat.map(x=>x.value)),foraPorCat,ano};
 }
 /* fração do movimento que cabe ao proprietário filtrado — só quando se pede share, o filtro é uma
    pessoa (não um grupo) e o movimento tem imóvel; nos restantes casos conta por inteiro

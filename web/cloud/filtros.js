@@ -86,6 +86,3 @@ closePops = function (keep) {
 window.addEventListener('resize', function () {
   [].slice.call(document.querySelectorAll('.selpop.on[data-float]')).forEach(popAnchor);
 });
-
-CW.pushNow = pushNow;
-CW.pullNow = pullNow;

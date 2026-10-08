@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Só do flavor dev: o fundo do ícone em âmbar, em vez do verde de produção
+     (src/main/res/values/colors.xml), para se distinguir de longe. As outras
+     cores continuam a vir de main — a fusão de recursos é por nome. -->
+<resources>
+    <color name="ic_launcher_background">#B45309</color>
+</resources>

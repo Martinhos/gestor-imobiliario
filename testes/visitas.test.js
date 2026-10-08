@@ -4,11 +4,12 @@
 // dos planeados respeita o passo de cada um, e a conversão em inquilino
 // leva o contacto para o campo certo.
 
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp } from './arnes.js';
+import { carregarApp, repor } from './arnes.js';
 
 const app = carregarApp();
+afterEach(() => repor(app));
 
 function monta() {
   app.db.properties = [app.normProp({ id: 'P1', name: 'T2 Lisboa', rentalMode: 'quartos',
@@ -63,6 +64,16 @@ describe('o calendário', () => {
     assert.equal(out.filter((o) => o.rec.id === 'R3').length, 0, 'silenciados fora');
   });
 
+  test('o «Até» do planeado (end) fecha a série: de 19 de outubro até 19 de fevereiro, março já não tem nada', () => {
+    monta();
+    app.db.recurring = [
+      { id: 'R1', name: 'Seguro', next: '2026-10-19', until: '', end: '2027-02-19', every: 'month', muted: false, tx: { kind: 'expense', amount: 30, propertyId: 'P1' } },
+    ];
+    const datas = app.calPlaneados('2026-10-01', '2027-06-30').map((o) => o.date);
+    assert.deepEqual(Array.from(datas), ['2026-10-19', '2026-11-19', '2026-12-19', '2027-01-19', '2027-02-19'], 'a última é a do dia do fim');
+    assert.equal(app.calPlaneados('2027-03-01', '2027-03-31').length, 0, 'março vazio');
+  });
+
   test('a grelha do mês marca visitas e planeados com pontos', () => {
     monta();
     app.calMes = '2026-09';
@@ -98,16 +109,45 @@ describe('o calendário', () => {
     const cheio = app.calDiaPanel('2026-09-10');
     assert.match(cheio, /Visitas/); assert.match(cheio, /Ana/); assert.match(cheio, /15:00/);
     assert.match(cheio, /Planeados/); assert.match(cheio, /Renda/);
-    assert.match(cheio, /visitModal\('V1'\)/, 'a visita abre a ficha');
+    assert.match(cheio, /visView\('V1'\)/, 'a visita abre a ficha');
     assert.match(cheio, /go\('recurring'\)/, 'o planeado leva aos Planeados');
     const vazio = app.calDiaPanel('2026-09-11');
     assert.match(vazio, /Nada marcado/);
-    assert.match(vazio, /visitModal\(null,\{date:'2026-09-11'\}\)/, 'marcar visita já com a data');
+    // uma ação declarada não leva objetos: o {date:…} vive no calMarcarVisita(iso)
+    assert.match(vazio, /calMarcarVisita\('2026-09-11'\)/, 'marcar visita já com a data');
     // a célula do dia em foco leva a classe .on e o aria-pressed
     app.calMes = '2026-09'; app.calDiaSel = '2026-09-10';
     const html = app.vCalendar();
     assert.match(html, /calday tap[^"]*on" data-d="2026-09-10"[^>]*aria-pressed="true"/);
     app.calMes = ''; app.calDiaSel = '';
+  });
+
+  test('o painel do dia adiciona um movimento recorrente com a primeira ocorrência nesse dia', () => {
+    monta();
+    const painel = app.calDiaPanel('2026-09-11');
+    assert.match(painel, /calNovoPlaneado\('2026-09-11'\)/, 'o botão leva o dia');
+    assert.match(painel, /Adicionar movimento recorrente/);
+    // escolhido o tipo, o formulário abre em modo planeado com a data do dia (o «next»)
+    let aberto = null;
+    const { newTxPick, txModal } = app;
+    app.newTxPick = (depois) => depois('expense');
+    app.txModal = (o) => { aberto = o; };
+    try { app.calNovoPlaneado('2026-09-11'); } finally { app.newTxPick = newTxPick; app.txModal = txModal; }
+    assert.equal(aberto.modo, 'rec');
+    assert.equal(aberto.kind, 'expense');
+    assert.equal(aberto.preset.date, '2026-09-11');
+  });
+
+  test('a grelha dos dias arrasta-se, e o mês vizinho sai pelos mesmos dias', () => {
+    monta();
+    app.calMes = '2026-09';
+    assert.match(app.vCalendar(), /id="calDias" data-pointerdown="calArrastar\(event,this\)"/);
+    // outubro de 2026 começa a uma quinta: três células em branco antes do dia 1
+    const out = app.calCelulas('2026-10-01', '').html;
+    assert.equal((out.match(/calday fora/g) || []).length, 3);
+    assert.equal((out.match(/data-d="2026-10-/g) || []).length, 31);
+    assert.doesNotMatch(out, / on"/, 'um vizinho não tem dia em foco');
+    app.calMes = '';
   });
 });
 

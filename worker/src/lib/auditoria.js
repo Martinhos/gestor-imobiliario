@@ -12,6 +12,13 @@
 
 import { now } from './http.js';
 
+// O horário do cron diário (a cópia da base e o resumo): o mesmo texto que o
+// wrangler.toml agenda em [triggers] crons. O index.js compara o event.cron
+// com ele — um prefixo de texto desalinhava-se sem erro nenhum ao mudar o
+// horário lá — e testes/correcao-api.test.js confere que os dois batem.
+// Mudar o horário é mudar os dois.
+export const CRON_DIARIO = '0 9 * * *';
+
 // Nunca lança: a auditoria não pode ser o motivo de uma ação falhar. Mas
 // também não engole em silêncio — devolve se escreveu, e quem chama uma
 // ação sensível pode recusar-se a agir sem rasto.

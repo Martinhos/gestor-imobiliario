@@ -17,29 +17,57 @@ function propModal(id){
     collectProp();
     if(pForm.id&&prop(pForm.id)&&!pode(pForm.id,'house.edit'))return toast(fraseSemPerm('house.edit'));
     if(!pForm.name.trim())return falhaCampo('p_name','Dá um nome ao imóvel.');
+    /* o campo vive numa dobra que pode estar fechada (display:none): o falhaCampo
+       não chega a um campo escondido, por isso abre-se a dobra primeiro */
+    if(pForm.freguesiaCodigo&&!/^\d{6}$/.test(pForm.freguesiaCodigo)){
+      const f=document.getElementById('fold_reg');if(f&&!f.classList.contains('open'))toggleFold('reg');
+      return falhaCampo('p_freguesiaCodigo','O código da freguesia tem 6 dígitos.');
+    }
+    /* o capital de cada hipoteca é obrigatório (o asterisco de loanSect): a
+       dobra pode estar fechada, e abre-se antes de apontar o campo */
+    const semCapital=servicoLigado('credits')?(pForm.loans||[]).find(l=>!(capitalDoInicio(l,db.transactions)>0)):null;
+    if(semCapital){
+      const f=document.getElementById('fold_loans');if(f&&!f.classList.contains('open'))toggleFold('loans');
+      return falhaCampo('l_out_'+semCapital.id,'Indica o capital em dívida.');
+    }
     (pForm.loans||[]).forEach(l=>{l.name=l.name||l.bank||'Hipoteca'});   /* a recorrência identifica-se pelo nome */
-    const antes=loanStartsAntes(prop(pForm.id));   /* antes de trocar o objeto na db */
+    /* a pergunta pelas prestações desde o início (creditos.js) cria movimentos numa hipoteca:
+       corre com os Créditos e os Movimentos ligados nesta conta; o planeado da prestação só
+       com os Planeados */
+    const historia=servicoLigado('credits')&&servicoLigado('transactions');
+    const antes=historia?loanStartsAntes(prop(pForm.id)):null;   /* antes de trocar o objeto na db */
     const i=db.properties.findIndex(x=>x.id===pForm.id);
     if(i<0)db.properties.push(pForm);else db.properties[i]=pForm;
-    syncAllLoanRecs();save();closeModal();render();toast(id?'Imóvel atualizado.':'Imóvel adicionado.');
-    perguntarPrestacoesEmFalta(pForm,antes);
+    /* os planeados da ficha (IMI, condomínio, seguro) e os das hipotecas são dos Planeados */
+    if(servicoLigado('recurring')){syncPropRecs(pForm);syncAllLoanRecs()}
+    save();closeModal();render();toast(id?'Imóvel atualizado.':'Imóvel adicionado.');
+    if(historia)perguntarPrestacoesEmFalta(pForm,antes);
   };
 }
 /* O corpo da ficha de um imóvel: o que se sabe sobre ele, para ler.
 
    O que é sempre visível (morada, destino, quartos, donos) e o resto conforme
-   o cargo — fotos com file.view, valores com report.view, hipotecas com
-   loan.view. Nunca o bloco de quotas nem os comentários dos donos: o servidor
-   já não os manda a quem colabora.
+   o cargo — fotos com file.view, valores e a linha fiscal com report.view,
+   hipotecas com loan.view. Nunca o bloco de quotas nem os comentários dos donos: o servidor
+   já não os manda a quem colabora. E conforme os serviços ligados nesta conta:
+   o estado e os contratos ativos são dos Contratos, o bloco das hipotecas é
+   dos Créditos — desligados, a ficha não os mostra.
    Recebe: id — o id do imóvel.
    Devolve: o HTML do corpo, ou vazio se o imóvel já não existir. */
 function propFicha(id){
   const p=prop(id);if(!p)return '';
-  const st=pode(id,'contract.view')?propStatus(p):null,ls=loansOf(p),c=cargoDe(id);
-  const dono=p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):''),ac=pode(id,'contract.view')?activeContracts(id):[];
-  const reg=[p.freguesia||p.parish,p.concelho,p.fraction?'fração '+p.fraction:'',p.floor,p.registry?'n.º '+p.registry:'',p.matrix?'artigo '+p.matrix:'',p.energyClass?'classe '+p.energyClass:''].filter(Boolean).map(esc).join(' · ');
-  return ficha([
-    c.dono?null:{tipo:'nota',valor:`${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}És colaborador${c.nome?' como <b>'+esc(c.nome)+'</b>':''} — a ficha é só de leitura.`},
+  const vCt=pode(id,'contract.view')&&servicoLigado('contracts'),vLoan=pode(id,'loan.view')&&servicoLigado('credits');
+  const st=vCt?propStatus(p):null,ls=loansOf(p),c=cargoDe(id);
+  const dono=p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):''),ac=vCt?activeContracts(id):[];
+  const reg=[p.freguesia||p.parish,p.freguesiaCodigo?'freguesia n.º '+p.freguesiaCodigo:'',p.concelho,p.distrito,
+    p.tipoPredio==='U'?'urbano':p.tipoPredio==='R'?'rústico':'',p.tipologia,
+    p.fraction?'fração '+p.fraction:'',p.floor,p.registry?'n.º '+p.registry:'',p.matrix?'artigo '+p.matrix:'',p.energyClass?'classe '+p.energyClass:''].filter(Boolean).map(esc).join(' · ');
+  /* o que o Anexo F e o Anexo G pedem e não é dado registal: o VPT (reparte os gastos
+     quando só se arrenda parte do imóvel) e o dia em que o imóvel foi comprado */
+  const fisco=[p.vpt?'VPT '+euro(p.vpt):'',p.purchaseDate?'adquirido a '+dPT(p.purchaseDate):''].filter(Boolean).join(' · ');
+  /* as despesas fixas são planeados (dos Planeados): vê-as quem é dono ou vê planeados */
+  const fixas=servicoLigado('recurring')&&(c.dono||pode(id,'rec.view'))?despesasFixasTxt(p):'';
+  const corpo=ficha([
     {rotulo:'Morada',valor:esc(p.address||'')},
     {rotulo:'Destino',valor:p.use==='proprio'?'Uso próprio':'Arrendamento'+(p.rentalMode==='quartos'?' · por quartos':' · imóvel inteiro')},
     st?{rotulo:'Estado',valor:esc(st.label)}:null,
@@ -48,13 +76,25 @@ function propFicha(id){
     ac.length?{tipo:'bloco',rotulo:'Contratos ativos',valor:ac.map(x=>`${x.roomId?esc(roomName(p,x.roomId))+': ':''}${esc(ctNames(x))} · ${euro(x.rent)}`).join('<br>')}:null,
     pode(id,'report.view')?{rotulo:'Valor de mercado',valor:euro(p.value)}:null,
     pode(id,'report.view')?{rotulo:'Valor de aquisição',valor:euro(p.purchase)}:null,
-    pode(id,'loan.view')&&ls.length?{tipo:'bloco',rotulo:'Hipotecas',
+    pode(id,'report.view')&&fisco?{rotulo:'Fiscal',valor:fisco}:null,
+    fixas?{tipo:'bloco',rotulo:'Despesas fixas',valor:esc(fixas)+'<br><span class="u-c-v-muted">Criam os planeados sozinhas.</span>'}:null,
+    vLoan&&ls.length?{tipo:'bloco',rotulo:'Hipotecas',
       valor:ls.map(l=>`${esc(loanName(l))} · ${euro2(loanCalc(l).total)}/mês · ${euro(l.outstanding)} em dívida`).join('<br>')}:null,
     pode(id,'file.view')&&(p.photos||[]).length?{tipo:'bloco',rotulo:'Fotos',
-      valor:`<div style="display:flex;flex-wrap:wrap;gap:8px">${(p.photos||[]).map(f=>`<div class="pcover" id="th_${esc(f.id)}" style="width:84px;height:66px;border-radius:10px;background:var(--chip);overflow:hidden"></div>`).join('')}</div>`}:null,
+      valor:`<div class="u-d-flex u-fxw-wrap u-g-8px">${(p.photos||[]).map(f=>`<div class="pcover u-w-84px u-h-66px u-br-10px u-bg-v-chip u-ov-hidden" id="th_${esc(f.id)}"></div>`).join('')}</div>`}:null,
     reg?{tipo:'bloco',rotulo:'Dados registais',valor:reg}:null,
     p.listing?{tipo:'bloco',rotulo:'Anúncio',valor:esc(p.listing)}:null,
   ]);
+  if(c.dono)return corpo;
+  /* quem colabora lê primeiro o que o cargo lhe deixa fazer aqui, e tem os
+     botões à mão; o «Editar a ficha» é o «Editar» do rodapé */
+  const podes=frasePodesNoImovel(id);
+  const acoes=acoesNoImovel(id).filter(a=>a.perm!=='house.edit');
+  const nota=`${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}És colaborador${c.nome?' como <b>'+esc(c.nome)+'</b>':''}${pode(id,'house.edit')?'.':acoes.length?' — os dados do imóvel são só de leitura.':' — a ficha é só de leitura.'}`
+    +(podes?`<span class="u-d-block u-mt-4px">${esc(podes)}</span>`:'');
+  /* um botão que muda de ecrã fecha antes a ficha, senão ela ficava por cima */
+  const botoes=acoes.map((a,i)=>`<button type="button" class="btn${i?'':' primary'}" data-toca="${a.toca}" data-click="${a.toca==='ecra'?'closeAllModals();':''}${a.act}">${ic(a.icon,16)} ${esc(a.rotulo)}</button>`).join('');
+  return ficha([{tipo:'nota',valor:nota}])+(botoes?`<div class="colab-acoes u-mt-12px">${botoes}</div>`:'')+`<div class="u-mt-14px">${corpo}</div>`;
 }
 /* A ficha de um imóvel: o que tocar num imóvel passa a abrir.
 
@@ -74,9 +114,41 @@ function propView(id){
     depois:()=>{if(pode(id,'file.view')){const x=prop(id);if(x)paintThumbs(x.photos)}},
   });
 }
+/* O nome de um mês por extenso, para o menu do mês do seguro e a ficha.
+   Recebe: m — o mês (1–12).
+   Devolve: o nome em minúsculas (texto); '' fora de 1–12. */
+function nomeDoMes(m){return ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'][m-1]||''}
+/* As despesas fixas de um imóvel numa linha: «IMI 400,00 €/ano · Condomínio
+   55,00 €/mês · Seguro 96,00 €/ano em agosto». É o resumo da dobra do
+   formulário e a linha da ficha.
+   Recebe: p — o imóvel.
+   Devolve: o texto (sem escapar); '' sem nenhum valor. */
+function despesasFixasTxt(p){
+  return [p.imi>0?'IMI '+euro2(p.imi)+'/ano':'',p.condominio>0?'Condomínio '+euro2(p.condominio)+'/mês':'',
+    p.seguro>0?'Seguro '+euro2(p.seguro)+'/ano'+(p.seguroMes?' em '+nomeDoMes(p.seguroMes):''):''].filter(Boolean).join(' · ');
+}
+/* A dobra «Despesas fixas do imóvel» do formulário: o IMI, o condomínio, o
+   seguro e o mês dele. Cada valor cria um planeado (planeados.js:syncPropRecs),
+   e a explicação diz em que datas — é dos Planeados, e sem esse serviço na
+   conta não se pede o que não criaria nada.
+   Devolve: o HTML da dobra (texto); '' sem os Planeados. */
+function fixasSect(){
+  if(!servicoLigado('recurring'))return '';
+  const p=pForm,meses=[{v:0,label:'O mês em que o guardares'}].concat([...Array(12)].map((_,i)=>({v:i+1,label:nomeDoMes(i+1)})));
+  return fold('fixas','Despesas fixas do imóvel',`
+      <div class="row3">
+        <label>IMI (€/ano)<input id="p_imi" type="text" inputmode="decimal" value="${p.imi||''}" placeholder="Opcional"></label>
+        <label>Condomínio (€/mês)<input id="p_condominio" type="text" inputmode="decimal" value="${p.condominio||''}" placeholder="Opcional"></label>
+        <label>Seguro (€/ano)<input id="p_seguro" type="text" inputmode="decimal" value="${p.seguro||''}" placeholder="Opcional"></label></div>
+      <label>Mês do seguro${sel('p_seguroMes',p.seguroMes||0,meses,'','rascunho')}</label>
+      <div class="hint">Cada valor cria um planeado que pede confirmação na data, e o valor vive aqui: apagar o planeado apaga-o daqui.
+        O IMI sai nas prestações da lei: até 100 € numa só, em maio; de 100 a 500 € em maio e novembro; acima de 500 € em maio, agosto e novembro — no último dia do mês.
+        O condomínio no dia 1 de cada mês; o seguro uma vez por ano, no fim do mês escolhido.</div>`,
+    {icon:'clock',open:!!(p.imi>0||p.condominio>0||p.seguro>0),summary:esc(despesasFixasTxt(p))||'nenhuma'});
+}
 /* Constrói o HTML do formulário do imóvel a partir de pForm: proprietários e
-   quotas-partes, destino, quartos, valores, fotos, dados registais, hipotecas
-   e anúncio. Só lê — quem escreve de volta é collectProp().
+   quotas-partes, destino, quartos, valores, despesas fixas, fotos, dados
+   registais, hipotecas e anúncio. Só lê — quem escreve de volta é collectProp().
    Devolve: string de HTML do formulário, pronta a inserir com innerHTML. */
 function propBody(){
   const p=pForm,ls=p.loans||[];
@@ -84,70 +156,81 @@ function propBody(){
   const shares=sharesOf(p),custom=hasShares(p);
   const sumSh=sum(owners.map(o=>Number((p.ownerShares||{})[o.id])||0));
   return `<div class="form">
-    <label>Nome <span class="req">*</span><input id="p_name" value="${esc(p.name)}" placeholder="T2 Lisboa" autocomplete="off"></label>
+    <label>Nome <span class="req">*</span><input id="p_name" value="${esc(p.name)}" placeholder="Ex: T2 Lisboa" autocomplete="off"></label>
     <label>Morada<input id="p_addr" value="${esc(p.address)}" placeholder="Opcional" autocomplete="off"></label>
-    <div><div class="flabel">Proprietários e quota-parte</div>
-      <div class="form" style="gap:7px">
-        ${owners.map(o=>`<div class="ownrow"><span class="avatar" style="width:30px;height:30px;font-size:11px;flex:0 0 30px">${esc(initials(o.name))}</span>
+    <div><div class="flabel">Proprietários e quota-parte (%, opcional)</div>
+      <div class="form u-g-7px">
+        ${owners.map(o=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${esc(initials(o.name))}</span>
           <span class="nm">${esc(o.name)}</span>
-          <input id="p_share_${o.id}" type="text" inputmode="decimal" value="${(p.ownerShares||{})[o.id]!=null?dec(p.ownerShares[o.id]):''}" placeholder="${dec(Math.round(shares[o.id]*1000)/10)}" oninput="liveShares()">
+          <input id="p_share_${o.id}" type="text" inputmode="decimal" value="${(p.ownerShares||{})[o.id]!=null?dec(p.ownerShares[o.id]):''}" placeholder="Ex: ${dec(Math.round(shares[o.id]*1000)/10)}" data-input="liveShares()">
           <span class="pc">%</span>
-          <button type="button" class="btn sm danger" data-toca="rascunho" onclick="delPropOwner('${o.id}')">${ic('x',13)}</button></div>`).join('')}
-        <button type="button" class="tagadd" style="justify-self:start" data-toca="camada" onclick="addPropOwner()">+ Adicionar proprietário</button></div>
-      <div class="hint" id="shareHint" style="margin-top:7px">${shareHint(owners,custom,sumSh)}</div></div>
+          <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delPropOwner('${o.id}')">${ic('x',13)}</button></div>`).join('')}
+        <button type="button" class="tagadd u-js-start" data-toca="camada" data-click="addPropOwner()">+ Adicionar proprietário</button></div>
+      <div class="hint u-mt-7px" id="shareHint">${shareHint(owners,custom,sumSh)}</div></div>
     <div><div class="flabel">Destino do imóvel</div>
       <div class="seg c2">${[['investimento','key','Arrendamento','para render'],['proprio','home','Uso próprio','vivo cá']]
-        .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.use===k?'on':''}" data-toca="rascunho" onclick="setUse('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
+        .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.use===k?'on':''}" data-toca="rascunho" data-click="setUse('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
     ${p.use==='investimento'?`
       <div><div class="flabel">Tipo de arrendamento</div>
         <div class="seg c2">${[['inteiro','building','Imóvel inteiro','um contrato só'],['quartos','door','Por quartos','um contrato por quarto']]
-          .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.rentalMode===k?'on':''}" data-toca="rascunho" onclick="setMode('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
-      ${p.rentalMode==='quartos'?`<div><div class="flabel">Quartos</div>
-        <div class="form" style="gap:8px">${(p.rooms||[]).map(r=>`<div class="roomrow">
-          <input id="p_room_${r.id}" value="${esc(r.name)}" placeholder="Quarto" autocomplete="off">
-          <button type="button" class="btn sm danger" data-toca="rascunho" onclick="delRoom('${r.id}')">${ic('trash',14)}</button></div>`).join('')}
-          <button type="button" class="btn sm" data-toca="rascunho" onclick="addRoom()">${ic('plus',14)} Adicionar quarto</button></div></div>`:''}`:''}
-    <div class="row">
-      <label>Valor de mercado (€)<input id="p_value" type="text" inputmode="decimal" value="${p.value||''}" placeholder="180000"></label>
-      <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${p.purchase||''}" placeholder="150000"></label></div>
+          .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.rentalMode===k?'on':''}" data-toca="rascunho" data-click="setMode('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
+      ${p.rentalMode==='quartos'?`<div><div class="flabel">Quartos (nome opcional)</div>
+        <div class="form u-g-8px">${(p.rooms||[]).map(r=>`<div class="roomrow">
+          <input id="p_room_${r.id}" value="${esc(r.name)}" placeholder="Ex: Quarto da varanda" autocomplete="off">
+          <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delRoom('${r.id}')">${ic('trash',14)}</button></div>`).join('')}
+          <button type="button" class="btn sm" data-toca="rascunho" data-click="addRoom()">${ic('plus',14)} Adicionar quarto</button></div></div>`:''}`:''}
+    <div class="row3">
+      <label>Valor de mercado (€)<input id="p_value" type="text" inputmode="decimal" value="${p.value||''}" placeholder="Opcional"></label>
+      <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${p.purchase||''}" placeholder="Opcional"></label>
+      <label>Data de aquisição<input id="p_purchaseDate" type="date" value="${p.purchaseDate||''}"></label></div>
+    ${fixasSect()}
     ${fold('photos','Fotos',fileBlock('',p.photos||[],'p_photoin','propAddPhotos','delPropPhoto',{photos:true,move:1,hint:'A primeira foto é a capa do imóvel. Arrasta pelo puxador para reordenar.'}),{icon:'photo',open:!!(p.photos||[]).length,summary:(p.photos||[]).length?p.photos.length+' foto'+(p.photos.length===1?'':'s'):'nenhuma'})}
     ${fold('reg','Dados registais',`
       <div class="row">
-        <label>Freguesia<input id="p_freguesia" value="${esc(p.freguesia||p.parish||'')}" placeholder="Soure"></label>
-        <label>Concelho<input id="p_concelho" value="${esc(p.concelho||'')}" placeholder="Soure"></label></div>
+        <label>Freguesia<input id="p_freguesia" value="${esc(p.freguesia||p.parish||'')}" placeholder="Opcional"></label>
+        <label>Concelho<input id="p_concelho" value="${esc(p.concelho||'')}" placeholder="Opcional"></label></div>
       <div class="row3">
-        <label>Fração autónoma<input id="p_fraction" value="${esc(p.fraction||'')}" placeholder="A"></label>
-        <label>Andar<input id="p_floor" value="${esc(p.floor||'')}" placeholder="2.º"></label>
-        <label>Descrição predial n.º<input id="p_registry" value="${esc(p.registry)}" placeholder="15937"></label></div>
-      <div class="row3">
-        <label>Rua<input id="p_street" value="${esc(p.street||'')}" placeholder="Rua Central"></label>
-        <label>Número da porta<input id="p_doorNumber" value="${esc(p.doorNumber||'')}" placeholder="12"></label>
-        <label>Código postal<input id="p_postalCode" value="${esc(p.postalCode||'')}" placeholder="3130-000"></label></div>
-      <label>Localidade<input id="p_locality" value="${esc(p.locality||'')}" placeholder="Soure"></label>
+        <label>Distrito<input id="p_distrito" value="${esc(p.distrito||'')}" placeholder="Opcional"></label>
+        <label>Código da freguesia (opcional)<input id="p_freguesiaCodigo" value="${esc(p.freguesiaCodigo||'')}" inputmode="numeric" maxlength="6" placeholder="Ex: 110623" autocomplete="off"></label>
+        <label>Tipo de prédio${sel('p_tipoPredio',p.tipoPredio||'',[{v:'',label:'—'},{v:'U',label:'Urbano'},{v:'R',label:'Rústico'}],'','rascunho')}</label></div>
       <div class="row">
-        <label>Artigo matricial<input id="p_matrix" value="${esc(p.matrix)}" placeholder="4651"></label>
-        <label>Licença de utilização<input id="p_licence" value="${esc(p.licence)}" placeholder="Alvará n.º 26/2013"></label></div>
+        <label>Tipologia${sel('p_tipologia',p.tipologia||'',[{v:'',label:'—'}].concat(['T0','T1','T2','T3','T4','T5','T6'].map(x=>({v:x,label:x}))),'','rascunho')}</label>
+        <label>VPT (€)<input id="p_vpt" type="text" inputmode="decimal" value="${p.vpt||''}" placeholder="Opcional"></label></div>
       <div class="row3">
-        <label>Certificado energético<input id="p_energyCert" value="${esc(p.energyCert)}" placeholder="SCE395442330"></label>
-        <label>Classe<input id="p_energyClass" value="${esc(p.energyClass)}" placeholder="D"></label>
+        <label>Fração autónoma (opcional)<input id="p_fraction" value="${esc(p.fraction||'')}" placeholder="Ex: A"></label>
+        <label>Andar (opcional)<input id="p_floor" value="${esc(p.floor||'')}" placeholder="Ex: 2.º"></label>
+        <label>Descrição predial n.º (opcional)<input id="p_registry" value="${esc(p.registry)}" placeholder="Ex: 15937"></label></div>
+      <div class="row3">
+        <label>Rua<input id="p_street" value="${esc(p.street||'')}" placeholder="Opcional"></label>
+        <label>Número da porta<input id="p_doorNumber" value="${esc(p.doorNumber||'')}" placeholder="Opcional"></label>
+        <label>Código postal (opcional)<input id="p_postalCode" value="${esc(p.postalCode||'')}" placeholder="Ex: 1200-195"></label></div>
+      <label>Localidade<input id="p_locality" value="${esc(p.locality||'')}" placeholder="Opcional"></label>
+      <div class="row">
+        <label>Artigo matricial (opcional)<input id="p_matrix" value="${esc(p.matrix)}" placeholder="Ex: 4651"></label>
+        <label>Licença de utilização (opcional)<input id="p_licence" value="${esc(p.licence)}" placeholder="Ex: Alvará n.º 26/2013"></label></div>
+      <div class="row3">
+        <label>Certificado energético (opcional)<input id="p_energyCert" value="${esc(p.energyCert)}" placeholder="Ex: SCE395442330"></label>
+        <label>Classe (opcional)<input id="p_energyClass" value="${esc(p.energyClass)}" placeholder="Ex: D"></label>
         <label>Válido até<input id="p_energyValid" type="date" value="${p.energyValid||''}"></label></div>
-      <div class="hint">Usados nas cláusulas do contrato em PDF. Deixa em branco o que não se aplicar — as frases correspondentes são omitidas.</div>`,
-      {icon:'contract',summary:[p.freguesia||p.parish,p.registry?'n.º '+p.registry:''].filter(Boolean).join(' · ')||'para o contrato'})}
-    ${fold('loans','Hipotecas',`
+      <div class="hint">Usados nas cláusulas do contrato em PDF e no resumo do Anexo F. Deixa em branco o que não se aplicar — as frases correspondentes são omitidas.
+        O código da freguesia (6 dígitos), o tipo de prédio e o artigo vêm da caderneta predial ou da nota de cobrança do IMI; o Anexo F pede-os em cada linha do quadro das rendas.
+        O VPT serve para repartir os gastos quando só se arrenda parte do imóvel. A data de aquisição fica guardada para o dia em que venderes (Anexo G).</div>`,
+      {icon:'contract',summary:[esc(p.freguesia||p.parish||''),p.freguesiaCodigo?'freguesia n.º '+esc(p.freguesiaCodigo):'',p.registry?'n.º '+esc(p.registry):''].filter(Boolean).join(' · ')||'para o contrato'})}
+    ${!servicoLigado('credits')?'':fold('loans','Hipotecas',`
         ${ls.map((l,i)=>loanSect(l,i)).join('')}
-        ${ls.length>1?`<div class="card" style="background:var(--tint);padding:12px">
-          <div class="stat" style="padding-top:0;border:0"><span>Total das prestações</span><b style="font-size:16px">${euro2(payOf(p))}/mês</b></div>
+        ${ls.length>1?`<div class="card u-bg-v-tint u-p-12px">
+          <div class="stat u-pt-0 u-b-0"><span>Total das prestações</span><b class="u-fs-16px">${euro2(payOf(p))}/mês</b></div>
           <div class="hint">${euro(debtOf(p))} em dívida no total.</div></div>`:''}
-        <button type="button" class="addbox" data-toca="rascunho" onclick="addLoan()">
+        <button type="button" class="addbox" data-toca="rascunho" data-click="addLoan()">
           <span class="ic">${ic('bank',20)}</span>
           <span><b>${ls.length?'Adicionar outra hipoteca':'Adicionar hipoteca'}</b><small>${ls.length?'crédito para obras, consolidação, segunda hipoteca…':'crédito à aquisição ou outro'}</small></span>
           <span class="plus">${ic('plus',18)}</span></button>
       ${ls.length?`<div class="hint">Um imóvel pode ter várias hipotecas em simultâneo. Todas contam para a dívida e para o LTV.</div>`:''}`,
       {icon:'bank',open:!!ls.length,summary:ls.length?(ls.length+(ls.length===1?' hipoteca · ':' hipotecas · ')+euro2(payOf(p))+'/mês'):'nenhuma'})}
-    ${fold('text','Anúncio',`<label>Descrição para anúncios<textarea id="p_listing" placeholder="Texto para publicar em portais e redes sociais…">${esc(p.listing||'')}</textarea></label>`,
+    ${fold('text','Anúncio',`<label>Descrição para anúncios<textarea id="p_listing" placeholder="Opcional">${esc(p.listing||'')}</textarea></label>`,
       {icon:'file',open:!!p.listing,summary:p.listing?'com texto':''})}
     <div class="hint">A renda, as datas e os inquilinos ficam no contrato, não aqui.</div>
-    ${richEditor('Comentários dos proprietários','p_notes',p.notes)}</div>`;
+    ${richEditor('Comentários dos proprietários','p_notes',p.notes,'Opcional')}</div>`;
 }
 // Secção de uma hipoteca no formulário: campos consoante o tipo de taxa,
 // caixa de simulação e documentos. O i serve só para o título por omissão.
@@ -157,39 +240,40 @@ function propBody(){
 function loanSect(l,i){
   return `<div class="sect">
     <div class="sect-head"><span class="ic">${ic('bank',18)}</span><b>${esc(l.name||'Hipoteca '+(i+1))}</b><span class="spacer"></span>
-      <button type="button" class="btn sm danger" data-toca="dados" data-risco="destroi" onclick="delLoan('${l.id}')">${ic('trash',14)}</button></div>
+      <button type="button" class="btn sm danger" data-toca="dados" data-risco="destroi" data-click="delLoan('${l.id}')">${ic('trash',14)}</button></div>
     <div class="row">
-      <label>Finalidade<input id="l_name_${l.id}" value="${esc(l.name)}" placeholder="Aquisição" autocomplete="off" oninput="liveLoan('${l.id}')"></label>
-      <label>Banco<input id="l_bank_${l.id}" value="${esc(l.bank)}" placeholder="Millennium" autocomplete="off"></label></div>
+      <label>Finalidade<input id="l_name_${l.id}" value="${esc(l.name)}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label>
+      <label>Banco<input id="l_bank_${l.id}" value="${esc(l.bank)}" placeholder="Opcional" autocomplete="off"></label></div>
     <div class="row3">
-      <label>Capital em dívida (€)<input id="l_out_${l.id}" type="text" inputmode="decimal" value="${l.outstanding||''}" placeholder="150000" oninput="liveLoan('${l.id}')"></label>
-      <label>Prazo (anos)<input id="l_years_${l.id}" type="text" inputmode="numeric" value="${l.years||''}" placeholder="30" oninput="liveLoan('${l.id}')"></label>
-      <label>Início<input id="l_start_${l.id}" type="date" value="${l.start||''}"></label></div>
-    <div class="hint" style="margin-top:-4px">À data de início. Se o crédito já vem de trás, ao guardar a app propõe registar as prestações desde então — e o capital desce com elas.</div>
+      <label>Capital em dívida (€) <span class="req">*</span><input id="l_out_${l.id}" type="text" inputmode="decimal" value="${capitalDoInicio(l,db.transactions)||''}" placeholder="Ex: 150000" data-input="liveLoan('${l.id}')"></label>
+      <label>Prazo (anos)<input id="l_years_${l.id}" type="text" inputmode="numeric" value="${esc(l.years||'')}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
+      <label>Início<input id="l_start_${l.id}" type="date" value="${esc(l.start||'')}"></label></div>
+    <div class="hint u-mt-n4px">À data de início: as prestações registadas abatem-no, e a caixa abaixo diz o que falta hoje. Se o crédito já vem de trás, ao guardar a app propõe registar as prestações desde então — e o capital desce com elas. Prazo em branco: 30 anos.</div>
     <div><div class="flabel">Tipo de taxa</div>
       <div class="seg c3">${[['fixa','lock','Fixa','não muda'],['mista','split','Mista','fixa e depois variável'],['variavel','wave','Variável','Euribor + spread']]
-        .map(([k,ico,lb,sb])=>`<button type="button" class="opt ${l.type===k?'on':''}" data-toca="rascunho" onclick="setLType('${l.id}','${k}')"><span class="ic">${ic(ico,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>
+        .map(([k,ico,lb,sb])=>`<button type="button" class="opt ${l.type===k?'on':''}" data-toca="rascunho" data-click="setLType('${l.id}','${k}')"><span class="ic">${ic(ico,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>
     ${l.type==='fixa'?`<div class="row">
-      <label>Taxa anual TAN (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="3,2" oninput="liveLoan('${l.id}')"></label>
-      <label>Comissão de amortização (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="2"></label></div>`:''}
+      <label>Taxa anual TAN (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
+      <label>Comissão de amortização (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional"></label></div>`:''}
     ${l.type==='mista'?`<div class="row">
-        <label>Anos com taxa fixa<input id="l_fy_${l.id}" type="text" inputmode="numeric" value="${l.fixedYears||''}" placeholder="5" oninput="liveLoan('${l.id}')"></label>
-        <label>Taxa fixa (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="3,1" oninput="liveLoan('${l.id}')"></label></div>`:''}
+        <label>Anos com taxa fixa<input id="l_fy_${l.id}" type="text" inputmode="numeric" value="${l.fixedYears||''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
+        <label>Taxa fixa (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label></div>
+      <div class="hint u-mt-n4px">Anos com taxa fixa em branco: 5.</div>`:''}
     ${l.type!=='fixa'?`<div class="row3">
       <label>Indexante${sel('l_index_'+l.id,l.index,['3m','6m','12m'].map(x=>({v:x,label:'Euribor '+x})),'liveLoanAll','rascunho')}</label>
-      <label>Indexante (%)<input id="l_eur_${l.id}" type="text" inputmode="decimal" value="${l.euribor?dec(l.euribor):''}" placeholder="2,1" oninput="liveLoan('${l.id}')"></label>
-      <label>Spread (%)<input id="l_spr_${l.id}" type="text" inputmode="decimal" value="${l.spread?dec(l.spread):''}" placeholder="1,0" oninput="liveLoan('${l.id}')"></label></div>
+      <label>Indexante (%)<input id="l_eur_${l.id}" type="text" inputmode="decimal" value="${l.euribor?dec(l.euribor):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
+      <label>Spread (%)<input id="l_spr_${l.id}" type="text" inputmode="decimal" value="${l.spread?dec(l.spread):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label></div>
     <div class="row">
-      ${l.type==='mista'?`<label>Comissão amort. — fase fixa (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="2"></label>`:''}
-      <label>Comissão amort. — taxa variável (%)<input id="l_fvar_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeVar!=null?dec(l.amortFeeVar):''}" placeholder="0,5"></label></div>`:''}
-    <label class="check"><input type="checkbox" id="l_stamp_${l.id}" ${l.stampTax?'checked':''} onchange="toggleStamp('${l.id}')">
+      ${l.type==='mista'?`<label>Comissão amort. — fase fixa (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional"></label>`:''}
+      <label>Comissão amort. — taxa variável (%)<input id="l_fvar_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeVar!=null?dec(l.amortFeeVar):''}" placeholder="Opcional"></label></div>`:''}
+    <label class="check"><input type="checkbox" id="l_stamp_${l.id}" ${l.stampTax?'checked':''} data-change="toggleStamp('${l.id}')">
       Pagar imposto do selo sobre os juros (${dec(db.settings.stampPct??4)}%)</label>
-    <div class="hint" style="margin-top:-4px">Créditos mais antigos podem não o ter. Desliga se a tua prestação não o inclui.</div>
-    <div class="card" style="background:var(--tint)" id="loanBox_${l.id}">${loanBox(l)}</div>
+    <div class="hint u-mt-n4px">Créditos mais antigos podem não o ter. Desliga se a tua prestação não o inclui.</div>
+    <div class="card u-bg-v-tint" id="loanBox_${l.id}">${loanBox(l)}</div>
     ${fileBlock('FINE e outros documentos',l.files||[],'l_filein_'+l.id,'loanAddFiles','delLoanFile',
       {arg:l.id,addLabel:'Anexar documento',hint:'Ficha de Informação Normalizada Europeia, escritura, plano de amortização, cartas do banco.'})}
     <label class="check"><input type="checkbox" id="l_autorec_${l.id}" ${l.autoRec!==false?'checked':''}> Criar movimento recorrente da prestação</label>
-    <div class="hint" style="margin-top:-4px">Todos os meses a app pede para confirmar a prestação em Planeados, já com a hipoteca associada.</div>
+    <div class="hint u-mt-n4px">Todos os meses a app pede para confirmar a prestação em Planeados, já com a hipoteca associada.</div>
     </div>`;
 }
 /* Lê os campos do DOM de volta para pForm. Tolerante a campos ausentes: as
@@ -202,14 +286,18 @@ function collectProp(){
   if(has('p_addr'))p.address=val('p_addr');
   if(has('p_value'))p.value=num(val('p_value'));
   if(has('p_purchase'))p.purchase=num(val('p_purchase'));
-  ['parish','freguesia','concelho','fraction','floor','street','doorNumber','postalCode','locality','registry','matrix','licence','energyCert','energyClass','energyValid'].forEach(k=>{
+  if(has('p_vpt'))p.vpt=Math.max(0,num(val('p_vpt')));
+  ['imi','condominio','seguro'].forEach(k=>{if(has('p_'+k))p[k]=Math.max(0,Math.round(num(val('p_'+k))*100)/100)});
+  if(has('p_seguroMes'))p.seguroMes=Math.min(12,Math.max(0,Math.round(num(val('p_seguroMes')))));
+  ['parish','freguesia','concelho','distrito','freguesiaCodigo','tipoPredio','tipologia','purchaseDate','fraction','floor','street','doorNumber','postalCode','locality','registry','matrix','licence','energyCert','energyClass','energyValid'].forEach(k=>{
     const e=document.getElementById('p_'+k);if(e)p[k]=e.value});
+  p.freguesiaCodigo=String(p.freguesiaCodigo||'').trim();   /* a validação ao guardar conta dígitos, não espaços */
   if(document.getElementById('p_notes'))p.notes=richVal('p_notes');
   if(has('p_listing'))p.listing=val('p_listing');
   (p.rooms||[]).forEach(r=>{const e=document.getElementById('p_room_'+r.id);if(e)r.name=e.value});
   (p.photos||[]).forEach(f=>{const e=document.getElementById('fn_'+f.id);if(e)f.name=e.value});
   const shr={};(p.ownerIds||[]).forEach(oid=>{const e=document.getElementById('p_share_'+oid);
-    if(e&&String(e.value).trim()!==''){const v=num(e.value);if(v>=0)shr[oid]=v}else if(!e&&p.ownerShares&&p.ownerShares[oid]!=null&&p.ownerShares[oid]>=0)shr[oid]=p.ownerShares[oid]});
+    if(e&&String(e.value).trim()!==''){const v=numTaxa(e.value);if(v>=0)shr[oid]=v}else if(!e&&p.ownerShares&&p.ownerShares[oid]!=null&&p.ownerShares[oid]>=0)shr[oid]=p.ownerShares[oid]});
   p.ownerShares=shr;
   (p.loans||[]).forEach(l=>{
     const g=k=>document.getElementById('l_'+k+'_'+l.id);
@@ -218,16 +306,21 @@ function collectProp(){
     (l.files||[]).forEach(f=>{const e=document.getElementById('fn_'+f.id);if(e)f.name=e.value});
     if(g('name'))l.name=val('l_name_'+l.id);
     if(g('bank'))l.bank=val('l_bank_'+l.id);
-    if(g('out'))l.outstanding=num(val('l_out_'+l.id));
+    /* o campo é o capital da data de início; o capital em dívida deriva dele (fim deste ciclo) */
+    if(g('out'))l.capitalInicio=Math.max(0,num(val('l_out_'+l.id))||0);
     if(g('years'))l.years=num(val('l_years_'+l.id))||30;
     if(g('start'))l.start=val('l_start_'+l.id);
-    if(g('rate'))l.rate=num(val('l_rate_'+l.id));
-    if(g('eur'))l.euribor=num(val('l_eur_'+l.id));
-    if(g('spr'))l.spread=num(val('l_spr_'+l.id));
+    /* as percentagens leem-se pelo numTaxa: numa taxa «0,875» são 0,875,
+       nunca 875 (o num() é para euros, onde três casas são milhares) */
+    if(g('rate'))l.rate=numTaxa(val('l_rate_'+l.id));
+    if(g('eur'))l.euribor=numTaxa(val('l_eur_'+l.id));
+    if(g('spr'))l.spread=numTaxa(val('l_spr_'+l.id));
     if(g('fy'))l.fixedYears=num(val('l_fy_'+l.id))||5;
     if(g('index'))l.index=val('l_index_'+l.id);
-    if(g('ffix'))l.amortFeeFix=Math.max(0,num(val('l_ffix_'+l.id)));
-    if(g('fvar'))l.amortFeeVar=Math.max(0,num(val('l_fvar_'+l.id)));
+    if(g('ffix'))l.amortFeeFix=Math.max(0,numTaxa(val('l_ffix_'+l.id)));
+    if(g('fvar'))l.amortFeeVar=Math.max(0,numTaxa(val('l_fvar_'+l.id)));
+    /* o capital em dívida não se escreve: é o do início menos o que os pagamentos registados abateram */
+    l.outstanding=saldoEmDivida(l,db.transactions);
   });
 }
 // Frase que explica a divisão das quotas-partes: partes iguais, soma 100%,
@@ -255,7 +348,7 @@ let _propPaint=null;
 // Repinta o corpo do modal a partir de pForm (ou do pintor alternativo em
 // _propPaint) e volta a carregar as miniaturas das fotos.
 // Devolve: nada — redesenha a vista.
-function repaintProp(){const b=modalBodyEl();if(!b)return;b.innerHTML=(_propPaint||propBody)();paintThumbs(pForm.photos)}
+function repaintProp(){const b=modalBodyEl();if(!b)return;b.innerHTML=(_propPaint||propBody)();marcarDatasVazias(b);paintThumbs(pForm.photos)}
 // Muda o destino do imóvel (arrendamento/uso próprio) e repinta — os campos
 // visíveis dependem dele.
 // Recebe: u — o destino: 'investimento' ou 'proprio'.
@@ -357,35 +450,38 @@ function liveLoan(lid){
 function liveLoanAll(){collectProp();(pForm.loans||[]).forEach(l=>{
   const b=document.getElementById('loanBox_'+l.id);if(b)b.innerHTML=loanBox(l)})}
 /* HTML da caixa de simulação de uma hipoteca: prestação mensal decomposta em
-   capital, juros e selo, prestação após a fase fixa (mista, se ainda não
-   chegou — descontando as prestações já registadas) e custo total do crédito.
-   Sem capital em dívida ou prazo devolve só a dica do que falta; com o prazo
-   já esgotado pelas prestações registadas, avisa em vez de fingir uma prestação.
+   capital, juros e selo, o capital em dívida de hoje quando as prestações
+   registadas já abateram o do início, prestação após a fase fixa (mista, se
+   ainda não chegou — descontando as prestações já registadas) e custo total
+   do crédito. Sem capital ou prazo devolve só a dica do que falta; liquidado,
+   diz que está; com o prazo já esgotado pelas prestações registadas, avisa em
+   vez de fingir uma prestação.
    Recebe: l — a hipoteca (objeto; aguenta null/undefined).
    Devolve: string de HTML da caixa, pronta a inserir com innerHTML; '' sem hipoteca. */
 function loanBox(l){
   if(!l)return '';
-  if(!l.outstanding||!l.years)return `<div class="hint">Falta o capital em dívida e o prazo.</div>`;
+  const capital=capitalDoInicio(l,db.transactions);
+  if(!(capital>0)||!l.years)return `<div class="hint">Falta o capital em dívida e o prazo.</div>`;
+  if(!(Number(l.outstanding)>0))return `<div class="hint">Crédito liquidado: as prestações registadas já pagaram o capital todo.</div>`;
   const c=loanCalc(l),a=amort(l);
   let extra='';
   if(l.type==='mista'){
-    /* as linhas do plano começam no mês de hoje: a fase muda em rows[fixedYears*12 − registadas],
-       ou seja, daqui a k meses — a data diz-se a partir de hoje, não do início */
+    /* as linhas do plano começam na próxima por pagar: a fase muda em rows[fixedYears*12 − registadas],
+       e o mês diz-se pelo mesmo relógio do aviso dos prazos (credito.js:fimDaFaseFixa) */
     const k=Math.round((Number(l.fixedYears)||0)*12)-loanMes(l),r=k>0?a.rows[k]:null;
-    if(r){
-      /* rows[0] é a PRÓXIMA por pagar: o mês da recorrência, ou o seguinte a hoje quando a deste mês já está registada */
-      const r0=loanRecOf(l),ref=(r0&&r0.next)||today();
-      const jaEste=!r0&&db.transactions.some(t=>t.kind==='loan'&&t.loanId===l.id&&t.payType!=='amortizacao'&&String(t.date||'').slice(0,7)===today().slice(0,7));
-      const t0=Number(ref.slice(0,4))*12+Number(ref.slice(5,7))-1+k+(jaEste?1:0);
-      extra=`<div class="stat"><span>Prestação a partir de ${MES[t0%12]} ${Math.floor(t0/12)}</span><b>${euro2(r.pay+r.st)}</b></div>`}
+    const r0=r&&servicoLigado('recurring')?loanRecOf(l):null;
+    const fim=r?fimDaFaseFixa(l,db.transactions,today(),r0&&r0.next):'';
+    if(r&&fim)extra=`<div class="stat"><span>Prestação a partir de ${MES[Number(fim.slice(5,7))-1]} ${fim.slice(0,4)}</span><b>${euro2(r.pay+r.st)}</b></div>`;
   }
-  if(a.esgotado)extra+=`<div class="hint" style="border-left:3px solid var(--warn);padding-left:10px"><b>Prazo esgotado</b> — as prestações já registadas cobrem o prazo inteiro e ainda há dívida. Confirma o prazo e as prestações registadas.</div>`;
-  return `<div class="stat" style="padding-top:0"><span>Prestação mensal</span><b style="font-size:16px">${euro2(c.total)}</b></div>
+  if(a.esgotado)extra+=`<div class="hint u-bl-3px-solid-v-warn u-pl-10px"><b>Prazo esgotado</b> — as prestações já registadas cobrem o prazo inteiro e ainda há dívida. Confirma o prazo e as prestações registadas.</div>`;
+  /* o campo acima é o capital da data de início: o de hoje diz-se aqui, quando já é outro */
+  const hoje=Math.abs(capital-Number(l.outstanding))>0.005?`<div class="stat"><span>Capital em dívida hoje</span><b>${euro2(l.outstanding)}</b></div>`:'';
+  return `<div class="stat u-pt-0"><span>Prestação mensal</span><b class="u-fs-16px">${euro2(c.total)}</b></div>${hoje}
     <div class="stat"><span>Capital</span><b>${euro2(c.principal)}</b></div>
     <div class="stat"><span>Juros</span><b>${euro2(c.interest)}</b></div>
     ${l.stampTax?`<div class="stat"><span>Imposto do selo (${dec(db.settings.stampPct??4)}% dos juros)</span><b>${euro2(c.stamp)}</b></div>`:''}${extra}
-    <div class="stat" style="border:0"><span>Custo total do crédito</span><b class="neg">${euro(a.totInt+a.totStamp)}</b></div>
-    <div class="hint">${rateLabel(l)} · ${c.n} prestações por pagar</div>`;
+    <div class="stat u-b-0"><span>Custo total do crédito</span><b class="neg">${euro(a.totInt+a.totStamp)}</b></div>
+    <div class="hint">${esc(rateLabel(l))} · ${c.n} prestações por pagar</div>`;
 }
 // Junta as fotos escolhidas no input às do imóvel (assíncrono) e repinta.
 // Recebe: input — o <input type="file"> com as fotos escolhidas.
@@ -463,29 +559,58 @@ function photoDragEnd(){
 // Devolve: nada — redesenha a vista.
 function delPropPhoto(fid){collectProp();pForm.photos=(pForm.photos||[]).filter(f=>f.id!==fid);idbDel(fid).catch(()=>{});idbDel('tn_'+fid).catch(()=>{});repaintProp()}
 // Abre a lista dos proprietários ainda não associados para escolher um, com
-// atalho para criar um novo.
+// atalho para criar um novo — esse é dos Proprietários, e só aparece com o
+// serviço ligado nesta conta.
 // Devolve: nada — abre a janela de escolha.
 function addPropOwner(){
   collectProp();
   const free=db.owners.filter(o=>(pForm.ownerIds||[]).indexOf(o.id)<0);
   pickModal('Escolher proprietário',free.map(o=>({v:o.id,label:o.name,sub:[o.phone,o.email].filter(Boolean).join(' · '),avatar:true})),
     o=>{pForm.ownerIds.push(o.v);closeModal();repaintProp()},
-    `<button type="button" class="btn" style="width:100%;justify-content:center" data-toca="camada" onclick="newOwnerFromProp()">${ic('plus',15)} Criar proprietário novo</button>`);
+    servicoLigado('owners')?`<button type="button" class="btn u-w-100pc u-jc-center" data-toca="camada" data-click="newOwnerFromProp()">${ic('plus',15)} Criar proprietário novo</button>`:'');
 }
 // Desassocia um proprietário do imóvel e esquece a quota-parte dele.
 // Recebe: oid — o id do proprietário a desassociar.
 // Devolve: nada — redesenha a vista.
 function delPropOwner(oid){collectProp();pForm.ownerIds=(pForm.ownerIds||[]).filter(x=>x!==oid);if(pForm.ownerShares)delete pForm.ownerShares[oid];repaintProp()}
 // Cria um proprietário novo a partir da ficha do imóvel: abre a ficha de
-// pessoa e, ao gravar, associa-o logo ao imóvel em edição.
+// pessoa (dos Proprietários — com o serviço desligado nesta conta avisa e
+// não abre) e, ao gravar, associa-o logo ao imóvel em edição.
 // Devolve: nada — abre a ficha de pessoa.
 function newOwnerFromProp(){
   closeModal();   /* fecha a lista de escolha; a ficha nova abre por cima do imóvel */
-  personModal('owner',null,nid=>{if(pForm.ownerIds.indexOf(nid)<0)pForm.ownerIds.push(nid);closeModal();render();repaintProp();toast('Proprietário criado.')});
+  chamarServico('owners','personModal','owner',null,nid=>{if(pForm.ownerIds.indexOf(nid)<0)pForm.ownerIds.push(nid);closeModal();render();repaintProp();toast('Proprietário criado.')});
+}
+/* Um imóvel apagado leva a parte dele de cada movimento de vários imóveis (um
+   lote, movimento.js); as partes que ficam nos outros imóveis passam a ser o
+   lote inteiro — menos uma parte, e o total a soma delas —, e uma só que
+   sobre passa a movimento normal. Sem isto ficavam a dizer «dividido por 3»
+   com duas partes, um lote incompleto para sempre, que ninguém edita nem
+   apaga. Só quando todas as partes que ficam estão ao meu alcance: acertar
+   uma que o servidor me recusa tirava-a da base local. Só dados: não chama os
+   Movimentos (o imóvel é outro serviço).
+   Recebe: id — o id do imóvel que sai; txs — os movimentos dele (as cópias).
+   Devolve: as cópias das partes que mudaram, como estavam, para o Anular. */
+function acertarLotesSemImovel(id,txs){
+  const antes=[];
+  new Set(txs.filter(x=>x.lote&&x.lote.id).map(x=>x.lote.id)).forEach(lid=>{
+    const ficam=db.transactions.filter(x=>x.lote&&x.lote.id===lid&&x.propertyId!==id);
+    if(!ficam.length||ficam.some(x=>!pode(x.propertyId,'tx.add')))return;
+    ficam.forEach(x=>antes.push(JSON.parse(JSON.stringify(x))));
+    if(ficam.length===1){ficam[0].lote=null;return}
+    const total=Math.round(sum(ficam.map(x=>Number(x.amount)||0))*100)/100;
+    ficam.forEach(x=>{
+      const partes=Object.assign({},x.lote.partes||{});delete partes[id];
+      x.lote=Object.assign({},x.lote,{n:ficam.length,total,partes});
+    });
+  });
+  return antes;
 }
 /* Apaga o imóvel e, em cascata, os contratos e os movimentos associados, com
    Anular. A cópia guarda-se antes de apagar; as fotos e os documentos das
-   hipotecas só saem do IndexedDB quando o Anular expira.
+   hipotecas só saem do IndexedDB quando o Anular expira. As partes que o
+   imóvel tinha em movimentos de vários imóveis saem com ele, e o resto desses
+   movimentos acerta-se (acertarLotesSemImovel).
    Recebe: id — o id do imóvel a apagar.
    Devolve: nada — abre a confirmação; só se apaga depois do sim. */
 function delProp(id){
@@ -502,11 +627,14 @@ function delProp(id){
     db.properties=db.properties.filter(x=>x.id!==id);if(dashProp===id)dashProp='';if(txProp===id)txProp='';
     db.contracts=db.contracts.filter(x=>x.propertyId!==id);
     db.transactions=db.transactions.filter(x=>x.propertyId!==id);
+    const lotesAntes=acertarLotesSemImovel(id,copia.txs);
     save();closeAllModals();render();
     comDesfazer('Imóvel apagado.',()=>{
       db.properties.push(copia.p);
       db.contracts=db.contracts.concat(copia.cts);
-      db.transactions=db.transactions.concat(copia.txs);
+      /* as partes que ficaram voltam a ser como eram, e as do imóvel voltam */
+      const volta=new Map(lotesAntes.map(x=>[x.id,x]));
+      db.transactions=db.transactions.map(x=>volta.get(x.id)||x).concat(copia.txs);
     },()=>{
       (copia.p.photos||[]).forEach(f=>{idbDel(f.id).catch(()=>{});idbDel('tn_'+f.id).catch(()=>{})});
       (copia.p.loans||[]).forEach(l=>(l.files||[]).forEach(f=>idbDel(f.id).catch(()=>{})));

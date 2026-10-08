@@ -1,14 +1,20 @@
-// Verificação de ID tokens (JWT RS256) do Google e da Apple, sem dependências:
-// vai buscar as chaves públicas (JWKS) do fornecedor, valida a assinatura com
+// Verificação de ID tokens (JWT RS256) da Google, sem dependências: vai
+// buscar as chaves públicas (JWKS) do fornecedor, valida a assinatura com
 // WebCrypto e confere emissor, audiência e validade.
+//
+// Só a Google. A entrada com Apple chegou a ter aqui as chaves e o emissor,
+// mas nunca teve rota, client id nem botão — e um fornecedor que nunca foi
+// exercitado é uma armadilha para quem o ligar a pensar que já funciona (a
+// Apple manda o email_verified como texto em alguns tokens, e a verificação
+// abaixo exige true). Um fornecedor fora desta lista é recusado antes de se
+// ir à rede. A coluna users.apple_sub (migração 0003) fica — as migrações não
+// se revertem — e o purgeAccount continua a limpá-la.
 
 const JWKS_URL = {
   google: 'https://www.googleapis.com/oauth2/v3/certs',
-  apple: 'https://appleid.apple.com/auth/keys',
 };
 const ISSUERS = {
   google: ['https://accounts.google.com', 'accounts.google.com'],
-  apple: ['https://appleid.apple.com'],
 };
 
 let jwksCache = {};
@@ -31,7 +37,7 @@ function b64uToJSON(s) {
 
 // A chave pública do fornecedor com aquele kid. Cache de uma hora, renovada também
 // quando o kid não aparece — é assim que uma rotação de chaves passa sem se dar por ela.
-// Recebe: provider — 'google' ou 'apple'; kid — o id da chave, vindo do cabeçalho do JWT.
+// Recebe: provider — 'google' (o único em JWKS_URL); kid — o id da chave, vindo do cabeçalho do JWT.
 // Devolve: Promise com o objeto JWK da chave, ou null se o kid não existir;
 // lança Error se não conseguir obter as chaves do fornecedor.
 async function getKey(provider, kid) {
@@ -46,16 +52,17 @@ async function getKey(provider, kid) {
 }
 
 /* Valida um ID token de ponta a ponta: assinatura RS256 contra as chaves públicas do
-   fornecedor ('google' ou 'apple'), emissor, audiência (o client id da app), validade
-   e email confirmado. Devolve o payload quando tudo bate certo; qualquer falha lança
-   Error com a razão — quem chama decide o que mostrar. Vai à rede buscar as chaves
-   quando a cache não chega.
-   Recebe: provider — 'google' ou 'apple'; token — o ID token (JWT compacto,
-   três segmentos separados por pontos); audience — o client id que tem de
+   fornecedor ('google', o único em JWKS_URL), emissor, audiência (o client id da app),
+   validade e email confirmado. Devolve o payload quando tudo bate certo; qualquer falha
+   lança Error com a razão — quem chama decide o que mostrar. Vai à rede buscar as
+   chaves quando a cache não chega; um fornecedor fora da lista é recusado antes.
+   Recebe: provider — 'google'; token — o ID token (JWT compacto, três
+   segmentos separados por pontos); audience — o client id que tem de
    constar no aud do token.
    Devolve: Promise com o payload do token quando tudo bate certo; qualquer
    falha lança Error com a razão. */
 export async function verifyIdToken(provider, token, audience) {
+  if (!Object.prototype.hasOwnProperty.call(JWKS_URL, provider)) throw new Error('fornecedor desconhecido');
   const parts = String(token || '').split('.');
   if (parts.length !== 3) throw new Error('token malformado');
   const header = b64uToJSON(parts[0]);

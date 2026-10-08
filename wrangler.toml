@@ -24,8 +24,10 @@ binding = "ASSETS"
 # Os assets respondem ANTES do worker por omissao — e "/" batia no
 # index.html da app em qualquer hostname, tapando a landing do apex/www.
 # So a raiz passa pelo worker (que decide landing ou app); o resto dos
-# ficheiros continua a servir-se direto.
-run_worker_first = ["/"]
+# ficheiros continua a servir-se direto. O manifesto tambem passa: fora de
+# producao o worker reescreve-o com o nome e os icones de dev
+# (worker/src/lib/identidade.js); em producao sai tal e qual.
+run_worker_first = ["/", "/manifest.webmanifest"]
 
 [[d1_databases]]
 binding = "DB"
@@ -94,7 +96,8 @@ MAX_USERS = "2000"
 #
 # Papéis do bot. Cada um aceita ids de pessoa ou ids de cargo do Discord,
 # separados por vírgulas ou espaços — com cargos, entra e sai gente sem tocar
-# nos segredos. Sem nenhum definido, quem tiver acesso ao servidor é admin.
+# nos segredos. Sem nenhum definido, quem tiver acesso ao servidor é master:
+# numa instalação nova, o único que lá chega é quem instalou o bot.
 #   DISCORD_MASTER   · dono: pode tudo, hoje e o que vier a existir
 #   DISCORD_ADMINS   · opera: consumo, cópias, e tudo o que os outros veem
 #   DISCORD_DEVS     · constrói: erros da app e do servidor, infra, segurança
@@ -117,7 +120,7 @@ routes = [
 [env.dev.assets]
 directory = "web"
 binding = "ASSETS"
-run_worker_first = ["/"]
+run_worker_first = ["/", "/manifest.webmanifest"]
 
 [[env.dev.d1_databases]]
 binding = "DB"

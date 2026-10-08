@@ -3,11 +3,12 @@
 // 70% de um menu de 16 categorias fora de vista, sem sinal nenhum de que
 // faltava ali alguma coisa.
 
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp } from './arnes.js';
+import { carregarApp, repor } from './arnes.js';
 
 const app = carregarApp();
+afterEach(() => repor(app));
 const { posicaoPop } = app;
 
 // um botão com 44px de altura, o tamanho real de um .selbtn

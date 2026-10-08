@@ -16,6 +16,10 @@ export const PREFIXO = 'copias/';
 export const DIAS = 14;         // cópias diárias mantidas
 export const MESES = 12;        // e a do dia 1 de cada mês, durante um ano
 const PAGINA = 500;             // registos por consulta
+// A coluna auxiliar com o rowid de cada linha: é o cursor da página seguinte
+// e sai da linha antes de ela ser escrita — a cópia tem só as colunas da
+// tabela, que é o que o scripts/restaurar.js põe no INSERT.
+const CURSOR = '_rowid_da_copia';
 
 // A retenção do Time Travel no plano gratuito da Cloudflare. Está aqui para
 // aparecer no resumo diário: é a diferença entre "temos 7 dias" e o que
@@ -27,8 +31,17 @@ export const TIME_TRAVEL_DIAS = 7;
 const FORA = /^(rate_limits|sqlite_|_cf_|d1_)/;
 const NOME_OK = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+// O dia UTC de um instante, como AAAA-MM-DD: é o que dá o nome a cada cópia.
+// Recebe: t — o instante (milissegundos de época, ou o que o Date aceitar).
+// Devolve: o dia (texto AAAA-MM-DD, em UTC).
 export const dia = (t) => new Date(t).toISOString().slice(0, 10);
+// A chave no R2 da cópia de um dia.
+// Recebe: t — um instante desse dia (milissegundos de época).
+// Devolve: a chave (texto: PREFIXO, o dia e .ndjson.gz).
 export const chaveDoDia = (t) => PREFIXO + dia(t) + '.ndjson.gz';
+// O dia de uma cópia, lido da chave dela.
+// Recebe: k — a chave no R2 (texto).
+// Devolve: o dia (AAAA-MM-DD), ou null se a chave não for de uma cópia.
 export const diaDaChave = (k) => {
   const m = /(\d{4}-\d{2}-\d{2})\.ndjson\.gz$/.exec(String(k));
   return m ? m[1] : null;
@@ -70,16 +83,28 @@ export async function tabelasDaBase(env) {
     .filter((n) => NOME_OK.test(n) && !FORA.test(n));
 }
 
-// Lê a base por páginas e vai entregando linhas NDJSON. Nunca tem a base
-// toda em memória — o worker tem 128 MB e a base pode ir até 500.
-// Recebe: env — o ambiente do worker (a base D1); tabelas — os nomes das
-// tabelas a copiar; conta — o objeto { linhas, t } onde se vai somando o que
-// já foi escrito.
-// Devolve: um ReadableStream de bytes — o cabeçalho primeiro, depois uma
-// linha NDJSON por registo.
+/* Lê a base por páginas e vai entregando linhas NDJSON. Nunca tem a base
+   toda em memória — o worker tem 128 MB e a base pode ir até 500.
+
+   As páginas seguem o rowid, com a última linha lida como cursor, e não um
+   OFFSET. Um OFFSET não salta: o SQLite percorre e deita fora as linhas de
+   antes, e a D1 conta-as todas em rows_read — a cópia de uma tabela de
+   50 000 linhas lia 2,5 M, metade do tecto diário do plano gratuito, e o
+   custo crescia com o quadrado da tabela. Pelo rowid, cada página é uma
+   procura na chave e lê só o que devolve. E uma linha apagada a meio da
+   cópia já não empurra as seguintes para trás (com OFFSET, a primeira da
+   página seguinte ficava de fora). Todas as tabelas das migrações têm rowid
+   (nenhuma é WITHOUT ROWID, e há um teste que o guarda): uma que não tivesse
+   fazia a consulta rebentar e a cópia falhar alto, com relato.
+   Recebe: env — o ambiente do worker (a base D1); tabelas — os nomes das
+   tabelas a copiar; conta — o objeto { linhas, t } onde se vai somando o que
+   já foi escrito.
+   Devolve: um ReadableStream de bytes — o cabeçalho primeiro, depois uma
+   linha NDJSON por registo. */
 function fluxo(env, tabelas, conta) {
   const enc = new TextEncoder();
-  let ti = 0, salto = 0, cabecalho = false;
+  // depois: o rowid da última linha entregue da tabela atual (null no início dela)
+  let ti = 0, depois = null, cabecalho = false;
   return new ReadableStream({
     async pull(c) {
       if (!cabecalho) {
@@ -91,15 +116,21 @@ function fluxo(env, tabelas, conta) {
       }
       if (ti >= tabelas.length) { c.close(); return; }
       const t = tabelas[ti];
-      const r = await env.DB.prepare(
-        'SELECT * FROM "' + t + '" LIMIT ? OFFSET ?'
-      ).bind(PAGINA, salto).all();
+      // a primeira página não tem cursor: um rowid pode ser negativo
+      const q = env.DB.prepare(
+        'SELECT rowid AS "' + CURSOR + '", * FROM "' + t + '"' +
+        (depois == null ? '' : ' WHERE rowid > ?') + ' ORDER BY rowid LIMIT ?'
+      );
+      const r = await (depois == null ? q.bind(PAGINA) : q.bind(depois, PAGINA)).all();
       const linhas = r.results || [];
-      if (linhas.length < PAGINA) { ti++; salto = 0; } else { salto += PAGINA; }
+      if (linhas.length < PAGINA) { ti++; depois = null; } else { depois = linhas[linhas.length - 1][CURSOR]; }
       if (!linhas.length) { c.enqueue(enc.encode('')); return; }
       conta.linhas += linhas.length;
       c.enqueue(enc.encode(
-        linhas.map((linha) => JSON.stringify({ t, r: linha })).join('\n') + '\n'
+        linhas.map((linha) => {
+          delete linha[CURSOR];   // o cursor não é da tabela: não vai para a cópia
+          return JSON.stringify({ t, r: linha });
+        }).join('\n') + '\n'
       ));
     },
   });

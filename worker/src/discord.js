@@ -5,10 +5,10 @@
 import { dailyReport, usageFields } from './notify.js';
 import { lerAcessos, guardarAcessos, origemDoAcesso, excecoesDoMenu } from './acessos.js';
 import {
-  PAPEIS, PODEM_TUDO, SO_MASTER, PERMISSOES, CATS_DO_PAPEL,
-  comoLista, nomeDoPapel, cor, catsDe, papeisDe, papel,
+  PODEM_TUDO, SO_MASTER, PERMISSOES,
+  comoLista, nomeDoPapel, cor, catsDe, papeisDe,
 } from './lib/papeis.js';
-import { postAsBot } from './lib/bot.js';
+import { cargosDoMembro } from './lib/bot.js';
 /* Os papéis e o envio pelo bot vivem em lib/, porque são lidos de mais do que
    um lado (o back office, o notify.js, o gerador de docs) e daqui faziam
    ciclos de importação. Saem na mesma por aqui, para quem já os importava
@@ -96,14 +96,10 @@ function adiar(ctx, i, trabalho) {
   return { type: ADIADO, data: { flags: 64 } };
 }
 
-// Resposta à vista de todos no canal, com botões opcionais.
-// Recebe: content (opcional) — o texto; embeds (opcional) — lista de embeds;
-// components (opcional) — as action rows com botões ou menus.
-// Devolve: o objeto de interação (type 4, sem flags) pronto a ir na Response.
-const publico = (content, embeds, components) => ({
-  type: MSG,
-  data: { content: content || '', embeds: embeds || [], components: components || [] },
-});
+// A resposta HTTP que o Discord espera: o objeto da interação, em JSON.
+// Recebe: o — o objeto de resposta do Discord (type e data).
+// Devolve: a Response com o JSON e o Content-Type certo.
+const json = (o) => new Response(JSON.stringify(o), { headers: { 'Content-Type': 'application/json' } });
 
 const ESTADOS = { criado: 'Recebido', resolucao: 'Em resolução', concluido: 'Concluído' };
 
@@ -197,13 +193,19 @@ async function acharTicket(env, ref) {
 /* Também por aqui se escreve no fio e no rasto: uma resposta dada pelo
    Discord que só mexesse na coluna reply ficava invisível no back office,
    e ninguém sabia que caminho a escreveu.
+   O email à pessoa segue no waitUntil, depois da resposta ao Discord, como
+   no back office. O Discord corta a interação aos 3 segundos, e um Resend
+   lento dava «o aplicativo não respondeu» com a resposta já no fio — quem
+   visse o erro repetia o comando, e a pessoa ficava com duas linhas no fio
+   e dois emails.
    Recebe: env — acesso à base e ao correio; ref — o id do pedido, inteiro ou
    prefixo; estado — o novo estado ('resolucao' ou 'concluido'); resposta
    (opcional) — o texto a escrever no fio e a enviar por email; quem (opcional)
-   — quem mexeu, como { id, nome, papel }.
+   — quem mexeu, como { id, nome, papel }; ctx (opcional) — o contexto de
+   execução do worker, onde o email fica a correr (sem ele, espera-se).
    Devolve: promessa do pedido já com o estado (e a resposta) novos, ou null
    se o pedido não existir. */
-async function mudarEstado(env, ref, estado, resposta, quem) {
+async function mudarEstado(env, ref, estado, resposta, quem, ctx) {
   const t = await acharTicket(env, ref);
   if (!t) return null;
   const agora = Date.now();
@@ -229,7 +231,8 @@ async function mudarEstado(env, ref, estado, resposta, quem) {
       .bind(t.user_id).first();
     if (dono && dono.email) {
       const { emailRespostaPedido } = await import('./lib/correio.js');
-      await emailRespostaPedido(env, dono.email, t.subject, resposta, t.id);
+      const envio = emailRespostaPedido(env, dono.email, t.subject, resposta, t.id);
+      if (ctx && ctx.waitUntil) ctx.waitUntil(envio); else await envio;
     }
   }
   return Object.assign({}, t, { status: estado, reply: resposta || t.reply });
@@ -333,29 +336,32 @@ function campoDaFicha(f) {
 }
 
 // /pedido: abre um pedido pelo id, com a ficha de quem escreveu no lugar do
-// campo "De" e os botões de mudar o estado.
+// campo "De" e os botões de mudar o estado. Efémera, como as outras: a ficha
+// leva o email e a situação da conta de uma pessoa, e o comando pode ser
+// corrido num canal onde está quem nem tem papel no bot.
 // Recebe: env — acesso à base; opts — as opções do comando (id — o id do
 // pedido, inteiro ou prefixo); pap — um papel (string) ou lista de papéis.
-// Devolve: promessa da resposta do Discord com o embed e os botões, ou a recusa.
+// Devolve: promessa da resposta efémera com o embed e os botões, ou a recusa.
 async function cmdPedido(env, opts, pap) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
   const embed = ticketEmbedFull(g.t);
   const ficha = campoDaFicha(await fichaDe(env, g.t.user_id));
   if (ficha) embed.fields = [ficha].concat(embed.fields.filter((c) => c.name !== 'De'));
-  return { type: MSG, data: { embeds: [embed], components: ticketButtons(g.t.id) } };
+  return { type: MSG, data: { flags: 64, embeds: [embed], components: ticketButtons(g.t.id) } };
 }
 
 // /responder: escreve a resposta no pedido e marca-o em resolução; se for um
 // pedido de gente, a pessoa recebe a resposta por email e na app.
 // Recebe: env — acesso à base e ao correio; opts — as opções (id — o id ou
 // prefixo do pedido; texto — a resposta a dar); pap — um papel ou lista de
-// papéis; quem — quem responde, como { id, nome, papel }.
+// papéis; quem — quem responde, como { id, nome, papel }; ctx — o contexto
+// de execução do worker (o email segue nele, depois da resposta).
 // Devolve: promessa da resposta efémera com o pedido atualizado, ou a recusa.
-async function cmdResponder(env, opts, pap, quem) {
+async function cmdResponder(env, opts, pap, quem, ctx) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
-  const t = await mudarEstado(env, g.t.id, 'resolucao', opts.texto, quem);
+  const t = await mudarEstado(env, g.t.id, 'resolucao', opts.texto, quem, ctx);
   return reply('✏️ Respondido e marcado como **em resolução**. A pessoa vê a resposta na app.',
     [ticketEmbedFull(t)]);
 }
@@ -363,12 +369,13 @@ async function cmdResponder(env, opts, pap, quem) {
 // /fechar: dá o pedido por concluído, com resposta final se vier texto.
 // Recebe: env — acesso à base e ao correio; opts — as opções (id — o id ou
 // prefixo do pedido; texto (opcional) — a resposta final); pap — um papel ou
-// lista de papéis; quem — quem fecha, como { id, nome, papel }.
+// lista de papéis; quem — quem fecha, como { id, nome, papel }; ctx — o
+// contexto de execução do worker (o email segue nele, depois da resposta).
 // Devolve: promessa da resposta efémera "Concluído" com o pedido, ou a recusa.
-async function cmdFechar(env, opts, pap, quem) {
+async function cmdFechar(env, opts, pap, quem, ctx) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
-  const t = await mudarEstado(env, g.t.id, 'concluido', opts.texto, quem);
+  const t = await mudarEstado(env, g.t.id, 'concluido', opts.texto, quem, ctx);
   return reply('✅ Concluído.', [ticketEmbedFull(t)]);
 }
 
@@ -469,7 +476,7 @@ async function guardaDoPedido(env, id, pap) {
   if (!t) return { erro: reply('Não encontrei nenhum pedido com esse id.') };
   if (!podeVer(pap, t.category)) {
     return { erro: reply('Esse pedido é de *' + (CATS[t.category] || t.category) +
-      '*, fora do papel **' + pap + '**.') };
+      '*, fora do papel **' + nomeDoPapel(pap) + '**.') };
   }
   return { t };
 }
@@ -525,6 +532,7 @@ async function cmdDocs(env, i, papeis) {
     nome: u.global_name || u.username || u.id,
     papel: papeis[0],
     papeis,
+    guildId: i.guild_id,   // o servidor onde a sessão volta a perguntar os cargos
   });
   const base = env.ENV_NAME ? 'https://dev.rendorium.com' : 'https://app.rendorium.com';
   return reply('📚 A documentação da casa — gerada do próprio código a cada deploy:\n' +
@@ -553,6 +561,7 @@ async function cmdEntrar(env, i, papeis, request) {
     nome: u.global_name || u.username || u.id,
     papel: papeis[0],   // o principal, para mostrar
     papeis,             // todos, para decidir o que se vê
+    guildId: i.guild_id,   // onde a sessão volta a perguntar os cargos (equipa.js:getEquipa)
   });
   /* O origin do pedido é o endpoint das interações — que continua a ser o
      workers.dev antigo, e continua a funcionar. Mas a ligação que se dá às
@@ -575,12 +584,18 @@ async function cmdEntrar(env, i, papeis, request) {
    bandeiras; email (opcional) — para onde passa a ir o correio de teste);
    request — o pedido HTTP recebido (hoje fica por usar).
    Devolve: promessa da resposta efémera com a ligação de teste e as notas do
-   que abri-la faz. */
+   que abri-la faz — ou o aviso de que falta a chave de teste. */
 async function cmdTest(env, i, opts, request) {
   const { ligacaoTeste } = await import('./teste.js');
   const base = 'https://dev.rendorium.com';   // o teste vive sempre aqui
   const u = (i.member && i.member.user) || i.user || {};
-  const lig = await ligacaoTeste(env, base, !!opts.dados, !!opts.extra, u.id, !!opts.limpar, opts.email);
+  let lig;
+  try {
+    lig = await ligacaoTeste(env, base, !!opts.dados, !!opts.extra, u.id, !!opts.limpar, opts.email);
+  } catch (e) {
+    // sem chave de teste não se assina nada: diz-se o que falta, e não uma ligação que não vale
+    return reply('🧪 ' + cut((e && e.message) || e, 300));
+  }
   return reply('🧪 O teu ambiente de teste (a ligação vale 10 minutos):\n' + lig + '\n\n' +
     (opts.limpar
       ? 'Abri-la APAGA as tuas contas de teste e começa numa lavada.'
@@ -715,25 +730,18 @@ async function cmdAccess(env, i, opts) {
    Os que viajaram na mensagem podem estar velhos — o cargo pode ter mudado
    entre abrir o menu e mexer nele — e gravar exceções contra um cargo velho
    dava exceções erradas. Se a pergunta não der, vale o que veio na mensagem:
-   é melhor do que recusar o clique.
+   é melhor do que recusar o clique. A pergunta é a de lib/bot.js
+   (cargosDoMembro), a mesma com que a sessão de equipa revê os papéis.
    Recebe: env — as variáveis de ambiente (usa DISCORD_BOT_TOKEN); i — a
    interação (usa guild_id); alvoId — o id de Discord do alvo; guardados — a
    lista de papéis que viajou na mensagem, para valer se a pergunta falhar.
-   Devolve: promessa da lista de papéis fresca do Discord, ou `guardados`. */
+   Devolve: promessa da lista de papéis fresca do Discord — vazia se a pessoa
+   já saiu do servidor —, ou `guardados` quando a pergunta não deu. */
 async function papeisDoAlvo(env, i, alvoId, guardados) {
-  if (env.DISCORD_BOT_TOKEN && i.guild_id) {
-    try {
-      const r = await fetch(
-        'https://discord.com/api/v10/guilds/' + i.guild_id + '/members/' + alvoId,
-        { headers: { Authorization: 'Bot ' + env.DISCORD_BOT_TOKEN } }
-      );
-      if (r.ok) {
-        const m = await r.json();
-        return papeisDe(env, { member: { user: { id: alvoId }, roles: m.roles || [] } });
-      }
-    } catch (e) { /* fica o que veio na mensagem */ }
-  }
-  return guardados;
+  const c = await cargosDoMembro(env, i.guild_id, alvoId);
+  if (!c) return guardados;   // fica o que veio na mensagem
+  if (c.saiu) return [];
+  return papeisDe(env, { member: { user: { id: alvoId }, roles: c.cargos } });
 }
 
 /* Trata os cliques na mensagem do /access: o botão repõe tudo ao cargo, o
@@ -805,9 +813,10 @@ function quemFala(i, pap) {
 /* ---------------------------- encaminhamento ---------------------------- */
 
 /* A porta de entrada de todas as interações do Discord: verifica a assinatura,
-   responde ao ping, e encaminha botões, menus e comandos — cada um atrás da
-   pergunta "este papel pode?". Devolve sempre a Response JSON que o Discord
-   espera; um erro num comando vira mensagem, não um 500.
+   responde ao ping, e passa o resto ao encaminhar. Devolve sempre a Response
+   JSON que o Discord espera: um erro num comando, num botão ou num menu vira
+   mensagem para quem clicou e relato para quem programa — nunca um 500, que
+   o Discord mostra como «esta interação falhou» sem dizer a ninguém porquê.
    Recebe: request — o pedido HTTP vindo do Discord (assinatura nos cabeçalhos,
    interação no corpo); env — as variáveis de ambiente; ctx — o contexto de
    execução do worker.
@@ -825,30 +834,61 @@ export async function handleInteraction(request, env, ctx) {
 
   let i;
   try { i = JSON.parse(raw); } catch (e) { return new Response('json inválido', { status: 400 }); }
-  const json = (o) => new Response(JSON.stringify(o), { headers: { 'Content-Type': 'application/json' } });
+  if (!i || typeof i !== 'object') return new Response('json inválido', { status: 400 });
 
   if (i.type === 1) return json(PONG);
 
+  try {
+    return await encaminhar(i, env, ctx, request);
+  } catch (e) {
+    try {
+      const { recordReport } = await import('./lib/relatos.js');
+      const d = i.data || {};
+      await recordReport(env, ctx, 'server', 'Discord: ' + ((e && e.message) || e),
+        'interação ' + i.type + ' ' + cut(d.name || d.custom_id || '', 80) + '\n' +
+        String((e && e.stack) || '').slice(0, 800));
+    } catch (e2) { /* o relato é para quem programa; quem clicou tem a mensagem na mesma */ }
+    return json(reply('Correu mal: ' + cut((e && e.message) || e, 300)));
+  }
+}
+
+/* O que se faz com uma interação já verificada: quem é, que papéis tem e
+   que exceções lhe foram dadas, e depois botões, menus e comandos — cada um
+   atrás da pergunta "este papel pode?".
+   Os botões de um pedido passam pelas mesmas exceções que os comandos que
+   fazem o mesmo: o «Concluir» é o /fechar e o «Em resolução» é o /responder.
+   Um /access que retirasse o /fechar e deixasse o botão não retirava nada.
+   Recebe: i — a interação do Discord, com a assinatura já verificada; env —
+   as variáveis de ambiente; ctx — o contexto de execução do worker; request
+   — o pedido HTTP recebido.
+   Devolve: promessa da Response JSON para o Discord. Um erro lança, e quem
+   chama faz dele mensagem e relato. */
+async function encaminhar(i, env, ctx, request) {
   const papeis = papeisDe(env, i);
   if (!papeis.length) return json(reply('Não tens permissão para usar este bot.'));
   const pap = papeis;
   const quemSou = (i.member && i.member.user && i.member.user.id) || (i.user && i.user.id);
   const meusAcessos = await lerAcessos(env, quemSou);
+  const dados = i.data || {};
 
   // botões e menus
   if (i.type === 3) {
-    const cid = String(i.data.custom_id || '');
+    const cid = String(dados.custom_id || '');
     // o menu do /access e o seu botão de repor
     if (cid.indexOf('ac:') === 0 || cid.indexOf('acz:') === 0) {
       return json(await acessoInteracao(env, i, papeis, cid));
     }
-    const [, acao, id] = cid.split(':');
-    const estado = acao === 'fim' ? 'concluido' : 'resolucao';
+    const [prefixo, acao, id] = cid.split(':');
+    if (prefixo !== 'tk' || (acao !== 'res' && acao !== 'fim') || !id) return json(reply('Não conheço este botão.'));
+    const comando = acao === 'fim' ? 'fechar' : 'responder';
+    if (!podeCorrer(pap, comando, meusAcessos)) {
+      return json(reply('Este botão faz o mesmo que o **/' + comando + '**, que não é para ti.'));
+    }
     const antes = await env.DB.prepare('SELECT category FROM tickets WHERE id = ?').bind(id).first();
     if (antes && !podeVer(pap, antes.category)) {
       return json(reply('Esse pedido é de *' + (CATS[antes.category] || antes.category) + '*, fora do papel **' + nomeDoPapel(pap) + '**.'));
     }
-    const t = await mudarEstado(env, id, estado, null, quemFala(i, pap));
+    const t = await mudarEstado(env, id, acao === 'fim' ? 'concluido' : 'resolucao', null, quemFala(i, pap), ctx);
     if (!t) return json(reply('Esse pedido já não existe.'));
     return json({
       type: UPDATE,
@@ -858,9 +898,9 @@ export async function handleInteraction(request, env, ctx) {
 
   // comandos
   if (i.type === 2) {
-    const nome = i.data.name;
+    const nome = dados.name;
     const opts = {};
-    (i.data.options || []).forEach(function (o) { opts[o.name] = o.value; });
+    (dados.options || []).forEach(function (o) { opts[o.name] = o.value; });
     // A recusa diz o que se pode fazer em vez de só dizer que não: quem
     // recebe um "não tens permissão" seco vai perguntar a alguém.
     if (!podeCorrer(pap, nome, meusAcessos)) {
@@ -869,23 +909,19 @@ export async function handleInteraction(request, env, ctx) {
         (meus.length ? 'Podes correr: ' + meus.map((c) => '`/' + c + '`').join(', ') + '.'
                      : 'Não tens nenhum comando disponível.')));
     }
-    try {
-      if (nome === 'comandos') return json(cmdComandos(pap, meusAcessos));
-      if (nome === 'access') return json(await cmdAccess(env, i, opts));
-      if (nome === 'entrar') return json(await cmdEntrar(env, i, papeis, request));
-      if (nome === 'test') return json(await cmdTest(env, i, opts, request));
-      if (nome === 'docs') return json(await cmdDocs(env, i, papeis));
-      if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
-      if (nome === 'pedido') return json(await cmdPedido(env, opts, pap));
-      if (nome === 'responder') return json(await cmdResponder(env, opts, pap, quemFala(i, pap)));
-      if (nome === 'fechar') return json(await cmdFechar(env, opts, pap, quemFala(i, pap)));
-      if (nome === 'erros') return json(await cmdErros(env, opts));
-      if (nome === 'uso') return json(adiar(ctx, i, () => cmdUso(env)));
-      if (nome === 'copias') return json(adiar(ctx, i, () => cmdCopias(env, opts)));
-      if (nome === 'resumo') return json(adiar(ctx, i, () => cmdResumo(env, ctx)));
-    } catch (e) {
-      return json(reply('Correu mal: ' + cut(e.message, 300)));
-    }
+    if (nome === 'comandos') return json(cmdComandos(pap, meusAcessos));
+    if (nome === 'access') return json(await cmdAccess(env, i, opts));
+    if (nome === 'entrar') return json(await cmdEntrar(env, i, papeis, request));
+    if (nome === 'test') return json(await cmdTest(env, i, opts, request));
+    if (nome === 'docs') return json(await cmdDocs(env, i, papeis));
+    if (nome === 'pedidos') return json(await cmdPedidos(env, opts, pap));
+    if (nome === 'pedido') return json(await cmdPedido(env, opts, pap));
+    if (nome === 'responder') return json(await cmdResponder(env, opts, pap, quemFala(i, pap), ctx));
+    if (nome === 'fechar') return json(await cmdFechar(env, opts, pap, quemFala(i, pap), ctx));
+    if (nome === 'erros') return json(await cmdErros(env, opts));
+    if (nome === 'uso') return json(adiar(ctx, i, () => cmdUso(env)));
+    if (nome === 'copias') return json(adiar(ctx, i, () => cmdCopias(env, opts)));
+    if (nome === 'resumo') return json(adiar(ctx, i, () => cmdResumo(env, ctx)));
     /* O Discord regista os comandos para o bot todo, mas quem lhes responde
        é o worker de cada ambiente. Um comando novo registado antes de ser
        promovido aparece na lista e cai aqui — e "comando desconhecido" manda

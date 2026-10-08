@@ -7,7 +7,8 @@
 
    Nada aqui devolve dados de imóveis, contratos ou movimentos. Quem faz
    suporte precisa de saber com quem fala e o que essa pessoa escreveu, não
-   de lhe ver as contas.
+   de lhe ver as contas. A exceção é descarregar uma cópia da base, que é a
+   base inteira: fica com o master, como as ações sobre contas.
 
    Desde que isto ganhou poderes de escrita, vale uma regra sem exceções:
    toda a ação que muda alguma coisa escreve primeiro no audit_log. Nas
@@ -18,6 +19,7 @@
 import { json, err, body, now, badId, CATEGORIAS } from './lib/http.js';
 import { catsDe } from './lib/papeis.js';
 import { auditar, registarOp } from './lib/auditoria.js';
+import { SERVICOS, servicoDe, servicosDesligados, guardarServico } from './lib/servicos.js';
 
 // Corta a `n` caracteres com reticências — para os resumos que vão para o rasto.
 // Recebe: s — o texto (qualquer valor; null e undefined contam como vazio); n — o máximo de caracteres.
@@ -128,6 +130,20 @@ async function ficha360(env, userId) {
   return f;
 }
 
+/* Os serviços de uma conta, pela ordem do catálogo: o nome que se lê, se
+   está ligado (ausência de linha = ligado; a lib aplica o fecho dos
+   dependentes) e os que ele requer — com isto o cartão da ficha calcula
+   quem cai junto ao desligar, sem segunda consulta.
+   Recebe: env — o ambiente do worker (a base em env.DB); userId — o id da conta;
+   desligados (opcional) — a lista já lida (o PUT tem-na de guardarServico e não
+   volta à base por ela).
+   Devolve: promessa de um array de { id, nome, ligado, requer }, um por
+   serviço do catálogo. */
+async function servicosDaConta(env, userId, desligados) {
+  const off = Array.isArray(desligados) ? desligados : await servicosDesligados(env, userId);
+  return SERVICOS.map((s) => ({ id: s.id, nome: s.nome, ligado: off.indexOf(s.id) < 0, requer: s.requer.slice() }));
+}
+
 /* ----------------------------- ações de conta ----------------------------
 
    Cada uma valida, escreve o rasto, e só depois mexe. O motivo é
@@ -171,8 +187,6 @@ const ACOES_DE_CONTA = {
     await env.DB.prepare('UPDATE users SET email = ? WHERE id = ?').bind(email, u.id).run();
     return 'email: ' + u.email + ' → ' + email;
   },
-  /* Só com password definida: uma conta criada pelo Google não tem outra
-     porta, e desligar-lhe o Google era trancar a pessoa fora de vez. */
   /* Definir uma palavra-passe nova, sem passar pelo email: para quem ficou
      trancado fora com o email inacessível, e para dar uma porta própria a
      uma conta só-Google antes de lhe desligar o Google. As sessões antigas
@@ -183,11 +197,12 @@ const ACOES_DE_CONTA = {
     if (weakPassword(String(valor || ''))) {
       throw new Error('Fraca: 8+ caracteres, com maiúscula, minúscula, número e símbolo.');
     }
-    const { hashPassword } = await import('./auth.js');
-    const pw = await hashPassword(String(valor));
+    // grava-se como as da app (auth.js:palavraNova): com PASS_PEPPER vai com pimenta e fica pass_v 2
+    const { palavraNova } = await import('./auth.js');
+    const pw = await palavraNova(env, String(valor));
     await env.DB.prepare(
-      'UPDATE users SET pass_hash = ?, pass_salt = ?, sess_epoch = COALESCE(sess_epoch, 0) + 1 WHERE id = ?'
-    ).bind(pw.hash, pw.salt, u.id).run();
+      'UPDATE users SET pass_hash = ?, pass_salt = ?, pass_v = ?, sess_epoch = COALESCE(sess_epoch, 0) + 1 WHERE id = ?'
+    ).bind(pw.hash, pw.salt, pw.v, u.id).run();
     return 'palavra-passe definida — todas as sessões terminadas';
   },
   /* Apagar de vez: o purge a sério, o mesmo do "apagar conta" na app e do
@@ -202,6 +217,8 @@ const ACOES_DE_CONTA = {
     await purgeAccount(env, u.id);
     return 'conta apagada de vez (' + u.email + ')';
   },
+  /* Só com password definida: uma conta criada pelo Google não tem outra
+     porta, e desligar-lhe o Google era trancar a pessoa fora de vez. */
   async 'desligar-google'(env, u) {
     if (!u.google_sub) throw new Error('Esta conta não tem Google ligado.');
     if (!u.pass_hash) throw new Error('É uma conta só-Google: sem password, desligar o Google trancava-a fora.');
@@ -404,7 +421,8 @@ export async function rotasEquipaApi(c) {
     return json({ ok: true });
   }
 
-  /* ---- procurar uma pessoa ---- */
+  /* ---- criar uma conta ---- */
+
   /* Criar uma conta pelo back office: só o master, com motivo, e sem
      nunca colidir — o email é único, e a resposta de uma colisão diz qual
      é a conta que já lá está. Os termos ficam por aceitar de propósito:
@@ -430,16 +448,18 @@ export async function rotasEquipaApi(c) {
     }
     const registado = await auditar(env, eu, 'conta.criar', email, motivo);
     if (!registado) return err(500, 'A auditoria não está a escrever — sem rasto não se criam contas.');
-    const { newUserId, hashPassword } = await import('./auth.js');
-    const pw = await hashPassword(pass);
+    // a palavra-passe grava-se como as da app (auth.js:palavraNova): com PASS_PEPPER fica pass_v 2
+    const { newUserId, palavraNova } = await import('./auth.js');
+    const pw = await palavraNova(env, pass);
     const id = newUserId();
     await env.DB.prepare(
-      'INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(id, email, nome || email.split('@')[0], pw.hash, pw.salt, now()).run();
+      'INSERT INTO users (id, email, name, pass_hash, pass_salt, pass_v, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(id, email, nome || email.split('@')[0], pw.hash, pw.salt, pw.v, now()).run();
     await auditar(env, eu, 'conta.criar.feito', id, email);
     return json({ id, email });
   }
 
+  /* ---- procurar uma pessoa ---- */
   if (path === '/api/equipa/pessoas' && method === 'GET') {
     if (cats.indexOf('user') < 0) return err(403, 'O teu papel não vê pessoas.');
     const q = (url.searchParams.get('q') || '').trim().slice(0, 80);
@@ -512,7 +532,45 @@ export async function rotasEquipaApi(c) {
     return json({ ok: true, resultado, quem });
   }
 
-  /* ---- a sala das máquinas (quem vê a infraestrutura) ---- */
+  /* ---- os serviços de uma conta (suporte e master) ----
+     Cada separador da app é um serviço que se pode desligar a uma conta.
+     É de quem fala com as pessoas (o canto 'user': suporte e master), como
+     a pesquisa e a ficha — não é uma ação de master, porque não mexe na
+     vida da conta: nada se apaga, e liga-se outra vez quando se quiser. A
+     regra vive na lib (worker/src/lib/servicos.js), a mesma do cliente:
+     desligar desliga os dependentes, ligar exige os requeridos ligados. O
+     rasto é o das ações de conta — a intenção primeiro, e sem rasto não
+     se mexe; depois o feito ou o falhou. */
+  const mServicos = /^\/api\/equipa\/pessoas\/([^/]+)\/servicos(?:\/([^/]+))?$/.exec(path);
+  if (mServicos && ((method === 'GET' && !mServicos[2]) || (method === 'PUT' && mServicos[2]))) {
+    if (cats.indexOf('user') < 0) return err(403, 'Os serviços de uma conta são de quem fala com as pessoas.');
+    const id = decodeURIComponent(mServicos[1]);
+    if (badId(id)) return err(400, 'Id inválido.');
+    const u = await env.DB.prepare('SELECT id, deleted_at FROM users WHERE id = ?').bind(id).first();
+    if (!u) return err(404, 'Conta não encontrada.');
+    if (method === 'GET') return json({ servicos: await servicosDaConta(env, id) });
+
+    const s = servicoDe(decodeURIComponent(mServicos[2]));
+    if (!s) return err(400, 'Serviço desconhecido.');
+    const b = await body(request);
+    if (!b || typeof b.ligado !== 'boolean') return err(400, 'Diz se é para ligar ou desligar: {ligado: true} ou {ligado: false}.');
+    if (u.deleted_at) return err(409, 'Essa conta foi apagada; já não há onde mexer.');
+    const verbo = b.ligado ? 'ligar' : 'desligar';
+    const registado = await auditar(env, eu, 'conta.servico.' + verbo, id, s.id + ' (' + s.nome + ')');
+    if (!registado) return err(500, 'A auditoria não está a escrever — sem rasto não se mexe nos serviços.');
+    let desligados;
+    try {
+      desligados = await guardarServico(env, id, s.id, b.ligado, eu.discordId);
+    } catch (e) {
+      if (!(e && e.status === 400)) throw e;
+      await auditar(env, eu, 'conta.servico.' + verbo + '.falhou', id, s.id + ': ' + (e.error || e.message));
+      return err(400, String(e.error || e.message));
+    }
+    await auditar(env, eu, 'conta.servico.' + verbo + '.feito', id,
+      s.id + (desligados.length ? ' — desligados agora: ' + desligados.join(', ') : ' — tudo ligado'));
+    return json({ servicos: await servicosDaConta(env, id, desligados) });
+  }
+
   /* ---- endereços @rendorium.com (Email Routing do Cloudflare) ---- */
   if (path === '/api/equipa/email' && method === 'GET') {
     if (cats.indexOf('infra') < 0) return err(403, 'Os endereços são de quem vê a infraestrutura.');
@@ -544,6 +602,7 @@ export async function rotasEquipaApi(c) {
     }
   }
 
+  /* ---- a sala das máquinas (quem vê a infraestrutura) ---- */
   if (path.startsWith('/api/equipa/operacao')) {
     if (cats.indexOf('infra') < 0) return err(403, 'A operação é de quem vê a infraestrutura.');
 
@@ -582,8 +641,10 @@ export async function rotasEquipaApi(c) {
        fora de produção — lá dentro nem a rota de destino existe. */
     if (path === '/api/equipa/operacao/teste' && method === 'POST') {
       if (!env.ENV_NAME) return err(404, 'Produção não tem ambiente de teste.');
+      const { ligacaoTeste, temChaveDeTeste, SEM_CHAVE } = await import('./teste.js');
+      // sem chave não há ligação que valha: diz-se o que falta, antes de deixar rasto
+      if (!temChaveDeTeste(env)) return err(503, SEM_CHAVE);
       const b = await body(request);
-      const { ligacaoTeste } = await import('./teste.js');
       await auditar(env, eu, 'operacao.teste', null,
         'ligação de teste emitida' + (b && b.limpar ? ' (limpar tudo)' : b && b.manter ? ' (extra)' : ' (retomar)') +
         (b && b.dados ? ' (com dados de exemplo)' : ''));
@@ -609,9 +670,8 @@ export async function rotasEquipaApi(c) {
       const chave = PREFIXO + mResumo[1] + '.ndjson.gz';
       const obj = await env.FILES.get(chave);
       if (!obj) return err(404, 'Não há cópia desse dia.');
-      // o plano gratuito dá pouco CPU: uma cópia grande inspeciona-se em
-      // casa, com scripts/restaurar.js --resumo, não aqui
-      // o plano gratuito dá ~10 ms de CPU: acima disto, inspeciona-se em casa
+      // o plano gratuito dá ~10 ms de CPU: uma cópia grande inspeciona-se em casa,
+      // com scripts/restaurar.js --resumo, não aqui
       if (obj.size > 2 * 1024 * 1024) {
         return err(413, 'Cópia grande de mais para inspecionar no worker. Descarrega-a e corre scripts/restaurar.js --resumo.');
       }
@@ -647,11 +707,20 @@ export async function rotasEquipaApi(c) {
 
     const mDescarga = /^\/api\/equipa\/operacao\/copias\/(\d{4}-\d{2}-\d{2})\/descarregar$/.exec(path);
     if (mDescarga && method === 'GET') {
+      /* Descarregar uma cópia é sair com a base inteira: as contas de toda a
+         gente, com os hashes das palavras-passe, os registos, o rasto. É a
+         leitura mais sensível daqui — mais do que a ficha de uma pessoa, que
+         já pede o canto 'user' — e fica com as ações que mexem na vida de
+         quem usa a app: só o master. Quem opera continua a verificar a cópia
+         (o resumo, acima), que é o que precisa para saber se ela presta. */
+      if (!eMaster(eu)) {
+        return err(403, 'Descarregar a base inteira é só do master. Para saber se a cópia presta, usa o Verificar.');
+      }
       const { PREFIXO } = await import('./salvaguarda.js');
       const chave = PREFIXO + mDescarga[1] + '.ndjson.gz';
       const obj = await env.FILES.get(chave);
       if (!obj) return err(404, 'Não há cópia desse dia.');
-      // descarregar uma cópia é sair com a base toda: fica no rasto
+      // e fica no rasto, com o tamanho do que saiu
       await auditar(env, eu, 'operacao.descarregar', chave, obj.size + ' bytes');
       return new Response(obj.body, {
         headers: {

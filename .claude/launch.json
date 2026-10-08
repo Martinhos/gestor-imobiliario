@@ -1,1 +1,0 @@
-{"version":"0.0.1","configurations":[{"name":"landing","runtimeExecutable":"python","runtimeArgs":["-m","http.server","8123","-d","C:/Users/MARTIN~1/AppData/Local/Temp/claude/C--Users-Martinho-Santos-Desktop-Gestor-imobili-rio/bff1e60f-40ed-4f15-b156-209c4ed2151c/scratchpad"],"port":8123}]}

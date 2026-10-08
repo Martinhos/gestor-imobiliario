@@ -10,6 +10,7 @@
    É da equipa: pede a mesma sessão que o resto do /equipa. */
 
 import { DOCS } from './docs-gerados.js';
+import { CSP_ESTRITA } from './lib/http.js';
 
 // Escapa &, < e > para HTML; null e undefined viram ''.
 // Recebe: s — o valor a escapar (qualquer coisa; é convertido a string).
@@ -25,11 +26,6 @@ const prosa = (t) => esc(t).split(/\n{2,}/)
   .filter(Boolean)
   .map((p) => '<p>' + p.replace(/\n/g, ' ') + '</p>').join('');
 
-/* Monta a página inteira — gaveta, comandos, capítulos, pesquisa — a partir
-   do DOCS gerado no deploy, e devolve-a como Response HTML sem cache. Tudo
-   inline: a página não volta a pedir nada ao servidor, e a pesquisa corre no
-   browser sobre o próprio DOM.
-   Devolve: uma Response HTML sem cache com a página completa. */
 /* Parte o comentário de uma função nas suas três peças: o sumário (a prosa
    que explica o que faz), o Recebe e o Devolve. As etiquetas procuram-se no
    princípio de uma linha ou de uma frase — a palavra «devolve» no meio de
@@ -80,9 +76,11 @@ function paramsDe(texto) {
 
 /* Monta a página inteira — gaveta, comandos, capítulos e pesquisa — a partir
    do DOCS gerado no deploy. Cada função aparece em quatro peças distintas:
-   assinatura, sumário, Recebe e Devolve.
-   Devolve: uma Response HTML sem cache, pronta a servir em /equipa/docs. */
-export function paginaDocs() {
+   assinatura, sumário, Recebe e Devolve. O conteúdo vai todo na página — só
+   o CSS_DOCS e o GUIAO_DOCS vêm à parte (/equipa/docs.css e /equipa/docs.js,
+   por causa da CSP_ESTRITA) — e a pesquisa corre no browser sobre o DOM.
+   Devolve: o HTML da página completa (texto). */
+function montarPagina() {
   let nFn = 0;
 
   const capitulos = (DOCS.capitulos || []).map((c) => {
@@ -129,8 +127,53 @@ export function paginaDocs() {
   const html = `<!doctype html><html lang="pt"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><title>Docs · Rendorium</title>
-<style>
-:root{color-scheme:light dark;--bg:#f7f8fa;--card:#fff;--ink:#17221d;--muted:#5a635e;--line:#e7ebe8;--accent:#244c3b;--accent-ink:#fff;--chip:#f2f4f3;--marca:#fff4c2}
+<link rel="stylesheet" href="/equipa/docs.css">
+</head><body>
+<button class="burger" aria-label="Navegação">☰</button>
+<div class="app">
+<aside>
+  <h1>Como isto funciona</h1>
+  <input id="q" type="search" placeholder="Pesquisar em tudo…" autocomplete="off">
+  <nav id="nav">${gaveta}</nav>
+</aside>
+<main>
+  <section class="painel" id="resultados"><h2>Resultados</h2><div id="lista"></div></section>
+  <section class="cap" id="cmd"><h2>Comandos do Discord</h2>${comandos}</section>
+  ${capitulos}
+</main>
+</div>
+<script src="/equipa/docs.js"></script>
+</body></html>`;
+
+  return html;
+}
+
+/* A página pronta. É igual para toda a equipa e só muda com o DOCS, que só
+   muda num deploy (e um deploy traz isolates novos) — mas montá-la custa 40
+   a 90 ms de CPU, mil e tal funções e 1 MB de HTML, dez vezes o que o plano
+   gratuito dá a um pedido. Monta-se na primeira vez que este isolate a
+   serve e guarda-se; os pedidos seguintes só a entregam. */
+let paginaPronta = null;
+
+/* A documentação da casa, em /equipa/docs (a sessão de equipa já foi
+   verificada pelo index.js).
+   Devolve: uma Response HTML sem cache com a página completa. */
+export function paginaDocs() {
+  if (paginaPronta === null) paginaPronta = montarPagina();
+  return new Response(paginaPronta, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Content-Security-Policy': CSP_ESTRITA,
+    },
+  });
+}
+
+/* Os estilos da página, servidos à parte em /equipa/docs.css
+   (paginas-recursos.js, só com sessão de equipa, como a página): a página
+   vai com a CSP_ESTRITA, que não aplica uma folha escrita dentro do próprio
+   HTML (a etiqueta de estilo em linha). */
+export const CSS_DOCS = `:root{color-scheme:light dark;--bg:#f7f8fa;--card:#fff;--ink:#17221d;--muted:#5a635e;--line:#e7ebe8;--accent:#244c3b;--accent-ink:#fff;--chip:#f2f4f3;--marca:#fff4c2}
 @media(prefers-color-scheme:dark){:root{--bg:#12141b;--card:#1b1e28;--ink:#eef0f6;--muted:#9aa3b8;--line:#2b3040;--accent:#5ee0a8;--accent-ink:#0b1410;--chip:#272b38;--marca:#4a3f14}}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
@@ -184,6 +227,8 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
 .res{display:block;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:7px;cursor:pointer;font-size:13.5px}
 .res .onde{color:var(--muted);font-size:11.5px;margin-bottom:3px}
 .res:hover{border-color:var(--accent)}
+/* a pesquisa sem resultados (era um style= no parágrafo) */
+.nada{color:var(--muted)}
 .burger{display:none}
 @media(max-width:860px){
   .app{grid-template-columns:1fr}
@@ -192,26 +237,22 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
   .burger{display:inline-flex;position:fixed;top:12px;right:12px;z-index:6;width:42px;height:42px;border-radius:11px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:18px;align-items:center;justify-content:center;cursor:pointer}
   main{padding:20px 16px 60px}
 }
-</style></head><body>
-<button class="burger" onclick="document.querySelector('aside').classList.toggle('aberta')" aria-label="Navegação">☰</button>
-<div class="app">
-<aside>
-  <h1>Como isto funciona</h1>
-  <input id="q" type="search" placeholder="Pesquisar em tudo…" autocomplete="off">
-  <nav id="nav">${gaveta}</nav>
-</aside>
-<main>
-  <section class="painel" id="resultados"><h2>Resultados</h2><div id="lista"></div></section>
-  <section class="cap" id="cmd"><h2>Comandos do Discord</h2>${comandos}</section>
-  ${capitulos}
-</main>
-</div>
-<script>
-(function () {
+`;
+
+/* O JavaScript da página, servido em /equipa/docs.js (só com sessão de
+   equipa): a gaveta, os capítulos e a pesquisa, sobre o próprio DOM. Os
+   eventos ligam-se com addEventListener — a CSP_ESTRITA não corre um on…=
+   escrito no HTML. É um String.raw: o que aqui está é o que o browser recebe. */
+export const GUIAO_DOCS = String.raw`(function () {
   var nav = document.getElementById('nav');
   var q = document.getElementById('q');
   var caps = [].slice.call(document.querySelectorAll('.cap'));
   var res = document.getElementById('resultados'), lista = document.getElementById('lista');
+
+  // o botão da gaveta, no telemóvel
+  document.querySelector('.burger').addEventListener('click', function () {
+    document.querySelector('aside').classList.toggle('aberta');
+  });
 
   /* o capítulo ativo vive no #hash: um refresh (ou uma ligação partilhada)
      volta ao mesmo sítio. O fechaGaveta distingue navegação a sério de
@@ -230,10 +271,10 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
       var m = document.querySelector('main'); if (m) m.scrollTop = 0; window.scrollTo(0, 0);
     }
   }
-  nav.onclick = function (e) {
+  nav.addEventListener('click', function (e) {
     var a = e.target.closest('a'); if (!a) return;
     e.preventDefault(); q.value = ''; ativa(a.dataset.cap);
-  };
+  });
 
   /* o índice da pesquisa constrói-se do próprio DOM: cada função e cada
      ficheiro, com o capítulo a que pertencem — pesquisar é filtrar isto */
@@ -254,7 +295,17 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
     });
   });
 
-  q.oninput = function () {
+  // abrir um resultado: vai ao capítulo, abre o ficheiro e marca o sítio
+  function abrirResultado(e2) {
+    q.value = ''; ativa(e2.cap);
+    if (e2.fich) e2.fich.open = true;
+    if (e2.el.tagName === 'DETAILS') e2.el.open = true;
+    e2.el.scrollIntoView({ block: 'center' });
+    e2.el.classList.add('marca');
+    setTimeout(function () { e2.el.classList.remove('marca'); }, 1800);
+  }
+
+  q.addEventListener('input', function () {
     var termo = q.value.trim().toLowerCase();
     if (termo.length < 2) { if (res.classList.contains('on')) ativa(capAtual, false); return; }
     caps.forEach(function (c) { c.classList.remove('on'); });
@@ -268,28 +319,13 @@ code{background:var(--chip);border-radius:5px;padding:1px 6px;font-size:.92em;fo
       var b = document.createElement('div');
       b.className = 'res';
       b.innerHTML = '<div class="onde">' + e.capNome + '</div><code>' + e.rotulo.replace(/</g, '&lt;') + '</code>';
-      b.onclick = (function (e2) {
-        return function () {
-          q.value = ''; ativa(e2.cap);
-          if (e2.fich) e2.fich.open = true;
-          if (e2.el.tagName === 'DETAILS') e2.el.open = true;
-          e2.el.scrollIntoView({ block: 'center' });
-          e2.el.classList.add('marca');
-          setTimeout(function () { e2.el.classList.remove('marca'); }, 1800);
-        };
-      })(e);
+      b.addEventListener('click', abrirResultado.bind(null, e));
       lista.appendChild(b);
     }
-    if (!vistos) lista.innerHTML = '<p style="color:var(--muted)">Nada com «' + termo.replace(/</g, '&lt;') + '».</p>';
+    if (!vistos) lista.innerHTML = '<p class="nada">Nada com «' + termo.replace(/</g, '&lt;') + '».</p>';
     res.classList.add('on');
-  };
+  });
 
   ativa((location.hash || '').slice(1) || 'cmd', false);
 })();
-</script>
-</body></html>`;
-
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
-  });
-}
+`;

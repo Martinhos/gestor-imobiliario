@@ -6,13 +6,13 @@
 // afirmar — um deles com um botão de Confirmar que criava a renda em
 // duplicado.
 
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
-import { carregarApp } from './arnes.js';
+import { carregarApp, repor } from './arnes.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const le = (p) => fs.readFileSync(path.join(AQUI, '..', p), 'utf8');
@@ -20,6 +20,7 @@ const le = (p) => fs.readFileSync(path.join(AQUI, '..', p), 'utf8');
 /* ------------------------------------------------------- a camada da app */
 
 const app = carregarApp();
+afterEach(() => repor(app));
 
 function aEsperar() {
   app.CW = { user: { id: 'EU' } };   // sessão iniciada, sem _esperaFim: à espera
@@ -167,7 +168,7 @@ describe('o push não apaga antes de saber', () => {
 describe('os lembretes refazem-se com o estado do servidor', () => {
   test('o applyState reagenda: gravar com rawSet não passa pelo save()', () => {
     const s = le('web/cloud/nucleo.js');
-    const i = s.indexOf('function applyState(st)');
+    const i = s.indexOf('function applyState(');
     assert.ok(i > -1);
     const corpo = s.slice(i, s.indexOf('function pullNow', i));
     assert.match(corpo, /scheduleReminders\(\)/, 'reagenda');

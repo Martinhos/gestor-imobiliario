@@ -96,7 +96,6 @@ function baseFalsa(estado) {
   };
 }
 
-const avisos = () => { const l = []; return { l, notify: (e) => l.push(e) }; };
 
 describe('contar pessoas e não ocorrências', () => {
   test('o mesmo erro da mesma pessoa conta uma pessoa', async () => {

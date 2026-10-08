@@ -1,16 +1,18 @@
 // Métricas: o peso de cada movimento na vista por proprietário, as amortizações à parte,
 // o yield sobre o mesmo conjunto, o NOI anualizado, as receitas que não são rendimento,
-// o IRS sobre rendas, a projeção, os acertos globais e a data de hoje em hora local.
+// o IRS sobre rendas, a projeção e os acertos globais. (A data de hoje em hora
+// local prova-se no numeros.test.js, com o relógio verdadeiro.)
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar, igual } from './arnes.js';
+import { carregarApp, limpar, igual, perto, repor } from './arnes.js';
 
-const app = carregarApp();
-const perto = (a, b, tol = 0.01) =>
-  assert.ok(Math.abs(a - b) <= tol, `esperava ${b} (±${tol}), veio ${a}`);
-const ANO = new Date().getFullYear();
-const MES = new Date().getMonth() + 1;
+// a app vive num dia fixo: o NOI anualiza-se pelos meses que já passaram do
+// ano, e o que o teste prova não pode mudar com o mês em que corre
+const app = carregarApp({ hoje: '2026-09-06' });
+afterEach(() => repor(app));
+const ANO = Number(app.today().slice(0, 4));
+const MES = Number(app.today().slice(5, 7));
 const soma = (a) => a.reduce((x, y) => x + y, 0);
 
 let casa, casa2;
@@ -216,31 +218,32 @@ describe('projeção', () => {
     perto(g.rows[3].rent, 13200, 0.001);
   });
 
-  test('as despesas partem do último ano completo com despesas', () => {
+  /* As despesas da projeção eram o histórico (o último ano completo, ou o
+     corrente anualizado). Passaram a ser os planeados de despesa levados ao
+     ano: o que está marcado para se repetir, e não o que se gastou. */
+  test('as despesas partem dos planeados, não do histórico', () => {
     mov({ amount: 2400, propertyId: 'casa', date: (ANO - 1) + '-06-01' });
     mov({ amount: 300, propertyId: 'casa', date: ANO + '-02-01' });
-    const r = app.projRows(null);
-    perto(r.rows[0].exp, 2400);
-    assert.equal(r.base.year, ANO - 1);
-    assert.equal(r.base.anualizado, false);
-    perto(r.rows[1].exp, 2400 * 1.02, 0.001);
+    let r = app.projRows(null);
+    assert.equal(r.rows[0].exp, 0, 'o histórico não projeta despesa nenhuma');
+    assert.equal(r.base.n, 0);
+    perto(r.base.fora, 2400, 0.001, 'o que se gastou no último ano completo diz-se, de fora');
+    assert.equal(r.base.foraAno, ANO - 1);
+    app.db.recurring.push(app.normRec({ name: 'Seguro', every: 'month', next: ANO + '-10-01', tx: { kind: 'expense', amount: 100, propertyId: 'casa', category: 'Seguros' } }));
+    r = app.projRows(null);
+    perto(r.rows[0].exp, 1200);
+    assert.equal(r.base.n, 1);
+    perto(r.rows[1].exp, 1200 * 1.02, 0.001);
     perto(r.rows[1].rent, 12000 * 1.02, 0.001);
   });
 
-  test('um ano só com receitas não serve de base — vai-se ao anterior', () => {
-    mov({ amount: 1800, propertyId: 'casa', date: (ANO - 2) + '-06-01' });
-    mov({ kind: 'income', amount: 12000, propertyId: 'casa', date: (ANO - 1) + '-06-01' });
+  test('o IRS é a renda de cada contrato à taxa dele, contado no ano das rendas', () => {
     const r = app.projRows(null);
-    perto(r.rows[0].exp, 1800);
-    assert.equal(r.base.year, ANO - 2);
-  });
-
-  test('sem ano completo, anualiza o ano corrente', () => {
-    mov({ amount: 300, propertyId: 'casa', date: ANO + '-02-01' });
-    const r = app.projRows(null);
-    perto(r.rows[0].exp, 300 * 12 / MES, 1e-6);
-    assert.equal(r.base.anualizado, true);
-    assert.equal(r.base.year, ANO);
+    perto(r.rows[0].irs, 12000 * 0.25, 1e-9, 'sem fim, 25 %');
+    perto(r.rows[1].irs, 12000 * 1.02 * 0.25, 1e-6, 'anda com o aumento');
+    perto(r.rows[0].cf, r.rows[0].rent - r.rows[0].irs - r.rows[0].exp - r.rows[0].loan, 1e-9);
+    app.db.contracts[0].taxRate = 28;
+    perto(app.projRows(null).rows[0].irs, 12000 * 0.28, 1e-9, 'a taxa escrita manda');
   });
 
   test('as prestações param quando o crédito acaba', () => {
@@ -251,7 +254,7 @@ describe('projeção', () => {
     assert.equal(r.rows[1].loan, 0);
     perto(r.debtY[0], 0);
     assert.equal(r.rows.length, 3);
-    perto(r.rows[0].cf, r.rows[0].rent - r.rows[0].exp - r.rows[0].loan, 1e-9);
+    perto(r.rows[0].cf, r.rows[0].rent - r.rows[0].irs - r.rows[0].exp - r.rows[0].loan, 1e-9);
   });
 });
 
@@ -313,14 +316,5 @@ describe('contas entre proprietários (grupo e global)', () => {
     const b = app.ownerBalances(null);
     igual(Object.keys(eff).sort(), Object.keys(b).sort());
     Object.keys(b).forEach((k) => perto(eff[k], b[k], 0.001));
-  });
-});
-
-describe('a data de hoje', () => {
-  test('é a data local, não a UTC', () => {
-    const d = new Date();
-    const local = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    assert.match(app.today(), /^\d{4}-\d{2}-\d{2}$/);
-    assert.equal(app.today(), local);
   });
 });

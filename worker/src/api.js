@@ -7,21 +7,16 @@
 // outro utilizador; apagar a casa ou gerir a partilha é só do dono. Além dos
 // comproprietários há colaboradores: pessoas com um cargo (lista de
 // permissões) numa lista de casas do dono, que veem e fazem só o que o cargo
-// deixa e nunca entram nas quotas (rotas/colaboradores.js).
+// deixa e nunca entram nas quotas (rotas/colaboradores.js). E há grupos
+// partilhados: um conjunto de casas com membros, em que cada membro é
+// comproprietário de todas as casas do grupo (rotas/grupos.js).
 //
 // Este ficheiro é só o encaminhador: monta o contexto, corre as rotas por
 // ordem e devolve a primeira resposta. Cada área vive no seu módulo, em
 // rotas/, e os ajudantes partilhados em lib/.
 
 import { getSessionUser } from './auth.js';
-import {
-  json, err, body, now, tooBig, badId, cleanData, clientIp,
-  TERMS_VERSION, CATEGORIAS,
-} from './lib/http.js';
-import { rateLimit } from './lib/limites.js';
-import {
-  canAccessHouse, participantsOf, preserveOwnership, connectionForUser, purgeAccount,
-} from './lib/acesso.js';
+import { json, err, body, CATEGORIAS } from './lib/http.js';
 import { recordReport } from './lib/relatos.js';
 
 import { rotasAuth } from './rotas/auth.js';
@@ -34,6 +29,7 @@ import { rotasAnexos } from './rotas/anexos.js';
 import { rotasCasas } from './rotas/casas.js';
 import { rotasConexoes } from './rotas/conexoes.js';
 import { rotasColaboradores, rotasPreVisualizacao } from './rotas/colaboradores.js';
+import { rotasGrupos, rotasPreVisualizacaoGrupo } from './rotas/grupos.js';
 import { rotasContasDeTeste } from './teste.js';
 
 export { recordReport, CATEGORIAS };
@@ -47,6 +43,7 @@ const COM_SESSAO = [
   rotasTickets,
   rotasAnexos,
   rotasColaboradores,
+  rotasGrupos,
   rotasCasas,
   rotasConexoes,
 ];
@@ -65,12 +62,12 @@ export async function handleApi(request, env, ctx) {
   const method = request.method;
   const seg = path.split('/').filter(Boolean);   // ['api', ...]
 
-  const c = {
-    request, env, ctx, url, path, method, seg, me: null,
-    json, err, body, now, tooBig, badId, cleanData, clientIp,
-    rateLimit, canAccessHouse, participantsOf, preserveOwnership, connectionForUser,
-    purgeAccount, TERMS_VERSION, CATEGORIAS, recordReport,
-  };
+  /* O contexto do pedido: o que é DESTE pedido (request, env, ctx, url,
+     path, method, seg e, depois da sessão, me). As bibliotecas (json, err,
+     body, rateLimit…) importa-as cada rota de lib/ — assim a cabeça de um
+     ficheiro diz de que depende. json, err e body ficam também aqui só para
+     o teste.js, que ainda os tira do contexto. */
+  const c = { request, env, ctx, url, path, method, seg, me: null, json, err, body };
 
   // sem sessão: registo, entrada, saída e entrada com Google
   const semSessao = await rotasAuth(c);
@@ -85,6 +82,9 @@ export async function handleApi(request, env, ctx) {
   // só mostra, nunca gasta nem cria nada
   const previa = await rotasPreVisualizacao(c);
   if (previa) return previa;
+  // e o que uma ligação de grupo partilhado é, pelas mesmas regras
+  const previaGrupo = await rotasPreVisualizacaoGrupo(c);
+  if (previaGrupo) return previaGrupo;
 
   c.me = await getSessionUser(env, request);
   if (!c.me) return err(401, 'Sessão inválida — inicia sessão de novo.');
