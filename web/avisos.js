@@ -67,6 +67,14 @@ var AVISOS = [
         ],
       },
       {
+        titulo: 'O calendário arrasta-se e planeia',
+        afeta: ['movimentos'],
+        itens: [
+          'O mês do calendário arrasta-se para os lados com o dedo (ou com o rato): o mês anterior e o seguinte espreitam enquanto arrastas, e um gesto rápido ou um quarto do caminho chegam para virar a página.',
+          'O dia escolhido no calendário tem o botão «Adicionar movimento recorrente», com a primeira vez já nesse dia.',
+        ],
+      },
+      {
         titulo: 'Selecionar vários movimentos desliza',
         afeta: ['movimentos'],
         itens: [

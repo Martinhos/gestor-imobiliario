@@ -104,7 +104,7 @@ describe('autonomia: cada serviço de análise carrega e rende só com a base', 
     igual(app.crachaDe('calendar'), { n: 0, so: 'barra' });
     assert.equal(app.calPlaneados(app.pzHoje(), app.pzHoje()).length, 0, 'sem o passo dos Planeados não há ocorrências');
     // o atalho de marcar visita passou a chamar o calMarcarVisita(iso), que faz o visitModal(null,{date:iso})
-    assert.doesNotMatch(app.vCalendar(), /calMarcarVisita\(|visitModal\(|go\('recurring'\)/);
+    assert.doesNotMatch(app.vCalendar(), /calMarcarVisita\(|visitModal\(|go\('recurring'\)|calNovoPlaneado\(/);
   });
 
   test('autonomia: a avaliação sem gastos no imóvel não precisa da visão geral para a frase das despesas sem imóvel', () => {
@@ -164,10 +164,11 @@ describe('desligado: com os serviços que usam desligados, cada vista rende sem 
     assert.match(html, /visView\('V1'\)/, 'controlo: a visita de hoje abre a ficha');
     assert.match(html, /calMarcarVisita\('/, 'controlo: marcar visita neste dia');
     assert.match(html, /go\('recurring'\)/, 'controlo: o planeado de hoje leva aos Planeados');
+    assert.match(html, /calNovoPlaneado\('/, 'controlo: adicionar um recorrente neste dia');
     assert.match(html, /pt vis/); assert.match(html, /pt pla/);
     desligar(app);
     html = app.vCalendar();
-    assert.doesNotMatch(html, /visView\(|calMarcarVisita\(|visitModal\(|go\('recurring'\)|Marcar visita/);
+    assert.doesNotMatch(html, /visView\(|calMarcarVisita\(|visitModal\(|go\('recurring'\)|Marcar visita|calNovoPlaneado\(/);
     assert.doesNotMatch(html, /pt vis|pt pla/, 'nem os pontos nem a legenda deles');
     assert.match(html, /Nada marcado para este dia/);
     assert.match(html, /toca num dia para veres o que tem/);

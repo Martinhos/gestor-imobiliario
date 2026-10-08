@@ -233,6 +233,13 @@ html.dark .badge.red{color:var(--danger)}
 .calday.on .n{color:var(--accent);font-weight:750}
 .calday.tap:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .calday .pts{display:flex;flex-wrap:wrap;gap:2px}
+/* a grelha dos dias arrasta-se para os lados (calendario.js:calArrastar): a
+   vertical continua a ser da página, a horizontal passa a ser do calendário */
+#calDias{touch-action:pan-y;user-select:none;-webkit-user-select:none}
+/* durante o arrasto os vizinhos espreitam dos lados, recortados pelo cartão */
+#calDias.arrasta{position:relative}
+#calCard.arrasta{overflow:hidden}
+.calvizinho{position:absolute;top:0;width:100%;pointer-events:none}
 .pt{width:6px;height:6px;border-radius:50%;display:inline-block}
 .pt.vis{background:var(--accent)}
 .pt.pla{background:var(--warn)}

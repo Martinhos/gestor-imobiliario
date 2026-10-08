@@ -121,6 +121,34 @@ describe('o calendário', () => {
     assert.match(html, /calday tap[^"]*on" data-d="2026-09-10"[^>]*aria-pressed="true"/);
     app.calMes = ''; app.calDiaSel = '';
   });
+
+  test('o painel do dia adiciona um movimento recorrente com a primeira ocorrência nesse dia', () => {
+    monta();
+    const painel = app.calDiaPanel('2026-09-11');
+    assert.match(painel, /calNovoPlaneado\('2026-09-11'\)/, 'o botão leva o dia');
+    assert.match(painel, /Adicionar movimento recorrente/);
+    // escolhido o tipo, o formulário abre em modo planeado com a data do dia (o «next»)
+    let aberto = null;
+    const { newTxPick, txModal } = app;
+    app.newTxPick = (depois) => depois('expense');
+    app.txModal = (o) => { aberto = o; };
+    try { app.calNovoPlaneado('2026-09-11'); } finally { app.newTxPick = newTxPick; app.txModal = txModal; }
+    assert.equal(aberto.modo, 'rec');
+    assert.equal(aberto.kind, 'expense');
+    assert.equal(aberto.preset.date, '2026-09-11');
+  });
+
+  test('a grelha dos dias arrasta-se, e o mês vizinho sai pelos mesmos dias', () => {
+    monta();
+    app.calMes = '2026-09';
+    assert.match(app.vCalendar(), /id="calDias" data-pointerdown="calArrastar\(event,this\)"/);
+    // outubro de 2026 começa a uma quinta: três células em branco antes do dia 1
+    const out = app.calCelulas('2026-10-01', '').html;
+    assert.equal((out.match(/calday fora/g) || []).length, 3);
+    assert.equal((out.match(/data-d="2026-10-/g) || []).length, 31);
+    assert.doesNotMatch(out, / on"/, 'um vizinho não tem dia em foco');
+    app.calMes = '';
+  });
 });
 
 describe('converter em inquilino', () => {

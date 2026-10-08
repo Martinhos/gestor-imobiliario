@@ -300,9 +300,11 @@ function pintarComContinuidade(pintar,o){
    pintar); pintar — a função que repinta; dir — +1 para a frente (o novo vem
    da direita), -1 para trás; moldura (opcional) — função que devolve a caixa
    que ENVOLVE a fita e que tem de crescer com ela (o cartão do calendário,
-   que muda de altura entre um mês de cinco e um de seis semanas).
+   que muda de altura entre um mês de cinco e um de seis semanas); desde
+   (opcional) — px a que o que sai já estava deslocado, quando foi um dedo a
+   começar a viagem (o arrasto do calendário): a fita continua dali.
    Devolve: o que a função pintar devolver. */
-function deslizarEntre(obter,pintar,dir,moldura){
+function deslizarEntre(obter,pintar,dir,moldura,desde){
   const a=obter();
   if(semMovimento()||!a||!a.animate)return pintar();
   const r0=a.getBoundingClientRect();
@@ -322,7 +324,7 @@ function deslizarEntre(obter,pintar,dir,moldura){
      saiu, houve uma repintura mas não houve troca — e uma fita a correr para
      mostrar o mesmo lê-se como a app a fazer um gesto que ninguém pediu. */
   if(a.outerHTML===b.outerHTML)return res;
-  correrAFita(a,b,r0,dir<0?-1:1,moldura?moldura():null,hm0);
+  correrAFita(a,b,r0,dir<0?-1:1,moldura?moldura():null,hm0,desde);
   return res;
 }
 
@@ -338,9 +340,10 @@ function semIds(e){
    Recebe: a — o nó antigo (já fora do documento); b — o nó novo, no seu lugar;
    r0 — o retângulo que o antigo ocupava; d — +1 para a frente, -1 para trás;
    moldura (opcional) — a caixa que envolve a fita e cresce com ela; hm0 — a
-   altura dessa caixa antes da repintura.
+   altura dessa caixa antes da repintura; desde (opcional) — px a que a fita
+   já ia quando foi largada por um dedo.
    Devolve: nada — anima e limpa no fim. */
-function correrAFita(a,b,r0,d,moldura,hm0){
+function correrAFita(a,b,r0,d,moldura,hm0,desde){
   const r=b.getBoundingClientRect();
   const w=Math.round(r.width)||Math.round(r0.width);
   const caixa=document.createElement('div');
@@ -358,11 +361,13 @@ function correrAFita(a,b,r0,d,moldura,hm0){
   deitar(a,Math.round(r0.width)||w);
   b.style.visibility='hidden';
   /* a --curva-fita, e não a --curva-entra: esta fita estava parada, e a curva
-     de quem chega arranca à velocidade máxima (index.html) */
+     de quem chega arranca à velocidade máxima (index.html). Largada por um
+     dedo, parte de onde ele a deixou (o) — o resto da viagem é o mesmo. */
+  const o=Number(desde)||0;
   const dur=msDoToken('--lento',340),curva=tokenTexto('--curva-fita','cubic-bezier(.4,0,.2,1)');
-  a.animate([{transform:'none'},{transform:'translateX('+(-d*w)+'px)'}],
+  a.animate([{transform:'translateX('+o+'px)'},{transform:'translateX('+(-d*w)+'px)'}],
     {duration:dur,easing:curva,fill:'forwards'});
-  const an=clone.animate([{transform:'translateX('+(d*w)+'px)'},{transform:'none'}],
+  const an=clone.animate([{transform:'translateX('+(d*w+o)+'px)'},{transform:'none'}],
     {duration:dur,easing:curva,fill:'backwards'});
   const fim=function(){try{b.style.visibility='';caixa.remove()}catch(x){}};
   an.onfinish=fim;
