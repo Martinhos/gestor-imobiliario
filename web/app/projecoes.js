@@ -33,8 +33,9 @@ function mesesEmVigor(c,ano){
 }
 /* Os números da projeção, sem HTML: por ano do horizonte (s.years), as rendas
    dos contratos ativos com o aumento anual de cada um, o IRS sobre elas à taxa
-   de cada contrato (irs.js:taxRateOf — a mesma da «renda líquida de impostos»;
-   conta no ano das rendas, embora se pague no seguinte), as despesas previstas
+   de cada contrato no ano da coluna (irs.js:taxRateOf, com as regras da versão
+   desse ano — a mesma da «renda líquida de impostos»; conta no ano das rendas,
+   embora se pague no seguinte), as despesas previstas
    (metricas.js:despesasPrevistas — os planeados de despesa levados ao ano) com
    a inflação, as prestações segundo o plano de cada hipoteca (param quando o
    crédito acaba) e o cashflow; mais a dívida no fim de cada ano e o que ficou
@@ -71,7 +72,8 @@ function projRows(pid){
       const anos=Math.max(0,yr-desde);
       return c.rent*sh(prop(c.propertyId))*meses*Math.pow(1+((c.increase==null?s.growth:c.increase)/100),anos);
     });
-    const rent=sum(per),irs=sum(per.map((v,j)=>v*taxRateOf(act[j])/100)),exp=base.op*Math.pow(1+s.inflation/100,i),ln=sched[i];
+    /* a taxa do ano de cada coluna (a dos 10 % das rendas moderadas acaba em 2029) */
+    const rent=sum(per),irs=sum(per.map((v,j)=>v*taxRateOf(act[j],yr)/100)),exp=base.op*Math.pow(1+s.inflation/100,i),ln=sched[i];
     rows.push({yr:YEAR+i,rent,irs,exp,loan:ln,cf:rent-irs-exp-ln,per});
   }
   const debtY=[...Array(n)].map((_,i)=>sum(pps.map(p=>sh(p)*sum(liveLoans(p).map(l=>{

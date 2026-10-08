@@ -449,11 +449,11 @@ describe('as Projeções', () => {
     mov({ amount: 8000, category: 'Obras e benfeitorias', sub: 'Remodelação' });
     const r = app.projRows(null);
     perto(r.rows[0].rent, 12000);
-    perto(r.rows[0].irs, 3000, 1e-9, '25 % sem fim');
+    perto(r.rows[0].irs, 1200, 1e-9, 'sem fim e com 1 000 €/mês, em 2026: os 10 % das rendas moderadas');
     perto(r.rows[0].exp, 1200);
     perto(r.rows[1].exp, 1200 * 1.02, 0.001);
-    perto(r.rows[1].irs, 3000, 1e-9, 'sem aumento, o IRS não muda');
-    perto(r.rows[0].cf, 12000 - 3000 - 1200 - r.rows[0].loan, 0.001);
+    perto(r.rows[1].irs, 1200, 1e-9, 'sem aumento, o IRS não muda');
+    perto(r.rows[0].cf, 12000 - 1200 - 1200 - r.rows[0].loan, 0.001);
     igual(Object.keys(r.base).sort(), ['fora', 'foraAno', 'foraPorCat', 'n', 'op', 'porCat']);
     perto(r.base.op, 1200); assert.equal(r.base.n, 1);
     perto(r.base.fora, 8000); assert.equal(r.base.foraAno, ANO - 1);
@@ -464,11 +464,11 @@ describe('as Projeções', () => {
     const g = app.projRows(null);
     perto(g.rows[0].irs, 3360 + 6000 * app.taxRateOf(app.db.contracts[1]) / 100, 1e-6);
     assert.equal(app.taxRateOf(app.db.contracts[1]), 10);
-    // o IRS anda com as rendas e com a quota-parte
-    app.db.contracts = [app.normContract({ propertyId: 'casa', rent: 1000, active: true, increase: 10 })];
-    perto(app.projRows(null).rows[1].irs, 12000 * 1.1 * 0.25, 1e-6);
+    // o IRS anda com as rendas e com a quota-parte (acima de 2 300 €/mês, 25 % sem fim)
+    app.db.contracts = [app.normContract({ propertyId: 'casa', rent: 2500, active: true, increase: 10 })];
+    perto(app.projRows(null).rows[1].irs, 30000 * 1.1 * 0.25, 1e-6);
     app.ownerFilter = 'bruno';
-    perto(app.projRows(null).rows[0].irs, 1500, 1e-6);
+    perto(app.projRows(null).rows[0].irs, 3750, 1e-6);
   });
 
   test('a página diz «Despesas previstas», o IRS com o prazo, o que ficou de fora, e a tabela tem a coluna IRS', () => {

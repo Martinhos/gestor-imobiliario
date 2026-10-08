@@ -187,5 +187,8 @@ os dados são carregados e sincronizados para a tua conta.
 ## Limitações conhecidas
 
 - Notificações de movimentos por confirmar existiam via alarmes Android; na web o aviso aparece ao abrir a app.
-- A página Declaração resume o Anexo F (quadro 4.1) e lembra os prazos da AT, mas não entrega nada à AT
+- A página Declaração resume o Anexo F (quadros 4.1 e 4.2) e lembra os prazos da AT, mas não entrega nada à AT
   nem lê o Portal das Finanças — o Modelo 2, os recibos eletrónicos e a declaração fazem-se lá.
+- As regras do IRS têm uma versão por ano dos rendimentos (`web/app/irs-2025.js`, `irs-2026.js`…). Um ano
+  novo cria-se com `node scripts/nova-versao-irs.js 2027` e revê-se com o Orçamento do Estado e a portaria do
+  Modelo 3 (o guião diz o que rever); até lá, o ano novo usa as regras do anterior e a página avisa.

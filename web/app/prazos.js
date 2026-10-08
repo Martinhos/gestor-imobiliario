@@ -16,10 +16,11 @@
    E os prazos da AT, que a lei mede em meses e a app conta em dias: o
    Modelo 2 (comunicar o contrato até ao fim do mês seguinte ao início, e
    a cessação até ao fim do mês seguinte ao fim), o recibo eletrónico de
-   cada renda (até ao fim do mês seguinte), o Anexo F (de 1 de abril a 30
-   de junho) e a comunicação de 15 de fevereiro dos contratos com taxa
-   reduzida. Um contrato que o senhorio marcou como «não declarado» é uma
-   escolha dele: nenhum destes prazos nasce dele, e nenhum texto o julga. */
+   cada renda (até ao fim do mês seguinte), a entrega do Anexo F e a
+   comunicação de fevereiro dos contratos com redução de taxa pela duração —
+   estas duas com as datas da versão do ano (irs-AAAA.js). Um contrato que o
+   senhorio marcou como «não declarado» é uma escolha dele: nenhum destes
+   prazos nasce dele, e nenhum texto o julga. */
 
 // dias de antecedência com que cada tipo de prazo começa a avisar
 const PZ_ANTECEDENCIA = { oposicao: 150, fim: 60, aumento: 45, cc: 60, energia: 90, taxa: 90,
@@ -142,7 +143,7 @@ function prazosDe(hoje){
      essa marca é uma escolha, e não há aviso nenhum a discuti-la. O ano de
      referência (Y) é o anterior ao de `hoje`: é o que se entrega em junho e o
      que se comunica em fevereiro. */
-  const ano=Number(h.slice(0,4)),Y=ano-1;
+  const ano=Number(h.slice(0,4)),Y=ano-1,vY=irsAno(Y);   // as datas da AT são da versão desse ano (irs-AAAA.js)
   const nomeDe=c=>c.name||propName(c.propertyId)||'contrato';
   /* vivo em `hoje` (e não no dia real, como o ctVivo): um contrato que já
      terminou não pede o Modelo 2 do início */
@@ -170,7 +171,7 @@ function prazosDe(hoje){
     if(ctFiscoPorIndicar(c)&&c.start&&vivoEm(c)){
       const alvo=fimDoMesSeguinte(c.start);
       poe('modelo2',c.id+':'+alvo,alvo,'Comunicar o contrato à AT (Modelo 2) — '+nome,
-        'Até '+dPT(alvo)+', o fim do mês seguinte ao início. Se já o comunicaste, ou se não vais declarar este contrato, marca-o na ficha e este aviso desaparece.',
+        'Até '+dPT(alvo)+', o fim do mês seguinte ao início. Com ele paga-se o imposto do selo (10 % de uma renda), que é dedutível no Anexo F: regista-o como despesa. Se já o comunicaste, ou se não vais declarar este contrato, marca-o na ficha e este aviso desaparece.',
         abrir,true);
     }
     if(!ctDeclarado(c))return;
@@ -180,17 +181,20 @@ function prazosDe(hoje){
         'Até '+dPT(alvo)+', o fim do mês seguinte ao fim do contrato. O Modelo 2 também serve para a cessação; até 15 de fevereiro a AT pede ainda o motivo, nos contratos com taxa reduzida. Depois de a comunicares, silencia este aviso.',
         abrir,true);
     }
-    if(irsRate(c)<25&&comRendasEmY[c.id]){
-      const alvo=(Y+1)+'-02-15';
+    /* só a redução pela duração (art. 72.º) pede esta comunicação; a taxa
+       das rendas moderadas (EBF art. 45.º-C) não — era «taxa abaixo de 25»,
+       e com os 10 % de 2026 acendia em quase todos os contratos */
+    if(irsTaxa(c,Y).reducao&&comRendasEmY[c.id]){
+      const alvo=vY.prazos.comunicacaoDuracao;
       poe('fev15',c.id+':'+alvo,alvo,'Comunicar a duração do contrato à AT — '+nome,
-        'Nos contratos com taxa reduzida, até '+dPT(alvo)+' comunica-se no Portal das Finanças o contrato, a duração e as renovações. Sem isto perde-se a redução.',
+        'Nos contratos com redução de taxa pela duração, até '+dPT(alvo)+' comunica-se no Portal das Finanças o contrato, a duração e as renovações. Sem isto perde-se a redução.',
         abrir,true);
     }
   });
   if(houveRendasEmY){
-    const alvo=(Y+1)+'-06-30';
+    const alvo=vY.entrega.ate;
     poe('irs',String(Y),alvo,'Entregar o IRS — Anexo F de '+Y,
-      'De 1 de abril a 30 de junho. A página Declaração tem as linhas do quadro 4.1 e o que ainda falta.',
+      'De '+irsDiaMes(vY.entrega.de)+' a '+irsDiaMes(alvo)+'. A página Declaração tem as linhas dos quadros 4.1 e 4.2 e o que ainda falta.',
       servicoLigado('fisco')?"go('fisco')":'',false);
   }
 

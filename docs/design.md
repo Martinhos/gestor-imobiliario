@@ -43,6 +43,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Tocar num registo é lê-lo
 - Um contrato tem três estados
 - A Declaração resume, não declara
+- As regras do IRS têm uma versão por ano
 - Segurar não é selecionar
 - Entrar na seleção é um deslize, não uma troca
 - A fita da barra de baixo
@@ -1082,15 +1083,27 @@ gera nenhum prazo da AT — nem Modelo 2, nem recibos, nem 15 de fevereiro
 (prazos.js:prazosDe). Lembrar a alguém um prazo que decidiu não cumprir não
 é ajudar: é insistir.
 
-A página Declaração mostra as linhas do quadro 4.1 com o que a app sabe e aponta
-o que falta — o código da freguesia, o número do contrato na AT, o NIF de um
-inquilino — em vez de deixar a célula em branco ou, pior, de a preencher
-(fisco.js:vFisco). Nunca se inventa um código nem um número: o que não está
-nos dados não está na página. E o que é conta da app vem dito como tal: os
-gastos de um imóvel com vários contratos repartem-se pelas linhas na
-proporção das rendas de cada uma, e a página chama-lhe estimativa, porque é
-uma. Quem declara é a pessoa, no Portal das Finanças; a app poupa-lhe a soma
-e a procura, não a assinatura.
+A página Declaração mostra as linhas dos quadros 4.1 e 4.2 com o que a app
+sabe e aponta o que falta — o código da freguesia, o número do contrato na
+AT, o NIF de um inquilino — em vez de deixar a célula em branco ou, pior, de
+a preencher (fisco.js:vFisco). Nunca se inventa um código nem um número: o
+que não está nos dados não está na página. E o que é conta da app vem dito
+como tal: os gastos de um imóvel com vários contratos repartem-se pelas
+linhas na proporção das rendas de cada uma — contando também as rendas que
+ficam fora do quadro, cuja parte não entra (fisco.js:fiscoReparte) —, e o
+imposto à cabeça é a estimativa sem englobamento; a página chama a cada uma
+estimativa, porque é. Quem declara é a pessoa, no Portal das Finanças; a app
+poupa-lhe a soma e a procura, não a assinatura.
+
+Os números seguem a regra de caixa da lei. Uma renda conta no ano em que se
+recebe, mesmo que respeite a outro, e a parte de anos anteriores fica
+apontada para o quadro 8 (fisco.js:fiscoAnosAnterioresCard). Um gasto conta
+no ano em que se pagou, e só se o imóvel tinha um contrato em vigor nesse
+dia — o condomínio de um mês com a casa vazia não é gasto de arrendamento;
+o IMI e o selo contam no ano em que o imóvel deu rendas
+(fisco.js:FISCO_SEM_PERIODO). A coluna escolhida à mão na despesa passa por
+cima disto: a pessoa decidiu, e a página diz quantos gastos ficaram de fora
+para ela poder decidir.
 
 A coluna onde um gasto cai sai de uma regra que se vê e se muda: o mapa
 categoria → coluna vive nas definições, por categoria ou por «categoria /
@@ -1110,6 +1123,44 @@ que precisa sai, em vez de sair com um espaço em branco ou um valor por
 omissão — sem dia de pagamento não há a frase do dia, sem rendas antecipadas
 não há a cláusula delas —, e sem início, fim, senhorio ou morada o PDF não se
 gera: diz o que falta (contrato-pdf.js:generateContractPdf).
+
+## As regras do IRS têm uma versão por ano
+O que muda de ano para ano na lei e no impresso não se escreve no código que
+o lê. Cada ano dos rendimentos tem o seu ficheiro, com o nome do ano —
+irs-2025.js, irs-2026.js —, que chama irs.js:registarAnoIrs com tudo o que
+vale para esses rendimentos: o prazo da entrega, se o Anexo F desse ano já
+foi aprovado (irs-2026.js:modelo), as taxas — a da habitação, a do não
+habitacional, os regimes da redução pela duração com as datas em que valem e
+a das rendas moderadas (irs-2026.js:rendaModerada) —, as colunas de gastos,
+os códigos da natureza, os quadros, a data da comunicação de fevereiro, o que
+mudou nesse ano e o guia de preenchimento. Uma versão é dados, nunca código,
+e cada dado tem a fonte no cabeçalho do ficheiro.
+
+O nome é o ano dos RENDIMENTOS, não o da entrega: o irs-2026.js é a
+declaração que se entrega em 2027. É assim que o Modelo 3 identifica a
+declaração, é o ano que a página escolhe e é o ano a que a lei do Orçamento
+se aplica; a página diz sempre os dois (fisco.js:fiscoAnoCard).
+
+Quem lê é o motor (irs.js:irsAno, irs.js:irsTaxa, irs.js:irsReducao). A taxa
+de um contrato num ano sai da versão desse ano, e fica a mais baixa entre a
+base, a redução pela duração e a das rendas moderadas; a escrita no contrato
+manda sobre todas (irs.js:taxRateOf). A redução pela duração é o que manda um
+contrato para o quadro 4.2 e o que pede a comunicação de fevereiro
+(prazos.js:prazosDe); a taxa das rendas moderadas não pede nenhuma das duas.
+Por isso nenhum código pergunta se a taxa é menor do que 25 — com os 10 % de
+2026 essa pergunta acendia o aviso de fevereiro em quase todos os contratos.
+
+Um ano sem versão usa a mais recente antes dele, com as datas da AT passadas
+para o ano certo, e a página di-lo em vez de fingir (o `exato` do
+irs.js:irsAno). O ano novo funciona no dia 1 de janeiro, e a versão dele chega
+quando as regras forem conhecidas: o scripts/nova-versao-irs.js copia a
+última, passa as datas, marca o modelo como provisório, troca as novidades
+por uma frase verdadeira e regista o ficheiro no index.html, no sw.js, no
+arnês e no MAPA; depois alguém confirma com o Orçamento, a portaria do Modelo
+3 e o ofício-circulado da AT, e muda o que mudou. Os passos do guia não
+escrevem anos — dizem {ano} e {ate}, que o fisco.js:fiscoGuiaCard troca —
+para a cópia não arrastar anos velhos. O testes/irs-anos.test.js confere cada
+versão, o registo dela e o próprio guião, numa cópia da árvore.
 
 ## Segurar não é selecionar
 A lista dos movimentos mexe-se por baixo do dedo: o toque longo entra em modo

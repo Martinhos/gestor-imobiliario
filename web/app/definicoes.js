@@ -584,8 +584,9 @@ function vIrsMapa(){
       ${(cs[k]||[]).length?`<div class="flabel u-mt-4px">Subcategorias</div>${cs[k].map(sb=>menu(sb,k+' / '+sb,optSub)).join('')}`:''}</div>`))
     .join('<div class="u-h-14px"></div>');
   return `${card('O que o Anexo F deixa deduzir','Artigo 41.º do CIRS, em poucas linhas',`
-    <div class="hint">Entra o que pagaste para obter a renda: conservação e manutenção, condomínio, taxas autárquicas, seguros, gestão, água e luz quando são tuas. O IMI e o imposto do selo têm coluna própria.</div>
-    <div class="hint u-mt-8px">Ficam de fora, por lei: os juros e os gastos financeiros do crédito, as depreciações, o mobiliário, os eletrodomésticos e a decoração. Conservar é dedutível; beneficiar — uma cozinha nova, uma remodelação que acrescenta valor — não é.</div>
+    <div class="hint">Entra o que pagaste para obter ou garantir a renda, enquanto o imóvel esteve arrendado: conservação e manutenção, condomínio, taxas autárquicas, o seguro de renda, a comissão da imobiliária, o certificado energético. O IMI pago no ano e o imposto do selo do contrato têm coluna própria.</div>
+    <div class="hint u-mt-8px">Ficam de fora, por lei: os juros e os gastos financeiros do crédito, as depreciações, o mobiliário, os eletrodomésticos, a decoração e o Adicional ao IMI — que não é gasto, abate ao imposto no quadro 9. Conservar é dedutível; beneficiar — uma cozinha nova, uma remodelação que acrescenta valor — não é (conta na mais-valia, quando venderes).</div>
+    <div class="hint u-mt-8px">Na dúvida, segundo a AT: o seguro multirriscos facultativo e a água, a luz e o gás pagos por ti. Cada gasto precisa de fatura com o teu NIF e a identificação do imóvel.</div>
     <div class="hint u-mt-8px">Aqui dizes em que coluna cai cada categoria. A subcategoria pode ter regra própria; sem ela, segue a categoria.</div>`)}
   <div class="u-h-14px"></div>
   ${cartoes}

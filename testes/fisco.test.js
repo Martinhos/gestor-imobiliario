@@ -284,7 +284,8 @@ describe('a vista, o texto e o CSV', () => {
 
   test('o texto traz os mesmos números da página', () => {
     const t = app.fiscoTexto();
-    assert.match(t, /ANEXO F · QUADRO 4\.1 — 2024/);
+    assert.match(t, /ANEXO F · QUADROS 4\.1 E 4\.2 — 2024/);
+    assert.match(t, /\[4\.1\] n\.º 1234567/, 'cada contrato diz o seu quadro');
     assert.ok(t.includes('Rendas ilíquidas ' + app.euro2(12500)));
     assert.ok(t.includes('IMI ' + app.euro2(300)));
     assert.ok(t.includes('n.º 1234567'));
@@ -303,7 +304,9 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(linhas[0], /^"ano";"declarado";"contrato";"n_at"/);
     assert.match(linhas[0], /"conservacao";"condominio";"imi";"selo";"taxas";"outros";"obras24"/);
     assert.match(linhas[1], /^"2024";"sim";"Arroios";"1234567";"2024-01-01";"T2 Arroios";"110623";"U";"4651";"A";"07";"Tiago";"123456789";"100";"12500";"500"/);
-    assert.match(linhas[1], /;"0";"120";"300";"0";"0";"0";"200";"2023-07-01";"2";""$/);
+    assert.match(linhas[1], /;"0";"120";"300";"0";"0";"0";"200";"2023-07-01";"2";"";/);
+    // as colunas novas vão no fim: quadro, taxa, líquido (12 500 − 420 − 200), imposto a 25 %, anos anteriores, termo, renovação
+    assert.match(linhas[1], /;"4\.1";"25";"11880";"2970";"";"";""$/);
     assert.match(linhas[2], /^"2024";"nao";"Benfica";"";"2023-06-01";"T1 Benfica"/);
     assert.match(linhas[2], /"1200";"0"/);
     const n = linhas[0].split(';').length;

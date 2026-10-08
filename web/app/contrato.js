@@ -33,9 +33,10 @@ function ctFicha(id){
   const fisc=fiscoDe(c),fin=(FISCO_FINALIDADES.find(x=>x[0]===fisc.finalidade)||[])[1]||'';
   const fiscoTxt=fisc.estado==='declarado'?['Declarado à AT',fisc.numero?'n.º '+esc(fisc.numero):'sem n.º',fin.toLowerCase()].filter(Boolean).join(' · ')
     :fisc.estado==='naoDeclarado'?'Não declarado':'Por indicar';
-  /* a taxa reduzida pela duração é só dos contratos de habitação permanente:
-     com a finalidade a dizer outra coisa, a nota era falsa */
-  const taxaReduzida=fisc.estado==='declarado'&&irsRate(c)<25&&(!fisc.finalidade||fisc.finalidade==='hp');
+  /* a redução pela duração é só dos contratos de habitação permanente (o
+     irsReducao já o sabe), e é ela — não a taxa das rendas moderadas — que
+     pede o quadro 4.2 e a comunicação de fevereiro */
+  const irsDoAno=irsTaxa(c,YEAR),escrita=Number(c.taxRate)>0,taxaReduzida=fisc.estado==='declarado'&&!!irsDoAno.reducao;
   return ficha([
     /* Sem botão «Editar» no rodapé, a ficha tem de dizer porquê — e não há
        uma só razão: há «não tens permissão» e há «só quem o adicionou pode
@@ -56,9 +57,11 @@ function ctFicha(id){
     c.rent>0?{rotulo:'Renda mensal',valor:euroS(c.rent)}:null,
     /* o bruto engana, e a marca de «estimado» é a mesma que os cartões já dão:
        o formulário guarda 0 para «em branco», e escrever «0%» era mentira */
-    c.rent>0?{rotulo:'Imposto sobre a renda',valor:dec(taxRateOf(c))+'%'+(Number(c.taxRate)>0?'':' (estimado pela duração)')}:null,
+    c.rent>0?{rotulo:'Imposto sobre a renda',valor:dec(taxRateOf(c))+'%'+(Number(c.taxRate)>0?'':' (estimado: '+irsTaxaPorque(c)+')')}:null,
     {rotulo:'Declaração',valor:fiscoTxt},
-    taxaReduzida?{tipo:'nota',valor:'Pela duração, este contrato beneficia da taxa reduzida de '+dec(irsRate(c))+' %. Isso pede duas coisas: o quadro 4.2 do Anexo F preenchido, e a duração e as renovações comunicadas no Portal das Finanças até 15 de fevereiro.'}:null,
+    taxaReduzida?{tipo:'nota',valor:'Pela duração, este contrato tem direito à taxa reduzida de '+dec(irsDoAno.reducao.taxa)+' %. Isso pede duas coisas: o quadro 4.2 do Anexo F preenchido, e a duração e as renovações comunicadas no Portal das Finanças até 15 de fevereiro.'
+      +(!escrita&&irsDoAno.motivo==='moderada'?' Em '+YEAR+' a renda dá-lhe ainda os '+dec(irsDoAno.taxa)+' % das rendas moderadas, que ficam por serem mais baixos.':'')}:null,
+    !taxaReduzida&&c.rent>0&&!escrita&&irsDoAno.motivo==='moderada'?{tipo:'nota',valor:'Com a renda até '+euro(irsAno(YEAR).taxas.rendaModerada.limiteMensal)+' por mês, as rendas de '+YEAR+' pagam a taxa de '+dec(irsDoAno.taxa)+' % das rendas moderadas (EBF art. 45.º-C), em vez de '+dec(irsAno(YEAR).taxas.habitacional)+' %.'}:null,
     c.rent>0?{rotulo:'Renda líquida',valor:euroS(netRent(c))}:null,
     c.payDay?{rotulo:'Renda paga',valor:(c.payDayTo&&c.payDayTo>c.payDay)?('entre o dia '+c.payDay+' e o dia '+c.payDayTo):('no dia '+c.payDay)}:null,
     isActive(c)&&rec&&rec.next&&pode(pid,'rec.view')?{rotulo:'Próxima renda',valor:dPT(rec.next)}:null,
@@ -247,7 +250,7 @@ function ctBody(){
     <div class="row">
       <label>Renda mensal (€) <span class="req">*</span><input id="c_rent" type="text" inputmode="decimal" value="${c.rent||''}" placeholder="Ex: 450" data-input="liveNet()"></label>
       <label>Imposto sobre a renda (%, opcional)<input id="c_tax" type="text" inputmode="decimal" value="${c.taxRate?dec(c.taxRate):''}" placeholder="Ex: ${dec(irsRate(c))}" data-input="liveNet()"></label></div>
-    <div class="hint u-mt-n6px">Em branco: <b id="c_taxVazio">${dec(irsRate(c))} %</b>, estimado pela duração do contrato. A taxa especial de IRS sobre rendas de habitação é 25 %, e desce para 15 %, 10 % ou 5 % em contratos de 5, 10 ou 20 anos ou mais. Noutros usos é 28 % — escreve-a. É uma estimativa sobre a renda bruta: as despesas dedutíveis (IMI, condomínio, obras) baixam o imposto.</div>
+    <div class="hint u-mt-n6px">Em branco: <b id="c_taxVazio">${dec(irsRate(c))} %</b>, a estimativa para ${YEAR}. ${esc(irsTaxasTexto(YEAR))} É uma estimativa sobre a renda bruta: as despesas dedutíveis (IMI, condomínio, obras) baixam o imposto.</div>
     <div class="card u-bg-v-tint u-p-12px" id="netBox">${netBox()}</div>
     ${fold('terms','Prazo, caução e pagamento',`
     <div class="row">
@@ -314,31 +317,40 @@ function ctBody(){
     ${richEditor('Notas','c_notes',c.notes,'Opcional')}
   </div>`;
 }
+/* O contrato como está escrito no formulário agora, para a estimativa da
+   taxa: a renda, as datas e a finalidade dos campos que estão no ecrã, o
+   resto do cForm. Não grava nada.
+   Devolve: um objeto novo com a forma de um contrato. */
+function ctEmEdicao(){
+  const eR=document.getElementById('c_rent');
+  const f=Object.assign({},fiscoDe(cForm));
+  if(document.getElementById('c_ffin'))f.finalidade=val('c_ffin');
+  return Object.assign({},cForm,{rent:eR?num(eR.value):cForm.rent,start:val('c_start')||cForm.start,end:val('c_end')||cForm.end,fisco:f});
+}
 // HTML do resumo bruto → imposto → líquido. Lê os campos do formulário se
 // já estiverem no DOM; antes disso usa os valores de cForm. Sem taxa escrita,
-// a estimativa pela duração do contrato (irsRate), marcada como tal.
+// a estimativa do ano corrente (irsRate), com o motivo à vista.
 // Devolve: string com o HTML do resumo (ou um aviso, se faltar a renda).
 function netBox(){
   /* «campo presente e vazio» (apagado de propósito → estimativa) é diferente de «ainda sem DOM» (cForm) */
-  const eR=document.getElementById('c_rent'),eT=document.getElementById('c_tax');
-  const r=eR?num(eR.value):cForm.rent,escrita=eT?num(eT.value):(Number(cForm.taxRate)||0);
-  const datas={start:val('c_start')||cForm.start,end:val('c_end')||cForm.end};
-  const tx=escrita>0?escrita:irsRate(datas);
+  const eT=document.getElementById('c_tax'),est=ctEmEdicao();
+  const r=est.rent,escrita=eT?num(eT.value):(Number(cForm.taxRate)||0);
+  const tx=escrita>0?escrita:irsRate(est);
   if(!r)return `<div class="hint">Falta a renda.</div>`;
   const imposto=r*tx/100;
   return `<div class="stat u-pt-0"><span>Renda bruta</span><b>${euro2(r)}</b></div>
-    <div class="stat"><span>Imposto (${dec(tx)}%${escrita>0?'':', estimado pela duração'})</span><b class="neg">−${euro2(imposto)}</b></div>
+    <div class="stat"><span>Imposto (${dec(tx)}%${escrita>0?'':', estimado: '+esc(irsTaxaPorque(est))})</span><b class="neg">−${euro2(imposto)}</b></div>
     <div class="stat u-b-0"><span>Renda líquida</span><b class="pos u-fs-16px">${euro2(r-imposto)}</b></div>
     <div class="hint">${euro(( r-imposto)*12)} por ano, se a renda se mantiver.</div>`;
 }
 // Recalcula o resumo da renda líquida enquanto se escreve na renda ou no imposto,
-// e — porque a taxa em branco depende da duração — o exemplo do imposto e o
-// «Em branco: N %» por baixo dele, ao mudar as datas.
+// e — porque a taxa em branco depende da renda, das datas e da finalidade — o
+// exemplo do imposto e o «Em branco: N %» por baixo dele.
 // Devolve: nada — reescreve a caixa #netBox, o placeholder de c_tax e o #c_taxVazio.
 function liveNet(){
   const b=document.getElementById('netBox');if(b)b.innerHTML=netBox();
   const v=document.getElementById('c_taxVazio'),t=document.getElementById('c_tax');
-  const r=dec(irsRate({start:val('c_start')||cForm.start,end:val('c_end')||cForm.end}));
+  const r=dec(irsRate(ctEmEdicao()));
   if(v)v.textContent=r+' %';
   if(t)t.placeholder='Ex: '+r;
 }
@@ -418,12 +430,12 @@ function fiscoSect(){
   if(f.estado!=='declarado')return seg+`<div class="hint">Comunicaste este contrato às Finanças (Modelo 2)? Marca aqui: o resumo do Anexo F e os prazos da AT dependem disso.</div>`;
   /* a cessação só faz sentido num contrato que acaba ou já acabou */
   const cessa=!!c.end||c.active===false;
-  /* a taxa reduzida pela duração é só dos contratos de habitação permanente */
-  const reduzida=irsRate(c)<25&&(!f.finalidade||f.finalidade==='hp');
+  /* a redução pela duração é só dos contratos de habitação permanente (irsReducao) */
+  const reduzida=irsTaxa(c,YEAR).reducao;
   return seg+`
     <div class="row">
       <label>N.º do contrato na AT (opcional)<input id="c_fnum" type="text" inputmode="numeric" value="${esc(f.numero)}" placeholder="Ex: 1234567" autocomplete="off"></label>
-      <label>Finalidade${sel('c_ffin',f.finalidade,[{v:'',label:'—'}].concat(FISCO_FINALIDADES.map(x=>({v:x[0],label:x[1]}))),'','rascunho')}</label></div>
+      <label>Finalidade${sel('c_ffin',f.finalidade,[{v:'',label:'—'}].concat(FISCO_FINALIDADES.map(x=>({v:x[0],label:x[1]}))),'liveNet','rascunho')}</label></div>
     <div class="hint u-mt-n6px">Vem no comprovativo do Modelo 2; o Anexo F pede-o em cada linha.</div>
     <div class="row">
       <label>Data de celebração<input id="c_fcel" type="date" value="${esc(f.celebracao)}"></label>
@@ -433,12 +445,12 @@ function fiscoSect(){
       ${renovs.length?`<div class="form u-g-9px">${renovs.map(r=>`<div class="invrow u-gtc-1fr-1fr-auto u-ai-end">
         <label>Início<input id="c_rini_${esc(r.id)}" type="date" value="${esc(r.inicio)}"></label>
         <label>Fim<input id="c_rfim_${esc(r.id)}" type="date" value="${esc(r.fim)}"></label>
-        <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delRenov('${jsq(r.id)}')" aria-label="Tirar renovação">${ic('trash',14)}</button></div>`).join('')}</div>`:''}
+        <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delRenov('${jsq(r.id)}')" aria-label="Remover renovação">${ic('trash',14)}</button></div>`).join('')}</div>`:''}
       <div class="toolbar ${renovs.length?'u-m-4px-0-0':'u-m-0-0-0'}"><button type="button" class="btn sm" data-toca="rascunho" data-click="addRenov()">${ic('plus',14)} Adicionar renovação</button></div>
       <div class="hint">Início e fim de cada renovação. O quadro 4.2A do Anexo F pede os da última.</div></div>
     ${cessa?`<label>Motivo da cessação (opcional)<input id="c_fces" value="${esc(f.cessacaoMotivo)}" placeholder="Ex: Fim do prazo" autocomplete="off"></label>
     <div class="hint u-mt-n6px">A AT pergunta-o ao comunicar o fim do contrato: fim do prazo, acordo, denúncia…</div>`:''}
-    ${reduzida?`<div class="hint">Taxa reduzida pela duração: vai ao quadro 4.2 do Anexo F, e até 15 de fevereiro comunica-se a duração e as renovações no Portal das Finanças.</div>`:''}`;
+    ${reduzida?`<div class="hint">Taxa reduzida pela duração (${dec(reduzida.taxa)} %): vai ao quadro 4.2 do Anexo F, e até 15 de fevereiro comunica-se a duração e as renovações no Portal das Finanças.</div>`:''}`;
 }
 /* Muda o estado do contrato perante a AT e repinta, para os campos do
    declarado aparecerem ou sumirem. Colhe antes: o que estava escrito nos
@@ -449,8 +461,8 @@ function setFiscoEstado(v){collectCt();cForm.fisco.estado=FISCO_ESTADOS.indexOf(
 /* Acrescenta uma renovação vazia (início e fim por escrever) e repinta.
    Devolve: nada — repinta o formulário. */
 function addRenov(){collectCt();cForm.fisco.renovacoes.push({id:uid(),inicio:'',fim:''});repaintCt()}
-/* Tira uma renovação pelo id e repinta.
-   Recebe: rid — o id da renovação a tirar.
+/* Remove uma renovação pelo id e repinta.
+   Recebe: rid — o id da renovação a remover.
    Devolve: nada — repinta o formulário. */
 function delRenov(rid){collectCt();cForm.fisco.renovacoes=cForm.fisco.renovacoes.filter(r=>r.id!==rid);repaintCt()}
 

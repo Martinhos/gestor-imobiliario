@@ -21,7 +21,7 @@ export const MODULOS = [
   'metricas', 'navegacao', 'servicos', 'acessos', 'vistas',
   'painel-geral', 'lista-imoveis', 'lista-contratos', 'lista-pessoas', 'lista-colaboradores', 'lista-movimentos', 'projecoes',
   'imovel', 'pessoas', 'contrato',
-  'planeados', 'prazos', 'notificacoes', 'visitas', 'calendario', 'movimento', 'creditos', 'splitwise', 'contrato-pdf',
+  'planeados', 'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'visitas', 'calendario', 'movimento', 'creditos', 'splitwise', 'contrato-pdf',
   'avaliacao', 'fisco', 'definicoes', 'copias',
 ];
 
@@ -44,7 +44,7 @@ const DE_SERVICOS = new Set(SERVICOS_FICHEIROS.flatMap((s) => s.ficheiros)
    lista vive no web/sw.js (BASE, com o arranque, que aqui não carrega). */
 export const BASE = ['eventos', 'estilos-calculados', 'dados', 'anexos', 'formato', 'espera', 'registos', 'tipos', 'irs', 'saldos', 'ambito', 'icones', 'tema',
   'lista', 'continuidade', 'graficos', 'credito', 'componentes', 'metricas', 'navegacao', 'servicos', 'acessos', 'vistas',
-  'prazos', 'notificacoes', 'splitwise', 'definicoes', 'copias'];
+  'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'splitwise', 'definicoes', 'copias'];
 
 /* Cada módulo é da base ou de um serviço, e só de um; a base vai pela ordem
    do MODULOS. Rebenta ao importar o arnês, com o nome à vista: um ficheiro

@@ -1,6 +1,8 @@
 /* ================= FISCO ================= */
-/* A página do IRS de um senhorio: o quadro 4.1 do Anexo F, linha a linha, com
-   o que a app sabe e o que falta apontado ao lado.
+/* A página do IRS de um senhorio: os quadros 4.1 e 4.2 do Anexo F, linha a
+   linha, com o que a app sabe e o que falta apontado ao lado, e as regras, os
+   prazos e o guia do ano escolhido — que vêm da versão desse ano dos
+   rendimentos (irs-AAAA.js, lida por irs.js:irsAno).
 
    A app RESUME, não declara. Nunca inventa um número nem um código: uma linha
    sem código de freguesia fica com a falta escrita, não com um código
@@ -8,19 +10,27 @@
    senhorio — fica fora do quadro e dos totais, listado à parte sem juízo, com
    o nome e o valor e mais nada.
 
-   Cash basis: uma renda conta no ano da data do movimento; um gasto no ano em
-   que foi pago. Com um titular escolhido tudo entra pela quota-parte dele — o
-   Anexo F é por titular, e um imóvel a meias tem duas declarações.
+   Cash basis (CIRS art. 8.º): uma renda conta no ano em que é recebida, mesmo
+   que respeite a outro — a parte de anos anteriores diz-se à parte, para o
+   quadro 8; um gasto conta no ano em que foi pago, e só se foi pago com o
+   imóvel arrendado (as instruções do quadro 4.1), salvo o IMI e o selo, que
+   contam no ano em que o imóvel deu rendas (CIRS art. 41.º n.º 5). Com um
+   titular escolhido tudo entra pela quota-parte dele — o Anexo F é por
+   titular, e um imóvel a meias tem duas declarações (CIRS art. 19.º).
 
-   O que é estimativa diz-se como tal: os gastos de um imóvel com dois
-   contratos no mesmo ano repartem-se pelas linhas na proporção das rendas de
-   cada uma; o rateio que a lei pede quando o imóvel se arrenda por partes (por
-   VPT ou por área) fica para quem preenche, com o VPT à mão na ficha do imóvel. */
+   O que é estimativa diz-se como tal: os gastos de um imóvel com mais do que
+   um contrato no ano repartem-se pelos contratos na proporção das rendas de
+   cada um — incluindo as rendas que ficam fora do quadro (não declaradas ou
+   sem contrato), cuja parte não entra; o rateio que a lei pede quando o
+   imóvel se arrenda por partes independentes (por VPT ou por área, CIRS art.
+   41.º n.º 4) fica para quem preenche, com o VPT à mão na ficha do imóvel. E
+   o imposto é a estimativa sem englobamento, à taxa de cada contrato. */
 
 /* o ano escolhido no seletor; vazio é «automático» (fiscoAnoAtual) */
 let fiscoAno='';
-/* as colunas de gastos do quadro 4.1, pela ordem em que o Anexo F as pede */
-const fiscoCols=['conservacao','condominio','imi','selo','taxas','outros'];
+/* as colunas de gastos que contam no ano em que o imóvel deu rendas, e não só
+   no período arrendado (CIRS art. 41.º n.º 5) */
+const FISCO_SEM_PERIODO={imi:1,selo:1};
 
 /* O ano que a página mostra: o escolhido; senão, até junho e havendo rendas no
    ano anterior, o ano anterior — é o que se está a declarar. Depois de junho
@@ -43,8 +53,8 @@ function fiscoColRotulo(k){
    Devolve: o texto com o número à frente. */
 function fiscoN(n,sing,plur){return n+' '+(n===1?sing:plur)}
 /* A data 24 meses antes de outra, em texto — o limite das obras que o artigo
-   41.º do CIRS deixa deduzir antes de o arrendamento começar. Só se compara,
-   por isso vale a aritmética no ano e nunca um Date (nem toISOString).
+   41.º n.º 7 do CIRS deixa deduzir antes de o arrendamento começar. Só se
+   compara, por isso vale a aritmética no ano e nunca um Date (nem toISOString).
    Recebe: iso — a data 'AAAA-MM-DD'.
    Devolve: 'AAAA-MM-DD' dois anos antes, ou '' sem data. */
 function fiscoMenos24(iso){
@@ -53,20 +63,22 @@ function fiscoMenos24(iso){
 }
 /* Havia algum contrato do imóvel em vigor nesta data? É o que separa uma obra
    feita entre arrendamentos (dedutível nos 24 meses antes do seguinte) de uma
-   reparação durante um. Com data de fim, vale a data; sem ela, vale o estado
-   — um contrato sem fim e inativo não diz quando acabou, e não se adivinha.
+   reparação durante um, e um gasto do período arrendado de um gasto com o
+   imóvel vazio. Conta qualquer contrato, declarado ou não. Com data de fim,
+   vale a data; sem ela, vale o estado — um contrato sem fim e inativo não diz
+   quando acabou, e não se adivinha.
    Recebe: pid — o id do imóvel; d — a data 'AAAA-MM-DD'.
    Devolve: true se havia. */
 function fiscoHaviaContrato(pid,d){
   return (db.contracts||[]).some(c=>c.propertyId===pid&&c.start&&c.start<=d&&(c.end?c.end>=d:c.active!==false));
 }
-/* Os contratos para que um gasto conta como «obras antes do arrendamento»:
-   por imóvel que o gasto toca, os contratos que começam DEPOIS da data e até
-   24 meses depois, quando o gasto está marcado à mão como obras24 ou é
-   conservação numa altura em que o imóvel não tinha contrato em vigor. Entre
-   vários, só os que começam mais cedo: a obra precede UM arrendamento, e um
-   gasto contado em dois anos seria contado duas vezes (dois quartos a começar
-   no mesmo dia repartem-na).
+/* Os contratos para que um gasto conta como «obras antes do arrendamento»
+   (CIRS art. 41.º n.º 7): por imóvel que o gasto toca, os contratos que começam
+   DEPOIS da data e até 24 meses depois, quando o gasto está marcado à mão como
+   obras24 ou é conservação numa altura em que o imóvel não tinha contrato em
+   vigor. Entre vários, só os que começam mais cedo: a obra precede UM
+   arrendamento, e um gasto contado em dois anos seria contado duas vezes (dois
+   quartos a começar no mesmo dia repartem-na).
    Recebe: t — o movimento (despesa); col — a coluna do Anexo F já calculada (irsColunaDe).
    Devolve: objeto {idDoImovel: [contratos]}; vazio quando não é obra dos 24 meses. */
 function fiscoObra24De(t,col){
@@ -83,23 +95,29 @@ function fiscoObra24De(t,col){
 }
 /* Reparte um valor pelas linhas de um imóvel na proporção das rendas de cada
    uma — a estimativa que o resumo assume para um imóvel com mais do que um
-   contrato no ano. Sem rendas em nenhuma (só com rendas a zero), em partes
-   iguais, para nunca dividir por zero.
+   contrato no ano. As rendas do imóvel que não têm linha (contratos não
+   declarados, rendas sem contrato) pesam na divisão e a parte delas não vai a
+   linha nenhuma: sem isto os gastos do imóvel inteiro caíam na linha do único
+   contrato declarado. Sem rendas em lado nenhum (só rendas a zero), em partes
+   iguais pelas linhas, para nunca dividir por zero.
    Recebe: ls — as linhas do imóvel; valor — o que repartir (euros); fn — chamada
-   com (linha, parte) por cada linha.
+   com (linha, parte) por cada linha; resto (opcional) — as rendas do imóvel fora das linhas.
    Devolve: nada — entrega a parte de cada linha a fn. */
-function fiscoReparte(ls,valor,fn){
-  const tot=sum(ls.map(l=>l.rendas));
+function fiscoReparte(ls,valor,fn,resto){
+  const tot=sum(ls.map(l=>l.rendas))+(Number(resto)||0);
   ls.forEach(l=>fn(l,valor*(tot>0?l.rendas/tot:1/ls.length)));
 }
-/* Uma linha do quadro 4.1 ainda sem valores: a identificação do contrato, do
-   imóvel e dos inquilinos, e as faltas que se veem sem olhar às rendas — o
-   que a AT pergunta e a app não tem. Um NIF que não bate certo é uma falta
-   como as outras: vai para o Anexo F tal e qual, e volta recusado.
-   Recebe: c — o contrato; p — o imóvel (pode faltar); q — a quota-parte (0–1).
+/* Uma linha do Anexo F ainda sem valores: a identificação do contrato, do
+   imóvel e dos inquilinos, o quadro onde vai (o 4.2 quando há redução pela
+   duração, o 4.1 nos outros), a taxa e a natureza do ano, as datas do 4.2A e
+   as faltas que se veem sem olhar às rendas — o que a AT pergunta e a app não
+   tem. Um NIF que não bate certo é uma falta como as outras: vai para o Anexo
+   F tal e qual, e volta recusado.
+   Recebe: c — o contrato; p — o imóvel (pode faltar); q — a quota-parte (0–1);
+   ano — o ano dos rendimentos.
    Devolve: a linha (objeto), com rendas, retenções e gastos a zero. */
-function fiscoLinhaNova(c,p,q){
-  const f=fiscoDe(c),ts=ctTenants(c),faltas=[];
+function fiscoLinhaNova(c,p,q,ano){
+  const f=fiscoDe(c),ts=ctTenants(c),faltas=[],v=irsAno(ano),tx=irsTaxa(c,ano);
   if(ctFiscoPorIndicar(c))faltas.push('contrato por indicar se está declarado');
   if(ctDeclarado(c)&&!f.numero)faltas.push('n.º do contrato na AT');
   if(!p||!p.freguesiaCodigo)faltas.push('código da freguesia');
@@ -107,57 +125,72 @@ function fiscoLinhaNova(c,p,q){
   if(!p||!p.matrix)faltas.push('artigo matricial');
   if(!ts.length)faltas.push('inquilino do contrato');
   ts.forEach(t=>{
-    const v=nifValido(t.nif);
-    if(v===false)faltas.push('NIF do inquilino '+t.name+' não bate certo');
-    else if(v===null&&!String(t.pais||'').trim())faltas.push('NIF ou país do inquilino '+t.name);
+    const ok=nifValido(t.nif);
+    if(ok===false)faltas.push('NIF do inquilino '+t.name+' não bate certo');
+    else if(ok===null&&!String(t.pais||'').trim())faltas.push('NIF ou país do inquilino '+t.name);
   });
-  const g={};fiscoCols.forEach(k=>{g[k]=0});
+  if(tx.reducao&&!f.finalidade)faltas.push('finalidade do contrato (a redução pela duração é só da habitação permanente)');
+  const ps=irsPeriodos(c),ult=ps.length>1?ps[ps.length-1]:null;
+  const g={};v.colunas.forEach(k=>{g[k]=0});
   return {contratoId:c.id,propertyId:p?p.id:(c.propertyId||null),nome:ctName(c),imovel:p?p.name:'',
     atNumero:f.numero,inicio:c.start||'',estado:f.estado,
     freguesiaCodigo:p?p.freguesiaCodigo:'',tipoPredio:p?p.tipoPredio:'',artigo:p?p.matrix:'',fracao:p?p.fraction:'',
-    quota:q,natureza:naturezaIrs(c),
+    quota:q,natureza:naturezaIrs(c,ano),
+    quadro:tx.reducao?v.quadros.comReducao:v.quadros.semReducao,taxaReduzida:!!tx.reducao,
+    taxa:taxRateOf(c,ano),taxaEscrita:Number(c.taxRate)>0,motivoTaxa:tx.motivo,
+    datas:{inicio:c.start||'',fim:c.end||'',renovacaoInicio:ult?ult.inicio:'',renovacaoFim:ult?ult.fim:''},
     inquilinos:ts.map(t=>({id:t.id,nome:t.name,nif:t.nif||'',pais:t.pais||''})),
-    rendas:0,retencoes:0,gastos:g,obras24:{valor:0,inicioGastos:''},
-    taxaReduzida:irsRate(c)<25,faltas:faltas,recibosPorEmitir:0};
+    rendas:0,retencoes:0,gastos:g,obras24:{valor:0,inicioGastos:''},anosAnteriores:{},liquido:0,imposto:0,
+    faltas:faltas,recibosPorEmitir:0};
 }
 /* O resumo do Anexo F de um ano — a função pura por trás da página, do texto e
    do CSV. Uma linha por contrato NÃO marcado como não declarado com rendas no
    ano; os não declarados vão para «fora», somados; as rendas sem contrato (ou
-   de um contrato entretanto apagado) para «semContrato», por imóvel. Os gastos
-   do imóvel no ano entram pela coluna que irsColunaDe lhes dá, com o peso de
+   de um contrato entretanto apagado) para «semContrato», por imóvel. Uma renda
+   cujo mês (periodo) é de um ano anterior entra na linha na mesma e fica
+   apontada em anosAnteriores, para o quadro 8. Os gastos do imóvel no ano
+   entram pela coluna que irsColunaDe lhes dá, com o peso de
    metricas.js:txWeight (um movimento de grupo reparte-se pelos imóveis) e pela
-   quota, e repartem-se pelas linhas do imóvel na proporção das rendas. As
-   obras dos 24 meses (fiscoObra24De) entram só na linha do contrato que
-   começou neste ano, e nunca voltam a entrar nas colunas normais — nem neste
-   ano nem noutro.
+   quota, só se foram pagos com um contrato em vigor (o IMI e o selo sempre), e
+   repartem-se pelas linhas do imóvel na proporção das rendas (fiscoReparte).
+   As obras dos 24 meses (fiscoObra24De) entram só na linha do contrato a que
+   pertencem, no primeiro ano em que ele tem rendas, e nunca voltam a entrar
+   nas colunas normais — nem neste ano nem noutro. Por linha, o rendimento
+   líquido e o imposto estimado à taxa do contrato nesse ano.
 
    Com um titular, entram só os imóveis onde ele tem quota, e tudo pela quota.
    Sem titular vale o âmbito da vista; com um grupo de proprietários no filtro,
    o grupo é ignorado (o Anexo F é por pessoa) e os valores vão por inteiro.
    Recebe: ano — o ano (número ou texto); titularId — o id do proprietário
    (vazio ou nulo para todos, por inteiro).
-   Devolve: {ano, titularId, imoveis, linhas, fora, semContrato, totais, avisos,
-   semRegra, obrasSoltas} — linhas: [{contratoId, propertyId, nome, imovel, atNumero,
+   Devolve: {ano, versao, colunas, titularId, imoveis, linhas, fora,
+   semContrato, totais, avisos, semRegra, obrasSoltas, foraDoPeriodo} — versao
+   é irsAno(ano); linhas: [{contratoId, propertyId, nome, imovel, atNumero,
    inicio, estado, freguesiaCodigo, tipoPredio, artigo, fracao, quota,
-   natureza, inquilinos:[{id, nome, nif, pais}], rendas, retencoes,
-   gastos:{conservacao, condominio, imi, selo, taxas, outros}, obras24:{valor,
-   inicioGastos}, taxaReduzida, faltas:[texto], recibosPorEmitir}]; fora:
-   [{contratoId, nome, imovel, rendas, n, quota}]; semContrato: [{propertyId,
-   imovel, rendas, n, ids}]; totais: {rendas, retencoes, gastos, obras24};
+   natureza, quadro, taxaReduzida, taxa, taxaEscrita, motivoTaxa, datas:{inicio,
+   fim, renovacaoInicio, renovacaoFim}, inquilinos:[{id, nome, nif, pais}],
+   rendas, retencoes, gastos:{<coluna>: euros}, obras24:{valor, inicioGastos},
+   anosAnteriores:[{ano, valor}], liquido, imposto, faltas:[texto],
+   recibosPorEmitir}]; fora: [{contratoId, nome, imovel, rendas, n, quota}];
+   semContrato: [{propertyId, imovel, rendas, n, ids}]; totais: {rendas,
+   retencoes, gastos, obras24, liquido, imposto, prejuizo, anosAnteriores};
    avisos: [{texto, abrir, toca}]; semRegra: n.º de despesas que caíram em
    «outros» por não terem regra; obrasSoltas: n.º de despesas do ano marcadas
-   como obras24 sem contrato a começar depois; imoveis: quantos imóveis entraram. */
+   como obras24 sem contrato a começar depois; foraDoPeriodo: n.º de despesas
+   do ano pagas sem contrato em vigor, que não entram; imoveis: quantos imóveis
+   entraram. */
 function resumoFiscal(ano,titularId){
   ano=Number(ano)||YEAR;titularId=titularId||'';
-  const A=String(ano);
+  const A=String(ano),v=irsAno(ano),cols=v.colunas;
   const perm=p=>pode(p.id,'tx.view')||pode(p.id,'report.view')||pode(p.id,'loan.view');
   const quotaDe=p=>p?(titularId?shareOf(p,titularId):1):(titularId?0:1);
   const base=(ownerIsGrp()?db.properties.filter(perm):pidProps(null)).filter(p=>pode(p.id,'report.view')&&quotaDe(p)>0);
   const props={};base.forEach(p=>{props[p.id]=p});
   const noAno=t=>String(t.date||'').startsWith(A);
-  const linhas={},fora={},semC={};
+  const linhas={},fora={},semC={},resto={};
+  const sobra=(pid,valor)=>{if(pid)resto[pid]=(resto[pid]||0)+valor};
   /* as rendas do ano, cada uma para a linha do seu contrato — ou para fora, ou
-     para as sem contrato */
+     para as sem contrato; estas duas pesam na repartição dos gastos (resto) */
   (db.transactions||[]).forEach(t=>{
     if(!ehRenda(t)||!noAno(t))return;
     const c=t.contractId?contract(t.contractId):null;
@@ -167,11 +200,13 @@ function resumoFiscal(ano,titularId){
     if(!pid&&titularId)return;         // sem imóvel não há quota de ninguém
     const q=quotaDe(p),bruta=rendaBruta(t)*q;
     if(!c){const s=semC[pid]||(semC[pid]={propertyId:pid||null,imovel:p?p.name:'Sem imóvel',rendas:0,n:0,ids:[]});
-      s.rendas+=bruta;s.n++;s.ids.push(t.id);return}
+      s.rendas+=bruta;s.n++;s.ids.push(t.id);sobra(pid,bruta);return}
     if(ctNaoDeclarado(c)){const f=fora[c.id]||(fora[c.id]={contratoId:c.id,nome:ctName(c),imovel:p?p.name:'',rendas:0,n:0,quota:q});
-      f.rendas+=bruta;f.n++;return}
-    const l=linhas[c.id]||(linhas[c.id]=fiscoLinhaNova(c,p,q));
+      f.rendas+=bruta;f.n++;sobra(pid,bruta);return}
+    const l=linhas[c.id]||(linhas[c.id]=fiscoLinhaNova(c,p,q,ano));
     l.rendas+=bruta;l.retencoes+=(Number(t.retencao)||0)*q;
+    const y=Number(String(t.periodo||'').slice(0,4));
+    if(y&&y<ano)l.anosAnteriores[y]=(l.anosAnteriores[y]||0)+bruta;
     if(!t.recibo&&ctDeclarado(c))l.recibosPorEmitir++;
   });
   const L=Object.keys(linhas).map(k=>linhas[k]);
@@ -180,9 +215,10 @@ function resumoFiscal(ano,titularId){
      por imóvel, porque um movimento de grupo pode ser obra num imóvel vago e
      gasto corrente noutro — para não voltar a entrar nas colunas normais, nem
      sequer quando a linha do contrato a que pertence não é deste ano. A obra
-     entra na linha do contrato no PRIMEIRO ano em que ele tem rendas, e não no
-     ano do início: um contrato que começa em dezembro e recebe a primeira
-     renda em janeiro não tem linha no ano do início, e a obra perdia-se nos dois */
+     entra na linha do contrato no PRIMEIRO ano em que ele tem rendas — o do
+     início, quase sempre, que é o que a AT pede; um contrato que começa em
+     dezembro e recebe a primeira renda em janeiro não tem linha no ano do
+     início, e a obra perdia-se nos dois */
   const primeiroAno={};
   (db.transactions||[]).forEach(t=>{
     if(!ehRenda(t)||!t.contractId)return;
@@ -208,55 +244,70 @@ function resumoFiscal(ano,titularId){
       });
     });
   });
-  /* os gastos do ano, por coluna, repartidos pelas linhas de cada imóvel; uma
-     despesa marcada à mão como obras24 sem contrato a começar depois não tem
-     linha onde caia — conta-se, para o aviso dizer que ficou de fora */
-  let semRegra=0,obrasSoltas=0;
+  /* os gastos do ano, por coluna, repartidos pelas linhas de cada imóvel. Um
+     gasto pago com o imóvel sem contrato em vigor não entra (só o período
+     arrendado conta; o IMI e o selo contam no ano em que o imóvel deu rendas)
+     — salvo quando a coluna foi escolhida à mão no movimento: aí a pessoa
+     decidiu, e manda. Uma despesa marcada à mão como obras24 sem contrato a
+     começar depois não tem linha onde caia — conta-se, para o aviso dizer
+     que ficou de fora */
+  let semRegra=0,obrasSoltas=0,foraDoPeriodo=0;
   (db.transactions||[]).forEach(t=>{
     if(t.kind!=='expense'||!noAno(t))return;
     const r=irsColunaDe(t);if(r.col==='nao')return;
-    const jaFoi=consumidos[t.id]||{};
-    let entrou=false;
+    const jaFoi=consumidos[t.id]||{},d=String(t.date||'');
+    let entrou=false,vazio=false;
     Object.keys(porImovel).forEach(pid=>{
       if(jaFoi[pid])return;
       const w=txWeight(t,pid,false);if(!(w>0))return;
+      if(r.col!=='obras24'&&!FISCO_SEM_PERIODO[r.col]&&r.origem!=='movimento'&&!fiscoHaviaContrato(pid,d)){vazio=true;return}
       entrou=true;
-      if(r.col!=='obras24')fiscoReparte(porImovel[pid],(Number(t.amount)||0)*w*quotaDe(props[pid]),(l,parte)=>{l.gastos[r.col]+=parte});
+      if(r.col!=='obras24')fiscoReparte(porImovel[pid],(Number(t.amount)||0)*w*quotaDe(props[pid]),(l,parte)=>{l.gastos[r.col]+=parte},resto[pid]);
     });
+    if(vazio)foraDoPeriodo++;
     if(!entrou)return;
     if(r.col==='obras24')obrasSoltas++;
     else if(r.origem==='omissao')semRegra++;
   });
-  /* arredondar ao cêntimo no fim, para os totais baterem com as linhas */
-  const totais={rendas:0,retencoes:0,gastos:{},obras24:0};fiscoCols.forEach(k=>{totais.gastos[k]=0});
+  /* arredondar ao cêntimo no fim, para os totais baterem com as linhas; o
+     líquido e o imposto de cada linha saem dos valores já arredondados */
+  const totais={rendas:0,retencoes:0,gastos:{},obras24:0,liquido:0,imposto:0,prejuizo:0,anosAnteriores:0};cols.forEach(k=>{totais.gastos[k]=0});
   L.forEach(l=>{
     l.rendas=r2(l.rendas);l.retencoes=r2(l.retencoes);l.obras24.valor=r2(l.obras24.valor);
-    fiscoCols.forEach(k=>{l.gastos[k]=r2(l.gastos[k]);totais.gastos[k]+=l.gastos[k]});
+    cols.forEach(k=>{l.gastos[k]=r2(l.gastos[k]);totais.gastos[k]+=l.gastos[k]});
+    l.anosAnteriores=Object.keys(l.anosAnteriores).map(Number).sort((a,b)=>a-b).map(y=>({ano:y,valor:r2(l.anosAnteriores[y])}));
+    l.liquido=r2(l.rendas-sum(cols.map(k=>l.gastos[k]))-l.obras24.valor);
+    l.imposto=r2(l.liquido*l.taxa/100);
     totais.rendas+=l.rendas;totais.retencoes+=l.retencoes;totais.obras24+=l.obras24.valor;
+    totais.liquido+=l.liquido;totais.imposto+=l.imposto;totais.anosAnteriores+=sum(l.anosAnteriores.map(x=>x.valor));
   });
-  totais.rendas=r2(totais.rendas);totais.retencoes=r2(totais.retencoes);totais.obras24=r2(totais.obras24);
-  fiscoCols.forEach(k=>{totais.gastos[k]=r2(totais.gastos[k])});
+  ['rendas','retencoes','obras24','liquido','anosAnteriores'].forEach(k=>{totais[k]=r2(totais[k])});
+  cols.forEach(k=>{totais.gastos[k]=r2(totais.gastos[k])});
+  /* um resultado negativo não paga imposto: reporta-se aos seis anos seguintes (CIRS art. 55.º) */
+  totais.imposto=Math.max(0,r2(totais.imposto));totais.prejuizo=totais.liquido<0?-totais.liquido:0;
   const pt=(a,b)=>String(a).localeCompare(String(b),'pt');
-  L.sort((a,b)=>pt(a.imovel,b.imovel)||pt(a.inicio,b.inicio)||pt(a.nome,b.nome));
+  L.sort((a,b)=>pt(a.quadro,b.quadro)||pt(a.imovel,b.imovel)||pt(a.inicio,b.inicio)||pt(a.nome,b.nome));
   const F=Object.keys(fora).map(k=>fora[k]).map(f=>Object.assign(f,{rendas:r2(f.rendas)})).sort((a,b)=>pt(a.nome,b.nome));
   const S=Object.keys(semC).map(k=>semC[k]).map(s=>Object.assign(s,{rendas:r2(s.rendas)})).sort((a,b)=>pt(a.imovel,b.imovel));
-  return {ano:ano,titularId:titularId,imoveis:base.length,linhas:L,fora:F,semContrato:S,totais:totais,
-    avisos:fiscoAvisos(ano,L,F,S,semRegra,obrasSoltas),semRegra:semRegra,obrasSoltas:obrasSoltas};
+  return {ano:ano,versao:v,colunas:cols,titularId:titularId,imoveis:base.length,linhas:L,fora:F,semContrato:S,totais:totais,
+    avisos:fiscoAvisos(ano,L,F,S,semRegra,obrasSoltas,foraDoPeriodo),semRegra:semRegra,obrasSoltas:obrasSoltas,foraDoPeriodo:foraDoPeriodo};
 }
 /* O que há a tratar antes de preencher o quadro: contratos por indicar,
    declarados sem número, inquilinos sem NIF, imóveis sem os dados matriciais,
-   rendas sem recibo ou sem contrato, despesas sem regra — cada um com o toque
-   que leva ao sítio certo. Os contratos não declarados são o último, sem
-   toque e sem pedido: não são uma falta, são uma escolha, e diz-se só que
-   ficam fora. Cada toque abre a ficha de outro serviço (contratos, inquilinos,
-   imóveis, movimentos): com esse serviço desligado nesta conta o aviso fica,
-   que a falta é a mesma, mas sem o toque.
+   rendas sem recibo ou sem contrato, despesas sem regra ou pagas com o imóvel
+   vazio, o imposto do selo de um contrato que começou no ano — cada um com o
+   toque que leva ao sítio certo. Os contratos não declarados são o último,
+   sem toque e sem pedido: não são uma falta, são uma escolha, e diz-se só que
+   ficam fora. Cada toque abre a ficha de outro serviço (contratos,
+   inquilinos, imóveis, movimentos): com esse serviço desligado nesta conta o
+   aviso fica, que a falta é a mesma, mas sem o toque.
    Recebe: ano — o ano; L — as linhas do resumo; F — os contratos fora; S — as
    rendas sem contrato; semRegra — n.º de despesas sem regra de dedução;
-   obrasSoltas — n.º de despesas marcadas como obras24 sem contrato a seguir.
+   obrasSoltas — n.º de despesas marcadas como obras24 sem contrato a seguir;
+   foraDoPeriodo — n.º de despesas pagas sem contrato em vigor.
    Devolve: [{texto, abrir, toca}] — abrir é o código do onclick ('' sem ação);
    toca a família do ponto ('camada' abre uma ficha, 'ecra' muda de ecrã). */
-function fiscoAvisos(ano,L,F,S,semRegra,obrasSoltas){
+function fiscoAvisos(ano,L,F,S,semRegra,obrasSoltas,foraDoPeriodo){
   const out=[],add=(texto,abrir,toca)=>out.push({texto:texto,abrir:abrir||'',toca:toca||''});
   /* o toque só se o serviço que ele abre está ligado; senão [abrir, toca] vazios */
   const se=(id,abrir,toca)=>servicoLigado(id)?[abrir,toca]:['',''];
@@ -267,6 +318,9 @@ function fiscoAvisos(ano,L,F,S,semRegra,obrasSoltas){
   const semNum=L.filter(l=>l.estado==='declarado'&&!l.atNumero);
   if(semNum.length)add(semNum.length===1?'Contrato '+semNum[0].nome+': declarado à AT, sem o n.º do contrato'
     :semNum.length+' contratos declarados à AT sem o n.º do contrato',...umCt(semNum));
+  const semFin=L.filter(l=>l.taxaReduzida&&l.faltas.some(x=>/^finalidade/.test(x)));
+  if(semFin.length)add(semFin.length===1?'Contrato '+semFin[0].nome+': diz se é habitação permanente — a redução pela duração depende disso'
+    :semFin.length+' contratos longos sem finalidade: a redução pela duração é só da habitação permanente',...umCt(semFin));
   const vistos={};
   L.forEach(l=>l.inquilinos.forEach(t=>{
     if(vistos[t.id])return;vistos[t.id]=1;
@@ -283,21 +337,32 @@ function fiscoAvisos(ano,L,F,S,semRegra,obrasSoltas){
   const comRecibos=L.filter(l=>l.recibosPorEmitir>0),nRec=sum(comRecibos.map(l=>l.recibosPorEmitir));
   if(nRec)add(fiscoN(nRec,'renda','rendas')+' de '+ano+' sem recibo eletrónico emitido',
     ...(comRecibos.length===1?umCt(comRecibos):se('transactions',"go('transactions')",'ecra')));
+  /* o selo do contrato (10 % de uma renda, pago com o Modelo 2) é dedutível e
+     esquece-se: só se o contrato começou no ano e o prazo do Modelo 2 ainda
+     caía nele — senão o selo pode ter sido pago no ano seguinte, com razão */
+  const semSelo=L.filter(l=>l.estado==='declarado'&&l.inicio.slice(0,4)===String(ano)&&fimDoMesSeguinte(l.inicio).slice(0,4)===String(ano)&&!(l.gastos.selo>0));
+  if(semSelo.length)add((semSelo.length===1?'Contrato '+semSelo[0].nome+': começou em '+ano+' e não há imposto do selo nos gastos'
+    :semSelo.length+' contratos começaram em '+ano+' sem imposto do selo nos gastos')+' — o que se paga com o Modelo 2 (10 % de uma renda) é dedutível: regista-o como despesa, em Impostos › Imposto do selo',
+    ...se('transactions',"go('transactions')",'ecra'));
   const nSem=sum(S.map(s=>s.n));
   if(nSem)add(fiscoN(nSem,'renda','rendas')+' de '+ano+' sem contrato ligado '+(nSem===1?'fica':'ficam')+' fora do quadro',
     ...(nSem===1?se('transactions',`txView('${jsq(S[0].ids[0])}')`,'camada'):se('transactions',"go('transactions')",'ecra')));
   if(semRegra)add(fiscoN(semRegra,'despesa sem regra de dedução conta','despesas sem regra de dedução contam')+' em Outros: define-a nas Definições → IRS e dedução',
     "go('settings');goSet('irs')",'ecra');
+  if(foraDoPeriodo)add(fiscoN(foraDoPeriodo,'despesa paga','despesas pagas')+' em '+ano+' com o imóvel sem contrato em vigor '+(foraDoPeriodo===1?'fica':'ficam')+' fora: só conta o período arrendado. Se é deste período, corrige as datas do contrato ou escolhe a coluna na ficha da despesa',
+    ...se('transactions',"go('transactions')",'ecra'));
   if(obrasSoltas)add(fiscoN(obrasSoltas,'despesa marcada como obras dos 24 meses','despesas marcadas como obras dos 24 meses')+' de '+ano+' sem contrato a começar depois: '+(obrasSoltas===1?'fica':'ficam')+' fora até o haver',
     ...se('transactions',"go('transactions')",'ecra'));
   if(F.length)add(fiscoN(F.length,'contrato marcado como não declarado fica','contratos marcados como não declarados ficam')+' fora deste resumo.','','');
   return out;
 }
 
-/* A vista do separador Declaração: o painel com o titular e o ano, e para o ano
-   escolhido as obrigações, o quadro 4.1, as obras dos 24 meses, o que ficou
-   fora por escolha e as rendas sem contrato. Sem imóveis, ou sem rendas no
-   ano, diz-o e aponta a saída.
+/* A vista do separador Declaração: o painel com o titular e o ano, a versão
+   das regras desse ano (o prazo, o modelo, o que mudou), e para o ano
+   escolhido as obrigações, os quadros 4.1 e 4.2, as obras dos 24 meses, as
+   rendas de anos anteriores, o que ficou fora por escolha, as rendas sem
+   contrato e o guia de preenchimento. Sem imóveis, ou sem rendas no ano,
+   diz-o e aponta a saída.
    Devolve: o HTML da vista (string). */
 function vFisco(){
   const ano=fiscoAnoAtual(),auto=!fiscoAno,grupo=ownerIsGrp(),titular=grupo?'':ownerFilter;
@@ -313,33 +378,57 @@ function vFisco(){
     ${servicoLigado('properties')?saida('Adicionar imóvel',"go('properties')",'ecra'):vazioServicoDesligado('properties')}</div>`);
   if(!r.linhas.length&&!r.fora.length&&!r.semContrato.length){
     const outros=anos.filter(y=>y!==ano&&(db.transactions||[]).some(t=>ehRenda(t)&&String(t.date||'').startsWith(String(y))));
-    return panel+`<div class="empty"><b>Sem rendas em ${ano}</b>${outros.length?'Há rendas em '+esc(outros.join(', '))+'. ':''}Uma renda entra aqui quando o movimento é da categoria Rendas e está ligado ao contrato.
+    return panel+fiscoAnoCard(r)+`<div class="empty"><b>Sem rendas em ${ano}</b>${outros.length?'Há rendas em '+esc(outros.join(', '))+'. ':''}Uma renda entra aqui quando o movimento é da categoria Rendas e está ligado ao contrato.
       ${saida('Escolher outro ano','hdrFiltToggle()','vista')}</div>`;
   }
   /* Os cartões empilham-se numa grelha de uma coluna com o mesmo intervalo
      que as colunas da casa (index.html:.cols, 14px). O card() não traz margem
      própria, e somados um a seguir ao outro ficavam colados. A coluna é
      minmax(0,1fr) e não 1fr: um item de grelha não encolhe abaixo do seu
-     conteúdo, e a tabela do quadro 4.1, mais larga do que o ecrã, alargava a
+     conteúdo, e a tabela do quadro, mais larga do que o ecrã, alargava a
      página em vez de rolar dentro do .tablewrap. */
-  return panel+`<div class="toolbar">
+  const Q=r.versao.quadros;
+  return panel+fiscoAnoCard(r)+`<div class="toolbar">
     <button class="btn" data-toca="nada" data-click="fiscoPartilhar()">Partilhar</button>
     <button class="btn" data-toca="nada" data-click="fiscoCsv()">CSV</button></div>`
     +fiscoKpis(r)+`<div class="fiscoPilha u-d-grid u-gtc-minmax-0-1fr u-g-14px">`
-    +fiscoObrigacoesCard(r)+fiscoQuadroCard(r)+fiscoObrasCard(r)+fiscoForaCard(r)+fiscoSemContratoCard(r)+`</div>`;
+    +fiscoObrigacoesCard(r)+fiscoQuadroCard(r,Q.semReducao)+fiscoQuadroCard(r,Q.comReducao)+fiscoObrasCard(r)
+    +fiscoAnosAnterioresCard(r)+fiscoForaCard(r)+fiscoSemContratoCard(r)+fiscoGuiaCard(r)+`</div>`;
+}
+/* O cartão da versão das regras: o ano dos rendimentos e o prazo da entrega,
+   o estado do modelo do Anexo F (oficial ou provisório), e o que mudou nesse
+   ano. Quando o ano não tem versão própria, di-lo antes de tudo: usam-se as
+   regras da versão mais próxima, e as taxas e os quadros podem ter mudado.
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: o HTML do cartão (string). */
+function fiscoAnoCard(r){
+  const v=r.versao,e=v.entrega;
+  const falta=v.exato?'':`<div class="hint u-mb-8px"><b>Ainda não há versão das regras de ${r.ano}.</b> ${v.pedido>v.ano
+    ?'Usam-se as de '+v.ano+', a mais recente, com as datas passadas para '+r.ano+' — as taxas e os quadros podem ter mudado.'
+    :'Usam-se as de '+v.ano+', a mais antiga que a app tem.'}</div>`;
+  const novidades=v.exato&&v.novidades.length?`<div class="flabel u-mt-9px">O que mudou em ${r.ano}</div>
+    <ul class="u-m-0 u-pl-18px">${v.novidades.map(n=>`<li class="small u-mt-4px">${esc(n)}</li>`).join('')}</ul>`:'';
+  /* num ano emprestado, o texto do modelo é o de outro ano («os rendimentos
+     de 2026» na página de 2027): diz-se só de que versão são as regras */
+  const selo=!v.exato?`<span class="badge amber">Regras de ${v.ano}</span>`
+    :`<span class="badge ${v.modelo.oficial?'':'amber'}">${v.modelo.oficial?'Modelo oficial':'Versão provisória'}</span>`;
+  return `<div class="u-mb-14px">`+card('IRS '+r.ano,'Rendimentos de '+r.ano+' · entrega de '+esc(irsDiaMes(e.de))+' a '+esc(irsDiaMes(e.ate))+' de '+esc(e.ate.slice(0,4)),
+    falta+`<div>${selo}</div>${v.exato?`<div class="hint u-mt-8px">${esc(v.modelo.texto)}</div>`:''}${novidades}`)+`</div>`;
 }
 /* Os quatro números do ano à cabeça, em cartões com explicação ao toque:
-   rendas ilíquidas, retenções, gastos dedutíveis e obras dos 24 meses — os
-   totais do quadro, antes de o ler linha a linha.
+   rendas ilíquidas, gastos dedutíveis (com as obras dos 24 meses), o
+   rendimento líquido e o imposto estimado — os totais dos quadros, antes de
+   os ler linha a linha.
    Recebe: r — o resumo (resumoFiscal).
    Devolve: o HTML da grelha (string). */
 function fiscoKpis(r){
-  const g=sum(fiscoCols.map(k=>r.totais.gastos[k]));
+  const T=r.totais,g=sum(r.colunas.map(k=>T.gastos[k]))+T.obras24;
+  const aPagar=r2(T.imposto-T.retencoes);
   return `<div class="grid u-mb-14px">
-    ${kpi('Rendas ilíquidas',euro(r.totais.rendas),'',fiscoN(r.linhas.length,'contrato','contratos')+' em '+r.ano,'O que entrou como renda mais o que o inquilino reteve na fonte. É o valor que vai ao quadro 4.1; cauções e empréstimos recebidos ficam de fora.')}
-    ${kpi('Retenções na fonte',euro(r.totais.retencoes),'','entregues à AT pelo inquilino','O IRS que um inquilino com contabilidade organizada reteve e entregou por ti. Abate ao imposto a pagar; a renda declara-se pelo valor ilíquido.')}
-    ${kpi('Gastos dedutíveis',euro(g),'','conservação, condomínio, IMI, selo, taxas e outros','A soma das seis colunas de gastos do quadro 4.1, pela regra de cada categoria (Definições → IRS e dedução). Ficam fora os juros, o mobiliário e as obras que acrescentam valor.')}
-    ${kpi('Obras dos 24 meses',euro(r.totais.obras24),'',r.totais.obras24?'antes do arrendamento':'nenhuma em '+r.ano,'Conservação paga nos 24 meses antes de um contrato começar, com o imóvel sem contrato em vigor. Entra na linha desse contrato, à parte das outras colunas.')}</div>`;
+    ${kpi('Rendas ilíquidas',euro(T.rendas),'',fiscoN(r.linhas.length,'contrato','contratos')+' em '+r.ano,'O que entrou como renda mais o que o inquilino reteve na fonte, no ano em que foi recebido. É o valor que vai aos quadros 4.1 e 4.2; cauções e empréstimos recebidos ficam de fora.')}
+    ${kpi('Gastos dedutíveis',euro(g),'',T.obras24?'com '+euro(T.obras24)+' de obras dos 24 meses':'conservação, condomínio, IMI, selo, taxas e outros','As colunas de gastos dos quadros, pela regra de cada categoria (Definições → IRS e dedução), só do período em que o imóvel esteve arrendado, e as obras de conservação dos 24 meses antes de um contrato. Ficam fora os juros, o mobiliário, o AIMI e as obras que acrescentam valor.')}
+    ${kpi('Rendimento líquido',euro(T.liquido),T.liquido<0?'neg':'',T.prejuizo?'prejuízo a reportar':'rendas menos gastos',T.prejuizo?'As rendas não chegaram para os gastos. O resultado negativo não se perde: abate às rendas dos seis anos seguintes (CIRS art. 55.º), se o imóvel voltar a dar rendas.':'As rendas ilíquidas menos os gastos dedutíveis, linha a linha. É sobre isto que se paga o imposto.')}
+    ${kpi('Imposto estimado',euro(T.imposto),'',T.retencoes?'já retido '+euro(T.retencoes)+' · '+(aPagar>=0?'falta '+euro(aPagar):'a receber '+euro(-aPagar)):'sem englobamento','O rendimento líquido de cada contrato à taxa dele em '+r.ano+' (a escrita no contrato, ou a estimativa da versão do ano), somado. É uma estimativa sem englobamento: o valor certo é o da liquidação da AT. As retenções do inquilino abatem a isto.')}</div>`;
 }
 /* O cartão «Obrigações de <ano>»: os avisos do resumo, cada um a abrir o sítio
    onde se trata; o dos não declarados fica liso, que não há nada a tratar.
@@ -349,42 +438,51 @@ function fiscoObrigacoesCard(r){
   const row=a=>a.abrir?`<div class="card tap u-p-11px-13px" data-toca="${esc(a.toca||'camada')}" data-click="${a.abrir}"><b class="u-fw-600">${esc(a.texto)}</b></div>`
     :`<div class="card u-p-11px-13px"><span class="small">${esc(a.texto)}</span></div>`;
   const corpo=r.avisos.length?`<div class="list u-g-8px">${r.avisos.map(row).join('')}</div>`
-    :`<div class="hint">Com o que a app sabe, não falta nada para preencher o quadro 4.1 de ${r.ano}.</div>`;
+    :`<div class="hint">Com o que a app sabe, não falta nada para preencher os quadros de ${r.ano}.</div>`;
   return card('Obrigações de '+r.ano,r.avisos.length?fiscoN(r.avisos.length,'ponto a tratar','pontos a tratar'):'Nada em falta',
     corpo+`<div class="hint u-mt-9px">A app resume, não declara: o que falta fica escrito aqui e ao pé de cada linha. Os prazos com data — Modelo 2, recibos, entrega do Anexo F — estão nos Prazos da visão geral.</div>`);
 }
-/* O cartão do quadro 4.1: uma tabela com uma linha por contrato e a linha dos
-   totais, e o hint que diz o que é estimativa.
-   Recebe: r — o resumo (resumoFiscal).
-   Devolve: o HTML do cartão (string). */
-function fiscoQuadroCard(r){
-  const G=r.totais.gastos;
-  const cab=`<thead><tr><th>Contrato</th><th class="u-ta-left">Início</th><th class="u-ta-left">Imóvel</th><th class="u-ta-left">Inquilinos</th><th class="u-ta-left">Nat.</th><th>Rendas ilíquidas</th><th>Retenções</th>${fiscoCols.map(k=>`<th>${esc(fiscoColRotulo(k))}</th>`).join('')}</tr></thead>`;
-  const tot=`<tr><td colspan="5"><b>Total</b></td><td><b>${euro2(r.totais.rendas)}</b></td><td><b>${euro2(r.totais.retencoes)}</b></td>${fiscoCols.map(k=>`<td><b>${euro2(G[k])}</b></td>`).join('')}</tr>`;
-  return card('Anexo F · quadro 4.1','Rendimentos prediais de '+r.ano+(r.titularId?' · quota-parte de '+esc(ownerFilterName()):' · valores por inteiro'),
-    `<div class="tablewrap"><table class="table">${cab}<tbody>${r.linhas.map(fiscoLinhaHtml).join('')}${tot}</tbody></table></div>
-    <div class="hint u-mt-9px">Rendas ilíquidas: o que entrou mais o que o inquilino reteve na fonte. Os gastos de um imóvel com mais do que um contrato no ano repartem-se pelas linhas na proporção das rendas de cada uma — é uma estimativa; o rateio por VPT ou por área, quando o imóvel se arrenda por partes, fica para quem preenche.${r.semRegra?' '+fiscoN(r.semRegra,'despesa sem regra de dedução conta','despesas sem regra de dedução contam')+' em Outros.':''}</div>`);
+/* O cartão de um quadro de rendas (o 4.1 ou o 4.2): uma tabela com as linhas
+   desse quadro e a linha dos totais, e o hint do que é estimativa. O 4.2 leva
+   por baixo as datas do 4.2A, que a AT pede sempre com ele. Sem linhas nesse
+   quadro, não se escreve.
+   Recebe: r — o resumo (resumoFiscal); q — o quadro ('4.1', '4.2').
+   Devolve: o HTML do cartão (string), ou '' sem linhas. */
+function fiscoQuadroCard(r,q){
+  const ls=r.linhas.filter(l=>l.quadro===q);if(!ls.length)return '';
+  const cols=r.colunas,red=q===r.versao.quadros.comReducao,s=k=>r2(sum(ls.map(l=>k(l))));
+  const cab=`<thead><tr><th>Contrato</th><th class="u-ta-left">Início</th><th class="u-ta-left">Imóvel</th><th class="u-ta-left">Inquilinos</th><th class="u-ta-left">Nat.</th><th>Rendas ilíquidas</th><th>Retenções</th>${cols.map(k=>`<th>${esc(fiscoColRotulo(k))}</th>`).join('')}</tr></thead>`;
+  const tot=`<tr><td colspan="5"><b>Total</b></td><td><b>${euro2(s(l=>l.rendas))}</b></td><td><b>${euro2(s(l=>l.retencoes))}</b></td>${cols.map(k=>`<td><b>${euro2(s(l=>l.gastos[k]))}</b></td>`).join('')}</tr>`;
+  const sub=(red?'Habitação permanente com redução de taxa pela duração':'Contratos sem redução pela duração')+' · '+r.ano+(r.titularId?' · quota-parte de '+esc(ownerFilterName()):' · valores por inteiro');
+  const datas=red?`<div class="flabel u-mt-12px">Quadro ${esc(r.versao.quadros.datas)} · datas de cada contrato</div>
+    <div class="tablewrap"><table class="table"><thead><tr><th>Contrato</th><th class="u-ta-left">Início</th><th class="u-ta-left">Termo</th><th class="u-ta-left">Última renovação</th></tr></thead><tbody>
+    ${ls.map(l=>`<tr><td class="u-ws-normal">${esc(l.nome)}</td><td class="u-ta-left">${dPT(l.datas.inicio)||'—'}</td><td class="u-ta-left">${dPT(l.datas.fim)||'—'}</td><td class="u-ta-left">${l.datas.renovacaoInicio?dPT(l.datas.renovacaoInicio)+' a '+(dPT(l.datas.renovacaoFim)||'—'):'—'}</td></tr>`).join('')}</tbody></table></div>
+    <div class="hint u-mt-9px">O ${esc(r.versao.quadros.datas)} pergunta ainda se a duração e as renovações foram comunicadas no Portal até 15 de fevereiro — sem isso não há redução. Num contrato celebrado desde 2024, a redução só vale se a renda não passar 150 % dos limites por tipologia e concelho (o quadro 4.2C pergunta-o).</div>`:'';
+  return card('Anexo F · quadro '+esc(q),sub,
+    `<div class="tablewrap"><table class="table">${cab}<tbody>${ls.map(fiscoLinhaHtml).join('')}${tot}</tbody></table></div>
+    <div class="hint u-mt-9px">Rendas ilíquidas: o que entrou mais o que o inquilino reteve na fonte. Os gastos de um imóvel com mais do que um contrato no ano repartem-se pelas linhas na proporção das rendas de cada uma — é uma estimativa; o rateio por VPT ou por área, quando o imóvel se arrenda por partes, fica para quem preenche.${r.semRegra&&!red?' '+fiscoN(r.semRegra,'despesa sem regra de dedução conta','despesas sem regra de dedução contam')+' em Outros.':''}</div>${datas}`);
 }
-/* Uma linha da tabela do quadro 4.1: o n.º na AT (ou «—») e o nome, o início,
-   o imóvel com os dados matriciais, os inquilinos com NIF ou país, a natureza,
-   as rendas, as retenções e as seis colunas de gastos; as faltas em small por
-   baixo do contrato. Tocar abre a ficha do contrato — só com o serviço dos
-   Contratos ligado nesta conta; sem ele a linha é só de leitura.
+/* Uma linha da tabela de um quadro: o n.º na AT (ou «—») e o nome, o início e
+   a taxa do ano, o imóvel com os dados matriciais, os inquilinos com NIF ou
+   país, a natureza, as rendas, as retenções e as colunas de gastos; as faltas
+   em small por baixo do contrato. Tocar abre a ficha do contrato — só com o
+   serviço dos Contratos ligado nesta conta; sem ele a linha é só de leitura.
    Recebe: l — a linha do resumo.
    Devolve: o HTML do <tr> (string). */
 function fiscoLinhaHtml(l){
   const inq=l.inquilinos.length?l.inquilinos.map(t=>`${esc(t.nome)}<span class="small"> · ${t.nif?esc(fmtNIF(t.nif)):(t.pais?esc(t.pais):'sem NIF')}</span>`).join('<br>'):'<span class="small">—</span>';
   const im=[l.freguesiaCodigo||'—',l.tipoPredio||'—',l.artigo?'art. '+l.artigo:'—',l.fracao?'fr. '+l.fracao:''].filter(Boolean).map(esc).join(' · ');
   const v=x=>x?euro2(x):'—';
+  const taxa='taxa '+dec(l.taxa)+' %'+(l.taxaEscrita?'':' · '+({nh:'não habitacional',duracao:'pela duração',moderada:'renda moderada',base:'base'}[l.motivoTaxa]||''));
   const toque=servicoLigado('contracts')?` data-toca="camada" class="u-cur-pointer" data-click="ctView('${jsq(l.contratoId)}')"`:'';
   return `<tr${toque}>
     <td class="u-ws-normal u-minw-170px"><b>${l.atNumero?esc(l.atNumero):'—'}</b><div class="small">${esc(l.nome)}${!l.estado?' · por indicar':''}</div>${l.faltas.length?`<div class="small">Falta: ${esc(l.faltas.join(', '))}.</div>`:''}</td>
-    <td class="u-ta-left">${dPT(l.inicio)||'—'}${l.taxaReduzida?'<div class="small">taxa reduzida</div>':''}</td>
+    <td class="u-ta-left">${dPT(l.inicio)||'—'}<div class="small">${esc(taxa)}</div></td>
     <td class="u-ta-left">${esc(l.imovel)}<div class="small">${im}</div></td>
     <td class="u-ta-left u-ws-normal u-minw-150px">${inq}</td>
     <td class="u-ta-left">${esc(l.natureza)}</td>
     <td>${euro2(l.rendas)}</td><td>${v(l.retencoes)}</td>
-    ${fiscoCols.map(k=>`<td>${v(l.gastos[k])}</td>`).join('')}</tr>`;
+    ${Object.keys(l.gastos).map(k=>`<td>${v(l.gastos[k])}</td>`).join('')}</tr>`;
 }
 /* O cartão das obras dos 24 meses anteriores ao arrendamento — só quando as há.
    Recebe: r — o resumo (resumoFiscal).
@@ -392,9 +490,20 @@ function fiscoLinhaHtml(l){
 function fiscoObrasCard(r){
   const ls=r.linhas.filter(l=>l.obras24.valor>0);if(!ls.length)return '';
   return card('Obras antes do arrendamento','Gastos dos 24 meses anteriores ao início, nos contratos que começaram em '+r.ano,
-    ls.map(l=>`<div class="stat"><span>${esc(l.nome)}<div class="small">${esc(l.imovel)} · desde ${dPT(l.obras24.inicioGastos)}</div></span><b>${euro2(l.obras24.valor)}</b></div>`).join('')
+    ls.map(l=>`<div class="stat"><span>${esc(l.nome)}<div class="small">${esc(l.imovel)} · quadro ${esc(l.quadro)} · desde ${dPT(l.obras24.inicioGastos)}</div></span><b>${euro2(l.obras24.valor)}</b></div>`).join('')
     +`<div class="stat"><span><b>Total</b></span><b>${euro2(r.totais.obras24)}</b></div>
-    <div class="hint u-mt-9px">Conservação e manutenção pagas antes de o contrato começar, nos 24 meses anteriores, quando o imóvel não tinha contrato em vigor — e o que marcaste à mão como obras dos 24 meses. Entram à parte das outras colunas e não se repetem noutro ano.</div>`);
+    <div class="hint u-mt-9px">Conservação e manutenção pagas antes de o contrato começar, nos 24 meses anteriores, quando o imóvel não tinha contrato em vigor — e o que marcaste à mão como obras dos 24 meses. Vão nas três colunas próprias da linha do contrato (início do contrato, mês do primeiro pagamento, valor) e não se repetem noutro ano.</div>`);
+}
+/* O cartão das rendas recebidas no ano que respeitam a anos anteriores (pelo
+   mês a que a renda respeita, no movimento) — só quando as há. Já estão no
+   valor das linhas; o quadro 8 diz que parte é de que ano.
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: o HTML do cartão (string), ou '' sem rendas de anos anteriores. */
+function fiscoAnosAnterioresCard(r){
+  const ls=r.linhas.filter(l=>l.anosAnteriores.length);if(!ls.length)return '';
+  return card('Rendas de anos anteriores','Recebidas em '+r.ano+' · quadro '+esc(r.versao.quadros.anosAnteriores),
+    ls.map(l=>l.anosAnteriores.map(a=>`<div class="stat"><span>${esc(l.nome)}<div class="small">quadro ${esc(l.quadro)} · respeitam a ${a.ano}</div></span><b>${euro2(a.valor)}</b></div>`).join('')).join('')
+    +`<div class="hint u-mt-9px">Já estão nas rendas da linha, porque contam no ano em que se recebem. No quadro ${esc(r.versao.quadros.anosAnteriores)} dizes de que ano é cada parte: no 8A se optares pelo englobamento (o valor reparte-se pelos anos a que respeita), ou no 8B se entregares declarações de substituição desses anos, até cinco para trás.</div>`);
 }
 /* O cartão «Fora da declaração»: os contratos marcados como não declarados com
    rendas no ano, com o valor, sem juízo. Tocar abre o contrato — com o serviço
@@ -409,7 +518,7 @@ function fiscoForaCard(r){
       <div class="row-between u-ai-center u-g-10px"><div class="u-minw-0"><b>${esc(f.nome)}</b><div class="small">${esc(f.imovel)}${f.imovel?' · ':''}${fiscoN(f.n,'renda','rendas')} em ${r.ano}</div></div><b>${euro2(f.rendas)}</b></div></div>`;
   return card('Fora da declaração',fiscoN(r.fora.length,'contrato marcado como não declarado','contratos marcados como não declarados'),
     `<div class="list u-g-8px">${r.fora.map(linha).join('')}</div>
-    <div class="hint u-mt-9px">As rendas destes contratos não entram no quadro nem nos totais. ${comContratos?'O estado muda-se na ficha do contrato.':fraseServicoDesligado('contracts')}</div>`);
+    <div class="hint u-mt-9px">As rendas destes contratos não entram no quadro nem nos totais, e a parte deles nos gastos do imóvel também não. ${comContratos?'O estado muda-se na ficha do contrato.':fraseServicoDesligado('contracts')}</div>`);
 }
 /* O cartão «Rendas sem contrato»: as rendas do ano que não dizem de que
    contrato são, por imóvel, com a saída para as ligar — que é dos Movimentos:
@@ -425,26 +534,43 @@ function fiscoSemContratoCard(r){
     +`<div class="hint u-mt-9px">Uma renda só entra numa linha do quadro quando o movimento diz de que contrato é. ${comMovimentos?'Abre o movimento e liga-o ao contrato.':fraseServicoDesligado('transactions')}</div>`
     +(!comMovimentos?'':n===1?saida('Abrir o movimento',`txView('${jsq(r.semContrato[0].ids[0])}')`,'camada'):saida('Ver movimentos',"go('transactions')",'ecra')));
 }
+/* O guia de preenchimento do ano, passo a passo, tal como a versão o escreve
+   — recolhido, que se lê uma vez por ano. Os passos não escrevem anos: dizem
+   {ano} (o dos rendimentos) e {ate} (o último dia da entrega), e é aqui que
+   se trocam — assim a cópia de uma versão para o ano seguinte não tem anos
+   velhos escondidos no texto.
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: o HTML da secção (string). */
+function fiscoGuiaCard(r){
+  const v=r.versao,ate=irsDiaMes(v.entrega.ate)+' de '+v.entrega.ate.slice(0,4);
+  const txt=s=>String(s).split('{ano}').join(String(r.ano)).split('{ate}').join(ate);
+  return fold('fiscoGuia','Como preencher, passo a passo',`<ol class="u-m-0 u-pl-18px">${v.passos.map(p=>`<li class="u-mt-8px"><b>${esc(txt(p.titulo))}</b><div class="small u-mt-2px">${esc(txt(p.texto))}</div></li>`).join('')}</ol>
+    <div class="hint u-mt-9px">${v.exato?'Guia da versão '+v.ano+' das regras.':'Guia da versão '+v.ano+' — ainda não há uma para '+r.ano+'.'} A app resume; quem declara és tu, no Portal das Finanças.</div>`,
+    {icon:'info',summary:fiscoN(v.passos.length,'passo','passos')});
+}
 /* O resumo em texto simples, para partilhar ou copiar: totais, uma entrada por
-   contrato com a identificação, os valores e as faltas, e depois o que ficou
-   fora, as rendas sem contrato e o que há a tratar. Os mesmos números da página.
+   contrato com o quadro, a identificação, os valores e as faltas, e depois o
+   que ficou fora, as rendas sem contrato e o que há a tratar. Os mesmos
+   números da página.
    Devolve: o texto (string, várias linhas). */
 function fiscoTexto(){
   const ano=fiscoAnoAtual(),r=resumoFiscal(ano,ownerIsGrp()?'':ownerFilter);
-  const gastos=g=>fiscoCols.map(k=>fiscoColRotulo(k)+' '+euro2(g[k])).join(' · ');
-  return `ANEXO F · QUADRO 4.1 — ${ano}${r.titularId?' · '+ownerFilterName()+' (quota-parte)':''}
+  const gastos=g=>r.colunas.map(k=>fiscoColRotulo(k)+' '+euro2(g[k])).join(' · ');
+  return `ANEXO F · QUADROS 4.1 E 4.2 — ${ano}${r.titularId?' · '+ownerFilterName()+' (quota-parte)':''}
+${r.versao.exato?'Regras de '+r.versao.ano+(r.versao.modelo.oficial?'':' (provisórias)'):'Ainda sem regras de '+ano+': usam-se as de '+r.versao.ano}
 
 Rendas ilíquidas ${euro2(r.totais.rendas)} · retenções ${euro2(r.totais.retencoes)}
 ${gastos(r.totais.gastos)}${r.totais.obras24?'\nObras antes do arrendamento '+euro2(r.totais.obras24):''}
+Rendimento líquido ${euro2(r.totais.liquido)} · imposto estimado ${euro2(r.totais.imposto)} (sem englobamento)
 
 POR CONTRATO
-${r.linhas.map(l=>`  ${l.atNumero?'n.º '+l.atNumero:'sem n.º na AT'} · ${l.nome} — ${l.imovel||'sem imóvel'}${l.quota<1?' · quota-parte '+pct(l.quota,0):''}
-    Início ${dPT(l.inicio)||'—'} · freguesia ${l.freguesiaCodigo||'—'} · ${l.tipoPredio||'—'} · artigo ${l.artigo||'—'}${l.fracao?' · fração '+l.fracao:''} · natureza ${l.natureza}
+${r.linhas.map(l=>`  [${l.quadro}] ${l.atNumero?'n.º '+l.atNumero:'sem n.º na AT'} · ${l.nome} — ${l.imovel||'sem imóvel'}${l.quota<1?' · quota-parte '+pct(l.quota,0):''}
+    Início ${dPT(l.inicio)||'—'} · freguesia ${l.freguesiaCodigo||'—'} · ${l.tipoPredio||'—'} · artigo ${l.artigo||'—'}${l.fracao?' · fração '+l.fracao:''} · natureza ${l.natureza} · taxa ${dec(l.taxa)} %
     Inquilinos: ${l.inquilinos.length?l.inquilinos.map(t=>t.nome+' ('+(t.nif||t.pais||'sem NIF')+')').join(', '):'—'}
-    Rendas ilíquidas ${euro2(l.rendas)} · retenções ${euro2(l.retencoes)}
-    ${gastos(l.gastos)}${l.obras24.valor?'\n    Obras antes do arrendamento '+euro2(l.obras24.valor)+' (desde '+dPT(l.obras24.inicioGastos)+')':''}${l.faltas.length?'\n    Falta: '+l.faltas.join(', ')+'.':''}`).join('\n')}
+    Rendas ilíquidas ${euro2(l.rendas)} · retenções ${euro2(l.retencoes)}${l.anosAnteriores.length?' · de anos anteriores: '+l.anosAnteriores.map(a=>a.ano+' '+euro2(a.valor)).join(', '):''}
+    ${gastos(l.gastos)}${l.obras24.valor?'\n    Obras antes do arrendamento '+euro2(l.obras24.valor)+' (desde '+dPT(l.obras24.inicioGastos)+')':''}${l.quadro===r.versao.quadros.comReducao?'\n    '+r.versao.quadros.datas+': início '+(dPT(l.datas.inicio)||'—')+' · termo '+(dPT(l.datas.fim)||'—')+(l.datas.renovacaoInicio?' · última renovação '+dPT(l.datas.renovacaoInicio)+' a '+(dPT(l.datas.renovacaoFim)||'—'):''):''}${l.faltas.length?'\n    Falta: '+l.faltas.join(', ')+'.':''}`).join('\n')}
 ${r.fora.length?'\nFORA DA DECLARAÇÃO\n'+r.fora.map(f=>`  ${f.nome}${f.imovel?' — '+f.imovel:''}: ${euro2(f.rendas)}`).join('\n')+'\n':''}${r.semContrato.length?'\nRENDAS SEM CONTRATO\n'+r.semContrato.map(s=>`  ${s.imovel}: ${euro2(s.rendas)} (${fiscoN(s.n,'movimento','movimentos')})`).join('\n')+'\n':''}${r.avisos.length?'\nA TRATAR\n'+r.avisos.map(a=>'  · '+a.texto).join('\n')+'\n':''}
-Resumo feito pela app com o que tem registado. Os gastos de um imóvel com mais do que um contrato repartem-se pelas rendas; o rateio por VPT ou área fica para quem preenche.
+Resumo feito pela app com o que tem registado. Os gastos de um imóvel com mais do que um contrato repartem-se pelas rendas; o rateio por VPT ou área fica para quem preenche. O imposto é uma estimativa.
 `;
 }
 /* Partilha o resumo do Anexo F: folha de partilha do Android, Web Share API,
@@ -457,22 +583,25 @@ function fiscoPartilhar(){
   if(navigator.clipboard)return navigator.clipboard.writeText(txt).then(()=>toast('Resumo copiado.'));
   toast('Não foi possível partilhar.');
 }
-/* Exporta o quadro 4.1 do ano para CSV (ponto e vírgula, campos entre aspas,
+/* Exporta os quadros do ano para CSV (ponto e vírgula, campos entre aspas,
    para abrir no Excel): um cabeçalho, uma linha por contrato, e as dos
    contratos não declarados com «nao» na coluna declarado — só com nome,
-   imóvel, quota e rendas, porque é só isso que se sabe deles aqui.
+   imóvel, quota e rendas, porque é só isso que se sabe deles aqui. As colunas
+   novas vão sempre no fim, para quem já tem uma folha montada sobre as velhas.
    Devolve: nada — dispara a descarga do CSV. */
 function fiscoCsv(){
-  const ano=fiscoAnoAtual(),r=resumoFiscal(ano,ownerIsGrp()?'':ownerFilter);
+  const ano=fiscoAnoAtual(),r=resumoFiscal(ano,ownerIsGrp()?'':ownerFilter),cols=r.colunas;
   const n=v=>String(r2(Number(v)||0));
   const rows=[['ano','declarado','contrato','n_at','inicio','imovel','freguesia','tipo_predio','artigo','fracao','natureza','inquilinos','nif_ou_pais','quota_pct','rendas_iliquidas','retencoes']
-    .concat(fiscoCols).concat(['obras24','obras24_desde','recibos_por_emitir','faltas'])];
+    .concat(cols).concat(['obras24','obras24_desde','recibos_por_emitir','faltas','quadro','taxa_pct','liquido','imposto_estimado','anos_anteriores','termo','ultima_renovacao'])];
   r.linhas.forEach(l=>rows.push([ano,l.estado==='declarado'?'sim':'por indicar',l.nome,l.atNumero,l.inicio,l.imovel,l.freguesiaCodigo,l.tipoPredio,l.artigo,l.fracao,l.natureza,
     l.inquilinos.map(t=>t.nome).join(' / '),l.inquilinos.map(t=>t.nif||t.pais||'').join(' / '),n(l.quota*100),n(l.rendas),n(l.retencoes)]
-    .concat(fiscoCols.map(k=>n(l.gastos[k]))).concat([n(l.obras24.valor),l.obras24.inicioGastos,l.recibosPorEmitir,l.faltas.join('; ')])));
+    .concat(cols.map(k=>n(l.gastos[k]))).concat([n(l.obras24.valor),l.obras24.inicioGastos,l.recibosPorEmitir,l.faltas.join('; '),
+      l.quadro,n(l.taxa),n(l.liquido),n(l.imposto),l.anosAnteriores.map(a=>a.ano+':'+n(a.valor)).join(' '),l.datas.fim,
+      l.datas.renovacaoInicio?l.datas.renovacaoInicio+'/'+l.datas.renovacaoFim:''])));
   r.fora.forEach(f=>{const c=contract(f.contratoId);
     rows.push([ano,'nao',f.nome,'',c?c.start||'':'',f.imovel,'','','','','',c?ctNames(c):'','',n(f.quota*100),n(f.rendas),'0']
-      .concat(fiscoCols.map(()=>'0')).concat(['0','','','']))});
+      .concat(cols.map(()=>'0')).concat(['0','','','','','','','','','','']))});
   download('anexo-f-'+ano+'.csv','text/csv;charset=utf-8',rows.map(row=>row.map(x=>'"'+String(x==null?'':x).split('"').join('""')+'"').join(';')).join('\n'));
   toast('CSV exportado.');
 }

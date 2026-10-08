@@ -172,12 +172,14 @@ describe('IRS sobre rendas', () => {
     assert.equal(app.irsRate(null), 25);
   });
 
-  test('sem taxa escrita usa a sugestão; 0 é o mesmo que em branco; escrita manda', () => {
-    perto(app.netRent(app.normContract({ rent: 1000 })), 750);
-    perto(app.netRent(app.normContract({ rent: 1000, taxRate: 0 })), 750);
+  test('sem taxa escrita usa a sugestão do ano; 0 é o mesmo que em branco; escrita manda', () => {
+    perto(app.netRent(app.normContract({ rent: 1000 }), 2025), 750, 0.01, '2025: 25 %');
+    perto(app.netRent(app.normContract({ rent: 1000, taxRate: 0 }), 2025), 750);
+    perto(app.netRent(app.normContract({ rent: 1000 })), 900, 0.01, 'sem ano é o corrente (2026): renda moderada, 10 %');
     perto(app.netRent(app.normContract({ rent: 1000, taxRate: 28 })), 720);
-    perto(app.netRent(app.normContract({ rent: 1000, start: '2026-01-01', end: '2036-01-01' })), 900);
+    perto(app.netRent(app.normContract({ rent: 1000, start: '2026-01-01', end: '2036-01-01' }), 2026), 900);
     assert.equal(app.taxRateOf(app.normContract({ rent: 1000, taxRate: 28 })), 28);
+    perto(app.netRentOf({ id: 'nenhum' }), 0, 0.01, 'o map já não passa o índice como ano');
   });
 });
 
@@ -237,13 +239,20 @@ describe('projeção', () => {
     perto(r.rows[1].rent, 12000 * 1.02, 0.001);
   });
 
-  test('o IRS é a renda de cada contrato à taxa dele, contado no ano das rendas', () => {
+  test('o IRS é a renda de cada contrato à taxa dele no ano de cada coluna, contado no ano das rendas', () => {
+    // 1000 €/mês está dentro das rendas moderadas: 10 % de 2026 a 2029 (EBF art. 45.º-C), 25 % depois
+    app.db.settings.years = 5;
     const r = app.projRows(null);
-    perto(r.rows[0].irs, 12000 * 0.25, 1e-9, 'sem fim, 25 %');
-    perto(r.rows[1].irs, 12000 * 1.02 * 0.25, 1e-6, 'anda com o aumento');
+    assert.equal(ANO, 2026);
+    perto(r.rows[0].irs, 12000 * 0.10, 1e-9, 'sem fim e renda moderada: 10 %');
+    perto(r.rows[1].irs, 12000 * 1.02 * 0.10, 1e-6, 'anda com o aumento');
+    perto(r.rows[4].irs, 12000 * Math.pow(1.02, 4) * 0.25, 1e-6, 'em 2030 a taxa moderada acabou: 25 %');
     perto(r.rows[0].cf, r.rows[0].rent - r.rows[0].irs - r.rows[0].exp - r.rows[0].loan, 1e-9);
     app.db.contracts[0].taxRate = 28;
     perto(app.projRows(null).rows[0].irs, 12000 * 0.28, 1e-9, 'a taxa escrita manda');
+    app.db.contracts[0].taxRate = 0;
+    app.db.contracts[0].rent = 2500;
+    perto(app.projRows(null).rows[0].irs, 30000 * 0.25, 1e-9, 'acima de 2 300 € por mês, sem fim: 25 %');
   });
 
   test('as prestações param quando o crédito acaba', () => {

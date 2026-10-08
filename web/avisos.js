@@ -27,6 +27,41 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 39,
+    data: '2026-10-08',
+    titulo: 'A Declaração segue as regras de cada ano',
+    seccoes: [
+      {
+        titulo: 'Uma versão das regras do IRS por ano',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'A página Declaração abre com o IRS do ano escolhido: os rendimentos de que ano são, quando se entregam, se o Anexo F desse ano já foi aprovado, e o que mudou nesse ano. Os rendimentos de 2026 já têm as regras de 2026 — marcadas como provisórias até a AT aprovar o modelo da declaração, no início de 2027.',
+          'Em baixo, «Como preencher, passo a passo»: do rosto da declaração ao englobamento, com o que é de cada quadro do Anexo F.',
+        ],
+      },
+      {
+        titulo: 'As taxas certas para cada contrato',
+        afeta: ['contratos'],
+        itens: [
+          'Desde 2026 as rendas de habitação até 2 300 € por mês pagam 10 % de IRS (Decreto-Lei 97/2026), em contratos novos e antigos, até 2029. A renda líquida, as projeções e a Declaração passam a contar com isso; um contrato longo que já pague menos pela duração fica com a taxa dele.',
+          'Um arrendamento não habitacional (uma loja, um escritório, uma garagem à parte) paga 28 %, e não 25 %: escolhe a finalidade na secção Declaração do contrato. A redução pela duração passa a ser só da habitação permanente, conta as renovações registadas, e um contrato começado entre 2019 e outubro de 2023 fica com a taxa do regime desse tempo até renovar.',
+          'Na ficha do contrato, o imposto diz porque é o que é: pela duração, renda moderada, não habitacional.',
+        ],
+      },
+      {
+        titulo: 'Um resumo do Anexo F mais certo',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'Os contratos de habitação permanente com redução pela duração vão para o quadro 4.2, com as datas que o 4.2A pede; os outros ficam no 4.1.',
+          'Os gastos de um imóvel com um contrato declarado e outro não declarado (ou com rendas sem contrato) já não caem todos no declarado: cada contrato leva a sua parte.',
+          'Só contam os gastos pagos com o imóvel arrendado — o condomínio de um mês em que a casa estava vazia fica fora, e a página diz quantos ficaram. O IMI e o imposto do selo contam sempre no ano em que o imóvel deu rendas.',
+          'Uma renda de um ano anterior recebida este ano aparece à parte, para o quadro 8; e um contrato que começou no ano sem o imposto do selo nos gastos é lembrado, porque é dedutível.',
+          'À cabeça, o rendimento líquido e o imposto estimado, à taxa de cada contrato, com as retenções já pagas descontadas.',
+        ],
+      },
+    ],
+  },
+  {
     v: 38,
     data: '2026-09-13',
     titulo: 'A app passa a ser feita de serviços',

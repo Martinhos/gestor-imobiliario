@@ -36,6 +36,7 @@ confere que cada uma aponta para código que existe.
 - 2026-09-24 · O repositório passou a público
 - 2026-09-24 · A app de dev instala-se ao lado da de produção
 - 2026-09-29 · Um grupo partilha-se como grupo, e a vista geral começa pela jornada
+- 2026-10-08 · O IRS ganha uma versão por ano, e a Declaração deixa de deduzir a mais
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1034,3 +1035,48 @@ continua «Todos os imóveis», porque um acerto sem imóvel é mesmo de todos. 
 nos Colaboradores sem imóveis o cartão «Colaboradores», cujo vazio mandava
 criar uma ligação de convite que não se pode criar, deixa de se escrever
 (partilha.js:colaboradoresCard).
+
+## 2026-10-08 · O IRS ganha uma versão por ano, e a Declaração deixa de deduzir a mais
+O Martinho pediu duas coisas: ter a certeza de que a feature do IRS está bem
+feita, e uma versão das regras por ano, com o nome do ano. Começou por uma
+pesquisa (o Doutor Finanças como guia, confirmado no impresso e nas
+instruções oficiais do Anexo F, no CIRS e no Diário da República), e a
+pesquisa achou na app coisas ditas mal:
+
+- o não habitacional pagava 25 % na estimativa — a lei diz 28 % (CIRS art.
+  72.º n.º 1 e)); e a redução pela duração aplicava-se a qualquer contrato
+  longo, quando é só da habitação permanente;
+- não havia a taxa de 10 % das rendas até 2 300 €/mês, criada pelo DL 97/2026
+  com efeitos desde 1 de janeiro de 2026 — a renda líquida de quase todos os
+  contratos de 2026 estava subestimada;
+- os contratos ainda no regime de 2019 (começados entre 2019 e 6 de outubro
+  de 2023) ficavam com os 15 % da Lei 56/2023 quando ficam com o regime antigo
+  até renovarem; e as renovações iguais (−2 pontos cada) não contavam;
+- tudo ia ao «quadro 4.1», quando os contratos com redução pela duração vão
+  ao 4.2, com o 4.2A;
+- os gastos de um imóvel com um contrato declarado e outro não declarado
+  caíam todos no declarado — deduzia-se o dobro; e o condomínio pago com a
+  casa vazia contava, quando só conta o período arrendado.
+
+As regras de cada ano passaram para uma versão por ano dos rendimentos
+(irs.js:irsAno; a regra está no design.md, «As regras do IRS têm uma versão
+por ano»). Decisões que não se leem no código: o nome é o ano dos
+rendimentos (o Martinho pode preferir o da entrega — renomear é barato); não
+há versão de 2024 nem anteriores, que usam a de 2025 com as datas recuadas e
+o aviso de que não é a do ano; a versão de 2026 é provisória enquanto não sair
+a portaria do Modelo 3 (fevereiro ou março de 2027), e a de 2027 nasce do
+scripts/nova-versao-irs.js quando o Orçamento for publicado — a proposta
+entregue a 2026-10-08 não mexe na categoria F. Os 10 % aplicam-se também à
+habitação não permanente, porque a lei só pede «exclusivamente habitação» (o
+Doutor Finanças diz que pede permanente; seguiu-se a lei). A finalidade por
+indicar continua a assumir-se habitação, mas a redução pela duração passa a
+pedi-la como falta. As renovações «de igual duração» lêem-se como do mesmo
+escalão que o contrato. A coluna escolhida à mão numa despesa passa por cima
+da regra do período arrendado. E as rendas de anos anteriores ficam na linha
+(a lei conta-as no ano em que se recebem) e são só apontadas para o quadro 8.
+
+Ficou de fora, para o Martinho decidir: o simulador do englobamento (precisa
+dos outros rendimentos da pessoa), o quadro 9 do AIMI, os códigos do quadro
+10, o titular A/B da tributação conjunta, a dispensa dos recibos e o Modelo 44,
+as isenções do RSAA e dos programas municipais, e os n.ºs 23 e 24 do art.
+72.º (os limites da renda e o bónus da renda mais baixa).

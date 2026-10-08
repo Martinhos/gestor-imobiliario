@@ -43,19 +43,22 @@ function seed(){
   db.tenants=[t1,t2,t3,t4,t5];
   /* três contratos comunicados à AT, cada um com o número que ela devolveu; o
      quarto contrato (c4, o casal do quarto 3) fica por indicar — o senhorio
-     ainda não disse, e é isso que faz aparecer o prazo do Modelo 2 */
-  const c1=normContract({propertyId:p1,tenantIds:[t1.id],rent:1250,taxRate:25,deposit:2500,payDay:8,
+     ainda não disse, e é isso que faz aparecer o prazo do Modelo 2. Nenhum
+     escreve a taxa do imposto: a estimativa é a das regras do ano
+     (irs.js:irsTaxa), e uma taxa escrita taparia, por exemplo, os 10 % das
+     rendas moderadas de 2026 */
+  const c1=normContract({propertyId:p1,tenantIds:[t1.id],rent:1250,deposit:2500,payDay:8,
     start:`${YEAR-1}-09-01`,increase:2.5,iban:'PT50 0033 0000 4567 8901 2345 6',
     ownerEmail:o1.email,ownerPhone:o1.phone,tenantEmail:t1.email,tenantPhone:t1.phone,
     fisco:{estado:'declarado',numero:'1043782',finalidade:'hp',celebracao:`${YEAR-1}-08-25`,renovavel:true},
     inventory:[{id:uid(),name:'Sofá de 3 lugares',qty:1,state:'novo'},{id:uid(),name:'Cadeiras de sala',qty:4,state:'usado'},
                {id:uid(),name:'Máquina de lavar roupa',qty:1,state:'usado'}],
     keys:[{id:uid(),name:'Chaves de casa',qty:2},{id:uid(),name:'Chave do correio',qty:1}]});
-  const c2=normContract({propertyId:p2,roomId:q1.id,tenantIds:[t2.id],rent:350,taxRate:25,deposit:350,payDay:1,start:`${YEAR}-09-01`,
+  const c2=normContract({propertyId:p2,roomId:q1.id,tenantIds:[t2.id],rent:350,deposit:350,payDay:1,start:`${YEAR}-09-01`,
     fisco:{estado:'declarado',numero:'1188406',finalidade:'hp',celebracao:`${YEAR}-08-25`,renovavel:true}});
-  const c3=normContract({propertyId:p2,roomId:q2.id,tenantIds:[t3.id],rent:350,taxRate:25,deposit:350,payDay:1,start:`${YEAR}-09-01`,
+  const c3=normContract({propertyId:p2,roomId:q2.id,tenantIds:[t3.id],rent:350,deposit:350,payDay:1,start:`${YEAR}-09-01`,
     fisco:{estado:'declarado',numero:'1188417',finalidade:'hp',celebracao:`${YEAR}-08-25`,renovavel:true}});
-  const c4=normContract({propertyId:p2,roomId:q3.id,tenantIds:[t4.id,t5.id],rent:430,taxRate:25,deposit:430,payDay:1,
+  const c4=normContract({propertyId:p2,roomId:q3.id,tenantIds:[t4.id,t5.id],rent:430,deposit:430,payDay:1,
     start:`${YEAR}-07-01`,notes:'Casal, quarto com casa de banho privativa',
     ownerEmail:o1.email,ownerPhone:o1.phone,tenantPhone:'912 000 004'});
   db.contracts=[c1,c2,c3,c4];
