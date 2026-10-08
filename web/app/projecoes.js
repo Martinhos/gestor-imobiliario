@@ -90,19 +90,22 @@ function projNomesCats(l){
 /* O que o cabeçalho das Projeções diz das despesas e do IRS: quanto entra por ano,
    de quantos planeados e de que categorias, e de onde vêm (a ficha de cada imóvel e
    os Planeados); o IRS à taxa de cada contrato e quando se paga; o que ficou de fora
-   por ter sido pago de uma vez; e a porta — para os imóveis enquanto não há nenhum
-   planeado (é lá que o IMI, o condomínio e o seguro se põem), para os Planeados
-   depois — só com esse serviço ligado nesta conta.
+   por ter sido pago de uma vez; e a porta para os Planeados — só com esse serviço
+   ligado nesta conta.
+   Sem nenhum planeado de despesa as contas fazem-se com zero e as despesas
+   previstas não se mencionam: chegou a haver uma frase «Ainda não há despesas
+   previstas…» com um botão para os imóveis, e era um aviso solto no topo de
+   uma página que só queria mostrar a projeção (o Martinho pediu que saísse).
    Recebe: base — o {op, porCat, n, fora, foraPorCat, foraAno} de projRows.
    Devolve: o HTML (texto) das linhas de ajuda. */
 function projDespesasTxt(base){
   const dentro=base.n>0
-    ?`Despesas previstas: <b>${euro(base.op)}/ano</b> — ${base.n} planeado${base.n===1?'':'s'} de despesa (${esc(projNomesCats(base.porCat))}): o IMI, o condomínio e o seguro da ficha de cada imóvel e os que marcaste nos Planeados; crescem com a inflação.`
-    :'Ainda não há despesas previstas, e a projeção não conta despesas: o IMI, o condomínio e o seguro põem-se na ficha de cada imóvel e criam os planeados sozinhos.';
-  const irs=' IRS sobre as rendas à taxa de cada contrato, contado no ano das rendas — a declaração entrega-se de abril a junho e paga-se até 31 de agosto do ano seguinte.';
-  const fora=base.fora>0?` Em ${base.foraAno} gastaste ainda <b>${euro(base.fora)}</b> em despesas de uma vez (${esc(projNomesCats(base.foraPorCat))}), que não se projetam.`:'';
-  const porta=base.n>0?(servicoLigado('recurring')?`<button type="button" class="btn sm" data-toca="ecra" data-click="go('recurring')">Ver planeados</button>`:'')
-    :(servicoLigado('properties')?`<button type="button" class="btn sm" data-toca="ecra" data-click="go('properties')">Ver imóveis</button>`:'');
+    ?`Despesas previstas: <b>${euro(base.op)}/ano</b> — ${base.n} planeado${base.n===1?'':'s'} de despesa (${esc(projNomesCats(base.porCat))}): o IMI, o condomínio e o seguro da ficha de cada imóvel e os que marcaste nos Planeados; crescem com a inflação. `
+    :'';
+  const irs='IRS sobre as rendas à taxa de cada contrato, contado no ano das rendas — a declaração entrega-se de abril a junho e paga-se até 31 de agosto do ano seguinte.';
+  /* o «ainda» só faz sentido depois das despesas previstas */
+  const fora=base.fora>0?` Em ${base.foraAno} gastaste${base.n>0?' ainda':''} <b>${euro(base.fora)}</b> em despesas de uma vez (${esc(projNomesCats(base.foraPorCat))}), que não se projetam.`:'';
+  const porta=base.n>0&&servicoLigado('recurring')?`<button type="button" class="btn sm" data-toca="ecra" data-click="go('recurring')">Ver planeados</button>`:'';
   return `<div class="hint u-mt-12px">${dentro}${irs}${fora}</div>${porta?`<div class="u-mt-8px">${porta}</div>`:''}`;
 }
 /* O cartão da dívida quando não há dívida: em vez de um gráfico com uma linha
@@ -136,7 +139,8 @@ function vProjections(){
       :(servicoLigado('properties')?saida('Adicionar imóvel',"go('properties')",'ecra'):vazioServicoDesligado('properties'))}</div>`;
   /* o eixo leva o ano em dois algarismos (cabem mais), a leitura por extenso */
   const first=rows[0],last=rows[rows.length-1],labels=rows.map(r=>String(r.yr).slice(2)),anos=rows.map(r=>String(r.yr));
-  const baseTxt=' Aqui: '+euro(base.op)+'/ano de despesas previstas em '+base.n+' planeado'+(base.n===1?'':'s')+'.';
+  /* sem planeados de despesa, a explicação do cashflow não fala de despesas previstas */
+  const baseTxt=base.n>0?' Aqui: '+euro(base.op)+'/ano de despesas previstas em '+base.n+' planeado'+(base.n===1?'':'s')+'.':'';
   const varRenda=first.rent?last.rent/first.rent-1:0;
   /* fora do painel de análise: o painel abre-se só a pedido, e o que conta
      como despesa é o que mais muda a leitura da projeção */

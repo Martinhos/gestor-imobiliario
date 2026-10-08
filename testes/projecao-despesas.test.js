@@ -490,18 +490,19 @@ describe('as Projeções', () => {
     assert.match(app.WHY.cashflowFim, /pague no ano seguinte/);
   });
 
-  test('sem nenhum planeado, a página di-lo e aponta para os imóveis; com um serviço desligado não há botão', () => {
+  /* Chegou a dizer «Ainda não há despesas previstas…» com um botão para os
+     imóveis: um aviso solto no topo, e o Martinho pediu que saísse. Sem
+     planeados, as contas fazem-se com zero e não se fala de despesas previstas. */
+  test('sem nenhum planeado, as contas fazem-se com zero e as despesas previstas não se mencionam', () => {
     mov({ amount: 8000, category: 'Obras e benfeitorias' });
     let h = app.vProjections();
-    assert.match(h, /Ainda não há despesas previstas, e a projeção não conta despesas: o IMI, o condomínio e o seguro põem-se na ficha de cada imóvel/);
-    assert.match(h, /data-click="go\('properties'\)">Ver imóveis/);
-    assert.doesNotMatch(h, /Ver planeados/);
+    assert.doesNotMatch(h, /Ainda não há despesas previstas|Despesas previstas|despesas previstas em/);
+    assert.doesNotMatch(h, /Ver imóveis|Ver planeados/);
     assert.equal(app.projRows(null).rows[0].exp, 0);
-    assert.match(h, /Em 2025 gastaste ainda/);
-    app.definirServicosDesligados(['properties']);
-    assert.doesNotMatch(app.vProjections(), /Ver imóveis|Ver planeados/);
-    app.definirServicosDesligados([]);
+    assert.match(h, /<div class="hint u-mt-12px">IRS sobre as rendas/, 'o IRS continua, à cabeça');
+    assert.match(h, /Em 2025 gastaste <b>/, 'o que se gastou de uma vez continua, sem o «ainda»');
     despesa(100);
+    assert.match(app.vProjections(), /Em 2025 gastaste ainda/);
     app.definirServicosDesligados(['recurring']);
     h = app.vProjections();
     assert.match(h, /Despesas previstas/);
