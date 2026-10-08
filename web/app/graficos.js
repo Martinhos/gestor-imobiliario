@@ -339,16 +339,20 @@ function axisY(min,max,x0,x1,y0,y1,fmt){
 }
 /* Gráfico de linhas com área sombreada e dica em cada ponto. series=[{name,values,color}],
    labels no eixo X; o: h (altura), fmt (formatação dos valores, por omissão euro),
-   area:false tira o sombreado, marks=[{i,label}] põe linhas verticais de referência.
+   area:false tira o sombreado, marks=[{i,label}] põe linhas verticais de referência,
+   rotulos=[…] dá à leitura (e à descrição e às dicas) os rótulos por extenso quando
+   o eixo os leva encurtados — o eixo das projeções diz «30», e a leitura «2030».
    Substitui valores não finitos por 0 (mexe nos arrays recebidos).
    Recebe: series — array de séries {name, values, color} (values em números;
    color opcional, sai da paleta); labels — etiquetas do eixo X, uma por ponto;
-   o (opcional) — as opções h, fmt, area e marks descritas acima.
+   o (opcional) — as opções h, fmt, area, marks e rotulos descritas acima.
    Devolve: HTML pronto a inserir — a cabeça com o lugar da leitura no canto
    superior direito (graficos.js:cabecaDaLeitura) e, por baixo, o desenho;
    com mais de uma série, a legenda à esquerda desse lugar. */
 function cLine(series,labels,o){
   o=o||{};const h=o.h||180,x0=44,x1=W-6,y0=10,y1=h-8,F=o.fmt||euro;
+  /* o que a leitura diz de cada ponto: por extenso quando vem, senão o do eixo */
+  const rot=labels.map((l,i)=>o.rotulos&&o.rotulos[i]!=null?o.rotulos[i]:l);
   series.forEach(s=>{s.values=s.values.map(v=>isFinite(v)?v:0)});
   const all=[].concat(...series.map(s=>s.values));
   let max=Math.max(0,...all),min=Math.min(0,...all);
@@ -370,7 +374,7 @@ function cLine(series,labels,o){
     if(o.area!==false)g+=`<polygon points="${X(0).toFixed(1)},${Y(Math.max(min,0)).toFixed(1)} ${pts} ${X(s.values.length-1).toFixed(1)},${Y(Math.max(min,0)).toFixed(1)}" fill="${c}" opacity=".12"/>`;
     g+=`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
     s.values.forEach((v,i)=>{
-      const tip=`${labels[i]}${series.length>1?' · '+s.name:''}: ${F(v)}`;
+      const tip=`${rot[i]}${series.length>1?' · '+s.name:''}: ${F(v)}`;
       if(s.values.length<=26)g+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="2.6" fill="var(--card)" stroke="${c}" stroke-width="1.8"><title>${esc(tip)}</title></circle>`;
     });
   });
@@ -381,8 +385,8 @@ function cLine(series,labels,o){
   });
   /* com uma serie so, a leitura nao repete o nome dela: e o do cartao */
   const ler=series.map((s,i)=>({nome:series.length>1?s.name:'',cor:s.color||PAL[i%PAL.length],vals:s.values}));
-  return cabecaDaLeitura(`<div class="chartbox"${dadosParaLer(labels,ler,labels.map((_,i)=>X(i)),F)}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Evolução',labels)}>${g}</svg></div>`,
-    labels,ler,F,series.length>1?legend(series.map((s,i)=>({label:s.name,color:s.color||PAL[i%PAL.length]})),false):'');
+  return cabecaDaLeitura(`<div class="chartbox"${dadosParaLer(rot,ler,labels.map((_,i)=>X(i)),F)}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Evolução',rot)}>${g}</svg></div>`,
+    rot,ler,F,series.length>1?legend(series.map((s,i)=>({label:s.name,color:s.color||PAL[i%PAL.length]})),false):'');
 }
 /* Barras empilhadas: cada grupo é um array de segmentos {label,value,color}, com os
    positivos a empilhar para cima e os negativos para baixo (rendas contra despesas).

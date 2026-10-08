@@ -121,6 +121,23 @@ describe('a cabeça do gráfico: a legenda à esquerda, o lugar da leitura no ca
     assert.match(css, /\.chartmolde>b>span,\.chartmolde>\.lvl>span\{grid-area:1\/1\}/, 'todos na mesma célula: a largura do mais largo, a altura de uma linha');
   });
 
+  /* As projeções encurtam o ano no eixo («30»), onde não cabem trinta anos
+     por extenso; a leitura dizia «30» também, e o Martinho pediu «2030». */
+  test('com rotulos, o eixo fica curto e a leitura, a descrição e as dicas dizem o rótulo por extenso', () => {
+    const html = app.cLine([{ name: 'Rendas', values: [1, 2, 3] }, { name: 'Cashflow', values: [3, 2, 1] }], ['30', '31', '32'],
+      { rotulos: ['2030', '2031', '2032'] });
+    assert.deepEqual([...lido(html).rot], ['2030', '2031', '2032'], 'a leitura de cada coluna');
+    assert.match(molde(html), /<b><span>2030<\/span><span>2031<\/span><span>2032<\/span><\/b>/, 'o molde guarda o lugar do ano inteiro');
+    assert.match(html, /aria-label="Evolução, de 2030 a 2032\./);
+    assert.match(html, /<title>2031 · Rendas: /);
+    assert.match(html, /text-anchor="middle">31<\/text>/, 'o eixo continua curto');
+    assert.doesNotMatch(html, /text-anchor="middle">2031<\/text>/);
+  });
+
+  test('sem rotulos, a leitura diz o rótulo do eixo', () => {
+    assert.deepEqual([...lido(app.cLine([{ name: 'A', values: [1, 2] }], ['jan', 'fev'])).rot], ['jan', 'fev']);
+  });
+
   test('o molde e o data-lido escrevem os valores com a mesma função — o molde mede o que vai aparecer', () => {
     const fmt = (v) => (v * 100).toFixed(1).replace('.', ',') + '%';
     const html = app.cLine([{ name: 'LTV', values: [0.42, 0.389, 0.1] }, { name: 'Alvo', values: [0.6, 0.6, 0.6] }], ['2026', '2027', '2028'], { fmt });
