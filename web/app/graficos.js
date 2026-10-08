@@ -52,19 +52,22 @@ const atrasoEntrada=(i,n)=>{
    primeiro ja esquecido.
 
    Aqui o dedo percorre o grafico, uma guia acompanha a coluna mais proxima e
-   os valores dessa coluna aparecem num cartao FIXO no canto inferior direito,
-   DEBAIXO do desenho — no sitio onde a mao nao esta, e sem sair enquanto o
+   os valores dessa coluna aparecem num cartao FIXO no canto superior direito,
+   POR CIMA do desenho — no sitio onde a mao nao esta, e sem sair enquanto o
    dedo nao sair.
 
-   O desenho e: [caixa do grafico] e, por baixo, um «pe» em grelha — a legenda
-   a esquerda e, a direita, o LUGAR da leitura (graficos.js:peDaLeitura). Os
-   dois vivem dentro de um contentor (.chartler), e e por ele que a leitura de
-   um grafico se encontra (graficos.js:lugarDaLeitura).
+   O desenho e: uma «cabeca» em grelha — a legenda a esquerda e, a direita, o
+   LUGAR da leitura (graficos.js:cabecaDaLeitura) — e, por baixo dela, a caixa
+   do grafico. As duas vivem dentro de um contentor (.chartler), e e por ele
+   que a leitura de um grafico se encontra (graficos.js:lugarDaLeitura).
 
    Chegou a ser uma faixa sobreposta ao TOPO do desenho, a largura toda: nao
    mexia na altura, mas tapava o que la estava — as barras mais altas, os
    valores do eixo — e em tres series partia em duas linhas por cima do
-   grafico. Debaixo do eixo, ao lado da legenda, havia um canto vazio; e la.
+   grafico. Depois foi para um pe DEBAIXO do eixo, ao lado da legenda: ja nao
+   tapava o desenho, mas no telemovel a mao vem de baixo, e o dedo que
+   percorre o grafico tapava a leitura. Por cima do desenho, e com lugar
+   proprio (nao sobreposta), nem a mao nem a leitura tapam nada.
 
    Tres regras, e o porque de cada uma:
    - O lugar EXISTE SEMPRE, invisivel sem leitura e com a altura da leitura:
@@ -72,10 +75,14 @@ const atrasoEntrada=(i,n)=>{
      um molde (.chartmolde) escondido no proprio lugar, com as mesmas linhas
      que a leitura vai ter; a leitura que se ve fica por cima dele, posta em
      absoluto, e nao conta para o tamanho.
-   - A largura e FIXA enquanto se le. O molde leva o rotulo mais comprido e,
-     por serie, o valor escrito mais comprido; e ele que da a largura ao lugar
-     (fit-content, ate ~58% do pe), e a leitura so a herda. Sem isto o cartao
-     «dancava» de mes para mes com o texto, e a legenda ao lado ia atras.
+   - A largura e FIXA enquanto se le. O molde leva TODOS os rotulos e, por
+     serie, TODOS os valores escritos, empilhados no mesmo sitio
+     (graficos.js:pilha) — o mais largo de cada e que da a largura ao lugar
+     (fit-content, ate ~58% da cabeca), e a leitura so a herda. Sem isto o
+     cartao «dancava» de mes para mes com o texto, e a legenda ao lado ia
+     atras. Levou so o texto com MAIS LETRAS, e as letras nao tem todas a
+     mesma largura: «jan» e «mai» tem tres, e o «mai» saia «m..» no grafico
+     de linhas, porque o lugar era o do «jan».
      Os numeros vao em tabular-nums: «1 260 €» e «8 888 €» ocupam o mesmo.
    - O valor nunca se corta; o nome, sim, com reticencias — o nome inteiro
      esta na legenda, mesmo ao lado.
@@ -84,11 +91,11 @@ const atrasoEntrada=(i,n)=>{
    vistas.js) esta noutra linha, la em cima, e nao colide com nada. O que
    colide sao os NOMES DAS SERIES — os creditos levam o nome que o senhorio
    lhes deu, e «Hipoteca do T2 de Campo de Ourique, Caixa» nao cabe ao lado
-   de uma leitura num telemovel. Com um nome acima de PE_NOME_CURTO letras,
-   ou com mais de PE_SERIES series, o pe EMPILHA (graficos.js:peEmpilha): a
-   legenda toma a largura toda e parte os nomes em linhas, e a leitura fica
-   por baixo dela, no mesmo canto inferior direito, com a largura que
-   precisar.
+   de uma leitura num telemovel. Com um nome acima de CAB_NOME_CURTO letras,
+   ou com mais de CAB_SERIES series, a cabeca EMPILHA
+   (graficos.js:cabecaEmpilha): a legenda toma a largura toda e parte os
+   nomes em linhas, e a leitura fica por baixo dela, encostada a direita e
+   logo acima do desenho, com a largura que precisar.
 
    Com muitas series (> 4, so os creditos chegam la) a leitura mostra-as
    TODAS, uma por linha. Mostrar quatro e «+N» escondia precisamente o que o
@@ -99,14 +106,14 @@ const atrasoEntrada=(i,n)=>{
 
    Com uma serie so (sem legenda, e sem nome na leitura) a leitura e uma
    linha: o rotulo, a bolinha e o valor. Uma coluna com o mes por cima de um
-   unico valor reservava uma linha vazia debaixo de cada grafico de linhas. */
+   unico valor reservava uma linha vazia por cima de cada grafico de linhas. */
 /* Quantas letras pode ter o nome de uma serie para a legenda caber ao lado da
    leitura, num telemovel de 375px: medido a 12,5px, «Prestações» com a bolinha
    ocupa ~85px e sobram ~120px a coluna da legenda. */
-const PE_NOME_CURTO=16;
-/* A partir de quantas series o pe empilha: a leitura ao lado de uma legenda
-   de cinco linhas espremia as duas. */
-const PE_SERIES=4;
+const CAB_NOME_CURTO=16;
+/* A partir de quantas series a cabeca empilha: a leitura ao lado de uma
+   legenda de cinco linhas espremia as duas. */
+const CAB_SERIES=4;
 
 /* Uma frase que diz o que o grafico mostra, para quem nao o ve.
 
@@ -146,7 +153,7 @@ function dadosParaLer(labels,series,xs,fmt){
 }
 
 /* As series com os valores ja escritos, na forma curta que viaja no data-lido
-   e de que o pe tira o molde: os dois tem de ler exatamente o mesmo texto,
+   e de que a cabeca tira o molde: os dois tem de ler exatamente o mesmo texto,
    senao o molde media uma leitura que nao e a que aparece.
    Recebe: series — [{nome,cor,vals}] (vals em numeros); fmt (opcional) — como
    escrever um valor (por omissao euro; se rebentar, cai no euro).
@@ -157,70 +164,77 @@ function seriesEscritas(series,fmt){
   return (series||[]).map(x=>({n:x.nome||'',c:x.cor||'',v:(x.vals||[]).map(escreve)}));
 }
 
-/* O texto mais comprido de uma lista — o que o molde precisa para a leitura
-   nunca ser mais larga do que o lugar que lhe guardaram.
-   Recebe: lista — os textos (o que nao for texto conta como vazio).
-   Devolve: o mais comprido, em letras ('' numa lista vazia). */
-function maisComprido(lista){
-  return (lista||[]).reduce((a,b)=>{b=b==null?'':String(b);return b.length>a.length?b:a},'');
+/* Um pedaco da leitura: um texto so (a leitura de uma coluna) ou todos os
+   textos que la podem aparecer, cada um no seu <span> (o molde). No molde, o
+   CSS poe os <span> todos na mesma celula (estilos.css:.chartmolde), e o
+   pedaco fica com a largura do mais LARGO — que nao e o de mais letras: «mai»
+   e mais largo do que «jan».
+   Recebe: x — o texto, ou a lista dos textos (repetidos contam uma vez).
+   Devolve: o HTML, escapado. */
+function pilha(x){
+  const txt=v=>esc(String(v==null?'':v));
+  if(!Array.isArray(x))return txt(x);
+  return [...new Set(x.map(v=>String(v==null?'':v)))].map(v=>`<span>${txt(v)}</span>`).join('');
 }
 
 /* O interior de uma leitura: o rotulo e uma linha por serie (bolinha, nome,
    valor). Serve a leitura de cada coluna (graficos.js:mostrarColuna) e o
-   molde que guarda o lugar (graficos.js:peDaLeitura) — o mesmo HTML, para
+   molde que guarda o lugar (graficos.js:cabecaDaLeitura) — o mesmo HTML, para
    terem as mesmas linhas e a mesma altura.
    Os tres pedacos de cada linha sao filhos diretos da leitura, que e uma
    grelha de tres colunas: os valores alinham todos pela direita, na mesma
    coluna, seja qual for o comprimento do nome de cada serie.
-   Recebe: rot — o rotulo da coluna (o mes, o ano); linhas — [{n,c,v}] com
-   um valor ja escrito por serie.
+   Recebe: rot — o rotulo da coluna (o mes, o ano), ou no molde a lista de
+   todos; linhas — [{n,c,v}] com um valor ja escrito por serie (no molde, v
+   e a lista de todos os valores da serie).
    Devolve: o HTML. Com uma serie sem nome, o rotulo faz de nome na unica
    linha (a leitura de uma linha so, .uma no CSS). */
 function linhasDaLeitura(rot,linhas){
-  const vl=x=>`<span class="lvl">${esc(String(x.v==null?'':x.v))}</span>`;
+  const vl=x=>`<span class="lvl">${pilha(x.v)}</span>`;
   if(linhas.length===1&&!linhas[0].n)
-    return `<b>${esc(rot||'')}</b><i data-fundo="${esc(linhas[0].c)}"></i>${vl(linhas[0])}`;
-  return `<b>${esc(rot||'')}</b>`+linhas.map(x=>
+    return `<b>${pilha(rot)}</b><i data-fundo="${esc(linhas[0].c)}"></i>${vl(linhas[0])}`;
+  return `<b>${pilha(rot)}</b>`+linhas.map(x=>
     `<i data-fundo="${esc(x.c)}"></i><span class="lnm">${esc(x.n)}</span>${vl(x)}`).join('');
 }
 
-/* Se o pe de um grafico empilha: a legenda por cima, a toda a largura, e a
-   leitura por baixo, no canto. Lado a lado, um nome comprido ou cinco linhas
-   de legenda espremiam a leitura ou a legenda (o porque, no bloco «LER COM O
-   DEDO» acima).
+/* Se a cabeca de um grafico empilha: a legenda em cima, a toda a largura, e
+   a leitura por baixo dela, no canto. Lado a lado, um nome comprido ou cinco
+   linhas de legenda espremiam a leitura ou a legenda (o porque, no bloco «LER
+   COM O DEDO» acima).
    Recebe: s — as series escritas, [{n,c,v}].
    Devolve: true quando empilha. */
-function peEmpilha(s){
-  return s.length>PE_SERIES||s.some(x=>x.n.length>PE_NOME_CURTO);
+function cabecaEmpilha(s){
+  return s.length>CAB_SERIES||s.some(x=>x.n.length>CAB_NOME_CURTO);
 }
 
-/* O grafico pronto a ler: a caixa do desenho e, por baixo, o pe com a
-   legenda a esquerda e o lugar da leitura no canto inferior direito, os dois
+/* O grafico pronto a ler: a cabeca com a legenda a esquerda e o lugar da
+   leitura no canto superior direito e, por baixo, a caixa do desenho, as duas
    dentro do contentor por onde a leitura se encontra.
-   O lugar leva o molde — a leitura do rotulo mais comprido com o valor mais
-   comprido de cada serie, escondido — que lhe da a altura e a largura desde
-   a primeira pintura; e a leitura que se ve, vazia, por cima dele.
+   O lugar leva o molde — todos os rotulos e, por serie, todos os valores,
+   escondidos e empilhados (graficos.js:pilha) — que lhe da a altura e a
+   largura desde a primeira pintura; e a leitura que se ve, vazia, por cima
+   dele.
    Recebe: caixa — o HTML do .chartbox com o <svg>; labels — as etiquetas do
    eixo; series — [{nome,cor,vals}], as mesmas que foram para o data-lido;
    fmt (opcional) — como escrever os valores; leg — o HTML da legenda ('' sem
-   legenda: o lugar fica sozinho, no canto direito debaixo do eixo).
+   legenda: o lugar fica sozinho, no canto direito por cima do desenho).
    Devolve: o HTML do contentor .chartler; sem colunas ou sem series, a caixa
    e a legenda como vieram, sem lugar nenhum (nao ha nada para ler). */
-function peDaLeitura(caixa,labels,series,fmt,leg){
+function cabecaDaLeitura(caixa,labels,series,fmt,leg){
   const s=seriesEscritas(series,fmt);
   if(!labels||!labels.length||!s.length)return caixa+(leg||'');
-  const molde=linhasDaLeitura(maisComprido(labels),s.map(x=>({n:x.n,c:x.c,v:maisComprido(x.v)})));
+  const molde=linhasDaLeitura(labels,s.map(x=>({n:x.n,c:x.c,v:x.v})));
   const uma=s.length===1&&!s[0].n?' uma':'';
-  return `<div class="chartler">${caixa}<div class="chartpe${peEmpilha(s)?' empilhado':''}${leg?'':' so'}">${leg||''}`+
+  return `<div class="chartler"><div class="chartcab${cabecaEmpilha(s)?' empilhado':''}${leg?'':' so'}">${leg||''}`+
     `<div class="chartlugar"><div class="chartlido chartmolde${uma}" aria-hidden="true">${molde}</div>`+
-    `<div class="chartlido${uma}"></div></div></div></div>`;
+    `<div class="chartlido${uma}"></div></div></div>${caixa}</div>`;
 }
 
-/* A leitura que se ve de um grafico: no pe do mesmo grafico, e nao dentro da
-   caixa — o pe e irmao da caixa, e e o contentor que os junta.
+/* A leitura que se ve de um grafico: na cabeca do mesmo grafico, e nao
+   dentro da caixa — a cabeca e irma da caixa, e e o contentor que as junta.
    Recebe: caixa — o .chartbox.
    Devolve: o elemento da leitura (o .chartlido que nao e o molde), ou null
-   num grafico sem pe. */
+   num grafico sem cabeca. */
 function lugarDaLeitura(caixa){
   const ler=caixa&&caixa.closest&&caixa.closest('.chartler');
   return ler&&ler.querySelector?ler.querySelector('.chartlugar>.chartlido:not(.chartmolde)'):null;
@@ -242,11 +256,12 @@ function colunaSobODedo(caixa,d,cx){
 }
 
 /* Mostra a coluna que o dedo escolheu: a guia no desenho e a leitura no
-   canto do pe. A leitura so se reescreve quando a coluna muda — o dedo dispara
-   dezenas de pointermove dentro da mesma coluna.
+   canto da cabeca. A leitura so se reescreve quando a coluna muda — o dedo
+   dispara dezenas de pointermove dentro da mesma coluna.
    Recebe: caixa — o .chartbox; i — o indice da coluna.
-   Devolve: nada — mexe na guia dentro da caixa e na leitura do pe (num
-   grafico sem pe, so na guia: a leitura nunca volta para cima do desenho). */
+   Devolve: nada — mexe na guia dentro da caixa e na leitura da cabeca (num
+   grafico sem cabeca, so na guia: a leitura nunca volta para cima do
+   desenho). */
 function mostrarColuna(caixa,i){
   let d;try{d=JSON.parse(caixa.getAttribute('data-lido')||'')}catch(e){return}
   if(!d)return;
@@ -329,9 +344,9 @@ function axisY(min,max,x0,x1,y0,y1,fmt){
    Recebe: series — array de séries {name, values, color} (values em números;
    color opcional, sai da paleta); labels — etiquetas do eixo X, uma por ponto;
    o (opcional) — as opções h, fmt, area e marks descritas acima.
-   Devolve: HTML pronto a inserir — o desenho e, por baixo, o pé com o lugar
-   da leitura no canto inferior direito (graficos.js:peDaLeitura); com mais
-   de uma série, a legenda à esquerda desse lugar. */
+   Devolve: HTML pronto a inserir — a cabeça com o lugar da leitura no canto
+   superior direito (graficos.js:cabecaDaLeitura) e, por baixo, o desenho;
+   com mais de uma série, a legenda à esquerda desse lugar. */
 function cLine(series,labels,o){
   o=o||{};const h=o.h||180,x0=44,x1=W-6,y0=10,y1=h-8,F=o.fmt||euro;
   series.forEach(s=>{s.values=s.values.map(v=>isFinite(v)?v:0)});
@@ -366,7 +381,7 @@ function cLine(series,labels,o){
   });
   /* com uma serie so, a leitura nao repete o nome dela: e o do cartao */
   const ler=series.map((s,i)=>({nome:series.length>1?s.name:'',cor:s.color||PAL[i%PAL.length],vals:s.values}));
-  return peDaLeitura(`<div class="chartbox"${dadosParaLer(labels,ler,labels.map((_,i)=>X(i)),F)}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Evolução',labels)}>${g}</svg></div>`,
+  return cabecaDaLeitura(`<div class="chartbox"${dadosParaLer(labels,ler,labels.map((_,i)=>X(i)),F)}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Evolução',labels)}>${g}</svg></div>`,
     labels,ler,F,series.length>1?legend(series.map((s,i)=>({label:s.name,color:s.color||PAL[i%PAL.length]})),false):'');
 }
 /* Barras empilhadas: cada grupo é um array de segmentos {label,value,color}, com os
@@ -374,9 +389,9 @@ function cLine(series,labels,o){
    Recebe: groups — array de grupos, cada um o tal array de segmentos {label,
    value, color} (value em euros; negativo empilha para baixo); labels —
    etiquetas do eixo X, uma por grupo; o (opcional) — h é a altura do gráfico.
-   Devolve: HTML — o desenho e, por baixo, o pé: a legenda (junta-se a partir
-   das etiquetas que aparecem nos segmentos) à esquerda e o lugar da leitura
-   no canto inferior direito (graficos.js:peDaLeitura). */
+   Devolve: HTML — a cabeça: a legenda (junta-se a partir das etiquetas que
+   aparecem nos segmentos) à esquerda e o lugar da leitura no canto superior
+   direito (graficos.js:cabecaDaLeitura); e, por baixo, o desenho. */
 function cBars(groups,labels,o){
   o=o||{};const h=o.h||190,x0=44,x1=W-6,y0=10,y1=h-8;
   const tops=groups.map(g=>sum(g.filter(v=>v.value>0).map(v=>v.value)));
@@ -417,7 +432,7 @@ function cBars(groups,labels,o){
   });
   const ler=names.map(nm=>({nome:nm.label,cor:nm.color,
     vals:groups.map(gr=>sum(gr.filter(x=>x.label===nm.label).map(x=>x.value)))}));
-  return peDaLeitura(`<div class="chartbox"${dadosParaLer(labels,ler,groups.map((_,i)=>x0+bw*i+bw/2),o.fmt)}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Entradas e saídas',labels)}>${g}</svg></div>`,
+  return cabecaDaLeitura(`<div class="chartbox"${dadosParaLer(labels,ler,groups.map((_,i)=>x0+bw*i+bw/2),o.fmt)}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Entradas e saídas',labels)}>${g}</svg></div>`,
     labels,ler,o.fmt,legend(names,false));
 }
 /* Anel de proporções com o total ao centro. items=[{label,value,color}] — valores ≤ 0

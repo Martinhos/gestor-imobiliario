@@ -289,32 +289,36 @@ html.dark .badge.red{color:var(--danger)}
 
 .chartbox svg{width:100%;height:auto;display:block;overflow:visible}
 /* Ler um gráfico com o dedo (graficos.js). A guia é SOBREPOSTA ao desenho; a
-   leitura não: vive no pé, debaixo do eixo, no canto inferior direito — a
-   faixa que ficava no topo do desenho tapava as barras mais altas e o eixo.
-   O lugar dela existe sempre, invisível, com a altura e a largura que o molde
-   lhe dá: um gráfico não pode mudar de altura só por alguém lhe tocar. */
+   leitura não: vive na cabeça, por cima do desenho, no canto superior direito
+   — a faixa que ficava sobreposta ao topo do desenho tapava as barras mais
+   altas e o eixo, e o pé debaixo do eixo ficava tapado pela mão, que no
+   telemóvel vem de baixo. O lugar dela existe sempre, invisível, com a altura
+   e a largura que o molde lhe dá: um gráfico não pode mudar de altura só por
+   alguém lhe tocar. */
 /* Sem seleção nem callout: os rótulos do eixo são <text> a sério dentro do
    SVG, e segurar o dedo caía no gesto de selecionar palavra do browser — que
    escolhia o mês e, ao começar, roubava o ponteiro e cancelava a leitura. É a
    mesma proteção que a app já dá a [data-lp], o outro gesto de segurar. */
 .chartbox{position:relative;touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .chartguia,.chartlido{opacity:0;pointer-events:none;transition:opacity var(--rapido) var(--curva)}
-.chartbox.a-ler .chartguia,.chartbox.a-ler+.chartpe .chartlido{opacity:1}
+.chartbox.a-ler .chartguia,.chartler:has(>.chartbox.a-ler) .chartlido{opacity:1}
 .chartguia{position:absolute;top:0;bottom:13px;width:1.5px;margin-left:-.75px;background:var(--line2);border-radius:2px}
-/* O pé: a legenda à esquerda e o lugar da leitura à direita, numa grelha — a
-   legenda nunca fica por baixo da leitura. A coluna da leitura tem a largura
-   do molde (fit-content) e nunca passa de 58%: num telemóvel a legenda
-   precisa do resto. Sem legenda (.so), o lugar fica sozinho no canto. */
-.chartpe{display:grid;grid-template-columns:minmax(0,1fr) fit-content(58%);gap:10px 12px;align-items:start;margin-top:10px}
-.chartpe>.legend{margin-top:0;grid-column:1;grid-row:1}
+/* A cabeça: a legenda à esquerda e o lugar da leitura à direita, numa grelha
+   — a legenda nunca fica por baixo da leitura. A coluna da leitura tem a
+   largura do molde (fit-content) e nunca passa de 58%: num telemóvel a
+   legenda precisa do resto. O lugar desce ao fundo da cabeça, colado ao
+   desenho. Sem legenda (.so), o lugar fica sozinho no canto. */
+.chartcab{display:grid;grid-template-columns:minmax(0,1fr) fit-content(58%);gap:10px 12px;align-items:start;margin-bottom:10px}
+.chartcab>.legend{margin-top:0;grid-column:1;grid-row:1}
 .chartlugar{grid-column:2;grid-row:1;align-self:end;position:relative;min-width:0}
-/* Empilhado (graficos.js:peEmpilha — nomes compridos ou mais de quatro
+/* Empilhado (graficos.js:cabecaEmpilha — nomes compridos ou mais de quatro
    séries): a legenda toma a largura toda e parte os nomes em linhas, que é
-   onde o nome inteiro se lê; a leitura vai para baixo dela, no mesmo canto. */
-.chartpe.empilhado{grid-template-columns:minmax(0,1fr)}
-.chartpe.empilhado .chartlugar{grid-column:1;grid-row:2;justify-self:end;max-width:100%}
-.chartpe.empilhado>.legend{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
-.chartpe.empilhado>.legend .nm{white-space:normal;overflow-wrap:anywhere}
+   onde o nome inteiro se lê; a leitura vai para baixo dela, no mesmo canto,
+   logo acima do desenho. */
+.chartcab.empilhado{grid-template-columns:minmax(0,1fr)}
+.chartcab.empilhado .chartlugar{grid-column:1;grid-row:2;justify-self:end;max-width:100%}
+.chartcab.empilhado>.legend{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.chartcab.empilhado>.legend .nm{white-space:normal;overflow-wrap:anywhere}
 /* A leitura: uma grelha de três colunas — bolinha, nome, valor — com o
    rótulo a negrito por cima, a toda a largura. Os valores alinham pela
    direita, em algarismos de largura igual, e nunca se cortam; o nome corta
@@ -330,19 +334,14 @@ html.dark .badge.red{color:var(--danger)}
 .chartlido .lnm{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
 .chartlido .lvl{font-weight:650;text-align:right}
 /* O molde dá o tamanho e não se vê; a leitura que se vê fica por cima dele,
-   em absoluto, e por isso o texto de cada mês não mexe na largura. */
+   em absoluto, e por isso o texto de cada mês não mexe na largura. O rótulo
+   e o valor do molde levam TODOS os textos possíveis, empilhados na mesma
+   célula (graficos.js:pilha): a largura é a do mais largo, e não a do que
+   tem mais letras — «mai» não cabia no lugar do «jan». */
 .chartmolde{visibility:hidden}
+.chartmolde>b,.chartmolde>.lvl{display:grid}
+.chartmolde>b>span,.chartmolde>.lvl>span{grid-area:1/1}
 .chartlugar>.chartlido:not(.chartmolde){position:absolute;inset:0}
-/* No computador, dois cartões lado a lado (.cols, e o .cw-blk da vista geral)
-   esticam à altura do maior, e o gráfico do mais baixo deixava a leitura a
-   meio do cartão, com um vazio por baixo. Quando o gráfico é o corpo inteiro
-   do cartão, o pé estica até ao fundo: a legenda fica colada ao desenho e o
-   lugar da leitura desce ao canto. Só aí (:only-child): num corpo com mais
-   coisas, pô-lo em flex mudava o espaçamento delas. */
-.card:has(>div>.chartler:only-child){display:flex;flex-direction:column}
-.card>div:has(>.chartler:only-child),.card>div>.chartler:only-child{flex:1 1 auto;display:flex;flex-direction:column}
-.card>div>.chartler:only-child>.chartpe{flex:1 1 auto;grid-template-rows:1fr}
-.card>div>.chartler:only-child>.chartpe.empilhado{grid-template-rows:auto 1fr}
 /* A página trancada por baixo de uma janela. Quem tranca é o overflow do
    html e o position:fixed do body — o body NÃO leva overflow:hidden.
 

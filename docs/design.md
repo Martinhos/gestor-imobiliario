@@ -740,39 +740,43 @@ com o do lado; e ver outro mês obriga a outro toque, com o primeiro já
 esquecido.
 
 Agora o dedo percorre o gráfico, uma guia acompanha a coluna mais próxima e
-os valores dessa coluna aparecem num cartão FIXO no canto inferior direito,
-DEBAIXO do desenho — no sítio onde a mão não está, e sem sair enquanto o dedo
-não sair (graficos.js:mostrarColuna). O gráfico é a caixa do desenho e, por
-baixo, um pé em grelha: a legenda à esquerda e o lugar da leitura à direita,
-os dois num contentor por onde a leitura se encontra
-(graficos.js:peDaLeitura, graficos.js:lugarDaLeitura). Chegou a ser uma faixa
-sobreposta ao topo do desenho, a toda a largura: não mexia na altura, mas
-tapava as barras mais altas e os valores do eixo, enquanto o canto debaixo do
-eixo, ao lado da legenda, ficava vazio — o Martinho apontou-o. Só a guia é
-sobreposta. E o gesto é horizontal (estilos.css:.chartbox com touch-action),
-para o scroll vertical continuar a funcionar por cima dele.
+os valores dessa coluna aparecem num cartão FIXO no canto superior direito,
+POR CIMA do desenho — no sítio onde a mão não está, e sem sair enquanto o
+dedo não sair (graficos.js:mostrarColuna). O gráfico é uma cabeça em grelha —
+a legenda à esquerda e o lugar da leitura à direita — e, por baixo dela, a
+caixa do desenho, as duas num contentor por onde a leitura se encontra
+(graficos.js:cabecaDaLeitura, graficos.js:lugarDaLeitura). Chegou a ser uma
+faixa sobreposta ao topo do desenho, a toda a largura: não mexia na altura,
+mas tapava as barras mais altas e os valores do eixo. Depois foi um pé
+debaixo do eixo, ao lado da legenda: já não tapava o desenho, mas no
+telemóvel a mão vem de baixo, e o dedo que percorre o gráfico tapava a
+leitura — o Martinho apontou as duas. Por cima, com lugar próprio, nem uma
+coisa nem outra. Só a guia é sobreposta. E o gesto é horizontal
+(estilos.css:.chartbox com touch-action), para o scroll vertical continuar a
+funcionar por cima dele.
 
 O lugar EXISTE SEMPRE, invisível sem leitura: um gráfico não pode mudar de
 altura só por alguém lhe tocar. Quem lhe dá o tamanho é um molde escondido
-(estilos.css:.chartmolde) com as mesmas linhas que a leitura vai ter — o
-rótulo mais comprido e, por série, o valor escrito mais comprido
-(graficos.js:linhasDaLeitura, graficos.js:maisComprido); a leitura que se vê
-fica por cima dele, em absoluto, e não conta para a largura. Por isso a
-largura é fixa enquanto se lê — não «dança» de mês para mês com o texto — e
-os números vão em tabular-nums. A coluna da leitura nunca passa de 58% do pé
-(estilos.css:.chartpe), para a legenda ter o resto. O valor nunca se corta; o
-nome de uma série, sim, com reticências — o nome inteiro está na legenda, ao
-lado. Com uma série só não há legenda nem nome: a leitura é uma linha (rótulo,
-bolinha, valor), sozinha no canto debaixo do eixo. No computador, dois cartões
-lado a lado esticam à altura do maior; quando o gráfico é o corpo inteiro do
-cartão, o pé estica até ao fundo e a leitura desce ao canto, com a legenda
-colada ao desenho.
+(estilos.css:.chartmolde) com as mesmas linhas que a leitura vai ter — com
+TODOS os rótulos e, por série, TODOS os valores escritos, empilhados na
+mesma célula (graficos.js:linhasDaLeitura, graficos.js:pilha); a leitura que
+se vê fica por cima dele, em absoluto, e não conta para a largura. Por isso
+a largura é fixa enquanto se lê — não «dança» de mês para mês com o texto —
+e os números vão em tabular-nums. O molde chegou a levar só o texto com mais
+letras, e as letras não têm a mesma largura: «jan» e «mai» têm três, o lugar
+era o do «jan», e o «mai» saía «m..» no gráfico de linhas. A coluna da
+leitura nunca passa de 58% da cabeça (estilos.css:.chartcab), para a legenda
+ter o resto. O valor nunca se corta; o nome de uma série, sim, com
+reticências — o nome inteiro está na legenda, ao lado. Com uma série só não
+há legenda nem nome: a leitura é uma linha (rótulo, bolinha, valor), sozinha
+no canto por cima do desenho.
 
 Um título de cartão comprido não colide com nada: está noutra linha, lá em
 cima. O que colide são os NOMES DAS SÉRIES — os créditos levam o nome que o
 senhorio lhes deu. Com um nome de mais de 16 letras, ou mais de quatro
-séries, o pé empilha (graficos.js:peEmpilha): a legenda toma a largura toda e
-parte os nomes em linhas, e a leitura fica por baixo dela, no mesmo canto.
+séries, a cabeça empilha (graficos.js:cabecaEmpilha): a legenda toma a
+largura toda e parte os nomes em linhas, e a leitura fica por baixo dela, no
+mesmo canto, logo acima do desenho.
 Com muitas séries a leitura mostra-as TODAS, uma por linha: mostrar quatro e
 «+N» escondia o que o gráfico existe para mostrar (a dívida de cada crédito,
 e o Total, que é o último); duas colunas partiam ao meio a largura de nomes

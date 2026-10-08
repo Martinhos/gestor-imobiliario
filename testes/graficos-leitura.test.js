@@ -1,9 +1,10 @@
-// A leitura de um gráfico com o dedo, no canto inferior direito do cartão.
-// O cLine e o cBars devolvem o desenho e, por baixo, um pé em grelha: a
-// legenda à esquerda e o lugar da leitura à direita, guardado desde a
-// primeira pintura por um molde escondido — a leitura nunca fica por cima do
-// desenho e o cartão não muda de altura por alguém lhe tocar
-// (graficos.js:peDaLeitura, graficos.js:mostrarColuna). Verificações do HTML
+// A leitura de um gráfico com o dedo, no canto superior direito do cartão.
+// O cLine e o cBars devolvem uma cabeça em grelha — a legenda à esquerda e o
+// lugar da leitura à direita, guardado desde a primeira pintura por um molde
+// escondido — e, por baixo dela, o desenho: a leitura nunca se sobrepõe ao
+// desenho, a mão que o percorre (vem de baixo) não a tapa, e o cartão não
+// muda de altura por alguém lhe tocar (graficos.js:cabecaDaLeitura,
+// graficos.js:mostrarColuna). Verificações do HTML
 // que sai, do gesto com um DOM a fingir, e das regras do CSS que fazem o
 // resto; o desenho no ecrã vê-se no browser.
 
@@ -67,7 +68,7 @@ function elementoLeitura() {
 }
 
 /* Uma caixa de gráfico a fingir, com o data-lido de um gráfico a sério e,
-   se pedido, o contentor e o pé onde mora a leitura.
+   se pedido, o contentor e a cabeça onde mora a leitura.
    Recebe: html — o HTML do gráfico; comPe — false para uma caixa sem contentor.
    Devolve: {caixa, leitura, seletores} — seletores regista o que se procurou. */
 function caixaDe(html, comPe = true) {
@@ -82,16 +83,16 @@ function caixaDe(html, comPe = true) {
   return { caixa, leitura, seletores };
 }
 
-describe('o pé do gráfico: a legenda à esquerda, o lugar da leitura no canto', () => {
-  test('o cBars devolve o contentor com a caixa do desenho e, por baixo, o pé com a legenda antes do lugar', () => {
+describe('a cabeça do gráfico: a legenda à esquerda, o lugar da leitura no canto, o desenho por baixo', () => {
+  test('o cBars devolve o contentor com a cabeça (a legenda antes do lugar) e, por baixo, a caixa do desenho', () => {
     const html = tres();
-    assert.match(html, /^<div class="chartler"><div class="chartbox"/, 'o contentor junta a caixa e o pé');
-    const fimDesenho = html.indexOf('</svg></div>');
-    const pe = html.indexOf('<div class="chartpe');
-    assert.ok(fimDesenho > 0 && pe > fimDesenho, 'o pé vem depois do desenho, fora da caixa');
-    assert.ok(html.indexOf('<div class="legend">') > pe, 'a legenda vive no pé');
+    assert.match(html, /^<div class="chartler"><div class="chartcab/, 'o contentor junta a cabeça e a caixa, a cabeça primeiro');
+    const caixa = html.indexOf('<div class="chartbox"');
+    const cab = html.indexOf('<div class="chartcab');
+    assert.ok(caixa > cab, 'o desenho vem depois da cabeça, fora dela');
+    assert.ok(html.indexOf('<div class="legend">') > cab && html.indexOf('<div class="legend">') < caixa, 'a legenda vive na cabeça');
     assert.ok(html.indexOf('<div class="chartlugar">') > html.indexOf('<div class="legend">'), 'e o lugar da leitura à direita dela');
-    assert.doesNotMatch(html.slice(0, fimDesenho), /chartlido/, 'nada da leitura dentro da caixa do desenho');
+    assert.doesNotMatch(html.slice(caixa), /chartlido/, 'nada da leitura dentro da caixa do desenho');
   });
 
   test('o lugar existe antes de alguém tocar: o molde e a leitura vazia por cima', () => {
@@ -99,13 +100,25 @@ describe('o pé do gráfico: a legenda à esquerda, o lugar da leitura no canto'
     assert.match(html, /<div class="chartlugar"><div class="chartlido chartmolde" aria-hidden="true">[\s\S]*?<\/div><div class="chartlido"><\/div><\/div>/);
   });
 
-  test('o molde tem as linhas que a leitura vai ter: o rótulo e uma por série, com o valor mais comprido de cada uma', () => {
+  test('o molde tem as linhas que a leitura vai ter: o rótulo e uma por série, com todos os valores de cada uma', () => {
     const m = molde(tres());
     assert.equal((m.match(/<b>/g) || []).length, 1, 'um rótulo');
     assert.equal((m.match(/class="lnm"/g) || []).length, 3, 'três séries, três linhas');
-    assert.match(m, /<span class="lnm">Despesas<\/span><span class="lvl">−12\u202F080\u202F€<\/span>/,
-      'a linha das despesas guarda o lugar do valor mais comprido, e não o do primeiro mês');
-    assert.match(m, /<span class="lnm">Receita<\/span><span class="lvl">950\u202F€<\/span>/);
+    assert.match(m, /<b><span>jan<\/span><span>fev<\/span><span>mar<\/span><\/b>/, 'o rótulo guarda o lugar de todos os meses');
+    assert.match(m, /<span class="lnm">Despesas<\/span><span class="lvl"><span>−80 €<\/span><span>−1 080 €<\/span><span>−12 080 €<\/span><\/span>/,
+      'a linha das despesas guarda o lugar de todos os valores, e não só o do primeiro mês');
+    assert.match(m, /<span class="lnm">Receita<\/span><span class="lvl"><span>950 €<\/span><\/span>/, 'um valor repetido conta uma vez');
+  });
+
+  /* «jan» e «mai» têm as mesmas três letras, e o molde guardava só o texto com
+     mais letras — o primeiro, «jan». O «mai», mais largo, saía «m..» na
+     leitura do gráfico de linhas. A largura que conta é a do mais LARGO, e só
+     o browser a sabe: o molde leva-os todos, empilhados na mesma célula. */
+  test('o molde guarda o lugar de todos os rótulos empilhados, e não só do que tem mais letras', () => {
+    const html = app.cLine([{ name: 'Acumulado', values: [1, 2, 3, 4, 5] }], ['jan', 'fev', 'mar', 'abr', 'mai']);
+    for (const m of ['jan', 'fev', 'mar', 'abr', 'mai']) assert.match(molde(html), new RegExp('<span>' + m + '</span>'));
+    assert.match(css, /\.chartmolde>b,\.chartmolde>\.lvl\{display:grid\}/);
+    assert.match(css, /\.chartmolde>b>span,\.chartmolde>\.lvl>span\{grid-area:1\/1\}/, 'todos na mesma célula: a largura do mais largo, a altura de uma linha');
   });
 
   test('o molde e o data-lido escrevem os valores com a mesma função — o molde mede o que vai aparecer', () => {
@@ -113,33 +126,33 @@ describe('o pé do gráfico: a legenda à esquerda, o lugar da leitura no canto'
     const html = app.cLine([{ name: 'LTV', values: [0.42, 0.389, 0.1] }, { name: 'Alvo', values: [0.6, 0.6, 0.6] }], ['2026', '2027', '2028'], { fmt });
     const d = lido(html);
     assert.deepEqual([...d.s[0].v], ['42,0%', '38,9%', '10,0%']);
-    assert.match(molde(html), /<span class="lnm">LTV<\/span><span class="lvl">42,0%<\/span>/);
+    assert.match(molde(html), /<span class="lnm">LTV<\/span><span class="lvl"><span>42,0%<\/span><span>38,9%<\/span><span>10,0%<\/span><\/span>/);
     assert.doesNotMatch(molde(html), /€/, 'nada de euros num rácio');
   });
 
   test('uma série só: sem legenda, o lugar sozinho no canto, e a leitura numa linha (rótulo, bolinha, valor)', () => {
     const html = app.cLine([{ name: 'Acumulado', values: [100, 2538, 900], color: '#2f7d5b' }], ['jan', 'fev', 'mar'], { h: 200 });
-    assert.match(html, /<div class="chartpe so"><div class="chartlugar">/, 'sem legenda, o pé é só o lugar');
+    assert.match(html, /<div class="chartcab so"><div class="chartlugar">/, 'sem legenda, a cabeça é só o lugar');
     assert.doesNotMatch(html, /class="legend"/);
-    assert.match(html, /<div class="chartlido chartmolde uma" aria-hidden="true"><b>jan<\/b><i data-fundo="#2f7d5b"><\/i><span class="lvl">2\u202F538\u202F€<\/span><\/div><div class="chartlido uma"><\/div>/);
+    assert.match(html, /<div class="chartlido chartmolde uma" aria-hidden="true"><b><span>jan<\/span><span>fev<\/span><span>mar<\/span><\/b><i data-fundo="#2f7d5b"><\/i><span class="lvl"><span>100 €<\/span><span>2 538 €<\/span><span>900 €<\/span><\/span><\/div><div class="chartlido uma"><\/div>/);
     assert.doesNotMatch(molde(html), /Acumulado/, 'o nome da série é o do cartão: a leitura não o repete');
   });
 
-  test('um nome de série comprido (60 letras): o pé empilha — a legenda com o nome inteiro, a leitura por baixo', () => {
+  test('um nome de série comprido (60 letras): a cabeça empilha — a legenda com o nome inteiro, a leitura por baixo dela', () => {
     const longo = 'Hipoteca do T2 da Rua Ferreira Borges em Campo de Ourique, C';
     assert.equal(longo.length, 60);
     const html = app.cLine([{ name: longo, values: [180000, 170000] }, { name: 'Total', values: [180000, 170000] }], ['2026', '2027']);
-    assert.match(html, /<div class="chartpe empilhado">/);
+    assert.match(html, /<div class="chartcab empilhado">/);
     assert.match(html, new RegExp('<span class="nm">' + longo + '</span>'), 'a legenda leva o nome inteiro');
     assert.match(molde(html), new RegExp('<span class="lnm">' + longo + '</span>'), 'a leitura também — o CSS é que o corta com reticências');
   });
 
-  test('com quatro séries de nomes curtos o pé fica lado a lado; com cinco empilha, e a leitura mostra as cinco', () => {
+  test('com quatro séries de nomes curtos a cabeça fica lado a lado; com cinco empilha, e a leitura mostra as cinco', () => {
     const serie = (n) => ({ name: n, values: [1, 2] });
     const quatro = app.cLine(['A', 'B', 'C', 'D'].map(serie), ['2026', '2027']);
-    assert.match(quatro, /<div class="chartpe">/, 'quatro cabem ao lado da leitura');
+    assert.match(quatro, /<div class="chartcab">/, 'quatro cabem ao lado da leitura');
     const cinco = app.cLine(['A', 'B', 'C', 'D', 'Total'].map(serie), ['2026', '2027']);
-    assert.match(cinco, /<div class="chartpe empilhado">/);
+    assert.match(cinco, /<div class="chartcab empilhado">/);
     assert.equal((molde(cinco).match(/class="lnm"/g) || []).length, 5, 'todas as séries, sem «+N»');
     assert.doesNotMatch(molde(cinco), /\+\d/);
   });
@@ -151,19 +164,19 @@ describe('o pé do gráfico: a legenda à esquerda, o lugar da leitura no canto'
     assert.match(molde(html), /A &amp; B/);
   });
 
-  test('sem nada para ler não há lugar nenhum: barras sem segmentos não ganham pé', () => {
+  test('sem nada para ler não há lugar nenhum: barras sem segmentos não ganham cabeça', () => {
     const html = app.cBars([[], []], ['jan', 'fev']);
     assert.doesNotMatch(html, /data-lido|chartler|chartlugar|chartlido/);
   });
 
-  test('o donut e as barras horizontais ficam como eram: sem pé nem leitura', () => {
+  test('o donut e as barras horizontais ficam como eram: sem cabeça nem leitura', () => {
     const d = app.cDonut([{ label: 'Obras', value: 300 }, { label: 'IMI', value: 200 }]);
     const h = app.cHBars([{ label: 'Obras', value: 300 }]);
-    for (const html of [d, h]) assert.doesNotMatch(html, /chartler|chartpe|chartlido|data-lido/);
+    for (const html of [d, h]) assert.doesNotMatch(html, /chartler|chartcab|chartlido|data-lido/);
   });
 });
 
-describe('o gesto: a leitura aparece no pé do mesmo gráfico', () => {
+describe('o gesto: a leitura aparece na cabeça do mesmo gráfico', () => {
   test('mostrarColuna procura a leitura pelo contentor e escreve-lhe o rótulo e os valores da coluna', () => {
     const { caixa, leitura, seletores } = caixaDe(tres());
     app.mostrarColuna(caixa, 2);
@@ -171,7 +184,7 @@ describe('o gesto: a leitura aparece no pé do mesmo gráfico', () => {
     assert.match(leitura.innerHTML, /^<b>mar<\/b>/);
     assert.match(leitura.innerHTML, /<span class="lnm">Despesas<\/span><span class="lvl">−12\u202F080\u202F€<\/span>/);
     assert.equal(leitura.getAttribute('data-col'), '2');
-    assert.ok(caixa.classes.has('a-ler'), 'a caixa fica a ler (o CSS acende a leitura do pé irmão)');
+    assert.ok(caixa.classes.has('a-ler'), 'a caixa fica a ler (o CSS acende a leitura da cabeça irmã)');
     const guia = caixa.filhos.find((f) => f.className === 'chartguia');
     assert.ok(guia, 'a guia continua no desenho');
     assert.match(guia.style.left, /%$/);
@@ -188,7 +201,7 @@ describe('o gesto: a leitura aparece no pé do mesmo gráfico', () => {
     assert.match(leitura.innerHTML, /^<b>fev<\/b>/);
   });
 
-  test('num gráfico sem pé a guia anda, mas a leitura nunca volta para dentro da caixa do desenho', () => {
+  test('num gráfico sem cabeça a guia anda, mas a leitura nunca volta para dentro da caixa do desenho', () => {
     const { caixa } = caixaDe(tres(), false);
     app.mostrarColuna(caixa, 1);
     assert.deepEqual(caixa.filhos.map((f) => f.className), ['chartguia'], 'só a guia entra na caixa');
@@ -203,22 +216,29 @@ describe('o gesto: a leitura aparece no pé do mesmo gráfico', () => {
     assert.doesNotThrow(() => app.largarLeitura(null));
   });
 
-  test('maisComprido escolhe o texto mais comprido e aguenta o que não é texto', () => {
-    assert.equal(app.maisComprido(['jan', 'fevereiro', 'mar']), 'fevereiro');
-    assert.equal(app.maisComprido([null, 12345, '7']), '12345');
-    assert.equal(app.maisComprido([]), '');
-    assert.equal(app.maisComprido(undefined), '');
+  test('pilha escreve um texto só, ou todos os textos (sem repetidos) cada um no seu span, escapados', () => {
+    assert.equal(app.pilha('mai'), 'mai');
+    assert.equal(app.pilha(null), '');
+    assert.equal(app.pilha(['jan', 'mai', 'jan', null]), '<span>jan</span><span>mai</span><span></span>');
+    assert.equal(app.pilha(['<i>']), '<span>&lt;i&gt;</span>');
   });
 });
 
-describe('o CSS do pé e da leitura', () => {
-  test('o pé é uma grelha: a legenda com o resto, a leitura com a largura do molde até 58%', () => {
-    assert.match(css, /\.chartpe\{display:grid;grid-template-columns:minmax\(0,1fr\) fit-content\(58%\)/);
-    assert.match(css, /\.chartlugar\{[^}]*grid-column:2[^}]*align-self:end/, 'o lugar no canto inferior direito');
+describe('o CSS da cabeça e da leitura', () => {
+  test('a cabeça é uma grelha: a legenda com o resto, a leitura com a largura do molde até 58%', () => {
+    assert.match(css, /\.chartcab\{display:grid;grid-template-columns:minmax\(0,1fr\) fit-content\(58%\)/);
+    assert.match(css, /\.chartlugar\{[^}]*grid-column:2[^}]*align-self:end/, 'o lugar no fundo da cabeça, colado ao desenho');
+  });
+
+  /* A leitura chegou a viver num pé debaixo do eixo: no telemóvel a mão vem
+     de baixo, e o dedo que percorre o gráfico tapava-a. */
+  test('a cabeça fica por cima do desenho, separada dele, e não por baixo', () => {
+    assert.match(css, /\.chartcab\{[^}]*margin-bottom:10px/);
+    assert.doesNotMatch(css, /\.chartpe\b/, 'o pé já não existe');
   });
 
   test('a leitura acende-se pela caixa irmã, e não por estar dentro dela', () => {
-    assert.match(css, /\.chartbox\.a-ler\+\.chartpe \.chartlido\{opacity:1\}|,\.chartbox\.a-ler\+\.chartpe \.chartlido\{opacity:1\}/);
+    assert.match(css, /,\.chartler:has\(>\.chartbox\.a-ler\) \.chartlido\{opacity:1\}/);
   });
 
   test('os números da leitura não dançam e o valor não se corta; o nome corta com reticências', () => {
@@ -231,12 +251,12 @@ describe('o CSS do pé e da leitura', () => {
   });
 
   test('empilhado, a legenda parte os nomes em linhas em vez de os cortar', () => {
-    assert.match(css, /\.chartpe\.empilhado>\.legend \.nm\{white-space:normal/);
-    assert.match(css, /\.chartpe\.empilhado \.chartlugar\{[^}]*justify-self:end/, 'a leitura continua encostada à direita');
+    assert.match(css, /\.chartcab\.empilhado>\.legend \.nm\{white-space:normal/);
+    assert.match(css, /\.chartcab\.empilhado \.chartlugar\{[^}]*justify-self:end/, 'a leitura continua encostada à direita');
   });
 
   test('a leitura usa as cores do tema (sem cores fixas), para o tema escuro', () => {
-    const regras = css.match(/\.chart(?:lido|pe|lugar|molde)[^{]*\{[^}]*\}/g) || [];
+    const regras = css.match(/\.chart(?:lido|cab|lugar|molde)[^{]*\{[^}]*\}/g) || [];
     assert.ok(regras.length >= 6);
     for (const r of regras) assert.doesNotMatch(r, /#[0-9a-f]{3,8}\b|rgba?\(/i, r);
   });

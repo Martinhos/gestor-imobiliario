@@ -395,13 +395,14 @@ describe('movimento', () => {
     const g = /\.chartguia,\.chartlido\{([^}]*)\}/.exec(cssLimpo);
     assert.ok(g, 'a regra da guia e da faixa existe');
     assert.match(cssLimpo, /\.chartguia\{position:absolute/);
-    /* A faixa ficava no topo do desenho e tapava as barras mais altas; a
-       leitura passou para o pé, no canto inferior direito, por cima de um
-       molde que lhe guarda o lugar (graficos.js:peDaLeitura). */
+    /* A faixa ficava sobreposta ao topo do desenho e tapava as barras mais
+       altas; a leitura passou para a cabeça, por cima do desenho e com lugar
+       próprio, por cima de um molde que lhe guarda o lugar
+       (graficos.js:cabecaDaLeitura). */
     assert.doesNotMatch(cssLimpo, /\.chartlido\{[^}]*top:0/, 'a leitura já não se sobrepõe ao topo do desenho');
     assert.match(cssLimpo, /\.chartmolde\{visibility:hidden\}/, 'o molde guarda o lugar sem se ver');
     assert.match(cssLimpo, /\.chartlugar>\.chartlido:not\(\.chartmolde\)\{position:absolute/,
-      'a leitura fica por cima do molde, no lugar do pé, e não mexe na altura nem na largura');
+      'a leitura fica por cima do molde, no lugar da cabeça, e não mexe na altura nem na largura');
     const cb = /\.chartbox\{([^}]*)\}/.exec(cssLimpo);
     assert.ok(cb, 'a regra da caixa existe');
     assert.match(cb[1], /position:relative/);
