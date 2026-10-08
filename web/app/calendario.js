@@ -79,7 +79,8 @@ function calNav(delta){
 }
 
 /* As ocorrências dos movimentos planeados dentro de um intervalo de dias,
-   expandidas a partir do próximo vencimento de cada um com o passo dele.
+   expandidas a partir do próximo vencimento de cada um com o passo dele,
+   até ao fim do planeado (end), quando o tem.
    Os silenciados ficam de fora — no calendário como no cartão. O passo de cada
    um é dos Planeados (planeados.js:nextDate): com esse serviço desligado nesta
    conta não há ocorrências, e a lista sai vazia.
@@ -91,7 +92,8 @@ function calPlaneados(de,ate){
   (db.recurring||[]).forEach(r=>{
     if(!r.next||r.muted)return;
     let d=r.next,n=0;
-    while(d&&d<=ate&&n<40){
+    // o «Até» do planeado (r.end) também fecha a série: depois dele já não se repete
+    while(d&&d<=ate&&n<40&&!(r.end&&d>r.end)){
       if(d>=de)out.push({date:d,rec:r});
       if(r.every==='once')break;
       d=nextDate(d,r.every);n++;

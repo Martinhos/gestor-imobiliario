@@ -243,6 +243,29 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     assert.equal(ultimo(esp.folhas).titulo, 'Rui Dono');
   });
 
+  test('o meu perfil edita-se mas não se apaga: nem no formulário, nem na ficha, nem no toque longo; outro proprietário sem conta apaga-se', () => {
+    const { app, esp } = montar();
+    app.db.owners.push(app.normPerson({ id: 'o2', name: 'Sem Conta' }));
+    app.CW.user = { id: 'o1', name: 'Rui Dono', email: 'rui@exemplo.pt', token: 't' };
+    app.personModal('owner', 'o1');
+    assert.doesNotMatch(ultimo(esp.modais).menu, /Apagar|delPerson/, 'o formulário do meu perfil sem «Apagar»');
+    app.personView('owner', 'o1');
+    assert.doesNotMatch(ultimo(esp.modais).menu, /Apagar|delPerson/, 'a ficha também não');
+    app.lpMenu('per:owner:o1');
+    assert.ok(!ultimo(esp.folhas).labels.includes('Apagar'), ultimo(esp.folhas).labels.join(' | '));
+    assert.equal(app.personApagavel('owner', app.db.owners[0]), false);
+    // um proprietário com conta (ligado) também não: sai desfazendo a partilha
+    assert.equal(app.personApagavel('owner', Object.assign(app.normPerson({ id: 'u9', name: 'Ligado' }), { _userId: 'u9' })), false);
+    // controlo: um proprietário sem conta continua a ter o «Apagar»
+    app.personModal('owner', 'o2');
+    assert.match(ultimo(esp.modais).menu, /Apagar proprietário/);
+    app.lpMenu('per:owner:o2');
+    assert.ok(ultimo(esp.folhas).labels.includes('Apagar'));
+    // e um inquilino também
+    app.personModal('tenant', 't1');
+    assert.match(ultimo(esp.modais).menu, /Apagar inquilino/);
+  });
+
   /* A nuvem com sessão e estado: eu sou o dono do T2 Porto, com uma
      colaboradora, um cargo, um convite, a ligação de partilha ativa e um
      pedido recebido; e um imóvel onde sou eu o colaborador. */

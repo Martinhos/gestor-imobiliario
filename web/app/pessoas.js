@@ -15,6 +15,20 @@ function personEditavel(kind,p){
   if(kind==='tenant')return podeEditarInquilino(p);
   return !p._userId||!!(window.CW&&CW.user&&CW.user.id===p.id);
 }
+/* Posso apagar a ficha desta pessoa?
+
+   Como o «Editar», mas mais estreito: o meu perfil edita-se e não se apaga
+   (sou eu), e um proprietário com conta sai desfazendo a partilha, não
+   apagando a ficha — a nuvem recusava os dois com um aviso
+   (cloud/utilizadores.js:delPerson), e um botão que só serve para ouvir
+   «não podes» não se escreve.
+   Recebe: kind — 'tenant' ou 'owner'; p — a pessoa.
+   Devolve: true se o «Apagar» deve existir. */
+function personApagavel(kind,p){
+  if(!personEditavel(kind,p))return false;
+  if(kind==='tenant')return true;
+  return !p._userId&&!(window.CW&&CW.user&&CW.user.id===p.id);
+}
 /* O corpo da ficha de uma pessoa: o que se sabe sobre ela, para ler.
 
    Um inquilino e um proprietário partilham o formulário, mas lêem-se por
@@ -117,7 +131,7 @@ function personView(kind,id){
       }
       /* apagar um proprietário com conta não é apagar um registo meu: é
          mexer numa pessoa que o servidor volta a mandar no pull seguinte */
-      if(ok)it.push({label:kind==='owner'?'Apagar proprietário':'Apagar inquilino',
+      if(personApagavel(kind,p))it.push({label:kind==='owner'?'Apagar proprietário':'Apagar inquilino',
         icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${jsq(kind)}','${jsq(id)}')`});
       return it.length?menu('fichaPer',it):'';
     },
@@ -153,7 +167,7 @@ function personModal(kind,id,after,houseId){
   perForm=normPerson(orig?JSON.parse(JSON.stringify(orig)):null);
   if(!orig&&houseId&&kind==='tenant')perForm.houseId=houseId;
   const word=kind==='owner'?'proprietário':'inquilino';
-  const m=id?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${kind}','${id}')`}]):'';
+  const m=orig&&personApagavel(kind,orig)?menu('per',[{label:'Apagar '+word,icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${kind}','${id}')`}]):'';
   openModal((id?'Editar ':'Novo ')+word,personBody(),null,m);
   onSave=()=>{
     collectPerson();

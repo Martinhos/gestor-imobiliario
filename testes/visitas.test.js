@@ -64,6 +64,16 @@ describe('o calendário', () => {
     assert.equal(out.filter((o) => o.rec.id === 'R3').length, 0, 'silenciados fora');
   });
 
+  test('o «Até» do planeado (end) fecha a série: de 19 de outubro até 19 de fevereiro, março já não tem nada', () => {
+    monta();
+    app.db.recurring = [
+      { id: 'R1', name: 'Seguro', next: '2026-10-19', until: '', end: '2027-02-19', every: 'month', muted: false, tx: { kind: 'expense', amount: 30, propertyId: 'P1' } },
+    ];
+    const datas = app.calPlaneados('2026-10-01', '2027-06-30').map((o) => o.date);
+    assert.deepEqual(Array.from(datas), ['2026-10-19', '2026-11-19', '2026-12-19', '2027-01-19', '2027-02-19'], 'a última é a do dia do fim');
+    assert.equal(app.calPlaneados('2027-03-01', '2027-03-31').length, 0, 'março vazio');
+  });
+
   test('a grelha do mês marca visitas e planeados com pontos', () => {
     monta();
     app.calMes = '2026-09';

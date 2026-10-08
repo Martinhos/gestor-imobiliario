@@ -95,7 +95,7 @@ function lpPessoa(a){
   const ok=kind==='owner'||podeEditarInquilino(pp);
   const opts=ok?[{label:'Editar ficha',icon:'pen',act:()=>personModal(kind,pid)}]:[];
   lpExtrasDe('per',a).forEach(o=>opts.push(o));
-  if(ok)opts.push({label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)});
+  if(ok&&personApagavel(kind,pp))opts.push({label:'Apagar',icon:'trash',act:()=>delPerson(kind,pid)});
   return lpShow(pp.name,opts);
 }
 registarServico({id:'tenants',vistas:{tenants:'vTenants'},lp:{per:'lpPessoa'}});
