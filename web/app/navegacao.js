@@ -68,19 +68,6 @@ function gavetaGravar(){try{localStorage.setItem(LS_GAVETA,JSON.stringify(_gavet
    Recebe: rotulo — o label da secção (ex.: 'Finanças').
    Devolve: o id (string), ex.: 'gav-financas'. */
 function gavetaIdDe(rotulo){return 'gav-'+deacc(rotulo).replace(/[^a-z0-9]+/g,'-')}
-/* A gaveta está no rail do computador, só com ícones (body.rail)? Aí não há
-   títulos a ler nem secções a recolher: os ícones ficam todos à vista. Abaixo
-   de 900px o body.rail não vale — a gaveta é sempre a larga —, e quem o diz é
-   o próprio aside, como no openDrawer, para não haver dois sítios a saber
-   onde é o corte.
-   Devolve: true no rail; false na gaveta larga ou sem body.rail. */
-function gavetaNoRail(){
-  const b=document.body;
-  if(!b||!b.classList||!b.classList.contains('rail'))return false;
-  const gav=document.querySelector('aside');
-  const pos=gav&&typeof getComputedStyle==='function'?(getComputedStyle(gav)||{}).position:'';
-  return pos!=='fixed';
-}
 /* Quando se chega a um separador, a secção dele abre-se: nunca se fica num
    ecrã sem ver na gaveta onde se está. Vale para todos os caminhos — o go, a
    barra de baixo (goBarra), a página reposta ao recarregar
@@ -122,8 +109,7 @@ function gavetaCabeca(fechada,id){
 /* O HTML da gaveta, secção a secção (NAV_GROUPS), com o separador atual
    marcado e os crachás. As secções com título são um botão que recolhe
    (gavetaAlternar) e um contentor com os itens, que a CSS encolhe; as sem
-   título (as portas de cima e as Definições) ficam como sempre. No rail
-   (gavetaNoRail) os títulos voltam ao .navh de antes, sem botão. Uma
+   título (as portas de cima e as Definições) ficam como sempre. Uma
    secção sem separadores à vista desaparece com o título.
    O crachá do título vai no HTML mesmo com a secção aberta (a CSS
    esconde-o): assim recolher e abrir mudam só uma classe e um atributo, e o
@@ -131,11 +117,10 @@ function gavetaCabeca(fechada,id){
    Recebe: fora — ids dos separadores escondidos (os de separadoresEscondidos).
    Devolve: o HTML (string) para o #nav. */
 function gavetaHtml(fora){
-  const rail=gavetaNoRail();
   return NAV_GROUPS.map(g=>{const ids=g.ids.filter(id=>fora.indexOf(id)<0);if(!ids.length)return '';
     const itens=ids.map(id=>{const t=TABS.find(x=>x.id===id);
       return `<a class="${t.id===tab?'on':''}" tabindex="0" ${t.id===tab?'aria-current="page"':''} data-toca="ecra" data-click="go('${jsq(t.id)}')">${ic(t.icon)}<span class="txt">${t.label}</span>${crachaHtml(t.id,'gaveta')}</a>`}).join('');
-    if(!g.label||rail)return `<div class="navh">${g.label}</div>`+itens;
+    if(!g.label)return `<div class="navh">${g.label}</div>`+itens;
     const fechada=_gavetaFechadas.indexOf(g.label)>-1,id=gavetaIdDe(g.label);
     return `${gavetaCabeca(fechada,id)} data-toca="nada" data-click="gavetaAlternar('${jsq(g.label)}')">`+
       `<span class="txt">${g.label}</span>${gavetaCracha(ids,itens)}<span class="chev">${ic('chevD',14)}</span></button>`+
@@ -150,11 +135,10 @@ function gavetaHtml(fora){
    próxima pintura (a sincronização de fundo) ver que nada mudou e não
    recriar a gaveta debaixo do dedo. Troca-a por texto, e não pedindo o HTML
    outra vez: pintar de novo passava pelo cntNovo e gastava o pulso de um
-   crachá que ainda ninguém viu. No rail não faz nada: lá não há secções.
+   crachá que ainda ninguém viu.
    Recebe: rotulo — o label da secção (ex.: 'Finanças').
    Devolve: nada — grava as recolhidas e atualiza a secção no ecrã. */
 function gavetaAlternar(rotulo){
-  if(gavetaNoRail())return;
   const i=_gavetaFechadas.indexOf(rotulo),fechar=i<0,id=gavetaIdDe(rotulo);
   if(fechar)_gavetaFechadas.push(rotulo);else _gavetaFechadas.splice(i,1);
   gavetaGravar();

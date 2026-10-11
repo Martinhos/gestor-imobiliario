@@ -295,22 +295,6 @@ describe('o aparelho, o rail e a folha de estilos', () => {
     assert.deepEqual(JSON.parse(JSON.stringify(certa._gavetaFechadas)), ['Pessoas'], 'só rótulos');
   });
 
-  test('no rail do computador não há secções a recolher: os títulos são os de sempre e o toque não faz nada', () => {
-    const contem = app.document.body.classList.contains;
-    app.document.body.classList.contains = (c) => c === 'rail';
-    try {
-      app.gavetaAlternar('Finanças');
-      assert.equal(guardadas(), null, 'no rail o título não recolhe');
-      app.buildNav();
-      const html = nav();
-      assert.doesNotMatch(html, /navsec|<button/);
-      assert.match(html, /<div class="navh">Finanças<\/div>/);
-      assert.ok(idsDe(html).includes('fisco'), 'todos os ícones à vista');
-    } finally {
-      app.document.body.classList.contains = contem;
-    }
-  });
-
   test('a CSS: título com classe própria, altura por grid-template-rows com as variáveis da app, itens fora do Tab quando recolhidos, e o .navh de fora intacto', () => {
     assert.match(css, /\n\.navh\{font-size:10\.5px;letter-spacing:\.07em;text-transform:uppercase;color:var\(--side-muted\);padding:14px 12px 4px;opacity:\.85;white-space:nowrap\}/,
       'o .navh (também o dos «Pedidos por responder») não mudou');

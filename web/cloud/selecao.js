@@ -170,6 +170,13 @@ function selPintar() {
     var ids = selIdsDoMes(e.getAttribute('data-mes-box'));
     e.innerHTML = caixa(ids.length > 0 && ids.every(selTem), ids.some(selTem));
   });
+  patchHdrSel();
+}
+
+/* A caixa de tudo e a contagem, no cabeçalho (patchHdrSel): cheia com tudo
+   o que está à vista marcado, a meio com parte.
+   Devolve: nada — mexe no #selGlobal e no #selConta, se lá estiverem. */
+function selCabPintar() {
   var g = document.getElementById('selGlobal');
   if (g) {
     var ids = selIdsVisiveis();
@@ -177,7 +184,6 @@ function selPintar() {
   }
   var n = document.getElementById('selConta');
   if (n) n.textContent = selN() ? selN() + (selN() === 1 ? ' movimento' : ' movimentos') : 'nenhum movimento';
-  patchHdrSel();
 }
 
 // o HTML da caixa de marcar: cheia, vazia, ou a meio (parcial) com um traço
@@ -254,7 +260,6 @@ vTransactions = function () {
   if (!txLinhasPintadas) { CW.selMode = false; return html; }
   if (!CW.selMode) return html;
 
-  // a barra global fica colada ao topo, para se poder marcar tudo a meio da lista
   /* As ações descem para onde está o polegar: quem acabou de marcar linhas
      a meio da lista não tem de subir ao canto do ecrã. A barra de baixo
      substitui a de atalhos enquanto a seleção durar; o cabeçalho mantém o
@@ -266,13 +271,10 @@ vTransactions = function () {
       '<button type="button" class="btn" data-toca="camada" data-click="CW.selEditar()">' + ic('pen', 15) + ' Editar</button>' +
       '<button type="button" class="btn danger" data-toca="dados" data-risco="destroi" data-click="CW.selApagar()">' + ic('trash', 15) + ' Eliminar</button>' +
     '</div>';
-  var barra =
-    '<div class="sel-bar">' +
-      '<span class="selbox" id="selGlobal" data-toca="vista" data-click="CW.selTodos(event)">' + caixa(false) + '</span>' +
-      '<span class="u-fx-1 u-minw-0 u-cur-pointer" data-toca="vista" data-click="CW.selTodos(event)"><b id="selConta">nenhum movimento</b>' +
-      '<span class="small u-d-block">toca para marcar ou desmarcar tudo</span></span>' +
-    '</div>';
-  return barra + html + fundo;
+  /* A caixa de tudo e a contagem vivem no cabeçalho (patchHdrSel), no lugar
+     do título: numa barra por cima da lista empurravam-na ~64px para baixo
+     ao entrar, e puxavam-na ao sair. */
+  return html + fundo;
 };
 
 /* ------------------------------------------ o toque longo e o kebab da linha */
@@ -300,18 +302,34 @@ lpMenu = function (v) {
 
 /* ------------------------------------------------------- o botão do cabeçalho */
 
-/* Veste o botão do cabeçalho para a seleção: passa a "⋯" (as ações da
-   seleção), acende quando há marcas, e ganha um X ao lado para sair. Fora
-   da seleção só remove o X — o render normal repõe o resto.
-   Devolve: nada — mexe diretamente no botão do cabeçalho, no DOM. */
+/* Veste o cabeçalho para a seleção: o título dá lugar à caixa de tudo e à
+   contagem (#selCab — a CSS esconde o título com o body.sel-on), colados ao
+   topo como o cabeçalho, para se poder marcar tudo a meio da lista; o botão
+   passa a "⋯" (as ações da seleção), acende quando há marcas, e ganha um X
+   ao lado para sair. Fora da seleção remove o #selCab e o X — o render
+   normal repõe o resto.
+   Devolve: nada — mexe diretamente no cabeçalho, no DOM. */
 function patchHdrSel() {
   var hb = document.getElementById('hdrFilt');
   if (!hb) return;
-  var x = document.getElementById('selFechar');
+  var x = document.getElementById('selFechar'), cab = document.getElementById('selCab');
   if (!CW.selMode || tab !== 'transactions') {
     if (x) x.remove();
+    if (cab) cab.remove();
     return;
   }
+  var tit = document.getElementById('pageTitle');
+  if (!cab && tit && tit.parentNode) {
+    cab = document.createElement('div');
+    cab.id = 'selCab';
+    cab.className = 'sel-cab';
+    cab.innerHTML =
+      '<span class="selbox" id="selGlobal" data-toca="vista" data-click="CW.selTodos(event)">' + caixa(false) + '</span>' +
+      '<span class="u-fx-1 u-minw-0 u-cur-pointer" data-toca="vista" data-click="CW.selTodos(event)"><b id="selConta">nenhum movimento</b>' +
+      '<span class="small u-d-block">toca para marcar tudo</span></span>';
+    tit.parentNode.insertBefore(cab, tit);
+  }
+  selCabPintar();
   hb.style.display = '';
   hb.innerHTML = ic('dots', 18);
   hb.title = 'O que fazer com a seleção';
@@ -586,14 +604,13 @@ function selOpacidade(e) {
 
 /* Onde estão, antes do render, as peças que a mudança de modo mexe: o nome
    de cada mês (e o título dele, que pode subir ou descer), o corpo de cada
-   linha e — se se está a sair — as caixas e a barra de cima, que vão deixar
-   de existir. Em coordenadas do documento, como o continuidade.js:ondeEsta,
+   linha e — se se está a sair — as caixas, que vão deixar de existir. Em coordenadas do documento, como o continuidade.js:ondeEsta,
    para um scroll entre medir e aplicar não virar deslocamento.
    Devolve: {meses, corpos, caixas} — meses e corpos por chave (o mês, o id
    da linha), caixas uma lista de {el, x, y, w, h, op, dono}. */
 function selMedirDeslize() {
   var sy = window.pageYOffset || 0, m = { meses: {}, corpos: {}, caixas: [] };
-  // a caixa que sai, com o dono que ela acompanha ('' para a barra de cima)
+  // a caixa que sai, com o dono que ela acompanha
   var guardar = function (el, dono) {
     var r = el.getBoundingClientRect();
     if (selNoEcra(r)) m.caixas.push({ el: el, x: r.left, y: r.top + sy, w: r.width, h: r.height, op: selOpacidade(el), dono: dono });
@@ -610,16 +627,13 @@ function selMedirDeslize() {
     var cx = selModoPintado && e.querySelector('.selbox');
     if (cx) guardar(cx, 'tx:' + id);
   });
-  var barra = selModoPintado && document.querySelector('#view .sel-bar');
-  if (barra) guardar(barra, '');
   return m;
 }
 
 /* Põe uma caixa que o render deitou fora de volta no ecrã, onde estava, e
    deixa-a desvanecer — a ir com a linha ou o título de que era, que estão a
    deslizar para o sítio novo. É o mesmo nó (não um clone), na camada de
-   saída do continuidade.js, sem ids (o #selGlobal ia lá dentro) e surdo ao
-   toque.
+   saída do continuidade.js, sem ids e surdo ao toque.
    Recebe: c — {el, x, y, w, h, op} do selMedirDeslize; dy — quanto o dono
    se moveu (px, 0 se não se move); o — {dur, curva, durF}, os tempos.
    Devolve: nada — o nó sai do documento quando acaba de desvanecer. */
@@ -644,7 +658,8 @@ function selFantasma(c, dy, o) {
 
 /* Depois do render, numa microtarefa: cada peça volta ao sítio onde estava
    e desliza para o novo; ao entrar, as caixas e a barra aparecem; ao sair,
-   as que saíram desvanecem (selFantasma).
+   as que saíram desvanecem (selFantasma). A caixa de tudo, no cabeçalho,
+   entra com a animação da folha (estilos.css:.sel-cab).
    Recebe: antes — o selMedirDeslize de antes do render; entra — true ao
    entrar na seleção, false ao sair.
    Devolve: nada — só anima o que está à vista (continuidade.js:porPerto). */
@@ -684,9 +699,8 @@ function selAplicarDeslize(antes, entra) {
     if (Math.abs(dx) >= 1) c.animate([{ transform: 'translateX(' + dx + 'px)' }, { transform: 'none' }], { duration: o.dur, easing: o.curva });
   });
   if (entra) {
-    [].slice.call(document.querySelectorAll('#view .selbox, #view .sel-bar')).forEach(function (e) {
-      // a caixa de tudo vai dentro da barra: desvanecer as duas era desvanecer duas vezes
-      if (e.id === 'selGlobal' || !e.animate || !porPerto(e.getBoundingClientRect())) return;
+    [].slice.call(document.querySelectorAll('#view .selbox')).forEach(function (e) {
+      if (!e.animate || !porPerto(e.getBoundingClientRect())) return;
       e.animate([{ opacity: 0 }, { opacity: 1 }], { duration: o.durF, easing: o.curva });
     });
     return;
@@ -694,8 +708,8 @@ function selAplicarDeslize(antes, entra) {
   antes.caixas.forEach(function (c) {
     /* uma caixa cujo dono desapareceu (apagado) ou foi para longe sai sem
        fantasma: o que o dono tinha, a continuidade já o desvanece */
-    if (c.dono && !(c.dono in mexeu)) return;
-    selFantasma(c, c.dono ? mexeu[c.dono] : 0, o);
+    if (!(c.dono in mexeu)) return;
+    selFantasma(c, mexeu[c.dono], o);
   });
 }
 

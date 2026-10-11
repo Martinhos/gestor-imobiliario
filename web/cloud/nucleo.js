@@ -10,6 +10,14 @@ var LS_LIGACAO = 'gi_ligacao_url';   // + '_<id>': o URL da ligação permanente
 // 3 minutos entre leituras: com 90 segundos, uma app aberta o dia todo
 // sozinha consumia uma fatia enorme do plano gratuito da base de dados.
 var PULL_MS = 180000;
+/* Sem ninguém a mexer na app, as leituras espaçam-se: um separador esquecido
+   aberto numa conta grande gastava sozinho perto de um quinto das leituras
+   diárias da base. [inativo há mais de, ler de]: 10 min → de 10 em 10 min;
+   1 h → de 30 em 30 min. Ao voltar, o primeiro toque põe o ciclo de 30 s a
+   ler logo (já passou mais do que o PULL_MS). */
+var PULL_INATIVO = [[3600000, 1800000], [600000, 600000]];
+// a última vez que alguém tocou, escreveu ou rolou a app (marcarAtividade)
+var ultimaAtividade = Date.now();
 
 // O CW.state de quem ainda não recebeu nenhum estado: as listas todas com forma, vazias.
 // Devolve: um objeto novo com a forma do estado.
@@ -1305,8 +1313,9 @@ function aEscreverNumCampo() {
 
 /* Pede o estado ao servidor. Com condicional, manda o selo do último estado
    aplicado (If-None-Match): se nada mudou, o servidor responde 304 sem corpo
-   e poupa a leitura de todas as linhas — a maior despesa do plano, de três em
-   três minutos por aparelho aberto. A primeira leitura da página nunca é
+   e poupa a resposta e a reconstrução da base — mas não as leituras na D1: o
+   servidor lê as linhas todas antes de calcular o selo. O que poupa leituras
+   é ler menos vezes (intervaloDeLeitura). A primeira leitura da página nunca é
    condicional: o CW.state (cargos, ligações, pedidos) só vive em memória.
    Recebe: condicional — verdadeiro para mandar o selo, se o houver.
    Devolve: Promise com {estado, selo, resumo}, ou {naoMudou: true} num 304. */
@@ -1346,8 +1355,25 @@ function pullNow(force) {
   }).catch(function () { semLigacao = true; setSyncBadge('off'); fimDaEspera(); });
 }
 
-// Um ciclo: envia o que houver e, se a última leitura já passou PULL_MS e
-// nada está a ser editado, volta a ler.
+// Guarda o momento de um toque, de uma tecla ou de um scroll: é por ele que o
+// intervaloDeLeitura sabe se há alguém a usar a app.
+// Devolve: nada.
+function marcarAtividade() { ultimaAtividade = Date.now(); }
+
+/* De quanto em quanto tempo se lê o estado agora: o PULL_MS com alguém a
+   usar a app, mais espaçado quanto mais tempo ela estiver parada
+   (PULL_INATIVO).
+   Recebe: agora (opcional) — o instante, em ms (para os testes).
+   Devolve: o intervalo em ms. */
+function intervaloDeLeitura(agora) {
+  var parado = (agora || Date.now()) - ultimaAtividade;
+  for (var i = 0; i < PULL_INATIVO.length; i++) if (parado > PULL_INATIVO[i][0]) return PULL_INATIVO[i][1];
+  return PULL_MS;
+}
+
+// Um ciclo: envia o que houver e, se a última leitura já passou o intervalo
+// (intervaloDeLeitura) e nada está a ser editado, volta a ler. Com o
+// separador escondido só envia: ninguém está a ver, e voltar à frente lê.
 // Devolve: nada — dispara o push (e talvez o pull) e segue.
 function syncCycle() {
   if (!CW.user) return;
@@ -1355,7 +1381,8 @@ function syncCycle() {
   // se usar é velha demais para escrever (cloud/novidades.js:gateAtualizar)
   if (CW.trancado) return;
   pushNow().then(function () {
-    if (Date.now() - lastPull > PULL_MS && !modalStack.length && !aEscreverNumCampo()) pullNow();
+    if (document.hidden) return;
+    if (Date.now() - lastPull > intervaloDeLeitura() && !modalStack.length && !aEscreverNumCampo()) pullNow();
   });
 }
 
@@ -1392,7 +1419,10 @@ function startSync(pedido) {
   window.addEventListener('online', syncCycle);
   window.addEventListener('pagehide', despacharJa);
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) despacharJa(); else syncCycle();
+    if (document.hidden) despacharJa(); else { marcarAtividade(); syncCycle(); }
+  });
+  ['pointerdown', 'keydown', 'scroll'].forEach(function (ev) {
+    document.addEventListener(ev, marcarAtividade, { capture: true, passive: true });
   });
 }
 

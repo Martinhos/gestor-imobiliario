@@ -251,7 +251,7 @@ function dentroDaPagina() {
     const semMes = linhas.filter((l) => !l.getAttribute('data-mes'));
     if (semId.length) falhar('cada linha traz o seu id', semId.length + ' de ' + linhas.length + ' sem data-tx');
     if (semMes.length) falhar('cada linha sabe o seu mês', semMes.length + ' de ' + linhas.length + ' sem data-mes');
-    const selecao = !!document.querySelector('.sel-bar');
+    const selecao = !!document.querySelector('.sel-cab');
     if (selecao) {
       const semCaixa = linhas.filter((l) => !l.querySelector('.selbox'));
       if (semCaixa.length) falhar('em seleção, cada linha tem caixa', semCaixa.length + ' de ' + linhas.length + ' sem .selbox');
@@ -391,7 +391,7 @@ function dentroDaPagina() {
      o caminho visivel passa a ser a barra do fundo, com o Editar e o Eliminar.
      A regra dizia «um botao DENTRO da linha» quando queria dizer «um caminho
      visivel no ECRA» — e em selecao o ecra inteiro e outro. */
-  const emSelecao = !!document.querySelector('.sel-bar,.sel-fundo');
+  const emSelecao = !!document.querySelector('.sel-cab,.sel-fundo');
   const comGesto = emSelecao ? [] : [...document.querySelectorAll('#view [data-lp]')]
     .filter((e) => e.offsetParent);
   const semPortaVisivel = comGesto.filter((e) => !e.querySelector('button,[role=button],a[href]'));

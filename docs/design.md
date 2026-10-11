@@ -113,7 +113,7 @@ cabeçalho nasce transparente e só se acende com a página rolada
 componentes.js): no topo não há conteúdo por baixo dela para separar.
 --shadow (0 24px 60px
 rgba(0,0,0,.28) → .6) é a sombra dos menus e das janelas. --track, --rail
-264px, --rail-min 76px e os --inset-* da área segura fecham a lista.
+264px e os --inset-* da área segura fecham a lista.
 
 As semânticas são três classes, .pos, .neg e .amber (estilos.css:.pos), e
 valem em texto, KPIs e saldos. Os selos são .badge (marca), .badge.grey,
@@ -1359,7 +1359,7 @@ está suspenso e tem de o parecer. Acima dele ficam só o aviso (90) e o balão
 (95), que não escondem nada com que se possa interagir.
 
 **Centrado no ecrã, e não na área que sobra do menu.** A alternativa foi
-considerada e não vale: a largura do menu muda (`--rail` e `--rail-min`),
+considerada e não vale: a largura do menu muda (`--rail`),
 portanto um modal centrado no que sobra saltaria de sítio quando o menu
 encolhesse; no telemóvel não há menu nenhum, o que daria duas regras onde basta
 uma; e deixar a navegação à vista e por iluminar, ao lado de um modal aberto,
@@ -1473,7 +1473,12 @@ escrever o botão (espera.js:podeExemplo), e não depois, a apagá-lo do DOM.
 ## A sincronização: o que é daqui e o que é do servidor
 A app escreve no aparelho e sincroniza depois: cada gravação agenda um envio
 das diferenças para o retrato do que o servidor já tem (nucleo.js:pushNow), e
-de três em três minutos lê o estado (nucleo.js:pullNow). O retrato guarda um
+de três em três minutos lê o estado (nucleo.js:pullNow). Só com o separador à
+vista, e cada vez menos quando ninguém mexe na app — de dez em dez minutos
+depois de dez parada, de meia em meia hora depois de uma hora
+(nucleo.js:intervaloDeLeitura) —, porque cada leitura lê na D1 as linhas
+todas da conta, mesmo quando acaba num 304; o primeiro toque volta ao ritmo
+normal (nucleo.js:marcarAtividade). O retrato guarda um
 resumo de cada entidade, e não o JSON dela (nucleo.js:resumoDeTexto): com o
 JSON, o retrato chegava a passar de um terço da base.
 
@@ -1720,8 +1725,9 @@ Pessoas, Finanças (Movimentos, Planeados, Créditos, Declaração) e Análise
 há, que antes se perdiam no fim de seis Finanças); e ao fundo, outra vez sem
 título, as Definições. Nenhum separador repete o ícone de outro: a
 Avaliação e a Declaração deixaram o «file» e o escudo dos Colaboradores
-pelo «bars» e o «recibo» (icones.js:ic). As regras do rail do computador
-(estilos.css:body.rail) existem, mas nenhum código o liga hoje; abaixo de
+pelo «bars» e o «recibo» (icones.js:ic). Não há menu encolhido só com
+ícones: as regras dele vinham da primeira versão e nada as ligava, e
+saíram a 2026-10-11 — quem quer menos menu recolhe as secções. Abaixo de
 900px a gaveta vira gaveta com véu (estilos.css:aside e estilos.css:.scrim
 dentro de estilos.css:@media(max-width:900px)) e o foco entra nela ao abrir,
 no primeiro sítio alcançável e nunca num item recolhido
@@ -1750,8 +1756,7 @@ prazo — a cor do mais urgente, para um atraso nunca ficar escondido. O
 buildNav só reescreve o #nav quando o HTML mudou: corre a cada render, e a
 sincronização de fundo recriava a gaveta debaixo do dedo; o gavetaAlternar
 acerta a mesma secção no HTML guardado (navegacao.js:gavetaCabeca), para a
-pintura seguinte não ver diferença. No rail (navegacao.js:gavetaNoRail) não
-há secções a recolher.
+pintura seguinte não ver diferença.
 
 A barra de baixo tem quatro destinos, a um toque: visão geral («Geral»),
 movimentos, imóveis e calendário (navegacao.js:TABBAR,

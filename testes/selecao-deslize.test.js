@@ -42,7 +42,7 @@ function peca(r, o = {}) {
    ela (depois): o título é mais alto, o nome está ao meio e o corpo da linha
    foi empurrado pela caixa. Nós NOVOS a cada chamada, como o render faz.
    Recebe: sel — true para o ecrã em seleção.
-   Devolve: {nome, titulo, linha, corpo, caixaMes, caixaLinha, barra, global, todos(seletor)}. */
+   Devolve: {nome, titulo, linha, corpo, caixaMes, caixaLinha, todos(seletor)}. */
 function ecra(sel) {
   const titulo = peca(sel ? { x: 15, y: 364, w: 345, h: 56 } : { x: 15, y: 300, w: 345, h: 20 });
   const nome = peca(sel ? { x: 157.5, y: 384, w: 60, h: 16 } : { x: 15, y: 302, w: 60, h: 16 }, { attrs: { 'data-mes-nome': '2026-03' }, pai: titulo });
@@ -52,16 +52,14 @@ function ecra(sel) {
     { attrs: { 'data-tx': 'A' }, dentro: { '.txcorpo': corpo, '.selbox': caixaLinha } });
   const caixaMes = sel ? peca({ x: 15, y: 371, w: 140, h: 42 }, { attrs: { 'data-mes-box': '2026-03' } }) : null;
   titulo.querySelector = (s) => (s === '[data-mes-box]' ? caixaMes : null);
-  const global = sel ? peca({ x: 15, y: 70, w: 36, h: 42 }, { id: 'selGlobal' }) : null;
-  const barra = sel ? peca({ x: 15, y: 60, w: 345, h: 64 }) : null;
   const todos = (s) => {
     if (s === '#view [data-mes-nome]') return [nome];
     if (s === '#view .txrow[data-tx]') return [linha];
     if (s === '#view [data-mes-box]') return caixaMes ? [caixaMes] : [];
-    if (s === '#view .selbox, #view .sel-bar') return sel ? [caixaMes, caixaLinha, barra, global] : [];
+    if (s === '#view .selbox') return sel ? [caixaMes, caixaLinha] : [];
     return [];
   };
-  return { nome, titulo, linha, corpo, caixaMes, caixaLinha, barra, global, todos };
+  return { nome, titulo, linha, corpo, caixaMes, caixaLinha, todos };
 }
 
 /* Liga o ecrã falso à app: antes do render vê-se `antes`, e o render (o da
@@ -77,7 +75,7 @@ function ligar(antes) {
     return r;
   };
   app.document.querySelectorAll = (s) => estado.atual.todos(s);
-  app.document.querySelector = (s) => (s === '#view .sel-bar' ? estado.atual.barra : null);
+  app.document.querySelector = () => null;
   return { atual: () => estado.atual };
 }
 
@@ -107,16 +105,15 @@ describe('entrar na seleção', () => {
     assert.equal(nome.anims[0].op.easing, 'cubic-bezier(0,0,.2,1)', 'a --curva-entra');
   });
 
-  test('as caixas do mês e das linhas e a barra de cima aparecem a desvanecer; a caixa de tudo vai com a barra', async () => {
+  test('as caixas do mês e das linhas aparecem a desvanecer', async () => {
     const v = ligar(ecra(false));
     app.CW.selEntrar('A');
     await depoisDoRender();
-    const { caixaMes, caixaLinha, barra, global } = v.atual();
-    for (const [nomeDaPeca, e] of [['a caixa do mês', caixaMes], ['a caixa da linha', caixaLinha], ['a barra', barra]]) {
+    const { caixaMes, caixaLinha } = v.atual();
+    for (const [nomeDaPeca, e] of [['a caixa do mês', caixaMes], ['a caixa da linha', caixaLinha]]) {
       assert.deepEqual(passos(e), [['0', '1']], nomeDaPeca + ' aparece');
       assert.equal(e.anims[0].op.duration, 200, nomeDaPeca + ': no --medio');
     }
-    assert.equal(global.anims.length, 0, 'desvanecer a caixa e a barra que a leva era desvanecer duas vezes');
   });
 
   test('o corpo de cada linha abre espaço à caixa a deslizar, e o título desce com as linhas pela altura do nome', async () => {
@@ -135,10 +132,42 @@ describe('entrar na seleção', () => {
     app.CW.selEntrar('A');
     await depoisDoRender();
     const e = v.atual();
-    for (const p of [e.nome, e.titulo, e.corpo, e.caixaMes, e.caixaLinha, e.barra]) {
+    for (const p of [e.nome, e.titulo, e.corpo, e.caixaMes, e.caixaLinha]) {
       assert.deepEqual(Object.keys(p.style), [], 'style vazio');
       assert.ok(p.anims.every((a) => !a.op.fill), 'sem fill: no fim a animação desaparece e o sticky manda');
     }
+  });
+});
+
+describe('a caixa de tudo, no cabeçalho', () => {
+  test('a contagem e a caixa de tudo vão para o lugar do título, e a lista não leva barra por cima que a empurre', () => {
+    /* o getElementById do arnês inventa um elemento para qualquer id: aqui o
+       #selCab só existe depois de o cabeçalho o inserir antes do título */
+    const doc = app.document, porId = doc.getElementById;
+    let cab = null, saiu = false;
+    const titulo = porId('pageTitle');
+    titulo.parentNode = { insertBefore: (e, antes) => { if (antes === titulo) { cab = e; e.remove = () => { saiu = true; cab = null; }; } } };
+    doc.getElementById = (id) => (id === 'selCab' ? cab : porId(id));
+    try {
+      app.CW.selEntrar('A');
+      assert.doesNotMatch(app.vTransactions(), /sel-bar|selGlobal|selConta/, 'nada por cima da lista');
+      assert.ok(cab, 'o #selCab nasce no cabeçalho, antes do título');
+      assert.equal(cab.className, 'sel-cab');
+      assert.match(cab.innerHTML, /id="selGlobal"[^>]*data-click="CW\.selTodos\(event\)"/);
+      assert.match(cab.innerHTML, /id="selConta"/);
+      app.CW.selSair();
+      assert.ok(saiu, 'e sai com a seleção');
+    } finally {
+      doc.getElementById = porId;
+      titulo.parentNode = null;
+    }
+  });
+
+  test('a folha esconde o título em seleção e cola o título do mês logo abaixo do cabeçalho', () => {
+    const css = readFileSync(new URL('../web/estilos.css', import.meta.url), 'utf8');
+    assert.match(css, /body\.sel-on #pageTitle,body\.sel-on #pageSub\{display:none\}/);
+    assert.match(css, /\.section-title\.sel-mes\{position:sticky;top:calc\(57px \+ var\(--inset-top\)\)/);
+    assert.doesNotMatch(css, /\.sel-bar\{/);
   });
 });
 
@@ -150,7 +179,7 @@ describe('só na mudança de modo', () => {
     app.render();
     await depoisDoRender();
     const e = v.atual();
-    for (const p of [e.nome, e.titulo, e.corpo, e.caixaMes, e.caixaLinha, e.barra]) assert.equal(p.anims.length, 0);
+    for (const p of [e.nome, e.titulo, e.corpo, e.caixaMes, e.caixaLinha]) assert.equal(p.anims.length, 0);
     assert.equal(app.selModoPintado, true, 'o modo pintado continua a ser a seleção');
   });
 
@@ -159,13 +188,13 @@ describe('só na mudança de modo', () => {
     app.CW.selEntrar();                 // «Selecionar vários» sem nada marcado: o toque a seguir marca
     await depoisDoRender();
     const e = v.atual();
-    const antes = [e.nome, e.titulo, e.corpo, e.caixaMes, e.caixaLinha, e.barra].map((p) => p.anims.length);
+    const antes = [e.nome, e.titulo, e.corpo, e.caixaMes, e.caixaLinha].map((p) => p.anims.length);
     app.CW.selToggle('A');
     app.CW.selMes('2026-03');
     app.CW.selPintar();
     app.pintarListaTx();
     await depoisDoRender();
-    assert.deepEqual([e.nome, e.titulo, e.corpo, e.caixaMes, e.caixaLinha, e.barra].map((p) => p.anims.length), antes);
+    assert.deepEqual([e.nome, e.titulo, e.corpo, e.caixaMes, e.caixaLinha].map((p) => p.anims.length), antes);
     assert.ok(e.caixaLinha.innerHTML.includes('selck on'), 'e a marca pintou-se à mesma');
   });
 
@@ -216,12 +245,12 @@ describe('sair da seleção', () => {
     await depoisDoRender();
     const sel = v.atual();
     // o que cada caixa já tinha da entrada (o aparecer); o que conta é o que vem a seguir
-    const daEntrada = new Map([sel.caixaMes, sel.caixaLinha, sel.barra].map((c) => [c, c.anims.length]));
+    const daEntrada = new Map([sel.caixaMes, sel.caixaLinha].map((c) => [c, c.anims.length]));
     const daSaida = (c) => ({ anims: c.anims.slice(daEntrada.get(c)) });
     app.CW.selSair();
     await depoisDoRender();
     const camada = app.document.getElementById('saidas');
-    for (const c of [sel.caixaMes, sel.caixaLinha, sel.barra]) {
+    for (const c of [sel.caixaMes, sel.caixaLinha]) {
       assert.ok(camada.children.includes(c), 'o mesmo nó, na camada de saída');
       assert.equal(c.style.position, 'fixed');
       assert.equal(c.style.pointerEvents, 'none', 'surdo ao toque');
@@ -233,7 +262,6 @@ describe('sair da seleção', () => {
     // a caixa da linha sobe com a linha (420 → 340: 80px); a do mês com o nome (392 → 310)
     assert.deepEqual(passos(daSaida(sel.caixaLinha))[0], ['none', 'translateY(-80px)'], 'a linha sobe 80px ao sair');
     assert.deepEqual(passos(daSaida(sel.caixaMes))[0], ['none', 'translateY(-82px)']);
-    assert.equal(daSaida(sel.barra).anims.length, 1, 'a barra não tem dono: só desvanece');
   });
 
   test('sair a meio de uma entrada e voltar a entrar: parte de onde a peça está, e os fantasmas da saída vão-se já', async () => {
@@ -261,7 +289,7 @@ describe('sair da seleção', () => {
     app.CW.selSair();
     await depoisDoRender();
     const fora = v.atual();
-    for (const p of [sel.nome, sel.titulo, sel.corpo, sel.caixaMes, sel.caixaLinha, sel.barra, fora.nome, fora.titulo, fora.corpo]) {
+    for (const p of [sel.nome, sel.titulo, sel.corpo, sel.caixaMes, sel.caixaLinha, fora.nome, fora.titulo, fora.corpo]) {
       assert.equal(p.anims.length, 0);
       assert.deepEqual(Object.keys(p.style), []);
     }

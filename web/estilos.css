@@ -9,7 +9,7 @@
   --danger:#b94a48; --danger-soft:#f7e8e7; --warn:#9a6400; --warn-soft:#f6eeda;
   --side:#1a3a2c; --side-ink:#dfece6; --side-muted:#9dbdae; --side-hover:rgba(255,255,255,.07); --side-on:rgba(255,255,255,.13);
   --track:#dfe3e1; --blur:rgba(247,248,250,.94); --shadow:0 24px 60px rgba(0,0,0,.28);
-  --rail:264px; --rail-min:76px;
+  --rail:264px;
   /* Movimento: uma só escala de durações e duas curvas, citadas por toda a
      folha, para nada aqui ser um número escolhido à sorte. --curva arranca
      depressa e chega devagar — é a de quem entra em cena; --curva-sai faz o
@@ -79,25 +79,19 @@ button,input,select,textarea{font:inherit;color:inherit}
 
 .app{display:flex;min-height:100%}
 aside{width:var(--rail);flex:0 0 var(--rail);background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;height:100dvh;transition:width var(--medio) var(--curva-entra),flex-basis var(--medio) var(--curva-entra),transform var(--medio) var(--curva-sai);z-index:62}
-body.rail aside{width:var(--rail-min);flex-basis:var(--rail-min)}
 .brand{display:flex;align-items:center;gap:11px;padding:calc(18px + var(--inset-top)) 18px 14px;min-height:60px}
 .brand .mark{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.12);display:grid;place-items:center;flex:0 0 34px}
 .brand b{font-size:15px;letter-spacing:-.01em;display:block;white-space:nowrap}
 .brand small{color:var(--side-muted);font-size:11px;white-space:nowrap}
-body.rail .brand .txt{display:none}
 nav{display:grid;gap:2px;padding:8px 10px;flex:1;align-content:start;overflow:auto}
 nav a{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:11px;color:var(--side-muted);cursor:pointer;white-space:nowrap;position:relative}
 nav a svg{flex:0 0 20px}
 nav a:hover{background:var(--side-hover);color:#fff}
 nav a.on{background:var(--side-on);color:#fff;font-weight:600}
 nav a.on::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--side-ink)}
-body.rail nav a .txt{display:none}
-body.rail nav a{justify-content:center;padding:11px 0}
 .railfoot{padding:10px 10px calc(10px + var(--inset-bottom));border-top:1px solid rgba(255,255,255,.09)}
 .railbtn{width:100%;display:flex;align-items:center;gap:12px;background:transparent;border:0;color:var(--side-muted);padding:10px 12px;border-radius:11px;cursor:pointer;text-align:left}
 .railbtn:hover{background:var(--side-hover);color:#fff}
-body.rail .railbtn{justify-content:center;padding:10px 0}
-body.rail .railbtn .txt{display:none}
 /* O véu acompanha a gaveta em vez de chegar inteiro no primeiro frame: a
    mesma duração e a mesma curva do aside, aqui em cima. O display fica de fora
    de propósito — com opacity:0 e display:block o véu continuava a apanhar os
@@ -125,9 +119,6 @@ header.top .sub{color:var(--muted);font-size:12px;margin-top:2px}
   aside{position:fixed;left:0;top:0;transform:translateX(-100%);width:var(--rail);flex-basis:var(--rail)}
   body.open aside{transform:none;box-shadow:0 0 40px rgba(0,0,0,.4);
     transition:width var(--medio) var(--curva-entra),flex-basis var(--medio) var(--curva-entra),transform var(--medio) var(--curva-entra)}
-  body.rail aside{width:var(--rail);flex-basis:var(--rail)}
-  body.rail .brand .txt,body.rail nav a .txt,body.rail .railbtn .txt{display:block}
-  body.rail nav a,body.rail .railbtn{justify-content:flex-start;padding:11px 12px}
   body.open .scrim{opacity:1;visibility:visible;transition:opacity var(--medio) var(--curva-entra),visibility 0s}
   .burger{display:inline-flex;align-items:center;justify-content:center}
   .wrap{padding:14px calc(15px + var(--inset-right)) calc(44px + var(--inset-bottom)) calc(15px + var(--inset-left))}
@@ -156,7 +147,7 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
    elemento: o tornarFocavel carimba role="button" em tudo o que tem onclick,
    e é por aí que se apanha também o que ainda não existe. O que se copia — o
    IBAN, as notas, os valores das fichas — não tem onclick nenhum. */
-[role="button"],.section-title,.selbox,.sel-bar{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+[role="button"],.section-title,.selbox,.sel-cab{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .grid{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(158px,1fr))}
 .cols{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));margin-top:14px}
 .kpi .label{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
@@ -1119,9 +1110,15 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
 .selck.meio i{width:10px;height:2.5px;border-radius:2px;background:var(--accent);display:block}
 .txrow.sel-on{border-color:var(--accent);background:var(--tint)}
 /* o mês e o global acompanham o scroll: sem isso, a meio de uma lista longa
-   deixava de haver como marcar tudo sem voltar ao topo */
-.sel-bar{position:sticky;top:calc(57px + var(--inset-top));z-index:26;display:flex;align-items:center;gap:2px;background:var(--bg);padding:10px 0;margin:-4px 0 6px;box-shadow:0 8px 10px -10px rgba(0,0,0,.3)}
-.section-title.sel-mes{position:sticky;top:calc(114px + var(--inset-top));z-index:25;background:var(--bg);align-items:center;padding:7px 0;margin-top:14px;cursor:pointer}
+   deixava de haver como marcar tudo sem voltar ao topo. O global vive no
+   cabeçalho, no lugar do título (cloud/selecao.js:patchHdrSel) — numa barra
+   por cima da lista empurrava-a ~64px ao entrar na seleção. Entra a
+   desvanecer, em @keyframes por ser um nó acabado de inserir. */
+.sel-cab{display:flex;align-items:center;min-width:0;animation:veuEntra var(--medio) var(--curva-entra) backwards}
+.sel-cab .selbox{padding:0 10px 0 0}
+.sel-cab .small{margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.sel-on #pageTitle,body.sel-on #pageSub{display:none}
+.section-title.sel-mes{position:sticky;top:calc(57px + var(--inset-top));z-index:25;background:var(--bg);align-items:center;padding:4px 0;margin-top:9px;cursor:pointer}
 /* o nome do mês ao meio do título, e não ao meio do que sobra: com três
    filhos em space-between ficava entre a caixa e o saldo, que não têm a
    mesma largura — 10 a 20px ao lado, conforme o saldo. A caixa e o saldo
@@ -1132,6 +1129,10 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
    para o toque, que é também o que o título inteiro faz. */
 .section-title.sel-mes .selbox,.section-title.sel-mes .txnet{flex:1 1 0}
 .section-title.sel-mes .selbox{padding-left:0;padding-right:0}
+/* Sem padding em altura: a caixa (22px) mais os 4px do sticky e os 9px de
+   cima dão os mesmos 39px do título fora da seleção (17px de letra e 22px
+   de margem), e a lista não desce ao entrar. O toque é o do título inteiro. */
+.section-title.sel-mes .selbox{padding-top:0;padding-bottom:0}
 .section-title.sel-mes .selck{margin-left:2px}
 .section-title.sel-mes .txnet{text-align:right}
 /* o kebab de cada linha, discreto até se lhe tocar */
