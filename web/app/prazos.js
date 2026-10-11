@@ -18,13 +18,25 @@
    a cessação até ao fim do mês seguinte ao fim), o recibo eletrónico de
    cada renda (até ao fim do mês seguinte), a entrega do Anexo F e a
    comunicação de fevereiro dos contratos com redução de taxa pela duração —
-   estas duas com as datas da versão do ano (irs-AAAA.js). Um contrato que o
+   estas duas com as datas da versão do ano (irs-AAAA.js); a comunicação de
+   fevereiro cala-se num contrato que já a tem marcada (irsComunicado). E o
+   envio ao IHRU dos contratos do RSAA (15 de janeiro do ano seguinte à
+   celebração), e o Modelo 44 de quem está dispensado do recibo eletrónico
+   (db.settings.irs.dispensaRecibos, escolhido na página Declaração) — que, por
+   isso mesmo, deixa de ser avisado dos recibos por emitir. Um contrato que o
    senhorio marcou como «não declarado» é uma escolha dele: nenhum destes
    prazos nasce dele, e nenhum texto o julga. */
 
 // dias de antecedência com que cada tipo de prazo começa a avisar
 const PZ_ANTECEDENCIA = { oposicao: 150, fim: 60, aumento: 45, cc: 60, energia: 90, taxa: 90,
-  modelo2: 45, cessacao: 45, recibos: 40, irs: 90, fev15: 45 };
+  modelo2: 45, cessacao: 45, recibos: 40, irs: 90, fev15: 45, rsaa: 45, modelo44: 45 };
+
+/* O Modelo 44 (a declaração anual das rendas de quem está dispensado do recibo
+   eletrónico, CIRS art. 115.º n.º 5 b)) entrega-se até ao fim de fevereiro
+   desde o DL 49/2025, em vigor a 1 de julho de 2025 — antes era até ao fim de
+   janeiro (Portaria 98-A/2015, art. 8.º). Conta o dia do prazo: o fim de
+   fevereiro de 2026 já é depois dessa data, o fim de janeiro de 2025 não. */
+const PZ_MODELO44 = { fevereiroDesde: '2025-07-01' };
 
 /* Uma data local como 'AAAA-MM-DD', sem passar pelo toISOString: esse
    converte para UTC e, com o horário de verão, meia-noite local vira o dia
@@ -92,7 +104,10 @@ function pzMes(iso){
    início), a cessação dos declarados que terminaram (fim do mês seguinte ao
    fim), os recibos por emitir das rendas dos últimos três meses (fim do mês
    seguinte à renda), o Anexo F do ano anterior (30 de junho) quando houve
-   rendas, e o 15 de fevereiro dos declarados com taxa reduzida. Nada disto
+   rendas, o 15 de fevereiro dos declarados com taxa reduzida que ainda não
+   têm a comunicação desse ano marcada, o envio ao IHRU dos contratos do RSAA
+   e, com a dispensa do recibo eletrónico ligada, o Modelo 44 do ano anterior
+   quando houve rendas (e então nenhum recibo por emitir). Nada disto
    nasce de um contrato «não declarado». O `hoje` manda em tudo, incluindo
    no «ano anterior» e nos «últimos três meses».
 
@@ -128,7 +143,7 @@ function prazosDe(hoje){
       poe('oposicao',c.id+':'+c.end,oposicao,'Oposição à renovação — '+nome,
         'Para o contrato não renovar a '+dPT(c.end)+', o aviso ao inquilino tem de seguir até '+dPT(oposicao)+' (120 dias).',abrir,false);
       poe('fim',c.id+':'+c.end,c.end,'Fim do prazo do contrato — '+nome,
-        'Termina a '+dPT(c.end)+'. Sem oposição, renova-se automaticamente pelo período legal — atualiza o fim para o novo prazo.',abrir,true);
+        'Termina a '+dPT(c.end)+'. Sem oposição, renova-se automaticamente pelo período legal — regista a renovação na ficha do contrato («Renovar…»).',abrir,true);
     }
     if(c.increase!=null&&c.start){
       const aniv=pzAniversario(c.start,h);
@@ -144,6 +159,10 @@ function prazosDe(hoje){
      referência (Y) é o anterior ao de `hoje`: é o que se entrega em junho e o
      que se comunica em fevereiro. */
   const ano=Number(h.slice(0,4)),Y=ano-1,vY=irsAno(Y);   // as datas da AT são da versão desse ano (irs-AAAA.js)
+  /* a escolha da página Declaração: dispensado do recibo eletrónico (65 anos
+     ou mais, ou sem caixa postal eletrónica e com poucas rendas). Pode não
+     haver db.settings.irs nenhum */
+  const dispensa=!!(db.settings&&db.settings.irs&&db.settings.irs.dispensaRecibos===true);
   const nomeDe=c=>c.name||propName(c.propertyId)||'contrato';
   /* vivo em `hoje` (e não no dia real, como o ctVivo): um contrato que já
      terminou não pede o Modelo 2 do início */
@@ -158,7 +177,7 @@ function prazosDe(hoje){
     /* uma renda sem contrato (ou de contrato entretanto apagado) é renda na
        mesma: conta para o Anexo F, e a página Declaração lista-a à parte */
     if(t.date.slice(0,4)===String(Y)){houveRendasEmY=true;if(c)comRendasEmY[c.id]=1}
-    if(c&&ctDeclarado(c)&&!t.recibo&&t.date>=desde){
+    if(c&&ctDeclarado(c)&&!dispensa&&!t.recibo&&t.date>=desde){
       const alvo=fimDoMesSeguinte(t.date);
       poe('recibos',t.id+':'+alvo,alvo,'Recibo de renda por emitir — '+nomeDe(c),
         'Renda de '+pzMes(t.periodo||t.date)+' recebida a '+dPT(t.date)+': emite o recibo eletrónico no Portal das Finanças e marca-o no movimento.',
@@ -174,6 +193,20 @@ function prazosDe(hoje){
         'Até '+dPT(alvo)+', o fim do mês seguinte ao início. Com ele paga-se o imposto do selo (10 % de uma renda), que é dedutível no Anexo F: regista-o como despesa. Se já o comunicaste, ou se não vais declarar este contrato, marca-o na ficha e este aviso desaparece.',
         abrir,true);
     }
+    /* RSAA (anexo III do DL 97/2026, art. 6.º n.º 3): a cópia do contrato vai à
+       plataforma do IHRU até 15 de janeiro do ano seguinte ao da celebração —
+       sem isso não há isenção. Também por indicar (o Modelo 2 pode ainda
+       vir antes do dia). Só os celebrados desde que o regime existe (o
+       `desde` da isenção na versão do ano da celebração); passado o dia, já não
+       há o que fazer, e o aviso cala-se */
+    const cel=fiscoDe(c).celebracao||c.start||'';
+    const rs=fiscoDe(c).isencao==='rsaa'&&c.active!==false&&/^\d{4}-/.test(cel)?irsIsencao(c,Number(cel.slice(0,4))):null;
+    if(rs&&rs.prazoIhru&&(!rs.desde||cel>=rs.desde)){
+      const alvo=(Number(cel.slice(0,4))+1)+'-'+rs.prazoIhru;
+      poe('rsaa',c.id+':'+alvo,alvo,'Enviar o contrato ao IHRU (RSAA) — '+nome,
+        'Até '+dPT(alvo)+', a cópia do contrato e o comprovativo da comunicação às Finanças vão à plataforma do IHRU. Sem isto as rendas não ficam isentas de IRS. Depois de enviar, silencia este aviso.',
+        abrir,false);
+    }
     if(!ctDeclarado(c))return;
     if(c.end&&(c.end<h||c.active===false)){
       const alvo=fimDoMesSeguinte(c.end);
@@ -184,13 +217,21 @@ function prazosDe(hoje){
     /* só a redução pela duração (art. 72.º) pede esta comunicação; a taxa
        das rendas moderadas (EBF art. 45.º-C) não — era «taxa abaixo de 25»,
        e com os 10 % de 2026 acendia em quase todos os contratos */
-    if(irsTaxa(c,Y).reducao&&comRendasEmY[c.id]){
+    if(irsTaxa(c,Y).reducao&&comRendasEmY[c.id]&&!irsComunicado(c,Y)){
       const alvo=vY.prazos.comunicacaoDuracao;
       poe('fev15',c.id+':'+alvo,alvo,'Comunicar a duração do contrato à AT — '+nome,
-        'Nos contratos com redução de taxa pela duração, até '+dPT(alvo)+' comunica-se no Portal das Finanças o contrato, a duração e as renovações. Sem isto perde-se a redução.',
+        'Nos contratos com redução de taxa pela duração, até '+dPT(alvo)+' comunica-se no Portal das Finanças o contrato, a duração e as renovações. Sem isto perde-se a redução. Depois de comunicar, marca-o na ficha do contrato e este aviso desaparece.',
         abrir,true);
     }
   });
+  /* o Modelo 44: só para quem a página Declaração diz estar dispensado do
+     recibo eletrónico, e só quando houve rendas no ano anterior */
+  if(dispensa&&houveRendasEmY){
+    const fev=pzIso(new Date(ano,2,0)),alvo=fev>=PZ_MODELO44.fevereiroDesde?fev:ano+'-01-31';
+    poe('modelo44',String(Y),alvo,'Modelo 44 — as rendas de '+Y,
+      'Quem está dispensado do recibo de renda eletrónico entrega, até '+dPT(alvo)+', a declaração anual das rendas (Modelo 44) no Portal das Finanças: as rendas recebidas em '+Y+', discriminadas. É ela que faz as vezes dos recibos que não se emitiram.',
+      servicoLigado('fisco')?"go('fisco')":'',true);
+  }
   if(houveRendasEmY){
     const alvo=vY.entrega.ate;
     poe('irs',String(Y),alvo,'Entregar o IRS — Anexo F de '+Y,

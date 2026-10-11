@@ -28,7 +28,7 @@ var FUNCIONALIDADES = {
 var AVISOS = [
   {
     v: 39,
-    data: '2026-10-08',
+    data: '2026-10-12',
     titulo: 'A Declaração segue as regras de cada ano',
     seccoes: [
       {
@@ -57,6 +57,32 @@ var AVISOS = [
           'Só contam os gastos pagos com o imóvel arrendado — o condomínio de um mês em que a casa estava vazia fica fora, e a página diz quantos ficaram. O IMI e o imposto do selo contam sempre no ano em que o imóvel deu rendas.',
           'Uma renda de um ano anterior recebida este ano aparece à parte, para o quadro 8; e um contrato que começou no ano sem o imposto do selo nos gastos é lembrado, porque é dedutível.',
           'À cabeça, o rendimento líquido e o imposto estimado, à taxa de cada contrato, com as retenções já pagas descontadas.',
+        ],
+      },
+      {
+        titulo: 'O contrato diz ao IRS o que as datas não dizem',
+        afeta: ['contratos'],
+        itens: [
+          'Renova um contrato pelo «Renovar…» da ficha e a renovação fica guardada, com o fim novo; mudar a data de fim no formulário pergunta se é uma renovação ou uma correção.',
+          'Marca na ficha a comunicação de fevereiro como feita, e o aviso desse ano desaparece.',
+          'Indica a isenção do contrato (PAA, RSAA, programas municipais) e, nos contratos desde 2024, se a renda passa o limite do concelho ou é mais baixa do que a do contrato anterior — a taxa estimada acompanha.',
+          'Com o RSAA, a app lembra o envio ao IHRU até 15 de janeiro; com a dispensa dos recibos eletrónicos, lembra o Modelo 44.',
+        ],
+      },
+      {
+        titulo: 'A Declaração sabe a tua situação',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'Diz no cartão «A tua situação» se entregas em conjunto (e quem é o titular A ou B) e se estás dispensado dos recibos: cada linha mostra o titular, e as Obrigações ganham o Modelo 44.',
+          'Os quadros 4.2B, 4.2C, 6D e 9 (AIMI) aparecem quando se aplicam, e o 4.2A diz contrato a contrato se a comunicação de fevereiro foi feita.',
+          'Escreve os outros rendimentos do agregado e a página simula se compensa englobar as rendas.',
+        ],
+      },
+      {
+        titulo: 'Selecionar movimentos sem a lista saltar',
+        afeta: ['movimentos'],
+        itens: [
+          'Ao selecionar vários movimentos, a contagem e o «marcar tudo» vão para o cabeçalho, e a lista fica onde estava.',
         ],
       },
     ],

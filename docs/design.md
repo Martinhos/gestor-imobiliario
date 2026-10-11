@@ -44,6 +44,8 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Um contrato tem três estados
 - A Declaração resume, não declara
 - As regras do IRS têm uma versão por ano
+- O que o contrato diz ao IRS para lá das datas
+- A Declaração sabe a tua situação
 - Segurar não é selecionar
 - Entrar na seleção é um deslize, não uma troca
 - A fita da barra de baixo
@@ -1162,6 +1164,72 @@ escrevem anos — dizem {ano} e {ate}, que o fisco.js:fiscoGuiaCard troca —
 para a cópia não arrastar anos velhos. O testes/irs-anos.test.js confere cada
 versão, o registo dela e o próprio guião, numa cópia da árvore.
 
+## O que o contrato diz ao IRS para lá das datas
+A taxa de um contrato não sai só das datas e da renda: sai também de quatro
+respostas que a pessoa dá no bloco fiscal (dados.js:normFisco). A isenção
+(`isencao`: PAA, RSAA, programa municipal ou de alojamento estudantil) vem
+antes de tudo — 0 % (irs.js:irsTaxa, irs.js:irsIsencao), na linha do 4.1 e
+com o quadro 6D a apontar para ela; a lista das isenções, com o código e a
+explicação, é da versão do ano (`isencoes` no irs-2026.js), e o RSAA não
+existe antes de 2026. Num contrato celebrado desde 2024, a renda acima de
+150 % do limite do concelho faz perder a redução pela duração (CIRS art. 72.º
+n.º 23) e a renda pelo menos 5 % abaixo da do contrato anterior dá mais 5
+pontos no período inicial (n.º 24); os números vivem na versão
+(`taxas.limiteRendaAlta` e `taxas.bonusRendaMenor`), o motor só os lê
+(irs.js:irsReducao), e o formulário só pergunta quando a resposta conta
+(contrato.js:ctN23Visivel). A app não tem as tabelas dos limites por
+concelho: pergunta, e por indicar conta-se a redução.
+
+Uma renovação regista-se, não se escreve por cima: o «Renovar…» da ficha
+(contrato.js:ctRenovar) e a pergunta do formulário quando o fim anda para a
+frente (contrato.js:ctFimPergunta) juntam a renovação ao histórico e levam o
+fim do contrato com ela; o período inicial acaba na véspera da primeira
+renovação (irs.js:irsPeriodos), para o escalão de cada período ser o dele.
+
+Os avisos da AT calam-se quando a coisa está feita, e não só silenciados: a
+comunicação de fevereiro de cada ano marca-se na ficha
+(contrato.js:ctMarcarComunicada, irs.js:irsComunicado) e o prazo desse ano
+desaparece. A dispensa do recibo eletrónico troca os avisos de recibos pelo
+Modelo 44 (prazos.js:prazosDe), e o RSAA traz o envio ao IHRU até 15 de
+janeiro do ano seguinte à celebração.
+
+## A Declaração sabe a tua situação
+O que só o senhorio sabe vive nas definições, em `db.settings.irs`, e muda-se
+no cartão «A tua situação», logo abaixo do cartão do ano
+(fisco.js:fiscoSituacaoCard): a tributação conjunta, a letra de cada
+proprietário (A ou B), a dispensa dos recibos eletrónicos e os outros
+rendimentos coletáveis do agregado por ano. Vai com as definições para o
+servidor, e uma base antiga ganha-o completo (dados.js:normIrsDefs) — sempre
+um objeto novo, nunca o do blank, que a nuvem copia por referência.
+
+- Titular. Sem conjunta é sempre A (cada um entrega o seu Anexo F). Em
+  conjunta, cada linha leva a letra do titular escolhido no painel; sem
+  titular, as letras dos donos do imóvel («A/B» num imóvel dos dois, que no
+  Portal vai em duas linhas) (fisco.js:fiscoTitularDe).
+- Isentos (6D). Um contrato isento fica na linha do 4.1, porque as
+  instruções do 6D pedem o campo do 4.1 onde o imóvel foi identificado, com
+  imposto zero; as rendas contam nas rendas e nos gastos do quadro, mas não no
+  líquido nem no imposto — vão a `totais.isentos`, que o englobamento usa só
+  para a taxa (fisco.js:fiscoIsentosCard).
+- AIMI (9). Nunca é gasto. A página soma o AIMI pago no ano e estima a parte
+  que abate ao imposto: a do VPT dos prédios com rendas sobre o VPT de todos
+  os urbanos, até ao imposto das rendas (fisco.js:fiscoAimi). Sem o VPT de um
+  prédio, não estima — diz qual falta.
+- 4.2A, 4.2B e 4.2C. Contrato a contrato, a comunicação de fevereiro
+  (comunicada a dd/mm/aaaa, ou por comunicar); os contratos com a descida do
+  n.º 24, com as duas rendas; e a resposta do 4.2C só quando todos os
+  contratos celebrados desde 2024 estão confirmados dentro do limite
+  (fisco.js:fiscoReducoesHtml).
+- Englobamento (6G). Os escalões de cada ano vivem na versão
+  (`englobamento`, com a fonte ao lado). A simulação compara o imposto à taxa
+  especial com o que as rendas acrescentam aos outros rendimentos pelos
+  escalões, com o quociente conjugal em conjunta (fisco.js:fiscoColeta,
+  fisco.js:fiscoEnglobamento). É uma estimativa e di-lo: sem deduções à
+  coleta, sem mínimo de existência.
+- Modelo 44. Com a dispensa dos recibos ligada, as rendas sem recibo deixam
+  de ser falta e as Obrigações ganham a linha do Modelo 44 com o prazo (fim
+  de fevereiro desde as rendas de 2025; fisco.js:fiscoPrazoModelo44).
+
 ## Segurar não é selecionar
 A lista dos movimentos mexe-se por baixo do dedo: o toque longo entra em modo
 de seleção, nasce uma barra acima de tudo e o título do mês cresce e cola-se
@@ -1183,7 +1251,8 @@ saltava da esquerda para o meio de um fotograma para o outro, as caixas
 apareciam já feitas e o texto de cada linha dava um pulo para a direita. O
 Martinho pediu o deslize: o nome do mês desliza do sítio onde estava até ao
 meio do título, o corpo de cada linha abre espaço à caixa a deslizar, e as
-caixas (e a barra de cima, que leva a caixa de tudo) aparecem a desvanecer.
+caixas aparecem a desvanecer; a caixa de tudo e a contagem entram no
+cabeçalho, no lugar do título (selecao.js:patchHdrSel, estilos.css:.sel-cab).
 Ao sair, o caminho inverso: o nome volta à esquerda e as caixas que saíram
 desvanecem no lugar onde estavam, a acompanhar a linha ou o título de que
 eram (selecao.js:selFantasma, na camada de saída da continuidade,
@@ -1216,11 +1285,14 @@ O nome do mês fica mesmo ao meio do título, e não ao meio do que sobra: a
 caixa e o saldo repartem o resto por igual (estilos.css:.txnet), sem padding
 de lado na caixa, que o flex-basis 0 não conta. E os indicadores e os
 cartões das contas vão numa peça com chave (lista-movimentos.js:vTransactions,
-data-fk="txresumo"): a barra da seleção empurra tudo para baixo, e com as
-linhas a deslizar e os indicadores a saltar o título do mês passava por cima
-do fundo dos cartões. Fica por resolver, de propósito: a barra de cima ainda
-empurra a lista ~64px (agora a deslizar), e a altura de cada linha troca no
-primeiro fotograma — animar alturas por linha é o que a continuidade recusa.
+data-fk="txresumo"): com as linhas a deslizar e os indicadores a saltar, o
+título do mês passava por cima do fundo dos cartões. Nada por cima da lista
+a empurra: a caixa de tudo vive no cabeçalho, e o título do mês em seleção
+tem a mesma altura que fora dela (a caixa sem padding em altura,
+estilos.css:.section-title.sel-mes) — medido no telemóvel, a primeira linha
+fica no mesmo píxel a entrar e a sair. Fica por resolver, de propósito: a
+altura de cada linha troca no primeiro fotograma — animar alturas por linha
+é o que a continuidade recusa.
 
 ## A fita da barra de baixo
 Mudar de separador trocava o conteúdo de golpe. Passa a virar como uma fita —

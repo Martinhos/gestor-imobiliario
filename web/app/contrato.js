@@ -37,6 +37,9 @@ function ctFicha(id){
      irsReducao já o sabe), e é ela — não a taxa das rendas moderadas — que
      pede o quadro 4.2 e a comunicação de fevereiro */
   const irsDoAno=irsTaxa(c,YEAR),escrita=Number(c.taxRate)>0,taxaReduzida=fisc.estado==='declarado'&&!!irsDoAno.reducao;
+  const isento=irsDoAno.motivo==='isento'?irsDoAno.isencao:null,bonusRM=irsAno(YEAR).taxas.bonusRendaMenor;
+  /* a comunicação de fevereiro do ano em causa, com o botão de a marcar */
+  const comunicacao=fisc.estado==='declarado'?ctComunicacaoNota(c):'';
   return ficha([
     /* Sem botão «Editar» no rodapé, a ficha tem de dizer porquê — e não há
        uma só razão: há «não tens permissão» e há «só quem o adicionou pode
@@ -59,8 +62,13 @@ function ctFicha(id){
        o formulário guarda 0 para «em branco», e escrever «0%» era mentira */
     c.rent>0?{rotulo:'Imposto sobre a renda',valor:dec(taxRateOf(c))+'%'+(Number(c.taxRate)>0?'':' (estimado: '+irsTaxaPorque(c)+')')}:null,
     {rotulo:'Declaração',valor:fiscoTxt},
-    taxaReduzida?{tipo:'nota',valor:'Pela duração, este contrato tem direito à taxa reduzida de '+dec(irsDoAno.reducao.taxa)+' %. Isso pede duas coisas: o quadro 4.2 do Anexo F preenchido, e a duração e as renovações comunicadas no Portal das Finanças até 15 de fevereiro.'
+    isento?{tipo:'nota',valor:'Isento de IRS: '+esc(isento.nome)+'. As rendas declaram-se na linha do quadro 4.1 do Anexo F, sem imposto, e o quadro '+esc(isento.quadro)+' aponta para ela'
+      +(isento.codigo?' (código '+esc(isento.codigo)+').':' (o código ainda não se conhece: o Anexo F destes rendimentos não foi aprovado).')}:null,
+    taxaReduzida?{tipo:'nota',valor:'Pela duração, este contrato tem direito à taxa reduzida de '+dec(irsDoAno.reducao.taxa)+' %'
+      +(irsDoAno.reducao.bonus&&bonusRM?', já com os '+dec(bonusRM.pontos)+' pontos a menos de uma renda mais baixa do que a do contrato anterior (quadro 4.2B)':'')
+      +'. Isso pede duas coisas: o quadro 4.2 do Anexo F preenchido, e a duração e as renovações comunicadas no Portal das Finanças até 15 de fevereiro.'
       +(!escrita&&irsDoAno.motivo==='moderada'?' Em '+YEAR+' a renda dá-lhe ainda os '+dec(irsDoAno.taxa)+' % das rendas moderadas, que ficam por serem mais baixos.':'')}:null,
+    comunicacao?{tipo:'nota',valor:comunicacao}:null,
     !taxaReduzida&&c.rent>0&&!escrita&&irsDoAno.motivo==='moderada'?{tipo:'nota',valor:'Com a renda até '+euro(irsAno(YEAR).taxas.rendaModerada.limiteMensal)+' por mês, as rendas de '+YEAR+' pagam a taxa de '+dec(irsDoAno.taxa)+' % das rendas moderadas (EBF art. 45.º-C), em vez de '+dec(irsAno(YEAR).taxas.habitacional)+' %.'}:null,
     c.rent>0?{rotulo:'Renda líquida',valor:euroS(netRent(c))}:null,
     c.payDay?{rotulo:'Renda paga',valor:(c.payDayTo&&c.payDayTo>c.payDay)?('entre o dia '+c.payDay+' e o dia '+c.payDayTo):('no dia '+c.payDay)}:null,
@@ -112,6 +120,9 @@ function ctView(id){
          atalho não aparece — o menu fica com o que é do contrato */
       if(servicoLigado('transactions')&&isActive(c)&&pode(pid,'tx.add'))it.push({label:'Registar renda',icon:'up',toca:'camada',act:`ctRegistarRenda('${jsq(pid)}','${jsq(id)}')`});
       it.push({label:'Gerar contrato em PDF',icon:'pen',toca:'camada',act:`generateContractPdf('${jsq(id)}')`});
+      /* renovar regista a renovação (fisco.renovacoes) e leva o fim para a
+         frente — mudar só a data de fim perdia o histórico que o 4.2A pede */
+      if(ok&&c.end&&c.active!==false)it.push({label:'Renovar…',icon:'cal',toca:'camada',act:`ctRenovar('${jsq(id)}')`});
       /* o «Reativar» apaga o c.end, e por isso só se oferece a quem
          terminou mesmo: num contrato por começar, um clique destruía a data
          de fim e o menu voltava a oferecê-lo, para sempre */
@@ -195,8 +206,9 @@ function verMovimentosFora(id){
     `<div class="hint u-mt-12px">As datas destes movimentos não se mexem: dizem quando o dinheiro entrou. Abre cada um para corrigir o que for preciso.</div>`);
 }
 /* Devolve o handler que o modal usa ao guardar: valida imóvel, renda,
-   inquilinos e datas, insere ou substitui o contrato em db.contracts,
-   sincroniza o movimento recorrente da renda e persiste tudo.
+   inquilinos e datas e grava (ctGravar). Num contrato que já tinha fim e o
+   vê ir para a frente, pergunta primeiro se é uma renovação ou uma correção
+   da data (ctFimPergunta) — a renovação fica no histórico.
    Devolve: a função de guardar (sem argumentos), pronta a pôr em onSave. */
 function ctSaver(){
   return ()=>{
@@ -208,22 +220,64 @@ function ctSaver(){
     /* um fim antes do início guardava sem aviso e o contrato sumia das
        rendas e projeções, sem sinal nenhum do porquê */
     if(cForm.start&&cForm.end&&cForm.end<cForm.start)return falhaCampo('c_end','O fim do contrato é antes do início — verifica as datas.');
-    const i=db.contracts.findIndex(x=>x.id===cForm.id);
-    if(i<0)db.contracts.push(cForm);else db.contracts[i]=cForm;
-    /* a renda planeada é dos Planeados: desligados nesta conta, o servidor nem
-       aceitava o registo — o contrato guarda-se na mesma, sem ela */
-    if(servicoLigado('recurring'))syncContractRec(cForm);
-    save();closeModal();buildNav();render();
-    /* O que é previsão acompanha o contrato; o que é FACTO fica onde está. A
-       data de um movimento diz que o dinheiro entrou naquele dia, e mudá-la
-       era dizer que entrou noutro — muda a receita do ano, o IRS, o cashflow
-       e as contas entre proprietários. A app aponta, e a pessoa decide. */
-    const fora=movimentosForaDoContrato(cForm);
-    if(fora.length)return toast(fora.length===1?'1 movimento deste contrato está fora das datas dele.'
-      :fora.length+' movimentos deste contrato estão fora das datas dele.',
-      {rotulo:'Ver',ms:9000,fn:()=>verMovimentosFora(cForm.id)});
-    toast('Contrato guardado.');
+    const antes=contract(cForm.id),fimAntes=antes&&antes.end;
+    /* só quando o fim vai para a frente (uma renovação nunca o encurta) e a
+       renovação ainda não foi escrita à mão nas renovações */
+    if(fimAntes&&cForm.end&&cForm.end>fimAntes&&!(fiscoDe(cForm).renovacoes||[]).some(r=>r.inicio===pzAddDias(fimAntes,1)))
+      return ctFimPergunta(fimAntes);
+    ctGravar();
   };
+}
+/* o fim que estava gravado, enquanto a pergunta «renovação ou correção?»
+   está aberta (ctFimPergunta → ctFimResposta) */
+let _ctFimAntes='';
+/* Pergunta, por cima do formulário, se a data de fim nova é uma renovação
+   ou uma correção da data. As duas respostas gravam (ctFimResposta).
+   Recebe: fimAntes — o fim que estava gravado ('AAAA-MM-DD').
+   Devolve: nada — abre a pergunta. */
+function ctFimPergunta(fimAntes){
+  _ctFimAntes=fimAntes;
+  openModal('Renovação ou correção?',`<div class="hint u-fs-14px">O fim do contrato passa de ${dPT(fimAntes)} para ${dPT(cForm.end)}. É uma renovação? Fica registada nas renovações (de ${dPT(pzAddDias(fimAntes,1))} a ${dPT(cForm.end)}), e o quadro 4.2A do Anexo F pede-a. Se só estás a corrigir uma data mal escrita, é uma correção.</div>`,
+    `<button class="btn" data-toca="dados" data-click="ctFimResposta(0)">É uma correção</button><button class="btn primary" data-toca="dados" data-click="ctFimResposta(1)">É uma renovação</button>`);
+}
+/* A resposta à pergunta do fim: fecha-a, regista a renovação quando o é, e
+   grava o contrato.
+   Recebe: renov — 1 se é uma renovação, 0 se é uma correção da data.
+   Devolve: nada — grava (ctGravar). */
+function ctFimResposta(renov){
+  closeModal();
+  if(Number(renov)&&_ctFimAntes)ctJuntaRenovacao(cForm,pzAddDias(_ctFimAntes,1),cForm.end);
+  _ctFimAntes='';
+  ctGravar();
+}
+/* Acrescenta uma renovação às do bloco fiscal, sem mexer no fim do contrato.
+   Recebe: c — o contrato (o do formulário ou o da base); inicio, fim — 'AAAA-MM-DD'.
+   Devolve: nada — muda c.fisco. */
+function ctJuntaRenovacao(c,inicio,fim){
+  const f=fiscoDe(c);
+  if((f.renovacoes||[]).some(r=>r.inicio===inicio))return;
+  c.fisco=normFisco(Object.assign({},f,{renovacoes:(f.renovacoes||[]).concat([{id:uid(),inicio:inicio,fim:fim}])}));
+}
+/* Grava o contrato do formulário (cForm, já validado): insere-o ou substitui-o
+   em db.contracts, sincroniza o movimento recorrente da renda, persiste,
+   fecha o formulário e aponta os movimentos que ficaram fora das datas.
+   Devolve: nada. */
+function ctGravar(){
+  const i=db.contracts.findIndex(x=>x.id===cForm.id);
+  if(i<0)db.contracts.push(cForm);else db.contracts[i]=cForm;
+  /* a renda planeada é dos Planeados: desligados nesta conta, o servidor nem
+     aceitava o registo — o contrato guarda-se na mesma, sem ela */
+  if(servicoLigado('recurring'))syncContractRec(cForm);
+  save();closeModal();buildNav();render();
+  /* O que é previsão acompanha o contrato; o que é FACTO fica onde está. A
+     data de um movimento diz que o dinheiro entrou naquele dia, e mudá-la
+     era dizer que entrou noutro — muda a receita do ano, o IRS, o cashflow
+     e as contas entre proprietários. A app aponta, e a pessoa decide. */
+  const fora=movimentosForaDoContrato(cForm);
+  if(fora.length)return toast(fora.length===1?'1 movimento deste contrato está fora das datas dele.'
+    :fora.length+' movimentos deste contrato estão fora das datas dele.',
+    {rotulo:'Ver',ms:9000,fn:()=>verMovimentosFora(cForm.id)});
+  toast('Contrato guardado.');
 }
 // HTML do formulário do contrato, montado a partir de cForm. Só devolve a
 // string — é o ctModal/repaintCt que a põe no modal e pinta as miniaturas.
@@ -318,13 +372,18 @@ function ctBody(){
   </div>`;
 }
 /* O contrato como está escrito no formulário agora, para a estimativa da
-   taxa: a renda, as datas e a finalidade dos campos que estão no ecrã, o
-   resto do cForm. Não grava nada.
+   taxa: a renda, as datas, a finalidade, a celebração, a isenção e as duas
+   perguntas do art. 72.º n.os 23 e 24 dos campos que estão no ecrã, o resto
+   do cForm. Não grava nada.
    Devolve: um objeto novo com a forma de um contrato. */
 function ctEmEdicao(){
   const eR=document.getElementById('c_rent');
   const f=Object.assign({},fiscoDe(cForm));
   if(document.getElementById('c_ffin'))f.finalidade=val('c_ffin');
+  if(document.getElementById('c_fcel'))f.celebracao=val('c_fcel');
+  if(document.getElementById('c_fisen'))f.isencao=val('c_fisen');
+  if(document.getElementById('c_facima')){const r=val('c_facima');f.rendaAcimaDoLimite=r==='1'?true:r==='0'?false:null}
+  if(document.getElementById('c_fant'))f.rendaAnterior=num(val('c_fant'))||0;
   return Object.assign({},cForm,{rent:eR?num(eR.value):cForm.rent,start:val('c_start')||cForm.start,end:val('c_end')||cForm.end,fisco:f});
 }
 // HTML do resumo bruto → imposto → líquido. Lê os campos do formulário se
@@ -344,15 +403,20 @@ function netBox(){
     <div class="hint">${euro(( r-imposto)*12)} por ano, se a renda se mantiver.</div>`;
 }
 // Recalcula o resumo da renda líquida enquanto se escreve na renda ou no imposto,
-// e — porque a taxa em branco depende da renda, das datas e da finalidade — o
-// exemplo do imposto e o «Em branco: N %» por baixo dele.
-// Devolve: nada — reescreve a caixa #netBox, o placeholder de c_tax e o #c_taxVazio.
+// e — porque a taxa em branco depende da renda, das datas, da finalidade, da
+// isenção e das perguntas do art. 72.º — o exemplo do imposto e o «Em branco:
+// N %» por baixo dele; mostra ou esconde as perguntas dos n.os 23 e 24
+// (ctN23Visivel) e troca a explicação da isenção escolhida.
+// Devolve: nada — reescreve a caixa #netBox, o placeholder de c_tax, o
+// #c_taxVazio, o #c_fisenHint e o hidden do #c_fn23.
 function liveNet(){
   const b=document.getElementById('netBox');if(b)b.innerHTML=netBox();
   const v=document.getElementById('c_taxVazio'),t=document.getElementById('c_tax');
-  const r=dec(irsRate(ctEmEdicao()));
+  const est=ctEmEdicao(),r=dec(irsRate(est));
   if(v)v.textContent=r+' %';
   if(t)t.placeholder='Ex: '+r;
+  const n=document.getElementById('c_fn23');if(n)n.hidden=!ctN23Visivel(est);
+  const h=document.getElementById('c_fisenHint');if(h)h.textContent=ctIsencaoTexto(fiscoDe(est).isencao);
 }
 /* Copia o que está nos campos do modal para cForm. Chamar SEMPRE antes de
    repintar ou de mexer nas listas (inventário, chaves, fotos), senão o que
@@ -402,6 +466,9 @@ function collectCt(){
     const b=document.getElementById('c_rfim_'+r.id);if(b)r.fim=b.value;
   });
   if(document.getElementById('c_fces'))f.cessacaoMotivo=val('c_fces');
+  if(document.getElementById('c_fisen'))f.isencao=val('c_fisen');
+  if(document.getElementById('c_facima')){const r=val('c_facima');f.rendaAcimaDoLimite=r==='1'?true:r==='0'?false:null}
+  if(document.getElementById('c_fant'))f.rendaAnterior=num(val('c_fant'))||0;
   c.fisco=normFisco(f);
 }
 // Repinta o corpo do modal a partir de cForm e recarrega as miniaturas das
@@ -419,10 +486,18 @@ function repaintCt(){const b=modalBodyEl();if(!b)return;b.innerHTML=ctBody();mar
    resumo e dos prazos). O que se pede ao contrato declarado é o que o Anexo F
    e o Modelo 2 pedem, campo a campo, com a razão à frente de cada um: o
    número da AT vai em cada linha do quadro 4.1, a celebração no 4.2, as
-   renovações no 4.2A, o motivo da cessação na comunicação à AT.
+   renovações no 4.2A, o motivo da cessação na comunicação à AT. E o que mexe
+   na taxa: a isenção de um programa de arrendamento acessível (quadro 6D) e,
+   num contrato celebrado desde 2024 com redução possível, as duas perguntas
+   do art. 72.º — a renda acima de 150 % do limite (n.º 23) e a renda do
+   contrato anterior (n.º 24) —, escondidas quando não se aplicam (o liveNet
+   mostra-as quando a celebração ou as datas mudam).
    Devolve: string com o HTML da secção. */
 function fiscoSect(){
   const c=cForm,f=fiscoDe(c),renovs=f.renovacoes||[];
+  const vA=irsAno(YEAR),L=vA.taxas.limiteRendaAlta,B=vA.taxas.bonusRendaMenor,isens=vA.isencoes||[];
+  const isOpts=[{v:'',label:'Nenhuma'}].concat(isens.map(x=>({v:x.id,label:x.nome})));
+  if(f.isencao&&!isens.some(x=>x.id===f.isencao))isOpts.push({v:f.isencao,label:f.isencao.toUpperCase()});
   const seg=`<div><div class="flabel">Perante a AT</div>
     <div class="seg c3">${[['','dots','Por indicar','ainda não disse'],['declarado','bank','Declarado à AT','Modelo 2 entregue'],['naoDeclarado','home','Não declarado','fica fora do IRS']]
       .map(([k,i,lb,sb])=>`<button type="button" class="opt ${f.estado===k?'on':''}" data-toca="rascunho" data-click="setFiscoEstado('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>`;
@@ -438,9 +513,17 @@ function fiscoSect(){
       <label>Finalidade${sel('c_ffin',f.finalidade,[{v:'',label:'—'}].concat(FISCO_FINALIDADES.map(x=>({v:x[0],label:x[1]}))),'liveNet','rascunho')}</label></div>
     <div class="hint u-mt-n6px">Vem no comprovativo do Modelo 2; o Anexo F pede-o em cada linha.</div>
     <div class="row">
-      <label>Data de celebração<input id="c_fcel" type="date" value="${esc(f.celebracao)}"></label>
+      <label>Data de celebração<input id="c_fcel" type="date" value="${esc(f.celebracao)}" data-change="liveNet()"></label>
       <label>Renovável${sel('c_fren',f.renovavel===true?'1':f.renovavel===false?'0':'',[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'','rascunho')}</label></div>
     <div class="hint u-mt-n6px">O dia em que assinaram: o quadro 4.2 do Anexo F pede-o nos contratos de longa duração.</div>
+    <label>Isenção de IRS${sel('c_fisen',f.isencao,isOpts,'liveNet','rascunho')}</label>
+    <div class="hint u-mt-n6px" id="c_fisenHint">${esc(ctIsencaoTexto(f.isencao))}</div>
+    ${L&&B?`<div id="c_fn23"${ctN23Visivel(c)?'':' hidden'}><div class="form">
+      <label>Renda acima de ${dec(L.percentagem)} % do limite do concelho?${sel('c_facima',f.rendaAcimaDoLimite===true?'1':f.rendaAcimaDoLimite===false?'0':'',[{v:'',label:'Não sei'},{v:'0',label:'Não'},{v:'1',label:'Sim'}],'liveNet','rascunho')}</label>
+      <div class="hint u-mt-n6px">Num contrato de habitação celebrado desde ${dPT(L.desde)}, uma renda mensal acima de ${dec(L.percentagem)} % dos limites gerais da tipologia no concelho (os do arrendamento acessível) faz perder a redução pela duração, e o contrato vai ao quadro 4.1 (CIRS art. 72.º n.º 23). A app não tem essas tabelas: indica-o aqui. Em «Não sei» conta-se a redução.</div>
+      <label>Renda do contrato anterior neste imóvel (€)<input id="c_fant" type="text" inputmode="decimal" value="${f.rendaAnterior?dec(f.rendaAnterior):''}" placeholder="Opcional" data-input="liveNet()"></label>
+      <div class="hint u-mt-n6px">Se a renda deste contrato for pelo menos ${dec(B.rendaMenorPct)} % mais baixa do que a do anterior, a taxa desce mais ${dec(B.pontos)} pontos (CIRS art. 72.º n.º 24, quadro 4.2B do Anexo F). Em branco: não se aplica.</div>
+    </div></div>`:''}
     <div><div class="flabel">Renovações</div>
       ${renovs.length?`<div class="form u-g-9px">${renovs.map(r=>`<div class="invrow u-gtc-1fr-1fr-auto u-ai-end">
         <label>Início<input id="c_rini_${esc(r.id)}" type="date" value="${esc(r.inicio)}"></label>
@@ -465,6 +548,162 @@ function addRenov(){collectCt();cForm.fisco.renovacoes.push({id:uid(),inicio:'',
    Recebe: rid — o id da renovação a remover.
    Devolve: nada — repinta o formulário. */
 function delRenov(rid){collectCt();cForm.fisco.renovacoes=cForm.fisco.renovacoes.filter(r=>r.id!==rid);repaintCt()}
+/* A explicação curta da isenção escolhida, para a dica por baixo da escolha:
+   o texto da versão do ano e onde se declara; sem isenção, para que serve.
+   Recebe: id — o valor de fisco.isencao ('' ou o id de uma isenção).
+   Devolve: o texto (sem HTML). */
+function ctIsencaoTexto(id){
+  const x=id?(irsAno(YEAR).isencoes||[]).find(i=>i.id===id):null;
+  if(!id)return 'Só os contratos de um programa de arrendamento acessível estão isentos de IRS. Com isenção, a taxa estimada passa a 0 %.';
+  if(!x)return 'Esta isenção não existe nas regras de '+YEAR+'.';
+  return x.texto+' Declara-se no quadro '+x.quadro+' do Anexo F'+(x.codigo?' (código '+x.codigo+')':' (o código ainda não se conhece)')+'.';
+}
+/* As perguntas dos n.os 23 e 24 do art. 72.º só se fazem quando contam: num
+   contrato celebrado (ou começado, sem celebração escrita) desde a data do
+   n.º 23 que, sem elas, teria redução pela duração no ano corrente.
+   Recebe: c — o contrato (o do formulário, ou o que ctEmEdicao devolve).
+   Devolve: true se as perguntas se mostram. */
+function ctN23Visivel(c){
+  const L=irsAno(YEAR).taxas.limiteRendaAlta;if(!L||!c)return false;
+  const f=fiscoDe(c),cel=f.celebracao||c.start||'';
+  if(!cel||cel<L.desde)return false;
+  return !!irsReducao(Object.assign({},c,{fisco:Object.assign({},f,{rendaAcimaDoLimite:null,rendaAnterior:0,isencao:''})}),YEAR);
+}
+/* O ano dos rendimentos cuja comunicação de fevereiro (Portaria 110/2019) a
+   ficha propõe marcar: o anterior, se teve redução e ainda não está marcado
+   (ou se está, até ao dia do prazo — para se poder desmarcar); senão o
+   corrente, se tem redução. É o mesmo ano que os prazos avisam.
+   Recebe: c — o contrato; hoje — 'AAAA-MM-DD'.
+   Devolve: o ano (número), ou null quando não há o que comunicar. */
+function ctAnoComunicacao(c,hoje){
+  const a=Number(String(hoje).slice(0,4)),Y=a-1;
+  if(ctViveNoAno(c,Y)&&irsTaxa(c,Y).reducao&&(!irsComunicado(c,Y)||hoje<=irsAno(Y).prazos.comunicacaoDuracao))return Y;
+  return ctViveNoAno(c,a)&&irsTaxa(c,a).reducao?a:null;
+}
+/* O contrato esteve em vigor algum dia do ano? Do início ao fim efetivo
+   (ctFimEfetivo); sem fim, até sempre. Um ano antes de o contrato começar,
+   ou depois de acabar, não tem duração nenhuma a comunicar.
+   Recebe: c — o contrato; ano — o ano (número).
+   Devolve: true ou false. */
+function ctViveNoAno(c,ano){
+  const fim=ctFimEfetivo(c);
+  return !!c.start&&c.start<=ano+'-12-31'&&(!fim||fim>=ano+'-01-01');
+}
+/* O fim de um contrato contando as renovações registadas: o c.end, ou o fim
+   de uma renovação escrita à mão que vai para lá dele.
+   Recebe: c — o contrato.
+   Devolve: 'AAAA-MM-DD', ou '' sem fim. */
+function ctFimEfetivo(c){
+  let fim=(c&&c.end)||'';
+  (fiscoDe(c).renovacoes||[]).forEach(r=>{if(fim&&r.fim&&r.fim>fim)fim=r.fim});
+  return fim;
+}
+/* A linha da ficha sobre a comunicação de fevereiro do ano em causa: feita (e
+   quando) ou por fazer (e até quando), com o botão de a marcar ou desmarcar
+   para quem pode alterar o contrato.
+   Recebe: c — o contrato.
+   Devolve: o HTML (texto escapado e o botão), ou '' sem nada a comunicar. */
+function ctComunicacaoNota(c){
+  const h=today(),ano=ctAnoComunicacao(c,h);if(ano==null)return '';
+  const feita=irsComunicado(c,ano),prazo=irsAno(ano).prazos.comunicacaoDuracao;
+  const txt=feita?'Duração e renovações de '+ano+' comunicadas no Portal das Finanças a '+dPT(feita)+'.'
+    :'Duração e renovações de '+ano+' por comunicar no Portal das Finanças: '+(h>prazo?'o prazo era ':'até ')+dPT(prazo)+'.';
+  const btn=podeEditar(c.propertyId,'contract.add',c)?`<div class="toolbar u-m-9px-0-0"><button type="button" class="btn sm" data-toca="${feita?'dados':'camada'}" data-click="${feita?`ctMarcarComunicada('${jsq(c.id)}',${ano},0)`:`ctComunicadaPergunta('${jsq(c.id)}',${ano})`}">${feita?'Desmarcar':'Marcar como comunicada'}</button></div>`:'';
+  return esc(txt)+btn;
+}
+/* A janela pequena de «Marcar como comunicada»: o dia em que a comunicação
+   foi feita no Portal, proposto hoje (ou o dia do prazo, se já passou) — o
+   4.2A pergunta se foi feita a tempo, e a data de hoje, num ano já fechado,
+   dizia que não.
+   Recebe: id — o id do contrato; ano — o ano dos rendimentos.
+   Devolve: nada — abre a janela. */
+function ctComunicadaPergunta(id,ano){
+  const c=contract(id);if(!c)return;
+  const recusa=motivoRecusa(c.propertyId,'contract.add',c);if(recusa)return toast(recusa);
+  const h=today(),prazo=irsAno(ano).prazos.comunicacaoDuracao,dia=h>prazo?prazo:h;
+  openModal('Comunicação de '+anoIrs(ano),`<div class="form">
+    <div class="hint">A duração e as renovações de ${anoIrs(ano)} comunicam-se no Portal das Finanças até ${dPT(prazo)}.</div>
+    <label>Comunicada a <span class="req">*</span><input id="c_comdia" type="date" max="${esc(h)}" value="${esc(dia)}"></label></div>`,
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="ctMarcarComunicada('${jsq(id)}',${anoIrs(ano)},1)">Marcar</button>`);
+}
+/* Marca (com o dia da janela, ctComunicadaPergunta) ou desmarca a
+   comunicação de fevereiro de um ano num contrato, e grava pelo caminho de
+   sempre (save + render, que repinta a ficha aberta). Marcada, o aviso do 15
+   de fevereiro desse ano cala-se.
+   Recebe: id — o id do contrato; ano — o ano dos rendimentos; on — 1 marca, 0 desmarca.
+   Devolve: nada. */
+function ctMarcarComunicada(id,ano,on){
+  const c=contract(id);if(!c)return;
+  const recusa=motivoRecusa(c.propertyId,'contract.add',c);if(recusa)return toast(recusa);
+  const f=fiscoDe(c),com=Object.assign({},f.comunicacoes),k=String(anoIrs(ano));
+  if(Number(on)){
+    const dia=val('c_comdia');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(dia))return falhaCampo('c_comdia','Indica o dia da comunicação.');
+    if(dia>today())return falhaCampo('c_comdia','O dia da comunicação não pode ser depois de hoje.');
+    com[k]=dia;
+    closeModal();
+  }else delete com[k];
+  c.fisco=normFisco(Object.assign({},f,{comunicacoes:com}));
+  save();render();
+  toast(Number(on)?'Comunicação de '+k+' marcada como feita.':'Comunicação de '+k+' desmarcada.');
+}
+/* Soma meses a uma data, em hora local; um dia que não existe no mês de
+   chegada (31 de abril) cai no último dia desse mês.
+   Recebe: iso — 'AAAA-MM-DD'; n — os meses a somar.
+   Devolve: 'AAAA-MM-DD'. */
+function ctSomaMeses(iso,n){
+  const d0=new Date(iso+'T00:00:00'),dia=d0.getDate();
+  const d=new Date(d0.getFullYear(),d0.getMonth()+n,1),ult=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  d.setDate(Math.min(dia,ult));
+  return pzIso(d);
+}
+/* O fim que a janela «Renovar…» propõe: o fim de agora mais a duração do
+   período que acaba nele (a última renovação, ou o contrato inicial) — em
+   meses inteiros quando os há, senão em dias.
+   Recebe: c — o contrato (com fim).
+   Devolve: 'AAAA-MM-DD', ou '' sem fim. */
+function ctRenovacaoSugerida(c){
+  if(!c||!c.end)return '';
+  const fe=ctFimEfetivo(c);if(fe!==c.end)c=Object.assign({},c,{end:fe});
+  const ps=irsPeriodos(c),ult=ps[ps.length-1];
+  const ini=ult.inicio&&ult.inicio<=c.end?ult.inicio:(c.start||'');
+  const novoIni=pzAddDias(c.end,1),meses=ini?irsMeses(ini,c.end):0;
+  if(meses>0)return pzAddDias(ctSomaMeses(novoIni,meses),-1);
+  const dias=ini?pzDias(c.end,ini)+1:0;
+  return dias>0?pzAddDias(c.end,dias):pzAddAnos(c.end,1);
+}
+/* A janela pequena do «Renovar…» da ficha: a nova data de fim, já com a
+   sugestão (ctRenovacaoSugerida).
+   Recebe: id — o id do contrato.
+   Devolve: nada — abre a janela. */
+function ctRenovar(id){
+  const c=contract(id);if(!c||!c.end)return;
+  const recusa=motivoRecusa(c.propertyId,'contract.add',c);if(recusa)return toast(recusa);
+  openModal('Renovar contrato',`<div class="form">
+    <div class="hint">O contrato termina a ${dPT(ctFimEfetivo(c))}. A renovação começa a ${dPT(pzAddDias(ctFimEfetivo(c),1))} e fica registada nas renovações, e o fim do contrato passa a ser o novo. As rendas planeadas seguem-no.</div>
+    <label>Novo fim <span class="req">*</span><input id="c_renfim" type="date" value="${esc(ctRenovacaoSugerida(c))}"></label>
+    <div class="hint u-mt-n6px">A data proposta repete a duração do período que agora acaba.</div></div>`,
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="ctRenovarOk('${jsq(id)}')">Renovar</button>`);
+}
+/* Grava a renovação da janela «Renovar…»: uma entrada nas renovações (do dia
+   a seguir ao fim antigo até ao fim novo), o fim novo no contrato, e as
+   rendas planeadas acertadas pelo syncContractRec.
+   Recebe: id — o id do contrato.
+   Devolve: nada — grava, fecha a janela e redesenha. */
+function ctRenovarOk(id){
+  const c=contract(id);if(!c||!c.end)return;
+  const recusa=motivoRecusa(c.propertyId,'contract.add',c);if(recusa)return toast(recusa);
+  const fim=val('c_renfim'),fe=ctFimEfetivo(c);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fim))return falhaCampo('c_renfim','Indica a nova data de fim.');
+  if(fim<=fe)return falhaCampo('c_renfim','O novo fim tem de ser depois de '+dPT(fe)+'.');
+  /* uma renovação já registada à mão para lá do fim conta: a nova começa
+     depois dela, e não se escreve a mesma outra vez */
+  ctJuntaRenovacao(c,pzAddDias(fe,1),fim);
+  c.end=fim;
+  if(servicoLigado('recurring'))syncContractRec(c);
+  save();closeModal();buildNav();render();
+  toast('Renovação registada: o contrato vai até '+dPT(fim)+'.');
+}
 
 /* contacto: escolher de uma pessoa conhecida, ou escrever outro
    Recebe: kind — 'owner' ou 'tenant', diz de que lado é a secção; c — o

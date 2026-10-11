@@ -20,8 +20,8 @@ const IRS_ANOS={};
    ao carregar, com tudo o que vale para os rendimentos desse ano (o formato
    está no próprio irs-2025.js). Uma versão é dados, nunca código: o motor que
    os lê é este ficheiro.
-   Recebe: v — a versão ({ano, entrega, modelo, taxas, naturezas, quadros,
-   prazos, novidades, passos}).
+   Recebe: v — a versão ({ano, entrega, modelo, taxas, isencoes, englobamento,
+   naturezas, quadros, prazos, novidades, passos}).
    Devolve: nada — guarda-a em IRS_ANOS. */
 function registarAnoIrs(v){IRS_ANOS[v.ano]=v}
 /* Os anos com versão própria, do mais antigo ao mais recente.
@@ -61,14 +61,29 @@ function irsMeses(ini,fim){
   const s=new Date(ini+'T00:00:00'),e=new Date(fim+'T00:00:00');e.setDate(e.getDate()+1);
   return Math.max(0,(e.getFullYear()-s.getFullYear())*12+(e.getMonth()-s.getMonth())-(e.getDate()<s.getDate()?1:0));
 }
+/* O dia antes de uma data, em hora local (sem toISOString: com o horário de
+   verão, a meia-noite local em UTC é a véspera, e o dia saía trocado).
+   Recebe: iso — 'AAAA-MM-DD'.
+   Devolve: 'AAAA-MM-DD' do dia anterior, ou '' sem data válida. */
+function irsVespera(iso){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||''));if(!m)return '';
+  const d=new Date(Number(m[1]),Number(m[2])-1,Number(m[3])-1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 /* Os períodos de um contrato: o inicial (início e fim) e cada renovação
-   registada no bloco fiscal, pela ordem em que começam.
+   registada no bloco fiscal, pela ordem em que começam. O fim do inicial é o
+   do contrato — ou, havendo renovações, a véspera da primeira: quem renova
+   pelo «Renovar…» da ficha leva o c.end para o fim da renovação, e o
+   contrato inicial não passa a durar o que duraram os dois (o escalão e as
+   «renovações de igual duração» do art. 72.º contam cada período por si).
    Recebe: c — o contrato.
    Devolve: [{inicio, fim}] — o primeiro é sempre o do contrato. */
 function irsPeriodos(c){
   const rs=(fiscoDe(c).renovacoes||[]).filter(r=>r&&r.inicio).map(r=>({inicio:r.inicio,fim:r.fim||''}))
     .sort((a,b)=>a.inicio<b.inicio?-1:a.inicio>b.inicio?1:0);
-  return [{inicio:(c&&c.start)||'',fim:(c&&c.end)||''}].concat(rs);
+  const ini=(c&&c.start)||'';let fim=(c&&c.end)||'';
+  if(rs.length&&ini&&rs[0].inicio>ini&&(!fim||fim>=rs[0].inicio))fim=irsVespera(rs[0].inicio);
+  return [{inicio:ini,fim:fim}].concat(rs);
 }
 /* A redução da taxa pela duração do contrato (CIRS art. 72.º n.ºs 3 a 5), só
    no arrendamento para habitação permanente — ou de finalidade por indicar,
@@ -78,13 +93,25 @@ function irsPeriodos(c){
    cada um com `desde`/`ate`), o escalão é o da duração dele, e cada renovação
    anterior do mesmo escalão desce `porRenovacao` pontos até ao `minimo`.
    Sem fim no período, não há duração e não há redução.
+   Os n.os 23 e 24 (parâmetros na versão: taxas.limiteRendaAlta e
+   taxas.bonusRendaMenor). Um contrato celebrado desde a data do n.º 23 com a
+   renda acima de 150 % do limite do concelho (fisco.rendaAcimaDoLimite, que a
+   pessoa indica — a app não tem as tabelas) não tem redução nenhuma; por
+   indicar conta como dentro do limite. E um contrato novo com redução cuja
+   renda é pelo menos 5 % mais baixa do que a do contrato anterior no mesmo
+   imóvel (fisco.rendaAnterior) desce mais 5 pontos — só no período inicial
+   (o n.º 24 fala de «novos contratos»; uma renovação não o é: a leitura
+   prudente) e nunca abaixo do mínimo da versão.
    Recebe: c — o contrato; ano (opcional) — o ano dos rendimentos.
-   Devolve: {taxa, meses, renovacoes, desde} — desde é o início do período —
-   ou null quando não há redução. */
+   Devolve: {taxa, meses, renovacoes, desde, bonus} — desde é o início do
+   período; bonus diz se a descida do n.º 24 entrou (quadro 4.2B) — ou null
+   quando não há redução. */
 function irsReducao(c,ano){
   if(!c)return null;
-  const fin=fiscoDe(c).finalidade;if(fin&&fin!=='hp')return null;
+  const F=fiscoDe(c),fin=F.finalidade;if(fin&&fin!=='hp')return null;
   const a=anoIrs(ano),T=irsAno(a).taxas,ps=irsPeriodos(c),fimAno=a+'-12-31';
+  const cel=F.celebracao||ps[0].inicio,L=T.limiteRendaAlta;
+  if(L&&cel&&cel>=L.desde&&F.rendaAcimaDoLimite===true)return null;
   const vivos=ps.filter(p=>p.inicio&&p.inicio<=fimAno),atual=vivos[vivos.length-1]||ps[0];
   if(!atual.inicio||!atual.fim)return null;
   const regime=(T.duracao||[]).find(r=>atual.inicio>=r.desde&&(!r.ate||atual.inicio<=r.ate));
@@ -96,21 +123,55 @@ function irsReducao(c,ano){
      o contrato inicial também for desse escalão */
   const igual=esc(irsMeses(ps[0].inicio,ps[0].fim))===e;
   const renovacoes=igual?vivos.slice(1).filter(p=>esc(irsMeses(p.inicio,p.fim))===e).length:0;
-  const taxa=e.porRenovacao?Math.max(e.minimo,e.taxa-renovacoes*e.porRenovacao):e.taxa;
-  return {taxa:taxa,meses:meses,renovacoes:renovacoes,desde:atual.inicio};
+  let taxa=e.porRenovacao?Math.max(e.minimo,e.taxa-renovacoes*e.porRenovacao):e.taxa,bonus=false;
+  /* n.º 24: em cêntimos inteiros, para 950 € contra 1 000 € dar «5 % abaixo» sem
+     o arredondamento do 0,95 o estragar */
+  const B=T.bonusRendaMenor,renda=Number(c.rent)||0,ant=Number(F.rendaAnterior)||0;
+  if(B&&cel&&cel>=B.desde&&atual===ps[0]&&ant>0&&renda>0&&renda*100<=ant*(100-B.rendaMenorPct)){
+    const t2=Math.max(B.minimo,taxa-B.pontos);
+    if(t2<taxa){taxa=t2;bonus=true}
+  }
+  return {taxa:taxa,meses:meses,renovacoes:renovacoes,desde:atual.inicio,bonus:bonus};
+}
+/* A isenção de um contrato num ano: a que o bloco fiscal indica
+   (fisco.isencao), se a versão desse ano a tem na lista (irs-AAAA.js:isencoes —
+   o RSAA só existe desde 2026, e nas rendas de 2025 não isenta nada).
+   Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
+   Devolve: a isenção da versão ({id, nome, curto, quadro, codigo, lei,
+   texto…}), ou null. */
+function irsIsencao(c,ano){
+  const f=fiscoDe(c),id=f.isencao;if(!id)return null;
+  const is=(irsAno(ano).isencoes||[]).find(x=>x.id===id)||null;
+  /* uma isenção com data (o RSAA, desde 1/9/2026) é dos contratos celebrados
+     desde então — como o prazo do IHRU (prazos.js:prazosDe) já conta */
+  const cel=f.celebracao||(c&&c.start)||'';
+  return is&&is.desde&&cel&&cel<is.desde?null:is;
+}
+/* A comunicação de fevereiro de um ano já feita: o dia em que o senhorio
+   comunicou no Portal a duração e as renovações do contrato (Portaria
+   110/2019; a dos rendimentos de X faz-se até irsAno(X).prazos.comunicacaoDuracao).
+   Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
+   Devolve: 'AAAA-MM-DD', ou '' se não está marcada. */
+function irsComunicado(c,ano){
+  return (fiscoDe(c).comunicacoes||{})[String(anoIrs(ano))]||'';
 }
 /* A taxa especial do IRS sobre as rendas de um contrato num ano, e porquê
    (CIRS art. 72.º; EBF art. 45.º-C). Não habitacional: a taxa da versão (28 %).
    Habitacional: a base (25 %), a redução pela duração quando a há
    (irsReducao), e a das rendas moderadas quando a versão a tem, o ano está
    dentro dela e a renda mensal não passa o limite — fica sempre a mais baixa.
+   Antes de tudo, a isenção (irsIsencao: PAA, RSAA, programas municipais):
+   um contrato isento paga 0 %, fica na linha do 4.1 e o quadro da isenção
+   (6D) aponta para ela — é o que as instruções do 6D pedem.
    É a estimativa: a taxa escrita no contrato manda sobre ela (taxRateOf).
    Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
-   Devolve: {taxa, motivo, reducao} — motivo é 'nh', 'base', 'duracao' ou
-   'moderada'; reducao o que irsReducao devolveu (ou null), mesmo quando a
-   moderada ganha, porque é ela que manda o contrato para o quadro 4.2. */
+   Devolve: {taxa, motivo, reducao} — motivo é 'isento', 'nh', 'base',
+   'duracao' ou 'moderada'; reducao o que irsReducao devolveu (ou null), mesmo
+   quando a moderada ganha, porque é ela que manda o contrato para o quadro
+   4.2 (null no isento); no isento há ainda isencao, a da versão. */
 function irsTaxa(c,ano){
-  const a=anoIrs(ano),T=irsAno(a).taxas;
+  const a=anoIrs(ano),T=irsAno(a).taxas,is=c?irsIsencao(c,a):null;
+  if(is)return {taxa:0,motivo:'isento',reducao:null,isencao:is};
   if(c&&fiscoDe(c).finalidade==='nh')return {taxa:T.naoHabitacional,motivo:'nh',reducao:null};
   const r=irsReducao(c,a),m=T.rendaModerada,renda=Number(c&&c.rent)||0;
   let out={taxa:T.habitacional,motivo:'base',reducao:r};
@@ -128,7 +189,7 @@ function irsRate(c,ano){return irsTaxa(c,ano).taxa}
    Devolve: o texto curto. */
 function irsTaxaPorque(c,ano){
   const t=irsTaxa(c,ano);
-  return t.motivo==='nh'?'não habitacional':t.motivo==='duracao'?'pela duração':t.motivo==='moderada'?'renda moderada':'taxa base';
+  return t.motivo==='isento'?'isento':t.motivo==='nh'?'não habitacional':t.motivo==='duracao'?'pela duração':t.motivo==='moderada'?'renda moderada':'taxa base';
 }
 /* As taxas especiais de um ano numa frase, para a dica do formulário do
    contrato: a da habitação e a do resto, os escalões da duração do regime em

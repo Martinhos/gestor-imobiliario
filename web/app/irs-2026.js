@@ -39,11 +39,47 @@ registarAnoIrs({
       {desde:'2023-10-07',escaloes:[{meses:240,taxa:5},{meses:120,taxa:10},{meses:60,taxa:15,porRenovacao:2,minimo:5}]},
       {desde:'2019-01-01',ate:'2023-10-06',escaloes:[{meses:240,taxa:10},{meses:120,taxa:14},{meses:60,taxa:23,porRenovacao:5,minimo:14},{meses:24,taxa:26,porRenovacao:2,minimo:14}]}],
     /* EBF art. 45.º-C: 10 % até aos rendimentos de 2029, renda até 2 300 €/mês */
-    rendaModerada:{taxa:10,limiteMensal:2300,ate:2029}},
+    rendaModerada:{taxa:10,limiteMensal:2300,ate:2029},
+    /* CIRS art. 72.º n.º 23 e n.º 24, como em 2025 (os comentários e os pontos
+       INCERTOS estão no irs-2025.js). Desde 1 de setembro de 2026 os limites do
+       n.º 23 são os do RSAA (DL 97/2026, art. 14.º b)), cuja portaria ainda não
+       saiu: a pergunta ao senhorio fica a mesma. */
+    limiteRendaAlta:{desde:'2024-01-01',percentagem:150},
+    bonusRendaMenor:{desde:'2024-01-01',rendaMenorPct:5,pontos:5,minimo:5}},
+  /* As isenções (o formato está no irs-2025.js). O PAA acabou a 1 de setembro
+     de 2026 (DL 97/2026, arts. 17.º e 18.º), mas os contratos que já lá
+     estavam mantêm a isenção (art. 15.º n.º 2) — fica na lista. O RSAA (anexo
+     III do DL 97/2026) isenta desde 1 de setembro de 2026; `desde` é essa data
+     e `prazoIhru` o dia (MM-DD) do ano seguinte à celebração até ao qual a
+     cópia do contrato vai à plataforma do IHRU (art. 6.º n.º 3) — prazos.js
+     avisa-o. INCERTO: o código do RSAA no quadro 6D — o Anexo F dos
+     rendimentos de 2026 ainda não foi aprovado, e pode trazer um código novo
+     ou um quadro próprio; fica vazio até a portaria sair. */
+  isencoes:[
+    {id:'paa',nome:'Programa de Apoio ao Arrendamento (PAA)',curto:'PAA',quadro:'6D',codigo:'01',lei:'DL 68/2019, art. 20.º; DL 97/2026, art. 15.º',
+      texto:'Contrato que já estava no Programa de Apoio ao Arrendamento: o programa acabou a 1 de setembro de 2026, mas estes contratos mantêm a isenção de IRS.'},
+    {id:'rsaa',nome:'Regime Simplificado de Arrendamento Acessível (RSAA)',curto:'RSAA',quadro:'6D',codigo:'',lei:'DL 97/2026, anexo III',desde:'2026-09-01',prazoIhru:'01-15',
+      texto:'Contrato de habitação celebrado desde 1 de setembro de 2026, com a renda até ao limite da tipologia no concelho (a portaria dos limites ainda não saiu) e pelo menos 3 anos (3 meses na residência temporária). A cópia do contrato vai à plataforma do IHRU até 15 de janeiro do ano seguinte ao da celebração; sem isso não há isenção.'},
+    {id:'pma',nome:'Programa municipal de arrendamento acessível (PMA)',curto:'programa municipal',quadro:'6D',codigo:'02',lei:'EBF art. 71.º-A',
+      texto:'Contrato celebrado num programa municipal de habitação a renda acessível: as rendas ficam isentas de IRS durante o contrato.'},
+    {id:'pmae',nome:'Programa municipal de alojamento estudantil (PMAE)',curto:'alojamento estudantil municipal',quadro:'6D',codigo:'03',lei:'EBF art. 71.º-A',
+      texto:'Contrato celebrado num programa municipal de alojamento para estudantes: as rendas ficam isentas de IRS durante o contrato.'}],
   colunas:['conservacao','condominio','imi','selo','taxas','outros'],
   naturezas:{habitacional:'07',naoHabitacional:'06'},
   quadros:{semReducao:'4.1',comReducao:'4.2',datas:'4.2A',anosAnteriores:'8',englobamento:'6G',aimi:'9',cessados:'10'},
   prazos:{comunicacaoDuracao:'2027-02-15'},
+  /* As taxas gerais do CIRS art. 68.º dos rendimentos de 2026, na redação da
+     Lei 73-A/2025, de 30 de dezembro (OE 2026) — a versão em vigor no Portal
+     das Finanças (info.portaldasfinancas.gov.pt, cirs_rep/irs68.aspx,
+     consultado a 2026-10-11), confirmada pelas taxas médias publicadas. O
+     formato e as parcelas como no irs-2025.js. A taxa adicional de
+     solidariedade (art. 68.º-A) fica nos 80 000 € — só a proposta do OE 2027 a
+     muda. */
+  englobamento:{
+    escaloes:[{ate:8342,taxa:12.5,parcela:0},{ate:12587,taxa:15.7,parcela:266.94},{ate:17838,taxa:21.2,parcela:959.23},
+      {ate:23089,taxa:24.1,parcela:1476.53},{ate:29397,taxa:31.1,parcela:3092.76},{ate:43090,taxa:34.9,parcela:4209.85},
+      {ate:46566,taxa:43.1,parcela:7743.23},{ate:86634,taxa:44.6,parcela:8441.72},{ate:null,taxa:48,parcela:11387.27}],
+    solidariedade:[{acima:80000,taxa:2.5},{acima:250000,taxa:5}]},
   novidades:[
     'Taxa de 10 % nas rendas de habitação até 2 300 € por mês, em contratos novos e já existentes, de 2026 a 2029 (Decreto-Lei 97/2026). Conta a renda inteira do contrato, com móveis e serviços. Se a duração já dá uma taxa mais baixa, fica essa; o não habitacional continua a 28 %.',
     'O inquilino com contabilidade organizada passa a reter 10 %, e não 25 %, nessas rendas. A retenção é um adiantamento do imposto: o que se reteve a mais acerta-se na declaração.',

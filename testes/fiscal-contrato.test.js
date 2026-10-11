@@ -196,7 +196,8 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
       fisco: { estado: 'naoDeclarado', numero: '1234567', finalidade: 'hp', renovavel: true } });
     desfazerDom = domCom({ c_rent: '800' });
     app.collectCt();
-    igual(app.cForm.fisco, { estado: 'naoDeclarado', numero: '1234567', finalidade: 'hp', celebracao: '', renovavel: true, renovacoes: [], cessacaoMotivo: '' });
+    igual(app.cForm.fisco, { estado: 'naoDeclarado', numero: '1234567', finalidade: 'hp', celebracao: '', renovavel: true, renovacoes: [], cessacaoMotivo: '',
+      comunicacoes: {}, rendaAcimaDoLimite: null, rendaAnterior: 0, isencao: '' });
   });
 });
 

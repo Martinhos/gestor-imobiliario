@@ -104,7 +104,10 @@ if (require.main === module) {
     console.log('Criada ' + path.relative(path.join(__dirname, '..'), r.ficheiro) + ' a partir da de ' + r.de + ', e registada no index.html, no sw.js, no arnês e no MAPA.');
     console.log('\nAntes de publicar, rever com as fontes (e escrevê-las no cabeçalho, com a data):');
     console.log('  1. A Lei do Orçamento do Estado para ' + para + ' e os decretos do ano: o art. 72.º do CIRS (taxas e reduções),');
-    console.log('     o art. 41.º (gastos), o art. 45.º-C do EBF (rendas moderadas, até 2029) e os limites — mudar `taxas`.');
+    console.log('     o art. 41.º (gastos), o art. 45.º-C do EBF (rendas moderadas, até 2029) e os limites — mudar `taxas`');
+    console.log('     (com os n.os 23 e 24 do art. 72.º: `limiteRendaAlta` e `bonusRendaMenor`) e as `isencoes` (quadro 6D:');
+    console.log('     PAA, RSAA e programas municipais — os códigos e o prazo do IHRU), e o `englobamento` (os escalões do');
+    console.log('     art. 68.º e a solidariedade do 68.º-A, que o OE muda quase todos os anos).');
     console.log('  2. A portaria que aprova o Modelo 3 dos rendimentos de ' + para + ' (fev/mar de ' + (para + 1) + ') e o ofício-circulado da AT:');
     console.log('     quadros, colunas e códigos (`quadros`, `colunas`, `naturezas`). Quando sair: `modelo.oficial = true` e o texto.');
     console.log('  3. As `novidades`: trocar a frase provisória pelo que mudou, em frases para quem declara.');

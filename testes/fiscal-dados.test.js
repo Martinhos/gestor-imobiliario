@@ -48,7 +48,8 @@ describe('a pessoa guarda o país e a retenção', () => {
 describe('o bloco fiscal do contrato', () => {
   test('um contrato antigo ganha o bloco vazio: por indicar', () => {
     const c = app.normContract({ id: 'C', rent: 500 });
-    igual(c.fisco, { estado: '', numero: '', finalidade: '', celebracao: '', renovavel: null, renovacoes: [], cessacaoMotivo: '' });
+    igual(c.fisco, { estado: '', numero: '', finalidade: '', celebracao: '', renovavel: null, renovacoes: [], cessacaoMotivo: '',
+      comunicacoes: {}, rendaAcimaDoLimite: null, rendaAnterior: 0, isencao: '' });
     assert.ok(app.ctFiscoPorIndicar(c));
     assert.ok(!app.ctDeclarado(c));
     assert.ok(!app.ctNaoDeclarado(c));

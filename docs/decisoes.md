@@ -37,6 +37,7 @@ confere que cada uma aponta para código que existe.
 - 2026-09-24 · A app de dev instala-se ao lado da de produção
 - 2026-09-29 · Um grupo partilha-se como grupo, e a vista geral começa pela jornada
 - 2026-10-08 · O IRS ganha uma versão por ano, e a Declaração deixa de deduzir a mais
+- 2026-10-12 · O que tinha ficado de fora do IRS entra
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1080,3 +1081,37 @@ dos outros rendimentos da pessoa), o quadro 9 do AIMI, os códigos do quadro
 10, o titular A/B da tributação conjunta, a dispensa dos recibos e o Modelo 44,
 as isenções do RSAA e dos programas municipais, e os n.ºs 23 e 24 do art.
 72.º (os limites da renda e o bónus da renda mais baixa).
+
+## 2026-10-12 · O que tinha ficado de fora do IRS entra
+O que a versão por ano deixou para o Martinho decidir (entrada de
+2026-10-08) entrou a pedido dele («faz tudo»), por dois agentes, um do lado
+do contrato e outro da página Declaração.
+
+No contrato: as comunicações de fevereiro já feitas (o aviso do ano
+cala-se), a isenção de um programa de arrendamento acessível (0 %, quadro
+6D), as duas perguntas dos n.os 23 e 24 do art. 72.º e o «Renovar…» que
+guarda a renovação em vez de mudar o fim. Na Declaração: o cartão «A tua
+situação» (conjunta, titular A/B, dispensa dos recibos, outros rendimentos),
+o quadro 9 do AIMI, o 6D, a comunicação no 4.2A, o 4.2B e o 4.2C, o
+simulador do englobamento e o Modelo 44.
+
+Decisões que não se leem no código. No n.º 24 leu-se «5 %» da renda
+anterior (a pesquisa escrevia «5 p.p.»), a partir de 1/1/2024 como o n.º 23,
+só no período inicial e nunca abaixo de 5 % — a letra daria 0 % num contrato
+de 20 anos. No n.º 23 «Não sei» conta a redução, para não mudar a taxa de
+todos os contratos de 2024 sem a pessoa ter dito nada. Os contratos isentos
+ficam na linha do 4.1, e não à parte como o pedido ao agente dizia, porque as
+instruções do quadro 6D pedem «o campo do quadro 4.1, onde o imóvel foi
+identificado» — saem só do líquido e do imposto. O AIMI que abate é estimado
+pelo VPT dos prédios da app e limitado ao imposto estimado das rendas, a
+leitura prudente do CIMI art. 135.º-I. As parcelas a abater dos escalões não
+vêm na lei: calculam-se para a tabela ser contínua, e o teste confere-as com
+as taxas médias publicadas de 2026. O código do RSAA no 6D fica por conhecer
+até sair o Anexo F de 2026. Um imóvel dos dois cônjuges em conjunta diz «A/B»
+sem titular escolhido.
+
+Uma mudança de comportamento: o período inicial passou a acabar na véspera
+da primeira renovação (irs.js:irsPeriodos) — com o «Renovar…» a levar o fim
+para a frente, um contrato de 5 anos renovado por mais 5 lia-se como um de
+10 e ficava com 10 % em vez de 15 %. Os contratos antigos, com o fim
+original, dão o mesmo que antes.
