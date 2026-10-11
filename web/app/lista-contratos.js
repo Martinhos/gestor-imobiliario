@@ -61,7 +61,8 @@ function vContracts(){
           </div>
           <div class="u-d-flex u-g-8px u-fx-0-0-auto u-ai-flex-start">
             <div class="u-ta-right"><div class="u-fw-750 u-fs-16px">${euro(c.rent)}</div>
-            <div class="small">líquido ${euro(netRent(c))} · imposto ${dec(taxRateOf(c))}%${Number(c.taxRate)>0?'':' (estim.)'}</div></div>
+            <div class="small">líquido ${euro(netRent(c))}</div>
+            <div class="small">imposto ${dec(taxRateOf(c))}%${Number(c.taxRate)>0?'':' (estim.)'}</div></div>
             ${kebab('ct:'+c.id)}</div></div>
         ${ts.length?`<div class="u-mt-9px">${ts.map(t=>`<div class="small u-d-flex u-ai-center u-g-7px u-p-2px-0">
           ${ic('users',13)}<span class="u-fx-1 u-minw-0 u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(t.name)}</span>
