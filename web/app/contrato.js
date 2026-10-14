@@ -86,6 +86,8 @@ function ctFicha(id){
     c.iban?{rotulo:'IBAN',valor:esc(fmtIBAN(c.iban))}:null,
     (c.ownerPhone||c.ownerEmail)?{rotulo:'Contacto do senhorio',valor:esc(contacto(c.ownerPhone,c.ownerEmail))}:null,
     verPessoas&&(c.tenantPhone||c.tenantEmail)?{rotulo:'Contacto do inquilino',valor:esc(contacto(c.tenantPhone,c.tenantEmail))}:null,
+    /* a lista de tarefas abre-se numa janela própria (tarefas.js:tfAbrir) */
+    tfLinhaDaFicha('contrato',c.id),
     inv.length?{tipo:'bloco',rotulo:'Inventário',
       valor:inv.map(i=>esc((i.qty||1)+'× '+(i.name||'artigo'))+(i.state==='novo'?' · novo':'')).join('<br>')}:null,
     chaves.length?{tipo:'bloco',rotulo:'Chaves entregues',

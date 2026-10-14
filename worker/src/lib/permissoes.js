@@ -119,7 +119,7 @@ export function kindsVisiveis(perms) {
 }
 
 // A casa como um cargo a vê: sem hipotecas salvo loan.view, sem fotos salvo
-// file.view, sem valor/aquisição salvo report.view, sem notas/anúncio salvo
+// file.view, sem valor/aquisição salvo report.view, sem notas/anúncio/tarefas salvo
 // house.edit, e nunca as quotas. O que fica é o que qualquer colaborador vê:
 // nome, morada, quartos, dados registais.
 // Recebe: data — o JSON da casa já interpretado (objeto); perms — Set ou array.
@@ -130,7 +130,7 @@ export function projetarCasa(data, perms) {
   if (!temPerm(perms, 'loan.view')) delete d.loans;
   if (!temPerm(perms, 'file.view')) delete d.photos;
   if (!temPerm(perms, 'report.view')) { delete d.value; delete d.purchase; }
-  if (!temPerm(perms, 'house.edit')) { delete d.notes; delete d.listing; }
+  if (!temPerm(perms, 'house.edit')) { delete d.notes; delete d.listing; delete d.tarefas; }
   return d;
 }
 
@@ -164,7 +164,7 @@ export function fundirCasa(existenteStr, incoming, perms) {
     (k === 'loans' && !temPerm(perms, 'loan.view')) ||
     (k === 'photos' && !temPerm(perms, 'file.view')) ||
     ((k === 'value' || k === 'purchase') && !temPerm(perms, 'report.view')) ||
-    ((k === 'notes' || k === 'listing') && !temPerm(perms, 'house.edit'));
+    ((k === 'notes' || k === 'listing' || k === 'tarefas') && !temPerm(perms, 'house.edit'));
   Object.keys(incoming || {}).forEach((k) => { if (!bloqueado(k)) out[k] = incoming[k]; });
   return out;
 }

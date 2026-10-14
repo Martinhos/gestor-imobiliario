@@ -20,7 +20,7 @@ export const MODULOS = [
   'lista', 'continuidade', 'graficos', 'credito', 'componentes',
   'metricas', 'navegacao', 'servicos', 'acessos', 'vistas',
   'painel-geral', 'lista-imoveis', 'lista-contratos', 'lista-pessoas', 'lista-colaboradores', 'lista-movimentos', 'projecoes',
-  'imovel', 'pessoas', 'contrato',
+  'imovel', 'pessoas', 'contrato', 'tarefas',
   'planeados', 'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'visitas', 'calendario', 'movimento', 'creditos', 'splitwise', 'contrato-pdf',
   'avaliacao', 'fisco', 'definicoes', 'copias',
 ];

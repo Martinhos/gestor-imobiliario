@@ -1157,6 +1157,29 @@ body.sel-on .wrap{padding-bottom:calc(120px + var(--inset-bottom))}
    de os ler de relance. */
 #raiz#raiz .colab-acoes{display:flex;flex-wrap:wrap;gap:8px}
 #raiz#raiz .colab-acoes .btn{flex:1 1 auto;justify-content:center;min-height:44px;white-space:nowrap}
+/* ---- web/app/tarefas.js ---- */
+/* A lista de tarefas de um imóvel ou de um contrato (tarefas.js:tfLista): uma
+   secção é um cabeçalho com o nome, a conta e o ⋯ dela, e as tarefas por
+   baixo, uma por linha. A caixa de marcar vive dentro de um label de 44px,
+   que é a área de toque dela: a caixa nativa tem 18, e um dedo que falha a
+   caixa caía no nome e abria o formulário em vez de marcar. O nome é um botão
+   da largura que sobra, com a altura do dedo. Cumprida, a tarefa fica riscada
+   e em cinzento, no mesmo sítio: saltar para o fim da lista ao marcar tirava
+   a linha de debaixo do dedo. */
+#raiz#raiz .tf-seccao{margin-top:6px}
+#raiz#raiz .tf-cab{display:flex;align-items:center;gap:8px;padding:2px 0 4px;border-bottom:1px solid var(--line)}
+#raiz#raiz .tf-cab b{flex:1 1 auto;min-width:0;font-size:14px;font-weight:650;color:var(--ink);overflow-wrap:anywhere}
+#raiz#raiz .tf-conta{font-size:12px;color:var(--muted);white-space:nowrap}
+#raiz#raiz .tf-itens{display:flex;flex-direction:column}
+#raiz#raiz .tf-item{display:flex;align-items:center;gap:2px;border-bottom:1px solid var(--line)}
+#raiz#raiz .tf-marca{display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex:0 0 auto;margin-left:-12px;cursor:pointer}
+#raiz#raiz .tf-marca input{width:18px;height:18px;margin:0;padding:0;accent-color:var(--accent);cursor:pointer}
+#raiz#raiz .tf-marca input:disabled{cursor:default}
+#raiz#raiz .tf-nome{flex:1 1 auto;min-width:0;min-height:44px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:2px;
+  padding:8px 0;border:0;background:none;text-align:left;font:inherit;font-size:14px;font-weight:500;color:var(--ink);overflow-wrap:anywhere}
+#raiz#raiz button.tf-nome{cursor:pointer}
+#raiz#raiz .tf-quando{font-size:11.5px;color:var(--muted);text-decoration:none}
+#raiz#raiz .tf-feita .tf-nome>span{text-decoration:line-through;color:var(--muted)}
 /* ---- web/cloud/partilha.js ---- */
 /* A folha dos documentos legais (os termos e a privacidade, que o
    cloud/ajuda.js embrulha numa div .lg): texto corrido, legível, sem cartões.

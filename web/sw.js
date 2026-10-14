@@ -67,7 +67,7 @@ const APP = [
   'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'splitwise', 'definicoes', 'copias', 'arranque',
   // os serviços
   'painel-geral', 'lista-imoveis', 'lista-contratos', 'lista-pessoas', 'lista-colaboradores',
-  'lista-movimentos', 'projecoes', 'imovel', 'pessoas', 'contrato', 'planeados', 'visitas', 'calendario', 'movimento',
+  'lista-movimentos', 'projecoes', 'imovel', 'pessoas', 'contrato', 'tarefas', 'planeados', 'visitas', 'calendario', 'movimento',
   'creditos', 'contrato-pdf', 'avaliacao', 'fisco',
 ].map((n) => '/app/' + n + '.js');
 const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'grupos', 'ajuda', 'painel',

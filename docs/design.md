@@ -41,6 +41,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Uma porta, e nenhum beco
 - Um aviso não tapa o que se pede para carregar
 - Tocar num registo é lê-lo
+- As tarefas de um imóvel ou de um contrato
 - Um contrato tem três estados
 - A Declaração resume, não declara
 - As regras do IRS têm uma versão por ano
@@ -1035,6 +1036,29 @@ passou a ser um caminho a mais para o mesmo sítio. Quando não há nada a
 fazer, o menu fica vazio, e é o menu vazio que faz aparecer o aviso «Só
 podes ver este registo» (componentes.js:lpShow) — uma decisão que já lá
 estava e que um «Ver» lá dentro tinha desfeito.
+
+## As tarefas de um imóvel ou de um contrato
+Um imóvel e um contrato têm uma lista de tarefas, organizada em secções,
+onde se pesquisa pelo nome da tarefa, pela secção e pelas cumpridas ou por
+cumprir.
+
+A lista vive dentro do registo (`tarefas: {seccoes, itens}`,
+dados.js:normTarefas), e não num kind próprio: sobe e desce com o imóvel ou o
+contrato, com as permissões dele. Num contrato altera-a quem pode alterar o
+contrato (acessos.js:podeEditar); num imóvel, quem pode editar a ficha — e
+quem colabora sem essa permissão nem a recebe nem a escreve, como as notas
+(worker/src/lib/permissoes.js:projetarCasa, worker/src/lib/permissoes.js:fundirCasa).
+
+A ficha só mostra o resumo e a porta (tarefas.js:tfLinhaDaFicha): uma ficha
+lê-se e não tem campos. A lista abre-se numa janela própria
+(tarefas.js:tfAbrir), sem «Guardar»: cada toque grava logo, pelo mesmo caminho
+(tarefas.js:tfGravar, que reverifica a permissão no momento de gravar). Por
+isso a janela volta a contar como «sem alterações» a cada repintura
+(tarefas.js:tfPintar) — fechar no X depois de pesquisar não pergunta «Sair sem
+guardar?». A pesquisa repinta só a lista, e o campo não perde o foco. Uma
+tarefa cumprida fica riscada no mesmo sítio, sem saltar para o fim: saltar
+tirava a linha de debaixo do dedo. Remover uma tarefa ou uma secção (que leva
+as tarefas dela) tem Anular (componentes.js:comDesfazer).
 
 ## Um contrato tem três estados
 A app sabia dois — ativo e não ativo — e um contrato assinado que ainda não

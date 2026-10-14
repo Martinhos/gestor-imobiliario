@@ -196,6 +196,24 @@ function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:''
   o.id=idSeguro(o.id);o.houseId=idSeguro(o.houseId);
   o.pais=String(o.pais||'');o.retem=!!o.retem;
   o.files=(o.files||[]).map(normFile);return o}
+/* normaliza a lista de tarefas de um imóvel ou de um contrato (tarefas.js): as
+   secções pela ordem em que foram criadas, e as tarefas, cada uma presa a uma
+   secção ou a nenhuma (seccao vazia). Uma tarefa que aponte para uma secção que
+   já não existe passa para «sem secção» em vez de desaparecer; feitaEm é o dia
+   em que foi marcada como cumprida, e só fica numa tarefa cumprida.
+   Recebe: t — a lista em bruto ({seccoes, itens}, parcial, ou nada).
+   Devolve: um objeto novo {seccoes:[{id,nome}], itens:[{id,nome,seccao,feita,feitaEm}]}. */
+function normTarefas(t){
+  const o=t&&typeof t==='object'&&!Array.isArray(t)?t:{};
+  const seccoes=(Array.isArray(o.seccoes)?o.seccoes:[]).filter(x=>x&&typeof x==='object')
+    .map(x=>({id:idSeguro(x.id||uid()),nome:String(x.nome||'').trim()}));
+  const ids=seccoes.map(x=>x.id);
+  const itens=(Array.isArray(o.itens)?o.itens:[]).filter(x=>x&&typeof x==='object')
+    .map(x=>{const feita=!!x.feita,sec=idSeguro(x.seccao||'');
+      return {id:idSeguro(x.id||uid()),nome:String(x.nome||'').trim(),seccao:ids.indexOf(sec)>-1?sec:'',
+        feita:feita,feitaEm:feita&&/^\d{4}-\d{2}-\d{2}$/.test(String(x.feitaEm||''))?String(x.feitaEm):''}});
+  return {seccoes:seccoes,itens:itens};
+}
 /* normaliza um imóvel e migra o que mudou entre versões: equity passa a purchase, o crédito único
    vira lista de hipotecas, quartos em texto ganham id, e quotas de donos removidos são descartadas.
    Os campos fiscais (o que o Anexo F e o Modelo 2 pedem por imóvel): distrito, código da
@@ -205,6 +223,7 @@ function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:''
    As despesas fixas do imóvel, que criam planeados sozinhas (planeados.js:syncPropRecs):
    imi (€/ano), condominio (€/mês), seguro (€/ano) e seguroMes (1–12; 0 é o mês corrente
    quando o planeado nasce). Zero é «sem valor»: não há planeado.
+   As tarefas (tarefas.js) passam pelo normTarefas.
    Recebe: p — o imóvel em bruto, de qualquer versão dos dados (ou nada).
    Devolve: um objeto novo com o imóvel completo e já migrado. */
 function normProp(p){
@@ -234,6 +253,7 @@ function normProp(p){
   const osh=chavesSeguras(o.ownerShares),sh={};
   Object.keys(osh).forEach(k=>{const v=Number(osh[k]);if(o.ownerIds.indexOf(k)>-1&&isFinite(v)&&v>=0)sh[k]=v});
   o.ownerShares=sh;
+  o.tarefas=normTarefas(o.tarefas);
   return o;
 }
 /* normaliza o bloco fiscal de um contrato: o estado perante a AT (FISCO_ESTADOS — o vazio
@@ -272,6 +292,7 @@ function normFisco(f){
   return o;
 }
 /* normaliza um contrato: omissões preenchidas; itens do inventário e chaves ganham id próprio;
+   as tarefas (tarefas.js) passam pelo normTarefas;
    o bloco fiscal passa por normFisco (um contrato antigo ganha-o vazio: «por indicar»)
    Recebe: c — o contrato em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos do contrato preenchidos. */
@@ -287,6 +308,7 @@ function normContract(c){
   o.files=(o.files||[]).map(normFile);
   o.inventory=(o.inventory||[]).map(i=>{const q=Object.assign({id:uid(),name:'',qty:1,state:'usado'},i);q.id=idSeguro(q.id);return q});
   o.keys=(o.keys||[]).map(i=>{const q=Object.assign({id:uid(),name:'',qty:1},i);q.id=idSeguro(q.id);return q});
+  o.tarefas=normTarefas(o.tarefas);
   return o;
 }
 /* Os modos de dividir um valor pelos imóveis (o psplit de um movimento de

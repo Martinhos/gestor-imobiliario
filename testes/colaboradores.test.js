@@ -148,6 +148,19 @@ describe('as permissões (lista canónica, igual à do cliente)', () => {
     assert.equal(semLoans.loans.length, 1, 'sem loan.view as hipotecas não se tocam');
   });
 
+  /* As tarefas de um imóvel (web/app/tarefas.js) são do dono como as notas:
+     quem colabora sem «Editar a ficha» nem as recebe nem as escreve. */
+  test('as tarefas de um imóvel vão e voltam só com house.edit', () => {
+    const tarefas = { seccoes: [{ id: 's1', nome: 'Obras' }], itens: [{ id: 'k1', nome: 'Pintar a sala', seccao: 's1', feita: false, feitaEm: '' }] };
+    const data = Object.assign({ tarefas }, H1);
+    assert.ok(!('tarefas' in projetarCasa(data, new Set(['report.view']))), 'sem house.edit não vão');
+    assert.deepEqual(projetarCasa(data, new Set(normalizarPerms(['house.edit']))).tarefas, tarefas);
+    const base = JSON.stringify(data);
+    const outras = { seccoes: [], itens: [] };
+    assert.deepEqual(fundirCasa(base, { tarefas: outras }, new Set(['tx.view'])).tarefas, tarefas, 'sem house.edit não se escrevem');
+    assert.deepEqual(fundirCasa(base, { tarefas: outras }, new Set(normalizarPerms(['house.edit']))).tarefas, outras);
+  });
+
   test('proximaData, planeadoTermina e fundirPlaneado (a aritmética do cliente, em texto)', () => {
     assert.equal(proximaData('2026-01-31', 'month'), '2026-02-28', 'o dia prende-se ao último do mês');
     assert.equal(proximaData('2028-01-31', 'month'), '2028-02-29', 'bissexto');

@@ -1,0 +1,263 @@
+// A lista de tarefas de um imóvel ou de um contrato (web/app/tarefas.js):
+// vive dentro do registo, arruma-se em secções, cada tarefa está cumprida ou
+// por cumprir, e a janela pesquisa pelo nome da tarefa e da secção e filtra
+// pela secção e pelo estado. Cada toque grava logo; quem não pode alterar o
+// registo não altera a lista.
+
+import { test, describe, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { carregarApp, limpar, repor, elementos, igual } from './arnes.js';
+import { janelasFalsas } from './lib/dom.js';
+import { conferir, EX } from './lib/formularios.js';
+
+const HOJE = '2026-10-14';
+const app = carregarApp({ hoje: HOJE });
+afterEach(() => repor(app));
+
+/* Uma base com um imóvel de arrendamento e um contrato nele; as janelas numa
+   pilha observável e os toasts guardados.
+   Devolve: {abertas, toasts}. */
+function base() {
+  limpar(app);
+  app.db.owners = [app.normPerson({ id: 'O1', name: 'Eu' })];
+  app.db.tenants = [app.normPerson({ id: 'I1', name: 'Ana' })];
+  app.db.properties = [app.normProp({ id: 'P1', name: 'T2 Lisboa', use: 'investimento', ownerIds: ['O1'] })];
+  app.db.contracts = [app.normContract({ id: 'C1', propertyId: 'P1', rent: 600, tenantIds: ['I1'], start: '2026-01-01' })];
+  const abertas = janelasFalsas(app, 'render', 'buildNav', 'save', 'paintThumbs', 'setModal');
+  const toasts = [];
+  app.toast = (m, op) => { toasts.push({ m, op }); };
+  return { abertas, toasts };
+}
+
+/* Uma lista já arrumada: duas secções e três tarefas, uma delas solta.
+   Devolve: as tarefas em bruto. */
+const LISTA = () => ({
+  seccoes: [{ id: 'S1', nome: 'Obras' }, { id: 'S2', nome: 'Documentos' }],
+  itens: [
+    { id: 'K1', nome: 'Pintar a sala', seccao: 'S1', feita: false },
+    { id: 'K2', nome: 'Trocar o esquentador', seccao: 'S1', feita: true, feitaEm: '2026-10-01' },
+    { id: 'K3', nome: 'Pedir o certificado energético', seccao: 'S2', feita: false },
+    { id: 'K4', nome: 'Ligar à Ana', seccao: '', feita: false },
+  ],
+});
+
+/* Os nomes das tarefas que a lista da janela mostra, pela ordem.
+   Devolve: array de nomes. */
+const nomesNaLista = () => [...app.tfLista().matchAll(/<span class="tf-nome"><span>([^<]*)<\/span>|class="tf-nome"[^>]*><span>([^<]*)<\/span>/g)]
+  .map((m) => m[1] || m[2]);
+
+describe('os dados', () => {
+  test('o normTarefas arruma o que vier: secção desconhecida fica solta, o dia só numa cumprida, lixo vira lista vazia', () => {
+    const t = app.normTarefas({
+      seccoes: [{ id: 'S1', nome: ' Obras ' }, null],
+      itens: [{ id: 'K1', nome: 'A', seccao: 'S9', feita: false, feitaEm: '2026-01-01' },
+        { id: 'K2', nome: 'B', seccao: 'S1', feita: true, feitaEm: '2026-02-03' }, 'lixo'],
+    });
+    igual(t, {
+      seccoes: [{ id: 'S1', nome: 'Obras' }],
+      itens: [{ id: 'K1', nome: 'A', seccao: '', feita: false, feitaEm: '' },
+        { id: 'K2', nome: 'B', seccao: 'S1', feita: true, feitaEm: '2026-02-03' }],
+    });
+    igual(app.normTarefas('x'), { seccoes: [], itens: [] });
+    igual(app.normTarefas([1, 2]), { seccoes: [], itens: [] });
+  });
+
+  test('o imóvel e o contrato guardam as tarefas, e um registo antigo nasce com a lista vazia', () => {
+    const p = app.normProp({ id: 'P1', name: 'X', tarefas: LISTA() });
+    assert.equal(p.tarefas.itens.length, 4);
+    assert.equal(app.normContract({ id: 'C1', tarefas: LISTA() }).tarefas.seccoes.length, 2);
+    igual(app.normProp({ id: 'P2', name: 'Y' }).tarefas, { seccoes: [], itens: [] });
+    igual(app.normProp(JSON.parse(JSON.stringify(p))).tarefas, JSON.parse(JSON.stringify(p.tarefas)), 'ida e volta sem perdas');
+  });
+});
+
+describe('a ficha', () => {
+  test('sem tarefas, a ficha oferece adicioná-las; com tarefas, diz quantas faltam e abre a lista', () => {
+    base();
+    assert.match(app.propFicha('P1'), /Tarefas[\s\S]*Ainda não há tarefas\.[\s\S]*tfAbrir\('imovel','P1'\)[\s\S]*Adicionar tarefas/);
+    app.db.contracts[0].tarefas = app.normTarefas(LISTA());
+    assert.match(app.ctFicha('C1'), /3 por cumprir · 1 cumprida[\s\S]*tfAbrir\('contrato','C1'\)[\s\S]*Ver tarefas/);
+  });
+
+  test('a ficha não tem campos: a lista abre-se numa janela à parte', () => {
+    base();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    assert.doesNotMatch(app.propFicha('P1'), /<input/);
+  });
+});
+
+describe('a janela da lista', () => {
+  test('abre com o nome do registo, as tarefas soltas primeiro e as secções pela ordem', () => {
+    const { abertas } = base();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    assert.equal(abertas[0].t, 'Tarefas · T2 Lisboa');
+    igual(nomesNaLista(), ['Ligar à Ana', 'Pintar a sala', 'Trocar o esquentador', 'Pedir o certificado energético']);
+    assert.match(abertas[0].b, /type="search"/);
+    assert.match(abertas[0].f, /Adicionar tarefa/);
+    assert.match(abertas[0].m, /Adicionar secção/);
+  });
+
+  test('pesquisa pelo nome da tarefa, sem olhar a acentos nem maiúsculas', () => {
+    base();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    app.tfPesquisar('ENERGETICO');
+    igual(nomesNaLista(), ['Pedir o certificado energético']);
+  });
+
+  test('pesquisa pelo nome da secção: aparecem as tarefas dela', () => {
+    base();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    app.tfPesquisar('obras');
+    igual(nomesNaLista(), ['Pintar a sala', 'Trocar o esquentador']);
+  });
+
+  test('filtra pela secção, pelas soltas e pelo estado, e os filtros somam-se à pesquisa', () => {
+    base();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    const el = elementos(app);
+    el.tf_fsec.value = 'S1'; el.tf_fest.value = '';
+    app.tfFiltrar();
+    igual(nomesNaLista(), ['Pintar a sala', 'Trocar o esquentador']);
+    el.tf_fest.value = 'feitas';
+    app.tfFiltrar();
+    igual(nomesNaLista(), ['Trocar o esquentador']);
+    el.tf_fsec.value = ''; el.tf_fest.value = 'por';
+    app.tfFiltrar();
+    igual(nomesNaLista(), ['Ligar à Ana', 'Pintar a sala', 'Pedir o certificado energético']);
+    el.tf_fsec.value = '__sem__';
+    app.tfFiltrar();
+    igual(nomesNaLista(), ['Ligar à Ana']);
+    el.tf_fsec.value = ''; el.tf_fest.value = 'por';
+    app.tfFiltrar();
+    app.tfPesquisar('sala');
+    igual(nomesNaLista(), ['Pintar a sala']);
+    app.tfPesquisar('esquentador');
+    assert.match(app.tfLista(), /Nenhuma tarefa corresponde/, 'cumprida e filtrada por «Por cumprir»');
+  });
+
+  test('o filtro das secções só oferece «Sem secção» quando há tarefas soltas e secções', () => {
+    base();
+    const opcoes = (t) => JSON.parse(JSON.stringify(app.tfOpcoesDeSeccao(app.normTarefas(t)))).map((o) => o.label);
+    assert.deepEqual(opcoes(LISTA()), ['Todas as secções', 'Obras', 'Documentos', 'Sem secção']);
+    const semSoltas = LISTA(); semSoltas.itens = semSoltas.itens.filter((x) => x.seccao);
+    assert.deepEqual(opcoes(semSoltas), ['Todas as secções', 'Obras', 'Documentos']);
+  });
+});
+
+describe('o que grava', () => {
+  test('marcar uma tarefa grava logo, com o dia; desmarcar tira o dia', () => {
+    base();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    app.tfMarcar('K1', true);
+    const k1 = () => app.db.properties[0].tarefas.itens.find((x) => x.id === 'K1');
+    assert.equal(k1().feita, true);
+    assert.equal(k1().feitaEm, HOJE);
+    app.tfMarcar('K1', false);
+    assert.equal(k1().feita, false);
+    assert.equal(k1().feitaEm, '');
+  });
+
+  test('o formulário de uma tarefa nova segue a regra dos formulários, e guardar põe-na na secção escolhida', () => {
+    const { abertas, toasts } = base();
+    app.db.contracts[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('contrato', 'C1');
+    app.tfNovaTarefa('S2');
+    const form = abertas[1];
+    assert.equal(form.t, 'Nova tarefa');
+    conferir('tarefa', form.b, { obrigatorios: ['tf_nome'], exemplos: { tf_nome: EX + 'Trocar o esquentador' } });
+    assert.match(form.b, /Tarefa <span class="req">\*<\/span>/);
+    const el = elementos(app);
+    el.tf_nome.value = '   ';
+    app.tfGuardarTarefa();
+    assert.equal(app.db.contracts[0].tarefas.itens.length, 4, 'sem nome não se guarda');
+    assert.equal(toasts.pop().m, 'Escreve a tarefa.');
+    el.tf_nome.value = ' Entregar a caderneta ';
+    el.tf_sec.value = 'S2';
+    app.tfGuardarTarefa();
+    const nova = app.db.contracts[0].tarefas.itens[4];
+    assert.equal(nova.nome, 'Entregar a caderneta');
+    assert.equal(nova.seccao, 'S2');
+    assert.equal(nova.feita, false);
+    assert.equal(toasts.pop().m, 'Tarefa adicionada.');
+  });
+
+  test('editar muda o nome, a secção e o estado; remover tem Anular', () => {
+    const { toasts } = base();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    app.tfEditarTarefa('K4');
+    const el = elementos(app);
+    el.tf_nome.value = 'Ligar à Ana às 18h';
+    el.tf_sec.value = 'S2';
+    el.tf_feita.checked = true;
+    app.tfGuardarTarefa();
+    const k4 = () => app.db.properties[0].tarefas.itens.find((x) => x.id === 'K4');
+    assert.equal(k4().nome, 'Ligar à Ana às 18h');
+    assert.equal(k4().seccao, 'S2');
+    assert.equal(k4().feitaEm, HOJE);
+    app.tfEditarTarefa('K4');
+    app.tfRemoverTarefa('K4');
+    assert.equal(k4(), undefined);
+    const t = toasts.pop();
+    assert.equal(t.m, 'Tarefa removida.');
+    t.op.fn();
+    assert.equal(k4().nome, 'Ligar à Ana às 18h', 'o Anular repõe-na');
+  });
+
+  test('uma secção nova, um nome novo, e remover a secção leva as tarefas dela (com Anular)', () => {
+    const { abertas, toasts } = base();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    app.tfNovaSeccao();
+    elementos(app).pm_v.value = 'Mudança';
+    app._pm();
+    const t = () => app.db.properties[0].tarefas;
+    assert.deepEqual(t().seccoes.map((s) => s.nome), ['Obras', 'Documentos', 'Mudança']);
+    app.tfMudarNomeSeccao('S1');
+    assert.equal(abertas[abertas.length - 1].t, 'Mudar o nome da secção');
+    elementos(app).pm_v.value = 'Obras na cozinha';
+    app._pm();
+    assert.equal(t().seccoes[0].nome, 'Obras na cozinha');
+    app.tfRemoverSeccao('S1');
+    assert.deepEqual(t().seccoes.map((s) => s.id).includes('S1'), false);
+    assert.deepEqual(t().itens.map((x) => x.id), ['K3', 'K4']);
+    const aviso = toasts.pop();
+    assert.equal(aviso.m, 'Secção removida, com 2 tarefas.');
+    aviso.op.fn();
+    assert.deepEqual(t().itens.map((x) => x.id), ['K1', 'K2', 'K3', 'K4']);
+    assert.equal(t().itens[0].seccao, 'S1', 'as tarefas voltam para a secção');
+  });
+});
+
+describe('quem pode', () => {
+  test('quem colabora sem «Editar a ficha» não vê a linha das tarefas do imóvel nem marca nada', () => {
+    const { toasts } = base();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    app.window.CW = { user: { id: 'eu' }, cargos: { P1: { dono: false, nome: 'Ver', perms: ['contract.view'] } }, pessoas: {} };
+    assert.equal(app.tfPodeAlterar('imovel', 'P1'), false);
+    app.tfMarcar('K1', true);
+    assert.equal(app.db.properties[0].tarefas.itens[0].feita, false, 'recusado');
+    assert.match(toasts.pop().m, /Não tens permissão/);
+    app.db.properties[0].tarefas = app.normTarefas(null);   // o servidor nem as manda
+    assert.equal(app.tfLinhaDaFicha('imovel', 'P1'), null);
+  });
+
+  test('num contrato que outro adicionou, a lista lê-se mas não se altera: sem botões nem caixas ativas', () => {
+    base();
+    app.db.contracts[0].tarefas = app.normTarefas(LISTA());
+    app.db.contracts[0]._createdBy = 'outro';
+    app.window.CW = { user: { id: 'eu' }, cargos: { P1: { dono: false, nome: 'Gestor', perms: ['contract.view', 'contract.add'] } }, pessoas: {} };
+    assert.equal(app.tfPodeAlterar('contrato', 'C1'), false);
+    app.tfAbrir('contrato', 'C1');
+    assert.match(app.ctFicha('C1'), /Ver tarefas/, 'quem vê o contrato vê a lista');
+    const html = app.tfLista();
+    assert.match(html, /disabled/);
+    assert.doesNotMatch(html, /tfEditarTarefa/);
+  });
+});

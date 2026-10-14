@@ -30,8 +30,8 @@
    espelho no servidor é worker/src/lib/servicos.js (um teste compara os dois). */
 const SERVICOS=[
   {id:'dashboard',nome:'Visão geral',ficheiros:['app/painel-geral.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['properties','contracts','transactions','recurring','owners']},
-  {id:'properties',nome:'Imóveis',ficheiros:['app/lista-imoveis.js','app/imovel.js'],kinds:[],userKinds:[],casa:true,colab:false,requer:[],usa:['contracts','credits','owners','transactions']},
-  {id:'contracts',nome:'Contratos',ficheiros:['app/lista-contratos.js','app/contrato.js','app/contrato-pdf.js'],kinds:['contract'],userKinds:[],casa:false,colab:false,requer:['properties','tenants'],usa:['transactions','recurring']},
+  {id:'properties',nome:'Imóveis',ficheiros:['app/lista-imoveis.js','app/imovel.js','app/tarefas.js'],kinds:[],userKinds:[],casa:true,colab:false,requer:[],usa:['contracts','credits','owners','transactions']},
+  {id:'contracts',nome:'Contratos',ficheiros:['app/lista-contratos.js','app/contrato.js','app/contrato-pdf.js','app/tarefas.js'],kinds:['contract'],userKinds:[],casa:false,colab:false,requer:['properties','tenants'],usa:['transactions','recurring']},
   {id:'visits',nome:'Visitas',ficheiros:['app/visitas.js'],kinds:['visit'],userKinds:[],casa:false,colab:false,requer:['properties'],usa:['tenants']},
   {id:'tenants',nome:'Inquilinos',ficheiros:['app/lista-pessoas.js','app/pessoas.js'],kinds:['tenant'],userKinds:['tenant'],casa:false,colab:false,requer:[],usa:['contracts']},
   {id:'owners',nome:'Proprietários',ficheiros:['app/lista-pessoas.js','app/pessoas.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['properties']},

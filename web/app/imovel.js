@@ -74,6 +74,8 @@ function propFicha(id){
     (p.rooms||[]).length?{rotulo:'Quartos',valor:(p.rooms||[]).map(r=>esc(r.name)).join(', ')}:null,
     {rotulo:'Proprietários',valor:esc(ownerNames(p))},
     ac.length?{tipo:'bloco',rotulo:'Contratos ativos',valor:ac.map(x=>`${x.roomId?esc(roomName(p,x.roomId))+': ':''}${esc(ctNames(x))} · ${euro(x.rent)}`).join('<br>')}:null,
+    /* a lista de tarefas abre-se numa janela própria (tarefas.js:tfAbrir) */
+    tfLinhaDaFicha('imovel',id),
     pode(id,'report.view')?{rotulo:'Valor de mercado',valor:euro(p.value)}:null,
     pode(id,'report.view')?{rotulo:'Valor de aquisição',valor:euro(p.purchase)}:null,
     pode(id,'report.view')&&fisco?{rotulo:'Fiscal',valor:fisco}:null,

@@ -47,7 +47,7 @@ const MAPA = [
     ficheiros: ['web/app/servicos.js', 'worker/src/lib/servicos.js'] },
   { id: 'imoveis', titulo: 'Imóveis, contratos e pessoas',
     ficheiros: ['web/app/registos.js', 'web/app/lista-imoveis.js', 'web/app/imovel.js', 'web/app/lista-contratos.js', 'web/app/contrato.js', 'web/app/contrato-pdf.js',
-      'web/app/lista-pessoas.js', 'web/app/pessoas.js', 'web/app/lista-colaboradores.js', 'web/app/avaliacao.js', 'web/app/prazos.js',
+      'web/app/tarefas.js', 'web/app/lista-pessoas.js', 'web/app/pessoas.js', 'web/app/lista-colaboradores.js', 'web/app/avaliacao.js', 'web/app/prazos.js',
       'web/app/visitas.js', 'web/app/calendario.js'] },
   { id: 'movimentos', titulo: 'Movimentos e seleção em massa',
     ficheiros: ['web/app/tipos.js', 'web/app/lista-movimentos.js', 'web/app/movimento.js', 'web/app/planeados.js', 'web/cloud/selecao.js',

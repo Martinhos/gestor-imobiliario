@@ -79,6 +79,14 @@ var AVISOS = [
         ],
       },
       {
+        titulo: 'Listas de tarefas nos imóveis e nos contratos',
+        afeta: ['imoveis', 'contratos'],
+        itens: [
+          'A ficha de um imóvel e a de um contrato têm agora «Tarefas»: o que há para fazer nele, arrumado em secções (Obras, Documentos, o que quiseres), com cada tarefa marcada como cumprida ou por cumprir.',
+          'Na lista pesquisas pelo nome da tarefa ou da secção, e filtras pela secção e pelas que estão por cumprir ou já cumpridas.',
+        ],
+      },
+      {
         titulo: 'Selecionar movimentos sem a lista saltar',
         afeta: ['movimentos'],
         itens: [
