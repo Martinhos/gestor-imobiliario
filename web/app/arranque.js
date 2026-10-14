@@ -159,6 +159,16 @@ document.addEventListener('focusin',e=>{
   const s2=topSheet();if(s2)s2.classList.add('kb');
   setTimeout(()=>{try{t.scrollIntoView({block:'center',behavior:'smooth'})}catch(err){}},260);
 });
+/* as caixas de texto crescem ao escrever e ao aparecerem já com texto
+   (componentes.js:ajustarCaixas; sem nada a fazer onde o CSS já o faz) */
+if(!caixaSozinha&&typeof MutationObserver!=='undefined'){
+  document.addEventListener('input',e=>{if(e.target&&e.target.tagName==='TEXTAREA')ajustarCaixas(e.target)});
+  let caixasPedidas=false;
+  new MutationObserver(()=>{
+    if(caixasPedidas)return;caixasPedidas=true;
+    requestAnimationFrame(()=>{caixasPedidas=false;ajustarCaixas()});
+  }).observe(document.body,{childList:true,subtree:true});
+}
 document.addEventListener('focusout',()=>{
   setTimeout(()=>{
     if(typing(document.activeElement))return;

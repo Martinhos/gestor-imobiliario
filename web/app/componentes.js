@@ -306,6 +306,29 @@ function toggleFold(id){
      Fica lá: um re-render deita o nó fora e o próximo nasce sem ela — que é o
      que faz a dobra já aberta não voltar a piscar. */
   if(on)el.classList.add('entra');
+  if(on)ajustarCaixas(el);   // as caixas de texto lá dentro mediam 0 enquanto estava fechada
+}
+// o browser cresce as caixas de texto sozinho (field-sizing do CSS)? Então o ajustarCaixas não faz nada.
+const caixaSozinha=typeof CSS!=='undefined'&&!!CSS.supports&&CSS.supports('field-sizing','content');
+/* As caixas de texto crescem com o que lá está escrito, em vez de ficarem nos
+   90px com uma barra de deslizar. O CSS faz isto sozinho onde houver
+   field-sizing (estilos.css:textarea); onde não houver (Firefox, Safari
+   antigo), mede-se aqui: altura a zero, e fica a do conteúdo mais as bordas.
+   Uma caixa escondida (dobra fechada) mede 0 e fica como está; a dobra pede
+   outra medida ao abrir (toggleFold).
+   Recebe: raiz (opcional) — onde procurar as caixas (o documento por omissão),
+   ou a própria caixa.
+   Devolve: nada — muda o style.height das caixas visíveis. */
+function ajustarCaixas(raiz){
+  if(caixaSozinha)return;
+  raiz=raiz||document;
+  const caixas=raiz.tagName==='TEXTAREA'?[raiz]:[].slice.call(raiz.querySelectorAll('textarea'));
+  caixas.forEach(t=>{
+    if(!t.offsetParent)return;
+    const cs=getComputedStyle(t),bordas=parseFloat(cs.borderTopWidth)+parseFloat(cs.borderBottomWidth);
+    t.style.height='auto';
+    t.style.height=(t.scrollHeight+bordas)+'px';
+  });
 }
 /* Os ficheiros escolhidos no <input type="file"> do fileBlock, entregues a
    quem os pediu. Era o onchange em linha «${onPick}(this)» (com o argumento
