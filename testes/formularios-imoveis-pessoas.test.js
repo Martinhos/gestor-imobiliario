@@ -29,6 +29,33 @@ function base() {
    Devolve: os textos dos placeholder="…". */
 const placeholders = (html) => [...html.matchAll(/placeholder="([^"]*)"/g)].map((m) => m[1]);
 
+/* O que o guardar faz a um campo quando o recusa: o elemento do arnês (o
+   mesmo que a app recebe do getElementById) passa a anotar as classes, os
+   atributos, o que se escreve depois dele e o foco.
+   Recebe: id — o id do campo.
+   Devolve: {cls, attrs, depois, foco} — as anotações, que crescem à medida. */
+function marcasDe(id) {
+  const e = app.document.getElementById(id);
+  const m = { cls: [], attrs: {}, depois: [], foco: 0 };
+  e.classList = { add: (c) => { m.cls.push(c); }, remove() {}, toggle() {}, contains: () => false };
+  e.setAttribute = (k, v) => { m.attrs[k] = String(v); };
+  e.insertAdjacentElement = (onde, p) => { m.depois.push([onde, p.id, p.className, p.textContent]); };
+  e.focus = () => { m.foco++; };
+  return m;
+}
+
+/* Confere que o erro ficou dito no campo: o contorno (.err), o aria-invalid,
+   a frase por baixo (.erro-campo, apontada pelo aria-describedby) e o foco.
+   Recebe: m — as anotações de marcasDe; id — o id do campo; msg — a frase.
+   Devolve: nada — falha o teste se faltar alguma coisa. */
+function erroNoCampo(m, id, msg) {
+  assert.ok(m.cls.includes('err'), id + ': sem o contorno vermelho');
+  assert.equal(m.attrs['aria-invalid'], 'true', id + ': sem o aria-invalid');
+  assert.equal(m.attrs['aria-describedby'], id + '-erro', id + ': o aria-describedby não aponta a frase');
+  assert.deepEqual(m.depois, [['afterend', id + '-erro', 'erro-campo', msg]], id + ': a frase por baixo do campo');
+  assert.equal(m.foco, 1, id + ': o campo não recebeu o foco');
+}
+
 describe('os formulários do imóvel e das pessoas, para lá do básico', () => {
   test('quartos: cada nome tem um exemplo com «Ex: », o título diz que o nome é opcional, e nenhum leva asterisco', () => {
     const abertas = base();
@@ -45,11 +72,13 @@ describe('os formulários do imóvel e das pessoas, para lá do básico', () => 
     assert.match(html, /id="p_room_R1" value="Quarto 1"/, 'o nome escrito fica no campo');
   });
 
-  test('quotas-partes: o exemplo é a parte igual com «Ex: », o título diz «(%, opcional)» e a dica diz o que vale em branco', () => {
+  test('quotas-partes: um grupo próprio; o exemplo é a parte igual com «Ex: », cada campo diz «(%, opcional)» e a dica diz o que vale em branco', () => {
     const abertas = base();
     app.propModal('P1');
     const html = abertas[0].b;
-    assert.match(html, /<div class="flabel">Proprietários e quota-parte \(%, opcional\)<\/div>/);
+    assert.match(html, /<div class="sect imv-grupo">\s*<div class="imv-sec-cab"><h3>Proprietários e quota-parte<\/h3><\/div>/);
+    assert.match(html, /id="p_share_O1"[^>]*aria-label="Quota de Eu \(%, opcional\)"/);
+    assert.match(html, /aria-label="Remover Rui Matos"[^>]*data-click="delPropOwner\('O2'\)"/, 'o remover diz quem remove');
     assert.match(html, /id="p_share_O1"[^>]*placeholder="Ex: 50"/);
     assert.match(html, /id="p_share_O2"[^>]*placeholder="Ex: 50"/);
     assert.match(html, /Partes iguais \(50% cada\)/, 'em branco são partes iguais, e a dica diz quanto');
@@ -105,7 +134,7 @@ describe('os formulários do imóvel e das pessoas, para lá do básico', () => 
     assert.match(html, /id="pe_name" value="Ana Rodrigues"/, 'os valores ficam nos campos');
   });
 
-  test('pessoas: o nome leva o asterisco porque o guardar recusa uma ficha sem nome', () => {
+  test('pessoas: o nome leva o asterisco porque o guardar recusa uma ficha sem nome, e diz o erro no campo', () => {
     const abertas = base();
     const avisos = [];
     app.toast = (m) => { avisos.push(m); };
@@ -114,9 +143,11 @@ describe('os formulários do imóvel e das pessoas, para lá do básico', () => 
     app.collectPerson = () => {};
     app.perForm.name = '  ';
     const antes = app.db.owners.length;
+    const nome = marcasDe('pe_name');
     app.onSave();
     assert.deepEqual(avisos, ['Escreve o nome.']);
     assert.equal(app.db.owners.length, antes, 'não grava');
+    erroNoCampo(nome, 'pe_name', 'Escreve o nome.');
   });
 
   test('visita com contacto preenchido, numa casa por quartos: o imóvel leva o asterisco, o quarto não; o contacto diz o que é no rótulo', () => {
@@ -134,7 +165,7 @@ describe('os formulários do imóvel e das pessoas, para lá do básico', () => 
     for (const ph of placeholders(html)) assert.ok(ph.startsWith(EX), 'placeholder fora da regra: ' + ph);
   });
 
-  test('visita: o imóvel, quem vem e a data são os obrigatórios — o guardar recusa cada um em branco', () => {
+  test('visita: o imóvel, quem vem e a data são os obrigatórios — o guardar recusa cada um em branco (e o fim antes do início), e diz o erro no campo', () => {
     const abertas = base();
     const avisos = [];
     app.toast = (m) => { avisos.push(m); };
@@ -143,8 +174,16 @@ describe('os formulários do imóvel e das pessoas, para lá do básico', () => 
     assert.equal(abertas.length, 1);
     app.visColhe = () => {};
     const tenta = (o) => { Object.assign(app.visForm, { nomes: 'Rui', propertyId: 'P1', date: '2026-10-05' }, o); app.onSave(); };
-    tenta({ nomes: '' }); tenta({ propertyId: '' }); tenta({ date: '' });
-    assert.deepEqual(avisos, ['Escreve quem vem à visita.', 'Escolhe o imóvel.', 'Escolhe a data.']);
+    /* cada recusa diz-se no seu campo; o imóvel, no botão do menu da casa
+       (o input escondido do sel() não se vê nem toma o foco) */
+    const m = { vi_nomes: marcasDe('vi_nomes'), selb_vi_prop: marcasDe('selb_vi_prop'), vi_prop: marcasDe('vi_prop'), vi_date: marcasDe('vi_date'), vi_end: marcasDe('vi_end') };
+    tenta({ nomes: '' }); tenta({ propertyId: '' }); tenta({ date: '' }); tenta({ start: '11:00', end: '10:30' });
+    assert.deepEqual(avisos, ['Escreve quem vem à visita.', 'Escolhe o imóvel.', 'Escolhe a data.', 'A hora de fim é antes da de início.']);
     assert.equal((app.db.visits || []).length, 0, 'nenhuma ficou gravada');
+    erroNoCampo(m.vi_nomes, 'vi_nomes', 'Escreve quem vem à visita.');
+    erroNoCampo(m.selb_vi_prop, 'selb_vi_prop', 'Escolhe o imóvel.');
+    assert.deepEqual(m.vi_prop.cls, [], 'o input escondido não leva o erro');
+    erroNoCampo(m.vi_date, 'vi_date', 'Escolhe a data.');
+    erroNoCampo(m.vi_end, 'vi_end', 'A hora de fim é antes da de início.');
   });
 });

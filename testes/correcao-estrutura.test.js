@@ -237,19 +237,29 @@ describe('uma raiz só nas Definições', () => {
     app.CW.user = { id: 'EU', name: 'Eu', email: 'eu@x.pt' };
     app.setPage = '';
     const h = app.vSettings(), p = portas(h);
-    for (const x of ['tema', 'defaults', 'cats', 'irs', 'tags', 'filtros', 'dados', 'cloud', 'ajuda', 'faq', 'novidades', 'legal']) {
+    for (const x of ['tema', 'defaults', 'cats', 'filtros', 'dados', 'cloud', 'ajuda', 'faq', 'novidades', 'legal']) {
       assert.ok(p.includes(x), 'a porta de «' + x + '»: ' + p.join(' '));
     }
-    // os Grupos são um separador: a subpágina antiga não tem porta, e o caminho velho leva ao separador
-    assert.ok(!p.includes('groups'), 'sem a porta dos Grupos nas Definições');
-    for (const x of Object.keys(copia(app.SUBPAGE))) if (!['termos', 'privacidade', 'groups'].includes(x)) assert.ok(p.includes(x), 'a subpágina «' + x + '» tem porta');
+    // os Grupos são um separador que vive nas Definições (2026-10): a linha leva ao separador
+    assert.ok(p.includes('groups'), 'a porta dos Grupos nas Definições');
+    /* as categorias, as etiquetas e o IRS são uma página só (2026-10,
+       D-DefCategorias): a raiz tem a porta «cats», e «irs» e «tags» ficam como
+       nomes antigos da mesma página, para o que os guarda (goSet, uma página
+       guardada) continuar a abrir */
+    for (const x of ['irs', 'tags']) {
+      assert.ok(!p.includes(x), '«' + x + '» já não tem porta própria');
+      app.setPage = x;
+      assert.equal(app.vSettings(), (app.setPage = 'cats', app.vSettings()), '«' + x + '» abre a página das categorias');
+      app.setPage = '';
+    }
+    for (const x of Object.keys(copia(app.SUBPAGE))) if (!['termos', 'privacidade', 'groups', 'irs', 'tags'].includes(x)) assert.ok(p.includes(x), 'a subpágina «' + x + '» tem porta');
     assert.equal(p.length, new Set(p).size, 'sem portas repetidas');
     assert.match(h, /CW\.editProfile\(\)/, 'o perfil');
     assert.match(h, /<span>Versão<\/span>/, 'e um cartão Sobre só');
     assert.equal((h.match(/<span>Versão<\/span>/g) || []).length, 1);
     // o que as novidades e o aviso legal mandam procurar em «Definições → …»
     const r = rotulos(h), textos = ler('web/avisos.js') + ler('web/legal.js');
-    for (const x of ['IRS e dedução', 'Filtros comuns', 'Conta e partilha', 'Perguntas frequentes', 'Ajuda e sugestões', 'Novidades', 'Importar e cópias']) {
+    for (const x of ['Categorias, etiquetas e IRS', 'Filtros comuns', 'Conta e partilha', 'Perguntas frequentes', 'Ajuda e sugestões', 'Novidades', 'Importar e cópias']) {
       assert.ok(textos.includes('Definições → ' + x) || textos.includes('Definições → <b>' + x), 'controlo: a app manda a «' + x + '»');
       assert.ok(r.includes(x), '«Definições → ' + x + '» existe na raiz: ' + r.join(' | '));
     }
@@ -260,8 +270,8 @@ describe('uma raiz só nas Definições', () => {
     const app = carregarApp();
     app.setPage = '';
     const p = portas(app.vSettings());
-    for (const x of ['tema', 'defaults', 'cats', 'irs', 'tags', 'filtros', 'dados']) assert.ok(p.includes(x), x);
-    assert.ok(!p.includes('groups'), 'os Grupos são um separador, não uma linha das Definições');
+    for (const x of ['tema', 'defaults', 'cats', 'filtros', 'dados']) assert.ok(p.includes(x), x);
+    assert.ok(p.includes('groups'), 'a porta dos Grupos é da base: existe sem a nuvem');
     assert.ok(!p.includes('cloud'), 'a conta é da nuvem');
     app.setPage = 'tema';
     assert.match(app.vSettings(), /setTheme\('dark'\)/, 'a subpágina do Tema é da base');

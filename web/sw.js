@@ -77,8 +77,11 @@ const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 
    redirecionamento, e o que ficava guardado era uma resposta marcada como
    redirecionada — que o browser recusa entregar a uma navegação. O «/» é o
    mesmo documento e responde direto. */
+/* As duas letras da app (estilos.css, os @font-face) entram na concha: sem
+   elas a app abria offline na letra do sistema, com outra cara. */
 const SHELL = ['/', '/estilos.css', '/avisos.js', '/legal.js', '/manifest.webmanifest',
-  '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'].concat(APP, NUVEM);
+  '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
+  '/fonts/geist.woff2', '/fonts/bricolage-grotesque.woff2'].concat(APP, NUVEM);
 
 /* NÃO se chama skipWaiting() no install. Chamava-se, e foi por isso que a v31
    partiu em produção: o worker novo assumia o controlo a meio de um

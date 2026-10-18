@@ -3,10 +3,13 @@
 
 /* ---------------- pedidos de ajuda e sugestões ---------------- */
 
+/* O selo de cada estado de um pedido, nas cores do canvas (M-Ajuda): o que
+   chegou e ninguém viu é cobalto (como o «por confirmar»), o que está a ser
+   tratado é âmbar, e o concluído é verde. */
 var TK_STATUS = {
-  criado: { label: 'Recebido', cor: 'amber', nota: 'à espera de ser visto' },
-  resolucao: { label: 'Em resolução', cor: '', nota: 'já estamos a tratar disto' },
-  concluido: { label: 'Concluído', cor: 'grey', nota: '' },
+  criado: { label: 'Recebido', cor: '' },
+  resolucao: { label: 'Em resolução', cor: 'amber' },
+  concluido: { label: 'Concluído', cor: 'in' },
 };
 CW.tickets = null;          // null: ainda não sabemos; [] : não há pedidos
 CW._ticketsFalhou = false;  // a última leitura falhou — diz-se, e só se tenta de novo a pedido
@@ -34,112 +37,183 @@ CW.ticketsDeNovo = function () {
   render();
 };
 
-/* A página "Ajuda e sugestões": botões para reportar problema ou sugerir
-   melhoria, os pedidos em curso e os concluídos (com estado e resposta da
-   equipa), e a lista de tutoriais. À primeira passagem dispara o loadTickets
-   e repinta quando os pedidos chegarem; enquanto não chegam não afirma nada,
-   e se não deu para os carregar diz isso, com um botão para tentar de novo.
+/* Um pedido ao suporte como linha do cartão «Os teus pedidos» (o canvas
+   M-Ajuda): o selo do estado e «Problema · 12/10/2026» numa linha, o
+   assunto por baixo, e a resposta da equipa, quando há, numa caixa à parte.
+   Recebe: x — o pedido, como vem da API ({subject, kind, status, created_at, reply}).
+   Devolve: o HTML da linha (texto). */
+function linhaDoPedidoAjuda(x) {
+  var st = TK_STATUS[x.status] || TK_STATUS.criado;
+  var d = new Date(x.created_at);
+  /* o dia LOCAL, e nao o de UTC: um pedido das 23h30 de Lisboa aparecia com
+   o dia seguinte */
+  var data = dPT(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+  return '<div class="aj-pedido">' +
+    '<div class="aj-pedido-cab"><span class="badge' + (st.cor ? ' ' + st.cor : '') + '">' + st.label + '</span>' +
+      '<span class="small num">' + (x.kind === 'sugestao' ? 'Sugestão' : 'Problema') + ' · ' + data + '</span></div>' +
+    '<p class="aj-pedido-tit">' + esc(x.subject) + '</p>' +
+    (x.reply ? '<div class="aj-resposta"><b>Equipa Rendorium:</b> ' + esc(x.reply) + '</div>' : '') +
+    '</div>';
+}
+
+/* O cabeçalho de uma secção da Ajuda: o título e, à direita, uma nota ou
+   uma ação.
+   Recebe: titulo — o texto do título; direita (opcional) — o HTML do lado direito.
+   Devolve: o HTML do cabeçalho (texto). */
+function cabecaDaAjuda(titulo, direita) {
+  return '<div class="aj-cab"><h2>' + titulo + '</h2>' + (direita || '') + '</div>';
+}
+
+/* A página «Ajuda e sugestões», pela ordem do canvas (M-Ajuda): «Como se
+   faz» (os tutoriais, num carrossel), as perguntas frequentes em destaque
+   com a porta para todas, «Os teus pedidos» com «Novo pedido» e a resposta
+   da equipa, e, no fim, as novidades, os termos, a privacidade e a versão.
+   À primeira passagem dispara o loadTickets e repinta quando os pedidos
+   chegarem; enquanto não chegam não afirma nada, e se não deu para os
+   carregar diz isso, com um botão para tentar de novo.
+   Recebe: nada.
    Devolve: o HTML da página, como string. */
 function vAjuda() {
   if (CW.tickets === null && !CW._ticketsFalhou) { loadTickets(); }
   var t = CW.tickets || [];
-  var semSaber = CW.tickets === null
+  var pedidos = CW.tickets === null
     ? (CW._ticketsFalhou
-      ? '<div class="hint u-mt-16px">Não deu para carregar os teus pedidos — tenta de novo.</div>' +
-        '<div class="toolbar u-mt-8px"><button class="btn" data-toca="dados" data-click="CW.ticketsDeNovo()">Tentar de novo</button></div>'
-      : '')
-    : '<div class="hint u-mt-16px">Ainda não enviaste nenhum pedido.</div>';
-  var abertos = t.filter(function (x) { return x.status !== 'concluido'; });
-  var fechados = t.filter(function (x) { return x.status === 'concluido'; });
-
-  var linha = function (x) {
-    var st = TK_STATUS[x.status] || TK_STATUS.criado;
-    var d = new Date(x.created_at);
-    /* o dia LOCAL, e nao o de UTC: um pedido das 23h30 de Lisboa aparecia com
-     o dia seguinte */
-    var data = dPT(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
-    return '<div class="card u-p-12px-13px">' +
-      '<div class="row-between u-ai-flex-start u-g-10px">' +
-      '<div class="u-minw-0"><b class="u-d-block">' + esc(x.subject) + '</b>' +
-      '<span class="small">' + (x.kind === 'sugestao' ? 'Sugestão' : 'Problema') + ' · ' + data + '</span></div>' +
-      '<span class="badge ' + st.cor + ' u-fx-0-0-auto">' + st.label + '</span></div>' +
-      (st.nota ? '<div class="small u-mt-6px">' + st.nota + '</div>' : '') +
-      (x.reply ? '<div class="hint u-mt-9px"><b>Resposta:</b> ' + esc(x.reply) + '</div>' : '') +
-      '</div>';
-  };
-
-  return card('Contar um problema ou dar uma ideia',
-    'Respondemos dentro da app, aqui mesmo',
-    '<div class="hint">Se algo correu mal, diz o que estavas a fazer quando aconteceu — ajuda a perceber o problema.</div>' +
-    '<div class="toolbar u-mt-12px">' +
-    '<button class="btn primary" data-click="CW.newTicket(\'problema\')">' + ic('info', 15) + ' Reportar problema</button>' +
-    '<button class="btn" data-click="CW.newTicket(\'sugestao\')">' + ic('plus', 15) + ' Sugerir melhoria</button></div>') +
-    (abertos.length
-      ? '<div class="section-title">Em curso</div><div class="list u-g-9px">' + abertos.map(linha).join('') + '</div>'
-      : semSaber) +
-    (fechados.length
-      ? '<div class="section-title">Concluídos</div><div class="list u-g-9px">' + fechados.slice(0, 10).map(linha).join('') + '</div>'
-      : '') +
-    tutoriaisNaAjuda();
+      ? '<div class="card aj-cartao"><div class="aj-pedido"><p class="small">Não deu para carregar os teus pedidos — tenta de novo.</p>' +
+        '<div><button class="btn sm" data-toca="dados" data-click="CW.ticketsDeNovo()">Tentar de novo</button></div></div></div>'
+      : '<div class="espera aj-espera"><span class="roda" aria-hidden="true"></span><span><b>À espera do servidor.</b> Os teus pedidos aparecem assim que chegarem.</span></div>')
+    : t.length
+      /* os em curso primeiro, depois os concluídos (os dez mais recentes) */
+      ? '<div class="card aj-cartao">' + t.filter(function (x) { return x.status !== 'concluido'; })
+          .concat(t.filter(function (x) { return x.status === 'concluido'; }).slice(0, 10))
+          .map(linhaDoPedidoAjuda).join('') + '</div>'
+      : '<div class="empty aj-vazio"><b>Ainda não enviaste nenhum pedido.</b>Se algo correu mal, ou te falta alguma coisa, conta-nos — respondemos aqui e por email.</div>';
+  var destaque = typeof PERGUNTAS_FREQUENTES !== 'undefined' ? PERGUNTAS_FREQUENTES.filter(function (q) { return q.destaque; }) : [];
+  var perguntas = destaque.length
+    ? cabecaDaAjuda('Perguntas frequentes') +
+      '<div class="card aj-perguntas">' + destaque.map(perguntaHtml).join('') +
+        '<button type="button" class="aj-fq aj-todas" data-toca="ecra" data-click="goSet(\'faq\')"><span>Ver as ' + PERGUNTAS_FREQUENTES.length + ' perguntas</span>' + ic('chevR', 18) + '</button>' +
+      '</div>'
+    : '';
+  return '<div class="aj-pagina">' +
+    tutoriaisNaAjuda() +
+    perguntas +
+    cabecaDaAjuda('Os teus pedidos', '<button type="button" class="btn sm primary" data-toca="camada" data-click="CW.newTicket(\'problema\')">' + ic('plus', 16) + 'Novo pedido</button>') +
+    pedidos +
+    '<p class="small aj-rodape">' +
+      '<a href="#" data-toca="ecra" data-click="event.preventDefault();goSet(\'novidades\')">Novidades</a> · ' +
+      '<a href="#" data-toca="camada" data-click="CW.readDoc(event,\'termos\')">Termos</a> · ' +
+      '<a href="#" data-toca="camada" data-click="CW.readDoc(event,\'privacidade\')">Privacidade</a>' +
+      (typeof VERSAO !== 'undefined' ? ' · <span class="num">versão ' + VERSAO + '</span>' : '') + '</p>' +
+    '</div>';
 }
 
-/* Os tutoriais listados um a um: quem precisa de um não devia ter de esperar
-   que a app lho ofereça na vista geral, nem de dispensar o cartão dos
-   primeiros passos para nunca mais lá chegar.
+/* «Como se faz»: os tutoriais, um mosaico cada, num carrossel que se
+   desliza de lado (o canvas M-Ajuda) — quantos passos tem, o título, e o
+   selo «Visto» ou o resumo. Quem precisa de um não devia ter de esperar que
+   a app lho ofereça na vista geral, nem de dispensar o cartão dos primeiros
+   passos para nunca mais lá chegar. No cabeçalho, quantos já viu.
+   Recebe: nada.
    Devolve: o HTML da secção "Como se faz", como string — vazia se não houver
    tutoriais. */
 function tutoriaisNaAjuda() {
   if (typeof CW.listaDeTutoriais !== 'function') return '';
   var ts = CW.listaDeTutoriais();
   if (!ts.length) return '';
-  return '<div class="section-title">Como se faz</div>' +
-    '<div class="list u-g-9px">' + ts.map(function (t) {
-      return '<div class="card tap u-p-12px-13px" data-click="CW.guiaAbrir(\'' + t.id + '\')">' +
-        '<div class="row-between u-ai-center u-g-10px">' +
-        '<div class="u-minw-0"><b class="u-d-block">' + esc(t.titulo) + '</b>' +
-        '<span class="small">' + t.passos + ' passos' + (t.visto ? ' · já viste' : '') + '</span>' +
-        '<span class="small u-d-block u-mt-3px">' + esc(t.resumo) + '</span></div>' +
-        '<span class="u-fx-0-0-auto u-c-v-muted u-tf-rotate-180deg">' + ic('chev', 18) + '</span>' +
-        '</div></div>';
+  var vistos = ts.filter(function (t) { return t.visto; }).length;
+  return cabecaDaAjuda('Como se faz', '<span class="small num">' + vistos + ' de ' + ts.length + ' vistos</span>') +
+    '<div class="aj-tutoriais">' + ts.map(function (t) {
+      return '<button type="button" class="aj-tu" data-toca="ecra" data-click="CW.guiaAbrir(\'' + t.id + '\')">' +
+        '<span class="small num">' + t.passos + ' passos</span>' +
+        '<b>' + esc(t.titulo) + '</b>' +
+        (t.visto ? '<span class="badge in">Visto</span>' : '<span class="small">' + esc(t.resumo) + '</span>') +
+        '</button>';
     }).join('') + '</div>';
 }
 
-// Abre o modal de novo pedido; kind ('problema' ou 'sugestao') só muda os textos.
-// Recebe: kind — 'problema' ou 'sugestao', o tipo de pedido.
-// Devolve: nada — abre o modal.
+/* Os textos do pedido que mudam com o tipo: o exemplo do assunto, o rótulo e
+   o exemplo da caixa, e a nota por baixo dela. Os exemplos vêm sem o «Ex: »,
+   que se escreve à frente de cada placeholder (a regra dos formulários).
+   Recebe: kind — 'problema' ou 'sugestao'.
+   Devolve: {assunto, rotulo, exemplo, nota} (texto). */
+function textosDoPedido(kind) {
+  return kind === 'sugestao'
+    ? { assunto: 'Poder marcar rendas em atraso', rotulo: 'A tua ideia',
+        exemplo: 'Marcar uma renda como em atraso, para a ver na Visão geral até a receber.',
+        nota: 'O que gostavas de conseguir fazer, e porquê.' }
+    : { assunto: 'O gráfico das rendas não aparece', rotulo: 'O que aconteceu',
+        exemplo: 'Abri as Projeções no telemóvel e o gráfico ficou em branco. Esperava ver as rendas dos próximos anos.',
+        nota: 'O que estavas a fazer, o que esperavas e o que aconteceu.' };
+}
+
+/* Abre a janela «Novo pedido» (o canvas M-NovoPedido): o tipo num
+   segmentado (Problema / Sugestão, que troca os textos sem apagar o que já
+   se escreveu), o assunto e a descrição com o contador de caracteres, e a
+   nota do que vai junto com o pedido. Os dois campos são obrigatórios (o
+   sendTicket recusa-os vazios); os placeholders são exemplos, e o que era
+   instrução passou para a nota debaixo da caixa.
+   Recebe: kind — 'problema' ou 'sugestao', o tipo com que abre.
+   Devolve: nada — abre o modal. */
 CW.newTicket = function (kind) {
-  var problema = kind === 'problema';
-  /* os dois campos são obrigatórios (o sendTicket recusa-os vazios); os
-     placeholders são exemplos, e o que era instrução («O que estavas a
-     fazer…») passou para a nota debaixo da caixa */
-  var body = '<div class="form">' +
-    (problema
-      ? '<label>Assunto <span class="req">*</span><input id="tk_s" maxlength="140" placeholder="Ex: O gráfico das rendas não aparece" autocomplete="off"></label>' +
-        '<label>O que aconteceu <span class="req">*</span><textarea id="tk_b" class="u-minh-130px" maxlength="4000" ' +
-        'placeholder="Ex: Abri as Projeções no telemóvel e o gráfico ficou em branco. Esperava ver as rendas dos próximos anos."></textarea></label>' +
-        '<div class="hint u-m-n4px-0-0">O que estavas a fazer, o que esperavas e o que aconteceu.</div>'
-      : '<label>Assunto <span class="req">*</span><input id="tk_s" maxlength="140" placeholder="Ex: Poder marcar rendas em atraso" autocomplete="off"></label>' +
-        '<label>A tua ideia <span class="req">*</span><textarea id="tk_b" class="u-minh-130px" maxlength="4000" ' +
-        'placeholder="Ex: Marcar uma renda como em atraso, para a ver na visão geral até a receber."></textarea></label>' +
-        '<div class="hint u-m-n4px-0-0">O que gostavas de conseguir fazer, e porquê.</div>') +
-    '<div class="hint">Enviamos com a página onde estás e a versão da app. Não enviamos os teus dados.</div>' +
-    '<div id="tk_e" class="small u-c-v-danger"></div></div>';
-  openModal(problema ? 'Reportar problema' : 'Sugerir melhoria', body,
-    '<button class="btn" data-click="closeModal()">Cancelar</button>' +
-    '<button class="btn primary" data-click="CW.sendTicket(\'' + kind + '\')">Enviar</button>');
+  kind = kind === 'sugestao' ? 'sugestao' : 'problema';
+  CW._tkTipo = kind;
+  var tx = textosDoPedido(kind);
+  var opcao = function (k, rotulo) {
+    return '<button type="button" role="radio" aria-checked="' + (k === kind) + '" data-tk="' + k + '" data-toca="rascunho" data-click="CW.ticketTipo(\'' + k + '\')">' + rotulo + '</button>';
+  };
+  var body = '<div class="form tk-form">' +
+    '<div class="segm tk-tipo" role="radiogroup" aria-label="Tipo de pedido">' + opcao('problema', 'Problema') + opcao('sugestao', 'Sugestão') + '</div>' +
+    '<div class="tk-campo"><label>Assunto <span class="req">*</span><input id="tk_s" maxlength="140" placeholder="Ex: ' + tx.assunto + '" autocomplete="off"></label>' +
+      '<span class="small num tk-conta" id="tk_s_n" aria-hidden="true">0 / 140</span></div>' +
+    '<div class="tk-campo"><label><span class="rotulo-txt" id="tk_b_rot">' + tx.rotulo + '</span> <span class="req">*</span><textarea id="tk_b" class="u-minh-130px" maxlength="4000" ' +
+      'placeholder="Ex: ' + tx.exemplo + '"></textarea></label>' +
+      '<div class="hint u-m-n4px-0-0" id="tk_nota">' + tx.nota + '</div>' +
+      '<span class="small num tk-conta" id="tk_b_n" aria-hidden="true">0 / 4000</span></div>' +
+    '<div class="tk-junto">' + ic('info', 18) + '<p>Com o pedido vai a versão da app e o browser que usas. Os teus dados não vão. A resposta chega aqui e por email.</p></div>' +
+    '<div id="tk_e" class="small u-c-v-danger" role="alert"></div></div>';
+  openModal('Novo pedido', body,
+    '<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button>' +
+    '<button class="btn primary" data-toca="dados" data-click="CW.sendTicket()">Enviar</button>');
+  ['tk_s', 'tk_b'].forEach(function (id) {
+    var campo = document.getElementById(id), conta = document.getElementById(id + '_n');
+    if (!campo || !conta || !campo.addEventListener) return;
+    campo.addEventListener('input', function () { conta.textContent = String(campo.value || '').length + ' / ' + (id === 'tk_s' ? 140 : 4000); });
+  });
 };
 
-/* Valida e envia o pedido escrito no modal, juntando a versão e o user agent
-   (os dados do utilizador não vão). Com sucesso fecha o modal e recarrega a
-   lista; o erro fica escrito dentro do próprio modal.
-   Recebe: kind — 'problema' ou 'sugestao', o tipo que segue para a API.
+/* Troca o tipo do pedido aberto (o segmentado da janela): muda o rótulo,
+   os exemplos e a nota no sítio, sem tocar no que já está escrito.
+   Recebe: kind — 'problema' ou 'sugestao'.
+   Devolve: nada — mexe nos textos da janela aberta. */
+CW.ticketTipo = function (kind) {
+  CW._tkTipo = kind === 'sugestao' ? 'sugestao' : 'problema';
+  var tx = textosDoPedido(CW._tkTipo);
+  var s = document.getElementById('tk_s'), b = document.getElementById('tk_b');
+  var rot = document.getElementById('tk_b_rot'), nota = document.getElementById('tk_nota');
+  if (s) s.placeholder = 'Ex: ' + tx.assunto;
+  if (b) b.placeholder = 'Ex: ' + tx.exemplo;
+  if (rot) rot.textContent = tx.rotulo;
+  if (nota) nota.textContent = tx.nota;
+  var corpo = modalBodyEl();
+  if (corpo) [].slice.call(corpo.querySelectorAll('.tk-tipo [role="radio"]')).forEach(function (o) {
+    o.setAttribute('aria-checked', o.getAttribute('data-tk') === CW._tkTipo ? 'true' : 'false');
+  });
+};
+
+/* Valida e envia o pedido escrito no modal, juntando a versão da app e o
+   browser (os dados do utilizador não vão). Um campo vazio diz-se junto
+   dele (componentes.js:falhaCampo); com sucesso fecha o modal e recarrega a
+   lista; o erro do servidor fica escrito dentro do próprio modal.
+   Recebe: kind (opcional) — 'problema' ou 'sugestao', o tipo que segue para
+   a API; sem ele, o que está escolhido na janela.
    Devolve: nada — envia o pedido e fecha o modal quando corre bem. */
 CW.sendTicket = function (kind) {
+  kind = kind || CW._tkTipo || 'problema';
   var e = document.getElementById('tk_e');
   e.textContent = '';
   var subject = val('tk_s').trim(), text = val('tk_b').trim();
-  if (!subject || !text) { e.textContent = 'Escreve o assunto e a descrição.'; return; }
-  var ctx = 'v' + L.version + ' · ' + (navigator.userAgent || '').slice(0, 120);
+  if (!subject) return falhaCampo('tk_s', 'Escreve o assunto.');
+  if (!text) return falhaCampo('tk_b', kind === 'sugestao' ? 'Conta a tua ideia.' : 'Conta o que aconteceu.');
+  var ctx = 'v' + (typeof VERSAO !== 'undefined' ? VERSAO : '?') + ' · ' + (navigator.userAgent || '').slice(0, 120);
   api('POST', '/api/tickets', { kind: kind, subject: subject, body: text, context: ctx })
     .then(function () {
       closeModal();
@@ -276,7 +350,7 @@ function vLegal() {
       '<p class="u-m-0-0-8px">A app evolui continuamente e é fornecida tal como está.</p>' +
       '<ul class="u-m-0 u-pl-18px">' +
       '<li class="u-mb-5px"><b>Guarda as tuas próprias cópias</b> em Definições → Importar e cópias — nenhuma nuvem substitui uma cópia tua.</li>' +
-      '<li class="u-mb-5px">Anexos e fotos ficam só neste aparelho — não sincronizam nem entram nas cópias.</li>' +
+      '<li class="u-mb-5px">Anexos e fotos sincronizam com a sessão iniciada, mas não entram nas cópias de segurança.</li>' +
       '<li class="u-mb-5px">Os valores e projeções são estimativas, não aconselhamento fiscal ou jurídico.</li>' +
       '<li class="u-mb-5px">O contrato em PDF é um modelo genérico: revê-o antes de assinar.</li>' +
       '<li>Ao guardares dados de inquilinos, és tu o responsável por eles.</li>' +
@@ -352,35 +426,51 @@ CW.closeDoc = function () {
   lockScroll(false);
 };
 
-/* Ecrã bloqueante para quem aceitou uma versão antiga dos termos: deixa ler
-   os documentos e só sai dali aceitando — ou recusando, o que apaga a conta
-   depois de mais uma confirmação. Se já estiver aberto, não duplica.
+/* Ecrã bloqueante para quem aceitou uma versão antiga dos termos (o canvas
+   M-Termos): o ícone do documento, o título, a frase com a data da versão
+   nova, os dois documentos para ler (cada um abre por cima, CW.readDoc), o
+   essencial do aviso prático, e só sai dali aceitando — ou recusando, o que
+   apaga a conta depois de mais uma confirmação, essa sim com o botão
+   vermelho (CW.refuseTerms). Se já estiver aberto, não duplica.
+   Recebe: nada.
    Devolve: nada — monta o ecrã #cwTerms e trava o scroll. */
 function showTermsGate() {
   if (document.getElementById('cwTerms')) return;
   var el = document.createElement('div');
   el.id = 'cwTerms';
   el.style.cssText = 'position:fixed;inset:0;z-index:196;background:var(--bg);overflow:auto;' +
-    'display:flex;justify-content:center;padding:22px';
+    'display:flex;justify-content:center;padding:calc(28px + var(--inset-top,0px)) 20px calc(24px + var(--inset-bottom,0px))';
+  el.setAttribute('role', 'alertdialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-labelledby', 'tgTit');
+  var doc = function (page, titulo, sub) {
+    return '<button type="button" class="tg-doc" data-toca="camada" data-click="CW.readDoc(event,\'' + page + '\')">' +
+      '<span class="tg-doc-txt"><b>' + titulo + '</b><span class="small">' + sub + '</span></span>' +
+      '<span class="seta">' + ic('chevR', 20) + '</span></button>';
+  };
   el.innerHTML =
-    '<div class="card u-maxw-460px u-w-100pc u-p-24px u-m-auto">' +
-    '<div class="u-d-flex u-g-12px u-ai-center">' +
-    '<span class="avatar u-bg-v-accent-soft u-c-v-accent">' + ic('contract', 20) + '</span>' +
-    '<div><div class="title u-fs-18px">Atualizámos os termos</div>' +
-    '<div class="small">Precisamos da tua aceitação para continuar</div></div></div>' +
-    '<div class="hint u-fs-14px u-lh-1p6 u-mt-14px">' +
-    '<p class="u-m-0-0-10px">Os <b>Termos e Condições</b> e a <b>Política de Privacidade</b> foram ' +
-    '<b>atualizados</b> desde a versão que aceitaste. Vale a pena ler o que mudou.</p>' +
-    '<p class="u-m-0">Sem a tua aceitação não podemos continuar a guardar os teus dados. Se recusares, ' +
-    '<b>a conta e tudo o que lá está serão apagados</b>.</p></div>' +
-    '<div class="toolbar u-mt-14px u-fxd-column u-g-8px">' +
-    '<button class="btn u-w-100pc u-jc-center" data-click="CW.readDoc(event,\'termos\')">Ler os Termos e Condições</button>' +
-    '<button class="btn u-w-100pc u-jc-center" data-click="CW.readDoc(event,\'privacidade\')">Ler a Política de Privacidade</button>' +
-    '<button class="btn primary u-w-100pc u-jc-center" data-click="CW.acceptTerms()">Aceito</button>' +
-    '<button class="btn danger u-w-100pc u-jc-center" data-click="CW.refuseTerms()">Não aceito — apagar a conta</button>' +
-    '</div><div id="cwt_err" class="small u-c-v-danger u-mt-8px"></div></div>';
+    '<div class="tg-caixa">' +
+    '<span class="tg-ic" aria-hidden="true">' + ic('contract', 28) + '</span>' +
+    '<div class="tg-cab"><h1 id="tgTit" tabindex="-1">Os termos foram atualizados</h1>' +
+    '<p class="num">A versão de ' + esc(LEGAL_UPDATED) + ' dos Termos e da Política de Privacidade substitui a que aceitaste. ' +
+    'Para continuar a usar a app, aceita a versão nova.</p></div>' +
+    '<div class="card tg-docs">' +
+      doc('termos', 'Termos e Condições', 'O acordo entre ti e quem opera o serviço') +
+      doc('privacidade', 'Política de Privacidade', 'Que dados tratamos, porquê e por quanto tempo') +
+    '</div>' +
+    '<div class="tg-aviso"><p class="tg-aviso-tit">Antes de confiares dados reais</p><ul>' +
+      '<li>Guarda cópias tuas em Definições → Importar e cópias.</li>' +
+      '<li>Os valores e as projeções são estimativas, não aconselhamento.</li>' +
+      '<li>O contrato em PDF é uma minuta genérica.</li>' +
+      '<li>Quem guarda dados de inquilinos é responsável por eles.</li></ul></div>' +
+    '<div class="tg-botoes">' +
+    '<button type="button" class="btn primary" data-toca="dados" data-click="CW.acceptTerms()">Aceitar e continuar</button>' +
+    '<button type="button" class="btn ghost tg-recusa" data-toca="camada" data-click="CW.refuseTerms()">Recusar e apagar a conta</button>' +
+    '</div><p id="cwt_err" class="small u-c-v-danger" role="alert"></p></div>';
   document.body.appendChild(el);
   lockScroll(true);
+  // o foco entra no ecrã, para o teclado e o leitor de ecrã não ficarem na app por trás
+  try { document.getElementById('tgTit').focus({ preventScroll: true }); } catch (e) {}
 }
 
 // Regista a aceitação dos termos na API e fecha o ecrã bloqueante; se o
@@ -402,7 +492,10 @@ CW.acceptTerms = function () {
 };
 
 // Modal de confirmação da recusa dos termos: avisa que apaga a conta e tudo o
-// que lá está, sugere exportar primeiro e exige escrever APAGAR.
+// que lá está, sugere exportar primeiro e exige escrever APAGAR. Aberto por
+// cima do ecrã dos termos (z 196), que tapava um modal normal (z 70): a
+// janela ganha a classe que a põe acima dele (.modal.sobre-portao).
+// Recebe: nada.
 // Devolve: nada — abre o modal de confirmação.
 CW.refuseTerms = function () {
   var body = '<div class="form">' +
@@ -412,9 +505,10 @@ CW.refuseTerms = function () {
     'Definições → Importar e cópias → Guardar cópia.</div>' +
     '<label><span class="rotulo-txt">Escreve <b>APAGAR</b> para confirmar</span> <span class="req">*</span><input id="cw_ref_c" placeholder="APAGAR" autocomplete="off" class="u-tt-uppercase"></label>' +
     '<div id="cw_ref_e" class="small u-c-v-danger"></div></div>';
-  openModal('Recusar e apagar a conta', body,
-    '<button class="btn" data-click="closeModal()">Cancelar</button>' +
-    '<button class="btn danger" data-click="CW.doRefuseTerms()">Apagar definitivamente</button>');
+  var L = openModal('Recusar e apagar a conta', body,
+    '<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button>' +
+    '<button class="btn danger" data-toca="dados" data-risco="destroi" data-click="CW.doRefuseTerms()">Apagar definitivamente</button>');
+  if (L && L.el && L.el.classList && document.getElementById('cwTerms')) L.el.classList.add('sobre-portao');
 };
 
 /* Consuma a recusa: a API apaga a conta no servidor (a palavra de confirmação

@@ -16,37 +16,31 @@
      'pend' — «N por enviar», e FICA enquanto houver. É o estado que faltava.
      'off'  — «Sem ligação», e fica até haver.
 
-   E saiu de cima do sino, que vive no canto direito do cabeçalho: desce para
-   debaixo dele.
+   Vive no cabeçalho (index.html:#hdrSync), entre o título e o sino — o
+   canvas de 2026-10 põe-no lá, e deixou de ser um selo solto por cima da
+   página a disputar o canto com o sino. É um ícone de nuvem com a frase ao
+   lado: verde «Guardado», cobalto «N por enviar», âmbar «Sem ligação». No
+   telemóvel fica só o ícone (a frase vai no aria-label e no title); no
+   computador a frase do «Guardado» recolhe ao fim de dois segundos (a
+   classe .recibo) e o ícone fica — o recibo lê-se e sai, o estado vê-se.
    Recebe: state — 'ok', 'pend' ou 'off'; n (opcional) — quantas alterações
    estão por enviar, para o 'pend' as poder contar.
-   Devolve: nada — mexe só no elemento #cwSync. */
+   Devolve: nada — mexe só no elemento #hdrSync. */
 function setSyncBadge(state, n) {
-  var el = document.getElementById('cwSync');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'cwSync';
-    el.style.cssText = 'position:fixed;z-index:59;right:14px;top:calc(var(--inset-top,0px) + 62px);' +
-      'font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;pointer-events:none;' +
-      'opacity:0;transition:opacity var(--medio) var(--curva);box-shadow:var(--shadow)';
-    document.body.appendChild(el);
-  }
+  var el = document.getElementById('hdrSync');
+  if (!el) return;
   clearTimeout(setSyncBadge._t);
-  var põe = function (txto, fundo, cor) {
-    el.textContent = txto; el.style.background = fundo; el.style.color = cor; el.style.opacity = '1';
-  };
-  if (state === 'off') {
-    põe('Sem ligação — sincroniza mais tarde', 'var(--warn-soft)', 'var(--warn)');
-  } else if (state === 'pend') {
-    var q = Number(n) || 0;
-    if (!q) { el.style.opacity = '0'; return; }
-    põe(q === 1 ? '1 alteração por enviar' : q + ' alterações por enviar',
-      'var(--chip)', 'var(--muted)');
-  } else {
-    põe('Guardado', 'var(--accent-soft)', 'var(--accent)');
-    /* um recibo, não um letreiro: fica o tempo de se ler e sai */
-    setSyncBadge._t = setTimeout(function () { el.style.opacity = '0'; }, 2000);
-  }
+  var q = Number(n) || 0;
+  if (state === 'pend' && !q) { el.innerHTML = ''; el.className = ''; return; }
+  var e = state === 'off' ? ['fora', 'nuvemFora', 'Sem ligação — sincroniza mais tarde']
+    : state === 'pend' ? ['pend', 'nuvemSobe', q === 1 ? '1 alteração por enviar' : q + ' alterações por enviar']
+    : ['ok', 'nuvemOk', 'Guardado'];
+  el.className = 'sync ' + e[0];
+  el.title = e[2];
+  el.setAttribute('aria-label', e[2]);
+  el.innerHTML = ic(e[1], 18) + '<span>' + e[2] + '</span>';
+  /* um recibo, não um letreiro: a frase fica o tempo de se ler */
+  if (state !== 'off' && state !== 'pend') setSyncBadge._t = setTimeout(function () { el.classList.add('recibo'); }, 2000);
 }
 
 /* ---------------- ecrã de entrada ---------------- */
@@ -81,18 +75,108 @@ function passProblem(p) {
 function camposDaEntrada(login) {
   return (login ? '' : '<label>Nome (opcional)<input id="cwa_name" placeholder="Ex: Ana Rodrigues" autocomplete="name"></label>') +
     '<label>Email <span class="req">*</span><input id="cwa_email" type="email" placeholder="Ex: ana@exemplo.pt" autocomplete="email"></label>' +
-    '<label>Palavra-passe <span class="req">*</span><input id="cwa_pass" type="password" autocomplete="' + (login ? 'current-password' : 'new-password') + '"></label>' +
-    (login ? '' :
-      '<div id="cwa_passreq" class="small u-m-n4px-0-0 u-d-flex u-fxw-wrap u-g-3px-12px"></div>' +
-      '<label>Confirmar palavra-passe <span class="req">*</span><input id="cwa_pass2" type="password" autocomplete="new-password"></label>');
+    /* o «Mostrar» fica fora do rótulo (um rótulo com dois controlos lá
+       dentro não é rótulo de nenhum), por cima do canto direito do campo */
+    '<div class="ent-pw"><label>Palavra-passe <span class="req">*</span><input id="cwa_pass" type="password" autocomplete="' + (login ? 'current-password' : 'new-password') + '"' +
+      (login ? '' : ' aria-describedby="cwa_passreq"') + '></label>' +
+      '<button type="button" class="ent-ver" aria-controls="cwa_pass" aria-pressed="false" data-toca="nada" data-click="CW.verPalavraPasse(\'cwa_pass\')">Mostrar</button></div>' +
+    (login
+      ? '<a href="#" class="ent-esqueci" data-toca="dados" data-click="CW.esqueci(event)">Esqueci-me da palavra-passe</a>'
+      : '<div id="cwa_passreq" class="ent-reqs"></div>' +
+        '<label>Confirmar palavra-passe <span class="req">*</span><input id="cwa_pass2" type="password" autocomplete="new-password"></label>');
+}
+
+/* Os requisitos da palavra-passe no registo, cada um com o seu teste: o que
+   a caixa dos requisitos mostra enquanto se escreve (e o passProblem diz
+   quando se carrega em «Criar conta»). */
+var REQUISITOS_DA_PALAVRA_PASSE = [
+  ['len', '8+ caracteres', function (p) { return p.length >= 8; }],
+  ['up', 'maiúscula', function (p) { return /[A-Z]/.test(p); }],
+  ['low', 'minúscula', function (p) { return /[a-z]/.test(p); }],
+  ['num', 'número', function (p) { return /[0-9]/.test(p); }],
+  ['sym', 'símbolo (ex.: ! ? € .)', function (p) { return /[^A-Za-z0-9]/.test(p); }],
+];
+
+/* Pinta a caixa dos requisitos (o canvas M-CriarConta): o visto verde nos
+   cumpridos e um círculo vazio nos que faltam, com o estado escrito para o
+   leitor de ecrã («cumprido» / «por cumprir»), já que o desenho não se lê.
+   Serve o registo e a mudança de palavra-passe (partilha.js:CW.passwordModal).
+   Recebe: p — a palavra-passe escrita; caixa (opcional) — o id da caixa
+   ('cwa_passreq' por omissão).
+   Devolve: nada — escreve dentro da caixa. */
+function pintarRequisitos(p, caixa) {
+  caixa = document.getElementById(caixa || 'cwa_passreq');
+  if (!caixa) return;
+  caixa.innerHTML = REQUISITOS_DA_PALAVRA_PASSE.map(function (r) {
+    var ok = r[2](String(p || ''));
+    return '<span class="ent-req' + (ok ? ' ok' : '') + '" data-req="' + r[0] + '">' +
+      (ok ? ic('check', 16) : '<span class="ent-req-circ" aria-hidden="true"></span>') +
+      '<span class="ent-so-leitor">' + (ok ? 'cumprido: ' : 'por cumprir: ') + '</span>' + r[1] + '</span>';
+  }).join('');
+}
+
+/* Marca um campo do ecrã de entrada com o erro por baixo, sem aviso e sem
+   lhe levar o foco: é o que se faz ao sair de um campo (o email mal escrito),
+   onde roubar o foco prendia a pessoa no campo. Ao enviar, os erros vão pelo
+   componentes.js:falhaCampo, que faz o mesmo e leva lá o foco. Larga-se à
+   primeira tecla.
+   Recebe: id — o id do campo; msg — a frase do erro.
+   Devolve: nada — escreve o erro junto do campo. */
+function marcarCampo(id, msg) {
+  var e = document.getElementById(id);
+  if (!e || !e.classList) return;
+  e.classList.add('err');
+  if (typeof e.insertAdjacentElement !== 'function') return;
+  var antes = document.getElementById(id + '-erro');
+  if (antes) antes.remove();
+  var p = document.createElement('p');
+  p.className = 'erro-campo'; p.id = id + '-erro'; p.textContent = msg;
+  e.insertAdjacentElement('afterend', p);
+  e.setAttribute('aria-invalid', 'true');
+  e.setAttribute('aria-describedby', p.id);
+  e.addEventListener('input', function () {
+    e.classList.remove('err'); e.removeAttribute('aria-invalid'); e.removeAttribute('aria-describedby'); p.remove();
+  }, { once: true });
+}
+
+/* A frase da nota de quem chega por uma ligação, em HTML: quem convida e o
+   cargo a negro, como no canvas (M-Entrar). Os nomes passam pelo esc.
+   Recebe: ch — {tipo, token}; prev — a pré-visualização (pode vir null).
+   Devolve: o HTML da frase (texto). */
+function fraseDaChegadaHtml(ch, prev) {
+  if (!prev || ch.tipo === 'ligar' || ch.tipo === 'grupo' || !prev.ownerName) return esc(fraseDaChegada(ch, prev));
+  var casas = nomesPorExtenso(prev.houses);
+  return '<b>' + esc(prev.ownerName) + '</b> convida-te para colaborar' + (prev.roleName ? ' como <b>' + esc(prev.roleName) + '</b>' : '') +
+    (casas ? ' em ' + esc(casas) : '') + '. Entra ou cria conta para aceitares o convite.';
+}
+
+/* Escreve a nota da chegada no ecrã de entrada aberto: o avatar com as
+   iniciais de quem convida (ou o ícone das pessoas, sem nome) e a frase. É
+   o que se repinta quando a pré-visualização chega, sem tocar nos campos.
+   Recebe: nada (lê a ligação guardada e CW._chegadaPrev).
+   Devolve: nada — mexe no #cwa_msg e no #cwa_msg_av, se lá estiverem. */
+function pintarNotaDaChegada() {
+  var ch = chegadaGuardada(), prev = CW._chegadaPrev || null;
+  var el = document.getElementById('cwa_msg'), av = document.getElementById('cwa_msg_av');
+  if (!el || !ch) return;
+  el.innerHTML = fraseDaChegadaHtml(ch, prev);
+  if (av) av.innerHTML = prev && prev.ownerName ? esc(initials(prev.ownerName)) : ic('users', 20);
 }
 
 /* Desenha o ecrã de entrada por cima de tudo — login ou registo, conforme
-   CW.showAuthMode — com msg como erro opcional no topo (ou como nota, quando
-   quem chega vem por uma ligação de convite e ainda não errou nada). No
-   registo liga a validação ao vivo do email e dos requisitos da
-   palavra-passe; no fim tenta montar a entrada social (Google), se estiver
-   configurada.
+   CW.showAuthMode —, com o desenho do canvas (M-Entrar e M-CriarConta): a
+   marca (numa faixa do mosaico, quando se chega por uma ligação), o título
+   do registo, a nota de quem convida, o segmentado «Entrar / Criar conta»,
+   os campos com rótulo, os requisitos da palavra-passe a acenderem-se, o
+   botão, o «ou» com o Google, e os documentos. msg é um erro opcional no
+   topo (ou a nota, quando quem chega vem por uma ligação de convite e ainda
+   não errou nada). No registo liga a validação do email ao sair do campo e
+   os requisitos da palavra-passe; no fim tenta montar a entrada social
+   (Google), se estiver configurada. Trocar de separador não apaga o email
+   já escrito. Uma ligação que já não serve (CW._chegadaErro, posto pela
+   pré-visualização que falhou) diz-se no topo como erro, sem a faixa e sem o
+   «e ver o convite» — o convite já não existe —, e continua a dizer-se ao
+   trocar de separador, até se entrar.
    Recebe: msg (opcional) — mensagem a mostrar no topo do ecrã; nota
    (opcional) — verdadeiro para a mostrar como nota e não como erro.
    Devolve: nada — redesenha o ecrã de entrada. */
@@ -106,77 +190,73 @@ function showAuth(msg, nota) {
   CW.showAuthMode = CW.showAuthMode || 'login';
   // quem chegou por uma ligação e ainda não entrou vê sempre o porquê
   if (!msg && CW._chegadaMsg) { msg = CW._chegadaMsg; nota = true; }
+  else if (!msg && CW._chegadaErro) msg = CW._chegadaErro;
   if (!authEl) {
     authEl = document.createElement('div');
     authEl.id = 'cwAuth';
     authEl.style.cssText = 'position:fixed;inset:0;z-index:200;background:var(--bg);overflow:auto;' +
-      'display:flex;justify-content:center;padding:22px';
+      'display:flex;justify-content:center';
     document.body.appendChild(authEl);
   }
   var login = CW.showAuthMode === 'login';
+  var emailAntes = val('cwa_email');
+  var ch = nota ? chegadaGuardada() : null;
+  var depois = !ch ? '' : ch.tipo === 'ligar' ? ' e ver o pedido' : ' e ver o convite';
+  var aba = function (modo, rotulo) {
+    var on = CW.showAuthMode === modo;
+    return '<button type="button" role="tab" id="cwaTab_' + modo + '" aria-selected="' + on + '" aria-controls="cwaPainel" tabindex="' + (on ? '0' : '-1') + '"' +
+      (on ? ' class="on"' : '') + ' data-toca="ecra" data-click="CW.modoDaEntrada(\'' + modo + '\')" data-keydown="CW.teclaDaEntrada(event)">' + rotulo + '</button>';
+  };
+  var marca = '<span class="marca" aria-hidden="true"></span><span class="disp ent-nome">Rendorium</span>';
   authEl.style.display = 'flex';
   authEl.innerHTML =
-    '<div class="card u-maxw-400px u-w-100pc u-p-24px u-m-auto">' +
-    '<div class="u-d-flex u-g-12px u-ai-center u-mb-6px">' +
-    '<span class="avatar u-bg-v-accent u-c-v-accent-ink">' + (typeof ic === 'function' ? ic('building', 20) : '') + '</span>' +
-    '<div><div class="title u-fs-18px">Rendorium</div>' +
-    '<div class="small">' + (login ? 'Inicia sessão para continuar' : 'Cria a tua conta') + '</div></div></div>' +
-    (msg ? '<div class="hint u-m-8px-0 ' + (nota ? 'u-c-v-ink u-bl-3px-solid-v-accent u-pl-10px' : 'u-c-v-danger') + '" id="cwa_msg">' + esc(msg) + '</div>' : '') +
-    '<div class="form u-mt-12px u-d-grid u-g-10px">' +
+    '<div class="ent' + (ch ? ' ent-com-faixa' : '') + '">' +
+    (ch
+      ? '<div class="ent-faixa imv-mosaico imv-noite"><div class="ent-chip">' + marca + '</div></div>'
+      : '<div class="ent-marca">' + marca + '</div>') +
+    '<div class="ent-corpo">' +
+    (ch ? '' : '<h1 class="ent-tit">O teu portefólio de arrendamento, arrumado.</h1>') +
+    (msg && nota
+      ? '<div class="ent-convite"><span class="avatar ent-convite-av" id="cwa_msg_av" aria-hidden="true">' + ic('users', 20) + '</span>' +
+        '<p id="cwa_msg">' + esc(msg) + '</p></div>'
+      : msg ? '<p class="ent-msg-erro" id="cwa_msg" role="alert">' + esc(msg) + '</p>' : '') +
+    '<div class="segm ent-segm" role="tablist" aria-label="Entrar ou criar conta">' + aba('login', 'Entrar') + aba('register', 'Criar conta') + '</div>' +
+    '<div class="form ent-form" id="cwaPainel" role="tabpanel" aria-labelledby="cwaTab_' + CW.showAuthMode + '">' +
     camposDaEntrada(login) +
     (login ? '' :
-      '<label class="check u-ai-flex-start u-g-9px u-mt-2px">' +
-      '<input type="checkbox" id="cwa_terms" class="u-mt-2px">' +
-      '<span class="small">Li e aceito os <a href="#" class="u-c-v-accent" data-click="CW.readDoc(event,\'termos\')">Termos e Condições</a> ' +
-      'e a <a href="#" class="u-c-v-accent" data-click="CW.readDoc(event,\'privacidade\')">Política de Privacidade</a>. <span class="req">*</span></span></label>') +
-    '<div id="cwa_err" class="small u-c-v-danger"></div>' +
-    '<button class="btn primary u-w-100pc u-jc-center" data-click="CW.submitAuth()">' + (login ? 'Entrar' : 'Criar conta') + '</button>' +
-    '<button class="btn u-w-100pc u-jc-center" data-click="CW.toggleAuth()">' +
-    (login ? 'Ainda não tenho conta' : 'Já tenho conta') + '</button>' +
-    (login ? '<div class="u-ta-center u-mt-2px"><a href="#" class="small u-c-v-muted" data-click="CW.esqueci(event)">Esqueci-me da palavra-passe</a></div>' : '') +
+      '<label class="check ent-termos">' +
+      '<input type="checkbox" id="cwa_terms">' +
+      '<span>Li e aceito os <a href="#" data-toca="camada" data-click="CW.readDoc(event,\'termos\')">Termos e Condições</a> ' +
+      'e a <a href="#" data-toca="camada" data-click="CW.readDoc(event,\'privacidade\')">Política de Privacidade</a>. <span class="req">*</span></span></label>') +
+    '<p id="cwa_err" class="erro-campo" role="alert"></p>' +
+    '<p id="cwa_info" class="small ent-info" role="status"></p>' +
+    '<button type="button" class="btn primary ent-botao" data-toca="dados" data-click="CW.submitAuth()">' + (login ? 'Entrar' : 'Criar conta') + depois + '</button>' +
+    '</div>' +
     '<div id="cwa_social" class="u-d-none">' +
-    '<div class="u-d-flex u-ai-center u-g-10px u-m-4px-0"><span class="u-fx-1 u-h-1px u-bg-v-line"></span>' +
-    '<span class="small">ou</span><span class="u-fx-1 u-h-1px u-bg-v-line"></span></div>' +
-    '<div id="cwa_gbtn" class="u-d-flex u-jc-center u-mb-8px"></div>' +
-    '</div></div></div>';
+    '<div class="ent-ou" aria-hidden="true"><span></span>ou<span></span></div>' +
+    '<div id="cwa_gbtn" class="ent-google"></div>' +
+    '</div>' +
+    (login
+      ? '<p class="small ent-rodape"><a href="#" data-toca="camada" data-click="CW.readDoc(event,\'termos\')">Termos e Condições</a> · ' +
+        '<a href="#" data-toca="camada" data-click="CW.readDoc(event,\'privacidade\')">Política de Privacidade</a></p>'
+      : '<p class="small ent-rodape">Grátis, sem planos e sem limite de imóveis.</p>') +
+    '</div></div>';
   lockScroll(true);
+  if (ch) pintarNotaDaChegada();
+  var em = document.getElementById('cwa_email');
+  if (em && emailAntes) em.value = emailAntes;
   var last = document.getElementById(login ? 'cwa_pass' : 'cwa_pass2');
   if (last) last.addEventListener('keydown', function (e) { if (e.key === 'Enter') CW.submitAuth(); });
   if (!login) {
-    // email: valida o formato ao sair do campo
-    var em = document.getElementById('cwa_email'), errEl = document.getElementById('cwa_err');
-    em.addEventListener('blur', function () {
+    // email: valida o formato ao sair do campo, sem roubar o foco
+    if (em) em.addEventListener('blur', function () {
       var v = em.value.trim();
-      if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) errEl.textContent = 'Email inválido — confirma o formato (ex.: nome@exemplo.pt).';
-      else if (errEl.textContent.indexOf('Email inválido') === 0) errEl.textContent = '';
-    });
-    em.addEventListener('input', function () {
-      if (errEl.textContent.indexOf('Email inválido') === 0) errEl.textContent = '';
+      if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) marcarCampo('cwa_email', 'Email inválido — confirma o formato (ex.: nome@exemplo.pt).');
     });
     // palavra-passe: requisitos verificados enquanto escreve
-    var reqs = [
-      ['len', '8+ caracteres', function (p) { return p.length >= 8; }],
-      ['up', 'maiúscula', function (p) { return /[A-Z]/.test(p); }],
-      ['low', 'minúscula', function (p) { return /[a-z]/.test(p); }],
-      ['num', 'número', function (p) { return /[0-9]/.test(p); }],
-      ['sym', 'símbolo', function (p) { return /[^A-Za-z0-9]/.test(p); }],
-    ];
-    var reqBox = document.getElementById('cwa_passreq');
-    reqBox.innerHTML = reqs.map(function (r) { return '<span id="cwa_rq_' + r[0] + '">• ' + r[1] + '</span>'; }).join('');
     var pw = document.getElementById('cwa_pass');
-    var paintReqs = function () {
-      var p = pw.value;
-      reqs.forEach(function (r) {
-        var el = document.getElementById('cwa_rq_' + r[0]);
-        if (!el) return;
-        var ok = r[2](p);
-        el.textContent = (ok ? '✓ ' : '• ') + r[1];
-        el.style.color = ok ? 'var(--accent)' : 'var(--muted)';
-        el.style.fontWeight = ok ? '650' : '400';
-      });
-    };
-    paintReqs();
-    pw.addEventListener('input', paintReqs);
+    pintarRequisitos(pw ? pw.value : '');
+    if (pw) pw.addEventListener('input', function () { pintarRequisitos(pw.value); });
   }
   loadSocial();
 }
@@ -189,6 +269,42 @@ CW.showAuth = function () { showAuth(); };
 CW.toggleAuth = function () {
   CW.showAuthMode = CW.showAuthMode === 'login' ? 'register' : 'login';
   showAuth();
+};
+
+/* Escolhe «Entrar» ou «Criar conta» no segmentado do ecrã de entrada: só
+   redesenha se mudar, e o foco fica no separador escolhido.
+   Recebe: modo — 'login' ou 'register'.
+   Devolve: nada — redesenha o ecrã de entrada no modo pedido. */
+CW.modoDaEntrada = function (modo) {
+  if (modo !== 'login' && modo !== 'register') return;
+  if (CW.showAuthMode === modo) return;
+  CW.showAuthMode = modo;
+  showAuth();
+  var t = document.getElementById('cwaTab_' + modo);
+  if (t) try { t.focus(); } catch (e) {}
+};
+
+/* As setas no segmentado do ecrã de entrada passam de um separador ao outro,
+   como num conjunto de separadores (role=tablist).
+   Recebe: e — o evento da tecla.
+   Devolve: nada — troca de modo com as setas; as outras teclas seguem. */
+CW.teclaDaEntrada = function (e) {
+  if (!e || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+  e.preventDefault();
+  CW.modoDaEntrada(CW.showAuthMode === 'login' ? 'register' : 'login');
+};
+
+/* O «Mostrar» da palavra-passe: troca o campo entre escondido e à vista, e o
+   botão diz o que vai fazer a seguir (Mostrar / Esconder) e se está ligado.
+   Recebe: id — o id do campo da palavra-passe.
+   Devolve: nada — muda o type do campo e o botão. */
+CW.verPalavraPasse = function (id) {
+  var campo = document.getElementById(id);
+  if (!campo) return;
+  var ver = campo.type === 'password';
+  campo.type = ver ? 'text' : 'password';
+  var b = document.querySelector('[aria-controls="' + id + '"].ent-ver');
+  if (b) { b.textContent = ver ? 'Esconder' : 'Mostrar'; b.setAttribute('aria-pressed', ver ? 'true' : 'false'); }
 };
 
 /* O fecho de qualquer entrada bem-sucedida (formulário, Google, ligação por
@@ -238,7 +354,7 @@ function finishLogin(u) {
   startSync();
   // veio por uma ligação de convite ou de partilha: só DEPOIS de o ecrã de
   // entrada sair — um modal por baixo dele não se via (a lição do cwRepor)
-  CW._chegadaMsg = '';
+  CW._chegadaMsg = ''; CW._chegadaErro = '';
   CW.resgatarChegada();
 }
 
@@ -251,14 +367,20 @@ CW.submitAuth = function () {
   var payload = { email: val('cwa_email'), password: val('cwa_pass') };
   var errEl = document.getElementById('cwa_err');
   errEl.textContent = '';
+  var info = document.getElementById('cwa_info');
+  if (info) info.textContent = '';
+  /* o que se pode dizer antes de perguntar ao servidor diz-se junto do campo
+     (componentes.js:falhaCampo); os termos dizem-se logo por baixo da caixa */
+  if (!String(payload.email || '').trim()) return falhaCampo('cwa_email', 'Escreve o teu email.');
+  if (!login && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(payload.email).trim())) {
+    return falhaCampo('cwa_email', 'Email inválido — confirma o formato (ex.: nome@exemplo.pt).');
+  }
+  if (login && !payload.password) return falhaCampo('cwa_pass', 'Escreve a palavra-passe.');
   if (!login) {
     payload.name = val('cwa_name');
     var prob = passProblem(payload.password);
-    if (prob) { errEl.textContent = prob; return; }
-    if (payload.password !== val('cwa_pass2')) {
-      errEl.textContent = 'As palavras-passe não coincidem.';
-      return;
-    }
+    if (prob) return falhaCampo('cwa_pass', prob);
+    if (payload.password !== val('cwa_pass2')) return falhaCampo('cwa_pass2', 'As palavras-passe não coincidem.');
     var chk = document.getElementById('cwa_terms');
     if (!chk || !chk.checked) {
       errEl.textContent = 'Tens de aceitar os Termos e a Política de Privacidade para criar a conta.';
@@ -278,17 +400,23 @@ CW.submitAuth = function () {
 
 /* Esqueci-me da palavra-passe: pede a ligação por email e, quando a pessoa
    volta com o token no endereço, troca-a aqui mesmo. A resposta do servidor
-   é sempre a mesma, exista a conta ou não.
+   é sempre a mesma, exista a conta ou não. Sem email escrito, o campo diz que
+   é para lá que vai a ligação (era um prompt() do sistema). O que o servidor
+   responde fica escrito no próprio ecrã (#cwa_info): um aviso em baixo
+   ficava por trás do ecrã de entrada, que está por cima de tudo.
    Recebe: e (opcional) — o evento do clique, para travar a navegação da ligação.
-   Devolve: nada — pede a ligação de reposição e avisa num toast. */
+   Devolve: nada — pede a ligação de reposição e diz o resultado no ecrã. */
 CW.esqueci = function (e) {
   if (e) e.preventDefault();
-  var em = val('cwa_email') || prompt('O email da tua conta:') || '';
-  em = em.trim();
-  if (!em) return;
+  var em = String(val('cwa_email') || '').trim();
+  if (!em) return falhaCampo('cwa_email', 'Escreve o email da tua conta: é para lá que vai a ligação.');
+  var diz = function (t) {
+    var info = document.getElementById('cwa_info');
+    if (info) info.textContent = t; else toast(t);
+  };
   api('POST', '/api/auth/repor', { email: em })
-    .then(function (r) { toast(r.msg || 'Se esse email tiver conta, enviámos uma ligação.'); })
-    .catch(function () { toast('Não deu para pedir agora — tenta daqui a pouco.'); });
+    .then(function (r) { diz(r.msg || 'Se esse email tiver conta, enviámos uma ligação.'); })
+    .catch(function () { diz('Não deu para pedir agora — tenta daqui a pouco.'); });
 };
 
 /* No ambiente de dev, numa conta de teste, a marca do topo dá lugar a um
@@ -314,9 +442,9 @@ CW.esqueci = function (e) {
          que destoava aqui tanto como destoava nos formulários */
       if (typeof window.sel !== 'function') return;
       var atual = d.contas.find(function (c) { return c.atual; }) || d.contas[0];
-      var rotulo = function (ct) { return '\uD83E\uDDEA ' + ct.email.split('@')[0].replace('teste-', '#'); };
+      var rotulo = function (ct) { return 'Teste ' + ct.email.split('@')[0].replace('teste-', '#'); };
       var opcoes = d.contas.map(function (ct) { return { v: ct.id, label: rotulo(ct) }; });
-      opcoes.push({ div: true }, { v: '+nova', label: '\uFF0B Nova conta de teste' });
+      opcoes.push({ div: true }, { v: '+nova', label: 'Nova conta de teste' });
       /* vai como função para o sel(): um window.x posto aqui, depois do
          arranque, fica fora da lista dos nomes da app (eventos.js) */
       var cwTrocaConta = function () {
@@ -494,9 +622,17 @@ function fraseDaChegada(ch, prev) {
       (n === 1 ? '1 imóvel' : n + ' imóveis') + '). Entra ou cria conta para pedires para entrar.';
   }
   if (!prev) return 'Entra ou cria conta para aceitares o convite.';
-  var casas = (prev.houses || []).map(function (h) { return h.name; }).filter(Boolean).join(', ');
+  var casas = nomesPorExtenso(prev.houses);
   return (prev.ownerName || 'Alguém') + ' convida-te para colaborar' + (prev.roleName ? ' como ' + prev.roleName : '') +
     (casas ? ' em ' + casas : '') + '. Entra ou cria conta para aceitares o convite.';
+}
+
+// Os nomes dos imóveis de uma ligação numa frase: «A», «A e B», «A, B e C».
+// Recebe: casas — os imóveis da pré-visualização ([{name}]).
+// Devolve: o texto (sem escapar), ou '' sem nomes.
+function nomesPorExtenso(casas) {
+  var n = (casas || []).map(function (h) { return h && h.name; }).filter(Boolean);
+  return n.length < 2 ? (n[0] || '') : n.slice(0, -1).join(', ') + ' e ' + n[n.length - 1];
 }
 
 (function () {
@@ -509,14 +645,19 @@ function fraseDaChegada(ch, prev) {
   CW._chegadaMsg = fraseDaChegada(ch, null);
   preverChegada(ch).then(function (prev) {
     CW._chegadaMsg = fraseDaChegada(ch, prev);
-    var el = document.getElementById('cwa_msg');
-    if (el) el.textContent = CW._chegadaMsg;
+    CW._chegadaPrev = prev || null;
+    pintarNotaDaChegada();   // a nota do ecrã aberto: o avatar de quem convida e a frase
   }).catch(function (e) {
-    // ligação que não serve: diz-se já, e não se volta a perguntar
+    /* ligação que não serve: diz-se já, e não se volta a perguntar. Mudar só
+       o texto da nota deixava o resto a prometer o convite (o «Entrar e ver o
+       convite», a faixa, o avatar), e trocar de separador apagava o erro: o
+       ecrã aberto redesenha-se com ele (showAuth lê o CW._chegadaErro), e um
+       ecrã que ainda não abriu mostra-o quando abrir — chamar o showAuth
+       daqui abria a entrada antes de o arranque a decidir. */
     esquecerChegada(ch.tipo);
-    CW._chegadaMsg = '';
-    var el = document.getElementById('cwa_msg');
-    if (el) { el.textContent = e.message || 'Essa ligação não serve.'; el.style.color = 'var(--danger)'; }
+    CW._chegadaMsg = ''; CW._chegadaPrev = null;
+    CW._chegadaErro = e.message || 'Essa ligação não serve.';
+    if (authEl && authEl.style.display !== 'none') showAuth();
   });
 })();
 
@@ -529,6 +670,7 @@ CW.naoSouEu = function (e) {
   // a frase da ligação guardada é a nota do ecrã de entrada (showAuth sem mensagem)
   var ch = chegadaGuardada();
   CW._chegadaMsg = ch ? fraseDaChegada(ch, prevDaChegada(ch.tipo)) : '';
+  CW._chegadaPrev = ch ? prevDaChegada(ch.tipo) : null;
   encerrarSessao({ avisarServidor: true });
 };
 
@@ -554,33 +696,53 @@ CW.enviarPedido = function (token) {
 };
 
 // A linha «Entras como <email>» com o «Não sou eu», para os modais da chegada.
+// Recebe: nada (lê CW.user).
 // Devolve: o HTML (texto).
 function entrasComo() {
-  return '<div class="hint">Entras como <b>' + esc(CW.user.email || CW.user.name || '') + '</b>. ' +
-    '<a href="#" class="u-c-v-accent" data-click="CW.naoSouEu(event)">Não sou eu</a></div>';
+  return '<p class="small cv-quem">Entras como <b>' + esc(CW.user.email || CW.user.name || '') + '</b> · ' +
+    '<a href="#" data-toca="ecra" data-click="CW.naoSouEu(event)">Não sou eu</a></p>';
 }
 
-// O modal do convite: quem convida, o cargo, os imóveis, o que vai poder, e
-// «Aceitar» / «Agora não». Só o Aceitar gasta a ligação.
+/* Os imóveis de uma ligação em mosaicos (o canvas M-ConviteAceitar): a capa
+   de cada um (a cor estável do imóvel, lista-imoveis.js:imvMosaico, quando
+   o serviço dos Imóveis está carregado) e o nome por baixo.
+   Recebe: casas — os imóveis da pré-visualização ([{id, name}]).
+   Devolve: o HTML dos mosaicos (texto), ou '' sem imóveis. */
+function casasDaChegada(casas) {
+  if (!casas || !casas.length) return '';
+  return '<div class="cv-casas">' + casas.map(function (h) {
+    var cor = typeof imvMosaico === 'function' ? imvMosaico(h) : 'imv-t0';
+    return '<div class="cv-casa"><div class="cv-capa imv-mosaico ' + cor + '" aria-hidden="true"></div><b>' + esc(h.name || 'Sem nome') + '</b></div>';
+  }).join('') + '</div>';
+}
+
+// O modal do convite (o canvas M-ConviteAceitar): quem convida e para quantos
+// imóveis, com que cargo e o que isso não dá, os imóveis em mosaicos, o que
+// vai poder fazer (um visto por permissão do cargo, e o cadeado no que fica
+// com os donos), quem está a entrar, e «Agora não» / «Aceitar convite». Só o
+// Aceitar gasta a ligação.
 // Recebe: token — o token; prev — a pré-visualização do servidor.
 // Devolve: nada — abre o modal.
 function modalConvite(token, prev) {
   CW._convitePrev = prev;
-  var casas = (prev.houses || []).map(function (h) {
-    return '<div class="card u-p-10px-13px"><b>' + esc(h.name || 'Sem nome') + '</b></div>';
-  }).join('');
+  var n = (prev.houses || []).length;
   // os rótulos são do serviço Colaboradores (colaboradores.js); desligado, o convite não se aceita e o «Vais poder» sai
-  var pode = (servicoLigado('colaboradores') ? permsFechadas(prev.perms || []).map(rotuloDe) : [])
-    .map(function (t) { return t.charAt(0).toLowerCase() + t.slice(1); });
-  openModal('Convite de ' + (prev.ownerName || ''),
-    '<div class="form">' +
-    '<div class="hint u-fs-14px"><b>' + esc(prev.ownerName || 'Alguém') + '</b> convida-te para colaborar como <b>' + esc(prev.roleName || 'colaborador') + '</b>.</div>' +
-    (casas ? '<div><div class="flabel">Imóveis</div><div class="list u-g-7px">' + casas + '</div></div>' : '') +
-    (pode.length ? '<div><div class="flabel">Vais poder</div><div class="hint">' + esc(pode.join(', ')) + '.</div></div>' : '') +
-    '<div class="hint">Não ficas comproprietário: as quotas e as contas entre donos não te incluem. Podes sair quando quiseres no menu, em Pessoas → Colaboradores.</div>' +
+  var pode = servicoLigado('colaboradores') ? permsFechadas(prev.perms || []).map(rotuloDe) : [];
+  openModal('Convite para colaborar',
+    '<div class="cv">' +
+    '<p class="disp cv-tit">' + esc(prev.ownerName || 'Alguém') + ' convida-te para ajudar a gerir ' +
+      (n === 1 ? '1 imóvel' : n ? n + ' imóveis' : 'os seus imóveis') + '.</p>' +
+    '<p class="small">Com o cargo <b>' + esc(prev.roleName || 'colaborador') + '</b>. Não ficas comproprietário: não entras nas quotas nem nas contas entre donos.</p>' +
+    casasDaChegada(prev.houses) +
+    (pode.length
+      ? '<section class="cv-pode" aria-labelledby="cvPode"><p class="lbl" id="cvPode">O que vais poder fazer</p><ul>' +
+        pode.map(function (t) { return '<li>' + ic('check', 18) + '<span>' + esc(t) + '</span></li>'; }).join('') +
+        '<li class="cv-nao">' + ic('lock', 18) + '<span>As quotas e as contas entre donos ficam com os donos</span></li></ul></section>'
+      : '') +
+    '<p class="small">Podes sair quando quiseres, em Definições → Colaboradores e cargos.</p>' +
     entrasComo() + '</div>',
-    '<button class="btn" data-click="CW.chegadaDepois(\'convite\')">Agora não</button>' +
-    '<button class="btn primary" data-click="CW.aceitarConvite(\'' + jsq(token) + '\')">Aceitar</button>');
+    '<button class="btn" data-toca="camada" data-click="CW.chegadaDepois(\'convite\')">Agora não</button>' +
+    '<button class="btn primary" data-toca="dados" data-click="CW.aceitarConvite(\'' + jsq(token) + '\')">Aceitar convite</button>');
 }
 
 // O modal da ligação de partilha: quem pede, as caixas dos meus imóveis, e
@@ -597,37 +759,37 @@ function modalLigar(token, prev) {
           (p.address ? ' <span class="small">' + esc(p.address) + '</span>' : '') + '</span></label>';
       }).join('') + '</div></div>'
     : '<div class="hint">Ainda não tens imóveis para partilhar — cria um primeiro e volta a abrir a ligação.</div>';
-  openModal('Pedido de ' + (prev.ownerName || ''),
-    '<div class="form"><div class="hint u-fs-14px"><b>' + dono + '</b> pede que partilhes imóveis com ele.</div>' + caixas +
-    '<div class="hint">' + dono + ' passa a comproprietário dos imóveis que escolheres — vê contratos, movimentos e pessoas desses imóveis. Cada pedido fica à espera que ele aceite.</div>' +
+  openModal('Pedido de partilha',
+    '<div class="cv"><p class="disp cv-tit">' + dono + ' pede que partilhes imóveis com ele.</p>' +
+    '<p class="small">' + dono + ' passa a comproprietário dos imóveis que escolheres — vê contratos, movimentos e pessoas desses imóveis. Cada pedido fica à espera que ele aceite.</p>' +
+    '<div class="form">' + caixas + '</div>' +
     entrasComo() + '</div>',
-    '<button class="btn" data-click="CW.chegadaDepois(\'ligar\')">Agora não</button>' +
-    (meus.length ? '<button class="btn primary" data-click="CW.enviarPedido(\'' + jsq(token) + '\')">Enviar pedido</button>' : ''));
+    '<button class="btn" data-toca="camada" data-click="CW.chegadaDepois(\'ligar\')">Agora não</button>' +
+    (meus.length ? '<button class="btn primary" data-toca="dados" data-click="CW.enviarPedido(\'' + jsq(token) + '\')">Enviar pedido</button>' : ''));
 }
 
-/* O modal da ligação de um grupo partilhado: quem convida, o nome do grupo,
-   os imóveis que já lá estão, o que entrar implica — é um pedido, que o dono
-   tem de aceitar; depois, comproprietário deles todos, e os que a pessoa
-   puser ficam partilhados — e «Pedir para entrar» / «Agora não». Só o Pedir
+/* O modal da ligação de um grupo partilhado (a família do convite,
+   M-ConviteAceitar): quem convida e para que grupo, os imóveis que já lá
+   estão em mosaicos, o que entrar implica — é um pedido, que o dono tem de
+   aceitar; depois, comproprietário deles todos, e os que a pessoa adicionar
+   ficam partilhados — e «Pedir para entrar» / «Agora não». Só o Pedir
    (POST, cloud/grupos.js:CW.entrarNoGrupo) age.
    Recebe: token — o token; prev — a pré-visualização ({name, ownerName, houses, members}).
    Devolve: nada — abre o modal. */
 function modalGrupo(token, prev) {
   CW._grupoPrev = prev;
   var dono = esc(prev.ownerName || 'Alguém');
-  var casas = (prev.houses || []).map(function (h) {
-    return '<div class="card u-p-10px-13px"><b>' + esc(h.name || 'Sem nome') + '</b></div>';
-  }).join('');
+  var casas = casasDaChegada(prev.houses);
   var membros = Number(prev.members) || 0;
   openModal('Grupo de ' + (prev.ownerName || ''),
-    '<div class="form">' +
-    '<div class="hint u-fs-14px"><b>' + dono + '</b> convida-te para o grupo <b>«' + esc(prev.name || 'sem nome') + '»</b>' +
-    (membros ? ' (' + membros + (membros === 1 ? ' pessoa' : ' pessoas') + ')' : '') + '.</div>' +
-    (casas ? '<div><div class="flabel">Imóveis no grupo</div><div class="list u-g-7px">' + casas + '</div></div>'
-      : '<div class="hint">O grupo ainda não tem imóveis — os que os membros puserem passam a ser partilhados contigo.</div>') +
-    '<div class="hint">Ao pedires para entrar, <b>' + dono + '</b> tem de aceitar. Depois passas a comproprietário ' +
+    '<div class="cv">' +
+    '<p class="cv-frase"><b>' + dono + '</b> convida-te para o grupo <b>«' + esc(prev.name || 'sem nome') + '»</b>' +
+    (membros ? ' (' + membros + (membros === 1 ? ' pessoa' : ' pessoas') + ')' : '') + '.</p>' +
+    (casas ? '<p class="lbl">Imóveis no grupo</p>' + casas
+      : '<p class="small">O grupo ainda não tem imóveis — os que os membros adicionarem passam a ser partilhados contigo.</p>') +
+    '<p class="small">Ao pedires para entrar, <b>' + dono + '</b> tem de aceitar. Depois passas a comproprietário ' +
     (casas ? 'destes imóveis' : 'dos imóveis do grupo') + ' — vês contratos, movimentos e pessoas. ' +
-    'Os imóveis que adicionares ao grupo ficam partilhados com todos os membros. Podes sair quando quiseres, em Grupos.</div>' +
+    'Os imóveis que adicionares ao grupo ficam partilhados com todos os membros. Podes sair quando quiseres, em Definições → Grupos.</p>' +
     entrasComo() + '</div>',
     '<button class="btn" data-toca="camada" data-click="CW.chegadaDepois(\'grupo\')">Agora não</button>' +
     '<button class="btn primary" data-toca="dados" data-click="CW.entrarNoGrupo(\'' + jsq(token) + '\')">Pedir para entrar</button>');
@@ -667,9 +829,12 @@ CW.resgatarChegada = function () {
   setTimeout(tentar, 400);
 };
 
-// Valida a palavra-passe nova e confirma a reposição com o token da ligação de
-// email; se o servidor aceitar, fecha a sobreposição e devolve o ecrã de entrada.
-// Devolve: nada — os erros ficam escritos na sobreposição; o sucesso fecha-a.
+/* Valida a palavra-passe nova e confirma a reposição com o token da ligação de
+   email; se o servidor aceitar, fecha a sobreposição e devolve o ecrã de
+   entrada, com a confirmação escrita nele (#cwa_info, role=status): o aviso
+   em baixo (.toast, z 90) ficava por trás do ecrã de entrada (z 200), e quem
+   acabava de mudar a palavra-passe não via confirmação nenhuma.
+   Devolve: nada — os erros ficam escritos na sobreposição; o sucesso fecha-a. */
 CW.reporConfirmar = function () {
   var p1 = val('rp_1'), p2 = val('rp_2');
   var errEl = document.getElementById('rp_err');
@@ -681,8 +846,9 @@ CW.reporConfirmar = function () {
       CW._reporToken = null;
       var el = document.getElementById('cwRepor');
       if (el) el.remove();
-      toast('Feito — entra com a palavra-passe nova.');
       showAuth();
+      var info = document.getElementById('cwa_info');
+      if (info) info.textContent = 'Palavra-passe mudada. Entra com a nova.';
     })
     .catch(function (e) { errEl.textContent = e.message || 'Essa ligação já não serve.'; });
 };

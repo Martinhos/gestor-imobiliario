@@ -335,10 +335,9 @@ describe('a página Declaração', () => {
   test('a ficha do contrato diz porque é que a taxa é a que é', () => {
     comRendas(2026);
     app.db.contracts[0].end = '2027-12-31';
-    let html = '';
-    app.ficha = (linhas) => { html = JSON.stringify(linhas); return ''; };
-    app.ctFicha('c1');
-    assert.match(html, /10%[^"]*\(estimado: renda moderada\)/);
+    // a ficha do contrato é desde 2026-10 um conjunto de cartões (contrato.js:ctFicha), sem o componentes.js:ficha
+    const html = app.ctFicha('c1');
+    assert.match(html, /10%<\/b><span class="small">renda moderada · estim\./);
     assert.match(html, /taxa de 10 % das rendas moderadas \(EBF art\. 45\.º-C\)/);
   });
 });

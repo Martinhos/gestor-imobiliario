@@ -138,6 +138,73 @@ describe('os movimentos, tipo a tipo', () => {
   });
 });
 
+describe('o formulário do movimento no desenho do canvas (M-Novo movimento)', () => {
+  /* os botões do segmentado do tipo: [rótulo, ligado]
+     Recebe: html — o corpo do formulário.
+     Devolve: array de [texto, true/false]. */
+  const tipos = (html) => [...html.matchAll(/role="radio" aria-checked="(true|false)"[^>]*data-click="txMudaTipo\('\w+'\)">([^<]*)</g)].map((m) => [m[2], m[1] === 'true']);
+
+  test('o tipo num segmentado de cinco, ligado o do movimento — a dívida paga também liga a «Dívida»', () => {
+    const abertas = base();
+    app.txModal({ kind: 'expense', propId: 'P1' });
+    assert.deepEqual(tipos(abertas[0].b).map((t) => t[0]), ['Receita', 'Despesa', 'Crédito', 'Dívida', 'Transf.']);
+    assert.deepEqual(tipos(abertas[0].b).filter((t) => t[1]).map((t) => t[0]), ['Despesa']);
+    assert.match(abertas[0].b, /<div class="segm mov-tipo-segm" role="radiogroup" aria-label="Tipo de movimento">/);
+    assert.match(abertas[0].b, /aria-label="Transferência entre proprietários"/, 'o «Transf.» diz-se por inteiro ao leitor de ecrã');
+    app.txModal({ kind: 'repay', propId: 'P1' });
+    assert.deepEqual(tipos(abertas[1].b).filter((t) => t[1]).map((t) => t[0]), ['Dívida']);
+  });
+
+  test('o montante grande, na letra dos títulos, com o €, e os campos em grupos', () => {
+    const abertas = base();
+    app.txModal({ kind: 'expense', propId: 'P1' });
+    const html = abertas[0].b;
+    assert.match(html, /<span class="mov-montante-campo neg"><input id="t_amount" type="text" inputmode="decimal" class="disp"/);
+    assert.match(html, /<span class="disp mov-euro" aria-hidden="true">€<\/span>/);
+    assert.ok((html.match(/class="sect mov-grp/g) || []).length >= 3, 'o que foi, a classificação e a divisão');
+    assert.match(html, /<div class="mov-par"><label>Data<input id="t_date" type="date"/, 'a data ao lado do imóvel');
+    assert.match(html, /<div class="sect mov-grp mov-divisao" id="fold_split">\s*<div class="mov-grp-cab"><b>Divisão entre proprietários<\/b><span class="small">2 donos<\/span><\/div>/);
+  });
+
+  test('trocar de tipo no segmentado leva o que só o tipo antigo tinha, e mantém o que se escreveu', () => {
+    base();
+    app.db.properties[0].loans = [app.normLoan({ id: 'L1', name: 'Aquisição', outstanding: 100000, rate: 3, years: 30 })];
+    app.txModal({ kind: 'loan', propId: 'P1' });
+    assert.equal(app.tForm.loanId, 'L1');
+    app.tForm.interest = 50; app.tForm.principal = 200;
+    app.txMudaTipo('expense');
+    assert.equal(app.tForm.kind, 'expense');
+    assert.equal(app.tForm.loanId, null, 'uma despesa não abate na hipoteca');
+    assert.ok(!('interest' in app.tForm) && !('principal' in app.tForm), 'nem leva a distribuição escondida');
+    app.tForm.irsCol = 'conservacao';
+    app.txMudaTipo('income');
+    assert.equal(app.tForm.irsCol, '', 'a coluna do Anexo F é das despesas');
+    app.tForm.contractId = 'C1'; app.tForm.retencao = 30; app.tForm.periodo = '2026-03';
+    app.txMudaTipo('owed');
+    assert.deepEqual([app.tForm.contractId, app.tForm.retencao, app.tForm.periodo], [null, 0, ''], 'o que o IRS pergunta a uma renda sai');
+    // o setKind colhe o formulário antes de trocar: o nome escreve-se no campo
+    app.document.getElementById('t_creditor').value = 'Pai';
+    app.txMudaTipo('owed');
+    assert.equal(app.tForm.kind, 'owed', 'a «Dívida» já escolhida fica');
+    app.setKind('repay');
+    assert.equal(app.tForm.creditor, 'Pai', 'entre recebida e paga não muda nada');
+    app.txMudaTipo('settle');
+    assert.equal(app.tForm.creditor, '');
+    assert.equal(app.tForm.split, null);
+  });
+
+  test('um grupo só se divide numa receita ou despesa: noutro tipo volta ao imóvel por omissão', () => {
+    base();
+    app.db.groups = [app.normGroup({ id: 'G', name: 'Bloco', kind: 'prop', ids: ['P1'] })];
+    app.txModal({ kind: 'expense', preset: { groupId: 'G', propertyId: null } });
+    assert.equal(app.tForm.groupId, 'G');
+    // o setKind colhe o imóvel do formulário antes de trocar: o grupo está escolhido no campo
+    app.document.getElementById('t_prop').value = 'g:G';
+    app.txMudaTipo('loan');
+    assert.deepEqual([app.tForm.groupId, app.tForm.todos, app.tForm.psplit], [null, false, null]);
+  });
+});
+
 describe('o contrato', () => {
   test('o imóvel e os inquilinos são obrigatórios e levam o asterisco; o nome em branco diz qual fica', () => {
     const abertas = base();
@@ -204,5 +271,120 @@ describe('o contrato', () => {
     const f = app.fiscoSect();
     assert.equal(ph(f, 'c_fces'), EX + 'Fim do prazo');
     assert.match(f, /fim do prazo, acordo, denúncia…<\/div>/);
+  });
+});
+
+describe('o formulário do contrato no desenho do canvas (M-NovoContrato)', () => {
+  test('os campos em grupos, pela ordem da prancheta, e o resto recolhido', () => {
+    const abertas = base();
+    app.ctModal();
+    const html = abertas[0].b;
+    const grupos = [...html.matchAll(/<div class="sect ct-gf" id="(ct_\w+)"/g)].map((m) => m[1]);
+    assert.deepEqual(grupos, ['ct_arrenda', 'ct_renda', 'ct_prazo', 'ct_fisco', 'ct_contactos', 'ct_notas']);
+    assert.deepEqual([...html.matchAll(/<h3 class="ct-gf-tit">([^<]+)<\/h3>/g)].map((m) => m[1]), ['Renda', 'Prazo', 'Contactos']);
+    for (const d of ['inv', 'photos', 'keys', 'files']) assert.match(html, new RegExp('<div class="sect fold " id="fold_' + d + '"'), 'a dobra ' + d + ' nasce fechada');
+    // os dois interruptores são caixas da casa (o collectCt lê-as como sempre) com o papel de interruptor
+    assert.match(html, /<input type="checkbox" role="switch" class="ct-sw" id="c_autorec" checked>/);
+    assert.match(html, /<input type="checkbox" role="switch" class="ct-sw" id="c_active" checked>/);
+    // o dia do pagamento: dois campos lado a lado, «Opcional»
+    assert.match(html, /<label>entre o dia<input id="c_day"[^>]*placeholder="Opcional"><\/label>/);
+    assert.match(html, /<label>e o dia<input id="c_dayTo"[^>]*placeholder="Opcional"><\/label>/);
+    assert.match(html, /Num mês que não tenha esse dia \(o 31 em abril\), conta o último dia do mês\./, 'o dia que «flutua» diz-se');
+  });
+
+  test('o quarto escolhe-se em chips (role radio), e os já prometidos dizem-no sem deixar de se poder escolher', () => {
+    const abertas = base();
+    app.db.properties[0].rentalMode = 'quartos';
+    app.db.properties[0].rooms = [{ id: 'Q1', name: 'Quarto 1' }, { id: 'Q2', name: 'Quarto 2' }];
+    app.db.contracts = [app.normContract({ id: 'C9', propertyId: 'P1', roomId: 'Q1', tenantIds: ['I1'], rent: 300, start: '2020-01-01' })];
+    app.ctModal(null, 'P1');
+    const html = abertas[0].b;
+    assert.match(html, /<input type="hidden" id="c_room" value="">/);
+    const chips = [...html.matchAll(/role="radio" aria-checked="(true|false)" data-v="([^"]*)"[^>]*>([^<]+)(<span class="ct-ja-txt"> · já arrendado<\/span>)?/g)]
+      .map((m) => [m[3], m[1] === 'true', !!m[4]]);
+    assert.deepEqual(chips, [['Imóvel inteiro', true, false], ['Quarto 1', false, true], ['Quarto 2', false, false]]);
+    assert.doesNotMatch(html, /aria-disabled|disabled/, 'um quarto prometido pode ter o contrato seguinte');
+  });
+
+  test('a frase do prazo diz quanto dura e até quando se avisa o inquilino', () => {
+    assert.equal(app.ctFraseDoPrazo({ start: '2026-11-01', end: '2027-10-31' }), '1 ano. Para não renovar, avisa o inquilino até 03/07/2027 (120 dias) — a app lembra-te antes, nos prazos.');
+    assert.equal(app.ctFraseDoPrazo({ start: '2026-01-01', end: '2026-06-30' }).slice(0, 9), '6 meses. ');
+    assert.match(app.ctFraseDoPrazo({ start: '2026-01-01', end: '' }), /^Sem data de fim/);
+    assert.equal(app.ctFraseDoPrazo({ start: '2026-05-01', end: '2026-01-01' }), '', 'com as datas trocadas é o erro do campo que fala');
+    // e acompanha as datas que se escrevem
+    base();
+    app.ctModal();
+    const el = (id) => app.document.getElementById(id);
+    el('c_start').value = '2026-11-01';
+    el('c_end').value = '2028-10-31';
+    app.liveNet();
+    assert.match(el('c_prazoFrase').textContent, /^2 anos\. Para não renovar, avisa o inquilino até 03\/07\/2028/);
+  });
+
+  test('os contactos: o contacto copiado de uma pessoa fica com ela escolhida em «Usar o contacto de», e vazio nunca casa com vazio', () => {
+    const abertas = base();
+    const ultimo = () => abertas[abertas.length - 1].b;
+    // a proprietária sem contacto na ficha: nada a escolher, ficam os campos
+    app.ctModal();
+    assert.equal(app.cForm.ownerContactId, '');
+    assert.match(ultimo(), /id="c_omail"/);
+    // com contacto: o contrato novo copia-o e escolhe-a — o ecrã já não diz «Outro contacto (escrever)» por cima do contacto dela
+    Object.assign(app.db.owners[0], { email: 'eu@exemplo.pt', phone: '913 000 001' });
+    app.ctModal();
+    assert.deepEqual([app.cForm.ownerContactId, app.cForm.ownerEmail, app.cForm.ownerPhone], ['O1', 'eu@exemplo.pt', '913 000 001']);
+    assert.match(ultimo(), /<input type="hidden" id="c_ocid" value="O1">/);
+    assert.match(ultimo(), /<div class="ct-net-linha ct-contacto-escolhido"><span>Eu<\/span>/);
+    assert.doesNotMatch(ultimo(), /id="c_omail"/);
+    // trocar para um imóvel só do Rui: a escolha larga-se com o contacto que veio dela, e entra o do Rui
+    Object.assign(app.db.owners[1], { email: 'rui@exemplo.pt', phone: '' });
+    app.db.properties.push(app.normProp({ id: 'P2', name: 'T1 Porto', use: 'investimento', ownerIds: ['O2'] }));
+    app.cForm.propertyId = 'P2';
+    app.fillOwnerContact();
+    assert.deepEqual([app.cForm.ownerContactId, app.cForm.ownerEmail, app.cForm.ownerPhone], ['O2', 'rui@exemplo.pt', '']);
+    // o que alguém escreveu à mão fica, e não se escolhe ninguém
+    Object.assign(app.cForm, { propertyId: 'P1', ownerContactId: '', ownerEmail: 'outro@exemplo.pt', ownerPhone: '960 000 000' });
+    app.fillOwnerContact();
+    assert.deepEqual([app.cForm.ownerContactId, app.cForm.ownerEmail, app.cForm.ownerPhone], ['', 'outro@exemplo.pt', '960 000 000']);
+    // um contrato gravado antes, com o contacto da proprietária escrito (outra caixa, outros espaços): ao abrir, ela fica escolhida
+    app.db.contracts = [app.normContract({ id: 'C1', propertyId: 'P1', rent: 500, tenantIds: ['I1'], start: '2026-01-01', ownerEmail: 'EU@exemplo.pt', ownerPhone: '913000001' })];
+    app.ctModal('C1');
+    assert.equal(app.cForm.ownerContactId, 'O1');
+    // com outro contacto, ninguém
+    app.db.contracts[0].ownerPhone = '960 000 000';
+    app.ctModal('C1');
+    assert.equal(app.cForm.ownerContactId, '');
+    assert.match(ultimo(), /id="c_omail"/);
+    // sem contacto no contrato nem na ficha: vazio com vazio não é o mesmo contacto
+    Object.assign(app.db.owners[0], { email: '', phone: '' });
+    Object.assign(app.db.contracts[0], { ownerEmail: '', ownerPhone: '' });
+    app.ctModal('C1');
+    assert.equal(app.cForm.ownerContactId, '');
+    // uma escolha que já não está na lista não se mostra: o sel dizia o nome da primeira pessoa por cima dos campos
+    app.db.contracts[0].ownerContactId = 'ninguem';
+    app.ctModal('C1');
+    assert.match(ultimo(), /<input type="hidden" id="c_ocid" value="">/);
+    assert.match(ultimo(), /id="c_omail"/);
+    // o inquilino: o mesmo, ao entrar no contrato novo com o contacto da ficha
+    Object.assign(app.db.tenants[0], { phone: '912 000 002' });
+    app.ctModal(null, 'P1', 'I1');
+    assert.deepEqual([app.cForm.tenantContactId, app.cForm.tenantPhone], ['I1', '912 000 002']);
+    assert.match(ultimo(), /<input type="hidden" id="c_tcid" value="I1">/);
+  });
+
+  test('guardar sem imóvel, sem renda ou sem inquilinos diz o erro junto do campo', () => {
+    base();
+    app.ctModal(null, 'P1');
+    const vistos = [];
+    app.falhaCampo = (id, msg) => { vistos.push([id, msg]); };
+    const el = (id) => app.document.getElementById(id);
+    el('c_prop').value = '';
+    app.onSave();
+    el('c_prop').value = 'P1';
+    el('c_rent').value = '';
+    app.onSave();
+    el('c_rent').value = '500';
+    app.onSave();
+    assert.deepEqual(vistos, [['c_prop', 'Escolhe o imóvel.'], ['c_rent', 'Indica a renda mensal.'], ['c_tenants', 'Escolhe pelo menos um inquilino.']]);
+    assert.equal(app.db.contracts.length, 0, 'nada se grava');
   });
 });

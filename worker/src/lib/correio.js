@@ -24,24 +24,209 @@ export const REMETENTES = {
   geral: { de: 'Rendorium <general@' + DOMINIO + '>', responderA: 'general@' + DOMINIO },
 };
 
-/* O molde de todos os emails: simples, com a cara da app, e sempre com a
-   versão em texto — há caixas de correio que só mostram isso.
-   Recebe: titulo — o título dentro do cartão; corpoHtml — o corpo, já em
-   HTML; rodape (opcional) — o texto pequeno do fim (por omissão, o aviso de
-   quem tem conta).
+/* ------------------------------ o molde ---------------------------------- */
+
+/* Um email não é uma página: não há CSP, mas há o Gmail, o Outlook e o Apple
+   Mail, cada um com a sua ideia de CSS. Daí as regras do molde:
+   - estilos em linha. O <style> do cabeçalho só ACRESCENTA o escuro e o
+     telemóvel a quem os souber ler; sem ele, o email fica claro e inteiro;
+   - tabelas para a estrutura, com 560 px de largura no máximo (o Outlook do
+     Windows não conhece max-width: leva uma tabela de 560 só para ele);
+   - nada de fora: nem imagens, nem letras do Google. A pilha das letras põe
+     a Geist à frente e cai no sistema onde ela não estiver instalada;
+   - a marca é uma tabela cobalto com dois arcos de contorno (o
+     radial-gradient da app não chega ao correio); o Outlook do Windows, que
+     não desenha cantos redondos, fica com o quadrado cobalto liso.
+   As cores são as do contrato do redesign (os tokens de web/estilos.css),
+   escritas por extenso porque um email não lê variáveis de CSS. */
+const COR = {
+  fundo: '#F2F3F6',        // --bg
+  cartao: '#FFFFFF',       // --card
+  tinta: '#121826',        // --ink
+  secundario: '#4F586B',   // --muted
+  terciario: '#687083',    // --faint: o rodapé
+  contorno: '#E2E5EB',     // --line
+  cobalto: '#2952D9',      // --accent: a marca e o botão
+  sobreCobalto: '#FFFFFF', // --accent-ink
+  suave: '#E9EEFC',        // --accent-soft: o fundo do assunto citado
+  suaveTinta: '#1D3FB0',   // --accent-text
+};
+// Os mesmos papéis no escuro (os tokens de :root.dark), para os clientes que
+// respeitam o prefers-color-scheme (o Apple Mail, o Outlook do Mac).
+const COR_ESCURO = {
+  fundo: '#0B111E', cartao: '#141C2C', tinta: '#E9EDF5', secundario: '#AEB7C9',
+  terciario: '#8C96AB', contorno: '#253049', cobalto: '#7C9BFF', sobreCobalto: '#0B111E',
+  suave: '#1E2A4D', suaveTinta: '#B5C6FF',
+};
+const LETRA = "'Geist',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const LETRA_TITULO = "'Bricolage Grotesque'," + LETRA;
+// O aviso do fim por omissão: quem tem conta e não pediu nada.
+const RODAPE_CONTA = 'Recebeste este email porque tens uma conta no Rendorium. Se não foste tu, ignora — nada acontece sem o teu clique.';
+// O aviso do fim dos emails de pedidos: o no-reply e o support respondem ambos para o suporte.
+const RODAPE_PEDIDO = 'Se responderes a este email, a resposta também chega ao suporte.';
+// Quanto da resposta da equipa vai no email (o resto lê-se na app).
+const RESPOSTA_MAX = 1500;
+
+/* Os <style> do cabeçalho: o telemóvel (margens mais curtas) e o escuro.
+   Tudo com !important, porque tem de vencer os estilos em linha — e tudo
+   opcional: o Gmail na web ignora o escuro e fica com o claro, que é o
+   desenho de base. Dois blocos e não um, porque o Gmail deita fora um
+   <style> inteiro quando tropeça numa regra que não conhece: assim o do
+   escuro (:root, prefers-color-scheme) não leva o do telemóvel consigo.
+   As classes rd-* são só ganchos para isto. */
+const ESTILO = '<style>' +
+  '@media (max-width:480px){' +
+  '.rd-moldura{padding:16px!important}' +
+  '.rd-corpo{padding:22px 20px 20px!important}' +
+  '.rd-rodape{padding:14px 20px 18px!important}}' +
+  '</style><style>' +
+  ':root{color-scheme:light dark;supported-color-schemes:light dark}' +
+  '@media (prefers-color-scheme:dark){' +
+  '.rd-fundo{background:' + COR_ESCURO.fundo + '!important}' +
+  '.rd-cartao{background:' + COR_ESCURO.cartao + '!important;border-color:' + COR_ESCURO.contorno + '!important}' +
+  '.rd-tinta{color:' + COR_ESCURO.tinta + '!important}' +
+  '.rd-sec{color:' + COR_ESCURO.secundario + '!important}' +
+  '.rd-rodape{color:' + COR_ESCURO.terciario + '!important;border-color:' + COR_ESCURO.contorno + '!important}' +
+  '.rd-caixa{border-color:' + COR_ESCURO.contorno + '!important}' +
+  '.rd-cit{background:' + COR_ESCURO.suave + '!important;color:' + COR_ESCURO.suaveTinta + '!important}' +
+  '.rd-botao{background:' + COR_ESCURO.cobalto + '!important}' +
+  '.rd-botao a{color:' + COR_ESCURO.sobreCobalto + '!important}}' +
+  '</style>';
+
+/* Escapa o que vai para dentro do HTML de um email: o assunto que a pessoa
+   escreveu, a resposta da equipa, uma ligação num href. HTML de email não é
+   sítio para surpresas, venha o texto de quem vier.
+   Recebe: t — o texto (null e undefined dão '').
+   Devolve: o texto com & < > " ' trocados pelas entidades. */
+export function escaparHtml(t) {
+  return String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* O endereço da app para o botão dos emails de pedidos: o mesmo critério do
+   bot (discord.js) — fora de produção há ENV_NAME, e a app é a do dev.
+   Recebe: env — o ambiente do worker.
+   Devolve: 'https://app.rendorium.com', ou 'https://dev.rendorium.com' fora de produção. */
+export function enderecoDaApp(env) {
+  return 'https://' + (env && env.ENV_NAME ? 'dev.' : 'app.') + DOMINIO;
+}
+
+/* A versão em texto simples: as mesmas partes do HTML, pela mesma ordem,
+   separadas por uma linha em branco (as vazias saem).
+   Recebe: partes — array de textos (ou falsos, que se saltam).
+   Devolve: o corpo em texto simples. */
+function textoDoEmail(partes) {
+  return partes.filter(Boolean).join('\n\n');
+}
+
+/* Um parágrafo do corpo. O 'sub' é a nota pequena em cinzento (o «se o botão
+   não abrir», a referência do pedido); o 'num' alinha os algarismos.
+   Recebe: html — o conteúdo, já em HTML (escapado por quem chama); tipo
+   (opcional) — 'sub', 'num' ou 'sub num'.
+   Devolve: o <p> com os estilos em linha. */
+function paragrafo(html, tipo) {
+  const sub = /\bsub\b/.test(tipo || '');
+  const num = /\bnum\b/.test(tipo || '') ? 'font-variant-numeric:tabular-nums;' : '';
+  return '<p class="' + (sub ? 'rd-sec' : 'rd-tinta') + '" style="margin:0;font-family:' + LETRA + ';' +
+    (sub ? 'font-size:13px;line-height:1.5;color:' + COR.secundario
+      : 'font-size:15px;line-height:1.5;color:' + COR.tinta) +
+    ';' + num + 'overflow-wrap:anywhere;word-break:break-word">' + html + '</p>';
+}
+
+/* O assunto do pedido citado num bloco suave cobalto (o .qt da prancheta).
+   Recebe: html — o assunto, já escapado.
+   Devolve: a tabela do bloco. */
+function citacao(html) {
+  return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0">' +
+    '<tr><td class="rd-cit" bgcolor="' + COR.suave + '" style="padding:14px 16px;border-radius:12px;background:' + COR.suave +
+    ';color:' + COR.suaveTinta + ';font-family:' + LETRA + ';font-size:14.5px;line-height:1.5;overflow-wrap:anywhere;word-break:break-word">' +
+    html + '</td></tr></table>';
+}
+
+/* A resposta da equipa numa caixa com contorno, para se distinguir do que o
+   email diz à volta dela.
+   Recebe: html — a resposta, já escapada e com as quebras em <br>.
+   Devolve: a tabela da caixa. */
+function caixa(html) {
+  return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0">' +
+    '<tr><td class="rd-caixa rd-tinta" style="padding:16px;border:1px solid ' + COR.contorno + ';border-radius:12px;color:' + COR.tinta +
+    ';font-family:' + LETRA + ';font-size:15px;line-height:1.5;overflow-wrap:anywhere;word-break:break-word">' +
+    html + '</td></tr></table>';
+}
+
+/* O botão: cobalto, texto branco, 48 px de altura (14 + 20 + 14), raio 12.
+   O Outlook do Windows não dá padding a um <a>: o mso-padding-alt dá-o à
+   célula, e o botão fica com a mesma altura lá também.
+   Recebe: href — o endereço (é escapado aqui); rotulo — o texto do botão.
+   Devolve: a tabela do botão. */
+function botao(href, rotulo) {
+  return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0">' +
+    '<tr><td class="rd-botao" bgcolor="' + COR.cobalto + '" style="border-radius:12px;background:' + COR.cobalto + ';mso-padding-alt:14px 22px">' +
+    '<a href="' + escaparHtml(href) + '" target="_blank" style="display:inline-block;padding:14px 22px;border-radius:12px;font-family:' + LETRA +
+    ';font-size:15px;line-height:20px;font-weight:600;color:' + COR.sobreCobalto + ';text-decoration:none">' +
+    escaparHtml(rotulo) + '</a></td></tr></table>';
+}
+
+/* A marca: o quadrado cobalto de 28 px, raio 8, com dois arcos brancos em
+   cantos opostos. Na app é um radial-gradient; aqui é uma tabela 2×2 de
+   células de 14 px, e cada arco é um quarto de círculo feito de contorno (3
+   px, raio 12, centrado no canto). Os arcos vão dentro de um comentário
+   condicional: o Outlook do Windows, que os desenharia como esquadros, não
+   os vê. É decorativa: aria-hidden.
+   Devolve: a tabela da marca. */
+function marca() {
+  const celula = 'width:14px;height:14px;padding:0;font-size:0;line-height:0';
+  const arco = (lados, canto, margem) => '<!--[if !mso]><!--><div style="width:9px;height:9px;margin:' + margem + ';' +
+    lados.map((l) => 'border-' + l + ':3px solid ' + COR.sobreCobalto).join(';') +
+    ';border-' + canto + '-radius:12px;font-size:0;line-height:0"></div><!--<![endif]-->';
+  return '<table role="presentation" aria-hidden="true" width="28" height="28" cellpadding="0" cellspacing="0" border="0" bgcolor="' + COR.cobalto +
+    '" style="width:28px;height:28px;background:' + COR.cobalto + ';border-radius:8px;border-collapse:separate;border-spacing:0;table-layout:fixed">' +
+    '<tr><td width="14" height="14" valign="top" style="' + celula + '">' + arco(['right', 'bottom'], 'bottom-right', '0') + '</td>' +
+    '<td width="14" height="14" style="' + celula + '"></td></tr>' +
+    '<tr><td width="14" height="14" style="' + celula + '"></td>' +
+    '<td width="14" height="14" valign="top" style="' + celula + '">' + arco(['left', 'top'], 'top-left', '2px 0 0 2px') + '</td></tr></table>';
+}
+
+/* O molde de todos os emails, vestido como a prancheta D-Emails: fundo
+   cinzento-claro, um cartão branco de 560 px no máximo com a marca, o
+   título, os blocos do corpo (16 px entre eles) e, por baixo de um filete, o
+   rodapé pequeno. A versão em texto escreve-a quem chama (textoDoEmail).
+   Recebe: opcoes — { assunto: o assunto do email (vai para o <title>);
+   titulo: o título dentro do cartão; blocos: array de HTML (parágrafos,
+   citação, caixa, botão; os falsos saltam-se); rodape (opcional): o texto
+   pequeno do fim, por omissão o aviso de quem tem conta }.
    Devolve: o HTML completo do email, como texto. */
-export function molde(titulo, corpoHtml, rodape) {
-  return `<!doctype html><html lang="pt"><body style="margin:0;padding:0;background:#f4f6f4">
-  <div style="max-width:520px;margin:0 auto;padding:28px 18px;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a231e">
-    <div style="font-weight:800;font-size:17px;margin-bottom:18px">
-      <span style="display:inline-block;width:26px;height:26px;border-radius:8px;background:#244c3b;color:#fff;text-align:center;line-height:26px;margin-right:8px">R</span>Rendorium</div>
-    <div style="background:#fff;border:1px solid #e3e9e4;border-radius:14px;padding:22px 24px">
-      <h1 style="font-size:18px;margin:0 0 12px">${titulo}</h1>
-      <div style="font-size:14.5px;line-height:1.65">${corpoHtml}</div>
-    </div>
-    <div style="font-size:12px;color:#5c6862;margin-top:14px;line-height:1.6">${rodape ||
-      'Recebeste este email porque tens uma conta no Rendorium. Se não foste tu, ignora — nada acontece sem o teu clique.'}</div>
-  </div></body></html>`;
+export function molde({ assunto, titulo, blocos, rodape }) {
+  const linhas = (blocos || []).filter(Boolean)
+    .map((b) => '<tr><td style="padding:16px 0 0">' + b + '</td></tr>').join('');
+  return '<!doctype html><html lang="pt-PT"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<meta name="x-apple-disable-message-reformatting">' +
+    '<meta name="format-detection" content="telephone=no,date=no,address=no,email=no">' +
+    '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">' +
+    '<title>' + escaparHtml(assunto || titulo) + '</title>' + ESTILO + '</head>' +
+    '<body class="rd-fundo" style="margin:0;padding:0;background:' + COR.fundo + ';-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%">' +
+    '<table role="presentation" class="rd-fundo" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="' + COR.fundo + '" style="background:' + COR.fundo + '">' +
+    '<tr><td class="rd-moldura" align="center" style="padding:32px 16px">' +
+    '<!--[if mso]><table role="presentation" align="center" width="560" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->' +
+    '<table role="presentation" class="rd-cartao" align="center" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="' + COR.cartao +
+    '" style="width:100%;max-width:560px;margin:0 auto;background:' + COR.cartao + ';border:1px solid ' + COR.contorno +
+    ';border-radius:16px;border-collapse:separate;border-spacing:0">' +
+    '<tr><td class="rd-corpo" style="padding:28px 28px 24px">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse">' +
+    '<tr><td><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse"><tr>' +
+    '<td width="28" valign="middle">' + marca() + '</td>' +
+    '<td class="rd-tinta" valign="middle" style="padding:0 0 0 10px;font-family:' + LETRA_TITULO + ';font-size:18px;line-height:28px;font-weight:700;letter-spacing:-0.015em;color:' + COR.tinta + '">Rendorium</td>' +
+    '</tr></table></td></tr>' +
+    '<tr><td style="padding:16px 0 0"><h1 class="rd-tinta" style="margin:0;font-family:' + LETRA_TITULO +
+    ';font-size:22px;line-height:1.25;font-weight:700;letter-spacing:-0.015em;color:' + COR.tinta + '">' + escaparHtml(titulo) + '</h1></td></tr>' +
+    linhas + '</table></td></tr>' +
+    '<tr><td class="rd-rodape" style="padding:16px 28px 22px;border-top:1px solid ' + COR.contorno + ';font-family:' + LETRA +
+    ';font-size:12.5px;line-height:1.5;color:' + COR.terciario + '">' + escaparHtml(rodape || RODAPE_CONTA) + '</td></tr>' +
+    '</table>' +
+    '<!--[if mso]></td></tr></table><![endif]-->' +
+    '</td></tr></table></body></html>';
 }
 
 // Qualquer endereço no domínio da casa — rendorium.com ou um subdomínio.
@@ -134,73 +319,126 @@ export function numeroPedido(id) {
   return '#' + String(id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
 }
 
-// A confirmação automática de que um pedido de ajuda ficou registado, com o
-// número que a pessoa pode citar em qualquer canal. Devolve o resultado do enviarEmail.
+/* A confirmação de que um pedido de ajuda ficou registado, com o número que
+   a pessoa pode citar em qualquer canal: o assunto dela citado, o número, e
+   o botão para a app (onde o pedido se acompanha).
+   Recebe: env — o ambiente do worker (dá o endereço da app); id — o id do
+   pedido (dá o número); assunto — o assunto que a pessoa escreveu.
+   Devolve: { assunto, html, texto } — o email pronto a enviar. */
+export function cartaPedidoRecebido(env, id, assunto) {
+  const num = numeroPedido(id);
+  const pedido = String(assunto || '').trim();
+  const app = enderecoDaApp(env);
+  const titulo = 'Recebemos o teu pedido';
+  const registado = 'Ficou registado com o número ' + num + '. Vamos responder-te por email.';
+  const naApp = 'Podes acompanhar e responder na app, em Definições › Ajuda e sugestões.';
+  return {
+    assunto: titulo + ' ' + num,
+    texto: textoDoEmail([titulo, pedido && '«' + pedido + '»', registado, naApp, 'Abrir a app: ' + app, RODAPE_PEDIDO]),
+    html: molde({
+      assunto: titulo + ' ' + num,
+      titulo,
+      blocos: [
+        pedido && citacao(escaparHtml(pedido)),
+        paragrafo('Ficou registado com o número <strong>' + escaparHtml(num) + '</strong>. Vamos responder-te por email.', 'num'),
+        paragrafo(escaparHtml(naApp)),
+        botao(app, 'Abrir a app'),
+      ],
+      rodape: RODAPE_PEDIDO,
+    }),
+  };
+}
+
+// A confirmação automática de que um pedido de ajuda ficou registado (a
+// cartaPedidoRecebido), enviada do no-reply. Devolve o resultado do enviarEmail.
 // Recebe: env — o ambiente do worker; para — o email da pessoa; id — o id do
 // pedido (dá o número); assunto — o assunto que a pessoa escreveu.
 // Devolve: promessa de { enviado, motivo } — o que o enviarEmail disser.
 export async function emailPedidoRecebido(env, para, id, assunto) {
-  const num = numeroPedido(id);
-  return enviarEmail(env, {
-    para,
-    remetente: 'maquina',
-    assunto: 'Recebemos o teu pedido ' + num,
-    texto: 'O teu pedido «' + assunto + '» chegou e tem o número ' + num + '.\n\n' +
-      'Vamos responder-te por email; também podes acompanhar e responder na app, ' +
-      'em Definições → Ajuda e sugestões.',
-    html: molde('Recebemos o teu pedido ' + num,
-      `<p style="margin:0 0 10px;color:#5c6862">${String(assunto || '').replace(/</g, '&lt;')}</p>
-       <p style="margin:0 0 14px">Chegou e ficou registado com o número <b>${num}</b>.
-       Vamos responder-te por email.</p>
-       <p style="margin:0">Podes acompanhar e responder na app, em
-       <b>Definições → Ajuda e sugestões</b>.</p>`,
-      'Recebeste este email porque escreveste um pedido de ajuda no Rendorium. Responder a este email também funciona — cai na nossa caixa de suporte.'),
-  });
+  const c = cartaPedidoRecebido(env, id, assunto);
+  return enviarEmail(env, { para, remetente: 'maquina', assunto: c.assunto, html: c.html, texto: c.texto });
 }
 
-// O email de reset de palavra-passe: entrega a `ligacao` já pronta. O "vale
-// 1 hora, uma vez" é garantido por quem a criou — aqui só se escreve o envelope.
+/* O email de repor a palavra-passe: entrega a `ligacao` já pronta, no botão e
+   escrita por extenso para quem tiver de a copiar. O «vale 1 hora e serve uma
+   vez» é garantido por quem a criou — aqui só se escreve o envelope.
+   Recebe: ligacao — o URL de reposição, completo e já assinado.
+   Devolve: { assunto, html, texto } — o email pronto a enviar. */
+export function cartaReporPassword(ligacao) {
+  const titulo = 'Repor a tua palavra-passe';
+  const pedido = 'Alguém pediu para repor a palavra-passe desta conta. A ligação vale 1 hora e serve uma vez.';
+  const ignora = 'Se não pediste isto, ignora.';
+  const url = String(ligacao || '');
+  return {
+    assunto: titulo,
+    texto: textoDoEmail([titulo, pedido, 'Definir palavra-passe nova:\n' + url, ignora, RODAPE_CONTA]),
+    html: molde({
+      assunto: titulo,
+      titulo,
+      blocos: [
+        paragrafo(escaparHtml(pedido)),
+        botao(url, 'Definir palavra-passe nova'),
+        paragrafo('Se o botão não abrir, copia esta ligação:<br><span class="rd-tinta" style="color:' + COR.tinta +
+          ';word-break:break-all">' + escaparHtml(url) + '</span>', 'sub'),
+        paragrafo(escaparHtml(ignora)),
+      ],
+      rodape: RODAPE_CONTA,
+    }),
+  };
+}
+
+// O email de repor a palavra-passe (a cartaReporPassword), enviado do no-reply.
 // Recebe: env — o ambiente do worker; para — o email da conta; ligacao — o
 // URL de reposição, completo e já assinado.
 // Devolve: promessa de { enviado, motivo } — o que o enviarEmail disser.
 export async function emailReporPassword(env, para, ligacao) {
-  return enviarEmail(env, {
-    para,
-    remetente: 'maquina',
-    assunto: 'Repor a tua palavra-passe',
-    texto: 'Para definires uma palavra-passe nova, abre esta ligação (vale 1 hora, uma só vez):\n\n' +
-      ligacao + '\n\nSe não pediste isto, ignora este email — nada muda sem o teu clique.',
-    html: molde('Repor a tua palavra-passe',
-      `<p style="margin:0 0 14px">Pediste para repor a palavra-passe da tua conta. A ligação vale
-       <b>1 hora</b> e serve <b>uma vez</b>:</p>
-       <p style="margin:0 0 14px"><a href="${ligacao}" style="display:inline-block;background:#244c3b;color:#fff;
-       text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600">Definir palavra-passe nova</a></p>
-       <p style="margin:0;color:#5c6862;font-size:13px">Se o botão não abrir, copia a ligação:<br>${ligacao}</p>`),
-  });
+  const c = cartaReporPassword(ligacao);
+  return enviarEmail(env, { para, remetente: 'maquina', assunto: c.assunto, html: c.html, texto: c.texto });
 }
 
-/* A resposta da equipa a um pedido, enviada do support@ para a pessoa poder
-   responder na mesma conversa. A `resposta` vai cortada a 1500 caracteres e
-   escapada — é texto da equipa, mas HTML de email não é sítio para surpresas.
-   Recebe: env — o ambiente do worker; para — o email da pessoa; assunto — o
+/* A resposta da equipa a um pedido: o número e o assunto por cima, a
+   resposta numa caixa, e o botão para a app. A resposta vai cortada a
+   RESPOSTA_MAX caracteres nas DUAS versões (com reticências quando corta: o
+   resto lê-se na app) e, no HTML, escapada — é texto da equipa, mas HTML de
+   email não é sítio para surpresas.
+   Recebe: env — o ambiente do worker (dá o endereço da app); assunto — o
    assunto do pedido original (cortado a 120 no assunto do email); resposta —
    o texto da equipa; id (opcional) — o id do pedido, para levar o número.
-   Devolve: promessa de { enviado, motivo } — o que o enviarEmail disser. */
+   Devolve: { assunto, html, texto } — o email pronto a enviar. */
+export function cartaRespostaPedido(env, assunto, resposta, id) {
+  const num = id ? numeroPedido(id) : '';
+  const pedido = String(assunto || '').trim();
+  const app = enderecoDaApp(env);
+  const inteira = String(resposta || '').replace(/\r\n?/g, '\n');
+  const corpo = inteira.length > RESPOSTA_MAX ? inteira.slice(0, RESPOSTA_MAX).trimEnd() + '…' : inteira;
+  const referencia = [num, pedido].filter(Boolean).join(' · ');
+  const titulo = 'Respondemos ao teu pedido';
+  const naApp = 'Podes ver o histórico e responder na app, em Definições › Ajuda e sugestões.';
+  const oAssunto = titulo + (num ? ' ' + num + ' ' : ': ') + String(assunto || '').slice(0, 120);
+  return {
+    assunto: oAssunto,
+    texto: textoDoEmail([titulo, referencia, corpo, naApp, 'Ver na app: ' + app, RODAPE_PEDIDO]),
+    html: molde({
+      assunto: oAssunto,
+      titulo,
+      blocos: [
+        referencia && paragrafo(escaparHtml(referencia), 'sub num'),
+        corpo && caixa(escaparHtml(corpo).replace(/\n/g, '<br>')),
+        paragrafo(escaparHtml(naApp)),
+        botao(app, 'Ver na app'),
+      ],
+      rodape: RODAPE_PEDIDO,
+    }),
+  };
+}
+
+// A resposta da equipa a um pedido (a cartaRespostaPedido), enviada do
+// support@ para a pessoa poder responder na mesma conversa.
+// Recebe: env — o ambiente do worker; para — o email da pessoa; assunto — o
+// assunto do pedido original; resposta — o texto da equipa; id (opcional) —
+// o id do pedido, para levar o número.
+// Devolve: promessa de { enviado, motivo } — o que o enviarEmail disser.
 export async function emailRespostaPedido(env, para, assunto, resposta, id) {
-  const num = id ? numeroPedido(id) + ' ' : '';
-  const seguro = String(resposta || '').slice(0, 1500)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-  return enviarEmail(env, {
-    para,
-    remetente: 'suporte',
-    assunto: 'Respondemos ao teu pedido ' + (num || ': ') + String(assunto || '').slice(0, 120),
-    texto: 'Respondemos ao teu pedido ' + num + '«' + assunto + '»:\n\n' + resposta +
-      '\n\nPodes ver e responder na app, em Definições → Ajuda e sugestões.',
-    html: molde('Respondemos ao teu pedido ' + num,
-      `<p style="margin:0 0 10px;color:#5c6862">${String(assunto || '').replace(/</g, '&lt;')}</p>
-       <div style="background:#f0f5f1;border-radius:10px;padding:14px 16px;margin:0 0 14px">${seguro}</div>
-       <p style="margin:0">Podes ver o histórico e responder na app, em
-       <b>Definições → Ajuda e sugestões</b>.</p>`,
-      'Recebeste este email porque escreveste um pedido de ajuda no Rendorium. Responder a este email também funciona — cai na nossa caixa de suporte.'),
-  });
+  const c = cartaRespostaPedido(env, assunto, resposta, id);
+  return enviarEmail(env, { para, remetente: 'suporte', assunto: c.assunto, html: c.html, texto: c.texto });
 }

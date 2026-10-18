@@ -75,7 +75,7 @@ function selLCartoes() {
 }
 
 // Põe a caixa em cada cartão (um toque passa a marcar) e a barra de baixo,
-// com Cancelar, a contagem e Eliminar.
+// com Cancelar, a contagem e Apagar.
 // Devolve: nada — mexe no DOM já desenhado.
 function selLDecorar() {
   selLCartoes().forEach(function (c) {
@@ -93,10 +93,13 @@ function selLDecorar() {
   if (!document.querySelector('.sel-fundo')) {
     var f = document.createElement('div');
     f.className = 'sel-fundo';
+    // a mesma barra dos movimentos (estilos.css:.sel-fundo): no ecrã largo, azul-noite a flutuar no fundo
+    f.setAttribute('role', 'toolbar');
+    f.setAttribute('aria-label', 'Seleção');
     f.innerHTML =
       '<button type="button" class="btn" data-toca="modo" data-click="CW.selLSair()">' + ic('x', 15) + ' Cancelar</button>' +
       '<b id="selLConta" class="u-fx-1 u-ta-center"></b>' +
-      '<button type="button" class="btn danger" data-toca="dados" data-risco="destroi" data-click="CW.selLApagar()">' + ic('trash', 15) + ' Eliminar</button>';
+      '<button type="button" class="btn danger" data-toca="dados" data-risco="destroi" data-click="CW.selLApagar()">' + ic('trash', 15) + ' Apagar</button>';
     document.body.appendChild(f);
   }
   selLPintar();
@@ -115,6 +118,19 @@ function selLPintar() {
   if (conta) conta.textContent = n ? n + ' selecionado' + (n === 1 ? '' : 's') : 'toca nos cartões';
 }
 
+/* O que vai junto com os imóveis apagados, dito com os números e o plural
+   certo: «Vão junto 2 contratos e 5 movimentos.», «Vai junto 1 contrato.»,
+   ou «Sem contratos nem movimentos ligados.».
+   Recebe: nc — quantos contratos; nt — quantos movimentos.
+   Devolve: a frase (texto). */
+function selLVaoJunto(nc, nt) {
+  var partes = [];
+  if (nc) partes.push(nc + (nc === 1 ? ' contrato' : ' contratos'));
+  if (nt) partes.push(nt + (nt === 1 ? ' movimento' : ' movimentos'));
+  if (!partes.length) return 'Sem contratos nem movimentos ligados.';
+  return (nc + nt === 1 ? 'Vai junto ' : 'Vão junto ') + partes.join(' e ') + '.';
+}
+
 /* Apagar em massa, com os números à vista e o Anular por baixo: um imóvel
    arrasta os contratos e os movimentos dele; um contrato deixa os movimentos,
    só desligados.
@@ -128,7 +144,7 @@ CW.selLApagar = function () {
     var cts = db.contracts.filter(function (c) { return ids.indexOf(c.propertyId) > -1; });
     var txs = db.transactions.filter(function (t) { return ids.indexOf(t.propertyId) > -1; });
     confirmModal('Apagar ' + ids.length + (ids.length === 1 ? ' imóvel' : ' imóveis'),
-      'Vão junto ' + cts.length + ' contrato(s) e ' + txs.length + ' movimento(s).',
+      selLVaoJunto(cts.length, txs.length),
       function () {
         var copia = {
           ps: JSON.parse(JSON.stringify(db.properties.filter(function (p) { return ids.indexOf(p.id) > -1; }))),
@@ -196,10 +212,9 @@ lpMenu = function (v) {
       if (!m || m.querySelector('[data-sel-varios]')) return;
       var btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'card tap';
+      btn.className = 'card tap sel-varios';
       btn.setAttribute('data-sel-varios', '1');
       btn.setAttribute('data-toca', 'modo');
-      btn.style.cssText = 'padding:12px 14px;display:flex;align-items:center;gap:11px';
       btn.innerHTML = '<span class="ic u-w-34px u-h-34px u-br-10px u-d-grid u-pi-center u-bg-v-accent-soft u-c-v-accent u-fx-0-0-34px">' + ic('check', 18) + '</span>' +
         '<span class="u-fx-1 u-minw-0 u-ta-left"><b class="u-d-block u-fs-14px">Selecionar vários</b></span>';
       btn.onclick = function () { closeAllModals(); CW.selLEntrar(tipo, id); };

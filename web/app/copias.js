@@ -120,6 +120,10 @@ function downloadCsv(){
   toast('CSV exportado.');
 }
 // Partilha o relatório do portefólio por ordem de preferência: folha de partilha do Android, Web Share API, ou cópia para a área de transferência.
+// A cópia recusada (sem permissão, a página sem foco) diz que falhou: a
+// promessa rejeitava calada e não aparecia aviso nenhum — como o fisco.js faz
+// com o resumo do Anexo F.
+// Recebe: nada.
 // Devolve: nada de útil — só o efeito de partilhar (ou copiar) o texto.
 function shareReport(){
   /* o relatório é da Avaliação: sem esse serviço nesta conta não há o que partilhar */
@@ -127,7 +131,7 @@ function shareReport(){
   if(txt==null)return toast(hintServicoDesligado('reports'));
   if(window.Android&&window.Android.shareText)return window.Android.shareText('Avaliação do portefólio',txt);
   if(navigator.share)return navigator.share({title:'Avaliação do portefólio',text:txt}).catch(()=>{});
-  if(navigator.clipboard)return navigator.clipboard.writeText(txt).then(()=>toast('Relatório copiado.'));
+  if(navigator.clipboard)return navigator.clipboard.writeText(txt).then(()=>toast('Relatório copiado.'),()=>toast('Não foi possível copiar o relatório.'));
   toast('Não foi possível partilhar.');
 }
 // Apagar tudo: limpa a base local (mantém o tema) após confirmação; com sessão iniciada recusa e aponta as alternativas seguras.

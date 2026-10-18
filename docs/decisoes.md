@@ -38,6 +38,7 @@ confere que cada uma aponta para código que existe.
 - 2026-09-29 · Um grupo partilha-se como grupo, e a vista geral começa pela jornada
 - 2026-10-08 · O IRS ganha uma versão por ano, e a Declaração deixa de deduzir a mais
 - 2026-10-12 · O que tinha ficado de fora do IRS entra
+- 2026-10-17 · Uma cara nova, desenhada antes de escrita
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1115,3 +1116,150 @@ da primeira renovação (irs.js:irsPeriodos) — com o «Renovar…» a levar o 
 para a frente, um contrato de 5 anos renovado por mais 5 lia-se como um de
 10 e ficava com 10 % em vez de 15 %. Os contratos antigos, com o fim
 original, dão o mesmo que antes.
+
+## 2026-10-17 · Uma cara nova, desenhada antes de escrita
+A Rendorium mudou de cara inteira de uma vez, a partir de um canvas do Claude
+Design («Rendorium — app», sessenta pranchetas: a linguagem, os ecrãs no
+telemóvel e no computador, os estados, a montra e as páginas legais, os
+emails e o back office). Fez-se por uma árvore de quinze folhas — a fundação,
+a casca, nove folhas de ecrãs e três de fora da app —, cada uma com o seu
+contrato, as suas provas no browser contra as pranchetas e a sua lista de
+conformidade, e uma revisão adversária no fim. As regras novas vivem no
+design.md; aqui fica o porquê das que custaram.
+
+O vermelho deixou de ser o negativo. Uma despesa a vermelho lia-se como um
+erro, e um atraso não se distinguia de um gasto normal: o dinheiro passou a
+ter três cores (o que entra, o que sai, a prestação — estilos.css:--in,
+estilos.css:--out, estilos.css:--loan) e o vermelho ficou só para o perigo
+(estilos.css:.perigo). O cobalto da marca passou a ser só a ação: o verde
+antigo fazia de botão, de positivo e de «em vigor» ao mesmo tempo. As séries
+dos gráficos deixaram de ter hex à mão (tema.js:COR_SERIE), o que fechou duas
+dívidas antigas de uma vez.
+
+As letras são da casa e servem-se da casa. A CSP só deixa font-src 'self', e
+um Google Fonts pedia abrir a CSP a um terceiro e mandar-lhe o IP de cada
+pessoa: a Geist e a Bricolage Grotesque vivem em web/fonts/, variáveis e só
+com o latino, pré-carregadas e na concha do service worker (sw.js:SHELL),
+com swap para nunca haver texto invisível.
+
+A navegação arrumou-se em cinco grupos do dia a dia (navegacao.js:NAV_GROUPS)
+e a barra de baixo em áreas (navegacao.js:AREAS): Casas e Dinheiro juntam
+três separadores cada, e lembram-se do último. «Pessoas» é uma porta para os
+Inquilinos e os Proprietários (navegacao.js:PESSOAS), que continuam serviços
+à parte — um serviço desligado não pode deixar meia porta acesa. Os Grupos e
+os Colaboradores saíram do menu para as Definições: são arrumação da conta, e
+o menu tinha opções a mais. O FAB saiu de todos os ecrãs: cobria o último
+cartão de cada lista e no computador repetia a ação que o cabeçalho passou a
+ter (navegacao.js:pintarAcaoDoCabecalho); cria-se no + da barra e no «Criar»
+da barra lateral, que abrem a mesma folha (navegacao.js:abrirAdicionar). O
+estado da sincronização subiu ao cabeçalho (cloud/entrada.js:setSyncBadge) e
+o sino passou a «Pede atenção», onde o que está por confirmar se confirma sem
+sair dali (notificacoes.js:atencaoCorpo).
+
+A montra deixou as capturas. Seis imagens que envelheciam a cada mudança da
+app, em claro e escuro, deram lugar a maquetes de HTML e CSS com números que
+fecham (landing.js:RECEITA_MES) e barras geradas dos dados
+(landing.js:alturasDasBarras), porque a página não tem JavaScript nem
+atributos de estilo. Fica uma captura só, a imagem de partilha, que as redes
+mostram sem correr CSS (scripts/capturas.js:CAPTURAS).
+
+Os emails vestiram a linguagem sem nada de fora — nem imagens, nem letras —,
+porque o Gmail e o Outlook cortam o que vem de fora e as letras não chegam lá:
+as cores do contrato vão escritas por extenso (correio.js:COR) e a marca é
+uma tabela (correio.js:marca). O back office ficou com a barra lateral
+grafite, de propósito diferente do azul-noite da app, e perdeu o último
+confirm(): desligar um serviço pergunta no próprio cartão e diz quem cai junto
+(equipa-guiao.js:mostrarAvisoDesligar).
+
+Os ecrãs trouxeram três decisões que o desenho não mostra. O que não destrói
+não leva vermelho: «Recusar desta vez» um planeado não apaga nada, e passou
+do botão vermelho para o ⋯ da linha (planeados.js:pendMenuItens). Os números
+que mudam uma página da Análise — o yield exigido, o horizonte, o aumento
+das rendas, a inflação — saíram do painel dos filtros para a própria página
+(estilos.css:.ana-pin): escondidos lá, mudavam todos os números sem se ver
+porquê. E o «Partilhar» passou a estar no cartão de cada grupo
+(definicoes.js:cartaoDoGrupo), o que tornou inútil o «Partilhar um grupo que
+já tens», que listava os privados à parte: as portas passaram de três a
+duas.
+
+Fechou a dívida das cirurgias da nuvem sobre o HTML da app. A secção dos
+proprietários do formulário do imóvel era trocada por expressão regular, e a
+expressão deixara de casar a 2026-10-01, quando o título passou a
+«Proprietários e quota-parte (%, opcional)»: sem erro nenhum, quem tinha
+conta via a secção local, com as quotas escritas à mão, em vez das quotas
+por proposta. O formulário pede agora a secção a um ponto de extensão
+(imovel.js:donosDoFormulario), que a nuvem preenche quando há sessão. O
+embrulho do cartão por confirmar, que acrescentava o «Recusar» ao lado do
+botão de silenciar, deixou de casar quando o Silenciar foi para o ⋯, e saiu:
+o «Recusar desta vez» e o «Preencher N em falta» vêm das linhas do próprio
+cartão, e os cartões dos contratos usam as mesmas linhas
+(cloud/painel.js:pendBlock).
+
+As linhas das listas deixaram o ⋮, como no canvas: a ficha já tinha as
+mesmas opções no ⋯ e no «Editar», tocar na linha abre-a, e o toque longo
+continua. O que custou foi a regra do percurso que pedia um botão dentro de
+cada linha com toque longo («o gesto tem sempre um caminho visível ao
+lado»): queria dizer um caminho visível e dizia um botão, e passou a aceitar
+a linha focável que abre a ficha (testes/ui/invariantes.js). Nos Movimentos a
+seleção ficou com portas à vista — o «Selecionar vários» no cabeçalho e, no
+ecrã largo, as caixas da tabela —, e a barra das ações, que o canvas punha
+entre os totais e a tabela, flutua no fundo: ali empurrava a lista ~56px ao
+primeiro visto (cloud/selecao.js:selBarraHtml). O título do mês ganhou
+classe própria (estilos.css:.mov-mes), e a metade dos Movimentos da dívida
+dos cabeçalhos com um utilitário por cima fechou.
+
+O caminho curto dos Movimentos (lista-movimentos.js:refrescarMovimentos)
+trazia um defeito desde a casca nova: refazia a vista sem a faixa do âmbito
+e sem os separadores da área, e a primeira tecla da pesquisa levava os
+separadores do telemóvel. Passou a refazer o mesmo molde que o render, como
+a via parcial das outras listas (vistas.js:refrescarListasVivas). E trocar
+de tipo no segmentado do formulário de um movimento limpa o que só o tipo
+antigo tinha (movimento.js:limparDoTipo): escondidos pelo tipo novo, uma
+hipoteca, um contrato ou uma coluna do Anexo F ficavam gravados sem ninguém
+os ver.
+
+Nos Contratos, a linha ganhou dois andares (lista-contratos.js:ctLinha): o
+de fora recebe o bloco dos por confirmar que a nuvem pendura
+(cloud/painel.js:decoratePending), o de dentro abre a ficha, e assim o toque
+no Confirmar não chega ao que abre. O cabeçalho de cada imóvel ganhou classe
+própria (estilos.css:.ct-grupo-cab), e com ele fechou a outra metade da
+dívida dos cabeçalhos com um utilitário por cima. O PDF do contrato vestiu
+as cores do tema claro (contrato-pdf.js:PDF_COR) mas ficou na Helvetica: a
+Geist e a Bricolage só entravam embutidas, a partir dos woff2, que vêm em
+Brotli e o escritor do PDF teria de desfazer, e a Helvetica é uma das
+catorze letras que todo o leitor de PDF já tem.
+
+Na conta, os portões — a entrada, os termos novos, a versão velha demais —
+estão acima do aviso e das janelas, e isso escondia duas coisas. O
+«Esqueci-me da palavra-passe» pedia o email com o prompt() do browser, o
+último da app, que no WebView do Android podia devolver null sem aparecer, e
+a resposta ia num aviso por trás do ecrã de entrada; agora aponta o campo, e
+a resposta fica escrita no próprio ecrã (entrada.js:esqueci). E «Não aceito
+— apagar a conta» abria a confirmação por baixo do ecrã dos termos, e o
+toque não fazia nada que se visse; a janela que um portão abre leva agora a
+classe que a põe por cima dele (estilos.css:.modal.sobre-portao). O pedido
+ao suporte levava a versão dos termos em vez da da app, e chegava a dizer
+«v2026-09-09»; leva o VERSAO (ajuda.js:CW.sendTicket). Com estes ecrãs
+fecharam as dívidas do prompt(), dos emojis e dos vistos escritos como
+caracteres (entrada.js:pintarRequisitos), e os caminhos que os textos
+ensinam passaram a ser os das Definições, «Definições → Grupos» e
+«Definições → Colaboradores e cargos».
+
+A revisão adversária do fim foi um revisor por folha, com capturas contra as
+pranchetas, e um cético por achado, a tentar derrubá-lo antes de ele contar:
+ficaram 136 achados confirmados em dez folhas, a casca e as nove de ecrãs.
+Os que mais pesaram não eram de aspeto, eram contas erradas com cara nova:
+o plano de amortização contava anos de doze prestações a partir de hoje, e
+não anos civis (creditos.js:yearRows); o total dos por confirmar somava
+entradas e saídas como positivas (planeados.js:pendTotal); a confirmação de
+apagar uma seleção somava os valores sem sinal, e dizia «1 305,00 €» com a
+barra a dizer «+1 195,00 €» (cloud/selecao.js:CW.selApagar); e os chips dos
+Contratos contavam contratos fora do âmbito que a lista não mostrava
+(ambito.js:visiveis). Nenhuma destas se via numa prancheta, que tem os
+números certos por construção: só uma revisão que lia os números, e não só o
+desenho, as apanhava. Da mesma revisão saíram regras que valem para lá da folha
+onde nasceram: gravar não tira o foco a quem usa o teclado (o render troca a
+vista inteira, e o foco caía no body), uma grelha ao lado da navegação
+lateral parte-se pela largura do cartão e não pela do ecrã, um botão nunca
+vive dentro de um elemento tocável, e o realce de passar por cima só existe
+com rato, porque num ecrã de dedo largo ficava preso.

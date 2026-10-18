@@ -668,3 +668,206 @@ describe('as taxas escrevem-se com as casas decimais todas', () => {
     igual(l.capitalInicio, 250000, 'e o capital continua a ler «250.000» como duzentos e cinquenta mil');
   });
 });
+
+describe('o cartão dos por confirmar e a página dos Créditos na linguagem de 2026-10', () => {
+  /* um planeado por confirmar, com o cartão aberto (fechado não mostra linhas) */
+  const pendente = (id, tx, extra = {}) => {
+    app.db.recurring.push(app.normRec(Object.assign({ id, name: tx.label || 'Planeado', every: 'month', next: hoje, tx }, extra)));
+    app.localStorage.setItem('gi_pend_shut', '0');
+  };
+  const classe = (html, c) => new RegExp('class="(?:[^"]*\\s)?' + c + '(?:\\s[^"]*)?"').test(html);
+
+  test('cada linha diz o nome, onde e quando, o valor com a cor e o selo; Confirmar, Rever e o ⋯ — sem a borda nem o vermelho', () => {
+    casa([]);
+    pendente('rc', { kind: 'expense', label: 'Condomínio', amount: 85, propertyId: 'p1' }, { until: '2026-09-10' });
+    pendente('rr', { kind: 'income', label: 'Renda', amount: 425, propertyId: 'p1' }, { next: '2026-09-01', until: '2026-09-03' });
+    const card = app.pendingCard(true);
+    assert.ok(!classe(card, 'pend') && !classe(card, 'late'), 'a borda colorida à esquerda saiu');
+    assert.doesNotMatch(card, /btn[^"]*danger/, 'nenhum botão vermelho: nada aqui destrói');
+    assert.match(card, /<h3>Por confirmar<\/h3><span class="badge red">1 em atraso<\/span>/);
+    assert.match(card, /2 à espera/);
+    assert.ok(card.indexOf("recView('rr')") < card.indexOf("recView('rc')"), 'as em atraso primeiro');
+    assert.match(card, /Casa · entre 06\/09 e 10\/09/, 'de onde é e quando');
+    assert.match(card, /plan-num neg">−85,00/, 'o que sai a laranja, com o sinal');
+    assert.match(card, /plan-num pos">425,00/, 'o que entra a verde');
+    assert.match(card, /<span class="badge">Por confirmar<\/span>/);
+    assert.match(card, /<span class="badge red">Em atraso<\/span>/);
+    assert.match(card, /class="btn sm primary" data-toca="dados" data-click="quickConfirmRec\('rc'\)"/);
+    assert.match(card, /data-click="confirmRec\('rc'\)">Rever<\/button>/);
+    assert.match(card, /id="menu_pend_rc"[\s\S]*skipRec\('rc'\)[^<]*><svg[\s\S]*?Silenciar avisos/);
+    assert.doesNotMatch(card, /Recusar/, 'sem a nuvem não há recusar');
+  });
+
+  test('o «Recusar desta vez» e o «Preencher» da nuvem vão para o ⋯, e o fecho por omissão fica', () => {
+    casa([]);
+    app.CW = { rejectRec() {}, fillMissed() {} };
+    pendente('rv', { kind: 'expense', label: 'Limpeza', amount: 30, propertyId: 'p1' }, { next: '2026-06-05' });
+    const card = app.pendingCard(true);
+    const menu = card.slice(card.indexOf('id="menu_pend_rv"'));
+    assert.match(menu, /data-click="closePops\(\);CW\.rejectRec\('rv'\)"[^>]*>[\s\S]*?Recusar desta vez/);
+    assert.match(menu, /CW\.fillMissed\('rv'\)[^>]*>[\s\S]*?Preencher 4 em falta/);
+    assert.doesNotMatch(card.slice(0, card.indexOf('id="menu_pend_rv"')), /rejectRec/, 'fora do ⋯ não há recusar');
+    app.localStorage.removeItem('gi_pend_shut');
+    const fechado = app.pendingCard(true);
+    assert.match(fechado, /toca para ver/);
+    assert.doesNotMatch(fechado, /quickConfirmRec|rejectRec/, 'fechado só o cabeçalho');
+    assert.match(fechado, /pendToggle\(\)/);
+  });
+
+  test('a lista dos planeados: a periodicidade e a próxima data, o selo da origem e os chips', () => {
+    casa([loan('a')]);
+    app.syncAllLoanRecs();
+    app.db.recurring.push(app.normRec({ id: 'rm', name: 'Limpeza das escadas', every: 'month', next: '2026-10-05', muted: true,
+      tx: { kind: 'expense', label: 'Limpeza das escadas', amount: 30, propertyId: 'p1' } }));
+    const html = app.vRecurring();
+    assert.match(html, /<span class="badge loan">da hipoteca<\/span>/);
+    assert.match(html, /mensal, dia 5 · próxima 05\/10/);
+    assert.match(html, /<span class="badge grey">à mão<\/span><span class="badge grey">Silenciado<\/span>/);
+    assert.match(html, /data-click="recChip\('auto'\)">Automáticos/);
+    assert.match(html, /class="chip on" aria-pressed="true" data-toca="vista" data-click="recChip\(''\)">Todos <span class="n">2<\/span>/);
+    app.recChip('muted');
+    const so = app.vRecurring();
+    assert.match(so, /data-lp="rec:rm"/);
+    assert.doesNotMatch(so, /data-lp="rec:(?!rm)/, 'só os silenciados');
+    assert.doesNotMatch(html, /class="fab"/, 'o «Novo recorrente» vive no cabeçalho');
+  });
+
+  test('os Créditos: o resumo, o cartão (tipo, taxa, prestação, em dívida, por pagar), o fim da taxa fixa e o plano numa caixa que rola', () => {
+    casa([loan('a', { type: 'mista', rate: 2, fixedYears: 1, euribor: 3, spread: 1, start: '2025-01-10' }), loan('b', { outstanding: 0 })]);
+    registadas('a', 10);
+    const html = app.vCredits();
+    assert.match(html, /Em dívida · 1 hipoteca ativa/);
+    assert.match(html, /mortView\('p1','a'\)/);
+    assert.match(html, /<span class="badge loan">Mista<\/span>/);
+    assert.match(html, /prestações por pagar/);
+    assert.match(html, /depois: /, 'a prestação de depois da fase fixa');
+    const f = app.credFimFixa(A());
+    assert.ok(f && f.dias > 7 && f.dias <= 90, 'a fase fixa acaba dentro da janela: ' + JSON.stringify(f));
+    assert.match(html, new RegExp('badge amber cred-selo">Taxa fixa acaba em ' + f.dias + ' dias'));
+    assert.match(html, /amortModal\('p1','a'\)">Plano<\/button>/);
+    assert.match(html, /id="credDetalhe"/, 'o painel do computador');
+    assert.match(html, /Liquidadas <span class="small">· 1/, 'as liquidadas atrás de um botão');
+    assert.match(html, /<span class="badge grey">Liquidada<\/span>/);
+    assert.doesNotMatch(html, /class="fab"/);
+    const anos = app.yearRows(A()).yrs;
+    const toda = app.credTabela(A());
+    assert.equal((toda.match(/<tr>/g) || []).length, anos.length + 1, 'o cabeçalho e um ano por linha');
+    const curta = app.credTabela(A(), 10);
+    assert.equal((curta.match(/<tr>/g) || []).length, 11);
+    assert.match(curta, new RegExp('cred-tab-fim[\\s\\S]*' + anos[anos.length - 1].yr + ': '));
+    assert.match(curta, /^<div class="cred-plano" role="region"/);
+  });
+
+  test('o total do cabeçalho soma com o sinal das linhas: o que entra menos o que sai, com a cor e o −', () => {
+    casa([]);
+    pendente('rc', { kind: 'expense', label: 'Condomínio', amount: 85, propertyId: 'p1' });
+    pendente('rr', { kind: 'income', label: 'Renda', amount: 425, propertyId: 'p1' });
+    let card = app.pendingCard(true);
+    assert.match(card, /<b class="num plan-pend-total pos">340,00/, '425 − 85, e não 510');
+    pendente('rp', { kind: 'loan', label: 'Prestação', amount: 693.02, propertyId: 'p1' });
+    pendente('rt', { kind: 'settle', label: 'Acerto', amount: 1000, propertyId: 'p1' });
+    card = app.pendingCard(true);
+    assert.match(card, /<b class="num plan-pend-total neg">−353,02/, 'a prestação subtrai e a transferência conta zero');
+    perto(app.pendTotal(app.db.recurring), -353.02);
+  });
+
+  test('o plano ano a ano conta por ano civil: a primeira linha leva só as prestações até dezembro', () => {
+    casa([loan('a')]);
+    app.syncAllLoanRecs();
+    recDe('a').next = '2026-10-05';
+    const linhas = app.amort(A()).rows, anos = app.yearRows(A()).yrs;
+    const cap = (de, ate) => linhas.slice(de, ate).reduce((s, r) => s + r.cap, 0);
+    assert.equal(anos[0].yr, 2026);
+    perto(anos[0].cap, cap(0, 3), 0.01, 'em 2026 só entram out, nov e dez');
+    perto(anos[0].bal, linhas[2].bal, 0.01, 'a dívida a 31/12/2026');
+    assert.equal(anos[1].yr, 2027);
+    perto(anos[1].cap, cap(3, 15));
+    // 360 prestações de out 2026 a set 2056: a última linha é a de 2056, com nove
+    assert.equal(anos.length, 31);
+    anos.forEach((y, i) => assert.equal(y.yr, 2026 + i, 'cada linha com o seu ano'));
+    perto(anos[30].cap, cap(351, 360));
+    assert.equal(anos[30].bal, 0);
+    const curta = app.credTabela(A(), 10);
+    assert.match(curta, /cred-tab-fim[\s\S]*2056: /, 'o «…» acaba no ano da última prestação');
+  });
+
+  test('sem os Planeados, a primeira prestação do plano é a deste mês', () => {
+    casa([loan('a')]);
+    app.definirServicosDesligados(['recurring']);
+    try {
+      const linhas = app.amort(A()).rows, anos = app.yearRows(A()).yrs;
+      assert.equal(anos[0].yr, 2026);
+      perto(anos[0].cap, linhas.slice(0, 4).reduce((s, r) => s + r.cap, 0), 0.01, 'set, out, nov e dez');
+      assert.equal(anos[anos.length - 1].yr, 2056, '360 prestações de set 2026 a ago 2056');
+    } finally { app.definirServicosDesligados([]); }
+  });
+
+  test('o resumo e o gráfico de todas somam pelo ano de cada linha: a hipoteca que só paga no ano seguinte deve tudo no fim deste', () => {
+    casa([loan('a'), loan('b', { outstanding: 50000, years: 10 })]);
+    app.syncAllLoanRecs();
+    recDe('a').next = '2026-10-05';
+    recDe('b').next = '2027-01-05';
+    const d = app.credDividaPorAno([A(), B()]);
+    assert.equal(d.anos[0], 2026);
+    assert.equal(d.anos[d.anos.length - 1], 2056);
+    perto(d.por[1][0], 50000, 0.01, 'B não paga nada em 2026');
+    perto(d.por[1][1], app.yearRows(B()).yrs[0].bal, 0.01, 'o fim de 2027 de B é a primeira linha dela');
+    assert.equal(d.por[1][d.anos.indexOf(2037)], 0, 'B acaba em dez 2036');
+    perto(d.somas[0], app.yearRows(A()).yrs[0].bal + 50000);
+    const p = app.prop('p1');
+    const resumo = app.credResumo([{ p, l: A() }, { p, l: B() }]);
+    assert.match(resumo, /de 2026 a 2056, a descer/);
+    assert.match(resumo, /<span>2026<\/span><span>Dívida no fim de cada ano<\/span><span>2056<\/span>/);
+    assert.equal((resumo.match(/<rect /g) || []).length, 31);
+    assert.match(resumo, /<rect class="agora" x="1"/, 'a barra de 2026 acesa');
+    let rot = null;
+    app.cLine = (series, labels) => { rot = { labels: [...labels], total: [...series[series.length - 1].values] }; return ''; };
+    app.openModal = () => {};
+    app.amortModal('p1', '');
+    assert.equal(rot.labels[0], '2026');
+    assert.equal(rot.labels[rot.labels.length - 1], '2056');
+    perto(rot.total[0], d.somas[0], 0.01, 'o total do gráfico de todas é o mesmo');
+  });
+
+  test('o painel do computador tem «Plano» (o plano inteiro e o gráfico); a ficha chama ao custo «Juros e selo»', () => {
+    casa([loan('a'), loan('b', { outstanding: 0 })]);
+    const p = app.prop('p1');
+    const det = app.credDetalhe({ p, l: A() });
+    assert.match(det, /cred-det-acoes">[\s\S]*data-click="amortModal\('p1','a'\)">Plano<\/button>/);
+    assert.doesNotMatch(app.credDetalhe({ p, l: B() }), /amortModal/, 'uma liquidada não tem plano');
+    assert.match(app.mortFicha('p1', 'a'), /Juros e selo até ao fim/);
+    A().stampTax = false;
+    const sem = app.mortFicha('p1', 'a');
+    assert.match(sem, /Juros até ao fim/);
+    assert.doesNotMatch(sem, /Juros e selo/);
+  });
+
+  test('com filtros, os vazios dos Planeados e dos Modelos são o vazio dos filtros; com um chip de estado os Modelos saem', () => {
+    casa([]);
+    app.recChip(''); app.lf('lrec').q = '';
+    app.db.recurring.push(app.normRec({ id: 'rm', name: 'Limpeza', every: 'month', next: '2026-10-05', tx: { kind: 'expense', label: 'Limpeza', amount: 30, propertyId: 'p1' } }));
+    app.db.templates.push(app.normTpl({ id: 'm1', name: 'Luz', tx: { kind: 'expense', label: 'Luz', amount: 30, propertyId: 'p1' } }));
+    app.recChip('muted');
+    const so = app.vRecurring();
+    assert.ok(so.includes(app.vazioFiltro()), 'nenhum silenciado: o vazio com «Limpar filtros»');
+    assert.doesNotMatch(so, /<h2>Modelos<\/h2>|plan-modelo/, 'um modelo não tem estado: a secção sai');
+    app.recChip('manual');
+    assert.match(app.vRecurring(), /<h2>Modelos<\/h2>[\s\S]*tplView\('m1'\)/, 'os modelos são todos criados à mão');
+    app.recChip('');
+    app.lf('lrec').q = 'zzz';
+    const f = app.vRecurring();
+    assert.equal(f.split(app.vazioFiltro()).length - 1, 2, 'com a pesquisa, os dois vazios com «Limpar filtros»');
+    app.lf('lrec').q = '';
+  });
+
+  test('na Agenda, um planeado de todos os imóveis diz de onde é, como nos Planeados', () => {
+    casa([]);
+    app.db.recurring.push(app.normRec({ id: 'rt', name: 'Seguro de responsabilidade', every: 'month', next: hoje,
+      tx: { kind: 'expense', label: 'Seguro de responsabilidade', amount: 20, todos: true } }));
+    app.db.recurring.push(app.normRec({ id: 'rc', name: 'Condomínio', every: 'month', next: hoje,
+      tx: { kind: 'expense', label: 'Condomínio', amount: 55, propertyId: 'p1' } }));
+    const html = app.calDiaPanel(hoje);
+    assert.match(html, /Seguro de responsabilidade<\/p><p class="small num">Todos os imóveis · mensal<\/p>/);
+    assert.match(html, /Condomínio<\/p><p class="small num">Casa · mensal<\/p>/);
+  });
+});

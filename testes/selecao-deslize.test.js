@@ -48,8 +48,10 @@ function ecra(sel) {
   const nome = peca(sel ? { x: 157.5, y: 384, w: 60, h: 16 } : { x: 15, y: 302, w: 60, h: 16 }, { attrs: { 'data-mes-nome': '2026-03' }, pai: titulo });
   const corpo = peca(sel ? { x: 80, y: 430, w: 200, h: 40 } : { x: 30, y: 350, w: 250, h: 40 });
   const caixaLinha = sel ? peca({ x: 30, y: 430, w: 36, h: 42 }) : null;
+  // o quadrado do ícone, entre a caixa e o corpo: empurrado o mesmo que o corpo
+  const icone = peca(sel ? { x: 66, y: 430, w: 36, h: 36 } : { x: 16, y: 350, w: 36, h: 36 });
   const linha = peca(sel ? { x: 15, y: 420, w: 345, h: 70 } : { x: 15, y: 340, w: 345, h: 92 },
-    { attrs: { 'data-tx': 'A' }, dentro: { '.txcorpo': corpo, '.selbox': caixaLinha } });
+    { attrs: { 'data-tx': 'A' }, dentro: { '.txcorpo': corpo, '.selbox': caixaLinha, '.ic': icone } });
   const caixaMes = sel ? peca({ x: 15, y: 371, w: 140, h: 42 }, { attrs: { 'data-mes-box': '2026-03' } }) : null;
   titulo.querySelector = (s) => (s === '[data-mes-box]' ? caixaMes : null);
   const todos = (s) => {
@@ -59,7 +61,7 @@ function ecra(sel) {
     if (s === '#view .selbox') return sel ? [caixaMes, caixaLinha] : [];
     return [];
   };
-  return { nome, titulo, linha, corpo, caixaMes, caixaLinha, todos };
+  return { nome, titulo, linha, corpo, icone, caixaMes, caixaLinha, todos };
 }
 
 /* Liga o ecrã falso à app: antes do render vê-se `antes`, e o render (o da
@@ -122,6 +124,7 @@ describe('entrar na seleção', () => {
     await depoisDoRender();
     const { corpo, titulo } = v.atual();
     assert.deepEqual(passos(corpo), [['translateX(-50px)', 'none']], 'de 30 para 80, empurrado pela caixa');
+    assert.deepEqual(passos(v.atual().icone), [['translateX(-50px)', 'none']], 'o quadrado do ícone vai com o corpo, e não salta');
     /* o centro do nome passa de 310 para 392: é por ele que o título se
        alinha, e não pelo topo (o título em seleção é mais alto) */
     assert.deepEqual(passos(titulo), [['translateY(-82px)', 'none']]);
@@ -294,6 +297,157 @@ describe('sair da seleção', () => {
       assert.deepEqual(Object.keys(p.style), []);
     }
     assert.equal(app.CW.selMode, false, 'e a seleção entrou e saiu na mesma');
+  });
+});
+
+describe('a tabela do ecrã largo: as caixas sempre lá, a barra das ações e o cabeçalho', () => {
+  test('fora da seleção a caixa existe (a folha só a mostra na tabela) e marcá-la entra; o kebab saiu', () => {
+    const t = app.db.transactions[0];
+    const html = app.txLinhaHtml(t, '2026-03');
+    assert.match(html, /<span class="selbox fora" role="checkbox" aria-checked="false" aria-label="Selecionar «Luz»" data-toca="modo" data-click="CW\.selEntrar\('A',event\)">/);
+    assert.doesNotMatch(html, /txkebab|txOpcoes/, 'o Editar e o Apagar de um movimento sozinho estão na ficha');
+    assert.match(html, /data-click="txView\('A'\)"/, 'tocar na linha continua a abrir a ficha');
+    assert.match(app.txMesHtml('2026-03'), /<span class="selbox mes fora" role="checkbox"[^>]*data-click="CW\.selEntrarMes\('2026-03',event\)">/);
+    assert.match(app.vTransactions(), /<span class="selbox mov-cab-caixa" data-sel-tudo role="checkbox"[^>]*data-toca="modo" data-click="CW\.selEntrarTodos\(event\)">/);
+    assert.equal(typeof app.CW.txOpcoes, 'undefined');
+  });
+
+  test('em seleção a caixa da linha é só desenho (a linha marca, com aria-pressed), e a de tudo marca tudo', () => {
+    app.CW.selEntrar('A');
+    const html = app.txLinhaHtml(app.db.transactions[0], '2026-03');
+    assert.match(html, /<span class="selbox" aria-hidden="true">/);
+    assert.match(html, /aria-pressed="true"/);
+    assert.match(html, /data-click="CW\.selToggle\('A',event\)"/);
+    assert.match(app.txMesHtml('2026-03'), /data-mes-box="2026-03" role="checkbox" aria-checked="false" aria-label="Marcar mar 2026"/);
+    assert.match(app.vTransactions(), /data-sel-tudo role="checkbox"[^>]*data-toca="vista" data-click="CW\.selTodos\(event\)"/);
+    app.CW.selSair();
+  });
+
+  test('a barra: Cancelar, Editar e Apagar no telemóvel; quantos, a soma, Mudar categoria, Adicionar etiquetas e o × no ecrã largo', () => {
+    app.db.settings.tags = ['Urgente'];
+    app.CW.selEntrar('A');
+    const html = app.vTransactions();
+    const barra = html.slice(html.indexOf('<div class="sel-fundo mov-sel" role="toolbar" aria-label="Seleção">'));
+    assert.ok(barra.length > 0, 'a barra das ações vem com a vista em seleção');
+    assert.match(barra, /<p class="sel-info"><b id="selFundoN">/);
+    // o nome acessível contém o que se lê no botão («Cancelar»): quem fala com o telemóvel acerta-lhe
+    assert.match(barra, /class="btn sel-fim" aria-label="Cancelar a seleção" data-toca="modo" data-click="CW\.selSair\(\)">[\s\S]*?<span class="sel-fim-txt">Cancelar<\/span>/);
+    assert.match(barra, /class="btn sel-largo" data-precisa data-toca="camada" data-click="CW\.selEditar\('cat'\)">Mudar categoria</);
+    assert.match(barra, /class="btn sel-largo" data-precisa data-toca="camada" data-click="CW\.selEditar\('tags'\)">Adicionar etiquetas</);
+    assert.match(barra, /class="btn sel-estreito" data-precisa data-toca="camada" data-click="CW\.selEditar\(\)">/);
+    assert.match(barra, /class="btn danger" data-precisa data-toca="dados" data-risco="destroi" data-click="CW\.selApagar\(\)">/);
+    app.db.settings.tags = [];
+    assert.doesNotMatch(app.vTransactions(), /Adicionar etiquetas/, 'sem etiquetas definidas não há o que acrescentar');
+    app.CW.selSair();
+  });
+
+  test('a contagem, a soma com o sinal e o «Apagar N» enchem-se a cada marca', () => {
+    app.db.transactions.push(app.normTx({ id: 'B', kind: 'income', label: 'Renda', amount: 500, date: '2026-03-02' }));
+    const doc = app.document, porId = doc.getElementById, el = {};
+    doc.getElementById = (id) => (['selFundoN', 'selFundoSoma', 'selFundoApagar'].includes(id) ? (el[id] = el[id] || { textContent: '' }) : porId(id));
+    try {
+      app.CW.selEntrar('A');
+      assert.equal(el.selFundoN.textContent, '1 selecionado');
+      assert.equal(el.selFundoSoma.textContent, '· somam ' + app.euro2(-50));
+      assert.equal(el.selFundoApagar.textContent, 'Apagar 1');
+      app.CW.selToggle('B');
+      assert.equal(el.selFundoN.textContent, '2 selecionados');
+      assert.equal(el.selFundoSoma.textContent, '· somam +' + app.euro2(450), 'a renda soma, a luz subtrai');
+      app.CW.selToggle('A'); app.CW.selToggle('B');
+      assert.equal(el.selFundoN.textContent, 'Nenhum selecionado');
+      assert.equal(el.selFundoApagar.textContent, 'Apagar');
+      assert.equal(app.CW.selMode, true, 'no telemóvel a seleção fica, à espera do toque seguinte');
+    } finally { doc.getElementById = porId; app.CW.selSair(); }
+  });
+
+  test('na tabela, desmarcar a última caixa termina a seleção', () => {
+    app.matchMedia = (q) => ({ matches: /min-width:1100px/.test(q), addEventListener() {}, addListener() {} });
+    app.CW.selEntrar('A');
+    app.CW.selToggle('A');
+    assert.equal(app.CW.selMode, false);
+  });
+
+  test('na tabela as caixas já se viam: entrar não as faz aparecer, e sair não deixa fantasmas', async () => {
+    const v = ligar(ecra(false));
+    const fora = peca({ x: 15, y: 340, w: 22, h: 22 });
+    const qsa = app.document.querySelectorAll;
+    // as .fora veem-se no ecrã que não é de seleção (o de antes de entrar e o de depois de sair)
+    app.document.querySelectorAll = (s) => (s === '#view .selbox.fora' ? (v.atual().caixaLinha ? [] : [fora]) : qsa(s));
+    app.CW.selEntrar('A');
+    await depoisDoRender();
+    const sel = v.atual();
+    assert.equal(sel.caixaLinha.anims.length, 0, 'a caixa não desvanece a entrar');
+    assert.equal(sel.caixaMes.anims.length, 0);
+    app.CW.selSair();
+    await depoisDoRender();
+    assert.equal(app.selFantasmas.length, 0, 'nenhuma caixa sai a desvanecer: as .fora ficam no lugar');
+  });
+
+  test('no cabeçalho dos movimentos o botão é o «Selecionar vários»; em seleção abre as ações', () => {
+    let acoes = 0;
+    const selAcoes = app.CW.selAcoes;
+    app.CW.selAcoes = () => { acoes++; };
+    try {
+      app.hdrFiltToggle();
+      assert.equal(app.CW.selMode, true, 'fora da seleção entra');
+      app.hdrFiltToggle();
+      assert.equal(acoes, 1, 'dentro dela abre as ações');
+    } finally { app.CW.selAcoes = selAcoes; app.CW.selSair(); }
+  });
+
+  test('em seleção o cabeçalho não repete a barra: nem o «⋯» à vista, nem um X ao lado dele', () => {
+    const doc = app.document, cria = doc.createElement, criados = [];
+    doc.createElement = (t) => { const e = cria(t); criados.push(t); return e; };
+    try {
+      app.CW.selEntrar('A');
+      app.patchHdrSel();
+      assert.ok(!criados.includes('button'), 'o cabeçalho não ganha botões em seleção: ' + criados.join(','));
+    } finally { doc.createElement = cria; app.CW.selSair(); }
+    const css = readFileSync(new URL('../web/estilos.css', import.meta.url), 'utf8');
+    assert.match(css, /body\.sel-on #hdrFilt\.mov-hdr-sel\{display:none\}/, 'o «⋯» esconde-se em seleção');
+    assert.doesNotMatch(css, /#selFechar/);
+  });
+
+  test('o menu das ações e a confirmação dizem «Apagar», como a barra', () => {
+    let opcoes = null;
+    const lp = app.lpShow;
+    app.lpShow = (t, o) => { opcoes = JSON.parse(JSON.stringify(o.map((x) => x.label))); };
+    try {
+      app.CW.selEntrar('A');
+      app.CW.selAcoes();
+      assert.deepEqual(opcoes, ['Editar seleção', 'Apagar seleção']);
+    } finally { app.lpShow = lp; app.CW.selSair(); }
+  });
+
+  test('na barra azul-noite o realce só existe com rato, e os véus são os da barra lateral', () => {
+    const css = readFileSync(new URL('../web/estilos.css', import.meta.url), 'utf8');
+    const largo = css.slice(css.indexOf('@media(min-width:901px){\n  .sel-fundo{'), css.indexOf('@media(min-width:901px) and (hover:hover){'));
+    assert.ok(largo.length > 0, 'o bloco do ecrã largo vem antes do do rato');
+    assert.doesNotMatch(largo.replace(/\r/g, ''), /\.sel-fundo [^{]*:hover\{/, 'nenhum :hover fora do @media(hover:hover)');
+    assert.match(css, /@media\(min-width:901px\) and \(hover:hover\)\{\s*\.sel-fundo \.btn:hover\{background:var\(--side-on\)\}/);
+    assert.match(css, /\.sel-fundo \.btn\{[^}]*background:var\(--side-hover\)/);
+    assert.match(css, /\.sel-fundo \.sel-info\{display:block;flex:1 0 auto;white-space:nowrap\}/, 'a soma não se corta: os botões descem');
+  });
+
+  test('a edição em massa abre só a parte pedida pela barra', () => {
+    app.db.settings.tags = ['Urgente', 'Dedutível'];
+    const abertas = [];
+    const open = app.openModal;
+    app.openModal = (t, b) => { abertas.push({ t, b }); };
+    try {
+      app.CW.selEntrar('A');
+      app.CW.selEditar('cat');
+      assert.equal(abertas[0].t, 'Mudar a categoria de 1 movimento');
+      assert.match(abertas[0].b, /id="selCat"/);
+      assert.doesNotMatch(abertas[0].b, /id="selTags"/);
+      app.CW.selEditar('tags');
+      assert.equal(abertas[1].t, 'Adicionar etiquetas a 1 movimento');
+      assert.doesNotMatch(abertas[1].b, /id="selCat"/);
+      assert.match(abertas[1].b, /<button type="button" class="chip" aria-pressed="false" data-tag="Urgente"/);
+      app.CW.selEditar();
+      assert.equal(abertas[2].t, 'Editar 1 movimento');
+      assert.match(abertas[2].b, /id="selCat"[\s\S]*id="selTags"/);
+    } finally { app.openModal = open; app.CW.selSair(); }
   });
 });
 

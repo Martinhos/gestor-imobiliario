@@ -1,10 +1,14 @@
 /* ================= CONTRATO ================= */
 let cForm={};
-/* O corpo da ficha de um contrato: o que se sabe sobre ele, para ler.
+/* O corpo da ficha de um contrato: o que se sabe sobre ele, para ler, como a
+   prancheta M-Contrato.
 
-   Pela ordem das perguntas que trazem alguém aqui: ainda está em vigor, quem
-   lá mora, quanto paga, quando acaba — e só depois o que ficou combinado (dia
-   de pagamento, caução, aumento, chaves e recheio).
+   Pela ordem das perguntas que trazem alguém aqui: ainda está em vigor e
+   quando acaba (o selo, o imóvel e a barra do tempo), o que tem prazo (os
+   cartões dos prazos que já avisam), quanto paga e se já pagou (os valores),
+   como está perante a AT, quem lá mora, a caução e o resto do que ficou
+   combinado, as tarefas, o inventário e os anexos, e o PDF. O «Editar» é o do
+   rodapé, só para quem pode (ctView); quem não pode lê porquê logo à cabeça.
 
    As datas ficam como a app as escreve em todo o lado. Um formato português
    só aqui dava duas maneiras de escrever a mesma data no mesmo ecrã.
@@ -12,27 +16,213 @@ let cForm={};
    Devolve: o HTML do corpo, ou vazio se o contrato já não existir. */
 function ctFicha(id){
   const c=contract(id);if(!c)return '';
-  const pid=c.propertyId,p=prop(pid),ts=ctTenants(c);
-  /* a renda planeada é dos Planeados: desligados nesta conta, não há próxima
-     renda a mostrar — e a função nem sequer existe para lhe perguntar */
-  const inv=c.inventory||[],chaves=c.keys||[],rec=servicoLigado('recurring')?ctRecOf(c):null;
-  const fotos=((p&&p.photos)||[]).filter(f=>(c.photoIds||[]).indexOf(f.id)>-1);
-  const rendas=(db.transactions||[]).filter(t=>t.contractId===c.id&&t.kind==='income');
-  const ultima=rendas.map(t=>t.date).sort().pop();
-  const dias=c.end?pzDias(c.end):null;
-  const contacto=(tel,email)=>[tel?fmtPhone(tel):'',email||''].filter(Boolean).join(' · ');
+  const pid=c.propertyId,p=prop(pid);
   /* O contacto do inquilino está escrito no CONTRATO, e o servidor manda o
      contrato inteiro a quem tem contract.view. O cargo «Contabilista», que a
      app traz de fábrica, tem contract.view e não tem tenant.view — sem esta
      guarda lia o contacto de quem não pode sequer abrir a ficha da pessoa. */
   const verPessoas=pode(pid,'tenant.view');
+  /* Sem botão «Editar» no rodapé, a ficha tem de dizer porquê — e não há
+     uma só razão: há «não tens permissão» e há «só quem o adicionou pode
+     alterar». Quem tem contract.add mas não criou este contrato lia uma
+     frase que não era a sua. A app já sabe dizer a certa. */
   const recusa=motivoRecusa(pid,'contract.add',c);
-  /* O estado perante a AT numa linha só, com o que se sabe: o número que a AT
-     deu ao contrato e a finalidade. «Não declarado» é uma escolha do senhorio,
-     e escreve-se como se escreve «Em vigor»: sem cor, sem aviso. */
+  const pzs=ctPrazosDoContrato(c);
+  /* a lista de tarefas abre-se numa janela própria (tarefas.js:tfAbrir) */
+  const tf=tfLinhaDaFicha('contrato',c.id);
+  const cartoes=[ctValoresDaFicha(c),ctAtDaFicha(c),ctInquilinosDaFicha(c,verPessoas),ctCaucaoDaFicha(c,verPessoas),
+    tf?ctSecao(tf.rotulo,`<div class="ct-tarefas">${tf.valor}</div>`):'',
+    String(c.notes||'').trim()?ctSecao('Notas',`<div class="ct-notas">${rich(c.notes)}</div>`):'',
+    ctAnexosDaFicha(c,p)].filter(Boolean).join('');
+  return `<div class="ct-ficha">
+    ${recusa?`<p class="ct-recusa">${esc(recusa)}</p>`:''}
+    ${ctTopoDaFicha(c,p,pzs)}
+    ${pzs.map(x=>ctPrazoDaFicha(c,x)).join('')}
+    <div class="ct-grelha">${cartoes}</div>
+    <button type="button" class="btn ct-gerar-pdf" data-toca="camada" data-click="ctPdfJanela('${jsq(c.id)}')">${ic('down',18)} Gerar contrato em PDF</button>
+  </div>`;
+}
+/* Um cartão da ficha, com o título e, à direita dele, o que se passar (um
+   selo); sem título é só o corpo.
+   Recebe: titulo — o texto (por escapar; '' sem cabeçalho); corpo — o HTML;
+   extra (opcional) — o HTML à direita do título.
+   Devolve: o HTML do cartão. */
+function ctSecao(titulo,corpo,extra){
+  return `<div class="card ct-sec">${titulo?`<div class="ct-sec-cab"><h3>${esc(titulo)}</h3>${extra||''}</div>`:''}<div class="ct-sec-corpo">${corpo}</div></div>`;
+}
+/* Uma linha rótulo / valor de um cartão da ficha.
+   Recebe: rot — o rótulo (por escapar); valor — o HTML do valor, já escapado.
+   Devolve: o HTML da linha, ou '' sem valor (uma ficha mostra o que se sabe). */
+function ctKv(rot,valor){
+  const v=valor==null?'':String(valor).trim();
+  return v?`<div class="ct-kv"><span>${esc(rot)}</span><b>${v}</b></div>`:'';
+}
+/* O que falta (ou passou) até uma data, por extenso: «faltam 134 dias», «falta
+   1 dia», «acaba hoje»; com o verbo «começa», para um contrato por começar.
+   Recebe: d — os dias até à data (pzDias); verbo (opcional) — 'começa' muda as frases.
+   Devolve: o texto. */
+function ctFaltaTexto(d,verbo){
+  if(verbo==='começa')return d<=0?'começa hoje':d===1?'começa amanhã':'começa daqui a '+d+' dias';
+  return d<=0?'acaba hoje':d===1?'falta 1 dia':'faltam '+d+' dias';
+}
+/* O topo da ficha: o selo do estado, o imóvel com a parte arrendada e o
+   período — o início, o que falta e o fim por cima da barra do tempo
+   decorrido (a largura vem do data-largura, estilos-calculados.js; nada em
+   linha para a CSP). Sem as duas datas não há barra, e diz-se o que há. O
+   prazo que custa um ano de contrato se passar diz-se aqui quando o cartão
+   dele não está (silenciado, ou a nuvem ainda sem estado).
+   Cada coisa diz-se uma vez, como a prancheta: com a barra, o selo diz só
+   «Em vigor» e os dias que faltam ficam por cima da barra (a tabela da lista
+   continua a juntá-los ao selo, que lá é o único sítio); o início de um
+   contrato por começar está no período, e não também ao lado do selo.
+   Recebe: c — o contrato; p — o imóvel (pode faltar); pzs — os prazos do contrato que avisam.
+   Devolve: o HTML do topo. */
+function ctTopoDaFicha(c,p,pzs){
+  const e=ctEstado(c),comBarra=!!(c.start&&c.end&&c.end>=c.start);
+  const st=e==='ativo'&&comBarra?{txt:'Em vigor',cor:'in'}:ctSeloDoEstado(c);
+  /* só quando o imóvel existe mesmo: sem ele o ctLabel escreve «?», e um
+     ponto de interrogação numa ficha é pior do que a linha não estar lá */
+  const onde=p?esc(p.name)+(c.roomId?' · '+esc(roomName(p,c.roomId)||'Quarto'):(p.rentalMode==='quartos'?' · Imóvel inteiro':'')):'';
+  let periodo;
+  if(comBarra){
+    const tot=Math.max(1,pzDias(c.end,c.start)),feito=Math.min(tot,Math.max(0,pzDias(today(),c.start)));
+    const pct=e==='terminado'?100:e==='futuro'?0:Math.round(feito/tot*100);
+    const meio=e==='futuro'?ctFaltaTexto(pzDias(c.start),'começa'):e==='terminado'?'terminou':ctFaltaTexto(pzDias(c.end));
+    periodo=`<div class="ct-periodo"><span>${dPT(c.start)}</span><span class="small">${meio}</span><span>${dPT(c.end)}</span></div>
+      <div class="ct-barra" role="progressbar" aria-label="Prazo do contrato" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${pct}% do prazo já passou"><span class="ct-barra-feita" data-largura="${pct}"></span></div>`;
+  }else periodo=`<p class="small ct-periodo-so">${c.start?(e==='futuro'?'Começa a ':'Desde ')+dPT(c.start):'Sem data de início'}${c.end?' · até '+dPT(c.end):' · sem data de fim'}</p>`;
+  const dias=c.end?pzDias(c.end):null;
+  const op=isActive(c)&&c.end&&dias>=0&&dias<=150&&!pzs.some(x=>x.tipo==='oposicao')
+    ?`<p class="small ct-op">Para o contrato não renovar a ${dPT(c.end)}, o aviso ao inquilino tem de seguir até <b>${dPT(pzAddDias(c.end,-120))}</b> (120 dias).</p>`:'';
+  return `<div class="ct-topo">
+    <div class="ct-topo-selos"><span class="badge${st.cor?' '+st.cor:''}">${esc(st.txt)}</span></div>
+    ${onde?`<p class="ct-onde">${onde}</p>`:''}
+    ${periodo}${op}
+  </div>`;
+}
+/* Os prazos deste contrato que já avisam e não foram silenciados (os mesmos
+   do sino e da Visão geral — prazos.js:prazosAtivos), mais os recibos por
+   emitir das rendas dele. Nada antes de se saber o estado do servidor
+   (espera.js:sabemosOEstado).
+   Recebe: c — o contrato.
+   Devolve: os prazos (array), do mais urgente para o menos. */
+function ctPrazosDoContrato(c){
+  if(!sabemosOEstado())return [];
+  const doCt={};(db.transactions||[]).forEach(t=>{if(t.contractId===c.id)doCt[t.id]=1});
+  return prazosAtivos().filter(p=>{
+    const a=String(p.chave).split(':');
+    return CT_PRAZOS_DO_CONTRATO.indexOf(a[0])>-1?a[1]===c.id:(a[0]==='recibos'&&!!doCt[a[1]]);
+  });
+}
+/* O título de um prazo na ficha, com a data: «Oposição à renovação até
+   31/10/2026».
+   Recebe: x — o prazo (prazos.js:prazosDe).
+   Devolve: o texto (por escapar). */
+function ctTituloDoPrazo(x){
+  const d=dPT(x.alvo);
+  switch(x.tipo){
+    case 'oposicao':return 'Oposição à renovação até '+d;
+    case 'fim':return (x.dias<0?'O prazo acabou a ':'O contrato termina a ')+d;
+    case 'aumento':return 'Aviso do aumento até '+d;
+    case 'modelo2':return 'Comunicar o contrato à AT até '+d;
+    case 'cessacao':return 'Comunicar a cessação à AT até '+d;
+    case 'fev15':return 'Comunicar a duração à AT até '+d;
+    case 'rsaa':return 'Enviar o contrato ao IHRU até '+d;
+    case 'recibos':return 'Emitir o recibo da renda até '+d;
+  }
+  return pzPartes(x).titulo+' · '+d;
+}
+/* O cartão de um prazo na ficha (a prancheta: «Oposição à renovação até…»):
+   o título com a data, o selo do que falta na cor do contrato visual
+   (prazos.js:pzSelo), a frase do porquê e do como (a do sino) e as ações — na
+   oposição e no fim, Renovar e Terminar para quem pode; num recibo, abrir o
+   movimento —, e o ✕ que silencia esta ocorrência, com «Anular»
+   (prazos.js:pzSilencia). O fundo é o suave da cor do selo.
+   Recebe: c — o contrato; x — o prazo.
+   Devolve: o HTML do cartão. */
+function ctPrazoDaFicha(c,x){
+  const ok=podeEditar(c.propertyId,'contract.add',c),cor=pzSelo(x),id=jsq(c.id),acoes=[];
+  if((x.tipo==='oposicao'||x.tipo==='fim')&&ok&&c.end&&c.active!==false)
+    acoes.push(`<button type="button" class="btn sm" data-toca="camada" data-click="ctRenovar('${id}')">Renovar</button>`,
+      `<button type="button" class="btn sm" data-toca="camada" data-click="endContract('${id}')">Terminar</button>`);
+  if(x.tipo==='recibos'&&x.abrir)acoes.push(`<button type="button" class="btn sm" data-toca="camada" data-click="${x.abrir}">Abrir a renda</button>`);
+  acoes.push(`<button type="button" class="btn sm ghost so-icone ct-silenciar" aria-label="Silenciar este aviso" title="Silenciar até a data mudar" data-toca="dados" data-click="pzSilencia('${jsq(x.chave)}')">${ic('x',16)}</button>`);
+  return `<div class="ct-prazo ct-prazo-${cor}">
+    <div class="ct-prazo-cab"><span class="ct-prazo-ic" aria-hidden="true">${ic('clock',20)}</span><p class="ct-prazo-tit">${esc(ctTituloDoPrazo(x))}</p><span class="badge ct-prazo-quando">${esc(pzQuando(x))}</span></div>
+    <p class="ct-prazo-txt">${esc(x.sub)}</p>
+    <div class="ct-prazo-acoes">${acoes.join('')}</div></div>`;
+}
+/* O cartão dos valores: a renda, o imposto (com o porquê da taxa estimada)
+   e a líquida em três números grandes, e por baixo o dia do pagamento, a
+   próxima renda planeada (dos Planeados), as rendas já registadas (dos
+   Movimentos — a pergunta a seguir a «quanto paga» é «já pagou») e o aumento
+   anual; e os dois atalhos, Registar renda e Ver movimentos, para quem os
+   pode usar. Com um serviço desligado nesta conta, o que é dele não se
+   escreve.
+   Recebe: c — o contrato.
+   Devolve: o HTML do cartão. */
+function ctValoresDaFicha(c){
+  const pid=c.propertyId,id=jsq(c.id);
+  /* a renda planeada é dos Planeados: desligados nesta conta, não há próxima
+     renda a mostrar — e a função nem sequer existe para lhe perguntar */
+  const rec=servicoLigado('recurring')?ctRecOf(c):null;
+  const movs=servicoLigado('transactions')&&pode(pid,'tx.view')?(db.transactions||[]).filter(t=>t.contractId===c.id):[];
+  const rendas=movs.filter(t=>t.kind==='income'),ultima=rendas.map(t=>t.date).sort().pop();
+  /* o bruto engana, e a marca de «estimado» é a mesma que a lista já dá: o
+     formulário guarda 0 para «em branco», e escrever «0%» era mentira */
+  const escrita=Number(c.taxRate)>0,liq=netRent(c);
+  const tres=c.rent>0?`<div class="ct-tres">
+      <div><span class="small">Renda</span><b class="disp">${euro2(c.rent)}</b></div>
+      <div><span class="small">Imposto</span><b class="disp">${dec(taxRateOf(c))}%</b><span class="small">${escrita?'escrita no contrato':esc(irsTaxaPorque(c))+' · estim.'}</span></div>
+      <div><span class="small">Líquida</span><b class="disp">${euro2(liq)}</b><span class="small">${euro(liq*12)}/ano</span></div></div>`
+    :`<p class="hint ct-sem-renda">Este contrato ainda não tem renda.</p>`;
+  const kv=[
+    ctKv('Pagamento',c.payDay?((c.payDayTo&&c.payDayTo>c.payDay)?'entre o dia '+c.payDay+' e o dia '+c.payDayTo:'no dia '+c.payDay):''),
+    isActive(c)&&rec&&rec.next&&pode(pid,'rec.view')?ctRendaPlaneada(rec):'',
+    rendas.length?ctKv('Rendas registadas',rendas.length+(ultima?' · última a '+dPT(ultima):'')):'',
+    c.increase!=null&&c.increase!==''?ctKv('Aumento anual',dec(c.increase)+'%'+(c.start?' · próximo a '+dPT(pzAniversario(c.start)):'')):''].join('');
+  /* registar a renda é dos Movimentos: com o serviço desligado nesta conta o
+     atalho não aparece */
+  const botoes=[servicoLigado('transactions')&&isActive(c)&&pode(pid,'tx.add')?`<button type="button" class="btn sm primary" data-toca="camada" data-click="ctRegistarRenda('${jsq(pid)}','${id}')">Registar renda</button>`:'',
+    movs.length?`<button type="button" class="btn sm" data-toca="camada" data-click="ctVerMovimentos('${id}')">Ver movimentos</button>`:''].join('');
+  return `<div class="card ct-sec ct-valores">${tres}${kv}${botoes?`<div class="ct-botoes">${botoes}</div>`:''}</div>`;
+}
+/* A linha da renda planeada no cartão dos valores, nos três estados que os
+   Planeados distinguem (planeados.js:recSelo): ainda não chegou — «Próxima
+   renda … · planeada»; chegou e a janela do pagamento ainda está aberta —
+   «· por confirmar»; a janela fechou sem confirmação — «Renda em atraso», a
+   vermelho, desde quando (a mesma data da ficha do planeado). Chamar
+   «próxima» a uma renda que já devia ter entrado escondia o atraso que a
+   lista diz a vermelho.
+   Recebe: rec — o planeado da renda do contrato (planeados.js:ctRecOf), com next.
+   Devolve: o HTML da linha (contrato.js:ctKv). */
+function ctRendaPlaneada(rec){
+  if(rec.next>today())return ctKv('Próxima renda',dPT(rec.next)+' · planeada');
+  if(recIsLate(rec))return ctKv('Renda em atraso',`<span class="perigo">desde ${dPT(rec.until||rec.next)}</span>${rec.muted?' · silenciada':''}`);
+  return ctKv('Próxima renda',dPT(rec.next)+' · por confirmar');
+}
+/* Os movimentos de um contrato, do mais recente para o mais antigo, numa
+   lista de escolha; tocar abre a ficha do movimento. É o «Ver movimentos» da
+   ficha: os Movimentos não têm filtro por contrato.
+   Recebe: id — o id do contrato.
+   Devolve: nada — abre a lista de escolha. */
+function ctVerMovimentos(id){
+  const c=contract(id);if(!c)return;
+  const movs=(db.transactions||[]).filter(t=>t.contractId===c.id).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  if(!movs.length)return;
+  pickModal('Movimentos do contrato',movs.map(t=>({v:t.id,label:(t.label||'Movimento')+' · '+euro2(t.amount),sub:dPT(t.date),icon:'swap'})),
+    o=>{closeModal();chamarServico('transactions','txView',o.v)});
+}
+/* O cartão «Perante a AT»: o estado num selo (declarado a verde, por indicar
+   a cobalto, não declarado a cinzento — uma escolha do senhorio, sem cor de
+   aviso), e o que se sabe do declarado — o número que a AT deu, a finalidade,
+   a celebração, as renovações e o quadro do Anexo F —, com as notas do IRS:
+   a isenção, a taxa reduzida pela duração e a comunicação de fevereiro (com o
+   botão de a marcar), e a taxa das rendas moderadas.
+   Recebe: c — o contrato.
+   Devolve: o HTML do cartão. */
+function ctAtDaFicha(c){
   const fisc=fiscoDe(c),fin=(FISCO_FINALIDADES.find(x=>x[0]===fisc.finalidade)||[])[1]||'';
-  const fiscoTxt=fisc.estado==='declarado'?['Declarado à AT',fisc.numero?'n.º '+esc(fisc.numero):'sem n.º',fin.toLowerCase()].filter(Boolean).join(' · ')
-    :fisc.estado==='naoDeclarado'?'Não declarado':'Por indicar';
   /* a redução pela duração é só dos contratos de habitação permanente (o
      irsReducao já o sabe), e é ela — não a taxa das rendas moderadas — que
      pede o quadro 4.2 e a comunicação de fevereiro */
@@ -40,74 +230,124 @@ function ctFicha(id){
   const isento=irsDoAno.motivo==='isento'?irsDoAno.isencao:null,bonusRM=irsAno(YEAR).taxas.bonusRendaMenor;
   /* a comunicação de fevereiro do ano em causa, com o botão de a marcar */
   const comunicacao=fisc.estado==='declarado'?ctComunicacaoNota(c):'';
-  return ficha([
-    /* Sem botão «Editar» no rodapé, a ficha tem de dizer porquê — e não há
-       uma só razão: há «não tens permissão» e há «só quem o adicionou pode
-       alterar». Quem tem contract.add mas não criou este contrato lia uma
-       frase que não era a sua. A app já sabe dizer a certa. */
-    recusa?{tipo:'nota',valor:esc(recusa)}:null,
-    /* três estados: dizer «Terminado» três linhas acima do campo «Início»,
-       num contrato que começa em 2028, é uma afirmação falsa sobre um
-       documento legal, no ecrã onde a pessoa a foi confirmar */
-    {rotulo:'Estado',valor:ctEstado(c)==='ativo'?'Em vigor'
-      :(ctEstado(c)==='futuro'?'Por começar'+(c.start?' · a '+dPT(c.start):''):'Terminado')},
-    /* só quando o imóvel existe mesmo: sem ele o ctLabel escreve «?», e um
-       ponto de interrogação numa ficha é pior do que a linha não estar lá */
-    p?{rotulo:'Imóvel',valor:esc(ctLabel(c))}:null,
-    p&&p.rentalMode==='quartos'?{rotulo:'Parte arrendada',valor:c.roomId?esc(roomName(p,c.roomId)):'Imóvel inteiro'}:null,
-    ts.length?{tipo:'bloco',rotulo:ts.length>1?'Inquilinos':'Inquilino',
-      valor:ts.map(t=>[esc(t.name),verPessoas?esc(contacto(t.phone,t.email)):''].filter(Boolean).join(' · ')).join('<br>')}:null,
-    c.rent>0?{rotulo:'Renda mensal',valor:euroS(c.rent)}:null,
-    /* o bruto engana, e a marca de «estimado» é a mesma que os cartões já dão:
-       o formulário guarda 0 para «em branco», e escrever «0%» era mentira */
-    c.rent>0?{rotulo:'Imposto sobre a renda',valor:dec(taxRateOf(c))+'%'+(Number(c.taxRate)>0?'':' (estimado: '+irsTaxaPorque(c)+')')}:null,
-    {rotulo:'Declaração',valor:fiscoTxt},
-    isento?{tipo:'nota',valor:'Isento de IRS: '+esc(isento.nome)+'. As rendas declaram-se na linha do quadro 4.1 do Anexo F, sem imposto, e o quadro '+esc(isento.quadro)+' aponta para ela'
-      +(isento.codigo?' (código '+esc(isento.codigo)+').':' (o código ainda não se conhece: o Anexo F destes rendimentos não foi aprovado).')}:null,
-    taxaReduzida?{tipo:'nota',valor:'Pela duração, este contrato tem direito à taxa reduzida de '+dec(irsDoAno.reducao.taxa)+' %'
+  const selo=fisc.estado==='declarado'?'<span class="badge in">Declarado</span>':fisc.estado==='naoDeclarado'?'<span class="badge grey">Não declarado</span>':'<span class="badge">Por indicar</span>';
+  let corpo='';
+  if(fisc.estado==='declarado'){
+    const renovs=(fisc.renovacoes||[]).filter(r=>r.fim).sort((a,b)=>String(a.fim).localeCompare(String(b.fim)));
+    /* os recibos eletrónicos das rendas deste ano, pela marca de cada renda
+       (os Movimentos, a quem os pode ver); com a dispensa da página
+       Declaração não há recibos, há o Modelo 44 */
+    const dispensa=!!(db.settings&&db.settings.irs&&db.settings.irs.dispensaRecibos===true);
+    const rendasAno=servicoLigado('transactions')&&pode(c.propertyId,'tx.view')
+      ?(db.transactions||[]).filter(t=>t.contractId===c.id&&ehRenda(t)&&String(t.date||'').slice(0,4)===String(YEAR)):[];
+    const porEmitir=rendasAno.filter(t=>!t.recibo).length;
+    const recibos=dispensa?'dispensado · Modelo 44':rendasAno.length?(porEmitir?porEmitir+' de '+rendasAno.length+' por emitir em '+YEAR:'todos emitidos em '+YEAR):'';
+    corpo=ctKv('N.º do contrato',String(fisc.numero||'').trim()?esc(fisc.numero):'<span class="badge red">Falta o n.º</span>')
+      +ctKv('Finalidade',esc(fin))
+      +ctKv('Celebrado a',fisc.celebracao?dPT(fisc.celebracao)+(fisc.renovavel===true?' · renovável':fisc.renovavel===false?' · não renovável':''):'')
+      +ctKv('Renovações',renovs.length?renovs.length+' · a última até '+dPT(renovs[renovs.length-1].fim):'')
+      +ctKv('Recibos eletrónicos',recibos)
+      +ctKv('Anexo F',isento?'quadro 4.1 · isento':taxaReduzida?'quadro 4.2 · pela duração':'quadro 4.1 · '+esc(irsTaxaPorque(c)));
+  }else corpo=`<p class="hint">${fisc.estado==='naoDeclarado'?'Fica fora do resumo do Anexo F e dos prazos da AT.':'Comunicaste este contrato às Finanças (Modelo 2)? Indica-o ao editar: o resumo do Anexo F e os prazos da AT dependem disso.'}</p>`;
+  const notas=[
+    isento?'Isento de IRS: '+esc(isento.nome)+'. As rendas declaram-se na linha do quadro 4.1 do Anexo F, sem imposto, e o quadro '+esc(isento.quadro)+' aponta para ela'
+      +(isento.codigo?' (código '+esc(isento.codigo)+').':' (o código ainda não se conhece: o Anexo F destes rendimentos não foi aprovado).'):'',
+    taxaReduzida?'Pela duração, este contrato tem direito à taxa reduzida de '+dec(irsDoAno.reducao.taxa)+' %'
       +(irsDoAno.reducao.bonus&&bonusRM?', já com os '+dec(bonusRM.pontos)+' pontos a menos de uma renda mais baixa do que a do contrato anterior (quadro 4.2B)':'')
       +'. Isso pede duas coisas: o quadro 4.2 do Anexo F preenchido, e a duração e as renovações comunicadas no Portal das Finanças até 15 de fevereiro.'
-      +(!escrita&&irsDoAno.motivo==='moderada'?' Em '+YEAR+' a renda dá-lhe ainda os '+dec(irsDoAno.taxa)+' % das rendas moderadas, que ficam por serem mais baixos.':'')}:null,
-    comunicacao?{tipo:'nota',valor:comunicacao}:null,
-    !taxaReduzida&&c.rent>0&&!escrita&&irsDoAno.motivo==='moderada'?{tipo:'nota',valor:'Com a renda até '+euro(irsAno(YEAR).taxas.rendaModerada.limiteMensal)+' por mês, as rendas de '+YEAR+' pagam a taxa de '+dec(irsDoAno.taxa)+' % das rendas moderadas (EBF art. 45.º-C), em vez de '+dec(irsAno(YEAR).taxas.habitacional)+' %.'}:null,
-    c.rent>0?{rotulo:'Renda líquida',valor:euroS(netRent(c))}:null,
-    c.payDay?{rotulo:'Renda paga',valor:(c.payDayTo&&c.payDayTo>c.payDay)?('entre o dia '+c.payDay+' e o dia '+c.payDayTo):('no dia '+c.payDay)}:null,
-    isActive(c)&&rec&&rec.next&&pode(pid,'rec.view')?{rotulo:'Próxima renda',valor:dPT(rec.next)}:null,
-    c.start?{rotulo:'Início',valor:dPT(c.start)}:null,
-    /* a contagem só quando já é acionável, senão é decoração */
-    c.end?{rotulo:'Fim',valor:dPT(c.end)+(dias>=0&&dias<=180?' · faltam '+dias+' dias':'')}:null,
-    /* o prazo que custa um ano de contrato se passar: a app já o calcula nos
-       prazos, e a ficha di-lo onde a pessoa está mesmo a olhar */
-    isActive(c)&&c.end&&dias>=0&&dias<=150?{tipo:'nota',
-      valor:'Para o contrato não renovar a '+dPT(c.end)+', o aviso ao inquilino tem de seguir até <b>'+dPT(pzAddDias(c.end,-120))+'</b> (120 dias).'}:null,
-    c.increase!=null&&c.increase!==''?{rotulo:'Aumento anual',valor:dec(c.increase)+'%'+(c.start?' · próximo a '+dPT(pzAniversario(c.start)):'')}:null,
-    c.deposit>0?{rotulo:'Caução',valor:euroS(c.deposit)}:null,
-    c.advance>0?{rotulo:'Rendas antecipadas',valor:c.advance+(Number(c.advance)===1?' mês':' meses')}:null,
-    c.iban?{rotulo:'IBAN',valor:esc(fmtIBAN(c.iban))}:null,
-    (c.ownerPhone||c.ownerEmail)?{rotulo:'Contacto do senhorio',valor:esc(contacto(c.ownerPhone,c.ownerEmail))}:null,
-    verPessoas&&(c.tenantPhone||c.tenantEmail)?{rotulo:'Contacto do inquilino',valor:esc(contacto(c.tenantPhone,c.tenantEmail))}:null,
-    /* a lista de tarefas abre-se numa janela própria (tarefas.js:tfAbrir) */
-    tfLinhaDaFicha('contrato',c.id),
-    inv.length?{tipo:'bloco',rotulo:'Inventário',
-      valor:inv.map(i=>esc((i.qty||1)+'× '+(i.name||'artigo'))+(i.state==='novo'?' · novo':'')).join('<br>')}:null,
-    chaves.length?{tipo:'bloco',rotulo:'Chaves entregues',
-      valor:chaves.map(k=>esc((k.qty||1)+'× '+(k.name||'chave'))).join('<br>')}:null,
-    pode(pid,'file.view')&&fotos.length?{tipo:'bloco',rotulo:'Registo fotográfico',
-      valor:`<div class="u-d-flex u-fxw-wrap u-g-8px">${fotos.map(f=>`<div class="pcover u-w-84px u-h-66px u-br-10px u-bg-v-chip u-ov-hidden" id="th_${esc(f.id)}"></div>`).join('')}</div>`}:null,
-    pode(pid,'file.view')&&(c.files||[]).length?{tipo:'bloco',rotulo:'Anexos',
-      valor:(c.files||[]).map(f=>`<span role="button" tabindex="0" data-toca="camada" class="u-cur-pointer u-td-underline" data-click="openMeta('${jsq(f.id)}')">${esc(f.name||'ficheiro')}</span>`).join('<br>')}:null,
-    /* a pergunta a seguir a «quanto paga» é «já pagou» — e as rendas registadas
-       são dos Movimentos: desligados, a linha não se escreve */
-    servicoLigado('transactions')&&pode(pid,'tx.view')&&rendas.length?{rotulo:'Rendas registadas',valor:rendas.length+(ultima?' · última a '+dPT(ultima):'')}:null,
-    String(c.notes||'').trim()?{tipo:'bloco',rotulo:'Notas',valor:rich(c.notes)}:null,
-  ]);
+      +(!escrita&&irsDoAno.motivo==='moderada'?' Em '+YEAR+' a renda dá-lhe ainda os '+dec(irsDoAno.taxa)+' % das rendas moderadas, que ficam por serem mais baixos.':''):'',
+    comunicacao,
+    !taxaReduzida&&c.rent>0&&!escrita&&irsDoAno.motivo==='moderada'?'Com a renda até '+euro(irsAno(YEAR).taxas.rendaModerada.limiteMensal)+' por mês, as rendas de '+YEAR+' pagam a taxa de '+dec(irsDoAno.taxa)+' % das rendas moderadas (EBF art. 45.º-C), em vez de '+dec(irsAno(YEAR).taxas.habitacional)+' %.':''
+  ].filter(Boolean).map(t=>`<div class="ct-nota">${t}</div>`).join('');
+  return ctSecao('Perante a AT',corpo+notas,selo);
+}
+/* O selo do cartão de cidadão de uma pessoa, quando já pede atenção: caducado
+   a vermelho; a caducar dentro da antecedência dos prazos (prazos.js:
+   PZ_ANTECEDENCIA.cc) a âmbar, ou a vermelho na última semana.
+   Recebe: iso — a validade do CC ('AAAA-MM-DD').
+   Devolve: o HTML do selo, ou ''. */
+function ctSeloDoCc(iso){
+  const d=pzDias(iso);
+  if(d<0)return `<span class="badge red">CC caducou a ${dPT(iso)}</span>`;
+  return d<=PZ_ANTECEDENCIA.cc?`<span class="badge ${d<=7?'red':'amber'}">CC caduca a ${dPT(iso)}</span>`:'';
+}
+/* O cartão dos inquilinos: as iniciais, o nome, o telefone e o email (a quem
+   pode ver inquilinos; tocar liga ou escreve), o selo do cartão de cidadão
+   quando caduca, e a porta para a ficha da pessoa — com os Inquilinos ligados.
+   O telefone e o email são as portas para ligar e escrever: cada um na sua
+   linha, para no dedo terem a altura de um toque (estilos.css, secção
+   «redesign: 1.3.3», .ct-pessoa-txt a).
+   Recebe: c — o contrato; verPessoas — se o cargo deixa ver os inquilinos.
+   Devolve: o HTML do cartão, ou '' sem inquilinos. */
+function ctInquilinosDaFicha(c,verPessoas){
+  const ts=ctTenants(c);if(!ts.length)return '';
+  const abre=verPessoas&&servicoLigado('tenants');
+  const linhas=ts.map(t=>{
+    const tel=verPessoas&&t.phone?fmtPhone(t.phone):'',mail=verPessoas&&t.email?String(t.email):'';
+    const cont=(tel?`<a class="small" href="tel:${esc(tel.replace(/\s+/g,''))}">${esc(tel)}</a>`:'')+(mail?`<a class="small" href="mailto:${esc(mail)}">${esc(mail)}</a>`:'');
+    const cc=verPessoas&&t.ccValid?ctSeloDoCc(t.ccValid):'';
+    return `<div class="ct-pessoa"><span class="avatar ct-av" aria-hidden="true">${esc(initials(t.name))}</span>
+      <div class="ct-pessoa-txt"><b>${esc(t.name)}</b>${cont}${cc?`<span class="ct-pessoa-selos">${cc}</span>`:''}</div>
+      ${abre?`<button type="button" class="btn sm ghost so-icone ct-pessoa-abrir" aria-label="Abrir a ficha de ${esc(t.name)}" data-toca="camada" data-click="personView('tenant','${jsq(t.id)}')">${ic('chevR',18)}</button>`:''}</div>`;
+  }).join('');
+  return ctSecao(ts.length>1?'Inquilinos':'Inquilino',linhas);
+}
+/* O cartão do que ficou combinado à parte da renda: a caução, as rendas
+   antecipadas, o IBAN e os contactos escritos no contrato (o do inquilino só
+   a quem pode ver inquilinos — ver ctFicha).
+   Recebe: c — o contrato; verPessoas — se o cargo deixa ver os inquilinos.
+   Devolve: o HTML do cartão, ou '' sem nada para mostrar. */
+function ctCaucaoDaFicha(c,verPessoas){
+  const contacto=(tel,email)=>[tel?fmtPhone(tel):'',email||''].filter(Boolean).join(' · ');
+  const corpo=[c.deposit>0?ctKv('Caução',euro2(c.deposit)):'',
+    c.advance>0?ctKv('Rendas antecipadas',c.advance+(Number(c.advance)===1?' mês':' meses')):'',
+    c.iban?ctKv('IBAN',`<span class="ct-iban">${esc(fmtIBAN(c.iban))}</span>`):'',
+    (c.ownerPhone||c.ownerEmail)?ctKv('Contacto do senhorio',esc(contacto(c.ownerPhone,c.ownerEmail))):'',
+    verPessoas&&(c.tenantPhone||c.tenantEmail)?ctKv('Contacto do inquilino',esc(contacto(c.tenantPhone,c.tenantEmail))):''].join('');
+  return corpo?`<div class="card ct-sec ct-sec-kv">${corpo}</div>`:'';
+}
+/* Os mosaicos do que vai junto ao contrato (a prancheta): o inventário, as
+   chaves entregues, o registo fotográfico e os anexos, cada um com quantos
+   são, e tocar abre a lista (ctVerAnexos). As fotos e os ficheiros pedem
+   file.view; o que não há não aparece.
+   Recebe: c — o contrato; p — o imóvel (pode faltar).
+   Devolve: o HTML dos mosaicos, ou ''. */
+function ctAnexosDaFicha(c,p){
+  const vf=pode(c.propertyId,'file.view'),inv=c.inventory||[],ch=c.keys||[];
+  const fotos=vf?((p&&p.photos)||[]).filter(f=>(c.photoIds||[]).indexOf(f.id)>-1):[],files=vf?(c.files||[]):[];
+  const t=[];
+  if(inv.length)t.push(['inv','Inventário',inv.length===1?'1 artigo':inv.length+' artigos']);
+  if(ch.length){const n=sum(ch.map(k=>Number(k.qty)||1));t.push(['chaves','Chaves entregues',(ch.length===1?'1 tipo':ch.length+' tipos')+' · '+(n===1?'1 chave':n+' chaves')])}
+  if(fotos.length)t.push(['fotos','Registo fotográfico',fotos.length===1?'1 foto do imóvel':fotos.length+' fotos do imóvel']);
+  if(files.length)t.push(['anexos','Anexos',files.length===1?'1 ficheiro':files.length+' ficheiros']);
+  return t.length?`<div class="ct-minis">${t.map(([k,r,v])=>`<button type="button" class="ct-mini" data-toca="camada" data-click="ctVerAnexos('${jsq(c.id)}','${k}')"><span class="small">${r}</span><b>${esc(v)}</b></button>`).join('')}</div>`:'';
+}
+/* A lista de um dos mosaicos da ficha, numa janela por cima: os artigos do
+   inventário com a quantidade e o estado, as chaves, as fotos escolhidas do
+   imóvel (pintadas depois de abrir) ou os anexos (tocar abre o ficheiro).
+   Recebe: id — o id do contrato; qual — 'inv', 'chaves', 'fotos' ou 'anexos'.
+   Devolve: nada — abre a janela. */
+function ctVerAnexos(id,qual){
+  const c=contract(id);if(!c)return;
+  const p=prop(c.propertyId),vf=pode(c.propertyId,'file.view');
+  const fotos=vf?((p&&p.photos)||[]).filter(f=>(c.photoIds||[]).indexOf(f.id)>-1):[];
+  let titulo='',corpo='';
+  if(qual==='inv'){titulo='Inventário';corpo=(c.inventory||[]).map(i=>ctKv((i.qty||1)+'× '+(i.name||'artigo'),i.state==='novo'?'Novo':'Usado')).join('')}
+  else if(qual==='chaves'){titulo='Chaves entregues';corpo=(c.keys||[]).map(k=>ctKv(k.name||'chave',String(k.qty||1))).join('')}
+  else if(qual==='fotos'){titulo='Registo fotográfico';corpo=`<div class="ct-fotos">${fotos.map(f=>`<figure class="ct-foto"><div class="pcover ct-foto-img" id="th_${esc(f.id)}"></div><figcaption class="small">${esc(f.name||'Fotografia')}</figcaption></figure>`).join('')}</div>`}
+  else if(qual==='anexos'&&vf){titulo='Anexos';corpo=(c.files||[]).map(f=>`<button type="button" class="ct-anexo" data-toca="camada" data-click="openMeta('${jsq(f.id)}')">${ic('clip',18)}<span>${esc(f.name||'ficheiro')}</span>${ic('chevR',16)}</button>`).join('')}
+  if(!corpo)return;
+  openModal(titulo,`<div class="ct-lista-anexos">${corpo}</div>`,`<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`);
+  if(qual==='fotos')paintThumbs(fotos);
 }
 /* A ficha de um contrato: o que tocar num contrato passa a abrir.
 
    Era um formulário de quarenta campos, com o «Apagar contrato» encostado ao
-   título. Agora tocar lê, e editar é um passo — e as ações que não são ler
-   nem editar (registar a renda, gerar o PDF, terminar, apagar) ficam no menu
-   do cabeçalho, que é onde vivem as opções de um registo.
+   título. Agora tocar lê, e editar é um passo — o «Editar» do rodapé, só para
+   quem pode (acessos.js:podeEditar) — e as ações que não são ler nem editar
+   (registar a renda, o PDF, renovar, terminar, apagar) ficam no menu do
+   cabeçalho, que é onde vivem as opções de um registo. No computador a janela
+   alarga e os cartões vão em duas colunas (estilos.css, «redesign: 1.3.3»).
    Recebe: id — o id do contrato.
    Devolve: nada — abre a janela. */
 function ctView(id){
@@ -121,7 +361,7 @@ function ctView(id){
       /* registar a renda é dos Movimentos: com o serviço desligado nesta conta o
          atalho não aparece — o menu fica com o que é do contrato */
       if(servicoLigado('transactions')&&isActive(c)&&pode(pid,'tx.add'))it.push({label:'Registar renda',icon:'up',toca:'camada',act:`ctRegistarRenda('${jsq(pid)}','${jsq(id)}')`});
-      it.push({label:'Gerar contrato em PDF',icon:'pen',toca:'camada',act:`generateContractPdf('${jsq(id)}')`});
+      it.push({label:'Gerar contrato em PDF',icon:'down',toca:'camada',act:`ctPdfJanela('${jsq(id)}')`});
       /* renovar regista a renovação (fisco.renovacoes) e leva o fim para a
          frente — mudar só a data de fim perdia o histórico que o 4.2A pede */
       if(ok&&c.end&&c.active!==false)it.push({label:'Renovar…',icon:'cal',toca:'camada',act:`ctRenovar('${jsq(id)}')`});
@@ -134,8 +374,6 @@ function ctView(id){
       return it.length?menu('fichaCt',it):'';
     },
     editar:ok?{rotulo:'Editar',act:`ctModal('${jsq(id)}')`}:null,
-    depois:()=>{const x=contract(id);if(!x||!pode(pid,'file.view'))return;
-      const q=prop(x.propertyId);paintThumbs(((q&&q.photos)||[]).filter(f=>(x.photoIds||[]).indexOf(f.id)>-1))},
   });
 }
 /* O «Registar renda» do menu da ficha: abre o formulário do movimento já como
@@ -172,8 +410,9 @@ function ctModal(id,pid,tid){
     tenantIds:tid&&tenant(tid)?[tid]:[]});
   if(!id)fillOwnerContact();
   if(!id&&tid&&tenant(tid))fillTenantContact(tid);
+  if(id)ctReconheceContactos();
   const ok=!!id&&podeEditar(cForm.propertyId,'contract.add',contract(id));
-  const m=id?menu('ct',[{label:'Gerar contrato em PDF',icon:'pen',act:`generateContractPdf('${jsq(id)}')`}].concat(ok?[
+  const m=id?menu('ct',[{label:'Gerar contrato em PDF',icon:'down',toca:'camada',act:`ctPdfJanela('${jsq(id)}')`}].concat(ok?[
     ctEstado(cForm)!=='terminado'?{label:'Terminar contrato',icon:'x',act:`endContract('${jsq(id)}')`}:{label:'Reativar contrato',icon:'check',act:`reactivateContract('${jsq(id)}')`},
     {label:'Apagar contrato',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delContract('${jsq(id)}')`}]:[])):'';
   openModal(id?'Editar contrato':'Novo contrato',ctBody(),null,m);
@@ -208,17 +447,19 @@ function verMovimentosFora(id){
     `<div class="hint u-mt-12px">As datas destes movimentos não se mexem: dizem quando o dinheiro entrou. Abre cada um para corrigir o que for preciso.</div>`);
 }
 /* Devolve o handler que o modal usa ao guardar: valida imóvel, renda,
-   inquilinos e datas e grava (ctGravar). Num contrato que já tinha fim e o
-   vê ir para a frente, pergunta primeiro se é uma renovação ou uma correção
-   da data (ctFimPergunta) — a renovação fica no histórico.
+   inquilinos e datas e grava (ctGravar). O erro diz-se junto do campo
+   (componentes.js:falhaCampo), que também o anuncia. Num contrato que já tinha
+   fim e o vê ir para a frente, pergunta primeiro se é uma renovação ou uma
+   correção da data (ctFimPergunta) — a renovação fica no histórico.
+   Recebe: nada.
    Devolve: a função de guardar (sem argumentos), pronta a pôr em onSave. */
 function ctSaver(){
   return ()=>{
     collectCt();
-    if(!cForm.propertyId)return toast('Escolhe o imóvel.');
+    if(!cForm.propertyId)return falhaCampo('c_prop','Escolhe o imóvel.');
     const recusa=motivoRecusa(cForm.propertyId,'contract.add',contract(cForm.id));if(recusa)return toast(recusa);
     if(!(cForm.rent>0))return falhaCampo('c_rent','Indica a renda mensal.');
-    if(!cForm.tenantIds.length)return toast('Escolhe pelo menos um inquilino.');
+    if(!cForm.tenantIds.length)return falhaCampo('c_tenants','Escolhe pelo menos um inquilino.');
     /* um fim antes do início guardava sem aviso e o contrato sumia das
        rendas e projeções, sem sinal nenhum do porquê */
     if(cForm.start&&cForm.end&&cForm.end<cForm.start)return falhaCampo('c_end','O fim do contrato é antes do início — verifica as datas.');
@@ -281,9 +522,19 @@ function ctGravar(){
     {rotulo:'Ver',ms:9000,fn:()=>verMovimentosFora(cForm.id)});
   toast('Contrato guardado.');
 }
-// HTML do formulário do contrato, montado a partir de cForm. Só devolve a
-// string — é o ctModal/repaintCt que a põe no modal e pinta as miniaturas.
-// Devolve: string com o HTML do formulário do contrato.
+/* HTML do formulário do contrato, montado a partir de cForm, como a prancheta
+   M-NovoContrato: os campos em grupos (.sect) — o que se arrenda (o imóvel, o
+   quarto em chips, os inquilinos e o nome), a renda (o imposto e a líquida, o
+   dia do pagamento e o aumento), o prazo (as datas com a frase da duração e
+   da oposição, a caução, as rendas antecipadas e o IBAN), a renda recorrente
+   e o estado do contrato em interruptores com a situação perante a AT num
+   segmentado, e os contactos —; recolhidos, o inventário, as fotos, as chaves
+   e os anexos; e as notas. O obrigatório leva o asterisco vermelho e o erro
+   diz-se junto do campo (ctSaver). Os ids são os de sempre, lidos pelo
+   collectCt. Só devolve a string — é o ctModal/repaintCt que a põe no modal e
+   pinta as miniaturas.
+   Recebe: nada — lê o cForm.
+   Devolve: string com o HTML do formulário do contrato. */
 function ctBody(){
   const c=cForm,p=prop(c.propertyId),rooms=(p&&p.rentalMode==='quartos')?(p.rooms||[]):[];
   /* ctVivo: é o único aviso contra assinar dois contratos para o mesmo
@@ -292,49 +543,62 @@ function ctBody(){
   const tags=ctTenants(c).map(t=>({id:t.id,label:t.name}));
   const inv=c.inventory||[];
   const nSum=(c.keys||[]).length?sum(c.keys.map(k=>k.qty))+' chaves':'';
-  const fisc=fiscoDe(c),fsum=fisc.estado==='declarado'?'Declarado'+(fisc.numero?' · n.º '+esc(fisc.numero):''):fisc.estado==='naoDeclarado'?'Não declarado':'por indicar';
+  const rec=servicoLigado('recurring');
   /* o nome, o imposto e o aumento em branco valem alguma coisa: o exemplo é
      esse valor, e a dica por baixo di-lo («Em branco: …») */
   const nomeVazio=(c.tenantIds||[]).length?ctPick(c):'';
-  return `<div class="form">
-    <label>Nome do contrato (opcional)<input id="c_name" value="${esc(c.name||'')}" placeholder="Ex: ${esc(nomeVazio||'Ana · T2 Lisboa')}" autocomplete="off"></label>
-    <div class="hint u-mt-n6px">É por este nome que o contrato aparece nos movimentos e nas listas. ${nomeVazio?`Em branco: «${esc(nomeVazio)}», o dos inquilinos.`:'Em branco, usa-se o nome dos inquilinos.'}</div>
-    <label>Imóvel <span class="req">*</span>${sel('c_prop',c.propertyId,propOptsPara('contract.add',c.propertyId).filter(o=>{const x=prop(o.v);return x&&(x.use==='investimento'||x.id===c.propertyId)}),'onCtProp','rascunho')}</label>
-    ${rooms.length?`<label>Quarto${sel('c_room',c.roomId||'',[{v:'',label:'— sem quarto —'}].concat(rooms.map(r=>({v:r.id,label:r.name+(taken.indexOf(r.id)>-1?' (já arrendado)':'')}))),'','rascunho')}</label>`
-     :(p&&p.use==='investimento'?`<div class="hint">Este imóvel está definido como arrendado por inteiro. Para arrendar por quartos, muda isso na ficha do imóvel.</div>`:'')}
-    <div><div class="flabel">Inquilinos <span class="req">*</span></div>${tagField(tags,'Adicionar','addCtTenant()','delCtTenant','','camada')}</div>
-    <div class="row">
-      <label>Renda mensal (€) <span class="req">*</span><input id="c_rent" type="text" inputmode="decimal" value="${c.rent||''}" placeholder="Ex: 450" data-input="liveNet()"></label>
-      <label>Imposto sobre a renda (%, opcional)<input id="c_tax" type="text" inputmode="decimal" value="${c.taxRate?dec(c.taxRate):''}" placeholder="Ex: ${dec(irsRate(c))}" data-input="liveNet()"></label></div>
-    <div class="hint u-mt-n6px">Em branco: <b id="c_taxVazio">${dec(irsRate(c))} %</b>, a estimativa para ${YEAR}. ${esc(irsTaxasTexto(YEAR))} É uma estimativa sobre a renda bruta: as despesas dedutíveis (IMI, condomínio, obras) baixam o imposto.</div>
-    <div class="card u-bg-v-tint u-p-12px" id="netBox">${netBox()}</div>
-    ${fold('terms','Prazo, caução e pagamento',`
-    <div class="row">
-      <label>Início<input id="c_start" type="date" value="${c.start||''}" data-change="liveNet()"></label>
-      <label>Fim<input id="c_end" type="date" value="${c.end||''}" data-change="liveNet()"></label></div>
-    <div class="row3">
-      <label>Renda entre o dia<input id="c_day" type="text" inputmode="numeric" value="${c.payDay||''}" placeholder="Opcional"></label>
-      <label>e o dia<input id="c_dayTo" type="text" inputmode="numeric" value="${c.payDayTo||''}" placeholder="Opcional"></label>
-      <label>Aumento anual (%, opcional)<input id="c_inc" type="text" inputmode="decimal" value="${c.increase==null?'':dec(c.increase)}" placeholder="Ex: ${dec(db.settings.growth)}"></label></div>
-    <div class="hint u-mt-n6px">Aumento em branco: ${dec(db.settings.growth)} % ao ano nas projeções (o das Definições), sem o aviso do aumento nos prazos.</div>
-    <div class="row"><label>Caução (€)<input id="c_dep" type="text" inputmode="decimal" value="${c.deposit||''}" placeholder="Opcional"></label>
-      <label>Rendas antecipadas (meses)<input id="c_adv" type="text" inputmode="numeric" value="${c.advance||''}" placeholder="Opcional"></label></div>
-    ${servicoLigado('recurring')?`<div class="hint u-mt-n6px">A renda cria um movimento recorrente todos os meses. Com rendas antecipadas, arranca depois dos meses pagos à cabeça.</div>`:''}
-    <label>IBAN para pagamento das rendas (opcional)<input id="c_iban" value="${esc(c.iban)}" placeholder="Ex: PT50 0002 0123 1234 5678 9015 4" autocomplete="off"></label>`,
-      {icon:'contract',open:false,summary:[c.start?'de '+dPT(c.start):'',c.end?'a '+dPT(c.end):'',c.deposit?'caução '+euro(c.deposit):''].filter(Boolean).join(' ')})}
-    ${fold('fisco','Declaração',fiscoSect(),{icon:'recibo',summary:fsum})}
-    ${fold('contacts','Contactos',contactSect('owner',c,p)+contactSect('tenant',c,p),{icon:'users',summary:[c.ownerPhone||c.ownerEmail?'senhorio':'',c.tenantPhone||c.tenantEmail?'inquilino':''].filter(Boolean).join(' · ')})}
+  return `<div class="form ct-form">
+    <div class="sect ct-gf" id="ct_arrenda">
+      <label>Imóvel <span class="req">*</span>${sel('c_prop',c.propertyId,propOptsPara('contract.add',c.propertyId).filter(o=>{const x=prop(o.v);return x&&(x.use==='investimento'||x.id===c.propertyId)}),'onCtProp','rascunho')}</label>
+      ${rooms.length?ctQuartosHtml(c,rooms,taken)
+       :(p&&p.use==='investimento'?`<div class="hint ct-colado">Este imóvel está definido como arrendado por inteiro. Para arrendar por quartos, muda isso na ficha do imóvel.</div>`:'')}
+      <div class="ct-campo"><div class="flabel">Inquilinos <span class="req">*</span></div><div id="c_tenants">${tagField(tags,'Adicionar','addCtTenant()','delCtTenant','','camada')}</div></div>
+      <label>Nome do contrato (opcional)<input id="c_name" value="${esc(c.name||'')}" placeholder="Ex: ${esc(nomeVazio||'Ana · T2 Lisboa')}" autocomplete="off"></label>
+      <div class="hint ct-colado">É por este nome que o contrato aparece nos movimentos e nas listas. ${nomeVazio?`Em branco: «${esc(nomeVazio)}», o dos inquilinos.`:'Em branco, usa-se o nome dos inquilinos.'}</div>
+    </div>
+    <div class="sect ct-gf" id="ct_renda"><h3 class="ct-gf-tit">Renda</h3>
+      <label>Renda mensal (€) <span class="req">*</span><input id="c_rent" type="text" inputmode="decimal" class="num" value="${c.rent||''}" placeholder="Ex: 450" data-input="liveNet()"></label>
+      <label>Imposto sobre a renda (%, opcional)<input id="c_tax" type="text" inputmode="decimal" class="num" value="${c.taxRate?dec(c.taxRate):''}" placeholder="Ex: ${dec(irsRate(c))}" data-input="liveNet()"></label>
+      <div class="hint ct-colado">Em branco: <b id="c_taxVazio">${dec(irsRate(c))} %</b>, a estimativa para ${YEAR}. ${esc(irsTaxasTexto(YEAR))} É uma estimativa sobre a renda bruta: as despesas dedutíveis (IMI, condomínio, obras) baixam o imposto.</div>
+      <div class="ct-net" id="netBox">${netBox()}</div>
+      <div class="ct-campo"><span class="flabel" id="c_diasRot">A renda paga-se</span>
+        <div class="ct-par ct-dias" role="group" aria-labelledby="c_diasRot">
+          <label>entre o dia<input id="c_day" type="text" inputmode="numeric" class="num" value="${c.payDay||''}" placeholder="Opcional"></label>
+          <label>e o dia<input id="c_dayTo" type="text" inputmode="numeric" class="num" value="${c.payDayTo||''}" placeholder="Opcional"></label></div>
+        <div class="hint">Num mês que não tenha esse dia (o 31 em abril), conta o último dia do mês.</div></div>
+      <label>Aumento anual (%, opcional)<input id="c_inc" type="text" inputmode="decimal" class="num" value="${c.increase==null?'':dec(c.increase)}" placeholder="Ex: ${dec(db.settings.growth)}"></label>
+      <div class="hint ct-colado">Aumento em branco: ${dec(db.settings.growth)} % ao ano nas projeções (o das Definições), sem o aviso do aumento nos prazos.</div>
+    </div>
+    <div class="sect ct-gf" id="ct_prazo"><h3 class="ct-gf-tit">Prazo</h3>
+      <div class="ct-par">
+        <label>Início<input id="c_start" type="date" value="${c.start||''}" data-change="liveNet()"></label>
+        <label>Fim<input id="c_end" type="date" value="${c.end||''}" data-change="liveNet()"></label></div>
+      <p class="hint ct-colado" id="c_prazoFrase">${esc(ctFraseDoPrazo(c))}</p>
+      <div class="ct-par">
+        <label>Caução (€)<input id="c_dep" type="text" inputmode="decimal" class="num" value="${c.deposit||''}" placeholder="Opcional"></label>
+        <label>Rendas antecipadas (meses)<input id="c_adv" type="text" inputmode="numeric" class="num" value="${c.advance||''}" placeholder="Opcional"></label></div>
+      ${rec?`<div class="hint ct-colado">Com rendas antecipadas, a renda recorrente arranca depois dos meses pagos à cabeça.</div>`:''}
+      <label>IBAN para pagamento das rendas (opcional)<input id="c_iban" value="${esc(c.iban)}" placeholder="Ex: PT50 0002 0123 1234 5678 9015 4" autocomplete="off"></label>
+    </div>
+    <div class="sect ct-gf" id="ct_fisco">
+      ${rec?ctInterruptor('c_autorec',c.autoRec!==false,'Criar movimento recorrente da renda','Todos os meses a renda fica por confirmar em Planeados.'):''}
+      ${ctInterruptor('c_active',c.active!==false,'Contrato em vigor','Desligado, o contrato deixa de contar para as rendas e as projeções.')}
+      ${fiscoSect()}
+    </div>
+    <div class="sect ct-gf" id="ct_contactos"><h3 class="ct-gf-tit">Contactos</h3>
+      ${contactSect('owner',c,p)}${contactSect('tenant',c,p)}
+    </div>
     ${fold('inv','Inventário',`
       ${inv.length?`<div class="form u-g-7px">
         <label class="check u-mb-2px"><input type="checkbox" id="inv_all" data-change="invToggleAll()"> Selecionar todos</label>
         ${inv.map(it=>`<div class="invrow">
-          <input type="checkbox" class="i-c" id="invc_${it.id}">
+          <input type="checkbox" class="i-c" id="invc_${it.id}" aria-label="Selecionar ${esc(it.name||'artigo')}">
           <input class="i-n" id="invn_${it.id}" value="${esc(it.name)}" placeholder="Ex: Sofá" aria-label="Artigo">
           <input class="i-q" id="invq_${it.id}" type="text" inputmode="numeric" value="${it.qty}" placeholder="Ex: 1" aria-label="Quantidade">
           <span class="i-s">${sel('invs_'+it.id,it.state,[{v:'novo',label:'Novo'},{v:'usado',label:'Usado'}],'','rascunho')}</span>
-          <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delInv('${it.id}')">${ic('trash',14)}</button></div>`).join('')}
+          <button type="button" class="btn sm danger so-icone" aria-label="Remover ${esc(it.name||'artigo')}" data-toca="rascunho" data-click="delInv('${it.id}')">${ic('trash',14)}</button></div>`).join('')}
         <div class="toolbar u-m-4px-0-0"><button type="button" class="btn sm danger" data-toca="rascunho" data-click="delInvSelected()">Remover selecionados</button></div>
-      </div>`:`<div class="hint"></div>`}
+      </div>`:`<div class="hint">Ainda sem artigos: o anexo I do contrato em PDF diz «sem elementos registados».</div>`}
       <div class="toolbar u-m-0">
         <button type="button" class="btn sm" data-toca="rascunho" data-click="addInv()">${ic('plus',14)} Adicionar artigo</button>
         <button type="button" class="btn sm" data-toca="camada" data-click="addInvBulk()">Adicionar vários</button></div>`,
@@ -343,9 +607,9 @@ function ctBody(){
       ${(p&&(p.photos||[]).length)?`
         <div class="hint u-m-n4px-0-0">Escolhe quais das fotos do imóvel entram neste contrato.</div>
         <div class="thumbs">${p.photos.map(f=>{const on=(c.photoIds||[]).indexOf(f.id)>-1;
-          return `<div class="thumb ${on?'u-bc-v-accent u-bw-2px':'u-op-055'}" data-toca="rascunho" data-click="togCtPhoto('${f.id}')">
+          return `<div class="thumb ${on?'u-bc-v-accent u-bw-2px':'u-op-055'}" role="checkbox" aria-checked="${on?'true':'false'}" data-toca="rascunho" data-click="togCtPhoto('${f.id}')">
             <div id="th_${f.id}" class="u-h-76px u-bg-v-chip"></div>
-            <div class="nm">${on?'✓ ':''}${esc(f.name||'sem nome')}</div></div>`}).join('')}</div>
+            <div class="nm">${on?ic('check',13)+' ':''}${esc(f.name||'sem nome')}</div></div>`}).join('')}</div>
         <div class="toolbar u-m-11px-0-0">
           <button type="button" class="btn sm" data-toca="rascunho" data-click="allCtPhotos(1)">Selecionar todas</button>
           <button type="button" class="btn sm" data-toca="rascunho" data-click="allCtPhotos(0)">Nenhuma</button></div>`
@@ -355,23 +619,72 @@ function ctBody(){
       ${(c.keys||[]).length?`<div class="form u-g-7px">
         <label class="check u-mb-2px"><input type="checkbox" id="key_all" data-change="keyToggleAll()"> Selecionar todos</label>
         ${c.keys.map(k=>`<div class="invrow u-gtc-auto-1fr-62px-auto">
-          <input type="checkbox" id="keyc_${k.id}">
+          <input type="checkbox" id="keyc_${k.id}" aria-label="Selecionar ${esc(k.name||'chave')}">
           <input class="i-n" id="keyn_${k.id}" value="${esc(k.name)}" placeholder="Ex: Chave de casa" aria-label="Tipo de chave">
           <input class="i-q" id="keyq_${k.id}" type="text" inputmode="numeric" value="${k.qty}" placeholder="Ex: 1" aria-label="Quantidade">
-          <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delKey('${k.id}')">${ic('trash',14)}</button></div>`).join('')}
+          <button type="button" class="btn sm danger so-icone" aria-label="Remover ${esc(k.name||'chave')}" data-toca="rascunho" data-click="delKey('${k.id}')">${ic('trash',14)}</button></div>`).join('')}
         <div class="toolbar u-m-4px-0-0"><button type="button" class="btn sm danger" data-toca="rascunho" data-click="delKeySelected()">Remover selecionadas</button></div>
-      </div>`:`<div class="hint"></div>`}
+      </div>`:`<div class="hint">Ainda sem chaves: o auto de entrega do contrato em PDF diz «sem elementos registados».</div>`}
       <div class="toolbar u-m-0">
         <button type="button" class="btn sm" data-toca="rascunho" data-click="addKey()">${ic('plus',14)} Adicionar tipo de chave</button>
         <button type="button" class="btn sm" data-toca="camada" data-click="addKeyBulk()">Adicionar várias</button></div>`,
       {icon:'key',summary:nSum})}
     ${fold('files','Anexos',fileBlock('',c.files||[],'c_filein','ctAddFiles','ctDelFile',{hint:'PDF do contrato assinado, recibos, comunicações. Ficam no dispositivo e não entram na cópia em JSON.'}),
       {icon:'clip',summary:(c.files||[]).length?c.files.length+' anexo'+(c.files.length===1?'':'s'):''})}
-    <label class="check"><input type="checkbox" id="c_active" ${c.active!==false?'checked':''}> Contrato em vigor</label>
-    ${servicoLigado('recurring')?`<label class="check"><input type="checkbox" id="c_autorec" ${c.autoRec!==false?'checked':''}> Criar movimento recorrente da renda</label>
-    <div class="hint u-mt-n4px">Todos os meses a app pede para confirmar a renda em Planeados.</div>`:''}
-    ${richEditor('Notas','c_notes',c.notes,'Opcional')}
+    <div class="sect ct-gf" id="ct_notas">${richEditor('Notas','c_notes',c.notes,'Opcional')}</div>
   </div>`;
+}
+/* O quarto do contrato, num imóvel arrendado por quartos: um chip por quarto
+   (role radio) e «Imóvel inteiro» à cabeça. Os que já têm contrato vivo dizem
+   «· já arrendado» e continuam a poder escolher-se — um contrato novo pode
+   ser o que começa quando o de agora acabar —, mas não passam despercebidos.
+   O valor vive num campo escondido (c_room), que o collectCt lê.
+   Recebe: c — o contrato do formulário; rooms — os quartos do imóvel; taken — os ids dos quartos com contrato vivo.
+   Devolve: o HTML do campo. */
+function ctQuartosHtml(c,rooms,taken){
+  const cur=c.roomId||'';
+  const opcoes=[{v:'',label:'Imóvel inteiro'}].concat(rooms.map(r=>({v:r.id,label:r.name,ja:taken.indexOf(r.id)>-1})));
+  return `<div class="ct-campo"><span class="flabel" id="c_roomRot">Quarto</span><input type="hidden" id="c_room" value="${esc(cur)}">
+    <div class="chips-fila ct-quartos" role="radiogroup" aria-labelledby="c_roomRot">${opcoes.map(o=>
+      `<button type="button" class="chip${cur===o.v?' on':''}${o.ja?' ct-ja':''}" role="radio" aria-checked="${cur===o.v?'true':'false'}" data-v="${esc(o.v)}" data-toca="rascunho" data-click="ctEscolheQuarto('${jsq(o.v)}')">${esc(o.label)}${o.ja?'<span class="ct-ja-txt"> · já arrendado</span>':''}</button>`).join('')}</div></div>`;
+}
+/* Um chip do quarto foi tocado: guarda a escolha no campo escondido e acende
+   o chip, sem repintar o formulário (o foco e o que se escreveu ficam).
+   Recebe: rid — o id do quarto ('' para o imóvel inteiro).
+   Devolve: nada — mexe no campo e nos chips. */
+function ctEscolheQuarto(rid){
+  const v=String(rid||''),i=document.getElementById('c_room');if(i)i.value=v;
+  const g=document.querySelector('.ct-quartos');if(!g)return;
+  [].slice.call(g.querySelectorAll('[role="radio"]')).forEach(b=>{
+    const on=b.getAttribute('data-v')===v;
+    b.classList.toggle('on',on);b.setAttribute('aria-checked',on?'true':'false');
+  });
+}
+/* Um interruptor do formulário (a prancheta: «Criar movimento recorrente da
+   renda»): a caixa de marcar da casa, com o papel de interruptor e o aspeto
+   do .interruptor, dentro de um rótulo que se toca inteiro. É uma caixa, e
+   não um botão, para o collectCt a ler como sempre leu (chk).
+   Recebe: id — o id da caixa; on — se está ligada; titulo — o que liga; sub — a frase por baixo.
+   Devolve: o HTML do interruptor. */
+function ctInterruptor(id,on,titulo,sub){
+  return `<label class="ct-sw-linha"><span class="ct-sw-txt"><b>${esc(titulo)}</b><span class="small">${esc(sub)}</span></span><input type="checkbox" role="switch" class="ct-sw" id="${esc(id)}"${on?' checked':''}></label>`;
+}
+/* A frase por baixo das datas: quanto dura o contrato e, com fim, até quando
+   se avisa o inquilino para ele não renovar (os 120 dias que os prazos
+   contam — prazos.js:prazosDe). Sem fim, diz que não há prazo a avisar.
+   Recebe: c — o contrato (o do formulário, ou o que ctEmEdicao devolve).
+   Devolve: o texto (por escapar); '' com as datas trocadas. */
+function ctFraseDoPrazo(c){
+  const iso=/^\d{4}-\d{2}-\d{2}$/;
+  if(!iso.test(String(c.end||'')))return 'Sem data de fim: não há oposição à renovação a avisar.';
+  if(iso.test(String(c.start||''))&&c.end<c.start)return '';
+  let dur='';
+  if(iso.test(String(c.start||''))){
+    const m=Math.round(pzDias(c.end,c.start)/30.44);
+    dur=m>=12&&m%12===0?(m/12===1?'1 ano':m/12+' anos'):(m===1?'1 mês':m+' meses');
+  }
+  const op=pzAddDias(c.end,-120);
+  return (dur?dur.charAt(0).toUpperCase()+dur.slice(1)+'. ':'')+'Para não renovar, avisa o inquilino até '+dPT(op)+' (120 dias) — a app lembra-te antes, nos prazos.';
 }
 /* O contrato como está escrito no formulário agora, para a estimativa da
    taxa: a renda, as datas, a finalidade, a celebração, a isenção e as duas
@@ -390,33 +703,38 @@ function ctEmEdicao(){
 }
 // HTML do resumo bruto → imposto → líquido. Lê os campos do formulário se
 // já estiverem no DOM; antes disso usa os valores de cForm. Sem taxa escrita,
-// a estimativa do ano corrente (irsRate), com o motivo à vista.
+// a estimativa do ano corrente (irsRate), com o motivo à vista. Vive numa
+// caixa da superfície 2 (.ct-net), com a líquida a verde e o imposto a laranja.
+// Recebe: nada — lê os campos ou o cForm.
 // Devolve: string com o HTML do resumo (ou um aviso, se faltar a renda).
 function netBox(){
   /* «campo presente e vazio» (apagado de propósito → estimativa) é diferente de «ainda sem DOM» (cForm) */
   const eT=document.getElementById('c_tax'),est=ctEmEdicao();
   const r=est.rent,escrita=eT?num(eT.value):(Number(cForm.taxRate)||0);
   const tx=escrita>0?escrita:irsRate(est);
-  if(!r)return `<div class="hint">Falta a renda.</div>`;
+  if(!r)return `<div class="small">Escreve a renda para veres a líquida.</div>`;
   const imposto=r*tx/100;
-  return `<div class="stat u-pt-0"><span>Renda bruta</span><b>${euro2(r)}</b></div>
-    <div class="stat"><span>Imposto (${dec(tx)}%${escrita>0?'':', estimado: '+esc(irsTaxaPorque(est))})</span><b class="neg">−${euro2(imposto)}</b></div>
-    <div class="stat u-b-0"><span>Renda líquida</span><b class="pos u-fs-16px">${euro2(r-imposto)}</b></div>
-    <div class="hint">${euro(( r-imposto)*12)} por ano, se a renda se mantiver.</div>`;
+  return `<div class="ct-net-linha"><span>Renda bruta</span><b>${euro2(r)}</b></div>
+    <div class="ct-net-linha"><span>Imposto (${dec(tx)}%${escrita>0?'':', estimado: '+esc(irsTaxaPorque(est))})</span><b class="neg">−${euro2(imposto)}</b></div>
+    <div class="ct-net-linha ct-net-total"><span>Renda líquida</span><b class="pos">${euro2(r-imposto)}</b></div>
+    <div class="small">${euro((r-imposto)*12)} por ano, se a renda se mantiver.</div>`;
 }
 // Recalcula o resumo da renda líquida enquanto se escreve na renda ou no imposto,
 // e — porque a taxa em branco depende da renda, das datas, da finalidade, da
 // isenção e das perguntas do art. 72.º — o exemplo do imposto e o «Em branco:
 // N %» por baixo dele; mostra ou esconde as perguntas dos n.os 23 e 24
-// (ctN23Visivel) e troca a explicação da isenção escolhida.
+// (ctN23Visivel) e troca a explicação da isenção escolhida; e a frase da
+// duração e da oposição por baixo das datas (ctFraseDoPrazo).
+// Recebe: nada — lê os campos do formulário.
 // Devolve: nada — reescreve a caixa #netBox, o placeholder de c_tax, o
-// #c_taxVazio, o #c_fisenHint e o hidden do #c_fn23.
+// #c_taxVazio, o #c_prazoFrase, o #c_fisenHint e o hidden do #c_fn23.
 function liveNet(){
   const b=document.getElementById('netBox');if(b)b.innerHTML=netBox();
   const v=document.getElementById('c_taxVazio'),t=document.getElementById('c_tax');
   const est=ctEmEdicao(),r=dec(irsRate(est));
   if(v)v.textContent=r+' %';
   if(t)t.placeholder='Ex: '+r;
+  const fr=document.getElementById('c_prazoFrase');if(fr)fr.textContent=ctFraseDoPrazo(est);
   const n=document.getElementById('c_fn23');if(n)n.hidden=!ctN23Visivel(est);
   const h=document.getElementById('c_fisenHint');if(h)h.textContent=ctIsencaoTexto(fiscoDe(est).isencao);
 }
@@ -500,31 +818,34 @@ function fiscoSect(){
   const vA=irsAno(YEAR),L=vA.taxas.limiteRendaAlta,B=vA.taxas.bonusRendaMenor,isens=vA.isencoes||[];
   const isOpts=[{v:'',label:'Nenhuma'}].concat(isens.map(x=>({v:x.id,label:x.nome})));
   if(f.isencao&&!isens.some(x=>x.id===f.isencao))isOpts.push({v:f.isencao,label:f.isencao.toUpperCase()});
-  const seg=`<div><div class="flabel">Perante a AT</div>
-    <div class="seg c3">${[['','dots','Por indicar','ainda não disse'],['declarado','bank','Declarado à AT','Modelo 2 entregue'],['naoDeclarado','home','Não declarado','fica fora do IRS']]
-      .map(([k,i,lb,sb])=>`<button type="button" class="opt ${f.estado===k?'on':''}" data-toca="rascunho" data-click="setFiscoEstado('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>`;
-  if(f.estado==='naoDeclarado')return seg+`<div class="hint">Este contrato fica fora do resumo do Anexo F e dos prazos da AT. Podes mudar isto quando quiseres.</div>`;
-  if(f.estado!=='declarado')return seg+`<div class="hint">Comunicaste este contrato às Finanças (Modelo 2)? Marca aqui: o resumo do Anexo F e os prazos da AT dependem disso.</div>`;
+  /* o segmentado da casa (a prancheta): três escolhas curtas, com a mesma
+     letra e a mesma cor — «não declarado» é uma decisão, não um erro */
+  const seg=`<div class="ct-campo"><span class="flabel" id="c_fiscoRot">Perante a AT</span>
+    <div class="segm ct-at-segm" role="radiogroup" aria-labelledby="c_fiscoRot">${[['','Por indicar'],['declarado','Declarado'],['naoDeclarado','Não declarado']]
+      .map(([k,lb])=>`<button type="button" role="radio" aria-checked="${f.estado===k?'true':'false'}" class="${f.estado===k?'on':''}" data-toca="rascunho" data-click="setFiscoEstado('${k}')">${lb}</button>`).join('')}</div></div>`;
+  if(f.estado==='naoDeclarado')return seg+`<div class="hint ct-colado">Este contrato fica fora do resumo do Anexo F e dos prazos da AT. Podes mudar isto quando quiseres.</div>`;
+  if(f.estado!=='declarado')return seg+`<div class="hint ct-colado">Comunicaste este contrato às Finanças (Modelo 2)? Marca aqui: o resumo do Anexo F e os prazos da AT dependem disso.${/^\d{4}-\d{2}-\d{2}$/.test(String(c.start||''))?' O prazo é '+dPT(fimDoMesSeguinte(c.start))+', o fim do mês seguinte ao início.':''}</div>`;
   /* a cessação só faz sentido num contrato que acaba ou já acabou */
   const cessa=!!c.end||c.active===false;
   /* a redução pela duração é só dos contratos de habitação permanente (irsReducao) */
   const reduzida=irsTaxa(c,YEAR).reducao;
+  /* cada dica logo a seguir ao campo de que fala: lado a lado só o que cabe
+     a 390px (a data e o «Renovável») */
   return seg+`
-    <div class="row">
-      <label>N.º do contrato na AT (opcional)<input id="c_fnum" type="text" inputmode="numeric" value="${esc(f.numero)}" placeholder="Ex: 1234567" autocomplete="off"></label>
-      <label>Finalidade${sel('c_ffin',f.finalidade,[{v:'',label:'—'}].concat(FISCO_FINALIDADES.map(x=>({v:x[0],label:x[1]}))),'liveNet','rascunho')}</label></div>
-    <div class="hint u-mt-n6px">Vem no comprovativo do Modelo 2; o Anexo F pede-o em cada linha.</div>
-    <div class="row">
+    <label>N.º do contrato na AT (opcional)<input id="c_fnum" type="text" inputmode="numeric" class="num" value="${esc(f.numero)}" placeholder="Ex: 1234567" autocomplete="off"></label>
+    <div class="hint ct-colado">Vem no comprovativo do Modelo 2; o Anexo F pede-o em cada linha.</div>
+    <label>Finalidade${sel('c_ffin',f.finalidade,[{v:'',label:'—'}].concat(FISCO_FINALIDADES.map(x=>({v:x[0],label:x[1]}))),'liveNet','rascunho')}</label>
+    <div class="ct-par">
       <label>Data de celebração<input id="c_fcel" type="date" value="${esc(f.celebracao)}" data-change="liveNet()"></label>
       <label>Renovável${sel('c_fren',f.renovavel===true?'1':f.renovavel===false?'0':'',[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'','rascunho')}</label></div>
-    <div class="hint u-mt-n6px">O dia em que assinaram: o quadro 4.2 do Anexo F pede-o nos contratos de longa duração.</div>
+    <div class="hint ct-colado">O dia em que assinaram: o quadro 4.2 do Anexo F pede-o nos contratos de longa duração.</div>
     <label>Isenção de IRS${sel('c_fisen',f.isencao,isOpts,'liveNet','rascunho')}</label>
-    <div class="hint u-mt-n6px" id="c_fisenHint">${esc(ctIsencaoTexto(f.isencao))}</div>
+    <div class="hint ct-colado" id="c_fisenHint">${esc(ctIsencaoTexto(f.isencao))}</div>
     ${L&&B?`<div id="c_fn23"${ctN23Visivel(c)?'':' hidden'}><div class="form">
       <label>Renda acima de ${dec(L.percentagem)} % do limite do concelho?${sel('c_facima',f.rendaAcimaDoLimite===true?'1':f.rendaAcimaDoLimite===false?'0':'',[{v:'',label:'Não sei'},{v:'0',label:'Não'},{v:'1',label:'Sim'}],'liveNet','rascunho')}</label>
-      <div class="hint u-mt-n6px">Num contrato de habitação celebrado desde ${dPT(L.desde)}, uma renda mensal acima de ${dec(L.percentagem)} % dos limites gerais da tipologia no concelho (os do arrendamento acessível) faz perder a redução pela duração, e o contrato vai ao quadro 4.1 (CIRS art. 72.º n.º 23). A app não tem essas tabelas: indica-o aqui. Em «Não sei» conta-se a redução.</div>
+      <div class="hint ct-colado">Num contrato de habitação celebrado desde ${dPT(L.desde)}, uma renda mensal acima de ${dec(L.percentagem)} % dos limites gerais da tipologia no concelho (os do arrendamento acessível) faz perder a redução pela duração, e o contrato vai ao quadro 4.1 (CIRS art. 72.º n.º 23). A app não tem essas tabelas: indica-o aqui. Em «Não sei» conta-se a redução.</div>
       <label>Renda do contrato anterior neste imóvel (€)<input id="c_fant" type="text" inputmode="decimal" value="${f.rendaAnterior?dec(f.rendaAnterior):''}" placeholder="Opcional" data-input="liveNet()"></label>
-      <div class="hint u-mt-n6px">Se a renda deste contrato for pelo menos ${dec(B.rendaMenorPct)} % mais baixa do que a do anterior, a taxa desce mais ${dec(B.pontos)} pontos (CIRS art. 72.º n.º 24, quadro 4.2B do Anexo F). Em branco: não se aplica.</div>
+      <div class="hint ct-colado">Se a renda deste contrato for pelo menos ${dec(B.rendaMenorPct)} % mais baixa do que a do anterior, a taxa desce mais ${dec(B.pontos)} pontos (CIRS art. 72.º n.º 24, quadro 4.2B do Anexo F). Em branco: não se aplica.</div>
     </div></div>`:''}
     <div><div class="flabel">Renovações</div>
       ${renovs.length?`<div class="form u-g-9px">${renovs.map(r=>`<div class="invrow u-gtc-1fr-1fr-auto u-ai-end">
@@ -534,7 +855,7 @@ function fiscoSect(){
       <div class="toolbar ${renovs.length?'u-m-4px-0-0':'u-m-0-0-0'}"><button type="button" class="btn sm" data-toca="rascunho" data-click="addRenov()">${ic('plus',14)} Adicionar renovação</button></div>
       <div class="hint">Início e fim de cada renovação. O quadro 4.2A do Anexo F pede os da última.</div></div>
     ${cessa?`<label>Motivo da cessação (opcional)<input id="c_fces" value="${esc(f.cessacaoMotivo)}" placeholder="Ex: Fim do prazo" autocomplete="off"></label>
-    <div class="hint u-mt-n6px">A AT pergunta-o ao comunicar o fim do contrato: fim do prazo, acordo, denúncia…</div>`:''}
+    <div class="hint ct-colado">A AT pergunta-o ao comunicar o fim do contrato: fim do prazo, acordo, denúncia…</div>`:''}
     ${reduzida?`<div class="hint">Taxa reduzida pela duração (${dec(reduzida.taxa)} %): vai ao quadro 4.2 do Anexo F, e até 15 de fevereiro comunica-se a duração e as renovações no Portal das Finanças.</div>`:''}`;
 }
 /* Muda o estado do contrato perante a AT e repinta, para os campos do
@@ -718,11 +1039,13 @@ function contactSect(kind,c,p){
   const cur=owners?c.ownerContactId:c.tenantContactId;
   const opts=gente.map(g=>({v:g.id,label:g.name+(g.phone?' · '+fmtPhone(g.phone):'')})).concat([{v:'',label:'Outro contacto (escrever)'}]);
   const chosen=cur?gente.find(g=>g.id===cur):null;
-  return `<div class="sect">
-    <div class="sect-head"><span class="ic">${ic(owners?'crown':'users',18)}</span><b>Contacto do ${owners?'senhorio':'inquilino'}</b></div>
-    <div class="hint u-m-n4px-0-0">${owners?'O que o inquilino usa para vos contactar.':'Ponto de contacto deste contrato.'}</div>
-    ${gente.length?`<label>Usar o contacto de${sel(owners?'c_ocid':'c_tcid',cur||'',opts,owners?'onOwnerContact':'onTenantContact','rascunho')}</label>`:''}
-    ${chosen?`<div class="stat u-b-0 u-p-4px-0"><span>${esc(chosen.name)}</span>
+  /* uma escolha que já não está na lista (a pessoa saiu do contrato ou do
+     imóvel) não se mostra: o sel caía na primeira pessoa, e o ecrã dizia um
+     nome por cima dos campos de outro contacto */
+  return `<div class="ct-contacto">
+    <div class="ct-contacto-cab"><b>Contacto do ${owners?'senhorio':'inquilino'}</b><span class="small">${owners?'O que o inquilino usa para vos contactar.':'Ponto de contacto deste contrato.'}</span></div>
+    ${gente.length?`<label>Usar o contacto de${sel(owners?'c_ocid':'c_tcid',chosen?cur:'',opts,owners?'onOwnerContact':'onTenantContact','rascunho')}</label>`:''}
+    ${chosen?`<div class="ct-net-linha ct-contacto-escolhido"><span>${esc(chosen.name)}</span>
         <b>${esc([chosen.phone?fmtPhone(chosen.phone):'',chosen.email].filter(Boolean).join(' · ')||'sem contacto na ficha')}</b></div>`
       :`<div class="row">
         <label>Email (opcional)<input id="${owners?'c_omail':'c_tmail'}" type="email" inputmode="email" value="${esc(owners?c.ownerEmail:c.tenantEmail)}" placeholder="Ex: ${owners?'rui@exemplo.pt':'ana@exemplo.pt'}" autocomplete="off"></label>
@@ -805,22 +1128,66 @@ function doKeyBulk(){
   });
   closeModal();repaintCt();toast(added?'Chaves adicionadas.':'Nada para adicionar.');
 }
-/* puxa o contacto do primeiro proprietário, se ainda estiver vazio
-   Devolve: nada — só preenche o email/telefone em cForm. */
+/* O contacto escrito no contrato é exatamente o de uma pessoa? O email sem
+   olhar a maiúsculas e o telefone só pelos algarismos; e nunca vazio com
+   vazio — um contrato sem contacto não é «o contacto» de quem também não
+   tem nenhum.
+   Recebe: email, tel — o contacto do contrato; g — a pessoa (owner ou tenant).
+   Devolve: true/false. */
+function ctMesmoContacto(email,tel,g){
+  const m=x=>String(x||'').trim().toLowerCase(),d=x=>String(x||'').replace(/\D/g,'');
+  return !!g&&!!(m(email)||d(tel))&&m(email)===m(g.email)&&d(tel)===d(g.phone);
+}
+/* Puxa o contacto do primeiro proprietário para os campos ainda vazios. Se
+   estavam os dois vazios e a pessoa tem contacto, fica ela escolhida em «Usar
+   o contacto de»: os campos traziam o contacto da proprietária e a escolha
+   dizia «Outro contacto (escrever)». Ao trocar de imóvel (onCtProp), uma
+   escolha que não é proprietária do imóvel novo larga-se — e o contacto que
+   veio dela também, para entrar o do proprietário certo; o que alguém
+   escreveu à mão fica.
+   Devolve: nada — só mexe no email/telefone e na escolha em cForm. */
 function fillOwnerContact(){
   const p=prop(cForm.propertyId);if(!p)return;
-  const o=ownersOfProp(p).map(owner).filter(Boolean)[0];if(!o)return;
+  const os=ownersOfProp(p).map(owner).filter(Boolean);
+  if(cForm.ownerContactId&&!os.some(o=>o.id===cForm.ownerContactId)){
+    if(ctMesmoContacto(cForm.ownerEmail,cForm.ownerPhone,owner(cForm.ownerContactId))){cForm.ownerEmail='';cForm.ownerPhone=''}
+    cForm.ownerContactId='';
+  }
+  const o=os[0];if(!o)return;
+  const vazios=!cForm.ownerEmail&&!cForm.ownerPhone;
   if(!cForm.ownerEmail)cForm.ownerEmail=o.email||'';
   if(!cForm.ownerPhone)cForm.ownerPhone=o.phone||'';
+  if(!cForm.ownerContactId&&vazios&&(o.email||o.phone))cForm.ownerContactId=o.id;
 }
 // Preenche o contacto do inquilino do contrato com o da pessoa, mas só os
-// campos ainda vazios — não pisa o que já lá estava.
+// campos ainda vazios — não pisa o que já lá estava. Se estavam os dois
+// vazios e a pessoa tem contacto, fica ela escolhida em «Usar o contacto de»
+// (como o do senhorio, fillOwnerContact).
 // Recebe: tid — id do inquilino.
-// Devolve: nada — só preenche o email/telefone em cForm.
+// Devolve: nada — só preenche o email/telefone e a escolha em cForm.
 function fillTenantContact(tid){
   const t=tenant(tid);if(!t)return;
+  const vazios=!cForm.tenantEmail&&!cForm.tenantPhone;
   if(!cForm.tenantEmail)cForm.tenantEmail=t.email||'';
   if(!cForm.tenantPhone)cForm.tenantPhone=t.phone||'';
+  if(!cForm.tenantContactId&&vazios&&(t.email||t.phone))cForm.tenantContactId=t.id;
+}
+/* Ao abrir um contrato que já existe: se o contacto escrito nele é
+   exatamente o de um proprietário do imóvel (ou de um dos inquilinos) e
+   nenhuma pessoa está escolhida, escolhe-a — os contratos gravados antes
+   desta regra diziam «Outro contacto (escrever)» por cima do contacto da
+   proprietária. Só com contacto igual e não vazio (ctMesmoContacto).
+   Recebe: nada — lê e mexe no cForm.
+   Devolve: nada. */
+function ctReconheceContactos(){
+  if(!cForm.ownerContactId){
+    const o=ownersOfProp(prop(cForm.propertyId)||{}).map(owner).filter(Boolean).find(g=>ctMesmoContacto(cForm.ownerEmail,cForm.ownerPhone,g));
+    if(o)cForm.ownerContactId=o.id;
+  }
+  if(!cForm.tenantContactId){
+    const t=ctTenants(cForm).find(g=>ctMesmoContacto(cForm.tenantEmail,cForm.tenantPhone,g));
+    if(t)cForm.tenantContactId=t.id;
+  }
 }
 // Ao trocar o imóvel do contrato: limpa o quarto (pertencia ao anterior),
 // puxa o contacto do proprietário novo e repinta.
@@ -938,7 +1305,7 @@ function endContract(id){
 function reactivateContract(id){
   const c=contract(id);if(!c)return;
   const recusa=motivoRecusa(c.propertyId,'contract.add',c);if(recusa)return toast(recusa);
-  confirmModal('Reativar contrato',`Voltar a pôr o contrato de ${esc(ctNames(c))} ativo? Volta a contar para as rendas e projeções.`,()=>{
+  confirmModal('Reativar contrato',`Reativar o contrato de ${esc(ctNames(c))}? Volta a contar para as rendas e projeções.`,()=>{
     c.active=true;c.end='';if(servicoLigado('recurring'))syncContractRec(c);save();closeAllModals();buildNav();render();toast('Contrato reativado.');
   });
 }

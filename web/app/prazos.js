@@ -302,17 +302,43 @@ function pzSilencia(chave){
   render();
 }
 
-/* Estado aberto/fechado do cartão dos prazos, guardado no aparelho (como o
-   dos movimentos por confirmar: a vista geral é para ver de relance).
-   Devolve: verdadeiro se o cartão deve estar fechado. */
-function pzShut(){try{return localStorage.getItem('gi_pz_shut')==='1'}catch(e){return false}}
-/* Alterna o cartão dos prazos e redesenha.
-   Devolve: nada — grava a escolha no aparelho e redesenha. */
-function pzToggle(){try{localStorage.setItem('gi_pz_shut',pzShut()?'0':'1')}catch(e){}render()}
+/* O que falta (ou o que já passou) para um prazo, dito por extenso como o
+   selo o mostra: «Passou há 17 dias», «É hoje», «Falta 1 dia», «Faltam 14 dias».
+   Recebe: p — o prazo (com dias).
+   Devolve: o texto. */
+function pzQuando(p){
+  const d=Number(p&&p.dias)||0;
+  if(d<0)return 'Passou há '+(-d)+(d===-1?' dia':' dias');
+  if(d===0)return 'É hoje';
+  return d===1?'Falta 1 dia':'Faltam '+d+' dias';
+}
 
-/* HTML do cartão «Prazos» da vista geral: os avisos dentro da janela, do
-   mais urgente para o menos, cada um com a ação certa (abrir o contrato, a
-   pessoa, o imóvel) e um «Silenciar» com rede.
+/* A cor do selo de um prazo, pela regra do contrato visual: vermelho o que
+   passou ou falta 7 dias ou menos, âmbar até 30, cinzento o resto.
+   Recebe: p — o prazo (com urg, de pzUrg).
+   Devolve: a classe do .badge ('red', 'amber' ou 'grey'). */
+function pzSelo(p){return p.urg==='info'?'grey':p.urg==='breve'?'amber':'red'}
+
+/* O título de um prazo partido em duas linhas curtas: o que há a fazer e de
+   quem é, com a data-alvo — «Comunicar a cessação à AT» e «Estúdio Arroios ·
+   30/09/2026». O título vem de prazosDe como «o quê — de quem»; a frase longa
+   (o porquê e o como) fica para o «Pede atenção» (notificacoes.js:notifModal).
+   Recebe: p — o prazo (com titulo e alvo).
+   Devolve: {titulo, onde} — texto por escapar. */
+function pzPartes(p){
+  const t=String((p&&p.titulo)||''),i=t.lastIndexOf(' — ');
+  const titulo=i>0?t.slice(0,i):t,quem=i>0?t.slice(i+3):'';
+  return {titulo,onde:(quem?quem+' · ':'')+dPT(p.alvo)};
+}
+
+/* HTML do cartão «Prazos legais e fiscais» da Visão geral (o canvas: um dos
+   três cartões do «Pede atenção» no computador). Os quatro mais urgentes,
+   cada um numa linha curta — o que há a fazer, de quem e quando, e o selo
+   do que falta —, que abre o sítio certo (o contrato, a pessoa, o imóvel); o
+   ✕ silencia esta ocorrência com «Anular» (pzSilencia). «Ver todos» abre o
+   «Pede atenção» só com os prazos, onde cada um traz a frase inteira. Era um
+   cartão que se recolhia (fechado, dizia quantos; aberto, ocupava o ecrã):
+   com quatro linhas curtas e o resto a um toque, já não há o que recolher.
    Devolve: o HTML do cartão (texto), ou '' quando não há prazos na janela. */
 function prazosCard(){
   /* o mesmo guarda do sino (espera.js:sabemosOEstado): um prazo silenciado
@@ -320,27 +346,18 @@ function prazosCard(){
   if(!sabemosOEstado())return '';
   const lista=prazosAtivos();
   if(!lista.length)return '';
-  const selo=p=>{
-    const cls=p.urg==='info'?'grey':p.urg==='breve'?'amber':'red';
-    const txt=p.dias<0?('há '+(-p.dias)+' d'):p.dias===0?'hoje':(p.dias+' d');
-    return `<span class="badge ${cls} u-fx-0-0-auto">${txt}</span>`;
+  /* sem «abrir» (o serviço que abria está desligado nesta conta) a linha não
+     se apresenta como tocável: diz o prazo, e o ✕ continua a silenciar */
+  const row=p=>{
+    const x=pzPartes(p);
+    const dentro=`<span class="vg-item-txt"><b>${esc(x.titulo)}</b><span class="small">${esc(x.onde)}</span></span><span class="badge ${pzSelo(p)}">${pzQuando(p)}</span>`;
+    return `<div class="vg-item">${p.abrir?`<button type="button" class="vg-item-abrir" data-toca="camada" data-click="${p.abrir}">${dentro}</button>`:`<div class="vg-item-abrir">${dentro}</div>`}
+      <button type="button" class="btn sm ghost so-icone vg-silenciar" aria-label="Silenciar: ${esc(x.titulo)}" title="Silenciar até a data mudar" data-toca="dados" data-click="pzSilencia('${jsq(p.chave)}')">${ic('x',16)}</button></div>`;
   };
-  /* sem «abrir» (o serviço que abria está desligado nesta conta) o cartão não
-     se apresenta como tocável: diz o prazo, e o Silenciar continua a servir */
-  const row=p=>`<div class="card${p.abrir?' tap':''} u-p-11px-13px"${p.abrir?` data-toca="camada" data-click="${p.abrir}"`:''}>
-    <div class="row-between u-ai-center u-g-10px">
-      <div class="u-minw-0"><b class="u-d-block u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(p.titulo)}</b>
-        <span class="small">${esc(p.sub)}</span></div>${selo(p)}</div>
-    <div class="toolbar u-m-9px-0-0">
-      <button class="btn sm" data-toca="dados" data-click="event.stopPropagation();pzSilencia('${jsq(p.chave)}')">Silenciar</button></div></div>`;
-  const urgentes=lista.filter(p=>p.dias<=7).length,open=!pzShut();
-  return `<div class="card u-mb-14px" id="pzCard">
-    <div class="row-between tap u-ai-center u-cur-pointer u-m-n16px u-p-16px" data-toca="vista" data-click="pzToggle()">
-      <div class="u-minw-0"><div class="title">Prazos</div>
-        <div class="small">${lista.length} na janela de aviso${urgentes?' · <b class="neg">'+urgentes+' com 7 dias ou menos</b>':''}${open?'':' · toca para ver'}</div></div>
-      <span class="u-fx-0-0-auto u-d-inline-flex ${open?'u-tf-rotate-90deg':'u-tf-rotate-n90deg'}">${ic('chev',20)}</span></div>
-    ${open?`<div class="list u-g-8px u-mt-12px">${lista.map(row).join('')}</div>
-    <div class="hint u-mt-9px">Silenciar cala esta ocorrência; quando a data mudar, o aviso volta sozinho.</div>`:''}</div>`;
+  return `<div class="card vg-cartao vg-prazos" id="pzCard">
+    <div class="vg-card-cab"><h3 class="title vg-tit">Prazos legais e fiscais</h3>
+      <button type="button" class="vg-ligacao vg-cab-acao" data-toca="camada" data-click="notifModal('prazos')">${lista.length>4?'Ver os '+lista.length:'Ver todos'}</button></div>
+    <div class="vg-itens">${lista.slice(0,4).map(row).join('')}</div></div>`;
 }
 
 /* Lembretes de prazos para a ponte Android (o scheduleReminders junta-os aos

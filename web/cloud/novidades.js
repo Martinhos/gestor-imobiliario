@@ -82,64 +82,65 @@ function marcarVisto(v) {
 
 /* ---------------------------------------------------------- o que há de novo */
 
-var novAbertas = {};   // que secções estão abertas neste modal
+var novAbertas = {};   // que secções estão abertas ({'versão:índice': true/false}); sem marca, só a primeira
+var novPrimeira = '';  // a chave da primeira secção da lista à vista: abre sozinha
 
-// Uma secção de novidades como cartão dobrável; a chave liga-a ao estado de
-// aberta/fechada em novAbertas.
+// Uma secção de novidades que abre e fecha (o .ar do canvas M-Novidades): o
+// título num botão da largura toda, com quantas coisas tem quando está
+// fechada, e as novidades em lista por baixo quando está aberta. O botão diz
+// se está aberto (aria-expanded).
 // Recebe: sec — a secção ({titulo, itens}); chave — texto único ('versão:índice')
 // que a identifica em novAbertas.
-// Devolve: o HTML do cartão, em texto.
+// Devolve: o HTML da secção, em texto.
 function secHtml(sec, chave) {
-  var aberta = novAbertas[chave] !== false;   // por omissão, abertas
-  return '<div class="card u-p-0 u-ov-hidden">' +
-    '<div class="row-between tap u-ai-center u-p-13px-15px u-cur-pointer" ' +
-      'data-toca="vista" data-click="CW.novToggle(\'' + chave + '\')">' +
-      '<b class="u-minw-0">' + esc(sec.titulo) + '</b>' +
-      '<span class="u-fx-0-0-auto u-d-inline-flex u-c-v-muted ' +
-        (aberta ? 'u-tf-rotate-90deg' : 'u-tf-rotate-n90deg') + '">' +
-        ic('chev', 18) + '</span></div>' +
+  var aberta = novAbertas[chave] === undefined ? chave === novPrimeira : !!novAbertas[chave];
+  var n = (sec.itens || []).length;
+  return '<button type="button" class="nov-ar" aria-expanded="' + aberta + '" data-toca="vista" data-click="CW.novToggle(\'' + chave + '\')">' +
+      '<span class="nov-ar-tit">' + esc(sec.titulo) + (aberta ? '' : ' <span class="small num">· ' + n + '</span>') + '</span>' +
+      ic('chevD', 18) + '</button>' +
     (aberta
-      ? '<div class="u-p-0-15px-14px"><ul class="u-m-0 u-pl-18px u-c-v-muted u-fs-14px">' +
-        sec.itens.map(function (i) { return '<li class="u-m-6px-0">' + esc(i) + '</li>'; }).join('') +
-        '</ul></div>'
-      : '') +
-    '</div>';
+      ? '<ul class="nov-itens">' + sec.itens.map(function (i) { return '<li>' + esc(i) + '</li>'; }).join('') + '</ul>'
+      : '');
 }
 
-// A lista de avisos inteira em HTML — serve o modal e a secção das Definições.
+// A lista de avisos inteira em HTML — serve o modal e a secção das Definições:
+// por versão, o rótulo «Versão N» com a data à direita, e as secções num
+// cartão, a primeira aberta e as outras fechadas.
 // Recebe: avisos — array de avisos já filtrados ({v, data, titulo, seccoes}).
 // Devolve: o HTML da lista completa (um <div id="novLista">), em texto.
 function novHtml(avisos) {
+  novPrimeira = avisos.length && avisos[0].seccoes.length ? avisos[0].v + ':0' : '';
   // o id permite redesenhar só esta lista, sem a página saltar para o topo
-  return '<div class="form" id="novLista">' + avisos.map(function (a) {
-    return '<div>' +
-      '<div class="section-title u-mt-0">' + esc(a.titulo) + '</div>' +
-      '<div class="small u-m-n6px-0-10px">versão ' + a.v + ' · ' + dPT(a.data) + '</div>' +
-      '<div class="list u-g-9px">' +
+  return '<div class="nov-lista" id="novLista">' + avisos.map(function (a) {
+    return '<section class="nov-versao" aria-label="' + esc('Versão ' + a.v) + '">' +
+      '<div class="nov-v-cab"><p class="lbl">Versão ' + a.v + '</p><span class="small num">' + dPT(a.data) + '</span></div>' +
+      '<div class="card nov-secs">' +
       a.seccoes.map(function (s, i) { return secHtml(s, a.v + ':' + i); }).join('') +
-      '</div></div>';
-  }).join('<div class="u-h-16px"></div>') + '</div>';
+      '</div></section>';
+  }).join('') + '</div>';
 }
 
 /* Abrir e fechar uma secção.
 
    Redesenhava só o corpo do modal. Na secção das Definições não há modal
    nenhum, por isso o toque mudava o estado e não se via nada — era preciso
-   sair do submenu e voltar a entrar. Agora redesenha onde quer que a lista
-   esteja: no modal se houver um, senão na vista.
+   sair do submenu e voltar a entrar. Agora redesenha a lista onde quer que
+   ela esteja (o #novLista, no modal ou na vista). A primeira secção abre
+   sozinha (novPrimeira); a partir do primeiro toque manda o novAbertas.
    Recebe: chave — a chave da secção em novAbertas ('versão:índice').
    Devolve: nada — inverte o estado e redesenha a lista onde ela estiver. */
 CW.novToggle = function (chave) {
-  novAbertas[chave] = novAbertas[chave] === false;
+  var aberta = novAbertas[chave] === undefined ? chave === novPrimeira : !!novAbertas[chave];
+  novAbertas[chave] = !aberta;
   if (!CW._novAvisos) return;
-  var m = modalTop();
-  var corpo = m && m.el.querySelector('.body');
-  if (corpo && corpo.querySelector('[data-click*="novToggle"]')) {
-    corpo.innerHTML = novHtml(CW._novAvisos);
-    return;
-  }
+  /* a lista tem o seu id, no modal e na página: troca-se só ela, e o foco
+     volta ao botão tocado (o nó novo), para o teclado não cair no topo */
   var lista = document.getElementById('novLista');
-  if (lista) lista.outerHTML = novHtml(CW._novAvisos);
+  if (!lista) return;
+  lista.outerHTML = novHtml(CW._novAvisos);
+  var nova = document.getElementById('novLista');
+  var b = nova && nova.querySelector('[data-click="CW.novToggle(\'' + chave + '\')"]');
+  if (b) try { b.focus(); } catch (e) {}
 };
 
 // Abre o modal "O que há de novo"; aoFechar, se vier, corre quando a pessoa
@@ -150,7 +151,7 @@ CW.novToggle = function (chave) {
 CW.verNovidades = function (avisos, aoFechar) {
   CW._novAvisos = avisos;
   novAbertas = {};
-  openModal('O que há de novo', novHtml(avisos),
+  openModal('O que há de novo', '<p class="small nov-sub">Só o que diz respeito ao que usas.</p>' + novHtml(avisos),
     '<button class="btn primary" data-toca="camada" data-click="CW.novFechar()">Continuar</button>');
   CW._novFecho = aoFechar;
 };
@@ -180,8 +181,32 @@ function mostrarNovidadesSeHouver() {
 
 /* ------------------------------------------------------ atualização forçada */
 
+/* O miolo dos dois ecrãs da versão (o canvas M-Atualizar): o azul-noite da
+   barra lateral de ponta a ponta, o mosaico azul-noite por cima (o .tile do
+   canvas, estilos.css:.imv-noite — o cobalto claro das capas, imv-t0, dava
+   um cinzento-lavanda sobre o --side), o título, a frase, e por baixo o que
+   cada um tem — a caixa dos passos, a nota e o botão.
+   Recebe: titulo — o título; frase — o texto por baixo dele (de confiança);
+   resto — o HTML que vem a seguir (a caixa dos passos, a nota, o botão).
+   Devolve: o HTML do ecrã (texto). */
+function ecraDaVersao(titulo, frase, resto) {
+  return '<div class="upd-mosaico imv-mosaico imv-noite" aria-hidden="true"></div>' +
+    '<div class="upd-corpo">' +
+      '<h1 class="upd-tit">' + titulo + '</h1>' +
+      '<p class="upd-frase num">' + frase + '</p>' +
+      resto +
+    '</div>';
+}
+
 /* O ecrã que tranca a app quando a versão em uso desceu abaixo da mínima
-   aceite: tapa tudo e só deixa atualizar. Chamado duas vezes não duplica.
+   aceite (o canvas M-Atualizar): tapa tudo e só deixa atualizar — a frase
+   diz a versão que se tem e a mais antiga que serve, e que enquanto não se
+   atualizar nada sobe; a nota diz que atualizar não apaga nada. O
+   «Atualizar agora» abre o ecrã dos passos (ecraAtualizar) por cima deste.
+   Por cima do botão fica a caixa do que correu mal (#cwUpdErro, role=alert,
+   vazia e escondida até ser precisa): é aí que o CW.atualizarAgora diz que
+   não há servidor, porque um aviso em baixo (.toast, z 90) ficava por trás
+   deste ecrã. Chamado duas vezes não duplica.
    Recebe: minima — número da versão mais antiga que ainda é aceite.
    Devolve: nada — acrescenta o ecrã ao body (ou nada, se já lá estiver). */
 function gateAtualizar(minima) {
@@ -202,16 +227,20 @@ function gateAtualizar(minima) {
      entrada, e portanto invisível a quem ainda não entrou — que é justamente
      quem o comentário do fim deste ficheiro diz que ele existe para servir:
      quem está preso no ecrã de entrada por causa de um erro já corrigido. */
-  el.style.cssText = 'position:fixed;inset:0;z-index:235;background:var(--bg);overflow:auto;' +
-    'padding:calc(28px + var(--inset-top)) 18px calc(28px + var(--inset-bottom));display:flex;justify-content:center';
-  el.innerHTML = '<div class="u-maxw-420px u-w-100pc u-m-auto">' +
-    card('Há uma versão nova', 'Esta já não pode ser usada',
-      '<div class="hint">A versão que tens (' + VERSAO + ') deixou de ser aceite; a mais antiga que serve é a ' +
-      minima + '. Atualizar demora um instante e não perdes nada — os teus dados estão na tua conta.</div>' +
-      '<div class="toolbar u-m-15px-0-0">' +
-      '<button class="btn primary" data-toca="ecra" data-click="CW.atualizarAgora()">Atualizar agora</button></div>') +
-    '</div>';
+  el.style.cssText = 'position:fixed;inset:0;z-index:235;overflow:auto';
+  el.className = 'upd-ecra';
+  el.setAttribute('role', 'alertdialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-labelledby', 'cwUpdTit');
+  el.innerHTML = ecraDaVersao('<span id="cwUpdTit">É preciso atualizar a app</span>',
+    'A versão que tens (' + VERSAO + ') deixou de ser aceite; a mais antiga que serve é a ' + minima +
+    '. Enquanto não atualizares, nada é enviado para a tua conta.',
+    caixaDosPassos('nova', '') +
+    '<p class="upd-nota">Atualizar não apaga nada. O que registaste neste aparelho e ainda não subiu sobe logo a seguir.</p>' +
+    '<p id="cwUpdErro" class="upd-erro" role="alert"></p>' +
+    '<button type="button" class="btn upd-botao" data-toca="ecra" data-click="CW.atualizarAgora()">Atualizar agora</button>');
   document.body.appendChild(el);
+  try { el.querySelector('.upd-botao').focus(); } catch (e) {}
 }
 
 /* Espera que apareça um worker em espera. Depois de um update() o worker novo
@@ -267,13 +296,14 @@ function trocarDeWorker() {
 /* Pergunta ao servidor se ele responde, com tempo-limite curto. É a condição
    mínima para valer a pena apagar a cópia local: sem servidor do outro lado,
    apagar não atualiza nada e só deixa a pessoa sem app. O /versao.json nunca é
-   servido da cache (web/sw.js), portanto a resposta é sempre da rede.
+   servido da cache (web/sw.js), portanto a resposta é sempre da rede. O
+   tempo-limite desarma-se quando a resposta chega.
    Devolve: Promise com true se o servidor respondeu (nunca rejeita). */
 function servidorResponde() {
   return new Promise(function (ok) {
-    var feito = false;
-    var diz = function (v) { if (!feito) { feito = true; ok(v); } };
-    setTimeout(function () { diz(false); }, 4000);
+    var feito = false, limite = null;
+    var diz = function (v) { if (!feito) { feito = true; clearTimeout(limite); ok(v); } };
+    limite = setTimeout(function () { diz(false); }, 4000);
     fetch('/versao.json', { cache: 'no-store' }).then(
       function (r) { diz(!!(r && r.ok)); },
       function () { diz(false); }
@@ -286,22 +316,32 @@ function servidorResponde() {
    de uma cache já construída. Só se ela não acontecer é que se pega no machado
    — e aí confirma-se que o servidor responde antes de apagar a única cópia
    local que existe.
+   Sem servidor, o ecrã dos passos sai e diz-se porquê. Com a app trancada
+   (o #cwUpd), a frase fica no próprio ecrã, por cima do botão (#cwUpdErro):
+   o aviso em baixo (.toast, z 90) ficava por trás dele (z 235), e quem tocava
+   no único botão que há voltava ao ecrã trancado sem saber porquê. Da faixa
+   discreta (bannerAtualizar), que não tapa nada, vai no aviso. A caixa
+   esvazia-se a cada tentativa.
    Devolve: Promise que resolve quando não houver mais nada a fazer; no caminho
    feliz não chega a resolver, porque a página recarrega. */
 CW.atualizarAgora = function () {
-  ecraAtualizar('nova', 'a procurar a versão nova…');
+  var erro = document.getElementById('cwUpdErro');
+  if (erro) erro.textContent = '';
+  ecraAtualizar('nova', 'procurar');
   return trocarDeWorker().then(function (trocou) {
-    if (trocou) { ecraAtualizar('nova', 'a reiniciar…'); location.reload(); return; }
+    if (trocou) { ecraAtualizar('nova', 'reiniciar'); location.reload(); return; }
     return servidorResponde().then(function (ha) {
       if (!ha) {
         var el = document.getElementById('cwUpd2');
         if (el) el.remove();
-        toast('Sem ligação ao servidor. A atualização fica para quando houver rede.');
+        var noEcra = document.getElementById('cwUpd') && document.getElementById('cwUpdErro');
+        if (noEcra) noEcra.textContent = 'Sem ligação ao servidor. Quando houver rede, toca outra vez em «Atualizar agora».';
+        else toast('Sem ligação ao servidor. A atualização fica para quando houver rede.');
         return;
       }
-      ecraAtualizar('nova', 'a limpar a versão antiga…');
+      ecraAtualizar('nova', 'limpar');
       return limparCaches().then(function () {
-        ecraAtualizar('nova', 'a reiniciar…');
+        ecraAtualizar('nova', 'reiniciar');
         location.reload();
       });
     });
@@ -386,12 +426,39 @@ function bannerAtualizar(v) {
   document.body.appendChild(el);
 }
 
-/* O ecrã que se vê enquanto a app se atualiza sozinha. Antes era um piscar
-   mudo: a página recarregava sem dizer porquê, e quem visse ficava sem
-   saber se era um erro. Agora diz o que está a fazer, passo a passo.
+/* Os passos de uma atualização, pela ordem em que se veem: procurar,
+   descarregar (ou, pelo machado, limpar a versão antiga) e reiniciar. */
+var PASSOS_DA_ATUALIZACAO = ['procurar', 'descarregar', 'reiniciar'];
+
+/* A caixa dos passos (role=status, para o leitor de ecrã os ir dizendo):
+   os que já passaram com o visto, o que está a correr com a roda, e os que
+   faltam com um círculo vazio.
+   Recebe: versao — número da versão de destino, ou 'nova'; passo — o passo
+   em curso ('procurar', 'descarregar', 'limpar' ou 'reiniciar').
+   Devolve: o HTML da caixa (texto). */
+function caixaDosPassos(versao, passo) {
+  var agora = PASSOS_DA_ATUALIZACAO.indexOf(passo === 'limpar' ? 'descarregar' : passo);
+  var rotulo = {
+    procurar: 'A procurar a versão nova',
+    descarregar: passo === 'limpar' ? 'A limpar a versão antiga'
+      : (versao === 'nova' ? 'A descarregar a versão nova' : 'A descarregar a versão ' + versao),
+    reiniciar: 'A reiniciar',
+  };
+  return '<ol class="upd-passos" role="status">' + PASSOS_DA_ATUALIZACAO.map(function (k, i) {
+    if (i < agora) return '<li class="upd-passo feito">' + ic('check', 20) + '<span>' + rotulo[k] + '</span></li>';
+    if (i === agora) return '<li class="upd-passo atual"><span id="cwUpdRoda" class="nov-roda" aria-hidden="true"></span><span>' + rotulo[k] + '…</span></li>';
+    return '<li class="upd-passo"><span class="upd-circulo" aria-hidden="true"></span><span>' + rotulo[k] + '</span></li>';
+  }).join('') + '</ol>';
+}
+
+/* O ecrã que se vê enquanto a app se atualiza (o canvas M-Atualizar). Antes
+   era um piscar mudo: a página recarregava sem dizer porquê, e quem visse
+   ficava sem saber se era um erro. Agora diz o que está a fazer, passo a
+   passo, na caixa dos passos (caixaDosPassos), e que não se perde nada.
    Recebe: versao — número da versão de destino (ou o texto 'nova', quando não
-   se sabe qual é); passo — texto do passo em curso, mostrado por baixo.
-   Devolve: nada — cria o ecrã se ainda não existir e atualiza o passo. */
+   se sabe qual é); passo — o passo em curso ('procurar', 'descarregar',
+   'limpar' ou 'reiniciar').
+   Devolve: nada — cria o ecrã se ainda não existir e atualiza os passos. */
 function ecraAtualizar(versao, passo) {
   var el = document.getElementById('cwUpd2');
   if (!el) {
@@ -399,20 +466,19 @@ function ecraAtualizar(versao, passo) {
     el.id = 'cwUpd2';
     // acima de tudo, portao de login incluido (z 200): enquanto se atualiza,
     // atualizar E o estado da app
-    el.style.cssText = 'position:fixed;inset:0;z-index:240;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px;text-align:center';
-    el.innerHTML = '<div class="u-maxw-320px">' +
-      '<div id="cwUpdRoda" class="nov-roda"></div>' +
-      '<b class="u-fs-16px">A atualizar para a versão ' + versao + '</b>' +
-      '<div class="small u-mt-7px" id="cwUpdPasso"></div>' +
-      '<div class="small u-mt-14px u-op-07">Não perdes nada — os teus dados ficam onde estão.</div></div>';
+    el.style.cssText = 'position:fixed;inset:0;z-index:240;overflow:auto';
+    el.className = 'upd-ecra';
+    el.innerHTML = ecraDaVersao(versao === 'nova' ? 'A atualizar a app' : 'A atualizar para a versão ' + versao,
+      'Atualizar não apaga nada: os teus dados ficam onde estão, e o que registaste neste aparelho sobe logo a seguir.',
+      '<div id="cwUpdPassos"></div>');
     /* A roda e a animação dela viviam numa folha criada aqui por JavaScript,
        que é CSS em linha e a CSP sem 'unsafe-inline' recusa tal como recusa um
        atributo de estilo: passaram para o web/estilos.css (secção
-       g12-novidades), tal e qual, na classe .nov-roda. */
+       g12-novidades), na classe .nov-roda. */
     document.body.appendChild(el);
   }
-  var p = document.getElementById('cwUpdPasso');
-  if (p) p.textContent = passo;
+  var p = document.getElementById('cwUpdPassos');
+  if (p) p.innerHTML = caixaDosPassos(versao, passo);
 }
 
 /* Pergunta ao servidor (/versao.json) que versão há: abaixo da mínima tranca
@@ -438,9 +504,9 @@ CW.verificarVersao = function () {
       var nova = Number(d.versao);
       if (jaRecarreguei(nova)) { bannerAtualizar(nova); return; }
       marcarRecarga(nova);
-      ecraAtualizar(nova, 'a descarregar a versão nova…');
+      ecraAtualizar(nova, 'descarregar');
       return trocarDeWorker().then(function (trocou) {
-        ecraAtualizar(nova, 'a reiniciar…');
+        ecraAtualizar(nova, 'reiniciar');
         /* Trocou: o worker novo já está a mandar, com a shell inteira na cache
            dele — não há nada para limpar, e limpar seria desfazê-la.
            Não trocou: resta o machado, que é o que faz a versão nova chegar a
@@ -465,6 +531,10 @@ function vNovidades() {
   return novHtml(todas);
 }
 
+/* O cabeçalho da página (vistas.js:render lê-o de SUBPAGE): sem entrada,
+   caía no do separador e dizia «Definições», com o subtítulo do Tema. */
+SUBPAGE.novidades = { label: 'Novidades', sub: 'O que mudou em cada versão' };
+
 var _vSettingsNov = vSettings;
 vSettings = function () {
   if (setPage === 'novidades') return backRow + vNovidades();
@@ -475,10 +545,11 @@ vSettings = function () {
 // aviso legal, que é a outra coisa que se lê e não se mexe. Entra como linha
 // (definicoes.js:linhaDefinicoes), e já não por procura e troca no HTML da
 // raiz — que dependia da forma exata do navRow do aviso legal.
+/* O crachá (o canvas M-Definicoes) é o número do «N por ler». */
 linhaDefinicoes({ sec: 'sobre', ordem: 20, page: 'novidades', label: 'Novidades', icon: 'info', sub: function () {
   var novas = avisosDesde(vistoAte()).length;
   return novas ? novas + ' por ler · versão ' + VERSAO : 'O que mudou · versão ' + VERSAO;
-} });
+}, cracha: function () { return avisosDesde(vistoAte()).length; } });
 
 /* ------------------------------------------------------------- o arranque */
 

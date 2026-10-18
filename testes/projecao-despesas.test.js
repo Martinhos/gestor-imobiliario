@@ -214,7 +214,7 @@ describe('quem os mantém e quem os apaga', () => {
     igual(app.db.recurring.map((x) => [x.tx.propertyId, x.tx.propRec]), [['casa2', 'seguro']], 'só os do imóvel apagado saem');
   });
 
-  test('apagar o planeado tira o valor da ficha — e as prestações irmãs do IMI —, e a confirmação di-lo', () => {
+  test('apagar o planeado remove o valor da ficha — e as prestações irmãs do IMI —, e a confirmação di-lo', () => {
     semEcra();
     let frase = '';
     app.confirmModal = (t, x, sim) => { frase = x; sim(); };
@@ -222,7 +222,7 @@ describe('quem os mantém e quem os apaga', () => {
     app.syncPropRecs(casa);
     app.delRec(imis()[0].id);
     assert.match(frase, /o IMI da ficha do imóvel Casa/);
-    assert.match(frase, /tira também o valor da ficha \(e as outras prestações\)/);
+    assert.match(frase, /remove também o valor da ficha \(e as outras prestações\)/);
     assert.equal(casa.imi, 0);
     assert.equal(imis().length, 0, 'as duas prestações saem');
     assert.equal(app.propRecsOf(casa).length, 2, 'o condomínio e o seguro ficam');
@@ -267,7 +267,7 @@ describe('quem os mantém e quem os apaga', () => {
     app.syncPropRecs(casa);
     const f = app.recFicha(imis()[0].id);
     assert.match(f, /IMI do imóvel Casa/);
-    assert.match(f, /apagar este planeado tira-o de lá/);
+    assert.match(f, /apagar este planeado remove-o de lá/);
     assert.match(app.vRecurring(), /do imóvel/);
     assert.match(app.recOrigensFrase(), /o IMI, o condomínio e o seguro da ficha de cada imóvel criam um sem tu fazeres nada/);
     app.definirServicosDesligados(['properties']);
@@ -314,7 +314,12 @@ describe('a ficha e o formulário do imóvel', () => {
     casa.imi = 400; casa.condominio = 55; casa.seguro = 96; casa.seguroMes = 8;
     const f = app.propFicha('casa');
     assert.match(f, /Despesas fixas/);
-    assert.match(f, /IMI 400,00\s€\/ano · Condomínio 55,00\s€\/mês · Seguro 96,00\s€\/ano em agosto/);
+    /* a ficha de 2026-10 escreve cada despesa fixa na sua linha (nome, quando, valor):
+       lê-se o texto, sem as etiquetas, e o mês do seguro diz-se («em agosto» ou «fim de ago») */
+    const texto = f.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    assert.match(texto, /IMI .*400,00\s€\/ano/);
+    assert.match(texto, /Condomínio .*55,00\s€\/mês/);
+    assert.match(texto, /Seguro .*\bago.*96,00\s€\/ano|Seguro 96,00\s€\/ano em agosto/);
     assert.doesNotMatch(app.propFicha('casa2'), /Despesas fixas/, 'sem valores não há linha');
     const rui = Object.assign(app.normProp({ id: 'P2', name: 'T2 Rui', ownerIds: ['ana'], imi: 300 }), { _sharedFrom: 'Rui', _ownerUserId: 'rui' });
     app.db.properties.push(rui);
@@ -323,7 +328,7 @@ describe('a ficha e o formulário do imóvel', () => {
     assert.doesNotMatch(app.propFicha('P2'), /Despesas fixas/);
     sessao(['tx.view', 'rec.view']);
     assert.match(app.propFicha('P2'), /Despesas fixas/);
-    assert.match(app.propFicha('P2'), /IMI 300,00/);
+    assert.match(app.propFicha('P2').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '), /IMI .*300,00/);
   });
 });
 
@@ -519,7 +524,9 @@ describe('o que saiu', () => {
     app.setPage = '';
     const raiz = app.vSettings();
     assert.doesNotMatch(raiz, /Despesas que se repetem|goSet\('repete'\)/);
-    assert.match(raiz, /goSet\('irs'\)/, 'as outras entradas ficam');
+    /* o «IRS e dedução» vive desde 2026-10 na página das Categorias (o 'irs' abre-a) */
+    assert.match(raiz, /goSet\('cats'\)/, 'as outras entradas ficam');
+    assert.ok(app.SUBPAGE.irs, 'e a subpágina do IRS continua');
     app.setPage = 'repete';
     assert.equal(app.vSettings(), raiz, 'uma subpágina que não existe cai na raiz');
   });

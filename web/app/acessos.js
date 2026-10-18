@@ -374,13 +374,13 @@ function editarFichaDeColaboracao(){
    gramática das ações (os nomes são de serviços: a gramática resolve-os na
    hora, e só se o serviço estiver ligado é que a ação se oferece). */
 const ACOES_DE_ADICIONAR=[
-  {id:'movimento',label:'Movimento',icon:'swap',servico:'transactions',quando:()=>podeSemImovel()||casasComo('tx.add').length>0,act:'newTxPick()'},
+  {id:'movimento',label:'Movimento',icon:'lista',servico:'transactions',quando:()=>podeSemImovel()||casasComo('tx.add').length>0,act:'newTxPick()'},
   {id:'imovel',label:'Imóvel',icon:'building',servico:'properties',quando:()=>!souSoColaborador(),act:'propModal()'},
   {id:'contrato',label:'Contrato',icon:'contract',servico:'contracts',quando:()=>casasComo('contract.add').length>0,act:'ctModal()'},
   {id:'inquilino',label:'Inquilino',icon:'users',servico:'tenants',quando:()=>!souSoColaborador()||casasComo('tenant.add').length>0,act:"personModal('tenant')"},
   {id:'proprietario',label:'Proprietário',icon:'crown',servico:'owners',quando:()=>!souSoColaborador(),act:"personModal('owner')"},
   {id:'visita',label:'Visita',icon:'door',servico:'visits',quando:()=>casasComo('visit.add').length>0,act:'visitModal()'},
-  {id:'planeado',label:'Movimento recorrente',icon:'clock',servico:'recurring',quando:()=>podeSemImovel()||casasComo('rec.add').length>0,act:'newRec()'},
+  {id:'planeado',label:'Movimento recorrente',icon:'repetir',servico:'recurring',quando:()=>podeSemImovel()||casasComo('rec.add').length>0,act:'newRec()'},
   {id:'modelo',label:'Modelo',icon:'file',servico:'recurring',quando:()=>podeSemImovel()||casasComo('rec.add').length>0,act:'newTpl()'},
   {id:'hipoteca',label:'Hipoteca',icon:'bank',servico:'credits',quando:()=>casasComo('house.edit').length>0,act:'newMort()'}
 ];
@@ -403,18 +403,18 @@ function acaoDoSeparador(tab){
   return ({dashboard:'movimento',transactions:'movimento',properties:'imovel',contracts:'contrato',tenants:'inquilino',owners:'proprietario',
     visits:'visita',calendar:'visita',recurring:'planeado',credits:'hipoteca'})[tab]||'';
 }
-/* Os destinos da barra de baixo: cada destino escondido dá o lugar ao
-   primeiro visível de visitas, contratos, inquilinos e planeados que ainda
-   não esteja na barra; sem substituto, o lugar some. Quem nada esconde fica
-   com a barra de sempre.
+/* Os destinos da barra de baixo que esta pessoa vê: um separador, se não
+   está escondido; uma área (Casas, Dinheiro — navegacao.js:AREAS), se
+   alguma das portas dela está à vista. Já não há substitutos: as áreas
+   juntam o que antes disputava os quatro lugares (visitas, contratos,
+   inquilinos, planeados), e um destino sem nada à vista some.
    Recebe: ids — os destinos de origem (TABBAR); fora (opcional) — os ids escondidos (separadoresEscondidos).
    Devolve: array de ids, sem repetidos. */
 function barraDeBaixo(ids,fora){
-  const f=fora||[],base=ids||[],out=[];
-  const subs=['visits','contracts','tenants','recurring'].filter(id=>f.indexOf(id)<0&&base.indexOf(id)<0);
-  base.forEach(id=>{
-    const x=f.indexOf(id)<0?id:subs.shift();
-    if(x&&out.indexOf(x)<0)out.push(x);
+  const f=fora||[],out=[];
+  (ids||[]).forEach(id=>{
+    const ve=typeof AREAS!=='undefined'&&AREAS[id]?AREAS[id].ids.some(p=>portaVisivel(p,f)):f.indexOf(id)<0;
+    if(ve&&out.indexOf(id)<0)out.push(id);
   });
   return out;
 }

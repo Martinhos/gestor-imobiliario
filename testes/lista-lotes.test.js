@@ -365,32 +365,48 @@ describe('a seleção com lotes (cloud/selecao.js)', () => {
     assert.equal(nuvem.CW.selMode, false, 'sai da seleção');
   });
 
-  test('eliminar a seleção apaga as três partes, a confirmação soma 300 € e o Anular repõe-nas', () => {
+  test('apagar a seleção apaga as três partes, a confirmação soma −300 € e o Anular repõe-nas', () => {
     lote(nuvem, 'L1', ['casa', 'casa2', 'casa3']);
     lote(nuvem, 'L2', ['casa', 'casa2'], { label: 'Condomínio' });
     nuvem.CW.selEntrar('L1_casa');
     nuvem.CW.selApagar();
     assert.ok(esp.confirmar, 'pede confirmação');
-    assert.equal(esp.confirmar.titulo, 'Eliminar 1 movimento');
-    assert.equal(esp.confirmar.texto, 'Somam ' + nuvem.euro2(300) + '.');
+    assert.equal(esp.confirmar.titulo, 'Apagar 1 movimento');
+    assert.equal(esp.confirmar.texto, 'Somam ' + nuvem.euro2(-300) + '.', 'uma despesa soma com o sinal, como na barra');
     esp.confirmar.cb();
     igual(nuvem.db.transactions.map((t) => t.id).sort(), ['L2_casa', 'L2_casa2'], 'só o outro lote fica');
-    assert.equal(esp.desfazer.msg, '1 movimento eliminado.');
+    assert.equal(esp.desfazer.msg, '1 movimento apagado.');
     esp.desfazer.restaurar();
     igual(nuvem.db.transactions.map((t) => t.id).sort(), ['L1_casa', 'L1_casa2', 'L1_casa3', 'L2_casa', 'L2_casa2']);
     igual(nuvem.db.transactions.filter((t) => t.lote.id === 'L1').map((t) => t.lote.total), [300, 300, 300], 'inteiras, com o lote');
   });
 
-  test('um lote e um movimento solto: «Eliminar 2 movimentos», somam 350 €', () => {
+  test('um lote e um movimento solto: «Apagar 2 movimentos», somam −350 €', () => {
     lote(nuvem, 'L1', ['casa', 'casa2', 'casa3']);
     mov(nuvem, { id: 'A', amount: 50 });
     nuvem.CW.selEntrar('A');
     nuvem.CW.selToggle('L1_casa3');
     nuvem.CW.selApagar();
-    assert.equal(esp.confirmar.titulo, 'Eliminar 2 movimentos');
-    assert.equal(esp.confirmar.texto, 'Somam ' + nuvem.euro2(350) + '.');
+    assert.equal(esp.confirmar.titulo, 'Apagar 2 movimentos');
+    assert.equal(esp.confirmar.texto, 'Somam ' + nuvem.euro2(-350) + '.');
     esp.confirmar.cb();
     assert.equal(nuvem.db.transactions.length, 0);
+  });
+
+  test('uma receita e uma despesa marcadas: a confirmação soma o mesmo que a barra, com o sinal', () => {
+    mov(nuvem, { id: 'R', kind: 'income', label: 'Renda', amount: 1250 });
+    mov(nuvem, { id: 'D', amount: 55 });
+    const doc = nuvem.document, porId = doc.getElementById, el = {};
+    doc.getElementById = (id) => (id === 'selFundoSoma' ? (el[id] = el[id] || { textContent: '' }) : porId(id));
+    try {
+      nuvem.CW.selEntrar('R');
+      nuvem.CW.selToggle('D');
+      nuvem.selCabPintar();                       // o que o render faz a cada marca (aqui está calado)
+      assert.equal(el.selFundoSoma.textContent, '· somam +' + nuvem.euro2(1195), 'a barra: a renda soma, a despesa subtrai');
+      nuvem.CW.selApagar();
+      assert.equal(esp.confirmar.titulo, 'Apagar 2 movimentos');
+      assert.equal(esp.confirmar.texto, 'Somam +' + nuvem.euro2(1195) + '.', 'e a janela diz o mesmo número, e não 1 305 €');
+    } finally { doc.getElementById = porId; }
   });
 
   test('um lote incompleto nesta base não se edita nem se apaga pela seleção: só quem vê os imóveis todos o altera', () => {

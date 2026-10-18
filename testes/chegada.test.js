@@ -15,6 +15,8 @@ import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 
+import { carregarTudo } from './arnes.js';
+
 const require = createRequire(import.meta.url);
 const { ficheirosGuardados, decidir, verificar } = require('../scripts/chegada.js');
 
@@ -166,5 +168,60 @@ describe('com que publicação se compara', () => {
       assert.equal(v.ok, true);
       assert.match(v.motivo, /nada do que a cache guarda mudou/);
     } finally { r.fim(); }
+  });
+});
+
+/* Do lado de quem a recebe: a versão nova chega pelo «Atualizar agora»
+   (cloud/novidades.js:CW.atualizarAgora). Sem servidor do outro lado não se
+   apaga nada e diz-se porquê — e com a app trancada (o ecrã #cwUpd, z 235)
+   diz-se no próprio ecrã: o aviso em baixo (.toast, z 90) ficava por trás
+   dele, e quem tocava no único botão que há voltava ao ecrã trancado sem
+   saber porquê. No arnês não há worker nem rede: o trocarDeWorker diz que
+   não trocou e o servidorResponde que não responde. */
+describe('o «Atualizar agora» sem servidor', () => {
+  /* A app inteira com os avisos apanhados, e um DOM só com os ids dados
+     (os outros não existem), cada um a lembrar-se do texto e a sair com o
+     remove().
+     Recebe: ids — os ids que existem.
+     Devolve: {app, avisos, els}. */
+  function montar(ids) {
+    const app = carregarTudo();
+    const avisos = [];
+    app.toast = (m) => { avisos.push(m); };
+    const els = new Map(ids.map((id) => [id, { id, textContent: '', innerHTML: '', remove() { els.delete(id); } }]));
+    app.document.getElementById = (id) => els.get(id) || null;
+    return { app, avisos, els };
+  }
+
+  test('com a app trancada, a frase fica no ecrã trancado (e não num aviso por trás dele), e esvazia-se a cada tentativa', async () => {
+    const { app, avisos, els } = montar(['cwUpd', 'cwUpdErro', 'cwUpd2', 'cwUpdPassos']);
+    els.get('cwUpdErro').textContent = 'a frase da tentativa anterior';
+    const vai = app.CW.atualizarAgora();
+    assert.equal(els.get('cwUpdErro').textContent, '', 'a caixa esvazia-se ao tentar de novo');
+    await vai;
+    assert.equal(els.get('cwUpdErro').textContent, 'Sem ligação ao servidor. Quando houver rede, toca outra vez em «Atualizar agora».');
+    assert.ok(!els.has('cwUpd2'), 'o ecrã dos passos saiu');
+    assert.deepEqual(avisos, [], 'e nada foi para o aviso, que o ecrã trancado tapa');
+  });
+
+  test('da faixa discreta (sem o ecrã trancado), que não tapa nada, vai no aviso', async () => {
+    const { app, avisos } = montar(['cwUpd2', 'cwUpdPassos']);
+    await app.CW.atualizarAgora();
+    assert.deepEqual(avisos, ['Sem ligação ao servidor. A atualização fica para quando houver rede.']);
+  });
+
+  test('o ecrã trancado traz a caixa vazia por cima do botão, com role=alert', () => {
+    const app = carregarTudo();
+    let html = '';
+    app.document.getElementById = () => null;
+    app.document.body.appendChild = (el) => { html = el.innerHTML; return el; };
+    app.gateAtualizar(99);
+    assert.match(html, /<p id="cwUpdErro" class="upd-erro" role="alert"><\/p><button type="button" class="btn upd-botao"/);
+    assert.match(html, /<div class="upd-mosaico imv-mosaico imv-noite" aria-hidden="true">/, 'com o mosaico azul-noite do canvas');
+  });
+
+  test('a página das novidades tem o cabeçalho dela, e não o do separador', () => {
+    const app = carregarTudo();
+    assert.deepEqual(JSON.parse(JSON.stringify(app.SUBPAGE.novidades)), { label: 'Novidades', sub: 'O que mudou em cada versão' });
   });
 });

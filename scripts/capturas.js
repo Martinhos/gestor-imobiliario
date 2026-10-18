@@ -1,18 +1,20 @@
-/* As capturas da app para a página de entrada.
-   -------------------------------------------
-   A landing descreve uma app cujo argumento é «arrumado» e não mostrava
-   nenhuma. Estas imagens são o produto a sério, tirado do mesmo browser que
-   corre o percurso — não são maquetes desenhadas à mão que envelhecem sem
-   ninguém dar por isso.
+/* A imagem de partilha da página de entrada.
+   ------------------------------------------
+   Desde o redesign de 2026-10 a montra desenha a app em maquetes de HTML e
+   CSS (worker/src/landing.js), que seguem os tokens e não envelhecem; as
+   capturas que ela mostrava saíram. Fica a imagem que as redes sociais, o
+   WhatsApp e o Discord mostram quando se partilha a ligação (og:image): essa
+   não corre CSS, e é a app a sério, tirada do mesmo browser que corre o
+   percurso.
 
    Correm contra um servidor local (npm run dev) e em 127.0.0.1 DE PROPÓSITO:
    é outra origem que o localhost, portanto outro localStorage. Não há sessão
    iniciada, não há nada que suba para a nuvem, e os dados são os de exemplo —
    nunca os de ninguém.
 
-   Cada captura sai nos dois temas, porque a página troca-as pelo tema de quem
-   a vê. O WebP é feito no próprio browser (canvas.toDataURL), para isto não
-   precisar de mais uma dependência só para converter uma imagem.
+   Sai só clara: quem a mostra não conhece o tema de ninguém. O WebP é feito no
+   próprio browser (canvas.toDataURL), para isto não precisar de mais uma
+   dependência só para converter uma imagem.
 
    Correr: node scripts/capturas.js   (com o servidor local a servir a app) */
 
@@ -27,9 +29,6 @@ const DESTINO = path.join(__dirname, '..', 'web', 'img', 'landing');
    ecrã inteiro numa vista comprida daria uma tira de três mil pixéis que
    ninguém consegue ler num cartão. */
 const CAPTURAS = [
-  { nome: 'visao-geral', tab: 'dashboard', largura: 390, altura: 800, escala: 2 },
-  { nome: 'movimentos', tab: 'transactions', largura: 390, altura: 800, escala: 2 },
-  { nome: 'computador', tab: 'dashboard', largura: 1180, altura: 760, escala: 1.5 },
   /* a imagem que aparece quando se partilha a ligação: 1200x630 é a medida que
      o WhatsApp, o Discord e as redes recortam sem cortar nada */
   { nome: 'partilha', tab: 'dashboard', largura: 1200, altura: 630, escala: 1, soClara: true },

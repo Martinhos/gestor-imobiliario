@@ -253,6 +253,11 @@ function refrescarListasVivas(){
   /* o molde tem de ficar igual ao que o render produziria, senão as duas
      árvores não batem certo e cai-se fora por nada — foi o que o fabpad fez */
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
+  /* e a moldura da casca que o render põe por cima da vista (a faixa do
+     âmbito e os separadores da área): sem ela, uma tecla na pesquisa de uma
+     lista fazia desaparecer os separadores — a via parcial refaz o ecrã
+     inteiro a partir deste molde */
+  html=faixaDoAmbito()+abasDaArea()+html;
   const registo={};_listasVivas.forEach(l=>{registo[l.id]=l.itens});
   _listasVivas=[];
   const molde=document.createElement('div');molde.innerHTML=html;
@@ -302,10 +307,14 @@ function render(){
   const antes=(ecra===_ecraPintado&&!contSuspensa)?medirContinuidade(view()):null;
   _ecraPintado=ecra;
   const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
-  document.getElementById('pageTitle').textContent=meta.label;
-  document.getElementById('pageSub').textContent=meta.sub;
+  /* o título leva o nome da área no telemóvel e o do separador no computador
+     (navegacao.js:tituloDoEcraHtml); o subtítulo diz o estado do ecrã onde há
+     um (navegacao.js:subtituloDoEcra) */
+  document.getElementById('pageTitle').innerHTML=tituloDoEcraHtml(meta);
+  document.getElementById('pageSub').textContent=subtituloDoEcra(meta);
   if(typeof notifSino==='function')notifSino();
   pintarBotaoFiltros();
+  pintarAcaoDoCabecalho();
   _listasVivas=[];                 // o que sobrou de uma vista construída e não usada não conta
   /* A vista é a que o serviço do separador registou (servicos.js): a base
      não nomeia serviços. Sem vista são duas coisas diferentes, e cada uma tem
@@ -315,6 +324,10 @@ function render(){
   const vista=vistaDoSeparador(tab);
   let html=vista?vista():separadorLigado(tab)?vistaNaoCarregouHtml(tab):servicoDesligadoHtml(tab);
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
+  /* por cima de cada vista, a casca: a faixa do âmbito em foco e os
+     separadores da área (navegacao.js:faixaDoAmbito, navegacao.js:abasDaArea) —
+     da base, e não de cada serviço, para serem os mesmos em todo o lado */
+  html=faixaDoAmbito()+abasDaArea()+html;
   /* A entrada dos gráficos é de quem chega ao ecrã, não de cada repintura: o
      render corre também quando a sincronização adota o estado do servidor de 3
      em 3 minutos (cloud/nucleo.js:applyState) e a cada gesto que só mexe num
@@ -389,15 +402,20 @@ function silhuetaKpi(vals){
    mostrava −17 000 € com uma comparação a falar de −3 400 €. Uma variação
    pendurada num número que não é de um ano não quer dizer nada.
 
-   Compara-se pelo texto já formatado, com o formatador da própria série: se os
-   dois não derem exatamente a mesma string, não estão a falar da mesma coisa e
-   a faixa cala-se.
-   Recebe: cx — a caixa da série, que vive dentro do cartão; s — a série; ano —
-   a entrada do ano corrente ({label,value}).
+   Compara-se pelo texto já formatado, com o formatador com que o cartão foi
+   escrito: o da série (fmt), ou o fmtValor quando o cartão escreve o valor de
+   outra maneira — a Visão geral põe os cêntimos no cartão («29 910,00 €») e
+   arredonda a faixa («2025: 27 690 €»). Se os dois não derem exatamente a
+   mesma string, não estão a falar da mesma coisa e a faixa cala-se.
+   Recebe: cx — a caixa da série, que vive dentro do cartão; s — a série
+   ({fmt, fmtValor opcional, …}); ano — a entrada do ano corrente ({label,value}).
    Devolve: verdadeiro se o cartão mostra o valor deste ano. */
 function falaDoMesmo(cx,s,ano){
   const cartao=cx.closest?cx.closest('.card.kpi'):null;
   const alvo=cartao&&cartao.querySelector('.value');
+  /* o cartão escrito com outro formatador: compara-se com esse (numa cópia —
+     a faixa continua a escrever o ano anterior com o da série) */
+  if(s.fmtValor)s=Object.assign({},s,{fmt:s.fmtValor});
   if(!alvo||!s.fmt)return false;
   const limpa=t=>String(t==null?'':t).replace(/\s+/g,' ').trim();
   return limpa(alvo.textContent)===limpa(s.fmt(ano.value));
@@ -518,19 +536,30 @@ function kpiPorque(id){document.getElementById(id).classList.toggle('open')}
    com evo.anual verdadeiro, o cartão abre espaço para a faixa da série, o que
    só é honesto quando o valor mostrado É o do ano corrente — nos Movimentos o
    valor é a soma do filtro inteiro e a faixa não tem do que falar;
-   acao (opcional) — {label, act} de um botão que a janela oferece no rodapé (ex.: filtrar por este tipo).
+   acao (opcional) — {label, act} de um botão que a janela oferece no rodapé (ex.: filtrar por este tipo);
+   o (opcional) — o que a Visão geral acrescenta ao cartão sem mudar os outros
+   ecrãs: cls (classes a juntar ao cartão), cor (a cor da série, para a
+   bolinha antes do rótulo — vem do tema.js:COR_SERIE, nunca um hex à mão),
+   serie (a cor das linhas da janela, quando não é a da bolinha — o Cashflow
+   tem a bolinha do tema escuro, por o cartão ser escuro) e extra (HTML de uma
+   linha a mais, entre a série e o rodapé).
    Devolve: string HTML do cartão KPI. */
-const kpi=(l,v,c,f,why,evo,acao)=>{
+const kpi=(l,v,c,f,why,evo,acao,o)=>{
   const id='k'+(++kpiN);
-  if(evo){KPI_REG[id]={title:l,why:why||'',evo,acao:acao||null};
+  o=o||{};
+  /* a bolinha vive DENTRO do rótulo e não tem texto: o rótulo continua a ler-se
+     «Receita» (o dashKey do painel e o título da janela leem o texto dele) */
+  const bola=o.cor?`<i class="kdot" data-fundo="${esc(o.cor)}" aria-hidden="true"></i>`:'';
+  const cls=o.cls?' '+o.cls:'';
+  if(evo){KPI_REG[id]={title:l,why:why||'',evo,acao:acao||null,cor:o.serie||o.cor||''};
     /* A caixa da série nasce VAZIA e com a altura certa. Quem a enche é o
        pintarSeriesKpi, depois de a página estar pintada — encher uma caixa que
        ainda não tem altura faria saltar tudo o que está por baixo, que foi
        precisamente a queixa dos «quadrados que aparecem desalinhados». */
-    return `<div class="card kpi evo" id="${id}" data-toca="camada" data-click="kpiModal('${jsq(id)}')"><span class="kic">${ic('trend',11)}</span>
-      <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${(evo.anual&&haAnoAnterior())?`<div class="kserie" data-kpi="${id}"></div>`:''}${f?`<div class="foot">${f}</div>`:''}</div>`}
-  return `<div class="card kpi ${why?'why':''}" id="${id}" ${why?`data-toca="nada" data-click="kpiPorque('${jsq(id)}')"`:''}>
-    <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${f?`<div class="foot">${f}</div>`:''}
+    return `<div class="card kpi evo${cls}" id="${id}" data-toca="camada" data-click="kpiModal('${jsq(id)}')"><span class="kic">${ic('trend',11)}</span>
+      <div class="label">${bola}${l}</div><div class="value ${c||''}">${v}</div>${(evo.anual&&haAnoAnterior())?`<div class="kserie" data-kpi="${id}"></div>`:''}${o.extra||''}${f?`<div class="foot">${f}</div>`:''}</div>`}
+  return `<div class="card kpi ${why?'why':''}${cls}" id="${id}" ${why?`data-toca="nada" data-click="kpiPorque('${jsq(id)}')"`:''}>
+    <div class="label">${bola}${l}</div><div class="value ${c||''}">${v}</div>${o.extra||''}${f?`<div class="foot">${f}</div>`:''}
     ${why?`<div class="expl">${why}</div>`:''}</div>`;
 };
 /* A tabela da janela de um indicador — só quando diz o que o gráfico não diz.
@@ -558,18 +587,25 @@ function tabelaDoKpi(k,d,fmt){
 /* abre a janela de evolução de um KPI: corre o evo() registado no cartão e
    mostra a série mês a mês, a ano a ano e a tabela. Se o evo falhar ou não
    devolver nada, simplesmente não abre.
+   As duas linhas levam a cor da série do cartão (o contrato: Receita --in,
+   Despesas --out, Prestações --loan, Cashflow --accent), e sem ela o cobalto
+   — o «Ano a ano» chegou a sair no laranja das despesas em todos os cartões,
+   a Receita incluída. O «Mês a mês» acaba no mês corrente
+   (vistas.js:mesesAMostrar): os meses que ainda não chegaram desenhavam-se a
+   0 €, como se fossem um valor registado.
    Recebe: id — o id do cartão KPI ('k1', 'k2', …) registado em KPI_REG.
    Devolve: nada — abre a janela de evolução (ou nada, se o evo falhar). */
 function kpiModal(id){
   const k=KPI_REG[id];if(!k)return;
   let d;try{d=k.evo()}catch(e){d=null}
   if(!d)return;
-  const fmt=d.fmt||euro;
+  const fmt=d.fmt||euro,cor=k.cor||COR_SERIE.cashflow;
   const vals=(d.yearly||[]).map(y=>y.value);
+  const ate=d.monthly?mesesAMostrar([d.monthly]):0;
   const body=`<div class="form">
     ${k.why?`<div class="hint">${k.why}</div>`:''}
-    ${d.monthly?`<div><div class="flabel">Mês a mês em ${YEAR}</div>${cLine([{name:k.title,values:d.monthly,color:PAL[0]}],MES,{h:170,fmt})}</div>`:''}
-    ${(d.yearly||[]).length>1?`<div><div class="flabel">${d.yearlyTitle||'Ano a ano'}</div>${cLine([{name:k.title,values:vals,color:PAL[1]}],d.yearly.map(y=>String(y.label)),{h:170,fmt,marks:d.marks})}</div>`:''}
+    ${d.monthly?`<div><div class="flabel">Mês a mês em ${YEAR}</div>${cLine([{name:k.title,values:d.monthly.slice(0,ate),color:cor}],MES.slice(0,ate),{h:170,fmt})}</div>`:''}
+    ${(d.yearly||[]).length>1?`<div><div class="flabel">${d.yearlyTitle||'Ano a ano'}</div>${cLine([{name:k.title,values:vals,color:cor}],d.yearly.map(y=>String(y.label)),{h:170,fmt,marks:d.marks})}</div>`:''}
     ${tabelaDoKpi(k,d,fmt)}
     ${d.note?`<div class="hint">${d.note}</div>`:''}</div>`;
   openModal(k.title,body,`<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`+
@@ -584,16 +620,43 @@ function yearsWithData(pid){
   db.transactions.forEach(t=>{const y=Number(String(t.date||'').slice(0,4));if(y&&txWeight(t,pid,false)>0)ys[y]=1});
   return Object.keys(ys).map(Number).sort();
 }
+/* Quantos meses do ano corrente um gráfico mensal mostra: até ao mês corrente,
+   ou até ao último com algum valor quando há movimentos com data futura (a app
+   aceita-os, e o fim da linha tem de bater com o total do cartão). O canvas
+   acaba o eixo no mês corrente («jan · mai · out»): uma linha que seguisse
+   por nov e dez ao nível de hoje lia-se como valor registado.
+   Recebe: series — arrays de 12 valores (um por mês) que o gráfico desenha.
+   Devolve: o número de meses a mostrar, de mês corrente + 1 até 12. */
+function mesesAMostrar(series){
+  const agora=new Date().getMonth();
+  let ate=11;
+  while(ate>agora&&!series.some(s=>Number((s||[])[ate])))ate--;
+  return ate+1;
+}
 /* série histórica de um campo monetário das métricas (income, op, loan ou cf):
    mês a mês no ano corrente e ano a ano nos anos com movimentos. pid limita a
    um imóvel ou grupo; sem fmt, formata em euros.
+   O ano a ano começa no primeiro ano em que o campo tem valor (o corrente fica
+   sempre) e não salta anos: o yearsWithData só dá os anos com algum movimento,
+   e um empréstimo de 2020 fazia o eixo dizer «2020 · 2025 · 2026», com 2020 a
+   0 € e à mesma distância de 2025 do que 2026 — a reta lia-se como uma receita
+   a crescer aos poucos durante os anos que faltam.
    Recebe: field — o campo das métricas ('income', 'op', 'loan' ou 'cf'); pid (opcional) — id do imóvel ou de grupo
    ('g:…'), null/vazio para o âmbito todo; fmt (opcional) — função de formatação dos valores.
-   Devolve: objeto {fmt, monthly (12 totais mensais), yearly (array de {label: ano, value})} para a janela do KPI. */
+   Devolve: objeto {fmt, monthly (12 totais mensais), yearly (array de {label: ano, value}, anos seguidos)} para a janela do KPI. */
 function evoMoney(field,pid,fmt){
   const kind={income:'income',op:'expense',loan:'loan'}[field];
   const monthly=kind?monthly_(YEAR,pid,kind):[...Array(12)].map((_,i)=>monthly_(YEAR,pid,'income')[i]-monthly_(YEAR,pid,'expense')[i]-monthly_(YEAR,pid,'loan')[i]-monthly_(YEAR,pid,'amort')[i]);
-  return {fmt:fmt||euro,monthly,yearly:yearsWithData(pid).map(y=>({label:y,value:metrics(y,pid,{share:true})[field]}))};
+  const valor=y=>metrics(y,pid,{share:true})[field];
+  const anos=yearsWithData(pid);
+  /* os anos do princípio em que o campo é zero saem; o corrente fica, e o
+     anterior também quando tem movimentos — é com ele que a faixa do cartão
+     compara («▲ novo · 2025: 0 €», pintarSeriesKpi). Entre o primeiro e o
+     último que ficam, entram os que faltam. */
+  let i=0;while(i<anos.length-1&&anos[i]<YEAR-1&&!valor(anos[i]))i++;
+  const de=anos[i],a=anos[anos.length-1],yearly=[];
+  for(let y=de;y<=a;y++)yearly.push({label:y,value:valor(y)});
+  return {fmt:fmt||euro,monthly,yearly};
 }
 // atalho: totais mensais já na quota-parte do proprietário filtrado
 // Recebe: y — o ano (número); pid — id do imóvel ou de grupo ('g:…'), ou null para o âmbito todo; kind — 'income', 'expense', 'loan' ou 'amort'.
@@ -610,7 +673,7 @@ const WHY={
   ltv:'Dívida a dividir pelo valor de mercado — na tua quota, quando há filtro de proprietário. Quanto mais baixo, menos alavancado está o portefólio.',
   valorIntro:'O valor de mercado que introduziste na ficha do imóvel. É a tua estimativa, não um cálculo.',
   valorRend:'Quanto valeria o imóvel se o comprasses hoje exigindo o yield que definiste: resultado líquido anual dividido por esse yield. No ano corrente, o resultado até hoje é anualizado.',
-  diferenca:'Positivo: as rendas justificam mais do que o valor que puseste. Sem valor de mercado na ficha não há comparação.',
+  diferenca:'Positivo: as rendas justificam mais do que o valor de mercado que indicaste. Sem valor de mercado na ficha não há comparação.',
   equity:'Valor de mercado menos o que ainda está em dívida. É o que sobraria se vendesses e liquidasses as hipotecas hoje.',
   rendaHoje:'Soma das rendas anuais dos contratos ativos, aos valores de hoje.',
   rendaFim:'A mesma soma no último ano do horizonte, já com os aumentos anuais aplicados.',
@@ -654,30 +717,60 @@ function ownerBar(){
 // muda o filtro global de proprietário; se o imóvel em foco sair do âmbito, larga-o
 // Devolve: nada — redesenha a vista.
 function onOwnerFilter(){ownerFilter=val('ownerSel')||'';if(dashProp&&!inScope(dashProp))dashProp='';render()}
-/* cartão reutilizável: saldos entre proprietários (de um imóvel ou de todos)
+/* cartão reutilizável: saldos entre proprietários (de um imóvel ou de todos),
+   embrulhado na sua fila (.cols) para os ecrãs que o põem solto — a Avaliação
+   e os Movimentos. A Visão geral usa o cartão sem a fila (contasCard), porque
+   o põe ao lado do Portefólio.
    Recebe: pid — id do imóvel a que limitar, ou null/vazio para todos os do âmbito.
    Devolve: string HTML do cartão, ou vazia se não há saldos a mostrar. */
 function balancesCard(pid){
-  /* as contas entre proprietários são dos proprietários: num imóvel onde só colaboro não há cartão */
+  const c=contasCard(pid);
+  return c?`<div class="cols">${c}</div>`:'';
+}
+/* O nome curto de um proprietário numa frase de contas: o primeiro nome, como
+   o canvas escreve («Pedro paga 412,30 € a Maria»), a menos que outro da mesma
+   conta tenha o mesmo primeiro nome — aí o nome inteiro, para não se trocarem.
+   Recebe: id — o id do proprietário; ids — os ids de todos os que aparecem.
+   Devolve: o nome (texto, por escapar); '?' sem ficha. */
+function nomeCurto(id,ids){
+  const nome=String((owner(id)||{}).name||'?').trim()||'?',pri=nome.split(/\s+/)[0];
+  const repete=(ids||[]).some(o=>o!==id&&String((owner(o)||{}).name||'').trim().split(/\s+/)[0]===pri);
+  return repete?nome:pri;
+}
+/* O cartão «Contas entre proprietários» (o canvas da Visão geral): um mosaico
+   por proprietário — «A receber» em verde suave, «A pagar» em laranja suave,
+   «Em dia» em cinzento —, o plano de acerto num quadro tracejado com o botão
+   primário «Acertar contas», e os últimos acertos registados. O «(eu)» marca a
+   pessoa com sessão. O ⓘ abre como se chega aos saldos (saldos.js:balancesDetail).
+   As contas são dos proprietários: num imóvel onde só colaboro não há cartão.
+   Recebe: pid — id do imóvel, 'g:ID' de um grupo, ou null/vazio para o âmbito todo.
+   Devolve: string HTML do cartão (sem a fila), ou vazia se não há saldos. */
+function contasCard(pid){
   if(pid&&!String(pid).startsWith('g:')&&!souDono(pid))return '';
   const bal=ownerBalances(pid),ks=Object.keys(bal);
   if(!ks.length)return '';
-  const tot=debtTotal(bal),plan=settlePlan(bal);
+  const tot=debtTotal(bal),plan=settlePlan(bal),eu=meuId();
   const rows=ks.map(k=>({id:k,name:(owner(k)||{}).name||'?',v:bal[k]})).sort((a,b)=>b.v-a.v);
-  return `<div class="cols"><div class="card">
-    <div class="row-between"><div><div class="title">Contas entre proprietários</div>
-      <div class="small">${pid?'Neste imóvel':'Todos os imóveis'} · receitas, despesas e prestações com pessoa indicada; dívidas a terceiros não contam</div></div>
-      <button class="btn sm u-fx-0-0-auto u-p-7px" title="Como se chega aos saldos" data-toca="camada" data-click="${stop}balancesDetail(${pid?`'${jsq(pid)}'`:'null'})">${ic('info',16)}</button></div>
-    <div class="u-mt-13px">
-      ${rows.map(r=>`<div class="stat"><span class="u-d-flex u-ai-center u-g-9px">
-        <span class="avatar u-w-28px u-h-28px u-fs-11px u-fx-0-0-28px">${esc(initials(r.name))}</span>${esc(r.name)}</span>
-        <b class="${Math.abs(r.v)<0.01?'':(r.v>0?'pos':'neg')}">${Math.abs(r.v)<0.01?'em dia':(r.v>0?'a receber '+euro2(r.v):'a pagar '+euro2(-r.v))}</b></div>`).join('')}
-      ${tot>0.005?`<div class="divider"></div>
-        <div class="hint">${plan.map(x=>`<b>${esc((owner(x.from)||{}).name)}</b> paga <b>${euro2(x.amount)}</b> a <b>${esc((owner(x.to)||{}).name)}</b>`).join('<br>')}</div>
-        <div class="toolbar u-m-13px-0-0"><button class="btn primary" data-toca="camada" data-click="settleModal(${pid?`'${jsq(pid)}'`:'null'})">
-          ${ic('check',16)} Pagar todas as dívidas</button></div>`
-        :`<div class="hint u-mt-11px">Está tudo liquidado.</div>`}
-    </div></div></div>`;
+  const alvo=pid?`'${jsq(pid)}'`:'null';
+  /* os acertos que contam nesta vista: os do imóvel, os dos imóveis do grupo,
+     ou — no âmbito todo — os que o âmbito vê (com ou sem imóvel) */
+  const doAlvo=t=>!pid?(!t.propertyId||inScope(t.propertyId)):String(pid).startsWith('g:')?pidProps(pid).some(p=>p.id===t.propertyId):t.propertyId===pid;
+  const hist=db.transactions.filter(t=>t.kind==='settle'&&doAlvo(t)).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,4);
+  const ids=rows.map(r=>r.id).concat(...hist.map(h=>[h.paidBy,h.toId]),...plan.map(x=>[x.from,x.to]));
+  const nm=id=>esc(nomeCurto(id,ids));
+  const tile=r=>{const z=Math.abs(r.v)<0.01,tipo=z?'zero':r.v>0?'in':'out';
+    return `<div class="vg-saldo ${tipo}"><p class="vg-saldo-nome">${esc(r.name)}${eu&&r.id===eu?' (eu)':''}</p>
+      <p class="vg-saldo-valor num">${z?'Em dia':r.v>0?'A receber '+euro2(r.v):'A pagar '+euro2(-r.v)}</p></div>`};
+  return `<div class="card vg-cartao vg-contas">
+    <div class="vg-card-cab"><h3 class="title vg-tit">Contas entre proprietários</h3><span class="small">${pid?'Neste imóvel':'Todos os imóveis'}</span>
+      <button type="button" class="btn sm ghost so-icone vg-cab-acao" aria-label="Como se chega aos saldos" title="Como se chega aos saldos" data-toca="camada" data-click="${stop}balancesDetail(${alvo})">${ic('info',18)}</button></div>
+    <div class="vg-saldos">${rows.map(tile).join('')}</div>
+    ${tot>0.005?`<div class="vg-plano"><p><span class="small">Plano de acerto</span>${plan.map(x=>`<b class="num">${nm(x.from)} paga ${euro2(x.amount)} a ${nm(x.to)}</b>`).join('')}</p>
+      <button type="button" class="btn primary" data-toca="camada" data-click="settleModal(${alvo})">Acertar contas</button></div>`
+      :`<p class="small">Está tudo liquidado: ninguém deve nada a ninguém.</p>`}
+    ${hist.length?`<div class="vg-acertos"><p class="lbl">Últimos acertos</p>
+      ${hist.map(h=>`<div class="vg-acerto num"><span>${dPT(h.date)} · ${nm(h.paidBy)} → ${nm(h.toId)}</span><b>${euro2(h.amount)}</b></div>`).join('')}</div>`:''}
+  </div>`;
 }
 /* os acertos que zeram os saldos: um plano por imóvel da vista e, no âmbito todo,
    mais um «Todos os imóveis» para o que os imóveis não explicam — as dívidas dos
@@ -707,7 +800,7 @@ function settleModal(pid){
   const total=sum(plans.map(x=>sum(x.plan.map(y=>y.amount))));
   if(!plans.length)return toast('Não há dívidas para liquidar.');
   const hist=db.transactions.filter(t=>t.kind==='settle').sort((a,b)=>String(a.date).localeCompare(String(b.date))).slice(-4).reverse();
-  openModal('Pagar dívidas entre proprietários',`<div class="form">
+  openModal('Acertar contas entre proprietários',`<div class="form">
     <div class="hint">Vão ser registadas ${plans.reduce((a,x)=>a+x.plan.length,0)} transferências, ${euro2(total)} no total. Os saldos ficam a zero.</div>
     ${plans.map(x=>`<div class="card u-p-12px-14px">
       <div class="title u-fs-14px">${esc(x.name)}</div>

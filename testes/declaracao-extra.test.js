@@ -7,7 +7,7 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar, perto, repor, elementos } from './arnes.js';
+import { carregarApp, limpar, perto, repor } from './arnes.js';
 
 // a app vive na primavera a seguir ao ano do resumo, que é o de 2025 — o
 // primeiro com versão própria das regras
@@ -70,9 +70,13 @@ describe('as escolhas guardadas nas definições', () => {
     app.fiscoSetIrs('dispensaRecibos', true);
     app.fiscoSetIrs('outraCoisa', true);
     assert.equal(app.db.settings.irs.outraCoisa, undefined, 'um campo que não é escolha não se grava');
-    elementos(app).fiscoTit_bruno.value = 'B';
-    app.fiscoSetTitulares();
+    app.fiscoSetTitular('bruno', 'B');
     assert.deepEqual(copia(app.db.settings.irs.titulares), { bruno: 'B' });
+    app.fiscoSetTitular('bruno', 'X');
+    assert.deepEqual(copia(app.db.settings.irs.titulares), { bruno: 'A' }, 'o que não é B é A');
+    app.fiscoSetTitular('__proto__', 'B');
+    app.fiscoSetTitular('ninguem', 'B');
+    assert.deepEqual(copia(app.db.settings.irs.titulares), { bruno: 'A' }, 'só um proprietário que existe');
     app.fiscoSetOutros('18.000');
     assert.equal(app.db.settings.irs.outrosRendimentos['2025'], 18000);
     app.fiscoSetOutros('');
@@ -114,18 +118,81 @@ describe('o titular A ou B', () => {
     linhas.forEach((l) => assert.equal(l.split(';').length, n));
   });
 
-  test('o cartão «A tua situação» vem logo a seguir ao do ano, e os menus dos titulares só em conjunta', () => {
+  test('o cartão «A tua situação fiscal» vem em linhas, ao lado dos prazos, com interruptores e o segmentado A/B só em conjunta', () => {
     let html = app.vFisco();
-    const sit = html.indexOf('A tua situação');
-    assert.ok(sit > html.indexOf('IRS 2025') && sit < html.indexOf('fiscoPartilhar()'), 'abaixo do cartão do ano, antes da barra');
-    assert.match(html, /id="fiscoConjunta"/);
-    assert.match(html, /id="fiscoDispensa"/);
+    const sit = html.indexOf('A tua situação fiscal');
+    assert.ok(sit > html.indexOf('IRS 2025') && sit > html.indexOf('A tratar antes de entregar') && sit < html.indexOf('fiscoPilha'), 'na grelha, depois do ano e das obrigações, antes dos quadros');
+    assert.ok(html.includes('class="interruptor" role="switch" id="fiscoConjunta" aria-checked="false" aria-label="Tributação conjunta" data-toca="dados" data-click="fiscoSetIrs(\'conjunta\',true)"'));
+    assert.match(html, /id="fiscoDispensa" aria-checked="false"[^>]*data-click="fiscoSetIrs\('dispensaRecibos',true\)"/);
     assert.doesNotMatch(html, /fiscoTit_/);
     app.db.settings.irs.conjunta = true;
+    app.db.settings.irs.titulares = { bruno: 'B' };
     html = app.vFisco();
+    assert.match(html, /id="fiscoConjunta" aria-checked="true"[^>]*data-click="fiscoSetIrs\('conjunta',false\)"/, 'ligado, o toque desliga');
     assert.match(html, /id="fiscoTit_ana"/);
     assert.match(html, /id="fiscoTit_bruno"/);
+    assert.ok(html.includes('<button type="button" class="on" aria-pressed="true" data-toca="dados" data-click="fiscoSetTitular(\'bruno\',\'B\')">B</button>'), 'a letra do Bruno acesa no segmentado');
     assert.doesNotMatch(html, /\b(pôr|tirar|põe|tira)\b/i);
+  });
+});
+
+describe('as linhas da situação fiscal e o foco depois de gravar', () => {
+  afterEach(() => repor(app));
+
+  test('a linha de cada interruptor é o rótulo dele: toca-se inteira', () => {
+    const html = app.vFisco();
+    assert.ok(html.includes('<label class="fis-linha fis-linha-toque"><span class="fis-linha-txt"><b>Tributação conjunta</b><span class="small">Casados ou unidos de facto</span></span><button type="button" class="interruptor" role="switch" id="fiscoConjunta"'));
+    assert.match(html, /<label class="fis-linha fis-linha-toque"><span class="fis-linha-txt"><b>Estou dispensado dos recibos de renda eletrónicos<\/b><\/span><button type="button" class="interruptor" role="switch" id="fiscoDispensa"/);
+    const rotulos = html.match(/<label class="fis-linha[\s\S]*?<\/label>/g) || [];
+    assert.equal(rotulos.length, 2);
+    rotulos.forEach((r) => {
+      assert.doesNotMatch(r, /<(p|div)[\s>]/, 'um <label> só leva texto corrido');
+      assert.equal((r.match(/<button/g) || []).length, 1, 'e um controlo só');
+    });
+  });
+
+  test('o interruptor e o A/B ficam com o foco depois de redesenhar', () => {
+    const doc = app.document;
+    const sw = doc.getElementById('fiscoConjunta');
+    sw.id = 'fiscoConjunta';
+    const focos = [];
+    let pintou = 0;
+    sw.focus = () => { focos.push('conjunta'); doc.activeElement = sw; };
+    // o render troca a vista inteira: quem tinha o foco desaparece e ele cai no body
+    app.render = () => { pintou++; doc.activeElement = doc.body; };
+    doc.activeElement = sw;
+    app.fiscoSetIrs('conjunta', true);
+    assert.equal(app.db.settings.irs.conjunta, true);
+    assert.equal(pintou, 1, 'num clique redesenha já, com o botão focado');
+    assert.deepEqual(focos, ['conjunta'], 'pelo id');
+    // o A/B não tem id: volta-se ao botão com o mesmo data-click, que não muda ao redesenhar
+    const acao = (x) => "fiscoSetTitular('bruno','" + x + "')";
+    const botao = (x, foco) => ({ getAttribute: (k) => (k === 'data-click' ? acao(x) : null), focus: foco });
+    const novoA = botao('A', () => focos.push('A'));
+    const novoB = botao('B', () => { focos.push('B'); doc.activeElement = novoB; });
+    doc.getElementById('view').querySelectorAll = () => [novoA, novoB];
+    doc.activeElement = botao('B', () => {});
+    app.fiscoSetTitular('bruno', 'B');
+    assert.equal(app.db.settings.irs.titulares.bruno, 'B');
+    assert.equal(pintou, 2);
+    assert.deepEqual(focos, ['conjunta', 'B'], 'pelo data-click');
+  });
+
+  test('os outros rendimentos gravam já, e o redesenho espera que o foco chegue ao campo seguinte', async () => {
+    const doc = app.document;
+    const seguinte = doc.getElementById('fisSeguinte');
+    seguinte.id = 'fisSeguinte';
+    let pintou = 0, focado = 0;
+    seguinte.focus = () => { focado++; doc.activeElement = seguinte; };
+    app.render = () => { pintou++; doc.activeElement = doc.body; };
+    doc.activeElement = doc.body;        // no change, o foco ainda vai a caminho do campo seguinte
+    app.fiscoSetOutros('18000');
+    assert.equal(app.db.settings.irs.outrosRendimentos['2025'], 18000, 'grava já');
+    assert.equal(pintou, 0, 'o redesenho espera que o foco assente');
+    doc.activeElement = seguinte;        // o Tab acabou de o levar ao campo seguinte
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(pintou, 1);
+    assert.equal(focado, 1, 'o campo seguinte tem o foco outra vez');
   });
 });
 

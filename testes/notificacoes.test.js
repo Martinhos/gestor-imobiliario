@@ -153,7 +153,7 @@ describe('o modal e a tabbar', () => {
     app.openModal = (t, b) => { corpo = b; };
     app.notifModal();
     app.openModal = openReal;
-    assert.match(corpo, /Nas casas partilhadas/);
+    assert.match(corpo, /Atividade nas casas partilhadas/);
     assert.match(corpo, /Visita — Ana/);
     assert.match(corpo, /Maria Costa/);
   });
@@ -170,8 +170,80 @@ describe('o modal e a tabbar', () => {
     assert.doesNotMatch(corpo, /hoje dias/);
   });
 
-  test('a barra de baixo leva o Calendario no lugar dos Planeados', () => {
-    assert.deepEqual(Array.from(app.TABBAR), ['dashboard', 'transactions', 'properties', 'calendar']);
+  // o corpo do «Pede atenção», com os planeados e os prazos dados
+  function corpoCom(recs, prazos) {
+    const openReal = app.openModal, recReal = app.recActive, pzReal = app.prazosAtivos;
+    let corpo = '';
+    app.openModal = (t, b) => { corpo = b; };
+    app.recActive = () => recs;
+    app.prazosAtivos = () => prazos;
+    try { app.notifModal(); } finally { app.openModal = openReal; app.recActive = recReal; app.prazosAtivos = pzReal; }
+    return corpo;
+  }
+  const rec = (id, kind, amount) => app.normRec({ id, name: 'Planeado ' + id, every: 'month', next: app.today(),
+    tx: { kind, label: 'x', amount, propertyId: 'P1' } });
+
+  test('Confirmar e Silenciar refazem a janela com o mesmo filtro: a linha confirmada não fica à vista com a data antiga', () => {
+    monta();
+    const corpo = corpoCom([rec('r1', 'income', 800)], []);
+    const conf = /<button[^>]*data-click="([^"]*)">Confirmar</.exec(corpo);
+    assert.ok(conf, 'controlo: há um Confirmar');
+    assert.equal(conf[1], "quickConfirmRec('r1');notifModal('')", 'confirma e refaz a janela');
+    const sil = /<button[^>]*data-click="([^"]*)">Silenciar</.exec(corpo);
+    assert.ok(sil && /;notifModal\(''\)$/.test(sil[1]), 'o Silenciar também');
+  });
+
+  test('o valor de um por confirmar tem a cor do dinheiro dele, como nos Planeados: prestação roxa, despesa laranja, as duas com «−», transferência sem cor nem sinal', () => {
+    monta();
+    const corpo = corpoCom([rec('r1', 'loan', 716.54), rec('r2', 'expense', 50), rec('r3', 'income', 800), rec('r4', 'settle', 30)], []);
+    const valores = [...corpo.matchAll(/<b class="(num[^"]*)">([^<]*)<\/b>/g)].map((m) => [m[1], m[2]]);
+    assert.equal(valores.length, 4, 'controlo: quatro valores');
+    const de = (n) => valores.find((v) => v[1].includes(n));
+    assert.equal(de('716,54')[0], 'num prest', 'prestação: roxa');
+    assert.ok(de('716,54')[1].startsWith('−'), 'a prestação sai: leva o «−» (planeados.js:recValor)');
+    assert.equal(de('50,00')[0], 'num neg');
+    assert.ok(de('50,00')[1].startsWith('−'));
+    assert.equal(de('800,00')[0], 'num pos');
+    assert.deepEqual([de('30,00')[0], de('30,00')[1].includes('−')], ['num', false], 'a transferência não tem cor nem sinal');
+  });
+
+  test('um prazo diz quanto falta como o cartão («Falta 1 dia»), e um sem destino não se apresenta como tocável', () => {
+    monta();
+    const corpo = corpoCom([], [
+      { titulo: 'Comunicar à AT', dias: 1, abrir: "go('contracts')", urg: 'urgente' },
+      { titulo: 'Seguro a renovar', dias: 20, abrir: '', urg: 'breve' },
+    ]);
+    assert.match(corpo, />Falta 1 dia</);
+    assert.doesNotMatch(corpo, /Faltam 1 dia/);
+    assert.match(corpo, /<button type="button" class="atencao-linha tap"[^>]*data-click="closeModal\(\);go\('contracts'\)">[\s\S]*?Comunicar à AT/);
+    assert.match(corpo, /<div class="atencao-linha"><div class="atencao-txt"><p class="title">Seguro a renovar/, 'sem destino: uma linha, não um botão');
+    assert.doesNotMatch(corpo, /data-click="closeModal\(\);"/, 'nenhum toque que só fecha a janela');
+    assert.match(corpo, /<span class="badge amber">Faltam 20 dias</);
+  });
+
+  test('o sino diz o nome da janela que abre, com a contagem, e não só o número', () => {
+    monta();
+    const b = app.document.getElementById('hdrBell');
+    const attrs = {};
+    const setReal = b.setAttribute, contaReal = app.notifConta;
+    b.setAttribute = (k, v) => { attrs[k] = v; };
+    app.tab = 'dashboard';
+    try {
+      app.CW._esperaFim = true; // o crachá espera pelo servidor (espera.js:sabemosOEstado)
+      app.notifConta = () => 4;
+      app.notifSino();
+      assert.equal(attrs['aria-label'], 'Pede atenção: 4 por ver');
+      assert.equal(b.title, 'Pede atenção: 4 por ver');
+      app.notifConta = () => 0;
+      app.notifSino();
+      assert.equal(attrs['aria-label'], 'Pede atenção');
+    } finally {
+      b.setAttribute = setReal; app.notifConta = contaReal;
+    }
+  });
+
+  test('a barra de baixo tem o Inicio, as duas areas (Casas e Dinheiro) e a Agenda', () => {
+    assert.deepEqual(Array.from(app.TABBAR), ['dashboard', 'casas', 'dinheiro', 'calendar']);
   });
 });
 
@@ -206,7 +278,7 @@ describe('os pedidos de grupo e os lotes no sino', () => {
     let corpo = '';
     app.openModal = (t, b) => { corpo = b; };
     app.notifModal();
-    assert.match(corpo, /<div class="navh">Pedidos por responder<\/div>/);
+    assert.match(corpo, /<h3>Pedidos por responder<\/h3>/);
     assert.match(corpo, /Zé quer entrar no grupo «Família»/);
     assert.match(corpo, /data-toca="dados" data-click="notifGrupoAceitar\('G2','ZE'\)">Aceitar</);
     assert.match(corpo, /data-toca="dados" data-click="notifGrupoRecusar\('G2','ZE'\)">Recusar</);

@@ -4,7 +4,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
 /* A folha da app vive no web/estilos.css, para a CSP poder deixar de aceitar
    estilos em linha: era o <style> do index.html, e passou para lá com o mesmo
@@ -651,13 +651,23 @@ describe('materiais', () => {
       'quem a põe é o ouvinte de scroll');
   });
 
-  /* A letra é a do sistema de quem lê: SF no iPhone e no Mac, Segoe no
-     Windows. A Inter nunca foi carregada como webfont — só aparecia a quem
-     a tivesse instalada, e era uma cara diferente por acaso. */
-  test('a letra é a do sistema, sem webfont fantasma à frente', () => {
+  /* As letras são a Geist (texto) e a Bricolage Grotesque (títulos e valores
+     grandes), da linguagem de 2026-10 — carregadas de verdade, da própria
+     origem (a CSP só deixa font-src 'self'), e com a letra do sistema a seguir
+     na pilha para o que chega antes delas ou fica fora do latino. A Inter de
+     antes era o contrário: estava à frente da pilha e nunca era carregada. */
+  test('as letras são a Geist e a Bricolage, auto-alojadas, com o sistema a seguir', () => {
     const body = /\nbody\{[^}]*\}/.exec(cssLimpo);
     assert.ok(body, 'a regra do body existe');
-    assert.match(body[0], /font-family:system-ui,-apple-system/);
-    assert.doesNotMatch(cssLimpo, /font-family:Inter/, 'a Inter saiu da frente');
+    assert.match(body[0], /font-family:var\(--letra\)/);
+    assert.match(cssLimpo, /--letra:'Geist',system-ui,-apple-system/, 'a Geist à frente, o sistema logo a seguir');
+    assert.match(cssLimpo, /--letra-titulo:'Bricolage Grotesque','Geist',system-ui/);
+    for (const [fam, ficheiro] of [['Geist', 'geist'], ['Bricolage Grotesque', 'bricolage-grotesque']]) {
+      const face = new RegExp("@font-face\\{font-family:'" + fam + "';[^}]*font-display:swap;[^}]*src:url\\(/fonts/" + ficheiro + "\\.woff2\\) format\\('woff2'\\)");
+      assert.match(cssLimpo, face, 'o @font-face da ' + fam + ', com swap e da própria origem');
+      assert.ok(existsSync(new URL('../web/fonts/' + ficheiro + '.woff2', import.meta.url)), 'o ficheiro da ' + fam + ' existe');
+    }
+    assert.doesNotMatch(cssLimpo, /fonts\.googleapis|fonts\.gstatic/, 'nada de letras de fora: a CSP recusa');
+    assert.doesNotMatch(cssLimpo, /font-family:Inter/, 'a Inter não volta');
   });
 });

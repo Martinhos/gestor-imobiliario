@@ -74,9 +74,32 @@ describe('os dados', () => {
 describe('a ficha', () => {
   test('sem tarefas, a ficha oferece adicioná-las; com tarefas, diz quantas faltam e abre a lista', () => {
     base();
-    assert.match(app.propFicha('P1'), /Tarefas[\s\S]*Ainda não há tarefas\.[\s\S]*tfAbrir\('imovel','P1'\)[\s\S]*Adicionar tarefas/);
+    const vazia = app.propFicha('P1');
+    assert.match(vazia, /<h3>Tarefas<\/h3><span class="small num">Ainda não há tarefas\.<\/span>/);
+    assert.match(vazia, /data-click="tfAbrir\('imovel','P1'\);tfNovaTarefa\(''\)"[^>]*>.*Adicionar tarefa/);
+    assert.doesNotMatch(vazia, /Ver tarefas|Ver todas/, 'sem tarefas não há lista para ver');
     app.db.contracts[0].tarefas = app.normTarefas(LISTA());
     assert.match(app.ctFicha('C1'), /3 por cumprir · 1 cumprida[\s\S]*tfAbrir\('contrato','C1'\)[\s\S]*Ver tarefas/);
+  });
+
+  test('a ficha do imóvel mostra as primeiras por cumprir e, se couberem, as cumpridas mais recentes, e cada linha abre a lista', () => {
+    base();
+    const t = LISTA();
+    t.itens.push({ id: 'K5', nome: 'Pintar o quarto', seccao: '', feita: false }, { id: 'K6', nome: 'Rever o contador', seccao: '', feita: false });
+    app.db.properties[0].tarefas = app.normTarefas(t);
+    const f = app.propFicha('P1');
+    assert.match(f, /<h3>Tarefas<\/h3><span class="small num">5 por cumprir · 1 cumprida<\/span>/);
+    const nomes = [...f.matchAll(/<span class="tf-fl-nome"><span class="imv-so-leitor">([^<]*)<\/span>([^<]*)<\/span>/g)].map((m) => m[1] + m[2]);
+    igual(nomes, ['Por cumprir: Pintar a sala', 'Por cumprir: Pedir o certificado energético', 'Por cumprir: Ligar à Ana', 'Por cumprir: Pintar o quarto'],
+      'quatro por cumprir, pela ordem da lista; a cumprida não cabe');
+    assert.match(f, /<span class="badge grey">Obras<\/span>/, 'a secção de cada uma');
+    assert.match(f, /Ver todas/, 'há mais do que as que se veem');
+    assert.equal((f.match(/class="imv-linha tap tf-fl[^"]*" data-toca="camada" data-click="tfAbrir\('imovel','P1'\)"/g) || []).length, 4, 'cada linha abre a lista');
+    // com poucas por cumprir, entram as cumpridas mais recentes, riscadas
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    const g = app.propFicha('P1');
+    assert.match(g, /tf-fl tf-feita[\s\S]*?Cumprida: <\/span>Trocar o esquentador<\/span>\s*<span class="small num">01\/10<\/span>/);
+    assert.match(g, /Ver tarefas/);
   });
 
   test('a ficha não tem campos: a lista abre-se numa janela à parte', () => {
@@ -94,8 +117,15 @@ describe('a janela da lista', () => {
     assert.equal(abertas[0].t, 'Tarefas · T2 Lisboa');
     igual(nomesNaLista(), ['Ligar à Ana', 'Pintar a sala', 'Trocar o esquentador', 'Pedir o certificado energético']);
     assert.match(abertas[0].b, /type="search"/);
-    assert.match(abertas[0].f, /Adicionar tarefa/);
+    // «Nova tarefa», o título do formulário que abre: «Adicionar tarefa» com o
+    // ícone partia-se em duas linhas em meio rodapé de um telemóvel
+    assert.match(abertas[0].f, /<button type="button" class="btn primary" [^>]*tfNovaTarefa\(''\)">(?:<svg[\s\S]*?<\/svg>)? Nova tarefa<\/button>/);
     assert.match(abertas[0].m, /Adicionar secção/);
+    // o limpar da pesquisa é um ícone de traço, e não o carácter «✕»
+    const limparQ = /<button type="button" class="qclear[^"]*"[^>]*aria-label="Limpar a pesquisa">([\s\S]*?)<\/button>/.exec(abertas[0].b);
+    assert.ok(limparQ, 'há o botão de limpar a pesquisa');
+    assert.match(limparQ[1], /^<svg/);
+    assert.doesNotMatch(limparQ[1], /✕/);
   });
 
   test('pesquisa pelo nome da tarefa, sem olhar a acentos nem maiúsculas', () => {

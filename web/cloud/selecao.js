@@ -1,8 +1,9 @@
 /* Selecionar vários movimentos e tratá-los de uma vez.
    ---------------------------------------------------
    O toque longo num movimento passa a entrar em modo de seleção, com esse já
-   marcado. As opções de um movimento sozinho passam para um kebab na própria
-   linha — ficam a um toque em vez de a um toque longo, que ninguém adivinha.
+   marcado; o «Selecionar vários» do cabeçalho entra sem nada marcado; e na
+   tabela do ecrã largo as caixas estão sempre à vista, e marcar uma entra.
+   As opções de um movimento sozinho (Editar, Apagar) estão na ficha.
 
    Em seleção há três níveis de marca: cada movimento, cada mês, e um global.
    O global e o do mês acompanham o scroll, senão a meio de uma lista de
@@ -79,14 +80,56 @@ function selMarcar(ids, on) {
 /* ------------------------------------------------------------- entrar e sair */
 
 // Entra em modo de seleção — opcionalmente já com um movimento marcado — e repinta a vista com as caixas.
-// Recebe: id (opcional) — o id do movimento a marcar logo à entrada.
+// Recebe: id (opcional) — o id do movimento a marcar logo à entrada; ev (opcional) — o evento do
+// toque na caixa de uma linha da tabela, para não abrir também a ficha.
 // Devolve: nada — redesenha a vista.
-CW.selEntrar = function (id) {
+CW.selEntrar = function (id, ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   CW.selMode = true;
   selIds = {};
   if (id) selMarcar([id], true);   // a linha de um lote entra com o lote inteiro
   render();
 };
+
+/* A caixa de um mês, na tabela do ecrã largo, fora da seleção: entra já com
+   esse mês marcado. As linhas leem-se do ecrã antes de repintar.
+   Recebe: mo — o mês em "AAAA-MM"; ev (opcional) — o evento do toque.
+   Devolve: nada — redesenha a vista. */
+CW.selEntrarMes = function (mo, ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  var ids = selIdsDoMes(mo);
+  CW.selMode = true;
+  selIds = {};
+  selMarcar(ids, true);
+  render();
+};
+
+/* A caixa de tudo, no cabeçalho da tabela, fora da seleção: entra com tudo o
+   que está à vista marcado.
+   Recebe: ev (opcional) — o evento do toque.
+   Devolve: nada — redesenha a vista. */
+CW.selEntrarTodos = function (ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  var ids = selIdsVisiveis();
+  CW.selMode = true;
+  selIds = {};
+  selMarcar(ids, true);
+  render();
+};
+
+/* A lista é uma tabela com as caixas sempre à vista (o ecrã largo,
+   D-Movimentos)? Lê-se da mesma largura da folha (estilos.css:.mov-linha).
+   Devolve: true no ecrã largo; false no telemóvel e no intermédio. */
+function selNaTabela() {
+  try { return !!(window.matchMedia && window.matchMedia('(min-width:1100px)').matches); } catch (e) { return false; }
+}
+
+/* Na tabela, a seleção é o que as caixas marcam: desmarcar a última termina-a,
+   como numa lista de correio. No telemóvel fica, à espera do toque seguinte.
+   Devolve: nada — sai da seleção (e repinta) quando é o caso. */
+function selSairSeVazio() {
+  if (CW.selMode && !selN() && selNaTabela()) CW.selSair();
+}
 
 /* limpa o estado sem repintar: para quem já vai repintar por outra razão
    Devolve: nada — só limpa o estado da seleção. */
@@ -111,6 +154,7 @@ CW.selToggle = function (id, ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   selMarcar([id], !selIds[id]);
   selPintar();
+  selSairSeVazio();
 };
 
 /* Marca ou desmarca um mês inteiro: se já estava todo marcado, limpa-o;
@@ -124,6 +168,7 @@ CW.selMes = function (mo, ev) {
   var todos = ids.length && ids.every(selTem);
   selMarcar(ids, !todos);
   selPintar();
+  selSairSeVazio();
 };
 
 // como o selMes, mas para todas as linhas visíveis: tudo marcado limpa, senão marca o que falta
@@ -135,6 +180,7 @@ CW.selTodos = function (ev) {
   var todos = ids.length && ids.every(selTem);
   selMarcar(ids, !todos);
   selPintar();
+  selSairSeVazio();
 };
 
 // os ids de todos os movimentos que a vista mostra neste momento (já com os filtros aplicados)
@@ -163,27 +209,60 @@ function selPintar() {
   [].slice.call(document.querySelectorAll('#view .txrow[data-tx]')).forEach(function (e) {
     var on = selTem(e.getAttribute('data-tx'));
     e.classList.toggle('sel-on', on);
+    if (e.setAttribute) e.setAttribute('aria-pressed', on ? 'true' : 'false');
     var c = e.querySelector('.selbox');
     if (c) c.innerHTML = caixa(on);
   });
   [].slice.call(document.querySelectorAll('#view [data-mes-box]')).forEach(function (e) {
     var ids = selIdsDoMes(e.getAttribute('data-mes-box'));
-    e.innerHTML = caixa(ids.length > 0 && ids.every(selTem), ids.some(selTem));
+    var todos = ids.length > 0 && ids.every(selTem), algum = ids.some(selTem);
+    e.innerHTML = caixa(todos, algum);
+    if (e.setAttribute) e.setAttribute('aria-checked', todos ? 'true' : algum ? 'mixed' : 'false');
   });
   patchHdrSel();
 }
 
-/* A caixa de tudo e a contagem, no cabeçalho (patchHdrSel): cheia com tudo
-   o que está à vista marcado, a meio com parte.
-   Devolve: nada — mexe no #selGlobal e no #selConta, se lá estiverem. */
+/* A caixa de tudo e a contagem: no cabeçalho do telemóvel (patchHdrSel), na
+   coluna das caixas da tabela ([data-sel-tudo]) e na barra das ações (a
+   contagem, a soma e o «Apagar N»). Cheia com tudo o que está à vista
+   marcado, a meio com parte. Sem nada marcado, as ações ficam paradas.
+   Devolve: nada — mexe no #selGlobal, no #selConta, nas caixas de tudo e na
+   barra, se lá estiverem. */
 function selCabPintar() {
+  var ids = selIdsVisiveis(), todos = ids.length > 0 && ids.every(selTem), algum = ids.some(selTem), n = selN();
   var g = document.getElementById('selGlobal');
   if (g) {
-    var ids = selIdsVisiveis();
-    g.innerHTML = caixa(ids.length > 0 && ids.every(selTem), ids.some(selTem));
+    g.innerHTML = caixa(todos, algum);
+    if (g.setAttribute) g.setAttribute('aria-checked', todos ? 'true' : algum ? 'mixed' : 'false');
   }
-  var n = document.getElementById('selConta');
-  if (n) n.textContent = selN() ? selN() + (selN() === 1 ? ' movimento' : ' movimentos') : 'nenhum movimento';
+  [].slice.call(document.querySelectorAll('#view [data-sel-tudo]')).forEach(function (e) {
+    e.innerHTML = caixa(CW.selMode && todos, CW.selMode && algum);
+    if (e.setAttribute) e.setAttribute('aria-checked', CW.selMode && todos ? 'true' : CW.selMode && algum ? 'mixed' : 'false');
+  });
+  var c = document.getElementById('selConta');
+  if (c) c.textContent = n ? n + (n === 1 ? ' movimento' : ' movimentos') : 'nenhum movimento';
+  var bn = document.getElementById('selFundoN');
+  if (bn) bn.textContent = n ? n + (n === 1 ? ' selecionado' : ' selecionados') : 'Nenhum selecionado';
+  var bs = document.getElementById('selFundoSoma');
+  if (bs) bs.textContent = n ? '· somam ' + selSomaTexto() : '· marca nas caixas';
+  var ba = document.getElementById('selFundoApagar');
+  if (ba) ba.textContent = n ? 'Apagar ' + n : 'Apagar';
+  [].slice.call(document.querySelectorAll('.sel-fundo [data-precisa]')).forEach(function (b) {
+    if (n) b.removeAttribute('disabled'); else b.setAttribute('disabled', '');
+  });
+}
+
+/* Quanto somam os movimentos marcados, com o sinal do dinheiro: o que entra
+   soma, o que sai subtrai, e um acerto entre proprietários não conta. De um
+   lote, as partes todas (selAlvos) — o total que se escreveu.
+   Devolve: o valor em texto, com o sinal («+425,00 €», «−1 016,00 €»). */
+function selSomaTexto() {
+  var s = 0;
+  selAlvos().txs.forEach(function (t) {
+    var v = Math.round((Number(t.amount) || 0) * 100);
+    if (isIn(t.kind)) s += v; else if (isOut(t.kind)) s -= v;
+  });
+  return (s > 0 ? '+' : '') + euro2(s / 100);
 }
 
 // o HTML da caixa de marcar: cheia, vazia, ou a meio (parcial) com um traço
@@ -208,9 +287,15 @@ function caixa(marcada, parcial) {
    própria. E enquanto fosse assim, nenhuma repintura parcial podia ser
    segura: uma linha repintada sozinha nascia sem nada disto.
 
-   Agora substitui-se o ponto de extensão da linha (vistas.js:txLinhaExtra) e
-   o do mês (vistas.js:txMesExtra). O que aparece no ecrã é exatamente o
-   mesmo. */
+   Agora substitui-se o ponto de extensão da linha (lista-movimentos.js:txLinhaExtra)
+   e o do mês (lista-movimentos.js:txMesExtra).
+
+   Fora da seleção a caixa também lá está, com a classe .fora: a folha só a
+   mostra na tabela do ecrã largo (D-Movimentos), onde as caixas estão sempre
+   à vista e marcar uma é a porta da seleção. No telemóvel fica escondida, e a
+   porta é o toque longo ou o «Selecionar vários» do cabeçalho (patchHdrSel).
+   O kebab de cada linha saiu com o canvas: o Editar e o Apagar de um
+   movimento sozinho estão na ficha, que é o que tocar na linha abre. */
 
 var _txLinhaExtra = txLinhaExtra;
 txLinhaExtra = function (t, mes) {
@@ -221,17 +306,13 @@ txLinhaExtra = function (t, mes) {
   x.attrs = (x.attrs || '') + ' data-tx="' + esc(id) + '" data-mes="' + esc(mes || '') + '"';
   if (CW.selMode) {
     // a caixa entra à esquerda e o toque na linha passa a marcar
-    x.caixa = (x.caixa || '') + '<span class="selbox">' + caixa(selTem(id)) + '</span>';
+    x.caixa = (x.caixa || '') + '<span class="selbox" aria-hidden="true">' + caixa(selTem(id)) + '</span>';
     x.onclick = 'CW.selToggle(\'' + jsq(id) + '\',event)';
-    x.attrs += ' data-toca="vista"';
+    x.attrs += ' data-toca="vista" aria-pressed="' + (selTem(id) ? 'true' : 'false') + '"';
     if (selTem(id)) x.cls = ((x.cls || '') + ' sel-on').trim();
   } else {
-    /* Fora da seleção, um kebab com o que o toque longo dava. O toque longo
-       continua a existir, mas passa a entrar em seleção — e sem o kebab as
-       opções de um movimento sozinho ficavam sem porta nenhuma. */
-    x.acoes = (x.acoes || '') +
-      '<button type="button" class="iconbtn opcoes txkebab" aria-label="Opções"' +
-      ' data-toca="camada" data-click="event.stopPropagation();CW.txOpcoes(\'' + jsq(id) + '\')">' + ic('dots', 18) + '</button>';
+    x.caixa = (x.caixa || '') + '<span class="selbox fora" role="checkbox" aria-checked="false" aria-label="Selecionar «' +
+      esc(t.label || 'movimento') + '»" data-toca="modo" data-click="CW.selEntrar(\'' + jsq(id) + '\',event)">' + caixa(false) + '</span>';
   }
   return x;
 };
@@ -239,58 +320,74 @@ txLinhaExtra = function (t, mes) {
 var _txMesExtra = txMesExtra;
 txMesExtra = function (mes) {
   var x = _txMesExtra(mes) || {};
-  if (!CW.selMode || !mes) return x;
+  if (!mes) return x;
+  if (!CW.selMode) {
+    /* a caixa do mês na tabela: entra na seleção com o mês marcado */
+    x.caixa = (x.caixa || '') + '<span class="selbox mes fora" role="checkbox" aria-checked="false" aria-label="Selecionar ' +
+      esc(mesPt(mes)) + '" data-toca="modo" data-click="CW.selEntrarMes(\'' + jsq(mes) + '\',event)">' + caixa(false) + '</span>';
+    return x;
+  }
   x.cls = ((x.cls || '') + ' sel-mes').trim();
   /* SEM style aqui: o título já leva um no template (vistas.js) e, com dois,
      o parser fica com o primeiro — o meu — e o display:flex morria. O cursor
      vai na folha, com o resto da regra .sel-mes. */
   x.attrs = (x.attrs || '') + ' data-toca="vista" data-click="CW.selMes(\'' + jsq(mes) + '\',event)"';
   x.caixa = (x.caixa || '') +
-    '<span class="selbox mes" data-mes-box="' + esc(mes) + '" data-toca="vista" data-click="CW.selMes(\'' + jsq(mes) + '\',event)"></span>';
+    '<span class="selbox mes" data-mes-box="' + esc(mes) + '" role="checkbox" aria-checked="false" aria-label="Marcar ' + esc(mesPt(mes)) +
+    '" data-toca="vista" data-click="CW.selMes(\'' + jsq(mes) + '\',event)"></span>';
   return x;
 };
 
 /* ------------------------------------------------ a vista, com as barras */
 
+/* A caixa de tudo na coluna das caixas da tabela (lista-movimentos.js:txCabTabela):
+   em seleção marca ou desmarca tudo o que está à vista; fora dela entra na
+   seleção com tudo marcado. A selCabPintar acerta-a a cada marca.
+   Devolve: o HTML da caixa (texto). */
+function selCaixaTudoHtml() {
+  return CW.selMode
+    ? '<span class="selbox mov-cab-caixa" data-sel-tudo role="checkbox" aria-checked="false" aria-label="Marcar todos os movimentos à vista" data-toca="vista" data-click="CW.selTodos(event)">' + caixa(false) + '</span>'
+    : '<span class="selbox mov-cab-caixa" data-sel-tudo role="checkbox" aria-checked="false" aria-label="Selecionar todos os movimentos à vista" data-toca="modo" data-click="CW.selEntrarTodos(event)">' + caixa(false) + '</span>';
+}
+
+/* A barra das ações da seleção. No telemóvel desce para onde está o polegar —
+   Cancelar, Editar e Apagar —, no lugar da barra de baixo; no ecrã largo é a
+   barra do canvas (D-Movimentos), azul-noite: quantos estão marcados e quanto
+   somam, «Mudar categoria», «Adicionar etiquetas» (com etiquetas definidas),
+   «Apagar N» e o × que termina. Flutua no fundo, e não entre os totais e a
+   tabela, onde o canvas a desenhou: aí empurrava a tabela ~56px ao primeiro
+   visto, e a regra é que nada por cima da lista a empurre. A folha mostra as
+   peças de cada um (estilos.css:.sel-fundo). A contagem, a soma e o número do
+   «Apagar» enche-os a selCabPintar.
+   Devolve: o HTML da barra (texto). */
+function selBarraHtml() {
+  var etiquetas = (db.settings && db.settings.tags || []).length;
+  return '<div class="sel-fundo mov-sel" role="toolbar" aria-label="Seleção">' +
+      '<p class="sel-info"><b id="selFundoN">Nenhum selecionado</b> <span id="selFundoSoma"></span></p>' +
+      '<button type="button" class="btn sel-fim" aria-label="Cancelar a seleção" data-toca="modo" data-click="CW.selSair()">' + ic('x', 16) + '<span class="sel-fim-txt">Cancelar</span></button>' +
+      '<span class="sel-espaco"></span>' +
+      '<button type="button" class="btn sel-largo" data-precisa data-toca="camada" data-click="CW.selEditar(\'cat\')">Mudar categoria</button>' +
+      (etiquetas ? '<button type="button" class="btn sel-largo" data-precisa data-toca="camada" data-click="CW.selEditar(\'tags\')">Adicionar etiquetas</button>' : '') +
+      '<button type="button" class="btn sel-estreito" data-precisa data-toca="camada" data-click="CW.selEditar()">' + ic('pen', 15) + ' Editar</button>' +
+      '<button type="button" class="btn danger" data-precisa data-toca="dados" data-risco="destroi" data-click="CW.selApagar()">' + ic('trash', 15) + '<span id="selFundoApagar">Apagar</span></button>' +
+    '</div>';
+}
+
 var _vTransactions_sel = vTransactions;
 vTransactions = function () {
-  var html = _vTransactions_sel();
+  var html = _vTransactions_sel().replace('<span class="mov-cab-caixa"></span>', selCaixaTudoHtml());
   /* sem linhas não há nada para marcar — e sair daqui evita ficar com a barra
      de seleção viva por cima de um ecrã vazio */
   if (!txLinhasPintadas) { CW.selMode = false; return html; }
   if (!CW.selMode) return html;
-
-  /* As ações descem para onde está o polegar: quem acabou de marcar linhas
-     a meio da lista não tem de subir ao canto do ecrã. A barra de baixo
-     substitui a de atalhos enquanto a seleção durar; o cabeçalho mantém o
-     caminho antigo para quem já o conhece. */
-  var fundo =
-    '<div class="sel-fundo">' +
-      '<button type="button" class="btn" data-toca="modo" data-click="CW.selSair()">' + ic('x', 15) + ' Cancelar</button>' +
-      '<span class="u-fx-1"></span>' +
-      '<button type="button" class="btn" data-toca="camada" data-click="CW.selEditar()">' + ic('pen', 15) + ' Editar</button>' +
-      '<button type="button" class="btn danger" data-toca="dados" data-risco="destroi" data-click="CW.selApagar()">' + ic('trash', 15) + ' Eliminar</button>' +
-    '</div>';
-  /* A caixa de tudo e a contagem vivem no cabeçalho (patchHdrSel), no lugar
-     do título: numa barra por cima da lista empurravam-na ~64px para baixo
-     ao entrar, e puxavam-na ao sair. */
-  return html + fundo;
+  /* A caixa de tudo e a contagem vivem no cabeçalho do telemóvel
+     (patchHdrSel), no lugar do título, e na coluna das caixas da tabela:
+     numa barra por cima da lista empurravam-na ~64px para baixo ao entrar, e
+     puxavam-na ao sair. As ações vão na barra do fundo. */
+  return html + selBarraHtml();
 };
 
-/* ------------------------------------------ o toque longo e o kebab da linha */
-
-// O kebab da linha: as opções de um movimento sozinho, mais a porta de entrada na seleção.
-// Recebe: id — o id do movimento da linha.
-// Devolve: nada — abre a folha de opções (lpShow); se o id não existir, não faz nada.
-CW.txOpcoes = function (id) {
-  var t = (db.transactions || []).find(function (x) { return x.id === id; });
-  if (!t) return;
-  lpShow(t.label, [
-    { label: 'Editar movimento', icon: 'pen', act: function () { txModal({ id: id }); } },
-    { label: 'Selecionar vários', icon: 'check', act: function () { CW.selEntrar(id); } },
-    { label: 'Apagar movimento', icon: 'trash', act: function () { delTx(id); } },
-  ]);
-};
+/* ------------------------------------------------------ o toque longo */
 
 // nos movimentos o toque longo entra em seleção; no resto continua como estava
 var _lpMenu_sel = lpMenu;
@@ -302,20 +399,41 @@ lpMenu = function (v) {
 
 /* ------------------------------------------------------- o botão do cabeçalho */
 
-/* Veste o cabeçalho para a seleção: o título dá lugar à caixa de tudo e à
-   contagem (#selCab — a CSS esconde o título com o body.sel-on), colados ao
-   topo como o cabeçalho, para se poder marcar tudo a meio da lista; o botão
-   passa a "⋯" (as ações da seleção), acende quando há marcas, e ganha um X
-   ao lado para sair. Fora da seleção remove o #selCab e o X — o render
-   normal repõe o resto.
+/* Veste o cabeçalho dos Movimentos. Fora da seleção, o botão do cabeçalho é
+   o «Selecionar vários» do canvas (M-Movimentos) — os filtros abrem-se no
+   botão ao lado da pesquisa (lista-movimentos.js:txBarraHtml) —, e some sem
+   linhas para marcar e na tabela do ecrã largo, onde as caixas já estão à
+   vista (a folha: estilos.css:.mov-hdr-sel). Em seleção, o título dá lugar à
+   caixa de tudo e à contagem (#selCab — a CSS esconde o título com o
+   body.sel-on), colados ao topo como o cabeçalho, para se poder marcar tudo a
+   meio da lista. O botão passa a "⋯" (as ações da seleção, CW.selAcoes), mas
+   a folha esconde-o em seleção (estilos.css:body.sel-on #hdrFilt.mov-hdr-sel):
+   a barra do fundo já tem o Cancelar, o Editar e o Apagar, e o «⋯» e o X que
+   havia ao lado dele repetiam-nos. Noutro separador devolve o botão aos
+   filtros — o render normal repõe o funil.
    Devolve: nada — mexe diretamente no cabeçalho, no DOM. */
 function patchHdrSel() {
   var hb = document.getElementById('hdrFilt');
   if (!hb) return;
-  var x = document.getElementById('selFechar'), cab = document.getElementById('selCab');
-  if (!CW.selMode || tab !== 'transactions') {
-    if (x) x.remove();
+  var cab = document.getElementById('selCab');
+  if (!hb.getAttribute('data-titulo')) hb.setAttribute('data-titulo', hb.title || 'Filtros e parâmetros');
+  if (tab !== 'transactions') {
     if (cab) cab.remove();
+    if (hb.classList.contains('mov-hdr-sel')) {
+      hb.classList.remove('mov-hdr-sel');
+      hb.title = hb.getAttribute('data-titulo');
+      hb.removeAttribute('aria-label');
+    }
+    return;
+  }
+  hb.classList.add('mov-hdr-sel');
+  if (!CW.selMode) {
+    if (cab) cab.remove();
+    hb.style.display = txLinhasPintadas ? '' : 'none';
+    hb.innerHTML = ic('check', 18);
+    hb.title = 'Selecionar vários';
+    hb.setAttribute('aria-label', 'Selecionar vários');
+    hb.classList.remove('primary');
     return;
   }
   var tit = document.getElementById('pageTitle');
@@ -324,7 +442,7 @@ function patchHdrSel() {
     cab.id = 'selCab';
     cab.className = 'sel-cab';
     cab.innerHTML =
-      '<span class="selbox" id="selGlobal" data-toca="vista" data-click="CW.selTodos(event)">' + caixa(false) + '</span>' +
+      '<span class="selbox" id="selGlobal" role="checkbox" aria-checked="false" aria-label="Marcar todos os movimentos à vista" data-toca="vista" data-click="CW.selTodos(event)">' + caixa(false) + '</span>' +
       '<span class="u-fx-1 u-minw-0 u-cur-pointer" data-toca="vista" data-click="CW.selTodos(event)"><b id="selConta">nenhum movimento</b>' +
       '<span class="small u-d-block">toca para marcar tudo</span></span>';
     tit.parentNode.insertBefore(cab, tit);
@@ -333,34 +451,38 @@ function patchHdrSel() {
   hb.style.display = '';
   hb.innerHTML = ic('dots', 18);
   hb.title = 'O que fazer com a seleção';
-  hb.classList.toggle('primary', selN() > 0);
-  if (!x) {
-    x = document.createElement('button');
-    x.id = 'selFechar';
-    x.className = 'btn';
-    x.style.cssText = 'flex:0 0 auto;margin-left:7px';
-    x.title = 'Sair da seleção';
-    x.setAttribute('data-toca', 'modo');
-    x.setAttribute('data-click', 'CW.selSair()');
-    x.innerHTML = ic('x', 18);
-    hb.parentNode.insertBefore(x, hb.nextSibling);
-  }
+  hb.setAttribute('aria-label', 'O que fazer com a seleção');
+  /* sem o .primary: no cabeçalho do telemóvel o botão não tem fundo, e o
+     texto do primário (branco) desaparecia; sem marcas, as ações avisam */
+  hb.classList.remove('primary');
 }
 
+/* O cabeçalho repinta-se também pelo caminho curto da lista
+   (lista-movimentos.js:refrescarMovimentos), que repõe o funil sem passar pelo
+   render: fica exposto para ele.
+   Devolve: nada — veste o cabeçalho (patchHdrSel). */
+CW.selCabecalho = function () { patchHdrSel(); };
+
+// Nos Movimentos o botão do cabeçalho é da seleção: fora dela entra («Selecionar
+// vários»), dentro abre as ações. No resto continua a abrir os filtros.
+// Devolve: nada.
 var _hdrFiltToggle_sel = hdrFiltToggle;
 hdrFiltToggle = function () {
-  if (CW.selMode && tab === 'transactions') return CW.selAcoes();
+  if (tab === 'transactions') return CW.selMode ? CW.selAcoes() : CW.selEntrar();
   return _hdrFiltToggle_sel();
 };
 
-// o menu do "⋯" do cabeçalho: editar ou eliminar a seleção (avisa se nada estiver marcado)
-// Devolve: nada — abre a folha de opções (lpShow), ou um toast se nada estiver marcado.
+/* O menu das ações da seleção: editar ou apagar o que está marcado (avisa
+   se nada estiver marcado). O «⋯» do cabeçalho que o abria esconde-se em
+   seleção (estilos.css:body.sel-on #hdrFilt.mov-hdr-sel), porque a barra do
+   fundo já tem o Editar e o Apagar; o hdrFiltToggle continua a chamá-lo.
+   Devolve: nada — abre a folha de opções (lpShow), ou um toast se nada estiver marcado. */
 CW.selAcoes = function () {
   var n = selN();
   if (!n) return toast('Marca pelo menos um movimento.');
   lpShow(n + (n === 1 ? ' movimento marcado' : ' movimentos marcados'), [
     { label: 'Editar seleção', icon: 'pen', act: function () { CW.selEditar(); } },
-    { label: 'Eliminar seleção', icon: 'trash', act: function () { CW.selApagar(); } },
+    { label: 'Apagar seleção', icon: 'trash', act: function () { CW.selApagar(); } },
   ]);
 };
 
@@ -369,8 +491,10 @@ CW.selAcoes = function () {
 /* Abre a janela de edição em massa: categoria, subcategoria e etiquetas.
    Só se aplica o que for preenchido — o resto de cada movimento fica como
    está, e as etiquetas só se acrescentam. O Aplicar é o selGravar.
+   Recebe: parte (opcional) — 'cat' só a categoria e a subcategoria, 'tags' só
+   as etiquetas; sem ela, tudo.
    Devolve: nada — abre o modal de edição em massa (ou nada, sem marcas). */
-CW.selEditar = function () {
+CW.selEditar = function (parte) {
   var n = selN();
   if (!n) return;
   var tree = allCats('');
@@ -378,22 +502,32 @@ CW.selEditar = function () {
     Object.keys(tree).map(function (c) { return { v: c, label: c }; })
   );
   var tags = (db.settings.tags || []);
+  /* a barra do ecrã largo abre só uma das partes (o «Mudar categoria» e o
+     «Adicionar etiquetas» do canvas); o «Editar» do telemóvel, as duas */
+  var comCat = parte !== 'tags', comTags = parte !== 'cat' && tags.length;
+  var quantos = n + (n === 1 ? ' movimento' : ' movimentos');
 
-  openModal('Editar ' + n + (n === 1 ? ' movimento' : ' movimentos'),
+  openModal(parte === 'cat' ? 'Mudar a categoria de ' + quantos : parte === 'tags' ? 'Adicionar etiquetas a ' + quantos : 'Editar ' + quantos,
     '<div class="form">' +
-      '<div class="hint">Só se altera o que preencheres. O resto de cada movimento fica como está.</div>' +
-      '<label>Categoria' + sel('selCat', '', cats, 'CW.selCatMudou', 'rascunho') + '</label>' +
-      '<div id="selSubBox"><label>Subcategoria' +
-        sel('selSub', '', [{ v: '', label: '— não mexer —' }], '', 'rascunho') + '</label></div>' +
-      (tags.length
-        ? '<div><div class="flabel">Etiquetas</div>' +
-          '<div class="chips" id="selTags">' + tags.map(function (g) {
-            return '<button type="button" class="tag grey" data-tag="' + esc(g) +
+      (parte ? '' : '<div class="hint">Só se altera o que preencheres. O resto de cada movimento fica como está.</div>') +
+      (comCat
+        /* a função, e não o nome: o selPick resolve um nome pelo funcaoDaApp,
+           que só conhece nomes de topo — «CW.selCatMudou» não o é, e a
+           subcategoria nunca acompanhava a categoria */
+        ? '<label>Categoria' + sel('selCat', '', cats, CW.selCatMudou, 'rascunho') + '</label>' +
+          '<div id="selSubBox"><label>Subcategoria' +
+            sel('selSub', '', [{ v: '', label: '— não mexer —' }], '', 'rascunho') + '</label></div>'
+        : '') +
+      (comTags
+        ? '<div><div class="flabel" id="selTagsL">Etiquetas</div>' +
+          '<div class="chips-fila" id="selTags" role="group" aria-labelledby="selTagsL">' + tags.map(function (g) {
+            return '<button type="button" class="chip" aria-pressed="false" data-tag="' + esc(g) +
               '" data-toca="nada" data-click="CW.selTagToggle(this)">' + esc(g) + '</button>';
           }).join('') + '</div>' +
           '<div class="hint u-mt-7px">As que marcares são <b>acrescentadas</b>. ' +
           'Nenhuma etiqueta é removida.</div></div>'
         : '') +
+      (parte === 'tags' && !tags.length ? '<div class="hint">Ainda não tens etiquetas: cria-as em Definições → Categorias, etiquetas e IRS.</div>' : '') +
     '</div>',
     '<button class="btn" data-toca="camada" data-click="closeAllModals()">Cancelar</button>' +
     '<button class="btn primary" data-toca="dados" data-click="CW.selGravar()">Aplicar</button>');
@@ -410,11 +544,13 @@ CW.selCatMudou = function () {
     [{ v: '', label: '— não mexer —' }].concat(subs.map(function (x) { return { v: x, label: x }; })), '', 'rascunho') + '</label>';
 };
 
-// liga/desliga uma etiqueta na edição em massa (o estado vive na classe do próprio botão)
-// Recebe: b — o próprio botão da etiqueta (elemento do DOM).
-// Devolve: nada — alterna a classe .on do botão.
+// liga/desliga uma etiqueta na edição em massa (o estado vive na classe do próprio chip)
+// Recebe: b — o próprio chip da etiqueta (elemento do DOM).
+// Devolve: nada — alterna a classe .on e o aria-pressed do chip.
 CW.selTagToggle = function (b) {
-  b.classList.toggle('on');
+  var on = !b.classList.contains('on');
+  b.classList.toggle('on', on);
+  if (b.setAttribute) b.setAttribute('aria-pressed', on ? 'true' : 'false');
 };
 
 /* O que as ações da seleção tocam: os movimentos marcados e, de cada lote
@@ -466,7 +602,7 @@ function selForaFrase(k) {
    toast se nada foi preenchido). */
 CW.selGravar = function () {
   var cat = val('selCat'), sub = val('selSub');
-  var tags = [].slice.call(document.querySelectorAll('#selTags .tag.on'))
+  var tags = [].slice.call(document.querySelectorAll('#selTags .on'))
     .map(function (b) { return b.getAttribute('data-tag'); });
   if (!cat && !sub && !tags.length) return toast('Não escolheste nada para alterar.');
 
@@ -484,18 +620,21 @@ CW.selGravar = function () {
   toast(((n ? n + (n === 1 ? ' movimento alterado.' : ' movimentos alterados.') : '') + ' ' + selForaFrase(alvo.fora)).trim());
 };
 
-/* Elimina os movimentos marcados: a confirmação diz quantos são e quanto
+/* Apaga os movimentos marcados: a confirmação diz quantos são e quanto
    somam — de um lote, o total das partes todas, que saem juntas —, e à saída
    fica um "Anular" de seis segundos (comDesfazer) — a cópia é tirada antes
-   do corte e volta inteira se o anular for clicado.
+   do corte e volta inteira se o anular for clicado. A soma é a da barra
+   (selSomaTexto), com o sinal do dinheiro: somava os valores sem sinal, e
+   uma receita de 1 250 € com uma despesa de 55 € dava «+1 195,00 €» na barra
+   e «1 305,00 €» na janela, no momento de apagar. O verbo é o da barra e o
+   do canvas: Apagar, do menu ao aviso.
    Devolve: nada — se for confirmado, grava e sai da seleção. */
 CW.selApagar = function () {
   if (!selN()) return;
   var alvo = selAlvos();
   if (!alvo.txs.length) return toast(selForaFrase(alvo.fora));
-  var total = sum(alvo.txs.map(function (t) { return t.amount || 0; }));
-  confirmModal('Eliminar ' + alvo.n + (alvo.n === 1 ? ' movimento' : ' movimentos'),
-    'Somam ' + euro2(total) + '.' + (alvo.fora ? ' ' + selForaFrase(alvo.fora) : ''),
+  confirmModal('Apagar ' + alvo.n + (alvo.n === 1 ? ' movimento' : ' movimentos'),
+    'Somam ' + selSomaTexto() + '.' + (alvo.fora ? ' ' + selForaFrase(alvo.fora) : ''),
     function () {
       /* outra vez aqui: entre a pergunta e o sim pode ter chegado uma parte */
       var agora = selAlvos(), sai = {};
@@ -503,7 +642,7 @@ CW.selApagar = function () {
       var copia = JSON.parse(JSON.stringify(agora.txs));
       db.transactions = (db.transactions || []).filter(function (t) { return !sai[t.id]; });
       save(); buildNav(); CW.selSair();
-      comDesfazer(agora.n + (agora.n === 1 ? ' movimento eliminado.' : ' movimentos eliminados.'), function () {
+      comDesfazer(agora.n + (agora.n === 1 ? ' movimento apagado.' : ' movimentos apagados.'), function () {
         db.transactions = (db.transactions || []).concat(copia);
       });
     });
@@ -572,6 +711,17 @@ var selModoPintado = false;
 // as caixas que saíram e ainda desvanecem na camada de saída, para a mudança seguinte as levar já
 var selFantasmas = [];
 
+/* As caixas estão à vista fora da seleção — a tabela do ecrã largo, onde as
+   .fora se mostram? Aí entrar e sair não as faz aparecer nem desaparecer: só
+   mudam de marca, e não há nada a desvanecer.
+   Devolve: true se alguma caixa .fora tem tamanho no ecrã. */
+function selForaAVista() {
+  return [].slice.call(document.querySelectorAll('#view .selbox.fora')).some(function (e) {
+    var r = e.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  });
+}
+
 /* O corpo de uma linha: o que fica à direita da caixa e é empurrado por ela.
    Recebe: e — a linha (.txrow).
    Devolve: o elemento .txcorpo (lista-movimentos.js:txLinhaHtml), ou null. */
@@ -609,7 +759,7 @@ function selOpacidade(e) {
    Devolve: {meses, corpos, caixas} — meses e corpos por chave (o mês, o id
    da linha), caixas uma lista de {el, x, y, w, h, op, dono}. */
 function selMedirDeslize() {
-  var sy = window.pageYOffset || 0, m = { meses: {}, corpos: {}, caixas: [] };
+  var sy = window.pageYOffset || 0, m = { meses: {}, corpos: {}, caixas: [], tabela: !selModoPintado && selForaAVista() };
   // a caixa que sai, com o dono que ela acompanha
   var guardar = function (el, dono) {
     var r = el.getBoundingClientRect();
@@ -696,15 +846,25 @@ function selAplicarDeslize(antes, entra) {
     // a linha em si é da continuidade (data-fk); aqui só o corpo, de lado
     mexeu['tx:' + id] = r.top + sy - a.y;
     var dx = a.x - c.getBoundingClientRect().left;
-    if (Math.abs(dx) >= 1) c.animate([{ transform: 'translateX(' + dx + 'px)' }, { transform: 'none' }], { duration: o.dur, easing: o.curva });
+    if (Math.abs(dx) >= 1) {
+      c.animate([{ transform: 'translateX(' + dx + 'px)' }, { transform: 'none' }], { duration: o.dur, easing: o.curva });
+      /* o quadrado do ícone (lista-movimentos.js:txLinhaHtml) está entre a
+         caixa e o corpo, e é empurrado o mesmo: desliza com ele, senão saltava */
+      var ic = e.querySelector('.ic');
+      if (ic && ic.animate) ic.animate([{ transform: 'translateX(' + dx + 'px)' }, { transform: 'none' }], { duration: o.dur, easing: o.curva });
+    }
   });
   if (entra) {
+    /* na tabela as caixas já se viam: só mudam de marca, não aparecem */
+    if (antes.tabela) return;
     [].slice.call(document.querySelectorAll('#view .selbox')).forEach(function (e) {
       if (!e.animate || !porPerto(e.getBoundingClientRect())) return;
       e.animate([{ opacity: 0 }, { opacity: 1 }], { duration: o.durF, easing: o.curva });
     });
     return;
   }
+  /* ao sair na tabela as caixas ficam (as .fora): nenhuma desaparece */
+  if (selForaAVista()) return;
   antes.caixas.forEach(function (c) {
     /* uma caixa cujo dono desapareceu (apagado) ou foi para longe sai sem
        fantasma: o que o dono tinha, a continuidade já o desvanece */

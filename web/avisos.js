@@ -27,6 +27,72 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 40,
+    data: '2026-10-17',
+    titulo: 'Uma cara nova',
+    seccoes: [
+      {
+        titulo: 'A mesma app, com outra cara',
+        afeta: ['app'],
+        itens: [
+          'Cores novas: o cobalto para o que se carrega, um azul-noite na barra lateral, e o dinheiro com três cores que se distinguem também pela luz — o que entra a verde, o que sai a laranja, as prestações a roxo. O vermelho fica só para o que está em atraso, para os erros e para o que apaga.',
+          'Letras novas, que vêm com a app e funcionam sem rede: a Geist no texto e a Bricolage Grotesque nos títulos e nos números grandes.',
+          'Cartões com contorno e sem sombra, botões de 44 px, selos retangulares, e o tema escuro redesenhado com as mesmas cores, mais claras.',
+          'Um campo que falta diz-o logo por baixo, a vermelho, e não só num aviso em baixo.',
+        ],
+      },
+      {
+        titulo: 'Cinco grupos, iguais no telemóvel e no computador',
+        afeta: ['app'],
+        itens: [
+          'O menu passou a ter cinco grupos: Visão geral, Casas (Imóveis, Contratos, Pessoas, Visitas), Dinheiro (Movimentos, Planeados, Créditos), Análise (Avaliação, Projeções, IRS · Anexo F) e Agenda. Em baixo, as Definições, a Ajuda e a tua conta.',
+          'No telemóvel, a barra de baixo é Início, Casas, «+», Dinheiro e Agenda. Casas e Dinheiro abrem com separadores no topo, e lembram-se de onde ficaste.',
+          'As Pessoas juntam os Inquilinos e os Proprietários, com um separador para cada.',
+          'Os Grupos e os Colaboradores passaram para as Definições.',
+          'A Declaração chama-se agora «IRS · Anexo F».',
+        ],
+      },
+      {
+        titulo: '«Criar» e «Pede atenção»',
+        afeta: ['app', 'movimentos'],
+        itens: [
+          'O botão «Criar» (na barra lateral e no «+» do telemóvel) abre uma folha com os cinco tipos de movimento, os teus modelos e os outros registos, com o do ecrã onde estás em primeiro. No computador, o botão principal de cada ecrã fica no cabeçalho («Novo movimento», «Novo contrato», …).',
+          'O sino abre «Pede atenção»: o que está por confirmar (confirmas ali mesmo), os prazos legais e fiscais, os pedidos por responder e o que os outros fizeram nas casas partilhadas, com filtros por cima.',
+          'Com um proprietário em foco, uma faixa no topo diz de quem são os valores, e limpa-se num toque.',
+          'O estado da sincronização vive no cabeçalho: Guardado, alterações por enviar, ou sem ligação.',
+        ],
+      },
+      {
+        titulo: 'Os ecrãs, um a um',
+        afeta: ['app', 'imoveis', 'contratos', 'movimentos', 'creditos', 'partilha', 'conta'],
+        itens: [
+          'A Visão geral começa pelo que pede atenção, segue com os quatro números do ano, e arruma os gráficos e as contas entre proprietários em filas. Os prazos legais e fiscais mostram os quatro mais urgentes, e o resto está a um toque.',
+          'Os Imóveis têm a foto de capa (ou um padrão com cor própria), o estado, três números e o que pede atenção. Os chips de cima filtram num toque, e a pesquisa também encontra os inquilinos. A ficha mostra tudo pela ordem em que se lê, com as ações rápidas por cima.',
+          'Os Movimentos têm a pesquisa sempre à vista e chips para o período, o tipo, o imóvel e a categoria. No computador a lista é uma tabela com colunas; marcar uma caixa entra na seleção, e a barra de baixo diz quanto somam os selecionados.',
+          'No formulário de um movimento o tipo escolhe-se num toque, o montante é grande, e o «pago por» é um botão por proprietário.',
+          'Os Planeados abrem com o que vem de trás para registar de uma vez, os por confirmar (Confirmar, Rever, e o resto no ⋯), chips para filtrar e um selo que diz de onde vem cada um.',
+          'Os Créditos mostram a dívida, as prestações e os juros até ao fim, um cartão por hipoteca, e no computador o plano ano a ano ao lado.',
+          'O Calendário mostra o mês num cartão, com pontos nos dias com visitas e planeados, e o dia escolhido por baixo (ou ao lado, no computador).',
+          'A Avaliação abre com o valor de mercado ao lado do valor por rendimento, as métricas em cartões e uma tabela por imóvel; tocar numa linha abre a avaliação desse imóvel. As Projeções e o IRS · Anexo F ganharam o mesmo arranjo, com «A tratar antes de entregar» numerado.',
+          'Os Contratos aparecem por imóvel: no telemóvel uma linha por contrato, no computador uma tabela com o período, a renda, o imposto, a líquida e o que falta perante a AT. A ficha abre pelos prazos que pedem decisão (Renovar, Terminar), e «Contrato em PDF» mostra o que vai no documento e o que falta antes de o gerar.',
+          'As Pessoas mostram cada inquilino numa linha com as iniciais, onde mora e a renda, e selos só do que importa (renda em atraso, cartão de cidadão a caducar). A ficha de um inquilino lê-se primeiro: onde mora, os contactos (tocas para ligar ou escrever), a identificação e os documentos.',
+          'As Visitas separam as próximas das passadas, com o dia num bloco à esquerda e o estado num selo: agendada, realizada ou faltou.',
+          'Os primeiros passos de uma conta nova são uma lista: o que já fizeste, o passo de agora com o botão que o faz, e quantos faltam.',
+          'Entrar e criar conta, os termos novos, a ajuda, os pedidos ao suporte, as novidades e o tutorial guiado têm a cara nova. Recusar um pedido de partilha deixou de ser um botão vermelho: recusar não apaga nada.',
+          'As Definições arrumam-se em Conta, Dinheiro e IRS, e App. As categorias, as etiquetas e as colunas do Anexo F vivem numa página só: Definições → Categorias, etiquetas e IRS. Convidar um colaborador abre uma janela, e o convite pronto mostra-se logo.',
+        ],
+      },
+      {
+        titulo: 'Fora da app',
+        afeta: ['app', 'suporte'],
+        itens: [
+          'A página rendorium.com, os Termos e a Privacidade têm a cara nova.',
+          'Os emails (o pedido de ajuda recebido, a resposta do suporte e o de repor a palavra-passe) também, e leem-se bem no telemóvel e no tema escuro do email.',
+        ],
+      },
+    ],
+  },
+  {
     v: 39,
     data: '2026-10-12',
     titulo: 'A Declaração segue as regras de cada ano',
@@ -343,7 +409,7 @@ var AVISOS = [
         titulo: 'IRS e dedução, nas Definições',
         afeta: ['app', 'movimentos'],
         itens: [
-          'Em Definições → IRS e dedução dizes em que coluna do Anexo F cai cada categoria e subcategoria de pagamentos, com o que o artigo 41.º do CIRS deixa deduzir explicado em poucas linhas.',
+          'Em Definições → Categorias, etiquetas e IRS dizes em que coluna do Anexo F cai cada categoria e subcategoria de pagamentos, com o que o artigo 41.º do CIRS deixa deduzir explicado em poucas linhas.',
           'As regras de origem já separam o que a lei deixa de fora — juros, mobiliário, eletrodomésticos, beneficiações — e podes repô-las quando quiseres.',
         ],
       },
@@ -498,7 +564,7 @@ var AVISOS = [
         afeta: ['creditos', 'movimentos'],
         itens: [
           'Um movimento criado a partir de uma prestação planeada já vem com a hipoteca certa preenchida — antes ficava sem crédito atribuído e tinhas de o escolher a cada mês.',
-          'A prestação segue a divisão que puseste no planeado: quem paga e por quem se divide passam para o movimento como estão.',
+          'A prestação segue a divisão que escolheste no planeado: quem paga e por quem se divide passam para o movimento como estão.',
         ],
       },
       {

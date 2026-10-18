@@ -189,7 +189,7 @@ describe('desligado: com os serviços que usam desligados, cada vista rende sem 
     // com contratos na db e os serviços desligados, a tabela rende na mesma
     semear(app); desligar(app);
     html = app.vProjections();
-    assert.match(html, /Detalhe ano a ano/);
+    assert.match(html, /Ano a ano/);
     assert.doesNotMatch(html, /go\('contracts'\)|go\('properties'\)/);
     // e o vazio sem imóveis
     zerar(app); ligarTudo(app);
@@ -235,7 +235,7 @@ describe('desligado: com os serviços que usam desligados, cada vista rende sem 
     html = app.vFisco();
     assert.doesNotMatch(html, /ctView\(|personView\(|propView\(|txView\(|go\('contracts'\)|go\('transactions'\)|go\('properties'\)/);
     assert.match(html, /Anexo F · quadro 4\.1/, 'o quadro fica');
-    assert.match(html, /Obrigações de /, 'as obrigações ficam, sem toque');
+    assert.match(html, /A tratar antes de entregar/, 'as obrigações ficam, sem toque');
     assert.match(html, /Fora da declaração/);
     assert.match(html, /Rendas sem contrato/);
     assert.match(html, /O serviço Contratos está desligado nesta conta\./);

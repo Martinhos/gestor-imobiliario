@@ -1,11 +1,26 @@
 /* ================= TEMA E ÁREA SEGURA =================
    A aparência que depende do aparelho: o tema claro, escuro ou automático
    (isDark, applyTheme, setTheme), as duas paletas dos gráficos (PAL_LIGHT e
-   PAL_DARK, trocadas dentro do próprio PAL) e as margens da área segura
-   (fitInsets, e o __setInsets que o wrapper Android chama). */
-const PAL_LIGHT=['#2f7d5b','#7aa9d6','#d6a34a','#c56b68','#8a7bb8','#5aa8a0','#b58a5e','#9aa7a1','#6f8f76','#c2926a','#7e93b8','#a4b56c'];
-const PAL_DARK=['#5ee0a8','#7aa9ff','#ffc35c','#ff8a80','#c89bff','#5ad0d8','#f0a06a','#b8c2d6','#8fd0a0','#ffb08a','#9fb8ff','#d4e07a'];
+   PAL_DARK, trocadas dentro do próprio PAL), as cores das séries com papel
+   (COR_SERIE) e as margens da área segura (fitInsets, e o __setInsets que o
+   wrapper Android chama). */
+/* A paleta categórica (as fatias das categorias, uma cor por imóvel, por
+   contrato): as sete primeiras são as do canvas de 2026-10 — cobalto,
+   laranja, verde, roxo, mostarda, petróleo, ardósia — e as cinco seguintes
+   prolongam-nas com a mesma luminosidade, para doze categorias não repetirem
+   cor. A escura é a mesma família, mais clara, para o fundo azul-noite. */
+const PAL_LIGHT=['#2952d9','#bd420c','#16775a','#6845c2','#c99a06','#0e8ba8','#8b93a5','#b03a78','#5e7d1f','#a0522d','#3d6fb6','#7c6a55'];
+const PAL_DARK=['#7c9bff','#ff9a62','#4cc79a','#b49bff','#f2c25a','#5cc8e0','#8c96ab','#f08cc0','#a8cf6a','#e0a07a','#8fb4f0','#c2b29a'];
 const PAL=PAL_LIGHT.slice();
+/* As séries que têm PAPEL, e não um lugar numa lista: o que entra é verde, as
+   despesas laranja, as prestações e a dívida roxas, o cashflow cobalto — as
+   mesmas de --in, --out, --loan e --accent na folha. Escreviam-se à mão em
+   cada gráfico ('#c56b68', '#d6a34a') e o tema escuro nunca as trocava; agora
+   o applyTheme troca-as aqui dentro, como troca o PAL, e quem guardou a
+   referência vê as novas. */
+const COR_SERIE_CLARO={receita:'#16775a',despesa:'#bd420c',prestacao:'#6845c2',divida:'#6845c2',cashflow:'#2952d9'};
+const COR_SERIE_ESCURO={receita:'#4cc79a',despesa:'#ff9a62',prestacao:'#b49bff',divida:'#b49bff',cashflow:'#7c9bff'};
+const COR_SERIE=Object.assign({},COR_SERIE_CLARO);
 
 /* ================= ÁREA SEGURA ================= */
 /* O wrapper Android injeta os valores exatos. Fora dele, medimos o env() e,
@@ -63,7 +78,9 @@ function applyTheme(){
   const d=isDark();
   document.documentElement.classList.toggle('dark',d);
   PAL.splice(0,PAL.length,...(d?PAL_DARK:PAL_LIGHT));
-  const m=document.getElementById('metaTheme');if(m)m.content=d?'#161a3a':'#1a3a2c';
+  Object.assign(COR_SERIE,d?COR_SERIE_ESCURO:COR_SERIE_CLARO);
+  /* a barra do sistema: o azul-noite da barra lateral no claro, o fundo no escuro */
+  const m=document.getElementById('metaTheme');if(m)m.content=d?'#0b111e':'#0e1830';
   /* No modo automático não se fixa o esquema. Fixá-lo era um ciclo vicioso: o
      browser dizia "claro", a app escrevia color-scheme:light, e isso confirma
      ao browser que a página não sabe ser escura — deixando-o sem razão para

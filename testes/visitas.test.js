@@ -39,13 +39,129 @@ describe('a página das visitas', () => {
       app.normVisit({ nomes: 'Bruno', propertyId: 'P1', date: '2001-01-01', estado: 'realizada', resultado: 'interessado' }),
     ];
     const html = app.vVisits();
-    assert.match(html, /Próximas/);
-    assert.match(html, /Passadas/);
+    assert.match(html, /<div class="vis-grupo-cab"><h2>Próximas<\/h2><span class="small num">1<\/span><\/div>/, 'cada grupo diz quantas são');
+    assert.match(html, /<div class="vis-grupo-cab"><h2>Passadas<\/h2><span class="small num">1<\/span><\/div>/);
     assert.match(html, /Ana/);
-    assert.match(html, /Interessado/, 'o desfecho aparece nas realizadas');
-    assert.match(html, /class="fab"/, 'há FAB para marcar');
+    assert.match(html, /<span class="badge in">Interessado<\/span>/, 'o desfecho aparece nas realizadas, a verde');
+    assert.doesNotMatch(html, /class="fab"/, 'sem FAB: o «Marcar visita» está no cabeçalho e no + da barra');
+    assert.doesNotMatch(html, /lpMenu\(/, 'nem ⋮: as opções estão na ficha e no toque longo');
     assert.match(html, /fpanel/, 'os filtros vivem no painel comum da app');
     assert.match(html, /type="date"[\s\S]*type="time"/, 'intervalos de dia e de hora no painel');
+    assert.match(vazioDeVisitas(), /data-click="visitModal\(\)">Marcar visita<\/button>/, 'o vazio continua a ter o seu botão');
+  });
+
+  test('as linhas: o bloco da data, a hora e o imóvel, e os selos com as cores da Agenda — à direita nas que vêm, por baixo nas passadas', () => {
+    monta();
+    const hoje = app.pzHoje(), dia = (n) => app.pzAddDias(hoje, n);
+    app.db.visits = [
+      app.normVisit({ id: 'V1', nomes: 'Carlos Pinto', propertyId: 'P1', roomId: 'Q1', date: hoje, start: '11:00', end: '11:30' }),
+      app.normVisit({ id: 'V2', nomes: 'Daniel Sousa', propertyId: 'P1', date: dia(5), start: '10:00' }),
+      app.normVisit({ id: 'V3', nomes: 'Joana Reis', propertyId: 'P1', date: dia(-2), start: '18:00', estado: 'realizada', resultado: 'interessado' }),
+      app.normVisit({ id: 'V4', nomes: 'Bruno Matos', propertyId: 'P1', date: dia(-30), estado: 'faltou' }),
+      app.normVisit({ id: 'V5', nomes: 'Rita', propertyId: 'P1', date: dia(-40), estado: 'cancelada' }),
+    ];
+    const html = app.vVisits();
+    const linha = (id) => html.split('data-lp="vis:').find((x) => x.startsWith(id + '"')) || '';
+    assert.match(linha('V1'), /<span class="vis-data num hoje"><b>\d+<\/b><span>hoje<\/span><\/span>/, 'hoje a cheio');
+    assert.match(linha('V1'), /11:00 – 11:30 · T2 Lisboa · Quarto 1/);
+    assert.match(linha('V1'), /<span class="vis-selos vis-selos-dir"><span class="badge">Agendada<\/span><\/span>/, 'agendada a cobalto, à direita');
+    assert.match(linha('V2'), /10:00 · T2 Lisboa · daqui a 5 dias/, 'a semana diz quanto falta');
+    assert.ok(linha('V2').includes('<span>' + app.MES[Number(dia(5).slice(5, 7)) - 1] + '</span>'), 'mais longe, o mês');
+    assert.match(linha('V3'), /18:00 · T2 Lisboa · há 2 dias/);
+    assert.match(linha('V3'), /<span class="vis-selos"><span class="badge in">Realizada<\/span><span class="badge in">Interessado<\/span><\/span>/, 'por baixo, o estado e o desfecho');
+    assert.match(linha('V4'), /<span class="badge amber">Faltou<\/span>/, 'faltou a âmbar, como na Agenda');
+    assert.doesNotMatch(linha('V4'), /há 30 dias/, 'longe de mais para o «há N dias»');
+    assert.match(linha('V5'), /<span class="badge grey">Cancelada<\/span>/);
+    assert.match(html, /<div class="list vis-lista" data-listaviva="visitas:Próximas">/);
+    // a Visão geral de quem colabora chama-a pelo map: o índice que chega a mais não muda nada
+    assert.equal(app.visCard(app.db.visits[0], 3, app.db.visits), app.visCard(app.db.visits[0]));
+  });
+
+  test('os chips dos filtros: escolhidos dizem o valor e têm o ×; os dias e horas abrem o painel', () => {
+    monta();
+    app.db.visits = [app.normVisit({ id: 'V1', nomes: 'Ana', propertyId: 'P1', date: '2999-01-01' })];
+    let html = app.vVisits();
+    assert.match(html, /<div class="vis-chips" role="group" aria-label="Filtrar as visitas">/);
+    for (const [k, nome] of [['pr', 'Imóvel'], ['es', 'Estado'], ['rs', 'Desfecho']]) {
+      assert.match(html, new RegExp('<span class="vis-chip"><div class="sel" id="sel_vischip_' + k + '">[\\s\\S]*?aria-label="' + nome + '"[\\s\\S]*?<span id="lab_vischip_' + k + '">' + nome + '</span>'), nome);
+    }
+    assert.match(html, /class="chip vis-chip-dias" data-toca="vista" data-click="hdrFiltToggle\(\)">Dias e horas<\/button>/);
+    app.lf('lvis').pr = 'P1';
+    app.lf('lvis').d1 = '2026-10-15';
+    app.lf('lvis').h1 = '18:00';
+    html = app.vVisits();
+    assert.match(html, /<span class="vis-chip on"><div class="sel" id="sel_vischip_pr">[\s\S]*?aria-label="Imóvel: T2 Lisboa"[\s\S]*?<span id="lab_vischip_pr">T2 Lisboa<\/span>/);
+    assert.match(html, /aria-label="Limpar imóvel" data-toca="vista" data-click="visLimparChip\('lvis','pr'\)"/);
+    const dias = 'desde ' + (app.pzHoje().slice(0, 4) === '2026' ? '15/10' : '15/10/2026') + ' · desde 18:00';
+    assert.ok(html.includes('aria-label="Dias e horas: ' + dias + '"'), 'o chip diz o intervalo');
+    let pintou = 0;
+    app.render = () => { pintou++; };
+    app.visLimparChip('lvis', 'dias');
+    assert.deepEqual([app.lf('lvis').d1, app.lf('lvis').h1, app.lf('lvis').pr], ['', '', 'P1'], 'limpa os quatro limites, e só eles');
+    app.visLimparChip('lvis', 'pr');
+    assert.equal(app.lf('lvis').pr, '');
+    assert.equal(pintou, 2);
+    // um nome com «$&» não vira outra coisa na troca do rótulo
+    app.db.properties[0].name = 'Casa $& Cia';
+    app.lf('lvis').pr = 'P1';
+    try { assert.match(app.vVisits(), /<span id="lab_vischip_pr">Casa \$&amp; Cia<\/span>/); } finally { app.lf('lvis').pr = ''; }
+  });
+
+  test('os intervalos do painel: cada campo de dia e de hora tem nome para o leitor de ecrã', () => {
+    monta();
+    app.db.visits = [app.normVisit({ id: 'V1', nomes: 'Ana', propertyId: 'P1', date: '2999-01-01' })];
+    const html = app.vVisits();
+    const campos = [...html.matchAll(/<input type="(date|time)"[^>]*>/g)].map((m) => [m[1], (m[0].match(/aria-label="([^"]*)"/) || [])[1]]);
+    assert.deepEqual(campos, [['date', 'Dia — de'], ['date', 'Dia — até'], ['time', 'Hora de início — de'], ['time', 'Hora de início — até']]);
+    assert.match(html, /<div class="vis-int-rot" aria-hidden="true">Dia<\/div>/, 'o rótulo à vista, com o desenho do rótulo de um campo');
+  });
+});
+
+/* O vazio da página das visitas, com um imóvel onde se pode marcar.
+   Devolve: o HTML da vista sem visitas nenhumas. */
+function vazioDeVisitas() {
+  const guardadas = app.db.visits;
+  app.db.visits = [];
+  try { return app.vVisits(); } finally { app.db.visits = guardadas; }
+}
+
+describe('a ficha da visita', () => {
+  test('lê-se primeiro: quando por extenso, os selos, o imóvel, o contacto que liga, os comentários e as outras visitas ao imóvel', () => {
+    monta();
+    const hoje = app.pzHoje(), dia = (n) => app.pzAddDias(hoje, n);
+    app.db.visits = [
+      app.normVisit({ id: 'V1', nomes: 'Joana Reis', propertyId: 'P1', roomId: 'Q1', date: dia(-2), start: '18:00', end: '18:30', estado: 'realizada', resultado: 'pensar', contacto: '926 410 775', notas: 'Gostou da luz.\nTem um gato.' }),
+      app.normVisit({ id: 'V2', nomes: 'Carlos Pinto', propertyId: 'P1', date: hoje, start: '11:00' }),
+      app.normVisit({ id: 'V3', nomes: 'Daniel Sousa', propertyId: 'P1', date: dia(7), start: '10:00' }),
+      app.normVisit({ id: 'V4', nomes: 'Já foi', propertyId: 'P1', date: dia(-5) }),
+      app.normVisit({ id: 'V5', nomes: 'Desistiu', propertyId: 'P1', date: dia(3), estado: 'cancelada' }),
+    ];
+    const f = app.visFicha('V1');
+    assert.match(f, /<p class="vis-quando num">[A-ZÀ-Ú][a-zà-ú]+, \d\d\/\d\d\/\d{4} · 18:00 – 18:30 · há 2 dias<\/p>/, 'o dia da semana, a data, as horas e quanto foi');
+    assert.match(f, /<div class="vis-selos"><span class="badge in">Realizada<\/span><span class="badge">A pensar<\/span><\/div>/);
+    assert.match(f, /<div class="vis-kv"><span>Imóvel<\/span><span>T2 Lisboa<\/span><\/div>/);
+    assert.match(f, /<div class="vis-kv"><span>Quarto<\/span><span>Quarto 1<\/span><\/div>/);
+    assert.match(f, /<a class="vis-kv pes-liga" href="tel:926410775" data-toca="nada"><span>Contacto<\/span><span>926 410 775<\/span><\/a>/, 'o contacto liga');
+    assert.match(f, /<p class="lbl">Comentários<\/p><p class="vis-texto">Gostou da luz\.<br>Tem um gato\.<\/p>/);
+    assert.match(f, /<p class="lbl">Outras visitas a este imóvel<\/p>\s*<p class="small num">Hoje às 11:00 · Carlos Pinto<br>[\d/]+ às 10:00 · Daniel Sousa<\/p>/, 'só as que vêm, e não as canceladas');
+    assert.doesNotMatch(f, /Converter em inquilino/, 'a pensar ainda não convida a converter');
+    assert.doesNotMatch(f, /<input|<textarea|<select/, 'uma ficha lê-se, não se edita');
+    // um email escreve
+    app.db.visits[0].contacto = 'joana@exemplo.pt';
+    assert.match(app.visFicha('V1'), /href="mailto:joana@exemplo\.pt"/);
+  });
+
+  test('numa realizada com interesse convida a converter em inquilino, só com os Inquilinos e a permissão', () => {
+    monta();
+    app.db.visits = [app.normVisit({ id: 'V1', nomes: 'Joana Reis', propertyId: 'P1', date: '2001-01-01', estado: 'realizada', resultado: 'interessado' })];
+    const f = app.visFicha('V1');
+    assert.match(f, /<section class="vis-converte"><p class="vis-converte-tit">Há interesse em arrendar\.<\/p>/);
+    assert.match(f, /data-toca="camada" data-click="visConverte\('V1'\)">[\s\S]*? Converter em inquilino<\/button>/);
+    app.definirServicosDesligados(['tenants']);
+    try { assert.doesNotMatch(app.visFicha('V1'), /vis-converte/); } finally { app.definirServicosDesligados([]); }
+    const pode = app.pode;
+    app.pode = (pid, perm) => perm !== 'tenant.add';
+    try { assert.doesNotMatch(app.visFicha('V1'), /vis-converte/); } finally { app.pode = pode; }
   });
 });
 

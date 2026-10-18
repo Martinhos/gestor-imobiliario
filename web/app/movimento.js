@@ -88,8 +88,9 @@ function txGuardar(id){
   /* um pagamento de crédito a sério (não um planeado nem um modelo só) abate capital
      na ficha do imóvel: sem «Editar a ficha» o movimento subia e a dívida não */
   if(tForm.kind==='loan'&&!planeado&&(m.modo!=='tpl'||m.alsoTx)){const rc=motivoCredito(tForm.propertyId);if(rc)return toast(rc)}
-  if(!tForm.label.trim())return falhaCampo('t_label','Escreve uma descrição.');
+  /* pela ordem do formulário: o montante vem primeiro, e gravar vazio marca-o a ele */
   if(!(tForm.amount>0))return falhaCampo('t_amount','Indica um montante.');
+  if(!tForm.label.trim())return falhaCampo('t_label','Escreve uma descrição.');
   /* com hipotecas vivas, um pagamento de crédito sem hipoteca ia parar à conta errada ou a nenhuma */
   if(tForm.kind==='loan'&&!tForm.loanId&&liveLoans(prop(tForm.propertyId)).length)return falhaCampo('t_loan','Indica a hipoteca.');
   if(tForm.kind==='settle'){
@@ -257,7 +258,9 @@ function txFicha(id){
     omissao:'sem regra, cai em Outros',excluido:'não conta: categoria fora dos totais'}[col.origem]||''):'';
   return ficha([
     {tipo:'nota',valor:esc(lote?recusaDoLote(t):motivoRecusa(t.propertyId,'tx.add',t))},
-    {rotulo:'Montante',valor:`<span class="${K.color}">${K.sign}${euro2(montante)}</span>`},
+    /* a cor do valor é a da lista (txTomDoTipo): a prestação roxa, a dívida em
+       cobalto — o K.color dava-lhes o âmbar, que é só para aviso */
+    {rotulo:'Montante',valor:`<span class="${txTomDoTipo(t.kind).valor}">${K.sign}${euro2(montante)}</span>`},
     {rotulo:'Tipo',valor:esc(K.short)+(t.kind==='loan'?(t.payType==='amortizacao'?' · amortização':' · prestação'):'')},
     {rotulo:'Data',valor:dPT(t.date)},
     /* sem imóvel: um acerto é de todos os imóveis; o resto é um movimento avulso,
@@ -438,47 +441,111 @@ function txBody(){
   const catKeys=Object.keys(cs).filter(c=>!(t.kind==='expense'&&c==='Crédito à habitação'));if(t.category&&catKeys.indexOf(t.category)<0)catKeys.unshift(t.category);
   const credit=t.kind==='owed'||t.kind==='repay',settle=t.kind==='settle';
   const owOpts=[{v:'',label:'Todos os proprietários'}].concat(ows.map(o=>({v:o.id,label:rotuloDoDono(o,ows.length)})));
-  /* a categoria e a subcategoria são texto de quem as escreveu — e o resumo da dobra entra no HTML tal e qual */
-  const catSum=esc([t.category,t.sub].filter(Boolean).join(' / '))+((t.tags||[]).length?(t.category?' · ':'')+t.tags.length+' etiqueta'+(t.tags.length===1?'':'s'):'');
-  const planeado=txModo.modo==='rec',modelo=txModo.modo==='tpl';
-  return `<div class="form">
+  const planeado=txModo.modo==='rec',modelo=txModo.modo==='tpl',tom=txTomDoTipo(t.kind);
+  const repor=calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011;
+  const imovel=`<label>Imóvel${podeSemImovel()?'':' <span class="req">*</span>'}${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:(t.todos?'*':'')),opcoesDoImovel(t),'onPropChange','rascunho')}</label>`;
+  /* O formulário do canvas (M-Novo movimento): o tipo num segmentado, o
+     montante grande, e os campos em grupos — o que foi (montante, descrição,
+     data, imóvel, quem pagou), como se classifica (categoria, coluna do Anexo
+     F, etiquetas), como se divide —, e os comentários. O que se grava é o de
+     sempre: os mesmos ids, lidos pelo collectTx. */
+  return `<div class="form mov-form">
     ${modelo?`<label>Nome do modelo (opcional)<input id="t_tplName" value="${esc(txModo.tplName||'')}" placeholder="Ex: Renda mensal T2" autocomplete="off"></label>
     <div class="hint u-mt-n6px">Em branco, o modelo fica com o nome da descrição.</div>`:''}
-    ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" data-toca="rascunho" data-click="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
-    <label>Descrição <span class="req">*</span><input id="t_label" value="${esc(t.label)}" placeholder="Ex: ${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
-    <div class="row">
-      <label>Montante (€) <span class="req">*</span><div class="u-d-flex u-g-7px u-ai-center">
-        <input id="t_amount" type="text" inputmode="decimal" class="u-fx-1 u-minw-0" value="${t.amount||''}" placeholder="Ex: ${t.kind==='income'?'900':t.kind==='loan'?'650':t.kind==='settle'?'250':t.kind==='owed'||t.kind==='repay'?'5000':'80'}" data-input="txMontanteEscrito(this.value)">
-        <button type="button" class="btn sm primary${calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011?'':' u-d-none'} u-fx-0-0-auto u-p-9px-12px" id="amt_reset" title="Repor a prestação calculada" data-toca="rascunho" data-click="onAmtReset()">Repor</button></div></label>
-      ${planeado?'<span></span>':`<label>Data<input id="t_date" type="date" value="${esc(t.date)}" data-change="txDataMudou()"></label>`}</div>
-    <label>Imóvel${podeSemImovel()?'':' <span class="req">*</span>'}${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:(t.todos?'*':'')),opcoesDoImovel(t),'onPropChange','rascunho')}</label>
-    ${(!settle&&!t.propertyId&&!t.groupId&&!t.todos&&podeSemImovel())?'<div class="hint u-mt-n6px">Conta nos totais, mas não na avaliação de nenhum imóvel.</div>':''}
-    ${t.todos&&!t.propertyId?`<div class="hint u-mt-n6px">${esc(dicaDeTodos(t))}</div>`:''}
-    ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+dPT(c.start):'')}))),'onCtChange','rascunho')}</label>`:''}
-    ${t.kind==='income'&&(t.contractId||t.category==='Rendas')?txFiscoSect():''}
-    ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${lns.length?' <span class="req">*</span>':''}${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange','rascunho')}</label>`:''}
-    ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'} (opcional)<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Ex: Pai" autocomplete="off" list="creditorList" data-input="refreshCredHint()">
-        <datalist id="creditorList">${knownCreditors().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
-      <div class="hint" id="credHint">${credHint()}</div>`:''}
-    ${settle?(ows.length>1?`<div class="row">
-        <label>Quem paga <span class="req">*</span>${sel('t_paid',t.paidBy||'',owOpts,'','rascunho')}</label>
-        <label>Quem recebe <span class="req">*</span>${sel('t_to',t.toId||'',owOpts,'','rascunho')}</label></div>
-      <div class="hint">Transferência entre proprietários deste imóvel: acerta as contas entre donos e não conta como receita nem despesa.</div>`
-      :`<div class="hint">Escolhe um imóvel com pelo menos dois proprietários.</div>`)
-    :(ows.length?`<label>${isIn(t.kind)?'Recebido por':'Pago por'}${sel('t_paid',t.paidBy||'',owOpts,'','rascunho')}</label>`:'')}
-    <div id="loanHint">${loanHint()}</div>
-    ${settle?'':fold('cat','Categoria e etiquetas',`<div class="${subs.length||t.category?'row':''}">
-      <label>Categoria${sel('t_cat',t.category,[{v:'',label:'— sem categoria —'}].concat(catKeys.map(c=>({v:c,label:c}))).concat([{v:'__new__',label:'+ Criar categoria…'}]),'onCatChange','rascunho')}</label>
-      ${subs.length||t.category?`<label>Subcategoria${sel('t_sub',t.sub,[{v:'',label:'— indiferente —'}].concat(subs.map(x=>({v:x,label:x}))).concat([{v:'__new__',label:'+ Criar subcategoria…'}]),'onSubChange','rascunho')}</label>`:''}</div>
+    ${txTipoSegm(t)}
+    ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" aria-pressed="${t.kind===k}" data-toca="rascunho" data-click="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
+    <div class="sect mov-grp">
+      <label>Montante (€) <span class="req">*</span><div class="mov-montante">
+        <span class="mov-montante-campo ${tom.valor}"><input id="t_amount" type="text" inputmode="decimal" class="disp" value="${txMontanteNoCampo(t.amount)}" placeholder="Ex: ${t.kind==='income'?'900':t.kind==='loan'?'650':t.kind==='settle'?'250':t.kind==='owed'||t.kind==='repay'?'5000':'80'}" data-input="txMontanteEscrito(this.value)"><span class="disp mov-euro" aria-hidden="true">€</span></span>
+        <button type="button" class="btn sm primary${repor?'':' u-d-none'} mov-repor" id="amt_reset" title="Repor a prestação calculada" data-toca="rascunho" data-click="onAmtReset()">Repor</button></div></label>
+      <label>Descrição <span class="req">*</span><input id="t_label" value="${esc(t.label)}" placeholder="Ex: ${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
+      ${planeado?imovel:`<div class="mov-par"><label>Data<input id="t_date" type="date" value="${esc(t.date)}" data-change="txDataMudou()"></label>${imovel}</div>`}
+      ${(!settle&&!t.propertyId&&!t.groupId&&!t.todos&&podeSemImovel())?'<div class="hint u-mt-n6px">Conta nos totais, mas não na avaliação de nenhum imóvel.</div>':''}
+      ${t.todos&&!t.propertyId?`<div class="hint u-mt-n6px">${esc(dicaDeTodos(t))}</div>`:''}
+      ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+dPT(c.start):'')}))),'onCtChange','rascunho')}</label>`:''}
+      ${t.kind==='income'&&(t.contractId||t.category==='Rendas')?txFiscoSect():''}
+      ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${lns.length?' <span class="req">*</span>':''}${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange','rascunho')}</label>`:''}
+      ${t.kind==='loan'?`<div id="loanHint">${loanHint()}</div>`:''}
+      ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'} (opcional)<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Ex: Pai" autocomplete="off" list="creditorList" data-input="refreshCredHint()">
+          <datalist id="creditorList">${knownCreditors().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
+        <div class="hint" id="credHint">${credHint()}</div>`:''}
+      ${settle?(ows.length>1?`<div class="row">
+          <label>Quem paga <span class="req">*</span>${sel('t_paid',t.paidBy||'',owOpts,'','rascunho')}</label>
+          <label>Quem recebe <span class="req">*</span>${sel('t_to',t.toId||'',owOpts,'','rascunho')}</label></div>
+        <div class="hint">Transferência entre proprietários deste imóvel: acerta as contas entre donos e não conta como receita nem despesa.</div>`
+        :`<div class="hint">Escolhe um imóvel com pelo menos dois proprietários.</div>`)
+      :(ows.length?txPagoPorHtml(t,ows,owOpts):'')}
+    </div>
+    ${settle?'':`<div class="sect mov-grp" id="fold_cat">
+      <div class="${subs.length||t.category?'row':''}">
+        <label>Categoria${sel('t_cat',t.category,[{v:'',label:'— sem categoria —'}].concat(catKeys.map(c=>({v:c,label:c}))).concat([{v:'__new__',label:'+ Criar categoria…'}]),'onCatChange','rascunho')}</label>
+        ${subs.length||t.category?`<label>Subcategoria${sel('t_sub',t.sub,[{v:'',label:'— indiferente —'}].concat(subs.map(x=>({v:x,label:x}))).concat([{v:'__new__',label:'+ Criar subcategoria…'}]),'onSubChange','rascunho')}</label>`:''}</div>
       ${t.kind==='expense'?`<label>Coluna no Anexo F${sel('t_irscol',t.irsCol||'',[{v:'',label:'Pela categoria: '+irsColunaNome(irsColunaDe(Object.assign({},t,{irsCol:''})).col)}].concat(IRS_COLUNAS.map(x=>({v:x[0],label:x[1]}))),'onIrsCol','rascunho')}</label>
       <div class="hint u-mt-n6px">Só o que pagaste para obter a renda entra. Juros, mobiliário, eletrodomésticos e obras que acrescentam valor ficam de fora.</div>`:''}
-      <div><div class="flabel">Etiquetas</div>${tagField((t.tags||[]).map(g=>({id:g,label:g})),'Adicionar','addTxTag()','delTxTag','grey')}</div>`,
-      {icon:'tag',open:!!(t.category||(t.tags||[]).length),summary:catSum||'sem categoria'})}
+      <div class="mov-etiquetas"><div class="flabel">Etiquetas</div>${tagField((t.tags||[]).map(g=>({id:g,label:g})),'Adicionar','addTxTag()','delTxTag','')}</div>
+    </div>`}
     ${(!settle&&(t.groupId||t.todos)&&txProps(t).length>1)?psplitSect():''}
     ${(!settle&&!credit&&ows.length>1)?splitSect(ows):''}
     ${credit&&ows.length>1?`<div class="hint">Dívidas a terceiros não entram nas contas entre proprietários: ficam com quem as recebe ou paga.</div>`:''}
     ${planeado&&servicoLigado('recurring')?recSect():''}
     ${richEditor('Comentários','t_notes',t.notes,'Opcional')}</div>`;
+}
+/* O tipo do movimento num segmentado, no cimo do formulário (o canvas):
+   Receita, Despesa, Crédito, Dívida e Transferência. Mudar de tipo passa pelo
+   setKind, como já passava trocar entre dívida recebida e paga; a dívida
+   recebida ou paga escolhe-se logo a seguir.
+   Recebe: t — o movimento do formulário (tForm).
+   Devolve: o HTML do segmentado (texto). */
+function txTipoSegm(t){
+  const ops=[['income','Receita',''],['expense','Despesa',''],['loan','Crédito','Pagamento de crédito'],['owed','Dívida',''],['settle','Transf.','Transferência entre proprietários']];
+  const atual=t.kind==='repay'?'owed':t.kind;
+  return `<div class="segm mov-tipo-segm" role="radiogroup" aria-label="Tipo de movimento">${ops.map(([k,l,a])=>{const on=atual===k;
+    return `<button type="button" role="radio" aria-checked="${on}"${on?` class="on ${txTomDoTipo(k).valor}"`:''}${a?` aria-label="${a}" title="${a}"`:''} data-toca="rascunho" data-click="txMudaTipo('${k}')">${l}</button>`}).join('')}</div>`;
+}
+/* Um toque no segmentado do tipo. A «Dívida» já escolhida (recebida ou paga)
+   fica como está; o resto passa pelo setKind.
+   Recebe: k — o tipo tocado ('income', 'expense', 'loan', 'owed' ou 'settle').
+   Devolve: nada — muda o tipo e repinta o formulário (ou nada, se já era esse). */
+function txMudaTipo(k){
+  if(k===tForm.kind||(k==='owed'&&tForm.kind==='repay'))return;
+  setKind(k);
+}
+/* O nome curto de um proprietário, para o segmentado de quem pagou: o primeiro
+   nome quando nenhum outro à escolha começa pelo mesmo, senão o nome inteiro;
+   com « (eu)» no meu, pela regra do rotuloDoDono.
+   Recebe: o — o proprietário; ows — os proprietários à escolha.
+   Devolve: o nome (texto, por escapar). */
+function rotuloCurtoDoDono(o,ows){
+  const pn=x=>String((x&&x.name)||'').trim().split(/\s+/)[0];
+  const curto=ows.filter(x=>pn(x)===pn(o)).length>1?(o.name||''):pn(o);
+  return ows.length>1&&meuId()&&o.id===meuId()?curto+' (eu)':curto;
+}
+/* «Pago por» (ou «Recebido por»): com até dois proprietários um segmentado
+   (o canvas) — «Todos» e um botão por dono —; com mais, o menu de sempre. O
+   valor vive no #t_paid, que o collectTx lê como antes.
+   Recebe: t — o movimento do formulário; ows — os proprietários à escolha;
+   owOpts — as opções do menu, para quando são mais de dois.
+   Devolve: o HTML do campo (texto). */
+function txPagoPorHtml(t,ows,owOpts){
+  const rot=isIn(t.kind)?'Recebido por':'Pago por';
+  if(ows.length>2)return `<label>${rot}${sel('t_paid',t.paidBy||'',owOpts,'','rascunho')}</label>`;
+  const ops=[{v:'',curto:'Todos',nome:'Todos os proprietários'}].concat(ows.map(o=>({v:o.id,curto:rotuloCurtoDoDono(o,ows),nome:rotuloDoDono(o,ows.length)})));
+  return `<div class="mov-campo"><span class="flabel" id="t_paidL">${rot}</span><input type="hidden" id="t_paid" value="${esc(t.paidBy||'')}">
+    <div class="segm" role="radiogroup" aria-labelledby="t_paidL">${ops.map(o=>{const on=(t.paidBy||'')===o.v;
+      return `<button type="button" role="radio" aria-checked="${on}"${on?' class="on"':''} data-v="${esc(o.v)}" title="${esc(o.nome)}"${o.nome!==o.curto?` aria-label="${esc(o.nome)}"`:''} data-toca="rascunho" data-click="txPagoPor('${jsq(o.v)}')">${esc(o.curto)}</button>`}).join('')}</div></div>`;
+}
+/* Um toque no segmentado de quem pagou: escreve no #t_paid e no tForm, acende
+   o botão tocado e refaz a dica da divisão, que diz se há quem pagou. Não
+   repinta o formulário: o resto não depende disto.
+   Recebe: v — o id do proprietário, ou '' para «Todos».
+   Devolve: nada — mexe no campo, no tForm e no segmentado. */
+function txPagoPor(v){
+  const h=document.getElementById('t_paid');if(h)h.value=v||'';
+  tForm.paidBy=v||null;
+  const g=h&&h.parentNode&&h.parentNode.querySelector?h.parentNode.querySelector('.segm'):null;
+  if(g)[].slice.call(g.querySelectorAll('[role="radio"]')).forEach(b=>{const on=(b.getAttribute('data-v')||'')===(v||'');
+    b.setAttribute('aria-checked',on?'true':'false');b.classList.toggle('on',on)});
+  refreshSplit();
 }
 // Texto por baixo do campo do credor: o saldo corrente com essa pessoa
 // (recebido, devolvido, o que falta) ou uma orientação se ainda não há registos.
@@ -522,40 +589,77 @@ function onIrsCol(){collectTx();tForm.irsCol=val('t_irscol')||''}
    Recebe: mode — o modo da divisão ('pct', 'percent', 'amount' ou 'adjust').
    Devolve: o exemplo (texto), sem o «Ex: », que é o placeholder que o põe. */
 function exemploDaParte(mode){return mode==='pct'?'1':mode==='percent'?'50':mode==='adjust'?'5':'100'}
-/* divisão entre proprietários: quotas, percentagem, valor certo ou ajuste
+/* A divisão entre proprietários, num grupo do formulário (o canvas): o
+   título com quantos donos são, «Como se divide» (quotas, partes iguais,
+   percentagem, valor certo, ajuste) e, nos modos que o pedem, um campo por
+   dono; por baixo, as partes e se a soma bate certo (splitHint).
    Recebe: ows — os proprietários a listar (objetos com id e name, já resolvidos).
-   Devolve: o HTML da secção dobrável (string). */
+   Devolve: o HTML do grupo (string). */
 function splitSect(ows){
   const t=tForm,sp=t.split||{mode:'quota',parts:{}},mode=sp.mode||'quota',parts=sp.parts||{};
-  const lab=(SPLIT_MODES.find(m=>m[0]===mode)||[])[1]||'';
-  return fold('split','Divisão entre proprietários',`
-    <label>Como se divide${sel('t_split',mode,SPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onSplitSel','rascunho')}</label>
+  return `<div class="sect mov-grp mov-divisao" id="fold_split">
+    <div class="mov-grp-cab"><b>Divisão entre proprietários</b><span class="small">${ows.length} donos</span></div>
+    <label class="mov-rot-fraco">Como se divide${sel('t_split',mode,SPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onSplitSel','rascunho')}</label>
     ${(mode==='quota'||mode==='equal')?'':`<div class="form u-g-7px">${ows.map(o=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${esc(initials(o.name))}</span>
       <span class="nm">${esc(rotuloDoDono(o,ows.length))}</span>
       <input id="t_sp_${o.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[o.id]!=null&&parts[o.id]!==''?dec(parts[o.id]):''}" placeholder="Ex: ${exemploDaParte(mode)}" aria-label="Parte de ${esc(o.name)}" data-input="refreshSplit()">
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
-    <div class="hint" id="splitHint">${splitHint(ows)}</div>`,{icon:'split',summary:lab});
+    <div id="splitHint" class="mov-divisao-dica" aria-live="polite">${splitHint(ows)}</div></div>`;
 }
-/* Dica por baixo da divisão entre proprietários: explica o modo escolhido, avisa quando
-   as contas não batem certo (falta, excesso, percentagens fora dos 100) e mostra quanto
-   calha a cada um com o montante atual. ows: os proprietários do imóvel, já resolvidos.
+/* As partes de uma divisão, como o canvas as mostra: cada uma com o nome, a
+   percentagem do total e o valor; a barra das proporções; e, por baixo, «Soma
+   X — bate certo», ou o aviso do que não bate.
+   Recebe: linhas — [{nome, cents}] (o nome por escapar, os cêntimos de cada
+   parte); total — o total em cêntimos; aviso — o texto do que não bate certo
+   (por escapar), ou '' quando bate.
+   Devolve: o HTML (string). */
+function partesDaDivisaoHtml(linhas,total,aviso){
+  const soma=sum(linhas.map(l=>l.cents||0));
+  const pct=l=>total?Math.round((l.cents||0)/total*1000)/10:0;
+  /* .mov-pfila, e não .mov-parte: essa é a frase da parte na linha da lista
+     (lista-movimentos.js:txLinhaHtml), e a regra desta fila (flex, 14,5px)
+     caía-lhe em cima e cortava-a sem reticências */
+  const linha=l=>`<div class="mov-pfila"><span class="mov-pnome">${esc(l.nome)}</span><span class="small">${dec(pct(l))}%</span><b>${euro2((l.cents||0)/100)}</b></div>`;
+  const barra=`<div class="mov-pbarra" aria-hidden="true">${linhas.map(l=>`<span data-largura="${Math.max(0,Math.min(100,pct(l))).toFixed(1)}"></span>`).join('')}</div>`;
+  /* com duas partes a barra fica entre elas, como no canvas; com mais, por baixo */
+  const corpo=linhas.length===2?linha(linhas[0])+barra+linha(linhas[1]):linhas.map(linha).join('')+barra;
+  return `<div class="mov-partes">${corpo}</div>`+
+    (aviso?`<p class="mov-soma perigo">${ic('aviso',16)}<span>${esc(aviso)}</span></p>`:`<p class="mov-soma">${ic('check',16)}<span>Soma ${euro2(soma/100)} — bate certo.</span></p>`);
+}
+/* A descrição de um modo de divisão como frase: com maiúscula e ponto final
+   («Pela quota-parte de cada um.»). As descrições dos modos (SPLIT_MODES,
+   dados.js:PSPLIT_MODES) são fragmentos em minúscula, e abriam a dica assim.
+   Recebe: modos — a lista dos modos ([valor, rótulo, descrição]); mode — o
+   valor do modo escolhido.
+   Devolve: a frase (texto, por escapar; '' se o modo não tiver descrição). */
+function txFraseDoModo(modos,mode){
+  const s=String((modos.find(m=>m[0]===mode)||[])[2]||'');
+  return s?s.charAt(0).toUpperCase()+s.slice(1)+'.':'';
+}
+/* Dica por baixo da divisão entre proprietários: explica o modo escolhido e,
+   com o montante escrito, mostra quanto calha a cada um (pelo primeiro nome)
+   e se a soma bate certo — ou o que falta, o que passa, as percentagens fora
+   dos 100. ows: os proprietários do imóvel, já resolvidos.
    Recebe: ows — os proprietários do imóvel (objetos com id e name).
    Devolve: o HTML da dica (string; '' sem imóvel escolhido). */
 function splitHint(ows){
   const t=tForm,p=prop(t.propertyId);if(!p)return '';
   const mode=(t.split||{}).mode||'quota',total=Math.abs(Number(t.amount)||0);
-  const intro=(t.paidBy?'':'Só entra nas contas entre proprietários se indicares quem pagou ou recebeu. ')+((SPLIT_MODES.find(m=>m[0]===mode)||[])[2]||'')+'.';
+  /* o modo primeiro, numa frase sua (as descrições do SPLIT_MODES são
+     fragmentos em minúscula), e depois a condição: juntas davam «… recebeu.
+     pela quota-parte de cada um.» */
+  const intro=`<div class="hint">${txFraseDoModo(SPLIT_MODES,mode)+(t.paidBy?'':' Só entra nas contas entre proprietários se indicares quem pagou ou recebeu.')}</div>`;
   if(!total)return intro;
-  const os=ows.map(o=>o.id),c=txSplitCents(t,p,os);
-  let warn='';
-  if(mode==='amount'){const s2=sum(os.map(o=>Number(((t.split||{}).parts||{})[o])||0)),d=Math.round((total-s2)*100)/100;
-    if(Math.abs(d)>0.005)warn=`<b class="neg">${d>0?'Faltam '+euro2(d):'Passa '+euro2(-d)}</b> · `}
-  if(mode==='percent'){const s2=sum(os.map(o=>Number(((t.split||{}).parts||{})[o])||0));
-    if(Math.abs(s2-100)>0.01)warn=`<b class="neg">Somam ${dec(Math.round(s2*100)/100)}%</b> · `}
-  if(mode==='adjust'){const pr=(t.split||{}).parts||{},s2=sum(os.map(o=>Number(pr[o])||0));
-    if(os.some(o=>Number(pr[o])<0))warn=`<b class="neg">Ajustes negativos não contam</b> · `;
-    else if(s2>total+0.005)warn=`<b class="neg">Os ajustes (${euro2(s2)}) passam o total</b> · `}
-  return warn+intro+'<br>'+ows.map((o,i)=>`${esc(o.name.split(' ')[0])} <b>${euro2(c[i]/100)}</b>`).join(' · ');
+  const os=ows.map(o=>o.id),c=txSplitCents(t,p,os),pr=(t.split||{}).parts||{};
+  const s2=sum(os.map(o=>Number(pr[o])||0));
+  let aviso='';
+  if(mode==='amount'){const d=Math.round((total-s2)*100)/100;
+    if(Math.abs(d)>0.005)aviso=d>0?'Faltam '+euro2(d)+': os valores têm de somar '+euro2(total)+'.':'Passam '+euro2(-d)+' do total ('+euro2(total)+').'}
+  if(mode==='percent'&&Math.abs(s2-100)>0.01)aviso='As percentagens somam '+dec(Math.round(s2*100)/100)+'%: têm de somar 100.';
+  if(mode==='adjust'){
+    if(os.some(o=>Number(pr[o])<0))aviso='Ajustes negativos não contam: um ajuste é sempre um extra.';
+    else if(s2>total+0.005)aviso='Os ajustes ('+euro2(s2)+') passam o total.'}
+  return intro+partesDaDivisaoHtml(ows.map((o,i)=>({nome:String(o.name||'').split(' ')[0],cents:c[i]})),Math.round(total*100),aviso);
 }
 // Valida a divisão entre proprietários antes de guardar: devolve a mensagem de erro,
 // ou '' se está tudo certo (quotas e partes iguais nunca falham).
@@ -593,37 +697,40 @@ function collectSplit(){
 }
 /* a divisão do valor pelos imóveis (de um grupo, ou de «Todos os imóveis»): os
    modos (PSPLIT_MODES) vivem no dados.js, porque o normTx só aceita um deles */
-// Secção "Divisão entre imóveis" dos movimentos de grupo: escolha do modo e,
-// quando o modo pede valores, um campo por imóvel. Devolve o HTML do fold.
-// Devolve: o HTML do fold (string).
+/* A divisão entre imóveis (de um grupo, ou de «Todos os imóveis»), num grupo
+   do formulário como a dos donos: o título com quantos imóveis são, «Como se
+   divide» e, nos modos que o pedem, um campo por imóvel; por baixo, as partes
+   e se a soma bate certo (psplitHint).
+   Devolve: o HTML do grupo (string). */
 function psplitSect(){
   const t=tForm,ps=txProps(t),sp=t.psplit||{mode:'equal',parts:{}},mode=sp.mode||'equal',parts=sp.parts||{};
-  const lab=(PSPLIT_MODES.find(m=>m[0]===mode)||[])[1]||'';
-  return fold('psplit','Divisão entre imóveis',`
-    <label>Como se divide${sel('t_psplit',mode,PSPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onPsplitSel','rascunho')}</label>
+  return `<div class="sect mov-grp mov-divisao" id="fold_psplit">
+    <div class="mov-grp-cab"><b>Divisão entre imóveis</b><span class="small">${ps.length} imóveis</span></div>
+    <label class="mov-rot-fraco">Como se divide${sel('t_psplit',mode,PSPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onPsplitSel','rascunho')}</label>
     ${['equal','value','purchase'].indexOf(mode)>-1?'':`<div class="form u-g-7px">${ps.map(p=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${ic('building',15)}</span>
       <span class="nm">${esc(p.name)}</span>
       <input id="t_pp_${p.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[p.id]!=null&&parts[p.id]!==''?dec(parts[p.id]):''}" placeholder="Ex: ${exemploDaParte(mode)}" aria-label="Parte de ${esc(p.name)}" data-input="refreshPsplit()">
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
-    <div class="hint" id="psplitHint">${psplitHint()}</div>`,{icon:'building',open:true,summary:lab});
+    <div id="psplitHint" class="mov-divisao-dica" aria-live="polite">${psplitHint()}</div></div>`;
 }
-// Dica da divisão entre imóveis: explica o modo, avisa somas que não batem certo
-// e mostra quanto fica para cada imóvel do grupo.
+// Dica da divisão entre imóveis: explica o modo e, com o montante escrito, mostra
+// quanto fica para cada imóvel e se a soma bate certo (ou o que não bate).
 // Devolve: o HTML da dica (string; '' com menos de dois imóveis).
 function psplitHint(){
   const t=tForm,ps=txProps(t);if(ps.length<2)return '';
   const mode=(t.psplit||{}).mode||'equal',total=Math.abs(Number(t.amount)||0);
-  const intro=((PSPLIT_MODES.find(m=>m[0]===mode)||[])[2]||'')+'.';
+  const intro=`<div class="hint">${txFraseDoModo(PSPLIT_MODES,mode)}</div>`;
   if(!total)return intro;
-  const c=psplitCents(t,ps,Math.round(total*100));
-  let warn='';
-  const s2=sum(ps.map(p=>Number(((t.psplit||{}).parts||{})[p.id])||0));
-  if(mode==='amount'){const d=Math.round((total-s2)*100)/100;if(Math.abs(d)>0.005)warn=`<b class="neg">${d>0?'Faltam '+euro2(d):'Passa '+euro2(-d)}</b> · `}
-  if(mode==='percent'&&Math.abs(s2-100)>0.01)warn=`<b class="neg">Somam ${dec(Math.round(s2*100)/100)}%</b> · `;
-  if(mode==='adjust'){const pr=(t.psplit||{}).parts||{};
-    if(ps.some(p=>Number(pr[p.id])<0))warn=`<b class="neg">Ajustes negativos não contam</b> · `;
-    else if(s2>total+0.005)warn=`<b class="neg">Os ajustes (${euro2(s2)}) passam o total</b> · `}
-  return warn+intro+'<br>'+ps.map((p,i)=>`${esc(p.name)} <b>${euro2(c[i]/100)}</b>`).join(' · ');
+  const c=psplitCents(t,ps,Math.round(total*100)),pr=(t.psplit||{}).parts||{};
+  const s2=sum(ps.map(p=>Number(pr[p.id])||0));
+  let aviso='';
+  if(mode==='amount'){const d=Math.round((total-s2)*100)/100;
+    if(Math.abs(d)>0.005)aviso=d>0?'Faltam '+euro2(d)+': os valores têm de somar '+euro2(total)+'.':'Passam '+euro2(-d)+' do total ('+euro2(total)+').'}
+  if(mode==='percent'&&Math.abs(s2-100)>0.01)aviso='As percentagens somam '+dec(Math.round(s2*100)/100)+'%: têm de somar 100.';
+  if(mode==='adjust'){
+    if(ps.some(p=>Number(pr[p.id])<0))aviso='Ajustes negativos não contam: um ajuste é sempre um extra.';
+    else if(s2>total+0.005)aviso='Os ajustes ('+euro2(s2)+') passam o total.'}
+  return intro+partesDaDivisaoHtml(ps.map((p,i)=>({nome:p.name,cents:c[i]})),Math.round(total*100),aviso);
 }
 // Valida a divisão entre imóveis: devolve a mensagem de erro ou '' se ok.
 // Só se aplica a movimentos de grupo (ou de «Todos os imóveis») com dois ou mais imóveis.
@@ -719,7 +826,7 @@ function loanHint(){
     if(!t.loanId&&liveLoans(p).length>1)return `<div class="hint">Escolhe a hipoteca acima: é a ela que este pagamento abate.</div>`;
     if(t.loanId)return `<div class="hint">A hipoteca deste movimento não existe neste imóvel. Escolhe outra acima, ou deixa como está.</div>`;
     /* o caminho para criar a hipoteca só se aponta com os Créditos ligados nesta conta */
-    return `<div class="hint">Nenhuma hipoteca associada. Podes registar o pagamento na mesma${servicoLigado('credits')?', ou criar a hipoteca em Finanças → Créditos':''}.</div>`;
+    return `<div class="hint">Nenhuma hipoteca associada. Podes registar o pagamento na mesma${servicoLigado('credits')?', ou criar a hipoteca em Dinheiro → Créditos':''}.</div>`;
   }
   const avail=loanAvail(t,l),fr=amortFeeRate(l),amort=t.payType==='amortizacao';
   const amt=montanteDoCredito(t,l),dist=distribuicaoDe(t,l);
@@ -733,7 +840,7 @@ function loanHint(){
     return seg+`<div class="card u-bg-v-tint u-p-13px">
       <div class="stat u-pt-0 u-ai-center"><span>Abate ao capital</span><b class="pos" id="lh_cap">${euro2(cap)}</b></div>
       <div class="stat u-b-0 u-ai-center"><span>Comissão de amortização (${dec(r2(fr*100))}%)</span><b class="neg" id="lh_fee">${euro2(fee)}</b></div>
-      <div class="hint" id="loanLeft">${cap>avail+0.011?`<b class="neg">Só faltam ${euro2(avail)} pagar — não podes amortizar mais do que isso.</b>`:`Ficam ${euro(Math.max(0,avail-Math.min(cap,avail)))} em dívida.`}</div></div>`;
+      <div class="hint" id="loanLeft">${cap>avail+0.011?`<b class="perigo">Só faltam ${euro2(avail)} pagar — não podes amortizar mais do que isso.</b>`:`Ficam ${euro(Math.max(0,avail-Math.min(cap,avail)))} em dívida.`}</div></div>`;
   }
   /* prestação normal: juros editáveis, selo derivado, capital é o resto — sem comissão */
   const int=dist.interest,st=dist.stamp,cap=dist.principal;
@@ -754,7 +861,7 @@ function loanHint(){
 // Devolve: o texto da linha (string HTML).
 function loanLeftTxt(l,int,st,cap,fee,amt,avail){
   const sum=r2(int+st+cap+(fee||0));
-  if(cap>avail+0.011)return `<b class="neg">Só faltam ${euro2(avail)} pagar — não podes amortizar mais do que isso.</b>`;
+  if(cap>avail+0.011)return `<b class="perigo">Só faltam ${euro2(avail)} pagar — não podes amortizar mais do que isso.</b>`;
   if(cap<-0.005||fee<-0.005||int<-0.005||Math.abs(sum-amt)>0.011)return `<b class="neg">A soma da distribuição dá ${euro2(r2(int+st+Math.max(0,cap)+Math.max(0,fee||0)))}, mas o montante é ${euro2(amt)}.</b>`;
   return `Ficam ${euro(Math.max(0,avail-Math.min(cap,avail)))} em dívida.`;
 }
@@ -782,6 +889,15 @@ function calcLoanTotal(){
 function txMontanteEscrito(v){
   tForm.amount=num(v);
   refreshLoanHint();refreshSplit();amtResetSync();
+}
+/* O montante como se escreve no campo: com vírgula e dois decimais
+   («223,61», «320,00»), como o «Repor» o escreve e como o canvas o mostra.
+   Ia o número em bruto, e editar um movimento mostrava «223.61».
+   Recebe: v — o montante (número, ou vazio).
+   Devolve: o texto do campo ('' sem montante, para se ver o exemplo). */
+function txMontanteNoCampo(v){
+  const n=Number(v);
+  return n>0?dec(n.toFixed(2)):'';
 }
 // Mostra o botão "Repor" ao lado do montante só quando o que está escrito
 // difere da prestação calculada na hipoteca. O estado inicial vem da mesma
@@ -848,8 +964,32 @@ function repaintTx(){const b=modalBodyEl();if(!b)return;b.innerHTML=txBody();mar
    Devolve: nada — atualiza o tForm e repinta o modal. */
 function setKind(k){keepTyped();
   if(treeKey(tForm.kind)!==treeKey(k)){tForm.category='';tForm.sub=''}
+  limparDoTipo(tForm.kind,k);
   tForm.kind=k;if(k!=='settle'&&tForm.label==='Transferência entre proprietários')tForm.label='';prefill();repaintTx();
   const h=modalTop()&&modalTop().el.querySelector('.head h2');if(h)h.textContent=txTitulo()}
+/* Ao trocar de tipo no segmentado, o que só o tipo antigo tinha sai do
+   formulário — senão gravava-se escondido: a hipoteca e a distribuição de um
+   pagamento de crédito, o contrato e o que o IRS pergunta a uma renda, a
+   coluna do Anexo F de uma despesa, a pessoa de uma dívida a terceiros, a
+   divisão entre donos num acerto (que não a tem). E só uma receita ou uma
+   despesa se dividem por vários imóveis: noutro tipo, um grupo ou «Todos os
+   imóveis» volta ao imóvel por omissão, o do txModal. Entre dívida recebida e
+   paga não muda nada.
+   Recebe: de — o tipo que estava; para — o tipo novo.
+   Devolve: nada — só mexe no tForm. */
+function limparDoTipo(de,para){
+  const t=tForm,divida=k=>k==='owed'||k==='repay';
+  if(de===para)return;
+  if(de==='loan'&&para!=='loan'){t.loanId=null;t.payType='prestacao';['interest','stamp','principal','fee','_splitTouched'].forEach(x=>{delete t[x]})}
+  if(de==='income'&&para!=='income'){t.contractId=null;t.periodo='';t.recibo=false;t.retencao=0}
+  if(de==='expense'&&para!=='expense')t.irsCol='';
+  if(divida(de)&&!divida(para))t.creditor='';
+  if(para==='settle')t.split=null;
+  if(para!=='income'&&para!=='expense'&&(t.groupId||t.todos)){
+    t.groupId=null;t.todos=false;t.psplit=null;
+    t.propertyId=(db.properties.length===1||!podeSemImovel())?((casasComo('tx.add')[0]||{}).id||null):null;
+  }
+}
 /* Mudou o imóvel (ou grupo, valores "g:id", ou «Todos os imóveis», '*'): limpa tudo o que
    dependia dele — contrato, hipoteca, divisões e distribuição — e volta a sugerir valores
    para o novo contexto.
@@ -950,10 +1090,10 @@ function addTxTag(){
   pickModal('Escolher etiqueta',free.map(g=>({v:g,label:g})),
     g=>{tForm.tags.push(g.v);closeModal();repaintTx()},
     `<button type="button" class="btn u-w-100pc u-jc-center" data-toca="camada" data-click="newTagFromTx()">${ic('plus',15)} Criar etiqueta nova</button>
-     <div class="hint u-mt-8px">Podes gerir a lista em Definições → Etiquetas.</div>`);
+     <div class="hint u-mt-8px">Podes gerir a lista em Definições → Categorias, etiquetas e IRS.</div>`);
 }
 // Cria uma etiqueta nova a partir do modal do movimento: entra na lista global
-// (Definições → Etiquetas), fica gravada, e aplica-se logo a este movimento.
+// (Definições → Categorias, etiquetas e IRS), fica gravada, e aplica-se logo a este movimento.
 // Devolve: nada — grava nas definições e repinta o modal do movimento.
 function newTagFromTx(){
   closeModal();

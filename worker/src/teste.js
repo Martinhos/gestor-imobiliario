@@ -43,7 +43,7 @@ function segredoDoTeste(env) {
 
 // O que se diz quando falta o segredo: no Discord, no back office e na rota.
 export const SEM_CHAVE = 'O ambiente de teste não tem chave: falta a TESTE_CHAVE (ou o token do bot) neste worker. ' +
-  'Põe o segredo e corre o deploy.';
+  'Adiciona o segredo e corre o deploy.';
 
 // Se este worker tem com que assinar e verificar ligações de teste.
 // Recebe: env — o ambiente do worker.
@@ -131,20 +131,34 @@ async function criarContaDeTeste(env, quem) {
   return { id, email };
 }
 
-// Quem abre esta rota é uma pessoa num browser: os erros são uma página
-// que se lê, não um JSON que se decifra.
-// Recebe: status — o código HTTP da resposta; titulo — o título, no
-// separador e na página; texto — a explicação por baixo (HTML simples).
-// Devolve: uma Response HTML completa, sem cache.
+// o frasco de ensaio do ícone das páginas do /t/entrar (traço da casa, grelha de 24)
+const FRASCO = 'M9 3h6M10 3v6l-5.6 9.4A1.7 1.7 0 0 0 5.9 21h12.2a1.7 1.7 0 0 0 1.5-2.6L14 9V3M7.2 15h9.6';
+
+/* Quem abre esta rota é uma pessoa num browser: os erros são uma página
+   que se lê, não um JSON que se decifra. Veste-se como as outras páginas
+   públicas do worker (landing.js, legal-vista.js): a marca, a Geist e a
+   Bricolage, o fundo #F2F3F6 e um cartão branco, no tema de quem lê. O
+   quadrado do ícone diz o peso do erro: cinzento quando a porta não existe
+   (produção), âmbar quando é a ligação que está mal, vermelho quando é o
+   ambiente que falha.
+   Recebe: status — o código HTTP da resposta; titulo — o título, no
+   separador e na página; texto — a explicação por baixo (HTML simples).
+   Devolve: uma Response HTML completa, sem cache e fora dos motores de busca. */
 function pagina(status, titulo, texto) {
-  return new Response('<!doctype html><html lang="pt"><meta charset="utf-8">' +
+  const tom = status >= 500 ? ' perigo' : status === 404 ? '' : ' aviso';
+  return new Response('<!doctype html><html lang="pt-PT"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<title>' + titulo + '</title>' +
+    '<meta name="color-scheme" content="light dark">' +
+    '<meta name="robots" content="noindex,nofollow">' +
+    '<title>' + titulo + ' — Rendorium</title>' +
+    '<link rel="icon" href="/icon-192.png">' +
     '<link rel="stylesheet" href="/paginas/teste.css">' +
-    '<body><div class="caixa">' +
-    '<div class="icone">🧪</div>' +
+    '</head><body><main class="caixa">' +
+    '<div class="marca"><span class="mark" aria-hidden="true"></span><span class="nome">Rendorium</span>' +
+    '<span class="selo">Entrada de teste</span></div>' +
+    '<div class="icone' + tom + '"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="' + FRASCO + '"/></svg></div>' +
     '<h1>' + titulo + '</h1>' +
-    '<p>' + texto + '</p></div></body></html>', {
+    '<p>' + texto + '</p></main></body></html>', {
     status,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
@@ -156,13 +170,44 @@ function pagina(status, titulo, texto) {
 
 /* Os estilos das páginas de erro do /t/entrar, servidos à parte em
    /paginas/teste.css (paginas-recursos.js): a página vai com a CSP_ESTRITA,
-   que não aplica estilos escritos dentro do HTML. */
-export const CSS_TESTE = `body{margin:0;display:grid;place-items:center;min-height:100vh;background:#12141b;color:#eef0f6;
-  font:16px/1.6 system-ui,sans-serif}
-.caixa{max-width:420px;padding:28px;text-align:center}
-.icone{font-size:38px;margin-bottom:10px}
-h1{font-size:19px;margin:0 0 8px}
-p{margin:0;color:#9aa3b8;font-size:14.5px}
+   que não aplica estilos escritos dentro do HTML. As letras são as mesmas
+   declarações do CSS_LANDING (landing.js) e do CSS_LEGAL (legal-vista.js), e
+   um teste confere que as três não divergem; os tokens são os do contrato
+   do redesign, com os escuros para quem lê no tema escuro. */
+export const CSS_TESTE = `@font-face{font-family:'Geist';src:url(/fonts/geist.woff2) format('woff2');font-weight:100 900;font-style:normal;font-display:swap;
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Bricolage Grotesque';src:url(/fonts/bricolage-grotesque.woff2) format('woff2');font-weight:200 800;font-style:normal;font-display:swap;
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+:root{color-scheme:light dark;
+  --bg:#F2F3F6;--card:#FFFFFF;--chip:#F6F7F9;--ink:#121826;--muted:#4F586B;--line:#E2E5EB;
+  --accent:#2952D9;--accent-soft:#E9EEFC;--accent-text:#1D3FB0;
+  --warn:#8F5600;--warn-soft:#FFF1D1;--danger:#B42318;--danger-soft:#FDE8E6;
+  --marca:#2952D9;--marca-arco:#FFFFFF}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#0B111E;--card:#141C2C;--chip:#1A2335;--ink:#E9EDF5;--muted:#AEB7C9;--line:#253049;
+  --accent:#7C9BFF;--accent-soft:#1E2A4D;--accent-text:#B5C6FF;
+  --warn:#F2C25A;--warn-soft:#352A12;--danger:#FF8A80;--danger-soft:#3D1A1A}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:24px 16px;
+  background:var(--bg);color:var(--ink);font-family:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.caixa{width:100%;max-width:440px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px}
+.marca{display:flex;align-items:center;gap:10px;margin-bottom:24px}
+.nome{font-family:'Bricolage Grotesque','Geist',system-ui,sans-serif;font-weight:650;font-size:19px;letter-spacing:-.02em}
+.mark{display:block;flex:none;width:30px;height:30px;border-radius:8px;
+  background:radial-gradient(circle at 0 0,transparent 23%,var(--marca-arco) 24%,var(--marca-arco) 30.2%,transparent 31.2%),
+    radial-gradient(circle at 100% 100%,transparent 23%,var(--marca-arco) 24%,var(--marca-arco) 30.2%,transparent 31.2%),var(--marca)}
+.selo{margin-left:auto;display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;
+  background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600;white-space:nowrap}
+.icone{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;
+  background:var(--chip);color:var(--muted);margin-bottom:14px}
+.icone.aviso{background:var(--warn-soft);color:var(--warn)}
+.icone.perigo{background:var(--danger-soft);color:var(--danger)}
+.icone svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+h1{font-family:'Bricolage Grotesque','Geist',system-ui,sans-serif;font-weight:650;font-size:20px;line-height:1.25;
+  letter-spacing:-.015em;margin:0 0 8px;text-wrap:balance}
+p{margin:0;color:var(--muted);font-size:15px}
+a{color:var(--accent)}
 `;
 
 /* A rota /t/entrar: valida a validade e a assinatura e, conforme as opções
@@ -181,7 +226,7 @@ export async function rotaTeste(c) {
   // sem segredo, nenhuma assinatura prova nada: falha alto em vez de aceitar
   if (!temChaveDeTeste(env)) {
     return pagina(503, 'Ambiente de teste sem chave',
-      'Falta a TESTE_CHAVE neste ambiente — sem ela ninguém consegue assinar uma ligação que valha. Põe o segredo e corre o deploy do dev.');
+      'Falta a TESTE_CHAVE neste ambiente — sem ela ninguém consegue assinar uma ligação que valha. Adiciona o segredo e corre o deploy do dev.');
   }
 
   const exp = url.searchParams.get('exp') || '';

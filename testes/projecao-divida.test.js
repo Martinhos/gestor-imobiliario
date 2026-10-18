@@ -17,7 +17,7 @@ afterEach(() => repor(app));
 function cartaoDaDivida(html) {
   const i = html.indexOf('Dívida por amortizar');
   assert.ok(i > 0, 'o cartão existe');
-  return html.slice(i, html.indexOf('Detalhe ano a ano', i));
+  return html.slice(i, html.indexOf('Ano a ano', i));
 }
 
 let casa;

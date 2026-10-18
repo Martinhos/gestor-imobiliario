@@ -160,9 +160,9 @@ describe('regressão: a camada da nuvem carrega inteira e embrulha as funções 
     /* cada wrapper guardou o original e reatribuiu o nome: prova de que a
        função existia quando a nuvem chegou (a ordem do index.html) */
     for (const [orig, atual] of [['_vDashboard', 'vDashboard'], ['_vDashboard_guia', 'vDashboard'], ['_vTransactions', 'vTransactions'], ['_vTransactions_sel', 'vTransactions'],
-      ['_lpMenu', 'lpMenu'], ['_lpMenu_sel', 'lpMenu'], ['_pendingCard', 'pendingCard'], ['_render', 'render'], ['_render_sel', 'render'], ['_go', 'go'], ['_go_sel', 'go'],
+      ['_lpMenu', 'lpMenu'], ['_lpMenu_sel', 'lpMenu'], ['_render', 'render'], ['_render_sel', 'render'], ['_go', 'go'], ['_go_sel', 'go'],
       ['_goSet', 'goSet'], ['_save', 'save'], ['_hdrFiltToggle', 'hdrFiltToggle'], ['_hdrFiltToggle_sel', 'hdrFiltToggle'], ['_vSettings', 'vSettings'], ['_vSettingsNov', 'vSettings'],
-      ['_syncContractRec', 'syncContractRec'], ['_seed_guia', 'seed'], ['_delPerson', 'delPerson'], ['_propBody', 'propBody'], ['_txLinhaExtra', 'txLinhaExtra'], ['_txMesExtra', 'txMesExtra'],
+      ['_syncContractRec', 'syncContractRec'], ['_seed_guia', 'seed'], ['_delPerson', 'delPerson'], ['_txLinhaExtra', 'txLinhaExtra'], ['_txMesExtra', 'txMesExtra'],
       ['_evoMoney', 'evoMoney'], ['_kpiModal', 'kpiModal'], ['_closePops', 'closePops'], ['_setTheme', 'setTheme'], ['_driveOpen', 'driveOpen']]) {
       assert.equal(typeof app[orig], 'function', orig + ' apanhou uma função');
       assert.notEqual(app[orig], app[atual], atual + ' foi reatribuída por cima');
@@ -378,7 +378,8 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     }
     app.definirServicosDesligados([]);
     app.setPage = 'defaults';
-    assert.match(app.vSettings(), /capTargetSet\(/, 'com a Avaliação ligada, o yield exigido está lá');
+    // o campo grava por definicoes.js:gravarValorPorOmissao (sem repintar: o foco segue para o campo seguinte)
+    assert.match(app.vSettings(), /id="def_capTarget"/, 'com a Avaliação ligada, o yield exigido está lá');
   });
 });
 
@@ -464,8 +465,10 @@ describe('regressões da passagem a serviços', () => {
     const app = carregarApp();
     semear(app);
     app.setPage = 'defaults';
+    // controlo: com a Avaliação ligada o campo está lá
+    assert.match(app.vSettings(), /id="def_capTarget"/);
     app.definirServicosDesligados(['reports']);
-    assert.doesNotMatch(app.vSettings(), /capTargetSet\(/);
+    assert.doesNotMatch(app.vSettings(), /id="def_capTarget"|capTargetSet\(/);
   });
 
   // revisão dos serviços, A.1-7

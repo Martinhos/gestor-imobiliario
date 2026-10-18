@@ -43,10 +43,11 @@ function domCom(valores) {
   return () => { doc.getElementById = original; };
 }
 
-// o HTML só da dobra «Fisco» do formulário do contrato
+// o HTML só do grupo do formulário onde vive a situação perante a AT (o
+// desenho de 2026-10: um grupo .sect aberto, e não uma dobra fechada)
 const dobraFisco = (html) => {
-  const a = html.indexOf('id="fold_fisco"'), b = html.indexOf('id="fold_contacts"');
-  assert.ok(a > -1 && b > a, 'a dobra Fisco existe e vem antes dos Contactos');
+  const a = html.indexOf('id="ct_fisco"'), b = html.indexOf('id="ct_contactos"');
+  assert.ok(a > -1 && b > a, 'o grupo da AT existe e vem antes dos Contactos');
   return html.slice(a, b);
 };
 
@@ -58,15 +59,20 @@ describe('o formulário do contrato: a secção Fisco', () => {
     const html = app.ctBody();
     const dobra = dobraFisco(html);
     for (const v of ['', 'declarado', 'naoDeclarado']) assert.match(dobra, new RegExp("setFiscoEstado\\('" + v + "'\\)"), 'o botão «' + v + '»');
-    assert.match(dobra, /Por indicar/);
-    assert.match(dobra, /Declarado à AT/);
-    assert.match(dobra, /Não declarado/);
-    assert.match(dobra, /class="seg c3"/, 'o controlo segmentado da casa');
+    // o segmentado da casa (role radio), com a escolha ligada
+    assert.match(dobra, /<div class="segm ct-at-segm" role="radiogroup" aria-labelledby="c_fiscoRot">/);
+    assert.match(dobra, /role="radio" aria-checked="true" class="on" data-toca="rascunho" data-click="setFiscoEstado\(''\)">Por indicar</);
+    assert.match(dobra, /aria-checked="false"[^>]*>Declarado</);
+    assert.match(dobra, /aria-checked="false"[^>]*>Não declarado</);
     assert.match(dobra, /Comunicaste este contrato às Finanças \(Modelo 2\)\?/);
     assert.doesNotMatch(dobra, /id="c_fnum"/, 'sem estado, nenhum campo do declarado');
-    assert.match(dobra, /class="fsum">por indicar</, 'o resumo da dobra');
-    // a dobra vem logo a seguir a «Prazo, caução e pagamento»
-    assert.ok(html.indexOf('id="fold_terms"') < html.indexOf('id="fold_fisco"'));
+    // o grupo vem logo a seguir ao do prazo
+    assert.ok(html.indexOf('id="ct_prazo"') < html.indexOf('id="ct_fisco"'));
+  });
+
+  test('por indicar, com o início escrito, diz até quando se entrega o Modelo 2', () => {
+    app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800, start: '2026-03-10' });
+    assert.match(dobraFisco(app.ctBody()), /O prazo é 30\/04\/2026, o fim do mês seguinte ao início\./);
   });
 
   test('declarado: pede o número da AT, a finalidade, a celebração, se renova e as renovações', () => {
@@ -85,7 +91,7 @@ describe('o formulário do contrato: a secção Fisco', () => {
     assert.match(dobra, /addRenov\(\)/);
     assert.match(dobra, /Adicionar renovação/);
     assert.match(dobra, /quadro 4\.2A/);
-    assert.match(dobra, /class="fsum">Declarado · n\.º 1234567</);
+    assert.match(dobra, /aria-checked="true" class="on"[^>]*>Declarado</, 'o segmentado diz o estado');
     assert.doesNotMatch(dobra, /id="c_fces"/, 'sem fim nem inatividade não há cessação');
   });
 
@@ -107,7 +113,7 @@ describe('o formulário do contrato: a secção Fisco', () => {
     assert.match(dobra, /fica fora do resumo do Anexo F e dos prazos da AT\. Podes mudar isto quando quiseres\./);
     assert.doesNotMatch(dobra, /class="[^"]*\b(danger|neg|amber|warn|late)\b/, 'sem cor de perigo nem de aviso');
     assert.doesNotMatch(dobra, /ilegal|obrigat|coima|multa|risco/i, 'sem ameaça');
-    assert.match(dobra, /class="fsum">Não declarado</);
+    assert.match(dobra, /aria-checked="true" class="on"[^>]*>Não declarado</);
   });
 
   test('a dica da taxa reduzida: só no declarado, e só em habitação permanente', () => {
@@ -202,27 +208,52 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
 });
 
 describe('a ficha do contrato diz o estado fiscal', () => {
-  test('por indicar', () => {
+  // o cartão «Perante a AT» da ficha (o desenho de 2026-10): o título com o selo do estado
+  const cab = (h) => (/<div class="ct-sec-cab"><h3>Perante a AT<\/h3>(<span class="badge[^"]*">[^<]*<\/span>)<\/div>/.exec(h) || [])[1] || '';
+
+  test('por indicar: o selo cobalto e a frase do que muda ao indicar', () => {
     monta();
-    assert.match(app.ctFicha('C1'), /<span>Declaração<\/span><b>Por indicar<\/b>/);
+    const h = app.ctFicha('C1');
+    assert.equal(cab(h), '<span class="badge">Por indicar</span>');
+    assert.match(h, /Comunicaste este contrato às Finanças \(Modelo 2\)\?/);
   });
 
   test('declarado, com o número e a finalidade quando existem', () => {
     monta({ estado: 'declarado', numero: '1234567', finalidade: 'hp' });
-    assert.match(app.ctFicha('C1'), /<b>Declarado à AT · n\.º 1234567 · habitação permanente<\/b>/);
+    let h = app.ctFicha('C1');
+    assert.equal(cab(h), '<span class="badge in">Declarado</span>', 'declarado a verde');
+    assert.match(h, /<div class="ct-kv"><span>N\.º do contrato<\/span><b>1234567<\/b><\/div>/);
+    assert.match(h, /<div class="ct-kv"><span>Finalidade<\/span><b>Habitação permanente<\/b><\/div>/);
+    assert.match(h, /<span>Anexo F<\/span><b>quadro 4\.1 · /);
     monta({ estado: 'declarado', numero: '1234567' });
-    assert.match(app.ctFicha('C1'), /<b>Declarado à AT · n\.º 1234567<\/b>/);
+    h = app.ctFicha('C1');
+    assert.match(h, /<b>1234567<\/b>/);
+    assert.doesNotMatch(h, /<span>Finalidade<\/span>/, 'o que não se sabe não aparece');
     monta({ estado: 'declarado', finalidade: 'nh' });
-    assert.match(app.ctFicha('C1'), /<b>Declarado à AT · sem n\.º · não habitacional<\/b>/);
+    h = app.ctFicha('C1');
+    assert.match(h, /<span>N\.º do contrato<\/span><b><span class="badge red">Falta o n\.º<\/span><\/b>/, 'sem número, o selo vermelho');
+    assert.match(h, /<b>Não habitacional<\/b>/);
     monta({ estado: 'declarado', numero: '<b>' });
-    assert.match(app.ctFicha('C1'), /n\.º &lt;b&gt;/, 'o número é escapado');
+    assert.match(app.ctFicha('C1'), /<b>&lt;b&gt;<\/b>/, 'o número é escapado');
   });
 
-  test('não declarado: uma linha como as outras, sem cor nem nota', () => {
+  test('declarado: os recibos eletrónicos das rendas do ano, pela marca de cada renda', () => {
+    monta({ estado: 'declarado', numero: '1' });
+    const renda = (data, recibo) => app.normTx({ kind: 'income', category: 'Rendas', amount: 800, date: data, propertyId: 'P1', contractId: 'C1', recibo });
+    app.db.transactions = [renda(ANO + '-01-08', true), renda(ANO + '-02-08', false), renda((ANO - 1) + '-12-08', false)];
+    assert.match(app.ctFicha('C1'), new RegExp('<span>Recibos eletrónicos</span><b>1 de 2 por emitir em ' + ANO + '</b>'), 'só as do ano contam');
+    app.db.transactions[1].recibo = true;
+    assert.match(app.ctFicha('C1'), new RegExp('<b>todos emitidos em ' + ANO + '</b>'));
+    app.db.settings.irs = { dispensaRecibos: true };
+    assert.match(app.ctFicha('C1'), /<span>Recibos eletrónicos<\/span><b>dispensado · Modelo 44<\/b>/);
+  });
+
+  test('não declarado: um selo cinzento como os outros, sem cor de aviso nem nota', () => {
     monta({ estado: 'naoDeclarado' });
     const h = app.ctFicha('C1');
-    assert.match(h, /<div class="stat"><span>Declaração<\/span><b>Não declarado<\/b><\/div>/);
+    assert.equal(cab(h), '<span class="badge grey">Não declarado</span>');
     assert.doesNotMatch(h, /fora da declaração|ilegal|coima|risco/i);
+    assert.doesNotMatch(h, /N\.º do contrato|Anexo F<\/span>/, 'nenhum campo do declarado');
   });
 
   test('a nota da taxa reduzida: no declarado de habitação com duração, e só aí', () => {

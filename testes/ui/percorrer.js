@@ -146,9 +146,9 @@ const CENAS = [
     nome: 'calendario-mes-seguinte',
     fazer: () => {
       go('calendar'); render();
-      const m0 = document.querySelector('#view .toolbar b').textContent.trim();
+      const m0 = document.querySelector('#view .cal-nav-tit h2').textContent.trim();
       calNav(1);
-      const m1 = document.querySelector('#view .toolbar b').textContent.trim();
+      const m1 = document.querySelector('#view .cal-nav-tit h2').textContent.trim();
       if (m0 === m1) throw new Error('o mes nao mudou: ' + m0);
     },
   },
@@ -168,7 +168,7 @@ const CENAS = [
     fazer: () => {
       go('calendar'); render();
       calNav(2);
-      const b = [...document.querySelectorAll('#view .toolbar .btn')].find((x) => x.textContent.trim() === 'Hoje');
+      const b = [...document.querySelectorAll('#view .cal-nav .btn')].find((x) => x.textContent.trim() === 'Hoje');
       if (!b) throw new Error('dois meses a frente e sem botao Hoje');
       b.click();
     },

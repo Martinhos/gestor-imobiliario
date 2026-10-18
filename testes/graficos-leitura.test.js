@@ -11,7 +11,7 @@
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { carregarApp, repor } from './arnes.js';
+import { carregarApp, repor, igual } from './arnes.js';
 
 const app = carregarApp();
 afterEach(() => repor(app))
@@ -238,6 +238,130 @@ describe('o gesto: a leitura aparece na cabeça do mesmo gráfico', () => {
     assert.equal(app.pilha(null), '');
     assert.equal(app.pilha(['jan', 'mai', 'jan', null]), '<span>jan</span><span>mai</span><span></span>');
     assert.equal(app.pilha(['<i>']), '<span>&lt;i&gt;</span>');
+  });
+});
+
+/* A Visão geral do canvas de 2026-10 escreve por cima das barras o mês
+   corrente («out 2026 · Receita … · Despesas …») antes de alguém tocar, e
+   pinta por trás a coluna desse mês. A leitura continua a ser a do canto: o
+   dedo troca-a, e ao largar volta ao mês fixo (graficos.js:cabecaDaLeitura,
+   graficos.js:largarLeitura). */
+describe('a leitura acesa antes de tocar, e o mês em destaque', () => {
+  const comLer = (o) => app.cBars([0, 1, 2].map((i) => [
+    { label: 'Receita', value: 950, color: '#2f7d5b' },
+    { label: 'Despesas', value: -[80, 1080, 12080][i], color: '#c56b68' },
+  ]), ['jan', 'fev', 'mar'], Object.assign({ h: 190 }, o));
+
+  test('com ler, a leitura nasce escrita nessa coluna e o contentor fica fixo, a dizer qual', () => {
+    const html = comLer({ ler: 1 });
+    assert.match(html, /^<div class="chartler fixa" data-ler="1"><div class="chartcab/);
+    const lida = /<div class="chartlido" data-col="1">([\s\S]*?)<\/div><\/div><\/div>/.exec(html);
+    assert.ok(lida, 'a leitura que se vê já traz a coluna');
+    assert.match(lida[1], /^<b>fev<\/b>/);
+    assert.match(lida[1], /<span class="lnm">Despesas<\/span><span class="lvl">−1 080 €<\/span>/);
+    assert.match(molde(html), /<span>mar<\/span>/, 'o molde continua a guardar o lugar de todos');
+  });
+
+  test('numa série só, a leitura acesa é a de uma linha', () => {
+    const html = app.cLine([{ name: 'Acumulado', values: [100, 2538, 900], color: '#2f7d5b' }], ['jan', 'fev', 'mar'], { ler: 2 });
+    assert.match(html, /<div class="chartlido uma" data-col="2"><b>mar<\/b><i data-fundo="#2f7d5b"><\/i><span class="lvl">900 €<\/span><\/div>/);
+  });
+
+  test('sem ler, ou com uma coluna que não existe, é como era: a leitura nasce vazia', () => {
+    for (const o of [{}, { ler: 3 }, { ler: -1 }, { ler: 1.5 }, { ler: '1' }]) {
+      const html = comLer(o);
+      assert.match(html, /^<div class="chartler"><div class="chartcab/, JSON.stringify(o));
+      assert.match(html, /<div class="chartlido"><\/div>/, JSON.stringify(o));
+    }
+  });
+
+  test('largar a leitura volta à coluna fixa, e não fica na última que o dedo leu', () => {
+    const dados = desescapar(/data-lido="([^"]*)"/.exec(comLer({ ler: 0 }))[1]);
+    const leitura = elementoLeitura();
+    leitura.setAttribute('data-col', '0');
+    const ler = { querySelector: (s) => (s === '.chartlugar>.chartlido:not(.chartmolde)' ? leitura : null), getAttribute: (k) => (k === 'data-ler' ? '0' : null) };
+    const caixa = elementoLeitura();
+    caixa.getAttribute = (k) => (k === 'data-lido' ? dados : null);
+    caixa.querySelector = (s) => (s === '.chartguia' ? caixa.filhos.find((f) => f.className === 'chartguia') || null : null);
+    caixa.closest = (s) => (s === '.chartler' ? ler : null);
+    app.mostrarColuna(caixa, 2);
+    assert.match(leitura.innerHTML, /^<b>mar<\/b>/, 'o dedo leu março');
+    app.largarLeitura(caixa);
+    assert.ok(!caixa.classes.has('a-ler'), 'a guia sai');
+    assert.equal(leitura.getAttribute('data-col'), '0');
+    assert.match(leitura.innerHTML, /^<b>jan<\/b>/, 'e a leitura volta a janeiro');
+  });
+
+  test('o destaque pinta por trás de tudo a faixa suave da coluna, e só com uma coluna que existe', () => {
+    const html = comLer({ destaque: 2 });
+    assert.match(html, /<svg [^>]*><rect class="gdestaque" x="[\d.]+" y="4" width="[\d.]+" height="[\d.]+" rx="6" fill="var\(--accent-soft\)"\/>/,
+      'é a primeira forma do desenho: a grelha e as barras pintam por cima');
+    assert.equal((html.match(/gdestaque/g) || []).length, 1);
+    for (const o of [{}, { destaque: 3 }, { destaque: -1 }]) assert.doesNotMatch(comLer(o), /gdestaque/, JSON.stringify(o));
+    assert.doesNotMatch(html, /class="gbar[^"]*gdestaque|gdestaque[^"]*gbar/, 'a faixa não cresce com as barras');
+  });
+
+  test('as barras horizontais: o nome com a segunda parte mais apagada, e o negativo a laranja (dinheiro que sai), não a vermelho', () => {
+    const html = app.cHBars([{ label: 'Ana', sub: 'T2 Lisboa', value: 1150 }, { label: '<b>Casa</b>', value: -300 }]);
+    assert.match(html, /<span class="nm u-c-v-ink">Ana <span class="small">· T2 Lisboa<\/span><\/span>/);
+    assert.match(html, /&lt;b&gt;Casa&lt;\/b&gt;<\/span>/, 'o nome vai escapado');
+    assert.match(html, /data-fundo="var\(--out\)"/);
+    assert.doesNotMatch(html, /--danger/);
+  });
+
+  test('o CSS acende a leitura fixa sem ninguém tocar', () => {
+    assert.match(css, /\.chartler\.fixa \.chartlido\{opacity:1\}/);
+  });
+});
+
+/* O eixo dos valores: marcas redondas com o zero, cada uma à sua altura, na
+   mesma unidade em todo o eixo e com o menos tipográfico (graficos.js:axisY,
+   graficos.js:marcasDoEixo). Partido em quartos exatos dizia «1,7k · 575 ·
+   −529 · −1,6k», com o hífen, e o zero sem rótulo. E as barras que descem
+   pela ordem inversa, quando se pede (cBars com desceAoContrario). */
+describe('o eixo dos valores e a ordem do que desce', () => {
+  /* As marcas do eixo, pela ordem do desenho, com o y de cada uma.
+     Recebe: html — o HTML do gráfico.
+     Devolve: [{t, y}] — o texto e o y da linha da grelha (o texto vai 3,2 abaixo). */
+  const marcas = (html) => [...html.matchAll(/<text x="38" y="([\d.]+)" text-anchor="end"[^>]*>([^<]*)</g)].map((m) => ({ t: m[2], y: +(+m[1] - 3.2).toFixed(1) }));
+  /* O y da linha do zero (a mais forte, --line2) que o cBars e o cLine desenham.
+     Recebe: html. Devolve: o número. */
+  const linhaDoZero = (html) => +/<line x1="44" y1="([\d.]+)" x2="354" y2="[\d.]+" stroke="var\(--line2\)"\/>/.exec(html)[1];
+  const seg = (label, value) => ({ label, value, color: '#' + label.length.toString(16).padStart(6, '0') });
+
+  test('as marcas são redondas, com o zero na linha dele, em milhares quando a maior chega aos mil, e com o «−»', () => {
+    const html = app.cBars([[seg('Receita', 1700)], [seg('Despesas', -2700)]], ['jan', 'fev']);
+    const m = marcas(html);
+    igual(m.map((x) => x.t), ['−2k', '−1k', '0', '1k']);
+    assert.equal(m.find((x) => x.t === '0').y, linhaDoZero(html), 'o zero tem rótulo, à altura da linha do zero');
+    assert.doesNotMatch(html, /text-anchor="end"[^>]*>-/, 'nenhum hífen a fazer de menos');
+  });
+
+  test('abaixo dos mil, por extenso; e cada marca à sua altura, sem alargar o intervalo dos dados', () => {
+    const html = app.cBars([[seg('Receita', 575)], [seg('Despesas', -529)]], ['jan', 'fev'], { h: 150 });
+    const m = marcas(html);
+    igual(m.map((x) => x.t), ['−400', '−200', '0', '200', '400']);
+    // a altura proporcional: o desenho vai de 10 (575) a 142 (−529) com h=150
+    const y = (v) => +(142 - 132 * (v + 529) / 1104).toFixed(1);
+    m.forEach((x) => assert.ok(Math.abs(x.y - y(Number(x.t.replace('−', '-')))) < 0.11, x.t + ' à sua altura (' + x.y + ')'));
+  });
+
+  test('com o formatador da janela, as marcas redondas saem em euros', () => {
+    const html = app.cLine([{ name: 'Receita', values: [454, 907, 1361, 1814] }], ['jan', 'fev', 'mar', 'abr'], { fmt: app.euro });
+    igual(marcas(html).map((x) => x.t), [0, 500, 1000, 1500].map((v) => app.euro(v)));
+  });
+
+  test('desceAoContrario: o primeiro a descer é o último dos segmentos, sem mexer na legenda nem na leitura', () => {
+    const grupo = [[seg('Receita', 100), seg('Despesas', -50), seg('Prestações', -30)]];
+    const barras = (html) => Object.fromEntries([...html.matchAll(/<rect class="gbar[^"]*" x="[\d.]+" y="([\d.]+)"[^>]*fill="(#[0-9a-f]+)"/g)].map((r) => [r[2], +r[1]]));
+    const normal = app.cBars(grupo, ['jan'], { h: 150 }), inverso = app.cBars(grupo, ['jan'], { h: 150, desceAoContrario: true });
+    const zN = linhaDoZero(normal), zI = linhaDoZero(inverso);
+    assert.equal(barras(normal)[seg('Despesas', 0).color], zN, 'sem a opção, as despesas encostam ao zero');
+    assert.equal(barras(inverso)[seg('Prestações', 0).color], zI, 'com ela, as prestações encostam ao zero');
+    assert.ok(barras(inverso)[seg('Despesas', 0).color] > zI, 'e as despesas vão para o fundo');
+    const legenda = (html) => [...html.matchAll(/<span class="nm">([^<]+)<\/span>/g)].map((x) => x[1]);
+    igual(legenda(inverso), legenda(normal), 'a legenda fica pela mesma ordem');
+    igual(lido(inverso).s.map((x) => x.n), ['Receita', 'Despesas', 'Prestações'], 'e a leitura também');
   });
 });
 

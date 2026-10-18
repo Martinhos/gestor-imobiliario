@@ -125,13 +125,17 @@ function ajustarPop(p){
   if(!btn)return;
   /* repor antes de medir: uma medição feita sobre o ajuste anterior herda-o */
   p.style.top='';p.style.bottom='';p.style.maxHeight='';
+  /* O espaço é o que TODOS os antepassados que cortam deixam ver, e não só o
+     primeiro: um grupo de formulário que corta (o .sect de cantos redondos)
+     pode estar meio rolado para fora do corpo do modal, e medir só por ele
+     abria o menu para cima por cima do corpo (6px cortados no telemóvel
+     deitado). */
   let limite={top:0,bottom:window.innerHeight};
   for(let a=p.parentElement;a&&a!==document.body;a=a.parentElement){
     const cs=getComputedStyle(a);
     if(/hidden|auto|scroll/.test(cs.overflow+cs.overflowX+cs.overflowY)){
       const r=a.getBoundingClientRect();
-      limite={top:Math.max(0,r.top),bottom:Math.min(window.innerHeight,r.bottom)};
-      break;
+      limite={top:Math.max(limite.top,r.top),bottom:Math.min(limite.bottom,r.bottom)};
     }
   }
   /* offsetHeight e não getBoundingClientRect().height: o menu entra com um
@@ -165,7 +169,18 @@ function selAberto(id,aberto){const b=document.getElementById('selb_'+id);if(b)b
 function selFocarEscolhida(pop){
   const opts=[].slice.call(pop.querySelectorAll('.selopt'));
   const o=opts.find(x=>x.getAttribute('aria-selected')==='true')||opts[0];
-  try{if(o)o.focus()}catch(x){}
+  /* sem deixar o foco rolar a página: o menu já foi medido e posto (ajustarPop),
+     e o focus() simples rolava o corpo do modal (o scroll-padding-bottom dele)
+     por baixo do menu, que ficava 6px fora do corpo. A opção vem à vista só
+     dentro da caixa do próprio menu. */
+  try{
+    if(o){
+      o.focus({preventScroll:true});
+      const t=o.offsetTop,b=t+o.offsetHeight;
+      if(t<pop.scrollTop)pop.scrollTop=t;
+      else if(b>pop.scrollTop+pop.clientHeight)pop.scrollTop=b-pop.clientHeight;
+    }
+  }catch(x){}
 }
 /* A opção seguinte numa lista de n, para uma tecla: as setas andam uma e param
    nas pontas (uma lista de escolha não dá a volta), Home e End vão às pontas.
@@ -490,7 +505,7 @@ function modalLayer(){
   const m=document.createElement('div');m.className='modal open';
   m.innerHTML=`<div class="bg" data-toca="camada" data-click="closeModal('fundo')"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
     <div class="head"><h2 id="modalTitle"></h2><div class="spacer"></div><span id="modalMenu"></span>
-      <button class="iconbtn" data-toca="camada" data-click="closeModal('x')" aria-label="Fechar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <button class="iconbtn" data-toca="camada" data-click="closeModal('x')" aria-label="Fechar">${ic('x')}</button></div>
     <div class="body" id="modalBody"></div><div class="foot" id="modalFoot"></div></div>`;
   return m;
 }
@@ -558,7 +573,8 @@ function marcarDatasVazias(raiz){
 // Preenche uma janela já criada: título, corpo, menu do cabeçalho e rodapé —
 // por omissão, Cancelar + Guardar (que chama o onSave da janela de cima).
 // Recebe: el — o elemento da janela (vindo do modalLayer); title — o texto do título;
-// body — HTML do corpo; foot (opcional) — HTML do rodapé (por omissão Cancelar+Guardar);
+// body — HTML do corpo; foot (opcional) — HTML do rodapé (por omissão Cancelar+Guardar;
+// SEM_RODAPE para uma janela que só se fecha no X, como a folha «Criar»);
 // menuHtml (opcional) — HTML para o menu do cabeçalho.
 // Devolve: nada — preenche a janela no DOM.
 function fillModal(el,title,body,foot,menuHtml){
@@ -567,8 +583,14 @@ function fillModal(el,title,body,foot,menuHtml){
   if(typeof tornarFocavel==='function')tornarFocavel(el.querySelector('.body'));
   marcarDatasVazias(el.querySelector('.body'));
   el.querySelector('.head span').innerHTML=semEtiquetasQueCorrem(menuHtml||'');
-  el.querySelector('.foot').innerHTML=semEtiquetasQueCorrem(foot||`<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="onSave&&onSave()">Guardar</button>`);
+  const pe=el.querySelector('.foot');
+  pe.innerHTML=foot===SEM_RODAPE?'':semEtiquetasQueCorrem(foot||`<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="onSave&&onSave()">Guardar</button>`);
+  if(pe.classList)pe.classList.toggle('u-d-none',foot===SEM_RODAPE);
 }
+/* O rodapé de uma janela que não tem botões em baixo: escolhe-se no corpo e
+   fecha-se no X (a folha «Criar», navegacao.js:abrirAdicionar). Uma marca, e
+   não '': uma string vazia continua a querer dizer «o rodapé de omissão». */
+const SEM_RODAPE='\u0000sem-rodape';
 
 /* ================= A FICHA DE LEITURA =================
    Tocar num registo LÊ; editar é um passo deliberado.
@@ -767,10 +789,12 @@ function closeModal(origem){
     /* a pergunta veste o tema da app, não o do browser. Abrir a pergunta
        por cima também rearma o histórico (openModal→pushHist), por isso o
        "voltar" que trouxe até aqui fica tratado sozinho. */
+    /* o caminho seguro é o primário (o canvas, M-Visita): quem carregou no X
+       por engano continua com um toque; sair é a escolha deliberada */
     openModal('Sair sem guardar?',
-      `<div class="hint u-fs-14px">Tens alterações por guardar nesta janela. Se saíres, perdem-se.</div>`,
-      `<button class="btn" data-click="closeModal()">Continuar a editar</button>
-       <button class="btn danger" data-click="_sairSemGuardar()">Sair sem guardar</button>`);
+      `<div class="hint u-fs-14px">Tens alterações por guardar nesta janela. Se saíres agora, perdes estas alterações.</div>`,
+      `<button class="btn" data-click="_sairSemGuardar()">Sair sem guardar</button>
+       <button class="btn primary" data-click="closeModal()">Continuar a editar</button>`);
     return;
   }
   const M=modalStack.pop();lockPage();if(!M)return;
@@ -841,17 +865,29 @@ function comDesfazer(msg,restaurar,aoExpirar){
   setTimeout(()=>{if(_desfazer===eu){_desfazer=null;if(eu.expira)eu.expira()}},6400);
 }
 
-/* O toast diz o que falta; isto aponta o campo — realça-o, leva-o ao ecrã
-   e larga o realce à primeira tecla.
-   Recebe: id — o id do campo com o problema; msg — o texto do toast.
-   Devolve: nada — mostra o toast e realça o campo no ecrã. */
+/* O erro diz-se no próprio campo: o contorno vermelho e, por baixo dele, a
+   frase que diz o que fazer (o canvas de 2026-10 — só o aviso em baixo
+   obrigava a procurar qual era o campo). O toast continua: é ele que o leitor
+   de ecrã anuncia (role=status) e o que se vê quando o teclado tapa o campo;
+   o campo leva aria-invalid e aria-describedby a apontar a frase, para quem
+   lá chega pelo Tab a ouvir. Tudo se larga à primeira tecla.
+   Recebe: id — o id do campo com o problema; msg — a frase do erro.
+   Devolve: nada — escreve o erro junto do campo, mostra o toast e leva o campo ao ecrã. */
 function falhaCampo(id,msg){
   toast(msg);
   const e=document.getElementById(id);if(!e)return;
   e.classList.add('err');
+  /* um nó sem a API de inserção (o DOM mínimo dos testes) fica com o realce */
+  if(typeof e.insertAdjacentElement!=='function'){e.addEventListener('input',()=>e.classList.remove('err'),{once:true});return}
+  const ancora=(typeof e.closest==='function'&&e.closest('.sel'))||e,idErro=id+'-erro';
+  const antes=document.getElementById(idErro);if(antes)antes.remove();
+  const p=document.createElement('p');p.className='erro-campo';p.id=idErro;p.textContent=msg;
+  ancora.insertAdjacentElement('afterend',p);
+  e.setAttribute('aria-invalid','true');e.setAttribute('aria-describedby',idErro);
   try{e.scrollIntoView({block:'center'})}catch(x){}
   try{e.focus({preventScroll:true})}catch(x){}
-  e.addEventListener('input',()=>e.classList.remove('err'),{once:true});
+  const larga=()=>{e.classList.remove('err');e.removeAttribute('aria-invalid');e.removeAttribute('aria-describedby');p.remove()};
+  e.addEventListener('input',larga,{once:true});
 }
 /* escolher de uma lista, no estilo da app
    Recebe: title — o texto do título; options — lista de opções {label,sub,icon,
@@ -986,6 +1022,16 @@ function avisoAcimaDoRodape(){
     const r=pes.getBoundingClientRect();
     if(r.height)acima=Math.max(acima,H-r.top);
   });
+  /* Sem rodapé por cima, a barra de baixo do telemóvel: o aviso a 22px do
+     fundo tapava o Casas, o + e o Dinheiro durante segundos. Só quando ela
+     está à vista (no computador, com a gaveta aberta ou em seleção é
+     display:none e o rect vem vazio). Aqui sem os 12px de folga de baixo: o
+     aviso fica à distância de sempre (os 22px do fundo), contada do topo da
+     barra em vez do fundo do ecrã. */
+  if(!acima){
+    const barra=document.getElementById('tabbar'),r=barra&&barra.getBoundingClientRect?barra.getBoundingClientRect():null;
+    if(r&&r.height&&r.top<H)acima=H-r.top-12;
+  }
   t.style.setProperty('--acima',acima>0?Math.ceil(acima+12)+'px':'0px');
 }
 /* Mede outra vez quando a folha tiver assentado.

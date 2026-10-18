@@ -157,20 +157,25 @@ describe('o formulário da pessoa', () => {
 });
 
 describe('a ficha da pessoa', () => {
+  /* Uma linha rótulo/valor da ficha (pessoas.js:pesKv), como o HTML a escreve.
+     Recebe: rotulo — o texto da esquerda; valor — o começo do HTML da direita.
+     Devolve: a expressão que a encontra. */
+  const kv = (rotulo, valor) => new RegExp('<div class="pes-kv"><span>' + rotulo + '</span><span>' + valor);
+
   test('o inquilino que retém e tem um NIF que não bate certo lê-se assim', () => {
     app.db.tenants.push(app.normPerson({ id: 't1', name: 'Ana', nif: '123456780', retem: true, pais: 'Espanha' }));
     const html = app.personFicha('tenant', 't1');
-    assert.ok(html.includes('Retenção na fonte'));
-    assert.ok(html.includes('retém IRS ao pagar a renda'));
-    assert.ok(html.includes('NIF 123 456 780 · não bate certo'));
-    assert.ok(html.includes('País: Espanha'));
+    assert.match(html, kv('Retenção na fonte', 'retém IRS ao pagar a renda'));
+    assert.match(html, kv('NIF', '123 456 780<span class="pes-mau">não bate certo</span>'), 'o aviso fica ao lado do número');
+    assert.match(html, kv('País', 'Espanha'));
+    assert.match(html, /<h3>Identificação<\/h3>/, 'no cartão da identificação');
     assert.ok(!html.includes('Esta ficha só tem o nome'), 'a ficha não está vazia');
   });
 
   test('um NIF certo não leva aviso, e um proprietário nunca tem a linha da retenção', () => {
     app.db.tenants.push(app.normPerson({ id: 't1', name: 'Ana', nif: '123456789' }));
     const html = app.personFicha('tenant', 't1');
-    assert.ok(html.includes('NIF 123 456 789'));
+    assert.match(html, kv('NIF', '123 456 789</span>'));
     assert.ok(!html.includes('não bate certo'));
     assert.ok(!html.includes('Retenção na fonte'));
     app.db.owners.push(app.normPerson({ id: 'o1', name: 'Bruno', retem: true }));

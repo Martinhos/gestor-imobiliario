@@ -23,13 +23,10 @@ function propModal(id){
       const f=document.getElementById('fold_reg');if(f&&!f.classList.contains('open'))toggleFold('reg');
       return falhaCampo('p_freguesiaCodigo','O código da freguesia tem 6 dígitos.');
     }
-    /* o capital de cada hipoteca é obrigatório (o asterisco de loanSect): a
-       dobra pode estar fechada, e abre-se antes de apontar o campo */
+    /* o capital de cada hipoteca é obrigatório (o asterisco de loanSect); o
+       grupo das hipotecas está sempre aberto, e o falhaCampo chega ao campo */
     const semCapital=servicoLigado('credits')?(pForm.loans||[]).find(l=>!(capitalDoInicio(l,db.transactions)>0)):null;
-    if(semCapital){
-      const f=document.getElementById('fold_loans');if(f&&!f.classList.contains('open'))toggleFold('loans');
-      return falhaCampo('l_out_'+semCapital.id,'Indica o capital em dívida.');
-    }
+    if(semCapital)return falhaCampo('l_out_'+semCapital.id,'Indica o capital em dívida.');
     (pForm.loans||[]).forEach(l=>{l.name=l.name||l.bank||'Hipoteca'});   /* a recorrência identifica-se pelo nome */
     /* a pergunta pelas prestações desde o início (creditos.js) cria movimentos numa hipoteca:
        corre com os Créditos e os Movimentos ligados nesta conta; o planeado da prestação só
@@ -44,59 +41,311 @@ function propModal(id){
     if(historia)perguntarPrestacoesEmFalta(pForm,antes);
   };
 }
-/* O corpo da ficha de um imóvel: o que se sabe sobre ele, para ler.
+/* O corpo da ficha de um imóvel: o que se sabe sobre ele, para ler, como a
+   prancheta M-Imovel — a capa (a primeira foto, ou o mosaico) com quantas
+   fotos há, a morada e os selos, os donos com as quotas e quem deve a quem,
+   as ações rápidas, o cartão dos números, os por confirmar, os quartos ou o
+   contrato, as hipotecas, as despesas fixas, as tarefas, os dados registais
+   e fiscais e o anúncio. O título é o da janela; o «Editar» é o do rodapé, e
+   só existe para quem pode (propView).
 
    O que é sempre visível (morada, destino, quartos, donos) e o resto conforme
    o cargo — fotos com file.view, valores e a linha fiscal com report.view,
-   hipotecas com loan.view. Nunca o bloco de quotas nem os comentários dos donos: o servidor
-   já não os manda a quem colabora. E conforme os serviços ligados nesta conta:
-   o estado e os contratos ativos são dos Contratos, o bloco das hipotecas é
-   dos Créditos — desligados, a ficha não os mostra.
+   hipotecas com loan.view. Nunca as quotas nem os comentários dos donos a quem
+   colabora: o servidor já não os manda. E conforme os serviços ligados nesta
+   conta: o estado e os contratos são dos Contratos, as hipotecas dos Créditos,
+   as despesas fixas e os por confirmar dos Planeados, as ações de cada um
+   do seu — desligados, a ficha não os mostra.
    Recebe: id — o id do imóvel.
    Devolve: o HTML do corpo, ou vazio se o imóvel já não existir. */
 function propFicha(id){
   const p=prop(id);if(!p)return '';
-  const vCt=pode(id,'contract.view')&&servicoLigado('contracts'),vLoan=pode(id,'loan.view')&&servicoLigado('credits');
-  const st=vCt?propStatus(p):null,ls=loansOf(p),c=cargoDe(id);
-  const dono=p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):''),ac=vCt?activeContracts(id):[];
+  const v={ct:pode(id,'contract.view')&&servicoLigado('contracts'),loan:pode(id,'loan.view')&&servicoLigado('credits'),
+    rep:pode(id,'report.view'),file:pode(id,'file.view')};
+  const c=cargoDe(id);
+  const cartoes=[imvPorConfirmar(p,c),imvQuartos(p,v.ct),imvContratos(p,v.ct),v.loan?imvHipotecas(p):'',imvFixas(p,c),
+    tfCartaoDaFicha('imovel',id),imvRegistais(p,v.rep),
+    p.listing?`<div class="card imv-sec"><div class="imv-sec-cab"><h3>Anúncio</h3></div><p class="imv-texto">${esc(p.listing)}</p></div>`:''].filter(Boolean).join('');
+  return `<div class="imv-ficha">
+    ${imvCapaDaFicha(p,v.file)}
+    ${imvTopoDaFicha(p,v.ct,c)}
+    ${c.dono?'':imvNotaDeColaborador(p,c)}
+    ${imvAcoesRapidas(p,c)}
+    ${imvNumerosDaFicha(p,v)}
+    ${cartoes?`<div class="imv-grelha">${cartoes}</div>`:''}
+  </div>`;
+}
+/* A capa da ficha: a primeira foto (o depois do propView pinta-a, pelo id
+   th_) por cima do mosaico do imóvel, e o botão que abre a galeria com
+   quantas fotos há.
+   Recebe: p — o imóvel; vFile — se o cargo deixa ver as fotos.
+   Devolve: o HTML da capa. */
+function imvCapaDaFicha(p,vFile){
+  const fs=vFile?(p.photos||[]):[],f=fs[0];
+  return `<div class="imv-fcapa imv-mosaico ${imvMosaico(p)}${f?' pcover':''}"${f?` id="th_${esc(f.id)}"`:''}>
+    ${fs.length?`<button type="button" class="imv-fotos-btn" data-toca="camada" data-click="imvGaleria('${jsq(p.id)}')">${ic('photo',16)} ${fs.length} foto${fs.length===1?'':'s'}</button>`:''}</div>`;
+}
+/* A morada, os selos (o estado, o destino, os contratos por começar, os
+   colaboradores) e a linha dos donos: as quotas e, entre donos, quem deve a
+   quem (saldos.js:settlePlan). As quotas e as contas são dos donos: a quem
+   colabora só os nomes que o servidor mandou.
+   Recebe: p — o imóvel; vCt — se o estado se pode mostrar; c — o cargo (acessos.js:cargoDe).
+   Devolve: o HTML do topo. */
+function imvTopoDaFicha(p,vCt,c){
+  const st=vCt?propStatus(p):null;
+  const destino=p.use==='proprio'?(st?'':'Uso próprio'):'Arrendamento · '+(p.rentalMode==='quartos'?'por quartos':'imóvel inteiro');
+  const futuros=vCt?contractsOf(p.id).filter(x=>ctEstado(x)==='futuro').length:0;
+  const selos=[st?`<span class="badge ${imvCorDoEstado(st.key)}">${esc(st.label)}</span>`:'',destino?`<span class="badge grey">${destino}</span>`:'',
+    futuros?`<span class="badge">${futuros===1?'1 contrato por começar':futuros+' contratos por começar'}</span>`:'',seloColaboradores(p)].join('');
+  const donos=(p.ownerIds||[]).map(owner).filter(Boolean);
+  let linha='';
+  if(c.dono&&donos.length){
+    const sh2=donos.length>1?sharesOf(p):null;
+    linha=donos.map(o=>esc(o.name)+(sh2?' '+pct(sh2[o.id]||0,0):'')).join(' · ');
+    const primeiro=oid=>{const o=owner(oid);return o?o.name.split(' ')[0]:''};
+    const contas=donos.length>1?settlePlan(ownerBalances(p.id)).filter(t=>primeiro(t.from)&&primeiro(t.to))
+      .map(t=>`${esc(primeiro(t.from))} deve ${euro2(t.amount)} a ${esc(primeiro(t.to))}`):[];
+    if(contas.length)linha+=` <span class="small">· ${contas.join(' · ')}</span>`;
+  }else if(ownerNames(p))linha=esc(ownerNames(p));
+  return `<div class="imv-ftopo">
+    <p class="imv-fmorada">${esc(p.address||'Sem morada')}</p>
+    ${selos?`<div class="imv-selos">${selos}</div>`:''}
+    ${linha?`<p class="imv-donos num">${linha}</p>`:''}</div>`;
+}
+/* A nota de quem colabora: de quem é o imóvel, o cargo e o que ele deixa
+   fazer aqui. O «Editar a ficha» é o «Editar» do rodapé.
+   Recebe: p — o imóvel; c — o cargo (acessos.js:cargoDe).
+   Devolve: o HTML da nota. */
+function imvNotaDeColaborador(p,c){
+  const id=p.id,dono=p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):'');
+  const podes=frasePodesNoImovel(id),acoes=acoesNoImovel(id).filter(a=>a.perm!=='house.edit');
+  return `<div class="hint imv-nota">${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}És colaborador${c.nome?' como <b>'+esc(c.nome)+'</b>':''}${pode(id,'house.edit')?'.':acoes.length?' — os dados do imóvel são só de leitura.':' — a ficha é só de leitura.'}`
+    +(podes?`<span class="imv-nota-podes">${esc(podes)}</span>`:'')+'</div>';
+}
+/* As ações rápidas da ficha, em chips, só as que o cargo e os serviços
+   ligados deixam: ao dono, «Novo contrato» (num imóvel de arrendamento),
+   «Registar despesa», «Pagamento de crédito» (com hipoteca viva e podendo
+   abater capital — acessos.js:motivoCredito) e «Ver movimentos»; a quem
+   colabora, as do cargo (acessos.js:acoesNoImovel) e «Ver movimentos». Um
+   chip que muda de ecrã fecha antes a ficha, senão ela ficava por cima.
+   Recebe: p — o imóvel; c — o cargo (acessos.js:cargoDe).
+   Devolve: o HTML da fila de chips, ou ''. */
+function imvAcoesRapidas(p,c){
+  const id=p.id,q=jsq(id),a=[];
+  if(c.dono){
+    if(servicoLigado('contracts')&&p.use==='investimento'&&pode(id,'contract.add'))a.push({rotulo:'Novo contrato',icon:'plus',toca:'camada',act:`ctModal(null,'${q}')`});
+    if(servicoLigado('transactions')&&pode(id,'tx.add'))a.push({rotulo:'Registar despesa',icon:'dn',toca:'camada',act:`despesaNoImovel('${q}')`});
+    if(servicoLigado('credits')&&servicoLigado('transactions')&&liveLoans(p).length&&!motivoCredito(id))
+      a.push({rotulo:'Pagamento de crédito',icon:'bank',toca:'camada',act:`pagamentoNoImovel('${q}')`});
+  }else acoesNoImovel(id).filter(x=>x.perm!=='house.edit').forEach(x=>a.push({rotulo:x.rotulo,icon:x.icon,toca:x.toca,act:x.act}));
+  if(servicoLigado('transactions')&&pode(id,'tx.view'))a.push({rotulo:'Ver movimentos',icon:'lista',toca:'ecra',act:`verMovimentosDoImovel('${q}')`});
+  if(!a.length)return '';
+  return `<div class="chips-fila imv-acoes" role="group" aria-label="Ações rápidas">${a.map(x=>
+    `<button type="button" class="chip" data-toca="${x.toca}" data-click="${x.toca==='ecra'?'closeAllModals();':''}${x.act}">${ic(x.icon,16)} ${esc(x.rotulo)}</button>`).join('')}</div>`;
+}
+/* O cartão dos números da ficha, cada um só se o cargo e os serviços o
+   deixam ver: a renda em vigor e a yield (dos Contratos), o valor de mercado
+   e — sem renda — o de aquisição (os valores), e o que está em dívida nas
+   hipotecas (dos Créditos).
+   Recebe: p — o imóvel; v — {ct, rep, loan}.
+   Devolve: o HTML do cartão, ou '' sem nenhum número para mostrar. */
+function imvNumerosDaFicha(p,v){
+  const rent=v.ct?rentOf(p):0,ls=v.loan?liveLoans(p):[],cel=[];
+  if(rent>0)cel.push(['Renda em vigor',euro2(rent)+'<span class="small">/mês</span>']);
+  if(rent>0&&v.rep&&p.value)cel.push(['Yield',pct(rent*12/p.value)]);
+  if(v.rep)cel.push(['Valor de mercado',p.value?euro(p.value):'—']);
+  if(v.rep&&!(rent>0))cel.push(['Valor de aquisição',p.purchase?euro(p.purchase):'—']);
+  if(ls.length)cel.push(['Em dívida · '+(ls.length===1?'1 hipoteca':ls.length+' hipotecas'),euro(debtOf(p))]);
+  if(!cel.length)return '';
+  return `<div class="card imv-numeros num">${cel.map(([k,x])=>`<div class="imv-cel"><span class="small">${k}</span><b class="disp">${x}</b></div>`).join('')}</div>`;
+}
+/* O cabeçalho de um cartão da ficha: o título e, à direita, uma nota curta
+   ou um selo.
+   Recebe: titulo — o texto (por escapar); dir (opcional) — HTML do que vai à direita.
+   Devolve: o HTML do cabeçalho. */
+function imvCab(titulo,dir){return `<div class="imv-sec-cab"><h3>${esc(titulo)}</h3>${dir||''}</div>`}
+/* Os por confirmar deste imóvel (dos Planeados), cada um com o selo do
+   atraso e o «Confirmar» de um toque para quem pode; tocar no texto da linha
+   revê-o antes (planeados.js:confirmRec). Usa as perguntas dos Planeados
+   (recActive, recIsLate, recusaConfirmar, recSemCredito, recCreditoPago) e
+   nada antes de se saber o estado do servidor.
+   O alvo de «rever» é o bloco do texto, e o «Confirmar» é irmão dele, fora:
+   com a linha inteira tocável (o tornarFocavel dá-lhe role="button"), o botão
+   ficava dentro de outro botão, e para um leitor de ecrã os filhos de um
+   botão são só texto — o «Confirmar» podia nem ser anunciado.
+   Recebe: p — o imóvel; c — o cargo (acessos.js:cargoDe).
+   Devolve: o HTML do cartão, ou '' sem nada por confirmar. */
+function imvPorConfirmar(p,c){
+  if(!servicoLigado('recurring')||!sabemosOEstado())return '';
+  if(!c.dono&&!pode(p.id,'rec.view'))return '';
+  const rs=recActive().filter(r=>r.tx&&r.tx.propertyId===p.id);
+  if(!rs.length)return '';
+  const linhas=rs.map(r=>{
+    const late=recIsLate(r),conf=!recusaConfirmar(r)&&!recSemCredito(r)&&!recCreditoPago(r);
+    return `<div class="imv-linha imv-pend">
+      <div class="imv-linha-txt tap" data-toca="camada" data-click="confirmRec('${jsq(r.id)}')"><b>${esc(r.name)}</b><span class="small num">${dPT(r.next)}${r.until&&r.until!==r.next?' – '+dPT(r.until):''}${r.tx.amount?' · '+euro2(r.tx.amount):''}</span>
+        <span class="badge${late?' red':''}">${late?'Em atraso':'Por confirmar'}</span></div>
+      ${conf?`<button type="button" class="btn sm primary" data-toca="dados" data-click="quickConfirmRec('${jsq(r.id)}')">Confirmar</button>`:''}</div>`;
+  }).join('');
+  return `<div class="card imv-sec">${imvCab('Por confirmar',`<span class="small num">${rs.length}</span>`)}${linhas}</div>`;
+}
+/* Uma linha de contrato num cartão da ficha: o quarto (ou o rótulo), quem lá
+   mora e até quando (ou desde quando), a renda; tocar abre a ficha do
+   contrato (contrato.js:ctView). Um contrato que ainda não começou diz-o.
+   Recebe: ct — o contrato; rotulo — o nome do quarto ('' num imóvel inteiro:
+   a linha leva então o nome de quem lá mora).
+   Devolve: o HTML da linha. */
+function imvLinhaContrato(ct,rotulo){
+  const futuro=ctEstado(ct)==='futuro';
+  const quando=futuro?(ct.start?'a partir de '+dPT(ct.start):''):ct.end?'até '+dPT(ct.end):ct.start?'desde '+dPT(ct.start):'';
+  const sub=(rotulo?[esc(ctNames(ct)),quando]:[quando]).filter(Boolean).join(' · ');
+  return `<div class="imv-linha tap" data-toca="camada" data-click="ctView('${jsq(ct.id)}')">
+    <div class="imv-linha-txt"><b>${esc(rotulo||ctNames(ct))}</b>${sub?`<span class="small num">${sub}</span>`:''}${futuro?'<span class="badge">Por começar</span>':''}</div>
+    <b class="num">${euro2(ct.rent)}</b><span class="seta">${ic('chevR',18)}</span></div>`;
+}
+/* O cartão dos quartos de um imóvel por quartos: quantos estão arrendados e,
+   quarto a quarto, o contrato (ou «Livre», com o «Novo contrato» e o
+   «Marcar visita» para quem pode). Sem poder ver os contratos, só os nomes
+   dos quartos — o que o servidor não manda não se adivinha.
+   Recebe: p — o imóvel; vCt — se o cargo e os serviços deixam ver os contratos.
+   Devolve: o HTML do cartão, ou ''. */
+function imvQuartos(p,vCt){
+  const rooms=p.rooms||[];
+  if(p.use!=='investimento'||p.rentalMode!=='quartos'||!rooms.length)return '';
+  if(!vCt)return `<div class="card imv-sec">${imvCab('Quartos',`<span class="small num">${rooms.length}</span>`)}${rooms.map(r=>`<div class="imv-linha"><div class="imv-linha-txt"><b>${esc(r.name||'Quarto')}</b></div></div>`).join('')}</div>`;
+  const vivos=contractsOf(p.id).filter(ctVivo),q=jsq(p.id);
+  const podeCt=servicoLigado('contracts')&&pode(p.id,'contract.add'),podeVis=servicoLigado('visits')&&pode(p.id,'visit.add');
+  let ocupados=0;
+  const linhas=rooms.map(r=>{
+    const ct=vivos.find(x=>x.roomId===r.id&&isActive(x))||vivos.find(x=>x.roomId===r.id);
+    if(ct){if(isActive(ct))ocupados++;return imvLinhaContrato(ct,r.name||'Quarto')}
+    const botoes=[podeVis?`<button type="button" class="btn sm" data-toca="camada" data-click="marcarVisitaNoImovel('${q}')">Marcar visita</button>`:'',
+      podeCt?`<button type="button" class="btn sm" data-toca="camada" data-click="contratoNoQuarto('${q}','${jsq(r.id)}')">Novo contrato</button>`:''].join('');
+    return `<div class="imv-linha imv-livre"><div class="imv-linha-txt"><b>${esc(r.name||'Quarto')}</b><span class="small">Sem contrato</span></div>
+      <span class="badge amber">Livre</span>${botoes?`<div class="imv-botoes">${botoes}</div>`:''}</div>`;
+  });
+  vivos.filter(x=>!x.roomId||!rooms.some(r=>r.id===x.roomId)).forEach(x=>linhas.push(imvLinhaContrato(x,'Sem quarto')));
+  return `<div class="card imv-sec">${imvCab('Quartos',`<span class="small num">${ocupados} de ${rooms.length} arrendados</span>`)}${linhas.join('')}</div>`;
+}
+/* O cartão do contrato de um imóvel arrendado inteiro: os contratos em vigor
+   e os que ainda não começaram, um por linha. Por quartos, é o cartão dos
+   quartos que os mostra.
+   Recebe: p — o imóvel; vCt — se o cargo e os serviços deixam ver os contratos.
+   Devolve: o HTML do cartão, ou '' sem contratos. */
+function imvContratos(p,vCt){
+  if(!vCt||p.use!=='investimento'||p.rentalMode==='quartos')return '';
+  const vivos=contractsOf(p.id).filter(ctVivo);if(!vivos.length)return '';
+  const nA=vivos.filter(isActive).length,nF=vivos.length-nA;
+  const sub=[nA?nA+' em vigor':'',nF?nF+' por começar':''].filter(Boolean).join(' · ');
+  return `<div class="card imv-sec">${imvCab(vivos.length===1?'Contrato':'Contratos',`<span class="small">${sub}</span>`)}${vivos.map(x=>imvLinhaContrato(x,'')).join('')}</div>`;
+}
+/* Um cartão por hipoteca (dos Créditos): o tipo de taxa, a taxa e as
+   prestações por pagar, a prestação e o que está em dívida hoje, e os botões
+   do plano de amortização (creditos.js:amortModal) e da ficha da hipoteca
+   com os documentos (creditos.js:mortView).
+   Recebe: p — o imóvel.
+   Devolve: o HTML dos cartões, ou '' sem hipotecas. */
+function imvHipotecas(p){
+  const q=jsq(p.id);
+  return loansOf(p).map(l=>{
+    const viva=Number(l.outstanding)>0,calc=viva?loanCalc(l):null,nd=(l.files||[]).length,lq=jsq(l.id);
+    return `<div class="card imv-sec">${imvCab('Hipoteca · '+loanName(l),`<span class="badge loan">${esc(RATE[l.type]||'Taxa')}</span>`)}
+      <div class="imv-sec-corpo">
+        <p class="small num">${esc(rateLabel(l))}${calc?' · '+calc.n+' prestações por pagar':' · liquidada'}</p>
+        ${calc?`<div class="imv-par num"><div><span class="small">Prestação</span><b>${euro2(calc.total)}<span class="small">/mês</span></b></div>
+          <div><span class="small">Em dívida hoje</span><b>${euro(l.outstanding)}</b></div></div>`:''}
+        <div class="imv-botoes">${viva?`<button type="button" class="btn sm" data-toca="camada" data-click="amortModal('${q}','${lq}')">Plano de amortização</button>`:''}
+          <button type="button" class="btn sm" data-toca="camada" data-click="mortView('${q}','${lq}')">${nd?nd+(nd===1?' documento':' documentos'):'Ver hipoteca'}</button></div>
+      </div></div>`;
+  }).join('');
+}
+/* O cartão das despesas fixas (o IMI, o condomínio e o seguro da ficha), que
+   viram planeados: uma linha por despesa com quando se paga e quanto. É dos
+   Planeados, e vê-o quem é dono ou vê planeados.
+   Recebe: p — o imóvel; c — o cargo (acessos.js:cargoDe).
+   Devolve: o HTML do cartão, ou '' sem nenhuma despesa fixa. */
+function imvFixas(p,c){
+  if(!servicoLigado('recurring')||!(c.dono||pode(p.id,'rec.view')))return '';
+  const curto=m=>nomeDoMes(m).slice(0,3);
+  const imi=p.imi>0?imiPrestacoes(p.imi).map(x=>curto(x.mes)).join(' · '):'';
+  const linhas=[p.imi>0?['IMI',imi,euro2(p.imi)+'/ano']:null,p.condominio>0?['Condomínio','dia 1',euro2(p.condominio)+'/mês']:null,
+    p.seguro>0?['Seguro',p.seguroMes?'fim de '+curto(p.seguroMes):'uma vez por ano',euro2(p.seguro)+'/ano']:null].filter(Boolean);
+  if(!linhas.length)return '';
+  return `<div class="card imv-sec">${imvCab('Despesas fixas','<span class="small">viram planeados</span>')}
+    ${linhas.map(([n,q,x])=>`<div class="imv-linha imv-fixa num"><span class="imv-fixa-n">${n}</span><span class="small">${q}</span><b>${x}</b></div>`).join('')}</div>`;
+}
+/* O cartão dos dados registais e fiscais: o registo (freguesia, concelho,
+   distrito, tipo, tipologia, fração, andar, descrição, artigo, classe e
+   validade do certificado energético) e, para quem vê os valores, o fiscal —
+   o VPT (reparte os gastos quando só se arrenda parte do imóvel) e o dia em
+   que o imóvel foi comprado (o Anexo G).
+   Recebe: p — o imóvel; vRep — se o cargo deixa ver os valores.
+   Devolve: o HTML do cartão, ou '' sem nada escrito. */
+function imvRegistais(p,vRep){
   const reg=[p.freguesia||p.parish,p.freguesiaCodigo?'freguesia n.º '+p.freguesiaCodigo:'',p.concelho,p.distrito,
     p.tipoPredio==='U'?'urbano':p.tipoPredio==='R'?'rústico':'',p.tipologia,
-    p.fraction?'fração '+p.fraction:'',p.floor,p.registry?'n.º '+p.registry:'',p.matrix?'artigo '+p.matrix:'',p.energyClass?'classe '+p.energyClass:''].filter(Boolean).map(esc).join(' · ');
-  /* o que o Anexo F e o Anexo G pedem e não é dado registal: o VPT (reparte os gastos
-     quando só se arrenda parte do imóvel) e o dia em que o imóvel foi comprado */
-  const fisco=[p.vpt?'VPT '+euro(p.vpt):'',p.purchaseDate?'adquirido a '+dPT(p.purchaseDate):''].filter(Boolean).join(' · ');
-  /* as despesas fixas são planeados (dos Planeados): vê-as quem é dono ou vê planeados */
-  const fixas=servicoLigado('recurring')&&(c.dono||pode(id,'rec.view'))?despesasFixasTxt(p):'';
-  const corpo=ficha([
-    {rotulo:'Morada',valor:esc(p.address||'')},
-    {rotulo:'Destino',valor:p.use==='proprio'?'Uso próprio':'Arrendamento'+(p.rentalMode==='quartos'?' · por quartos':' · imóvel inteiro')},
-    st?{rotulo:'Estado',valor:esc(st.label)}:null,
-    (p.rooms||[]).length?{rotulo:'Quartos',valor:(p.rooms||[]).map(r=>esc(r.name)).join(', ')}:null,
-    {rotulo:'Proprietários',valor:esc(ownerNames(p))},
-    ac.length?{tipo:'bloco',rotulo:'Contratos ativos',valor:ac.map(x=>`${x.roomId?esc(roomName(p,x.roomId))+': ':''}${esc(ctNames(x))} · ${euro(x.rent)}`).join('<br>')}:null,
-    /* a lista de tarefas abre-se numa janela própria (tarefas.js:tfAbrir) */
-    tfLinhaDaFicha('imovel',id),
-    pode(id,'report.view')?{rotulo:'Valor de mercado',valor:euro(p.value)}:null,
-    pode(id,'report.view')?{rotulo:'Valor de aquisição',valor:euro(p.purchase)}:null,
-    pode(id,'report.view')&&fisco?{rotulo:'Fiscal',valor:fisco}:null,
-    fixas?{tipo:'bloco',rotulo:'Despesas fixas',valor:esc(fixas)+'<br><span class="u-c-v-muted">Criam os planeados sozinhas.</span>'}:null,
-    vLoan&&ls.length?{tipo:'bloco',rotulo:'Hipotecas',
-      valor:ls.map(l=>`${esc(loanName(l))} · ${euro2(loanCalc(l).total)}/mês · ${euro(l.outstanding)} em dívida`).join('<br>')}:null,
-    pode(id,'file.view')&&(p.photos||[]).length?{tipo:'bloco',rotulo:'Fotos',
-      valor:`<div class="u-d-flex u-fxw-wrap u-g-8px">${(p.photos||[]).map(f=>`<div class="pcover u-w-84px u-h-66px u-br-10px u-bg-v-chip u-ov-hidden" id="th_${esc(f.id)}"></div>`).join('')}</div>`}:null,
-    reg?{tipo:'bloco',rotulo:'Dados registais',valor:reg}:null,
-    p.listing?{tipo:'bloco',rotulo:'Anúncio',valor:esc(p.listing)}:null,
-  ]);
-  if(c.dono)return corpo;
-  /* quem colabora lê primeiro o que o cargo lhe deixa fazer aqui, e tem os
-     botões à mão; o «Editar a ficha» é o «Editar» do rodapé */
-  const podes=frasePodesNoImovel(id);
-  const acoes=acoesNoImovel(id).filter(a=>a.perm!=='house.edit');
-  const nota=`${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}És colaborador${c.nome?' como <b>'+esc(c.nome)+'</b>':''}${pode(id,'house.edit')?'.':acoes.length?' — os dados do imóvel são só de leitura.':' — a ficha é só de leitura.'}`
-    +(podes?`<span class="u-d-block u-mt-4px">${esc(podes)}</span>`:'');
-  /* um botão que muda de ecrã fecha antes a ficha, senão ela ficava por cima */
-  const botoes=acoes.map((a,i)=>`<button type="button" class="btn${i?'':' primary'}" data-toca="${a.toca}" data-click="${a.toca==='ecra'?'closeAllModals();':''}${a.act}">${ic(a.icon,16)} ${esc(a.rotulo)}</button>`).join('');
-  return ficha([{tipo:'nota',valor:nota}])+(botoes?`<div class="colab-acoes u-mt-12px">${botoes}</div>`:'')+`<div class="u-mt-14px">${corpo}</div>`;
+    p.fraction?'fração '+p.fraction:'',p.floor,p.registry?'descrição predial n.º '+p.registry:'',p.matrix?'artigo '+p.matrix:'',p.energyClass?'classe '+p.energyClass:'',
+    p.energyValid?'certificado válido até '+dPT(p.energyValid):''].filter(Boolean).map(esc).join(' · ');
+  const fisco=vRep?[p.vpt?'VPT '+euro(p.vpt):'',p.purchaseDate?'adquirido a '+dPT(p.purchaseDate):''].filter(Boolean).join(' · '):'';
+  if(!reg&&!fisco)return '';
+  return `<div class="card imv-sec">${imvCab('Dados registais e fiscais')}<div class="imv-sec-corpo">
+    ${reg?`<p class="small num"><b class="imv-rot">Registo</b> ${reg}</p>`:''}${fisco?`<p class="small num"><b class="imv-rot">Fiscal</b> ${fisco}</p>`:''}</div></div>`;
+}
+/* A galeria das fotos de um imóvel, numa janela: as miniaturas em grelha, e
+   tocar numa abre-a (componentes.js:openMeta). É o botão da capa da ficha.
+   Recebe: id — o id do imóvel.
+   Devolve: nada — abre a janela. */
+function imvGaleria(id){
+  const p=prop(id);if(!p||!pode(id,'file.view'))return;
+  const fs=p.photos||[];if(!fs.length)return;
+  openModal('Fotos · '+p.name,`<div class="imv-galeria">${fs.map((f,i)=>
+    `<button type="button" class="imv-gfoto pcover" id="th_${esc(f.id)}" data-toca="camada" data-click="openMeta('${jsq(f.id)}')" aria-label="${esc(f.name||('Foto '+(i+1)))}">${i===0?'<span class="imv-nfotos">capa</span>':''}</button>`).join('')}</div>`,
+    `<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`);
+  paintThumbs(fs);
+}
+/* «Registar despesa» da ficha: o formulário da despesa já com o imóvel (é
+   dos Movimentos — com o serviço desligado nesta conta avisa e não abre).
+   Recebe: pid — o id do imóvel.
+   Devolve: nada — abre o formulário. */
+function despesaNoImovel(pid){
+  if(!pode(pid,'tx.add'))return toast(fraseSemPerm('tx.add'));
+  chamarServico('transactions','txModal',{kind:'expense',propId:pid});
+}
+/* «Pagamento de crédito» da ficha: o formulário do pagamento já com o imóvel
+   e, havendo uma só hipoteca viva, com ela. Abate capital, e por isso pede
+   também «Editar a ficha» (acessos.js:motivoCredito).
+   Recebe: pid — o id do imóvel.
+   Devolve: nada — abre o formulário (ou diz porque não). */
+function pagamentoNoImovel(pid){
+  const rc=motivoCredito(pid);if(rc)return toast(rc);
+  const ls=liveLoans(prop(pid));
+  chamarServico('transactions','txModal',ls.length===1?{kind:'loan',propId:pid,preset:{loanId:ls[0].id}}:{kind:'loan',propId:pid});
+}
+/* «Novo contrato» na linha de um quarto livre: o formulário do contrato já
+   com o imóvel E o quarto escolhido. Sem isto o botão prometia o quarto e
+   abria no «Imóvel inteiro», e quem gravava sem reparar criava um contrato do
+   imóvel todo num imóvel por quartos. O quarto acende-se pelo chip do
+   formulário (contrato.js:ctEscolheQuarto), sem repintar; e só se o
+   formulário abriu mesmo — o ctModal pode sair cedo com um aviso, e aí a
+   janela de cima continua a ser a ficha. O quarto pré-escolhido não conta como
+   alteração de quem escreve: o retrato da janela tira-se outra vez.
+   Recebe: pid — o id do imóvel; rid — o id do quarto.
+   Devolve: nada — abre o formulário do contrato. */
+function contratoNoQuarto(pid,rid){
+  const antes=modalTop();
+  ctModal(null,pid);
+  const L=modalTop();
+  if(!L||L===antes||!cForm||contract(cForm.id)||cForm.propertyId!==pid)return;   /* um contrato novo: o id ainda não está na base */
+  const p=prop(pid);if(!p||!(p.rooms||[]).some(r=>r.id===rid))return;
+  cForm.roomId=rid;ctEscolheQuarto(rid);
+  if(L.el)L.snap=modalSnap(L.el);
+}
+/* «Ver movimentos» da ficha: os Movimentos filtrados por este imóvel.
+   Recebe: pid — o id do imóvel.
+   Devolve: nada — muda de ecrã. */
+function verMovimentosDoImovel(pid){
+  go('transactions');
+  setTimeout(()=>{if(tab==='transactions'){txProp=pid;render()}},0);
 }
 /* A ficha de um imóvel: o que tocar num imóvel passa a abrir.
 
@@ -104,90 +353,175 @@ function propFicha(id){
    tocar, um formulário de vinte e um campos com o «Apagar imóvel» encostado
    ao título. Agora tocar lê, e editar é um passo deliberado — o botão do
    rodapé, que só existe para quem pode.
+
+   A capa pinta-se na camada DESTA ficha, e não na de cima: o render repinta
+   as fichas abertas (componentes.js:refrescarFichas) também quando há outra
+   janela por cima — a lista das tarefas, a galeria, o plano de amortização —,
+   e o paintThumbs sem raiz procurava a capa nessa janela, e a ficha ficava
+   com o mosaico e «3 fotos». Na primeira pintura, dentro do abrirFicha, a
+   camada ainda não está guardada, mas aí a de cima é a própria ficha.
    Recebe: id — o id do imóvel.
    Devolve: nada — abre a janela. */
 function propView(id){
   const p=prop(id);if(!p)return;
-  abrirFicha({
+  let camada=null;
+  camada=abrirFicha({
     titulo:()=>{const x=prop(id);return x?x.name:'Imóvel'},
     corpo:()=>propFicha(id),
     menu:()=>souCriador(id)?menu('fichaProp',[{label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${jsq(id)}')`}]):'',
     editar:pode(id,'house.edit')?{rotulo:'Editar',act:`propModal('${jsq(id)}')`}:null,
-    depois:()=>{if(pode(id,'file.view')){const x=prop(id);if(x)paintThumbs(x.photos)}},
+    depois:()=>{if(pode(id,'file.view')){const x=prop(id);if(x)paintThumbs(x.photos,camada&&camada.el?camada.el:undefined)}},
   });
 }
 /* O nome de um mês por extenso, para o menu do mês do seguro e a ficha.
    Recebe: m — o mês (1–12).
    Devolve: o nome em minúsculas (texto); '' fora de 1–12. */
 function nomeDoMes(m){return ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'][m-1]||''}
-/* As despesas fixas de um imóvel numa linha: «IMI 400,00 €/ano · Condomínio
-   55,00 €/mês · Seguro 96,00 €/ano em agosto». É o resumo da dobra do
-   formulário e a linha da ficha.
-   Recebe: p — o imóvel.
-   Devolve: o texto (sem escapar); '' sem nenhum valor. */
-function despesasFixasTxt(p){
-  return [p.imi>0?'IMI '+euro2(p.imi)+'/ano':'',p.condominio>0?'Condomínio '+euro2(p.condominio)+'/mês':'',
-    p.seguro>0?'Seguro '+euro2(p.seguro)+'/ano'+(p.seguroMes?' em '+nomeDoMes(p.seguroMes):''):''].filter(Boolean).join(' · ');
+/* A frase das prestações do IMI, que o grupo das despesas fixas escreve
+   enquanto se escreve o valor: «IMI 400,00 €/ano em 2 prestações de
+   200,00 €, no fim de maio e de novembro, para confirmares na data.» As
+   prestações são as da lei (planeados.js:imiPrestacoes): só se pede com os
+   Planeados ligados, que é quando o grupo existe (fixasSect).
+   Recebe: v — o IMI do ano (número ou o texto do campo).
+   Devolve: a frase (texto, por escapar); '' sem IMI. */
+function imvFraseImi(v){
+  const imi=Math.round((typeof v==='number'?v:num(v))*100)/100;
+  if(!(imi>0)||!servicoLigado('recurring'))return '';
+  const ps=imiPrestacoes(imi),meses=listaE(ps.map((x,i)=>(i?'de ':'')+nomeDoMes(x.mes)));
+  if(ps.length===1)return `IMI ${euro2(imi)}/ano numa só prestação, no fim de ${meses}, para confirmares na data.`;
+  const iguais=ps.every(x=>Math.abs(x.amount-ps[0].amount)<0.005);
+  return `IMI ${euro2(imi)}/ano em ${ps.length} prestações ${iguais?'de '+euro2(ps[0].amount):'('+listaE(ps.map(x=>euro2(x.amount)))+')'}, no fim de ${meses}, para confirmares na data.`;
 }
-/* A dobra «Despesas fixas do imóvel» do formulário: o IMI, o condomínio, o
-   seguro e o mês dele. Cada valor cria um planeado (planeados.js:syncPropRecs),
-   e a explicação diz em que datas — é dos Planeados, e sem esse serviço na
-   conta não se pede o que não criaria nada.
-   Devolve: o HTML da dobra (texto); '' sem os Planeados. */
+/* O campo do IMI mudou: reescreve a frase das prestações por baixo.
+   Recebe: v — o texto do campo.
+   Devolve: nada — mexe só na frase. */
+function imvImiMudou(v){
+  const e=document.getElementById('imv_imi_frase');if(!e)return;
+  const t=imvFraseImi(v);e.textContent=t;e.classList.toggle('u-d-none',!t);
+}
+/* Um valor em euros como entra num campo do formulário: com a vírgula
+   decimal da app («154277,2») e não com o ponto do JavaScript («154277.2»),
+   arredondado ao cêntimo — com três casas, o num() lia «154277,255» como
+   milhares. Os inteiros ficam iguais («100000»), e o num() lê os dois.
+   Recebe: v — o valor (número; aguenta vazio e nulo).
+   Devolve: o texto do campo; '' sem valor. */
+function imvEurosNoCampo(v){const n=Number(v)||0;return n?dec(r2(n)):''}
+/* O grupo «Despesas fixas do imóvel» do formulário: o IMI, o condomínio, o
+   seguro e o mês dele, e por baixo a frase das prestações do IMI. Cada valor
+   cria um planeado (planeados.js:syncPropRecs), e a explicação diz em que
+   datas — é dos Planeados, e sem esse serviço na conta não se pede o que não
+   criaria nada.
+   Devolve: o HTML do grupo (texto); '' sem os Planeados. */
 function fixasSect(){
   if(!servicoLigado('recurring'))return '';
   const p=pForm,meses=[{v:0,label:'O mês em que o guardares'}].concat([...Array(12)].map((_,i)=>({v:i+1,label:nomeDoMes(i+1)})));
-  return fold('fixas','Despesas fixas do imóvel',`
-      <div class="row3">
-        <label>IMI (€/ano)<input id="p_imi" type="text" inputmode="decimal" value="${p.imi||''}" placeholder="Opcional"></label>
-        <label>Condomínio (€/mês)<input id="p_condominio" type="text" inputmode="decimal" value="${p.condominio||''}" placeholder="Opcional"></label>
-        <label>Seguro (€/ano)<input id="p_seguro" type="text" inputmode="decimal" value="${p.seguro||''}" placeholder="Opcional"></label></div>
-      <label>Mês do seguro${sel('p_seguroMes',p.seguroMes||0,meses,'','rascunho')}</label>
+  const frase=imvFraseImi(p.imi);
+  /* o seguro e o mês dele numa fila à parte: no telemóvel ela passa a uma
+     coluna (estilos.css:.imv-2col-largo), porque «O mês em que o guardares»
+     não cabe em meia coluna e cortado não se lê */
+  return `<div class="sect imv-grupo">
+      ${imvCab('Despesas fixas do imóvel','<span class="small">viram planeados</span>')}
+      <div class="imv-2col">
+        <label>IMI (€/ano)<input id="p_imi" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.imi)}" placeholder="Opcional" data-input="imvImiMudou(this.value)"></label>
+        <label>Condomínio (€/mês)<input id="p_condominio" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.condominio)}" placeholder="Opcional"></label></div>
+      <div class="imv-2col imv-2col-largo">
+        <label>Seguro (€/ano)<input id="p_seguro" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.seguro)}" placeholder="Opcional"></label>
+        <label>Mês do seguro${sel('p_seguroMes',p.seguroMes||0,meses,'','rascunho')}</label></div>
+      <p class="imv-frase num${frase?'':' u-d-none'}" id="imv_imi_frase" aria-live="polite">${esc(frase)}</p>
       <div class="hint">Cada valor cria um planeado que pede confirmação na data, e o valor vive aqui: apagar o planeado apaga-o daqui.
         O IMI sai nas prestações da lei: até 100 € numa só, em maio; de 100 a 500 € em maio e novembro; acima de 500 € em maio, agosto e novembro — no último dia do mês.
-        O condomínio no dia 1 de cada mês; o seguro uma vez por ano, no fim do mês escolhido.</div>`,
-    {icon:'clock',open:!!(p.imi>0||p.condominio>0||p.seguro>0),summary:esc(despesasFixasTxt(p))||'nenhuma'});
+        O condomínio no dia 1 de cada mês; o seguro uma vez por ano, no fim do mês escolhido.</div></div>`;
 }
-/* Constrói o HTML do formulário do imóvel a partir de pForm: proprietários e
-   quotas-partes, destino, quartos, valores, despesas fixas, fotos, dados
-   registais, hipotecas e anúncio. Só lê — quem escreve de volta é collectProp().
+/* Ponto de extensão da secção dos proprietários do formulário do imóvel.
+   Com contas, os proprietários são os utilizadores e as quotas mudam por
+   proposta (cloud/utilizadores.js:cwOwnersBlock): a nuvem põe aqui a função
+   que escreve a secção dela, e o formulário pede-lha. Devolvendo '', fica a
+   secção daqui (donosSect). Era uma expressão regular por cima do HTML do
+   formulário, que deixou de casar sem erro nenhum quando o título mudou. */
+let donosDoFormulario=null;
+/* A secção dos proprietários do formulário: a da nuvem, quando há conta
+   (donosDoFormulario), ou a daqui, com as quotas escritas à mão.
+   Devolve: o HTML do grupo. */
+function seccaoDosDonos(){
+  if(donosDoFormulario){try{const h=donosDoFormulario();if(h)return h}catch(e){}}
+  return donosSect();
+}
+/* O grupo «Proprietários e quota-parte» sem contas: um proprietário por
+   linha com a percentagem (em branco, partes iguais — o exemplo diz quanto) e
+   o remover, a frase que explica a divisão, e os botões de adicionar um que
+   já existe e de criar um novo (este dos Proprietários: só com o serviço
+   ligado nesta conta).
+   Devolve: o HTML do grupo. */
+function donosSect(){
+  const p=pForm,owners=(p.ownerIds||[]).map(owner).filter(Boolean);
+  const shares=sharesOf(p),custom=hasShares(p);
+  const sumSh=sum(owners.map(o=>Number((p.ownerShares||{})[o.id])||0));
+  return `<div class="sect imv-grupo">
+    ${imvCab('Proprietários e quota-parte')}
+    ${owners.length?`<div class="imv-donos-lista">${owners.map(o=>`<div class="imv-dono">
+        <span class="imv-dono-nome">${esc(o.name)}</span>
+        <span class="imv-pct"><input id="p_share_${o.id}" type="text" inputmode="decimal" value="${(p.ownerShares||{})[o.id]!=null?dec(p.ownerShares[o.id]):''}" placeholder="Ex: ${dec(Math.round(shares[o.id]*1000)/10)}" aria-label="Quota de ${esc(o.name)} (%, opcional)" data-input="liveShares()"><span aria-hidden="true">%</span></span>
+        <button type="button" class="btn ghost so-icone" aria-label="Remover ${esc(o.name)}" data-toca="rascunho" data-click="delPropOwner('${o.id}')">${ic('x',18)}</button></div>`).join('')}</div>`:''}
+    <div class="hint" id="shareHint">${shareHint(owners,custom,sumSh)}</div>
+    <div class="imv-botoes">
+      <button type="button" class="btn sm" data-toca="camada" data-click="addPropOwner()">${ic('plus',16)} Adicionar proprietário</button>
+      ${servicoLigado('owners')?`<button type="button" class="btn sm ghost imv-criar" data-toca="camada" data-click="criarDonoNoImovel()">Criar novo</button>`:''}</div>
+  </div>`;
+}
+/* Um segmentado de duas escolhas do formulário (o destino, o tipo de
+   arrendamento), com a frase da escolha feita por baixo.
+   Recebe: rotulo — o nome do grupo; ops — [[valor, rótulo, frase]]; atual — o
+   valor escolhido; fn — o nome da função que muda a escolha.
+   Devolve: o HTML do campo. */
+function imvSegmentado(rotulo,ops,atual,fn){
+  const on=ops.find(o=>o[0]===atual)||ops[0];
+  return `<div class="imv-campo"><div class="flabel" id="imv_seg_${fn}">${rotulo}</div>
+    <div class="segm" role="radiogroup" aria-labelledby="imv_seg_${fn}">${ops.map(([k,lb])=>
+      `<button type="button" role="radio" aria-checked="${k===on[0]?'true':'false'}" class="${k===on[0]?'on':''}" data-toca="rascunho" data-click="${fn}('${k}')">${lb}</button>`).join('')}</div>
+    <div class="hint imv-seg-frase">${on[2]}</div></div>`;
+}
+/* Constrói o HTML do formulário do imóvel a partir de pForm, em grupos como
+   a prancheta M-NovoImovel: o nome, a morada, o destino e o tipo de
+   arrendamento (com os quartos); os proprietários e as quotas-partes; os
+   valores; as hipotecas; as despesas fixas; e, recolhidos, as fotos, os dados
+   registais e fiscais, e o anúncio com os comentários. Só lê — quem escreve de
+   volta é collectProp().
    Devolve: string de HTML do formulário, pronta a inserir com innerHTML. */
 function propBody(){
   const p=pForm,ls=p.loans||[];
-  const owners=(p.ownerIds||[]).map(owner).filter(Boolean);
-  const shares=sharesOf(p),custom=hasShares(p);
-  const sumSh=sum(owners.map(o=>Number((p.ownerShares||{})[o.id])||0));
-  return `<div class="form">
-    <label>Nome <span class="req">*</span><input id="p_name" value="${esc(p.name)}" placeholder="Ex: T2 Lisboa" autocomplete="off"></label>
-    <label>Morada<input id="p_addr" value="${esc(p.address)}" placeholder="Opcional" autocomplete="off"></label>
-    <div><div class="flabel">Proprietários e quota-parte (%, opcional)</div>
-      <div class="form u-g-7px">
-        ${owners.map(o=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${esc(initials(o.name))}</span>
-          <span class="nm">${esc(o.name)}</span>
-          <input id="p_share_${o.id}" type="text" inputmode="decimal" value="${(p.ownerShares||{})[o.id]!=null?dec(p.ownerShares[o.id]):''}" placeholder="Ex: ${dec(Math.round(shares[o.id]*1000)/10)}" data-input="liveShares()">
-          <span class="pc">%</span>
-          <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delPropOwner('${o.id}')">${ic('x',13)}</button></div>`).join('')}
-        <button type="button" class="tagadd u-js-start" data-toca="camada" data-click="addPropOwner()">+ Adicionar proprietário</button></div>
-      <div class="hint u-mt-7px" id="shareHint">${shareHint(owners,custom,sumSh)}</div></div>
-    <div><div class="flabel">Destino do imóvel</div>
-      <div class="seg c2">${[['investimento','key','Arrendamento','para render'],['proprio','home','Uso próprio','vivo cá']]
-        .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.use===k?'on':''}" data-toca="rascunho" data-click="setUse('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
-    ${p.use==='investimento'?`
-      <div><div class="flabel">Tipo de arrendamento</div>
-        <div class="seg c2">${[['inteiro','building','Imóvel inteiro','um contrato só'],['quartos','door','Por quartos','um contrato por quarto']]
-          .map(([k,i,lb,s])=>`<button type="button" class="opt ${p.rentalMode===k?'on':''}" data-toca="rascunho" data-click="setMode('${k}')"><span class="ic">${ic(i,18)}</span><b>${lb}</b><small>${s}</small></button>`).join('')}</div></div>
-      ${p.rentalMode==='quartos'?`<div><div class="flabel">Quartos (nome opcional)</div>
-        <div class="form u-g-8px">${(p.rooms||[]).map(r=>`<div class="roomrow">
-          <input id="p_room_${r.id}" value="${esc(r.name)}" placeholder="Ex: Quarto da varanda" autocomplete="off">
-          <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delRoom('${r.id}')">${ic('trash',14)}</button></div>`).join('')}
-          <button type="button" class="btn sm" data-toca="rascunho" data-click="addRoom()">${ic('plus',14)} Adicionar quarto</button></div></div>`:''}`:''}
-    <div class="row3">
-      <label>Valor de mercado (€)<input id="p_value" type="text" inputmode="decimal" value="${p.value||''}" placeholder="Opcional"></label>
-      <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${p.purchase||''}" placeholder="Opcional"></label>
-      <label>Data de aquisição<input id="p_purchaseDate" type="date" value="${p.purchaseDate||''}"></label></div>
+  return `<div class="form imv-form">
+    <div class="sect imv-grupo">
+      <label>Nome <span class="req">*</span><input id="p_name" value="${esc(p.name)}" placeholder="Ex: T2 Lisboa" autocomplete="off"></label>
+      <label>Morada<input id="p_addr" value="${esc(p.address)}" placeholder="Opcional" autocomplete="off"></label>
+      ${imvSegmentado('Destino do imóvel',[['investimento','Arrendamento','Para render: tem contratos e rendas.'],['proprio','Uso próprio','Para ti ou para a família, sem rendas.']],p.use,'setUse')}
+      ${p.use==='investimento'?imvSegmentado('Tipo de arrendamento',[['inteiro','Imóvel inteiro','Um contrato só, para o imóvel todo.'],['quartos','Por quartos','Um contrato por quarto.']],p.rentalMode,'setMode'):''}
+      ${p.use==='investimento'&&p.rentalMode==='quartos'?`<div class="imv-campo"><div class="flabel">Quartos (nome opcional)</div>
+        <div class="imv-quartos">${(p.rooms||[]).map(r=>`<div class="roomrow">
+          <input id="p_room_${r.id}" value="${esc(r.name)}" placeholder="Ex: Quarto da varanda" aria-label="Nome do quarto (opcional)" autocomplete="off">
+          <button type="button" class="btn ghost so-icone" aria-label="Remover ${esc(r.name||'o quarto')}" data-toca="rascunho" data-click="delRoom('${r.id}')">${ic('x',18)}</button></div>`).join('')}
+          <button type="button" class="btn sm imv-mais" data-toca="rascunho" data-click="addRoom()">${ic('plus',16)} Adicionar quarto</button></div></div>`:''}
+    </div>
+    ${seccaoDosDonos()}
+    <div class="sect imv-grupo">
+      ${imvCab('Valores')}
+      <div class="imv-2col">
+        <label>Valor de mercado (€)<input id="p_value" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.value)}" placeholder="Opcional"></label>
+        <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.purchase)}" placeholder="Opcional"></label></div>
+      <label>Data de aquisição<input id="p_purchaseDate" type="date" value="${p.purchaseDate||''}"></label>
+      <div class="hint imv-colado">Serve para o Anexo G, se um dia venderes.</div>
+    </div>
+    ${!servicoLigado('credits')?'':`<div class="sect imv-grupo">
+      ${imvCab('Hipotecas',`<span class="small num">${ls.length?(ls.length+(ls.length===1?' hipoteca · ':' hipotecas · ')+euro2(payOf(p))+'/mês'):'nenhuma'}</span>`)}
+      ${ls.map((l,i)=>loanSect(l,i)).join('')}
+      ${ls.length>1?`<div class="card u-bg-v-tint u-p-12px">
+        <div class="stat u-pt-0 u-b-0"><span>Total das prestações</span><b class="u-fs-16px">${euro2(payOf(p))}/mês</b></div>
+        <div class="hint">${euro(debtOf(p))} em dívida no total.</div></div>`:''}
+      <button type="button" class="btn imv-mais" data-toca="rascunho" data-click="addLoan()">${ic('plus',18)} ${ls.length?'Adicionar outra hipoteca':'Adicionar hipoteca'}</button>
+      <div class="hint">${ls.length?'Um imóvel pode ter várias hipotecas em simultâneo. Todas contam para a dívida e para o LTV.':'Crédito à aquisição ou outro. Simulamos a prestação enquanto escreves; se o crédito vem de trás, propomos registar as prestações em falta.'}</div>
+    </div>`}
     ${fixasSect()}
-    ${fold('photos','Fotos',fileBlock('',p.photos||[],'p_photoin','propAddPhotos','delPropPhoto',{photos:true,move:1,hint:'A primeira foto é a capa do imóvel. Arrasta pelo puxador para reordenar.'}),{icon:'photo',open:!!(p.photos||[]).length,summary:(p.photos||[]).length?p.photos.length+' foto'+(p.photos.length===1?'':'s'):'nenhuma'})}
-    ${fold('reg','Dados registais',`
+    ${fold('photos','Fotos',fileBlock('',p.photos||[],'p_photoin','propAddPhotos','delPropPhoto',{photos:true,move:1,hint:'A primeira foto é a capa do imóvel. Arrasta pelo puxador para reordenar.'}),{icon:'photo',open:!!(p.photos||[]).length,summary:(p.photos||[]).length?p.photos.length+' foto'+(p.photos.length===1?'':'s'):'a primeira é a capa'})}
+    ${fold('reg','Dados registais e fiscais',`
       <div class="row">
         <label>Freguesia<input id="p_freguesia" value="${esc(p.freguesia||p.parish||'')}" placeholder="Opcional"></label>
         <label>Concelho<input id="p_concelho" value="${esc(p.concelho||'')}" placeholder="Opcional"></label></div>
@@ -197,7 +531,7 @@ function propBody(){
         <label>Tipo de prédio${sel('p_tipoPredio',p.tipoPredio||'',[{v:'',label:'—'},{v:'U',label:'Urbano'},{v:'R',label:'Rústico'}],'','rascunho')}</label></div>
       <div class="row">
         <label>Tipologia${sel('p_tipologia',p.tipologia||'',[{v:'',label:'—'}].concat(['T0','T1','T2','T3','T4','T5','T6'].map(x=>({v:x,label:x}))),'','rascunho')}</label>
-        <label>VPT (€)<input id="p_vpt" type="text" inputmode="decimal" value="${p.vpt||''}" placeholder="Opcional"></label></div>
+        <label>VPT (€)<input id="p_vpt" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.vpt)}" placeholder="Opcional"></label></div>
       <div class="row3">
         <label>Fração autónoma (opcional)<input id="p_fraction" value="${esc(p.fraction||'')}" placeholder="Ex: A"></label>
         <label>Andar (opcional)<input id="p_floor" value="${esc(p.floor||'')}" placeholder="Ex: 2.º"></label>
@@ -216,23 +550,13 @@ function propBody(){
         <label>Válido até<input id="p_energyValid" type="date" value="${p.energyValid||''}"></label></div>
       <div class="hint">Usados nas cláusulas do contrato em PDF e no resumo do Anexo F. Deixa em branco o que não se aplicar — as frases correspondentes são omitidas.
         O código da freguesia (6 dígitos), o tipo de prédio e o artigo vêm da caderneta predial ou da nota de cobrança do IMI; o Anexo F pede-os em cada linha do quadro das rendas.
-        O VPT serve para repartir os gastos quando só se arrenda parte do imóvel. A data de aquisição fica guardada para o dia em que venderes (Anexo G).</div>`,
-      {icon:'contract',summary:[esc(p.freguesia||p.parish||''),p.freguesiaCodigo?'freguesia n.º '+esc(p.freguesiaCodigo):'',p.registry?'n.º '+esc(p.registry):''].filter(Boolean).join(' · ')||'para o contrato'})}
-    ${!servicoLigado('credits')?'':fold('loans','Hipotecas',`
-        ${ls.map((l,i)=>loanSect(l,i)).join('')}
-        ${ls.length>1?`<div class="card u-bg-v-tint u-p-12px">
-          <div class="stat u-pt-0 u-b-0"><span>Total das prestações</span><b class="u-fs-16px">${euro2(payOf(p))}/mês</b></div>
-          <div class="hint">${euro(debtOf(p))} em dívida no total.</div></div>`:''}
-        <button type="button" class="addbox" data-toca="rascunho" data-click="addLoan()">
-          <span class="ic">${ic('bank',20)}</span>
-          <span><b>${ls.length?'Adicionar outra hipoteca':'Adicionar hipoteca'}</b><small>${ls.length?'crédito para obras, consolidação, segunda hipoteca…':'crédito à aquisição ou outro'}</small></span>
-          <span class="plus">${ic('plus',18)}</span></button>
-      ${ls.length?`<div class="hint">Um imóvel pode ter várias hipotecas em simultâneo. Todas contam para a dívida e para o LTV.</div>`:''}`,
-      {icon:'bank',open:!!ls.length,summary:ls.length?(ls.length+(ls.length===1?' hipoteca · ':' hipotecas · ')+euro2(payOf(p))+'/mês'):'nenhuma'})}
-    ${fold('text','Anúncio',`<label>Descrição para anúncios<textarea id="p_listing" placeholder="Opcional">${esc(p.listing||'')}</textarea></label>`,
-      {icon:'file',open:!!p.listing,summary:p.listing?'com texto':''})}
-    <div class="hint">A renda, as datas e os inquilinos ficam no contrato, não aqui.</div>
-    ${richEditor('Comentários dos proprietários','p_notes',p.notes,'Opcional')}</div>`;
+        O VPT serve para repartir os gastos quando só se arrenda parte do imóvel.</div>`,
+      {icon:'recibo',summary:[esc(p.freguesia||p.parish||''),p.freguesiaCodigo?'freguesia n.º '+esc(p.freguesiaCodigo):'',p.registry?'descrição predial n.º '+esc(p.registry):''].filter(Boolean).join(' · ')||'para o contrato e o Anexo F'})}
+    ${fold('text','Anúncio e comentários',`<label>Descrição para anúncios<textarea id="p_listing" placeholder="Opcional">${esc(p.listing||'')}</textarea></label>
+      ${richEditor('Comentários dos proprietários','p_notes',p.notes,'Opcional')}
+      <div class="hint">Os comentários dos proprietários nunca chegam a quem colabora.</div>`,
+      {icon:'lista',open:!!(p.listing||p.notes),summary:p.listing||p.notes?'com texto':'os comentários ficam entre os donos'})}
+    <div class="hint">A renda, as datas e os inquilinos ficam no contrato, não aqui.</div></div>`;
 }
 // Secção de uma hipoteca no formulário: campos consoante o tipo de taxa,
 // caixa de simulação e documentos. O i serve só para o título por omissão.
@@ -242,12 +566,12 @@ function propBody(){
 function loanSect(l,i){
   return `<div class="sect">
     <div class="sect-head"><span class="ic">${ic('bank',18)}</span><b>${esc(l.name||'Hipoteca '+(i+1))}</b><span class="spacer"></span>
-      <button type="button" class="btn sm danger" data-toca="dados" data-risco="destroi" data-click="delLoan('${l.id}')">${ic('trash',14)}</button></div>
+      <button type="button" class="btn sm danger so-icone" aria-label="Apagar a hipoteca" data-toca="dados" data-risco="destroi" data-click="delLoan('${l.id}')">${ic('trash',16)}</button></div>
     <div class="row">
       <label>Finalidade<input id="l_name_${l.id}" value="${esc(l.name)}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label>
       <label>Banco<input id="l_bank_${l.id}" value="${esc(l.bank)}" placeholder="Opcional" autocomplete="off"></label></div>
     <div class="row3">
-      <label>Capital em dívida (€) <span class="req">*</span><input id="l_out_${l.id}" type="text" inputmode="decimal" value="${capitalDoInicio(l,db.transactions)||''}" placeholder="Ex: 150000" data-input="liveLoan('${l.id}')"></label>
+      <label>Capital em dívida (€) <span class="req">*</span><input id="l_out_${l.id}" type="text" inputmode="decimal" value="${imvEurosNoCampo(capitalDoInicio(l,db.transactions))}" placeholder="Ex: 150000" data-input="liveLoan('${l.id}')"></label>
       <label>Prazo (anos)<input id="l_years_${l.id}" type="text" inputmode="numeric" value="${esc(l.years||'')}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
       <label>Início<input id="l_start_${l.id}" type="date" value="${esc(l.start||'')}"></label></div>
     <div class="hint u-mt-n4px">À data de início: as prestações registadas abatem-no, e a caixa abaixo diz o que falta hoje. Se o crédito já vem de trás, ao guardar a app propõe registar as prestações desde então — e o capital desce com elas. Prazo em branco: 30 anos.</div>
@@ -575,12 +899,21 @@ function addPropOwner(){
 // Recebe: oid — o id do proprietário a desassociar.
 // Devolve: nada — redesenha a vista.
 function delPropOwner(oid){collectProp();pForm.ownerIds=(pForm.ownerIds||[]).filter(x=>x!==oid);if(pForm.ownerShares)delete pForm.ownerShares[oid];repaintProp()}
-// Cria um proprietário novo a partir da ficha do imóvel: abre a ficha de
-// pessoa (dos Proprietários — com o serviço desligado nesta conta avisa e
-// não abre) e, ao gravar, associa-o logo ao imóvel em edição.
+// Cria um proprietário novo a partir da lista de escolha do formulário do
+// imóvel: fecha a lista e segue como o «Criar novo» (criarDonoNoImovel).
 // Devolve: nada — abre a ficha de pessoa.
 function newOwnerFromProp(){
   closeModal();   /* fecha a lista de escolha; a ficha nova abre por cima do imóvel */
+  criarDonoNoImovel(true);   /* o addPropOwner já recolheu o formulário */
+}
+// «Criar novo» no grupo dos proprietários do formulário do imóvel: abre a
+// ficha de pessoa (dos Proprietários — com o serviço desligado nesta conta
+// avisa e não abre) e, ao gravar, associa-o logo ao imóvel em edição. O que
+// já está escrito no formulário fica (collectProp antes de sair).
+// Recebe: colhido (opcional) — true quando quem chama já recolheu o formulário.
+// Devolve: nada — abre a ficha de pessoa.
+function criarDonoNoImovel(colhido){
+  if(!colhido)collectProp();
   chamarServico('owners','personModal','owner',null,nid=>{if(pForm.ownerIds.indexOf(nid)<0)pForm.ownerIds.push(nid);closeModal();render();repaintProp();toast('Proprietário criado.')});
 }
 /* Um imóvel apagado leva a parte dele de cada movimento de vários imóveis (um

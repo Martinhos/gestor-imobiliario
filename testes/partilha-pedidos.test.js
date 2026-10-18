@@ -218,10 +218,41 @@ describe('pedidosDashCard', () => {
   test('o cartão dos pedidos em Conta e partilha e o da ligação usam as mesmas linhas e botões', () => {
     const { app } = comEstado((st) => { PEDIDO(st); CONVITE(st); });
     const dash = app.pedidosDashCard(), conta = app.pedidosCard(), lig = app.connCard(app.CW.state.connections[1]);
-    const linha = /<div class="card u-p-12px-13px"><b class="u-d-block">Ana quer partilhar T2 Porto contigo<\/b>[\s\S]*?<\/div><\/div>/;
+    const linha = /<div class="pd-linha"><b class="u-d-block">Ana quer partilhar T2 Porto contigo<\/b>[\s\S]*?<\/div><\/div>/;
     assert.equal(linha.exec(dash)[0], linha.exec(conta)[0], 'a linha do pedido é uma só');
     const botoes = /<button class="btn primary sm" data-toca="dados" data-click="CW\.acceptConn\('K2'\)">Aceitar<\/button><button[^>]*>Recusar<\/button>/;
     assert.equal(botoes.exec(dash)[0], botoes.exec(lig)[0], 'os botões do convite são os mesmos');
+  });
+
+  /* Recusar um pedido não destrói nada (quem pediu pode voltar a pedir): é o
+     botão secundário, e não o vermelho cheio do que apaga (o canvas Main). */
+  test('o «Recusar» é o botão secundário em todas as linhas, e nunca o vermelho', () => {
+    const { app } = comEstado((st) => { PEDIDO(st); GRUPO(st); CONVITE(st); });
+    const h = app.pedidosDashCard() + app.pedidosCard() + app.connCard(app.CW.state.connections[1]);
+    const recusas = h.match(/<button[^>]*>Recusar<\/button>/g) || [];
+    assert.ok(recusas.length >= 5, 'as três do cartão, a do pedido em Conta e partilha e a do convite: ' + recusas.length);
+    for (const b of recusas) {
+      assert.match(b, /^<button class="btn sm" data-toca="dados" data-click="CW\.(?:pedidoRecusar|grupoRecusarPedido|delConn)\(/, b);
+      assert.doesNotMatch(b, /danger/, b);
+    }
+  });
+
+  /* As linhas sozinhas, sem cartão: o que a Visão geral junta à atividade num
+     cartão só («Pedidos e atividade», o canvas Main). O cartão é feito delas. */
+  test('linhasDosPedidos devolve só as linhas — partilha, grupo e convite, por esta ordem — e o cartão leva-as por dentro', () => {
+    const { app } = comEstado((st) => { PEDIDO(st); GRUPO(st); CONVITE(st); });
+    const l = app.linhasDosPedidos();
+    assert.ok(l.startsWith('<div class="pd-linha">') && l.endsWith('</div></div>'), 'começa e acaba numa linha: ' + l.slice(0, 80));
+    assert.equal((l.match(/<div class="pd-linha">/g) || []).length, 3, 'uma por pedido');
+    assert.ok(!/class="card|title|por responder|<!--fim-pedidos-->|u-h-14px/.test(l), 'sem cartão, sem título, sem marca nem espaço');
+    const iP = l.indexOf('Ana quer partilhar'), iG = l.indexOf('Zé quer entrar no grupo'), iC = l.indexOf('Zé quer ligar-se');
+    assert.ok(iP > -1 && iP < iG && iG < iC, [iP, iG, iC].join(', '));
+    assert.ok(app.pedidosDashCard().includes('<div class="pd-lista">' + l + '</div>'), 'o cartão é o das linhas');
+    // sem nada por responder, vazio; e o serviço desligado tira os pedidos dele, como no cartão
+    const { app: vazio } = comEstado();
+    assert.equal(vazio.linhasDosPedidos(), '');
+    app.definirServicosDesligados(['colaboradores']);
+    assert.equal((app.linhasDosPedidos().match(/<div class="pd-linha">/g) || []).length, 1, 'só o convite de ligação');
   });
 });
 
@@ -365,8 +396,9 @@ describe('as quotas ao escolher a casa a partilhar', () => {
     const { app } = abrir();
     marcar(app, 'H5', true);
     const b = bloco(app, 'H5');
-    assert.match(b, /<label>Eu \(tu\) \(%\)<input id="cw_q_H5_EU" type="text" inputmode="decimal" value="50"><\/label>/);
-    assert.match(b, /<label>Rui \(%\)<input id="cw_q_H5_RUI" type="text" inputmode="decimal" value="50"><\/label>/);
+    // uma linha por pessoa (o canvas M-Quotas): o nome, o campo com nome para o leitor de ecrã, e o %
+    assert.match(b, /<label class="pt-quota"><span class="pt-quota-nome">Eu \(tu\)<\/span><input id="cw_q_H5_EU" type="text" inputmode="decimal" value="50" aria-label="Eu \(tu\), quota em %"><span class="pt-pct" aria-hidden="true">%<\/span><\/label>/);
+    assert.match(b, /<label class="pt-quota"><span class="pt-quota-nome">Rui<\/span><input id="cw_q_H5_RUI" type="text" inputmode="decimal" value="50" aria-label="Rui, quota em %">/);
     assert.match(b, /A divisão só entra em vigor depois de o outro confirmar; até lá fica em partes iguais\./);
     assert.equal((b.match(/<input /g) || []).length, 2);
     marcar(app, 'H5', false);
@@ -379,7 +411,7 @@ describe('as quotas ao escolher a casa a partilhar', () => {
     const b = bloco(app, 'H5');
     for (const u of ['EU', 'ANA', 'RUI']) assert.match(b, new RegExp('id="cw_q_H5_' + u + '" [^>]*value="33,3"'));
     assert.equal((b.match(/<input /g) || []).length, 3);
-    assert.match(b, /Ana \(%\)/);
+    assert.match(b, /<span class="pt-quota-nome">Ana<\/span>/);
   });
 
   test('desmarcar e voltar a marcar repõe o que estava escrito', () => {
@@ -524,5 +556,62 @@ describe('os pedidos ficam à frente do guia', () => {
     assert.ok(bloco.includes("fim = '<!--fim-pedidos-->'"), 'depois os pedidos por responder');
     assert.ok(bloco.indexOf("'<!--fim-podes--></div>'") < bloco.indexOf("fim = '<!--fim-pedidos-->'"), 'por esta ordem');
     assert.ok(bloco.includes('return passosHtml + html'), 'e sem nenhum dos dois, por cima');
+  });
+});
+
+/* ------------------------------------------------ remover e aceitar uma ligação */
+
+/* Em toda a página o nome é «ligação» (o ⋯ diz «Remover ligação»): a janela,
+   o aceitar e o remover diziam «conexão», que é o do Brasil. E a janela de
+   confirmação diz com números o que vai junto (contrato §4), sem «casa(s)». */
+describe('remover e aceitar uma ligação', () => {
+  test('a janela diz o nome e as casas que vão junto, e o botão é o «Remover» vermelho', async () => {
+    const { app, esp } = comEstado((st) => { st.connections[0].myShares = ['H1', 'H5']; st.connections[0].peerShares = ['X1']; });
+    app.CW.delConn('K1');
+    const j = esp.abertas[0];
+    assert.equal(j.t, 'Remover a ligação a Rui');
+    assert.ok(j.b.includes('Deixas de partilhar 2 casas com Rui, e a casa que recebes deixa de aparecer. Os dados de cada um não são apagados.'), j.b);
+    assert.match(j.f, /<button class="btn danger" data-click="_ok\(\)">Remover<\/button>/);
+    app._ok();
+    await espera();
+    assert.deepEqual(esp.api.map((x) => x.method + ' ' + x.path), ['DELETE /api/connections/K1']);
+    assert.deepEqual(esp.toasts, ['Ligação removida.']);
+  });
+
+  test('no singular, só num sentido, e sem casas nenhumas', () => {
+    const frase = (mine, theirs) => {
+      const { app } = comEstado((st) => { st.connections[0].myShares = mine; st.connections[0].peerShares = theirs; });
+      return app.fraseRemoverLigacao(app.CW.state.connections[0]);
+    };
+    assert.equal(frase(['H1'], []), 'Deixas de partilhar 1 casa com Rui. Os dados de cada um não são apagados.');
+    assert.equal(frase([], ['X1', 'X2', 'X3']), 'As 3 casas que recebes de Rui deixam de aparecer. Os dados de cada um não são apagados.');
+    assert.equal(frase([], ['X1']), 'A casa que recebes de Rui deixa de aparecer. Os dados de cada um não são apagados.');
+    assert.equal(frase([], []), 'Ainda não partilham casas um com o outro: sai só a ligação. Os dados de cada um não são apagados.');
+    const { app } = comEstado((st) => { st.connections[0].peer.name = '<b>Zé</b>'; });
+    assert.ok(app.fraseRemoverLigacao(app.CW.state.connections[0]).includes('&lt;b&gt;Zé&lt;/b&gt;'), 'o nome passa pelo esc');
+  });
+
+  test('um convite enviado sai sem perguntar; aceitar diz «Ligação aceite»', async () => {
+    const { app, esp } = comEstado(CONVITE);
+    app.CW.delConn('K2', 1);
+    app.CW.acceptConn('K2');
+    await espera();
+    assert.equal(esp.abertas.length, 0, 'sem janela');
+    assert.deepEqual(esp.toasts.slice().sort(), ['Convite removido.', 'Ligação aceite. Escolhe agora que casas queres partilhar.']);
+    assert.ok(!/'[^'\n]*[Cc]onex(ão|ões)[^'\n]*'/.test(le('web/cloud/partilha.js')), 'nenhuma «conexão» nas frases');
+  });
+
+  /* O convite por responder salta à vista (o canvas M-Partilha): a linha leva
+     a classe pt-convite, e a folha de estilos tem de a pintar — escrevia-se a
+     classe e nenhuma regra a lia. */
+  test('cada classe da linha de uma ligação tem regra na folha de estilos, a do convite incluída', () => {
+    const { app } = comEstado(CONVITE);
+    const linha = app.connCard(app.CW.state.connections[1]);
+    assert.match(linha, /class="pt-linha pt-convite"/);
+    const css = le('web/estilos.css');
+    for (const c of new Set([...linha.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].split(/\s+/)).filter((c) => /^pt-/.test(c)))) {
+      assert.ok(new RegExp('\\.' + c + '\\b').test(css), 'a classe ' + c + ' não tem regra');
+    }
+    assert.match(css, /\.pt-linha\.pt-convite\{background:var\(--accent-soft\)\}/);
   });
 });

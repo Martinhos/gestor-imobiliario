@@ -116,30 +116,30 @@ describe('as frases', () => {
 });
 
 describe('a barra de baixo', () => {
-  const TB = ['dashboard', 'transactions', 'properties', 'calendar'];
+  // a barra de 2026-10: duas portas e duas áreas (navegacao.js:TABBAR, navegacao.js:AREAS)
+  const TB = ['dashboard', 'casas', 'dinheiro', 'calendar'];
 
   test('barraDeBaixo: quem nada esconde fica com a de sempre', () => {
     igual(app.barraDeBaixo(TB, []), TB);
     igual(app.barraDeBaixo(TB), TB);
-    igual(app.barraDeBaixo(TB, ['credits', 'fisco']), TB, 'esconder o que não está na barra não mexe nela');
+    igual(app.barraDeBaixo(TB, ['credits', 'fisco']), TB, 'esconder parte de uma área não a tira da barra');
   });
 
-  test('barraDeBaixo: o lugar escondido vai para o primeiro visível, e sem substituto some', () => {
-    igual(app.barraDeBaixo(TB, ['transactions', 'recurring', 'contracts']), ['dashboard', 'visits', 'properties', 'calendar']);
-    igual(app.barraDeBaixo(TB, ['transactions', 'visits']), ['dashboard', 'contracts', 'properties', 'calendar']);
-    igual(app.barraDeBaixo(TB, ['transactions', 'visits', 'contracts', 'tenants', 'recurring']), ['dashboard', 'properties', 'calendar']);
+  test('barraDeBaixo: uma área só sai quando todas as portas dela estão escondidas; um destino escondido sai', () => {
+    igual(app.barraDeBaixo(TB, ['transactions', 'recurring']), TB, 'os Créditos seguram o Dinheiro');
+    igual(app.barraDeBaixo(TB, ['transactions', 'recurring', 'credits']), ['dashboard', 'casas', 'calendar']);
+    igual(app.barraDeBaixo(TB, ['tenants']), TB, 'a «Pessoas» segura-se nos proprietários');
+    igual(app.barraDeBaixo(TB, ['properties', 'contracts', 'tenants', 'owners', 'visits']), ['dashboard', 'dinheiro', 'calendar']);
+    igual(app.barraDeBaixo(TB, ['calendar']), ['dashboard', 'casas', 'dinheiro']);
   });
 
   test('barraDeBaixo nunca repete um destino', () => {
-    const dois = app.barraDeBaixo(TB, ['transactions', 'calendar']);
-    igual(dois, ['dashboard', 'visits', 'properties', 'contracts']);
-    const comVisitas = app.barraDeBaixo(['dashboard', 'visits', 'transactions', 'calendar'], ['transactions']);
-    igual(comVisitas, ['dashboard', 'visits', 'contracts', 'calendar'], 'o que já está na barra não é substituto');
+    igual(app.barraDeBaixo(['dashboard', 'casas', 'casas', 'calendar'], []), ['dashboard', 'casas', 'calendar']);
     const x = app.barraDeBaixo(TB, ['dashboard', 'transactions', 'properties', 'calendar']);
     assert.equal(new Set(x).size, x.length);
   });
 
-  test('buildTabbar: o gestor de visitas tem as Visitas no lugar dos Movimentos; o dono, a de sempre', () => {
+  test('buildTabbar: o gestor de visitas tem as Casas e não o Dinheiro; o dono, a de sempre', () => {
     const fixos = elementos(app);
     casas(app, [null, CONTAB, GESTOR]);
     app.buildNav();
@@ -148,9 +148,9 @@ describe('a barra de baixo', () => {
     casas(app, [GESTOR, GESTOR, GESTOR]);
     app.buildNav();
     const gestor = fixos.tabbar.innerHTML;
-    igual((gestor.match(/goBarra\('(\w+)'\)/g) || []).map((s) => s.slice(9, -2)), ['dashboard', 'visits', 'properties', 'calendar']);
-    assert.match(gestor, />Visitas</);
-    assert.doesNotMatch(gestor, /Movimentos/);
+    igual((gestor.match(/goBarra\('(\w+)'\)/g) || []).map((s) => s.slice(9, -2)), ['dashboard', 'casas', 'calendar']);
+    assert.match(gestor, />Casas</);
+    assert.doesNotMatch(gestor, /Dinheiro/);
   });
 
   test('separadoresEscondidos esconde Movimentos e Planeados a quem vê hipotecas sem ver movimentos', () => {
@@ -183,14 +183,18 @@ describe('a ficha do imóvel', () => {
     assert.match(f2, /Marcar visita/);
     const f3 = app.propFicha('P3');
     assert.match(f3, /a ficha é só de leitura/);
-    assert.doesNotMatch(f3, /Neste imóvel podes|<button/, 'um cargo que só vê não tem botões');
+    assert.doesNotMatch(f3, /Neste imóvel podes/);
+    // um cargo que só vê não tem botões de ação: o único é o chip que leva a
+    // ler os movimentos do imóvel (imovel.js, as ações rápidas da ficha)
+    const botoes3 = f3.match(/<button[^>]*>[\s\S]*?<\/button>/g) || [];
+    igual(botoes3.map((b) => (b.match(/data-click="([^"]*)"/) || [])[1]), ["closeAllModals();verMovimentosDoImovel('P3')"], 'um cargo que só vê não tem botões de ação');
   });
 
   test('a ficha do dono fica como era', () => {
     casas(app, [null, GESTOR, GESTOR]);
     const f = app.propFicha('P1');
     assert.doesNotMatch(f, /És colaborador|Neste imóvel podes|colab-acoes/);
-    assert.ok(f.startsWith('<div class="form">'));
+    assert.ok(f.startsWith('<div class="imv-ficha">'), 'a ficha do dono começa pela capa, sem nota de colaborador');
   });
 });
 

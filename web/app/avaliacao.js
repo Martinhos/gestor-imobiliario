@@ -1,30 +1,96 @@
 /* ================= AVALIAÇÃO ================= */
-// A vista de avaliação: filtros, cartão do portefólio e um cartão por imóvel.
-// Devolve: o HTML da vista (string).
+/* o contador dos ids da página: o herói abre e fecha a explicação pelo seu id
+   (vistas.js:kpiPorque), e cada pintura dá ids novos */
+let avaN=0;
+/* A vista de avaliação, como a prancheta D-Avaliacao: a barra do âmbito (com
+   o yield exigido e as ações da página), e depois o portefólio — o herói do
+   valor de mercado contra o valor por rendimento, os cinco rácios, a conta de
+   exploração ao lado das contas entre proprietários, a tabela «Por imóvel» e
+   os gráficos do ano. Tocar numa linha da tabela põe esse imóvel em foco
+   (repFoco) e a página passa a ser a ficha dele (repCard). Com um imóvel só no
+   âmbito, o portefólio É esse imóvel: vai logo a ficha, sem tabela de uma linha.
+   Devolve: o HTML da vista (string). */
 function vReports(){
   if(repProp&&!pidProps(repProp).length)repProp='';
   /* um imóvel onde só colaboro sem «Ver valores e avaliação» não tem cartão: o servidor não manda os valores */
   const list=pidProps(repProp).filter(p=>pode(p.id,'report.view'));
-  const panel=anaPanelPadrao('repSel',repProp,'onRepSel',`
-    <label class="u-mt-10px u-maxw-220px">Yield exigido (%)<input type="text" inputmode="decimal" value="${dec(db.settings.capTarget)}" placeholder="Opcional" data-change="capTargetSet(this.value)"></label>
-    <div class="hint u-mt-9px">A avaliação por rendimento capitaliza o resultado líquido anual ao yield exigido (em branco: 5 %). No ano corrente, o resultado até hoje é anualizado (×12 sobre os meses decorridos).${ownerFilter&&!ownerIsGrp()?' Valores na quota-parte de <b>'+esc(ownerFilterName())+'</b>.':''}</div>`);
+  const panel=anaPanelPadrao('repSel',repProp,'onRepSel');
   /* a saída do vazio leva aos Imóveis: com esse serviço desligado nesta conta
      o botão não se escreve, e a frase diz quem o liga */
   if(!list.length)return panel+(esperaDoServidor()||`<div class="empty"><b>Sem imóveis para avaliar</b>A avaliação parte do que cada imóvel rende.
     ${servicoLigado('properties')?saida('Adicionar imóvel',"go('properties')",'ecra'):vazioServicoDesligado('properties')}</div>`);
-  return panel+`<div class="toolbar">
-    <button class="btn" data-click="shareReport()">Partilhar</button>
-    <button class="btn" data-click="downloadCsv()">CSV</button></div>`
-    +((!repProp||String(repProp).startsWith('g:'))?portCard(repProp||null):'')+list.map(repCard).join('');
+  const casa=list.length===1?list[0]:null;
+  return panel+`<div class="ana ava">${avaBarra()}${casa?repCard(casa):portCard(repProp||null)}</div>`;
+}
+/* A barra do topo da Avaliação: o âmbito em chips (o proprietário e o imóvel
+   em foco — com ▾ abrem o painel dos filtros, com × deixam o foco), o yield
+   exigido escrito ali mesmo, e as ações da página: partilhar a avaliação e
+   exportar os movimentos.
+   Devolve: o HTML da barra (string). */
+function avaBarra(){
+  const g=repProp&&String(repProp).startsWith('g:'),foco=!repProp?'':g?'Grupo · '+((grp(String(repProp).slice(2))||{}).name||''):propName(repProp);
+  const chipFoco=foco?`<button type="button" class="chip on" data-toca="vista" data-click="repAnaLimpar();render()" aria-label="Imóvel em foco: ${esc(foco)} (limpar)"><span>Imóvel<span class="ana-largo"> em foco</span>: ${esc(foco)}</span>${ic('x',14)}</button>`
+    :`<button type="button" class="chip" data-toca="vista" data-click="hdrFiltToggle()"><span>Imóvel<span class="ana-largo"> em foco</span>: portefólio</span>${ic('chevD',16)}</button>`;
+  return `<div class="ana-barra"><div class="chips-fila ana-ambito"><span class="lbl ana-lbl-ambito">Âmbito</span>${avaChipDono()}${chipFoco}
+    <label class="ana-pin"><span>Yield exigido</span><input id="avaYield" type="text" inputmode="decimal" class="num" value="${dec(db.settings.capTarget)}" placeholder="Opcional" aria-label="Yield exigido (%)" data-change="capTargetSet(this.value)"><span>%</span></label></div>
+    <div class="ana-acoes"><button type="button" class="btn" data-toca="nada" data-click="shareReport()"><span>Partilhar<span class="ana-largo"> avaliação</span></span></button>
+    <button type="button" class="btn" data-toca="nada" data-click="downloadCsv()"><span>Exportar<span class="ana-largo"> movimentos (CSV)</span><span class="ana-curto"> CSV</span></span></button></div></div>`;
+}
+/* O chip do proprietário na barra do âmbito: sem ninguém, «todos» e abre o
+   painel dos filtros; com alguém, o nome e o × que o deixa
+   (navegacao.js:limparAmbito). Sem proprietários registados não se escreve.
+   Devolve: o HTML do chip (string), ou ''. */
+function avaChipDono(){
+  if(!db.owners.length)return '';
+  /* o texto num <span>: com um nome comprido é ele que leva as reticências e
+     o chip não passa da largura do ecrã (estilos.css:.ana-ambito .chip>span) */
+  return ownerFilter?`<button type="button" class="chip on" data-toca="vista" data-click="limparAmbito()" aria-label="Proprietário: ${esc(ownerFilterName())} (limpar)"><span>Proprietário: ${esc(ownerFilterName())}</span>${ic('x',14)}</button>`
+    :`<button type="button" class="chip" data-toca="vista" data-click="hdrFiltToggle()"><span>Proprietário: todos</span>${ic('chevD',16)}</button>`;
+}
+/* Um cartão da Análise: o título na letra dos títulos, o subtítulo ao lado e,
+   à direita, o que o cartão traz no cabeçalho (um botão de informação).
+   Recebe: titulo — o título (texto já seguro); sub — o subtítulo ('' sem ele);
+   corpo — o HTML do cartão; cls (opcional) — classes a mais; extra (opcional)
+   — o HTML do canto direito do cabeçalho.
+   Devolve: o HTML do cartão (string). */
+function avaCartao(titulo,sub,corpo,cls,extra){
+  return `<section class="card ana-cartao${cls?' '+cls:''}"><div class="ana-cab"><h2 class="ana-tit">${titulo}</h2>${sub?`<span class="small">${sub}</span>`:''}${extra?`<span class="ana-extra">${extra}</span>`:''}</div>${corpo}</section>`;
+}
+/* Põe um imóvel (ou nenhum) em foco e volta a desenhar no topo: é o toque
+   numa linha da tabela «Por imóvel», que abre a ficha desse imóvel.
+   Recebe: id — o id do imóvel, ou '' para o portefólio.
+   Devolve: nada — muda o foco, redesenha e sobe ao topo. */
+function repFoco(id){
+  repProp=id||'';render();
+  try{window.scrollTo(0,0)}catch(e){}
 }
 // aplica o imóvel (ou grupo) escolhido no seletor e volta a desenhar
 // Devolve: nada — guarda o filtro e redesenha a vista.
 function onRepSel(){repProp=val('repSel')||'';render()}
 /* grava o yield exigido: vazio ou zero repõe os 5 %; negativos ficam em 0,1 % — a avaliação
-   divide por ele, e um yield negativo dava valores negativos
+   divide por ele, e um yield negativo dava valores negativos. Grava já; o
+   redesenho vai pelo avaRepintar, que devolve o foco a quem o tinha.
    Recebe: v — o que foi escrito no campo (texto).
-   Devolve: nada — grava a definição e redesenha (setSet). */
-function capTargetSet(v){setSet('capTarget',Math.max(0.1,num(v)||5))}
+   Devolve: nada — grava a definição e agenda o redesenho (avaRepintar). */
+function capTargetSet(v){db.settings.capTarget=Math.max(0.1,num(v)||5);save();avaRepintar()}
+/* Redesenha a página sem tirar o foco a quem usa o teclado. Gravar o campo do
+   yield (ao sair dele com Tab) refazia a vista inteira já, e o campo seguinte,
+   para onde o Tab ia, desaparecia: o foco caía no <body> e o Tab seguinte
+   voltava ao topo da página. Quando o change corre, o foco ainda não chegou
+   ao campo seguinte — por isso o redesenho espera que ele assente
+   (setTimeout), lê o id de quem o tem, redesenha e devolve-lho. O render é
+   lido aqui, ao agendar (é o que os testes trocam).
+   Recebe: nada.
+   Devolve: nada — agenda o redesenho. */
+function avaRepintar(){
+  const pinta=render;
+  setTimeout(()=>{
+    const a=document.activeElement,id=a&&a!==document.body?a.id||'':'';
+    pinta();
+    const e=id?document.getElementById(id):null;
+    if(e&&e!==document.activeElement)try{e.focus({preventScroll:true})}catch(x){}
+  },0);
+}
 /* o yield exigido em fração, nunca abaixo de 0,1 % (dados antigos podiam trazer zero ou negativo)
    Devolve: número, ex.: 0.05 para 5 %. */
 const capTargetFrac=()=>Math.max(0.1,Number(db.settings.capTarget)||5)/100;
@@ -40,123 +106,215 @@ function diffKpi(diff){
   if(!isFinite(diff))return {v:'—',c:'',f:'sem valor de mercado'};
   return {v:(diff>=0?'+':'')+pct(diff),c:diff>=0?'pos':'neg',f:diff>=0?'as rendas justificam mais':'as rendas justificam menos'};
 }
-/* a fila de rentabilidade de um cartão da avaliação: yield bruto, cap rate, sobre a
-   aquisição e LTV, cada um com explicação e evolução ao toque (evoRatio)
-   Recebe: m — as métricas do ano (metrics(), com share); pid — id do imóvel, 'g:ID' ou null (o que evoRatio recebe).
+/* A fila dos rácios (a prancheta: cinco cartões de métricas): o Equity à
+   cabeça e depois o yield bruto, o cap rate, o retorno sobre a aquisição e o
+   LTV, cada um com explicação e evolução ao toque (evoRatio). O rodapé de cada
+   um diz a conta, com os valores que entram nela.
+   Recebe: m — as métricas do ano (metrics(), com share); pid — id do imóvel,
+   'g:ID' ou null (o que evoRatio recebe); eq (opcional) — o HTML do cartão do
+   Equity, que o portefólio e o imóvel fazem de maneira diferente.
    Devolve: o HTML da grelha (string). */
-function rentGrid(m,pid){
-  return `<div class="grid u-mt-11px">
-    ${kpi('Yield bruto',pct(m.grossYield),'','imóveis com contrato ativo',WHY.yieldBruto,()=>evoRatio('grossYield',pid))}
-    ${kpi('Cap rate',pct(m.cap),'','NOI anualizado / valor de mercado',WHY.cap,()=>evoRatio('cap',pid))}
-    ${kpi('Sobre a aquisição',pct(m.coc),'','sobre '+euro(m.purchase)+' de aquisição',WHY.aquisicao,()=>evoRatio('coc',pid))}
-    ${kpi('LTV',pct(m.ltv),'',euro(m.debt)+' em dívida',WHY.ltv,()=>evoRatio('ltv',pid))}</div>`;
+function rentGrid(m,pid,eq){
+  return `<div class="grid ava-metricas">${eq||''}
+    ${kpi('Yield bruto',pct(m.grossYield),'','renda contratada ÷ valor, só imóveis arrendados',WHY.yieldBruto,()=>evoRatio('grossYield',pid))}
+    ${kpi('Cap rate',pct(m.cap),'','NOI anualizado ÷ valor de mercado',WHY.cap,()=>evoRatio('cap',pid))}
+    ${kpi('Sobre a aquisição',pct(m.coc),'','cashflow ÷ '+euro(m.purchase)+' de aquisição',WHY.aquisicao,()=>evoRatio('coc',pid))}
+    ${kpi('LTV',pct(m.ltv),'',euro(m.debt)+' em dívida ÷ valor',WHY.ltv,()=>evoRatio('ltv',pid))}</div>`;
 }
-/* a conta de exploração de um cartão: rendas, despesas, NOI, prestações, amortizações
-   antecipadas (só quando as há) e cashflow
+/* O herói da Avaliação (a prancheta): o valor de mercado e o valor por
+   rendimento em duas barras à mesma escala, e ao lado a diferença em grande,
+   a frase que a lê e a conta que a dá. Num imóvel, o valor por rendimento e a
+   diferença abrem a evolução ano a ano (evoValuation, pela janela dos
+   indicadores: vistas.js:kpiModal, com o registo em KPI_REG). «Como se
+   calcula» abre a explicação por baixo, no próprio cartão (vistas.js:kpiPorque).
+   Recebe: m — as métricas do ano (metrics(), com share); valuation — o valor
+   por rendimento; diff — a fração da diferença (NaN sem valor de mercado);
+   p (opcional) — o imóvel, para a evolução; sem ele é o portefólio.
+   Devolve: o HTML do cartão (string). */
+function avaHeroi(m,valuation,diff,p){
+  const d=diffKpi(diff),id='avaHeroi'+(++avaN),topo=Math.max(m.value,valuation,0);
+  const larg=v=>topo>0?Math.max(0,Math.min(100,v/topo*100)).toFixed(1):'0';
+  /* a evolução de um imóvel vai pela janela dos indicadores: regista-se como um KPI */
+  const reg=(t,why,f)=>{const k='k'+(++kpiN);KPI_REG[k]={title:t,why:why,evo:f,acao:null};return k};
+  const frase=!isFinite(diff)?'Diferença: sem valor de mercado na ficha, não há comparação.'
+    :diff>=0?'As rendas de hoje justificam mais do que o valor de mercado.':'As rendas de hoje justificam menos do que o valor de mercado.';
+  const rend=`<span class="ava-barra-lin"><span>Valor por rendimento</span><b class="disp ava-rend">${euro(valuation)}</b></span>
+    <span class="ava-trilho"><span class="ava-enche ava-enche-rend" data-largura="${larg(valuation)}"></span></span>`;
+  const pctTxt=`<span class="disp ava-pct ${d.c}">${d.v}</span>`;
+  return `<section class="card ava-heroi" id="${id}">
+    <div class="ava-barras">
+      <div class="ava-barra-bloco"><span class="ava-barra-lin"><span>Valor de mercado</span><b class="disp">${euro(m.value)}</b></span>
+        <span class="ava-trilho"><span class="ava-enche" data-largura="${larg(m.value)}"></span></span></div>
+      ${p?`<button type="button" class="ava-barra-bloco ava-evo" data-toca="camada" data-click="kpiModal('${reg('Valor por rendimento',WHY.valorRend,()=>evoValuation(p,'val'))}')" aria-label="Valor por rendimento, ${euro(valuation)}: ver a evolução">${rend}</button>`
+        :`<div class="ava-barra-bloco">${rend}</div>`}
+    </div>
+    <div class="ava-dif">
+      ${p?`<button type="button" class="ava-evo ava-pct-btn" data-toca="camada" data-click="kpiModal('${reg('Diferença',WHY.diferenca,()=>evoValuation(p,'diff'))}')" aria-label="Diferença, ${d.v}: ver a evolução">${pctTxt}</button>`:pctTxt}
+      <p class="ava-frase">${frase}</p>
+      <p class="small num">Resultado anualizado de ${euro(m.noiAnual)} ÷ yield exigido de ${pct(capTargetFrac())}.</p>
+      <button type="button" class="btn sm ghost ava-porque" data-toca="nada" data-click="kpiPorque('${id}')">${ic('info',16)}Como se calcula</button>
+      <div class="hint ava-expl">${WHY.valorIntro} ${WHY.valorRend} ${WHY.diferenca} A avaliação por rendimento capitaliza o resultado líquido anual ao yield exigido (em branco: 5 %). O anualizado é ×12 sobre os meses decorridos.</div>
+    </div></section>`;
+}
+/* a conta de exploração (a prancheta): rendas, despesas, o NOI em destaque,
+   prestações, amortizações antecipadas (só quando as há) e o cashflow. O que
+   sai leva o «−» e a cor só quando há valor: sem hipotecas era «−0 €» a roxo.
    Recebe: m — as métricas do ano (metrics()).
    Devolve: o HTML do cartão (string). */
 function contaCard(m){
-  return card('Conta de exploração',String(YEAR),`
-    <div class="stat"><span>Rendas recebidas</span><b class="pos">${euro(m.income)}</b></div>
-    <div class="stat"><span>Despesas operacionais</span><b class="neg">−${euro(m.op)}</b></div>
-    <div class="stat"><span>Resultado líquido (NOI)</span><b>${euro(m.noi)}</b></div>
-    <div class="stat"><span>Prestações pagas</span><b class="amber">−${euro(m.loan)}</b></div>
-    ${m.amort?`<div class="stat"><span>Amortizações antecipadas</span><b class="amber">−${euro(m.amort)}</b></div>`:''}
-    <div class="stat"><span>Cashflow</span><b class="${m.cf>=0?'pos':'neg'}">${euro(m.cf)}</b></div>`);
+  const l=(r,v,c,x)=>`<div class="ava-ce${x?' '+x:''}"><span>${r}</span><b class="${c||''}">${v}</b></div>`;
+  /* o teste é sobre o valor arredondado: o euro() mostra-o ao euro, e 0,40 € davam «−0 €» */
+  const sai=(r,v,c)=>Math.round(v)?l(r,'−'+euro(v),c):l(r,euro(0),'');
+  return avaCartao('Conta de exploração · '+YEAR,'',
+    l('Rendas recebidas',euro(m.income),'pos')+sai('Despesas operacionais',m.op,'neg')
+    +l('Resultado líquido (NOI)',euro(m.noi),'','ava-ce-noi')
+    +sai('Prestações pagas',m.loan,'prest')+(m.amort?sai('Amortizações antecipadas',m.amort,'prest'):'')
+    +l('Cashflow',euro(m.cf),m.cf<0?'neg':'','ava-ce-cf'),'ava-conta');
 }
-/* agregado de todo o portefólio (no âmbito do filtro de proprietário, na quota-parte dele)
+/* O cartão ao lado da conta de exploração (a prancheta): as contas entre
+   proprietários — quem tem a receber e quem tem a pagar, o plano que as acerta
+   e o «Acertar contas» (vistas.js:settleModal), e o «como se chega aos
+   saldos» (saldos.js:balancesDetail) — e por baixo as rendas anuais e o NOI
+   anualizado. Os saldos são dos proprietários: num imóvel onde só colaboro, ou
+   sem saldos, o cartão fica só com os indicadores.
+   Recebe: m — as métricas do ano; pid — o id do imóvel, 'g:ID' ou null; netY
+   (opcional) — a renda anual líquida de impostos do imóvel (o portefólio não a tem).
+   Devolve: o HTML do cartão (string). */
+function avaContasCard(m,pid,netY){
+  const ind=`<div class="ava-ind">
+    <div><span class="small">Renda anual contratada</span><b>${euro(m.annualRent)}</b></div>
+    ${netY!=null?`<div><span class="small">Renda anual líquida de impostos (estim.)</span><b>${euro(netY)}</b></div>`:''}
+    <div><span class="small">NOI anualizado</span><b>${euro(m.noiAnual)}</b></div></div>`;
+  const dono=!pid||String(pid).startsWith('g:')||souDono(pid),bal=dono?ownerBalances(pid):{},ks=Object.keys(bal);
+  if(!ks.length)return avaCartao('Indicadores','',ind,'ava-contas');
+  const tot=debtTotal(bal),plan=settlePlan(bal),arg=pid?`'${jsq(pid)}'`:'null';
+  const rows=ks.map(k=>({name:(owner(k)||{}).name||'?',v:bal[k]})).sort((a,b)=>b.v-a.v);
+  const saldos=`<div class="ava-saldos">${rows.map(r=>{const z=Math.abs(r.v)<0.01;
+    return `<div class="ava-saldo${z?'':r.v>0?' in':' out'}"><b>${esc(r.name)}</b><span>${z?'Em dia':r.v>0?'A receber '+euro2(r.v):'A pagar '+euro2(-r.v)}</span></div>`}).join('')}</div>`;
+  const acerto=tot>0.005?`<div class="hint">${plan.map(x=>`<b>${esc((owner(x.from)||{}).name)}</b> paga <b>${euro2(x.amount)}</b> a <b>${esc((owner(x.to)||{}).name)}</b>`).join('<br>')}</div>
+    <div class="ava-acerto"><button type="button" class="btn primary" data-toca="camada" data-click="settleModal(${arg})">${ic('check',16)}Acertar contas</button></div>`
+    :`<div class="hint">Está tudo liquidado.</div>`;
+  return avaCartao('Contas entre proprietários',(pid&&!String(pid).startsWith('g:')?'Neste imóvel':'Todos os imóveis')+' · receitas, despesas e prestações com pessoa indicada',
+    saldos+acerto+ind,'ava-contas',
+    `<button type="button" class="btn sm ghost so-icone" aria-label="Como se chega aos saldos" data-toca="camada" data-click="balancesDetail(${arg})">${ic('info',18)}</button>`);
+}
+/* o selo da ocupação de um imóvel, nas cores do contrato da linguagem:
+   arrendado verde, por quartos cobalto (o .badge sem modificador), vago
+   âmbar, uso próprio cinzento. O cobalto é a classe vazia: um «|| 'grey'»
+   trocava-a pelo cinzento e o «3/4 quartos» saía igual ao «Uso próprio».
+   Recebe: st — o estado (registos.js:propStatus).
+   Devolve: a classe do .badge ('in', '', 'amber' ou 'grey'; cinzento para um estado desconhecido). */
+function avaSelo(st){
+  const m={arrendado:'in',parcial:'',vago:'amber',proprio:'grey'},k=st&&st.key;
+  return Object.prototype.hasOwnProperty.call(m,k)?m[k]:'grey';
+}
+/* os donos de um imóvel para a linha da tabela: o nome, ou os nomes com a
+   quota de cada um quando são vários
+   Recebe: p — o imóvel.
+   Devolve: o texto (ex.: «Maria Costa 60% · Pedro Costa 40%»), ou ''. */
+function avaDonos(p){
+  const os=ownersOfProp(p);
+  if(os.length<2)return ownerNames(p);
+  return os.map(o=>((owner(o)||{}).name||'?')+' '+pct(shareOf(p,o),0)).join(' · ');
+}
+/* A tabela «Por imóvel» (a prancheta): uma linha por imóvel do âmbito, com a
+   ocupação, o valor, a renda anual, o NOI anualizado, os rácios e o cashflow
+   do ano — os números dos cartões de cada imóvel, na quota-parte do
+   proprietário filtrado. Tocar numa linha abre a ficha do imóvel (repFoco).
+   Recebe: list — os imóveis (com a permissão de ver a avaliação); pid — o
+   'g:ID' do grupo em foco, ou null.
+   Devolve: o HTML do cartão (string). */
+function avaTabela(list,pid){
+  const linha=p=>{const x=metrics(YEAR,p.id,{share:true}),st=propStatus(p),donos=avaDonos(p);
+    return `<tr data-toca="vista" data-click="repFoco('${jsq(p.id)}')" aria-label="${esc(p.name)}: abrir a avaliação">
+      <td><b>${esc(p.name)}</b>${donos?`<div class="small">${esc(donos)}</div>`:''}</td>
+      <td class="u-ta-left"><span class="badge ${avaSelo(st)}">${esc(st.label)}</span></td>
+      <td>${euro(x.value)}</td><td>${x.annualRent?euro(x.annualRent):'—'}</td>
+      <td class="${x.noiAnual<0?'neg':''}">${euro(x.noiAnual)}</td>
+      <td>${pct(x.grossYield)}</td><td>${pct(x.cap)}</td><td>${pct(x.ltv)}</td>
+      <td class="${x.cf<0?'neg':''}"><b>${euro(x.cf)}</b></td></tr>`};
+  const sub=list.length+' '+(list.length===1?'imóvel':'imóveis')+(pid?' · grupo '+esc((grp(String(pid).slice(2))||{}).name||''):'')+' · toca numa linha para abrir a avaliação do imóvel';
+  return avaCartao('Por imóvel',sub,`<div class="tablewrap"><table class="table ana-fixa ava-tabela"><thead><tr>
+    <th>Imóvel</th><th class="u-ta-left">Ocupação</th><th>Valor</th><th>Renda anual</th><th>NOI anualizado</th><th>Yield</th><th>Cap rate</th><th>LTV</th><th>Cashflow</th></tr></thead>
+    <tbody>${list.map(linha).join('')}</tbody></table></div>`,'ava-por-imovel');
+}
+/* os dois gráficos do ano, lado a lado: rendas, despesas e prestações mês a mês
+   (as cores das séries: tema.js:COR_SERIE) e a estrutura das despesas
+   Recebe: pid — id do imóvel, 'g:ID' ou null; vazio — o HTML a mostrar sem gastos no ano.
+   Devolve: o HTML da fila dos dois cartões (string). */
+function avaGraficos(pid,vazio){
+  const inc=monthly(YEAR,pid,'income',true),exp=monthly(YEAR,pid,'expense',true),ln=monthly(YEAR,pid,'loan',true),cs=byCategory(YEAR,pid,true);
+  return `<div class="cols">
+    ${avaCartao('Rendas e despesas','Mês a mês em '+YEAR,cBars(inc.map((v,i)=>[{label:'Rendas',value:v,color:COR_SERIE.receita},{label:'Despesas',value:-exp[i],color:COR_SERIE.despesa},{label:'Prestação',value:-ln[i],color:COR_SERIE.prestacao}]),MES,{h:190}))}
+    ${avaCartao('Estrutura de despesas','Gastos do ano',cs.length?cDonut(cs,{sub:'gastos do ano'}):vazio)}</div>`;
+}
+/* O portefólio (no âmbito do filtro de proprietário, na quota-parte dele, ou
+   de um grupo de imóveis): o herói, os rácios, a conta de exploração com as
+   contas entre proprietários, a tabela «Por imóvel» e os gráficos do ano.
    Recebe: pid — 'g:ID' de um grupo de imóveis, ou null/vazio para o portefólio completo.
-   Devolve: o HTML do cartão (string); '' sem imóveis no âmbito. */
+   Devolve: o HTML (string); '' sem imóveis no âmbito. */
 function portCard(pid){
   const m=metrics(YEAR,pid||null,{share:true}),ps=pidProps(pid);
   if(!ps.length)return '';
-  const {valuation,diff}=valuationOf(m.noiAnual,m.value),d=diffKpi(diff);
-  const inc=monthly(YEAR,pid||null,'income',true),exp=monthly(YEAR,pid||null,'expense',true),ln=monthly(YEAR,pid||null,'loan',true);
-  const cs=byCategory(YEAR,pid||null,true);
-  return `<div class="card u-mb-14px u-p-18px u-bw-2px">
-    <div class="row-between"><div class="u-minw-0">
-      <div class="title u-fs-18px">${pid?'Grupo · '+esc((grp(String(pid).slice(2))||{}).name||''):'Portefólio completo'}</div>
-      <div class="small">${ps.length} ${ps.length===1?'imóvel':'imóveis'}${ownerFilter?' · '+esc(ownerFilterName()):''}</div></div>
-      <span class="badge">${YEAR}</span></div>
-    <div class="grid u-mt-14px">
-      ${kpi('Valor de mercado',euro(m.value),'','soma dos imóveis',WHY.valorIntro)}
-      ${kpi('Valor por rendimento',euro(valuation),d.c,`a ${pct(capTargetFrac())} de yield exigido`,WHY.valorRend)}
-      ${kpi('Diferença',d.v,d.c,d.f,WHY.diferenca)}
-      ${kpi('Equity',euro(m.value-m.debt),'','valor menos dívida',WHY.equity)}</div>
-    ${rentGrid(m,pid||null)}
-    <div class="cols">
-      ${card('Rendas e despesas','Mês a mês em '+YEAR,cBars(inc.map((v,i)=>[{label:'Rendas',value:v,color:PAL[0]},{label:'Despesas',value:-exp[i],color:'#c56b68'},{label:'Prestação',value:-ln[i],color:'#d6a34a'}]),MES,{h:190}))}
-      ${card('Estrutura de despesas','',cs.length?cDonut(cs,{sub:'gastos do ano'}):`<div class="hint">Sem gastos em ${YEAR}.</div>`)}</div>
-    <div class="cols">
-      ${contaCard(m)}
-      ${card('Indicadores','',`
-        <div class="stat"><span>Renda anual contratada</span><b>${euro(m.annualRent)}</b></div>
-        <div class="stat"><span>NOI anualizado</span><b>${euro(m.noiAnual)}</b></div>`)}</div>
-  </div>`;
+  const {valuation,diff}=valuationOf(m.noiAnual,m.value);
+  return avaHeroi(m,valuation,diff,null)
+    +rentGrid(m,pid||null,kpi('Equity',euro(m.value-m.debt),'','mercado − dívida',WHY.equity))
+    +`<div class="cols">${contaCard(m)}${avaContasCard(m,pid||null,null)}</div>`
+    +avaTabela(ps.filter(p=>pode(p.id,'report.view')),pid||null)
+    +avaGraficos(pid||null,`<div class="hint">Sem gastos em ${YEAR}.</div>`);
 }
-/* O cartão de avaliação de um imóvel: valor introduzido contra valor por rendimento,
-   a fila de rentabilidade, contratos ativos, gráficos do ano, conta de exploração,
-   indicadores e — havendo hipotecas — a projeção da dívida até ao fim. Com um
-   proprietário filtrado, os valores entram na quota-parte dele (como no portefólio);
-   a tabela de contratos e o cartão das hipotecas ficam por inteiro, que são factos deles.
+/* A avaliação de um imóvel (a ficha que a linha da tabela abre): o nome, a
+   morada e a ocupação; o herói do valor de mercado contra o valor por
+   rendimento; os rácios; a conta de exploração com as contas entre
+   proprietários e os indicadores; os contratos ativos; os gráficos do ano; e
+   — havendo hipotecas — a projeção da dívida até ao fim. Com um proprietário
+   filtrado, os valores entram na quota-parte dele (como no portefólio); a
+   tabela de contratos e o cartão das hipotecas ficam por inteiro, que são
+   factos deles.
    Recebe: p — o imóvel (objeto da base local).
-   Devolve: o HTML do cartão (string). */
+   Devolve: o HTML (string). */
 function repCard(p){
   const m=metrics(YEAR,p.id,{share:true}),ls=liveLoans(p),q=sh(p);
   const ac=activeContracts(p.id),netY=netRentOf(p)*12*q;
-  const {valuation,diff}=valuationOf(m.noiAnual,m.value),d=diffKpi(diff);
-  const inc=monthly(YEAR,p.id,'income',true),exp=monthly(YEAR,p.id,'expense',true),ln=monthly(YEAR,p.id,'loan',true);
-  const cs=byCategory(YEAR,p.id,true),st=propStatus(p),own=ownerNames(p);
+  const {valuation,diff}=valuationOf(m.noiAnual,m.value);
+  const st=propStatus(p),own=ownerNames(p);
   /* a tabela dos contratos é dos Contratos, e a frase das despesas sem imóvel
      é da Visão geral (painel-geral.js:orphanExpenses): cada uma só com o seu
      serviço ligado nesta conta */
   const comContratos=servicoLigado('contracts')&&ac.length>0;
   const orfas=servicoLigado('dashboard')?orphanExpenses(YEAR):[];
-  return `<div class="card u-mb-14px u-p-18px">
-    <div class="row-between"><div class="u-minw-0">
-      <div class="title u-fs-18px">${esc(p.name)}</div>
-      <div class="small">${esc(p.address||'')} · ${st.label}${own?' · '+esc(own):''}${q<1?' · quota-parte de '+esc(ownerFilterName())+' ('+pct(q,0)+')':''}</div></div>
-      <span class="badge ${st.badge}">${YEAR}</span></div>
-    <div class="grid u-mt-14px">
-      ${kpi('Valor introduzido',euro(m.value),'','valor de mercado',WHY.valorIntro)}
-      ${kpi('Valor por rendimento',euro(valuation),d.c,`a ${pct(capTargetFrac())} de yield exigido`,WHY.valorRend,()=>evoValuation(p,'val'))}
-      ${kpi('Diferença',d.v,d.c,d.f,WHY.diferenca,()=>evoValuation(p,'diff'))}
-      ${kpi('Equity',euro(m.value-m.debt),'','valor menos dívida',WHY.equity,()=>evoValuation(p,'equity'))}</div>
-    ${rentGrid(m,p.id)}
-    ${comContratos?card('Contratos ativos','',`<div class="tablewrap"><table class="table"><thead><tr>
-      <th>${p.rentalMode==='quartos'?'Quarto':'Contrato'}</th><th>Inquilinos</th><th>Renda</th><th>Imposto</th><th>Líquida</th></tr></thead><tbody>
+  const linhaSub=[p.address||'',own,q<1?'quota-parte de '+ownerFilterName()+' ('+pct(q,0)+')':''].filter(Boolean).map(esc).join(' · ');
+  return `<div class="ava-cab-imovel"><div class="u-minw-0"><h2 class="ava-nome">${esc(p.name)}</h2>${linhaSub?`<p class="small">${linhaSub}</p>`:''}</div>
+      <span class="badge ${avaSelo(st)}">${esc(st.label)}</span></div>
+    ${avaHeroi(m,valuation,diff,p)}
+    ${rentGrid(m,p.id,kpi('Equity',euro(m.value-m.debt),'','mercado − dívida',WHY.equity,()=>evoValuation(p,'equity')))}
+    <div class="cols">${contaCard(m)}${avaContasCard(m,p.id,netY)}</div>
+    ${comContratos?avaCartao('Contratos ativos',ac.length+' '+(ac.length===1?'contrato':'contratos')+' · renda por mês',`<div class="tablewrap"><table class="table ana-fixa"><thead><tr>
+      <th>${p.rentalMode==='quartos'?'Quarto':'Contrato'}</th><th class="u-ta-left">Inquilinos</th><th>Renda</th><th>Imposto</th><th>Líquida</th></tr></thead><tbody>
       ${ac.map(x=>`<tr><td><b>${x.roomId?esc(roomName(p,x.roomId)):'Imóvel inteiro'}</b></td>
         <td class="u-ta-left u-ws-normal">${esc(ctNames(x))}</td><td>${euro(x.rent)}</td>
         <td class="neg">${dec(taxRateOf(x))}%${Number(x.taxRate)>0?'':' <span class="small">estim.</span>'}</td><td><b>${euro(netRent(x))}</b></td></tr>`).join('')}
-      <tr><td colspan="2"><b>Total mensal</b></td><td><b>${euro(rentOf(p))}</b></td><td></td><td><b>${euro(netRentOf(p))}</b></td></tr>
+      <tr class="ana-total"><td><b>Total mensal</b></td><td></td><td><b>${euro(rentOf(p))}</b></td><td></td><td><b>${euro(netRentOf(p))}</b></td></tr>
       </tbody></table></div>`):''}
-    <div class="cols">
-      ${card('Rendas e despesas','Mês a mês em '+YEAR,cBars(inc.map((v,i)=>[{label:'Rendas',value:v,color:PAL[0]},{label:'Despesas',value:-exp[i],color:'#c56b68'},{label:'Prestação',value:-ln[i],color:'#d6a34a'}]),MES,{h:190}))}
-      ${card('Estrutura de despesas','',cs.length?cDonut(cs,{sub:'gastos do ano'})
-        :`<div class="hint">Não há gastos atribuídos a este imóvel em ${YEAR}.${orfas.length?` Há ${euro(sum(orfas.map(x=>x.amount)))} em despesas sem imóvel atribuído, que aparecem na visão geral mas não aqui.`:''}</div>`)}</div>
-    <div class="cols">
-      ${contaCard(m)}
-      ${card('Indicadores','',`
-        <div class="stat"><span>Renda anual contratada</span><b>${euro(m.annualRent)}</b></div>
-        <div class="stat"><span>Renda anual líquida de impostos (estim.)</span><b>${euro(netY)}</b></div>
-        <div class="stat"><span>NOI anualizado</span><b>${euro(m.noiAnual)}</b></div>`)}</div>
-    ${balancesCard(p.id)}
+    ${avaGraficos(p.id,`<div class="hint">Não há gastos atribuídos a este imóvel em ${YEAR}.${orfas.length?` Há ${euro(sum(orfas.map(x=>x.amount)))} em despesas sem imóvel atribuído, que aparecem na visão geral mas não aqui.`:''}</div>`)}
     ${ls.length?(()=>{
       const per=ls.map(l=>({l,a:amort(l),c:loanCalc(l)}));
       const nY=Math.max(...per.map(x=>Math.ceil(x.a.rows.length/12)));
       const bal=[...Array(nY)].map((_,i)=>sum(per.map(x=>{const r=x.a.rows[Math.min((i+1)*12-1,x.a.rows.length-1)];
         return (i+1)*12-1<x.a.rows.length?r.bal:0})));
-      return card(ls.length>1?ls.length+' hipotecas':'Hipoteca',ls.map(x=>esc(loanName(x))).join(' · '),
-        per.map(x=>`<div class="stat"><span>${esc(loanName(x.l))}<div class="small">${RATE[x.l.type]} · ${x.l.years} anos${(x.l.files||[]).length?' · '+x.l.files.length+' doc.':''}</div></span>
-          <b>${euro(x.l.outstanding)}<div class="small u-fw-500">${euro2(x.c.total)}/mês</div></b></div>`).join('')
-        +`<div class="stat"><span><b>Total em dívida</b></span><b>${euro(debtOf(p))}</b></div>
+      /* os números e o gráfico lado a lado (estilos.css:.ava-hip): a toda a
+         largura do cartão, o desenho escalava pelo viewBox até 526px de altura
+         e letras dos eixos com 35px; a meia largura fica à escala dos outros */
+      return avaCartao(ls.length>1?ls.length+' hipotecas':'Hipoteca',ls.map(x=>esc(loanName(x))).join(' · '),
+        `<div class="ava-hip"><div>${per.map(x=>`<div class="stat"><span>${esc(loanName(x.l))}<div class="small">${RATE[x.l.type]} · ${x.l.years} anos${(x.l.files||[]).length?' · '+x.l.files.length+' doc.':''}</div></span>
+          <b>${euro(x.l.outstanding)}<div class="small u-fw-500">${euro2(x.c.total)}/mês</div></b></div>`).join('')}
+          <div class="stat"><span><b>Total em dívida</b></span><b>${euro(debtOf(p))}</b></div>
           <div class="stat"><span>Prestações mensais</span><b>${euro2(payOf(p))}</b></div>
           <div class="stat"><span>Juros até ao fim</span><b class="neg">${euro(sum(per.map(x=>x.a.totInt)))}</b></div>
-          <div class="stat"><span>Imposto do selo até ao fim</span><b class="neg">${euro(sum(per.map(x=>x.a.totStamp)))}</b></div>
-          <div class="divider"></div>${cLine([{name:'Em dívida',values:bal,color:'#d6a34a'}],
-        [...Array(nY)].map((_,i)=>String(YEAR+i)),{h:160,marks:decadeMarks(YEAR,nY)})}`);
-    })():''}
-  </div>`;
+          <div class="stat"><span>Imposto do selo até ao fim</span><b class="neg">${euro(sum(per.map(x=>x.a.totStamp)))}</b></div></div>
+          ${cLine([{name:'Em dívida',values:bal,color:COR_SERIE.divida}],
+        [...Array(nY)].map((_,i)=>String(YEAR+i)),{h:160,marks:decadeMarks(YEAR,nY)})}</div>`);
+    })():''}`;
 }
 /* avaliação por rendimento ano a ano (histórico, com o NOI anualizado no ano corrente)
    e equity projetado com a amortização — na quota-parte do proprietário filtrado

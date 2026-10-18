@@ -1,8 +1,7 @@
-// O separador Colaboradores de quem ainda não tem imóveis: o cartão
-// «Colaboradores» — cujo vazio mandava «criar uma ligação de convite em cima»
-// — não se escreve, porque sem imóveis não há convite que se possa criar. O
-// «Convidar colaborador» (que diz para criar o primeiro imóvel) e os «Cargos»
-// ficam. Como o partilha-pedidos.test.js: a nuvem por cima da app do arnês.
+// O separador Colaboradores de quem ainda não tem imóveis: o cartão «Quem
+// colabora» — cujo vazio manda convidar — não se escreve, porque sem imóveis
+// não há convite que se possa criar. O «Convidar colaborador» (cuja janela
+// diz para criar o primeiro imóvel) e os «Cargos» ficam. Como o partilha-pedidos.test.js: a nuvem por cima da app do arnês.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -43,30 +42,31 @@ const MINHA = { id: 'H1', ownerId: 'EU', ownerName: 'Eu', mine: true, participan
 const DO_RUI = { id: 'H2', ownerId: 'RUI', ownerName: 'Rui', mine: false, participants: ['RUI', 'EU'], updatedAt: 1, data: { id: 'H2', name: 'Do Rui' } };
 
 describe('o separador Colaboradores sem imóveis', () => {
-  test('com um cargo e sem imóveis, ficam só o «Convidar colaborador» e os «Cargos»', () => {
+  // Os títulos dos cartões da página (os <h3>), pela ordem.
+  // Recebe: h — o HTML da página.
+  // Devolve: array de textos.
+  const titulos = (h) => [...h.matchAll(/<h3>([^<]+)<\/h3>/g)].map((m) => m[1]);
+
+  test('com um cargo e sem imóveis, ficam só o «Convidar colaborador» (que diz por onde se começa) e os «Cargos»', () => {
     const app = comEstado(BASE());
-    const h = app.vColaboradores();
-    const titulos = [...h.matchAll(/<div class="title">([^<]+)<\/div>/g)].map((m) => m[1]);
-    assert.deepEqual(titulos, ['Convidar colaborador', 'Cargos']);
-    assert.doesNotMatch(h, /Cria uma ligação de convite em cima/, 'a frase do vazio do cartão «Colaboradores» não aparece');
-    assert.match(h, /Ainda não tens imóveis para partilhar — cria um primeiro\./, 'o de cima continua a dizer por onde se começa');
-    assert.equal(app.colaboradoresCard(), '', 'o cartão em si é vazio');
+    const h = app.paginaDosColaboradores();
+    assert.deepEqual(titulos(h), ['Cargos']);
+    assert.match(h, /data-click="CW\.conviteModal\(\)">[\s\S]*? Convidar colaborador/);
+    assert.doesNotMatch(h, /Convida alguém com uma ligação de uso único/, 'a frase do vazio de «Quem colabora» não aparece');
+    assert.equal(app.quemColaboraCard(), '', 'o cartão em si é vazio');
   });
 
   test('controlo: com um imóvel meu o cartão volta, com o vazio dele', () => {
     const st = BASE(); st.houses = [MINHA];
     const app = comEstado(st);
-    const h = app.vColaboradores();
-    const titulos = [...h.matchAll(/<div class="title">([^<]+)<\/div>/g)].map((m) => m[1]);
-    assert.deepEqual(titulos, ['Convidar colaborador', 'Colaboradores', 'Cargos']);
-    assert.match(app.colaboradoresCard(), /Ainda não tens colaboradores\. Cria uma ligação de convite em cima\./);
+    assert.deepEqual(titulos(app.paginaDosColaboradores()), ['Quem colabora', 'Cargos']);
+    assert.match(app.quemColaboraCard(), /Ainda ninguém colabora contigo\. Convida alguém com uma ligação de uso único\./);
   });
 
   test('só com um imóvel que outro partilhou comigo, o cartão fica pela nota de quem gere colaboradores', () => {
     const st = BASE(); st.houses = [DO_RUI];
     const app = comEstado(st);
-    const h = app.colaboradoresCard();
-    assert.match(h, /só quem criou o imóvel gere colaboradores/);
-    assert.match(app.vColaboradores(), /<div class="title">Colaboradores<\/div>/);
+    assert.match(app.quemColaboraCard(), /só quem criou o imóvel gere colaboradores/);
+    assert.deepEqual(titulos(app.paginaDosColaboradores()), ['Quem colabora', 'Cargos']);
   });
 });

@@ -10,10 +10,12 @@
    despe as notas (worker/src/lib/permissoes.js:projetarCasa). Num contrato,
    altera-a quem pode alterar o contrato (acessos.js:podeEditar).
 
-   A ficha mostra o resumo e a porta (tfLinhaDaFicha); a lista abre-se numa
-   janela própria (tfAbrir), porque uma ficha lê-se e não tem campos
-   (docs/design.md, «Tocar num registo é lê-lo»). Cada toque na lista grava
-   logo — marcar uma tarefa não pede um «Guardar». */
+   A ficha do contrato mostra o resumo e a porta (tfLinhaDaFicha); a do
+   imóvel um cartão com as primeiras tarefas, só de leitura, e as mesmas
+   portas (tfCartaoDaFicha). A lista abre-se numa janela própria (tfAbrir),
+   porque uma ficha lê-se e não tem campos (docs/design.md, «Tocar num
+   registo é lê-lo»). Cada toque na lista grava logo — marcar uma tarefa não
+   pede um «Guardar». */
 
 /* a janela de tarefas aberta: de que registo é ({tipo,id}), e o que a
    pesquisa e os dois filtros pedem. Volta ao início a cada tfAbrir. */
@@ -66,6 +68,32 @@ function tfLinhaDaFicha(tipo,id){
   return {tipo:'bloco',rotulo:'Tarefas',valor:esc(tfResumo(t))
     +`<div class="toolbar u-m-9px-0-0"><button type="button" class="btn sm" data-toca="camada" data-click="tfAbrir('${jsq(tipo)}','${jsq(id)}')">${ic('check',14)} ${rotulo}</button></div>`};
 }
+/* O cartão das tarefas na ficha do imóvel (a prancheta M-Imovel): o resumo
+   no cabeçalho, as primeiras por cumprir (até quatro) e as cumpridas mais
+   recentes que caibam até às quatro, e o «Adicionar tarefa» e o «Ver
+   todas». A ficha lê-se e não tem campos: cada tarefa é uma linha com a
+   caixa desenhada, e tocar abre a lista (tfAbrir), onde se marca. Quem não
+   pode alterar e não tem tarefas não o vê.
+   Recebe: tipo — 'imovel' ou 'contrato'; id — o id do registo.
+   Devolve: o HTML do cartão, ou '' sem nada a mostrar. */
+function tfCartaoDaFicha(tipo,id){
+  const r=tfRegisto(tipo,id);if(!r)return '';
+  const t=tarefasDe(r),ok=tfPodeAlterar(tipo,id);
+  if(!t.itens.length&&!ok)return '';
+  const abrir=`tfAbrir('${jsq(tipo)}','${jsq(id)}')`;
+  const por=t.itens.filter(x=>!x.feita),feitas=t.itens.filter(x=>x.feita).sort((a,b)=>String(b.feitaEm||'').localeCompare(String(a.feitaEm||'')));
+  const vistas=por.slice(0,4).concat(feitas.slice(0,Math.max(0,4-Math.min(4,por.length))));
+  const sec=x=>{const s=t.seccoes.find(y=>y.id===x.seccao);return s?s.nome:''};
+  const linhas=vistas.map(x=>`<div class="imv-linha tap tf-fl${x.feita?' tf-feita':''}" data-toca="camada" data-click="${abrir}">
+      <span class="tf-caixa" aria-hidden="true">${x.feita?ic('check',14):''}</span>
+      <span class="tf-fl-nome"><span class="imv-so-leitor">${x.feita?'Cumprida: ':'Por cumprir: '}</span>${esc(x.nome||'Sem nome')}</span>
+      ${x.feita&&x.feitaEm?`<span class="small num">${dPT(x.feitaEm).slice(0,5)}</span>`:sec(x)?`<span class="badge grey">${esc(sec(x))}</span>`:''}</div>`).join('');
+  const mais=t.itens.length>vistas.length;
+  return `<div class="card imv-sec tf-cartao"><div class="imv-sec-cab"><h3>Tarefas</h3><span class="small num">${esc(tfResumo(t))}</span></div>
+    ${linhas}
+    <div class="tf-fl-pe">${ok?`<button type="button" class="btn ghost tf-fl-mais" data-toca="camada" data-click="${abrir};tfNovaTarefa('')">${ic('plus',18)} Adicionar tarefa</button>`:''}
+      ${t.itens.length?`<button type="button" class="btn ghost tf-fl-ver" data-toca="camada" data-click="${abrir}">${mais?'Ver todas':'Ver tarefas'}</button>`:''}</div></div>`;
+}
 /* Abre a janela da lista de tarefas de um imóvel ou de um contrato, com a
    pesquisa e os filtros limpos.
    Recebe: tipo — 'imovel' ou 'contrato'; id — o id do registo.
@@ -83,12 +111,15 @@ function tfTitulo(){
   const nome=r?(tfAlvo.tipo==='contrato'?ctName(r):r.name):'';
   return 'Tarefas'+(nome?' · '+nome:'');
 }
-/* O rodapé da janela: fechar e, para quem pode, adicionar uma tarefa.
+/* O rodapé da janela: fechar e, para quem pode, adicionar uma tarefa. O
+   botão diz «Nova tarefa» (o título do formulário que abre): «Adicionar
+   tarefa» com o ícone não cabe em meio rodapé de um telemóvel e partia-se
+   em duas linhas, com o ícone sozinho à esquerda.
    Devolve: o HTML do rodapé. */
 function tfRodape(){
   const ok=tfAlvo&&tfPodeAlterar(tfAlvo.tipo,tfAlvo.id);
   return `<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`
-    +(ok?`<button type="button" class="btn primary" data-toca="camada" data-click="tfNovaTarefa('')">${ic('plus',16)} Adicionar tarefa</button>`:'');
+    +(ok?`<button type="button" class="btn primary" data-toca="camada" data-click="tfNovaTarefa('')">${ic('plus',16)} Nova tarefa</button>`:'');
 }
 /* O ⋯ do cabeçalho da janela: adicionar uma secção (só para quem pode).
    Devolve: o HTML do menu, ou '' sem nada a oferecer. */
@@ -112,7 +143,7 @@ function tfCorpo(){
   const r=tfRegisto(tfAlvo.tipo,tfAlvo.id),t=tarefasDe(r);
   const filtros=t.itens.length?`<div class="qwrap"><input id="tf_q" class="txq" type="search" value="${esc(tfFiltro.q)}" placeholder="Pesquisar…" autocomplete="off"
       aria-label="Pesquisar por tarefa ou secção" data-input="tfPesquisar(this.value)">
-      <button type="button" class="qclear${tfFiltro.q?'':' u-d-none'}" data-toca="vista" data-click="tfLimparPesquisa()" aria-label="Limpar a pesquisa">✕</button></div>
+      <button type="button" class="qclear${tfFiltro.q?'':' u-d-none'}" data-toca="vista" data-click="tfLimparPesquisa()" aria-label="Limpar a pesquisa">${ic('x',14)}</button></div>
     <div class="row"><label>Secção${sel('tf_fsec',tfFiltro.seccao,tfOpcoesDeSeccao(t),'tfFiltrar','vista')}</label>
       <label>Estado${sel('tf_fest',tfFiltro.estado,[{v:'',label:'Todas'},{v:'por',label:'Por cumprir'},{v:'feitas',label:'Cumpridas'}],'tfFiltrar','vista')}</label></div>`:'';
   return `<div class="form">${filtros}<div id="tf_lista">${tfLista()}</div></div>`;

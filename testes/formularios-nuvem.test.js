@@ -64,7 +64,8 @@ describe('o ecrã de entrada', () => {
     });
     assert.deepEqual(cs.map((c) => c.id), ['cwa_name', 'cwa_email', 'cwa_pass', 'cwa_pass2']);
     assert.match(html, /<label>Nome \(opcional\)<input id="cwa_name" placeholder="Ex: Ana Rodrigues" autocomplete="name"><\/label>/);
-    assert.match(html, /<input id="cwa_pass" type="password" autocomplete="new-password">/);
+    // no registo a palavra-passe aponta para os requisitos (aria-describedby), que o leitor de ecrã lê com ela
+    assert.match(html, /<input id="cwa_pass" type="password" autocomplete="new-password" aria-describedby="cwa_passreq">/);
     assert.match(html, /<label>Confirmar palavra-passe <span class="req">\*<\/span><input id="cwa_pass2" type="password" autocomplete="new-password"><\/label>/);
     // os requisitos da palavra-passe ficam entre a palavra-passe e a confirmação
     assert.ok(html.indexOf('id="cwa_pass"') < html.indexOf('id="cwa_passreq"') && html.indexOf('id="cwa_passreq"') < html.indexOf('id="cwa_pass2"'));
@@ -148,14 +149,31 @@ describe('o pedido de ajuda e a recusa dos termos', () => {
     for (const [i, nota] of [[0, 'O que estavas a fazer, o que esperavas e o que aconteceu.'], [1, 'O que gostavas de conseguir fazer, e porquê.']]) {
       const cs = conferir('pedido ' + i, abertas[i].b, { obrigatorios: ['tk_s', 'tk_b'] });
       for (const c of cs) assert.ok(c.placeholder.startsWith(EX), c.id + ': «' + c.placeholder + '» é um exemplo');
-      assert.ok(abertas[i].b.includes('</textarea></label><div class="hint u-m-n4px-0-0">' + nota + '</div>'), 'a instrução fica por baixo da caixa');
+      assert.ok(abertas[i].b.includes('</textarea></label><div class="hint u-m-n4px-0-0" id="tk_nota">' + nota + '</div>'), 'a instrução fica por baixo da caixa');
       assert.doesNotMatch(abertas[i].b, new RegExp('placeholder="' + nota.slice(0, 12)));
+      // o tipo escolhe-se num segmentado (Problema / Sugestão), com o escolhido marcado
+      assert.match(abertas[i].b, new RegExp('<div class="segm tk-tipo" role="radiogroup" aria-label="Tipo de pedido"><button type="button" role="radio" aria-checked="' + (i === 0) + '"'));
     }
-    // o envio continua a recusar vazio — é por isso que levam o asterisco
+    assert.equal(abertas[0].t, 'Novo pedido');
+    // o envio continua a recusar vazio — é por isso que levam o asterisco —, e diz-se junto do campo
+    const pedidos = [];
+    let contexto = '';
+    a.api = (m, rota, corpo) => { pedidos.push(m + ' ' + rota); contexto = (corpo && corpo.context) || ''; return new Promise(() => {}); };
+    const falhas = [];
+    a.falhaCampo = (id, msg) => { falhas.push(id + ': ' + msg); };
     a.document.getElementById('tk_s').value = '';
     a.document.getElementById('tk_b').value = 'algo';
     a.CW.sendTicket('problema');
-    assert.equal(a.document.getElementById('tk_e').textContent, 'Escreve o assunto e a descrição.');
+    a.document.getElementById('tk_s').value = 'Um assunto';
+    a.document.getElementById('tk_b').value = '';
+    a.CW.sendTicket('problema');
+    assert.deepEqual(falhas, ['tk_s: Escreve o assunto.', 'tk_b: Conta o que aconteceu.'], 'cada campo vazio diz-se junto dele');
+    assert.deepEqual(pedidos, [], 'e nada vai ao servidor');
+    // com os dois, segue — com a versão da app no contexto
+    a.document.getElementById('tk_b').value = 'Aconteceu isto.';
+    a.CW.sendTicket();
+    assert.deepEqual(pedidos, ['POST /api/tickets'], 'sem argumento vale o tipo escolhido na janela');
+    assert.ok(contexto.startsWith('v' + a.VERSAO + ' · '), 'o contexto leva a versão da app, e não a dos termos: ' + contexto);
   });
 
   test('recusar os termos: o APAGAR é obrigatório e fica a exceção', () => {
@@ -218,5 +236,112 @@ describe('o resto da base', () => {
     for (const p of ph) assert.ok(p === 'Opcional' || p.startsWith(EX) || p === 'Pesquisar…', 'placeholder «' + p + '»');
     assert.match(html, /em branco: 5 %/);
     assert.match(html, /Em branco: 1 ano, e 0 % de aumento e de inflação\./);
+  });
+});
+
+/* Os erros de Conta e partilha dizem-se junto do campo, como no Entrar e no
+   Novo pedido (componentes.js:falhaCampo): o «Ligar» vazio ou recusado pelo
+   servidor era só um aviso em baixo, e a palavra-passe nova fraca ou
+   desencontrada saía no fundo da janela, longe do campo e sem o marcar. */
+describe('os erros de Conta e partilha junto do campo', () => {
+  /* A app com a nuvem e o falhaCampo apanhado.
+     Devolve: {a, falhas} — falhas são os [id, frase] marcados, pela ordem. */
+  function comFalhas() {
+    const a = nuvem();
+    const falhas = [];
+    a.falhaCampo = (id, msg) => { falhas.push([id, msg]); };
+    return { a, falhas };
+  }
+
+  test('«Ligar» com o campo vazio marca o campo do id, e não pergunta ao servidor', () => {
+    const { a, falhas } = comFalhas();
+    let pedidos = 0;
+    a.api = () => { pedidos++; return Promise.resolve({}); };
+    a.document.getElementById('cw_peer').value = '   ';
+    a.CW.addConn();
+    assert.deepEqual(falhas, [['cw_peer', 'Escreve o id que o outro te deu.']]);
+    assert.equal(pedidos, 0);
+  });
+
+  test('o que o servidor recusa ao ligar (o próprio id) diz-se no campo', async () => {
+    const { a, falhas } = comFalhas();
+    a.api = () => Promise.reject(new Error('Não te podes ligar a ti próprio.'));
+    a.document.getElementById('cw_peer').value = 'eu123456';
+    a.CW.addConn();
+    await new Promise((r) => setTimeout(r, 5));
+    assert.deepEqual(falhas, [['cw_peer', 'Não te podes ligar a ti próprio.']]);
+  });
+
+  test('mudar a palavra-passe: a fraca diz-se na nova, o desencontro na confirmação, e o fundo fica para o servidor', () => {
+    const { a, falhas } = comFalhas();
+    const el = (id) => a.document.getElementById(id);
+    el('cw_pw_new').value = '';
+    a.CW.savePassword();
+    el('cw_pw_new').value = 'Casa2026!Bonfim';
+    el('cw_pw_new2').value = 'Casa2026!Bonfi';
+    a.CW.savePassword();
+    assert.deepEqual(falhas, [['cw_pw_new', 'A palavra-passe precisa de pelo menos 8 caracteres.'], ['cw_pw_new2', 'As palavras-passe não coincidem.']]);
+    assert.equal(el('cw_pw_err').textContent, '', 'o fundo da janela fica para o que o servidor responder');
+  });
+
+  test('o erro da palavra-passe nova não lhe tira a caixa dos requisitos (aria-describedby), e à primeira tecla volta a ela', () => {
+    const a = nuvem();
+    const attrs = { 'aria-describedby': 'cw_pw_req' }, ouvintes = [];
+    const campo = {
+      classList: { add() {}, remove() {} }, closest: () => null, focus() {}, scrollIntoView() {}, insertAdjacentElement() {},
+      setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: (k) => { delete attrs[k]; },
+      addEventListener: (t, f) => { ouvintes.push(f); },
+    };
+    a.document.getElementById = (id) => (id === 'cw_pw_new' ? campo : null);
+    a.falhaPalavraNova('A palavra-passe precisa de um símbolo (ex.: ! ? € .).');
+    assert.equal(attrs['aria-invalid'], 'true');
+    assert.equal(attrs['aria-describedby'], 'cw_pw_new-erro cw_pw_req');
+    ouvintes.forEach((f) => f());
+    assert.equal(attrs['aria-describedby'], 'cw_pw_req');
+  });
+});
+
+/* O ecrã de entrada não esconde o que acabou de acontecer: o que vai para
+   um aviso em baixo (.toast, z 90) fica por trás dele (z 200). */
+describe('o que o ecrã de entrada diz', () => {
+  test('a palavra-passe nova guardada (a ligação «repor» do email) confirma-se no ecrã de entrada, e não num aviso por trás dele', async () => {
+    const a = nuvem(false);
+    const avisos = [];
+    a.toast = (m) => { avisos.push(m); };
+    const el = (id) => a.document.getElementById(id);
+    a.CW._reporToken = 'f'.repeat(64);
+    el('rp_1').value = 'Casa2026!Bonfim';
+    el('rp_2').value = 'Casa2026!Bonfim';
+    a.CW.reporConfirmar();
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(el('cwa_info').textContent, 'Palavra-passe mudada. Entra com a nova.');
+    assert.deepEqual(avisos, []);
+  });
+
+  /* Quem chega sem sessão por uma ligação de convite que já não serve: a
+     pré-visualização falha, a ligação esquece-se, e o ecrã já aberto deixa de
+     prometer o convite (o «Entrar e ver o convite», a faixa, a nota) — e o
+     erro continua lá ao trocar de separador. A app carrega com a ligação no
+     endereço e o servidor a responder 404 à pré-visualização. */
+  test('a ligação de convite que já não serve: o ecrã aberto redesenha-se com o erro, sem o convite, e o erro fica ao trocar de separador', async () => {
+    const guardado = new Map();
+    const a = carregarTudo({
+      antes(j) {
+        j.location.search = '?convite=' + 'a'.repeat(64);
+        j.sessionStorage = { getItem: (k) => (guardado.has(k) ? guardado.get(k) : null), setItem: (k, v) => { guardado.set(k, String(v)); }, removeItem: (k) => { guardado.delete(k); } };
+        j.fetch = (url) => (String(url).indexOf('/api/convite/') === 0
+          ? Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ error: 'Essa ligação já foi usada, expirou, ou não existe.' }) })
+          : Promise.reject(new Error('sem rede nos testes')));
+      },
+    });
+    assert.match(a.authEl.innerHTML, /Entrar e ver o convite/, 'controlo: ao abrir, o ecrã é o do convite');
+    await new Promise((r) => setTimeout(r, 20));
+    const h = a.authEl.innerHTML;
+    assert.match(h, /<p class="ent-msg-erro" id="cwa_msg" role="alert">Essa ligação já foi usada, expirou, ou não existe\.<\/p>/);
+    assert.doesNotMatch(h, /e ver o convite|ent-faixa|ent-convite/, 'nada promete o convite');
+    assert.match(h, />Entrar<\/button>/);
+    assert.equal(guardado.has('gi_convite'), false, 'a ligação esqueceu-se');
+    a.CW.modoDaEntrada('register');
+    assert.match(a.authEl.innerHTML, /role="alert">Essa ligação já foi usada/, 'trocar de separador não apaga o erro');
   });
 });

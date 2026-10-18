@@ -231,9 +231,11 @@ function dentroDaPagina() {
     if (semChave.length) falhar('cada mes traz a sua chave', semChave.length + ' de ' + meses.length);
     /* o saldo do mes e escrito depois de reconciliar, e nao vem na assinatura
        do bloco — se viesse, mudar um filtro refazia o mes inteiro */
+    /* desde 2026-10 o saldo diz «saldo +306,20 €», com a cor do dinheiro no
+       número (<b class="pos|neg">, neutro quando é zero) e não no .txnet */
     const semTotal = meses.filter((m) => {
-      const s = m.querySelector('.txnet');
-      return !s || !s.textContent.trim() || !/pos|neg/.test(s.className);
+      const s = m.querySelector('.txnet'), b = s && s.querySelector('b');
+      return !s || !/^saldo /.test(s.textContent.trim()) || !b || !b.textContent.trim();
     });
     if (semTotal.length) falhar('cada mes mostra o seu saldo', semTotal.length + ' sem .txnet preenchido');
   }
@@ -279,8 +281,13 @@ function dentroDaPagina() {
         .filter((m) => getComputedStyle(m).display !== 'flex');
       if (chatos.length) falhar('o título do mês continua em flex', chatos.length + ' títulos deixaram de o ser');
     } else {
-      const semKebab = linhas.filter((l) => !l.querySelector('.txkebab'));
-      if (semKebab.length) falhar('fora da seleção, cada linha tem o seu kebab', semKebab.length + ' de ' + linhas.length + ' sem .txkebab');
+      /* Fora da seleção, tocar numa linha abre a ficha do movimento (ler
+         primeiro); o kebab de cada linha saiu com o canvas de 2026-10 — as
+         ações vivem na ficha, no toque longo e na seleção. */
+      const semFicha = linhas.filter((l) => !/txView\(/.test(l.getAttribute('data-click') || ''));
+      if (semFicha.length) falhar('fora da seleção, cada linha abre a ficha', semFicha.length + ' de ' + linhas.length + ' sem txView no toque');
+      const kebabs = document.querySelectorAll('#view .txrow .txkebab').length;
+      if (kebabs) falhar('as linhas já não têm kebab', kebabs + ' .txkebab no ecrã');
     }
   }
 
@@ -291,15 +298,21 @@ function dentroDaPagina() {
      seta deixa o calMes posto, com o mes de hoje la dentro, e o botao ficava
      no ecra sem nada para fazer. Le-se o mes pelo TITULO, que e o que a pessoa
      ve, e nao pela variavel, que e o que estava errado. */
-  const barraCal = document.querySelector('#view .calgrid') && document.querySelector('#view .toolbar b');
+  /* O m\u00eas vive no cart\u00e3o do calend\u00e1rio desde 2026-10 (\u00abOutubro 2026\u00bb no
+     .cal-nav-tit, o \u00abHoje\u00bb entre as setas do .cal-nav). Com a grelha no ecr\u00e3 e
+     sem o t\u00edtulo, falha: a regra n\u00e3o pode ficar calada por a marca\u00e7\u00e3o ter
+     mudado (foi o que aconteceu ao .toolbar b de antes). */
+  const gradeCal = document.querySelector('#view .calgrid');
+  const barraCal = gradeCal && document.querySelector('#view .cal-nav-tit h2');
+  if (gradeCal && !barraCal) falhar('o calend\u00e1rio diz o m\u00eas', 'grelha sem .cal-nav-tit h2');
   if (barraCal) {
     const mes = barraCal.textContent.trim();
     const hoje = new Date();
     const nomes = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho',
       'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
     const semAcento = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    const noMesDeHoje = semAcento(mes) === nomes[hoje.getMonth()] + ' de ' + hoje.getFullYear();
-    const temBotao = [...document.querySelectorAll('#view .toolbar .btn')]
+    const noMesDeHoje = semAcento(mes) === nomes[hoje.getMonth()] + ' ' + hoje.getFullYear();
+    const temBotao = [...document.querySelectorAll('#view .cal-nav .btn')]
       .some((b) => b.textContent.trim() === 'Hoje');
     medidas.calendarioMes = mes;
     if (noMesDeHoje && temBotao) falhar('o «Hoje» não fica no mês de hoje', mes + ' com botão');
@@ -311,8 +324,8 @@ function dentroDaPagina() {
      Vivia no canto superior direito, que e onde o sino esta, e ninguem tinha
      dado por isso porque nenhuma cena o mostrava — ele so aparecia quando a
      ligacao caia. Agora ha uma cena por estado, e esta regra guarda o sitio. */
-  const selo = document.getElementById('cwSync');
-  if (selo && getComputedStyle(selo).opacity !== '0') {
+  const selo = document.getElementById('hdrSync');
+  if (selo && selo.innerHTML && getComputedStyle(selo).display !== 'none') {
     const rs = selo.getBoundingClientRect();
     ['hdrBell', 'hdrFilt'].forEach((id) => {
       const outro = document.getElementById(id);
@@ -394,7 +407,13 @@ function dentroDaPagina() {
   const emSelecao = !!document.querySelector('.sel-cab,.sel-fundo');
   const comGesto = emSelecao ? [] : [...document.querySelectorAll('#view [data-lp]')]
     .filter((e) => e.offsetParent);
-  const semPortaVisivel = comGesto.filter((e) => !e.querySelector('button,[role=button],a[href]'));
+  /* Desde 2026-10 as linhas já não têm kebab: a porta visível é a própria
+     linha — alcançável pelo teclado (o tornarFocavel dá-lhe tabindex) e a
+     abrir a ficha, onde as mesmas opções vivem no ⋯ e no «Editar» (ler
+     primeiro). Conta como porta um botão lá dentro OU a linha focável com
+     toque que abre. */
+  const abreSozinha = (e) => e.hasAttribute('data-click') && e.tabIndex >= 0;
+  const semPortaVisivel = comGesto.filter((e) => !abreSozinha(e) && !e.querySelector('button,[role=button],a[href]'));
   medidas.linhasComGesto = comGesto.length;
   if (comGesto.length && semPortaVisivel.length) {
     falhar('o gesto tem sempre um caminho visivel ao lado',

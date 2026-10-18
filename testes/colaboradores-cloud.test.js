@@ -224,6 +224,13 @@ describe('as ações da nuvem falam com a API do contrato', () => {
     assert.match(esp.toasts[0], /atribuído a 1 pessoas/);
   });
 
+  test('a janela do cargo: cada caixa Ver/Adicionar/Editar tem o rótulo como área de toque (a classe da folha, e não letra de 13px)', () => {
+    app.CW.cargoModal();
+    const b = esp.modais[0].corpo;
+    assert.ok(!b.includes('u-fs-13px'), 'sem a letra miúda');
+    assert.match(b, /<div class="stat u-ai-center colab-perm-linha"><span>Visitas<\/span><span class="colab-perm-caixas"><label class="check colab-perm-caixa"><input type="checkbox" data-perm="visit\.view" id="cg_visit_view"/);
+  });
+
   test('guardar cargo envia PUT /api/roles/:id com o nome e o fecho das permissões', async () => {
     const caixas = [{ checked: true, dataset: { perm: 'contract.add' } }, { checked: false, dataset: { perm: 'tx.view' } }];
     app.document.querySelectorAll = (q) => (q === 'input[data-perm]' ? caixas : []);
@@ -239,18 +246,55 @@ describe('as ações da nuvem falam com a API do contrato', () => {
     assert.deepEqual(esp.toasts, ['Cargo guardado.']);
   });
 
-  test('criar convite: POST /api/collab-invites com cargo e imóveis, e o modal com a ligação', async () => {
+  test('criar convite: POST /api/collab-invites com cargo e imóveis, e a janela «Convite pronto» com a ligação, o cargo, os imóveis e quando expira', async () => {
     app.document.getElementById = (id) => ({ value: id === 'cw_inv_cargo' ? 'R2' : '', checked: id === 'cw_inv_h_H1' });
-    esp.resposta = () => ({ token: 'x', url: 'https://app.rendorium.com/?convite=' + 'a'.repeat(64), expiresAt: 1 });
+    const fim = new Date(2030, 9, 24, 12).getTime();
+    esp.resposta = () => ({ token: 'x', url: 'https://app.rendorium.com/?convite=' + 'a'.repeat(64), expiresAt: fim });
     app.CW.criarConvite();
     await espera();
     assert.equal(esp.api[0].method, 'POST');
     assert.equal(esp.api[0].path, '/api/collab-invites');
     assert.deepEqual(JSON.parse(JSON.stringify(esp.api[0].body)), { roleId: 'R2', houseIds: ['H1'] });
     assert.equal(esp.toasts[0], 'Ligação de convite criada — copia-a e envia.');
-    assert.equal(esp.modais[0].titulo, 'Ligação de convite');
-    assert.match(esp.modais[0].corpo, /convite=a{64}/);
-    assert.match(esp.modais[0].rodape, /Copiar ligação/);
+    const j = esp.modais[0];
+    assert.equal(j.titulo, 'Convite pronto');
+    assert.match(j.corpo, /value="https:\/\/app\.rendorium\.com\/\?convite=a{64}"/);
+    assert.match(j.corpo, /Gestor de visitas · Minha/, 'o cargo e os imóveis');
+    assert.match(j.corpo, /CW\.copiar\('https:\/\/app\.rendorium\.com\/\?convite=a{64}'\)">Copiar ligação/);
+    assert.match(j.corpo, /Serve uma vez · expira a 24\/10\/2030/);
+    assert.match(j.corpo, /Esta ligação só se vê agora\. Se a perderes, revoga o convite e cria outro\./);
+    assert.match(j.rodape, />Feito</);
+    assert.ok(!/\son[a-z]+=|\sstyle=/.test(j.corpo + j.rodape), 'nada em linha');
+  });
+
+  test('a janela «Convidar colaborador»: o cargo em opções (o primeiro escolhido), os imóveis meus em caixas, os grupos em chips, a nota opcional com exemplo, e «Criar ligação de convite»', () => {
+    app.db.groups = [app.normGroup({ id: 'G1', kind: 'prop', name: 'Casas minhas', ids: ['H1'] })];
+    app.CW.conviteModal();
+    const j = esp.modais[0];
+    assert.equal(j.titulo, 'Convidar colaborador');
+    assert.match(j.corpo, /role="radiogroup" aria-labelledby="cw_inv_cl"><p class="flabel" id="cw_inv_cl">Cargo <span class="req">\*<\/span>/);
+    assert.match(j.corpo, /<input type="hidden" id="cw_inv_cargo" value="R2">/);
+    assert.match(j.corpo, /role="radio" aria-checked="true" class="colab-cargo-op on" data-id="R2" data-toca="rascunho" data-click="CW\.conviteCargo\(this\)">[\s\S]*?Gestor de visitas[\s\S]*?Adiciona visitas/);
+    assert.match(j.corpo, /data-click="CW\.cargoModal\(\)">[\s\S]*? Criar outro cargo/);
+    assert.ok(j.corpo.includes('id="cw_inv_h_H1"') && !j.corpo.includes('cw_inv_h_H2'), 'só os imóveis meus');
+    // os imóveis numa lista em cartão, linha a linha (o canvas, M-Convidar), e não caixas soltas
+    assert.match(j.corpo, /<div class="colab-casas"><label class="check colab-casa"><input type="checkbox" id="cw_inv_h_H1"><span class="colab-txt"><b>Minha<\/b>/);
+    assert.match(j.corpo, /class="chip" data-toca="rascunho" data-click="CW\.conviteGrupo\('G1'\)">Casas minhas</);
+    assert.match(j.corpo, /<label>Nota para ti \(opcional\)<input id="cw_inv_label" maxlength="60" value="" placeholder="Ex: Para a Ana, contabilidade"/);
+    assert.match(j.rodape, /data-toca="dados" data-click="CW\.criarConvite\(\)">Criar ligação de convite</);
+    assert.ok(!/\son[a-z]+=|\sstyle=/.test(j.corpo + j.rodape), 'nada em linha');
+  });
+
+  test('sem cargos, «Convidar colaborador» diz que o primeiro passo é o cargo; sem imóveis meus, que não há para onde convidar', () => {
+    app.CW.state.roles = [];
+    app.CW.conviteModal();
+    assert.match(esp.modais[0].corpo, /Primeiro, um cargo/);
+    assert.match(esp.modais[0].rodape, /closeModal\(\);CW\.cargoModal\(\)/);
+    app.CW.state.roles = [{ id: 'R2', name: 'Gestor de visitas', perms: ['visit.add'], n: 0 }];
+    app.db.properties = app.db.properties.filter((p) => p.id !== 'H1');
+    app.CW.conviteModal();
+    assert.match(esp.modais[1].corpo, /Ainda não tens imóveis teus/);
+    assert.match(esp.modais[1].rodape, /propModal\(\)/);
   });
 
   test('revogar convite e remover colaborador confirmam e chamam DELETE', async () => {
@@ -277,6 +321,7 @@ describe('as ações da nuvem falam com a API do contrato', () => {
     app.modalStack.push(janela);
     app.CW.mudarColaborador('C1');
     assert.equal(esp.modais[0].titulo, 'Mudar cargo ou imóveis');
+    assert.match(esp.modais[0].corpo, /<div class="colab-casas"><label class="check colab-casa"><input type="checkbox" id="cw_col_h_H1" checked>/, 'a mesma lista do convite');
     assert.equal(typeof janela.onSave, 'function', 'a gravação ficou pendurada na janela');
     janela.onSave();
     await espera();
@@ -382,11 +427,12 @@ describe('antes do primeiro sync', () => {
   test('o separador não diz «ainda não tens» a quem só ainda não sincronizou', () => {
     const app = comEstado((st) => { st.roles = []; st.collaborators = []; st.invites = []; });
     app.CW._pulled = 0;   // arranque sem rede: o estado do servidor ainda não chegou
-    const html = app.vColaboradores();
-    assert.match(html, /À espera do servidor/);
+    const html = app.paginaDosColaboradores();
+    assert.match(html, /<div class="espera" role="status"><span class="roda" aria-hidden="true"><\/span><p class="u-m-0"><b>À espera do servidor\.<\/b>/);
     assert.doesNotMatch(html, /Ainda não tens colaboradores/, 'não mente a quem pode ter');
+    assert.match(html, /Colaboras com/, 'os imóveis onde colaboro vêm do aparelho e mostram-se na mesma');
     app.CW._pulled = 1;
-    assert.match(app.vColaboradores(), /Ainda não tens colaboradores/, 'depois do sync, o vazio é verdade');
+    assert.match(app.paginaDosColaboradores(), /Ainda não tens colaboradores/, 'depois do sync, o vazio é verdade');
   });
 });
 
@@ -414,38 +460,103 @@ describe('a página Conta e partilha', () => {
   });
 });
 
-describe('o separador Colaboradores', () => {
-  test('vColaboradores traz os quatro blocos, por esta ordem', () => {
+describe('o separador Colaboradores (o canvas de 2026-10, D-Colaboradores)', () => {
+  test('a página traz «Convidar colaborador», quem colabora, os convites por usar, os cargos e onde colaboro, por esta ordem', () => {
     const app = comEstado();
-    const h = app.vColaboradores();
-    for (const t of ['sem quota-parte', 'Convidar colaborador', 'cw_inv_h_H1', 'Convites por usar', 'para a Ana',
-      'Colaboradores', 'Maria', 'Mudar cargo ou imóveis', 'Cargos', 'Gestor de visitas', 'CW.cargoModal()',
-      'Imóveis onde colaboras', 'Do Rui', "CW.sairDeImovel('C9')"]) {
-      assert.ok(h.includes(t), 'a vista tem: ' + t);
+    const h = app.paginaDosColaboradores();
+    for (const t of ['sem quota-parte', 'CW.conviteModal()', 'Convidar colaborador', 'Quem colabora', 'Maria', 'Minha',
+      "CW.mudarColaborador('C1')", "CW.removerColaborador('C1')", 'Convites por usar', 'Gestor de visitas · «para a Ana»',
+      "CW.revogarConvite('abc123')", 'Cargos', 'CW.cargoModal()', "CW.cargoModal('R2')", 'Onde colaboras', 'Colaboras com', 'Do Rui',
+      "CW.sairDeImovel('C9')"]) {
+      assert.ok(h.includes(t), 'a página tem: ' + t);
     }
-    // o imóvel de colaboração não entra nas caixas do convite
-    assert.ok(!h.includes('cw_inv_h_H2'), 'não convido para o imóvel do Rui');
-    // convidar → colaboradores por imóvel → cargos → imóveis onde colaboro
-    const ordem = ['Uma ligação de uso único, com um cargo', 'Quem colabora em cada imóvel',
-      'O que cada colaborador pode fazer', 'Como colaborador, não como dono'].map((t) => h.indexOf(t));
-    assert.ok(ordem.every((i) => i > -1), 'os quatro subtítulos estão lá: ' + ordem.join(', '));
+    // a página já não traz o formulário do convite: ele vive na janela (CW.conviteModal)
+    assert.ok(!h.includes('cw_inv_h_'), 'sem as caixas do convite na página');
+    const ordem = ['Convidar colaborador', '<h3>Quem colabora</h3>', '<h3>Convites por usar</h3>', '<h3>Cargos</h3>', 'Onde colaboras'].map((t) => h.indexOf(t));
+    assert.ok(ordem.every((i) => i > -1), 'os cinco blocos estão lá: ' + ordem.join(', '));
     assert.deepEqual(ordem, [...ordem].sort((a, b) => a - b), 'e por esta ordem');
+    assert.ok(!/\son[a-z]+=|\sstyle=/.test(h), 'nada em linha');
+  });
+
+  test('cada cargo diz quantas pessoas o têm, o resumo, «Editar», e a tabela das permissões (Ver/Adicionar) — a do primeiro aberta, e o botão abre e fecha no sítio', () => {
+    const app = comEstado((st) => { st.roles.push({ id: 'R3', name: 'Ver tudo', perms: ['report.view'], n: 0 }); });
+    const h = app.paginaDosColaboradores();
+    assert.match(h, /<b class="u-d-block">Gestor de visitas<\/b><span class="small">1 pessoa · 1 convite<\/span>/);
+    assert.match(h, /role="table" aria-label="Permissões do cargo Gestor de visitas">/, 'a do primeiro aberta');
+    assert.match(h, /role="table" aria-label="Permissões do cargo Ver tudo" hidden>/, 'as outras fechadas');
+    assert.match(h, /<span role="cell">Visitas<\/span><span role="cell" class="colab-sim" aria-label="Ver: sim">/);
+    assert.match(h, /<span role="cell">Movimentos<\/span><span role="cell" class="colab-nao" aria-label="Ver: não">/);
+    assert.match(h, /<span role="cell">Hipotecas<\/span><span role="cell" class="colab-nao" aria-label="Ver: não"><span class="colab-traco"><\/span><\/span><span role="cell" class="colab-na" aria-label="Adicionar: não se aplica">/);
+    assert.match(h, /<span role="cell">Ficha do imóvel<\/span><span role="cell" class="colab-na" aria-label="Ver: não se aplica"><\/span><span role="cell" class="colab-nao" aria-label="Editar: não">/);
+    // o botão abre e fecha a tabela sem repintar
+    const tabela = { hidden: true };
+    const attrs = { 'aria-expanded': 'false', 'aria-controls': 'cgperm_1' };
+    const botao = { dataset: { id: 'R3' }, getAttribute: (k) => attrs[k], setAttribute: (k, v) => { attrs[k] = v; } };
+    app.document.getElementById = (id) => (id === 'cgperm_1' ? tabela : null);
+    app.CW.cargoPermissoes(botao);
+    assert.equal(tabela.hidden, false);
+    assert.equal(attrs['aria-expanded'], 'true');
+    assert.match(app.paginaDosColaboradores(), /aria-label="Permissões do cargo Ver tudo">/, 'e lembra-se na pintura seguinte');
+    // com dois cargos, o primeiro à parte e os outros num bloco (o canvas: duas colunas num cartão largo)
+    assert.match(h, /<section class="card colab-cartao colab-cargos-cartao">[\s\S]*?<div class="colab-cargos-dois"><div class="colab-cargo">[\s\S]*?Gestor de visitas[\s\S]*?<div class="colab-cargos-resto"><div class="colab-cargo">[\s\S]*?Ver tudo/);
+    // com um só, não há segunda coluna a ficar vazia
+    assert.doesNotMatch(comEstado().paginaDosColaboradores(), /colab-cargos-dois|colab-cargos-resto/);
+  });
+
+  test('os convites dizem quanto falta, em dias de calendário: âmbar com dias, vermelho no último', () => {
+    // a meio do dia daqui a 5 dias são 5 dias de calendário, seja qual for a hora a que a bateria corre
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const meioDia = (n) => new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + n, 12).getTime();
+    const app = comEstado((st) => { st.invites[0].expiresAt = meioDia(5); st.invites.push({ id: 'ff', roleName: 'Contabilista', houses: [], expiresAt: Date.now() + 3600000 }); });
+    const h = app.paginaDosColaboradores();
+    assert.match(h, /<span class="badge amber">5 dias<\/span>/);
+    assert.match(h, /<span class="badge red">Expira amanhã<\/span>|<span class="badge red">Expira hoje<\/span>/);
+  });
+
+  test('o selo conta dias de calendário, e não fatias de 24 horas a partir de agora', () => {
+    const app = comEstado();
+    const as = (d, h, m) => new Date(2026, 9, d, h, m).getTime();
+    const agora = as(17, 22, 47);
+    // acaba hoje às 23:59: era «Expira amanhã» (faltava 1 h 12 min, que o Math.ceil subia a 1 dia)
+    assert.equal(app.seloDoConvite(as(17, 23, 59), agora), '<span class="badge red">Expira hoje</span>');
+    // acaba amanhã às 23:00: era «2 dias»
+    assert.equal(app.seloDoConvite(as(18, 23, 0), agora), '<span class="badge red">Expira amanhã</span>');
+    assert.equal(app.seloDoConvite(as(19, 1, 0), agora), '<span class="badge amber">2 dias</span>');
+    // de manhã cedo, sete dias depois à mesma hora (como o servidor os cria) são 7 dias
+    assert.equal(app.seloDoConvite(as(24, 8, 0), as(17, 8, 0)), '<span class="badge amber">7 dias</span>');
+    // a mudança da hora (25 de outubro de 2026) não rouba nem dá um dia
+    assert.equal(app.seloDoConvite(as(27, 9, 0), as(24, 9, 0)), '<span class="badge amber">3 dias</span>');
+    assert.equal(app.seloDoConvite(as(17, 20, 0), agora), '<span class="badge red">Expirou</span>');
+    assert.equal(app.seloDoConvite(0, agora), '');
   });
 
   test('sem cargos, sem convites e sem colaboradores, o vazio convida a criar o primeiro cargo', () => {
     const app = comEstado((st) => { st.roles = []; st.collaborators = []; st.invites = []; });
-    const h = app.vColaboradores();
+    const h = app.paginaDosColaboradores();
     assert.ok(h.includes('Ainda não tens colaboradores'));
     assert.ok(h.includes('CW.cargoModal()'), 'com o botão de criar o cargo');
     assert.ok(!h.includes('Convidar colaborador'), 'sem cargo não há convite a fazer');
     // os imóveis onde sou eu o colaborador continuam à vista
-    assert.ok(h.includes('Imóveis onde colaboras') && h.includes('Do Rui'));
+    assert.ok(h.includes('Colaboras com') && h.includes('Do Rui'));
   });
 
-  test('sem sessão iniciada, a vista pede a conta', () => {
+  test('onde colaboro: «Colaboras com <dono>», o cargo, o que o cargo deixa e em que imóveis, e as finanças com o dono quando o cargo não as vê', () => {
+    const app = comEstado();
+    const h = app.colaboroCartao();
+    assert.match(h, /<span class="small">Colaboras com<\/span><b class="u-d-block">Rui<\/b><\/span><span class="badge">Contabilista<\/span>/);
+    assert.match(h, /em <b>Do Rui<\/b>\./);
+    assert.ok(!h.includes('As finanças destes imóveis ficam com o dono'), 'o contabilista vê os movimentos');
+    const app2 = comEstado((st) => { st.houses[1].collab = { id: 'C9', roleId: 'R1', roleName: 'Gestor de visitas', perms: ['visit.view', 'visit.add'] }; });
+    assert.match(app2.colaboroCartao(), /As finanças destes imóveis ficam com o dono\./);
+  });
+
+  test('sem sessão iniciada, a página pede a conta; e o separador (vColabTab) põe-lhe a cabeça das subpáginas', () => {
     const { app } = montar();
     app.CW.user = null;
-    assert.match(app.vColaboradores(), /Iniciar sessão/);
+    assert.match(app.paginaDosColaboradores(), /Iniciar sessão/);
+    const t = app.vColabTab();
+    assert.match(t, /class="toolbar def-voltar[^"]*">\s*<button class="btn" data-toca="ecra" data-click="go\('settings'\)">/, 'o Voltar leva às Definições');
+    assert.match(t, /<nav class="def-nav" aria-label="Definições">/, 'e a navegação lateral, para o computador');
   });
 });
 

@@ -16,6 +16,13 @@
 const VESTADO={agendada:'Agendada',realizada:'Realizada',faltou:'Faltou',cancelada:'Cancelada'};
 // o desfecho de uma visita realizada — vazio enquanto não se souber
 const VDESFECHO={'':'—',interessado:'Interessado',pensar:'A pensar','sem-interesse':'Sem interesse'};
+/* A cor do selo de cada estado, a mesma do painel do dia da Agenda
+   (calendario.js:calDiaPanel): agendada cobalto, realizada verde, faltou
+   âmbar, cancelada cinzenta. '' é o cobalto do .badge. */
+const VIS_COR={agendada:'',realizada:'in',faltou:'amber',cancelada:'grey'};
+/* E a de cada desfecho: interessado verde, a pensar cobalto (ainda por
+   decidir), sem interesse cinzento. */
+const VIS_COR_DESF={interessado:'in',pensar:'','sem-interesse':'grey'};
 
 let visForm=null;
 
@@ -44,21 +51,27 @@ function visIntervaloMudou(k,chave,valor){
 }
 
 /* Um par de campos de intervalo (de–até) para o painel de filtros, na
-   mesma linha: datas ou horas, guardados no estado da lista.
+   mesma linha: datas ou horas, guardados no estado da lista. Um rótulo só
+   para dois campos não cabe num <label>: cada campo leva o nome inteiro no
+   aria-label («Dia — de», «Dia — até»), que é o que o leitor de ecrã diz.
    Recebe: k — a chave da lista ('lvis'); tipo — 'date' ou 'time';
    k1/k2 — as chaves do estado para o «de» e o «até»; rotulo — o texto do label.
    Devolve: o HTML da linha (texto). */
 function visIntervalo(k,tipo,k1,k2,rotulo){
   const s=lf(k);
-  const campo=(chave)=>`<input type="${tipo}" value="${esc(s[chave]||'')}" class="u-fx-1 u-minw-0"
+  const campo=(chave,ponta)=>`<input type="${tipo}" value="${esc(s[chave]||'')}" class="u-fx-1 u-minw-0" aria-label="${esc(rotulo+' — '+ponta)}"
     data-change="visIntervaloMudou('${k}','${chave}',this.value)">`;
-  return `<div><div class="small u-mb-4px">${rotulo}</div>
-    <div class="u-d-flex u-g-8px u-ai-center">${campo(k1)}<span class="small">até</span>${campo(k2)}</div></div>`;
+  return `<div><div class="vis-int-rot" aria-hidden="true">${esc(rotulo)}</div>
+    <div class="u-d-flex u-g-8px u-ai-center">${campo(k1,'de')}<span class="small" aria-hidden="true">até</span>${campo(k2,'até')}</div></div>`;
 }
 
-/* A página das visitas: o painel de filtros comum da app (imóvel, estado,
-   desfecho, dia de–até, hora de–até e pesquisa de texto), as próximas e as
-   passadas em blocos separados, e o FAB para marcar.
+/* A página das visitas (o canvas M-Visitas): por cima, os chips dos filtros
+   (imóvel, estado, desfecho — cada um abre a sua escolha — e os dias e horas,
+   que abrem o painel); o painel de filtros comum da app tem o resto (a
+   pesquisa de texto e os intervalos de dia e de hora) e os mesmos três
+   seletores. Por baixo, as próximas e as passadas em dois cartões, cada um
+   com o título e quantas são; no computador lado a lado. Sem FAB: o «Marcar
+   visita» está no cabeçalho e no + da barra, e no vazio.
    Devolve: o HTML da página (texto). */
 function vVisits(){
   const K='lvis',s=lf(K);
@@ -74,90 +87,204 @@ function vVisits(){
   });
   const marca=casasComo('visit.add').length>0;   /* sem imóvel onde possa marcar, não há botão */
   if(!(db.visits||[]).length)
-    return esperaDoServidor()||`<div class="empty"><b>Ainda não há visitas</b>${marca?'Marca a primeira: quem vem, a que imóvel, e quando.':'As visitas aos imóveis onde colaboras aparecem aqui.'}
-      ${marca?`<div class="toolbar u-jc-center u-mt-16px">
-      <button class="btn primary" data-toca="camada" data-click="visitModal()">Marcar visita</button></div>`:''}</div>`;
+    return esperaDoServidor()||`<div class="empty"><b>Ainda não há visitas</b>${marca?'Marca a primeira: quem vem, a que imóvel, e quando.':'As visitas aos imóveis onde colaboras aparecem aqui.'}${marca?saida('Marcar visita','visitModal()','camada'):''}</div>`;
   const head=lfBar(K,[
-    lfSel(K,'pr',[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p=>({v:p.id,label:p.name||p.address||'imóvel'})))),
-    lfSel(K,'es',[{v:'',label:'Todos os estados'}].concat(Object.keys(VESTADO).map(x=>({v:x,label:VESTADO[x]})))),
-    lfSel(K,'rs',[{v:'',label:'Todos os desfechos'}].concat(Object.keys(VDESFECHO).filter(Boolean).map(x=>({v:x,label:VDESFECHO[x]})))),
+    lfSel(K,'pr',visOpcoesDoFiltro('pr')),
+    lfSel(K,'es',visOpcoesDoFiltro('es')),
+    lfSel(K,'rs',visOpcoesDoFiltro('rs')),
     visIntervalo(K,'date','d1','d2','Dia'),
     visIntervalo(K,'time','h1','h2','Hora de início'),
-  ],lista.length);
+  ],lista.length)+visChips(K);
   const futuras=lista.filter(v=>!visPassada(v)),passadas=lista.filter(visPassada).reverse();
   /* o título do grupo fica FORA do contentor: o motor deita fora tudo o que
      não seja um item com chave */
-  const bloco=(titulo,vs)=>vs.length?`<div class="navh u-m-4px-0-8px">${titulo}</div>`
-    +listaViva('visitas:'+titulo,vs.map(v=>({chave:'vis:'+v.id,html:visCard(v)})),'','vis-bloco'):'';
-  return head+bloco('Próximas',futuras)+bloco('Passadas',passadas)+
-    (lista.length?'':'<div class="empty">Nada com estes filtros.</div>')+
-    (marca?`<button class="fab" data-toca="camada" data-click="visitModal()" aria-label="Marcar visita">${ic('plus',22)}</button>`:'');
+  const grupo=(titulo,vs)=>vs.length?`<section class="vis-grupo"><div class="vis-grupo-cab"><h2>${titulo}</h2><span class="small num">${vs.length}</span></div>`
+    +listaViva('visitas:'+titulo,vs.map(v=>({chave:'vis:'+v.id,html:visCard(v)})),'vis-lista')+'</section>':'';
+  return head+(lista.length?`<div class="vis-grupos">${grupo('Próximas',futuras)}${grupo('Passadas',passadas)}</div>`:vazioFiltro());
+}
+/* As opções de um filtro das visitas, iguais no painel e nos chips.
+   Recebe: chave — 'pr' (imóvel), 'es' (estado) ou 'rs' (desfecho).
+   Devolve: [{v, label}] com o «todos» à cabeça. */
+function visOpcoesDoFiltro(chave){
+  if(chave==='pr')return [{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p=>({v:p.id,label:p.name||p.address||'imóvel'})));
+  if(chave==='es')return [{v:'',label:'Todos os estados'}].concat(Object.keys(VESTADO).map(x=>({v:x,label:VESTADO[x]})));
+  return [{v:'',label:'Todos os desfechos'}].concat(Object.keys(VDESFECHO).filter(Boolean).map(x=>({v:x,label:VDESFECHO[x]})));
+}
+/* Os chips dos filtros das visitas (o canvas): Imóvel, Estado e Desfecho
+   abrem a sua escolha e, ligados, dizem o valor com um × ao lado para o
+   limpar; «Dias e horas» abre o painel, onde estão os intervalos, e ligado
+   diz o intervalo. São o mesmo estado do painel (lf('lvis')), aplicado ao
+   escolher, sem «Aplicar».
+   Recebe: k — a chave da lista ('lvis').
+   Devolve: o HTML da fila de chips. */
+function visChips(k){
+  const s=lf(k),dias=visDiasRotulo(s);
+  return `<div class="vis-chips" role="group" aria-label="Filtrar as visitas">${visChipSel(k,'pr','Imóvel')}${visChipSel(k,'es','Estado')}${visChipSel(k,'rs','Desfecho')}${dias
+    ?`<span class="vis-chip on"><button type="button" class="vis-chip-txt" aria-label="Dias e horas: ${esc(dias)}" data-toca="vista" data-click="hdrFiltToggle()">${esc(dias)}</button><button type="button" class="vis-chip-x" aria-label="Limpar dias e horas" data-toca="vista" data-click="visLimparChip('${jsq(k)}','dias')">${ic('x',14)}</button></span>`
+    :'<button type="button" class="chip vis-chip-dias" data-toca="vista" data-click="hdrFiltToggle()">Dias e horas</button>'}</div>`;
+}
+/* Um chip que abre a escolha de um filtro: o menu da casa (componentes.js:sel)
+   vestido de chip, como os dos movimentos. Desligado diz o nome do filtro e
+   leva a seta; ligado diz o valor, com o fundo cobalto e o × para o limpar.
+   O leitor de ecrã ouve o nome e o valor.
+   Recebe: k — a chave da lista; chave — o campo do filtro ('pr', 'es', 'rs');
+   nome — o nome do filtro («Imóvel»).
+   Devolve: o HTML do chip. */
+function visChipSel(k,chave,nome){
+  const id='vischip_'+chave,atual=lf(k)[chave]||'',ops=visOpcoesDoFiltro(chave);
+  const o=atual?ops.find(x=>String(x.v)===String(atual)):null;
+  const aplicar=()=>{lf(k)[chave]=val(id)||'';render()};
+  const diz=o?o.label:nome;
+  /* trocas por função, e não por texto: um «$&» no nome de um imóvel não
+     pode virar outra coisa no meio da troca */
+  const h=sel(id,atual,ops,aplicar,'vista')
+    .replace('class="selbtn"',()=>'class="selbtn" aria-label="'+esc(nome+(o?': '+o.label:''))+'"')
+    .replace(/(<span id="lab_[^"]*">)[^<]*(<\/span>)/,(m,a,b)=>a+esc(diz)+b);
+  return `<span class="vis-chip${o?' on':''}">${h}${o?`<button type="button" class="vis-chip-x" aria-label="Limpar ${esc(nome.toLowerCase())}" data-toca="vista" data-click="visLimparChip('${jsq(k)}','${jsq(chave)}')">${ic('x',14)}</button>`:''}</span>`;
+}
+/* O × de um chip das visitas: limpa esse filtro (ou, nos dias e horas, os
+   quatro limites) e repinta.
+   Recebe: k — a chave da lista; chave — 'pr', 'es', 'rs' ou 'dias'.
+   Devolve: nada — repinta a vista. */
+function visLimparChip(k,chave){
+  const s=lf(k);
+  (chave==='dias'?['d1','d2','h1','h2']:[chave]).forEach(x=>{s[x]=''});
+  render();
+}
+/* Uma data curta para os chips e as linhas: sem o ano quando é o deste ano.
+   Recebe: iso — 'AAAA-MM-DD'.
+   Devolve: '24/10' ou '24/10/2027' (texto). */
+function visDataCurta(iso){const t=dPT(iso);return String(iso||'').slice(0,4)===pzHoje().slice(0,4)?t.slice(0,5):t}
+/* O que o chip dos dias e horas diz quando há limites postos: «15/10 – 20/10 ·
+   desde 18:00», por exemplo.
+   Recebe: s — o estado do filtro (lf('lvis')).
+   Devolve: o texto (por escapar), ou '' sem limites. */
+function visDiasRotulo(s){
+  const par=(a,b,f)=>a&&b?f(a)+' – '+f(b):a?'desde '+f(a):b?'até '+f(b):'';
+  return [par(s.d1,s.d2,visDataCurta),par(s.h1,s.h2,x=>x)].filter(Boolean).join(' · ');
+}
+/* O bloco da data de uma visita na lista (o canvas): o dia em grande e, por
+   baixo, «hoje», «amanhã», «ontem» ou o mês; hoje a cheio em cobalto.
+   Recebe: v — a visita; d — os dias que faltam (pzDias), ou null sem data.
+   Devolve: o HTML do bloco. */
+function visBlocoData(v,d){
+  if(!v.date)return '<span class="vis-data"><b>—</b><span>sem data</span></span>';
+  const rot=d===0?'hoje':d===1?'amanhã':d===-1?'ontem':(MES[Number(v.date.slice(5,7))-1]||'');
+  return `<span class="vis-data num${d===0?' hoje':''}"><b>${Number(v.date.slice(8,10))}</b><span>${rot}</span></span>`;
+}
+/* Os selos de uma visita: o estado, com a cor da Agenda, e — numa realizada —
+   o desfecho, quando se sabe.
+   Recebe: v — a visita.
+   Devolve: o HTML dos selos (texto), ou ''. */
+function visSelos(v){
+  const cls=c=>'badge'+(c?' '+c:'');
+  const e=VESTADO[v.estado]?`<span class="${cls(VIS_COR[v.estado])}">${VESTADO[v.estado]}</span>`:'';
+  const r=v.estado==='realizada'&&v.resultado&&VDESFECHO[v.resultado]?`<span class="${cls(VIS_COR_DESF[v.resultado]===undefined?'grey':VIS_COR_DESF[v.resultado])}">${VDESFECHO[v.resultado]}</span>`:'';
+  return e+r;
 }
 
-/* O cartão de uma visita na lista: quem, onde e quando à esquerda, o selo
-   de estado à direita, e o menu contextual (⋯) com as ações — marcar
-   realizada ou falta, converter em inquilino, apagar com Anular.
+/* A linha de uma visita (o canvas M-Visitas): o bloco da data, quem vem, a
+   hora e o imóvel (com o «daqui a N dias» ou o «há N dias» quando a semana o
+   pede), quem a marcou quando não fui eu, e os selos — à direita numa que
+   ainda vem, por baixo numa que já passou (o estado e o desfecho). Toca para
+   a ficha (visView); o toque longo abre as opções. Sem o ⋮: as ações estão
+   na ficha (o ⋯ da janela) e no toque longo, como nas outras listas do canvas.
+   Serve também as próximas visitas da Visão geral de quem colabora
+   (painel-geral.js:proximasVisitasColab, que a chama pelo map — por isso só
+   lê o primeiro argumento).
    Recebe: v — a visita.
-   Devolve: o HTML do cartão (texto). */
+   Devolve: o HTML da linha (texto). */
 function visCard(v){
   const p=prop(v.propertyId);
-  const quarto=v.roomId&&p?(p.rooms.find(r=>r.id===v.roomId)||{}).name:'';
-  const hora=v.start?v.start+(v.end?'–'+v.end:''):'';
-  const seloCls=v.estado==='realizada'?'':v.estado==='faltou'||v.estado==='cancelada'?'grey':'amber';
-  const desf=v.estado==='realizada'&&v.resultado?' · '+VDESFECHO[v.resultado]:'';
-  /* A porta é a mesma de todas as outras listas. Era o único cartão da app a
-     plantar um menu() dentro de si próprio, e o .card.tap tem overflow:hidden:
-     o menu ficava recortado pelo cartão e o ajustarPop ainda o encolhia ao
-     mínimo, por eleger esse mesmo cartão como o primeiro antepassado que
-     corta — «fica contido dentro do cartão e o resto desaparece».
-     As ações vêm do visOpcoes, que é onde já vivem para a ficha e para o
-     toque longo. */
-  const acoes=visOpcoes(v);
-  return `<div class="card tap" data-lp="vis:${esc(v.id)}" data-fk="vis:${esc(v.id)}" data-toca="camada" data-click="visView('${jsq(v.id)}')">
-    <div class="row-between u-ai-flex-start u-g-8px">
-      <div class="u-minw-0">
-        <b class="u-d-block u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(v.nomes||'(sem nome)')}</b>
-        <span class="small">${esc(p?(p.name||p.address):'imóvel?')}${quarto?' · '+esc(quarto):''} · ${v.date?esc(dPT(v.date)):'sem data'}${hora?' · '+esc(hora):''}${desf}</span>
-        ${v.notas?`<span class="small u-d-block u-mt-3px u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(v.notas)}</span>`:''}</div>
-      <span class="u-fx-0-0-auto u-d-inline-flex u-ai-center u-g-4px">
-        <span class="badge ${seloCls}">${VESTADO[v.estado]||v.estado}</span>
-        ${acoes.length?kebab('vis:'+v.id):''}</span></div></div>`;
+  const quarto=v.roomId&&p?roomName(p,v.roomId):'';
+  const hora=v.start?esc(v.start)+(v.end?' – '+esc(v.end):''):'';
+  const d=v.date?pzDias(v.date):null;
+  const rel=d!==null&&Math.abs(d)>=2&&Math.abs(d)<=7?(d>0?'daqui a '+d+' dias':'há '+(-d)+' dias'):'';
+  const onde=esc(p?(p.name||p.address||'imóvel'):'imóvel apagado')+(quarto?' · '+esc(quarto):'');
+  const quem=v._createdBy&&v._createdBy!==meuId()?'Marcada por '+esc(nomeUtilizador(v._createdBy)):'';
+  const passou=visPassada(v),selos=visSelos(v);
+  return `<div class="vis-linha tap" data-lp="vis:${esc(v.id)}" data-fk="vis:${esc(v.id)}" data-toca="camada" data-click="visView('${jsq(v.id)}')">
+    ${visBlocoData(v,d)}
+    <span class="vis-txt"><b class="vis-nome">${esc(v.nomes||'(sem nome)')}</b>
+      <span class="small num">${[hora,onde,rel].filter(Boolean).join(' · ')}</span>
+      ${quem?`<span class="small">${quem}</span>`:''}${passou&&selos?`<span class="vis-selos">${selos}</span>`:''}</span>
+    ${!passou&&selos?`<span class="vis-selos vis-selos-dir">${selos}</span>`:''}</div>`;
 }
 
-/* O corpo da ficha de uma visita.
+/* Quando é uma visita, por extenso: o dia da semana, a data, as horas e o
+   «daqui a três dias» colado, que é o que a data sozinha não diz.
+   Recebe: v — a visita.
+   Devolve: o texto (HTML escapado), ex.: «Quinta, 15/10/2026 · 18:00 – 18:30 · há 2 dias». */
+function visQuando(v){
+  if(!v.date)return 'Sem data';
+  let dia='';
+  try{dia=new Date(v.date+'T00:00:00').toLocaleDateString('pt-PT',{weekday:'long'}).split('-')[0]}catch(e){}
+  dia=dia?dia.charAt(0).toUpperCase()+dia.slice(1)+', ':'';
+  const h=v.start?' · '+esc(v.start)+(v.end?' – '+esc(v.end):''):'';
+  const d=pzDias(v.date);
+  const rel=d===0?'hoje':d===1?'amanhã':d===-1?'ontem':(d>0?'daqui a '+d+' dias':'há '+(-d)+' dias');
+  return dia+esc(dPT(v.date))+h+' · '+rel;
+}
+/* Uma linha rótulo/valor da ficha da visita (o .kv do canvas). Com uma
+   ligação, a linha inteira toca: o telemóvel liga, o email escreve.
+   Recebe: rotulo — o texto da esquerda; valor — o HTML da direita, já
+   escapado; href (opcional) — a ligação.
+   Devolve: o HTML da linha, ou '' sem valor. */
+function visKv(rotulo,valor,href){
+  if(!valor)return '';
+  return href?`<a class="vis-kv pes-liga" href="${esc(href)}" data-toca="nada"><span>${esc(rotulo)}</span><span>${valor}</span></a>`
+    :`<div class="vis-kv"><span>${esc(rotulo)}</span><span>${valor}</span></div>`;
+}
+/* A ligação de um contacto escrito à mão: um email escreve, um número de
+   telefone (nove dígitos ou mais) liga; o resto não liga a nada.
+   Recebe: c — o contacto.
+   Devolve: 'mailto:…', 'tel:…' ou ''. */
+function visLigacao(c){
+  c=String(c||'').trim();
+  if(/^[^\s@]+@[^\s@]+$/.test(c))return 'mailto:'+c;
+  const n=c.replace(/[^\d+]/g,'');
+  return n.replace(/\D/g,'').length>=9?'tel:'+n:'';
+}
+/* O corpo da ficha de uma visita (o canvas M-VisitaFicha).
 
    Abre-se por duas razões, e em momentos diferentes: na véspera, para
    confirmar a hora e ter o contacto à mão; depois, para reler o que ficou
-   combinado e decidir a quem ligar.
+   combinado e decidir a quem ligar. Por isso: quando, por extenso, e os
+   selos do estado e do desfecho; numa realizada com interesse, o convite a
+   converter em inquilino; o imóvel, o contacto que toca e quem a marcou; os
+   comentários; e as outras visitas que vêm ao mesmo imóvel.
 
-   A data leva o «daqui a três dias» colado, que é o que a data sozinha não
-   diz. E o imóvel tem um valor de recurso: o delProp apaga contratos e
-   movimentos em cascata mas não as visitas, e uma visita órfã tem de dizer
-   que o imóvel desapareceu, em vez de ficar sem sítio.
+   O imóvel tem um valor de recurso: o delProp apaga contratos e movimentos
+   em cascata mas não as visitas, e uma visita órfã tem de dizer que o imóvel
+   desapareceu, em vez de ficar sem sítio.
    Recebe: id — o id da visita.
    Devolve: o HTML do corpo, ou vazio se a visita já não existir. */
 function visFicha(id){
   const v=(db.visits||[]).find(x=>x.id===id);if(!v)return '';
-  const p=prop(v.propertyId);
-  const quando=(function(){
-    if(!v.date)return '';
-    const h=v.start?' · '+esc(v.start)+(v.end?'–'+esc(v.end):''):'';
-    const d=pzDias(v.date);
-    const rel=d===0?'hoje':d===1?'amanhã':d===-1?'ontem':(d>0?'daqui a '+d+' dias':'há '+(-d)+' dias');
-    return esc(dPT(v.date))+h+' · '+rel;
-  })();
-  return ficha([
-    {tipo:'nota',valor:esc(motivoRecusa(v.propertyId,'visit.add',v))},
-    {rotulo:'Quando',valor:quando},
-    {rotulo:'Imóvel',valor:esc(p?p.name:'imóvel apagado')},
-    v.roomId&&p?{rotulo:'Quarto',valor:esc(roomName(p,v.roomId))}:null,
-    {rotulo:'Quem vem',valor:esc(v.nomes||'')},
-    {rotulo:'Contacto',valor:esc(v.contacto||'')},
-    {rotulo:'Estado',valor:esc(VESTADO[v.estado]||v.estado||'')},
-    v.estado==='realizada'&&v.resultado?{rotulo:'Desfecho',valor:esc(VDESFECHO[v.resultado]||'')}:null,
-    String(v.notas||'').trim()?{tipo:'bloco',rotulo:'Comentários',valor:esc(v.notas).replace(/\n/g,'<br>')}:null,
-    v._createdBy&&v._createdBy!==meuId()?{rotulo:'Marcada por',valor:esc(nomeUtilizador(v._createdBy))}:null,
-  ]);
+  const p=prop(v.propertyId),nota=motivoRecusa(v.propertyId,'visit.add',v),selos=visSelos(v);
+  const contacto=String(v.contacto||'').trim(),notas=String(v.notas||'').trim();
+  /* converter é criar uma ficha de inquilino, que é dos Inquilinos: só com o
+     serviço ligado e a permissão (o mesmo critério do visOpcoes) */
+  const converte=v.estado==='realizada'&&v.resultado==='interessado'&&servicoLigado('tenants')&&pode(v.propertyId,'tenant.add');
+  const outras=p?(db.visits||[]).filter(x=>x.id!==v.id&&x.propertyId===v.propertyId&&x.estado!=='cancelada'&&x.date&&!visPassada(x))
+    .sort((a,b)=>((a.date||'')+(a.start||''))<((b.date||'')+(b.start||''))?-1:1).slice(0,4):[];
+  const quandoCurto=x=>{const d=pzDias(x.date);return (d===0?'Hoje':d===1?'Amanhã':visDataCurta(x.date))+(x.start?' às '+esc(x.start):'')};
+  return `<div class="vis-ficha">
+    ${nota?`<p class="hint">${esc(nota)}</p>`:''}
+    <div class="vis-topo"><p class="vis-quando num">${visQuando(v)}</p>${selos?`<div class="vis-selos">${selos}</div>`:''}</div>
+    ${converte?`<section class="vis-converte"><p class="vis-converte-tit">Há interesse em arrendar.</p>
+      <p>Cria a ficha de inquilino com o nome, o contacto e as notas desta visita. Depois, o contrato já a encontra.</p>
+      <button type="button" class="btn primary" data-toca="camada" data-click="visConverte('${jsq(v.id)}')">${ic('pessoaMais',18)} Converter em inquilino</button></section>`:''}
+    <section class="card vis-sec">
+      ${visKv('Imóvel',esc(p?(p.name||p.address||'imóvel'):'imóvel apagado'))}
+      ${v.roomId&&p?visKv('Quarto',esc(roomName(p,v.roomId))):''}
+      ${visKv('Contacto',esc(contacto),visLigacao(contacto))}
+      ${v._createdBy&&v._createdBy!==meuId()?visKv('Marcada por',esc(nomeUtilizador(v._createdBy))):''}
+    </section>
+    ${notas?`<section class="card vis-sec"><p class="lbl">Comentários</p><p class="vis-texto">${esc(notas).replace(/\n/g,'<br>')}</p></section>`:''}
+    ${outras.length?`<section class="card vis-sec vis-outras"><p class="lbl">Outras visitas a este imóvel</p>
+      <p class="small num">${outras.map(x=>quandoCurto(x)+' · '+esc(x.nomes||'(sem nome)')).join('<br>')}</p></section>`:''}
+  </div>`;
 }
 /* As opções de uma visita, iguais na ficha, no kebab e no toque longo. A
    ficha e o kebab põem-nas num menu() de onclick em texto; o toque longo
@@ -221,10 +348,13 @@ function visitModal(id,extra){
   onSave=()=>{
     visColhe();
     const recusa=motivoRecusa(visForm.propertyId,'visit.add',orig);if(recusa)return toast(recusa);
-    if(!visForm.nomes.trim())return toast('Escreve quem vem à visita.');
-    if(!visForm.propertyId)return toast('Escolhe o imóvel.');
-    if(!visForm.date)return toast('Escolhe a data.');
-    if(visForm.end&&visForm.start&&visForm.end<visForm.start)return toast('A hora de fim é antes da de início.');
+    /* o erro diz-se no campo (componentes.js:falhaCampo); no imóvel, no botão
+       do menu da casa — o input escondido do sel() não se vê nem toma o foco,
+       e escolher repinta o corpo (visPropMudou), o que larga o erro */
+    if(!visForm.nomes.trim())return falhaCampo('vi_nomes','Escreve quem vem à visita.');
+    if(!visForm.propertyId)return falhaCampo('selb_vi_prop','Escolhe o imóvel.');
+    if(!visForm.date)return falhaCampo('vi_date','Escolhe a data.');
+    if(visForm.end&&visForm.start&&visForm.end<visForm.start)return falhaCampo('vi_end','A hora de fim é antes da de início.');
     db.visits=db.visits||[];
     const i=db.visits.findIndex(x=>x.id===visForm.id);
     if(i<0)db.visits.push(visForm);else db.visits[i]=visForm;

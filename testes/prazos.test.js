@@ -289,6 +289,70 @@ describe('os prazos da AT', () => {
   });
 });
 
+/* O cartão da Visão geral (o canvas: «Prazos legais e fiscais», um dos três
+   cartões do «Pede atenção» no computador): linhas curtas — o que há a fazer,
+   de quem e quando, e o selo do que falta —, os quatro mais urgentes, e
+   «Ver todos» que abre o sino só com os prazos. Este cartão lê o dia real
+   (prazosAtivos sem data), por isso as datas são contadas a partir dele. */
+describe('o cartão «Prazos legais e fiscais»', () => {
+  test('o selo diz o que falta por extenso e na cor do contrato visual', () => {
+    assert.equal(app.pzQuando({ dias: -1 }), 'Passou há 1 dia');
+    assert.equal(app.pzQuando({ dias: -17 }), 'Passou há 17 dias');
+    assert.equal(app.pzQuando({ dias: 0 }), 'É hoje');
+    assert.equal(app.pzQuando({ dias: 1 }), 'Falta 1 dia');
+    assert.equal(app.pzQuando({ dias: 14 }), 'Faltam 14 dias');
+    assert.deepEqual([-3, 0, 7, 8, 30, 31].map((d) => app.pzSelo({ urg: app.pzUrg(d) })), ['red', 'red', 'red', 'amber', 'amber', 'grey']);
+  });
+
+  test('o título parte-se em o quê e de quem, com a data-alvo', () => {
+    assert.deepEqual({ ...app.pzPartes({ titulo: 'Comunicar a cessação à AT — Estúdio Arroios', alvo: '2026-09-30' }) },
+      { titulo: 'Comunicar a cessação à AT', onde: 'Estúdio Arroios · 30/09/2026' });
+    assert.deepEqual({ ...app.pzPartes({ titulo: 'Fim da taxa fixa — Crédito — T2 (Lisboa)', alvo: '2027-01-01' }) },
+      { titulo: 'Fim da taxa fixa — Crédito', onde: 'T2 (Lisboa) · 01/01/2027' }, 'parte no último travessão');
+    assert.deepEqual({ ...app.pzPartes({ titulo: 'Sem dono', alvo: '2026-01-02' }) }, { titulo: 'Sem dono', onde: '02/01/2026' });
+  });
+
+  test('os quatro mais urgentes, cada um com o selo, a porta e o ✕ de silenciar; «Ver os N» abre o sino nos prazos', () => {
+    const d = (n) => app.pzAddDias(app.pzHoje(), n);
+    monta({ end: d(50) });
+    app.db.tenants[0].ccValid = d(5);
+    app.db.properties[0].energyValid = d(20);
+    app.db.properties.push(app.normProp({ id: 'P2', name: 'T3 Coimbra', energyValid: d(80) }));
+    app.db.owners = [app.normPerson({ id: 'O1', name: 'Rui', ccValid: d(-3) })];
+    const lista = app.prazosAtivos();
+    assert.ok(lista.length >= 5, 'controlo: há mais de quatro na janela (' + lista.length + ')');
+    const h = app.prazosCard();
+    assert.match(h, /^<div class="card vg-cartao vg-prazos" id="pzCard">/);
+    assert.match(h, /<h3 class="title vg-tit">Prazos legais e fiscais<\/h3>/);
+    assert.match(h, new RegExp('data-toca="camada" data-click="notifModal\\(\'prazos\'\\)">Ver os ' + lista.length + '<'));
+    assert.equal((h.match(/<div class="vg-item">/g) || []).length, 4, 'quatro linhas');
+    assert.equal((h.match(/data-click="pzSilencia\('/g) || []).length, 4, 'cada uma com o seu ✕');
+    assert.match(h, /aria-label="Silenciar: Cartão de cidadão"/, 'o ✕ diz o que silencia');
+    assert.ok(h.indexOf('Passou há 3 dias') > -1 && h.indexOf('Passou há 3 dias') < h.indexOf('Faltam 5 dias'), 'pela ordem da urgência');
+    assert.doesNotMatch(h, /Faltam 50 dias|Faltam 80 dias/, 'os menos urgentes ficam para o «Ver os N»');
+    assert.match(h, /<span class="badge red">Passou há 3 dias<\/span>/);
+    assert.match(h, /<span class="badge amber">Faltam 20 dias<\/span>/);
+    assert.match(h, /<b>Cartão de cidadão<\/b><span class="small">Rui · /, 'o quê, e de quem com a data');
+    assert.match(h, /<button type="button" class="vg-item-abrir" data-toca="camada" data-click="personView\('owner','O1'\)">/, 'a linha abre a ficha da pessoa');
+    assert.doesNotMatch(h, /\sstyle=|\son[a-z]+=/);
+  });
+
+  test('com quatro ou menos, «Ver todos»; sem nenhum, nada; sem o serviço que abria, a linha não é botão', () => {
+    const d = (n) => app.pzAddDias(app.pzHoje(), n);
+    monta();
+    app.db.contracts = [];
+    assert.equal(app.prazosCard(), '', 'sem prazos não há cartão');
+    app.db.properties[0].energyValid = d(20);
+    assert.match(app.prazosCard(), />Ver todos</);
+    app.definirServicosDesligados(['properties']);
+    const h = app.prazosCard();
+    assert.match(h, /<div class="vg-item-abrir"><span class="vg-item-txt"><b>Certificado energético<\/b>/);
+    assert.doesNotMatch(h, /propView\(/);
+    assert.match(h, /data-click="pzSilencia\(/, 'o ✕ continua a silenciar');
+    app.definirServicosDesligados([]);
+  });
+});
+
 describe('silenciar', () => {
   test('cala a ocorrência; uma data nova traz o aviso de volta', () => {
     monta({ end: '2027-01-10' });

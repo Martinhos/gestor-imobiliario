@@ -130,16 +130,52 @@ describe('onde vive a rentabilidade', () => {
     assert.match(html, /Renda líquida de impostos \(estim\.\)/);
   });
 
-  test('a avaliação mostra os quatro rácios como KPI com explicação e evolução', () => {
+  test('a avaliação mostra os quatro rácios como KPI com explicação e evolução, no portefólio e na ficha do imóvel', () => {
     oitoRendas();
-    const html = app.vReports();
-    for (const r of ['Yield bruto', 'Cap rate', 'Sobre a aquisição', 'LTV']) {
-      assert.ok((html.match(new RegExp('class="label">' + r + '<', 'g')) || []).length >= 2, r + ' no portefólio e no imóvel');
+    /* com um imóvel só, o portefólio É esse imóvel: a página é logo a ficha dele */
+    let html = app.vReports();
+    for (const r of ['Yield bruto', 'Cap rate', 'Sobre a aquisição', 'LTV', 'Equity']) {
+      assert.equal((html.match(new RegExp('class="label">' + r + '<', 'g')) || []).length, 1, r + ' na ficha do imóvel');
     }
-    assert.ok((html.match(/class="card kpi evo"/g) || []).length >= 8, 'oito KPIs com evolução (4+4)');
+    assert.equal((html.match(/class="card kpi evo"/g) || []).length, 5, 'cinco KPIs com evolução (o Equity e os quatro rácios)');
+    assert.match(html, /kpiModal\('k\d+'\)" aria-label="Valor por rendimento, /, 'o valor por rendimento abre a evolução');
+    assert.match(html, /kpiModal\('k\d+'\)" aria-label="Diferença, /, 'e a diferença também');
+    assert.doesNotMatch(html, /Por imóvel/, 'sem tabela de uma linha');
+    /* com dois, o portefólio: os rácios dele e a tabela «Por imóvel», que abre a ficha de cada um */
+    app.db.properties.push(app.normProp({ id: 'v2', name: 'T1 Benfica', value: 150000, ownerIds: ['ana'] }));
+    html = app.vReports();
+    for (const r of ['Yield bruto', 'Cap rate', 'Sobre a aquisição', 'LTV']) {
+      assert.equal((html.match(new RegExp('class="label">' + r + '<', 'g')) || []).length, 1, r + ' no portefólio');
+    }
+    assert.equal((html.match(/class="card kpi evo"/g) || []).length, 4, 'os quatro rácios do portefólio com evolução');
+    assert.match(html, /<th>Imóvel<\/th><th class="u-ta-left">Ocupação<\/th><th>Valor<\/th><th>Renda anual<\/th><th>NOI anualizado<\/th><th>Yield<\/th><th>Cap rate<\/th><th>LTV<\/th><th>Cashflow<\/th>/);
+    assert.match(html, /data-click="repFoco\('v1'\)"/);
+    assert.match(html, /data-click="repFoco\('v2'\)"/);
+    const m = app.metrics(ANO, 'v1', { share: true });
+    assert.ok(html.includes('<td>' + app.pct(m.cap) + '</td>'), 'a linha traz o cap rate do imóvel');
+    assert.match(html, /Ana 60% · Bruno 40%/, 'os donos com a quota de cada um');
     assert.doesNotMatch(html, /Yield líquido \(cap rate\)/);
     assert.match(html, /Renda anual contratada/);
     assert.match(html, /anualizado/);
+    /* tocar numa linha põe o imóvel em foco, e a página passa a ser a ficha dele */
+    app.render = () => {};
+    app.repFoco('v1');
+    assert.equal(app.repProp, 'v1');
+    html = app.vReports();
+    assert.match(html, /<h2 class="ava-nome">T2<\/h2>/);
+    assert.match(html, /data-click="repAnaLimpar\(\);render\(\)" aria-label="Imóvel em foco: T2 \(limpar\)"/, 'e o chip do âmbito limpa-o');
+    app.repProp = '';
+  });
+
+  test('as ações da página e o yield exigido vivem na barra do âmbito', () => {
+    oitoRendas();
+    const html = app.vReports();
+    /* no telemóvel os rótulos encurtam-se (Partilhar, Exportar CSV): o resto vive num .ana-largo */
+    assert.ok(html.includes('data-click="shareReport()"><span>Partilhar<span class="ana-largo"> avaliação</span></span></button>'));
+    assert.ok(html.includes('data-click="downloadCsv()"><span>Exportar<span class="ana-largo"> movimentos (CSV)</span><span class="ana-curto"> CSV</span></span></button>'));
+    assert.match(html, /<label class="ana-pin"><span>Yield exigido<\/span><input[^>]*placeholder="Opcional"[^>]*data-change="capTargetSet\(this\.value\)"/);
+    assert.match(html, /Proprietário: todos/);
+    assert.ok(html.includes('Imóvel<span class="ana-largo"> em foco</span>: portefólio'));
   });
 
   test('evoRatio aceita o âmbito todo, um imóvel e um grupo', () => {
@@ -158,7 +194,67 @@ describe('onde vive a rentabilidade', () => {
     mov({ kind: 'loan', amount: 600, payType: 'prestacao', date: ANO + '-04-05' });
     mov({ kind: 'loan', amount: 30000, payType: 'amortizacao', date: ANO + '-04-20' });
     assert.match(app.repCard(p), /Amortizações antecipadas/);
-    assert.ok(app.vDashboard().includes('+' + app.euro(30000) + ' amortizados'));
-    assert.ok(app.vDashboard().includes('>' + app.euro(600) + '<'), 'as prestações não levam a amortização');
+    /* a visão geral escreve os fluxos com os cêntimos (painel-geral.js: o canvas
+       diz «+5 000,00 € amortizados»); a regra que se guarda aqui é a mesma */
+    assert.ok(app.vDashboard().includes('+' + app.euro2(30000) + ' amortizados'));
+    assert.ok(app.vDashboard().includes('>' + app.euro2(600) + '<'), 'as prestações não levam a amortização');
+  });
+});
+
+describe('o que a página mostra e faz', () => {
+  test('o selo da ocupação: por quartos cobalto, uso próprio cinzento, e um estado desconhecido cinzento', () => {
+    assert.equal(app.avaSelo({ key: 'parcial', label: '3/4 quartos' }), '', 'o cobalto é o .badge sem modificador');
+    assert.equal(app.avaSelo({ key: 'arrendado' }), 'in');
+    assert.equal(app.avaSelo({ key: 'vago' }), 'amber');
+    assert.equal(app.avaSelo({ key: 'proprio' }), 'grey');
+    assert.equal(app.avaSelo({ key: 'outra' }), 'grey');
+    assert.equal(app.avaSelo({ key: 'toString' }), 'grey', 'só as chaves do mapa');
+  });
+
+  test('na conta de exploração, o «−» e a cor só vão no que tem valor', () => {
+    const m = { income: 1000, op: 0, noi: 1000, loan: 0.4, amort: 0, cf: 999.6 };
+    let html = app.contaCard(m);
+    assert.doesNotMatch(html, /−/, 'sem despesas nem prestações não há «−0 €»');
+    assert.doesNotMatch(html, /class="(neg|prest)"/, 'nem a cor do que sai');
+    html = app.contaCard(Object.assign({}, m, { op: 250, loan: 600, cf: 150 }));
+    assert.ok(html.includes('<b class="neg">−' + app.euro(250) + '</b>'));
+    assert.ok(html.includes('<b class="prest">−' + app.euro(600) + '</b>'));
+  });
+
+  test('gravar o yield não tira o foco ao campo para onde o Tab foi', async () => {
+    const doc = app.document;
+    const seguinte = doc.getElementById('avaSeguinte');
+    seguinte.id = 'avaSeguinte';
+    let pintou = 0, focado = 0;
+    seguinte.focus = () => { focado++; doc.activeElement = seguinte; };
+    // o render troca a vista inteira: quem tinha o foco desaparece e ele cai no body
+    app.render = () => { pintou++; doc.activeElement = doc.body; };
+    doc.activeElement = doc.body;        // no change, o foco ainda vai a caminho do campo seguinte
+    app.capTargetSet('6');
+    assert.equal(app.db.settings.capTarget, 6, 'grava já');
+    assert.equal(pintou, 0, 'o redesenho espera que o foco assente');
+    doc.activeElement = seguinte;        // o Tab acabou de o levar ao campo seguinte
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(pintou, 1, 'redesenha uma vez');
+    assert.equal(focado, 1, 'e devolve o foco ao campo seguinte');
+    assert.match(app.vReports(), /<input id="avaYield" [^>]*data-change="capTargetSet\(this\.value\)"/, 'o campo do yield tem id, para o foco lhe voltar');
+  });
+
+  test('a explicação do herói diz o anualizado uma vez só', () => {
+    oitoRendas();
+    const m = app.metrics(ANO, 'v1', { share: true }), v = app.valuationOf(m.noiAnual, m.value);
+    const html = app.avaHeroi(m, v.valuation, v.diff, null);
+    assert.equal(html.split('o resultado até hoje é anualizado').length - 1, 1);
+    assert.match(html, /O anualizado é ×12 sobre os meses decorridos\./);
+  });
+
+  test('as hipotecas: os números e o gráfico da dívida lado a lado; o total dos contratos só na primeira célula', () => {
+    p.loans = [app.normLoan({ id: 'l1', outstanding: 100000, years: 30, rate: 3 })];
+    const html = app.repCard(p);
+    assert.match(html, /<div class="ava-hip"><div><div class="stat">[\s\S]*Imposto do selo até ao fim[\s\S]*?<\/div><\/div>\s*<div class="chartbox/, 'os números numa coluna e o gráfico noutra');
+    app.db.tenants.push(app.normPerson({ id: 't1', name: 'Tiago' }));
+    app.db.contracts.push(app.normContract({ id: 'C1', propertyId: 'v1', tenantIds: ['t1'], rent: 900, start: (ANO - 1) + '-01-01', active: true }));
+    const comContrato = app.repCard(p);
+    assert.match(comContrato, /<tr class="ana-total"><td><b>Total mensal<\/b><\/td><td><\/td>/, 'a célula presa ao rolar não leva duas colunas por cima dos valores');
   });
 });

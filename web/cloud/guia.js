@@ -72,25 +72,45 @@ CW.guiaSeguinte = function () {
   render();
 };
 
-// fecha e remove o cartão do tutorial, sem o marcar como visto
+// fecha e remove o cartão do tutorial, sem o marcar como visto; a página e
+// as janelas deixam de lhe guardar espaço (as classes do guiaAjustar saem)
 // Devolve: nada — remove o cartão do DOM.
 CW.guiaFechar = function () {
   guia = null;
   var el = document.getElementById('cwGuia');
   if (el) el.remove();
+  var corpo = document.body;
+  if (corpo && corpo.classList) { corpo.classList.remove('com-guia'); corpo.classList.remove('guia-sobre'); }
 };
 
-/* Com uma janela aberta, o cartão encosta ao topo.
+/* Com uma janela aberta, o cartão encosta ao topo, e a janela fica abaixo
+   dele.
 
    Ficava por baixo da janela e desaparecia: entrava-se nas definições para
-   preencher o perfil e o tutorial sumia, sem forma de continuar. Agora passa
-   por cima — e muda para o topo, senão tapava os botões de guardar e
-   cancelar, que estão em baixo.
-   Devolve: nada — liga ou desliga a classe 'sobre-janela' no cartão. */
+   preencher o perfil e o tutorial sumia, sem forma de continuar. Passou por
+   cima — e para o topo, senão tapava os botões de guardar e cancelar, que
+   estão em baixo. Lá em cima tapava o cabeçalho da janela: o título, o ✕ de
+   fechar e o primeiro campo. Por isso, enquanto ele lá está, o body leva a
+   classe 'guia-sobre' e a janela começa abaixo do cartão (no telemóvel e no
+   tablet, onde ele ocupa a largura; estilos.css, secção 1.3.9).
+   Sem janela, o cartão flutua por cima do fim da página: a classe 'com-guia'
+   dá à página espaço em baixo para o último registo sair de trás dele, e o
+   tutorial pede precisamente para se mexer na app por baixo.
+   As duas reservas usam a altura do cartão, medida e não adivinhada (o texto
+   de cada passo tem o seu tamanho), na variável --guia-alto do body. Mede-se
+   o offsetHeight, que não conta a translação da entrada (guiaEntra).
+   Devolve: nada — liga ou desliga as classes e escreve a altura. */
 function guiaAjustar() {
   var el = document.getElementById('cwGuia');
   if (!el) return;
-  el.classList.toggle('sobre-janela', !!document.querySelector('.modal.open'));
+  var sobre = !!document.querySelector('.modal.open');
+  el.classList.toggle('sobre-janela', sobre);
+  var corpo = document.body;
+  if (!corpo || !corpo.classList) return;
+  corpo.classList.add('com-guia');
+  corpo.classList.toggle('guia-sobre', sobre);
+  var alto = Number(el.offsetHeight) || 0;
+  if (alto > 0 && corpo.style && typeof corpo.style.setProperty === 'function') corpo.style.setProperty('--guia-alto', Math.ceil(alto) + 'px');
 }
 
 ['openModal', 'closeAllModals', 'closeModal'].forEach(function (nome) {
@@ -105,12 +125,20 @@ function guiaAjustar() {
 
 /* Desenha (ou redesenha) o cartão flutuante com o passo atual: cria o #cwGuia
    se ainda não existir, muda para o ecrã que o passo aponta (p.ir) e escreve
-   título, texto e botões. O texto do passo é HTML de confiança — vem de
-   TUTORIAIS, escrito aqui —, por isso só o título passa pelo esc.
+   o cartão do canvas (M-Tutorial): o azul-noite da barra lateral, por cima
+   de tudo o que é claro, com «<tutorial> · passo N de M» e o ✕ à cabeça, o
+   título do passo, o texto, uma fita com um traço por passo (os feitos e o
+   atual acesos) e «Anterior» / «Seguinte» lado a lado — no último,
+   «Terminar». No primeiro passo não há «Anterior», e o «Seguinte» fica com
+   a largura toda. É uma região com nome (o leitor de ecrã diz «Tutorial:
+   <nome>»), e a fita é só desenho: o número já está escrito. O texto do
+   passo é HTML de confiança — vem de TUTORIAIS, escrito aqui —, por isso só
+   o título passa pelo esc.
+   Recebe: nada (lê o tutorial aberto, guia).
    Devolve: nada — escreve o cartão no DOM. */
 function guiaPintar() {
   if (!guia) return;
-  var p = guia.passos[guia.i], n = guia.passos.length;
+  var p = guia.passos[guia.i], n = guia.passos.length, t = TUTORIAIS[guia.id] || { titulo: '' };
   /* Um passo leva ao ecrã certo, e mais nada. Abrir janelas por conta própria
      era desorientador — a janela aparecia entre um passo e o seguinte, sem
      ninguém a ter pedido, e tapava o próprio tutorial. Quem quiser preencher
@@ -123,33 +151,39 @@ function guiaPintar() {
     el.id = 'cwGuia';
     document.body.appendChild(el);
   }
-  guiaAjustar();
+  var fita = '';
+  for (var k = 0; k < n; k++) fita += '<span' + (k <= guia.i ? ' class="on"' : '') + '></span>';
   el.innerHTML =
-    '<div class="card guia-cartao">' +
-      '<div class="row-between u-ai-flex-start u-g-10px">' +
-        '<div class="u-minw-0">' +
-          '<div class="small u-c-v-accent u-fw-600">Passo ' + (guia.i + 1) + ' de ' + n + '</div>' +
-          '<div class="title u-mt-2px">' + esc(p.titulo) + '</div>' +
-        '</div>' +
-        '<button type="button" class="iconbtn" aria-label="Fechar" data-toca="camada" data-click="CW.guiaFechar()">' + ic('x', 18) + '</button>' +
+    '<section class="guia-cartao" role="region" aria-label="' + esc('Tutorial: ' + t.titulo) + '">' +
+      '<div class="guia-cab">' +
+        '<p class="guia-conta num">' + esc(t.titulo) + ' · passo ' + (guia.i + 1) + ' de ' + n + '</p>' +
+        '<button type="button" class="guia-fechar" aria-label="Fechar o tutorial" data-toca="camada" data-click="CW.guiaFechar()">' + ic('x', 18) + '</button>' +
       '</div>' +
-      '<div class="hint u-mt-9px">' + p.texto + '</div>' +
-      '<div class="toolbar u-mt-13px">' +
+      '<h2 class="guia-tit">' + esc(p.titulo) + '</h2>' +
+      '<p class="guia-txt">' + p.texto + '</p>' +
+      '<div class="guia-fita" aria-hidden="true">' + fita + '</div>' +
+      '<div class="guia-botoes">' +
         (guia.i > 0
-          ? '<button class="btn sm" data-toca="vista" data-click="CW.guiaAnterior()">' + ic('chev', 14) + ' Anterior</button>'
+          ? '<button type="button" class="btn guia-ant" data-toca="vista" data-click="CW.guiaAnterior()">Anterior</button>'
           : '') +
-        '<button class="btn sm primary" data-toca="vista" data-click="CW.guiaSeguinte()">' +
+        '<button type="button" class="btn guia-seg" data-toca="vista" data-click="CW.guiaSeguinte()">' +
           (guia.i < n - 1 ? 'Seguinte' : 'Terminar') + '</button>' +
-        '<button class="btn sm u-ml-auto" data-toca="camada" data-click="CW.guiaFechar()">Fechar</button>' +
       '</div>' +
-    '</div>';
+    '</section>';
+  /* depois de escrito: a altura que as reservas usam é a deste passo */
+  guiaAjustar();
 }
 
 /* ------------------------------------------------------------- os tutoriais */
 
+/* Cada tutorial: o título, o resumo curto que a Ajuda mostra no mosaico dele
+   (cloud/ajuda.js:tutoriaisNaAjuda — cabe em duas linhas de 156px) e os
+   passos, cada um com o título, o texto (HTML de confiança) e, quando o
+   passo é sobre um ecrã, o separador para onde leva (ir). */
 var TUTORIAIS = {
   perfil: {
     titulo: 'Preencher o teu perfil',
+    resumo: 'Os teus dados nos contratos',
     passos: [
       {
         titulo: 'Porquê começar por aqui',
@@ -172,6 +206,7 @@ var TUTORIAIS = {
   },
   imoveis: {
     titulo: 'Adicionar o primeiro imóvel',
+    resumo: 'A base de tudo o resto',
     passos: [
       {
         titulo: 'Um imóvel de cada vez',
@@ -180,14 +215,14 @@ var TUTORIAIS = {
         ir: 'properties',
       },
       {
-        titulo: 'Para arrendar ou para viver',
-        texto: 'Se escolheres <b>investimento</b>, a app passa a calcular rentabilidade e a pedir contratos. ' +
-          'Se for <b>uso próprio</b>, fica de fora dessas contas.',
+        titulo: 'Para render ou para viver?',
+        texto: 'Ao criar o imóvel, escolhe <b>Arrendamento</b> se é para render, ou <b>Uso próprio</b> se vives lá. ' +
+          'Só os de arrendamento pedem contratos e entram nas contas da rentabilidade.',
       },
       {
         titulo: 'Valor de mercado e de aquisição',
         texto: 'São o que dá as mais-valias e o retorno. Se ainda não souberes o de mercado, ' +
-          'põe o de aquisição nos dois e corriges depois.',
+          'escreve o de aquisição nos dois e corriges depois.',
       },
       {
         titulo: 'Se tiveres crédito',
@@ -198,6 +233,7 @@ var TUTORIAIS = {
   },
   contratos: {
     titulo: 'Registar um contrato',
+    resumo: 'O contrato gera a renda',
     passos: [
       {
         titulo: 'O contrato liga o imóvel ao inquilino',
@@ -219,11 +255,12 @@ var TUTORIAIS = {
   },
   movimentos: {
     titulo: 'Registar movimentos',
+    resumo: 'O que entra e o que sai',
     passos: [
       {
         titulo: 'O que entra e o que sai',
         texto: 'Rendas recebidas, despesas pagas, prestações do crédito. É daqui que saem todos ' +
-          'os números da vista geral.',
+          'os números da Visão geral.',
         ir: 'transactions',
       },
       {
@@ -240,11 +277,12 @@ var TUTORIAIS = {
   },
   visitas: {
     titulo: 'Marcar uma visita',
+    resumo: 'Quem vem, onde e quando',
     passos: [
       {
         titulo: 'Onde se marca',
         texto: 'Estás nas <b>Visitas</b>. Toca no <b>+</b> (ou em <b>Marcar visita</b>, com a lista vazia). ' +
-          'Quem colabora tem o mesmo botão na vista geral e na ficha do imóvel.',
+          'Quem colabora tem o mesmo botão na Visão geral e na ficha do imóvel.',
         ir: 'visits',
       },
       {
@@ -279,10 +317,15 @@ function euSou() {
    deixa (feito quando há uma visita criada por si). Sem sessão o passo do
    perfil salta — não há perfil de ninguém para preencher — e os outros
    ficam: a jornada da vista geral (jornadaInicial) serve quem ainda não
-   entrou. Cada passo traz o rótulo curto da fita (rotulo), o porquê, a
-   ação (act) que o botão "Fazer agora" dispara e a família dela (toca:
-   'camada' abre uma janela, 'ecra' muda de ecrã).
-   Devolve: os passos aplicáveis (array de {id, rotulo, titulo, porque, feito, toca, act}). */
+   entrou. Cada passo traz o título, o porquê (o que se lê enquanto está por
+   fazer), o que já se fez (feitoTxt, o que se lê riscado), a ação (act) do
+   botão do passo atual com o rótulo dele (botao: o verbo do que abre, como
+   no canvas — «Adicionar imóvel», e não um «Fazer agora» que não diz o
+   quê), a família da ação (toca: 'camada' abre uma janela, 'ecra' muda de
+   ecrã) e por onde se começa (fase), para a frase das boas-vindas.
+   Recebe: nada (lê a base local, a sessão e os serviços ligados).
+   Devolve: os passos aplicáveis (array de {id, titulo, porque, feitoTxt,
+   feito, botao, mais, toca, act, fase}). */
 function passos() {
   var eu = euSou();
   // só colaboradora (souSoColaborador, web/app/acessos.js): os passos de dono não lhe dizem respeito
@@ -294,59 +337,73 @@ function passos() {
     return !(db.contracts || []).some(function (c) { return c.propertyId === p.id; });
   });
   var podeMovimentos = !colab || casasComo('tx.add').length > 0;
+  var nImoveis = (db.properties || []).length, nMovs = (db.transactions || []).length;
   return [
     {
       id: 'perfil',
-      rotulo: 'Perfil',
       titulo: 'Preenche o teu perfil',
       porque: 'Os teus dados entram nos contratos que a app gera.',
+      feitoTxt: eu && eu.name ? 'Nome e NIF preenchidos.' : 'NIF preenchido.',
       feito: !!(eu && eu.nif),
       salta: colab || !CW.user,
+      botao: 'Preencher o perfil',
       toca: 'camada',
       act: 'CW.editProfile()',
+      fase: 'pelo teu perfil',
     },
     {
       id: 'imoveis',
-      rotulo: 'Imóveis',
       titulo: 'Adiciona os teus imóveis',
-      porque: 'É a base de tudo o resto.',
-      feito: (db.properties || []).length > 0,
+      porque: 'É a base de tudo o resto: contratos, rendas, despesas e o IRS partem daqui.',
+      feitoTxt: nImoveis === 1 ? '1 imóvel adicionado.' : nImoveis + ' imóveis adicionados.',
+      feito: nImoveis > 0,
       // um passo de um serviço desligado nesta conta não se propõe: abriria um formulário que o servidor recusa
       salta: colab || !servicoLigado('properties'),
+      botao: 'Adicionar imóvel',
+      mais: true,
       toca: 'camada',
       act: 'propModal()',
+      fase: 'pelos imóveis',
     },
     {
       id: 'contratos',
-      rotulo: 'Contratos',
       titulo: 'Regista os contratos',
       porque: semContrato.length
         ? semContrato.length + (semContrato.length === 1 ? ' imóvel para arrendar ainda sem contrato.' : ' imóveis para arrendar ainda sem contrato.')
         : 'Para as rendas passarem a aparecer sozinhas.',
-      feito: (db.properties || []).length > 0 && !semContrato.length,
+      feitoTxt: 'Os imóveis para arrendar já têm contrato.',
+      feito: nImoveis > 0 && !semContrato.length,
       salta: colab || !arrendar.length || !servicoLigado('contracts'),   // só para uso próprio, só colaborador, ou sem os Contratos: não se aplica
+      botao: 'Adicionar contrato',
+      mais: true,
       toca: 'camada',
       act: 'ctModal()',
+      fase: 'pelos contratos',
     },
     {
       id: 'visitas',
-      rotulo: 'Visita',
       titulo: 'Marca a primeira visita',
       porque: 'Quem vem, a que imóvel e quando — o dono vê-a logo.',
+      feitoTxt: 'Já marcaste uma visita.',
       feito: visitaMinha,
       salta: !colab || !casasComo('visit.add').length || !servicoLigado('visits'),
+      botao: 'Marcar visita',
+      mais: true,
       toca: 'camada',
       act: 'visitModal()',
+      fase: 'pela primeira visita',
     },
     {
       id: 'movimentos',
-      rotulo: 'Movimentos',
       titulo: 'Confirma os primeiros movimentos',
-      porque: 'É daqui que saem os números da vista geral.',
-      feito: (db.transactions || []).length > 0,
+      porque: 'É daqui que saem os números da Visão geral.',
+      feitoTxt: nMovs === 1 ? '1 movimento registado.' : nMovs + ' movimentos registados.',
+      feito: nMovs > 0,
       salta: !podeMovimentos || !servicoLigado('transactions'),
+      botao: 'Ir para os movimentos',
       toca: 'ecra',
       act: "go('transactions')",
+      fase: 'pelos movimentos',
     },
   ].filter(function (p) { return !p.salta; });
 }
@@ -365,73 +422,131 @@ function passosDispensados() {
   try { return localStorage.getItem(LS_PASSOS) === '1'; } catch (e) { return false; }
 }
 
-/* O cartão de primeiros passos, que é a jornada: a fita dos passos — um
-   círculo por passo, com o visto nos feitos e o número nos outros, e o
-   rótulo curto por baixo — e, por baixo dela, SÓ o passo atual (o primeiro
-   por fazer), com o título, o porquê, o "Fazer agora" e o botão do tutorial.
-   Era uma lista de quatro cartões, cada um com os seus dois botões, e numa
-   conta nova ocupava o ecrã inteiro antes de se ver fosse o que fosse: a
-   fita diz o mesmo em duas linhas, e a pessoa só tem de decidir uma coisa.
-   Vai ao topo da vista geral e, enquanto não há movimentos, É a vista
-   (jornadaInicial). Devolve '' quando foi dispensado ou já está tudo feito
-   (o cartão não fica pendurado a dar os parabéns). Não exige sessão: sem
-   ela os passos são os mesmos menos o do perfil (passos).
-   A fita é uma <ol> e não um desenho: um leitor de ecrã lê «lista, 4
+/* O passo atual e a lista, ou null quando não há cartão a mostrar
+   (dispensado, ou tudo feito — o cartão não fica pendurado a dar os
+   parabéns).
+   Recebe: nada.
+   Devolve: {ps, atual, nFeitos} ou null. */
+function estadoDosPassos() {
+  if (passosDispensados()) return null;
+  var ps = passos(), atual = -1, nFeitos = 0;
+  for (var k = 0; k < ps.length; k++) {
+    if (ps[k].feito) nFeitos++;
+    else if (atual < 0) atual = k;
+  }
+  return atual < 0 ? null : { ps: ps, atual: atual, nFeitos: nFeitos };
+}
+
+/* Uma linha da lista dos passos (o .st do canvas M-PrimeirosPassos): o
+   círculo — o visto num verde suave nos feitos, o número cheio de cobalto
+   no atual, o número em cinzento nos que faltam —, o título e a frase. O
+   feito lê-se riscado, com o que já se fez; o atual tem a faixa cobalto
+   suave, o título maior, o porquê, e os dois botões: a ação do passo e o
+   tutorial dele («Como se faz · N passos», ou «Rever o tutorial» depois de
+   visto até ao fim). Só o atual tem botões: a pessoa só tem de decidir uma
+   coisa de cada vez.
+   Recebe: q — o passo (de passos()); i — a posição dele; atual — o índice
+   do passo atual; f — os tutoriais vistos (feitos()).
+   Devolve: o HTML do <li> (texto). */
+function linhaDoPasso(q, i, atual, f) {
+  var agora = i === atual;
+  var circulo = q.feito
+    ? '<span class="jornada-n" role="img" aria-label="Feito">' + ic('check', 16) + '</span>'
+    : '<span class="jornada-n">' + (i + 1) + '</span>';
+  var corpo = '<b class="jornada-l">' + esc(q.titulo) + '</b>';
+  if (q.feito) corpo += '<span class="small">' + esc(q.feitoTxt) + '</span>';
+  else if (!agora) corpo += '<span class="small">' + esc(q.porque) + '</span>';
+  else {
+    var t = TUTORIAIS[q.id];
+    corpo += '<span class="jornada-porque">' + esc(q.porque) + '</span>' +
+      '<span class="jornada-acoes">' +
+        '<button type="button" class="btn primary" data-toca="' + q.toca + '" data-click="' + q.act + '">' +
+          (q.mais ? ic('plus', 18) : '') + esc(q.botao) + '</button>' +
+        (t ? '<button type="button" class="btn" data-toca="ecra" data-click="CW.guiaAbrir(\'' + q.id + '\')">' +
+          (f[q.id] ? 'Rever o tutorial' : 'Como se faz · ' + t.passos.length + ' passos') + '</button>' : '') +
+      '</span>';
+  }
+  return '<li class="jornada-passo' + (q.feito ? ' feito' : agora ? ' atual' : '') + '"' + (agora ? ' aria-current="step"' : '') + '>' +
+    circulo + '<span class="jornada-txt">' + corpo + '</span></li>';
+}
+
+/* As boas-vindas da conta nova (o topo do canvas M-PrimeirosPassos): o
+   mosaico cobalto por cima, num cartão azul-noite, com o olá pelo primeiro
+   nome da conta e a frase que diz de onde saem os números e por onde se
+   começa — ou se continua, quando já há passos feitos.
+   Recebe: e — o estado dos passos (estadoDosPassos).
+   Devolve: o HTML da secção (texto). */
+function boasVindas(e) {
+  var nome = String((CW.user && CW.user.name) || '').trim().split(/\s+/)[0];
+  var p = e.ps[e.atual];
+  return '<section class="pp-boas" aria-label="Boas-vindas">' +
+    '<div class="pp-boas-mosaico imv-mosaico imv-t0" aria-hidden="true"></div>' +
+    '<div class="pp-boas-txt">' +
+      '<h2>Olá' + (nome ? ', ' + esc(nome) : '') + '. Vamos adicionar as tuas casas à app.</h2>' +
+      '<p>Os números da Visão geral saem dos movimentos. ' + (e.nFeitos ? 'Continua ' : 'Começa ') + esc(p.fase) + '; o resto vem a seguir.</p>' +
+    '</div></section>';
+}
+
+/* O cartão de primeiros passos, como no canvas (M-PrimeirosPassos): o
+   título com a conta do que está feito («1 de 4 feitos»), uma barra verde
+   que a diz, e um passo por linha (linhaDoPasso) — o atual em destaque, com
+   a ação e o tutorial. Por baixo, fora do cartão, «Dispensar os primeiros
+   passos». Vai ao topo da vista geral e, enquanto não há movimentos, É a
+   vista (jornadaInicial, que lhe junta as boas-vindas). Devolve '' quando
+   foi dispensado ou já está tudo feito. Não exige sessão: sem ela os passos
+   são os mesmos menos o do perfil (passos).
+   A lista é uma <ol> e não um desenho: um leitor de ecrã lê «lista, 4
    itens», o passo atual leva aria-current="step", e o círculo de um passo
    feito anuncia-se «Feito» (role="img") — o número dos outros lê-se tal
-   e qual, e o rótulo a seguir.
+   e qual, e o título a seguir. A barra é um progressbar com o mesmo número.
+   Era uma fita horizontal, com um traço de círculo a círculo que passava
+   por cima do círculo do passo atual; numa lista não há traço que cruzar,
+   e o círculo do atual é cheio.
+   Recebe: comBoasVindas (opcional) — verdadeiro para abrir com as
+   boas-vindas (a jornada no lugar da vista).
    Devolve: o HTML do cartão (string); '' quando não há nada a mostrar. */
-function cartaoPassos() {
-  if (passosDispensados()) return '';
-  var ps = passos(), atual = -1;
-  for (var k = 0; k < ps.length; k++) if (!ps[k].feito) { atual = k; break; }
-  if (atual < 0) return '';
-  var p = ps[atual], f = feitos();
-
-  return '<div class="card u-mb-14px">' +
-    '<div class="row-between u-ai-flex-start">' +
-      '<div><div class="title">Primeiros passos</div>' +
-      '<div class="small">Passo ' + (atual + 1) + ' de ' + ps.length + ' · sugestões, não obrigações</div></div>' +
-      '<button type="button" class="iconbtn" aria-label="Dispensar" data-toca="vista" data-click="CW.passosFora()">' + ic('x', 18) + '</button>' +
-    '</div>' +
-    '<ol class="jornada" role="list">' +
-    ps.map(function (q, i) {
-      var estado = q.feito ? ' feito' : (i === atual ? ' atual' : '');
-      return '<li class="jornada-passo' + estado + '"' + (i === atual ? ' aria-current="step"' : '') + '>' +
-        (q.feito
-          ? '<span class="jornada-n" role="img" aria-label="Feito">' + ic('check', 13) + '</span>'
-          : '<span class="jornada-n">' + (i + 1) + '</span>') +
-        '<span class="jornada-l">' + esc(q.rotulo) + '</span>' +
-        '</li>';
-    }).join('') +
-    '</ol>' +
-    '<div class="jornada-agora"><b>' + esc(p.titulo) + '</b>' +
-      '<span class="small u-d-block">' + esc(p.porque) + '</span>' +
-      '<div class="toolbar u-m-9px-0-0">' +
-        '<button class="btn sm primary" data-toca="' + p.toca + '" data-click="' + p.act + '">Fazer agora</button>' +
-        '<button class="btn sm" data-toca="ecra" data-click="CW.guiaAbrir(\'' + p.id + '\')">' +
-          (f[p.id] ? 'Rever o tutorial' : 'Como se faz') + '</button>' +
-      '</div></div>' +
+function cartaoPassos(comBoasVindas) {
+  var e = estadoDosPassos();
+  if (!e) return '';
+  var f = feitos(), n = e.ps.length;
+  var pc = Math.round(e.nFeitos * 1000 / n) / 10;
+  return '<div class="pp-jornada' + (comBoasVindas ? ' pp-com-boas' : '') + '">' +
+    (comBoasVindas ? boasVindas(e) : '') +
+    '<section class="card pp-cartao" aria-labelledby="ppTitulo">' +
+      '<div class="pp-cab">' +
+        '<h2 id="ppTitulo">Primeiros passos</h2>' +
+        '<span class="small num">' + e.nFeitos + ' de ' + n + ' feitos</span>' +
+      '</div>' +
+      '<div class="pp-barra" role="progressbar" aria-labelledby="ppTitulo" aria-valuemin="0" aria-valuemax="' + n + '" aria-valuenow="' + e.nFeitos + '" aria-valuetext="' + e.nFeitos + ' de ' + n + ' feitos">' +
+        '<span data-largura="' + pc + '"></span></div>' +
+      '<ol class="jornada" role="list">' +
+        e.ps.map(function (q, i) { return linhaDoPasso(q, i, e.atual, f); }).join('') +
+      '</ol>' +
+    '</section>' +
+    '<button type="button" class="btn ghost pp-fora" data-toca="vista" data-click="CW.passosFora()">Dispensar os primeiros passos</button>' +
     '</div>';
 }
 
 /* A jornada no lugar da vista geral. Enquanto não há movimentos, a vista
    geral eram quatro indicadores a 0 € e dois gráficos vazios por baixo do
    cartão dos passos — números que não dizem nada e ocupam o ecrã todo. Sem
-   movimentos, a vista É o cartão dos passos (painel-geral.js:vDashboard
-   pergunta aqui), mais o portefólio quando há imóveis; os indicadores voltam
-   com o primeiro movimento. Não substitui a vista a quem só colabora (o topo
-   dele é o «O que podes fazer», e as contas não são dele), nem a quem
-   dispensou o cartão, nem quando já não há passos por fazer — nesses casos
-   devolve '' e a vista geral fica como sempre.
-   Devolve: o HTML do cartão (string), ou '' quando a jornada não substitui a vista. */
+   movimentos, a vista É o cartão dos passos com as boas-vindas por cima
+   (painel-geral.js:vDashboard pergunta aqui), mais o portefólio quando há
+   imóveis; os indicadores voltam com o primeiro movimento. Não substitui a
+   vista a quem só colabora (o topo dele é o «O que podes fazer», e as
+   contas não são dele), nem a quem dispensou o cartão, nem quando já não há
+   passos por fazer — nesses casos devolve '' e a vista geral fica como
+   sempre.
+   Recebe: nada.
+   Devolve: o HTML da jornada (string), ou '' quando ela não substitui a vista. */
 function jornadaInicial() {
   if ((db.transactions || []).length || souSoColaborador()) return '';
-  return cartaoPassos();
+  return cartaoPassos(true);
 }
 
 /* Todos os tutoriais, para quem os quiser rever. Vive aqui e não na ajuda
    porque é aqui que estão — a ajuda só os mostra.
+   Recebe: nada.
    Devolve: um resumo por tutorial (array de {id, titulo, passos, resumo, visto}). */
 CW.listaDeTutoriais = function () {
   var f = feitos();
@@ -439,7 +554,7 @@ CW.listaDeTutoriais = function () {
     var t = TUTORIAIS[id];
     return {
       id: id, titulo: t.titulo, passos: t.passos.length,
-      resumo: t.passos[0].texto.replace(/<[^>]+>/g, '').slice(0, 90) + '…',
+      resumo: t.resumo || t.passos[0].texto.replace(/<[^>]+>/g, '').slice(0, 90) + '…',
       visto: !!f[id],
     };
   });

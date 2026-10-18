@@ -4,7 +4,7 @@
 // capital com elas — como se fossem confirmadas uma a uma.
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { carregarApp, limpar, perto, repor } from './arnes.js';
+import { carregarApp, limpar, perto, repor, igual } from './arnes.js';
 
 /* O dia em que a app vive: as funções puras recebem-no, e as outras leem-no
    do relógio da app — o que cada teste prova não muda com o dia em que a
@@ -318,5 +318,55 @@ describe('perguntar e inserir', () => {
     assert.equal(app.loanRecOf(l()), undefined, 'sem dívida não há recorrência');
     desfazer();
     perto(l().outstanding, 100000); assert.ok(app.loanRecOf(l()), 'anular repõe a recorrência');
+  });
+});
+
+describe('a faixa de quem vem de trás, na página dos Planeados', () => {
+  /* um planeado à mão que começou em junho: a 6 de setembro faltam os
+     movimentos de 5 de junho, julho, agosto e setembro */
+  const limpeza = (extra = {}) => {
+    app.db.recurring.push(app.normRec(Object.assign({ id: 'R1', name: 'Limpeza das escadas', every: 'month', next: '2026-06-05',
+      tx: { kind: 'expense', label: 'Limpeza das escadas', amount: 30 } }, extra)));
+    return app.db.recurring.find((r) => r.id === 'R1');
+  };
+
+  test('os candidatos: dois ou mais períodos em falta, que avisam, e nunca as prestações', () => {
+    limpeza();
+    app.db.recurring.push(app.normRec({ id: 'R2', name: 'Só um', every: 'month', next: '2026-09-01', tx: { kind: 'expense', label: 'Só um', amount: 5 } }));
+    app.db.recurring.push(app.normRec({ id: 'R3', name: 'Calado', every: 'month', next: '2026-05-01', muted: true, tx: { kind: 'expense', label: 'Calado', amount: 5 } }));
+    app.db.recurring.push(app.normRec({ id: 'R4', name: 'Prestação', every: 'month', next: '2026-04-01', tx: { kind: 'loan', label: 'Prestação', amount: 400 } }));
+    const c = app.recRetroCandidatos();
+    igual(c.map((x) => x.r.id), ['R1']);
+    igual(c[0].datas, ['2026-06-05', '2026-07-05', '2026-08-05', '2026-09-05']);
+  });
+
+  test('a faixa diz desde quando, o que falta, quanto e com que etiqueta — só com a nuvem, que é quem regista', () => {
+    limpeza();
+    assert.equal(app.recRetroFaixa(), '', 'sem o CW.fillMissed não há faixa');
+    app.CW = { fillMissed() {} };
+    const f = app.recRetroFaixa();
+    assert.match(f, /«Limpeza das escadas» vem de trás/);
+    assert.match(f, /Começa a 05\/06\/2026: faltam jun, jul, ago e set\. Registamos 4 movimentos de 30,00\s€ \(120,00\s€\), com a etiqueta «Estimativa»\?/);
+    assert.match(f, /class="btn sm primary" data-toca="camada" data-click="CW\.fillMissed\('R1'\)">Registar os 4</);
+    assert.match(f, /data-click="recRetroAgoraNao\('R1'\)">Agora não</);
+    assert.match(app.vRecurring(), /«Limpeza das escadas» vem de trás/, 'na página, por cima dos por confirmar');
+  });
+
+  test('«Agora não» guarda-se no aparelho e a faixa só volta a este se passarem a faltar mais', () => {
+    const r = limpeza();
+    app.CW = { fillMissed() {} };
+    app.recRetroAgoraNao('R1');
+    assert.equal(app.recRetroFaixa(), '');
+    igual(JSON.parse(app.localStorage.getItem('gi_retro_agora_nao')), { R1: 4 });
+    r.next = '2026-05-05';   // um mês mais atrás: passam a faltar cinco
+    assert.match(app.recRetroFaixa(), /Registar os 5/);
+  });
+
+  test('os períodos numa frase: os meses pelo nome até seis do mesmo ano, com o ano se não é este; senão a contagem', () => {
+    assert.equal(app.recRetroMeses(['2025-10-01', '2025-11-01', '2025-12-01'], 'month'), 'faltam out, nov e dez de 2025');
+    assert.equal(app.recRetroMeses(['2025-12-01', '2026-01-01'], 'month'), 'faltam 2 meses, de 01/12/2025 a 01/01/2026', 'a atravessar o ano, a contagem');
+    const oito = ['01', '02', '03', '04', '05', '06', '07', '08'].map((m) => '2026-' + m + '-08');
+    assert.equal(app.recRetroMeses(oito, 'month'), 'faltam 8 meses, de 08/01/2026 a 08/08/2026');
+    assert.equal(app.recRetroMeses(['2024-03-01', '2025-03-01'], 'year'), 'faltam 2 anos, de 01/03/2024 a 01/03/2025');
   });
 });

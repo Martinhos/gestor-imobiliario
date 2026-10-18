@@ -61,3 +61,50 @@ describe('o guião servido pelo /equipa compila', () => {
     }
   });
 });
+
+/* A ferramenta da equipa veste a linguagem da app — cobalto, cartões,
+   selos, Geist e Bricolage —, mas com a barra GRAFITE e a marca em ardósia,
+   para nunca se confundir com a app (azul-noite). O que pede valores ou um
+   motivo abre a janela de confirmação, e o resultado diz-se no aviso de
+   baixo: nem alert(), nem prompt(), nem <select>. */
+describe('o back office na linguagem nova', () => {
+  test('nada de alert(), prompt(), confirm() nem <select>; desligar um serviço pergunta numa faixa do cartão', async () => {
+    const { GUIAO } = await import('../worker/src/equipa-guiao.js');
+    // o código, sem os comentários (que podem contar como era antes)
+    const codigo = GUIAO.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(codigo.length > GUIAO.length / 2, 'controlo: tirar os comentários deixou o código');
+    assert.doesNotMatch(codigo, /\balert\(/, 'sem alert(): os resultados vão para o aviso de baixo');
+    assert.doesNotMatch(codigo, /\bprompt\(/, 'sem prompt(): os valores pedem-se na janela');
+    assert.doesNotMatch(codigo, /<select/, 'sem <select>: os modelos são um menu e as categorias são chips');
+    assert.doesNotMatch(codigo, /\bconfirm\(/, 'sem confirm(): desligar um serviço pergunta na faixa âmbar do cartão');
+    assert.match(codigo, /if \(!confirmado\) \{ mostrarAvisoDesligar\(id, servico, nome, caem\); return; \}/, 'desligar mostra a faixa antes de pedir');
+    assert.match(GUIAO, /function formulario\(/, 'a janela de confirmação existe');
+    assert.match(GUIAO, /CAMPO_MOTIVO = \{ nome: 'motivo'[^}]*min: 5, max: 300/, 'o motivo com o mínimo e o máximo que o servidor pede');
+    assert.match(GUIAO, /function avisar\(/, 'e o aviso de baixo também');
+  });
+
+  test('os dois CSS declaram as letras de /fonts/, os tokens da app e a barra grafite, sem o verde antigo nem o azul-noite', async () => {
+    const { CSS_EQUIPA } = await import('../worker/src/equipa-vista.js');
+    const { CSS_DOCS } = await import('../worker/src/docs-vista.js');
+    for (const [nome, css] of [['CSS_EQUIPA', CSS_EQUIPA], ['CSS_DOCS', CSS_DOCS]]) {
+      assert.match(css, /font-family:'Geist'[^}]*src:url\(\/fonts\/geist\.woff2\)/, nome + ': a Geist, de /fonts/');
+      assert.match(css, /font-family:'Bricolage Grotesque'[^}]*src:url\(\/fonts\/bricolage-grotesque\.woff2\)/, nome + ': a Bricolage, de /fonts/');
+      assert.match(css, /--accent:#2952D9/, nome + ': o cobalto');
+      assert.match(css, /--eq:#161A23/, nome + ': a barra grafite');
+      assert.match(css, /--eq-marca:#5B6478/, nome + ': a marca em ardósia');
+      assert.doesNotMatch(css, /#244c3b|#5ee0a8|#17221d/i, nome + ': nada do verde antigo');
+      assert.doesNotMatch(css, /#0E1830/i, nome + ': nunca o azul-noite da barra da app');
+      assert.doesNotMatch(css, /fonts\.googleapis|fonts\.gstatic/, nome + ': nada de letras do Google (a CSP recusa)');
+    }
+  });
+
+  test('a página traz a barra lateral com a marca e o selo «Equipa», a Documentação, o Sair, a janela e o aviso', async () => {
+    const html = await new Response(paginaEquipa(EUS[0]).body).text();
+    assert.match(html, /<nav class="eq-lado" aria-label="Equipa">/);
+    assert.match(html, /<span class="mark" aria-hidden="true"><\/span><span class="eq-nome">Rendorium<\/span><span class="eq-selo">Equipa<\/span>/);
+    assert.match(html, /<a class="nv" href="\/equipa\/docs">/);
+    assert.match(html, /<button type="button" class="eq-sair" data-acao="sair">Sair<\/button>/);
+    assert.match(html, /<dialog class="janela" id="dialogo" aria-labelledby="janelaTit">/);
+    assert.match(html, /id="aviso" role="status" aria-live="polite"/);
+  });
+});

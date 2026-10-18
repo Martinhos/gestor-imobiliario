@@ -120,49 +120,143 @@ function livreDeDividas(){
   return `<div class="livre"><span class="livre-selo">${ic('check',24)}</span><b>Boa! Não tens dívidas registadas.</b>
     <span>Nenhum crédito em uso nos imóveis desta vista: não há prestações a abater às rendas.</span></div>`;
 }
+/* Um cartão da Análise nas Projeções: o título na letra dos títulos e o
+   subtítulo ao lado (o mesmo desenho da Avaliação e do IRS).
+   Recebe: titulo — o título (texto já seguro); sub — o subtítulo ('' sem ele);
+   corpo — o HTML do cartão; cls (opcional) — classes a mais.
+   Devolve: o HTML do cartão (string). */
+function prjCartao(titulo,sub,corpo,cls){
+  return `<section class="card ana-cartao${cls?' '+cls:''}"><div class="ana-cab"><h2 class="ana-tit">${titulo}</h2>${sub?`<span class="small">${sub}</span>`:''}</div>${corpo}</section>`;
+}
+/* A barra do topo das Projeções (a prancheta): o âmbito em chips — o
+   proprietário e o imóvel em foco, que com ▾ abrem o painel dos filtros e com
+   × deixam o foco — e os três números da projeção escritos ali mesmo: o
+   horizonte, o aumento das rendas e a inflação das despesas (gravam ao sair
+   do campo, prjDefinir, e o foco fica onde o Tab o levou). Por baixo, a
+   frase do que vale em branco.
+   Recebe: s — as definições (db.settings).
+   Devolve: o HTML da barra (string). */
+function prjBarra(s){
+  const g=projProp&&String(projProp).startsWith('g:'),foco=!projProp?'':g?'Grupo · '+((grp(String(projProp).slice(2))||{}).name||''):propName(projProp);
+  /* o texto de cada chip num <span>: com um nome comprido é ele que leva as
+     reticências e o chip não passa da largura do ecrã (estilos.css:.ana-ambito .chip>span) */
+  const dono=!db.owners.length?'':ownerFilter
+    ?`<button type="button" class="chip on" data-toca="vista" data-click="limparAmbito()" aria-label="Proprietário: ${esc(ownerFilterName())} (limpar)"><span>Proprietário: ${esc(ownerFilterName())}</span>${ic('x',14)}</button>`
+    :`<button type="button" class="chip" data-toca="vista" data-click="hdrFiltToggle()"><span>Proprietário: todos</span>${ic('chevD',16)}</button>`;
+  const chipFoco=foco?`<button type="button" class="chip on" data-toca="vista" data-click="projAnaLimpar();render()" aria-label="Imóvel em foco: ${esc(foco)} (limpar)"><span>Imóvel<span class="ana-largo"> em foco</span>: ${esc(foco)}</span>${ic('x',14)}</button>`
+    :`<button type="button" class="chip" data-toca="vista" data-click="hdrFiltToggle()"><span>Imóvel<span class="ana-largo"> em foco</span>: todos</span>${ic('chevD',16)}</button>`;
+  return `<div class="ana-barra"><div class="chips-fila ana-ambito"><span class="lbl ana-lbl-ambito">Âmbito</span>${dono}${chipFoco}</div>
+    <div class="ana-pins">
+    <label class="ana-pin"><span>Horizonte</span><input id="prjHorizonte" type="text" inputmode="numeric" class="num" value="${s.years}" placeholder="Opcional" aria-label="Horizonte (anos)" data-change="prjDefinir('years',Math.min(30,Math.max(1,num(this.value))))"><span>anos</span></label>
+    <label class="ana-pin"><span>Aumento<span class="ana-largo"> das rendas</span></span><input id="prjAumento" type="text" inputmode="decimal" class="num" value="${dec(s.growth)}" placeholder="Opcional" aria-label="Aumento anual das rendas (%)" data-change="prjDefinir('growth',numTaxa(this.value))"><span>%</span></label>
+    <label class="ana-pin"><span>Inflação<span class="ana-largo"> das despesas</span></span><input id="prjInflacao" type="text" inputmode="decimal" class="num" value="${dec(s.inflation)}" placeholder="Opcional" aria-label="Inflação das despesas (%)" data-change="prjDefinir('inflation',numTaxa(this.value))"><span>%</span></label></div></div>
+    <p class="small prj-nota">Cada contrato tem o seu aumento. Em Portugal há um coeficiente máximo publicado todos os anos. Em branco: 1 ano, e 0 % de aumento e de inflação.</p>`;
+}
+/* Grava um dos três números da barra (o horizonte, o aumento das rendas ou a
+   inflação das despesas) nas definições, como o vistas.js:setSet, mas o
+   redesenho vai pelo prjRepintar, que devolve o foco a quem o tinha.
+   Recebe: k — a chave em db.settings ('years', 'growth' ou 'inflation'); v — o valor já validado.
+   Devolve: nada — grava e agenda o redesenho. */
+function prjDefinir(k,v){
+  if(k!=='years'&&k!=='growth'&&k!=='inflation')return;
+  db.settings[k]=v;save();prjRepintar();
+}
+/* Redesenha a página sem tirar o foco a quem usa o teclado. Gravar um campo
+   da barra (ao sair dele com Tab) refazia a vista inteira já, e o campo
+   seguinte, para onde o Tab ia, desaparecia: o foco caía no <body> e o Tab
+   seguinte voltava ao topo da página. Quando o change corre, o foco ainda
+   não chegou ao campo seguinte — por isso o redesenho espera que ele assente
+   (setTimeout), lê o id de quem o tem, redesenha e devolve-lho. O render é
+   lido aqui, ao agendar (é o que os testes trocam).
+   Recebe: nada.
+   Devolve: nada — agenda o redesenho. */
+function prjRepintar(){
+  const pinta=render;
+  setTimeout(()=>{
+    const a=document.activeElement,id=a&&a!==document.body?a.id||'':'';
+    pinta();
+    const e=id?document.getElementById(id):null;
+    if(e&&e!==document.activeElement)try{e.focus({preventScroll:true})}catch(x){}
+  },0);
+}
+/* O aviso da prancheta «A projeção não inventa renovações»: os contratos do
+   horizonte que acabam antes do fim dele (o mesesEmVigor corta-os aí, e a
+   renovação só conta quando está registada no contrato), agrupados pelo ano
+   em que acabam, e a porta para os Contratos — com esse serviço ligado nesta
+   conta. Sem nenhum a acabar no horizonte, não se escreve.
+   Recebe: act — os contratos da projeção; last — a linha do último ano.
+   Devolve: o HTML do aviso (string), ou ''. */
+function prjRenovacoes(act,last){
+  const fimAno=c=>Number(String(c.end||'').slice(0,4));
+  const acabam=act.filter(c=>c.end&&fimAno(c)>=YEAR&&(fimAno(c)<last.yr||(fimAno(c)===last.yr&&String(c.end).slice(5,7)!=='12')));
+  if(!acabam.length)return '';
+  const porAno={};
+  acabam.forEach(c=>{const a=fimAno(c);(porAno[a]=porAno[a]||[]).push(ctName(c))});
+  const partes=Object.keys(porAno).map(Number).sort((a,b)=>a-b).map((a,i)=>{const ns=porAno[a],v=ns.length>1;
+    return (i?(v?'os de ':'o de '):(v?'Os contratos de ':'O contrato de '))+listaE(ns)+(v?' acabam':' acaba')+' em '+a});
+  return `<div class="prj-aviso" role="note">${ic('aviso',20)}<p><b>A projeção não inventa renovações.</b> ${esc(listaE(partes))}. Regista as renovações nos contratos para veres anos realistas.</p>${servicoLigado('contracts')?`<button type="button" class="btn sm" data-toca="ecra" data-click="go('contracts')">Ver contratos</button>`:''}</div>`;
+}
+/* O gráfico das entradas e saídas por ano (a prancheta): as rendas para cima,
+   o IRS, as despesas e as prestações para baixo, nas cores das séries
+   (tema.js:COR_SERIE; o IRS na categórica, PAL[4]) — e, até seis anos, o
+   cashflow de cada ano por baixo da sua coluna.
+   Recebe: rows — as linhas de projRows; anos — os anos por extenso (texto).
+   Devolve: o HTML do cartão (string). */
+function prjFluxos(rows,anos){
+  const comCf=rows.length<=6;
+  const g=cBars(rows.map(r=>[{label:'Rendas',value:r.rent,color:COR_SERIE.receita},{label:'IRS',value:-r.irs,color:PAL[4]},
+    {label:'Despesas',value:-r.exp,color:COR_SERIE.despesa},{label:'Prestações',value:-r.loan,color:COR_SERIE.prestacao}]),anos,{h:200,titulo:'Entradas e saídas por ano'});
+  const cf=comCf?`<div class="prj-cfs" aria-hidden="true">${rows.map(r=>`<span class="${r.cf<0?'neg':'pos'}">${euro(r.cf)}</span>`).join('')}</div>`:'';
+  return prjCartao(comCf?'Entradas, saídas e cashflow por ano':'Entradas e saídas por ano','rendas para cima; IRS, despesas e prestações para baixo',g+cf,'prj-fluxos');
+}
+/* A tabela «Ano a ano» (a prancheta): uma coluna por contrato, as rendas, o
+   IRS, as despesas, as prestações, o cashflow e — com créditos em uso — a
+   dívida no fim de cada ano.
+   Recebe: rows, act, debtY — o que projRows devolve; comDivida — há créditos em uso.
+   Devolve: o HTML do cartão (string). */
+function prjTabela(rows,act,debtY,comDivida){
+  return prjCartao('Ano a ano','uma coluna por contrato · IRS contado no ano das rendas',`<div class="tablewrap"><table class="table ana-fixa prj-tabela"><thead><tr>
+    <th>Ano</th>${act.map(c=>`<th>${esc(ctName(c))}</th>`).join('')}<th>Rendas</th><th>IRS</th><th>Despesas</th><th>Prestações</th><th>Cashflow</th>${comDivida?'<th>Dívida no fim</th>':''}</tr></thead><tbody>
+    ${rows.map((r,i)=>`<tr><td><b>${r.yr}</b></td>${r.per.map(v=>`<td>${v?euro(v):'—'}</td>`).join('')}
+      <td class="pos"><b>${euro(r.rent)}</b></td><td>${euro(r.irs)}</td><td>${euro(r.exp)}</td><td>${euro(r.loan)}</td>
+      <td class="${r.cf>=0?'pos':'neg'}"><b>${euro(r.cf)}</b></td>${comDivida?`<td>${euro(debtY[i])}</td>`:''}</tr>`).join('')}</tbody></table></div>`);
+}
 /* Projeções ao horizonte definido nas definições (s.years), a partir de
-   projRows: KPIs, gráficos e tabela ano a ano com uma coluna por contrato e as
-   colunas das rendas, do IRS, das despesas, das prestações e do cashflow. O
-   cabeçalho diz de onde vêm as despesas previstas, o IRS e o que ficou de fora.
+   projRows, como a prancheta D-Projecoes: a barra do âmbito com o horizonte, o
+   aumento e a inflação; os indicadores; o aviso das renovações; o gráfico das
+   entradas e saídas ao lado da dívida por amortizar (ou da boa notícia); a
+   tabela ano a ano com uma coluna por contrato; e, no fim, de onde vêm as
+   despesas previstas, o IRS e o que ficou de fora.
    Devolve: string com o HTML completo da vista. */
 function vProjections(){
   if(projProp&&!pidProps(projProp).length)projProp='';
   const s=db.settings,{rows,act,debtY,base}=projRows(projProp||null),n=rows.length;
-  const head=anaPanelPadrao('projSel',projProp,'onProjProp',`
-    <div class="row3 u-mt-10px">
-    <label>Horizonte (anos)<input type="text" inputmode="numeric" value="${s.years}" placeholder="Opcional" data-change="setSet('years',Math.min(30,Math.max(1,num(this.value))))"></label>
-    <label>Aumento anual (%)<input type="text" inputmode="decimal" value="${dec(s.growth)}" placeholder="Opcional" data-change="setSet('growth',numTaxa(this.value))"></label>
-    <label>Inflação das despesas (%)<input type="text" inputmode="decimal" value="${dec(s.inflation)}" placeholder="Opcional" data-change="setSet('inflation',numTaxa(this.value))"></label></div>
-    <div class="hint u-mt-9px">Cada contrato tem o seu aumento. Em Portugal há um coeficiente máximo publicado todos os anos. Em branco: 1 ano, e 0 % de aumento e de inflação.</div>`);
+  const head=anaPanelPadrao('projSel',projProp,'onProjProp')+`<div class="ana prj">`+prjBarra(s);
   /* a saída do vazio leva aos Contratos ou aos Imóveis: com esse serviço
      desligado nesta conta o botão não se escreve, e a frase diz quem o liga */
-  if(!act.length)return head+`<div class="empty u-mt-14px"><b>Nenhum contrato ativo</b>As projeções partem das rendas contratadas.
+  if(!act.length)return head+`<div class="empty"><b>Nenhum contrato ativo</b>As projeções partem das rendas contratadas.
     ${db.properties.length?(servicoLigado('contracts')?saida('Ver contratos',"go('contracts')",'ecra'):vazioServicoDesligado('contracts'))
-      :(servicoLigado('properties')?saida('Adicionar imóvel',"go('properties')",'ecra'):vazioServicoDesligado('properties'))}</div>`;
-  /* o eixo leva o ano em dois algarismos (cabem mais), a leitura por extenso */
+      :(servicoLigado('properties')?saida('Adicionar imóvel',"go('properties')",'ecra'):vazioServicoDesligado('properties'))}</div></div>`;
+  /* o eixo da dívida leva o ano em dois algarismos (cabem mais), a leitura por extenso */
   const first=rows[0],last=rows[rows.length-1],labels=rows.map(r=>String(r.yr).slice(2)),anos=rows.map(r=>String(r.yr));
   /* sem planeados de despesa, a explicação do cashflow não fala de despesas previstas */
   const baseTxt=base.n>0?' Aqui: '+euro(base.op)+'/ano de despesas previstas em '+base.n+' planeado'+(base.n===1?'':'s')+'.':'';
   const varRenda=first.rent?last.rent/first.rent-1:0;
-  /* fora do painel de análise: o painel abre-se só a pedido, e o que conta
-     como despesa é o que mais muda a leitura da projeção */
-  return head+(ownerFilter&&!ownerIsGrp()?`<div class="hint u-mt-12px">Valores na quota-parte de <b>${esc(ownerFilterName())}</b>.</div>`:'')+projDespesasTxt(base)+`<div class="grid u-mt-14px">
+  const comDivida=pidProps(projProp||null).some(p=>liveLoans(p).length);
+  return head+`<div class="grid prj-kpis">
     ${kpi('Renda anual hoje',euro(first.rent),'','a preços de '+YEAR,WHY.rendaHoje,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',yearly:rows.map(r=>({label:r.yr,value:r.rent}))}))}
     ${kpi('Renda em '+last.yr,euro(last.rent),varRenda>=0?'pos':'neg',(varRenda>=0?'+':'')+pct(varRenda)+' acumulado',WHY.rendaFim,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',yearly:rows.map(r=>({label:r.yr,value:r.rent}))}))}
-    ${kpi('Total do período',euro(sum(rows.map(r=>r.rent))),'',n+' anos de rendas',WHY.totalPeriodo,()=>{let a=0;return {fmt:euro,yearlyTitle:'Acumulado ano a ano',yearly:rows.map(r=>({label:r.yr,value:a+=r.rent}))}})}
-    ${kpi('Cashflow em '+last.yr,euro(last.cf),last.cf>=0?'pos':'neg','com IRS, despesas e prestações',WHY.cashflowFim+baseTxt,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',extraTitle:'Prestações',yearly:rows.map(r=>({label:r.yr,value:r.cf,extra:euro(r.loan)}))}))}</div>
+    ${kpi(n>1?'Rendas de '+first.yr+' a '+last.yr:'Rendas de '+first.yr,euro(sum(rows.map(r=>r.rent))),'',n+(n===1?' ano':' anos')+' · só contratos registados',WHY.totalPeriodo,()=>{let a=0;return {fmt:euro,yearlyTitle:'Acumulado ano a ano',yearly:rows.map(r=>({label:r.yr,value:a+=r.rent}))}})}
+    ${kpi('Cashflow em '+last.yr,euro(last.cf),last.cf>=0?'pos':'neg','com IRS, despesas e prestações',WHY.cashflowFim+baseTxt,()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',extraTitle:'Prestações',yearly:rows.map(r=>({label:r.yr,value:r.cf,extra:euro(r.loan)}))}))}
+    ${comDivida?kpi('Dívida no fim de '+last.yr,euro(debtY[n-1]),'','pelo plano das hipotecas','O capital em dívida no fim de cada ano, somando os créditos em uso nos imóveis desta vista, pelo plano de cada hipoteca.',()=>({fmt:euro,yearlyTitle:'Projeção ano a ano',yearly:rows.map((r,i)=>({label:r.yr,value:debtY[i]}))})):''}</div>
+  ${prjRenovacoes(act,last)}
   <div class="cols">
-    ${card('Rendas, prestações e cashflow','',cLine([{name:'Rendas',values:rows.map(r=>r.rent),color:PAL[0]},
-      {name:'Prestações',values:rows.map(r=>r.loan),color:'#d6a34a'},
-      {name:'Cashflow',values:rows.map(r=>r.cf),color:PAL[1]}],labels,{h:210,marks:decadeMarks(YEAR,n),rotulos:anos}))}
-    ${pidProps(projProp||null).some(p=>liveLoans(p).length)
-      ?card('Dívida por amortizar','Somando os créditos em uso',cLine([{name:'Em dívida',values:debtY,color:'#d6a34a'}],labels,{h:200,marks:decadeMarks(YEAR,n),rotulos:anos}))
-      :card('Dívida por amortizar','',livreDeDividas())}</div>
-  <div class="u-mt-14px">${card('Detalhe ano a ano','Uma coluna por contrato ativo',`<div class="tablewrap"><table class="table"><thead><tr>
-    <th>Ano</th>${act.map(c=>`<th>${esc(ctName(c))}</th>`).join('')}<th>Rendas</th><th>IRS</th><th>Despesas</th><th>Prestações</th><th>Cashflow</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td><b>${r.yr}</b></td>${r.per.map(v=>`<td>${euro(v)}</td>`).join('')}
-      <td><b>${euro(r.rent)}</b></td><td class="neg">${euro(r.irs)}</td><td class="neg">${euro(r.exp)}</td><td class="amber">${euro(r.loan)}</td>
-      <td class="${r.cf>=0?'pos':'neg'}"><b>${euro(r.cf)}</b></td></tr>`).join('')}</tbody></table></div>`)}</div>`;
+    ${prjFluxos(rows,anos)}
+    ${comDivida
+      ?prjCartao('Dívida por amortizar','Somando os créditos em uso',cLine([{name:'Em dívida',values:debtY,color:COR_SERIE.divida}],labels,{h:200,marks:decadeMarks(YEAR,n),rotulos:anos}))
+      :prjCartao('Dívida por amortizar','',livreDeDividas())}</div>
+  ${prjTabela(rows,act,debtY,comDivida)}
+  ${projDespesasTxt(base)}</div>`;
 }
 // nº de filtros ativos no painel de análise das projeções: proprietário e imóvel em foco
 // Devolve: número de filtros ativos (0 a 2).
