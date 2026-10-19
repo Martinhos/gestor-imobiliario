@@ -39,6 +39,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-08 · O IRS ganha uma versão por ano, e a Declaração deixa de deduzir a mais
 - 2026-10-12 · O que tinha ficado de fora do IRS entra
 - 2026-10-17 · Uma cara nova, desenhada antes de escrita
+- 2026-10-19 · Os erros dos robôs não são pedidos
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1263,3 +1264,25 @@ vista inteira, e o foco caía no body), uma grelha ao lado da navegação
 lateral parte-se pela largura do cartão e não pela do ecrã, um botão nunca
 vive dentro de um elemento tocável, e o realce de passar por cima só existe
 com rato, porque num ecrã de dedo largo ficava preso.
+
+## 2026-10-19 · Os erros dos robôs não são pedidos
+Os doze pedidos abertos no back office eram todos relatos automáticos, sem
+uma pessoa por trás: dez «… is not defined» no arranque (NAV_GROUPS,
+driveOpen, CW, vSettings, registarServico e outros), uma cura do arranque e
+uma promessa rejeitada no registo do service worker. Quase todos diziam
+«Chrome 153 · Android 6.0.1», que não existe — o Chrome deixou o Android 6
+há muito, e esse par é a cara do Googlebot de telemóvel —, e a promessa
+rejeitada passava pelo wrsParams, o renderizador do Google. Na versão em
+produção cada símbolo em falta está definido num script que carrega antes de
+quem o usa; o erro só nasce quando um script anterior não chegou, ou chegou
+de outra versão, que é o que o renderizador faz com a cache e o orçamento
+dele. Nenhuma pessoa o vê, e cada passagem reabria os pedidos fechados.
+
+A porta fecha-se no servidor (rotas/relatos.js:deRobo): um relato cujo
+user-agent, o do cabeçalho ou o que o browser mandou, é de um robô
+conhecido, ou cuja stack passa pelo wrsParams, recebe ok e não se grava,
+não vai ao Discord e não gasta o tecto do endereço. No servidor e não no
+cliente porque apanha também as cópias antigas da app que os robôs guardam.
+Os robôs vão nomeados um a um: um /bot/ solto apanhava os telemóveis da
+Cubot. O HeadlessChrome fica de fora da lista, porque é o browser dos
+percursos de teste, e um erro que lá apareça é para ver.

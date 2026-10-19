@@ -678,6 +678,51 @@ describe('os erros sem utilizador', () => {
   });
 });
 
+describe('os relatos dos robôs', () => {
+  // os doze pedidos abertos em produção a 2026-10-19 eram todos do Googlebot
+  const GOOGLEBOT = 'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 ' +
+    '(KHTML, like Gecko) Chrome/153.0.8010.52 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+  const CHROME = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.8010.52 Mobile Safari/537.36';
+  const CUBOT = 'Mozilla/5.0 (Linux; Android 12; Cubot Note 30) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.8010.52 Mobile Safari/537.36';
+  const relatar = (env, corpo, ua) => resp(pedir(env, null, '/api/reports', 'POST',
+    Object.assign({ message: 'Uncaught ReferenceError: NAV_GROUPS is not defined', detail: 'x', ecra: 'arranque' }, corpo),
+    ua ? { 'User-Agent': ua } : {}));
+  const pedidos = (env) => conta1(env, 'SELECT COUNT(*) AS n FROM tickets');
+
+  test('o Googlebot no cabeçalho não abre pedido', async () => {
+    const env = ambiente();
+    assert.equal((await relatar(env, {}, GOOGLEBOT)).ok, true, 'responde ok, para não insistir');
+    assert.equal(await pedidos(env), 0);
+  });
+
+  test('nem no agente que o browser mandou', async () => {
+    const env = ambiente();
+    await relatar(env, { agente: GOOGLEBOT.slice(0, 180) }, CHROME);
+    assert.equal(await pedidos(env), 0);
+  });
+
+  test('nem o renderizador do Google com outra cara (wrsParams)', async () => {
+    const env = ambiente();
+    await relatar(env, { message: 'Promessa rejeitada: Rejected',
+      detail: 'Error: Rejected\n    at wrsParams.serviceWorkers.navigator.serviceWorker.register (<anonymous>:12:648)' }, CHROME);
+    assert.equal(await pedidos(env), 0);
+  });
+
+  test('um robô não gasta o tecto de quem está no mesmo endereço', async () => {
+    const env = ambiente();
+    for (let i = 0; i < 6; i++) await relatar(env, { message: 'Robô ' + i }, GOOGLEBOT);
+    await relatar(env, { message: 'De uma pessoa' }, CHROME);
+    assert.equal(await pedidos(env), 1);
+  });
+
+  test('um Chrome a sério, e um telemóvel da Cubot, continuam a contar', async () => {
+    const env = ambiente();
+    await relatar(env, { agente: CHROME }, CHROME);
+    await relatar(env, { message: 'Outro erro', agente: CUBOT }, CUBOT);
+    assert.equal(await pedidos(env), 2);
+  });
+});
+
 /* ------------------ A.4-17a · pimenta nas palavras-passe ---------------- */
 
 describe('as palavras-passe', () => {
