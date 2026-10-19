@@ -304,8 +304,12 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
 /* a grelha dos dias arrasta-se para os lados (calendario.js:calArrastar): a
    vertical continua a ser da página, a horizontal passa a ser do calendário */
 #calDias{touch-action:pan-y;user-select:none;-webkit-user-select:none}
-/* durante o arrasto os vizinhos espreitam dos lados, recortados pelo cartão */
-#calDias.arrasta{position:relative}
+/* durante o arrasto os vizinhos espreitam dos lados, recortados pelo cartão;
+   em altura, pelo mês de agora: um vizinho de seis semanas tem mais uma fila
+   que um mês de cinco, e ela ficava por cima da legenda. A fila a mais só
+   aparece depois de largar, quando a fita abre o espaço (continuidade.js:
+   aFitaAbreEspaco). O clip, e não o hidden, deixa os lados à vista. */
+#calDias.arrasta{position:relative;overflow-y:clip}
 #calCard.arrasta{overflow:hidden}
 .calvizinho{position:absolute;top:0;width:100%;pointer-events:none}
 /* o ponto das visitas é cobalto e o dos planeados laranja (o dinheiro que sai,
@@ -630,6 +634,12 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
   aside .nav-criar{display:none}
   #hdrAcao,#hdrSec{display:none}
   header.top #hdrBell,header.top #hdrFilt{border-color:transparent;background:transparent;width:44px;min-width:44px;padding:0}
+  /* aceso (o painel dos filtros aberto, ou o «Concluir» da edição dos
+     cartões): o .btn.primary sem o fundo deixava o ícone na --accent-ink —
+     branco no cabeçalho claro, escuro no escuro —, e o botão sumia justamente
+     quando era a maneira de fechar o painel. Aceso é o par suave da escolha
+     feita, o mesmo do .selopt.on, em claro e em escuro (vistas.js:pintarBotaoFiltros) */
+  header.top #hdrFilt.primary{background:var(--accent-soft);color:var(--accent-text)}
   header.top .sync{background:transparent!important;width:44px;height:44px;padding:0;justify-content:center}
   header.top .sync span{display:none}
   /* com algo por enviar ou sem ligação, a frase desce para uma faixa fina por
@@ -664,10 +674,14 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
 /* a barra é uma coluna: os grupos rolam e o fundo (as Definições, a Ajuda e
    a conta, navegacao.js:gavetaHtml) encosta-se ao fundo e fica pegado lá,
    sempre à vista, com a divisória do canvas por cima — a 1440×900 a Ajuda e
-   a conta só apareciam depois de rolar */
-#nav{display:flex;flex-direction:column}
+   a conta só apareciam depois de rolar.
+   O fundo vai rente ao fundo e de lado a lado: o espaço de baixo do #nav (e a
+   área segura) passa para dentro dele, e as margens negativas cobrem as
+   laterais. Com o espaço no #nav, o sticky parava acima dele, e os grupos
+   viam-se a passar por baixo e pelos lados do fundo. */
+#nav{display:flex;flex-direction:column;padding-bottom:0}
 #nav>*{flex-shrink:0}
-.nav-fundo{display:grid;gap:2px;margin-top:auto;position:sticky;bottom:0;z-index:1;padding-top:8px;border-top:1px solid var(--side-line);background:var(--side)}
+.nav-fundo{display:grid;gap:2px;margin:auto -14px 0;position:sticky;bottom:0;z-index:1;padding:8px 14px calc(16px + var(--inset-bottom));border-top:1px solid var(--side-line);background:var(--side)}
 /* os títulos vazios das secções sem nome (as portas de cima e o fundo) não
    ocupam lugar: o HTML conta com eles como fronteira (gavetaHtml), o ecrã não */
 #nav .navh:empty{padding:0}
@@ -708,6 +722,18 @@ body.sel-on #hdrSec{display:none}
 .segm.abas-pessoas>a{flex:0 0 auto;min-height:44px;padding:0 2px;border-radius:0;border-bottom:2.5px solid transparent;margin-bottom:-1px;font-size:15px;color:var(--muted)}
 .segm.abas-pessoas>.on{background:transparent;box-shadow:none;color:var(--ink);font-weight:650;border-bottom-color:var(--accent)}
 @media(min-width:901px){.abas>.abas-area{display:none}}
+/* deslizar entre separadores (navegacao.js:sepArrastar): no telemóvel, numa
+   área com separadores, o arrasto de lado é da app e o vertical continua do
+   browser, com o pinch-zoom. Enquanto o dedo leva a página, o pai corta o que
+   lhe passa da margem — clip, e não hidden, para o cabeçalho pegajoso colar.
+   O nome do vizinho espreita no vazio que a página deixa (navegacao.js:sepEspreita). */
+@media(max-width:900px){#view:has(>.abas>.abas-area){touch-action:pan-y pinch-zoom}}
+main.sep-arrasto{overflow-x:clip}
+.sep-espreita{position:absolute;left:0;top:0;display:flex;align-items:center;gap:4px;max-width:45vw;padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:14px;font-weight:600;white-space:nowrap;opacity:0;transition:opacity var(--rapido),color var(--rapido),background-color var(--rapido),border-color var(--rapido)}
+.sep-espreita span{overflow:hidden;text-overflow:ellipsis}
+.sep-espreita svg{flex:0 0 auto}
+.sep-espreita.on{opacity:1}
+.sep-espreita.pronto{color:var(--accent-text);background:var(--accent-soft);border-color:var(--accent-soft)}
 /* o âmbito em foco, por cima da vista */
 .faixa-ambito{display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:8px 8px 8px 14px;border-radius:14px;background:var(--accent-soft);border:1px solid var(--line2);color:var(--accent-text)}
 .faixa-ambito p{flex:1;min-width:0;margin:0;font-size:14px}
@@ -852,6 +878,20 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .fpanel{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:45;margin:0}
 .fpanel.on{display:block}
 .fpanel>.card{box-shadow:0 16px 38px rgba(0,0,0,.30);max-height:min(72vh,560px);max-height:min(72dvh,560px);overflow:auto;overscroll-behavior:contain}
+/* «Limpar» e «Fechar» presos ao fundo (vistas.js:fpanelPe, nos painéis do
+   vistas.js:lfBar e do vistas.js:anaPanel), na forma do .sheet .foot: o resto
+   rola por trás, o pé fica, com a divisória e o fundo do cartão. A caixa
+   continua a ser quem rola (o cloud/filtros.js segue as listas abertas pelo
+   scroll dela), e o pé é o último filho, pegajoso em baixo: num painel curto
+   fica logo a seguir aos filtros. Sem padding em baixo na caixa, para o pé
+   assentar no fundo; as margens negativas levam-no de lado a lado. O
+   scroll-padding é a altura do pé: o Tab não deixa um campo escondido por
+   trás dele. Os Movimentos têm o painel deles (.mov-fwrap), com o Limpar e o
+   Fechar no topo. */
+.fpanel>.card.fp-caixa{padding:12px 12px 0;scroll-padding-bottom:80px}
+.fp-caixa>.fp-pe{position:sticky;bottom:0;z-index:1;display:flex;align-items:center;gap:10px;margin:12px -12px 0;padding:10px 12px 12px;background:var(--card);border-top:1px solid var(--line)}
+/* no dedo, os dois a meias e com os 48px do rodapé das janelas */
+@media(max-width:900px){.fp-caixa>.fp-pe .btn{flex:1;min-height:48px}}
 .fabpad{height:84px}
 .totop{position:fixed;left:50%;transform:translateX(-50%) scale(.9);bottom:calc(20px + var(--inset-bottom));z-index:57;width:44px;height:44px;
   border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);display:flex;align-items:center;justify-content:center;
@@ -2621,6 +2661,14 @@ a.pes-liga:focus-visible,.pes-kv.tap:focus-visible,.pes-linha-f.tap:focus-visibl
 .mov-filtros-n{margin:-10px 0 0;font-variant-numeric:tabular-nums}
 .mov-campo{display:flex;flex-direction:column;gap:8px;min-width:0}
 .mov-campo .flabel{margin:0}
+/* «Pago por» em chips (movimento.js:txPagoPorHtml): o nome inteiro, a fila
+   parte em linhas e um nome que não caiba sozinho numa linha parte dentro do
+   chip — nunca reticências; o visto só no aceso, que a cor sozinha não chega;
+   no dedo, 44px */
+.pago-por .chip{white-space:normal;max-width:100%;text-align:left;padding:6px 14px;line-height:1.25}
+.pago-por .chip svg{display:none}
+.pago-por .chip.on svg{display:block}
+@media(pointer:coarse){.pago-por .chip{min-height:44px}}
 .mov-grelha{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 10px}
 .mov-ligado .selbtn{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-text);font-weight:600}
 .mov-ligado .selbtn svg{color:var(--accent-text)}
@@ -2770,6 +2818,13 @@ label.mov-interr{display:flex;align-items:center;gap:12px;min-height:44px;paddin
 .cred-barras rect{fill:var(--side-text);opacity:.6}
 .cred-barras rect.agora{opacity:1}
 .cred-r-eixo{display:flex;justify-content:space-between;gap:8px;margin-top:4px;font-size:11.5px;color:var(--side-text)}
+/* as barras leem-se com o dedo (creditos.js:credBarrasLer): a leitura e a
+   guia nas cores da barra lateral, legíveis no azul-noite nos dois temas; a
+   guia desce até ao fundo das barras (o eixo está fora do desenho) */
+.cred-resumo .chartcab{margin-bottom:8px}
+.cred-r-caixa .cred-barras{height:56px}   /* o .chartbox svg dá height:auto, e o desenho crescia com a largura */
+.cred-resumo .chartlido{background:var(--side-on);color:var(--side-ink)}
+.cred-resumo .chartguia{bottom:0;width:2px;margin-left:-1px;background:var(--side-ink)}
 /* os pagamentos sem hipoteca: a faixa do cobalto suave, com o «Associar» */
 .cred-aviso{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:0 0 14px;padding:12px 16px;border-radius:16px;
   background:var(--accent-soft);color:var(--accent-text);border:1px solid var(--line2);border-color:color-mix(in srgb,var(--accent) 24%,transparent)}
@@ -2811,7 +2866,6 @@ label.mov-interr{display:flex;align-items:center;gap:12px;min-height:44px;paddin
 .cred-tab{min-width:560px}
 .cred-tab th,.cred-tab td{padding:9px 14px}
 .cred-tab th{position:sticky;top:0;z-index:1;background:var(--chip);text-transform:uppercase;letter-spacing:.04em}
-.cred-tab-plano th:nth-child(2),.cred-tab-plano td:nth-child(2){text-align:left}
 /* a «Dívida no fim» fica presa à direita da caixa: numa caixa estreita (a
    janela do Plano a 390px) era a coluna que o corte escondia, e nada dizia
    que a tabela rolava; o traço à esquerda diz que há mais por baixo dela */
@@ -2819,6 +2873,12 @@ label.mov-interr{display:flex;align-items:center;gap:12px;min-height:44px;paddin
 .cred-tab-plano th:last-child{z-index:2;background:var(--chip)}
 @media(max-width:900px){.cred-tab-plano th:last-child,.cred-tab-plano td:last-child{box-shadow:inset 1px 0 0 var(--line)}}
 .cred-tab-fim td{color:var(--muted)}
+/* o plano: a taxa e as prestações de um ano parcial por baixo do período; a
+   linha «Anos seguintes» separa os meses dos anos — não fica presa em cima
+   nem à direita como os cabeçalhos, e o rótulo fica à vista ao rolar de lado */
+.cred-tab-sub{display:block;font-size:11.5px;font-weight:500;color:var(--muted)}
+.cred-tab-plano .cred-tab-grupo th{position:static;padding-top:14px;text-align:left;background:var(--chip);box-shadow:none;color:var(--ink)}
+.cred-tab-grupo th>span{position:sticky;left:14px}
 .cred-tab-total td{border-top:1px solid var(--line)}
 /* o painel da hipoteca aberta (só no computador) */
 .cred-det-cab{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;padding:18px 18px 12px}

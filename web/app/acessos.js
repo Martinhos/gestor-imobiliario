@@ -431,6 +431,8 @@ function separadoresEscondidos(){
   /* os serviços desligados nesta conta (servicos.js): o separador some do
      menu, e o resto da app pergunta servicoLigado antes de lhes tocar */
   if(typeof servicosDesligados==='function')servicosDesligados().forEach(poe);
+  // e os que ainda não chegaram a este ambiente (a Declaração em produção)
+  if(typeof servicoForaDoAmbiente==='function')SERVICOS.forEach(s=>{if(servicoForaDoAmbiente(s.id))poe(s.id)});
   /* cargos e convites vivem no servidor: sem conta na nuvem o separador não
      tem o que mostrar (a vista explica-o, mas não vale ocupar o menu) */
   if(!(typeof window!=='undefined'&&window.CW&&CW.user))poe('colaboradores');

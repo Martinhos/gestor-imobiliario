@@ -96,16 +96,32 @@ function anaPanelPadrao(selId,valor,onchange,extra){
     <div class="u-w-100pc">${sel(selId,valor,po,onchange,'vista')}</div></div>${extra||''}`);
 }
 /* embrulha os controlos de análise (inner, já em HTML) no painel dropdown do
-   cabeçalho, com os botões Limpar/Fechar; o wrapper tem altura 0 para o
-   painel flutuar por cima da página em vez de a empurrar.
+   cabeçalho, com os botões Limpar/Fechar no pé preso ao fundo
+   (vistas.js:fpanelPe); o wrapper tem altura 0 para o painel flutuar por cima
+   da página em vez de a empurrar.
    Recebe: inner — os controlos do painel, já em HTML (string).
    Devolve: string HTML do painel pronto a inserir na vista. */
-function anaPanel(inner){return `<div class="fwrap u-h-0"><div class="fpanel ${anaOpen[tab]?'on':''} u-t-0"><div class="card u-p-12px">
+function anaPanel(inner){return `<div class="fwrap u-h-0"><div class="fpanel ${anaOpen[tab]?'on':''} u-t-0"><div class="card fp-caixa">
   ${typeof fcSelector==='function'?fcSelector():''}${inner}
-  <div class="toolbar u-m-12px-0-0">
-    <button class="btn" data-toca="vista" data-click="anaClear()">${ic('x',15)} Limpar</button>
-    <button class="btn primary" data-toca="camada" data-click="anaApply()">${ic('check',15)} Fechar</button>
-  </div></div></div></div>`}
+  ${fpanelPe('anaClear()','anaApply()')}</div></div></div>`}
+/* O pé do painel dos filtros: «Limpar» à esquerda, «Fechar» primário à
+   direita, preso ao fundo da caixa (estilos.css:.fp-pe). A caixa (o .card)
+   continua a ser quem rola — o cloud/filtros.js segue as listas abertas pelo
+   scroll dela —, e o pé é o último filho, pegajoso em baixo: num painel
+   comprido fica no fundo enquanto o resto passa por trás; num curto fica logo
+   a seguir aos filtros, sem esticar a caixa. Era uma .toolbar no fim da caixa,
+   que saía de vista ao rolar: no telemóvel, com o botão do cabeçalho apagado,
+   ficava-se sem maneira de fechar o painel. Os Movimentos têm o seu
+   (lista-movimentos.js:txFilterPainel), com o Limpar e o Fechar no topo.
+   Recebe: limpar — a ação do «Limpar» (texto para o data-click); fechar — a
+   do «Fechar».
+   Devolve: o HTML do pé. */
+function fpanelPe(limpar,fechar){
+  return `<div class="fp-pe">
+    <button class="btn" data-toca="vista" data-click="${limpar}">${ic('x',15)} Limpar</button>
+    <button class="btn primary" data-toca="camada" data-click="${fechar}">${ic('check',15)} Fechar</button>
+  </div>`;
+}
 /* Cartões e afins são divs com data-click: sem isto, o teclado não chega a
    nenhuma lista — nem um leitor de ecrã os anuncia como acionáveis. Corre
    depois de cada render e de cada fillModal.
@@ -142,8 +158,18 @@ function pintarBotaoFiltros(){
   if(!hasFilt)return;
   hb.innerHTML=ic('filter',16)+(hdrFiltN()?'<span class="dot"></span>':'');
   /* aceso com o painel aberto: o da base (anaOpen) ou o que o serviço diz
-     (aberto); os movimentos não registam «aberto» e nunca acendem, como dantes */
-  hb.classList.toggle('primary',a?(a.aberto?!!a.aberto():!!anaOpen[tab]):(LFK[tab]?!!lf(LFK[tab])._open:false));
+     (aberto); os movimentos não registam «aberto» e nunca acendem, como dantes.
+     No telemóvel o cabeçalho tira o fundo aos botões, e aceso é o par suave
+     (estilos.css:header.top #hdrFilt.primary) — com o .primary sozinho o ícone
+     ficava da cor do cabeçalho e o botão sumia com o painel aberto. */
+  const sabe=!(a&&a.alternar&&!a.aberto);
+  const aberto=a?(a.aberto?!!a.aberto():!!anaOpen[tab]):(LFK[tab]?!!lf(LFK[tab])._open:false);
+  hb.classList.toggle('primary',aberto);
+  /* o leitor de ecrã ouve o que a cor mostra: aberto ou fechado. Onde o
+     serviço tem painel próprio sem dizer se está aberto (os Movimentos, cujo
+     botão do cabeçalho é o «Selecionar vários»), não se afirma nada */
+  if(sabe)hb.setAttribute('aria-expanded',aberto?'true':'false');
+  else hb.removeAttribute('aria-expanded');
 }
 /* ================= LISTAS VIVAS =================
    Uma lista que se acerta em vez de se refazer.
@@ -281,7 +307,9 @@ function refrescarListasVivas(){
     const novo=molde.querySelector('[data-listaviva="'+k.replace(/"/g,'')+'"]');
     if(novo&&novo.parentNode)novo.parentNode.replaceChild(vivas[k],novo);
   });
+  const rolou=rolagemDoPainel();
   v.replaceChildren.apply(v,[].slice.call(molde.children));
+  reporRolagemDoPainel(rolou);
   tornarFocavel(v);
   marcarDatasVazias(v);
   pintarBotaoFiltros();
@@ -293,6 +321,28 @@ function refrescarListasVivas(){
   return true;
 }
 let _ultimaRepintura=null;
+/* Quanto está rolada a caixa do painel de filtros aberto (vistas.js:lfBar,
+   vistas.js:anaPanel). Cada filtro mexido repinta o ecrã, e o painel nasce de
+   novo: sem isto, escolher a ordenação, no fundo de um painel comprido,
+   atirava a caixa para o topo — com o «Fechar» preso ao fundo, era o resto
+   que fugia debaixo do dedo. Os Movimentos guardam o nó do painel inteiro
+   (lista-movimentos.js:txGuardarNo) e não passam por aqui.
+   Recebe: nada.
+   Devolve: os píxeis rolados (0 sem painel aberto). */
+function rolagemDoPainel(){
+  const v=view(),c=v&&v.querySelector('.fpanel.on>.fp-caixa');
+  return c?c.scrollTop||0:0;
+}
+/* Repõe na caixa do painel aberto, acabada de pintar, a rolagem lida antes
+   (vistas.js:rolagemDoPainel); se a caixa encolheu, o browser acerta-a ao
+   máximo que houver.
+   Recebe: y — os píxeis rolados; com 0 não faz nada.
+   Devolve: nada — escreve o scrollTop da caixa. */
+function reporRolagemDoPainel(y){
+  if(!y)return;
+  const v=view(),c=v&&v.querySelector('.fpanel.on>.fp-caixa');
+  if(c)c.scrollTop=y;
+}
 /* Redesenha a página inteira: título e subtítulo, botão de filtros do
    cabeçalho, e o HTML da vista do separador atual (vDashboard, vProperties…).
    Substitui o innerHTML de #view, por isso o estado do DOM anterior perde-se;
@@ -305,6 +355,8 @@ function render(){
      ver continuidade.js. */
   const ecra=tab+'|'+(setPage||'');
   const antes=(ecra===_ecraPintado&&!contSuspensa)?medirContinuidade(view()):null;
+  /* no mesmo ecrã, o painel dos filtros aberto fica onde estava rolado */
+  const rolou=ecra===_ecraPintado?rolagemDoPainel():0;
   _ecraPintado=ecra;
   const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
   /* o título leva o nome da área no telemóvel e o do separador no computador
@@ -336,6 +388,7 @@ function render(){
   view().classList.toggle('entra',!!_entrar);_entrar=0;
   view().innerHTML=html;
   pintarListasVivas();             // as listas vivas, pela mesma via
+  reporRolagemDoPainel(rolou);
   /* O que cada serviço pinta DEPOIS de o HTML estar posto — registado com
      depois:{separador:'nome'} (servicos.js:depoisDoSeparador): a lista dos
      movimentos com motor próprio (o innerHTML traz a moldura e o #txLista
@@ -933,17 +986,14 @@ function lfBar(k,sels,found,sorts){
   const sortRow=sorts?`<div class="u-d-flex u-fxd-column u-g-9px u-mt-9px">
       ${lfSel(k,'sb',[{v:'',label:sorts.defLabel||'Ordem original'}].concat(sorts.opts))}
       ${lfSel(k,'sd',[{v:'',label:'Ascendente'},{v:'desc',label:'Descendente'}])}</div>`:'';
-  return `<div class="fwrap u-h-0"><div class="fpanel ${s._open?'on':''} u-t-0"><div class="card u-p-12px">
+  return `<div class="fwrap u-h-0"><div class="fpanel ${s._open?'on':''} u-t-0"><div class="card fp-caixa">
     ${k==='lprops'&&typeof fcSelector==='function'?fcSelector():''}
     <div class="qwrap"><input id="lq_${k}" class="txq" type="search" value="${esc(lf(k).q||'')}" placeholder="Pesquisar…" autocomplete="off"
       data-input="lfSearch('${jsq(k)}',this.value);lqMostrarLimpar(this)">
       <button class="qclear${(lf(k).q||'')?'':' u-d-none'}" data-toca="vista" data-click="lqLimpar(this,'${jsq(k)}')">✕</button></div>
     <div class="u-d-flex u-fxd-column u-g-9px u-mt-9px">${sels.join('')}</div>
     ${sortRow}
-    <div class="toolbar u-m-12px-0-0">
-      <button class="btn" data-toca="vista" data-click="lfClear('${jsq(k)}')">${ic('x',15)} Limpar</button>
-      <button class="btn primary" data-toca="camada" data-click="lfApply('${jsq(k)}')">${ic('check',15)} Fechar</button>
-    </div>
+    ${fpanelPe(`lfClear('${jsq(k)}')`,`lfApply('${jsq(k)}')`)}
   </div></div></div>
   ${n?`<div class="small u-m-2px-0-10px">${found} resultado${found===1?'':'s'} com os filtros ativos${String(s.q||'').trim()?' · pesquisa: “'+esc(s.q.trim())+'”':''}.</div>`:''}`;
 }

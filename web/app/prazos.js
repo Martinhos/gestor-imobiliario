@@ -235,7 +235,7 @@ function prazosDe(hoje){
   if(houveRendasEmY){
     const alvo=vY.entrega.ate;
     poe('irs',String(Y),alvo,'Entregar o IRS — Anexo F de '+Y,
-      'De '+irsDiaMes(vY.entrega.de)+' a '+irsDiaMes(alvo)+'. A página Declaração tem as linhas dos quadros 4.1 e 4.2 e o que ainda falta.',
+      'De '+irsDiaMes(vY.entrega.de)+' a '+irsDiaMes(alvo)+'.'+(servicoLigado('fisco')?' A página Declaração tem as linhas dos quadros 4.1 e 4.2 e o que ainda falta.':''),
       servicoLigado('fisco')?"go('fisco')":'',false);
   }
 

@@ -88,8 +88,13 @@ function txGuardar(id){
   /* um pagamento de crédito a sério (não um planeado nem um modelo só) abate capital
      na ficha do imóvel: sem «Editar a ficha» o movimento subia e a dívida não */
   if(tForm.kind==='loan'&&!planeado&&(m.modo!=='tpl'||m.alsoTx)){const rc=motivoCredito(tForm.propertyId);if(rc)return toast(rc)}
-  /* pela ordem do formulário: o montante vem primeiro, e gravar vazio marca-o a ele */
-  if(!(tForm.amount>0))return falhaCampo('t_amount','Indica um montante.');
+  /* pela ordem do formulário: o montante vem primeiro, e gravar vazio marca-o a ele.
+     Num modelo só (sem registar) pode ficar vazio: grava-se 0, e o que depende do
+     total (a divisão por valores, a distribuição da prestação) espera pelo montante
+     que se escrever ao usar o modelo */
+  const semMontante=txMontanteOpcional()&&!tForm.amount;
+  if(semMontante)tForm.amount=0;
+  else if(!(tForm.amount>0))return falhaCampo('t_amount','Indica um montante.');
   if(!tForm.label.trim())return falhaCampo('t_label','Escreve uma descrição.');
   /* com hipotecas vivas, um pagamento de crédito sem hipoteca ia parar à conta errada ou a nenhuma */
   if(tForm.kind==='loan'&&!tForm.loanId&&liveLoans(prop(tForm.propertyId)).length)return falhaCampo('t_loan','Indica a hipoteca.');
@@ -102,20 +107,32 @@ function txGuardar(id){
   const pe=psplitError();if(pe)return toast(pe);
   const lV=tForm.kind==='loan'&&tForm.loanId?findLoan(prop(tForm.propertyId),tForm.loanId):null;
   if(lV){
-    Object.assign(tForm,distribuicaoDe(tForm,lV));
-    if(tForm.payType!=='amortizacao'){
-      if(Number(tForm.interest)<0||Number(tForm.stamp)<0||Number(tForm.principal)<0)return toast('Juros e selo ultrapassam o montante: baixa os juros na tabela da distribuição.');
-      const s=r2(Number(tForm.interest||0)+Number(tForm.stamp||0)+Number(tForm.principal||0));
-      if(Math.abs(s-tForm.amount)>0.011)return toast('Juros, selo e capital têm de somar o montante ('+euro2(tForm.amount)+').');
+    /* sem montante não há o que distribuir: o modelo não leva distribuição (nem a de
+       um montante que já teve), e o movimento que nascer dele calcula-a com o seu */
+    if(semMontante)['interest','stamp','principal','fee'].forEach(k=>{delete tForm[k]});
+    else{
+      Object.assign(tForm,distribuicaoDe(tForm,lV));
+      if(tForm.payType!=='amortizacao'){
+        if(Number(tForm.interest)<0||Number(tForm.stamp)<0||Number(tForm.principal)<0)return toast('Juros e selo ultrapassam o montante: baixa os juros na tabela da distribuição.');
+        const s=r2(Number(tForm.interest||0)+Number(tForm.stamp||0)+Number(tForm.principal||0));
+        if(Math.abs(s-tForm.amount)>0.011)return toast('Juros, selo e capital têm de somar o montante ('+euro2(tForm.amount)+').');
+      }
+      const av=loanAvail(tForm,lV);
+      if(Number(tForm.principal)>av+0.011)return toast('Só faltam '+euro2(av)+' pagar nesta hipoteca — não podes amortizar mais do que isso.');
     }
-    const av=loanAvail(tForm,lV);
-    if(Number(tForm.principal)>av+0.011)return toast('Só faltam '+euro2(av)+' pagar nesta hipoteca — não podes amortizar mais do que isso.');
     if(!tForm._edit&&!(Number(lV.outstanding)>0))return toast('Esta hipoteca já está paga: não é possível associar novos pagamentos.');
   }
   if(planeado)return txGuardarPlaneado();
   if(m.modo==='tpl')return txGuardarModelo();
   return txGuardarMovimento(id);
 }
+/* Se o montante do formulário aberto pode ficar vazio: só num modelo que se
+   guarda sozinho (o modo 'tpl' sem alsoTx). Com alsoTx regista-se também o
+   movimento, e um movimento leva sempre montante; registar, confirmar e os
+   planeados também.
+   Recebe: nada (lê o txModo).
+   Devolve: true ou false. */
+function txMontanteOpcional(){return txModo.modo==='tpl'&&!txModo.alsoTx}
 /* Guardar no modo 'rec': só o planeado muda (ou nasce); não cria movimentos.
    O txGuardar já validou.
    Devolve: nada — grava, fecha e redesenha. */
@@ -181,7 +198,8 @@ function txGuardarMovimento(id){
 }
 /* Afina o tForm depois de mudar o imóvel ou o tipo: limpa quem paga/recebe se já não for dono,
    escolhe a hipoteca viva por defeito e, se o montante ainda estiver vazio, sugere valor e
-   descrição a partir da renda do contrato ou da prestação da hipoteca. As sugestões ficam
+   descrição a partir da renda do contrato ou da prestação da hipoteca (menos ao alterar um
+   modelo guardado, que pode ter ficado sem montante de propósito). As sugestões ficam
    marcadas em _aA/_aL para o keepTyped as distinguir do que o utilizador escreveu.
    Devolve: nada — só mexe no tForm; quem chama repinta depois. */
 function prefill(){
@@ -203,7 +221,8 @@ function prefill(){
   /* numa renda nova o mês a que respeita é, quase sempre, o mês em que entra:
      sugere-se, e quem recebe em atraso corrige o campo */
   if(tForm.kind==='income'&&!tForm._edit&&tForm.contractId&&!tForm.periodo&&/^\d{4}-\d{2}/.test(String(tForm.date||'')))tForm.periodo=String(tForm.date).slice(0,7);
-  if(tForm.amount)return;
+  /* um modelo guardado sem montante ficou assim de propósito: alterá-lo não o volta a sugerir */
+  if(tForm.amount||(txMontanteOpcional()&&txModo.tplId))return;
   const set=(a,l)=>{tForm.amount=Math.round(a*100)/100;tForm._aA=tForm.amount;if(!tForm.label){tForm.label=l;tForm._aL=l}};
   if(tForm.kind==='income'&&p){
     const c=tForm.contractId?contract(tForm.contractId):null;
@@ -441,7 +460,7 @@ function txBody(){
   const catKeys=Object.keys(cs).filter(c=>!(t.kind==='expense'&&c==='Crédito à habitação'));if(t.category&&catKeys.indexOf(t.category)<0)catKeys.unshift(t.category);
   const credit=t.kind==='owed'||t.kind==='repay',settle=t.kind==='settle';
   const owOpts=[{v:'',label:'Todos os proprietários'}].concat(ows.map(o=>({v:o.id,label:rotuloDoDono(o,ows.length)})));
-  const planeado=txModo.modo==='rec',modelo=txModo.modo==='tpl',tom=txTomDoTipo(t.kind);
+  const planeado=txModo.modo==='rec',modelo=txModo.modo==='tpl',tom=txTomDoTipo(t.kind),montanteOpc=txMontanteOpcional();
   const repor=calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011;
   const imovel=`<label>Imóvel${podeSemImovel()?'':' <span class="req">*</span>'}${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:(t.todos?'*':'')),opcoesDoImovel(t),'onPropChange','rascunho')}</label>`;
   /* O formulário do canvas (M-Novo movimento): o tipo num segmentado, o
@@ -455,9 +474,10 @@ function txBody(){
     ${txTipoSegm(t)}
     ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" aria-pressed="${t.kind===k}" data-toca="rascunho" data-click="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
     <div class="sect mov-grp">
-      <label>Montante (€) <span class="req">*</span><div class="mov-montante">
-        <span class="mov-montante-campo ${tom.valor}"><input id="t_amount" type="text" inputmode="decimal" class="disp" value="${txMontanteNoCampo(t.amount)}" placeholder="Ex: ${t.kind==='income'?'900':t.kind==='loan'?'650':t.kind==='settle'?'250':t.kind==='owed'||t.kind==='repay'?'5000':'80'}" data-input="txMontanteEscrito(this.value)"><span class="disp mov-euro" aria-hidden="true">€</span></span>
+      <label>Montante (€)${montanteOpc?'':' <span class="req">*</span>'}<div class="mov-montante">
+        <span class="mov-montante-campo ${tom.valor}"><input id="t_amount" type="text" inputmode="decimal" class="disp" value="${txMontanteNoCampo(t.amount)}" ${montanteOpc?'placeholder="Opcional"':`placeholder="Ex: ${t.kind==='income'?'900':t.kind==='loan'?'650':t.kind==='settle'?'250':t.kind==='owed'||t.kind==='repay'?'5000':'80'}"`} data-input="txMontanteEscrito(this.value)"><span class="disp mov-euro" aria-hidden="true">€</span></span>
         <button type="button" class="btn sm primary${repor?'':' u-d-none'} mov-repor" id="amt_reset" title="Repor a prestação calculada" data-toca="rascunho" data-click="onAmtReset()">Repor</button></div></label>
+      ${montanteOpc?'<div class="hint u-mt-n6px">Em branco, escreves o montante quando usares o modelo.</div>':''}
       <label>Descrição <span class="req">*</span><input id="t_label" value="${esc(t.label)}" placeholder="Ex: ${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
       ${planeado?imovel:`<div class="mov-par"><label>Data<input id="t_date" type="date" value="${esc(t.date)}" data-change="txDataMudou()"></label>${imovel}</div>`}
       ${(!settle&&!t.propertyId&&!t.groupId&&!t.todos&&podeSemImovel())?'<div class="hint u-mt-n6px">Conta nos totais, mas não na avaliação de nenhum imóvel.</div>':''}
@@ -474,7 +494,7 @@ function txBody(){
           <label>Quem recebe <span class="req">*</span>${sel('t_to',t.toId||'',owOpts,'','rascunho')}</label></div>
         <div class="hint">Transferência entre proprietários deste imóvel: acerta as contas entre donos e não conta como receita nem despesa.</div>`
         :`<div class="hint">Escolhe um imóvel com pelo menos dois proprietários.</div>`)
-      :(ows.length?txPagoPorHtml(t,ows,owOpts):'')}
+      :(ows.length?txPagoPorHtml(t,ows):'')}
     </div>
     ${settle?'':`<div class="sect mov-grp" id="fold_cat">
       <div class="${subs.length||t.category?'row':''}">
@@ -510,39 +530,31 @@ function txMudaTipo(k){
   if(k===tForm.kind||(k==='owed'&&tForm.kind==='repay'))return;
   setKind(k);
 }
-/* O nome curto de um proprietário, para o segmentado de quem pagou: o primeiro
-   nome quando nenhum outro à escolha começa pelo mesmo, senão o nome inteiro;
-   com « (eu)» no meu, pela regra do rotuloDoDono.
-   Recebe: o — o proprietário; ows — os proprietários à escolha.
-   Devolve: o nome (texto, por escapar). */
-function rotuloCurtoDoDono(o,ows){
-  const pn=x=>String((x&&x.name)||'').trim().split(/\s+/)[0];
-  const curto=ows.filter(x=>pn(x)===pn(o)).length>1?(o.name||''):pn(o);
-  return ows.length>1&&meuId()&&o.id===meuId()?curto+' (eu)':curto;
-}
-/* «Pago por» (ou «Recebido por»): com até dois proprietários um segmentado
-   (o canvas) — «Todos» e um botão por dono —; com mais, o menu de sempre. O
-   valor vive no #t_paid, que o collectTx lê como antes.
-   Recebe: t — o movimento do formulário; ows — os proprietários à escolha;
-   owOpts — as opções do menu, para quando são mais de dois.
+/* «Pago por» (ou «Recebido por»): «Todos» e um chip por proprietário, com o
+   nome inteiro, numa fila que parte para a linha seguinte quando não cabe
+   (estilos.css:.pago-por). Foi um segmentado de botões iguais e os nomes
+   saíam cortados («Martinho (e…»); dos quatro desenhos que o Martinho viu,
+   escolheu os chips. Servem de um a quantos donos houver, sem trocar de
+   componente a partir do terceiro. O valor vive no #t_paid, que o collectTx
+   lê como antes.
+   Recebe: t — o movimento do formulário; ows — os proprietários à escolha.
    Devolve: o HTML do campo (texto). */
-function txPagoPorHtml(t,ows,owOpts){
+function txPagoPorHtml(t,ows){
   const rot=isIn(t.kind)?'Recebido por':'Pago por';
-  if(ows.length>2)return `<label>${rot}${sel('t_paid',t.paidBy||'',owOpts,'','rascunho')}</label>`;
-  const ops=[{v:'',curto:'Todos',nome:'Todos os proprietários'}].concat(ows.map(o=>({v:o.id,curto:rotuloCurtoDoDono(o,ows),nome:rotuloDoDono(o,ows.length)})));
+  const ops=[{v:'',rotulo:'Todos',nome:'Todos os proprietários'}].concat(ows.map(o=>{const n=rotuloDoDono(o,ows.length);return {v:o.id,rotulo:n,nome:n}}));
   return `<div class="mov-campo"><span class="flabel" id="t_paidL">${rot}</span><input type="hidden" id="t_paid" value="${esc(t.paidBy||'')}">
-    <div class="segm" role="radiogroup" aria-labelledby="t_paidL">${ops.map(o=>{const on=(t.paidBy||'')===o.v;
-      return `<button type="button" role="radio" aria-checked="${on}"${on?' class="on"':''} data-v="${esc(o.v)}" title="${esc(o.nome)}"${o.nome!==o.curto?` aria-label="${esc(o.nome)}"`:''} data-toca="rascunho" data-click="txPagoPor('${jsq(o.v)}')">${esc(o.curto)}</button>`}).join('')}</div></div>`;
+    <div class="chips-fila pago-por" role="radiogroup" aria-labelledby="t_paidL">${ops.map(o=>{const on=(t.paidBy||'')===o.v;
+      return `<button type="button" role="radio" aria-checked="${on}" class="chip${on?' on':''}" data-v="${esc(o.v)}" title="${esc(o.nome)}"${o.nome!==o.rotulo?` aria-label="${esc(o.nome)}"`:''} data-toca="rascunho" data-click="txPagoPor('${jsq(o.v)}')">${ic('check',14)}<span>${esc(o.rotulo)}</span></button>`}).join('')}</div></div>`;
 }
-/* Um toque no segmentado de quem pagou: escreve no #t_paid e no tForm, acende
-   o botão tocado e refaz a dica da divisão, que diz se há quem pagou. Não
+/* Um toque num chip de quem pagou: escreve no #t_paid e no tForm, acende o
+   chip tocado e refaz a dica da divisão, que diz se há quem pagou. Não
    repinta o formulário: o resto não depende disto.
    Recebe: v — o id do proprietário, ou '' para «Todos».
-   Devolve: nada — mexe no campo, no tForm e no segmentado. */
+   Devolve: nada — mexe no campo, no tForm e nos chips. */
 function txPagoPor(v){
   const h=document.getElementById('t_paid');if(h)h.value=v||'';
   tForm.paidBy=v||null;
-  const g=h&&h.parentNode&&h.parentNode.querySelector?h.parentNode.querySelector('.segm'):null;
+  const g=h&&h.parentNode&&h.parentNode.querySelector?h.parentNode.querySelector('.pago-por'):null;
   if(g)[].slice.call(g.querySelectorAll('[role="radio"]')).forEach(b=>{const on=(b.getAttribute('data-v')||'')===(v||'');
     b.setAttribute('aria-checked',on?'true':'false');b.classList.toggle('on',on)});
   refreshSplit();
@@ -662,17 +674,19 @@ function splitHint(ows){
   return intro+partesDaDivisaoHtml(ows.map((o,i)=>({nome:String(o.name||'').split(' ')[0],cents:c[i]})),Math.round(total*100),aviso);
 }
 // Valida a divisão entre proprietários antes de guardar: devolve a mensagem de erro,
-// ou '' se está tudo certo (quotas e partes iguais nunca falham).
+// ou '' se está tudo certo (quotas e partes iguais nunca falham). Num modelo sem
+// montante não há total com que comparar os valores e os ajustes: essa soma confere-se
+// no movimento que nascer dele; as percentagens e as quotas conferem-se já.
 // Devolve: a mensagem de erro (string) ou '' se está tudo válido.
 function splitError(){
   const t=tForm,p=prop(t.propertyId),mode=(t.split||{}).mode;
   if(!p||!mode||mode==='quota'||mode==='equal')return '';
   const os=ownersOfProp(p),parts=(t.split||{}).parts||{},total=Math.abs(Number(t.amount)||0);
-  const s2=sum(os.map(o=>Number(parts[o])||0));
-  if(mode==='amount'&&Math.abs(s2-total)>0.005)return 'Os valores da divisão têm de somar '+euro2(total)+'.';
+  const s2=sum(os.map(o=>Number(parts[o])||0)),semTotal=!total&&txMontanteOpcional();
+  if(mode==='amount'&&!semTotal&&Math.abs(s2-total)>0.005)return 'Os valores da divisão têm de somar '+euro2(total)+'.';
   if(mode==='adjust'){
     if(os.some(o=>Number(parts[o])<0))return 'Os ajustes não podem ser negativos: um ajuste é sempre um extra.';
-    if(s2>total+0.005)return 'Os ajustes somam '+euro2(s2)+' e não podem passar o total ('+euro2(total)+').';
+    if(!semTotal&&s2>total+0.005)return 'Os ajustes somam '+euro2(s2)+' e não podem passar o total ('+euro2(total)+').';
   }
   if(mode==='pct'&&!(s2>0))return 'Indica pelo menos uma quota.';
   if(mode==='percent'&&Math.abs(s2-100)>0.01)return 'As percentagens têm de somar 100 (somam '+dec(Math.round(s2*100)/100)+').';
@@ -734,17 +748,19 @@ function psplitHint(){
 }
 // Valida a divisão entre imóveis: devolve a mensagem de erro ou '' se ok.
 // Só se aplica a movimentos de grupo (ou de «Todos os imóveis») com dois ou mais imóveis.
+// Num modelo sem montante, os valores e os ajustes por imóvel não se comparam com o
+// total (confere-os o movimento que nascer dele); as percentagens e as quotas, sim.
 // Devolve: a mensagem de erro (string) ou '' se está tudo válido.
 function psplitError(){
   const t=tForm;if(!t.groupId&&!t.todos)return '';
   const ps=txProps(t),mode=(t.psplit||{}).mode;
   if(ps.length<2||!mode||['equal','value','purchase'].indexOf(mode)>-1)return '';
   const parts=(t.psplit||{}).parts||{},total=Math.abs(Number(t.amount)||0);
-  const s2=sum(ps.map(p=>Number(parts[p.id])||0));
-  if(mode==='amount'&&Math.abs(s2-total)>0.005)return 'Os valores por imóvel têm de somar '+euro2(total)+'.';
+  const s2=sum(ps.map(p=>Number(parts[p.id])||0)),semTotal=!total&&txMontanteOpcional();
+  if(mode==='amount'&&!semTotal&&Math.abs(s2-total)>0.005)return 'Os valores por imóvel têm de somar '+euro2(total)+'.';
   if(mode==='adjust'){
     if(ps.some(p=>Number(parts[p.id])<0))return 'Os ajustes por imóvel não podem ser negativos: um ajuste é sempre um extra.';
-    if(s2>total+0.005)return 'Os ajustes por imóvel somam '+euro2(s2)+' e não podem passar o total ('+euro2(total)+').';
+    if(!semTotal&&s2>total+0.005)return 'Os ajustes por imóvel somam '+euro2(s2)+' e não podem passar o total ('+euro2(total)+').';
   }
   if(mode==='pct'&&!(s2>0))return 'Indica pelo menos uma quota de imóvel.';
   if(mode==='percent'&&Math.abs(s2-100)>0.01)return 'As percentagens por imóvel têm de somar 100 (somam '+dec(Math.round(s2*100)/100)+').';

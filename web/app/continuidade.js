@@ -432,10 +432,16 @@ let _fimPainel=null;
    margem direita dava régua horizontal durante a viagem. Corta-se com
    overflow-x:clip no pai. Clip, e não hidden: o hidden fá-lo contentor de
    rolamento e o cabeçalho pegajoso deixa de colar.
+   Largada por um dedo (o arrasto entre os separadores de uma área,
+   navegacao.js:sepArrastoFim), a viagem parte de onde ele deixou a página,
+   como a do calendário: quem sai começa deslocado desde px, quem entra vem
+   colado a ele, e não há salto no fotograma em que o dedo sai.
    Recebe: pintar — repinta a app no separador novo; d — +1 se o novo vem da
-   direita, -1 se vem da esquerda.
+   direita, -1 se vem da esquerda; desde (opcional) — px a que a página já
+   estava deslocada quando o dedo a largou (o #view tem de vir já sem o
+   transform do arrasto, senão as medidas saem tortas).
    Devolve: o que o pintar devolver. */
-function deslizarPainel(pintar,d){
+function deslizarPainel(pintar,d,desde){
   const v=document.getElementById('view'),m=v&&v.parentNode;
   const corta=!!(window.CSS&&CSS.supports&&CSS.supports('overflow-x','clip'));
   const alt=window.innerHeight||0,r=v?v.getBoundingClientRect():null;
@@ -481,9 +487,11 @@ function deslizarPainel(pintar,d){
      seis mil pixéis. Fica escondido enquanto a fita corre. */
   const fixos=[].slice.call(v.querySelectorAll('.fab,.fabmenu'));
   fixos.forEach(e=>{e.style.visibility='hidden'});
-  velho.animate([{transform:'none'},{transform:'translateX('+(-d*w)+'px)'}],
+  /* o: de onde o dedo largou a página — o resto da viagem é o mesmo */
+  const o=Number(desde)||0;
+  velho.animate([{transform:'translateX('+o+'px)'},{transform:'translateX('+(-d*w)+'px)'}],
     {duration:dur,easing:curva,fill:'forwards'});
-  const an=v.animate([{transform:'translateX('+(d*w)+'px)'},{transform:'none'}],
+  const an=v.animate([{transform:'translateX('+(d*w+o)+'px)'},{transform:'none'}],
     {duration:dur,easing:curva});
   const fim=function(){
     if(_fimPainel!==fim)return;_fimPainel=null;

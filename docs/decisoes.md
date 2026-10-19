@@ -40,6 +40,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-12 · O que tinha ficado de fora do IRS entra
 - 2026-10-17 · Uma cara nova, desenhada antes de escrita
 - 2026-10-19 · Os erros dos robôs não são pedidos
+- 2026-10-19 · A cara nova depois de usada, e a Declaração fica em dev
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1286,3 +1287,86 @@ cliente porque apanha também as cópias antigas da app que os robôs guardam.
 Os robôs vão nomeados um a um: um /bot/ solto apanhava os telemóveis da
 Cubot. O HeadlessChrome fica de fora da lista, porque é o browser dos
 percursos de teste, e um erro que lá apareça é para ver.
+
+## 2026-10-19 · A cara nova depois de usada, e a Declaração fica em dev
+A v40 ainda não foi publicada, e o Martinho usou-a primeiro em dev. Do que
+apontou saíram quatro folhas (os Créditos, os filtros, o deslizar entre
+separadores e o modelo sem montante) e três mudanças à mão. As regras vivem
+no design.md; aqui fica o porquê.
+
+A Declaração sai de produção. O Martinho ainda não confirmou todas as contas
+dela, e uma conta do IRS errada à vista de quem declara é pior do que não a
+ter. Fica em dev, onde se continua a conferir. Faz-se no catálogo, com o
+soDev (servicos.js:SERVICOS), e não desligando-a conta a conta no back
+office: um interruptor por conta deixava de fora as contas novas e voltava
+a ligar-se à mão. A pergunta é uma só (servicos.js:servicoForaDoAmbiente),
+feita onde já se pergunta se um serviço está ligado
+(servicos.js:servicoLigado, acessos.js:separadoresEscondidos), e por isso
+todos os caminhos que já respeitam um serviço desligado a respeitam também.
+Até o servidor dizer o ambiente vale 'producao', o lado seguro: o pior que
+acontece em dev é a Declaração aparecer um instante depois. Por isso o
+cloud/guia.js refaz a barra quando o ambiente chega, e repõe a página
+guardada: o restorePage do arranque correu sem saber que ela existia, e em
+dev um recarregamento na Declaração caía na visão geral.
+
+O plano da hipoteca mostra o primeiro ano mês a mês e o resto ano a ano
+(creditos.js:planoLinhas), a pedido do Martinho. O ano que se vive paga-se
+mês a mês, e é aí que se quer ver cada prestação; os anos seguintes só
+interessam pela soma. Os meses contam a partir da primeira prestação (a
+próxima por confirmar), e não de janeiro, para a primeira linha ser sempre
+a próxima a pagar. A taxa saiu da coluna própria: a 375px a tabela já rolava
+com seis colunas, e a coluna nova, a do que se paga, é a que explica o salto
+de uma mista; a taxa lê-se onde muda. As barras da dívida do resumo leem-se
+com o dedo pela maquinaria do graficos.js, e não por uma própria
+(creditos.js:credBarrasLer): o mesmo gesto, a mesma leitura no canto e as
+mesmas regras em toda a app. O desenho ficou, porque o Martinho gosta dele;
+só a leitura e a guia ganharam as cores da barra lateral.
+
+O «Limpar» e o «Fechar» dos filtros desapareciam ao rolar um painel
+comprido, e o botão dos filtros, primário com o painel aberto, ficava no
+telemóvel da cor do cabeçalho, justamente quando era a maneira de fechar.
+O pé (vistas.js:fpanelPe) é pegajoso dentro da caixa que já rolava, e não
+um cartão partido num corpo que rola e num pé fora dele, como o .sheet:
+o cloud/filtros.js segue as listas abertas dos seletores pelo scroll de
+`.fpanel .card`, e com outro elemento a rolar elas ficavam paradas enquanto
+a caixa andava; e num painel curto o pé assenta logo a seguir aos filtros
+sem regra nenhuma a mais. O preço é a caixa não ter padding em baixo e o pé
+levar margens negativas para ir de lado a lado. Pelo caminho, escolher a
+ordenação no fundo do painel atirava a caixa para o topo, porque o render a
+refazia; agora volta à rolagem em que estava (vistas.js:reporRolagemDoPainel).
+
+Deslizar de lado entre os separadores das Casas e do Dinheiro usa a fita da
+barra de baixo (continuidade.js:deslizarPainel), e não um vizinho pintado ao
+lado. O calendário mostra os meses vizinhos a espreitar porque um mês é uma
+grelha pequena; pintar o separador vizinho inteiro enquanto se arrasta era
+um render a mais por gesto, e um painel de quinhentas linhas. O nome do
+vizinho no vazio diz para onde se vai, e a fita, ao largar, mostra-o a
+chegar de onde o dedo deixou a página. «O que rola de lado» mede-se, não se
+nomeia (navegacao.js:sepRolaDeLado): uma lista de classes envelhecia a cada
+ecrã novo. Só o dedo e a caneta, porque num computador com a janela
+estreita arrastar com o rato é selecionar texto; e as bordas de 20px ficam
+ao voltar do Android e do Safari, que nasce lá.
+
+O modelo pode ficar sem montante (movimento.js:txMontanteOpcional). O
+Martinho nem sempre sabe quanto vai pagar — a luz, a água, uma obra —, e o
+modelo serve para não reescrever a descrição, o imóvel, a categoria e a
+divisão; o valor escreve-se no dia. Só o modelo que se guarda sozinho fica
+sem montante: tudo o que regista um movimento continua a exigi-lo, porque
+um movimento de 0 € não tem sentido nas contas. Grava-se 0, e não vazio nem
+null, para o normTx e as vistas não mudarem, que já tratam o 0 como «sem
+montante». A distribuição da prestação sai do modelo sem montante, em vez de
+se gravar a calculada: o movimento que nasce dele calcula a sua com o
+montante e a dívida desse dia, e uma distribuição velha seria ruído. As
+somas da divisão por valores ficam para o movimento: sem total não há como
+as conferir, e recusar o modelo obrigava a inventar um montante.
+
+Dois acertos de desenho. No calendário, um vizinho de seis semanas tem mais
+uma fila do que um mês de cinco, e durante o arrasto ela ficava por cima da
+legenda: a grelha corta agora em altura enquanto se arrasta
+(estilos.css:#calDias.arrasta, overflow-y:clip), e a fila só aparece depois
+de largar, quando a fita abre o espaço. Clip, e não hidden, para os
+vizinhos continuarem a espreitar dos lados. Na barra lateral, o espaço de
+baixo vivia no padding do #nav, e o sticky do fundo parava acima dele: os
+grupos viam-se a passar por baixo e pelos lados do fundo. O #nav ficou sem
+padding em baixo, e o fundo leva o espaço e a área segura por dentro, com
+margens de -14px (estilos.css:.nav-fundo).

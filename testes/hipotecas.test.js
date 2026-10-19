@@ -749,11 +749,13 @@ describe('o cartão dos por confirmar e a página dos Créditos na linguagem de 
     assert.match(html, /Liquidadas <span class="small">· 1/, 'as liquidadas atrás de um botão');
     assert.match(html, /<span class="badge grey">Liquidada<\/span>/);
     assert.doesNotMatch(html, /class="fab"/);
-    const anos = app.yearRows(A()).yrs;
+    const anos = app.yearRows(A()).yrs, plano = app.planoLinhas(A());
     const toda = app.credTabela(A());
-    assert.equal((toda.match(/<tr>/g) || []).length, anos.length + 1, 'o cabeçalho e um ano por linha');
+    assert.equal(plano.meses.length, 12);
+    assert.equal((toda.match(/<tr>/g) || []).length, 1 + 12 + plano.anos.length, 'o cabeçalho, os doze meses e um ano por linha');
+    assert.match(toda, /<tr class="cred-tab-grupo"><th scope="rowgroup" colspan="6"><span>Anos seguintes<\/span>/);
     const curta = app.credTabela(A(), 10);
-    assert.equal((curta.match(/<tr>/g) || []).length, 11);
+    assert.equal((curta.match(/<tr>/g) || []).length, 1 + 12 + 10, 'os doze meses e os dez primeiros anos');
     assert.match(curta, new RegExp('cred-tab-fim[\\s\\S]*' + anos[anos.length - 1].yr + ': '));
     assert.match(curta, /^<div class="cred-plano" role="region"/);
   });

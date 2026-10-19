@@ -178,6 +178,9 @@ describe('regressão: a camada da nuvem carrega inteira e embrulha as funções 
     assert.equal(app.vistaDoSeparador('settings'), app.vSettings);
     assert.notEqual(app.vistaDoSeparador('settings'), app._vSettings);
     assert.equal(app.depoisDoSeparador('transactions'), app.pintarListaTx);
+    // até o servidor dizer o ambiente vale produção, onde a Declaração ainda não existe
+    assert.notEqual(typeof app.vistaDoSeparador('fisco'), 'function', 'a Declaração fica de fora em produção');
+    app.CW.ambiente = 'dev';
     for (const t of SEPARADORES) assert.equal(typeof app.vistaDoSeparador(t), 'function', t);
     // e a vista embrulhada rende com dados, nuvem incluída
     const fixos = elementos(app);

@@ -114,10 +114,10 @@ describe('«Opcional» nos formulários', () => {
     assert.doesNotMatch(abertas[0].b, /type="date"[^>]*placeholder=/, 'nenhuma data leva placeholder: o browser ignora-o');
   });
 
-  test('modelo: o nome do modelo é opcional e mantém o exemplo', () => {
+  test('modelo: o nome do modelo e o montante são opcionais, e o nome mantém o exemplo', () => {
     const abertas = base();
     app.txModal({ kind: 'expense', modo: 'tpl' });
-    conferir('modelo', abertas[0].b, { obrigatorios: ['t_label', 't_amount'], exemplos: { t_tplName: true }, deixados: ['t_sp_', 't_pp_'] });
+    conferir('modelo', abertas[0].b, { obrigatorios: ['t_label'], exemplos: { t_tplName: true }, deixados: ['t_sp_', 't_pp_'] });
   });
 
   test('inquilino: só o nome é obrigatório, e ganhou o asterisco; CC, país, morada e notas guardam o exemplo', () => {

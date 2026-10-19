@@ -691,6 +691,8 @@ function patchHdr() {
     hb.innerHTML = ic('check', 16) + '<span class="hdr-concluir"> Concluir</span>';
     hb.setAttribute('aria-label', 'Concluir a edição dos cartões');
     hb.classList.add('primary');
+    // é o «Concluir», e não o botão dos filtros: não abre nem fecha painel nenhum
+    hb.removeAttribute('aria-expanded');
     hb.title = 'Terminar a edição dos cartões';
   } else {
     hb.title = 'Filtros e parâmetros';

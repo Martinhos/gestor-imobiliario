@@ -85,7 +85,7 @@ describe('os movimentos, tipo a tipo', () => {
     // o modelo guarda a retenção, mas não o mês: o campo não está lá, nem a frase dele
     app.txModal({ kind: 'income', propId: 'P1', ctId: 'C1', modo: 'tpl' });
     const tpl = abertas[1].b;
-    conferir('modelo de renda', tpl, { obrigatorios: ['t_label', 't_amount'], exemplos: { t_tplName: EX + 'Renda mensal T2' }, deixados: LINHAS });
+    conferir('modelo de renda', tpl, { obrigatorios: ['t_label'], exemplos: { t_tplName: EX + 'Renda mensal T2' }, deixados: LINHAS });
     assert.doesNotMatch(tpl, /t_periodo|Mês em branco/);
     assert.match(tpl, /Em branco, o modelo fica com o nome da descrição\./);
   });

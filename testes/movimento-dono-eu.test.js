@@ -47,12 +47,12 @@ const opcoes = (id) => Array.from(app.window.__sel[id].options).filter((o) => !o
    Recebe: html — o corpo do formulário.
    Devolve: array de textos. */
 const linhasDaDivisao = (html) => [...html.matchAll(/<span class="nm">([^<]*)<\/span>/g)].map((m) => m[1]);
-/* as escolhas do segmentado de «Pago por»/«Recebido por» (até dois donos): o
-   nome inteiro de cada uma, no title (o que o leitor de ecrã também lê), e o
-   curto que se vê no botão
+/* as escolhas dos chips de «Pago por»/«Recebido por»: o nome inteiro de
+   cada uma, no title (o que o leitor de ecrã também lê), e o que se vê no
+   chip
    Recebe: html — o corpo do formulário.
    Devolve: array de {nome, curto}. */
-const segmento = (html) => [...html.matchAll(/<button type="button" role="radio"[^>]*title="([^"]*)"[^>]*data-click="txPagoPor\([^)]*\)">([^<]*)<\/button>/g)]
+const segmento = (html) => [...html.matchAll(/<button type="button" role="radio"[^>]*title="([^"]*)"[^>]*data-click="txPagoPor\([^)]*\)"><svg[\s\S]*?<\/svg><span>([^<]*)<\/span><\/button>/g)]
   .map((m) => ({ nome: m[1], curto: m[2] }));
 const nomes = (html) => segmento(html).map((x) => x.nome);
 
@@ -74,7 +74,7 @@ describe('o «(eu)» no formulário do movimento', () => {
     duasCasas();
     const abertas = janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     app.txModal({ kind: 'expense', propId: 'P1', preset: { split: { mode: 'percent', parts: {} } } });
-    // com dois donos é o segmentado do canvas: «Todos» e um botão por dono
+    // «Todos» e um chip por dono, com o nome inteiro
     assert.deepEqual(nomes(abertas[0].b), ['Todos os proprietários', 'Eu (eu)', 'Rui']);
     assert.deepEqual(segmento(abertas[0].b).map((x) => x.curto), ['Todos', 'Eu (eu)', 'Rui']);
     assert.match(abertas[0].b, /<span class="flabel" id="t_paidL">Pago por<\/span><input type="hidden" id="t_paid" value="">/);
@@ -88,19 +88,19 @@ describe('o «(eu)» no formulário do movimento', () => {
     assert.deepEqual(nomes(abertas[1].b), ['Todos os proprietários', 'Eu (eu)', 'Rui']);
   });
 
-  test('o segmentado mostra o primeiro nome, e o inteiro quando dois começam igual', () => {
+  test('os chips mostram o nome inteiro, sem o cortar ao primeiro', () => {
     duasCasas();
     app.db.owners = [app.normPerson({ id: 'eu', name: 'Ana Costa' }), app.normPerson({ id: 'rui', name: 'Rui Matos' })];
     const abertas = janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     app.txModal({ kind: 'expense', propId: 'P1' });
-    assert.deepEqual(segmento(abertas[0].b).map((x) => x.curto), ['Todos', 'Ana (eu)', 'Rui']);
+    assert.deepEqual(segmento(abertas[0].b).map((x) => x.curto), ['Todos', 'Ana Costa (eu)', 'Rui Matos']);
     assert.deepEqual(nomes(abertas[0].b), ['Todos os proprietários', 'Ana Costa (eu)', 'Rui Matos']);
     app.db.owners[1].name = 'Ana Matos';
     app.txModal({ kind: 'expense', propId: 'P1' });
     assert.deepEqual(segmento(abertas[1].b).map((x) => x.curto), ['Todos', 'Ana Costa (eu)', 'Ana Matos']);
   });
 
-  test('um toque no segmentado escreve no campo e no movimento, sem repintar', () => {
+  test('um toque num chip escreve no campo e no movimento, sem repintar', () => {
     duasCasas();
     janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     app.txModal({ kind: 'expense', propId: 'P1' });
@@ -118,15 +118,15 @@ describe('o «(eu)» no formulário do movimento', () => {
     } finally { app.repaintTx = repaint; }
   });
 
-  test('com três ou mais donos fica o menu de sempre', () => {
+  test('com três ou mais donos continuam a ser chips, um por dono', () => {
     duasCasas();
     app.db.owners.push(app.normPerson({ id: 'bia', name: 'Bia' }));
     app.db.properties[0].ownerIds = ['eu', 'rui', 'bia'];
     const abertas = janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     app.txModal({ kind: 'expense', propId: 'P1' });
-    assert.deepEqual(segmento(abertas[0].b), []);
-    assert.deepEqual(opcoes('t_paid'), ['Todos os proprietários', 'Eu (eu)', 'Rui', 'Bia']);
-    assert.match(abertas[0].b, /<label>Pago por<div class="sel"/);
+    assert.deepEqual(nomes(abertas[0].b), ['Todos os proprietários', 'Eu (eu)', 'Rui', 'Bia']);
+    assert.match(abertas[0].b, /<div class="chips-fila pago-por" role="radiogroup" aria-labelledby="t_paidL">/);
+    assert.doesNotMatch(abertas[0].b, /<label>Pago por<div class="sel"/, 'já não troca para o menu');
   });
 
   test('a dica da divisão vai pelo primeiro nome, sem o sufixo, e diz se a soma bate certo', () => {
@@ -151,7 +151,7 @@ describe('o «(eu)» no formulário do movimento', () => {
     app.txModal({ kind: 'expense', propId: 'P2' });
     assert.deepEqual(nomes(abertas[0].b), ['Todos os proprietários', 'Eu']);
     assert.equal(app.tForm.paidBy, 'eu', 'e fica logo escolhido, como sempre');
-    assert.match(abertas[0].b, /role="radio" aria-checked="true" class="on" data-v="eu"/, 'e aceso no segmentado');
+    assert.match(abertas[0].b, /role="radio" aria-checked="true" class="chip on" data-v="eu"/, 'e aceso nos chips');
   });
 
   test('sem sessão (meuId vazio) não há «(eu)», mesmo com dois proprietários', () => {

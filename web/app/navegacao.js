@@ -418,7 +418,7 @@ function goBarra(id){
    Recebe: id — o separador de destino (um id de TABS, ex.: 'transactions').
    Devolve: nada — redesenha a vista. */
 function go(id){
-  const lado=_ladoSep;_ladoSep=0;
+  const lado=_ladoSep,desde=_desdeSep;_ladoSep=0;_desdeSep=0;
   /* um separador de um serviço desligado nesta conta não abre: diz-se
      porquê e fica-se onde se está (um atalho antigo, um endereço guardado) */
   if(typeof separadorLigado==='function'&&!separadorLigado(id)){toast(hintServicoDesligado(servicoDoSeparador(id)));return}
@@ -428,8 +428,266 @@ function go(id){
   /* tocar no separador aceso não é uma travessia, é uma repintura — e essa já
      tem o acompanhamento das peças */
   if(!lado||id===tab||typeof deslizarPainel!=='function')return pintar();
-  return deslizarPainel(pintar,lado);
+  return deslizarPainel(pintar,lado,desde);
 }
+/* ---- deslizar entre os separadores de uma área ----
+   No telemóvel, os separadores de uma área (Imóveis, Contratos, Pessoas,
+   Visitas; Movimentos, Planeados, Créditos) são um carrossel: arrastar de
+   lado na vista leva a página com o dedo, e largar depois de um quarto da
+   largura, ou com um sacudir, acaba a viagem até ao vizinho pela fita da
+   barra de baixo (continuidade.js:deslizarPainel), a partir de onde o dedo a
+   deixou. Largar antes disso devolve a página ao sítio. Nas pontas não há
+   vizinho: a página resiste, e não dá a volta.
+
+   As regras são as do calendário (calendario.js:calArrastar): o eixo decide-se
+   aos 10px, e um gesto que começa na vertical é da página, que rola como
+   sempre — o touch-action:pan-y do #view (estilos.css, «deslizar entre
+   separadores») deixa o browser rolar, e nesse caso chega o pointercancel e a
+   página volta ao sítio. E nunca rouba um gesto que já tem dono
+   (sepGestoLivre, sepEstadoLivre). */
+/* De onde o dedo largou a página: o go lê-o junto com o _ladoSep, e pela
+   mesma razão (os embrulhos da nuvem chamam o go com um argumento só). */
+let _desdeSep=0;
+/* o arrasto em curso: {id,x0,y0,dx,desl,ativo,w,vx,xa,ta,v,r0,meio,viz,mexe,esp,espD}, ou null */
+let _sepArrasto=null;
+/* true enquanto a página volta ao sítio (200ms): um dedo novo nesse instante
+   apanhava-a com a animação de regresso ainda por cima do transform */
+let _sepVolta=false;
+/* As bordas do ecrã são do sistema: o voltar do Android e do Safari nasce lá. */
+const SEP_BORDA=20;
+/* Onde um arrasto de lado já tem dono, e por isso nunca vira o separador: a
+   grelha do calendário, a leitura dos gráficos (e das barras da dívida dos
+   Créditos, pela mesma classe), o puxador das fotos, um bloco do painel em
+   edição, os campos de texto e as janelas. O que rola de lado vê-se pela
+   medida, e não pelo nome (sepRolaDeLado). */
+const SEP_NAO_ROUBA='#calDias,.chartbox[data-lido],.pgrab,#view.cw-edit .cw-blk,'+
+  'input,textarea,select,[contenteditable]:not([contenteditable="false"]),.modal';
+/* A porta vizinha da atual, na área onde se está, pela ordem dos separadores
+   que se veem (abasDaArea).
+   Recebe: d — +1 a seguinte (a da direita), -1 a anterior; fora (opcional) —
+   os ids escondidos (separadoresEscondidos).
+   Devolve: o id da porta (de AREAS), ou '' na ponta ou fora de uma área com
+   separadores. */
+function portaVizinha(d,fora){
+  const f=fora||(typeof separadoresEscondidos==='function'?separadoresEscondidos():[]);
+  const area=areaComSeparadores(f);if(!area||!d)return '';
+  const portas=AREAS[area].ids.filter(id=>portaVisivel(id,f));
+  const i=portas.findIndex(id=>idsDaPorta(id).indexOf(tab)>-1);
+  return i>-1&&portas[i+(d>0?1:-1)]||'';
+}
+/* O separador para onde um arrasto leva: o destino da porta vizinha (as
+   Pessoas abrem nos Inquilinos, ou nos Proprietários se só esses se veem).
+   Recebe: d — +1 a seguinte, -1 a anterior; fora (opcional) — os ids escondidos.
+   Devolve: o id de TABS, ou '' sem vizinho. */
+function vizinhoNaArea(d,fora){
+  const f=fora||(typeof separadoresEscondidos==='function'?separadoresEscondidos():[]);
+  const p=portaVizinha(d,f);return p?destinoDe(p,f):'';
+}
+/* Diz se um elemento rola de lado: tem mais largura do que mostra e deixa-se
+   rolar (as filas de chips, as tabelas, os totais dos Movimentos, os
+   tutoriais da Ajuda, o plano dos Créditos). Um contentor com overflow:auto
+   que cabe inteiro não conta — lá o arrasto é da página.
+   Recebe: el — o elemento.
+   Devolve: true/false. */
+function sepRolaDeLado(el){
+  if(!el||!(el.scrollWidth>el.clientWidth+1))return false;
+  let ox='';try{ox=getComputedStyle(el).overflowX}catch(e){}
+  return ox==='auto'||ox==='scroll';
+}
+/* Diz se um arrasto que começa neste elemento pode ser de virar o
+   separador: tem de ser dentro do #view, e nem o elemento nem os pais até ao
+   #view podem ter já dono para um arrasto de lado (SEP_NAO_ROUBA,
+   sepRolaDeLado).
+   Recebe: alvo — o elemento onde o dedo pousou (o target do pointerdown).
+   Devolve: true/false. */
+function sepGestoLivre(alvo){
+  const v=document.getElementById('view');
+  if(!alvo||!v||typeof alvo.closest!=='function'||!v.contains(alvo))return false;
+  if(alvo.closest(SEP_NAO_ROUBA))return false;
+  for(let el=alvo;el&&el!==v;el=el.parentElement)if(sepRolaDeLado(el))return false;
+  return true;
+}
+/* Diz se a app está num estado em que um arrasto pode virar o separador: um
+   ecrã até 900px (no computador a barra lateral mostra as portas todas), uma
+   área com separadores, e nada por cima nem a meio — uma janela, a gaveta, a
+   seleção (dos Movimentos ou de uma lista), o painel em edição.
+   Devolve: true/false. */
+function sepEstadoLivre(){
+  let estreito=false;
+  try{estreito=!!(window.matchMedia&&window.matchMedia('(max-width:900px)').matches)}catch(e){}
+  if(!estreito)return false;
+  if(typeof modalStack!=='undefined'&&modalStack.length)return false;
+  const b=document.body,cl=b&&b.classList;
+  if(cl&&(cl.contains('open')||cl.contains('sel-on')))return false;
+  if(window.CW&&(window.CW.editMode||window.CW.selMode))return false;
+  return !!areaComSeparadores();
+}
+/* A resistência de uma ponta: a página anda cada vez menos quanto mais se
+   puxa, e nunca passa de uma fração da largura (a curva das listas do iOS).
+   Recebe: dx — px que o dedo andou; w — a largura da página.
+   Devolve: px a que a página fica (com o sinal de dx). */
+function sepElastico(dx,w){
+  const a=Math.abs(dx),l=w||1;
+  return Math.sign(dx)*(1-1/(a*.55/l+1))*l*.5;
+}
+/* Começa (talvez) um arrasto entre separadores: guarda onde o dedo pousou e
+   fica à escuta. Só passa a arrastar no sepArrastoMove, quando o dedo andou
+   na horizontal. O rato não entra: num ecrã estreito de computador, arrastar
+   é selecionar texto.
+   Recebe: e — o PointerEvent do pointerdown (ouvido no documento).
+   Devolve: nada — liga os ouvintes do documento. */
+function sepArrastar(e){
+  if(_sepArrasto||!e||e.button>0||e.isPrimary===false||e.pointerType==='mouse')return;
+  // a meio de uma fita a página está em viagem: um dedo agora pegava nela a meio
+  if(_sepVolta||(typeof _fimPainel!=='undefined'&&_fimPainel))return;
+  const larg=window.innerWidth||0;
+  if(e.clientX<SEP_BORDA||(larg&&e.clientX>larg-SEP_BORDA))return;
+  if(!sepEstadoLivre()||!sepGestoLivre(e.target))return;
+  _sepArrasto={id:e.pointerId,x0:e.clientX,y0:e.clientY,dx:0,desl:0,ativo:false,w:0,vx:0,xa:e.clientX,ta:Date.now()};
+  document.addEventListener('pointermove',sepArrastoMove);
+  document.addEventListener('pointerup',sepArrastoFim);
+  document.addEventListener('pointercancel',sepArrastoFim);
+}
+/* O dedo andou: decide se o gesto é de virar o separador (horizontal) ou da
+   página (vertical), e, sendo de virar, leva a página com ele.
+   Recebe: e — o PointerEvent do pointermove.
+   Devolve: nada — mexe no transform do #view. */
+function sepArrastoMove(e){
+  const a=_sepArrasto;if(!a||e.pointerId!==a.id)return;
+  let dx=e.clientX-a.x0;const dy=e.clientY-a.y0;
+  if(!a.ativo){
+    // o dedo foi para cima ou para baixo: é a página a rolar, não é connosco
+    if(Math.abs(dy)>10&&Math.abs(dy)>=Math.abs(dx))return sepArrastoLargar();
+    if(Math.abs(dx)<10)return;
+    /* entretanto pode ter aberto uma janela (o toque longo) ou começado uma
+       seleção: o gesto deixou de ser nosso */
+    const v=document.getElementById('view');
+    if(!v||!sepEstadoLivre())return sepArrastoLargar();
+    const r=v.getBoundingClientRect(),alt=window.innerHeight||0;
+    a.ativo=true;a.v=v;a.r0=r;a.w=r.width||window.innerWidth||1;
+    a.meio=(Math.max(r.top,0)+Math.min(r.bottom,alt||r.bottom))/2;
+    a.viz={'1':vizinhoNaArea(1),'-1':vizinhoNaArea(-1)};
+    a.mexe=!semMovimento()&&!!v.parentNode;
+    // a folga de decidir não conta: a página arranca colada ao dedo, sem salto
+    a.x0+=dx<0?-10:10;dx=e.clientX-a.x0;
+    if(a.mexe)v.parentNode.classList.add('sep-arrasto');
+  }
+  /* um toque longo que chegou a meio (o dedo parou antes dos 12px dele) abriu
+     uma janela ou uma seleção: a página volta ao sítio e o gesto acaba */
+  else if(!sepEstadoLivre())return sepArrastoFim({type:'pointercancel',pointerId:a.id});
+  const agora=Date.now(),dt=agora-a.ta;
+  // a velocidade dos últimos instantes, alisada: é ela que diz se o gesto foi um sacudir
+  if(dt>0)a.vx=.6*((e.clientX-a.xa)/dt)+.4*a.vx;
+  a.xa=e.clientX;a.ta=agora;a.dx=dx;
+  // arrastar para a esquerda traz o separador da direita, que é o seguinte
+  const d=dx<0?1:-1,tem=!!a.viz[d];
+  a.desl=tem?dx:sepElastico(dx,a.w);
+  if(a.mexe)a.v.style.transform='translateX('+a.desl+'px)';
+  sepEspreita(a,tem&&dx?d:0);
+}
+/* O nome do separador que vem, a espreitar no espaço que a página deixa ao
+   sair para o lado — sem ele, o arrasto mostrava um vazio e não dizia para
+   onde se ia. Acende-se quando largar já vira. Não é tocável nem lido pelo
+   leitor de ecrã: quem lê tem os separadores no topo do ecrã. Sem movimento
+   (prefers-reduced-motion) fica parado à beira do ecrã, e só aparece.
+   Recebe: a — o arrasto em curso; d — o lado do vizinho (+1, -1), ou 0 para
+   o esconder (na ponta, ou com o dedo de volta ao sítio).
+   Devolve: nada — cria, posiciona ou esconde o .sep-espreita. */
+function sepEspreita(a,d){
+  if(!d){if(a.esp)a.esp.classList.remove('on');return}
+  if(!a.esp){
+    if(typeof camadaDeSaida!=='function')return;
+    a.esp=document.createElement('div');a.esp.className='sep-espreita';a.esp.setAttribute('aria-hidden','true');
+    camadaDeSaida().appendChild(a.esp);
+  }
+  const el=a.esp;
+  if(a.espD!==d){
+    a.espD=d;
+    const nome=esc(rotuloDaPorta(portaVizinha(d)).label);
+    el.innerHTML=d>0?'<span>'+nome+'</span>'+ic('chevR',16):ic('chev',16)+'<span>'+nome+'</span>';
+    el.style.top=Math.round(a.meio)+'px';
+    a.espW=el.offsetWidth||0;
+  }
+  /* colado à borda da página que sai, 12px para dentro do vazio; sem
+     movimento, à beira do ecrã do lado de onde o vizinho viria */
+  const borda=d>0?a.r0.right+(a.mexe?a.desl:-a.espW-24):a.r0.left+(a.mexe?a.desl:a.espW+24);
+  const x=d>0?borda+12:borda-12-a.espW;
+  el.style.transform='translate('+Math.round(x)+'px,-50%)';
+  el.classList.add('on');
+  el.classList.toggle('pronto',Math.abs(a.dx)>a.w/4);
+}
+/* Tira os ouvintes do documento e esquece o arrasto.
+   Devolve: nada. */
+function sepArrastoLargar(){
+  document.removeEventListener('pointermove',sepArrastoMove);
+  document.removeEventListener('pointerup',sepArrastoFim);
+  document.removeEventListener('pointercancel',sepArrastoFim);
+  _sepArrasto=null;
+}
+/* Devolve a página ao estado de antes do arrasto: sem o transform do dedo,
+   sem o corte do pai, sem o nome a espreitar.
+   Recebe: a — o arrasto que acabou.
+   Devolve: nada. */
+function sepArrastoArrumar(a){
+  if(a.v)a.v.style.transform='';
+  if(a.v&&a.v.parentNode)a.v.parentNode.classList.remove('sep-arrasto');
+  if(a.esp)a.esp.remove();
+}
+/* O dedo saiu: vira para o separador vizinho, se o gesto chegou para isso,
+   ou devolve a página ao sítio. Um pointercancel (o browser ficou com o
+   gesto, para rolar) nunca vira. O toque que o browser dispara a seguir não é
+   um toque num cartão — engole-se, senão largar a página em cima de um
+   imóvel abria-o.
+   Recebe: e — o PointerEvent do pointerup ou do pointercancel.
+   Devolve: nada — vira pelo sepIrPara ou anima o regresso. */
+function sepArrastoFim(e){
+  const a=_sepArrasto;if(!a||(e&&e.pointerId!==a.id))return;
+  sepArrastoLargar();
+  if(!a.ativo)return;
+  sepEngolirToque();
+  const d=a.dx<0?1:-1,alvo=a.viz[d];
+  const vira=!!alvo&&e.type!=='pointercancel'&&(Math.abs(a.dx)>a.w/4||
+    (Math.abs(a.dx)>30&&Math.abs(a.vx)>.4&&(a.vx<0)===(a.dx<0)));
+  if(a.esp){a.esp.remove();a.esp=null}
+  if(vira){
+    /* o #view sai do arrasto ANTES de a fita o medir; ela parte de onde ele estava */
+    const desde=a.mexe?a.desl:0;
+    sepArrastoArrumar(a);
+    return sepIrPara(alvo,d,desde);
+  }
+  if(!a.mexe||!a.desl||!a.v.animate)return sepArrastoArrumar(a);
+  const v=a.v,de=a.desl,dur=msDoToken('--medio',200);
+  v.style.transform='';_sepVolta=true;
+  const an=v.animate([{transform:'translateX('+de+'px)'},{transform:'none'}],
+    {duration:dur,easing:tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)')});
+  let feito=false;
+  const fim=()=>{if(feito)return;feito=true;_sepVolta=false;sepArrastoArrumar(a)};
+  an.onfinish=fim;
+  // a rede de sempre: num separador escondido o onfinish não chega
+  setTimeout(fim,dur+120);
+}
+/* Vai para o separador vizinho, com a fita a correr para o lado certo e a
+   partir de onde o dedo deixou a página — o mesmo caminho do goBarra.
+   Recebe: id — o separador de destino; d — +1 se vem da direita, -1 da
+   esquerda; desde — px a que a página estava deslocada (0 sem movimento).
+   Devolve: nada — navega. */
+function sepIrPara(id,d,desde){
+  _ladoSep=d;_desdeSep=desde||0;
+  try{go(id)}finally{_ladoSep=0;_desdeSep=0}   // o go GLOBAL: a nuvem embrulha-o
+}
+/* Engole o próximo clique, venha de onde vier — o que o browser dispara logo
+   a seguir ao fim de um arrasto. Corre na captura do window, depois da
+   ligação das ações (eventos.js), e trava-o antes de chegar ao cartão onde o
+   dedo saiu.
+   Devolve: nada. */
+function sepEngolirToque(){
+  const engole=ev=>{ev.stopPropagation();ev.preventDefault();tira()};
+  const tira=()=>window.removeEventListener('click',engole,true);
+  window.addEventListener('click',engole,true);
+  // se não vier clique nenhum (o browser não o dá depois de um arrasto), o próximo toque é a sério
+  setTimeout(tira,350);
+}
+document.addEventListener('pointerdown',sepArrastar);
 // Navega dentro das Definições: p é a subpágina ('' volta ao menu). Entrar
 // numa subpágina arma o histórico, para o voltar do sistema subir a Definições.
 // Os Grupos e os Colaboradores são separadores que vivem nas Definições: as

@@ -45,7 +45,8 @@ function credSeloFixa(l){
 /* O resumo das hipotecas ativas: em dívida, as prestações de um mês e os
    juros e o selo até ao fim — e, no telemóvel, a dívida no fim de cada ano em
    barras (a soma das hipotecas por ano civil, creditos.js:credDividaPorAno,
-   como o gráfico de todas na amortização; a barra do ano corrente acesa). No
+   como o gráfico de todas na amortização; a barra do ano corrente acesa), que
+   se leem com o dedo como os gráficos (creditos.js:credBarrasLer). No
    telemóvel é o cartão azul-noite do canvas M-Creditos; no computador, três
    cartões (D-Creditos). As contas são as de sempre.
    Recebe: live — as {p,l} com capital em dívida.
@@ -62,8 +63,24 @@ function credResumo(live){
     <div class="cred-r cred-r-divida"><p class="cred-r-rot">Em dívida · ${n} ${n===1?'hipoteca ativa':'hipotecas ativas'}</p><p class="disp num cred-r-v">${euro(tot)}</p></div>
     <div class="cred-r cred-r-prest"><p class="cred-r-rot">Prestações</p><p class="disp num cred-r-v2">${euro2(pay)}<span class="cred-r-mes">/mês</span></p></div>
     <div class="cred-r cred-r-juros"><p class="cred-r-rot">Juros e selo até ao fim</p><p class="disp num cred-r-v2">${euro(juros)}</p></div>
-    ${nY>1?`<div class="cred-r-graf"><svg class="cred-barras" viewBox="0 0 ${nY*10} 56" preserveAspectRatio="none" role="img" aria-label="${esc('Dívida no fim de cada ano, de '+y0+' a '+y1+', a descer até '+euro(somas[nY-1])+'.')}">${barras}</svg>
+    ${nY>1?`<div class="cred-r-graf">${credBarrasLer(d.anos,somas,agora,`<svg class="cred-barras" viewBox="0 0 ${nY*10} 56" preserveAspectRatio="none" role="img" aria-label="${esc('Dívida no fim de cada ano, de '+y0+' a '+y1+', a descer até '+euro(somas[nY-1])+'. Percorre com o dedo para ler cada ano.')}">${barras}</svg>`)}
       <div class="cred-r-eixo num"><span>${y0}</span><span>Dívida no fim de cada ano</span><span>${y1}</span></div></div>`:''}</section>`;
+}
+/* As barras da dívida do resumo, prontas a ler com o dedo como os gráficos
+   da Visão geral, pela mesma maquinaria (graficos.js:dadosParaLer,
+   graficos.js:cabecaDaLeitura; o gesto é dos ouvintes do documento,
+   graficos.js:mostrarColuna): uma guia acompanha o ano mais próximo e a
+   leitura («2031 · 142 310 €») fica no lugar reservado por cima das barras,
+   acesa no ano corrente e de volta a ele ao largar. O desenho é o de sempre;
+   as colunas ficam no meio de cada barra, passadas às unidades do leitor
+   (graficos.js:W), porque o SVG tem dez unidades por ano e estica à largura.
+   Recebe: anos — os anos civis (números); somas — a dívida no fim de cada um;
+   agora — o índice do ano corrente; svg — o HTML do desenho das barras.
+   Devolve: o HTML do contentor .chartler com a cabeça e a caixa do desenho. */
+function credBarrasLer(anos,somas,agora,svg){
+  const n=anos.length,rot=anos.map(String),xs=anos.map((_,i)=>(i*10+5)/(n*10)*W);
+  const serie=[{nome:'',cor:'var(--side-text)',vals:somas}];
+  return cabecaDaLeitura(`<div class="chartbox cred-r-caixa"${dadosParaLer(rot,serie,xs,euro)}>${svg}</div>`,rot,serie,euro,'',agora);
 }
 /* O cartão de uma hipoteca: o nome e o imóvel, o selo do tipo de taxa, a taxa
    por extenso, o fim da taxa fixa quando está perto, a prestação (e a de
@@ -93,25 +110,72 @@ function credCartao(x,sel){
       :'<p class="small">Crédito liquidado: já não há capital em dívida.</p>'}</div>
     ${acoes?`<div class="cred-hp-acoes">${acoes}</div>`:''}</div>`;
 }
-/* O plano de amortização ano a ano numa tabela que rola dentro da sua caixa:
-   o ano, a taxa, o capital, os juros, o selo e a dívida no fim (yearRows —
-   as contas de sempre). Com max, as primeiras linhas e uma última com o ano
-   em que acaba.
-   Recebe: l — a hipoteca viva; max (opcional) — quantas linhas mostrar.
+/* As linhas do plano de amortização: o primeiro ano mês a mês e o resto por
+   ano civil. As doze primeiras prestações (as da amortização, credito.js:amort,
+   a contar do mês da primeira, creditos.js:credPrimeiraData) vão uma por
+   linha, com o mês e o ano («nov 2026»): é o ano que se está a viver, e é
+   mês a mês que se paga. Depois, uma linha por ano civil com a soma desse ano;
+   a primeira é o resto do ano em que acabam as doze (parcial: menos de doze
+   prestações), e a última a do ano em que o crédito acaba. Cada linha leva o
+   que se paga (capital + juros + selo — a prestação com o selo; na última
+   prestação o capital é o que falta, e não o da prestação calculada), o
+   capital, os juros, o selo, a dívida no fim (a do último mês da linha), a
+   taxa (a do último mês) e quantas prestações tem. As somas batem com as da
+   amortização: a soma de todas as linhas é a soma de todos os meses.
+   Recebe: l — a hipoteca.
+   Devolve: {meses, anos} — meses as até doze primeiras {rot,d,n,pay,cap,int,st,bal,rate}
+   (rot «nov 2026», d 'AAAA-MM', n 1); anos as seguintes {rot,yr,n,pay,cap,int,st,bal,rate}
+   (rot o ano em texto, n as prestações desse ano). */
+function planoLinhas(l){
+  const a=amort(l),d0=credPrimeiraData(l),meses=[],anos=[];
+  let yr=Number(d0.slice(0,4)),mes=Number(d0.slice(5,7)),ano=null;
+  a.rows.forEach((r,i)=>{
+    const pay=r.cap+r.int+r.st;
+    if(i<12)meses.push({rot:MES[mes-1]+' '+yr,d:yr+'-'+String(mes).padStart(2,'0'),n:1,pay,cap:r.cap,int:r.int,st:r.st,bal:r.bal,rate:r.rate});
+    else{
+      if(!ano||ano.yr!==yr)anos.push(ano={rot:String(yr),yr,n:0,pay:0,cap:0,int:0,st:0,bal:0,rate:r.rate});
+      ano.n++;ano.pay+=pay;ano.cap+=r.cap;ano.int+=r.int;ano.st+=r.st;ano.bal=r.bal;ano.rate=r.rate;
+    }
+    if(++mes>12){mes=1;yr++}
+  });
+  return {meses,anos};
+}
+/* O plano de amortização numa tabela que rola dentro da sua caixa
+   (creditos.js:planoLinhas): as doze primeiras prestações mês a mês e, a
+   seguir a uma linha de grupo «Anos seguintes», um ano civil por linha com a
+   soma desse ano. Colunas: o período, o que se paga (a prestação com o
+   selo), o capital, os juros, o selo e a dívida no fim. A taxa não tem
+   coluna — a 375px já eram seis a rolar —: vai por baixo do período na
+   primeira linha e onde muda (a passagem de uma mista à variável). Um ano
+   com menos de doze prestações diz quantas. Os meses levam os cêntimos (é o
+   que sai da conta); os anos, o euro inteiro, como sempre. Com max, os meses
+   e os primeiros max anos, e uma última linha com o ano em que acaba.
+   Recebe: l — a hipoteca viva; max (opcional) — quantos anos mostrar.
    Devolve: o HTML da caixa com a tabela (texto). */
 function credTabela(l,max){
-  const r=yearRows(l),ys=r.yrs,corta=!!max&&ys.length>max,ult=ys[ys.length-1];
+  const r=planoLinhas(l),ms=r.meses,ys=r.anos,corta=!!max&&ys.length>max,ult=ys[ys.length-1];
   const taxa=v=>dec(Math.round((Number(v)||0)*1000)/1000)+'%';
-  return `<div class="cred-plano" role="region" aria-label="Plano de amortização ano a ano" tabindex="0"><table class="table cred-tab cred-tab-plano">
-    <thead><tr><th scope="col">Ano</th><th scope="col">Taxa</th><th scope="col">Capital</th><th scope="col">Juros</th><th scope="col">Selo</th><th scope="col">Dívida no fim</th></tr></thead>
-    <tbody>${(corta?ys.slice(0,max):ys).map(y=>`<tr><td><b>${y.yr}</b></td><td>${esc(taxa(y.rate))}</td><td>${euro(y.cap)}</td><td>${euro(y.int)}</td><td>${euro(y.st)}</td><td><b>${euro(y.bal)}</b></td></tr>`).join('')}
-    ${corta?`<tr class="cred-tab-fim"><td>…</td><td></td><td></td><td></td><td></td><td>${ult.yr}: ${euro(ult.bal)}</td></tr>`:''}</tbody></table></div>`;
+  let antes=null;
+  /* a taxa por baixo do período: na primeira linha e sempre que muda */
+  const sub=x=>{const t=taxa(x.rate),muda=t!==antes;antes=t;
+    const n=x.yr&&x.n!==12?x.n+(x.n===1?' prestação':' prestações'):'';
+    const ps=[n,muda?'taxa '+t:''].filter(Boolean).join(' · ');
+    return ps?`<span class="cred-tab-sub">${esc(ps)}</span>`:''};
+  const linha=(x,f)=>`<tr><td><b>${esc(x.rot)}</b>${sub(x)}</td><td>${f(x.pay)}</td><td>${f(x.cap)}</td><td>${f(x.int)}</td><td>${f(x.st)}</td><td><b>${euro(x.bal)}</b></td></tr>`;
+  const anos=corta?ys.slice(0,max):ys;
+  return `<div class="cred-plano" role="region" aria-label="Plano de amortização: o primeiro ano mês a mês, depois ano a ano" tabindex="0"><table class="table cred-tab cred-tab-plano">
+    <thead><tr><th scope="col">Período</th><th scope="col">Prestação</th><th scope="col">Capital</th><th scope="col">Juros</th><th scope="col">Selo</th><th scope="col">Dívida no fim</th></tr></thead>
+    <tbody>${ms.map(x=>linha(x,euro2)).join('')}</tbody>
+    ${ys.length?`<tbody><tr class="cred-tab-grupo"><th scope="rowgroup" colspan="6"><span>Anos seguintes</span></th></tr>
+    ${anos.map(x=>linha(x,euro)).join('')}
+    ${corta?`<tr class="cred-tab-fim"><td>…</td><td></td><td></td><td></td><td></td><td>${ult.yr}: ${euro(ult.bal)}</td></tr>`:''}</tbody>`:''}</table></div>`;
 }
 /* O painel da hipoteca aberta, ao lado da lista no computador (o canvas
    D-Creditos): o nome e o imóvel, o capital do início, o prazo, as prestações
    registadas e os documentos; Pagamento, Plano e Editar (só a quem pode); a
    prestação do próximo mês por dentro, a de depois da fase fixa, os juros e o
-   selo até ao fim; e o plano ano a ano, nas dez primeiras linhas. O «Plano»
+   selo até ao fim; e o plano (creditos.js:credTabela): os doze primeiros
+   meses e os dez anos seguintes, com o ano em que acaba. O «Plano»
    abre o plano inteiro e o gráfico (amortModal): no computador tocar numa
    hipoteca escolhe-a aqui e não abre a ficha, e era na ficha que estava a
    amortização. No telemóvel o painel não aparece: lá o plano abre-se no botão
@@ -163,7 +227,7 @@ function credPagasAlternar(){credPagas=!credPagas;render()}
    dos pagamentos sem hipoteca, e as hipotecas em cartões — no telemóvel as
    ativas e, por um botão, as liquidadas; no computador a lista à esquerda
    (chips Ativas / Liquidadas) e a hipoteca escolhida aberta à direita, com o
-   plano ano a ano. «Nova hipoteca» está no cabeçalho do computador; no
+   plano. «Nova hipoteca» está no cabeçalho do computador; no
    telemóvel, ao lado do título das ativas, e no vazio.
    Devolve: o HTML da vista (texto). */
 function vCredits(){
@@ -592,7 +656,8 @@ function credDividaPorAno(ls){
   return {anos,por,somas:anos.map((_,k)=>sum(por.map(v=>v[k])))};
 }
 let amortPid=null,amortLid='';
-/* Modal da amortização de um imóvel: com uma hipoteca escolhida, gráfico e tabela ano a ano;
+/* Modal da amortização de um imóvel: com uma hipoteca escolhida, o gráfico ano a ano e a tabela
+   (o primeiro ano mês a mês, depois ano a ano: creditos.js:credTabela);
    sem escolha, todas as hipotecas com a linha do total. Abre sempre uma janela nova (a ficha
    e o toque longo de uma hipoteca já trazem a hipoteca escolhida); só o seletor da própria
    janela (onAmortSel) troca o conteúdo no sítio. Sem hipoteca dada, escolhe sozinho se só

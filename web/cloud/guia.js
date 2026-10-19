@@ -20,13 +20,20 @@ var LS_PASSOS = 'gi_passos_fora';     // o cartão de primeiros passos foi dispe
    esconde os dados de exemplo onde eles não devem estar. A resposta chega
    depois da primeira pintura, e por isso repinta-se quando ela muda alguma
    coisa — sem sessão iniciada não há sincronização nenhuma a fazê-lo, e em
-   dev o botão do exemplo nunca chegava a aparecer. */
+   dev o botão do exemplo nunca chegava a aparecer. O ambiente também decide
+   os serviços que só existem fora de produção (servicos.js:
+   servicoForaDoAmbiente): a barra refaz-se, e quem recarregou a página num
+   deles volta a ele (o restorePage do arranque correu sem o saber). */
 CW.ambiente = 'producao';
 api('GET', '/api/auth/config')
   .then(function (c) {
     if (!c || !c.ambiente || c.ambiente === CW.ambiente) return;
     CW.ambiente = c.ambiente;
-    try { render(); } catch (e) {}
+    try {
+      if (!separadorLigado(tab)) { tab = primeiroSeparadorLigado(); setPage = ''; }
+      buildNav(); render();
+      if (tab === 'dashboard' && CW.user) restorePage();
+    } catch (e) {}
   })
   .catch(function () {});
 

@@ -793,7 +793,14 @@ notificações só aparece na visão geral (notificacoes.js:notifSino).
 Os filtros não ocupam a página: estão atrás do botão de funil do
 cabeçalho (vistas.js:hdrFiltToggle, vistas.js:hdrFiltN; o render
 pinta-o). O botão ganha um ponto quando há filtros ativos
-(estilos.css:.filtbtn) e fica primário com o painel aberto. O painel
+(estilos.css:.filtbtn) e acende com o painel aberto: primário no
+computador; no telemóvel, onde o cabeçalho tira o fundo aos botões, o par
+suave da escolha feita, --accent-soft com --accent-text
+(estilos.css:#hdrFilt.primary, no header.top do telemóvel) — com o primário
+só, o ícone ficaria na --accent-ink, da cor do cabeçalho, e o botão sumia
+justamente quando é a maneira de fechar o painel. Diz o mesmo ao leitor de
+ecrã pelo aria-expanded (vistas.js:pintarBotaoFiltros); nos Movimentos,
+onde o botão do cabeçalho é o «Selecionar vários», não o leva. O painel
 (estilos.css:.fwrap, estilos.css:.fpanel) é pegajoso e flutua por cima do
 conteúdo sem o empurrar: preso ao topo, desaparecia ao primeiro scroll. Nos
 Movimentos o botão dos filtros fica ao lado da pesquisa, que está sempre à
@@ -801,7 +808,18 @@ vista, e o do cabeçalho é o «Selecionar vários» (ver «Os Movimentos»).
 
 Os três painéis de filtro tinham três feitios; fica UM (a nota do
 vistas.js:lfSel): mexes, a lista muda logo atrás; «Limpar» à esquerda,
-«Fechar» primário à direita, em todo o lado. lfBar (vistas.js:lfBar)
+«Fechar» primário à direita, em todo o lado. Fora dos Movimentos, o
+«Limpar» e o «Fechar» vivem num pé preso ao fundo da caixa (vistas.js:fpanelPe,
+estilos.css:.fp-pe), na forma do rodapé das janelas: o resto rola por trás,
+o pé fica, com a divisória e o fundo do cartão; no telemóvel vão a meias,
+com 48px. A caixa continua a ser quem rola (o cloud/filtros.js segue as
+listas abertas pelo scroll dela) e o pé é o último filho, pegajoso em
+baixo: num painel curto fica logo a seguir aos filtros, sem esticar a
+caixa, e o scroll-padding da caixa é a altura dele, para o Tab não deixar um
+campo escondido por trás. Mexer num filtro repinta o ecrã, e a caixa volta
+à rolagem em que estava (vistas.js:rolagemDoPainel,
+vistas.js:reporRolagemDoPainel): escolher a ordenação, no fundo de um
+painel comprido, não atira a caixa para o topo. lfBar (vistas.js:lfBar)
 monta-o: pesquisa no topo com o botão de limpar, seletores empilhados
 (vistas.js:lfSel), ordenação (vistas.js:lfSort) e a linha «N resultados
 com os filtros ativos» quando os há. lfHit (vistas.js:lfHit) faz a
@@ -811,8 +829,8 @@ o seletor de dono e o que cada ecrã acrescenta — é o
 vistas.js:anaPanelPadrao. A pesquisa
 espera 280 ms e devolve o foco com o cursor no fim (vistas.js:lfSearch,
 lista-movimentos.js:onTxSearch). O painel dos Movimentos é o mesmo, com o
-desenho do M-Filtros: o Limpar e o Fechar ao lado do título (ver «Os
-Movimentos»).
+desenho do M-Filtros: o Limpar e o Fechar no topo, ao lado do título (ver
+«Os Movimentos»).
 
 Os filtros mais usados de uma lista estão também à vista, em chips por cima
 dela, e são os mesmos do painel — mexer num muda o outro. Há dois feitios. O
@@ -1253,6 +1271,11 @@ Por isso as formas não têm toque próprio, e o gráfico tem uma descrição s�
 fatias do donut e os itens da legenda com onPick, que entram na categoria
 (graficos.js:cDonut, graficos.js:legend). A história — 37 formas alcançáveis
 pelo Tab, e zero depois — está no diário, a 2026-09-08.
+
+As barras da dívida dos Créditos usam a mesma cabeça e o mesmo gesto, sem
+legenda (uma série sem nome: a leitura de uma linha) e com a leitura acesa
+no ano corrente (creditos.js:credBarrasLer; ver «Os Planeados, os Créditos e
+a Agenda»).
 
 ## Uma tabela só quando diz o que o gráfico não diz
 A janela de um indicador (vistas.js:kpiModal) mostrava sempre a tabela do
@@ -2040,7 +2063,9 @@ altura de cada linha troca no primeiro fotograma — animar alturas por linha
 ## A fita da barra de baixo
 Mudar de separador trocava o conteúdo de golpe. Passa a virar como uma fita —
 mas **só na barra de baixo**, e só quando o toque veio de lá
-(navegacao.js:goBarra).
+(navegacao.js:goBarra), ou quando o dedo desliza de lado entre os
+separadores de uma área (ver «Deslizar entre os separadores de uma área»,
+no fim desta secção).
 
 A barra tem quatro destinos e uma ordem à vista: ir das Casas para o
 Dinheiro é andar um lugar para a direita, e a pessoa viu o lugar antes de lá
@@ -2107,6 +2132,63 @@ E a caixa para onde os filhos do `#view` vão durante a viagem leva as classes
 do próprio `#view`, menos a `.entra` (continuidade.js:deslizarPainel): sem o
 `.wrap`, o conteúdo esticava de encosto a encosto e a fita dava um salto antes
 de deslizar.
+
+### Deslizar entre os separadores de uma área
+No telemóvel (até 900px), os separadores de uma área são um carrossel:
+Imóveis, Contratos, Pessoas, Visitas nas Casas; Movimentos, Planeados,
+Créditos no Dinheiro. Arrastar de lado na vista leva a página com o dedo, e
+largar depois de um quarto da largura, ou com um sacudir, acaba a viagem até
+ao separador vizinho (navegacao.js:sepArrastar, navegacao.js:sepArrastoFim).
+Largar antes disso devolve a página ao sítio, no --medio e na --curva-entra.
+O vizinho é o da ordem das abas do topo, com os separadores escondidos (um
+cargo, um serviço desligado) fora da fila (navegacao.js:portaVizinha,
+navegacao.js:vizinhoNaArea); as Pessoas são uma porta só e abrem onde a aba
+abre (navegacao.js:destinoDe). Nas pontas não há vizinho: a página resiste —
+anda cada vez menos, nunca mais de meia largura (navegacao.js:sepElastico) —
+e não dá a volta. Os Inquilinos e os Proprietários dentro das Pessoas não
+entram no carrossel, e no computador não há gesto nenhum.
+
+A viagem é esta fita (continuidade.js:deslizarPainel), que aceita o `desde`,
+como o deslizarEntre e o correrAFita: quem sai parte de onde o dedo deixou a
+página e quem entra vem colado a ele, sem salto no fotograma em que o dedo
+sai. O lado e o desde chegam ao go por variáveis (navegacao.js:_ladoSep,
+navegacao.js:_desdeSep), pelo navegacao.js:sepIrPara, pela mesma razão do
+goBarra: os embrulhos da nuvem chamam o go com um argumento só. O #view sai
+do arrasto antes de a fita o medir.
+
+Enquanto o dedo leva a página, o nome do vizinho espreita no vazio que ela
+deixa, colado à borda dela (navegacao.js:sepEspreita, estilos.css:.sep-espreita),
+e acende-se no cobalto suave quando largar já vira. Não é tocável nem lido
+pelo leitor de ecrã: quem lê tem as abas do topo. O pai do #view corta o que
+lhe passa da margem durante o arrasto (estilos.css:main.sep-arrasto, clip e
+não hidden, para o cabeçalho pegajoso colar). Sem movimento
+(prefers-reduced-motion) a página não segue o dedo: o nome aparece à beira do
+ecrã, e largar troca de separador sem deslize.
+
+As regras do gesto são as do calendário (calendario.js:calArrastar): o eixo
+decide-se aos 10px, e a folga de decidir não conta (a página arranca colada
+ao dedo); um gesto que começa na vertical é da página, que rola como sempre —
+o `touch-action:pan-y pinch-zoom` do #view numa área com abas (a nota
+«deslizar entre separadores» do estilos.css) deixa ao browser o vertical e o
+zoom, e se ele ficar com o gesto chega o pointercancel, que nunca vira. O
+clique que vem a seguir a um arrasto engole-se (navegacao.js:sepEngolirToque).
+Só o dedo e a caneta: o rato num ecrã estreito seleciona texto.
+
+Nunca rouba um gesto que já tem dono (navegacao.js:SEP_NAO_ROUBA,
+navegacao.js:sepGestoLivre, navegacao.js:sepEstadoLivre): a grelha do
+calendário (#calDias); a leitura dos gráficos e das barras da dívida dos
+Créditos (.chartbox[data-lido]); o puxador das fotos (.pgrab); um bloco do
+painel em edição; os campos de texto; tudo o que rola de lado — visto pela
+medida (navegacao.js:sepRolaDeLado: mais largo do que mostra e com overflow-x
+auto ou scroll), e não pelo nome, para apanhar as filas de chips, as tabelas,
+os totais dos Movimentos, os tutoriais da Ajuda e o plano dos Créditos sem
+uma lista a envelhecer; um overflow:auto que cabe inteiro é da página. As
+abas do topo rolam de lado, e por isso um arrasto que comece nelas é do
+browser. Nem com uma janela ou a gaveta abertas, em seleção (dos Movimentos
+ou de uma lista, body.sel-on), com o painel em edição, ou a meio de uma
+fita. As bordas do ecrã (20px) são do voltar do sistema. Se um toque longo
+abrir uma janela ou uma seleção a meio do arrasto, a página volta ao sítio e
+o gesto acaba (navegacao.js:sepArrastoMove).
 
 ## A renda planeada e as rendas já lançadas
 Uma recorrência é um **cursor**, e não um histórico: guarda uma data só, a
@@ -2430,7 +2512,7 @@ Os Planeados (planeados.js:vRecurring, o canvas M-Planeados) são, por esta
 ordem: a faixa de quem vem de trás, o cartão «Por confirmar», os chips Todos,
 Automáticos, Criados à mão e Silenciados (planeados.js:recChip — o mesmo
 estado do filtro lf('lrec').st, aplicado ao tocar), a lista num cartão e os
-Modelos em chips, com o valor. Cada linha da lista (planeados.js:recLinha) diz
+Modelos em chips, com o valor quando o têm. Cada linha da lista (planeados.js:recLinha) diz
 a periodicidade com o dia («mensal, dia 5», planeados.js:recRepete) e a
 próxima data; o tipo, o imóvel e a categoria; o selo da origem e o do
 estado; e o valor. O selo da origem (planeados.js:recOrigem) é roxo «da
@@ -2493,7 +2575,7 @@ depois da fase fixa (creditos.js:credDepois), o capital em dívida com as
 prestações por pagar, a barra do capital do início já pago e, no telemóvel,
 Pagamento e Plano. No computador a lista fica à esquerda, com os chips
 Ativas e Liquidadas (creditos.js:credVerPagas), e a hipoteca escolhida
-aberta à direita, com o plano ano a ano (creditos.js:credDetalhe): tocar
+aberta à direita, com o plano (creditos.js:credDetalhe): tocar
 numa hipoteca escolhe-a no painel em vez de abrir uma janela por cima
 (creditos.js:mortView chama o creditos.js:credEscolher quando o painel está
 à vista). Como a ficha, com o ⋯ → Amortização, não abre dali, o painel tem
@@ -2501,16 +2583,44 @@ numa hipoteca escolhe-a no painel em vez de abrir uma janela por cima
 Pagamento e Editar. No telemóvel as liquidadas abrem por baixo das ativas
 (creditos.js:credPagasAlternar).
 
-O plano de amortização é uma tabela só (creditos.js:credTabela), que rola
-dentro da sua caixa com o cabeçalho preso (estilos.css:.cred-plano): no
-painel do computador, as dez primeiras linhas e uma última com o ano em que
-acaba; na janela da amortização (creditos.js:amortModal, o «Plano»),
-inteira. Os juros e o selo não levam cor na tabela. A «Dívida no fim» fica
-presa à direita da caixa (estilos.css:.cred-tab-plano, position:sticky), com
-um traço à esquerda no telemóvel e no tablet a dizer que a tabela rola.
+As barras da dívida do resumo (só no telemóvel) leem-se com o dedo como os
+gráficos da Visão geral, pela mesma maquinaria (creditos.js:credBarrasLer,
+com graficos.js:dadosParaLer e graficos.js:cabecaDaLeitura; o gesto é dos
+ouvintes do documento, graficos.js:mostrarColuna): uma guia acompanha o ano
+mais próximo, e a leitura («2036 · 142 440 €») fica no lugar reservado por
+cima das barras, acesa no ano corrente e de volta a ele ao largar; o cartão
+não muda de altura ao tocar. A leitura não mexe no desenho das barras, do
+eixo e do cartão azul-noite: as colunas do leitor ficam no meio de cada
+barra, passadas às unidades do leitor (graficos.js:W), e as barras guardam
+os 56px (estilos.css:.cred-r-caixa — o `.chartbox svg` dá-lhes height:auto,
+e cresceriam com a largura). A leitura e a guia levam as cores da barra
+lateral (--side-on, --side-ink, e a bolinha --side-text, a cor das barras),
+legíveis no azul-noite nos dois temas.
 
-O plano conta por ano civil (creditos.js:yearRows): a primeira linha leva as
-prestações do mês da primeira até dezembro — a primeira é a próxima por
+O plano de amortização é uma tabela só (creditos.js:credTabela), que rola
+dentro da sua caixa com o cabeçalho preso (estilos.css:.cred-plano). As
+linhas vêm do creditos.js:planoLinhas: as doze primeiras prestações uma por
+linha, com o mês e o ano («out 2026»), e depois, a seguir a uma linha de
+grupo «Anos seguintes» (um `<th scope="rowgroup">` noutro `<tbody>`, que não
+fica preso em cima nem à direita, estilos.css:.cred-tab-grupo), um ano civil
+por linha com a soma desse ano. O primeiro ano é o resto do ano em que
+acabam as doze — parcial —, e o último o do fim; um ano com menos de doze
+prestações diz quantas («3 prestações»). As colunas são o Período, a
+Prestação (o que se paga: capital + juros + selo), o Capital, os Juros, o
+Selo e a Dívida no fim. A taxa não tem coluna: vai por baixo do período na
+primeira linha e onde muda (a passagem de uma mista à variável). Os meses
+levam os cêntimos, os anos o euro inteiro. As somas batem: a soma de todas
+as linhas é a da amortização (credito.js:amort), e a dívida da última é
+zero. No painel do computador (creditos.js:credDetalhe) vão os doze meses,
+os dez primeiros anos e uma última linha com o ano em que acaba; na janela
+da amortização (creditos.js:amortModal, o «Plano»), inteira. Os juros e o
+selo não levam cor na tabela. A «Dívida no fim» fica presa à direita da
+caixa (estilos.css:.cred-tab-plano, position:sticky), com um traço à
+esquerda no telemóvel e no tablet a dizer que a tabela rola.
+
+O gráfico ano a ano e as barras contam por ano civil (creditos.js:yearRows):
+a primeira linha leva as prestações do mês da primeira até dezembro — a
+primeira é a próxima por
 confirmar com os Planeados ligados, senão hoje (creditos.js:credPrimeiraData,
 que é também o «Prestação de …» do painel) —, as seguintes doze cada, e cada
 linha tem o seu ano. As barras do resumo e o gráfico de «Todas as hipotecas»
@@ -2539,7 +2649,12 @@ Planeados (planeados.js:imovelDoMolde: o imóvel, o grupo, «Todos os
 imóveis» ou «Sem imóvel»), e não só o imóvel. E o painel tem «Marcar visita» e
 «Recorrente». No computador o mês e o dia ficam lado a lado
 (estilos.css:.cal-pag). O arrasto da grelha é o de sempre
-(calendario.js:calArrastar).
+(calendario.js:calArrastar), com a altura do mês de agora: durante o
+arrasto a grelha corta em altura o que lhe passa (estilos.css:#calDias.arrasta,
+overflow-y:clip, que deixa os lados à vista), porque um vizinho de seis
+semanas tem mais uma fila do que um mês de cinco, e ela ficaria por cima da
+legenda. A fila a mais só aparece depois de largar, quando a fita abre o
+espaço (continuidade.js:aFitaAbreEspaco).
 
 ## As datas leem-se como se escrevem em Portugal
 O ecrã dizia `2028-03-15`. Passa a dizer **15/03/2028** (formato.js:dPT), e
@@ -3281,16 +3396,43 @@ ou «Todos os imóveis» fora de uma receita ou despesa. Gravar vazio marca
 primeiro o montante, que é o primeiro campo: a validação segue a ordem do
 formulário (movimento.js:txGuardar).
 
-«Pago por» com até dois donos é um segmentado — «Todos» e um botão por
-dono, pelo primeiro nome quando não se repete (movimento.js:txPagoPorHtml,
-movimento.js:rotuloCurtoDoDono, movimento.js:txPagoPor) —; com mais, o menu
-de sempre, e o valor continua no #t_paid. As divisões entre proprietários e
+«Pago por» são chips — «Todos» e um por dono, com o nome inteiro e o «(eu)»
+— numa fila que parte para a linha seguinte quando não cabe
+(movimento.js:txPagoPorHtml, movimento.js:txPagoPor, estilos.css:.pago-por),
+de um a quantos donos houver; o valor continua no #t_paid. Nada se corta: o
+segmentado de botões iguais que lá esteve cortava os nomes («Martinho
+(e…»). As divisões entre proprietários e
 entre imóveis são grupos com o título e quantos são, as partes com a
 percentagem e o valor, a barra das proporções e «Soma X — bate certo», ou o
 aviso a vermelho, que é um erro (movimento.js:partesDaDivisaoHtml,
 movimento.js:splitHint, movimento.js:psplitHint). A dica das divisões abre
 com o modo numa frase sua, com maiúscula (movimento.js:txFraseDoModo), e a
 condição de quem pagou vem a seguir.
+
+Num modelo que se guarda sozinho (o modo tpl sem alsoTx: Planeados →
+Modelos, «Novo modelo» e «Editar modelo») o montante é opcional
+(movimento.js:txMontanteOpcional): o rótulo «Montante (€)» vem sem
+asterisco, o placeholder diz «Opcional» e por baixo há a dica «Em branco,
+escreves o montante quando usares o modelo.» (movimento.js:txBody). Guardar
+sem montante grava o modelo com amount 0 (movimento.js:txGuardar), e o que
+depende do total espera pelo montante que se escrever ao usar o modelo: a
+distribuição da prestação (juros, selo, capital, comissão) não se calcula
+nem se grava — um modelo que já a tinha perde-a ao ficar sem montante —, e
+a divisão por valores ou por ajustes, entre donos ou entre imóveis
+(movimento.js:splitError, movimento.js:psplitError), não se compara com o
+total. Os ajustes negativos, as percentagens que não somam 100 e as quotas
+vazias continuam a falhar logo. Guardar o modelo e registar o movimento (o
+«Criar modelo novo» de «Usar modelo»), registar ou confirmar um movimento e
+criar ou alterar um planeado pedem sempre o montante («Indica um
+montante.»). Alterar um modelo sem montante abre o campo vazio, sem sugerir
+a renda do contrato nem a prestação da hipoteca (movimento.js:prefill); um
+modelo novo sugere-as. Usar um modelo sem montante
+(planeados.js:newFromTemplate, planeados.js:applyTemplate) abre o movimento
+com o campo vazio (movimento.js:txMontanteNoCampo mostra o 0 como vazio) e
+a validação de sempre; num modelo de renda com contrato, ou de prestação
+com hipoteca, o formulário sugere o valor do contrato ou da prestação, como
+num movimento novo. As vistas escondem o montante que falta (os chips dos
+Modelos, lista-movimentos.js:useTemplateNew).
 
 «O meu perfil» pede o telemóvel com o indicativo do país no menu da casa
 (componentes.js:sel, no campo escondido cw_cc), numa linha própria
@@ -3371,7 +3513,11 @@ de 900px, porque o + está na barra. Nenhum separador repete o ícone de outro
 A barra lateral é uma coluna (estilos.css:#nav, em flex), e o fundo — as
 Definições, a Ajuda e a conta — vive numa caixa própria pegada ao fundo, com
 a divisória por cima (navegacao.js:gavetaHtml, estilos.css:.nav-fundo): os
-grupos rolam por cima dela e a conta está sempre à vista. Os títulos vazios
+grupos rolam por cima dela e a conta está sempre à vista. O fundo vai rente
+ao fundo e de lado a lado: o #nav tem padding-bottom:0, e é o fundo que leva
+o espaço de baixo e a área segura, com margens de -14px para cobrir as
+laterais. Com o espaço no #nav, o sticky pararia acima dele, e os grupos
+ver-se-iam a passar por baixo e pelos lados do fundo. Os títulos vazios
 das secções sem nome ficam no HTML, porque são a fronteira das secções, mas
 não ocupam lugar (a regra .navh:empty do #nav).
 
@@ -3388,7 +3534,7 @@ Definições com porta própria acende a sua, e não a das Definições — a Aj
 —, porque o navegacao.js:goSet refaz a barra (navegacao.js:buildNav) antes
 de pintar. O separador fisco
 chama-se «IRS · Anexo F» (o serviço continua «Declaração» no catálogo e no
-back office).
+back office), e só existe fora de produção (ver «A app em serviços»).
 
 As secções com título recolhem-se (navegacao.js:gavetaHtml,
 navegacao.js:gavetaAlternar) — pedido do Martinho quando o menu passou a
@@ -3445,7 +3591,8 @@ ecrã»; no telemóvel o + faz as vezes dela. Vazias, escondem-se pelo :empty.
 Nos ecrãs de uma área, por cima da vista e só no
 telemóvel, vão os separadores da área num segmentado
 (navegacao.js:abasDaArea, estilos.css:.abas-area; o render põe-nos,
-vistas.js:render); e com um proprietário em foco, a faixa do âmbito, que diz
+vistas.js:render), e passa-se de um ao vizinho também a deslizar de lado
+(ver «A fita da barra de baixo»); e com um proprietário em foco, a faixa do âmbito, que diz
 de quem são os valores e limpa-se num toque (navegacao.js:faixaDoAmbito,
 navegacao.js:limparAmbito, estilos.css:.faixa-ambito). As vias parciais das
 listas põem as duas como o render (ver «O motor das listas»).
@@ -3564,8 +3711,21 @@ arranque a saber antes de o servidor responder; o separador some, go recusa
 com um toast (navegacao.js:go), um endereço guardado não se restaura
 (web/cloud/nucleo.js:restorePage), e chegar a um separador desligado por um
 atalho antigo pinta um ecrã que diz o nome e quem liga, sem juízo
-(servicos.js:servicoDesligadoHtml). Quem não tem conta tem tudo ligado
-(servicos.js:servicoLigado).
+(servicos.js:servicoDesligadoHtml). Quem não tem conta tem ligado tudo o
+que o ambiente tem (servicos.js:servicoLigado).
+
+Um serviço pode ainda não ter chegado a produção: com soDev no catálogo
+(servicos.js:SERVICOS; hoje só a Declaração, o fisco) está desligado para
+toda a gente em produção, e existe em dev (servicos.js:servicoForaDoAmbiente).
+O servicos.js:servicoLigado pergunta-o além da lista dos desligados, e a
+barra esconde-o pelo acessos.js:separadoresEscondidos; ligá-lo no back
+office não o traz. Produção é CW.ambiente==='producao'
+(cloud/guia.js:CW.ambiente), que é o valor até o servidor responder — o lado
+seguro. Quando a resposta muda o ambiente, o cloud/guia.js refaz a barra e
+repinta (sai do separador se ele ficou de fora), e quem recarregou numa
+página que só existe em dev volta a ela (web/cloud/nucleo.js:restorePage),
+que o arranque não repôs por ainda não a saber ligada. Sem a camada da
+nuvem (os testes da base) não há ambiente a dizer, e nada fica de fora.
 
 O interruptor, no back office, é o cartão «Serviços» na ficha de um
 utilizador, em Pessoas, para quem fala com as pessoas (o suporte e o master).
