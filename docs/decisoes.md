@@ -1481,3 +1481,13 @@ ligar» da abertura é só o ícone, e a tentativa depois de uma falha fica com
 a faixa, laranja, para o cabeçalho não mexer de 30 em 30 segundos. À vista,
 «Sem ligação ao servidor»; o «— sincroniza mais tarde» ficou no aria-label:
 com ele a frase tinha 340px e, entre 901 e 1024px, comia o título do ecrã.
+
+O segmentado do destino e do tipo de arrendamento desliza, e o formulário
+cresce (pedido do Martinho no mesmo dia: «devem deslizar em vez de fazer pop
+no outro lado, e o ecrã deve crescer»). O realce passou a peça própria porque
+a repintura do formulário troca o segmentado inteiro, e uma transição CSS no
+botão velho nunca chegava a correr: a peça nova nasce no sítio novo e
+anima-se a partir do velho. A altura vai pela única caixa onde os campos
+mudam (o primeiro grupo), como no painel do dia do calendário — uma caixa
+só, e não a janela inteira, que no computador está centrada e saltaria de
+sítio a cada fotograma.

@@ -442,7 +442,8 @@ describe('a lista, a ficha e o formulário na linguagem nova', () => {
     app.propModal('p1');
     const html = abertas[0].b;
     assert.ok((html.match(/<div class="sect imv-grupo">/g) || []).length >= 4, 'os grupos são cartões .sect');
-    assert.match(html, /<div class="segm" role="radiogroup" aria-labelledby="imv_seg_setUse"><button type="button" role="radio" aria-checked="true" class="on"[^>]*setUse\('investimento'\)">Arrendamento<\/button>/);
+    // o realce é uma peça à parte, posta na escolha pela classe, que desliza (imvSegDeslizar)
+    assert.match(html, /<div class="segm desliza" id="imv_segm_setUse" role="radiogroup" aria-labelledby="imv_seg_setUse"><span class="segm-polegar i0" aria-hidden="true"><\/span><button type="button" role="radio" aria-checked="true" class="on"[^>]*setUse\('investimento'\)">Arrendamento<\/button>/);
     assert.match(html, /role="radio" aria-checked="false" class=""[^>]*setMode\('quartos'\)">Por quartos<\/button>/);
     assert.match(html, /id="p_share_o1"/, 'sem a nuvem, a secção daqui');
     app.donosDoFormulario = () => '<div class="sect imv-grupo cw-teste">da nuvem</div>';
@@ -453,6 +454,30 @@ describe('a lista, a ficha e o formulário na linguagem nova', () => {
     app.propModal('p1');
     assert.match(abertas[2].b, /id="p_share_o1"/, 'vazia, fica a daqui');
     app.donosDoFormulario = null;
+  });
+
+  test('o realce do segmentado desliza da escolha de antes para a nova, e sem movimento fica parado', () => {
+    const app = carregarApp();
+    semear(app);
+    const anims = [];
+    const polegar = (cls) => ({ classList: { contains: (c) => c === cls }, animate: (k, o) => anims.push({ k, o }) });
+    const doc = app.document, antes = doc.getElementById;
+    let peca = polegar('i1');
+    doc.getElementById = (id) => (id === 'imv_segm_setMode' ? { querySelector: () => peca } : antes.call(doc, id));
+    const semMov = app.semMovimento;
+    try {
+      app.semMovimento = () => false;
+      app.imvSegDeslizar('setMode', 0);
+      assert.equal(anims.length, 1);
+      assert.equal(anims[0].k.map((x) => x.transform).join(' → '), 'translateX(0) → translateX(calc(100% + 2px))', 'parte do sítio velho e chega ao novo');
+      assert.ok(anims[0].o.duration > 0 && anims[0].o.duration <= 300, 'um passo de interface, nunca mais de 300 ms');
+      app.imvSegDeslizar('setMode', 1);
+      assert.equal(anims.length, 1, 'sem mudança de escolha, nada a deslizar');
+      peca = polegar('i0');
+      app.semMovimento = () => true;
+      app.imvSegDeslizar('setMode', 1);
+      assert.equal(anims.length, 1, 'com movimento reduzido, a peça fica onde a classe a pôs');
+    } finally { doc.getElementById = antes; app.semMovimento = semMov; }
   });
 
   test('com a nuvem e uma sessão, o formulário leva a secção das quotas por proposta (cloud/utilizadores.js); sem sessão, a daqui', () => {

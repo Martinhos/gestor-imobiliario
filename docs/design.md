@@ -494,6 +494,20 @@ mais contraste recebe contornos mais fundos, só pelos tokens das linhas,
 para tudo o que os cita mudar com eles
 (estilos.css:@media(prefers-contrast:more)).
 
+
+Um segmentado do formulário que muda o que o formulário mostra — o destino do
+imóvel e o tipo de arrendamento — desliza o realce de uma escolha para a
+outra, e o grupo onde os campos aparecem e somem cresce ou encolhe até à
+altura nova (imovel.js:imvSegmentado, imovel.js:imvSegDeslizar,
+imovel.js:repaintPropCrescendo). O realce é uma peça à parte, por baixo dos
+botões (estilos.css:.segm-polegar), posta na escolha por classe; a repintura
+troca o segmentado por um novo, e a peça parte do sítio velho por transform,
+no --medio e na --curva-fita, porque atravessa em bloco. A altura é a do
+continuidade.js:crescerEmAltura, no mesmo --medio, para o realce e o grupo
+assentarem juntos. O fundo trocado de um botão para o outro e o formulário a
+saltar de tamanho eram dois saltos no mesmo toque. Sem movimento, as duas
+coisas mudam logo.
+
 ## Componentes da casa, e quando usar cada um
 sel(id,value,options,onchange) (componentes.js:sel) é O menu de escolha.
 Nunca um <select> nativo: destoava nos formulários e destoa no topo (o

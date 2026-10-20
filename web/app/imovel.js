@@ -473,14 +473,17 @@ function donosSect(){
   </div>`;
 }
 /* Um segmentado de duas escolhas do formulário (o destino, o tipo de
-   arrendamento), com a frase da escolha feita por baixo.
+   arrendamento), com a frase da escolha feita por baixo. O realce é uma peça
+   à parte (.segm-polegar), posta na escolha pela classe i0/i1, que desliza de
+   uma escolha para a outra (imovel.js:imvSegDeslizar) — o fundo trocado de um
+   botão para o outro era um salto.
    Recebe: rotulo — o nome do grupo; ops — [[valor, rótulo, frase]]; atual — o
    valor escolhido; fn — o nome da função que muda a escolha.
    Devolve: o HTML do campo. */
 function imvSegmentado(rotulo,ops,atual,fn){
-  const on=ops.find(o=>o[0]===atual)||ops[0];
+  const on=ops.find(o=>o[0]===atual)||ops[0],i=ops.indexOf(on);
   return `<div class="imv-campo"><div class="flabel" id="imv_seg_${fn}">${rotulo}</div>
-    <div class="segm" role="radiogroup" aria-labelledby="imv_seg_${fn}">${ops.map(([k,lb])=>
+    <div class="segm desliza" id="imv_segm_${fn}" role="radiogroup" aria-labelledby="imv_seg_${fn}"><span class="segm-polegar i${i}" aria-hidden="true"></span>${ops.map(([k,lb])=>
       `<button type="button" role="radio" aria-checked="${k===on[0]?'true':'false'}" class="${k===on[0]?'on':''}" data-toca="rascunho" data-click="${fn}('${k}')">${lb}</button>`).join('')}</div>
     <div class="hint imv-seg-frase">${on[2]}</div></div>`;
 }
@@ -679,23 +682,52 @@ let _propPaint=null;
 // _propPaint) e volta a carregar as miniaturas das fotos.
 // Devolve: nada — redesenha a vista.
 function repaintProp(){const b=modalBodyEl();if(!b)return;b.innerHTML=(_propPaint||propBody)();marcarDatasVazias(b);paintThumbs(pForm.photos)}
+/* Repinta o formulário do imóvel com o primeiro grupo (o nome, o destino, o
+   tipo de arrendamento e os quartos) a crescer ou a encolher até à altura
+   nova, em vez de mudar de tamanho de um fotograma para o outro
+   (continuidade.js:crescerEmAltura). É aí que os campos aparecem e somem.
+   Devolve: nada — redesenha a vista. */
+function repaintPropCrescendo(){
+  crescerEmAltura(()=>{const b=modalBodyEl();return b&&b.querySelector('.imv-grupo')},repaintProp);
+}
+/* O realce de um segmentado do formulário desliza da escolha de antes para a
+   de agora. A repintura troca o segmentado por um novo, já com o realce no
+   sítio novo; a peça parte do sítio velho por transform (o mesmo passo da
+   classe i1: a largura dela mais o espaço entre botões) e chega ao novo, no
+   --medio e na --curva-fita, a curva do que atravessa em bloco. Sem
+   movimento, fica onde a classe a pôs.
+   Recebe: fn — o nome da função do segmentado ('setUse' ou 'setMode'); de —
+   o índice da escolha de antes.
+   Devolve: nada — anima a peça (ou nada). */
+function imvSegDeslizar(fn,de){
+  const g=document.getElementById('imv_segm_'+fn),p=g&&g.querySelector('.segm-polegar');
+  if(!p||!p.animate||semMovimento())return;
+  const para=p.classList.contains('i1')?1:0;
+  if(para===de)return;
+  const passo=i=>i?'translateX(calc(100% + 2px))':'translateX(0)';
+  p.animate([{transform:passo(de)},{transform:passo(para)}],
+    {duration:msDoToken('--medio',200),easing:tokenTexto('--curva-fita','cubic-bezier(.4,0,.2,1)')});
+}
 // Muda o destino do imóvel (arrendamento/uso próprio) e repinta — os campos
-// visíveis dependem dele.
+// visíveis dependem dele: o realce desliza e o grupo cresce até eles.
 // Recebe: u — o destino: 'investimento' ou 'proprio'.
 // Devolve: nada — redesenha a vista.
-function setUse(u){collectProp();pForm.use=u;repaintProp()}
+function setUse(u){
+  collectProp();const de=pForm.use==='proprio'?1:0;pForm.use=u;
+  repaintPropCrescendo();imvSegDeslizar('setUse',de);
+}
 // Muda o tipo de arrendamento; ao passar a quartos sem nenhum criado, semeia
 // dois para a lista não aparecer vazia.
 // Recebe: m — o tipo de arrendamento: 'inteiro' ou 'quartos'.
 // Devolve: nada — redesenha a vista.
 function setMode(m){
-  collectProp();pForm.rentalMode=m;
+  collectProp();const de=pForm.rentalMode==='quartos'?1:0;pForm.rentalMode=m;
   if(m==='quartos'&&!(pForm.rooms||[]).length)pForm.rooms=[{id:uid(),name:'Quarto 1'},{id:uid(),name:'Quarto 2'}];
-  repaintProp();
+  repaintPropCrescendo();imvSegDeslizar('setMode',de);
 }
 // Acrescenta um quarto com nome sequencial e repinta.
 // Devolve: nada — redesenha a vista.
-function addRoom(){collectProp();pForm.rooms.push({id:uid(),name:'Quarto '+(pForm.rooms.length+1)});repaintProp()}
+function addRoom(){collectProp();pForm.rooms.push({id:uid(),name:'Quarto '+(pForm.rooms.length+1)});repaintPropCrescendo()}
 /* Tira um quarto do formulário. Se algum contrato apontava para ele, perde já
    a ligação em db.contracts (não espera pelo Guardar do imóvel) e avisa.
    Recebe: rid — o id do quarto a tirar.
@@ -705,7 +737,7 @@ function delRoom(rid){
   const used=db.contracts.some(c=>c.roomId===rid);
   pForm.rooms=pForm.rooms.filter(r=>r.id!==rid);
   if(used){db.contracts.forEach(c=>{if(c.roomId===rid)c.roomId=null});toast('O contrato desse quarto ficou sem quarto associado.')}
-  repaintProp();
+  repaintPropCrescendo();
 }
 // Acrescenta uma hipoteca normalizada; a primeira chama-se "Aquisição" por
 // omissão, as seguintes ficam sem nome até o utilizador dizer a finalidade.
