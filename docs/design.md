@@ -2671,6 +2671,12 @@ separadores» do estilos.css) deixa ao browser o vertical e o zoom, e se ele fic
 clique que vem a seguir a um arrasto engole-se (navegacao.js:sepEngolirToque).
 Só o dedo e a caneta: o rato num ecrã estreito seleciona texto.
 
+O gesto começa em qualquer ponto da página, e não só onde há conteúdo: o
+sepGestoLivre só aceita o que está dentro do #view, e uma lista curta ou
+vazia acabava a meio do ecrã — o vazio por baixo era do main, e deslizar ali
+não fazia nada. Numa área com abas o #view cresce até ao fundo do main, que
+é flex em coluna (estilos.css:main), e o vazio passa a ser dele.
+
 Nunca rouba um gesto que já tem dono (navegacao.js:SEP_NAO_ROUBA,
 navegacao.js:sepGestoLivre, navegacao.js:sepEstadoLivre): a grelha do
 calendário (#calDias); a leitura dos gráficos e das barras da dívida dos

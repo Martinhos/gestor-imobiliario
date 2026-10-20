@@ -407,4 +407,9 @@ describe('a casa, na página e na folha', () => {
     assert.match(css, /#abasArea:not\(:empty\)~#view/, 'o pan-y passa ao #view por baixo da casa');
     assert.match(css, /\.sep-vizinho\{position:absolute;left:0;box-sizing:border-box;max-width:none;margin:0\}/);
   });
+
+  test('numa área com abas o #view enche até ao fundo do main: uma lista curta ou vazia também vira com o dedo no vazio', () => {
+    assert.match(css, /main\{flex:1;min-width:0;display:flex;flex-direction:column\}/, 'o main é flex em coluna');
+    assert.match(css, /@media\(max-width:900px\)\{#abasArea:not\(:empty\)~#view\{flex:1 0 auto\}\}/);
+  });
 });

@@ -774,6 +774,11 @@ body.sel-on #hdrSec{display:none}
    Sem movimento pedido, só o nome do vizinho espreita à beira do ecrã
    (navegacao.js:sepEspreita). */
 @media(max-width:900px){#abasArea:not(:empty)~#view,#view:has(>.abas>.abas-area){touch-action:pan-y pinch-zoom}}
+/* Uma lista curta ou vazia acabava a meio do ecrã, e o vazio por baixo era
+   do main: um dedo pousado ali não virava o separador. Numa área com abas o
+   #view cresce até ao fundo do main (que é flex em coluna), e o vazio passa
+   a ser dele — o gesto e o touch-action valem no ecrã inteiro. */
+@media(max-width:900px){#abasArea:not(:empty)~#view{flex:1 0 auto}}
 main.sep-arrasto{overflow-x:clip}
 .sep-palco{position:absolute;top:0;overflow:hidden;pointer-events:none}
 .sep-vizinho{position:absolute;left:0;box-sizing:border-box;max-width:none;margin:0}
