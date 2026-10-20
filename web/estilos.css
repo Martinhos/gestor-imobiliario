@@ -2098,6 +2098,65 @@ button.vg-item-abrir:active{background:var(--press)}
 /* o anel por dentro, com uma margem da cor do cartão: assenta em qualquer fotografia */
 .imv-capa-abre:focus-visible{outline:2px solid var(--accent);outline-offset:-6px;box-shadow:inset 0 0 0 4px var(--card)}
 /* ===== fim: ajustes-v40c 1.1 ===== */
+/* ===== ajustes-v40d: 1.1 — o realce dos segmentados em qualquer escuro ===== */
+/* A escolha acesa de um segmentado: um contorno de 2px no cobalto, o fundo
+   --accent-soft e o texto --accent-text — o desenho do .chip.on e do .opt.on.
+   O realce era só luz: o branco sobre a pista quase branca, e no escuro o
+   --line2 sobre o --chip (1.52:1). O Samsung Internet, com o telemóvel em
+   escuro, responde prefers-color-scheme:light e escurece a página à força sem
+   olhar ao color-scheme: inverte a luz dos fundos, e o branco do realce e o
+   quase branco da pista caíam em dois pretos iguais. Para esse filtro o
+   contorno é cor da frente, e passa a um azul claro sobre a pista escurecida
+   (3.3:1 medido no Chromium com o escurecimento forçado): a diferença está no
+   matiz e na luz, e não num cinzento quase igual ao outro. Uma sombra por
+   dentro (inset) não servia: o filtro não lhe toca, e o cobalto escuro sobre a
+   pista escurecida fica a 2.5:1.
+   Vale em todos os segmentados (o tipo do movimento, o Tema, as abas da área,
+   a entrada, as categorias, o titular A/B, o pedido de ajuda), menos nas abas
+   sublinhadas das Pessoas, que já são um traço; e nos dois temas: as regras
+   do :root.dark da secção de cima pesam o mesmo e ficam antes destas. Um
+   segmentado pode dar outra cor ao texto aceso pela variável --segm-texto
+   (o tipo do movimento, abaixo); o contorno é sempre o cobalto.
+   O contorno é um ::after por cima do botão, e não a borda dele: a borda
+   comia 4px à largura do texto, e piorava as reticências que os segmentados
+   apertados já tinham a 375px (a regra seguinte). */
+.segm:not(.abas-pessoas):not(.desliza)>.on,.segm:not(.abas-pessoas):not(.desliza)>[aria-checked="true"],
+.segm:not(.abas-pessoas):not(.desliza)>[aria-current="page"],.segm:not(.abas-pessoas):not(.desliza)>[aria-selected="true"]{
+  position:relative;background:var(--accent-soft);color:var(--segm-texto,var(--accent-text));box-shadow:none}
+.segm:not(.abas-pessoas):not(.desliza)>.on::after,.segm:not(.abas-pessoas):not(.desliza)>[aria-checked="true"]::after,
+.segm:not(.abas-pessoas):not(.desliza)>[aria-current="page"]::after,.segm:not(.abas-pessoas):not(.desliza)>[aria-selected="true"]::after{
+  content:"";position:absolute;inset:0;border:2px solid var(--accent);border-radius:inherit;pointer-events:none}
+/* O aceso escreve-se a 600 e fica mais largo do que os outros, e nos
+   segmentados apertados não cabia: a 375px «Despes…», «Não declarad…» e o
+   «Planeados» com o número perdiam o fim (já antes do contorno). As colunas
+   ficam iguais (flex:1 1 0, a regra de base), e com flex:1 1 0 cada botão
+   recebe a mesma largura de texto mais o seu enchimento: «Despesa» a 600 e
+   14px (59px) não cabia num quinto da linha. Nos dois mais apertados (os
+   cinco tipos do movimento; Por indicar, Declarado, Não declarado) a letra
+   passa a 13px e o enchimento baixa em todos os botões do grupo; nas abas da
+   área chega menos enchimento. */
+.segm.mov-tipo-segm>button{font-size:13px;padding-left:3px;padding-right:3px}
+.segm.ct-at-segm>button[type="button"]{font-size:13px;padding-left:1px;padding-right:1px}
+.segm.abas-area>a{padding-left:6px;padding-right:6px}
+/* O que desliza (imovel.js:imvSegmentado): o contorno e o fundo vão na peça
+   que corre por baixo (.segm-polegar), e o botão aceso fica só com o texto.
+   Os dois seletores, para o :root.dark da secção de cima não ganhar no escuro. */
+.segm.desliza>.segm-polegar,:root.dark .segm.desliza>.segm-polegar{border:2px solid var(--accent);background:var(--accent-soft);box-shadow:none}
+.segm.desliza>.on,.segm.desliza>[aria-checked="true"]{color:var(--accent-text)}
+/* O tipo do movimento: o realce no cobalto, como os outros, e o texto na cor
+   do dinheiro dele (movimento.js:txTipoSegm, lista-movimentos.js:txTomDoTipo)
+   — a receita verde, a despesa laranja, a prestação roxa; a dívida e a
+   transferência no --accent-text. O contorno não muda de cor com o tipo: no
+   escurecimento forçado o verde e o laranja ficam escuros (2.1:1 e 2.7:1
+   contra a pista, medido), e o cobalto fica claro. */
+.mov-tipo-segm>button.on.pos{--segm-texto:var(--in)}
+.mov-tipo-segm>button.on.neg{--segm-texto:var(--out)}
+.mov-tipo-segm>button.on.prest{--segm-texto:var(--loan)}
+/* A nota do Samsung Internet na linha do Tema (definicoes.js:linhaDoTema):
+   texto pequeno por baixo do segmentado, alinhado com ele */
+.def-tema-samsung{margin:0;font-size:13px;line-height:1.45;color:var(--muted)}
+.def-tema-samsung b{font-weight:600;color:var(--ink)}
+/* ===== fim: ajustes-v40d 1.1 ===== */
 /* ===== redesign: 1.3.3 — os Contratos ===== */
 /* web/app/lista-contratos.js, web/app/contrato.js e web/app/contrato-pdf.js:
    a lista (pranchetas M-Contratos e D-Contratos), a ficha (M-Contrato), o
@@ -2806,13 +2865,56 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .ct-contacto-escolhido>span,.ct-net-linha.ct-contacto-escolhido>b{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .ct-contacto-tel{white-space:nowrap}
 /* O Início e o Fim da visita (visitas.js:visBody): lado a lado também no
-   telemóvel e da largura da hora. Numa .row empilhavam-se abaixo dos 520px,
-   dois campos a toda a largura para «14:30». A altura é a do campo da casa
-   (46px), acima dos 44 no dedo. */
-.vis-par{display:grid;grid-template-columns:repeat(2,minmax(0,8.75rem));justify-content:start;align-items:end;gap:12px}
+   telemóvel, em duas colunas iguais que enchem a linha. Numa .row
+   empilhavam-se abaixo dos 520px; do tamanho da hora, encostados à esquerda,
+   deixavam meia linha vazia. A altura é a do campo da casa (46px). */
+.vis-par{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:12px}
 .vis-par>label{min-width:0}
 .vis-par input{min-width:0;padding-left:12px;padding-right:10px}
 /* ===== fim: ajustes-v40c 1.2 ===== */
+/* ===== ajustes-v40d: 1.3 — o quarto à espera de uma data (contrato.js:ctQuartosMiolo) ===== */
+/* Um chip à espera de uma data (o início do contrato antes do fim do
+   contrato desse quarto, ou do último fim para a casa inteira) não vale
+   neste início, mas toca-se: muda o início para essa data e escolhe-o
+   (contrato.js:ctComecaNoFim). Lê-se como os desligados — o tracejado e a
+   tinta esbatida —, mas a data vai na cor do realce, a dizer que é por ali,
+   e guarda a mão. O erro do grupo não o pinta de vermelho: não é a escolha. */
+.ct-quartos .chip.ct-espera:not(.on){color:var(--muted);border-style:dashed}
+.ct-quartos .chip.ct-espera:not(.on) .ct-ja-txt{color:var(--accent-text)}
+#c_roomEsc.err>.chip.ct-espera:not(.on){border-color:var(--line2)}
+@media(hover:hover){.ct-quartos .chip.ct-espera:not(.on):hover{border-color:var(--accent)}}
+/* ===== fim: ajustes-v40d 1.3 ===== */
+/* ===== ajustes-v40d: 1.2 — as fotos de um imóvel em carrossel (anexos.js:fotoCarrossel) ===== */
+/* O palco tem um tamanho fixo — quadrado, até 60% da altura do ecrã — e cada
+   foto cabe lá inteira (contain): de uma foto ao alto para uma ao comprido a
+   janela não muda de altura, nem a meio da viagem. A fita leva três lugares
+   (a anterior, a de agora e a seguinte) separados pela --fc-folga, que o
+   anexos.js:fotoPasso também lê para saber o tamanho de um passo. O pan-y
+   deixa o vertical ao browser: o corpo da janela continua a rolar. A foto
+   não se arrasta à moda do browser nem abre o menu do toque longo — o
+   «Guardar» é o caminho para a guardar. */
+.fc-palco{--fc-folga:16px;position:relative;overflow:hidden;width:100%;aspect-ratio:1/1;max-height:60vh;max-height:60dvh;border-radius:12px;background:var(--tint);touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.fc-fita{position:absolute;inset:0}
+.fc-slide{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.fc-slide.fc-ant{transform:translateX(calc(-100% - var(--fc-folga)))}
+.fc-slide.fc-seg{transform:translateX(calc(100% + var(--fc-folga)))}
+.fc-img{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;-webkit-user-drag:none;-webkit-touch-callout:none}
+.fc-falta{display:none;padding:0 24px;text-align:center;color:var(--muted);font-size:13px}
+.fc-slide.fc-sem .fc-img{display:none}
+.fc-slide.fc-sem .fc-falta{display:block}
+.fc-palco.arrasta{cursor:grabbing}
+.fc-pos{color:var(--ink);font-weight:600}
+/* As setas ‹ ›, à beira do palco, para o rato. No dedo ficam só para o
+   leitor de ecrã (o arrasto é o caminho), e aparecem quando o Tab lá chega.
+   A posição vem da margem e não de um transform, para o premido poder
+   encolher a seta sem a tirar do sítio. */
+.fc-seta{position:absolute;top:50%;width:44px;height:44px;margin-top:-22px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:transform var(--rapido) var(--curva)}
+.fc-seta-ant{left:10px}
+.fc-seta-seg{right:10px}
+.fc-seta:active{transform:scale(.94);background:var(--press)}
+@media(hover:hover){.fc-seta:hover{background:var(--tint)}}
+@media(hover:none),(pointer:coarse){.fc-seta:not(:focus-visible){width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);border:0}}
+/* ===== fim: ajustes-v40d 1.2 ===== */
 /* ===== redesign: 1.3.6 — os Planeados, os Créditos e a Agenda ===== */
 /* --- o cartão dos por confirmar (planeados.js:pendingCard), também na Visão
    geral: sem a borda colorida à esquerda — o estado diz-se no selo. O
@@ -3319,13 +3421,10 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
   /* um botão só de ícone pequeno (o ⓘ das contas entre proprietários) fica 44×44 */
   .ana .btn.sm.so-icone{width:44px}
 }
-/* no telemóvel as ações da página dizem-se na forma curta (.ana-curto em vez
-   do .ana-largo) e ficam lado a lado, a dividir a largura */
-.ana-curto{display:none}
 @media(max-width:520px){
-  .ana-largo{display:none}
-  .ana-curto{display:inline}
   .ana-barra{gap:8px}
+  /* no telemóvel as ações da página (o «Partilhar resumo» da Declaração)
+     ficam numa linha delas, lado a lado, a dividir a largura */
   .ana-acoes{width:100%;gap:8px}
   .ana-acoes>.btn{flex:1 1 auto;padding:0 10px;font-size:14px}
   .fis-ob .btn{margin-left:38px}
@@ -3342,9 +3441,8 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 /* ===== ajustes-v40c: 1.5 — Projeções e Avaliação: chips e a roda dentada ===== */
 /* O topo das Projeções e da Avaliação é a fila de chips das listas
    (vistas.js:anaChips: .mov-chips, .mov-chip), sem pesquisa nem funil. Na
-   Avaliação as ações da página vão na mesma linha, encostadas à direita; no
-   telemóvel descem para uma linha delas, a dividir a largura (a regra do
-   .ana-acoes na secção 1.3.7). */
+   Avaliação o botão de partilha vai na mesma linha, encostado à direita,
+   também no telemóvel (a secção ajustes-v40d 1.5). */
 .ana-topo{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}
 .ana-topo>.mov-chips{flex:1 1 auto;min-width:0;margin:0}
 .ana-topo>.ana-acoes{margin-left:auto}
@@ -3358,6 +3456,16 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .ana-opcoes{margin:0}
 .ana-opcoes-nota{margin:12px 0 0}
 /* ===== fim: ajustes-v40c 1.5 ===== */
+/* ===== ajustes-v40d: 1.5 — o botão de partilha da Avaliação ===== */
+/* As ações da Avaliação são um botão só, de ícone (avaliacao.js:avaPartilha:
+   o .btn.so-icone, 44×44), que abre o menu de ações da casa (.menupop). No
+   telemóvel fica na linha do chip, à direita, em vez de descer para uma linha
+   dele (a regra do .ana-acoes de largura inteira, na secção 1.3.7, é a da
+   Declaração). O menu tem a largura das opções, sem partir «Exportar
+   movimentos (CSV)» em duas linhas, e nunca passa da largura do ecrã. */
+@media(max-width:520px){.ana-topo>.ana-acoes{width:auto}}
+.ava-partilha .menupop{width:max-content;max-width:calc(100vw - 32px)}
+/* ===== fim: ajustes-v40d 1.5 ===== */
 /* ===== redesign: 1.3.8 — as Definições ===== */
 /* A raiz (definicoes.js:raizDasDefinicoes, o canvas M-Definicoes): secções
    com o rótulo e as linhas numa lista com divisórias; no computador correm

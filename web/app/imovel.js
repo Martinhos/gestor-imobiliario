@@ -486,7 +486,9 @@ function donosSect(){
    arrendamento), com a frase da escolha feita por baixo. O realce é uma peça
    à parte (.segm-polegar), posta na escolha pela classe i0/i1, que desliza de
    uma escolha para a outra (imovel.js:imvSegDeslizar) — o fundo trocado de um
-   botão para o outro era um salto.
+   botão para o outro era um salto. A peça leva o contorno no cobalto e o
+   texto aceso o --accent-text (estilos.css, a secção ajustes-v40d 1.1): vê-se
+   no claro, no escuro e quando o browser escurece a página à força.
    O campo é uma peça do grupo que cresce (data-parte, continuidade.js:partesDe):
    quando o de cima muda e este fica, fica no sítio.
    Recebe: rotulo — o nome do grupo; ops — [[valor, rótulo, frase]]; atual — o

@@ -99,8 +99,7 @@ tocáveis. --press #e9ecf2 → #253049 é o premido (nunca igual ao hover).
 (rótulos, hints, .small); --faint #687083 → #8c96ab (estilos.css:--faint) o
 terciário: os placeholders, as setas que dizem «abre», os rótulos inativos
 da barra de baixo. --line #e2e5eb → #253049 são os contornos e --line2
-#cdd2db → #33405c o contorno dos controlos (botões, campos, chips) e, no
-escuro, a escolha acesa do segmentado (ver «Componentes da casa»).
+#cdd2db → #33405c o contorno dos controlos (botões, campos, chips).
 
 --accent #2952d9 → #7c9bff é o cobalto da AÇÃO: o botão primário
 (estilos.css:.btn.primary), o ativo da barra de baixo, o chip ligado, o
@@ -196,6 +195,34 @@ ganhou addEventListener na versão 14, por isso fica o addListener de
 recurso (a IIFE que fecha web/app/tema.js, a seguir a
 tema.js:setTheme).
 
+O Samsung Internet, com o telemóvel em escuro, responde
+prefers-color-scheme:light e escurece a página à força (o «modo escuro»
+dele), sem olhar ao color-scheme — nem ao «only light». Com o tema em
+Automático a app pinta o claro e o browser inverte-lhe a luz: os fundos
+claros passam a escuros, e duas superfícies que só diferem na luz (um realce
+branco sobre uma pista quase branca) caem em dois pretos iguais. O que
+sobrevive a esse filtro é a cor da frente: o texto e as bordas mudam de luz
+mas ficam do lado contrário ao fundo. Por isso um estado (a escolha acesa)
+diz-se com uma borda ou um contorno no --accent, e não só com um fundo de
+outra luz; e uma sombra por dentro (inset) não serve, porque o filtro não
+lhe toca (estilos.css, a secção ajustes-v40d 1.1). A app não sabe se o
+browser a está a escurecer — o getComputedStyle continua a dizer as cores
+claras, porque o filtro é da pintura.
+
+Na linha do Tema das Definições, só no Samsung Internet (o UA tem
+«SamsungBrowser») e só com o tema em Automático, uma nota diz onde se muda:
+Samsung Internet → Definições → Labs → Usar o tema escuro do site, e aí o
+Automático passa a seguir o telemóvel; ou o Escuro da app
+(definicoes.js:linhaDoTema, definicoes.js:notaDoSamsung,
+definicoes.js:eSamsungInternet). A nota liga-se ao segmentado por
+aria-describedby.
+
+A prova do escurecimento forçado corre no Chromium com
+`--blink-settings=forceDarkModeEnabled=true` (o
+`--enable-features=WebContentsForceDark` sozinho não faz nada no headless
+shell, que não tem a camada do Chrome que o passa ao Blink), e o contraste
+mede-se nos pixeis da captura (.unlazy/ajustes-v40d/prova-contraste.mjs).
+
 ## Tipografia
 Duas letras, auto-alojadas em web/fonts/ (a CSP só deixa font-src 'self'): a
 Geist no texto e a Bricolage Grotesque nos títulos e nos valores grandes,
@@ -248,8 +275,9 @@ para os KPIs; estilos.css:.cols com gap 14 e colunas de 290px para os
 cartões de gráfico; estilos.css:.list com gap 11; estilos.css:.form com gap
 13; estilos.css:.row e estilos.css:.row3 com gap 11, que empilham abaixo de
 520px, salvo o intervalo De/Até, que se lê lado a lado
-(estilos.css:.row.lado-a-lado), e o Início e o Fim da visita, em campos da
-largura da hora (estilos.css:.vis-par). A estilos.css:.toolbar tem gap 10. O
+(estilos.css:.row.lado-a-lado), e o Início e o Fim da visita, em duas
+colunas iguais que enchem a linha (estilos.css:.vis-par). A
+estilos.css:.toolbar tem gap 10. O
 estilos.css:.section-title leva 24px por cima e 10 por baixo. Um estado vazio
 não se cola aos KPIs que o antecedem (estilos.css:.grid+.empty).
 
@@ -585,8 +613,9 @@ um pedido — de partilha, para entrar num grupo, um convite de ligação — é
 botão secundário ao lado do Aceitar primário, porque quem pediu pode voltar
 a pedir (partilha.js:linhasDosPedidos). As linhas das listas não têm ⋮:
 tocar abre a ficha, onde as opções vivem no ⋯ da janela e no «Editar» do
-rodapé, e o toque longo (data-lp e componentes.js:lpMenu) abre a lista de
-ações do tipo de registo, que é uma só (ver «Padrões de página»). O que destrói (Apagar, Remover, Eliminar,
+rodapé, e o toque longo (data-lp) entra na seleção de vários ou, nas pessoas
+e nas visitas, abre a lista de ações do tipo de registo, que é uma só
+(componentes.js:lpMenu; ver «Padrões de página»). O que destrói (Apagar, Remover, Eliminar,
 Terminar) fica vermelho também na folha do toque longo
 (componentes.js:lpShow). Todos os menus fecham ao clique fora
 (componentes.js:closePops, chamada pelo ouvinte de click do arranque, em
@@ -597,6 +626,18 @@ arranque, na captura, porque o scroll de uma caixa (o corpo de uma janela, o
 painel dos filtros) não sobe; ignora o scroll de dentro do próprio menu, que
 um menu encolhido pelo ajustarPop pode ter. As listas dos seletores que
 flutuam nos filtros não fecham: acompanham o scroll (cloud/filtros.js).
+
+O botão que abre um ⋯ diz `aria-expanded`: false no HTML do
+componentes.js:menu, true ao abrir (componentes.js:menuOpen) e false ao
+fechar, seja pelo clique fora (componentes.js:closePops), seja pelo scroll
+do arranque — os dois pelo componentes.js:menuExpandido. O Escape com um ⋯
+aberto fecha o menu e devolve o foco ao botão que o abriu; a janela por
+baixo fica (componentes.js:menuEscape, chamado pelo componentes.js:selTecla
+quando a tecla não é de uma lista de um sel() aberta — a lista de dentro
+fecha primeiro). Vale para os botões feitos à mão que chamam o menuOpen no
+mesmo .menuwrap (o botão de partilha da Avaliação): o botão encontra-se pelo
+`data-click^="menuOpen("` (componentes.js:menuBotao), e nasce com
+aria-expanded="false" como o do menu.
 
 pode(pid,perm) antes de mostrar uma ação (acessos.js:pode). Num imóvel onde
 o utilizador só colabora, o cargo diz o que se vê e o que se adiciona; o
@@ -739,14 +780,34 @@ estado vazio (estilos.css:.empty), .tip para a dica dos gráficos
 (estilos.css:.tip; graficos.js:chartTip).
 
 O segmentado (estilos.css:.segm) é um trilho --chip com a escolha acesa por
-cima, e a acesa destaca-se do trilho nos dois temas. No claro é o --card
-branco com uma sombra curta; no escuro é o --line2, sem sombra
-(estilos.css:.segm>.on e a regra do :root.dark na secção do formulário do
-imóvel), a 1.52:1 contra o trilho — em todos os segmentados: o tipo do
-movimento, o tema, o «pago por», as abas da área e o realce que desliza no
-formulário do imóvel (estilos.css:.segm-polegar). O --card do escuro é mais
-escuro do que o trilho, e a sombra no escuro não se vê: a escolha acesa
-desaparecia.
+cima, no desenho do .chip.on e do .opt.on: o fundo --accent-soft, o texto
+--accent-text e um contorno de 2px no --accent — um ::after colado às bordas
+do botão, que não come largura ao texto (estilos.css, a secção ajustes-v40d
+1.1). Vale em todos os segmentados — o tipo do movimento, o tema, o «pago
+por», as abas da área, a entrada, as categorias, o titular A/B —, nos dois
+temas, menos nas abas sublinhadas das Pessoas (.abas-pessoas), que já são um
+traço. O contorno contra a pista tem 5.9:1 no claro, 6:1 no escuro e 3.3:1
+sob o escurecimento forçado do Samsung Internet (medido nos pixeis): um
+realce que fosse só luz (um branco com sombra no claro, o --line2 no escuro)
+desaparece quando o browser escurece a página (ver «Tema escuro e a regra do
+color-scheme»).
+
+No segmentado que desliza (imovel.js:imvSegmentado) o contorno e o fundo vão
+na peça que corre (estilos.css:.segm-polegar), e o botão aceso fica só com o
+texto. O tipo do movimento acende o contorno no cobalto como os outros, e só
+o texto na cor do dinheiro (--segm-texto: a receita --in, a despesa --out, a
+prestação --loan; movimento.js:txTipoSegm): o verde e o laranja, sob o
+escurecimento forçado, ficam escuros contra a pista (2.1:1 e 2.7:1).
+
+Os dois segmentados mais apertados — os cinco tipos do movimento
+(estilos.css:.mov-tipo-segm) e o Por indicar, Declarado, Não declarado do
+contrato (estilos.css:.ct-at-segm) — têm colunas iguais, a letra a 13px e
+menos enchimento (3px e 1px de cada lado); as abas da área ficam com 6px
+(estilos.css:.abas-area). A 14px, «Despesa» a 600 não cabe num quinto da
+linha a 375px e fica «Despes…». Com flex:1 1 0 cada botão recebe a mesma
+largura de texto mais o seu enchimento, por isso o enchimento baixa em todos
+os do grupo. A 375px sobram cerca de 3px a «Despesa» e 4px a «Não
+declarado».
 
 Os ícones vivem no icones.js:ic, e dois dizem uma ação de cabeçalho: a
 caixa com o visto (icones.js:caixaVisto, o ☑) é o «Selecionar vários» em
@@ -1003,21 +1064,28 @@ título, o essencial numa linha curta separada por «·», os selos e, à
 direita, o valor. Os contratos agrupam-se por imóvel, cada grupo com um
 cabeçalho de classe própria e a renda do mês à direita
 (estilos.css:.ct-grupo-cab; ver «Os Contratos»). Não há ⋮: tocar na linha
-abre a ficha, onde estão as ações, e o toque longo continua — nas pessoas e
-nas visitas abre as opções; nos planeados e nos modelos abre as opções
-(planeados.js:lpPlaneado, planeados.js:lpModelo) com «Selecionar vários» no
-fim (planeados.js:lpPortaSelecao), que entra na seleção desse tipo com o
-tocado marcado — só na página dos Planeados e só a quem pode silenciar ou
-apagar; o que a nuvem acrescenta à folha depois de ela abrir
-(cloud/painel.js:menuOption, o «Recusar desta vez») fica antes dele
-(cloud/selecao-listas.js:selLPortaNoFim); nos imóveis e nos contratos, com
-conta seleciona e sem ela abre o menu; nos movimentos entra na seleção. Em
+abre a ficha, onde estão as ações (o ⋯ da ficha), e o toque longo continua —
+nas pessoas e nas visitas abre as opções; nos movimentos, nos imóveis, nos
+contratos, nos planeados e nos modelos entra na seleção de vários com o
+tocado já marcado (cloud/selecao-listas.js:lpLongo →
+cloud/selecao-listas.js:CW.selLEntrar), o mesmo gesto em toda a app; sem
+conta, onde a nuvem não corre, abre as opções. As opções de um planeado
+vivem no ⋯ da ficha (planeados.js:recView: Confirmar sem rever, Silenciar ou
+Reativar avisos, Editar, Apagar) e as de um modelo também
+(planeados.js:tplView: Editar e Apagar, com o «Usar modelo» no rodapé); o
+«Recusar desta vez» e o «Preencher N em falta» de um por confirmar vivem no
+⋯ da linha do cartão «Por confirmar» (planeados.js:pendMenuItens). A folha
+das opções (planeados.js:lpPlaneado, planeados.js:lpModelo) continua a
+existir para quem a chama, com «Selecionar vários» no fim
+(planeados.js:lpPortaSelecao, cloud/selecao-listas.js:selLPortaNoFim) — como
+a dos imóveis e dos contratos —, mas o toque longo já não a abre. Em
 seleção, o toque longo marca e desmarca como o toque nos Imóveis, nos
 Contratos e nos Planeados (cloud/selecao-listas.js:CW.selLTocar). A
 porta visível do toque longo é a própria linha, que o tornarFocavel torna
-alcançável pelo teclado: o percurso aceita como caminho visível a linha
-focável que abre a ficha (testes/ui/invariantes.js). Em seleção, a porta
-visível é a barra do fundo.
+alcançável pelo teclado (Enter abre a ficha): o percurso aceita como caminho
+visível a linha focável que abre a ficha (testes/ui/invariantes.js); a porta
+da seleção pelo teclado é o ☑ do cabeçalho. Em seleção, a porta visível é a
+barra do fundo.
 
 A lista dos imóveis é a exceção com capa, a prancheta M-Casas
 (lista-imoveis.js:vProperties): cada cartão leva a capa à esquerda, da altura
@@ -1076,9 +1144,18 @@ nome, no cobalto, com o × que volta a todos os imóveis e deixa o foco no
 chip (vistas.js:anaChipFocar). Escolher pelo teclado devolve o foco ao chip
 refeito (projecoes.js:onProjProp, avaliacao.js:onRepSel, pelo
 vistas.js:lfReporFoco). Não há chip de proprietário. Na Avaliação, as ações
-da página (Partilhar, Exportar) vão na mesma linha, à direita, e descem para
-uma linha delas no telemóvel (estilos.css:.ana-topo), com a forma curta num
-.ana-curto e a longa num .ana-largo («Exportar CSV»). Um nome comprido leva
+da página são um botão só, na mesma linha do chip, à direita — também no
+telemóvel (estilos.css:.ana-topo): o botão de partilha
+(avaliacao.js:avaPartilha), de ícone (ic('partilhar'), os três pontos
+ligados), .btn.so-icone de 44×44, com o nome «Partilhar» (aria-label e
+title). Abre o menu de ações da casa (.menuwrap/.menupop, pelo
+componentes.js:menuOpen) com «Partilhar avaliação» (copias.js:shareReport) e
+«Exportar movimentos (CSV)» (copias.js:downloadCsv); cada opção fecha o menu
+antes de correr, e o menu fecha também ao tocar fora, ao rolar e com o
+Escape. O componentes.js:menu leva sempre o ⋯ e o nome «Opções», por isso o
+menu escreve-se à mão, com a mesma .menuwrap/.menupop, para fechar e se
+posicionar como todos os outros. Tem a largura das opções, sem as partir, e
+não passa da largura do ecrã (estilos.css:.ava-partilha). Um nome comprido leva
 reticências no chip, que nunca passa da largura (estilos.css:.ana-chips).
 Sem imóveis no âmbito e sem foco, o chip não se escreve.
 
@@ -1766,6 +1843,56 @@ dentro de outro. Para o teclado e o leitor de ecrã a porta continua a ser o
 «N fotos», que diz quantas há: o da capa fica fora do Tab (tabindex -1), com
 nome («Ver as fotos»), para não haver duas paragens seguidas que fazem o
 mesmo. O premido escurece a capa com o --veu; o passar por cima só com rato.
+
+As fotos de um imóvel andam em carrossel. Na janela de uma foto, arrastar de
+lado passa à seguinte ou à anterior das fotos desse imóvel, com volta:
+depois da última vem a primeira, e antes da primeira a última
+(web/app/anexos.js:fotoCarrossel, web/app/anexos.js:fotoVolta). O «3 de 8»
+fica por baixo da foto, antes do tamanho e da data, e o título da janela é o
+nome da foto de agora («Foto 3» sem nome); o «Guardar» guarda a que está à
+vista (web/app/anexos.js:fotoGuardar). Entram as fotos do imóvel a que a foto
+pertence, só as imagens, pela ordem dele — a primeira é a capa
+(web/app/anexos.js:fotosDoImovel); vinda do formulário do imóvel (as
+miniaturas do componentes.js:fileBlock, que chamam `openMeta(id,true)`), a
+fila é a do formulário, com as fotos ainda por gravar e a ordem que lá
+estiver. Um imóvel com uma foto só, e os anexos de imagem que não são fotos
+de imóvel (contratos, pessoas, hipotecas), abrem sem carrossel: setas e «1
+de 1» sem para onde ir eram ruído.
+
+O palco tem tamanho fixo — quadrado, até 60% da altura do ecrã — e cada foto
+cabe lá inteira (object-fit:contain), sobre o --tint (estilos.css:.fc-palco):
+com fotos ao alto e ao comprido no mesmo imóvel, uma janela à altura de cada
+foto saltava a cada passagem, e a fita não corre numa caixa que muda de
+tamanho a meio. A fita tem três lugares (a anterior, a de agora e a
+seguinte), separados pela --fc-folga; no fim de cada viagem os lugares rodam
+(web/app/anexos.js:fotoRodar), e quem já lá estava não volta a carregar. Só
+ficam presos os object URLs das três fotos da fita, e todos se soltam quando
+a janela fecha.
+
+O gesto segue as regras do calendário e dos separadores
+(calendario.js:calArrastar, navegacao.js:sepArrastoMove): o eixo decide-se aos
+10px e a folga de decidir não conta (web/app/anexos.js:fotoEixo); um gesto que
+começa na vertical é do corpo da janela, que rola (touch-action:pan-y no
+palco); largar depois de um quarto da largura, ou com um sacudir para o
+mesmo lado, passa (web/app/anexos.js:fotoDecide); antes disso a foto volta ao
+sítio no --medio e na --curva-entra. O clique que vem a seguir a um arrasto
+engole-se (navegacao.js:sepEngolirToque). O rato também arrasta. Um dedo que
+pousa numa foto a meio da viagem apanha-a onde ela está, e uma seta tocada a
+meio de outra continua dali (web/app/anexos.js:fotoParar) — sem salto. O
+deslizar entre separadores não rouba o gesto: com uma janela aberta, o
+navegacao.js:sepEstadoLivre já diz que não.
+
+A viagem pelas setas parte parada, na --curva-fita e no --lento (como a fita
+das listas); largada por um dedo já vem a andar, e acaba na --curva-entra e
+no --medio, que arranca no máximo — com a --curva-fita havia um travão no
+instante em que o dedo saía (web/app/anexos.js:fotoCorrer). As setas ‹ ›
+(44px, «Foto anterior» e «Foto seguinte») veem-se só no computador, com rato;
+no dedo ficam só para o leitor de ecrã, e aparecem quando o Tab lá chega. As
+teclas ← e → passam sem fita — um atalho de teclado não anima
+(web/app/anexos.js:fotoTecla) — e não mexem num campo de texto. As vizinhas
+são aria-hidden; o «3 de 8» é aria-live polite; o palco é um grupo com
+aria-roledescription «carrossel». Sem movimento (prefers-reduced-motion) a
+foto não segue o dedo e a troca é de uma vez, como nos separadores.
 
 As ações rápidas são chips, só os que o cargo e os serviços ligados deixam.
 O primeiro é «Movimentos · N»
@@ -2679,10 +2806,11 @@ perfil) e da visita (Marcar e Editar visita) dizem o erro no campo
 (componentes.js:falhaCampo): o nome; quem vem, o imóvel, a data, e o fim
 antes do início. Escolher o imóvel da visita repinta o corpo e larga o erro
 (visitas.js:visPropMudou). O Início e o Fim da visita vão lado a lado também
-no telemóvel, em campos da largura da hora (visitas.js:visBody,
-estilos.css:.vis-par — duas colunas de até 8,75rem encostadas à esquerda,
-46px de altura): numa .row empilhavam-se abaixo dos 520px, dois campos a
-toda a largura para «14:30».
+no telemóvel, em duas colunas iguais que enchem a linha por igual
+(visitas.js:visBody, estilos.css:.vis-par —
+repeat(2,minmax(0,1fr)), 46px de altura): numa .row empilhavam-se abaixo dos
+520px, dois campos a toda a largura para «14:30»; encostados à esquerda na
+largura da hora, ficavam descentrados e com um vazio à direita.
 
 As Visitas (visitas.js:vVisits, o canvas M-Visitas) abrem com a pesquisa à
 vista, o funil e os chips Imóvel, Estado e Desfecho (visitas.js:visChipSel
@@ -2872,7 +3000,11 @@ Entrar com um tipo esquece o outro (cloud/selecao-listas.js:CW.selLEntrar);
 em seleção, os cartões do outro tipo ficam atenuados (estilos.css:.sel-fora)
 e tocá-los vai ao cloud/selecao-listas.js:CW.selLOutro — sem nada marcado a
 seleção passa a esse tipo com ele marcado; com marcas, um aviso diz
-«Seleciona planeados ou modelos, não os dois» e as marcas ficam.
+«Seleciona planeados ou modelos, não os dois» e as marcas ficam. O toque
+longo num planeado ou num modelo entra na seleção desse tipo com ele marcado
+(cloud/selecao-listas.js:lpLongo), mesmo num que não posso silenciar nem
+apagar, como nos imóveis: as ações da barra recusam com a razão e contam os
+que ficam de fora.
 
 A barra de baixo dos planeados (cloud/selecao-listas.js:selLBarraHtml) tem
 o Cancelar, o Silenciar ou o Reativar (#selLMudo) e o Apagar; a dos modelos
@@ -2918,8 +3050,9 @@ a periodicidade com o dia («mensal, dia 5», planeados.js:recRepete) e a
 próxima data; o tipo, o imóvel e a categoria; o selo da origem e o do
 estado; e o valor. O selo da origem (planeados.js:recOrigem) é roxo «da
 hipoteca», cobalto «do contrato», e cinzento «do imóvel» e «à mão». Não há
-FAB nem ⋮: o «Novo recorrente» está no cabeçalho e no +, e as opções na ficha
-e no toque longo.
+FAB nem ⋮: o «Novo recorrente» está no cabeçalho e no +, as opções no ⋯ da
+ficha, e o toque longo seleciona vários (ver a seleção dos Planeados, em
+«Os Movimentos»).
 
 No dedo, os chips dos Modelos têm 44px (estilos.css:.plan-modelo), sem o
 ::after das irmãs: a fila rola de lado e cortava-o. Com filtros, os vazios
@@ -3396,7 +3529,10 @@ parte, dentro da lista — o Tema. Um html continua a ser um cartão inteiro, à
 parte da lista. O Tema está na própria raiz, num segmentado Automático, Claro
 e Escuro que grava ao tocar e devolve o foco ao botão escolhido
 (definicoes.js:linhaDoTema, definicoes.js:temaEscolher; as opções têm o id
-defTema_<tema>), como os segmentados das categorias e dos grupos; o toque no
+defTema_<tema>), como os segmentados das categorias e dos grupos; por baixo,
+só no Samsung Internet e com o Automático, a nota que diz onde se desliga o
+escurecimento forçado (definicoes.js:notaDoSamsung; ver «Tema escuro e a
+regra do color-scheme»). O toque no
 título leva à página do Tema (definicoes.js:vTema), que explica o que fazer
 quando o browser não passa a preferência do sistema e continua a gravar pelo
 tema.js:setTheme.
@@ -3801,26 +3937,66 @@ largura), os chips do quarto, o «+ Adicionar» dos inquilinos e uma área de
 (estilos.css:.ct-form, estilos.css:.ct-quartos, estilos.css:#c_tenants), sem
 mexer nas regras base do .tag e do .tagadd.
 
-Num imóvel por quartos com algum quarto arrendado — um contrato que ainda
-não acabou, ctVivo (contrato.js:ctQuartosEstado) — a casa toda já não está
-livre: o «Imóvel inteiro» sai (contrato.js:ctInteiroPossivel), o «Quarto»
-leva o asterisco, os arrendados ficam à vista com «· já arrendado» mas
-desligados (contorno tracejado e tinta esbatida, estilos.css:.ct-quartos),
-e uma frase diz que o contrato é de um dos quartos livres. O contrato novo
-abre no primeiro quarto livre, pela ordem da ficha
-(contrato.js:ctQuartoPorOmissao, no ctModal e no onCtProp — o «Novo
-contrato» da ficha, da lista dos Contratos e das ações de quem colabora); o
-«Novo contrato» de um quarto livre escolhe esse quarto
-(imovel.js:contratoNoQuarto). Sem nenhum quarto livre, todos os chips ficam
-desligados e a frase diz que não há contrato novo possível ali
-(#c_roomSem, ligada ao grupo por aria-describedby). O guardar recusa a casa
-inteira com quartos arrendados junto dos chips (contrato.js:ctSaver →
-falhaCampo('c_roomEsc'), com o foco no primeiro quarto livre), e tocar num
-quarto larga o erro. Um contrato que já estava gravado como do imóvel
-inteiro continua a abrir e a gravar como estava
+Num imóvel por quartos com quartos arrendados — um contrato que ainda não
+acabou, ctVivo (contrato.js:ctQuartosEstado) — as escolhas dependem da data
+de início do contrato novo (contrato.js:ctQuartosMiolo):
+
+- **O imóvel inteiro** escolhe-se se o início for no dia do último fim dos
+  contratos dos quartos, ou depois — o fim mais tarde, contando as
+  renovações escritas à mão (contrato.js:ctInteiroPossivel, o ultimoFim do
+  contrato.js:ctQuartosEstado, contrato.js:ctFimEfetivo). Um contrato de
+  quarto sem data de fim bloqueia-o: nenhuma data o deixa escolher, e o chip
+  nem aparece. Antes do último fim, o chip fica à vista, à espera.
+- **Um quarto arrendado** escolhe-se se o início for no dia do fim do
+  contrato desse quarto, ou depois (contrato.js:ctQuartoPossivel); com dois
+  contratos vivos no mesmo quarto, conta o que acaba mais tarde; sem data de
+  fim, nunca.
+- **Um quarto livre**, sempre.
+
+Cada chip à espera de uma data diz-la ao lado, em dd/mm/aaaa («Quarto 1 ·
+livre a 31/03/2027», «Imóvel inteiro · livre a 31/08/2027»), e toca-se:
+escolhe-o e põe o início do contrato nesse dia — o fim do contrato desse
+quarto, ou o último fim para a casa inteira (contrato.js:ctComecaNoFim) —,
+pelo mesmo caminho de quem muda a data (contrato.js:ctInicioMudou: o liveNet
+e os chips refazem-se); o aviso diz «O início do contrato passou para
+dd/mm/aaaa.» e o foco volta ao chip. Por isso não é disabled: é um botão com
+aria-disabled, o .ct-espera (tracejado e tinta esbatida, com a data na cor
+do realce — estilos.css, secção ajustes-v40d 1.3), e o rótulo «Quarto 1,
+livre a 31/03/2027, toca para começar nessa data» para o leitor de ecrã. Um
+quarto arrendado sem fim diz «· já arrendado» e fica disabled, sem toque
+(estilos.css:.ct-quartos). A frase por baixo (#c_roomFrase,
+contrato.js:ctQuartosFrase, apontada pelo grupo com aria-describedby) diz a
+partir de quando a casa inteira fica livre («A casa inteira só a partir de
+31/08/2027, o fim do contrato mais longo»), ou que não se escolhe enquanto
+houver um quarto sem fim, e a regra dos quartos arrendados; sem nenhuma
+escolha possível, diz porquê. A data de cada quarto lê-se onde ele está; a
+frase fica para a casa inteira e para a regra.
+
+Mudar o início reavalia (o change do #c_start chama o
+contrato.js:ctInicioMudou, que corre o liveNet e reescreve o miolo do
+campo): a escolha feita nunca se perde nem se desliga — trocá-la sozinha
+esconderia a mudança. Se deixar de valer, fica escolhida e o erro aparece
+por baixo dos chips, como o do guardar (#c_roomEsc-erro, o grupo com
+aria-invalid), e diz-se no aviso uma vez, quando aparece ou muda; tocar num
+chip válido larga-o. O guardar recusa uma escolha que não vale para o início
+(contrato.js:ctSaver → contrato.js:ctEscolhaInvalida →
+falhaCampo('c_roomEsc'), com o foco no primeiro chip que se pode escolher).
+Um início vazio conta como hoje (contrato.js:ctInicioDe).
+
+O contrato novo abre (contrato.js:ctEscolhaPorOmissao, no ctModal e no
+onCtProp — o «Novo contrato» da ficha, da lista dos Contratos e das ações de
+quem colabora): sem quartos arrendados, no imóvel inteiro, à cabeça; senão no
+primeiro quarto livre, pela ordem da ficha (contrato.js:ctQuartoPorOmissao);
+sem quartos livres, no primeiro quarto da lista que tenha fim, com o início
+no dia em que o contrato dele acaba (contrato.js:ctOmissaoSemLivres) — a
+ordem da ficha é a que a pessoa conhece, e «o que vaga primeiro» mudava de
+quarto conforme as datas; se nenhum tiver fim, em nada, e a frase diz que
+não há contrato novo possível ali. O «Novo contrato» de um quarto livre
+escolhe esse quarto (imovel.js:contratoNoQuarto). O início de um contrato já
+gravado nunca se mexe ao trocar de imóvel. Um contrato que já estava gravado
+como do imóvel inteiro continua a abrir e a gravar como estava
 (contrato.js:ctInteiroGravado), e o quarto que o próprio contrato já tinha
-escolhe-se sempre. Sem quartos arrendados, o «Imóvel inteiro» vai à cabeça
-e escolhido.
+escolhe-se sempre.
 
 «Usar o contacto de» diz a verdade (contrato.js:contactSect,
 contrato.js:fillOwnerContact, contrato.js:fillTenantContact). O contacto
@@ -4434,7 +4610,10 @@ maiúsculas de secção vêm do CSS, não do texto.
 
 Sem emojis na interface. Os ícones são traço em SVG, ic(nome,tamanho)
 (icones.js:ic): stroke 1.8, currentColor, 20px por omissão. Um ícone
-novo entra no mapa do ic(), não como carácter.
+novo entra no mapa do ic(), não como carácter. A partilha é o `partilhar`
+(icones.js:partilhar): os três pontos ligados, o sinal de partilha do
+Android, e não a seta a sair da caixa, que ao lado do «down» das descargas
+se lia como «carregar».
 
 O hint explica o porquê, não repete o rótulo: «Confirmar regista o
 movimento e agenda o seguinte. Silenciar deixa-o à espera, sem avisos.»
@@ -4537,7 +4716,8 @@ como fórmula (copias.js:celulaCsv); os números vão tal e qual.
 Em ecrã de dedo, nada abaixo do mínimo de toque, e só aí: no rato os
 tamanhos compactos continuam certos (estilos.css:@media(pointer:coarse)).
 44px os botões, os itens da gaveta e os cabeçalhos das dobras; 40 o
-.btn.sm. O toque longo abre as opções do cartão aos 480 ms, com vibração,
+.btn.sm. O toque longo dispara aos 480 ms — entra na seleção, ou abre as
+opções do cartão onde não há seleção —, com vibração,
 e engole o clique que vem a seguir (componentes.js:_lpT e os ouvintes de
 pointer que o usam).
 

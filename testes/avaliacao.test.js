@@ -170,9 +170,10 @@ describe('onde vive a rentabilidade', () => {
   test('as ações da página vivem na fila do chip «Imóvel»; o yield exigido saiu para a roda dentada', () => {
     oitoRendas();
     const html = app.vReports();
-    /* no telemóvel os rótulos encurtam-se (Partilhar, Exportar CSV): o resto vive num .ana-largo */
-    assert.ok(html.includes('data-click="shareReport()"><span>Partilhar<span class="ana-largo"> avaliação</span></span></button>'));
-    assert.ok(html.includes('data-click="downloadCsv()"><span>Exportar<span class="ana-largo"> movimentos (CSV)</span><span class="ana-curto"> CSV</span></span></button>'));
+    /* um botão de partilha só, com as duas ações no menu dele */
+    assert.ok(html.includes('aria-label="Partilhar" title="Partilhar">'));
+    assert.ok(html.includes('data-click="closePops();shareReport()">'));
+    assert.ok(html.includes('data-click="closePops();downloadCsv()">'));
     assert.match(html, /^<div class="ana-topo"><div class="chips-fila mov-chips ana-chips" role="group" aria-label="Filtros da avaliação"><span class="mov-chip">/);
     assert.doesNotMatch(html, /ana-pin|avaYield|capTargetSet/, 'o yield não está na página');
     assert.doesNotMatch(html, /Proprietário/, 'nem o chip do proprietário');

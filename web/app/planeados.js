@@ -647,7 +647,7 @@ function tplView(id){
    edição: guardar altera a recorrência em vez de criar um movimento. Um
    planeado que não posso alterar (alheio, num imóvel onde só colaboro — os
    campos são de quem o criou; ou de um cargo que só vê) abre só de leitura:
-   confirmar e silenciar ficam no toque longo.
+   confirmar e silenciar ficam no ⋯ da ficha (recView).
    Recebe: id — o id da recorrência a editar.
    Devolve: nada — abre o formulário carregado com a recorrência. */
 function editRec(id){
@@ -1130,8 +1130,9 @@ function recChip(v){
 }
 /* Uma linha da lista dos planeados: o nome, a periodicidade e a próxima data
    (ou, chegada a data, quando pede confirmação), o tipo e o imóvel, o selo da
-   origem e o do estado, e o valor com a cor do dinheiro. Tocar abre a ficha;
-   o toque longo dá as opções (planeados.js:lpPlaneado).
+   origem e o do estado, e o valor com a cor do dinheiro. Tocar abre a ficha,
+   com as opções no ⋯; o toque longo entra na seleção de vários com ela
+   marcada (cloud/selecao-listas.js:lpLongo).
    Recebe: r — o planeado.
    Devolve: o HTML da linha (texto). */
 function recLinha(r){
@@ -1226,11 +1227,14 @@ function recCracha(){
   const n=sabemosOEstado()?recActive().length:0;
   return {n:n,aviso:!recLate().length};
 }
-/* O menu de toque longo de um planeado (data-lp "rec:<id>"): com rec.add
-   confirmo e silencio qualquer planeado (o servidor só lhe funde next, until
-   e muted); editar os campos e apagar é só o que eu criei — o alheio que
-   termina ao confirmar apaga-se pelo Confirmar, não por aqui. Os outros
-   serviços acrescentam as suas opções por lpExtras.
+/* A folha das opções de um planeado (data-lp "rec:<id>", pelo lpMenu): com
+   rec.add confirmo e silencio qualquer planeado (o servidor só lhe funde
+   next, until e muted); editar os campos e apagar é só o que eu criei — o
+   alheio que termina ao confirmar apaga-se pelo Confirmar, não por aqui. Os
+   outros serviços acrescentam as suas opções por lpExtras. Com a nuvem, o
+   toque longo já não a abre: entra na seleção de vários
+   (cloud/selecao-listas.js:lpLongo), e as opções de um só vivem no ⋯ da
+   ficha (recView); a folha fica para quem chama o lpMenu.
    Recebe: a — as partes do data-lp (['rec', id]).
    Devolve: nada — abre a folha de opções (ou nada, se o planeado já não existir). */
 function lpPlaneado(a){
@@ -1244,7 +1248,9 @@ function lpPlaneado(a){
   if(conf||podeEditar(hid,'rec.add',r,true))lpPortaSelecao('rec',id,opts);
   return lpShow(r.name,opts);
 }
-/* O menu de toque longo de um modelo (data-lp "tpl:<id>").
+/* A folha das opções de um modelo (data-lp "tpl:<id>", pelo lpMenu). Com a
+   nuvem, o toque longo entra na seleção (cloud/selecao-listas.js:lpLongo), e
+   as opções de um só vivem na ficha (tplView).
    Recebe: a — as partes do data-lp (['tpl', id]).
    Devolve: nada — abre a folha de opções (ou nada, se o modelo já não existir). */
 function lpModelo(a){
@@ -1256,7 +1262,7 @@ function lpModelo(a){
   return lpShow(x.name,opts);
 }
 /* A porta da seleção de vários no fim da folha das opções de um planeado ou
-   de um modelo, como o «Selecionar vários» do kebab dos imóveis
+   de um modelo, como o «Selecionar vários» da folha dos imóveis
    (cloud/selecao-listas.js): entra na seleção desse tipo com o tocado já
    marcado. Só na página dos Planeados — a folha abre-se também noutros
    ecrãs, onde não há seleção — e só com a camada da seleção carregada.

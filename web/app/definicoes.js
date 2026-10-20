@@ -306,16 +306,37 @@ function navRow(title,sub,icon,page){return `<div class="card def-lista">${linha
    escuro num segmentado, que grava ao tocar e vale só neste aparelho; por
    cima, o que o automático está a resolver agora, e o toque leva à página do
    Tema, que explica o que fazer quando o browser não passa a preferência do
-   sistema (vTema).
+   sistema (vTema). No Samsung Internet em automático, por baixo, a nota de
+   onde se muda (notaDoSamsung), ligada ao segmentado por aria-describedby.
    Recebe: nada.
    Devolve: o HTML (texto) da linha. */
 function linhaDoTema(){
   const t=db.settings.theme||'auto';
   const sub=t==='auto'?'O sistema está em '+(mq().matches?'escuro':'claro'):'Vale só neste aparelho';
   const op=[['auto','Automático'],['light','Claro'],['dark','Escuro']];
+  const nota=notaDoSamsung(t);
   return `<div class="def-tema">
     <button type="button" class="def-tema-cab" data-toca="ecra" data-click="goSet('tema')"><b class="u-d-block">Tema</b><span class="small">${esc(sub)}</span><span class="seta">${ic('chevR',18)}</span></button>
-    <div class="segm" role="radiogroup" aria-label="Tema">${op.map(([v,r])=>`<button type="button" id="defTema_${v}" role="radio" aria-checked="${t===v}" class="${t===v?'on':''}" data-toca="dados" data-click="temaEscolher('${jsq(v)}')">${r}</button>`).join('')}</div></div>`;
+    <div class="segm" role="radiogroup" aria-label="Tema"${nota?' aria-describedby="defTemaSamsung"':''}>${op.map(([v,r])=>`<button type="button" id="defTema_${v}" role="radio" aria-checked="${t===v}" class="${t===v?'on':''}" data-toca="dados" data-click="temaEscolher('${jsq(v)}')">${r}</button>`).join('')}</div>${nota}</div>`;
+}
+/* A app está a correr no Samsung Internet? O UA dele diz «SamsungBrowser»
+   (no telemóvel e no DeX); o WebView da app Android não, e lá o
+   escurecimento à força já vem desligado.
+   Recebe: nada (lê o navigator.userAgent).
+   Devolve: verdadeiro no Samsung Internet. */
+function eSamsungInternet(){
+  try{return /\bSamsungBrowser\//.test(String(navigator.userAgent||''))}catch(e){return false}
+}
+/* A nota do Samsung Internet na linha do Tema. Com o telemóvel em escuro, o
+   browser da Samsung responde à página que está em claro e escurece-a à força
+   (o «modo escuro» dele, que não olha ao color-scheme): com o tema em
+   Automático a app aparece clara, ou num escuro que não é o dela. Só lá e só
+   em Automático — no Claro e no Escuro a escolha já não depende do browser.
+   Recebe: t — o tema escolhido ('auto', 'light' ou 'dark').
+   Devolve: o HTML (texto) da nota, ou '' fora desse caso. */
+function notaDoSamsung(t){
+  if(t!=='auto'||!eSamsungInternet())return '';
+  return `<p class="def-tema-samsung" id="defTemaSamsung">O Samsung Internet escurece as páginas à força e a app pode aparecer clara. Em <b>Samsung Internet → Definições → Labs → Usar o tema escuro do site</b>, a app passa a seguir o telemóvel; ou escolhe <b>Escuro</b> aqui.</p>`;
 }
 /* Escolhe o tema no segmentado da raiz. O setTheme repinta a vista, e o
    botão onde estava o foco era destruído: quem usa o teclado ou o leitor de
@@ -404,7 +425,7 @@ function vTema() {
       ? '<div class="hint u-mt-9px">O automático segue o que o browser diz preferir, e este está a dizer <b>claro</b>. ' +
         'Se tens o aparelho em escuro, é o browser que não está a passar a preferência. No browser da Samsung há duas opções, ' +
         'e o modo escuro sozinho pode não chegar: <b>Definições → Visualização e deslocamento de página → Modo escuro</b>, e ' +
-        '<b>Definições → Labs → Usar tema escuro do site</b>. Se mesmo assim ficar em claro, escolhe <b>Escuro</b> aqui — ' +
+        '<b>Definições → Labs → Usar o tema escuro do site</b>. Se mesmo assim ficar em claro, escolhe <b>Escuro</b> aqui — ' +
         'essa opção não depende do browser e funciona sempre.</div>'
       : ''));
 }

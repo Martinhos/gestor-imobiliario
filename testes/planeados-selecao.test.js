@@ -4,8 +4,10 @@
 // razão dita); Apagar com as regras do delRec (os automáticos desligam o
 // autoRec do contrato ou da hipoteca, os da ficha do imóvel levam o valor e as
 // irmãs) e das permissões, e o Anular a repor tudo. O toque longo num
-// planeado ou num modelo abre as opções com «Selecionar vários» no fim, e o
-// botão do cabeçalho que entra na seleção é a caixa com o visto em todo o lado.
+// planeado ou num modelo entra na seleção com ele já marcado, como nos
+// Imóveis e nos Contratos, e a barra é a do tipo; as opções de um só ficam no
+// ⋯ da ficha (e na folha do lpMenu, com «Selecionar vários» no fim); o botão
+// do cabeçalho que entra na seleção é a caixa com o visto em todo o lado.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -168,10 +170,78 @@ describe('o toque longo e a seleção nos Planeados (cloud/selecao-listas.js)', 
   });
   afterEach(() => { nuvem.CW.selL = { tipo: null, ids: {} }; });
 
-  test('o toque longo num planeado abre as opções com «Selecionar vários» no fim, que entra com ele marcado', () => {
+  test('o toque longo num planeado entra na seleção com ele marcado, sem abrir a folha das opções', () => {
+    let folhas = 0;
+    nuvem.lpShow = () => { folhas++; };
+    nuvem.lpLongo('rec:R1');
+    assert.equal(folhas, 0, 'nada de folha');
+    assert.equal(nuvem.CW.selL.tipo, 'rec');
+    assert.deepEqual(Object.keys(nuvem.CW.selL.ids), ['R1']);
+  });
+
+  test('num modelo o mesmo: entra na seleção dos modelos com ele marcado', () => {
+    let folhas = 0;
+    nuvem.lpShow = () => { folhas++; };
+    nuvem.lpLongo('tpl:T2');
+    assert.equal(folhas, 0);
+    assert.equal(nuvem.CW.selL.tipo, 'tpl');
+    assert.deepEqual(Object.keys(nuvem.CW.selL.ids), ['T2']);
+  });
+
+  test('o toque longo é o mesmo gesto dos Imóveis e dos Contratos: o lpLongo já não abre o lpMenu para nenhum tipo', () => {
+    const fonte = nuvem.lpLongo.toString();
+    assert.doesNotMatch(fonte, /lpMenu/);
+    assert.doesNotMatch(fonte, /SEL_LP_OPCOES|SEL_PLAN/, 'sem exceção para os planeados');
+    nuvem.tab = 'properties';
+    nuvem.lpLongo('prop:P1');
+    assert.equal(nuvem.CW.selL.tipo, 'prop');
+    assert.deepEqual(Object.keys(nuvem.CW.selL.ids), ['P1'], 'nos imóveis igual');
+  });
+
+  test('fora da página dos Planeados o toque longo num planeado não entra em nada', () => {
+    let folhas = 0;
+    nuvem.lpShow = () => { folhas++; };
+    nuvem.tab = 'calendar';
+    nuvem.lpLongo('rec:R1');
+    nuvem.lpLongo('tpl:T1');
+    assert.equal(nuvem.CW.selL.tipo, null);
+    assert.equal(folhas, 0);
+  });
+
+  test('um silenciado segurado entra com o Reativar na barra; um ativo com o Silenciar; um modelo sem silêncio', () => {
+    const mudo = nuvem.document.getElementById('selLMudo');
+    nuvem.lpLongo('rec:R2');
+    nuvem.selLPintar();
+    assert.equal(mudo.hidden, false);
+    assert.match(mudo.innerHTML, /Reativar$/);
+    nuvem.CW.selLSair();
+    nuvem.lpLongo('rec:R1');
+    nuvem.selLPintar();
+    assert.match(mudo.innerHTML, /Silenciar$/);
+    const acoes = (html) => Array.from(html.matchAll(/data-click="CW\.selL(Sair|Mudo|Apagar)\(\)"/g), (m) => m[1]);
+    assert.deepEqual(acoes(nuvem.selLBarraHtml(nuvem.CW.selL.tipo)), ['Sair', 'Mudo', 'Apagar'], 'Cancelar, Silenciar/Reativar, Apagar — por esta ordem');
+    nuvem.CW.selLSair();
+    nuvem.lpLongo('tpl:T1');
+    assert.deepEqual(acoes(nuvem.selLBarraHtml(nuvem.CW.selL.tipo)), ['Sair', 'Apagar'], 'nos modelos, Cancelar e Apagar');
+  });
+
+  test('as opções de um só ficam no ⋯ da ficha: o planeado com Silenciar e Apagar, o modelo com Editar e Apagar', () => {
+    let ficha = null;
+    nuvem.abrirFicha = (o) => { ficha = o; };
+    nuvem.menu = (id, itens) => itens;
+    nuvem.recView('R1');
+    assert.deepEqual(Array.from(ficha.menu(), (x) => x.label), ['Confirmar sem rever', 'Silenciar', 'Editar', 'Apagar']);
+    nuvem.recView('R2');
+    assert.ok(ficha.menu().some((x) => x.label === 'Reativar avisos'), 'o silenciado reativa-se');
+    nuvem.tplView('T1');
+    assert.deepEqual(Array.from(ficha.menu(), (x) => x.label), ['Editar', 'Apagar']);
+    assert.equal(ficha.editar.rotulo, 'Usar modelo');
+  });
+
+  test('a folha das opções (lpMenu) continua com «Selecionar vários» no fim, que entra com ele marcado — e só na página dos Planeados', () => {
     let titulo = '', opts = null;
     nuvem.lpShow = (t, o) => { titulo = t; opts = o; };
-    nuvem.lpLongo('rec:R1');
+    nuvem.lpMenu('rec:R1');
     assert.equal(titulo, 'Luz');
     const ult = opts[opts.length - 1];
     assert.equal(ult.label, 'Selecionar vários');
@@ -180,12 +250,8 @@ describe('o toque longo e a seleção nos Planeados (cloud/selecao-listas.js)', 
     ult.act();
     assert.equal(nuvem.CW.selL.tipo, 'rec');
     assert.deepEqual(Object.keys(nuvem.CW.selL.ids), ['R1']);
-  });
-
-  test('num modelo o mesmo; e fora da página dos Planeados a folha não oferece a seleção', () => {
-    let opts = null;
-    nuvem.lpShow = (t, o) => { opts = o; };
-    nuvem.lpLongo('tpl:T1');
+    nuvem.CW.selLSair();
+    nuvem.lpMenu('tpl:T1');
     assert.deepEqual(Array.from(opts, (o) => o.label), ['Usar modelo', 'Editar', 'Apagar', 'Selecionar vários']);
     nuvem.tab = 'calendar';
     nuvem.lpMenu('rec:R1');

@@ -62,13 +62,14 @@ const gOpts=kind=>grpsOf(kind).map(g=>({v:'g:'+g.id,label:'Grupo · '+g.name}));
 /* fecha os menus abertos, excepto os que contêm "keep" (um menu de escolha dentro do menu de filtros
    não pode fechar o menu que o contém)
    Recebe: keep (opcional) — um elemento do DOM; os menus que o contenham ficam abertos.
-   Devolve: nada — tira a classe .on aos menus abertos (e acerta o aria-expanded dos sel()). */
+   Devolve: nada — tira a classe .on aos menus abertos (e acerta o aria-expanded dos sel() e dos ⋯). */
 function closePops(keep){
   const list=document.querySelectorAll('.selpop.on,.menupop.on');
   [].slice.call(list).forEach(x=>{
     if(keep&&x.contains(keep))return;
     x.classList.remove('on');
     if(x.id&&x.id.indexOf('pop_')===0)selAberto(x.id.slice(4),false);   // o botão do sel() diz que fechou
+    else if(x.classList.contains('menupop'))menuExpandido(x,false);      // e o do ⋯ também
   });
 }
 /* Onde cabe um menu que abre a partir de um botão.
@@ -201,16 +202,19 @@ function selIndiceSeguinte(i,n,tecla){
    foco à opção escolhida; numa opção, andam pelas outras; o Escape com a lista
    aberta fecha-a e devolve o foco ao botão — e é engolido, para não fechar
    também a janela por baixo. O Enter e o espaço são dos próprios botões.
+   Um Escape que não é de uma lista aberta passa ao menuEscape: com um menu ⋯
+   aberto, fecha-o, e a janela por baixo fica.
    Recebe: e — o evento keydown.
-   Devolve: true se a tecla era do sel() e foi tratada; false para seguir. */
+   Devolve: true se a tecla era do sel() ou de um menu ⋯ e foi tratada; false para seguir. */
 function selTecla(e){
-  const t=e&&e.target;if(!t||typeof t.closest!=='function')return false;
-  const caixa=t.closest('.sel');if(!caixa)return false;
+  const t=e&&e.target;if(!t||typeof t.closest!=='function')return menuEscape(e);
+  const caixa=t.closest('.sel');if(!caixa)return menuEscape(e);
   const pop=caixa.querySelector('.selpop'),btn=caixa.querySelector('.selbtn');
-  if(!pop||!btn||!pop.id)return false;
+  if(!pop||!btn||!pop.id)return menuEscape(e);
   const k=e.key,aberto=pop.classList.contains('on');
   if(k==='Escape'){
-    if(!aberto)return false;
+    // a lista do sel() fechada: o Escape pode ser de um menu ⋯ aberto à volta dela
+    if(!aberto)return menuEscape(e);
     if(e.preventDefault)e.preventDefault();
     closePops();try{btn.focus()}catch(x){}
     return true;
@@ -268,17 +272,47 @@ function selPick(e,id,i){
    apaga alguma coisa.
    Devolve: string de HTML do botão ⋯ com o menu, pronta a inserir com innerHTML. */
 function menu(id,items){
-  return `<span class="menuwrap"><button type="button" class="iconbtn opcoes" data-toca="camada" data-click="menuOpen(event,'${jsq(id)}')" aria-label="Opções">${ic('dots',18)}</button>
+  return `<span class="menuwrap"><button type="button" class="iconbtn opcoes" data-toca="camada" data-click="menuOpen(event,'${jsq(id)}')" aria-label="Opções" aria-expanded="false">${ic('dots',18)}</button>
     <div class="menupop" id="menu_${esc(id)}">${items.map(it=>
       `<button type="button" class="${it.danger?'danger':''}"${it.toca?` data-toca="${it.toca}"`:''}${it.risco==='destroi'?' data-risco="destroi"':''} data-click="closePops();${it.act}">${ic(it.icon||'dots',17)} ${esc(it.label)}</button>`).join('')}</div></span>`;
 }
 // Abre/fecha o menu de ações (⋯) criado por menu(), com o mesmo ajuste de posição dos sel().
+// O botão diz se o menu está aberto (aria-expanded); fechar passa pelo closePops, que o repõe.
 // Recebe: e — o evento do clique (pode vir null); id — o id dado ao menu() (abre menu_<id>).
 // Devolve: nada — alterna a classe .on do menu no DOM.
 function menuOpen(e,id){
   if(e)e.stopPropagation();
   const p=document.getElementById('menu_'+id),was=p&&p.classList.contains('on');
-  closePops(p?p.parentNode:null);if(p&&!was){p.classList.add('on');ajustarPop(p);};
+  closePops(p?p.parentNode:null);if(p&&!was){p.classList.add('on');menuExpandido(p,true);ajustarPop(p);};
+}
+/* O botão que abre um menu ⋯: o do menuOpen ao lado dele, no mesmo
+   .menuwrap — o do menu() e os feitos à mão (o «Partilhar» da Avaliação).
+   Recebe: p — o .menupop.
+   Devolve: o botão, ou null. */
+function menuBotao(p){
+  const w=p&&p.parentNode;
+  return w&&typeof w.querySelector==='function'?w.querySelector('[data-click^="menuOpen("]'):null;
+}
+/* Diz ao leitor de ecrã se o menu está aberto, no botão que o abre.
+   Recebe: p — o .menupop; aberto — true/false.
+   Devolve: nada. */
+function menuExpandido(p,aberto){
+  const b=menuBotao(p);if(b)b.setAttribute('aria-expanded',aberto?'true':'false');
+}
+/* O Escape com um menu ⋯ aberto fecha o menu, e não a janela por baixo dele:
+   o foco volta ao botão que o abriu e a tecla é engolida (o selTecla, a quem
+   o arranque pergunta primeiro, chama-o quando a tecla não é de um sel()).
+   Recebe: e — o evento keydown.
+   Devolve: true se havia um menu aberto e fechou; false para seguir. */
+function menuEscape(e){
+  if(!e||e.key!=='Escape')return false;
+  const abertos=[].slice.call(document.querySelectorAll('.menupop.on'));
+  if(!abertos.length)return false;
+  const b=menuBotao(abertos[abertos.length-1]);
+  if(e.preventDefault)e.preventDefault();
+  closePops();
+  try{if(b)b.focus()}catch(x){}
+  return true;
 }
 /* etiquetas removíveis
    Recebe: items — lista de {id,label} das etiquetas a mostrar; addLabel — o texto
@@ -389,7 +423,7 @@ function fileBlock(label,list,inputId,onPick,delFn,opts){
   return `<div>${label?`<div class="flabel">${esc(label)}</div>`:''}
     ${list.length?(photos?
       `<div class="list u-g-8px">${list.map((f,i)=>`<div class="prow">
-         <div class="pth pcover" id="th_${esc(f.id)}" data-click="openMeta('${jsq(f.id)}')">${i===0?'<span class="capa">capa</span>':''}</div>
+         <div class="pth pcover" id="th_${esc(f.id)}" data-click="openMeta('${jsq(f.id)}',true)">${i===0?'<span class="capa">capa</span>':''}</div>
          <input class="pnm" id="fn_${esc(f.id)}" value="${esc(f.name)}" placeholder="Ex: Sala de estar" aria-label="Nome da fotografia (opcional)" autocomplete="off" data-input="livePhotoName('${jsq(f.id)}',this.value)">
          ${opts.move?`<button type="button" class="pgrab" aria-label="Arrastar para reordenar" data-pointerdown="photoDrag(event,this,${i})">${ic('grip',16)}</button>`:''}
          <button type="button" class="btn sm danger u-fx-0-0-auto u-minw-40px u-minh-40px u-ml-8px" aria-label="Apagar a fotografia" data-click="delFileConfirm('${jsq(delFn)}','${jsq(f.id)}','fotografia')">${ic('trash',14)}</button></div>`).join('')}</div>`
@@ -423,10 +457,13 @@ function delFileConfirm(fn,fid,tipo){
     ()=>{const f=daApp(fn);if(f)f(fid)});
 }
 // Abre a ficha do ficheiro `fid` (nome, tamanho, pré-visualização), procurando-o
-// entre os metadados já guardados e os pendentes do formulário aberto.
-// Recebe: fid — o id do ficheiro cuja ficha se abre.
+// entre os metadados já guardados e os pendentes do formulário aberto. Uma
+// foto de um imóvel abre no carrossel das fotos dele (anexos.js:fotoCarrossel).
+// Recebe: fid — o id do ficheiro cuja ficha se abre; doFormulario (opcional) —
+// verdadeiro quando vem das fotos do formulário do imóvel (o fileBlock): o
+// carrossel segue a ordem de lá, com as fotos ainda por gravar.
 // Devolve: nada — abre a janela com a ficha do ficheiro.
-function openMeta(fid){openFileMeta(allFileMetas().concat(pendingMetas()).find(f=>f.id===fid))}
+function openMeta(fid,doFormulario){openFileMeta(allFileMetas().concat(pendingMetas()).find(f=>f.id===fid),!!doFormulario)}
 /* mostra as miniaturas depois do HTML entrar no DOM. "root" limita a procura (a lista de imóveis
    e a janela aberta por cima usam os mesmos ids). */
 /* miniatura pequena de uma foto: usa a guardada (tn_), ou cria-a uma vez a partir do original.

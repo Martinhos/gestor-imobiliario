@@ -43,6 +43,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-19 · A cara nova depois de usada, e a Declaração fica em dev
 - 2026-10-20 · As listas imitam os Movimentos, e a nuvem diz se liga
 - 2026-10-20 · A terceira volta da v40: sem saltos, por quartos, e sem o filtro de proprietário
+- 2026-10-20 · A quarta volta da v40: o realce que o Samsung escurece, as fotos em carrossel e os quartos a partir do fim
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1620,3 +1621,140 @@ se está a olhar. O cartão «Por confirmar» da Agenda abre e fecha na
 iguais fecham hoje com curvas diferentes. Falta decidir se a regra continua,
 ou se passa a valer só para o que sai do ecrã a deslizar (a gaveta, o
 toast).
+
+## 2026-10-20 · A quarta volta da v40: o realce que o Samsung escurece, as fotos em carrossel e os quartos a partir do fim
+A quarta volta do Martinho pela v40 em dev, ainda no mesmo dia. Saíram cinco
+folhas — o realce dos segmentados, as fotos em carrossel, as datas dos
+contratos por quartos, o toque longo dos Planeados e o botão de partilha da
+Avaliação — e duas mudanças à mão: o Início e o Fim da visita em duas
+colunas iguais (estilos.css:.vis-par), e o fecho dos ⋯ ao rolar
+(web/app/arranque.js) a pôr o aria-expanded do botão a false, pelo
+componentes.js:menuExpandido, como o clique fora já fazia. As regras vivem
+no design.md; aqui fica o porquê.
+
+**O seletor do imóvel não se via no telemóvel do Martinho.** «Não consigo
+ver (tenho modo escuro no OS e tem um efeito diferente no tema da aplicação
+do que só o tema escuro ou tema claro).» A pergunta que desfez o mistério
+foi qual o browser: o Samsung Internet, com o tema da app em Automático e o
+telemóvel em escuro — e a app aparecia clara. O que se aprendeu:
+
+- O Samsung Internet tem um modo escuro próprio que escurece as páginas à
+  força, transformando as cores que o autor escreveu, sem lhe pedir licença
+  (o blog da Samsung chama-lhe «Force Dark Mode», o nome do Chrome:
+  https://developer.samsung.com/internet/blog/en/2020/12/15/dark-mode-in-samsung-internet).
+  Nesse modo a página ouve prefers-color-scheme:light, e o Automático da app
+  pinta o claro — que o browser depois inverte. O mesmo blog descreve uma
+  escolha experimental entre só escurecer à força, só a media query, ou
+  preferir a media query quando o site declara o color-scheme; na versão que
+  o Martinho tem, é o «Definições → Labs → Usar o tema escuro do site».
+- Há programadores a dar com o mesmo: o tema escuro do site passado por cima
+  pelo escuro do Samsung Internet
+  (https://forum.developer.samsung.com/t/websites-dark-mode-gets-overridden-by-samsung-internets-default-dark-mode/22937).
+  O meta color-scheme, que no Chrome do Android chega para desligar o
+  escurecimento no claro («only light», ver o design.md), no Samsung
+  Internet não chega.
+- O WebView do Android tem as mesmas peças com outros nomes: o
+  prefers-color-scheme vem do tema da app (isLightTheme), e o escurecimento
+  algorítmico só corre quando a app o deixa e o autor não o desliga; com o
+  escurecimento só do browser, a media query de escuro dá falso
+  (https://developer.android.com/guide/webapps/dark-theme). A app Android
+  já desliga o escurecimento no seu WebView; no browser, quem decide é o
+  browser.
+- A página não consegue saber que está a ser escurecida: o getComputedStyle
+  continua a dar as cores claras, porque o filtro é da pintura. No
+  Chromium, o escurecimento forçado liga-se com
+  `--blink-settings=forceDarkModeEnabled=true`; o
+  `--enable-features=WebContentsForceDark` não faz nada no headless shell, e
+  o contraste só se mede nos pixeis da captura.
+
+Medido assim: o fundo do realce (o branco com sombra sobre a pista quase
+branca) caía a 1.1:1 da pista — dois pretos quase iguais —; uma sombra por
+dentro ficava no cobalto escuro, a 2.5:1; uma borda no cobalto, que para o
+filtro é cor da frente, passava a azul claro a 3.3:1. Ficou o contorno de
+2px no --accent, com o fundo --accent-soft e o texto --accent-text, o
+desenho que os chips e as opções já tinham, em todos os segmentados e nos
+dois temas: o defeito era o mesmo em todos, e o realce do escuro da volta
+anterior (o --line2, 1.52:1) era também só luz. O tipo do movimento acende
+o contorno no cobalto e só o texto na cor do dinheiro, porque o verde e o
+laranja, escurecidos à força, ficam escuros contra a pista (2.1:1 e 2.7:1).
+Ponderado: o --accent-text no contorno dava 4.1:1 sob o escurecimento, mais
+margem, mas o --accent já passa o 3:1 do WCAG para componentes; fica
+registado, se o aparelho mostrar pouco. Como a app não sabe que a escurecem,
+a nota nas Definições → Tema aparece só no Samsung Internet e só em
+Automático (definicoes.js:notaDoSamsung): diz onde se desliga, ou que se
+escolha o Escuro da app. Uma nota para todos falava de um problema que a
+maioria não tem.
+
+**As fotos de um imóvel em carrossel, com volta, e as setas só no
+computador.** «A ver as fotos, quero poder fazer scroll lateral entre elas.
+No final faz loop.» O gesto é o do calendário e dos separadores (o eixo aos
+10px, um quarto da largura ou um sacudir), para o dedo não ter de aprender
+um terceiro. O palco tem tamanho fixo e a foto cabe inteira: com fotos ao
+alto e ao comprido no mesmo imóvel, a janela saltava de altura a cada
+passagem, e a fita não pode correr numa caixa que muda a meio; o quadrado é
+o meio-termo entre as da sala (ao comprido) e as do telemóvel (ao alto).
+Duas curvas na mesma fita: das setas parte parada; largada por um dedo já
+vai à velocidade dele, e uma curva que arranca a zero travava no instante
+em que o dedo saía. As setas veem-se só com rato — no dedo o gesto é o
+caminho, e duas setas por cima da foto tapavam-na —, e ficam para o leitor
+de ecrã e para o Tab. O teclado passa sem fita, que um atalho de teclado não
+anima. Com uma foto só não há carrossel: setas e «1 de 1» eram ruído.
+
+**O Início e o Fim da visita enchem a linha.** «Não ficam centrados. Quero
+que preencham o espaço disponível de forma uniforme.» As duas colunas da
+largura da hora, encostadas à esquerda, deixavam um vazio à direita; duas
+colunas iguais (repeat(2,minmax(0,1fr))) repartem a linha.
+
+**A casa inteira e os quartos arrendados voltam a escolher-se, a partir do
+fim.** A volta anterior tinha tirado o «Imóvel inteiro» de um imóvel com
+quartos arrendados; o Martinho corrigiu: um contrato da casa inteira, ou de
+um quarto arrendado, faz-se desde que comece no dia do último fim dos
+contratos dos quartos (o do contrato mais longo), ou depois. É o caso de
+quem já sabe quem entra quando os quartos vagarem. O dia do fim conta,
+porque foi assim que o pedido o disse. Um contrato sem data de fim bloqueia
+(resposta do Martinho): sem fim não há data a partir da qual a casa fique
+livre, e o chip da casa inteira nem aparece, que nenhuma data o mudaria. A
+escolha não se perde ao mudar o início: quem recua a data vê o erro junto
+do campo e decide, e trocá-la sozinha esconderia a mudança. A data de cada
+quarto lê-se no chip dele, e a frase fica para a casa inteira e para a
+regra — uma lista de quartos e datas, com quatro quartos, ninguém a lia.
+
+Sem quartos livres, o contrato abre no 1.º quarto da lista que tenha fim,
+com o início nesse fim (resposta do Martinho). A ordem da ficha é a que a
+pessoa conhece; «o que vaga primeiro» mudava de quarto conforme as datas.
+Tocar num chip «livre a …» muda o início para essa data (outra resposta),
+em vez de obrigar a ir ao campo da data, e um aviso di-lo. Para o toque
+chegar, o chip deixou de ser disabled e passou a aria-disabled, com o
+rótulo «livre a …, toca para começar nessa data»; só o «já arrendado» sem
+fim fica disabled, porque não há data para onde ir.
+
+**O toque longo dos Planeados e dos Modelos entra na seleção, como no resto
+da app.** «O longpress dos planeados deve ter o mesmo comportamento que o
+resto da app.» Substitui a resposta da volta anterior, em que abria as
+opções com «Selecionar vários» no fim: o mesmo gesto a fazer coisas
+diferentes conforme a lista obrigava a aprender cada ecrã, e as opções de
+um só já estavam todas no ⋯ da ficha, a um toque. O «editar no fundo» do
+pedido é a barra de sempre — Silenciar com todos ativos, Reativar com todos
+silenciados, e Apagar. Entra-se mesmo num planeado que não posso silenciar
+nem apagar, como nos imóveis: as ações da barra recusam com a razão e
+contam os que ficam de fora.
+
+**O «Partilhar» da Avaliação num menu, atrás do ícone dos três pontos
+ligados.** «O partilhar ou exportar CSV deve estar dentro de um botão de
+partilha, com icon de partilha.» Os dois botões de texto ocupavam uma linha
+só deles no telemóvel; um botão de ícone cabe na linha do chip, e a página
+ganha essa altura. O menu é o da casa, escrito à mão, porque o
+componentes.js:menu leva sempre o ⋯ e o nome «Opções»; abre pelo mesmo
+menuOpen, para fechar e se posicionar como os outros. O ícone é o dos três
+pontos ligados (icones.js:partilhar), e não a seta a sair da caixa: a app
+vive no Android (a app e o Samsung Internet), onde a partilha é esse sinal,
+e a seta para cima ao lado do «down» das descargas lia-se como «carregar».
+
+**Os menus ⋯ têm aria-expanded e fecham com o Escape.** Ao rever o botão de
+partilha viu-se que nenhum ⋯ da casa dizia ao leitor de ecrã se estava
+aberto, e que o Escape não o fechava (só o sel() e as janelas o ouviam). O
+botão nasce com aria-expanded="false" e muda ao abrir e ao fechar, pelo
+clique fora, pelo scroll ou pelo Escape (componentes.js:menuEscape), que
+devolve o foco ao botão e deixa a janela de baixo onde está. O fecho ao
+rolar tirava o .on sem passar pelo closePops, e o botão ficava a dizer
+«aberto» com o menu fechado: foi a mudança à mão no arranque.

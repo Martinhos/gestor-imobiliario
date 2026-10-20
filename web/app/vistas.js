@@ -138,8 +138,8 @@ function anaPanelPadrao(selId,valor,onchange){
    lfCabeca: esse guarda o estado no lf(k) de uma lista e põe sempre a barra
    da pesquisa e o funil, e o foco de uma análise é do serviço
    (projecoes.js:projProp, navegacao.js:repProp). As ações da página, quando
-   as há (o Partilhar e o Exportar da Avaliação), vão na mesma linha, à
-   direita, e descem para uma linha delas no telemóvel (estilos.css:.ana-topo).
+   as há (o botão de partilha da Avaliação, avaliacao.js:avaPartilha), vão na
+   mesma linha, à direita, também no telemóvel (estilos.css:.ana-topo).
    Sem imóveis no âmbito e sem nada em foco, o chip não tinha o que escolher e
    não se escreve.
    Recebe: o — {id (o do seletor, ex.: 'projSel'), valor (o imóvel ou 'g:ID'

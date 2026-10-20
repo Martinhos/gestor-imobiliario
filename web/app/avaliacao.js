@@ -25,18 +25,31 @@ function vReports(){
 }
 /* O topo da Avaliação: no sítio da barra dos filtros das listas, só a fila de
    chips — o «Imóvel» em foco, um imóvel ou um grupo (vistas.js:anaChips) —,
-   sem pesquisa, sem funil e sem painel; e, na mesma linha, as ações da
-   página: partilhar a avaliação e exportar os movimentos. O proprietário não
-   tem chip: o filtro global de proprietário está de saída da app. O yield
-   exigido já não vive na página: abre-se na roda dentada do cabeçalho
-   (avaliacao.js:avaOpcoes).
+   sem pesquisa, sem funil e sem painel; e, na mesma linha, à direita, o
+   botão de partilha (avaPartilha). O proprietário não tem chip: o filtro
+   global de proprietário está de saída da app. O yield exigido já não vive na
+   página: abre-se na roda dentada do cabeçalho (avaliacao.js:avaOpcoes).
    Recebe: comAcoes — verdadeiro com avaliação à vista (sem ela não há o que
    partilhar nem exportar).
    Devolve: o HTML (string). */
 function avaChips(comAcoes){
-  const acoes=comAcoes?`<div class="ana-acoes"><button type="button" class="btn" data-toca="nada" data-click="shareReport()"><span>Partilhar<span class="ana-largo"> avaliação</span></span></button>
-    <button type="button" class="btn" data-toca="nada" data-click="downloadCsv()"><span>Exportar<span class="ana-largo"> movimentos (CSV)</span><span class="ana-curto"> CSV</span></span></button></div>`:'';
+  const acoes=comAcoes?`<div class="ana-acoes">${avaPartilha()}</div>`:'';
   return anaChips({id:'repSel',valor:repProp,aplicar:'onRepSel',limpar:'repAnaLimpar();render()',dos:'da avaliação',acoes});
+}
+/* As ações da página da Avaliação num botão só, com o ícone de partilha
+   (ic('partilhar')), que abre o menu de ações da casa com as duas: «Partilhar
+   avaliação» (copias.js:shareReport) e «Exportar movimentos (CSV)»
+   (copias.js:downloadCsv). É o menu do componentes.js:menu — a mesma
+   .menuwrap/.menupop, aberta pelo componentes.js:menuOpen, que fecha ao tocar
+   fora, ao escolher e ao rolar (arranque.js) —, escrito aqui só porque o menu()
+   leva sempre o ⋯ e o nome «Opções». O botão é o .btn.so-icone, 44×44, com o
+   nome «Partilhar» (aria-label e title).
+   Recebe: nada.
+   Devolve: o HTML do botão com o menu (string). */
+function avaPartilha(){
+  const item=(icone,rotulo,act)=>`<button type="button" data-toca="nada" data-click="closePops();${act}">${ic(icone,17)} ${rotulo}</button>`;
+  return `<span class="menuwrap ava-partilha"><button type="button" class="btn so-icone" data-toca="camada" data-click="menuOpen(event,'avaPartilha')" aria-expanded="false" aria-label="Partilhar" title="Partilhar">${ic('partilhar',18)}</button>
+    <div class="menupop" id="menu_avaPartilha">${item('partilhar','Partilhar avaliação','shareReport()')}${item('down','Exportar movimentos (CSV)','downloadCsv()')}</div></span>`;
 }
 /* As opções da avaliação, na janela que a roda dentada do cabeçalho abre
    (vistas.js:ANA_RODA, o «alternar» do registo): o yield exigido, que vivia

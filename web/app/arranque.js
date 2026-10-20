@@ -126,7 +126,7 @@ document.addEventListener('click',()=>closePops());
    menu encolhido pelo ajustarPop pode ter. Na captura, porque o scroll não sobe
    (o corpo de uma janela, a caixa dos filtros). */
 document.addEventListener('scroll',e=>{const t=e.target;if(t&&t.closest&&t.closest('.menupop'))return;
-  [].forEach.call(document.querySelectorAll('.menupop.on'),p=>p.classList.remove('on'))},{capture:true,passive:true});
+  [].forEach.call(document.querySelectorAll('.menupop.on'),p=>{p.classList.remove('on');menuExpandido(p,false)})},{capture:true,passive:true});
 /* Enter ativa o que é clicável mas não é botão nativo (cartões, itens do
    menu): é o que falta para a app inteira andar a teclado. */
 document.addEventListener('keydown',e=>{

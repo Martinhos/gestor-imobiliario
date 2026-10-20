@@ -189,7 +189,11 @@ describe('o realce do segmentado vê-se nos dois temas', () => {
     .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
   const contraste = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
-  test('no escuro o realce é o --line2 sobre a pista, em todos os segmentados, com 1.5:1 ou mais; no claro, o branco com a sombra de sempre', () => {
+  // a regra desta ronda (o --line2 no escuro, o branco com a sombra no claro)
+  // fica por baixo da da ronda seguinte, que lhe põe o contorno no cobalto
+  // por cima (testes/segmentado-contraste.test.js)
+  test('no escuro o realce era o --line2 sobre a pista, com 1.5:1 ou mais; no claro, o branco com a sombra; e a regra do contorno vem depois', () => {
+    assert.ok(CSS.indexOf('/* ===== ajustes-v40d: 1.1') > CSS.indexOf('/* ===== fim: ajustes-v40c 1.1 ===== */'), 'o contorno ganha por vir depois');
     assert.match(SECCAO, /:root\.dark \.segm\.desliza>\.segm-polegar,\r?\n:root\.dark \.segm>\.on,[^{]*\{background:var\(--line2\);box-shadow:none\}/);
     assert.match(CSS, /\.segm-polegar\{[^}]*background:var\(--card\);box-shadow:/, 'o realce do claro é o cartão com a sombra');
     assert.doesNotMatch(SECCAO, /\n\.segm\.desliza\{background/, 'a pista do claro é a de todos os segmentados');

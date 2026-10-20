@@ -1,16 +1,16 @@
 /* Selecionar vários — imóveis, contratos, planeados e modelos.
    ----------------------------------------
-   Nos imóveis e nos contratos o toque longo seleciona vários, como nos
-   movimentos: apagar em massa faz sentido aí — e apagar um imóvel arrasta
-   os contratos e movimentos dele, por isso a confirmação diz os números e o
-   Anular repõe tudo. As opções de um cartão continuam no kebab.
+   Nos imóveis, nos contratos, nos planeados e nos modelos o toque longo
+   seleciona vários, como nos movimentos: entra na seleção com o tocado já
+   marcado (CW.selLEntrar). Apagar em massa faz sentido aí — e apagar um
+   imóvel arrasta os contratos e movimentos dele, por isso a confirmação diz
+   os números e o Anular repõe tudo. As opções de um só ficam no ⋯ da ficha
+   (e na folha do lpMenu, com o «Selecionar vários»).
 
    Nos Planeados há dois tipos no mesmo separador, os planeados ('rec') e os
    modelos ('tpl'), e seleciona-se um OU outro: entrar com um tipo esquece o
-   outro, e os cartões do outro ficam atenuados (CW.selLOutro). Aí o toque
-   longo abre as opções do registo (planeados.js:lpPlaneado e lpModelo), com
-   «Selecionar vários» no fim (planeados.js:lpPortaSelecao); a barra de baixo
-   tem, nos planeados, Silenciar ou Reativar além do Apagar. As regras de
+   outro, e os cartões do outro ficam atenuados (CW.selLOutro). A barra de
+   baixo tem, nos planeados, Silenciar ou Reativar além do Apagar. As regras de
    cada planeado — quem pode, o que um automático arrasta — são as de
    planeados.js (recMudarVarios, recApagarVarios), as mesmas do skipRec e do
    delRec.
@@ -25,8 +25,8 @@
 'use strict';
 
 var TABS_SEL = { prop: 'properties', ct: 'contracts', rec: 'recurring', tpl: 'recurring' };   // o tipo do cartão → o separador onde há seleção
-// os tipos cujo toque longo, fora da seleção, abre as opções (com «Selecionar vários» no fim) em vez de selecionar
-var SEL_LP_OPCOES = { rec: 1, tpl: 1 };
+// os tipos dos Planeados: a barra deles (selLBarraHtml, estilos.css:.sel-l-plan) e a porta da seleção na própria folha das opções (planeados.js:lpPortaSelecao)
+var SEL_PLAN = { rec: 1, tpl: 1 };
 
 CW.selL = { tipo: null, ids: {} };
 // a seleção acabou de começar: as caixas postas a seguir entram a desvanecer (selLDecorar)
@@ -58,19 +58,19 @@ CW.selLToggle = function (id) {
 // Devolve: o número.
 function selLN() { return Object.keys(CW.selL.ids).length; }
 
-/* O toque longo, redirecionado de vez: os movimentos, os imóveis e os
-   contratos entram em seleção; os planeados e os modelos abrem as opções
-   (lpMenu → planeados.js:lpPlaneado / lpModelo, com «Selecionar vários» no
-   fim). Já em seleção, marca ou desmarca, como o toque (CW.selLTocar). O
-   resto não faz nada — as opções vivem no kebab.
+/* O toque longo, redirecionado de vez: os movimentos, os imóveis, os
+   contratos, os planeados e os modelos entram em seleção com o tocado já
+   marcado — o mesmo gesto em toda a app. Já em seleção, marca ou desmarca,
+   como o toque (CW.selLTocar). O resto não faz nada — as opções de um só
+   vivem no ⋯ da ficha (nos planeados, planeados.js:recView; nos modelos,
+   planeados.js:tplView).
    Recebe: v — o data-lp tocado ('tx:<id>', 'prop:<id>', 'rec:<id>', …).
-   Devolve: nada — entra em seleção, marca, ou abre as opções. */
+   Devolve: nada — entra em seleção, ou marca. */
 window.lpLongo = function (v) {
   var a = String(v || '').split(':');
   if (a[0] === 'tx' && tab === 'transactions' && CW.selEntrar) return CW.selEntrar(a[1]);
   if (!TABS_SEL[a[0]]) return;
   if (CW.selL.tipo && tab === TABS_SEL[a[0]]) return CW.selLTocar(a[0], a[1]);
-  if (SEL_LP_OPCOES[a[0]]) return lpMenu(v);
   return CW.selLEntrar(a[0], a[1]);
 };
 
@@ -278,7 +278,7 @@ function selLDecorar() {
   if (f && f.getAttribute('data-sel-tipo') !== tipo) { f.remove(); f = null; }
   if (!f) {
     f = document.createElement('div');
-    f.className = 'sel-fundo' + (SEL_LP_OPCOES[tipo] ? ' sel-l-plan' : '');
+    f.className = 'sel-fundo' + (SEL_PLAN[tipo] ? ' sel-l-plan' : '');
     f.setAttribute('data-sel-tipo', tipo);
     // a mesma barra dos movimentos (estilos.css:.sel-fundo): no ecrã largo, azul-noite a flutuar no fundo
     f.setAttribute('role', 'toolbar');
@@ -300,7 +300,7 @@ function selLDecorar() {
    Devolve: o HTML de dentro da barra (texto). */
 function selLBarraHtml(tipo) {
   var apagar = '<button type="button" class="btn danger" data-toca="dados" data-risco="destroi" data-click="CW.selLApagar()">' + ic('trash', 15) + ' Apagar</button>';
-  if (!SEL_LP_OPCOES[tipo]) {
+  if (!SEL_PLAN[tipo]) {
     return '<button type="button" class="btn" data-toca="modo" data-click="CW.selLSair()">' + ic('x', 15) + ' Cancelar</button>' +
       '<b id="selLConta" class="u-fx-1 u-ta-center"></b>' + apagar;
   }
@@ -507,12 +507,14 @@ function selLApagarModelos(ids) {
     });
 }
 
-// o kebab dos cartões ganha a mesma porta que os movimentos já tinham (os
-// planeados e os modelos têm-na na própria folha: planeados.js:lpPortaSelecao)
+// a folha das opções de um cartão (lpMenu) ganha a mesma porta que os
+// movimentos já tinham (os planeados e os modelos têm-na na própria folha:
+// planeados.js:lpPortaSelecao). O toque longo já não a abre — entra direto na
+// seleção (window.lpLongo) —, mas a porta fica onde a folha se abrir
 var _lpMenu_sl = lpMenu;
 lpMenu = function (v) {
   var a = String(v || '').split(':');
-  if (TABS_SEL[a[0]] && !SEL_LP_OPCOES[a[0]] && tab === TABS_SEL[a[0]] && !CW.selL.tipo) {
+  if (TABS_SEL[a[0]] && !SEL_PLAN[a[0]] && tab === TABS_SEL[a[0]] && !CW.selL.tipo) {
     // injeta "Selecionar vários" nas opções do kebab: mesma lista, mais uma
     var tipo = a[0], id = a[1];
     var r = _lpMenu_sl(v);
@@ -532,7 +534,7 @@ lpMenu = function (v) {
     return r;
   }
   var res = _lpMenu_sl(v);
-  if (SEL_LP_OPCOES[a[0]]) selLPortaNoFim();
+  if (SEL_PLAN[a[0]]) selLPortaNoFim();
   return res;
 };
 

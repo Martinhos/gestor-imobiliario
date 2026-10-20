@@ -409,10 +409,10 @@ function ctModal(id,pid,tid){
   cForm=normContract(id?JSON.parse(JSON.stringify(contract(id))):{propertyId:(pid&&(prop(pid)||{}).use==='investimento'&&pode(pid,'contract.add')?pid:rentables[0].id),start:today(),
     tenantIds:tid&&tenant(tid)?[tid]:[]});
   /* num imóvel por quartos com quartos arrendados, o contrato novo abre no
-     primeiro quarto livre — o «Imóvel inteiro» já não é escolha
-     (ctQuartoPorOmissao); quem veio de um quarto escolhe-o a seguir
+     primeiro quarto livre — o «Imóvel inteiro» só a partir do último fim
+     (ctEscolhaPorOmissao); quem veio de um quarto escolhe-o a seguir
      (imovel.js:contratoNoQuarto) */
-  if(!id)cForm.roomId=ctQuartoPorOmissao(cForm);
+  if(!id)ctEscolhaPorOmissao(cForm);
   if(!id)fillOwnerContact();
   if(!id&&tid&&tenant(tid))fillTenantContact(tid);
   if(id)ctReconheceContactos();
@@ -452,7 +452,8 @@ function verMovimentosFora(id){
     `<div class="hint u-mt-12px">As datas destes movimentos não se mexem: dizem quando o dinheiro entrou. Abre cada um para corrigir o que for preciso.</div>`);
 }
 /* Devolve o handler que o modal usa ao guardar: valida imóvel, quarto (a
-   casa inteira não, com quartos arrendados — ctInteiroPossivel), renda,
+   casa inteira e um quarto arrendado só com o início no dia do fim dos
+   contratos deles, ou depois — ctEscolhaInvalida), renda,
    inquilinos e datas e grava (ctGravar). O erro diz-se junto do campo
    (componentes.js:falhaCampo), que também o anuncia. Num contrato que já tinha
    fim e o vê ir para a frente, pergunta primeiro se é uma renovação ou uma
@@ -464,13 +465,14 @@ function ctSaver(){
     collectCt();
     if(!cForm.propertyId)return falhaCampo('c_prop','Escolhe o imóvel.');
     const recusa=motivoRecusa(cForm.propertyId,'contract.add',contract(cForm.id));if(recusa)return toast(recusa);
-    /* a casa toda não se arrenda com quartos já arrendados (ctInteiroPossivel);
-       sem quarto livre, o formulário já disse porquê e o erro repete-o */
-    const qs=ctQuartosEstado(cForm);
-    if(qs.rooms.length&&!cForm.roomId&&!ctInteiroPossivel(cForm,qs)){
-      falhaCampo('c_roomEsc',qs.livres.length?'Já há quartos arrendados: escolhe um dos quartos livres.':'Todos os quartos deste imóvel estão arrendados: não há contrato novo possível aqui.');
+    /* a casa toda e um quarto arrendado só a partir do fim dos contratos
+       deles (ctEscolhaInvalida); sem escolha possível, o formulário já disse
+       porquê e o erro repete-o */
+    const erroQuarto=ctEscolhaInvalida(cForm);
+    if(erroQuarto){
+      falhaCampo('c_roomEsc',erroQuarto);_ctErroQuarto=erroQuarto;
       /* o grupo não toma o foco: quem vai pelo teclado fica no primeiro quarto livre */
-      const livre=document.querySelector('.ct-quartos [role="radio"]:not(:disabled)');if(livre)try{livre.focus({preventScroll:true})}catch(x){}
+      const livre=document.querySelector('.ct-quartos [role="radio"]:not(:disabled):not([aria-disabled="true"])');if(livre)try{livre.focus({preventScroll:true})}catch(x){}
       return;
     }
     if(!(cForm.rent>0))return falhaCampo('c_rent','Indica a renda mensal.');
@@ -583,7 +585,7 @@ function ctBody(){
     </div>
     <div class="sect ct-gf" id="ct_prazo"><h3 class="ct-gf-tit">Prazo</h3>
       <div class="ct-par">
-        <label>Início<input id="c_start" type="date" value="${c.start||''}" data-change="liveNet()"></label>
+        <label>Início<input id="c_start" type="date" value="${c.start||''}" data-change="ctInicioMudou()"></label>
         <label>Fim<input id="c_end" type="date" value="${c.end||''}" data-change="liveNet()"></label></div>
       <p class="hint ct-colado" id="c_prazoFrase">${esc(ctFraseDoPrazo(c))}</p>
       <div class="ct-par">
@@ -648,16 +650,37 @@ function ctBody(){
 }
 /* Os quartos do imóvel do contrato, vistos deste contrato: todos, os que já
    têm OUTRO contrato vivo (ctVivo — um quarto prometido para 2028 já está
-   prometido; o próprio contrato não conta) e os livres. Um imóvel inteiro ou
-   sem quartos devolve listas vazias.
+   prometido; o próprio contrato não conta), os livres, e quando é que cada
+   arrendado fica livre: o fim do contrato dele (ctFimEfetivo, com as
+   renovações escritas à mão); com dois contratos vivos no mesmo quarto, o
+   que acaba mais tarde; um contrato sem data de fim deixa-o sem data. Um
+   imóvel inteiro ou sem quartos devolve listas vazias.
    Recebe: c — o contrato (o do formulário, com propertyId e id).
-   Devolve: {rooms, ocupados, livres} — os quartos (objetos) e os ids dos
-   arrendados e dos livres, pela ordem da ficha do imóvel. */
+   Devolve: {rooms, ocupados, livres, fins, semFim, ultimoFim} — os quartos
+   (objetos); os ids dos arrendados e dos livres, pela ordem da ficha do
+   imóvel; o fim de cada arrendado por id ('AAAA-MM-DD', '' sem fim); os
+   arrendados sem fim; e o fim mais tarde de todos ('' se algum não tem fim,
+   ou sem arrendados). */
 function ctQuartosEstado(c){
   const p=prop(c.propertyId),rooms=(p&&p.rentalMode==='quartos')?(p.rooms||[]):[];
-  const taken=db.contracts.filter(x=>x.id!==c.id&&x.propertyId===c.propertyId&&ctVivo(x)).map(x=>x.roomId);
-  const ocupados=rooms.filter(r=>taken.indexOf(r.id)>-1).map(r=>r.id);
-  return {rooms,ocupados,livres:rooms.filter(r=>ocupados.indexOf(r.id)<0).map(r=>r.id)};
+  const fins={},tem=id=>Object.prototype.hasOwnProperty.call(fins,id);
+  db.contracts.filter(x=>x.id!==c.id&&x.propertyId===c.propertyId&&x.roomId&&ctVivo(x)).forEach(x=>{
+    const f=ctFimEfetivo(x),antes=tem(x.roomId)?fins[x.roomId]:null;
+    fins[x.roomId]=antes===''||!f?'':(antes&&antes>f?antes:f);
+  });
+  const ocupados=rooms.filter(r=>tem(r.id)).map(r=>r.id);
+  const semFim=ocupados.filter(id=>!fins[id]);
+  return {rooms,ocupados,livres:rooms.filter(r=>!tem(r.id)).map(r=>r.id),fins,semFim,
+    ultimoFim:semFim.length?'':ocupados.reduce((m,id)=>fins[id]>m?fins[id]:m,'')};
+}
+/* A data de início que as escolhas do quarto olham: a do contrato, ou hoje
+   enquanto o campo está vazio (um contrato sem início começa, para isto,
+   no dia em que se escreve).
+   Recebe: c — o contrato do formulário.
+   Devolve: 'AAAA-MM-DD'. */
+function ctInicioDe(c){
+  const s=String((c&&c.start)||'');
+  return /^\d{4}-\d{2}-\d{2}$/.test(s)?s:today();
 }
 /* Um contrato que já estava gravado como do imóvel inteiro: abre e grava
    como estava, mesmo que entretanto haja quartos arrendados — não se tranca
@@ -668,60 +691,229 @@ function ctInteiroGravado(c){
   const g=c&&c.id?contract(c.id):null;
   return !!g&&!g.roomId;
 }
-/* O «Imóvel inteiro» ainda se escolhe? Não num imóvel por quartos com
-   algum quarto arrendado: a casa toda já não está livre, e o que se arrenda
-   são os quartos que sobram. Fica para o contrato gravado assim
-   (ctInteiroGravado).
+/* O «Imóvel inteiro» escolhe-se? Num imóvel por quartos com quartos
+   arrendados, só se o contrato começar no dia do último fim dos contratos
+   deles, ou depois (o fim mais tarde — ctQuartosEstado:ultimoFim); um
+   arrendado sem data de fim bloqueia-o. Sem arrendados, sempre; e o
+   contrato gravado assim continua como estava (ctInteiroGravado).
    Recebe: c — o contrato do formulário; qs (opcional) — o ctQuartosEstado(c), já feito.
    Devolve: true se o contrato pode ser do imóvel inteiro. */
 function ctInteiroPossivel(c,qs){
   const q=qs||ctQuartosEstado(c);
-  return !q.ocupados.length||ctInteiroGravado(c);
+  return !q.ocupados.length||ctInteiroGravado(c)||(!!q.ultimoFim&&ctInicioDe(c)>=q.ultimoFim);
 }
-/* O quarto com que um contrato NOVO abre: num imóvel por quartos com algum
-   quarto arrendado, o primeiro livre (o «Imóvel inteiro» já não é
-   escolha); sem quartos arrendados, nenhum — o imóvel inteiro, como sempre.
-   Sem quartos livres também nenhum, e o formulário diz porquê
-   (ctQuartosHtml).
+/* Um quarto escolhe-se? Livre, sempre. Arrendado, só se o contrato começar
+   no dia do fim do contrato desse quarto, ou depois; sem data de fim, não.
+   O quarto que o próprio contrato já tinha gravado escolhe-se sempre (não se
+   tranca a edição de um contrato antigo).
+   Recebe: c — o contrato do formulário; qs — o ctQuartosEstado(c) (ou nada); rid — o id do quarto.
+   Devolve: true se o quarto pode ser deste contrato. */
+function ctQuartoPossivel(c,qs,rid){
+  const q=qs||ctQuartosEstado(c);
+  if(q.ocupados.indexOf(rid)<0)return true;
+  const g=c&&c.id?contract(c.id):null;
+  if(g&&g.roomId===rid)return true;
+  return !!q.fins[rid]&&ctInicioDe(c)>=q.fins[rid];
+}
+/* O quarto com que um contrato abre, para o início que ele tem: sem
+   quartos arrendados — ou com o início depois de todos acabarem — nenhum (o
+   imóvel inteiro, como sempre); senão o primeiro livre, pela ordem da
+   ficha; sem livres, o primeiro arrendado que já acabou nesse início.
+   Nenhum também quando nada se escolhe nesse início (ctEscolhaPorOmissao
+   decide o que fazer).
    Recebe: c — o contrato do formulário.
    Devolve: o id do quarto, ou null. */
 function ctQuartoPorOmissao(c){
   const q=ctQuartosEstado(c);
-  return !ctInteiroPossivel(c,q)&&q.livres.length?q.livres[0]:null;
+  if(ctInteiroPossivel(c,q))return null;
+  if(q.livres.length)return q.livres[0];
+  return q.ocupados.find(id=>ctQuartoPossivel(c,q,id))||null;
 }
-/* O quarto do contrato, num imóvel arrendado por quartos: um chip por quarto
-   (role radio) e «Imóvel inteiro» à cabeça. Com algum quarto arrendado, o
-   «Imóvel inteiro» sai (ctInteiroPossivel) e os arrendados dizem
-   «· já arrendado» desligados: escolhem-se os livres. Só o quarto que o
-   próprio contrato já tinha continua a escolher-se, mesmo partilhado. Sem
-   nenhum quarto livre, uma frase diz que não há contrato possível aqui.
-   O valor vive num campo escondido (c_room), que o collectCt lê; o erro do
-   ctSaver cai no grupo (c_roomEsc).
+/* Sem nada que se escolha no início que o contrato novo tem (todos os
+   quartos arrendados): o primeiro quarto da lista (a ordem da ficha), com
+   o início no dia em que o contrato dele acaba; se o primeiro não tiver
+   data de fim, o seguinte que tenha. Sem nenhum com data, nada (o
+   formulário diz que não há contrato possível). Decisão do Martinho
+   (2026-10-20).
+   Recebe: c — o contrato do formulário; q — o ctQuartosEstado(c).
+   Devolve: {roomId, start}, ou null. */
+function ctOmissaoSemLivres(c,q){
+  const rid=q.ocupados.find(id=>q.fins[id]);
+  return rid?{roomId:rid,start:q.fins[rid]}:null;
+}
+/* A escolha com que um contrato NOVO abre (ctModal) ou com que fica ao
+   trocar de imóvel (onCtProp): o quarto por omissão no início que tem
+   (ctQuartoPorOmissao); se nesse início nada se escolhe, o quarto e o
+   início do ctOmissaoSemLivres — só num contrato que ainda não está na
+   base: o início de um gravado não se mexe ao trocar de imóvel.
+   Recebe: c — o contrato do formulário (muda-lhe o roomId e, se for
+   preciso, o start).
+   Devolve: nada. */
+function ctEscolhaPorOmissao(c){
+  c.roomId=ctQuartoPorOmissao(c);
+  if(c.roomId||ctInteiroPossivel(c)||(c.id&&contract(c.id)))return;
+  const o=ctOmissaoSemLivres(c,ctQuartosEstado(c));
+  if(o){c.roomId=o.roomId;c.start=o.start}
+}
+/* O porquê de a escolha do quarto não valer para o início do contrato, na
+   voz do erro (o ctSaver e o aviso junto dos chips, ctQuartosMiolo). Fora
+   de um imóvel por quartos, nunca.
+   Recebe: c — o contrato do formulário (roomId e start); qs (opcional) — o ctQuartosEstado(c).
+   Devolve: o texto do erro, ou '' se a escolha vale. */
+function ctEscolhaInvalida(c,qs){
+  const q=qs||ctQuartosEstado(c),cur=c.roomId||'';
+  if(!q.rooms.length)return '';
+  if(cur){
+    if(ctQuartoPossivel(c,q,cur))return '';
+    return q.fins[cur]?'Com este início, o quarto escolhido ainda está arrendado: só a partir de '+dPT(q.fins[cur])+'.'
+      :'O quarto escolhido está arrendado sem data de fim: escolhe outro quarto.';
+  }
+  if(ctInteiroPossivel(c,q))return '';
+  if(ctNadaSeEscolhe(c,q))return q.semFim.length===q.ocupados.length&&!q.livres.length
+    ?'Todos os quartos deste imóvel estão arrendados: não há contrato novo possível aqui.'
+    :'Com este início, todos os quartos ainda estão arrendados: muda o início para o dia em que um contrato acaba.';
+  return q.ultimoFim?'Com este início, a casa inteira ainda não está livre: só a partir de '+dPT(q.ultimoFim)+'.'
+    :'A casa inteira não se escolhe enquanto houver um quarto arrendado sem data de fim: escolhe um quarto.';
+}
+/* Nada se escolhe para este início: nem a casa inteira, nem quarto nenhum.
+   Recebe: c — o contrato do formulário; q — o ctQuartosEstado(c).
+   Devolve: true se não há escolha possível. */
+function ctNadaSeEscolhe(c,q){
+  return !ctInteiroPossivel(c,q)&&!q.rooms.some(r=>ctQuartoPossivel(c,q,r.id));
+}
+/* A frase por baixo dos chips, num imóvel por quartos com quartos
+   arrendados: a partir de quando a casa inteira fica livre (o último fim,
+   ou nunca enquanto houver um arrendado sem data de fim), a regra dos
+   quartos arrendados (a data de cada um vai no chip) e, sem escolha
+   possível, porquê. Sem arrendados, ou num contrato gravado da casa
+   inteira, nada.
+   Recebe: c — o contrato do formulário; q — o ctQuartosEstado(c).
+   Devolve: o texto (por escapar), ou ''. */
+function ctQuartosFrase(c,q){
+  if(!q.ocupados.length||ctInteiroGravado(c))return '';
+  const nada=ctNadaSeEscolhe(c,q)&&!c.roomId;
+  if(nada&&!q.livres.length&&q.semFim.length===q.ocupados.length)
+    return 'Todos os quartos deste imóvel estão arrendados sem data de fim, por isso não há contrato novo possível aqui. Quando um contrato acabar, o quarto fica livre; ou adiciona um quarto na ficha do imóvel.';
+  const partes=[];
+  if(nada)partes.push('Com este início, todos os quartos ainda estão arrendados.');
+  if(!ctInteiroPossivel(c,q))partes.push(q.ultimoFim
+    ?'A casa inteira só a partir de '+dPT(q.ultimoFim)+(q.ocupados.length>1?', o fim do contrato mais longo.':', o fim do contrato do quarto arrendado.')
+    :'A casa inteira não se escolhe enquanto houver um quarto arrendado sem data de fim.');
+  const quartoEspera=q.ocupados.some(id=>q.fins[id]&&!ctQuartoPossivel(c,q,id));
+  if(quartoEspera)partes.push('Um quarto arrendado escolhe-se com o início no dia em que o contrato dele acaba, ou depois.');
+  if(quartoEspera||(!ctInteiroPossivel(c,q)&&q.ultimoFim))partes.push('Tocar numa escolha com data muda o início do contrato para esse dia.');
+  return partes.join(' ');
+}
+/* O quarto do contrato, num imóvel arrendado por quartos: o campo inteiro,
+   numa caixa que o ctInicioMudou reescreve por dentro (ctQuartosMiolo).
    Recebe: c — o contrato do formulário; qs — o ctQuartosEstado(c).
    Devolve: o HTML do campo. */
 function ctQuartosHtml(c,qs){
-  const cur=c.roomId||'',inteiro=ctInteiroPossivel(c,qs);
-  const opcoes=(inteiro?[{v:'',label:'Imóvel inteiro'}]:[]).concat(qs.rooms.map(r=>({v:r.id,label:r.name||'Quarto',ja:qs.ocupados.indexOf(r.id)>-1})));
-  /* sem quarto livre não há escolha: só o quarto do próprio contrato, se o tiver */
-  const semLivres=!inteiro&&!qs.livres.length&&!cur;
-  return `<div class="ct-campo"><span class="flabel" id="c_roomRot">Quarto${inteiro?'':' <span class="req">*</span>'}</span><input type="hidden" id="c_room" value="${esc(cur)}">
-    <div class="chips-fila ct-quartos" id="c_roomEsc" role="radiogroup" aria-labelledby="c_roomRot"${semLivres?' aria-describedby="c_roomSem"':''}>${opcoes.map(o=>{
-      const on=cur===o.v,fora=o.ja&&!on;
-      return `<button type="button" class="chip${on?' on':''}${o.ja?' ct-ja':''}" role="radio" aria-checked="${on?'true':'false'}" data-v="${esc(o.v)}"${fora?' disabled':` data-toca="rascunho" data-click="ctEscolheQuarto('${jsq(o.v)}')"`}>${esc(o.label)}${o.ja?'<span class="ct-ja-txt"> · já arrendado</span>':''}</button>`}).join('')}</div>
-    ${semLivres?`<div class="hint" id="c_roomSem">Todos os quartos deste imóvel estão arrendados, por isso não há contrato novo possível aqui. Quando um contrato acabar, o quarto fica livre; ou adiciona um quarto na ficha do imóvel.</div>`
-      :inteiro||contract(c.id)?'':`<div class="hint">Já há quartos arrendados: o contrato é de um dos quartos livres, e não do imóvel inteiro.</div>`}</div>`;
+  return `<div class="ct-campo" id="c_roomCampo">${ctQuartosMiolo(c,qs)}</div>`;
+}
+/* O miolo do campo do quarto: um chip por quarto (role radio) e «Imóvel
+   inteiro» à cabeça. Com quartos arrendados, as escolhas dependem do
+   INÍCIO do contrato: o «Imóvel inteiro» só a partir do último fim
+   (ctInteiroPossivel) — à espera antes disso, e fora de vista enquanto um
+   arrendado não tiver data de fim —, e um arrendado a partir do fim do dele
+   (ctQuartoPossivel), com a data no chip («· livre a dd/mm/aaaa»; sem data
+   de fim, «· já arrendado», desligado). Um chip à espera de uma data não é
+   disabled: leva aria-disabled e o .ct-espera, e o toque muda o início para
+   essa data e escolhe-o (ctComecaNoFim); o rótulo para o leitor de ecrã diz
+   «livre a …, toca para começar nessa data». A escolha feita nunca se desliga: se o início
+   a deixar de fora, fica escolhida e o erro diz-se por baixo, como o do
+   ctSaver (ctEscolhaInvalida). A frase (ctQuartosFrase) diz as datas e, sem
+   escolha possível, porquê; o grupo aponta-lhe.
+   O valor vive num campo escondido (c_room), que o collectCt lê; o erro do
+   ctSaver cai no grupo (c_roomEsc).
+   Recebe: c — o contrato do formulário; qs — o ctQuartosEstado(c).
+   Devolve: o HTML de dentro do campo. */
+function ctQuartosMiolo(c,qs){
+  const cur=c.roomId||'',inteiro=ctInteiroPossivel(c,qs),gravado=ctInteiroGravado(c);
+  /* a casa inteira à vista quando se escolhe, ou quando só espera por uma
+     data (nenhum arrendado sem fim); com um arrendado sem fim nunca se
+     escolheria, e sai */
+  const verInteiro=inteiro||!qs.semFim.length;
+  const opcoes=(verInteiro?[{v:'',label:'Imóvel inteiro',pode:inteiro,
+    fim:!gravado&&qs.ocupados.length?qs.ultimoFim:''}]:[])
+    .concat(qs.rooms.map(r=>({v:r.id,label:r.name||'Quarto',pode:ctQuartoPossivel(c,qs,r.id),
+      ja:qs.ocupados.indexOf(r.id)>-1,fim:qs.fins[r.id]||''})));
+  const frase=ctQuartosFrase(c,qs),erro=ctEscolhaInvalida(c,qs);
+  /* o erro por baixo só quando a escolha está à vista, num chip aceso */
+  const erroVisto=erro&&opcoes.some(o=>o.v===cur);
+  _ctErroQuarto=erroVisto?erro:'';
+  const descr=erroVisto?'c_roomEsc-erro':frase?'c_roomFrase':'';
+  return `<span class="flabel" id="c_roomRot">Quarto${inteiro?'':' <span class="req">*</span>'}</span><input type="hidden" id="c_room" value="${esc(cur)}">
+    <div class="chips-fila ct-quartos${erroVisto?' err':''}" id="c_roomEsc" role="radiogroup" aria-labelledby="c_roomRot"${descr?` aria-describedby="${descr}"`:''}${erroVisto?' aria-invalid="true"':''}>${opcoes.map(o=>{
+      /* à espera de uma data: não vale neste início, mas toca-se — muda o
+         início para o fim e escolhe-o (ctComecaNoFim); sem data de fim,
+         desligado de vez. O escolhido nunca se desliga. */
+      const on=cur===o.v,espera=!o.pode&&!!o.fim,fora=!o.pode&&!on&&!espera;
+      /* a marca diz quando fica livre (ou que está arrendado sem fim); o
+         .ct-ja dá-lhe o fundo dos arrendados, também à casa inteira à espera */
+      const marca=o.fim?' · livre a '+dPT(o.fim):o.ja?' · já arrendado':'';
+      const acao=fora?' disabled':` data-toca="rascunho" data-click="${espera?'ctComecaNoFim':'ctEscolheQuarto'}('${jsq(o.v)}')"`;
+      const rotulo=espera?` aria-label="${esc(o.label+', livre a '+dPT(o.fim)+', toca para começar nessa data')}"${on?'':' aria-disabled="true"'}`:'';
+      return `<button type="button" class="chip${on?' on':''}${o.ja||o.fim?' ct-ja':''}${espera?' ct-espera':''}" role="radio" aria-checked="${on?'true':'false'}" data-v="${esc(o.v)}"${rotulo}${acao}>${esc(o.label)}${marca?`<span class="ct-ja-txt">${esc(marca)}</span>`:''}</button>`}).join('')}</div>
+    ${erroVisto?`<p class="erro-campo" id="c_roomEsc-erro">${esc(erro)}</p>`:''}
+    ${frase?`<div class="hint" id="c_roomFrase">${esc(frase)}</div>`:''}`;
+}
+/* o erro do quarto que está à vista junto dos chips (ctQuartosMiolo, o
+   ctSaver), para o ctInicioMudou o dizer só quando aparece ou muda; o
+   ctEscolheQuarto larga-o */
+let _ctErroQuarto='';
+/* O início do contrato mudou: o resumo da renda e a frase do prazo
+   (liveNet) e, num imóvel por quartos, as escolhas do quarto, que dependem
+   dele (ctQuartosMiolo) — sem largar a escolha feita. Se ela deixar de
+   valer, o erro aparece junto dos chips e diz-se também em voz
+   (o toast, como o falhaCampo), uma vez, quando aparece ou muda.
+   Recebe: nada — lê o c_start e o c_room.
+   Devolve: nada — reescreve o miolo do campo do quarto. */
+function ctInicioMudou(){
+  liveNet();
+  const campo=document.getElementById('c_roomCampo');if(!campo||!cForm)return;
+  const quarto=document.getElementById('c_room');
+  const est=Object.assign({},cForm,{start:val('c_start'),roomId:(quarto&&quarto.value)||null});
+  const antes=_ctErroQuarto;
+  campo.innerHTML=ctQuartosMiolo(est,ctQuartosEstado(est));
+  if(_ctErroQuarto&&_ctErroQuarto!==antes)toast(_ctErroQuarto);
+}
+/* Tocou-se num chip à espera de uma data («Quarto 1 · livre a 31/03/2027»,
+   «Imóvel inteiro · livre a …»): escolhe-o e põe o início do contrato
+   nesse dia — o fim do contrato desse quarto, ou o último fim para a casa
+   inteira —, pelo mesmo caminho de quem muda a data (ctInicioMudou: o
+   liveNet e os chips refazem-se). O aviso diz o início novo, e o foco
+   volta ao chip, que foi redesenhado.
+   Recebe: rid — o id do quarto ('' para o imóvel inteiro).
+   Devolve: nada — mexe no início, no quarto e nos chips. */
+function ctComecaNoFim(rid){
+  const v=String(rid||''),ini=document.getElementById('c_start'),quarto=document.getElementById('c_room');
+  if(!ini||!cForm)return;
+  const q=ctQuartosEstado(Object.assign({},cForm,{start:val('c_start'),roomId:v||null}));
+  const fim=v?q.fins[v]:q.ultimoFim;if(!fim)return;
+  ini.value=fim;if(quarto)quarto.value=v;
+  marcarDatasVazias(ini);
+  ctInicioMudou();
+  toast('O início do contrato passou para '+dPT(fim)+'.');
+  const b=document.querySelector('.ct-quartos [data-v="'+v.replace(/["\\]/g,'')+'"]');
+  if(b)try{b.focus({preventScroll:true})}catch(x){}
 }
 /* Um chip do quarto foi tocado: guarda a escolha no campo escondido e acende
    o chip, sem repintar o formulário (o foco e o que se escreveu ficam). Larga
-   o erro do «Escolhe um quarto» (ctSaver), se lá estiver.
+   o erro do quarto (ctSaver, ctQuartosMiolo), se lá estiver, e o grupo
+   volta a apontar para a frase.
    Recebe: rid — o id do quarto ('' para o imóvel inteiro).
    Devolve: nada — mexe no campo e nos chips. */
 function ctEscolheQuarto(rid){
   const v=String(rid||''),i=document.getElementById('c_room');if(i)i.value=v;
   const g=document.querySelector('.ct-quartos');if(!g)return;
   g.classList.remove('err');g.removeAttribute('aria-invalid');
-  if(g.getAttribute('aria-describedby')==='c_roomEsc-erro')g.removeAttribute('aria-describedby');
+  if(g.getAttribute('aria-describedby')==='c_roomEsc-erro'){
+    g.removeAttribute('aria-describedby');
+    if(document.getElementById('c_roomFrase')&&typeof g.setAttribute==='function')g.setAttribute('aria-describedby','c_roomFrase');
+  }
   const erro=document.getElementById('c_roomEsc-erro');if(erro)erro.remove();
+  _ctErroQuarto='';
   [].slice.call(g.querySelectorAll('[role="radio"]')).forEach(b=>{
     const on=b.getAttribute('data-v')===v;
     b.classList.toggle('on',on);b.setAttribute('aria-checked',on?'true':'false');
@@ -1268,10 +1460,10 @@ function ctReconheceContactos(){
 }
 // Ao trocar o imóvel do contrato: larga o quarto (pertencia ao anterior) e
 // escolhe o do imóvel novo como um contrato novo o escolheria (o primeiro
-// livre, com quartos arrendados — ctQuartoPorOmissao), puxa o contacto do
+// livre, com quartos arrendados — ctEscolhaPorOmissao), puxa o contacto do
 // proprietário novo e repinta.
 // Devolve: nada — repinta o formulário.
-function onCtProp(){collectCt();cForm.propertyId=val('c_prop');cForm.roomId=ctQuartoPorOmissao(cForm);fillOwnerContact();repaintCt()}
+function onCtProp(){collectCt();cForm.propertyId=val('c_prop');ctEscolhaPorOmissao(cForm);fillOwnerContact();repaintCt()}
 // Abre o seletor de inquilinos (só os que ainda não estão no contrato); ao
 // escolher, junta-o e preenche o contacto do contrato se estiver vazio.
 // Devolve: nada — abre o seletor de inquilinos.
