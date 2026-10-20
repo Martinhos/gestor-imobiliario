@@ -163,11 +163,14 @@ function visSelos(v){
    hora e o imóvel (com o «daqui a N dias» ou o «há N dias» quando a semana o
    pede), quem a marcou quando não fui eu, e os selos — à direita numa que
    ainda vem, por baixo numa que já passou (o estado e o desfecho). Toca para
-   a ficha (visView); o toque longo abre as opções. Sem o ⋮: as ações estão
-   na ficha (o ⋯ da janela) e no toque longo, como nas outras listas do canvas.
+   a ficha (visView); o toque longo entra na seleção de vários com ela
+   marcada, como nas Casas (cloud/selecao-listas.js:lpLongo, que põe a caixa
+   antes do bloco da data). Sem o ⋮: as ações de uma só estão na ficha (o ⋯
+   da janela), como nas outras listas do canvas.
    Serve também as próximas visitas da Visão geral de quem colabora
    (painel-geral.js:proximasVisitasColab, que a chama pelo map — por isso só
-   lê o primeiro argumento).
+   lê o primeiro argumento); lá não há seleção, que só existe no separador
+   das Visitas.
    Recebe: v — a visita.
    Devolve: o HTML da linha (texto). */
 function visCard(v){
@@ -262,8 +265,8 @@ function visFicha(id){
       <p class="small num">${outras.map(x=>quandoCurto(x)+' · '+esc(x.nomes||'(sem nome)')).join('<br>')}</p></section>`:''}
   </div>`;
 }
-/* As opções de uma visita, iguais na ficha, no kebab e no toque longo. A
-   ficha e o kebab põem-nas num menu() de onclick em texto; o toque longo
+/* As opções de uma visita, iguais na ficha, no kebab e na folha do lpMenu. A
+   ficha e o kebab põem-nas num menu() de onclick em texto; a folha
    (lpShow) quer funções — e fazê-las a partir do texto com new Function é o
    que a CSP da app (sem 'unsafe-eval', web/_headers) recusa: o toque longo
    rebentava antes de abrir. Por isso cada opção vem escrita das duas formas,
@@ -433,9 +436,11 @@ function visConverte(id){
   toast('Ficha criada a partir da visita — completa o que faltar.');
 }
 /* ---- registo do serviço (servicos.js) ---- */
-/* O menu de toque longo de uma visita (data-lp "vis:<id>"). Os cartões de
-   visita têm data-lp desde sempre, e o toque longo não fazia nada: vibrava,
-   enchia a barra da espera e acabava em silêncio, porque o ramo não existia.
+/* A folha das opções de uma visita (data-lp "vis:<id>"), a que o
+   componentes.js:lpMenu dá a vez. Na lista o toque longo já não a abre —
+   entra na seleção de vários, onde Realizada, Falta e Apagar vão para várias
+   de uma vez (cloud/selecao-listas.js:lpLongo) —, mas fica como o handler do
+   prefixo: é por ela que os outros serviços juntam as suas opções (lpExtras).
    As opções vêm do visOpcoes já como funções — nunca feitas de texto, que a
    CSP não deixa avaliar. Os outros serviços acrescentam as suas por lpExtras.
    Recebe: a — as partes do data-lp (['vis', id]).

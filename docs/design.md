@@ -50,7 +50,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - O que o contrato diz ao IRS para lá das datas
 - A Declaração sabe a tua situação
 - Segurar não é selecionar
-- Entrar na seleção é um deslize, não uma troca
+- Entrar na seleção é como nas Casas
 - A fita da barra de baixo
 - A renda planeada e as rendas já lançadas
 - Os Contratos
@@ -145,8 +145,8 @@ As semânticas são classes: .pos (verde), .neg (laranja, o dinheiro que sai),
 variantes .grey, .amber, .red, .in, .out e .loan (estilos.css:.badge): os
 pares passam 4,5:1 a 12px nos dois temas (medido na prova da fundação), e
 os hex com licença que o .badge.amber e o .badge.red tinham saíram. Os
-exemplos de hex fora dos tokens com licença são hoje a marca (o branco dos
-arcos, estilos.css:.marca), o véu da janela de baixo
+exemplos de hex fora dos tokens com licença são hoje a marca (o branco da
+casa, estilos.css:.marca), o véu da janela de baixo
 (estilos.css:.modal.under), o verde e o laranja do escuro nas setas do
 Cashflow da Visão geral, que é azul-noite nos dois temas
 (estilos.css:.vg-kpi.cf), e as cores do mosaico das capas no claro.
@@ -613,10 +613,11 @@ um pedido — de partilha, para entrar num grupo, um convite de ligação — é
 botão secundário ao lado do Aceitar primário, porque quem pediu pode voltar
 a pedir (partilha.js:linhasDosPedidos). As linhas das listas não têm ⋮:
 tocar abre a ficha, onde as opções vivem no ⋯ da janela e no «Editar» do
-rodapé, e o toque longo (data-lp) entra na seleção de vários ou, nas pessoas
-e nas visitas, abre a lista de ações do tipo de registo, que é uma só
-(componentes.js:lpMenu; ver «Padrões de página»). O que destrói (Apagar, Remover, Eliminar,
-Terminar) fica vermelho também na folha do toque longo
+rodapé, e o toque longo (data-lp) entra na seleção de vários — também nos
+inquilinos e nas visitas; nos proprietários não faz nada (ver «Padrões de
+página»). A lista de ações do tipo de registo, que é uma só, é a folha que o
+componentes.js:lpMenu abre (o kebab, e o toque longo onde a nuvem não corre).
+O que destrói (Apagar, Remover, Eliminar, Terminar) fica vermelho também nela
 (componentes.js:lpShow). Todos os menus fecham ao clique fora
 (componentes.js:closePops, chamada pelo ouvinte de click do arranque, em
 web/app/arranque.js). Um ⋯ aberto (estilos.css:.menupop) fecha também
@@ -642,8 +643,8 @@ aria-expanded="false" como o do menu.
 pode(pid,perm) antes de mostrar uma ação (acessos.js:pode). Num imóvel onde
 o utilizador só colabora, o cargo diz o que se vê e o que se adiciona; o
 servidor já despe os dados e recusa as escritas, mas um botão que leva a
-uma recusa é um botão a mais. Por isso cada ação pergunta primeiro: o menu
-do toque longo filtra as opções (componentes.js:lpMenu), os FABs, a
+uma recusa é um botão a mais. Por isso cada ação pergunta primeiro: a folha
+das opções filtra-as (componentes.js:lpMenu), os FABs, a
 folha do + da barra de baixo e os seletores de imóvel dos formulários só
 listam onde se pode adicionar (acessos.js:casasComo,
 acessos.js:acoesDeAdicionar, acessos.js:propOptsPara; movimento.js:txBody), a
@@ -694,6 +695,44 @@ constante ensinava o dedo a confirmar sem ler. A confirmação trava o
 engano de quem lê; o Anular salva o engano de quem confirmou por hábito.
 aoExpirar liquida o que não volta (blobs) só quando a janela fecha sem
 cliques. Silenciar um prazo usa o mesmo (prazos.js:pzSilencia).
+
+O aviso com botão afasta-se com o dedo (componentes.js:avisoPousar,
+componentes.js:avisoArrastoMove, componentes.js:avisoArrastoFim). O cartão do
+«Anular» tapa o fundo do ecrã seis segundos, e às vezes é o que está por trás
+dele que se quer ver. Puxa-se para baixo: só o eixo vertical, a decidir aos
+10px e sem salto (a folga não conta); para cima resiste
+(componentes.js:avisoElastico, a curva do sepElastico, nunca mais de metade
+da altura). Largar passada metade da altura dele, ou com um sacudir para
+baixo (componentes.js:AVISO_SACODIR, 0,4px/ms, a velocidade dos últimos
+instantes pelo e.timeStamp — componentes.js:avisoHora; parado mais de 100ms
+antes de largar já não é sacudir), fecha-o a sair pelo fundo a partir de
+onde o dedo o deixou (componentes.js:avisoSaiPorBaixo: --medio, --curva — o
+largar continua a velocidade do dedo, por isso não é a --curva-sai). Largar
+antes volta ao sítio (componentes.js:avisoVoltaAoSitio: --medio,
+--curva-entra). Fechar o cartão não desfaz nem antecipa nada: o apagado
+continua apagado e o aoExpirar corre aos 6400ms de sempre.
+
+O prazo espera pelo dedo. Com o dedo pousado no aviso, o temporizador dele
+para e o do comDesfazer também (o op.segura do toast): o «Anular» nunca fica
+à vista depois de o que não volta ter sido liquidado. Devolvido ao sítio, o
+aviso retoma o que faltava, com um mínimo de 1,5s para se ler
+(componentes.js:AVISO_RETOMA_MS), e o prazo do desfazer anda o mesmo tanto
+(continua a 400ms do fim do aviso). Afastado, o prazo é o de sempre; se o
+dedo o segurou para lá dele, liquida ao largar.
+
+O clique que o browser dispara a seguir a um arrasto não carrega no «Anular»
+(componentes.js:toast, o _avisoEngole, 350ms como o sepEngolirToque). Só o
+dedo e a caneta arrastam (componentes.js:AVISO_PONTEIROS): com o rato,
+arrastar é selecionar texto, e no computador o aviso não tapa o que tapa num
+telemóvel. Um aviso novo a meio de um arrasto ganha
+(componentes.js:avisoInterromper): o arrasto acaba ali, o anterior deixa de
+esperar pelo dedo, e o novo volta ao sítio pela transição do .on. Apanhado a
+meio do regresso, o aviso segue o dedo a partir de onde a animação o tinha.
+Sem movimento (prefers-reduced-motion, continuidade.js:semMovimento) não
+segue o dedo: desvanece (estilos.css:.toast.arrastar.pronto) quando largar
+já fecha, e fecha sem animar. O CSS: estilos.css:.toast.arrasta
+(touch-action:none, sem seleção de texto) e estilos.css:.toast.arrastar (o
+transform sem transição durante o arrasto).
 
 toast(m,op) (componentes.js:toast) é para o que aconteceu: 2,8 segundos,
 frase curta com ponto final. Tem role=status e aria-live
@@ -803,7 +842,9 @@ Os dois segmentados mais apertados — os cinco tipos do movimento
 (estilos.css:.mov-tipo-segm) e o Por indicar, Declarado, Não declarado do
 contrato (estilos.css:.ct-at-segm) — têm colunas iguais, a letra a 13px e
 menos enchimento (3px e 1px de cada lado); as abas da área ficam com 6px
-(estilos.css:.abas-area). A 14px, «Despesa» a 600 não cabe num quinto da
+(estilos.css:.abas-area), mas não são flex:1 1 0: são as colunas iguais da
+grelha da casa delas, e não perdem o fim — rolam (ver «As abas da área, fora
+do #view», em «A fita da barra de baixo»). A 14px, «Despesa» a 600 não cabe num quinto da
 linha a 375px e fica «Despes…». Com flex:1 1 0 cada botão recebe a mesma
 largura de texto mais o seu enchimento, por isso o enchimento baixa em todos
 os do grupo. A 375px sobram cerca de 3px a «Despesa» e 4px a «Não
@@ -859,8 +900,9 @@ desiste, e o render faz o resto.
 
 Uma via parcial refaz a vista a partir de um molde, e o molde tem de ser o
 que o render poria — com a casca que ele põe à frente de cada vista: os
-separadores da área (navegacao.js:abasDaArea). Sem ela, a primeira tecla da pesquisa levava os
-separadores do telemóvel. Nos Movimentos o caminho curto guarda ainda dois
+separadores da área (navegacao.js:abasDaArea) — e é dali que o
+navegacao.js:abasAssentar os leva para a casa deles, por cima do #view. Sem
+ela, a primeira tecla da pesquisa levava os separadores do telemóvel. Nos Movimentos o caminho curto guarda ainda dois
 nós da moldura de uma pintura para a seguinte
 (lista-movimentos.js:txGuardarNo): o campo da pesquisa, que não perde o foco
 nem o que o teclado estava a compor, e o painel dos filtros, que não volta
@@ -954,14 +996,14 @@ onde o botão do cabeçalho é o «Selecionar vários», não o leva. O painel
 conteúdo sem o empurrar: preso ao topo, desaparecia ao primeiro scroll. Nas
 listas e nos Movimentos o funil fica ao lado da pesquisa, que está sempre à
 vista, e o botão do cabeçalho só existe onde há seleção de vários — os
-Movimentos, os Imóveis, os Contratos e os Planeados —, onde é o «Selecionar
-vários», a caixa com o visto (vistas.js:LF_COM_CABECALHO,
-vistas.js:pintarBotaoFiltros; ver «Os Movimentos»). Nos Planeados a base não
-o pinta, e quem o mostra é a camada da seleção, que corre depois
-(cloud/selecao-listas.js:selLCabecalho). Nos Inquilinos, nos Proprietários,
-nas Visitas e nos Créditos não há botão no cabeçalho: dois botões para o
-mesmo painel eram ruído. Nas Projeções e na Avaliação o botão é a roda
-dentada das opções (ver abaixo).
+Movimentos, os Imóveis, os Contratos, os Inquilinos, as Visitas e os
+Planeados —, onde é o «Selecionar vários», a caixa com o visto
+(vistas.js:LF_COM_CABECALHO, vistas.js:pintarBotaoFiltros; ver «Os
+Movimentos»). Nos Inquilinos, nas Visitas e nos Planeados a base não o pinta,
+e quem o mostra é a camada da seleção, que corre depois
+(cloud/selecao-listas.js:selLCabecalho). Nos Proprietários e nos Créditos não
+há botão no cabeçalho: dois botões para o mesmo painel eram ruído. Nas
+Projeções e na Avaliação o botão é a roda dentada das opções (ver abaixo).
 
 Os painéis de filtro têm um modelo só (a nota do vistas.js:lfSel): mexes, a
 lista muda logo atrás, sem «Aplicar»; «Limpar» à esquerda, «Fechar» à
@@ -1041,9 +1083,9 @@ ficar nele, e o «Fechar» devolve-o ao funil (vistas.js:lfFocarFunil);
 escolher num seletor deixa o foco no seletor refeito (vistas.js:lfReporFoco);
 o «Limpar» do painel, que some, passa o foco ao «Fechar».
 
-Nos Imóveis, nos Contratos e nos Planeados o botão do cabeçalho é o
-«Selecionar vários», a caixa com o visto (icones.js:caixaVisto;
-cloud/selecao-listas.js:selLCabecalho, a seguir ao
+Nos Imóveis, nos Contratos, nos Inquilinos, nas Visitas e nos Planeados o
+botão do cabeçalho é o «Selecionar vários», a caixa com o visto
+(icones.js:caixaVisto; cloud/selecao-listas.js:selLCabecalho, a seguir ao
 cloud/selecao.js:patchHdrSel, que embrulha): é da camada da seleção e não
 da base, que não conhece a nuvem; corre depois da base
 (vistas.js:pintarBotaoFiltros) e da camada do painel (cloud/painel.js:patchHdr,
@@ -1065,11 +1107,11 @@ direita, o valor. Os contratos agrupam-se por imóvel, cada grupo com um
 cabeçalho de classe própria e a renda do mês à direita
 (estilos.css:.ct-grupo-cab; ver «Os Contratos»). Não há ⋮: tocar na linha
 abre a ficha, onde estão as ações (o ⋯ da ficha), e o toque longo continua —
-nas pessoas e nas visitas abre as opções; nos movimentos, nos imóveis, nos
-contratos, nos planeados e nos modelos entra na seleção de vários com o
-tocado já marcado (cloud/selecao-listas.js:lpLongo →
-cloud/selecao-listas.js:CW.selLEntrar), o mesmo gesto em toda a app; sem
-conta, onde a nuvem não corre, abre as opções. As opções de um planeado
+nos movimentos, nos imóveis, nos contratos, nos inquilinos, nas visitas, nos
+planeados e nos modelos entra na seleção de vários com o tocado já marcado
+(cloud/selecao-listas.js:lpLongo → cloud/selecao-listas.js:CW.selLEntrar), o
+mesmo gesto em toda a app; nos proprietários não faz nada; sem conta, onde a
+nuvem não corre, abre as opções. As opções de um planeado
 vivem no ⋯ da ficha (planeados.js:recView: Confirmar sem rever, Silenciar ou
 Reativar avisos, Editar, Apagar) e as de um modelo também
 (planeados.js:tplView: Editar e Apagar, com o «Usar modelo» no rodapé); o
@@ -1080,7 +1122,8 @@ existir para quem a chama, com «Selecionar vários» no fim
 (planeados.js:lpPortaSelecao, cloud/selecao-listas.js:selLPortaNoFim) — como
 a dos imóveis e dos contratos —, mas o toque longo já não a abre. Em
 seleção, o toque longo marca e desmarca como o toque nos Imóveis, nos
-Contratos e nos Planeados (cloud/selecao-listas.js:CW.selLTocar). A
+Contratos, nos Inquilinos, nas Visitas e nos Planeados
+(cloud/selecao-listas.js:CW.selLTocar). A
 porta visível do toque longo é a própria linha, que o tornarFocavel torna
 alcançável pelo teclado (Enter abre a ficha): o percurso aceita como caminho
 visível a linha focável que abre a ficha (testes/ui/invariantes.js); a porta
@@ -1716,7 +1759,10 @@ está: com um modal aberto, caía em cima de «Guardar» e «Cancelar». Sobe
 a altura do rodapé que está aberto, medida e não adivinhada — há rodapés
 de duas linhas (componentes.js:toast; estilos.css:.toast, o --acima). A
 barra de baixo é o mesmo caso: sem rodapé de janela, o aviso sobe para cima
-dela quando está à vista (componentes.js:avisoAcimaDoRodape mede o #tabbar).
+dela quando está à vista (componentes.js:avisoAcimaDoRodape mede o #tabbar),
+e em seleção sobe acima da barra das ações (estilos.css:.sel-fundo), que lá
+está no lugar dela. E o que fica por baixo do aviso vê-se puxando-o para
+baixo (ver o comDesfazer, em «Componentes da casa»).
 
 E «Anular» deixou de ser um link. Estava sublinhado, com cor de link,
 deitado sobre a barra escura do aviso — e é a única saída de uma ação que
@@ -1980,19 +2026,20 @@ proprietário com conta só o edita quem tem a conta — o db.owners refaz-se do
 perfis do servidor a cada leitura (cloud/nucleo.js) —, e nenhuma porta de
 lado abre o formulário que se perdia na leitura seguinte: o
 pessoas.js:personModal com o id dele abre a ficha (pessoas.js:personView),
-como já fazia com um inquilino que não se pode alterar, e o toque longo
-segue a mesma regra (lista-pessoas.js:lpPessoa), sem «Editar ficha» nem
-«Apagar»; sem opções nenhumas, o aviso diz de quem é o perfil, e não que é o
-cargo que não deixa (componentes.js:lpShow). No meu perfil, o «Editar» e o
-«Editar ficha» abrem o «O meu perfil» da nuvem, com o indicativo
-(cloud/utilizadores.js:CW.editProfile); sem a nuvem, a ficha local.
+como já fazia com um inquilino que não se pode alterar, e a folha das opções
+(lista-pessoas.js:lpPessoa, que o lpMenu abre) segue a mesma regra, sem
+«Editar ficha» nem «Apagar»; sem opções nenhumas, o aviso diz de quem é o
+perfil, e não que é o cargo que não deixa (componentes.js:lpShow). No meu
+perfil, o «Editar» e o «Editar ficha» abrem o «O meu perfil» da nuvem, com
+o indicativo (cloud/utilizadores.js:CW.editProfile); sem a nuvem, a ficha
+local.
 
 A do inquilino, por esta ordem: o avatar com «Inquilino» e os selos — o do
 contrato («Com contrato em vigor» verde, «Contrato por começar» cobalto,
 «Contrato terminado» ou «Sem contrato» cinzento), «Renda em atraso» e o
 cartão de cidadão a caducar —; as ações rápidas em chips
 (estilos.css:.pes-acoes), «Ver contrato» (o em vigor, ou o que vai começar)
-e «Novo contrato» já com a pessoa, pelo mesmo critério do toque longo;
+e «Novo contrato» já com a pessoa, pelo mesmo critério da folha das opções;
 «Mora em», com uma linha por contrato em vigor — onde, desde e até quando,
 a renda e o estado dela (em dia verde, por confirmar cobalto, em atraso
 vermelho) —, que toca para o contrato (pessoas.js:pesLinhaContrato); «Vai
@@ -2429,9 +2476,8 @@ um objeto novo, nunca o do blank, que a nuvem copia por referência.
 ## Segurar não é selecionar
 Um toque longo é um dedo parado sobre texto, e é isso que o browser espera
 para o começar a selecionar. Nos movimentos o toque longo entra em modo de
-seleção, e o dedo, que não se mexeu, fica sobre a linha ou sobre o título do
-mês, que em seleção se cola ao topo — e o browser faz o que faz a um dedo
-parado sobre texto.
+seleção, e o dedo, que não se mexeu, fica sobre a linha — e o browser faz o
+que faz a um dedo parado sobre texto.
 
 A regra casa pelo **comportamento**, não pelo elemento
 (estilos.css:[role="button"]): o `tornarFocavel` carimba `role="button"` em
@@ -2441,67 +2487,47 @@ por isso apanha também o chrome que ainda não existe. O que se copia — o
 IBAN, as notas, os valores das fichas — não tem ação nenhuma e continua
 selecionável. É a mesma correção que o gráfico levou.
 
-## Entrar na seleção é um deslize, não uma troca
-O toque longo num movimento (ou «Selecionar vários», no cabeçalho) repinta a
-vista inteira, e o título de cada mês ganha a caixa de marcar. Antes o «set
-2026» saltava da esquerda para o meio de um fotograma para o outro, as caixas
-apareciam já feitas e o texto de cada linha dava um pulo para a direita. O
-Martinho pediu o deslize: o nome do mês desliza do sítio onde estava até ao
-meio do título, o corpo de cada linha abre espaço à caixa a deslizar, e as
-caixas aparecem a desvanecer; a caixa de tudo e a contagem entram no
-cabeçalho, no lugar do título (selecao.js:patchHdrSel, estilos.css:.sel-cab).
-Ao sair, o caminho inverso: o nome volta à esquerda e as caixas que saíram
-desvanecem no lugar onde estavam, a acompanhar a linha ou o título de que
-eram (selecao.js:selFantasma, na camada de saída da continuidade,
-continuidade.js:camadaDeSaida). O quadrado do ícone fica entre a caixa e o
-corpo, e desliza com o corpo, nos dois sentidos. Na tabela do ecrã largo as
-caixas já se viam fora da seleção: aí entrar e sair não as anima
-(cloud/selecao.js:selForaAVista, lido no selAplicarDeslize), e o título da
-página fica — a contagem vive na barra do fundo.
+## Entrar na seleção é como nas Casas
+O toque longo num movimento (ou o «Selecionar vários» do cabeçalho) entra na
+seleção como nos Imóveis, nos Contratos e nos Planeados
+(cloud/selecao-listas.js:selLDecorar): as caixas das linhas aparecem a
+desvanecer, no --medio e com a --curva-entra (estilos.css:.sel-entra para as
+das Casas, a mesma animação em `#view .mov-linha>.selbox.sel-entra` para as
+dos Movimentos), e a caixa de tudo e a contagem entram no cabeçalho, no lugar
+do título, da mesma maneira (cloud/selecao.js:patchHdrSel,
+estilos.css:.sel-cab). A barra do fundo chega de uma vez, como a delas. Sair
+também é o das Casas: o render seguinte já não tem caixas, e elas vão-se sem
+animar, sem fantasmas nem nada no style de ninguém.
 
-É o FLIP da continuidade, feito à mão para peças que não são linhas e por
-isso não têm data-fk: mede-se antes do render (selecao.js:selMedirDeslize),
-repinta-se, e numa microtarefa põe-se cada peça de volta onde estava e
-deixa-se ir (selecao.js:selAplicarDeslize). Só transform e opacity, pela API
-de animações e sem fill: no fim não fica nada no style de ninguém — e o
-título do mês, que em seleção é sticky (estilos.css:.sel-mes), continua a
-colar-se ao topo. Mede-se o que está no ecrã, e não onde as peças deviam
-estar: sair a meio de uma entrada continua de onde o nome ia, e as caixas
-que saem partem da opacidade a que estavam.
+Só ao ENTRAR (cloud/selecao.js:selEntrou, gasto pelo
+cloud/selecao.js:selCaixasEntram no fim do render): marcar uma linha
+(cloud/selecao.js:selPintar), a caixa de tudo, a lista viva
+(lista-movimentos.js:pintarListaTx) e a sincronização de fundo, que é um
+render sem mudar de modo, não voltam a animar. A classe sai quando a animação
+acaba (animationend): uma linha que a lista viva muda de sítio é reinserida, e
+uma animação de CSS recomeça num nó reinserido. Na tabela do ecrã largo as
+caixas já se viam antes de entrar (cloud/selecao.js:selNaTabela): só mudam de
+marca, e não desvanecem. Com menos movimento pedido, a regra do
+prefers-reduced-motion da folha desliga a animação — é CSS, e não a API de
+animações, por isso não precisa do continuidade.js:semMovimento.
 
-Só na MUDANÇA de modo (selecao.js:selModoPintado): marcar uma linha
-(selecao.js:selPintar), a lista viva (lista-movimentos.js:pintarListaTx) e a
-sincronização de fundo, que é um render sem mudar de modo, não voltam a
-animar. Com menos movimento pedido não se mede nem se anima nada
-(continuidade.js:semMovimento — a regra de CSS não apanha a API de animações).
+Já em seleção, o toque longo marca e desmarca, como o toque — o das Casas
+(cloud/selecao-listas.js:CW.selLTocar). O cloud/selecao.js:CW.selEntrar com
+um id, já em seleção, vai ao CW.selToggle: não volta a entrar nem deita fora
+o que estava marcado.
 
-Os tempos são os da continuidade, e não um número à parte: o nome atravessa
-mais de cem pixeis e as linhas à volta dele deslizam no mesmo render com o
---lento e a --curva-entra (continuidade.js:aplicarContinuidade); com outro
-tempo, o título e as linhas chegavam cada um à sua hora e o fundo do título
-tapava o cimo da primeira linha. As caixas desvanecem no --medio. O título
-alinha-se pela altura do NOME, e não pelo topo: em seleção é mais alto.
-
-O nome do mês fica mesmo ao meio do título, e não ao meio do que sobra: a
-caixa e o saldo repartem o resto por igual (estilos.css:.txnet), sem padding
-de lado na caixa, que o flex-basis 0 não conta. E os indicadores e os
-cartões das contas vão numa peça com chave (lista-movimentos.js:vTransactions,
-data-fk="txresumo"): com as linhas a deslizar e os indicadores a saltar, o
-título do mês passava por cima do fundo dos cartões. Nada por cima da lista
-a empurra: a caixa de tudo vive no cabeçalho, a barra das ações flutua no
-fundo, e o título do mês tem 32px e as mesmas margens dentro e fora da
-seleção (estilos.css:.mov-mes; a caixa sem padding em altura,
-estilos.css:.section-title.sel-mes) — medido no telemóvel, a primeira linha
-fica no mesmo píxel a entrar e a sair. Fica por resolver, de propósito: a
-altura de cada linha troca no primeiro fotograma — animar alturas por linha
-é o que a continuidade recusa.
+O título de cada mês é o mesmo dentro e fora da seleção
+(lista-movimentos.js:txMesHtml): não tem caixa, não se cola ao topo e não muda
+de altura — marca-se linha a linha ou tudo, como nas Casas. Nada por cima da
+lista a empurra: a caixa de tudo vive no cabeçalho e a barra das ações flutua
+no fundo.
 
 ## A fita da barra de baixo
 Mudar de separador trocava o conteúdo de golpe. Passa a virar como uma fita —
 mas **só na barra de baixo**, e só quando o toque veio de lá
 (navegacao.js:goBarra), ou quando o dedo desliza de lado entre os
-separadores de uma área (ver «Deslizar entre os separadores de uma área»,
-no fim desta secção).
+separadores de uma área (ver «Deslizar entre os separadores de uma área» e
+«As abas da área, fora do #view», no fim desta secção).
 
 A barra tem quatro destinos e uma ordem à vista: ir das Casas para o
 Dinheiro é andar um lugar para a direita, e a pessoa viu o lugar antes de lá
@@ -2569,6 +2595,15 @@ do próprio `#view`, menos a `.entra` (continuidade.js:deslizarPainel): sem o
 `.wrap`, o conteúdo esticava de encosto a encosto e a fita dava um salto antes
 de deslizar.
 
+As abas da área não viajam com o painel: vivem fora do `#view`, na casa
+delas (index.html:#abasArea), e quando a área é a mesma ficam no mesmo
+píxel. De área para área (a barra de baixo: das Casas para o Dinheiro, da
+Agenda para as Casas) a fila é outra e entra com o conteúdo, do mesmo lado,
+com a mesma duração e a mesma curva; a fila velha sai numa caixa fixa no
+sítio onde estava, com o espaçamento da casa (continuidade.js:abasNaFita,
+estilos.css:.abas-saida). As abas de uma área são a cabeça dessa página, e
+mudar de área é mudar de página.
+
 ### Deslizar entre os separadores de uma área
 No telemóvel (até 900px), os separadores de uma área são um carrossel:
 Imóveis, Contratos, Pessoas, Visitas nas Casas; Movimentos, Planeados,
@@ -2581,8 +2616,8 @@ cargo, um serviço desligado) fora da fila (navegacao.js:portaVizinha,
 navegacao.js:vizinhoNaArea); as Pessoas são uma porta só e abrem onde a aba
 abre (navegacao.js:destinoDe). Nas pontas não há vizinho: a página resiste —
 anda cada vez menos, nunca mais de meia largura (navegacao.js:sepElastico) —
-e não dá a volta. Os Inquilinos e os Proprietários dentro das Pessoas não
-entram no carrossel, e no computador não há gesto nenhum.
+e não dá a volta. Os Inquilinos, os Proprietários e os Colaboradores dentro
+das Pessoas não entram no carrossel, e no computador não há gesto nenhum.
 
 A viagem é esta fita (continuidade.js:deslizarPainel), que aceita o `desde`,
 como o deslizarEntre e o correrAFita: quem sai parte de onde o dedo deixou a
@@ -2592,21 +2627,47 @@ navegacao.js:_desdeSep), pelo navegacao.js:sepIrPara, pela mesma razão do
 goBarra: os embrulhos da nuvem chamam o go com um argumento só. O #view sai
 do arrasto antes de a fita o medir.
 
-Enquanto o dedo leva a página, o nome do vizinho espreita no vazio que ela
-deixa, colado à borda dela (navegacao.js:sepEspreita, estilos.css:.sep-espreita),
-e acende-se no cobalto suave quando largar já vira. Não é tocável nem lido
-pelo leitor de ecrã: quem lê tem as abas do topo. O pai do #view corta o que
-lhe passa da margem durante o arrasto (estilos.css:main.sep-arrasto, clip e
-não hidden, para o cabeçalho pegajoso colar). Sem movimento
-(prefers-reduced-motion) a página não segue o dedo: o nome aparece à beira do
-ecrã, e largar troca de separador sem deslize.
+Enquanto o dedo leva a página, o separador vizinho entra colado a ela,
+pintado de verdade: o render de sempre, com os embrulhos da nuvem (os
+pendentes por confirmar, o selo de partilhado), num contentor à parte e sem
+mudar de separador (vistas.js:pintarVistaAParte — o id do `#view` passa ao
+contentor durante a pintura, para o «depois» de cada serviço e as
+decorações o encontrarem pelos sítios de sempre, e volta no fim, com o
+separador, o ecrã pintado e o cabeçalho de onde se está). Pinta-se uma vez
+por lado e por gesto, quando o dedo vai para esse lado
+(navegacao.js:sepVizinho), e nunca a cada pointermove; vive num palco fixo
+na camada de saída, recortado à faixa do `#view` que se vê e nunca por cima
+das abas (navegacao.js:sepPalco, navegacao.js:sepPalcoAlto), no sítio onde
+vai ficar (a viagem acaba com a página no topo). Não se toca nem se lê
+(inert, aria-hidden). Largar e virar tira o vizinho pintado no mesmo
+instante em que a fita põe o verdadeiro no lugar dele; largar e voltar
+leva-o para fora com a página, no mesmo --medio e na mesma --curva-entra.
+Quem chega pelo dedo já esteve à vista: não volta a entrar em cena — os
+gráficos não se desenham de novo e os números não contam de zero
+(navegacao.js:go, o _entrar só se liga sem desde).
+
+As abas da área ficam paradas por cima (ver «As abas da área, fora do
+#view», abaixo) e o realce corre entre a aba de onde se sai e a vizinha, à
+proporção do arrasto (navegacao.js:abasPolegarEm), sem transição enquanto o
+dedo o leva; na ponta fica onde está. Ao largar assenta na aba onde se fica:
+com a duração da fita quando vira (chega com o painel), com a curva do
+regresso quando volta (estilos.css:.abas-area.viaja, e as classes .volta e
+.arrasta do .abas-area). O pai do `#view` corta o que lhe passa da margem
+durante o arrasto (estilos.css:main.sep-arrasto, clip e não hidden, para o
+cabeçalho pegajoso colar).
+
+Sem movimento (prefers-reduced-motion) nada segue o dedo — nem a página, nem
+o vizinho, nem o realce —, e não se pinta vizinho nenhum: o nome do vizinho
+aparece à beira do ecrã (navegacao.js:sepEspreita, estilos.css:.sep-espreita),
+acende-se no cobalto suave quando largar já vira, e largar troca de
+separador sem deslize, com o realce já na aba nova.
 
 As regras do gesto são as do calendário (calendario.js:calArrastar): o eixo
 decide-se aos 10px, e a folga de decidir não conta (a página arranca colada
 ao dedo); um gesto que começa na vertical é da página, que rola como sempre —
-o `touch-action:pan-y pinch-zoom` do #view numa área com abas (a nota
-«deslizar entre separadores» do estilos.css) deixa ao browser o vertical e o
-zoom, e se ele ficar com o gesto chega o pointercancel, que nunca vira. O
+o `touch-action:pan-y pinch-zoom` do #view por baixo de uma casa das abas
+cheia (estilos.css:#abasArea:not(:empty)~#view; a nota «deslizar entre
+separadores» do estilos.css) deixa ao browser o vertical e o zoom, e se ele ficar com o gesto chega o pointercancel, que nunca vira. O
 clique que vem a seguir a um arrasto engole-se (navegacao.js:sepEngolirToque).
 Só o dedo e a caneta: o rato num ecrã estreito seleciona texto.
 
@@ -2619,12 +2680,51 @@ medida (navegacao.js:sepRolaDeLado: mais largo do que mostra e com overflow-x
 auto ou scroll), e não pelo nome, para apanhar as filas de chips, as tabelas,
 os totais dos Movimentos, os tutoriais da Ajuda e o plano dos Créditos sem
 uma lista a envelhecer; um overflow:auto que cabe inteiro é da página. As
-abas do topo rolam de lado, e por isso um arrasto que comece nelas é do
-browser. Nem com uma janela ou a gaveta abertas, em seleção (dos Movimentos
+abas da área estão fora do #view (index.html:#abasArea): um arrasto que
+comece nelas nunca vira o separador — rola-as, quando não cabem. Nem com uma janela ou a gaveta abertas, em seleção (dos Movimentos
 ou de uma lista, body.sel-on), com o painel em edição, ou a meio de uma
 fita. As bordas do ecrã (20px) são do voltar do sistema. Se um toque longo
 abrir uma janela ou uma seleção a meio do arrasto, a página volta ao sítio e
 o gesto acaba (navegacao.js:sepArrastoMove).
+
+### As abas da área, fora do #view
+As abas da área (Imóveis, Contratos, Pessoas, Visitas; Movimentos,
+Planeados, Créditos) vivem na casa delas, por cima do `#view` e fora dele
+(index.html:#abasArea), para ficarem paradas enquanto o painel desliza. Quem
+pinta continua a escrevê-las à cabeça da vista, como sempre
+(vistas.js:render, vistas.js:refrescarListasVivas e
+lista-movimentos.js:refrescarMovimentos fazem `abasDaArea()+…`), e o
+navegacao.js:abasAssentar tira-as de lá e acerta a casa: a mesma fila (a
+mesma área, o mesmo número de abas) fica o MESMO nó, e só se copiam as
+diferenças — o aceso, o aria-current, o destino das Pessoas e o número
+(navegacao.js:abasCopiar). Por isso o foco do teclado fica na aba onde se
+carregou Enter, e o realce desliza para a aba nova em vez de nascer já lá.
+Outra área, ou outras abas à vista, troca a fila inteira. Fora de uma área
+com separadores a casa esvazia-se e o :empty esconde-a; no computador
+esconde-se sempre. O render e a via parcial das listas chamam o abasAssentar
+logo a seguir a escrever; quem repinta por outra via (a pesquisa dos
+Movimentos) é apanhado por um MutationObserver nos filhos do `#view`
+(navegacao.js:abasVigiar), que corre antes de o browser pintar. A moldura
+`.abas` fica no `#view`, vazia: no computador continua a dar os 14px de
+sempre, e no telemóvel esconde-se (estilos.css:.abas:empty). As Pessoas
+(Inquilinos, Proprietários, Colaboradores, .abas-pessoas) são do conteúdo
+das Pessoas e ficam no `#view`, a correr com ele.
+
+O realce da aba acesa é uma peça à parte, como no segmentado que desliza
+(imovel.js:imvSegmentado): a fila ganha .desliza e .n2 a .n4 (quantas abas)
+e um .segm-polegar, que assenta pela classe .i0 a .i3 (em múltiplos da
+largura dele mais os 2px do intervalo, sem medir nada) e desliza no --medio
+e na --curva-fita num toque numa aba. O contorno cobalto e o fundo suave vão
+no realce; a aba acesa fica com o texto no --accent-text, que é cor da
+frente — o escurecimento forçado do Samsung Internet distingue-a.
+
+Quando as abas não cabem (a partir de ~360px com o número dos Planeados), a
+casa rola de lado, sem barra, e o fim da rolagem não puxa o voltar do
+sistema (overscroll-behavior-x:contain). A fila é uma grelha de colunas
+iguais: à largura do ecrã quando cabem, e à largura da aba mais comprida,
+cada uma, quando não cabem (nunca reticências). O realce rola com elas,
+porque vive dentro da fila; a aba acesa, e no arrasto a de destino, entram à
+vista (navegacao.js:abasAVista).
 
 ## A renda planeada e as rendas já lançadas
 Uma recorrência é um **cursor**, e não um histórico: guarda uma data só, a
@@ -2724,8 +2824,8 @@ lê-lo», e o formulário em «Os formulários dizem o que é obrigatório…».
 
 Gerar o PDF passa por uma folha, «Contrato em PDF»
 (contrato-pdf.js:ctPdfJanela, contrato-pdf.js:ctPdfFicha — a prancheta
-M-ContratoPDF), que abre do botão da ficha, do ⋯ da ficha e do formulário,
-e do toque longo: a miniatura do documento com o nome do ficheiro
+M-ContratoPDF), que abre do botão da ficha, do ⋯ da ficha e do formulário
+(o toque longo num contrato entra na seleção): a miniatura do documento com o nome do ficheiro
 (contrato-pdf.js:ctPdfNome); o que falta para se poder gerar, a vermelho; o
 que vai e o que fica de fora (contrato-pdf.js:ctPdfVerificar — a licença, o
 registo, o certificado energético, a frase do pagamento, os dados de cada
@@ -2794,8 +2894,8 @@ do «Pede atenção»: um inquilino com contrato que ainda não acabou, ou um
 proprietário.
 
 Não há FAB nem ⋮: o «Novo inquilino» e o «Novo proprietário» estão no
-cabeçalho e no + (navegacao.js:pintarAcaoDoCabecalho), e as opções na ficha
-e no toque longo (lista-pessoas.js:lpPessoa). O vazio tem o seu botão
+cabeçalho e no + (navegacao.js:pintarAcaoDoCabecalho), e as opções de uma
+pessoa estão no ⋯ da ficha (pessoas.js:personView). O vazio tem o seu botão
 (vistas.js:saida). A ficha está em «Tocar num registo é lê-lo»; o «Acertar
 contas» das contas entre proprietários tem 44px no dedo
 (estilos.css:.pes-contas), como os .btn.sm das fichas do imóvel e do
@@ -2838,7 +2938,72 @@ realizada verde, faltou âmbar, cancelada cinzenta; as do desfecho
 interesse cinzento. A mesma linha serve as próximas visitas na Visão geral
 de quem colabora (painel-geral.js:proximasVisitasColab), sem o cartão à
 volta. Também aqui não há FAB nem ⋮: o «Marcar visita» está no cabeçalho, no
-+ e no vazio, e as opções na ficha e no toque longo.
++ e no vazio, e as opções de uma visita no ⋯ da ficha (visitas.js:visView).
+As folhas das opções de uma pessoa e de uma visita (lista-pessoas.js:lpPessoa,
+visitas.js:lpVisita) continuam registadas como o handler do prefixo, e o
+componentes.js:lpMenu continua a abri-las — é por elas que os outros serviços
+juntam opções (lpExtras) —, mas o toque longo na lista já não as abre.
+
+Os Inquilinos e as Visitas selecionam-se como as Casas: o toque longo entra
+na seleção de vários com o tocado já marcado (cloud/selecao-listas.js:lpLongo
+→ cloud/selecao-listas.js:CW.selLEntrar); já em seleção, marca e desmarca
+como o toque (cloud/selecao-listas.js:CW.selLTocar). Os Proprietários e os
+Colaboradores não têm seleção, e as visitas da Visão geral também não
+(painel-geral.js:proximasVisitasColab usa a mesma linha, mas a seleção só
+existe no separador das Visitas). O «Selecionar vários» do cabeçalho é o das
+Casas (cloud/selecao-listas.js:selLCabecalho): a base não pinta lá o funil
+(vistas.js:LF_COM_CABECALHO), e quem o mostra é a camada da seleção, como nos
+Planeados.
+
+Os tipos da seleção das listas são 'prop', 'ct', 'ten' (inquilinos), 'vis'
+(visitas), 'rec' e 'tpl' (cloud/selecao-listas.js:TABS_SEL). O id de cada
+cartão lê-se pelo começo do data-lp do tipo
+(cloud/selecao-listas.js:selLPrefixo, cloud/selecao-listas.js:selLIdDe,
+cloud/selecao-listas.js:selLDoLp): os inquilinos usam o data-lp das pessoas,
+«per:tenant:<id>», e um «per:owner:<id>» não é de nenhum tipo. As contagens
+dizem o plural e o género certos (cloud/selecao-listas.js:selLPalavras):
+«1 inquilino», «nenhum inquilino», «2 visitas», «nenhuma visita»; na barra,
+«2 selecionadas» nas visitas, e sem nada marcado «toca nos inquilinos» ou
+«toca nas visitas»; a caixa de tudo diz «Marcar todas as visitas à vista».
+
+A caixa entra à cabeça da linha: na do inquilino antes do avatar, na da
+visita antes do bloco da data, à altura dele
+(cloud/selecao-listas.js:selLDecorar; no estilos.css, a secção
+«ajustes-v40-5: 1.3»). No computador a grelha da linha do inquilino ganha à
+cabeça a coluna da caixa (estilos.css:body.lst-sel, a regra da
+.linha.pes-linha). A linha
+marcada leva o fundo cobalto suave dos Contratos e um filete cobalto à
+esquerda, que o escurecimento forçado do Samsung Internet não come
+(estilos.css:.pes-lista>.pes-linha.sel-on-card); o avatar e o selo cobalto
+ficam no fundo do cartão, para não sumirem nela.
+
+Quem não se pode levar não se marca: um inquilino que não posso apagar (as
+regras do pessoas.js:delPerson — motivoRecusa com a casa do inquilino e
+'tenant.add', pessoas.js:personApagavel; nunca o meu perfil), uma visita que
+não posso alterar nem apagar (cloud/selecao-listas.js:selLRecusa). A linha
+fica atenuada, sem caixa, com aria-disabled; tocá-la (ou o toque longo nela)
+diz porquê, e a caixa de tudo deixa-a de fora
+(cloud/selecao-listas.js:selLMarcaveis). Marcar e só ouvir a recusa no fim
+era um botão que serve para ouvir «não podes».
+
+Apagar vários inquilinos (cloud/selecao-listas.js:selLApagarInquilinos):
+confirmação com quantos e os contratos de que saem («Saem de 2 contratos,
+que se mantêm.»; com um só, o nome; só com os Contratos ligados se fala
+deles); a ficha sai da lista e o id sai dos contratos. O Anular repõe as
+fichas, e cada uma no seu lugar nos contratos, sem tirar quem lá tenha
+entrado entretanto; os documentos só saem do IndexedDB quando o Anular
+expira.
+
+Nas visitas a barra tem Realizada, Falta e Apagar. Realizada e Falta só
+estão ligadas com todas as marcadas agendadas e que posso alterar
+(cloud/selecao-listas.js:selLVisPode,
+cloud/selecao-listas.js:selLPintarVisitas), com a razão dita («Só as
+agendadas se marcam como realizadas ou falta.»); mudam todas de uma vez, e o
+Anular devolve a cada uma o estado que tinha
+(cloud/selecao-listas.js:CW.selLVisEstado). Apagar várias pergunta antes e
+tem o Anular (cloud/selecao-listas.js:selLApagarVisitas). A barra é a das
+Casas, com as ações numa segunda linha no telemóvel (ver a seleção dos
+Planeados, em «Os Movimentos»).
 
 ## Os Movimentos
 A lista tem dois desenhos e um HTML só, porque a assinatura da linha viva é
@@ -2865,8 +3030,8 @@ classes suas.
 Os meses: o título na letra dos títulos, com «saldo +306,20 €» à direita,
 escrito depois de reconciliar (lista-movimentos.js:pintarListaTx); as linhas
 de cada mês num cartão só, separadas por um traço (estilos.css:.mov-lista).
-O título do mês tem a mesma altura dentro e fora da seleção (ver «Entrar na
-seleção é um deslize, não uma troca»).
+O título do mês é o mesmo dentro e fora da seleção, sem caixa (ver «Entrar na
+seleção é como nas Casas»).
 
 Por cima da lista, os totais são o kpi da casa, compacto
 (estilos.css:.mov-tot): Receitas, Despesas, Prestações (roxo, a classe
@@ -2933,27 +3098,40 @@ rápido têm 44px (estilos.css:.mov-etiq, estilos.css:.mov-chip-etiq).
 
 Para selecionar vários, o botão do cabeçalho é o «Selecionar vários», a
 caixa com o visto (icones.js:caixaVisto; cloud/selecao.js:patchHdrSel, e o
-embrulho do hdrFiltToggle). Em
-seleção o cabeçalho não repete a barra: o botão esconde-se
-(estilos.css:body.sel-on, a regra #hdrFilt.mov-hdr-sel), e o cabeçalho não
-tem um × seu; o hdrFiltToggle continua a abrir as ações em seleção
-(cloud/selecao.js:CW.selAcoes). Na tabela do ecrã largo as caixas estão
-sempre à vista: fora da seleção existem com a classe .fora, que a folha só
-mostra a partir de 1100px — a mesma largura que o
-cloud/selecao.js:selNaTabela lê —, e marcar uma entra na seleção com essa
-linha, esse mês ou tudo (cloud/selecao.js:CW.selEntrar,
-cloud/selecao.js:CW.selEntrarMes, cloud/selecao.js:CW.selEntrarTodos);
-desmarcar a última termina-a (cloud/selecao.js:selSairSeVazio). Aí o
-«Selecionar vários» do cabeçalho sai, porque as caixas já são a porta. O
-Editar e o Apagar de um movimento sozinho estão na ficha, que é o que tocar
-na linha abre.
+embrulho do hdrFiltToggle). Fora da seleção entra; em seleção sai, como o das
+Casas, mas a folha esconde-o (estilos.css:body.sel-on, a regra
+#hdrFilt.mov-hdr-sel): a barra do fundo tem o Cancelar e as ações. Em
+seleção o título dá lugar à caixa de tudo e à contagem (#selCab: «2
+movimentos», «nenhum movimento», «toca para marcar tudo»), como o #selLCab
+das Casas, e a caixa de tudo é focável (tabindex) — Enter e Espaço marcam
+tudo. Na tabela do ecrã largo as caixas estão sempre à vista: fora da seleção
+existem com a classe .fora, que a folha só mostra a partir de 1100px — a
+mesma largura que o cloud/selecao.js:selNaTabela lê —, e marcar uma entra na
+seleção com essa linha, ou com tudo pela caixa do cabeçalho da tabela
+(cloud/selecao.js:CW.selEntrar, cloud/selecao.js:CW.selEntrarTodos);
+desmarcar a última termina-a (cloud/selecao.js:selSairSeVazio). O título do
+mês da tabela não tem caixa: o nome fica na coluna da Data
+(estilos.css:.mov-tabela). Aí o «Selecionar vários» do cabeçalho sai, porque
+as caixas já são a porta. O Editar e o Apagar de um movimento sozinho estão
+na ficha, que é o que tocar na linha abre.
 
-Os Imóveis, os Contratos e os Planeados têm o mesmo cabeçalho de seleção:
-fora dela, o «Selecionar vários» (a caixa com o visto e o nome do dos
-Movimentos, também no «Selecionar vários» do kebab), que entra sem nada
-marcado (cloud/selecao-listas.js:CW.selLEntrar) e some sem cartões à vista;
-em seleção, o título dá lugar à caixa de tudo e à contagem («nenhum imóvel»,
-«2 contratos»; cloud/selecao-listas.js:selLCabNovo,
+A linha marcada tem o realce dos cartões das Casas (estilos.css:.sel-on-card,
+cloud/selecao.js:selPintar): o fundo das linhas dos Contratos (--accent-soft)
+e o contorno no --accent — o traço de cima é o do .sel-on-card e os outros
+três lados uma sombra por dentro, para duas linhas marcadas seguidas não
+ficarem com um traço triplo entre elas; a primeira linha do mês leva o anel
+inteiro, e no telemóvel as pontas da primeira e da última acompanham a curva
+do cartão. Com o escurecimento forçado do Samsung Internet a marca lê-se pela
+cor da frente: o contorno e a caixa cheia com o visto (medido: contraste 2,95
+entre a caixa marcada e a vazia).
+
+Os Imóveis, os Contratos, os Inquilinos, as Visitas e os Planeados têm o
+mesmo cabeçalho de seleção: fora dela, o «Selecionar vários» (a caixa com o
+visto e o nome do dos Movimentos, também no «Selecionar vários» do kebab),
+que entra sem nada marcado (cloud/selecao-listas.js:CW.selLEntrar) e some sem
+cartões à vista; em seleção, o título dá lugar à caixa de tudo e à contagem
+(«nenhum imóvel», «2 contratos», «nenhum inquilino», «2 visitas»;
+cloud/selecao-listas.js:selLCabNovo,
 cloud/selecao-listas.js:CW.selLTodos — a .sel-cab dos Movimentos), e o botão
 esconde-se (estilos.css:body.sel-on #hdrFilt.lst-hdr-sel). O toque longo
 entra no mesmo cabeçalho; antes deixava-o vazio, só com o hambúrguer e a
@@ -2961,34 +3139,47 @@ nuvem. Ao contrário dos Movimentos, a caixa de tudo e o «Selecionar vários»
 ficam no ecrã largo (estilos.css:.lst-sel-cab, com a classe body.lst-sel),
 porque estas listas não têm caixas na tabela.
 
-A barra das ações (cloud/selecao.js:selBarraHtml) é, no telemóvel, a barra
-de baixo — Cancelar, Editar, Apagar N —; a partir de 901px, a barra
-azul-noite do canvas: «N selecionados · somam X», com o sinal do dinheiro
-(cloud/selecao.js:selSomaTexto), Mudar categoria, Adicionar etiquetas (com
-etiquetas definidas), Apagar N e o × no fim. Flutua no fundo da coluna
-(estilos.css:.sel-fundo), e não entre os totais e a tabela, onde o canvas a
-desenhou: aí empurrava a tabela ~56px ao primeiro visto. A dos imóveis e
-dos contratos (cloud/selecao-listas.js) veste o mesmo. A edição em massa
-abre só a parte que a barra pede (CW.selEditar('cat'), CW.selEditar('tags');
-o Editar do telemóvel abre as duas), e as etiquetas são chips com
-aria-pressed.
+A barra das ações dos Movimentos (cloud/selecao.js:selBarraHtml) é a das
+Casas: × Cancelar, a contagem ao meio — «2 selecionados», e sem nada marcado
+«toca nos movimentos», como o «toca nos cartões» delas — e as ações, que
+aqui são as dos Movimentos: Mudar categoria, Adicionar etiquetas (com
+etiquetas definidas), Editar e Apagar N, paradas sem nada marcado
+(data-precisa). É um nó do body, posto como o das Casas
+(cloud/selecao.js:selBarraPor): fica de render para render, a selCabPintar
+só lhe acerta os números, e só se refaz quando as etiquetas aparecem ou
+somem. Não é da vista: não anda com o #view.
 
-A barra azul-noite tem os fundos dos véus da barra lateral — --side-hover em
-repouso, --side-on por baixo do rato, este só em @media(hover:hover). A soma
-não se corta (estilos.css:.sel-fundo, o .sel-info com flex:1 0 auto): sem
-lugar, os botões descem. O botão que se lê «Cancelar» chama-se «Cancelar a
-seleção», com o nome visível dentro do nome acessível.
+No telemóvel tem duas linhas, como na prévia que o Martinho escolheu: em
+cima o Cancelar e a contagem, com o quanto somam por baixo
+(«somam −223,61 €», cloud/selecao.js:selSomaTexto); em baixo os botões lado
+a lado, em partes iguais, cada um com o ícone por cima de um rótulo curto —
+«Categoria», «Etiquetas», «Editar», «Apagar 2» (cloud/selecao.js:selBotaoHtml,
+estilos.css:.sel-rot-curto). A 375px cabem os quatro sem régua, com 54px de
+alto. A contagem fica ao meio da barra: as duas colunas de lado repartem o
+resto, e a do Cancelar só cresce o que ele precisar. Com 120px, a barra abre
+espaço por baixo da lista e sobe o «Topo» flutuante (estilos.css:body.sel-mov,
+a classe que o render da seleção põe).
+
+A partir de 901px é a barra azul-noite das Casas e do canvas, numa linha:
+× Cancelar, «N selecionados · somam X» ao meio, e «Mudar categoria»,
+«Adicionar etiquetas» e «Apagar N» por extenso (estilos.css:.sel-rot-longo);
+o Editar sai, porque os outros dois o repartem. Os botões têm os fundos dos
+véus da barra lateral — --side-hover em repouso, --side-on por baixo do
+rato, este só em @media(hover:hover). A soma não se corta
+(estilos.css:.sel-fundo, o .sel-info com flex:1 0 auto): sem lugar, os
+botões descem. A edição em massa abre só a parte que o botão pede
+(CW.selEditar('cat'), CW.selEditar('tags'); o Editar abre as duas), e as
+etiquetas são chips com aria-pressed.
 
 A seleção diz um número e um verbo. A confirmação de apagar soma com o sinal
 do dinheiro, como a barra (cloud/selecao.js:CW.selApagar usa o selSomaTexto):
 somar os valores sem sinal dava «+1 195,00 €» na barra e «1 305,00 €» na
-janela. E o verbo é «Apagar» em tudo — no botão da barra, no menu das ações
-(«Apagar seleção»), no título da confirmação («Apagar N movimentos») e no
-aviso («N movimentos apagados.»). Na seleção dos imóveis e dos contratos é o
-mesmo, e o que vai junto diz-se com o plural certo
-(cloud/selecao-listas.js:selLVaoJunto: «Vão junto 2 contratos e 5
-movimentos.», «Vai junto 1 contrato.», «Sem contratos nem movimentos
-ligados.»). O «Selecionar vários» que entra no menu de um imóvel ou de um
+janela. E o verbo é «Apagar» em tudo — no botão da barra, no título da
+confirmação («Apagar N movimentos») e no aviso («N movimentos apagados.»).
+Na seleção dos imóveis e dos contratos é o mesmo, e o que vai junto diz-se
+com o plural certo (cloud/selecao-listas.js:selLVaoJunto: «Vão junto 2
+contratos e 5 movimentos.», «Vai junto 1 contrato.», «Sem contratos nem
+movimentos ligados.»). O «Selecionar vários» que entra no menu de um imóvel ou de um
 contrato veste uma classe (estilos.css:.card.sel-varios), e não um cssText.
 
 Nos Planeados seleciona-se vários de um de dois tipos: os planeados ('rec')
@@ -3006,16 +3197,23 @@ longo num planeado ou num modelo entra na seleção desse tipo com ele marcado
 apagar, como nos imóveis: as ações da barra recusam com a razão e contam os
 que ficam de fora.
 
-A barra de baixo dos planeados (cloud/selecao-listas.js:selLBarraHtml) tem
-o Cancelar, o Silenciar ou o Reativar (#selLMudo) e o Apagar; a dos modelos
-só o Cancelar e o Apagar. O silêncio segue os marcados
-(planeados.js:recMudoDaSelecao): todos ativos, Silenciar; todos silenciados,
-Reativar; misturados, nenhum dos dois, e a razão dita no lugar da contagem
-(#selLPorque, aria-live) — um botão só não diria o que faria a cada um. A
-contagem dos planeados vive no cabeçalho, e a barra só a repete no ecrã
-largo; no telemóvel até 430px o Cancelar é só o ×, num alvo de 44px com o
-nome por extenso (estilos.css:.sel-l-plan), para os três botões caberem nos
-375px.
+A barra de baixo é a das Casas em todos os tipos
+(cloud/selecao-listas.js:selLBarraHtml): × Cancelar com o nome à vista, a
+contagem ao meio e as ações. Imóveis, contratos, inquilinos e modelos: só o
+Apagar, numa linha. Planeados e visitas (cloud/selecao-listas.js:SEL_ACOES):
+a contagem com a razão de uma ação estar fora por baixo (#selLPorque,
+aria-live), e as ações numa segunda linha no telemóvel — a .sel-l-quebra
+ocupa a largura toda (estilos.css:.sel-l-duas); no ecrã largo, uma linha só.
+As ações com data-sel-l-precisa desligam-se sem nada marcado
+(cloud/selecao-listas.js:selLPintar).
+
+Nos planeados as ações são o Silenciar ou o Reativar (#selLMudo) e o Apagar.
+O silêncio segue os marcados (planeados.js:recMudoDaSelecao): todos ativos,
+Silenciar; todos silenciados, Reativar; misturados, nenhum dos dois, e a
+razão dita por baixo da contagem (#selLPorque) — um botão só não diria o que
+faria a cada um. A barra mostra a contagem também no telemóvel, como as
+outras, e o Cancelar não encolhe para só o ×: com as ações na segunda linha,
+a contagem, o nome do Cancelar e as ações cabem nos 375px.
 
 As regras de cada planeado são as de um só, e vivem uma vez em
 planeados.js: silenciar e reativar pedem o que o skipRec pede
@@ -4143,7 +4341,15 @@ sessão, e levam às páginas das Definições por navegacao.js:abrirDefinicoes)
 Ao cimo de tudo, o «Criar» a toda a largura (estilos.css:.nav-criar; ver «A
 fita da barra de baixo»), que o menu do telemóvel não tem — escondido abaixo
 de 900px, porque o + está na barra. Nenhum separador repete o ícone de outro
-(icones.js:ic).
+(icones.js:ic), e nenhum se parece com o do vizinho: o Início (a Visão geral)
+são os quatro mosaicos do `painel`, e não uma casa — com a casa das Casas ao
+lado, na barra de baixo, os dois liam-se como o mesmo destino.
+
+A marca, no topo da gaveta e da barra lateral (index.html, a .brand) e no
+ecrã de entrada (cloud/entrada.js), é a casa do ícone da app — o telhado com
+beirais, as paredes e a porta pequena, o `home` do icones.js:ic — em branco
+num quadrado cobalto de 30px com raio 8 (estilos.css:.marca). É a mesma forma
+dos ícones da PWA e do Android, que nunca a deixaram.
 
 A barra lateral é uma coluna (estilos.css:#nav, em flex), e o fundo — as
 Definições, a Ajuda e a conta — vive numa caixa própria pegada ao fundo, com
@@ -4252,8 +4458,9 @@ movimento», «Novo contrato»… — a mesma que a folha «Criar» marca «nest
 ecrã»; no telemóvel o + faz as vezes dela. Vazias, escondem-se pelo :empty.
 Nos ecrãs de uma área, por cima da vista e só no
 telemóvel, vão os separadores da área num segmentado
-(navegacao.js:abasDaArea, estilos.css:.abas-area; o render põe-nos,
-vistas.js:render), e passa-se de um ao vizinho também a deslizar de lado
+(navegacao.js:abasDaArea, estilos.css:.abas-area; o render escreve-os e o
+navegacao.js:abasAssentar leva-os para a casa deles, index.html:#abasArea,
+por cima do #view), e passa-se de um ao vizinho também a deslizar de lado
 (ver «A fita da barra de baixo»). As vias parciais das listas põem-nos
 como o render (ver «O motor das listas»).
 
@@ -4613,7 +4820,8 @@ Sem emojis na interface. Os ícones são traço em SVG, ic(nome,tamanho)
 novo entra no mapa do ic(), não como carácter. A partilha é o `partilhar`
 (icones.js:partilhar): os três pontos ligados, o sinal de partilha do
 Android, e não a seta a sair da caixa, que ao lado do «down» das descargas
-se lia como «carregar».
+se lia como «carregar». A casa é uma só, a da marca (`home`); o Início é o
+`painel` e as Casas o `building`.
 
 O hint explica o porquê, não repete o rótulo: «Confirmar regista o
 movimento e agenda o seguinte. Silenciar deixa-o à espera, sem avisos.»
@@ -4716,8 +4924,8 @@ como fórmula (copias.js:celulaCsv); os números vão tal e qual.
 Em ecrã de dedo, nada abaixo do mínimo de toque, e só aí: no rato os
 tamanhos compactos continuam certos (estilos.css:@media(pointer:coarse)).
 44px os botões, os itens da gaveta e os cabeçalhos das dobras; 40 o
-.btn.sm. O toque longo dispara aos 480 ms — entra na seleção, ou abre as
-opções do cartão onde não há seleção —, com vibração,
+.btn.sm. O toque longo dispara aos 480 ms — entra na seleção onde a há, e
+sem a nuvem abre as opções do cartão —, com vibração,
 e engole o clique que vem a seguir (componentes.js:_lpT e os ouvintes de
 pointer que o usam).
 
@@ -4789,8 +4997,8 @@ origem não é o centro da forma (estilos.css:svg [role="button"]:active).
 
 Não se decora uma vista pegando no HTML que ela acabou de gerar, metendo-o
 num nó avulso e mexendo-lhe: pede-se um ponto de extensão à vista, e ela
-chama-o enquanto se escreve (lista-movimentos.js:txLinhaExtra e lista-movimentos.js:txMesExtra
-são os primeiros; quem os substitui é cloud/selecao.js). Medido com 500
+chama-o enquanto se escreve (lista-movimentos.js:txLinhaExtra é o primeiro;
+quem o substitui é cloud/selecao.js). Medido com 500
 movimentos, o ida-e-volta custava 36 dos 40 ms de cada pintura dos
 Movimentos — e, pior do que o tempo: enquanto for assim, nenhuma repintura
 parcial é segura, porque uma linha repintada sozinha nasce sem as
@@ -4889,8 +5097,8 @@ testes/csp.test.js varre a app à procura deles.
 
 Não se usa new Function nem eval: a CSP não tem 'unsafe-eval' (worker/src/index.js:CSP,
 a que o worker põe na app, igual à do web/_headers),
-e o que se constrói assim não corre — a folha do toque longo de uma visita
-não abria. Uma ação que tem de ir como texto e como função escreve-se das
+e o que se constrói assim não corre — a folha das opções de uma visita (a do
+lpMenu) não abria. Uma ação que tem de ir como texto e como função escreve-se das
 duas maneiras, lado a lado (visitas.js:visOpcoes). O mesmo vale de fora para
 dentro: um predicado passado em TEXTO ao Playwright — um page.evaluate('…'),
 um waitForFunction('…') — é avaliado com eval dentro da página e é recusado na

@@ -333,7 +333,8 @@ describe('a viagem e o CSS', () => {
   });
 
   test('o CSS: pan-y com pinch-zoom só no telemóvel e numa área, o corte do pai, o nome a espreitar por tokens', () => {
-    assert.match(css, /@media\(max-width:900px\)\{#view:has\(>\.abas>\.abas-area\)\{touch-action:pan-y pinch-zoom\}\}/);
+    // numa área as abas estão na casa delas, por cima do #view (navegacao.js:abasAssentar)
+    assert.match(css, /@media\(max-width:900px\)\{#abasArea:not\(:empty\)~#view,#view:has\(>\.abas>\.abas-area\)\{touch-action:pan-y pinch-zoom\}\}/);
     assert.match(css, /main\.sep-arrasto\{overflow-x:clip\}/);
     const espreita = (css.match(/\.sep-espreita[^{]*\{[^}]*\}/g) || []).join('');
     assert.ok(espreita.length > 0, 'a regra existe');

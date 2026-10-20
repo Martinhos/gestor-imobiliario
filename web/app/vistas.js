@@ -476,6 +476,7 @@ function refrescarListasVivas(){
     filhos.slice(0,i).forEach(n=>v.insertBefore(n,barra.vivo));
     filhos.slice(i+1).forEach(n=>v.appendChild(n));
   }else v.replaceChildren.apply(v,[].slice.call(molde.children));
+  abasAssentar();                  // as abas da área vão para a casa delas (navegacao.js)
   reporRolagemDoPainel(rolou);
   tornarFocavel(v);
   marcarDatasVazias(v);
@@ -513,6 +514,19 @@ function reporRolagemDoPainel(y){
   const v=view(),c=v&&v.querySelector('.fpanel.on>.fp-caixa,.fpanel.on>.lfm-caixa');
   if(c)c.scrollTop=y;
 }
+/* O cabeçalho do ecrã onde se está: o título leva o nome da área no
+   telemóvel e o do separador no computador (navegacao.js:tituloDoEcraHtml);
+   o subtítulo diz o estado do ecrã onde há um (navegacao.js:subtituloDoEcra);
+   e o sino, o botão dos filtros e a ação do ecrã.
+   Devolve: nada — escreve no cabeçalho. */
+function pintarCabecalhoDoEcra(){
+  const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
+  document.getElementById('pageTitle').innerHTML=tituloDoEcraHtml(meta);
+  document.getElementById('pageSub').textContent=subtituloDoEcra(meta);
+  if(typeof notifSino==='function')notifSino();
+  pintarBotaoFiltros();
+  pintarAcaoDoCabecalho();
+}
 /* Redesenha a página inteira: título e subtítulo, botão de filtros do
    cabeçalho, e o HTML da vista do separador atual (vDashboard, vProperties…).
    Substitui o innerHTML de #view, por isso o estado do DOM anterior perde-se;
@@ -529,15 +543,7 @@ function render(){
   /* no mesmo ecrã, o painel dos filtros aberto fica onde estava rolado */
   const rolou=ecra===_ecraPintado?rolagemDoPainel():0;
   _ecraPintado=ecra;
-  const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
-  /* o título leva o nome da área no telemóvel e o do separador no computador
-     (navegacao.js:tituloDoEcraHtml); o subtítulo diz o estado do ecrã onde há
-     um (navegacao.js:subtituloDoEcra) */
-  document.getElementById('pageTitle').innerHTML=tituloDoEcraHtml(meta);
-  document.getElementById('pageSub').textContent=subtituloDoEcra(meta);
-  if(typeof notifSino==='function')notifSino();
-  pintarBotaoFiltros();
-  pintarAcaoDoCabecalho();
+  pintarCabecalhoDoEcra();
   _listasVivas=[];                 // o que sobrou de uma vista construída e não usada não conta
   /* A vista é a que o serviço do separador registou (servicos.js): a base
      não nomeia serviços. Sem vista são duas coisas diferentes, e cada uma tem
@@ -558,6 +564,10 @@ function render(){
      acontecem lá dentro (o donutDrill) são de quem tocou no gráfico. */
   view().classList.toggle('entra',!!_entrar);_entrar=0;
   view().innerHTML=html;
+  /* as abas da área saem da cabeça da vista para a casa delas, por cima do
+     #view (navegacao.js:abasAssentar): a mesma fila fica o mesmo nó, e o
+     realce desliza para a aba nova em vez de nascer já lá */
+  abasAssentar();
   pintarListasVivas();             // as listas vivas, pela mesma via
   reporRolagemDoPainel(rolou);
   /* O que cada serviço pinta DEPOIS de o HTML estar posto — registado com
@@ -591,6 +601,46 @@ function render(){
   setTimeout(function(){if(document.hidden)pintarSeriesKpi()},0);
   contarValores();
   refrescarFichas();               // uma ficha aberta por baixo de um formulário não fica a mentir
+}
+/* true enquanto o render pinta um vizinho à parte (pintarVistaAParte): as
+   abas da área dele não vão para a casa das abas (navegacao.js:abasAssentar) */
+let _pintarAParte=false;
+/* Pinta OUTRO separador num contentor à parte, sem mudar de separador: é o
+   vizinho que o carrossel mostra a entrar enquanto o dedo arrasta
+   (navegacao.js:sepVizinho). É o render de sempre — o global, com os
+   embrulhos da nuvem —, para o vizinho ser o que vai ficar e não um esboço:
+   a vista, as listas vivas, o que o serviço pinta depois (a lista dos
+   movimentos, as rendas dos grupos, as miniaturas), o que a nuvem decora (os
+   pendentes por confirmar, o selo de partilhado) e as Pessoas com o
+   segmentado delas. Para todos encontrarem o contentor pelos sítios de
+   sempre (o view(), o #txLista, o [data-lp] no documento), o id do #view
+   passa ao contentor durante a pintura e volta no fim, aconteça o que
+   acontecer; o separador e o ecrã pintado também. O que o render escreve fora
+   do #view (o cabeçalho) volta a ser o do separador onde se está, pela mesma
+   via da repintura parcial (refrescarListasVivas). No fim saem as abas da
+   área (ficam as vivas, por cima), o botão flutuante e os ids — dois
+   #txLista no documento davam um getElementById errado.
+   Recebe: id — o separador a pintar; el — o contentor (já no documento).
+   Devolve: true se pintou; false sem vista ou se a pintura rebentou. */
+function pintarVistaAParte(id,el){
+  const real=view();
+  if(!real||!el||!vistaDoSeparador(id)||typeof el.querySelectorAll!=='function')return false;
+  const tabAntes=tab,ecraAntes=_ecraPintado,entrarAntes=_entrar;
+  let ok=false;
+  real.removeAttribute('id');el.id='view';_pintarAParte=true;
+  try{
+    tab=id;_entrar=0;              // quem espreita não entra em cena: nem gráficos a crescer nem números a contar
+    render();
+    ok=true;
+  }catch(e){ok=false}
+  finally{
+    tab=tabAntes;_ecraPintado=ecraAntes;_entrar=entrarAntes;_pintarAParte=false;
+    el.removeAttribute('id');real.id='view';
+    try{pintarCabecalhoDoEcra();if(window.CW&&CW.selCabecalho)CW.selCabecalho()}catch(e){}
+  }
+  [].slice.call(el.querySelectorAll('.fab,.fabmenu')).forEach(e=>e.remove());
+  if(typeof semIds==='function')semIds(el);
+  return ok;
 }
 let kpiN=0;const KPI_REG={};
 /* Há movimentos do ano passado?

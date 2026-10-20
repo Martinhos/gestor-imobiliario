@@ -3,7 +3,7 @@
    20px por omissão, pontas e juntas redondas): ic(nome, lado) devolve o SVG
    inline. Um ícone novo entra aqui, e não como emoji nem como carácter de
    texto. Os da navegação, do estado e do sino são os do canvas de 2026-10
-   (home, building, contract, users, door, lista, repetir, bank, bars, trend,
+   (painel, building, contract, users, door, lista, repetir, bank, bars, trend,
    recibo, cal, gear, ajuda, bell, menu, carteira, nuvem*). */
 // ícone SVG inline pelo nome n, com s px de lado (20 por omissão);
 // o traço herda a cor do texto onde for colado (currentColor).
@@ -11,7 +11,12 @@
 // Devolve: o SVG inline (string HTML); um SVG sem traços se o nome não existir.
 function ic(n,s){s=s||20;const I={
   shield:'<path d="M12 3l7 2.6v5.2c0 4.6-3 8.4-7 10.2-4-1.8-7-5.6-7-10.2V5.6z"/><path d="M9 11.5l2 2 4-4"/>',
-  home:'<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+  /* a casa da marca: o telhado com beirais, as paredes e a porta pequena (a
+     casa do ícone da app, que voltou à marca em 2026-10-20) */
+  home:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-5h5v5"/>',
+  /* o Início: quatro mosaicos de alturas trocadas — um resumo, e não mais
+     uma casa ao lado da das Casas */
+  painel:'<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
   /* a casa das Casas (os imóveis): o telhado e a porta */
   building:'<path d="M4 21V8l8-5 8 5v13"/><path d="M9 21v-6h6v6"/>',
   users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>',

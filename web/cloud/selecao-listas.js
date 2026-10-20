@@ -1,11 +1,18 @@
-/* Selecionar vários — imóveis, contratos, planeados e modelos.
+/* Selecionar vários — imóveis, contratos, inquilinos, visitas, planeados e modelos.
    ----------------------------------------
-   Nos imóveis, nos contratos, nos planeados e nos modelos o toque longo
-   seleciona vários, como nos movimentos: entra na seleção com o tocado já
-   marcado (CW.selLEntrar). Apagar em massa faz sentido aí — e apagar um
-   imóvel arrasta os contratos e movimentos dele, por isso a confirmação diz
-   os números e o Anular repõe tudo. As opções de um só ficam no ⋯ da ficha
-   (e na folha do lpMenu, com o «Selecionar vários»).
+   Nos imóveis, nos contratos, nos inquilinos, nas visitas, nos planeados e
+   nos modelos o toque longo seleciona vários, como nos movimentos: entra na
+   seleção com o tocado já marcado (CW.selLEntrar). Apagar em massa faz
+   sentido aí — e apagar um imóvel arrasta os contratos e movimentos dele, por
+   isso a confirmação diz os números e o Anular repõe tudo. As opções de um só
+   ficam no ⋯ da ficha (e na folha do lpMenu, com o «Selecionar vários»).
+
+   Os inquilinos apagam-se aos vários com as regras do pessoas.js:delPerson
+   (quem não posso apagar não se marca: selLRecusa); as visitas marcam-se
+   como realizadas ou como falta, todas de uma vez, ou apagam-se, com as
+   regras do visitas.js:visEstado e do visitas.js:visApaga. Os Proprietários e
+   os Colaboradores não têm seleção. O data-lp dos inquilinos é o das pessoas,
+   «per:tenant:<id>» — o id lê-se pelo começo de cada tipo (selLPrefixo).
 
    Nos Planeados há dois tipos no mesmo separador, os planeados ('rec') e os
    modelos ('tpl'), e seleciona-se um OU outro: entrar com um tipo esquece o
@@ -24,32 +31,94 @@
    dos docs nem a CI as viam. A caixa de marcar é a de selecao.js. */
 'use strict';
 
-var TABS_SEL = { prop: 'properties', ct: 'contracts', rec: 'recurring', tpl: 'recurring' };   // o tipo do cartão → o separador onde há seleção
-// os tipos dos Planeados: a barra deles (selLBarraHtml, estilos.css:.sel-l-plan) e a porta da seleção na própria folha das opções (planeados.js:lpPortaSelecao)
+// o tipo do cartão → o separador onde há seleção ('ten' são os inquilinos, 'vis' as visitas)
+var TABS_SEL = { prop: 'properties', ct: 'contracts', ten: 'tenants', vis: 'visits', rec: 'recurring', tpl: 'recurring' };
+// os tipos dos Planeados: a porta da seleção na própria folha das opções (planeados.js:lpPortaSelecao)
 var SEL_PLAN = { rec: 1, tpl: 1 };
+// os tipos com mais ações na barra que o Apagar: a contagem e a razão por cima, as ações por baixo (selLBarraHtml, estilos.css:.sel-l-duas)
+var SEL_ACOES = { rec: 1, vis: 1 };
+// o começo do data-lp de cada tipo, quando não é «<tipo>:» — os inquilinos usam o das pessoas (lista-pessoas.js:personCard)
+var SEL_PREFIXO = { ten: 'per:tenant:' };
 
 CW.selL = { tipo: null, ids: {} };
 // a seleção acabou de começar: as caixas postas a seguir entram a desvanecer (selLDecorar)
 var selLEntrou = false;
 
+/* O começo do data-lp dos cartões de um tipo: «prop:», «vis:», e nos
+   inquilinos «per:tenant:» (os proprietários, «per:owner:», ficam de fora).
+   Recebe: tipo — 'prop', 'ct', 'ten', 'vis', 'rec' ou 'tpl'.
+   Devolve: o prefixo (texto). */
+function selLPrefixo(tipo) { return SEL_PREFIXO[tipo] || tipo + ':'; }
+
+/* O id de um cartão do tipo em seleção, lido pela forma do data-lp dele.
+   Recebe: c — o elemento com data-lp; tipo (opcional) — o tipo (o em seleção, por omissão).
+   Devolve: o id (texto). */
+function selLIdDe(c, tipo) {
+  return String(c.getAttribute('data-lp') || '').slice(selLPrefixo(tipo || CW.selL.tipo).length);
+}
+
+/* O tipo de seleção e o id de um data-lp, se for de um cartão que se
+   seleciona: 'per:tenant:t1' dá {tipo:'ten', id:'t1'}; 'per:owner:o1', nada.
+   Recebe: v — o data-lp.
+   Devolve: {tipo, id}, ou null. */
+function selLDoLp(v) {
+  var s = String(v || '');
+  for (var t in TABS_SEL) {
+    var p = selLPrefixo(t);
+    if (s.indexOf(p) === 0 && s.length > p.length) return { tipo: t, id: s.slice(p.length) };
+  }
+  return null;
+}
+
+/* Porque é que um cartão não se pode marcar: um inquilino que não posso
+   apagar (as regras do pessoas.js:delPerson — personApagavel e a permissão
+   de adicionar inquilinos na casa dele; e nunca o meu perfil, como o embrulho
+   de cloud/utilizadores.js:delPerson); uma visita que não posso alterar nem
+   apagar. Os outros tipos marcam-se todos: as regras de cada um vêm na ação.
+   Recebe: tipo — o tipo do cartão; id — o id dele.
+   Devolve: a frase da recusa (texto), ou '' quando se marca. */
+function selLRecusa(tipo, id) {
+  if (tipo === 'ten') {
+    var p = (db.tenants || []).find(function (x) { return x.id === id; });
+    if (!p) return '';
+    if (window.CW && CW.user && CW.user.id === id) return 'Este perfil és tu — podes editá-lo, não apagá-lo.';
+    var casa = casaDoInquilino(p), recusa = motivoRecusa(casa, 'tenant.add', p, true);
+    if (recusa) return recusa;
+    if (typeof personApagavel === 'function' && !personApagavel('tenant', p)) return 'Não podes apagar esta ficha.';
+    return '';
+  }
+  if (tipo === 'vis') {
+    var v = (db.visits || []).find(function (x) { return x.id === id; });
+    return v ? motivoRecusa(v.propertyId, 'visit.add', v, true) || motivoRecusa(v.propertyId, 'visit.add', v) : '';
+  }
+  return '';
+}
+
 // Entra na seleção de vários cartões de um tipo, com o tocado já marcado.
 // Num separador com dois tipos (os Planeados) esquece o que estava marcado do outro.
-// Recebe: tipo — 'prop', 'ct', 'rec' ou 'tpl'; id (opcional) — o id do cartão tocado.
+// Um cartão que não se marca (selLRecusa) entra sem marca, e o aviso diz porquê.
+// Recebe: tipo — 'prop', 'ct', 'ten', 'vis', 'rec' ou 'tpl'; id (opcional) — o id do cartão tocado.
 // Devolve: nada — marca e repinta (ou nada, fora do separador desse tipo).
 CW.selLEntrar = function (tipo, id) {
   if (tab !== TABS_SEL[tipo]) return;
   CW.selL = { tipo: tipo, ids: {} };
-  if (id) CW.selL.ids[id] = 1;
+  var recusa = id ? selLRecusa(tipo, id) : '';
+  if (id && !recusa) CW.selL.ids[id] = 1;
   selLEntrou = true;
   render();
+  if (recusa) toast(recusa);
 };
 // Sai da seleção de vários.
 // Devolve: nada — esquece o que estava marcado e repinta.
 CW.selLSair = function () { CW.selL = { tipo: null, ids: {} }; render(); };
-// Marca ou desmarca um cartão.
+// Marca ou desmarca um cartão; o que não se marca (selLRecusa) diz porquê.
 // Recebe: id — o id do cartão.
-// Devolve: nada — repinta as caixas e a contagem.
+// Devolve: nada — repinta as caixas e a contagem (ou avisa).
 CW.selLToggle = function (id) {
+  if (!CW.selL.ids[id]) {
+    var recusa = selLRecusa(CW.selL.tipo, id);
+    if (recusa) return toast(recusa);
+  }
   if (CW.selL.ids[id]) delete CW.selL.ids[id]; else CW.selL.ids[id] = 1;
   selLPintar();
 };
@@ -59,19 +128,22 @@ CW.selLToggle = function (id) {
 function selLN() { return Object.keys(CW.selL.ids).length; }
 
 /* O toque longo, redirecionado de vez: os movimentos, os imóveis, os
-   contratos, os planeados e os modelos entram em seleção com o tocado já
-   marcado — o mesmo gesto em toda a app. Já em seleção, marca ou desmarca,
-   como o toque (CW.selLTocar). O resto não faz nada — as opções de um só
+   contratos, os inquilinos, as visitas, os planeados e os modelos entram em
+   seleção com o tocado já marcado — o mesmo gesto em toda a app. Já em
+   seleção, marca ou desmarca, como o toque (CW.selLTocar). O resto (os
+   proprietários, as visitas da Visão geral) não faz nada — as opções de um só
    vivem no ⋯ da ficha (nos planeados, planeados.js:recView; nos modelos,
-   planeados.js:tplView).
-   Recebe: v — o data-lp tocado ('tx:<id>', 'prop:<id>', 'rec:<id>', …).
+   planeados.js:tplView; nas pessoas, pessoas.js:personView; nas visitas,
+   visitas.js:visView).
+   Recebe: v — o data-lp tocado ('tx:<id>', 'prop:<id>', 'per:tenant:<id>', 'vis:<id>', …).
    Devolve: nada — entra em seleção, ou marca. */
 window.lpLongo = function (v) {
   var a = String(v || '').split(':');
   if (a[0] === 'tx' && tab === 'transactions' && CW.selEntrar) return CW.selEntrar(a[1]);
-  if (!TABS_SEL[a[0]]) return;
-  if (CW.selL.tipo && tab === TABS_SEL[a[0]]) return CW.selLTocar(a[0], a[1]);
-  return CW.selLEntrar(a[0], a[1]);
+  var s = selLDoLp(v);
+  if (!s) return;
+  if (CW.selL.tipo && tab === TABS_SEL[s.tipo]) return CW.selLTocar(s.tipo, s.id);
+  return CW.selLEntrar(s.tipo, s.id);
 };
 
 /* Um cartão tocado (ou segurado) em seleção: o do tipo em seleção marca ou
@@ -116,7 +188,7 @@ function selLTipoDe(t) {
   var ts = selLTiposDe(t);
   if (!ts.length) return null;
   if (CW.selL.tipo && ts.indexOf(CW.selL.tipo) > -1) return CW.selL.tipo;
-  if (ts.length > 1) for (var i = 0; i < ts.length; i++) if (document.querySelector('#view [data-lp^="' + ts[i] + ':"]')) return ts[i];
+  if (ts.length > 1) for (var i = 0; i < ts.length; i++) if (document.querySelector('#view [data-lp^="' + selLPrefixo(ts[i]) + '"]')) return ts[i];
   return ts[0];
 }
 
@@ -124,19 +196,34 @@ function selLTipoDe(t) {
    Recebe: t — o separador.
    Devolve: true se há algum cartão de um dos tipos dele no #view. */
 function selLHaCartoes(t) {
-  return selLTiposDe(t).some(function (k) { return !!document.querySelector('#view [data-lp^="' + k + ':"]'); });
+  return selLTiposDe(t).some(function (k) { return !!document.querySelector('#view [data-lp^="' + selLPrefixo(k) + '"]'); });
 }
 
-// o nome dos cartões de cada tipo, no singular e no plural, para a contagem do cabeçalho
-var SEL_NOMES = { prop: ['imóvel', 'imóveis'], ct: ['contrato', 'contratos'], rec: ['planeado', 'planeados'], tpl: ['modelo', 'modelos'] };
+/* o nome dos cartões de cada tipo, no singular e no plural, para as
+   contagens — e 'f' nos femininos («nenhuma visita», «2 selecionadas»,
+   «Marcar todas as visitas à vista») */
+var SEL_NOMES = { prop: ['imóvel', 'imóveis'], ct: ['contrato', 'contratos'], ten: ['inquilino', 'inquilinos'], vis: ['visita', 'visitas', 'f'],
+  rec: ['planeado', 'planeados'], tpl: ['modelo', 'modelos'] };
 
-/* O cabeçalho dos Imóveis, dos Contratos e dos Planeados segue o dos
+/* As palavras das contagens de um tipo, com o género certo.
+   Recebe: tipo — o tipo em seleção.
+   Devolve: {um, varios, nenhum, sel, todos, toca} — «visita», «visitas»,
+   «nenhuma visita», «selecionada» (a juntar o «s»), «todas as visitas» e o
+   «toca nas visitas» da barra vazia (nas Casas, «toca nos cartões»). */
+function selLPalavras(tipo) {
+  var n = SEL_NOMES[tipo] || ['registo', 'registos'], f = n[2] === 'f';
+  return { um: n[0], varios: n[1], nenhum: (f ? 'nenhuma ' : 'nenhum ') + n[0], sel: f ? 'selecionada' : 'selecionado',
+    todos: (f ? 'todas as ' : 'todos os ') + n[1], toca: tipo === 'ten' || tipo === 'vis' ? (f ? 'toca nas ' : 'toca nos ') + n[1] : 'toca nos cartões' };
+}
+
+/* O cabeçalho dos Imóveis, dos Contratos, dos Inquilinos, das Visitas e
+   dos Planeados segue o dos
    Movimentos (cloud/selecao.js:patchHdrSel). Fora da seleção, o botão do
    cabeçalho é o «Selecionar vários», com a mesma caixa com o visto (o ☑) e o
    mesmo nome — os filtros abrem-se no funil ao lado da pesquisa
    (vistas.js:lfCabeca) —, e some sem cartões à vista, que não há o que
-   marcar. Nos Planeados a base não pinta o botão (vistas.js:LF_COM_CABECALHO
-   não os tem): quem o mostra é esta função, que corre depois. Em seleção, o título dá lugar à caixa de
+   marcar. Nos Inquilinos, nas Visitas e nos Planeados a base não pinta o
+   botão (vistas.js:LF_COM_CABECALHO não os tem): quem o mostra é esta função, que corre depois. Em seleção, o título dá lugar à caixa de
    tudo e à contagem (#selLCab, a .sel-cab dos Movimentos), e a folha esconde
    o botão (estilos.css:body.sel-on #hdrFilt.lst-hdr-sel): a barra de baixo já
    tem o Cancelar e o Apagar. Noutro separador devolve o botão a quem o pinta
@@ -180,7 +267,7 @@ function selLCabNovo(tipo) {
     cab.id = 'selLCab';
     cab.className = 'sel-cab lst-sel-cab';
     cab.innerHTML =
-      '<span class="selbox" id="selLTudo" role="checkbox" tabindex="0" aria-checked="false" aria-label="Marcar todos os ' + SEL_NOMES[tipo][1] + ' à vista" data-toca="vista" data-click="CW.selLTodos(event)">' + caixa(false) + '</span>' +
+      '<span class="selbox" id="selLTudo" role="checkbox" tabindex="0" aria-checked="false" aria-label="Marcar ' + selLPalavras(tipo).todos + ' à vista" data-toca="vista" data-click="CW.selLTodos(event)">' + caixa(false) + '</span>' +
       '<span class="u-fx-1 u-minw-0 u-cur-pointer" data-toca="vista" data-click="CW.selLTodos(event)"><b id="selLCabConta"></b>' +
       '<span class="small u-d-block">toca para marcar tudo</span></span>';
     tit.parentNode.insertBefore(cab, tit);
@@ -189,12 +276,13 @@ function selLCabNovo(tipo) {
 }
 
 /* A caixa de tudo do cabeçalho: marca os cartões todos à vista (os que os
-   filtros deixam) ou, com todos marcados, desmarca-os.
+   filtros deixam, e só os que se marcam: selLMarcaveis) ou, com todos
+   marcados, desmarca-os.
    Recebe: ev (opcional) — o evento do toque, que não segue para baixo.
    Devolve: nada — marca e repinta as caixas e a contagem. */
 CW.selLTodos = function (ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
-  var ids = selLCartoes().map(function (c) { return c.getAttribute('data-lp').split(':')[1]; });
+  var ids = selLMarcaveis().map(function (c) { return selLIdDe(c); });
   var todos = ids.length && ids.every(function (id) { return CW.selL.ids[id]; });
   ids.forEach(function (id) { if (todos) delete CW.selL.ids[id]; else CW.selL.ids[id] = 1; });
   selLPintar();
@@ -208,7 +296,8 @@ patchHdrSel = function () {
   selLCabecalho();
 };
 
-// Nos Imóveis, nos Contratos e nos Planeados o botão do cabeçalho é da
+// Nos Imóveis, nos Contratos, nos Inquilinos, nas Visitas e nos Planeados
+// o botão do cabeçalho é da
 // seleção: fora dela entra, sem nada marcado (o toque a seguir marca; nos
 // Planeados, com os planeados — ou os modelos, sem planeados à vista); dentro,
 // sai. No resto continua a fazer o que fazia.
@@ -239,21 +328,34 @@ render = function () {
 };
 
 // Os cartões do tipo em seleção que estão na vista.
-// Devolve: array de elementos com data-lp «<tipo>:<id>».
+// Devolve: array de elementos com o data-lp do tipo («prop:<id>», «per:tenant:<id>»…).
 function selLCartoes() {
-  return [].slice.call(document.querySelectorAll('#view [data-lp^="' + CW.selL.tipo + ':"]'));
+  return [].slice.call(document.querySelectorAll('#view [data-lp^="' + selLPrefixo(CW.selL.tipo) + '"]'));
+}
+
+// Os cartões à vista que se podem marcar: os do tipo, menos os que o
+// selLDecorar deixou de fora (selLRecusa, guardada no próprio nó em _selLFora).
+// Devolve: array de elementos.
+function selLMarcaveis() {
+  return selLCartoes().filter(function (c) { return !c._selLFora; });
 }
 
 // Põe a caixa em cada cartão do tipo em seleção (um toque passa a marcar —
 // e ao entrar as caixas desvanecem: selLEntrou), atenua os do outro tipo do
-// mesmo separador (CW.selLOutro) e põe a barra de baixo, a do tipo
+// mesmo separador (CW.selLOutro) e os que não se marcam (selLRecusa: sem
+// caixa, e o toque diz porquê), e põe a barra de baixo, a do tipo
 // (selLBarraHtml): mudar de tipo troca-a.
 // Devolve: nada — mexe no DOM já desenhado.
 function selLDecorar() {
   var tipo = CW.selL.tipo;
   selLCartoes().forEach(function (c) {
-    var id = c.getAttribute('data-lp').split(':')[1];
-    if (!c.querySelector('.selbox')) {
+    var id = selLIdDe(c, tipo), recusa = selLRecusa(tipo, id);
+    c._selLFora = recusa;
+    if (recusa) {
+      delete CW.selL.ids[id];
+      c.classList.add('sel-fora');
+      c.setAttribute('aria-disabled', 'true');
+    } else if (!c.querySelector('.selbox')) {
       var b = document.createElement('span');
       b.className = 'selbox' + (selLEntrou ? ' sel-entra' : '');
       b.setAttribute('data-selbox', id);
@@ -266,8 +368,8 @@ function selLDecorar() {
   });
   selLTiposDe(tab).forEach(function (k) {
     if (k === tipo) return;
-    [].slice.call(document.querySelectorAll('#view [data-lp^="' + k + ':"]')).forEach(function (c) {
-      var id = c.getAttribute('data-lp').split(':')[1];
+    [].slice.call(document.querySelectorAll('#view [data-lp^="' + selLPrefixo(k) + '"]')).forEach(function (c) {
+      var id = selLIdDe(c, k);
       c.classList.add('sel-fora');
       c.setAttribute('data-toca', 'vista');
       c.setAttribute('data-click', 'CW.selLOutro(\'' + k + '\',\'' + jsqBruto(id) + '\')');
@@ -278,7 +380,7 @@ function selLDecorar() {
   if (f && f.getAttribute('data-sel-tipo') !== tipo) { f.remove(); f = null; }
   if (!f) {
     f = document.createElement('div');
-    f.className = 'sel-fundo' + (SEL_PLAN[tipo] ? ' sel-l-plan' : '');
+    f.className = 'sel-fundo' + (SEL_ACOES[tipo] ? ' sel-l-duas' : '');
     f.setAttribute('data-sel-tipo', tipo);
     // a mesma barra dos movimentos (estilos.css:.sel-fundo): no ecrã largo, azul-noite a flutuar no fundo
     f.setAttribute('role', 'toolbar');
@@ -289,34 +391,38 @@ function selLDecorar() {
   selLPintar();
 }
 
-/* O que vai na barra de baixo de cada tipo. Imóveis e contratos: Cancelar,
-   a contagem e Apagar. Planeados: o Cancelar (só o × no telemóvel estreito,
-   com o nome por extenso), a razão de não haver Silenciar nem Reativar
-   quando os marcados estão misturados (#selLPorque, que o leitor de ecrã
-   ouve), o Silenciar ou o Reativar (#selLMudo, que o selLPintar acerta) e o
-   Apagar; os modelos, sem o silêncio, que não têm. A contagem dos planeados
-   vive no cabeçalho, e na barra só no ecrã largo (estilos.css:.sel-l-plan).
-   Recebe: tipo — 'prop', 'ct', 'rec' ou 'tpl'.
+/* O que vai na barra de baixo de cada tipo — a das Casas: × Cancelar, a
+   contagem ao meio e as ações. Imóveis, contratos, inquilinos e modelos: só
+   o Apagar, numa linha. Os planeados e as visitas têm mais ações (SEL_ACOES):
+   a contagem leva por baixo a razão de uma ação estar fora (#selLPorque, que
+   o leitor de ecrã ouve), e as ações vão para uma segunda linha no telemóvel
+   (a .sel-l-quebra; estilos.css:.sel-l-duas) — numa só não cabiam a 375px.
+   Nos planeados, o Silenciar ou o Reativar (#selLMudo, que o selLPintarMudo
+   acerta); nas visitas, o Realizada e o Falta (selLPintarVisitas). As ações
+   com data-sel-l-precisa desligam-se sem nada marcado (selLPintar).
+   Recebe: tipo — 'prop', 'ct', 'ten', 'vis', 'rec' ou 'tpl'.
    Devolve: o HTML de dentro da barra (texto). */
 function selLBarraHtml(tipo) {
-  var apagar = '<button type="button" class="btn danger" data-toca="dados" data-risco="destroi" data-click="CW.selLApagar()">' + ic('trash', 15) + ' Apagar</button>';
-  if (!SEL_PLAN[tipo]) {
-    return '<button type="button" class="btn" data-toca="modo" data-click="CW.selLSair()">' + ic('x', 15) + ' Cancelar</button>' +
-      '<b id="selLConta" class="u-fx-1 u-ta-center"></b>' + apagar;
-  }
-  return '<button type="button" class="btn sel-l-cancelar" aria-label="Cancelar a seleção" data-toca="modo" data-click="CW.selLSair()">' + ic('x', 15) + '<span class="sel-l-txt">Cancelar</span></button>' +
+  var cancelar = '<button type="button" class="btn" data-toca="modo" data-click="CW.selLSair()">' + ic('x', 15) + ' Cancelar</button>';
+  var apagar = '<button type="button" class="btn danger" data-sel-l-precisa data-toca="dados" data-risco="destroi" data-click="CW.selLApagar()">' + ic('trash', 15) + ' Apagar</button>';
+  if (!SEL_ACOES[tipo]) return cancelar + '<b id="selLConta" class="u-fx-1 u-ta-center"></b>' + apagar;
+  var acoes = tipo === 'rec'
+    ? '<button type="button" class="btn" id="selLMudo" hidden data-toca="dados" data-click="CW.selLMudo()"></button>'
+    : '<button type="button" class="btn" id="selLRealizada" data-sel-l-precisa data-toca="dados" data-click="CW.selLVisEstado(\'realizada\')">' + ic('check', 15) + ' Realizada</button>' +
+      '<button type="button" class="btn" id="selLFalta" data-sel-l-precisa data-toca="dados" data-click="CW.selLVisEstado(\'faltou\')">' + ic('x', 15) + ' Falta</button>';
+  return cancelar +
     '<p class="sel-l-info"><b id="selLConta"></b><span id="selLPorque" class="small" aria-live="polite"></span></p>' +
-    (tipo === 'rec' ? '<button type="button" class="btn" id="selLMudo" hidden data-toca="dados" data-click="CW.selLMudo()"></button>' : '') +
-    apagar;
+    '<i class="sel-l-quebra" aria-hidden="true"></i>' + acoes + apagar;
 }
 
-// Pinta as caixas (a de selecao.js), a caixa de tudo do cabeçalho e as
-// contagens conforme o que está marcado.
+// Pinta as caixas (a de selecao.js), a caixa de tudo do cabeçalho, as
+// contagens conforme o que está marcado e as ações que precisam de marcas.
 // Devolve: nada — mexe no DOM já desenhado.
 function selLPintar() {
   var ids = [];
   selLCartoes().forEach(function (c) {
-    var id = c.getAttribute('data-lp').split(':')[1];
+    if (c._selLFora) return;   // sem caixa: não se marca (selLDecorar)
+    var id = selLIdDe(c);
     ids.push(id);
     var b = c.querySelector('[data-selbox]');
     if (b) b.innerHTML = caixa(!!CW.selL.ids[id]);
@@ -324,20 +430,52 @@ function selLPintar() {
     // o leitor de ecrã ouve marcado ou não, no próprio cartão (um botão: tornarFocavel)
     if (c.setAttribute) c.setAttribute('aria-pressed', CW.selL.ids[id] ? 'true' : 'false');
   });
-  var n = selLN(), conta = document.getElementById('selLConta');
-  if (conta) conta.textContent = n ? n + ' selecionado' + (n === 1 ? '' : 's') : 'toca nos cartões';
+  var n = selLN(), conta = document.getElementById('selLConta'), pal = selLPalavras(CW.selL.tipo);
+  if (conta) conta.textContent = n ? n + ' ' + pal.sel + (n === 1 ? '' : 's') : pal.toca;
   var marcados = ids.filter(function (id) { return CW.selL.ids[id]; }).length;
   var todos = ids.length > 0 && marcados === ids.length, algum = marcados > 0;
   var g = document.getElementById('selLTudo');
-  var nomes = SEL_NOMES[CW.selL.tipo] || ['registo', 'registos'];
   if (g) {
     g.innerHTML = caixa(todos, algum);
     g.setAttribute('aria-checked', todos ? 'true' : algum ? 'mixed' : 'false');
-    g.setAttribute('aria-label', 'Marcar todos os ' + nomes[1] + ' à vista');
+    g.setAttribute('aria-label', 'Marcar ' + pal.todos + ' à vista');
   }
   var cc = document.getElementById('selLCabConta');
-  if (cc) cc.textContent = n ? n + ' ' + nomes[n === 1 ? 0 : 1] : 'nenhum ' + nomes[0];
+  if (cc) cc.textContent = n ? n + ' ' + (n === 1 ? pal.um : pal.varios) : pal.nenhum;
+  [].slice.call(document.querySelectorAll('.sel-fundo [data-sel-l-precisa]')).forEach(function (b) { b.disabled = !n; });
   if (CW.selL.tipo === 'rec') selLPintarMudo();
+  if (CW.selL.tipo === 'vis') selLPintarVisitas();
+}
+
+/* Se as visitas marcadas se podem marcar como realizadas ou como falta: só
+   quando são todas agendadas e as posso alterar (as regras do
+   visitas.js:visEstado, motivoRecusa).
+   Recebe: ids — os ids marcados (array).
+   Devolve: {pode, porque} — pode é true ou false; porque, a razão de não
+   poder ('' sem nada marcado). */
+function selLVisPode(ids) {
+  var vs = ids.map(function (id) { return (db.visits || []).find(function (x) { return x.id === id; }); }).filter(Boolean);
+  if (!vs.length) return { pode: false, porque: '' };
+  if (vs.some(function (v) { return v.estado !== 'agendada'; })) return { pode: false, porque: 'Só as agendadas se marcam como realizadas ou falta.' };
+  for (var i = 0; i < vs.length; i++) {
+    var recusa = motivoRecusa(vs[i].propertyId, 'visit.add', vs[i]);
+    if (recusa) return { pode: false, porque: recusa };
+  }
+  return { pode: true, porque: '' };
+}
+
+/* O Realizada e o Falta da barra das visitas, conforme as marcadas
+   (selLVisPode): desligados com alguma que não esteja agendada ou que eu não
+   possa alterar, e a razão dita ao lado da contagem — como o Silenciar dos
+   planeados (selLPintarMudo).
+   Devolve: nada — mexe na barra já posta. */
+function selLPintarVisitas() {
+  var r = selLVisPode(Object.keys(CW.selL.ids)), pq = document.getElementById('selLPorque');
+  ['selLRealizada', 'selLFalta'].forEach(function (k) {
+    var b = document.getElementById(k);
+    if (b) b.disabled = !r.pode;
+  });
+  if (pq) pq.textContent = r.porque;
 }
 
 /* O Silenciar ou o Reativar da barra dos planeados, conforme os marcados
@@ -405,6 +543,8 @@ CW.selLApagar = function () {
   var tipo = CW.selL.tipo;
   if (tipo === 'rec') return selLApagarPlaneados(ids);
   if (tipo === 'tpl') return selLApagarModelos(ids);
+  if (tipo === 'ten') return selLApagarInquilinos(ids);
+  if (tipo === 'vis') return selLApagarVisitas(ids);
 
   if (tipo === 'prop') {
     var cts = db.contracts.filter(function (c) { return ids.indexOf(c.propertyId) > -1; });
@@ -507,16 +647,125 @@ function selLApagarModelos(ids) {
     });
 }
 
+/* Os marcados que a ação pode levar, e a recusa do primeiro que não pode
+   (selLRecusa — quem já não existe também fica de fora, calado).
+   Recebe: lista — o array do db (db.tenants, db.visits); tipo — 'ten' ou 'vis'; ids — os marcados.
+   Devolve: {ok, fora, recusa} — os registos que se podem levar, quantos ficaram de fora, e porquê. */
+function selLQuemPode(lista, tipo, ids) {
+  var ok = [], fora = 0, recusa = '';
+  ids.forEach(function (id) {
+    var x = (lista || []).find(function (y) { return y.id === id; });
+    if (!x) return;
+    var r = selLRecusa(tipo, id);
+    if (r) { fora++; if (!recusa) recusa = r; } else ok.push(x);
+  });
+  return { ok: ok, fora: fora, recusa: recusa };
+}
+
+/* Apagar vários inquilinos, com as regras do pessoas.js:delPerson a cada um
+   (selLRecusa): a ficha sai da lista e o id sai dos contratos, que ficam.
+   Ao contrário do delPerson, há Anular — repõe as fichas e o lugar de cada
+   uma nos contratos —, e por isso os documentos só saem do IndexedDB quando
+   o Anular expira. A confirmação diz quantos contratos ficam sem eles (só
+   com os Contratos ligados nesta conta: desligados, o id sai deles na mesma,
+   mas a pergunta não os nomeia).
+   Recebe: ids — os ids marcados (array).
+   Devolve: nada — pede confirmação; só depois apaga e oferece o Anular. */
+function selLApagarInquilinos(ids) {
+  var q = selLQuemPode(db.tenants, 'ten', ids);
+  if (!q.ok.length) return toast(q.recusa || 'Não está nada selecionado.');
+  var oids = q.ok.map(function (p) { return p.id; }), n = oids.length;
+  var tem = function (c) { return (c.tenantIds || []).some(function (t) { return oids.indexOf(t) > -1; }); };
+  var comCt = servicoLigado('contracts'), nc = comCt ? db.contracts.filter(tem).length : 0;
+  // como o delPerson: o nome de quem sai, quando é um só
+  var quem = n === 1 ? 'Apagar “' + esc(q.ok[0].name || '(sem nome)') + '”? ' : '';
+  var frase = !comCt ? '' : nc ? (n === 1 ? 'Sai de ' : 'Saem de ') + nc + (nc === 1 ? ' contrato, que se mantém.' : ' contratos, que se mantêm.') : 'Sem contratos ligados.';
+  confirmModal('Apagar ' + n + (n === 1 ? ' inquilino' : ' inquilinos'), ((quem + frase).trim() || 'As fichas saem da lista.') + selLFora(q.fora), function () {
+    var copia = {
+      ts: JSON.parse(JSON.stringify(q.ok)),
+      ligados: db.contracts.filter(tem).map(function (c) { return { id: c.id, ids: (c.tenantIds || []).slice() }; }),
+    };
+    db.tenants = db.tenants.filter(function (t) { return oids.indexOf(t.id) < 0; });
+    db.contracts.forEach(function (c) { if (tem(c)) c.tenantIds = c.tenantIds.filter(function (t) { return oids.indexOf(t) < 0; }); });
+    save(); CW.selLSair(); buildNav();
+    comDesfazer(n + (n === 1 ? ' inquilino apagado.' : ' inquilinos apagados.') + selLFora(q.fora), function () {
+      var ha = {};
+      db.tenants.forEach(function (t) { ha[t.id] = 1; });
+      db.tenants = db.tenants.concat(copia.ts.filter(function (t) { return !ha[t.id]; }));
+      // cada um volta ao seu lugar no contrato, sem desfazer o que entretanto lá entrou
+      copia.ligados.forEach(function (x) {
+        var c = db.contracts.find(function (y) { return y.id === x.id; });
+        if (!c) return;
+        c.tenantIds = c.tenantIds || [];
+        x.ids.forEach(function (t, i) { if (c.tenantIds.indexOf(t) < 0) c.tenantIds.splice(Math.min(i, c.tenantIds.length), 0, t); });
+      });
+    }, function () {
+      copia.ts.forEach(function (p) { (p.files || []).forEach(function (f) { idbDel(f.id).catch(function () {}); }); });
+    });
+  });
+}
+
+/* Apagar várias visitas, com as regras do visitas.js:visApaga a cada uma
+   (selLRecusa) e o Anular que as repõe. Pergunta antes, como os outros
+   apagar da barra: são várias de uma vez.
+   Recebe: ids — os ids marcados (array).
+   Devolve: nada — pede confirmação; só depois apaga e oferece o Anular. */
+function selLApagarVisitas(ids) {
+  var q = selLQuemPode(db.visits, 'vis', ids);
+  if (!q.ok.length) return toast(q.recusa || 'Não está nada selecionado.');
+  var vids = q.ok.map(function (v) { return v.id; }), n = vids.length;
+  confirmModal('Apagar ' + n + (n === 1 ? ' visita' : ' visitas'),
+    (n === 1 ? 'Sai da lista e da Agenda.' : 'Saem da lista e da Agenda.') + selLFora(q.fora), function () {
+      var copia = JSON.parse(JSON.stringify(q.ok));
+      db.visits = (db.visits || []).filter(function (v) { return vids.indexOf(v.id) < 0; });
+      save(); CW.selLSair(); buildNav();
+      comDesfazer(n + (n === 1 ? ' visita apagada.' : ' visitas apagadas.') + selLFora(q.fora), function () {
+        var ha = {};
+        (db.visits || []).forEach(function (v) { ha[v.id] = 1; });
+        db.visits = (db.visits || []).concat(copia.filter(function (v) { return !ha[v.id]; }));
+      });
+    });
+}
+
+/* Marca as visitas marcadas como realizadas ou como falta, de uma vez, com o
+   Anular que devolve a cada uma o estado que tinha — como o visitas.js:visEstado
+   a cada uma. Só com todas agendadas e as que posso alterar (selLVisPode):
+   senão diz porquê e não muda nada.
+   Recebe: estado — 'realizada' ou 'faltou'.
+   Devolve: nada — grava, sai da seleção e oferece o Anular (ou avisa). */
+CW.selLVisEstado = function (estado) {
+  if (CW.selL.tipo !== 'vis' || (estado !== 'realizada' && estado !== 'faltou')) return;
+  var ids = Object.keys(CW.selL.ids), r = selLVisPode(ids);
+  if (!ids.length) return toast('Não está nada selecionado.');
+  if (!r.pode) return toast(r.porque);
+  var antes = [];
+  ids.forEach(function (id) {
+    var v = (db.visits || []).find(function (x) { return x.id === id; });
+    if (v) { antes.push({ id: id, estado: v.estado }); v.estado = estado; }
+  });
+  save(); CW.selLSair(); buildNav();
+  var n = antes.length, um = n === 1;
+  var msg = estado === 'realizada'
+    ? n + (um ? ' visita marcada como realizada' : ' visitas marcadas como realizadas') + ' — preenche o desfecho quando souberes.'
+    : n + (um ? ' visita marcada como falta.' : ' visitas marcadas como falta.');
+  comDesfazer(msg, function () {
+    antes.forEach(function (x) {
+      var v = (db.visits || []).find(function (y) { return y.id === x.id; });
+      if (v) v.estado = x.estado;
+    });
+  });
+};
+
 // a folha das opções de um cartão (lpMenu) ganha a mesma porta que os
 // movimentos já tinham (os planeados e os modelos têm-na na própria folha:
 // planeados.js:lpPortaSelecao). O toque longo já não a abre — entra direto na
 // seleção (window.lpLongo) —, mas a porta fica onde a folha se abrir
 var _lpMenu_sl = lpMenu;
 lpMenu = function (v) {
-  var a = String(v || '').split(':');
-  if (TABS_SEL[a[0]] && !SEL_PLAN[a[0]] && tab === TABS_SEL[a[0]] && !CW.selL.tipo) {
+  var a = String(v || '').split(':'), s = selLDoLp(v);
+  if (s && !SEL_PLAN[s.tipo] && tab === TABS_SEL[s.tipo] && !CW.selL.tipo) {
     // injeta "Selecionar vários" nas opções do kebab: mesma lista, mais uma
-    var tipo = a[0], id = a[1];
+    var tipo = s.tipo, id = s.id;
     var r = _lpMenu_sl(v);
     setTimeout(function () {
       var m = document.querySelector('.modal.open .body .list');

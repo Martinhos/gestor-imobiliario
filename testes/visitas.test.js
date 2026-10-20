@@ -44,7 +44,7 @@ describe('a página das visitas', () => {
     assert.match(html, /Ana/);
     assert.match(html, /<span class="badge in">Interessado<\/span>/, 'o desfecho aparece nas realizadas, a verde');
     assert.doesNotMatch(html, /class="fab"/, 'sem FAB: o «Marcar visita» está no cabeçalho e no + da barra');
-    assert.doesNotMatch(html, /lpMenu\(/, 'nem ⋮: as opções estão na ficha e no toque longo');
+    assert.doesNotMatch(html, /lpMenu\(/, 'nem ⋮: as opções estão na ficha; o toque longo seleciona vários');
     assert.match(html, /fpanel/, 'os filtros vivem no painel comum da app');
     assert.match(html, /type="date"[\s\S]*type="time"/, 'intervalos de dia e de hora no painel');
     assert.match(vazioDeVisitas(), /data-click="visitModal\(\)">Marcar visita<\/button>/, 'o vazio continua a ter o seu botão');

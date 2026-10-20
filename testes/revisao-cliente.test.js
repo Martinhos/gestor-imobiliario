@@ -154,7 +154,7 @@ describe('regressão: a camada da nuvem carrega inteira e embrulha as funções 
   test('carregarTudo carrega sem lançar, e cada função que a nuvem embrulha continua a ser uma função — a nova, não a de antes', () => {
     const app = carregarTudo();
     for (const n of ['vDashboard', 'vTransactions', 'lpMenu', 'render', 'go', 'save', 'pendingCard', 'goSet', 'hdrFiltToggle', 'vSettings',
-      'syncContractRec', 'seed', 'delPerson', 'propBody', 'txLinhaExtra', 'txMesExtra', 'evoMoney', 'kpiModal', 'closePops', 'selOpen', 'selPick', 'setTheme', 'driveOpen']) {
+      'syncContractRec', 'seed', 'delPerson', 'propBody', 'txLinhaExtra', 'evoMoney', 'kpiModal', 'closePops', 'selOpen', 'selPick', 'setTheme', 'driveOpen']) {
       assert.equal(typeof app[n], 'function', n + ' é função');
     }
     /* cada wrapper guardou o original e reatribuiu o nome: prova de que a
@@ -162,7 +162,7 @@ describe('regressão: a camada da nuvem carrega inteira e embrulha as funções 
     for (const [orig, atual] of [['_vDashboard', 'vDashboard'], ['_vDashboard_guia', 'vDashboard'], ['_vTransactions', 'vTransactions'], ['_vTransactions_sel', 'vTransactions'],
       ['_lpMenu', 'lpMenu'], ['_lpMenu_sel', 'lpMenu'], ['_render', 'render'], ['_render_sel', 'render'], ['_go', 'go'], ['_go_sel', 'go'],
       ['_goSet', 'goSet'], ['_save', 'save'], ['_hdrFiltToggle', 'hdrFiltToggle'], ['_hdrFiltToggle_sel', 'hdrFiltToggle'], ['_vSettings', 'vSettings'], ['_vSettingsNov', 'vSettings'],
-      ['_syncContractRec', 'syncContractRec'], ['_seed_guia', 'seed'], ['_delPerson', 'delPerson'], ['_txLinhaExtra', 'txLinhaExtra'], ['_txMesExtra', 'txMesExtra'],
+      ['_syncContractRec', 'syncContractRec'], ['_seed_guia', 'seed'], ['_delPerson', 'delPerson'], ['_txLinhaExtra', 'txLinhaExtra'],
       ['_evoMoney', 'evoMoney'], ['_kpiModal', 'kpiModal'], ['_closePops', 'closePops'], ['_setTheme', 'setTheme'], ['_driveOpen', 'driveOpen']]) {
       assert.equal(typeof app[orig], 'function', orig + ' apanhou uma função');
       assert.notEqual(app[orig], app[atual], atual + ' foi reatribuída por cima');

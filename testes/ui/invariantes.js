@@ -209,10 +209,9 @@ function dentroDaPagina() {
 
   /* 5. As linhas dos movimentos nascem decoradas.
 
-     A camada da nuvem (cloud/selecao.js) acrescenta a cada linha o data-tx e
-     o data-mes — de onde saem os ids que o «marcar tudo» e o «marcar o mês»
-     leem — e, conforme o modo, o kebab (a única porta para as opções de um
-     movimento sozinho, sem toque longo) ou a caixa de marcar.
+     A camada da nuvem (cloud/selecao.js) acrescenta a cada linha o data-tx —
+     de onde saem os ids que o «marcar tudo» lê — e, em seleção, a caixa de
+     marcar; fora dela, tocar na linha abre a ficha.
 
      Até aqui isto era colado por cima do HTML já gerado, e agora é gerado com
      ele (vistas.js:txLinhaExtra). De qualquer das formas, o que não pode
@@ -250,9 +249,11 @@ function dentroDaPagina() {
     const semChave = linhas.filter((l) => !l.getAttribute('data-chave'));
     if (semChave.length) falhar('cada linha traz a chave do motor', semChave.length + ' de ' + linhas.length + ' sem data-chave');
     const semId = linhas.filter((l) => !l.getAttribute('data-tx'));
-    const semMes = linhas.filter((l) => !l.getAttribute('data-mes'));
     if (semId.length) falhar('cada linha traz o seu id', semId.length + ' de ' + linhas.length + ' sem data-tx');
-    if (semMes.length) falhar('cada linha sabe o seu mês', semMes.length + ' de ' + linhas.length + ' sem data-mes');
+    /* o título do mês é o mesmo dentro e fora da seleção (o modelo das Casas
+       marca linha a linha ou tudo): uma caixa nele é a de antes a voltar */
+    const mesComCaixa = document.querySelectorAll('#view .txmes>.mov-mes .selbox,#view .section-title.sel-mes').length;
+    if (mesComCaixa) falhar('o título do mês não tem caixa', mesComCaixa + ' títulos com caixa ou com a .sel-mes');
     const selecao = !!document.querySelector('.sel-cab');
     if (selecao) {
       const semCaixa = linhas.filter((l) => !l.querySelector('.selbox'));
@@ -266,20 +267,29 @@ function dentroDaPagina() {
       const marcados = typeof selIds === 'object' && selIds ? selIds : null;
       if (marcados) {
         const deviam = linhas.filter((l) => marcados[l.getAttribute('data-tx')]).length;
-        const estao = linhas.filter((l) => l.classList.contains('sel-on')).length;
+        /* a marca é o realce dos cartões das Casas (.sel-on-card), com a
+           caixa cheia lá dentro — a cor da frente, que o escurecimento
+           forçado do Samsung Internet não apaga */
+        const estao = linhas.filter((l) => l.classList.contains('sel-on-card')).length;
         if (deviam !== estao) falhar('as marcas concordam com o estado', deviam + ' marcados, ' + estao + ' com marca no ecrã');
+        const cheias = linhas.filter((l) => l.querySelector('.selbox .selck.on')).length;
+        if (deviam !== cheias) falhar('cada linha marcada tem a caixa cheia', deviam + ' marcados, ' + cheias + ' caixas cheias');
       }
 
-      /* O título do mês é o que permite marcar um mês inteiro, e é um ponto de
-         extensão à parte do da linha: sem isto, neutralizá-lo deixava a suite
-         verde. Parte-se dos meses que as LINHAS dizem ter — assim a regra não
-         pode ficar vazia por a decoração ter desaparecido. */
-      const mesesDasLinhas = [...new Set(linhas.map((l) => l.getAttribute('data-mes')).filter(Boolean))];
-      const semTitulo = mesesDasLinhas.filter((m) => !document.querySelector('#view .section-title.sel-mes [data-mes-box="' + m + '"]'));
-      if (semTitulo.length) falhar('em seleção, cada mês tem a sua caixa', semTitulo.join(', ') + ' sem [data-mes-box]');
-      const chatos = [...document.querySelectorAll('#view .section-title.sel-mes')]
-        .filter((m) => getComputedStyle(m).display !== 'flex');
-      if (chatos.length) falhar('o título do mês continua em flex', chatos.length + ' títulos deixaram de o ser');
+      /* A barra do fundo é a das Casas, posta no body (cloud/selecao.js:selBarraPor):
+         o Cancelar, a contagem ao meio e as ações dos Movimentos. Sem ela a
+         seleção fica sem saída nem ações, e nada dá erro. */
+      const barra = document.querySelector('body>.sel-fundo.mov-sel');
+      if (!barra) falhar('em seleção, a barra do fundo está no body', 'sem .sel-fundo.mov-sel');
+      else {
+        const conta = barra.querySelector('#selFundoN');
+        if (!conta || !/^(toca nos movimentos|\d+ selecionados?)$/.test(conta.textContent.trim())) {
+          falhar('a barra diz quantos estão marcados', conta ? '«' + conta.textContent.trim() + '»' : 'sem #selFundoN');
+        }
+        const acoes = barra.querySelectorAll('.sel-acoes [data-precisa]').length;
+        if (acoes < 3) falhar('a barra tem as ações dos Movimentos', acoes + ' botões com data-precisa');
+        if (!barra.querySelector('.sel-fim')) falhar('a barra tem o Cancelar', 'sem .sel-fim');
+      }
     } else {
       /* Fora da seleção, tocar numa linha abre a ficha do movimento (ler
          primeiro); o kebab de cada linha saiu com o canvas de 2026-10 — as
@@ -401,7 +411,7 @@ function dentroDaPagina() {
      deixou o toque longo (A.3-14), e o filtro saiu com ele. */
   /* Em modo de selecao a regra nao se aplica, e nao e uma excecao de
      conveniencia: o kebab sai de proposito para dar lugar a caixa de marcar, e
-     o caminho visivel passa a ser a barra do fundo, com o Editar e o Eliminar.
+     o caminho visivel passa a ser a barra do fundo, com o Cancelar e as acoes.
      A regra dizia «um botao DENTRO da linha» quando queria dizer «um caminho
      visivel no ECRA» — e em selecao o ecra inteiro e outro. */
   const emSelecao = !!document.querySelector('.sel-cab,.sel-fundo');

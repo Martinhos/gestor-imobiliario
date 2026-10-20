@@ -225,6 +225,21 @@ const CENAS = [
     },
   },
   {
+    /* Como nas Casas, já em seleção o toque longo marca outra linha em vez de
+       voltar a entrar e deitar fora a primeira: as duas ficam marcadas, com o
+       realce, a caixa cheia e a barra a dizer «2 selecionados». */
+    nome: 'selecao-de-movimentos-toque-longo-marca',
+    fazer: () => {
+      go('transactions'); render();
+      const ls = [...document.querySelectorAll('#view .txrow')];
+      if (ls.length < 2) throw new Error('sem movimentos que cheguem para marcar (' + ls.length + ')');
+      window.lpLongo(ls[0].getAttribute('data-lp'));
+      window.lpLongo(ls[1].getAttribute('data-lp'));
+      const n = document.querySelector('.sel-fundo.mov-sel #selFundoN');
+      if (!n || n.textContent.trim() !== '2 selecionados') throw new Error('o segundo toque longo não marcou: «' + (n ? n.textContent : 'sem barra') + '»');
+    },
+  },
+  {
     /* Marcar várias e repintar por OUTRO caminho que não o de entrar em
        seleção. O selToggle só repinta as marcas (selPintar), sem regerar
        linha nenhuma; o render a seguir regera-as todas, e as marcas têm de lá

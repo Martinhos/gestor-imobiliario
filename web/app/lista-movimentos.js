@@ -545,13 +545,6 @@ let txLinhasPintadas=0;
    caixa é HTML colado no início da linha e acoes HTML colado no fim da coluna
    direita. Tudo opcional; o vazio devolve um objeto sem nada. */
 function txLinhaExtra(t,mes){return {}}
-/* O mesmo para o título de um mês, que em modo de seleção ganha caixa própria.
-   Vale aqui o mesmo aviso do attrs sem class — e aqui doía mais, porque é no
-   class do título que vive o display:flex que põe o saldo do mês à direita.
-   Recebe: mes — o mês em 'AAAA-MM'.
-   Devolve: {attrs,cls,caixa} — atributos e classes extra do título, e HTML a
-   colar antes do nome do mês. Tudo opcional. */
-function txMesExtra(mes){return {}}
 /* Movimentos: KPIs do filtro atual (com evolução ao toque), saldos entre
    proprietários, dívidas a terceiros e a lista agrupada por mês com o saldo
    de cada um. Tudo respeita os filtros e a ordenação escolhidos no modal.
@@ -839,16 +832,13 @@ const mesPt=iso=>(MES[Number(String(iso).slice(5,7))-1]||'')+' '+String(iso).sli
    filtro e o texto do bloco deixava de bater certo. Fica um <span> vazio, que
    o pintarListaTx enche depois de reconciliar.
 
-   O nome do mês leva o mês num data-mes-nome, e o corpo de cada linha a
-   classe txcorpo: são as duas peças que a caixa da seleção empurra, e é por
-   elas que cloud/selecao.js:selMedirDeslize as reencontra depois do render
-   para as fazer deslizar em vez de saltar.
+   O título é o mesmo dentro e fora da seleção: a seleção marca linha a
+   linha ou tudo (cloud/selecao.js), como nas Casas, e o mês não tem caixa.
    Recebe: mo — o mes 'AAAA-MM'.
    Devolve: o HTML do bloco (string). */
 function txMesHtml(mo){
-  const xm=txMesExtra(mo)||{};
-  return `<div class="txmes"><div class="section-title mov-mes${xm.cls?' '+xm.cls:''}" ${xm.attrs||''}>
-    ${xm.caixa||''}<span class="txmes-nome" data-mes-nome="${esc(mo)}">${esc(mesPt(mo))}</span><span class="txnet"></span></div>
+  return `<div class="txmes"><div class="section-title mov-mes">
+    <span class="txmes-nome">${esc(mesPt(mo))}</span><span class="txnet"></span></div>
     <div class="list mov-lista"></div></div>`;
 }
 /* Enche (ou acerta) a lista dos movimentos dentro do #txLista, mexendo so no

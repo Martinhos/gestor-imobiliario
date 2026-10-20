@@ -1,6 +1,6 @@
 // Os serviços das pessoas — Inquilinos, Proprietários e Colaboradores — como
 // serviços: cada um carrega e rende só com a base (e o que requer), e quando
-// os outros estão desligados nesta conta as listas, a ficha e o toque longo
+// os outros estão desligados nesta conta as listas, a ficha e a folha das opções (lpMenu)
 // rendem sem os atalhos para eles (contratos num inquilino, imóveis num
 // proprietário, a partilha e os cargos que a nuvem pinta).
 
@@ -56,7 +56,7 @@ describe('autonomia: os inquilinos, os proprietários e os colaboradores rendem 
     const html = app.vTenants();
     assert.match(html, /Ana Inquilina/);
     assert.ok(html.includes("personView('tenant','t1')"), 'o cartão abre a ficha');
-    assert.ok(html.includes('data-lp="per:tenant:t1"'), 'e tem toque longo');
+    assert.ok(html.includes('data-lp="per:tenant:t1"'), 'e tem toque longo (a seleção de vários)');
     for (const t of SEM_CONTRATOS) assert.ok(!html.includes(t), 'sem ' + t);
     assert.ok(!html.includes('Sem contrato ativo') && !html.includes('Arrendamento da Ana'), 'os contratos não se mencionam: o serviço não está nesta conta');
     assert.ok(!html.includes('lfsel_lten_ct'), 'sem o filtro por contrato');
@@ -175,7 +175,7 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     return { app, esp, fixos: elementos(app) };
   }
 
-  test('desligado: contracts — a lista e a ficha de um inquilino rendem sem os atalhos para contratos, e o toque longo sem «Novo contrato»', () => {
+  test('desligado: contracts — a lista e a ficha de um inquilino rendem sem os atalhos para contratos, e a folha das opções sem «Novo contrato»', () => {
     const { app, esp, fixos } = montar();
     app.definirServicosDesligados(['contracts']);
     assert.ok(app.servicoLigado('tenants'), 'os inquilinos não requerem os contratos');
@@ -221,7 +221,7 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     for (const t of SEM_IMOVEIS) assert.ok(!ultimo(esp.modais).corpo.includes(t) && !ultimo(esp.modais).menu.includes(t), 'ficha sem ' + t);
   });
 
-  test('desligado: owners — a lista de inquilinos abre; tenants — a de proprietários abre; o toque longo segue o kind', () => {
+  test('desligado: owners — a lista de inquilinos abre; tenants — a de proprietários abre; a folha das opções segue o kind', () => {
     const { app, esp, fixos } = montar();
     app.definirServicosDesligados(['owners']);
     assert.equal(typeof app.vistaDoSeparador('tenants'), 'function');
@@ -249,7 +249,7 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     assert.equal(ultimo(esp.folhas).titulo, 'Rui Dono');
   });
 
-  test('o meu perfil edita-se mas não se apaga: nem no formulário, nem na ficha, nem no toque longo; outro proprietário sem conta apaga-se', () => {
+  test('o meu perfil edita-se mas não se apaga: nem no formulário, nem na ficha, nem na folha das opções; outro proprietário sem conta apaga-se', () => {
     const { app, esp } = montar();
     app.db.owners.push(app.normPerson({ id: 'o2', name: 'Sem Conta' }));
     app.CW.user = { id: 'o1', name: 'Rui Dono', email: 'rui@exemplo.pt', token: 't' };
@@ -329,7 +329,7 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     assert.equal(esp.toasts.filter((t) => t === 'O serviço Colaboradores está desligado nesta conta.').length, 2);
   });
 
-  test('desligado: o controlo positivo — com tudo ligado, a lista, a ficha, o toque longo e a nuvem mostram tudo', () => {
+  test('desligado: o controlo positivo — com tudo ligado, a lista, a ficha, a folha das opções e a nuvem mostram tudo', () => {
     const { app, esp } = montarNuvem();
     igual(app.servicosDesligados(), []);
     const lista = app.vTenants();
@@ -395,7 +395,7 @@ describe('o desenho: as listas e as fichas das pessoas lêem o que a app sabe', 
       app.normContract({ id: 'c3', propertyId: 'p2', tenantIds: ['t3'], rent: 400, start: dia(40), active: true }),
       app.normContract({ id: 'c4', propertyId: 'p1', tenantIds: ['t4'], rent: 650, start: dia(-800), end: dia(-30), active: true }));
     const html = app.vTenants();
-    assert.doesNotMatch(html, /class="fab"|lpMenu\(/, 'nem FAB nem ⋮: as opções estão na ficha e no toque longo');
+    assert.doesNotMatch(html, /class="fab"|lpMenu\(/, 'nem FAB nem ⋮: as opções estão na ficha');
     assert.match(html, /<div class="list pes-lista" data-listaviva="inquilinos">/, 'as linhas num cartão');
     const ana = linhaDe(html, 'tenant', 't1');
     assert.match(ana, /<span class="avatar pes-av" aria-hidden="true">AI<\/span>/, 'as iniciais');
@@ -555,9 +555,9 @@ describe('o desenho: as listas e as fichas das pessoas lêem o que a app sabe', 
     assert.equal(ultimo(esp.toasts), 'Documento adicionado.');
   });
 
-  test('o toque longo segue o «Editar» da ficha: o perfil de outro proprietário com conta não se edita, o meu abre «O meu perfil»', () => {
+  test('a folha das opções (lpMenu) segue o «Editar» da ficha: o perfil de outro proprietário com conta não se edita, o meu abre «O meu perfil»', () => {
     const { app, esp } = montarDesenho();
-    /* o toque longo devolve as opções inteiras (com o act), não só os rótulos */
+    /* a folha devolve as opções inteiras (com o act), não só os rótulos */
     const opcoes = [];
     app.lpShow = (t, opts) => { opcoes.push({ titulo: t, opts }); };
     app.db.owners.push(app.normPerson({ id: 'o2', name: 'Sem Conta' }), Object.assign(app.normPerson({ id: 'u9', name: 'Pedro Costa' }), { _userId: 'u9' }));

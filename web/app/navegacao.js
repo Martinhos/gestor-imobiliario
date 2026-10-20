@@ -1,6 +1,6 @@
 /* ================= NAVEGAÇÃO ================= */
 const TABS=[
-  {id:'dashboard',icon:'home',label:'Visão geral',sub:'Indicadores do portefólio'},
+  {id:'dashboard',icon:'painel',label:'Visão geral',sub:'Indicadores do portefólio'},
   {id:'properties',icon:'building',label:'Imóveis',sub:'Dados, fotos, proprietários e crédito'},
   {id:'groups',icon:'layers',label:'Grupos',sub:'Imóveis em conjunto, só teus ou partilhados'},
   {id:'contracts',icon:'contract',label:'Contratos',sub:'Renda, impostos, inventário e anexos'},
@@ -279,7 +279,7 @@ function crachaHtml(id,onde){
    lembra-se do separador onde se estava (_ultimoNaArea). */
 const TABBAR=['dashboard','casas','dinheiro','calendar'];
 /* o rótulo e o ícone de cada destino da barra de baixo */
-const BARRA_ROTULO={dashboard:['Início','home'],calendar:['Agenda','cal']};
+const BARRA_ROTULO={dashboard:['Início','painel'],calendar:['Agenda','cal']};
 /* os destinos que a barra de baixo mostra agora, pela ordem à vista: é por
    eles que o goBarra sabe para que lado corre a fita */
 let _barraAgora=TABBAR.slice();
@@ -419,7 +419,10 @@ function go(id){
      porquê e fica-se onde se está (um atalho antigo, um endereço guardado) */
   if(typeof separadorLigado==='function'&&!separadorLigado(id)){toast(hintServicoDesligado(servicoDoSeparador(id)));return}
   const area=areaDe(id);if(area)_ultimoNaArea[area]=id;
-  const pintar=()=>{tab=id;ambitoSemDono();setPage='';aoMudarDeSeparador();closeDrawer();fecharFiltros();_entrar=1;buildNav();render();
+  /* Quem chega pelo dedo já esteve à vista: o carrossel pintou-o a entrar
+     (sepVizinho). Os gráficos não se desenham outra vez nem os números contam
+     de zero — era ver o ecrã a recomeçar depois de já lá estar. */
+  const pintar=()=>{tab=id;ambitoSemDono();setPage='';aoMudarDeSeparador();closeDrawer();fecharFiltros();if(!desde)_entrar=1;buildNav();render();
     try{window.scrollTo(0,0)}catch(e){}};
   /* tocar no separador aceso não é uma travessia, é uma repintura — e essa já
      tem o acompanhamento das peças */
@@ -435,6 +438,12 @@ function go(id){
    deixou. Largar antes disso devolve a página ao sítio. Nas pontas não há
    vizinho: a página resiste, e não dá a volta.
 
+   Enquanto o dedo arrasta, o separador vizinho vê-se a entrar colado à
+   página que sai, pintado de verdade (sepVizinho: a vista dele, uma vez por
+   lado e por gesto, nunca a cada pointermove), e as abas da área ficam
+   paradas por cima (abasAssentar), com o realce a correr entre a aba de onde
+   se sai e a vizinha, à proporção do arrasto.
+
    As regras são as do calendário (calendario.js:calArrastar): o eixo decide-se
    aos 10px, e um gesto que começa na vertical é da página, que rola como
    sempre — o touch-action:pan-y do #view (estilos.css, «deslizar entre
@@ -444,7 +453,8 @@ function go(id){
 /* De onde o dedo largou a página: o go lê-o junto com o _ladoSep, e pela
    mesma razão (os embrulhos da nuvem chamam o go com um argumento só). */
 let _desdeSep=0;
-/* o arrasto em curso: {id,x0,y0,dx,desl,ativo,w,vx,xa,ta,v,r0,meio,viz,mexe,esp,espD}, ou null */
+/* o arrasto em curso: {id,x0,y0,dx,desl,ativo,w,vx,xa,ta,v,r0,meio,viz,mexe,esp,espD,
+   abas,i,palco,vizP,topo}, ou null */
 let _sepArrasto=null;
 /* true enquanto a página volta ao sítio (200ms): um dedo novo nesse instante
    apanhava-a com a animação de regresso ainda por cima do transform */
@@ -545,9 +555,12 @@ function sepArrastar(e){
   document.addEventListener('pointercancel',sepArrastoFim);
 }
 /* O dedo andou: decide se o gesto é de virar o separador (horizontal) ou da
-   página (vertical), e, sendo de virar, leva a página com ele.
+   página (vertical), e, sendo de virar, leva a página com ele, traz o
+   vizinho colado a ela (sepVizinho) e corre o realce das abas
+   (abasPolegarEm) à proporção do caminho. Sem movimento pedido nada segue o
+   dedo: só o nome do vizinho aparece à beira do ecrã (sepEspreita).
    Recebe: e — o PointerEvent do pointermove.
-   Devolve: nada — mexe no transform do #view. */
+   Devolve: nada — mexe no transform do #view, do vizinho e do realce. */
 function sepArrastoMove(e){
   const a=_sepArrasto;if(!a||e.pointerId!==a.id)return;
   let dx=e.clientX-a.x0;const dy=e.clientY-a.y0;
@@ -566,7 +579,15 @@ function sepArrastoMove(e){
     a.mexe=!semMovimento()&&!!v.parentNode;
     // a folga de decidir não conta: a página arranca colada ao dedo, sem salto
     a.x0+=dx<0?-10:10;dx=e.clientX-a.x0;
-    if(a.mexe)v.parentNode.classList.add('sep-arrasto');
+    if(a.mexe){
+      v.parentNode.classList.add('sep-arrasto');
+      /* o realce larga a transição enquanto o dedo o leva: com ela ficava
+         200ms atrás do dedo */
+      a.abas=document.querySelector('#abasArea>.abas-area');a.i=abasIndice(a.abas);
+      if(a.abas&&a.i>-1)a.abas.classList.add('arrasta');else a.abas=null;
+      // a aba de destino entra à vista, quando as abas não cabem
+      const d0=dx<0?1:-1;if(a.abas&&a.viz[d0])abasAVista(a.abas,a.i+d0,true);
+    }
   }
   /* um toque longo que chegou a meio (o dedo parou antes dos 12px dele) abriu
      uma janela ou uma seleção: a página volta ao sítio e o gesto acaba */
@@ -578,14 +599,91 @@ function sepArrastoMove(e){
   // arrastar para a esquerda traz o separador da direita, que é o seguinte
   const d=dx<0?1:-1,tem=!!a.viz[d];
   a.desl=tem?dx:sepElastico(dx,a.w);
-  if(a.mexe)a.v.style.transform='translateX('+a.desl+'px)';
-  sepEspreita(a,tem&&dx?d:0);
+  if(!a.mexe)return sepEspreita(a,tem&&dx?d:0);
+  // primeiro o vizinho (e a medida do palco), depois a escrita: ler depois de escrever obrigava a recalcular
+  if(tem&&dx)sepVizinho(a,d);
+  sepVizinhosEm(a,a.desl);
+  a.v.style.transform='translateX('+a.desl+'px)';
+  /* o realce: da aba de onde se sai para a vizinha, à proporção do arrasto;
+     na ponta fica onde está (a página resiste, a fila não tem para onde ir) */
+  if(a.abas)abasPolegarEm(a.abas,a.i+(tem?d*Math.min(1,Math.abs(a.desl)/a.w):0));
 }
-/* O nome do separador que vem, a espreitar no espaço que a página deixa ao
-   sair para o lado — sem ele, o arrasto mostrava um vazio e não dizia para
-   onde se ia. Acende-se quando largar já vira. Não é tocável nem lido pelo
-   leitor de ecrã: quem lê tem os separadores no topo do ecrã. Sem movimento
-   (prefers-reduced-motion) fica parado à beira do ecrã, e só aparece.
+/* O palco do carrossel: uma caixa fixa por cima da faixa do #view que se vê
+   (do topo dele, ou do da janela se ele já subiu, até ao fundo da janela),
+   recortada à largura dele, onde os vizinhos entram (sepVizinho). Nunca
+   cobre as abas, que estão por cima do #view; a barra de baixo, por cima da
+   camada de saída, tapa o que lhe cabe.
+   Recebe: a — o arrasto em curso.
+   Devolve: o palco (um <div> na camada de saída), ou null sem onde o pôr. */
+function sepPalco(a){
+  if(a.palco)return a.palco;
+  if(typeof camadaDeSaida!=='function')return null;
+  const p=document.createElement('div');
+  p.className='sep-palco';p.setAttribute('aria-hidden','true');
+  p.style.left=Math.round(a.r0.left)+'px';p.style.width=Math.round(a.w)+'px';
+  camadaDeSaida().appendChild(p);
+  a.palco=p;a.alto=null;
+  sepPalcoAlto(a);
+  return p;
+}
+/* Acerta a altura do palco e o sítio do vizinho ao #view de agora: o
+   cabeçalho pode crescer a meio do arrasto (a faixa da sincronização) e
+   empurrar a página. O vizinho fica onde vai ficar — a viagem acaba com a
+   página no topo (o go faz scrollTo(0,0)), e o #view no topo começa onde
+   está agora mais o que já se rolou. O translateX do dedo não mexe no topo
+   medido, e a medida não obriga a refazer nada (só o transform mudou).
+   Recebe: a — o arrasto em curso, com o palco.
+   Devolve: nada. */
+function sepPalcoAlto(a){
+  const p=a.palco;if(!p)return;
+  const t=Math.round(a.v.getBoundingClientRect().top),alt=window.innerHeight||0;
+  if(a.alto===t)return;
+  a.alto=t;
+  const topo=Math.max(t,0);
+  p.style.top=topo+'px';p.style.height=Math.max(0,(alt||a.r0.height)-topo)+'px';
+  a.topo=t+Math.round(window.pageYOffset||0)-topo;
+  const viz=a.vizP||{};
+  Object.keys(viz).forEach(k=>{if(viz[k])viz[k].style.top=a.topo+'px'});
+}
+/* Pinta o separador vizinho de um lado, uma vez por gesto, pelo render de
+   sempre (vistas.js:pintarVistaAParte), numa caixa com as classes do #view,
+   como a de quem sai na fita (continuidade.js:deslizarPainel). Se a pintura
+   falhar, o lado fica vazio — o arrasto continua, e largar vira na mesma.
+   Recebe: a — o arrasto em curso; d — o lado (+1 o seguinte, -1 o anterior).
+   Devolve: nada — guarda o vizinho em a.vizP[d]. */
+function sepVizinho(a,d){
+  a.vizP=a.vizP||{};
+  if(d in a.vizP)return;
+  a.vizP[d]=null;
+  const palco=sepPalco(a);if(!palco)return;
+  const el=document.createElement('div');
+  el.className=String(a.v.className||'').split(/\s+/).filter(c=>c&&c!=='entra').join(' ')+' sep-vizinho';
+  el.setAttribute('inert','');
+  el.style.top=a.topo+'px';el.style.width=Math.round(a.w)+'px';
+  palco.appendChild(el);
+  const t0=Date.now();
+  if(typeof pintarVistaAParte!=='function'||!pintarVistaAParte(a.viz[d],el)){el.remove();return}
+  _sepPintura=Date.now()-t0;
+  a.vizP[d]=el;
+}
+/* quanto custou a última pintura de um vizinho (ms), para se poder medir */
+let _sepPintura=0;
+/* Põe os vizinhos já pintados colados à página: o da direita uma largura à
+   direita dela, o da esquerda uma à esquerda. O palco recorta o que fica de
+   fora.
+   Recebe: a — o arrasto; x — px a que a página está.
+   Devolve: nada. */
+function sepVizinhosEm(a,x){
+  sepPalcoAlto(a);
+  const p=a.vizP||{};
+  Object.keys(p).forEach(k=>{if(p[k])p[k].style.transform='translateX('+(Number(k)*a.w+x)+'px)'});
+}
+/* O nome do separador que vem, à beira do ecrã do lado de onde ele viria —
+   só no caminho sem movimento (prefers-reduced-motion), onde nem a página
+   nem o vizinho seguem o dedo e, sem ele, o arrasto não dizia para onde se
+   ia. Com movimento quem o diz é o próprio vizinho, a entrar (sepVizinho).
+   Acende-se quando largar já vira. Não é tocável nem lido pelo leitor de
+   ecrã: quem lê tem as abas no topo do ecrã.
    Recebe: a — o arrasto em curso; d — o lado do vizinho (+1, -1), ou 0 para
    o esconder (na ponta, ou com o dedo de volta ao sítio).
    Devolve: nada — cria, posiciona ou esconde o .sep-espreita. */
@@ -604,10 +702,8 @@ function sepEspreita(a,d){
     el.style.top=Math.round(a.meio)+'px';
     a.espW=el.offsetWidth||0;
   }
-  /* colado à borda da página que sai, 12px para dentro do vazio; sem
-     movimento, à beira do ecrã do lado de onde o vizinho viria */
-  const borda=d>0?a.r0.right+(a.mexe?a.desl:-a.espW-24):a.r0.left+(a.mexe?a.desl:a.espW+24);
-  const x=d>0?borda+12:borda-12-a.espW;
+  // 12px para dentro da beira da página, do lado de onde o vizinho viria
+  const x=d>0?a.r0.right-12-a.espW:a.r0.left+12;
   el.style.transform='translate('+Math.round(x)+'px,-50%)';
   el.classList.add('on');
   el.classList.toggle('pronto',Math.abs(a.dx)>a.w/4);
@@ -621,13 +717,27 @@ function sepArrastoLargar(){
   _sepArrasto=null;
 }
 /* Devolve a página ao estado de antes do arrasto: sem o transform do dedo,
-   sem o corte do pai, sem o nome a espreitar.
+   sem o corte do pai, sem o nome a espreitar e sem o palco dos vizinhos.
    Recebe: a — o arrasto que acabou.
    Devolve: nada. */
 function sepArrastoArrumar(a){
   if(a.v)a.v.style.transform='';
   if(a.v&&a.v.parentNode)a.v.parentNode.classList.remove('sep-arrasto');
   if(a.esp)a.esp.remove();
+  if(a.palco){a.palco.remove();a.palco=null;a.vizP={}}
+}
+/* O realce das abas no fim do arrasto: assenta na aba onde se fica, pela
+   transição da folha — com a duração da fita quando vira (a classe viaja:
+   chega com o painel), ou com a do regresso quando volta (volta). A classe
+   sai quando a viagem acabou.
+   Recebe: a — o arrasto que acabou; modo — 'viaja' ou 'volta'.
+   Devolve: nada. */
+function sepPolegarLargar(a,modo){
+  const nav=a.abas;if(!nav)return;
+  nav.classList.remove('arrasta','viaja','volta');
+  nav.classList.add(modo);
+  const dur=msDoToken(modo==='viaja'?'--lento':'--medio',modo==='viaja'?340:200);
+  setTimeout(()=>nav.classList.remove(modo),dur+120);
 }
 /* O dedo saiu: vira para o separador vizinho, se o gesto chegou para isso,
    ou devolve a página ao sítio. Um pointercancel (o browser ficou com o
@@ -646,16 +756,28 @@ function sepArrastoFim(e){
     (Math.abs(a.dx)>30&&Math.abs(a.vx)>.4&&(a.vx<0)===(a.dx<0)));
   if(a.esp){a.esp.remove();a.esp=null}
   if(vira){
-    /* o #view sai do arrasto ANTES de a fita o medir; ela parte de onde ele estava */
+    /* o #view sai do arrasto ANTES de a fita o medir; ela parte de onde ele
+       estava. O vizinho pintado sai no mesmo instante em que a fita põe o
+       verdadeiro no lugar dele — no mesmo fotograma, sem buraco. */
     const desde=a.mexe?a.desl:0;
     sepArrastoArrumar(a);
-    return sepIrPara(alvo,d,desde);
+    sepPolegarLargar(a,'viaja');
+    try{sepIrPara(alvo,d,desde)}
+    // a repintura já pousou o realce na aba nova; se não houve repintura, volta à de antes
+    finally{if(a.abas)abasPolegarEm(a.abas,abasIndice(a.abas),true)}
+    return;
   }
+  sepPolegarLargar(a,'volta');
+  if(a.abas)abasPolegarEm(a.abas,a.i,true);
   if(!a.mexe||!a.desl||!a.v.animate)return sepArrastoArrumar(a);
   const v=a.v,de=a.desl,dur=msDoToken('--medio',200);
+  const op={duration:dur,easing:tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)')};
   v.style.transform='';_sepVolta=true;
-  const an=v.animate([{transform:'translateX('+de+'px)'},{transform:'none'}],
-    {duration:dur,easing:tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)')});
+  const an=v.animate([{transform:'translateX('+de+'px)'},{transform:'none'}],op);
+  /* o vizinho volta para fora com a página, colado a ela */
+  const p=a.vizP||{};
+  Object.keys(p).forEach(k=>{const el=p[k],x=Number(k)*a.w;if(el&&el.animate)
+    el.animate([{transform:'translateX('+(x+de)+'px)'},{transform:'translateX('+x+'px)'}],Object.assign({fill:'forwards'},op))});
   let feito=false;
   const fim=()=>{if(feito)return;feito=true;_sepVolta=false;sepArrastoArrumar(a)};
   an.onfinish=fim;
@@ -730,6 +852,131 @@ function abasDaArea(){
   }
   return html?`<div class="abas">${html}</div>`:'';
 }
+/* ---- as abas da área, paradas por cima do carrossel ----
+   As abas da área (o .segm.abas-area do abasDaArea) não são do conteúdo de
+   um separador: são a fila por onde ele corre. Por isso vivem FORA do #view,
+   na casa delas (index.html:#abasArea), e quando o painel desliza — com o
+   dedo (sepArrastoMove) ou na fita (continuidade.js:deslizarPainel) — ficam
+   no mesmo píxel. Quem pinta continua a escrevê-las à cabeça da vista
+   (vistas.js:render, vistas.js:refrescarListasVivas,
+   lista-movimentos.js:refrescarMovimentos fazem html=abasDaArea()+…), e o
+   abasAssentar tira-as de lá e acerta a casa: a mesma fila fica o MESMO nó,
+   e só troca o aceso, os números e os destinos — o foco do teclado fica onde
+   estava, e o realce (o .segm-polegar, como o do imovel.js:imvSegmentado)
+   desliza da aba de onde se sai para a de destino. As Pessoas
+   (Inquilinos/Proprietários/Colaboradores, .abas-pessoas) são do conteúdo
+   das Pessoas e ficam no #view, a correr com ele. */
+/* Tira as abas da área da cabeça de uma vista acabada de pintar. A moldura
+   .abas fica, mesmo vazia: no computador, onde as abas nunca se viram, era
+   ela que dava os 14px por cima do conteúdo, e lá fica tudo como estava; no
+   telemóvel, vazia, a folha esconde-a (o espaço é o da casa das abas).
+   Recebe: raiz — o contentor da vista (o #view, ou o vizinho do carrossel).
+   Devolve: o <nav> tirado, ou null quando a vista não as tem. */
+function abasTirarDaVista(raiz){
+  if(!raiz||typeof raiz.querySelector!=='function')return null;
+  const m=raiz.querySelector(':scope>.abas'),n=m&&m.querySelector(':scope>.abas-area');
+  if(!n)return null;
+  n.remove();
+  return n;
+}
+/* As ligações de uma fila de abas, pela ordem (sem o polegar).
+   Recebe: nav — o .segm.abas-area.
+   Devolve: array de <a>. */
+function abasLigacoes(nav){
+  return nav&&typeof nav.querySelectorAll==='function'?[].slice.call(nav.querySelectorAll(':scope>a')):[];
+}
+/* A posição da aba acesa na fila.
+   Recebe: nav — o .segm.abas-area.
+   Devolve: o índice (0, 1, …), ou -1 sem aba acesa. */
+function abasIndice(nav){
+  return abasLigacoes(nav).findIndex(a=>a.classList.contains('on'));
+}
+/* Leva a fila nova para a casa das abas, ou acerta a que lá está. Corre a
+   seguir a cada pintura do #view (vistas.js:render, refrescarListasVivas) e,
+   para quem pinta por outra via (lista-movimentos.js:refrescarMovimentos),
+   pelo observador do abasVigiar. Uma fila com a mesma área e o mesmo número
+   de abas é a mesma fila: fica o nó vivo e copiam-se as diferenças
+   (abasCopiar). Outra área, ou outras abas à vista, troca a fila inteira —
+   aí não há realce a deslizar, porque não há de onde. Fora de uma área com
+   separadores a casa esvazia-se (e o :empty esconde-a).
+   Devolve: nada — mexe na casa das abas (#abasArea). */
+function abasAssentar(){
+  const v=view(),casa=document.getElementById('abasArea');
+  if(!v||!casa||typeof casa.replaceChildren!=='function')return;
+  const novo=abasTirarDaVista(v),vivo=casa.firstElementChild||null;
+  // o vizinho que o carrossel pinta à parte (vistas.js:pintarVistaAParte) não é a área de agora
+  if(typeof _pintarAParte!=='undefined'&&_pintarAParte)return;
+  if(!novo){if(vivo&&!areaComSeparadores())casa.replaceChildren();return}
+  let nav=novo;
+  if(vivo&&vivo.getAttribute('aria-label')===novo.getAttribute('aria-label')&&
+     abasLigacoes(vivo).length===abasLigacoes(novo).length){abasCopiar(novo,vivo);nav=vivo}
+  else{
+    novo.classList.add('desliza','n'+abasLigacoes(novo).length);
+    novo.insertAdjacentHTML('afterbegin','<span class="segm-polegar" aria-hidden="true"></span>');
+    casa.replaceChildren(novo);
+    casa.scrollLeft=0;             // a fila de outra área começa no princípio, não onde a outra rolou
+  }
+  const i=abasIndice(nav);
+  abasPolegarEm(nav,i,true);
+  abasAVista(nav,i,nav===vivo);
+}
+/* Copia para as abas vivas o que mudou nas acabadas de escrever: o aceso
+   (class e aria-current), o destino (o data-click das Pessoas muda com o
+   último tipo visto) e o rótulo com o número. O que já é igual não se toca.
+   Recebe: de — o <nav> novo; para — o <nav> vivo, com o mesmo número de abas.
+   Devolve: nada. */
+function abasCopiar(de,para){
+  const novas=abasLigacoes(de);
+  abasLigacoes(para).forEach((a,i)=>{
+    const b=novas[i];if(!b||a.outerHTML===b.outerHTML)return;
+    [].slice.call(a.attributes).forEach(x=>{if(!b.hasAttribute(x.name))a.removeAttribute(x.name)});
+    [].slice.call(b.attributes).forEach(x=>{if(a.getAttribute(x.name)!==x.value)a.setAttribute(x.name,x.value)});
+    if(a.innerHTML!==b.innerHTML)a.innerHTML=b.innerHTML;
+  });
+}
+/* Põe o realce numa aba, ou a meio caminho entre duas. Numa posição inteira
+   e assente, a classe i0…i3 diz onde (estilos.css, a secção «deslizar entre
+   separadores»), e a transição da folha leva-o lá; a meio de um arrasto, o
+   transform segue o dedo, em fração de aba (translateX em múltiplos da
+   largura do próprio realce mais o intervalo de 2px, a mesma conta do
+   .segm-polegar.i1).
+   Recebe: nav — o .segm.abas-area; p — a posição (0 na primeira aba; 1.4 é
+   40% do caminho entre a segunda e a terceira); assente — true para a
+   pousar na aba p (tira o transform do dedo).
+   Devolve: nada. */
+function abasPolegarEm(nav,p,assente){
+  const pol=nav&&typeof nav.querySelector==='function'&&nav.querySelector(':scope>.segm-polegar');
+  if(!pol)return;
+  if(assente){
+    pol.className='segm-polegar'+(p>-1?' i'+p:' fora');
+    pol.style.transform='';
+    return;
+  }
+  pol.style.transform='translateX(calc('+(Math.round(p*1000)/1000)+' * (100% + 2px)))';
+}
+/* Quando as abas não cabem (estilos.css:#abasArea rola de lado), traz uma
+   delas à vista, com 16px de folga, sem mexer nas que já se veem.
+   Recebe: nav — o .segm.abas-area; i — a aba; suave — true para rolar com
+   movimento (nunca sem movimento pedido).
+   Devolve: nada. */
+function abasAVista(nav,i,suave){
+  const casa=nav&&nav.parentNode,a=abasLigacoes(nav)[i];
+  if(!a||!casa||!(casa.scrollWidth>casa.clientWidth+1)||typeof casa.scrollBy!=='function')return;
+  const c=casa.getBoundingClientRect(),r=a.getBoundingClientRect(),folga=16;
+  const d=r.left<c.left+folga?r.left-c.left-folga:r.right>c.right-folga?r.right-c.right+folga:0;
+  if(d)casa.scrollBy({left:d,behavior:suave&&!semMovimento()?'smooth':'auto'});
+}
+/* Vigia o #view: quem o repinta por outra via que não o render (a pesquisa
+   dos Movimentos, lista-movimentos.js:refrescarMovimentos) escreve lá as
+   abas de novo, e o observador leva-as para a casa delas antes de o browser
+   pintar (corre numa microtarefa). Corre uma vez, ao carregar.
+   Devolve: nada. */
+function abasVigiar(){
+  const v=view();
+  if(!v||typeof MutationObserver!=='function'||typeof v.nodeType!=='number')return;
+  new MutationObserver(abasAssentar).observe(v,{childList:true});
+}
+abasVigiar();
 /* Quantos há de cada tipo de pessoa, para o segmentado das Pessoas: as
    fichas dos inquilinos e dos proprietários, que estão na base; e quem
    colabora nos meus imóveis, que só a nuvem sabe

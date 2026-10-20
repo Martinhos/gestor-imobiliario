@@ -1,7 +1,8 @@
 /* ================= PESSOAS, AS LISTAS (serviços tenants e owners) ================= */
-/* As listas dos inquilinos e dos proprietários, a linha de uma pessoa e o
-   menu de toque longo. A ficha está em pessoas.js. São dois serviços num
-   ficheiro: partilham a linha e a ficha, e o toque longo decide pelo kind.
+/* As listas dos inquilinos e dos proprietários, a linha de uma pessoa e a
+   folha das opções (o toque longo nos inquilinos seleciona vários). A ficha
+   está em pessoas.js. São dois serviços num ficheiro: partilham a linha e a
+   ficha, e a folha das opções decide pelo kind.
    Veio de vistas.js e de componentes.js:lpMenu quando a app passou a
    serviços; regista-se no fim.
 
@@ -21,9 +22,11 @@
    uma coluna com o contacto. Cada coisa só com o serviço que a alimenta
    ligado nesta conta — desligado, nem «Sem contrato»: seria falar de um
    serviço que a conta não tem; fica o contacto.
-   Ao toque abre a ficha (personView); o toque longo abre as opções. Sem o ⋮:
-   as opções estão na ficha (o ⋯ da janela) e no toque longo, como nas outras
-   listas do canvas.
+   Ao toque abre a ficha (personView). O toque longo num inquilino entra na
+   seleção de vários com ele marcado, como nas Casas
+   (cloud/selecao-listas.js:lpLongo, que põe a caixa antes do avatar); num
+   proprietário não faz nada. Sem o ⋮: as opções de um só estão na ficha (o
+   ⋯ da janela), como nas outras listas do canvas.
    Recebe: pp — a pessoa (objeto de inquilino ou de proprietário); kind —
    'tenant' ou 'owner'; sit (opcional) — os contratos do inquilino já
    arrumados (pessoas.js:pesContratos), para a lista não os contar duas vezes.
@@ -147,7 +150,11 @@ function vOwners(){
   if(!list.length)return head+vazioFiltro();
   return head+listaViva('proprietarios',list.map(o=>({chave:'own:'+o.id,html:personCard(o,'owner')})),'pes-lista');
 }
-/* O menu de toque longo de uma pessoa (data-lp "per:<kind>:<id>"). O handler
+/* A folha das opções de uma pessoa (data-lp "per:<kind>:<id>"), a que o
+   componentes.js:lpMenu dá a vez. Na lista o toque longo já não a abre —
+   entra na seleção de vários (cloud/selecao-listas.js:lpLongo) —, mas fica
+   como o handler do prefixo: é por ela que os outros serviços juntam as suas
+   opções (lpExtras), e o lpMenu continua a abri-la. O handler
    é registado pelos dois serviços e o dono é o do kind: com os Proprietários
    desligados, um cartão de proprietário não abre nada (e o mesmo para os
    Inquilinos). Os outros serviços acrescentam as suas opções por lpExtras.

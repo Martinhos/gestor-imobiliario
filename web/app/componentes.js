@@ -891,15 +891,32 @@ let _desfazer=null;
    Recebe: msg — o texto do toast; restaurar — função que repõe os dados quando
    o Anular é clicado; aoExpirar (opcional) — função corrida quando o prazo
    passa sem clique, ou quando outro desfazer atropela este.
-   Devolve: nada — mostra o toast e arma o prazo de seis segundos. */
+   Devolve: nada — mostra o toast e arma o prazo de seis segundos.
+   O prazo é o dos 6400ms desde o apagar (o toast sai aos 6000, e os 400 de
+   folga apanham o toque do último instante). Com o dedo pousado no toast
+   (avisoPousar) o prazo espera: o «Anular» não pode ficar à vista depois de
+   o que não volta já ter sido liquidado. Se o dedo o devolve ao sítio, o
+   toast ganha o tempo que esteve seguro e o prazo anda com ele (o `segura`
+   recebe esse acréscimo); se o afasta, o prazo é o de sempre — fechar o
+   cartão não anula nem antecipa nada. */
 function comDesfazer(msg,restaurar,aoExpirar){
   if(_desfazer&&_desfazer.expira)_desfazer.expira();   // o anterior liquida-se
-  const eu={expira:aoExpirar||null};_desfazer=eu;
+  const eu={expira:aoExpirar||null,fim:Date.now()+6400,preso:false,h:0};_desfazer=eu;
+  // o prazo chegou: liquida, a não ser que o dedo esteja no toast ou que o fim tenha andado
+  const vence=()=>{
+    if(_desfazer!==eu||eu.preso)return;
+    const falta=eu.fim-Date.now();
+    if(falta>0){clearTimeout(eu.h);eu.h=setTimeout(vence,falta);return}
+    _desfazer=null;if(eu.expira)eu.expira();
+  };
   toast(msg,{rotulo:'Anular',ms:6000,fn(){
     if(_desfazer===eu)_desfazer=null;
     restaurar();save();try{buildNav()}catch(e){}render();toast('Anulado.');
+  },segura(sim,mais){
+    if(sim){eu.preso=true;return}
+    eu.preso=false;eu.fim+=mais||0;clearTimeout(eu.h);vence();
   }});
-  setTimeout(()=>{if(_desfazer===eu){_desfazer=null;if(eu.expira)eu.expira()}},6400);
+  eu.h=setTimeout(vence,6400);
 }
 
 /* O erro diz-se no próprio campo: o contorno vermelho e, por baixo dele, a
@@ -1021,14 +1038,229 @@ function lpMenu(v){
    possivel. Sem op, comporta-se exatamente como sempre.
    Recebe: m — a mensagem a mostrar (texto); op (opcional) — {rotulo, fn, ms}: o texto do botão,
    o que ele faz ao ser tocado e quanto tempo o aviso fica no ecrã (ms; 2800 por omissão).
-   Devolve: nada — mostra o aviso no fundo do ecrã. */
+   Devolve: nada — mostra o aviso no fundo do ecrã.
+   Um aviso com botão arrasta-se para baixo com o dedo (avisoPousar): leva a
+   classe .arrasta, guarda o op em t._op e a hora a que sai em t._fim, para o
+   arrasto pausar e retomar o prazo. O op pode trazer segura(sim, mais) — o
+   comDesfazer usa-o para o prazo dele esperar pelo dedo. Um aviso novo a
+   meio de um arrasto ganha: o arrasto acaba ali (avisoInterromper). */
 function toast(m,op){const t=document.getElementById('toast');
+  avisoInterromper(t);
   t.textContent=m;
-  if(op&&op.rotulo&&op.fn){const b=document.createElement('button');b.type='button';b.className='toastbtn';
-    b.textContent=op.rotulo;b.onclick=()=>{clearTimeout(t._h);t.classList.remove('on');op.fn()};t.appendChild(b)}
+  const comBotao=!!(op&&op.rotulo&&op.fn);
+  if(comBotao){const b=document.createElement('button');b.type='button';b.className='toastbtn';
+    /* o clique que o browser dá a seguir a um arrasto não é um toque no Anular */
+    b.textContent=op.rotulo;b.onclick=()=>{if(Date.now()<_avisoEngole){_avisoEngole=0;return}
+      clearTimeout(t._h);t.classList.remove('on');op.fn()};t.appendChild(b)}
+  t._op=comBotao?op:null;
+  t.classList.toggle('arrasta',comBotao);
   avisoAcimaDoRodape();
   t.classList.add('on');clearTimeout(t._h);
-  t._h=setTimeout(()=>t.classList.remove('on'),(op&&op.ms)||2800)}
+  const ms=(op&&op.ms)||2800;t._fim=Date.now()+ms;
+  t._h=setTimeout(()=>t.classList.remove('on'),ms)}
+
+/* ---- O aviso afasta-se com o dedo ----
+   O cartão do «Anular» tapa o fundo do ecrã seis segundos, e às vezes é
+   precisamente o que está por trás que se quer ver. Puxa-se para baixo:
+   só o eixo vertical, para cima resiste (avisoElastico). Largar passada
+   metade da altura dele, ou com um sacudir para baixo, fecha-o a deslizar
+   para fora — o apagado continua apagado, e o comDesfazer liquida no prazo
+   de sempre. Largar antes disso devolve-o ao sítio. Enquanto o dedo está
+   nele o prazo do aviso para; ao voltar, retoma (com um mínimo para se ler).
+   Só o dedo e a caneta (AVISO_PONTEIROS): com o rato, arrastar é selecionar
+   texto, e no computador o aviso não tapa o que tapa num telemóvel. Sem
+   movimento (prefers-reduced-motion) não segue o dedo: desvanece um pouco
+   quando largar já fecha, e fecha sem animar. */
+// quem arrasta o aviso: o dedo e a caneta; o rato fica de fora
+const AVISO_PONTEIROS=['touch','pen'];
+// a velocidade (px/ms, para baixo) que conta como sacudir — a do arrasto entre separadores
+const AVISO_SACODIR=.4;
+// devolvido ao sítio, o aviso fica pelo menos isto (ms): o que estava a acabar não some ao voltar
+const AVISO_RETOMA_MS=1500;
+let _avisoArr=null,_avisoEngole=0;
+/* O dedo pousou: se foi num aviso com botão, à vista, o prazo dele para e
+   fica-se à escuta do arrasto. Pegar no aviso a meio do regresso apanha-o
+   onde ele está, sem salto.
+   Recebe: e — o PointerEvent do pointerdown (ouvido no documento).
+   Devolve: nada — liga os ouvintes do documento. */
+function avisoPousar(e){
+  if(_avisoArr||!e||e.button>0||e.isPrimary===false||AVISO_PONTEIROS.indexOf(e.pointerType)<0)return;
+  const t=e.target&&typeof e.target.closest==='function'?e.target.closest('#toast'):null;
+  if(!t||!t._op||!t.classList.contains('on')||!t.classList.contains('arrasta'))return;
+  const agora=Date.now();
+  const a={id:e.pointerId,t,op:t._op,x0:e.clientX,y0:e.clientY,base:0,dy:0,desl:0,vy:0,ya:e.clientY,ta:avisoHora(e),
+    ativo:false,mexe:!semMovimento(),h:1,topo:0,resto:Math.max(0,(t._fim||agora)-agora),fimAntes:t._fim||agora};
+  if(t._anim){
+    // a meio do regresso: fica onde a animação o tinha
+    try{const m=/matrix\(([^)]*)\)/.exec(getComputedStyle(t).transform||'');
+      if(m)a.base=parseFloat(m[1].split(',')[5])||0}catch(x){}
+    const an=t._anim;t._anim=null;try{an.cancel()}catch(x){}
+    t.classList.add('arrastar');
+    a.desl=a.dy=a.base;
+    if(a.base)t.style.transform='translateX(-50%) translateY('+a.base+'px)';
+  }
+  _avisoArr=a;
+  clearTimeout(t._h);
+  if(a.op.segura)a.op.segura(true);
+  document.addEventListener('pointermove',avisoArrastoMove);
+  document.addEventListener('pointerup',avisoArrastoFim);
+  document.addEventListener('pointercancel',avisoArrastoFim);
+}
+/* O dedo andou: na vertical, passados os 10px de decidir, o aviso segue-o;
+   para o lado, o gesto não é dele (fica parado até o dedo sair).
+   Recebe: e — o PointerEvent do pointermove.
+   Devolve: nada — mexe no transform do #toast. */
+function avisoArrastoMove(e){
+  const a=_avisoArr;if(!a||e.pointerId!==a.id||a.deLado)return;
+  const t=a.t;
+  let dy=e.clientY-a.y0;const dx=e.clientX-a.x0;
+  if(!a.ativo){
+    if(Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy)){a.deLado=true;return}
+    if(Math.abs(dy)<10)return;
+    a.ativo=true;
+    const r=t.getBoundingClientRect?t.getBoundingClientRect():null;
+    a.h=(r&&r.height)||t.offsetHeight||1;a.topo=((r&&r.top)||0)-a.base;
+    // a folga de decidir não conta: o aviso arranca colado ao dedo, sem salto
+    a.y0+=dy<0?-10:10;dy=e.clientY-a.y0;
+    try{t.setPointerCapture(a.id)}catch(x){}
+    t.classList.add('arrastar');
+  }
+  const agora=avisoHora(e),dt=agora-a.ta;
+  // a velocidade dos últimos instantes, alisada: é ela que diz se o gesto foi um sacudir
+  if(dt>0)a.vy=.6*((e.clientY-a.ya)/dt)+.4*a.vy;
+  a.ya=e.clientY;a.ta=agora;
+  a.dy=a.base+dy;
+  a.desl=a.dy>=0?a.dy:avisoElastico(a.dy,a.h);
+  if(a.mexe)t.style.transform='translateX(-50%) translateY('+a.desl+'px)';
+  t.classList.toggle('pronto',avisoFechaAoLargar(a,agora));
+}
+/* Para cima, o aviso resiste: anda cada vez menos quanto mais se puxa, e
+   nunca passa de metade da altura dele (a curva do sepElastico).
+   Recebe: dy — px que o dedo andou (negativo, para cima); h — a altura do aviso.
+   Devolve: px a que o aviso fica (com o sinal de dy). */
+function avisoElastico(dy,h){
+  const a=Math.abs(dy),l=h||1;
+  return Math.sign(dy)*(1-1/(a*.55/l+1))*l*.5;
+}
+/* Largar agora fecha o aviso? Passada metade da altura dele, ou a descer
+   depressa. Uma velocidade de há mais de 100ms já não é um sacudir: o dedo
+   parou antes de sair.
+   Recebe: a — o arrasto em curso; agora — a hora do evento (avisoHora).
+   Devolve: true/false. */
+function avisoFechaAoLargar(a,agora){
+  const vy=agora-a.ta>100?0:a.vy;
+  return a.dy>a.h/2||(a.dy>0&&vy>AVISO_SACODIR);
+}
+/* A hora de um evento do dedo, para a velocidade: a do próprio evento (em
+   alta resolução, a de quando o dedo lá esteve), e não a de quando o código
+   corre — os movimentos chegam às vezes aos pares no mesmo milissegundo, e
+   pelo relógio da página um par desses parecia um sacudir.
+   Recebe: e — o PointerEvent (pode não trazer timeStamp, como nos testes).
+   Devolve: ms (número), sempre no mesmo relógio para o mesmo gesto. */
+function avisoHora(e){
+  return e&&typeof e.timeStamp==='number'&&e.timeStamp>0?e.timeStamp:Date.now();
+}
+/* Tira os ouvintes do documento e esquece o arrasto.
+   Devolve: nada. */
+function avisoArrastoLargar(){
+  document.removeEventListener('pointermove',avisoArrastoMove);
+  document.removeEventListener('pointerup',avisoArrastoFim);
+  document.removeEventListener('pointercancel',avisoArrastoFim);
+  _avisoArr=null;
+}
+/* O dedo saiu: fecha o aviso, se o gesto chegou para isso, ou devolve-o ao
+   sítio e retoma o prazo. Um pointercancel nunca fecha. Depois de um
+   arrasto, o clique que o browser dispara engole-se (o Anular não carrega).
+   Recebe: e — o PointerEvent do pointerup ou do pointercancel.
+   Devolve: nada. */
+function avisoArrastoFim(e){
+  const a=_avisoArr;if(!a||(e&&e.pointerId!==a.id))return;
+  avisoArrastoLargar();
+  // um toque (ou um dedo que foi para o lado): o aviso fica, ou acaba de voltar se o dedo o apanhou a meio
+  if(!a.ativo){avisoVoltaAoSitio(a);return avisoRetoma(a)}
+  // se não vier clique nenhum, o próximo toque é a sério
+  _avisoEngole=Date.now()+350;
+  if(e&&e.type!=='pointercancel'&&avisoFechaAoLargar(a,avisoHora(e)))return avisoSaiPorBaixo(a);
+  avisoVoltaAoSitio(a);avisoRetoma(a);
+}
+/* O aviso sai pelo fundo, a partir de onde o dedo o deixou: a mesma
+   direção por onde entrou. Por baixo da animação ele já está fechado (sem
+   .on, sem toque), para nada piscar no fim. O prazo do desfazer é o de
+   sempre: segura(false) sem acréscimo.
+   Recebe: a — o arrasto que acabou.
+   Devolve: nada. */
+function avisoSaiPorBaixo(a){
+  const t=a.t,de='translateX(-50%) translateY('+a.desl+'px)';
+  clearTimeout(t._h);t._fim=0;
+  t.classList.remove('pronto');t.style.transform='';t.classList.remove('on');
+  if(a.op.segura)a.op.segura(false,0);
+  if(!a.mexe||typeof t.animate!=='function')return avisoAssentar(t);
+  // até sair do ecrã, e nunca para trás de onde o dedo o largou
+  const fora=Math.max(a.desl,(window.innerHeight||0)-a.topo),dur=msDoToken('--medio',200);
+  const an=t.animate([{transform:de,opacity:1},{transform:'translateX(-50%) translateY('+Math.round(fora)+'px)',opacity:0}],
+    {duration:dur,easing:tokenTexto('--curva','cubic-bezier(.22,1,.36,1)')});
+  avisoQuandoAcabar(t,an,dur);
+}
+/* O aviso volta ao sítio, a partir de onde o dedo o deixou (--medio,
+   --curva-entra). Sem movimento, ou sem deslocação, só assenta.
+   Recebe: a — o arrasto que acabou.
+   Devolve: nada. */
+function avisoVoltaAoSitio(a){
+  const t=a.t,de='translateX(-50%) translateY('+a.desl+'px)';
+  t.classList.remove('pronto');t.style.transform='';
+  if(!a.mexe||!a.desl||typeof t.animate!=='function')return avisoAssentar(t);
+  const dur=msDoToken('--medio',200);
+  const an=t.animate([{transform:de},{transform:'translateX(-50%)'}],
+    {duration:dur,easing:tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)')});
+  avisoQuandoAcabar(t,an,dur);
+}
+/* Guarda a animação do aviso (para um dedo ou um aviso novo a poderem
+   interromper) e, no fim dela, devolve-lhe as transições de sempre.
+   Recebe: t — o #toast; an — a Animation; dur — a duração dela (ms).
+   Devolve: nada. */
+function avisoQuandoAcabar(t,an,dur){
+  t._anim=an;
+  const fim=()=>{if(t._anim!==an)return;t._anim=null;avisoAssentar(t)};
+  an.onfinish=fim;
+  // a rede de sempre: num separador escondido o onfinish não chega
+  setTimeout(fim,dur+120);
+}
+/* Tira a classe do arrasto sem disparar as transições: o estilo de agora
+   calcula-se primeiro, com elas desligadas, e só depois elas voltam.
+   Recebe: t — o #toast.
+   Devolve: nada. */
+function avisoAssentar(t){
+  try{void getComputedStyle(t).opacity}catch(x){}
+  t.classList.remove('arrastar');t.classList.remove('pronto');
+}
+/* O prazo do aviso volta a contar, com o que faltava (pelo menos
+   AVISO_RETOMA_MS), e o op fica a saber quanto tempo ele ganhou.
+   Recebe: a — o arrasto que acabou com o aviso à vista.
+   Devolve: nada. */
+function avisoRetoma(a){
+  const t=a.t;
+  if(!t.classList.contains('on')||t._op!==a.op)return;
+  const resto=Math.max(a.resto,AVISO_RETOMA_MS);
+  t._fim=Date.now()+resto;clearTimeout(t._h);
+  t._h=setTimeout(()=>t.classList.remove('on'),resto);
+  if(a.op.segura)a.op.segura(false,Math.max(0,t._fim-a.fimAntes));
+}
+/* Um aviso novo chegou: o arrasto ou a animação do anterior acabam aqui, e
+   o op dele deixa de esperar pelo dedo (o prazo dele é o de sempre). As
+   transições voltam já, sem assentar primeiro: o aviso novo regressa ao
+   sítio pela transição do .on, a partir de onde o dedo o tinha.
+   Recebe: t — o #toast (pode faltar).
+   Devolve: nada. */
+function avisoInterromper(t){
+  if(!t)return;
+  const a=_avisoArr;
+  if(a&&a.t===t){avisoArrastoLargar();if(a.op.segura)a.op.segura(false,0)}
+  if(t._anim){const an=t._anim;t._anim=null;try{an.cancel()}catch(x){}}
+  if(a||(t.classList&&t.classList.contains('arrastar'))){
+    t.style.transform='';t.classList.remove('arrastar');t.classList.remove('pronto');
+  }
+}
+document.addEventListener('pointerdown',avisoPousar);
 
 /* Põe o aviso acima do rodapé da janela que estiver aberta.
 
@@ -1064,7 +1296,13 @@ function avisoAcimaDoRodape(){
      está à vista (no computador, com a gaveta aberta ou em seleção é
      display:none e o rect vem vazio). Aqui sem os 12px de folga de baixo: o
      aviso fica à distância de sempre (os 22px do fundo), contada do topo da
-     barra em vez do fundo do ecrã. */
+     barra em vez do fundo do ecrã. Em seleção a barra de baixo some e fica a
+     das ações (.sel-fundo, a das listas e a dos Movimentos, que no telemóvel
+     tem duas linhas): o aviso sobe acima dela da mesma maneira. */
+  if(!acima){
+    const sf=document.querySelector('.sel-fundo'),rs=sf&&sf.getBoundingClientRect?sf.getBoundingClientRect():null;
+    if(rs&&rs.height&&rs.top<H)acima=H-rs.top-12;
+  }
   if(!acima){
     const barra=document.getElementById('tabbar'),r=barra&&barra.getBoundingClientRect?barra.getBoundingClientRect():null;
     if(r&&r.height&&r.top<H)acima=H-r.top-12;

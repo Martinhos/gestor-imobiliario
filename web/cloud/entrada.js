@@ -247,7 +247,7 @@ function showAuth(msg, nota) {
     return '<button type="button" role="tab" id="cwaTab_' + modo + '" aria-selected="' + on + '" aria-controls="cwaPainel" tabindex="' + (on ? '0' : '-1') + '"' +
       (on ? ' class="on"' : '') + ' data-toca="ecra" data-click="CW.modoDaEntrada(\'' + modo + '\')" data-keydown="CW.teclaDaEntrada(event)">' + rotulo + '</button>';
   };
-  var marca = '<span class="marca" aria-hidden="true"></span><span class="disp ent-nome">Rendorium</span>';
+  var marca = '<span class="marca" aria-hidden="true">' + ic('home', 18) + '</span><span class="disp ent-nome">Rendorium</span>';
   authEl.style.display = 'flex';
   authEl.innerHTML =
     '<div class="ent' + (ch ? ' ent-com-faixa' : '') + '">' +

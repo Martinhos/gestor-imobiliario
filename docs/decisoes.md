@@ -44,6 +44,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-20 · As listas imitam os Movimentos, e a nuvem diz se liga
 - 2026-10-20 · A terceira volta da v40: sem saltos, por quartos, e sem o filtro de proprietário
 - 2026-10-20 · A quarta volta da v40: o realce que o Samsung escurece, as fotos em carrossel e os quartos a partir do fim
+- 2026-10-20 · A quinta volta da v40: o carrossel dos separadores, uma seleção só, os Inquilinos e as Visitas selecionáveis, o Anular que se afasta e o Início que não é uma casa
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1350,6 +1351,11 @@ ecrã novo. Só o dedo e a caneta, porque num computador com a janela
 estreita arrastar com o rato é selecionar texto; e as bordas de 20px ficam
 ao voltar do Android e do Safari, que nasce lá.
 
+> Nota de 2026-10-20: o vizinho passou a ser pintado de verdade enquanto o
+> dedo arrasta, a pedido do Martinho («o conteúdo deve ser como um
+> carroucel», «a barra de cima não deve ir»), e o nome no vazio ficou só para
+> quem pede menos movimento — ver «2026-10-20 · A quinta volta da v40».
+
 O modelo pode ficar sem montante (movimento.js:txMontanteOpcional). O
 Martinho nem sempre sabe quanto vai pagar — a luz, a água, uma obra —, e o
 modelo serve para não reescrever a descrição, o imóvel, a categoria e a
@@ -1758,3 +1764,104 @@ clique fora, pelo scroll ou pelo Escape (componentes.js:menuEscape), que
 devolve o foco ao botão e deixa a janela de baixo onde está. O fecho ao
 rolar tirava o .on sem passar pelo closePops, e o botão ficava a dizer
 «aberto» com o menu fechado: foi a mudança à mão no arranque.
+
+## 2026-10-20 · A quinta volta da v40: o carrossel dos separadores, uma seleção só, os Inquilinos e as Visitas selecionáveis, o Anular que se afasta e o Início que não é uma casa
+A quinta volta do Martinho pela v40 em dev, ainda no mesmo dia. Saíram
+quatro folhas — o carrossel dos separadores com as abas paradas, a seleção
+dos Movimentos como a das Casas, os Inquilinos e as Visitas selecionáveis
+(com a barra dos Planeados), e o cartão do «Anular» que se puxa para baixo —
+e uma mudança à mão: o ícone do Início e a marca. As regras vivem no
+design.md; aqui fica o porquê.
+
+**Deslizar entre os separadores de uma área é um carrossel.** «Quando faço
+scroll lateral nos movimentos, casas, etc, a barra de cima não deve ir. Deve
+deslizar para o submenu correspondente. O conteúdo deve ser como um
+carroucel.» Reverte o que se tinha decidido no dia 19 (a nota está lá, em
+«A cara nova depois de usada»): o vizinho pinta-se de verdade enquanto o
+dedo arrasta (vistas.js:pintarVistaAParte), e as abas da área ficam paradas
+por cima, com o realce a correr entre as duas (navegacao.js:abasPolegarEm).
+O custo que antes nos fez recusar — um render a mais por gesto — paga-se uma
+vez por lado e por gesto, no arranque (navegacao.js:sepVizinho), e mediu-se:
+com os dados de exemplo, 3 a 16ms a 1x e 11 a 80ms com o processador a um
+quarto; o pior é ter os Movimentos como vizinho (~80ms de JavaScript e um
+fotograma de ~200ms a 4x), menos do que o render que qualquer ida aos
+Movimentos já custa nesse processador (220 a 330ms). A pintura é o render de
+sempre, e não um esboço: um vizinho sem os pendentes por confirmar mudava de
+forma no fotograma em que chegava.
+
+As abas saíram do #view para a casa delas (index.html:#abasArea,
+navegacao.js:abasAssentar), porque um nó que se repinta por cima de si mesmo
+não desliza o realce, e porque o arrasto e a fita movem o #view inteiro. De
+área para área elas entram com o conteúdo (continuidade.js:abasNaFita): são
+a cabeça de outra página. Os Inquilinos, os Proprietários e os Colaboradores
+ficam fora da fila, como antes. A espreita do nome ficou só no caminho sem
+movimento.
+
+**Os Movimentos selecionam-se como as Casas.** «O modo de seleção multipla
+no menu casas é diferente do do menu dinheiro. Quero que seja igual ao das
+casas, tendo em conta os botões que já existem. Mantém os botões, muda o
+feel e visual.» A resposta do Martinho fixou o modelo: o das Casas, em todo
+o lado. Saíram o deslize do nome do mês — o FLIP à mão do cloud/selecao.js,
+com os fantasmas das caixas na camada de saída da continuidade — e as caixas
+por mês, que só os Movimentos tinham; o título do mês ficou igual dentro e
+fora da seleção, sem caixa e sem se colar ao topo. As caixas entram a
+desvanecer como as das Casas (cloud/selecao.js:selCaixasEntram), e sair é
+sem animação, como lá. O «⋯» que o botão do cabeçalho era em seleção saiu,
+com o menu das ações que abria: as ações estão todas na barra do fundo.
+
+A barra passou a ser a delas — × Cancelar, a contagem ao meio, as ações — e
+foi para o body (cloud/selecao.js:selBarraPor), para não andar com o #view.
+No telemóvel ficou em duas linhas, como na prévia que o Martinho escolheu:
+os quatro botões dos Movimentos (Categoria, Etiquetas, Editar, Apagar) não
+cabiam numa linha com o Cancelar e a contagem a 375px, e com o ícone por
+cima de um rótulo curto cabem lado a lado. O toque longo em seleção passou a
+marcar, como nas Casas: antes voltava a entrar na seleção e deitava fora o
+que estava marcado. A linha marcada ganhou o realce dos cartões das Casas, e
+o contorno, que é cor da frente, distingue-a no escurecimento forçado do
+Samsung Internet (ver a volta anterior).
+
+**Os Inquilinos e as Visitas selecionam-se; os Proprietários não.** «As
+pessoas e visitas também devem ser selecionáveis. Para as visitas, para
+além de apagar vários, devo poder marcar como realizada ou como falta. Para
+as pessoas, devo poder apagar várias.» O pedido dos proprietários — ver as
+casas partilhadas com ele e as percentagens — já existia: a ficha tem
+«Imóveis e quota-parte», e cada imóvel abre a ficha dele. O Martinho («Não
+vi que já existia») deixou-a como está, e a seleção nas Pessoas é só nos
+Inquilinos. As visitas da Visão geral usam a mesma linha, mas não se
+selecionam: a seleção é do separador das Visitas.
+
+Quem não se pode levar não se marca (cloud/selecao-listas.js:selLRecusa):
+marcar e só ouvir a recusa no fim era um botão que serve para ouvir «não
+podes»; assim o toque diz porquê logo ali. Apagar vários inquilinos tem
+Anular, ao contrário do delPerson de um só, porque é o padrão da barra e
+são vários de uma vez; por isso os documentos esperam pelo fim do Anular
+para sair do IndexedDB (cloud/selecao-listas.js:selLApagarInquilinos).
+
+A barra dos Planeados escondia a contagem no telemóvel, e o Cancelar
+encolhia para só o ×, porque não cabiam ao lado de três botões. Com as
+ações numa segunda linha (estilos.css:.sel-l-duas) — a forma da prévia que o
+Martinho escolheu para os Movimentos —, cabem a contagem, o nome do
+Cancelar e as ações a 375px; as Visitas, com Realizada, Falta e Apagar,
+usam a mesma.
+
+**O cartão do «Anular» puxa-se para baixo.** «Devo poder deslizar para
+baixo o cartão que aparece que permite anular quando apago alguma coisa.
+Posso querer ver alguma coisa que está por detrás dele.» Fechá-lo é só tirar
+o cartão da frente — por isso não anula (seria a ação contrária ao gesto)
+nem liquida mais cedo: os seis segundos de arrependimento não mudam por se
+ter afastado o cartão. O prazo pausa com o dedo pousado
+(componentes.js:avisoPousar) porque o «Anular» à vista com o desfazer já
+liquidado repunha um registo sem os ficheiros do IndexedDB. Só o dedo e a
+caneta arrastam (componentes.js:AVISO_PONTEIROS): com o rato, arrastar é
+selecionar texto, e no computador o aviso não tapa o que tapa no telemóvel.
+
+**O Início deixou de ser uma casa, e a marca voltou a ser.** «O icon de
+inicio e de casas na barra de navegação são demasiado parecidos.» A casa do
+Início e a casa das Casas, lado a lado na barra de baixo, liam-se como o
+mesmo destino; o Início passou a ser os quatro mosaicos do ícone `painel`
+(icones.js:ic, navegacao.js:BARRA_ROTULO). No mesmo pedido: «Quero que o
+icon da aplicação na gaveta seja como o antigo. o mesmo formato, não
+necessariamente a mesma cor.» A marca (estilos.css:.marca) voltou a ser a
+casa do ícone da app — o telhado com beirais, as paredes e a porta pequena,
+o `home` do icones.js:ic —, em branco no quadrado cobalto: a forma é a dos
+ícones da PWA e do Android, e a cor fica a da cara nova.

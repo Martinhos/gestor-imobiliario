@@ -299,7 +299,7 @@ describe('o toque longo e a seleção nos Planeados (cloud/selecao-listas.js)', 
     nuvem.document.querySelector = () => null;
     assert.equal(nuvem.selLHaCartoes('recurring'), false, 'sem cartões, o botão some');
     assert.deepEqual(Array.from(nuvem.selLTiposDe('recurring')), ['rec', 'tpl']);
-    assert.equal(nuvem.selLTipoDe('visits'), null);
+    assert.equal(nuvem.selLTipoDe('owners'), null, 'nos Proprietários não há seleção');
   });
 
   test('o botão do cabeçalho é a caixa com o visto nos Planeados, nos Imóveis e nos Movimentos, e no kebab', () => {
@@ -312,7 +312,7 @@ describe('o toque longo e a seleção nos Planeados (cloud/selecao-listas.js)', 
     assert.equal(hb.title, 'Selecionar vários');
     assert.equal(hb.style.display, '');
     const fonte = readFileSync(new URL('../web/cloud/selecao.js', import.meta.url), 'utf8');
-    assert.match(fonte, /if \(!CW\.selMode\) \{[\s\S]*?hb\.innerHTML = ic\('caixaVisto', 18\);/, 'os Movimentos também');
+    assert.match(fonte, /function patchHdrSel\(\) \{[\s\S]*?hb\.innerHTML = ic\('caixaVisto', 18\);/, 'os Movimentos também');
     const listas = readFileSync(new URL('../web/cloud/selecao-listas.js', import.meta.url), 'utf8');
     assert.match(listas, /u-c-v-accent u-fx-0-0-34px">' \+ ic\('caixaVisto', 18\)/, 'e o «Selecionar vários» do kebab');
     assert.doesNotMatch(listas, /ic\('check', 18\)/);
@@ -339,13 +339,13 @@ describe('o toque longo e a seleção nos Planeados (cloud/selecao-listas.js)', 
     assert.equal(pq.textContent, '');
   });
 
-  test('o HTML da barra: os planeados com o silêncio e o Cancelar com nome, os modelos sem silêncio, as outras listas como estavam', () => {
+  test('o HTML da barra: a das Casas em todas — os planeados com a contagem, a razão e o silêncio; os modelos como as outras listas', () => {
     const r = nuvem.selLBarraHtml('rec');
-    assert.match(r, /class="btn sel-l-cancelar" aria-label="Cancelar a seleção"[^>]*data-click="CW\.selLSair\(\)"><svg[\s\S]*?<span class="sel-l-txt">Cancelar<\/span>/);
-    assert.match(r, /<span id="selLPorque" class="small" aria-live="polite"><\/span>/);
+    assert.match(r, /^<button type="button" class="btn" data-toca="modo" data-click="CW\.selLSair\(\)"><svg[\s\S]*? Cancelar<\/button>/, 'o × Cancelar das Casas, com o nome à vista');
+    assert.match(r, /<p class="sel-l-info"><b id="selLConta"><\/b><span id="selLPorque" class="small" aria-live="polite"><\/span><\/p><i class="sel-l-quebra" aria-hidden="true"><\/i>/, 'a contagem, a razão e a quebra antes das ações');
     assert.match(r, /<button type="button" class="btn" id="selLMudo" hidden data-toca="dados" data-click="CW\.selLMudo\(\)"><\/button>/);
     assert.ok(r.indexOf('selLMudo') < r.indexOf('CW.selLApagar()'), 'o silêncio antes do Apagar');
-    assert.doesNotMatch(nuvem.selLBarraHtml('tpl'), /selLMudo/);
+    assert.doesNotMatch(nuvem.selLBarraHtml('tpl'), /selLMudo|sel-l-info/, 'os modelos só têm o Apagar: a barra das Casas');
     assert.match(nuvem.selLBarraHtml('tpl'), /CW\.selLApagar\(\)/);
     assert.match(nuvem.selLBarraHtml('prop'), /^<button type="button" class="btn" data-toca="modo" data-click="CW\.selLSair\(\)"><svg[\s\S]*? Cancelar<\/button><b id="selLConta" class="u-fx-1 u-ta-center"><\/b>/);
   });
@@ -408,7 +408,7 @@ describe('o toque longo e a seleção nos Planeados (cloud/selecao-listas.js)', 
     assert.ok(r1.cls.has('sel-on-card'));
     assert.ok(t1.cls.has('sel-fora'));
     assert.equal(t1.atr['data-click'], "CW.selLOutro('tpl','T1')");
-    assert.match(corpo[0].className, /^sel-fundo sel-l-plan$/);
+    assert.match(corpo[0].className, /^sel-fundo sel-l-duas$/);
     assert.match(corpo[0].innerHTML, /id="selLMudo"/);
     const rc2 = cartao('rec:RC');
     nuvem.document.querySelectorAll = (s) => (s === '#view [data-lp^="rec:"]' ? [rc2] : []);
@@ -422,7 +422,10 @@ describe('o toque longo e a seleção nos Planeados (cloud/selecao-listas.js)', 
     assert.match(sec, /#view \[data-selbox\]\.sel-entra\{animation:veuEntra var\(--medio\) var\(--curva-entra\) backwards\}/);
     assert.match(sec, /\.plan-modelo>\[data-selbox\]\{padding:0;margin-right:8px\}/);
     assert.match(sec, /\.sel-fundo #selLMudo\[hidden\]\{display:none\}/, 'o .btn não esconde o [hidden] sozinho');
-    assert.match(sec, /@media\(max-width:430px\)\{\s*\.sel-fundo\.sel-l-plan \.sel-l-cancelar\{width:44px;padding:0;flex:0 0 44px\}/);
+    // a barra dos planeados é agora a das visitas: a contagem à vista, as ações numa segunda linha no telemóvel
+    const nova = css.slice(css.indexOf('/* ===== ajustes-v40-5: 1.3'), css.indexOf('/* ===== fim: ajustes-v40-5 1.3 ===== */'));
+    assert.match(nova, /\.sel-fundo\.sel-l-duas \.sel-l-quebra\{flex:0 0 100%;height:0;margin-top:8px\}/);
+    assert.doesNotMatch(css, /sel-l-plan/, 'a barra dos planeados já não esconde a contagem');
     assert.doesNotMatch(sec, /#[0-9a-f]{3,6}\b|rgba?\(/i, 'cores só por tokens');
     assert.doesNotMatch(sec, /\d+m?s\b(?![^(]*\))/, 'tempos só por tokens');
     assert.match(css, /@media\(prefers-reduced-motion:reduce\)\{\*,\*::before,\*::after\{animation:none!important;transition:none!important/);

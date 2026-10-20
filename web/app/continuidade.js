@@ -589,6 +589,13 @@ function deslizarPainel(pintar,d,desde){
      mesmo canto, e dois botões iguais no mesmo sítio lêem-se como um erro */
   [].slice.call(velho.querySelectorAll('.fab,.fabmenu')).forEach(e=>e.remove());
   caixa.appendChild(velho);camadaDeSaida().appendChild(caixa);
+  /* As abas da área vivem fora do #view (navegacao.js:abasAssentar) e, na
+     mesma área, ficam paradas: a repintura só lhes troca o aceso. De área para
+     área (a barra de baixo: das Casas para o Dinheiro, da Agenda para as
+     Casas) a fila é outra, e entra com o conteúdo — é outra página, e as abas
+     de uma área são a cabeça dela. */
+  const casa=document.getElementById('abasArea'),abasAntes=casa&&casa.firstElementChild||null;
+  const ra=abasAntes?casa.getBoundingClientRect():null;
   let res;
   contSuspensa=true;               // lá dentro há um render, e ele acompanha peças por conta própria
   try{res=pintar()}
@@ -611,12 +618,42 @@ function deslizarPainel(pintar,d,desde){
     {duration:dur,easing:curva,fill:'forwards'});
   const an=v.animate([{transform:'translateX('+(d*w+o)+'px)'},{transform:'none'}],
     {duration:dur,easing:curva});
+  const caixaAbas=abasNaFita(casa,abasAntes,ra,d,w,o,dur,curva);
   const fim=function(){
     if(_fimPainel!==fim)return;_fimPainel=null;
-    try{m.style.overflowX=clipAntes;fixos.forEach(e=>{e.style.visibility=''});caixa.remove()}catch(x){}};
+    try{m.style.overflowX=clipAntes;fixos.forEach(e=>{e.style.visibility=''});caixa.remove();
+      if(caixaAbas)caixaAbas.remove()}catch(x){}};
   _fimPainel=fim;an.onfinish=fim;
   /* rede: num separador escondido a animação não corre e o onfinish nunca
      chega — o pai ficava cortado e o painel velho por cima do novo */
   setTimeout(fim,dur+600);
   return res;
+}
+
+/* As abas da área numa travessia entre áreas (deslizarPainel). Se a
+   repintura deixou a mesma fila na casa das abas, ela fica parada e aqui não
+   se faz nada. Se a trocou, a fila nova entra com o conteúdo, do mesmo lado e
+   com a mesma duração e curva; e a velha — já fora do documento — sai numa
+   caixa fixa no sítio onde estava, com o espaçamento da casa
+   (estilos.css:.abas-saida), como os filhos do #view saem na caixa deles.
+   Recebe: casa — o #abasArea; antes — a fila que lá estava antes da
+   repintura (ou null); ra — o retângulo da casa antes; d — o lado; w — a
+   largura da fita; o — de onde o dedo a largou; dur — a duração em ms;
+   curva — a curva, em texto.
+   Devolve: a caixa de quem sai, para o fim da fita a tirar, ou null. */
+function abasNaFita(casa,antes,ra,d,w,o,dur,curva){
+  if(!casa||casa.firstElementChild===antes)return null;
+  if(casa.firstElementChild&&casa.animate)
+    casa.animate([{transform:'translateX('+(d*w+o)+'px)'},{transform:'none'}],{duration:dur,easing:curva});
+  const alt=window.innerHeight||0;
+  if(!antes||!ra||!ra.height||ra.bottom<=0||ra.top>=alt)return null;
+  const cx=document.createElement('div');
+  cx.style.cssText='position:fixed;left:'+ra.left+'px;top:'+ra.top+'px;width:'+Math.round(ra.width)+
+    'px;height:'+Math.round(ra.height)+'px;overflow:hidden;pointer-events:none';
+  const fila=document.createElement('div');
+  fila.className='abas-saida';
+  fila.appendChild(antes);cx.appendChild(fila);camadaDeSaida().appendChild(cx);
+  fila.animate([{transform:'translateX('+o+'px)'},{transform:'translateX('+(-d*w)+'px)'}],
+    {duration:dur,easing:curva,fill:'forwards'});
+  return cx;
 }
