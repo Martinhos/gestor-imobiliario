@@ -176,40 +176,27 @@ describe('o componente: a barra, os chips e o painel', () => {
     assert.equal(app.lfBarraViva({ children: [] }, { children: [novo] }), null);
   });
 
-  test('«Limpar» tira os filtros e a pesquisa, deixa a ordenação e o painel, e nos imóveis larga o proprietário global', () => {
+  test('«Limpar» tira os filtros e a pesquisa, e deixa a ordenação e o painel', () => {
     app.render = () => {};
-    Object.assign(app.lf('lprops'), { _open: true, st: 'vago', q: 'mar', own: 'o1', sb: 'renda', sd: 'desc' });
-    app.ownerFilter = 'o1';
+    Object.assign(app.lf('lprops'), { _open: true, st: 'vago', q: 'mar', md: 'quartos', sb: 'renda', sd: 'desc' });
     app.lfClear('lprops');
     assert.deepEqual(JSON.parse(JSON.stringify(app.lf('lprops'))), { _open: true, sb: 'renda', sd: 'desc' });
-    assert.equal(app.ownerFilter, '');
   });
 });
 
 describe('os Imóveis e os Contratos usam o componente', () => {
   beforeEach(() => semear(app));
 
-  test('Imóveis: a pesquisa à vista, os chips do estado (com quantos) e do proprietário, o do arrendamento só no ecrã largo, e o painel com a ordenação', () => {
+  test('Imóveis: a pesquisa à vista, o chip do estado (com quantos), o do arrendamento só no ecrã largo, sem o do proprietário, e o painel com a ordenação', () => {
     const h = app.vProperties();
     assert.match(h, /^<div class="mov-barra lfm-barra">[\s\S]*id="lq_lprops"/);
     assert.match(h, /<div class="chips-fila mov-chips" role="group" aria-label="Filtros dos imóveis"><span class="mov-chip"><div class="sel" id="sel_lfc_lprops_st">/);
     assert.match(h, /<span>Todos os estados · 2<\/span>[\s\S]*?<span>Arrendados · 1<\/span>[\s\S]*?<span>Uso próprio · 1<\/span>/);
-    assert.match(h, /<span class="mov-chip"><div class="sel" id="sel_lfc_lprops_own">/);
+    assert.doesNotMatch(h, /lprops_own|>Proprietário</, 'sem o filtro de proprietário: saiu com o filtro global');
     assert.match(h, /<span class="mov-chip mov-so-largo"><div class="sel" id="sel_lfc_lprops_md">/);
     assert.match(h, /<label>Ordenar por<div class="sel" id="sel_lfsel_lprops_sb">/);
     assert.doesNotMatch(h, /imv-filtros|fp-caixa|fp-pe/, 'nem a fila antiga nem o pé');
     assert.match(h, /Aplicam-se ao mexer · 2 imóveis/);
-  });
-
-  test('Imóveis: o chip do proprietário é o filtro global, e escolher um espelha-o', () => {
-    app.render = () => {};
-    app.lfCabeca('lprops', { campos: [{ chave: 'own', nome: 'Proprietário', rapido: true, aplicar: app.imvFiltroDono, opcoes: [{ v: '', label: 'Todos' }] }] });
-    app.lfMudar('lprops', 'own', 'o2');
-    assert.equal(app.ownerFilter, 'o2');
-    const h = app.vProperties();
-    assert.match(h, /Casa do Campo/);
-    assert.doesNotMatch(h, /T2 Lisboa/);
-    assert.match(h, /<span class="mov-chip on"><div class="sel" id="sel_lfc_lprops_own">[\s\S]*?aria-label="Proprietário: Pedro Dono"/);
   });
 
   test('Contratos: a pesquisa à vista, o estado com as contagens, o imóvel e a ordenação no ecrã largo; sem o «Selecionar» na fila', () => {

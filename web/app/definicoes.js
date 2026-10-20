@@ -794,7 +794,6 @@ function delGroup(id){
     (used?` ${used===1?'Um movimento antigo, ainda por dividir pelos imóveis, fica':used+' movimentos antigos, ainda por dividir pelos imóveis, ficam'} sem grupo: passa${used===1?'':'m'} a «Sem imóvel» e conta${used===1?'':'m'} só nos totais.`:''),()=>{
     db.transactions.forEach(t=>{if(t.groupId===id){t.groupId=null;t.psplit=null}});
     if(String(txProp).slice(2)===id)txProp='';
-    if(String(ownerFilter).slice(2)===id)ownerFilter='';
     db.groups=(db.groups||[]).filter(x=>x.id!==id);
     save();closeAllModals();render();toast('Grupo apagado.');
   });
@@ -1001,9 +1000,11 @@ function delTag(g){
 
 /* ======================= FILTROS COMUNS =======================
    Um conjunto de escolhas com nome — "T2 Lisboa · rendas", "Só despesas do
-   Manel" — definido uma vez e aplicado em qualquer vista que filtre. Cada
-   vista aplica só o que lhe diz respeito: a visão geral usa o imóvel e o
-   proprietário, os movimentos usam tudo. */
+   Manel" — definido uma vez e aplicado onde há o que aplicar: os Movimentos
+   usam tudo (os chips do painel e da fila), a visão geral só o imóvel (o
+   seletor do painel dela). Não guarda proprietário: o filtro global de
+   proprietário saiu (ambito.js); um filtro de antes com «owner» guarda-o
+   ainda, mas ninguém o lê, e ao editá-lo a chave sai (fcGuardar). */
 
 // A lista de filtros comuns guardada nas definições ([] enquanto não houver).
 // Devolve: o array de filtros de db.settings.filters ([] novo se ainda não houver).
@@ -1018,9 +1019,9 @@ function filtrosComuns(){return db.settings.filters||[]}
 function vFiltrosComuns(){
   const list=filtrosComuns();
   const novo=`<button type="button" class="btn primary" data-toca="camada" data-click="fcModal()">${ic('plus',18)} Novo filtro comum</button>`;
-  if(!list.length)return `<p class="def-intro">Um filtro comum guarda um conjunto de escolhas — imóvel, proprietário, tipo, categoria, datas — para aplicares num toque, no funil de cada vista.</p>
+  if(!list.length)return `<p class="def-intro">Um filtro comum guarda um conjunto de escolhas — imóvel, tipo, categoria, datas — para aplicares num toque, nos filtros dos Movimentos e da visão geral.</p>
     <div class="empty"><b>Ainda não tens nenhum</b>Define-o uma vez e aplica-o em qualquer vista que filtre.<div>${novo}</div></div>`;
-  return `<div class="def-cab"><p class="def-intro">Aplicam-se no funil de cada vista; cada vista usa só o que lhe diz respeito.</p><span class="def-cab-acoes">${novo}</span></div>
+  return `<div class="def-cab"><p class="def-intro">Aplicam-se nos filtros dos Movimentos e da visão geral; cada vista usa só o que lhe diz respeito.</p><span class="def-cab-acoes">${novo}</span></div>
     <section class="card def-lista">${list.map(f=>`<div class="def-filtro">
       <button type="button" class="linha def-linha" data-toca="camada" data-click="fcModal('${jsq(f.id)}')">
         <span class="ic">${ic('filter',20)}</span>
@@ -1030,13 +1031,13 @@ function vFiltrosComuns(){
 
 // Resumo das escolhas de um filtro numa linha, separadas por «·»;
 // devolve '' quando o filtro não fixa nada.
-// Recebe: f — o filtro comum (objeto {kind,prop,owner,cat,sub,de,ate,…}).
+// Um «owner» de um filtro de antes não entra: já não se aplica.
+// Recebe: f — o filtro comum (objeto {kind,prop,cat,sub,de,ate,…}).
 // Devolve: o resumo em texto; '' se o filtro não fixar nada.
 function fcResumo(f){
   const p=[];
   if(f.kind)p.push(nomeDoTipo(f.kind));
   if(f.prop){const pr=prop(f.prop);p.push(pr?pr.name:f.prop)}
-  if(f.owner){const o=db.owners.find(x=>x.id===f.owner);p.push(o?o.name:f.owner)}
   if(f.cat)p.push(f.cat);
   if(f.sub)p.push(f.sub);
   if(f.de||f.ate)p.push(f.de&&f.ate?dPT(f.de)+' → '+dPT(f.ate):f.de?'desde '+dPT(f.de):'até '+dPT(f.ate));
@@ -1050,28 +1051,28 @@ let fcForm=null;
 // Devolve: nada — abre o modal.
 function fcModal(id){
   const f=filtrosComuns().find(x=>x.id===id);
-  fcForm=f?JSON.parse(JSON.stringify(f)):{id:uid(),name:'',kind:'',prop:'',owner:'',cat:'',sub:'',de:'',ate:''};
+  fcForm=f?JSON.parse(JSON.stringify(f)):{id:uid(),name:'',kind:'',prop:'',cat:'',sub:'',de:'',ate:''};
   openModal(f?'Editar filtro comum':'Novo filtro comum',fcCorpo(),
     `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="fcGuardar()">Guardar</button>`);
 }
-/* Corpo do modal do filtro: nome, tipo, imóvel, proprietário, categoria,
-   subcategoria e datas. As categorias dependem do tipo escolhido (as dívidas
-   usam a árvore das despesas), daí mudar o tipo repintar o formulário.
+/* Corpo do modal do filtro: nome, tipo, imóvel, categoria, subcategoria e
+   datas (sem proprietário: ver FILTROS COMUNS). As categorias dependem do
+   tipo escolhido (as dívidas usam a árvore das despesas), daí mudar o tipo
+   repintar o formulário.
    Devolve: o HTML (texto) do corpo do modal, gerado a partir de fcForm. */
 function fcCorpo(){
   const kinds=[{v:'',label:'Todos os tipos'},{v:'income',label:'Receitas'},{v:'expense',label:'Despesas'},{v:'loan',label:'Pagamentos de crédito'},{v:'debt',label:'Dívidas'}];
   const props=[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p=>({v:p.id,label:p.name})));
-  const owners=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
   const tree=allCats(fcForm.kind==='debt'?'expense':fcForm.kind);
   const catOpts=[{v:'',label:'Todas as categorias'}].concat(Object.keys(tree).map(c=>({v:c,label:c})));
   const subs=fcForm.cat?(tree[fcForm.cat]||[]):[];
+  /* a categoria vai sozinha, a toda a largura; com subcategorias, as duas lado a lado */
+  const cat=`<label>Categoria${sel('fc_cat',fcForm.cat,catOpts,'fcColher','rascunho')}</label>`;
   return `<div class="form">
     <label>Nome <span class="req">*</span><input id="fc_name" value="${esc(fcForm.name)}" placeholder="Ex: T2 Lisboa · rendas" autocomplete="off" data-input="fcColher(1)"></label>
     <div class="row"><label>Tipo${sel('fc_kind',fcForm.kind,kinds,'fcColher','rascunho')}</label>
       <label>Imóvel${sel('fc_prop',fcForm.prop,props,'fcColher','rascunho')}</label></div>
-    <div class="row"><label>Proprietário${sel('fc_owner',fcForm.owner,owners,'fcColher','rascunho')}</label>
-      <label>Categoria${sel('fc_cat',fcForm.cat,catOpts,'fcColher','rascunho')}</label></div>
-    ${subs.length?`<label>Subcategoria${sel('fc_sub',fcForm.sub,[{v:'',label:'Todas'}].concat(subs.map(x=>({v:x,label:x}))),'fcColher','rascunho')}</label>`:''}
+    ${subs.length?'<div class="row">'+cat+`<label>Subcategoria${sel('fc_sub',fcForm.sub,[{v:'',label:'Todas'}].concat(subs.map(x=>({v:x,label:x}))),'fcColher','rascunho')}</label></div>`:cat}
     <div class="row lado-a-lado"><label>De<input id="fc_de" type="date" value="${fcForm.de||''}" data-change="fcColher()"></label>
       <label>Até<input id="fc_ate" type="date" value="${fcForm.ate||''}" data-change="fcColher()"></label></div>
     <div class="hint">Deixa em branco o que não quiseres fixar. Cada vista aplica só o que lhe diz respeito.</div>
@@ -1089,16 +1090,18 @@ function fcColher(soFormulario){
   const repinta=!soFormulario&&(kindNovo!==fcForm.kind||catNova!==fcForm.cat);
   if(catNova!==fcForm.cat)fcForm.sub='';
   fcForm.kind=kindNovo;fcForm.cat=catNova;
-  fcForm.prop=val('fc_prop')||'';fcForm.owner=val('fc_owner')||'';
+  fcForm.prop=val('fc_prop')||'';
   fcForm.sub=val('fc_sub')||fcForm.sub||'';fcForm.de=val('fc_de')||'';fcForm.ate=val('fc_ate')||'';
   if(repinta){const t=modalTop();if(t){const b=modalBodyEl();if(b){b.innerHTML=fcCorpo();marcarDatasVazias(b)}}}
 }
-// Guarda o filtro do modal: colhe o formulário, exige nome, substitui (ou
-// acrescenta) em db.settings.filters e fecha com um toast.
+// Guarda o filtro do modal: colhe o formulário, exige nome, tira o «owner»
+// de um filtro de antes, substitui (ou acrescenta) em db.settings.filters e
+// fecha com um toast.
 // Devolve: nada — grava nas definições e fecha o modal (ou avisa se faltar o nome).
 function fcGuardar(){
   fcColher();
   if(!String(fcForm.name||'').trim())return falhaCampo('fc_name','Dá um nome ao filtro.');
+  delete fcForm.owner;
   db.settings.filters=filtrosComuns().filter(x=>x.id!==fcForm.id).concat([fcForm]);
   save();closeModal();render();toast('Filtro comum guardado.');
 }
@@ -1114,26 +1117,24 @@ function delFiltroComum(id){
   comDesfazer('Filtro comum apagado.',()=>{db.settings.filters=(db.settings.filters||[]).concat([copia])});
 }
 
-/* O aplicador: cada vista pega no que lhe diz respeito.
+/* O aplicador: cada vista pega no que lhe diz respeito — os Movimentos tudo,
+   a visão geral o imóvel. O «owner» de um filtro de antes ignora-se: não há
+   filtro de proprietário (ambito.js).
    Recebe: id — o id do filtro comum a aplicar.
    Devolve: nada — muda os filtros da vista ativa e repinta. */
 function aplicarFiltroComum(id){
   const f=filtrosComuns().find(x=>x.id===id);if(!f)return;
   if(tab==='transactions'){
-    txFilter=f.kind||'';txProp=f.prop||'';ownerFilter=f.owner||'';
+    txFilter=f.kind||'';txProp=f.prop||'';
     // um filtro comum não guarda etiquetas: as escolhidas saem, senão somavam-se a ele
     if(typeof txEtiq!=='undefined')txEtiq=[];
     txCat=f.cat||'';txSub=f.sub||'';txDe=f.de||'';txAte=f.ate||'';
     if(typeof txRerender==='function')txRerender();else render();   // a repintura curta é dos Movimentos
     toast('Filtro «'+f.name+'» aplicado.');return;
   }
-  // vistas de análise e listas: aplica-se o imóvel e o proprietário
+  // a visão geral (o seletor do painel dela): aplica-se o imóvel
   if(tab==='dashboard')dashProp=f.prop||'';
-  if(tab==='projections')projProp=f.prop||'';
-  if(tab==='reports')repProp=f.prop||'';
-  ownerFilter=f.owner||'';
-  if(typeof LFK!=='undefined'&&LFK[tab]&&f.owner!==undefined){lf(LFK[tab]).own=f.owner||''}
-  render();toast('Filtro «'+f.name+'» aplicado — '+(f.cat||f.kind||f.de?'esta vista usa só o imóvel e o proprietário.':'feito.'));
+  render();toast('Filtro «'+f.name+'» aplicado — '+(f.cat||f.kind||f.de||f.ate?'esta vista usa só o imóvel.':'feito.'));
 }
 // Selector "aplicar um filtro comum" para meter num funil de filtros; devolve
 // '' enquanto não houver filtros. fn é o onchange (por omissão onFcAplicar).

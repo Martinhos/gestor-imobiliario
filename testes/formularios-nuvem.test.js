@@ -230,7 +230,12 @@ describe('o resto da base', () => {
     assert.match(foto, /id="fn_F1" value="IMG_001\.jpg" placeholder="Ex: Sala de estar" aria-label="Nome da fotografia \(opcional\)"/);
     limpar(app);
     app.db.properties = [app.normProp({ id: 'P1', name: 'T2 Lisboa' })];
-    const html = app.vReports() + app.vProjections();
+    // os campos das opções vivem na janela da roda dentada
+    let janelas = '';
+    const abrir = app.openModal;
+    app.openModal = (t, b) => { janelas += b; };
+    try { app.prjOpcoes(); app.avaOpcoes(); } finally { app.openModal = abrir; }
+    const html = app.vReports() + app.vProjections() + janelas;
     const ph = [...html.matchAll(/placeholder="([^"]*)"/g)].map((m) => m[1]);
     assert.ok(ph.filter((p) => p === 'Opcional').length >= 4, 'o yield, o horizonte, o aumento e a inflação');
     for (const p of ph) assert.ok(p === 'Opcional' || p.startsWith(EX) || p === 'Pesquisar…', 'placeholder «' + p + '»');

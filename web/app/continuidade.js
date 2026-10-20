@@ -96,31 +96,149 @@ function msDoToken(nome,porOmissao){
    caminho continua de onde o primeiro ia, em vez de recomeçar do princípio.
    O overflow fecha-se só durante a viagem, enquanto a caixa é mais curta do
    que o que leva dentro — e este painel não tem menus de sel() lá dentro para
-   serem recortados.
+   serem recortados. */
+/* Três coisas que a primeira versão não via, e que no formulário do imóvel
+   davam «o UI salta» ao passar a Uso próprio ou a Imóvel inteiro — medidas
+   fotograma a fotograma:
+   - A caixa a encolher é MAIOR do que o que já leva dentro, e numa grelha
+     (o .sect) a altura a mais reparte-se pelas linhas: o nome descia 70px, a
+     morada 210px e o segmentado 280px, e voltavam. Durante a viagem a caixa
+     leva a classe .a-crescer (estilos.css:.a-crescer), que encosta as linhas
+     ao topo — o que fica não se mexe, e a borda de baixo sobe.
+   - Medir depois de pintar faz o layout com o conteúdo já curto, e o corpo
+     da janela prende o scroll ao fundo novo (1546 → 1243px); a animação põe
+     logo a altura antiga e o conteúdo salta 303px. O scroll de quem rola
+     guarda-se antes e repõe-se depois de a animação começar.
+   - O que sai sumia de golpe e deixava um vazio a encolher; o que fica por
+     baixo (os quartos depois do que se removeu) subia de golpe. As peças
+     com data-parte são acompanhadas (continuidade.js:acompanharPartes): quem
+     ficou e mudou de sítio desliza, quem chegou desvanece a entrar, e quem
+     saiu desvanece no sítio onde estava, recortado pela caixa.
    Recebe: obter — função que devolve a caixa (chamada antes e depois de pintar);
    pintar — função que troca o conteúdo; token (opcional) — o degrau de duração
    a usar, '--medio' por omissão (o calNav pede o '--lento' para a caixa
    assentar no mesmo tempo que a grelha leva a virar a página).
-   Devolve: nada — pinta sempre, e anima só quando há diferença de altura. */
+   Devolve: nada — pinta sempre, e anima só quando há diferença de altura ou
+   peças a acompanhar. */
 function crescerEmAltura(obter,pintar,token){
   const a=obter();
   if(!a||!a.animate||semMovimento()){pintar();return}
   const h0=a.getBoundingClientRect().height;
+  const rol=quemRola(a),st=rol?rol.scrollTop:0;
+  const p0=partesDe(a);
   pintar();
   const b=obter();
   if(!b||!b.animate)return;
   const h1=b.getBoundingClientRect().height;
-  // menos de um pixel não é crescimento nenhum, e custa o mesmo que um a sério
-  if(Math.abs(h1-h0)<1)return;
+  const p1=partesDe(b);
   const dur=msDoToken(token||'--medio',200),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
-  const antes=b.style.overflow;
-  b.style.overflow='hidden';
-  const an=b.animate([{height:h0+'px'},{height:h1+'px'}],{duration:dur,easing:curva});
-  const fim=function(){try{b.style.overflow=antes}catch(x){}};
-  an.onfinish=fim;
-  /* rede: num separador escondido a animação não corre e o onfinish nunca
-     chega — sem isto a caixa ficava com o overflow fechado para sempre */
-  setTimeout(fim,dur+120);
+  // menos de um pixel não é crescimento nenhum, e custa o mesmo que um a sério
+  const cresce=Math.abs(h1-h0)>=1;
+  if(cresce){
+    const antes=b.style.overflow;
+    b.style.overflow='hidden';
+    b.classList.add('a-crescer');
+    const an=b.animate([{height:h0+'px'},{height:h1+'px'}],{duration:dur,easing:curva});
+    const fim=function(){try{b.style.overflow=antes;b.classList.remove('a-crescer')}catch(x){}};
+    an.onfinish=fim;
+    /* rede: num separador escondido a animação não corre e o onfinish nunca
+       chega — sem isto a caixa ficava com o overflow fechado para sempre */
+    setTimeout(fim,dur+120);
+  }
+  /* depois de a animação pôr a altura antiga, o conteúdo tem outra vez o
+     tamanho de antes, e o scroll guardado volta a caber; daqui para a frente
+     encolhe com a caixa, fotograma a fotograma, em vez de saltar */
+  if(rol&&rol.scrollTop!==st)rol.scrollTop=st;
+  acompanharPartes(p0,p1,b,dur,curva);
+}
+
+/* Quem rola à volta de um elemento: o primeiro antepassado com scroll (o
+   corpo da janela, .sheet .body), ou a página.
+   Recebe: e — o elemento.
+   Devolve: o elemento que rola, ou null sem documento. */
+function quemRola(e){
+  try{
+    for(let p=e.parentElement;p&&p!==document.body&&p!==document.documentElement;p=p.parentElement){
+      const o=getComputedStyle(p).overflowY;
+      if((o==='auto'||o==='scroll')&&p.scrollHeight>p.clientHeight)return p;
+    }
+    return document.scrollingElement||document.documentElement||null;
+  }catch(x){return null}
+}
+
+/* As peças de uma caixa que cresce, pela chave de cada uma (data-parte), e
+   onde está cada uma — em relação à peça que a contém (para saber se ELA se
+   mexeu, e não a de fora) e em relação à caixa (para a pôr de volta no sítio,
+   se sair). Uma chave, um dono: o data-fk é da continuidade das listas e o
+   data-lp do toque longo; o data-parte é só disto. O que já está a sair
+   (.a-sair) não conta.
+   Recebe: caixa — o elemento.
+   Devolve: {chave:{el,x,y,cx,cy,w,pai}} — pai é a chave da peça que a contém, ou ''. */
+function partesDe(caixa){
+  const out={};
+  if(!caixa||!caixa.querySelectorAll||!caixa.getBoundingClientRect)return out;
+  const rc=caixa.getBoundingClientRect();
+  [].slice.call(caixa.querySelectorAll('[data-parte]')).forEach(function(e){
+    if(e.closest&&e.closest('.a-sair'))return;
+    const k=e.getAttribute('data-parte');if(!k||out[k])return;
+    const r=e.getBoundingClientRect();
+    let pai=e.parentElement&&e.parentElement.closest?e.parentElement.closest('[data-parte]'):null;
+    if(pai&&!caixa.contains(pai))pai=null;
+    const rp=pai?pai.getBoundingClientRect():rc;
+    out[k]={el:e,x:r.left-rp.left,y:r.top-rp.top,cx:r.left-rc.left,cy:r.top-rc.top,w:r.width,pai:pai?pai.getAttribute('data-parte'):''};
+  });
+  return out;
+}
+
+/* Acompanha as peças de uma caixa que trocou de conteúdo, no mesmo tempo e
+   na mesma curva da caixa, para assentarem juntas. Quem existe dos dois
+   lados e mudou de sítio dentro da peça que a contém parte do sítio velho
+   por transform (o FLIP do topo deste ficheiro). Quem chegou desvanece a
+   entrar — só a de fora, a de dentro vem com ela. Quem saiu é o próprio nó
+   antigo, sem ids, inerte e surdo ao toque, posto de volta DENTRO da caixa
+   onde estava e a desvanecer no --rapido: a caixa recorta-o enquanto
+   encolhe, e some antes de os de baixo lhe chegarem. Não vai para a camada
+   de saída (continuidade.js:camadaDeSaida), que está por baixo das janelas.
+   Recebe: p0, p1 — as peças antes e depois (partesDe); b — a caixa nova;
+   dur — a duração em ms; curva — a curva, em texto.
+   Devolve: nada — anima o que houver a animar. */
+function acompanharPartes(p0,p1,b,dur,curva){
+  const ks0=Object.keys(p0),ks1=Object.keys(p1);
+  if(!ks0.length&&!ks1.length)return;
+  ks1.forEach(function(k){
+    const n=p1[k],v=p0[k];
+    if(!n.el.animate)return;
+    if(!v){
+      // a peça de fora entra; as de dentro vêm com ela
+      if(n.pai&&!p0[n.pai])return;
+      n.el.animate([{opacity:0},{opacity:1}],{duration:dur,easing:curva});
+      return;
+    }
+    const dx=v.x-n.x,dy=v.y-n.y;
+    if(Math.abs(dx)<1&&Math.abs(dy)<1)return;
+    n.el.animate([{transform:'translate('+dx+'px,'+dy+'px)'},{transform:'none'}],{duration:dur,easing:curva});
+  });
+  const saem=ks0.filter(function(k){return !p1[k]&&!(p0[k].pai&&!p1[p0[k].pai])&&!p0[k].el.isConnected});
+  if(!saem.length)return;
+  // a caixa passa a ser o sítio de onde os que saem se medem (estilos.css:.tem-saidas)
+  b.classList.add('tem-saidas');
+  const rapido=msDoToken('--rapido',120),curvaSai=tokenTexto('--curva-sai','cubic-bezier(.4,0,1,1)');
+  saem.forEach(function(k){
+    const v=p0[k],e=v.el;
+    semIds(e);
+    e.classList.add('a-sair');
+    e.setAttribute('aria-hidden','true');e.setAttribute('inert','');
+    e.style.position='absolute';e.style.margin='0';e.style.pointerEvents='none';
+    e.style.left=(v.cx-(b.clientLeft||0))+'px';e.style.top=(v.cy-(b.clientTop||0))+'px';e.style.width=v.w+'px';
+    b.appendChild(e);
+    const an=e.animate([{opacity:1},{opacity:0}],{duration:rapido,easing:curvaSai,fill:'forwards'});
+    const fora=function(){try{e.remove()}catch(x){}};
+    an.onfinish=fora;
+    // a mesma rede do resto: num separador escondido a animação não corre
+    setTimeout(fora,rapido+600);
+  });
+  // a classe só fica enquanto eles lá estão
+  setTimeout(function(){try{if(!b.querySelector('.a-sair'))b.classList.remove('tem-saidas')}catch(x){}},rapido+700);
 }
 
 /* A camada onde ficam, por um instante, os nós que a repintura deitou fora.

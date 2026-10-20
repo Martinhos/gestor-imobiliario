@@ -202,7 +202,7 @@ function gavetaHtml(fora){
     return `${gavetaCabeca(fechada,id)} data-toca="nada" data-click="gavetaAlternar('${jsq(g.label)}')">`+
       `<span class="txt">${g.label}</span>${gavetaCracha(ids,itens)}<span class="chev">${ic('chevD',14)}</span></button>`+
       `<div class="navsec-corpo" id="${id}"><div class="navsec-itens">${itens}</div></div></div>`}).join('');
-  return criar+gavetaAmbito()+grupos;
+  return criar+grupos;
 }
 /* O fundo da barra lateral, a seguir às Definições: a Ajuda e o cartão da
    conta (avatar com as iniciais, o nome, «Conta e partilha»). Os dois vivem
@@ -216,16 +216,6 @@ function gavetaFundo(){
   return `<a class="${ajudaOn?'on':''}" tabindex="0" ${ajudaOn?'aria-current="page"':''} role="link" data-toca="ecra" data-click="abrirDefinicoes('ajuda')">${ic('ajuda')}<span class="txt">Ajuda</span></a>`+
     `<button type="button" class="nav-conta" data-toca="ecra" data-click="abrirDefinicoes('cloud')"><span class="avatar">${esc(initials(nome))}</span>`+
     `<span class="u-minw-0"><b>${esc(nome)}</b><small>Conta e partilha</small></span></button>`;
-}
-/* O âmbito em foco, no menu: «Proprietário em foco» com quem está escolhido
-   (o canvas, M-Menu). Só com mais do que um proprietário — com um só não há
-   o que escolher. O toque abre a escolha (escolherAmbito).
-   Devolve: o HTML (string), ou ''. */
-function gavetaAmbito(){
-  if(!db.owners||db.owners.length<2)return '';
-  const nome=typeof ownerFilterName==='function'&&ownerFilterName();
-  return `<button type="button" class="nav-ambito" data-toca="camada" data-click="escolherAmbito()">${ic('users',18)}`+
-    `<span class="u-minw-0"><small>Proprietário em foco</small><b>${nome?esc(nome)+(ownerIsGrp()?'':' · quota'):'Todos'}</b></span>${ic('chevD',16)}</button>`;
 }
 /* Recolhe ou abre uma secção da gaveta. É da família «nada»: muda o DOM que
    já lá está — uma classe na secção, o aria-expanded no título — e não chama
@@ -416,8 +406,10 @@ function goBarra(id){
   _ladoSep=(i>-1&&j>-1&&i!==j)?(j>i?1:-1):0;
   try{go(dest)}finally{_ladoSep=0}   // o go GLOBAL: a nuvem embrulha-o
 }
-/* Muda de separador: limpa a subpágina das Definições e o donut, fecha a
-   gaveta, refaz a navegação e repinta, com scroll para o topo. Vindo da barra
+/* Muda de separador: limpa a subpágina das Definições e o donut, larga o
+   titular do IRS ao sair dele (ambito.js:ambitoSemDono, antes do buildNav,
+   para os crachás não o contarem), fecha a gaveta, refaz a navegação e
+   repinta, com scroll para o topo. Vindo da barra
    de baixo (goBarra), o painel vira como uma fita para o lado certo.
    Recebe: id — o separador de destino (um id de TABS, ex.: 'transactions').
    Devolve: nada — redesenha a vista. */
@@ -427,7 +419,7 @@ function go(id){
      porquê e fica-se onde se está (um atalho antigo, um endereço guardado) */
   if(typeof separadorLigado==='function'&&!separadorLigado(id)){toast(hintServicoDesligado(servicoDoSeparador(id)));return}
   const area=areaDe(id);if(area)_ultimoNaArea[area]=id;
-  const pintar=()=>{tab=id;setPage='';aoMudarDeSeparador();closeDrawer();fecharFiltros();_entrar=1;buildNav();render();
+  const pintar=()=>{tab=id;ambitoSemDono();setPage='';aoMudarDeSeparador();closeDrawer();fecharFiltros();_entrar=1;buildNav();render();
     try{window.scrollTo(0,0)}catch(e){}};
   /* tocar no separador aceso não é uma travessia, é uma repintura — e essa já
      tem o acompanhamento das peças */
@@ -711,17 +703,6 @@ function goSet(p){if(p==='groups'||p==='colaboradores')return go(p);setPage=p;if
    Recebe: p — a subpágina ('ajuda', 'cloud', …).
    Devolve: nada — redesenha a vista. */
 function abrirDefinicoes(p){if(tab!=='settings')go('settings');if(tab==='settings')goSet(p)}
-/* A escolha do proprietário em foco (o «Proprietário em foco» do menu): todos,
-   uma pessoa (os valores passam à quota-parte dela) ou um grupo de
-   proprietários. É o mesmo filtro do seletor das vistas (vistas.js:ownerBar,
-   ambito.js:ownerFilter), e larga o imóvel em foco se ele sair do âmbito.
-   Devolve: nada — abre a escolha; escolher repinta. */
-function escolherAmbito(){
-  const opts=[{v:'',label:'Todos os proprietários',icon:'users'}]
-    .concat(db.owners.map(o=>({v:o.id,label:o.name,sub:'os valores na quota-parte de '+(o.name||'').split(' ')[0],avatar:1})))
-    .concat(grpsOf('owner').map(g=>({v:'g:'+g.id,label:g.name,sub:'grupo de proprietários',icon:'layers'})));
-  pickModal('Proprietário em foco',opts,o=>{closeModal();closeDrawer();ownerFilter=o.v;if(dashProp&&!inScope(dashProp))dashProp='';buildNav();render()});
-}
 /* Os separadores de uma área, no topo do ecrã do telemóvel (o canvas, M-Casas
    e M-Movimentos): Imóveis/Contratos/Pessoas/Visitas e
    Movimentos/Planeados/Créditos, num segmentado. No computador escondem-se
@@ -761,23 +742,12 @@ function contagemDePessoas(id){
   if(id==='colaboradores')return typeof contarColaboradores==='function'?contarColaboradores():null;
   return ((id==='tenants'?db.tenants:db.owners)||[]).length;
 }
-/* O âmbito sempre à vista (o canvas: «Âmbito sempre à vista»): com um
-   proprietário em foco, uma faixa no topo do ecrã diz de quem são os valores
-   e limpa-se num toque; na Visão geral diz também o imóvel em foco. Sem foco,
-   nada.
-   Devolve: o HTML (string), ou ''. */
-function faixaDoAmbito(){
-  const nome=ownerFilter?ownerFilterName():'',casa=tab==='dashboard'&&dashProp?propName(dashProp):'';
-  if(!nome&&!casa)return '';
-  const n=scope().length;
-  const titulo=nome?(ownerIsGrp()?'Grupo «'+nome+'»':nome+' · quota'):casa;
-  const frase=nome?(ownerIsGrp()?'Os imóveis dos proprietários do grupo':'Valores na quota-parte de '+nome.split(' ')[0])+', em '+n+(n===1?' imóvel':' imóveis')+(casa?' · em foco: '+casa:''):'Imóvel em foco na visão geral';
-  return `<div class="faixa-ambito" role="status">${ic(nome?'users':'building',20)}<p><b>${esc(titulo)}</b><span>${esc(frase)}</span></p>`+
-    `<button type="button" class="btn sm ghost" data-toca="vista" data-click="limparAmbito()">Limpar</button></div>`;
-}
-/* Limpa o âmbito em foco: o proprietário e o imóvel da visão geral.
+/* Limpa o titular do IRS · Anexo F: o × do chip «… · quota-parte» da barra
+   da Declaração (fisco.js:fisBarra). Era o «Limpar» da faixa do âmbito, que
+   saiu com o filtro global de proprietário (ambito.js); o nome ficou porque
+   é o que o fisco.js chama.
    Devolve: nada — repinta. */
-function limparAmbito(){ownerFilter='';dashProp='';buildNav();render()}
+function limparAmbito(){ownerFilter='';buildNav();render()}
 /* o rótulo do botão da ação do ecrã no cabeçalho, pela ação */
 const ROTULO_ACAO={movimento:'Novo movimento',imovel:'Novo imóvel',contrato:'Novo contrato',inquilino:'Novo inquilino',
   proprietario:'Novo proprietário',visita:'Marcar visita',planeado:'Novo recorrente',hipoteca:'Nova hipoteca'};

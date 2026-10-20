@@ -678,8 +678,20 @@ function editBar() {
   v.insertBefore(el, grid || v.firstChild);
 }
 
-// em modo de edição, o botão de filtros do cabeçalho passa a dizer "Concluir"
-// Devolve: nada — mexe no botão do cabeçalho já desenhado.
+/* O nome e o título que o «Concluir» veste no botão do cabeçalho: ao despir,
+   só sai o que ainda for isto. */
+var HDR_CONCLUIR = { rotulo: 'Concluir a edição dos cartões', titulo: 'Terminar a edição dos cartões' };
+
+/* Em modo de edição, o botão de filtros do cabeçalho passa a dizer
+   «Concluir». Fora dele despe só o que vestiu: o nome e o título que ainda
+   forem os do «Concluir» (HDR_CONCLUIR). Corre depois de cada render, e o
+   botão já foi pintado por quem é dono dele nesse ecrã — o funil
+   (vistas.js:pintarBotaoFiltros), a roda dentada das Projeções e da
+   Avaliação (vistas.js:pintarRoda), que escreve o seu nome; repor aqui o
+   título dos filtros e apagar o aria-label a cada render tirava à roda o
+   nome que ela acabou de escrever.
+   Recebe: nada.
+   Devolve: nada — mexe no botão do cabeçalho já desenhado. */
 function patchHdr() {
   var hb = document.getElementById('hdrFilt');
   if (!hb) return;
@@ -689,14 +701,15 @@ function patchHdr() {
        leva o título, o selo, o sino e «Concluir» — e a barra da edição, logo
        por baixo, tem o seu «Concluir» por extenso */
     hb.innerHTML = ic('check', 16) + '<span class="hdr-concluir"> Concluir</span>';
-    hb.setAttribute('aria-label', 'Concluir a edição dos cartões');
+    hb.setAttribute('aria-label', HDR_CONCLUIR.rotulo);
     hb.classList.add('primary');
     // é o «Concluir», e não o botão dos filtros: não abre nem fecha painel nenhum
     hb.removeAttribute('aria-expanded');
-    hb.title = 'Terminar a edição dos cartões';
+    hb.title = HDR_CONCLUIR.titulo;
   } else {
-    hb.title = 'Filtros e parâmetros';
-    hb.removeAttribute('aria-label');   // o nome volta a ser o do título
+    if (hb.title === HDR_CONCLUIR.titulo) hb.title = 'Filtros e parâmetros';
+    // o nome volta a ser o do título
+    if (hb.getAttribute('aria-label') === HDR_CONCLUIR.rotulo) hb.removeAttribute('aria-label');
   }
 }
 

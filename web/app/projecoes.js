@@ -2,9 +2,12 @@
 /* As rendas futuras e os aumentos anuais, imóvel a imóvel. Veio de vistas.js
    quando a app passou a serviços; regista-se no fim. */
 let projProp='';
-// muda o imóvel (ou grupo) em foco nas projeções
-// Devolve: nada — redesenha a vista.
-function onProjProp(){projProp=val('projSel')||'';render()}
+/* Muda o imóvel (ou grupo) em foco nas projeções, escolhido no chip «Imóvel»
+   (vistas.js:anaChips). Escolher pelo teclado deixa o foco no botão do chip,
+   que o render refaz: volta ao novo, com o mesmo id (vistas.js:lfReporFoco).
+   Recebe: nada (lê o seletor #projSel).
+   Devolve: nada — redesenha a vista. */
+function onProjProp(){const antes=document.activeElement;projProp=val('projSel')||'';render();lfReporFoco(antes)}
 /* Quantos meses de um ano é que este contrato está em vigor.
 
    A projeção somava a renda cheia a todos os anos do horizonte, sem olhar às
@@ -128,32 +131,54 @@ function livreDeDividas(){
 function prjCartao(titulo,sub,corpo,cls){
   return `<section class="card ana-cartao${cls?' '+cls:''}"><div class="ana-cab"><h2 class="ana-tit">${titulo}</h2>${sub?`<span class="small">${sub}</span>`:''}</div>${corpo}</section>`;
 }
-/* A barra do topo das Projeções (a prancheta): o âmbito em chips — o
-   proprietário e o imóvel em foco, que com ▾ abrem o painel dos filtros e com
-   × deixam o foco — e os três números da projeção escritos ali mesmo: o
-   horizonte, o aumento das rendas e a inflação das despesas (gravam ao sair
-   do campo, prjDefinir, e o foco fica onde o Tab o levou). Por baixo, a
-   frase do que vale em branco.
-   Recebe: s — as definições (db.settings).
-   Devolve: o HTML da barra (string). */
-function prjBarra(s){
-  const g=projProp&&String(projProp).startsWith('g:'),foco=!projProp?'':g?'Grupo · '+((grp(String(projProp).slice(2))||{}).name||''):propName(projProp);
-  /* o texto de cada chip num <span>: com um nome comprido é ele que leva as
-     reticências e o chip não passa da largura do ecrã (estilos.css:.ana-ambito .chip>span) */
-  const dono=!db.owners.length?'':ownerFilter
-    ?`<button type="button" class="chip on" data-toca="vista" data-click="limparAmbito()" aria-label="Proprietário: ${esc(ownerFilterName())} (limpar)"><span>Proprietário: ${esc(ownerFilterName())}</span>${ic('x',14)}</button>`
-    :`<button type="button" class="chip" data-toca="vista" data-click="hdrFiltToggle()"><span>Proprietário: todos</span>${ic('chevD',16)}</button>`;
-  const chipFoco=foco?`<button type="button" class="chip on" data-toca="vista" data-click="projAnaLimpar();render()" aria-label="Imóvel em foco: ${esc(foco)} (limpar)"><span>Imóvel<span class="ana-largo"> em foco</span>: ${esc(foco)}</span>${ic('x',14)}</button>`
-    :`<button type="button" class="chip" data-toca="vista" data-click="hdrFiltToggle()"><span>Imóvel<span class="ana-largo"> em foco</span>: todos</span>${ic('chevD',16)}</button>`;
-  return `<div class="ana-barra"><div class="chips-fila ana-ambito"><span class="lbl ana-lbl-ambito">Âmbito</span>${dono}${chipFoco}</div>
-    <div class="ana-pins">
-    <label class="ana-pin"><span>Horizonte</span><input id="prjHorizonte" type="text" inputmode="numeric" class="num" value="${s.years}" placeholder="Opcional" aria-label="Horizonte (anos)" data-change="prjDefinir('years',Math.min(30,Math.max(1,num(this.value))))"><span>anos</span></label>
-    <label class="ana-pin"><span>Aumento<span class="ana-largo"> das rendas</span></span><input id="prjAumento" type="text" inputmode="decimal" class="num" value="${dec(s.growth)}" placeholder="Opcional" aria-label="Aumento anual das rendas (%)" data-change="prjDefinir('growth',numTaxa(this.value))"><span>%</span></label>
-    <label class="ana-pin"><span>Inflação<span class="ana-largo"> das despesas</span></span><input id="prjInflacao" type="text" inputmode="decimal" class="num" value="${dec(s.inflation)}" placeholder="Opcional" aria-label="Inflação das despesas (%)" data-change="prjDefinir('inflation',numTaxa(this.value))"><span>%</span></label></div></div>
-    <p class="small prj-nota">Cada contrato tem o seu aumento. Em Portugal há um coeficiente máximo publicado todos os anos. Em branco: 1 ano, e 0 % de aumento e de inflação.</p>`;
+/* O topo das Projeções: no sítio da barra dos filtros das listas, só a fila
+   de chips — o «Imóvel» em foco (vistas.js:anaChips), sem pesquisa, sem funil
+   e sem painel. O proprietário não tem chip: o filtro global de proprietário
+   está de saída da app. Os três números da projeção (o horizonte, o aumento e
+   a inflação) já não vivem na página: abrem-se na roda dentada do cabeçalho
+   (projecoes.js:prjOpcoes).
+   Recebe: nada.
+   Devolve: o HTML da fila (string), ou '' sem imóveis. */
+function prjChips(){
+  return anaChips({id:'projSel',valor:projProp,aplicar:'onProjProp',limpar:'projAnaLimpar();render()',dos:'da projeção'});
 }
-/* Grava um dos três números da barra (o horizonte, o aumento das rendas ou a
-   inflação das despesas) nas definições, como o vistas.js:setSet, mas o
+/* As opções da projeção, na janela que a roda dentada do cabeçalho abre
+   (vistas.js:ANA_RODA, o «alternar» do registo): o horizonte, o aumento das
+   rendas e a inflação das despesas — os três números que viviam numa barra no
+   topo da página, e que lá competiam com os filtros. São os mesmos das
+   Definições › Valores por omissão (definicoes.js:vDefaults), no mesmo
+   desenho. Gravam ao escrever (prjOpcao), e a projeção por trás acompanha.
+   Recebe: nada.
+   Devolve: nada — abre a janela (vistas.js:anaOpcoes). */
+function prjOpcoes(){
+  const s=db.settings;
+  anaOpcoes('Opções da projeção',[
+    {id:'prjHorizonte',titulo:'Horizonte',sub:'Quantos anos a projeção mostra, de 1 a 30',valor:String(s.years),modo:'numeric',unidade:'anos',
+      input:"prjOpcao(this,'years')",change:"prjOpcao(this,'years',1)"},
+    {id:'prjAumento',titulo:'Aumento das rendas',sub:'Por ano, nos contratos sem aumento próprio',valor:dec(s.growth),modo:'decimal',unidade:'%',
+      input:"prjOpcao(this,'growth')",change:"prjOpcao(this,'growth',1)"},
+    {id:'prjInflacao',titulo:'Inflação das despesas',sub:'Por ano, faz crescer as despesas previstas',valor:dec(s.inflation),modo:'decimal',unidade:'%',
+      input:"prjOpcao(this,'inflation')",change:"prjOpcao(this,'inflation',1)"}],
+    'Cada contrato tem o seu aumento. Em Portugal há um coeficiente máximo publicado todos os anos. Em branco: 1 ano, e 0 % de aumento e de inflação. São os mesmos valores das Definições, em Valores por omissão.');
+}
+/* Um campo da janela das opções mudou. Ao escrever, grava o valor que o
+   campo vale (as regras das Definições, definicoes.js:NORMA_DOS_VALORES: o
+   horizonte entre 1 e 30, as taxas com vírgula) e a projeção redesenha-se por
+   trás; um valor igual ao gravado não redesenha. Ao sair do campo, o campo
+   passa a mostrar o que ficou gravado (o horizonte em branco passa a 1), para
+   não dizer uma coisa e a app guardar outra.
+   Recebe: campo — o campo (o this da ação); k — 'years', 'growth' ou
+   'inflation'; fim (opcional) — verdadeiro ao sair do campo.
+   Devolve: nada — grava, e ao sair reescreve o campo. */
+function prjOpcao(campo,k,fim){
+  if(!campo||(k!=='years'&&k!=='growth'&&k!=='inflation'))return;
+  const v=NORMA_DOS_VALORES[k](campo.value);
+  if(db.settings[k]!==v)prjDefinir(k,v);
+  if(fim)campo.value=k==='years'?String(v):dec(v);
+  anaOpcaoGravada();
+}
+/* Grava um dos três números das opções (o horizonte, o aumento das rendas ou
+   a inflação das despesas) nas definições, como o vistas.js:setSet, mas o
    redesenho vai pelo prjRepintar, que devolve o foco a quem o tinha.
    Recebe: k — a chave em db.settings ('years', 'growth' ou 'inflation'); v — o valor já validado.
    Devolve: nada — grava e agenda o redesenho. */
@@ -161,9 +186,9 @@ function prjDefinir(k,v){
   if(k!=='years'&&k!=='growth'&&k!=='inflation')return;
   db.settings[k]=v;save();prjRepintar();
 }
-/* Redesenha a página sem tirar o foco a quem usa o teclado. Gravar um campo
-   da barra (ao sair dele com Tab) refazia a vista inteira já, e o campo
-   seguinte, para onde o Tab ia, desaparecia: o foco caía no <body> e o Tab
+/* Redesenha a página sem tirar o foco a quem usa o teclado. Os campos viviam
+   numa barra da página, e gravar um (ao sair dele com Tab) refazia a vista
+   inteira já, e o campo seguinte, para onde o Tab ia, desaparecia: o foco caía no <body> e o Tab
    seguinte voltava ao topo da página. Quando o change corre, o foco ainda
    não chegou ao campo seguinte — por isso o redesenho espera que ele assente
    (setTimeout), lê o id de quem o tem, redesenha e devolve-lho. O render é
@@ -222,16 +247,16 @@ function prjTabela(rows,act,debtY,comDivida){
       <td class="${r.cf>=0?'pos':'neg'}"><b>${euro(r.cf)}</b></td>${comDivida?`<td>${euro(debtY[i])}</td>`:''}</tr>`).join('')}</tbody></table></div>`);
 }
 /* Projeções ao horizonte definido nas definições (s.years), a partir de
-   projRows, como a prancheta D-Projecoes: a barra do âmbito com o horizonte, o
-   aumento e a inflação; os indicadores; o aviso das renovações; o gráfico das
-   entradas e saídas ao lado da dívida por amortizar (ou da boa notícia); a
+   projRows, como a prancheta D-Projecoes: a fila de chips com o imóvel em
+   foco (os números da projeção estão na roda dentada do cabeçalho); os
+   indicadores; o aviso das renovações; o gráfico das entradas e saídas ao lado da dívida por amortizar (ou da boa notícia); a
    tabela ano a ano com uma coluna por contrato; e, no fim, de onde vêm as
    despesas previstas, o IRS e o que ficou de fora.
    Devolve: string com o HTML completo da vista. */
 function vProjections(){
   if(projProp&&!pidProps(projProp).length)projProp='';
-  const s=db.settings,{rows,act,debtY,base}=projRows(projProp||null),n=rows.length;
-  const head=anaPanelPadrao('projSel',projProp,'onProjProp')+`<div class="ana prj">`+prjBarra(s);
+  const {rows,act,debtY,base}=projRows(projProp||null),n=rows.length;
+  const head=prjChips()+`<div class="ana prj">`;
   /* a saída do vazio leva aos Contratos ou aos Imóveis: com esse serviço
      desligado nesta conta o botão não se escreve, e a frase diz quem o liga */
   if(!act.length)return head+`<div class="empty"><b>Nenhum contrato ativo</b>As projeções partem das rendas contratadas.
@@ -258,10 +283,13 @@ function vProjections(){
   ${prjTabela(rows,act,debtY,comDivida)}
   ${projDespesasTxt(base)}</div>`;
 }
-// nº de filtros ativos no painel de análise das projeções: proprietário e imóvel em foco
-// Devolve: número de filtros ativos (0 a 2).
-function projAnaN(){return (ownerFilter?1:0)+(projProp?1:0)}
-// limpa o imóvel em foco das projeções (o proprietário limpa-o a base, anaClear)
+// nº de filtros ativos das projeções: o imóvel em foco (o chip «Imóvel»)
+// Devolve: número de filtros ativos (0 ou 1).
+function projAnaN(){return projProp?1:0}
+// limpa o imóvel em foco das projeções (vistas.js:anaClear chama-o)
 // Devolve: nada — limpa o filtro; quem chama repinta.
 function projAnaLimpar(){projProp=''}
-registarServico({id:'projections',vistas:{projections:'vProjections'},analise:{projections:{n:'projAnaN',limpar:'projAnaLimpar'}}});
+/* o botão do cabeçalho é a roda dentada das opções (vistas.js:ANA_RODA), e
+   tocar-lhe é o «alternar» da análise: abre a janela das opções */
+registarServico({id:'projections',vistas:{projections:'vProjections'},analise:{projections:{n:'projAnaN',limpar:'projAnaLimpar',alternar:'prjOpcoes'}}});
+registarRoda('projections','Opções da projeção');

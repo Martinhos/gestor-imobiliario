@@ -624,12 +624,11 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
   /* o «topo» é um círculo ao centro, como o +: a 76px ficava a 6px dele */
   body .totop{bottom:calc(92px + var(--inset-bottom))}
   body.open .tabbar{display:none}
-  /* o menu do telemóvel: o mapa completo numa gaveta de 328px, com o fecho
-     e o proprietário em foco; o cabeçalho perde os contornos dos botões e a
+  /* o menu do telemóvel: o mapa completo numa gaveta de 328px, com o
+     fecho; o cabeçalho perde os contornos dos botões e a
      ação do ecrã (o + da barra de baixo faz as vezes dela) */
   aside{width:min(328px,88vw);flex-basis:min(328px,88vw)}
   aside .brand .fecha-gaveta{display:inline-flex}
-  aside .nav-ambito{display:flex}
   /* o menu do telemóvel não tem o «Criar» (o M-Menu): lá o + vive na barra de baixo */
   aside .nav-criar{display:none}
   #hdrAcao,#hdrSec{display:none}
@@ -668,13 +667,6 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
    áreas e as janelas da navegação. */
 /* «Criar», ao cimo da barra lateral */
 .nav-criar{width:100%;justify-content:flex-start;margin:4px 0 10px}
-/* o proprietário em foco, no menu do telemóvel (no computador o âmbito
-   escolhe-se no painel do cabeçalho) */
-.nav-ambito{display:none;align-items:center;gap:10px;width:100%;min-height:52px;margin:0 0 6px;padding:6px 12px;border-radius:12px;border:1px solid var(--side-line);background:var(--side-hover);color:var(--side-ink);text-align:left;cursor:pointer}
-.nav-ambito svg:first-child{color:#9fb4ff} /* o azul informativo do canvas, que se lê no azul-noite */
-.nav-ambito>span{flex:1}
-.nav-ambito small{display:block;color:var(--side-text);font-size:12px}
-.nav-ambito b{display:block;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* a barra é uma coluna: os grupos rolam e o fundo (as Definições, a Ajuda e
    a conta, navegacao.js:gavetaHtml) encosta-se ao fundo e fica pegado lá,
    sempre à vista, com a divisória do canvas por cima — a 1440×900 a Ajuda e
@@ -747,12 +739,6 @@ main.sep-arrasto{overflow-x:clip}
 .sep-espreita svg{flex:0 0 auto}
 .sep-espreita.on{opacity:1}
 .sep-espreita.pronto{color:var(--accent-text);background:var(--accent-soft);border-color:var(--accent-soft)}
-/* o âmbito em foco, por cima da vista */
-.faixa-ambito{display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:8px 8px 8px 14px;border-radius:14px;background:var(--accent-soft);border:1px solid var(--line2);color:var(--accent-text)}
-.faixa-ambito p{flex:1;min-width:0;margin:0;font-size:14px}
-.faixa-ambito b{display:block;font-weight:650}
-.faixa-ambito span{display:block;font-size:12.5px}
-.faixa-ambito .btn{color:var(--accent-text)}
 /* a folha «Criar» (navegacao.js:abrirAdicionar) */
 .criar{display:flex;flex-direction:column;gap:10px}
 .criar-tit{margin:6px 0 0}
@@ -2080,6 +2066,38 @@ button.vg-item-abrir:active{background:var(--press)}
 /* a lista dos países é mais larga do que o botão: «+239 São Tomé e Príncipe» */
 .cw-tel .selpop{right:auto;min-width:min(260px,80vw)}
 /* ===== fim: 1.3.2 ===== */
+/* ===== ajustes-v40c: 1.1 — o formulário e a ficha do imóvel ===== */
+/* A caixa que cresce ou encolhe (continuidade.js:crescerEmAltura). Durante a
+   viagem a altura dela é a animada; a encolher é maior do que o que já leva
+   dentro, e numa grelha (o .sect do formulário do imóvel) a altura a mais
+   repartia-se pelas linhas — o nome descia 70px, a morada 210px, o
+   segmentado 280px, e voltavam. Encostadas ao topo, as linhas que ficam não
+   se mexem e só a borda de baixo sobe. */
+.a-crescer{align-content:start}
+/* o sítio de onde se medem as peças que saem, postas de volta por cima a
+   desvanecer (continuidade.js:acompanharPartes) */
+.tem-saidas{position:relative}
+/* O realce de um segmentado no escuro: era o --card (#141c2c), MAIS escuro do
+   que a pista (--chip, #1a2335), e com uma sombra que no escuro não se vê —
+   «o slider desapareceu». Passa ao --line2 (#33405c), 1.52:1 contra a pista,
+   sem a sombra; o mesmo para o aceso de todos os segmentados, que tinham o
+   mesmo defeito (o tipo do movimento, o tema, as abas da área). No claro fica
+   o de sempre: o branco com a sombra sobre a pista clara, como o resto da
+   app. */
+:root.dark .segm.desliza>.segm-polegar,
+:root.dark .segm>.on,:root.dark .segm>[aria-checked="true"],:root.dark .segm>[aria-current="page"],:root.dark .segm>[aria-selected="true"]{background:var(--line2);box-shadow:none}
+:root.dark .segm.desliza>.on,:root.dark .segm.desliza>[aria-checked="true"],:root.dark .segm.abas-pessoas>.on{background:transparent}
+/* A capa da ficha com fotos abre a galeria (imovel.js:imvCapaDaFicha): um
+   botão a cobri-la, por baixo do «N fotos» (que tem z-index 1) e por cima da
+   fotografia, que o paintThumbs mete antes dele. O premido escurece a capa
+   com o véu das janelas; o passar por cima, só com rato, menos. */
+.imv-capa-abre{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;border:0;background:transparent;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.imv-capa-abre::after{content:"";position:absolute;inset:0;background:var(--veu);opacity:0;transition:opacity var(--rapido) var(--curva)}
+@media(hover:hover){.imv-capa-abre:hover::after{opacity:.15}}
+.imv-capa-abre:active::after{opacity:.3}
+/* o anel por dentro, com uma margem da cor do cartão: assenta em qualquer fotografia */
+.imv-capa-abre:focus-visible{outline:2px solid var(--accent);outline-offset:-6px;box-shadow:inset 0 0 0 4px var(--card)}
+/* ===== fim: ajustes-v40c 1.1 ===== */
 /* ===== redesign: 1.3.3 — os Contratos ===== */
 /* web/app/lista-contratos.js, web/app/contrato.js e web/app/contrato-pdf.js:
    a lista (pranchetas M-Contratos e D-Contratos), a ficha (M-Contrato), o
@@ -2769,6 +2787,32 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
   .cred-corpo .cred-cab>.btn.plan-novo{display:none}
 }
 /* ===== fim: ajustes-v40b 1.2 ===== */
+/* ===== ajustes-v40c: 1.2 — contratos e visitas ===== */
+/* O quarto do contrato (contrato.js:ctQuartosHtml): com quartos arrendados,
+   os arrendados ficam à vista mas não se escolhem — o chip desligado perde a
+   mão e a tinta, e o contorno tracejado diz «não está livre» sem depender só
+   da cor. O erro do ctSaver (falhaCampo no grupo) acende o contorno dos que
+   se podem escolher, e não um anel à volta da fila. */
+.ct-quartos .chip:disabled{cursor:default;color:var(--muted);border-style:dashed}
+.ct-quartos .chip:disabled .ct-ja-txt{color:var(--muted)}
+#c_roomEsc.err{box-shadow:none}
+#c_roomEsc.err>.chip:not(:disabled){border-color:var(--danger)}
+/* O contacto escolhido (contrato.js:contactSect, contrato.js:ctMeiosDeContacto):
+   a linha da líquida (.ct-net-linha) não parte o valor, e um email ou um nome
+   comprido saía da caixa a 375px. Aqui a linha embrulha — o contacto desce
+   para baixo do nome quando não cabe ao lado —, o telefone fica inteiro e o
+   email e o nome partem onde for preciso. */
+.ct-net-linha.ct-contacto-escolhido{flex-wrap:wrap;row-gap:2px;min-width:0}
+.ct-contacto-escolhido>span,.ct-net-linha.ct-contacto-escolhido>b{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.ct-contacto-tel{white-space:nowrap}
+/* O Início e o Fim da visita (visitas.js:visBody): lado a lado também no
+   telemóvel e da largura da hora. Numa .row empilhavam-se abaixo dos 520px,
+   dois campos a toda a largura para «14:30». A altura é a do campo da casa
+   (46px), acima dos 44 no dedo. */
+.vis-par{display:grid;grid-template-columns:repeat(2,minmax(0,8.75rem));justify-content:start;align-items:end;gap:12px}
+.vis-par>label{min-width:0}
+.vis-par input{min-width:0;padding-left:12px;padding-right:10px}
+/* ===== fim: ajustes-v40c 1.2 ===== */
 /* ===== redesign: 1.3.6 — os Planeados, os Créditos e a Agenda ===== */
 /* --- o cartão dos por confirmar (planeados.js:pendingCard), também na Visão
    geral: sem a borda colorida à esquerda — o estado diz-se no selo. O
@@ -2999,6 +3043,87 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
   .cal-dica{flex-basis:auto}
 }
 /* ===== fim: 1.3.6 ===== */
+/* ===== ajustes-v40c: 1.3 — a seleção nos Planeados e nos Modelos ===== */
+/* (cloud/selecao-listas.js:selLDecorar com os tipos 'rec' e 'tpl') A caixa de
+   marcar entra na linha do planeado antes do texto, sem padding nem margem:
+   o gap da linha já a afasta. No modelo vai dentro do chip, mais pequena,
+   para o chip não crescer. */
+.plan-linha>[data-selbox]{padding:0;margin-right:0}
+.plan-modelo>[data-selbox]{padding:0;margin-right:8px}
+.plan-modelo>[data-selbox] .selck{width:20px;height:20px;border-radius:6px}
+/* Ao ENTRAR na seleção as caixas desvanecem (selecao-listas.js:selLEntrou),
+   como as dos Movimentos: no --medio, a curva de quem chega. Marcar e as
+   repinturas de fundo não as voltam a animar — a classe só se põe ao entrar. */
+#view [data-selbox].sel-entra{animation:veuEntra var(--medio) var(--curva-entra) backwards}
+/* O outro tipo, em seleção (os modelos enquanto se marcam planeados, e o
+   contrário): atenuado, porque ou se marcam uns ou outros (CW.selLOutro).
+   Sem transição: a classe chega com os nós novos da repintura, de uma vez. */
+#view .sel-fora{opacity:.5}
+/* A barra dos planeados (selecao-listas.js:selLBarraHtml): o Cancelar, a
+   razão de não haver Silenciar nem Reativar com os marcados misturados, o
+   Silenciar ou o Reativar, e o Apagar. A contagem está no cabeçalho, e no
+   telemóvel a barra não a repete: não cabia ao lado dos três botões. */
+.sel-fundo.sel-l-plan .sel-l-info{flex:1 1 auto;min-width:0;margin:0;display:flex;flex-direction:column;align-items:center;text-align:center;line-height:1.25}
+.sel-fundo.sel-l-plan .sel-l-info b{display:none}
+.sel-fundo.sel-l-plan .sel-l-info .small:empty{display:none}
+.sel-fundo #selLMudo[hidden]{display:none}
+/* no telemóvel estreito o Cancelar é só o ×, num alvo de 44px, com o nome
+   por extenso (aria-label): com o texto, os três botões passavam dos 375px */
+@media(max-width:430px){
+  .sel-fundo.sel-l-plan .sel-l-cancelar{width:44px;padding:0;flex:0 0 44px}
+  .sel-fundo.sel-l-plan .sel-l-txt{display:none}
+}
+@media(min-width:901px){
+  .sel-fundo.sel-l-plan .sel-l-info{align-items:flex-start;text-align:left}
+  .sel-fundo.sel-l-plan .sel-l-info b{display:block;white-space:nowrap}
+  .sel-fundo.sel-l-plan .sel-l-info .small{color:var(--side-text)}
+}
+/* ===== fim: ajustes-v40c 1.3 ===== */
+/* ===== ajustes-v40c: 1.4 — a Agenda: o cartão «Por confirmar» ===== */
+/* A coluna do dia (calendario.js:vCalendar): o painel do dia e, por baixo, o
+   cartão dos por confirmar. No computador é a segunda coluna da .cal-pag. */
+.cal-coluna{display:flex;flex-direction:column;gap:12px;min-width:0}
+/* O cartão (calendario.js:calPendCard): o cabeçalho é um botão inteiro, com o
+   desenho do cabeçalho do cartão dos Planeados (.plan-pend-cab); as linhas e a
+   dica são as de lá (.plan-pend-linhas, .plan-pend-dica). O número vai num
+   selo com a cor do crachá da barra de baixo (.tabbar a .cnt), que é o mesmo
+   número: é o que liga o ícone ao cartão. */
+.cal-pend{padding:0}
+.cal-pend-h{margin:0;font:inherit;letter-spacing:0}
+.cal-pend-cab{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"tit n chev" "sub sub sub";align-items:center;gap:2px 10px;
+  width:100%;min-height:44px;padding:16px 18px;border:0;border-radius:15px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer;
+  transition:background-color var(--rapido) var(--curva)}
+.cal-pend:not(.fechado) .cal-pend-cab{border-bottom-left-radius:0;border-bottom-right-radius:0}
+@media(hover:hover){.cal-pend-cab:hover{background:var(--tint)}}
+.cal-pend-cab:active{background:var(--press)}
+.cal-pend-cab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.cal-pend-tit{grid-area:tit;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0}
+.cal-pend-nome{font-family:var(--letra-titulo);font-size:16px;font-weight:650;letter-spacing:-.015em}
+.cal-pend-n{grid-area:n;display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 7px;border-radius:999px;
+  background:var(--out);color:var(--accent-ink);font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums}
+.cal-pend-chev{grid-area:chev;display:inline-flex;color:var(--faint);transition:transform var(--medio) var(--curva)}
+.cal-pend:not(.fechado) .cal-pend-chev{transform:rotate(180deg)}
+.cal-pend-sub{grid-area:sub;margin:0}
+.cal-pend:not(.fechado) .cal-pend-ver{display:none}
+/* A dobra: uma transição num nó vivo (calendario.js:calPendAlternar troca o
+   .fechado), retomada do sítio onde ia se se tocar outra vez a meio. A altura
+   anda pelo grid-template-rows de 1fr a 0fr, com os dois valores escritos —
+   como as secções da gaveta (.navsec-corpo); a partir de uma linha medida pelo
+   conteúdo não interpolava (a nota do .fold). O conteúdo desvanece com ela.
+   As duas na --curva-entra e no --medio, a abrir e a fechar: a que fecha
+   também é uma saída, e uma saída que arranca devagar (a --curva-sai) atrasa
+   o instante para que se está a olhar. O corte (overflow) só existe fechado e
+   durante a viagem (.viagem): aberto e parado, os menus ⋯ das linhas abrem
+   para fora do cartão. Fechado, o visibility tira as linhas do Tab e do leitor
+   de ecrã — no FIM da viagem, para se verem a sair; a abrir, logo no início.
+   Sem movimento, a regra geral desliga as transições e tudo é de uma vez. */
+.cal-pend-corpo{display:grid;grid-template-rows:1fr;transition:grid-template-rows var(--medio) var(--curva-entra)}
+.cal-pend.fechado>.cal-pend-corpo{grid-template-rows:0fr}
+.cal-pend-dentro{min-height:0;min-width:0;opacity:1;visibility:visible;transition:opacity var(--medio) var(--curva-entra),visibility 0s}
+.cal-pend.fechado .cal-pend-dentro{opacity:0;visibility:hidden;transition:opacity var(--medio) var(--curva-entra),visibility 0s var(--medio)}
+.cal-pend.fechado .cal-pend-dentro,.cal-pend.viagem .cal-pend-dentro{overflow:hidden}
+@media(max-width:520px){.cal-pend-cab{padding:14px}}
+/* ===== fim: ajustes-v40c 1.4 ===== */
 /* ===== redesign: 1.3.7 — a Análise ===== */
 /* A Avaliação, as Projeções e o IRS · Anexo F como as pranchetas D-Avaliacao,
    D-Projecoes, D-Declaracao e M-SituacaoFiscal (avaliacao.js, projecoes.js,
@@ -3021,15 +3146,6 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 /* o rótulo «Titular» e o chip dele numa caixa só: quebram de linha juntos */
 .fis-titular{display:inline-flex;align-items:center;gap:8px;min-width:0;max-width:100%;margin-left:8px}
 .ana-acoes{display:flex;flex-wrap:wrap;gap:10px}
-.ana-pins{display:flex;flex-wrap:wrap;gap:8px}
-/* um número da página escrito ali mesmo (a .pin da prancheta): o rótulo, o
-   campo pequeno e a unidade numa caixa só; o anel do foco é o da caixa */
-.ana-pin{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;border:1px solid var(--line2);border-radius:12px;background:var(--card);color:var(--muted);font-size:14px;font-weight:500;cursor:text}
-.ana-pin>span:first-child{flex:1 1 auto}
-.ana-pin input{width:52px;min-height:0;padding:0;border:0;border-radius:0;background:transparent;font-weight:700;text-align:right;color:var(--ink)}
-.ana-pin input:focus-visible{outline:0}
-.ana-pin:has(input:focus-visible){border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.prj-nota{margin:-6px 0 0}
 /* o cartão da Análise: cabeçalho com o título e o subtítulo, e o resto em coluna */
 .ana-cartao{display:flex;flex-direction:column;gap:12px}
 .ana-cab{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;min-width:0}
@@ -3203,19 +3319,15 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
   /* um botão só de ícone pequeno (o ⓘ das contas entre proprietários) fica 44×44 */
   .ana .btn.sm.so-icone{width:44px}
 }
-/* no telemóvel a barra aperta-se: os chips do âmbito dizem-se sozinhos
-   («Proprietário: …», «Imóvel em foco: …») e cabem os dois numa linha sem o
-   rótulo; as ações da página ficam lado a lado, a dividir a largura */
+/* no telemóvel as ações da página dizem-se na forma curta (.ana-curto em vez
+   do .ana-largo) e ficam lado a lado, a dividir a largura */
 .ana-curto{display:none}
 @media(max-width:520px){
-  .ana-largo,.ana-lbl-ambito{display:none}
+  .ana-largo{display:none}
   .ana-curto{display:inline}
   .ana-barra{gap:8px}
   .ana-acoes{width:100%;gap:8px}
   .ana-acoes>.btn{flex:1 1 auto;padding:0 10px;font-size:14px}
-  .ana-pins{width:100%}
-  .ana-pin{flex:1 1 140px;gap:6px}
-  .ana-pin input{width:44px}
   .fis-ob .btn{margin-left:38px}
   /* o rótulo do titular desce com o chip para a fila seguinte: sem recuo */
   .fis-titular{margin-left:0}
@@ -3227,6 +3339,25 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
   #fold_fiscoGuia .fsum{display:none}
 }
 /* ===== fim: 1.3.7 ===== */
+/* ===== ajustes-v40c: 1.5 — Projeções e Avaliação: chips e a roda dentada ===== */
+/* O topo das Projeções e da Avaliação é a fila de chips das listas
+   (vistas.js:anaChips: .mov-chips, .mov-chip), sem pesquisa nem funil. Na
+   Avaliação as ações da página vão na mesma linha, encostadas à direita; no
+   telemóvel descem para uma linha delas, a dividir a largura (a regra do
+   .ana-acoes na secção 1.3.7). */
+.ana-topo{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}
+.ana-topo>.mov-chips{flex:1 1 auto;min-width:0;margin:0}
+.ana-topo>.ana-acoes{margin-left:auto}
+/* um nome comprido no chip leva reticências e o chip não passa da largura:
+   a 375px a página não rola de lado */
+.ana-chips .mov-chip{min-width:0}
+.ana-chips .mov-chip .sel,.ana-chips .mov-chip .selbtn{min-width:0;max-width:100%}
+.ana-chips .mov-chip .selbtn span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* a janela das opções (vistas.js:anaOpcoes): as linhas das Definições ›
+   Valores por omissão (.def-vr) numa lista, e a nota por baixo */
+.ana-opcoes{margin:0}
+.ana-opcoes-nota{margin:12px 0 0}
+/* ===== fim: ajustes-v40c 1.5 ===== */
 /* ===== redesign: 1.3.8 — as Definições ===== */
 /* A raiz (definicoes.js:raizDasDefinicoes, o canvas M-Definicoes): secções
    com o rótulo e as linhas numa lista com divisórias; no computador correm

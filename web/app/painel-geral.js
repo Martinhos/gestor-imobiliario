@@ -4,8 +4,8 @@
    Veio de vistas.js quando a app passou a serviços; regista-se no fim
    (servicos.js:registarServico). As regras de aspeto vivem na secção
    «redesign: 1.3.1» do web/estilos.css (classes .vg-…). */
-/* visão geral: proprietário e imóvel
-   Devolve: string HTML do painel de análise com os dois seletores. */
+/* visão geral: o imóvel (ou grupo) em foco, e o filtro comum quando os há
+   Devolve: string HTML do painel de análise (vistas.js:anaPanelPadrao). */
 function dashBar(){return anaPanelPadrao('dashPropSel',dashProp,'onDashProp')}
 // muda o imóvel (ou grupo) em foco na visão geral
 // Devolve: nada — redesenha a vista.
@@ -18,8 +18,8 @@ function onDashProp(){dashProp=val('dashPropSel')||'';render()}
    Cada fila é um .cols: a nuvem parte-as em blocos arrumáveis e dá a cada
    cartão a largura da fila — metade com dois, um terço com três
    (cloud/painel.js). Os rácios de rentabilidade vivem na Avaliação. Respeita o
-   filtro de proprietário (valores na quota-parte; a faixa do âmbito, posta
-   pelo render, di-lo) e o imóvel/grupo em foco.
+   imóvel/grupo em foco; não há filtro de proprietário (ambito.js), e os
+   valores são por inteiro.
    Devolve: string com o HTML completo da vista. */
 function vDashboard(){
   if(dashProp&&!pidProps(dashProp).length)dashProp='';
@@ -82,15 +82,14 @@ function vDashboard(){
   /* por imóvel: o cashflow (verde o que dá, laranja o que custa) e o que o
      explica quando ele é baixo — uma amortização deste ano, o uso próprio */
   const porImovel=m.props.map(p=>{const mp=metrics(YEAR,p.id,{share:true});
-    return {label:p.name+(ownerFilter&&sh(p)<1?' ('+shareText(p)+')':''),value:mp.cf,color:mp.cf<0?COR_SERIE.despesa:COR_SERIE.receita,am:mp.amort,nome:p.name,proprio:p.use==='proprio'}}).sort((a,b)=>b.value-a.value);
+    return {label:p.name,value:mp.cf,color:mp.cf<0?COR_SERIE.despesa:COR_SERIE.receita,am:mp.amort,nome:p.name,proprio:p.use==='proprio'}}).sort((a,b)=>b.value-a.value);
   const notasImovel=porImovel.filter(x=>x.am>0.005).slice(0,2).map(x=>x.nome+' amortizou '+euro(x.am)+' este ano.')
     .concat(porImovel.filter(x=>x.proprio).slice(0,2).map(x=>x.nome+' é de uso próprio.'));
   const act=db.contracts.filter(c=>isActive(c)&&inScope(c.propertyId)&&(!pid||pidProps(pid).some(p=>p.id===c.propertyId)));
-  const cs=c=>sh(prop(c.propertyId));
   /* a renda de cada contrato em vigor: quem (o nome do contrato, ou os
      inquilinos) e onde (o quarto, ou o imóvel), da maior para a menor */
   const rendas=act.map(c=>{const p=prop(c.propertyId);
-    return {label:String(c.name||'').trim()||ctNames(c),sub:c.roomId?roomName(p,c.roomId):(p?p.name:''),value:c.rent*cs(c),color:COR_SERIE.receita}}).sort((a,b)=>b.value-a.value);
+    return {label:String(c.name||'').trim()||ctNames(c),sub:c.roomId?roomName(p,c.roomId):(p?p.name:''),value:c.rent,color:COR_SERIE.receita}}).sort((a,b)=>b.value-a.value);
   /* a marca diz que o numero destes cartoes E o do ano corrente — e por isso
      que a variacao face ao ano anterior pode falar deles (vistas.js:kpi).
      O cartão escreve o valor com os cêntimos (euro2, como o canvas: «29 910,00
@@ -115,8 +114,8 @@ function vDashboard(){
     {rot:'Imóveis · contratos ativos',val:m.props.length+' · '+act.length,so:'estreito'},
     {rot:'Imóveis',val:m.props.length,so:'largo'},
     {rot:'Contratos ativos',val:act.length,so:'largo'},
-    {rot:'Renda contratada',val:euro2(sum(act.map(c=>c.rent*cs(c))))+'<span class="small">/mês</span>'},
-    {rot:'Renda líquida de impostos (estim.)',val:euro2(sum(act.map(c=>netRent(c)*cs(c))))+'<span class="small">/mês</span>',so:'largo'},
+    {rot:'Renda contratada',val:euro2(sum(act.map(c=>c.rent)))+'<span class="small">/mês</span>'},
+    {rot:'Renda líquida de impostos (estim.)',val:euro2(sum(act.map(c=>netRent(c))))+'<span class="small">/mês</span>',so:'largo'},
     {rot:'Valor de mercado',val:euro(m.value)},
     {rot:'Valor de aquisição',val:euro(m.purchase),so:'largo'},
     {rot:'Em dívida',val:euro(m.debt)},
@@ -138,7 +137,7 @@ function vDashboard(){
     ${(!pid||String(pid).startsWith('g:'))&&porImovel.length>1?vgCard('Cashflow por imóvel','',cHBars(porImovel,{fmt:euro2})+(notasImovel.length?`<p class="small vg-nota">${esc(notasImovel.join(' '))}</p>`:'')):''}
     ${vgCard('Renda por contrato','€/mês, em vigor',rendas.length?cHBars(rendas,{fmt:euro2})+`<p class="small vg-nota num">Total contratado: ${euro2(sum(rendas.map(r=>r.value)))}/mês</p>`:'<p class="small">Nenhum contrato em vigor.</p>')}</div>
   <div class="cols">
-    ${vgCard(pid?esc(dpName):'Portefólio',ownerFilter?(ownerIsGrp()?'grupo '+esc(ownerFilterName()):'quota-parte de '+esc(ownerFilterName())):'',portefolioHtml(portItens)+
+    ${vgCard(pid?esc(dpName):'Portefólio','',portefolioHtml(portItens)+
       `<p class="small vg-nota vg-so-largo">Mais-valias em bruto: mercado menos aquisição. Ao vender, o que é tributado desconta ainda o IMT e o selo da compra, as obras dos últimos 12 anos e as despesas da venda, e aplica o coeficiente de desvalorização da moeda.</p>`,{acao:avaliacao})}
     ${contasCard(pid)}</div>`;
 }
@@ -237,14 +236,14 @@ function atividadeCard(ativ){
    aquisição, a dívida e o património líquido. Os contratos ativos, a renda
    contratada, as mais-valias e a nota fiscal ficam de fora: sem movimentos
    são zeros e frases sobre zeros. Sem imóveis em foco não há cartão nenhum.
-   Recebe: m — as métricas do ano (metrics), já na quota-parte do filtro.
+   Recebe: m — as métricas do ano (metrics).
    Devolve: string HTML do cartão, ou vazia sem imóveis. */
 function portefolioInicial(m){
   if(!m.props.length)return '';
   /* o cartão genérico (vistas.js:card), e não o vgCard: a jornada é da folha
      dos primeiros passos e o teste dela lê o título como sempre foi; o corpo é
      a mesma grelha de números do Portefólio da vista cheia */
-  return card('Portefólio',ownerFilter?(ownerIsGrp()?'grupo '+esc(ownerFilterName()):'quota-parte de '+esc(ownerFilterName())):'',portefolioHtml([
+  return card('Portefólio','',portefolioHtml([
     {rot:'Imóveis',val:m.props.length},
     {rot:'Valor de mercado',val:euro(m.value)},
     {rot:'Valor de aquisição',val:euro(m.purchase)},
@@ -329,11 +328,11 @@ function dashVerSemImovel(){go('transactions');setTimeout(()=>{txProp='__none__'
    da Avaliação, e o atalho para as ver nos movimentos. Ocupa a largura toda
    (.vg-cheia) e diz ao painel arrumável a chave de sempre (data-bloco), a do
    antigo cartão «Despesas sem imóvel» — uma ordem guardada não o perde.
-   Escondido quando há filtro de proprietário ou não há órfãs — e com o serviço
+   Escondido quando não há órfãs — e com o serviço
    dos Movimentos desligado nesta conta, que é para lá que o atalho leva.
    Devolve: string HTML do aviso, ou vazia quando não se aplica. */
 function orphanCard(){
-  if(ownerFilter||!servicoLigado('transactions'))return '';
+  if(!servicoLigado('transactions'))return '';
   const o=orphanExpenses(YEAR);if(!o.length)return '';
   const uma=o.length===1;
   return `<div class="card vg-aviso vg-cheia" role="note" data-bloco="card:Despesas sem imóvel"><span class="vg-aviso-ic">${ic('aviso',20)}</span>
@@ -366,10 +365,10 @@ function dashDepois(){
   view().insertAdjacentHTML('beforeend',
     '<div id="dashPersonalizar" class="u-ta-center u-m-2px-0-0">'+arrumar+'</div>'+novoTx);
 }
-// nº de filtros ativos no painel de análise da visão geral: proprietário e imóvel em foco
-// Devolve: número de filtros ativos (0 a 2).
-function dashAnaN(){return (ownerFilter?1:0)+(dashProp?1:0)}
-// limpa o imóvel em foco da visão geral (o proprietário limpa-o a base, anaClear)
+// nº de filtros ativos no painel de análise da visão geral: o imóvel em foco
+// Devolve: número de filtros ativos (0 ou 1).
+function dashAnaN(){return dashProp?1:0}
+// limpa o imóvel em foco da visão geral (vistas.js:anaClear chama-o)
 // Devolve: nada — limpa o filtro; quem chama repinta.
 function dashAnaLimpar(){dashProp=''}
 // ao mudar de separador, o donut aberto fecha-se: era o go() que o fazia, e o go() não nomeia serviços

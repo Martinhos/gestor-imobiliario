@@ -415,12 +415,11 @@ describe('os separadores da área por cima da vista', () => {
 
   test('a via parcial das listas (a pesquisa) põe por cima a mesma moldura que o render', () => {
     /* uma tecla na pesquisa de uma lista refazia o ecrã sem os separadores da
-       área nem a faixa do âmbito (a via parcial não os punha); o render e ela
-       têm de concordar */
+       área (a via parcial não os punha); o render e ela têm de concordar */
     const fonte = readFileSync(new URL('../web/app/vistas.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
     const corpo = (nome) => { const i = fonte.indexOf('function ' + nome + '('); return fonte.slice(i, fonte.indexOf('\n}\n', i)); };
     for (const nome of ['render', 'refrescarListasVivas']) {
-      assert.match(corpo(nome), /html=faixaDoAmbito\(\)\+abasDaArea\(\)\+html;/, nome + ' põe a moldura da casca');
+      assert.match(corpo(nome), /html=abasDaArea\(\)\+html;/, nome + ' põe a moldura da casca');
     }
   });
 });

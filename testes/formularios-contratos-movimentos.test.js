@@ -292,18 +292,17 @@ describe('o formulário do contrato no desenho do canvas (M-NovoContrato)', () =
     assert.match(html, /Num mês que não tenha esse dia \(o 31 em abril\), conta o último dia do mês\./, 'o dia que «flutua» diz-se');
   });
 
-  test('o quarto escolhe-se em chips (role radio), e os já prometidos dizem-no sem deixar de se poder escolher', () => {
+  test('o quarto escolhe-se em chips (role radio); com um quarto arrendado, o imóvel inteiro sai e o arrendado di-lo sem se poder escolher', () => {
     const abertas = base();
     app.db.properties[0].rentalMode = 'quartos';
     app.db.properties[0].rooms = [{ id: 'Q1', name: 'Quarto 1' }, { id: 'Q2', name: 'Quarto 2' }];
     app.db.contracts = [app.normContract({ id: 'C9', propertyId: 'P1', roomId: 'Q1', tenantIds: ['I1'], rent: 300, start: '2020-01-01' })];
     app.ctModal(null, 'P1');
     const html = abertas[0].b;
-    assert.match(html, /<input type="hidden" id="c_room" value="">/);
-    const chips = [...html.matchAll(/role="radio" aria-checked="(true|false)" data-v="([^"]*)"[^>]*>([^<]+)(<span class="ct-ja-txt"> · já arrendado<\/span>)?/g)]
-      .map((m) => [m[3], m[1] === 'true', !!m[4]]);
-    assert.deepEqual(chips, [['Imóvel inteiro', true, false], ['Quarto 1', false, true], ['Quarto 2', false, false]]);
-    assert.doesNotMatch(html, /aria-disabled|disabled/, 'um quarto prometido pode ter o contrato seguinte');
+    assert.match(html, /<input type="hidden" id="c_room" value="Q2">/, 'abre no primeiro quarto livre');
+    const chips = [...html.matchAll(/role="radio" aria-checked="(true|false)" data-v="([^"]*)"([^>]*)>([^<]+)(<span class="ct-ja-txt"> · já arrendado<\/span>)?/g)]
+      .map((m) => [m[4], m[1] === 'true', !!m[5], / disabled/.test(m[3])]);
+    assert.deepEqual(chips, [['Quarto 1', false, true, true], ['Quarto 2', true, false, false]]);
   });
 
   test('a frase do prazo diz quanto dura e até quando se avisa o inquilino', () => {

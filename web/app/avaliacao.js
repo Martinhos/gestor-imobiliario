@@ -2,8 +2,9 @@
 /* o contador dos ids da página: o herói abre e fecha a explicação pelo seu id
    (vistas.js:kpiPorque), e cada pintura dá ids novos */
 let avaN=0;
-/* A vista de avaliação, como a prancheta D-Avaliacao: a barra do âmbito (com
-   o yield exigido e as ações da página), e depois o portefólio — o herói do
+/* A vista de avaliação, como a prancheta D-Avaliacao: a fila de chips com o
+   imóvel em foco e as ações da página (avaChips; o yield exigido está na roda
+   dentada do cabeçalho, avaOpcoes), e depois o portefólio — o herói do
    valor de mercado contra o valor por rendimento, os cinco rácios, a conta de
    exploração ao lado das contas entre proprietários, a tabela «Por imóvel» e
    os gráficos do ano. Tocar numa linha da tabela põe esse imóvel em foco
@@ -14,38 +15,54 @@ function vReports(){
   if(repProp&&!pidProps(repProp).length)repProp='';
   /* um imóvel onde só colaboro sem «Ver valores e avaliação» não tem cartão: o servidor não manda os valores */
   const list=pidProps(repProp).filter(p=>pode(p.id,'report.view'));
-  const panel=anaPanelPadrao('repSel',repProp,'onRepSel');
   /* a saída do vazio leva aos Imóveis: com esse serviço desligado nesta conta
-     o botão não se escreve, e a frase diz quem o liga */
-  if(!list.length)return panel+(esperaDoServidor()||`<div class="empty"><b>Sem imóveis para avaliar</b>A avaliação parte do que cada imóvel rende.
+     o botão não se escreve, e a frase diz quem o liga; o chip fica, para se
+     poder largar um foco que deixou a página vazia */
+  if(!list.length)return avaChips(false)+(esperaDoServidor()||`<div class="empty"><b>Sem imóveis para avaliar</b>A avaliação parte do que cada imóvel rende.
     ${servicoLigado('properties')?saida('Adicionar imóvel',"go('properties')",'ecra'):vazioServicoDesligado('properties')}</div>`);
   const casa=list.length===1?list[0]:null;
-  return panel+`<div class="ana ava">${avaBarra()}${casa?repCard(casa):portCard(repProp||null)}</div>`;
+  return avaChips(true)+`<div class="ana ava">${casa?repCard(casa):portCard(repProp||null)}</div>`;
 }
-/* A barra do topo da Avaliação: o âmbito em chips (o proprietário e o imóvel
-   em foco — com ▾ abrem o painel dos filtros, com × deixam o foco), o yield
-   exigido escrito ali mesmo, e as ações da página: partilhar a avaliação e
-   exportar os movimentos.
-   Devolve: o HTML da barra (string). */
-function avaBarra(){
-  const g=repProp&&String(repProp).startsWith('g:'),foco=!repProp?'':g?'Grupo · '+((grp(String(repProp).slice(2))||{}).name||''):propName(repProp);
-  const chipFoco=foco?`<button type="button" class="chip on" data-toca="vista" data-click="repAnaLimpar();render()" aria-label="Imóvel em foco: ${esc(foco)} (limpar)"><span>Imóvel<span class="ana-largo"> em foco</span>: ${esc(foco)}</span>${ic('x',14)}</button>`
-    :`<button type="button" class="chip" data-toca="vista" data-click="hdrFiltToggle()"><span>Imóvel<span class="ana-largo"> em foco</span>: portefólio</span>${ic('chevD',16)}</button>`;
-  return `<div class="ana-barra"><div class="chips-fila ana-ambito"><span class="lbl ana-lbl-ambito">Âmbito</span>${avaChipDono()}${chipFoco}
-    <label class="ana-pin"><span>Yield exigido</span><input id="avaYield" type="text" inputmode="decimal" class="num" value="${dec(db.settings.capTarget)}" placeholder="Opcional" aria-label="Yield exigido (%)" data-change="capTargetSet(this.value)"><span>%</span></label></div>
-    <div class="ana-acoes"><button type="button" class="btn" data-toca="nada" data-click="shareReport()"><span>Partilhar<span class="ana-largo"> avaliação</span></span></button>
-    <button type="button" class="btn" data-toca="nada" data-click="downloadCsv()"><span>Exportar<span class="ana-largo"> movimentos (CSV)</span><span class="ana-curto"> CSV</span></span></button></div></div>`;
+/* O topo da Avaliação: no sítio da barra dos filtros das listas, só a fila de
+   chips — o «Imóvel» em foco, um imóvel ou um grupo (vistas.js:anaChips) —,
+   sem pesquisa, sem funil e sem painel; e, na mesma linha, as ações da
+   página: partilhar a avaliação e exportar os movimentos. O proprietário não
+   tem chip: o filtro global de proprietário está de saída da app. O yield
+   exigido já não vive na página: abre-se na roda dentada do cabeçalho
+   (avaliacao.js:avaOpcoes).
+   Recebe: comAcoes — verdadeiro com avaliação à vista (sem ela não há o que
+   partilhar nem exportar).
+   Devolve: o HTML (string). */
+function avaChips(comAcoes){
+  const acoes=comAcoes?`<div class="ana-acoes"><button type="button" class="btn" data-toca="nada" data-click="shareReport()"><span>Partilhar<span class="ana-largo"> avaliação</span></span></button>
+    <button type="button" class="btn" data-toca="nada" data-click="downloadCsv()"><span>Exportar<span class="ana-largo"> movimentos (CSV)</span><span class="ana-curto"> CSV</span></span></button></div>`:'';
+  return anaChips({id:'repSel',valor:repProp,aplicar:'onRepSel',limpar:'repAnaLimpar();render()',dos:'da avaliação',acoes});
 }
-/* O chip do proprietário na barra do âmbito: sem ninguém, «todos» e abre o
-   painel dos filtros; com alguém, o nome e o × que o deixa
-   (navegacao.js:limparAmbito). Sem proprietários registados não se escreve.
-   Devolve: o HTML do chip (string), ou ''. */
-function avaChipDono(){
-  if(!db.owners.length)return '';
-  /* o texto num <span>: com um nome comprido é ele que leva as reticências e
-     o chip não passa da largura do ecrã (estilos.css:.ana-ambito .chip>span) */
-  return ownerFilter?`<button type="button" class="chip on" data-toca="vista" data-click="limparAmbito()" aria-label="Proprietário: ${esc(ownerFilterName())} (limpar)"><span>Proprietário: ${esc(ownerFilterName())}</span>${ic('x',14)}</button>`
-    :`<button type="button" class="chip" data-toca="vista" data-click="hdrFiltToggle()"><span>Proprietário: todos</span>${ic('chevD',16)}</button>`;
+/* As opções da avaliação, na janela que a roda dentada do cabeçalho abre
+   (vistas.js:ANA_RODA, o «alternar» do registo): o yield exigido, que vivia
+   escrito na barra do topo. É o mesmo das Definições › Valores por omissão
+   (definicoes.js:vDefaults), no mesmo desenho. Grava ao escrever
+   (avaOpcaoYield), e a avaliação por trás acompanha.
+   Recebe: nada.
+   Devolve: nada — abre a janela (vistas.js:anaOpcoes). */
+function avaOpcoes(){
+  anaOpcoes('Opções da avaliação',[
+    {id:'avaYield',titulo:'Yield exigido',sub:'O resultado anual de cada imóvel a dividir por este yield dá o valor por rendimento',valor:dec(db.settings.capTarget),modo:'decimal',unidade:'%',
+      input:'avaOpcaoYield(this)',change:'avaOpcaoYield(this,1)'}],
+    'Tem de ser maior que zero; em branco volta aos 5 %. É o mesmo valor das Definições, em Valores por omissão.');
+}
+/* O campo do yield exigido da janela das opções mudou. Ao escrever, grava
+   pelo capTargetSet o valor que o campo vale (vazio ou zero são 5 %), e a
+   avaliação redesenha-se por trás; um valor igual ao gravado não redesenha.
+   Ao sair do campo, o campo passa a mostrar o que ficou gravado.
+   Recebe: campo — o campo (o this da ação); fim (opcional) — verdadeiro ao
+   sair do campo.
+   Devolve: nada — grava, e ao sair reescreve o campo. */
+function avaOpcaoYield(campo,fim){
+  if(!campo)return;
+  if(db.settings.capTarget!==NORMA_DOS_VALORES.capTarget(campo.value))capTargetSet(campo.value);
+  if(fim)campo.value=dec(db.settings.capTarget);
+  anaOpcaoGravada();
 }
 /* Um cartão da Análise: o título na letra dos títulos, o subtítulo ao lado e,
    à direita, o que o cartão traz no cabeçalho (um botão de informação).
@@ -64,17 +81,21 @@ function repFoco(id){
   repProp=id||'';render();
   try{window.scrollTo(0,0)}catch(e){}
 }
-// aplica o imóvel (ou grupo) escolhido no seletor e volta a desenhar
-// Devolve: nada — guarda o filtro e redesenha a vista.
-function onRepSel(){repProp=val('repSel')||'';render()}
+/* Aplica o imóvel (ou grupo) escolhido no chip «Imóvel» (vistas.js:anaChips)
+   e volta a desenhar. Escolher pelo teclado deixa o foco no botão do chip,
+   que o render refaz: volta ao novo, com o mesmo id (vistas.js:lfReporFoco).
+   Recebe: nada (lê o seletor #repSel).
+   Devolve: nada — guarda o filtro e redesenha a vista. */
+function onRepSel(){const antes=document.activeElement;repProp=val('repSel')||'';render();lfReporFoco(antes)}
 /* grava o yield exigido: vazio ou zero repõe os 5 %; negativos ficam em 0,1 % — a avaliação
    divide por ele, e um yield negativo dava valores negativos. Grava já; o
-   redesenho vai pelo avaRepintar, que devolve o foco a quem o tinha.
+   redesenho vai pelo avaRepintar, que devolve o foco a quem o tinha. Quem o
+   chama é o campo da janela das opções (avaliacao.js:avaOpcaoYield).
    Recebe: v — o que foi escrito no campo (texto).
    Devolve: nada — grava a definição e agenda o redesenho (avaRepintar). */
 function capTargetSet(v){db.settings.capTarget=Math.max(0.1,num(v)||5);save();avaRepintar()}
-/* Redesenha a página sem tirar o foco a quem usa o teclado. Gravar o campo do
-   yield (ao sair dele com Tab) refazia a vista inteira já, e o campo seguinte,
+/* Redesenha a página sem tirar o foco a quem usa o teclado. O campo do yield
+   vivia na barra da página, e gravá-lo (ao sair dele com Tab) refazia a vista inteira já, e o campo seguinte,
    para onde o Tab ia, desaparecia: o foco caía no <body> e o Tab seguinte
    voltava ao topo da página. Quando o change corre, o foco ainda não chegou
    ao campo seguinte — por isso o redesenho espera que ele assente
@@ -390,10 +411,13 @@ ${activeContracts(p.id).map(c=>`      ${c.roomId?roomName(p,c.roomId):'Imóvel i
 `;
 }
 /* ---- registo do serviço (servicos.js) ---- */
-// nº de filtros ativos no painel de análise da avaliação: proprietário e imóvel em foco
-// Devolve: número de filtros ativos (0 a 2).
-function repAnaN(){return (ownerFilter?1:0)+(repProp?1:0)}
-// limpa o imóvel em foco da avaliação (o proprietário limpa-o a base, anaClear)
+// nº de filtros ativos da avaliação: o imóvel em foco (o chip «Imóvel»)
+// Devolve: número de filtros ativos (0 ou 1).
+function repAnaN(){return repProp?1:0}
+// limpa o imóvel em foco da avaliação (vistas.js:anaClear chama-o)
 // Devolve: nada — limpa o filtro; quem chama repinta.
 function repAnaLimpar(){repProp=''}
-registarServico({id:'reports',vistas:{reports:'vReports'},analise:{reports:{n:'repAnaN',limpar:'repAnaLimpar'}}});
+/* o botão do cabeçalho é a roda dentada das opções (vistas.js:ANA_RODA), e
+   tocar-lhe é o «alternar» da análise: abre a janela das opções */
+registarServico({id:'reports',vistas:{reports:'vReports'},analise:{reports:{n:'repAnaN',limpar:'repAnaLimpar',alternar:'avaOpcoes'}}});
+registarRoda('reports','Opções da avaliação');

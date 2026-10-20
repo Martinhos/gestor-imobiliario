@@ -119,6 +119,14 @@ function seed(){
    a janela que está por baixo dele. */
 document.addEventListener('keydown',e=>{if(selTecla(e))return;if(e.key==='Escape')closeModal('esc')});
 document.addEventListener('click',()=>closePops());
+/* Um menu ⋯ aberto fecha quando a página (ou a caixa onde ele está) rola: ficava
+   pendurado no sítio onde o botão estava, com o botão já noutro sítio. Só os
+   .menupop — as listas dos seletores que flutuam nos filtros acompanham o
+   scroll (cloud/filtros.js) — e não o scroll de dentro do próprio menu, que um
+   menu encolhido pelo ajustarPop pode ter. Na captura, porque o scroll não sobe
+   (o corpo de uma janela, a caixa dos filtros). */
+document.addEventListener('scroll',e=>{const t=e.target;if(t&&t.closest&&t.closest('.menupop'))return;
+  [].forEach.call(document.querySelectorAll('.menupop.on'),p=>p.classList.remove('on'))},{capture:true,passive:true});
 /* Enter ativa o que é clicável mas não é botão nativo (cartões, itens do
    menu): é o que falta para a app inteira andar a teclado. */
 document.addEventListener('keydown',e=>{

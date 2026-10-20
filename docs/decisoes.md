@@ -42,6 +42,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-19 · Os erros dos robôs não são pedidos
 - 2026-10-19 · A cara nova depois de usada, e a Declaração fica em dev
 - 2026-10-20 · As listas imitam os Movimentos, e a nuvem diz se liga
+- 2026-10-20 · A terceira volta da v40: sem saltos, por quartos, e sem o filtro de proprietário
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1179,8 +1180,8 @@ não leva vermelho: «Recusar desta vez» um planeado não apaga nada, e passou
 do botão vermelho para o ⋯ da linha (planeados.js:pendMenuItens). Os números
 que mudam uma página da Análise — o yield exigido, o horizonte, o aumento
 das rendas, a inflação — saíram do painel dos filtros para a própria página
-(estilos.css:.ana-pin): escondidos lá, mudavam todos os números sem se ver
-porquê. E o «Partilhar» passou a estar no cartão de cada grupo
+(a caixa .ana-pin, que saiu a 2026-10-20 para a janela da roda dentada):
+escondidos lá, mudavam todos os números sem se ver porquê. E o «Partilhar» passou a estar no cartão de cada grupo
 (definicoes.js:cartaoDoGrupo), o que tornou inútil o «Partilhar um grupo que
 já tens», que listava os privados à parte: as portas passaram de três a
 duas.
@@ -1491,3 +1492,131 @@ anima-se a partir do velho. A altura vai pela única caixa onde os campos
 mudam (o primeiro grupo), como no painel do dia do calendário — uma caixa
 só, e não a janela inteira, que no computador está centrada e saltaria de
 sítio a cada fotograma.
+
+## 2026-10-20 · A terceira volta da v40: sem saltos, por quartos, e sem o filtro de proprietário
+A terceira volta do Martinho pela v40 em dev, no mesmo dia. Do que apontou
+saíram seis folhas — o formulário e a ficha do imóvel, os contratos e as
+visitas, a seleção nos Planeados, o cartão da Agenda, as Projeções e a
+Avaliação, e o filtro de proprietário — e duas mudanças à mão: o ⋯ aberto
+fecha ao rolar (web/app/arranque.js, o ouvinte de scroll na captura), e o
+«Selecionar vários» e as opções de uma análise ganharam ícone próprio
+(icones.js:caixaVisto, icones.js:roda). Quatro perguntas foram ao Martinho
+antes de se escrever código, e as respostas estão abaixo. As regras vivem no
+design.md; aqui fica o porquê.
+
+O formulário do imóvel saltava ao passar a Uso próprio ou a Imóvel inteiro
+(«o UI salta, faz uma animação estranha»). Mediram-se três defeitos,
+fotograma a fotograma, antes de se mexer: numa grelha a encolher, a altura
+a mais repartia-se pelas linhas (o nome descia 70px, a morada 210px, o
+segmentado 280px, e voltavam); medir depois de pintar prendia o scroll ao
+fundo novo, e o conteúdo saltava 303px; e o que saía sumia de golpe,
+deixando um vazio a encolher. A caixa que cresce
+(continuidade.js:crescerEmAltura) passou a acompanhar as peças lá dentro
+(continuidade.js:acompanharPartes), pela chave data-parte, em vez de só
+animar a altura: animar só a altura era o que deixava o vazio. O que sai
+fica dentro da caixa, que o recorta, e não na camada de saída das listas,
+que vive por baixo das janelas.
+
+O realce do segmentado tem de se ver no escuro («o slider desapareceu em
+modo escuro»). No escuro a escolha acesa era o --card, mais escuro do que o
+trilho, com uma sombra que lá não se vê. Passou ao --line2 sem sombra, 1.52:1
+contra o trilho — e em todos os segmentados, não só no do formulário: o
+tipo do movimento, o tema, o «pago por» e as abas da área tinham o mesmo
+defeito, e um segmentado que se visse e os outros não era pior. No claro
+fica como sempre: o branco com a sombra lê-se.
+
+As Projeções e a Avaliação só com os chips e a roda dentada. O Martinho
+escolheu «B · só os chips»: sem pesquisa (numa análise não há o que
+procurar), sem funil e sem painel, com o chip «Imóvel» no sítio da barra das
+outras listas. O lfCabeca põe sempre a pesquisa e o funil e guarda o estado
+no lf(k) de uma lista, e o foco de uma análise é do serviço (projProp,
+repProp): ensiná-lo a ler o estado de fora e a calar metade do que faz era
+dobrar o componente, e o chip com as mesmas classes (vistas.js:anaChips) dá
+o mesmo desenho. Os números da projeção não são filtros: estavam na página,
+numa barra, e competiam com o chip no topo. A roda abre uma janela, e não um
+painel ancorado, porque são poucos campos e no telemóvel a folha de baixo é
+o sítio das opções; o desenho é o das Definições › Valores por omissão,
+porque são os mesmos valores, e uma terceira forma de os escrever era ruído.
+Gravam ao escrever, e não só ao sair: o Escape fecha a janela sem passar
+pelo blur, e perguntava «Sair sem guardar?» de um valor que o resto da app
+diz que já está gravado. A roda volta a escrever o nome numa microtarefa
+(vistas.js:pintarRoda), porque as camadas da seleção, que correm depois do
+render, ainda despem o botão pela marca e não pelo valor; sai quando elas
+compararem pelo valor, como o cloud/painel.js:patchHdr já faz
+(cloud/painel.js:HDR_CONCLUIR).
+
+O filtro global de proprietário saiu de todo. O Martinho escolheu «tirar de
+todo»: sai da gaveta, da faixa por cima da vista e dos filtros das listas,
+das análises e dos filtros comuns. Era um estado escondido que mudava todos
+os números da app (a quota-parte) a partir de um sítio só, com uma faixa
+para o lembrar; com dois ou três donos, quem quer saber de um procura-o ou
+abre a ficha dele. O ownerFilter ficou, como titular do IRS · Anexo F: a
+declaração é por titular (é ele que entrega o anexo), e o fisco.js lê o
+titular dali — tirá-lo partia o IRS, e dar ao titular um estado próprio é
+trabalho do fisco.js. Para não haver um filtro escondido, o render e a
+mudança de separador largam-no fora do IRS (ambito.js:ambitoSemDono): a
+regra é «fora do IRS é sempre ''», e não «ninguém o escreve», que um atalho
+antigo ou um filtro comum guardado podiam desmentir. A canalização
+(ambito.js:visiveis, ambito.js:scope, a quota do saldos.js:sh) ficou: com o
+ownerFilter vazio é a identidade, e tirá-la era refazer as contas da quota
+em seis ficheiros e uma dúzia de testes de aritmética sem mudar nada do que
+se vê. O «Ver a app na quota de …» da ficha do proprietário saiu com ele:
+sem o filtro, levava à Visão geral e não mudava nada.
+
+O cartão «Por confirmar» na Agenda. O crachá da Agenda contava os planeados
+vencidos e não silenciados, mas a Agenda não mostrava nenhum: o Martinho via
+um «1» no ícone sem perceber de onde vinha. Pediu, «no calendário, por baixo
+de marcar visita e movimento recorrente, um cartão abatível com os por
+confirmar». O cartão usa as linhas dos Planeados para confirmar ali mesmo, e
+o crachá passou a contar pela mesma função que o cartão mostra
+(calendario.js:calPendentes): o número do ícone e o do cartão não podem
+discordar. Abre fechado, com uma chave sua: nos Planeados a lista é a razão
+de lá se ir, na Agenda é um aparte do mês.
+
+O toque longo nos Planeados abre as opções. O Martinho respondeu que o
+toque longo abre as opções, com «Selecionar vários» no fim
+(planeados.js:lpPortaSelecao); nos Imóveis e nos Contratos continua a
+selecionar. Em seleção, o toque longo marca como o toque: nos Imóveis e nos
+Contratos voltava a entrar e deitava fora o que estava marcado.
+
+Ou planeados ou modelos na seleção, nunca os dois. As ações não são as
+mesmas (um modelo não se silencia), e uma barra que servisse os dois teria
+de explicar a cada toque o que fazia a cada um. Tocar no outro tipo sem
+marcas troca; com marcas avisa e não as deita fora — perder uma seleção de
+cinco por um toque ao lado era pior do que um aviso. O Silenciar e o
+Reativar só aparecem com os marcados todos no mesmo estado, como o Martinho
+pediu («silenciar todos se estiverem todos ativos, reativar todos se
+estiverem todos silenciados»): um «alternar» trocava uns para um lado e
+outros para o outro. As regras de apagar um planeado (planeados.js:recTirar,
+planeados.js:recRepor) passaram a viver uma vez em planeados.js, usadas pelo
+delRec e pela seleção: a seleção tinha de fazer aos automáticos exatamente o
+que o delRec faz, e duas cópias divergiam à primeira mudança.
+
+O contrato da casa inteira é recusado num imóvel com quartos arrendados. O
+pedido do Martinho: uma casa arrendada por quartos com quartos já
+arrendados não pode ter um contrato da casa toda; o que se arrenda são os
+quartos que sobram. O formulário abria no «Imóvel inteiro» e deixava
+escolher um quarto já arrendado «para o contrato seguinte», e quem gravava
+sem reparar criava um contrato da casa toda por cima dos dos quartos. Agora
+abre no primeiro quarto livre, os arrendados não se escolhem, e o guardar
+recusa a casa inteira (contrato.js:ctSaver): o contrato seguinte de um
+quarto faz-se quando o de agora acabar, ou renovando-o. Os arrendados ficam
+à vista, desligados, em vez de desaparecer: dizem porque é que o quarto não
+está na escolha, e sem nenhum livre explicam a frase de que não há contrato
+novo possível. A exceção é o que já estava gravado — um contrato antigo da
+casa inteira, ou um quarto partilhado por dois contratos, continua a
+editar-se (contrato.js:ctInteiroGravado), para não trancar dados de antes da
+regra. No contacto do senhorio, o telefone não parte a meio e o email e o
+nome partem onde for preciso: um «912 345 / 678» lê-se mal, e por isso não
+é só um overflow-wrap no texto todo.
+
+Fica uma questão em aberto, levantada pela folha da Agenda. A regra da casa
+diz que a --curva-sai serve o que se fecha (ver «Movimento», no design.md),
+e as secções da gaveta fecham nela (estilos.css:.navsec-corpo). Mas o guia
+do movimento (/animate) desaconselha numa interface curvas que arrancam
+devagar: a --curva-sai (cubic-bezier(.4,0,1,1)) atrasa o instante para que
+se está a olhar. O cartão «Por confirmar» da Agenda abre e fecha na
+--curva-entra (estilos.css:.cal-pend-corpo), e as duas dobras que se veem
+iguais fecham hoje com curvas diferentes. Falta decidir se a regra continua,
+ou se passa a valer só para o que sai do ecrã a deslizar (a gaveta, o
+toast).

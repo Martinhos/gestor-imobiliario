@@ -78,12 +78,20 @@ function propFicha(id){
 /* A capa da ficha: a primeira foto (o depois do propView pinta-a, pelo id
    th_) por cima do mosaico do imóvel, e o botão que abre a galeria com
    quantas fotos há.
+
+   Com fotos, a capa toda abre a galeria: quem vê uma fotografia toca nela, e
+   só o «N fotos» no canto abria. É um botão à parte, irmão do «N fotos» e por
+   baixo dele (nunca um botão dentro de outro), a cobrir a capa. Para o
+   teclado e para o leitor de ecrã a porta continua a ser o «N fotos», que diz
+   quantas há: o da capa fica fora da ordem do Tab (tabindex -1), para não
+   haver duas paragens seguidas que fazem o mesmo, mas tem nome.
    Recebe: p — o imóvel; vFile — se o cargo deixa ver as fotos.
    Devolve: o HTML da capa. */
 function imvCapaDaFicha(p,vFile){
-  const fs=vFile?(p.photos||[]):[],f=fs[0];
+  const fs=vFile?(p.photos||[]):[],f=fs[0],abre=`data-toca="camada" data-click="imvGaleria('${jsq(p.id)}')"`;
   return `<div class="imv-fcapa imv-mosaico ${imvMosaico(p)}${f?' pcover':''}"${f?` id="th_${esc(f.id)}"`:''}>
-    ${fs.length?`<button type="button" class="imv-fotos-btn" data-toca="camada" data-click="imvGaleria('${jsq(p.id)}')">${ic('photo',16)} ${fs.length} foto${fs.length===1?'':'s'}</button>`:''}</div>`;
+    ${fs.length?`<button type="button" class="imv-capa-abre" tabindex="-1" aria-label="Ver as fotos" ${abre}></button>
+    <button type="button" class="imv-fotos-btn" ${abre}>${ic('photo',16)} ${fs.length} foto${fs.length===1?'':'s'}</button>`:''}</div>`;
 }
 /* A morada, os selos (o estado, o destino, os contratos por começar, os
    colaboradores) e a linha dos donos: as quotas e, entre donos, quem deve a
@@ -209,7 +217,9 @@ function imvLinhaContrato(ct,rotulo){
 }
 /* O cartão dos quartos de um imóvel por quartos: quantos estão arrendados e,
    quarto a quarto, o contrato (ou «Livre», com o «Novo contrato» e o
-   «Marcar visita» para quem pode). Sem poder ver os contratos, só os nomes
+   «Marcar visita» para quem pode — a visita já com ESSE quarto, que foi onde
+   se tocou: com a casa inteira por omissão, num imóvel com dois quartos
+   livres era preciso escolher de novo). Sem poder ver os contratos, só os nomes
    dos quartos — o que o servidor não manda não se adivinha.
    Recebe: p — o imóvel; vCt — se o cargo e os serviços deixam ver os contratos.
    Devolve: o HTML do cartão, ou ''. */
@@ -223,7 +233,7 @@ function imvQuartos(p,vCt){
   const linhas=rooms.map(r=>{
     const ct=vivos.find(x=>x.roomId===r.id&&isActive(x))||vivos.find(x=>x.roomId===r.id);
     if(ct){if(isActive(ct))ocupados++;return imvLinhaContrato(ct,r.name||'Quarto')}
-    const botoes=[podeVis?`<button type="button" class="btn sm" data-toca="camada" data-click="marcarVisitaNoImovel('${q}')">Marcar visita</button>`:'',
+    const botoes=[podeVis?`<button type="button" class="btn sm" data-toca="camada" data-click="marcarVisitaNoImovel('${q}','${jsq(r.id)}')">Marcar visita</button>`:'',
       podeCt?`<button type="button" class="btn sm" data-toca="camada" data-click="contratoNoQuarto('${q}','${jsq(r.id)}')">Novo contrato</button>`:''].join('');
     return `<div class="imv-linha imv-livre"><div class="imv-linha-txt"><b>${esc(r.name||'Quarto')}</b><span class="small">Sem contrato</span></div>
       <span class="badge amber">Livre</span>${botoes?`<div class="imv-botoes">${botoes}</div>`:''}</div>`;
@@ -477,12 +487,14 @@ function donosSect(){
    à parte (.segm-polegar), posta na escolha pela classe i0/i1, que desliza de
    uma escolha para a outra (imovel.js:imvSegDeslizar) — o fundo trocado de um
    botão para o outro era um salto.
+   O campo é uma peça do grupo que cresce (data-parte, continuidade.js:partesDe):
+   quando o de cima muda e este fica, fica no sítio.
    Recebe: rotulo — o nome do grupo; ops — [[valor, rótulo, frase]]; atual — o
    valor escolhido; fn — o nome da função que muda a escolha.
    Devolve: o HTML do campo. */
 function imvSegmentado(rotulo,ops,atual,fn){
   const on=ops.find(o=>o[0]===atual)||ops[0],i=ops.indexOf(on);
-  return `<div class="imv-campo"><div class="flabel" id="imv_seg_${fn}">${rotulo}</div>
+  return `<div class="imv-campo" data-parte="seg-${fn}"><div class="flabel" id="imv_seg_${fn}">${rotulo}</div>
     <div class="segm desliza" id="imv_segm_${fn}" role="radiogroup" aria-labelledby="imv_seg_${fn}"><span class="segm-polegar i${i}" aria-hidden="true"></span>${ops.map(([k,lb])=>
       `<button type="button" role="radio" aria-checked="${k===on[0]?'true':'false'}" class="${k===on[0]?'on':''}" data-toca="rascunho" data-click="${fn}('${k}')">${lb}</button>`).join('')}</div>
     <div class="hint imv-seg-frase">${on[2]}</div></div>`;
@@ -498,15 +510,15 @@ function propBody(){
   const p=pForm,ls=p.loans||[];
   return `<div class="form imv-form">
     <div class="sect imv-grupo">
-      <label>Nome <span class="req">*</span><input id="p_name" value="${esc(p.name)}" placeholder="Ex: T2 Lisboa" autocomplete="off"></label>
-      <label>Morada<input id="p_addr" value="${esc(p.address)}" placeholder="Opcional" autocomplete="off"></label>
+      <label data-parte="nome">Nome <span class="req">*</span><input id="p_name" value="${esc(p.name)}" placeholder="Ex: T2 Lisboa" autocomplete="off"></label>
+      <label data-parte="morada">Morada<input id="p_addr" value="${esc(p.address)}" placeholder="Opcional" autocomplete="off"></label>
       ${imvSegmentado('Destino do imóvel',[['investimento','Arrendamento','Para render: tem contratos e rendas.'],['proprio','Uso próprio','Para ti ou para a família, sem rendas.']],p.use,'setUse')}
       ${p.use==='investimento'?imvSegmentado('Tipo de arrendamento',[['inteiro','Imóvel inteiro','Um contrato só, para o imóvel todo.'],['quartos','Por quartos','Um contrato por quarto.']],p.rentalMode,'setMode'):''}
-      ${p.use==='investimento'&&p.rentalMode==='quartos'?`<div class="imv-campo"><div class="flabel">Quartos (nome opcional)</div>
-        <div class="imv-quartos">${(p.rooms||[]).map(r=>`<div class="roomrow">
+      ${p.use==='investimento'&&p.rentalMode==='quartos'?`<div class="imv-campo" data-parte="quartos"><div class="flabel">Quartos (nome opcional)</div>
+        <div class="imv-quartos">${(p.rooms||[]).map(r=>`<div class="roomrow" data-parte="q-${esc(r.id)}">
           <input id="p_room_${r.id}" value="${esc(r.name)}" placeholder="Ex: Quarto da varanda" aria-label="Nome do quarto (opcional)" autocomplete="off">
           <button type="button" class="btn ghost so-icone" aria-label="Remover ${esc(r.name||'o quarto')}" data-toca="rascunho" data-click="delRoom('${r.id}')">${ic('x',18)}</button></div>`).join('')}
-          <button type="button" class="btn sm imv-mais" data-toca="rascunho" data-click="addRoom()">${ic('plus',16)} Adicionar quarto</button></div></div>`:''}
+          <button type="button" class="btn sm imv-mais" data-parte="q-mais" data-toca="rascunho" data-click="addRoom()">${ic('plus',16)} Adicionar quarto</button></div></div>`:''}
     </div>
     ${seccaoDosDonos()}
     <div class="sect imv-grupo">
@@ -686,6 +698,10 @@ function repaintProp(){const b=modalBodyEl();if(!b)return;b.innerHTML=(_propPain
    tipo de arrendamento e os quartos) a crescer ou a encolher até à altura
    nova, em vez de mudar de tamanho de um fotograma para o outro
    (continuidade.js:crescerEmAltura). É aí que os campos aparecem e somem.
+   As peças do grupo têm chave (data-parte: o nome, a morada, cada
+   segmentado, os quartos e cada quarto, o «Adicionar quarto»): o que fica
+   não se mexe, o que sai desvanece onde estava, o que chega desvanece a
+   entrar, e os quartos de baixo de um que se remove sobem a deslizar.
    Devolve: nada — redesenha a vista. */
 function repaintPropCrescendo(){
   crescerEmAltura(()=>{const b=modalBodyEl();return b&&b.querySelector('.imv-grupo')},repaintProp);
@@ -708,22 +724,42 @@ function imvSegDeslizar(fn,de){
   p.animate([{transform:passo(de)},{transform:passo(para)}],
     {duration:msDoToken('--medio',200),easing:tokenTexto('--curva-fita','cubic-bezier(.4,0,.2,1)')});
 }
+/* O segmentado tem o foco (do teclado, ou do toque que o deu ao botão)? A
+   repintura troca-o por um novo, e o foco caía no corpo da página: quem anda
+   de Tab tinha de recomeçar do topo do formulário.
+   Recebe: fn — o nome da função do segmentado ('setUse' ou 'setMode').
+   Devolve: verdadeiro se o foco está num dos botões dele. */
+function imvSegTemFoco(fn){
+  try{const g=document.getElementById('imv_segm_'+fn),a=document.activeElement;return !!(g&&a&&g!==a&&g.contains(a))}
+  catch(e){return false}
+}
+/* Devolve o foco à escolha acesa do segmentado novo, sem rolar o corpo.
+   Recebe: fn — o nome da função do segmentado.
+   Devolve: nada — mexe só no foco. */
+function imvSegFocar(fn){
+  try{const b=document.querySelector('#imv_segm_'+fn+' [aria-checked="true"]');if(b)b.focus({preventScroll:true})}catch(e){}
+}
 // Muda o destino do imóvel (arrendamento/uso próprio) e repinta — os campos
-// visíveis dependem dele: o realce desliza e o grupo cresce até eles.
+// visíveis dependem dele: o realce desliza, o grupo cresce até eles, e o foco
+// fica na escolha nova se estava no segmentado.
 // Recebe: u — o destino: 'investimento' ou 'proprio'.
 // Devolve: nada — redesenha a vista.
 function setUse(u){
+  const foco=imvSegTemFoco('setUse');
   collectProp();const de=pForm.use==='proprio'?1:0;pForm.use=u;
   repaintPropCrescendo();imvSegDeslizar('setUse',de);
+  if(foco)imvSegFocar('setUse');
 }
 // Muda o tipo de arrendamento; ao passar a quartos sem nenhum criado, semeia
-// dois para a lista não aparecer vazia.
+// dois para a lista não aparecer vazia. O foco, como no setUse.
 // Recebe: m — o tipo de arrendamento: 'inteiro' ou 'quartos'.
 // Devolve: nada — redesenha a vista.
 function setMode(m){
+  const foco=imvSegTemFoco('setMode');
   collectProp();const de=pForm.rentalMode==='quartos'?1:0;pForm.rentalMode=m;
   if(m==='quartos'&&!(pForm.rooms||[]).length)pForm.rooms=[{id:uid(),name:'Quarto 1'},{id:uid(),name:'Quarto 2'}];
   repaintPropCrescendo();imvSegDeslizar('setMode',de);
+  if(foco)imvSegFocar('setMode');
 }
 // Acrescenta um quarto com nome sequencial e repinta.
 // Devolve: nada — redesenha a vista.

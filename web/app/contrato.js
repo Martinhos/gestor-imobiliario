@@ -408,6 +408,11 @@ function ctModal(id,pid,tid){
   if(!id&&!rentables.length)return toast(db.properties.some(p=>p.use==='investimento')?fraseSemPerm('contract.add'):'Nenhum imóvel de arrendamento. Muda o uso na ficha do imóvel para criar contratos.');
   cForm=normContract(id?JSON.parse(JSON.stringify(contract(id))):{propertyId:(pid&&(prop(pid)||{}).use==='investimento'&&pode(pid,'contract.add')?pid:rentables[0].id),start:today(),
     tenantIds:tid&&tenant(tid)?[tid]:[]});
+  /* num imóvel por quartos com quartos arrendados, o contrato novo abre no
+     primeiro quarto livre — o «Imóvel inteiro» já não é escolha
+     (ctQuartoPorOmissao); quem veio de um quarto escolhe-o a seguir
+     (imovel.js:contratoNoQuarto) */
+  if(!id)cForm.roomId=ctQuartoPorOmissao(cForm);
   if(!id)fillOwnerContact();
   if(!id&&tid&&tenant(tid))fillTenantContact(tid);
   if(id)ctReconheceContactos();
@@ -446,7 +451,8 @@ function verMovimentosFora(id){
     icon:'swap'})),o=>{closeModal();chamarServico('transactions','txView',o.v)},
     `<div class="hint u-mt-12px">As datas destes movimentos não se mexem: dizem quando o dinheiro entrou. Abre cada um para corrigir o que for preciso.</div>`);
 }
-/* Devolve o handler que o modal usa ao guardar: valida imóvel, renda,
+/* Devolve o handler que o modal usa ao guardar: valida imóvel, quarto (a
+   casa inteira não, com quartos arrendados — ctInteiroPossivel), renda,
    inquilinos e datas e grava (ctGravar). O erro diz-se junto do campo
    (componentes.js:falhaCampo), que também o anuncia. Num contrato que já tinha
    fim e o vê ir para a frente, pergunta primeiro se é uma renovação ou uma
@@ -458,6 +464,15 @@ function ctSaver(){
     collectCt();
     if(!cForm.propertyId)return falhaCampo('c_prop','Escolhe o imóvel.');
     const recusa=motivoRecusa(cForm.propertyId,'contract.add',contract(cForm.id));if(recusa)return toast(recusa);
+    /* a casa toda não se arrenda com quartos já arrendados (ctInteiroPossivel);
+       sem quarto livre, o formulário já disse porquê e o erro repete-o */
+    const qs=ctQuartosEstado(cForm);
+    if(qs.rooms.length&&!cForm.roomId&&!ctInteiroPossivel(cForm,qs)){
+      falhaCampo('c_roomEsc',qs.livres.length?'Já há quartos arrendados: escolhe um dos quartos livres.':'Todos os quartos deste imóvel estão arrendados: não há contrato novo possível aqui.');
+      /* o grupo não toma o foco: quem vai pelo teclado fica no primeiro quarto livre */
+      const livre=document.querySelector('.ct-quartos [role="radio"]:not(:disabled)');if(livre)try{livre.focus({preventScroll:true})}catch(x){}
+      return;
+    }
     if(!(cForm.rent>0))return falhaCampo('c_rent','Indica a renda mensal.');
     if(!cForm.tenantIds.length)return falhaCampo('c_tenants','Escolhe pelo menos um inquilino.');
     /* um fim antes do início guardava sem aviso e o contrato sumia das
@@ -536,10 +551,7 @@ function ctGravar(){
    Recebe: nada — lê o cForm.
    Devolve: string com o HTML do formulário do contrato. */
 function ctBody(){
-  const c=cForm,p=prop(c.propertyId),rooms=(p&&p.rentalMode==='quartos')?(p.rooms||[]):[];
-  /* ctVivo: é o único aviso contra assinar dois contratos para o mesmo
-     quarto, e um quarto prometido para 2028 já está prometido */
-  const taken=db.contracts.filter(x=>x.id!==c.id&&x.propertyId===c.propertyId&&ctVivo(x)).map(x=>x.roomId);
+  const c=cForm,p=prop(c.propertyId),qs=ctQuartosEstado(c),rooms=qs.rooms;
   const tags=ctTenants(c).map(t=>({id:t.id,label:t.name}));
   const inv=c.inventory||[];
   const nSum=(c.keys||[]).length?sum(c.keys.map(k=>k.qty))+' chaves':'';
@@ -550,7 +562,7 @@ function ctBody(){
   return `<div class="form ct-form">
     <div class="sect ct-gf" id="ct_arrenda">
       <label>Imóvel <span class="req">*</span>${sel('c_prop',c.propertyId,propOptsPara('contract.add',c.propertyId).filter(o=>{const x=prop(o.v);return x&&(x.use==='investimento'||x.id===c.propertyId)}),'onCtProp','rascunho')}</label>
-      ${rooms.length?ctQuartosHtml(c,rooms,taken)
+      ${rooms.length?ctQuartosHtml(c,qs)
        :(p&&p.use==='investimento'?`<div class="hint ct-colado">Este imóvel está definido como arrendado por inteiro. Para arrendar por quartos, muda isso na ficha do imóvel.</div>`:'')}
       <div class="ct-campo"><div class="flabel">Inquilinos <span class="req">*</span></div><div id="c_tenants">${tagField(tags,'Adicionar','addCtTenant()','delCtTenant','','camada')}</div></div>
       <label>Nome do contrato (opcional)<input id="c_name" value="${esc(c.name||'')}" placeholder="Ex: ${esc(nomeVazio||'Ana · T2 Lisboa')}" autocomplete="off"></label>
@@ -634,27 +646,82 @@ function ctBody(){
     <div class="sect ct-gf" id="ct_notas">${richEditor('Notas','c_notes',c.notes,'Opcional')}</div>
   </div>`;
 }
+/* Os quartos do imóvel do contrato, vistos deste contrato: todos, os que já
+   têm OUTRO contrato vivo (ctVivo — um quarto prometido para 2028 já está
+   prometido; o próprio contrato não conta) e os livres. Um imóvel inteiro ou
+   sem quartos devolve listas vazias.
+   Recebe: c — o contrato (o do formulário, com propertyId e id).
+   Devolve: {rooms, ocupados, livres} — os quartos (objetos) e os ids dos
+   arrendados e dos livres, pela ordem da ficha do imóvel. */
+function ctQuartosEstado(c){
+  const p=prop(c.propertyId),rooms=(p&&p.rentalMode==='quartos')?(p.rooms||[]):[];
+  const taken=db.contracts.filter(x=>x.id!==c.id&&x.propertyId===c.propertyId&&ctVivo(x)).map(x=>x.roomId);
+  const ocupados=rooms.filter(r=>taken.indexOf(r.id)>-1).map(r=>r.id);
+  return {rooms,ocupados,livres:rooms.filter(r=>ocupados.indexOf(r.id)<0).map(r=>r.id)};
+}
+/* Um contrato que já estava gravado como do imóvel inteiro: abre e grava
+   como estava, mesmo que entretanto haja quartos arrendados — não se tranca
+   a edição de um contrato antigo por causa dos que vieram depois.
+   Recebe: c — o contrato do formulário.
+   Devolve: true se está na base e sem quarto. */
+function ctInteiroGravado(c){
+  const g=c&&c.id?contract(c.id):null;
+  return !!g&&!g.roomId;
+}
+/* O «Imóvel inteiro» ainda se escolhe? Não num imóvel por quartos com
+   algum quarto arrendado: a casa toda já não está livre, e o que se arrenda
+   são os quartos que sobram. Fica para o contrato gravado assim
+   (ctInteiroGravado).
+   Recebe: c — o contrato do formulário; qs (opcional) — o ctQuartosEstado(c), já feito.
+   Devolve: true se o contrato pode ser do imóvel inteiro. */
+function ctInteiroPossivel(c,qs){
+  const q=qs||ctQuartosEstado(c);
+  return !q.ocupados.length||ctInteiroGravado(c);
+}
+/* O quarto com que um contrato NOVO abre: num imóvel por quartos com algum
+   quarto arrendado, o primeiro livre (o «Imóvel inteiro» já não é
+   escolha); sem quartos arrendados, nenhum — o imóvel inteiro, como sempre.
+   Sem quartos livres também nenhum, e o formulário diz porquê
+   (ctQuartosHtml).
+   Recebe: c — o contrato do formulário.
+   Devolve: o id do quarto, ou null. */
+function ctQuartoPorOmissao(c){
+  const q=ctQuartosEstado(c);
+  return !ctInteiroPossivel(c,q)&&q.livres.length?q.livres[0]:null;
+}
 /* O quarto do contrato, num imóvel arrendado por quartos: um chip por quarto
-   (role radio) e «Imóvel inteiro» à cabeça. Os que já têm contrato vivo dizem
-   «· já arrendado» e continuam a poder escolher-se — um contrato novo pode
-   ser o que começa quando o de agora acabar —, mas não passam despercebidos.
-   O valor vive num campo escondido (c_room), que o collectCt lê.
-   Recebe: c — o contrato do formulário; rooms — os quartos do imóvel; taken — os ids dos quartos com contrato vivo.
+   (role radio) e «Imóvel inteiro» à cabeça. Com algum quarto arrendado, o
+   «Imóvel inteiro» sai (ctInteiroPossivel) e os arrendados dizem
+   «· já arrendado» desligados: escolhem-se os livres. Só o quarto que o
+   próprio contrato já tinha continua a escolher-se, mesmo partilhado. Sem
+   nenhum quarto livre, uma frase diz que não há contrato possível aqui.
+   O valor vive num campo escondido (c_room), que o collectCt lê; o erro do
+   ctSaver cai no grupo (c_roomEsc).
+   Recebe: c — o contrato do formulário; qs — o ctQuartosEstado(c).
    Devolve: o HTML do campo. */
-function ctQuartosHtml(c,rooms,taken){
-  const cur=c.roomId||'';
-  const opcoes=[{v:'',label:'Imóvel inteiro'}].concat(rooms.map(r=>({v:r.id,label:r.name,ja:taken.indexOf(r.id)>-1})));
-  return `<div class="ct-campo"><span class="flabel" id="c_roomRot">Quarto</span><input type="hidden" id="c_room" value="${esc(cur)}">
-    <div class="chips-fila ct-quartos" role="radiogroup" aria-labelledby="c_roomRot">${opcoes.map(o=>
-      `<button type="button" class="chip${cur===o.v?' on':''}${o.ja?' ct-ja':''}" role="radio" aria-checked="${cur===o.v?'true':'false'}" data-v="${esc(o.v)}" data-toca="rascunho" data-click="ctEscolheQuarto('${jsq(o.v)}')">${esc(o.label)}${o.ja?'<span class="ct-ja-txt"> · já arrendado</span>':''}</button>`).join('')}</div></div>`;
+function ctQuartosHtml(c,qs){
+  const cur=c.roomId||'',inteiro=ctInteiroPossivel(c,qs);
+  const opcoes=(inteiro?[{v:'',label:'Imóvel inteiro'}]:[]).concat(qs.rooms.map(r=>({v:r.id,label:r.name||'Quarto',ja:qs.ocupados.indexOf(r.id)>-1})));
+  /* sem quarto livre não há escolha: só o quarto do próprio contrato, se o tiver */
+  const semLivres=!inteiro&&!qs.livres.length&&!cur;
+  return `<div class="ct-campo"><span class="flabel" id="c_roomRot">Quarto${inteiro?'':' <span class="req">*</span>'}</span><input type="hidden" id="c_room" value="${esc(cur)}">
+    <div class="chips-fila ct-quartos" id="c_roomEsc" role="radiogroup" aria-labelledby="c_roomRot"${semLivres?' aria-describedby="c_roomSem"':''}>${opcoes.map(o=>{
+      const on=cur===o.v,fora=o.ja&&!on;
+      return `<button type="button" class="chip${on?' on':''}${o.ja?' ct-ja':''}" role="radio" aria-checked="${on?'true':'false'}" data-v="${esc(o.v)}"${fora?' disabled':` data-toca="rascunho" data-click="ctEscolheQuarto('${jsq(o.v)}')"`}>${esc(o.label)}${o.ja?'<span class="ct-ja-txt"> · já arrendado</span>':''}</button>`}).join('')}</div>
+    ${semLivres?`<div class="hint" id="c_roomSem">Todos os quartos deste imóvel estão arrendados, por isso não há contrato novo possível aqui. Quando um contrato acabar, o quarto fica livre; ou adiciona um quarto na ficha do imóvel.</div>`
+      :inteiro||contract(c.id)?'':`<div class="hint">Já há quartos arrendados: o contrato é de um dos quartos livres, e não do imóvel inteiro.</div>`}</div>`;
 }
 /* Um chip do quarto foi tocado: guarda a escolha no campo escondido e acende
-   o chip, sem repintar o formulário (o foco e o que se escreveu ficam).
+   o chip, sem repintar o formulário (o foco e o que se escreveu ficam). Larga
+   o erro do «Escolhe um quarto» (ctSaver), se lá estiver.
    Recebe: rid — o id do quarto ('' para o imóvel inteiro).
    Devolve: nada — mexe no campo e nos chips. */
 function ctEscolheQuarto(rid){
   const v=String(rid||''),i=document.getElementById('c_room');if(i)i.value=v;
   const g=document.querySelector('.ct-quartos');if(!g)return;
+  g.classList.remove('err');g.removeAttribute('aria-invalid');
+  if(g.getAttribute('aria-describedby')==='c_roomEsc-erro')g.removeAttribute('aria-describedby');
+  const erro=document.getElementById('c_roomEsc-erro');if(erro)erro.remove();
   [].slice.call(g.querySelectorAll('[role="radio"]')).forEach(b=>{
     const on=b.getAttribute('data-v')===v;
     b.classList.toggle('on',on);b.setAttribute('aria-checked',on?'true':'false');
@@ -1046,11 +1113,21 @@ function contactSect(kind,c,p){
     <div class="ct-contacto-cab"><b>Contacto do ${owners?'senhorio':'inquilino'}</b><span class="small">${owners?'O que o inquilino usa para vos contactar.':'Ponto de contacto deste contrato.'}</span></div>
     ${gente.length?`<label>Usar o contacto de${sel(owners?'c_ocid':'c_tcid',chosen?cur:'',opts,owners?'onOwnerContact':'onTenantContact','rascunho')}</label>`:''}
     ${chosen?`<div class="ct-net-linha ct-contacto-escolhido"><span>${esc(chosen.name)}</span>
-        <b>${esc([chosen.phone?fmtPhone(chosen.phone):'',chosen.email].filter(Boolean).join(' · ')||'sem contacto na ficha')}</b></div>`
+        <b>${ctMeiosDeContacto(chosen)}</b></div>`
       :`<div class="row">
         <label>Email (opcional)<input id="${owners?'c_omail':'c_tmail'}" type="email" inputmode="email" value="${esc(owners?c.ownerEmail:c.tenantEmail)}" placeholder="Ex: ${owners?'rui@exemplo.pt':'ana@exemplo.pt'}" autocomplete="off"></label>
         <label>Telemóvel (opcional)<input id="${owners?'c_ophone':'c_tphone'}" type="tel" inputmode="tel" value="${esc(owners?c.ownerPhone:c.tenantPhone)}" placeholder="Ex: ${owners?'912 345 678':'913 456 789'}" autocomplete="off"></label></div>`}
   </div>`;
+}
+/* O telefone e o email da pessoa escolhida no contacto (contactSect), cada um
+   no seu bocado: o telefone não parte a meio (.ct-contacto-tel), o email
+   parte onde for preciso (.ct-contacto-mail) — um email ou um nome comprido
+   desce de linha em vez de sair da caixa a 375px.
+   Recebe: g — a pessoa (owner/tenant) com phone e email.
+   Devolve: o HTML (escapado) do que vai dentro do <b>. */
+function ctMeiosDeContacto(g){
+  const partes=[g.phone?`<span class="ct-contacto-tel">${esc(fmtPhone(g.phone))}</span>`:'',g.email?`<span class="ct-contacto-mail">${esc(g.email)}</span>`:''].filter(Boolean);
+  return partes.length?partes.join(' · '):'sem contacto na ficha';
 }
 // Ao escolher o contacto do senhorio: copia o email/telefone da pessoa
 // escolhida para o contrato e repinta o formulário.
@@ -1189,10 +1266,12 @@ function ctReconheceContactos(){
     if(t)cForm.tenantContactId=t.id;
   }
 }
-// Ao trocar o imóvel do contrato: limpa o quarto (pertencia ao anterior),
-// puxa o contacto do proprietário novo e repinta.
+// Ao trocar o imóvel do contrato: larga o quarto (pertencia ao anterior) e
+// escolhe o do imóvel novo como um contrato novo o escolheria (o primeiro
+// livre, com quartos arrendados — ctQuartoPorOmissao), puxa o contacto do
+// proprietário novo e repinta.
 // Devolve: nada — repinta o formulário.
-function onCtProp(){collectCt();cForm.propertyId=val('c_prop');cForm.roomId=null;fillOwnerContact();repaintCt()}
+function onCtProp(){collectCt();cForm.propertyId=val('c_prop');cForm.roomId=ctQuartoPorOmissao(cForm);fillOwnerContact();repaintCt()}
 // Abre o seletor de inquilinos (só os que ainda não estão no contrato); ao
 // escolher, junta-o e preenche o contacto do contrato se estiver vazio.
 // Devolve: nada — abre o seletor de inquilinos.

@@ -2,14 +2,16 @@
 /* A lista dos imóveis e o menu de toque longo de um imóvel. A ficha, as
    divisões e as fotos estão em imovel.js. Veio de vistas.js e de
    componentes.js:lpMenu quando a app passou a serviços; regista-se no fim. */
-/* Lista de imóveis com pesquisa, filtros (estado, proprietário — este espelha
-   o filtro global —, modo de arrendamento) e ordenação, como a prancheta
-   M-Casas e com os filtros dos Movimentos (vistas.js:lfCabeca): por cima, a
-   pesquisa sempre à vista com o funil do painel completo, e os chips rápidos
-   do estado e do proprietário (o do arrendamento só no ecrã largo, ou
-   ligado); por baixo, um cartão por imóvel com a capa à esquerda (a primeira
-   foto, ou o mosaico do imóvel), o nome, a morada, o selo do estado, três
-   números e os selos do que pede atenção. Tocar no cartão abre a ficha
+/* Lista de imóveis com pesquisa, filtros (estado, modo de arrendamento) e
+   ordenação, como a prancheta M-Casas e com os filtros dos Movimentos
+   (vistas.js:lfCabeca): por cima, a pesquisa sempre à vista com o funil do
+   painel completo, e os chips rápidos do estado (o do arrendamento só no ecrã
+   largo, ou ligado). Não há filtro de proprietário (saiu com o filtro global,
+   ambito.js) nem o seletor dos filtros comuns, que aqui não tinham o que
+   aplicar; a pesquisa encontra os imóveis pelo nome dos donos. Por baixo,
+   um cartão por imóvel com a capa à esquerda (a primeira foto, ou o mosaico
+   do imóvel), o nome, a morada, o selo do estado, três números e os selos
+   do que pede atenção. Tocar no cartão abre a ficha
    (imovel.js:propView), onde estão o Editar, as ações rápidas e o Apagar: o
    cartão já não tem o ⋮.
    Devolve: string com o HTML completo da vista. */
@@ -25,24 +27,20 @@ function vProperties(){
       (p.rooms||[]).map(r=>r.name).join(' '),quem].join(' '));
   });
   let list=s.st&&vEstado?resto.filter(p=>propStatus(p).key===s.st):resto;
-  s.own=ownerFilter||'';   /* o filtro do proprietário é o global: o chip e o painel mostram-no e mudam-no (imvFiltroDono) */
   /* sem imóveis nenhuns não há o que pesquisar nem filtrar: fica o vazio com o seu botão */
   const head=(!db.properties.length?'':lfCabeca(K,{nome:['imóvel','imóveis'],dos:'dos imóveis',n:list.length,
       campos:[vEstado?imvCampoEstado(resto):null,
-        db.owners.length?{chave:'own',nome:'Proprietário',curto:'Todos',rapido:true,aplicar:imvFiltroDono,
-          opcoes:[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')))}:null,
         {chave:'md',nome:'Arrendamento',curto:'Todos',rapido:'largo',
           opcoes:[{v:'',label:'Todos os arrendamentos'},{v:'inteiro',label:'Imóvel inteiro'},{v:'quartos',label:'Por quartos'}]}],
       /* a renda e a yield são dos Contratos, a dívida dos Créditos: sem eles, ordenar por elas não ordenava nada */
       ordem:{opcoes:[{v:'nome',label:'Nome'},{v:'valor',label:'Valor'}].concat(vEstado?[{v:'renda',label:'Renda'},{v:'yield',label:'Yield'}]:[])
-        .concat(servicoLigado('credits')?[{v:'divida',label:'Dívida'}]:[])},
-      topo:fcSelector()}))
+        .concat(servicoLigado('credits')?[{v:'divida',label:'Dívida'}]:[])}}))
     +(db.properties.length||!podeExemplo()?'':`<div class="toolbar"><button class="btn" data-toca="dados" data-click="seed()">Carregar exemplo</button></div>`);
   list=lfSort(K,list,{nome:p=>p.name,valor:p=>p.value,renda:p=>rentOf(p),divida:p=>debtOf(p),yield:p=>{const r=rentOf(p);return r&&p.value?r*12/p.value:0}});
   if(!list.length){
     const espera=esperaDoServidor();if(espera)return head+espera;
     if(lfCount(K))return head+vazioFiltro();
-    return head+`<div class="empty"><b>Sem imóveis</b>${db.properties.length?'Nenhum imóvel deste proprietário.':'Adiciona o primeiro para começares a acompanhar o investimento.'}${saida('Adicionar imóvel','propModal()','camada')}</div>`;
+    return head+`<div class="empty"><b>Sem imóveis</b>Adiciona o primeiro para começares a acompanhar o investimento.${saida('Adicionar imóvel','propModal()','camada')}</div>`;
   }
   const dividas=dividasEntreDonos(list);   /* uma passagem pelos movimentos por pintura, e não seis por cartão */
   const pendentes=imvPendentesPorImovel();   /* e uma pelos planeados */
@@ -70,11 +68,6 @@ function imvCampoEstado(resto){
    Recebe: v — a chave do estado ('' para todos, 'arrendado', 'parcial', 'vago', 'proprio').
    Devolve: nada — repinta a vista. */
 function imvFiltroRapido(v){lf('lprops').st=String(v||'');render()}
-/* Filtra os imóveis por um proprietário (ou grupo): é o filtro global de
-   proprietário, que os outros ecrãs também seguem, e o da lista espelha-o.
-   Recebe: v — o id do proprietário, 'g:ID' de um grupo, ou '' para todos.
-   Devolve: nada — repinta a vista. */
-function imvFiltroDono(v){ownerFilter=String(v||'');lf('lprops').own=ownerFilter;render()}
 /* A cor do selo de cada estado, a do contrato do redesign: arrendado verde,
    parcial cobalto, vago âmbar, uso próprio cinzento.
    Recebe: k — a chave do estado (registos.js:propStatus).
@@ -172,7 +165,6 @@ function imvCartao(p,divida,pend){
     futuros?`<span class="badge">${futuros===1?'1 contrato por começar':futuros+' contratos por começar'}</span>`:'',
     divida>0.005?`<span class="badge grey">${ic('users',12)} ${euro(divida)} entre proprietários</span>`:'',
     p.use==='investimento'&&p.rentalMode==='quartos'?'<span class="badge grey">Por quartos</span>':'',
-    ownerFilter&&sh(p)<1?`<span class="badge grey">Quota ${shareText(p)}</span>`:'',
     seloColaboradores(p)].filter(Boolean).join('');
   return `<div class="card tap imv-card" data-lp="prop:${esc(p.id)}" data-fk="prop:${esc(p.id)}" data-toca="camada" data-click="propView('${jsq(p.id)}')">
     ${imvCapa(p,vFile)}

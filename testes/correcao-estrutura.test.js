@@ -208,14 +208,17 @@ describe('os vazios e o painel de análise, partilhados', () => {
   });
 
   // achado A.2-14
-  test('as vistas continuam a pintá-los: o vazio com o Limpar, a frase com o nome do serviço, e o painel com os dois seletores', () => {
+  test('as vistas continuam a pintá-los: o vazio com o Limpar, a frase com o nome do serviço, e o painel com o seletor do imóvel', () => {
     const app = carregarApp(); limpar(app);
     app.db.owners = [app.normPerson({ id: 'O1', name: 'Ana' }), app.normPerson({ id: 'O2', name: 'Rui' })];
     app.db.properties = [app.normProp({ id: 'P1', name: 'Casa', ownerIds: ['O1', 'O2'] })];
     assert.match(app.vazioFiltro(), /Nada neste filtro/); assert.match(app.vazioFiltro(), /limparFiltroAtual\(\)/);
-    for (const [nome, h] of [['dashBar', app.dashBar()], ['vProjections', app.vProjections()], ['vReports', app.vReports()]]) {
-      assert.match(h, /id="selb_ownerSel"|'ownerSel'/, nome + ': o seletor de proprietário');
-      assert.match(h, /Todos os imóveis/, nome + ': o de imóvel');
+    assert.doesNotMatch(app.dashBar(), /ownerSel/, 'dashBar: sem o seletor de proprietário (o filtro global saiu)');
+    assert.match(app.dashBar(), /Todos os imóveis/, 'dashBar: o de imóvel');
+    // as Projeções e a Avaliação só têm o chip do imóvel
+    for (const [nome, h] of [['vProjections', app.vProjections()], ['vReports', app.vReports()]]) {
+      assert.doesNotMatch(h, /ownerSel/, nome + ': sem o seletor de proprietário');
+      assert.match(h, /Todos os imóveis/, nome + ': o chip do imóvel');
     }
     assert.match(app.vFisco(), /Todos os proprietários/, 'a Declaração: o titular, sem grupos');
     // sem imóveis e com os Imóveis desligados: a frase diz o nome e quem liga

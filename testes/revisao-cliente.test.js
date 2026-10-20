@@ -243,30 +243,30 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     assert.ok(fixos.view.innerHTML.length > 0);
   });
 
-  test('hdrFiltN, anaClear e limparFiltroAtual contam e limpam o que cada serviço regista, e o proprietário pela base', () => {
+  test('hdrFiltN, anaClear e limparFiltroAtual contam e limpam o que cada serviço regista, e o titular do IRS pela base', () => {
     const app = carregarApp();
     elementos(app);
     semear(app);
     app.tab = 'transactions';
-    app.txSearch = 'renda'; app.txFilter = 'income'; app.txDe = ANO + '-01-01'; app.ownerFilter = 'o1'; app.txNoPayer = false;
-    assert.equal(app.hdrFiltN(), 5, 'pesquisa, tipo, datas, proprietário e «só com pessoa»');
+    app.txSearch = 'renda'; app.txFilter = 'income'; app.txDe = ANO + '-01-01'; app.txNoPayer = false;
+    assert.equal(app.hdrFiltN(), 4, 'pesquisa, tipo, datas e «só com pessoa» — o proprietário já não é filtro');
     app.limparFiltroAtual();
-    assert.equal(app.txSearch, ''); assert.equal(app.txFilter, ''); assert.equal(app.txDe, ''); assert.equal(app.ownerFilter, ''); assert.equal(app.txNoPayer, true);
+    assert.equal(app.txSearch, ''); assert.equal(app.txFilter, ''); assert.equal(app.txDe, ''); assert.equal(app.txNoPayer, true);
     assert.equal(app.hdrFiltN(), 0);
-    app.tab = 'dashboard'; app.ownerFilter = 'o1'; app.dashProp = 'p1';
-    assert.equal(app.hdrFiltN(), 2);
+    app.tab = 'dashboard'; app.dashProp = 'p1';
+    assert.equal(app.hdrFiltN(), 1, 'a visão geral conta só o imóvel em foco');
     app.anaClear();
-    assert.equal(app.dashProp, ''); assert.equal(app.ownerFilter, ''); assert.equal(app.hdrFiltN(), 0);
-    app.tab = 'projections'; app.ownerFilter = 'o1'; app.projProp = 'p1';
-    assert.equal(app.hdrFiltN(), 2);
+    assert.equal(app.dashProp, ''); assert.equal(app.hdrFiltN(), 0);
+    app.tab = 'projections'; app.projProp = 'p1';
+    assert.equal(app.hdrFiltN(), 1);
     app.limparFiltroAtual();
     assert.equal(app.projProp, ''); assert.equal(app.hdrFiltN(), 0);
-    app.tab = 'reports'; app.ownerFilter = 'o1'; app.repProp = 'p1';
-    assert.equal(app.hdrFiltN(), 2);
+    app.tab = 'reports'; app.repProp = 'p1';
+    assert.equal(app.hdrFiltN(), 1);
     app.anaClear();
     assert.equal(app.repProp, ''); assert.equal(app.hdrFiltN(), 0);
     app.tab = 'fisco'; app.ownerFilter = 'o1'; app.fiscoAno = '2020';
-    assert.equal(app.hdrFiltN(), 1, 'na Declaração o ano não é filtro');
+    assert.equal(app.hdrFiltN(), 1, 'na Declaração o titular conta, e o ano não é filtro');
     app.anaClear();
     assert.equal(app.fiscoAno, ''); assert.equal(app.ownerFilter, '');
     app.tab = 'properties';

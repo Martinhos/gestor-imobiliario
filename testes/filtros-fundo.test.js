@@ -86,7 +86,7 @@ describe('o pé preso ao fundo do painel', () => {
     const listas = { properties: 'lprops', contracts: 'lcts', tenants: 'lten', owners: 'lown', visits: 'lvis', recurring: 'lrec', credits: 'lcred' };
     const fixos = elementos(app);
     const comoMovimentos = [];
-    for (const t of Object.keys(listas).concat(['dashboard', 'reports', 'projections', 'fisco'])) {
+    for (const t of Object.keys(listas).concat(['dashboard', 'fisco'])) {
       app.fecharFiltros();
       app.tab = t;
       if (listas[t]) app.lf(listas[t])._open = true; else app.anaOpen[t] = true;

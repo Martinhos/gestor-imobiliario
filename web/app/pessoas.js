@@ -225,8 +225,8 @@ function pesFichaInquilino(p){
 }
 /* A ficha de um proprietário (o canvas M-Proprietario): o avatar com o selo da
    conta, a nota de quem manda no perfil, as contas entre proprietários com o
-   plano de acerto, os imóveis e a quota-parte com a renda que lhe cabe, os
-   contactos e a identificação, e o atalho para ver a app na quota dele.
+   plano de acerto, os imóveis e a quota-parte com a renda que lhe cabe, e os
+   contactos e a identificação.
    Recebe: p — o proprietário.
    Devolve: o HTML do corpo. */
 function pesFichaDono(p){
@@ -234,10 +234,9 @@ function pesFichaDono(p){
   /* os imóveis só com o serviço que os traz ligado nesta conta */
   const casas=servicoLigado('properties')?propsOf(p.id):[];
   const renda=pesRendaDoDono(p,casas);
-  /* o saldo só sem filtro de proprietário ligado (com ele, o ownerBalances
-     ignora os movimentos sem imóvel e devolvia meia verdade) e com os
-     Movimentos ligados: sem eles não se diz «em dia» sobre o que a conta não vê */
-  const bal=!ownerFilter&&servicoLigado('transactions')?ownerBalances(null):null;
+  /* o saldo só com os Movimentos ligados: sem eles não se diz «em dia» sobre
+     o que a conta não vê */
+  const bal=servicoLigado('transactions')?ownerBalances(null):null;
   const saldo=bal?bal[p.id]:undefined;
   let contas='';
   if(saldo!==undefined){
@@ -253,12 +252,6 @@ function pesFichaDono(p){
       <span class="pes-forte">${esc(x.name||x.address||'imóvel')}</span><span>${souDono(x.id)?pct(shareOf(x,p.id),0):''}${verCasa?`<span class="seta">${ic('chevR',18)}</span>`:''}</span></div>`).join('')
     +(renda>0?`<div class="pes-kv pes-total num"><span>Renda que lhe cabe</span><span><b>${euro2(renda)}</b>/mês</span></div>`:'');
   const L=pesLinhasDaPessoa(p,'owner'),cc=pesSeloCC(p,'owner');
-  const primeiro=String(p.name||'').trim().split(/\s+/)[0]||'';
-  /* o atalho só quando a quota dele mostra outra coisa: há imóveis que não
-     são dele, ou num dos dele a parte não é inteira — com 100% de tudo, a app
-     na quota dele é a app como está */
-  const quota=!!primeiro&&casas.some(x=>souDono(x.id))&&
-    (db.properties.some(x=>(x.ownerIds||[]).indexOf(p.id)<0)||casas.some(x=>souDono(x.id)&&shareOf(x,p.id)<0.995));
   const vazia=!L.contactos&&!L.ident&&!casas.length;
   return `<div class="pes-ficha">
     <div class="pes-topo">${pesAvatar(p,true)}<div class="pes-topo-txt"><p class="pes-papel">Proprietário</p>${eu||comConta||cc?`<div class="pes-selos">${eu?'<span class="badge">O teu perfil</span>':comConta?'<span class="badge">Tem conta Rendorium</span>':''}${cc}</div>`:''}</div></div>
@@ -266,7 +259,6 @@ function pesFichaDono(p){
     ${contas}
     ${pesCartao('Imóveis e quota-parte',linhasCasas,casas.length?`<span class="small num">${casas.length}</span>`:'')}
     ${pesCartao('Contactos e identificação',L.contactos+L.ident)}
-    ${quota?`<button type="button" class="btn pes-quota" data-toca="ecra" data-click="pesVerNaQuota('${jsq(p.id)}')">${ic('filter',18)} Ver a app na quota de ${esc(primeiro)}</button>`:''}
     ${vazia?`<p class="hint">Esta ficha só tem o nome. ${personEditavel('owner',p)?'Toca em «Editar» para juntar contacto e identificação.':'O perfil é mantido por quem tem a conta.'}</p>`:''}
   </div>`;
 }
@@ -297,18 +289,6 @@ function pesJuntarDocs(id,input){
     p.files=(p.files||[]).concat(ms);save();render();
     toast(ms.length===1?'Documento adicionado.':ms.length+' documentos adicionados.');
   });
-}
-/* «Ver a app na quota de…» da ficha de um proprietário: põe-no em foco (o
-   mesmo filtro do «Proprietário em foco», navegacao.js:escolherAmbito) e leva
-   à Visão geral, onde os valores passam à quota dele.
-   Recebe: id — o id do proprietário.
-   Devolve: nada — fecha as janelas e muda de ecrã. */
-function pesVerNaQuota(id){
-  if(!(db.owners||[]).some(o=>o.id===id))return;
-  closeAllModals();
-  ownerFilter=id;if(dashProp&&!inScope(dashProp))dashProp='';
-  buildNav();
-  if(servicoLigado('dashboard'))go('dashboard');else render();
 }
 /* A ficha de uma pessoa: o que tocar num inquilino ou num proprietário abre.
 

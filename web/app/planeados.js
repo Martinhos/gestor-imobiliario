@@ -693,11 +693,145 @@ function delRec(id){
   const isLoan=r.auto&&(r.tx||{}).loanId,pr=r.auto?(r.tx||{}).propRec:'';
   const doImovel=pr?`Este é ${({imi:'o IMI',condominio:'o condomínio',seguro:'o seguro'})[pr]} da ficha do imóvel ${esc(propName(r.tx.propertyId))}. Apagar remove também o valor da ficha${pr==='imi'?' (e as outras prestações)':''}; para voltar, escreve-o de novo no imóvel.`:'';
   confirmModal('Apagar movimento recorrente',r.auto?(isLoan?`Esta é a prestação de uma hipoteca. Apagar deixa de a pedir todos os meses (podes voltar a ligá-la na hipoteca).`:doImovel||`Este é a renda de um contrato. Apagar deixa de a pedir todos os meses (podes voltar a ligá-la guardando o contrato de novo).`):`Deixar de repetir “${esc(r.name)}”? Os movimentos já criados ficam.`,()=>{
-    if(r.auto){const c=contract((r.tx||{}).contractId);if(c)c.autoRec=false;
-      if(isLoan)db.properties.forEach(p=>(p.loans||[]).forEach(l=>{if(l.id===r.tx.loanId)l.autoRec=false}));
-      if(pr){const p=prop(r.tx.propertyId);if(p)p[pr]=0;db.recurring=db.recurring.filter(x=>!(x.auto&&x.tx&&x.tx.propRec===pr&&x.tx.propertyId===r.tx.propertyId))}}
-    db.recurring=db.recurring.filter(x=>x.id!==id);save();closeAllModals();buildNav();render();toast('Movimento recorrente apagado.');
+    recTirar(r);save();closeAllModals();buildNav();render();toast('Movimento recorrente apagado.');
   });
+}
+/* Tira um planeado da base com as regras do apagar — as do delRec, e as da
+   seleção de vários (cloud/selecao-listas.js), que é por isso que vivem
+   aqui uma vez só. Num automático desliga o autoRec no contrato ou na
+   hipoteca de origem (sem isso a sincronização voltava a criá-lo); num da
+   ficha do imóvel (IMI, condomínio, seguro) põe o valor a zero na ficha e
+   leva as prestações irmãs. Não grava nem repinta: quem chama decide.
+   Recebe: r — o planeado (de db.recurring).
+   Devolve: o que é preciso para o repor (recRepor): {recs, cts, loans, props}
+   — as cópias do que saiu e os valores de antes do que mudou. */
+function recTirar(r){
+  const t=r.tx||{},pr=r.auto?t.propRec:'',d={recs:[],cts:[],loans:[],props:[]};
+  if(r.auto){
+    const c=contract(t.contractId);if(c){d.cts.push([c.id,c.autoRec]);c.autoRec=false}
+    if(t.loanId)db.properties.forEach(p=>(p.loans||[]).forEach(l=>{if(l.id===t.loanId){d.loans.push([p.id,l.id,l.autoRec]);l.autoRec=false}}));
+    if(pr){const p=prop(t.propertyId);if(p){d.props.push([p.id,pr,p[pr]]);p[pr]=0}}
+  }
+  const sai=x=>x.id===r.id||!!(pr&&x.auto&&x.tx&&x.tx.propRec===pr&&x.tx.propertyId===t.propertyId);
+  d.recs=JSON.parse(JSON.stringify((db.recurring||[]).filter(sai)));
+  db.recurring=(db.recurring||[]).filter(x=>!sai(x));
+  return d;
+}
+/* O Anular de um recTirar: os planeados voltam (os que entretanto não
+   tenham voltado por outra via), e o contrato, a hipoteca e a ficha do
+   imóvel ficam como estavam. Não grava nem repinta (o comDesfazer fá-lo).
+   Recebe: d — o que o recTirar devolveu.
+   Devolve: nada — mexe no db. */
+function recRepor(d){
+  if(!d)return;
+  const ha={};(db.recurring||[]).forEach(x=>{ha[x.id]=1});
+  db.recurring=(db.recurring||[]).concat((d.recs||[]).filter(x=>!ha[x.id]));
+  (d.cts||[]).forEach(([id,antes])=>{const c=contract(id);if(c)c.autoRec=antes});
+  (d.loans||[]).forEach(([pid,lid,antes])=>{const p=prop(pid);const l=p&&(p.loans||[]).find(y=>y.id===lid);if(l)l.autoRec=antes});
+  (d.props||[]).forEach(([pid,campo,antes])=>{const p=prop(pid);if(p)p[campo]=antes});
+}
+/* ---- vários de uma vez: a seleção de vários dos Planeados ----
+   A camada da seleção (cloud/selecao-listas.js) marca; as regras de cada
+   planeado — quem pode silenciar, quem pode apagar, o que um automático
+   arrasta — são as daqui, as mesmas do skipRec e do delRec. */
+/* Os planeados de uma lista de ids, pela ordem da base; os que já não
+   existem não entram.
+   Recebe: ids — os ids (array).
+   Devolve: os planeados (array). */
+function recsDe(ids){
+  const q={};(ids||[]).forEach(i=>{q[i]=1});
+  return (db.recurring||[]).filter(r=>q[r.id]);
+}
+/* O que a seleção pode fazer ao silêncio: silenciar quando todos avisam,
+   reativar quando todos estão silenciados; misturados, nenhum dos dois —
+   um botão só não diz o que faria a cada um.
+   Recebe: ids — os ids marcados (array).
+   Devolve: 'silenciar', 'reativar', 'misto', ou '' sem nenhum. */
+function recMudoDaSelecao(ids){
+  const rs=recsDe(ids);if(!rs.length)return '';
+  const m=rs.filter(r=>r.muted).length;
+  return m===0?'silenciar':m===rs.length?'reativar':'misto';
+}
+/* Silencia ou reativa vários, com a regra do skipRec: num imóvel onde só
+   colaboro, silenciar pede «Adicionar e confirmar planeados»
+   (motivoRecusa com 'confirmar'). Os que não posso ficam como estão. Não
+   grava nem repinta.
+   Recebe: ids — os ids (array); mudo — true silencia, false reativa.
+   Devolve: {feitos, recusa, antes} — os ids mudados, a frase da primeira
+   recusa ('' sem nenhuma) e quantos ficaram de fora (fora), e o muted de
+   antes de cada um, para o Anular (recMudoRepor). */
+function recMudarVarios(ids,mudo){
+  const out={feitos:[],recusa:'',fora:0,antes:{}};
+  recsDe(ids).forEach(r=>{
+    const m=motivoRecusa((r.tx||{}).propertyId,'rec.add',r,'confirmar');
+    if(m){out.fora++;if(!out.recusa)out.recusa=m;return}
+    out.antes[r.id]=!!r.muted;r.muted=!!mudo;out.feitos.push(r.id);
+  });
+  return out;
+}
+/* O Anular de um recMudarVarios: cada planeado volta ao silêncio que tinha.
+   Recebe: antes — {id: muted} (o antes do recMudarVarios).
+   Devolve: nada — mexe no db. */
+function recMudoRepor(antes){
+  recsDe(Object.keys(antes||{})).forEach(r=>{r.muted=antes[r.id]});
+}
+/* Quais dos marcados posso apagar, com a regra do delRec (motivoRecusa com
+   true: só os meus, ou um alheio que termina ao confirmar).
+   Recebe: ids — os ids marcados (array).
+   Devolve: {ok, recusa, fora} — os planeados que posso apagar, a frase da
+   primeira recusa ('' sem nenhuma) e quantos ficam de fora. */
+function recPodeApagar(ids){
+  const out={ok:[],recusa:'',fora:0};
+  recsDe(ids).forEach(r=>{
+    const m=motivoRecusa((r.tx||{}).propertyId,'rec.add',r,true);
+    if(m){out.fora++;if(!out.recusa)out.recusa=m}else out.ok.push(r);
+  });
+  return out;
+}
+/* A frase da confirmação de apagar vários planeados: o que acontece aos
+   movimentos, o que os automáticos arrastam (as rendas, as prestações, os da
+   ficha do imóvel), como no delRec, e os que ficam de fora por não os
+   poder apagar.
+   Recebe: ids — os ids marcados (array).
+   Devolve: o HTML da frase (texto), com o que vem de fora escapado. */
+function recApagarFrase(ids){
+  const {ok,recusa,fora}=recPodeApagar(ids),n=ok.length,conta=(k,um,uns)=>k+' '+(k===1?um:uns);
+  const ct=ok.filter(r=>r.auto&&!(r.tx||{}).loanId&&!(r.tx||{}).propRec).length;
+  const pr=ok.filter(r=>r.auto&&(r.tx||{}).loanId).length,im=ok.filter(r=>r.auto&&(r.tx||{}).propRec).length;
+  const f=[(n===1?'Deixa':'Deixam')+' de se repetir; os movimentos já criados ficam.'];
+  const volta=k=>(k===1?'volta':'voltam')+' a ligar-se ';
+  if(ct)f.push(conta(ct,'é a renda de um contrato','são rendas de contratos')+': '+volta(ct)+'guardando o contrato de novo.');
+  if(pr)f.push(conta(pr,'é a prestação de uma hipoteca','são prestações de hipotecas')+': '+volta(pr)+'na hipoteca.');
+  if(im)f.push(conta(im,'vem','vêm')+' da ficha do imóvel (IMI, condomínio, seguro): o valor sai também da ficha.');
+  if(fora)f.push(conta(fora,'fica','ficam')+' de fora: '+recusa);
+  return f.map(esc).join('<br>');
+}
+/* Apaga vários planeados com as regras do delRec (recTirar), um a um; os que
+   não posso apagar ficam. Não grava nem repinta.
+   Recebe: ids — os ids (array).
+   Devolve: {feitos, recusa, fora, desfaz} — os ids apagados, a frase da
+   primeira recusa, quantos ficaram de fora, e a lista do que cada recTirar
+   devolveu (para o Anular, recRepor de trás para a frente). */
+function recApagarVarios(ids){
+  const out={feitos:[],recusa:'',fora:0,desfaz:[]};
+  recsDe(ids).forEach(r=>{
+    /* um planeado do IMI leva as irmãs: a seguinte da lista já pode ter saído */
+    if(!(db.recurring||[]).some(x=>x.id===r.id)){out.feitos.push(r.id);return}
+    const m=motivoRecusa((r.tx||{}).propertyId,'rec.add',r,true);
+    if(m){out.fora++;if(!out.recusa)out.recusa=m;return}
+    out.desfaz.push(recTirar(r));out.feitos.push(r.id);
+  });
+  return out;
+}
+/* Apaga vários modelos, como o delTpl a cada um: os movimentos criados a
+   partir deles ficam. Não grava nem repinta.
+   Recebe: ids — os ids dos modelos (array).
+   Devolve: as cópias dos modelos apagados (array), para o Anular. */
+function tplApagarVarios(ids){
+  const q={};(ids||[]).forEach(i=>{q[i]=1});
+  const sai=JSON.parse(JSON.stringify((db.templates||[]).filter(x=>q[x.id])));
+  db.templates=(db.templates||[]).filter(x=>!q[x.id]);
+  return sai;
 }
 // Apaga o modelo, com confirmação; os movimentos criados a partir dele ficam.
 // Recebe: id — o id do modelo a apagar.
@@ -1106,6 +1240,8 @@ function lpPlaneado(a){
   if(conf)opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)});
   lpExtrasDe('rec',a).forEach(o=>opts.push(o));
   if(edita)opts.push({label:'Editar',icon:'pen',act:()=>editRec(id)},{label:'Apagar',icon:'trash',act:()=>delRec(id)});
+  /* «Selecionar vários» só a quem pode silenciar ou apagar: a seleção não tem outras ações */
+  if(conf||podeEditar(hid,'rec.add',r,true))lpPortaSelecao('rec',id,opts);
   return lpShow(r.name,opts);
 }
 /* O menu de toque longo de um modelo (data-lp "tpl:<id>").
@@ -1116,6 +1252,19 @@ function lpModelo(a){
   const opts=[{label:'Usar modelo',icon:'plus',act:()=>newFromTemplate(id)},{label:'Editar',icon:'pen',act:()=>editTpl(id)}];
   lpExtrasDe('tpl',a).forEach(o=>opts.push(o));
   opts.push({label:'Apagar',icon:'trash',act:()=>delTpl(id)});
+  lpPortaSelecao('tpl',id,opts);
   return lpShow(x.name,opts);
+}
+/* A porta da seleção de vários no fim da folha das opções de um planeado ou
+   de um modelo, como o «Selecionar vários» do kebab dos imóveis
+   (cloud/selecao-listas.js): entra na seleção desse tipo com o tocado já
+   marcado. Só na página dos Planeados — a folha abre-se também noutros
+   ecrãs, onde não há seleção — e só com a camada da seleção carregada.
+   Recebe: tipo — 'rec' ou 'tpl'; id — o id do tocado; opts — as opções da
+   folha, a que se acrescenta.
+   Devolve: nada — acrescenta a opção ao opts. */
+function lpPortaSelecao(tipo,id,opts){
+  if(tab!=='recurring'||!(typeof window!=='undefined'&&window.CW&&typeof window.CW.selLEntrar==='function'))return;
+  opts.push({label:'Selecionar vários',icon:'caixaVisto',act:()=>window.CW.selLEntrar(tipo,id)});
 }
 registarServico({id:'recurring',vistas:{recurring:'vRecurring'},lp:{rec:'lpPlaneado',tpl:'lpModelo'},cracha:{recurring:'recCracha'}});

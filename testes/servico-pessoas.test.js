@@ -520,9 +520,8 @@ describe('o desenho: as listas e as fichas das pessoas lêem o que a app sabe', 
     assert.doesNotMatch(so, /Esta ficha só tem o nome|Telemóvel|NIF|Fiador|CC\.pdf/);
   });
 
-  test('a ficha do proprietário: as contas com o plano de acerto, a quota-parte com a renda que lhe cabe, e o atalho para a quota dele', () => {
+  test('a ficha do proprietário: as contas com o plano de acerto, a quota-parte com a renda que lhe cabe, e sem o atalho para a quota dele', () => {
     const { app, esp } = montarDesenho();
-    assert.doesNotMatch(app.personFicha('owner', 'o1'), /pesVerNaQuota/, 'dono de tudo a 100%: a app na quota dele é a app como está');
     app.db.owners.push(app.normPerson({ id: 'o2', name: 'Maria Costa' }));
     Object.assign(app.db.properties[0], { ownerIds: ['o1', 'o2'], ownerShares: { o1: 40, o2: 60 } });
     app.db.transactions.push(app.normTx({ id: 'x1', kind: 'expense', label: 'Obras', amount: 1000, date: '2026-02-01', propertyId: 'p1', paidBy: 'o2' }));
@@ -531,16 +530,8 @@ describe('o desenho: as listas e as fichas das pessoas lêem o que a app sabe', 
     assert.match(f, /<section class="card pes-contas out">[\s\S]*?A pagar 400,00\s€[\s\S]*?Plano: Rui paga 400,00\s€ a Maria\.[\s\S]*?data-click="settleModal\(null\)">Acertar contas<\/button>/);
     assert.match(f, /data-click="propView\('p1'\)">\s*<span class="pes-forte">T2 Porto<\/span><span>40%/);
     assert.match(f, /<span>Renda que lhe cabe<\/span><span><b>280,00\s€<\/b>\/mês<\/span>/, '700 € na quota de 40%');
-    assert.match(f, /data-toca="ecra" data-click="pesVerNaQuota\('o1'\)">[\s\S]*? Ver a app na quota de Rui<\/button>/);
+    assert.doesNotMatch(f, /pesVerNaQuota|Ver a app na quota/, 'o filtro global de proprietário saiu, e o atalho com ele');
     assert.match(app.personFicha('owner', 'o2'), /<section class="card pes-contas in">[\s\S]*?A receber 400,00\s€/);
-    // o atalho põe o proprietário em foco e leva à Visão geral
-    let foi = '';
-    app.go = (t) => { foi = t; };
-    app.buildNav = () => {};
-    app.pesVerNaQuota('o1');
-    assert.equal(app.ownerFilter, 'o1');
-    assert.equal(foi, 'dashboard');
-    app.ownerFilter = '';
     // outro proprietário com conta: a nota de quem manda no perfil, e sem «Editar»
     app.db.owners.push(Object.assign(app.normPerson({ id: 'u9', name: 'Pedro Costa', phone: '917330482' }), { _userId: 'u9' }));
     const pedro = app.personFicha('owner', 'u9');

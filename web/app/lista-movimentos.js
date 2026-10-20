@@ -25,7 +25,7 @@ function txFilterCount(){
 // as etiquetas, como as datas, contam como UM, sejam uma ou várias
 // Devolve: número de filtros ativos, sem contar as datas.
 function txFilterCountSem(){
-  return (txFilter?1:0)+(txProp?1:0)+(txPaid?1:0)+(ownerFilter?1:0)+(txCat?1:0)+(txSub?1:0)+(txNoPayer?0:1)+(txEtiq.length?1:0);
+  return (txFilter?1:0)+(txProp?1:0)+(txPaid?1:0)+(txCat?1:0)+(txSub?1:0)+(txNoPayer?0:1)+(txEtiq.length?1:0);
 }
 /* As etiquetas que se podem escolher no filtro: as da lista mestra
    (db.settings.tags, pela ordem de lá), as que algum movimento usa e já não
@@ -108,9 +108,9 @@ function txqLimpar(botao){
 /* um movimento passa em TODOS os filtros ativos? Tipo ('debt' junta owed e
    repay), imóvel/grupo ('__none__' = sem imóvel atribuído; um imóvel apanha
    os movimentos dele, as partes dos lotes que lhe cabem e os movimentos de
-   grupo antigos com quota nele), âmbito do proprietário, pessoa que
-   pagou/recebeu, pesquisa, categoria/subcategoria, etiquetas (basta uma das
-   escolhidas: txTemEtiqueta) e intervalo de datas.
+   grupo antigos com quota nele), âmbito das contas (ambito.js:inScope),
+   pessoa que pagou/recebeu, pesquisa, categoria/subcategoria, etiquetas
+   (basta uma das escolhidas: txTemEtiqueta) e intervalo de datas.
    «Sem imóvel» quer dizer mesmo sem imóvel: um movimento sem imóvel, sem
    grupo e sem «Todos os imóveis» não é de nenhum imóvel, e um filtro por
    imóvel deixa-o de fora (entrava, como se fosse de todos). Passa sem filtro
@@ -125,6 +125,8 @@ function txMatch(t){
     if(!(t.groupId===gid||(t.propertyId&&gids.indexOf(t.propertyId)>-1)))return false}
   else if(txProp){if(t.propertyId){if(t.propertyId!==txProp)return false}
     else if(!(t.groupId||t.todos)||txPropShare(t,txProp)<=0)return false}   /* sem imóvel não é de nenhum imóvel */
+  /* o âmbito das contas (ambito.js): sem titular é tudo; a canalização fica
+     inteira, como a quota do saldos.js, e só o IRS ainda põe um titular */
   if(t.propertyId){if(!inScope(t.propertyId))return false}
   else if(t.groupId||t.todos){if(ownerFilter&&!txProps(t).some(p=>inScope(p.id)))return false}
   else if(ownerFilter)return false;
@@ -251,7 +253,6 @@ function filterSummary(){
   if(txProp==='__none__')p.push('sem imóvel');
   else if(String(txProp||'').startsWith('g:'))p.push('grupo '+((grp(txProp.slice(2))||{}).name||''));
   else if(txProp)p.push(propName(txProp));
-  if(ownerFilter)p.push('de '+ownerFilterName());
   if(txPaid)p.push('pago/recebido por '+((owner(txPaid)||{}).name||''));
   if(txCat==='__none__')p.push('sem categoria');else if(txCat)p.push(txCat+(txSub&&txSub!=='__none__'?' / '+txSub:''));
   if(txSub==='__none__')p.push('sem subcategoria');
@@ -329,7 +330,7 @@ function txOpcoesCategoria(){
 }
 /* Os filtros comuns (Definições → Filtros comuns, definicoes.js) que se podem
    aplicar aqui.
-   Devolve: array de filtros ({id, name, kind, prop, owner, cat, sub, de, ate}). */
+   Devolve: array de filtros ({id, name, kind, prop, cat, sub, de, ate}; um «owner» de antes ignora-se). */
 function txComuns(){return filtrosComuns()}
 /* O filtro comum está aplicado? Os filtros dos movimentos são exatamente os
    dele — e ele fixa alguma coisa: um filtro em branco não está «ligado» numa
@@ -338,7 +339,7 @@ function txComuns(){return filtrosComuns()}
    Recebe: f — o filtro comum.
    Devolve: true/false. */
 function txComumLigado(f){
-  const c=[['kind',txFilter],['prop',txProp],['owner',ownerFilter],['cat',txCat],['sub',txSub],['de',txDe],['ate',txAte]];
+  const c=[['kind',txFilter],['prop',txProp],['cat',txCat],['sub',txSub],['de',txDe],['ate',txAte]];
   return !txEtiq.length&&c.some(([k])=>f[k])&&c.every(([k,v])=>(f[k]||'')===(v||''));
 }
 /* O chip de um filtro comum: aplica-o; ligado (com o visto), limpa os filtros.
@@ -406,7 +407,6 @@ function txFilterBody(){
      por isso a troca é só aqui. */
   const curto=(ops,rot)=>ops.map(o=>o.v===''?{v:'',label:rot}:o);
   const payers=[{v:'',label:'Qualquer um'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
-  const owners=[{v:'',label:'Todos'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')));
   const tree=allCats(txFilter==='debt'?'expense':txFilter);
   const subsF=txCat&&txCat!=='__none__'?(tree[txCat]||[]):[];
   const subOpts=[{v:'',label:'Todas'},{v:'__none__',label:'Sem subcategoria'}].concat(subsF.map(x=>({v:x,label:x})));
@@ -428,8 +428,7 @@ function txFilterBody(){
       ${servicoLigado('properties')?`<label${lig(txProp)}>Imóvel${sel('txPropF',txProp,curto(txOpcoesImovel(),'Todos'),'onTxProp','vista')}</label>`:''}
       <label${lig(txCat)}>Categoria${sel('txCatF',txCat,curto(txOpcoesCategoria(),'Todas'),'onTxCat','vista')}</label>
       ${txCat&&txCat!=='__none__'?`<label${lig(txSub)}>Subcategoria${sel('txSubF',txSub,subOpts,'onTxSub','vista')}</label>`:''}
-      ${donos?`<label${lig(txPaid)}>Pago ou recebido por${sel('txPaidF',txPaid,payers,'onTxPaid','vista')}</label>
-      <label${lig(ownerFilter)}>Proprietário${sel('txOwnerF',ownerFilter,owners,'onTxOwner','vista')}</label>`:''}
+      ${donos?`<label${lig(txPaid)}>Pago ou recebido por${sel('txPaidF',txPaid,payers,'onTxPaid','vista')}</label>`:''}
       <label>De<input id="txDeF" type="date" value="${txDe}" data-change="onTxDatas()"></label>
       <label>Até<input id="txAteF" type="date" value="${txAte}" data-change="onTxDatas()"></label>
       <label>Ordenar por${sel('txSortF',txSort,[{v:'date',label:'Data'},{v:'amount',label:'Valor'}],'onTxSort','vista')}</label>
@@ -464,9 +463,6 @@ function txFilterFechar(){txFiltAberto=false;closePops();render()}
 // muda o filtro de imóvel/grupo dos movimentos
 // Devolve: nada — redesenha a lista e o modal.
 function onTxProp(){txProp=val('txPropF')||'';txRerender()}
-// muda o proprietário em foco; o filtro de imóvel cai porque o âmbito mudou
-// Devolve: nada — redesenha a lista e o modal.
-function onTxOwner(){ownerFilter=val('txOwnerF')||'';txProp='';txRerender()}
 // muda o filtro de quem pagou ou recebeu
 // Devolve: nada — redesenha a lista e o modal.
 function onTxPaid(){txPaid=val('txPaidF')||'';txRerender()}
@@ -486,12 +482,12 @@ function onTxDatas(){
   if(txDe&&txAte&&txAte<txDe){const x=txDe;txDe=txAte;txAte=x}   // trocadas endireitam-se
   txRerender();
 }
-/* Repõe todos os filtros dos movimentos na origem, incluindo a pesquisa e o
-   proprietário global. O campo da pesquisa é o mesmo nó de pintura para
-   pintura (refrescarMovimentos), e por isso esvazia-se aqui, à mão.
+/* Repõe todos os filtros dos movimentos na origem, incluindo a pesquisa. O
+   campo da pesquisa é o mesmo nó de pintura para pintura
+   (refrescarMovimentos), e por isso esvazia-se aqui, à mão.
    Devolve: nada — redesenha a lista e o painel. */
 function clearTxFilters(){
-  txFilter='';txProp='';txPaid='';txCat='';txSub='';ownerFilter='';txNoPayer=true;txSearch='';txDe='';txAte='';txEtiq=[];
+  txFilter='';txProp='';txPaid='';txCat='';txSub='';txNoPayer=true;txSearch='';txDe='';txAte='';txEtiq=[];
   clearTimeout(_qT);
   const q=document.getElementById('tx_q');if(q&&q.value){q.value='';txqMostrarLimpar(q)}
   closePops();txRerender();
@@ -894,12 +890,12 @@ function refrescarMovimentos(){
   const antigaLista=document.getElementById('txLista');
   if(tab!=='transactions'||!antigaLista){render();return null}
   const v=view();
-  /* a moldura é o que o render poria por cima da lista: também a casca — a
-     faixa do âmbito (o proprietário muda no painel) e os separadores da área,
-     que o render põe à frente de cada vista (vistas.js:render). Sem elas, a
+  /* a moldura é o que o render poria por cima da lista: também a casca — os
+     separadores da área, que o render põe à frente de cada vista
+     (vistas.js:render). Sem eles, a
      primeira tecla da pesquisa levava os separadores do telemóvel. */
   const molde=document.createElement('div');
-  molde.innerHTML=faixaDoAmbito()+abasDaArea()+vTransactions();
+  molde.innerHTML=abasDaArea()+vTransactions();
   const novaLista=molde.querySelector('#txLista');
   if(!novaLista){render();return null}
   /* A pesquisa fica o MESMO nó, com o foco e o que o teclado estava a compor;

@@ -163,19 +163,19 @@ describe('onde vive a rentabilidade', () => {
     assert.equal(app.repProp, 'v1');
     html = app.vReports();
     assert.match(html, /<h2 class="ava-nome">T2<\/h2>/);
-    assert.match(html, /data-click="repAnaLimpar\(\);render\(\)" aria-label="Imóvel em foco: T2 \(limpar\)"/, 'e o chip do âmbito limpa-o');
+    assert.match(html, /<span class="mov-chip on">[\s\S]*?aria-label="Imóvel: T2"[\s\S]*?aria-label="Voltar a todos os imóveis" data-toca="vista" data-click="repAnaLimpar\(\);render\(\);anaChipFocar\('repSel'\)"/, 'e o × do chip «Imóvel» limpa-o');
     app.repProp = '';
   });
 
-  test('as ações da página e o yield exigido vivem na barra do âmbito', () => {
+  test('as ações da página vivem na fila do chip «Imóvel»; o yield exigido saiu para a roda dentada', () => {
     oitoRendas();
     const html = app.vReports();
     /* no telemóvel os rótulos encurtam-se (Partilhar, Exportar CSV): o resto vive num .ana-largo */
     assert.ok(html.includes('data-click="shareReport()"><span>Partilhar<span class="ana-largo"> avaliação</span></span></button>'));
     assert.ok(html.includes('data-click="downloadCsv()"><span>Exportar<span class="ana-largo"> movimentos (CSV)</span><span class="ana-curto"> CSV</span></span></button>'));
-    assert.match(html, /<label class="ana-pin"><span>Yield exigido<\/span><input[^>]*placeholder="Opcional"[^>]*data-change="capTargetSet\(this\.value\)"/);
-    assert.match(html, /Proprietário: todos/);
-    assert.ok(html.includes('Imóvel<span class="ana-largo"> em foco</span>: portefólio'));
+    assert.match(html, /^<div class="ana-topo"><div class="chips-fila mov-chips ana-chips" role="group" aria-label="Filtros da avaliação"><span class="mov-chip">/);
+    assert.doesNotMatch(html, /ana-pin|avaYield|capTargetSet/, 'o yield não está na página');
+    assert.doesNotMatch(html, /Proprietário/, 'nem o chip do proprietário');
   });
 
   test('evoRatio aceita o âmbito todo, um imóvel e um grupo', () => {
@@ -237,7 +237,11 @@ describe('o que a página mostra e faz', () => {
     await new Promise((r) => setTimeout(r, 5));
     assert.equal(pintou, 1, 'redesenha uma vez');
     assert.equal(focado, 1, 'e devolve o foco ao campo seguinte');
-    assert.match(app.vReports(), /<input id="avaYield" [^>]*data-change="capTargetSet\(this\.value\)"/, 'o campo do yield tem id, para o foco lhe voltar');
+    let corpo = '';
+    const abrir = app.openModal;
+    app.openModal = (t, b) => { corpo = b; };
+    try { app.avaOpcoes(); } finally { app.openModal = abrir; }
+    assert.match(corpo, /<input id="avaYield" [^>]*data-input="avaOpcaoYield\(this\)" data-change="avaOpcaoYield\(this,1\)"/, 'o campo do yield tem id, para o foco lhe voltar');
   });
 
   test('a explicação do herói diz o anualizado uma vez só', () => {

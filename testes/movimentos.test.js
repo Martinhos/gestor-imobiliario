@@ -200,7 +200,7 @@ describe('o painel dos filtros (o M-Filtros)', () => {
     assert.equal(vazia('txCatF'), 'Todas');
     assert.equal(vazia('txSubF'), 'Todas');
     assert.equal(vazia('txPaidF'), 'Qualquer um');
-    assert.equal(vazia('txOwnerF'), 'Todos');
+    assert.ok(!app.window.__sel.txOwnerF && !/Proprietário</.test(corpo), 'sem o filtro de proprietário (o «Pago por» fica)');
     // os chips, que usam as mesmas listas, continuam com o nome inteiro
     assert.equal(app.txOpcoesImovel()[0].label, 'Todos os imóveis');
     assert.equal(app.txOpcoesCategoria()[0].label, 'Todas as categorias');

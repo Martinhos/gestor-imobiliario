@@ -341,10 +341,15 @@ function fraseCurtaPodes(pid){
   const l=podesNoImovel(pid);
   return l.length?'Podes '+listaE(l):'Só podes consultar';
 }
-/* Marca uma visita já com o imóvel escolhido (a ação dos botões de um imóvel).
-   Recebe: pid — o id do imóvel.
+/* Marca uma visita já com o imóvel escolhido (a ação dos botões de um imóvel)
+   e, vinda da linha de um quarto livre (imovel.js:imvQuartos), com esse
+   quarto — o formulário (visitas.js:visitModal) junta o que lhe chega ao
+   rascunho, e o menu do quarto abre nele.
+   Recebe: pid — o id do imóvel; rid (opcional) — o id do quarto.
    Devolve: nada — abre o formulário da visita. */
-function marcarVisitaNoImovel(pid){chamarServico('visits','visitModal',null,{propertyId:pid})}
+function marcarVisitaNoImovel(pid,rid){
+  chamarServico('visits','visitModal',null,rid?{propertyId:pid,roomId:rid}:{propertyId:pid});
+}
 /* Regista um movimento num imóvel: o caminho do FAB dos Movimentos (primeiro
    o tipo), com o imóvel posto. O pagamento de crédito abate capital na ficha
    do imóvel: sem a poder editar, diz-se antes de abrir o formulário.

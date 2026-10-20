@@ -99,13 +99,14 @@ tocáveis. --press #e9ecf2 → #253049 é o premido (nunca igual ao hover).
 (rótulos, hints, .small); --faint #687083 → #8c96ab (estilos.css:--faint) o
 terciário: os placeholders, as setas que dizem «abre», os rótulos inativos
 da barra de baixo. --line #e2e5eb → #253049 são os contornos e --line2
-#cdd2db → #33405c o contorno dos controlos (botões, campos, chips).
+#cdd2db → #33405c o contorno dos controlos (botões, campos, chips) e, no
+escuro, a escolha acesa do segmentado (ver «Componentes da casa»).
 
 --accent #2952d9 → #7c9bff é o cobalto da AÇÃO: o botão primário
 (estilos.css:.btn.primary), o ativo da barra de baixo, o chip ligado, o
 foco, as ligações. Já não é o positivo: o dinheiro tem as suas cores.
 --accent-ink #ffffff → #0b111e é o texto sobre ele; --accent-soft #e9eefc
-→ #1e2a4d o fundo suave (o chip ligado, a faixa do âmbito, o selo «por
+→ #1e2a4d o fundo suave (o chip ligado, o selo «por
 confirmar», os ícones das dobras); --accent-text #1d3fb0 → #b5c6ff
 (estilos.css:--accent-text) o cobalto de texto sobre o suave;
 --accent-press e --accent-fundo o premido e o carregado do primário.
@@ -247,7 +248,8 @@ para os KPIs; estilos.css:.cols com gap 14 e colunas de 290px para os
 cartões de gráfico; estilos.css:.list com gap 11; estilos.css:.form com gap
 13; estilos.css:.row e estilos.css:.row3 com gap 11, que empilham abaixo de
 520px, salvo o intervalo De/Até, que se lê lado a lado
-(estilos.css:.row.lado-a-lado). A estilos.css:.toolbar tem gap 10. O
+(estilos.css:.row.lado-a-lado), e o Início e o Fim da visita, em campos da
+largura da hora (estilos.css:.vis-par). A estilos.css:.toolbar tem gap 10. O
 estilos.css:.section-title leva 24px por cima e 10 por baixo. Um estado vazio
 não se cola aos KPIs que o antecedem (estilos.css:.grid+.empty).
 
@@ -349,8 +351,9 @@ pelo graficos.js:cBars, graficos.js:cHBars e graficos.js:cDonut).
 
 A transition fica para os poucos sítios onde a classe troca num nó vivo:
 o dia escolhido do calendário (calendario.js:calSel troca o .on sem
-redesenhar a grelha) e tudo o que reage ao dedo, que é reação e não
-entrada.
+redesenhar a grelha), as secções da gaveta e o cartão «Por confirmar» da
+Agenda, que dobram num nó vivo, e tudo o que reage ao dedo, que é reação e
+não entrada.
 
 E uma entrada precisa sempre de um portão, porque «nó novo» não quer
 dizer «alguém pediu». O render corre sempre que a app adota um estado novo
@@ -508,6 +511,56 @@ assentarem juntos. O fundo trocado de um botão para o outro e o formulário a
 saltar de tamanho eram dois saltos no mesmo toque. Sem movimento, as duas
 coisas mudam logo.
 
+A caixa que cresce não mexe o que fica. Durante a viagem leva a classe
+estilos.css:.a-crescer, que encosta as linhas ao topo: a encolher, a caixa é
+maior do que o que já leva dentro, e numa grelha (o .sect) a altura a mais
+repartia-se pelas linhas — o nome, a morada e o segmentado afastavam-se até
+280px e voltavam. O scroll de quem rola (continuidade.js:quemRola)
+guarda-se antes de pintar e repõe-se depois de a animação começar: pintar
+com o conteúdo já curto prende o scroll ao fundo novo, e o conteúdo saltava;
+daí em diante encolhe com a caixa. As peças com chave (data-parte;
+continuidade.js:partesDe) acompanham a caixa no mesmo tempo e na mesma curva
+(continuidade.js:acompanharPartes): a que ficou e mudou de sítio dentro da
+peça que a contém parte do sítio velho por transform; a que chegou desvanece
+a entrar (só a de fora); a que saiu é o próprio nó antigo, sem ids, inerte e
+surdo ao toque, posto de volta DENTRO da caixa (estilos.css:.tem-saidas) a
+desvanecer no --rapido e na --curva-sai — a caixa recorta-o enquanto
+encolhe, e some antes de as de baixo lhe chegarem. Não vai para a camada de
+saída das listas (continuidade.js:camadaDeSaida), que está por baixo das
+janelas.
+
+Uma chave, um dono, também aqui: o data-fk é da continuidade das listas, o
+data-lp do toque longo, e o data-parte só da caixa que cresce. No formulário
+do imóvel têm chave o nome, a morada, cada segmentado, os quartos, cada
+quarto e o «Adicionar quarto» (imovel.js:propBody, imovel.js:imvSegmentado).
+Tocar outra vez a meio da viagem continua de onde ia: as alturas e as
+posições medem-se como estão renderizadas. O foco não se perde na
+repintura: se estava no segmentado (o Enter de quem anda de Tab, ou o toque
+que deu o foco ao botão), volta à escolha nova, sem rolar o corpo
+(imovel.js:imvSegTemFoco, imovel.js:imvSegFocar). No computador a janela do
+formulário do imóvel fica na altura máxima e só o corpo muda: centrada, uma
+janela que mudasse de altura mexeria as duas bordas.
+
+O cartão «Por confirmar» da Agenda dobra como as secções da gaveta: o corpo
+está sempre no HTML, e abrir e fechar é trocar a classe .fechado num nó vivo
+(calendario.js:calPendAlternar). A altura anda por uma transição de
+grid-template-rows de 1fr a 0fr com os dois valores escritos
+(estilos.css:.cal-pend-corpo), o conteúdo desvanece com ela, e um segundo
+toque a meio retoma do sítio onde ia, porque é uma transição e não
+keyframes. O visibility tira as linhas do Tab e do leitor de ecrã no FIM do
+fecho e põe-nas logo no início da abertura. O corte (overflow:hidden) só
+existe fechado e durante a viagem (.viagem, que sai no transitionend do
+grid-template-rows, com a rede de um setTimeout): aberto e parado, os menus
+⋯ das linhas abrem para fora do cartão. No FIM da abertura, se o cartão
+ficou abaixo da barra de baixo, a página rola o que falta
+(calendario.js:calPendMostrar), sem nunca levar o cartão para cima de 12px
+por baixo do cabeçalho pegajoso; no princípio não pode, porque a página
+ainda não tem a altura nova e o scroll parava no fundo de antes. As duas
+direções vão na --curva-entra e no --medio — também a que fecha, ao
+contrário da regra da --curva-sai acima; a questão está em aberto no
+docs/decisoes.md (2026-10-20). Sem movimento, a regra geral desliga a
+transição e o scroll é de uma vez.
+
 ## Componentes da casa, e quando usar cada um
 sel(id,value,options,onchange) (componentes.js:sel) é O menu de escolha.
 Nunca um <select> nativo: destoava nos formulários e destoa no topo (o
@@ -537,7 +590,13 @@ ações do tipo de registo, que é uma só (ver «Padrões de página»). O que 
 Terminar) fica vermelho também na folha do toque longo
 (componentes.js:lpShow). Todos os menus fecham ao clique fora
 (componentes.js:closePops, chamada pelo ouvinte de click do arranque, em
-web/app/arranque.js).
+web/app/arranque.js). Um ⋯ aberto (estilos.css:.menupop) fecha também
+quando a página, ou a caixa onde ele está, rola: ficava pendurado onde o
+botão estava, com o botão já noutro sítio. É o ouvinte de scroll do
+arranque, na captura, porque o scroll de uma caixa (o corpo de uma janela, o
+painel dos filtros) não sobe; ignora o scroll de dentro do próprio menu, que
+um menu encolhido pelo ajustarPop pode ter. As listas dos seletores que
+flutuam nos filtros não fecham: acompanham o scroll (cloud/filtros.js).
 
 pode(pid,perm) antes de mostrar uma ação (acessos.js:pode). Num imóvel onde
 o utilizador só colabora, o cargo diz o que se vê e o que se adiciona; o
@@ -679,6 +738,22 @@ tipo de movimento (estilos.css:.opt, estilos.css:.seg), .empty para o
 estado vazio (estilos.css:.empty), .tip para a dica dos gráficos
 (estilos.css:.tip; graficos.js:chartTip).
 
+O segmentado (estilos.css:.segm) é um trilho --chip com a escolha acesa por
+cima, e a acesa destaca-se do trilho nos dois temas. No claro é o --card
+branco com uma sombra curta; no escuro é o --line2, sem sombra
+(estilos.css:.segm>.on e a regra do :root.dark na secção do formulário do
+imóvel), a 1.52:1 contra o trilho — em todos os segmentados: o tipo do
+movimento, o tema, o «pago por», as abas da área e o realce que desliza no
+formulário do imóvel (estilos.css:.segm-polegar). O --card do escuro é mais
+escuro do que o trilho, e a sombra no escuro não se vê: a escolha acesa
+desaparecia.
+
+Os ícones vivem no icones.js:ic, e dois dizem uma ação de cabeçalho: a
+caixa com o visto (icones.js:caixaVisto, o ☑) é o «Selecionar vários» em
+todas as listas com seleção — o visto sozinho lia-se como «concluir» —, e a
+roda dentada (icones.js:roda) abre as opções de uma análise (as Projeções e
+a Avaliação), que não é a engrenagem das Definições.
+
 ## O motor das listas
 A app pinta trocando o innerHTML: a vista é gerada em texto e o browser
 volta a construir tudo. Medido com 500 movimentos, são 6 110 nós e ~48ms
@@ -722,9 +797,8 @@ uma lista tem de fazer nascer um cartão, ou as duas árvores não batem certo,
 desiste, e o render faz o resto.
 
 Uma via parcial refaz a vista a partir de um molde, e o molde tem de ser o
-que o render poria — com a casca que ele põe à frente de cada vista: a faixa
-do âmbito e os separadores da área (navegacao.js:faixaDoAmbito,
-navegacao.js:abasDaArea). Sem ela, a primeira tecla da pesquisa levava os
+que o render poria — com a casca que ele põe à frente de cada vista: os
+separadores da área (navegacao.js:abasDaArea). Sem ela, a primeira tecla da pesquisa levava os
 separadores do telemóvel. Nos Movimentos o caminho curto guarda ainda dois
 nós da moldura de uma pintura para a seguinte
 (lista-movimentos.js:txGuardarNo): o campo da pesquisa, que não perde o foco
@@ -819,11 +893,14 @@ onde o botão do cabeçalho é o «Selecionar vários», não o leva. O painel
 conteúdo sem o empurrar: preso ao topo, desaparecia ao primeiro scroll. Nas
 listas e nos Movimentos o funil fica ao lado da pesquisa, que está sempre à
 vista, e o botão do cabeçalho só existe onde há seleção de vários — os
-Movimentos, os Imóveis e os Contratos —, onde é o «Selecionar vários»
-(vistas.js:LF_COM_CABECALHO, vistas.js:pintarBotaoFiltros; ver «Os
-Movimentos»). Nos Inquilinos, nos Proprietários, nas Visitas, nos Planeados
-e nos Créditos não há botão no cabeçalho: dois botões para o mesmo painel
-eram ruído.
+Movimentos, os Imóveis, os Contratos e os Planeados —, onde é o «Selecionar
+vários», a caixa com o visto (vistas.js:LF_COM_CABECALHO,
+vistas.js:pintarBotaoFiltros; ver «Os Movimentos»). Nos Planeados a base não
+o pinta, e quem o mostra é a camada da seleção, que corre depois
+(cloud/selecao-listas.js:selLCabecalho). Nos Inquilinos, nos Proprietários,
+nas Visitas e nos Créditos não há botão no cabeçalho: dois botões para o
+mesmo painel eram ruído. Nas Projeções e na Avaliação o botão é a roda
+dentada das opções (ver abaixo).
 
 Os painéis de filtro têm um modelo só (a nota do vistas.js:lfSel): mexes, a
 lista muda logo atrás, sem «Aplicar»; «Limpar» à esquerda, «Fechar» à
@@ -838,10 +915,11 @@ caixa, e o scroll-padding da caixa é a altura dele, para o Tab não deixar um
 campo escondido por trás. Mexer num filtro repinta o ecrã, e a caixa volta
 à rolagem em que estava (vistas.js:rolagemDoPainel,
 vistas.js:reporRolagemDoPainel): escolher a ordenação, no fundo de um
-painel comprido, não atira a caixa para o topo. O anaPanel monta-o, e o de
-sempre — o seletor de dono e o que cada ecrã acrescenta — é o
-vistas.js:anaPanelPadrao. Nas listas e nos Movimentos o «Limpar» e o
-«Fechar» estão no topo, ao lado do título (ver abaixo e «Os Movimentos»).
+painel comprido, não atira a caixa para o topo. O anaPanel monta-o
+(vistas.js:anaPanel; o seletor dos filtros comuns só onde o ecrã o pede), e
+o da Visão geral — o imóvel em foco — é o vistas.js:anaPanelPadrao. Nas
+listas e nos Movimentos o «Limpar» e o «Fechar» estão no topo, ao lado do
+título (ver abaixo e «Os Movimentos»).
 
 Todas as listas filtram como os Movimentos (vistas.js:lfCabeca), e é um
 componente só, que veste as classes deles, em vez de uma cópia por lista. A
@@ -879,8 +957,8 @@ já começa por ele («Ordenar: renda»), só o rótulo.
 O painel é o dos Movimentos (vistas.js:lfPainelCorpo, as classes
 estilos.css:.mov-fwrap, estilos.css:.mov-filtros-card,
 estilos.css:.mov-grelha): o título com o «Limpar» (só com filtros ligados) e
-o «Fechar» NO TOPO, «Aplicam-se ao mexer · N imóveis», o que a lista põe por
-cima (os filtros comuns nos imóveis) e a grelha de duas colunas, com a
+o «Fechar» NO TOPO, «Aplicam-se ao mexer · N imóveis» e a grelha de duas
+colunas, com a
 ordenação no fim (vistas.js:lfCampos: «Ordenar por» e, escolhida, «Ordem»).
 Na grelha, a opção vazia diz o curto («Todos»), e o campo ligado veste o
 cobalto (estilos.css:.mov-ligado). Além dos seletores (vistas.js:lfSel, que
@@ -902,11 +980,13 @@ ficar nele, e o «Fechar» devolve-o ao funil (vistas.js:lfFocarFunil);
 escolher num seletor deixa o foco no seletor refeito (vistas.js:lfReporFoco);
 o «Limpar» do painel, que some, passa o foco ao «Fechar».
 
-Nos Imóveis e nos Contratos o botão do cabeçalho é o «Selecionar vários»
-(cloud/selecao-listas.js:selLCabecalho, a seguir ao
+Nos Imóveis, nos Contratos e nos Planeados o botão do cabeçalho é o
+«Selecionar vários», a caixa com o visto (icones.js:caixaVisto;
+cloud/selecao-listas.js:selLCabecalho, a seguir ao
 cloud/selecao.js:patchHdrSel, que embrulha): é da camada da seleção e não
-da base, porque a nuvem (cloud/painel.js:patchHdr) repõe o título e o nome
-do botão depois de cada render, e só quem corre depois dela o pode vestir.
+da base, que não conhece a nuvem; corre depois da base
+(vistas.js:pintarBotaoFiltros) e da camada do painel (cloud/painel.js:patchHdr,
+que só despe o «Concluir» que vestiu — cloud/painel.js:HDR_CONCLUIR).
 Sem a camada, o hdrFiltToggle continua a abrir o mesmo painel. O caminho
 curto repõe-no (CW.selCabecalho, chamado pelo vistas.js:refrescarListasVivas
 depois do pintarBotaoFiltros).
@@ -923,9 +1003,17 @@ título, o essencial numa linha curta separada por «·», os selos e, à
 direita, o valor. Os contratos agrupam-se por imóvel, cada grupo com um
 cabeçalho de classe própria e a renda do mês à direita
 (estilos.css:.ct-grupo-cab; ver «Os Contratos»). Não há ⋮: tocar na linha
-abre a ficha, onde estão as ações, e o toque longo continua — nas pessoas,
-nas visitas e nos planeados abre as opções; nos imóveis e nos contratos, com
-conta seleciona e sem ela abre o menu; nos movimentos entra na seleção. A
+abre a ficha, onde estão as ações, e o toque longo continua — nas pessoas e
+nas visitas abre as opções; nos planeados e nos modelos abre as opções
+(planeados.js:lpPlaneado, planeados.js:lpModelo) com «Selecionar vários» no
+fim (planeados.js:lpPortaSelecao), que entra na seleção desse tipo com o
+tocado marcado — só na página dos Planeados e só a quem pode silenciar ou
+apagar; o que a nuvem acrescenta à folha depois de ela abrir
+(cloud/painel.js:menuOption, o «Recusar desta vez») fica antes dele
+(cloud/selecao-listas.js:selLPortaNoFim); nos imóveis e nos contratos, com
+conta seleciona e sem ela abre o menu; nos movimentos entra na seleção. Em
+seleção, o toque longo marca e desmarca como o toque nos Imóveis, nos
+Contratos e nos Planeados (cloud/selecao-listas.js:CW.selLTocar). A
 porta visível do toque longo é a própria linha, que o tornarFocavel torna
 alcançável pelo teclado: o percurso aceita como caminho visível a linha
 focável que abre a ficha (testes/ui/invariantes.js). Em seleção, a porta
@@ -955,7 +1043,7 @@ por confirmar («1 renda em atraso» a vermelho, «2 por confirmar» a cobalto,
 contados numa passagem só pelos planeados,
 lista-imoveis.js:imvPendentesPorImovel), os contratos por começar, o que está
 por acertar entre proprietários (cinzento: é uma conta, não um perigo), «Por
-quartos», a quota do proprietário em foco e os colaboradores.
+quartos» e os colaboradores.
 
 Por cima da lista, a pesquisa à vista com o funil (vistas.js:lfCabeca), que
 encontra também quem mora no imóvel — os inquilinos dos contratos vivos —,
@@ -963,41 +1051,71 @@ para quem pode ver os contratos. Os chips rápidos são o estado — cada um
 com quantos imóveis há nele entre os que passam os outros filtros,
 «Arrendados · 2» (lista-imoveis.js:imvCampoEstado, aplicado pelo
 lista-imoveis.js:imvFiltroRapido; ligado diz o rótulo curto do
-lista-imoveis.js:ESTADOS_RAPIDOS) — e o proprietário, que é o filtro global
-(lista-imoveis.js:imvFiltroDono); o do arrendamento só no ecrã largo, para a
-fila caber numa linha aos 390px. No painel, mais a ordenação: nome e valor
-sempre, a renda e a yield com os Contratos, a dívida com os Créditos (sem
-eles não ordenavam nada), e os filtros comuns por cima. Sem os Contratos não
+lista-imoveis.js:ESTADOS_RAPIDOS) —; o do arrendamento só no ecrã largo,
+para a fila caber numa linha aos 390px. No painel, mais a ordenação: nome e
+valor sempre, a renda e a yield com os Contratos, a dívida com os Créditos
+(sem eles não ordenavam nada). Não há filtro de proprietário nem o seletor
+dos filtros comuns, que ali não tinham o que aplicar: a pesquisa encontra os
+imóveis pelo nome dos donos. Sem os Contratos não
 há chip do estado. No computador os cartões vão numa grelha de colunas de
 400px no mínimo (estilos.css:.imv-lista).
 
 Um ecrã de análise é uma coluna de blocos, cada fila um .cols: a Visão geral
 pela ordem do canvas (painel-geral.js:vDashboard; ver «A Visão geral»), a
 Avaliação do herói aos gráficos (avaliacao.js:portCard; ver «A Avaliação e
-as Projeções»). A Avaliação, as Projeções e o IRS · Anexo F abrem com a
-mesma barra (avaliacao.js:avaBarra, projecoes.js:prjBarra, fisco.js:fisBarra;
-estilos.css:.ana-barra): o âmbito em chips e as ações da página à direita.
-Um chip com ▾ abre o painel dos filtros (vistas.js:hdrFiltToggle), um com ×
-limpa o foco (navegacao.js:limparAmbito para o proprietário, repAnaLimpar e
-projAnaLimpar para o imóvel). O painel continua, com os seletores de sempre;
-os chips dizem o que está escolhido sem o abrir. No telemóvel a barra
-aperta-se em rótulos curtos: o que só cabe no computador vive num .ana-largo
-e a forma curta num .ana-curto («Imóvel: portefólio», «Exportar CSV»,
-«Aumento»), e quando o chip limpa um foco o texto inteiro fica no
-aria-label. Um chip com nome — o proprietário, o imóvel em foco, o titular —
-tem o texto num <span>, que leva as reticências, e nunca passa da largura da
-barra (estilos.css:.ana-ambito, o .chip>span; avaliacao.js:avaChipDono,
-projecoes.js:prjBarra, fisco.js:fisBarra): com um nome comprido, a página
+as Projeções»).
+
+As Projeções e a Avaliação filtram como as listas, mas só com a fila de
+chips: no sítio da barra das listas (vistas.js:lfCabeca) está o chip
+«Imóvel» — um imóvel ou um grupo, o foco da análise — e mais nada: sem
+pesquisa, que numa análise não há o que procurar, sem funil e sem painel
+(vistas.js:anaChips, projecoes.js:prjChips, avaliacao.js:avaChips). O chip é
+o seletor da casa vestido de chip, com as classes dos das listas
+(estilos.css:.mov-chip): desligado diz «Imóvel» e leva a seta; ligado diz o
+nome, no cobalto, com o × que volta a todos os imóveis e deixa o foco no
+chip (vistas.js:anaChipFocar). Escolher pelo teclado devolve o foco ao chip
+refeito (projecoes.js:onProjProp, avaliacao.js:onRepSel, pelo
+vistas.js:lfReporFoco). Não há chip de proprietário. Na Avaliação, as ações
+da página (Partilhar, Exportar) vão na mesma linha, à direita, e descem para
+uma linha delas no telemóvel (estilos.css:.ana-topo), com a forma curta num
+.ana-curto e a longa num .ana-largo («Exportar CSV»). Um nome comprido leva
+reticências no chip, que nunca passa da largura (estilos.css:.ana-chips).
+Sem imóveis no âmbito e sem foco, o chip não se escreve.
+
+Nestas duas, o botão do cabeçalho é a roda dentada (icones.js:roda), e não
+o funil: abre a janela das opções (vistas.js:ANA_RODA, vistas.js:registarRoda,
+vistas.js:pintarRoda; o «alternar» do registo da análise —
+projecoes.js:prjOpcoes, avaliacao.js:avaOpcoes). O nome é «Opções da
+projeção» / «Opções da avaliação» (aria-label e title); diz que abre um
+diálogo (aria-haspopup="dialog"), não diz aberto nem fechado, nunca acende e
+não leva o ponto dos filtros — o chip já está à vista. A Visão geral e o IRS
+· Anexo F continuam com o funil e o painel (vistas.js:anaPanelPadrao,
+fisco.js:fisBarra). O da Visão geral tem o imóvel e, quando os há, os
+filtros comuns; o do IRS tem o titular (vistas.js:anaSelDono), sem filtros
+comuns, que não guardam titular. O IRS abre com a sua barra
+(estilos.css:.ana-barra): os anos e o titular em chips e as ações da página
+à direita; o chip do titular com ▾ abre o painel (vistas.js:hdrFiltToggle) e
+com × larga-o (navegacao.js:limparAmbito). Um chip com nome tem o texto num
+<span>, que leva as reticências, e nunca passa da largura da barra
+(estilos.css:.ana-ambito, o .chip>span): com um nome comprido, a página
 rolava de lado no telemóvel.
 
-Os números que mudam a página escrevem-se nela, numa caixa com rótulo, campo
-e unidade (estilos.css:.ana-pin): o yield exigido da Avaliação; o horizonte,
-o aumento das rendas e a inflação das despesas das Projeções. Não vivem no
-painel dos filtros: escondidos lá, mudavam todos os números sem se ver
-porquê. O placeholder continua «Opcional», e a frase do que vale em branco
-continua na página. Os três das Projeções gravam pelo projecoes.js:prjDefinir
-e o yield pelo avaliacao.js:capTargetSet, e nenhum chama o vistas.js:setSet
-direto.
+A janela das opções (vistas.js:anaOpcoes) tem as linhas das Definições ›
+Valores por omissão (estilos.css:.def-vr; vistas.js:anaLinhaOpcao) — são os
+mesmos números de db.settings —, a nota do que vale em branco, e só o
+«Fechar». Projeções: o horizonte (anos), o aumento das rendas (%) e a
+inflação das despesas (%); Avaliação: o yield exigido (%). Cada campo grava
+ao escrever, e a página por trás acompanha (projecoes.js:prjOpcao →
+prjDefinir; avaliacao.js:avaOpcaoYield → capTargetSet), com as regras de
+definicoes.js:NORMA_DOS_VALORES; um valor igual ao gravado não redesenha, e
+nenhum chama o vistas.js:setSet direto. Ao sair do campo, o campo passa a
+dizer o que ficou gravado (o horizonte em branco é 1). Depois de cada
+gravação o retrato da janela é o de agora (vistas.js:anaOpcaoGravada): o X,
+o Escape e o fundo fecham sem «Sair sem guardar?». O placeholder é
+«Opcional». Os ids ficam (#prjHorizonte, #prjAumento, #prjInflacao,
+#avaYield), e o redesenho continua pelo prjRepintar/avaRepintar, que não
+tiram o foco ao campo. A janela entra e sai pela folha da casa
+(componentes.js:openModal), sem movimento próprio.
 
 Gravar um campo ou um interruptor da Análise não tira o foco a quem usa o
 teclado. O render troca a vista inteira, e quem tinha o foco desaparecia: o
@@ -1008,8 +1126,9 @@ um campo o foco ainda vai a caminho do seguinte, por isso o redesenho espera
 que ele assente (um setTimeout); num clique é logo (avaliacao.js:avaRepintar,
 projecoes.js:prjRepintar, fisco.js:fisRepintar; o fisco.js:fiscoGravarIrs
 recebe o adiar, que o fisco.js:fiscoSetOutros passa). Por isso cada campo
-que grava ao sair tem id (#avaYield, #prjHorizonte, #prjAumento,
-#prjInflacao, #fiscoOutros). São três cópias, como os cartões: cada serviço
+que grava ao sair tem id (#avaYield, #prjHorizonte, #prjAumento e
+#prjInflacao, na janela das opções, vistas.js:anaOpcoes; #fiscoOutros, na
+página). São três cópias, como os cartões: cada serviço
 carrega sozinho.
 
 Um cartão da Análise tem o título na letra dos títulos, a 18px (16 no
@@ -1044,12 +1163,18 @@ antes de aparecer um único indicador. O cabeçalho diz o que é preciso
 saber (quantos em atraso, o total, quantos esperam); a lista abre-se com um
 toque. Guarda-se '0' explícito quando se abre, para distinguir «nunca
 mexeu» de «quis aberto». O dos prazos não precisa: são quatro linhas curtas,
-e o resto está a um toque, no sino filtrado (prazos.js:prazosCard).
+e o resto está a um toque, no sino filtrado (prazos.js:prazosCard). O
+cartão «Por confirmar» da Agenda também abre fechado
+(calendario.js:calPendCard, calendario.js:calPendShut; a chave
+gi_agenda_pend_shut é calendario.js:CAL_PEND_LS), com outra chave de
+propósito: nos Planeados a lista é a razão de lá se ir, na Agenda é um
+aparte do mês, e abrir um não abre o outro.
 
 Quando a mudança é local, repinta-se só o cartão, não a vista:
 painel-geral.js:donutDrill, planeados.js:pendToggle e o dia do calendário
 (calendario.js:calSel troca a classe .on na grelha e repinta só o painel
-de calendario.js:calDiaPanel). render() substitui o innerHTML de #view e
+de calendario.js:calDiaPanel). O calendario.js:calPendAlternar nem repinta
+o cartão: troca a classe num nó vivo. render() substitui o innerHTML de #view e
 perde o estado do DOM (vistas.js:render; index.html:#view).
 
 ## A Visão geral
@@ -1063,9 +1188,10 @@ da fila (cloud/painel.js): dois numa fila são metades (.cw-wide), três são
 terços (.cw-terco), um sozinho atravessa (.cw-full), e a faixa âmbar
 atravessa sempre (.vg-cheia). A grelha tem doze colunas
 (estilos.css:.cw-dash) e responde à largura da vista, não à do ecrã: abaixo
-de 560px tudo atravessa, e os terços só começam nos 900px. A quota-parte não
-tem hint na vista: quem a diz é a faixa do âmbito, posta pelo render
-(navegacao.js:faixaDoAmbito).
+de 560px tudo atravessa, e os terços só começam nos 900px. Os valores são
+por inteiro: não há filtro de proprietário (ver «Navegação»). O painel dos
+filtros tem o imóvel (ou grupo) em foco e, quando os há, o seletor dos
+filtros comuns, que aqui aplicam o imóvel (vistas.js:anaPanelPadrao).
 
 O «Pede atenção» (painel-geral.js:pedeAtencao) é só o que muda decisões. No
 computador são cartões lado a lado (estilos.css:.vg-atencao-grade): os por
@@ -1618,7 +1744,7 @@ e se a renda está em dia; uma visita, quem vem e quando; uma hipoteca,
 quanto falta e a que taxa.
 
 A ficha do imóvel é a prancheta M-Imovel (imovel.js:propFicha), por esta
-ordem: a capa a toda a largura, com o botão das fotos, que abre a galeria
+ordem: a capa a toda a largura, com o «N fotos», que abre a galeria
 (imovel.js:imvCapaDaFicha, imovel.js:imvGaleria); a morada, os selos e a
 linha dos donos com as quotas e quem deve a quem (imovel.js:imvTopoDaFicha,
 saldos.js:settlePlan); a nota de quem colabora
@@ -1632,6 +1758,14 @@ O título é o da janela e o «Editar» o do rodapé, só para quem pode
 (imovel.js:propView, componentes.js:fichaRodape), como nas outras fichas; o
 Apagar está no ⋯ da janela. No computador a janela alarga até 940px e os cartões vão em duas colunas (estilos.css:.imv-ficha, e a regra
 .sheet:has(.imv-ficha)).
+
+Com fotos, a capa toda da ficha abre a galeria (imovel.js:imvCapaDaFicha,
+estilos.css:.imv-capa-abre): quem vê uma fotografia toca nela. É um botão
+irmão do «N fotos», por baixo dele e por cima da fotografia — nunca um botão
+dentro de outro. Para o teclado e o leitor de ecrã a porta continua a ser o
+«N fotos», que diz quantas há: o da capa fica fora do Tab (tabindex -1), com
+nome («Ver as fotos»), para não haver duas paragens seguidas que fazem o
+mesmo. O premido escurece a capa com o --veu; o passar por cima só com rato.
 
 As ações rápidas são chips, só os que o cargo e os serviços ligados deixam.
 O primeiro é «Movimentos · N»
@@ -1658,7 +1792,11 @@ abre-o; um quarto livre diz «Livre», com «Marcar visita» e «Novo contrato»
 para quem pode, e o «Novo contrato» abre o formulário já nesse quarto
 (imovel.js:contratoNoQuarto: acende o chip pelo contrato.js:ctEscolheQuarto,
 só se o formulário abriu mesmo, e volta a fotografar a janela, para ela não
-contar como mexida). Num imóvel inteiro o cartão é o do contrato
+contar como mexida). O «Marcar visita» abre a visita com esse quarto
+(acessos.js:marcarVisitaNoImovel recebe o quarto e passa-o ao
+visitas.js:visitModal com o imóvel): foi aí que se tocou, e com a casa
+inteira por omissão, num imóvel com dois quartos livres, era preciso
+escolher de novo. Os outros chamadores, sem quarto, abrem só com o imóvel. Num imóvel inteiro o cartão é o do contrato
 (imovel.js:imvContratos). Cada hipoteca tem o seu cartão, com o tipo de taxa
 num selo roxo, a taxa, as prestações por pagar, a prestação, o que está em
 dívida hoje, o plano de amortização e a ficha da hipoteca com os documentos
@@ -1748,12 +1886,9 @@ perfil», ou «Tem conta Rendorium» noutro com conta); no perfil de outro com
 conta, a nota do cadeado — só quem tem a conta o edita, e sai das casas
 desfazendo a partilha —; as contas entre proprietários, laranja suave a
 pagar e verde suave a receber, com o plano de acerto em que ele entra e
-«Acertar contas» (vistas.js:settleModal), só sem proprietário em foco e com
-os Movimentos ligados; «Imóveis e quota-parte», cada imóvel a abrir a sua
-ficha, com a renda que lhe cabe por baixo; «Contactos e identificação»; e
-«Ver a app na quota de …» (pessoas.js:pesVerNaQuota), o mesmo filtro do
-«Proprietário em foco», que leva à Visão geral — só quando a quota dele
-mostra outra coisa.
+«Acertar contas» (vistas.js:settleModal), com os Movimentos ligados;
+«Imóveis e quota-parte», cada imóvel a abrir a sua ficha, com a renda que
+lhe cabe por baixo; e «Contactos e identificação».
 
 A ficha da visita (visitas.js:visFicha, o canvas M-VisitaFicha) diz quando,
 por extenso, com o dia da semana e o «há 2 dias» (visitas.js:visQuando), e
@@ -1893,7 +2028,8 @@ duas perguntas diferentes a fazer-lhes, que é o que estava a ser confundido:
   e para **avisar**: a renda recorrente de um contrato que começa daqui a um
   ano tem de continuar marcada (planeados.js:syncContractRec), o prazo da
   oposição à renovação pode cair antes do início num contrato curto
-  (prazos.js), o quarto já prometido continua prometido (contrato.js:ctBody),
+  (prazos.js), o quarto já prometido continua prometido, e não se escolhe
+  para outro contrato (contrato.js:ctQuartosEstado),
   a caução recebe-se antes de começar (movimento.js:txBody), e uma projeção
   de dez anos não pode apagar à entrada o contrato que só começa no terceiro
   (projecoes.js:projRows, avaliacao.js:evoRatio) — aí quem corta por datas é o
@@ -1926,8 +2062,8 @@ escala, com a diferença em grande, a frase que a lê e a conta que a dá
 e os gráficos do ano (avaliacao.js:avaGraficos).
 
 Tocar numa linha da tabela põe o imóvel em foco, e a página passa a ser a
-avaliação dele (avaliacao.js:repFoco, avaliacao.js:repCard); o chip «Imóvel
-em foco» volta ao portefólio. Com um imóvel só no âmbito, a página é logo a
+avaliação dele (avaliacao.js:repFoco, avaliacao.js:repCard); o × do chip
+«Imóvel» volta ao portefólio. Com um imóvel só no âmbito, a página é logo a
 dele (avaliacao.js:vReports): uma tabela de uma linha e um portefólio igual
 ao imóvel eram a mesma coisa duas vezes. O herói de um imóvel abre a evolução
 do valor por rendimento e da diferença pela janela dos indicadores
@@ -2542,7 +2678,11 @@ Os formulários da pessoa (Novo e Editar inquilino, Novo proprietário, O meu
 perfil) e da visita (Marcar e Editar visita) dizem o erro no campo
 (componentes.js:falhaCampo): o nome; quem vem, o imóvel, a data, e o fim
 antes do início. Escolher o imóvel da visita repinta o corpo e larga o erro
-(visitas.js:visPropMudou).
+(visitas.js:visPropMudou). O Início e o Fim da visita vão lado a lado também
+no telemóvel, em campos da largura da hora (visitas.js:visBody,
+estilos.css:.vis-par — duas colunas de até 8,75rem encostadas à esquerda,
+46px de altura): numa .row empilhavam-se abaixo dos 520px, dois campos a
+toda a largura para «14:30».
 
 As Visitas (visitas.js:vVisits, o canvas M-Visitas) abrem com a pesquisa à
 vista, o funil e os chips Imóvel, Estado e Desfecho (visitas.js:visChipSel
@@ -2663,8 +2803,9 @@ movimento novo (newTxFromFilters) não herda as etiquetas do filtro: com
 várias escolhidas não se sabe quais pôr. No dedo, os chips da linha e o chip
 rápido têm 44px (estilos.css:.mov-etiq, estilos.css:.mov-chip-etiq).
 
-Para selecionar vários, o botão do cabeçalho é o «Selecionar vários» do
-canvas (cloud/selecao.js:patchHdrSel, e o embrulho do hdrFiltToggle). Em
+Para selecionar vários, o botão do cabeçalho é o «Selecionar vários», a
+caixa com o visto (icones.js:caixaVisto; cloud/selecao.js:patchHdrSel, e o
+embrulho do hdrFiltToggle). Em
 seleção o cabeçalho não repete a barra: o botão esconde-se
 (estilos.css:body.sel-on, a regra #hdrFilt.mov-hdr-sel), e o cabeçalho não
 tem um × seu; o hdrFiltToggle continua a abrir as ações em seleção
@@ -2679,8 +2820,9 @@ desmarcar a última termina-a (cloud/selecao.js:selSairSeVazio). Aí o
 Editar e o Apagar de um movimento sozinho estão na ficha, que é o que tocar
 na linha abre.
 
-Os Imóveis e os Contratos têm o mesmo cabeçalho de seleção: fora dela, o
-«Selecionar vários» (o visto e o nome do dos Movimentos), que entra sem nada
+Os Imóveis, os Contratos e os Planeados têm o mesmo cabeçalho de seleção:
+fora dela, o «Selecionar vários» (a caixa com o visto e o nome do dos
+Movimentos, também no «Selecionar vários» do kebab), que entra sem nada
 marcado (cloud/selecao-listas.js:CW.selLEntrar) e some sem cartões à vista;
 em seleção, o título dá lugar à caixa de tudo e à contagem («nenhum imóvel»,
 «2 contratos»; cloud/selecao-listas.js:selLCabNovo,
@@ -2720,6 +2862,47 @@ mesmo, e o que vai junto diz-se com o plural certo
 movimentos.», «Vai junto 1 contrato.», «Sem contratos nem movimentos
 ligados.»). O «Selecionar vários» que entra no menu de um imóvel ou de um
 contrato veste uma classe (estilos.css:.card.sel-varios), e não um cssText.
+
+Nos Planeados seleciona-se vários de um de dois tipos: os planeados ('rec')
+ou os modelos ('tpl'), nunca os dois (cloud/selecao-listas.js:TABS_SEL, os
+dois no separador 'recurring'). O ☑ do cabeçalho entra com os planeados — ou
+com os modelos, sem planeados à vista (cloud/selecao-listas.js:selLTipoDe)
+— e some sem nenhum dos dois (cloud/selecao-listas.js:selLHaCartoes).
+Entrar com um tipo esquece o outro (cloud/selecao-listas.js:CW.selLEntrar);
+em seleção, os cartões do outro tipo ficam atenuados (estilos.css:.sel-fora)
+e tocá-los vai ao cloud/selecao-listas.js:CW.selLOutro — sem nada marcado a
+seleção passa a esse tipo com ele marcado; com marcas, um aviso diz
+«Seleciona planeados ou modelos, não os dois» e as marcas ficam.
+
+A barra de baixo dos planeados (cloud/selecao-listas.js:selLBarraHtml) tem
+o Cancelar, o Silenciar ou o Reativar (#selLMudo) e o Apagar; a dos modelos
+só o Cancelar e o Apagar. O silêncio segue os marcados
+(planeados.js:recMudoDaSelecao): todos ativos, Silenciar; todos silenciados,
+Reativar; misturados, nenhum dos dois, e a razão dita no lugar da contagem
+(#selLPorque, aria-live) — um botão só não diria o que faria a cada um. A
+contagem dos planeados vive no cabeçalho, e a barra só a repete no ecrã
+largo; no telemóvel até 430px o Cancelar é só o ×, num alvo de 44px com o
+nome por extenso (estilos.css:.sel-l-plan), para os três botões caberem nos
+375px.
+
+As regras de cada planeado são as de um só, e vivem uma vez em
+planeados.js: silenciar e reativar pedem o que o skipRec pede
+(planeados.js:recMudarVarios, motivoRecusa com 'confirmar'); apagar segue o
+delRec (planeados.js:recApagarVarios → recTirar): a renda automática
+desliga o autoRec do contrato, a prestação o da hipoteca, e um da ficha do
+imóvel (IMI, condomínio, seguro) põe o valor a zero e leva as prestações
+irmãs. Os que não posso ficam de fora e o aviso conta-os. A confirmação de
+apagar vários diz o que os automáticos arrastam e quantos ficam de fora
+(planeados.js:recApagarFrase); o Anular repõe os planeados, os autoRec e os
+valores da ficha (planeados.js:recRepor). Os modelos apagam-se como pelo
+delTpl, com o Anular (planeados.js:tplApagarVarios).
+
+Ao entrar na seleção as caixas desvanecem
+(cloud/selecao-listas.js:selLEntrou, estilos.css:[data-selbox].sel-entra, o
+veuEntra no --medio com a --curva-entra); marcar e as repinturas de fundo
+não as voltam a animar. Cada cartão diz se está marcado ao leitor de ecrã
+(aria-pressed, cloud/selecao-listas.js:selLPintar), e a caixa desenhada fica
+escondida dele.
 
 ## Os Planeados, os Créditos e a Agenda
 Os Planeados (planeados.js:vRecurring, o canvas M-Planeados) são, por esta
@@ -2870,7 +3053,27 @@ valor (calendario.js:calValor) — num cartão; de onde é diz-se como nos
 Planeados (planeados.js:imovelDoMolde: o imóvel, o grupo, «Todos os
 imóveis» ou «Sem imóvel»), e não só o imóvel. E o painel tem «Marcar visita» e
 «Recorrente». No computador o mês e o dia ficam lado a lado
-(estilos.css:.cal-pag). O arrasto da grelha é o de sempre
+(estilos.css:.cal-pag).
+
+Por baixo do painel do dia, na mesma coluna (estilos.css:.cal-coluna — no
+computador, a segunda coluna da .cal-pag), vive o cartão «Por confirmar»
+(calendario.js:calPendCard): os planeados vencidos que ainda avisam, a mesma
+lista que o crachá da Agenda conta na barra de baixo
+(calendario.js:calPendentes, que o calendario.js:calCracha também usa — o
+número no ícone e o do cartão não podem discordar). Sem nada por confirmar,
+ou com os Planeados desligados, não há cartão. O cabeçalho é um botão dentro
+de um título (o acordeão: o leitor de ecrã diz «recolhido» ou «expandido»,
+aria-controls para o corpo) com «Por confirmar», quantos em atraso num selo
+vermelho, o número num selo com a cor do crachá da barra de baixo
+(estilos.css:.cal-pend-n, o --out do .tabbar a .cnt) e «N planeado(s) à
+espera · toca para ver». O corpo leva as linhas do cartão dos Planeados
+(planeados.js:pendLinha — Confirmar, Rever, a ficha e o ⋯) numa lista viva,
+os em atraso primeiro, e a dica que diz de onde vem o crachá. Fica fora do
+#calDiaPanel: o calendario.js:calSel repinta o painel a cada dia escolhido,
+e o cartão não muda com o dia. Confirmar ou silenciar repinta a vista e a
+barra (quickConfirmRec e skipRec chamam o buildNav e o render), e o cartão e
+o crachá descem juntos. Abre fechado (ver «O que é longo abre fechado») e
+dobra como as secções da gaveta (ver «Movimento»). O arrasto da grelha é o de sempre
 (calendario.js:calArrastar), com a altura do mês de agora: durante o
 arrasto a grelha corta em altura o que lhe passa (estilos.css:#calDias.arrasta,
 overflow-y:clip, que deixa os lados à vista), porque um vizinho de seis
@@ -3579,8 +3782,7 @@ escritas à mão.
 O formulário do contrato vai em grupos .sect, como a prancheta
 M-NovoContrato (contrato.js:ctBody): o que se arrenda — o imóvel, o quarto
 em chips com role radio (contrato.js:ctQuartosHtml,
-contrato.js:ctEscolheQuarto; um já prometido diz «· já arrendado» e
-escolhe-se na mesma), os inquilinos e o nome —; a renda — o imposto com a
+contrato.js:ctEscolheQuarto), os inquilinos e o nome —; a renda — o imposto com a
 caixa da líquida, o dia do pagamento em dois campos lado a lado, com a
 frase de que num mês sem esse dia conta o último, e o aumento —; o prazo —
 as datas, com a frase da duração e da oposição, que se reescreve enquanto se
@@ -3599,6 +3801,27 @@ largura), os chips do quarto, o «+ Adicionar» dos inquilinos e uma área de
 (estilos.css:.ct-form, estilos.css:.ct-quartos, estilos.css:#c_tenants), sem
 mexer nas regras base do .tag e do .tagadd.
 
+Num imóvel por quartos com algum quarto arrendado — um contrato que ainda
+não acabou, ctVivo (contrato.js:ctQuartosEstado) — a casa toda já não está
+livre: o «Imóvel inteiro» sai (contrato.js:ctInteiroPossivel), o «Quarto»
+leva o asterisco, os arrendados ficam à vista com «· já arrendado» mas
+desligados (contorno tracejado e tinta esbatida, estilos.css:.ct-quartos),
+e uma frase diz que o contrato é de um dos quartos livres. O contrato novo
+abre no primeiro quarto livre, pela ordem da ficha
+(contrato.js:ctQuartoPorOmissao, no ctModal e no onCtProp — o «Novo
+contrato» da ficha, da lista dos Contratos e das ações de quem colabora); o
+«Novo contrato» de um quarto livre escolhe esse quarto
+(imovel.js:contratoNoQuarto). Sem nenhum quarto livre, todos os chips ficam
+desligados e a frase diz que não há contrato novo possível ali
+(#c_roomSem, ligada ao grupo por aria-describedby). O guardar recusa a casa
+inteira com quartos arrendados junto dos chips (contrato.js:ctSaver →
+falhaCampo('c_roomEsc'), com o foco no primeiro quarto livre), e tocar num
+quarto larga o erro. Um contrato que já estava gravado como do imóvel
+inteiro continua a abrir e a gravar como estava
+(contrato.js:ctInteiroGravado), e o quarto que o próprio contrato já tinha
+escolhe-se sempre. Sem quartos arrendados, o «Imóvel inteiro» vai à cabeça
+e escolhido.
+
 «Usar o contacto de» diz a verdade (contrato.js:contactSect,
 contrato.js:fillOwnerContact, contrato.js:fillTenantContact). O contacto
 copiado de uma pessoa para campos vazios fica com ela escolhida; ao abrir um
@@ -3608,6 +3831,13 @@ contrato.js:ctMesmoContacto) — o email sem olhar a maiúsculas, o telefone só
 pelos algarismos, e vazio nunca casa com vazio; trocar de imóvel larga uma
 escolha que não é proprietária do imóvel novo, com o contacto que veio dela;
 e uma escolha que já não está na lista não se mostra.
+
+O contacto escolhido (contrato.js:contactSect) mostra o nome e, ao lado ou
+por baixo, o telefone e o email em bocados (contrato.js:ctMeiosDeContacto):
+o telefone não parte a meio (.ct-contacto-tel), o nome e o email partem onde
+for preciso. A linha embrulha (estilos.css:.ct-contacto-escolhido) em vez
+de herdar o valor sem quebra da linha da líquida (.ct-net-linha>b): um nome
+ou um email de 60 caracteres desce de linha e não sai da caixa a 375px.
 
 O formulário do movimento é a prancheta M-Novo movimento
 (movimento.js:txBody): o tipo num segmentado de cinco
@@ -3803,9 +4033,21 @@ não ver diferença.
 
 Abaixo de 900px a barra vira gaveta de 328px com véu (estilos.css:aside e
 estilos.css:.scrim dentro de estilos.css:@media(max-width:900px)), com o
-fecho no cimo (index.html:.fecha-gaveta) e o «Proprietário em foco»
-(navegacao.js:gavetaAmbito, que abre navegacao.js:escolherAmbito); o foco
-entra nela ao abrir, no primeiro sítio alcançável (navegacao.js:openDrawer).
+fecho no cimo (index.html:.fecha-gaveta); o foco entra nela ao abrir, no
+primeiro sítio alcançável (navegacao.js:openDrawer).
+
+Não há filtro global de proprietário: nem na gaveta, nem numa faixa por
+cima da vista, nem nos filtros das listas, das análises ou dos filtros
+comuns. Os valores são por inteiro, e quem procura um proprietário
+encontra-o pela pesquisa (a dos Imóveis procura os donos) ou escolhe o
+imóvel. O ownerFilter só vive no IRS · Anexo F, onde é o titular da
+declaração (vistas.js:anaSelDono, sem grupos; o × do chip dele é o
+navegacao.js:limparAmbito); o render e a mudança de separador largam-no
+fora dali (ambito.js:ambitoSemDono), e um valor de antes não filtra nada.
+Um filtro comum guardado com proprietário aplica o resto e ignora essa
+parte, e editá-lo tira-a (definicoes.js:fcGuardar). A canalização
+(ambito.js:visiveis, ambito.js:scope, ambito.js:inScope, a quota do
+saldos.js:sh) ficou: com o ownerFilter vazio dá o mesmo que não a ter.
 
 O cabeçalho (index.html:<header class="top">) tem, por esta ordem, o título
 e o subtítulo, o estado da sincronização, o sino, os filtros, a ação
@@ -3836,10 +4078,8 @@ Nos ecrãs de uma área, por cima da vista e só no
 telemóvel, vão os separadores da área num segmentado
 (navegacao.js:abasDaArea, estilos.css:.abas-area; o render põe-nos,
 vistas.js:render), e passa-se de um ao vizinho também a deslizar de lado
-(ver «A fita da barra de baixo»); e com um proprietário em foco, a faixa do âmbito, que diz
-de quem são os valores e limpa-se num toque (navegacao.js:faixaDoAmbito,
-navegacao.js:limparAmbito, estilos.css:.faixa-ambito). As vias parciais das
-listas põem as duas como o render (ver «O motor das listas»).
+(ver «A fita da barra de baixo»). As vias parciais das listas põem-nos
+como o render (ver «O motor das listas»).
 
 O sino abre o «Pede atenção» (notificacoes.js:notifModal,
 notificacoes.js:atencaoCorpo): chips Tudo, Por confirmar, Prazos e Pedidos,
@@ -4384,9 +4624,13 @@ cima depois do clique e o toque seguinte deixa de mudar coisa nenhuma
 (estilos.css:--press; testes/estilos.test.js varre a folha à procura de
 pares iguais).
 
-Não se anima a altura de uma dobra: foi tentado com grid-template-rows
-0fr→1fr e a dobra ficou presa aberta (estilos.css:.fold.entra.open>.fold-body,
-a nota por cima).
+Não se anima a altura de uma dobra a partir de uma linha medida pelo
+conteúdo: foi tentado com grid-template-rows 0fr→1fr na dobra dos
+formulários, que nasce de um display:none, e ficou presa aberta
+(estilos.css:.fold.entra.open>.fold-body, a nota por cima). Num nó vivo, com
+1fr e 0fr escritos e a classe trocada, interpola: as secções da gaveta e o
+cartão «Por confirmar» da Agenda (estilos.css:.navsec-corpo,
+estilos.css:.cal-pend-corpo).
 
 Não se põe uma animação de entrada sem um portão que diga que alguém a
 pediu. Um nó novo não é um gesto: a leitura de fundo recria tudo cada vez

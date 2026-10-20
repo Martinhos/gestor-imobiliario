@@ -178,7 +178,7 @@ describe('desligado: com os outros serviços desligados nada rebenta e os atalho
     app.definirServicosDesligados([]);
     const todos = app.txFilterBody();
     assert.match(todos, /txPropF/);
-    assert.match(todos, /txOwnerF/);
+    assert.doesNotMatch(todos, /txOwnerF/, 'o filtro de proprietário saiu; o «Pago ou recebido por» fica');
     assert.match(todos, /txPaidF/);
   });
 

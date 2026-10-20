@@ -8,17 +8,32 @@ const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',rec
    listas sai: os filtros abrem-se no funil ao lado da pesquisa
    (vistas.js:lfBarraHtml), e um segundo botão para o mesmo painel era ruído. */
 const LF_COM_CABECALHO=['properties','contracts'];
+/* As análises cujo botão do cabeçalho é a roda dentada das opções, e não o
+   funil dos filtros — as Projeções e a Avaliação, que filtram só pelo chip
+   «Imóvel» da página (vistas.js:anaChips) e têm números a afinar (o
+   horizonte, o aumento, a inflação; o yield exigido). Separador → o nome que
+   o leitor de ecrã ouve («Opções da projeção»). Quem a pede é o próprio
+   serviço (registarRoda), que regista também o «alternar» da análise dele:
+   é esse que a roda abre (hdrFiltToggle). A base não nomeia serviços. */
+const ANA_RODA={};
+/* Um serviço de análise troca o funil do cabeçalho pela roda dentada.
+   Recebe: t — o id do separador ('projections'); nome — o que o leitor de
+   ecrã ouve e o rato mostra («Opções da projeção»).
+   Devolve: nada — regista no ANA_RODA. */
+function registarRoda(t,nome){ANA_RODA[t]=String(nome||'Opções')}
 /* toque no botão de filtros do cabeçalho: abre o painel certo consoante o
    separador — o da lista nas listas de registos, o dos movimentos, o de
-   análise nos restantes. Nos Movimentos, nos Imóveis e nos Contratos a camada
+   análise nos restantes, e as opções nas análises com a roda dentada
+   (vistas.js:ANA_RODA). Nos Movimentos, nos Imóveis e nos Contratos a camada
    da seleção toma-o para o «Selecionar vários» (cloud/selecao.js,
    cloud/selecao-listas.js), e os filtros abrem-se no funil ao lado da
    pesquisa; sem ela, é este que os abre.
    Devolve: nada — abre/fecha o painel respetivo e redesenha a vista. */
 function hdrFiltToggle(){
   if(LFK[tab])return lfToggle(LFK[tab]);
-  /* um serviço com painel próprio (os movimentos) regista o seu «alternar»;
-     os de análise usam o painel da base */
+  /* um serviço com painel próprio (os movimentos) ou com janela de opções
+     (as Projeções e a Avaliação) regista o seu «alternar»; os outros de
+     análise usam o painel da base */
   const a=analiseDe(tab);
   if(a&&a.alternar)return a.alternar();
   anaOpen[tab]=!anaOpen[tab];render();fpanelEntra(anaOpen[tab]);
@@ -60,10 +75,10 @@ function hdrFiltN(){
 // fecha o painel de análise do separador atual (os filtros aplicam-se logo ao mexer)
 // Devolve: nada — fecha o painel e redesenha a vista.
 function anaApply(){anaOpen[tab]=false;render()}
-// limpa o proprietário global e o imóvel em foco do separador de análise onde estamos
+// limpa o imóvel em foco do separador de análise onde estamos (e, no IRS, o titular)
 // Devolve: nada — limpa os filtros e redesenha a vista.
 function anaClear(){
-  ownerFilter='';
+  ownerFilter='';   // o titular do IRS · Anexo F; fora dele já está vazio (ambito.js:ambitoSemDono)
   /* o imóvel em foco é de cada serviço de análise: cada um regista o seu
      «limpar» (servicos.js:registarServico, chave analise) */
   const a=analiseDe(tab);
@@ -71,8 +86,8 @@ function anaClear(){
   closePops();render();
 }
 // nº de filtros ativos no separador atual, contados pelo serviço que o tem
-// (a visão geral e as projeções contam o proprietário e o imóvel em foco; a
-// Declaração só o proprietário; os movimentos os seus filtros e a pesquisa)
+// (a visão geral, as projeções e a avaliação contam o imóvel em foco; a
+// Declaração o titular; os movimentos os seus filtros e a pesquisa)
 // Devolve: número de filtros ativos (0 quando o separador não regista análise).
 const ANA_N=()=>{const a=analiseDe(tab);return a&&a.n?a.n():0};
 /* O vazio de uma lista quando os filtros não deixam nada: diz-o e oferece o
@@ -80,38 +95,126 @@ const ANA_N=()=>{const a=analiseDe(tab);return a&&a.n?a.n():0};
    estava copiado à letra em cinco.
    Devolve: o HTML do .empty (texto). */
 function vazioFiltro(){return `<div class="empty"><b>Nada neste filtro</b><div class="u-mt-10px"><button type="button" class="btn sm" data-toca="vista" data-click="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`}
-/* O seletor de proprietário dos painéis de análise (o ownerSel, que muda o
-   filtro de proprietário da app inteira). Sem proprietários não se escreve.
-   Recebe: valor — o que está escolhido; comGrupos (opcional) — false tira os
-   grupos de proprietários (a Declaração é por titular, e um grupo não o é).
+/* O seletor do titular do IRS · Anexo F (fisco.js, no painel dela): o
+   ownerSel, que escreve o ownerFilter. Já não é um filtro da app inteira —
+   esse saiu (ambito.js) —, e por isso só se escreve ali, sem grupos: a
+   declaração é por titular, e um grupo não o é. Sem proprietários não se
+   escreve.
+   Recebe: valor — o titular escolhido ('' para todos).
    Devolve: o HTML do seletor (texto), ou ''. */
-function anaSelDono(valor,comGrupos){
+function anaSelDono(valor){
   if(!db.owners.length)return '';
   const oo=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
-  return `<div class="u-w-100pc">${sel('ownerSel',valor,comGrupos===false?oo:oo.concat(gdiv(gOpts('owner'))),'onOwnerFilter','vista')}</div>`;
+  return `<div class="u-w-100pc">${sel('ownerSel',valor,oo,'onOwnerFilter','vista')}</div>`;
 }
-/* O painel de análise de uma vista: o seletor de proprietário, o de imóvel (ou
-   grupo) do âmbito e, por baixo, o que a vista acrescenta (os campos das
-   Projeções, o yield da Avaliação). A visão geral, as Projeções e a Avaliação
-   montavam as mesmas três linhas cada uma.
+/* As opções do seletor de imóvel de uma análise: todos, cada imóvel do âmbito
+   e, depois de uma linha, os grupos de imóveis ('g:ID'). O painel da visão
+   geral e o chip «Imóvel» das Projeções e da Avaliação escolhem do mesmo.
+   Recebe: nada.
+   Devolve: array de {v, label} (e o {div:true} antes dos grupos). */
+function anaOpcoesImovel(){
+  return [{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
+}
+/* O painel de análise da visão geral (painel-geral.js:dashBar): o filtro
+   comum, quando os há (definicoes.js:fcSelector — ali aplica o imóvel), e o
+   seletor de imóvel (ou grupo). Não tem proprietário: o filtro global saiu
+   (ambito.js). As Projeções e a Avaliação também o usavam; agora filtram
+   pelo chip da página (vistas.js:anaChips) e abrem as opções na roda dentada
+   do cabeçalho (vistas.js:ANA_RODA).
    Recebe: selId — o id do seletor de imóvel; valor — o imóvel (ou 'g:ID')
-   escolhido; onchange — o nome da função a chamar ao mudar; extra (opcional) —
-   o HTML a pôr por baixo dos seletores.
+   escolhido; onchange — o nome da função a chamar ao mudar.
    Devolve: o HTML do painel, já embrulhado pelo anaPanel. */
-function anaPanelPadrao(selId,valor,onchange,extra){
-  const po=[{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
-  return anaPanel(`<div class="u-d-flex u-fxd-column u-g-9px">
-    ${anaSelDono(ownerFilter)}
-    <div class="u-w-100pc">${sel(selId,valor,po,onchange,'vista')}</div></div>${extra||''}`);
+function anaPanelPadrao(selId,valor,onchange){
+  return anaPanel(`<div class="u-w-100pc">${sel(selId,valor,anaOpcoesImovel(),onchange,'vista')}</div>`,true);
+}
+/* A fila de chips de uma análise sem painel (as Projeções e a Avaliação), no
+   sítio onde as listas têm a barra dos filtros (vistas.js:lfCabeca): só os
+   chips — sem pesquisa, que numa análise não há o que procurar, sem funil e
+   sem painel. O único chip é o «Imóvel» (um imóvel ou um grupo: o foco da
+   análise), o seletor da casa vestido de chip como o das listas
+   (vistas.js:lfChip), com as mesmas classes (estilos.css:.mov-chip):
+   desligado diz «Imóvel» e leva a seta; ligado diz o nome, no cobalto, com o
+   × que volta a todos os imóveis e deixa o foco no chip. Não passa pelo
+   lfCabeca: esse guarda o estado no lf(k) de uma lista e põe sempre a barra
+   da pesquisa e o funil, e o foco de uma análise é do serviço
+   (projecoes.js:projProp, navegacao.js:repProp). As ações da página, quando
+   as há (o Partilhar e o Exportar da Avaliação), vão na mesma linha, à
+   direita, e descem para uma linha delas no telemóvel (estilos.css:.ana-topo).
+   Sem imóveis no âmbito e sem nada em foco, o chip não tinha o que escolher e
+   não se escreve.
+   Recebe: o — {id (o do seletor, ex.: 'projSel'), valor (o imóvel ou 'g:ID'
+   em foco; '' para todos), aplicar (o nome da função de topo que lê o
+   seletor e repinta), limpar (a ação do ×, em texto), dos (o fim do nome da
+   fila para o leitor de ecrã, ex.: 'da projeção'), acoes (opcional) — o HTML
+   das ações da página}.
+   Devolve: o HTML da fila (texto), ou só o das ações, ou ''. */
+function anaChips(o){
+  const v=String(o.valor||''),id=String(o.id),ops=anaOpcoesImovel();
+  const chips=!v&&!scope().length?'':(()=>{
+    const op=v?ops.find(x=>!x.div&&String(x.v)===v):null;
+    const rot=v?(op?String(op.label):propName(v)):'',diz=v?rot:'Imóvel';
+    const s=sel(id,v,ops,o.aplicar,'vista')
+      .replace('class="selbtn"',()=>'class="selbtn" aria-label="'+esc(v?'Imóvel: '+rot:'Imóvel')+'"')
+      .replace(/(<span id="lab_[^"]*">)[^<]*(<\/span>)/,(m,a,b)=>a+esc(diz)+b);
+    const x=v?`<button type="button" class="mov-chip-x" aria-label="Voltar a todos os imóveis" data-toca="vista" data-click="${o.limpar};anaChipFocar('${jsq(id)}')">${ic('x',14)}</button>`:'';
+    return `<div class="chips-fila mov-chips ana-chips" role="group" aria-label="Filtros ${esc(o.dos||'')}"><span class="mov-chip${v?' on':''}">${s}${x}</span></div>`;
+  })();
+  if(!o.acoes)return chips;
+  return `<div class="ana-topo">${chips}${o.acoes}</div>`;
+}
+/* Depois do × de um chip de análise, o foco vai para o chip, que o render
+   refez sem o × — sem isto caía no <body> e o Tab recomeçava no topo.
+   Recebe: id — o id do seletor do chip (o botão é o selb_<id>).
+   Devolve: nada — foca o botão do chip, se estiver no ecrã. */
+function anaChipFocar(id){
+  const b=document.getElementById('selb_'+id);
+  if(b&&b.focus)try{b.focus()}catch(e){}
+}
+/* Uma linha da janela das opções de uma análise: o que é e para que serve à
+   esquerda, o campo e a unidade à direita — o desenho das Definições ›
+   Valores por omissão (definicoes.js:linhaDeValor, estilos.css:.def-vr), que
+   guardam os mesmos números. O rótulo embrulha a linha, para o campo ter nome
+   e o toque em qualquer parte o focar. Ao contrário dessa, grava ao escrever
+   (a página por trás acompanha) e acerta o campo ao sair dele.
+   Recebe: l — {id, titulo, sub, valor, modo (o inputmode), unidade, input (a
+   ação ao escrever), change (a ação ao sair)}.
+   Devolve: o HTML (texto) da linha. */
+function anaLinhaOpcao(l){
+  return `<label class="def-vr"><span class="def-vr-txt"><b>${esc(l.titulo)}</b><span class="small">${esc(l.sub)}</span></span>
+    <span class="def-valor"><input id="${esc(l.id)}" type="text" inputmode="${esc(l.modo)}" value="${esc(l.valor)}" placeholder="Opcional" autocomplete="off" data-input="${l.input}" data-change="${l.change}"><span class="def-unidade">${esc(l.unidade)}</span></span></label>`;
+}
+/* A janela das opções de uma análise, que a roda dentada do cabeçalho abre
+   (vistas.js:ANA_RODA): as linhas dos números numa lista, a nota do que vale
+   em branco, e só o «Fechar» em baixo — cada campo grava ao mexer, por isso
+   não há Guardar nem Cancelar.
+   Recebe: titulo — o título da janela («Opções da projeção»); linhas — as
+   linhas (vistas.js:anaLinhaOpcao); nota — o texto da nota (já seguro).
+   Devolve: a camada aberta (componentes.js:openModal). */
+function anaOpcoes(titulo,linhas,nota){
+  return openModal(titulo,`<section class="card def-lista ana-opcoes" aria-label="${esc(titulo)}">${linhas.map(anaLinhaOpcao).join('')}</section>
+    ${nota?`<p class="hint ana-opcoes-nota">${nota}</p>`:''}`,
+    `<button type="button" class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>`);
+}
+/* Um campo da janela das opções acabou de gravar: o retrato da janela passa a
+   ser o de agora, para o X, o Escape ou o toque no fundo fecharem sem
+   perguntar «Sair sem guardar?» — já não há nada por guardar.
+   Recebe: nada.
+   Devolve: nada — refaz o retrato da janela de cima (componentes.js:modalSnap). */
+function anaOpcaoGravada(){
+  const L=modalTop();
+  if(L&&L.el)L.snap=modalSnap(L.el);
 }
 /* embrulha os controlos de análise (inner, já em HTML) no painel dropdown do
    cabeçalho, com os botões Limpar/Fechar no pé preso ao fundo
    (vistas.js:fpanelPe); o wrapper tem altura 0 para o painel flutuar por cima
-   da página em vez de a empurrar.
-   Recebe: inner — os controlos do painel, já em HTML (string).
+   da página em vez de a empurrar. O seletor dos filtros comuns só vai onde
+   um filtro comum tem o que aplicar (a visão geral, o imóvel): na Declaração
+   não tem — um filtro comum não guarda o titular.
+   Recebe: inner — os controlos do painel, já em HTML (string); comComuns
+   (opcional) — true põe o seletor dos filtros comuns por cima.
    Devolve: string HTML do painel pronto a inserir na vista. */
-function anaPanel(inner){return `<div class="fwrap u-h-0"><div class="fpanel ${anaOpen[tab]?'on':''} u-t-0"><div class="card fp-caixa">
-  ${typeof fcSelector==='function'?fcSelector():''}${inner}
+function anaPanel(inner,comComuns){return `<div class="fwrap u-h-0"><div class="fpanel ${anaOpen[tab]?'on':''} u-t-0"><div class="card fp-caixa">
+  ${comComuns&&typeof fcSelector==='function'?fcSelector():''}${inner}
   ${fpanelPe('anaClear()','anaApply()')}</div></div></div>`}
 /* O pé do painel dos filtros: «Limpar» à esquerda, «Fechar» primário à
    direita, preso ao fundo da caixa (estilos.css:.fp-pe). A caixa (o .card)
@@ -163,6 +266,8 @@ let _ecraPintado='';
    chama-a a seguir (CW.selCabecalho). Nas outras listas (os Inquilinos, os
    Proprietários, as Visitas, os Planeados e os Créditos) não há botão: os
    filtros estão no funil ao lado da pesquisa (vistas.js:LF_COM_CABECALHO).
+   Nas Projeções e na Avaliação é a roda dentada das opções
+   (vistas.js:pintarRoda).
    Devolve: nada — escreve no #hdrFilt, que vive fora do #view. */
 function pintarBotaoFiltros(){
   const hb=document.getElementById('hdrFilt');if(!hb)return;
@@ -171,7 +276,9 @@ function pintarBotaoFiltros(){
      e as listas com a seleção de vários (os Imóveis e os Contratos) */
   const a=analiseDe(tab),hasFilt=!!a||(!!LFK[tab]&&LF_COM_CABECALHO.indexOf(tab)>-1);
   hb.style.display=hasFilt?'':'none';
-  if(!hasFilt)return;
+  const roda=a&&ANA_RODA[tab]?ANA_RODA[tab]:'';
+  pintarRoda(hb,roda);
+  if(!hasFilt||roda)return;
   hb.innerHTML=ic('filter',16)+(hdrFiltN()?'<span class="dot"></span>':'');
   /* aceso com o painel aberto: o da base (anaOpen) ou o que o serviço diz
      (aberto); os movimentos não registam «aberto» e nunca acendem, como dantes.
@@ -186,6 +293,43 @@ function pintarBotaoFiltros(){
      botão do cabeçalho é o «Selecionar vários»), não se afirma nada */
   if(sabe)hb.setAttribute('aria-expanded',aberto?'true':'false');
   else hb.removeAttribute('aria-expanded');
+}
+/* Veste o botão do cabeçalho de roda dentada nas análises que a pedem
+   (vistas.js:ANA_RODA), ou despe-o ao sair delas. A roda abre uma janela, e
+   não um painel: diz que abre um diálogo (aria-haspopup) e não diz aberto nem
+   fechado, nunca acende, e não leva o ponto dos filtros — o chip «Imóvel» já
+   está à vista na página. O nome e o título são o do registo («Opções da
+   projeção»).
+   Ao sair, só se despe o que a roda vestiu (a marca .ana-hdr-roda): o
+   «Selecionar vários» da camada da seleção, que vem a seguir, tem os seus.
+   A camada do painel (cloud/painel.js:patchHdr) já só despe o «Concluir» que
+   vestiu (cloud/painel.js:HDR_CONCLUIR). As da seleção ainda não: vindo dos
+   Imóveis, dos Contratos, dos Planeados ou dos Movimentos, o
+   cloud/selecao-listas.js:selLCabecalho e o cloud/selecao.js:patchHdrSel
+   correm depois deste render e, por a marca deles ainda lá estar, repõem o
+   título e tiram o aria-label — o nome que a roda acabou de escrever. Por
+   isso a roda volta a escrevê-los numa microtarefa, depois da cadeia inteira
+   dos embrulhos e antes de o browser pintar (a janela do
+   aplicarContinuidade, vistas.js:render). Sai quando essas duas só despirem
+   o nome que ainda for o delas.
+   Recebe: hb — o #hdrFilt; nome — o nome da roda, ou '' fora dela.
+   Devolve: nada — mexe no botão, no DOM. */
+function pintarRoda(hb,nome){
+  if(!nome){
+    if(!hb.classList.contains('ana-hdr-roda'))return;
+    hb.classList.remove('ana-hdr-roda');
+    hb.removeAttribute('aria-haspopup');hb.removeAttribute('aria-label');
+    hb.title='Filtros e parâmetros';
+    return;
+  }
+  const veste=()=>{hb.setAttribute('aria-label',nome);hb.title=nome};
+  hb.innerHTML=ic('roda',18);
+  hb.classList.add('ana-hdr-roda');
+  hb.classList.remove('primary');
+  hb.removeAttribute('aria-expanded');
+  hb.setAttribute('aria-haspopup','dialog');
+  veste();
+  Promise.resolve().then(()=>{if(ANA_RODA[tab]===nome&&hb.classList.contains('ana-hdr-roda'))veste()});
 }
 /* ================= LISTAS VIVAS =================
    Uma lista que se acerta em vez de se refazer.
@@ -295,11 +439,10 @@ function refrescarListasVivas(){
   /* o molde tem de ficar igual ao que o render produziria, senão as duas
      árvores não batem certo e cai-se fora por nada — foi o que o fabpad fez */
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
-  /* e a moldura da casca que o render põe por cima da vista (a faixa do
-     âmbito e os separadores da área): sem ela, uma tecla na pesquisa de uma
-     lista fazia desaparecer os separadores — a via parcial refaz o ecrã
-     inteiro a partir deste molde */
-  html=faixaDoAmbito()+abasDaArea()+html;
+  /* e a moldura da casca que o render põe por cima da vista (os separadores
+     da área): sem ela, uma tecla na pesquisa de uma lista fazia desaparecer
+     os separadores — a via parcial refaz o ecrã inteiro a partir deste molde */
+  html=abasDaArea()+html;
   const registo={};_listasVivas.forEach(l=>{registo[l.id]=l.itens});
   _listasVivas=[];
   const molde=document.createElement('div');molde.innerHTML=html;
@@ -380,6 +523,7 @@ function render(){
      que os inquilinos, os movimentos e tudo o resto continuavam a trocar de
      golpe enquanto só três chamadas se lembravam de pedir. Só no mesmo ecrã —
      ver continuidade.js. */
+  ambitoSemDono();                 // fora do IRS não há proprietário em foco, nem um de antes
   const ecra=tab+'|'+(setPage||'');
   const antes=(ecra===_ecraPintado&&!contSuspensa)?medirContinuidade(view()):null;
   /* no mesmo ecrã, o painel dos filtros aberto fica onde estava rolado */
@@ -403,10 +547,10 @@ function render(){
   const vista=vistaDoSeparador(tab);
   let html=vista?vista():separadorLigado(tab)?vistaNaoCarregouHtml(tab):servicoDesligadoHtml(tab);
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
-  /* por cima de cada vista, a casca: a faixa do âmbito em foco e os
-     separadores da área (navegacao.js:faixaDoAmbito, navegacao.js:abasDaArea) —
-     da base, e não de cada serviço, para serem os mesmos em todo o lado */
-  html=faixaDoAmbito()+abasDaArea()+html;
+  /* por cima de cada vista, a casca: os separadores da área
+     (navegacao.js:abasDaArea) — da base, e não de cada serviço, para serem os
+     mesmos em todo o lado */
+  html=abasDaArea()+html;
   /* A entrada dos gráficos é de quem chega ao ecrã, não de cada repintura: o
      render corre também quando a sincronização adota o estado do servidor de 3
      em 3 minutos (cloud/nucleo.js:applyState) e a cada gesto que só mexe num
@@ -693,7 +837,7 @@ function kpiModal(id){
 }
 /* anos com movimentos que contam nesta vista (o mesmo peso das métricas: imóvel,
    grupo ou âmbito todo), mais o corrente
-   Recebe: pid (opcional) — id do imóvel ou 'g:ID' de um grupo; vazio/null usa o âmbito do proprietário filtrado.
+   Recebe: pid (opcional) — id do imóvel ou 'g:ID' de um grupo; vazio/null usa o âmbito todo.
    Devolve: array de anos (números) por ordem ascendente. */
 function yearsWithData(pid){
   const ys={};ys[YEAR]=1;
@@ -738,7 +882,7 @@ function evoMoney(field,pid,fmt){
   for(let y=de;y<=a;y++)yearly.push({label:y,value:valor(y)});
   return {fmt:fmt||euro,monthly,yearly};
 }
-// atalho: totais mensais já na quota-parte do proprietário filtrado
+// atalho: totais mensais na quota-parte (saldos.js:sh — sem titular, por inteiro)
 // Recebe: y — o ano (número); pid — id do imóvel ou de grupo ('g:…'), ou null para o âmbito todo; kind — 'income', 'expense', 'loan' ou 'amort'.
 // Devolve: array de 12 números — o total de cada mês desse ano.
 const monthly_=(y,pid,kind)=>monthly(y,pid,kind,true);
@@ -748,9 +892,9 @@ const WHY={
   prestacoes:'Capital, juros e selo das prestações. Separado das despesas porque parte é poupança, não custo. As amortizações antecipadas ficam à parte, no rodapé.',
   cashflow:'Receita menos despesas, prestações e amortizações antecipadas. É o dinheiro que saiu mesmo da carteira — uma amortização também sai, embora seja capital e não custo.',
   yieldBruto:'Renda anual contratada sobre o valor de mercado dos imóveis com contrato ativo — os mesmos imóveis em cima e em baixo. Ignora despesas; serve para comparar com anúncios.',
-  cap:'Resultado líquido (rendas menos despesas, sem o banco) a dividir pelo valor de mercado. No ano corrente o resultado é anualizado. Mede o imóvel, não o financiamento — na tua quota, quando há filtro de proprietário.',
+  cap:'Resultado líquido (rendas menos despesas, sem o banco) a dividir pelo valor de mercado. No ano corrente o resultado é anualizado. Mede o imóvel, não o financiamento.',
   aquisicao:'Cashflow do ano até hoje a dividir pelo preço de compra, com o crédito incluído. Não é o retorno sobre o capital próprio: para isso faltaria tirar ao preço o que o banco emprestou.',
-  ltv:'Dívida a dividir pelo valor de mercado — na tua quota, quando há filtro de proprietário. Quanto mais baixo, menos alavancado está o portefólio.',
+  ltv:'Dívida a dividir pelo valor de mercado. Quanto mais baixo, menos alavancado está o portefólio.',
   valorIntro:'O valor de mercado que introduziste na ficha do imóvel. É a tua estimativa, não um cálculo.',
   valorRend:'Quanto valeria o imóvel se o comprasses hoje exigindo o yield que definiste: resultado líquido anual dividido por esse yield. No ano corrente, o resultado até hoje é anualizado.',
   diferenca:'Positivo: as rendas justificam mais do que o valor de mercado que indicaste. Sem valor de mercado na ficha não há comparação.',
@@ -787,16 +931,9 @@ function lockPage(){try{
   else if(!on&&was){h.classList.remove('noscroll');document.body.style.top='';window.scrollTo(0,_lockY)}
 }catch(e){}}
 
-// barra com o seletor de proprietário; vazia se não há proprietários registados
-// Devolve: string HTML da barra (vazia se não há proprietários).
-function ownerBar(){
-  if(!db.owners.length)return '';
-  const opts=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')));
-  return `<div class="toolbar"><div class="u-minw-230px u-maxw-320px">${sel('ownerSel',ownerFilter,opts,'onOwnerFilter','vista')}</div></div>`;
-}
-// muda o filtro global de proprietário; se o imóvel em foco sair do âmbito, larga-o
+// muda o titular do IRS · Anexo F (o seletor vistas.js:anaSelDono, só na Declaração)
 // Devolve: nada — redesenha a vista.
-function onOwnerFilter(){ownerFilter=val('ownerSel')||'';if(dashProp&&!inScope(dashProp))dashProp='';render()}
+function onOwnerFilter(){ownerFilter=val('ownerSel')||'';render()}
 /* cartão reutilizável: saldos entre proprietários (de um imóvel ou de todos),
    embrulhado na sua fila (.cols) para os ecrãs que o põem solto — a Avaliação
    e os Movimentos. A Visão geral usa o cartão sem a fila (contasCard), porque
@@ -861,7 +998,7 @@ function contasCard(pid){
 function settleTargets(pid){
   const props=pidProps(pid).filter(p=>souDono(p.id));
   const out=props.map(p=>({pid:p.id,name:p.name,plan:settlePlan(ownerBalances(p.id))})).filter(x=>x.plan.length);
-  if(!pid&&!ownerFilter){
+  if(!pid){
     const tot=ownerBalances(null),per=props.map(p=>ownerBalances(p.id)),resto={};
     Object.keys(tot).forEach(k=>{resto[k]=tot[k]-sum(per.map(b=>b[k]||0))});
     const plan=settlePlan(resto);
@@ -956,19 +1093,17 @@ function lqLimpar(botao,k){
 function limparFiltroAtual(){
   if(typeof LFK!=='undefined'&&LFK[tab])return lfClear(LFK[tab]);
   /* o resto é análise, e cada serviço regista o seu «limpar» (os movimentos
-     incluídos: os filtros deles limpam-se por aqui, e o proprietário pela base) */
+     incluídos: os filtros deles limpam-se por aqui) */
   if(typeof anaClear==='function')anaClear();
 }
 /* Limpa os filtros e a pesquisa da lista k sem mexer no painel nem na
-   ordenação, que não é um filtro (como o clearTxFilters dos Movimentos); nos
-   imóveis larga também o proprietário global. Uma pesquisa ainda por aplicar
+   ordenação, que não é um filtro (como o clearTxFilters dos Movimentos). Uma pesquisa ainda por aplicar
    morre com eles, e o campo da barra esvazia-se já: a via parcial guarda-o
    de pintura para pintura (vistas.js:lfBarraViva).
    Recebe: k — a chave da lista ('lprops', 'lcts', …).
    Devolve: nada — redesenha a vista. */
 function lfClear(k){
   const s=lf(k);listF[k]=Object.assign({_open:s._open},s.sb?{sb:s.sb,sd:s.sd||''}:{});
-  if(k==='lprops')ownerFilter='';
   clearTimeout(_lqT);
   const q=document.getElementById('lq_'+k);if(q&&q.value){q.value='';lqMostrarLimpar(q)}
   /* o «Limpar» do painel some com os filtros: o foco do teclado fica no «Fechar» */
@@ -1044,7 +1179,7 @@ function lfSort(k,list,keys){
    estilos.css:.mov-grelha), para ser o mesmo desenho e não uma cópia dele.
 
    O estado é o lf(k) da lista e nada mais: cada campo é uma chave dele
-   (lf(k).st, lf(k).own…), a pesquisa é o lf(k).q, a ordenação o lf(k).sb e
+   (lf(k).st, lf(k).md…), a pesquisa é o lf(k).q, a ordenação o lf(k).sb e
    o lf(k).sd, e o painel aberto o lf(k)._open. A lista continua a filtrar,
    contar e ordenar pelos de sempre (lfHit, lfCount, lfSort).
 
@@ -1053,7 +1188,7 @@ function lfSort(k,list,keys){
      dos     'dos imóveis' — o nome da fila dos chips («Filtros dos imóveis»)
      n       quantos registos passam os filtros, para a linha do painel
      campos  os seletores, pela ordem dos chips e da grelha (um falsy não conta):
-       chave   a chave no lf(k) ('st', 'own'…)
+       chave   a chave no lf(k) ('st', 'md'…)
        nome    o rótulo na grelha e o que o chip desligado diz ('Estado')
        opcoes  [{v:'', label:'Todos os estados'}, {v:'vago', label:'Vagos', n:2}…] — a
                opção '' primeiro; o n (opcional) junta « · 2» ao rótulo da escolha
@@ -1063,7 +1198,7 @@ function lfSort(k,list,keys){
                «Pago por» dos Movimentos); falsy: só no painel
        rotulo  (opcional) v => o que o chip ligado diz; sem ele, o rótulo da opção
        aplicar (opcional) v => muda o estado e repinta; sem ele, lf(k)[chave] = v e
-               render() (os imóveis espelham o proprietário no filtro global)
+               render()
        tipo    (opcional) 'date' ou 'time': em vez de um seletor, um campo de data
                ou de hora na grelha (o «De» e o «Até» das visitas); nunca é chip
        junto   (opcional) um nome comum a vários campos que contam como UM filtro
@@ -1075,7 +1210,6 @@ function lfSort(k,list,keys){
      chips   (opcional) [{html, x}] — chips que não são um campo, já em HTML, a
              seguir aos dos campos (o «Dias e horas» das visitas, que abre o
              painel: vistas.js:lfAbrirEm); x diz que o chip tem o seu ×
-     topo    (opcional) HTML por cima da grelha (os filtros comuns, nos imóveis)
    Devolve a barra, o painel e os chips, por esta ordem, como os Movimentos:
    o painel abre logo por baixo da pesquisa, por cima dos chips. O botão do
    cabeçalho deixa de ser dos filtros: nos Imóveis e nos Contratos é o
@@ -1185,8 +1319,7 @@ function lfPainelHtml(k,o,cs){
     <div class="card mov-filtros-card lfm-caixa">${lfPainelCorpo(k,o,cs)}</div></div></div>`;
 }
 /* O corpo do painel (o M-Filtros): o título com o «Limpar» (só com filtros
-   ligados) e o «Fechar», quantos passam, o que a lista põe por cima e a
-   grelha de duas colunas. Cada seletor aplica logo, sem «Aplicar».
+   ligados) e o «Fechar», quantos passam e a grelha de duas colunas. Cada seletor aplica logo, sem «Aplicar».
    Recebe: k — a chave da lista; o — a declaração; cs — os campos.
    Devolve: o HTML do corpo. */
 function lfPainelCorpo(k,o,cs){
@@ -1196,7 +1329,6 @@ function lfPainelCorpo(k,o,cs){
       ${lfNFiltros(k)?`<button type="button" class="btn ghost" data-toca="vista" data-click="lfClear('${jsq(k)}')">Limpar</button>`:''}
       <button type="button" class="btn" data-toca="camada" data-click="lfApply('${jsq(k)}')">Fechar</button></div>
     <p class="small mov-filtros-n">Aplicam-se ao mexer · ${n} ${esc(n===1?nome[0]:nome[1])}</p>
-    ${o&&o.topo?o.topo:''}
     ${cs.length?`<div class="mov-grelha">${cs.map(c=>lfCampoNaGrelha(k,c)).join('')}</div>`:''}
   </div>`;
 }

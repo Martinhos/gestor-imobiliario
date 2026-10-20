@@ -338,7 +338,10 @@ function visitModal(id,extra){
   };
 }
 
-/* O corpo do formulário da visita, a partir de visForm.
+/* O corpo do formulário da visita, a partir de visForm. O Início e o Fim vão
+   lado a lado também no telemóvel, em campos da largura da hora (.vis-par),
+   e não um por linha a toda a largura.
+   Recebe: nada — lê o visForm.
    Devolve: o HTML do formulário (texto). */
 function visBody(){
   const v=visForm;
@@ -354,7 +357,7 @@ function visBody(){
     <label>Imóvel <span class="req">*</span>${sel('vi_prop',v.propertyId,props,'visPropMudou','rascunho')}</label>
     ${quartos?`<label>Quarto${sel('vi_room',v.roomId,quartos,'','rascunho')}</label>`:''}
     <label>Data <span class="req">*</span><input id="vi_date" type="date" value="${v.date||''}"></label>
-    <div class="row">
+    <div class="vis-par">
       <label>Início<input id="vi_start" type="time" value="${v.start||''}"></label>
       <label>Fim<input id="vi_end" type="time" value="${v.end||''}"></label></div>
     <div class="row">
