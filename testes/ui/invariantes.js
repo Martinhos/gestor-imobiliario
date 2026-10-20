@@ -446,8 +446,13 @@ function dentroDaPagina() {
      toque longo existe. */
   const abrePorta = /(^|[^\w.])(lpMenu|menuOpen)\(|CW\.txOpcoes\(/;
   const portas = pontos.filter((e) => abrePorta.test(e.getAttribute('data-click') || ''));
+  /* Um menu de ACOES DA PAGINA (o botao de partilha da Avaliacao: partilhar,
+     exportar) nao e a porta das opcoes de um registo: declara-se com
+     data-menu="acoes" no .menuwrap e tem o seu icone e o seu nome — mas tem de
+     ter nome e o alvo minimo, como qualquer porta. */
   const foraDoMolde = portas.filter((e) => {
     const r = e.getBoundingClientRect();
+    if (e.closest('[data-menu="acoes"]')) return !e.getAttribute('aria-label') || r.width < 40 || r.height < 40;
     return !e.classList.contains('opcoes') || e.getAttribute('aria-label') !== 'Op\u00e7\u00f5es' ||
       r.width < 40 || r.height < 40;
   });

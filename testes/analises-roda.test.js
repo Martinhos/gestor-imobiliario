@@ -74,7 +74,7 @@ describe('a fila de chips no sítio dos filtros', () => {
   test('Avaliação: o mesmo, com as ações da página na mesma linha', () => {
     const h = app.vReports();
     assert.match(h, /^<div class="ana-topo"><div class="chips-fila mov-chips ana-chips" role="group" aria-label="Filtros da avaliação"><span class="mov-chip"><div class="sel" id="sel_repSel">/);
-    assert.match(h, /<\/div><div class="ana-acoes"><span class="menuwrap ava-partilha"><button type="button" class="btn so-icone" data-toca="camada" data-click="menuOpen\(event,'avaPartilha'\)" aria-expanded="false" aria-label="Partilhar"/);
+    assert.match(h, /<\/div><div class="ana-acoes"><span class="menuwrap ava-partilha" data-menu="acoes"><button type="button" class="btn so-icone" data-toca="camada" data-click="menuOpen\(event,'avaPartilha'\)" aria-expanded="false" aria-label="Partilhar"/);
     assert.doesNotMatch(h, /type="search"|mov-barra|mov-filt|class="fwrap|fpanel|fp-pe|ana-pin|avaYield|Âmbito/);
   });
 

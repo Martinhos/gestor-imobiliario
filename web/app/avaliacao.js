@@ -48,7 +48,7 @@ function avaChips(comAcoes){
    Devolve: o HTML do botão com o menu (string). */
 function avaPartilha(){
   const item=(icone,rotulo,act)=>`<button type="button" data-toca="nada" data-click="closePops();${act}">${ic(icone,17)} ${rotulo}</button>`;
-  return `<span class="menuwrap ava-partilha"><button type="button" class="btn so-icone" data-toca="camada" data-click="menuOpen(event,'avaPartilha')" aria-expanded="false" aria-label="Partilhar" title="Partilhar">${ic('partilhar',18)}</button>
+  return `<span class="menuwrap ava-partilha" data-menu="acoes"><button type="button" class="btn so-icone" data-toca="camada" data-click="menuOpen(event,'avaPartilha')" aria-expanded="false" aria-label="Partilhar" title="Partilhar">${ic('partilhar',18)}</button>
     <div class="menupop" id="menu_avaPartilha">${item('partilhar','Partilhar avaliação','shareReport()')}${item('down','Exportar movimentos (CSV)','downloadCsv()')}</div></span>`;
 }
 /* As opções da avaliação, na janela que a roda dentada do cabeçalho abre

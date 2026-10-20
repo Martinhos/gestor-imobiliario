@@ -36,11 +36,11 @@ describe('o botão de partilha da Avaliação', () => {
 
   test('um botão só, de ícone, com o nome «Partilhar», que abre o menu', () => {
     const h = app.vReports();
-    const b = h.match(/<span class="menuwrap ava-partilha"><button ([^>]*)>([\s\S]*?)<\/button>/);
+    const b = h.match(/<span class="menuwrap ava-partilha" data-menu="acoes"><button ([^>]*)>([\s\S]*?)<\/button>/);
     assert.ok(b, 'o botão está na fila do chip');
     assert.match(b[1], /^type="button" class="btn so-icone" data-toca="camada" data-click="menuOpen\(event,'avaPartilha'\)" aria-expanded="false" aria-label="Partilhar" title="Partilhar"$/, 'nasce fechado, como o ⋯ da casa');
     assert.equal(b[2], app.ic('partilhar', 18), 'só o ícone de partilha, sem texto');
-    assert.match(h, /<div class="ana-acoes"><span class="menuwrap ava-partilha">/);
+    assert.match(h, /<div class="ana-acoes"><span class="menuwrap ava-partilha" data-menu="acoes">/);
     assert.doesNotMatch(h, /ana-largo|ana-curto/, 'os rótulos longo e curto dos dois botões saíram');
   });
 
