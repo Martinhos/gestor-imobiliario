@@ -2,18 +2,20 @@
 /* A lista dos imóveis e o menu de toque longo de um imóvel. A ficha, as
    divisões e as fotos estão em imovel.js. Veio de vistas.js e de
    componentes.js:lpMenu quando a app passou a serviços; regista-se no fim. */
-/* Lista de imóveis com pesquisa, filtros (estado, modo de arrendamento,
-   proprietário — este espelha o filtro global) e ordenação, como a prancheta
-   M-Casas: por cima, o painel da pesquisa (vistas.js:lfBar) e os chips do
-   filtro rápido pelo estado, que filtram ao tocar; por baixo, um cartão por
-   imóvel com a capa à esquerda (a primeira foto, ou o mosaico do imóvel), o
-   nome, a morada, o selo do estado, três números e os selos do que pede
-   atenção. Tocar no cartão abre a ficha (imovel.js:propView), onde estão o
-   Editar, as ações rápidas e o Apagar: o cartão já não tem o ⋮.
+/* Lista de imóveis com pesquisa, filtros (estado, proprietário — este espelha
+   o filtro global —, modo de arrendamento) e ordenação, como a prancheta
+   M-Casas e com os filtros dos Movimentos (vistas.js:lfCabeca): por cima, a
+   pesquisa sempre à vista com o funil do painel completo, e os chips rápidos
+   do estado e do proprietário (o do arrendamento só no ecrã largo, ou
+   ligado); por baixo, um cartão por imóvel com a capa à esquerda (a primeira
+   foto, ou o mosaico do imóvel), o nome, a morada, o selo do estado, três
+   números e os selos do que pede atenção. Tocar no cartão abre a ficha
+   (imovel.js:propView), onde estão o Editar, as ações rápidas e o Apagar: o
+   cartão já não tem o ⋮.
    Devolve: string com o HTML completo da vista. */
 function vProperties(){
   const K='lprops',s=lf(K);
-  /* o estado (arrendado, vago…) lê-se dos contratos: sem o serviço dos Contratos nesta conta, nem o filtro nem os chips têm de que falar */
+  /* o estado (arrendado, vago…) lê-se dos contratos: sem o serviço dos Contratos nesta conta, nem o filtro nem o chip têm de que falar */
   const vEstado=servicoLigado('contracts');
   const resto=visiveis().filter(p=>{
     if(s.md){if(p.use!=='investimento')return false;if((p.rentalMode||'inteiro')!==s.md)return false}
@@ -23,14 +25,19 @@ function vProperties(){
       (p.rooms||[]).map(r=>r.name).join(' '),quem].join(' '));
   });
   let list=s.st&&vEstado?resto.filter(p=>propStatus(p).key===s.st):resto;
-  if(!lf(K)._open)lf(K).own=ownerFilter||'';   /* o estado aplicado espelha o filtro global de proprietário */
-  const ownSel=db.owners.length?lfSel(K,'own',[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')))):'';
-  const head=lfBar(K,[ownSel,
-      vEstado?lfSel(K,'st',[{v:'',label:'Todos os estados'}].concat(ESTADOS_RAPIDOS.filter(x=>x[0]).map(x=>({v:x[0],label:x[2]})))):'',
-      lfSel(K,'md',[{v:'',label:'Todos os arrendamentos'},{v:'inteiro',label:'Imóvel inteiro'},{v:'quartos',label:'Por quartos'}])],list.length,
-      {opts:[{v:'nome',label:'Ordenar por nome'},{v:'valor',label:'Ordenar por valor'},{v:'renda',label:'Ordenar por renda'},{v:'divida',label:'Ordenar por dívida'},{v:'yield',label:'Ordenar por yield'}]})
-    +(db.properties.length||!podeExemplo()?'':`<div class="toolbar"><button class="btn" data-toca="dados" data-click="seed()">Carregar exemplo</button></div>`)
-    +(vEstado&&visiveis().length?imvChipsEstado(resto.length):'');
+  s.own=ownerFilter||'';   /* o filtro do proprietário é o global: o chip e o painel mostram-no e mudam-no (imvFiltroDono) */
+  /* sem imóveis nenhuns não há o que pesquisar nem filtrar: fica o vazio com o seu botão */
+  const head=(!db.properties.length?'':lfCabeca(K,{nome:['imóvel','imóveis'],dos:'dos imóveis',n:list.length,
+      campos:[vEstado?imvCampoEstado(resto):null,
+        db.owners.length?{chave:'own',nome:'Proprietário',curto:'Todos',rapido:true,aplicar:imvFiltroDono,
+          opcoes:[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')))}:null,
+        {chave:'md',nome:'Arrendamento',curto:'Todos',rapido:'largo',
+          opcoes:[{v:'',label:'Todos os arrendamentos'},{v:'inteiro',label:'Imóvel inteiro'},{v:'quartos',label:'Por quartos'}]}],
+      /* a renda e a yield são dos Contratos, a dívida dos Créditos: sem eles, ordenar por elas não ordenava nada */
+      ordem:{opcoes:[{v:'nome',label:'Nome'},{v:'valor',label:'Valor'}].concat(vEstado?[{v:'renda',label:'Renda'},{v:'yield',label:'Yield'}]:[])
+        .concat(servicoLigado('credits')?[{v:'divida',label:'Dívida'}]:[])},
+      topo:fcSelector()}))
+    +(db.properties.length||!podeExemplo()?'':`<div class="toolbar"><button class="btn" data-toca="dados" data-click="seed()">Carregar exemplo</button></div>`);
   list=lfSort(K,list,{nome:p=>p.name,valor:p=>p.value,renda:p=>rentOf(p),divida:p=>debtOf(p),yield:p=>{const r=rentOf(p);return r&&p.value?r*12/p.value:0}});
   if(!list.length){
     const espera=esperaDoServidor();if(espera)return head+espera;
@@ -41,24 +48,33 @@ function vProperties(){
   const pendentes=imvPendentesPorImovel();   /* e uma pelos planeados */
   return head+listaViva('imoveis',list.map(p=>({chave:'prop:'+p.id,html:imvCartao(p,dividas[p.id]||0,pendentes[p.id]||[])})),'imv-lista');
 }
-/* Os chips do filtro rápido pelo estado: o valor do filtro (o mesmo «st» do
-   painel), o rótulo do chip e o do seletor do painel. */
+/* Os estados do filtro rápido: o valor do filtro (o «st» do lf('lprops')), o
+   rótulo curto e o do seletor. */
 const ESTADOS_RAPIDOS=[['','Todos','Todos os estados'],['arrendado','Arrendados','Arrendados'],['parcial','Parciais','Parcialmente arrendados'],
   ['vago','Vagos','Vagos'],['proprio','Uso próprio','Uso próprio']];
-/* A fila dos chips do filtro rápido (Todos, Arrendados, Parciais, Vagos, Uso
-   próprio). Tocar filtra logo, sem «Aplicar»; é o mesmo filtro do seletor do
-   painel, e os dois dizem sempre o mesmo. O «Todos» leva quantos há.
-   Recebe: n — quantos imóveis passam os outros filtros (a pesquisa, o modo).
-   Devolve: o HTML da fila. */
-function imvChipsEstado(n){
-  const st=lf('lprops').st||'';
-  return `<div class="chips-fila imv-filtros" role="group" aria-label="Filtrar pelo estado">${ESTADOS_RAPIDOS.map(([v,rot])=>
-    `<button type="button" class="chip${st===v?' on':''}" aria-pressed="${st===v?'true':'false'}" data-toca="vista" data-click="imvFiltroRapido('${jsq(v)}')">${rot}${v?'':` <span class="n">${n}</span>`}</button>`).join('')}</div>`;
+/* O campo do estado, o primeiro chip rápido dos imóveis e o primeiro
+   seletor do painel (vistas.js:lfCabeca): cada estado com quantos imóveis
+   há nele entre os que passam os outros filtros («Vagos · 2»), e o «Todos os
+   estados» com todos eles. Só existe com os Contratos ligados, que é de onde
+   o estado se lê. Ligado, o chip diz o rótulo curto («Parciais»).
+   Recebe: resto — os imóveis que passam os outros filtros (a pesquisa, o modo).
+   Devolve: o campo {chave, nome, opcoes, curto, rapido, rotulo, aplicar}. */
+function imvCampoEstado(resto){
+  const n={};(resto||[]).forEach(p=>{const k=propStatus(p).key;n[k]=(n[k]||0)+1});
+  return {chave:'st',nome:'Estado',curto:'Todos',rapido:true,aplicar:imvFiltroRapido,
+    rotulo:v=>(ESTADOS_RAPIDOS.find(x=>x[0]===v)||[])[1]||v,
+    opcoes:ESTADOS_RAPIDOS.map(([v,,rot])=>({v,label:rot,n:v?n[v]||0:(resto||[]).length}))};
 }
-/* Um chip do filtro rápido foi tocado: muda o filtro do estado e repinta.
+/* Filtra os imóveis por um estado — o chip do estado e o seletor do painel
+   passam por aqui.
    Recebe: v — a chave do estado ('' para todos, 'arrendado', 'parcial', 'vago', 'proprio').
    Devolve: nada — repinta a vista. */
 function imvFiltroRapido(v){lf('lprops').st=String(v||'');render()}
+/* Filtra os imóveis por um proprietário (ou grupo): é o filtro global de
+   proprietário, que os outros ecrãs também seguem, e o da lista espelha-o.
+   Recebe: v — o id do proprietário, 'g:ID' de um grupo, ou '' para todos.
+   Devolve: nada — repinta a vista. */
+function imvFiltroDono(v){ownerFilter=String(v||'');lf('lprops').own=ownerFilter;render()}
 /* A cor do selo de cada estado, a do contrato do redesign: arrendado verde,
    parcial cobalto, vago âmbar, uso próprio cinzento.
    Recebe: k — a chave do estado (registos.js:propStatus).

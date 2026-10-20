@@ -599,7 +599,7 @@ CW.aceitarConvite = function (token) {
         (pode.length ? '<div class="hint">Podes: ' + esc(pode.join(', ')) + '.</div>' : '') +
         (saltadas.length ? '<div class="hint">Já eras comproprietário de ' + esc(saltadas.join(', ')) + ' — aí fica tudo como estava.</div>' : '') +
         '<div class="hint">Os cartões desses imóveis levam o selo «de ' + esc(r.ownerName || prev.ownerName || '') + ' · ' + esc(r.roleName || prev.roleName || '') +
-        '». Podes sair quando quiseres em Definições → Colaboradores e cargos.</div></div>',
+        '». Podes sair quando quiseres em Pessoas → Colaboradores.</div></div>',
         '<button class="btn primary" data-toca="ecra" data-click="closeAllModals();go(\'properties\')">Ver os imóveis</button>');
     })
     .catch(function (e) {
@@ -679,7 +679,7 @@ colaboroCard = function () {
   return partes.join(linha);
 };
 
-/* ---------------- a página «Colaboradores e cargos» ---------------- */
+/* ---------------- a página dos Colaboradores ---------------- */
 
 /* O selo do tempo que um convite ainda vale, em dias de calendário (no fuso
    deste aparelho, como a data «expira a dd/mm/aaaa» ao lado): «Expira hoje»
@@ -858,8 +858,8 @@ function colaboroCartao() {
   '<p class="hint def-nota">Não tens quota-parte nestes imóveis nem entras nas contas entre proprietários. Ao sair, o que registaste fica com o dono.</p>';
 }
 
-/* A página «Colaboradores e cargos» (o separador colaboradores, que vive nas
-   Definições — o canvas, D-Colaboradores): o que é um colaborador e
+/* A página dos Colaboradores (o separador colaboradores, o terceiro das
+   Pessoas — o canvas, D-Colaboradores): o que é um colaborador e
    «Convidar colaborador» (CW.conviteModal); depois «Quem colabora», os
    «Convites por usar», os «Cargos» com a tabela das permissões, e os
    imóveis onde sou eu o colaborador (para quem só colabora, estes vêm
@@ -869,7 +869,7 @@ function colaboroCartao() {
    fica a espera, e só os imóveis onde colaboro (que vêm do aparelho). Com o
    serviço desligado, o ecrã que diz o nome e quem o liga.
    Recebe: nada.
-   Devolve: o HTML (texto) da página, sem a cabeça das subpáginas (vColabTab põe-na). */
+   Devolve: o HTML (texto) da página; os separadores da área por cima põe-nos o render (navegacao.js:abasDaArea). */
 function paginaDosColaboradores() {
   if (!servicoLigado('colaboradores')) return servicoDesligadoHtml('colaboradores');
   if (!CW.user) {
@@ -1018,18 +1018,32 @@ function corpoDoConvitePronto(url, cargo, casas, expira) {
     '<p class="small">Serve uma vez' + (data ? ' · expira a ' + data : '') + '</p></div>' +
     '<p class="colab-aviso">' + ic('aviso', 18) + '<span>Esta ligação só se vê agora. Se a perderes, revoga o convite e cria outro.</span></p></div>';
 }
-/* A porta dos Colaboradores nas Definições (o canvas de 2026-10: «Colaboradores
-   e cargos» na secção Conta, com quantas pessoas colaboram e quantos convites
-   esperam). Saíram da barra lateral: são arrumação da conta, e a linha leva ao
-   separador deles (navegacao.js:goSet). Antes do primeiro estado não se
-   contam pessoas: diz-se o que é.
+/* Quantas pessoas colaboram nos meus imóveis, para o terceiro segmento das
+   Pessoas (navegacao.js:contagemDePessoas): cada pessoa uma vez, mesmo que
+   tenha dois cargos em imóveis diferentes — o servidor dá uma linha por
+   cargo. Os colaboradores vivem no servidor: sem sessão, sem o separador à
+   vista (haColaboradores), ou antes do primeiro estado, não se sabe, e não
+   se inventa um zero. Os convites por usar não contam:
+   ainda não são ninguém. A porta saiu das Definições a 2026-10-20 (a linha
+   «Colaboradores e cargos»): os Colaboradores são das Pessoas.
    Recebe: nada.
-   Devolve: o resumo da linha (texto). */
+   Devolve: o número de pessoas, ou null quando ainda não se sabe. */
+function contarColaboradores() {
+  if (!CW.user || !CW._pulled || !haColaboradores()) return null;
+  var vistos = {}, pessoas = 0;
+  ((CW.state && CW.state.collaborators) || []).forEach(function (c) { var k = c.userId || c.id; if (!vistos[k]) { vistos[k] = 1; pessoas++; } });
+  return pessoas;
+}
+/* O subtítulo do ecrã dos Colaboradores, no cabeçalho do computador
+   (navegacao.js:subtituloDoEcra): quantas pessoas colaboram e quantos
+   convites esperam — o que era o resumo da linha das Definições, que saiu.
+   Antes do primeiro estado não se contam pessoas: diz-se o que é.
+   Recebe: nada.
+   Devolve: o resumo (texto). */
 function resumoDosColaboradores() {
   var st = CW.state || {};
   if (!CW._pulled) return 'Quem ajuda a gerir, e com que cargo';
-  var vistos = {}, pessoas = 0;
-  (st.collaborators || []).forEach(function (c) { var k = c.userId || c.id; if (!vistos[k]) { vistos[k] = 1; pessoas++; } });
+  var pessoas = contarColaboradores() || 0;
   var conv = (st.invites || []).length, onde = (db.properties || []).filter(function (p) { return p._cargo; }).length;
   var partes = [];
   if (pessoas) partes.push(pessoas + (pessoas === 1 ? ' pessoa' : ' pessoas'));
@@ -1037,11 +1051,10 @@ function resumoDosColaboradores() {
   if (!partes.length && onde) partes.push('Colaboras em ' + onde + (onde === 1 ? ' imóvel' : ' imóveis'));
   return partes.length ? partes.join(' · ') : 'Quem ajuda a gerir, e com que cargo';
 }
-/* A linha só aparece quando o separador aparece: com sessão e com o serviço
-   ligado (acessos.js:separadoresEscondidos).
+/* O separador dos Colaboradores está à vista: com sessão e com o serviço
+   ligado (acessos.js:separadoresEscondidos). Sem ele não há o que contar.
    Recebe: nada.
-   Devolve: true se a linha aparece. */
+   Devolve: true se o separador aparece. */
 function haColaboradores() {
   return !(typeof separadoresEscondidos === 'function' && separadoresEscondidos().indexOf('colaboradores') > -1);
 }
-linhaDefinicoes({ sec: 'conta', ordem: 30, page: 'colaboradores', label: 'Colaboradores e cargos', icon: 'shield', sub: resumoDosColaboradores, se: haColaboradores });

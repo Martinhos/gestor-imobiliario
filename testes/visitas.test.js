@@ -77,43 +77,50 @@ describe('a página das visitas', () => {
     assert.equal(app.visCard(app.db.visits[0], 3, app.db.visits), app.visCard(app.db.visits[0]));
   });
 
-  test('os chips dos filtros: escolhidos dizem o valor e têm o ×; os dias e horas abrem o painel', () => {
+  test('os chips dos filtros: escolhidos dizem o valor e têm o ×; os dias e horas levam ao painel', () => {
     monta();
     app.db.visits = [app.normVisit({ id: 'V1', nomes: 'Ana', propertyId: 'P1', date: '2999-01-01' })];
     let html = app.vVisits();
-    assert.match(html, /<div class="vis-chips" role="group" aria-label="Filtrar as visitas">/);
+    assert.match(html, /<div class="chips-fila mov-chips" role="group" aria-label="Filtros das visitas">/, 'a fila dos Movimentos (vistas.js:lfCabeca)');
     for (const [k, nome] of [['pr', 'Imóvel'], ['es', 'Estado'], ['rs', 'Desfecho']]) {
-      assert.match(html, new RegExp('<span class="vis-chip"><div class="sel" id="sel_vischip_' + k + '">[\\s\\S]*?aria-label="' + nome + '"[\\s\\S]*?<span id="lab_vischip_' + k + '">' + nome + '</span>'), nome);
+      assert.match(html, new RegExp('<span class="mov-chip"><div class="sel" id="sel_lfc_lvis_' + k + '">[\\s\\S]*?aria-label="' + nome + '"[\\s\\S]*?<span id="lab_lfc_lvis_' + k + '">' + nome + '</span>'), nome);
     }
-    assert.match(html, /class="chip vis-chip-dias" data-toca="vista" data-click="hdrFiltToggle\(\)">Dias e horas<\/button>/);
+    assert.match(html, /<span class="mov-chip mov-so-largo lfm-chip-abre"><button type="button" class="mov-chip-txt" data-toca="vista" data-click="lfAbrirEm\('lvis','lfi_lvis_d1'\)">Dias e horas<\/button><\/span>/, 'desligado, só no ecrã largo, e leva ao primeiro dia');
     app.lf('lvis').pr = 'P1';
     app.lf('lvis').d1 = '2026-10-15';
     app.lf('lvis').h1 = '18:00';
     html = app.vVisits();
-    assert.match(html, /<span class="vis-chip on"><div class="sel" id="sel_vischip_pr">[\s\S]*?aria-label="Imóvel: T2 Lisboa"[\s\S]*?<span id="lab_vischip_pr">T2 Lisboa<\/span>/);
-    assert.match(html, /aria-label="Limpar imóvel" data-toca="vista" data-click="visLimparChip\('lvis','pr'\)"/);
+    assert.match(html, /<span class="mov-chip on"><div class="sel" id="sel_lfc_lvis_pr">[\s\S]*?aria-label="Imóvel: T2 Lisboa"[\s\S]*?<span id="lab_lfc_lvis_pr">T2 Lisboa<\/span>/);
+    assert.match(html, /aria-label="Limpar imóvel" data-toca="vista" data-click="lfLimparCampo\('lvis','pr'\)"/);
     const dias = 'desde ' + (app.pzHoje().slice(0, 4) === '2026' ? '15/10' : '15/10/2026') + ' · desde 18:00';
-    assert.ok(html.includes('aria-label="Dias e horas: ' + dias + '"'), 'o chip diz o intervalo');
+    assert.ok(html.includes('aria-label="Dias e horas: ' + dias + '. Mudar nos filtros"'), 'o chip diz o intervalo');
+    assert.match(html, /aria-label="Limpar dias e horas" data-toca="vista" data-click="visLimparChip\('lvis','dias'\)"/);
+    assert.equal(app.lfNFiltros('lvis'), 3, 'o imóvel, o dia e a hora: o «de» e o «até» contam como um');
+    app.lf('lvis').d2 = '2026-10-20';
+    app.vVisits();
+    assert.equal(app.lfNFiltros('lvis'), 3, 'o «até» do mesmo intervalo não soma');
     let pintou = 0;
     app.render = () => { pintou++; };
     app.visLimparChip('lvis', 'dias');
-    assert.deepEqual([app.lf('lvis').d1, app.lf('lvis').h1, app.lf('lvis').pr], ['', '', 'P1'], 'limpa os quatro limites, e só eles');
+    assert.deepEqual([app.lf('lvis').d1, app.lf('lvis').d2, app.lf('lvis').h1, app.lf('lvis').pr], ['', '', '', 'P1'], 'limpa os quatro limites, e só eles');
     app.visLimparChip('lvis', 'pr');
     assert.equal(app.lf('lvis').pr, '');
     assert.equal(pintou, 2);
     // um nome com «$&» não vira outra coisa na troca do rótulo
     app.db.properties[0].name = 'Casa $& Cia';
     app.lf('lvis').pr = 'P1';
-    try { assert.match(app.vVisits(), /<span id="lab_vischip_pr">Casa \$&amp; Cia<\/span>/); } finally { app.lf('lvis').pr = ''; }
+    try { assert.match(app.vVisits(), /<span id="lab_lfc_lvis_pr">Casa \$&amp; Cia<\/span>/); } finally { app.lf('lvis').pr = ''; }
   });
 
-  test('os intervalos do painel: cada campo de dia e de hora tem nome para o leitor de ecrã', () => {
+  test('os intervalos do painel: cada campo de dia e de hora diz o nome inteiro, lado a lado na grelha', () => {
     monta();
     app.db.visits = [app.normVisit({ id: 'V1', nomes: 'Ana', propertyId: 'P1', date: '2999-01-01' })];
     const html = app.vVisits();
-    const campos = [...html.matchAll(/<input type="(date|time)"[^>]*>/g)].map((m) => [m[1], (m[0].match(/aria-label="([^"]*)"/) || [])[1]]);
-    assert.deepEqual(campos, [['date', 'Dia — de'], ['date', 'Dia — até'], ['time', 'Hora de início — de'], ['time', 'Hora de início — até']]);
-    assert.match(html, /<div class="vis-int-rot" aria-hidden="true">Dia<\/div>/, 'o rótulo à vista, com o desenho do rótulo de um campo');
+    const campos = [...html.matchAll(/<label>([^<]*)<input id="lfi_lvis_(\w+)" type="(date|time)"[^>]*data-change="lfMudar\('lvis','\2',this\.value\)">/g)].map((m) => [m[3], m[1], m[2]]);
+    assert.deepEqual(campos, [['date', 'Dia — de', 'd1'], ['date', 'Dia — até', 'd2'], ['time', 'Hora de início — de', 'h1'], ['time', 'Hora de início — até', 'h2']]);
+    const grelha = html.slice(html.indexOf('<div class="mov-grelha">'));
+    const ordem = ['lfsel_lvis_pr', 'lfsel_lvis_es', 'lfi_lvis_d1', 'lfi_lvis_d2', 'lfi_lvis_h1', 'lfi_lvis_h2', 'lfsel_lvis_rs'].map((id) => grelha.indexOf('id="' + id + '"'));
+    assert.ok(ordem.every((i, n) => i > 0 && (!n || i > ordem[n - 1])), 'o imóvel e o estado, os dias, as horas, o desfecho: ' + ordem.join(','));
   });
 });
 

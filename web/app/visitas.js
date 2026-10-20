@@ -39,39 +39,27 @@ function visOrdenadas(){
    Devolve: verdadeiro quando a data é anterior a hoje. */
 function visPassada(v){return (v.date||'')<pzHoje()}
 
-/* Um campo do intervalo mudou: guarda no estado da lista o que lá ficou
-   escrito e repinta. Era um onchange com uma atribuição e com o nome do campo
-   interpolado, e nem uma nem o outro cabem na gramática das ações.
-   Recebe: k — a chave da lista ('lvis'); chave — o campo do estado ('d1',
-   'd2', 'h1' ou 'h2'); valor — o que está escrito no campo.
-   Devolve: nada — grava no estado da lista e repinta. */
-function visIntervaloMudou(k,chave,valor){
-  lf(k)[chave]=valor;
-  render();
+/* Um par de campos de intervalo (de–até) para a grelha do painel de filtros
+   (vistas.js:lfCabeca), lado a lado como o «De» e o «Até» dos Movimentos:
+   datas ou horas, guardadas no estado da lista. Cada campo diz o nome
+   inteiro («Dia — de», «Dia — até»), que é também o que o leitor de ecrã diz,
+   e os dois contam como um filtro só no funil (o junto).
+   Recebe: tipo — 'date' ou 'time'; k1/k2 — as chaves do estado para o «de» e
+   o «até»; rotulo — o nome do intervalo («Dia»).
+   Devolve: os dois campos [{chave, nome, tipo, junto}]. */
+function visIntervalo(tipo,k1,k2,rotulo){
+  return [{chave:k1,nome:rotulo+' — de',tipo:tipo,junto:k1},{chave:k2,nome:rotulo+' — até',tipo:tipo,junto:k1}];
 }
 
-/* Um par de campos de intervalo (de–até) para o painel de filtros, na
-   mesma linha: datas ou horas, guardados no estado da lista. Um rótulo só
-   para dois campos não cabe num <label>: cada campo leva o nome inteiro no
-   aria-label («Dia — de», «Dia — até»), que é o que o leitor de ecrã diz.
-   Recebe: k — a chave da lista ('lvis'); tipo — 'date' ou 'time';
-   k1/k2 — as chaves do estado para o «de» e o «até»; rotulo — o texto do label.
-   Devolve: o HTML da linha (texto). */
-function visIntervalo(k,tipo,k1,k2,rotulo){
-  const s=lf(k);
-  const campo=(chave,ponta)=>`<input type="${tipo}" value="${esc(s[chave]||'')}" class="u-fx-1 u-minw-0" aria-label="${esc(rotulo+' — '+ponta)}"
-    data-change="visIntervaloMudou('${k}','${chave}',this.value)">`;
-  return `<div><div class="vis-int-rot" aria-hidden="true">${esc(rotulo)}</div>
-    <div class="u-d-flex u-g-8px u-ai-center">${campo(k1,'de')}<span class="small" aria-hidden="true">até</span>${campo(k2,'até')}</div></div>`;
-}
-
-/* A página das visitas (o canvas M-Visitas): por cima, os chips dos filtros
-   (imóvel, estado, desfecho — cada um abre a sua escolha — e os dias e horas,
-   que abrem o painel); o painel de filtros comum da app tem o resto (a
-   pesquisa de texto e os intervalos de dia e de hora) e os mesmos três
-   seletores. Por baixo, as próximas e as passadas em dois cartões, cada um
-   com o título e quantas são; no computador lado a lado. Sem FAB: o «Marcar
-   visita» está no cabeçalho e no + da barra, e no vazio.
+/* A página das visitas (o canvas M-Visitas), com os filtros dos Movimentos
+   (vistas.js:lfCabeca): por cima, a pesquisa à vista com o funil do painel
+   completo, e os chips — o imóvel, o estado e o desfecho, cada um a sua
+   escolha (visitas.js:visChipSel), e os dias e horas, que abrem o painel
+   nos intervalos (visitas.js:visChips). O painel tem os mesmos três
+   seletores e os intervalos de dia e de hora de início. Por baixo, as
+   próximas e as passadas em dois cartões, cada um com o título e quantas
+   são; no computador lado a lado. Sem FAB: o «Marcar visita» está no
+   cabeçalho e no + da barra, e no vazio.
    Devolve: o HTML da página (texto). */
 function vVisits(){
   const K='lvis',s=lf(K);
@@ -88,13 +76,12 @@ function vVisits(){
   const marca=casasComo('visit.add').length>0;   /* sem imóvel onde possa marcar, não há botão */
   if(!(db.visits||[]).length)
     return esperaDoServidor()||`<div class="empty"><b>Ainda não há visitas</b>${marca?'Marca a primeira: quem vem, a que imóvel, e quando.':'As visitas aos imóveis onde colaboras aparecem aqui.'}${marca?saida('Marcar visita','visitModal()','camada'):''}</div>`;
-  const head=lfBar(K,[
-    lfSel(K,'pr',visOpcoesDoFiltro('pr')),
-    lfSel(K,'es',visOpcoesDoFiltro('es')),
-    lfSel(K,'rs',visOpcoesDoFiltro('rs')),
-    visIntervalo(K,'date','d1','d2','Dia'),
-    visIntervalo(K,'time','h1','h2','Hora de início'),
-  ],lista.length)+visChips(K);
+  /* na grelha os pares ficam lado a lado: o imóvel e o estado, os dias, as
+     horas, e o desfecho no fim; os chips seguem a ordem dos campos rápidos */
+  const head=lfCabeca(K,{nome:['visita','visitas'],dos:'das visitas',n:lista.length,
+    campos:[visChipSel('pr','Imóvel'),visChipSel('es','Estado')]
+      .concat(visIntervalo('date','d1','d2','Dia'),visIntervalo('time','h1','h2','Hora de início'),[visChipSel('rs','Desfecho')]),
+    chips:visChips(K)});
   const futuras=lista.filter(v=>!visPassada(v)),passadas=lista.filter(visPassada).reverse();
   /* o título do grupo fica FORA do contentor: o motor deita fora tudo o que
      não seja um item com chave */
@@ -110,37 +97,26 @@ function visOpcoesDoFiltro(chave){
   if(chave==='es')return [{v:'',label:'Todos os estados'}].concat(Object.keys(VESTADO).map(x=>({v:x,label:VESTADO[x]})));
   return [{v:'',label:'Todos os desfechos'}].concat(Object.keys(VDESFECHO).filter(Boolean).map(x=>({v:x,label:VDESFECHO[x]})));
 }
-/* Os chips dos filtros das visitas (o canvas): Imóvel, Estado e Desfecho
-   abrem a sua escolha e, ligados, dizem o valor com um × ao lado para o
-   limpar; «Dias e horas» abre o painel, onde estão os intervalos, e ligado
-   diz o intervalo. São o mesmo estado do painel (lf('lvis')), aplicado ao
-   escolher, sem «Aplicar».
+/* Os chips das visitas que não são um campo (o.chips do vistas.js:lfCabeca):
+   o «Dias e horas», que leva aos intervalos no painel
+   (vistas.js:lfAbrirEm, com o foco no primeiro dia) e, ligado, diz o
+   intervalo com o × que o limpa. Desligado só aparece no ecrã largo, para a
+   fila caber no telemóvel: lá, os intervalos estão no funil.
    Recebe: k — a chave da lista ('lvis').
-   Devolve: o HTML da fila de chips. */
+   Devolve: [{html, x}] — o chip e se tem o seu ×. */
 function visChips(k){
-  const s=lf(k),dias=visDiasRotulo(s);
-  return `<div class="vis-chips" role="group" aria-label="Filtrar as visitas">${visChipSel(k,'pr','Imóvel')}${visChipSel(k,'es','Estado')}${visChipSel(k,'rs','Desfecho')}${dias
-    ?`<span class="vis-chip on"><button type="button" class="vis-chip-txt" aria-label="Dias e horas: ${esc(dias)}" data-toca="vista" data-click="hdrFiltToggle()">${esc(dias)}</button><button type="button" class="vis-chip-x" aria-label="Limpar dias e horas" data-toca="vista" data-click="visLimparChip('${jsq(k)}','dias')">${ic('x',14)}</button></span>`
-    :'<button type="button" class="chip vis-chip-dias" data-toca="vista" data-click="hdrFiltToggle()">Dias e horas</button>'}</div>`;
+  const s=lf(k),dias=visDiasRotulo(s),abrir=`lfAbrirEm('${jsq(k)}','lfi_${jsq(k)}_d1')`;
+  if(dias)return [{x:true,html:`<span class="mov-chip on lfm-chip-abre"><button type="button" class="mov-chip-txt" aria-label="${esc('Dias e horas: '+dias+'. Mudar nos filtros')}" data-toca="vista" data-click="${abrir}">${esc(dias)}</button><button type="button" class="mov-chip-x" aria-label="Limpar dias e horas" data-toca="vista" data-click="visLimparChip('${jsq(k)}','dias')">${ic('x',14)}</button></span>`}];
+  return [{x:false,html:`<span class="mov-chip mov-so-largo lfm-chip-abre"><button type="button" class="mov-chip-txt" data-toca="vista" data-click="${abrir}">Dias e horas</button></span>`}];
 }
-/* Um chip que abre a escolha de um filtro: o menu da casa (componentes.js:sel)
-   vestido de chip, como os dos movimentos. Desligado diz o nome do filtro e
-   leva a seta; ligado diz o valor, com o fundo cobalto e o × para o limpar.
-   O leitor de ecrã ouve o nome e o valor.
-   Recebe: k — a chave da lista; chave — o campo do filtro ('pr', 'es', 'rs');
-   nome — o nome do filtro («Imóvel»).
-   Devolve: o HTML do chip. */
-function visChipSel(k,chave,nome){
-  const id='vischip_'+chave,atual=lf(k)[chave]||'',ops=visOpcoesDoFiltro(chave);
-  const o=atual?ops.find(x=>String(x.v)===String(atual)):null;
-  const aplicar=()=>{lf(k)[chave]=val(id)||'';render()};
-  const diz=o?o.label:nome;
-  /* trocas por função, e não por texto: um «$&» no nome de um imóvel não
-     pode virar outra coisa no meio da troca */
-  const h=sel(id,atual,ops,aplicar,'vista')
-    .replace('class="selbtn"',()=>'class="selbtn" aria-label="'+esc(nome+(o?': '+o.label:''))+'"')
-    .replace(/(<span id="lab_[^"]*">)[^<]*(<\/span>)/,(m,a,b)=>a+esc(diz)+b);
-  return `<span class="vis-chip${o?' on':''}">${h}${o?`<button type="button" class="vis-chip-x" aria-label="Limpar ${esc(nome.toLowerCase())}" data-toca="vista" data-click="visLimparChip('${jsq(k)}','${jsq(chave)}')">${ic('x',14)}</button>`:''}</span>`;
+/* O campo de um filtro das visitas (o imóvel, o estado, o desfecho): um chip
+   rápido — o menu da casa vestido de chip, que ligado diz o valor com o × —
+   e um seletor do painel, o mesmo estado lf('lvis')[chave], aplicado ao
+   escolher (vistas.js:lfCabeca).
+   Recebe: chave — o campo do filtro ('pr', 'es', 'rs'); nome — o nome do filtro («Imóvel»).
+   Devolve: o campo {chave, nome, opcoes, curto, rapido}. */
+function visChipSel(chave,nome){
+  return {chave:chave,nome:nome,curto:'Todos',rapido:true,opcoes:visOpcoesDoFiltro(chave)};
 }
 /* O × de um chip das visitas: limpa esse filtro (ou, nos dias e horas, os
    quatro limites) e repinta.
@@ -149,7 +125,7 @@ function visChipSel(k,chave,nome){
 function visLimparChip(k,chave){
   const s=lf(k);
   (chave==='dias'?['d1','d2','h1','h2']:[chave]).forEach(x=>{s[x]=''});
-  render();
+  closePops();render();
 }
 /* Uma data curta para os chips e as linhas: sem o ano quando é o deste ano.
    Recebe: iso — 'AAAA-MM-DD'.

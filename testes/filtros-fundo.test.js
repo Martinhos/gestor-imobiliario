@@ -1,15 +1,16 @@
-// O painel dos filtros das listas e da análise: o «Limpar» e o «Fechar» vivem
-// num pé que fica preso ao fundo da caixa enquanto o resto rola
-// (vistas.js:fpanelPe, estilos.css:.fp-pe), com a caixa a continuar a ser
-// quem rola; no telemóvel o botão do cabeçalho fica aceso e legível com o
-// painel aberto (estilos.css:header.top #hdrFilt.primary) e diz ao leitor de
-// ecrã se o painel está aberto (aria-expanded); e a rolagem da caixa
-// sobrevive a repintar o mesmo ecrã. Os Movimentos ficam com o painel deles.
+// O painel dos filtros da análise: o «Limpar» e o «Fechar» vivem num pé que
+// fica preso ao fundo da caixa enquanto o resto rola (vistas.js:fpanelPe,
+// estilos.css:.fp-pe), com a caixa a continuar a ser quem rola; todas as
+// listas, no feitio dos Movimentos (vistas.js:lfCabeca), e os Movimentos têm
+// o «Limpar» e o «Fechar» no topo, e nenhum pé. No telemóvel o botão do
+// cabeçalho fica aceso e legível com o painel aberto (estilos.css:header.top
+// #hdrFilt.primary) e diz ao leitor de ecrã se o painel está aberto
+// (aria-expanded); e a rolagem da caixa sobrevive a repintar o mesmo ecrã.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { carregarApp, limpar, repor, elementos } from './arnes.js';
+import { carregarApp, limpar, repor, elementos, igual } from './arnes.js';
 
 const app = carregarApp();
 afterEach(() => repor(app));
@@ -71,15 +72,6 @@ function regra(seletor) {
 describe('o pé preso ao fundo do painel', () => {
   beforeEach(() => { semear(); app.fecharFiltros(); });
 
-  test('lfBar: o «Limpar» e o «Fechar» são o último filho da caixa, por esta ordem, com as ações da lista', () => {
-    const c = peDaCaixa(app.lfBar('lprops', [], 0));
-    assert.ok(c && c.pe, 'a caixa tem o pé');
-    assert.match(c.pe, /data-click="lfClear\('lprops'\)">[\s\S]*Limpar<\/button>\s*<button class="btn primary"[^>]*data-click="lfApply\('lprops'\)">[\s\S]*Fechar<\/button>/);
-    assert.match(c.depois, /^\s*<\/div><\/div><\/div>/, 'nada depois do pé dentro da caixa');
-    assert.ok(!/class="toolbar/.test(app.lfBar('lprops', [], 0)), 'a .toolbar do fim da caixa saiu');
-    assert.ok(!/u-p-12px/.test(app.lfBar('lprops', [], 0)), 'o padding da caixa vem da folha (o pé assenta no fundo)');
-  });
-
   test('anaPanel: o mesmo pé, com o anaClear e o anaApply, a seguir aos controlos', () => {
     app.tab = 'dashboard';
     const html = app.anaPanel('<p id="controlos">x</p>');
@@ -90,19 +82,29 @@ describe('o pé preso ao fundo do painel', () => {
     assert.match(c.depois, /^\s*<\/div><\/div><\/div>/, 'nada depois do pé dentro da caixa');
   });
 
-  test('todos os ecrãs do lfBar e do anaPanel pintam o painel aberto com o pé; os Movimentos ficam com o deles', () => {
+  test('as análises pintam o painel aberto com o pé; as listas, todas, com o Limpar e o Fechar no topo (lfCabeca) — nunca os dois', () => {
     const listas = { properties: 'lprops', contracts: 'lcts', tenants: 'lten', owners: 'lown', visits: 'lvis', recurring: 'lrec', credits: 'lcred' };
     const fixos = elementos(app);
+    const comoMovimentos = [];
     for (const t of Object.keys(listas).concat(['dashboard', 'reports', 'projections', 'fisco'])) {
       app.fecharFiltros();
       app.tab = t;
       if (listas[t]) app.lf(listas[t])._open = true; else app.anaOpen[t] = true;
       app.render();
       const html = fixos.view.innerHTML;
+      if (listas[t] && /lfm-caixa/.test(html)) {
+        comoMovimentos.push(t);
+        const k = listas[t];
+        assert.match(html, new RegExp('class="fpanel on[^"]*" id="lfp_' + k + '" role="region" aria-labelledby="lft_' + k + '">\\s*<div class="card mov-filtros-card lfm-caixa">'), t + ': o painel aberto com o cartão dos Movimentos');
+        assert.match(html, new RegExp('<div class="mov-filtros-cab"><h2 class="mov-filtros-tit" id="lft_' + k + '">Filtros</h2>[\\s\\S]*?data-click="lfApply\\(\'' + k + '\'\\)">Fechar</button></div>'), t + ': o Fechar na cabeça');
+        assert.ok(!/fp-caixa|fp-pe/.test(html), t + ': sem o pé');
+        continue;
+      }
       assert.match(html, /class="fpanel on[^"]*"><div class="card fp-caixa">/, t + ': o painel aberto com a caixa nova');
       assert.equal((html.match(/class="fp-pe"/g) || []).length, 1, t + ': um pé só');
       assert.match(peDaCaixa(html).depois, /^\s*<\/div><\/div><\/div>/, t + ': o pé é o último filho da caixa');
     }
+    igual(comoMovimentos, Object.keys(listas), 'nenhuma lista ficou com o pé: todas estão no feitio dos Movimentos');
     app.fecharFiltros();
     app.tab = 'transactions';
     app.render();
@@ -173,7 +175,7 @@ describe('o botão dos filtros do cabeçalho com o painel aberto', () => {
     assert.ok(!('aria-expanded' in atr), 'nos Movimentos o botão é o «Selecionar vários»');
   });
 
-  test('o botão do cabeçalho abre e fecha o painel, como dantes', () => {
+  test('sem a camada da seleção, o botão do cabeçalho abre e fecha o painel da lista, o mesmo do funil', () => {
     const fixos = elementos(app);
     app.tab = 'properties';
     app.hdrFiltToggle();
@@ -194,7 +196,7 @@ describe('a rolagem da caixa ao repintar', () => {
      Devolve: nada — troca o querySelector do #view. */
   function caixasEmFila(caixas) {
     const v = elementos(app).view;
-    v.querySelector = (s) => (s === '.fpanel.on>.fp-caixa' ? caixas.shift() || null : null);
+    v.querySelector = (s) => (s === '.fpanel.on>.fp-caixa,.fpanel.on>.lfm-caixa' ? caixas.shift() || null : null);
   }
 
   test('no mesmo ecrã, a caixa nova fica onde a de antes estava rolada', () => {

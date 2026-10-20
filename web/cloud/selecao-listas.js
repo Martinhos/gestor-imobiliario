@@ -8,6 +8,8 @@
 
    As opções de um cartão continuam no kebab. O toque longo deixa de abrir
    menus em qualquer lado: ou seleciona (onde há seleção) ou não faz nada.
+   A porta à vista é o «Selecionar vários» do cabeçalho, como nos Movimentos
+   (selLCabecalho).
 
    Vive no âmbito global, como os outros ficheiros da camada, com o
    comentário de interface em cada função: dentro de um IIFE, nem o gerador
@@ -52,6 +54,103 @@ window.lpLongo = function (v) {
   if (TABS_SEL[a[0]]) return CW.selLEntrar(a[0], a[1]);
 };
 
+/* O tipo dos cartões que se selecionam num separador (o TABS_SEL ao contrário).
+   Recebe: t — o separador ('properties', 'contracts', …).
+   Devolve: 'prop', 'ct', ou null onde não há seleção de vários. */
+function selLTipoDe(t) {
+  for (var k in TABS_SEL) if (TABS_SEL[k] === t) return k;
+  return null;
+}
+
+// o nome dos cartões de cada tipo, no singular e no plural, para a contagem do cabeçalho
+var SEL_NOMES = { prop: ['imóvel', 'imóveis'], ct: ['contrato', 'contratos'] };
+
+/* O cabeçalho dos Imóveis e dos Contratos segue o dos Movimentos
+   (cloud/selecao.js:patchHdrSel). Fora da seleção, o botão do cabeçalho é o
+   «Selecionar vários», com o mesmo visto e o mesmo nome — os filtros abrem-se
+   no funil ao lado da pesquisa (vistas.js:lfCabeca) —, e some sem cartões à
+   vista, que não há o que marcar. Em seleção, o título dá lugar à caixa de
+   tudo e à contagem (#selLCab, a .sel-cab dos Movimentos), e a folha esconde
+   o botão (estilos.css:body.sel-on #hdrFilt.lst-hdr-sel): a barra de baixo já
+   tem o Cancelar e o Apagar. Noutro separador devolve o botão a quem o pinta
+   (vistas.js:pintarBotaoFiltros e o cloud/painel.js:patchHdr). Corre depois
+   deles: no fim do patchHdrSel, que o render da seleção chama e o caminho
+   curto das listas também (CW.selCabecalho).
+   Devolve: nada — mexe no cabeçalho, no DOM. */
+function selLCabecalho() {
+  var hb = document.getElementById('hdrFilt');
+  if (!hb) return;
+  var tipo = selLTipoDe(tab);
+  var cab = document.getElementById('selLCab');
+  if (cab && (!tipo || CW.selL.tipo !== tipo)) cab.remove();
+  if (tipo && CW.selL.tipo === tipo) selLCabNovo(tipo);
+  if (!tipo) {
+    if (hb.classList.contains('lst-hdr-sel')) {
+      hb.classList.remove('lst-hdr-sel');
+      hb.title = hb.getAttribute('data-titulo') || 'Filtros e parâmetros';
+      hb.removeAttribute('aria-label');
+    }
+    return;
+  }
+  hb.classList.add('lst-hdr-sel');
+  hb.classList.remove('primary');
+  hb.removeAttribute('aria-expanded');
+  hb.innerHTML = ic('check', 18);
+  hb.title = 'Selecionar vários';
+  hb.setAttribute('aria-label', 'Selecionar vários');
+  hb.style.display = document.querySelector('#view [data-lp^="' + tipo + ':"]') ? '' : 'none';
+}
+
+/* Põe no lugar do título, em seleção, a caixa de tudo e a contagem — a
+   .sel-cab dos Movimentos, com um id seu. Já posta, só a repinta.
+   Recebe: tipo — 'prop' ou 'ct'.
+   Devolve: nada — mexe no cabeçalho, no DOM. */
+function selLCabNovo(tipo) {
+  var tit = document.getElementById('pageTitle');
+  if (!document.getElementById('selLCab') && tit && tit.parentNode) {
+    var cab = document.createElement('div');
+    cab.id = 'selLCab';
+    cab.className = 'sel-cab lst-sel-cab';
+    cab.innerHTML =
+      '<span class="selbox" id="selLTudo" role="checkbox" tabindex="0" aria-checked="false" aria-label="Marcar todos os ' + SEL_NOMES[tipo][1] + ' à vista" data-toca="vista" data-click="CW.selLTodos(event)">' + caixa(false) + '</span>' +
+      '<span class="u-fx-1 u-minw-0 u-cur-pointer" data-toca="vista" data-click="CW.selLTodos(event)"><b id="selLCabConta"></b>' +
+      '<span class="small u-d-block">toca para marcar tudo</span></span>';
+    tit.parentNode.insertBefore(cab, tit);
+  }
+  selLPintar();
+}
+
+/* A caixa de tudo do cabeçalho: marca os cartões todos à vista (os que os
+   filtros deixam) ou, com todos marcados, desmarca-os.
+   Recebe: ev (opcional) — o evento do toque, que não segue para baixo.
+   Devolve: nada — marca e repinta as caixas e a contagem. */
+CW.selLTodos = function (ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  var ids = selLCartoes().map(function (c) { return c.getAttribute('data-lp').split(':')[1]; });
+  var todos = ids.length && ids.every(function (id) { return CW.selL.ids[id]; });
+  ids.forEach(function (id) { if (todos) delete CW.selL.ids[id]; else CW.selL.ids[id] = 1; });
+  selLPintar();
+};
+
+/* o «Selecionar vários» das listas veste-se onde o dos Movimentos se veste:
+   no fim do patchHdrSel, que corre depois de cada render e pelo caminho curto */
+var _patchHdrSel_sl = patchHdrSel;
+patchHdrSel = function () {
+  _patchHdrSel_sl();
+  selLCabecalho();
+};
+
+// Nos Imóveis e nos Contratos o botão do cabeçalho é da seleção: fora dela
+// entra, sem nada marcado (o toque a seguir marca); dentro, sai. No resto
+// continua a fazer o que fazia.
+// Devolve: nada.
+var _hdrFiltToggle_sl = hdrFiltToggle;
+hdrFiltToggle = function () {
+  var tipo = selLTipoDe(tab);
+  if (tipo) return CW.selL.tipo ? CW.selLSair() : CW.selLEntrar(tipo);
+  return _hdrFiltToggle_sl();
+};
+
 /* depois de cada render, decora os cartões e põe a barra de baixo */
 var _render_sl = render;
 render = function () {
@@ -60,6 +159,8 @@ render = function () {
   if (CW.selL.tipo && !ativo) CW.selL = { tipo: null, ids: {} };   // mudou de ecrã: sai
   var algum = !!ativo || (CW.selMode && tab === 'transactions');
   document.body.classList.toggle('sel-on', algum);
+  // a seleção destas listas tem a caixa de tudo no cabeçalho também no ecrã largo (estilos.css:.lst-sel-cab)
+  document.body.classList.toggle('lst-sel', !!ativo);
   if (!algum) {
     var f = document.querySelector('.sel-fundo');
     if (f) f.remove();
@@ -105,17 +206,30 @@ function selLDecorar() {
   selLPintar();
 }
 
-// Pinta as caixas (a de selecao.js) e a contagem conforme o que está marcado.
+// Pinta as caixas (a de selecao.js), a caixa de tudo do cabeçalho e as
+// contagens conforme o que está marcado.
 // Devolve: nada — mexe no DOM já desenhado.
 function selLPintar() {
+  var ids = [];
   selLCartoes().forEach(function (c) {
     var id = c.getAttribute('data-lp').split(':')[1];
+    ids.push(id);
     var b = c.querySelector('[data-selbox]');
     if (b) b.innerHTML = caixa(!!CW.selL.ids[id]);
     c.classList.toggle('sel-on-card', !!CW.selL.ids[id]);
   });
   var n = selLN(), conta = document.getElementById('selLConta');
   if (conta) conta.textContent = n ? n + ' selecionado' + (n === 1 ? '' : 's') : 'toca nos cartões';
+  var marcados = ids.filter(function (id) { return CW.selL.ids[id]; }).length;
+  var todos = ids.length > 0 && marcados === ids.length, algum = marcados > 0;
+  var g = document.getElementById('selLTudo');
+  if (g) {
+    g.innerHTML = caixa(todos, algum);
+    g.setAttribute('aria-checked', todos ? 'true' : algum ? 'mixed' : 'false');
+  }
+  var nomes = SEL_NOMES[CW.selL.tipo] || ['registo', 'registos'];
+  var cc = document.getElementById('selLCabConta');
+  if (cc) cc.textContent = n ? n + ' ' + nomes[n === 1 ? 0 : 1] : 'nenhum ' + nomes[0];
 }
 
 /* O que vai junto com os imóveis apagados, dito com os números e o plural

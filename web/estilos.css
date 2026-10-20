@@ -646,11 +646,15 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
      baixo do cabeçalho, a toda a largura (o contrato: «uma faixa quando há
      algo por enviar»); o ícone fica. O cabeçalho cresce o que ela ocupa, e
      ela pinta-se no fundo dele (o header é pegajoso: é ele a caixa dela). O
-     «Guardado» fica só o ícone. */
-  header.top:has(>.sync.pend),header.top:has(>.sync.fora){padding-bottom:40px}
-  header.top .sync.pend span,header.top .sync.fora span{display:flex;align-items:center;position:absolute;left:0;right:0;bottom:0;min-height:34px;padding:0 calc(16px + var(--inset-right)) 0 calc(16px + var(--inset-left));font-size:13px;font-weight:600;white-space:normal;line-height:1.25}
+     «Guardado» fica só o ícone, e o «A ligar» da abertura também — a faixa a
+     entrar e a sair em cada abertura fazia o cabeçalho saltar; a nova
+     tentativa depois de uma falha (.liga.tenta) fica com a faixa que lá
+     estava, agora laranja, e o cabeçalho não mexe de 30 em 30 segundos. */
+  header.top:has(>.sync.pend),header.top:has(>.sync.fora),header.top:has(>.sync.tenta){padding-bottom:40px}
+  header.top .sync.pend span,header.top .sync.fora span,header.top .sync.tenta span{display:flex;align-items:center;position:absolute;left:0;right:0;bottom:0;min-height:34px;padding:0 calc(16px + var(--inset-right)) 0 calc(16px + var(--inset-left));font-size:13px;font-weight:600;white-space:normal;line-height:1.25}
   header.top .sync.pend span{background:var(--accent-soft);color:var(--accent-text)}
-  header.top .sync.fora span{background:var(--warn-soft);color:var(--warn)}
+  header.top .sync.fora span{background:var(--danger-soft);color:var(--danger)}
+  header.top .sync.tenta span{background:var(--out-soft);color:var(--out)}
   /* no telemóvel o título é o da área (Casas, Dinheiro): os separadores logo
      por baixo já dizem onde se está (navegacao.js:tituloDoEcraHtml) */
   header.top #pageTitle .tit-sep{display:none}
@@ -698,12 +702,16 @@ aside .fecha-gaveta{display:none;color:var(--side-ink)}
    dedo desfaz-se aqui, senão o fecho ficava realçado depois do toque */
 @media(hover:none){aside .fecha-gaveta:hover{background:transparent;color:var(--side-ink)}}
 /* o estado da sincronização, no cabeçalho (cloud/entrada.js:setSyncBadge):
-   um selo de 30px com a nuvem e a frase; o «Guardado» recolhe ao ícone */
+   um selo de 30px com a nuvem e a frase; o «Guardado» recolhe ao ícone.
+   «A ligar» é laranja (o --out: o --warn é âmbar acastanhado, e era a cor do
+   «Sem ligação» de antes — as duas a meias confundiam-se), «Sem ligação» é
+   vermelho (o --danger); os pares dão 4,5:1 ou mais em claro e em escuro */
 #hdrSync:empty{display:none}
 .sync{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;min-height:30px;padding:0 10px;border-radius:6px;font-size:13px;font-weight:600;white-space:nowrap}
+.sync.liga{background:var(--out-soft);color:var(--out)}
 .sync.ok{background:var(--in-soft);color:var(--in)}
 .sync.pend{background:var(--accent-soft);color:var(--accent-text)}
-.sync.fora{background:var(--warn-soft);color:var(--warn)}
+.sync.fora{background:var(--danger-soft);color:var(--danger)}
 .sync.recibo{padding:0 7px}
 .sync.recibo span{display:none}
 /* a ação principal do ecrã, no cabeçalho do computador, e a secundária à
@@ -719,8 +727,13 @@ body.sel-on #hdrSec{display:none}
 .abas{display:grid;gap:12px;margin:0 0 14px}
 .abas-area>a .n{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600}
 .segm.abas-pessoas{display:flex;gap:18px;padding:0;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent}
-.segm.abas-pessoas>a{flex:0 0 auto;min-height:44px;padding:0 2px;border-radius:0;border-bottom:2.5px solid transparent;margin-bottom:-1px;font-size:15px;color:var(--muted)}
+.segm.abas-pessoas>a{flex:0 1 auto;min-height:44px;padding:0 2px;border-radius:0;border-bottom:2.5px solid transparent;margin-bottom:-1px;font-size:15px;color:var(--muted)}
 .segm.abas-pessoas>.on{background:transparent;box-shadow:none;color:var(--ink);font-weight:650;border-bottom-color:var(--accent)}
+/* três no telemóvel (Inquilinos, Proprietários, Colaboradores — navegacao.js:PESSOAS):
+   aos 375px, com os 18px e os 15px, o terceiro passava da margem. Abaixo dos
+   420px o intervalo e a letra encolhem um pouco; e, num ecrã ainda mais
+   estreito, cada um pode encolher (flex:0 1 auto: corta-se o fim, nunca rola de lado) */
+@media(max-width:420px){.segm.abas-pessoas{gap:14px}.segm.abas-pessoas>a{font-size:14px}}
 @media(min-width:901px){.abas>.abas-area{display:none}}
 /* deslizar entre separadores (navegacao.js:sepArrastar): no telemóvel, numa
    área com separadores, o arrasto de lado é da app e o vertical continua do
@@ -878,8 +891,8 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .fpanel{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:45;margin:0}
 .fpanel.on{display:block}
 .fpanel>.card{box-shadow:0 16px 38px rgba(0,0,0,.30);max-height:min(72vh,560px);max-height:min(72dvh,560px);overflow:auto;overscroll-behavior:contain}
-/* «Limpar» e «Fechar» presos ao fundo (vistas.js:fpanelPe, nos painéis do
-   vistas.js:lfBar e do vistas.js:anaPanel), na forma do .sheet .foot: o resto
+/* «Limpar» e «Fechar» presos ao fundo (vistas.js:fpanelPe, no painel do
+   vistas.js:anaPanel, o das análises), na forma do .sheet .foot: o resto
    rola por trás, o pé fica, com a divisória e o fundo do cartão. A caixa
    continua a ser quem rola (o cloud/filtros.js segue as listas abertas pelo
    scroll dela), e o pé é o último filho, pegajoso em baixo: num painel curto
@@ -1008,7 +1021,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 /* ---- componentes da linguagem de 2026-10 que a casa ainda não tinha ---- */
 /* O chip: filtros e ações rápidas. Pílula de 36px; ligado leva o fundo suave,
    o contorno e o texto cobalto, e um × para o tirar. Os filtros aplicam-se ao
-   mexer — não há «Aplicar» (vistas.js:lfSel). O «Limpar» é um chip sem
+   mexer — não há «Aplicar» (vistas.js:lfMudar). O «Limpar» é um chip sem
    contorno, em cobalto. */
 .chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;cursor:pointer;text-decoration:none}
 .chip:hover{background:var(--tint)}
@@ -1554,8 +1567,8 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
    da largura que sobra, com a altura do dedo. Cumprida, a tarefa fica riscada
    e em cinzento, no mesmo sítio: saltar para o fim da lista ao marcar tirava
    a linha de debaixo do dedo. */
-#raiz#raiz .tf-seccao{margin-top:6px}
-#raiz#raiz .tf-cab{display:flex;align-items:center;gap:8px;padding:2px 0 4px;border-bottom:1px solid var(--line)}
+#raiz#raiz .tf-seccao{margin-top:6px;border-radius:12px}
+#raiz#raiz .tf-cab{display:flex;align-items:center;gap:8px;padding:0;border-bottom:1px solid var(--line)}
 #raiz#raiz .tf-cab b{flex:1 1 auto;min-width:0;font-size:14px;font-weight:650;color:var(--ink);overflow-wrap:anywhere}
 #raiz#raiz .tf-conta{font-size:12px;color:var(--muted);white-space:nowrap}
 #raiz#raiz .tf-itens{display:flex;flex-direction:column}
@@ -1568,6 +1581,46 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
 #raiz#raiz button.tf-nome{cursor:pointer}
 #raiz#raiz .tf-quando{font-size:11.5px;color:var(--muted);text-decoration:none}
 #raiz#raiz .tf-feita .tf-nome>span{text-decoration:line-through;color:var(--muted)}
+/* O cabeçalho de uma secção é um botão da largura toda (tarefas.js:tfDobrar):
+   a seta roda para o lado quando a secção está recolhida, e recolhida as
+   tarefas somem — continuam no HTML, para a pesquisa e o arrasto. O lugar
+   das tarefas sem secção que só existe para largar (.tf-so-alvo) não ocupa
+   nada fora de um arrasto. */
+#raiz#raiz .tf-dobra{flex:1 1 auto;min-width:0;min-height:44px;display:flex;align-items:center;gap:6px;margin:0 0 0 -6px;padding:0 6px;
+  border:0;border-radius:9px;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+#raiz#raiz span.tf-dobra{cursor:default}
+/* o lugar do ⋯ nas soltas: a largura do .iconbtn (32, e 44 ao dedo) */
+#raiz#raiz .tf-sem-menu{flex:0 0 32px}
+@media(pointer:coarse){#raiz#raiz .tf-sem-menu{flex-basis:44px}}
+#raiz#raiz .tf-chev{display:flex;flex:0 0 auto;color:var(--muted);transition:transform var(--medio) var(--curva)}
+#raiz#raiz .tf-recolhida .tf-chev{transform:rotate(-90deg)}
+#raiz#raiz .tf-recolhida .tf-itens{display:none}
+#raiz#raiz .tf-so-alvo{display:none}
+#raiz#raiz .tf-a-arrastar .tf-so-alvo{display:block}
+@media(hover:hover){#raiz#raiz button.tf-dobra:hover{background:var(--tint)}}
+#raiz#raiz button.tf-dobra:active{background:var(--press)}
+/* A pega de arrastar (tarefas.js:tfArrastar): à esquerda da caixa, com a
+   altura do dedo, e a única coisa da linha com touch-action:none — arrastar
+   no nome continua a rolar a lista. Agarrada, a linha levanta-se e segue o
+   dedo; a secção por cima de cujo nome se está acende, e entre duas tarefas
+   aparece a linha de onde vai ficar. Sem movimento (prefers-reduced-motion)
+   a seta não roda devagar, e o realce e a linha ficam iguais. */
+#raiz#raiz .tf-pega{display:grid;place-items:center;width:40px;height:44px;flex:0 0 auto;margin-left:-10px;padding:0;border:0;border-radius:9px;
+  background:none;color:var(--faint);cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#raiz#raiz .tf-pega+.tf-marca{margin-left:-6px}
+@media(hover:hover){#raiz#raiz .tf-pega:hover{color:var(--ink);background:var(--tint)}}
+#raiz#raiz .tf-pega:active{color:var(--ink);background:var(--press)}
+#raiz#raiz .tf-dobra:focus-visible,#raiz#raiz .tf-pega:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+#raiz#raiz .tf-a-arrastar{-webkit-user-select:none;user-select:none}
+#raiz#raiz .tf-a-arrastar .tf-pega{cursor:grabbing}
+#raiz#raiz .tf-seccao.tf-alvo{background:var(--accent-soft);box-shadow:0 0 0 6px var(--accent-soft),0 0 0 8px var(--accent)}
+#raiz#raiz .tf-seccao.tf-alvo .tf-cab{border-bottom-color:transparent}
+#raiz#raiz .tf-item.tf-agarrada{position:relative;z-index:5;background:var(--card);border-radius:12px;border-bottom-color:transparent;box-shadow:var(--shadow)}
+/* a tarefa agarrada flutua logo acima do dedo e a linha fica onde o dedo
+   está; se uma tarefa alta se chegar a ela, a linha continua por cima */
+#raiz#raiz .tf-linha{position:relative;z-index:6;height:0;pointer-events:none}
+#raiz#raiz .tf-linha::before{content:'';position:absolute;left:4px;right:0;top:-1.5px;height:3px;border-radius:2px;background:var(--accent)}
+#raiz#raiz .tf-linha::after{content:'';position:absolute;left:-4px;top:-5px;width:10px;height:10px;box-sizing:border-box;border-radius:50%;border:2px solid var(--accent);background:var(--card)}
 /* ---- web/cloud/partilha.js ---- */
 /* A folha dos documentos legais (os termos e a privacidade, que o
    cloud/ajuda.js embrulha numa div .lg): texto corrido, legível, sem cartões.
@@ -1855,23 +1908,27 @@ button.vg-item-abrir:active{background:var(--press)}
 .imv-so-leitor{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 
 /* --- a lista (lista-imoveis.js:vProperties) --- */
-/* Os chips do filtro rápido: uma fila que desliza de lado no telemóvel (cinco
-   chips não cabem em 358px) e que, no computador, cabe inteira. O enchimento
-   à volta deixa o anel do foco por inteiro dentro da fila que corta. */
-.imv-filtros,.imv-acoes{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:4px;margin:-4px}
-.imv-filtros::-webkit-scrollbar,.imv-acoes::-webkit-scrollbar{display:none}
+/* As ações rápidas da ficha (imovel.js:imvAcoesRapidas): uma fila de chips
+   que desliza de lado no telemóvel e que, no computador, cabe inteira. O
+   enchimento à volta deixa o anel do foco por inteiro dentro da fila que
+   corta. */
+.imv-acoes{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:4px;margin:-4px}
+.imv-acoes::-webkit-scrollbar{display:none}
 /* No dedo, o chip cresce dos 36px do desenho para os 40 (os das ações
    rápidas do canvas, e o mínimo do .btn.sm), e a área de toque chega aos 44:
    dois pixéis por cima e por baixo, invisíveis. */
-.imv-filtros>.chip,.imv-acoes>.chip{position:relative;flex:0 0 auto}
-@media(pointer:coarse){.imv-filtros>.chip,.imv-acoes>.chip{min-height:40px}
-  .imv-filtros>.chip::after,.imv-acoes>.chip::after{content:"";position:absolute;left:0;right:0;top:-2px;bottom:-2px}
+.imv-acoes>.chip{position:relative;flex:0 0 auto}
+/* o «Movimentos · N» da ficha vai à frente e a cheio, no cobalto do que se
+   carrega (imovel.js:imvAcoesRapidas): os outros chips são ações, este é o
+   caminho que mais se procura */
+.imv-acoes .chip.destaque{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+@media(hover:hover){.imv-acoes .chip.destaque:hover{background:var(--accent);filter:brightness(1.08)}}
+@media(pointer:coarse){.imv-acoes>.chip{min-height:40px}
+  .imv-acoes>.chip::after{content:"";position:absolute;left:0;right:0;top:-2px;bottom:-2px}
   .imv-ficha .btn.sm,.imv-form .btn.sm{min-height:44px}
   /* o botão só de ícone (o apagar de uma hipoteca) chega aos 44 também de
      largura: a base dá 36 ao .btn.sm.so-icone */
   .imv-ficha .btn.sm.so-icone,.imv-form .btn.sm.so-icone{width:44px}}
-.imv-filtros{margin-bottom:9px}
-@media(max-width:900px){.imv-filtros{margin-right:-16px;padding-right:16px}}
 .list.imv-lista{gap:12px}
 @media(min-width:900px){.list.imv-lista{grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:14px}}
 /* O cartão: a capa à esquerda, da altura do cartão, e o texto à direita. */
@@ -2021,36 +2078,6 @@ button.vg-item-abrir:active{background:var(--press)}
    partir de 1100px uma tabela, com as mesmas peças em colunas. */
 
 /* --- a lista (lista-contratos.js:vContracts) --- */
-/* Os chips: partem para uma segunda linha em vez de rolar de lado (como os
-   dos movimentos), porque a lista do imóvel abre por baixo do chip e um
-   contentor que rola cortava-a. */
-.ct-filtros{margin:0 0 12px}
-.ct-filtros>.chip,.ct-filtros>.ct-chip{position:relative;flex:0 0 auto}
-@media(pointer:coarse){.ct-filtros>.chip{min-height:40px}
-  .ct-filtros>.chip::after{content:"";position:absolute;left:0;right:0;top:-2px;bottom:-2px}}
-.chip.ct-selecionar{border-style:dashed;color:var(--accent-text)}
-@media(min-width:1100px){.chip.ct-selecionar{margin-left:auto}}
-body.sel-on .chip.ct-selecionar{display:none}
-/* Um chip que abre a escolha: o menu da casa (sel) vestido de chip — o mesmo
-   desenho dos chips dos movimentos. A lista abre por baixo, com largura para
-   se ler. */
-.ct-chip{display:inline-flex;align-items:center;max-width:100%;min-height:36px;border:1px solid var(--line2);border-radius:999px;background:var(--card);transition:background-color var(--rapido) var(--curva)}
-@media(hover:hover){.ct-chip:hover{background:var(--tint)}}
-.ct-chip .sel{position:static;width:auto;min-width:0}
-.ct-chip .selbtn{position:relative;width:auto;min-height:34px;padding:0 10px 0 12px;gap:6px;border:0;border-radius:999px;background:transparent;font-size:14px;font-weight:500;color:var(--ink)}
-.ct-chip .selbtn span{flex:0 1 auto;max-width:200px}
-.ct-chip .selbtn svg{width:16px;height:16px;color:var(--muted)}
-.ct-chip .selpop{left:0;right:auto;width:max-content;min-width:220px;max-width:min(320px,calc(100vw - 32px))}
-.ct-chip.on{background:var(--accent-soft);border-color:var(--accent)}
-.ct-chip.on .selbtn{padding-right:2px;color:var(--accent-text)}
-.ct-chip.on .selbtn svg{display:none}
-.ct-chip-x{position:relative;display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;margin-right:2px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--accent-text);cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-@media(hover:hover){.ct-chip-x:hover{background:var(--card)}}
-.ct-chip-x:active{background:var(--press)}
-.ct-chip-x:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-@media(pointer:coarse){.ct-chip{min-height:40px}.ct-chip .selbtn{min-height:38px}.ct-chip .selbtn::after,.ct-chip-x::after{content:"";position:absolute;inset:-3px 0}.ct-chip-x::after{inset:-7px}}
-.ct-chip.ct-so-largo{display:none}
-@media(min-width:1100px){.ct-chip.ct-so-largo{display:inline-flex}}
 
 /* Um grupo por imóvel: o nome na letra dos títulos, o que é, e a renda do mês
    à direita; as linhas num cartão. */
@@ -2319,19 +2346,16 @@ label.ct-sw-linha{display:flex;align-items:center;gap:12px;min-height:44px;font-
    do contacto e as próximas e as passadas vão lado a lado — a mesma família,
    sem prancheta própria. */
 
-/* --- os chips do filtro rápido e das ações rápidas (pesChips, pesFichaInquilino) ---
+/* --- os chips das ações rápidas (pessoas.js:pesFichaInquilino) ---
    Uma fila que desliza de lado no telemóvel e que, no computador, cabe
    inteira. O enchimento à volta deixa o anel do foco por inteiro dentro da
    fila que corta. No dedo, o chip cresce dos 36px do desenho para os 40, e a
    área de toque chega aos 44 (dois pixéis por cima e por baixo, invisíveis). */
-.pes-filtros,.pes-acoes{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:4px;margin:-4px}
-.pes-filtros::-webkit-scrollbar,.pes-acoes::-webkit-scrollbar{display:none}
-.pes-filtros>.chip,.pes-acoes>.chip{position:relative;flex:0 0 auto}
-@media(pointer:coarse){.pes-filtros>.chip,.pes-acoes>.chip,.vis-chips>.chip{min-height:40px}
-  .pes-filtros>.chip::after,.pes-acoes>.chip::after,.vis-chips>.chip::after{content:"";position:absolute;left:0;right:0;top:-2px;bottom:-2px}
-  .vis-chips>.chip{position:relative}}
-.pes-filtros{margin-bottom:9px}
-@media(max-width:900px){.pes-filtros{margin-right:-16px;padding-right:16px}}
+.pes-acoes{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:4px;margin:-4px}
+.pes-acoes::-webkit-scrollbar{display:none}
+.pes-acoes>.chip{position:relative;flex:0 0 auto}
+@media(pointer:coarse){.pes-acoes>.chip{min-height:40px}
+  .pes-acoes>.chip::after{content:"";position:absolute;left:0;right:0;top:-2px;bottom:-2px}}
 
 /* --- a lista das pessoas (lista-pessoas.js:personCard) ---
    Um cartão com uma linha por pessoa (o .linha da casa, com o avatar no lugar
@@ -2361,45 +2385,6 @@ label.ct-sw-linha{display:flex;align-items:center;gap:12px;min-height:44px;font-
   .linha.pes-linha{display:grid;grid-template-columns:40px minmax(0,1.4fr) minmax(0,1fr) minmax(96px,auto);gap:16px;padding:12px 18px}
   .pes-contacto{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pes-valor,.pes-valor:empty{display:block;text-align:right}}
-
-/* --- os chips dos filtros das visitas (visitas.js:visChips, visChipSel) ---
-   O menu da casa vestido de chip, como os dos movimentos. A escolha abre por
-   baixo da fila inteira, encostada à esquerda (o chip e o menu da casa são
-   estáticos aqui; quem segura é a fila): num chip à direita, um menu preso a
-   ele saía do ecrã no telemóvel. */
-.vis-chips{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}
-.vis-chip{display:inline-flex;align-items:center;max-width:100%;min-height:36px;border:1px solid var(--line2);border-radius:999px;background:var(--card);
-  transition:background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva)}
-@media(hover:hover){.vis-chip:hover{background:var(--tint)}}
-.vis-chip .sel{position:static;width:auto;min-width:0}
-.vis-chip .selbtn{position:relative;width:auto;min-height:34px;padding:0 10px 0 12px;gap:6px;border:0;border-radius:999px;background:transparent;font-size:14px;font-weight:500;color:var(--ink)}
-.vis-chip .selbtn span{flex:0 1 auto;max-width:200px}
-.vis-chip .selbtn svg{width:16px;height:16px;color:var(--muted)}
-.vis-chip.on{background:var(--accent-soft);border-color:var(--accent)}
-.vis-chip.on .selbtn{padding-right:2px;color:var(--accent-text)}
-.vis-chip.on .selbtn svg{display:none}
-.vis-chips .selpop{left:0;right:auto;width:min(320px,100%)}
-/* no computador há lugar: a escolha abre por baixo do próprio chip */
-@media(min-width:901px){.vis-chip{position:relative}.vis-chips .selpop{width:max-content;min-width:220px;max-width:320px}}
-.vis-chip-txt{position:relative;min-height:34px;padding:0 2px 0 12px;border:0;border-radius:999px;background:transparent;font:inherit;font-size:14px;font-weight:500;color:var(--accent-text);white-space:nowrap;cursor:pointer}
-.vis-chip-txt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.vis-chip-x{position:relative;display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;margin-right:2px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--accent-text);cursor:pointer}
-@media(hover:hover){.vis-chip-x:hover{background:var(--card)}}
-.vis-chip-x:active{background:var(--press)}
-.vis-chip-x:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-/* no dedo, o chip e o × crescem para os 40px, e a área de toque chega aos 44
-   (dois pixéis à volta, invisíveis), como os chips das pessoas */
-@media(pointer:coarse){.vis-chip{min-height:42px}.vis-chip .selbtn,.vis-chip-txt{min-height:40px}.vis-chip-x{flex-basis:40px;width:40px;height:40px;margin-right:0}
-  .vis-chip .selbtn::after,.vis-chip-txt::after{content:"";position:absolute;left:0;right:0;top:-2px;bottom:-2px}
-  .vis-chip-x::after{content:"";position:absolute;inset:-2px}}
-/* o rótulo de cada par de campos do painel («Dia», «Hora de início»): o de um
-   campo de formulário (14px 600 tinta); o nome que o leitor de ecrã ouve está
-   no aria-label de cada campo (visitas.js:visIntervalo) */
-.vis-int-rot{margin-bottom:4px;font-size:14px;font-weight:600;color:var(--ink)}
-/* no telemóvel a fila cabe numa linha, como no canvas: o «Dias e horas»
-   desligado sai (está no painel do botão dos filtros, no cabeçalho); ligado
-   fica, a dizer o intervalo */
-@media(max-width:900px){.chip.vis-chip-dias{display:none}}
 
 /* --- a lista das visitas (visitas.js:vVisits, visCard) ---
    Dois grupos com o título e quantas são; cada um um cartão com uma linha por
@@ -2661,6 +2646,21 @@ a.pes-liga:focus-visible,.pes-kv.tap:focus-visible,.pes-linha-f.tap:focus-visibl
 .mov-filtros-n{margin:-10px 0 0;font-variant-numeric:tabular-nums}
 .mov-campo{display:flex;flex-direction:column;gap:8px;min-width:0}
 .mov-campo .flabel{margin:0}
+/* --- as etiquetas no painel e na fila (lista-movimentos.js:txEtiquetasHtml) ---
+   escolha múltipla: o visto só no chip ligado, que a cor sozinha não chega; o
+   nome inteiro, a fila parte em linhas; no dedo, 44px */
+.mov-etiq .chip{white-space:normal;max-width:100%;text-align:left;line-height:1.25}
+.mov-etiq .chip svg{display:none}
+.mov-etiq .chip.on svg{display:block}
+@media(pointer:coarse){.mov-etiq .chip{min-height:44px}}
+.mov-etiq-d{margin:-2px 0 0;color:var(--muted)}
+/* o chip rápido: o texto é um botão que abre o painel, e corta com reticências
+   para a fila caber a 390px (o nome inteiro está no aria-label e no painel) */
+.mov-chip-etiq{min-width:0}
+.mov-chip-etiq .mov-chip-txt{position:relative;display:flex;align-items:center;min-width:0;max-width:200px;min-height:34px;border:0;border-radius:999px;background:transparent;font-family:inherit;cursor:pointer}
+.mov-chip-etiq-t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.mov-chip-etiq .mov-chip-txt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+@media(pointer:coarse){.mov-chip-etiq .mov-chip-txt::after{content:"";position:absolute;inset:-5px 0}}
 /* «Pago por» em chips (movimento.js:txPagoPorHtml): o nome inteiro, a fila
    parte em linhas e um nome que não caiba sozinho numa linha parte dentro do
    chip — nunca reticências; o visto só no aceso, que a cor sozinha não chega;
@@ -2716,6 +2716,49 @@ label.mov-interr{display:flex;align-items:center;gap:12px;min-height:44px;paddin
 .mov-form .tag button{color:var(--accent-text)}
 .mov-form .tagadd{min-height:36px}
 /* ===== fim: 1.3.5 ===== */
+/* ===== ajustes-v40b: 1.1 — as listas como os Movimentos ===== */
+/* (vistas.js:lfCabeca) A barra, os chips e o painel das listas são os dos
+   Movimentos, com as mesmas classes (.mov-barra, .mov-chip, .mov-fwrap,
+   .mov-filtros-card, .mov-grelha): o desenho é um, e mexer-lhe ali muda-o em
+   todo o lado. Aqui só o que é das listas. */
+/* Nos Imóveis e nos Contratos o botão do cabeçalho é o «Selecionar vários»
+   (cloud/selecao-listas.js:selLCabecalho); em seleção sai, como o dos
+   Movimentos: a barra de baixo já tem o Cancelar e o Apagar. Ao contrário do
+   dos Movimentos, fica no ecrã largo, onde estas listas não têm caixas à vista. */
+body.sel-on #hdrFilt.lst-hdr-sel{display:none}
+/* Em seleção, a caixa de tudo e a contagem no lugar do título
+   (cloud/selecao-listas.js:selLCabNovo, a .sel-cab dos Movimentos). No ecrã
+   largo os Movimentos têm a caixa de tudo na coluna da tabela e devolvem o
+   título; estas listas não têm tabela de caixas, e a do cabeçalho fica. */
+@media(min-width:1100px){
+  body.sel-on .sel-cab.lst-sel-cab{display:flex}
+  body.sel-on.lst-sel header.top #pageTitle,body.sel-on.lst-sel header.top #pageSub{display:none}
+}
+/* ===== fim: ajustes-v40b 1.1 ===== */
+/* ===== ajustes-v40b: 1.2 — as outras listas como os Movimentos ===== */
+/* (vistas.js:lfCabeca nos Inquilinos, nos Proprietários, nas Visitas, nos
+   Planeados e nos Créditos) O desenho continua a ser o dos Movimentos; aqui só
+   o que estas listas trazem de novo. */
+/* Um chip que não é um seletor e leva ao painel (o «Dias e horas» das
+   visitas, visitas.js:visChips): o texto é um botão, com o aspeto do botão
+   do .mov-chip desligado e o do .mov-chip-txt ligado; no dedo, 44px. */
+.lfm-chip-abre .mov-chip-txt{position:relative;display:flex;align-items:center;min-height:34px;border:0;border-radius:999px;background:transparent;font-family:inherit;cursor:pointer}
+.lfm-chip-abre:not(.on) .mov-chip-txt{padding:0 12px;color:var(--ink)}
+.lfm-chip-abre .mov-chip-txt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+@media(pointer:coarse){.lfm-chip-abre .mov-chip-txt::after{content:"";position:absolute;inset:-5px 0}}
+/* Os Créditos: as liquidadas abrem-se por baixo das ativas em todos os
+   ecrãs (creditos.js:credPagasAlternar), e o estado é o chip do
+   vistas.js:lfCabeca — os chips Ativas / Liquidadas do computador saíram.
+   Abertas (ou as únicas que o filtro deixa), as liquidadas mostram-se; no
+   computador o título e o botão das liquidadas ficam na coluna, e o «Nova
+   hipoteca» fica só no cabeçalho. */
+.cred-corpo.abertas .cred-pagas{display:flex;flex-direction:column;gap:12px}
+@media(min-width:901px){
+  .cred-corpo>.cred-col>.plan-cab{display:flex}
+  .cred-corpo>.cred-col>.btn.cred-liq{display:flex}
+  .cred-corpo .cred-cab>.btn.plan-novo{display:none}
+}
+/* ===== fim: ajustes-v40b 1.2 ===== */
 /* ===== redesign: 1.3.6 — os Planeados, os Créditos e a Agenda ===== */
 /* --- o cartão dos por confirmar (planeados.js:pendingCard), também na Visão
    geral: sem a borda colorida à esquerda — o estado diz-se no selo. O
@@ -2762,11 +2805,11 @@ label.mov-interr{display:flex;align-items:center;gap:12px;min-height:44px;paddin
    de baixo antes de o nome ficar cortado: o quarto é o que distingue duas rendas */
 @media(min-width:521px){.plan-pend-topo{flex-basis:260px}}
 /* no dedo, os botões pequenos desta área chegam aos 44px do toque, e os chips
-   dos Planeados e dos Modelos também (sem o ::after das irmãs: a fila rola de
-   lado com 2px de folga, e o que passasse disso ficava cortado) */
+   dos Modelos também (sem o ::after das irmãs: a fila rola de lado com 2px de
+   folga, e o que passasse disso ficava cortado) */
 @media(pointer:coarse){
   .plan-acoes .btn,.plan-retro-acoes .btn,.btn.plan-novo,.cred-hp-acoes .btn,.cred-det-acoes .btn,.cred-aviso .btn,.cal-nav .btn{min-height:44px}
-  .plan-chips .chip,.plan-modelo{min-height:44px}
+  .plan-modelo{min-height:44px}
 }
 /* --- a página dos Planeados (o canvas M-Planeados) --- */
 /* a faixa de quem vem de trás: o suave do cobalto, como a do âmbito; o
@@ -2779,10 +2822,6 @@ label.mov-interr{display:flex;align-items:center;gap:12px;min-height:44px;paddin
 .plan-retro-acoes{display:flex;gap:8px}
 .plan-retro-acoes .btn{flex:1 1 0}
 @media(min-width:901px){.plan-retro-acoes .btn{flex:0 0 auto;min-width:160px}}
-/* os chips: uma fila que rola de lado no telemóvel */
-.plan-chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 0 12px -2px;padding:2px}
-.plan-chips::-webkit-scrollbar{display:none}
-.plan-chips .chip{flex:0 0 auto}
 /* a lista num cartão só, as linhas separadas por um traço */
 .plan-lista{padding:0;overflow:hidden}
 .plan-linhas.list{gap:0}
@@ -2834,8 +2873,7 @@ label.mov-interr{display:flex;align-items:center;gap:12px;min-height:44px;paddin
 .cred-col{display:flex;flex-direction:column;gap:12px;min-width:0}
 .cred-col>.plan-cab{margin:4px 2px 0}
 .cred-ativas>.list,.cred-pagas>.list{gap:12px}
-.cred-chips,.cred-det,.cred-pagas{display:none}
-.cred-corpo.pagas .cred-pagas{display:flex;flex-direction:column;gap:12px}
+.cred-det,.cred-pagas{display:none}
 .cred-pagas>.hint{margin:0 2px}
 .cred-liq{justify-content:space-between;width:100%;font-weight:500}
 .cred-liq-chev{display:inline-flex;color:var(--faint);transition:transform var(--rapido) var(--curva)}
@@ -2901,9 +2939,6 @@ label.mov-interr{display:flex;align-items:center;gap:12px;min-height:44px;paddin
   .cred-r-graf{display:none}
   .cred-corpo{display:flex;align-items:flex-start;gap:16px}
   .cred-col{flex:1 1 300px;max-width:380px;gap:10px}
-  .cred-chips{display:flex}
-  .cred-col>.plan-cab,.cred-liq{display:none}
-  .cred-corpo.pagas .cred-ativas{display:none}
   .cred-ativas>.list,.cred-pagas>.list{gap:10px}
   .cred-det{display:block;flex:999 1 560px;min-width:0;padding:0;overflow:hidden}
   .cred-hp-acoes,.cred-barra,.cred-rot,.cred-sub{display:none}

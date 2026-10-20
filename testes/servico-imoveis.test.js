@@ -10,6 +10,9 @@ import { carregarApp, carregarServico, carregarTudo, limpar, igual, elementos } 
 // as janelas numa pilha observável; o toque longo devolve os rótulos
 import { janelasFalsas, menuDe } from './lib/dom.js';
 
+// o rótulo do chip dos movimentos de um imóvel: «Movimentos · N», ou só «Movimentos» sem nenhum
+const m = (app, id) => { const n = app.db.transactions.filter((t) => t.propertyId === id).length; return 'Movimentos' + (n ? ' · ' + n : ''); };
+
 /* um imóvel arrendado com hipoteca viva, o proprietário, o inquilino, o
    contrato em vigor e um pagamento de crédito sem hipoteca associada (um
    órfão, que o cartão dos créditos oferece para associar) */
@@ -161,7 +164,8 @@ describe('desligado: com os outros serviços desligados, a lista, a ficha e os m
     const listaOn = app.vProperties(), fichaOn = app.propFicha('p1');
     assert.match(listaOn, /Arrendado/);
     assert.match(listaOn, /<span>Renda<\/span><b>650/, 'a renda no cartão');
-    assert.match(listaOn, /imvFiltroRapido\('vago'\)/, 'os chips do filtro rápido');
+    assert.match(listaOn, /<span class="mov-chip"><div class="sel" id="sel_lfc_lprops_st">/, 'o chip rápido do estado');
+    assert.match(listaOn, /<span>Vagos · 0<\/span>/, 'cada estado com quantos há');
     assert.match(listaOn, /Todos os estados/);
     assert.match(listaOn, /Dívida/);
     assert.match(fichaOn, /<h3>Contrato<\/h3>/);
@@ -174,13 +178,13 @@ describe('desligado: com os outros serviços desligados, a lista, a ficha e os m
     assert.match(lista, /Casa da Praia/);
     assert.doesNotMatch(lista, ATALHOS_CONTRATOS);
     assert.doesNotMatch(lista, ATALHOS_MOVIMENTOS);
-    assert.ok(!/Arrendado/.test(lista) && !/Renda/.test(lista) && !/Todos os estados/.test(lista) && !/imvFiltroRapido/.test(lista), 'sem os Contratos não há estado, renda, contratos nem chips do estado');
+    assert.ok(!/Arrendado/.test(lista) && !/Renda/.test(lista) && !/Todos os estados/.test(lista) && !/lfc_lprops_st/.test(lista), 'sem os Contratos não há estado, renda (nem a ordenação por ela), contratos nem chip do estado');
     assert.match(lista, /Dívida/, 'os Créditos ficaram ligados: a dívida continua');
     assert.match(ficha, /Rua do Mar 1/);
     assert.doesNotMatch(ficha, ATALHOS_CONTRATOS);
     assert.doesNotMatch(ficha, ATALHOS_MOVIMENTOS);
     assert.ok(!/<h3>Contrato/.test(ficha) && !/ctView\(/.test(ficha) && !/Rui Costa/.test(ficha) && !/Renda em vigor/.test(ficha));
-    assert.doesNotMatch(ficha, /Registar despesa|Ver movimentos|Novo contrato/, 'nem as ações rápidas dos serviços desligados');
+    assert.doesNotMatch(ficha, /Registar despesa|verMovimentosDoImovel|Novo contrato/, 'nem as ações rápidas dos serviços desligados');
     assert.match(ficha, /Hipoteca · Aquisição/);
     const fixos = elementos(app);
     app.tab = 'properties';
@@ -350,20 +354,24 @@ describe('desligado: com os outros serviços desligados, a lista, a ficha e os m
 });
 
 describe('a lista, a ficha e o formulário na linguagem nova', () => {
-  test('os chips do filtro rápido filtram ao tocar, e o «Todos» conta os que passam os outros filtros', () => {
+  test('o chip rápido do estado filtra ao escolher, diz quantos há em cada estado, e o × limpa-o', () => {
     const app = carregarApp();
     semear(app);
     app.db.properties.push(app.normProp({ id: 'p2', name: 'Casa do Campo', use: 'proprio', ownerIds: ['o1'], value: 90000 }));
+    const chip = (h) => h.slice(h.indexOf('id="sel_lfc_lprops_st"'), h.indexOf('</span>', h.indexOf('id="pop_lfc_lprops_st"')));
     let html = app.vProperties();
-    assert.match(html, /class="chip on" aria-pressed="true" data-toca="vista" data-click="imvFiltroRapido\(''\)">Todos <span class="n">2<\/span>/);
+    assert.match(chip(html), /aria-label="Estado"[^>]*><span id="lab_lfc_lprops_st">Estado<\/span>/, 'desligado diz o nome');
+    assert.match(html, /<span>Todos os estados · 2<\/span>[\s\S]*<span>Arrendados · 1<\/span>[\s\S]*<span>Uso próprio · 1<\/span>/, 'o «Todos» conta os que passam os outros filtros');
     app.render = () => {};
     app.imvFiltroRapido('proprio');
     html = app.vProperties();
     assert.match(html, /Casa do Campo/);
     assert.doesNotMatch(html, /Casa da Praia/, 'o arrendado saiu');
-    assert.match(html, /class="chip on" aria-pressed="true"[^>]*imvFiltroRapido\('proprio'\)/);
+    assert.match(html, /<span class="mov-chip on"><div class="sel" id="sel_lfc_lprops_st">[\s\S]*?aria-label="Estado: Uso próprio"[\s\S]*?<span id="lab_lfc_lprops_st">Uso próprio<\/span>/);
+    assert.match(html, /data-click="lfLimparCampo\('lprops','st'\)"/, 'ligado, leva o ×');
     assert.equal(app.lf('lprops').st, 'proprio', 'é o mesmo filtro do seletor do painel');
-    app.imvFiltroRapido('');
+    app.lfLimparCampo('lprops', 'st');
+    assert.equal(app.lf('lprops').st, '');
     assert.match(app.vProperties(), /Casa da Praia/);
   });
 
@@ -396,8 +404,10 @@ describe('a lista, a ficha e o formulário na linguagem nova', () => {
     const f = app.propFicha('p1');
     assert.match(f, /^<div class="imv-ficha">/);
     assert.match(f, /<p class="imv-fmorada">Rua do Mar 1<\/p>/);
-    assert.deepEqual([...f.matchAll(/<button type="button" class="chip" [^>]*>(?:<svg[\s\S]*?<\/svg>)? ([^<]*)<\/button>/g)].map((m) => m[1]),
-      ['Novo contrato', 'Registar despesa', 'Pagamento de crédito', 'Ver movimentos']);
+    assert.deepEqual([...f.matchAll(/<button type="button" class="chip[^"]*"[^>]*>(?:<svg[\s\S]*?<\/svg>)? ([^<]*)<\/button>/g)].map((m) => m[1]),
+      [m(app, 'p1'), 'Novo contrato', 'Registar despesa', 'Pagamento de crédito']);
+    // os movimentos do imóvel vão à frente, acesos e com quantos são
+    assert.match(f, /<button type="button" class="chip on destaque" aria-label="Ver os movimentos deste imóvel[^"]*"/);
     assert.match(f, /data-click="pagamentoNoImovel\('p1'\)"/);
     assert.match(f, /data-toca="ecra" data-click="closeAllModals\(\);verMovimentosDoImovel\('p1'\)"/, 'mudar de ecrã fecha a ficha');
     assert.match(f, /Renda em vigor[\s\S]*Yield[\s\S]*Valor de mercado[\s\S]*Em dívida · 1 hipoteca/);
@@ -407,7 +417,7 @@ describe('a lista, a ficha e o formulário na linguagem nova', () => {
     // sem os Movimentos nem os Planeados: as ações deles e os por confirmar saem
     app.definirServicosDesligados(['transactions', 'recurring']);
     const g = app.propFicha('p1');
-    assert.doesNotMatch(g, /Registar despesa|Pagamento de crédito|Ver movimentos|Por confirmar/);
+    assert.doesNotMatch(g, /Registar despesa|Pagamento de crédito|verMovimentosDoImovel|Por confirmar/);
     assert.match(g, /Novo contrato/);
   });
 

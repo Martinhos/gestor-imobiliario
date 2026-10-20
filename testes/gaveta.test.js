@@ -6,8 +6,8 @@
 // não recria a gaveta quando nada mudou; no rail do computador não há nada a
 // recolher. E os ícones próprios da Avaliação e do IRS
 // (navegacao.js:gavetaHtml, navegacao.js:gavetaAlternar). A «Pessoas» é uma
-// porta que abre os Inquilinos (ou os Proprietários), e os Grupos e os
-// Colaboradores já não estão no menu (vivem nas Definições).
+// porta que abre os Inquilinos (ou os Proprietários, ou os Colaboradores), e
+// os Grupos já não estão no menu (vivem nas Definições).
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -238,7 +238,7 @@ describe('o crachá no título da secção recolhida', () => {
 });
 
 describe('o que a gaveta mostra', () => {
-  test('as Casas têm a porta «Pessoas»; o Dinheiro, a Análise e a Agenda os seus; os Grupos e os Colaboradores saíram do menu', () => {
+  test('as Casas têm a porta «Pessoas»; o Dinheiro, a Análise e a Agenda os seus; os Grupos saíram do menu, e os Colaboradores entram pela «Pessoas»', () => {
     app.buildNav();
     const html = nav();
     assert.deepEqual(idsDe(seccao(html, 'Casas')), ['properties', 'contracts', 'tenants', 'visits']);
@@ -248,10 +248,21 @@ describe('o que a gaveta mostra', () => {
     assert.deepEqual(idsDe(seccao(html, 'Análise')), ['reports', 'projections', 'fisco']);
     assert.match(seccao(html, 'Análise'), /<span class="txt">IRS · Anexo F<\/span>/);
     assert.deepEqual(idsDe(seccao(html, 'Agenda')), ['calendar']);
-    assert.doesNotMatch(html, /go\('(groups|colaboradores)'\)/, 'vivem nas Definições');
+    assert.doesNotMatch(html, /go\('(groups|colaboradores)'\)/, 'nem os Grupos nem os Colaboradores têm porta própria');
+    assert.doesNotMatch(html, /<span class="txt">Colaboradores<\/span>/);
     app.tab = 'owners';
     app.buildNav();
     assert.match(nav(), /<a class="on"[^>]*data-click="go\('owners'\)"[^>]*>[\s\S]*?Pessoas/, 'nos proprietários a porta fica acesa e leva-os');
+    // os Colaboradores só existem com sessão (acessos.js:separadoresEscondidos)
+    app.window.CW = Object.assign(app.window.CW || {}, { user: { id: 'eu', name: 'Ana Silva' } });
+    try {
+      app.tab = 'colaboradores';
+      app.buildNav();
+      assert.match(nav(), /<a class="on"[^>]*data-click="go\('colaboradores'\)"[^>]*>[\s\S]*?Pessoas/, 'nos colaboradores acende a «Pessoas»');
+      assert.doesNotMatch(nav(), /<a class="on"[^>]*go\('settings'\)/, 'e não as Definições');
+    } finally {
+      delete app.window.CW.user;
+    }
   });
 
   test('a Ajuda do fundo acende-se a ela, e não às Definições, mesmo chegando lá sem mudar de separador', () => {
@@ -395,6 +406,7 @@ describe('os separadores da área por cima da vista', () => {
     assert.match(cas, /aria-label="Casas"/);
     assert.match(cas, /<a class="on" aria-current="page"[^>]*go\('tenants'\)">Pessoas</, 'a porta Pessoas acende nos Inquilinos');
     assert.match(cas, /abas-pessoas/, 'e por baixo o segmentado Inquilinos/Proprietários');
+    assert.doesNotMatch(cas, /go\('colaboradores'\)/, 'sem sessão, os Colaboradores não entram no segmentado');
     for (const t of ['dashboard', 'calendar', 'settings']) {
       a.tab = t;
       assert.equal(a.abasDaArea(), '', t + ' não é de uma área com separadores');

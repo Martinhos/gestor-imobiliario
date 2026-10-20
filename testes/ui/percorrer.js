@@ -76,7 +76,10 @@ const CENAS = [
     nome: 'modais-empilhados',
     fazer: () => { txModal({ kind: 'expense' }); pickModal('Escolhe', [{ v: 1, label: 'Um' }, { v: 2, label: 'Dois' }], () => {}); },
   },
-  { nome: 'painel-de-filtros', fazer: () => { go('properties'); render(); document.getElementById('hdrFilt').click(); } },
+  /* os filtros das listas abrem-se no funil ao lado da pesquisa
+     (vistas.js:lfBarraHtml); o botão do cabeçalho dos Imóveis é o
+     «Selecionar vários», e o desta cena era ele */
+  { nome: 'painel-de-filtros', fazer: () => { go('properties'); render(); document.getElementById('lfb_lprops').click(); } },
   { nome: 'novidades', fazer: () => { CW.verNovidades(AVISOS.slice(0, 1)); } },
   { nome: 'tutorial', fazer: () => { CW.guiaAbrir('imoveis'); } },
   {

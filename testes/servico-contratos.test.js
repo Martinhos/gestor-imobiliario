@@ -71,8 +71,8 @@ describe('autonomia: os contratos e as visitas rendem só com a base e o que req
     assert.match(html, /data-lp="ct:C1"/);
     // o FAB saiu de todos os ecrãs: o «Novo contrato» é a ação do cabeçalho e o + da barra de baixo
     assert.doesNotMatch(html, /class="fab"/);
-    assert.match(html, /ct-filtros[\s\S]*Todos <span class="n">2<\/span>[\s\S]*Em vigor <span class="n">1<\/span>[\s\S]*Terminados <span class="n">1<\/span>/,
-      'os chips do filtro rápido dizem quantos há em cada estado');
+    assert.match(html, /id="sel_lfc_lcts_st"[\s\S]*<span>Todos os estados · 2<\/span>[\s\S]*<span>Em vigor · 1<\/span>[\s\S]*<span>Terminados · 1<\/span>/,
+      'o chip rápido do estado diz quantos há em cada estado');
     // tocar na linha abre a ficha; o elemento do toque longo (data-lp) é o de fora, onde a nuvem pendura os por confirmar
     assert.match(html, /<div[^>]* class="ct-linha" data-lp="ct:C1"[^>]*>\s*<div class="row-between ct-cols" data-toca="camada" data-click="ctAbrirDaLista\('C1'\)">/);
     assert.doesNotMatch(html, SEM_ATALHOS);
@@ -233,7 +233,7 @@ describe('o desenho de 2026-10: a lista, a ficha e a folha do PDF', () => {
     assert.match(html, /<div class="ct-c-renda"><b>800,00\s€<\/b><span class="small ct-so-estreito">líquida /);
   });
 
-  test('a lista: com um proprietário em foco, as contagens dos chips e o «N resultados» contam só os contratos que a lista mostra', () => {
+  test('a lista: com um proprietário em foco, as contagens do estado e o «N contratos» do painel contam só os contratos que a lista mostra', () => {
     const app = carregarApp();
     elementos(app);
     semear(app, { owners: true });
@@ -244,7 +244,12 @@ describe('o desenho de 2026-10: a lista, a ficha e a folha do PDF', () => {
       app.normContract({ id: 'C3', propertyId: 'P2', tenantIds: ['T1'], rent: 600, start: (ANO - 1) + '-01-01', end: (ANO + 2) + '-12-31' }),
       app.normContract({ id: 'C4', propertyId: 'P2', tenantIds: ['T1'], rent: 550, start: (ANO - 4) + '-01-01', end: (ANO - 3) + '-12-31', active: false }),
       app.normContract({ id: 'C5', propertyId: 'nenhum', tenantIds: ['T1'], rent: 300, start: (ANO - 1) + '-01-01', end: (ANO + 1) + '-12-31' }));
-    const chips = (h) => [...h.matchAll(/data-click="ctFiltroRapido\('(\w*)'\)">[^<]*<span class="n">(\d+)<\/span>/g)].map((m) => (m[1] || 'todos') + ':' + m[2]).join(' ');
+    // as escolhas do chip do estado, com quantos há em cada uma
+    const chips = (h) => {
+      const pop = h.slice(h.indexOf('id="pop_lfc_lcts_st"'), h.indexOf('</div>', h.indexOf('id="pop_lfc_lcts_st"')));
+      const NOME = { 'Todos os estados': 'todos', 'Em vigor': 'on', 'Por começar': 'fut', Terminados: 'off' };
+      return [...pop.matchAll(/<span>([^<·]+) · (\d+)<\/span>/g)].map((m) => NOME[m[1].trim()] + ':' + m[2]).join(' ');
+    };
     const linhas = (h) => (h.match(/class="ct-linha"/g) || []).length;
     // sem foco: os quatro com imóvel (o órfão não aparece, e por isso não conta)
     let h = app.vContracts();
@@ -258,7 +263,7 @@ describe('o desenho de 2026-10: a lista, a ficha e a folha do PDF', () => {
     app.lf('lcts').st = 'off';
     h = app.vContracts();
     assert.equal(linhas(h), 1);
-    assert.match(h, /1 resultado com os filtros ativos\./, 'o «N resultados» é o número de linhas que se veem');
+    assert.match(h, /Aplicam-se ao mexer · 1 contrato</, 'o «N contratos» do painel é o número de linhas que se veem');
     assert.equal(chips(h), 'todos:2 on:1 fut:0 off:1');
     app.lf('lcts').st = '';
   });
@@ -343,11 +348,16 @@ describe('o desenho de 2026-10: a lista, a ficha e a folha do PDF', () => {
     const app = carregarApp();
     semear(app, { owners: true });
     const aria = (h, id) => (new RegExp('id="selb_' + id + '" aria-haspopup="listbox"[^>]*>|class="selbtn" aria-label="([^"]*)" id="selb_' + id + '"').exec(h) || [])[1];
-    let h = app.ctChipsHtml({ '': 2, on: 1, fut: 0, off: 1 }, { sb: 'renda', p: 'P1' });
-    assert.equal(aria(h, 'ctcOrd'), 'Ordenar: renda');
-    assert.equal(aria(h, 'ctcProp'), 'Imóvel: T2 Lisboa');
-    h = app.ctChipsHtml({ '': 2, on: 1, fut: 0, off: 1 }, {});
-    assert.equal(aria(h, 'ctcOrd'), 'Ordenar', 'sem escolha, só o nome');
+    const conta = { '': 2, on: 1, fut: 0, off: 1 };
+    Object.assign(app.lf('lcts'), { sb: 'renda', p: 'P1' });
+    let h = app.ctChipsHtml(conta, app.lf('lcts'), 1, []);
+    assert.equal(aria(h, 'lfc_lcts_sb'), 'Ordenar: renda');
+    assert.equal(aria(h, 'lfc_lcts_p'), 'Imóvel: T2 Lisboa');
+    assert.match(h, /aria-label="Voltar à ordem original" data-toca="vista" data-click="lfLimparCampo\('lcts','sb'\)"/, 'o × da ordenação diz o que faz');
+    app.listF.lcts = {};
+    h = app.ctChipsHtml(conta, app.lf('lcts'), 2, []);
+    assert.equal(aria(h, 'lfc_lcts_sb'), 'Ordenar', 'sem escolha, só o nome');
+    assert.match(h, /<span class="mov-chip mov-so-largo"><div class="sel" id="sel_lfc_lcts_sb">/, 'a ordenação desligada só tem chip no ecrã largo');
   });
 
   test('a folha do PDF: o que falta para gerar, o que vai, o que fica de fora, e o total', () => {

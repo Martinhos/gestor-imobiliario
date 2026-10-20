@@ -176,7 +176,7 @@ describe('buildTabbar', () => {
     igual(app._barraAgora, TB);
   });
 
-  test('destinoDe: «pessoas» fica onde está ou abre os inquilinos; uma área abre a primeira porta à vista', () => {
+  test('destinoDe: «pessoas» fica onde está (os colaboradores incluídos) ou abre os inquilinos; uma área abre a primeira porta à vista', () => {
     casas(app, [null, null, null]);
     app.tab = 'dashboard';
     assert.equal(app.destinoDe('casas', []), 'properties');
@@ -186,6 +186,11 @@ describe('buildTabbar', () => {
     assert.equal(app.destinoDe('pessoas', []), 'owners', 'já nos proprietários: fica');
     app.tab = 'dashboard';
     assert.equal(app.destinoDe('pessoas', ['tenants']), 'owners', 'sem inquilinos: os proprietários');
+    assert.equal(app.destinoDe('pessoas', ['tenants', 'owners']), 'colaboradores', 'só com os colaboradores à vista: eles');
+    app.tab = 'colaboradores';
+    assert.equal(app.destinoDe('pessoas', []), 'colaboradores', 'já nos colaboradores: fica');
+    assert.equal(app.areaDe('colaboradores'), 'casas', 'os Colaboradores são das Casas');
+    app.tab = 'dashboard';
     assert.equal(app.destinoDe('casas', ['properties', 'contracts']), 'tenants', 'a primeira porta à vista');
   });
 });

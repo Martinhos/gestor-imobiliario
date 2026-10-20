@@ -5,9 +5,10 @@
    Veio de vistas.js e de componentes.js:lpMenu quando a app passou a
    serviços; regista-se no fim.
 
-   O desenho é o do canvas M-Pessoas: por cima, os chips do filtro rápido (o
-   segmentado Inquilinos/Proprietários, com quantos há de cada, é da casca —
-   navegacao.js:abasDaArea); por baixo, um cartão com uma linha por pessoa: o
+   O desenho é o do canvas M-Pessoas, com os filtros dos Movimentos
+   (vistas.js:lfCabeca): por cima, a pesquisa à vista com o funil e os chips
+   do filtro rápido (o segmentado Inquilinos/Proprietários, com quantos há de
+   cada, é da casca — navegacao.js:abasDaArea); por baixo, um cartão com uma linha por pessoa: o
    avatar com as iniciais, o nome, onde mora (ou os imóveis de que é dona), os
    selos do que pede atenção e, à direita, a renda. Sem FAB: o «Novo
    inquilino» e o «Novo proprietário» estão no cabeçalho e no + da barra. */
@@ -65,27 +66,32 @@ function personCard(pp,kind,sit){
     <span class="small pes-contacto">${usa?contacto:''}</span>
     <span class="num pes-valor">${valor>0?euro(valor):''}</span></div>`;
 }
-/* Os chips do filtro rápido (o canvas M-Pessoas): «Todos» e um por valor do
-   filtro que o painel já tem (vistas.js:lfSel) — o mesmo estado lf(k)[chave],
-   aplicado ao tocar, sem «Aplicar». Cada chip diz quantas pessoas da lista
-   (já com a pesquisa) lhe cabem, quando há alguma; o «Todos» não leva número,
-   que o segmentado da casca já diz quantos há.
+/* O campo do filtro rápido das pessoas, o primeiro chip da lista e o primeiro
+   seletor do painel (vistas.js:lfCabeca): nos inquilinos o contrato, nos
+   proprietários os imóveis. Cada escolha diz quantas pessoas da lista (já com
+   a pesquisa e os outros filtros) lhe cabem («Com contrato · 2»); o «Todos»
+   não leva número, que o segmentado da casca já diz quantos há. Ligado, o
+   chip diz o rótulo curto («Por começar»).
    Recebe: k — a chave da lista ('lten' ou 'lown'); chave — o campo do filtro
-   ('ct' ou 'pr'); opcoes — [[valor, rótulo, quantos]]; aria — o nome do grupo,
-   para o leitor de ecrã.
-   Devolve: o HTML da fila de chips. */
-function pesChips(k,chave,opcoes,aria){
-  const at=lf(k)[chave]||'';
-  return `<div class="chips-fila pes-filtros" role="group" aria-label="${esc(aria)}">${opcoes.map(([v,rot,n])=>
-    `<button type="button" class="chip${at===v?' on':''}" aria-pressed="${at===v?'true':'false'}" data-toca="vista" data-click="pesFiltroRapido('${jsq(k)}','${jsq(chave)}','${jsq(v)}')">${esc(rot)}${v&&n?` <span class="n">${n}</span>`:''}</button>`).join('')}</div>`;
+   ('ct' ou 'pr'); nome — o nome do campo («Contrato»); opcoes — [[valor,
+   rótulo curto, rótulo da escolha, quantos]], com o '' primeiro.
+   Devolve: o campo {chave, nome, opcoes, curto, rapido, rotulo, aplicar}. */
+function pesChips(k,chave,nome,opcoes){
+  return {chave:chave,nome:nome,curto:'Todos',rapido:true,aplicar:v=>pesFiltroRapido(k,chave,v),
+    rotulo:v=>((opcoes.find(x=>x[0]===v)||[])[1])||v,
+    opcoes:opcoes.map(([v,,rot,n])=>v?{v:v,label:rot,n:n||0}:{v:'',label:rot})};
 }
-/* Um chip do filtro rápido foi tocado: muda o filtro e repinta.
+/* O filtro rápido das pessoas mudou (o chip ou o seletor do painel): muda o
+   filtro e repinta.
    Recebe: k — a chave da lista; chave — o campo do filtro; v — o valor ('' para todos).
    Devolve: nada — repinta a vista. */
 function pesFiltroRapido(k,chave,v){lf(k)[chave]=String(v||'');render()}
-/* Lista de inquilinos (o canvas M-Pessoas), filtrável por com contrato, por
-   começar e sem contrato — nos chips e no painel, que são o mesmo filtro — e
-   por pesquisa; ordenação por nome, nº de contratos ou renda.
+/* Lista de inquilinos (o canvas M-Pessoas), com os filtros dos Movimentos
+   (vistas.js:lfCabeca): a pesquisa à vista com o funil do painel completo e o
+   chip do contrato — com contrato, por começar, sem contrato —, que é o mesmo
+   filtro do seletor do painel; ordenação por nome, nº de contratos ou renda
+   (no painel e, no ecrã largo, no chip). Sem inquilinos não há barra: fica o
+   vazio com o seu botão.
    Devolve: string com o HTML completo da vista. */
 function vTenants(){
   const K='lten',s=lf(K);
@@ -103,16 +109,19 @@ function vTenants(){
   list=lfSort(K,list,{nome:t=>t.name,contratos:t=>sit[t.id].ativos.length,renda:t=>sum(sit[t.id].ativos.map(c=>c.rent))});
   const adiciona=!souSoColaborador()||casasComo('tenant.add').length;   /* a condição do botão do vazio */
   const n=k=>achados.filter(tem[k]).length;
-  const head=lfBar(K,comCt?[lfSel(K,'ct',[{v:'',label:'Todos os inquilinos'},{v:'com',label:'Com contrato ativo'},{v:'fut',label:'Com contrato por começar'},{v:'sem',label:'Sem contrato'}])]:[],list.length,
-      {opts:[{v:'nome',label:'Ordenar por nome'}].concat(comCt?[{v:'contratos',label:'Ordenar por nº de contratos'},{v:'renda',label:'Ordenar por renda'}]:[])})
-    +(comCt&&db.tenants.length?pesChips(K,'ct',[['','Todos'],['com','Com contrato',n('com')],['fut','Por começar',n('fut')],['sem','Sem contrato',n('sem')]],'Filtrar pelo contrato'):'');
-  if(!db.tenants.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.${adiciona?saida('Adicionar inquilino',"personModal('tenant')",'camada'):''}</div>`);
+  /* sem inquilinos nenhuns não há o que pesquisar nem filtrar: fica o vazio com o seu botão */
+  if(!db.tenants.length)return esperaDoServidor()||`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.${adiciona?saida('Adicionar inquilino',"personModal('tenant')",'camada'):''}</div>`;
+  const head=lfCabeca(K,{nome:['inquilino','inquilinos'],dos:'dos inquilinos',n:list.length,
+    campos:[comCt?pesChips(K,'ct','Contrato',[['','Todos','Todos os inquilinos'],['com','Com contrato','Com contrato ativo',n('com')],
+      ['fut','Por começar','Com contrato por começar',n('fut')],['sem','Sem contrato','Sem contrato',n('sem')]]):null],
+    ordem:{opcoes:[{v:'nome',label:'Nome'}].concat(comCt?[{v:'contratos',label:'Nº de contratos'},{v:'renda',label:'Renda'}]:[]),rapido:'largo'}});
   if(!list.length)return head+vazioFiltro();
   return head+listaViva('inquilinos',list.map(t=>({chave:'ten:'+t.id,html:personCard(t,'tenant',sit[t.id])})),'pes-lista');
 }
-/* Lista de proprietários, na mesma família: filtrável por imóvel (no painel),
-   com e sem imóveis (nos chips e no painel, o mesmo filtro) e pesquisa;
-   ordenação por nome ou nº de imóveis.
+/* Lista de proprietários, na mesma família: a pesquisa à vista com o funil,
+   o chip dos imóveis — com e sem imóveis, o mesmo filtro do seletor do painel
+   — e o do imóvel de que é dono (só no ecrã largo, ou ligado); ordenação por
+   nome ou nº de imóveis. Sem proprietários não há barra.
    Devolve: string com o HTML completo da vista. */
 function vOwners(){
   const K='lown',s=lf(K);
@@ -128,11 +137,13 @@ function vOwners(){
   let list=tem[pr]?achados.filter(tem[pr]):achados;
   list=lfSort(K,list,{nome:o=>o.name,imoveis:o=>propsOf(o.id).length});
   const n=k=>achados.filter(tem[k]).length;
-  const head=lfBar(K,comProp?[lfSel(K,'p',[{v:'',label:'Todos os imóveis'}].concat(db.properties.map(p=>({v:p.id,label:'Dono de · '+p.name})))),
-      lfSel(K,'pr',[{v:'',label:'Todos os proprietários'},{v:'com',label:'Com imóveis'},{v:'sem',label:'Sem imóveis'}])]:[],list.length,
-      {opts:[{v:'nome',label:'Ordenar por nome'}].concat(comProp?[{v:'imoveis',label:'Ordenar por nº de imóveis'}]:[])})
-    +(comProp&&db.owners.length?pesChips(K,'pr',[['','Todos'],['com','Com imóveis',n('com')],['sem','Sem imóveis',n('sem')]],'Filtrar pelos imóveis'):'');
-  if(!db.owners.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.${saida('Adicionar proprietário',"personModal('owner')",'camada')}</div>`);
+  /* sem proprietários nenhuns não há o que pesquisar nem filtrar: fica o vazio com o seu botão */
+  if(!db.owners.length)return esperaDoServidor()||`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.${saida('Adicionar proprietário',"personModal('owner')",'camada')}</div>`;
+  const head=lfCabeca(K,{nome:['proprietário','proprietários'],dos:'dos proprietários',n:list.length,
+    campos:comProp?[pesChips(K,'pr','Imóveis',[['','Todos','Todos os proprietários'],['com','Com imóveis','Com imóveis',n('com')],['sem','Sem imóveis','Sem imóveis',n('sem')]]),
+      db.properties.length?{chave:'p',nome:'Dono de',curto:'Qualquer imóvel',rapido:'largo',rotulo:v=>'Dono de '+propName(v),
+        opcoes:[{v:'',label:'Qualquer imóvel'}].concat(db.properties.map(p=>({v:p.id,label:p.name})))}:null]:[],
+    ordem:{opcoes:[{v:'nome',label:'Nome'}].concat(comProp?[{v:'imoveis',label:'Nº de imóveis'}]:[]),rapido:'largo'}});
   if(!list.length)return head+vazioFiltro();
   return head+listaViva('proprietarios',list.map(o=>({chave:'own:'+o.id,html:personCard(o,'owner')})),'pes-lista');
 }

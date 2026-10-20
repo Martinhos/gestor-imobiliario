@@ -123,10 +123,11 @@ function imvNotaDeColaborador(p,c){
     +(podes?`<span class="imv-nota-podes">${esc(podes)}</span>`:'')+'</div>';
 }
 /* As ações rápidas da ficha, em chips, só as que o cargo e os serviços
-   ligados deixam: ao dono, «Novo contrato» (num imóvel de arrendamento),
-   «Registar despesa», «Pagamento de crédito» (com hipoteca viva e podendo
-   abater capital — acessos.js:motivoCredito) e «Ver movimentos»; a quem
-   colabora, as do cargo (acessos.js:acoesNoImovel) e «Ver movimentos». Um
+   ligados deixam: à frente e aceso, «Movimentos · N» (os do imóvel); ao
+   dono, «Novo contrato» (num imóvel de arrendamento), «Registar despesa» e
+   «Pagamento de crédito» (com hipoteca viva e podendo abater capital —
+   acessos.js:motivoCredito); a quem colabora, as do cargo
+   (acessos.js:acoesNoImovel). Um
    chip que muda de ecrã fecha antes a ficha, senão ela ficava por cima.
    Recebe: p — o imóvel; c — o cargo (acessos.js:cargoDe).
    Devolve: o HTML da fila de chips, ou ''. */
@@ -138,10 +139,13 @@ function imvAcoesRapidas(p,c){
     if(servicoLigado('credits')&&servicoLigado('transactions')&&liveLoans(p).length&&!motivoCredito(id))
       a.push({rotulo:'Pagamento de crédito',icon:'bank',toca:'camada',act:`pagamentoNoImovel('${q}')`});
   }else acoesNoImovel(id).filter(x=>x.perm!=='house.edit').forEach(x=>a.push({rotulo:x.rotulo,icon:x.icon,toca:x.toca,act:x.act}));
-  if(servicoLigado('transactions')&&pode(id,'tx.view'))a.push({rotulo:'Ver movimentos',icon:'lista',toca:'ecra',act:`verMovimentosDoImovel('${q}')`});
+  /* o «Movimentos · N» vai à frente e aceso: é o que mais se procura na
+     ficha, e no fim da fila, que rola de lado, ficava fora de vista */
+  if(servicoLigado('transactions')&&pode(id,'tx.view')){const n=db.transactions.filter(t=>t.propertyId===id).length;
+    a.unshift({rotulo:'Movimentos'+(n?' · '+n:''),aria:'Ver os movimentos deste imóvel'+(n?' ('+n+')':''),icon:'lista',toca:'ecra',destaque:true,act:`verMovimentosDoImovel('${q}')`})}
   if(!a.length)return '';
   return `<div class="chips-fila imv-acoes" role="group" aria-label="Ações rápidas">${a.map(x=>
-    `<button type="button" class="chip" data-toca="${x.toca}" data-click="${x.toca==='ecra'?'closeAllModals();':''}${x.act}">${ic(x.icon,16)} ${esc(x.rotulo)}</button>`).join('')}</div>`;
+    `<button type="button" class="chip${x.destaque?' on destaque':''}"${x.aria?` aria-label="${esc(x.aria)}"`:''} data-toca="${x.toca}" data-click="${x.toca==='ecra'?'closeAllModals();':''}${x.act}">${ic(x.icon,16)} ${esc(x.rotulo)}</button>`).join('')}</div>`;
 }
 /* O cartão dos números da ficha, cada um só se o cargo e os serviços o
    deixam ver: a renda em vigor e a yield (dos Contratos), o valor de mercado

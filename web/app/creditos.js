@@ -216,65 +216,78 @@ function credEscolher(pid,lid){
   [].slice.call(document.querySelectorAll('.cred-hp[data-cred]')).forEach(e=>e.classList.toggle('on',e.getAttribute('data-cred')===credSel));
   tornarFocavel(document.getElementById('credDetalhe'));
 }
-/* Os chips Ativas / Liquidadas do computador: que lista mostrar ao lado do painel.
-   Recebe: v — verdadeiro para as liquidadas.
-   Devolve: nada — muda a escolha e redesenha. */
-function credVerPagas(v){credPagas=!!v;credSel='';render()}
-/* O botão «Liquidadas» do telemóvel: abre e fecha a lista das já pagas por baixo das ativas.
+/* O estado das hipotecas a ver — Ativas, Liquidadas ou as duas —, pelo chip
+   do estado ou pelo seletor do painel (vistas.js:lfCabeca), que são o mesmo
+   filtro lf('lcred').st. Eram os chips Ativas / Liquidadas do computador; a
+   hipoteca escolhida no painel ao lado volta à primeira que se vê.
+   Recebe: v — '' (as duas), 'on' (ativas) ou 'off' (liquidadas).
+   Devolve: nada — muda o filtro e redesenha. */
+function credVerPagas(v){lf('lcred').st=v==='on'||v==='off'?v:'';credSel='';render()}
+/* O botão «Liquidadas» por baixo das ativas: abre e fecha a lista das já pagas.
    Devolve: nada — muda a escolha e redesenha. */
 function credPagasAlternar(){credPagas=!credPagas;render()}
 /* A página dos Créditos (os canvas M-Creditos e D-Creditos): o resumo, o aviso
-   dos pagamentos sem hipoteca, e as hipotecas em cartões — no telemóvel as
-   ativas e, por um botão, as liquidadas; no computador a lista à esquerda
-   (chips Ativas / Liquidadas) e a hipoteca escolhida aberta à direita, com o
-   plano. «Nova hipoteca» está no cabeçalho do computador; no
-   telemóvel, ao lado do título das ativas, e no vazio.
+   dos pagamentos sem hipoteca e, por cima do que filtram, os filtros dos
+   Movimentos (vistas.js:lfCabeca) — a pesquisa à vista com o funil do painel
+   completo, os chips do estado (Ativas, Liquidadas: creditos.js:credVerPagas)
+   e do imóvel, quando há mais de um com hipotecas, e a ordenação no ecrã
+   largo —; por baixo, as hipotecas em cartões: as ativas e, por um botão, as
+   liquidadas, em todos os ecrãs; no computador a lista fica à esquerda e a
+   hipoteca escolhida aberta à direita, com o plano. «Nova hipoteca» está no
+   cabeçalho do computador; no telemóvel, ao lado do título das ativas, e no
+   vazio.
    Devolve: o HTML da vista (texto). */
 function vCredits(){
   const K='lcred',s=lf(K);
   const rows=[];
   scope().forEach(p=>loansOf(p).forEach(l=>rows.push({p,l})));
   const live=rows.filter(x=>Number(x.l.outstanding)>0);
-  const shown=lfSort(K,rows.filter(({p,l})=>{
-    if(s.p&&p.id!==s.p)return false;
-    if(s.st==='on'&&!(Number(l.outstanding)>0))return false;
-    if(s.st==='off'&&Number(l.outstanding)>0)return false;
-    return lfHit(K,[loanName(l),l.name,l.bank,p.name,RATE[l.type],String(l.outstanding)].join(' '));
-  }),{divida:x=>x.l.outstanding,prestacao:x=>Number(x.l.outstanding)>0?loanCalc(x.l).total:0,nome:x=>loanName(x.l),imovel:x=>x.p.name});
+  /* a pesquisa e o imóvel; o estado à parte, para as contagens do chip */
+  const passa=({p,l})=>(!s.p||p.id===s.p)&&lfHit(K,[loanName(l),l.name,l.bank,p.name,RATE[l.type],String(l.outstanding)].join(' '));
+  const viva=x=>Number(x.l.outstanding)>0;
+  const semEstado=rows.filter(passa);
+  const shown=lfSort(K,semEstado.filter(x=>s.st==='on'?viva(x):s.st==='off'?!viva(x):true),
+    {divida:x=>x.l.outstanding,prestacao:x=>viva(x)?loanCalc(x.l).total:0,nome:x=>loanName(x.l),imovel:x=>x.p.name});
   /* uma hipoteca grava-se na ficha do imóvel: sem «Editar a ficha» em imóvel
      nenhum (o Contabilista de fábrica vê os créditos e não os edita), o botão
      — o do título e o do vazio — só levava a uma recusa no Guardar */
   const adiciona=casasComo('house.edit').length;
-  const head=lfBar(K,[lfSel(K,'p',lfPropOpts()),
-      lfSel(K,'st',[{v:'',label:'Ativas e liquidadas'},{v:'on',label:'Ativas'},{v:'off',label:'Liquidadas'}])],shown.length,
-      {opts:[{v:'divida',label:'Ordenar por dívida'},{v:'prestacao',label:'Ordenar por prestação'},{v:'nome',label:'Ordenar por nome'},{v:'imovel',label:'Ordenar por imóvel'}]});
   /* sem imóveis, o botão do canto só dava um aviso a dizer que faltava um
-     imóvel: um caminho que acaba num aviso não é um caminho */
-  if(!rows.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem hipotecas</b>${db.properties.length
+     imóvel: um caminho que acaba num aviso não é um caminho. E sem hipotecas
+     não há o que pesquisar nem filtrar: fica o vazio com o seu botão */
+  if(!rows.length)return esperaDoServidor()||`<div class="empty"><b>Sem hipotecas</b>${db.properties.length
     ?'Uma hipoteca está sempre associada a um imóvel.'+(adiciona?' Cria a primeira aqui ou na ficha do imóvel.'+saida('Nova hipoteca','newMort()','camada'):'')
-    :'Uma hipoteca está sempre associada a um imóvel, e ainda não há nenhum.'+saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`);
+    :'Uma hipoteca está sempre associada a um imóvel, e ainda não há nenhum.'+saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`;
+  /* os imóveis do âmbito com hipotecas, e o escolhido mesmo que já não tenha */
+  const comHipotecas=scope().filter(p=>loansOf(p).length||p.id===s.p);
+  const nAtivas=semEstado.filter(viva).length;
+  const head=lfCabeca(K,{nome:['hipoteca','hipotecas'],dos:'das hipotecas',n:shown.length,
+    campos:[{chave:'st',nome:'Estado',curto:'Todas',rapido:true,aplicar:credVerPagas,
+        opcoes:[{v:'',label:'Ativas e liquidadas'},{v:'on',label:'Ativas',n:nAtivas},{v:'off',label:'Liquidadas',n:semEstado.length-nAtivas}]},
+      {chave:'p',nome:'Imóvel',curto:'Todos',rapido:comHipotecas.length>1||!!s.p,
+        opcoes:[{v:'',label:'Todos os imóveis'}].concat(comHipotecas.map(p=>({v:p.id,label:p.name})))}],
+    ordem:{opcoes:[{v:'divida',label:'Dívida'},{v:'prestacao',label:'Prestação'},{v:'nome',label:'Nome'},{v:'imovel',label:'Imóvel'}],rapido:'largo'}});
   const resumo=credResumo(live);
-  if(!shown.length)return head+resumo+vazioFiltro();
+  if(!shown.length)return resumo+head+vazioFiltro();
   /* os pagamentos sem crédito são movimentos: sem o serviço dos Movimentos nesta conta não há aviso a mostrar */
   const aviso=(servicoLigado('transactions')?creditosOrfaos():[]).filter(x=>!motivoCredito(x.p.id)).map(({p,l,txs})=>`<div class="cred-aviso">
     <span class="cred-aviso-ic">${ic('bank',20)}</span>
     <p><b>${txs.length===1?'1 pagamento sem crédito associado':txs.length+' pagamentos sem crédito associado'}</b> em ${esc(p.name)} (${euro2(sum(txs.map(t=>t.amount||0)))}): ${txs.length===1?'não abateu':'não abateram'} capital nenhum a «${esc(loanName(l))}». Associar dá a cada um os juros, o selo e o capital do plano na sua data.</p>
     <button type="button" class="btn sm" data-toca="dados" data-click="associarOrfaos('${jsq(p.id)}','${jsq(l.id)}')" aria-label="${esc('Associar à hipoteca '+loanName(l))}">Associar</button></div>`).join('');
-  const act=shown.filter(x=>Number(x.l.outstanding)>0),paid=shown.filter(x=>!(Number(x.l.outstanding)>0));
-  const verPagas=(credPagas&&paid.length>0)||!act.length,aVista=verPagas?paid:act;
+  const act=shown.filter(viva),paid=shown.filter(x=>!viva(x));
+  /* as liquidadas à vista: abertas pelo botão por baixo das ativas, ou as
+     únicas que passam o filtro (o estado «Liquidadas»). O painel do
+     computador escolhe entre as que se veem */
+  const verPagas=(credPagas&&paid.length>0)||!act.length,aVista=verPagas?act.concat(paid):act;
   const x=aVista.find(y=>credChave(y.p,y.l)===credSel)||aVista[0]||null;
   const sel=x?credChave(x.p,x.l):'';
   const emLista=(id,xs)=>listaViva(id,xs.map(y=>({chave:'mort:'+y.p.id+':'+y.l.id,html:credCartao(y,sel)})));
   const novo=adiciona?'<button type="button" class="btn sm ghost plan-novo" data-toca="camada" data-click="newMort()">Nova hipoteca</button>':'';
-  const chips=act.length&&paid.length?`<div class="chips-fila cred-chips" role="group" aria-label="Mostrar">
-      <button type="button" class="chip${verPagas?'':' on'}" aria-pressed="${verPagas?'false':'true'}" data-toca="vista" data-click="credVerPagas(false)">Ativas <span class="n">${act.length}</span></button>
-      <button type="button" class="chip${verPagas?' on':''}" aria-pressed="${verPagas?'true':'false'}" data-toca="vista" data-click="credVerPagas(true)">Liquidadas <span class="n">${paid.length}</span></button></div>`:'';
-  const col=chips
-    +`<div class="plan-cab cred-cab"><h2>${act.length?'Ativas':'Liquidadas'}</h2>${novo}</div>`
+  const col=`<div class="plan-cab cred-cab"><h2>${act.length?'Ativas':'Liquidadas'}</h2>${novo}</div>`
     +(act.length?`<div class="cred-ativas">${emLista('creditos-ativos',act)}</div>`:'')
     +(paid.length&&act.length?`<button type="button" class="btn cred-liq" aria-expanded="${verPagas?'true':'false'}" data-toca="vista" data-click="credPagasAlternar()"><span>Liquidadas <span class="small">· ${paid.length}</span></span><span class="cred-liq-chev${verPagas?' aberto':''}">${ic('chevD',20)}</span></button>`:'')
     +(paid.length?`<div class="cred-pagas">${emLista('creditos-pagos',paid)}<p class="hint">Se editares um pagamento e a dívida voltar a subir, o crédito volta para as ativas.</p></div>`:'');
-  return head+resumo+aviso+`<div class="cred-corpo${verPagas?' pagas':''}"><div class="cred-col">${col}</div>${credDetalhe(x)}</div>`;
+  return resumo+aviso+head+`<div class="cred-corpo${verPagas?' abertas':''}"><div class="cred-col">${col}</div>${credDetalhe(x)}</div>`;
 }
 /* Os pagamentos de crédito de um imóvel que estão à espera de hipoteca: os que
    nasceram de um planeado sem crédito e por isso nunca abateram capital

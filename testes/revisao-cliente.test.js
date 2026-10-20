@@ -275,12 +275,12 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     assert.equal(app.hdrFiltN(), 0, 'sem análise registada, zero');
   });
 
-  test('o botão de filtros aparece nas listas, na análise e nos movimentos, e some no calendário, nos colaboradores e nas definições', () => {
+  test('o botão do cabeçalho aparece nos Imóveis e nos Contratos, na análise e nos movimentos, e some nas outras listas (o funil está ao lado da pesquisa), no calendário, nos colaboradores e nas definições', () => {
     const app = carregarApp();
     const fixos = elementos(app);
     semear(app);
-    const esperado = { dashboard: true, calendar: false, properties: true, contracts: true, visits: true, tenants: true, owners: true, colaboradores: false,
-      transactions: true, recurring: true, credits: true, projections: true, reports: true, fisco: true, settings: false };
+    const esperado = { dashboard: true, calendar: false, properties: true, contracts: true, visits: false, tenants: false, owners: false, colaboradores: false,
+      transactions: true, recurring: false, credits: false, projections: true, reports: true, fisco: true, settings: false };
     for (const t of SEPARADORES) {
       app.tab = t;
       app.pintarBotaoFiltros();

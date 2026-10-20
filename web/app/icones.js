@@ -44,10 +44,13 @@ function ic(n,s){s=s||20;const I={
   wave:'<path d="M3 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/>',
   split:'<path d="M4 6h5l3 6 3-6h5"/><path d="M4 18h5l3-6"/>',
   cloud:'<path d="M6 18a4 4 0 0 1 .6-8A6 6 0 0 1 18 9.5 3.5 3.5 0 0 1 17.5 18z"/><path d="M12 12v6M9.5 15.5 12 18l2.5-2.5"/>',
-  /* o estado da sincronização: guardado, por enviar, sem ligação */
+  /* o estado da sincronização: a ligar, guardado, por enviar, sem ligação.
+     No «a ligar» o relógio senta-se na base da nuvem, que abre para ele: um
+     relógio inteiro lá dentro, no traço de 1.8 e a 18px, era uma mancha */
+  nuvemLiga:'<path d="M8.5 18H7a5 5 0 1 1 .9-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8h-2.5"/><circle cx="12" cy="16" r="4"/><path d="M12 14v2l1.3 1"/>',
   nuvemOk:'<path d="M7 18a5 5 0 1 1 .9-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/><path d="M9.5 13.5l2 2 3.5-3.5"/>',
   nuvemSobe:'<path d="M7 18a5 5 0 1 1 .9-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/><path d="M12 16v-5M9.5 13.5 12 11l2.5 2.5"/>',
-  nuvemFora:'<path d="M7 18a5 5 0 1 1 .9-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/><path d="M4 4l16 16"/>',
+  nuvemFora:'<path d="M7 18a5 5 0 1 1 .9-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/><path d="M10 11l4 4M14 11l-4 4"/>',
   clip:'<path d="M21 11.5 12.5 20a5 5 0 0 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L10.5 18a2 2 0 0 1-3-3l8-8"/>',
   /* as Definições: três réguas com cursores */
   gear:'<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4"/>',

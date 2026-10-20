@@ -41,6 +41,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-17 · Uma cara nova, desenhada antes de escrita
 - 2026-10-19 · Os erros dos robôs não são pedidos
 - 2026-10-19 · A cara nova depois de usada, e a Declaração fica em dev
+- 2026-10-20 · As listas imitam os Movimentos, e a nuvem diz se liga
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1370,3 +1371,113 @@ baixo vivia no padding do #nav, e o sticky do fundo parava acima dele: os
 grupos viam-se a passar por baixo e pelos lados do fundo. O #nav ficou sem
 padding em baixo, e o fundo leva o espaço e a área segura por dentro, com
 margens de -14px (estilos.css:.nav-fundo).
+
+## 2026-10-20 · As listas imitam os Movimentos, e a nuvem diz se liga
+A segunda volta do Martinho pela v40 em dev. Do que apontou saíram seis
+folhas (as listas em duas, as etiquetas, os Colaboradores, as tarefas e a
+nuvem) e duas mudanças à mão: a linha «A tua situação fiscal» saiu das
+Definições, porque levava para fora delas, à página do IRS · Anexo F, onde a
+situação já vive; e o «Movimentos · N» passou à frente na ficha do imóvel.
+As regras vivem no design.md; aqui fica o porquê.
+
+Os Movimentos são o modelo, e as outras listas imitam-nos. O Martinho
+queixava-se de que, nos Movimentos, o botão dos filtros do cabeçalho era o
+«Selecionar vários» e o painel era diferente dos outros, e pediu-o igual. A
+resposta foi a contrária da pergunta: os Movimentos ficam como estão — «os
+outros menus é que o devem imitar: filtros rápidos, e botão de filtros mais
+completos». Por isso há um componente só (vistas.js:lfCabeca), que veste as
+classes dos Movimentos, em vez de copiar o markup para cada lista: imitar à
+letra é usar o mesmo desenho, e uma cópia afasta-se ao primeiro ajuste. Os
+chips rápidos são seletores, o menu da casa vestido de chip, e não as filas
+de chips de estado que os Imóveis, os Contratos, os Planeados e os Créditos
+tinham: com dois feitios de chip a fila não se lia como uma só. As
+contagens por estado passaram para as escolhas do chip («Em vigor · 3») e
+não se perderam. Os chips escolheram-se pelo que já existia e é mais usado
+(nos Imóveis o arrendamento só no ecrã largo, para a fila caber numa linha
+aos 390px). O funil não conta a pesquisa, que está à vista ao lado. A barra
+fica no documento na via parcial, em vez de sair e voltar como a dos
+Movimentos (lista-movimentos.js:txGuardarNo): um nó que sai do documento
+perde o foco, e o teclado do telemóvel fechava-se a meio de uma palavra. E
+fica por cima do que filtra, não sempre no topo: o cartão «Por confirmar»
+dos Planeados e o resumo dos Créditos não seguem os filtros, e um chip por
+cima deles dizia o contrário. Nos Créditos a coluna passou a ser a mesma em
+todos os ecrãs (as liquidadas por baixo das ativas, atrás de um botão): com
+o estado num chip, «Ativas e liquidadas» tem de mostrar as duas, e os chips
+Ativas / Liquidadas do computador escolhiam uma ou a outra e contradiziam o
+filtro. Os intervalos das Visitas passaram a campos da grelha com o nome
+inteiro à vista, como o «De» e o «Até» dos Movimentos, para o leitor de ecrã
+ouvir o que se vê. Fecha a dívida do «✕» em texto na pesquisa das listas: o
+limpar é o ic('x'), com o nome «Limpar a pesquisa» (vistas.js:lfBarraHtml).
+
+O «Limpar» e o «Fechar» vão no topo do painel das listas, ao lado do título,
+como nos Movimentos. Desfaz o pé preso ao fundo da véspera nas listas: o
+Martinho escolheu o feitio dos Movimentos, e um painel com os botões em
+cima e outro com eles em baixo era o que ele tinha pedido para acabar. O pé
+(vistas.js:fpanelPe) fica só nas análises, que ele pediu para não mudarem.
+
+O «Selecionar vários» fica no cabeçalho dos Imóveis e dos Contratos, as
+listas que têm seleção de vários; nas outras cinco o botão do cabeçalho sai
+(vistas.js:LF_COM_CABECALHO). Abrir o mesmo painel que o funil ao lado da
+pesquisa eram dois botões para a mesma coisa. O «Selecionar vários» é da
+camada da seleção e não da base (cloud/selecao-listas.js:selLCabecalho),
+porque a nuvem repõe o título e o nome do botão depois de cada render e só
+quem corre depois dela o pode vestir; sem a camada, o botão continua a abrir
+o painel. Em seleção, o cabeçalho segue o dos Movimentos — a caixa de tudo e
+a contagem no lugar do título —, porque o toque longo o deixava vazio, só
+com o hambúrguer e a nuvem.
+
+Nas etiquetas dos Movimentos basta uma (lista-movimentos.js:txTemEtiqueta):
+foi o que o Martinho pediu, «várias, basta uma». As etiquetas marcam coisas
+diferentes («Urgente», «Dedutível»), e a pergunta habitual é «mostra-me o
+que é urgente ou dedutível». Contam como um filtro no funil, como as datas:
+o número diz quantas escolhas de filtro há, e cinco etiquetas não são cinco
+filtros. O chip rápido só aparece com etiquetas escolhidas, porque o menu
+da casa é de escolha única e a fila do telemóvel já enche uma linha. Um
+filtro comum não guarda etiquetas, e por isso aplicá-lo limpa as escolhidas
+(definicoes.js:aplicarFiltroComum): somadas ao comum, o chip dele não
+aparecia ligado e o filtro não era o que se tinha escolhido. Apagar uma
+etiqueta tira-a do filtro (definicoes.js:delTag); as escolhidas que deixam
+de existir por outro caminho continuam no painel, para se poderem desligar.
+
+O «Movimentos · N» é o primeiro chip da ficha do imóvel, aceso a cobalto e
+com a contagem (imovel.js:imvAcoesRapidas): o Martinho pediu-o «mais
+saliente». É o que mais se procura na ficha, e no fim da fila, que rola de
+lado, ficava fora de vista.
+
+Os Colaboradores são das Pessoas. O Martinho procurava-os lá, e estavam nas
+Definições desde o canvas de 2026-10, como «arrumação da conta». Quem ajuda
+a gerir é gente, como os inquilinos e os proprietários: passaram a terceiro
+segmento das Pessoas (navegacao.js:PESSOAS), e a linha «Colaboradores e
+cargos» saiu das Definições. A contagem é de pessoas e só aparece depois de
+o servidor responder (cloud/colaboradores.js:contarColaboradores): um «0»
+antes disso afirmava o que ainda não se sabe. O resumo da linha que saiu
+(pessoas e convites) ficou como subtítulo do ecrã no computador.
+
+As tarefas. A secção criada no formulário grava-se com a tarefa, e não logo
+(tarefas.js:tfSecNovas): gravar logo repintava a janela da lista por baixo
+do formulário e deixava uma secção vazia a quem cancelasse. A tarefa
+agarrada flutua acima do dedo, porque debaixo dele tapava o que o pedido
+manda mostrar — a linha entre as duas tarefas e o nome da secção acesa. A
+alternativa ao arrasto é a própria pega, um botão que abre o «Mover tarefa»
+(tarefas.js:tfMoverTarefa): um ⋯ por tarefa acrescentava um terceiro alvo a
+cada linha de 358px. O recolhido é do aparelho, como a gaveta: um telemóvel
+e um computador pedem arrumações diferentes. E uma secção recolhida continua
+a ser alvo, como o pedido diz, com um aviso a dizer para onde foi a tarefa.
+
+A nuvem diz se está ligada. O Martinho pediu-a laranja com um relógio
+enquanto a app tenta ligar, verde quando liga, vermelha com uma cruz quando
+não liga, e laranja de novo em cada nova tentativa. O laranja é o --out, e
+não o --warn: o --warn é âmbar acastanhado, era a cor do «Sem ligação» de
+antes, e os dois lado a lado confundiam-se; os pares dão 4,5:1 ou mais nos
+dois temas. O relógio senta-se na base da nuvem, que abre para ele: um
+relógio inteiro lá dentro, no traço de 1.8 e a 18px, era uma mancha. Não
+roda: uma peça a girar no cabeçalho até 45 segundos, ou de 30 em 30 sem
+rede, era ruído. Sem ligação, o ciclo tenta a cada 30 segundos
+(cloud/nucleo.js:syncCycle) em vez de esperar pelo intervalo de leitura,
+que chega a meia hora parado: é o «laranja de novo em cada nova tentativa»,
+e o vermelho não fica mais tempo do que a falta de rede; sem rede, um
+pedido falhado não chega ao servidor e não gasta a D1. No telemóvel o «A
+ligar» da abertura é só o ícone, e a tentativa depois de uma falha fica com
+a faixa, laranja, para o cabeçalho não mexer de 30 em 30 segundos. À vista,
+«Sem ligação ao servidor»; o «— sincroniza mais tarde» ficou no aria-label:
+com ele a frase tinha 340px e, entre 901 e 1024px, comia o título do ecrã.

@@ -10,37 +10,77 @@
    enviado» e também «ainda não tentei» — e são coisas diferentes. Quem acabou
    de escrever alguma coisa não tinha como saber se já tinha subido.
 
-   Três estados, e o que muda entre eles é quanto tempo ficam:
+   Quatro estados, e o que muda entre eles é quanto tempo ficam:
+     'liga' — «A ligar ao servidor…», desde a abertura com sessão até a
+              primeira conversa com o servidor acabar, e outra vez em cada
+              nova tentativa depois de uma falha (cloud/nucleo.js:tentarLigar).
+              Fica enquanto a tentativa durar — no máximo o tempo-limite do
+              pedido (cloud/nucleo.js:TEMPO_API).
      'ok'   — «Guardado», e sai sozinho ao fim de dois segundos. É um recibo,
               não um letreiro: se ficasse, deixava de se ler.
      'pend' — «N por enviar», e FICA enquanto houver. É o estado que faltava.
-     'off'  — «Sem ligação», e fica até haver.
+     'off'  — «Sem ligação ao servidor», e fica até a tentativa seguinte.
+   E um quinto que é não estar: '' esvazia o selo (a sessão acabou).
 
    Vive no cabeçalho (index.html:#hdrSync), entre o título e o sino — o
    canvas de 2026-10 põe-no lá, e deixou de ser um selo solto por cima da
    página a disputar o canto com o sino. É um ícone de nuvem com a frase ao
-   lado: verde «Guardado», cobalto «N por enviar», âmbar «Sem ligação». No
-   telemóvel fica só o ícone (a frase vai no aria-label e no title); no
-   computador a frase do «Guardado» recolhe ao fim de dois segundos (a
-   classe .recibo) e o ícone fica — o recibo lê-se e sai, o estado vê-se.
-   Recebe: state — 'ok', 'pend' ou 'off'; n (opcional) — quantas alterações
-   estão por enviar, para o 'pend' as poder contar.
+   lado: laranja com um relógio «A ligar», verde «Guardado», cobalto «N por
+   enviar», vermelho com uma cruz «Sem ligação». No telemóvel fica só o
+   ícone (a frase vai no aria-label e no title); no computador a frase do
+   «Guardado» recolhe ao fim de dois segundos (a classe .recibo) e o ícone
+   fica — o recibo lê-se e sai, o estado vê-se. A nova tentativa depois de
+   uma falha (a classe .tenta) e o leitor de ecrã têm regras próprias, ditas
+   lá dentro.
+   Recebe: state — 'liga', 'ok', 'pend', 'off' ou '' (esvazia); n
+   (opcional) — quantas alterações estão por enviar, para o 'pend' as poder
+   contar.
    Devolve: nada — mexe só no elemento #hdrSync. */
 function setSyncBadge(state, n) {
   var el = document.getElementById('hdrSync');
   if (!el) return;
-  clearTimeout(setSyncBadge._t);
   var q = Number(n) || 0;
-  if (state === 'pend' && !q) { el.innerHTML = ''; el.className = ''; return; }
-  var e = state === 'off' ? ['fora', 'nuvemFora', 'Sem ligação — sincroniza mais tarde']
+  var antes = ' ' + (el.className || '') + ' ';
+  if (!state || (state === 'pend' && !q)) {
+    clearTimeout(setSyncBadge._t);
+    el.innerHTML = ''; el.className = '';
+    el.removeAttribute('title'); el.removeAttribute('aria-label'); el.setAttribute('aria-live', 'polite');
+    return;
+  }
+  /* [classe, ícone, frase, frase à vista]. A do «Sem ligação» à vista é a
+     curta: a inteira (com o «sincroniza mais tarde») tinha 340px e, no
+     computador estreito, comia o título do ecrã; fica no aria-label e no
+     title */
+  var e = state === 'off' ? ['fora', 'nuvemFora', 'Sem ligação ao servidor — sincroniza mais tarde', 'Sem ligação ao servidor']
+    : state === 'liga' ? ['liga', 'nuvemLiga', 'A ligar ao servidor…']
     : state === 'pend' ? ['pend', 'nuvemSobe', q === 1 ? '1 alteração por enviar' : q + ' alterações por enviar']
     : ['ok', 'nuvemOk', 'Guardado'];
-  el.className = 'sync ' + e[0];
+  /* Uma tentativa depois de uma falha (o selo estava em «Sem ligação», ou
+     numa tentativa anterior que ainda não acabou) leva a classe .tenta. No
+     telemóvel o «por enviar» e o «sem ligação» descem para uma faixa por
+     baixo do cabeçalho; o «A ligar» da abertura é só o ícone — a faixa a
+     entrar e a sair em cada abertura fazia o cabeçalho saltar duas vezes
+     por nada —, mas a nova tentativa herda a faixa que lá está, agora
+     laranja: sem ela, o cabeçalho encolhia e crescia de 30 em 30 segundos
+     enquanto a rede não voltasse (estilos.css:header.top .sync.tenta). */
+  var tenta = state === 'liga' && /\s(fora|tenta)\s/.test(antes);
+  var classe = 'sync ' + e[0] + (tenta ? ' tenta' : '');
+  // o mesmo selo outra vez (a abertura e o startSync dizem ambos «A ligar»): não se refaz nem se anuncia
+  if (el.className === classe && el.title === e[2]) return;
+  clearTimeout(setSyncBadge._t);
+  /* O leitor de ecrã (o #hdrSync é um role=status, aria-live=polite) ouve
+     as mudanças, mas não a roda das tentativas: de 30 em 30 segundos sem
+     rede o selo passa a «A ligar» e volta a «Sem ligação», e anunciar isso
+     era repetir a mesma frase para sempre. A tentativa e a falha repetida
+     mudam o selo com o aria-live desligado; o resto anuncia-se. */
+  var repete = tenta || (state === 'off' && / tenta /.test(antes));
+  el.setAttribute('aria-live', repete ? 'off' : 'polite');
+  el.className = classe;
   el.title = e[2];
   el.setAttribute('aria-label', e[2]);
-  el.innerHTML = ic(e[1], 18) + '<span>' + e[2] + '</span>';
+  el.innerHTML = ic(e[1], 18) + '<span>' + (e[3] || e[2]) + '</span>';
   /* um recibo, não um letreiro: a frase fica o tempo de se ler */
-  if (state !== 'off' && state !== 'pend') setSyncBadge._t = setTimeout(function () { el.classList.add('recibo'); }, 2000);
+  if (state === 'ok') setSyncBadge._t = setTimeout(function () { el.classList.add('recibo'); }, 2000);
 }
 
 /* ---------------- ecrã de entrada ---------------- */
@@ -739,7 +779,7 @@ function modalConvite(token, prev) {
         pode.map(function (t) { return '<li>' + ic('check', 18) + '<span>' + esc(t) + '</span></li>'; }).join('') +
         '<li class="cv-nao">' + ic('lock', 18) + '<span>As quotas e as contas entre donos ficam com os donos</span></li></ul></section>'
       : '') +
-    '<p class="small">Podes sair quando quiseres, em Definições → Colaboradores e cargos.</p>' +
+    '<p class="small">Podes sair quando quiseres, em Pessoas → Colaboradores.</p>' +
     entrasComo() + '</div>',
     '<button class="btn" data-toca="camada" data-click="CW.chegadaDepois(\'convite\')">Agora não</button>' +
     '<button class="btn primary" data-toca="dados" data-click="CW.aceitarConvite(\'' + jsq(token) + '\')">Aceitar convite</button>');
@@ -947,6 +987,9 @@ if (CW.user) {
   // sessão em cache: volta à página onde estava e sincroniza em fundo
   try { restorePage(); } catch (e) {}
   showLegalGate();
+  /* desde a abertura, a nuvem diz que está a tentar: laranja, com o relógio,
+     até o /api/state responder ('ok') ou falhar ('off') no startSync */
+  setSyncBadge('liga');
   /* As duas leituras do arranque partem JUNTAS. O /api/state estava dentro do
      .then do /api/me e pagava-lhe a ida e volta inteira antes de sequer sair —
      e é ele que destranca os contadores (o sabemosOEstado), portanto essa
@@ -989,8 +1032,11 @@ if (CW.user) {
     if (e && e.status === 401) sessionLost();
     // offline: continua local — e com a MESMA leitura já disparada, senão
     // este caminho abria um segundo /api/state, sem nada que trave dois
-    // applyState a chegarem fora de ordem
-    else { setSyncBadge('off'); startSync(pEstado); }
+    // applyState a chegarem fora de ordem. O selo não se mexe aqui: quem diz
+    // se há ligação é essa leitura, no startSync — pô-lo em «Sem ligação» já
+    // o fazia piscar para «A ligar» e outra vez para «Sem ligação», e
+    // mentia se o /api/state respondesse e só o /api/me tivesse falhado
+    else startSync(pEstado);
   });
 } else {
   showAuth();

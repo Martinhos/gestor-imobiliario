@@ -790,8 +790,8 @@ navegacao.js:tituloDoEcraHtml e pelo navegacao.js:subtituloDoEcra (ver
 «Navegação»). O sino das
 notificações só aparece na visão geral (notificacoes.js:notifSino).
 
-Os filtros não ocupam a página: estão atrás do botão de funil do
-cabeçalho (vistas.js:hdrFiltToggle, vistas.js:hdrFiltN; o render
+Os filtros não ocupam a página. Nas análises estão atrás do botão de funil
+do cabeçalho (vistas.js:hdrFiltToggle, vistas.js:hdrFiltN; o render
 pinta-o). O botão ganha um ponto quando há filtros ativos
 (estilos.css:.filtbtn) e acende com o painel aberto: primário no
 computador; no telemóvel, onde o cabeçalho tira o fundo aos botões, o par
@@ -802,15 +802,20 @@ justamente quando é a maneira de fechar o painel. Diz o mesmo ao leitor de
 ecrã pelo aria-expanded (vistas.js:pintarBotaoFiltros); nos Movimentos,
 onde o botão do cabeçalho é o «Selecionar vários», não o leva. O painel
 (estilos.css:.fwrap, estilos.css:.fpanel) é pegajoso e flutua por cima do
-conteúdo sem o empurrar: preso ao topo, desaparecia ao primeiro scroll. Nos
-Movimentos o botão dos filtros fica ao lado da pesquisa, que está sempre à
-vista, e o do cabeçalho é o «Selecionar vários» (ver «Os Movimentos»).
+conteúdo sem o empurrar: preso ao topo, desaparecia ao primeiro scroll. Nas
+listas e nos Movimentos o funil fica ao lado da pesquisa, que está sempre à
+vista, e o botão do cabeçalho só existe onde há seleção de vários — os
+Movimentos, os Imóveis e os Contratos —, onde é o «Selecionar vários»
+(vistas.js:LF_COM_CABECALHO, vistas.js:pintarBotaoFiltros; ver «Os
+Movimentos»). Nos Inquilinos, nos Proprietários, nas Visitas, nos Planeados
+e nos Créditos não há botão no cabeçalho: dois botões para o mesmo painel
+eram ruído.
 
-Os três painéis de filtro tinham três feitios; fica UM (a nota do
-vistas.js:lfSel): mexes, a lista muda logo atrás; «Limpar» à esquerda,
-«Fechar» primário à direita, em todo o lado. Fora dos Movimentos, o
-«Limpar» e o «Fechar» vivem num pé preso ao fundo da caixa (vistas.js:fpanelPe,
-estilos.css:.fp-pe), na forma do rodapé das janelas: o resto rola por trás,
+Os painéis de filtro têm um modelo só (a nota do vistas.js:lfSel): mexes, a
+lista muda logo atrás, sem «Aplicar»; «Limpar» à esquerda, «Fechar» à
+direita. Nas análises, o «Limpar» e o «Fechar» vivem num pé preso ao fundo
+da caixa (vistas.js:fpanelPe, estilos.css:.fp-pe; vistas.js:anaPanel), na
+forma do rodapé das janelas: o resto rola por trás,
 o pé fica, com a divisória e o fundo do cartão; no telemóvel vão a meias,
 com 48px. A caixa continua a ser quem rola (o cloud/filtros.js segue as
 listas abertas pelo scroll dela) e o pé é o último filho, pegajoso em
@@ -819,34 +824,82 @@ caixa, e o scroll-padding da caixa é a altura dele, para o Tab não deixar um
 campo escondido por trás. Mexer num filtro repinta o ecrã, e a caixa volta
 à rolagem em que estava (vistas.js:rolagemDoPainel,
 vistas.js:reporRolagemDoPainel): escolher a ordenação, no fundo de um
-painel comprido, não atira a caixa para o topo. lfBar (vistas.js:lfBar)
-monta-o: pesquisa no topo com o botão de limpar, seletores empilhados
-(vistas.js:lfSel), ordenação (vistas.js:lfSort) e a linha «N resultados
-com os filtros ativos» quando os há. lfHit (vistas.js:lfHit) faz a
-pesquisa por palavras e frases entre aspas, sem ligar a acentos. anaPanel
-(vistas.js:anaPanel) faz o mesmo para os ecrãs de análise, e o de sempre —
-o seletor de dono e o que cada ecrã acrescenta — é o
-vistas.js:anaPanelPadrao. A pesquisa
-espera 280 ms e devolve o foco com o cursor no fim (vistas.js:lfSearch,
-lista-movimentos.js:onTxSearch). O painel dos Movimentos é o mesmo, com o
-desenho do M-Filtros: o Limpar e o Fechar no topo, ao lado do título (ver
-«Os Movimentos»).
+painel comprido, não atira a caixa para o topo. O anaPanel monta-o, e o de
+sempre — o seletor de dono e o que cada ecrã acrescenta — é o
+vistas.js:anaPanelPadrao. Nas listas e nos Movimentos o «Limpar» e o
+«Fechar» estão no topo, ao lado do título (ver abaixo e «Os Movimentos»).
 
-Os filtros mais usados de uma lista estão também à vista, em chips por cima
-dela, e são os mesmos do painel — mexer num muda o outro. Há dois feitios. O
-filtro rápido escolhe entre poucos estados e aplica-se ao tocar, sem
-«Aplicar»: os imóveis pelo estado, os inquilinos pelo contrato, os
-proprietários pelos imóveis, e os planeados. Um filtro com muitas escolhas
-é o menu da casa vestido de chip (lista-movimentos.js:txChipSel,
-visitas.js:visChipSel): desligado diz o nome do filtro; ligado diz o valor,
-com o fundo cobalto e um × que limpa só esse. No telemóvel a fila desliza de
-lado, e o que não cabe e está desligado fica só no painel. O chip diz o nome
-ao leitor de ecrã uma vez: quando o rótulo já começa por ele («Ordenar:
-renda»), o aria-label é o rótulo (lista-contratos.js:ctChipSel).
+Todas as listas filtram como os Movimentos (vistas.js:lfCabeca), e é um
+componente só, que veste as classes deles, em vez de uma cópia por lista. A
+lista declara o que tem — o nome no singular e no plural, quantos passam, os
+campos e a ordenação — e recebe a barra (vistas.js:lfBarraHtml), o painel
+(vistas.js:lfPainelHtml, vistas.js:lfPainelCorpo) e os chips
+(vistas.js:lfChipsHtml), por esta ordem; a interface está no comentário por
+cima do lfCabeca. A barra é a pesquisa sempre à vista, com o funil ao lado,
+que diz quantos filtros estão ligados sem contar a pesquisa
+(vistas.js:lfNFiltros) e abre o painel completo. A pesquisa vai por palavras
+e frases entre aspas, sem ligar a acentos (vistas.js:lfHit), espera 280 ms e
+devolve o foco com o cursor no fim quando o campo foi recriado
+(vistas.js:lfSearch, como o lista-movimentos.js:onTxSearch); o limpar dela é
+o ic('x') com o nome «Limpar a pesquisa». A barra fica por cima do que
+filtra: no topo nos Imóveis, nos Contratos, nas Pessoas e nas Visitas; nos
+Planeados depois da faixa de quem vem de trás e do cartão «Por confirmar»,
+que não filtra; nos Créditos depois do resumo e do aviso dos pagamentos sem
+hipoteca. Sem registos nenhuns não há barra: fica o vazio com o seu botão.
 
-As contagens de uma lista contam o que a lista pode mostrar: os chips com
-quantos há e o «N resultados» contam só os registos que passam pelo âmbito,
-como as linhas (ambito.js:visiveis) — nos Contratos, um contrato de um imóvel
+Os filtros mais usados estão à vista, em chips por baixo da pesquisa, e são
+os mesmos do painel — mexer num muda o outro. Cada chip é o menu da casa
+vestido de chip (vistas.js:lfChip, lista-movimentos.js:txChipSel):
+desligado diz o nome do filtro; ligado diz o valor, com o fundo cobalto e um
+× que limpa só esse (vistas.js:lfLimparCampo); as escolhas levam quantos lhe
+cabem pelos olhos dos outros filtros («Em vigor · 3»). Um chip `'largo'` só
+aparece a partir de 901px, ou ligado (o «Pago por» dos Movimentos). Um chip
+que não é um seletor leva ao painel com o foco no campo dele
+(vistas.js:lfAbrirEm; estilos.css:.lfm-chip-abre) — o «Dias e horas» das
+Visitas, como o «Escolher datas…» dos Movimentos. Depois dos chips, o
+«Limpar» (vistas.js:lfChipsHtml), que no telemóvel só se mostra quando a
+única coisa ligada não tem o seu × à vista. A fila parte em linhas e não
+rola de lado. O chip diz o nome ao leitor de ecrã uma vez: quando o rótulo
+já começa por ele («Ordenar: renda»), só o rótulo.
+
+O painel é o dos Movimentos (vistas.js:lfPainelCorpo, as classes
+estilos.css:.mov-fwrap, estilos.css:.mov-filtros-card,
+estilos.css:.mov-grelha): o título com o «Limpar» (só com filtros ligados) e
+o «Fechar» NO TOPO, «Aplicam-se ao mexer · N imóveis», o que a lista põe por
+cima (os filtros comuns nos imóveis) e a grelha de duas colunas, com a
+ordenação no fim (vistas.js:lfCampos: «Ordenar por» e, escolhida, «Ordem»).
+Na grelha, a opção vazia diz o curto («Todos»), e o campo ligado veste o
+cobalto (estilos.css:.mov-ligado). Além dos seletores (vistas.js:lfSel, que
+aplica pelo vistas.js:lfMudar e respeita o `aplicar` do campo), a grelha
+tem campos de data e de hora (vistas.js:lfCampoNaGrelha), lado a lado como o
+«De» e o «Até» dos Movimentos; um intervalo conta como um filtro no funil (o
+`junto`, vistas.js:lfCount).
+
+O estado é o lf(k) da lista, e nada mais. O «Limpar» (vistas.js:lfClear)
+tira os filtros e a pesquisa e deixa a ordenação, que não é um filtro, como
+o clearTxFilters dos Movimentos. Na via parcial (vistas.js:refrescarListasVivas)
+a barra fica no documento (vistas.js:lfBarraViva) — o resto troca-se à volta
+dela e só o funil se refaz, se mudou —, e quem escreve não perde o foco, o
+cursor nem o que o teclado compunha: um nó que sai do documento perde o
+foco, e o teclado do telemóvel fechava-se a meio de uma palavra. Quando a
+via parcial desiste (nasce um cartão), o render recria o campo e o lfSearch
+devolve-lhe o foco. Ao teclado, o funil abre e fecha o painel com o foco a
+ficar nele, e o «Fechar» devolve-o ao funil (vistas.js:lfFocarFunil);
+escolher num seletor deixa o foco no seletor refeito (vistas.js:lfReporFoco);
+o «Limpar» do painel, que some, passa o foco ao «Fechar».
+
+Nos Imóveis e nos Contratos o botão do cabeçalho é o «Selecionar vários»
+(cloud/selecao-listas.js:selLCabecalho, a seguir ao
+cloud/selecao.js:patchHdrSel, que embrulha): é da camada da seleção e não
+da base, porque a nuvem (cloud/painel.js:patchHdr) repõe o título e o nome
+do botão depois de cada render, e só quem corre depois dela o pode vestir.
+Sem a camada, o hdrFiltToggle continua a abrir o mesmo painel. O caminho
+curto repõe-no (CW.selCabecalho, chamado pelo vistas.js:refrescarListasVivas
+depois do pintarBotaoFiltros).
+
+As contagens de uma lista contam o que a lista pode mostrar: as escolhas dos
+chips com quantos há e o «Aplicam-se ao mexer · N» contam só os registos que
+passam pelo âmbito, como as linhas (ambito.js:visiveis) — nos Contratos, um contrato de um imóvel
 fora do âmbito, ou sem imóvel, não entra na conta
 (lista-contratos.js:vContracts).
 
@@ -890,16 +943,19 @@ lista-imoveis.js:imvPendentesPorImovel), os contratos por começar, o que está
 por acertar entre proprietários (cinzento: é uma conta, não um perigo), «Por
 quartos», a quota do proprietário em foco e os colaboradores.
 
-Por cima da lista, a pesquisa continua no painel (vistas.js:lfBar) e
+Por cima da lista, a pesquisa à vista com o funil (vistas.js:lfCabeca), que
 encontra também quem mora no imóvel — os inquilinos dos contratos vivos —,
-para quem pode ver os contratos. E entram os chips do filtro rápido pelo
-estado: Todos, com a contagem, Arrendados, Parciais, Vagos e Uso
-próprio. Filtram ao tocar, sem «Aplicar», e são o mesmo filtro «st» do
-seletor do painel (lista-imoveis.js:imvChipsEstado,
-lista-imoveis.js:imvFiltroRapido, lista-imoveis.js:ESTADOS_RAPIDOS); sem os
-Contratos não há chips. No telemóvel a fila desliza de lado
-(estilos.css:.imv-filtros); no computador os cartões vão numa grelha de
-colunas de 400px no mínimo (estilos.css:.imv-lista).
+para quem pode ver os contratos. Os chips rápidos são o estado — cada um
+com quantos imóveis há nele entre os que passam os outros filtros,
+«Arrendados · 2» (lista-imoveis.js:imvCampoEstado, aplicado pelo
+lista-imoveis.js:imvFiltroRapido; ligado diz o rótulo curto do
+lista-imoveis.js:ESTADOS_RAPIDOS) — e o proprietário, que é o filtro global
+(lista-imoveis.js:imvFiltroDono); o do arrendamento só no ecrã largo, para a
+fila caber numa linha aos 390px. No painel, mais a ordenação: nome e valor
+sempre, a renda e a yield com os Contratos, a dívida com os Créditos (sem
+eles não ordenavam nada), e os filtros comuns por cima. Sem os Contratos não
+há chip do estado. No computador os cartões vão numa grelha de colunas de
+400px no mínimo (estilos.css:.imv-lista).
 
 Um ecrã de análise é uma coluna de blocos, cada fila um .cols: a Visão geral
 pela ordem do canvas (painel-geral.js:vDashboard; ver «A Visão geral»), a
@@ -1345,15 +1401,47 @@ coisa tem de poder saber se ela já subiu, e o silêncio não serve para isso:
 o silêncio quer dizer «está tudo enviado» e quer dizer «ainda não tentei», e
 são coisas diferentes.
 
-O selo (cloud/entrada.js:setSyncBadge) tem três estados, e o que os separa é
-quanto tempo ficam. «Guardado» é um recibo: aparece e sai ao fim de dois
-segundos, porque um letreiro permanente deixa de se ler. «N alterações por
-enviar» fica enquanto houver — é o estado que faltava, e o número é o das
-operações que o próximo envio vai levar (cloud/nucleo.js:pushNow), não uma
-estimativa. «Sem ligação» é só isso — sem rede, ou sem resposta a tempo — e
-fica até haver. Uma recusa do servidor (um 429, um 5xx) não é falta de rede:
-fica «N alterações por enviar», e a frase do servidor diz-se num toast
-(cloud/nucleo.js:avisoDoServidor).
+O selo (cloud/entrada.js:setSyncBadge) tem quatro estados, e o que os separa
+é quanto tempo ficam. «A ligar ao servidor…» é laranja, com um relógio na
+base da nuvem: aparece desde a abertura com sessão, antes do primeiro
+/api/state, e outra vez em cada nova tentativa depois de uma falha, e fica o
+que a tentativa durar — no máximo o tempo-limite do pedido
+(cloud/nucleo.js:TEMPO_API). «Guardado» é verde e é um recibo: aparece e sai
+ao fim de dois segundos, porque um letreiro permanente deixa de se ler. «N
+alterações por enviar» é cobalto e fica enquanto houver — é o estado que
+faltava, e o número é o das operações que o próximo envio vai levar
+(cloud/nucleo.js:pushNow), não uma estimativa. «Sem ligação ao servidor» é
+vermelho, com uma cruz dentro da nuvem — sem rede, ou sem resposta a tempo —
+e fica até à tentativa seguinte. Uma recusa do servidor (um 429, um 5xx) não
+é falta de ligação: o servidor respondeu, fica «N alterações por enviar», e a
+frase do servidor diz-se num toast (cloud/nucleo.js:avisoDoServidor). Sem
+sessão o selo não existe: sair esvazia-o (cloud/nucleo.js:encerrarSessao).
+O laranja é o --out, e não o --warn, que é âmbar acastanhado e se
+confundia com o vermelho ao lado; os pares (--out sobre --out-soft,
+--danger sobre --danger-soft) dão 4,5:1 ou mais nos dois temas. O relógio
+não roda: o estado diz-se pela cor e pelo desenho.
+
+Quem decide é o núcleo, em três sítios: cloud/nucleo.js:tentarLigar antes de
+cada conversa (só põe o «A ligar» se a última falhou, ou se ainda nenhuma
+acabou nesta sessão — com a ligação de pé, a leitura de três em três minutos
+não pisca nada), cloud/nucleo.js:ligou quando o servidor responde (com dados,
+com um 304 ou com uma recusa) e cloud/nucleo.js:caiuALigacao quando não
+responde. Sem ligação, o ciclo de 30 segundos tenta outra vez a cada volta,
+sem esperar pelo intervalo de leitura (cloud/nucleo.js:syncCycle) — que
+depois de uma hora parada é de meia hora, e o selo ficava vermelho esse tempo
+todo com a rede já de volta —, e uma tentativa por ciclo: se o envio já
+tentou, a leitura não vai atrás dele. O voltar online e o voltar à frente
+também são tentativas. No arranque o selo nasce «A ligar» e quem o tira é a
+leitura do estado; o /api/me a falhar não o põe em «Sem ligação», porque
+isso o fazia piscar, e mentia se só o /api/me tivesse falhado.
+
+O leitor de ecrã ouve as mudanças (o #hdrSync é um role=status), mas não a
+roda das tentativas: sem rede, de 30 em 30 segundos, o selo passa a «A ligar»
+e volta a «Sem ligação», e a tentativa e a falha repetida mudam-no com o
+aria-live desligado. O mesmo selo duas vezes seguidas não se refaz nem se
+anuncia. À vista diz «Sem ligação ao servidor»; o «— sincroniza mais tarde»
+fica no aria-label e no title, porque com ele a frase comia o título do ecrã
+no computador estreito.
 
 E vive no cabeçalho ao lado do título, nunca em cima de outra peça dele:
 esteve no canto superior direito, que é onde o sino mora, e ninguém tinha
@@ -1362,7 +1450,11 @@ quando a ligação caía. Há uma cena por estado e uma regra que guarda o síti
 (testes/ui/invariantes.js). No telemóvel o selo é o ícone, e as frases que
 ficam — «por enviar» e «sem ligação» — descem para uma faixa fina por baixo
 do cabeçalho, a toda a largura, e o cabeçalho cresce o que ela ocupa (ver
-«Navegação»).
+«Navegação»). O «A ligar» da abertura é só o ícone: a faixa a entrar e a
+sair em cada abertura fazia o cabeçalho saltar duas vezes por nada. Mas uma
+nova tentativa depois de uma falha herda a faixa que lá está, agora laranja
+(a classe .tenta, estilos.css:header.top) — sem isso o cabeçalho encolhia e
+crescia de 30 em 30 segundos enquanto a rede não voltasse.
 
 ## Uma porta, e nenhum beco
 As opções de um registo — editar, duplicar, apagar, selecionar vários —
@@ -1528,11 +1620,14 @@ Apagar está no ⋯ da janela. No computador a janela alarga até 940px e os car
 .sheet:has(.imv-ficha)).
 
 As ações rápidas são chips, só os que o cargo e os serviços ligados deixam.
-Ao dono: «Novo contrato» (num imóvel de arrendamento, contract.add),
-«Registar despesa» (tx.add), «Pagamento de crédito» (com uma hipoteca viva e
-o acessos.js:motivoCredito vazio; com uma só, já vem escolhida) e «Ver
-movimentos» (tx.view, os Movimentos filtrados pelo imóvel). A quem colabora,
-as do cargo (acessos.js:acoesNoImovel) e «Ver movimentos». Um chip que muda
+O primeiro é «Movimentos · N»
+(tx.view, os Movimentos filtrados pelo imóvel, com quantos tem), aceso a
+cobalto (estilos.css:.imv-acoes .chip.destaque): é o que mais se procura na
+ficha, e no fim da fila, que rola de lado, ficava fora de vista. Depois, ao
+dono: «Novo contrato» (num imóvel de arrendamento, contract.add), «Registar
+despesa» (tx.add) e «Pagamento de crédito» (com uma hipoteca viva e o
+acessos.js:motivoCredito vazio; com uma só, já vem escolhida). A quem
+colabora, as do cargo (acessos.js:acoesNoImovel). Um chip que muda
 de ecrã fecha antes a ficha (imovel.js:despesaNoImovel,
 imovel.js:pagamentoNoImovel, imovel.js:verMovimentosDoImovel).
 
@@ -1698,6 +1793,70 @@ o campo não perde o foco; o limpar dela é o ic('x',14). Uma
 tarefa cumprida fica riscada no mesmo sítio, sem saltar para o fim: saltar
 tirava a linha de debaixo do dedo. Remover uma tarefa ou uma secção (que leva
 as tarefas dela) tem Anular (componentes.js:comDesfazer).
+
+O formulário de uma tarefa tem sempre o seletor da secção, mesmo sem
+secções: «Sem secção», as secções pela ordem, e no fim «+ Criar secção…»
+(tarefas.js:tfOpcoesDoFormulario), como a categoria de um movimento
+(movimento.js:onCatChange). Escolher a última pede o nome
+(tarefas.js:tfSecMudou) e deixa a secção nova escolhida, sem tocar no nome
+que já se escreveu; um nome que já existe — sem olhar a acentos nem a
+maiúsculas — escolhe essa secção, com um aviso. A secção nova fica no
+formulário (tarefas.js:tfSecNovas) e grava-se com a tarefa
+(tarefas.js:tfGuardarTarefa): cancelar a tarefa não deixa uma secção vazia
+para trás, e gravar logo repintava a janela da lista por baixo do
+formulário. Cancelar o nome devolve o seletor à escolha de antes. Uma tarefa
+nova fica no fim da secção; editar e mudar de secção leva-a para o fim da
+nova. O «Adicionar secção» do ⋯ da janela continua lá.
+
+As secções recolhem-se. O cabeçalho de cada uma é um botão da largura toda
+(tarefas.js:tfSeccaoHtml) — a seta, o nome e «x de n» cumpridas —, com
+aria-expanded e aria-controls, e o ⋯ ao lado; a seta roda para o lado
+quando está recolhida. O grupo das tarefas sem secção, que vem primeiro,
+também se recolhe quando há secções. O que fica recolhido é do aparelho e
+não da conta, como a gaveta: `gi_tf_recolhidas`, por registo e por secção
+(tarefas.js:LS_TF_RECOLHIDAS, tarefas.js:tfDobrar), só com os ids que ainda
+existem; sem nada guardado — ou com o armazenamento fechado — está tudo
+aberto, e o toque vale em memória até recarregar. Recolhida, as tarefas
+continuam no HTML e é a folha que as esconde (estilos.css:.tf-recolhida): a
+pesquisa e o arrasto contam com elas.
+
+As tarefas arrastam-se pela pega, à esquerda da caixa (tarefas.js:tfItemHtml,
+tarefas.js:tfArrastar), que só existe para quem pode alterar a lista
+(tarefas.js:tfPodeAlterar). É a única coisa da linha com touch-action:none:
+arrastar no nome continua a rolar a lista. A partir de 5px na vertical a
+tarefa levanta-se e flutua logo ACIMA do dedo (tarefas.js:tfArrastoPintar):
+o dedo aponta o sítio, e o que lá está fica à vista — debaixo do dedo, a
+tarefa tapava a linha e o nome da secção acesa. O sítio é o da altura do
+dedo (tarefas.js:tfArrastoAlvo):
+
+- por cima do nome de uma secção — ou de uma secção recolhida, ou sem outras
+  tarefas — a secção inteira acende (estilos.css:.tf-alvo, com o
+  --accent-soft e um anel do --accent) e largar põe a tarefa em 1.º lugar
+  dela;
+- entre duas tarefas, da mesma secção ou de outra, aparece uma linha entre
+  elas (estilos.css:.tf-linha, do --accent) e largar põe-na aí, mudando de
+  secção se for preciso.
+
+Enquanto se arrasta, aparece no topo o lugar das tarefas sem secção quando
+nenhuma está à vista (tarefas.js:tfSoltasAlvoHtml), e a lista rola o que ele
+empurrou para nada saltar debaixo do dedo. Perto das bordas, a lista rola
+sozinha (tarefas.js:tfArrastoRolagem). O Esc desfaz sem fechar a janela, e o
+pointercancel também. Largada numa secção recolhida, onde não se vê, um
+aviso diz para onde foi.
+
+A ordem é a do array `itens`, e mais nada: não há campo novo
+(tarefas.js:tfMoverEm, uma função pura — a tarefa sai de onde está e entra a
+seguir à tarefa `depois` da secção de destino, ou em 1.º lugar com `depois`
+vazio; um `depois` que já não está lá põe-na no fim). Grava pelo
+tarefas.js:tfGravar, como todas as escritas.
+
+Ao teclado, e para quem não arrasta, a pega é um botão («Mover: <nome>»): o
+Enter — ou um toque sem arrastar — abre o «Mover tarefa»
+(tarefas.js:tfMoverTarefa), com a secção e a posição («Em primeiro lugar»,
+«Depois de «…»») de agora; mudar a secção traz as posições dela, com o fim
+escolhido. Guardar volta à lista com o foco na pega da tarefa movida. O
+clique que o browser dispara logo a seguir a um arrasto engole-se
+(tarefas.js:tfPegaClique).
 
 ## Um contrato tem três estados
 A app sabia dois — ativo e não ativo — e um contrato assinado que ainda não
@@ -2271,17 +2430,15 @@ sem cor de aviso (ver «A Declaração resume, não declara»). No telemóvel v�
 o estado, quando não está em vigor, e os dois avisos mais graves; no
 computador, o estado na coluna do período e os avisos todos na da AT.
 
-Por cima da lista, a pesquisa continua no painel (vistas.js:lfBar) e entram
-os chips (lista-contratos.js:ctChipsHtml): o estado — Todos, Em vigor, Por
-começar, Terminados —, cada um com quantos há nos imóveis do âmbito (ver
-«Padrões de página»), que é o filtro «st» do painel
-(lista-contratos.js:ctFiltroRapido); o imóvel e, só no computador, a
-ordenação, cada um o menu da casa vestido de chip
-(lista-contratos.js:ctChipSel; ligado, com o × que o limpa, de área 44×44
-pelo ::after a −7px, como o dos Movimentos, estilos.css:.ct-chip-x); e
-«Selecionar», a porta à vista da seleção de vários, quando a nuvem está
-carregada (cloud/selecao-listas.js:CW.selLEntrar). No telemóvel os chips
-partem em duas linhas. Por baixo (lista-contratos.js:ctRodapeDaLista): com
+Por cima da lista, a pesquisa à vista com o funil e os chips
+(lista-contratos.js:ctChipsHtml, que monta o vistas.js:lfCabeca): o estado —
+Em vigor, Por começar, Terminados, cada um com quantos há nos imóveis do
+âmbito (ver «Padrões de página»; lista-contratos.js:ctCampoEstado, aplicado
+pelo lista-contratos.js:ctFiltroRapido) —, o imóvel quando há mais de um com
+contratos, e a ordenação só no ecrã largo. O grupo está no painel. A porta
+da seleção de vários é o «Selecionar vários» do cabeçalho, e a dica do
+computador diz-o. Sem imóveis ou sem contratos não há barra. Por baixo
+(lista-contratos.js:ctRodapeDaLista): com
 «Em vigor», os imóveis de arrendamento sem contrato em vigor e, havendo
 terminados, «ver terminados»; no computador, com a seleção, como se apagam
 vários. Não há FAB nem ⋮: o «Novo contrato» está no cabeçalho e no +, e o
@@ -2319,20 +2476,23 @@ que todo o leitor de PDF tem: a Geist e a Bricolage só entravam embutidas
 (o porquê está no diário, a 2026-10-17).
 
 ## As Pessoas e as Visitas
-«Pessoas» é a porta da casca para os Inquilinos e os Proprietários
-(navegacao.js:PESSOAS): o segmentado dos dois, com quantos há de cada, é da
-casca (navegacao.js:abasDaArea), e a vista de cada separador é só a sua
-lista, o canvas M-Pessoas.
+«Pessoas» é a porta da casca para os Inquilinos, os Proprietários e os
+Colaboradores (navegacao.js:PESSOAS): o segmentado dos três, com quantos há
+de cada, é da casca (navegacao.js:abasDaArea), e a vista de cada separador é
+só a sua lista, o canvas M-Pessoas (os Colaboradores estão em «Os
+colaboradores»).
 
-Por cima, os chips do filtro rápido (lista-pessoas.js:pesChips,
-lista-pessoas.js:pesFiltroRapido): nos inquilinos Todos, Com contrato, Por
-começar e Sem contrato; nos proprietários Todos, Com imóveis e Sem imóveis.
-São o mesmo filtro do seletor do painel (lf('lten').ct e lf('lown').pr,
-vistas.js:lfSel), e cada chip diz quantas pessoas da lista, já com a
-pesquisa, lhe cabem, quando há alguma; o «Todos» não leva número, que o
-segmentado já o diz. Sem os Contratos (ou os Imóveis) ligados nesta conta
-não há chips nem seletor. No telemóvel a fila desliza de lado
-(estilos.css:.pes-filtros).
+Por cima, a pesquisa à vista com o funil e os chips (vistas.js:lfCabeca).
+Nos inquilinos, o chip do contrato (lista-pessoas.js:pesChips monta o campo;
+aplica pelo lista-pessoas.js:pesFiltroRapido): Com contrato ativo, Com
+contrato por começar, Sem contrato, cada escolha com quantos lhe cabem («Com
+contrato ativo · 2»), e ligado o rótulo curto («Por começar»); nos
+proprietários o dos imóveis (Com imóveis, Sem imóveis) e, no ecrã largo ou
+ligado, o «Dono de» (o imóvel; ligado, «Dono de T2 Lisboa»). A ordenação
+(nome, nº de contratos e renda; nome e nº de imóveis) está no painel e, no
+ecrã largo, no chip «Ordenar». Sem os Contratos (ou os Imóveis) ligados não
+há os chips deles. O «Todos» não leva número: o segmentado da casca já o
+diz.
 
 Por baixo, um cartão com uma linha por pessoa (lista-pessoas.js:personCard,
 o .linha da casa com o avatar no lugar do ícone; estilos.css:.pes-lista,
@@ -2370,17 +2530,16 @@ perfil) e da visita (Marcar e Editar visita) dizem o erro no campo
 antes do início. Escolher o imóvel da visita repinta o corpo e larga o erro
 (visitas.js:visPropMudou).
 
-As Visitas (visitas.js:vVisits, o canvas M-Visitas) abrem com os chips
-(visitas.js:visChips): Imóvel, Estado e Desfecho, cada um o menu da casa
-vestido de chip (visitas.js:visChipSel; ligado, diz o valor com o ×,
-visitas.js:visLimparChip), e «Dias e horas», que abre o painel; no telemóvel
-o «Dias e horas» desligado sai, para a fila caber. As escolhas são as mesmas
-do painel (visitas.js:visOpcoesDoFiltro), que continua com a pesquisa e os
-intervalos (visitas.js:visIntervalo): cada campo leva o nome inteiro no
-aria-label («Dia — de», «Hora de início — até»), e o rótulo à vista é o de um
-campo (estilos.css:.vis-int-rot, 14px a 600, a tinta). No dedo, os chips e o
-× do chip ligado chegam aos 44px pela área invisível do ::after
-(estilos.css:.vis-chip-x), como os das pessoas e o .ct-chip. Por baixo,
+As Visitas (visitas.js:vVisits, o canvas M-Visitas) abrem com a pesquisa à
+vista, o funil e os chips Imóvel, Estado e Desfecho (visitas.js:visChipSel
+monta cada campo, com as escolhas do visitas.js:visOpcoesDoFiltro), e o
+«Dias e horas» (visitas.js:visChips), que leva ao painel com o foco no
+primeiro dia (vistas.js:lfAbrirEm) e, ligado, diz o intervalo com o × que
+limpa os quatro limites (visitas.js:visLimparChip); desligado, só no ecrã
+largo. No painel, a grelha tem o imóvel e o estado, os dias («Dia — de»,
+«Dia — até»), as horas de início e o desfecho (visitas.js:visIntervalo dá
+os dois campos de cada intervalo, que contam como um). O rótulo de cada
+campo é o nome inteiro, à vista e para o leitor de ecrã. Por baixo,
 «Próximas» e «Passadas», cada uma com quantas são e as linhas num cartão
 (estilos.css:.vis-lista); no computador, lado a lado (estilos.css:.vis-grupos). Um filtro sem resultados usa o vazio de sempre
 (vistas.js:vazioFiltro).
@@ -2461,6 +2620,35 @@ fundo do ecrã; quando rola por dentro — no telemóvel não cabe por baixo da
 pesquisa —, uma sombra na borda diz que há mais (estilos.css:.mov-filtros-card:
 duas tampas em background-attachment:local sobre duas sombras em scroll).
 
+A seguir ao tipo, o painel tem a linha «Etiquetas»
+(lista-movimentos.js:txEtiquetasHtml): um chip por etiqueta, de escolha
+múltipla (aria-pressed, o visto só no ligado), num role="group" com rótulo e
+a nota «Basta uma das escolhidas.». Oferecem-se as etiquetas da lista mestra
+(db.settings.tags, pela ordem de lá), as que os movimentos usam fora dela
+(por ordem alfabética) e as escolhidas que já não existem, para se poderem
+desligar (lista-movimentos.js:txEtiquetasDisponiveis). Sem etiquetas na
+conta, a linha não aparece. Um movimento passa se tiver PELO MENOS UMA das
+escolhidas (lista-movimentos.js:txTemEtiqueta, chamada no txMatch); o estado
+é o global txEtiq (um array de nomes, trocado sempre por um novo), que só os
+Movimentos leem. As etiquetas contam como UM filtro no funil, sejam uma ou
+várias, como as datas (lista-movimentos.js:txFilterCountSem); o resumo diz
+«etiqueta X» ou «etiquetas X ou Y». Com etiquetas escolhidas, a fila dos
+chips ganha um chip ligado, «Urgente +2» (a primeira e quantas mais,
+lista-movimentos.js:txRotuloEtiquetas), cortado com reticências a 200px: o
+texto abre o painel com o foco na primeira escolhida
+(lista-movimentos.js:txEtiqAbrir), o × limpa-as, e o nome inteiro está no
+aria-label; desligado não há chip, porque o menu da casa é de escolha única.
+Saem com o «Limpar», com o limpar dos estados vazios e com o × do chip.
+Tocar num chip da linha (lista-movimentos.js:txPorEtiqueta) repinta o painel
+por dentro e devolve o foco ao chip novo da mesma etiqueta. Um filtro comum
+não guarda etiquetas: aplicá-lo limpa as escolhidas
+(definicoes.js:aplicarFiltroComum), e com etiquetas escolhidas nenhum filtro
+comum aparece ligado (lista-movimentos.js:txComumLigado). Apagar uma
+etiqueta nas Definições tira-a também do filtro (definicoes.js:delTag). Um
+movimento novo (newTxFromFilters) não herda as etiquetas do filtro: com
+várias escolhidas não se sabe quais pôr. No dedo, os chips da linha e o chip
+rápido têm 44px (estilos.css:.mov-etiq, estilos.css:.mov-chip-etiq).
+
 Para selecionar vários, o botão do cabeçalho é o «Selecionar vários» do
 canvas (cloud/selecao.js:patchHdrSel, e o embrulho do hdrFiltToggle). Em
 seleção o cabeçalho não repete a barra: o botão esconde-se
@@ -2476,6 +2664,18 @@ desmarcar a última termina-a (cloud/selecao.js:selSairSeVazio). Aí o
 «Selecionar vários» do cabeçalho sai, porque as caixas já são a porta. O
 Editar e o Apagar de um movimento sozinho estão na ficha, que é o que tocar
 na linha abre.
+
+Os Imóveis e os Contratos têm o mesmo cabeçalho de seleção: fora dela, o
+«Selecionar vários» (o visto e o nome do dos Movimentos), que entra sem nada
+marcado (cloud/selecao-listas.js:CW.selLEntrar) e some sem cartões à vista;
+em seleção, o título dá lugar à caixa de tudo e à contagem («nenhum imóvel»,
+«2 contratos»; cloud/selecao-listas.js:selLCabNovo,
+cloud/selecao-listas.js:CW.selLTodos — a .sel-cab dos Movimentos), e o botão
+esconde-se (estilos.css:body.sel-on #hdrFilt.lst-hdr-sel). O toque longo
+entra no mesmo cabeçalho; antes deixava-o vazio, só com o hambúrguer e a
+nuvem. Ao contrário dos Movimentos, a caixa de tudo e o «Selecionar vários»
+ficam no ecrã largo (estilos.css:.lst-sel-cab, com a classe body.lst-sel),
+porque estas listas não têm caixas na tabela.
 
 A barra das ações (cloud/selecao.js:selBarraHtml) é, no telemóvel, a barra
 de baixo — Cancelar, Editar, Apagar N —; a partir de 901px, a barra
@@ -2509,10 +2709,14 @@ contrato veste uma classe (estilos.css:.card.sel-varios), e não um cssText.
 
 ## Os Planeados, os Créditos e a Agenda
 Os Planeados (planeados.js:vRecurring, o canvas M-Planeados) são, por esta
-ordem: a faixa de quem vem de trás, o cartão «Por confirmar», os chips Todos,
-Automáticos, Criados à mão e Silenciados (planeados.js:recChip — o mesmo
-estado do filtro lf('lrec').st, aplicado ao tocar), a lista num cartão e os
-Modelos em chips, com o valor quando o têm. Cada linha da lista (planeados.js:recLinha) diz
+ordem: a faixa de quem vem de trás, o cartão «Por confirmar», a pesquisa à
+vista com o funil e os chips (vistas.js:lfCabeca), a lista num cartão e os
+Modelos em chips, com o valor quando o têm. Os chips são o estado, o tipo e,
+no ecrã largo, o imóvel. O estado (planeados.js:REC_ESTADOS, aplicado pelo
+planeados.js:recChip — o mesmo lf('lrec').st do seletor do painel) tem
+Automáticos, Criados à mão, Silenciados, Por confirmar e Em dia, cada um com
+quantos há pelos olhos dos outros filtros; ligado diz o rótulo curto. A
+ordenação diz a de sempre, a «Próxima data». Cada linha da lista (planeados.js:recLinha) diz
 a periodicidade com o dia («mensal, dia 5», planeados.js:recRepete) e a
 próxima data; o tipo, o imóvel e a categoria; o selo da origem e o do
 estado; e o valor. O selo da origem (planeados.js:recOrigem) é roxo «da
@@ -2520,15 +2724,12 @@ hipoteca», cobalto «do contrato», e cinzento «do imóvel» e «à mão». N�
 FAB nem ⋮: o «Novo recorrente» está no cabeçalho e no +, e as opções na ficha
 e no toque longo.
 
-Tocar num chip traz o chip ligado para dentro da fila depois de redesenhar,
-e rola só a fila (planeados.js:recChipAVista). No dedo, os chips dos
-Planeados e dos Modelos têm 44px (estilos.css:.plan-chips,
-estilos.css:.plan-modelo), sem o ::after das irmãs: a fila rola de lado e
-cortava-o. Com filtros, os vazios são o vazio dos filtros, com «Limpar
-filtros» (vistas.js:vazioFiltro), na lista e nos Modelos; e com um chip de
-estado que não o «Criados à mão» — Automáticos, Silenciados, e Por
-confirmar ou Em dia no painel — a secção dos Modelos sai, porque um modelo
-não tem estado.
+No dedo, os chips dos Modelos têm 44px (estilos.css:.plan-modelo), sem o
+::after das irmãs: a fila rola de lado e cortava-o. Com filtros, os vazios
+são o vazio dos filtros, com «Limpar filtros» (vistas.js:vazioFiltro), na
+lista e nos Modelos; e com um estado que não o «Criados à mão» —
+Automáticos, Silenciados, Por confirmar ou Em dia — a secção dos Modelos
+sai, porque um modelo não tem estado.
 
 O cartão «Por confirmar» (planeados.js:pendingCard) diz o estado no selo de
 cada linha (planeados.js:recSelo), sem borda colorida. O cabeçalho diz
@@ -2567,21 +2768,28 @@ faltar mais.
 Os Créditos (creditos.js:vCredits, os canvas M-Creditos e D-Creditos) abrem
 com o resumo (creditos.js:credResumo): no telemóvel o cartão azul-noite
 (--side), com a dívida no fim de cada ano em barras; no computador, três
-cartões. Segue-se o aviso dos pagamentos sem hipoteca, com «Associar», e os
-cartões das hipotecas (creditos.js:credCartao): o selo do tipo de taxa, a
+cartões. Segue-se o aviso dos pagamentos sem hipoteca, com «Associar»; a
+pesquisa à vista com o funil e os chips (vistas.js:lfCabeca) — o estado,
+Ativas · N e Liquidadas · N (aplicado pelo creditos.js:credVerPagas, que
+larga a hipoteca escolhida), o imóvel quando há mais de um com hipotecas, e
+a ordenação no ecrã largo —; e os cartões das hipotecas
+(creditos.js:credCartao): o selo do tipo de taxa, a
 taxa por extenso, o fim da taxa fixa quando cai dentro da janela dos prazos
 (creditos.js:credSeloFixa, creditos.js:credFimFixa), a prestação e a de
 depois da fase fixa (creditos.js:credDepois), o capital em dívida com as
 prestações por pagar, a barra do capital do início já pago e, no telemóvel,
-Pagamento e Plano. No computador a lista fica à esquerda, com os chips
-Ativas e Liquidadas (creditos.js:credVerPagas), e a hipoteca escolhida
-aberta à direita, com o plano (creditos.js:credDetalhe): tocar
+Pagamento e Plano. A coluna é a mesma em todos os ecrãs: o título
+«Ativas» (no computador sem o «Nova hipoteca», que está no cabeçalho), as
+ativas e o botão «Liquidadas · N», que as abre por baixo
+(creditos.js:credPagasAlternar; estilos.css:.cred-corpo.abertas). Com o
+estado «Liquidadas», só as pagas, abertas, com o título «Liquidadas». No
+computador a lista fica à esquerda, e a hipoteca escolhida — entre as que se
+veem — aberta à direita, com o plano (creditos.js:credDetalhe): tocar
 numa hipoteca escolhe-a no painel em vez de abrir uma janela por cima
 (creditos.js:mortView chama o creditos.js:credEscolher quando o painel está
 à vista). Como a ficha, com o ⋯ → Amortização, não abre dali, o painel tem
 «Plano» — o plano inteiro e o gráfico (creditos.js:amortModal) — entre
-Pagamento e Editar. No telemóvel as liquidadas abrem por baixo das ativas
-(creditos.js:credPagasAlternar).
+Pagamento e Editar.
 
 As barras da dívida do resumo (só no telemóvel) leem-se com o dedo como os
 gráficos da Visão geral, pela mesma maquinaria (creditos.js:credBarrasLer,
@@ -2933,8 +3141,8 @@ aberta nem com alguém a escrever num campo (nucleo.js:aEscreverNumCampo).
 Cada pedido tem tecto (nucleo.js:TEMPO_API): largar um pedido pendurado é o
 que deixa o envio seguinte sair. E uma resposta do servidor não é falta de
 rede: com 429 ou 5xx o selo fica em «N por enviar» e a frase dele diz-se num
-toast (nucleo.js:avisoDoServidor); «Sem ligação» é só sem rede, ou sem
-resposta a tempo.
+toast (nucleo.js:avisoDoServidor); «Sem ligação ao servidor» é só sem rede,
+ou sem resposta a tempo.
 
 A sessão vive no cookie HttpOnly que o servidor põe; o aparelho guarda quem
 entrou, não o token (o token só vem no corpo fora de produção e a pedido, para
@@ -2961,11 +3169,12 @@ cloud/novidades.js).
 
 Uma linha diz a secção, a ordem, o rótulo, o ícone e o resumo (que pode ser
 uma função, lida a cada pintura), e mais: page, a subpágina que abre, ou ir,
-o separador onde a coisa vive (a «A tua situação fiscal» leva ao IRS · Anexo
-F, com go); cracha, uma função que devolve o número do crachá (o dos Grupos
+o separador onde a coisa vive (go): uma linha das Definições nunca leva para
+fora delas sem ser a um separador que é arrumação da conta, como os Grupos —
+a situação fiscal vive só na página do IRS · Anexo F, e os Colaboradores nas
+Pessoas; cracha, uma função que devolve o número do crachá (o dos Grupos
 conta os pedidos por responder, servicos.js:crachaDe); se, uma função que diz
-se a linha aparece agora (a dos Colaboradores só com o separador à vista,
-cloud/colaboradores.js:haColaboradores); e linha, uma linha desenhada à
+se a linha aparece agora (nenhuma das de hoje o usa); e linha, uma linha desenhada à
 parte, dentro da lista — o Tema. Um html continua a ser um cartão inteiro, à
 parte da lista. O Tema está na própria raiz, num segmentado Automático, Claro
 e Escuro que grava ao tocar e devolve o foco ao botão escolhido
@@ -2979,8 +3188,8 @@ A cabeça das subpáginas é o backRow, e não é um texto fixo: é um getter do
 window (definicoes.js:cabecaDaSubpagina), lido na hora por todas as
 subpáginas — as da base e as da nuvem, que continuam a escrever
 backRow+vCloud() sem mudar. No telemóvel é o Voltar, colado ao topo; nos
-Grupos e nos Colaboradores, que são separadores, leva às Definições e não à
-raiz deles. No computador o Voltar some e fica a navegação lateral das
+Grupos, que são um separador, leva às Definições e não à raiz deles
+(definicoes.js:paginaDasDefinicoes já só trata os Grupos). No computador o Voltar some e fica a navegação lateral das
 Definições (definicoes.js:navDasDefinicoes, o canvas D-DefCategorias): as
 mesmas secções e linhas da raiz, com a página aberta acesa
 (definicoes.js:paginaDasDefinicoes), posta ao lado do conteúdo pela folha
@@ -3224,10 +3433,15 @@ se parte por imóvel ao guardar (ver «Um movimento de vários imóveis parte-se
 por imóvel»).
 
 ## Os colaboradores
-O separador dos Colaboradores vive nas Definições, e a página é da nuvem
-(cloud/colaboradores.js:paginaDosColaboradores, o canvas D-Colaboradores); o
-separador põe-lhe a cabeça das subpáginas (lista-colaboradores.js:vColabTab).
-Por esta ordem: o que é um colaborador e «Convidar colaborador»; «Quem
+O separador dos Colaboradores é o terceiro das Pessoas, na área Casas
+(navegacao.js:PESSOAS): um ecrã de área como os Inquilinos e os
+Proprietários, com os separadores da área e o segmentado das Pessoas por
+cima, que o render põe (navegacao.js:abasDaArea), e a deslizar de lado vai
+aos Contratos e às Visitas como as outras Pessoas
+(navegacao.js:vizinhoNaArea). A página é da nuvem
+(cloud/colaboradores.js:paginaDosColaboradores, o canvas D-Colaboradores), e
+o separador não lhe põe cabeça nenhuma (lista-colaboradores.js:vColabTab):
+nem o Voltar nem a navegação lateral das Definições. Por esta ordem: o que é um colaborador e «Convidar colaborador»; «Quem
 colabora» — as iniciais, os imóveis, o cargo num selo, Mudar e Remover
 (cloud/colaboradores.js:quemColaboraCard); «Convites por usar», com o selo
 dos dias que faltam (cloud/colaboradores.js:convitesCard,
@@ -3239,14 +3453,15 @@ cloud/colaboradores.js:CW.cargoPermissoes) — com dois cargos ou mais e o
 cartão com 700px ou mais, o primeiro à esquerda e os outros à direita, com a
 divisória ao meio (estilos.css:.colab-cargos-dois,
 estilos.css:.colab-cargos-resto, o @container colabcargos); e «Onde colaboras»
-(cloud/colaboradores.js:colaboroCartao). A linha da raiz das Definições é
-declarativa (page, sub, se), com quantas pessoas e quantos convites
-(cloud/colaboradores.js:resumoDosColaboradores), e só aparece quando o
-separador aparece: com sessão e com o serviço ligado. A página e a linha
-chamam-se «Colaboradores e cargos», e os textos que ensinam o caminho dizem
-«Definições → Colaboradores e cargos» (entrada.js:modalConvite,
+(cloud/colaboradores.js:colaboroCartao). Nas Definições não há linha dos
+Colaboradores. O resumo — quantas pessoas e quantos convites — é o
+subtítulo do ecrã no computador
+(cloud/colaboradores.js:resumoDosColaboradores), e a contagem do segmento
+conta só as pessoas (cloud/colaboradores.js:contarColaboradores, só com o
+separador à vista: cloud/colaboradores.js:haColaboradores). Os textos que
+ensinam o caminho dizem «Pessoas → Colaboradores» (entrada.js:modalConvite,
 cloud/colaboradores.js:CW.aceitarConvite e as perguntas frequentes,
-partilha.js:PERGUNTAS_FREQUENTES), e não «Pessoas → Colaboradores».
+partilha.js:PERGUNTAS_FREQUENTES).
 
 O selo de um convite conta dias de calendário
 (cloud/colaboradores.js:seloDoConvite): «Expira hoje» no dia em que acaba e «Expira amanhã» na véspera, os dois a
@@ -3271,7 +3486,7 @@ estilos.css:.colab-casas). As caixas Ver, Adicionar e Editar da janela do
 cargo têm o rótulo como área de toque, de 44px no dedo
 (cloud/colaboradores.js:caixaPerm, estilos.css:.colab-perm-caixa).
 
-Quem colabora vê nas Definições «Colaboras com <dono>», o cargo, o que o
+Quem colabora vê nos Colaboradores «Colaboras com <dono>», o cargo, o que o
 cargo deixa fazer e em que imóveis, e — quando o cargo não vê os movimentos
 — que as finanças ficam com o dono (cloud/colaboradores.js:colaboroCartao,
 M-Colaborador). Para quem só colabora, estes cartões vêm primeiro.
@@ -3521,15 +3736,25 @@ ver-se-iam a passar por baixo e pelos lados do fundo. Os títulos vazios
 das secções sem nome ficam no HTML, porque são a fronteira das secções, mas
 não ocupam lugar (a regra .navh:empty do #nav).
 
-«Pessoas» é uma porta e não um separador: abre os Inquilinos, ou os
-Proprietários quando é aí que se está ou quando os Inquilinos estão
-escondidos (navegacao.js:PESSOAS, navegacao.js:destinoDe), e acende com os
-dois (navegacao.js:portaAtiva). Os dois continuam a ser serviços e ecrãs à
-parte; lá dentro, um segmentado sublinhado troca-os, com quantos há de cada
-(navegacao.js:abasDaArea, estilos.css:.abas-pessoas). Os Grupos e os
-Colaboradores saíram do menu: são arrumação da conta, e as portas vivem nas
-Definições (ver «As Definições», «Grupos partilhados» e «Os
-colaboradores»); a porta das Definições fica acesa neles. Uma página das
+«Pessoas» é uma porta e não um separador: abre os Inquilinos, ou o
+separador das Pessoas onde já se está, ou o primeiro que se vê quando os
+Inquilinos estão escondidos (navegacao.js:PESSOAS, navegacao.js:destinoDe),
+e acende com os três (navegacao.js:portaAtiva). São três serviços e três
+ecrãs à parte — Inquilinos, Proprietários e Colaboradores —; lá dentro, um
+segmentado sublinhado troca-os, com quantos há de cada
+(navegacao.js:abasDaArea, navegacao.js:contagemDePessoas,
+estilos.css:.abas-pessoas). Os Colaboradores só existem com sessão na nuvem
+e com o serviço ligado (acessos.js:separadoresEscondidos): sem eles o
+segmentado fica com os dois de sempre. A contagem deles é de pessoas, e não
+de linhas do servidor (uma por cargo), e só aparece depois de o servidor
+responder — antes disso o segmento diz só o nome
+(cloud/colaboradores.js:contarColaboradores). Abaixo dos 420px o segmentado
+encolhe o intervalo e a letra para os três caberem aos 375px, e cada um pode
+encolher em vez de rolar de lado. Os Grupos saíram do menu: são arrumação
+da conta, e a porta vive nas Definições (ver «As Definições» e «Grupos
+partilhados»); a porta das Definições fica acesa neles. Um
+goSet('colaboradores') que sobre — um atalho antigo — leva ao separador
+(navegacao.js:goSet). Uma página das
 Definições com porta própria acende a sua, e não a das Definições — a Ajuda
 —, porque o navegacao.js:goSet refaz a barra (navegacao.js:buildNav) antes
 de pintar. O separador fisco
@@ -3575,12 +3800,17 @@ leva os dois nomes (navegacao.js:tituloDoEcraHtml) e a folha escolhe — o do
 separador no computador, o da área no telemóvel (estilos.css:#pageTitle, o
 .tit-area). O subtítulo, só no computador, diz o estado do ecrã onde há um
 (navegacao.js:subtituloDoEcra: na Visão geral, o período dos indicadores,
-«Ano de 2026 · até hoje, 17/10/2026»). A sincronização (index.html:#hdrSync,
-cloud/entrada.js:setSyncBadge) é verde «Guardado», que recolhe ao ícone ao
-fim de dois segundos — um recibo, não um letreiro —, cobalto «N alterações
-por enviar» e âmbar «Sem ligação»; no telemóvel o «Guardado» é só o ícone, e
-«por enviar» e «sem ligação» descem para uma faixa fina por baixo do
-cabeçalho, a toda a largura, com o ícone a ficar e o cabeçalho a crescer o
+«Ano de 2026 · até hoje, 17/10/2026»; nos Colaboradores, quantas pessoas
+colaboram e quantos convites esperam,
+cloud/colaboradores.js:resumoDosColaboradores). A sincronização
+(index.html:#hdrSync, cloud/entrada.js:setSyncBadge) é laranja «A ligar ao
+servidor…», com um relógio, enquanto tenta ligar; verde «Guardado», que
+recolhe ao ícone ao fim de dois segundos — um recibo, não um letreiro —;
+cobalto «N alterações por enviar»; e vermelho «Sem ligação ao servidor», com
+uma cruz; no telemóvel o «Guardado» e o «A ligar» da abertura são só o
+ícone, e «por enviar», «sem ligação» e a nova tentativa depois de uma falha
+descem para uma faixa fina por baixo do cabeçalho, a toda a largura, com o
+ícone a ficar e o cabeçalho a crescer o
 que ela ocupa (estilos.css:header.top, o .sync dentro de
 estilos.css:@media(max-width:900px)). A ação secundária é a de um ecrã que a
 tem — o «Exportar CSV» dos Movimentos (index.html:#hdrSec,
@@ -4063,10 +4293,11 @@ Um botão só de ícone pequeno chega a 44×44 com o .btn.sm.so-icone inteiro no
 seletor (estilos.css:.btn.sm.so-icone.vg-silenciar, e o mesmo nas fichas e no
 formulário do imóvel e na Análise): só com a classe da folha, perdia para a
 largura de 36 do .btn.sm.so-icone e para a altura de 40 do .btn.sm no dedo.
-O × de um chip ligado ganha a área com um ::after invisível
-(estilos.css:.ct-chip-x, estilos.css:.vis-chip-x) — menos numa fila que rola
-de lado, que o cortava: aí é o próprio chip que cresce
-(estilos.css:.plan-chips).
+O × de um chip ligado ganha a área com um ::after invisível — nas listas é
+o dos Movimentos (estilos.css:.mov-chip-x), e o chip que leva ao painel
+(estilos.css:.lfm-chip-abre) ganha os 44px pelo mesmo ::after; as filas dos
+chips partem em linhas e não rolam de lado. Numa fila que rola de lado, que
+cortava o ::after, é o próprio chip que cresce (estilos.css:.plan-modelo).
 
 Cartões e afins são divs com data-click: tornarFocavel dá-lhes tabindex e
 role=button depois de cada render e de cada janela
@@ -4284,12 +4515,11 @@ e #hdrBell .cnt (estilos.css:nav, estilos.css:.tabbar, estilos.css:#hdrBell),
 os dois últimos com corpos quase idênticos (só muda o lado) escritos duas
 vezes.
 
-Baixa. Ícones como caracteres de texto: o '✕' no botão de limpar a
-pesquisa do painel das listas (vistas.js:lfBar), quando a casa desenha tudo
-com ic('x'). O burger, o fecho do menu e o «topo» (estilos.css:.burger,
-index.html:.fecha-gaveta, index.html:#toTop) trazem SVG escrito à mão em vez
-de ic(), porque vivem no HTML estático, antes de o ic() existir; o X da
-janela já é o ic('x') (componentes.js:modalLayer).
+Baixa. Ícones fora do ic(): o burger, o fecho do menu e o «topo»
+(estilos.css:.burger, index.html:.fecha-gaveta, index.html:#toTop) trazem
+SVG escrito à mão em vez de ic(), porque vivem no HTML estático, antes de o
+ic() existir; o X da janela e o limpar da pesquisa das listas já são o
+ic('x') (componentes.js:modalLayer, vistas.js:lfBarraHtml).
 
 Baixa. Os botões de apagar do fileBlock fixam min-width e min-height de
 40px por utilitários (componentes.js:fileBlock), repetindo em todos os ecrãs o

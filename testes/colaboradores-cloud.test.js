@@ -550,13 +550,14 @@ describe('o separador Colaboradores (o canvas de 2026-10, D-Colaboradores)', () 
     assert.match(app2.colaboroCartao(), /As finanças destes imóveis ficam com o dono\./);
   });
 
-  test('sem sessão iniciada, a página pede a conta; e o separador (vColabTab) põe-lhe a cabeça das subpáginas', () => {
+  test('sem sessão iniciada, a página pede a conta; e o separador (vColabTab) é um ecrã das Pessoas, sem a cabeça das Definições', () => {
     const { app } = montar();
     app.CW.user = null;
     assert.match(app.paginaDosColaboradores(), /Iniciar sessão/);
     const t = app.vColabTab();
-    assert.match(t, /class="toolbar def-voltar[^"]*">\s*<button class="btn" data-toca="ecra" data-click="go\('settings'\)">/, 'o Voltar leva às Definições');
-    assert.match(t, /<nav class="def-nav" aria-label="Definições">/, 'e a navegação lateral, para o computador');
+    assert.match(t, /Iniciar sessão/);
+    assert.doesNotMatch(t, /def-voltar|go\('settings'\)/, 'sem o Voltar às Definições');
+    assert.doesNotMatch(t, /<nav class="def-nav"/, 'e sem a navegação lateral delas');
   });
 });
 

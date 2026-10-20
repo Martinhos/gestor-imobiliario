@@ -32,16 +32,20 @@ const view=()=>document.getElementById('view');
    cinco grupos do canvas de 2026-10. Ao cimo, sem título, a Visão geral; ao
    fundo, sem título, as Definições, a que o gavetaHtml junta a Ajuda e o
    cartão da conta. Sem título não se recolhem.
-   «pessoas» não é um separador: é a porta única dos Inquilinos e dos
-   Proprietários (PESSOAS), que continuam a ser dois serviços e dois ecrãs,
-   escolhidos lá dentro por um segmentado (abasDaArea). Os Grupos e os
-   Colaboradores saíram do menu: são arrumação da conta e vivem nas Definições
-   (definicoes.js:DEF_LINHAS e a linha que o cloud/colaboradores.js regista). */
+   «pessoas» não é um separador: é a porta única dos Inquilinos, dos
+   Proprietários e dos Colaboradores (PESSOAS), que continuam a ser três
+   serviços e três ecrãs, escolhidos lá dentro por um segmentado (abasDaArea).
+   Os Grupos saíram do menu: são arrumação da conta e vivem nas Definições
+   (definicoes.js:DEF_LINHAS). */
 const NAV_GROUPS=[{label:'',ids:['dashboard']},{label:'Casas',ids:['properties','contracts','pessoas','visits']},
   {label:'Dinheiro',ids:['transactions','recurring','credits']},{label:'Análise',ids:['reports','projections','fisco']},
   {label:'Agenda',ids:['calendar']},{label:'',ids:['settings']}];
-/* A porta «Pessoas»: os dois separadores que junta, pela ordem em que abre. */
-const PESSOAS=['tenants','owners'];
+/* A porta «Pessoas»: os três separadores que junta, pela ordem em que abre.
+   Os Colaboradores são o terceiro: quem ajuda a gerir também é gente, e
+   procurava-se aqui antes de se procurar nas Definições (o pedido de
+   2026-10-20). Sem sessão na nuvem escondem-se (acessos.js:separadoresEscondidos),
+   e o segmentado fica com os dois de sempre. */
+const PESSOAS=['tenants','owners','colaboradores'];
 /* As áreas da barra de baixo do telemóvel: cada uma é uma porta para vários
    separadores, que no topo do ecrã se trocam por separadores segmentados
    (abasDaArea). A Visão geral e a Agenda são um separador só cada uma. */
@@ -50,7 +54,7 @@ const AREAS={casas:{label:'Casas',icon:'building',ids:['properties','contracts',
 /* o último separador visitado em cada área: voltar a «Casas» na barra de
    baixo volta aos Contratos se era lá que se estava, e não aos Imóveis */
 const _ultimoNaArea={};
-/* Os separadores que uma porta do menu abre: «pessoas» são dois, as outras
+/* Os separadores que uma porta do menu abre: «pessoas» são três, as outras
    portas são o próprio separador.
    Recebe: id — um id de NAV_GROUPS ou de uma área.
    Devolve: array de ids de TABS. */
@@ -67,7 +71,7 @@ function areaDe(id){
   return Object.keys(AREAS).find(a=>AREAS[a].ids.some(p=>idsDaPorta(p).indexOf(id)>-1))||'';
 }
 /* Para onde leva uma porta (ou uma área): «pessoas» ao separador onde já se
-   está, ou ao primeiro dos dois que se vê; uma área ao último separador que
+   está, ou ao primeiro dos três que se vê; uma área ao último separador que
    lá se visitou, ou à primeira porta que se vê.
    Recebe: id — a porta ou a área; fora — os ids escondidos.
    Devolve: o id de TABS de destino, ou '' sem nada à vista. */
@@ -80,13 +84,13 @@ function destinoDe(id,fora){
   const ids=idsDaPorta(id).filter(x=>f.indexOf(x)<0);
   return ids.indexOf(tab)>-1?tab:(ids[0]||'');
 }
-/* A porta acesa no menu: a do separador atual; a das Definições também nas
-   páginas que vivem nelas (os Grupos, os Colaboradores) e não na da Ajuda,
-   que tem porta própria.
+/* A porta acesa no menu: a do separador atual; a das Definições também nos
+   Grupos, que vivem nelas, e não na Ajuda, que tem porta própria. Os
+   Colaboradores acendem a das Pessoas (PESSOAS), e já não a das Definições.
    Recebe: id — a porta.
    Devolve: true/false. */
 function portaAtiva(id){
-  if(id==='settings')return (tab==='settings'&&setPage!=='ajuda')||tab==='groups'||tab==='colaboradores';
+  if(id==='settings')return (tab==='settings'&&setPage!=='ajuda')||tab==='groups';
   return idsDaPorta(id).indexOf(tab)>-1;
 }
 /* O rótulo e o ícone de uma porta: os do separador, menos a «Pessoas».
@@ -690,9 +694,11 @@ function sepEngolirToque(){
 document.addEventListener('pointerdown',sepArrastar);
 // Navega dentro das Definições: p é a subpágina ('' volta ao menu). Entrar
 // numa subpágina arma o histórico, para o voltar do sistema subir a Definições.
-// Os Grupos e os Colaboradores são separadores que vivem nas Definições: as
-// linhas deles na raiz chamam goSet('groups') e goSet('colaboradores'), e daqui
-// vão para o separador (aqui na base e não só no embrulho da nuvem, cloud/nucleo.js).
+// Os Grupos são um separador que vive nas Definições: a linha deles na raiz
+// chama goSet('groups'), e daqui vai para o separador (aqui na base e não só
+// no embrulho da nuvem, cloud/nucleo.js). Os Colaboradores viveram lá até
+// 2026-10-20 e são agora das Pessoas: um goSet('colaboradores') que sobre (um
+// atalho, uma ação antiga) leva também ao separador.
 // Refaz também a barra lateral: a Ajuda tem porta própria, e entrar nela (ou
 // sair dela para as Perguntas frequentes) muda a porta acesa sem mudar de
 // separador — o render não toca na barra, e ficava aceso o «Definições». O
@@ -720,9 +726,10 @@ function escolherAmbito(){
    e M-Movimentos): Imóveis/Contratos/Pessoas/Visitas e
    Movimentos/Planeados/Créditos, num segmentado. No computador escondem-se
    (estilos.css:.abas-area) — lá a barra lateral mostra as portas todas. E nas
-   Pessoas, em todos os ecrãs, o segundo segmentado: Inquilinos ou
-   Proprietários, com quantos há de cada. Uma área com uma porta só à vista
-   (um cargo, um serviço desligado) não escreve separadores.
+   Pessoas, em todos os ecrãs, o segundo segmentado: Inquilinos, Proprietários
+   ou Colaboradores, com quantos há de cada (contagemDePessoas). Uma área com
+   uma porta só à vista (um cargo, um serviço desligado) não escreve
+   separadores, e as Pessoas com um só à vista não escrevem o segmentado.
    Devolve: o HTML (string), ou '' fora das áreas. */
 function abasDaArea(){
   const fora=typeof separadoresEscondidos==='function'?separadoresEscondidos():[];
@@ -737,10 +744,22 @@ function abasDaArea(){
   if(PESSOAS.indexOf(tab)>-1){
     const ps=PESSOAS.filter(id=>fora.indexOf(id)<0);
     if(ps.length>1)html+=`<nav class="segm abas-pessoas" aria-label="Tipo de pessoa">${ps.map(id=>{
-      const on=id===tab,n=((id==='tenants'?db.tenants:db.owners)||[]).length;
-      return `<a ${on?'class="on" aria-current="page" ':''}role="link" tabindex="0" data-toca="ecra" data-click="go('${jsq(id)}')">${rotuloDaPorta(id).label} <span class="n">${n}</span></a>`}).join('')}</nav>`;
+      const on=id===tab,n=contagemDePessoas(id);
+      return `<a ${on?'class="on" aria-current="page" ':''}role="link" tabindex="0" data-toca="ecra" data-click="go('${jsq(id)}')">${rotuloDaPorta(id).label}${n==null?'':' <span class="n">'+n+'</span>'}</a>`}).join('')}</nav>`;
   }
   return html?`<div class="abas">${html}</div>`:'';
+}
+/* Quantos há de cada tipo de pessoa, para o segmentado das Pessoas: as
+   fichas dos inquilinos e dos proprietários, que estão na base; e quem
+   colabora nos meus imóveis, que só a nuvem sabe
+   (cloud/colaboradores.js:contarColaboradores — cada pessoa uma vez, mesmo
+   com dois cargos). Antes de o servidor responder não há número: um «0»
+   ali era afirmar o que ainda não se sabe.
+   Recebe: id — 'tenants', 'owners' ou 'colaboradores'.
+   Devolve: o número, ou null quando não se sabe. */
+function contagemDePessoas(id){
+  if(id==='colaboradores')return typeof contarColaboradores==='function'?contarColaboradores():null;
+  return ((id==='tenants'?db.tenants:db.owners)||[]).length;
 }
 /* O âmbito sempre à vista (o canvas: «Âmbito sempre à vista»): com um
    proprietário em foco, uma faixa no topo do ecrã diz de quem são os valores
@@ -819,10 +838,13 @@ function tituloDoEcraHtml(meta){
    dos indicadores (o canvas, Main: «Ano de 2026 · até hoje, 17/10/2026») —
    os indicadores somam o ano corrente inteiro (metricas.js:metrics), por
    isso, havendo movimentos deste ano com data depois de hoje, diz até onde
-   eles vão em vez de «até hoje».
+   eles vão em vez de «até hoje». Nos Colaboradores, quantas pessoas
+   colaboram e quantos convites esperam (cloud/colaboradores.js:resumoDosColaboradores),
+   o que dizia a linha das Definições antes de eles passarem para as Pessoas.
    Recebe: meta — o separador ou a subpágina ({sub}).
    Devolve: o texto (string). */
 function subtituloDoEcra(meta){
+  if(tab==='colaboradores')return typeof resumoDosColaboradores==='function'?resumoDosColaboradores():meta.sub;
   if(tab!=='dashboard'||!(db.transactions||[]).length)return meta.sub;
   const hoje=today(),ano=String(YEAR);
   const ultimo=db.transactions.reduce((m,t)=>{const d=String(t.date||'');return d.indexOf(ano)===0&&d>m?d:m},'');

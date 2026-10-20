@@ -38,9 +38,10 @@ const CT_ESTADOS_RAPIDOS=[['','Todos'],['on','Em vigor'],['fut','Por começar'],
    movimento, e chegam ao contrato por ele. */
 const CT_PRAZOS_DO_CONTRATO=['oposicao','fim','aumento','modelo2','cessacao','fev15','rsaa'];
 /* Contratos agrupados por imóvel, como as pranchetas M-Contratos e
-   D-Contratos: por cima, o painel da pesquisa (vistas.js:lfBar) e os chips
-   do filtro rápido — o estado com as contagens, o imóvel e, no computador, a
-   ordenação —; por baixo, um grupo por imóvel com o nome, o que é (imóvel
+   D-Contratos: por cima, os filtros dos Movimentos (vistas.js:lfCabeca,
+   montados pelo ctChipsHtml) — a pesquisa sempre à vista com o funil do
+   painel completo, e os chips rápidos do estado com as contagens, do imóvel
+   e, no computador, da ordenação —; por baixo, um grupo por imóvel com o nome, o que é (imóvel
    inteiro, por quartos e quantos estão arrendados, vago) e a renda do mês, e
    uma linha por contrato (ctLinha). No computador é uma tabela só, com o
    cabeçalho das colunas na moldura. O «Novo contrato» é a ação do cabeçalho
@@ -55,18 +56,14 @@ function vContracts(){
      proprietário em foco, «Todos 6» por cima de três linhas — e um contrato
      sem imóvel entrava nas contagens sem nunca aparecer. */
   const noAmbito=new Set(visiveis().map(p=>p.id)),base=db.contracts.filter(c=>noAmbito.has(c.propertyId));
-  const head=lfBar(K,[
-      lfSel(K,'p',lfPropOpts()),
-      lfSel(K,'st',[{v:'',label:'Todos os estados'},{v:'on',label:'Em vigor'},{v:'fut',label:'Por começar'},{v:'off',label:'Terminados'}])]
-      .concat(cgs.length?[lfSel(K,'g',[{v:'',label:'Todos os grupos'}].concat(cgs.map(g=>({v:g.id,label:'Grupo · '+g.name}))))]:[]),
-      base.filter(c=>ctFMatch(c,s)).length,
-      {opts:[{v:'nome',label:'Ordenar por nome'},{v:'renda',label:'Ordenar por renda'},{v:'inicio',label:'Ordenar por início'}]});
-  if(!db.properties.length)return head+(esperaDoServidor()||`<div class="empty"><b>Cria primeiro um imóvel</b>Um contrato liga um imóvel a um ou mais inquilinos.
-    ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`);
-  if(!db.contracts.length)return head+`<div class="empty"><b>Sem contratos</b>O contrato é onde vive a renda: podes arrendar o imóvel inteiro, ou um contrato por quarto.${adiciona?saida('Novo contrato','ctModal()','camada'):''}</div>`;
-  /* as contagens dos chips: os contratos do âmbito que passam os outros filtros, por estado */
+  /* sem imóveis ou sem contratos não há o que pesquisar nem filtrar: fica o vazio com o seu botão */
+  if(!db.properties.length)return esperaDoServidor()||`<div class="empty"><b>Cria primeiro um imóvel</b>Um contrato liga um imóvel a um ou mais inquilinos.
+    ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`;
+  if(!db.contracts.length)return `<div class="empty"><b>Sem contratos</b>O contrato é onde vive a renda: podes arrendar o imóvel inteiro, ou um contrato por quarto.${adiciona?saida('Novo contrato','ctModal()','camada'):''}</div>`;
+  /* as contagens do estado: os contratos do âmbito que passam os outros filtros, por estado */
   const semEstado=Object.assign({},s,{st:''}),conta={'':0,on:0,fut:0,off:0};
   base.forEach(c=>{if(!ctFMatch(c,semEstado))return;conta['']++;const e=ctEstado(c);conta[e==='ativo'?'on':e==='futuro'?'fut':'off']++});
+  const head=ctChipsHtml(conta,s,base.filter(c=>ctFMatch(c,s)).length,cgs);
   const ctx=ctContextoDaLista();
   const grupos=[];
   visiveis().forEach(p=>{
@@ -85,8 +82,8 @@ function vContracts(){
       `+listaViva('cts:'+p.id,cs.map(c=>({chave:'ct:'+c.id,html:ctLinha(c,p,ctx)})),'ct-linhas')+`</section>`});
   });
   const rodape=ctRodapeDaLista(s);
-  if(!grupos.length)return head+ctChipsHtml(conta,s)+vazioFiltro()+rodape;
-  return head+ctChipsHtml(conta,s)+`<div class="ct-tabela">${ctCabecalhoDaTabela()}${listaViva('contratos',grupos,'ct-lista')}</div>`+rodape;
+  if(!grupos.length)return head+vazioFiltro()+rodape;
+  return head+`<div class="ct-tabela">${ctCabecalhoDaTabela()}${listaViva('contratos',grupos,'ct-lista')}</div>`+rodape;
 }
 /* O que um imóvel é, para o cabeçalho do grupo: imóvel inteiro, por quartos
    com quantos estão arrendados hoje, vago, ou uso próprio.
@@ -260,45 +257,36 @@ function ctCabecalhoDaTabela(){
   return `<div class="ct-cab" aria-hidden="true"><span class="ct-c-quem">Inquilinos · parte</span><span class="ct-c-per">Período</span><span class="ct-c-renda">Renda</span>
     <span class="ct-c-imp">Imposto</span><span class="ct-c-liq">Líquida</span><span class="ct-c-at">Perante a AT · avisos</span><span class="ct-c-seta"></span></div>`;
 }
-/* Um chip de filtro que abre a escolha: o menu da casa (sel) vestido de chip.
-   Desligado diz o nome do filtro e leva a seta; ligado diz o valor, com o
-   fundo cobalto e um × ao lado para o limpar.
-   Recebe: id — o id do sel; valor — o valor escolhido; opcoes — [{v, label}];
-   onchange — o nome da função que aplica; nome — o nome do filtro; rotulo — o
-   que o chip diz ligado; ligado — se o filtro está posto; limpar — a ação do ×;
-   cls (opcional) — classes extra do chip.
-   Devolve: o HTML do chip. */
-function ctChipSel(id,valor,opcoes,onchange,nome,rotulo,ligado,limpar,cls){
-  const diz=ligado?rotulo:nome;
-  /* o leitor de ecrã ouve o nome do filtro e o valor — uma vez só: o rótulo
-     da ordenação já começa por «Ordenar:», e juntar-lhe o nome dava «Ordenar:
-     Ordenar: renda» */
-  const ouve=ligado?(rotulo.indexOf(nome)===0?rotulo:nome+': '+rotulo):nome;
-  const s=sel(id,valor,opcoes,onchange,'vista')
-    .replace('class="selbtn"','class="selbtn" aria-label="'+esc(ouve)+'"')
-    .replace(/(<span id="lab_[^"]*">)[^<]*(<\/span>)/,'$1'+esc(diz)+'$2');
-  return `<span class="ct-chip${ligado?' on':''}${cls?' '+cls:''}">${s}${ligado?`<button type="button" class="ct-chip-x" aria-label="Limpar ${esc(nome.toLowerCase())}" data-toca="vista" data-click="${limpar}">${ic('x',14)}</button>`:''}</span>`;
+/* O campo do estado, o primeiro chip rápido dos contratos e o primeiro
+   seletor do painel (vistas.js:lfCabeca): Em vigor, Por começar e Terminados,
+   cada um com quantos há nos imóveis do âmbito entre os que passam os outros
+   filtros («Em vigor · 3»), e o «Todos os estados» com todos eles. O chip
+   ligado diz o estado sem a contagem.
+   Recebe: conta — {'', on, fut, off: quantos}.
+   Devolve: o campo {chave, nome, opcoes, curto, rapido, aplicar}. */
+function ctCampoEstado(conta){
+  return {chave:'st',nome:'Estado',curto:'Todos',rapido:true,aplicar:ctFiltroRapido,
+    opcoes:CT_ESTADOS_RAPIDOS.map(([v,rot])=>({v,label:v?rot:'Todos os estados',n:conta[v]||0}))};
 }
-/* A fila dos chips por cima da lista (as pranchetas): o estado com quantos
-   há em cada um — o mesmo filtro «st» do painel —, o imóvel, a ordenação (só
-   no computador) e o «Selecionar», que é a porta à vista da seleção de vários
-   (a nuvem, cloud/selecao-listas.js, quando está carregada). Tocar filtra
-   logo, sem «Aplicar».
-   Recebe: conta — {'' , on, fut, off: quantos}; s — o estado dos filtros (lf('lcts')).
-   Devolve: o HTML da fila. */
-function ctChipsHtml(conta,s){
-  const st=s.st||'';
-  const estados=CT_ESTADOS_RAPIDOS.map(([v,rot])=>
-    `<button type="button" class="chip${st===v?' on':''}" aria-pressed="${st===v?'true':'false'}" data-toca="vista" data-click="ctFiltroRapido('${v}')">${rot} <span class="n">${conta[v]}</span></button>`).join('');
-  const comContratos=visiveis().filter(p=>contractsOf(p.id).length);
-  const imovel=comContratos.length>1||s.p?ctChipSel('ctcProp',s.p||'',[{v:'',label:'Todos os imóveis'}].concat(comContratos.map(p=>({v:p.id,label:p.name}))),
-    'ctChipImovel','Imóvel',propName(s.p)||'Imóvel',!!s.p,'ctLimparImovel()'):'';
-  const ORD={nome:'nome',renda:'renda',inicio:'início'};
-  const ordem=ctChipSel('ctcOrd',s.sb||'',[{v:'',label:'Ordem original'},{v:'nome',label:'Por nome'},{v:'renda',label:'Por renda'},{v:'inicio',label:'Por início'}],
-    'ctChipOrdem','Ordenar','Ordenar: '+(ORD[s.sb]||''),!!ORD[s.sb],'ctLimparOrdem()','ct-so-largo');
-  const selecionar=typeof CW!=='undefined'&&CW&&typeof CW.selLEntrar==='function'
-    ?`<button type="button" class="chip ct-selecionar" data-toca="modo" data-click="CW.selLEntrar('ct')">${ic('check',16)} Selecionar</button>`:'';
-  return `<div class="chips-fila ct-filtros" role="group" aria-label="Filtrar os contratos">${estados}${imovel}${ordem}${selecionar}</div>`;
+/* Os filtros por cima da lista, no feitio dos Movimentos (vistas.js:lfCabeca):
+   a pesquisa com o funil do painel completo e os chips rápidos — o estado
+   com quantos há em cada um (ctCampoEstado), o imóvel quando há mais de um com
+   contratos e, só no computador, a ordenação. O painel tem também o grupo,
+   quando os há. Tocar filtra logo, sem «Aplicar». A seleção de vários entra
+   pelo «Selecionar vários» do cabeçalho (cloud/selecao-listas.js:selLCabecalho).
+   Recebe: conta — {'', on, fut, off: quantos}; s — o estado dos filtros
+   (lf('lcts')); n — quantos contratos passam os filtros; cgs — os grupos de
+   contratos.
+   Devolve: o HTML da barra, do painel e dos chips. */
+function ctChipsHtml(conta,s,n,cgs){
+  /* os imóveis do âmbito que têm contratos, e o escolhido mesmo que já não tenha */
+  const comContratos=visiveis().filter(p=>contractsOf(p.id).length||p.id===s.p);
+  return lfCabeca('lcts',{nome:['contrato','contratos'],dos:'dos contratos',n:n,
+    campos:[ctCampoEstado(conta),
+      {chave:'p',nome:'Imóvel',curto:'Todos',rapido:comContratos.length>1||!!s.p,
+        opcoes:[{v:'',label:'Todos os imóveis'}].concat(comContratos.map(p=>({v:p.id,label:p.name})))},
+      (cgs||[]).length?{chave:'g',nome:'Grupo',curto:'Todos',opcoes:[{v:'',label:'Todos os grupos'}].concat(cgs.map(g=>({v:g.id,label:g.name})))}:null],
+    ordem:{opcoes:[{v:'nome',label:'Nome'},{v:'renda',label:'Renda'},{v:'inicio',label:'Início'}],rapido:'largo'}});
 }
 /* O que fica por baixo da lista: com «Em vigor» escolhido, os imóveis de
    arrendamento que não têm contrato em vigor (e, havendo terminados, o
@@ -316,29 +304,14 @@ function ctRodapeDaLista(s){
     }
   }
   if(typeof CW!=='undefined'&&CW&&typeof CW.selLEntrar==='function'&&db.contracts.length)
-    out+=`<p class="small ct-dica-sel">Para apagar vários contratos, usa «Selecionar». Os movimentos ficam; só perdem a ligação ao contrato.</p>`;
+    out+=`<p class="small ct-dica-sel">Para apagar vários contratos, usa «Selecionar vários», no cabeçalho. Os movimentos ficam; só perdem a ligação ao contrato.</p>`;
   return out;
 }
-/* Um chip do estado foi tocado: muda o filtro (o mesmo do painel) e repinta.
+/* Filtra os contratos por um estado — o chip do estado, o seletor do painel
+   e o «ver terminados» por baixo da lista passam por aqui.
    Recebe: v — '' (todos), 'on', 'fut' ou 'off'.
    Devolve: nada — repinta a vista. */
 function ctFiltroRapido(v){lf('lcts').st=String(v||'');render()}
-/* O chip do imóvel: muda o filtro do imóvel (o mesmo do painel).
-   Recebe: nada — lê o valor escolhido do sel.
-   Devolve: nada — repinta a vista. */
-function ctChipImovel(){lf('lcts').p=val('ctcProp')||'';render()}
-/* O × do chip do imóvel: larga o filtro.
-   Recebe: nada.
-   Devolve: nada — repinta a vista. */
-function ctLimparImovel(){lf('lcts').p='';render()}
-/* O chip da ordenação: muda a ordem (a mesma do painel).
-   Recebe: nada — lê o valor escolhido do sel.
-   Devolve: nada — repinta a vista. */
-function ctChipOrdem(){lf('lcts').sb=val('ctcOrd')||'';render()}
-/* O × do chip da ordenação: volta à ordem original.
-   Recebe: nada.
-   Devolve: nada — repinta a vista. */
-function ctLimparOrdem(){const s=lf('lcts');s.sb='';s.sd='';render()}
 // um contrato passa nos filtros da lista? imóvel, estado, grupo e pesquisa por texto (nome, inquilinos, IBAN, notas…)
 // Recebe: c — o contrato (objeto); s — o estado dos filtros da lista (lf('lcts'): campos p, st, g e a pesquisa).
 // Devolve: true se o contrato passa em todos os filtros, false caso contrário.

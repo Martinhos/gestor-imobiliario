@@ -980,29 +980,19 @@ function recRetroAgoraNao(id){
   try{localStorage.setItem(RETRO_LS,JSON.stringify(o))}catch(e){}
   render();
 }
-/* Um chip da página dos Planeados: mostra todos, os automáticos, os criados à
-   mão ou os silenciados — o mesmo estado do filtro (lf('lrec').st) que o painel
-   de filtros escolhe, aplicado ao tocar. O render refaz a fila, que volta ao
-   princípio: o chip ligado volta à vista na fila (planeados.js:recChipAVista),
-   senão o Silenciados ficava quase todo fora do ecrã no telemóvel.
-   Recebe: v — '', 'auto', 'manual' ou 'muted'.
+/* Os estados do filtro dos Planeados (o «st» do lf('lrec')): o valor, o que o
+   chip ligado diz e o rótulo da escolha. Primeiro os quatro que eram chips
+   (Todos, Automáticos, Criados à mão, Silenciados), depois os do dia. */
+const REC_ESTADOS=[['','Todos','Todos os estados'],['auto','Automáticos','Automáticos (contratos, hipotecas e imóveis)'],['manual','Criados à mão','Criados à mão'],
+  ['muted','Silenciados','Silenciados'],['pend','Por confirmar','Por confirmar'],['ok','Em dia','Em dia']];
+/* O estado dos Planeados mudou — o chip do estado ou o seletor do painel
+   (vistas.js:lfCabeca), que são o mesmo filtro lf('lrec').st. Um valor que
+   não é um estado limpa o filtro.
+   Recebe: v — '', 'auto', 'manual', 'muted', 'pend' ou 'ok'.
    Devolve: nada — muda o filtro e redesenha. */
 function recChip(v){
-  lf('lrec').st=['auto','manual','muted'].indexOf(v)>-1?v:'';
+  lf('lrec').st=REC_ESTADOS.some(x=>x[0]&&x[0]===v)?v:'';
   render();
-  recChipAVista();
-}
-/* Traz o chip ligado para dentro da fila dos chips, rolando só a fila (e não
-   a página) o que faltar para ele se ver inteiro.
-   Devolve: nada — mexe no scrollLeft da fila; fora de um browser não faz nada. */
-function recChipAVista(){
-  try{
-    const fila=document.querySelector('.plan-chips'),c=fila&&fila.querySelector('.chip.on');
-    if(!c||!c.getBoundingClientRect)return;
-    const f=fila.getBoundingClientRect(),r=c.getBoundingClientRect();
-    if(r.right>f.right)fila.scrollLeft+=r.right-f.right+4;
-    else if(r.left<f.left)fila.scrollLeft-=f.left-r.left+4;
-  }catch(e){}
 }
 /* Uma linha da lista dos planeados: o nome, a periodicidade e a próxima data
    (ou, chegada a data, quando pede confirmação), o tipo e o imóvel, o selo da
@@ -1022,44 +1012,48 @@ function recLinha(r){
     ${recValor(t)}</div>`;
 }
 /* A página dos Planeados (o canvas M-Planeados): a faixa de quem vem de trás,
-   o cartão dos por confirmar, os chips Todos/Automáticos/Criados à mão/
-   Silenciados, a lista dos planeados num cartão, e os modelos em chips com o
-   valor. O «Novo recorrente» vive no cabeçalho (navegacao.js:#hdrAcao) e no
-   +; os vazios têm o seu botão, e com filtros são o vazio dos filtros
-   (vistas.js:vazioFiltro, com «Limpar filtros»). Com um chip de estado que não
-   o «Criados à mão», os Modelos saem: um modelo não tem estado.
+   o cartão dos por confirmar e, por cima do que filtram, os filtros dos
+   Movimentos (vistas.js:lfCabeca) — a pesquisa à vista com o funil do painel
+   completo e os chips do estado (Automáticos, Criados à mão, Silenciados, Por
+   confirmar, Em dia, cada um com quantos há: planeados.js:recChip), do tipo e,
+   no ecrã largo, do imóvel —; depois a lista dos planeados num cartão e os
+   modelos em chips com o valor. O «Novo recorrente» vive no cabeçalho
+   (navegacao.js:#hdrAcao) e no +; os vazios têm o seu botão, e com filtros
+   são o vazio dos filtros (vistas.js:vazioFiltro, com «Limpar filtros»). Com
+   um estado que não o «Criados à mão», os Modelos saem: um modelo não tem
+   estado.
    Devolve: o HTML da página (texto). */
 function vRecurring(){
   const K='lrec',s=lf(K);
   const hit=(name,tx)=>lfHit(K,[name,tx.label,tx.category,tx.sub,tx.creditor,propName(tx.propertyId),String(tx.amount||''),(tx.tags||[]).join(' '),tx.notes].join(' '));
   const base=r=>((!s.k||r.tx.kind===s.k)&&(!s.p||r.tx.propertyId===s.p)&&hit(r.name,r.tx));
-  const rc=(db.recurring||[]).filter(r=>{
-    if(!base(r))return false;
-    if(s.st==='pend'&&!(r.next&&r.next<=today()&&!r.muted))return false;
-    if(s.st==='ok'&&!(r.next&&r.next>today()))return false;
-    if(s.st==='muted'&&!r.muted)return false;
-    if(s.st==='auto'&&!r.auto)return false;
-    if(s.st==='manual'&&r.auto)return false;
+  /* um planeado está num estado? (o filtro e as contagens do chip) */
+  const noEstado=(r,st)=>{
+    if(st==='pend')return !!(r.next&&r.next<=today()&&!r.muted);
+    if(st==='ok')return !!(r.next&&r.next>today());
+    if(st==='muted')return !!r.muted;
+    if(st==='auto')return !!r.auto;
+    if(st==='manual')return !r.auto;
     return true;
-  }).sort((a,b)=>String(a.next).localeCompare(String(b.next)));
+  };
+  const daBase=(db.recurring||[]).filter(base);
+  const rc=daBase.filter(r=>noEstado(r,s.st)).sort((a,b)=>String(a.next).localeCompare(String(b.next)));
   const rcS=lfSort(K,rc,{nome:r=>r.name,valor:r=>r.tx.amount||0,data:r=>r.next||''});
   const tp=lfSort(K,(db.templates||[]).filter(x=>(!s.k||x.tx.kind===s.k)&&(!s.p||x.tx.propertyId===s.p)&&(!s.st||s.st==='manual')&&hit(x.name,x.tx)),
     {nome:x=>x.name,valor:x=>x.tx.amount||0,data:()=>0});
   const kinds=[{v:'',label:'Todos os tipos'},{v:'income',label:'Receitas'},{v:'expense',label:'Despesas'},{v:'loan',label:'Pagamentos de crédito'},{v:'owed',label:'Dívidas recebidas'},{v:'repay',label:'Pagamentos de dívida'}];
-  /* o filtro por imóvel só com os Imóveis ligados nesta conta */
-  const head=lfBar(K,[lfSel(K,'k',kinds)].concat(servicoLigado('properties')?[lfSel(K,'p',lfPropOpts())]:[]).concat([
-      lfSel(K,'st',[{v:'',label:'Todos os estados'},{v:'pend',label:'Por confirmar'},{v:'ok',label:'Em dia'},{v:'muted',label:'Silenciados'},{v:'auto',label:'Automáticos (contratos, hipotecas e imóveis)'},{v:'manual',label:'Criados à mão'}])]),
-      rc.length+tp.length,
-      {defLabel:'Ordenar pela próxima data',opts:[{v:'data',label:'Ordenar por data'},{v:'valor',label:'Ordenar por valor'},{v:'nome',label:'Ordenar por nome'}]});
+  /* os filtros por cima do que filtram, e só com alguma coisa para filtrar.
+     As escolhas do estado dizem quantos há em cada um pelos olhos dos outros
+     filtros (o tipo, o imóvel e a pesquisa contam; o estado é o próprio
+     campo); o filtro por imóvel só com os Imóveis ligados nesta conta */
+  const head=!(db.recurring||[]).length&&!(db.templates||[]).length?'':lfCabeca(K,{nome:['planeado','planeados'],dos:'dos planeados',n:rc.length+tp.length,
+    campos:[{chave:'st',nome:'Estado',curto:'Todos',rapido:true,aplicar:recChip,rotulo:v=>(REC_ESTADOS.find(x=>x[0]===v)||[])[1]||v,
+        opcoes:REC_ESTADOS.map(([v,,rot])=>({v:v,label:rot,n:v?daBase.filter(r=>noEstado(r,v)).length:daBase.length}))},
+      {chave:'k',nome:'Tipo',curto:'Todos',rapido:true,opcoes:kinds},
+      servicoLigado('properties')?{chave:'p',nome:'Imóvel',curto:'Todos',rapido:'largo',opcoes:lfPropOpts()}:null],
+    ordem:{omissao:'Próxima data',opcoes:[{v:'data',label:'Data'},{v:'valor',label:'Valor'},{v:'nome',label:'Nome'}]}});
   /* quem pode adicionar: a condição do «Novo recorrente» do cabeçalho, para os vazios e o «Novo modelo» */
   const adiciona=podeSemImovel()||casasComo('rec.add').length;
-  /* os chips mostram o que já existe pelos olhos do filtro (o tipo, o imóvel e
-     a pesquisa contam; o estado é o próprio chip) */
-  const todos=(db.recurring||[]).filter(base).length;
-  const chip=(v,rotulo,n)=>{const on=(s.st||'')===v;
-    return `<button type="button" class="chip${on?' on':''}" aria-pressed="${on?'true':'false'}" data-toca="vista" data-click="recChip('${v}')">${rotulo}${n!=null?` <span class="n">${n}</span>`:''}</button>`};
-  const chips=(db.recurring||[]).length?`<div class="chips-fila plan-chips" role="group" aria-label="Mostrar">
-      ${chip('','Todos',todos)}${chip('auto','Automáticos')}${chip('manual','Criados à mão')}${chip('muted','Silenciados')}</div>`:'';
   /* com filtros, o vazio é o dos filtros, com «Limpar filtros» (vistas.js:vazioFiltro) */
   const filtrado=lfCount('lrec')>0;
   const recs=rcS.length?`<div class="card plan-lista">${listaViva('recorrentes',rcS.map(r=>({chave:'rec:'+r.id,html:recLinha(r)})),'plan-linhas')}</div>`
@@ -1067,10 +1061,10 @@ function vRecurring(){
   /* um modelo não tem data nem origem: com um estado escolhido (Automáticos,
      Silenciados, Por confirmar, Em dia) a secção sai, em vez de dizer sempre
      que não há nada; «Criados à mão» deixa-os, que são todos à mão */
-  if(s.st&&s.st!=='manual')return head+recRetroFaixa()+pendingCard(true)+chips+recs;
+  if(s.st&&s.st!=='manual')return recRetroFaixa()+pendingCard(true)+head+recs;
   const tpls=tp.length?listaViva('modelos',tp.map(x=>({chave:'tpl:'+x.id,html:`<button type="button" class="chip plan-modelo" data-lp="tpl:${esc(x.id)}" data-fk="tpl:${esc(x.id)}" data-toca="camada" data-click="tplView('${jsq(x.id)}')"><span class="plan-modelo-nome">${esc(x.name)}</span>${Number(x.tx.amount)>0?` <span class="n">${euro2(x.tx.amount)}</span>`:''}</button>`})),'chips-fila plan-modelos')
     :filtrado?vazioFiltro():`<div class="empty u-p-24px"><b>Sem modelos</b>Um modelo é um movimento guardado para copiar à mão quando precisares.${adiciona?saida('Novo modelo','newTpl()','camada'):''}</div>`;
-  return head+recRetroFaixa()+pendingCard(true)+chips+recs
+  return recRetroFaixa()+pendingCard(true)+head+recs
     +`<div class="plan-cab"><h2>Modelos</h2>${tp.length&&adiciona?'<button type="button" class="btn sm ghost plan-novo" data-toca="camada" data-click="newTpl()">Novo modelo</button>':''}</div>${tpls}`;
 }
 /* secção do formulário de um planeado: a periodicidade, a janela e o fim — os

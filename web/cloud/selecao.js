@@ -410,7 +410,9 @@ lpMenu = function (v) {
    a folha esconde-o em seleção (estilos.css:body.sel-on #hdrFilt.mov-hdr-sel):
    a barra do fundo já tem o Cancelar, o Editar e o Apagar, e o «⋯» e o X que
    havia ao lado dele repetiam-nos. Noutro separador devolve o botão aos
-   filtros — o render normal repõe o funil.
+   filtros — o render normal repõe o funil —, e nos Imóveis e nos Contratos
+   o cloud/selecao-listas.js veste-o a seguir com o seu «Selecionar vários»
+   (selecao-listas.js:selLCabecalho, que embrulha esta).
    Devolve: nada — mexe diretamente no cabeçalho, no DOM. */
 function patchHdrSel() {
   var hb = document.getElementById('hdrFilt');

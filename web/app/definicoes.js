@@ -91,14 +91,15 @@ function exportarSoMeu(fn){
 }
 
 /* ================= DEFINIÇÕES ================= */
-/* A cabeça de cada subpágina das Definições — e dos Grupos e dos
-   Colaboradores, que vivem nelas. No telemóvel é o Voltar, colado ao topo
-   (nos documentos longos, os termos e a política, a meio de 300 linhas não
-   havia porta de saída à vista); nos Grupos e nos Colaboradores, que são
-   separadores, ele leva às Definições e não à raiz do separador. No
+/* A cabeça de cada subpágina das Definições — e dos Grupos, que vivem
+   nelas. No telemóvel é o Voltar, colado ao topo (nos documentos longos, os
+   termos e a política, a meio de 300 linhas não havia porta de saída à
+   vista); nos Grupos, que são um separador, ele leva às Definições e não à
+   raiz do separador. Os Colaboradores já não a têm: são das Pessoas, com os
+   separadores da área por cima (navegacao.js:abasDaArea). No
    computador o Voltar some e fica a navegação lateral das Definições
-   (navDasDefinicoes, o canvas de 2026-10: D-DefCategorias, D-DefDados,
-   D-Colaboradores), posta ao lado do conteúdo pela folha
+   (navDasDefinicoes, o canvas de 2026-10: D-DefCategorias, D-DefDados),
+   posta ao lado do conteúdo pela folha
    (estilos.css:.wrap:has(>.def-nav)). A Ajuda tem porta própria na barra
    lateral, e por isso fica sem a navegação das Definições.
    Recebe: nada (lê tab e setPage).
@@ -232,20 +233,6 @@ function resumoDosFiltros(){
   const fs=db.settings.filters||[];
   return fs.length?'«'+fs[0].name+'»'+(fs.length>1?' e mais '+(fs.length-1):''):'Um conjunto de escolhas, aplicado num toque';
 }
-/* A situação fiscal vive na página do IRS · Anexo F (fisco.js:fiscoSituacaoCard),
-   e a linha das Definições leva lá. Só quando o separador abre nesta conta.
-   Recebe: nada.
-   Devolve: true se a linha aparece. */
-function haSituacaoFiscal(){
-  return servicoLigado('fisco')&&separadoresEscondidos().indexOf('fisco')<0;
-}
-/* O resumo da linha «A tua situação fiscal»: a tributação e os recibos.
-   Recebe: nada.
-   Devolve: o texto. */
-function resumoDaSituacao(){
-  const d=servicoLigado('fisco')?fiscoIrsDefs():{};
-  return (d.conjunta?'Tributação conjunta':'Tributação separada')+' · '+(d.dispensaRecibos?'dispensado dos recibos eletrónicos':'sem dispensa de recibos');
-}
 const DEF_LINHAS=[
   /* os Grupos são filtros da app inteira, e vivem aqui desde 2026-10 (o
      canvas): saíram da barra lateral, e a linha leva ao separador deles
@@ -253,7 +240,6 @@ const DEF_LINHAS=[
      grupos partilhados (servicos.js:crachaDe, o mesmo do separador). */
   {sec:'conta',ordem:40,page:'groups',label:'Grupos',icon:'layers',sub:resumoDosGrupos,cracha:()=>{const c=crachaDe('groups');return c&&c.n||0}},
   {sec:'dinheiro',ordem:10,page:'cats',label:'Categorias, etiquetas e IRS',icon:'tag',sub:resumoDasCategorias},
-  {sec:'dinheiro',ordem:20,ir:'fisco',label:'A tua situação fiscal',icon:'recibo',sub:resumoDaSituacao,se:haSituacaoFiscal},
   {sec:'dinheiro',ordem:30,page:'defaults',label:'Valores por omissão',icon:'trend',sub:resumoDosValores},
   {sec:'dinheiro',ordem:40,page:'filtros',label:'Filtros comuns',icon:'filter',sub:resumoDosFiltros},
   {sec:'aplicacao',ordem:10,page:'tema',label:'Tema',linha:linhaDoTema},
@@ -293,7 +279,7 @@ function seccoesVisiveis(){
   return out;
 }
 /* A ação de uma linha que leva a algum lado: a subpágina (goSet), ou o
-   separador onde a coisa vive (go — a situação fiscal, no IRS · Anexo F).
+   separador onde a coisa vive (go — os Grupos).
    Recebe: l — a linha.
    Devolve: o texto da ação (para um data-click). */
 function acaoDaLinha(l){return l.ir?`go('${jsq(l.ir)}')`:`goSet('${jsq(l.page)}')`}
@@ -366,12 +352,12 @@ function raizDasDefinicoes(){
   return `<div class="def-raiz">${secs}${sair}</div>`;
 }
 /* A página das Definições aberta, para a navegação lateral a acender: os
-   Grupos e os Colaboradores pelo separador; o IRS e as etiquetas são a página
-   das categorias; os termos e a política vivem no aviso legal.
+   Grupos pelo separador; o IRS e as etiquetas são a página das categorias;
+   os termos e a política vivem no aviso legal.
    Recebe: nada (lê tab e setPage).
    Devolve: a chave da página (texto). */
 function paginaDasDefinicoes(){
-  if(tab==='groups'||tab==='colaboradores')return tab;
+  if(tab==='groups')return tab;
   if(setPage==='irs'||setPage==='tags')return 'cats';
   if(setPage==='termos'||setPage==='privacidade')return 'legal';
   return setPage||'';
@@ -1006,6 +992,8 @@ function delTag(g){
   confirmModal('Apagar etiqueta',`Apagar “${esc(g)}”?${used?` Sai de ${used===1?'1 movimento':used+' movimentos'}.`:''}`,()=>{
     db.settings.tags=(db.settings.tags||[]).filter(x=>x!==g);
     db.transactions.forEach(t=>{t.tags=(t.tags||[]).filter(x=>x!==g)});
+    // e sai do filtro dos Movimentos, se estava escolhida (lista-movimentos.js:txEtiq)
+    if(typeof txEtiq!=='undefined')txEtiq=txEtiq.filter(x=>x!==g);
     save();render();toast('Etiqueta apagada.');
   });
 }
@@ -1133,6 +1121,8 @@ function aplicarFiltroComum(id){
   const f=filtrosComuns().find(x=>x.id===id);if(!f)return;
   if(tab==='transactions'){
     txFilter=f.kind||'';txProp=f.prop||'';ownerFilter=f.owner||'';
+    // um filtro comum não guarda etiquetas: as escolhidas saem, senão somavam-se a ele
+    if(typeof txEtiq!=='undefined')txEtiq=[];
     txCat=f.cat||'';txSub=f.sub||'';txDe=f.de||'';txAte=f.ate||'';
     if(typeof txRerender==='function')txRerender();else render();   // a repintura curta é dos Movimentos
     toast('Filtro «'+f.name+'» aplicado.');return;

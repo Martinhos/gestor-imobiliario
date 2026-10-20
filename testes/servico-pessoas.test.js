@@ -60,8 +60,8 @@ describe('autonomia: os inquilinos, os proprietários e os colaboradores rendem 
     for (const t of SEM_CONTRATOS) assert.ok(!html.includes(t), 'sem ' + t);
     assert.ok(!html.includes('Sem contrato ativo') && !html.includes('Arrendamento da Ana'), 'os contratos não se mencionam: o serviço não está nesta conta');
     assert.ok(!html.includes('lfsel_lten_ct'), 'sem o filtro por contrato');
-    assert.ok(!html.includes('pesFiltroRapido'), 'nem os chips dele');
-    assert.ok(!html.includes('Ordenar por renda'), 'sem a ordem por renda');
+    assert.ok(!html.includes('lfc_lten_ct'), 'nem o chip dele');
+    assert.doesNotMatch(html, /id="pop_lfsel_lten_sb"[^]*?<span>Renda<\/span>/, 'sem a ordem por renda');
     assert.match(html, /<span class="small pes-sub">\+351 961 234 567 · ana@exemplo\.pt<\/span>/, 'a linha fica com o contacto');
     const fixos = elementos(app);
     app.tab = 'tenants';
@@ -86,7 +86,7 @@ describe('autonomia: os inquilinos, os proprietários e os colaboradores rendem 
     for (const t of SEM_IMOVEIS) assert.ok(!html.includes(t), 'sem ' + t);
     assert.ok(!html.includes('Sem imóveis'), 'os imóveis não se mencionam: o serviço não está nesta conta');
     assert.ok(!html.includes('lfsel_lown_p') && !html.includes('lfsel_lown_pr'), 'sem os filtros por imóvel');
-    assert.ok(!html.includes('pesFiltroRapido'), 'nem os chips deles');
+    assert.ok(!html.includes('lfc_lown_pr') && !html.includes('lfc_lown_p"'), 'nem os chips deles');
     const fixos = elementos(app);
     app.tab = 'owners';
     app.render();
@@ -134,6 +134,7 @@ describe('autonomia: os inquilinos, os proprietários e os colaboradores rendem 
     assert.ok(vazio.length > 0);
     assert.match(vazio, /Precisas de uma conta/);
     assert.ok(vazio.includes("goSet('cloud')"), 'a saída é para a base (Definições)');
+    assert.ok(!/def-voltar|def-nav/.test(vazio), 'é um ecrã das Pessoas: sem o Voltar nem a navegação das Definições');
     semear(app);
     assert.match(app.vColabTab(), /Precisas de uma conta/);
     const fixos = elementos(app);
@@ -192,7 +193,7 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     app.personView('tenant', 't1');
     for (const t of SEM_CONTRATOS) assert.ok(!ultimo(esp.modais).menu.includes(t) && !ultimo(esp.modais).corpo.includes(t), 'ficha sem ' + t);
     assert.ok(!ultimo(esp.modais).menu.includes('Ver contrato') && !ultimo(esp.modais).corpo.includes('Ver contrato'));
-    assert.ok(!html.includes('pesFiltroRapido'), 'nem os chips do filtro por contrato');
+    assert.ok(!html.includes('lfc_lten_ct'), 'nem o chip do filtro por contrato');
     app.lpMenu('per:tenant:t1');
     assert.ok(!ultimo(esp.folhas).labels.includes('Novo contrato'), ultimo(esp.folhas).labels.join(' | '));
     igual(ultimo(esp.folhas).labels, ['Editar ficha', 'Apagar']);
@@ -308,6 +309,9 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     assert.match(vc, /Colaboradores está desligado nesta conta/);
     assert.ok(!/CW\.cargoModal|Convidar colaborador|Maria|CW\.sairDeImovel/.test(vc), 'a vista não traz os cartões');
     assert.match(app.vColabTab(), /desligado nesta conta/, 'o separador passa a mesma página');
+    assert.ok(app.separadoresEscondidos().indexOf('colaboradores') > -1, 'desligado, sai do segmentado das Pessoas');
+    app.tab = 'tenants';
+    assert.doesNotMatch(app.abasDaArea(), /go\('colaboradores'\)/);
     const conta = app.vCloud();
     assert.match(conta, /A minha conta/);
     assert.match(conta, /Apagar a conta/);
@@ -331,12 +335,13 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     const lista = app.vTenants();
     assert.match(lista, /Mora em T2 Porto/, 'a linha diz onde mora, pelo contrato');
     assert.match(lista, /class="num pes-valor">700\s€</, 'e a renda à direita');
-    assert.ok(lista.includes('lfsel_lten_ct') && lista.includes('Ordenar por renda'));
-    assert.ok(lista.includes("pesFiltroRapido('lten','ct','com')"), 'e os chips do filtro rápido');
+    assert.ok(lista.includes('lfsel_lten_ct'));
+    assert.match(lista, /id="pop_lfsel_lten_sb"[^]*?<span>Renda<\/span>/, 'e a ordem por renda');
+    assert.ok(lista.includes('id="lfc_lten_ct"'), 'e o chip do filtro rápido');
     const donos = app.vOwners();
     assert.match(donos, /T2 Porto/);
     assert.ok(donos.includes('lfsel_lown_p'));
-    assert.ok(donos.includes("pesFiltroRapido('lown','pr','sem')"));
+    assert.ok(donos.includes('id="lfc_lown_pr"'));
     assert.match(app.personFicha('tenant', 't1'), /<h3>Mora em<\/h3>/);
     const fichaO = app.personFicha('owner', 'o1');
     assert.match(fichaO, /Imóveis e quota-parte/);
@@ -353,6 +358,8 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     }
     assert.equal(app.pedidosRecebidos().length, 1);
     assert.match(app.vColaboradores(), /Convidar colaborador/);
+    app.tab = 'tenants';
+    assert.match(app.abasDaArea(), /go\('colaboradores'\)">Colaboradores <span class="n">1<\/span>/, 'ligado e com sessão, os Colaboradores são o terceiro das Pessoas');
     const conta = app.vCloud();
     assert.ok(conta.includes('Ligar a outro utilizador') && conta.includes('CW.ligacaoRodar()') && conta.includes('Pedidos de partilha'));
     assert.ok(!conta.includes('está desligado nesta conta'));
@@ -406,11 +413,10 @@ describe('o desenho: as listas e as fichas das pessoas lêem o que a app sabe', 
     const marta = linhaDe(html, 'tenant', 't5');
     assert.match(marta, /<span class="small pes-sub">Sem contrato<\/span>/);
     assert.match(marta, /<span class="small pes-contacto">\+351 912 000 111<\/span>/, 'o contacto na coluna do computador');
-    assert.match(html, /aria-pressed="true"[^>]*data-click="pesFiltroRapido\('lten','ct',''\)">Todos<\/button>/);
-    assert.match(html, /pesFiltroRapido\('lten','ct','com'\)">Com contrato <span class="n">2<\/span>/);
-    assert.match(html, /pesFiltroRapido\('lten','ct','fut'\)">Por começar <span class="n">1<\/span>/);
-    assert.match(html, /pesFiltroRapido\('lten','ct','sem'\)">Sem contrato <span class="n">2<\/span>/);
-    // o chip filtra ao tocar, sem «Aplicar», e é o mesmo filtro do painel
+    // o chip do contrato (vistas.js:lfCabeca): desligado diz o nome, e cada escolha diz quantos lhe cabem
+    assert.match(html, /<span class="mov-chip"><div class="sel" id="sel_lfc_lten_ct">[\s\S]*?<span id="lab_lfc_lten_ct">Contrato<\/span>/);
+    assert.match(html, /id="pop_lfc_lten_ct"[\s\S]*?<span>Todos os inquilinos<\/span>[\s\S]*?<span>Com contrato ativo · 2<\/span>[\s\S]*?<span>Com contrato por começar · 1<\/span>[\s\S]*?<span>Sem contrato · 2<\/span>/);
+    // a escolha filtra logo, sem «Aplicar», e é o mesmo filtro do painel
     let pintou = 0;
     app.render = () => { pintou++; };
     app.pesFiltroRapido('lten', 'ct', 'sem');
@@ -418,7 +424,8 @@ describe('o desenho: as listas e as fichas das pessoas lêem o que a app sabe', 
     assert.equal(app.lf('lten').ct, 'sem');
     const sem = app.vTenants();
     igual([...sem.matchAll(/data-lp="per:tenant:(\w+)"/g)].map((m) => m[1]), ['t4', 't5']);
-    assert.match(sem, /aria-pressed="true"[^>]*data-click="pesFiltroRapido\('lten','ct','sem'\)"/);
+    assert.match(sem, /<span class="mov-chip on"><div class="sel" id="sel_lfc_lten_ct">[\s\S]*?aria-label="Contrato: Sem contrato"[\s\S]*?<span id="lab_lfc_lten_ct">Sem contrato<\/span>/, 'ligado, diz o valor');
+    assert.match(sem, /data-click="lfLimparCampo\('lten','ct'\)"/, 'com o × que o limpa');
   });
 
   test('a lista dos proprietários: os imóveis, a renda que lhe cabe, a conta de outro, e os chips com e sem imóveis', () => {
@@ -433,8 +440,7 @@ describe('o desenho: as listas e as fichas das pessoas lêem o que a app sabe', 
     assert.match(linhaDe(html, 'owner', 'o2'), /<span class="small pes-sub">Sem imóveis<\/span>/);
     assert.match(linhaDe(html, 'owner', 'u9'), /<span class="badge">Tem conta<\/span>/);
     assert.doesNotMatch(rui, /Tem conta/);
-    assert.match(html, /pesFiltroRapido\('lown','pr','com'\)">Com imóveis <span class="n">1<\/span>/);
-    assert.match(html, /pesFiltroRapido\('lown','pr','sem'\)">Sem imóveis <span class="n">2<\/span>/);
+    assert.match(html, /id="pop_lfc_lown_pr"[\s\S]*?<span>Com imóveis · 1<\/span>[\s\S]*?<span>Sem imóveis · 2<\/span>/);
     app.lf('lown').pr = 'com';
     igual([...app.vOwners().matchAll(/data-lp="per:owner:(\w+)"/g)].map((m) => m[1]), ['o1']);
   });
