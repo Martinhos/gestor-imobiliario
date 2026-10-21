@@ -361,7 +361,8 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     app.tab = 'tenants';
     assert.match(app.abasDaArea(), /go\('colaboradores'\)">Colaboradores <span class="n">1<\/span>/, 'ligado e com sessão, os Colaboradores são o terceiro das Pessoas');
     const conta = app.vCloud();
-    assert.ok(conta.includes('Ligar a outro utilizador') && conta.includes('CW.ligacaoRodar()') && conta.includes('Pedidos de partilha'));
+    assert.ok(conta.includes("go('owners')") && conta.includes('Partilhar com outras contas'), 'Conta e partilha leva aos Proprietários');
+    assert.ok(donos.includes('Ligar a outro utilizador') && donos.includes('CW.ligacaoRodar()') && donos.includes('Pedidos de partilha'), 'a partilha vive por baixo da lista dos proprietários');
     assert.ok(!conta.includes('está desligado nesta conta'));
     const bloco = app.cwOwnersBlock();
     assert.ok(bloco.includes('Maria') && bloco.includes('cwGerirColaboradores()'), 'a ficha do imóvel aponta para o separador');
@@ -536,7 +537,7 @@ describe('o desenho: as listas e as fichas das pessoas lêem o que a app sabe', 
     app.db.owners.push(Object.assign(app.normPerson({ id: 'u9', name: 'Pedro Costa', phone: '917330482' }), { _userId: 'u9' }));
     const pedro = app.personFicha('owner', 'u9');
     assert.match(pedro, /<span class="badge">Tem conta Rendorium<\/span>/);
-    assert.match(pedro, /<div class="pes-nota">[\s\S]*?só quem tem a conta o edita\. Para o remover das casas, desfaz a partilha em Conta e partilha\./);
+    assert.match(pedro, /<div class="pes-nota">[\s\S]*?só quem tem a conta o edita\. Para o remover das casas, desfaz a partilha em Pessoas → Proprietários\./);
     assert.match(pedro, /<h3>Contactos e identificação<\/h3>/);
     app.personView('owner', 'u9');
     assert.doesNotMatch(ultimo(esp.modais).rodape, /personModal|Editar/);

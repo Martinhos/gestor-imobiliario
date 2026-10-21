@@ -99,7 +99,7 @@ describe('a conta e a ligação a outro utilizador', () => {
     limpar(a);
     a.db.properties = [a.normProp({ id: 'P1', name: 'T2 Lisboa', ownerIds: ['EU'] })];
     a.CW.state.roles = [{ id: 'R1', name: 'Gestor de visitas', perms: ['visit.view'] }];
-    const conta = a.vCloud();
+    const conta = a.comproprietariosHtml();   // o campo de ligar vive por baixo da lista dos Proprietários
     const cs = conferir('ligar', conta, { obrigatorios: ['cw_peer'], deixados: ['cw_lig_'] });
     assert.equal(cs.find((c) => c.id === 'cw_peer').placeholder, EX + 'A7KQ2MPX');
     assert.match(conta, /<label class="u-fx-1 u-minw-0">O id dele <span class="req">\*<\/span><input id="cw_peer"/);

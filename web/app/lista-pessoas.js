@@ -121,10 +121,25 @@ function vTenants(){
   if(!list.length)return head+vazioFiltro();
   return head+listaViva('inquilinos',list.map(t=>({chave:'ten:'+t.id,html:personCard(t,'tenant',sit[t.id])})),'pes-lista');
 }
+/* A partilha entre contas, por baixo da lista dos proprietários: as
+   ligações a outros utilizadores, os pedidos e a ligação de partilha. É da
+   nuvem (cloud/partilha.js:comproprietariosHtml põe-na aqui); sem ela, nada.
+   Devolve: o HTML (texto), ou ''. */
+let partilhaDosDonos=null;
+/* O que a nuvem põe por baixo da lista dos proprietários (partilhaDosDonos),
+   e um erro lá não leva a lista consigo.
+   Recebe: nada.
+   Devolve: o HTML (texto), ou ''. */
+function partilhaNosDonos(){
+  if(!partilhaDosDonos)return '';
+  try{const h=partilhaDosDonos();return h||''}catch(e){return ''}
+}
 /* Lista de proprietários, na mesma família: a pesquisa à vista com o funil,
    o chip dos imóveis — com e sem imóveis, o mesmo filtro do seletor do painel
    — e o do imóvel de que é dono (só no ecrã largo, ou ligado); ordenação por
-   nome ou nº de imóveis. Sem proprietários não há barra.
+   nome ou nº de imóveis. Sem proprietários não há barra. Por baixo, com
+   sessão, a partilha com outras contas (partilhaNosDonos) — a não ser à
+   espera do servidor, em que fica só a roda.
    Devolve: string com o HTML completo da vista. */
 function vOwners(){
   const K='lown',s=lf(K);
@@ -141,14 +156,14 @@ function vOwners(){
   list=lfSort(K,list,{nome:o=>o.name,imoveis:o=>propsOf(o.id).length});
   const n=k=>achados.filter(tem[k]).length;
   /* sem proprietários nenhuns não há o que pesquisar nem filtrar: fica o vazio com o seu botão */
-  if(!db.owners.length)return esperaDoServidor()||`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.${saida('Adicionar proprietário',"personModal('owner')",'camada')}</div>`;
+  if(!db.owners.length)return esperaDoServidor()||`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.${saida('Adicionar proprietário',"personModal('owner')",'camada')}</div>`+partilhaNosDonos();
   const head=lfCabeca(K,{nome:['proprietário','proprietários'],dos:'dos proprietários',n:list.length,
     campos:comProp?[pesChips(K,'pr','Imóveis',[['','Todos','Todos os proprietários'],['com','Com imóveis','Com imóveis',n('com')],['sem','Sem imóveis','Sem imóveis',n('sem')]]),
       db.properties.length?{chave:'p',nome:'Dono de',curto:'Qualquer imóvel',rapido:'largo',rotulo:v=>'Dono de '+propName(v),
         opcoes:[{v:'',label:'Qualquer imóvel'}].concat(db.properties.map(p=>({v:p.id,label:p.name})))}:null]:[],
     ordem:{opcoes:[{v:'nome',label:'Nome'}].concat(comProp?[{v:'imoveis',label:'Nº de imóveis'}]:[]),rapido:'largo'}});
-  if(!list.length)return head+vazioFiltro();
-  return head+listaViva('proprietarios',list.map(o=>({chave:'own:'+o.id,html:personCard(o,'owner')})),'pes-lista');
+  if(!list.length)return head+vazioFiltro()+partilhaNosDonos();
+  return head+listaViva('proprietarios',list.map(o=>({chave:'own:'+o.id,html:personCard(o,'owner')})),'pes-lista')+partilhaNosDonos();
 }
 /* A folha das opções de uma pessoa (data-lp "per:<kind>:<id>"), a que o
    componentes.js:lpMenu dá a vez. Na lista o toque longo já não a abre —

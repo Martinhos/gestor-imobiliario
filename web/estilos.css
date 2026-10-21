@@ -4035,6 +4035,14 @@ label.pt-quota{grid-template-columns:minmax(0,1fr) 88px 16px;align-items:center;
 .pt-quota input{text-align:right;font-variant-numeric:tabular-nums}
 .pt-pct{color:var(--muted);font-weight:600}
 .pt-quotas .hint{margin:8px 0 0}
+/* a divisão em vigor de uma casa já partilhada (partilha.js:quotasDaCasaHtml):
+   as mesmas linhas, com a quota escrita em vez do campo */
+div.pt-quota{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 0;font-weight:500}
+div.pt-quota b{text-align:right}
+.pt-quotas .pt-botoes{margin-top:8px}
+.pt-sai{margin:10px 0 0;color:var(--warn)}
+/* a partilha entre contas por baixo da lista dos Proprietários (partilha.js:comproprietariosHtml) */
+.pt-pagina.pes-partilha{margin-top:22px}
 
 /* ---- cloud/entrada.js:modalConvite, modalLigar e modalGrupo — os convites
    (M-ConviteAceitar) ----

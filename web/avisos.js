@@ -122,6 +122,8 @@ var AVISOS = [
           'No calendário, um cartão «Por confirmar» mostra os planeados do número no ícone da Agenda, e confirmas ali mesmo.',
           'As Projeções e a Avaliação filtram por imóvel num chip, e o horizonte, o aumento das rendas, a inflação e o yield exigido estão na roda dentada do cabeçalho.',
           'Na Avaliação, partilhar e exportar o CSV estão num só botão de partilha, ao lado do chip do imóvel.',
+          'A partilha com outras contas passou para Pessoas › Proprietários, por baixo da lista. Em «Casas partilhadas» adicionas e removes casas, vês o que o outro partilha contigo e propões novas quotas — e confirmas ali mesmo a proposta de outro.',
+          'Em «Como se chega aos saldos», o movimento mais recente fica no topo e o mais antigo no fundo.',
           'Um menu ⋯ aberto fecha quando rolas a página ou carregas em Escape.',
           'Saiu o «Proprietário em foco»: os valores são sempre por inteiro. Para ver o que é de um proprietário, procura-o na pesquisa dos Imóveis ou abre a ficha dele.',
         ],

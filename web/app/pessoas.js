@@ -255,7 +255,7 @@ function pesFichaDono(p){
   const vazia=!L.contactos&&!L.ident&&!casas.length;
   return `<div class="pes-ficha">
     <div class="pes-topo">${pesAvatar(p,true)}<div class="pes-topo-txt"><p class="pes-papel">Proprietário</p>${eu||comConta||cc?`<div class="pes-selos">${eu?'<span class="badge">O teu perfil</span>':comConta?'<span class="badge">Tem conta Rendorium</span>':''}${cc}</div>`:''}</div></div>
-    ${comConta?`<div class="pes-nota">${ic('lock',20)}<p>Este perfil é de ${esc(p.name||'quem tem a conta')}, que tem conta: só quem tem a conta o edita. Para o remover das casas, desfaz a partilha em Conta e partilha.</p></div>`:''}
+    ${comConta?`<div class="pes-nota">${ic('lock',20)}<p>Este perfil é de ${esc(p.name||'quem tem a conta')}, que tem conta: só quem tem a conta o edita. Para o remover das casas, desfaz a partilha em Pessoas → Proprietários.</p></div>`:''}
     ${contas}
     ${pesCartao('Imóveis e quota-parte',linhasCasas,casas.length?`<span class="small num">${casas.length}</span>`:'')}
     ${pesCartao('Contactos e identificação',L.contactos+L.ident)}

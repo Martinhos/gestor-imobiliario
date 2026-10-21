@@ -383,10 +383,13 @@ describe('as quotas ao escolher a casa a partilhar', () => {
   const escreve = (app, hid, valores) => { for (const [u, v] of Object.entries(valores)) app.document.getElementById('cw_q_' + hid + '_' + u).value = v; };
   const chamadas = (esp) => esp.api.map((x) => x.method + ' ' + x.path);
 
-  test('a casa já partilhada vem marcada e sem quotas; a nova traz a caixa com o data-change e o lugar do bloco, vazio', () => {
-    const { corpo } = abrir();
-    assert.match(corpo, /id="cw_sh_H1" checked>/);
-    assert.ok(!/cw_qb_H1|shareCasaMudou\('H1'\)/.test(corpo), 'a já partilhada não ganha quotas por aqui');
+  test('a casa já partilhada vem marcada, com a divisão em vigor e «Propor nova divisão»; a nova traz a caixa com o data-change e o lugar do bloco, vazio', () => {
+    const { corpo, esp } = abrir();
+    assert.equal(esp.abertas[0].t, 'Partilha com Rui');
+    assert.match(corpo, /id="cw_sh_H1" checked data-toca="rascunho" data-change="CW\.shareCasaMudou\('H1'\)">/);
+    assert.match(corpo, /<div id="cw_qb_H1"><div class="pt-quotas">[\s\S]*?Eu \(tu\)<\/span><b class="num">50%<\/b>[\s\S]*?Rui<\/span><b class="num">50%<\/b>/);
+    assert.match(corpo, /data-toca="rascunho" data-click="CW\.shareProporAbrir\('H1'\)">Propor nova divisão</);
+    assert.ok(!corpo.includes('cw_q_H1_'), 'sem campos antes de propor');
     assert.match(corpo, /id="cw_sh_H5" data-toca="rascunho" data-change="CW\.shareCasaMudou\('H5'\)">/);
     assert.match(corpo, /<div id="cw_qb_H5"><\/div>/);
     assert.ok(!corpo.includes('cw_q_H5_'), 'sem campos de quotas antes de marcar');
@@ -478,6 +481,87 @@ describe('as quotas ao escolher a casa a partilhar', () => {
     assert.deepEqual(chamadas(b.esp), ['PUT /api/connections/K1/shares']);
     assert.deepEqual(b.esp.api[0].body, { houseIds: [] });
     assert.deepEqual(b.esp.toasts, ['Partilha atualizada.']);
+  });
+
+  test('desmarcar a casa já partilhada tira a divisão e diz que o outro deixa de a ver; voltar a marcar repõe', () => {
+    const { app } = abrir();
+    marcar(app, 'H1', false);
+    assert.match(bloco(app, 'H1'), /Ao guardar, Rui deixa de ver esta casa e de ter quota nela\./);
+    marcar(app, 'H1', true);
+    assert.match(bloco(app, 'H1'), /Propor nova divisão/);
+  });
+
+  test('«Propor nova divisão» abre os campos com a divisão atual; guardar com 70/30 faz o PUT e a proposta, sem mudar a lista', async () => {
+    const { app, esp } = abrir();
+    app.CW.shareProporAbrir('H1');
+    const b = bloco(app, 'H1');
+    assert.match(b, /id="cw_q_H1_EU" [^>]*value="50"/);
+    assert.match(b, /id="cw_q_H1_RUI" [^>]*value="50"/);
+    assert.match(b, /A nova divisão só entra em vigor depois de todos os comproprietários confirmarem\./);
+    assert.match(b, /CW\.shareProporFechar\('H1'\)">Não propor</);
+    escreve(app, 'H1', { EU: '70', RUI: '30' });
+    esp.abertas[0].onSave();
+    await espera();
+    assert.deepEqual(chamadas(esp), ['PUT /api/connections/K1/shares', 'POST /api/houses/H1/proposal']);
+    assert.deepEqual(esp.api[0].body, { houseIds: ['H1'] });
+    assert.deepEqual(esp.api[1].body, { shares: { EU: 70, RUI: 30 } });
+    assert.deepEqual(esp.toasts, ['A proposta de divisão seguiu — falta a confirmação do outro comproprietário.']);
+  });
+
+  test('a nova divisão igual à atual, ou fechada com «Não propor», não envia proposta; a soma errada recusa', async () => {
+    const a = abrir();
+    a.app.CW.shareProporAbrir('H1');
+    escreve(a.app, 'H1', { EU: '50', RUI: '50' });
+    a.esp.abertas[0].onSave();
+    await espera();
+    assert.deepEqual(chamadas(a.esp), ['PUT /api/connections/K1/shares']);
+    const b = abrir();
+    b.app.CW.shareProporAbrir('H1');
+    escreve(b.app, 'H1', { EU: '80', RUI: '20' });
+    b.app.CW.shareProporFechar('H1');
+    assert.ok(!bloco(b.app, 'H1').includes('cw_q_H1_'), 'fechou os campos');
+    b.app.CW.shareProporAbrir('H1');
+    assert.match(bloco(b.app, 'H1'), /id="cw_q_H1_EU" [^>]*value="80"/, 'reabre com o que estava escrito');
+    b.app.CW.shareProporFechar('H1');
+    b.esp.abertas[0].onSave();
+    await espera();
+    assert.deepEqual(chamadas(b.esp), ['PUT /api/connections/K1/shares']);
+    const c = abrir();
+    c.app.CW.shareProporAbrir('H1');
+    escreve(c.app, 'H1', { EU: '80', RUI: '30' });
+    c.esp.abertas[0].onSave();
+    await espera();
+    assert.deepEqual(c.esp.api, []);
+    assert.deepEqual(c.esp.toasts, ['As percentagens de Minha têm de somar 100 (agora somam 110).']);
+  });
+
+  test('a proposta por responder mostra-se: a do outro confirma-se ali; a minha diz de quem se espera e cancela-se', async () => {
+    const outro = abrir((st) => { st.proposals = [{ houseId: 'H1', shares: { EU: 40, RUI: 60 }, approvals: ['RUI'], proposedByName: 'Rui' }]; });
+    assert.match(outro.corpo, /Eu \(tu\)<\/span><b class="num">50% <span class="u-c-v-warn">→ 40%<\/span>/);
+    assert.match(outro.corpo, /<b>Rui<\/b> propôs esta nova divisão\./);
+    assert.match(outro.corpo, /CW\.shareResponder\('H1',1\)">Confirmar nova divisão</);
+    assert.ok(!outro.corpo.includes('shareProporAbrir'), 'com proposta por responder, não se propõe outra por cima');
+    await outro.app.CW.shareResponder('H1', 1);
+    assert.deepEqual(chamadas(outro.esp), ['POST /api/houses/H1/proposal/accept']);
+    const minha = abrir((st) => { st.proposals = [{ houseId: 'H1', shares: { EU: 60, RUI: 40 }, approvals: ['EU'], proposedByName: 'Eu' }]; });
+    assert.match(minha.corpo, /à espera de: <b>Rui<\/b>/);
+    assert.match(minha.corpo, /CW\.shareResponder\('H1',0\)">Cancelar proposta</);
+  });
+
+  test('as casas que o outro partilha comigo aparecem por baixo, sem caixa, com a divisão e o «Propor nova divisão»', async () => {
+    const { app, esp, corpo } = abrir((st) => {
+      st.houses.push({ id: 'H9', ownerId: 'RUI', ownerName: 'Rui', mine: false, participants: ['RUI', 'EU'], updatedAt: 1, data: { id: 'H9', name: 'Do Rui', address: 'Rua C' } });
+      st.connections[0].peerShares = ['H9'];
+    });
+    assert.match(corpo, /O que Rui partilha contigo<\/div>[\s\S]*?<b class="u-d-block">Do Rui<\/b>/);
+    assert.ok(!corpo.includes('cw_sh_H9'), 'não é minha: não se adiciona nem remove daqui');
+    assert.match(corpo, /CW\.shareProporAbrir\('H9'\)/);
+    app.CW.shareProporAbrir('H9');
+    escreve(app, 'H9', { RUI: '30', EU: '70' });
+    esp.abertas[0].onSave();
+    await espera();
+    assert.deepEqual(chamadas(esp), ['PUT /api/connections/K1/shares', 'POST /api/houses/H9/proposal']);
+    assert.deepEqual(esp.api[0].body, { houseIds: ['H1'] }, 'a lista das minhas fica como estava');
   });
 
   test('a proposta que falha depois do PUT: a partilha fica feita, e diz-se que a proposta não seguiu e onde a propor', async () => {

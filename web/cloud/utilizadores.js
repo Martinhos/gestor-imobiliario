@@ -13,7 +13,7 @@ delPerson = function (kind, id) {
   if (kind === 'owner') {
     if (CW.user && id === CW.user.id) return toast('Este perfil és tu — podes editá-lo, não apagá-lo.');
     var per = (db.owners || []).find(function (x) { return x.id === id; });
-    if (per && per._userId) return toast('Este proprietário é um utilizador ligado — para o remover, desfaz a partilha em Conta e partilha.');
+    if (per && per._userId) return toast('Este proprietário é um utilizador ligado — para o remover, desfaz a partilha em Pessoas → Proprietários.');
   }
   _delPerson(kind, id);
 };
@@ -146,7 +146,7 @@ function cwOwnersBlock() {
     : '';
   if (parts.length < 2) {
     return grupo('Proprietários', '<div class="hint">Este imóvel é só teu (100%). ' +
-      'Para o teres em compropriedade, partilha-o com outro utilizador em <b>Definições → Conta e partilha</b>.</div>' + colabHtml);
+      'Para o teres em compropriedade, partilha-o com outro utilizador em <b>Pessoas → Proprietários</b>.</div>' + colabHtml);
   }
   var shares = sharesOf(live);
   var prp = (CW.state.proposals || []).filter(function (x) { return x.houseId === p.id; })[0];
@@ -276,9 +276,10 @@ CW.proposeShares = function (hid, fromShare) {
    se, sendo o último, a divisão entrou logo em vigor), sem accept rejeita — que
    serve também para quem propôs a cancelar. Fala com a API e atualiza o modal.
    Recebe: hid — o id da casa; accept — 1/verdadeiro confirma, 0/falso rejeita.
-   Devolve: nada — chama a API e depois repinta o modal. */
+   Devolve: a promessa — resolve depois de repintar o modal (o modal das
+   partilhas repinta a seguir o seu bloco: partilha.js:CW.shareResponder). */
 CW.answerProposal = function (hid, accept) {
-  api('POST', '/api/houses/' + hid + '/proposal/' + (accept ? 'accept' : 'reject'))
+  return api('POST', '/api/houses/' + hid + '/proposal/' + (accept ? 'accept' : 'reject'))
     .then(function (r) {
       toast(accept
         ? (r.applied ? 'Confirmado por todos — a nova divisão já está em vigor.' : 'Confirmado — falta a resposta dos outros.')

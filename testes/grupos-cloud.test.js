@@ -642,8 +642,8 @@ describe('os cartões dos grupos partilhados no separador Grupos (o canvas de 20
     assert.match(h, /data-click="groupModal\('prop'\)">[\s\S]*?Novo grupo de imóveis</);
     assert.match(h, /Partilhar um grupo é para sempre: não volta a ser privado\./);
     const c = app.vCloud();
-    const iL = c.indexOf('Ainda não estás ligado a ninguém.'), iG = c.indexOf('Grupos partilhados'), iS = c.indexOf('Segurança');
-    assert.ok(iL > -1 && iG > iL && iS > iG, 'a seguir aos utilizadores ligados, antes da segurança: ' + [iL, iG, iS].join(', '));
+    const iL = c.indexOf('Partilhar com outras contas'), iG = c.indexOf('Grupos partilhados'), iS = c.indexOf('Segurança');
+    assert.ok(iL > -1 && iG > iL && iS > iG, 'a seguir à linha dos comproprietários, antes da segurança: ' + [iL, iG, iS].join(', '));
     assert.match(c, /data-toca="ecra" data-click="go\('groups'\)">[\s\S]*?<b class="u-d-block">Grupos partilhados<\/b><span class="small">2 grupos partilhados<\/span>/, 'a linha que leva ao separador');
     assert.ok(!c.includes('CW.grupoNovo()') && !c.includes("CW.grupoModal('G1')"), 'os grupos não vivem em Conta e partilha');
     app.db.groups = app.db.groups.filter((g) => !g._partilhado);

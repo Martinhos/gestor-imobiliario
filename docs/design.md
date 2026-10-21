@@ -3821,10 +3821,13 @@ As páginas que a nuvem pendura na raiz vestem o mesmo:
 
 - «Conta e partilha» (partilha.js:vCloud, o canvas M-Partilha) são secções
   com título e um cartão de linhas cada: a conta — o avatar, o id com
-  «Copiar», o perfil —; os comproprietários — as ligações como linhas, com o
+  «Copiar», o perfil —; os comproprietários, numa linha só que leva às
+  Pessoas › Proprietários, onde a partilha entre contas vive por baixo da
+  lista (partilha.js:comproprietariosHtml) — as ligações como linhas, com o
   avatar e as ações certas para o estado de cada uma (partilha.js:connCard),
-  o campo para ligar, os pedidos e a ligação de partilha —; os grupos, numa
-  linha só (ver «Grupos partilhados»); e a segurança, onde «Apagar a conta»
+  o campo para ligar, os pedidos e a ligação de partilha; sem o separador
+  dos Proprietários na conta, a partilha inteira fica aqui —; os grupos,
+  numa linha só (ver «Grupos partilhados»); e a segurança, onde «Apagar a conta»
   é uma linha vermelha que abre a confirmação. Um convite de ligação
   recebido tem o fundo --accent-soft, o título e a frase em --accent-text e
   o avatar em --card (estilos.css:.pt-linha.pt-convite). Os erros dizem-se
@@ -3840,6 +3843,13 @@ As páginas que a nuvem pendura na raiz vestem o mesmo:
   quantas das que recebo deixam de aparecer, sem «casa(s)» e sem género —, e
   o botão «Remover» vermelho, que o confirmModal tira da primeira palavra do
   título. No dedo, os .btn.sm desta página e dos pedidos têm 44px.
+  «Casas partilhadas», em cada ligação, abre «Partilha com <nome>»
+  (partilha.js:CW.sharesModal): as minhas casas com a caixa que as adiciona
+  ou remove (a nova traz as quotas ao marcá-la; a que sai diz que o outro
+  deixa de a ver), e por baixo as que o outro partilha comigo; cada casa
+  partilhada mostra a divisão em vigor, a proposta por responder (confirmar,
+  rejeitar ou cancelar ali mesmo) e «Propor nova divisão», que abre os
+  campos com a divisão atual (partilha.js:quotasDaCasaHtml).
 - «Ajuda e sugestões» (ajuda.js:vAjuda, M-Ajuda): «Como se faz», os
   tutoriais num carrossel (ajuda.js:tutoriaisNaAjuda); as perguntas de
   destaque, com a porta para as outras; «Os teus pedidos» com «Novo

@@ -437,14 +437,22 @@ describe('antes do primeiro sync', () => {
 });
 
 describe('a página Conta e partilha', () => {
-  test('vCloud fica só com a partilha entre proprietários', () => {
+  test('vCloud fica com a conta e a linha que leva à partilha, que vive nos Proprietários', () => {
     const app = comEstado();
     const h = app.vCloud();
-    for (const t of ['A minha conta', 'A minha ligação de partilha', 'Pedidos de partilha', 'Ana quer partilhar T2 Porto contigo',
-      'Ligar a outro utilizador', 'Ainda não estás ligado a ninguém.', 'Pedidos chegados por aqui', 'CW.ligacaoRodar()',
-      'Segurança', 'Apagar a conta']) {
+    for (const t of ['A minha conta', 'Partilhar com outras contas', "go('owners')", '1 por responder', 'Segurança', 'Apagar a conta']) {
       assert.ok(h.includes(t), 'a página tem: ' + t);
     }
+    const donos = app.vOwners();
+    for (const t of ['A minha ligação de partilha', 'Pedidos de partilha', 'Ana quer partilhar T2 Porto contigo',
+      'Ligar a outro utilizador', 'Ainda não estás ligado a ninguém.', 'Pedidos chegados por aqui', 'CW.ligacaoRodar()']) {
+      assert.ok(donos.includes(t), 'os Proprietários têm: ' + t);
+      assert.ok(!h.includes(t), 'Conta e partilha já não tem: ' + t);
+    }
+    // sem o separador dos Proprietários nesta conta, a partilha fica em Conta e partilha, que é onde se chega
+    app.definirServicosDesligados(['owners']);
+    assert.ok(app.vCloud().includes('Ligar a outro utilizador') && !app.vCloud().includes("go('owners')"));
+    app.definirServicosDesligados([]);
     for (const t of ['Convidar colaborador', 'cw_inv_h_H1', 'Convites por usar', 'Novo cargo', 'O que cada colaborador pode fazer',
       'Mudar cargo ou imóveis', 'Imóveis onde colaboras', "CW.sairDeImovel('C9')",
       "go('colaboradores')", 'Colaboradores']) {
@@ -454,7 +462,7 @@ describe('a página Conta e partilha', () => {
 
   test('sem ligação e sem pedidos, o cartão oferece criar e o dos pedidos não aparece', () => {
     const app = comEstado((st) => { st.shareLink = null; st.shareRequests = { incoming: [], outgoing: [] }; });
-    const h = app.vCloud();
+    const h = app.comproprietariosHtml();
     assert.ok(h.includes('CW.ligacaoCriar()'));
     assert.ok(!h.includes('Pedidos de partilha'));
   });
