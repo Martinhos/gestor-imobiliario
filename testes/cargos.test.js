@@ -113,15 +113,23 @@ describe('posso X nesta casa?', () => {
     assert.equal(app.podeSemImovel(), true);
   });
 
-  test('um comproprietário é dono mas não criador; só quem criou apaga', () => {
+  test('um comproprietário é dono mas não criador; só quem criou apaga — quem não criou sai do imóvel', () => {
     tresCasas();
     app.window.CW.cargos.P1 = { dono: true, criador: false };
     assert.equal(app.souDono('P1'), true);
     assert.equal(app.souCriador('P1'), false);
-    let msg = '';
+    let msg = '', pergunta = null;
     app.toast = (m) => { msg = m; };
+    // sem a nuvem (sem CW.sairDaCasa) não há para onde sair: diz quem pode apagar
     app.delProp('P1');
     assert.match(msg, /Só quem criou o imóvel/);
+    assert.equal(app.db.properties.length, 3, 'nada foi apagado');
+    // com ela, o «Apagar» de quem não criou é a confirmação da saída, e nada sai da base
+    app.window.CW.sairDaCasa = () => Promise.resolve({ ok: true });
+    app.confirmModal = (t, txt) => { pergunta = { t, txt }; };
+    app.delProp('P1');
+    assert.equal(pergunta.t, 'Apagar «T1 Meu»');
+    assert.match(pergunta.txt, /^Deixas de ser comproprietário de <b>T1 Meu<\/b>/);
     assert.equal(app.db.properties.length, 3, 'nada foi apagado');
   });
 
@@ -317,6 +325,9 @@ describe('o que se esconde', () => {
     assert.ok(!cont.includes('Editar imóvel') && !cont.includes('Apagar imóvel') && !cont.includes('Novo contrato'), cont.join(', '));
     const meu = menuDe('prop:P1').labels;
     assert.ok(meu.includes('Editar imóvel') && meu.includes('Apagar imóvel'), meu.join(', '));
+    // com a nuvem, quem colabora também tem o «Apagar imóvel»: é sair dele (imovel.js:imvSair)
+    app.window.CW.sairDaCasa = () => Promise.resolve({ ok: true });
+    assert.ok(menuDe('prop:P2').labels.includes('Apagar imóvel'));
   });
 
   test('contratos e movimentos: ver, ou editar só o que é meu', () => {

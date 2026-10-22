@@ -678,6 +678,18 @@ CW.delConn = function (id, isPending) {
   confirmModal('Remover a ligação a ' + (c.peer.name || c.peer.email || c.peer.id), fraseRemoverLigacao(c), doDel);
 };
 
+/* Sair de um imóvel que não criei (DELETE /api/houses/:id/participacao): o
+   colaborador deixa de colaborar nele, o comproprietário deixa de o ser e a
+   quota dele vai para os restantes (o servidor decide qual dos dois sou). É
+   o «Apagar imóvel» de quem não o criou (imovel.js:imvSair e
+   cloud/selecao-listas.js:selLApagarImoveis). Não pergunta nada nem
+   sincroniza: a confirmação e o pullNow são de quem chama.
+   Recebe: houseId — o id do imóvel.
+   Devolve: a promessa da resposta ({ok, como, ownerShares?}); rejeita com o erro do servidor. */
+CW.sairDaCasa = function (houseId) {
+  return api('DELETE', '/api/houses/' + encodeURIComponent(houseId) + '/participacao');
+};
+
 /* Quem entra na divisão de uma casa que se vai partilhar: os comproprietários
    atuais (como CW.proposeShares os lê, pelos ownerIds) e o par com quem se
    partilha, no fim.

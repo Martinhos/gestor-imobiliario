@@ -49,6 +49,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-22 · O realce que ainda ficava, a ligação repetida e as listas por origem
 - 2026-10-22 · Os Grupos nas Casas, a página Segurança e os títulos das secções sempre
 - 2026-10-22 · Os grupos selecionáveis, o novo grupo no + e as folhas que se arrastam para fechar
+- 2026-10-22 · Apagar um imóvel que não criei é sair dele
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2066,3 +2067,58 @@ cabe (navegacao.js:abasApertar), e não por uma largura de ecrã: aos 390 sem
 número fica a letra de sempre. O realce deixou de supor colunas iguais e mede a
 aba (navegacao.js:abasPolegarEm); anima o transform e a largura, e não um
 clip-path, que lhe cortava o contorno.
+
+## 2026-10-22 · Apagar um imóvel que não criei é sair dele
+
+**Apagar da minha lista é deixar de colaborar.** O Martinho: «Um colaborador
+que apague um imóvel em que está a colaborar da sua lista de imóveis, está a
+indicar que não pretende colaborar mais nesse imóvel. Logo esse imóvel deve
+deixar de estar indicado como colaborado no lado do proprietário.» Até aqui,
+o «Apagar» de um imóvel de outra pessoa só existia na seleção das Casas, e
+só apagava no aparelho: o envio para o servidor não manda o apagar das casas
+dos outros (cloud/nucleo.js:pushNow), e por isso o imóvel voltava na
+sincronização seguinte e o dono continuava a ver o colaborador. Agora sai-se
+mesmo no servidor (worker/src/rotas/casas.js:sairComoColaborador), e só
+desse imóvel: o «Deixar de colaborar» que já havia saía de todas as casas
+desse dono de uma vez, porque a colaboração é uma linha por dono e cargo.
+
+**O nome fica «Apagar», e a confirmação diz o resto.** Decidido com ele: o
+«Apagar imóvel» vermelho de sempre, sem Anular. A frase diz que as
+permissões são retiradas, que não se desfaz, e que para voltar é preciso um
+convite novo do dono (imovel.js:imvFraseSaida). Na seleção, o título começa
+sempre por «Apagar», mesmo só com imóveis dos outros, porque o confirmModal
+só pinta de vermelho um título que começa por Apagar, Remover, Eliminar ou
+Terminar. O «Sair de N grupos» dos grupos continua «Confirmar».
+
+**O comproprietário também sai, e a quota dele vai para os outros.** «Remover
+a compropriedade. A propriedade desse utilizador é dividida por quotas pelos
+restantes.» A quota de quem sai vai para os que ficam, na proporção das
+deles (worker/src/lib/acesso.js:redistribuirQuotas). É a primeira escrita
+das quotas que não passa por uma proposta aceite, e é de propósito: quem sai
+não tem de pedir licença aos outros para sair, e uma proposta pendente sem
+ele deixava a casa com uma quota de alguém que já não é participante. Por
+isso a proposta pendente apaga-se na mesma escrita. Os saldos e o IRS
+continuam calculados pelas quotas atuais, também nos movimentos passados,
+como depois de um «Remover ligação»; a confirmação di-lo. Quotas por data
+ficam para outra vez.
+
+**Quem chegou por um grupo sai só daquela casa.** Decidido com ele: fica no
+grupo. A pertença a um grupo é uma linha só para todas as casas dele, e por
+isso a saída guarda-se à parte, em `house_exits` (migração 0019), e todas as
+consultas que dão casas por grupo a respeitam
+(worker/src/lib/acesso.js:SAIU_DA_CASA). Sair também tira um cargo que a
+pessoa tivesse na mesma casa: sem isso, a precedência dono > comproprietário
+> colaborador devolvia-lhe a casa como colaborador. Só o criador a partilhar
+outra vez desfaz a saída. Voltar a ser aceite no grupo não a desfaz, e
+regravar o mesmo conjunto de casas do grupo também não: o cliente regrava o
+conjunto inteiro a cada mudança.
+
+**Os avisos são a primeira notificação de um utilizador para outro.** O sino
+era todo feito no aparelho, com os dados que já lá estavam. Uma saída não
+deixa nada nesses dados, porque a pessoa simplesmente desaparece da casa. Por
+isso o servidor guarda um aviso por destinatário (`house_events`), com os
+nomes escritos no momento, e manda-os no /api/state durante 90 dias. O sino
+mostra-os na atividade das casas partilhadas, com a mesma marca de leitura
+(notificacoes.js:notifSaidas). Ficam nessa secção e não numa à parte: o
+cloud/painel.js:pedidosNaPilha reconhece o cartão pelo título, e um segundo
+cartão partia a junção com os pedidos.

@@ -360,3 +360,144 @@ describe('os pedidos de grupo e os lotes no sino', () => {
     assert.match(l[0].sub, /^Maria Costa · 2 imóveis · /, 'um grupo que já não está na base fica só com os imóveis');
   });
 });
+
+/* Quem saiu de uma casa que fica comigo: o servidor manda as saídas em
+   CW.state.departures (um colaborador que deixou de colaborar, um
+   comproprietário que deixou de o ser), e o sino mostra-as na atividade, com
+   a mesma marca de leitura, a contar no crachá, e no painel geral. */
+describe('quem saiu, no sino e no painel', () => {
+  const cru = (x) => JSON.parse(JSON.stringify(x));
+  const saida = (id, kind, at, extra) => Object.assign({ id, kind, houseId: 'P1', houseName: 'T2 Benfica', actorId: 'RUI', actorName: 'Rui', at }, extra || {});
+  const comSaidas = (lista) => { monta(); app.CW.state = { departures: lista }; };
+  // o corpo do «Pede atenção», sem abrir janela nenhuma
+  const corpoDoSino = () => {
+    let corpo = '', pe = '';
+    const openReal = app.openModal;
+    app.openModal = (t, b, p) => { corpo = b; pe = p; };
+    try { app.notifModal(); } finally { app.openModal = openReal; }
+    return { corpo, pe };
+  };
+
+  test('sem departures (ausente, vazio, sem estado, sem nuvem) não há nada, nem no crachá nem no sino', () => {
+    monta();
+    assert.deepEqual(cru(app.notifSaidas()), [], 'sem estado');
+    app.CW.state = {};
+    assert.deepEqual(cru(app.notifSaidas()), [], 'estado de antes da regra');
+    app.CW.state = { departures: [] };
+    assert.deepEqual(cru(app.notifSaidas()), [], 'lista vazia');
+    app.CW.state = { departures: null };
+    assert.deepEqual(cru(app.notifSaidas()), []);
+    assert.equal(app.notifConta(), 0);
+    assert.doesNotMatch(corpoDoSino().corpo, /Atividade nas casas partilhadas/);
+    app.window.CW = undefined; app.CW = undefined;
+    assert.deepEqual(cru(app.notifSaidas()), [], 'numa app sem nuvem');
+    monta();
+  });
+
+  test('as duas frases, com quem, a casa, a hora como as outras e as mais recentes primeiro', () => {
+    comSaidas([saida('e1', 'colab.sair', 5000), saida('e2', 'casa.sair', 6000, { actorId: 'ZE', actorName: 'Zé Lopes' })]);
+    const l = cru(app.notifSaidas());
+    assert.deepEqual(l.map((n) => n.titulo), ['Zé Lopes deixou de ser comproprietário de T2 Benfica.', 'Rui deixou de colaborar em T2 Benfica.']);
+    assert.equal(l[1].sub, app.notifQuando(5000), 'o sub é a data e a hora, como na atividade');
+    assert.equal(l[0].quem, 'Zé Lopes');
+    assert.equal(app.notifQuem(l[0]), 'Zé Lopes', 'as iniciais do avatar são de quem saiu');
+    assert.equal(l[0].tipo, 'saida');
+  });
+
+  test('sem nome da casa vale o da base, sem nome de quem saiu «Alguém»; um tipo que não se conhece e a minha própria saída não entram', () => {
+    comSaidas([
+      saida('e1', 'colab.sair', 5000, { houseName: '', actorName: '' }),
+      saida('e2', 'outra.coisa', 5000),
+      saida('e3', 'casa.sair', 5000, { actorId: 'EU', actorName: 'Eu' }),
+      null,
+    ]);
+    const l = cru(app.notifSaidas());
+    assert.deepEqual(l.map((n) => n.titulo), ['Alguém deixou de colaborar em T2 Lisboa.']);
+  });
+
+  test('filtradas pela marca de leitura, como a atividade: o «Marcar tudo como lido» cala-as', () => {
+    comSaidas([saida('e1', 'colab.sair', 500), saida('e2', 'casa.sair', 6000)]);
+    assert.deepEqual(cru(app.notifSaidas()).map((n) => n.id), ['e2'], 'a de antes da marca não conta');
+    assert.equal(app.notifSaidas(0).length, 2, 'com uma marca dada, manda ela');
+    app.closeModal = () => {}; app.render = () => {};
+    app.notifLido();
+    assert.equal(app.notifSaidas().length, 0, 'depois de lido, silêncio');
+    assert.equal(app.notifConta(), 0);
+  });
+
+  test('a primeira contagem sem marca põe-na em agora: as saídas antigas não inundam', () => {
+    comSaidas([saida('e1', 'colab.sair', 6000)]);
+    delete app.db.settings.notifLidoAte;
+    assert.equal(app.notifSaidas().length, 0);
+    assert.ok(app.db.settings.notifLidoAte > 6000, 'a marca ficou posta');
+  });
+
+  test('contam no crachá, uma cada, junto com a atividade partilhada', () => {
+    comSaidas([saida('e1', 'colab.sair', 5000), saida('e2', 'casa.sair', 6000)]);
+    const dela = app.normVisit({ id: 'V1', nomes: 'Ana', propertyId: 'P1', date: '2999-01-01' });
+    dela._author = 'ELA'; dela._atServidor = 7000;
+    app.db.visits = [dela];
+    assert.equal(app.notifConta(), 3);
+    const l = cru(app.notifAtividade());
+    assert.deepEqual(l.map((n) => n.at), [7000, 6000, 5000], 'juntas e pela hora');
+  });
+
+  test('com os Colaboradores desligados, a saída de um colaborador não entra; a de um comproprietário fica', () => {
+    comSaidas([saida('e1', 'colab.sair', 5000), saida('e2', 'casa.sair', 6000)]);
+    app.definirServicosDesligados(['colaboradores']);
+    try {
+      assert.deepEqual(cru(app.notifSaidas()).map((n) => n.id), ['e2']);
+      assert.equal(app.notifConta(), 1);
+    } finally {
+      app.definirServicosDesligados([]);
+    }
+  });
+
+  test('o modal mostra as duas na atividade, levam à ficha do imóvel, e nada em linha', () => {
+    comSaidas([saida('e1', 'colab.sair', 5000), saida('e2', 'casa.sair', 6000, { actorName: 'Rui Costa' })]);
+    const { corpo, pe } = corpoDoSino();
+    assert.match(corpo, /<h3>Atividade nas casas partilhadas<\/h3>/);
+    assert.match(corpo, /Rui deixou de colaborar em T2 Benfica\./);
+    assert.match(corpo, /Rui Costa deixou de ser comproprietário de T2 Benfica\./);
+    assert.match(corpo, /<button type="button" class="atencao-linha tap" data-toca="camada" data-click="closeModal\(\);propView\('P1'\)"><span class="avatar" aria-hidden="true">RC<\/span>/);
+    assert.ok(!/\son[a-z]+=|style=/.test(corpo), 'sem style= nem on…=');
+    assert.match(pe, /Marcar tudo como lido/, 'há o que marcar como lido');
+  });
+
+  test('o toque: com a casa na base abre a ficha (propView); sem ela, ou com os Imóveis desligados, a linha não é um botão', () => {
+    comSaidas([saida('e1', 'colab.sair', 5000)]);
+    assert.equal(app.notifSaidas()[0].ir, "propView('P1')");
+    let abriu = '';
+    const viewReal = app.propView;
+    app.propView = (id) => { abriu = id; };
+    try { app.correrAcao(app.notifSaidas()[0].ir, null, null); } finally { app.propView = viewReal; }
+    assert.equal(abriu, 'P1', 'a ação abre a ficha da casa');
+
+    app.db.properties = [];
+    assert.equal(app.notifSaidas()[0].ir, '', 'a casa já não está na base');
+    const { corpo } = corpoDoSino();
+    assert.match(corpo, /<div class="atencao-linha"><span class="avatar" aria-hidden="true">R<\/span><div class="atencao-txt"><p class="title">Rui deixou de colaborar em T2 Benfica\./);
+    assert.doesNotMatch(corpo, /data-click="closeModal\(\);"/, 'nenhum toque que só fecha a janela');
+
+    // (sem os Imóveis os Colaboradores também se desligam: vai a saída de um comproprietário)
+    monta(); app.CW.state = { departures: [saida('e2', 'casa.sair', 5000)] };
+    app.definirServicosDesligados(['properties']);
+    try {
+      assert.equal(app.notifSaidas()[0].ir, '', 'sem os Imóveis não há ficha para abrir');
+    } finally {
+      app.definirServicosDesligados([]);
+    }
+  });
+
+  test('o painel geral mostra-a: a linha do telemóvel e o cartão da atividade', () => {
+    comSaidas([saida('e1', 'colab.sair', 5000)]);
+    app.CW._esperaFim = 1;   // o «Pede atenção» espera pelo servidor
+    const h = app.pedeAtencao();
+    assert.match(h, /<b>1 novidade nas casas partilhadas<\/b><span class="small">Rui deixou de colaborar em T2 Benfica\.<\/span>/, 'a frase vai sozinha, sem o nome repetido');
+    assert.match(h, /<h3 class="title vg-tit">Atividade nas casas partilhadas<\/h3>/);
+    assert.match(h, /<button type="button" class="vg-item-abrir" data-toca="camada" data-click="propView\('P1'\)"><span class="avatar" aria-hidden="true">R<\/span><span class="vg-item-txt"><b>Rui deixou de colaborar em T2 Benfica\.<\/b>/);
+    assert.ok(!/\son[a-z]+=|style=/.test(h), 'sem style= nem on…=');
+    app.db.properties = [];
+    assert.match(app.atividadeCard(app.notifAtividade()), /<div class="vg-item"><div class="vg-item-abrir"><span class="avatar"/, 'sem a casa, uma linha e não um botão');
+  });
+});

@@ -1,12 +1,119 @@
 // Casas, quotas, registos de cada casa e dados globais do utilizador.
 import { json, err, body, now, badId } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
-import { participantsOf } from '../lib/acesso.js';
-import { servicosDesligados, casaDesligada, FRASE_DESLIGADO } from '../lib/servicos.js';
+import { participantsOf, acessoACasa, redistribuirQuotas, avisoDeSaida } from '../lib/acesso.js';
+import { servicosDesligados, casaDesligada, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
 import { prepararEscritas, aplicarOp } from '../lib/escritas.js';
+import { auditar } from '../lib/auditoria.js';
 
 // A frase do travão das escritas — a mesma do /api/sync, que gasta o mesmo contador.
 const FRASE_RITMO = 'Demasiadas gravações seguidas. Espera um pouco — os dados não se perdem.';
+
+// A identidade com que um utilizador da app assina a auditoria.
+// Recebe: me — o utilizador com sessão.
+// Devolve: o objeto que auditar() espera ({ discordId, nome, papeis }).
+function quemSou(me) {
+  return { discordId: me.id, nome: me.name || '', papeis: ['utilizador'] };
+}
+
+// As linhas de colaborador de quem sai que deixam de ter casas desse dono
+// (a pessoa deixou de colaborar com ele de todo). A mesma limpeza das
+// rotas de colaboradores.js.
+// Recebe: env — o ambiente do worker; userId — quem sai; ownerId — o dono.
+// Devolve: a instrução preparada, para o lote.
+function colabOrfaos(env, userId, ownerId) {
+  return env.DB.prepare(
+    `DELETE FROM collaborators WHERE user_id = ? AND owner_id = ?
+      AND id NOT IN (SELECT collaborator_id FROM collaborator_houses)`
+  ).bind(userId, ownerId);
+}
+
+// O cargo de quem sai nesta casa, em todas as linhas de colaborador dele com
+// este dono (um cargo por casa, mas uma linha por cargo).
+// Recebe: env — o ambiente do worker; houseId — a casa; userId — quem sai;
+// ownerId — o dono.
+// Devolve: a instrução preparada, para o lote.
+function semCargoNaCasa(env, houseId, userId, ownerId) {
+  return env.DB.prepare(
+    `DELETE FROM collaborator_houses WHERE house_id = ?
+      AND collaborator_id IN (SELECT id FROM collaborators WHERE user_id = ? AND owner_id = ?)`
+  ).bind(houseId, userId, ownerId);
+}
+
+/* Um colaborador sai de UMA casa: o cargo dele nela desaparece (de qualquer
+   linha de colaborador sua com este dono), as linhas que fiquem sem casas
+   saem, e o dono recebe um aviso 'colab.sair'. As outras casas do mesmo
+   dono ficam como estavam. Tudo num lote; a auditoria depois.
+   Recebe: env — o ambiente do worker; me — quem sai (da sessão); houseId —
+   a casa; ownerId — o dono; houseName — o nome, lido antes de escrever.
+   Devolve: promessa da Response { ok, como: 'colaborador' }. */
+async function sairComoColaborador(env, me, houseId, ownerId, houseName) {
+  const t = now();
+  await env.DB.batch([
+    semCargoNaCasa(env, houseId, me.id, ownerId),
+    colabOrfaos(env, me.id, ownerId),
+    avisoDeSaida(env, ownerId, 'colab.sair', houseId, houseName, me, t),
+  ]);
+  await auditar(env, quemSou(me), 'colab.sair', ownerId, houseId);
+  return json({ ok: true, como: 'colaborador' });
+}
+
+/* Um comproprietário que não criou a casa sai dela, por todos os caminhos
+   ao mesmo tempo, num lote só: as partilhas da casa nas ligações em que
+   está; a saída em house_exits se a casa lhe chega por um grupo (continua no
+   grupo, e as outras casas do grupo continuam dele); um cargo que tivesse
+   nela por baixo (sem isto, a precedência devolvia-lhe a casa como
+   colaborador). A quota dele vai para os que ficam, na proporção das deles
+   (redistribuirQuotas), ownerIds fica com os que ficam, a proposta pendente
+   apaga-se (já não bate com os participantes), e cada um dos que ficam
+   recebe um aviso 'casa.sair'. Os saldos e o IRS seguem as quotas novas.
+   Uma casa com o JSON estragado não se reescreve (perdia-se o resto dela):
+   a pessoa sai na mesma, e as quotas ficam por acertar numa proposta.
+   Recebe: env — o ambiente do worker; me — quem sai (da sessão); houseId —
+   a casa; ownerId — o criador; casa — { name, data } lidos antes de
+   escrever (data null quando o JSON não se lê).
+   Devolve: promessa da Response { ok, como: 'comproprietario', ownerShares }. */
+async function sairComoComproprietario(env, me, houseId, ownerId, casa) {
+  const parts = (await participantsOf(env, houseId)) || [ownerId];
+  const ficam = parts.filter((u) => u !== me.id);
+  const porGrupo = await env.DB.prepare(
+    `SELECT 1 AS um FROM shared_group_houses gh
+       JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
+       JOIN shared_group_members m ON m.group_id = gh.group_id
+      WHERE gh.house_id = ? AND m.user_id = ? LIMIT 1`
+  ).bind(houseId, me.id).first();
+  const data = casa.data;
+  const quotas = data ? redistribuirQuotas(data.ownerShares, me.id, ficam) : null;
+  if (data) {
+    if (quotas) data.ownerShares = quotas; else delete data.ownerShares;
+    data.ownerIds = ficam;
+  }
+  const t = now();
+  const stmts = [
+    env.DB.prepare(
+      `DELETE FROM shares WHERE house_id = ?1
+         AND connection_id IN (SELECT id FROM connections WHERE requester_id = ?2 OR target_id = ?2)`
+    ).bind(houseId, me.id),
+  ];
+  if (porGrupo) {
+    stmts.push(env.DB.prepare('INSERT OR REPLACE INTO house_exits (house_id, user_id, created_at) VALUES (?, ?, ?)')
+      .bind(houseId, me.id, t));
+  }
+  stmts.push(
+    semCargoNaCasa(env, houseId, me.id, ownerId),
+    colabOrfaos(env, me.id, ownerId),
+    env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(houseId),
+  );
+  if (data) {
+    stmts.push(env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
+      .bind(JSON.stringify(data), t, houseId));
+  }
+  ficam.forEach((u) => stmts.push(avisoDeSaida(env, u, 'casa.sair', houseId, casa.name, me, t)));
+  await env.DB.batch(stmts);
+  await auditar(env, quemSou(me), 'casa.sair', houseId,
+    ownerId + (porGrupo ? ' · grupo' : '') + ' · ' + (quotas ? JSON.stringify(quotas) : 'partes iguais'));
+  return json({ ok: true, como: 'comproprietario', ownerShares: quotas });
+}
 
 // A operação do /api/sync que uma rota REST de escrita é, ou nada.
 // Recebe: seg — os segmentos do caminho; method — o método HTTP.
@@ -43,7 +150,10 @@ function respostaREST(op, r) {
    (lib/escritas.js) e travada pelo mesmo contador: o serviço desligado, o
    acesso com o grau, a fusão do colaborador e a regra dos anexos são os do
    sync, sem cópia. As quotas vivem só aqui, e sem Imóveis nesta conta
-   (lib/servicos.js) são 403 com a frase do serviço. Escreve na D1.
+   (lib/servicos.js) são 403 com a frase do serviço. E sair de uma casa que
+   não criei (DELETE …/participacao): o colaborador perde o cargo nela, o
+   comproprietário a compropriedade, com a quota dividida pelos que ficam.
+   Escreve na D1.
    Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
    method, seg e o utilizador em c.me).
    Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
@@ -68,6 +178,33 @@ export async function rotasCasas(c) {
       op.data = b.data;
     }
     return respostaREST(op, await aplicarOp(await prepararEscritas(env, me), op));
+  }
+
+  // ---- Sair de uma casa que não criei (DELETE …/participacao) -------------
+  // Apagar da minha lista um imóvel de outra pessoa é sair dele: perco as
+  // permissões nessa casa (e só nessa), e quem fica é avisado. O criador
+  // não sai (apaga a casa); quem não tem acesso leva o 404 de uma casa que
+  // não existe. Sem Imóveis nesta conta é o 403 das quotas; o colaborador
+  // sem Colaboradores, o 403 das outras escritas desse serviço.
+
+  if (seg[1] === 'houses' && seg.length === 4 && seg[3] === 'participacao' && method === 'DELETE') {
+    const houseId = seg[2];
+    if (badId(houseId)) return err(400, 'Identificador inválido.');
+    if (!(await rateLimit(env, 'w:' + me.id, 60, 900))) return err(429, FRASE_RITMO);
+    const desligados = await servicosDesligados(env, me.id);
+    if (casaDesligada(desligados)) return err(403, FRASE_DESLIGADO('properties'));
+    const acesso = await acessoACasa(env, me.id, houseId);
+    if (!acesso.ok) return err(404, 'Casa não encontrada.');
+    if (acesso.owner) return err(400, 'Criaste este imóvel: para o tirar da tua lista, apaga-o.');
+    if (acesso.collab && colabDesligado(desligados)) return err(403, FRASE_DESLIGADO('colaboradores'));
+    // o nome e as quotas leem-se ANTES de qualquer escrita: o aviso leva o nome
+    const row = await env.DB.prepare('SELECT data FROM houses WHERE id = ?').bind(houseId).first();
+    let data = null;
+    try { data = JSON.parse(row.data); } catch (e) {}
+    const legivel = !!data && typeof data === 'object' && !Array.isArray(data);
+    const casa = { data: legivel ? data : null, name: legivel ? String(data.name || '') : '' };
+    if (acesso.coowner) return sairComoComproprietario(env, me, houseId, acesso.ownerId, casa);
+    return sairComoColaborador(env, me, houseId, acesso.ownerId, casa.name);
   }
 
   // ---- Divisão de percentagens (com confirmação dos comproprietários) -----

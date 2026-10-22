@@ -190,16 +190,18 @@ function pedeAtencao(){
   const conf=rec?recActive():[],pz=prazosAtivos(),ped=notifPedidos();
   /* a atividade só depois de o sino ter marcado a primeira leitura: antes
      disso é o notifPartilha que a marca (e grava), e não a vista */
-  const ativ=db.settings.notifLidoAte==null?[]:notifPartilha();
+  const ativ=db.settings.notifLidoAte==null?[]:notifAtividade();
   if(!conf.length&&!pz.length&&!ped.length&&!ativ.length)return '';
   const nl=rec?conf.filter(recIsLate).length:0,total=sum(conf.map(r=>Number((r.tx||{}).amount)||0));
-  const passou=pz.filter(p=>p.dias<0),quem=n=>String(n.sub||'').split(' · ')[0];
+  /* a frase da linha da atividade: «Maria Costa · Movimento — Obra»; uma
+     saída já começa por quem saiu («Rui deixou de colaborar em …»), e vai sozinha */
+  const passou=pz.filter(p=>p.dias<0),resumo=n=>n.tipo==='saida'?n.titulo:notifQuem(n)+' · '+n.titulo;
   const linhas=[
     conf.length?atencaoLinha('confirmar',nl?'red':'','repetir',conf.length+' por confirmar',(nl?nl+' em atraso · ':'')+euro2(total)):'',
     pz.length?atencaoLinha('prazos','amber','clock',pz.length+(pz.length===1?' prazo':' prazos'),
       passou.length?(passou.length===1?'1 já passou':passou.length+' já passaram')+' · '+pzPartes(passou[0]).titulo:pzQuando(pz[0])+' · '+pzPartes(pz[0]).titulo):'',
     ped.length?atencaoLinha('pedidos','','pessoaMais',ped.length+(ped.length===1?' pedido por responder':' pedidos por responder'),ped[0].titulo):'',
-    ativ.length?atencaoLinha('','','users',ativ.length+(ativ.length===1?' novidade nas casas partilhadas':' novidades nas casas partilhadas'),quem(ativ[0])+' · '+ativ[0].titulo):''
+    ativ.length?atencaoLinha('','','users',ativ.length+(ativ.length===1?' novidade nas casas partilhadas':' novidades nas casas partilhadas'),resumo(ativ[0])):''
   ].join('');
   return `<section class="vg-atencao" aria-labelledby="vgAtencaoT">
     <div class="vg-atencao-cab"><h2 id="vgAtencaoT">Pede atenção</h2><span class="small">Só o que muda decisões: atrasos, prazos, pedidos e atividade nova.</span></div>
@@ -221,13 +223,18 @@ function atencaoLinha(filtro,cor,icone,titulo,sub){
 /* O cartão da atividade dos outros nas casas partilhadas, no «Pede atenção»
    do computador (o canvas: «Pedro Costa registou "Canalização — cozinha"»): as
    três mais recentes, cada uma com as iniciais de quem a fez e a porta para o
-   separador dela; «Ver tudo» abre o sino, onde se marcam como lidas.
-   Recebe: ativ — a lista do notifPartilha ({titulo, sub, ir}).
+   separador dela (ou, numa saída, para a ficha do imóvel de onde a pessoa
+   saiu); «Ver tudo» abre o sino, onde se marcam como lidas. Uma saída de um
+   imóvel que já não está na base não tem porta: fica uma linha, não um botão.
+   Recebe: ativ — a lista do notifAtividade ({titulo, sub, ir, toca, quem}).
    Devolve: o HTML do cartão, ou '' sem atividade. */
 function atividadeCard(ativ){
   if(!ativ.length)return '';
-  const linha=n=>`<div class="vg-item"><button type="button" class="vg-item-abrir" data-toca="ecra" data-click="${n.ir}"><span class="avatar">${esc(initials(String(n.sub||'').split(' · ')[0]||'?'))}</span>`+
-    `<span class="vg-item-txt"><b>${esc(n.titulo)}</b><span class="small">${esc(n.sub)}</span></span></button></div>`;
+  const linha=n=>{
+    const dentro=`<span class="avatar" aria-hidden="true">${esc(initials(notifQuem(n)))}</span>`+
+      `<span class="vg-item-txt"><b>${esc(n.titulo)}</b><span class="small">${esc(n.sub)}</span></span>`;
+    return `<div class="vg-item">${n.ir?`<button type="button" class="vg-item-abrir" data-toca="${n.toca||'ecra'}" data-click="${n.ir}">${dentro}</button>`:`<div class="vg-item-abrir">${dentro}</div>`}</div>`;
+  };
   return vgCard('Atividade nas casas partilhadas','',`<div class="vg-itens">${ativ.slice(0,3).map(linha).join('')}</div>`,
     {cls:'vg-atividade',acao:`<button type="button" class="vg-ligacao vg-cab-acao" data-toca="camada" data-click="notifModal('')">Ver tudo</button>`});
 }

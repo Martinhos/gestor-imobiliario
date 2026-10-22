@@ -440,15 +440,22 @@ CW.removerColaborador = function (id) {
 };
 
 /* Sair de um imóvel (ou de vários) onde sou colaborador: é a mesma linha de
-   colaboração (DELETE /api/collaborators/:id, que o próprio pode chamar). O
-   que registei fica com o dono.
+   colaboração (DELETE /api/collaborators/:id, que o próprio pode chamar) —
+   o «Deixar de colaborar», que sai de todos os imóveis dessa linha de uma
+   vez. A frase diz o mesmo que o «Apagar imóvel» de quem colabora
+   (imovel.js:imvFraseSaida): as permissões são retiradas em todos, o que
+   registei fica com o dono, não se desfaz, e para voltar é preciso um
+   convite novo dele.
    Recebe: collabId — o id da linha de colaboração (p._collabId do imóvel).
    Devolve: nada — pede confirmação, chama a API e sincroniza. */
 CW.sairDeImovel = function (collabId) {
   var casas = (db.properties || []).filter(function (p) { return p._collabId === collabId; });
   var nomes = casas.length ? nomesDeCasas(casas) : 'este imóvel';
   var titulo = casas.length > 1 ? 'Sair de ' + casas.length + ' imóveis' : 'Sair de ' + (casas[0] ? (casas[0].name || 'Sem nome') : 'imóvel');
-  confirmModal(titulo, 'Deixas de ver <b>' + esc(nomes) + '</b>. O que registaste fica com o dono.', function () {
+  var dono = esc((casas[0] && casas[0]._sharedFrom) || ''), varios = casas.length > 1;
+  var frase = 'Deixas de colaborar em <b>' + esc(nomes) + '</b>: as tuas permissões ' + (varios ? 'nesses imóveis são retiradas e eles saem' : 'neste imóvel são retiradas e ele sai') +
+    ' da tua lista. O que registaste fica com ' + (dono || 'o dono') + '. Não se desfaz: para voltares a ter acesso, pede ' + (dono ? 'a ' + dono : 'ao dono') + ' um convite novo.';
+  confirmModal(titulo, frase, function () {
     api('DELETE', '/api/collaborators/' + encodeURIComponent(collabId))
       .then(function () { toast('Saíste de ' + nomes + '.'); return pullNow(true); })
       .then(function () { render(); })

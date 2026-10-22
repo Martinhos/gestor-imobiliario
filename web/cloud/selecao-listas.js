@@ -4,7 +4,9 @@
    nos modelos e nos grupos o toque longo seleciona vários, como nos movimentos: entra na
    seleção com o tocado já marcado (CW.selLEntrar). Apagar em massa faz
    sentido aí — e apagar um imóvel arrasta os contratos e movimentos dele, por
-   isso a confirmação diz os números e o Anular repõe tudo. As opções de um só
+   isso a confirmação diz os números e o Anular repõe tudo. Dos imóveis que
+   não criei (colaborados ou partilhados comigo) apagar é sair, no servidor e
+   sem Anular, na mesma confirmação (selLApagarImoveis). As opções de um só
    ficam no ⋯ da ficha (e na folha do lpMenu, com o «Selecionar vários»).
 
    Os inquilinos apagam-se aos vários com as regras do pessoas.js:delPerson
@@ -552,8 +554,8 @@ function selLVaoJunto(nc, nt) {
 }
 
 /* Apagar em massa, com os números à vista e o Anular por baixo: um imóvel
-   arrasta os contratos e os movimentos dele; um contrato deixa os movimentos,
-   só desligados.
+   arrasta os contratos e os movimentos dele (e dos que não criei saio:
+   selLApagarImoveis); um contrato deixa os movimentos, só desligados.
    Devolve: nada — pede confirmação; só depois apaga e oferece o Anular. */
 CW.selLApagar = function () {
   var ids = Object.keys(CW.selL.ids);
@@ -564,37 +566,7 @@ CW.selLApagar = function () {
   if (tipo === 'ten') return selLApagarInquilinos(ids);
   if (tipo === 'vis') return selLApagarVisitas(ids);
   if (tipo === 'grp') return selLApagarGrupos(ids);
-
-  if (tipo === 'prop') {
-    var cts = db.contracts.filter(function (c) { return ids.indexOf(c.propertyId) > -1; });
-    var txs = db.transactions.filter(function (t) { return ids.indexOf(t.propertyId) > -1; });
-    confirmModal('Apagar ' + ids.length + (ids.length === 1 ? ' imóvel' : ' imóveis'),
-      selLVaoJunto(cts.length, txs.length),
-      function () {
-        var copia = {
-          ps: JSON.parse(JSON.stringify(db.properties.filter(function (p) { return ids.indexOf(p.id) > -1; }))),
-          cts: JSON.parse(JSON.stringify(cts)),
-          txs: JSON.parse(JSON.stringify(txs)),
-        };
-        db.properties = db.properties.filter(function (p) { return ids.indexOf(p.id) < 0; });
-        db.contracts = db.contracts.filter(function (c) { return ids.indexOf(c.propertyId) < 0; });
-        db.transactions = db.transactions.filter(function (t) { return ids.indexOf(t.propertyId) < 0; });
-        if (ids.indexOf(dashProp) > -1) dashProp = '';
-        if (ids.indexOf(txProp) > -1) txProp = '';
-        save(); CW.selLSair(); buildNav();
-        comDesfazer(ids.length + (ids.length === 1 ? ' imóvel apagado.' : ' imóveis apagados.'), function () {
-          db.properties = db.properties.concat(copia.ps);
-          db.contracts = db.contracts.concat(copia.cts);
-          db.transactions = db.transactions.concat(copia.txs);
-        }, function () {
-          copia.ps.forEach(function (p) {
-            (p.photos || []).forEach(function (f) { idbDel(f.id).catch(function () {}); idbDel('tn_' + f.id).catch(function () {}); });
-            (p.loans || []).forEach(function (l) { (l.files || []).forEach(function (f) { idbDel(f.id).catch(function () {}); }); });
-          });
-        });
-      });
-    return;
-  }
+  if (tipo === 'prop') return selLApagarImoveis(ids);
 
   // contratos: os movimentos ficam, só se desligam
   var recs = (db.recurring || []).filter(function (r) { return r.auto && r.tx && ids.indexOf(r.tx.contractId) > -1; });
@@ -623,6 +595,138 @@ CW.selLApagar = function () {
       });
     });
 };
+
+/* O que sair de vários imóveis que não criei faz, numa frase só (com um,
+   é a da ficha: imovel.js:imvFraseSaida): as permissões são retiradas, saem
+   da lista, o registado fica; nos de compropriedade a quota vai para os
+   restantes e os saldos e o IRS passam a contar com as quotas novas; não se
+   desfaz, e como se volta.
+   Recebe: ps — os imóveis (objetos de db.properties), dois ou mais.
+   Devolve: a frase (HTML, com os nomes escapados). */
+function selLSaidaFrase(ps) {
+  var nomes = listaE(ps.map(function (p) { return '<b>' + esc(p.name || 'Sem nome') + '</b>'; }));
+  var co = ps.filter(function (p) { return souDono(p.id); }), col = ps.length - co.length;
+  var f = 'Sais de ' + nomes + ': as tuas permissões neles são retiradas e saem da tua lista. O que lá registaste fica.';
+  if (co.length) {
+    f += ' ' + (co.length === 1 ? 'Em <b>' + esc(co[0].name || 'Sem nome') + '</b>, de que és comproprietário,' : 'Nos ' + co.length + ' de que és comproprietário,') +
+      ' a tua quota é dividida pelos restantes na proporção das quotas deles, e os saldos e o IRS passam a contar com as quotas novas, também nos movimentos já registados.';
+  }
+  return f + ' Não se desfaz: para voltares a um deles, ' + (co.length && col ? 'o dono tem de te enviar um convite novo ou voltar a partilhá-lo contigo.'
+    : co.length ? 'quem o criou tem de voltar a partilhá-lo contigo.' : 'pede ao dono um convite novo.');
+}
+
+/* O que apagar os imóveis marcados vai fazer, numa confirmação só, como a
+   dos grupos (selLGruposFrase): o título começa sempre por «Apagar» — é o
+   nome da ação, e o botão fica o vermelho de sempre —, «Apagar 2 imóveis»
+   só com os meus ou só com os de outros, «Apagar 1 imóvel e sair de 2» com
+   os dois; a frase diz o que vai junto com os meus (selLVaoJunto), o que
+   sair dos outros faz (imovel.js:imvFraseSaida com um, selLSaidaFrase com
+   vários) e, com os dois, que o Anular só repõe os meus.
+   Recebe: meus, outros — os imóveis (objetos de db.properties) que criei e
+   os que não criei; nc, nt — quantos contratos e movimentos vão com os meus.
+   Devolve: {titulo, frase} (texto; a frase é HTML, com os nomes escapados). */
+function selLImoveisFrase(meus, outros, nc, nt) {
+  var m = meus.length, o = outros.length, mix = m && o;
+  var imoveis = function (n) { return n + (n === 1 ? ' imóvel' : ' imóveis'); };
+  var titulo = mix ? 'Apagar ' + imoveis(m) + ' e sair de ' + o : 'Apagar ' + imoveis(m || o);
+  var partes = [];
+  if (m) {
+    partes.push(!mix ? selLVaoJunto(nc, nt)
+      : (m === 1 ? 'O teu <b>' + esc(meus[0].name || 'Sem nome') + '</b> é apagado.' : 'Os ' + m + ' teus são apagados.') + ' ' + selLVaoJunto(nc, nt));
+  }
+  if (o) partes.push(o === 1 && typeof imvFraseSaida === 'function' ? imvFraseSaida(outros[0]) : selLSaidaFrase(outros));
+  var frase = partes.join(' ');
+  if (mix) frase += ' O Anular só repõe ' + (m === 1 ? 'o teu.' : 'os teus.');
+  return { titulo: titulo, frase: frase };
+}
+
+/* Apaga os imóveis meus da lista, na base local, com o que vai junto: os
+   contratos e os movimentos deles. Grava e devolve o que o Anular precisa.
+   Recebe: ids — os ids dos imóveis; cts, txs — os contratos e os movimentos deles.
+   Devolve: {repor, liquidar} — repor devolve tudo à base; liquidar apaga as
+   fotos e os documentos do IndexedDB (quando o Anular expira). */
+function selLApagarImoveisLocal(ids, cts, txs) {
+  var copia = {
+    ps: JSON.parse(JSON.stringify(db.properties.filter(function (p) { return ids.indexOf(p.id) > -1; }))),
+    cts: JSON.parse(JSON.stringify(cts)),
+    txs: JSON.parse(JSON.stringify(txs)),
+  };
+  db.properties = db.properties.filter(function (p) { return ids.indexOf(p.id) < 0; });
+  db.contracts = db.contracts.filter(function (c) { return ids.indexOf(c.propertyId) < 0; });
+  db.transactions = db.transactions.filter(function (t) { return ids.indexOf(t.propertyId) < 0; });
+  if (ids.indexOf(dashProp) > -1) dashProp = '';
+  if (ids.indexOf(txProp) > -1) txProp = '';
+  save();
+  return {
+    repor: function () {
+      db.properties = db.properties.concat(copia.ps);
+      db.contracts = db.contracts.concat(copia.cts);
+      db.transactions = db.transactions.concat(copia.txs);
+    },
+    liquidar: function () {
+      copia.ps.forEach(function (p) {
+        (p.photos || []).forEach(function (f) { idbDel(f.id).catch(function () {}); idbDel('tn_' + f.id).catch(function () {}); });
+        (p.loans || []).forEach(function (l) { (l.files || []).forEach(function (f) { idbDel(f.id).catch(function () {}); }); });
+      });
+    },
+  };
+}
+
+/* Apagar os imóveis marcados, depois de UMA confirmação (selLImoveisFrase):
+   os que criei apagam-se na base, com os contratos e os movimentos, e com o
+   Anular; dos que não criei (colaborados ou partilhados comigo) saio no
+   servidor (cloud/partilha.js:CW.sairDaCasa), o que não se desfaz. Os
+   pedidos vão todos; um que falhe não trava os outros, e o aviso, um só,
+   espera pelas respostas e diz o que ficou como estava e porquê
+   (selLImoveisAviso). Com saídas feitas, o estado volta a ler-se. Só com os
+   meus, é o de sempre: apaga e oferece o Anular logo.
+   Recebe: ids — os ids marcados (array).
+   Devolve: nada — pede confirmação; só depois apaga, sai e avisa. */
+function selLApagarImoveis(ids) {
+  var ps = ids.map(function (id) { return db.properties.find(function (p) { return p.id === id; }); }).filter(Boolean);
+  if (!ps.length) return toast('Não está nada selecionado.');
+  var meus = ps.filter(function (p) { return souCriador(p.id); }), outros = ps.filter(function (p) { return !souCriador(p.id); });
+  var mids = meus.map(function (p) { return p.id; });
+  var cts = db.contracts.filter(function (c) { return mids.indexOf(c.propertyId) > -1; });
+  var txs = db.transactions.filter(function (t) { return mids.indexOf(t.propertyId) > -1; });
+  var q = selLImoveisFrase(meus, outros, cts.length, txs.length);
+  confirmModal(q.titulo, q.frase, function () {
+    var local = meus.length ? selLApagarImoveisLocal(mids, cts, txs) : null;
+    CW.selLSair(); buildNav();
+    if (!outros.length) return comDesfazer(selLImoveisAviso(meus.length, 0, []), local.repor, local.liquidar);
+    var nos = outros.map(function (p) {
+      var feito = typeof CW.sairDaCasa === 'function' ? CW.sairDaCasa(p.id) : Promise.reject(new Error('sem ligação ao servidor'));
+      return feito.then(function () { return { p: p, ok: true }; }, function (e) { return { p: p, ok: false, erro: (e && e.message) || 'sem resposta do servidor' }; });
+    });
+    Promise.all(nos).then(function (rs) {
+      var ok = rs.filter(function (r) { return r.ok; }), falhas = rs.filter(function (r) { return !r.ok; });
+      ok.forEach(function (r) { if (dashProp === r.p.id) dashProp = ''; if (txProp === r.p.id) txProp = ''; });
+      var msg = selLImoveisAviso(meus.length, ok.length, falhas);
+      if (local) comDesfazer(msg, local.repor, local.liquidar);
+      else toast(msg, falhas.length ? { ms: 6000 } : undefined);
+      if (!ok.length) return;
+      return Promise.resolve(pullNow(true)).catch(function () {}).then(function () { render(); });
+    });
+  });
+}
+
+/* O aviso do fim do apagar dos imóveis: quantos se apagaram, de quantos saí
+   e, quando o servidor recusou alguma saída, quais ficaram como estavam e
+   porquê (a razão da primeira).
+   Recebe: apagados — quantos se apagaram; saidas — de quantos saí; falhas —
+   [{p, erro}] das saídas que o servidor recusou.
+   Devolve: o texto do aviso. */
+function selLImoveisAviso(apagados, saidas, falhas) {
+  var partes = [];
+  if (apagados) partes.push(apagados + (apagados === 1 ? ' imóvel apagado.' : ' imóveis apagados.'));
+  if (saidas) partes.push('Saíste de ' + saidas + (saidas === 1 ? ' imóvel.' : ' imóveis.'));
+  if (falhas.length) {
+    var nomes = falhas.map(function (f) { return '«' + (f.p.name || 'Sem nome') + '»'; }).join(', ');
+    var porque = String(falhas[0].erro).replace(/\.?\s*$/, '.');
+    partes.push(nomes + (falhas.length === 1 ? ' ficou como estava: ' : ' ficaram como estavam: ') + porque);
+  }
+  return partes.join(' ');
+}
 
 /* Apagar vários planeados: a confirmação diz o que os automáticos arrastam e
    quantos ficam de fora (planeados.js:recApagarFrase); apaga com as regras

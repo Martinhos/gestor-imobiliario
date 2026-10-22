@@ -33,6 +33,12 @@
    sharedGroupRequests) sai em rotas/estado.js pela listarGrupos e pela
    pedidosDeGrupo daqui. As tabelas são as das migrações 0017 e 0018.
 
+   Um membro que saiu de uma casa do grupo (house_exits, migração 0019;
+   rotas/casas.js) fica no grupo, mas essa casa deixa de lhe chegar por ele
+   — nem a vê na lista do grupo (listarGrupos). Os outros membros continuam a
+   vê-la. Pôr a casa no grupo outra vez (PUT …/houses, uma casa que entra)
+   desfaz a saída de todos os membros dele.
+
    Regras de segurança que este ficheiro cumpre (as de colaboradores.js):
    - guarda-se só o SHA-256 do token da ligação; o token em claro vive no URL
      da criação e em mais lado nenhum (a auditoria leva o prefixo do hash);
@@ -170,7 +176,8 @@ async function grupoPorToken(env, token) {
 }
 
 // Os grupos partilhados vivos de que um utilizador é membro — os seus e os
-// dos outros —, cada um com os membros, as casas vivas e, nos seus, o estado
+// dos outros —, cada um com os membros, as casas vivas (menos as de que ele
+// saiu, house_exits) e, nos seus, o estado
 // da ligação (nunca o URL: só sai na criação) e os pedidos para entrar por
 // responder. É o que o /api/state manda em sharedGroups. Cinco consultas no
 // máximo, em blocos, sejam quantos forem os grupos.
@@ -198,10 +205,14 @@ export async function listarGrupos(env, userId) {
     `SELECT m.group_id, m.user_id, u.name FROM shared_group_members m
        JOIN users u ON u.id = m.user_id
       WHERE m.group_id IN ({IN}) ORDER BY m.joined_at, m.user_id`);
+  // as casas de que saí (house_exits) não aparecem nos meus grupos: aos
+  // outros membros continuam a aparecer
   const casas = await emBlocos(env, ids,
     `SELECT gh.group_id, gh.house_id, h.owner_id, h.data FROM shared_group_houses gh
        JOIN houses h ON h.id = gh.house_id
-      WHERE h.deleted = 0 AND gh.group_id IN ({IN}) ORDER BY gh.added_at, gh.house_id`);
+      WHERE h.deleted = 0
+        AND NOT EXISTS (SELECT 1 FROM house_exits x WHERE x.house_id = gh.house_id AND x.user_id = ?)
+        AND gh.group_id IN ({IN}) ORDER BY gh.added_at, gh.house_id`, [userId]);
   const meus = grupos.filter((g) => g.owner_id === userId).map((g) => g.id);
   const ligacoes = meus.length
     ? await emBlocos(env, meus, 'SELECT group_id, expires_at, revoked_at, uses FROM shared_group_links WHERE group_id IN ({IN})')
@@ -610,6 +621,14 @@ export async function rotasGrupos(c) {
       stmts.push(env.DB.prepare(
         'INSERT OR REPLACE INTO shared_group_houses (group_id, house_id, added_by, added_at) VALUES (?, ?, ?, ?)'
       ).bind(id, h, me.id, antes.get(h) || t));
+      // uma casa que ENTRA no grupo é partilhá-la de novo com os membros:
+      // quem dela tinha saído volta a tê-la. Uma que já lá estava não mexe
+      // (o conjunto regrava-se a cada mudança — e a saída tem de ficar)
+      if (!antes.has(h)) {
+        stmts.push(env.DB.prepare(
+          'DELETE FROM house_exits WHERE house_id = ? AND user_id IN (SELECT user_id FROM shared_group_members WHERE group_id = ?)'
+        ).bind(h, id));
+      }
     }
     await env.DB.batch(stmts);
     await auditar(env, eu, 'grupo.imoveis', id, houseIds.join(','));

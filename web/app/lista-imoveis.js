@@ -232,7 +232,8 @@ function lpImovel(a){
   const opts=pode(id,'house.edit')?[{label:'Editar imóvel',icon:'pen',act:()=>propModal(id)}]:[];
   lpExtrasDe('prop',a).forEach(o=>opts.push(o));
   acoesNoImovel(id).forEach(x=>{if(x.perm!=='house.edit'&&!opts.some(o=>o.label===x.rotulo))opts.push({label:x.rotulo,icon:x.icon,act:()=>correrAcao(x.act)})});
-  if(souCriador(id))opts.push({label:'Apagar imóvel',icon:'trash',act:()=>delProp(id)});
+  /* num imóvel que não criei, o mesmo «Apagar imóvel» é sair dele (imovel.js:imvSair, pelo delProp) */
+  if(imvPossoApagar(id))opts.push({label:'Apagar imóvel',icon:'trash',act:()=>delProp(id)});
   return lpShow(p.name,opts);
 }
 registarServico({id:'properties',vistas:{properties:'vProperties'},depois:{properties:'propsDepois'},lp:{prop:'lpImovel'}});

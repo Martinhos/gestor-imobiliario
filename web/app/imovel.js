@@ -10,7 +10,7 @@ function propModal(id){
   if(id&&!pode(id,'house.edit'))return propView(id);
   foldState={};_propPaint=null;
   pForm=normProp(id?JSON.parse(JSON.stringify(prop(id))):null);
-  const m=id&&souCriador(id)?menu('prop',[{label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${id}')`}]):'';
+  const m=id&&imvPossoApagar(id)?menu('prop',[{label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${id}')`}]):'';
   openModal(id?'Editar imóvel':'Novo imóvel',propBody(),null,m);
   paintThumbs(pForm.photos);
   onSave=()=>{
@@ -382,7 +382,7 @@ function propView(id){
   camada=abrirFicha({
     titulo:()=>{const x=prop(id);return x?x.name:'Imóvel'},
     corpo:()=>propFicha(id),
-    menu:()=>souCriador(id)?menu('fichaProp',[{label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${jsq(id)}')`}]):'',
+    menu:()=>imvPossoApagar(id)?menu('fichaProp',[{label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${jsq(id)}')`}]):'',
     editar:pode(id,'house.edit')?{rotulo:'Editar',act:`propModal('${jsq(id)}')`}:null,
     depois:()=>{if(pode(id,'file.view')){const x=prop(id);if(x)paintThumbs(x.photos,camada&&camada.el?camada.el:undefined)}},
   });
@@ -1000,15 +1000,16 @@ function acertarLotesSemImovel(id,txs){
    Anular. A cópia guarda-se antes de apagar; as fotos e os documentos das
    hipotecas só saem do IndexedDB quando o Anular expira. As partes que o
    imóvel tinha em movimentos de vários imóveis saem com ele, e o resto desses
-   movimentos acerta-se (acertarLotesSemImovel).
+   movimentos acerta-se (acertarLotesSemImovel). Só quem o criou o apaga: num
+   imóvel que não criei, «Apagar» é sair dele (imvSair).
    Recebe: id — o id do imóvel a apagar.
    Devolve: nada — abre a confirmação; só se apaga depois do sim. */
 function delProp(id){
   const p=prop(id),n=contractsOf(id).length;
   if(!p)return;
-  /* só quem criou o imóvel o apaga: nem comproprietários, nem colaboradores */
-  if(!souCriador(id))return toast('Só quem criou o imóvel o pode apagar.');
-  confirmModal('Apagar imóvel',`Apagar “${esc(p.name)}”${n?`, os seus ${n} contratos`:''} e todos os movimentos associados?`,()=>{
+  /* um comproprietário ou um colaborador não apaga o imóvel de outro: sai dele */
+  if(!souCriador(id))return imvSair(id);
+  confirmModal('Apagar imóvel',`Apagar “${esc(p.name)}”${n===1?', o seu contrato':n?`, os seus ${n} contratos`:''} e todos os movimentos associados?`,()=>{
     /* a cópia primeiro, os blobs só quando o Anular expirar: uma cascata
        destas confirmada por hábito era irrecuperável */
     const copia={p:JSON.parse(JSON.stringify(p)),
@@ -1029,5 +1030,81 @@ function delProp(id){
       (copia.p.photos||[]).forEach(f=>{idbDel(f.id).catch(()=>{});idbDel('tn_'+f.id).catch(()=>{})});
       (copia.p.loans||[]).forEach(l=>(l.files||[]).forEach(f=>idbDel(f.id).catch(()=>{})));
     });
+  });
+}
+/* Num imóvel que não criei, «Apagar» é sair dele: com sessão (a nuvem traz o
+   CW.sairDaCasa, cloud/partilha.js) e só num que ainda está na base.
+   Recebe: id — o id do imóvel.
+   Devolve: true se posso sair dele. */
+function imvPossoSair(id){return !!prop(id)&&!souCriador(id)&&typeof (window.CW&&CW.sairDaCasa)==='function'}
+/* O ⋯ da ficha, o do formulário e o toque longo têm «Apagar imóvel»: quem o
+   criou apaga-o (delProp), quem não o criou sai dele (imvSair).
+   Recebe: id — o id do imóvel.
+   Devolve: true se o «Apagar imóvel» entra no menu. */
+function imvPossoApagar(id){return souCriador(id)||imvPossoSair(id)}
+/* Como saio de um imóvel que não criei: tenho cargo (colaborador) ou sou dono
+   sem o ter criado (comproprietário, por uma ligação ou por um grupo).
+   Recebe: id — o id do imóvel.
+   Devolve: 'colaborador', 'comproprietario', ou '' num imóvel que criei. */
+function imvComoSaio(id){return souCriador(id)?'':souDono(id)?'comproprietario':'colaborador'}
+/* Quem criou o imóvel, para as frases da saída: o nome que o servidor mandou
+   (p._sharedFrom, o que o seloCargo usa) ou o da conta pelo id.
+   Recebe: p — o imóvel.
+   Devolve: o nome (texto, por escapar), ou '' sem nome. */
+function imvNomeDoDono(p){return (p&&(p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):'')))||''}
+/* Uma quota como a app a escreve: «30%», «33,33%» (no máximo duas casas,
+   como o servidor as arredonda).
+   Recebe: f — a fração (0–1).
+   Devolve: o texto. */
+function imvQuotaTexto(f){return String(Math.round((Number(f)||0)*10000)/100).replace('.',',')+'%'}
+/* Para onde vai a minha quota quando saio de um imóvel em compropriedade
+   (o contrato da rota: dividida pelos restantes na proporção das quotas
+   deles; sem quotas escritas, ficam em partes iguais). Com um só que fica,
+   passa para ele.
+   Recebe: p — o imóvel.
+   Devolve: a frase (HTML, nomes escapados), ou '' sem mais ninguém. */
+function imvFraseDaQuota(p){
+  const eu=meuId(),minha=sharesOf(p)[eu],ficam=(p.ownerIds||[]).filter(u=>u&&u!==eu);
+  if(!ficam.length)return '';
+  const q=minha!=null?' ('+imvQuotaTexto(minha)+')':'',nomes=ficam.map(u=>esc(nomeUtilizador(u)));
+  if(ficam.length===1)return `A tua quota${q} passa para ${nomes[0]}.`;
+  return `A tua quota${q} é dividida por ${listaE(nomes)} ${hasShares(p)?'na proporção das quotas deles':'em partes iguais'}.`;
+}
+/* O que sair de um imóvel que não criei faz, dito antes de confirmar: as
+   permissões são retiradas, o imóvel sai da lista, o registado fica, não se
+   desfaz e como se volta (o colaborador pede um convite novo ao dono; ao
+   comproprietário, quem o criou tem de voltar a partilhá-lo). Ao
+   comproprietário diz também para onde vai a quota (imvFraseDaQuota) e que
+   os saldos e o IRS passam a contar com as quotas novas — as quotas não são
+   por data, valem para os movimentos já registados.
+   Recebe: p — o imóvel.
+   Devolve: a frase (HTML, com os nomes escapados). */
+function imvFraseSaida(p){
+  const nome='<b>'+esc(p.name||'Sem nome')+'</b>',dono=esc(imvNomeDoDono(p));
+  if(imvComoSaio(p.id)==='colaborador')
+    return `Deixas de colaborar em ${nome}: as tuas permissões neste imóvel são retiradas e ele sai da tua lista. O que registaste fica com ${dono||'o dono'}. Não se desfaz: para voltares a ter acesso, pede ${dono?'a '+dono:'ao dono'} um convite novo.`;
+  const quota=imvFraseDaQuota(p);
+  return `Deixas de ser comproprietário de ${nome}: as tuas permissões são retiradas e ele sai da tua lista.${quota?' '+quota:''} Os saldos e o IRS do imóvel passam a contar com as quotas novas, também nos movimentos já registados. O que registaste fica. Não se desfaz: para voltares, ${dono||'quem o criou'} tem de voltar a partilhá-lo contigo.`;
+}
+/* Sair de um imóvel que não criei — o «Apagar imóvel» do ⋯ da ficha, do
+   formulário e do toque longo de quem não o criou (delProp encaminha para
+   aqui). Uma confirmação com o que se perde (imvFraseSaida), vermelha como a
+   do criador, sem Anular: a saída acontece no servidor
+   (cloud/partilha.js:CW.sairDaCasa) e não se desfaz. Só com a resposta: o
+   aviso, as janelas fecham (a ficha ficava sobre um imóvel que já não está
+   na lista), os filtros que apontavam para ele limpam-se e o estado volta a
+   ler-se. Um erro diz a frase do servidor e não muda nada.
+   Recebe: id — o id do imóvel.
+   Devolve: nada — abre a confirmação; só se sai depois do sim. */
+function imvSair(id){
+  const p=prop(id);if(!p)return;
+  if(!imvPossoSair(id))return toast('Só quem criou o imóvel o pode apagar.');
+  const nome=p.name||'Sem nome';
+  confirmModal('Apagar «'+nome+'»',imvFraseSaida(p),()=>{
+    window.CW.sairDaCasa(id).then(()=>{
+      if(dashProp===id)dashProp='';if(txProp===id)txProp='';
+      closeAllModals();toast('Saíste de '+nome+'.');
+      return Promise.resolve(typeof pullNow==='function'?pullNow(true):null).catch(()=>{}).then(()=>render());
+    },e=>toast((e&&e.message)||'Não deu para sair deste imóvel. Tenta outra vez.'));
   });
 }

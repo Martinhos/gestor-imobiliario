@@ -1420,7 +1420,21 @@ esse assunto: notifModal('confirmar'), notifModal('prazos'),
 notifModal('pedidos'), e notifModal('') para a atividade. Qual se vê decide
 o CSS, ao corte da casca (900px). Nada antes de saber o estado
 (espera.js:sabemosOEstado), e a atividade só depois de o sino ter marcado a
-primeira leitura — é ele que a marca e a grava.
+primeira leitura — é ele que a marca e a grava (notificacoes.js:notifMarca).
+
+Na mesma atividade vai quem saiu de uma casa que fica comigo
+(notificacoes.js:notifSaidas, de CW.state.departures): «Rui deixou de
+colaborar em T2 Benfica.» (só ao dono) e «Rui deixou de ser comproprietário
+de T2 Benfica.» (a todos os que ficam), com a data e a hora por baixo e as
+iniciais de quem saiu (notificacoes.js:notifQuem). A atividade e as saídas
+juntam-se pela hora (notificacoes.js:notifAtividade) — é o que o crachá conta
+(notificacoes.js:notifConta), a secção «Atividade nas casas partilhadas» do
+sino e o cartão do painel —, com a mesma marca de leitura: o «Marcar tudo
+como lido» cala-as também. Tocar numa saída abre a ficha do imóvel quando ele
+ainda está na base e os Imóveis estão ligados; sem isso a linha não é um
+botão. Com os Colaboradores desligados, as saídas de colaboradores não
+entram. Na linha do telemóvel, uma saída vai sozinha, sem o «Nome · » à
+frente, porque já começa por quem saiu.
 
 Os pedidos são da nuvem: a vista deixa o lugar `<!--vg-pedidos-->` na
 terceira coluna, por cima da atividade, e a nuvem enche-o
@@ -1974,6 +1988,25 @@ O título é o da janela e o «Editar» o do rodapé, só para quem pode
 (imovel.js:propView, componentes.js:fichaRodape), como nas outras fichas; o
 Apagar está no ⋯ da janela. No computador a janela alarga até 940px e os cartões vão em duas colunas (estilos.css:.imv-ficha, e a regra
 .sheet:has(.imv-ficha)).
+
+O «Apagar imóvel» está no ⋯ de toda a ficha, também na de um imóvel que não
+criei (imovel.js:imvPossoApagar), e no ⋯ do formulário e no toque longo.
+Quem o criou apaga-o (imovel.js:delProp, com o Anular). Quem não o criou —
+colaborador, ou comproprietário por uma ligação ou por um grupo — sai dele
+(imovel.js:imvSair; o delProp encaminha para lá): apagar da minha lista um
+imóvel de outra pessoa é dizer que não quero continuar nele. A confirmação
+chama-se «Apagar «Nome»», com o botão vermelho de sempre, e diz o que se
+perde e como se volta (imovel.js:imvFraseSaida). Ao colaborador: as
+permissões neste imóvel são retiradas, o que registou fica com o dono, não se
+desfaz, e para voltar pede ao dono um convite novo. Ao comproprietário: as
+permissões são retiradas, a quota vai para os que ficam na proporção das
+deles (imovel.js:imvFraseDaQuota), os saldos e o IRS passam a contar com as
+quotas novas também nos movimentos já registados, e para voltar quem o criou
+tem de o partilhar outra vez. Não há Anular: a saída é no servidor
+(cloud/partilha.js:CW.sairDaCasa). Só depois da resposta aparece o aviso
+«Saíste de Nome.», as janelas fecham, os filtros que apontavam para o imóvel
+limpam-se e o estado relê-se; o imóvel nunca sai da base à mão. Um erro diz a
+frase do servidor e não muda nada.
 
 Com fotos, a capa toda da ficha abre a galeria (imovel.js:imvCapaDaFicha,
 estilos.css:.imv-capa-abre): quem vê uma fotografia toca nela. É um botão
@@ -3323,6 +3356,19 @@ contratos e 5 movimentos.», «Vai junto 1 contrato.», «Sem contratos nem
 movimentos ligados.»). O «Selecionar vários» que entra no menu de um imóvel ou de um
 contrato veste uma classe (estilos.css:.card.sel-varios), e não um cssText.
 
+Na seleção dos imóveis marcam-se também os que não criei, e o Apagar tem UMA
+confirmação, como a dos grupos (cloud/selecao-listas.js:selLApagarImoveis, a
+frase em cloud/selecao-listas.js:selLImoveisFrase). O título começa sempre
+por «Apagar», para o botão ser vermelho: «Apagar 2 imóveis» só com os meus ou
+só com os de outros, e «Apagar 1 imóvel e sair de 2» com os dois. De um só
+imóvel de outra pessoa, a frase é a da ficha; de vários, a de
+cloud/selecao-listas.js:selLSaidaFrase; com os dois, acaba em «O Anular só
+repõe os teus.». Os meus apagam-se na base, com o Anular
+(cloud/selecao-listas.js:selLApagarImoveisLocal); dos outros saio no
+servidor. Os pedidos vão todos, um que falhe não trava os outros, e o aviso,
+um só, espera pelas respostas e diz o que ficou como estava
+(cloud/selecao-listas.js:selLImoveisAviso).
+
 Nos Planeados seleciona-se vários de um de dois tipos: os planeados ('rec')
 ou os modelos ('tpl'), nunca os dois (cloud/selecao-listas.js:TABS_SEL, os
 dois no separador 'recurring'). O ☑ do cabeçalho entra com os planeados — ou
@@ -4050,7 +4096,8 @@ convites, a última importação.
 
 ## Grupos partilhados
 Um grupo de imóveis partilha-se como grupo, e não casa a casa: quem está no
-grupo é comproprietário de todas as casas dele, com o que isso já significa
+grupo é comproprietário de todas as casas dele (menos as de que saiu — ver
+«Sair de um imóvel» abaixo), com o que isso já significa
 numa casa partilhada por ligação — vê e edita contratos, movimentos e
 pessoas, entra nas quotas e nas propostas (worker/src/lib/acesso.js:participantsOf,
 worker/src/lib/acesso.js:canAccessHouse, worker/src/lib/acesso.js:acessoACasa). A
@@ -4209,6 +4256,43 @@ Um movimento atribuído a um grupo partilhado chega a todos os membros porque
 se parte por imóvel ao guardar (ver «Um movimento de vários imóveis parte-se
 por imóvel»).
 
+**Sair de um imóvel.** Quem não criou uma casa sai dela com
+`DELETE /api/houses/:id/participacao` (worker/src/rotas/casas.js:rotasCasas).
+O criador leva 400 («Criaste este imóvel: para o tirar da tua lista,
+apaga-o.»); quem não tem acesso leva 404. É o grau que decide o caminho:
+
+- O colaborador perde o cargo NESSA casa, e só nela; a linha de colaborador
+  que fique sem casas sai (worker/src/rotas/casas.js:sairComoColaborador).
+- O comproprietário sai por todos os caminhos num só lote
+  (worker/src/rotas/casas.js:sairComoComproprietario): as partilhas da casa
+  nas ligações dele, uma linha em `house_exits` se a casa lhe chega por um
+  grupo (fica no grupo e com as outras casas dele), e um cargo que tivesse
+  por baixo — sem isso, a precedência devolvia-lha como colaborador. A quota
+  dele vai para os que ficam, na proporção das deles
+  (worker/src/lib/acesso.js:redistribuirQuotas: 2 casas decimais a somar
+  exatamente 100, o resto do arredondamento para a maior; sem quotas
+  guardadas, `ownerShares` sai e fica em partes iguais). `ownerIds` fica com
+  os que ficam, e a proposta pendente da casa apaga-se. É a única escrita das
+  quotas que não passa por uma proposta aceite.
+
+A saída por grupo (worker/src/lib/acesso.js:SAIU_DA_CASA) entra em todas as
+consultas que dão casas por grupo: a compropriedade e os membros da casa, as
+casas do /api/state e as de cada grupo
+(worker/src/rotas/grupos.js:listarGrupos). Aos outros membros, a casa
+continua a aparecer. A saída desfaz-se quando o criador volta a partilhar a
+casa com essa pessoa: pela ligação, por um pedido de partilha aceite, ou com
+uma casa que ENTRA num grupo (worker/src/lib/acesso.js:limparSaida).
+Regravar o mesmo conjunto de casas do grupo não a desfaz.
+
+Quem fica recebe um aviso: uma linha de `house_events` por destinatário, com
+o nome da casa e o de quem saiu lidos antes de qualquer escrita
+(worker/src/lib/acesso.js:avisoDeSaida). O `colab.sair` vai ao dono, e o
+`casa.sair` a cada um que fica. O /api/state manda-os em `departures`: os
+meus dos últimos 90 dias, os mais recentes primeiro, até 50; sem os
+Colaboradores ligados, os `colab.sair` não vêm. O «Deixar de colaborar» do
+próprio também avisa o dono, um aviso por casa. O dono a remover um
+colaborador não avisa ninguém.
+
 ## Os colaboradores
 O separador dos Colaboradores é o terceiro das Pessoas, na área Casas
 (navegacao.js:PESSOAS): um ecrã de área como os Inquilinos e os
@@ -4230,7 +4314,11 @@ cloud/colaboradores.js:CW.cargoPermissoes) — com dois cargos ou mais e o
 cartão com 700px ou mais, o primeiro à esquerda e os outros à direita, com a
 divisória ao meio (estilos.css:.colab-cargos-dois,
 estilos.css:.colab-cargos-resto, o @container colabcargos); e «Onde colaboras»
-(cloud/colaboradores.js:colaboroCartao). Nas Definições não há linha dos
+(cloud/colaboradores.js:colaboroCartao). O «Deixar de colaborar» de lá sai de
+todos os imóveis desse dono de uma vez, e a confirmação diz o mesmo que o
+«Apagar imóvel» de quem colabora (cloud/colaboradores.js:CW.sairDeImovel):
+as permissões são retiradas, não se desfaz, e para voltar é preciso pedir ao
+dono um convite novo. Para sair de um só, apaga-se o imóvel. Nas Definições não há linha dos
 Colaboradores. O resumo — quantas pessoas e quantos convites — é o
 subtítulo do ecrã no computador
 (cloud/colaboradores.js:resumoDosColaboradores), e a contagem do segmento
@@ -4705,7 +4793,8 @@ deixa, e Confirmar e Silenciar refazem a janela com o mesmo filtro; o valor
 de cada um tem as cores dos Planeados (planeados.js:recValor: a prestação
 roxa); os prazos dizem o que falta (prazos.js:pzQuando), com a cor no selo
 (prazos.js:pzSelo), e levam ao sítio deles — um prazo sem destino é uma
-linha, não um botão; e a atividade nas casas partilhadas. «Marcar tudo como
+linha, não um botão; e a atividade nas casas partilhadas, com quem saiu delas
+(notificacoes.js:notifSaidas). «Marcar tudo como
 lido» só aparece com atividade por ler. O sino diz ao leitor de ecrã quantos
 há: «Pede atenção: N por ver» (notificacoes.js:notifSino).
 

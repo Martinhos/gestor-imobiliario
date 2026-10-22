@@ -12,15 +12,29 @@
 // OU quem é membro de um grupo partilhado vivo que a contém (migração 0017,
 // rotas/grupos.js) — e não é o dono dela. As duas portas dão o mesmo grau,
 // e um membro que também tenha um cargo é comproprietário (a precedência).
+//
+// Quem não criou a casa pode sair dela (DELETE /api/houses/:id/participacao,
+// rotas/casas.js). Pela ligação, a partilha sai; por um grupo, fica uma
+// linha em house_exits (migração 0019) e a pertença ao grupo deixa de lhe
+// dar ESSA casa — continua no grupo e nas outras. Cada consulta que dá casas
+// por grupo leva o SAIU_DA_CASA; a linha sai quando o criador volta a
+// partilhar a casa com essa pessoa.
 
 import { now } from './http.js';
 import { normalizarPerms, permDoKind, podeAddKind, fraseRecusa, fundirPlaneado, planeadoTermina } from './permissoes.js';
 
+/* A condição que tira de uma consulta por grupo quem saiu da casa: com gh a
+   linha de shared_group_houses e m a de shared_group_members. É a mesma em
+   todas as consultas que dão casas por grupo (aqui, rotas/estado.js e
+   rotas/grupos.js) — sem ela num sítio, a casa voltava a quem saiu por esse. */
+export const SAIU_DA_CASA =
+  'NOT EXISTS (SELECT 1 FROM house_exits x WHERE x.house_id = gh.house_id AND x.user_id = m.user_id)';
+
 /* A pergunta da compropriedade sem o dono, numa consulta só: a casa (?1)
    está partilhada com este utilizador (?2) numa conexão aceite, ou ele é
-   membro de um grupo partilhado vivo que a contém. Quem chama já pôs o dono
-   de parte — e uma casa do próprio num grupo seu não o torna comproprietário
-   de si mesmo porque o dono responde antes. */
+   membro de um grupo partilhado vivo que a contém (e não saiu dela). Quem
+   chama já pôs o dono de parte — e uma casa do próprio num grupo seu não o
+   torna comproprietário de si mesmo porque o dono responde antes. */
 const COMPROPRIETARIO_SQL = `
   SELECT 1 FROM shares s
     JOIN connections c ON c.id = s.connection_id
@@ -30,17 +44,17 @@ const COMPROPRIETARIO_SQL = `
   SELECT 1 FROM shared_group_houses gh
     JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
     JOIN shared_group_members m ON m.group_id = gh.group_id
-   WHERE gh.house_id = ?1 AND m.user_id = ?2
+   WHERE gh.house_id = ?1 AND m.user_id = ?2 AND ${SAIU_DA_CASA}
    LIMIT 1`;
 
 // Os membros dos grupos partilhados vivos que contêm a casa, pela ordem em
-// que entraram (um membro de dois grupos com a mesma casa vem duas vezes:
-// quem chama tira os repetidos).
+// que entraram, menos os que saíram dela (um membro de dois grupos com a
+// mesma casa vem duas vezes: quem chama tira os repetidos).
 const MEMBROS_DA_CASA_SQL = `
   SELECT m.user_id FROM shared_group_houses gh
     JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
     JOIN shared_group_members m ON m.group_id = gh.group_id
-   WHERE gh.house_id = ?
+   WHERE gh.house_id = ? AND ${SAIU_DA_CASA}
    ORDER BY m.joined_at, m.user_id`;
 
 // Apaga objetos do R2 em listas de até mil chaves, o máximo que o delete
@@ -242,7 +256,8 @@ export async function planeadoAGravar(env, me, acesso, houseId, kind, recordId, 
 
 // Apagar uma casa, com tudo o que lhe está preso: os registos ficam marcados
 // (lápide), as partilhas, propostas, atribuições de colaboradores, pedidos
-// de partilha e a presença em grupos partilhados desaparecem, e os convites
+// de partilha, a presença em grupos partilhados e as saídas de quem dela
+// saiu por um grupo (house_exits) desaparecem, e os convites
 // por usar deixam de a incluir (um convite que ficasse sem casas fica
 // revogado). Os anexos ficam presos à
 // casa por agora: a app deixa desfazer o apagar, e o desfazer volta a gravar
@@ -264,6 +279,7 @@ export async function apagarCasa(env, houseId, ownerId) {
     ).bind(ownerId),
     env.DB.prepare('DELETE FROM share_requests WHERE house_id = ?').bind(houseId),
     env.DB.prepare('DELETE FROM shared_group_houses WHERE house_id = ?').bind(houseId),
+    env.DB.prepare('DELETE FROM house_exits WHERE house_id = ?').bind(houseId),
   ];
   const convites = (
     await env.DB.prepare(
@@ -302,6 +318,58 @@ export function preserveOwnership(existingDataStr, incoming) {
     }
   } catch (e) {}
   return incoming;
+}
+
+// A quota de quem sai de uma casa, dividida pelos que ficam na proporção das
+// quotas deles. Só contam os que ficam e têm valor guardado; cada quota nova
+// arredonda a 2 casas e a soma dá exatamente 100 — o resto do arredondamento
+// vai para a maior. Sem quotas guardadas, ou com os que ficam a somar 0, não
+// há proporção a seguir: null, que no cliente é «partes iguais».
+// Recebe: shares — o ownerShares guardado na casa (pode faltar ou vir
+// estragado); saiId — o id de quem sai; ficam — os ids dos participantes
+// que continuam.
+// Devolve: o ownerShares novo ({ id: percentagem }) ou null.
+export function redistribuirQuotas(shares, saiId, ficam) {
+  if (!shares || typeof shares !== 'object' || Array.isArray(shares)) return null;
+  const temValor = (u) => Object.prototype.hasOwnProperty.call(shares, u) && shares[u] !== null
+    && shares[u] !== '' && isFinite(Number(shares[u])) && Number(shares[u]) >= 0;
+  const ids = [...new Set(ficam || [])].filter((u) => u !== saiId && temValor(u));
+  const soma = ids.reduce((n, u) => n + Number(shares[u]), 0);
+  if (!(soma > 0)) return null;
+  // em centésimas de ponto, inteiras: a soma acerta-se sem erro de vírgula
+  const cent = ids.map((u) => Math.round((Number(shares[u]) / soma) * 10000));
+  let maior = 0;
+  cent.forEach((v, i) => { if (v > cent[maior]) maior = i; });
+  cent[maior] += 10000 - cent.reduce((n, v) => n + v, 0);
+  const out = {};
+  ids.forEach((u, i) => { out[u] = cent[i] / 100; });
+  return out;
+}
+
+// O aviso de que alguém saiu de uma casa, para um destinatário: uma linha de
+// house_events com o nome da casa e o de quem saiu escritos no momento (o
+// aviso lê-se igual depois de mudarem). O /api/state manda-os em departures.
+// Recebe: env — o ambiente do worker (a base D1); para — o id do
+// destinatário; kind — 'colab.sair' (vai ao dono) ou 'casa.sair' (vai a
+// cada participante que fica); houseId, houseName — a casa, com o nome lido
+// ANTES de qualquer escrita; quem — quem saiu ({ id, name }); t — o instante.
+// Devolve: a instrução preparada, para entrar no lote de quem chama.
+export function avisoDeSaida(env, para, kind, houseId, houseName, quem, t) {
+  return env.DB.prepare(
+    `INSERT INTO house_events (id, user_id, kind, house_id, house_name, actor_id, actor_name, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(crypto.randomUUID(), para, kind, houseId, String(houseName || ''), quem.id, String(quem.name || ''), t);
+}
+
+// A saída de alguém de uma casa desfeita: o criador voltou a partilhá-la com
+// essa pessoa (pela ligação, ou num pedido de partilha aceite) e a casa volta
+// a chegar-lhe também pelos grupos. Pôr a casa num grupo limpa a saída de
+// todos os membros dele, numa consulta própria (rotas/grupos.js).
+// Recebe: env — o ambiente do worker (a base D1); houseId — a casa; userId —
+// quem tinha saído.
+// Devolve: a instrução preparada, para entrar no lote de quem chama.
+export function limparSaida(env, houseId, userId) {
+  return env.DB.prepare('DELETE FROM house_exits WHERE house_id = ? AND user_id = ?').bind(houseId, userId);
 }
 
 // A conexão com este id em que o utilizador participa (convidou ou foi
@@ -349,7 +417,7 @@ export async function purgeAccount(env, uid) {
            JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
            JOIN shared_group_members m ON m.group_id = gh.group_id
            JOIN houses h ON h.id = gh.house_id
-          WHERE m.user_id = ?1 AND h.owner_id <> ?1`
+          WHERE m.user_id = ?1 AND h.owner_id <> ?1 AND ${SAIU_DA_CASA}`
       )
         .bind(uid)
         .all()
@@ -397,6 +465,10 @@ export async function purgeAccount(env, uid) {
       env.DB.prepare('DELETE FROM shared_group_members WHERE user_id = ?').bind(uid),
       env.DB.prepare('DELETE FROM shared_group_requests WHERE user_id = ?').bind(uid),
       env.DB.prepare('DELETE FROM shared_group_houses WHERE added_by = ?1 OR house_id IN (SELECT id FROM houses WHERE owner_id = ?1)').bind(uid),
+      // as saídas: as dela e as das casas dela (antes das casas, de que a
+      // condição depende); os avisos que recebeu e os que deu a outros
+      env.DB.prepare('DELETE FROM house_exits WHERE user_id = ?1 OR house_id IN (SELECT id FROM houses WHERE owner_id = ?1)').bind(uid),
+      env.DB.prepare('DELETE FROM house_events WHERE user_id = ?1 OR actor_id = ?1').bind(uid),
       // dados próprios
       env.DB.prepare('DELETE FROM records WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(uid),
       env.DB.prepare('DELETE FROM shares WHERE house_id IN (SELECT id FROM houses WHERE owner_id = ?)').bind(uid),

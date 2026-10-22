@@ -113,6 +113,14 @@ cortesia, nunca a barreira. Ao acrescentar um campo sensível à casa ou a
 um kind novo, a pergunta é «que permissão o abre?» — e a resposta escreve-se
 em worker/src/lib/permissoes.js antes de escrever no cliente.
 
+## Uma consulta nova que dá casas por grupo tem de saber de house_exits
+Quem saiu de uma casa que lhe chegava por um grupo continua membro do
+grupo: a saída é uma linha em `house_exits`, não a remoção do membro. Uma
+consulta nova que junte `shared_group_houses` com `shared_group_members` e
+se esqueça de `SAIU_DA_CASA` (worker/src/lib/acesso.js) devolve a casa a quem
+saiu dela, com as permissões de comproprietário. Copiar a condição para lá,
+e acrescentar o caso ao testes/sair-do-imovel-servidor.test.js.
+
 ## Um anexo sem kind é só de donos
 A migração 0014 acrescentou `files.record_kind`/`record_id` sem os
 preencher: todos os anexos anteriores ficaram com kind NULL, e o mesmo

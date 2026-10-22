@@ -6,7 +6,9 @@
    do servidor — a atividade dos outros nas casas partilhadas: cada registo
    escrito por outra pessoa chega com o autor e a hora (o worker grava o
    autor em cada escrita), e o que for mais novo do que a última leitura
-   aparece aqui com nome e apelido.
+   aparece aqui com nome e apelido. Na mesma atividade, quem saiu de uma
+   casa que fica comigo — um colaborador que deixou de colaborar, um
+   comproprietário que deixou de o ser (CW.state.departures, notifSaidas).
 
    «Marcar tudo como lido» guarda a marca temporal nas definições — que
    sincronizam, por isso ler num aparelho limpa o sino nos outros. */
@@ -58,13 +60,10 @@ function notifPedidos(){
    Devolve: lista de {tipo, titulo, sub, at, ir} por ordem do mais recente. */
 function notifPartilha(desde){
   const meu=(window.CW&&CW.user&&CW.user.id)||'';
-  // primeira vez: a contagem começa AGORA — sem isto, o primeiro sino
-  // despejava o histórico inteiro das casas partilhadas
-  if(desde==null&&db.settings.notifLidoAte==null){db.settings.notifLidoAte=Date.now();save()}
-  const marca=desde!=null?desde:Number((db.settings||{}).notifLidoAte||0);
+  const marca=notifMarca(desde);
   const out=[];
   const lotes={};   // lote.id → a linha dele em out
-  const quando=at=>new Date(at).toLocaleDateString('pt-PT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  const quando=notifQuando;
   const poe=(tipo,rotulo,nome,x,ir)=>{
     if(!x._author||x._author===meu)return;
     const at=Number(x._atServidor||0);
@@ -99,14 +98,94 @@ function notifPartilha(desde){
   return out.sort((a,b)=>b.at-a.at).slice(0,40);
 }
 
+/* A marca de leitura da atividade (a partilhada e as saídas): o que for
+   mais novo do que ela está por ler. Na primeira vez, a contagem começa
+   AGORA — sem isto, o primeiro sino despejava o histórico inteiro das casas
+   partilhadas —, e a marca grava-se (sincroniza com os outros aparelhos).
+   Recebe: desde (opcional) — marca temporal em ms, que manda sobre a guardada.
+   Devolve: a marca em ms (número; 0 se nunca houve e não se pôde pôr). */
+function notifMarca(desde){
+  if(desde!=null)return Number(desde)||0;
+  if(db.settings.notifLidoAte==null){db.settings.notifLidoAte=Date.now();save()}
+  return Number((db.settings||{}).notifLidoAte||0);
+}
+
+/* A hora de uma linha do sino, como as da atividade: «22/10, 14:30».
+   Recebe: at — marca temporal em ms.
+   Devolve: o texto da data e da hora. */
+function notifQuando(at){
+  return new Date(at).toLocaleDateString('pt-PT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+}
+
+/* Quem saiu das casas que ficam comigo: um colaborador que deixou de
+   colaborar num imóvel meu (kind 'colab.sair', só me chega a mim, o dono)
+   ou um comproprietário que deixou de o ser num imóvel que partilho
+   (kind 'casa.sair', chega a todos os que ficam). Vêm do servidor em
+   CW.state.departures (os dos últimos 90 dias, worker/src/rotas/estado.js),
+   com o nome da casa e o de quem saiu escritos no momento. Só os mais novos
+   do que a marca de leitura, como a atividade: o «Marcar tudo como lido»
+   cala-os também. Com os Colaboradores desligados nesta conta, as saídas de
+   colaboradores não entram (o servidor já não as manda; se sobrar alguma no
+   aparelho, não se mostra um aviso de um serviço que não está). O toque abre
+   a ficha do imóvel se ele ainda estiver na base e os Imóveis ligados (o
+   propView é desse serviço; a app carrega-o sempre, e por isso a guarda é o
+   servicoLigado e não um typeof); sem isso a linha não leva a lado nenhum
+   (ir vazio).
+   Recebe: desde (opcional) — marca temporal em ms; por omissão, a última
+   leitura guardada nas definições.
+   Devolve: lista de {tipo:'saida', id, kind, titulo, sub, quem, at, ir, toca}
+   por ordem do mais recente. */
+function notifSaidas(desde){
+  const st=window.CW&&CW.state;
+  const lista=st&&Array.isArray(st.departures)?st.departures:[];
+  if(!lista.length)return [];
+  const meu=(CW.user&&CW.user.id)||'';
+  const marca=notifMarca(desde);
+  const colab=servicoLigado('colaboradores');
+  const out=[];
+  lista.forEach(d=>{
+    if(!d||(d.kind!=='colab.sair'&&d.kind!=='casa.sair'))return;
+    if(d.kind==='colab.sair'&&!colab)return;
+    if(meu&&d.actorId===meu)return;   // a minha própria saída não é aviso para mim
+    const at=typeof d.at==='number'?d.at:(Number(d.at)||Date.parse(d.at)||0);
+    if(!(at>marca))return;
+    const quem=String(d.actorName||'').trim()||'Alguém';
+    const casa=String(d.houseName||'').trim()||propName(d.houseId)||'um imóvel';
+    const titulo=quem+(d.kind==='colab.sair'?' deixou de colaborar em ':' deixou de ser comproprietário de ')+casa+'.';
+    const abre=!!d.houseId&&servicoLigado('properties')&&!!prop(d.houseId);
+    out.push({tipo:'saida',id:String(d.id||''),kind:d.kind,titulo,sub:notifQuando(at),quem,at,
+      ir:abre?`propView('${jsq(d.houseId)}')`:'',toca:'camada'});
+  });
+  return out.sort((a,b)=>b.at-a.at);
+}
+
+/* A atividade do sino: a dos outros nas casas partilhadas (notifPartilha) e
+   quem saiu delas (notifSaidas), juntas e pela hora — é uma secção só no
+   «Pede atenção» e um cartão só no painel geral, com a mesma marca de leitura.
+   Recebe: desde (opcional) — como o notifPartilha.
+   Devolve: lista das linhas das duas, do mais recente, no máximo 40. */
+function notifAtividade(desde){
+  return notifPartilha(desde).concat(notifSaidas(desde)).sort((a,b)=>b.at-a.at).slice(0,40);
+}
+
+/* Quem fez o que uma linha da atividade diz, para as iniciais do avatar: o
+   quem das saídas, ou o nome à cabeça do sub da atividade partilhada
+   («Maria Costa · T2 Lisboa · …»).
+   Recebe: n — uma linha do notifAtividade.
+   Devolve: o nome (texto; '?' sem nenhum). */
+function notifQuem(n){
+  return (n&&n.quem)||String((n&&n.sub)||'').split(' · ')[0]||'?';
+}
+
 /* O que o sino conta: atrasados + atividade nova dos outros (um lote conta
-   uma vez) + pedidos à espera de resposta (de partilha e para entrar num
-   grupo meu). O que está só «por confirmar» ou é prazo
+   uma vez, e cada saída de um colaborador ou comproprietário conta uma) +
+   pedidos à espera de resposta (de partilha e para entrar num grupo meu). O
+   que está só «por confirmar» ou é prazo
    informativo não incha o número — está no modal, mas o crachá é para o que
    muda decisões.
    Devolve: o número para o crachá do sino (inteiro). */
 function notifConta(){
-  return (servicoLigado('recurring')?recLate().length:0)+notifPartilha().length+notifPedidos().length;
+  return (servicoLigado('recurring')?recLate().length:0)+notifAtividade().length+notifPedidos().length;
 }
 
 /* O sino do cabeçalho da vista geral, com o crachá quando há novidades. O
@@ -188,7 +267,7 @@ function atencaoCorpo(){
   const rec=servicoLigado('recurring');
   const conf=(rec?recActive():[]).slice().sort((a,b)=>(servicoLigado('recurring')&&recIsLate(b)?1:0)-(servicoLigado('recurring')&&recIsLate(a)?1:0));
   const prazos=prazosAtivos();
-  const partilha=notifPartilha(),pedidos=notifPedidos();
+  const partilha=notifAtividade(),pedidos=notifPedidos();
   const f=_atencaoFiltro,ve=k=>!f||f===k;
   const chip=(k,rot,n)=>`<button type="button" class="chip${f===k?' on':''}" aria-pressed="${f===k}" data-toca="vista" data-click="notifModal('${k}')">${rot}${n!=null?' <span class="n">'+n+'</span>':''}</button>`;
   const chips=`<div class="chips-fila atencao-chips">${chip('','Tudo')}${chip('confirmar','Por confirmar',conf.length)}${chip('prazos','Prazos',prazos.length)}${chip('pedidos','Pedidos',pedidos.length)}</div>`;
@@ -237,7 +316,14 @@ function atencaoCorpo(){
     const dentro=`<div class="atencao-txt"><p class="title">${esc(p.titulo)}</p>${p.sub?'<p class="small">'+esc(p.sub)+'</p>':''}</div><span class="badge ${pzSelo(p)}">${pzQuando(p)}</span>`;
     return p.abrir?`<button type="button" class="atencao-linha tap" data-toca="camada" data-click="closeModal();${p.abrir}">${dentro}</button>`:`<div class="atencao-linha">${dentro}</div>`;
   };
-  const atividade=n=>`<button type="button" class="atencao-linha tap" data-toca="ecra" data-click="closeModal();${n.ir}"><span class="avatar">${esc(initials(n.sub.split(' · ')[0]||'?'))}</span><div class="atencao-txt"><p class="title">${esc(n.titulo)}</p><p class="small">${esc(n.sub)}</p></div></button>`;
+  /* uma linha da atividade: as iniciais de quem, o que fez e quando; leva ao
+     sítio dela (o separador, ou a ficha do imóvel de onde alguém saiu). Uma
+     saída de um imóvel que já não está na base não leva a lado nenhum, e por
+     isso é uma linha e não um botão, como o prazo sem destino */
+  const atividade=n=>{
+    const dentro=`<span class="avatar" aria-hidden="true">${esc(initials(notifQuem(n)))}</span><div class="atencao-txt"><p class="title">${esc(n.titulo)}</p><p class="small">${esc(n.sub)}</p></div>`;
+    return n.ir?`<button type="button" class="atencao-linha tap" data-toca="${n.toca||'ecra'}" data-click="closeModal();${n.ir}">${dentro}</button>`:`<div class="atencao-linha">${dentro}</div>`;
+  };
   const total=conf.reduce((s,r)=>s+(Number((r.tx||{}).amount)||0),0),nl=servicoLigado('recurring')?conf.filter(recIsLate).length:0;
   const partes=[];
   if(ve('pedidos')&&pedidos.length)partes.push(cab('Pedidos por responder',String(pedidos.length))+pedidos.map(pedido).join(''));
