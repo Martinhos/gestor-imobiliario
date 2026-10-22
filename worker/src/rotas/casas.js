@@ -1,7 +1,10 @@
 // Casas, quotas, registos de cada casa e dados globais do utilizador.
 import { json, err, body, now, badId } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
-import { participantsOf, acessoACasa, redistribuirQuotas, avisoDeSaida } from '../lib/acesso.js';
+import {
+  participantsOf, acessoACasa, redistribuirQuotas, avisoDeSaida,
+  gravarCasa, comCasaFresca, casaMudou, FRASE_CASA_MUDOU,
+} from '../lib/acesso.js';
 import { servicosDesligados, casaDesligada, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
 import { prepararEscritas, aplicarOp } from '../lib/escritas.js';
 import { auditar } from '../lib/auditoria.js';
@@ -69,11 +72,32 @@ async function sairComoColaborador(env, me, houseId, ownerId, houseName) {
    recebe um aviso 'casa.sair'. Os saldos e o IRS seguem as quotas novas.
    Uma casa com o JSON estragado não se reescreve (perdia-se o resto dela):
    a pessoa sai na mesma, e as quotas ficam por acertar numa proposta.
+   Duas saídas ao mesmo tempo (ou uma gravação da ficha a meio) não se
+   esmagam: a casa grava-se por cima da revisão lida (acesso.js:gravarCasa),
+   e quem chegar em segundo relê tudo — os participantes e as quotas já sem
+   o primeiro — e refaz as contas (acesso.js:comCasaFresca).
    Recebe: env — o ambiente do worker; me — quem sai (da sessão); houseId —
-   a casa; ownerId — o criador; casa — { name, data } lidos antes de
-   escrever (data null quando o JSON não se lê).
-   Devolve: promessa da Response { ok, como: 'comproprietario', ownerShares }. */
-async function sairComoComproprietario(env, me, houseId, ownerId, casa) {
+   a casa; ownerId — o criador.
+   Devolve: promessa da Response { ok, como: 'comproprietario', ownerShares },
+   ou o 409 de FRASE_CASA_MUDOU à terceira recusa seguida. */
+async function sairComoComproprietario(env, me, houseId, ownerId) {
+  let r;
+  try { r = await comCasaFresca(() => sairDaCasaUmaVez(env, me, houseId, ownerId)); }
+  catch (e) { if (casaMudou(e)) return err(409, FRASE_CASA_MUDOU); throw e; }
+  await auditar(env, quemSou(me), 'casa.sair', houseId,
+    ownerId + (r.porGrupo ? ' · grupo' : '') + ' · ' + (r.quotas ? JSON.stringify(r.quotas) : 'partes iguais'));
+  return json({ ok: true, como: 'comproprietario', ownerShares: r.quotas });
+}
+
+/* Uma passagem da saída do comproprietário (sairComoComproprietario, que a
+   repete quando outra escrita mudou a casa): lê a casa e os participantes,
+   conta as quotas e grava tudo num lote.
+   Recebe: env, me, houseId, ownerId — os de sairComoComproprietario.
+   Devolve: promessa de { quotas, porGrupo } — o ownerShares novo (ou null)
+   e se a casa chegava por um grupo. */
+async function sairDaCasaUmaVez(env, me, houseId, ownerId) {
+  // o nome e as quotas leem-se ANTES de qualquer escrita: o aviso leva o nome
+  const casa = await lerCasa(env, houseId);
   const parts = (await participantsOf(env, houseId)) || [ownerId];
   const ficam = parts.filter((u) => u !== me.id);
   const porGrupo = await env.DB.prepare(
@@ -104,15 +128,64 @@ async function sairComoComproprietario(env, me, houseId, ownerId, casa) {
     colabOrfaos(env, me.id, ownerId),
     env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(houseId),
   );
-  if (data) {
-    stmts.push(env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
-      .bind(JSON.stringify(data), t, houseId));
-  }
+  // a casa primeiro: se outra escrita a mudou, a recusa desfaz o lote inteiro
+  if (data) stmts.unshift(gravarCasa(env, houseId, casa.rev, { data: JSON.stringify(data) }, t));
   ficam.forEach((u) => stmts.push(avisoDeSaida(env, u, 'casa.sair', houseId, casa.name, me, t)));
   await env.DB.batch(stmts);
-  await auditar(env, quemSou(me), 'casa.sair', houseId,
-    ownerId + (porGrupo ? ' · grupo' : '') + ' · ' + (quotas ? JSON.stringify(quotas) : 'partes iguais'));
-  return json({ ok: true, como: 'comproprietario', ownerShares: quotas });
+  return { quotas, porGrupo: !!porGrupo };
+}
+
+/* Uma passagem do aceitar de uma proposta de divisão (a rota repete-a
+   quando outra escrita passou à frente): relê a proposta e os participantes,
+   junta a minha aprovação e, com todos, aplica as quotas à casa. Duas
+   aprovações ao mesmo tempo não se perdem: a aprovação só se grava se a
+   proposta ainda estiver como se leu, e a casa por cima da revisão lida
+   (acesso.js:gravarCasa) — senão, a recusa 'casa-mudou' faz repetir.
+   Recebe: env — o ambiente do worker; me — quem aprova (da sessão);
+   houseId — a casa.
+   Devolve: promessa da Response { ok, applied }, o 404 sem proposta ou o
+   409 de uma proposta ilegível. */
+async function aceitarPropostaUmaVez(env, me, houseId) {
+  const parts = (await participantsOf(env, houseId)) || [];
+  const row = await env.DB.prepare('SELECT * FROM share_proposals WHERE house_id = ?').bind(houseId).first();
+  if (!row) return err(404, 'Não há nenhuma proposta pendente para esta casa.');
+  // uma proposta com JSON estragado não se aplica nem derruba a rota: pede-se outra
+  let aprovadas = null, quotas = null;
+  try { aprovadas = JSON.parse(row.approvals); quotas = JSON.parse(row.shares); } catch (e) {}
+  if (!Array.isArray(aprovadas) || !quotas || typeof quotas !== 'object') {
+    return err(409, 'Esta proposta está ilegível — faz uma nova.');
+  }
+  const approvals = new Set(aprovadas);
+  approvals.add(me.id);
+  if (parts.every((u) => approvals.has(u))) {
+    const casa = await lerCasa(env, houseId);
+    const data = casa.data || {};
+    data.ownerShares = quotas;
+    data.ownerIds = parts;
+    await env.DB.batch([
+      gravarCasa(env, houseId, casa.rev, { data: JSON.stringify(data) }, now()),
+      env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ? AND created_at = ?').bind(houseId, row.created_at),
+    ]);
+    return json({ ok: true, applied: true });
+  }
+  const r = await env.DB.prepare(
+    'UPDATE share_proposals SET approvals = ? WHERE house_id = ? AND approvals = ? AND created_at = ?'
+  ).bind(JSON.stringify([...approvals]), houseId, row.approvals, row.created_at).run();
+  // outra aprovação (ou outra proposta) chegou entre ler e gravar: relê
+  if (!r.meta || !r.meta.changes) throw new Error('casa-mudou: a proposta mudou entretanto');
+  return json({ ok: true, applied: false });
+}
+
+/* Os dados de uma casa, para quem vai escrever por cima deles: o JSON lido
+   (null quando não se lê ou não é um objeto), o nome e a revisão.
+   Recebe: env — o ambiente do worker; houseId — a casa.
+   Devolve: promessa de { data, name, rev }. */
+async function lerCasa(env, houseId) {
+  const row = await env.DB.prepare('SELECT data, rev FROM houses WHERE id = ?').bind(houseId).first();
+  let data = null;
+  try { data = JSON.parse(row.data); } catch (e) {}
+  const legivel = !!data && typeof data === 'object' && !Array.isArray(data);
+  return { data: legivel ? data : null, name: legivel ? String(data.name || '') : '', rev: row ? row.rev : '' };
 }
 
 // A operação do /api/sync que uma rota REST de escrita é, ou nada.
@@ -197,14 +270,9 @@ export async function rotasCasas(c) {
     if (!acesso.ok) return err(404, 'Casa não encontrada.');
     if (acesso.owner) return err(400, 'Criaste este imóvel: para o tirar da tua lista, apaga-o.');
     if (acesso.collab && colabDesligado(desligados)) return err(403, FRASE_DESLIGADO('colaboradores'));
-    // o nome e as quotas leem-se ANTES de qualquer escrita: o aviso leva o nome
-    const row = await env.DB.prepare('SELECT data FROM houses WHERE id = ?').bind(houseId).first();
-    let data = null;
-    try { data = JSON.parse(row.data); } catch (e) {}
-    const legivel = !!data && typeof data === 'object' && !Array.isArray(data);
-    const casa = { data: legivel ? data : null, name: legivel ? String(data.name || '') : '' };
-    if (acesso.coowner) return sairComoComproprietario(env, me, houseId, acesso.ownerId, casa);
-    return sairComoColaborador(env, me, houseId, acesso.ownerId, casa.name);
+    if (acesso.coowner) return sairComoComproprietario(env, me, houseId, acesso.ownerId);
+    // o colaborador não mexe na casa: só o nome, para o aviso
+    return sairComoColaborador(env, me, houseId, acesso.ownerId, (await lerCasa(env, houseId)).name);
   }
 
   // ---- Divisão de percentagens (com confirmação dos comproprietários) -----
@@ -249,31 +317,8 @@ export async function rotasCasas(c) {
     if (!row) return err(404, 'Não há nenhuma proposta pendente para esta casa.');
 
     if (seg[4] === 'accept' && seg.length === 5) {
-      // uma proposta com JSON estragado não se aplica nem derruba a rota: pede-se outra
-      let aprovadas = null, quotas = null;
-      try { aprovadas = JSON.parse(row.approvals); quotas = JSON.parse(row.shares); } catch (e) {}
-      if (!Array.isArray(aprovadas) || !quotas || typeof quotas !== 'object') {
-        return err(409, 'Esta proposta está ilegível — faz uma nova.');
-      }
-      const approvals = new Set(aprovadas);
-      approvals.add(me.id);
-      if (parts.every((u) => approvals.has(u))) {
-        const house = await env.DB.prepare('SELECT data FROM houses WHERE id = ?').bind(houseId).first();
-        let data = {};
-        try { data = JSON.parse(house.data); } catch (e) {}
-        data.ownerShares = quotas;
-        data.ownerIds = parts;
-        await env.DB.batch([
-          env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
-            .bind(JSON.stringify(data), now(), houseId),
-          env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(houseId),
-        ]);
-        return json({ ok: true, applied: true });
-      }
-      await env.DB.prepare('UPDATE share_proposals SET approvals = ? WHERE house_id = ?')
-        .bind(JSON.stringify([...approvals]), houseId)
-        .run();
-      return json({ ok: true, applied: false });
+      try { return await comCasaFresca(() => aceitarPropostaUmaVez(env, me, houseId)); }
+      catch (e) { if (casaMudou(e)) return err(409, FRASE_CASA_MUDOU); throw e; }
     }
 
     if (seg[4] === 'reject' && seg.length === 5) {

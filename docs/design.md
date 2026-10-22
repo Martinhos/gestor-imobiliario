@@ -4275,6 +4275,24 @@ apaga-o.»); quem não tem acesso leva 404. É o grau que decide o caminho:
   os que ficam, e a proposta pendente da casa apaga-se. É a única escrita das
   quotas que não passa por uma proposta aceite.
 
+Duas escritas na mesma casa não se esmagam. Toda a escrita da app em
+`houses` passa por worker/src/lib/acesso.js:gravarCasa, que grava com uma
+revisão nova (`rev`) por cima da revisão que leu (`rev_base`). Se outra
+escrita mudou a casa entretanto, o trigger `houses_revisao` (migração 0020)
+recusa a gravação e desfaz o lote inteiro em que ela ia; quem escreve relê a
+casa, refaz as contas e tenta outra vez
+(worker/src/lib/acesso.js:comCasaFresca). À terceira recusa seguida, o
+pedido responde 409 com worker/src/lib/acesso.js:FRASE_CASA_MUDOU, sem ter
+mudado nada. Assim, dois comproprietários a sair ao mesmo tempo dão as quotas
+certas, e a ficha gravada a meio de uma saída não repõe a quota de quem saiu.
+A aprovação de uma proposta também só se grava se a proposta ainda estiver
+como se leu (worker/src/rotas/casas.js:aceitarPropostaUmaVez), e por isso
+duas aprovações ao mesmo tempo não se perdem. Aceitar o mesmo convite duas
+vezes já era seguro, porque o convite se gasta numa só instrução. Uma
+correção à mão na consola, que não mexa em `rev`, passa sem verificação; o
+testes/revisao-da-casa.test.js confere que nenhuma escrita do worker foge ao
+gravarCasa.
+
 A saída por grupo (worker/src/lib/acesso.js:SAIU_DA_CASA) entra em todas as
 consultas que dão casas por grupo: a compropriedade e os membros da casa, as
 casas do /api/state e as de cada grupo

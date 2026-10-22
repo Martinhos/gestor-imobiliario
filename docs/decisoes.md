@@ -50,6 +50,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-22 · Os Grupos nas Casas, a página Segurança e os títulos das secções sempre
 - 2026-10-22 · Os grupos selecionáveis, o novo grupo no + e as folhas que se arrastam para fechar
 - 2026-10-22 · Apagar um imóvel que não criei é sair dele
+- 2026-10-22 · Duas escritas na mesma casa não se esmagam
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2122,3 +2123,35 @@ mostra-os na atividade das casas partilhadas, com a mesma marca de leitura
 (notificacoes.js:notifSaidas). Ficam nessa secção e não numa à parte: o
 cloud/painel.js:pedidosNaPilha reconhece o cartão pelo título, e um segundo
 cartão partia a junção com os pedidos.
+
+## 2026-10-22 · Duas escritas na mesma casa não se esmagam
+
+O Martinho perguntou se, para dois comproprietários a sair do mesmo imóvel ao
+mesmo tempo (ou duas pessoas a aceitar o mesmo convite), fazia sentido uma
+fila resolvida item a item. A ideia de pôr em fila as escritas sobre o mesmo
+item estava certa, mas uma fila do Cloudflare (Queues) não era a ferramenta. É
+assíncrona: a resposta chegava antes de a saída acontecer, e a confirmação
+«Saíste de…» já não podia esperar por ela nem dizer o erro do servidor.
+Entrega a mesma mensagem mais de uma vez, e cada item tinha de poder correr
+duas vezes. E era mais uma peça para configurar e testar no dev e na
+produção. Quem serializa mesmo por imóvel no Cloudflare são os Durable
+Objects, um por casa: pesado demais para três escritas.
+
+O que se fez foi gravar só se ninguém tiver gravado entretanto. Os dados da
+casa são um JSON que se lê, se muda e se grava inteiro, e havia três sítios
+onde duas leituras ao mesmo tempo davam uma escrita perdida: a saída de um
+comproprietário, a aprovação de uma proposta, e a gravação da ficha pelo
+cliente, que a meio de uma saída repunha a quota de quem tinha saído.
+Medido: sem a verificação, os testes de cruzamento acabam com as quotas
+50/30/20 de volta (testes/revisao-da-casa.test.js). Cada escrita leva uma
+revisão nova e diz sobre que revisão escreveu, e um trigger da base recusa-a
+quando a casa já mudou (worker/src/lib/acesso.js:gravarCasa, migração 0020).
+Um trigger, e não uma condição em cada instrução: a recusa desfaz o lote
+inteiro, e as saídas, as partilhas e os avisos que iam com a casa também não
+ficam. A revisão é um id ao acaso e não um número que sobe, porque duas
+escritas sobre a mesma revisão escreviam o mesmo número seguinte e o trigger
+deixava passar as duas.
+
+Aceitar o mesmo convite duas vezes já estava resolvido: o convite gasta-se
+numa só instrução (`UPDATE … WHERE used_at IS NULL`), e só um dos dois
+pedidos o consegue gastar.

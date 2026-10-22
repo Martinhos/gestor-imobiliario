@@ -268,8 +268,9 @@ export async function planeadoAGravar(env, me, acesso, houseId, kind, recordId, 
 // Devolve: promessa de nada — o efeito é o lote de escritas na base.
 export async function apagarCasa(env, houseId, ownerId) {
   const t = now();
+  const casa = await env.DB.prepare('SELECT rev FROM houses WHERE id = ?').bind(houseId).first();
   const stmts = [
-    env.DB.prepare('UPDATE houses SET deleted = 1, updated_at = ? WHERE id = ?').bind(t, houseId),
+    gravarCasa(env, houseId, casa ? casa.rev : '', { deleted: 1 }, t),
     env.DB.prepare('UPDATE records SET deleted = 1, updated_at = ? WHERE house_id = ?').bind(t, houseId),
     env.DB.prepare('DELETE FROM shares WHERE house_id = ?').bind(houseId),
     env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(houseId),
@@ -318,6 +319,50 @@ export function preserveOwnership(existingDataStr, incoming) {
     }
   } catch (e) {}
   return incoming;
+}
+
+// A frase de quando outra escrita passou à frente vezes seguidas: o pedido
+// não fez nada, e tentar outra vez resolve.
+export const FRASE_CASA_MUDOU = 'Outra pessoa mexeu neste imóvel ao mesmo tempo. Tenta outra vez.';
+
+// Uma escrita da app numa casa (migração 0020): grava as colunas pedidas com
+// uma revisão nova, por cima da revisão que se leu. Se entretanto outra
+// escrita mudou a casa, o trigger houses_revisao recusa esta e o lote
+// inteiro em que vai desfaz-se — quem chama relê e tenta outra vez
+// (comCasaFresca). Todas as escritas de houses no worker passam por aqui.
+// Recebe: env — o ambiente do worker (a base D1); houseId — a casa; revLida
+// — a rev que se leu junto com os dados ('' numa casa ainda sem revisão);
+// campos — { data?, deleted? } (data já em texto); t — o instante.
+// Devolve: a instrução preparada, para correr sozinha ou entrar num lote.
+export function gravarCasa(env, houseId, revLida, campos, t) {
+  const sets = [], args = [];
+  if (campos.data !== undefined) { sets.push('data = ?'); args.push(campos.data); }
+  if (campos.deleted !== undefined) { sets.push('deleted = ?'); args.push(campos.deleted); }
+  return env.DB.prepare(
+    `UPDATE houses SET ${sets.join(', ')}, updated_at = ?, rev = ?, rev_base = ? WHERE id = ?`
+  ).bind(...args, t, crypto.randomUUID(), revLida == null ? '' : revLida, houseId);
+}
+
+// Se um erro é a recusa do trigger houses_revisao (outra escrita mudou a
+// casa depois de esta a ler).
+// Recebe: e — o erro apanhado.
+// Devolve: true quando é essa recusa.
+export function casaMudou(e) {
+  return /casa-mudou/.test(String((e && (e.message || e)) || ''));
+}
+
+// Corre uma escrita que lê uma casa e a grava com gravarCasa, e repete-a
+// do princípio (a leitura incluída) quando outra escrita passou à frente.
+// Às três recusas seguidas desiste e deixa sair o erro: quem chama responde
+// com FRASE_CASA_MUDOU (409).
+// Recebe: fazer — função assíncrona sem argumentos que lê, conta e grava;
+// vezes — quantas tentativas (3 por omissão).
+// Devolve: promessa do que fazer devolver.
+export async function comCasaFresca(fazer, vezes = 3) {
+  for (let i = 1; ; i++) {
+    try { return await fazer(); }
+    catch (e) { if (!casaMudou(e) || i >= vezes) throw e; }
+  }
 }
 
 // A quota de quem sai de uma casa, dividida pelos que ficam na proporção das
@@ -405,6 +450,17 @@ const ANEXO_DE_OUTRO = 'owner_id = ?1 AND house_id IN (SELECT id FROM houses WHE
 // Recebe: env — o ambiente do worker (a base D1 e o R2); uid — o id da conta a apagar.
 // Devolve: nada — o efeito é o lote de escritas na base, lápide incluída.
 export async function purgeAccount(env, uid) {
+  // as quotas das casas dos outros leem-se e gravam-se: se outra escrita
+  // mudar uma delas a meio, o lote desfaz-se e a purga corre outra vez
+  return comCasaFresca(() => purgarConta(env, uid));
+}
+
+// Uma passagem da purga de uma conta (purgeAccount, que a repete quando uma
+// casa dos outros mudou entretanto). Correr duas vezes é seguro: o R2 sai
+// antes e o lote é tudo ou nada.
+// Recebe: env — o ambiente do worker (a base D1 e o R2); uid — o id da conta a apagar.
+// Devolve: nada — o efeito é o lote de escritas na base, lápide incluída.
+async function purgarConta(env, uid) {
     // casas de outros onde este utilizador constava como comproprietário —
     // por uma conexão aceite ou por um grupo partilhado vivo
     const foreign = (
@@ -425,7 +481,7 @@ export async function purgeAccount(env, uid) {
 
     const stmts = [];
     for (const row of foreign) {
-      const h = await env.DB.prepare('SELECT data FROM houses WHERE id = ?').bind(row.house_id).first();
+      const h = await env.DB.prepare('SELECT data, rev FROM houses WHERE id = ?').bind(row.house_id).first();
       if (!h) continue;
       let data;
       try { data = JSON.parse(h.data); } catch (e) { continue; }
@@ -436,8 +492,7 @@ export async function purgeAccount(env, uid) {
         touched = true;
       }
       if (touched) {
-        stmts.push(env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
-          .bind(JSON.stringify(data), now(), row.house_id));
+        stmts.push(gravarCasa(env, row.house_id, h.rev, { data: JSON.stringify(data) }, now()));
       }
     }
 

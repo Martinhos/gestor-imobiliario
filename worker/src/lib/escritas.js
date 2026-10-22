@@ -10,7 +10,10 @@
    errado. Agora uma regra de escrita entra aqui, e vale para os dois. */
 
 import { linkFiles, regraDosAnexos } from '../files.js';
-import { acessoACasa, regraDoRegisto, planeadoAGravar, apagarCasa, preserveOwnership } from './acesso.js';
+import {
+  acessoACasa, regraDoRegisto, planeadoAGravar, apagarCasa, preserveOwnership,
+  gravarCasa, comCasaFresca, casaMudou, FRASE_CASA_MUDOU,
+} from './acesso.js';
 import { fundirCasa, fraseRecusa } from './permissoes.js';
 import {
   servicosDesligados, kindsDesligados, userKindsDesligados, casaDesligada, servicoDoKind, FRASE_DESLIGADO,
@@ -59,9 +62,19 @@ function desligado(id) {
 // false a apagar; data — a ficha já limpa (só no put).
 // Devolve: promessa do resultado da operação.
 async function escreverCasa(e, houseId, put, data) {
-  const { env, me } = e;
   if (e.semCasas) return desligado('properties');
-  const existing = await env.DB.prepare('SELECT owner_id, deleted, data FROM houses WHERE id = ?')
+  // lê e grava por cima da revisão lida (acesso.js:gravarCasa); outra escrita
+  // a meio repete tudo, e à terceira desiste com um 409 que não mexeu em nada
+  try { return await comCasaFresca(() => escreverCasaUmaVez(e, houseId, put, data)); }
+  catch (erro) { if (casaMudou(erro)) return { ok: false, status: 409, error: FRASE_CASA_MUDOU }; throw erro; }
+}
+
+// Uma passagem de escreverCasa: lê a casa (com a revisão) e grava.
+// Recebe: e, houseId, put, data — os de escreverCasa.
+// Devolve: promessa do resultado da operação.
+async function escreverCasaUmaVez(e, houseId, put, data) {
+  const { env, me } = e;
+  const existing = await env.DB.prepare('SELECT owner_id, deleted, data, rev FROM houses WHERE id = ?')
     .bind(houseId).first();
   if (!put) {
     if (!existing || existing.deleted) return { ok: true, gone: true };
@@ -78,15 +91,13 @@ async function escreverCasa(e, houseId, put, data) {
       if (!a.collab.perms.has('house.edit')) return { ok: false, status: 403, error: fraseRecusa('casa') };
       dados = fundirCasa(existing.data, data, a.collab.perms);
     }
-    await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ? WHERE id = ?')
-      .bind(JSON.stringify(preserveOwnership(existing.data, dados)), now(), houseId).run();
+    await gravarCasa(env, houseId, existing.rev, { data: JSON.stringify(preserveOwnership(existing.data, dados)) }, now()).run();
     await linkFiles(env, houseId, dados, 'house', houseId, me.id, !!a.collab);
     return { ok: true };
   }
   if (existing) {
     if (existing.owner_id !== me.id) return { ok: false, status: 403 };
-    await env.DB.prepare('UPDATE houses SET data = ?, updated_at = ?, deleted = 0 WHERE id = ?')
-      .bind(JSON.stringify(preserveOwnership('', data)), now(), houseId).run();
+    await gravarCasa(env, houseId, existing.rev, { data: JSON.stringify(preserveOwnership('', data)), deleted: 0 }, now()).run();
   } else {
     await env.DB.prepare('INSERT INTO houses (id, owner_id, data, updated_at, deleted) VALUES (?, ?, ?, ?, 0)')
       .bind(houseId, me.id, JSON.stringify(preserveOwnership('', data)), now()).run();
