@@ -132,6 +132,7 @@ var AVISOS = [
           'Os Grupos passaram para as Casas, a seguir aos Imóveis, e saíram das Definições. O cartão da tua conta, no fundo do menu, abre o teu perfil.',
           '«Conta e partilha» passou a «Segurança», só com a palavra-passe, as sessões e o apagar da conta. O teu id está agora em Pessoas › Proprietários, ao lado do campo para ligar.',
           'As secções «Os meus…» das listas aparecem sempre com o título, mesmo quando só há casas tuas.',
+          'Num grupo de proprietários, o teu nome leva «(eu)» no fim — ao escolher quem adicionar, nos membros do grupo e no cartão dele.',
         ],
       },
     ],

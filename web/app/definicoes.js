@@ -605,11 +605,12 @@ function vCats(forcar){
 /* ===== grupos ===== */
 const GKIND={prop:{label:'Imóveis',icon:'building',one:'imóvel'},owner:{label:'Proprietários',icon:'crown',one:'proprietário'},contract:{label:'Contratos',icon:'contract',one:'contrato'}};
 // Nome legível de um membro de grupo a partir do tipo e do id; '' se já não existir.
+// Num proprietário, o meu leva « (eu)» (acessos.js:rotuloDoDono): nos chips e no cartão.
 // Recebe: kind — o tipo do grupo: 'prop', 'owner' ou 'contract'; id — o id do membro.
 // Devolve: o nome (texto); '' se o membro já não existir.
 function gMemberName(kind,id){
   if(kind==='prop')return propName(id);
-  if(kind==='owner')return (owner(id)||{}).name||'';
+  if(kind==='owner')return rotuloDoDono(owner(id),db.owners.length);
   const c=contract(id);return c?ctName(c):'';
 }
 /* A nuvem dos grupos partilhados está carregada? A base não conhece a nuvem
@@ -767,15 +768,17 @@ function groupBody(){
 // Devolve: nada — redesenha o corpo do modal.
 function repaintGroup(){const b=modalBodyEl();if(b)b.innerHTML=groupBody()}
 /* Seletor com os candidatos que ainda não estão no grupo (imóveis,
-   proprietários ou contratos, conforme o tipo). Recolhe primeiro o nome já
-   escrito para gForm, para o repinte não o perder.
+   proprietários ou contratos, conforme o tipo). Entre os proprietários, o meu
+   leva « (eu)» (acessos.js:rotuloDoDono) e o avatar fica com as iniciais do
+   nome. Recolhe primeiro o nome já escrito para gForm, para o repinte não o
+   perder.
    Devolve: nada — ao escolher, junta o membro a gForm e repinta o modal. */
 function addGroupMember(){
   gForm.name=val('g_name');
   const g=gForm;
   let cands=[];
   if(g.kind==='prop')cands=db.properties.filter(p=>g.ids.indexOf(p.id)<0).map(p=>({v:p.id,label:p.name,icon:'building'}));
-  else if(g.kind==='owner')cands=db.owners.filter(o=>g.ids.indexOf(o.id)<0).map(o=>({v:o.id,label:o.name,avatar:true}));
+  else if(g.kind==='owner')cands=db.owners.filter(o=>g.ids.indexOf(o.id)<0).map(o=>({v:o.id,label:rotuloDoDono(o,db.owners.length),nome:o.name,avatar:true}));
   else cands=db.contracts.filter(c=>g.ids.indexOf(c.id)<0).map(c=>({v:c.id,label:ctName(c),sub:propName(c.propertyId),icon:'contract'}));
   pickModal('Adicionar ao grupo',cands,o=>{g.ids.push(o.v);closeModal();repaintGroup()});
 }

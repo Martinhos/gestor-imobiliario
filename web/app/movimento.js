@@ -380,16 +380,6 @@ function txView(id){
   });
 }
 
-/* O nome de um proprietário nas escolhas do formulário: com mais do que um à
-   escolha, o meu leva « (eu)» no fim — numa lista de dois nomes iguais aos da
-   ficha, quem está com sessão não tinha como saber qual era o seu. Sem sessão
-   (meuId vazio) ninguém é «eu», e com um só proprietário não há que distinguir.
-   Recebe: o — o proprietário (ficha com id e name); n — quantos há à escolha.
-   Devolve: o nome (texto, por escapar), com « (eu)» quando é o meu e n > 1. */
-function rotuloDoDono(o,n){
-  const nome=(o&&o.name)||'',eu=meuId();
-  return n>1&&eu&&o&&o.id===eu?nome+' (eu)':nome;
-}
 /* As opções do seletor do imóvel no formulário do movimento. Quem pode
    registar sem imóvel (podeSemImovel: quem é dono de algum) tem à cabeça
    «Sem imóvel» ('') — num acerto, «Todos os imóveis», que é o que um acerto

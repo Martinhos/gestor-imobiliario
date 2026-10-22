@@ -1035,7 +1035,7 @@ a jornada — a fita dos passos com o atual em destaque
 (painel-geral.js:vDashboard). O primeiro movimento traz os números.
 
 **O resto, mais pequeno.** No formulário do movimento, com mais do que um
-proprietário à escolha, o meu nome leva «(eu)» (movimento.js:rotuloDoDono).
+proprietário à escolha, o meu nome leva «(eu)» (acessos.js:rotuloDoDono).
 O imóvel de um movimento tem duas opções que antes eram uma: «Sem imóvel»,
 que não é de imóvel nenhum e conta só nos totais da vista geral, e «Todos os
 imóveis», que se parte pelos imóveis que eu tinha na data do movimento

@@ -945,7 +945,9 @@ function falhaCampo(id,msg){
 }
 /* escolher de uma lista, no estilo da app
    Recebe: title — o texto do título; options — lista de opções {label,sub,icon,
-   avatar,…} (sub, icon e avatar são opcionais; a opção inteira volta no onPick);
+   avatar,nome,…} (sub, icon e avatar são opcionais; nome, quando o label leva
+   mais do que o nome — « (eu)» —, dá as iniciais do avatar; a opção inteira
+   volta no onPick);
    onPick — função chamada com a opção escolhida; extra (opcional) — HTML
    acrescentado por baixo da lista.
    Devolve: nada — abre a janela de escolha. */
@@ -953,7 +955,7 @@ function pickModal(title,options,onPick,extra){
   openModal(title,`<div class="form">
     ${options.length?`<div class="list u-g-7px">${options.map((o,i)=>
       `<button type="button" class="card tap u-p-12px-14px u-d-flex u-ai-center u-g-11px" data-click="_pick(${i})">
-        ${o.icon?`<span class="ic u-w-34px u-h-34px u-br-10px u-d-grid u-pi-center u-fx-0-0-34px ${o.icon==='trash'?'comp-pick-ic-destroi':'comp-pick-ic-normal'}">${ic(o.icon,18)}</span>`:o.avatar?`<span class="avatar">${esc(initials(o.label))}</span>`:''}
+        ${o.icon?`<span class="ic u-w-34px u-h-34px u-br-10px u-d-grid u-pi-center u-fx-0-0-34px ${o.icon==='trash'?'comp-pick-ic-destroi':'comp-pick-ic-normal'}">${ic(o.icon,18)}</span>`:o.avatar?`<span class="avatar">${esc(initials(o.nome||o.label))}</span>`:''}
         <span class="u-fx-1 u-minw-0 u-ta-left"><b class="u-d-block u-fs-14px">${esc(o.label)}</b>
         ${o.sub?`<span class="small">${esc(o.sub)}</span>`:''}</span></button>`).join('')}</div>`
       :`<div class="hint">Não há nada para escolher.</div>`}

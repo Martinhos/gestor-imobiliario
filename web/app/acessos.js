@@ -65,6 +65,18 @@ function temPerm(perms,perm){return fechoPerms(perms).has(perm)}
 // O id do utilizador com sessão; vazio sem sessão.
 // Devolve: o id (texto), ou '' sem sessão.
 function meuId(){return (window.CW&&CW.user&&CW.user.id)||''}
+/* O nome de um proprietário onde se escolhe entre vários: com mais do que um
+   à escolha, o meu leva « (eu)» no fim — numa lista de nomes iguais aos da
+   ficha, quem está com sessão não tinha como saber qual era o seu. Sem sessão
+   (meuId vazio) ninguém é «eu», e com um só proprietário não há que distinguir.
+   Serve o formulário do movimento e os grupos de proprietários, por isso vive
+   na base.
+   Recebe: o — o proprietário (ficha com id e name); n — quantos há à escolha.
+   Devolve: o nome (texto, por escapar), com « (eu)» quando é o meu e n > 1. */
+function rotuloDoDono(o,n){
+  const nome=(o&&o.name)||'',eu=meuId();
+  return n>1&&eu&&o&&o.id===eu?nome+' (eu)':nome;
+}
 /* O meu cargo num imóvel. Sem sessão, sem CW.cargos ou num imóvel só local,
    sou o dono (e o criador): é o comportamento de sempre.
    Recebe: pid — o id do imóvel.

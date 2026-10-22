@@ -2965,6 +2965,12 @@ ligar-se a outra conta, por baixo, sem botão de criar. Sem o serviço que alime
 contacto. No computador a linha é uma grelha com mais uma coluna, o
 contacto (estilos.css:.pes-contacto).
 
+Onde se escolhe entre proprietários, o meu nome leva « (eu)» no fim
+(acessos.js:rotuloDoDono): no formulário do movimento e nos grupos de
+proprietários — no seletor de adicionar, nos chips dos membros e no resumo
+do cartão (definicoes.js:gMemberName). Com um só proprietário, ou sem
+sessão, não há que distinguir. O avatar continua com as iniciais do nome.
+
 Os selos dizem o que pede atenção, e só o que a app sabe: «Renda em atraso»
 a vermelho, pelo planeado da renda (pessoas.js:pesRenda — com os Planeados
 ligados e o estado do servidor já chegado), e o cartão de cidadão a caducar
