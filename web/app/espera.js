@@ -31,7 +31,9 @@ function esperaDoServidor(){
     !(db.contracts||[]).length&&!(db.tenants||[]).length&&
     !(db.owners||[]).length&&!(db.visits||[]).length;
   if(sabemosOEstado()||!nada)return '';
-  return `<div class="empty"><b>À espera do servidor</b>Os dados desta conta ainda não chegaram a este aparelho. Aparecem assim que a app sincronizar.</div>`;
+  /* a roda diz que alguma coisa está a acontecer; a frase diz o quê e porque
+     ainda não se mostram contagens (o canvas, Sistema › Vazios) */
+  return `<div class="espera" role="status"><span class="roda" aria-hidden="true"></span><p class="u-m-0"><b>À espera do servidor.</b> Os dados desta conta ainda não chegaram a este aparelho. Aparecem assim que a app sincronizar.</p></div>`;
 }
 /* Este ambiente pode carregar dados de exemplo?
 

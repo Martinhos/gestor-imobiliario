@@ -9,7 +9,7 @@ import { webcrypto } from 'node:crypto';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-import { rotaTeste, ligacaoTeste, eContaDeTeste } from '../worker/src/teste.js';
+import { rotaTeste, ligacaoTeste, eContaDeTeste, CSS_TESTE } from '../worker/src/teste.js';
 import { handleApi } from '../worker/src/api.js';
 import { createSession, hashPassword } from '../worker/src/auth.js';
 import { TERMS_VERSION } from '../worker/src/lib/http.js';
@@ -101,6 +101,44 @@ describe('a porta /t/entrar', () => {
     assert.equal(todas.filter((u) => !u.deleted_at).length, 1);
     assert.ok(todas.find((u) => u.id === primeira.id).deleted_at, 'a antiga ficou lápide');
     assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM houses').first()).n, 0, 'a casa foi com ela');
+  });
+});
+
+describe('as páginas de erro da porta', () => {
+  /* Quem abre a porta é uma pessoa num browser. A página veste-se como as
+     outras páginas públicas do worker: a marca da app, as letras da casa, o
+     tema de quem lê — e nada de emojis a fazer de ícone. */
+  test('levam a marca, um ícone de traço e a folha à parte, e ficam fora dos motores de busca', async () => {
+    const r = await abrir(ambienteDoTeste({ ENV_NAME: undefined }), false);
+    const html = await r.text();
+    assert.match(html, /<html lang="pt-PT"><head>/);
+    assert.match(html, /<meta name="robots" content="noindex,nofollow">/, 'uma porta de testes não se indexa');
+    assert.match(html, /<span class="mark" aria-hidden="true"><\/span><span class="nome">Rendorium<\/span>/, 'a marca da app');
+    assert.match(html, /<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="[^"]+"\/><\/svg>/, 'o ícone é um traço');
+    assert.ok(!/\p{Extended_Pictographic}/u.test(html), 'e não um emoji');
+    assert.match(html, /<link rel="stylesheet" href="\/paginas\/teste\.css">/);
+  });
+
+  test('a folha traz as letras, os dois temas e a altura que acompanha o ecrã', () => {
+    assert.match(CSS_TESTE, /@font-face\{font-family:'Geist';src:url\(\/fonts\/geist\.woff2\)/);
+    assert.match(CSS_TESTE, /@font-face\{font-family:'Bricolage Grotesque';src:url\(\/fonts\/bricolage-grotesque\.woff2\)/);
+    assert.match(CSS_TESTE, /:root\{[^}]*--bg:#F2F3F6;/, 'o fundo claro da app');
+    assert.match(CSS_TESTE, /@media\(prefers-color-scheme:dark\)\{:root\{[^}]*--bg:#0B111E;/, 'e o escuro');
+    assert.match(CSS_TESTE, /min-height:100vh;min-height:100dvh/, 'a altura em vh com o par em dvh');
+  });
+
+  /* O quadrado do ícone diz o peso: cinzento quando a porta não existe,
+     âmbar quando é a ligação que está mal, vermelho quando o ambiente falha. */
+  test('o quadrado do ícone diz o peso do erro', async () => {
+    const icone = async (r) => /<div class="(icone[^"]*)">/.exec(await r.text())[1];
+    assert.equal(await icone(await abrir(ambienteDoTeste({ ENV_NAME: undefined }), false)), 'icone', 'produção: 404, sem alarme');
+    const ma = await abrir(ambienteDoTeste(), false, (l) => l.replace(/sig=(.)/, (m, c) => 'sig=' + (c === 'f' ? '0' : 'f')));
+    assert.equal(ma.status, 403, 'controlo: a assinatura errada');
+    assert.equal(await icone(ma), 'icone aviso', 'a ligação está mal: âmbar');
+    const semChave = ambienteDoTeste({ DISCORD_BOT_TOKEN: undefined });
+    const r = await rotaTeste({ env: semChave, url: new URL('https://dev.x.pt/t/entrar'), request: new Request('https://dev.x.pt/t/entrar') });
+    assert.equal(r.status, 503, 'controlo: o ambiente sem chave');
+    assert.equal(await icone(r), 'icone perigo', 'o ambiente falha: vermelho');
   });
 });
 

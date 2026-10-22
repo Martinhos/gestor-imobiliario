@@ -22,7 +22,7 @@
 import { randomToken, sha256hex } from '../auth.js';
 import { auditar } from '../lib/auditoria.js';
 import { normalizarPerms } from '../lib/permissoes.js';
-import { canAccessHouse } from '../lib/acesso.js';
+import { canAccessHouse, avisoDeSaida, limparSaida } from '../lib/acesso.js';
 import { recordReport } from '../lib/relatos.js';
 import { json, err, body, now, badId, clientIp, idsDeCasas } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
@@ -490,10 +490,23 @@ export async function rotasColaboradores(c) {
     if (!row || (row.owner_id !== me.id && row.user_id !== me.id)) return err(404, 'Colaborador não encontrado.');
 
     if (method === 'DELETE') {
-      await env.DB.batch([
+      const stmts = [
         env.DB.prepare('DELETE FROM collaborator_houses WHERE collaborator_id = ?').bind(id),
         env.DB.prepare('DELETE FROM collaborators WHERE id = ?').bind(id),
-      ]);
+      ];
+      /* o próprio a deixar de colaborar: o dono recebe um aviso por casa
+         que ele tinha, com os nomes lidos ANTES de as linhas saírem (é o
+         mesmo 'colab.sair' de sair de uma casa só, rotas/casas.js) */
+      if (row.user_id === me.id && row.owner_id !== me.id) {
+        const casas = (await env.DB.prepare(
+          `SELECT ch.house_id, h.data FROM collaborator_houses ch
+             JOIN houses h ON h.id = ch.house_id
+            WHERE ch.collaborator_id = ? AND h.deleted = 0 AND h.owner_id = ?`
+        ).bind(id, row.owner_id).all()).results;
+        const t = now();
+        casas.forEach((h) => stmts.push(avisoDeSaida(env, row.owner_id, 'colab.sair', h.house_id, nomeDaCasa(h.data), me, t)));
+      }
+      await env.DB.batch(stmts);
       if (row.owner_id === me.id) await auditar(env, eu, 'colab.remover', row.user_id, id);
       else await auditar(env, eu, 'colab.sair', row.owner_id, id);
       return json({ ok: true });
@@ -682,6 +695,9 @@ export async function rotasColaboradores(c) {
       stmts.push(env.DB.prepare(
         'INSERT OR IGNORE INTO shares (connection_id, owner_id, house_id) VALUES (?, ?, ?)'
       ).bind(conn.id, p.from_user, p.house_id));
+      // o criador voltou a partilhar a casa com quem aceita: se este tinha
+      // saído dela, a saída desfaz-se (a casa volta-lhe também pelos grupos)
+      stmts.push(limparSaida(env, p.house_id, p.to_user));
       stmts.push(env.DB.prepare("UPDATE share_requests SET status = 'accepted', decided_at = ? WHERE id = ?")
         .bind(now(), id));
       await env.DB.batch(stmts);

@@ -9,6 +9,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
 import { carregarServico, carregarTudo, limpar, igual } from './arnes.js';
 // as janelas numa pilha observável, sem repintar nem gravar; o toque longo devolve os rótulos
 import { janelasFalsas, menuDe } from './lib/dom.js';
@@ -76,7 +77,9 @@ describe('autonomia: os movimentos e os planeados rendem só com a base', () => 
        mesPt, que tem de viver nos movimentos e não nos planeados */
     assert.match(app.txMesHtml('2026-03'), /mar 2026/);
     for (const t of app.db.transactions) assert.match(app.txLinhaHtml(t, '2026-03'), new RegExp('data-lp="tx:' + t.id + '"'));
-    assert.match(app.txFilterBody(), /id="tx_q"/);
+    // a pesquisa vive na própria vista, sempre à vista; o painel tem o tipo em chips
+    assert.match(app.vTransactions(), /id="tx_q"/);
+    assert.match(app.txFilterBody(), /id="txKind"/);
     assert.equal(app.txFiltrosN(), 0);
     // a ficha
     const f = fichaDe(app, () => app.txView('T1'));
@@ -175,7 +178,7 @@ describe('desligado: com os outros serviços desligados nada rebenta e os atalho
     app.definirServicosDesligados([]);
     const todos = app.txFilterBody();
     assert.match(todos, /txPropF/);
-    assert.match(todos, /txOwnerF/);
+    assert.doesNotMatch(todos, /txOwnerF/, 'o filtro de proprietário saiu; o «Pago ou recebido por» fica');
     assert.match(todos, /txPaidF/);
   });
 
@@ -208,7 +211,9 @@ describe('desligado: com os outros serviços desligados nada rebenta e os atalho
     app.txModal('T1');
     assert.match(abertas[2].b, /id="t_ct"/);
     app.txModal({ kind: 'loan', propId: 'P2' });
-    assert.match(abertas[3].b, /Finanças → Créditos/);
+    // o grupo da navegação chama-se «Dinheiro»: já não há menu «Finanças»
+    assert.match(abertas[3].b, /Dinheiro → Créditos/);
+    assert.doesNotMatch(abertas[3].b, /Finanças →/);
   });
 
   test('desligado: o toque longo de um movimento não traz opções de serviços desligados', () => {
@@ -278,5 +283,116 @@ describe('desligado: com os outros serviços desligados nada rebenta e os atalho
     app.definirServicosDesligados(['transactions']);
     assert.ok(!rotulos('prop', ['prop', 'P1']).includes('Registar despesa'));
     assert.ok(!rotulos('ct', ['ct', 'C1']).includes('Registar renda'));
+  });
+});
+
+describe('o formulário e a ficha do movimento dizem o mesmo que a lista', () => {
+  /* tudo carregado, com os dados da semente e os serviços todos ligados */
+  function comTudo() {
+    const app = carregarTudo();
+    semear(app);
+    app.definirServicosDesligados([]);
+    return app;
+  }
+
+  test('na ficha, o montante tem a cor da linha: a prestação roxa, a dívida em cobalto, nunca o âmbar dos avisos', () => {
+    const app = comTudo();
+    assert.match(app.txFicha('T2'), /<span>Montante<\/span><b><span class="prest">/, 'um pagamento de crédito');
+    assert.match(app.txFicha('T3'), /<span>Montante<\/span><b><span class="mov-div">/, 'uma dívida a terceiros');
+    assert.match(app.txFicha('T1'), /<span>Montante<\/span><b><span class="pos">/);
+    assert.match(app.txFicha('T4'), /<span>Montante<\/span><b><span class="neg">/);
+    for (const id of ['T1', 'T2', 'T3', 'T4']) assert.doesNotMatch(app.txFicha(id), /<span>Montante<\/span><b><span class="amber">/, id);
+  });
+
+  test('editar escreve o montante com vírgula e dois decimais, como o «Repor»; um novo fica vazio, com o exemplo', () => {
+    const app = comTudo();
+    app.db.transactions.push(app.normTx({ id: 'T5', kind: 'loan', label: 'Prestação', amount: 223.61, propertyId: 'P2', date: '2026-03-14' }));
+    const abertas = janelasFalsas(app, 'render', 'buildNav', 'save', 'toast');
+    const montante = (b) => (b.match(/<input id="t_amount"[^>]*value="([^"]*)"/) || [])[1];
+    app.txModal('T5');
+    assert.equal(montante(abertas[0].b), '223,61', 'e não «223.61»');
+    app.txModal('T1');
+    assert.equal(montante(abertas[1].b), '800,00');
+    app.txModal({ kind: 'expense', propId: 'P1' });
+    assert.equal(montante(abertas[2].b), '');
+    assert.equal(app.num('223,61'), 223.61, 'e o que o campo mostra lê-se de volta igual');
+  });
+
+  test('gravar vazio marca primeiro o montante, que é o primeiro campo, e só depois a descrição', () => {
+    const app = comTudo();
+    janelasFalsas(app, 'render', 'buildNav', 'save', 'toast');
+    app.txModal({ kind: 'expense', propId: 'P1' });
+    const vistos = [];
+    app.falhaCampo = (id, msg) => { vistos.push([id, msg]); };
+    const el = (id) => app.document.getElementById(id);
+    el('t_prop').value = 'P1'; el('t_label').value = ''; el('t_amount').value = '';
+    app.txGuardar(null);
+    el('t_amount').value = '80';
+    app.txGuardar(null);
+    assert.deepEqual(vistos, [['t_amount', 'Indica um montante.'], ['t_label', 'Escreve uma descrição.']]);
+    assert.equal(app.db.transactions.length, 4, 'nada se grava');
+  });
+
+  test('a dica da divisão abre com o modo numa frase sua, e a condição de quem pagou vem a seguir', () => {
+    const app = comTudo();
+    janelasFalsas(app, 'render', 'buildNav', 'save', 'toast');
+    app.txModal({ kind: 'expense', propId: 'P1' });
+    const ows = app.ownersOfProp(app.prop('P1')).map(app.owner);
+    const intro = () => (app.splitHint(ows).match(/^<div class="hint">([^<]*)<\/div>/) || [])[1];
+    assert.equal(intro(), 'Pela quota-parte de cada um. Só entra nas contas entre proprietários se indicares quem pagou ou recebeu.');
+    app.tForm.paidBy = 'O1';
+    assert.equal(intro(), 'Pela quota-parte de cada um.', 'com quem pagou, a frase do modo fica sozinha e com maiúscula');
+    app.tForm.split = { mode: 'equal', parts: {} };
+    assert.equal(intro(), 'O mesmo para cada proprietário.');
+    // a da divisão entre imóveis também
+    assert.equal(app.txFraseDoModo(app.PSPLIT_MODES, 'equal'), 'O mesmo para cada imóvel.');
+    assert.equal(app.txFraseDoModo(app.PSPLIT_MODES, 'nenhum'), '');
+  });
+
+  test('os textos apontam para os menus que existem: Dinheiro → Créditos e Dinheiro → Planeados', () => {
+    const app = comTudo();
+    const abertas = janelasFalsas(app, 'render', 'buildNav', 'save', 'toast');
+    app.txModal({ kind: 'loan', propId: 'P2' });
+    assert.match(abertas[0].b, /criar a hipoteca em Dinheiro → Créditos/);
+    let extra = '';
+    app.pickModal = (t, its, cb, x) => { extra = x || ''; };
+    app.useTemplateNew();
+    assert.match(extra, /Os modelos gerem-se em Dinheiro → Planeados\./);
+    assert.doesNotMatch(extra + abertas[0].b, /Finanças →/);
+  });
+
+  test('a fila de cada dono na divisão tem classe sua: a .mov-parte é a frase da parte na lista, a 13px como a linha curta', () => {
+    const app = comTudo();
+    janelasFalsas(app, 'render', 'buildNav', 'save', 'toast');
+    app.txModal({ kind: 'expense', propId: 'P1' });
+    app.tForm.amount = 320;
+    const dica = app.splitHint(app.ownersOfProp(app.prop('P1')).map(app.owner));
+    assert.equal((dica.match(/<div class="mov-pfila">/g) || []).length, 2, 'uma fila por dono');
+    assert.doesNotMatch(dica, /mov-parte\b/);
+    const css = readFileSync(new URL('../web/estilos.css', import.meta.url), 'utf8');
+    // nenhuma regra solta da .mov-parte (era flex a 14,5px, e a frase da lista crescia e cortava-se sem reticências)
+    assert.doesNotMatch(css, /(^|[},])\s*\.mov-parte\s*[{,]/m);
+    const daLista = (css.match(/\.mov-linha \.mov-parte\{([^}]*)\}/) || [])[1] || '';
+    assert.doesNotMatch(daLista, /display|font-size/);
+  });
+
+  test('apagar imóveis da seleção diz o que vai junto com o plural certo, sem «(s)», e o botão da barra diz «Apagar»', () => {
+    const app = comTudo();
+    assert.equal(app.selLVaoJunto(2, 5), 'Vão junto 2 contratos e 5 movimentos.');
+    assert.equal(app.selLVaoJunto(1, 0), 'Vai junto 1 contrato.');
+    assert.equal(app.selLVaoJunto(0, 1), 'Vai junto 1 movimento.');
+    assert.equal(app.selLVaoJunto(1, 1), 'Vão junto 1 contrato e 1 movimento.');
+    assert.equal(app.selLVaoJunto(0, 0), 'Sem contratos nem movimentos ligados.');
+    let conf = null;
+    app.confirmModal = (t, x) => { conf = { t, x }; };
+    app.CW.selL = { tipo: 'prop', ids: { P1: 1 } };
+    app.CW.selLApagar();
+    assert.equal(conf.t, 'Apagar 1 imóvel');
+    assert.equal(conf.x, 'Vão junto 1 contrato e 4 movimentos.');
+    app.CW.selL = { tipo: null, ids: {} };
+    const fonte = readFileSync(new URL('../web/cloud/selecao-listas.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(fonte, /\(s\)'/, 'nenhum plural com «(s)» nos textos');
+    assert.match(fonte, /data-click="CW\.selLApagar\(\)">' \+ ic\('trash', 15\) \+ ' Apagar<\/button>/);
+    assert.doesNotMatch(fonte, /btn\.style\.cssText/, 'o «Selecionar vários» veste uma classe');
   });
 });

@@ -104,7 +104,12 @@ const IRS_MAPA0={
 const blank={v:13,properties:[],owners:[],tenants:[],contracts:[],transactions:[],settlements:[],templates:[],recurring:[],groups:[],visits:[],
   settings:{growth:2,inflation:2,years:10,theme:'auto',capTarget:5,quota:100,payTax:true,stampPct:4,
             cats:JSON.parse(JSON.stringify(CATS0)),catsIn:JSON.parse(JSON.stringify(CATS_IN0)),tags:TAGS0.slice(),
-            irsMapa:JSON.parse(JSON.stringify(IRS_MAPA0))}};
+            irsMapa:JSON.parse(JSON.stringify(IRS_MAPA0)),
+            /* o que só o senhorio sabe e muda o Anexo F (fisco.js, «A tua situação»):
+               tributação conjunta, a letra de cada proprietário (A ou B), a dispensa
+               dos recibos eletrónicos (Modelo 44) e os outros rendimentos coletáveis
+               do agregado por ano, para simular o englobamento (normIrsDefs) */
+            irs:{conjunta:false,titulares:{},dispensaRecibos:false,outrosRendimentos:{}}}};
 
 /* id único para qualquer registo novo; onde não há crypto.randomUUID, serve data + aleatório
    Devolve: uma string única (UUID, ou 'id' + data + aleatório como recurso). */
@@ -191,6 +196,24 @@ function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:''
   o.id=idSeguro(o.id);o.houseId=idSeguro(o.houseId);
   o.pais=String(o.pais||'');o.retem=!!o.retem;
   o.files=(o.files||[]).map(normFile);return o}
+/* normaliza a lista de tarefas de um imóvel ou de um contrato (tarefas.js): as
+   secções pela ordem em que foram criadas, e as tarefas, cada uma presa a uma
+   secção ou a nenhuma (seccao vazia). Uma tarefa que aponte para uma secção que
+   já não existe passa para «sem secção» em vez de desaparecer; feitaEm é o dia
+   em que foi marcada como cumprida, e só fica numa tarefa cumprida.
+   Recebe: t — a lista em bruto ({seccoes, itens}, parcial, ou nada).
+   Devolve: um objeto novo {seccoes:[{id,nome}], itens:[{id,nome,seccao,feita,feitaEm}]}. */
+function normTarefas(t){
+  const o=t&&typeof t==='object'&&!Array.isArray(t)?t:{};
+  const seccoes=(Array.isArray(o.seccoes)?o.seccoes:[]).filter(x=>x&&typeof x==='object')
+    .map(x=>({id:idSeguro(x.id||uid()),nome:String(x.nome||'').trim()}));
+  const ids=seccoes.map(x=>x.id);
+  const itens=(Array.isArray(o.itens)?o.itens:[]).filter(x=>x&&typeof x==='object')
+    .map(x=>{const feita=!!x.feita,sec=idSeguro(x.seccao||'');
+      return {id:idSeguro(x.id||uid()),nome:String(x.nome||'').trim(),seccao:ids.indexOf(sec)>-1?sec:'',
+        feita:feita,feitaEm:feita&&/^\d{4}-\d{2}-\d{2}$/.test(String(x.feitaEm||''))?String(x.feitaEm):''}});
+  return {seccoes:seccoes,itens:itens};
+}
 /* normaliza um imóvel e migra o que mudou entre versões: equity passa a purchase, o crédito único
    vira lista de hipotecas, quartos em texto ganham id, e quotas de donos removidos são descartadas.
    Os campos fiscais (o que o Anexo F e o Modelo 2 pedem por imóvel): distrito, código da
@@ -200,6 +223,7 @@ function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:''
    As despesas fixas do imóvel, que criam planeados sozinhas (planeados.js:syncPropRecs):
    imi (€/ano), condominio (€/mês), seguro (€/ano) e seguroMes (1–12; 0 é o mês corrente
    quando o planeado nasce). Zero é «sem valor»: não há planeado.
+   As tarefas (tarefas.js) passam pelo normTarefas.
    Recebe: p — o imóvel em bruto, de qualquer versão dos dados (ou nada).
    Devolve: um objeto novo com o imóvel completo e já migrado. */
 function normProp(p){
@@ -229,6 +253,7 @@ function normProp(p){
   const osh=chavesSeguras(o.ownerShares),sh={};
   Object.keys(osh).forEach(k=>{const v=Number(osh[k]);if(o.ownerIds.indexOf(k)>-1&&isFinite(v)&&v>=0)sh[k]=v});
   o.ownerShares=sh;
+  o.tarefas=normTarefas(o.tarefas);
   return o;
 }
 /* normaliza o bloco fiscal de um contrato: o estado perante a AT (FISCO_ESTADOS — o vazio
@@ -236,10 +261,27 @@ function normProp(p){
    que a AT atribui ao contrato na entrega do Modelo 2, a finalidade, a data de celebração,
    se é renovável, as renovações (cada uma com id, início e fim — o quadro 4.2A do Anexo F
    pede as datas da última) e o motivo da cessação (que a AT pede ao comunicá-la).
+   E o que mexe na taxa: as comunicações de fevereiro já feitas ({'AAAA': 'AAAA-MM-DD'} —
+   a chave é o ano dos rendimentos, o valor o dia em que se comunicou no Portal; só anos
+   de quatro dígitos e datas que existem), se a renda passa os 150 % do limite do
+   concelho (CIRS art. 72.º n.º 23: true, false ou null — por indicar), a renda do
+   contrato anterior no mesmo imóvel (n.º 24: euros ≥ 0, 0 é «não se aplica») e a
+   isenção (programas de arrendamento acessível: '', 'paa', 'rsaa', 'pma' ou 'pmae' — os
+   detalhes de cada uma vivem na versão do ano, irs-AAAA.js:isencoes).
    Recebe: f — o bloco em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos do bloco preenchidos. */
 function normFisco(f){
-  const o=Object.assign({estado:'',numero:'',finalidade:'',celebracao:'',renovavel:null,renovacoes:[],cessacaoMotivo:''},f||{});
+  const o=Object.assign({estado:'',numero:'',finalidade:'',celebracao:'',renovavel:null,renovacoes:[],cessacaoMotivo:'',
+    comunicacoes:{},rendaAcimaDoLimite:null,rendaAnterior:0,isencao:''},f||{});
+  /* uma data que existe no calendário: 2026-02-30 não passa */
+  const dataBoa=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s||''));if(!m)return false;
+    const d=new Date(Number(m[1]),Number(m[2])-1,Number(m[3]));return d.getFullYear()===Number(m[1])&&d.getMonth()===Number(m[2])-1&&d.getDate()===Number(m[3])};
+  const com={},cIn=o.comunicacoes&&typeof o.comunicacoes==='object'&&!Array.isArray(o.comunicacoes)?o.comunicacoes:{};
+  Object.keys(cIn).forEach(k=>{if(/^\d{4}$/.test(k)&&dataBoa(cIn[k]))com[k]=String(cIn[k])});
+  o.comunicacoes=com;
+  o.rendaAcimaDoLimite=(o.rendaAcimaDoLimite===true||o.rendaAcimaDoLimite===false)?o.rendaAcimaDoLimite:null;
+  const ra=Number(o.rendaAnterior);o.rendaAnterior=isFinite(ra)&&ra>0?ra:0;
+  if(['','paa','rsaa','pma','pmae'].indexOf(o.isencao)<0)o.isencao='';
   if(FISCO_ESTADOS.indexOf(o.estado)<0)o.estado='';
   if(!FISCO_FINALIDADES.some(x=>x[0]===o.finalidade))o.finalidade='';
   o.numero=String(o.numero||'').trim();
@@ -250,6 +292,7 @@ function normFisco(f){
   return o;
 }
 /* normaliza um contrato: omissões preenchidas; itens do inventário e chaves ganham id próprio;
+   as tarefas (tarefas.js) passam pelo normTarefas;
    o bloco fiscal passa por normFisco (um contrato antigo ganha-o vazio: «por indicar»)
    Recebe: c — o contrato em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos do contrato preenchidos. */
@@ -265,6 +308,7 @@ function normContract(c){
   o.files=(o.files||[]).map(normFile);
   o.inventory=(o.inventory||[]).map(i=>{const q=Object.assign({id:uid(),name:'',qty:1,state:'usado'},i);q.id=idSeguro(q.id);return q});
   o.keys=(o.keys||[]).map(i=>{const q=Object.assign({id:uid(),name:'',qty:1},i);q.id=idSeguro(q.id);return q});
+  o.tarefas=normTarefas(o.tarefas);
   return o;
 }
 /* Os modos de dividir um valor pelos imóveis (o psplit de um movimento de
@@ -342,10 +386,13 @@ function migrateSettlements(d){
 /* categorias novas que uma base antiga ainda não tem; e o mapa categoria → coluna do
    Anexo F, completado com as regras de origem que faltem sem pisar as que a pessoa mudou.
    O «repete» (as escolhas da página «Despesas que se repetem», que já não existe: a
-   projeção conta os planeados) sai de uma base que ainda o traga.
+   projeção conta os planeados) sai de uma base que ainda o traga. E o bloco irs
+   (normIrsDefs), que um settings antigo não tem — sempre um objeto novo, para
+   nunca partilhar o do blank (o Object.assign das bases copia a referência).
    Recebe: st — o objeto settings da base.
-   Devolve: nada — completa st.cats, st.catsIn, st.exclude e st.irsMapa no próprio objeto. */
+   Devolve: nada — completa st.cats, st.catsIn, st.exclude, st.irsMapa e st.irs no próprio objeto. */
 function fillCats(st){
+  st.irs=normIrsDefs(st.irs);
   st.exclude=(st.exclude&&typeof st.exclude==='object')?st.exclude:{};
   delete st.repete;
   /* uma cópia colada à mão pode trazer um texto onde há uma árvore: o «in» rebentava */
@@ -353,6 +400,20 @@ function fillCats(st){
   else['Crédito à habitação','Dívidas a terceiros'].forEach(k=>{if(!(k in st.cats))st.cats[k]=CATS0[k].slice()});
   if(!st.catsIn||typeof st.catsIn!=='object'||!Object.keys(st.catsIn).length)st.catsIn=JSON.parse(JSON.stringify(CATS_IN0));
   st.irsMapa=Object.assign({},IRS_MAPA0,(st.irsMapa&&typeof st.irsMapa==='object')?st.irsMapa:{});
+}
+/* O bloco irs das definições, sempre completo: a tributação conjunta e a
+   dispensa dos recibos como verdadeiro/falso, a letra de cada proprietário só
+   'A' ou 'B' (a chave pelo idSeguro), e os outros rendimentos só com chave de
+   ano de quatro dígitos e valor ≥ 0. O que mais lá vier fica.
+   Recebe: x — o bloco em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo {conjunta, titulares, dispensaRecibos, outrosRendimentos}. */
+function normIrsDefs(x){
+  x=(x&&typeof x==='object'&&!Array.isArray(x))?x:{};
+  const obj=o=>(o&&typeof o==='object'&&!Array.isArray(o))?o:{},tit={},outros={};
+  const t=obj(x.titulares),o=obj(x.outrosRendimentos);
+  Object.keys(t).forEach(k=>{if(t[k]==='A'||t[k]==='B')tit[idSeguro(k)]=t[k]});
+  Object.keys(o).forEach(k=>{const n=Number(o[k]);if(/^\d{4}$/.test(k)&&o[k]!==''&&o[k]!==null&&isFinite(n)&&n>=0)outros[k]=n});
+  return Object.assign({},x,{conjunta:x.conjunta===true,titulares:tit,dispensaRecibos:x.dispensaRecibos===true,outrosRendimentos:outros});
 }
 /* normaliza uma liquidação da lista antiga (de antes de os acertos serem movimentos)
    Recebe: x — a liquidação em bruto (objeto parcial, ou nada).

@@ -7,7 +7,12 @@
 
    As ocorrências dos planeados expandem-se a partir do próximo vencimento
    com o passo de cada um (semanal, mensal, trimestral, anual): o que se vê
-   é o que o cartão «por confirmar» vai pedir, dia a dia. */
+   é o que o cartão «por confirmar» vai pedir, dia a dia.
+
+   Por baixo do dia vive esse cartão (calPendCard): os planeados que já
+   venceram e esperam confirmação, os mesmos que o crachá da Agenda conta na
+   barra de baixo (calCracha). Sem ele, o número aparecia no ícone e não
+   havia onde ver de onde vinha. */
 
 let calMes='';      // 'AAAA-MM' do mês em vista; vazio = o mês de hoje
 let calDiaSel='';   // 'AAAA-MM-DD' do dia escolhido na grelha; vazio = o dia por omissão (calSelDia)
@@ -104,64 +109,82 @@ function calPlaneados(de,ate){
   return out;
 }
 
-/* A página do calendário: cabeçalho com o mês e as setas (e «Hoje» quando se
-   navegou), a grelha de segunda a domingo com visitas e planeados por dia,
-   e por baixo o painel do dia em foco.
+/* A página do calendário (o canvas M-Agenda): o cartão do mês — as setas, o
+   nome do mês com quantas visitas e quantos planeados tem (e «Hoje» quando se
+   navegou), os dias da semana, a grelha de segunda a domingo com um ponto
+   cobalto nos dias com visitas e um laranja nos dias com planeados, hoje
+   marcado a cheio, e a legenda — e o painel do dia em foco, com o cartão
+   «Por confirmar» por baixo (calPendCard). No computador o mês e a coluna do
+   dia ficam lado a lado (estilos.css:.cal-pag); o cartão vai na coluna do
+   dia, e fica de fora do #calDiaPanel para o calSel não o refazer a cada dia
+   escolhido.
    Devolve: o HTML da página (texto). */
 function vCalendar(){
   const inicio=calInicio();
   const d0=new Date(inicio+'T00:00:00');
-  const bruto=d0.toLocaleDateString('pt-PT',{month:'long',year:'numeric'});
-  const nome=bruto.charAt(0).toUpperCase()+bruto.slice(1);   // Setembro de 2026, nao Setembro De 2026
+  const mes=d0.toLocaleDateString('pt-PT',{month:'long'});
+  /* a primeira letra à mão: o text-transform:capitalize dava «Setembro De 2026» */
+  const Mes=mes.charAt(0).toUpperCase()+mes.slice(1),ano=d0.getFullYear();
   const sel=calSelDia();
-  const {html:celulas,total}=calCelulas(inicio,sel);
-  return `<div class="toolbar u-ai-center u-mb-12px">
-      <button class="btn" data-toca="vista" data-click="calNav(-1)" aria-label="Mês anterior">${ic('chev',18)}</button>
-      <b class="u-fx-1 u-ta-center">${esc(nome)}</b>
-      ${calMesEmVista()!==pzHoje().slice(0,7)?`<button class="btn" data-toca="vista" data-click="calNav(0)">Hoje</button>`:''}
-      <button class="btn u-tf-scalex-n1" data-toca="vista" data-click="calNav(1)" aria-label="Mês seguinte">${ic('chev',18)}</button></div>
-    <div class="card u-p-12px" id="calCard">
-      <div class="calgrid calhead" id="calGrelha0">${['S','T','Q','Q','S','S','D'].map(x=>`<span>${x}</span>`).join('')}</div>
-      <div class="calgrid" id="calDias" data-pointerdown="calArrastar(event,this)">${celulas}</div></div>
-    ${calDiaPanel(sel)}
-    <div class="hint u-mt-10px">${[servicoLigado('visits')?`<i class="pt vis u-va-middle"></i> visitas${total?' ('+total+' este mês)':''}`:'',
-      servicoLigado('recurring')?'<i class="pt pla u-va-middle"></i> movimentos planeados':'','toca num dia para veres o que tem'].filter(Boolean).join(' · ')}</div>`;
+  const {html:celulas,total,nPlaneados}=calCelulas(inicio,sel);
+  const comV=servicoLigado('visits'),comP=servicoLigado('recurring');
+  const contas=[comV?total+(total===1?' visita':' visitas'):'',comP?nPlaneados+(nPlaneados===1?' planeado':' planeados'):''].filter(Boolean).join(' · ');
+  return `<div class="cal-pag">
+    <div class="card cal-mes" id="calCard">
+      <div class="cal-nav">
+        <button type="button" class="btn ghost so-icone" data-toca="vista" data-click="calNav(-1)" aria-label="Mês anterior">${ic('chev',20)}</button>
+        <div class="cal-nav-tit"><h2>${esc(Mes+' '+ano)}</h2>${contas?`<p class="small num">${contas}</p>`:''}</div>
+        ${calMesEmVista()!==pzHoje().slice(0,7)?`<button type="button" class="btn sm" data-toca="vista" data-click="calNav(0)">Hoje</button>`:''}
+        <button type="button" class="btn ghost so-icone" data-toca="vista" data-click="calNav(1)" aria-label="Mês seguinte">${ic('chevR',20)}</button></div>
+      <div class="calgrid calhead" id="calGrelha0" aria-hidden="true">${['seg','ter','qua','qui','sex','sáb','dom'].map(x=>`<span>${x}</span>`).join('')}</div>
+      <div class="calgrid" id="calDias" data-pointerdown="calArrastar(event,this)" role="group" aria-label="${esc(Mes+' de '+ano)}">${celulas}</div>
+      <div class="cal-legenda">${comV?'<span><i class="pt vis"></i>Visitas</span>':''}${comP?'<span><i class="pt pla"></i>Planeados</span>':''}<span class="cal-dica">toca num dia para veres o que tem</span></div></div>
+    <div class="cal-coluna">${calDiaPanel(sel)}${calPendCard()}</div></div>`;
 }
 
-/* Os dias de um mês, prontos para a grelha: as células em branco até à
-   segunda-feira, e cada dia com os pontos das visitas e dos planeados. Serve
-   o mês em vista e, a meio de um arrasto, os vizinhos que espreitam dos lados.
+/* Os dias de um mês, prontos para a grelha: os últimos dias do mês anterior
+   até à segunda-feira (.fora) e os primeiros do seguinte até ao domingo
+   (.seguinte.fora — a contagem das de antes, que alinham o dia 1, lê-se
+   pelo «calday fora»), esbatidos e sem toque, e cada dia do mês um botão
+   com o número e os pontos — um cobalto
+   se tem visitas, um laranja se tem planeados — e o nome lido em voz alta
+   («17 de outubro, hoje, 1 visita, 2 planeados»). Serve o mês em vista e, a
+   meio de um arrasto, os vizinhos que espreitam dos lados (inerte: fora do Tab).
    Recebe: inicio — o primeiro dia do mês, 'AAAA-MM-01'; sel — o dia em foco
-   ('' para nenhum, como nos vizinhos).
-   Devolve: {html, total} — as células (texto) e o número de visitas do mês. */
-function calCelulas(inicio,sel){
+   ('' para nenhum, como nos vizinhos); inerte (opcional) — verdadeiro nos vizinhos.
+   Devolve: {html, total, nPlaneados} — as células (texto), o número de visitas
+   do mês e o de ocorrências planeadas nele. */
+function calCelulas(inicio,sel,inerte){
   const hoje=pzHoje();
   const d0=new Date(inicio+'T00:00:00');
   const diasNoMes=new Date(d0.getFullYear(),d0.getMonth()+1,0).getDate();
   const fim=inicio.slice(0,8)+String(diasNoMes).padStart(2,'0');
   // segunda-feira como primeiro dia: getDay() dá 0=domingo
   const antes=(d0.getDay()+6)%7;
+  const mes=d0.toLocaleDateString('pt-PT',{month:'long'});
 
   /* as visitas são do serviço das Visitas: desligado nesta conta, a grelha não as marca */
   const visitas={};
   (servicoLigado('visits')?db.visits||[]:[]).forEach(v=>{
     if(v.date>=inicio&&v.date<=fim&&v.estado!=='cancelada')(visitas[v.date]=visitas[v.date]||[]).push(v);
   });
-  const planeados={};
-  calPlaneados(inicio,fim).forEach(o=>{(planeados[o.date]=planeados[o.date]||[]).push(o.rec)});
+  const planeados={},ocorrencias=calPlaneados(inicio,fim);
+  ocorrencias.forEach(o=>{(planeados[o.date]=planeados[o.date]||[]).push(o.rec)});
 
   let html='';
-  for(let i=0;i<antes;i++)html+='<div class="calday fora"></div>';
+  const ultimoAntes=new Date(d0.getFullYear(),d0.getMonth(),0).getDate();
+  for(let i=antes;i>0;i--)html+=`<div class="calday fora" aria-hidden="true"><span class="n">${ultimoAntes-i+1}</span></div>`;
   for(let dia=1;dia<=diasNoMes;dia++){
     const iso=inicio.slice(0,8)+String(dia).padStart(2,'0');
-    const vs=visitas[iso]||[],ps=planeados[iso]||[];
-    const pontos=vs.slice(0,3).map(()=>'<i class="pt vis"></i>').join('')+
-      ps.slice(0,3).map(()=>'<i class="pt pla"></i>').join('')+
-      (vs.length+ps.length>6?'<i class="pt mais"></i>':'');
-    html+=`<div class="calday tap${iso===hoje?' hoje':''}${iso===sel?' on':''}" data-d="${iso}" tabindex="0" aria-pressed="${iso===sel?'true':'false'}" data-toca="vista" data-click="calSel('${iso}')">
-      <span class="n">${dia}</span><span class="pts">${pontos}</span></div>`;
+    const vs=visitas[iso]||[],ps=planeados[iso]||[],eHoje=iso===hoje,on=iso===sel;
+    const nome=[dia+' de '+mes,eHoje?'hoje':'',vs.length?vs.length+(vs.length===1?' visita':' visitas'):'',
+      ps.length?ps.length+(ps.length===1?' planeado':' planeados'):''].filter(Boolean).join(', ');
+    html+=`<button type="button" class="calday tap${eHoje?' hoje':''}${on?' on':''}" data-d="${iso}"${inerte?' tabindex="-1"':''} aria-pressed="${on?'true':'false'}" aria-label="${esc(nome)}" data-toca="vista" data-click="calSel('${iso}')">
+      <span class="n">${dia}</span><span class="pts">${vs.length?'<i class="pt vis"></i>':''}${ps.length?'<i class="pt pla"></i>':''}</span></button>`;
   }
-  return {html,total:Object.values(visitas).reduce((n,l)=>n+l.length,0)};
+  const depois=(7-(antes+diasNoMes)%7)%7;
+  for(let i=1;i<=depois;i++)html+=`<div class="calday seguinte fora" aria-hidden="true"><span class="n">${i}</span></div>`;
+  return {html,total:Object.values(visitas).reduce((n,l)=>n+l.length,0),nPlaneados:ocorrencias.length};
 }
 
 /* ---- arrastar o mês para os lados ----
@@ -272,7 +295,7 @@ function calVizinhos(el){
     const g=document.createElement('div');
     g.className='calgrid calvizinho';g.setAttribute('aria-hidden','true');
     g.style.left=(k*100)+'%';
-    g.innerHTML=calCelulas(pzIso(d).slice(0,8)+'01','').html;
+    g.innerHTML=calCelulas(pzIso(d).slice(0,8)+'01','',true).html;
     el.appendChild(g);
   });
 }
@@ -294,12 +317,38 @@ function calPodePlanear(){
   return servicoLigado('recurring')&&(podeSemImovel()||casasComo('rec.add').length>0);
 }
 
-/* O painel do dia em foco, por baixo da grelha: as visitas dele (tocar abre
-   a ficha), as ocorrências planeadas (tocar leva aos Planeados) e os botões
-   para marcar visita e adicionar um movimento recorrente, já com a data
-   posta. As visitas, as linhas delas e o botão delas são do serviço das
-   Visitas, e o outro botão é dos Planeados: desligados nesta conta, não se
-   escrevem.
+/* O título do painel do dia: «Hoje, sábado 17/10», «Amanhã, domingo 18/10» ou
+   «Segunda-feira, 19/10» — com o ano só quando não é o de hoje. A primeira
+   letra à mão (o toLocaleDateString dá-a minúscula).
+   Recebe: iso — o dia, em 'AAAA-MM-DD'.
+   Devolve: o texto (sem HTML). */
+function calTituloDia(iso){
+  const hoje=pzHoje(),d=new Date(iso+'T00:00:00');
+  const dia=d.toLocaleDateString('pt-PT',{weekday:'long'});
+  const curta=iso.slice(8,10)+'/'+iso.slice(5,7)+(iso.slice(0,4)!==hoje.slice(0,4)?'/'+iso.slice(0,4):'');
+  const am=new Date(hoje+'T00:00:00');am.setDate(am.getDate()+1);
+  if(iso===hoje)return 'Hoje, '+dia+' '+curta;
+  if(iso===pzIso(am))return 'Amanhã, '+dia+' '+curta;
+  return dia.charAt(0).toUpperCase()+dia.slice(1)+', '+curta;
+}
+/* O valor de um planeado no painel do dia, com a cor do dinheiro: o que
+   entra a verde, a prestação a roxo, o resto do que sai a laranja com o −.
+   Recebe: t — o tx do planeado ({kind, amount}).
+   Devolve: o HTML do valor (texto); '' sem montante. */
+function calValor(t){
+  t=t||{};if(!(Number(t.amount)>0))return '';
+  const sai=isOut(t.kind),cls=t.kind==='loan'?'prest':isIn(t.kind)?'pos':sai?'neg':'';
+  return `<b class="num cal-ev-valor ${cls}">${sai?'−':''}${euro2(t.amount)}</b>`;
+}
+
+/* O painel do dia em foco, ao lado ou por baixo da grelha: o título
+   (calTituloDia), num cartão as visitas dele (a hora, quem e onde, o estado;
+   tocar abre a ficha) e as ocorrências planeadas (o sentido do dinheiro, o
+   nome, de onde é — o imóvel, o grupo ou «Todos os imóveis» — e a
+   periodicidade, o valor; tocar leva aos Planeados), e os
+   botões «Marcar visita» e «Recorrente», já com a data posta. As visitas, as
+   linhas delas e o botão delas são do serviço das Visitas, e o outro botão é
+   dos Planeados: desligados nesta conta, não se escrevem.
    Recebe: iso — o dia, em 'AAAA-MM-DD'.
    Devolve: o HTML do painel (texto), com id calDiaPanel para calSel o repintar. */
 function calDiaPanel(iso){
@@ -309,27 +358,32 @@ function calDiaPanel(iso){
   const ps=calPlaneados(iso,iso);
   /* só há linhas de visita com as Visitas ligadas (vs vem vazio sem elas); tocar lê a ficha */
   const linhaV=v=>{const p=prop(v.propertyId),estado=VESTADO[v.estado]||'';
-    return `<div class="card tap u-p-10px-13px" data-toca="camada" data-click="visView('${jsq(v.id)}')">
-      <div class="row-between u-ai-center"><div class="u-minw-0">
-        <b class="u-d-block u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(v.nomes||'(sem nome)')}</b>
-        <span class="small">${v.start?esc(v.start)+(v.end?'–'+esc(v.end):'')+' · ':''}${esc(p?(p.name||p.address):'')}</span></div>
-        <span class="badge ${v.estado==='realizada'?'':'amber'}">${estado||''}</span></div></div>`};
-  const linhaP=o=>`<div class="card tap u-p-10px-13px" data-toca="ecra" data-click="go('recurring')">
-      <div class="row-between u-ai-center"><div class="u-minw-0">
-        <b class="u-d-block u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(o.rec.name)}</b>
-        <span class="small">${(KIND[o.rec.tx.kind]||{}).short||''}${o.rec.tx.propertyId?' · '+esc(propName(o.rec.tx.propertyId)):''}</span></div>
-        <b class="u-fx-0-0-auto">${o.rec.tx.amount?euro2(o.rec.tx.amount):''}</b></div></div>`;
-  const bruto=new Date(iso+'T00:00:00').toLocaleDateString('pt-PT',{weekday:'long',day:'numeric',month:'long'});
-  const data=bruto.charAt(0).toUpperCase()+bruto.slice(1);   // Sexta-feira, 10 de setembro
-  return `<div class="card u-mt-12px u-p-14px" id="calDiaPanel">
-    <div class="title">${esc(data)}</div>
-    <div class="list u-g-8px u-mt-12px">
-      ${vs.length?`<div class="flabel u-m-0">Visitas</div>${vs.map(linhaV).join('')}`:''}
-      ${ps.length?`<div class="flabel u-m-0">Planeados</div>${ps.map(linhaP).join('')}`:''}
-      ${!vs.length&&!ps.length?'<div class="hint">Nada marcado para este dia.</div>':''}
-      ${comVisitas||planear?`<div class="toolbar u-jc-center u-mt-6px">
-        ${comVisitas?`<button class="btn primary" data-toca="camada" data-click="calMarcarVisita('${iso}')">Marcar visita neste dia</button>`:''}
-        ${planear?`<button class="btn${comVisitas?'':' primary'}" data-toca="camada" data-click="calNovoPlaneado('${iso}')">Adicionar movimento recorrente</button>`:''}</div>`:''}</div></div>`;
+    const onde=[p?(p.name||p.address):'',v.contacto||''].filter(Boolean).map(esc).join(' · ');
+    return `<div class="cal-ev tap" data-toca="camada" data-click="visView('${jsq(v.id)}')">
+      <div class="cal-ev-hora num">${v.start?`<p>${esc(v.start)}</p>${v.end?`<p class="small">${esc(v.end)}</p>`:''}`:'<p class="small">—</p>'}</div>
+      <div class="cal-ev-txt"><p class="title">${esc(v.nomes||'(sem nome)')}</p>${onde?`<p class="small">${onde}</p>`:''}</div>
+      ${estado?`<span class="badge ${v.estado==='realizada'?'in':v.estado==='faltou'?'amber':''}">${esc(estado)}</span>`:''}</div>`};
+  /* o passo e o «de onde é» vêm dos Planeados (planeados.js:EVERY,
+     planeados.js:imovelDoMolde — o imóvel, o grupo, «Todos os imóveis» ou
+     «Sem imóvel», como na lista deles); sem eles não há linhas destas */
+  const linhaP=o=>{const t=o.rec.tx||{},ic0=t.kind==='loan'?'bank':isIn(t.kind)?'up':'dn';
+    const cor=t.kind==='loan'?'prest':isIn(t.kind)?'pos':isOut(t.kind)?'neg':'';
+    const passo=servicoLigado('recurring')?(EVERY[o.rec.every]||''):'';
+    const onde=servicoLigado('recurring')?imovelDoMolde(t):(t.propertyId?propName(t.propertyId):'');
+    const sub=[onde,passo].filter(Boolean).map(esc).join(' · ');
+    return `<div class="cal-ev tap" data-toca="ecra" data-click="go('recurring')">
+      <span class="cal-ev-ic ${cor}">${ic(ic0,20)}</span>
+      <div class="cal-ev-txt"><p class="title">${esc(o.rec.name)}</p>${sub?`<p class="small num">${sub}</p>`:''}</div>
+      ${calValor(t)}</div>`};
+  return `<div class="cal-dia" id="calDiaPanel">
+    <h2 class="cal-dia-tit">${esc(calTituloDia(iso))}</h2>
+    <div class="card cal-dia-lista">
+      ${vs.length?`<p class="lbl">Visitas</p>${vs.map(linhaV).join('')}`:''}
+      ${ps.length?`<p class="lbl">Planeados</p>${ps.map(linhaP).join('')}`:''}
+      ${!vs.length&&!ps.length?'<p class="hint cal-dia-vazio">Nada marcado para este dia.</p>':''}</div>
+    ${comVisitas||planear?`<div class="cal-dia-acoes${comVisitas&&planear?'':' um'}">
+      ${comVisitas?`<button type="button" class="btn" data-toca="camada" data-click="calMarcarVisita('${iso}')">${ic('door',18)} Marcar visita</button>`:''}
+      ${planear?`<button type="button" class="btn" data-toca="camada" data-click="calNovoPlaneado('${iso}')" aria-label="Adicionar movimento recorrente neste dia">${ic('repetir',18)} Recorrente</button>`:''}</div>`:''}</div>`;
 }
 
 /* Adicionar um movimento recorrente a partir de um dia do calendário: pergunta
@@ -373,14 +427,139 @@ function calSel(iso){
     tornarFocavel(document.getElementById('calDiaPanel'));
   });
 }
+
+/* ---- o cartão «Por confirmar» ----
+   O crachá da Agenda na barra de baixo conta os planeados vencidos e não
+   silenciados, e até aqui não havia nada na Agenda que os mostrasse: via-se
+   um «1» no ícone sem se perceber de onde vinha. O cartão vive por baixo do
+   dia, com as linhas do cartão dos Planeados (planeados.js:pendLinha —
+   Confirmar, Rever e o ⋯), e abre fechado, como lá: o que é longo abre
+   fechado, e a escolha fica no aparelho. A chave é outra (CAL_PEND_LS): nos
+   Planeados a lista é a razão de lá se ir, aqui é um aparte do mês, e abrir
+   uma não deve abrir a outra.
+
+   Tudo o que vem dos Planeados passa pelo servicoLigado('recurring') na
+   mesma linha: com eles desligados nesta conta não há cartão nem crachá. */
+const CAL_PEND_LS='gi_agenda_pend_shut';
+let calPendViagem=null;   // acaba a dobra em curso (tira o .viagem), ou null parado
+
+/* Os planeados por confirmar que a Agenda mostra e conta: os vencidos que
+   ainda avisam (planeados.js:recActive), e só depois de se saber o estado
+   (espera.js:sabemosOEstado) — antes disso eram rendas já confirmadas noutro
+   aparelho a aparecer e a sumir. Os em atraso primeiro, depois pela data,
+   como no cartão dos Planeados.
+   Devolve: a lista dos planeados (array de objetos de db.recurring), vazia
+   com os Planeados desligados. */
+function calPendentes(){
+  const lista=servicoLigado('recurring')&&sabemosOEstado()?recActive().slice():[];
+  return lista.sort((a,b)=>(calPendAtraso(b)?1:0)-(calPendAtraso(a)?1:0)||String(a.next).localeCompare(String(b.next)));
+}
+
+/* Um planeado em atraso: passou o último dia da janela sem confirmação
+   (planeados.js:recIsLate).
+   Recebe: r — o planeado.
+   Devolve: verdadeiro se está em atraso (falso com os Planeados desligados). */
+function calPendAtraso(r){return !!(servicoLigado('recurring')&&recIsLate(r))}
+
+/* O cartão está fechado? Por omissão sim; só o '0' guardado quer dizer
+   «quis aberto» — como o planeados.js:pendShut, para distinguir «nunca
+   mexeu» de «abriu».
+   Devolve: verdadeiro se o cartão está fechado. */
+function calPendShut(){try{return localStorage.getItem(CAL_PEND_LS)!=='0'}catch(e){return true}}
+
+/* O cartão «Por confirmar» da Agenda. O cabeçalho é um botão dentro de um
+   título (o padrão do acordeão: o leitor de ecrã anuncia-o como «recolhido»
+   ou «expandido»), e diz o que é preciso saber de relance: quantos em atraso
+   num selo vermelho e quantos esperam, num selo com a cor do crachá da barra
+   de baixo — é esse o número que lá aparece. O corpo leva as linhas do
+   cartão dos Planeados (planeados.js:pendLinha) numa lista viva — confirmar
+   uma tira-a a deslizar em vez de refazer o cartão — e a frase que explica
+   de onde vem o crachá. O corpo está sempre no HTML: abrir e fechar é trocar
+   a classe .fechado num nó vivo (calPendAlternar), e é isso que deixa a
+   dobra ser uma transição. Sem nada por confirmar, não há cartão.
+   Devolve: o HTML do cartão (texto), ou '' sem nada por confirmar. */
+function calPendCard(){
+  const pend=calPendentes();
+  if(!pend.length)return '';
+  const n=pend.length,nl=pend.filter(calPendAtraso).length,aberto=!calPendShut();
+  const itens=pend.map(r=>({chave:'pend:'+r.id,html:servicoLigado('recurring')?pendLinha(r):''}));
+  return `<section class="card cal-pend${aberto?'':' fechado'}" id="calPendCard" aria-labelledby="calPendNome">
+    <h2 class="cal-pend-h"><button type="button" class="cal-pend-cab" id="calPendCab" data-toca="nada" data-click="calPendAlternar()" aria-expanded="${aberto?'true':'false'}" aria-controls="calPendCorpo">
+      <span class="cal-pend-tit"><span class="cal-pend-nome" id="calPendNome">Por confirmar</span>${nl?`<span class="badge red">${nl} em atraso</span>`:''}</span>
+      <span class="cal-pend-n num" aria-hidden="true">${n}</span>
+      <span class="cal-pend-chev" aria-hidden="true">${ic('chevD',20)}</span>
+      <span class="small cal-pend-sub">${n} ${n===1?'planeado à espera':'planeados à espera'}<span class="cal-pend-ver"> · toca para ver</span></span></button></h2>
+    <div class="cal-pend-corpo" id="calPendCorpo"><div class="cal-pend-dentro">
+      ${listaViva('agendaPendentes',itens,'plan-pend-linhas')}
+      <p class="hint plan-pend-dica">São estes que contam no número da Agenda, na barra de baixo. Confirmar regista o movimento e agenda o seguinte; silenciar deixa-o à espera, sem contar.</p></div></div></section>`;
+}
+
+/* Abre ou fecha o cartão «Por confirmar» sem repintar nada: guarda a
+   escolha no aparelho e troca a classe .fechado e o aria-expanded no cartão
+   que já está no ecrã. A dobra é a transição do CSS
+   (estilos.css:.cal-pend-corpo, o grid-template-rows de 0fr a 1fr com os dois
+   valores escritos, como as secções da gaveta), que retoma do sítio onde ia
+   se se tocar outra vez a meio. Enquanto viaja, o cartão corta o que lhe sai
+   da caixa (.viagem); parado e aberto, não — os menus ⋯ das linhas abrem
+   para fora dele. Ao abrir, se o corpo ficou abaixo do ecrã (no telemóvel o
+   cartão é o último da página), a página rola o que falta para o ver
+   (calPendMostrar) — no FIM da dobra: no princípio a página ainda não tem a
+   altura do corpo, e o scroll parava no fundo de antes. Um segundo toque a
+   meio não rola nada.
+   Devolve: nada — mexe nas classes do cartão (repinta a vista só se o
+   cartão não estiver no ecrã). */
+function calPendAlternar(){
+  const fechar=!calPendShut();
+  try{localStorage.setItem(CAL_PEND_LS,fechar?'1':'0')}catch(e){}
+  const card=document.getElementById('calPendCard');
+  const corpo=card&&card.querySelector('.cal-pend-corpo'),cab=card&&card.querySelector('.cal-pend-cab');
+  if(!corpo||!cab)return render();
+  const animar=!semMovimento();
+  /* um segundo toque a meio: a viagem de antes deixa de contar (a transição
+     retoma sozinha do sítio onde ia), e começa a desta */
+  if(calPendViagem)calPendViagem();
+  if(animar){
+    card.classList.add('viagem');
+    const parar=()=>{corpo.removeEventListener('transitionend',aoAcabar);clearTimeout(rede);
+      card.classList.remove('viagem');if(calPendViagem===parar)calPendViagem=null};
+    const acabou=()=>{parar();if(!fechar)calPendMostrar(card,true)};
+    const aoAcabar=ev=>{if(ev.target===corpo&&ev.propertyName==='grid-template-rows')acabou()};
+    corpo.addEventListener('transitionend',aoAcabar);
+    /* a rede de sempre: num separador escondido a transição não acaba, e o
+       cartão ficava a cortar os menus para sempre */
+    const rede=setTimeout(acabou,msDoToken('--medio',200)+120);
+    calPendViagem=parar;
+  }
+  card.classList.toggle('fechado',fechar);
+  cab.setAttribute('aria-expanded',fechar?'false':'true');
+  if(!animar&&!fechar)calPendMostrar(card,false);
+}
+
+/* Rola a página o que falta para o cartão acabado de abrir ficar à vista,
+   acima da barra de baixo (com 12px de folga) — e nunca mais do que o
+   necessário para o cartão chegar a 12px por baixo do cabeçalho pegajoso
+   (header.top), para quem tocou não perder o cabeçalho do cartão de vista.
+   Corre com a dobra já assente, quando o cartão tem a altura final.
+   Recebe: card — o cartão; animar — falso quando o sistema pediu menos
+   movimento (rola de uma vez).
+   Devolve: nada — chama o window.scrollBy quando é preciso. */
+function calPendMostrar(card,animar){
+  const r=card.getBoundingClientRect();
+  const barra=document.querySelector('.tabbar'),topo=document.querySelector('header.top');
+  const rb=barra?barra.getBoundingClientRect():null,rt=topo?topo.getBoundingClientRect():null;
+  const limite=(rb&&rb.height>0?rb.top:window.innerHeight)-12;
+  const dy=Math.min(r.bottom-limite,r.top-(rt&&rt.height>0?rt.bottom:0)-12);
+  if(dy>0)try{window.scrollBy({top:dy,behavior:animar?'smooth':'auto'})}catch(e){}
+}
 /* ---- registo do serviço (servicos.js) ---- */
 /* O crachá do Calendário na barra de baixo: os planeados pendentes, o mesmo
    número que o separador dos Planeados mostra — se esse serviço está ligado
-   e o estado já se sabe (espera.js:sabemosOEstado).
+   e o estado já se sabe (espera.js:sabemosOEstado). Conta pela mesma lista
+   que o cartão «Por confirmar» mostra (calPendentes): o número no ícone e o
+   do cartão não podem discordar.
    Devolve: {n, so:'barra'} — a contagem (0 sem pendentes, ou com os Planeados
    desligados) e o sítio: só a barra de baixo, como sempre; na gaveta o crachá é dos Planeados. */
 function calCracha(){
-  const n=servicoLigado('recurring')&&sabemosOEstado()?recActive().length:0;
-  return {n:n,so:'barra'};
+  return {n:calPendentes().length,so:'barra'};
 }
 registarServico({id:'calendar',vistas:{calendar:'vCalendar'},cracha:{calendar:'calCracha'}});

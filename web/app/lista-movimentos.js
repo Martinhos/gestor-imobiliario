@@ -8,6 +8,12 @@
    que se está a filtrar, que é precisamente o que se quer ver a mudar
    enquanto se mexe nos filtros. */
 let txFiltAberto=false;
+/* As etiquetas por que se filtram os movimentos (os nomes, pela ordem em que
+   se escolheram). Podem ser várias, e um movimento passa se tiver PELO MENOS
+   UMA delas (txMatch). Vazio = sem filtro. Vive aqui e não com os outros
+   filtros (navegacao.js), porque só os Movimentos o leem; troca-se sempre por
+   um array novo, nunca se mexe no que está. */
+let txEtiq=[];
 // nº de filtros ativos nos movimentos (a pesquisa não conta: soma-se à parte no cabeçalho)
 // Devolve: número de filtros ativos (as datas contam como um só).
 function txFilterCount(){
@@ -15,10 +21,34 @@ function txFilterCount(){
   const datas=(txDe||txAte)?1:0;
   return datas+txFilterCountSem();
 }
-// a mesma contagem sem as datas; atenção: desligar "sem pessoa atribuída" conta como um filtro
+// a mesma contagem sem as datas; atenção: desligar "sem pessoa atribuída" conta como um filtro;
+// as etiquetas, como as datas, contam como UM, sejam uma ou várias
 // Devolve: número de filtros ativos, sem contar as datas.
 function txFilterCountSem(){
-  return (txFilter?1:0)+(txProp?1:0)+(txPaid?1:0)+(ownerFilter?1:0)+(txCat?1:0)+(txSub?1:0)+(txNoPayer?0:1);
+  return (txFilter?1:0)+(txProp?1:0)+(txPaid?1:0)+(txCat?1:0)+(txSub?1:0)+(txNoPayer?0:1)+(txEtiq.length?1:0);
+}
+/* As etiquetas que se podem escolher no filtro: as da lista mestra
+   (db.settings.tags, pela ordem de lá), as que algum movimento usa e já não
+   estão nela (por ordem alfabética), e as escolhidas que já não existem em
+   lado nenhum — para se poderem desligar. Sem repetidas nem vazias.
+   Devolve: array de nomes (texto); vazio quando a conta não tem etiquetas. */
+function txEtiquetasDisponiveis(){
+  const out=[],visto=Object.create(null);
+  const junta=g=>{g=String(g==null?'':g);if(g.trim()&&!visto[g]){visto[g]=1;out.push(g)}};
+  ((db.settings||{}).tags||[]).forEach(junta);
+  const usadas=[];
+  (db.transactions||[]).forEach(t=>(t.tags||[]).forEach(g=>{if(!visto[g]&&usadas.indexOf(g)<0)usadas.push(g)}));
+  usadas.sort((a,b)=>String(a).localeCompare(String(b),'pt')).forEach(junta);
+  txEtiq.forEach(junta);
+  return out;
+}
+/* Um movimento passa no filtro das etiquetas? Sem etiquetas escolhidas passa
+   sempre; com elas, basta ter UMA das escolhidas.
+   Recebe: t — o movimento.
+   Devolve: true/false. */
+function txTemEtiqueta(t){
+  if(!txEtiq.length)return true;
+  return (t.tags||[]).some(g=>txEtiq.indexOf(g)>-1);
 }
 // parte a pesquisa em termos: palavras soltas e frases entre aspas, tudo sem acentos
 // Devolve: array de termos (strings já desacentuadas); vazio sem pesquisa.
@@ -45,14 +75,16 @@ function txHay(t){
 }
 let _qT=null;
 /* pesquisa dos movimentos com atraso de 280 ms para não redesenhar a cada
-   tecla; como o render recria o campo, devolve-lhe o foco com o cursor no fim.
+   tecla. A lista viva guarda o próprio campo (refrescarMovimentos), que não
+   perde o foco nem o cursor; só quando o caminho caiu para o render, que
+   recria o campo, se lhe devolve o foco com o cursor no fim.
    Recebe: v — o texto escrito no campo de pesquisa.
    Devolve: nada — agenda o redesenho da vista. */
 function onTxSearch(v){
   clearTimeout(_qT);
   _qT=setTimeout(()=>{txSearch=v;refrescarMovimentos();
     const i=document.getElementById('tx_q');
-    if(i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}}},280);
+    if(i&&document.activeElement!==i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}}},280);
 }
 /* O ✕ da pesquisa dos movimentos aparece com o campo escrito e some com ele
    vazio. Era um estilo em linha (display) no atributo, e o estado inicial
@@ -76,8 +108,9 @@ function txqLimpar(botao){
 /* um movimento passa em TODOS os filtros ativos? Tipo ('debt' junta owed e
    repay), imóvel/grupo ('__none__' = sem imóvel atribuído; um imóvel apanha
    os movimentos dele, as partes dos lotes que lhe cabem e os movimentos de
-   grupo antigos com quota nele), âmbito do proprietário, pessoa que
-   pagou/recebeu, pesquisa, categoria/subcategoria e intervalo de datas.
+   grupo antigos com quota nele), âmbito das contas (ambito.js:inScope),
+   pessoa que pagou/recebeu, pesquisa, categoria/subcategoria, etiquetas
+   (basta uma das escolhidas: txTemEtiqueta) e intervalo de datas.
    «Sem imóvel» quer dizer mesmo sem imóvel: um movimento sem imóvel, sem
    grupo e sem «Todos os imóveis» não é de nenhum imóvel, e um filtro por
    imóvel deixa-o de fora (entrava, como se fosse de todos). Passa sem filtro
@@ -92,6 +125,8 @@ function txMatch(t){
     if(!(t.groupId===gid||(t.propertyId&&gids.indexOf(t.propertyId)>-1)))return false}
   else if(txProp){if(t.propertyId){if(t.propertyId!==txProp)return false}
     else if(!(t.groupId||t.todos)||txPropShare(t,txProp)<=0)return false}   /* sem imóvel não é de nenhum imóvel */
+  /* o âmbito das contas (ambito.js): sem titular é tudo; a canalização fica
+     inteira, como a quota do saldos.js, e só o IRS ainda põe um titular */
   if(t.propertyId){if(!inScope(t.propertyId))return false}
   else if(t.groupId||t.todos){if(ownerFilter&&!txProps(t).some(p=>inScope(p.id)))return false}
   else if(ownerFilter)return false;
@@ -102,6 +137,7 @@ function txMatch(t){
   else if(txCat&&t.category!==txCat)return false;
   if(txSub==='__none__'){if(t.sub)return false}
   else if(txSub&&t.sub!==txSub)return false;
+  if(!txTemEtiqueta(t))return false;
   // entre datas: as ISO comparam-se como texto, e vazio é "sem limite"
   if(txDe&&t.date<txDe)return false;
   if(txAte&&t.date>txAte)return false;
@@ -217,10 +253,10 @@ function filterSummary(){
   if(txProp==='__none__')p.push('sem imóvel');
   else if(String(txProp||'').startsWith('g:'))p.push('grupo '+((grp(txProp.slice(2))||{}).name||''));
   else if(txProp)p.push(propName(txProp));
-  if(ownerFilter)p.push('de '+ownerFilterName());
   if(txPaid)p.push('pago/recebido por '+((owner(txPaid)||{}).name||''));
   if(txCat==='__none__')p.push('sem categoria');else if(txCat)p.push(txCat+(txSub&&txSub!=='__none__'?' / '+txSub:''));
   if(txSub==='__none__')p.push('sem subcategoria');
+  if(txEtiq.length)p.push((txEtiq.length===1?'etiqueta ':'etiquetas ')+txEtiq.join(' ou '));
   if(!txNoPayer)p.push('só com pessoa atribuída');
   return esc(p.join(' · '));
 }
@@ -259,72 +295,167 @@ function useTemplateNew(){
   pickModal('Usar modelo',tp.map(x=>({v:x.id,label:x.name,sub:(KIND[x.tx.kind]||{}).short+(x.tx.amount?' · '+euro2(x.tx.amount):'')+(x.tx.propertyId?' · '+propName(x.tx.propertyId):''),icon:'file'})),
     o=>{chamarServico('recurring','newFromTemplate',o.v)},
     `<button type="button" class="btn u-w-100pc u-jc-center" data-toca="camada" data-click="newTplForTx()">${ic('plus',15)} Criar modelo novo</button>
-     <div class="hint u-mt-8px">Ao guardar, o modelo fica criado e o movimento é registado. Os modelos gerem-se em Finanças → Planeados.</div>`);
+     <div class="hint u-mt-8px">Ao guardar, o modelo fica criado e o movimento é registado. Os modelos gerem-se em Dinheiro → Planeados.</div>`);
 }
 /* criar um modelo a meio de “novo movimento”: guarda o modelo E regista o movimento
    Devolve: nada — abre o fluxo do modelo novo. */
 function newTplForTx(){
   newTxPick(k=>txModal({kind:k,modo:'tpl',alsoTx:true}));
 }
-/* os filtros vivem numa janela por cima da lista: mudar um filtro atualiza a lista e a própria janela
-   Devolve: nada — redesenha a vista e, se estiver aberto, o modal de filtros. */
-function txRerender(){
-  refrescarMovimentos();
-  /* o painel repinta-se no sítio, para os seletores dependentes (a
-     subcategoria depende da categoria) acompanharem sem fechar nada */
-  const p=document.getElementById('txFpanel');
-  if(p&&txFiltAberto){const c=p.querySelector('.card');
-    if(c)c.innerHTML=txFilterBody()+`<div class="toolbar u-m-12px-0-0">${txFilterFoot()}</div>`}
+/* Mudar um filtro atualiza a lista e o próprio painel, no sítio: a lista
+   linha a linha, e o painel com o mesmo nó (refrescarMovimentos), para os
+   seletores dependentes — a subcategoria depende da categoria — acompanharem
+   sem fechar nada nem perder o ponto até onde se tinha rolado.
+   Devolve: nada — redesenha a lista e, se estiver aberto, o painel. */
+function txRerender(){refrescarMovimentos()}
+/* Os tipos por que se filtra, pela ordem do painel e do chip: o valor do
+   txFilter e o rótulo. 'debt' junta as dívidas recebidas e as pagas. */
+const TX_FILTRO_TIPOS=[['','Todos'],['income','Receitas'],['expense','Despesas'],['loan','Pagamentos de crédito'],
+  ['debt','Dívidas'],['owed','Dívidas recebidas'],['repay','Dívidas pagas'],['settle','Transferências']];
+/* «1 movimento», «3 movimentos».
+   Recebe: n — quantos.
+   Devolve: o texto. */
+const txNMov=n=>n+(n===1?' movimento':' movimentos');
+/* As opções do filtro do imóvel: todos, sem imóvel, os do âmbito e os grupos.
+   Devolve: array de {v, label} para o sel(). */
+function txOpcoesImovel(){
+  return [{v:'',label:'Todos os imóveis'},{v:'__none__',label:'Sem imóvel atribuído'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
 }
-/* corpo do modal de filtros dos movimentos: pesquisa, tipo, imóvel,
-   categoria/subcategoria, pessoas, datas e ordenação. Cada controlo aplica
-   logo (handlers onTx*), e no fim mostra o resumo e quantos movimentos passam.
-   Devolve: string HTML do corpo do modal. */
+/* As opções do filtro da categoria, na árvore do tipo filtrado (as dívidas
+   usam a das despesas).
+   Devolve: array de {v, label} para o sel(). */
+function txOpcoesCategoria(){
+  const tree=allCats(txFilter==='debt'?'expense':txFilter);
+  return [{v:'',label:'Todas as categorias'},{v:'__none__',label:'Sem categoria'}].concat(Object.keys(tree).map(c=>({v:c,label:c})));
+}
+/* Os filtros comuns (Definições → Filtros comuns, definicoes.js) que se podem
+   aplicar aqui.
+   Devolve: array de filtros ({id, name, kind, prop, cat, sub, de, ate}; um «owner» de antes ignora-se). */
+function txComuns(){return filtrosComuns()}
+/* O filtro comum está aplicado? Os filtros dos movimentos são exatamente os
+   dele — e ele fixa alguma coisa: um filtro em branco não está «ligado» numa
+   lista sem filtros. Um filtro comum não guarda etiquetas: com etiquetas
+   escolhidas os filtros já são mais do que os dele, e não está ligado.
+   Recebe: f — o filtro comum.
+   Devolve: true/false. */
+function txComumLigado(f){
+  const c=[['kind',txFilter],['prop',txProp],['cat',txCat],['sub',txSub],['de',txDe],['ate',txAte]];
+  return !txEtiq.length&&c.some(([k])=>f[k])&&c.every(([k,v])=>(f[k]||'')===(v||''));
+}
+/* O chip de um filtro comum: aplica-o; ligado (com o visto), limpa os filtros.
+   Recebe: f — o filtro comum.
+   Devolve: o HTML do botão. */
+function txChipDoComum(f){
+  const on=txComumLigado(f);
+  return `<button type="button" class="chip${on?' on':''}" aria-pressed="${on}" data-toca="vista" data-click="${on?'clearTxFilters()':`aplicarFiltroComum('${jsq(f.id)}')`}">${on?ic('check',16):''}${esc(f.name)}</button>`;
+}
+/* A linha «Etiquetas» do painel: cada etiqueta que existe (txEtiquetasDisponiveis)
+   num chip que se liga e desliga (aria-pressed), com o visto quando ligado —
+   a cor sozinha não chega. Escolhem-se várias; passa um movimento com pelo
+   menos uma. Sem etiquetas na conta, a linha não aparece.
+   Devolve: o HTML da linha (texto), ou ''. */
+function txEtiquetasHtml(){
+  const todas=txEtiquetasDisponiveis();
+  if(!todas.length)return '';
+  return `<div class="mov-campo"><span class="flabel" id="txEtiqL">Etiquetas</span>
+      <div class="chips-fila mov-etiq" id="txEtiq" role="group" aria-labelledby="txEtiqL" aria-describedby="txEtiqD">${todas.map(g=>{const on=txEtiq.indexOf(g)>-1;
+        return `<button type="button" class="chip${on?' on':''}" aria-pressed="${on}" data-etiq="${esc(g)}" data-toca="vista" data-click="txPorEtiqueta('${jsq(g)}')">${ic('check',16)}${esc(g)}</button>`}).join('')}</div>
+      <span class="small mov-etiq-d" id="txEtiqD">Basta uma das escolhidas.</span></div>`;
+}
+/* Liga ou desliga uma etiqueta no filtro e repinta a lista e o painel. O
+   painel é refeito por dentro (refrescarMovimentos), e o chip tocado com ele:
+   se o foco estava num chip das etiquetas, volta ao chip novo da mesma
+   etiqueta — quem anda pelo teclado não é atirado para o topo.
+   Recebe: g — o nome da etiqueta.
+   Devolve: nada — muda o filtro e redesenha. */
+function txPorEtiqueta(g){
+  g=String(g==null?'':g);if(!g)return;
+  const a=document.activeElement,tinha=!!(a&&a.getAttribute&&a.getAttribute('data-etiq')!=null);
+  txEtiq=txEtiq.indexOf(g)>-1?txEtiq.filter(x=>x!==g):txEtiq.concat([g]);
+  txRerender();
+  if(!tinha)return;
+  const novo=[...document.querySelectorAll('#txEtiq [data-etiq]')].find(b=>b.getAttribute('data-etiq')===g);
+  if(novo)try{novo.focus({preventScroll:true})}catch(e){}
+}
+/* O texto do chip rápido das etiquetas: a primeira escolhida e, havendo mais,
+   quantas são além dela («Urgente +2») — a fila tem de caber no telemóvel.
+   Devolve: o texto (por escapar), ou '' sem etiquetas escolhidas. */
+function txRotuloEtiquetas(){
+  if(!txEtiq.length)return '';
+  return txEtiq[0]+(txEtiq.length>1?' +'+(txEtiq.length-1):'');
+}
+/* O texto do chip rápido abre o painel com o foco na primeira etiqueta
+   escolhida (ou na primeira da linha), para se mudarem as escolhas lá.
+   Devolve: nada — abre o painel e repinta. */
+function txEtiqAbrir(){
+  txFiltAberto=true;render();fpanelEntra(true);
+  const b=document.querySelector('#txEtiq .chip.on')||document.querySelector('#txEtiq .chip');
+  if(b)try{b.focus()}catch(e){}
+}
+/* O corpo do painel dos filtros (o M-Filtros do canvas): o título com o
+   «Limpar» e o «Fechar», quantos movimentos passam, os filtros comuns, o tipo
+   e as etiquetas em chips e, numa grelha, o imóvel, a categoria e a subcategoria, o
+   proprietário, quem pagou ou recebeu, as datas e a ordenação; por fim o
+   interruptor dos movimentos sem pessoa. Cada controlo aplica logo (os onTx*),
+   sem «Aplicar». A pesquisa vive na própria vista (txBarraHtml).
+   Devolve: string HTML do corpo do painel. */
 function txFilterBody(){
-  const kinds=[['','Todos os tipos'],['income','Receitas'],['expense','Despesas'],['loan','Pagamentos de crédito'],
-    ['debt','Dívidas (recebidas e pagas)'],['owed','Dívidas recebidas'],['repay','Dívidas pagas'],['settle','Transferências entre proprietários']];
-  const props=[{v:'',label:'Todos os imóveis'},{v:'__none__',label:'Sem imóvel atribuído'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
-  const payers=[{v:'',label:'Qualquer proprietário'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
-  const owners=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')));
-  const tree=allCats(txFilter==='debt'?'expense':txFilter),catOpts=[{v:'',label:'Todas as categorias'},{v:'__none__',label:'Sem categoria'}].concat(Object.keys(tree).map(c=>({v:c,label:c})));
+  /* na grelha de duas colunas o campo já diz o que é (o rótulo por cima): a
+     opção vazia diz só «Todos», «Todas» ou «Qualquer um», como no canvas —
+     «Todos os imó…» e «Qualquer pro…» cortavam-se a 390px. Os chips usam as
+     mesmas listas com os rótulos inteiros (txOpcoesImovel, txOpcoesCategoria),
+     por isso a troca é só aqui. */
+  const curto=(ops,rot)=>ops.map(o=>o.v===''?{v:'',label:rot}:o);
+  const payers=[{v:'',label:'Qualquer um'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
+  const tree=allCats(txFilter==='debt'?'expense':txFilter);
   const subsF=txCat&&txCat!=='__none__'?(tree[txCat]||[]):[];
-  const subOpts=[{v:'',label:'Todas as subcategorias'},{v:'__none__',label:'Sem subcategoria'}].concat(subsF.map(x=>({v:x,label:x})));
-  return `<div class="form">
-    ${fcSelector()}
-    <div class="qwrap"><input id="tx_q" class="txq" type="search" value="${esc(txSearch)}" placeholder="Pesquisar…" autocomplete="off"
-      data-input="onTxSearch(this.value);txqMostrarLimpar(this)">
-      <button class="qclear${txSearch?'':' u-d-none'}" data-toca="vista" data-click="txqLimpar(this)">✕</button></div>
-    <label>Tipo${sel('txKind',txFilter,kinds.map(k=>({v:k[0],label:k[1]})),'onTxFilter','vista')}</label>
-    ${servicoLigado('properties')?`<label>Imóvel${sel('txPropF',txProp,props,'onTxProp','vista')}</label>`:''}
-    <div class="row"><label>Categoria${sel('txCatF',txCat,catOpts,'onTxCat','vista')}</label>
-      ${txCat&&txCat!=='__none__'?`<label>Subcategoria${sel('txSubF',txSub,subOpts,'onTxSub','vista')}</label>`:''}</div>
-    ${db.owners.length&&servicoLigado('owners')?`<label>Proprietário${sel('txOwnerF',ownerFilter,owners,'onTxOwner','vista')}</label>
-    <label>Pago / recebido por${sel('txPaidF',txPaid,payers,'onTxPaid','vista')}</label>
-    <label class="check"><input type="checkbox" id="txNoPayer" ${txNoPayer?'checked':''} data-change="onTxNoPayer()"> Incluir movimentos sem pessoa atribuída</label>`:''}
-    <div class="row lado-a-lado"><label>De<input id="txDeF" type="date" value="${txDe}" data-change="onTxDatas()"></label>
-      <label>Até<input id="txAteF" type="date" value="${txAte}" data-change="onTxDatas()"></label></div>
-    <div class="row"><label>Ordenar por${sel('txSortF',txSort,[{v:'date',label:'Data'},{v:'amount',label:'Valor'}],'onTxSort','vista')}</label>
-      <label>Ordem${sel('txDirF',txDir,[{v:'desc',label:'Descendente'},{v:'asc',label:'Ascendente'}],'onTxDir','vista')}</label></div>
-    <div class="hint">${txFilterCount()?filterSummary()+' · '+linhasDaLista(db.transactions.filter(txMatch)).length+' movimentos':'Sem filtros: a lista mostra tudo.'}</div></div>`;
+  const subOpts=[{v:'',label:'Todas'},{v:'__none__',label:'Sem subcategoria'}].concat(subsF.map(x=>({v:x,label:x})));
+  const donos=db.owners.length&&servicoLigado('owners'),comuns=txComuns();
+  const n=linhasDaLista(db.transactions.filter(txMatch)).length;
+  /* um campo com o filtro posto veste o cobalto, como os chips (o canvas) */
+  const lig=v=>v?' class="mov-ligado"':'';
+  return `<div class="mov-filtros">
+    <div class="mov-filtros-cab"><h2 class="mov-filtros-tit" id="txFtit">Filtros</h2>
+      ${txFilterCount()?`<button type="button" class="btn ghost" data-toca="vista" data-click="clearTxFilters()">Limpar</button>`:''}
+      <button type="button" class="btn" data-toca="camada" data-click="txFilterFechar()">Fechar</button></div>
+    <p class="small mov-filtros-n">Aplicam-se ao mexer · ${txNMov(n)}</p>
+    ${comuns.length?`<div class="mov-campo"><span class="lbl">Filtros comuns</span><div class="chips-fila">${comuns.map(txChipDoComum).join('')}</div></div>`:''}
+    <div class="mov-campo"><span class="flabel" id="txKindL">Tipo</span>
+      <div class="chips-fila" id="txKind" role="radiogroup" aria-labelledby="txKindL">${TX_FILTRO_TIPOS.map(([k,l])=>{const on=txFilter===k;
+        return `<button type="button" class="chip${on?' on':''}" role="radio" aria-checked="${on}" data-toca="vista" data-click="txPorTipo('${k}')">${l}</button>`}).join('')}</div></div>
+    ${txEtiquetasHtml()}
+    <div class="mov-grelha">
+      ${servicoLigado('properties')?`<label${lig(txProp)}>Imóvel${sel('txPropF',txProp,curto(txOpcoesImovel(),'Todos'),'onTxProp','vista')}</label>`:''}
+      <label${lig(txCat)}>Categoria${sel('txCatF',txCat,curto(txOpcoesCategoria(),'Todas'),'onTxCat','vista')}</label>
+      ${txCat&&txCat!=='__none__'?`<label${lig(txSub)}>Subcategoria${sel('txSubF',txSub,subOpts,'onTxSub','vista')}</label>`:''}
+      ${donos?`<label${lig(txPaid)}>Pago ou recebido por${sel('txPaidF',txPaid,payers,'onTxPaid','vista')}</label>`:''}
+      <label>De<input id="txDeF" type="date" value="${txDe}" data-change="onTxDatas()"></label>
+      <label>Até<input id="txAteF" type="date" value="${txAte}" data-change="onTxDatas()"></label>
+      <label>Ordenar por${sel('txSortF',txSort,[{v:'date',label:'Data'},{v:'amount',label:'Valor'}],'onTxSort','vista')}</label>
+      <label>Ordem${sel('txDirF',txDir,[{v:'desc',label:'Descendente'},{v:'asc',label:'Ascendente'}],'onTxDir','vista')}</label>
+    </div>
+    ${donos?`<label class="mov-interr"><span id="txNoPayerL">Incluir movimentos sem pessoa atribuída</span>
+      <button type="button" class="interruptor" id="txNoPayer" role="switch" aria-checked="${txNoPayer?'true':'false'}" aria-labelledby="txNoPayerL" data-toca="vista" data-click="onTxNoPayer()"></button></label>`:''}
+  </div>`;
 }
+/* Filtra por um tipo, a partir dos chips do painel. A categoria e a
+   subcategoria caem, porque a árvore muda com o tipo.
+   Recebe: k — o tipo ('', 'income', 'expense', 'loan', 'debt', 'owed', 'repay' ou 'settle').
+   Devolve: nada — muda o filtro e redesenha a lista e o painel. */
+function txPorTipo(k){txFilter=k||'';txCat='';txSub='';txRerender()}
 // muda o campo de ordenação dos movimentos (data ou valor)
 // Devolve: nada — redesenha a lista e o modal.
 function onTxSort(){txSort=val('txSortF')||'date';txRerender()}
 // muda o sentido da ordenação dos movimentos
 // Devolve: nada — redesenha a lista e o modal.
 function onTxDir(){txDir=val('txDirF')||'desc';txRerender()}
-// rodapé do modal de filtros: Limpar (só quando há filtros) e Fechar
-// Devolve: string HTML do rodapé.
-function txFilterFoot(){return `${txFilterCount()?`<button class="btn" data-toca="vista" data-click="clearTxFilters()">${ic('x',15)} Limpar</button>`:''}<button class="btn primary" data-toca="camada" data-click="txFilterFechar()">${ic('check',15)} Fechar</button>`}
-// abre o modal de filtros dos movimentos
-// Devolve: nada — abre o modal.
-/* O painel de filtros dos movimentos, ancorado ao botão do cabeçalho — o
-   mesmo .fwrap/.fpanel das outras listas.
-   Devolve: o HTML do painel, ou vazio quando está fechado. */
+/* O painel de filtros dos movimentos — o mesmo .fwrap/.fpanel das outras
+   listas, logo por baixo da pesquisa e do botão que o abre. O Limpar e o
+   Fechar vivem no cabeçalho dele (txFilterBody).
+   Devolve: o HTML do painel (fechado, só a moldura escondida). */
 function txFilterPainel(){
-  return `<div class="fwrap u-h-0"><div class="fpanel ${txFiltAberto?'on':''} u-t-0" id="txFpanel">
-    <div class="card u-p-12px">${txFilterBody()}
-      <div class="toolbar u-m-12px-0-0">${txFilterFoot()}</div></div></div></div>`;
+  return `<div class="fwrap u-h-0 mov-fwrap"><div class="fpanel ${txFiltAberto?'on':''} u-t-0" id="txFpanel" role="region" aria-labelledby="txFtit">
+    <div class="card mov-filtros-card">${txFilterBody()}</div></div></div>`;
 }
 // fecha o painel de filtros dos movimentos (os filtros aplicam-se logo ao mexer)
 // Devolve: nada — fecha o painel e redesenha a vista.
@@ -332,9 +463,6 @@ function txFilterFechar(){txFiltAberto=false;closePops();render()}
 // muda o filtro de imóvel/grupo dos movimentos
 // Devolve: nada — redesenha a lista e o modal.
 function onTxProp(){txProp=val('txPropF')||'';txRerender()}
-// muda o proprietário em foco; o filtro de imóvel cai porque o âmbito mudou
-// Devolve: nada — redesenha a lista e o modal.
-function onTxOwner(){ownerFilter=val('txOwnerF')||'';txProp='';txRerender()}
 // muda o filtro de quem pagou ou recebeu
 // Devolve: nada — redesenha a lista e o modal.
 function onTxPaid(){txPaid=val('txPaidF')||'';txRerender()}
@@ -344,9 +472,9 @@ function onTxCat(){txCat=val('txCatF')||'';txSub='';txRerender()}
 // muda o filtro de subcategoria
 // Devolve: nada — redesenha a lista e o modal.
 function onTxSub(){txSub=val('txSubF')||'';txRerender()}
-// liga/desliga a inclusão de movimentos sem pessoa atribuída
-// Devolve: nada — redesenha a lista e o modal.
-function onTxNoPayer(){txNoPayer=chk('txNoPayer');txRerender()}
+// o interruptor dos movimentos sem pessoa atribuída: liga ou desliga a inclusão
+// Devolve: nada — redesenha a lista e o painel.
+function onTxNoPayer(){txNoPayer=!txNoPayer;txRerender()}
 // lê o intervalo de datas do modal e aplica-o à lista
 // Devolve: nada — redesenha a lista e o modal.
 function onTxDatas(){
@@ -354,9 +482,16 @@ function onTxDatas(){
   if(txDe&&txAte&&txAte<txDe){const x=txDe;txDe=txAte;txAte=x}   // trocadas endireitam-se
   txRerender();
 }
-// repõe todos os filtros dos movimentos na origem, incluindo a pesquisa e o proprietário global
-// Devolve: nada — redesenha a lista e o modal.
-function clearTxFilters(){txFilter='';txProp='';txPaid='';txCat='';txSub='';ownerFilter='';txNoPayer=true;txSearch='';txDe='';txAte='';closePops();txRerender()}
+/* Repõe todos os filtros dos movimentos na origem, incluindo a pesquisa. O
+   campo da pesquisa é o mesmo nó de pintura para pintura
+   (refrescarMovimentos), e por isso esvazia-se aqui, à mão.
+   Devolve: nada — redesenha a lista e o painel. */
+function clearTxFilters(){
+  txFilter='';txProp='';txPaid='';txCat='';txSub='';txNoPayer=true;txSearch='';txDe='';txAte='';txEtiq=[];
+  clearTimeout(_qT);
+  const q=document.getElementById('tx_q');if(q&&q.value){q.value='';txqMostrarLimpar(q)}
+  closePops();txRerender();
+}
 /* O «Pagar» do cartão das dívidas a terceiros: abre o formulário de uma dívida
    paga, já com o imóvel, a pessoa e o que falta devolver. Era um objeto
    literal escrito no atributo, que a gramática das ações não tem; faz o mesmo,
@@ -410,13 +545,6 @@ let txLinhasPintadas=0;
    caixa é HTML colado no início da linha e acoes HTML colado no fim da coluna
    direita. Tudo opcional; o vazio devolve um objeto sem nada. */
 function txLinhaExtra(t,mes){return {}}
-/* O mesmo para o título de um mês, que em modo de seleção ganha caixa própria.
-   Vale aqui o mesmo aviso do attrs sem class — e aqui doía mais, porque é no
-   class do título que vive o display:flex que põe o saldo do mês à direita.
-   Recebe: mes — o mês em 'AAAA-MM'.
-   Devolve: {attrs,cls,caixa} — atributos e classes extra do título, e HTML a
-   colar antes do nome do mês. Tudo opcional. */
-function txMesExtra(mes){return {}}
 /* Movimentos: KPIs do filtro atual (com evolução ao toque), saldos entre
    proprietários, dívidas a terceiros e a lista agrupada por mês com o saldo
    de cada um. Tudo respeita os filtros e a ordenação escolhidos no modal.
@@ -425,12 +553,13 @@ function txMesExtra(mes){return {}}
    uma vez cada — dá o mesmo total, sem depender de como se juntaram.
    Devolve: string com o HTML completo da vista. */
 function vTransactions(){
-  const nF=txFilterCount(),adiciona=podeSemImovel()||casasComo('tx.add').length;   /* a condição do FAB e do vazio */
-  const head=txFilterPainel()
-  +`${nF||txSearch.trim()?`<div class="small u-m-2px-0-10px">${filterSummary()}${txSearch.trim()?(nF?' · ':'')+'pesquisa: “'+esc(txSearch.trim())+'”':''}</div>`:''}`
-  +(adiciona?fab([{label:'Novo movimento',act:'newTxPick()'}]):'');
+  const adiciona=podeSemImovel()||casasComo('tx.add').length;   /* a condição do FAB e do vazio */
+  /* o FAB está escondido em todos os ecrãs (a casca); fica pela condição, que é a do vazio */
+  const fabHtml=adiciona?fab([{label:'Novo movimento',act:'newTxPick()'}]):'';
   txLinhasPintadas=0;txLista=[];   /* sem linhas, nenhuma: a lista de uma pintura anterior não fica a fingir que ainda se vê */
-  if(!db.transactions.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.${adiciona?saida('Registar movimento','newTxPick()','camada'):''}</div>`);
+  if(!db.transactions.length)return txFilterPainel()+fabHtml+(esperaDoServidor()||`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.${adiciona?saida('Registar movimento','newTxPick()','camada'):''}</div>`);
+  /* a pesquisa e o botão dos filtros, o painel logo por baixo, e os chips */
+  const head=txBarraHtml()+txFilterPainel()+txChipsHtml()+fabHtml;
   const partes=db.transactions.filter(txMatch),list=linhasDaLista(partes),vv={};   /* o valor na vista uma vez por linha: o comparador pede-o vezes sem conta */
   if(txSort==='amount')list.forEach(t=>{vv[t.id]=valorNaVista(t)});   /* a linha de um lote vale a soma das partes */
   list.sort((a,b)=>{const d=txDir==='desc'?-1:1;
@@ -451,13 +580,17 @@ function vTransactions(){
      o caminho que se fazia à mão pelo modal de filtros. O Saldo é a volta atrás. */
   const ver=(k,rot)=>({label:rot,act:`txVerTipo('${k}')`});
   const jaSo=k=>txFilter===k;
-  const resumo=`<div class="grid u-mb-4px">
-    ${kpi('Receitas',euro(tot.income),'pos','no filtro atual','Soma das receitas dos movimentos que passam no filtro.',evoTx('income'),jaSo('income')?null:ver('income','Ver só as receitas'))}
-    ${kpi('Despesas',euro(tot.expense),'neg','no filtro atual','Soma das despesas dos movimentos que passam no filtro.',evoTx('expense'),jaSo('expense')?null:ver('expense','Ver só as despesas'))}
-    ${kpi('Prestações',euro(tot.loan),'amber','no filtro atual','Prestações do crédito dos movimentos que passam no filtro.',evoTx('loan'),jaSo('loan')?null:ver('loan','Ver só as prestações'))}
-    ${tot.owed?kpi('Dívidas recebidas',euro(tot.owed),'amber','de terceiros','Dinheiro recebido de terceiros.',evoTx('owed'),jaSo('owed')?null:ver('owed','Ver só as dívidas recebidas')):''}
-    ${tot.repay?kpi('Dívidas pagas',euro(tot.repay),'neg','a terceiros','Devoluções a terceiros.',evoTx('repay'),jaSo('repay')?null:ver('repay','Ver só as dívidas pagas')):''}
-    ${kpi('Saldo',euro(saldo),saldo>=0?'pos':'neg',list.length+' movimentos','Entradas menos saídas dos movimentos que passam no filtro.',evoTx('saldo'),txFilter?ver('','Ver todos os tipos'):null)}</div>`;
+  /* Os totais em cartões tocáveis (o canvas: Receitas, Despesas, Prestações,
+     Saldo · N), cada um na cor do seu dinheiro — a prestação em roxo, as
+     dívidas em cobalto. Sem rodapé, menos o Saldo, que diz quantos movimentos
+     são. No telemóvel correm numa fila que se arrasta de lado. */
+  const resumo=`<div class="grid mov-tot" role="group" aria-label="Totais no filtro atual">
+    ${kpi('Receitas',euro(tot.income),'pos','','Soma das receitas dos movimentos que passam no filtro.',evoTx('income'),jaSo('income')?null:ver('income','Ver só as receitas'))}
+    ${kpi('Despesas',euro(tot.expense),'neg','','Soma das despesas dos movimentos que passam no filtro.',evoTx('expense'),jaSo('expense')?null:ver('expense','Ver só as despesas'))}
+    ${kpi('Prestações',euro(tot.loan),'prest','','Prestações do crédito dos movimentos que passam no filtro.',evoTx('loan'),jaSo('loan')?null:ver('loan','Ver só as prestações'))}
+    ${tot.owed?kpi('Dívidas recebidas',euro(tot.owed),'mov-div','','Dinheiro recebido de terceiros.',evoTx('owed'),jaSo('owed')?null:ver('owed','Ver só as dívidas recebidas')):''}
+    ${tot.repay?kpi('Dívidas pagas',euro(tot.repay),'mov-div','','Devoluções a terceiros.',evoTx('repay'),jaSo('repay')?null:ver('repay','Ver só as dívidas pagas')):''}
+    ${kpi('Saldo',euro(saldo),saldo>=0?'':'neg',txNMov(list.length),'Entradas menos saídas dos movimentos que passam no filtro.',evoTx('saldo'),txFilter?ver('','Ver todos os tipos'):null)}</div>`;
   txLista=list;
   /* Os indicadores e os cartões das contas vão juntos numa peça com chave
      (continuidade.js): entrar na seleção põe a barra dela por cima de tudo,
@@ -465,19 +598,177 @@ function vTransactions(){
      saltava de uma vez — o título do mês, a caminho, passava por cima do
      fundo dos cartões. Um <div> sem nada: as margens de dentro atravessam-no. */
   return head+`<div data-fk="txresumo">`+resumo+balancesCard(txProp||null)+creditorsCard(txProp&&txProp!=='__none__'?txProp:null)+`</div>`
-    +`<div id="txLista"></div>`;
+    +txCabTabela()+`<div id="txLista" class="mov-tabela"></div>`;
+}
+/* O cabeçalho das colunas, que só se vê no ecrã largo, onde a lista é uma
+   tabela (D-Movimentos): a caixa de tudo, Data, Descrição, Imóvel,
+   Categoria, Pago · recebido e Valor. Vive na moldura, logo antes do
+   #txLista — dentro dele o reconciliar tirava-o, por não ter chave. A caixa
+   de tudo é da camada da seleção (cloud/selecao.js), que enche o
+   .mov-cab-caixa; sem ela fica a coluna vazia. As colunas que um serviço
+   desligado não tem saem, como na linha.
+   Devolve: o HTML do cabeçalho (texto). */
+function txCabTabela(){
+  return `<div class="mov-cab" data-fk="txcab"><span class="mov-cab-caixa"></span><span class="mov-c-data">Data</span><span class="mov-c-desc">Descrição</span>`+
+    `${servicoLigado('properties')?'<span class="mov-c-imovel">Imóvel</span>':''}<span class="mov-c-cat">Categoria</span>`+
+    `${servicoLigado('owners')?'<span class="mov-c-quem">Pago · recebido</span>':''}<span class="mov-c-valor">Valor</span></div>`;
+}
+/* A pesquisa (sempre à vista, o canvas) e o botão que abre o painel dos
+   filtros, com quantos estão ligados. A pesquisa é um nó que a lista viva
+   guarda de pintura para pintura (refrescarMovimentos): escrever não perde o
+   foco nem o que o teclado estava a compor. A lupa é desenhada na folha
+   (estilos.css:.mov-lupa).
+   Devolve: o HTML da barra (texto). */
+function txBarraHtml(){
+  const n=txFilterCount(),res=filterSummary();
+  return `<div class="mov-barra">
+    <label class="mov-busca"><span class="mov-lupa" aria-hidden="true"></span>
+      <input id="tx_q" type="search" value="${esc(txSearch)}" placeholder="Pesquisar…" aria-label="Pesquisar movimentos: palavras soltas ou uma frase entre aspas" autocomplete="off" enterkeyhint="search"
+        data-input="onTxSearch(this.value);txqMostrarLimpar(this)"><button type="button" class="qclear${txSearch?'':' u-d-none'}" aria-label="Limpar a pesquisa" data-toca="vista" data-click="txqLimpar(this)">${ic('x',14)}</button></label>
+    <button type="button" class="btn so-icone mov-filt${txFiltAberto?' on':''}" id="txFiltBtn" aria-expanded="${txFiltAberto?'true':'false'}" aria-controls="txFpanel"
+      aria-label="${n?'Filtros: '+n+(n===1?' ativo':' ativos'):'Filtros'}"${res?` title="${res}"`:''} data-toca="vista" data-click="txFiltrosAlternar()">${ic('filter',18)}${n?`<span class="mov-filt-n" aria-hidden="true">${n}</span>`:''}</button>
+  </div>`;
+}
+/* Os anos que têm movimentos, do mais recente para o mais antigo — as escolhas
+   do chip do período.
+   Devolve: array de anos (texto, 'AAAA'). */
+function txAnos(){
+  const ys={};(db.transactions||[]).forEach(t=>{const y=String(t.date||'').slice(0,4);if(/^\d{4}$/.test(y))ys[y]=1});
+  return Object.keys(ys).sort().reverse();
+}
+/* O ano inteiro que as datas do filtro desenham, se o desenham.
+   Devolve: 'AAAA', ou '' quando o intervalo não é um ano de 1 de janeiro a 31 de dezembro. */
+function txAnoDoFiltro(){
+  const y=String(txDe||'').slice(0,4);
+  return /^\d{4}$/.test(y)&&txDe===y+'-01-01'&&txAte===y+'-12-31'?y:'';
+}
+/* O que o filtro das datas diz, para o rótulo do chip.
+   Devolve: o texto (por escapar): o ano, o intervalo, «desde …», «até …», ou ''. */
+function txRotuloPeriodo(){
+  const y=txAnoDoFiltro();if(y)return y;
+  if(txDe&&txAte)return dPT(txDe)+' – '+dPT(txAte);
+  return txDe?'desde '+dPT(txDe):txAte?'até '+dPT(txAte):'';
+}
+/* Um chip de filtro que abre a escolha: o menu da casa (sel) vestido de chip.
+   Desligado diz o nome do filtro e leva a seta; ligado diz o valor, com o
+   fundo cobalto e um × ao lado para o limpar. O rótulo é o do filtro e não o
+   da opção («Tipo», e não «Todos»), e o leitor de ecrã ouve os dois.
+   Recebe: id — o id do sel; valor — o valor escolhido; opcoes — [{v, label}];
+   onchange — o nome da função que aplica; nome — o nome do filtro; rotulo — o
+   que o chip diz ligado; ligado — se o filtro está posto; limpar — a ação do ×;
+   cls (opcional) — classes extra do chip.
+   Devolve: o HTML do chip (texto). */
+function txChipSel(id,valor,opcoes,onchange,nome,rotulo,ligado,limpar,cls){
+  const diz=ligado?rotulo:nome;
+  const s=sel(id,valor,opcoes,onchange,'vista')
+    .replace('class="selbtn"','class="selbtn" aria-label="'+esc(nome+(ligado?': '+rotulo:''))+'"')
+    .replace(/(<span id="lab_[^"]*">)[^<]*(<\/span>)/,'$1'+esc(diz)+'$2');
+  return `<span class="mov-chip${ligado?' on':''}${cls?' '+cls:''}">${s}${ligado?`<button type="button" class="mov-chip-x" aria-label="Limpar ${esc(nome.toLowerCase())}" data-toca="vista" data-click="${limpar}">${ic('x',14)}</button>`:''}</span>`;
+}
+/* Os chips dos filtros que já existem (o canvas): o período, o tipo, o
+   imóvel, a categoria e quem pagou ou recebeu — cada um abre a sua escolha e,
+   ligado, mostra o valor com o × —, as etiquetas quando há escolhidas (o
+   texto abre o painel, o × limpa-as), o «só com pessoa atribuída» quando está
+   ligado, os filtros comuns (só no ecrã largo; no telemóvel vivem no painel) e
+   o «Limpar». No telemóvel o «Pago por» desligado sai, para a fila caber: está
+   no painel.
+   Devolve: o HTML da fila de chips (texto). */
+function txChipsHtml(){
+  const L=[],anos=txAnos(),y=txAnoDoFiltro(),per=!!(txDe||txAte);
+  const opsPer=[{v:'',label:'Todo o período'}].concat(anos.map(a=>({v:a,label:a})))
+    .concat(per&&!y?[{v:'__atual__',label:txRotuloPeriodo()}]:[]).concat([{v:'__datas__',label:'Escolher datas…'}]);
+  L.push(txChipSel('txcPer',y||(per?'__atual__':''),opsPer,'txChipPeriodo','Período',txRotuloPeriodo(),per,"txLimparFiltro('per')"));
+  const tipo=TX_FILTRO_TIPOS.find(x=>x[0]===txFilter)||TX_FILTRO_TIPOS[0];
+  L.push(txChipSel('txcTipo',txFilter,TX_FILTRO_TIPOS.map(([v,l])=>({v,label:v?l:'Todos os tipos'})),'txChipTipo','Tipo',tipo[1],!!txFilter,"txLimparFiltro('tipo')"));
+  if(servicoLigado('properties')){
+    const rp=txProp==='__none__'?'Sem imóvel':String(txProp||'').startsWith('g:')?'Grupo · '+((grp(txProp.slice(2))||{}).name||''):propName(txProp);
+    L.push(txChipSel('txcProp',txProp,txOpcoesImovel(),'txChipImovel','Imóvel',rp,!!txProp,"txLimparFiltro('prop')"));
+  }
+  const rc=txCat==='__none__'?'Sem categoria':txCat+(txSub?' › '+(txSub==='__none__'?'sem subcategoria':txSub):'');
+  L.push(txChipSel('txcCat',txCat,txOpcoesCategoria(),'txChipCategoria','Categoria',rc,!!(txCat||txSub),"txLimparFiltro('cat')"));
+  /* as etiquetas são de escolha múltipla, que o menu da casa não tem: o chip
+     só aparece com elas escolhidas, e o texto abre o painel, onde se mudam */
+  if(txEtiq.length)L.push(`<span class="mov-chip on mov-chip-etiq"><button type="button" class="mov-chip-txt" aria-label="${esc((txEtiq.length===1?'Etiqueta: ':'Etiquetas: ')+txEtiq.join(' ou ')+'. Mudar nos filtros')}" data-toca="vista" data-click="txEtiqAbrir()"><span class="mov-chip-etiq-t">${esc(txRotuloEtiquetas())}</span></button><button type="button" class="mov-chip-x" aria-label="Limpar as etiquetas" data-toca="vista" data-click="txLimparFiltro('etiq')">${ic('x',14)}</button></span>`);
+  if(db.owners.length&&servicoLigado('owners')){
+    const payers=[{v:'',label:'Qualquer proprietário'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
+    L.push(txChipSel('txcPago',txPaid,payers,'txChipPago','Pago ou recebido por',(owner(txPaid)||{}).name||'',!!txPaid,"txLimparFiltro('pago')",txPaid?'':'mov-so-largo'));
+    if(!txNoPayer)L.push(`<span class="mov-chip on"><span class="mov-chip-txt">Só com pessoa atribuída</span><button type="button" class="mov-chip-x" aria-label="Incluir os movimentos sem pessoa atribuída" data-toca="vista" data-click="txLimparFiltro('pessoa')">${ic('x',14)}</button></span>`);
+  }
+  const comuns=txComuns();
+  if(comuns.length)L.push(txChipSel('txcComum','',[{v:'',label:'Nenhum'}].concat(comuns.map(f=>({v:f.id,label:f.name}))),'txChipComum','Filtros comuns','',false,'','mov-comum mov-so-largo'));
+  /* com um filtro só, no telemóvel, o × do chip já o limpa: o «Limpar» só se
+     mostra lá com dois ou mais, para a fila não partir em duas */
+  const nf=txFiltrosN();
+  if(nf)L.push(`<button type="button" class="chip limpar${nf>1?'':' mov-so-largo'}" data-toca="vista" data-click="clearTxFilters()">Limpar</button>`);
+  return `<div class="chips-fila mov-chips" role="group" aria-label="Filtros dos movimentos">${L.join('')}</div>`;
+}
+/* O chip do período: um ano escolhe-o de 1 de janeiro a 31 de dezembro, «Todo
+   o período» limpa as datas e «Escolher datas…» abre o painel, onde estão o
+   De e o Até.
+   Devolve: nada — muda as datas (ou abre o painel) e redesenha. */
+function txChipPeriodo(){
+  const v=val('txcPer')||'';
+  if(v==='__datas__'){txFiltAberto=true;render();fpanelEntra(true);const d=document.getElementById('txDeF');if(d)try{d.focus()}catch(e){}return}
+  if(v==='__atual__')return;
+  if(/^\d{4}$/.test(v)){txDe=v+'-01-01';txAte=v+'-12-31'}else{txDe='';txAte=''}
+  txRerender();
+}
+// O chip do tipo: muda o filtro; a categoria e a subcategoria caem, porque eram da árvore do tipo anterior.
+// Devolve: nada — redesenha a lista.
+function txChipTipo(){txPorTipo(val('txcTipo')||'')}
+// O chip do imóvel (ou grupo, 'g:…', ou '__none__'): muda o filtro.
+// Devolve: nada — redesenha a lista.
+function txChipImovel(){txProp=val('txcProp')||'';txRerender()}
+// O chip da categoria: muda o filtro; a subcategoria cai, porque era da anterior.
+// Devolve: nada — redesenha a lista.
+function txChipCategoria(){txCat=val('txcCat')||'';txSub='';txRerender()}
+// O chip de quem pagou ou recebeu: muda o filtro.
+// Devolve: nada — redesenha a lista.
+function txChipPago(){txPaid=val('txcPago')||'';txRerender()}
+// O chip dos filtros comuns: aplica o escolhido (a opção vazia não faz nada).
+// Devolve: nada — aplica o filtro comum (definicoes.js:aplicarFiltroComum).
+function txChipComum(){const v=val('txcComum');if(v)aplicarFiltroComum(v)}
+/* O × de um chip ligado: limpa só esse filtro.
+   Recebe: qual — 'per' (as datas), 'tipo' (e a categoria, que era da árvore
+   dele), 'prop', 'cat' (com a subcategoria), 'pago', 'pessoa' (volta a
+   incluir os movimentos sem pessoa atribuída) ou 'etiq' (todas as etiquetas).
+   Devolve: nada — muda o filtro e redesenha. */
+function txLimparFiltro(qual){
+  if(qual==='per'){txDe='';txAte=''}
+  else if(qual==='etiq')txEtiq=[];
+  else if(qual==='tipo'){txFilter='';txCat='';txSub=''}
+  else if(qual==='prop')txProp='';
+  else if(qual==='cat'){txCat='';txSub=''}
+  else if(qual==='pago')txPaid='';
+  else if(qual==='pessoa')txNoPayer=true;
+  closePops();txRerender();
 }
 /* As linhas que a última pintura da vista escolheu (linhasDaLista: os
    movimentos e, por lote, a primeira parte com _partes), para a lista se
    poder repintar sozinha sem voltar a filtrar e a ordenar tudo. */
 let txLista=[];
-/* Quem pagou (ou recebeu) e como se dividiu, na linha de um movimento.
+/* O tom de um tipo de movimento, para o quadrado do ícone e para o valor: a
+   receita verde, a despesa laranja, a prestação roxa, a dívida e o acerto em
+   cobalto (o canvas). Diz também o ícone e a classe do valor.
+   Recebe: k — o tipo ('income', 'expense', 'loan', 'owed', 'repay' ou 'settle').
+   Devolve: {ic, tom, valor} — o nome do ícone, a classe do quadrado (.linha
+   .ic.in|out|loan, ou '' para o cobalto) e a classe da cor do valor. */
+function txTomDoTipo(k){
+  return ({income:{ic:'up',tom:'in',valor:'pos'},expense:{ic:'dn',tom:'out',valor:'neg'},loan:{ic:'bank',tom:'loan',valor:'prest'},
+    owed:{ic:'users',tom:'',valor:'mov-div'},repay:{ic:'users',tom:'',valor:'mov-div'},settle:{ic:'swap',tom:'',valor:'mov-acerto'}})[k]
+    ||{ic:'dn',tom:'out',valor:'neg'};
+}
+/* O primeiro nome de um proprietário, para a linha curta do telemóvel.
+   Recebe: id — o id do proprietário.
+   Devolve: o nome (texto, por escapar), ou '' sem ninguém. */
+function txPrimeiroNome(id){const o=id&&owner(id);return o&&o.name?String(o.name).trim().split(/\s+/)[0]:''}
+/* Quem pagou ou recebeu, por inteiro: a coluna «Pago · recebido» da tabela.
+   Num acerto, quem paga → quem recebe.
    Recebe: t — o movimento.
-   Devolve: HTML da linha pequena, ou '' quando nao ha pagador. */
-function txQuem(t){
-  if(t.kind==='settle')return `<div class="small"><b>${esc((owner(t.paidBy)||{}).name||'?')}</b> \u2192 <b>${esc((owner(t.toId)||{}).name||'?')}</b></div>`;
-  if(!(t.paidBy&&owner(t.paidBy)))return '';
-  return `<div class="small">${isIn(t.kind)?'Recebido por':'Pago por'} <b>${esc(owner(t.paidBy).name)}</b>${splitLabel(t)?' \u00b7 dividido '+splitLabel(t):''}</div>`;
+   Devolve: o texto, já escapado ('' sem ninguém indicado). */
+function txQuemNome(t){
+  if(t.kind==='settle')return esc((owner(t.paidBy)||{}).name||'?')+' &rarr; '+esc((owner(t.toId)||{}).name||'?');
+  return t.paidBy&&owner(t.paidBy)?esc(owner(t.paidBy).name):'';
 }
 /* O HTML de UMA linha de movimento. Esta a parte porque e a peca que a lista
    viva compara consigo propria: o texto que sai daqui e a assinatura da linha
@@ -487,24 +778,43 @@ function txQuem(t){
    A linha de um lote (linhasDaLista) leva o id da primeira parte — no data-lp,
    no txView e no data-tx da seleção —, no lugar do imóvel o grupo ou «Todos
    os imóveis» com «· N imóveis», e o valor e a frase das partes que passaram.
+
+   Um HTML só para os dois desenhos do canvas, porque a assinatura é uma: no
+   telemóvel (M-Movimentos) o quadrado do ícone na cor do tipo, o título, a
+   linha curta «dd/mm · imóvel · quem» e o valor com sinal e cor; no ecrã
+   largo (D-Movimentos) a mesma linha é uma fila da tabela — Data, Descrição
+   (o título e, por baixo, o tipo com o que mais diz), Imóvel, Categoria,
+   Pago · recebido e Valor. A folha mostra as peças de um e esconde as do
+   outro (estilos.css:.mov-linha). A caixa da seleção e o que mais a nuvem
+   quiser vêm do txLinhaExtra.
    Recebe: t — o movimento, ou a linha de um lote; mo — o mes 'AAAA-MM' do
    bloco onde a linha entra.
    Devolve: o HTML da linha (string). */
 function txLinhaHtml(t,mo){
-  const k=KIND[t.kind]||KIND.expense,c=t.contractId?contract(t.contractId):null,parte=fraseDaParte(t);
-  const x=txLinhaExtra(t,mo)||{};
-  const onde=t._partes?' · '+ondeDoLoteNaLista(t):t.propertyId?' · '+esc(propName(t.propertyId)):'';
-  return `<div class="card tap txrow${x.cls?' '+x.cls:''} u-p-13px-15px" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" ${x.attrs||''} data-toca="camada" data-click="${x.onclick||`txView('${jsq(t.id)}')`}"><div class="row-between">
-    ${x.caixa||''}<div class="u-minw-0 txcorpo"><div class="title u-fs-14p5px">${esc(t.label)}</div>
-      <div class="small">${dPT(t.date)} \u00b7 ${k.short}${t.category?' \u00b7 '+esc(t.category)+(t.sub?' / '+esc(t.sub):''):''}${onde}${t.creditor?' \u00b7 '+esc(t.creditor):''}</div>
-      ${c?`<div class="small">${ic('contract',12)} ${esc(ctName(c))}</div>`:''}
-      ${txQuem(t)}
-      ${parte?`<div class="small">${parte}</div>`:''}
-      ${t.kind==='loan'&&(t.principal||t.interest||t.fee)?`<div class="small">${t.payType==='amortizacao'?`Amortiza\u00e7\u00e3o \u00b7 capital ${euro2(t.principal||0)} \u00b7 comiss\u00e3o ${euro2(t.fee||0)}`:`Capital ${euro2(t.principal||0)} \u00b7 juros ${euro2(t.interest||0)} \u00b7 selo ${euro2(t.stamp||0)}`}</div>`:''}
-      ${(!countsInTotals(t)||(t.tags||[]).length)?`<div class="chips">${countsInTotals(t)?'':'<span class="badge grey">fora dos totais</span>'}${(t.tags||[]).map(g=>`<span class="badge grey">${esc(g)}</span>`).join('')}</div>`:''}</div>
-    <div class="u-ta-right u-fx-0-0-auto"><div class="${k.color}${t.kind==='settle'?' u-c-v-muted':''} u-fw-750">${k.sign}${euro2(valorNaVista(t))}</div>
-      ${t.notes?`<div class="small u-mt-3px" title="Tem coment\u00e1rios">${ic('pen',12)}</div>`:''}${x.acoes||''}</div>
-  </div></div>`;
+  const k=KIND[t.kind]||KIND.expense,tom=txTomDoTipo(t.kind),c=t.contractId?contract(t.contractId):null,parte=fraseDaParte(t);
+  const x=txLinhaExtra(t,mo)||{},SEP=' · ';
+  const onde=t._partes?ondeDoLoteNaLista(t):t.propertyId?esc(propName(t.propertyId)):'';
+  const quem=t.kind==='settle'?esc(txPrimeiroNome(t.paidBy)||'?')+' → '+esc(txPrimeiroNome(t.toId)||'?'):esc(txPrimeiroNome(t.paidBy));
+  const cat=t.category?esc(t.category)+(t.sub?' › '+esc(t.sub):''):'';
+  /* a linha curta: a data sem o ano (o título do mês já o diz), onde e quem;
+     sem os dois, a categoria ou o tipo, para a linha nunca ficar só com a data */
+  const curta=[dPT(t.date).slice(0,5),onde,quem,t.creditor?esc(t.creditor):''].filter(Boolean);
+  if(curta.length===1)curta.push(cat||esc(k.short));
+  /* o tipo e o que mais diz deste movimento, por baixo da descrição na tabela */
+  const capital=t.kind==='loan'&&(t.principal||t.interest||t.fee)?(t.payType==='amortizacao'?'amortização · capital ':'capital ')+euro2(t.principal||0):'';
+  /* as etiquetas dizem-se na mesma linha, como no canvas («Despesa · Dedutível») */
+  const tipo=[esc(k.short),c?esc(ctName(c)):'',t.creditor?esc(t.creditor):'',capital,ehRenda(t)&&t.recibo?'recibo emitido':''].concat((t.tags||[]).map(esc)).filter(Boolean).join(SEP);
+  const marcas=!countsInTotals(t)?'<span class="badge grey">fora dos totais</span>':'';
+  return `<div class="linha txrow mov-linha${x.cls?' '+x.cls:''}" data-lp="tx:${esc(t.id)}" data-fk="tx:${esc(t.id)}" ${x.attrs||''} data-toca="camada" data-click="${x.onclick||`txView('${jsq(t.id)}')`}">
+    ${x.caixa||''}<span class="ic${tom.tom?' '+tom.tom:''}" aria-hidden="true">${ic(tom.ic,18)}</span><span class="mov-c-data">${dPT(t.date)}</span>
+    <div class="u-minw-0 txcorpo"><div class="title">${esc(t.label)}</div>
+      <div class="small mov-curta">${curta.join(SEP)}</div>
+      <div class="small mov-tipo">${tipo}</div>
+      ${parte?`<div class="small mov-parte">${parte}</div>`:''}
+      ${marcas?`<div class="mov-marcas">${marcas}</div>`:''}</div>
+    ${servicoLigado('properties')?`<span class="mov-c-imovel">${onde||'<span class="mov-vazio">&mdash;</span>'}</span>`:''}<span class="mov-c-cat">${cat||'<span class="mov-vazio">&mdash;</span>'}</span>${servicoLigado('owners')?`<span class="mov-c-quem">${txQuemNome(t)||'<span class="mov-vazio">&mdash;</span>'}</span>`:''}
+    <div class="mov-c-valor"><b class="${tom.valor}">${k.sign}${euro2(valorNaVista(t))}</b>${t.notes?`<span class="mov-nota" role="img" aria-label="Tem coment\u00e1rios">${ic('pen',13)}</span>`:''}${x.acoes||''}</div>
+  </div>`;
 }
 // "set 2026" a partir de uma data AAAA-MM-DD (ou AAAA-MM), para os títulos dos
 // meses e as perguntas. Vive aqui, e não nos Planeados, porque a lista e a
@@ -522,17 +832,14 @@ const mesPt=iso=>(MES[Number(String(iso).slice(5,7))-1]||'')+' '+String(iso).sli
    filtro e o texto do bloco deixava de bater certo. Fica um <span> vazio, que
    o pintarListaTx enche depois de reconciliar.
 
-   O nome do mês leva o mês num data-mes-nome, e o corpo de cada linha a
-   classe txcorpo: são as duas peças que a caixa da seleção empurra, e é por
-   elas que cloud/selecao.js:selMedirDeslize as reencontra depois do render
-   para as fazer deslizar em vez de saltar.
+   O título é o mesmo dentro e fora da seleção: a seleção marca linha a
+   linha ou tudo (cloud/selecao.js), como nas Casas, e o mês não tem caixa.
    Recebe: mo — o mes 'AAAA-MM'.
    Devolve: o HTML do bloco (string). */
 function txMesHtml(mo){
-  const xm=txMesExtra(mo)||{};
-  return `<div class="txmes"><div class="section-title${xm.cls?' '+xm.cls:''} u-d-flex u-jc-space-between u-tt-none" ${xm.attrs||''}>
-    ${xm.caixa||''}<span class="txmes-nome" data-mes-nome="${esc(mo)}">${esc(mesPt(mo))}</span><span class="txnet"></span></div>
-    <div class="list"></div></div>`;
+  return `<div class="txmes"><div class="section-title mov-mes">
+    <span class="txmes-nome">${esc(mesPt(mo))}</span><span class="txnet"></span></div>
+    <div class="list mov-lista"></div></div>`;
 }
 /* Enche (ou acerta) a lista dos movimentos dentro do #txLista, mexendo so no
    que mudou. Dois niveis: os meses, e as linhas de cada mes — assim uma linha
@@ -553,7 +860,8 @@ function pintarListaTx(){
     /* o saldo do mes escreve-se aqui, e nao na assinatura do bloco */
     const net=sum(by[mo].map(saldoNaVista));
     const sp=bl.querySelector('.txnet');
-    if(sp){sp.textContent=euro(net);sp.className='txnet '+(net>=0?'pos':'neg')}
+    /* «saldo +306,20 €», com o número na cor do dinheiro (o canvas) */
+    if(sp)sp.innerHTML='saldo <b'+(Math.abs(net)<0.005?'':net>0?' class="pos"':' class="neg"')+'>'+(net>=0.005?'+':'')+euro2(net)+'</b>';
   });
   tornarFocavel(alvo);
   /* as marcas da selecao vivem no DOM, e as linhas refeitas nasceram sem elas */
@@ -572,9 +880,22 @@ function refrescarMovimentos(){
   const antigaLista=document.getElementById('txLista');
   if(tab!=='transactions'||!antigaLista){render();return null}
   const v=view();
-  const molde=document.createElement('div');molde.innerHTML=vTransactions();
+  /* a moldura é o que o render poria por cima da lista: também a casca — os
+     separadores da área, que o render põe à frente de cada vista
+     (vistas.js:render). Sem eles, a
+     primeira tecla da pesquisa levava os separadores do telemóvel. */
+  const molde=document.createElement('div');
+  molde.innerHTML=abasDaArea()+vTransactions();
   const novaLista=molde.querySelector('#txLista');
   if(!novaLista){render();return null}
+  /* A pesquisa fica o MESMO nó, com o foco e o que o teclado estava a compor;
+     o painel dos filtros também, para não voltar ao topo a cada escolha — e
+     repinta-se por dentro. */
+  txGuardarNo(v,molde,'.mov-busca');
+  const painel=txGuardarNo(v,molde,'.mov-fwrap');
+  if(painel){const fp=painel.querySelector('.fpanel'),c=painel.querySelector('.mov-filtros-card');
+    if(fp)fp.classList.toggle('on',!!txFiltAberto);
+    if(c&&txFiltAberto)c.innerHTML=txFilterBody()}
   /* a moldura e tudo o que vem antes da lista: troca-se de uma vez, que e
      barato, e a lista fica de fora para ser comparada peca a peca */
   for(let n=antigaLista.previousElementSibling;n;){const p=n.previousElementSibling;n.remove();n=p}
@@ -583,12 +904,23 @@ function refrescarMovimentos(){
   nova.forEach(n=>v.insertBefore(n,antigaLista));
   const r=pintarListaTx();
   tornarFocavel(v);
+  marcarDatasVazias(v);
   pintarBotaoFiltros();
+  /* o botão do cabeçalho é da seleção nos movimentos (cloud/selecao.js), e o
+     pintarBotaoFiltros acabou de o repor como funil */
+  try{if(window.CW&&CW.selCabecalho)CW.selCabecalho()}catch(e){}
   return r;
 }
-// muda o filtro de tipo; categoria e subcategoria caem porque a árvore muda com o tipo
-// Devolve: nada — redesenha a lista e o modal.
-function onTxFilter(){txFilter=val('txKind')||'';txCat='';txSub='';txRerender()}
+/* Guarda um nó vivo da moldura de uma pintura para a seguinte: o novo, ainda
+   no molde, dá o lugar ao que já está no ecrã.
+   Recebe: v — o #view; molde — o elemento com a moldura nova; seletor — o do nó.
+   Devolve: o nó guardado (já no molde), ou null quando falta um dos dois. */
+function txGuardarNo(v,molde,seletor){
+  const vivo=v.querySelector(seletor),novo=molde.querySelector(seletor);
+  if(!vivo||!novo||!novo.parentNode)return null;
+  novo.parentNode.replaceChild(vivo,novo);
+  return vivo;
+}
 const TX_PLURAL={income:'as receitas',expense:'as despesas',loan:'as prestações',owed:'as dívidas recebidas',repay:'as dívidas pagas',settle:'as transferências',debt:'as dívidas'};
 /* Filtra os movimentos por um tipo, a partir da janela de um cartão de resumo.
    A categoria e a subcategoria limpam-se: as que havia eram do tipo anterior.
@@ -619,7 +951,7 @@ function txFiltrosFechar(){txFiltAberto=false}
 // limpa os filtros próprios dos movimentos no estado (o botão dos estados vazios,
 // via limparFiltroAtual → anaClear, que limpa o proprietário e repinta)
 // Devolve: nada — só o estado.
-function txFiltrosLimpar(){txFilter='';txProp='';txPaid='';txCat='';txSub='';txNoPayer=true;txSearch='';txDe='';txAte=''}
+function txFiltrosLimpar(){txFilter='';txProp='';txPaid='';txCat='';txSub='';txNoPayer=true;txSearch='';txDe='';txAte='';txEtiq=[]}
 /* O que os Movimentos acrescentam ao menu de toque longo de um IMÓVEL (data-lp
    "prop:<id>"): «Registar despesa», já com o imóvel escolhido. Só onde posso
    adicionar movimentos — a condição que vivia no ficheiro dos imóveis e agora

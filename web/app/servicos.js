@@ -30,8 +30,8 @@
    espelho no servidor é worker/src/lib/servicos.js (um teste compara os dois). */
 const SERVICOS=[
   {id:'dashboard',nome:'Visão geral',ficheiros:['app/painel-geral.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['properties','contracts','transactions','recurring','owners']},
-  {id:'properties',nome:'Imóveis',ficheiros:['app/lista-imoveis.js','app/imovel.js'],kinds:[],userKinds:[],casa:true,colab:false,requer:[],usa:['contracts','credits','owners','transactions']},
-  {id:'contracts',nome:'Contratos',ficheiros:['app/lista-contratos.js','app/contrato.js','app/contrato-pdf.js'],kinds:['contract'],userKinds:[],casa:false,colab:false,requer:['properties','tenants'],usa:['transactions','recurring']},
+  {id:'properties',nome:'Imóveis',ficheiros:['app/lista-imoveis.js','app/imovel.js','app/tarefas.js'],kinds:[],userKinds:[],casa:true,colab:false,requer:[],usa:['contracts','credits','owners','transactions']},
+  {id:'contracts',nome:'Contratos',ficheiros:['app/lista-contratos.js','app/contrato.js','app/contrato-pdf.js','app/tarefas.js'],kinds:['contract'],userKinds:[],casa:false,colab:false,requer:['properties','tenants'],usa:['transactions','recurring']},
   {id:'visits',nome:'Visitas',ficheiros:['app/visitas.js'],kinds:['visit'],userKinds:[],casa:false,colab:false,requer:['properties'],usa:['tenants']},
   {id:'tenants',nome:'Inquilinos',ficheiros:['app/lista-pessoas.js','app/pessoas.js'],kinds:['tenant'],userKinds:['tenant'],casa:false,colab:false,requer:[],usa:['contracts']},
   {id:'owners',nome:'Proprietários',ficheiros:['app/lista-pessoas.js','app/pessoas.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['properties']},
@@ -42,7 +42,7 @@ const SERVICOS=[
   {id:'credits',nome:'Créditos',ficheiros:['app/creditos.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:['properties'],usa:['transactions','recurring']},
   {id:'projections',nome:'Projeções',ficheiros:['app/projecoes.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['contracts','properties','transactions']},
   {id:'reports',nome:'Avaliação',ficheiros:['app/avaliacao.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['properties','contracts','transactions','owners']},
-  {id:'fisco',nome:'Declaração',ficheiros:['app/fisco.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['contracts','transactions','tenants','properties']},
+  {id:'fisco',nome:'Declaração',ficheiros:['app/fisco.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['contracts','transactions','tenants','properties'],soDev:true},
 ];
 /* onde o aparelho guarda os serviços desligados nesta conta, para o
    arranque os saber antes de o servidor responder */
@@ -70,7 +70,16 @@ function servicoDoSeparador(tab){return servicoDe(tab)?tab:''}
    ligado; a lista dos desligados vem do servidor e fica no aparelho.
    Recebe: id — o id do serviço.
    Devolve: true se está ligado (ou se não é um serviço do catálogo). */
-function servicoLigado(id){return _servicosDesligados.indexOf(id)<0}
+function servicoLigado(id){return _servicosDesligados.indexOf(id)<0&&!servicoForaDoAmbiente(id)}
+/* Este serviço fica de fora neste ambiente? Um serviço com soDev no catálogo
+   (a Declaração, enquanto as contas não estão todas confirmadas) só existe
+   fora de produção: em produção está desligado para toda a gente, e o back
+   office não o liga. O ambiente vem do servidor (cloud/guia.js, CW.ambiente),
+   que antes de responder vale 'producao' — o lado seguro. Sem a camada da
+   nuvem (os testes da base) não há ambiente a dizer, e nada fica de fora.
+   Recebe: id — o id do serviço.
+   Devolve: true se o serviço está fora deste ambiente. */
+function servicoForaDoAmbiente(id){const s=servicoDe(id);return !!(s&&s.soDev&&window.CW&&CW.ambiente==='producao')}
 /* Os serviços desligados nesta conta.
    Devolve: uma cópia da lista de ids (array). */
 function servicosDesligados(){return _servicosDesligados.slice()}

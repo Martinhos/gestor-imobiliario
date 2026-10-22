@@ -163,7 +163,7 @@ describe('o resumo do quadro 4.1', () => {
     perto(r.linhas[0].gastos.outros, 50, 1e-9);
     const a = r.avisos.find((x) => /sem regra de dedução/.test(x.texto));
     assert.ok(a);
-    assert.match(a.texto, /IRS e dedução/);
+    assert.match(a.texto, /Definições → Categorias, etiquetas e IRS/, 'o caminho que a raiz das Definições tem desde 2026-10');
     assert.equal(a.abrir, "go('settings');goSet('irs')");
     // uma despesa marcada à mão com a coluna manda sobre a categoria
     mov({ kind: 'expense', category: 'Coisas várias', amount: 70, irsCol: 'taxas', date: ANO + '-06-11' });
@@ -235,27 +235,54 @@ describe('a vista, o texto e o CSV', () => {
     const html = app.vFisco();
     assert.match(html, /Anexo F/);
     assert.match(html, /Fora da declaração/);
-    assert.match(html, /Obrigações de 2024/);
+    assert.match(html, /A tratar antes de entregar/);
     assert.match(html, /Obras antes do arrendamento/);
-    assert.equal((html.match(/class="card kpi why"/g) || []).length, 4, 'quatro indicadores com explicação');
+    /* os cinco números da prancheta: rendas, retenções, gastos, líquido e imposto */
+    assert.equal((html.match(/class="card kpi why"/g) || []).length, 5, 'cinco indicadores com explicação');
     assert.ok(html.includes('class="label">Rendas ilíquidas</div><div class="value ">' + app.euro(12500)));
+    assert.ok(html.includes('class="label">Retenções na fonte</div><div class="value ">' + app.euro(500)), 'as retenções que já iam no quadro, à cabeça');
     assert.match(html, /id="fiscoSel"/);
     assert.match(html, /id="ownerSel"/);
-    assert.match(html, /fiscoPartilhar\(\)/);
-    assert.match(html, /fiscoCsv\(\)/);
+    assert.match(html, /fiscoPartilhar\(\)">Partilhar resumo</, 'as ações da página dizem o que fazem');
+    assert.match(html, /fiscoCsv\(\)">Exportar CSV</);
+    assert.match(html, /data-click="fiscoEscolherAno\(2024\)">2024</, 'o ano dos rendimentos em chips, com o da página aceso');
+    assert.match(html, /class="chip on" aria-pressed="true" data-toca="vista" data-click="fiscoEscolherAno\(2024\)"/);
     assert.match(html, /class="tablewrap"><table class="table"/);
-    /* os cartões vinham somados um a seguir ao outro e ficavam colados: vivem
-       numa pilha com intervalo, e a coluna encolhe para a tabela rolar */
-    const pilha = html.indexOf('class="fiscoPilha u-d-grid u-gtc-minmax-0-1fr u-g-14px"');
-    assert.ok(pilha > -1, 'os cartões estão numa pilha com intervalo');
-    assert.ok(html.indexOf('Obrigações de 2024') > pilha && html.indexOf('Anexo F · quadro 4.1') > pilha && html.indexOf('Obras antes do arrendamento') > pilha,
-      'as obrigações, o quadro e as obras vivem todos dentro da pilha');
+    /* o resumo dos quadros numa tabela só, com as colunas da prancheta */
+    assert.match(html, /<th>Quadro<\/th><th class="u-ta-left">Contrato · imóvel<\/th><th class="u-ta-left">N\.º AT<\/th><th class="u-ta-left">Taxa<\/th><th>Rendas<\/th><th>Gastos<\/th><th>Líquido<\/th><th>Imposto<\/th><th class="u-ta-left">Falta<\/th>/);
+    const r = app.resumoFiscal(ANO, '');
+    assert.ok(html.includes('<td><b>' + app.euro2(r.totais.imposto) + '</b></td>'), 'o total do imposto no resumo é o dos cartões');
+    /* as obrigações e o englobamento lado a lado numa grelha; os quadros numa
+       pilha com intervalo, e a coluna encolhe para a tabela rolar */
+    const grelha = html.indexOf('class="fis-grelha"'), pilha = html.indexOf('class="fiscoPilha u-d-grid u-gtc-minmax-0-1fr u-g-14px"');
+    assert.ok(grelha > -1 && pilha > grelha, 'a grelha vem antes da pilha');
+    assert.ok(html.indexOf('A tratar antes de entregar') > grelha && html.indexOf('A tratar antes de entregar') < pilha, 'as obrigações vivem na grelha');
+    assert.ok(html.indexOf('Anexo F · quadro 4.1') > pilha && html.indexOf('Obras antes do arrendamento') > pilha,
+      'o quadro e as obras vivem dentro da pilha');
     assert.match(html, /1234567/);
     assert.match(html, /110623 · U · art\. 4651 · fr\. A/);
     assert.match(html, /ctView\('C1'\)/, 'a linha abre a ficha do contrato');
     assert.match(html, /ctView\('C2'\)/, 'e o não declarado também');
     assert.doesNotMatch(html, /Falta:/, 'nada falta ao contrato completo');
     assert.ok(html.indexOf('data-toca="vista"') > -1 && html.indexOf('data-toca="nada"') > -1 && html.indexOf('data-toca="camada"') > -1);
+  });
+
+  test('cada aviso tem o seu nível e o botão diz o sítio que abre', () => {
+    app.db.contracts[0].fisco.numero = '';
+    app.db.tenants[0].nif = '';
+    const r = app.resumoFiscal(ANO, '');
+    const semNum = r.avisos.find((a) => /sem o n\.º do contrato/.test(a.texto));
+    assert.equal(semNum.nivel, 'falta');
+    assert.equal(r.avisos.find((a) => /sem recibo eletrónico/.test(a.texto)).nivel, 'aviso');
+    assert.equal(r.avisos.find((a) => /não declarado/.test(a.texto)).nivel, 'info');
+    assert.equal(app.fiscoRotuloDoAviso("ctView('C1')"), 'Abrir contrato');
+    assert.equal(app.fiscoRotuloDoAviso("personView('tenant','t1')"), 'Abrir inquilino');
+    assert.equal(app.fiscoRotuloDoAviso("propView('v1')"), 'Abrir imóvel');
+    assert.equal(app.fiscoRotuloDoAviso("go('transactions')"), 'Ver movimentos');
+    const html = app.vFisco();
+    assert.match(html, /<span class="badge red fis-num">1<\/span><p>Contrato Arroios: declarado à AT, sem o n\.º do contrato<\/p><button type="button" class="btn sm" data-toca="camada" data-click="ctView\('C1'\)">Abrir contrato<\/button>/);
+    assert.match(html, /<span class="badge grey fis-num">\d+<\/span><p>1 contrato marcado como não declarado fica fora deste resumo\.<\/p><\/div>/, 'o que só se diz não tem botão');
+    assert.match(html, /<span class="badge red">N\.º do contrato na AT<\/span>/, 'o resumo dos quadros diz o que falta num selo');
   });
 
   test('sem rendas no ano diz-o e aponta os anos que têm', () => {
@@ -284,7 +311,8 @@ describe('a vista, o texto e o CSV', () => {
 
   test('o texto traz os mesmos números da página', () => {
     const t = app.fiscoTexto();
-    assert.match(t, /ANEXO F · QUADRO 4\.1 — 2024/);
+    assert.match(t, /ANEXO F · QUADROS 4\.1 E 4\.2 — 2024/);
+    assert.match(t, /\[4\.1\] n\.º 1234567/, 'cada contrato diz o seu quadro');
     assert.ok(t.includes('Rendas ilíquidas ' + app.euro2(12500)));
     assert.ok(t.includes('IMI ' + app.euro2(300)));
     assert.ok(t.includes('n.º 1234567'));
@@ -303,7 +331,10 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(linhas[0], /^"ano";"declarado";"contrato";"n_at"/);
     assert.match(linhas[0], /"conservacao";"condominio";"imi";"selo";"taxas";"outros";"obras24"/);
     assert.match(linhas[1], /^"2024";"sim";"Arroios";"1234567";"2024-01-01";"T2 Arroios";"110623";"U";"4651";"A";"07";"Tiago";"123456789";"100";"12500";"500"/);
-    assert.match(linhas[1], /;"0";"120";"300";"0";"0";"0";"200";"2023-07-01";"2";""$/);
+    assert.match(linhas[1], /;"0";"120";"300";"0";"0";"0";"200";"2023-07-01";"2";"";/);
+    // as colunas novas vão no fim: quadro, taxa, líquido (12 500 − 420 − 200), imposto a 25 %, anos anteriores, termo, renovação,
+    // e as do titular, do 6D, do 4.2A e do 4.2B
+    assert.match(linhas[1], /;"4\.1";"25";"11880";"2970";"";"";"";"A";"";"";"";""$/);
     assert.match(linhas[2], /^"2024";"nao";"Benfica";"";"2023-06-01";"T1 Benfica"/);
     assert.match(linhas[2], /"1200";"0"/);
     const n = linhas[0].split(';').length;
@@ -320,15 +351,49 @@ describe('a vista, o texto e o CSV', () => {
   });
 });
 
+describe('a barra, a partilha e as tabelas dos quadros', () => {
+  test('o rótulo «Titular» e o chip vão juntos, e o texto do chip vai num span (as reticências de um nome comprido)', () => {
+    let html = app.vFisco();
+    assert.ok(html.includes('<span class="fis-titular"><span class="lbl fis-lbl">Titular</span><button type="button" class="chip" data-toca="vista" data-click="hdrFiltToggle()"><span>Todos · por inteiro</span>'),
+      'sem titular, o rótulo e o chip numa caixa só');
+    app.ownerFilter = 'ana';
+    html = app.vFisco();
+    assert.match(html, /<span class="fis-titular"><span class="lbl fis-lbl">Titular<\/span><button type="button" class="chip on"[^>]*><span>Ana · quota-parte<\/span>/);
+  });
+
+  test('uma cópia recusada diz-se num aviso, sem ficar um erro por apanhar', async () => {
+    const avisos = [];
+    app.toast = (m) => avisos.push(m);
+    const nav = app.navigator;
+    nav.clipboard = { writeText: () => Promise.reject(new Error('Write permission denied.')) };
+    try {
+      await app.fiscoPartilhar();
+      assert.deepEqual(avisos, ['Não foi possível copiar o resumo.']);
+      nav.clipboard = { writeText: () => Promise.resolve() };
+      await app.fiscoPartilhar();
+      assert.deepEqual(avisos, ['Não foi possível copiar o resumo.', 'Resumo copiado.']);
+    } finally {
+      delete nav.clipboard;
+    }
+  });
+
+  test('no quadro, o «Total» fica só na primeira célula (a que se prende ao rolar) e o NIF não parte entre linhas', () => {
+    const html = app.vFisco();
+    assert.match(html, /<tr class="ana-total"><td><b>Total<\/b><\/td><td colspan="5"><\/td>/);
+    assert.doesNotMatch(html, /colspan="6"/);
+    assert.ok(html.includes('Tiago<span class="small"> · <span class="u-ws-nowrap">' + app.fmtNIF('123456789') + '</span></span>'));
+  });
+});
+
 describe('o separador e o registo', () => {
-  test('a Declaração (id fisco) está em TABS, no fim do grupo Finanças (a Avaliação passou para a Análise), e a subpágina irs existe', () => {
+  test('o IRS · Anexo F (id fisco) está em TABS, no fim do grupo Análise com a Avaliação e as Projeções, e a subpágina irs existe', () => {
     const t = app.TABS.find((x) => x.id === 'fisco');
     assert.ok(t, 'TABS tem fisco');
-    assert.equal(t.label, 'Declaração', 'o nome que se lê no menu — «Fisco» foi rejeitado como nome');
+    assert.equal(t.label, 'IRS · Anexo F', 'o nome do canvas de 2026-10 — «Fisco» foi rejeitado como nome, e «Declaração» deu-lhe lugar');
     assert.ok(t.icon && app.ic(t.icon).indexOf('<path') > -1, 'o ícone existe no ic()');
     const g = app.NAV_GROUPS.find((x) => x.ids.indexOf('fisco') > -1);
     assert.ok(g, 'um NAV_GROUP contém-no');
-    assert.equal(g.label, 'Finanças');
+    assert.equal(g.label, 'Análise');
     assert.equal(g.ids[g.ids.length - 1], 'fisco');
     assert.equal(app.NAV_GROUPS.find((x) => x.ids.indexOf('reports') > -1).label, 'Análise');
     assert.equal(app.SUBPAGE.irs.label, 'IRS e dedução');

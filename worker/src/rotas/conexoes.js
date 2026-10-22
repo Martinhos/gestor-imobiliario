@@ -1,7 +1,7 @@
 // Ligações entre utilizadores e escolha das casas partilhadas.
 import { json, err, body, now, idsDeCasas } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
-import { connectionForUser } from '../lib/acesso.js';
+import { connectionForUser, limparSaida } from '../lib/acesso.js';
 import { servicosDesligados, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
 
 /* Rotas das conexões: convidar outro utilizador pelo id curto, aceitar o
@@ -94,13 +94,17 @@ export async function rotasConexoes(c) {
     const stmts = [
       env.DB.prepare('DELETE FROM shares WHERE connection_id = ? AND owner_id = ?').bind(conn.id, me.id),
     ];
+    // partilhar de novo com quem tinha saído da casa desfaz a saída dele: a
+    // casa volta-lhe também pelos grupos (lib/acesso.js:limparSaida)
+    const par = conn.requester_id === me.id ? conn.target_id : conn.requester_id;
     for (const hid of houseIds) {
       stmts.push(
         env.DB.prepare('INSERT INTO shares (connection_id, owner_id, house_id) VALUES (?, ?, ?)').bind(
           conn.id,
           me.id,
           hid
-        )
+        ),
+        limparSaida(env, hid, par)
       );
     }
     await env.DB.batch(stmts);

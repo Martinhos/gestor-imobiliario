@@ -76,7 +76,10 @@ const CENAS = [
     nome: 'modais-empilhados',
     fazer: () => { txModal({ kind: 'expense' }); pickModal('Escolhe', [{ v: 1, label: 'Um' }, { v: 2, label: 'Dois' }], () => {}); },
   },
-  { nome: 'painel-de-filtros', fazer: () => { go('properties'); render(); document.getElementById('hdrFilt').click(); } },
+  /* os filtros das listas abrem-se no funil ao lado da pesquisa
+     (vistas.js:lfBarraHtml); o botão do cabeçalho dos Imóveis é o
+     «Selecionar vários», e o desta cena era ele */
+  { nome: 'painel-de-filtros', fazer: () => { go('properties'); render(); document.getElementById('lfb_lprops').click(); } },
   { nome: 'novidades', fazer: () => { CW.verNovidades(AVISOS.slice(0, 1)); } },
   { nome: 'tutorial', fazer: () => { CW.guiaAbrir('imoveis'); } },
   {
@@ -146,9 +149,9 @@ const CENAS = [
     nome: 'calendario-mes-seguinte',
     fazer: () => {
       go('calendar'); render();
-      const m0 = document.querySelector('#view .toolbar b').textContent.trim();
+      const m0 = document.querySelector('#view .cal-nav-tit h2').textContent.trim();
       calNav(1);
-      const m1 = document.querySelector('#view .toolbar b').textContent.trim();
+      const m1 = document.querySelector('#view .cal-nav-tit h2').textContent.trim();
       if (m0 === m1) throw new Error('o mes nao mudou: ' + m0);
     },
   },
@@ -168,7 +171,7 @@ const CENAS = [
     fazer: () => {
       go('calendar'); render();
       calNav(2);
-      const b = [...document.querySelectorAll('#view .toolbar .btn')].find((x) => x.textContent.trim() === 'Hoje');
+      const b = [...document.querySelectorAll('#view .cal-nav .btn')].find((x) => x.textContent.trim() === 'Hoje');
       if (!b) throw new Error('dois meses a frente e sem botao Hoje');
       b.click();
     },
@@ -219,6 +222,21 @@ const CENAS = [
       const l = document.querySelector('#view .txrow');
       if (!l) throw new Error('a vista dos Movimentos não tem linhas: a cena não prova nada');
       CW.selEntrar(l.getAttribute('data-lp').replace('tx:', ''));
+    },
+  },
+  {
+    /* Como nas Casas, já em seleção o toque longo marca outra linha em vez de
+       voltar a entrar e deitar fora a primeira: as duas ficam marcadas, com o
+       realce, a caixa cheia e a barra a dizer «2 selecionados». */
+    nome: 'selecao-de-movimentos-toque-longo-marca',
+    fazer: () => {
+      go('transactions'); render();
+      const ls = [...document.querySelectorAll('#view .txrow')];
+      if (ls.length < 2) throw new Error('sem movimentos que cheguem para marcar (' + ls.length + ')');
+      window.lpLongo(ls[0].getAttribute('data-lp'));
+      window.lpLongo(ls[1].getAttribute('data-lp'));
+      const n = document.querySelector('.sel-fundo.mov-sel #selFundoN');
+      if (!n || n.textContent.trim() !== '2 selecionados') throw new Error('o segundo toque longo não marcou: «' + (n ? n.textContent : 'sem barra') + '»');
     },
   },
   {

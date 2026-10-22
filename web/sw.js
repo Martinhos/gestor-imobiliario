@@ -64,10 +64,10 @@ const APP = [
   // a base
   'eventos', 'estilos-calculados', 'dados', 'anexos', 'formato', 'espera', 'registos', 'tipos', 'irs', 'saldos', 'ambito', 'icones', 'tema',
   'lista', 'continuidade', 'graficos', 'credito', 'componentes', 'metricas', 'navegacao', 'servicos', 'acessos', 'vistas',
-  'prazos', 'notificacoes', 'splitwise', 'definicoes', 'copias', 'arranque',
+  'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'splitwise', 'definicoes', 'copias', 'arranque',
   // os serviços
   'painel-geral', 'lista-imoveis', 'lista-contratos', 'lista-pessoas', 'lista-colaboradores',
-  'lista-movimentos', 'projecoes', 'imovel', 'pessoas', 'contrato', 'planeados', 'visitas', 'calendario', 'movimento',
+  'lista-movimentos', 'projecoes', 'imovel', 'pessoas', 'contrato', 'tarefas', 'planeados', 'visitas', 'calendario', 'movimento',
   'creditos', 'contrato-pdf', 'avaliacao', 'fisco',
 ].map((n) => '/app/' + n + '.js');
 const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'grupos', 'ajuda', 'painel',
@@ -77,8 +77,11 @@ const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 
    redirecionamento, e o que ficava guardado era uma resposta marcada como
    redirecionada — que o browser recusa entregar a uma navegação. O «/» é o
    mesmo documento e responde direto. */
+/* As duas letras da app (estilos.css, os @font-face) entram na concha: sem
+   elas a app abria offline na letra do sistema, com outra cara. */
 const SHELL = ['/', '/estilos.css', '/avisos.js', '/legal.js', '/manifest.webmanifest',
-  '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'].concat(APP, NUVEM);
+  '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
+  '/fonts/geist.woff2', '/fonts/bricolage-grotesque.woff2'].concat(APP, NUVEM);
 
 /* NÃO se chama skipWaiting() no install. Chamava-se, e foi por isso que a v31
    partiu em produção: o worker novo assumia o controlo a meio de um

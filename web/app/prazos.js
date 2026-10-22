@@ -16,14 +16,27 @@
    E os prazos da AT, que a lei mede em meses e a app conta em dias: o
    Modelo 2 (comunicar o contrato até ao fim do mês seguinte ao início, e
    a cessação até ao fim do mês seguinte ao fim), o recibo eletrónico de
-   cada renda (até ao fim do mês seguinte), o Anexo F (de 1 de abril a 30
-   de junho) e a comunicação de 15 de fevereiro dos contratos com taxa
-   reduzida. Um contrato que o senhorio marcou como «não declarado» é uma
-   escolha dele: nenhum destes prazos nasce dele, e nenhum texto o julga. */
+   cada renda (até ao fim do mês seguinte), a entrega do Anexo F e a
+   comunicação de fevereiro dos contratos com redução de taxa pela duração —
+   estas duas com as datas da versão do ano (irs-AAAA.js); a comunicação de
+   fevereiro cala-se num contrato que já a tem marcada (irsComunicado). E o
+   envio ao IHRU dos contratos do RSAA (15 de janeiro do ano seguinte à
+   celebração), e o Modelo 44 de quem está dispensado do recibo eletrónico
+   (db.settings.irs.dispensaRecibos, escolhido na página Declaração) — que, por
+   isso mesmo, deixa de ser avisado dos recibos por emitir. Um contrato que o
+   senhorio marcou como «não declarado» é uma escolha dele: nenhum destes
+   prazos nasce dele, e nenhum texto o julga. */
 
 // dias de antecedência com que cada tipo de prazo começa a avisar
 const PZ_ANTECEDENCIA = { oposicao: 150, fim: 60, aumento: 45, cc: 60, energia: 90, taxa: 90,
-  modelo2: 45, cessacao: 45, recibos: 40, irs: 90, fev15: 45 };
+  modelo2: 45, cessacao: 45, recibos: 40, irs: 90, fev15: 45, rsaa: 45, modelo44: 45 };
+
+/* O Modelo 44 (a declaração anual das rendas de quem está dispensado do recibo
+   eletrónico, CIRS art. 115.º n.º 5 b)) entrega-se até ao fim de fevereiro
+   desde o DL 49/2025, em vigor a 1 de julho de 2025 — antes era até ao fim de
+   janeiro (Portaria 98-A/2015, art. 8.º). Conta o dia do prazo: o fim de
+   fevereiro de 2026 já é depois dessa data, o fim de janeiro de 2025 não. */
+const PZ_MODELO44 = { fevereiroDesde: '2025-07-01' };
 
 /* Uma data local como 'AAAA-MM-DD', sem passar pelo toISOString: esse
    converte para UTC e, com o horário de verão, meia-noite local vira o dia
@@ -91,7 +104,10 @@ function pzMes(iso){
    início), a cessação dos declarados que terminaram (fim do mês seguinte ao
    fim), os recibos por emitir das rendas dos últimos três meses (fim do mês
    seguinte à renda), o Anexo F do ano anterior (30 de junho) quando houve
-   rendas, e o 15 de fevereiro dos declarados com taxa reduzida. Nada disto
+   rendas, o 15 de fevereiro dos declarados com taxa reduzida que ainda não
+   têm a comunicação desse ano marcada, o envio ao IHRU dos contratos do RSAA
+   e, com a dispensa do recibo eletrónico ligada, o Modelo 44 do ano anterior
+   quando houve rendas (e então nenhum recibo por emitir). Nada disto
    nasce de um contrato «não declarado». O `hoje` manda em tudo, incluindo
    no «ano anterior» e nos «últimos três meses».
 
@@ -127,7 +143,7 @@ function prazosDe(hoje){
       poe('oposicao',c.id+':'+c.end,oposicao,'Oposição à renovação — '+nome,
         'Para o contrato não renovar a '+dPT(c.end)+', o aviso ao inquilino tem de seguir até '+dPT(oposicao)+' (120 dias).',abrir,false);
       poe('fim',c.id+':'+c.end,c.end,'Fim do prazo do contrato — '+nome,
-        'Termina a '+dPT(c.end)+'. Sem oposição, renova-se automaticamente pelo período legal — atualiza o fim para o novo prazo.',abrir,true);
+        'Termina a '+dPT(c.end)+'. Sem oposição, renova-se automaticamente pelo período legal — regista a renovação na ficha do contrato («Renovar…»).',abrir,true);
     }
     if(c.increase!=null&&c.start){
       const aniv=pzAniversario(c.start,h);
@@ -142,7 +158,11 @@ function prazosDe(hoje){
      essa marca é uma escolha, e não há aviso nenhum a discuti-la. O ano de
      referência (Y) é o anterior ao de `hoje`: é o que se entrega em junho e o
      que se comunica em fevereiro. */
-  const ano=Number(h.slice(0,4)),Y=ano-1;
+  const ano=Number(h.slice(0,4)),Y=ano-1,vY=irsAno(Y);   // as datas da AT são da versão desse ano (irs-AAAA.js)
+  /* a escolha da página Declaração: dispensado do recibo eletrónico (65 anos
+     ou mais, ou sem caixa postal eletrónica e com poucas rendas). Pode não
+     haver db.settings.irs nenhum */
+  const dispensa=!!(db.settings&&db.settings.irs&&db.settings.irs.dispensaRecibos===true);
   const nomeDe=c=>c.name||propName(c.propertyId)||'contrato';
   /* vivo em `hoje` (e não no dia real, como o ctVivo): um contrato que já
      terminou não pede o Modelo 2 do início */
@@ -157,7 +177,7 @@ function prazosDe(hoje){
     /* uma renda sem contrato (ou de contrato entretanto apagado) é renda na
        mesma: conta para o Anexo F, e a página Declaração lista-a à parte */
     if(t.date.slice(0,4)===String(Y)){houveRendasEmY=true;if(c)comRendasEmY[c.id]=1}
-    if(c&&ctDeclarado(c)&&!t.recibo&&t.date>=desde){
+    if(c&&ctDeclarado(c)&&!dispensa&&!t.recibo&&t.date>=desde){
       const alvo=fimDoMesSeguinte(t.date);
       poe('recibos',t.id+':'+alvo,alvo,'Recibo de renda por emitir — '+nomeDe(c),
         'Renda de '+pzMes(t.periodo||t.date)+' recebida a '+dPT(t.date)+': emite o recibo eletrónico no Portal das Finanças e marca-o no movimento.',
@@ -170,8 +190,22 @@ function prazosDe(hoje){
     if(ctFiscoPorIndicar(c)&&c.start&&vivoEm(c)){
       const alvo=fimDoMesSeguinte(c.start);
       poe('modelo2',c.id+':'+alvo,alvo,'Comunicar o contrato à AT (Modelo 2) — '+nome,
-        'Até '+dPT(alvo)+', o fim do mês seguinte ao início. Se já o comunicaste, ou se não vais declarar este contrato, marca-o na ficha e este aviso desaparece.',
+        'Até '+dPT(alvo)+', o fim do mês seguinte ao início. Com ele paga-se o imposto do selo (10 % de uma renda), que é dedutível no Anexo F: regista-o como despesa. Se já o comunicaste, ou se não vais declarar este contrato, marca-o na ficha e este aviso desaparece.',
         abrir,true);
+    }
+    /* RSAA (anexo III do DL 97/2026, art. 6.º n.º 3): a cópia do contrato vai à
+       plataforma do IHRU até 15 de janeiro do ano seguinte ao da celebração —
+       sem isso não há isenção. Também por indicar (o Modelo 2 pode ainda
+       vir antes do dia). Só os celebrados desde que o regime existe (o
+       `desde` da isenção na versão do ano da celebração); passado o dia, já não
+       há o que fazer, e o aviso cala-se */
+    const cel=fiscoDe(c).celebracao||c.start||'';
+    const rs=fiscoDe(c).isencao==='rsaa'&&c.active!==false&&/^\d{4}-/.test(cel)?irsIsencao(c,Number(cel.slice(0,4))):null;
+    if(rs&&rs.prazoIhru&&(!rs.desde||cel>=rs.desde)){
+      const alvo=(Number(cel.slice(0,4))+1)+'-'+rs.prazoIhru;
+      poe('rsaa',c.id+':'+alvo,alvo,'Enviar o contrato ao IHRU (RSAA) — '+nome,
+        'Até '+dPT(alvo)+', a cópia do contrato e o comprovativo da comunicação às Finanças vão à plataforma do IHRU. Sem isto as rendas não ficam isentas de IRS. Depois de enviar, silencia este aviso.',
+        abrir,false);
     }
     if(!ctDeclarado(c))return;
     if(c.end&&(c.end<h||c.active===false)){
@@ -180,17 +214,28 @@ function prazosDe(hoje){
         'Até '+dPT(alvo)+', o fim do mês seguinte ao fim do contrato. O Modelo 2 também serve para a cessação; até 15 de fevereiro a AT pede ainda o motivo, nos contratos com taxa reduzida. Depois de a comunicares, silencia este aviso.',
         abrir,true);
     }
-    if(irsRate(c)<25&&comRendasEmY[c.id]){
-      const alvo=(Y+1)+'-02-15';
+    /* só a redução pela duração (art. 72.º) pede esta comunicação; a taxa
+       das rendas moderadas (EBF art. 45.º-C) não — era «taxa abaixo de 25»,
+       e com os 10 % de 2026 acendia em quase todos os contratos */
+    if(irsTaxa(c,Y).reducao&&comRendasEmY[c.id]&&!irsComunicado(c,Y)){
+      const alvo=vY.prazos.comunicacaoDuracao;
       poe('fev15',c.id+':'+alvo,alvo,'Comunicar a duração do contrato à AT — '+nome,
-        'Nos contratos com taxa reduzida, até '+dPT(alvo)+' comunica-se no Portal das Finanças o contrato, a duração e as renovações. Sem isto perde-se a redução.',
+        'Nos contratos com redução de taxa pela duração, até '+dPT(alvo)+' comunica-se no Portal das Finanças o contrato, a duração e as renovações. Sem isto perde-se a redução. Depois de comunicar, marca-o na ficha do contrato e este aviso desaparece.',
         abrir,true);
     }
   });
+  /* o Modelo 44: só para quem a página Declaração diz estar dispensado do
+     recibo eletrónico, e só quando houve rendas no ano anterior */
+  if(dispensa&&houveRendasEmY){
+    const fev=pzIso(new Date(ano,2,0)),alvo=fev>=PZ_MODELO44.fevereiroDesde?fev:ano+'-01-31';
+    poe('modelo44',String(Y),alvo,'Modelo 44 — as rendas de '+Y,
+      'Quem está dispensado do recibo de renda eletrónico entrega, até '+dPT(alvo)+', a declaração anual das rendas (Modelo 44) no Portal das Finanças: as rendas recebidas em '+Y+', discriminadas. É ela que faz as vezes dos recibos que não se emitiram.',
+      servicoLigado('fisco')?"go('fisco')":'',true);
+  }
   if(houveRendasEmY){
-    const alvo=(Y+1)+'-06-30';
+    const alvo=vY.entrega.ate;
     poe('irs',String(Y),alvo,'Entregar o IRS — Anexo F de '+Y,
-      'De 1 de abril a 30 de junho. A página Declaração tem as linhas do quadro 4.1 e o que ainda falta.',
+      'De '+irsDiaMes(vY.entrega.de)+' a '+irsDiaMes(alvo)+'.'+(servicoLigado('fisco')?' A página Declaração tem as linhas dos quadros 4.1 e 4.2 e o que ainda falta.':''),
       servicoLigado('fisco')?"go('fisco')":'',false);
   }
 
@@ -257,17 +302,43 @@ function pzSilencia(chave){
   render();
 }
 
-/* Estado aberto/fechado do cartão dos prazos, guardado no aparelho (como o
-   dos movimentos por confirmar: a vista geral é para ver de relance).
-   Devolve: verdadeiro se o cartão deve estar fechado. */
-function pzShut(){try{return localStorage.getItem('gi_pz_shut')==='1'}catch(e){return false}}
-/* Alterna o cartão dos prazos e redesenha.
-   Devolve: nada — grava a escolha no aparelho e redesenha. */
-function pzToggle(){try{localStorage.setItem('gi_pz_shut',pzShut()?'0':'1')}catch(e){}render()}
+/* O que falta (ou o que já passou) para um prazo, dito por extenso como o
+   selo o mostra: «Passou há 17 dias», «É hoje», «Falta 1 dia», «Faltam 14 dias».
+   Recebe: p — o prazo (com dias).
+   Devolve: o texto. */
+function pzQuando(p){
+  const d=Number(p&&p.dias)||0;
+  if(d<0)return 'Passou há '+(-d)+(d===-1?' dia':' dias');
+  if(d===0)return 'É hoje';
+  return d===1?'Falta 1 dia':'Faltam '+d+' dias';
+}
 
-/* HTML do cartão «Prazos» da vista geral: os avisos dentro da janela, do
-   mais urgente para o menos, cada um com a ação certa (abrir o contrato, a
-   pessoa, o imóvel) e um «Silenciar» com rede.
+/* A cor do selo de um prazo, pela regra do contrato visual: vermelho o que
+   passou ou falta 7 dias ou menos, âmbar até 30, cinzento o resto.
+   Recebe: p — o prazo (com urg, de pzUrg).
+   Devolve: a classe do .badge ('red', 'amber' ou 'grey'). */
+function pzSelo(p){return p.urg==='info'?'grey':p.urg==='breve'?'amber':'red'}
+
+/* O título de um prazo partido em duas linhas curtas: o que há a fazer e de
+   quem é, com a data-alvo — «Comunicar a cessação à AT» e «Estúdio Arroios ·
+   30/09/2026». O título vem de prazosDe como «o quê — de quem»; a frase longa
+   (o porquê e o como) fica para o «Pede atenção» (notificacoes.js:notifModal).
+   Recebe: p — o prazo (com titulo e alvo).
+   Devolve: {titulo, onde} — texto por escapar. */
+function pzPartes(p){
+  const t=String((p&&p.titulo)||''),i=t.lastIndexOf(' — ');
+  const titulo=i>0?t.slice(0,i):t,quem=i>0?t.slice(i+3):'';
+  return {titulo,onde:(quem?quem+' · ':'')+dPT(p.alvo)};
+}
+
+/* HTML do cartão «Prazos legais e fiscais» da Visão geral (o canvas: um dos
+   três cartões do «Pede atenção» no computador). Os quatro mais urgentes,
+   cada um numa linha curta — o que há a fazer, de quem e quando, e o selo
+   do que falta —, que abre o sítio certo (o contrato, a pessoa, o imóvel); o
+   ✕ silencia esta ocorrência com «Anular» (pzSilencia). «Ver todos» abre o
+   «Pede atenção» só com os prazos, onde cada um traz a frase inteira. Era um
+   cartão que se recolhia (fechado, dizia quantos; aberto, ocupava o ecrã):
+   com quatro linhas curtas e o resto a um toque, já não há o que recolher.
    Devolve: o HTML do cartão (texto), ou '' quando não há prazos na janela. */
 function prazosCard(){
   /* o mesmo guarda do sino (espera.js:sabemosOEstado): um prazo silenciado
@@ -275,27 +346,18 @@ function prazosCard(){
   if(!sabemosOEstado())return '';
   const lista=prazosAtivos();
   if(!lista.length)return '';
-  const selo=p=>{
-    const cls=p.urg==='info'?'grey':p.urg==='breve'?'amber':'red';
-    const txt=p.dias<0?('há '+(-p.dias)+' d'):p.dias===0?'hoje':(p.dias+' d');
-    return `<span class="badge ${cls} u-fx-0-0-auto">${txt}</span>`;
+  /* sem «abrir» (o serviço que abria está desligado nesta conta) a linha não
+     se apresenta como tocável: diz o prazo, e o ✕ continua a silenciar */
+  const row=p=>{
+    const x=pzPartes(p);
+    const dentro=`<span class="vg-item-txt"><b>${esc(x.titulo)}</b><span class="small">${esc(x.onde)}</span></span><span class="badge ${pzSelo(p)}">${pzQuando(p)}</span>`;
+    return `<div class="vg-item">${p.abrir?`<button type="button" class="vg-item-abrir" data-toca="camada" data-click="${p.abrir}">${dentro}</button>`:`<div class="vg-item-abrir">${dentro}</div>`}
+      <button type="button" class="btn sm ghost so-icone vg-silenciar" aria-label="Silenciar: ${esc(x.titulo)}" title="Silenciar até a data mudar" data-toca="dados" data-click="pzSilencia('${jsq(p.chave)}')">${ic('x',16)}</button></div>`;
   };
-  /* sem «abrir» (o serviço que abria está desligado nesta conta) o cartão não
-     se apresenta como tocável: diz o prazo, e o Silenciar continua a servir */
-  const row=p=>`<div class="card${p.abrir?' tap':''} u-p-11px-13px"${p.abrir?` data-toca="camada" data-click="${p.abrir}"`:''}>
-    <div class="row-between u-ai-center u-g-10px">
-      <div class="u-minw-0"><b class="u-d-block u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(p.titulo)}</b>
-        <span class="small">${esc(p.sub)}</span></div>${selo(p)}</div>
-    <div class="toolbar u-m-9px-0-0">
-      <button class="btn sm" data-toca="dados" data-click="event.stopPropagation();pzSilencia('${jsq(p.chave)}')">Silenciar</button></div></div>`;
-  const urgentes=lista.filter(p=>p.dias<=7).length,open=!pzShut();
-  return `<div class="card u-mb-14px" id="pzCard">
-    <div class="row-between tap u-ai-center u-cur-pointer u-m-n16px u-p-16px" data-toca="vista" data-click="pzToggle()">
-      <div class="u-minw-0"><div class="title">Prazos</div>
-        <div class="small">${lista.length} na janela de aviso${urgentes?' · <b class="neg">'+urgentes+' com 7 dias ou menos</b>':''}${open?'':' · toca para ver'}</div></div>
-      <span class="u-fx-0-0-auto u-d-inline-flex ${open?'u-tf-rotate-90deg':'u-tf-rotate-n90deg'}">${ic('chev',20)}</span></div>
-    ${open?`<div class="list u-g-8px u-mt-12px">${lista.map(row).join('')}</div>
-    <div class="hint u-mt-9px">Silenciar cala esta ocorrência; quando a data mudar, o aviso volta sozinho.</div>`:''}</div>`;
+  return `<div class="card vg-cartao vg-prazos" id="pzCard">
+    <div class="vg-card-cab"><h3 class="title vg-tit">Prazos legais e fiscais</h3>
+      <button type="button" class="vg-ligacao vg-cab-acao" data-toca="camada" data-click="notifModal('prazos')">${lista.length>4?'Ver os '+lista.length:'Ver todos'}</button></div>
+    <div class="vg-itens">${lista.slice(0,4).map(row).join('')}</div></div>`;
 }
 
 /* Lembretes de prazos para a ponte Android (o scheduleReminders junta-os aos

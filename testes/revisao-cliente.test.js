@@ -154,15 +154,15 @@ describe('regressão: a camada da nuvem carrega inteira e embrulha as funções 
   test('carregarTudo carrega sem lançar, e cada função que a nuvem embrulha continua a ser uma função — a nova, não a de antes', () => {
     const app = carregarTudo();
     for (const n of ['vDashboard', 'vTransactions', 'lpMenu', 'render', 'go', 'save', 'pendingCard', 'goSet', 'hdrFiltToggle', 'vSettings',
-      'syncContractRec', 'seed', 'delPerson', 'propBody', 'txLinhaExtra', 'txMesExtra', 'evoMoney', 'kpiModal', 'closePops', 'selOpen', 'selPick', 'setTheme', 'driveOpen']) {
+      'syncContractRec', 'seed', 'delPerson', 'propBody', 'txLinhaExtra', 'evoMoney', 'kpiModal', 'closePops', 'selOpen', 'selPick', 'setTheme', 'driveOpen']) {
       assert.equal(typeof app[n], 'function', n + ' é função');
     }
     /* cada wrapper guardou o original e reatribuiu o nome: prova de que a
        função existia quando a nuvem chegou (a ordem do index.html) */
     for (const [orig, atual] of [['_vDashboard', 'vDashboard'], ['_vDashboard_guia', 'vDashboard'], ['_vTransactions', 'vTransactions'], ['_vTransactions_sel', 'vTransactions'],
-      ['_lpMenu', 'lpMenu'], ['_lpMenu_sel', 'lpMenu'], ['_pendingCard', 'pendingCard'], ['_render', 'render'], ['_render_sel', 'render'], ['_go', 'go'], ['_go_sel', 'go'],
+      ['_lpMenu', 'lpMenu'], ['_lpMenu_sel', 'lpMenu'], ['_render', 'render'], ['_render_sel', 'render'], ['_go', 'go'], ['_go_sel', 'go'],
       ['_goSet', 'goSet'], ['_save', 'save'], ['_hdrFiltToggle', 'hdrFiltToggle'], ['_hdrFiltToggle_sel', 'hdrFiltToggle'], ['_vSettings', 'vSettings'], ['_vSettingsNov', 'vSettings'],
-      ['_syncContractRec', 'syncContractRec'], ['_seed_guia', 'seed'], ['_delPerson', 'delPerson'], ['_propBody', 'propBody'], ['_txLinhaExtra', 'txLinhaExtra'], ['_txMesExtra', 'txMesExtra'],
+      ['_syncContractRec', 'syncContractRec'], ['_seed_guia', 'seed'], ['_delPerson', 'delPerson'], ['_txLinhaExtra', 'txLinhaExtra'],
       ['_evoMoney', 'evoMoney'], ['_kpiModal', 'kpiModal'], ['_closePops', 'closePops'], ['_setTheme', 'setTheme'], ['_driveOpen', 'driveOpen']]) {
       assert.equal(typeof app[orig], 'function', orig + ' apanhou uma função');
       assert.notEqual(app[orig], app[atual], atual + ' foi reatribuída por cima');
@@ -178,6 +178,9 @@ describe('regressão: a camada da nuvem carrega inteira e embrulha as funções 
     assert.equal(app.vistaDoSeparador('settings'), app.vSettings);
     assert.notEqual(app.vistaDoSeparador('settings'), app._vSettings);
     assert.equal(app.depoisDoSeparador('transactions'), app.pintarListaTx);
+    // até o servidor dizer o ambiente vale produção, onde a Declaração ainda não existe
+    assert.notEqual(typeof app.vistaDoSeparador('fisco'), 'function', 'a Declaração fica de fora em produção');
+    app.CW.ambiente = 'dev';
     for (const t of SEPARADORES) assert.equal(typeof app.vistaDoSeparador(t), 'function', t);
     // e a vista embrulhada rende com dados, nuvem incluída
     const fixos = elementos(app);
@@ -240,30 +243,30 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     assert.ok(fixos.view.innerHTML.length > 0);
   });
 
-  test('hdrFiltN, anaClear e limparFiltroAtual contam e limpam o que cada serviço regista, e o proprietário pela base', () => {
+  test('hdrFiltN, anaClear e limparFiltroAtual contam e limpam o que cada serviço regista, e o titular do IRS pela base', () => {
     const app = carregarApp();
     elementos(app);
     semear(app);
     app.tab = 'transactions';
-    app.txSearch = 'renda'; app.txFilter = 'income'; app.txDe = ANO + '-01-01'; app.ownerFilter = 'o1'; app.txNoPayer = false;
-    assert.equal(app.hdrFiltN(), 5, 'pesquisa, tipo, datas, proprietário e «só com pessoa»');
+    app.txSearch = 'renda'; app.txFilter = 'income'; app.txDe = ANO + '-01-01'; app.txNoPayer = false;
+    assert.equal(app.hdrFiltN(), 4, 'pesquisa, tipo, datas e «só com pessoa» — o proprietário já não é filtro');
     app.limparFiltroAtual();
-    assert.equal(app.txSearch, ''); assert.equal(app.txFilter, ''); assert.equal(app.txDe, ''); assert.equal(app.ownerFilter, ''); assert.equal(app.txNoPayer, true);
+    assert.equal(app.txSearch, ''); assert.equal(app.txFilter, ''); assert.equal(app.txDe, ''); assert.equal(app.txNoPayer, true);
     assert.equal(app.hdrFiltN(), 0);
-    app.tab = 'dashboard'; app.ownerFilter = 'o1'; app.dashProp = 'p1';
-    assert.equal(app.hdrFiltN(), 2);
+    app.tab = 'dashboard'; app.dashProp = 'p1';
+    assert.equal(app.hdrFiltN(), 1, 'a visão geral conta só o imóvel em foco');
     app.anaClear();
-    assert.equal(app.dashProp, ''); assert.equal(app.ownerFilter, ''); assert.equal(app.hdrFiltN(), 0);
-    app.tab = 'projections'; app.ownerFilter = 'o1'; app.projProp = 'p1';
-    assert.equal(app.hdrFiltN(), 2);
+    assert.equal(app.dashProp, ''); assert.equal(app.hdrFiltN(), 0);
+    app.tab = 'projections'; app.projProp = 'p1';
+    assert.equal(app.hdrFiltN(), 1);
     app.limparFiltroAtual();
     assert.equal(app.projProp, ''); assert.equal(app.hdrFiltN(), 0);
-    app.tab = 'reports'; app.ownerFilter = 'o1'; app.repProp = 'p1';
-    assert.equal(app.hdrFiltN(), 2);
+    app.tab = 'reports'; app.repProp = 'p1';
+    assert.equal(app.hdrFiltN(), 1);
     app.anaClear();
     assert.equal(app.repProp, ''); assert.equal(app.hdrFiltN(), 0);
     app.tab = 'fisco'; app.ownerFilter = 'o1'; app.fiscoAno = '2020';
-    assert.equal(app.hdrFiltN(), 1, 'na Declaração o ano não é filtro');
+    assert.equal(app.hdrFiltN(), 1, 'na Declaração o titular conta, e o ano não é filtro');
     app.anaClear();
     assert.equal(app.fiscoAno, ''); assert.equal(app.ownerFilter, '');
     app.tab = 'properties';
@@ -272,12 +275,12 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     assert.equal(app.hdrFiltN(), 0, 'sem análise registada, zero');
   });
 
-  test('o botão de filtros aparece nas listas, na análise e nos movimentos, e some no calendário, nos colaboradores e nas definições', () => {
+  test('o botão do cabeçalho aparece nos Imóveis e nos Contratos, na análise e nos movimentos, e some nas outras listas (o funil está ao lado da pesquisa), no calendário, nos colaboradores e nas definições', () => {
     const app = carregarApp();
     const fixos = elementos(app);
     semear(app);
-    const esperado = { dashboard: true, calendar: false, properties: true, contracts: true, visits: true, tenants: true, owners: true, colaboradores: false,
-      transactions: true, recurring: true, credits: true, projections: true, reports: true, fisco: true, settings: false };
+    const esperado = { dashboard: true, calendar: false, properties: true, contracts: true, visits: false, tenants: false, owners: false, colaboradores: false,
+      transactions: true, recurring: false, credits: false, projections: true, reports: true, fisco: true, settings: false };
     for (const t of SEPARADORES) {
       app.tab = t;
       app.pintarBotaoFiltros();
@@ -378,7 +381,8 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     }
     app.definirServicosDesligados([]);
     app.setPage = 'defaults';
-    assert.match(app.vSettings(), /capTargetSet\(/, 'com a Avaliação ligada, o yield exigido está lá');
+    // o campo grava por definicoes.js:gravarValorPorOmissao (sem repintar: o foco segue para o campo seguinte)
+    assert.match(app.vSettings(), /id="def_capTarget"/, 'com a Avaliação ligada, o yield exigido está lá');
   });
 });
 
@@ -464,8 +468,10 @@ describe('regressões da passagem a serviços', () => {
     const app = carregarApp();
     semear(app);
     app.setPage = 'defaults';
+    // controlo: com a Avaliação ligada o campo está lá
+    assert.match(app.vSettings(), /id="def_capTarget"/);
     app.definirServicosDesligados(['reports']);
-    assert.doesNotMatch(app.vSettings(), /capTargetSet\(/);
+    assert.doesNotMatch(app.vSettings(), /id="def_capTarget"|capTargetSet\(/);
   });
 
   // revisão dos serviços, A.1-7

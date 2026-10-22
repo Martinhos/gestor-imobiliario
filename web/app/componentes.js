@@ -62,13 +62,14 @@ const gOpts=kind=>grpsOf(kind).map(g=>({v:'g:'+g.id,label:'Grupo · '+g.name}));
 /* fecha os menus abertos, excepto os que contêm "keep" (um menu de escolha dentro do menu de filtros
    não pode fechar o menu que o contém)
    Recebe: keep (opcional) — um elemento do DOM; os menus que o contenham ficam abertos.
-   Devolve: nada — tira a classe .on aos menus abertos (e acerta o aria-expanded dos sel()). */
+   Devolve: nada — tira a classe .on aos menus abertos (e acerta o aria-expanded dos sel() e dos ⋯). */
 function closePops(keep){
   const list=document.querySelectorAll('.selpop.on,.menupop.on');
   [].slice.call(list).forEach(x=>{
     if(keep&&x.contains(keep))return;
     x.classList.remove('on');
     if(x.id&&x.id.indexOf('pop_')===0)selAberto(x.id.slice(4),false);   // o botão do sel() diz que fechou
+    else if(x.classList.contains('menupop'))menuExpandido(x,false);      // e o do ⋯ também
   });
 }
 /* Onde cabe um menu que abre a partir de um botão.
@@ -125,13 +126,17 @@ function ajustarPop(p){
   if(!btn)return;
   /* repor antes de medir: uma medição feita sobre o ajuste anterior herda-o */
   p.style.top='';p.style.bottom='';p.style.maxHeight='';
+  /* O espaço é o que TODOS os antepassados que cortam deixam ver, e não só o
+     primeiro: um grupo de formulário que corta (o .sect de cantos redondos)
+     pode estar meio rolado para fora do corpo do modal, e medir só por ele
+     abria o menu para cima por cima do corpo (6px cortados no telemóvel
+     deitado). */
   let limite={top:0,bottom:window.innerHeight};
   for(let a=p.parentElement;a&&a!==document.body;a=a.parentElement){
     const cs=getComputedStyle(a);
     if(/hidden|auto|scroll/.test(cs.overflow+cs.overflowX+cs.overflowY)){
       const r=a.getBoundingClientRect();
-      limite={top:Math.max(0,r.top),bottom:Math.min(window.innerHeight,r.bottom)};
-      break;
+      limite={top:Math.max(limite.top,r.top),bottom:Math.min(limite.bottom,r.bottom)};
     }
   }
   /* offsetHeight e não getBoundingClientRect().height: o menu entra com um
@@ -165,7 +170,18 @@ function selAberto(id,aberto){const b=document.getElementById('selb_'+id);if(b)b
 function selFocarEscolhida(pop){
   const opts=[].slice.call(pop.querySelectorAll('.selopt'));
   const o=opts.find(x=>x.getAttribute('aria-selected')==='true')||opts[0];
-  try{if(o)o.focus()}catch(x){}
+  /* sem deixar o foco rolar a página: o menu já foi medido e posto (ajustarPop),
+     e o focus() simples rolava o corpo do modal (o scroll-padding-bottom dele)
+     por baixo do menu, que ficava 6px fora do corpo. A opção vem à vista só
+     dentro da caixa do próprio menu. */
+  try{
+    if(o){
+      o.focus({preventScroll:true});
+      const t=o.offsetTop,b=t+o.offsetHeight;
+      if(t<pop.scrollTop)pop.scrollTop=t;
+      else if(b>pop.scrollTop+pop.clientHeight)pop.scrollTop=b-pop.clientHeight;
+    }
+  }catch(x){}
 }
 /* A opção seguinte numa lista de n, para uma tecla: as setas andam uma e param
    nas pontas (uma lista de escolha não dá a volta), Home e End vão às pontas.
@@ -186,16 +202,19 @@ function selIndiceSeguinte(i,n,tecla){
    foco à opção escolhida; numa opção, andam pelas outras; o Escape com a lista
    aberta fecha-a e devolve o foco ao botão — e é engolido, para não fechar
    também a janela por baixo. O Enter e o espaço são dos próprios botões.
+   Um Escape que não é de uma lista aberta passa ao menuEscape: com um menu ⋯
+   aberto, fecha-o, e a janela por baixo fica.
    Recebe: e — o evento keydown.
-   Devolve: true se a tecla era do sel() e foi tratada; false para seguir. */
+   Devolve: true se a tecla era do sel() ou de um menu ⋯ e foi tratada; false para seguir. */
 function selTecla(e){
-  const t=e&&e.target;if(!t||typeof t.closest!=='function')return false;
-  const caixa=t.closest('.sel');if(!caixa)return false;
+  const t=e&&e.target;if(!t||typeof t.closest!=='function')return menuEscape(e);
+  const caixa=t.closest('.sel');if(!caixa)return menuEscape(e);
   const pop=caixa.querySelector('.selpop'),btn=caixa.querySelector('.selbtn');
-  if(!pop||!btn||!pop.id)return false;
+  if(!pop||!btn||!pop.id)return menuEscape(e);
   const k=e.key,aberto=pop.classList.contains('on');
   if(k==='Escape'){
-    if(!aberto)return false;
+    // a lista do sel() fechada: o Escape pode ser de um menu ⋯ aberto à volta dela
+    if(!aberto)return menuEscape(e);
     if(e.preventDefault)e.preventDefault();
     closePops();try{btn.focus()}catch(x){}
     return true;
@@ -253,17 +272,47 @@ function selPick(e,id,i){
    apaga alguma coisa.
    Devolve: string de HTML do botão ⋯ com o menu, pronta a inserir com innerHTML. */
 function menu(id,items){
-  return `<span class="menuwrap"><button type="button" class="iconbtn opcoes" data-toca="camada" data-click="menuOpen(event,'${jsq(id)}')" aria-label="Opções">${ic('dots',18)}</button>
+  return `<span class="menuwrap"><button type="button" class="iconbtn opcoes" data-toca="camada" data-click="menuOpen(event,'${jsq(id)}')" aria-label="Opções" aria-expanded="false">${ic('dots',18)}</button>
     <div class="menupop" id="menu_${esc(id)}">${items.map(it=>
       `<button type="button" class="${it.danger?'danger':''}"${it.toca?` data-toca="${it.toca}"`:''}${it.risco==='destroi'?' data-risco="destroi"':''} data-click="closePops();${it.act}">${ic(it.icon||'dots',17)} ${esc(it.label)}</button>`).join('')}</div></span>`;
 }
 // Abre/fecha o menu de ações (⋯) criado por menu(), com o mesmo ajuste de posição dos sel().
+// O botão diz se o menu está aberto (aria-expanded); fechar passa pelo closePops, que o repõe.
 // Recebe: e — o evento do clique (pode vir null); id — o id dado ao menu() (abre menu_<id>).
 // Devolve: nada — alterna a classe .on do menu no DOM.
 function menuOpen(e,id){
   if(e)e.stopPropagation();
   const p=document.getElementById('menu_'+id),was=p&&p.classList.contains('on');
-  closePops(p?p.parentNode:null);if(p&&!was){p.classList.add('on');ajustarPop(p);};
+  closePops(p?p.parentNode:null);if(p&&!was){p.classList.add('on');menuExpandido(p,true);ajustarPop(p);};
+}
+/* O botão que abre um menu ⋯: o do menuOpen ao lado dele, no mesmo
+   .menuwrap — o do menu() e os feitos à mão (o «Partilhar» da Avaliação).
+   Recebe: p — o .menupop.
+   Devolve: o botão, ou null. */
+function menuBotao(p){
+  const w=p&&p.parentNode;
+  return w&&typeof w.querySelector==='function'?w.querySelector('[data-click^="menuOpen("]'):null;
+}
+/* Diz ao leitor de ecrã se o menu está aberto, no botão que o abre.
+   Recebe: p — o .menupop; aberto — true/false.
+   Devolve: nada. */
+function menuExpandido(p,aberto){
+  const b=menuBotao(p);if(b)b.setAttribute('aria-expanded',aberto?'true':'false');
+}
+/* O Escape com um menu ⋯ aberto fecha o menu, e não a janela por baixo dele:
+   o foco volta ao botão que o abriu e a tecla é engolida (o selTecla, a quem
+   o arranque pergunta primeiro, chama-o quando a tecla não é de um sel()).
+   Recebe: e — o evento keydown.
+   Devolve: true se havia um menu aberto e fechou; false para seguir. */
+function menuEscape(e){
+  if(!e||e.key!=='Escape')return false;
+  const abertos=[].slice.call(document.querySelectorAll('.menupop.on'));
+  if(!abertos.length)return false;
+  const b=menuBotao(abertos[abertos.length-1]);
+  if(e.preventDefault)e.preventDefault();
+  closePops();
+  try{if(b)b.focus()}catch(x){}
+  return true;
 }
 /* etiquetas removíveis
    Recebe: items — lista de {id,label} das etiquetas a mostrar; addLabel — o texto
@@ -306,6 +355,29 @@ function toggleFold(id){
      Fica lá: um re-render deita o nó fora e o próximo nasce sem ela — que é o
      que faz a dobra já aberta não voltar a piscar. */
   if(on)el.classList.add('entra');
+  if(on)ajustarCaixas(el);   // as caixas de texto lá dentro mediam 0 enquanto estava fechada
+}
+// o browser cresce as caixas de texto sozinho (field-sizing do CSS)? Então o ajustarCaixas não faz nada.
+const caixaSozinha=typeof CSS!=='undefined'&&!!CSS.supports&&CSS.supports('field-sizing','content');
+/* As caixas de texto crescem com o que lá está escrito, em vez de ficarem nos
+   90px com uma barra de deslizar. O CSS faz isto sozinho onde houver
+   field-sizing (estilos.css:textarea); onde não houver (Firefox, Safari
+   antigo), mede-se aqui: altura a zero, e fica a do conteúdo mais as bordas.
+   Uma caixa escondida (dobra fechada) mede 0 e fica como está; a dobra pede
+   outra medida ao abrir (toggleFold).
+   Recebe: raiz (opcional) — onde procurar as caixas (o documento por omissão),
+   ou a própria caixa.
+   Devolve: nada — muda o style.height das caixas visíveis. */
+function ajustarCaixas(raiz){
+  if(caixaSozinha)return;
+  raiz=raiz||document;
+  const caixas=raiz.tagName==='TEXTAREA'?[raiz]:[].slice.call(raiz.querySelectorAll('textarea'));
+  caixas.forEach(t=>{
+    if(!t.offsetParent)return;
+    const cs=getComputedStyle(t),bordas=parseFloat(cs.borderTopWidth)+parseFloat(cs.borderBottomWidth);
+    t.style.height='auto';
+    t.style.height=(t.scrollHeight+bordas)+'px';
+  });
 }
 /* Os ficheiros escolhidos no <input type="file"> do fileBlock, entregues a
    quem os pediu. Era o onchange em linha «${onPick}(this)» (com o argumento
@@ -351,7 +423,7 @@ function fileBlock(label,list,inputId,onPick,delFn,opts){
   return `<div>${label?`<div class="flabel">${esc(label)}</div>`:''}
     ${list.length?(photos?
       `<div class="list u-g-8px">${list.map((f,i)=>`<div class="prow">
-         <div class="pth pcover" id="th_${esc(f.id)}" data-click="openMeta('${jsq(f.id)}')">${i===0?'<span class="capa">capa</span>':''}</div>
+         <div class="pth pcover" id="th_${esc(f.id)}" data-click="openMeta('${jsq(f.id)}',true)">${i===0?'<span class="capa">capa</span>':''}</div>
          <input class="pnm" id="fn_${esc(f.id)}" value="${esc(f.name)}" placeholder="Ex: Sala de estar" aria-label="Nome da fotografia (opcional)" autocomplete="off" data-input="livePhotoName('${jsq(f.id)}',this.value)">
          ${opts.move?`<button type="button" class="pgrab" aria-label="Arrastar para reordenar" data-pointerdown="photoDrag(event,this,${i})">${ic('grip',16)}</button>`:''}
          <button type="button" class="btn sm danger u-fx-0-0-auto u-minw-40px u-minh-40px u-ml-8px" aria-label="Apagar a fotografia" data-click="delFileConfirm('${jsq(delFn)}','${jsq(f.id)}','fotografia')">${ic('trash',14)}</button></div>`).join('')}</div>`
@@ -385,10 +457,13 @@ function delFileConfirm(fn,fid,tipo){
     ()=>{const f=daApp(fn);if(f)f(fid)});
 }
 // Abre a ficha do ficheiro `fid` (nome, tamanho, pré-visualização), procurando-o
-// entre os metadados já guardados e os pendentes do formulário aberto.
-// Recebe: fid — o id do ficheiro cuja ficha se abre.
+// entre os metadados já guardados e os pendentes do formulário aberto. Uma
+// foto de um imóvel abre no carrossel das fotos dele (anexos.js:fotoCarrossel).
+// Recebe: fid — o id do ficheiro cuja ficha se abre; doFormulario (opcional) —
+// verdadeiro quando vem das fotos do formulário do imóvel (o fileBlock): o
+// carrossel segue a ordem de lá, com as fotos ainda por gravar.
 // Devolve: nada — abre a janela com a ficha do ficheiro.
-function openMeta(fid){openFileMeta(allFileMetas().concat(pendingMetas()).find(f=>f.id===fid))}
+function openMeta(fid,doFormulario){openFileMeta(allFileMetas().concat(pendingMetas()).find(f=>f.id===fid),!!doFormulario)}
 /* mostra as miniaturas depois do HTML entrar no DOM. "root" limita a procura (a lista de imóveis
    e a janela aberta por cima usam os mesmos ids). */
 /* miniatura pequena de uma foto: usa a guardada (tn_), ou cria-a uma vez a partir do original.
@@ -467,8 +542,11 @@ function modalLayer(){
   const m=document.createElement('div');m.className='modal open';
   m.innerHTML=`<div class="bg" data-toca="camada" data-click="closeModal('fundo')"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
     <div class="head"><h2 id="modalTitle"></h2><div class="spacer"></div><span id="modalMenu"></span>
-      <button class="iconbtn" data-toca="camada" data-click="closeModal('x')" aria-label="Fechar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <button class="iconbtn" data-toca="camada" data-click="closeModal('x')" aria-label="Fechar">${ic('x')}</button></div>
     <div class="body" id="modalBody"></div><div class="foot" id="modalFoot"></div></div>`;
+  /* o arrasto da folha para baixo (folhaPousar) trava o scroll do browser
+     aqui, e não no documento: só os toques numa janela esperam por ele */
+  m.addEventListener('touchmove',folhaToqueMove,{passive:false});
   return m;
 }
 /* O que está escrito na janela, numa string comparável. É o suficiente para
@@ -535,7 +613,8 @@ function marcarDatasVazias(raiz){
 // Preenche uma janela já criada: título, corpo, menu do cabeçalho e rodapé —
 // por omissão, Cancelar + Guardar (que chama o onSave da janela de cima).
 // Recebe: el — o elemento da janela (vindo do modalLayer); title — o texto do título;
-// body — HTML do corpo; foot (opcional) — HTML do rodapé (por omissão Cancelar+Guardar);
+// body — HTML do corpo; foot (opcional) — HTML do rodapé (por omissão Cancelar+Guardar;
+// SEM_RODAPE para uma janela que só se fecha no X, como a folha «Criar»);
 // menuHtml (opcional) — HTML para o menu do cabeçalho.
 // Devolve: nada — preenche a janela no DOM.
 function fillModal(el,title,body,foot,menuHtml){
@@ -544,8 +623,14 @@ function fillModal(el,title,body,foot,menuHtml){
   if(typeof tornarFocavel==='function')tornarFocavel(el.querySelector('.body'));
   marcarDatasVazias(el.querySelector('.body'));
   el.querySelector('.head span').innerHTML=semEtiquetasQueCorrem(menuHtml||'');
-  el.querySelector('.foot').innerHTML=semEtiquetasQueCorrem(foot||`<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="onSave&&onSave()">Guardar</button>`);
+  const pe=el.querySelector('.foot');
+  pe.innerHTML=foot===SEM_RODAPE?'':semEtiquetasQueCorrem(foot||`<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="onSave&&onSave()">Guardar</button>`);
+  if(pe.classList)pe.classList.toggle('u-d-none',foot===SEM_RODAPE);
 }
+/* O rodapé de uma janela que não tem botões em baixo: escolhe-se no corpo e
+   fecha-se no X (a folha «Criar», navegacao.js:abrirAdicionar). Uma marca, e
+   não '': uma string vazia continua a querer dizer «o rodapé de omissão». */
+const SEM_RODAPE='\u0000sem-rodape';
 
 /* ================= A FICHA DE LEITURA =================
    Tocar num registo LÊ; editar é um passo deliberado.
@@ -702,8 +787,8 @@ function setModal(title,body,foot,menuHtml){
   t.tocado=false;
   return t;
 }
-/* Fechar por um caminho de abandono (toque no fundo, X, Escape, voltar)
-   com alterações por guardar pergunta primeiro. Foi um dos achados mais
+/* Fechar por um caminho de abandono (toque no fundo, X, Escape, voltar,
+   arrastar a folha para baixo) com alterações por guardar pergunta primeiro. Foi um dos achados mais
    sérios da auditoria de UX: um dedo mal posto no véu escurecido deitava
    fora um contrato meio-preenchido, sem uma palavra. Guardar e Cancelar
    continuam a fechar sem perguntar — são decisões, não acidentes.
@@ -731,11 +816,13 @@ function fecharComSaida(el){
   setTimeout(fora,(typeof msDoToken==='function'?msDoToken('--medio',200):200)+120);
 }
 /* Fecha a janela de cima. `origem` diz por onde se saiu ('fundo', 'x',
-   'voltar'…): esses caminhos de abandono, com alterações por guardar,
-   abrem primeiro a pergunta "Sair sem guardar?". Sem origem (Guardar,
-   Cancelar), fecha sem perguntar — são decisões, não acidentes.
+   'esc', 'voltar', 'arrasto' — a folha largada em baixo, folhaFecha): esses
+   caminhos de abandono, com alterações por guardar, abrem primeiro a
+   pergunta "Sair sem guardar?". Sem origem (Guardar, Cancelar), fecha sem
+   perguntar — são decisões, não acidentes.
    Recebe: origem (opcional) — string com o caminho de saída ('fundo', 'x',
-   'voltar'…); presente, e havendo alterações, abre primeiro a pergunta.
+   'esc', 'voltar', 'arrasto'); presente, e havendo alterações, abre
+   primeiro a pergunta.
    Devolve: nada — tira a janela da pilha e repõe a de baixo (ou o foco no gatilho). */
 function closeModal(origem){
   closePops();
@@ -744,10 +831,12 @@ function closeModal(origem){
     /* a pergunta veste o tema da app, não o do browser. Abrir a pergunta
        por cima também rearma o histórico (openModal→pushHist), por isso o
        "voltar" que trouxe até aqui fica tratado sozinho. */
+    /* o caminho seguro é o primário (o canvas, M-Visita): quem carregou no X
+       por engano continua com um toque; sair é a escolha deliberada */
     openModal('Sair sem guardar?',
-      `<div class="hint u-fs-14px">Tens alterações por guardar nesta janela. Se saíres, perdem-se.</div>`,
-      `<button class="btn" data-click="closeModal()">Continuar a editar</button>
-       <button class="btn danger" data-click="_sairSemGuardar()">Sair sem guardar</button>`);
+      `<div class="hint u-fs-14px">Tens alterações por guardar nesta janela. Se saíres agora, perdes estas alterações.</div>`,
+      `<button class="btn" data-click="_sairSemGuardar()">Sair sem guardar</button>
+       <button class="btn primary" data-click="closeModal()">Continuar a editar</button>`);
     return;
   }
   const M=modalStack.pop();lockPage();if(!M)return;
@@ -807,32 +896,63 @@ let _desfazer=null;
    Recebe: msg — o texto do toast; restaurar — função que repõe os dados quando
    o Anular é clicado; aoExpirar (opcional) — função corrida quando o prazo
    passa sem clique, ou quando outro desfazer atropela este.
-   Devolve: nada — mostra o toast e arma o prazo de seis segundos. */
+   Devolve: nada — mostra o toast e arma o prazo de seis segundos.
+   O prazo é o dos 6400ms desde o apagar (o toast sai aos 6000, e os 400 de
+   folga apanham o toque do último instante). Com o dedo pousado no toast
+   (avisoPousar) o prazo espera: o «Anular» não pode ficar à vista depois de
+   o que não volta já ter sido liquidado. Se o dedo o devolve ao sítio, o
+   toast ganha o tempo que esteve seguro e o prazo anda com ele (o `segura`
+   recebe esse acréscimo); se o afasta, o prazo é o de sempre — fechar o
+   cartão não anula nem antecipa nada. */
 function comDesfazer(msg,restaurar,aoExpirar){
   if(_desfazer&&_desfazer.expira)_desfazer.expira();   // o anterior liquida-se
-  const eu={expira:aoExpirar||null};_desfazer=eu;
+  const eu={expira:aoExpirar||null,fim:Date.now()+6400,preso:false,h:0};_desfazer=eu;
+  // o prazo chegou: liquida, a não ser que o dedo esteja no toast ou que o fim tenha andado
+  const vence=()=>{
+    if(_desfazer!==eu||eu.preso)return;
+    const falta=eu.fim-Date.now();
+    if(falta>0){clearTimeout(eu.h);eu.h=setTimeout(vence,falta);return}
+    _desfazer=null;if(eu.expira)eu.expira();
+  };
   toast(msg,{rotulo:'Anular',ms:6000,fn(){
     if(_desfazer===eu)_desfazer=null;
     restaurar();save();try{buildNav()}catch(e){}render();toast('Anulado.');
+  },segura(sim,mais){
+    if(sim){eu.preso=true;return}
+    eu.preso=false;eu.fim+=mais||0;clearTimeout(eu.h);vence();
   }});
-  setTimeout(()=>{if(_desfazer===eu){_desfazer=null;if(eu.expira)eu.expira()}},6400);
+  eu.h=setTimeout(vence,6400);
 }
 
-/* O toast diz o que falta; isto aponta o campo — realça-o, leva-o ao ecrã
-   e larga o realce à primeira tecla.
-   Recebe: id — o id do campo com o problema; msg — o texto do toast.
-   Devolve: nada — mostra o toast e realça o campo no ecrã. */
+/* O erro diz-se no próprio campo: o contorno vermelho e, por baixo dele, a
+   frase que diz o que fazer (o canvas de 2026-10 — só o aviso em baixo
+   obrigava a procurar qual era o campo). O toast continua: é ele que o leitor
+   de ecrã anuncia (role=status) e o que se vê quando o teclado tapa o campo;
+   o campo leva aria-invalid e aria-describedby a apontar a frase, para quem
+   lá chega pelo Tab a ouvir. Tudo se larga à primeira tecla.
+   Recebe: id — o id do campo com o problema; msg — a frase do erro.
+   Devolve: nada — escreve o erro junto do campo, mostra o toast e leva o campo ao ecrã. */
 function falhaCampo(id,msg){
   toast(msg);
   const e=document.getElementById(id);if(!e)return;
   e.classList.add('err');
+  /* um nó sem a API de inserção (o DOM mínimo dos testes) fica com o realce */
+  if(typeof e.insertAdjacentElement!=='function'){e.addEventListener('input',()=>e.classList.remove('err'),{once:true});return}
+  const ancora=(typeof e.closest==='function'&&e.closest('.sel'))||e,idErro=id+'-erro';
+  const antes=document.getElementById(idErro);if(antes)antes.remove();
+  const p=document.createElement('p');p.className='erro-campo';p.id=idErro;p.textContent=msg;
+  ancora.insertAdjacentElement('afterend',p);
+  e.setAttribute('aria-invalid','true');e.setAttribute('aria-describedby',idErro);
   try{e.scrollIntoView({block:'center'})}catch(x){}
   try{e.focus({preventScroll:true})}catch(x){}
-  e.addEventListener('input',()=>e.classList.remove('err'),{once:true});
+  const larga=()=>{e.classList.remove('err');e.removeAttribute('aria-invalid');e.removeAttribute('aria-describedby');p.remove()};
+  e.addEventListener('input',larga,{once:true});
 }
 /* escolher de uma lista, no estilo da app
    Recebe: title — o texto do título; options — lista de opções {label,sub,icon,
-   avatar,…} (sub, icon e avatar são opcionais; a opção inteira volta no onPick);
+   avatar,nome,…} (sub, icon e avatar são opcionais; nome, quando o label leva
+   mais do que o nome — « (eu)» —, dá as iniciais do avatar; a opção inteira
+   volta no onPick);
    onPick — função chamada com a opção escolhida; extra (opcional) — HTML
    acrescentado por baixo da lista.
    Devolve: nada — abre a janela de escolha. */
@@ -840,7 +960,7 @@ function pickModal(title,options,onPick,extra){
   openModal(title,`<div class="form">
     ${options.length?`<div class="list u-g-7px">${options.map((o,i)=>
       `<button type="button" class="card tap u-p-12px-14px u-d-flex u-ai-center u-g-11px" data-click="_pick(${i})">
-        ${o.icon?`<span class="ic u-w-34px u-h-34px u-br-10px u-d-grid u-pi-center u-fx-0-0-34px ${o.icon==='trash'?'comp-pick-ic-destroi':'comp-pick-ic-normal'}">${ic(o.icon,18)}</span>`:o.avatar?`<span class="avatar">${esc(initials(o.label))}</span>`:''}
+        ${o.icon?`<span class="ic u-w-34px u-h-34px u-br-10px u-d-grid u-pi-center u-fx-0-0-34px ${o.icon==='trash'?'comp-pick-ic-destroi':'comp-pick-ic-normal'}">${ic(o.icon,18)}</span>`:o.avatar?`<span class="avatar">${esc(initials(o.nome||o.label))}</span>`:''}
         <span class="u-fx-1 u-minw-0 u-ta-left"><b class="u-d-block u-fs-14px">${esc(o.label)}</b>
         ${o.sub?`<span class="small">${esc(o.sub)}</span>`:''}</span></button>`).join('')}</div>`
       :`<div class="hint">Não há nada para escolher.</div>`}
@@ -925,14 +1045,229 @@ function lpMenu(v){
    possivel. Sem op, comporta-se exatamente como sempre.
    Recebe: m — a mensagem a mostrar (texto); op (opcional) — {rotulo, fn, ms}: o texto do botão,
    o que ele faz ao ser tocado e quanto tempo o aviso fica no ecrã (ms; 2800 por omissão).
-   Devolve: nada — mostra o aviso no fundo do ecrã. */
+   Devolve: nada — mostra o aviso no fundo do ecrã.
+   Um aviso com botão arrasta-se para baixo com o dedo (avisoPousar): leva a
+   classe .arrasta, guarda o op em t._op e a hora a que sai em t._fim, para o
+   arrasto pausar e retomar o prazo. O op pode trazer segura(sim, mais) — o
+   comDesfazer usa-o para o prazo dele esperar pelo dedo. Um aviso novo a
+   meio de um arrasto ganha: o arrasto acaba ali (avisoInterromper). */
 function toast(m,op){const t=document.getElementById('toast');
+  avisoInterromper(t);
   t.textContent=m;
-  if(op&&op.rotulo&&op.fn){const b=document.createElement('button');b.type='button';b.className='toastbtn';
-    b.textContent=op.rotulo;b.onclick=()=>{clearTimeout(t._h);t.classList.remove('on');op.fn()};t.appendChild(b)}
+  const comBotao=!!(op&&op.rotulo&&op.fn);
+  if(comBotao){const b=document.createElement('button');b.type='button';b.className='toastbtn';
+    /* o clique que o browser dá a seguir a um arrasto não é um toque no Anular */
+    b.textContent=op.rotulo;b.onclick=()=>{if(Date.now()<_avisoEngole){_avisoEngole=0;return}
+      clearTimeout(t._h);t.classList.remove('on');op.fn()};t.appendChild(b)}
+  t._op=comBotao?op:null;
+  t.classList.toggle('arrasta',comBotao);
   avisoAcimaDoRodape();
   t.classList.add('on');clearTimeout(t._h);
-  t._h=setTimeout(()=>t.classList.remove('on'),(op&&op.ms)||2800)}
+  const ms=(op&&op.ms)||2800;t._fim=Date.now()+ms;
+  t._h=setTimeout(()=>t.classList.remove('on'),ms)}
+
+/* ---- O aviso afasta-se com o dedo ----
+   O cartão do «Anular» tapa o fundo do ecrã seis segundos, e às vezes é
+   precisamente o que está por trás que se quer ver. Puxa-se para baixo:
+   só o eixo vertical, para cima resiste (avisoElastico). Largar passada
+   metade da altura dele, ou com um sacudir para baixo, fecha-o a deslizar
+   para fora — o apagado continua apagado, e o comDesfazer liquida no prazo
+   de sempre. Largar antes disso devolve-o ao sítio. Enquanto o dedo está
+   nele o prazo do aviso para; ao voltar, retoma (com um mínimo para se ler).
+   Só o dedo e a caneta (AVISO_PONTEIROS): com o rato, arrastar é selecionar
+   texto, e no computador o aviso não tapa o que tapa num telemóvel. Sem
+   movimento (prefers-reduced-motion) não segue o dedo: desvanece um pouco
+   quando largar já fecha, e fecha sem animar. */
+// quem arrasta o aviso: o dedo e a caneta; o rato fica de fora
+const AVISO_PONTEIROS=['touch','pen'];
+// a velocidade (px/ms, para baixo) que conta como sacudir — a do arrasto entre separadores
+const AVISO_SACODIR=.4;
+// devolvido ao sítio, o aviso fica pelo menos isto (ms): o que estava a acabar não some ao voltar
+const AVISO_RETOMA_MS=1500;
+let _avisoArr=null,_avisoEngole=0;
+/* O dedo pousou: se foi num aviso com botão, à vista, o prazo dele para e
+   fica-se à escuta do arrasto. Pegar no aviso a meio do regresso apanha-o
+   onde ele está, sem salto.
+   Recebe: e — o PointerEvent do pointerdown (ouvido no documento).
+   Devolve: nada — liga os ouvintes do documento. */
+function avisoPousar(e){
+  if(_avisoArr||!e||e.button>0||e.isPrimary===false||AVISO_PONTEIROS.indexOf(e.pointerType)<0)return;
+  const t=e.target&&typeof e.target.closest==='function'?e.target.closest('#toast'):null;
+  if(!t||!t._op||!t.classList.contains('on')||!t.classList.contains('arrasta'))return;
+  const agora=Date.now();
+  const a={id:e.pointerId,t,op:t._op,x0:e.clientX,y0:e.clientY,base:0,dy:0,desl:0,vy:0,ya:e.clientY,ta:avisoHora(e),
+    ativo:false,mexe:!semMovimento(),h:1,topo:0,resto:Math.max(0,(t._fim||agora)-agora),fimAntes:t._fim||agora};
+  if(t._anim){
+    // a meio do regresso: fica onde a animação o tinha
+    try{const m=/matrix\(([^)]*)\)/.exec(getComputedStyle(t).transform||'');
+      if(m)a.base=parseFloat(m[1].split(',')[5])||0}catch(x){}
+    const an=t._anim;t._anim=null;try{an.cancel()}catch(x){}
+    t.classList.add('arrastar');
+    a.desl=a.dy=a.base;
+    if(a.base)t.style.transform='translateX(-50%) translateY('+a.base+'px)';
+  }
+  _avisoArr=a;
+  clearTimeout(t._h);
+  if(a.op.segura)a.op.segura(true);
+  document.addEventListener('pointermove',avisoArrastoMove);
+  document.addEventListener('pointerup',avisoArrastoFim);
+  document.addEventListener('pointercancel',avisoArrastoFim);
+}
+/* O dedo andou: na vertical, passados os 10px de decidir, o aviso segue-o;
+   para o lado, o gesto não é dele (fica parado até o dedo sair).
+   Recebe: e — o PointerEvent do pointermove.
+   Devolve: nada — mexe no transform do #toast. */
+function avisoArrastoMove(e){
+  const a=_avisoArr;if(!a||e.pointerId!==a.id||a.deLado)return;
+  const t=a.t;
+  let dy=e.clientY-a.y0;const dx=e.clientX-a.x0;
+  if(!a.ativo){
+    if(Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy)){a.deLado=true;return}
+    if(Math.abs(dy)<10)return;
+    a.ativo=true;
+    const r=t.getBoundingClientRect?t.getBoundingClientRect():null;
+    a.h=(r&&r.height)||t.offsetHeight||1;a.topo=((r&&r.top)||0)-a.base;
+    // a folga de decidir não conta: o aviso arranca colado ao dedo, sem salto
+    a.y0+=dy<0?-10:10;dy=e.clientY-a.y0;
+    try{t.setPointerCapture(a.id)}catch(x){}
+    t.classList.add('arrastar');
+  }
+  const agora=avisoHora(e),dt=agora-a.ta;
+  // a velocidade dos últimos instantes, alisada: é ela que diz se o gesto foi um sacudir
+  if(dt>0)a.vy=.6*((e.clientY-a.ya)/dt)+.4*a.vy;
+  a.ya=e.clientY;a.ta=agora;
+  a.dy=a.base+dy;
+  a.desl=a.dy>=0?a.dy:avisoElastico(a.dy,a.h);
+  if(a.mexe)t.style.transform='translateX(-50%) translateY('+a.desl+'px)';
+  t.classList.toggle('pronto',avisoFechaAoLargar(a,agora));
+}
+/* Para cima, o aviso resiste: anda cada vez menos quanto mais se puxa, e
+   nunca passa de metade da altura dele (a curva do sepElastico).
+   Recebe: dy — px que o dedo andou (negativo, para cima); h — a altura do aviso.
+   Devolve: px a que o aviso fica (com o sinal de dy). */
+function avisoElastico(dy,h){
+  const a=Math.abs(dy),l=h||1;
+  return Math.sign(dy)*(1-1/(a*.55/l+1))*l*.5;
+}
+/* Largar agora fecha o aviso? Passada metade da altura dele, ou a descer
+   depressa. Uma velocidade de há mais de 100ms já não é um sacudir: o dedo
+   parou antes de sair.
+   Recebe: a — o arrasto em curso; agora — a hora do evento (avisoHora).
+   Devolve: true/false. */
+function avisoFechaAoLargar(a,agora){
+  const vy=agora-a.ta>100?0:a.vy;
+  return a.dy>a.h/2||(a.dy>0&&vy>AVISO_SACODIR);
+}
+/* A hora de um evento do dedo, para a velocidade: a do próprio evento (em
+   alta resolução, a de quando o dedo lá esteve), e não a de quando o código
+   corre — os movimentos chegam às vezes aos pares no mesmo milissegundo, e
+   pelo relógio da página um par desses parecia um sacudir.
+   Recebe: e — o PointerEvent (pode não trazer timeStamp, como nos testes).
+   Devolve: ms (número), sempre no mesmo relógio para o mesmo gesto. */
+function avisoHora(e){
+  return e&&typeof e.timeStamp==='number'&&e.timeStamp>0?e.timeStamp:Date.now();
+}
+/* Tira os ouvintes do documento e esquece o arrasto.
+   Devolve: nada. */
+function avisoArrastoLargar(){
+  document.removeEventListener('pointermove',avisoArrastoMove);
+  document.removeEventListener('pointerup',avisoArrastoFim);
+  document.removeEventListener('pointercancel',avisoArrastoFim);
+  _avisoArr=null;
+}
+/* O dedo saiu: fecha o aviso, se o gesto chegou para isso, ou devolve-o ao
+   sítio e retoma o prazo. Um pointercancel nunca fecha. Depois de um
+   arrasto, o clique que o browser dispara engole-se (o Anular não carrega).
+   Recebe: e — o PointerEvent do pointerup ou do pointercancel.
+   Devolve: nada. */
+function avisoArrastoFim(e){
+  const a=_avisoArr;if(!a||(e&&e.pointerId!==a.id))return;
+  avisoArrastoLargar();
+  // um toque (ou um dedo que foi para o lado): o aviso fica, ou acaba de voltar se o dedo o apanhou a meio
+  if(!a.ativo){avisoVoltaAoSitio(a);return avisoRetoma(a)}
+  // se não vier clique nenhum, o próximo toque é a sério
+  _avisoEngole=Date.now()+350;
+  if(e&&e.type!=='pointercancel'&&avisoFechaAoLargar(a,avisoHora(e)))return avisoSaiPorBaixo(a);
+  avisoVoltaAoSitio(a);avisoRetoma(a);
+}
+/* O aviso sai pelo fundo, a partir de onde o dedo o deixou: a mesma
+   direção por onde entrou. Por baixo da animação ele já está fechado (sem
+   .on, sem toque), para nada piscar no fim. O prazo do desfazer é o de
+   sempre: segura(false) sem acréscimo.
+   Recebe: a — o arrasto que acabou.
+   Devolve: nada. */
+function avisoSaiPorBaixo(a){
+  const t=a.t,de='translateX(-50%) translateY('+a.desl+'px)';
+  clearTimeout(t._h);t._fim=0;
+  t.classList.remove('pronto');t.style.transform='';t.classList.remove('on');
+  if(a.op.segura)a.op.segura(false,0);
+  if(!a.mexe||typeof t.animate!=='function')return avisoAssentar(t);
+  // até sair do ecrã, e nunca para trás de onde o dedo o largou
+  const fora=Math.max(a.desl,(window.innerHeight||0)-a.topo),dur=msDoToken('--medio',200);
+  const an=t.animate([{transform:de,opacity:1},{transform:'translateX(-50%) translateY('+Math.round(fora)+'px)',opacity:0}],
+    {duration:dur,easing:tokenTexto('--curva','cubic-bezier(.22,1,.36,1)')});
+  avisoQuandoAcabar(t,an,dur);
+}
+/* O aviso volta ao sítio, a partir de onde o dedo o deixou (--medio,
+   --curva-entra). Sem movimento, ou sem deslocação, só assenta.
+   Recebe: a — o arrasto que acabou.
+   Devolve: nada. */
+function avisoVoltaAoSitio(a){
+  const t=a.t,de='translateX(-50%) translateY('+a.desl+'px)';
+  t.classList.remove('pronto');t.style.transform='';
+  if(!a.mexe||!a.desl||typeof t.animate!=='function')return avisoAssentar(t);
+  const dur=msDoToken('--medio',200);
+  const an=t.animate([{transform:de},{transform:'translateX(-50%)'}],
+    {duration:dur,easing:tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)')});
+  avisoQuandoAcabar(t,an,dur);
+}
+/* Guarda a animação do aviso (para um dedo ou um aviso novo a poderem
+   interromper) e, no fim dela, devolve-lhe as transições de sempre.
+   Recebe: t — o #toast; an — a Animation; dur — a duração dela (ms).
+   Devolve: nada. */
+function avisoQuandoAcabar(t,an,dur){
+  t._anim=an;
+  const fim=()=>{if(t._anim!==an)return;t._anim=null;avisoAssentar(t)};
+  an.onfinish=fim;
+  // a rede de sempre: num separador escondido o onfinish não chega
+  setTimeout(fim,dur+120);
+}
+/* Tira a classe do arrasto sem disparar as transições: o estilo de agora
+   calcula-se primeiro, com elas desligadas, e só depois elas voltam.
+   Recebe: t — o #toast.
+   Devolve: nada. */
+function avisoAssentar(t){
+  try{void getComputedStyle(t).opacity}catch(x){}
+  t.classList.remove('arrastar');t.classList.remove('pronto');
+}
+/* O prazo do aviso volta a contar, com o que faltava (pelo menos
+   AVISO_RETOMA_MS), e o op fica a saber quanto tempo ele ganhou.
+   Recebe: a — o arrasto que acabou com o aviso à vista.
+   Devolve: nada. */
+function avisoRetoma(a){
+  const t=a.t;
+  if(!t.classList.contains('on')||t._op!==a.op)return;
+  const resto=Math.max(a.resto,AVISO_RETOMA_MS);
+  t._fim=Date.now()+resto;clearTimeout(t._h);
+  t._h=setTimeout(()=>t.classList.remove('on'),resto);
+  if(a.op.segura)a.op.segura(false,Math.max(0,t._fim-a.fimAntes));
+}
+/* Um aviso novo chegou: o arrasto ou a animação do anterior acabam aqui, e
+   o op dele deixa de esperar pelo dedo (o prazo dele é o de sempre). As
+   transições voltam já, sem assentar primeiro: o aviso novo regressa ao
+   sítio pela transição do .on, a partir de onde o dedo o tinha.
+   Recebe: t — o #toast (pode faltar).
+   Devolve: nada. */
+function avisoInterromper(t){
+  if(!t)return;
+  const a=_avisoArr;
+  if(a&&a.t===t){avisoArrastoLargar();if(a.op.segura)a.op.segura(false,0)}
+  if(t._anim){const an=t._anim;t._anim=null;try{an.cancel()}catch(x){}}
+  if(a||(t.classList&&t.classList.contains('arrastar'))){
+    t.style.transform='';t.classList.remove('arrastar');t.classList.remove('pronto');
+  }
+}
+document.addEventListener('pointerdown',avisoPousar);
 
 /* Põe o aviso acima do rodapé da janela que estiver aberta.
 
@@ -963,6 +1298,22 @@ function avisoAcimaDoRodape(){
     const r=pes.getBoundingClientRect();
     if(r.height)acima=Math.max(acima,H-r.top);
   });
+  /* Sem rodapé por cima, a barra de baixo do telemóvel: o aviso a 22px do
+     fundo tapava o Casas, o + e o Dinheiro durante segundos. Só quando ela
+     está à vista (no computador, com a gaveta aberta ou em seleção é
+     display:none e o rect vem vazio). Aqui sem os 12px de folga de baixo: o
+     aviso fica à distância de sempre (os 22px do fundo), contada do topo da
+     barra em vez do fundo do ecrã. Em seleção a barra de baixo some e fica a
+     das ações (.sel-fundo, a das listas e a dos Movimentos, que no telemóvel
+     tem duas linhas): o aviso sobe acima dela da mesma maneira. */
+  if(!acima){
+    const sf=document.querySelector('.sel-fundo'),rs=sf&&sf.getBoundingClientRect?sf.getBoundingClientRect():null;
+    if(rs&&rs.height&&rs.top<H)acima=H-rs.top-12;
+  }
+  if(!acima){
+    const barra=document.getElementById('tabbar'),r=barra&&barra.getBoundingClientRect?barra.getBoundingClientRect():null;
+    if(r&&r.height&&r.top<H)acima=H-r.top-12;
+  }
   t.style.setProperty('--acima',acima>0?Math.ceil(acima+12)+'px':'0px');
 }
 /* Mede outra vez quando a folha tiver assentado.
@@ -980,3 +1331,237 @@ function avisoAcimaDoRodape(){
 function avisoQuandoAssentar(){
   setTimeout(avisoAcimaDoRodape,msDoToken('--medio',200)+120);
 }
+
+/* ================= A FOLHA ARRASTA-SE PARA BAIXO =================
+   Abaixo dos 520px uma janela é uma folha encostada em baixo, com a barra
+   por cima do cabeçalho (estilos.css:.sheet::before) — e a barra promete o
+   gesto que o sistema ensina: puxar para baixo fecha. Arrasta-se a janela de
+   cima da pilha, com o dedo ou a caneta (AVISO_PONTEIROS: com o rato,
+   arrastar é selecionar texto, e no computador a janela está ao meio do
+   ecrã, sem barra).
+   Agarra-se pelo cabeçalho (o .head, e a barra, que é da própria .sheet)
+   sempre; pelo corpo só com ele no topo do scroll e o gesto a começar para
+   baixo — a subir, ou com o corpo a meio, é o scroll de sempre (folhaZona).
+   Nunca arranca de um campo, de um toque longo, nem de quem já tem o seu
+   gesto (FOLHA_NAO_ARRANCA, e o que rola de lado).
+   A folha segue o dedo e o véu aclara à proporção (folhaVeu); para cima
+   resiste (folhaElastico). Largar passada metade da altura dela, ou com um
+   sacudir para baixo — a regra do aviso, avisoFechaAoLargar —, fecha pelo
+   closeModal('arrasto'): num formulário com alterações pergunta «Sair sem
+   guardar?» como o X, e ficando, a folha volta ao sítio. A saída continua
+   de onde o dedo a deixou (folhaFecha). Sem movimento pedido não segue o
+   dedo: desvanece quando largar já fecha, e fecha sem animar. */
+// a altura (px) que mede a resistência para cima: a folha nunca sobe mais de metade dela
+const FOLHA_RESISTE=48;
+// o que nunca agarra a folha: os campos, o toque longo, quem tem gesto próprio e as listas abertas
+const FOLHA_NAO_ARRANCA='input,textarea,select,[contenteditable]:not([contenteditable="false"]),[data-lp],[data-pointerdown],'+
+  '.chartbox[data-lido],.pago-por,[role="slider"],.selpop,.menupop';
+let _folhaArr=null,_folhaEngole=0;
+/* A janela mostra a barra? A mesma condição do CSS (estilos.css:.sheet::before,
+   dentro de @media(max-width:520px)), lida pelo matchMedia.
+   Devolve: true/false. */
+function folhaComBarra(){
+  try{return !!(window.matchMedia&&window.matchMedia('(max-width:520px)').matches)}catch(e){return false}
+}
+/* Por onde o dedo pegou na folha: pelo cabeçalho (o .head, ou a barra — que
+   é a própria .sheet), ou pelo corpo no topo do scroll. Fora disso — o
+   rodapé, um campo, um toque longo, quem tem gesto próprio, o que rola de
+   lado, ou o corpo (ou uma caixa dentro dele) já rolado — não pega.
+   Recebe: alvo — o elemento onde o dedo pousou; s — a .sheet da janela de cima.
+   Devolve: 'cab', 'corpo' ou '' (não pega). */
+function folhaZona(alvo,s){
+  if(!alvo||!s||typeof alvo.closest!=='function'||typeof s.querySelector!=='function')return '';
+  if(alvo.closest(FOLHA_NAO_ARRANCA))return '';
+  const cab=s.querySelector('.head'),corpo=s.querySelector('.body');
+  const zona=alvo===s||(cab&&cab.contains(alvo))?'cab':(corpo&&corpo.contains(alvo)?'corpo':'');
+  if(!zona)return '';
+  for(let el=alvo;el&&el!==s;el=el.parentElement){
+    if(zona==='corpo'&&el.scrollTop>0)return '';
+    if(typeof sepRolaDeLado==='function'&&sepRolaDeLado(el))return '';
+  }
+  return zona;
+}
+/* Para cima, a folha resiste: anda cada vez menos quanto mais se puxa, e
+   nunca sobe mais de metade de FOLHA_RESISTE (a curva do avisoElastico). Uma
+   folha encostada em baixo que subisse o que o dedo sobe descolava do fundo
+   do ecrã.
+   Recebe: dy — px que o dedo andou (negativo, para cima).
+   Devolve: px a que a folha fica (com o sinal de dy). */
+function folhaElastico(dy){return avisoElastico(dy,FOLHA_RESISTE)}
+/* O véu por trás da folha aclara à medida que ela desce: inteiro no sítio,
+   nada com a folha uma altura dela abaixo. Sem movimento, fica inteiro.
+   Recebe: a — o arrasto ({desl, h, mexe}).
+   Devolve: a opacidade do véu, de 0 a 1. */
+function folhaVeu(a){
+  if(!a||!a.mexe)return 1;
+  return Math.max(0,Math.min(1,1-a.desl/(a.h||1)));
+}
+/* Onde a folha está agora, na vertical, contando com a animação que a
+   estiver a levar (a entrada, ou o regresso ao sítio).
+   Recebe: s — a .sheet.
+   Devolve: px (0 no sítio). */
+function folhaDeslocada(s){
+  try{const m=/matrix\(([^)]*)\)/.exec(getComputedStyle(s).transform||'');
+    return m?(parseFloat(m[1].split(',')[5])||0):0}catch(e){return 0}
+}
+/* Para o regresso da folha (e do véu) onde ele estiver.
+   Recebe: s — a .sheet.
+   Devolve: nada. */
+function folhaPara(s){
+  const an=s._folhaAnim,veu=s._folhaVeuAnim;s._folhaAnim=null;s._folhaVeuAnim=null;
+  try{if(an)an.cancel()}catch(e){}
+  try{if(veu)veu.cancel()}catch(e){}
+}
+/* O dedo pousou: se foi na janela de cima, por onde ela se agarra (folhaZona),
+   e a janela mostra a barra, fica-se à escuta do arrasto. Pegar na folha a
+   meio do regresso apanha-a onde ela está, sem salto.
+   Recebe: e — o PointerEvent do pointerdown (ouvido no documento).
+   Devolve: nada — liga os ouvintes do documento. */
+function folhaPousar(e){
+  if(_folhaArr||!e||e.button>0||e.isPrimary===false||AVISO_PONTEIROS.indexOf(e.pointerType)<0)return;
+  if(!folhaComBarra())return;
+  const L=modalTop(),el=L&&L.el;
+  if(!el||typeof el.querySelector!=='function'||!el.classList.contains('open')||el.classList.contains('under'))return;
+  const s=el.querySelector('.sheet'),alvo=e.target;
+  if(!s||!alvo||typeof s.contains!=='function'||!s.contains(alvo))return;
+  const zona=folhaZona(alvo,s);if(!zona)return;
+  const a={id:e.pointerId,L,el,s,bg:el.querySelector('.bg'),zona,x0:e.clientX,y0:e.clientY,base:0,dy:0,desl:0,vy:0,
+    ya:e.clientY,ta:avisoHora(e),ativo:false,mexe:!semMovimento(),h:1};
+  if(s._folhaAnim){
+    // a meio do regresso: fica onde a animação a tinha
+    a.base=folhaDeslocada(s);folhaPara(s);
+    const r=s.getBoundingClientRect();a.h=(r&&r.height)||s.offsetHeight||1;
+    a.desl=a.dy=a.base;
+    if(a.base){s.style.transform='translateY('+a.base+'px)';if(a.bg)a.bg.style.opacity=String(folhaVeu(a))}
+  }
+  _folhaArr=a;
+  document.addEventListener('pointermove',folhaArrastoMove);
+  document.addEventListener('pointerup',folhaArrastoFim);
+  document.addEventListener('pointercancel',folhaArrastoFim);
+}
+/* O dedo andou: passados os 10px de decidir, na vertical, a folha segue-o;
+   para o lado, ou a subir pelo corpo, o gesto não é dela (é o scroll). A
+   folga de decidir não conta: a folha arranca colada ao dedo, sem salto.
+   Recebe: e — o PointerEvent do pointermove.
+   Devolve: nada — mexe no transform da .sheet e na opacidade do véu. */
+function folhaArrastoMove(e){
+  const a=_folhaArr;if(!a||e.pointerId!==a.id)return;
+  // abriu-se outra janela por cima, ou esta fechou por outro caminho: o gesto acaba aqui
+  if(modalTop()!==a.L)return folhaDesiste(a);
+  let dy=e.clientY-a.y0;const dx=e.clientX-a.x0;
+  if(!a.ativo){
+    if(Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy))return folhaDesiste(a);
+    if(Math.abs(dy)<10)return;
+    if(a.zona==='corpo'&&dy<0)return folhaDesiste(a);
+    a.ativo=true;
+    a.y0+=dy<0?-10:10;dy=e.clientY-a.y0;
+    const r=a.s.getBoundingClientRect();a.h=(r&&r.height)||a.s.offsetHeight||1;
+    // apanhada a meio da entrada: parte de onde a animação a tinha
+    if(!a.base&&a.mexe)a.base=folhaDeslocada(a.s);
+    a.el.classList.add('arrastou');a.s.classList.add('arrastar');
+    try{a.s.setPointerCapture(a.id)}catch(x){}
+    closePops();
+  }
+  const agora=avisoHora(e),dt=agora-a.ta;
+  // a velocidade dos últimos instantes, alisada: é ela que diz se o gesto foi um sacudir
+  if(dt>0)a.vy=.6*((e.clientY-a.ya)/dt)+.4*a.vy;
+  a.ya=e.clientY;a.ta=agora;
+  a.dy=a.base+dy;
+  a.desl=a.dy>=0?a.dy:folhaElastico(a.dy);
+  if(a.mexe){
+    a.s.style.transform='translateY('+a.desl+'px)';
+    if(a.bg)a.bg.style.opacity=String(folhaVeu(a));
+  }
+  a.s.classList.toggle('pronto',avisoFechaAoLargar(a,agora));
+}
+/* O browser não pode rolar o que a folha está a levar: um toque que agarrou
+   pelo cabeçalho, ou pelo corpo a descer, trava o scroll (preventDefault).
+   Sem isto, o browser tomava o gesto para si e mandava um pointercancel a
+   meio. Um gesto a subir pelo corpo não se trava — é o scroll —, nem o de
+   dois dedos.
+   Recebe: e — o TouchEvent do touchmove (ouvido na .modal, modalLayer).
+   Devolve: nada. */
+function folhaToqueMove(e){
+  const a=_folhaArr;if(!a||!e||e.cancelable===false)return;
+  const t=e.touches&&e.touches.length===1?e.touches[0]:null;if(!t)return;
+  if(!a.ativo&&a.zona!=='cab'){
+    const dy=t.clientY-a.y0,dx=t.clientX-a.x0;
+    if(dy<0||dy<Math.abs(dx))return;
+  }
+  e.preventDefault();
+}
+/* Tira os ouvintes do documento e esquece o arrasto.
+   Devolve: nada. */
+function folhaArrastoLargar(){
+  document.removeEventListener('pointermove',folhaArrastoMove);
+  document.removeEventListener('pointerup',folhaArrastoFim);
+  document.removeEventListener('pointercancel',folhaArrastoFim);
+  _folhaArr=null;
+}
+/* O gesto deixou de ser da folha (foi para o lado, subiu pelo corpo, ou a
+   janela deixou de ser a de cima): larga-o e, se a folha tinha saído do
+   sítio e ainda está aberta, devolve-a.
+   Recebe: a — o arrasto.
+   Devolve: nada. */
+function folhaDesiste(a){
+  folhaArrastoLargar();
+  if(modalStack.indexOf(a.L)<0)return;
+  if(a.ativo||a.base)folhaVoltaAoSitio(a);
+}
+/* O dedo saiu: fecha a janela, se o gesto chegou para isso, ou devolve a
+   folha ao sítio. Um pointercancel nunca fecha. Depois de um arrasto, o
+   clique que o browser dispara engole-se (não carrega no X nem no que
+   estiver por baixo).
+   Recebe: e — o PointerEvent do pointerup ou do pointercancel.
+   Devolve: nada. */
+function folhaArrastoFim(e){
+  const a=_folhaArr;if(!a||(e&&e.pointerId!==a.id))return;
+  if(modalTop()!==a.L)return folhaDesiste(a);
+  folhaArrastoLargar();
+  if(!a.ativo){if(a.base)folhaVoltaAoSitio(a);return}
+  _folhaEngole=Date.now()+350;
+  if(e&&e.type!=='pointercancel'&&avisoFechaAoLargar(a,avisoHora(e)))return folhaFecha(a);
+  folhaVoltaAoSitio(a);
+}
+/* Fecha a janela largada em baixo, pelo closeModal('arrasto'). A saída
+   (.sai, fecharComSaida) parte do transform que o dedo deixou — o
+   folhaDesce só declara o fim —, e a .arrastada troca-lhe a curva pela
+   --curva: o largar continua a velocidade do dedo (estilos.css, a região da
+   folha arrastável). Se a janela ficou (a pergunta «Sair sem guardar?»
+   abriu por cima), a folha volta ao sítio, por baixo dela.
+   Recebe: a — o arrasto que acabou.
+   Devolve: nada. */
+function folhaFecha(a){
+  a.s.classList.remove('arrastar');a.s.classList.remove('pronto');
+  if(a.mexe)a.el.classList.add('arrastada');
+  closeModal('arrasto');
+  if(modalStack.indexOf(a.L)<0)return;
+  a.el.classList.remove('arrastada');
+  folhaVoltaAoSitio(a);
+}
+/* A folha volta ao sítio, a partir de onde o dedo a deixou (--medio,
+   --curva-entra, como o aviso), e o véu escurece outra vez com ela. Sem
+   movimento, ou sem deslocação, só assenta.
+   Recebe: a — o arrasto.
+   Devolve: nada. */
+function folhaVoltaAoSitio(a){
+  const s=a.s,bg=a.bg,de='translateY('+a.desl+'px)',veu=folhaVeu(a);
+  s.classList.remove('arrastar');s.classList.remove('pronto');
+  s.style.transform='';if(bg)bg.style.opacity='';
+  if(!a.mexe||!a.desl||typeof s.animate!=='function')return;
+  const dur=msDoToken('--medio',200),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
+  const an=s.animate([{transform:de},{transform:'none'}],{duration:dur,easing:curva});
+  s._folhaAnim=an;
+  if(bg&&typeof bg.animate==='function')s._folhaVeuAnim=bg.animate([{opacity:veu},{opacity:1}],{duration:dur,easing:curva});
+  const fim=()=>{if(s._folhaAnim!==an)return;s._folhaAnim=null;s._folhaVeuAnim=null};
+  an.onfinish=fim;
+  // a rede de sempre: num separador escondido o onfinish não chega
+  setTimeout(fim,dur+120);
+}
+document.addEventListener('pointerdown',folhaPousar);
+// o clique que o browser dá a seguir a um arrasto da folha não é um toque
+document.addEventListener('click',e=>{
+  if(!_folhaEngole)return;
+  const engole=Date.now()<_folhaEngole;_folhaEngole=0;
+  if(engole){e.stopPropagation();e.preventDefault()}
+},true);

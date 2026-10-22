@@ -9,7 +9,10 @@ import { webcrypto } from 'node:crypto';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-import { enviarEmail, emailReporPassword, emailRespostaPedido, emailPedidoRecebido, numeroPedido, dominioDaCasa, REMETENTES } from '../worker/src/lib/correio.js';
+import {
+  enviarEmail, emailReporPassword, emailRespostaPedido, emailPedidoRecebido, numeroPedido, dominioDaCasa, REMETENTES,
+  cartaPedidoRecebido, cartaReporPassword, cartaRespostaPedido, escaparHtml, enderecoDaApp,
+} from '../worker/src/lib/correio.js';
 import { baseDeTeste, kvFalso, r2Falso } from './lib/bd.js';
 import { rotasEquipaApi } from '../worker/src/equipa-api.js';
 
@@ -144,6 +147,86 @@ describe('os emails concretos', () => {
     assert.match(c.from, /support@/);
     assert.match(c.subject, /#T1UUIDX/, 'a resposta cita o numero');
     assert.ok(c.html.includes('&lt;b&gt;isto&lt;/b&gt; &amp; aquilo'), 'nada de HTML injetado no molde');
+  });
+});
+
+describe('o que cada email diz, e como chega', () => {
+  const ASSUNTO = 'Renda <duplicada> & "outra" — não sei';
+  const ID = 'ab12cd34-e5f6-7890-abcd-ef1234567890';
+  // o texto visível de um HTML de email: sem etiquetas, entidades desfeitas, espaços juntos
+  const visivel = (h) => h.replace(/<!--[\s\S]*?-->/g, '').replace(/<style[\s\S]*?<\/style>/g, '').replace(/<title>[\s\S]*?<\/title>/, '')
+    .replace(/<br>/g, ' ').replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ');
+
+  test('o assunto que a pessoa escreveu vai escapado por inteiro (& < > ") no HTML, e tal e qual no texto', () => {
+    for (const c of [cartaPedidoRecebido({}, ID, ASSUNTO), cartaRespostaPedido({}, ASSUNTO, 'ok', ID)]) {
+      assert.ok(c.html.includes('Renda &lt;duplicada&gt; &amp; &quot;outra&quot; — não sei'), 'o escape cobre os quatro');
+      assert.doesNotMatch(c.html, /<duplicada>/);
+      assert.ok(c.texto.includes(ASSUNTO), 'o texto simples não leva entidades');
+      assert.doesNotMatch(c.texto, /&lt;|&amp;|&quot;|<p\b|<br>/);
+    }
+    assert.equal(escaparHtml(`<a href="x" title='y'>&</a>`), '&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;');
+    assert.equal(escaparHtml(null), '');
+  });
+
+  test('a versão em texto diz o mesmo que o HTML, nos três', () => {
+    const casos = [
+      [cartaPedidoRecebido({}, ID, ASSUNTO), ['Recebemos o teu pedido', ASSUNTO, 'Ficou registado com o número #AB12CD34. Vamos responder-te por email.',
+        'Podes acompanhar e responder na app, em Definições › Ajuda e sugestões.', 'Abrir a app', 'Se responderes a este email, a resposta também chega ao suporte.']],
+      [cartaReporPassword('https://app.rendorium.com/?repor=abc'), ['Repor a tua palavra-passe',
+        'Alguém pediu para repor a palavra-passe desta conta. A ligação vale 1 hora e serve uma vez.', 'Definir palavra-passe nova',
+        'https://app.rendorium.com/?repor=abc', 'Se não pediste isto, ignora.', 'Recebeste este email porque tens uma conta no Rendorium.']],
+      [cartaRespostaPedido({}, ASSUNTO, 'Já está.\nVê em Movimentos.', ID), ['Respondemos ao teu pedido', '#AB12CD34 · ' + ASSUNTO,
+        'Já está.', 'Vê em Movimentos.', 'Podes ver o histórico e responder na app, em Definições › Ajuda e sugestões.', 'Ver na app']],
+    ];
+    for (const [c, frases] of casos) {
+      const h = visivel(c.html);
+      for (const f of frases) {
+        assert.ok(c.texto.includes(f), 'o texto diz «' + f + '»');
+        assert.ok(h.includes(f), 'o HTML diz «' + f + '»');
+      }
+    }
+  });
+
+  test('os emails de pedidos levam à app certa: a de produção, ou a do dev fora dela', () => {
+    assert.equal(enderecoDaApp({}), 'https://app.rendorium.com');
+    assert.equal(enderecoDaApp({ ENV_NAME: 'dev' }), 'https://dev.rendorium.com');
+    const prod = cartaPedidoRecebido({}, ID, 'x');
+    assert.match(prod.html, /href="https:\/\/app\.rendorium\.com"/);
+    assert.match(prod.texto, /https:\/\/app\.rendorium\.com/);
+    assert.match(cartaRespostaPedido({ ENV_NAME: 'dev' }, 'x', 'y', ID).html, /href="https:\/\/dev\.rendorium\.com"/);
+  });
+
+  test('a ligação de repor vai escapada no href e por extenso para copiar', () => {
+    const c = cartaReporPassword('https://app.rendorium.com/?repor=abc&x="1"');
+    assert.ok(c.html.includes('href="https://app.rendorium.com/?repor=abc&amp;x=&quot;1&quot;"'), 'uma aspa não fecha o atributo');
+    assert.equal((c.html.match(/repor=abc/g) || []).length, 2, 'no botão e escrita por baixo');
+  });
+
+  test('a resposta comprida corta-se no mesmo sítio nas duas versões, com reticências', () => {
+    const longa = 'a'.repeat(1600);
+    const c = cartaRespostaPedido({}, 'x', longa, ID);
+    assert.ok(c.texto.includes('a'.repeat(1500) + '…'));
+    assert.ok(!c.texto.includes('a'.repeat(1501)));
+    assert.ok(c.html.includes('a'.repeat(1500) + '…'));
+    assert.ok(!c.html.includes('a'.repeat(1501)));
+    const curta = cartaRespostaPedido({}, 'x', 'curta', ID);
+    assert.doesNotMatch(curta.texto, /…/, 'sem corte, sem reticências');
+  });
+
+  test('nenhum email pede nada de fora: sem imagens, sem folhas, sem letras do Google', () => {
+    for (const c of [cartaPedidoRecebido({}, ID, 'x'), cartaReporPassword('https://app.rendorium.com/?repor=abc'), cartaRespostaPedido({}, 'x', 'y', ID)]) {
+      assert.doesNotMatch(c.html, /<img\b|<link\b|<script\b|\bsrc\s*=|url\(|@import|fonts\.google/i);
+      assert.match(c.html, /^<!doctype html><html lang="pt-PT">/);
+      assert.match(c.html, /<title>[^<]+<\/title>/, 'o assunto também no <title>');
+      assert.match(c.html, /max-width:560px/, 'o cartão não passa dos 560 px');
+    }
+  });
+
+  test('sem número, o assunto da resposta não leva espaço antes dos dois pontos', () => {
+    assert.equal(cartaRespostaPedido({}, 'Ajuda', 'y').assunto, 'Respondemos ao teu pedido: Ajuda');
+    assert.equal(cartaRespostaPedido({}, 'Ajuda', 'y', 'T1').assunto, 'Respondemos ao teu pedido #T1 Ajuda');
   });
 });
 

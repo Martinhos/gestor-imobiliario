@@ -215,13 +215,44 @@ describe('pedidosDashCard', () => {
     assert.equal(f.pedidosDashCard(), '', 'nenhum botão de aceitar a quem não é dono');
   });
 
-  test('o cartão dos pedidos em Conta e partilha e o da ligação usam as mesmas linhas e botões', () => {
+  test('o cartão dos pedidos nos Proprietários e o da ligação usam as mesmas linhas e botões', () => {
     const { app } = comEstado((st) => { PEDIDO(st); CONVITE(st); });
     const dash = app.pedidosDashCard(), conta = app.pedidosCard(), lig = app.connCard(app.CW.state.connections[1]);
-    const linha = /<div class="card u-p-12px-13px"><b class="u-d-block">Ana quer partilhar T2 Porto contigo<\/b>[\s\S]*?<\/div><\/div>/;
+    const linha = /<div class="pd-linha"><b class="u-d-block">Ana quer partilhar T2 Porto contigo<\/b>[\s\S]*?<\/div><\/div>/;
     assert.equal(linha.exec(dash)[0], linha.exec(conta)[0], 'a linha do pedido é uma só');
     const botoes = /<button class="btn primary sm" data-toca="dados" data-click="CW\.acceptConn\('K2'\)">Aceitar<\/button><button[^>]*>Recusar<\/button>/;
     assert.equal(botoes.exec(dash)[0], botoes.exec(lig)[0], 'os botões do convite são os mesmos');
+  });
+
+  /* Recusar um pedido não destrói nada (quem pediu pode voltar a pedir): é o
+     botão secundário, e não o vermelho cheio do que apaga (o canvas Main). */
+  test('o «Recusar» é o botão secundário em todas as linhas, e nunca o vermelho', () => {
+    const { app } = comEstado((st) => { PEDIDO(st); GRUPO(st); CONVITE(st); });
+    const h = app.pedidosDashCard() + app.pedidosCard() + app.connCard(app.CW.state.connections[1]);
+    const recusas = h.match(/<button[^>]*>Recusar<\/button>/g) || [];
+    assert.ok(recusas.length >= 5, 'as três do cartão, a do pedido nos Proprietários e a do convite: ' + recusas.length);
+    for (const b of recusas) {
+      assert.match(b, /^<button class="btn sm" data-toca="dados" data-click="CW\.(?:pedidoRecusar|grupoRecusarPedido|delConn)\(/, b);
+      assert.doesNotMatch(b, /danger/, b);
+    }
+  });
+
+  /* As linhas sozinhas, sem cartão: o que a Visão geral junta à atividade num
+     cartão só («Pedidos e atividade», o canvas Main). O cartão é feito delas. */
+  test('linhasDosPedidos devolve só as linhas — partilha, grupo e convite, por esta ordem — e o cartão leva-as por dentro', () => {
+    const { app } = comEstado((st) => { PEDIDO(st); GRUPO(st); CONVITE(st); });
+    const l = app.linhasDosPedidos();
+    assert.ok(l.startsWith('<div class="pd-linha">') && l.endsWith('</div></div>'), 'começa e acaba numa linha: ' + l.slice(0, 80));
+    assert.equal((l.match(/<div class="pd-linha">/g) || []).length, 3, 'uma por pedido');
+    assert.ok(!/class="card|title|por responder|<!--fim-pedidos-->|u-h-14px/.test(l), 'sem cartão, sem título, sem marca nem espaço');
+    const iP = l.indexOf('Ana quer partilhar'), iG = l.indexOf('Zé quer entrar no grupo'), iC = l.indexOf('Zé quer ligar-se');
+    assert.ok(iP > -1 && iP < iG && iG < iC, [iP, iG, iC].join(', '));
+    assert.ok(app.pedidosDashCard().includes('<div class="pd-lista">' + l + '</div>'), 'o cartão é o das linhas');
+    // sem nada por responder, vazio; e o serviço desligado tira os pedidos dele, como no cartão
+    const { app: vazio } = comEstado();
+    assert.equal(vazio.linhasDosPedidos(), '');
+    app.definirServicosDesligados(['colaboradores']);
+    assert.equal((app.linhasDosPedidos().match(/<div class="pd-linha">/g) || []).length, 1, 'só o convite de ligação');
   });
 });
 
@@ -352,10 +383,13 @@ describe('as quotas ao escolher a casa a partilhar', () => {
   const escreve = (app, hid, valores) => { for (const [u, v] of Object.entries(valores)) app.document.getElementById('cw_q_' + hid + '_' + u).value = v; };
   const chamadas = (esp) => esp.api.map((x) => x.method + ' ' + x.path);
 
-  test('a casa já partilhada vem marcada e sem quotas; a nova traz a caixa com o data-change e o lugar do bloco, vazio', () => {
-    const { corpo } = abrir();
-    assert.match(corpo, /id="cw_sh_H1" checked>/);
-    assert.ok(!/cw_qb_H1|shareCasaMudou\('H1'\)/.test(corpo), 'a já partilhada não ganha quotas por aqui');
+  test('a casa já partilhada vem marcada, com a divisão em vigor e «Propor nova divisão»; a nova traz a caixa com o data-change e o lugar do bloco, vazio', () => {
+    const { corpo, esp } = abrir();
+    assert.equal(esp.abertas[0].t, 'Partilha com Rui');
+    assert.match(corpo, /id="cw_sh_H1" checked data-toca="rascunho" data-change="CW\.shareCasaMudou\('H1'\)">/);
+    assert.match(corpo, /<div id="cw_qb_H1"><div class="pt-quotas">[\s\S]*?Eu \(tu\)<\/span><b class="num">50%<\/b>[\s\S]*?Rui<\/span><b class="num">50%<\/b>/);
+    assert.match(corpo, /data-toca="rascunho" data-click="CW\.shareProporAbrir\('H1'\)">Propor nova divisão</);
+    assert.ok(!corpo.includes('cw_q_H1_'), 'sem campos antes de propor');
     assert.match(corpo, /id="cw_sh_H5" data-toca="rascunho" data-change="CW\.shareCasaMudou\('H5'\)">/);
     assert.match(corpo, /<div id="cw_qb_H5"><\/div>/);
     assert.ok(!corpo.includes('cw_q_H5_'), 'sem campos de quotas antes de marcar');
@@ -365,8 +399,9 @@ describe('as quotas ao escolher a casa a partilhar', () => {
     const { app } = abrir();
     marcar(app, 'H5', true);
     const b = bloco(app, 'H5');
-    assert.match(b, /<label>Eu \(tu\) \(%\)<input id="cw_q_H5_EU" type="text" inputmode="decimal" value="50"><\/label>/);
-    assert.match(b, /<label>Rui \(%\)<input id="cw_q_H5_RUI" type="text" inputmode="decimal" value="50"><\/label>/);
+    // uma linha por pessoa (o canvas M-Quotas): o nome, o campo com nome para o leitor de ecrã, e o %
+    assert.match(b, /<label class="pt-quota"><span class="pt-quota-nome">Eu \(tu\)<\/span><input id="cw_q_H5_EU" type="text" inputmode="decimal" value="50" aria-label="Eu \(tu\), quota em %"><span class="pt-pct" aria-hidden="true">%<\/span><\/label>/);
+    assert.match(b, /<label class="pt-quota"><span class="pt-quota-nome">Rui<\/span><input id="cw_q_H5_RUI" type="text" inputmode="decimal" value="50" aria-label="Rui, quota em %">/);
     assert.match(b, /A divisão só entra em vigor depois de o outro confirmar; até lá fica em partes iguais\./);
     assert.equal((b.match(/<input /g) || []).length, 2);
     marcar(app, 'H5', false);
@@ -379,7 +414,7 @@ describe('as quotas ao escolher a casa a partilhar', () => {
     const b = bloco(app, 'H5');
     for (const u of ['EU', 'ANA', 'RUI']) assert.match(b, new RegExp('id="cw_q_H5_' + u + '" [^>]*value="33,3"'));
     assert.equal((b.match(/<input /g) || []).length, 3);
-    assert.match(b, /Ana \(%\)/);
+    assert.match(b, /<span class="pt-quota-nome">Ana<\/span>/);
   });
 
   test('desmarcar e voltar a marcar repõe o que estava escrito', () => {
@@ -446,6 +481,87 @@ describe('as quotas ao escolher a casa a partilhar', () => {
     assert.deepEqual(chamadas(b.esp), ['PUT /api/connections/K1/shares']);
     assert.deepEqual(b.esp.api[0].body, { houseIds: [] });
     assert.deepEqual(b.esp.toasts, ['Partilha atualizada.']);
+  });
+
+  test('desmarcar a casa já partilhada tira a divisão e diz que o outro deixa de a ver; voltar a marcar repõe', () => {
+    const { app } = abrir();
+    marcar(app, 'H1', false);
+    assert.match(bloco(app, 'H1'), /Ao guardar, Rui deixa de ver esta casa e de ter quota nela\./);
+    marcar(app, 'H1', true);
+    assert.match(bloco(app, 'H1'), /Propor nova divisão/);
+  });
+
+  test('«Propor nova divisão» abre os campos com a divisão atual; guardar com 70/30 faz o PUT e a proposta, sem mudar a lista', async () => {
+    const { app, esp } = abrir();
+    app.CW.shareProporAbrir('H1');
+    const b = bloco(app, 'H1');
+    assert.match(b, /id="cw_q_H1_EU" [^>]*value="50"/);
+    assert.match(b, /id="cw_q_H1_RUI" [^>]*value="50"/);
+    assert.match(b, /A nova divisão só entra em vigor depois de todos os comproprietários confirmarem\./);
+    assert.match(b, /CW\.shareProporFechar\('H1'\)">Não propor</);
+    escreve(app, 'H1', { EU: '70', RUI: '30' });
+    esp.abertas[0].onSave();
+    await espera();
+    assert.deepEqual(chamadas(esp), ['PUT /api/connections/K1/shares', 'POST /api/houses/H1/proposal']);
+    assert.deepEqual(esp.api[0].body, { houseIds: ['H1'] });
+    assert.deepEqual(esp.api[1].body, { shares: { EU: 70, RUI: 30 } });
+    assert.deepEqual(esp.toasts, ['A proposta de divisão seguiu — falta a confirmação do outro comproprietário.']);
+  });
+
+  test('a nova divisão igual à atual, ou fechada com «Não propor», não envia proposta; a soma errada recusa', async () => {
+    const a = abrir();
+    a.app.CW.shareProporAbrir('H1');
+    escreve(a.app, 'H1', { EU: '50', RUI: '50' });
+    a.esp.abertas[0].onSave();
+    await espera();
+    assert.deepEqual(chamadas(a.esp), ['PUT /api/connections/K1/shares']);
+    const b = abrir();
+    b.app.CW.shareProporAbrir('H1');
+    escreve(b.app, 'H1', { EU: '80', RUI: '20' });
+    b.app.CW.shareProporFechar('H1');
+    assert.ok(!bloco(b.app, 'H1').includes('cw_q_H1_'), 'fechou os campos');
+    b.app.CW.shareProporAbrir('H1');
+    assert.match(bloco(b.app, 'H1'), /id="cw_q_H1_EU" [^>]*value="80"/, 'reabre com o que estava escrito');
+    b.app.CW.shareProporFechar('H1');
+    b.esp.abertas[0].onSave();
+    await espera();
+    assert.deepEqual(chamadas(b.esp), ['PUT /api/connections/K1/shares']);
+    const c = abrir();
+    c.app.CW.shareProporAbrir('H1');
+    escreve(c.app, 'H1', { EU: '80', RUI: '30' });
+    c.esp.abertas[0].onSave();
+    await espera();
+    assert.deepEqual(c.esp.api, []);
+    assert.deepEqual(c.esp.toasts, ['As percentagens de Minha têm de somar 100 (agora somam 110).']);
+  });
+
+  test('a proposta por responder mostra-se: a do outro confirma-se ali; a minha diz de quem se espera e cancela-se', async () => {
+    const outro = abrir((st) => { st.proposals = [{ houseId: 'H1', shares: { EU: 40, RUI: 60 }, approvals: ['RUI'], proposedByName: 'Rui' }]; });
+    assert.match(outro.corpo, /Eu \(tu\)<\/span><b class="num">50% <span class="u-c-v-warn">→ 40%<\/span>/);
+    assert.match(outro.corpo, /<b>Rui<\/b> propôs esta nova divisão\./);
+    assert.match(outro.corpo, /CW\.shareResponder\('H1',1\)">Confirmar nova divisão</);
+    assert.ok(!outro.corpo.includes('shareProporAbrir'), 'com proposta por responder, não se propõe outra por cima');
+    await outro.app.CW.shareResponder('H1', 1);
+    assert.deepEqual(chamadas(outro.esp), ['POST /api/houses/H1/proposal/accept']);
+    const minha = abrir((st) => { st.proposals = [{ houseId: 'H1', shares: { EU: 60, RUI: 40 }, approvals: ['EU'], proposedByName: 'Eu' }]; });
+    assert.match(minha.corpo, /à espera de: <b>Rui<\/b>/);
+    assert.match(minha.corpo, /CW\.shareResponder\('H1',0\)">Cancelar proposta</);
+  });
+
+  test('as casas que o outro partilha comigo aparecem por baixo, sem caixa, com a divisão e o «Propor nova divisão»', async () => {
+    const { app, esp, corpo } = abrir((st) => {
+      st.houses.push({ id: 'H9', ownerId: 'RUI', ownerName: 'Rui', mine: false, participants: ['RUI', 'EU'], updatedAt: 1, data: { id: 'H9', name: 'Do Rui', address: 'Rua C' } });
+      st.connections[0].peerShares = ['H9'];
+    });
+    assert.match(corpo, /O que Rui partilha contigo<\/div>[\s\S]*?<b class="u-d-block">Do Rui<\/b>/);
+    assert.ok(!corpo.includes('cw_sh_H9'), 'não é minha: não se adiciona nem remove daqui');
+    assert.match(corpo, /CW\.shareProporAbrir\('H9'\)/);
+    app.CW.shareProporAbrir('H9');
+    escreve(app, 'H9', { RUI: '30', EU: '70' });
+    esp.abertas[0].onSave();
+    await espera();
+    assert.deepEqual(chamadas(esp), ['PUT /api/connections/K1/shares', 'POST /api/houses/H9/proposal']);
+    assert.deepEqual(esp.api[0].body, { houseIds: ['H1'] }, 'a lista das minhas fica como estava');
   });
 
   test('a proposta que falha depois do PUT: a partilha fica feita, e diz-se que a proposta não seguiu e onde a propor', async () => {
@@ -524,5 +640,181 @@ describe('os pedidos ficam à frente do guia', () => {
     assert.ok(bloco.includes("fim = '<!--fim-pedidos-->'"), 'depois os pedidos por responder');
     assert.ok(bloco.indexOf("'<!--fim-podes--></div>'") < bloco.indexOf("fim = '<!--fim-pedidos-->'"), 'por esta ordem');
     assert.ok(bloco.includes('return passosHtml + html'), 'e sem nenhum dos dois, por cima');
+  });
+});
+
+/* ------------------------------------------------ remover e aceitar uma ligação */
+
+/* Em toda a página o nome é «ligação» (o ⋯ diz «Remover ligação»): a janela,
+   o aceitar e o remover diziam «conexão», que é o do Brasil. E a janela de
+   confirmação diz com números o que vai junto (contrato §4), sem «casa(s)». */
+describe('remover e aceitar uma ligação', () => {
+  test('a janela diz o nome e as casas que vão junto, e o botão é o «Remover» vermelho', async () => {
+    const { app, esp } = comEstado((st) => { st.connections[0].myShares = ['H1', 'H5']; st.connections[0].peerShares = ['X1']; });
+    app.CW.delConn('K1');
+    const j = esp.abertas[0];
+    assert.equal(j.t, 'Remover a ligação a Rui');
+    assert.ok(j.b.includes('Deixas de partilhar 2 casas com Rui, e a casa que recebes deixa de aparecer. Os dados de cada um não são apagados.'), j.b);
+    assert.match(j.f, /<button class="btn danger" data-click="_ok\(\)">Remover<\/button>/);
+    app._ok();
+    await espera();
+    assert.deepEqual(esp.api.map((x) => x.method + ' ' + x.path), ['DELETE /api/connections/K1']);
+    assert.deepEqual(esp.toasts, ['Ligação removida.']);
+  });
+
+  test('no singular, só num sentido, e sem casas nenhumas', () => {
+    const frase = (mine, theirs) => {
+      const { app } = comEstado((st) => { st.connections[0].myShares = mine; st.connections[0].peerShares = theirs; });
+      return app.fraseRemoverLigacao(app.CW.state.connections[0]);
+    };
+    assert.equal(frase(['H1'], []), 'Deixas de partilhar 1 casa com Rui. Os dados de cada um não são apagados.');
+    assert.equal(frase([], ['X1', 'X2', 'X3']), 'As 3 casas que recebes de Rui deixam de aparecer. Os dados de cada um não são apagados.');
+    assert.equal(frase([], ['X1']), 'A casa que recebes de Rui deixa de aparecer. Os dados de cada um não são apagados.');
+    assert.equal(frase([], []), 'Ainda não partilham casas um com o outro: sai só a ligação. Os dados de cada um não são apagados.');
+    const { app } = comEstado((st) => { st.connections[0].peer.name = '<b>Zé</b>'; });
+    assert.ok(app.fraseRemoverLigacao(app.CW.state.connections[0]).includes('&lt;b&gt;Zé&lt;/b&gt;'), 'o nome passa pelo esc');
+  });
+
+  test('um convite enviado sai sem perguntar; aceitar diz «Ligação aceite»', async () => {
+    const { app, esp } = comEstado(CONVITE);
+    app.CW.delConn('K2', 1);
+    app.CW.acceptConn('K2');
+    await espera();
+    assert.equal(esp.abertas.length, 0, 'sem janela');
+    assert.deepEqual(esp.toasts.slice().sort(), ['Convite removido.', 'Ligação aceite. Escolhe agora que casas queres partilhar.']);
+    assert.ok(!/'[^'\n]*[Cc]onex(ão|ões)[^'\n]*'/.test(le('web/cloud/partilha.js')), 'nenhuma «conexão» nas frases');
+  });
+
+  /* O convite por responder salta à vista (o canvas M-Partilha): a linha leva
+     a classe pt-convite, e a folha de estilos tem de a pintar — escrevia-se a
+     classe e nenhuma regra a lia. */
+  test('cada classe da linha de uma ligação tem regra na folha de estilos, a do convite incluída', () => {
+    const { app } = comEstado(CONVITE);
+    const linha = app.connCard(app.CW.state.connections[1]);
+    assert.match(linha, /class="pt-linha pt-convite"/);
+    const css = le('web/estilos.css');
+    for (const c of new Set([...linha.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].split(/\s+/)).filter((c) => /^pt-/.test(c)))) {
+      assert.ok(new RegExp('\\.' + c + '\\b').test(css), 'a classe ' + c + ' não tem regra');
+    }
+    assert.match(css, /\.pt-linha\.pt-convite\{background:var\(--accent-soft\)\}/);
+  });
+});
+
+/* ------------------------------------------------ a ligação só na lista de cima, e o «Remover ligação» na ficha */
+
+/* A ligação ativa já está na lista dos Proprietários (pessoas.js:
+   donosComPartilha): o cartão de baixo deixava-a aparecer outra vez. Fica
+   com o que ainda não é ligação (os convites, nos dois sentidos), o campo
+   para ligar, os pedidos e a ligação de partilha; e «Remover ligação» passa
+   para o ⋯ do cabeçalho da ficha do outro. */
+describe('a ligação ativa só na lista de cima, e o «Remover ligação» na ficha', () => {
+  const ENVIADO = (st) => { st.connections.push({ id: 'K3', status: 'pending', incoming: false, peer: { id: 'LU', name: 'Lurdes' } }); };
+
+  test('o cartão dos Proprietários não repete a ligação ativa e leva os convites pendentes, o recebido e o enviado', () => {
+    const { app } = comEstado((st) => { CONVITE(st); ENVIADO(st); });
+    const h = app.comproprietariosHtml();
+    assert.ok(!h.includes("CW.sharesModal('K1')") && !h.includes('cw_conn_K1') && !h.includes("CW.delConn('K1')"), 'sem a ligação ativa com o Rui: ' + h);
+    assert.ok(!/>Rui</.test(h) && !h.includes('id RUI'), 'o Rui não aparece no cartão');
+    assert.match(h, /<div class="pt-linha pt-convite">[\s\S]*?Zé quer ligar-se a ti/, 'o convite recebido, com o fundo do convite');
+    assert.match(h, /data-click="CW\.acceptConn\('K2'\)">Aceitar</);
+    assert.match(h, /Lurdes[\s\S]*?À espera que aceite o convite\.[\s\S]*?data-click="CW\.delConn\('K3',1\)">Cancelar</, 'o enviado, com Cancelar');
+    assert.ok(!h.includes('pt-vazio'), 'com convites não há vazio');
+    // por esta ordem: os convites, o campo, e por baixo a ligação de partilha
+    const iC = h.indexOf('Zé quer ligar-se'), iL = h.indexOf('id="cw_peer"'), iS = h.indexOf('A minha ligação de partilha');
+    assert.ok(iC > -1 && iC < iL && iL < iS, [iC, iL, iS].join(', '));
+    assert.ok(app.donosComPartilha().some((o) => o.id === 'RUI'), 'controlo: o Rui está na lista dos Proprietários');
+  });
+
+  test('o vazio do cartão: sem ligação nenhuma diz que não estás ligado; com ativas e sem convites não diz nada; antes do sync diz que ainda não chegaram', () => {
+    const { app } = comEstado();
+    const comAtiva = app.comproprietariosHtml();
+    assert.ok(!comAtiva.includes('pt-vazio') && !comAtiva.includes('Ainda não estás ligado'), 'o Rui está ligado: o cartão começa no meu id');
+    assert.match(comAtiva, /<div class="card pt-cartao"><div class="pt-linha pt-meu">[\s\S]*?<\/div><div class="pt-linha pt-ligar">/);
+    const { app: sem } = comEstado((st) => { st.connections = []; });
+    assert.match(sem.comproprietariosHtml(), /<div class="pt-linha pt-vazio"><span class="small">Ainda não estás ligado a ninguém\.<\/span><\/div>/);
+    // só um convite enviado: há uma linha, e o vazio não se diz
+    const { app: so } = comEstado((st) => { st.connections = []; ENVIADO(st); });
+    assert.ok(!so.comproprietariosHtml().includes('pt-vazio'));
+    const { app: antes } = comEstado((st) => { st.connections = []; });
+    antes.CW._pulled = 0;
+    assert.match(antes.comproprietariosHtml(), /Ainda não recebemos as ligações deste aparelho/);
+  });
+
+  test('sem o separador dos Proprietários não há lista de cima: a Segurança leva a partilha, com as ativas no cartão, «Casas partilhadas» e o ⋯', () => {
+    const { app } = comEstado(CONVITE);
+    app.definirServicosDesligados(['owners']);
+    const h = app.vCloud();
+    assert.match(h, /data-toca="camada" data-click="CW\.sharesModal\('K1'\)">Casas partilhadas</);
+    assert.ok(h.includes("CW.delConn('K1')") && h.includes('Remover ligação'), 'o ⋯ da linha fica');
+    assert.ok(h.includes('Zé quer ligar-se a ti'), 'e o convite');
+    assert.ok(h.includes('O id do outro utilizador'), 'e o campo');
+    assert.ok(h.indexOf('O teu id') > -1 && h.indexOf('O teu id') < h.indexOf('O id do outro utilizador'), 'e o meu id, por cima do campo');
+    assert.ok(h.indexOf('Apagar a conta') < h.indexOf('Partilhar com outras contas'), 'a segurança primeiro, a partilha numa secção à parte por baixo');
+  });
+
+  test('o campo diz «O id do outro utilizador», com o asterisco vermelho e o exemplo; a dica e a secção não dizem «dele»', () => {
+    const { app } = comEstado();
+    const h = app.comproprietariosHtml();
+    assert.match(h, /<label class="u-fx-1 u-minw-0">O id do outro utilizador <span class="req">\*<\/span><input id="cw_peer"[^>]*placeholder="Ex: A7KQ2MPX"/);
+    assert.ok(h.includes('<p class="small">Ligar a outro utilizador: escreve o id que o outro utilizador te deu. Depois de aceite, cada um escolhe que casas partilha.</p>'), h);
+    assert.ok(!/\bdele\b|ele te deu/.test(h.replace(/<[^>]+>/g, ' ')), 'nenhum «dele» na secção');
+    assert.ok(h.includes('Na ficha de cada um, em «Editar casas partilhadas»'), 'a frase de cima aponta para onde as casas se editam agora');
+  });
+
+  test('a ficha de outro proprietário ligado tem «Remover ligação» no ⋯ do cabeçalho, que chama o CW.delConn com o id da ligação e pergunta antes', async () => {
+    const { app, esp } = comEstado();
+    assert.deepEqual(JSON.parse(JSON.stringify(app.partilhaComDonoDaNuvem('RUI'))), { act: "CW.sharesModal('K1')", ligacao: 'K1' }, 'o gancho traz o id da ligação');
+    app.personView('owner', 'RUI');
+    const f = esp.abertas[esp.abertas.length - 1];
+    assert.equal(f.t, 'Rui');
+    assert.match(f.m, /aria-label="Opções"/, 'o ⋯ no cabeçalho, ao lado do X');
+    assert.match(f.m, /<button type="button" class="danger" data-toca="camada" data-risco="destroi" data-click="closePops\(\);CW\.delConn\('K1'\)">[\s\S]*? Remover ligação<\/button>/);
+    assert.ok(!f.m.includes('Apagar proprietário'), 'um proprietário com conta não se apaga');
+    assert.match(f.f, /data-click="CW\.sharesModal\('K1'\)">Editar casas partilhadas</, 'o rodapé fica como estava');
+    // o que o ⋯ corre: a confirmação de sempre, e o DELETE com o id certo
+    app.CW.delConn('K1');
+    const j = esp.abertas[esp.abertas.length - 1];
+    assert.equal(j.t, 'Remover a ligação a Rui');
+    assert.ok(j.b.includes(app.fraseRemoverLigacao(app.CW.state.connections[0])), j.b);
+    app._ok();
+    await espera();
+    assert.deepEqual(esp.api.map((x) => x.method + ' ' + x.path), ['DELETE /api/connections/K1']);
+    assert.equal(app.modalStack.length, 1, 'o Rui continua na lista (o servidor aqui não mudou nada): a ficha fica');
+    // no meu perfil, e numa ficha de inquilino, não há
+    app.personView('owner', 'EU');
+    assert.ok(!esp.abertas[esp.abertas.length - 1].m.includes('Remover ligação'), 'no meu perfil não');
+    assert.equal(app.removerLigacaoDaFicha('tenant', { id: 'RUI', _userId: 'RUI' }), null);
+  });
+
+  test('um convite por aceitar ainda não dá «Remover ligação» na ficha', () => {
+    const { app } = comEstado((st) => { st.connections[0].status = 'pending'; st.connections[0].incoming = false; });
+    const rui = app.db.owners.find((o) => o.id === 'RUI');
+    assert.ok(rui, 'controlo: o Rui está na base pela casa em comum');
+    assert.equal(app.removerLigacaoDaFicha('owner', rui), null);
+  });
+
+  test('removida a ligação, a ficha de quem saiu da lista fecha; a de outra pessoa fica', async () => {
+    const { app, esp } = comEstado();
+    // o servidor, depois do DELETE: sem a ligação, e a Minha deixa de ser partilhada com o Rui
+    app.pullNow = () => {
+      const st = app.CW.state;
+      st.connections = [];
+      st.houses[0].participants = ['EU'];
+      app.db = app.rebuildDb(st);
+      return Promise.resolve();
+    };
+    app.personView('owner', 'RUI');
+    assert.equal(app.modalStack[app.modalStack.length - 1].ficha.dono, 'RUI', 'a ficha leva o id dele');
+    app.CW.delConn('K1');
+    app._ok();
+    await espera();
+    assert.deepEqual(esp.toasts, ['Ligação removida.']);
+    assert.ok(!app.donosComPartilha().some((o) => o.id === 'RUI'), 'controlo: o Rui saiu da lista');
+    assert.equal(app.modalStack.length, 0, 'a ficha do Rui fechou');
+    // com a ficha de outra pessoa por cima, nada fecha
+    const { app: b } = comEstado();
+    b.modalStack.push({ ficha: { dono: 'ANA' } });
+    b.fecharFichaDeQuemSaiu('RUI');
+    assert.equal(b.modalStack.length, 1, 'a ficha da Ana fica');
   });
 });

@@ -246,25 +246,29 @@ describe('a navegação com um separador desligado', () => {
     assert.equal(app.tab, 'contracts');
   });
 
-  test('go para um separador desligado vindo da barra de baixo (_ladoSep) fica onde está, sem deslizar, e diz porquê', () => {
+  test('go para um separador desligado com o lado armado (_ladoSep) fica onde está, sem deslizar, e diz porquê', () => {
     const { app, esp } = montar();
     app.deslizarPainel = (pintar) => { esp.deslizes++; pintar(); };
-    app.definirServicosDesligados(['properties']);   // os Imóveis estão na barra de baixo
+    app.definirServicosDesligados(['properties']);
     app.tab = 'dashboard';
-    app.goBarra('properties');
+    // a barra de baixo já não oferece um separador desligado (a área leva à
+    // primeira porta à vista), mas um atalho antigo com o lado armado ainda pode
+    app._ladoSep = 1;
+    app.go('properties');
     assert.equal(app.tab, 'dashboard', 'fica');
     assert.equal(esp.deslizes, 0, 'sem deslizar');
     assert.equal(app._ladoSep, 0, 'o lado não fica armado para o toque seguinte');
     assert.deepEqual(esp.toasts, ['O serviço Imóveis está desligado nesta conta.']);
-    // o mesmo pelo menu (sem lado)
-    app.go('properties');
-    assert.equal(app.tab, 'dashboard');
-    assert.equal(esp.toasts.length, 2);
-    // controlo positivo: ligado, a barra desliza e chega
+    // a área das Casas, com os Imóveis desligados, leva à primeira porta que se vê
+    app.goBarra('casas');
+    assert.notEqual(app.tab, 'properties', 'não abre o desligado');
+    assert.equal(esp.toasts.length, 1, 'e não precisa de dizer nada');
+    // controlo positivo: ligado, a barra desliza e chega — à porta onde se ficou na área
     app.definirServicosDesligados([]);
-    app.goBarra('properties');
-    assert.equal(app.tab, 'properties');
-    assert.equal(esp.deslizes, 1);
+    app.tab = 'dashboard';
+    app.goBarra('casas');
+    assert.equal(app.tab, 'groups', 'a área lembra-se de onde se ficou');
+    assert.ok(esp.deslizes >= 1);
   });
 
   // revisão dos serviços, A.3-5

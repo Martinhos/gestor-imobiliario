@@ -386,28 +386,11 @@ function offerFill() {
   CW.fillMissed(alvo.id);
 }
 
-var REJECT_BTN = function (id) {
-  return '<button class="btn sm danger" data-toca="dados" data-click="event.stopPropagation();CW.rejectRec(\'' + id + '\')">Recusar</button>';
-};
+/* O «Recusar desta vez» e o «Preencher N em falta» das linhas dos por
+   confirmar vivem no ⋯ de cada linha (planeados.js:pendMenuItens, que os
+   mostra quando a nuvem tem CW.rejectRec e CW.fillMissed); já não se
+   acrescentam ao cartão por cima. */
 
-// acrescenta "Recusar" a cada linha do cartão de pendentes (e, com períodos
-// em falta, o botão de os preencher — numa hipoteca, as prestações do plano
-// desde o início, que abatem capital)
-var _pendingCard = pendingCard;
-pendingCard = function (all) {
-  return _pendingCard(all).replace(/skipRec\('([^']+)'\)"[^>]*>[^<]*<\/button>/g, function (m, id) {
-    var r = (db.recurring || []).find(function (x) { return x.id === id; });
-    var n = r ? datasEmFalta(r).length : 0;
-    // com vários períodos em atraso, confirmar um a um não é opção
-    var fill = n >= 2
-      ? '<button class="btn sm" data-toca="camada" data-click="event.stopPropagation();CW.fillMissed(\'' + id + '\')">' +
-        'Preencher ' + n + ' em falta</button>'
-      : '';
-    return m + REJECT_BTN(id) + fill;
-  });
-};
-
-// ... e à lista de opções do toque longo numa recorrência
 // acrescenta uma opção ao menu de toque longo que acabou de abrir
 // Recebe: opts — objeto com icon (nome do ícone), label (texto principal) e act
 // (função chamada ao tocar, já com os modais fechados); opcionais: sub (linha
@@ -476,37 +459,26 @@ lpMenu = function (v) {
 
 /* ------- pendentes dentro de cada imóvel e de cada contrato ------- */
 
-// o HTML da lista "por confirmar" que se pendura no cartão de um imóvel ou
-// contrato; os botões só onde o cargo deixa confirmar planeados (rec.add)
+// o HTML da lista "por confirmar" que se pendura no cartão de um contrato:
+// as mesmas linhas do cartão dos Planeados (planeados.js:pendLinha — Confirmar,
+// Rever e o ⋯, cada ação só a quem a pode fazer), sem borda colorida
 // Recebe: list — array de planos recorrentes por confirmar (cada um com id, name, next, tx…).
-// Devolve: o HTML (string) do bloco, com os botões Confirmar/Silenciar/Recusar em cada linha.
+// Devolve: o HTML (string) do bloco.
 function pendBlock(list) {
-  return '<div class="cw-pend u-mt-11px u-bt-1px-solid-v-line u-pt-10px">' +
-    '<div class="small u-fw-650 u-mb-7px">' +
-    list.length + ' movimento' + (list.length === 1 ? '' : 's') + ' por confirmar</div>' +
-    list.map(function (r) {
-      var late = recIsLate(r);
-      var botoes = pode(r.tx && r.tx.propertyId, 'rec.add')
-        ? '<div class="toolbar u-m-8px-0-0">' +
-          '<button class="btn sm primary" data-toca="dados" data-click="event.stopPropagation();quickConfirmRec(\'' + r.id + '\')">' + ic('check', 13) + ' Confirmar</button>' +
-          '<button class="btn sm" data-toca="dados" data-click="event.stopPropagation();skipRec(\'' + r.id + '\')">Silenciar</button>' +
-          REJECT_BTN(r.id) + '</div>'
-        : '';
-      return '<div class="card pend ' + (late ? 'late' : '') + ' u-p-9px-11px u-mb-6px">' +
-        '<div class="row-between u-ai-center u-g-9px">' +
-        '<div class="u-minw-0"><b class="u-d-block u-fs-13px u-ov-hidden u-to-ellipsis u-ws-nowrap">' + esc(r.name) + '</b>' +
-        '<span class="small">' + dPT(r.next) + (late ? ' · <b class="neg">em atraso</b>' : ' · por confirmar') + '</span></div>' +
-        '<b class="u-fx-0-0-auto">' + (r.tx.amount ? euro2(r.tx.amount) : '') + '</b></div>' +
-        botoes + '</div>';
-    }).join('') + '</div>';
+  return '<div class="cw-pend">' +
+    '<p class="small cw-pend-tit">' +
+    list.length + ' movimento' + (list.length === 1 ? '' : 's') + ' por confirmar</p>' +
+    list.map(pendLinha).join('') + '</div>';
 }
 
-// Depois de cada render de Imóveis ou Contratos, acrescenta a cada cartão os
-// seus movimentos por confirmar. Mexe no DOM já desenhado, e não duplica o
-// bloco se ele já lá estiver.
+// Depois de cada render dos Contratos, acrescenta a cada cartão os seus
+// movimentos por confirmar. Mexe no DOM já desenhado, e não duplica o bloco
+// se ele já lá estiver. Os Imóveis não: o cartão diz «N rendas em atraso»
+// num selo, e a ficha do imóvel tem o seu «Por confirmar»
+// (imovel.js:imvPorConfirmar).
 // Devolve: nada — pendura os blocos diretamente nos cartões do DOM.
 function decoratePending() {
-  if (tab !== 'properties' && tab !== 'contracts') return;
+  if (tab !== 'contracts') return;
   /* Este é o pior dos três: além de afirmar «1 movimento por confirmar» a
      partir do que está no aparelho, punha lá o botão de Confirmar. Confirmar
      um fantasma criava a renda em duplicado — o rendaJaLancada não a via,
@@ -514,12 +486,9 @@ function decoratePending() {
   if (!sabemosOEstado()) return;
   var pend = recActive();
   if (!pend.length) return;
-  var pref = tab === 'properties' ? 'prop:' : 'ct:';
-  [].slice.call(document.querySelectorAll('[data-lp^="' + pref + '"]')).forEach(function (cardEl) {
-    var id = cardEl.getAttribute('data-lp').slice(pref.length);
-    var mine = pend.filter(function (r) {
-      return tab === 'properties' ? r.tx.propertyId === id : r.tx.contractId === id;
-    });
+  [].slice.call(document.querySelectorAll('[data-lp^="ct:"]')).forEach(function (cardEl) {
+    var id = cardEl.getAttribute('data-lp').slice(3);
+    var mine = pend.filter(function (r) { return r.tx.contractId === id; });
     if (!mine.length || cardEl.querySelector('.cw-pend')) return;
     var w = document.createElement('div');
     w.innerHTML = pendBlock(mine);
@@ -539,6 +508,10 @@ var DASH_TITLES = ['Entradas e saídas', 'Cashflow acumulado', 'Renda por contra
    Devolve: a chave (string) — "titulo:…", "kpi:…", "card:…", "despesas" ou
    "portefolio"; vazia quando nada encaixa. */
 function dashKey(el) {
+  /* um bloco que diz a sua chave (o aviso das despesas sem imóvel, que deixou
+     de ter título e guardou a chave do cartão de antes) */
+  var dita = el.getAttribute && el.getAttribute('data-bloco');
+  if (dita) return dita;
   if (el.classList && el.classList.contains('section-title')) return 'titulo:' + el.textContent.trim();
   var kl = el.querySelector('.kpi .label');
   if (kl) return 'kpi:' + kl.textContent.trim();
@@ -550,25 +523,82 @@ function dashKey(el) {
   return titles.length ? 'card:' + titles[0] : '';
 }
 
+/* O cartão dos pedidos dentro do «Pede atenção» (painel-geral.js:pedeAtencao,
+   o lugar <!--vg-pedidos-->): sem o espaço e sem a marca do fim com que ele
+   vem para a cabeça da vista — dentro de uma coluna o espaço é do CSS, e a
+   marca diria ao guia que pendurasse os passos ali dentro. Com convites de
+   ligação (que o sino não mostra, e por isso a linha do telemóvel também
+   não), o cartão fica à vista no telemóvel (.com-convites).
+   Recebe: pedidos — o HTML do partilha.js:pedidosDashCard.
+   Devolve: o HTML do cartão, embrulhado para a coluna dos pedidos. */
+function pedidosNoAtencao(pedidos) {
+  var limpo = pedidos.split('<!--fim-pedidos-->').join('').split('<div class="u-h-14px"></div>').join('');
+  return '<div class="vg-atencao-pedidos' + (temConvitesDeLigacao() ? ' com-convites' : '') + '">' + limpo + '</div>';
+}
+
+// Há convites de ligação por responder? (o sino não os mostra: no telemóvel
+// é o cartão dos pedidos que os leva, e por isso fica à vista)
+// Devolve: verdadeiro com pelo menos um convite recebido pendente.
+function temConvitesDeLigacao() {
+  return ((CW.state || {}).connections || []).some(function (c) { return c && c.status === 'pending' && c.incoming; });
+}
+
+/* Enche o lugar dos pedidos no «Pede atenção». Com atividade nas casas
+   partilhadas, os pedidos e a atividade são UM cartão, «Pedidos e atividade»
+   (o canvas Main): as linhas dos pedidos (partilha.js:linhasDosPedidos) entram
+   no cimo do cartão da atividade (painel-geral.js:atividadeCard). Sem
+   atividade — ou com convites de ligação, que no telemóvel precisam do cartão
+   dos pedidos à vista — vai o cartão dos pedidos inteiro, como antes.
+   Recebe: html — a vista geral da base, com o lugar <!--vg-pedidos-->;
+   pedidos — o cartão dos pedidos (partilha.js:pedidosDashCard) ou ''.
+   Devolve: o HTML com o lugar cheio (ou vazio). */
+function pedidosNaPilha(html, pedidos) {
+  var cab = '<h3 class="title vg-tit">Atividade nas casas partilhadas</h3>';
+  var linhas = pedidos && !temConvitesDeLigacao() && typeof linhasDosPedidos === 'function' ? linhasDosPedidos() : '';
+  var i = html.indexOf(cab);
+  if (linhas && i > -1) {
+    html = html.split('<!--vg-pedidos-->').join('');
+    i = html.indexOf(cab);
+    var j = html.indexOf('<div class="vg-itens">', i);
+    if (j > -1) {
+      return html.slice(0, i) + '<h3 class="title vg-tit">Pedidos e atividade</h3>' + html.slice(i + cab.length, j) +
+        '<div class="pd-lista vg-pedidos-linhas">' + linhas + '</div>' + html.slice(j);
+    }
+  }
+  return html.split('<!--vg-pedidos-->').join(pedidos ? pedidosNoAtencao(pedidos) : '');
+}
+
 /* Os pedidos por responder (partilha.js:pedidosDashCard) vão à cabeça da
    vista geral em todos os estados dela — também nos vazios, que é onde uma
    conta nova que recebeu um pedido está — e nunca entram na ordenação dos
-   cartões. */
+   cartões. Quando a vista tem o «Pede atenção» (o canvas de 2026-10), vão
+   para dentro dele, na coluna dos pedidos e da atividade, e a marca do fim
+   dos pedidos passa para o fim do bloco: os primeiros passos do guia
+   (cloud/guia.js) continuam a entrar depois do que é urgente. */
 var _vDashboard = vDashboard;
 vDashboard = function () {
   var pedidos = pedidosDashCard();
   var html = _vDashboard();
+  if (html.indexOf('<!--vg-pedidos-->') > -1) {
+    html = pedidosNaPilha(html, pedidos).split('<!--fim-atencao-->').join('<!--fim-pedidos-->');
+    pedidos = '';
+  }
   var tmp = document.createElement('div');
   tmp.innerHTML = html;
   var kids = [].slice.call(tmp.children), first = -1;
   for (var i = 0; i < kids.length; i++) if (kids[i].classList.contains('grid')) { first = i; break; }
   if (first < 0) return pedidos + html; // estado vazio: nada para ordenar
 
-  var fixed = pedidos + kids.slice(0, first).map(function (n) { return n.outerHTML; }).join('');
+  /* os filhos de um elemento não incluem os comentários: a marca do fim dos
+     pedidos, posta a seguir ao «Pede atenção», perdia-se ao recompor a vista,
+     e o guia pendurava os passos por cima de tudo — volta a escrever-se aqui */
+  var fixed = pedidos + kids.slice(0, first).map(function (n) {
+    return n.outerHTML + (n.classList.contains('vg-atencao') ? '<!--fim-pedidos-->' : '');
+  }).join('');
   var items = [], j = first;
-  // largura: 'full' atravessa a grelha toda, 'wide' ocupa duas células (no
-  // telemóvel são as duas colunas, no computador metade das quatro), e o resto
-  // ocupa uma. É o que permite um indicador ao lado do outro no telemóvel.
+  // largura: 'full' atravessa a grelha toda, 'wide' é metade e 'terco' um
+  // terço no computador (no telemóvel, todos a largura toda; os indicadores
+  // repartem-se lá dentro em duas colunas, estilos.css:.cw-dash).
   var push = function (html, larg) {
     var d = document.createElement('div');
     d.innerHTML = html;
@@ -576,10 +606,15 @@ vDashboard = function () {
   };
   while (j < kids.length) {
     var n = kids[j];
-    if (n.classList.contains('section-title')) { push(n.outerHTML, 'full'); j++; continue; }
+    if (n.classList.contains('section-title') || n.classList.contains('vg-cheia')) { push(n.outerHTML, 'full'); j++; continue; }
     if (n.classList.contains('cols')) {
-      // cada cartão de um par é independente: move-se sozinho
-      [].slice.call(n.children).forEach(function (c) { push(c.outerHTML, 'wide'); });
+      // cada cartão de uma fila é independente: move-se sozinho; a largura é a
+      // da fila em que a vista o pôs — dois numa fila dão metades, três dão
+      // terços (o canvas: as despesas, o cashflow por imóvel e as rendas lado
+      // a lado), e um sozinho atravessa a grelha em vez de deixar meia vazia
+      var filhos = [].slice.call(n.children);
+      var larg = filhos.length >= 3 ? 'terco' : filhos.length === 2 ? 'wide' : 'full';
+      filhos.forEach(function (c) { push(c.outerHTML, larg); });
     } else if (n.classList.contains('grid')) {
       // A fila de indicadores é um bloco só: pertencem uns aos outros e
       // movem-se juntos. Por dentro reparte-se em duas ou quatro colunas,
@@ -643,18 +678,38 @@ function editBar() {
   v.insertBefore(el, grid || v.firstChild);
 }
 
-// em modo de edição, o botão de filtros do cabeçalho passa a dizer "Concluir"
-// Devolve: nada — mexe no botão do cabeçalho já desenhado.
+/* O nome e o título que o «Concluir» veste no botão do cabeçalho: ao despir,
+   só sai o que ainda for isto. */
+var HDR_CONCLUIR = { rotulo: 'Concluir a edição dos cartões', titulo: 'Terminar a edição dos cartões' };
+
+/* Em modo de edição, o botão de filtros do cabeçalho passa a dizer
+   «Concluir». Fora dele despe só o que vestiu: o nome e o título que ainda
+   forem os do «Concluir» (HDR_CONCLUIR). Corre depois de cada render, e o
+   botão já foi pintado por quem é dono dele nesse ecrã — o funil
+   (vistas.js:pintarBotaoFiltros), a roda dentada das Projeções e da
+   Avaliação (vistas.js:pintarRoda), que escreve o seu nome; repor aqui o
+   título dos filtros e apagar o aria-label a cada render tirava à roda o
+   nome que ela acabou de escrever.
+   Recebe: nada.
+   Devolve: nada — mexe no botão do cabeçalho já desenhado. */
 function patchHdr() {
   var hb = document.getElementById('hdrFilt');
   if (!hb) return;
   if (CW.editMode && tab === 'dashboard') {
     hb.style.display = '';
-    hb.innerHTML = ic('check', 16) + ' Concluir';
+    /* no telemóvel só o visto (o texto some por CSS): o cabeçalho de 375px não
+       leva o título, o selo, o sino e «Concluir» — e a barra da edição, logo
+       por baixo, tem o seu «Concluir» por extenso */
+    hb.innerHTML = ic('check', 16) + '<span class="hdr-concluir"> Concluir</span>';
+    hb.setAttribute('aria-label', HDR_CONCLUIR.rotulo);
     hb.classList.add('primary');
-    hb.title = 'Terminar a edição dos cartões';
+    // é o «Concluir», e não o botão dos filtros: não abre nem fecha painel nenhum
+    hb.removeAttribute('aria-expanded');
+    hb.title = HDR_CONCLUIR.titulo;
   } else {
-    hb.title = 'Filtros e parâmetros';
+    if (hb.title === HDR_CONCLUIR.titulo) hb.title = 'Filtros e parâmetros';
+    // o nome volta a ser o do título
+    if (hb.getAttribute('aria-label') === HDR_CONCLUIR.rotulo) hb.removeAttribute('aria-label');
   }
 }
 

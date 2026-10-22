@@ -2,14 +2,38 @@
 /* botão de filtros no cabeçalho: análise, registos e movimentos */
 let anaOpen={};
 const LFK={properties:'lprops',contracts:'lcts',tenants:'lten',owners:'lown',recurring:'lrec',credits:'lcred',visits:'lvis'};
+/* As listas onde o botão do cabeçalho fica: as que têm a seleção de vários
+   (cloud/selecao-listas.js:TABS_SEL), onde a camada da seleção o veste de
+   «Selecionar vários» — e onde, sem ela, continua a abrir o painel. Nas outras
+   listas sai: os filtros abrem-se no funil ao lado da pesquisa
+   (vistas.js:lfBarraHtml), e um segundo botão para o mesmo painel era ruído. */
+const LF_COM_CABECALHO=['properties','contracts'];
+/* As análises cujo botão do cabeçalho é a roda dentada das opções, e não o
+   funil dos filtros — as Projeções e a Avaliação, que filtram só pelo chip
+   «Imóvel» da página (vistas.js:anaChips) e têm números a afinar (o
+   horizonte, o aumento, a inflação; o yield exigido). Separador → o nome que
+   o leitor de ecrã ouve («Opções da projeção»). Quem a pede é o próprio
+   serviço (registarRoda), que regista também o «alternar» da análise dele:
+   é esse que a roda abre (hdrFiltToggle). A base não nomeia serviços. */
+const ANA_RODA={};
+/* Um serviço de análise troca o funil do cabeçalho pela roda dentada.
+   Recebe: t — o id do separador ('projections'); nome — o que o leitor de
+   ecrã ouve e o rato mostra («Opções da projeção»).
+   Devolve: nada — regista no ANA_RODA. */
+function registarRoda(t,nome){ANA_RODA[t]=String(nome||'Opções')}
 /* toque no botão de filtros do cabeçalho: abre o painel certo consoante o
-   separador — dropdown nas listas de registos, modal nos movimentos, painel
-   de análise nos restantes.
+   separador — o da lista nas listas de registos, o dos movimentos, o de
+   análise nos restantes, e as opções nas análises com a roda dentada
+   (vistas.js:ANA_RODA). Nos Movimentos, nos Imóveis e nos Contratos a camada
+   da seleção toma-o para o «Selecionar vários» (cloud/selecao.js,
+   cloud/selecao-listas.js), e os filtros abrem-se no funil ao lado da
+   pesquisa; sem ela, é este que os abre.
    Devolve: nada — abre/fecha o painel respetivo e redesenha a vista. */
 function hdrFiltToggle(){
   if(LFK[tab])return lfToggle(LFK[tab]);
-  /* um serviço com painel próprio (os movimentos) regista o seu «alternar»;
-     os de análise usam o painel da base */
+  /* um serviço com painel próprio (os movimentos) ou com janela de opções
+     (as Projeções e a Avaliação) regista o seu «alternar»; os outros de
+     análise usam o painel da base */
   const a=analiseDe(tab);
   if(a&&a.alternar)return a.alternar();
   anaOpen[tab]=!anaOpen[tab];render();fpanelEntra(anaOpen[tab]);
@@ -51,10 +75,10 @@ function hdrFiltN(){
 // fecha o painel de análise do separador atual (os filtros aplicam-se logo ao mexer)
 // Devolve: nada — fecha o painel e redesenha a vista.
 function anaApply(){anaOpen[tab]=false;render()}
-// limpa o proprietário global e o imóvel em foco do separador de análise onde estamos
+// limpa o imóvel em foco do separador de análise onde estamos (e, no IRS, o titular)
 // Devolve: nada — limpa os filtros e redesenha a vista.
 function anaClear(){
-  ownerFilter='';
+  ownerFilter='';   // o titular do IRS · Anexo F; fora dele já está vazio (ambito.js:ambitoSemDono)
   /* o imóvel em foco é de cada serviço de análise: cada um regista o seu
      «limpar» (servicos.js:registarServico, chave analise) */
   const a=analiseDe(tab);
@@ -62,8 +86,8 @@ function anaClear(){
   closePops();render();
 }
 // nº de filtros ativos no separador atual, contados pelo serviço que o tem
-// (a visão geral e as projeções contam o proprietário e o imóvel em foco; a
-// Declaração só o proprietário; os movimentos os seus filtros e a pesquisa)
+// (a visão geral, as projeções e a avaliação contam o imóvel em foco; a
+// Declaração o titular; os movimentos os seus filtros e a pesquisa)
 // Devolve: número de filtros ativos (0 quando o separador não regista análise).
 const ANA_N=()=>{const a=analiseDe(tab);return a&&a.n?a.n():0};
 /* O vazio de uma lista quando os filtros não deixam nada: diz-o e oferece o
@@ -71,41 +95,147 @@ const ANA_N=()=>{const a=analiseDe(tab);return a&&a.n?a.n():0};
    estava copiado à letra em cinco.
    Devolve: o HTML do .empty (texto). */
 function vazioFiltro(){return `<div class="empty"><b>Nada neste filtro</b><div class="u-mt-10px"><button type="button" class="btn sm" data-toca="vista" data-click="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`}
-/* O seletor de proprietário dos painéis de análise (o ownerSel, que muda o
-   filtro de proprietário da app inteira). Sem proprietários não se escreve.
-   Recebe: valor — o que está escolhido; comGrupos (opcional) — false tira os
-   grupos de proprietários (a Declaração é por titular, e um grupo não o é).
+/* O seletor do titular do IRS · Anexo F (fisco.js, no painel dela): o
+   ownerSel, que escreve o ownerFilter. Já não é um filtro da app inteira —
+   esse saiu (ambito.js) —, e por isso só se escreve ali, sem grupos: a
+   declaração é por titular, e um grupo não o é. Sem proprietários não se
+   escreve.
+   Recebe: valor — o titular escolhido ('' para todos).
    Devolve: o HTML do seletor (texto), ou ''. */
-function anaSelDono(valor,comGrupos){
+function anaSelDono(valor){
   if(!db.owners.length)return '';
   const oo=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
-  return `<div class="u-w-100pc">${sel('ownerSel',valor,comGrupos===false?oo:oo.concat(gdiv(gOpts('owner'))),'onOwnerFilter','vista')}</div>`;
+  return `<div class="u-w-100pc">${sel('ownerSel',valor,oo,'onOwnerFilter','vista')}</div>`;
 }
-/* O painel de análise de uma vista: o seletor de proprietário, o de imóvel (ou
-   grupo) do âmbito e, por baixo, o que a vista acrescenta (os campos das
-   Projeções, o yield da Avaliação). A visão geral, as Projeções e a Avaliação
-   montavam as mesmas três linhas cada uma.
+/* As opções do seletor de imóvel de uma análise: todos, cada imóvel do âmbito
+   e, depois de uma linha, os grupos de imóveis ('g:ID'). O painel da visão
+   geral e o chip «Imóvel» das Projeções e da Avaliação escolhem do mesmo.
+   Recebe: nada.
+   Devolve: array de {v, label} (e o {div:true} antes dos grupos). */
+function anaOpcoesImovel(){
+  return [{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
+}
+/* O painel de análise da visão geral (painel-geral.js:dashBar): o filtro
+   comum, quando os há (definicoes.js:fcSelector — ali aplica o imóvel), e o
+   seletor de imóvel (ou grupo). Não tem proprietário: o filtro global saiu
+   (ambito.js). As Projeções e a Avaliação também o usavam; agora filtram
+   pelo chip da página (vistas.js:anaChips) e abrem as opções na roda dentada
+   do cabeçalho (vistas.js:ANA_RODA).
    Recebe: selId — o id do seletor de imóvel; valor — o imóvel (ou 'g:ID')
-   escolhido; onchange — o nome da função a chamar ao mudar; extra (opcional) —
-   o HTML a pôr por baixo dos seletores.
+   escolhido; onchange — o nome da função a chamar ao mudar.
    Devolve: o HTML do painel, já embrulhado pelo anaPanel. */
-function anaPanelPadrao(selId,valor,onchange,extra){
-  const po=[{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
-  return anaPanel(`<div class="u-d-flex u-fxd-column u-g-9px">
-    ${anaSelDono(ownerFilter)}
-    <div class="u-w-100pc">${sel(selId,valor,po,onchange,'vista')}</div></div>${extra||''}`);
+function anaPanelPadrao(selId,valor,onchange){
+  return anaPanel(`<div class="u-w-100pc">${sel(selId,valor,anaOpcoesImovel(),onchange,'vista')}</div>`,true);
+}
+/* A fila de chips de uma análise sem painel (as Projeções e a Avaliação), no
+   sítio onde as listas têm a barra dos filtros (vistas.js:lfCabeca): só os
+   chips — sem pesquisa, que numa análise não há o que procurar, sem funil e
+   sem painel. O único chip é o «Imóvel» (um imóvel ou um grupo: o foco da
+   análise), o seletor da casa vestido de chip como o das listas
+   (vistas.js:lfChip), com as mesmas classes (estilos.css:.mov-chip):
+   desligado diz «Imóvel» e leva a seta; ligado diz o nome, no cobalto, com o
+   × que volta a todos os imóveis e deixa o foco no chip. Não passa pelo
+   lfCabeca: esse guarda o estado no lf(k) de uma lista e põe sempre a barra
+   da pesquisa e o funil, e o foco de uma análise é do serviço
+   (projecoes.js:projProp, navegacao.js:repProp). As ações da página, quando
+   as há (o botão de partilha da Avaliação, avaliacao.js:avaPartilha), vão na
+   mesma linha, à direita, também no telemóvel (estilos.css:.ana-topo).
+   Sem imóveis no âmbito e sem nada em foco, o chip não tinha o que escolher e
+   não se escreve.
+   Recebe: o — {id (o do seletor, ex.: 'projSel'), valor (o imóvel ou 'g:ID'
+   em foco; '' para todos), aplicar (o nome da função de topo que lê o
+   seletor e repinta), limpar (a ação do ×, em texto), dos (o fim do nome da
+   fila para o leitor de ecrã, ex.: 'da projeção'), acoes (opcional) — o HTML
+   das ações da página}.
+   Devolve: o HTML da fila (texto), ou só o das ações, ou ''. */
+function anaChips(o){
+  const v=String(o.valor||''),id=String(o.id),ops=anaOpcoesImovel();
+  const chips=!v&&!scope().length?'':(()=>{
+    const op=v?ops.find(x=>!x.div&&String(x.v)===v):null;
+    const rot=v?(op?String(op.label):propName(v)):'',diz=v?rot:'Imóvel';
+    const s=sel(id,v,ops,o.aplicar,'vista')
+      .replace('class="selbtn"',()=>'class="selbtn" aria-label="'+esc(v?'Imóvel: '+rot:'Imóvel')+'"')
+      .replace(/(<span id="lab_[^"]*">)[^<]*(<\/span>)/,(m,a,b)=>a+esc(diz)+b);
+    const x=v?`<button type="button" class="mov-chip-x" aria-label="Voltar a todos os imóveis" data-toca="vista" data-click="${o.limpar};anaChipFocar('${jsq(id)}')">${ic('x',14)}</button>`:'';
+    return `<div class="chips-fila mov-chips ana-chips" role="group" aria-label="Filtros ${esc(o.dos||'')}"><span class="mov-chip${v?' on':''}">${s}${x}</span></div>`;
+  })();
+  if(!o.acoes)return chips;
+  return `<div class="ana-topo">${chips}${o.acoes}</div>`;
+}
+/* Depois do × de um chip de análise, o foco vai para o chip, que o render
+   refez sem o × — sem isto caía no <body> e o Tab recomeçava no topo.
+   Recebe: id — o id do seletor do chip (o botão é o selb_<id>).
+   Devolve: nada — foca o botão do chip, se estiver no ecrã. */
+function anaChipFocar(id){
+  const b=document.getElementById('selb_'+id);
+  if(b&&b.focus)try{b.focus()}catch(e){}
+}
+/* Uma linha da janela das opções de uma análise: o que é e para que serve à
+   esquerda, o campo e a unidade à direita — o desenho das Definições ›
+   Valores por omissão (definicoes.js:linhaDeValor, estilos.css:.def-vr), que
+   guardam os mesmos números. O rótulo embrulha a linha, para o campo ter nome
+   e o toque em qualquer parte o focar. Ao contrário dessa, grava ao escrever
+   (a página por trás acompanha) e acerta o campo ao sair dele.
+   Recebe: l — {id, titulo, sub, valor, modo (o inputmode), unidade, input (a
+   ação ao escrever), change (a ação ao sair)}.
+   Devolve: o HTML (texto) da linha. */
+function anaLinhaOpcao(l){
+  return `<label class="def-vr"><span class="def-vr-txt"><b>${esc(l.titulo)}</b><span class="small">${esc(l.sub)}</span></span>
+    <span class="def-valor"><input id="${esc(l.id)}" type="text" inputmode="${esc(l.modo)}" value="${esc(l.valor)}" placeholder="Opcional" autocomplete="off" data-input="${l.input}" data-change="${l.change}"><span class="def-unidade">${esc(l.unidade)}</span></span></label>`;
+}
+/* A janela das opções de uma análise, que a roda dentada do cabeçalho abre
+   (vistas.js:ANA_RODA): as linhas dos números numa lista, a nota do que vale
+   em branco, e só o «Fechar» em baixo — cada campo grava ao mexer, por isso
+   não há Guardar nem Cancelar.
+   Recebe: titulo — o título da janela («Opções da projeção»); linhas — as
+   linhas (vistas.js:anaLinhaOpcao); nota — o texto da nota (já seguro).
+   Devolve: a camada aberta (componentes.js:openModal). */
+function anaOpcoes(titulo,linhas,nota){
+  return openModal(titulo,`<section class="card def-lista ana-opcoes" aria-label="${esc(titulo)}">${linhas.map(anaLinhaOpcao).join('')}</section>
+    ${nota?`<p class="hint ana-opcoes-nota">${nota}</p>`:''}`,
+    `<button type="button" class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>`);
+}
+/* Um campo da janela das opções acabou de gravar: o retrato da janela passa a
+   ser o de agora, para o X, o Escape ou o toque no fundo fecharem sem
+   perguntar «Sair sem guardar?» — já não há nada por guardar.
+   Recebe: nada.
+   Devolve: nada — refaz o retrato da janela de cima (componentes.js:modalSnap). */
+function anaOpcaoGravada(){
+  const L=modalTop();
+  if(L&&L.el)L.snap=modalSnap(L.el);
 }
 /* embrulha os controlos de análise (inner, já em HTML) no painel dropdown do
-   cabeçalho, com os botões Limpar/Fechar; o wrapper tem altura 0 para o
-   painel flutuar por cima da página em vez de a empurrar.
-   Recebe: inner — os controlos do painel, já em HTML (string).
+   cabeçalho, com os botões Limpar/Fechar no pé preso ao fundo
+   (vistas.js:fpanelPe); o wrapper tem altura 0 para o painel flutuar por cima
+   da página em vez de a empurrar. O seletor dos filtros comuns só vai onde
+   um filtro comum tem o que aplicar (a visão geral, o imóvel): na Declaração
+   não tem — um filtro comum não guarda o titular.
+   Recebe: inner — os controlos do painel, já em HTML (string); comComuns
+   (opcional) — true põe o seletor dos filtros comuns por cima.
    Devolve: string HTML do painel pronto a inserir na vista. */
-function anaPanel(inner){return `<div class="fwrap u-h-0"><div class="fpanel ${anaOpen[tab]?'on':''} u-t-0"><div class="card u-p-12px">
-  ${typeof fcSelector==='function'?fcSelector():''}${inner}
-  <div class="toolbar u-m-12px-0-0">
-    <button class="btn" data-toca="vista" data-click="anaClear()">${ic('x',15)} Limpar</button>
-    <button class="btn primary" data-toca="camada" data-click="anaApply()">${ic('check',15)} Fechar</button>
-  </div></div></div></div>`}
+function anaPanel(inner,comComuns){return `<div class="fwrap u-h-0"><div class="fpanel ${anaOpen[tab]?'on':''} u-t-0"><div class="card fp-caixa">
+  ${comComuns&&typeof fcSelector==='function'?fcSelector():''}${inner}
+  ${fpanelPe('anaClear()','anaApply()')}</div></div></div>`}
+/* O pé do painel dos filtros: «Limpar» à esquerda, «Fechar» primário à
+   direita, preso ao fundo da caixa (estilos.css:.fp-pe). A caixa (o .card)
+   continua a ser quem rola — o cloud/filtros.js segue as listas abertas pelo
+   scroll dela —, e o pé é o último filho, pegajoso em baixo: num painel
+   comprido fica no fundo enquanto o resto passa por trás; num curto fica logo
+   a seguir aos filtros, sem esticar a caixa. Era uma .toolbar no fim da caixa,
+   que saía de vista ao rolar: no telemóvel, com o botão do cabeçalho apagado,
+   ficava-se sem maneira de fechar o painel. Os Movimentos têm o seu
+   (lista-movimentos.js:txFilterPainel), com o Limpar e o Fechar no topo, e
+   as listas, no feitio deles, também (vistas.js:lfPainelCorpo): o pé é só
+   das análises.
+   Recebe: limpar — a ação do «Limpar» (texto para o data-click); fechar — a
+   do «Fechar».
+   Devolve: o HTML do pé. */
+function fpanelPe(limpar,fechar){
+  return `<div class="fp-pe">
+    <button class="btn" data-toca="vista" data-click="${limpar}">${ic('x',15)} Limpar</button>
+    <button class="btn primary" data-toca="camada" data-click="${fechar}">${ic('check',15)} Fechar</button>
+  </div>`;
+}
 /* Cartões e afins são divs com data-click: sem isto, o teclado não chega a
    nenhuma lista — nem um leitor de ecrã os anuncia como acionáveis. Corre
    depois de cada render e de cada fillModal.
@@ -130,20 +260,76 @@ let _ecraPintado='';
 /* O botão de filtros do cabeçalho: se aparece, se tem o ponto de «há filtros
    postos», e se está aceso. Sai do render porque o caminho curto — mudar um
    filtro sem repintar a página — também tem de o acertar, e o ponto conta a
-   pesquisa (hdrFiltN).
+   pesquisa (hdrFiltN). Nos Movimentos, nos Imóveis e nos Contratos a camada
+   da seleção veste-o depois de «Selecionar vários» (cloud/selecao.js:patchHdrSel,
+   cloud/selecao-listas.js:selLCabecalho): quem o pinta pelo caminho curto
+   chama-a a seguir (CW.selCabecalho). Nas outras listas (os Inquilinos, os
+   Proprietários, as Visitas, os Planeados e os Créditos) não há botão: os
+   filtros estão no funil ao lado da pesquisa (vistas.js:LF_COM_CABECALHO).
+   Nas Projeções e na Avaliação é a roda dentada das opções
+   (vistas.js:pintarRoda).
    Devolve: nada — escreve no #hdrFilt, que vive fora do #view. */
 function pintarBotaoFiltros(){
   const hb=document.getElementById('hdrFilt');if(!hb)return;
-  /* quem tem filtros: as listas de registos (LFK) e os serviços que registam
-     análise (servicos.js:analiseDe) — a visão geral, as projeções, a
-     avaliação, a declaração e os movimentos */
-  const a=analiseDe(tab),hasFilt=!!a||!!LFK[tab];
+  /* quem tem o botão: os serviços que registam análise (servicos.js:analiseDe)
+     — a visão geral, as projeções, a avaliação, a declaração e os movimentos —
+     e as listas com a seleção de vários (os Imóveis e os Contratos) */
+  const a=analiseDe(tab),hasFilt=!!a||(!!LFK[tab]&&LF_COM_CABECALHO.indexOf(tab)>-1);
   hb.style.display=hasFilt?'':'none';
-  if(!hasFilt)return;
+  const roda=a&&ANA_RODA[tab]?ANA_RODA[tab]:'';
+  pintarRoda(hb,roda);
+  if(!hasFilt||roda)return;
   hb.innerHTML=ic('filter',16)+(hdrFiltN()?'<span class="dot"></span>':'');
   /* aceso com o painel aberto: o da base (anaOpen) ou o que o serviço diz
-     (aberto); os movimentos não registam «aberto» e nunca acendem, como dantes */
-  hb.classList.toggle('primary',a?(a.aberto?!!a.aberto():!!anaOpen[tab]):(LFK[tab]?!!lf(LFK[tab])._open:false));
+     (aberto); os movimentos não registam «aberto» e nunca acendem, como dantes.
+     No telemóvel o cabeçalho tira o fundo aos botões, e aceso é o par suave
+     (estilos.css:header.top #hdrFilt.primary) — com o .primary sozinho o ícone
+     ficava da cor do cabeçalho e o botão sumia com o painel aberto. */
+  const sabe=!(a&&a.alternar&&!a.aberto);
+  const aberto=a?(a.aberto?!!a.aberto():!!anaOpen[tab]):(LFK[tab]?!!lf(LFK[tab])._open:false);
+  hb.classList.toggle('primary',aberto);
+  /* o leitor de ecrã ouve o que a cor mostra: aberto ou fechado. Onde o
+     serviço tem painel próprio sem dizer se está aberto (os Movimentos, cujo
+     botão do cabeçalho é o «Selecionar vários»), não se afirma nada */
+  if(sabe)hb.setAttribute('aria-expanded',aberto?'true':'false');
+  else hb.removeAttribute('aria-expanded');
+}
+/* Veste o botão do cabeçalho de roda dentada nas análises que a pedem
+   (vistas.js:ANA_RODA), ou despe-o ao sair delas. A roda abre uma janela, e
+   não um painel: diz que abre um diálogo (aria-haspopup) e não diz aberto nem
+   fechado, nunca acende, e não leva o ponto dos filtros — o chip «Imóvel» já
+   está à vista na página. O nome e o título são o do registo («Opções da
+   projeção»).
+   Ao sair, só se despe o que a roda vestiu (a marca .ana-hdr-roda): o
+   «Selecionar vários» da camada da seleção, que vem a seguir, tem os seus.
+   A camada do painel (cloud/painel.js:patchHdr) já só despe o «Concluir» que
+   vestiu (cloud/painel.js:HDR_CONCLUIR). As da seleção ainda não: vindo dos
+   Imóveis, dos Contratos, dos Planeados ou dos Movimentos, o
+   cloud/selecao-listas.js:selLCabecalho e o cloud/selecao.js:patchHdrSel
+   correm depois deste render e, por a marca deles ainda lá estar, repõem o
+   título e tiram o aria-label — o nome que a roda acabou de escrever. Por
+   isso a roda volta a escrevê-los numa microtarefa, depois da cadeia inteira
+   dos embrulhos e antes de o browser pintar (a janela do
+   aplicarContinuidade, vistas.js:render). Sai quando essas duas só despirem
+   o nome que ainda for o delas.
+   Recebe: hb — o #hdrFilt; nome — o nome da roda, ou '' fora dela.
+   Devolve: nada — mexe no botão, no DOM. */
+function pintarRoda(hb,nome){
+  if(!nome){
+    if(!hb.classList.contains('ana-hdr-roda'))return;
+    hb.classList.remove('ana-hdr-roda');
+    hb.removeAttribute('aria-haspopup');hb.removeAttribute('aria-label');
+    hb.title='Filtros e parâmetros';
+    return;
+  }
+  const veste=()=>{hb.setAttribute('aria-label',nome);hb.title=nome};
+  hb.innerHTML=ic('roda',18);
+  hb.classList.add('ana-hdr-roda');
+  hb.classList.remove('primary');
+  hb.removeAttribute('aria-expanded');
+  hb.setAttribute('aria-haspopup','dialog');
+  veste();
+  Promise.resolve().then(()=>{if(ANA_RODA[tab]===nome&&hb.classList.contains('ana-hdr-roda'))veste()});
 }
 /* ================= LISTAS VIVAS =================
    Uma lista que se acerta em vez de se refazer.
@@ -253,6 +439,10 @@ function refrescarListasVivas(){
   /* o molde tem de ficar igual ao que o render produziria, senão as duas
      árvores não batem certo e cai-se fora por nada — foi o que o fabpad fez */
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
+  /* e a moldura da casca que o render põe por cima da vista (os separadores
+     da área): sem ela, uma tecla na pesquisa de uma lista fazia desaparecer
+     os separadores — a via parcial refaz o ecrã inteiro a partir deste molde */
+  html=abasDaArea()+html;
   const registo={};_listasVivas.forEach(l=>{registo[l.id]=l.itens});
   _listasVivas=[];
   const molde=document.createElement('div');molde.innerHTML=html;
@@ -276,10 +466,24 @@ function refrescarListasVivas(){
     const novo=molde.querySelector('[data-listaviva="'+k.replace(/"/g,'')+'"]');
     if(novo&&novo.parentNode)novo.parentNode.replaceChild(vivas[k],novo);
   });
-  v.replaceChildren.apply(v,[].slice.call(molde.children));
+  const rolou=rolagemDoPainel();
+  /* a barra da pesquisa de uma lista (vistas.js:lfBarraHtml) não sai do
+     documento: o resto troca-se à volta dela, e quem escreve não perde nada */
+  const barra=lfBarraViva(v,molde);
+  if(barra){
+    const filhos=[].slice.call(molde.children),i=filhos.indexOf(barra.novo);
+    [].slice.call(v.children).forEach(n=>{if(n!==barra.vivo)n.remove()});
+    filhos.slice(0,i).forEach(n=>v.insertBefore(n,barra.vivo));
+    filhos.slice(i+1).forEach(n=>v.appendChild(n));
+  }else v.replaceChildren.apply(v,[].slice.call(molde.children));
+  abasAssentar();                  // as abas da área vão para a casa delas (navegacao.js)
+  reporRolagemDoPainel(rolou);
   tornarFocavel(v);
   marcarDatasVazias(v);
   pintarBotaoFiltros();
+  /* o botão do cabeçalho é da seleção nos Imóveis e nos Contratos
+     (cloud/selecao-listas.js), e o pintarBotaoFiltros acabou de o repor como funil */
+  try{if(window.CW&&CW.selCabecalho)CW.selCabecalho()}catch(e){}
   /* o que o render repõe depois de pintar, esta via tem de repor também:
      senão um grupo mantido fica com o total de antes (as rendas dos grupos
      dos contratos, por exemplo — cada serviço regista o seu «depois») */
@@ -288,6 +492,41 @@ function refrescarListasVivas(){
   return true;
 }
 let _ultimaRepintura=null;
+/* Quanto está rolada a caixa do painel de filtros aberto (vistas.js:lfPainelHtml,
+   vistas.js:anaPanel). Cada filtro mexido repinta o
+   ecrã, e o painel nasce de novo: sem isto, escolher a ordenação, no fundo de
+   um painel comprido, atirava a caixa para o topo — era o resto que fugia
+   debaixo do dedo. Os Movimentos guardam o nó do painel inteiro
+   (lista-movimentos.js:txGuardarNo) e não passam por aqui.
+   Recebe: nada.
+   Devolve: os píxeis rolados (0 sem painel aberto). */
+function rolagemDoPainel(){
+  const v=view(),c=v&&v.querySelector('.fpanel.on>.fp-caixa,.fpanel.on>.lfm-caixa');
+  return c?c.scrollTop||0:0;
+}
+/* Repõe na caixa do painel aberto, acabada de pintar, a rolagem lida antes
+   (vistas.js:rolagemDoPainel); se a caixa encolheu, o browser acerta-a ao
+   máximo que houver.
+   Recebe: y — os píxeis rolados; com 0 não faz nada.
+   Devolve: nada — escreve o scrollTop da caixa. */
+function reporRolagemDoPainel(y){
+  if(!y)return;
+  const v=view(),c=v&&v.querySelector('.fpanel.on>.fp-caixa,.fpanel.on>.lfm-caixa');
+  if(c)c.scrollTop=y;
+}
+/* O cabeçalho do ecrã onde se está: o título leva o nome da área no
+   telemóvel e o do separador no computador (navegacao.js:tituloDoEcraHtml);
+   o subtítulo diz o estado do ecrã onde há um (navegacao.js:subtituloDoEcra);
+   e o sino, o botão dos filtros e a ação do ecrã.
+   Devolve: nada — escreve no cabeçalho. */
+function pintarCabecalhoDoEcra(){
+  const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
+  document.getElementById('pageTitle').innerHTML=tituloDoEcraHtml(meta);
+  document.getElementById('pageSub').textContent=subtituloDoEcra(meta);
+  if(typeof notifSino==='function')notifSino();
+  pintarBotaoFiltros();
+  pintarAcaoDoCabecalho();
+}
 /* Redesenha a página inteira: título e subtítulo, botão de filtros do
    cabeçalho, e o HTML da vista do separador atual (vDashboard, vProperties…).
    Substitui o innerHTML de #view, por isso o estado do DOM anterior perde-se;
@@ -298,14 +537,13 @@ function render(){
      que os inquilinos, os movimentos e tudo o resto continuavam a trocar de
      golpe enquanto só três chamadas se lembravam de pedir. Só no mesmo ecrã —
      ver continuidade.js. */
+  ambitoSemDono();                 // fora do IRS não há proprietário em foco, nem um de antes
   const ecra=tab+'|'+(setPage||'');
   const antes=(ecra===_ecraPintado&&!contSuspensa)?medirContinuidade(view()):null;
+  /* no mesmo ecrã, o painel dos filtros aberto fica onde estava rolado */
+  const rolou=ecra===_ecraPintado?rolagemDoPainel():0;
   _ecraPintado=ecra;
-  const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
-  document.getElementById('pageTitle').textContent=meta.label;
-  document.getElementById('pageSub').textContent=meta.sub;
-  if(typeof notifSino==='function')notifSino();
-  pintarBotaoFiltros();
+  pintarCabecalhoDoEcra();
   _listasVivas=[];                 // o que sobrou de uma vista construída e não usada não conta
   /* A vista é a que o serviço do separador registou (servicos.js): a base
      não nomeia serviços. Sem vista são duas coisas diferentes, e cada uma tem
@@ -315,6 +553,10 @@ function render(){
   const vista=vistaDoSeparador(tab);
   let html=vista?vista():separadorLigado(tab)?vistaNaoCarregouHtml(tab):servicoDesligadoHtml(tab);
   if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
+  /* por cima de cada vista, a casca: os separadores da área
+     (navegacao.js:abasDaArea) — da base, e não de cada serviço, para serem os
+     mesmos em todo o lado */
+  html=abasDaArea()+html;
   /* A entrada dos gráficos é de quem chega ao ecrã, não de cada repintura: o
      render corre também quando a sincronização adota o estado do servidor de 3
      em 3 minutos (cloud/nucleo.js:applyState) e a cada gesto que só mexe num
@@ -322,7 +564,12 @@ function render(){
      acontecem lá dentro (o donutDrill) são de quem tocou no gráfico. */
   view().classList.toggle('entra',!!_entrar);_entrar=0;
   view().innerHTML=html;
+  /* as abas da área saem da cabeça da vista para a casa delas, por cima do
+     #view (navegacao.js:abasAssentar): a mesma fila fica o mesmo nó, e o
+     realce desliza para a aba nova em vez de nascer já lá */
+  abasAssentar();
   pintarListasVivas();             // as listas vivas, pela mesma via
+  reporRolagemDoPainel(rolou);
   /* O que cada serviço pinta DEPOIS de o HTML estar posto — registado com
      depois:{separador:'nome'} (servicos.js:depoisDoSeparador): a lista dos
      movimentos com motor próprio (o innerHTML traz a moldura e o #txLista
@@ -354,6 +601,46 @@ function render(){
   setTimeout(function(){if(document.hidden)pintarSeriesKpi()},0);
   contarValores();
   refrescarFichas();               // uma ficha aberta por baixo de um formulário não fica a mentir
+}
+/* true enquanto o render pinta um vizinho à parte (pintarVistaAParte): as
+   abas da área dele não vão para a casa das abas (navegacao.js:abasAssentar) */
+let _pintarAParte=false;
+/* Pinta OUTRO separador num contentor à parte, sem mudar de separador: é o
+   vizinho que o carrossel mostra a entrar enquanto o dedo arrasta
+   (navegacao.js:sepVizinho). É o render de sempre — o global, com os
+   embrulhos da nuvem —, para o vizinho ser o que vai ficar e não um esboço:
+   a vista, as listas vivas, o que o serviço pinta depois (a lista dos
+   movimentos, as rendas dos grupos, as miniaturas), o que a nuvem decora (os
+   pendentes por confirmar, o selo de partilhado) e as Pessoas com o
+   segmentado delas. Para todos encontrarem o contentor pelos sítios de
+   sempre (o view(), o #txLista, o [data-lp] no documento), o id do #view
+   passa ao contentor durante a pintura e volta no fim, aconteça o que
+   acontecer; o separador e o ecrã pintado também. O que o render escreve fora
+   do #view (o cabeçalho) volta a ser o do separador onde se está, pela mesma
+   via da repintura parcial (refrescarListasVivas). No fim saem as abas da
+   área (ficam as vivas, por cima), o botão flutuante e os ids — dois
+   #txLista no documento davam um getElementById errado.
+   Recebe: id — o separador a pintar; el — o contentor (já no documento).
+   Devolve: true se pintou; false sem vista ou se a pintura rebentou. */
+function pintarVistaAParte(id,el){
+  const real=view();
+  if(!real||!el||!vistaDoSeparador(id)||typeof el.querySelectorAll!=='function')return false;
+  const tabAntes=tab,ecraAntes=_ecraPintado,entrarAntes=_entrar;
+  let ok=false;
+  real.removeAttribute('id');el.id='view';_pintarAParte=true;
+  try{
+    tab=id;_entrar=0;              // quem espreita não entra em cena: nem gráficos a crescer nem números a contar
+    render();
+    ok=true;
+  }catch(e){ok=false}
+  finally{
+    tab=tabAntes;_ecraPintado=ecraAntes;_entrar=entrarAntes;_pintarAParte=false;
+    el.removeAttribute('id');real.id='view';
+    try{pintarCabecalhoDoEcra();if(window.CW&&CW.selCabecalho)CW.selCabecalho()}catch(e){}
+  }
+  [].slice.call(el.querySelectorAll('.fab,.fabmenu')).forEach(e=>e.remove());
+  if(typeof semIds==='function')semIds(el);
+  return ok;
 }
 let kpiN=0;const KPI_REG={};
 /* Há movimentos do ano passado?
@@ -389,15 +676,20 @@ function silhuetaKpi(vals){
    mostrava −17 000 € com uma comparação a falar de −3 400 €. Uma variação
    pendurada num número que não é de um ano não quer dizer nada.
 
-   Compara-se pelo texto já formatado, com o formatador da própria série: se os
-   dois não derem exatamente a mesma string, não estão a falar da mesma coisa e
-   a faixa cala-se.
-   Recebe: cx — a caixa da série, que vive dentro do cartão; s — a série; ano —
-   a entrada do ano corrente ({label,value}).
+   Compara-se pelo texto já formatado, com o formatador com que o cartão foi
+   escrito: o da série (fmt), ou o fmtValor quando o cartão escreve o valor de
+   outra maneira — a Visão geral põe os cêntimos no cartão («29 910,00 €») e
+   arredonda a faixa («2025: 27 690 €»). Se os dois não derem exatamente a
+   mesma string, não estão a falar da mesma coisa e a faixa cala-se.
+   Recebe: cx — a caixa da série, que vive dentro do cartão; s — a série
+   ({fmt, fmtValor opcional, …}); ano — a entrada do ano corrente ({label,value}).
    Devolve: verdadeiro se o cartão mostra o valor deste ano. */
 function falaDoMesmo(cx,s,ano){
   const cartao=cx.closest?cx.closest('.card.kpi'):null;
   const alvo=cartao&&cartao.querySelector('.value');
+  /* o cartão escrito com outro formatador: compara-se com esse (numa cópia —
+     a faixa continua a escrever o ano anterior com o da série) */
+  if(s.fmtValor)s=Object.assign({},s,{fmt:s.fmtValor});
   if(!alvo||!s.fmt)return false;
   const limpa=t=>String(t==null?'':t).replace(/\s+/g,' ').trim();
   return limpa(alvo.textContent)===limpa(s.fmt(ano.value));
@@ -518,19 +810,30 @@ function kpiPorque(id){document.getElementById(id).classList.toggle('open')}
    com evo.anual verdadeiro, o cartão abre espaço para a faixa da série, o que
    só é honesto quando o valor mostrado É o do ano corrente — nos Movimentos o
    valor é a soma do filtro inteiro e a faixa não tem do que falar;
-   acao (opcional) — {label, act} de um botão que a janela oferece no rodapé (ex.: filtrar por este tipo).
+   acao (opcional) — {label, act} de um botão que a janela oferece no rodapé (ex.: filtrar por este tipo);
+   o (opcional) — o que a Visão geral acrescenta ao cartão sem mudar os outros
+   ecrãs: cls (classes a juntar ao cartão), cor (a cor da série, para a
+   bolinha antes do rótulo — vem do tema.js:COR_SERIE, nunca um hex à mão),
+   serie (a cor das linhas da janela, quando não é a da bolinha — o Cashflow
+   tem a bolinha do tema escuro, por o cartão ser escuro) e extra (HTML de uma
+   linha a mais, entre a série e o rodapé).
    Devolve: string HTML do cartão KPI. */
-const kpi=(l,v,c,f,why,evo,acao)=>{
+const kpi=(l,v,c,f,why,evo,acao,o)=>{
   const id='k'+(++kpiN);
-  if(evo){KPI_REG[id]={title:l,why:why||'',evo,acao:acao||null};
+  o=o||{};
+  /* a bolinha vive DENTRO do rótulo e não tem texto: o rótulo continua a ler-se
+     «Receita» (o dashKey do painel e o título da janela leem o texto dele) */
+  const bola=o.cor?`<i class="kdot" data-fundo="${esc(o.cor)}" aria-hidden="true"></i>`:'';
+  const cls=o.cls?' '+o.cls:'';
+  if(evo){KPI_REG[id]={title:l,why:why||'',evo,acao:acao||null,cor:o.serie||o.cor||''};
     /* A caixa da série nasce VAZIA e com a altura certa. Quem a enche é o
        pintarSeriesKpi, depois de a página estar pintada — encher uma caixa que
        ainda não tem altura faria saltar tudo o que está por baixo, que foi
        precisamente a queixa dos «quadrados que aparecem desalinhados». */
-    return `<div class="card kpi evo" id="${id}" data-toca="camada" data-click="kpiModal('${jsq(id)}')"><span class="kic">${ic('trend',11)}</span>
-      <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${(evo.anual&&haAnoAnterior())?`<div class="kserie" data-kpi="${id}"></div>`:''}${f?`<div class="foot">${f}</div>`:''}</div>`}
-  return `<div class="card kpi ${why?'why':''}" id="${id}" ${why?`data-toca="nada" data-click="kpiPorque('${jsq(id)}')"`:''}>
-    <div class="label">${l}</div><div class="value ${c||''}">${v}</div>${f?`<div class="foot">${f}</div>`:''}
+    return `<div class="card kpi evo${cls}" id="${id}" data-toca="camada" data-click="kpiModal('${jsq(id)}')"><span class="kic">${ic('trend',11)}</span>
+      <div class="label">${bola}${l}</div><div class="value ${c||''}">${v}</div>${(evo.anual&&haAnoAnterior())?`<div class="kserie" data-kpi="${id}"></div>`:''}${o.extra||''}${f?`<div class="foot">${f}</div>`:''}</div>`}
+  return `<div class="card kpi ${why?'why':''}${cls}" id="${id}" ${why?`data-toca="nada" data-click="kpiPorque('${jsq(id)}')"`:''}>
+    <div class="label">${bola}${l}</div><div class="value ${c||''}">${v}</div>${o.extra||''}${f?`<div class="foot">${f}</div>`:''}
     ${why?`<div class="expl">${why}</div>`:''}</div>`;
 };
 /* A tabela da janela de um indicador — só quando diz o que o gráfico não diz.
@@ -558,18 +861,25 @@ function tabelaDoKpi(k,d,fmt){
 /* abre a janela de evolução de um KPI: corre o evo() registado no cartão e
    mostra a série mês a mês, a ano a ano e a tabela. Se o evo falhar ou não
    devolver nada, simplesmente não abre.
+   As duas linhas levam a cor da série do cartão (o contrato: Receita --in,
+   Despesas --out, Prestações --loan, Cashflow --accent), e sem ela o cobalto
+   — o «Ano a ano» chegou a sair no laranja das despesas em todos os cartões,
+   a Receita incluída. O «Mês a mês» acaba no mês corrente
+   (vistas.js:mesesAMostrar): os meses que ainda não chegaram desenhavam-se a
+   0 €, como se fossem um valor registado.
    Recebe: id — o id do cartão KPI ('k1', 'k2', …) registado em KPI_REG.
    Devolve: nada — abre a janela de evolução (ou nada, se o evo falhar). */
 function kpiModal(id){
   const k=KPI_REG[id];if(!k)return;
   let d;try{d=k.evo()}catch(e){d=null}
   if(!d)return;
-  const fmt=d.fmt||euro;
+  const fmt=d.fmt||euro,cor=k.cor||COR_SERIE.cashflow;
   const vals=(d.yearly||[]).map(y=>y.value);
+  const ate=d.monthly?mesesAMostrar([d.monthly]):0;
   const body=`<div class="form">
     ${k.why?`<div class="hint">${k.why}</div>`:''}
-    ${d.monthly?`<div><div class="flabel">Mês a mês em ${YEAR}</div>${cLine([{name:k.title,values:d.monthly,color:PAL[0]}],MES,{h:170,fmt})}</div>`:''}
-    ${(d.yearly||[]).length>1?`<div><div class="flabel">${d.yearlyTitle||'Ano a ano'}</div>${cLine([{name:k.title,values:vals,color:PAL[1]}],d.yearly.map(y=>String(y.label)),{h:170,fmt,marks:d.marks})}</div>`:''}
+    ${d.monthly?`<div><div class="flabel">Mês a mês em ${YEAR}</div>${cLine([{name:k.title,values:d.monthly.slice(0,ate),color:cor}],MES.slice(0,ate),{h:170,fmt})}</div>`:''}
+    ${(d.yearly||[]).length>1?`<div><div class="flabel">${d.yearlyTitle||'Ano a ano'}</div>${cLine([{name:k.title,values:vals,color:cor}],d.yearly.map(y=>String(y.label)),{h:170,fmt,marks:d.marks})}</div>`:''}
     ${tabelaDoKpi(k,d,fmt)}
     ${d.note?`<div class="hint">${d.note}</div>`:''}</div>`;
   openModal(k.title,body,`<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`+
@@ -577,25 +887,52 @@ function kpiModal(id){
 }
 /* anos com movimentos que contam nesta vista (o mesmo peso das métricas: imóvel,
    grupo ou âmbito todo), mais o corrente
-   Recebe: pid (opcional) — id do imóvel ou 'g:ID' de um grupo; vazio/null usa o âmbito do proprietário filtrado.
+   Recebe: pid (opcional) — id do imóvel ou 'g:ID' de um grupo; vazio/null usa o âmbito todo.
    Devolve: array de anos (números) por ordem ascendente. */
 function yearsWithData(pid){
   const ys={};ys[YEAR]=1;
   db.transactions.forEach(t=>{const y=Number(String(t.date||'').slice(0,4));if(y&&txWeight(t,pid,false)>0)ys[y]=1});
   return Object.keys(ys).map(Number).sort();
 }
+/* Quantos meses do ano corrente um gráfico mensal mostra: até ao mês corrente,
+   ou até ao último com algum valor quando há movimentos com data futura (a app
+   aceita-os, e o fim da linha tem de bater com o total do cartão). O canvas
+   acaba o eixo no mês corrente («jan · mai · out»): uma linha que seguisse
+   por nov e dez ao nível de hoje lia-se como valor registado.
+   Recebe: series — arrays de 12 valores (um por mês) que o gráfico desenha.
+   Devolve: o número de meses a mostrar, de mês corrente + 1 até 12. */
+function mesesAMostrar(series){
+  const agora=new Date().getMonth();
+  let ate=11;
+  while(ate>agora&&!series.some(s=>Number((s||[])[ate])))ate--;
+  return ate+1;
+}
 /* série histórica de um campo monetário das métricas (income, op, loan ou cf):
    mês a mês no ano corrente e ano a ano nos anos com movimentos. pid limita a
    um imóvel ou grupo; sem fmt, formata em euros.
+   O ano a ano começa no primeiro ano em que o campo tem valor (o corrente fica
+   sempre) e não salta anos: o yearsWithData só dá os anos com algum movimento,
+   e um empréstimo de 2020 fazia o eixo dizer «2020 · 2025 · 2026», com 2020 a
+   0 € e à mesma distância de 2025 do que 2026 — a reta lia-se como uma receita
+   a crescer aos poucos durante os anos que faltam.
    Recebe: field — o campo das métricas ('income', 'op', 'loan' ou 'cf'); pid (opcional) — id do imóvel ou de grupo
    ('g:…'), null/vazio para o âmbito todo; fmt (opcional) — função de formatação dos valores.
-   Devolve: objeto {fmt, monthly (12 totais mensais), yearly (array de {label: ano, value})} para a janela do KPI. */
+   Devolve: objeto {fmt, monthly (12 totais mensais), yearly (array de {label: ano, value}, anos seguidos)} para a janela do KPI. */
 function evoMoney(field,pid,fmt){
   const kind={income:'income',op:'expense',loan:'loan'}[field];
   const monthly=kind?monthly_(YEAR,pid,kind):[...Array(12)].map((_,i)=>monthly_(YEAR,pid,'income')[i]-monthly_(YEAR,pid,'expense')[i]-monthly_(YEAR,pid,'loan')[i]-monthly_(YEAR,pid,'amort')[i]);
-  return {fmt:fmt||euro,monthly,yearly:yearsWithData(pid).map(y=>({label:y,value:metrics(y,pid,{share:true})[field]}))};
+  const valor=y=>metrics(y,pid,{share:true})[field];
+  const anos=yearsWithData(pid);
+  /* os anos do princípio em que o campo é zero saem; o corrente fica, e o
+     anterior também quando tem movimentos — é com ele que a faixa do cartão
+     compara («▲ novo · 2025: 0 €», pintarSeriesKpi). Entre o primeiro e o
+     último que ficam, entram os que faltam. */
+  let i=0;while(i<anos.length-1&&anos[i]<YEAR-1&&!valor(anos[i]))i++;
+  const de=anos[i],a=anos[anos.length-1],yearly=[];
+  for(let y=de;y<=a;y++)yearly.push({label:y,value:valor(y)});
+  return {fmt:fmt||euro,monthly,yearly};
 }
-// atalho: totais mensais já na quota-parte do proprietário filtrado
+// atalho: totais mensais na quota-parte (saldos.js:sh — sem titular, por inteiro)
 // Recebe: y — o ano (número); pid — id do imóvel ou de grupo ('g:…'), ou null para o âmbito todo; kind — 'income', 'expense', 'loan' ou 'amort'.
 // Devolve: array de 12 números — o total de cada mês desse ano.
 const monthly_=(y,pid,kind)=>monthly(y,pid,kind,true);
@@ -605,12 +942,12 @@ const WHY={
   prestacoes:'Capital, juros e selo das prestações. Separado das despesas porque parte é poupança, não custo. As amortizações antecipadas ficam à parte, no rodapé.',
   cashflow:'Receita menos despesas, prestações e amortizações antecipadas. É o dinheiro que saiu mesmo da carteira — uma amortização também sai, embora seja capital e não custo.',
   yieldBruto:'Renda anual contratada sobre o valor de mercado dos imóveis com contrato ativo — os mesmos imóveis em cima e em baixo. Ignora despesas; serve para comparar com anúncios.',
-  cap:'Resultado líquido (rendas menos despesas, sem o banco) a dividir pelo valor de mercado. No ano corrente o resultado é anualizado. Mede o imóvel, não o financiamento — na tua quota, quando há filtro de proprietário.',
+  cap:'Resultado líquido (rendas menos despesas, sem o banco) a dividir pelo valor de mercado. No ano corrente o resultado é anualizado. Mede o imóvel, não o financiamento.',
   aquisicao:'Cashflow do ano até hoje a dividir pelo preço de compra, com o crédito incluído. Não é o retorno sobre o capital próprio: para isso faltaria tirar ao preço o que o banco emprestou.',
-  ltv:'Dívida a dividir pelo valor de mercado — na tua quota, quando há filtro de proprietário. Quanto mais baixo, menos alavancado está o portefólio.',
+  ltv:'Dívida a dividir pelo valor de mercado. Quanto mais baixo, menos alavancado está o portefólio.',
   valorIntro:'O valor de mercado que introduziste na ficha do imóvel. É a tua estimativa, não um cálculo.',
   valorRend:'Quanto valeria o imóvel se o comprasses hoje exigindo o yield que definiste: resultado líquido anual dividido por esse yield. No ano corrente, o resultado até hoje é anualizado.',
-  diferenca:'Positivo: as rendas justificam mais do que o valor que puseste. Sem valor de mercado na ficha não há comparação.',
+  diferenca:'Positivo: as rendas justificam mais do que o valor de mercado que indicaste. Sem valor de mercado na ficha não há comparação.',
   equity:'Valor de mercado menos o que ainda está em dívida. É o que sobraria se vendesses e liquidasses as hipotecas hoje.',
   rendaHoje:'Soma das rendas anuais dos contratos ativos, aos valores de hoje.',
   rendaFim:'A mesma soma no último ano do horizonte, já com os aumentos anuais aplicados.',
@@ -644,40 +981,63 @@ function lockPage(){try{
   else if(!on&&was){h.classList.remove('noscroll');document.body.style.top='';window.scrollTo(0,_lockY)}
 }catch(e){}}
 
-// barra com o seletor de proprietário; vazia se não há proprietários registados
-// Devolve: string HTML da barra (vazia se não há proprietários).
-function ownerBar(){
-  if(!db.owners.length)return '';
-  const opts=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name}))).concat(gdiv(gOpts('owner')));
-  return `<div class="toolbar"><div class="u-minw-230px u-maxw-320px">${sel('ownerSel',ownerFilter,opts,'onOwnerFilter','vista')}</div></div>`;
-}
-// muda o filtro global de proprietário; se o imóvel em foco sair do âmbito, larga-o
+// muda o titular do IRS · Anexo F (o seletor vistas.js:anaSelDono, só na Declaração)
 // Devolve: nada — redesenha a vista.
-function onOwnerFilter(){ownerFilter=val('ownerSel')||'';if(dashProp&&!inScope(dashProp))dashProp='';render()}
-/* cartão reutilizável: saldos entre proprietários (de um imóvel ou de todos)
+function onOwnerFilter(){ownerFilter=val('ownerSel')||'';render()}
+/* cartão reutilizável: saldos entre proprietários (de um imóvel ou de todos),
+   embrulhado na sua fila (.cols) para os ecrãs que o põem solto — a Avaliação
+   e os Movimentos. A Visão geral usa o cartão sem a fila (contasCard), porque
+   o põe ao lado do Portefólio.
    Recebe: pid — id do imóvel a que limitar, ou null/vazio para todos os do âmbito.
    Devolve: string HTML do cartão, ou vazia se não há saldos a mostrar. */
 function balancesCard(pid){
-  /* as contas entre proprietários são dos proprietários: num imóvel onde só colaboro não há cartão */
+  const c=contasCard(pid);
+  return c?`<div class="cols">${c}</div>`:'';
+}
+/* O nome curto de um proprietário numa frase de contas: o primeiro nome, como
+   o canvas escreve («Pedro paga 412,30 € a Maria»), a menos que outro da mesma
+   conta tenha o mesmo primeiro nome — aí o nome inteiro, para não se trocarem.
+   Recebe: id — o id do proprietário; ids — os ids de todos os que aparecem.
+   Devolve: o nome (texto, por escapar); '?' sem ficha. */
+function nomeCurto(id,ids){
+  const nome=String((owner(id)||{}).name||'?').trim()||'?',pri=nome.split(/\s+/)[0];
+  const repete=(ids||[]).some(o=>o!==id&&String((owner(o)||{}).name||'').trim().split(/\s+/)[0]===pri);
+  return repete?nome:pri;
+}
+/* O cartão «Contas entre proprietários» (o canvas da Visão geral): um mosaico
+   por proprietário — «A receber» em verde suave, «A pagar» em laranja suave,
+   «Em dia» em cinzento —, o plano de acerto num quadro tracejado com o botão
+   primário «Acertar contas», e os últimos acertos registados. O «(eu)» marca a
+   pessoa com sessão. O ⓘ abre como se chega aos saldos (saldos.js:balancesDetail).
+   As contas são dos proprietários: num imóvel onde só colaboro não há cartão.
+   Recebe: pid — id do imóvel, 'g:ID' de um grupo, ou null/vazio para o âmbito todo.
+   Devolve: string HTML do cartão (sem a fila), ou vazia se não há saldos. */
+function contasCard(pid){
   if(pid&&!String(pid).startsWith('g:')&&!souDono(pid))return '';
   const bal=ownerBalances(pid),ks=Object.keys(bal);
   if(!ks.length)return '';
-  const tot=debtTotal(bal),plan=settlePlan(bal);
+  const tot=debtTotal(bal),plan=settlePlan(bal),eu=meuId();
   const rows=ks.map(k=>({id:k,name:(owner(k)||{}).name||'?',v:bal[k]})).sort((a,b)=>b.v-a.v);
-  return `<div class="cols"><div class="card">
-    <div class="row-between"><div><div class="title">Contas entre proprietários</div>
-      <div class="small">${pid?'Neste imóvel':'Todos os imóveis'} · receitas, despesas e prestações com pessoa indicada; dívidas a terceiros não contam</div></div>
-      <button class="btn sm u-fx-0-0-auto u-p-7px" title="Como se chega aos saldos" data-toca="camada" data-click="${stop}balancesDetail(${pid?`'${jsq(pid)}'`:'null'})">${ic('info',16)}</button></div>
-    <div class="u-mt-13px">
-      ${rows.map(r=>`<div class="stat"><span class="u-d-flex u-ai-center u-g-9px">
-        <span class="avatar u-w-28px u-h-28px u-fs-11px u-fx-0-0-28px">${esc(initials(r.name))}</span>${esc(r.name)}</span>
-        <b class="${Math.abs(r.v)<0.01?'':(r.v>0?'pos':'neg')}">${Math.abs(r.v)<0.01?'em dia':(r.v>0?'a receber '+euro2(r.v):'a pagar '+euro2(-r.v))}</b></div>`).join('')}
-      ${tot>0.005?`<div class="divider"></div>
-        <div class="hint">${plan.map(x=>`<b>${esc((owner(x.from)||{}).name)}</b> paga <b>${euro2(x.amount)}</b> a <b>${esc((owner(x.to)||{}).name)}</b>`).join('<br>')}</div>
-        <div class="toolbar u-m-13px-0-0"><button class="btn primary" data-toca="camada" data-click="settleModal(${pid?`'${jsq(pid)}'`:'null'})">
-          ${ic('check',16)} Pagar todas as dívidas</button></div>`
-        :`<div class="hint u-mt-11px">Está tudo liquidado.</div>`}
-    </div></div></div>`;
+  const alvo=pid?`'${jsq(pid)}'`:'null';
+  /* os acertos que contam nesta vista: os do imóvel, os dos imóveis do grupo,
+     ou — no âmbito todo — os que o âmbito vê (com ou sem imóvel) */
+  const doAlvo=t=>!pid?(!t.propertyId||inScope(t.propertyId)):String(pid).startsWith('g:')?pidProps(pid).some(p=>p.id===t.propertyId):t.propertyId===pid;
+  const hist=db.transactions.filter(t=>t.kind==='settle'&&doAlvo(t)).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,4);
+  const ids=rows.map(r=>r.id).concat(...hist.map(h=>[h.paidBy,h.toId]),...plan.map(x=>[x.from,x.to]));
+  const nm=id=>esc(nomeCurto(id,ids));
+  const tile=r=>{const z=Math.abs(r.v)<0.01,tipo=z?'zero':r.v>0?'in':'out';
+    return `<div class="vg-saldo ${tipo}"><p class="vg-saldo-nome">${esc(r.name)}${eu&&r.id===eu?' (eu)':''}</p>
+      <p class="vg-saldo-valor num">${z?'Em dia':r.v>0?'A receber '+euro2(r.v):'A pagar '+euro2(-r.v)}</p></div>`};
+  return `<div class="card vg-cartao vg-contas">
+    <div class="vg-card-cab"><h3 class="title vg-tit">Contas entre proprietários</h3><span class="small">${pid?'Neste imóvel':'Todos os imóveis'}</span>
+      <button type="button" class="btn sm ghost so-icone vg-cab-acao" aria-label="Como se chega aos saldos" title="Como se chega aos saldos" data-toca="camada" data-click="${stop}balancesDetail(${alvo})">${ic('info',18)}</button></div>
+    <div class="vg-saldos">${rows.map(tile).join('')}</div>
+    ${tot>0.005?`<div class="vg-plano"><p><span class="small">Plano de acerto</span>${plan.map(x=>`<b class="num">${nm(x.from)} paga ${euro2(x.amount)} a ${nm(x.to)}</b>`).join('')}</p>
+      <button type="button" class="btn primary" data-toca="camada" data-click="settleModal(${alvo})">Acertar contas</button></div>`
+      :`<p class="small">Está tudo liquidado: ninguém deve nada a ninguém.</p>`}
+    ${hist.length?`<div class="vg-acertos"><p class="lbl">Últimos acertos</p>
+      ${hist.map(h=>`<div class="vg-acerto num"><span>${dPT(h.date)} · ${nm(h.paidBy)} → ${nm(h.toId)}</span><b>${euro2(h.amount)}</b></div>`).join('')}</div>`:''}
+  </div>`;
 }
 /* os acertos que zeram os saldos: um plano por imóvel da vista e, no âmbito todo,
    mais um «Todos os imóveis» para o que os imóveis não explicam — as dívidas dos
@@ -688,7 +1048,7 @@ function balancesCard(pid){
 function settleTargets(pid){
   const props=pidProps(pid).filter(p=>souDono(p.id));
   const out=props.map(p=>({pid:p.id,name:p.name,plan:settlePlan(ownerBalances(p.id))})).filter(x=>x.plan.length);
-  if(!pid&&!ownerFilter){
+  if(!pid){
     const tot=ownerBalances(null),per=props.map(p=>ownerBalances(p.id)),resto={};
     Object.keys(tot).forEach(k=>{resto[k]=tot[k]-sum(per.map(b=>b[k]||0))});
     const plan=settlePlan(resto);
@@ -707,7 +1067,7 @@ function settleModal(pid){
   const total=sum(plans.map(x=>sum(x.plan.map(y=>y.amount))));
   if(!plans.length)return toast('Não há dívidas para liquidar.');
   const hist=db.transactions.filter(t=>t.kind==='settle').sort((a,b)=>String(a.date).localeCompare(String(b.date))).slice(-4).reverse();
-  openModal('Pagar dívidas entre proprietários',`<div class="form">
+  openModal('Acertar contas entre proprietários',`<div class="form">
     <div class="hint">Vão ser registadas ${plans.reduce((a,x)=>a+x.plan.length,0)} transferências, ${euro2(total)} no total. Os saldos ficam a zero.</div>
     ${plans.map(x=>`<div class="card u-p-12px-14px">
       <div class="title u-fs-14px">${esc(x.name)}</div>
@@ -742,8 +1102,11 @@ let listF={};
    Devolve: o objeto dos filtros dessa lista. */
 const lf=k=>listF[k]||(listF[k]={});
 let _lqT=null;
-/* pesquisa das listas com atraso de 280 ms para não redesenhar a cada tecla;
-   como o render recria o campo, devolve-lhe o foco com o cursor no fim.
+/* pesquisa das listas com atraso de 280 ms para não redesenhar a cada tecla.
+   A via parcial guarda o próprio campo da barra (vistas.js:lfBarraViva), que
+   não perde o foco nem o cursor; só quando o caminho caiu para o render, que
+   recria o campo, se lhe devolve o foco com o cursor no fim — como a dos
+   Movimentos (lista-movimentos.js:onTxSearch).
    Recebe: k — a chave da lista ('lprops', 'lcts', …); v — o texto escrito no campo de pesquisa.
    Devolve: nada — agenda o redesenho da vista. */
 function lfSearch(k,v){
@@ -752,7 +1115,7 @@ function lfSearch(k,v){
     /* a via parcial primeiro: escrever na pesquisa não tem de refazer o ecrã */
     if(!refrescarListasVivas())render();
     const i=document.getElementById('lq_'+k);
-    if(i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}}},280);
+    if(i&&document.activeElement!==i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}}},280);
 }
 /* Mostra ou esconde o ✕ da pesquisa enquanto se escreve, conforme o campo tem
    texto. Era um «this.nextElementSibling.style.display=this.value?'':'none'»
@@ -780,23 +1143,37 @@ function lqLimpar(botao,k){
 function limparFiltroAtual(){
   if(typeof LFK!=='undefined'&&LFK[tab])return lfClear(LFK[tab]);
   /* o resto é análise, e cada serviço regista o seu «limpar» (os movimentos
-     incluídos: os filtros deles limpam-se por aqui, e o proprietário pela base) */
+     incluídos: os filtros deles limpam-se por aqui) */
   if(typeof anaClear==='function')anaClear();
 }
-// limpa os filtros da lista k sem mexer no painel; nos imóveis larga também o proprietário global
-// Recebe: k — a chave da lista ('lprops', 'lcts', …).
-// Devolve: nada — redesenha a vista.
+/* Limpa os filtros e a pesquisa da lista k sem mexer no painel nem na
+   ordenação, que não é um filtro (como o clearTxFilters dos Movimentos). Uma pesquisa ainda por aplicar
+   morre com eles, e o campo da barra esvazia-se já: a via parcial guarda-o
+   de pintura para pintura (vistas.js:lfBarraViva).
+   Recebe: k — a chave da lista ('lprops', 'lcts', …).
+   Devolve: nada — redesenha a vista. */
 function lfClear(k){
-  const s=lf(k);listF[k]={_open:s._open};
-  if(k==='lprops')ownerFilter='';
+  const s=lf(k);listF[k]=Object.assign({_open:s._open},s.sb?{sb:s.sb,sd:s.sd||''}:{});
+  clearTimeout(_lqT);
+  const q=document.getElementById('lq_'+k);if(q&&q.value){q.value='';lqMostrarLimpar(q)}
+  /* o «Limpar» do painel some com os filtros: o foco do teclado fica no «Fechar» */
+  const antes=document.activeElement,noPainel=!!(antes&&antes.closest&&antes.closest('#lfp_'+k));
   closePops();render();
+  if(noPainel){const f=document.querySelector('#lfp_'+k+' .mov-filtros-cab .btn:not(.ghost)');if(f&&f.focus)try{f.focus()}catch(e){}}
 }
-// nº de filtros ativos da lista k — a ordenação (sb/sd) e o estado do painel não contam
-// Recebe: k — a chave da lista.
-// Devolve: número de filtros ativos.
-function lfCount(k){const s=lf(k);return Object.keys(s).reduce((n,f)=>{
+/* nº de filtros ativos da lista k — a ordenação (sb/sd) e o estado do painel
+   não contam; os campos que a lista declarou juntos (o junto de um campo do
+   vistas.js:lfCabeca — o «de» e o «até» de um intervalo) contam como UM, como
+   as datas dos Movimentos (lista-movimentos.js:txFilterCount).
+   Recebe: k — a chave da lista.
+   Devolve: número de filtros ativos. */
+function lfCount(k){const s=lf(k),cs=_lfCampos[k]||{},juntos={};return Object.keys(s).reduce((n,f)=>{
   if(f==='_open'||f==='sb'||f==='sd')return n;
-  return n+(f==='q'?(String(s.q||'').trim()?1:0):(s[f]?1:0))},0)}
+  if(f==='q')return n+(String(s.q||'').trim()?1:0);
+  if(!s[f])return n;
+  const j=cs[f]&&cs[f].junto;
+  if(j){if(juntos[j])return n;juntos[j]=1}
+  return n+1},0)}
 // a pesquisa da lista k encontra-se em hay? palavras e frases entre aspas, sem acentos; sem pesquisa passa tudo
 // Recebe: k — a chave da lista; hay — o texto onde procurar (os campos do registo juntos numa string).
 // Devolve: true se todos os termos da pesquisa aparecem em hay (ou não há pesquisa), false caso contrário.
@@ -804,11 +1181,10 @@ function lfHit(k,hay){const q=String(lf(k).q||'');if(!q.trim())return true;
   const h=deacc(hay),terms=[];
   q.replace(/"([^"]*)"/g,(m,ph)=>{if(ph.trim())terms.push(deacc(ph.trim()));return ' '}).split(/\s+/).forEach(w=>{if(w)terms.push(deacc(w))});
   for(const t of terms)if(h.indexOf(t)<0)return false;return true}
-/* Os três painéis de filtro tinham três feitios: rascunho com Aplicar nas
-   listas, aplicação imediata no modal dos movimentos, imediata com um botão
-   chamado «Aplicar» nas análises. Fica UM modelo mental: mexes, a lista
-   muda logo atrás; «Limpar» à esquerda, «Fechar» primário à direita, em
-   todo o lado. O rascunho foi-se com a razão de ser dele.
+/* O seletor de um campo de uma lista na grelha do painel (vistas.js:lfCampoNaGrelha):
+   mexes, a lista muda logo atrás, sem «Aplicar» — o mesmo modelo dos
+   Movimentos e das análises. Aplica pelo vistas.js:lfMudar, que respeita o
+   aplicar que o campo declarou.
    Recebe: k — a chave da lista; key — o nome do campo no estado do filtro (ex.: 'st', 'own', 'sb');
    opts — array de opções {v, label} para o seletor.
    Devolve: string HTML do seletor (o sel() guarda a função que aplica o filtro:
@@ -816,43 +1192,19 @@ function lfHit(k,hay){const q=String(lf(k).q||'');if(!q.trim())return true;
    nomes da app, e o selPick recusava-o). */
 function lfSel(k,key,opts){
   const id='lfsel_'+k+'_'+key;
-  const aplicar=()=>{lf(k)[key]=val(id)||'';if(k==='lprops')ownerFilter=lf(k).own||'';render()};
-  return `<div class="u-w-100pc">${sel(id,lf(k)[key]||'',opts,aplicar,'vista')}</div>`;
+  return sel(id,lf(k)[key]||'',opts,()=>lfMudar(k,key,val(id)),'vista');
 }
-// abre/fecha o painel de filtros da lista k
+// abre/fecha o painel de filtros da lista k; o foco que estava no funil volta a ele (vistas.js:lfFocarFunil)
 // Recebe: k — a chave da lista.
 // Devolve: nada — redesenha a vista.
 function lfToggle(k){
-  const s=lf(k);s._open=!s._open;render();fpanelEntra(s._open);
+  const s=lf(k),antes=document.activeElement;s._open=!s._open;render();fpanelEntra(s._open);lfFocarFunil(k,antes);
 }
-// fecha o painel da lista k (os filtros aplicam-se logo ao mexer)
+// fecha o painel da lista k (os filtros aplicam-se logo ao mexer); o foco que estava lá dentro volta ao funil
 // Recebe: k — a chave da lista.
 // Devolve: nada — redesenha a vista.
 function lfApply(k){
-  lf(k)._open=false;closePops();render();
-}
-/* o dropdown de filtros (aberto pelo botão do cabeçalho) inclui a pesquisa no topo
-   Recebe: k — a chave da lista; sels — array de seletores já em HTML (saídos de lfSel); found — nº de resultados
-   com os filtros ativos; sorts (opcional) — {opts: [{v, label}], defLabel} com as opções de ordenação.
-   Devolve: string HTML do dropdown, com a linha de resultados quando há filtros ativos. */
-function lfBar(k,sels,found,sorts){
-  const n=lfCount(k),s=lf(k);
-  const sortRow=sorts?`<div class="u-d-flex u-fxd-column u-g-9px u-mt-9px">
-      ${lfSel(k,'sb',[{v:'',label:sorts.defLabel||'Ordem original'}].concat(sorts.opts))}
-      ${lfSel(k,'sd',[{v:'',label:'Ascendente'},{v:'desc',label:'Descendente'}])}</div>`:'';
-  return `<div class="fwrap u-h-0"><div class="fpanel ${s._open?'on':''} u-t-0"><div class="card u-p-12px">
-    ${k==='lprops'&&typeof fcSelector==='function'?fcSelector():''}
-    <div class="qwrap"><input id="lq_${k}" class="txq" type="search" value="${esc(lf(k).q||'')}" placeholder="Pesquisar…" autocomplete="off"
-      data-input="lfSearch('${jsq(k)}',this.value);lqMostrarLimpar(this)">
-      <button class="qclear${(lf(k).q||'')?'':' u-d-none'}" data-toca="vista" data-click="lqLimpar(this,'${jsq(k)}')">✕</button></div>
-    <div class="u-d-flex u-fxd-column u-g-9px u-mt-9px">${sels.join('')}</div>
-    ${sortRow}
-    <div class="toolbar u-m-12px-0-0">
-      <button class="btn" data-toca="vista" data-click="lfClear('${jsq(k)}')">${ic('x',15)} Limpar</button>
-      <button class="btn primary" data-toca="camada" data-click="lfApply('${jsq(k)}')">${ic('check',15)} Fechar</button>
-    </div>
-  </div></div></div>
-  ${n?`<div class="small u-m-2px-0-10px">${found} resultado${found===1?'':'s'} com os filtros ativos${String(s.q||'').trim()?' · pesquisa: “'+esc(s.q.trim())+'”':''}.</div>`:''}`;
+  const antes=document.activeElement;lf(k)._open=false;closePops();render();lfFocarFunil(k,antes);
 }
 /* aplica a ordenação escolhida; sem escolha, mantém a ordem dada
    Recebe: k — a chave da lista; list — o array a ordenar; keys — objeto {opção: função que extrai o valor a comparar}.
@@ -863,6 +1215,326 @@ function lfSort(k,list,keys){
   return list.slice().sort((a,b)=>{const x=f(a),y=f(b);
     if(typeof x==='string'||typeof y==='string')return dir*String(x??'').localeCompare(String(y??''),'pt');
     return dir*((Number(x)||0)-(Number(y)||0))});
+}
+/* ================= AS LISTAS COMO OS MOVIMENTOS =================
+   O feitio dos filtros de uma lista é o dos Movimentos
+   (lista-movimentos.js:txBarraHtml, lista-movimentos.js:txChipsHtml,
+   lista-movimentos.js:txFilterPainel): a pesquisa sempre à vista, com o funil
+   ao lado, que diz quantos filtros estão ligados e abre o painel completo;
+   por baixo, os chips rápidos — cada um um seletor com o × que o limpa — e o
+   «Limpar» quando há algum; o painel tem o «Limpar» e o «Fechar» no TOPO, ao
+   lado do título, a linha «Aplicam-se ao mexer · N imóveis» e a grelha dos
+   seletores, com a ordenação no fim. Veste as mesmas classes
+   (estilos.css:.mov-barra, estilos.css:.mov-chip, estilos.css:.mov-fwrap,
+   estilos.css:.mov-grelha), para ser o mesmo desenho e não uma cópia dele.
+
+   O estado é o lf(k) da lista e nada mais: cada campo é uma chave dele
+   (lf(k).st, lf(k).md…), a pesquisa é o lf(k).q, a ordenação o lf(k).sb e
+   o lf(k).sd, e o painel aberto o lf(k)._open. A lista continua a filtrar,
+   contar e ordenar pelos de sempre (lfHit, lfCount, lfSort).
+
+   A interface — uma lista declara o que tem e chama o lfCabeca(k, o):
+     nome    ['imóvel', 'imóveis'] — o singular e o plural («· 3 imóveis», a pesquisa)
+     dos     'dos imóveis' — o nome da fila dos chips («Filtros dos imóveis»)
+     n       quantos registos passam os filtros, para a linha do painel
+     campos  os seletores, pela ordem dos chips e da grelha (um falsy não conta):
+       chave   a chave no lf(k) ('st', 'md'…)
+       nome    o rótulo na grelha e o que o chip desligado diz ('Estado')
+       opcoes  [{v:'', label:'Todos os estados'}, {v:'vago', label:'Vagos', n:2}…] — a
+               opção '' primeiro; o n (opcional) junta « · 2» ao rótulo da escolha
+       curto   (opcional) o rótulo da opção '' na grelha, onde o nome já está por
+               cima ('Todos'); sem ele, o rótulo inteiro
+       rapido  true: chip sempre; 'largo': chip só a partir de 901px, ou ligado (o
+               «Pago por» dos Movimentos); falsy: só no painel
+       rotulo  (opcional) v => o que o chip ligado diz; sem ele, o rótulo da opção
+       aplicar (opcional) v => muda o estado e repinta; sem ele, lf(k)[chave] = v e
+               render()
+       tipo    (opcional) 'date' ou 'time': em vez de um seletor, um campo de data
+               ou de hora na grelha (o «De» e o «Até» das visitas); nunca é chip
+       junto   (opcional) um nome comum a vários campos que contam como UM filtro
+               no funil (o «de» e o «até» de um intervalo; vistas.js:lfCount)
+     ordem   (opcional) {opcoes:[{v:'nome', label:'Nome'}…], rapido, omissao} — «Ordenar
+             por» (sb) e, com ela escolhida, «Ordem» (sd) no fim da grelha; com
+             rapido, também o chip «Ordenar»; omissao é o nome da ordem de
+             sempre ('Ordem original' sem ele)
+     chips   (opcional) [{html, x}] — chips que não são um campo, já em HTML, a
+             seguir aos dos campos (o «Dias e horas» das visitas, que abre o
+             painel: vistas.js:lfAbrirEm); x diz que o chip tem o seu ×
+   Devolve a barra, o painel e os chips, por esta ordem, como os Movimentos:
+   o painel abre logo por baixo da pesquisa, por cima dos chips. O botão do
+   cabeçalho deixa de ser dos filtros: nos Imóveis e nos Contratos é o
+   «Selecionar vários» (cloud/selecao-listas.js:selLCabecalho; sem a camada
+   da seleção, continua a abrir o mesmo painel, vistas.js:hdrFiltToggle), e
+   nas outras listas sai (vistas.js:LF_COM_CABECALHO). */
+/* Os campos de cada lista na última pintura, para o × de um chip e para os
+   seletores saberem quem aplica (o aplicar de cada campo). */
+let _lfCampos={};
+/* O cabeçalho dos filtros de uma lista: a barra, o painel e os chips.
+   Recebe: k — a chave da lista ('lprops', 'lcts'…); o — a declaração (ver
+   acima: nome, dos, n, campos, ordem, topo).
+   Devolve: o HTML (texto). */
+function lfCabeca(k,o){
+  const cs=lfCampos(k,o);
+  return lfBarraHtml(k,o)+lfPainelHtml(k,o,cs)+lfChipsHtml(k,o,cs);
+}
+/* Os campos de uma lista prontos a pintar: os declarados, sem os vazios, e a
+   ordenação em dois campos no fim — «Ordenar por» e, com ela escolhida, o
+   sentido. Ficam registados para o × e para o aplicar (vistas.js:lfMudar).
+   Recebe: k — a chave da lista; o — a declaração (vistas.js:lfCabeca).
+   Devolve: array de campos {chave, nome, opcoes, curto, rapido, rotulo, aplicar, tipo, junto}. */
+function lfCampos(k,o){
+  const cs=((o&&o.campos)||[]).filter(Boolean);
+  const ord=o&&o.ordem&&(o.ordem.opcoes||[]).length?[{v:'',label:o.ordem.omissao||'Ordem original'}].concat(o.ordem.opcoes):null;
+  if(ord){
+    cs.push({chave:'sb',nome:'Ordenar por',chip:'Ordenar',opcoes:ord,rapido:o.ordem.rapido,
+      limpa:o.ordem.omissao?'Voltar a ordenar por '+String(o.ordem.omissao).toLowerCase():'Voltar à ordem original',
+      rotulo:v=>'Ordenar: '+String((ord.find(x=>String(x.v)===String(v))||{}).label||v).toLowerCase()});
+    if(lf(k).sb)cs.push({chave:'sd',nome:'Ordem',opcoes:[{v:'',label:'Ascendente'},{v:'desc',label:'Descendente'}]});
+  }
+  const r={};cs.forEach(c=>{r[c.chave]=c});_lfCampos[k]=r;
+  return cs;
+}
+/* As opções de um campo como o sel() as quer: a contagem (n), quando a há,
+   junta-se ao rótulo («Vagos · 2»); os separadores dos grupos ficam.
+   Recebe: c — o campo.
+   Devolve: array de {v, label} (e os {div:true} tal e qual). */
+function lfOpcoes(c){return (c.opcoes||[]).map(x=>x.div||x.n==null?x:{v:x.v,label:x.label+' · '+x.n})}
+/* O que o chip de um campo ligado diz: o rótulo próprio do campo, ou o da
+   opção escolhida, sem a contagem.
+   Recebe: c — o campo; v — o valor escolhido.
+   Devolve: o texto (por escapar). */
+function lfRotulo(c,v){
+  if(typeof c.rotulo==='function')return String(c.rotulo(v)||'');
+  const o=(c.opcoes||[]).find(x=>!x.div&&String(x.v)===String(v));
+  return o?String(o.label):String(v);
+}
+/* Aplica o valor de um campo, pelo chip ou pela grelha: pelo aplicar do
+   campo, se o declarou, ou no lf(k); tirar a ordenação tira também o sentido.
+   Recebe: k — a chave da lista; chave — a do campo; v — o valor ('' limpa).
+   Devolve: nada — muda o estado e repinta. */
+function lfMudar(k,chave,v){
+  v=String(v==null?'':v);
+  const c=(_lfCampos[k]||{})[chave],antes=document.activeElement;
+  closePops();
+  if(c&&typeof c.aplicar==='function')c.aplicar(v);
+  else{
+    lf(k)[chave]=v;
+    if(chave==='sb'&&!v)lf(k).sd='';
+    render();
+  }
+  lfReporFoco(antes);
+}
+/* Escolher pelo teclado deixa o foco no botão do seletor (componentes.js:selPick),
+   e o render refá-lo: o foco volta ao novo, com o mesmo id. Um toque não deixa
+   o foco em nada com id, e aí não se mexe.
+   Recebe: antes — o elemento que tinha o foco antes de repintar.
+   Devolve: nada — foca o elemento novo com o mesmo id, se o houver. */
+function lfReporFoco(antes){
+  const id=antes&&antes.id;if(!id)return;
+  const e=document.getElementById(id);
+  if(e&&e!==antes&&e.focus)try{e.focus()}catch(x){}
+}
+/* O × de um chip ligado: limpa só esse filtro.
+   Recebe: k — a chave da lista; chave — a do campo.
+   Devolve: nada — limpa e repinta (vistas.js:lfMudar). */
+function lfLimparCampo(k,chave){lfMudar(k,chave,'')}
+/* Quantos filtros estão ligados na lista, sem a pesquisa: o número do funil
+   e o que acende o «Limpar» do painel (a pesquisa está à vista, ao lado).
+   Recebe: k — a chave da lista.
+   Devolve: o número. */
+function lfNFiltros(k){return lfCount(k)-(String(lf(k).q||'').trim()?1:0)}
+/* A barra: a pesquisa, sempre à vista, e o funil que abre o painel, com
+   quantos filtros estão ligados (lista-movimentos.js:txBarraHtml). É um filho
+   direto do #view, e a via parcial guarda-a de pintura para pintura
+   (vistas.js:lfBarraViva): escrever não perde o foco nem o cursor.
+   Recebe: k — a chave da lista; o — a declaração (vistas.js:lfCabeca).
+   Devolve: o HTML da barra. */
+function lfBarraHtml(k,o){
+  const q=String(lf(k).q||''),n=lfNFiltros(k),aberto=!!lf(k)._open,nome=(o&&o.nome)||['registo','registos'];
+  return `<div class="mov-barra lfm-barra">
+    <label class="mov-busca"><span class="mov-lupa" aria-hidden="true"></span>
+      <input id="lq_${esc(k)}" type="search" value="${esc(q)}" placeholder="Pesquisar…" aria-label="Pesquisar ${esc(nome[1])}: palavras soltas ou uma frase entre aspas" autocomplete="off" enterkeyhint="search"
+        data-input="lfSearch('${jsq(k)}',this.value);lqMostrarLimpar(this)"><button type="button" class="qclear${q?'':' u-d-none'}" aria-label="Limpar a pesquisa" data-toca="vista" data-click="lqLimpar(this,'${jsq(k)}')">${ic('x',14)}</button></label>
+    <button type="button" class="btn so-icone mov-filt${aberto?' on':''}" id="lfb_${esc(k)}" aria-expanded="${aberto?'true':'false'}" aria-controls="lfp_${esc(k)}"
+      aria-label="${n?'Filtros: '+n+(n===1?' ativo':' ativos'):'Filtros'}" data-toca="vista" data-click="lfToggle('${jsq(k)}')">${ic('filter',18)}${n?`<span class="mov-filt-n" aria-hidden="true">${n}</span>`:''}</button>
+  </div>`;
+}
+/* O painel completo, logo por baixo da barra: o .fwrap dos outros painéis,
+   com o cartão dos Movimentos (lista-movimentos.js:txFilterPainel), que rola
+   por dentro com a sombra na borda.
+   Recebe: k — a chave da lista; o — a declaração; cs — os campos (vistas.js:lfCampos).
+   Devolve: o HTML do painel (fechado, só a moldura escondida). */
+function lfPainelHtml(k,o,cs){
+  return `<div class="fwrap u-h-0 mov-fwrap"><div class="fpanel ${lf(k)._open?'on':''} u-t-0" id="lfp_${esc(k)}" role="region" aria-labelledby="lft_${esc(k)}">
+    <div class="card mov-filtros-card lfm-caixa">${lfPainelCorpo(k,o,cs)}</div></div></div>`;
+}
+/* O corpo do painel (o M-Filtros): o título com o «Limpar» (só com filtros
+   ligados) e o «Fechar», quantos passam e a grelha de duas colunas. Cada seletor aplica logo, sem «Aplicar».
+   Recebe: k — a chave da lista; o — a declaração; cs — os campos.
+   Devolve: o HTML do corpo. */
+function lfPainelCorpo(k,o,cs){
+  const n=Number(o&&o.n)||0,nome=(o&&o.nome)||['registo','registos'];
+  return `<div class="mov-filtros">
+    <div class="mov-filtros-cab"><h2 class="mov-filtros-tit" id="lft_${esc(k)}">Filtros</h2>
+      ${lfNFiltros(k)?`<button type="button" class="btn ghost" data-toca="vista" data-click="lfClear('${jsq(k)}')">Limpar</button>`:''}
+      <button type="button" class="btn" data-toca="camada" data-click="lfApply('${jsq(k)}')">Fechar</button></div>
+    <p class="small mov-filtros-n">Aplicam-se ao mexer · ${n} ${esc(n===1?nome[0]:nome[1])}</p>
+    ${cs.length?`<div class="mov-grelha">${cs.map(c=>lfCampoNaGrelha(k,c)).join('')}</div>`:''}
+  </div>`;
+}
+/* Um campo na grelha do painel: o nome por cima e o seletor da casa, que
+   veste o cobalto com o filtro posto (estilos.css:.mov-ligado) — ou, num
+   campo com tipo, o campo de data ou de hora, como o «De» e o «Até» dos
+   Movimentos (lista-movimentos.js:txFilterBody), que aplica ao mudar.
+   Recebe: k — a chave da lista; c — o campo.
+   Devolve: o HTML do <label>. */
+function lfCampoNaGrelha(k,c){
+  const v=String(lf(k)[c.chave]||'');
+  if(c.tipo==='date'||c.tipo==='time')
+    return `<label>${esc(c.nome)}<input id="lfi_${esc(k)}_${esc(c.chave)}" type="${c.tipo}" value="${esc(v)}" data-change="lfMudar('${jsq(k)}','${jsq(c.chave)}',this.value)"></label>`;
+  const ops=lfOpcoes(c).map(x=>!x.div&&x.v===''&&c.curto?{v:'',label:c.curto}:x);
+  return `<label${v?' class="mov-ligado"':''}>${esc(c.nome)}${lfSel(k,c.chave,ops)}</label>`;
+}
+/* Um chip rápido: o seletor da casa vestido de chip, como o dos Movimentos
+   (lista-movimentos.js:txChipSel) — o mesmo estado do campo da grelha, com
+   outro id. Desligado diz o nome e leva a seta; ligado diz o valor, com o
+   fundo cobalto e o × que o limpa. O leitor de ecrã ouve o nome e o valor
+   uma vez só: quando o rótulo já começa pelo nome («Ordenar: renda»), ouve
+   só o rótulo.
+   Recebe: k — a chave da lista; c — o campo (vistas.js:lfCampos).
+   Devolve: o HTML do chip. */
+function lfChip(k,c){
+  const v=String(lf(k)[c.chave]||''),ligado=!!v,nome=c.chip||c.nome,id='lfc_'+k+'_'+c.chave;
+  const rot=ligado?lfRotulo(c,v):'',diz=ligado?rot:nome;
+  const ouve=ligado?(rot.indexOf(nome)===0?rot:nome+': '+rot):nome;
+  const s=sel(id,v,lfOpcoes(c),()=>lfMudar(k,c.chave,val(id)),'vista')
+    .replace('class="selbtn"',()=>'class="selbtn" aria-label="'+esc(ouve)+'"')
+    .replace(/(<span id="lab_[^"]*">)[^<]*(<\/span>)/,(m,a,b)=>a+esc(diz)+b);
+  const largo=c.rapido==='largo'&&!ligado?' mov-so-largo':'';
+  const x=ligado?`<button type="button" class="mov-chip-x" aria-label="${esc(c.limpa||'Limpar '+nome.toLowerCase())}" data-toca="vista" data-click="lfLimparCampo('${jsq(k)}','${jsq(c.chave)}')">${ic('x',14)}</button>`:'';
+  return `<span class="mov-chip${ligado?' on':''}${largo}">${s}${x}</span>`;
+}
+/* A fila dos chips rápidos: os campos com rapido (nunca os de data ou hora),
+   os chips que a lista junta (o.chips) e, com algum filtro ou a pesquisa, o
+   «Limpar». No telemóvel o «Limpar» sai quando só há uma coisa ligada e ela
+   tem o seu × à vista (o de um chip, ou o da pesquisa): a fila não parte em
+   duas por um botão que repete outro.
+   Recebe: k — a chave da lista; o — a declaração; cs — os campos.
+   Devolve: o HTML da fila, ou '' sem chips. */
+function lfChipsHtml(k,o,cs){
+  const rapidos=cs.filter(c=>c.rapido&&!c.tipo),extra=((o&&o.chips)||[]).filter(x=>x&&x.html);
+  const L=rapidos.map(c=>lfChip(k,c)).concat(extra.map(x=>x.html));
+  if(!L.length)return '';
+  const s=lf(k),nf=lfCount(k);
+  const comX=rapidos.filter(c=>c.chave!=='sb'&&c.chave!=='sd'&&s[c.chave]).length+extra.filter(x=>x.x).length+(String(s.q||'').trim()?1:0);
+  if(nf)L.push(`<button type="button" class="chip limpar${nf===1&&comX===1?' mov-so-largo':''}" data-toca="vista" data-click="lfClear('${jsq(k)}')">Limpar</button>`);
+  return `<div class="chips-fila mov-chips" role="group" aria-label="Filtros ${esc((o&&o.dos)||'')}">${L.join('')}</div>`;
+}
+/* Depois de repintar, o foco volta ao funil de uma lista — quando lá estava
+   (o funil é refeito pelo render) ou quando estava no painel que fechou.
+   Recebe: k — a chave da lista; antes — o elemento que tinha o foco antes.
+   Devolve: nada — foca o funil, se for o caso. */
+function lfFocarFunil(k,antes){
+  if(!antes||!antes.closest||!antes.closest('#lfb_'+k+',#lfp_'+k))return;
+  const b=document.getElementById('lfb_'+k);
+  if(b&&b.focus)try{b.focus()}catch(e){}
+}
+/* Abre o painel de uma lista com o foco num campo — o chip que não é um
+   seletor (o «Dias e horas» das visitas) leva aos campos dele, como o
+   «Escolher datas…» dos Movimentos (lista-movimentos.js:txChipPeriodo). Já
+   aberto, não fecha: só leva o foco.
+   Recebe: k — a chave da lista; id — o id do campo a focar.
+   Devolve: nada — abre o painel, repinta e foca o campo. */
+function lfAbrirEm(k,id){
+  const s=lf(k),abre=!s._open;
+  s._open=true;closePops();render();
+  if(abre)fpanelEntra(true);
+  const e=document.getElementById(id);
+  if(e&&e.focus)try{e.focus()}catch(x){}
+}
+/* A barra viva de uma lista (vistas.js:lfBarraHtml) na via parcial: o nó que
+   está no ecrã fica o MESMO, sem nunca sair do documento — com o foco, o
+   cursor e o que o teclado estava a compor —, e só o funil, que conta os
+   filtros, se troca pelo novo. Os Movimentos fazem o mesmo à deles
+   (lista-movimentos.js:txGuardarNo), mas tiram-na e voltam a pô-la.
+   Recebe: v — o #view; molde — o elemento com a vista nova.
+   Devolve: {vivo, novo} — a barra do ecrã e a do molde, com o mesmo campo —,
+   ou null quando não há as duas. */
+function lfBarraViva(v,molde){
+  const filho=(raiz)=>[].slice.call(raiz.children||[]).find(n=>n.classList&&n.classList.contains('lfm-barra'));
+  const vivo=filho(v),novo=filho(molde);
+  if(!vivo||!novo)return null;
+  const a=vivo.querySelector('input'),b=novo.querySelector('input');
+  if(!a||!b||a.id!==b.id)return null;
+  const fa=vivo.querySelector('.mov-filt'),fb=novo.querySelector('.mov-filt');
+  if(fa&&fb&&fa.outerHTML!==fb.outerHTML)fa.replaceWith(fb);
+  return {vivo:vivo,novo:novo};
+}
+/* ================= AS LISTAS POR ORIGEM =================
+   Os Imóveis, os Inquilinos, as Visitas e os Contratos dividem-se pela origem
+   de cada registo (acessos.js:origemDaCasa): os meus, os partilhados comigo e
+   aqueles em que colaboro, por esta ordem. Cada secção com registos tem
+   sempre o título e quantos tem, mesmo sendo a única — quem só tem casas suas
+   lê «Os meus imóveis» por cima da lista —; uma secção vazia não aparece
+   (vistas.js:listaPorOrigem). O filtro «Origem» é um campo do lfCabeca, com
+   a chave 'or', que só existe quando a lista tem registos de pelo menos duas
+   origens (vistas.js:lfOrigem). */
+const ORIGENS=['meu','partilhado','colaboro'];
+/* As secções de uma lista por origem. Cada secção com registos leva sempre
+   um título e quantos registos tem, no feitio do cabeçalho dos grupos das
+   visitas, mesmo sendo a única: o título é um h2, e os grupos de dentro (as
+   Próximas e as Passadas, os imóveis dos contratos) ficam um nível abaixo.
+   Uma secção vazia não aparece. Cada secção pinta-se pelo pintor da lista,
+   que recebe o sufixo do id das suas listas vivas: '' quando a secção é a
+   única — os ids de sempre ('imoveis', 'visitas:Próximas'), que são os que
+   o refrescarListasVivas encontra no ecrã enquanto a lista não ganha outra
+   origem —, ':meu', ':partilhado' ou ':colaboro' com duas ou três, para
+   cada uma ter a sua lista viva (o motor deita fora o que não é item com
+   chave: o título fica FORA dela, como os das visitas, visitas.js:vVisits).
+   Sem registos nenhuns não há secção nem título: o pintor recebe a lista
+   vazia (quem chama já pôs antes o seu vazio, o vazioFiltro ou o da lista).
+   Recebe: nome — o nome curto da lista, para os ids dos títulos ('imoveis');
+   itens — os registos já filtrados e ordenados; origemDe — registo =>
+   'meu'|'partilhado'|'colaboro'; titulos — {meu, partilhado, colaboro};
+   pintar — (registos, sufixo, semTitulo) => o HTML da secção sem o título;
+   semTitulo é true só sem registos (então não há h2 por cima, e um grupo de
+   dentro seria o h2), e false em cada secção com o seu título.
+   Devolve: o HTML (texto). */
+function listaPorOrigem(nome,itens,origemDe,titulos,pintar){
+  const por={meu:[],partilhado:[],colaboro:[]};
+  (itens||[]).forEach(x=>{const o=origemDe(x);(por[o]||por.meu).push(x)});
+  const cheias=ORIGENS.filter(o=>por[o].length);
+  if(!cheias.length)return pintar([],'',true);
+  const sufixo=o=>cheias.length<2?'':':'+o;
+  return `<div class="org-seccoes">${cheias.map(o=>{const id='org_'+nome+'_'+o,n=por[o].length;
+    return `<section class="org-seccao" aria-labelledby="${esc(id)}"><div class="org-cab"><h2 class="org-tit" id="${esc(id)}">${esc(titulos[o])}</h2><span class="small num org-n">${n}</span></div>`
+      +pintar(por[o],sufixo(o),false)+'</section>'}).join('')}</div>`;
+}
+/* O filtro «Origem» de uma lista: que origens há na lista inteira (antes de
+   qualquer filtro — o campo não aparece e some a cada tecla da pesquisa) e o
+   valor que vale. Com menos de duas origens o campo não existe, e um filtro
+   guardado de antes deixa de cortar e sai do estado (senão o funil contava um
+   filtro que não se vê); o mesmo a um que escolheu uma origem que a lista
+   deixou de ter.
+   Recebe: k — a chave da lista ('lprops', 'lten', 'lvis', 'lcts'); base — os
+   registos todos da lista (no âmbito); origemDe — registo => a origem.
+   Devolve: {v, filtra, campo} — v é a origem escolhida ('' para todas);
+   filtra(registos) devolve os dessa origem; campo(resto, rot) devolve o campo
+   do lfCabeca (ou null sem duas origens), com quantos do resto — os que passam
+   os outros filtros — cabem em cada escolha; rot é {todos, meu, partilhado,
+   colaboro}, os rótulos das escolhas. */
+function lfOrigem(k,base,origemDe){
+  const ha=ORIGENS.filter(o=>(base||[]).some(x=>origemDe(x)===o)),s=lf(k);
+  if(s.or!==undefined&&(ha.length<2||ha.indexOf(s.or)<0))delete s.or;
+  const v=String(s.or||'');
+  return {v:v,
+    filtra:xs=>v?(xs||[]).filter(x=>origemDe(x)===v):(xs||[]),
+    campo:(resto,rot)=>{
+      if(ha.length<2)return null;
+      const n={};(resto||[]).forEach(x=>{const o=origemDe(x);n[o]=(n[o]||0)+1});
+      return {chave:'or',nome:'Origem',curto:rot.todos,rapido:true,rotulo:x=>rot[x]||x,
+        opcoes:[{v:'',label:rot.todos}].concat(ha.map(o=>({v:o,label:rot[o],n:n[o]||0})))};
+    }};
 }
 /* Fecha o leque do botão flutuante (#fabMenu). Era um
    document.getElementById('fabMenu').classList.remove('on') no atributo, e a

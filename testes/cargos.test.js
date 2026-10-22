@@ -113,15 +113,23 @@ describe('posso X nesta casa?', () => {
     assert.equal(app.podeSemImovel(), true);
   });
 
-  test('um comproprietário é dono mas não criador; só quem criou apaga', () => {
+  test('um comproprietário é dono mas não criador; só quem criou apaga — quem não criou sai do imóvel', () => {
     tresCasas();
     app.window.CW.cargos.P1 = { dono: true, criador: false };
     assert.equal(app.souDono('P1'), true);
     assert.equal(app.souCriador('P1'), false);
-    let msg = '';
+    let msg = '', pergunta = null;
     app.toast = (m) => { msg = m; };
+    // sem a nuvem (sem CW.sairDaCasa) não há para onde sair: diz quem pode apagar
     app.delProp('P1');
     assert.match(msg, /Só quem criou o imóvel/);
+    assert.equal(app.db.properties.length, 3, 'nada foi apagado');
+    // com ela, o «Apagar» de quem não criou é a confirmação da saída, e nada sai da base
+    app.window.CW.sairDaCasa = () => Promise.resolve({ ok: true });
+    app.confirmModal = (t, txt) => { pergunta = { t, txt }; };
+    app.delProp('P1');
+    assert.equal(pergunta.t, 'Apagar «T1 Meu»');
+    assert.match(pergunta.txt, /^Deixas de ser comproprietário de <b>T1 Meu<\/b>/);
     assert.equal(app.db.properties.length, 3, 'nada foi apagado');
   });
 
@@ -317,6 +325,9 @@ describe('o que se esconde', () => {
     assert.ok(!cont.includes('Editar imóvel') && !cont.includes('Apagar imóvel') && !cont.includes('Novo contrato'), cont.join(', '));
     const meu = menuDe('prop:P1').labels;
     assert.ok(meu.includes('Editar imóvel') && meu.includes('Apagar imóvel'), meu.join(', '));
+    // com a nuvem, quem colabora também tem o «Apagar imóvel»: é sair dele (imovel.js:imvSair)
+    app.window.CW.sairDaCasa = () => Promise.resolve({ ok: true });
+    assert.ok(menuDe('prop:P2').labels.includes('Apagar imóvel'));
   });
 
   test('contratos e movimentos: ver, ou editar só o que é meu', () => {
@@ -390,11 +401,12 @@ describe('o que se esconde', () => {
     // o cartão de um imóvel: do seu data-lp até ao data-lp seguinte
     const cartao = (id) => { const i = html.indexOf('data-lp="prop:' + id + '"'), j = html.indexOf('data-lp="prop:', i + 1); return html.slice(i, j < 0 ? undefined : j); };
     const t3 = cartao('P3');
-    assert.doesNotMatch(t3, /Yield|Valor |Dívida|Arrendado|Vago/);
+    // os números do cartão são pares <span>rótulo</span><b>valor</b> (lista-imoveis.js:imvNumeros)
+    assert.doesNotMatch(t3, /<span>(Yield|Valor|Renda|Dívida)<\/span>|Arrendado|Vago/);
     assert.match(t3, /de Rui · Gestor de visitas/);
     assert.match(t3, /cw-shared/, 'a nuvem não pendura outro selo por cima');
     const t2 = cartao('P2');
-    assert.match(t2, /Valor 200/);
+    assert.match(t2, /<span>Valor<\/span><b>200/);
     assert.match(t2, /de Rui · Contabilista/);
     const t1 = cartao('P1');
     assert.match(t1, /1 colaborador</);
@@ -416,9 +428,9 @@ describe('o que se esconde', () => {
     app.buildNav();
     assert.doesNotMatch(nav.innerHTML, /Créditos|Projeções|Avaliação|Movimentos/);
     assert.match(nav.innerHTML, /Visitas/);
-    assert.doesNotMatch(tb.innerHTML, /Movimentos/);
-    assert.match(tb.innerHTML, /Imóveis/);
-    assert.deepEqual(Array.from(app.TABBAR), ['dashboard', 'transactions', 'properties', 'calendar'], 'a constante não muda');
+    assert.doesNotMatch(tb.innerHTML, /Dinheiro/, 'sem finanças à vista, a área do Dinheiro sai da barra');
+    assert.match(tb.innerHTML, /Casas/);
+    assert.deepEqual(Array.from(app.TABBAR), ['dashboard', 'casas', 'dinheiro', 'calendar'], 'a constante não muda');
   });
 
   test('o FAB de novo movimento só existe onde posso adicionar', () => {
@@ -705,7 +717,8 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     assert.equal(app.podeEditarInquilino(ana), true, 'é minha: edito-a');
     assert.deepEqual(app.dbSoMeu().tenants.map((t) => t.id), [], 'não vai na cópia: é do imóvel do Rui');
     assert.match(app.vTenants(), /Ana/, 'e está na lista');
-    assert.match(app.vTenants(), /Adicionar inquilino/);
+    // criar um inquilino é da folha «Criar» (e da ação do cabeçalho), com a condição que o FAB tinha
+    assert.ok(app.acoesDeAdicionar().some((x) => x.id === 'inquilino'), 'o gestor de visitas pode adicionar inquilinos');
     // a visita de um imóvel meu dá uma ficha minha (houseId vazio), como as do FAB: presa ao imóvel, perdia-se com ele
     app.db.visits.push(app.normVisit({ id: 'V2', nomes: 'Bruno', propertyId: 'P1', contacto: '912' }));
     app.personModal = () => {};
@@ -813,7 +826,7 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     app.personModal('tenant');
     assert.equal(msg, app.fraseSemPerm('tenant.add'));
     assert.equal(abertas.length, n);
-    assert.doesNotMatch(app.vTenants(), /Adicionar inquilino/);
+    assert.ok(!app.acoesDeAdicionar().some((x) => x.id === 'inquilino'), 'sem tenant.add não há «Inquilino» na folha Criar');
     // um dono não passa por aqui
     sessao();
     app.personModal('tenant');

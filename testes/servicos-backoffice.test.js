@@ -214,14 +214,20 @@ describe('o cartão «Serviços» na ficha', () => {
     assert.match(vista, /Dependem dele: /, 'cada linha diz quem depende dele');
   });
 
-  test('desligar pede confirmação e lista os dependentes que caem junto; ligar não pede', () => {
-    const fn = vista.slice(vista.indexOf('function mudarServico('), vista.indexOf('/* ------------------------------- operação'));
+  /* Desde 2026-10 a pergunta é uma faixa âmbar no próprio cartão (o canvas,
+     B-Conta), e não o confirm() do browser, que a casa não usa. */
+  test('desligar pergunta numa faixa do cartão e lista os dependentes que caem junto; ligar não pergunta', () => {
+    const fn = vista.slice(vista.indexOf('function mudarServico('), vista.indexOf('function mostrarAvisoDesligar('));
     const ramo = fn.slice(fn.indexOf('if (!ligado) {'), fn.indexOf('pedir('));
-    assert.match(ramo, /confirm\(aviso\)/, 'a confirmação está no ramo de desligar');
-    assert.match(ramo, /dependentesDoServico\(servicosVistos, servico\)[\s\S]*s\.ligado/, 'os dependentes ainda ligados vão na confirmação');
-    assert.match(ramo, /Desligam-se também/);
-    assert.doesNotMatch(fn.slice(0, fn.indexOf('if (!ligado) {')), /confirm\(/, 'antes do ramo não há confirmação');
-    assert.doesNotMatch(fn.slice(fn.indexOf('pedir(')), /confirm\(/, 'ligar segue direto para o servidor');
+    assert.match(ramo, /if \(!confirmado\) \{ mostrarAvisoDesligar\(id, servico, nome, caem\); return; \}/, 'a pergunta está no ramo de desligar');
+    assert.match(ramo, /dependentesDoServico\(servicosVistos, servico\)[\s\S]*s\.ligado/, 'os dependentes ainda ligados vão na pergunta');
+    const faixa = vista.slice(vista.indexOf('function mostrarAvisoDesligar('), vista.indexOf('/* ------------------------------- operação'));
+    assert.match(faixa, /Desligam-se também/);
+    assert.match(faixa, /comAcao\('confirmarServico', \[id, servico\]\)/, 'o botão da faixa confirma');
+    assert.match(faixa, /comAcao\('cancelarServico'\)/, 'e o outro cancela');
+    assert.match(vista, /confirmarServico: function \(d\) \{ mudarServico\(d\.arg, d\.arg2, false, true\); \}/);
+    assert.doesNotMatch(vista.replace(/\/\*[\s\S]*?\*\//g, ''), /\bconfirm\(/, 'sem confirm() do browser');
+    assert.doesNotMatch(fn.slice(fn.indexOf('pedir(')), /mostrarAvisoDesligar/, 'ligar segue direto para o servidor');
   });
 
   test('o texto explica o que desligar faz: o separador some, os dados deixam de sair, nada é apagado', () => {
@@ -241,6 +247,6 @@ describe('o cartão «Serviços» na ficha', () => {
       assert.match(guiao, new RegExp('function ' + f + '\\('), f);
     }
     assert.match(guiao, /comAcao\('mudarServico', \[id, servico/, 'o guião chega ao browser tal como está escrito');
-    assert.match(guiao, /a esta conta\?\\n\\n/, 'as quebras de linha da confirmação também');
+    assert.match(guiao, /mostrarAvisoDesligar\(id, servico, nome, caem\)/, 'e a faixa da pergunta também');
   });
 });

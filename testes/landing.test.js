@@ -1,16 +1,24 @@
 // A página de entrada do rendorium.com.
 //
-// O que se testa aqui é sobretudo uma coisa: que as imagens que a página pede
-// existem mesmo. Elas são geradas por scripts/capturas.js e vivem em disco;
-// renomear uma captura, ou tirá-las só num tema, dava uma página com buracos
-// que ninguém veria até alguém abrir o site.
+// O produto mostra-se em maquetes desenhadas em HTML e CSS, não em capturas:
+// o que aqui se guarda é que elas digam a verdade sobre si próprias (os
+// números fecham, cada barra tem a sua altura, a descrição existe), que as
+// letras venham da casa, que a imagem de partilha continue onde as redes a
+// vão buscar, e o resto do contrato da página — sem JavaScript, metadados,
+// botões, cabeçalho, movimento e os seus recuos.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { webcrypto } from 'node:crypto';
+
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
+
 import { paginaLanding, CSS_LANDING } from '../worker/src/landing.js';
+import { CSS_LEGAL } from '../worker/src/legal-vista.js';
+import { CSS_TESTE } from '../worker/src/teste.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const raiz = (p) => path.join(AQUI, '..', p);
@@ -31,38 +39,101 @@ describe('a página de entrada', () => {
     assert.ok(!html.includes('undefined'), 'nada ficou undefined');
   });
 
-  /* Cada imagem tem de existir nos dois temas: a clara no src e a escura na
-     <source> da media query. Uma que falte não dá erro nenhum — dá um buraco. */
-  test('todas as capturas que a página pede existem em disco, nos dois temas', () => {
-    const pedidas = [...html.matchAll(/(?:src|srcset)="(\/img\/landing\/[^"]+)"/g)].map((m) => m[1]);
-    assert.ok(pedidas.length >= 6, 'a página mostra o produto (' + pedidas.length + ' imagens)');
-    pedidas.forEach((p) => {
-      const f = raiz('web' + p);
-      assert.ok(fs.existsSync(f), 'falta ' + p + ' — correr: node scripts/capturas.js');
-      assert.ok(fs.statSync(f).size > 4096, p + ' é pequena de mais para ser uma captura');
-    });
-    // e a que se vê ao partilhar a ligação
-    assert.ok(fs.existsSync(raiz('web/img/landing/partilha.webp')), 'falta a imagem de partilha');
+  /* O redesign trocou as capturas por maquetes em HTML e CSS (a prancheta
+     Landing): seguem os tokens e o tema de quem lê, e não envelhecem a cada
+     mudança da app. Quem não as vê ouve a descrição — cada uma é um role="img"
+     com aria-label, e o que está dentro dela não se lê aos bocados. */
+  test('mostra o produto em maquetes com descrição, e já não em capturas', () => {
+    assert.ok(!/<picture|<img\b/.test(html), 'nenhuma captura na página');
+    const maquetes = [...html.matchAll(/<div class="([^"]+)" role="img" aria-label="([^"]+)">/g)]
+      .map((m) => ({ classe: m[1], descricao: m[2] }));
+    assert.deepEqual(maquetes.map((m) => m.classe.split(' ')[0]), ['telemovel', 'computador', 'acerto'],
+      'o telemóvel, o computador e as contas entre donos');
+    maquetes.forEach((m) => assert.ok(m.descricao.length >= 60, 'uma descrição a sério: ' + m.descricao));
+    assert.match(html, /<div class="hero-visual">\s*<div class="tile" aria-hidden="true">/,
+      'o mosaico do hero é decoração, escondido dos leitores de ecrã');
   });
 
-  test('cada <picture> tem a escura na media query e a clara por omissão', () => {
-    const blocos = [...html.matchAll(/<picture>[\s\S]*?<\/picture>/g)].map((m) => m[0]);
-    assert.equal(blocos.length, 3, 'as três capturas da página');
-    blocos.forEach((b) => {
-      assert.match(b, /media="\(prefers-color-scheme: dark\)"/, 'segue o tema de quem lê');
-      assert.match(b, /-dark\.webp/, 'tem a escura');
-      assert.match(b, /-light\.webp/, 'e a clara');
-      assert.match(b, /width="\d+" height="\d+"/, 'com medidas, senão o texto salta quando ela chega');
-      assert.match(b, /alt="[^"]{20,}"/, 'e uma descrição a sério');
-    });
+  /* Os números da maquete são inventados, mas não podem ser absurdos: quem
+     gere rendas faz a conta de cabeça. A prancheta trazia um cashflow que não
+     fechava (7 534 € para 29 910 − 6 312 − 11 064); aqui o cashflow é o que
+     sobra, e é o mesmo no telemóvel e no computador. */
+  test('os números das maquetes fecham entre si', () => {
+    const valor = (rotulo) => [...html.matchAll(new RegExp('<p(?: class="m-sub")?>' + rotulo +
+      '</p><p class="tit">([−\\d\\u202F]+)\\u202F€</p>', 'g'))]
+      .map((m) => Number(m[1].replace(/ /g, '').replace('−', '-')));
+    const [r, d, p, c] = ['Receita', 'Despesas', 'Prestações', 'Cashflow'].map(valor);
+    [r, d, p, c].forEach((v) => assert.equal(v.length, 2, 'cada indicador nas duas maquetes'));
+    assert.equal(c[0], r[0] - d[0] - p[0], 'o cashflow é a receita menos as despesas e as prestações');
+    assert.deepEqual([r[0], d[0], p[0], c[0]], [r[1], d[1], p[1], c[1]], 'e o computador diz o mesmo que o telemóvel');
   });
 
-  /* A primeira imagem é a que se vê ao abrir: adiá-la é adiar a única prova de
-     que a app existe. As outras esperam. */
-  test('a do hero carrega já; as de baixo esperam', () => {
-    const blocos = [...html.matchAll(/<picture>[\s\S]*?<\/picture>/g)].map((m) => m[0]);
-    assert.ok(!blocos[0].includes('loading="lazy"'), 'a do hero não espera');
-    assert.ok(blocos.slice(1).every((b) => b.includes('loading="lazy"')), 'as outras esperam');
+  /* A CSP_ESTRITA não aplica um atributo de estilo: cada barra recebe a
+     altura por uma regra :nth-child da folha. Uma barra a mais no HTML ficava
+     com altura zero, sem erro nenhum. */
+  test('cada barra das maquetes tem a sua altura na folha', () => {
+    const nTel = (/<div class="m-cartao barras-tel">([\s\S]*?)<\/div>/.exec(html)[1].match(/<span><\/span>/g) || []).length;
+    const nPc = (html.match(/<span class="mes">/g) || []).length;
+    assert.ok(nTel >= 6, 'o gráfico do telemóvel tem barras');
+    assert.equal(nPc, nTel, 'os dois gráficos mostram os mesmos meses');
+    for (let i = 1; i <= nTel; i++) {
+      assert.match(css, new RegExp('\\.barras-tel span:nth-child\\(' + i + '\\)\\{height:\\d+px\\}'), 'a barra ' + i + ' do telemóvel');
+      assert.match(css, new RegExp('\\.barras-pc \\.mes:nth-child\\(' + i + '\\) \\.r\\{height:\\d+px\\}'), 'a receita ' + i + ' do computador');
+      assert.match(css, new RegExp('\\.barras-pc \\.mes:nth-child\\(' + i + '\\) \\.d\\{height:\\d+px\\}'), 'a despesa ' + i + ' do computador');
+    }
+    assert.ok(!new RegExp('\\.barras-tel span:nth-child\\(' + (nTel + 1) + '\\)').test(css), 'e nenhuma regra para uma barra que não existe');
+  });
+
+  /* A imagem de partilha é a única que fica: quem a mostra é a rede social,
+     que não corre CSS nenhum. As capturas antigas saíram com as maquetes, e o
+     que fica na pasta é o que alguém pede. */
+  test('a imagem de partilha existe, e a pasta não guarda capturas que ninguém pede', () => {
+    const f = raiz('web/img/landing/partilha.webp');
+    assert.ok(fs.existsSync(f), 'falta a imagem de partilha');
+    assert.ok(fs.statSync(f).size > 4096, 'e é uma imagem a sério');
+    for (const nome of fs.readdirSync(raiz('web/img/landing'))) {
+      assert.ok(html.includes('/img/landing/' + nome), nome + ' está na pasta mas a página não o pede');
+    }
+  });
+
+  /* As letras são as da app, auto-alojadas: a CSP só deixa font-src 'self',
+     e um pedido ao Google Fonts era recusado em silêncio — a página caía na
+     letra do sistema sem ninguém dar por isso. */
+  test('as letras são da casa, declaradas e pedidas cedo', () => {
+    for (const [familia, ficheiro] of [['Geist', 'geist'], ['Bricolage Grotesque', 'bricolage-grotesque']]) {
+      const bloco = new RegExp("@font-face\\{font-family:'" + familia + "';src:url\\(/fonts/" + ficheiro +
+        "\\.woff2\\) format\\('woff2'\\);[^}]*font-display:swap;[^}]*unicode-range:U\\+0000-00FF").exec(css);
+      assert.ok(bloco, familia + ' declarada com swap e o unicode-range latino');
+      assert.ok(fs.existsSync(raiz('web/fonts/' + ficheiro + '.woff2')), 'o ficheiro de ' + familia + ' existe');
+      assert.match(html, new RegExp('<link rel="preload" href="/fonts/' + ficheiro +
+        '\\.woff2" as="font" type="font/woff2" crossorigin>'), familia + ' pedida logo no <head>');
+    }
+    assert.match(css, /body\{[^}]*font-family:'Geist',/, 'o corpo na Geist');
+    assert.match(css, /h1,h2,h3,\.tit\{font-family:'Bricolage Grotesque',/, 'os títulos na Bricolage');
+    assert.ok(!/fonts\.googleapis|fonts\.gstatic/.test(html + css), 'nada do Google Fonts');
+  });
+
+  /* Três folhas, as mesmas letras: a montra, os documentos legais e a
+     entrada de teste declaram-nas cada uma na sua (a CSP_ESTRITA quer a folha
+     de cada página à parte), e uma que divergisse era uma página com outra
+     letra ou com um ficheiro que já não existe. */
+  test('a montra, os documentos e a entrada de teste declaram as mesmas letras', () => {
+    const letras = (t) => (t.match(/@font-face\{[^}]*\}/g) || []).join('\n');
+    assert.equal((letras(css).match(/@font-face/g) || []).length, 2, 'as duas na montra');
+    assert.equal(letras(CSS_LEGAL), letras(css), 'os documentos iguais à montra');
+    assert.equal(letras(CSS_TESTE), letras(css), 'e a entrada de teste também');
+  });
+
+  /* Segue o tema de quem lê, com os tokens do contrato da app: os mesmos
+     nomes, o fundo e o cobalto de cada lado. */
+  test('segue o tema de quem lê, com os tokens da app', () => {
+    assert.match(css, /:root\{color-scheme:light dark;[^}]*--bg:#F2F3F6;[^}]*--accent:#2952D9;/, 'o claro');
+    const escuro = /@media\(prefers-color-scheme:dark\)\{:root\{([^}]*)\}\}/.exec(css);
+    assert.ok(escuro, 'o escuro existe');
+    assert.match(escuro[1], /--bg:#0B111E;/, 'com o fundo escuro do contrato');
+    assert.match(escuro[1], /--accent:#7C9BFF;/, 'e o cobalto escuro');
+    assert.match(html, /<meta name="theme-color" content="#F2F3F6" media="\(prefers-color-scheme: light\)">/);
+    assert.match(html, /<meta name="theme-color" content="#0B111E" media="\(prefers-color-scheme: dark\)">/);
   });
 
   test('não tem JavaScript nenhum', () => {
@@ -130,7 +201,7 @@ describe('a página de entrada', () => {
     assert.match(css, /\.hero h1\{animation:sobe var\(--entrada\) var\(--curva-entra\) backwards\}/,
       'o hero entra pela curva de quem atravessa distância');
     assert.match(css, /\.hero \.telemovel\{animation:sobe [^}]*backwards\}/,
-      'a captura entra com ele');
+      'a maquete do telemóvel entra com ele');
     assert.match(css, /\.hero \.sub\{animation:sobe [^}]*\.07s backwards\}/,
       'e a chegada é escalonada, não em bloco');
     assert.match(css, /@supports \(animation-timeline: view\(\)\)/,

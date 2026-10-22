@@ -43,19 +43,22 @@ function seed(){
   db.tenants=[t1,t2,t3,t4,t5];
   /* três contratos comunicados à AT, cada um com o número que ela devolveu; o
      quarto contrato (c4, o casal do quarto 3) fica por indicar — o senhorio
-     ainda não disse, e é isso que faz aparecer o prazo do Modelo 2 */
-  const c1=normContract({propertyId:p1,tenantIds:[t1.id],rent:1250,taxRate:25,deposit:2500,payDay:8,
+     ainda não disse, e é isso que faz aparecer o prazo do Modelo 2. Nenhum
+     escreve a taxa do imposto: a estimativa é a das regras do ano
+     (irs.js:irsTaxa), e uma taxa escrita taparia, por exemplo, os 10 % das
+     rendas moderadas de 2026 */
+  const c1=normContract({propertyId:p1,tenantIds:[t1.id],rent:1250,deposit:2500,payDay:8,
     start:`${YEAR-1}-09-01`,increase:2.5,iban:'PT50 0033 0000 4567 8901 2345 6',
     ownerEmail:o1.email,ownerPhone:o1.phone,tenantEmail:t1.email,tenantPhone:t1.phone,
     fisco:{estado:'declarado',numero:'1043782',finalidade:'hp',celebracao:`${YEAR-1}-08-25`,renovavel:true},
     inventory:[{id:uid(),name:'Sofá de 3 lugares',qty:1,state:'novo'},{id:uid(),name:'Cadeiras de sala',qty:4,state:'usado'},
                {id:uid(),name:'Máquina de lavar roupa',qty:1,state:'usado'}],
     keys:[{id:uid(),name:'Chaves de casa',qty:2},{id:uid(),name:'Chave do correio',qty:1}]});
-  const c2=normContract({propertyId:p2,roomId:q1.id,tenantIds:[t2.id],rent:350,taxRate:25,deposit:350,payDay:1,start:`${YEAR}-09-01`,
+  const c2=normContract({propertyId:p2,roomId:q1.id,tenantIds:[t2.id],rent:350,deposit:350,payDay:1,start:`${YEAR}-09-01`,
     fisco:{estado:'declarado',numero:'1188406',finalidade:'hp',celebracao:`${YEAR}-08-25`,renovavel:true}});
-  const c3=normContract({propertyId:p2,roomId:q2.id,tenantIds:[t3.id],rent:350,taxRate:25,deposit:350,payDay:1,start:`${YEAR}-09-01`,
+  const c3=normContract({propertyId:p2,roomId:q2.id,tenantIds:[t3.id],rent:350,deposit:350,payDay:1,start:`${YEAR}-09-01`,
     fisco:{estado:'declarado',numero:'1188417',finalidade:'hp',celebracao:`${YEAR}-08-25`,renovavel:true}});
-  const c4=normContract({propertyId:p2,roomId:q3.id,tenantIds:[t4.id,t5.id],rent:430,taxRate:25,deposit:430,payDay:1,
+  const c4=normContract({propertyId:p2,roomId:q3.id,tenantIds:[t4.id,t5.id],rent:430,deposit:430,payDay:1,
     start:`${YEAR}-07-01`,notes:'Casal, quarto com casa de banho privativa',
     ownerEmail:o1.email,ownerPhone:o1.phone,tenantPhone:'912 000 004'});
   db.contracts=[c1,c2,c3,c4];
@@ -116,6 +119,14 @@ function seed(){
    a janela que está por baixo dele. */
 document.addEventListener('keydown',e=>{if(selTecla(e))return;if(e.key==='Escape')closeModal('esc')});
 document.addEventListener('click',()=>closePops());
+/* Um menu ⋯ aberto fecha quando a página (ou a caixa onde ele está) rola: ficava
+   pendurado no sítio onde o botão estava, com o botão já noutro sítio. Só os
+   .menupop — as listas dos seletores que flutuam nos filtros acompanham o
+   scroll (cloud/filtros.js) — e não o scroll de dentro do próprio menu, que um
+   menu encolhido pelo ajustarPop pode ter. Na captura, porque o scroll não sobe
+   (o corpo de uma janela, a caixa dos filtros). */
+document.addEventListener('scroll',e=>{const t=e.target;if(t&&t.closest&&t.closest('.menupop'))return;
+  [].forEach.call(document.querySelectorAll('.menupop.on'),p=>{p.classList.remove('on');menuExpandido(p,false)})},{capture:true,passive:true});
 /* Enter ativa o que é clicável mas não é botão nativo (cartões, itens do
    menu): é o que falta para a app inteira andar a teclado. */
 document.addEventListener('keydown',e=>{
@@ -156,6 +167,16 @@ document.addEventListener('focusin',e=>{
   const s2=topSheet();if(s2)s2.classList.add('kb');
   setTimeout(()=>{try{t.scrollIntoView({block:'center',behavior:'smooth'})}catch(err){}},260);
 });
+/* as caixas de texto crescem ao escrever e ao aparecerem já com texto
+   (componentes.js:ajustarCaixas; sem nada a fazer onde o CSS já o faz) */
+if(!caixaSozinha&&typeof MutationObserver!=='undefined'){
+  document.addEventListener('input',e=>{if(e.target&&e.target.tagName==='TEXTAREA')ajustarCaixas(e.target)});
+  let caixasPedidas=false;
+  new MutationObserver(()=>{
+    if(caixasPedidas)return;caixasPedidas=true;
+    requestAnimationFrame(()=>{caixasPedidas=false;ajustarCaixas()});
+  }).observe(document.body,{childList:true,subtree:true});
+}
 document.addEventListener('focusout',()=>{
   setTimeout(()=>{
     if(typing(document.activeElement))return;

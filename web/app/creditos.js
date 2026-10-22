@@ -1,55 +1,293 @@
-/* ================= CRÉDITOS (todas as hipotecas) =================
-   Devolve: o HTML da vista de créditos — barra de filtros, KPIs e a lista de
-   hipotecas em cartões. */
+/* ================= CRÉDITOS (todas as hipotecas) ================= */
+/* A hipoteca aberta ao lado da lista no computador, 'idImovel:idHipoteca'
+   (vazio: a primeira da lista à vista), e se a lista mostra as liquidadas — no
+   computador em vez das ativas (os chips), no telemóvel por baixo delas (o
+   botão «Liquidadas»). Duram enquanto a app estiver aberta. */
+let credSel='',credPagas=false;
+/* o tipo da taxa no selo do cartão, curto como no canvas */
+const CRED_TIPO={fixa:'Fixa',variavel:'Variável',mista:'Mista'};
+/* A chave de uma hipoteca na página: o imóvel e a hipoteca.
+   Recebe: p — o imóvel; l — a hipoteca.
+   Devolve: 'idImovel:idHipoteca' (texto). */
+function credChave(p,l){return p.id+':'+l.id}
+/* Quando acaba a taxa fixa de uma mista, pelo mesmo relógio dos prazos e da
+   simulação (credito.js:fimDaFaseFixa: as prestações registadas, e a próxima
+   por confirmar quando os Planeados a têm).
+   Recebe: l — a hipoteca.
+   Devolve: {fim, dias} — a data e os dias que faltam; null quando não é mista
+   ou a fase fixa já acabou. */
+function credFimFixa(l){
+  const r0=servicoLigado('recurring')?loanRecOf(l):null;
+  const fim=fimDaFaseFixa(l,db.transactions||[],today(),r0&&r0.next);
+  if(!fim)return null;
+  return {fim,dias:Math.round((new Date(fim+'T00:00:00')-new Date(today()+'T00:00:00'))/864e5)};
+}
+/* A prestação depois da fase fixa de uma mista: a linha da amortização do mês
+   em que a taxa muda (a mesma conta da ficha, creditos.js:mortFicha).
+   Recebe: l — a hipoteca viva.
+   Devolve: euros com o selo (número), ou null fora de uma mista em fase fixa. */
+function credDepois(l){
+  if(l.type!=='mista')return null;
+  const k=Math.round((Number(l.fixedYears)||0)*12)-loanMes(l);if(k<=0)return null;
+  const row=amort(l).rows[k];
+  return row?row.pay+row.st:null;
+}
+/* O selo do fim da taxa fixa, só dentro da janela de aviso dos prazos
+   (prazos.js:PZ_ANTECEDENCIA, a taxa): âmbar, e vermelho a sete dias ou menos.
+   Recebe: l — a hipoteca viva.
+   Devolve: o HTML do selo (texto), ou ''. */
+function credSeloFixa(l){
+  const f=credFimFixa(l);
+  if(!f||f.dias<0||f.dias>PZ_ANTECEDENCIA.taxa)return '';
+  const txt=f.dias===0?'A taxa fixa acaba hoje':f.dias===1?'A taxa fixa acaba amanhã':'Taxa fixa acaba em '+f.dias+' dias';
+  return `<span class="badge ${f.dias<=7?'red':'amber'} cred-selo">${txt}</span>`;
+}
+/* O resumo das hipotecas ativas: em dívida, as prestações de um mês e os
+   juros e o selo até ao fim — e, no telemóvel, a dívida no fim de cada ano em
+   barras (a soma das hipotecas por ano civil, creditos.js:credDividaPorAno,
+   como o gráfico de todas na amortização; a barra do ano corrente acesa), que
+   se leem com o dedo como os gráficos (creditos.js:credBarrasLer). No
+   telemóvel é o cartão azul-noite do canvas M-Creditos; no computador, três
+   cartões (D-Creditos). As contas são as de sempre.
+   Recebe: live — as {p,l} com capital em dívida.
+   Devolve: o HTML do resumo (texto). */
+function credResumo(live){
+  const n=live.length,tot=sum(live.map(x=>x.l.outstanding)),pay=sum(live.map(x=>loanCalc(x.l).total));
+  const juros=sum(live.map(x=>{const a=amort(x.l);return a.totInt+a.totStamp}));
+  const d=credDividaPorAno(live.map(x=>x.l)),somas=d.somas,nY=d.anos.length,y0=d.anos[0],y1=d.anos[nY-1];
+  const topo=Math.max(tot,...somas,1),agora=Math.max(0,d.anos.indexOf(Number(today().slice(0,4))));
+  /* as barras são atributos do SVG (x, y, width, height), e não estilos: a CSP não os trava */
+  const barras=somas.map((v,i)=>{const h=Math.max(2,Math.round(v/topo*52));
+    return `<rect class="${i===agora?'agora':''}" x="${i*10+1}" y="${56-h}" width="8" height="${h}" rx="1.5"></rect>`}).join('');
+  return `<section class="cred-resumo" aria-label="Resumo das hipotecas">
+    <div class="cred-r cred-r-divida"><p class="cred-r-rot">Em dívida · ${n} ${n===1?'hipoteca ativa':'hipotecas ativas'}</p><p class="disp num cred-r-v">${euro(tot)}</p></div>
+    <div class="cred-r cred-r-prest"><p class="cred-r-rot">Prestações</p><p class="disp num cred-r-v2">${euro2(pay)}<span class="cred-r-mes">/mês</span></p></div>
+    <div class="cred-r cred-r-juros"><p class="cred-r-rot">Juros e selo até ao fim</p><p class="disp num cred-r-v2">${euro(juros)}</p></div>
+    ${nY>1?`<div class="cred-r-graf">${credBarrasLer(d.anos,somas,agora,`<svg class="cred-barras" viewBox="0 0 ${nY*10} 56" preserveAspectRatio="none" role="img" aria-label="${esc('Dívida no fim de cada ano, de '+y0+' a '+y1+', a descer até '+euro(somas[nY-1])+'. Percorre com o dedo para ler cada ano.')}">${barras}</svg>`)}
+      <div class="cred-r-eixo num"><span>${y0}</span><span>Dívida no fim de cada ano</span><span>${y1}</span></div></div>`:''}</section>`;
+}
+/* As barras da dívida do resumo, prontas a ler com o dedo como os gráficos
+   da Visão geral, pela mesma maquinaria (graficos.js:dadosParaLer,
+   graficos.js:cabecaDaLeitura; o gesto é dos ouvintes do documento,
+   graficos.js:mostrarColuna): uma guia acompanha o ano mais próximo e a
+   leitura («2031 · 142 310 €») fica no lugar reservado por cima das barras,
+   acesa no ano corrente e de volta a ele ao largar. O desenho é o de sempre;
+   as colunas ficam no meio de cada barra, passadas às unidades do leitor
+   (graficos.js:W), porque o SVG tem dez unidades por ano e estica à largura.
+   Recebe: anos — os anos civis (números); somas — a dívida no fim de cada um;
+   agora — o índice do ano corrente; svg — o HTML do desenho das barras.
+   Devolve: o HTML do contentor .chartler com a cabeça e a caixa do desenho. */
+function credBarrasLer(anos,somas,agora,svg){
+  const n=anos.length,rot=anos.map(String),xs=anos.map((_,i)=>(i*10+5)/(n*10)*W);
+  const serie=[{nome:'',cor:'var(--side-text)',vals:somas}];
+  return cabecaDaLeitura(`<div class="chartbox cred-r-caixa"${dadosParaLer(rot,serie,xs,euro)}>${svg}</div>`,rot,serie,euro,'',agora);
+}
+/* O cartão de uma hipoteca: o nome e o imóvel, o selo do tipo de taxa, a taxa
+   por extenso, o fim da taxa fixa quando está perto, a prestação (e a de
+   depois da fase fixa), o capital em dívida com as prestações por pagar e a
+   barra do capital do início já pago; no telemóvel, os botões Pagamento e
+   Plano. Tocar lê (mortView: a ficha, ou no computador o painel ao lado). Uma
+   liquidada diz só que já não há dívida.
+   Recebe: x — {p,l}; sel — a chave da hipoteca aberta ao lado.
+   Devolve: o HTML do cartão (texto). */
+function credCartao(x,sel){
+  const {p,l}=x,viva=Number(l.outstanding)>0,c=viva?loanCalc(l):null,id=jsq(p.id),lid=jsq(l.id);
+  const depois=viva?credDepois(l):null,c0=viva?capitalDoInicio(l,db.transactions||[]):0;
+  const pct=c0>0?Math.max(0,Math.min(100,(c0-Number(l.outstanding))/c0*100)):0;
+  /* pagar abre o formulário do movimento (dos Movimentos) e mexe na hipoteca (motivoCredito); o plano é dos Créditos */
+  const pagar=viva&&servicoLigado('transactions')&&!motivoCredito(p.id);
+  const acoes=viva?(pagar?`<button type="button" class="btn sm" data-toca="camada" data-click="pagarCreditoDaHipoteca('${id}','${lid}')">Pagamento</button>`:'')
+    +`<button type="button" class="btn sm" data-toca="camada" data-click="amortModal('${id}','${lid}')">Plano</button>`:'';
+  return `<div class="card cred-hp${credChave(p,l)===sel?' on':''}${viva?'':' paga'}" data-cred="${esc(credChave(p,l))}">
+    <div class="cred-hp-corpo tap" data-lp="mort:${esc(p.id)}:${esc(l.id)}" data-fk="mort:${esc(p.id)}:${esc(l.id)}" data-toca="camada" data-click="mortView('${id}','${lid}')">
+      <div class="cred-hp-cab"><div class="cred-hp-nome"><h3>${esc(loanName(l))}</h3><p class="small">${esc(p.name)}</p></div>
+        ${viva?`<span class="badge loan">${esc(CRED_TIPO[l.type]||'')}</span>`:'<span class="badge grey">Liquidada</span>'}</div>
+      <p class="small num cred-hp-taxa">${esc(rateLabel(l))}</p>
+      ${viva?credSeloFixa(l)+`<div class="cred-hp-nums num">
+        <div><p class="small cred-rot">Prestação</p><p class="cred-v">${euro2(c.total)}<span class="small">/mês</span></p>${depois?`<p class="small cred-sub">depois: ${euro2(depois)}</p>`:''}</div>
+        <div class="cred-hp-div"><p class="small cred-rot">Em dívida</p><p class="cred-v">${euro(l.outstanding)}</p><p class="small cred-sub">${c.esgotado?'Prazo esgotado':c.n+(c.n===1?' prestação':' prestações')+' por pagar'}</p></div></div>
+      <div class="cred-barra" role="img" aria-label="${Math.round(pct)}% do capital do início já pago"><i data-largura="${pct.toFixed(1)}"></i></div>`
+      :'<p class="small">Crédito liquidado: já não há capital em dívida.</p>'}</div>
+    ${acoes?`<div class="cred-hp-acoes">${acoes}</div>`:''}</div>`;
+}
+/* As linhas do plano de amortização: o primeiro ano mês a mês e o resto por
+   ano civil. As doze primeiras prestações (as da amortização, credito.js:amort,
+   a contar do mês da primeira, creditos.js:credPrimeiraData) vão uma por
+   linha, com o mês e o ano («nov 2026»): é o ano que se está a viver, e é
+   mês a mês que se paga. Depois, uma linha por ano civil com a soma desse ano;
+   a primeira é o resto do ano em que acabam as doze (parcial: menos de doze
+   prestações), e a última a do ano em que o crédito acaba. Cada linha leva o
+   que se paga (capital + juros + selo — a prestação com o selo; na última
+   prestação o capital é o que falta, e não o da prestação calculada), o
+   capital, os juros, o selo, a dívida no fim (a do último mês da linha), a
+   taxa (a do último mês) e quantas prestações tem. As somas batem com as da
+   amortização: a soma de todas as linhas é a soma de todos os meses.
+   Recebe: l — a hipoteca.
+   Devolve: {meses, anos} — meses as até doze primeiras {rot,d,n,pay,cap,int,st,bal,rate}
+   (rot «nov 2026», d 'AAAA-MM', n 1); anos as seguintes {rot,yr,n,pay,cap,int,st,bal,rate}
+   (rot o ano em texto, n as prestações desse ano). */
+function planoLinhas(l){
+  const a=amort(l),d0=credPrimeiraData(l),meses=[],anos=[];
+  let yr=Number(d0.slice(0,4)),mes=Number(d0.slice(5,7)),ano=null;
+  a.rows.forEach((r,i)=>{
+    const pay=r.cap+r.int+r.st;
+    if(i<12)meses.push({rot:MES[mes-1]+' '+yr,d:yr+'-'+String(mes).padStart(2,'0'),n:1,pay,cap:r.cap,int:r.int,st:r.st,bal:r.bal,rate:r.rate});
+    else{
+      if(!ano||ano.yr!==yr)anos.push(ano={rot:String(yr),yr,n:0,pay:0,cap:0,int:0,st:0,bal:0,rate:r.rate});
+      ano.n++;ano.pay+=pay;ano.cap+=r.cap;ano.int+=r.int;ano.st+=r.st;ano.bal=r.bal;ano.rate=r.rate;
+    }
+    if(++mes>12){mes=1;yr++}
+  });
+  return {meses,anos};
+}
+/* O plano de amortização numa tabela que rola dentro da sua caixa
+   (creditos.js:planoLinhas): as doze primeiras prestações mês a mês e, a
+   seguir a uma linha de grupo «Anos seguintes», um ano civil por linha com a
+   soma desse ano. Colunas: o período, o que se paga (a prestação com o
+   selo), o capital, os juros, o selo e a dívida no fim. A taxa não tem
+   coluna — a 375px já eram seis a rolar —: vai por baixo do período na
+   primeira linha e onde muda (a passagem de uma mista à variável). Um ano
+   com menos de doze prestações diz quantas. Os meses levam os cêntimos (é o
+   que sai da conta); os anos, o euro inteiro, como sempre. Com max, os meses
+   e os primeiros max anos, e uma última linha com o ano em que acaba.
+   Recebe: l — a hipoteca viva; max (opcional) — quantos anos mostrar.
+   Devolve: o HTML da caixa com a tabela (texto). */
+function credTabela(l,max){
+  const r=planoLinhas(l),ms=r.meses,ys=r.anos,corta=!!max&&ys.length>max,ult=ys[ys.length-1];
+  const taxa=v=>dec(Math.round((Number(v)||0)*1000)/1000)+'%';
+  let antes=null;
+  /* a taxa por baixo do período: na primeira linha e sempre que muda */
+  const sub=x=>{const t=taxa(x.rate),muda=t!==antes;antes=t;
+    const n=x.yr&&x.n!==12?x.n+(x.n===1?' prestação':' prestações'):'';
+    const ps=[n,muda?'taxa '+t:''].filter(Boolean).join(' · ');
+    return ps?`<span class="cred-tab-sub">${esc(ps)}</span>`:''};
+  const linha=(x,f)=>`<tr><td><b>${esc(x.rot)}</b>${sub(x)}</td><td>${f(x.pay)}</td><td>${f(x.cap)}</td><td>${f(x.int)}</td><td>${f(x.st)}</td><td><b>${euro(x.bal)}</b></td></tr>`;
+  const anos=corta?ys.slice(0,max):ys;
+  return `<div class="cred-plano" role="region" aria-label="Plano de amortização: o primeiro ano mês a mês, depois ano a ano" tabindex="0"><table class="table cred-tab cred-tab-plano">
+    <thead><tr><th scope="col">Período</th><th scope="col">Prestação</th><th scope="col">Capital</th><th scope="col">Juros</th><th scope="col">Selo</th><th scope="col">Dívida no fim</th></tr></thead>
+    <tbody>${ms.map(x=>linha(x,euro2)).join('')}</tbody>
+    ${ys.length?`<tbody><tr class="cred-tab-grupo"><th scope="rowgroup" colspan="6"><span>Anos seguintes</span></th></tr>
+    ${anos.map(x=>linha(x,euro)).join('')}
+    ${corta?`<tr class="cred-tab-fim"><td>…</td><td></td><td></td><td></td><td></td><td>${ult.yr}: ${euro(ult.bal)}</td></tr>`:''}</tbody>`:''}</table></div>`;
+}
+/* O painel da hipoteca aberta, ao lado da lista no computador (o canvas
+   D-Creditos): o nome e o imóvel, o capital do início, o prazo, as prestações
+   registadas e os documentos; Pagamento, Plano e Editar (só a quem pode); a
+   prestação do próximo mês por dentro, a de depois da fase fixa, os juros e o
+   selo até ao fim; e o plano (creditos.js:credTabela): os doze primeiros
+   meses e os dez anos seguintes, com o ano em que acaba. O «Plano»
+   abre o plano inteiro e o gráfico (amortModal): no computador tocar numa
+   hipoteca escolhe-a aqui e não abre a ficha, e era na ficha que estava a
+   amortização. No telemóvel o painel não aparece: lá o plano abre-se no botão
+   «Plano» de cada cartão.
+   Recebe: x — {p,l} da hipoteca a mostrar, ou null.
+   Devolve: o HTML do painel (texto), com id credDetalhe para o credEscolher o repintar. */
+function credDetalhe(x){
+  if(!x)return '<section class="card cred-det" id="credDetalhe"><p class="hint">Escolhe uma hipoteca para veres o plano.</p></section>';
+  const {p,l}=x,viva=Number(l.outstanding)>0,id=jsq(p.id),lid=jsq(l.id),txs=db.transactions||[];
+  const c0=capitalDoInicio(l,txs),pagas=loanPaidN(l),docs=(l.files||[]).length,anos=Number(l.years)||0;
+  const meta=[c0>0?'Capital do início '+euro(c0):'',anos?anos+(anos===1?' ano':' anos')+(l.start?' desde '+dPT(l.start):''):(l.start?'Desde '+dPT(l.start):''),
+    pagas+(pagas===1?' prestação registada':' prestações registadas'),docs?docs+(docs===1?' documento':' documentos'):''].filter(Boolean).join(' · ');
+  const acoes=(viva&&servicoLigado('transactions')&&!motivoCredito(p.id)?`<button type="button" class="btn sm" data-toca="camada" data-click="pagarCreditoDaHipoteca('${id}','${lid}')">Pagamento</button>`:'')
+    +(viva?`<button type="button" class="btn sm" data-toca="camada" data-click="amortModal('${id}','${lid}')">Plano</button>`:'')
+    +(pode(p.id,'house.edit')?`<button type="button" class="btn sm" data-toca="camada" data-click="mortModal('${id}','${lid}')">Editar</button>`:'');
+  const cab=`<div class="cred-det-cab"><div class="cred-det-nome"><h2>${esc(loanName(l))} · ${esc(p.name)}</h2><p class="small num">${esc(meta)}</p></div>${acoes?`<div class="cred-det-acoes">${acoes}</div>`:''}</div>`;
+  if(!viva)return `<section class="card cred-det" id="credDetalhe">${cab}<p class="hint cred-det-nada">Crédito liquidado: já não há capital em dívida nem plano por cumprir.</p></section>`;
+  const c=loanCalc(l),a=amort(l),depois=credDepois(l),f=depois?credFimFixa(l):null;
+  const prox=credPrimeiraData(l);
+  const mes=d=>(MES[Number(String(d).slice(5,7))-1]||'')+(String(d).slice(0,4)!==today().slice(0,4)?' '+String(d).slice(0,4):'');
+  const vr=(Number(l.euribor)||0)+(Number(l.spread)||0);
+  return `<section class="card cred-det" id="credDetalhe">${cab}
+    <div class="cred-det-stats num">
+      <div><p class="small">Prestação de ${esc(mes(prox))}</p><p class="cred-v">${euro2(c.total)}</p><p class="small">capital ${euro2(c.principal)} · juros ${euro2(c.interest)}${l.stampTax===false?'':' · selo '+euro2(c.stamp)}</p></div>
+      ${depois?`<div><p class="small">${f?'A partir de '+esc(mes(f.fim)):'Depois da fase fixa'}</p><p class="cred-v">${euro2(depois)}</p><p class="small">Euribor ${esc(l.index||'')} ${esc(dec(l.euribor))}% + ${esc(dec(l.spread))}% = ${esc(dec(Math.round(vr*1000)/1000))}%</p></div>`:''}
+      <div><p class="small">Juros e selo até ao fim</p><p class="cred-v">${euro(a.totInt+a.totStamp)}</p></div></div>
+    ${credTabela(l,10)}</section>`;
+}
+/* No computador, tocar numa hipoteca da lista abre-a no painel ao lado: repinta
+   só o painel e acende o cartão, como o dia do calendário (calendario.js:calSel).
+   Recebe: pid — o id do imóvel; lid — o id da hipoteca.
+   Devolve: nada — mexe no DOM (ou redesenha a vista, se o painel não estiver lá). */
+function credEscolher(pid,lid){
+  credSel=pid+':'+lid;
+  const det=document.getElementById('credDetalhe'),p=prop(pid),l=p?findLoan(p,lid):null;
+  if(!det||!l)return render();
+  det.outerHTML=credDetalhe({p,l});
+  [].slice.call(document.querySelectorAll('.cred-hp[data-cred]')).forEach(e=>e.classList.toggle('on',e.getAttribute('data-cred')===credSel));
+  tornarFocavel(document.getElementById('credDetalhe'));
+}
+/* O estado das hipotecas a ver — Ativas, Liquidadas ou as duas —, pelo chip
+   do estado ou pelo seletor do painel (vistas.js:lfCabeca), que são o mesmo
+   filtro lf('lcred').st. Eram os chips Ativas / Liquidadas do computador; a
+   hipoteca escolhida no painel ao lado volta à primeira que se vê.
+   Recebe: v — '' (as duas), 'on' (ativas) ou 'off' (liquidadas).
+   Devolve: nada — muda o filtro e redesenha. */
+function credVerPagas(v){lf('lcred').st=v==='on'||v==='off'?v:'';credSel='';render()}
+/* O botão «Liquidadas» por baixo das ativas: abre e fecha a lista das já pagas.
+   Devolve: nada — muda a escolha e redesenha. */
+function credPagasAlternar(){credPagas=!credPagas;render()}
+/* A página dos Créditos (os canvas M-Creditos e D-Creditos): o resumo, o aviso
+   dos pagamentos sem hipoteca e, por cima do que filtram, os filtros dos
+   Movimentos (vistas.js:lfCabeca) — a pesquisa à vista com o funil do painel
+   completo, os chips do estado (Ativas, Liquidadas: creditos.js:credVerPagas)
+   e do imóvel, quando há mais de um com hipotecas, e a ordenação no ecrã
+   largo —; por baixo, as hipotecas em cartões: as ativas e, por um botão, as
+   liquidadas, em todos os ecrãs; no computador a lista fica à esquerda e a
+   hipoteca escolhida aberta à direita, com o plano. «Nova hipoteca» está no
+   cabeçalho do computador; no telemóvel, ao lado do título das ativas, e no
+   vazio.
+   Devolve: o HTML da vista (texto). */
 function vCredits(){
   const K='lcred',s=lf(K);
   const rows=[];
   scope().forEach(p=>loansOf(p).forEach(l=>rows.push({p,l})));
   const live=rows.filter(x=>Number(x.l.outstanding)>0);
-  const shown=lfSort(K,rows.filter(({p,l})=>{
-    if(s.p&&p.id!==s.p)return false;
-    if(s.st==='on'&&!(Number(l.outstanding)>0))return false;
-    if(s.st==='off'&&Number(l.outstanding)>0)return false;
-    return lfHit(K,[loanName(l),l.name,l.bank,p.name,RATE[l.type],String(l.outstanding)].join(' '));
-  }),{divida:x=>x.l.outstanding,prestacao:x=>Number(x.l.outstanding)>0?loanCalc(x.l).total:0,nome:x=>loanName(x.l),imovel:x=>x.p.name});
-  const tot=sum(live.map(x=>x.l.outstanding)),pay=sum(live.map(x=>loanCalc(x.l).total));
+  /* a pesquisa e o imóvel; o estado à parte, para as contagens do chip */
+  const passa=({p,l})=>(!s.p||p.id===s.p)&&lfHit(K,[loanName(l),l.name,l.bank,p.name,RATE[l.type],String(l.outstanding)].join(' '));
+  const viva=x=>Number(x.l.outstanding)>0;
+  const semEstado=rows.filter(passa);
+  const shown=lfSort(K,semEstado.filter(x=>s.st==='on'?viva(x):s.st==='off'?!viva(x):true),
+    {divida:x=>x.l.outstanding,prestacao:x=>viva(x)?loanCalc(x.l).total:0,nome:x=>loanName(x.l),imovel:x=>x.p.name});
   /* uma hipoteca grava-se na ficha do imóvel: sem «Editar a ficha» em imóvel
      nenhum (o Contabilista de fábrica vê os créditos e não os edita), o botão
-     — o FAB e o do vazio — só levava a uma recusa no Guardar */
+     — o do título e o do vazio — só levava a uma recusa no Guardar */
   const adiciona=casasComo('house.edit').length;
-  const head=lfBar(K,[lfSel(K,'p',lfPropOpts()),
-      lfSel(K,'st',[{v:'',label:'Ativas e liquidadas'},{v:'on',label:'Ativas'},{v:'off',label:'Liquidadas'}])],shown.length,
-      {opts:[{v:'divida',label:'Ordenar por dívida'},{v:'prestacao',label:'Ordenar por prestação'},{v:'nome',label:'Ordenar por nome'},{v:'imovel',label:'Ordenar por imóvel'}]})
-    +(adiciona?fab([{label:'Nova hipoteca',act:'newMort()'}]):'');
-  const kpis=`<div class="grid u-mb-14px">
-    ${kpi('Em dívida',euro(tot),'amber',live.length+(live.length===1?' hipoteca ativa':' hipotecas ativas'))}
-    ${kpi('Prestações',euro2(pay),'neg','por mês, no total')}
-    ${kpi('Juros até ao fim',euro(sum(live.map(x=>{const a=amort(x.l);return a.totInt+a.totStamp}))),'neg','com imposto do selo')}</div>`;
   /* sem imóveis, o botão do canto só dava um aviso a dizer que faltava um
-     imóvel: um caminho que acaba num aviso não é um caminho */
-  if(!rows.length)return head+(esperaDoServidor()||`<div class="empty"><b>Sem hipotecas</b>${db.properties.length
+     imóvel: um caminho que acaba num aviso não é um caminho. E sem hipotecas
+     não há o que pesquisar nem filtrar: fica o vazio com o seu botão */
+  if(!rows.length)return esperaDoServidor()||`<div class="empty"><b>Sem hipotecas</b>${db.properties.length
     ?'Uma hipoteca está sempre associada a um imóvel.'+(adiciona?' Cria a primeira aqui ou na ficha do imóvel.'+saida('Nova hipoteca','newMort()','camada'):'')
-    :'Uma hipoteca está sempre associada a um imóvel, e ainda não há nenhum.'+saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`);
-  if(!shown.length)return head+kpis+vazioFiltro();
-  const mortCard=({p,l})=>{const live2=Number(l.outstanding)>0,c=live2?loanCalc(l):null;
-    return `<div class="card tap" data-lp="mort:${esc(p.id)}:${esc(l.id)}" data-fk="mort:${esc(p.id)}:${esc(l.id)}" data-toca="camada" data-click="mortView('${jsq(p.id)}','${jsq(l.id)}')">
-      <div class="row-between"><div class="u-minw-0"><div class="title">${esc(loanName(l))} ${live2?'':'<span class="badge grey">liquidada</span>'}</div>
-        <div class="small">${esc(p.name)} · ${esc(RATE[l.type]||'')} · ${esc(rateLabel(l))}${(l.files||[]).length?' · '+l.files.length+' doc.':''}</div></div>
-        <div class="u-d-flex u-g-8px u-fx-0-0-auto u-ai-flex-start">
-          <div class="u-ta-right"><b>${euro(l.outstanding)}</b>${live2?`<div class="small">${euro2(c.total)}/mês</div>`:''}</div>
-          ${kebab('mort:'+p.id+':'+l.id)}</div></div></div>`};
-  /* os pagamentos sem crédito são movimentos: sem o serviço dos Movimentos nesta conta não há cartão a mostrar */
-  const aviso=(servicoLigado('transactions')?creditosOrfaos():[]).filter(x=>!motivoCredito(x.p.id)).map(({p,l,txs})=>`<div class="card u-mb-14px">
-    <div class="title">${txs.length===1?'1 pagamento sem crédito associado':txs.length+' pagamentos sem crédito associado'}</div>
-    <div class="small">${esc(p.name)} · ${euro2(sum(txs.map(t=>t.amount||0)))} · ${txs.length===1?'não abateu':'não abateram'} capital nenhum a ${esc(loanName(l))}.</div>
-    <div class="toolbar u-m-9px-0-0"><button class="btn sm primary" data-toca="dados" data-click="associarOrfaos('${jsq(p.id)}','${jsq(l.id)}')">Associar à hipoteca ${esc(loanName(l))}</button></div></div>`).join('');
-  const act=shown.filter(x=>Number(x.l.outstanding)>0),paid=shown.filter(x=>!(Number(x.l.outstanding)>0));
-  const emLista=(id,xs)=>listaViva(id,xs.map(x=>({chave:'mort:'+x.p.id+':'+x.l.id,html:mortCard(x)})));
-  const list=aviso+(act.length?emLista('creditos-ativos',act):'')
-    +(paid.length?`<div class="section-title ${act.length?'u-mt-18px':'u-mt-0px'}">Créditos antigos já pagos</div>`
-      +emLista('creditos-pagos',paid)
-      +`<div class="hint u-mt-10px">Se editares um pagamento e a dívida voltar a subir, o crédito volta para a lista de cima.</div>`:'');
-  return head+kpis+list+`<div class="hint u-mt-12px">Também podes geri-las na ficha de cada imóvel.</div>`;
+    :'Uma hipoteca está sempre associada a um imóvel, e ainda não há nenhum.'+saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`;
+  /* os imóveis do âmbito com hipotecas, e o escolhido mesmo que já não tenha */
+  const comHipotecas=scope().filter(p=>loansOf(p).length||p.id===s.p);
+  const nAtivas=semEstado.filter(viva).length;
+  const head=lfCabeca(K,{nome:['hipoteca','hipotecas'],dos:'das hipotecas',n:shown.length,
+    campos:[{chave:'st',nome:'Estado',curto:'Todas',rapido:true,aplicar:credVerPagas,
+        opcoes:[{v:'',label:'Ativas e liquidadas'},{v:'on',label:'Ativas',n:nAtivas},{v:'off',label:'Liquidadas',n:semEstado.length-nAtivas}]},
+      {chave:'p',nome:'Imóvel',curto:'Todos',rapido:comHipotecas.length>1||!!s.p,
+        opcoes:[{v:'',label:'Todos os imóveis'}].concat(comHipotecas.map(p=>({v:p.id,label:p.name})))}],
+    ordem:{opcoes:[{v:'divida',label:'Dívida'},{v:'prestacao',label:'Prestação'},{v:'nome',label:'Nome'},{v:'imovel',label:'Imóvel'}],rapido:'largo'}});
+  const resumo=credResumo(live);
+  if(!shown.length)return resumo+head+vazioFiltro();
+  /* os pagamentos sem crédito são movimentos: sem o serviço dos Movimentos nesta conta não há aviso a mostrar */
+  const aviso=(servicoLigado('transactions')?creditosOrfaos():[]).filter(x=>!motivoCredito(x.p.id)).map(({p,l,txs})=>`<div class="cred-aviso">
+    <span class="cred-aviso-ic">${ic('bank',20)}</span>
+    <p><b>${txs.length===1?'1 pagamento sem crédito associado':txs.length+' pagamentos sem crédito associado'}</b> em ${esc(p.name)} (${euro2(sum(txs.map(t=>t.amount||0)))}): ${txs.length===1?'não abateu':'não abateram'} capital nenhum a «${esc(loanName(l))}». Associar dá a cada um os juros, o selo e o capital do plano na sua data.</p>
+    <button type="button" class="btn sm" data-toca="dados" data-click="associarOrfaos('${jsq(p.id)}','${jsq(l.id)}')" aria-label="${esc('Associar à hipoteca '+loanName(l))}">Associar</button></div>`).join('');
+  const act=shown.filter(viva),paid=shown.filter(x=>!viva(x));
+  /* as liquidadas à vista: abertas pelo botão por baixo das ativas, ou as
+     únicas que passam o filtro (o estado «Liquidadas»). O painel do
+     computador escolhe entre as que se veem */
+  const verPagas=(credPagas&&paid.length>0)||!act.length,aVista=verPagas?act.concat(paid):act;
+  const x=aVista.find(y=>credChave(y.p,y.l)===credSel)||aVista[0]||null;
+  const sel=x?credChave(x.p,x.l):'';
+  const emLista=(id,xs)=>listaViva(id,xs.map(y=>({chave:'mort:'+y.p.id+':'+y.l.id,html:credCartao(y,sel)})));
+  const novo=adiciona?'<button type="button" class="btn sm ghost plan-novo" data-toca="camada" data-click="newMort()">Nova hipoteca</button>':'';
+  const col=`<div class="plan-cab cred-cab"><h2>${act.length?'Ativas':'Liquidadas'}</h2>${novo}</div>`
+    +(act.length?`<div class="cred-ativas">${emLista('creditos-ativos',act)}</div>`:'')
+    +(paid.length&&act.length?`<button type="button" class="btn cred-liq" aria-expanded="${verPagas?'true':'false'}" data-toca="vista" data-click="credPagasAlternar()"><span>Liquidadas <span class="small">· ${paid.length}</span></span><span class="cred-liq-chev${verPagas?' aberto':''}">${ic('chevD',20)}</span></button>`:'')
+    +(paid.length?`<div class="cred-pagas">${emLista('creditos-pagos',paid)}<p class="hint">Se editares um pagamento e a dívida voltar a subir, o crédito volta para as ativas.</p></div>`:'');
+  return resumo+aviso+head+`<div class="cred-corpo${verPagas?' abertas':''}"><div class="cred-col">${col}</div>${credDetalhe(x)}</div>`;
 }
 /* Os pagamentos de crédito de um imóvel que estão à espera de hipoteca: os que
    nasceram de um planeado sem crédito e por isso nunca abateram capital
@@ -162,7 +400,8 @@ function newMort(){
    «Quanto falta pagar, quanto sai por mês, a que taxa e até quando — e
    quanto me custa até ao fim.» A taxa vai inteira numa linha (o rateLabel já
    escreve «fixa 3,2%» ou «Euribor 6m 2,1% + 1% = 3,1%»): a ficha diz a taxa,
-   não os campos que a compõem.
+   não os campos que a compõem. O custo até ao fim chama-se «Juros e selo até
+   ao fim», como no resumo e no painel (só «Juros» numa hipoteca sem selo).
    Recebe: pid — o id do imóvel; lid — o id da hipoteca.
    Devolve: o HTML do corpo, ou vazio se a hipoteca já não existir. */
 function mortFicha(pid,lid){
@@ -184,7 +423,8 @@ function mortFicha(pid,lid){
     {rotulo:'Taxa',valor:esc(rateLabel(l))},
     l.start?{rotulo:'Início',valor:dPT(l.start)}:null,
     Number(l.years)>0?{rotulo:'Prazo',valor:l.years+(Number(l.years)===1?' ano':' anos')}:null,
-    a?{rotulo:'Juros até ao fim',valor:euro(a.totInt+a.totStamp)}:null,
+    /* o mesmo número e o mesmo nome do resumo e do painel; sem selo, são só juros */
+    a?{rotulo:l.stampTax===false?'Juros até ao fim':'Juros e selo até ao fim',valor:euro(a.totInt+a.totStamp)}:null,
     l.stampTax===false?{tipo:'nota',valor:'Sem imposto do selo.'}:null,
     l.autoRec===false?{tipo:'nota',valor:'Não cria o movimento recorrente da prestação.'}:null,
   ]);
@@ -197,12 +437,17 @@ function mortFicha(pid,lid){
 function pagarCreditoDaHipoteca(pid,lid){
   txModal({kind:'loan',propId:pid,preset:{loanId:lid}});
 }
-/* A ficha de uma hipoteca: o que tocar numa hipoteca passa a abrir.
+/* A ficha de uma hipoteca: o que tocar numa hipoteca passa a abrir. Na página
+   dos Créditos de um ecrã largo a hipoteca lê-se no painel ao lado da lista
+   (#credDetalhe, à vista só no computador): aí tocar escolhe-a lá
+   (credEscolher), em vez de abrir uma janela por cima do que já se está a ler.
    Recebe: pid — o id do imóvel; lid — o id da hipoteca.
-   Devolve: nada — abre a janela. */
+   Devolve: nada — abre a janela (ou escolhe a hipoteca no painel). */
 function mortView(pid,lid){
   const p=prop(pid),l=p?findLoan(p,lid):null;if(!l)return;
   if(!pode(pid,'loan.view'))return;
+  const det=typeof document!=='undefined'?document.getElementById('credDetalhe'):null;
+  if(tab==='credits'&&det&&det.isConnected===true&&det.offsetParent)return credEscolher(pid,lid);
   abrirFicha({
     titulo:()=>{const q=prop(pid),x=q?findLoan(q,lid):null;return x?loanName(x):'Hipoteca'},
     corpo:()=>mortFicha(pid,lid),
@@ -372,18 +617,60 @@ function inserirPrestacoesEmFalta(p,l,lista){
 /* ---- a amortização: a projeção ano a ano de uma hipoteca ----
    É informação da hipoteca, e não toca em movimentos: vive nos Créditos, e
    abre com os Movimentos desligados. */
-// Agrega o plano de amortização da hipoteca em linhas anuais (capital, juros, selo,
-// taxa e dívida no fim do ano) e devolve também os totais de juros e selo até ao fim.
-// Recebe: l — a hipoteca (objeto).
-// Devolve: {yrs,totInt,totStamp} — yrs é a lista anual de {yr,int,st,cap,bal,rate} (valores em euros, rate em %).
+/* O dia da primeira prestação do plano — a primeira linha da amortização: a
+   próxima por confirmar, quando os Planeados a têm; senão, hoje. É o relógio
+   do painel (creditos.js:credDetalhe, «Prestação de …») e o das linhas por ano
+   (creditos.js:yearRows). A amortização abre com os Planeados desligados, daí
+   a guarda.
+   Recebe: l — a hipoteca.
+   Devolve: a data em 'AAAA-MM-DD' (texto). */
+function credPrimeiraData(l){
+  const r0=servicoLigado('recurring')?loanRecOf(l):null,d=String((r0&&r0.next)||'');
+  return /^\d{4}-\d{2}-\d{2}$/.test(d)?d:today();
+}
+/* Agrega o plano de amortização da hipoteca em linhas por ano civil (capital,
+   juros, selo, taxa e dívida no fim do ano) e devolve também os totais de
+   juros e selo até ao fim. A primeira linha leva as prestações do mês da
+   primeira (creditos.js:credPrimeiraData) até dezembro; as seguintes, doze
+   cada; e cada uma tem o seu ano verdadeiro. Eram blocos de doze prestações a
+   contar de hoje com o nome dos anos civis: a linha «2026» levava prestações
+   de 2027, e a tabela acabava um ano antes da última.
+   Recebe: l — a hipoteca (objeto).
+   Devolve: {yrs,totInt,totStamp} — yrs é a lista anual de {yr,int,st,cap,bal,rate}
+   (yr o ano civil, valores em euros, rate em % — a do último mês do ano). */
 function yearRows(l){
-  const a=amort(l),yrs=[];let ai=0,as=0,ac=0,bal=l.outstanding,yr=YEAR;
+  const a=amort(l),yrs=[],d0=credPrimeiraData(l);
+  let ai=0,as=0,ac=0,bal=l.outstanding,yr=Number(d0.slice(0,4)),mes=Number(d0.slice(5,7));
   a.rows.forEach((r,i)=>{ai+=r.int;as+=r.st;ac+=r.cap;bal=r.bal;
-    if((i+1)%12===0||i===a.rows.length-1){yrs.push({yr:yr++,int:ai,st:as,cap:ac,bal,rate:r.rate});ai=as=ac=0}});
+    if(mes===12||i===a.rows.length-1){yrs.push({yr,int:ai,st:as,cap:ac,bal,rate:r.rate});ai=as=ac=0}
+    if(++mes>12){mes=1;yr++}});
   return {yrs,totInt:a.totInt,totStamp:a.totStamp};
 }
+/* A dívida no fim de cada ano civil de várias hipotecas, para as barras do
+   resumo (creditos.js:credResumo) e o gráfico de todas na amortização
+   (creditos.js:amortModal). Soma-se pelo ano de cada linha, e não pela
+   posição: os anos vão do primeiro ano do plano de alguma delas ao último;
+   antes do primeiro ano do seu plano uma hipoteca ainda deve o capital em
+   dívida de agora (a próxima prestação só cai no ano seguinte), e depois do
+   último já não deve nada.
+   Recebe: ls — as hipotecas (array).
+   Devolve: {anos, por, somas} — anos os anos civis por ordem (números); por a
+   dívida de cada hipoteca no fim de cada ano (um array por hipoteca, na ordem
+   de ls); somas a soma de todas em cada ano. Sem planos, tudo vazio. */
+function credDividaPorAno(ls){
+  const planos=(ls||[]).map(l=>yearRows(l).yrs),cheios=planos.filter(y=>y.length);
+  if(!cheios.length)return {anos:[],por:planos.map(()=>[]),somas:[]};
+  const y0=Math.min(...cheios.map(y=>y[0].yr)),y1=Math.max(...cheios.map(y=>y[y.length-1].yr)),anos=[];
+  for(let a=y0;a<=y1;a++)anos.push(a);
+  const por=planos.map((y,i)=>anos.map(a=>{
+    if(!y.length)return 0;
+    if(a<y[0].yr)return Number(ls[i].outstanding)||0;
+    const r=y.find(x=>x.yr===a);return r?r.bal:0}));
+  return {anos,por,somas:anos.map((_,k)=>sum(por.map(v=>v[k])))};
+}
 let amortPid=null,amortLid='';
-/* Modal da amortização de um imóvel: com uma hipoteca escolhida, gráfico e tabela ano a ano;
+/* Modal da amortização de um imóvel: com uma hipoteca escolhida, o gráfico ano a ano e a tabela
+   (o primeiro ano mês a mês, depois ano a ano: creditos.js:credTabela);
    sem escolha, todas as hipotecas com a linha do total. Abre sempre uma janela nova (a ficha
    e o toque longo de uma hipoteca já trazem a hipoteca escolhida); só o seletor da própria
    janela (onAmortSel) troca o conteúdo no sítio. Sem hipoteca dada, escolhe sozinho se só
@@ -399,21 +686,20 @@ function amortModal(pid,lid,trocar){
   let body='';
   if(amortLid){
     const l=findLoan(p,amortLid),r=yearRows(l);
-    body=`${cLine([{name:'Em dívida',values:r.yrs.map(y=>y.bal),color:'#d6a34a'}],r.yrs.map(y=>String(y.yr)),{h:180,marks:decadeMarks(r.yrs[0]?r.yrs[0].yr:YEAR,r.yrs.length)})}
-      <div class="tablewrap"><table class="table"><thead><tr><th>Ano</th><th>Taxa</th><th>Capital</th><th>Juros</th><th>Selo</th><th>Em dívida</th></tr></thead>
-      <tbody>${r.yrs.map(y=>`<tr><td><b>${y.yr}</b></td><td>${esc(dec(y.rate))}%</td><td>${euro(y.cap)}</td><td class="neg">${euro(y.int)}</td><td class="amber">${euro(y.st)}</td><td>${euro(y.bal)}</td></tr>`).join('')}</tbody></table></div>
+    /* a tabela é a do painel do computador (credTabela), inteira, e rola na sua caixa */
+    body=`${cLine([{name:'Em dívida',values:r.yrs.map(y=>y.bal),color:COR_SERIE.divida}],r.yrs.map(y=>String(y.yr)),{h:180,marks:decadeMarks(r.yrs[0]?r.yrs[0].yr:YEAR,r.yrs.length)})}
+      ${credTabela(l)}
       <div class="hint">Juros ${euro(r.totInt)} + imposto do selo ${euro(r.totStamp)} = <b>${euro(r.totInt+r.totStamp)}</b>.</div>`;
   }else{
-    const per=ls.map(l=>({l,r:yearRows(l)}));
-    const nY=Math.max(...per.map(x=>x.r.yrs.length));
-    const totals=[...Array(nY)].map((_,i)=>sum(per.map(x=>x.r.yrs[i]?x.r.yrs[i].bal:0)));
-    body=`${cLine(per.map((x,i)=>({name:loanName(x.l),values:[...Array(nY)].map((_,k)=>x.r.yrs[k]?x.r.yrs[k].bal:0),color:PAL[i%PAL.length]}))
-        .concat([{name:'Total',values:totals,color:'#d6a34a'}]),[...Array(nY)].map((_,i)=>String(YEAR+i)),{h:200,marks:decadeMarks(YEAR,nY)})}
-      <div class="tablewrap"><table class="table"><thead><tr><th>Hipoteca</th><th>Em dívida</th><th>Prestação</th><th>Juros até ao fim</th><th>Selo</th></tr></thead>
+    /* as linhas somam-se pelo ano civil de cada uma (credDividaPorAno), e não pela posição */
+    const per=ls.map(l=>({l,r:yearRows(l)})),d=credDividaPorAno(ls);
+    body=`${cLine(per.map((x,i)=>({name:loanName(x.l),values:d.por[i],color:PAL[i%PAL.length]}))
+        .concat([{name:'Total',values:d.somas,color:COR_SERIE.divida}]),d.anos.map(String),{h:200,marks:decadeMarks(d.anos[0]||YEAR,d.anos.length)})}
+      <div class="cred-plano" role="region" aria-label="As hipotecas do imóvel" tabindex="0"><table class="table cred-tab"><thead><tr><th scope="col">Hipoteca</th><th scope="col">Em dívida</th><th scope="col">Prestação</th><th scope="col">Juros até ao fim</th><th scope="col">Selo</th></tr></thead>
       <tbody>${per.map(x=>`<tr><td><b>${esc(loanName(x.l))}</b><div class="small">${esc(RATE[x.l.type]||'')} · ${esc(x.l.years)} anos</div></td>
-        <td>${euro(x.l.outstanding)}</td><td>${euro2(loanCalc(x.l).total)}</td><td class="neg">${euro(x.r.totInt)}</td><td class="amber">${euro(x.r.totStamp)}</td></tr>`).join('')}
-        <tr><td><b>Total</b></td><td><b>${euro(debtOf(p))}</b></td><td><b>${euro2(payOf(p))}</b></td>
-          <td class="neg"><b>${euro(sum(per.map(x=>x.r.totInt)))}</b></td><td class="amber"><b>${euro(sum(per.map(x=>x.r.totStamp)))}</b></td></tr>
+        <td>${euro(x.l.outstanding)}</td><td>${euro2(loanCalc(x.l).total)}</td><td>${euro(x.r.totInt)}</td><td>${euro(x.r.totStamp)}</td></tr>`).join('')}
+        <tr class="cred-tab-total"><td><b>Total</b></td><td><b>${euro(debtOf(p))}</b></td><td><b>${euro2(payOf(p))}</b></td>
+          <td><b>${euro(sum(per.map(x=>x.r.totInt)))}</b></td><td><b>${euro(sum(per.map(x=>x.r.totStamp)))}</b></td></tr>
       </tbody></table></div>`;
   }
   (trocar?setModal:openModal)('Amortização · '+p.name,`<div class="form">

@@ -2,7 +2,7 @@
    ---------------------------------------------------
    Os cartões e as ações dos grupos partilhados: criar ou partilhar um grupo,
    a ligação de convite por onde os outros pedem para entrar, os pedidos
-   (aceitar, recusar, cancelar), pôr e tirar imóveis, sair, apagar, e a
+   (aceitar, recusar, cancelar), adicionar e remover imóveis, sair, apagar, e a
    aterragem de ?grupo=<token>. O servidor decide, o cliente esconde
    (worker/src/rotas/grupos.js).
 
@@ -40,6 +40,28 @@ function grupoPartilhado(id) {
 function gruposPartilhados() {
   return (db.groups || []).filter(function (g) { return g._partilhado; });
 }
+
+// Os grupos partilhados em que estou com outra conta (membro ou dono).
+// Recebe: uid — o id da conta do outro.
+// Devolve: array de grupos de db.groups (os _partilhado).
+function gruposComDono(uid) {
+  return gruposPartilhados().filter(function (g) {
+    return g._dono === uid || (g._membros || []).some(function (m) { return m.id === uid; });
+  });
+}
+
+/* «Editar casas partilhadas» na ficha de um proprietário com quem só partilho
+   por grupo: abre os meus imóveis do grupo (CW.grupoImoveis); com mais de um
+   grupo em comum, escolhe-se primeiro qual.
+   Recebe: uid — o id da conta do outro.
+   Devolve: nada — abre a janela (ou a escolha do grupo). */
+CW.casasDoGrupoCom = function (uid) {
+  var gs = gruposComDono(uid);
+  if (!gs.length) return;
+  if (gs.length === 1) return CW.grupoImoveis(gs[0].id);
+  pickModal('Que grupo?', gs.map(function (g) { return { v: g.id, label: g.name || 'Grupo partilhado' }; }),
+    function (o) { closeModal(); CW.grupoImoveis(o.v); });
+};
 
 /* A chave, no aparelho, do URL da ligação de um grupo — por grupo e por
    conta, como a da ligação de partilha (colaboradores.js:guardarLigacao):
@@ -153,7 +175,7 @@ function pedidosParaEntrar(gid) {
 
 /* Um pedido para entrar que já teve resposta sai já do estado em memória,
    sem esperar pela leitura: o cartão «Pedidos por responder», o sino, a
-   janela do grupo e o cartão «Grupos partilhados» deixam de oferecer os
+   janela do grupo e o cartão dele no separador Grupos deixam de oferecer os
    botões mesmo que a leitura a seguir falhe. A leitura seguinte traz a
    verdade do servidor por cima.
    Recebe: gid — o id do grupo; uid — o id de quem pediu (um pedido que me
@@ -234,7 +256,7 @@ CW.grupoCancelarPedido = function (gid) {
    «Aceitar» e «Recusar»); os membros (o dono marcado, eu com «(eu)»,
    «Remover» nos outros só para o dono, «Sair do grupo» para quem não é
    dono); os imóveis com o dono de cada um e «Tirar» a quem pode (o dono do
-   grupo, o dono do imóvel); «Pôr os meus imóveis…» (ou a saída para criar o
+   grupo, o dono do imóvel); «Adicionar os meus imóveis…» (ou a saída para criar o
    primeiro); e, só para o dono, a ligação de convite — criar, ou copiar,
    rodar e desativar, com «expira a <data> · usada N vezes». O que o servidor
    recusaria não se escreve.
@@ -256,7 +278,7 @@ function corpoDoGrupo(g) {
         '<span class="small">quer entrar' + (quando ? ' · pediu a ' + esc(quando) : '') + '</span></span></div>' +
         '<div class="toolbar u-mt-9px">' +
         '<button class="btn primary sm" data-toca="dados" data-click="CW.grupoAceitarPedido(\'' + gid + '\',\'' + jsq(p.userId) + '\')">Aceitar</button>' +
-        '<button class="btn sm danger" data-toca="dados" data-click="CW.grupoRecusarPedido(\'' + gid + '\',\'' + jsq(p.userId) + '\')">Recusar</button></div></div>';
+        '<button class="btn sm" data-toca="dados" data-click="CW.grupoRecusarPedido(\'' + gid + '\',\'' + jsq(p.userId) + '\')">Recusar</button></div></div>';
     }).join('') + '</div>' +
     '<div class="hint u-mt-6px">Se aceitares, passa a comproprietário dos imóveis do grupo — vê e edita contratos, movimentos e pessoas.</div></div>';
   var membros = (g._membros || []).map(function (m) {
@@ -305,7 +327,7 @@ function corpoDoGrupo(g) {
   return '<div class="form">' + intro + pedidosHtml +
     '<div><div class="flabel">Membros</div><div class="list u-g-7px">' + membros + '</div>' + sair + '</div>' +
     '<div><div class="flabel">Imóveis</div>' +
-    (casas ? '<div class="list u-g-7px">' + casas + '</div>' : '<div class="hint">Ainda não há imóveis no grupo. Os que os membros puserem ficam partilhados com todos.</div>') +
+    (casas ? '<div class="list u-g-7px">' + casas + '</div>' : '<div class="hint">Ainda não há imóveis no grupo. Os que os membros adicionarem ficam partilhados com todos.</div>') +
     por + '</div>' + ligacao + '</div>';
 }
 
@@ -369,7 +391,7 @@ CW.grupoRenomear = function (id) {
   }, 'Casas de Lisboa');
 };
 
-/* «Pôr os meus imóveis…»: a janela com as minhas casas (cwMinha) em caixas,
+/* «Adicionar os meus imóveis…»: a janela com as minhas casas (cwMinha) em caixas,
    as que já estão no grupo marcadas; guardar envia o conjunto inteiro
    (PUT …/houses {houseIds} substitui o que EU pus — os imóveis dos outros
    não se tocam por aqui).
@@ -435,9 +457,8 @@ CW.grupoRemoverMembro = function (id, uid) {
 CW.grupoSair = function (id) {
   var g = grupoPartilhado(id), nome = (g && g.name) || 'o grupo';
   confirmModal('Sair do grupo', 'Deixas de ver os imóveis de <b>«' + esc(nome) + '»</b>, e os imóveis que adicionaste são removidos do grupo. Os movimentos já registados ficam em cada imóvel.', function () {
-    api('DELETE', '/api/shared-groups/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(meuId()))
+    grupoSairNoServidor(id)
       .then(function () {
-        desligarGrupoLocal(id);
         closeAllModals();
         toast('Saíste do grupo «' + nome + '».');
         return pullNow(true);
@@ -460,9 +481,8 @@ CW.grupoApagar = function (id) {
   var antigos = (db.transactions || []).filter(function (t) { return t.groupId === id; }).length;
   confirmModal('Apagar grupo', 'O grupo <b>«' + esc(nome) + '»</b> desaparece para todos os membros: deixam de ver os imóveis uns dos outros por ele. Os imóveis e os registos ficam com quem os criou. Os movimentos já registados ficam em cada imóvel.' +
     (antigos ? ' ' + (antigos === 1 ? 'Um movimento antigo, ainda por dividir, fica' : antigos + ' movimentos antigos, ainda por dividir, ficam') + ' sem imóvel.' : ''), function () {
-    api('DELETE', '/api/shared-groups/' + encodeURIComponent(id))
+    grupoApagarNoServidor(id)
       .then(function () {
-        desligarGrupoLocal(id);
         closeAllModals();
         toast('Grupo apagado.');
         return pullNow(true);
@@ -471,6 +491,27 @@ CW.grupoApagar = function (id) {
       .catch(function (e) { toast(e.message, { ms: 6000 }); });
   });
 };
+
+/* Apagar um grupo partilhado meu no servidor, sem perguntar (o CW.grupoApagar
+   pergunta antes; a seleção de vários pergunta uma vez por todos:
+   cloud/selecao-listas.js:selLApagarGrupos). Feito, o grupo sai já da base
+   (desligarGrupoLocal). Não lê o estado nem repinta: quem chama faz isso.
+   Recebe: id — o id do grupo.
+   Devolve: Promise que resolve com o grupo fora da base, ou rejeita com o erro do servidor. */
+function grupoApagarNoServidor(id) {
+  return api('DELETE', '/api/shared-groups/' + encodeURIComponent(id))
+    .then(function () { desligarGrupoLocal(id); });
+}
+
+/* Sair de um grupo partilhado de outra pessoa, sem perguntar (como o
+   grupoApagarNoServidor, para o CW.grupoSair e a seleção de vários): os
+   imóveis que lá pus saem comigo, e o grupo sai já da base.
+   Recebe: id — o id do grupo.
+   Devolve: Promise que resolve com o grupo fora da base, ou rejeita com o erro do servidor. */
+function grupoSairNoServidor(id) {
+  return api('DELETE', '/api/shared-groups/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(meuId()))
+    .then(function () { desligarGrupoLocal(id); });
+}
 
 /* ---------------- a ligação do grupo ---------------- */
 
@@ -588,7 +629,7 @@ function rodapeDeGrupoPorPartilhar(id) {
 function explicarGrupoVazio(g) {
   openModal('Este grupo ainda não tem imóveis',
     '<div class="form"><div class="hint u-fs-14px">O grupo <b>«' + esc(g.name || 'Sem nome') + '»</b> está vazio. Um grupo partilhado leva os imóveis teus que lá estão: junta-lhe pelo menos um em «Editar o grupo» e volta a tocar em «Partilhar».</div>' +
-    '<div class="hint">Para começar um grupo partilhado do zero, há «Novo grupo partilhado», no cartão «Grupos partilhados».</div></div>',
+    '<div class="hint">Para começar um grupo partilhado do zero, há «Novo grupo partilhado», nos imóveis dos Grupos.</div></div>',
     rodapeDeGrupoPorPartilhar(g.id));
 }
 
@@ -620,10 +661,9 @@ function explicarGrupoDosOutros(g, outras) {
 }
 
 /* Partilhar um grupo de imóveis privado que já existe. Chega-se aqui pelo
-   «Partilhar» que cada grupo de imóveis privado tem SEMPRE no separador
-   Grupos (app/definicoes.js:vGroups), por «Partilhar um grupo que já tens»
-   (CW.grupoEscolherParaPartilhar) e pela janela de edição do grupo (o botão
-   à vista e o ⋯). Por isso explica em vez de falhar: sem sessão, o ecrã de
+   «Partilhar» que cada grupo de imóveis privado tem SEMPRE no cartão dele, no
+   separador Grupos (app/definicoes.js:cartaoDoGrupo), e pela janela de
+   edição do grupo (o botão à vista e o ⋯). Por isso explica em vez de falhar: sem sessão, o ecrã de
    entrada com o porquê; com os Colaboradores desligados, a frase do
    serviço; um grupo vazio ou só com imóveis de outras pessoas, a janela que
    o diz (explicarGrupoVazio, explicarGrupoDosOutros). Com imóveis meus, diz
@@ -736,7 +776,7 @@ function desfechoDoGrupo(r, prev) {
     openModal('Pedido enviado',
       '<div class="form"><div class="hint u-fs-14px">' + (r.jaPedido ? 'Já tinhas pedido' : 'Pediste') + ' para entrar no grupo <b>«' + esc(nome) + '»</b>. ' +
       '<b>' + esc(dono || 'O dono do grupo') + '</b> tem de aceitar: quando aceitar, os imóveis do grupo aparecem-te e passas a comproprietário deles.</div>' +
-      '<div class="hint">Vês o pedido, e podes cancelá-lo, em Grupos, no cartão «Grupos partilhados».</div></div>',
+      '<div class="hint">Vês o pedido, e podes cancelá-lo, em Casas → Grupos.</div></div>',
       '<button class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>');
     return;
   }
@@ -744,8 +784,8 @@ function desfechoDoGrupo(r, prev) {
   openModal((r.jaEstava ? 'Já estás' : 'Agora estás') + ' no grupo «' + nome + '»',
     '<div class="form"><div class="hint u-fs-14px">Grupo de <b>' + esc(dono) + '</b>. ' +
     (casas ? 'És comproprietário de <b>' + esc(casas) + '</b>: vês e editas contratos, movimentos e pessoas.'
-      : 'O grupo ainda não tem imóveis — os que os membros puserem passam a ser partilhados contigo.') + '</div>' +
-    '<div class="hint">Podes adicionar ao grupo imóveis teus e sair quando quiseres, em Grupos.</div></div>',
+      : 'O grupo ainda não tem imóveis — os que os membros adicionarem passam a ser partilhados contigo.') + '</div>' +
+    '<div class="hint">Podes adicionar ao grupo imóveis teus e sair quando quiseres, em Casas → Grupos.</div></div>',
     '<button class="btn primary" data-toca="ecra" data-click="closeAllModals();go(\'properties\')">Ver os imóveis</button>');
 }
 
@@ -753,8 +793,8 @@ function desfechoDoGrupo(r, prev) {
    ligação. Entrar num grupo é um pedido que o dono aceita: a resposta diz
    se ficou pedido (pedido; jaPedido quando já havia um) ou se eu já era
    membro (jaEstava). Nos dois casos esquece o token guardado (entrada.js),
-   fecha as janelas, sincroniza (o pedido que fiz passa a estar no cartão
-   «Grupos partilhados») e mostra o desfecho (desfechoDoGrupo). Um 404 (a
+   fecha as janelas, sincroniza (o pedido que fiz passa a estar nos imóveis
+   dos Grupos — pedidosQueFizHtml) e mostra o desfecho (desfechoDoGrupo). Um 404 (a
    ligação não serve) ou um 400 (o grupo é meu) esquecem o token e fecham,
    para não voltar a perguntar; um erro passageiro — ou o 429 de um grupo
    com pedidos de mais por responder — deixa tudo como está, para se tentar
@@ -784,115 +824,101 @@ CW.entrarNoGrupo = function (token) {
     });
 };
 
-/* ---------------- o cartão «Grupos partilhados» ---------------- */
+/* ---------------- os cartões no separador Grupos ---------------- */
 
-/* O cartão «Grupos partilhados», no cimo do separador Grupos
-   (app/definicoes.js:vGrupos, por cima dos grupos privados): uma linha por
-   grupo — nome · N imóveis · N pessoas · «teu» ou «de <dono>», e nos meus
-   quantos pedidos esperam resposta — a abrir a janela dele; depois, os
-   pedidos que fiz para entrar e ainda esperam («<grupo> · à espera de
-   <dono>», com «Cancelar pedido»); «Novo grupo partilhado» e, quando há
-   pelo menos um grupo de imóveis privado (gruposParaPartilhar), «Partilhar
-   um grupo que já tens» — um grupo que já existe também se partilha, e não
-   só um novo; e a nota do que é. Viveu na página Conta e partilha, onde
-   ficou só uma linha que traz aqui (linhaDosGrupos). Só com sessão e com o
-   serviço Colaboradores ligado nesta conta.
-   Devolve: o HTML do cartão (texto), ou '' sem sessão ou com o serviço desligado. */
-function gruposCard() {
+/* Um instante como dia e mês («22/10»), para o fim de uma ligação de grupo.
+   Recebe: ms — o instante.
+   Devolve: «dd/mm» (texto), ou '' sem instante. */
+function diaEMes(ms) {
+  var n = Number(ms);
+  if (!(n > 0)) return '';
+  var d = new Date(n), dois = function (x) { return String(x).padStart(2, '0'); };
+  return dois(d.getDate()) + '/' + dois(d.getMonth() + 1);
+}
+
+/* O cartão de um grupo partilhado no separador Grupos (o canvas, M-Grupos):
+   o nome e o selo «Partilhado · teu» (ou «de <dono>»), os imóveis e quantas
+   pessoas; só para o dono, os pedidos para entrar (quem quer entrar, o que
+   aceitar quer dizer, «Aceitar» e «Recusar») e a ligação de convite —
+   «expira a <dd/mm> · usada N vezes» com «Copiar», «Rodar» e «Desativar» (com
+   o texto vermelho, grp-perigo: desliga a ligação de quem a tem), ou «Criar
+   ligação»; e os membros, com o dono marcado e eu com «(eu)». Com um pedido
+   por responder, o cartão leva o contorno cobalto
+   (estilos.css:.grp-partilhado:has(.grp-pedido)). O que o servidor recusaria
+   não se escreve.
+   Como o cartão de um privado (definicoes.js:cartaoDoGrupo): o cartão
+   inteiro abre a janela do grupo — os imóveis, o remover, o sair, o mudar o
+   nome e o apagar (CW.grupoModal); o «Abrir o grupo» saiu — e o toque longo
+   seleciona vários (data-lp «grp:<id>», cloud/selecao-listas.js). Os botões
+   dos pedidos e da ligação não sobem ao cartão (stopPropagation) e, em
+   seleção, ficam inertes (data-sel-inerte): o toque marca o cartão.
+   Recebe: g — o grupo (de db.groups, _partilhado).
+   Devolve: o HTML (texto) do cartão. */
+function cartaoDoGrupoPartilhado(g) {
+  var dono = !!g._meu, gid = jsq(g.id), eu = meuId(), sem = 'event.stopPropagation();';
+  var casas = (g.ids || []).map(function (pid) { return (prop(pid) || {}).name; }).filter(Boolean);
+  var membros = g._membros || [];
+  var selo = '<span class="badge">' + (dono ? 'Partilhado · teu' : 'Partilhado · de ' + esc(g._donoNome || '')) + '</span>';
+  var resumo = (casas.length ? casas.map(esc).join(' · ') : 'Ainda sem imóveis') + ' · ' + membros.length + (membros.length === 1 ? ' pessoa' : ' pessoas');
+  var pedidos = dono ? pedidosParaEntrar(g.id).map(function (p) {
+    var nome = p.name || nomeUtilizador(p.userId);
+    return '<div class="grp-parte grp-pedido"><p><b>' + esc(nome) + '</b> quer entrar</p>' +
+      '<p class="small">Se aceitares, passa a comproprietário dos imóveis do grupo.</p>' +
+      '<div class="grp-acoes" data-sel-inerte><button type="button" class="btn sm primary" data-toca="dados" data-click="' + sem + 'CW.grupoAceitarPedido(\'' + gid + '\',\'' + jsq(p.userId) + '\')">Aceitar</button>' +
+      '<button type="button" class="btn sm" data-toca="dados" data-click="' + sem + 'CW.grupoRecusarPedido(\'' + gid + '\',\'' + jsq(p.userId) + '\')">Recusar</button></div></div>';
+  }).join('') : '';
+  var ligacao = '';
+  if (dono) {
+    var l = g._ligacao, ativa = !!(l && l.ativo), usos = Number(l && l.uses) || 0, expira = ativa ? diaEMes(l.expiresAt) : '';
+    ligacao = '<div class="grp-parte grp-ligacao"><div><p class="lbl">Ligação de convite</p>' +
+      '<p class="small">' + (ativa ? (expira ? 'expira a ' + expira + ' · ' : '') + (usos ? 'usada ' + usos + (usos === 1 ? ' vez' : ' vezes') : 'ainda por usar') : 'Sem ligação ativa — cria uma para convidares') + '</p></div>' +
+      '<div class="grp-acoes" data-sel-inerte>' + (ativa
+        ? '<button type="button" class="btn sm" data-toca="nada" data-click="' + sem + 'CW.grupoLigacaoCopiar(\'' + gid + '\')">Copiar</button>' +
+          '<button type="button" class="btn sm" data-toca="dados" data-click="' + sem + 'CW.grupoLigacaoRodar(\'' + gid + '\')">Rodar</button>' +
+          '<button type="button" class="btn sm grp-perigo" data-toca="dados" data-click="' + sem + 'CW.grupoLigacaoDesativar(\'' + gid + '\')">Desativar</button>'
+        : '<button type="button" class="btn sm primary" data-toca="dados" data-click="' + sem + 'CW.grupoLigacaoCriar(\'' + gid + '\')">' + ic('plus', 16) + ' Criar ligação</button>') + '</div></div>';
+  }
+  var lista = membros.map(function (m) {
+    var nome = m.name || nomeUtilizador(m.id);
+    return '<li>' + esc(nome) + (m.id === eu ? ' (eu)' : '') + (m.id === g._dono ? ' <span class="small">· dono</span>' : '') + '</li>';
+  }).join('');
+  return '<section class="card grp-cartao grp-partilhado" data-lp="grp:' + esc(g.id) + '" data-toca="camada" data-click="CW.grupoModal(\'' + gid + '\')">' +
+    '<div class="grp-cab"><h3>' + esc(g.name || 'Sem nome') + '</h3>' + selo + '</div>' +
+    '<p class="small">' + resumo + '</p>' + pedidos + ligacao +
+    '<div class="grp-parte"><p class="lbl">Membros</p><ul class="grp-membros">' + lista + '</ul></div></section>';
+}
+
+/* Os pedidos que fiz para entrar no grupo de outra pessoa e ainda esperam
+   resposta: um cartão por pedido, no separador dos Imóveis dos Grupos, com o
+   nome do grupo, «À espera de <dono>», o que acontece quando aceitar, e
+   «Cancelar pedido». Só com sessão e com o serviço Colaboradores ligado.
+   Recebe: nada.
+   Devolve: o HTML (texto), ou '' sem pedidos. */
+function pedidosQueFizHtml() {
   if (!CW.user || !servicoLigado('colaboradores')) return '';
-  var gs = gruposPartilhados();
   var fiz = (((CW.state && CW.state.sharedGroupRequests) || {}).outgoing || []).filter(function (p) { return p && p.groupId; });
-  var linhas = gs.map(function (g) {
-    var n = (g.ids || []).length, m = (g._membros || []).length, pend = pedidosParaEntrar(g.id).length;
-    return '<div class="card tap u-p-11px-13px u-d-flex u-ai-center u-g-10px" data-toca="camada" data-click="CW.grupoModal(\'' + jsq(g.id) + '\')">' +
-      '<span class="avatar">' + ic('users', 17) + '</span>' +
-      '<span class="u-fx-1 u-minw-0"><b class="u-d-block">' + esc(g.name || 'Sem nome') + '</b>' +
-      '<span class="small">' + n + (n === 1 ? ' imóvel' : ' imóveis') + ' · ' + m + (m === 1 ? ' pessoa' : ' pessoas') +
-      ' · ' + (g._meu ? 'teu' : 'de ' + esc(g._donoNome || '')) +
-      (pend ? ' · <b>' + pend + (pend === 1 ? ' pedido' : ' pedidos') + ' por responder</b>' : '') + '</span></span>' +
-      '<span class="u-c-v-muted u-tf-rotate-180deg u-fx-0-0-auto">' + ic('chev', 17) + '</span></div>';
-  }).concat(fiz.map(function (p) {
+  return fiz.map(function (p) {
     var dono = p.ownerName ? esc(p.ownerName) : '';
-    return '<div class="card u-p-12px-13px"><b class="u-d-block">' + esc(p.groupName || 'Grupo') + ' · à espera de ' + (dono || 'resposta') + '</b>' +
-      '<span class="small">Pediste para entrar. Os imóveis do grupo aparecem quando ' + (dono || 'o dono') + ' aceitar.</span>' +
-      '<div class="toolbar u-mt-9px"><button class="btn sm" data-toca="dados" data-click="CW.grupoCancelarPedido(\'' + jsq(p.groupId) + '\')">Cancelar pedido</button></div></div>';
-  }));
-  var lista = linhas.length
-    ? '<div class="list u-g-8px">' + linhas.join('') + '</div>'
-    : '<div class="hint">Ainda não estás em nenhum grupo partilhado. Cria um novo, ou partilha um grupo de imóveis que já tenhas.</div>';
-  var partilhar = gruposParaPartilhar().length
-    ? '<button class="btn" data-toca="camada" data-click="CW.grupoEscolherParaPartilhar()">' + ic('users', 15) + ' Partilhar um grupo que já tens</button>'
-    : '';
-  return card('Grupos partilhados', 'Imóveis em conjunto, com quem entrar',
-    lista +
-    '<div class="toolbar u-mt-11px"><button class="btn" data-toca="camada" data-click="CW.grupoNovo()">' + ic('plus', 15) + ' Novo grupo partilhado</button>' + partilhar + '</div>' +
-    '<div class="hint u-mt-11px">Quem está num grupo é comproprietário de todos os imóveis dele. Cada membro adiciona ao grupo imóveis seus; o dono do grupo cria a ligação por onde os outros pedem para entrar, e aceita ou recusa cada pedido.</div>');
+    return '<section class="card grp-cartao">' +
+      '<div class="grp-cab"><h3>' + esc(p.groupName || 'Grupo') + '</h3><span class="badge">À espera de ' + (dono || 'resposta') + '</span></div>' +
+      '<p class="small">Pediste para entrar. Os imóveis do grupo aparecem quando ' + (dono || 'o dono') + ' aceitar.</p>' +
+      '<div class="grp-acoes"><button type="button" class="btn sm" data-toca="dados" data-click="CW.grupoCancelarPedido(\'' + jsq(p.groupId) + '\')">Cancelar pedido</button></div></section>';
+  }).join('');
 }
 
-/* ---------------- partilhar um grupo que já existe ---------------- */
+/* ---------------- o crachá do separador ---------------- */
 
-/* Os grupos de imóveis privados — todos os que se podem tentar partilhar.
-   Já foram só os que tinham um imóvel meu (cwMinha), e com isso o botão
-   escondia-se a quem só tinha grupos de casas que não criou, sem dizer
-   porquê. Agora todos se oferecem, e o CW.grupoPartilhar explica o que não
-   dá (vazio, só imóveis de outras pessoas). O cartão «Grupos partilhados»
-   pergunta por aqui antes de pôr «Partilhar um grupo que já tens».
-   Devolve: array de grupos de db.groups, pela ordem da base. */
-function gruposParaPartilhar() {
-  return (db.groups || []).filter(function (g) { return g && g.kind === 'prop' && !g._partilhado; });
-}
-
-/* «Partilhar um grupo que já tens», ao lado de «Novo grupo partilhado»: a
-   lista de todos os grupos de imóveis privados (gruposParaPartilhar), cada
-   um com quantos imóveis teus leva e quantos ficam de fora — ou que não tem
-   imóveis, ou nenhum teu; escolher fecha a lista e segue o caminho do
-   «Partilhar» de cada grupo (CW.grupoPartilhar: a confirmação que diz o que
-   muda, ou a janela que explica porque não dá).
-   Devolve: nada — abre a lista (ou avisa, sem nenhum grupo de imóveis). */
-CW.grupoEscolherParaPartilhar = function () {
-  if (!CW.user) return CW.showAuth();
-  if (!servicoLigado('colaboradores')) return toast(fraseServicoDesligado('colaboradores'), { ms: 6000 });
-  var gs = gruposParaPartilhar();
-  if (!gs.length) return toast('Ainda não tens grupos de imóveis. Cria um em «Novo grupo de imóveis», ou começa um partilhado do zero.', { ms: 6000 });
-  pickModal('Partilhar um grupo que já tens', gs.map(function (g) {
-    var c = casasDoGrupoPorDono(g), meus = c.minhas.length, fora = c.outras.length;
-    var sub = !meus && !fora ? 'Ainda sem imóveis'
-      : !meus ? 'Nenhum imóvel teu · ' + fora + (fora === 1 ? ' de outra pessoa' : ' de outras pessoas')
-      : meus + (meus === 1 ? ' imóvel teu' : ' imóveis teus') +
-        (fora ? ' · ' + fora + (fora === 1 ? ' de outra pessoa fica de fora' : ' de outras pessoas ficam de fora') : '');
-    return { v: g.id, label: g.name || 'Sem nome', icon: 'building', sub: sub };
-  }), function (o) { closeModal(); CW.grupoPartilhar(o.v); },
-  '<div class="hint u-mt-9px">O grupo fica com o mesmo nome e os mesmos imóveis teus. Quem entrar pela ligação, e tu aceitares, fica comproprietário deles. Num grupo partilhado só entram os imóveis teus.</div>');
-};
-
-/* ---------------- o crachá e a porta em Conta e partilha ---------------- */
-
-/* O crachá do separador Grupos, registado pelo serviço Colaboradores
-   (app/lista-colaboradores.js): os pedidos para entrar nos MEUS grupos que
-   esperam resposta — o mesmo número que o cartão soma nas linhas («N
-   pedidos por responder», pedidosParaEntrar). Com o serviço desligado o
-   registo não se despacha (servicos.js:crachaDe); sem sessão, zero.
+/* O crachá do separador Grupos — na aba deles, nas Casas, e na linha da
+   gaveta (navegacao.js:abasDaArea, crachaHtml) —, registado
+   pelo serviço Colaboradores (app/lista-colaboradores.js): os pedidos para
+   entrar nos MEUS grupos que esperam resposta, os mesmos que os cartões
+   mostram com «Aceitar» e «Recusar» (pedidosParaEntrar). Com o serviço
+   desligado o registo não se despacha (servicos.js:crachaDe); sem sessão, zero.
+   Recebe: nada.
    Devolve: {n} — a contagem. */
 function crachaDosGrupos() {
   if (!CW.user) return { n: 0 };
   var n = 0;
   gruposPartilhados().forEach(function (g) { if (g._meu) n += pedidosParaEntrar(g.id).length; });
   return { n: n };
-}
-
-/* A linha dos grupos na página Conta e partilha (partilha.js:vCloud). O
-   cartão «Grupos partilhados» viveu ali, longe dos grupos privados; passou
-   ao separador Grupos, e ali fica uma porta para ele, com quantos grupos
-   partilhados tenho e quantos pedidos esperam resposta nos meus. Só com
-   sessão e com o serviço Colaboradores ligado nesta conta.
-   Devolve: o HTML da linha (texto), ou ''. */
-function linhaDosGrupos() {
-  if (!CW.user || !servicoLigado('colaboradores')) return '';
-  var n = gruposPartilhados().length, pend = crachaDosGrupos().n;
-  var sub = (n ? n + (n === 1 ? ' grupo partilhado' : ' grupos partilhados') : 'Ainda em nenhum grupo partilhado') +
-    (pend ? ' · ' + pend + (pend === 1 ? ' pedido por responder' : ' pedidos por responder') : '');
-  return '<div class="card tap u-d-flex u-ai-center u-g-13px" data-toca="ecra" data-click="go(\'groups\')">' +
-    '<span class="avatar">' + ic('layers', 18) + '</span>' +
-    '<span class="u-fx-1 u-minw-0"><b class="u-d-block">Grupos partilhados</b><span class="small">' + esc(sub) + '</span></span>' +
-    '<span class="u-c-v-muted u-tf-rotate-180deg">' + ic('chev', 18) + '</span></div>';
 }

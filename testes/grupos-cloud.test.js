@@ -2,10 +2,10 @@
 // nucleo, entrada, partilha, acessos e definicoes): os grupos do estado
 // entram em db.groups marcados _partilhado e não sobem; ?grupo=<token>
 // aterra num modal e «Pedir para entrar» deixa um pedido que o dono aceita
-// ou recusa (na janela do grupo), e que quem pediu vê e cancela no cartão
-// «Grupos partilhados»; um grupo privado partilha-se,
-// cria-se um novo, gere-se na sua janela e aparece no cartão «Grupos
-// partilhados» e com o selo no separador Grupos. Como o
+// ou recusa (na janela do grupo e no cartão dele), e que quem pediu vê e
+// cancela nos imóveis do separador Grupos; um grupo privado partilha-se,
+// cria-se um novo, gere-se na sua janela e aparece no separador Grupos num
+// cartão com o selo, a ligação, os pedidos e os membros. Como o
 // partilha-pedidos.test.js: a nuvem por cima da app do arnês, com api,
 // pullNow, toast, as confirmações, os prompts e as janelas trocados por
 // espiões — o servidor destas rotas prova-se em grupos-partilhados.test.js.
@@ -240,7 +240,7 @@ describe('a porta ?grupo=<token>', () => {
     assert.match(j.b, /Imóveis no grupo/);
     assert.match(j.b, /<b>Do Rui<\/b>/);
     assert.match(j.b, /<b>Minha<\/b>/);
-    assert.match(j.b, /Ao pedires para entrar, <b>Rui<\/b> tem de aceitar\. Depois passas a comproprietário destes imóveis — vês contratos, movimentos e pessoas\. Os imóveis que adicionares ao grupo ficam partilhados com todos os membros\. Podes sair quando quiseres, em Grupos\./);
+    assert.match(j.b, /Ao pedires para entrar, <b>Rui<\/b> tem de aceitar\. Depois passas a comproprietário destes imóveis — vês contratos, movimentos e pessoas\. Os imóveis que adicionares ao grupo ficam partilhados com todos os membros\. Podes sair quando quiseres, em Casas → Grupos\./);
     assert.ok(!/Ao entrares|Entrar no grupo/.test(j.b + j.f), 'nada de entrar já');
     assert.match(j.b, /Entras como <b>eu@exemplo\.pt<\/b>/);
     assert.match(j.f, /data-toca="camada" data-click="CW\.chegadaDepois\('grupo'\)">Agora não</);
@@ -280,7 +280,7 @@ describe('a porta ?grupo=<token>', () => {
     const j = esp.abertas[1];
     assert.equal(j.t, 'Pedido enviado');
     assert.match(j.b, /Pediste para entrar no grupo <b>«Casas do Porto»<\/b>\. <b>Rui<\/b> tem de aceitar: quando aceitar, os imóveis do grupo aparecem-te e passas a comproprietário deles\./);
-    assert.match(j.b, /Vês o pedido, e podes cancelá-lo, em Grupos, no cartão «Grupos partilhados»\./);
+    assert.match(j.b, /Vês o pedido, e podes cancelá-lo, em Casas → Grupos\./);
     assert.match(j.f, /^<button class="btn primary" data-toca="camada" data-click="closeModal\(\)">Fechar<\/button>$/);
     assert.ok(!/Agora estás no grupo|És comproprietário|Ver os imóveis/.test(j.t + j.b + j.f), 'ainda não está no grupo');
     assert.ok(!/on[a-z]+=|style=/.test(j.b + j.f), 'nada em linha');
@@ -307,7 +307,7 @@ describe('a porta ?grupo=<token>', () => {
     const j = esp.abertas[esp.abertas.length - 1];
     assert.equal(j.t, 'Já estás no grupo «Casas do Porto»');
     assert.match(j.b, /Grupo de <b>Rui<\/b>\. És comproprietário de <b>Do Rui, Minha<\/b>: vês e editas contratos, movimentos e pessoas\./);
-    assert.match(j.b, /sair quando quiseres, em Grupos\./);
+    assert.match(j.b, /sair quando quiseres, em Casas → Grupos\./);
     assert.match(j.f, /data-toca="ecra" data-click="closeAllModals\(\);go\('properties'\)">Ver os imóveis</);
     assert.ok(!j.b.includes('tem de aceitar'), 'sem pedido nenhum');
     assert.equal(esp.puxou, 2);
@@ -426,7 +426,7 @@ describe('partilhar um grupo privado e criar um novo', () => {
     const j = esp.abertas[esp.abertas.length - 1];
     assert.equal(j.t, 'Casas de Faro');
     assert.match(j.b, /Grupo <b>teu<\/b>/);
-    assert.match(j.b, /Ainda não há imóveis no grupo/);
+    assert.match(j.b, /Ainda não há imóveis no grupo\. Os que os membros adicionarem ficam partilhados com todos\./);
     assert.match(j.b, /Criar ligação/);
     assert.equal(app.db.groups.find((g) => g.id === 'G9')._meu, true);
     // sem o serviço não se cria nada
@@ -605,48 +605,57 @@ describe('a janela do grupo (CW.grupoModal)', () => {
 
 /* ------------------------------------------------ os cartões e o separador Grupos */
 
-describe('o cartão «Grupos partilhados» e o separador Grupos', () => {
-  test('gruposCard lista os grupos com N imóveis, N pessoas e «teu»/«de <dono>», abre a janela e tem «Novo grupo partilhado»; vCloud tem só a linha que leva aos Grupos, com os Colaboradores ligados', () => {
+describe('os cartões dos grupos partilhados no separador Grupos (o canvas de 2026-10, M-Grupos)', () => {
+  test('o cartão de um grupo meu: o selo «Partilhado · teu», os imóveis e as pessoas, a ligação com «expira a dd/mm · usada N vezes» e Copiar/Rodar/Desativar, os membros com o dono; o cartão inteiro abre o grupo', () => {
     const { app } = comEstado();
-    const h = app.gruposCard();
-    assert.match(h, /<div class="title">Grupos partilhados<\/div>/);
-    assert.match(h, /data-toca="camada" data-click="CW\.grupoModal\('G1'\)">[\s\S]*?<b class="u-d-block">Casas do Porto<\/b><span class="small">2 imóveis · 3 pessoas · de Rui<\/span>/);
-    assert.match(h, /data-click="CW\.grupoModal\('G2'\)">[\s\S]*?<b class="u-d-block">Família<\/b><span class="small">1 imóvel · 2 pessoas · teu<\/span>/);
-    assert.match(h, /data-toca="camada" data-click="CW\.grupoNovo\(\)">[\s\S]*?Novo grupo partilhado</);
-    assert.match(h, /Quem está num grupo é comproprietário de todos os imóveis dele/);
-    assert.match(h, /o dono do grupo cria a ligação por onde os outros pedem para entrar, e aceita ou recusa cada pedido\./);
-    assert.ok(!h.includes('Privado'), 'os privados não são daqui');
-    const c = app.vCloud();
-    const iL = c.indexOf('Ainda não estás ligado a ninguém.'), iG = c.indexOf('Grupos partilhados'), iS = c.indexOf('Segurança');
-    assert.ok(iL > -1 && iG > iL && iS > iG, 'a seguir aos utilizadores ligados, antes da segurança: ' + [iL, iG, iS].join(', '));
-    assert.match(c, /data-toca="ecra" data-click="go\('groups'\)">[\s\S]*?<b class="u-d-block">Grupos partilhados<\/b><span class="small">2 grupos partilhados<\/span>/, 'a linha que leva ao separador');
-    assert.ok(!c.includes('CW.grupoNovo()') && !c.includes("CW.grupoModal('G1')"), 'o cartão já não vive em Conta e partilha');
-    // sem grupos, o vazio convida
-    app.db.groups = app.db.groups.filter((g) => !g._partilhado);
-    assert.match(app.gruposCard(), /Ainda não estás em nenhum grupo partilhado\. Cria um novo, ou partilha um grupo de imóveis que já tenhas\./);
-    assert.match(app.vCloud(), /Ainda em nenhum grupo partilhado/);
-    // com os Colaboradores desligados, nem cartão nem porta
-    app.definirServicosDesligados(['colaboradores']);
-    assert.equal(app.gruposCard(), '');
-    assert.ok(!app.vCloud().includes('Grupos partilhados'));
-    app.definirServicosDesligados([]);
-    app.CW.user = null;
-    assert.equal(app.gruposCard(), '', 'sem sessão não há grupos');
+    const g = app.grp('G2');
+    const h = app.cartaoDoGrupoPartilhado(g);
+    assert.match(h, /<h3>Família<\/h3><span class="badge">Partilhado · teu<\/span>/);
+    assert.match(h, /<p class="small">Terceira · 2 pessoas<\/p>/);
+    const fim = new Date(4102444800000), dois = (x) => String(x).padStart(2, '0');
+    assert.ok(h.includes('expira a ' + dois(fim.getDate()) + '/' + dois(fim.getMonth() + 1) + ' · usada 3 vezes'), 'o fim da ligação e os usos');
+    for (const a of ["CW.grupoLigacaoCopiar('G2')", "CW.grupoLigacaoRodar('G2')", "CW.grupoLigacaoDesativar('G2')"]) assert.ok(h.includes('event.stopPropagation();' + a), a + ', sem subir ao cartão');
+    assert.match(h, /^<section class="card grp-cartao grp-partilhado" data-lp="grp:G2" data-toca="camada" data-click="CW\.grupoModal\('G2'\)">/, 'o cartão abre a janela do grupo');
+    assert.ok(!h.includes('Abrir o grupo'), 'o «Abrir o grupo» saiu');
+    // «Desativar» com o texto vermelho, como no canvas (desliga a ligação de quem a tem)
+    assert.match(h, /<button type="button" class="btn sm grp-perigo" data-toca="dados" data-click="event\.stopPropagation\(\);CW\.grupoLigacaoDesativar\('G2'\)">Desativar<\/button>/);
+    assert.match(h, /<li>Eu \(eu\) <span class="small">· dono<\/span><\/li><li>Ana<\/li>/);
+    assert.ok(!/\son[a-z]+=|\sstyle=/.test(h), 'nada em linha');
   });
 
-  test('vGroups mostra o selo «Partilhado · N pessoas» (e «de <dono>» quando não é meu), abre CW.grupoModal num partilhado, e «Partilhar» no privado em vez de «Novo grupo partilhado»', () => {
+  test('o cartão de um grupo de outra pessoa: «Partilhado · de <dono>», sem a ligação e sem os pedidos; o cartão abre o grupo (onde se sai)', () => {
     const { app } = comEstado();
-    const h = app.vGroups();
-    assert.match(h, /data-click="CW\.grupoModal\('G1'\)">[\s\S]*?<div class="title">Casas do Porto<span class="badge grey u-ml-7px">Partilhado · 3 pessoas · de Rui<\/span><\/div>/);
-    assert.match(h, /data-click="CW\.grupoModal\('G2'\)">[\s\S]*?<div class="title">Família<span class="badge grey u-ml-7px">Partilhado · 2 pessoas<\/span><\/div>/);
-    assert.match(h, /data-click="groupModal\('prop','GP'\)">[\s\S]*?<div class="title">Privado<\/div>/, 'o privado abre o modal da base, sem selo');
-    assert.match(h, /data-toca="camada" data-click="event\.stopPropagation\(\);CW\.grupoPartilhar\('GP'\)">[\s\S]*?Partilhar<\/button>/);
+    const h = app.cartaoDoGrupoPartilhado(app.grp('G1'));
+    assert.match(h, /<h3>Casas do Porto<\/h3><span class="badge">Partilhado · de Rui<\/span>/);
+    assert.match(h, /Do Rui · Minha · 3 pessoas/);
+    assert.ok(!/Ligação de convite|grupoLigacao|grupoAceitarPedido/.test(h), 'o que só o dono faz não se escreve');
+    assert.match(h, /data-lp="grp:G1" data-toca="camada" data-click="CW\.grupoModal\('G1'\)"/);
+  });
+
+  test('o separador dos Imóveis tem os partilhados e o privado, cada grupo uma vez só, e o cabeçalho só o segmentado (criar é no +); a Segurança não fala de grupos', () => {
+    const { app } = comEstado();
+    const h = app.vGrupos();
+    assert.equal((h.match(/CW\.grupoModal\('G1'\)/g) || []).length, 1);
+    assert.equal((h.match(/CW\.grupoModal\('G2'\)/g) || []).length, 1);
+    assert.match(h, /data-lp="grp:GP" data-toca="camada" data-click="groupModal\('prop','GP'\)">/, 'o privado edita-se na janela da base, tocando no cartão');
+    assert.ok(!/ Editar<\/button>/.test(h), 'sem «Editar»');
+    assert.match(h, /<h3>Privado<\/h3><span class="badge grey">Privado<\/span>/);
     assert.equal((h.match(/CW\.grupoPartilhar\(/g) || []).length, 1, 'só no privado: os partilhados não se partilham outra vez');
-    assert.match(h, /«Partilhar» passa um grupo de imóveis a partilhado/);
-    assert.ok(!h.includes('Novo grupo partilhado'), 'vive no cartão dos partilhados, em cima');
+    assert.ok(!h.includes('CW.grupoNovo()') && !h.includes('Novo grupo partilhado'), 'o «Novo grupo partilhado» saiu do cabeçalho');
+    assert.ok(!h.includes('Novo grupo de imóveis'), 'e o «Novo grupo de imóveis» também');
+    assert.match(h, /Partilhar um grupo é para sempre: não volta a ser privado\./);
+    // os grupos vivem no separador Grupos, das Casas: a página da conta, que passou a ser só a Segurança, já não tem a linha que levava lá
+    const c = app.vCloud();
+    assert.ok(c.includes('Apagar a conta'), 'controlo: é a página da Segurança');
+    assert.ok(!/Grupos partilhados|go\('groups'\)|CW\.grupoNovo\(\)|CW\.grupoModal\('G1'\)|Ainda em nenhum grupo partilhado/.test(c), 'nada de grupos na Segurança');
+    // com os Colaboradores desligados, os partilhados continuam a ser cartões
+    app.definirServicosDesligados(['colaboradores']);
+    assert.ok(!app.vGrupos().includes('CW.grupoNovo()'));
+    app.definirServicosDesligados([]);
     // sem sessão o «Partilhar» fica à vista: o toque é que diz que é preciso entrar
     app.CW.user = null;
-    assert.ok(app.vGroups().includes("CW.grupoPartilhar('GP')"));
+    assert.ok(app.vGrupos().includes("CW.grupoPartilhar('GP')"));
+    assert.ok(!app.vGrupos().includes('CW.grupoNovo()'), 'sem sessão também não');
   });
 
   test('groupModal e delGroup delegam para a nuvem num grupo partilhado (apagar ao dono, sair a quem não é)', async () => {
@@ -688,7 +697,7 @@ describe('o cartão «Grupos partilhados» e o separador Grupos', () => {
     app.definirServicosDesligados(['colaboradores']);
     app.groupModal('prop', 'GP');
     assert.ok(esp.abertas[3].m.includes("CW.grupoPartilhar('GP')"));
-    assert.ok(!app.vGroups().includes('Novo grupo partilhado'));
+    assert.ok(!app.vGrupos().includes('Novo grupo partilhado'));
     // e num grupo de proprietários nunca
     app.definirServicosDesligados([]);
     app.db.groups.push(app.normGroup({ id: 'GO', kind: 'owner', name: 'Família', ids: ['EU'] }));
@@ -741,7 +750,7 @@ describe('o pedido para entrar num grupo', () => {
     assert.ok(!b.includes('Pedidos para entrar'));
     assert.ok(!/grupoAceitarPedido|grupoRecusarPedido|>Aceitar<|>Recusar</.test(b), 'nenhum botão a quem não é dono');
     assert.deepEqual(cru(app.pedidosParaEntrar('G1')), []);
-    assert.match(app.gruposCard(), /<b class="u-d-block">Casas do Porto<\/b><span class="small">2 imóveis · 3 pessoas · de Rui<\/span>/, 'e no cartão não se contam');
+    assert.ok(!/grupoAceitarPedido|quer entrar/.test(app.cartaoDoGrupoPartilhado(app.grp('G1'))), 'e no cartão também não');
   });
 
   test('CW.grupoAceitarPedido: POST …/requests/<uid>/accept, tira o pedido do estado, sincroniza, repinta a janela e diz quem entrou', async () => {
@@ -787,7 +796,7 @@ describe('o pedido para entrar num grupo', () => {
 
   test('CW.grupoCancelarPedido: DELETE …/requests/<eu>, tira o meu pedido do estado, sincroniza, e o cartão deixa de o mostrar', async () => {
     const { app, esp } = comEstado(COM_PEDIDOS());
-    assert.match(app.gruposCard(), /Casas de Faro · à espera de Tó/);
+    assert.match(app.pedidosQueFizHtml(), /<h3>Casas de Faro<\/h3><span class="badge">À espera de Tó<\/span>/);
     app.CW.grupoCancelarPedido('G7');
     await espera();
     assert.deepEqual(esp.chamadas(), ['DELETE /api/shared-groups/G7/requests/EU']);
@@ -795,25 +804,28 @@ describe('o pedido para entrar num grupo', () => {
     assert.equal(esp.puxou, 1);
     assert.deepEqual(cru(app.CW.state.sharedGroupRequests.outgoing), []);
     assert.equal(cru(app.CW.state.sharedGroupRequests.incoming).length, 1, 'os que me chegam ficam');
-    assert.ok(!app.gruposCard().includes('Casas de Faro'));
+    assert.ok(!app.vGrupos().includes('Casas de Faro'));
   });
 
-  test('gruposCard lista o pedido que fiz («<grupo> · à espera de <dono>», «Cancelar pedido») e, nos meus grupos, quantos pedidos esperam resposta', () => {
+  test('os Imóveis dos Grupos mostram o pedido que fiz («À espera de <dono>», «Cancelar pedido») depois dos grupos, e o cartão do meu grupo os pedidos que esperam resposta, com Aceitar e Recusar', () => {
     const { app } = comEstado(COM_PEDIDOS());
-    const h = app.gruposCard();
-    assert.match(h, /<b class="u-d-block">Casas de Faro · à espera de Tó<\/b><span class="small">Pediste para entrar\. Os imóveis do grupo aparecem quando Tó aceitar\.<\/span>/);
+    const h = app.vGrupos();
+    assert.match(h, /<h3>Casas de Faro<\/h3><span class="badge">À espera de Tó<\/span><\/div><p class="small">Pediste para entrar\. Os imóveis do grupo aparecem quando Tó aceitar\.<\/p>/);
     assert.match(h, /data-toca="dados" data-click="CW\.grupoCancelarPedido\('G7'\)">Cancelar pedido</);
-    assert.match(h, /<b class="u-d-block">Família<\/b><span class="small">1 imóvel · 2 pessoas · teu · <b>2 pedidos por responder<\/b><\/span>/);
+    const fam = app.cartaoDoGrupoPartilhado(app.grp('G2'));
+    assert.match(fam, /<p><b>Zé<\/b> quer entrar<\/p>[\s\S]*?CW\.grupoAceitarPedido\('G2','ZE'\)">Aceitar<[\s\S]*?CW\.grupoRecusarPedido\('G2','ZE'\)">Recusar</);
+    assert.match(fam, /<p><b>Lurdes<\/b> quer entrar<\/p>/);
+    assert.ok(fam.indexOf('Zé') < fam.indexOf('Lurdes'), 'pela ordem de chegada');
     assert.ok(h.indexOf('Família') < h.indexOf('Casas de Faro'), 'os grupos primeiro, depois os pedidos que fiz');
-    assert.ok(!/on[a-z]+=|style=/.test(h), 'nada em linha');
+    assert.ok(!/\son[a-z]+=|\sstyle=/.test(h), 'nada em linha');
     // só com o pedido, sem grupos: o pedido mostra-se e o vazio não
-    app.db.groups = app.db.groups.filter((g) => !g._partilhado);
-    const so = app.gruposCard();
-    assert.match(so, /Casas de Faro · à espera de Tó/);
-    assert.ok(!so.includes('Ainda não estás em nenhum grupo partilhado'));
+    app.db.groups = app.db.groups.filter((g) => !g._partilhado && g.kind !== 'prop');
+    const so = app.vGrupos();
+    assert.match(so, /À espera de Tó/);
+    assert.ok(!so.includes('Ainda não há grupos de imóveis'));
     // sem o nome do dono, sem buracos na frase
     app.CW.state.sharedGroupRequests.outgoing = [{ groupId: 'G8', groupName: 'Sem dono à vista' }];
-    assert.match(app.gruposCard(), /Sem dono à vista · à espera de resposta<\/b><span class="small">Pediste para entrar\. Os imóveis do grupo aparecem quando o dono aceitar\./);
+    assert.match(app.pedidosQueFizHtml(), /<h3>Sem dono à vista<\/h3><span class="badge">À espera de resposta<\/span><\/div><p class="small">Pediste para entrar\. Os imóveis do grupo aparecem quando o dono aceitar\./);
   });
 
   test('sem sessão ou com os Colaboradores desligados, aceitar, recusar e cancelar não chamam a API nem rebentam; um estado sem a lista dos pedidos também não', async () => {
@@ -822,7 +834,7 @@ describe('o pedido para entrar num grupo', () => {
     app.CW.grupoAceitarPedido('G2', 'ZE');
     app.CW.grupoRecusarPedido('G2', 'ZE');
     app.CW.grupoCancelarPedido('G7');
-    assert.equal(app.gruposCard(), '');
+    assert.equal(app.pedidosQueFizHtml(), '');
     await espera();
     assert.deepEqual(esp.api, []);
     app.CW.user = { id: 'EU', name: 'Eu', email: 'eu@exemplo.pt' };
@@ -837,7 +849,7 @@ describe('o pedido para entrar num grupo', () => {
     // um estado de antes da regra, sem sharedGroupRequests nem pedidos nos grupos
     app.definirServicosDesligados([]);
     app.CW.state = ESTADO();
-    assert.doesNotThrow(() => app.gruposCard());
+    assert.doesNotThrow(() => app.vGrupos());
     assert.doesNotThrow(() => app.CW.grupoModal('G2'));
     assert.ok(!esp.abertas[esp.abertas.length - 1].b.includes('Pedidos para entrar'));
     assert.equal(app.pedidosDashCard(), '');
@@ -857,5 +869,82 @@ describe('o pedido para entrar num grupo', () => {
     assert.equal(t.lote.alvo, 'g:G2', 'a parte fica como estava');
     assert.deepEqual(cru(app.CW.state.sharedGroupRequests.incoming), [], 'os pedidos do grupo saíram');
     assert.equal(cru(app.CW.state.sharedGroupRequests.outgoing).length, 1, 'os de outros grupos ficam');
+  });
+});
+
+/* ------------------------------------------------ os Proprietários: só as contas com quem partilho */
+
+describe('os Proprietários com sessão: a lista e o «Editar casas partilhadas»', () => {
+  test('a lista tem as contas com casa em comum, ligação ativa ou grupo; nem eu, nem quem só é referido, nem a ligação por aceitar', () => {
+    const st = ESTADO();
+    st.profiles.push({ userId: 'ZE', name: 'Zé', data: null }, { userId: 'IDA', name: 'Ida', data: null }, { userId: 'VELHO', name: 'Velho', data: null }, { userId: 'PEND', name: 'Pend', data: null });
+    st.connections = [
+      { id: 'L1', status: 'accepted', peer: { id: 'ZE', name: 'Zé' }, myShares: [], peerShares: [] },
+      { id: 'L2', status: 'pending', incoming: false, peer: { id: 'PEND', name: 'Pend' }, myShares: [], peerShares: [] },
+    ];
+    st.records.push({ kind: 'tx', id: 'T9', houseId: 'H1', updatedAt: 1, data: { id: 'T9', kind: 'expense', label: 'Obras', amount: 10, date: '2026-01-01', propertyId: 'H1', paidBy: 'VELHO' } });
+    const { app } = comEstado(st);
+    const ids = cru(app.donosComPartilha().map((o) => o.id)).sort();
+    assert.deepEqual(ids, ['ANA', 'RUI', 'ZE'], 'o Zé entra pela ligação, mesmo sem casas');
+    const html = app.vOwners();
+    assert.ok(!html.includes("personView('owner','EU')"), 'eu não estou');
+    assert.ok(html.includes("personView('owner','ZE')"));
+    assert.equal(app.contagemDePessoas('owners'), 3, 'o segmentado conta os mesmos');
+  });
+
+  test('a ficha: com ligação abre as Casas partilhadas dela; só por grupo abre os meus imóveis do grupo, com a escolha quando há dois', () => {
+    const st = ESTADO();
+    st.connections = [{ id: 'L1', status: 'accepted', peer: { id: 'RUI', name: 'Rui' }, myShares: [], peerShares: [] }];
+    const { app } = comEstado(st);
+    assert.deepEqual(cru(app.casasPartilhadasDaFicha('owner', app.db.owners.find((o) => o.id === 'RUI'))),
+      { rotulo: 'Editar casas partilhadas', act: "CW.sharesModal('L1')" });
+    const ana = app.db.owners.find((o) => o.id === 'ANA');
+    assert.deepEqual(cru(app.casasPartilhadasDaFicha('owner', ana)), { rotulo: 'Editar casas partilhadas', act: "CW.casasDoGrupoCom('ANA')" });
+    assert.equal(app.casasPartilhadasDaFicha('owner', app.db.owners.find((o) => o.id === 'EU')), null, 'no meu perfil não');
+    // a Ana está em G1 e em G2: escolhe-se o grupo, e a escolha abre os meus imóveis dele
+    let escolha = null, abriu = null;
+    app.pickModal = (t, opts, cb) => { escolha = { t, opts: cru(opts) }; cb(opts[1]); };
+    app.CW.grupoImoveis = (id) => { abriu = id; };
+    app.CW.casasDoGrupoCom('ANA');
+    assert.equal(escolha.t, 'Que grupo?');
+    assert.deepEqual(escolha.opts.map((o) => o.v), ['G1', 'G2']);
+    assert.equal(abriu, 'G2');
+    // só um grupo em comum: abre logo
+    escolha = null;
+    app.CW.casasDoGrupoCom('RUI');
+    assert.equal(escolha, null);
+    assert.equal(abriu, 'G1');
+    // sem a ligação e sem grupos, não há botão
+    app.CW.state.connections = [];
+    app.db.groups = app.db.groups.filter((g) => !g._partilhado);
+    assert.equal(app.casasPartilhadasDaFicha('owner', app.db.owners.find((o) => o.id === 'RUI')), null);
+  });
+
+  test('o ⋯ da ficha: com ligação tem «Remover ligação» com o id dela; só por grupo não tem; removida, quem fica pelo grupo mantém a ficha, repintada sem ele', async () => {
+    const st = ESTADO();
+    st.connections = [{ id: 'L1', status: 'accepted', peer: { id: 'RUI', name: 'Rui' }, myShares: [], peerShares: [] }];
+    const { app, esp } = comEstado(st);
+    assert.deepEqual(cru(app.partilhaComDonoDaNuvem('RUI')), { act: "CW.sharesModal('L1')", ligacao: 'L1' });
+    assert.deepEqual(cru(app.partilhaComDonoDaNuvem('ANA')), { act: "CW.casasDoGrupoCom('ANA')" }, 'só por grupo não há ligação');
+    // a Ana: só por grupo, o ⋯ não tem a opção (nem mais nada, e por isso não se escreve)
+    app.personView('owner', 'ANA');
+    const ana = esp.abertas[esp.abertas.length - 1];
+    assert.ok(!ana.m.includes('Remover ligação') && !ana.m.includes('delConn'), 'sem «Remover ligação»: ' + ana.m);
+    assert.match(ana.f, /data-click="CW\.casasDoGrupoCom\('ANA'\)">Editar casas partilhadas</);
+    // o Rui: com a ligação L1
+    app.personView('owner', 'RUI');
+    const L = app.modalStack[app.modalStack.length - 1];
+    assert.match(L.m, /data-risco="destroi" data-click="closePops\(\);CW\.delConn\('L1'\)">[\s\S]*? Remover ligação</);
+    // remove-se (o confirmModal do montar confirma logo); o servidor deixa de mandar a ligação
+    esp.aoPuxar = () => { app.CW.state.connections = []; };
+    app.CW.delConn('L1');
+    await espera();
+    assert.deepEqual(esp.chamadas(), ['DELETE /api/connections/L1']);
+    assert.equal(esp.confirmados[0].t, 'Remover a ligação a Rui');
+    assert.ok(app.donosComPartilha().some((o) => o.id === 'RUI'), 'controlo: o Rui fica na lista, pelo grupo G1 e pela casa em comum');
+    assert.equal(app.modalStack[app.modalStack.length - 1], L, 'a ficha dele fica aberta');
+    // o que o repinte lê agora: sem «Remover ligação», e o rodapé passa ao grupo
+    assert.ok(!L.ficha.menu().includes('Remover ligação'), 'o ⋯ já não tem a opção');
+    assert.match(app.fichaRodape(L.ficha), /data-click="CW\.casasDoGrupoCom\('RUI'\)">Editar casas partilhadas</);
   });
 });

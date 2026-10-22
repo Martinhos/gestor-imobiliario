@@ -67,9 +67,14 @@ describe('autonomia: os contratos e as visitas rendem só com a base e o que req
     assert.match(html, /T2 Lisboa/);
     assert.match(html, /Ana/);
     assert.match(html, /Quarto 1/);
-    assert.match(html, /terminado/, 'o C2 leva o selo');
+    assert.match(html, /<span class="badge grey">Terminado<\/span>/, 'o C2 leva o selo cinzento');
     assert.match(html, /data-lp="ct:C1"/);
-    assert.match(html, /Novo contrato/, 'o FAB de criar');
+    // o FAB saiu de todos os ecrãs: o «Novo contrato» é a ação do cabeçalho e o + da barra de baixo
+    assert.doesNotMatch(html, /class="fab"/);
+    assert.match(html, /id="sel_lfc_lcts_st"[\s\S]*<span>Todos os estados · 2<\/span>[\s\S]*<span>Em vigor · 1<\/span>[\s\S]*<span>Terminados · 1<\/span>/,
+      'o chip rápido do estado diz quantos há em cada estado');
+    // tocar na linha abre a ficha; o elemento do toque longo (data-lp) é o de fora, onde a nuvem pendura os por confirmar
+    assert.match(html, /<div[^>]* class="ct-linha" data-lp="ct:C1"[^>]*>\s*<div class="row-between ct-cols" data-toca="camada" data-click="ctAbrirDaLista\('C1'\)">/);
     assert.doesNotMatch(html, SEM_ATALHOS);
     app.tab = 'contracts';
     app.render();
@@ -88,13 +93,13 @@ describe('autonomia: os contratos e as visitas rendem só com a base e o que req
     assert.match(corpo, /Em vigor/);
     assert.match(corpo, /Ana/);
     assert.match(corpo, /800/);
-    assert.doesNotMatch(corpo, /Próxima renda/, 'a renda planeada é dos Planeados, que não estão');
+    assert.doesNotMatch(corpo, /Próxima renda|Renda em atraso/, 'a renda planeada é dos Planeados, que não estão');
     assert.doesNotMatch(corpo, SEM_ATALHOS);
     assert.equal(app.ctFicha('nada'), '');
     app.ctView('C1');
     assert.equal(abertas.length, 1);
     assert.match(abertas[0].t, /Ana/);
-    assert.match(abertas[0].m, /generateContractPdf\('C1'\)/);
+    assert.match(abertas[0].m, /ctPdfJanela\('C1'\)/, 'o PDF abre primeiro a folha do que vai e do que falta');
     assert.match(abertas[0].m, /Terminar contrato/);
     assert.doesNotMatch(abertas[0].m, /Registar renda|txModal\(/);
     assert.match(abertas[0].f, /ctModal\('C1'\)/, 'o dono edita');
@@ -207,6 +212,208 @@ describe('autonomia: os contratos e as visitas rendem só com a base e o que req
   });
 });
 
+describe('o desenho de 2026-10: a lista, a ficha e a folha do PDF', () => {
+  test('a lista: os selos do que cada contrato pede, com as cores do contrato visual', () => {
+    const app = carregarApp();
+    semear(app, { owners: true });
+    // um prazo de oposição daqui a 10 dias (âmbar) e um contrato declarado sem o número da AT (vermelho)
+    const c = app.contract('C1');
+    c.end = app.pzAddDias(app.today(), 130);
+    c.fisco = app.normFisco({ estado: 'declarado' });
+    const ctx = app.ctContextoDaLista();
+    const avisos = app.ctAvisos(c, app.prop('P1'), ctx);
+    igual(avisos.map((a) => a.cor + ':' + a.txt).filter((x) => /Oposição|Falta o n/.test(x)),
+      ['red:Falta o n.º na AT', 'amber:Oposição até ' + app.dPT(app.pzAddDias(app.today(), 10)).slice(0, 5)], 'do mais grave para o menos');
+    igual(app.ctSeloDoEstado(c), { txt: 'Em vigor · faltam 130 dias', cor: 'in' });
+    igual(app.ctSeloDoEstado(app.contract('C2')), { txt: 'Terminado', cor: 'grey' });
+    assert.equal(app.ctDescDoImovel(app.prop('P1')), 'por quartos · 1/1');
+    const html = app.ctLinha(c, app.prop('P1'), ctx);
+    assert.match(html, /<span class="ct-selos ct-so-estreito"><span class="badge red">Falta o n\.º na AT<\/span><span class="badge amber">Oposição até/);
+    assert.match(html, /<div class="ct-c-at"><span class="badge in">Declarado<\/span>/, 'na tabela, a AT e os avisos');
+    assert.match(html, /<div class="ct-c-renda"><b>800,00\s€<\/b><span class="small ct-so-estreito">líquida /);
+  });
+
+  test('a lista: com um proprietário em foco, as contagens do estado e o «N contratos» do painel contam só os contratos que a lista mostra', () => {
+    const app = carregarApp();
+    elementos(app);
+    semear(app, { owners: true });
+    // um segundo imóvel, só do Pedro, com um contrato em vigor e um terminado; e um contrato sem imóvel, que nenhuma lista mostra
+    app.db.owners.push(app.normPerson({ id: 'O2', name: 'Pedro' }));
+    app.db.properties.push(app.normProp({ id: 'P2', name: 'T3 Coimbra', use: 'investimento', ownerIds: ['O2'] }));
+    app.db.contracts.push(
+      app.normContract({ id: 'C3', propertyId: 'P2', tenantIds: ['T1'], rent: 600, start: (ANO - 1) + '-01-01', end: (ANO + 2) + '-12-31' }),
+      app.normContract({ id: 'C4', propertyId: 'P2', tenantIds: ['T1'], rent: 550, start: (ANO - 4) + '-01-01', end: (ANO - 3) + '-12-31', active: false }),
+      app.normContract({ id: 'C5', propertyId: 'nenhum', tenantIds: ['T1'], rent: 300, start: (ANO - 1) + '-01-01', end: (ANO + 1) + '-12-31' }));
+    // as escolhas do chip do estado, com quantos há em cada uma
+    const chips = (h) => {
+      const pop = h.slice(h.indexOf('id="pop_lfc_lcts_st"'), h.indexOf('</div>', h.indexOf('id="pop_lfc_lcts_st"')));
+      const NOME = { 'Todos os estados': 'todos', 'Em vigor': 'on', 'Por começar': 'fut', Terminados: 'off' };
+      return [...pop.matchAll(/<span>([^<·]+) · (\d+)<\/span>/g)].map((m) => NOME[m[1].trim()] + ':' + m[2]).join(' ');
+    };
+    const linhas = (h) => (h.match(/class="ct-linha"/g) || []).length;
+    // sem foco: os quatro com imóvel (o órfão não aparece, e por isso não conta)
+    let h = app.vContracts();
+    assert.equal(linhas(h), 4);
+    assert.equal(chips(h), 'todos:4 on:2 fut:0 off:2');
+    // com o Rui em foco, só o T2 Lisboa: os chips contam o que a lista tem
+    app.ownerFilter = 'O1';
+    h = app.vContracts();
+    assert.equal(linhas(h), 2);
+    assert.equal(chips(h), 'todos:2 on:1 fut:0 off:1', 'os chips contam só os contratos do âmbito');
+    app.lf('lcts').st = 'off';
+    h = app.vContracts();
+    assert.equal(linhas(h), 1);
+    assert.match(h, /Aplicam-se ao mexer · 1 contrato</, 'o «N contratos» do painel é o número de linhas que se veem');
+    assert.equal(chips(h), 'todos:2 on:1 fut:0 off:1');
+    app.lf('lcts').st = '';
+  });
+
+  test('a ficha: o topo com a barra do tempo, o cartão do prazo com as ações, e os cartões', () => {
+    const app = carregarApp();
+    elementos(app);
+    semear(app, { owners: true });
+    const c = app.contract('C1');
+    c.start = app.pzAddDias(app.today(), -140);
+    c.end = app.pzAddDias(app.today(), 140);
+    c.inventory = [{ id: 'A', name: 'Sofá', qty: 1, state: 'novo' }];
+    const h = app.ctFicha('C1');
+    // cada coisa uma vez, como a prancheta: o selo diz «Em vigor» e os dias que faltam ficam por cima da barra
+    assert.match(h, /<div class="ct-topo-selos"><span class="badge in">Em vigor<\/span><\/div>/);
+    assert.equal((h.match(/faltam 140 dias/g) || []).length, 1, 'os dias que faltam dizem-se uma vez');
+    assert.match(h, /<div class="ct-periodo"><span>[^<]+<\/span><span class="small">faltam 140 dias<\/span>/);
+    igual(app.ctSeloDoEstado(c), { txt: 'Em vigor · faltam 140 dias', cor: 'in' }, 'a tabela da lista continua a juntá-los ao selo');
+    assert.match(h, /<div class="ct-barra" role="progressbar"[^>]*aria-valuenow="50"[^>]*><span class="ct-barra-feita" data-largura="50"><\/span><\/div>/, 'metade do prazo, pela largura dos dados');
+    assert.match(h, /<div class="ct-prazo ct-prazo-amber">[\s\S]*?Oposição à renovação até[\s\S]*?ctRenovar\('C1'\)[\s\S]*?endContract\('C1'\)[\s\S]*?pzSilencia\('oposicao:C1:/, 'a oposição com Renovar, Terminar e o silenciar');
+    assert.match(h, /<h3>Perante a AT<\/h3><span class="badge">Por indicar<\/span>/);
+    assert.match(h, /<h3>Inquilino<\/h3>/);
+    assert.match(h, /data-click="ctVerAnexos\('C1','inv'\)"><span class="small">Inventário<\/span><b>1 artigo<\/b>/);
+    assert.match(h, /class="btn ct-gerar-pdf" data-toca="camada" data-click="ctPdfJanela\('C1'\)"/);
+    // o mosaico abre a lista dele
+    const abertas = janelasFalsas(app, 'paintThumbs', 'save');
+    app.ctVerAnexos('C1', 'inv');
+    assert.equal(abertas[0].t, 'Inventário');
+    assert.match(abertas[0].b, /<div class="ct-kv"><span>1× Sofá<\/span><b>Novo<\/b><\/div>/);
+  });
+
+  test('a ficha: a renda planeada nos três estados dos Planeados — planeada, por confirmar, em atraso a vermelho', () => {
+    const app = carregarApp();
+    elementos(app);
+    semear(app, { owners: true });
+    app.syncContractRec(app.contract('C1'));
+    const r = app.db.recurring[0], hoje = app.today(), d = (n) => app.pzAddDias(hoje, n);
+    const valores = () => app.ctValoresDaFicha(app.contract('C1'));
+    Object.assign(r, { next: d(10), until: d(10), muted: false });
+    assert.match(valores(), /<div class="ct-kv"><span>Próxima renda<\/span><b>[\d/]+ · planeada<\/b><\/div>/);
+    // chegou, e a janela do pagamento ainda está aberta: por confirmar, sem cor
+    Object.assign(r, { next: d(-3), until: d(4) });
+    assert.match(valores(), new RegExp('<span>Próxima renda</span><b>' + app.dPT(d(-3)) + ' · por confirmar</b>'));
+    assert.ok(!app.recIsLate(r));
+    // a janela fechou: não é «próxima», é uma renda em atraso, a vermelho, desde o fim da janela (como a ficha do planeado)
+    Object.assign(r, { next: d(-46), until: d(-40) });
+    let h = valores();
+    assert.doesNotMatch(h, /Próxima renda/);
+    assert.match(h, new RegExp('<span>Renda em atraso</span><b><span class="perigo">desde ' + app.dPT(d(-40)) + '</span></b>'));
+    Object.assign(r, { next: d(-46), until: '' });
+    assert.match(valores(), new RegExp('<span class="perigo">desde ' + app.dPT(d(-46)) + '</span>'));
+    // silenciada, continua em atraso, e di-lo
+    r.muted = true;
+    assert.match(valores(), /<span class="perigo">desde [\d/]+<\/span> · silenciada<\/b>/);
+  });
+
+  test('a ficha: um contrato por começar «começa a» (e a tabela também); a caução com cêntimos; o telefone e o email cada um na sua linha', () => {
+    const app = carregarApp();
+    elementos(app);
+    semear(app, { owners: true });
+    const c = app.contract('C1');
+    Object.assign(c, { start: app.pzAddDias(app.today(), 40), end: '', deposit: 2500 });
+    Object.assign(app.tenant('T1'), { email: 'ana@exemplo.pt' });
+    assert.equal(app.ctEstado(c), 'futuro');
+    const h = app.ctFicha('C1');
+    const dia = app.dPT(c.start);
+    assert.match(h, new RegExp('<div class="ct-topo-selos"><span class="badge">Por começar</span></div>'), 'o início não se repete ao lado do selo');
+    assert.match(h, new RegExp('<p class="small ct-periodo-so">Começa a ' + dia + ' · sem data de fim</p>'));
+    assert.doesNotMatch(h, /Desde /);
+    assert.equal(app.ctPeriodo(c), 'começa a ' + dia);
+    assert.equal(app.ctPeriodoCurto(c), 'começa a ' + dia);
+    c.start = app.pzAddDias(app.today(), -40);
+    assert.equal(app.ctPeriodo(c), 'desde ' + app.dPT(c.start), 'em vigor e sem fim, «desde»');
+    assert.match(app.ctFicha('C1'), /<p class="small ct-periodo-so">Desde [\d/]+ · sem data de fim<\/p>/);
+    // a caução no formato dos outros valores da ficha (e da folha do PDF)
+    assert.match(h, /<div class="ct-kv"><span>Caução<\/span><b>2\s500,00\s€<\/b><\/div>/);
+    // o telefone e o email: duas ligações, cada uma o seu elemento, sem o « · » no meio
+    assert.match(h, /<div class="ct-pessoa-txt"><b>Ana<\/b><a class="small" href="tel:\+351912000000">\+351 912 000 000<\/a><a class="small" href="mailto:ana@exemplo\.pt">ana@exemplo\.pt<\/a><\/div>/);
+  });
+
+  test('a lista: o chip da ordenação diz ao leitor de ecrã «Ordenar: renda», uma vez só; o do imóvel «Imóvel: T2 Lisboa»', () => {
+    const app = carregarApp();
+    semear(app, { owners: true });
+    const aria = (h, id) => (new RegExp('id="selb_' + id + '" aria-haspopup="listbox"[^>]*>|class="selbtn" aria-label="([^"]*)" id="selb_' + id + '"').exec(h) || [])[1];
+    const conta = { '': 2, on: 1, fut: 0, off: 1 };
+    Object.assign(app.lf('lcts'), { sb: 'renda', p: 'P1' });
+    let h = app.ctChipsHtml(conta, app.lf('lcts'), 1, []);
+    assert.equal(aria(h, 'lfc_lcts_sb'), 'Ordenar: renda');
+    assert.equal(aria(h, 'lfc_lcts_p'), 'Imóvel: T2 Lisboa');
+    assert.match(h, /aria-label="Voltar à ordem original" data-toca="vista" data-click="lfLimparCampo\('lcts','sb'\)"/, 'o × da ordenação diz o que faz');
+    app.listF.lcts = {};
+    h = app.ctChipsHtml(conta, app.lf('lcts'), 2, []);
+    assert.equal(aria(h, 'lfc_lcts_sb'), 'Ordenar', 'sem escolha, só o nome');
+    assert.match(h, /<span class="mov-chip mov-so-largo"><div class="sel" id="sel_lfc_lcts_sb">/, 'a ordenação desligada só tem chip no ecrã largo');
+  });
+
+  test('a folha do PDF: o que falta para gerar, o que vai, o que fica de fora, e o total', () => {
+    const app = carregarApp();
+    semear(app, { owners: true });
+    const c = app.contract('C1');
+    let v = app.ctPdfVerificar(c);
+    igual(v.falta.map((x) => x.txt), ['Falta a morada do imóvel'], 'o que o generateContractPdf recusa, dito antes');
+    Object.assign(app.prop('P1'), { street: 'Rua B', doorNumber: '2', postalCode: '1000-001', locality: 'Lisboa', licence: 'Alvará 1' });
+    Object.assign(c, { deposit: 800, advance: 1, iban: '' , payDay: null, payDayTo: null });
+    v = app.ctPdfVerificar(c);
+    igual(v.falta, []);
+    igual(v.vai.map((x) => x.txt), ['Senhorio: Rui', 'Inquilino, morada, prazo de 3 anos e renda']);
+    const fora = v.avisos.map((x) => x.txt);
+    assert.ok(!fora.includes('Sem licença de utilização'), 'a licença está escrita');
+    for (const t of ['Sem o registo predial', 'Sem certificado energético', 'Sem IBAN nem dia de pagamento', 'Rui sem n.º do CC, NIF e morada fiscal', 'Sem inventário', 'Sem chaves registadas'])
+      assert.ok(fora.includes(t), t + ' em ' + fora.join(' | '));
+    const h = app.ctPdfFicha('C1');
+    assert.match(h, /<p class="small num ct-pdf-ficheiro">contrato-t2-lisboa-\d{4}-\d\d-\d\d\.pdf<\/p>/);
+    assert.match(h, /Total a entregar na assinatura<\/p><p class="small">1 renda antecipada 800,00\s€ \+ caução 800,00\s€<\/p><\/div><b class="disp num">1\s600,00\s€<\/b>/);
+    assert.match(h, /É uma minuta genérica: lê-a com atenção antes de assinar\./);
+    // o «Descarregar PDF» com o que falta diz o primeiro e não gera
+    let dito = '', gerou = false;
+    app.toast = (m) => { dito = m; };
+    app.generateContractPdf = () => { gerou = true; };
+    c.end = '';
+    app.ctPdfDescarregar('C1');
+    assert.equal(dito, 'Falta a data de fim do contrato.', 'diz a data que falta, e não as duas');
+    assert.equal(gerou, false);
+    const falta = () => app.ctPdfVerificar(c).falta.map((x) => x.txt);
+    igual(falta(), ['Falta a data de fim do contrato']);
+    c.start = ''; c.end = (ANO + 1) + '-12-31';
+    igual(falta(), ['Falta a data de início do contrato']);
+    c.end = '';
+    igual(falta(), ['Faltam as datas de início e de fim do contrato']);
+  });
+
+  test('a folha do PDF: a miniatura escreve o título em minúsculas (as maiúsculas são da folha) e o «Completar» de uma pessoa abre o formulário dela, só a quem a pode alterar', () => {
+    const app = carregarApp();
+    semear(app, { owners: true });
+    Object.assign(app.prop('P1'), { street: 'Rua B', doorNumber: '2', postalCode: '1000-001', locality: 'Lisboa' });
+    const h = app.ctPdfFicha('C1');
+    assert.match(h, /<div class="ct-pdf-mini" aria-hidden="true"><p>Contrato de arrendamento urbano para habitação com prazo certo<\/p>/);
+    const completar = (nome) => (app.ctPdfVerificar(app.contract('C1')).avisos.find((x) => x.txt.startsWith(nome + ' sem')) || {}).act;
+    assert.equal(completar('Rui'), "personModal('owner','O1')", 'o proprietário abre o formulário, e não a ficha de leitura');
+    assert.equal(completar('Ana'), "personModal('tenant','T1')");
+    // um coproprietário com conta não se edita daqui: não há «Completar» que abra uma ficha sem «Editar»
+    app.db.owners[0]._userId = 'outra-conta';
+    assert.equal(completar('Rui'), '');
+    // e o meu próprio perfil edita-se pela nuvem
+    app.db.owners[0]._userId = 'O1';
+    app.CW = { user: { id: 'O1' }, editProfile() {} };
+    try { assert.equal(completar('Rui'), 'CW.editProfile()'); } finally { app.CW = undefined; }
+  });
+});
+
 describe('desligado: com os outros serviços desligados, os contratos e as visitas rendem sem os atalhos deles', () => {
   test('desligado: sem movimentos nem planeados, a lista e a ficha do contrato rendem sem os atalhos, e o controlo positivo mostra-os', () => {
     const app = carregarApp();
@@ -217,7 +424,8 @@ describe('desligado: com os outros serviços desligados, os contratos e as visit
     assert.equal(app.db.recurring.length, 1, 'a renda planeada existe');
     // controlo positivo: com tudo ligado, a ficha e o menu trazem o que é dos movimentos e dos planeados
     let corpo = app.ctFicha('C1');
-    assert.match(corpo, /Próxima renda/);
+    // a primeira renda planeada é a do mês a seguir à última registada: conforme o dia de hoje, próxima ou já em atraso
+    assert.match(corpo, /Próxima renda|Renda em atraso/);
     assert.match(corpo, /Rendas registadas/);
     app.ctView('C1');
     assert.match(abertas[0].m, /Registar renda/);
@@ -239,7 +447,7 @@ describe('desligado: com os outros serviços desligados, os contratos e as visit
     corpo = app.ctFicha('C1');
     assert.ok(corpo.length > 0);
     assert.match(corpo, /Em vigor/);
-    assert.doesNotMatch(corpo, /Próxima renda|Rendas registadas/);
+    assert.doesNotMatch(corpo, /Próxima renda|Renda em atraso|Rendas registadas/);
     assert.doesNotMatch(corpo, SEM_ATALHOS);
     app.ctView('C1');
     const L = abertas[abertas.length - 1];

@@ -264,12 +264,13 @@ describe('o despacho pelo registo', () => {
     const ana = app.analiseDe('dashboard');
     assert.equal(ana.n(), 0);
     app.ownerFilter = 'o1';
-    assert.equal(ana.n(), 1);
+    assert.equal(ana.n(), 0, 'a visão geral já não conta um proprietário');
     app.dashProp = 'p1';
-    assert.equal(app.analiseDe('dashboard').n(), 2);
+    assert.equal(app.analiseDe('dashboard').n(), 1);
     app.analiseDe('dashboard').limpar();
     assert.equal(app.dashProp, '');
-    assert.equal(app.analiseDe('fisco').n(), 1, 'a Declaração conta só o proprietário');
+    assert.equal(app.analiseDe('fisco').n(), 1, 'a Declaração conta só o titular');
+    app.ownerFilter = '';
     assert.equal(typeof app.analiseDe('transactions').alternar, 'function', 'os movimentos têm painel próprio');
     assert.equal(typeof app.analiseDe('transactions').limpar, 'function', 'e limpam os seus filtros pelo botão dos estados vazios');
     app.txSearch = 'x'; app.txFilter = 'income';

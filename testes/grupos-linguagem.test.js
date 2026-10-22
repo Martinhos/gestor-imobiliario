@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 const RAIZ = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FICHEIROS = ['web/cloud/grupos.js', 'worker/src/rotas/grupos.js'];
-const MAU = /\b(p[ôo]r|p[õo]e|p[õo]em|pus|puseste|puseram|pusesse|pôs|puser|puseres|tir(?:ar|a|am|ou|ado|ada|ados|adas|á-l[oa]s?|e))\b/i;
+const MAU = /\b(p[ôo]r|p[õo]e|p[õo]em|pus|puseste|puseram|pusesse|pusessem|pôs|puser|puseres|puserem|puserdes|pusermos|tir(?:ar|a|am|ou|ado|ada|ados|adas|á-l[oa]s?|e))\b/i;
 
 // As frases entre aspas de um ficheiro, fora dos comentários de linha e de bloco.
 // Recebe: src — o código.
@@ -40,6 +40,8 @@ function mas(src) {
 describe('os grupos partilhados adicionam e removem', () => {
   test('a regra apanha «pôr» e «tirar» e deixa passar o «por» e os comentários', () => {
     assert.equal(mas("x = 'Pôr os meus imóveis'; y = 'Tirar'; z = 'os que puseste'").length, 3);
+    // o futuro do conjuntivo também: «os que os membros puserem» passava
+    assert.equal(mas("a = 'Os que os membros puserem'; b = 'se puserdes'; c = 'quando pusermos'").length, 3);
     assert.equal(mas("x = 'Adicionar por grupo'; // pôr isto\n/* tirar */").length, 0);
   });
 

@@ -47,6 +47,14 @@ const opcoes = (id) => Array.from(app.window.__sel[id].options).filter((o) => !o
    Recebe: html — o corpo do formulário.
    Devolve: array de textos. */
 const linhasDaDivisao = (html) => [...html.matchAll(/<span class="nm">([^<]*)<\/span>/g)].map((m) => m[1]);
+/* as escolhas dos chips de «Pago por»/«Recebido por»: o nome inteiro de
+   cada uma, no title (o que o leitor de ecrã também lê), e o que se vê no
+   chip
+   Recebe: html — o corpo do formulário.
+   Devolve: array de {nome, curto}. */
+const segmento = (html) => [...html.matchAll(/<button type="button" role="radio"[^>]*title="([^"]*)"[^>]*data-click="txPagoPor\([^)]*\)"><svg[\s\S]*?<\/svg><span>([^<]*)<\/span><\/button>/g)]
+  .map((m) => ({ nome: m[1], curto: m[2] }));
+const nomes = (html) => segmento(html).map((x) => x.nome);
 
 describe('rotuloDoDono', () => {
   test('« (eu)» só no meu, e só com mais do que um à escolha', () => {
@@ -66,8 +74,10 @@ describe('o «(eu)» no formulário do movimento', () => {
     duasCasas();
     const abertas = janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     app.txModal({ kind: 'expense', propId: 'P1', preset: { split: { mode: 'percent', parts: {} } } });
-    assert.deepEqual(opcoes('t_paid'), ['Todos os proprietários', 'Eu (eu)', 'Rui']);
-    assert.match(abertas[0].b, /Pago por/);
+    // «Todos» e um chip por dono, com o nome inteiro
+    assert.deepEqual(nomes(abertas[0].b), ['Todos os proprietários', 'Eu (eu)', 'Rui']);
+    assert.deepEqual(segmento(abertas[0].b).map((x) => x.curto), ['Todos', 'Eu (eu)', 'Rui']);
+    assert.match(abertas[0].b, /<span class="flabel" id="t_paidL">Pago por<\/span><input type="hidden" id="t_paid" value="">/);
     assert.deepEqual(linhasDaDivisao(abertas[0].b), ['Eu (eu)', 'Rui']);
     // o campo de cada linha continua a ir pelo id, e não pelo rótulo
     assert.match(abertas[0].b, /id="t_sp_eu"/);
@@ -75,24 +85,73 @@ describe('o «(eu)» no formulário do movimento', () => {
     // numa renda o rótulo é «Recebido por», com o mesmo sufixo
     app.txModal({ kind: 'income', propId: 'P1' });
     assert.match(abertas[1].b, /Recebido por/);
-    assert.deepEqual(opcoes('t_paid'), ['Todos os proprietários', 'Eu (eu)', 'Rui']);
+    assert.deepEqual(nomes(abertas[1].b), ['Todos os proprietários', 'Eu (eu)', 'Rui']);
   });
 
-  test('a dica da divisão vai pelo primeiro nome, sem o sufixo', () => {
+  test('os chips mostram o nome inteiro, sem o cortar ao primeiro', () => {
+    duasCasas();
+    app.db.owners = [app.normPerson({ id: 'eu', name: 'Ana Costa' }), app.normPerson({ id: 'rui', name: 'Rui Matos' })];
+    const abertas = janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
+    app.txModal({ kind: 'expense', propId: 'P1' });
+    assert.deepEqual(segmento(abertas[0].b).map((x) => x.curto), ['Todos', 'Ana Costa (eu)', 'Rui Matos']);
+    assert.deepEqual(nomes(abertas[0].b), ['Todos os proprietários', 'Ana Costa (eu)', 'Rui Matos']);
+    app.db.owners[1].name = 'Ana Matos';
+    app.txModal({ kind: 'expense', propId: 'P1' });
+    assert.deepEqual(segmento(abertas[1].b).map((x) => x.curto), ['Todos', 'Ana Costa (eu)', 'Ana Matos']);
+  });
+
+  test('um toque num chip escreve no campo e no movimento, sem repintar', () => {
+    duasCasas();
+    janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
+    app.txModal({ kind: 'expense', propId: 'P1' });
+    let repintou = 0;
+    const repaint = app.repaintTx;
+    app.repaintTx = () => { repintou++; };
+    try {
+      app.txPagoPor('rui');
+      assert.equal(app.tForm.paidBy, 'rui');
+      assert.equal(app.document.getElementById('t_paid').value, 'rui', 'o campo que o collectTx lê');
+      app.txPagoPor('');
+      assert.equal(app.tForm.paidBy, null, '«Todos» é ninguém em particular');
+      assert.equal(app.document.getElementById('t_paid').value, '');
+      assert.equal(repintou, 0, 'o resto do formulário não depende de quem pagou');
+    } finally { app.repaintTx = repaint; }
+  });
+
+  test('com três ou mais donos continuam a ser chips, um por dono', () => {
+    duasCasas();
+    app.db.owners.push(app.normPerson({ id: 'bia', name: 'Bia' }));
+    app.db.properties[0].ownerIds = ['eu', 'rui', 'bia'];
+    const abertas = janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
+    app.txModal({ kind: 'expense', propId: 'P1' });
+    assert.deepEqual(nomes(abertas[0].b), ['Todos os proprietários', 'Eu (eu)', 'Rui', 'Bia']);
+    assert.match(abertas[0].b, /<div class="chips-fila pago-por" role="radiogroup" aria-labelledby="t_paidL">/);
+    assert.doesNotMatch(abertas[0].b, /<label>Pago por<div class="sel"/, 'já não troca para o menu');
+  });
+
+  test('a dica da divisão vai pelo primeiro nome, sem o sufixo, e diz se a soma bate certo', () => {
     duasCasas();
     janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     app.txModal({ kind: 'expense', propId: 'P1', preset: { amount: 100, paidBy: 'eu' } });
     const dica = app.splitHint(app.ownersOfProp(app.prop('P1')).map(app.owner));
-    assert.match(dica, /Eu <b>/);
+    assert.ok(dica.includes('<span class="mov-pnome">Eu</span><span class="small">50%</span><b>' + app.euro2(50) + '</b>'), dica);
     assert.doesNotMatch(dica, /\(eu\)/);
+    assert.ok(dica.includes('Soma ' + app.euro2(100) + ' — bate certo.'), dica);
+    // em valor certo, o que falta diz-se em vez do «bate certo»
+    app.tForm.split = { mode: 'amount', parts: { eu: 30, rui: 20 } };
+    const falta = app.splitHint(app.ownersOfProp(app.prop('P1')).map(app.owner));
+    assert.match(falta, /class="mov-soma perigo"/);
+    assert.ok(falta.includes('Faltam ' + app.euro2(50) + ': os valores têm de somar ' + app.euro2(100) + '.'), falta);
+    assert.doesNotMatch(falta, /bate certo/);
   });
 
   test('com um só proprietário não há «(eu)»', () => {
     duasCasas();
-    janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
+    const abertas = janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     app.txModal({ kind: 'expense', propId: 'P2' });
-    assert.deepEqual(opcoes('t_paid'), ['Todos os proprietários', 'Eu']);
+    assert.deepEqual(nomes(abertas[0].b), ['Todos os proprietários', 'Eu']);
     assert.equal(app.tForm.paidBy, 'eu', 'e fica logo escolhido, como sempre');
+    assert.match(abertas[0].b, /role="radio" aria-checked="true" class="chip on" data-v="eu"/, 'e aceso nos chips');
   });
 
   test('sem sessão (meuId vazio) não há «(eu)», mesmo com dois proprietários', () => {
@@ -101,7 +160,7 @@ describe('o «(eu)» no formulário do movimento', () => {
     assert.equal(app.meuId(), '');
     const abertas = janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     app.txModal({ kind: 'expense', propId: 'P1', preset: { split: { mode: 'percent', parts: {} } } });
-    assert.deepEqual(opcoes('t_paid'), ['Todos os proprietários', 'Eu', 'Rui']);
+    assert.deepEqual(nomes(abertas[0].b), ['Todos os proprietários', 'Eu', 'Rui']);
     assert.deepEqual(linhasDaDivisao(abertas[0].b), ['Eu', 'Rui']);
     assert.doesNotMatch(abertas[0].b, /\(eu\)/);
   });
@@ -146,7 +205,8 @@ describe('a opção «Sem imóvel»', () => {
     const abertas = janelasFalsas(app, 'paintThumbs', 'render', 'buildNav', 'save');
     app.txModal({ kind: 'expense' });
     assert.ok(abertas[0].b.includes(DICA), 'sem imóvel: a dica');
-    assert.match(abertas[0].b, /<\/label>\s*<div class="hint u-mt-n6px">Conta nos totais/, 'logo a seguir ao seletor do imóvel');
+    // o imóvel vive ao lado da data (o canvas): a dica vem logo a seguir aos dois
+    assert.match(abertas[0].b, /<\/label><\/div>\s*<div class="hint u-mt-n6px">Conta nos totais/, 'logo a seguir ao seletor do imóvel');
     app.txModal({ kind: 'expense', propId: 'P1' });
     assert.ok(!abertas[1].b.includes(DICA), 'com imóvel: sem dica');
     app.txModal({ kind: 'settle' });

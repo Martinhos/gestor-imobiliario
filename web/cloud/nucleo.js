@@ -10,6 +10,14 @@ var LS_LIGACAO = 'gi_ligacao_url';   // + '_<id>': o URL da ligação permanente
 // 3 minutos entre leituras: com 90 segundos, uma app aberta o dia todo
 // sozinha consumia uma fatia enorme do plano gratuito da base de dados.
 var PULL_MS = 180000;
+/* Sem ninguém a mexer na app, as leituras espaçam-se: um separador esquecido
+   aberto numa conta grande gastava sozinho perto de um quinto das leituras
+   diárias da base. [inativo há mais de, ler de]: 10 min → de 10 em 10 min;
+   1 h → de 30 em 30 min. Ao voltar, o primeiro toque põe o ciclo de 30 s a
+   ler logo (já passou mais do que o PULL_MS). */
+var PULL_INATIVO = [[3600000, 1800000], [600000, 600000]];
+// a última vez que alguém tocou, escreveu ou rolou a app (marcarAtividade)
+var ultimaAtividade = Date.now();
 
 // O CW.state de quem ainda não recebeu nenhum estado: as listas todas com forma, vazias.
 // Devolve: um objeto novo com a forma do estado.
@@ -282,8 +290,9 @@ function chaveDaLigacao(id) {
    limpeza diferentes, e cada chave nova tinha de ser lembrada em cinco sítios
    — já faltava em dois (a ligação de partilha, os planeados perguntados).
    Sai sempre: a sessão, a página guardada, os planeados já perguntados, a
-   ligação desta conta, o rasto, o estado em memória e os serviços desligados
-   (eram desta conta). A base local e o retrato ficam, de propósito
+   ligação desta conta, o rasto, o estado em memória, os serviços desligados
+   (eram desta conta) e o selo da nuvem (sem sessão não há ligação de que
+   falar; cloud/entrada.js:setSyncBadge). A base local e o retrato ficam, de propósito
    (docs/design.md, «A app não afirma nem decide antes de saber»): quem volta a entrar encontra o que
    deixou, e o finishLogin larga-os quando entra outra conta. Com apagarDados
    (a conta deixou de existir) vão também a base, o dono dela e o retrato.
@@ -309,6 +318,9 @@ function encerrarSessao(o) {
   CW._rasto = [];
   CW.state = estadoVazio(); CW.cargos = {}; CW.pessoas = {}; CW._pulled = 0;
   seloAplicado = ''; resumoAplicado = '';
+  // sem sessão a nuvem não diz nada; a próxima entrada volta a começar «A ligar»
+  semLigacao = false; porLigar = true;
+  try { setSyncBadge(''); } catch (e) {}
   try { definirServicosDesligados([]); } catch (e) {}
   try { closeAllModals(); } catch (e) {}
   // a próxima entrada começa na visão geral, não onde se saiu
@@ -543,6 +555,45 @@ var pushing = false, pushAgain = false, pushTimer = null;
    de o trazer. */
 var seloAplicado = '', resumoAplicado = '';
 var semLigacao = false;   // a última conversa com o servidor falhou por falta de rede
+var porLigar = true;      // nesta sessão ainda nenhuma conversa com o servidor acabou
+var ultimaTentativa = 0;  // quando começou a última tentativa de ligar (tentarLigar), em ms
+
+/* Uma conversa com o servidor vai começar. Se a última falhou por falta de
+   rede (semLigacao), ou se ainda nenhuma acabou nesta sessão (porLigar), é
+   uma tentativa de ligar: o selo passa a «A ligar ao servidor…» — laranja,
+   com o relógio — e fica até ela acabar, em 'ok' (ligou) ou em 'off'
+   (caiuALigacao). Com a ligação de pé não mexe no selo: quem chama diz o seu
+   (o 'pend' do envio).
+   Recebe: nada.
+   Devolve: true se é uma tentativa de ligar (e o selo ficou em 'liga'). */
+function tentarLigar() {
+  if (!semLigacao && !porLigar) return false;
+  ultimaTentativa = Date.now();
+  setSyncBadge('liga');
+  return true;
+}
+
+/* O servidor respondeu — com dados, com um 304 ou com uma recusa (um 429,
+   um 5xx): a ligação está de pé. O selo di-lo quem chama.
+   Recebe: nada.
+   Devolve: true se isto acabou uma tentativa de ligar (estava sem ligação ou
+   por ligar), para quem chama saber se o selo tem de sair do 'liga'. */
+function ligou() {
+  var era = semLigacao || porLigar;
+  semLigacao = false; porLigar = false;
+  return era;
+}
+
+/* A conversa falhou sem resposta: sem rede, ou sem resposta a tempo
+   (comTempoLimite). O selo fica vermelho, com a cruz, até à tentativa
+   seguinte (o ciclo de 30 s, o voltar online ou à frente, o próximo envio).
+   Sem sessão — ela acabou entretanto —, o selo não volta.
+   Recebe: nada.
+   Devolve: nada. */
+function caiuALigacao() {
+  semLigacao = true; porLigar = false;
+  if (CW.user) setSyncBadge('off');
+}
 
 // Agenda um envio daqui a 1,2s, juntando alterações seguidas num só push.
 // Com a app trancada pela versão mínima não arma nada.
@@ -691,8 +742,9 @@ function pushNow() {
   var sharedHouses = {};
   (CW.state.houses || []).forEach(function (h) { if (!h.mine) sharedHouses[h.id] = 1; });
   /* o que vai subir agora e o que a pessoa tem por enviar: diz-se, em vez de
-     ficar em silencio ate correr mal */
-  if (ops.length) setSyncBadge('pend', ops.length);
+     ficar em silencio ate correr mal. Sem ligação (ou ainda por ligar), este
+     envio é uma tentativa de ligar, e o selo diz isso primeiro */
+  if (ops.length && !tentarLigar()) setSyncBadge('pend', ops.length);
   /* As remoções por diferença esperam pelo primeiro estado. O retrato é por
      utilizador e não se apaga ao sair; o db é apagado no finishLogin quando
      quem entra é outra conta. Base vazia mais retrato cheio dava um «del»
@@ -748,7 +800,7 @@ function pushNow() {
   return chain
     .then(function () {
       saveSnap();
-      semLigacao = false;
+      ligou();
       /* um 200 com operações recusadas lá dentro ficava 'ok' para sempre,
          com o selo verde e os dados sem subir — e «Sem ligação» também não
          é: o servidor respondeu. Ficam por enviar, e o ciclo volta a tentar */
@@ -789,12 +841,11 @@ function pushNow() {
         /* o servidor respondeu e recusou o envio inteiro — 429 («Demasiadas
            gravações seguidas… os dados não se perdem»), 5xx. Não é falta de
            rede: o selo fica em «N por enviar» e a frase dele chega à pessoa */
-        semLigacao = false;
+        ligou();
         setSyncBadge('pend', porEnviar(ops));
         avisoDoServidor(e.message);
       } else {
-        semLigacao = true;   // sem rede, ou sem resposta a tempo
-        setSyncBadge('off');
+        caiuALigacao();   // sem rede, ou sem resposta a tempo
       }
     })
     .then(function () {
@@ -1274,7 +1325,7 @@ function applyState(st, selo, resumoSt) {
      também fica certo. */
   acertarCreditos(db);
   seloAplicado = selo || ''; resumoAplicado = resumoSt || '';
-  semLigacao = false;
+  ligou();
   saveSnap();
   try { localStorage.setItem(LS_OWNER, quem); } catch (e) {}
   rawSet(KEY, JSON.stringify(db));
@@ -1305,8 +1356,9 @@ function aEscreverNumCampo() {
 
 /* Pede o estado ao servidor. Com condicional, manda o selo do último estado
    aplicado (If-None-Match): se nada mudou, o servidor responde 304 sem corpo
-   e poupa a leitura de todas as linhas — a maior despesa do plano, de três em
-   três minutos por aparelho aberto. A primeira leitura da página nunca é
+   e poupa a resposta e a reconstrução da base — mas não as leituras na D1: o
+   servidor lê as linhas todas antes de calcular o selo. O que poupa leituras
+   é ler menos vezes (intervaloDeLeitura). A primeira leitura da página nunca é
    condicional: o CW.state (cargos, ligações, pedidos) só vive em memória.
    Recebe: condicional — verdadeiro para mandar o selo, se o houver.
    Devolve: Promise com {estado, selo, resumo}, ou {naoMudou: true} num 304. */
@@ -1317,12 +1369,12 @@ function pedirEstado(condicional) {
 }
 
 // O servidor está como estava no último estado aplicado: não há nada para
-// refazer nem para repintar. Se a última conversa tinha falhado por falta de
-// rede, o «Sem ligação» deixou de ser verdade — e vê-se se há por enviar.
+// refazer nem para repintar. Se esta leitura era uma tentativa de ligar (a
+// última conversa tinha falhado por falta de rede), o «A ligar» acaba em
+// «Guardado» — e vê-se se há por enviar.
 // Devolve: nada.
 function estadoIgual() {
-  if (!semLigacao) return;
-  semLigacao = false;
+  if (!ligou()) return;
   setSyncBadge('ok');
   schedulePush();
 }
@@ -1331,31 +1383,56 @@ function estadoIgual() {
 // escrever num campo, não faz nada (para não pisar uma edição a meio), salvo
 // com force. Se nada mudou — um 304 ao selo, ou a mesma resposta que o
 // último estado aplicado —, não refaz a base nem repinta: conta como leitura.
-// Falhas põem o selo a 'off'.
+// Depois de uma falha a leitura é uma tentativa de ligar e o selo diz «A
+// ligar» enquanto ela dura (tentarLigar); falhas põem-no a 'off'.
 // Recebe: force (opcional) — verdadeiro para ler mesmo com um modal aberto.
 // Devolve: Promise que resolve quando a leitura acabar (nunca rejeita).
 function pullNow(force) {
   if (!CW.user) return Promise.resolve();
   if (!force && (modalStack.length || aEscreverNumCampo())) return Promise.resolve();
   var quem = CW.user.id;
+  tentarLigar();
   return pedirEstado(true).then(function (x) {
     if (!CW.user || CW.user.id !== quem) return;   // a sessão mudou entretanto: o estado já não é de ninguém
     lastPull = Date.now();
     if (x.naoMudou || (x.resumo && x.resumo === resumoAplicado)) return estadoIgual();
     applyState(x.estado, x.selo, x.resumo);
-  }).catch(function () { semLigacao = true; setSyncBadge('off'); fimDaEspera(); });
+  }).catch(function () { caiuALigacao(); fimDaEspera(); });
 }
 
-// Um ciclo: envia o que houver e, se a última leitura já passou PULL_MS e
-// nada está a ser editado, volta a ler.
+// Guarda o momento de um toque, de uma tecla ou de um scroll: é por ele que o
+// intervaloDeLeitura sabe se há alguém a usar a app.
+// Devolve: nada.
+function marcarAtividade() { ultimaAtividade = Date.now(); }
+
+/* De quanto em quanto tempo se lê o estado agora: o PULL_MS com alguém a
+   usar a app, mais espaçado quanto mais tempo ela estiver parada
+   (PULL_INATIVO).
+   Recebe: agora (opcional) — o instante, em ms (para os testes).
+   Devolve: o intervalo em ms. */
+function intervaloDeLeitura(agora) {
+  var parado = (agora || Date.now()) - ultimaAtividade;
+  for (var i = 0; i < PULL_INATIVO.length; i++) if (parado > PULL_INATIVO[i][0]) return PULL_INATIVO[i][1];
+  return PULL_MS;
+}
+
+// Um ciclo: envia o que houver e, se a última leitura já passou o intervalo
+// (intervaloDeLeitura) e nada está a ser editado, volta a ler. Sem ligação,
+// cada ciclo é uma nova tentativa, sem esperar pelo intervalo — que depois
+// de uma hora parada é de meia hora, e o selo ficava vermelho esse tempo todo
+// com a rede já de volta —, salvo se o envio deste ciclo já tentou. Com o
+// separador escondido só envia: ninguém está a ver, e voltar à frente lê.
 // Devolve: nada — dispara o push (e talvez o pull) e segue.
 function syncCycle() {
   if (!CW.user) return;
   // trancado pelo ecrã de atualização forçada: uma versão velha demais para
   // se usar é velha demais para escrever (cloud/novidades.js:gateAtualizar)
   if (CW.trancado) return;
+  var desde = Date.now();
   pushNow().then(function () {
-    if (Date.now() - lastPull > PULL_MS && !modalStack.length && !aEscreverNumCampo()) pullNow();
+    if (document.hidden || modalStack.length || aEscreverNumCampo()) return;
+    var ler = semLigacao ? ultimaTentativa < desde : Date.now() - lastPull > intervaloDeLeitura();
+    if (ler) pullNow();
   });
 }
 
@@ -1381,18 +1458,23 @@ function syncCycle() {
 function startSync(pedido) {
   loadSnap();
   var quem = CW.user ? CW.user.id : '';
+  // a primeira leitura é a primeira tentativa de ligar: «A ligar» até ela acabar
+  tentarLigar();
   (pedido || pedirEstado(false)).then(function (x) {
     if (!CW.user || CW.user.id !== quem || !x || x.naoMudou) return;
     lastPull = Date.now();
     applyState(x.estado, x.selo, x.resumo);
-  }).catch(function () { semLigacao = true; setSyncBadge('off'); fimDaEspera(); });
+  }).catch(function () { caiuALigacao(); fimDaEspera(); });
   if (startSync._armado) return;   // entrar de novo na mesma página não arma um segundo ciclo
   startSync._armado = 1;
   setInterval(syncCycle, 30000);
   window.addEventListener('online', syncCycle);
   window.addEventListener('pagehide', despacharJa);
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) despacharJa(); else syncCycle();
+    if (document.hidden) despacharJa(); else { marcarAtividade(); syncCycle(); }
+  });
+  ['pointerdown', 'keydown', 'scroll'].forEach(function (ev) {
+    document.addEventListener(ev, marcarAtividade, { capture: true, passive: true });
   });
 }
 
@@ -1514,7 +1596,7 @@ function rememberPage() {
 }
 var _goSet = goSet;
 /* Navegar dentro das Definições, a lembrar a página. A subpágina antiga dos
-   Grupos passou a separador próprio: goSet('groups') — de um atalho, de uma
+   Grupos é hoje uma aba das Casas: goSet('groups') — de um atalho, de uma
    ação antiga — vai para o separador, e não para uma subpágina sem porta.
    Recebe: p — a subpágina das Definições ('' volta ao menu).
    Devolve: nada — navega e grava a página. */
@@ -1526,7 +1608,7 @@ goSet = function (p) {
 /* No arranque, devolve o utilizador ao separador onde estava; ignora estados
    guardados que já não existem e não faz nada quando era só o painel inicial.
    A página guardada antes de os Grupos serem separador ({tab:'settings',
-   set:'groups'}) abre o separador Grupos.
+   set:'groups'}) abre o separador Grupos, nas Casas.
    Devolve: nada — repõe o separador e repinta (ou não mexe em nada). */
 function restorePage() {
   var s = null;

@@ -94,7 +94,7 @@ window.LEGAL = (function () {
       'A conta é <b>pessoal</b>: és responsável por tudo o que nela acontece e por manter a palavra-passe ' +
       'em segredo. Avisa-nos assim que suspeitares de acesso indevido.',
       'Os dados que indicas têm de ser verdadeiros e atualizados.',
-      'Podes apagar a conta a qualquer momento em <b>Definições → Conta e partilha</b>.',
+      'Podes apagar a conta a qualquer momento em <b>Definições → Segurança</b>.',
     ]) +
     p('Ao apagares a conta, os teus dados são eliminados e a tua identidade passa a aparecer como ' +
       '“[deleted]” nas referências que existam nos dados de outros utilizadores — por exemplo, num ' +
@@ -226,7 +226,7 @@ window.LEGAL = (function () {
     p('Podes pedir <b>acesso</b> aos teus dados, <b>retificação</b>, <b>apagamento</b>, <b>limitação</b> ' +
       'do tratamento, <b>portabilidade</b> e <b>oposição</b>, e retirar consentimentos a qualquer momento. ' +
       'Na prática, a aplicação já te dá dois destes diretamente: podes exportar tudo em ' +
-      '<b>Definições → Importar e cópias</b> e apagar a conta em <b>Definições → Conta e partilha</b>.') +
+      '<b>Definições → Importar e cópias</b> e apagar a conta em <b>Definições → Segurança</b>.') +
     p('Para os restantes, escreve para ' + EMAIL + '. Se entenderes que os teus dados não estão a ser ' +
       'tratados corretamente, podes reclamar junto da <b>Comissão Nacional de Proteção de Dados</b> ' +
       '(cnpd.pt).') +

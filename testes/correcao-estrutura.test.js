@@ -208,14 +208,17 @@ describe('os vazios e o painel de análise, partilhados', () => {
   });
 
   // achado A.2-14
-  test('as vistas continuam a pintá-los: o vazio com o Limpar, a frase com o nome do serviço, e o painel com os dois seletores', () => {
+  test('as vistas continuam a pintá-los: o vazio com o Limpar, a frase com o nome do serviço, e o painel com o seletor do imóvel', () => {
     const app = carregarApp(); limpar(app);
     app.db.owners = [app.normPerson({ id: 'O1', name: 'Ana' }), app.normPerson({ id: 'O2', name: 'Rui' })];
     app.db.properties = [app.normProp({ id: 'P1', name: 'Casa', ownerIds: ['O1', 'O2'] })];
     assert.match(app.vazioFiltro(), /Nada neste filtro/); assert.match(app.vazioFiltro(), /limparFiltroAtual\(\)/);
-    for (const [nome, h] of [['dashBar', app.dashBar()], ['vProjections', app.vProjections()], ['vReports', app.vReports()]]) {
-      assert.match(h, /id="selb_ownerSel"|'ownerSel'/, nome + ': o seletor de proprietário');
-      assert.match(h, /Todos os imóveis/, nome + ': o de imóvel');
+    assert.doesNotMatch(app.dashBar(), /ownerSel/, 'dashBar: sem o seletor de proprietário (o filtro global saiu)');
+    assert.match(app.dashBar(), /Todos os imóveis/, 'dashBar: o de imóvel');
+    // as Projeções e a Avaliação só têm o chip do imóvel
+    for (const [nome, h] of [['vProjections', app.vProjections()], ['vReports', app.vReports()]]) {
+      assert.doesNotMatch(h, /ownerSel/, nome + ': sem o seletor de proprietário');
+      assert.match(h, /Todos os imóveis/, nome + ': o chip do imóvel');
     }
     assert.match(app.vFisco(), /Todos os proprietários/, 'a Declaração: o titular, sem grupos');
     // sem imóveis e com os Imóveis desligados: a frase diz o nome e quem liga
@@ -237,19 +240,30 @@ describe('uma raiz só nas Definições', () => {
     app.CW.user = { id: 'EU', name: 'Eu', email: 'eu@x.pt' };
     app.setPage = '';
     const h = app.vSettings(), p = portas(h);
-    for (const x of ['tema', 'defaults', 'cats', 'irs', 'tags', 'filtros', 'dados', 'cloud', 'ajuda', 'faq', 'novidades', 'legal']) {
+    for (const x of ['tema', 'defaults', 'cats', 'filtros', 'dados', 'cloud', 'ajuda', 'faq', 'novidades', 'legal']) {
       assert.ok(p.includes(x), 'a porta de «' + x + '»: ' + p.join(' '));
     }
-    // os Grupos são um separador: a subpágina antiga não tem porta, e o caminho velho leva ao separador
+    // os Grupos são uma aba das Casas (2026-10-22): as Definições já não têm a porta deles
     assert.ok(!p.includes('groups'), 'sem a porta dos Grupos nas Definições');
-    for (const x of Object.keys(copia(app.SUBPAGE))) if (!['termos', 'privacidade', 'groups'].includes(x)) assert.ok(p.includes(x), 'a subpágina «' + x + '» tem porta');
+    /* as categorias, as etiquetas e o IRS são uma página só (2026-10,
+       D-DefCategorias): a raiz tem a porta «cats», e «irs» e «tags» ficam como
+       nomes antigos da mesma página, para o que os guarda (goSet, uma página
+       guardada) continuar a abrir */
+    for (const x of ['irs', 'tags']) {
+      assert.ok(!p.includes(x), '«' + x + '» já não tem porta própria');
+      app.setPage = x;
+      assert.equal(app.vSettings(), (app.setPage = 'cats', app.vSettings()), '«' + x + '» abre a página das categorias');
+      app.setPage = '';
+    }
+    for (const x of Object.keys(copia(app.SUBPAGE))) if (!['termos', 'privacidade', 'groups', 'irs', 'tags'].includes(x)) assert.ok(p.includes(x), 'a subpágina «' + x + '» tem porta');
     assert.equal(p.length, new Set(p).size, 'sem portas repetidas');
     assert.match(h, /CW\.editProfile\(\)/, 'o perfil');
     assert.match(h, /<span>Versão<\/span>/, 'e um cartão Sobre só');
     assert.equal((h.match(/<span>Versão<\/span>/g) || []).length, 1);
     // o que as novidades e o aviso legal mandam procurar em «Definições → …»
     const r = rotulos(h), textos = ler('web/avisos.js') + ler('web/legal.js');
-    for (const x of ['IRS e dedução', 'Filtros comuns', 'Conta e partilha', 'Perguntas frequentes', 'Ajuda e sugestões', 'Novidades', 'Importar e cópias']) {
+    // a página da conta chama-se «Segurança» desde 2026-10-22 (e o aviso legal manda lá apagar a conta)
+    for (const x of ['Categorias, etiquetas e IRS', 'Filtros comuns', 'Segurança', 'Perguntas frequentes', 'Ajuda e sugestões', 'Novidades', 'Importar e cópias']) {
       assert.ok(textos.includes('Definições → ' + x) || textos.includes('Definições → <b>' + x), 'controlo: a app manda a «' + x + '»');
       assert.ok(r.includes(x), '«Definições → ' + x + '» existe na raiz: ' + r.join(' | '));
     }
@@ -260,8 +274,8 @@ describe('uma raiz só nas Definições', () => {
     const app = carregarApp();
     app.setPage = '';
     const p = portas(app.vSettings());
-    for (const x of ['tema', 'defaults', 'cats', 'irs', 'tags', 'filtros', 'dados']) assert.ok(p.includes(x), x);
-    assert.ok(!p.includes('groups'), 'os Grupos são um separador, não uma linha das Definições');
+    for (const x of ['tema', 'defaults', 'cats', 'filtros', 'dados']) assert.ok(p.includes(x), x);
+    assert.ok(!p.includes('groups'), 'os Grupos são uma aba das Casas: nem sem a nuvem têm porta aqui');
     assert.ok(!p.includes('cloud'), 'a conta é da nuvem');
     app.setPage = 'tema';
     assert.match(app.vSettings(), /setTheme\('dark'\)/, 'a subpágina do Tema é da base');

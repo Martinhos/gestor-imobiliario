@@ -4,7 +4,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
 /* A folha da app vive no web/estilos.css, para a CSP poder deixar de aceitar
    estilos em linha: era o <style> do index.html, e passou para lá com o mesmo
@@ -338,7 +338,8 @@ describe('movimento', () => {
     const fundo = (corpo) => (corpo.match(/background(?:-color)?:\s*([^;]+)/) || [])[1];
     const porEstado = (estado) => {
       const m = {};
-      for (const r of cssLimpo.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      /* sem os @media à volta: o :hover vive dentro do @media(hover:hover) */
+      for (const r of cssLimpo.replace(/@media[^{]*\{/g, '').matchAll(/([^{}]+)\{([^}]*)\}/g)) {
         if (!r[1].includes(estado)) continue;
         const cor = fundo(r[2]);
         if (!cor) continue;
@@ -351,6 +352,27 @@ describe('movimento', () => {
     const passa = porEstado(':hover'), preme = porEstado(':active');
     const iguais = Object.keys(preme).filter((k) => passa[k] && passa[k] === preme[k]);
     assert.deepEqual(iguais, [], 'premido igual a hover: o segundo toque não muda nada');
+  });
+
+  /* Do uso real (2026-10-22): «quando clico em qualquer botão, até eu clicar
+     em mais algum, aquele fica com cor de highlight». No dedo o :hover fica
+     preso depois do toque; só com rato é que passar por cima existe. E outra
+     vez no mesmo dia, nas abas das Casas e do Dinheiro: alguns Galaxy (a S
+     Pen) respondem (hover:hover) num ecrã de dedo, por isso o rato pede
+     também o (pointer:fine). */
+  test('nenhum :hover fora de um @media(hover:hover) and (pointer:fine)', () => {
+    const soltos = [];
+    const pilha = [];
+    let buf = '';
+    const doRato = (p) => /\(\s*hover\s*:\s*hover\s*\)/.test(p) && /\(\s*pointer\s*:\s*fine\s*\)/.test(p);
+    for (const c of cssLimpo) {
+      if (c === '{') {
+        if (buf.includes(':hover') && !buf.trim().startsWith('@') &&
+          !pilha.some(doRato)) soltos.push(buf.trim());
+        pilha.push(buf.trim()); buf = '';
+      } else if (c === '}') { pilha.pop(); buf = ''; } else if (c === ';') buf = ''; else buf += c;
+    }
+    assert.deepEqual(soltos, [], ':hover que fica preso no dedo');
   });
 
   /* Medido no browser: a --curva faz 83% do caminho em 30% do tempo. Num botão
@@ -395,13 +417,14 @@ describe('movimento', () => {
     const g = /\.chartguia,\.chartlido\{([^}]*)\}/.exec(cssLimpo);
     assert.ok(g, 'a regra da guia e da faixa existe');
     assert.match(cssLimpo, /\.chartguia\{position:absolute/);
-    /* A faixa ficava no topo do desenho e tapava as barras mais altas; a
-       leitura passou para o pé, no canto inferior direito, por cima de um
-       molde que lhe guarda o lugar (graficos.js:peDaLeitura). */
+    /* A faixa ficava sobreposta ao topo do desenho e tapava as barras mais
+       altas; a leitura passou para a cabeça, por cima do desenho e com lugar
+       próprio, por cima de um molde que lhe guarda o lugar
+       (graficos.js:cabecaDaLeitura). */
     assert.doesNotMatch(cssLimpo, /\.chartlido\{[^}]*top:0/, 'a leitura já não se sobrepõe ao topo do desenho');
     assert.match(cssLimpo, /\.chartmolde\{visibility:hidden\}/, 'o molde guarda o lugar sem se ver');
     assert.match(cssLimpo, /\.chartlugar>\.chartlido:not\(\.chartmolde\)\{position:absolute/,
-      'a leitura fica por cima do molde, no lugar do pé, e não mexe na altura nem na largura');
+      'a leitura fica por cima do molde, no lugar da cabeça, e não mexe na altura nem na largura');
     const cb = /\.chartbox\{([^}]*)\}/.exec(cssLimpo);
     assert.ok(cb, 'a regra da caixa existe');
     assert.match(cb[1], /position:relative/);
@@ -650,13 +673,23 @@ describe('materiais', () => {
       'quem a põe é o ouvinte de scroll');
   });
 
-  /* A letra é a do sistema de quem lê: SF no iPhone e no Mac, Segoe no
-     Windows. A Inter nunca foi carregada como webfont — só aparecia a quem
-     a tivesse instalada, e era uma cara diferente por acaso. */
-  test('a letra é a do sistema, sem webfont fantasma à frente', () => {
+  /* As letras são a Geist (texto) e a Bricolage Grotesque (títulos e valores
+     grandes), da linguagem de 2026-10 — carregadas de verdade, da própria
+     origem (a CSP só deixa font-src 'self'), e com a letra do sistema a seguir
+     na pilha para o que chega antes delas ou fica fora do latino. A Inter de
+     antes era o contrário: estava à frente da pilha e nunca era carregada. */
+  test('as letras são a Geist e a Bricolage, auto-alojadas, com o sistema a seguir', () => {
     const body = /\nbody\{[^}]*\}/.exec(cssLimpo);
     assert.ok(body, 'a regra do body existe');
-    assert.match(body[0], /font-family:system-ui,-apple-system/);
-    assert.doesNotMatch(cssLimpo, /font-family:Inter/, 'a Inter saiu da frente');
+    assert.match(body[0], /font-family:var\(--letra\)/);
+    assert.match(cssLimpo, /--letra:'Geist',system-ui,-apple-system/, 'a Geist à frente, o sistema logo a seguir');
+    assert.match(cssLimpo, /--letra-titulo:'Bricolage Grotesque','Geist',system-ui/);
+    for (const [fam, ficheiro] of [['Geist', 'geist'], ['Bricolage Grotesque', 'bricolage-grotesque']]) {
+      const face = new RegExp("@font-face\\{font-family:'" + fam + "';[^}]*font-display:swap;[^}]*src:url\\(/fonts/" + ficheiro + "\\.woff2\\) format\\('woff2'\\)");
+      assert.match(cssLimpo, face, 'o @font-face da ' + fam + ', com swap e da própria origem');
+      assert.ok(existsSync(new URL('../web/fonts/' + ficheiro + '.woff2', import.meta.url)), 'o ficheiro da ' + fam + ' existe');
+    }
+    assert.doesNotMatch(cssLimpo, /fonts\.googleapis|fonts\.gstatic/, 'nada de letras de fora: a CSP recusa');
+    assert.doesNotMatch(cssLimpo, /font-family:Inter/, 'a Inter não volta');
   });
 });

@@ -114,10 +114,10 @@ describe('«Opcional» nos formulários', () => {
     assert.doesNotMatch(abertas[0].b, /type="date"[^>]*placeholder=/, 'nenhuma data leva placeholder: o browser ignora-o');
   });
 
-  test('modelo: o nome do modelo é opcional e mantém o exemplo', () => {
+  test('modelo: o nome do modelo e o montante são opcionais, e o nome mantém o exemplo', () => {
     const abertas = base();
     app.txModal({ kind: 'expense', modo: 'tpl' });
-    conferir('modelo', abertas[0].b, { obrigatorios: ['t_label', 't_amount'], exemplos: { t_tplName: true }, deixados: ['t_sp_', 't_pp_'] });
+    conferir('modelo', abertas[0].b, { obrigatorios: ['t_label'], exemplos: { t_tplName: true }, deixados: ['t_sp_', 't_pp_'] });
   });
 
   test('inquilino: só o nome é obrigatório, e ganhou o asterisco; CC, país, morada e notas guardam o exemplo', () => {
@@ -314,10 +314,11 @@ describe('um botão em cada vazio', () => {
     assert.ok(!html.includes(botao('newTxPick()')));
   });
 
-  test('Inquilinos e Proprietários: cada vazio abre a ficha da sua pessoa; o filtro não', () => {
+  test('Inquilinos: o vazio abre a ficha; Proprietários: o vazio diz como a lista se enche, sem botão de criar; o filtro não', () => {
     limpar(app);
     assert.ok(app.vTenants().includes(botao("personModal('tenant')")));
-    assert.ok(app.vOwners().includes(botao("personModal('owner')")));
+    assert.ok(!app.vOwners().includes("personModal('owner')"), 'um proprietário é uma conta: não se cria à mão');
+    assert.match(app.vOwners(), /Aqui ficam as outras contas Rendorium com quem partilhas casas/);
     app.db.tenants = [app.normPerson({ id: 'I1', name: 'Ana' })];
     app.db.owners = [app.normPerson({ id: 'O1', name: 'Eu' })];
     app.lf('lten').q = 'zzz'; app.lf('lown').q = 'zzz';

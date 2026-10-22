@@ -6,7 +6,9 @@
    do servidor — a atividade dos outros nas casas partilhadas: cada registo
    escrito por outra pessoa chega com o autor e a hora (o worker grava o
    autor em cada escrita), e o que for mais novo do que a última leitura
-   aparece aqui com nome e apelido.
+   aparece aqui com nome e apelido. Na mesma atividade, quem saiu de uma
+   casa que fica comigo — um colaborador que deixou de colaborar, um
+   comproprietário que deixou de o ser (CW.state.departures, notifSaidas).
 
    «Marcar tudo como lido» guarda a marca temporal nas definições — que
    sincronizam, por isso ler num aparelho limpa o sino nos outros. */
@@ -58,13 +60,10 @@ function notifPedidos(){
    Devolve: lista de {tipo, titulo, sub, at, ir} por ordem do mais recente. */
 function notifPartilha(desde){
   const meu=(window.CW&&CW.user&&CW.user.id)||'';
-  // primeira vez: a contagem começa AGORA — sem isto, o primeiro sino
-  // despejava o histórico inteiro das casas partilhadas
-  if(desde==null&&db.settings.notifLidoAte==null){db.settings.notifLidoAte=Date.now();save()}
-  const marca=desde!=null?desde:Number((db.settings||{}).notifLidoAte||0);
+  const marca=notifMarca(desde);
   const out=[];
   const lotes={};   // lote.id → a linha dele em out
-  const quando=at=>new Date(at).toLocaleDateString('pt-PT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  const quando=notifQuando;
   const poe=(tipo,rotulo,nome,x,ir)=>{
     if(!x._author||x._author===meu)return;
     const at=Number(x._atServidor||0);
@@ -99,17 +98,99 @@ function notifPartilha(desde){
   return out.sort((a,b)=>b.at-a.at).slice(0,40);
 }
 
+/* A marca de leitura da atividade (a partilhada e as saídas): o que for
+   mais novo do que ela está por ler. Na primeira vez, a contagem começa
+   AGORA — sem isto, o primeiro sino despejava o histórico inteiro das casas
+   partilhadas —, e a marca grava-se (sincroniza com os outros aparelhos).
+   Recebe: desde (opcional) — marca temporal em ms, que manda sobre a guardada.
+   Devolve: a marca em ms (número; 0 se nunca houve e não se pôde pôr). */
+function notifMarca(desde){
+  if(desde!=null)return Number(desde)||0;
+  if(db.settings.notifLidoAte==null){db.settings.notifLidoAte=Date.now();save()}
+  return Number((db.settings||{}).notifLidoAte||0);
+}
+
+/* A hora de uma linha do sino, como as da atividade: «22/10, 14:30».
+   Recebe: at — marca temporal em ms.
+   Devolve: o texto da data e da hora. */
+function notifQuando(at){
+  return new Date(at).toLocaleDateString('pt-PT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+}
+
+/* Quem saiu das casas que ficam comigo: um colaborador que deixou de
+   colaborar num imóvel meu (kind 'colab.sair', só me chega a mim, o dono)
+   ou um comproprietário que deixou de o ser num imóvel que partilho
+   (kind 'casa.sair', chega a todos os que ficam). Vêm do servidor em
+   CW.state.departures (os dos últimos 90 dias, worker/src/rotas/estado.js),
+   com o nome da casa e o de quem saiu escritos no momento. Só os mais novos
+   do que a marca de leitura, como a atividade: o «Marcar tudo como lido»
+   cala-os também. Com os Colaboradores desligados nesta conta, as saídas de
+   colaboradores não entram (o servidor já não as manda; se sobrar alguma no
+   aparelho, não se mostra um aviso de um serviço que não está). O toque abre
+   a ficha do imóvel se ele ainda estiver na base e os Imóveis ligados (o
+   propView é desse serviço; a app carrega-o sempre, e por isso a guarda é o
+   servicoLigado e não um typeof); sem isso a linha não leva a lado nenhum
+   (ir vazio).
+   Recebe: desde (opcional) — marca temporal em ms; por omissão, a última
+   leitura guardada nas definições.
+   Devolve: lista de {tipo:'saida', id, kind, titulo, sub, quem, at, ir, toca}
+   por ordem do mais recente. */
+function notifSaidas(desde){
+  const st=window.CW&&CW.state;
+  const lista=st&&Array.isArray(st.departures)?st.departures:[];
+  if(!lista.length)return [];
+  const meu=(CW.user&&CW.user.id)||'';
+  const marca=notifMarca(desde);
+  const colab=servicoLigado('colaboradores');
+  const out=[];
+  lista.forEach(d=>{
+    if(!d||(d.kind!=='colab.sair'&&d.kind!=='casa.sair'))return;
+    if(d.kind==='colab.sair'&&!colab)return;
+    if(meu&&d.actorId===meu)return;   // a minha própria saída não é aviso para mim
+    const at=typeof d.at==='number'?d.at:(Number(d.at)||Date.parse(d.at)||0);
+    if(!(at>marca))return;
+    const quem=String(d.actorName||'').trim()||'Alguém';
+    const casa=String(d.houseName||'').trim()||propName(d.houseId)||'um imóvel';
+    const titulo=quem+(d.kind==='colab.sair'?' deixou de colaborar em ':' deixou de ser comproprietário de ')+casa+'.';
+    const abre=!!d.houseId&&servicoLigado('properties')&&!!prop(d.houseId);
+    out.push({tipo:'saida',id:String(d.id||''),kind:d.kind,titulo,sub:notifQuando(at),quem,at,
+      ir:abre?`propView('${jsq(d.houseId)}')`:'',toca:'camada'});
+  });
+  return out.sort((a,b)=>b.at-a.at);
+}
+
+/* A atividade do sino: a dos outros nas casas partilhadas (notifPartilha) e
+   quem saiu delas (notifSaidas), juntas e pela hora — é uma secção só no
+   «Pede atenção» e um cartão só no painel geral, com a mesma marca de leitura.
+   Recebe: desde (opcional) — como o notifPartilha.
+   Devolve: lista das linhas das duas, do mais recente, no máximo 40. */
+function notifAtividade(desde){
+  return notifPartilha(desde).concat(notifSaidas(desde)).sort((a,b)=>b.at-a.at).slice(0,40);
+}
+
+/* Quem fez o que uma linha da atividade diz, para as iniciais do avatar: o
+   quem das saídas, ou o nome à cabeça do sub da atividade partilhada
+   («Maria Costa · T2 Lisboa · …»).
+   Recebe: n — uma linha do notifAtividade.
+   Devolve: o nome (texto; '?' sem nenhum). */
+function notifQuem(n){
+  return (n&&n.quem)||String((n&&n.sub)||'').split(' · ')[0]||'?';
+}
+
 /* O que o sino conta: atrasados + atividade nova dos outros (um lote conta
-   uma vez) + pedidos à espera de resposta (de partilha e para entrar num
-   grupo meu). O que está só «por confirmar» ou é prazo
+   uma vez, e cada saída de um colaborador ou comproprietário conta uma) +
+   pedidos à espera de resposta (de partilha e para entrar num grupo meu). O
+   que está só «por confirmar» ou é prazo
    informativo não incha o número — está no modal, mas o crachá é para o que
    muda decisões.
    Devolve: o número para o crachá do sino (inteiro). */
 function notifConta(){
-  return (servicoLigado('recurring')?recLate().length:0)+notifPartilha().length+notifPedidos().length;
+  return (servicoLigado('recurring')?recLate().length:0)+notifAtividade().length+notifPedidos().length;
 }
 
-/* O sino do cabeçalho da vista geral, com o crachá quando há novidades.
+/* O sino do cabeçalho da vista geral, com o crachá quando há novidades. O
+   nome é o da janela que abre, com a contagem (o canvas: «Pede atenção: 4
+   por ver») — só com o crachá, o leitor de ecrã dizia «4, botão».
    Devolve: nada — pinta o botão #hdrBell conforme o separador e a contagem. */
 function notifSino(){
   const b=document.getElementById('hdrBell');if(!b)return;
@@ -117,8 +198,11 @@ function notifSino(){
   /* O crachá espera por saber (espera.js:sabemosOEstado): um número
      errado durante um segundo é pior do que nenhum. */
   const n=sabemosOEstado()?notifConta():0;
+  const nome=n?'Pede atenção: '+n+' por ver':'Pede atenção';
   b.style.display='';
-  b.innerHTML=ic('bell',16)+(n?`<span class="cnt${cntNovo('sino',n)}">${n>9?'9+':n}</span>`:'');
+  b.title=nome;
+  b.setAttribute('aria-label',nome);
+  b.innerHTML=ic('bell',16)+(n?`<span class="cnt${cntNovo('sino',n)}" aria-hidden="true">${n>9?'9+':n}</span>`:'');
 }
 
 /* Aceitar um pedido de partilha, a partir do sino. Fecha o modal primeiro (o
@@ -159,47 +243,97 @@ function notifGrupoRecusar(gid,uid){
   closeModal();window.CW&&CW.grupoRecusarPedido&&CW.grupoRecusarPedido(gid,uid);
 }
 
-/* O modal das notificações: as quatro fontes em secções, cada linha a levar
-   ao sítio certo, e «Marcar tudo como lido» a calar a partilha até haver
-   coisas novas (a marca sincroniza entre aparelhos).
-   Devolve: nada — abre o modal da casa com as listas. */
-function notifModal(){
+/* o filtro do «Pede atenção» aberto: '' (tudo), 'confirmar', 'prazos' ou 'pedidos' */
+let _atencaoFiltro='';
+/* O «Pede atenção» (o canvas de 2026-10, M-Atencao): o sino abre um sítio
+   só para o que muda decisões — os pedidos por responder, os movimentos por
+   confirmar (os em atraso primeiro), os prazos legais e fiscais e a atividade
+   dos outros nas casas partilhadas. Chips por cima filtram sem «Aplicar»; os
+   por confirmar confirmam-se aqui mesmo (ou abrem para rever), os pedidos
+   respondem-se aqui mesmo, e cada prazo leva ao sítio dele. «Marcar tudo
+   como lido» cala a partilha até haver coisas novas (a marca sincroniza).
+   Recebe: filtro (opcional) — '', 'confirmar', 'prazos' ou 'pedidos'.
+   Devolve: nada — abre a janela (ou refaz a que está aberta, ao mudar de filtro). */
+function notifModal(filtro){
+  _atencaoFiltro=typeof filtro==='string'?filtro:'';
+  const c=atencaoCorpo();
+  if(modalTop()&&modalTop().title==='Pede atenção')return setModal('Pede atenção',c.corpo,c.pe);
+  openModal('Pede atenção',c.corpo,c.pe);
+}
+/* O corpo do «Pede atenção» e o rodapé (só com atividade por ler).
+   Devolve: {corpo, pe} — HTML. */
+function atencaoCorpo(){
   /* os planeados são dos Planeados (servicoLigado); os prazos são da base e estão sempre */
-  const atrasados=servicoLigado('recurring')?recLate():[];
-  const pendentes=(servicoLigado('recurring')?recActive():[]).filter(r=>!recIsLate(r));
-  const prazos=prazosAtivos().slice(0,6);
-  const partilha=notifPartilha(),pedidos=notifPedidos();
-  const linha=(titulo,sub,ir,cls)=>`<div class="card tap u-p-10px-13px" data-click="closeModal();${ir}">
-    <div class="row-between u-ai-center u-g-8px"><div class="u-minw-0">
-      <b class="u-d-block u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(titulo)}</b>
-      <span class="small">${esc(sub)}</span></div>${cls?`<span class="badge ${cls} u-fx-0-0-auto">!</span>`:''}</div></div>`;
+  const rec=servicoLigado('recurring');
+  const conf=(rec?recActive():[]).slice().sort((a,b)=>(servicoLigado('recurring')&&recIsLate(b)?1:0)-(servicoLigado('recurring')&&recIsLate(a)?1:0));
+  const prazos=prazosAtivos();
+  const partilha=notifAtividade(),pedidos=notifPedidos();
+  const f=_atencaoFiltro,ve=k=>!f||f===k;
+  const chip=(k,rot,n)=>`<button type="button" class="chip${f===k?' on':''}" aria-pressed="${f===k}" data-toca="vista" data-click="notifModal('${k}')">${rot}${n!=null?' <span class="n">'+n+'</span>':''}</button>`;
+  const chips=`<div class="chips-fila atencao-chips">${chip('','Tudo')}${chip('confirmar','Por confirmar',conf.length)}${chip('prazos','Prazos',prazos.length)}${chip('pedidos','Pedidos',pedidos.length)}</div>`;
+  const cab=(titulo,extra)=>`<div class="atencao-cab"><h3>${titulo}</h3>${extra?'<span class="small">'+extra+'</span>':''}</div>`;
   /* um pedido responde-se aqui mesmo: a nuvem define CW.pedidoAceitar(id) e
      CW.pedidoRecusar(id) (partilha) e CW.grupoAceitarPedido(gid,uid) e
      CW.grupoRecusarPedido(gid,uid) (entrar num grupo meu), e os notif… de
-     cima chamam-nas. O modal fecha-se primeiro — o render() não fecha
+     cima chamam-nas. A janela fecha-se primeiro — o render() não fecha
      janelas, e o cartão ficava lá com os botões a repetir o pedido já
      respondido */
   const pedido=n=>{
     const sim=n.tipo==='grupo'?`notifGrupoAceitar('${jsq(n.gid)}','${jsq(n.uid)}')`:`notifPedidoAceitar('${jsq(n.id)}')`;
     const nao=n.tipo==='grupo'?`notifGrupoRecusar('${jsq(n.gid)}','${jsq(n.uid)}')`:`notifPedidoRecusar('${jsq(n.id)}')`;
-    return `<div class="card u-p-10px-13px">
-    <b class="u-d-block">${esc(n.titulo)}</b><span class="small">${esc(n.sub)}</span>
-    <div class="toolbar u-m-9px-0-0">
-      <button class="btn sm primary" data-toca="dados" data-click="${sim}">Aceitar</button>
+    return `<div class="card atencao-pedido"><p><b>${esc(n.titulo)}</b></p><p class="small">${esc(n.sub)}</p>
+      <div class="chips-fila"><button class="btn sm primary" data-toca="dados" data-click="${sim}">Aceitar</button>
       <button class="btn sm" data-toca="dados" data-click="${nao}">Recusar</button></div></div>`;
   };
-  const bloco=(titulo,linhas)=>linhas.length?`<div class="navh">${titulo}</div>${linhas.join('')}`:'';
-  const corpo=`<div class="list u-g-8px">
-    ${bloco('Pedidos por responder',pedidos.map(pedido))}
-    ${bloco('Em atraso',atrasados.map(r=>linha(r.name,'devia ter sido confirmado a '+dPT(r.next)+(r.tx.amount?' · '+euro2(r.tx.amount):''),"go('recurring')",'red')))}
-    ${bloco('Por confirmar',pendentes.slice(0,6).map(r=>linha(r.name,dPT(r.next)+(r.tx.amount?' · '+euro2(r.tx.amount):''),"go('recurring')")))}
-    ${bloco('Prazos',prazos.map(p=>linha(p.titulo,(p.dias<0?'há '+(-p.dias)+' dias':p.dias===0?'hoje':'em '+p.dias+' dias'),p.abrir,p.urg==='urgente'||p.urg==='passado'?'red':p.urg==='breve'?'amber':'')))}
-    ${bloco('Nas casas partilhadas',partilha.map(n=>linha(n.titulo,n.sub,n.ir)))}
-    ${!atrasados.length&&!pendentes.length&&!prazos.length&&!partilha.length&&!pedidos.length?'<div class="empty">Tudo em dia — nada a pedir atenção.</div>':''}
-  </div>`;
-  openModal('Notificações',corpo,
-    `<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`+
-    (partilha.length?`<button class="btn primary" data-toca="dados" data-click="notifLido()">Marcar tudo como lido</button>`:''));
+  /* um por confirmar: o nome, de onde é, quando, o valor e o estado; Confirmar
+     regista já (quickConfirmRec), Rever abre o formulário (confirmRec) e
+     Silenciar cala-o sem o tirar (skipRec) — cada um só se o cargo deixa.
+     Confirmar e Silenciar refazem a janela com o mesmo filtro: o planeado
+     confirmado passa ao mês seguinte, e uma linha que ficasse à vista com a
+     data antiga confirmava, ao segundo toque, um mês que ninguém viu.
+     O valor tem a cor do dinheiro dele, como nos Planeados
+     (planeados.js:recValor): receita verde, prestação roxa, o que sai
+     laranja com o «−»; uma transferência entre donos não tem cor nem sinal. */
+  const porConfirmar=r=>{
+    const late=servicoLigado('recurring')&&recIsLate(r),t=r.tx||{};
+    const podeConf=servicoLigado('recurring')&&!recusaConfirmar(r)&&!recSemCredito(r)&&!recCreditoPago(r);
+    const podeEd=servicoLigado('recurring')&&podeEditar(t.propertyId,'rec.add',r,'confirmar');
+    const onde=servicoLigado('recurring')?imovelDoMolde(t):'';
+    const sai=flowOf(t.kind)==='out',cor=t.kind==='loan'?'prest':isIn(t.kind)?'pos':sai?'neg':'';
+    return `<div class="atencao-linha"><div class="atencao-txt"><p class="title">${esc(r.name)}</p>
+      <p class="small">${onde?esc(onde)+' · ':''}${r.until&&r.until!==r.next?'entre '+dPT(r.next)+' e '+dPT(r.until):dPT(r.next)}</p></div>
+      <div class="atencao-valor"><b class="num${cor?' '+cor:''}">${t.amount?(sai?'−':'')+euro2(t.amount):''}</b><span class="badge ${late?'red':''}">${late?'Em atraso':'Por confirmar'}</span></div>
+      <div class="chips-fila atencao-acoes">${podeConf?`<button class="btn sm primary" data-toca="dados" data-click="quickConfirmRec('${jsq(r.id)}');notifModal('${jsq(f)}')">Confirmar</button>`:''}
+      <button class="btn sm" data-toca="camada" data-click="closeModal();confirmRec('${jsq(r.id)}')">Rever</button>
+      ${podeEd?`<button class="btn sm ghost" data-toca="dados" data-click="skipRec('${jsq(r.id)}');notifModal('${jsq(f)}')">Silenciar</button>`:''}</div></div>`;
+  };
+  /* um prazo: o selo diz quanto falta como o cartão da Visão geral o diz
+     (prazos.js:pzQuando — «Falta 1 dia», «É hoje», «Passou há 3 dias») e
+     com a mesma cor (prazos.js:pzSelo). Sem «abrir» (o serviço que o abria
+     está desligado nesta conta) a linha não se apresenta como tocável — um
+     toque que só fecha a janela é um beco —, como no prazos.js:prazosCard */
+  const prazo=p=>{
+    const dentro=`<div class="atencao-txt"><p class="title">${esc(p.titulo)}</p>${p.sub?'<p class="small">'+esc(p.sub)+'</p>':''}</div><span class="badge ${pzSelo(p)}">${pzQuando(p)}</span>`;
+    return p.abrir?`<button type="button" class="atencao-linha tap" data-toca="camada" data-click="closeModal();${p.abrir}">${dentro}</button>`:`<div class="atencao-linha">${dentro}</div>`;
+  };
+  /* uma linha da atividade: as iniciais de quem, o que fez e quando; leva ao
+     sítio dela (o separador, ou a ficha do imóvel de onde alguém saiu). Uma
+     saída de um imóvel que já não está na base não leva a lado nenhum, e por
+     isso é uma linha e não um botão, como o prazo sem destino */
+  const atividade=n=>{
+    const dentro=`<span class="avatar" aria-hidden="true">${esc(initials(notifQuem(n)))}</span><div class="atencao-txt"><p class="title">${esc(n.titulo)}</p><p class="small">${esc(n.sub)}</p></div>`;
+    return n.ir?`<button type="button" class="atencao-linha tap" data-toca="${n.toca||'ecra'}" data-click="closeModal();${n.ir}">${dentro}</button>`:`<div class="atencao-linha">${dentro}</div>`;
+  };
+  const total=conf.reduce((s,r)=>s+(Number((r.tx||{}).amount)||0),0),nl=servicoLigado('recurring')?conf.filter(recIsLate).length:0;
+  const partes=[];
+  if(ve('pedidos')&&pedidos.length)partes.push(cab('Pedidos por responder',String(pedidos.length))+pedidos.map(pedido).join(''));
+  if(ve('confirmar')&&conf.length)partes.push(cab('Por confirmar',conf.length+(nl?' · '+nl+' em atraso':'')+' · '+euro2(total))+`<div class="card atencao-lista">${conf.map(porConfirmar).join('')}</div>`);
+  if(ve('prazos')&&prazos.length)partes.push(cab('Prazos legais e fiscais',String(prazos.length))+`<div class="card atencao-lista">${prazos.map(prazo).join('')}</div>`);
+  if(!f&&partilha.length)partes.push(cab('Atividade nas casas partilhadas')+`<div class="card atencao-lista">${partilha.map(atividade).join('')}</div>`);
+  const vazio=f?'<div class="empty"><b>Nada aqui</b>Neste filtro não há nada a pedir atenção.<div><button class="btn sm" data-toca="vista" data-click="notifModal(\'\')">Ver tudo</button></div></div>'
+    :'<div class="empty"><b>Tudo em dia</b>Nada a pedir atenção: sem atrasos, prazos à porta nem pedidos por responder.</div>';
+  return {corpo:`<div class="atencao">${chips}${partes.join('')||vazio}</div>`,
+    pe:partilha.length?`<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button><button class="btn primary" data-toca="dados" data-click="notifLido()">Marcar tudo como lido</button>`:SEM_RODAPE};
 }
 
 /* Marca a atividade partilhada como lida até agora: a marca vive nas

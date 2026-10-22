@@ -16,7 +16,10 @@
 // os membros, as casas e, nos meus, o estado da ligação e os pedidos para
 // entrar. Os pedidos (migração 0018) saem também em `sharedGroupRequests`:
 // os que chegaram aos meus grupos e os que fiz. Quem só pediu não é membro —
-// não recebe as casas nem o grupo, só o seu pedido em `outgoing`.
+// não recebe as casas nem o grupo, só o seu pedido em `outgoing`. Quem saiu
+// de uma casa que lhe chegava por um grupo (house_exits, migração 0019) não
+// a recebe por esse grupo nem por outro, e sai dos `participants` dela; os
+// avisos de quem saiu das minhas casas vêm em `departures`.
 //
 // Por cima disto, os serviços desligados da conta (lib/servicos.js): a lista
 // sai em `servicos.desligados`, os registos dos kinds desligados e os
@@ -25,7 +28,7 @@
 // cargos, convites, ligação, pedidos, conexões e grupos vêm vazias — mas o
 // acesso às casas por grupo mantém-se, como o das partilhas por ligação.
 
-import { casasDeColaborador } from '../lib/acesso.js';
+import { casasDeColaborador, SAIU_DA_CASA } from '../lib/acesso.js';
 import { kindsVisiveis, projetarCasa, projetarRegisto } from '../lib/permissoes.js';
 import {
   servicosDesligados, kindsDesligados, userKindsDesligados, casaDesligada, colabDesligado,
@@ -36,6 +39,9 @@ import {
   listarCargos, listarColaboradores, listarConvites, estadoDaLigacao, pedidosDePartilha,
 } from './colaboradores.js';
 import { listarGrupos, pedidosDeGrupo } from './grupos.js';
+
+// Quantos dias de avisos de quem saiu (house_events) o estado manda.
+const DIAS_DOS_AVISOS = 90;
 
 // O If-None-Match do pedido traz este selo? Aceita uma lista separada por
 // vírgulas e o W/ que a Cloudflare põe num ETag quando comprime a resposta.
@@ -67,7 +73,7 @@ function seloIgual(cabecalho, selo) {
    Devolve: a Response JSON com o estado completo (me, profiles, proposals,
    houses, records, userRecords, connections, people, roles, collaborators,
    invites, shareLink, shareRequests, sharedGroups, sharedGroupRequests,
-   servicos) e o ETag, ou o
+   departures, servicos) e o ETag, ou o
    304 sem corpo, no GET /api/state; nada (undefined) noutros caminhos. */
 export async function rotasEstado(c) {
   const { env, request, ctx, path, method, me } = c;
@@ -111,7 +117,7 @@ export async function rotasEstado(c) {
               SELECT gh.house_id FROM shared_group_houses gh
                 JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
                 JOIN shared_group_members m ON m.group_id = gh.group_id
-               WHERE m.user_id = ?1
+               WHERE m.user_id = ?1 AND ${SAIU_DA_CASA}
             )
           )`
       )
@@ -237,12 +243,13 @@ export async function rotasEstado(c) {
         if (list && !list.includes(other)) list.push(other);
       });
       // e os membros dos grupos partilhados vivos que contêm cada casa, a
-      // seguir às partilhas por ligação — a mesma ordem de participantsOf
+      // seguir às partilhas por ligação — a mesma ordem de participantsOf,
+      // e como lá sem os que saíram da casa
       const membros = await inChunks(allIds,
         `SELECT gh.house_id, m.user_id FROM shared_group_houses gh
            JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
            JOIN shared_group_members m ON m.group_id = gh.group_id
-          WHERE gh.house_id IN ({IN})
+          WHERE gh.house_id IN ({IN}) AND ${SAIU_DA_CASA}
           ORDER BY m.joined_at, m.user_id`);
       membros.forEach((r) => {
         const list = houseParts[r.house_id];
@@ -355,6 +362,28 @@ export async function rotasEstado(c) {
         pedidosDeGrupo(env, me.id),
       ]);
 
+    /* quem saiu das casas onde fico (house_events, migração 0019): os meus
+       avisos dos últimos 90 dias, os mais recentes primeiro, até 50. Os de
+       um colaborador que saiu não vêm com os Colaboradores desligados — a
+       condição vai na consulta, para o limite contar só os que saem */
+    const departures = (
+      await env.DB.prepare(
+        `SELECT id, kind, house_id, house_name, actor_id, actor_name, created_at FROM house_events
+          WHERE user_id = ? AND created_at >= ?${semColab ? " AND kind <> 'colab.sair'" : ''}
+          ORDER BY created_at DESC, id DESC LIMIT 50`
+      )
+        .bind(me.id, Date.now() - DIAS_DOS_AVISOS * 86400000)
+        .all()
+    ).results.map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      houseId: e.house_id,
+      houseName: e.house_name,
+      actorId: e.actor_id,
+      actorName: e.actor_name,
+      at: e.created_at,
+    }));
+
     const estado = {
       me: { id: me.id, email: me.email, name: me.name },
       servicos: { desligados },
@@ -399,6 +428,7 @@ export async function rotasEstado(c) {
       shareRequests,
       sharedGroups,
       sharedGroupRequests,
+      departures,
       userRecords: userRecords.filter((r) => !userKindsOff.has(r.kind)).map((r) => ({
         kind: r.kind,
         id: r.id,

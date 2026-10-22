@@ -210,10 +210,10 @@ async function generateContractPdf(cid){
     const tag=el.tagName;
     if(skip(el))return;
     if(tag==='titulo'){pdf.text(T(el),{size:14,bold:true,center:true,after:4});return}
-    if(tag==='subtitulo'){pdf.text(T(el),{size:10,center:true,after:10});pdf.rule({after:12});return}
+    if(tag==='subtitulo'){pdf.text(T(el),{size:10,center:true,after:10,cor:PDF_COR.secundario});pdf.rule({after:12});return}
     if(tag==='secao'||tag==='anexo'){
       if(tag==='anexo')pdf.newPage();
-      pdf.gap(4);pdf.text(el.getAttribute('titulo'),{size:11.5,bold:true,after:6});
+      pdf.gap(4);pdf.text(el.getAttribute('titulo'),{size:11.5,bold:true,after:6,cor:PDF_COR.cobalto});
       [].slice.call(el.childNodes).forEach(ch=>{
         if(ch.nodeType!==1||skip(ch))return;
         if(ch.tagName==='p')pdf.text(T(ch),{after:5});
@@ -226,7 +226,7 @@ async function generateContractPdf(cid){
     if(tag==='clausula'){
       nCl++;
       pdf.gap(5);
-      pdf.text(`CLÁUSULA ${ROMANOS[nCl]||nCl+'.ª'} — ${el.getAttribute('titulo')}`,{size:10.5,bold:true,after:5});
+      pdf.text(`CLÁUSULA ${ROMANOS[nCl]||nCl+'.ª'} — ${el.getAttribute('titulo')}`,{size:10.5,bold:true,after:5,cor:PDF_COR.cobalto});
       let i=0;
       [].slice.call(el.getElementsByTagName('n')).forEach(nEl=>{
         if(skip(nEl))return;
@@ -234,13 +234,140 @@ async function generateContractPdf(cid){
       });
       return;
     }
-    if(tag==='destaque'){pdf.gap(4);pdf.text(T(el),{bold:true,after:6});pdf.rule({after:10});return}
+    if(tag==='destaque'){pdf.gap(4);pdf.caixa(T(el),{bold:true,cor:PDF_COR.cobaltoTexto,fundo:PDF_COR.cobaltoSuave,after:12});return}
   });
-  const name=('contrato-'+(p.name||'imovel')+'-'+today()).replace(/[^\w\-]+/g,'-').toLowerCase()+'.pdf';
+  const name=ctPdfNome(p);
   const bytes=pdf.build();
   if(window.Android&&window.Android.saveAs)window.Android.saveAs(name,'application/pdf',b64Latin1(bytes));
   else downloadBytes(name,'application/pdf',bytes);
   toast('Contrato gerado.');
+}
+/* O nome do ficheiro do contrato: «contrato-<imóvel>-<hoje>.pdf», só com
+   letras sem acento, algarismos e hífenes.
+   Recebe: p — o imóvel do contrato.
+   Devolve: o nome (texto). */
+function ctPdfNome(p){
+  return ('contrato-'+((p&&p.name)||'imovel')+'-'+today()).replace(/[^\w\-]+/g,'-').toLowerCase()+'.pdf';
+}
+/* O prazo de um contrato em palavras curtas, para a folha do PDF: «2 anos»,
+   «6 meses». O PDF escreve-o por extenso (prazoTexto).
+   Recebe: a — o início; b — o fim ('AAAA-MM-DD').
+   Devolve: o texto; '' sem as duas datas. */
+function ctPdfPrazoCurto(a,b){
+  const t=prazoTexto(a,b);if(!t)return '';
+  return t.replace(/\s*\([^)]*\)/,'');
+}
+/* O que o contrato em PDF leva e o que lhe falta, lido das fichas — a mesma
+   regra do modelo: o que falta fica de fora, nunca a meio de uma frase. Os
+   bloqueios são os do generateContractPdf (sem eles não se gera); o resto são
+   linhas «vai» (as partes, o prazo e a renda, os anexos) e «falta» (o que o
+   modelo omite: a licença, o registo, o certificado energético, a frase do
+   pagamento, os dados de identificação de cada pessoa, o inventário e as
+   chaves), cada uma com o caminho para completar a quem o pode fazer.
+   Recebe: c — o contrato.
+   Devolve: {falta: [{txt, act}], vai: [{txt, sub}], avisos: [{txt, sub, act}]} — act é a
+   ação do «Completar» ('' sem caminho). */
+function ctPdfVerificar(c){
+  const pid=c.propertyId,p=prop(pid),ts=ctTenants(c),owners=p?ownersOfProp(p).map(owner).filter(Boolean):[];
+  const editaCt=podeEditar(pid,'contract.add',c)?`ctModal('${jsq(c.id)}')`:'',editaImovel=p&&servicoLigado('properties')&&pode(pid,'house.edit')?`propModal('${jsq(pid)}')`:'';
+  const falta=[],vai=[],avisos=[];
+  if(!p)falta.push({txt:'O contrato não tem imóvel',act:editaCt});
+  if(!ts.length)falta.push({txt:'Falta pelo menos um inquilino',act:editaCt});
+  if(p&&!owners.length)falta.push({txt:'O imóvel não tem proprietários',act:editaImovel});
+  if(p&&!fullAddress(p))falta.push({txt:'Falta a morada do imóvel',act:editaImovel});
+  /* diz a data que falta, e não as duas: um contrato que começou e não tem
+     fim mandava procurar no formulário um início que já lá está */
+  if(!c.start||!c.end)falta.push({txt:!c.start&&!c.end?'Faltam as datas de início e de fim do contrato':!c.end?'Falta a data de fim do contrato':'Falta a data de início do contrato',act:editaCt});
+  if(owners.length){
+    const um=owners.length===1,o=owners[0];
+    vai.push({txt:(um?(o.gender==='f'?'Senhoria: ':'Senhorio: '):'Senhorios: ')+listaE(owners.map(x=>x.name)),sub:um?'':o.name+' representa'});
+  }
+  if(ts.length&&p&&fullAddress(p)&&c.start&&c.end)
+    vai.push({txt:(ts.length>1?'Inquilinos':'Inquilino')+', morada, prazo de '+ctPdfPrazoCurto(c.start,c.end)+' e renda',sub:''});
+  const inv=c.inventory||[],ch=c.keys||[],fotos=((p&&p.photos)||[]).filter(f=>(c.photoIds||[]).indexOf(f.id)>-1);
+  const anexos=[inv.length?'inventário ('+inv.length+')':'',fotos.length?'fotos ('+fotos.length+')':'',ch.length?'chaves ('+(ch.length===1?'1 tipo':ch.length+' tipos')+')':''].filter(Boolean);
+  if(anexos.length)vai.push({txt:'Anexos: '+anexos.join(', '),sub:''});
+  if(p){
+    if(!p.licence)avisos.push({txt:'Sem licença de utilização',sub:'Essa frase fica de fora.',act:editaImovel});
+    if(!p.registry)avisos.push({txt:'Sem o registo predial',sub:'Essa frase fica de fora.',act:editaImovel});
+    if(!p.energyCert)avisos.push({txt:'Sem certificado energético',sub:'Essa frase fica de fora.',act:editaImovel});
+  }
+  if(!c.iban&&!c.payDay&&!c.payDayTo)avisos.push({txt:'Sem IBAN nem dia de pagamento',sub:'A frase de como se paga a renda fica de fora.',act:editaCt});
+  /* O «Completar» de uma pessoa abre logo o formulário dela, como o do
+     imóvel e o do contrato — e só a quem a pode alterar (pessoas.js:
+     personEditavel, a mesma regra do «Editar» da ficha). O meu próprio perfil
+     edita-se pela nuvem (CW.editProfile), que é quem o sabe guardar. */
+  const pessoa=(x,kind)=>{
+    const sem=[x.cc?'':'n.º do CC',x.nif?'':'NIF',x.taxAddress?'':'morada fiscal'].filter(Boolean);
+    if(!sem.length)return;
+    const serv=kind==='owner'?'owners':'tenants';
+    const ed=servicoLigado(serv)&&personEditavel(kind,x);
+    const euSou=kind==='owner'&&!!(window.CW&&CW.user&&CW.user.id===x.id&&CW.editProfile);
+    avisos.push({txt:x.name+' sem '+listaE(sem),sub:'Vai só o que está preenchido.',act:!ed?'':euSou?'CW.editProfile()':`personModal('${kind}','${jsq(x.id)}')`});
+  };
+  owners.forEach(x=>pessoa(x,'owner'));
+  ts.forEach(x=>pessoa(x,'tenant'));
+  if(!inv.length)avisos.push({txt:'Sem inventário',sub:'O anexo I diz «sem elementos registados».',act:editaCt});
+  if(!ch.length)avisos.push({txt:'Sem chaves registadas',sub:'O auto de entrega diz «sem elementos registados».',act:editaCt});
+  return {falta:falta,vai:vai,avisos:avisos};
+}
+/* O corpo da folha «Contrato em PDF» (a prancheta M-ContratoPDF): de quem e
+   de onde é, a miniatura do documento com o nome do ficheiro, o que falta
+   para se poder gerar (a vermelho), o que vai e o que fica de fora (com o
+   «Completar» a quem o pode fazer), o total a entregar na assinatura — as
+   rendas antecipadas e a caução que o contrato pede — e o aviso de que é uma
+   minuta genérica.
+   Recebe: id — o id do contrato.
+   Devolve: o HTML do corpo, ou '' se o contrato já não existir. */
+function ctPdfFicha(id){
+  const c=contract(id);if(!c)return '';
+  const p=prop(c.propertyId),v=ctPdfVerificar(c);
+  const completar=a=>a?`<button type="button" class="btn sm" data-toca="camada" data-click="${a}">Completar</button>`:'';
+  const linha=(tipo,txt,sub,act)=>`<div class="ct-pdf-ck"><span class="ct-pdf-ic ct-pdf-${tipo}" aria-hidden="true">${ic(tipo==='ok'?'check':'aviso',14)}</span>
+    <div class="ct-pdf-ck-txt"><p>${esc(txt)}</p>${sub?`<p class="small">${esc(sub)}</p>`:''}</div>${completar(act)}</div>`;
+  const adv=Math.max(0,Math.round(Number(c.advance)||0)),antecipado=adv*(Number(c.rent)||0),caucao=Number(c.deposit)||0,total=antecipado+caucao;
+  const detalhe=[antecipado?(adv===1?'1 renda antecipada ':adv+' rendas antecipadas ')+euro2(antecipado):'',caucao?'caução '+euro2(caucao):''].filter(Boolean).join(' + ');
+  const quem=[ctNames(c),p?p.name:'',c.roomId&&p?roomName(p,c.roomId):''].filter(Boolean).join(' · ');
+  return `<div class="ct-pdf">
+    <p class="small ct-pdf-quem">${esc(quem)}</p>
+    <div class="ct-pdf-topo">
+      <div class="ct-pdf-mini" aria-hidden="true"><p>Contrato de arrendamento urbano para habitação com prazo certo</p>
+        <span class="ct-pdf-ln ct-pdf-t"></span><span class="ct-pdf-ln"></span><span class="ct-pdf-ln"></span><span class="ct-pdf-ln ct-pdf-80"></span>
+        <span class="ct-pdf-ln ct-pdf-t"></span><span class="ct-pdf-ln"></span><span class="ct-pdf-ln ct-pdf-90"></span>
+        <span class="ct-pdf-ln ct-pdf-t ct-pdf-55"></span><span class="ct-pdf-ln"></span><span class="ct-pdf-ln ct-pdf-70"></span>
+        <span class="ct-pdf-faixa"></span></div>
+      <div class="ct-pdf-sobre"><p class="ct-pdf-modelo">Modelo único da app</p>
+        <p class="small">Usa os dados das fichas. O que falta fica de fora, nunca a meio de uma frase.</p>
+        <p class="small num ct-pdf-ficheiro">${esc(ctPdfNome(p))}</p></div>
+    </div>
+    ${v.falta.length?`<div class="card ct-pdf-lista ct-pdf-bloqueio"><p class="lbl">Antes de gerar</p>${v.falta.map(x=>`<div class="ct-pdf-ck"><span class="ct-pdf-ic ct-pdf-mau" aria-hidden="true">${ic('x',14)}</span><div class="ct-pdf-ck-txt"><p>${esc(x.txt)}</p></div>${completar(x.act)}</div>`).join('')}</div>`:''}
+    <div class="card ct-pdf-lista"><p class="lbl">O que vai no contrato</p>
+      ${v.vai.map(x=>linha('ok',x.txt,x.sub,'')).join('')}${v.avisos.map(x=>linha('wn',x.txt,x.sub,x.act)).join('')}
+      ${v.vai.length||v.avisos.length?'':'<p class="small ct-pdf-nada">Completa o que falta para veres o que o contrato leva.</p>'}</div>
+    ${total>0?`<div class="ct-pdf-total"><div><p>Total a entregar na assinatura</p><p class="small">${esc(detalhe)}</p></div><b class="disp num">${euro2(total)}</b></div>`:''}
+    <p class="small">É uma minuta genérica: lê-a com atenção antes de assinar.</p>
+  </div>`;
+}
+/* Abre a folha «Contrato em PDF»: diz o que vai e o que falta, e o
+   «Descarregar PDF» do rodapé gera-o. É uma ficha (componentes.js:abrirFicha):
+   completar um dado por cima dela (a ficha do imóvel, a de uma pessoa) e
+   voltar deixa-a já com o que mudou.
+   Recebe: id — o id do contrato.
+   Devolve: nada — abre a janela (ou avisa, se o contrato já não existir). */
+function ctPdfJanela(id){
+  if(!contract(id))return toast('Contrato não encontrado.');
+  abrirFicha({titulo:'Contrato em PDF',corpo:()=>ctPdfFicha(id),editar:{rotulo:'Descarregar PDF',act:`ctPdfDescarregar('${jsq(id)}')`}});
+}
+/* O «Descarregar PDF» da folha: com o que falta para gerar, diz o primeiro e
+   fica; senão fecha a folha e gera o contrato (generateContractPdf).
+   Recebe: id — o id do contrato.
+   Devolve: nada. */
+function ctPdfDescarregar(id){
+  const c=contract(id);if(!c)return toast('Contrato não encontrado.');
+  const f=ctPdfVerificar(c).falta;
+  if(f.length)return toast(f[0].txt+'.');
+  closeModal();
+  generateContractPdf(id);
 }
 /* Desenha um elemento <tabela> do modelo: inventário e chaves saem como tabela de
    texto; a fonte "fotos" sai como sequência de fotografias com legenda. Sem dados
@@ -262,15 +389,15 @@ function tabela(pdf,el,c,p,d,imgs){
     rows=(c.keys||[]).map(k=>[k.name||'—',k.qty]);
   }else if(fonte==='fotos'){
     const metas=(p.photos||[]).filter(f=>(c.photoIds||[]).indexOf(f.id)>-1);
-    if(!metas.length){pdf.text('(sem fotografias selecionadas)',{size:9.5,after:4});return}
+    if(!metas.length){pdf.text('(sem fotografias selecionadas)',{size:9.5,after:4,cor:PDF_COR.secundario});return}
     metas.forEach((f,i)=>{
       const im=(imgs||{})[f.id],cap=`${i+1}. ${f.name||'Fotografia '+(i+1)}`;
       if(im)pdf.photo(im.n,im.w,im.h,cap,300);
-      else pdf.text(cap+' (imagem não disponível neste dispositivo)',{size:9.5,after:6});
+      else pdf.text(cap+' (imagem não disponível neste dispositivo)',{size:9.5,after:6,cor:PDF_COR.secundario});
     });
     pdf.gap(4);return;
   }
-  if(!rows.length){pdf.text('(sem elementos registados)',{size:9.5,after:4});return}
+  if(!rows.length){pdf.text('(sem elementos registados)',{size:9.5,after:4,cor:PDF_COR.secundario});return}
   pdf.line(cols,widths,{bold:true,rule:true,size:9.5});
   rows.forEach(r=>pdf.line(r,widths,{size:9.5,right:fonte==='chaves'?[1]:(fonte==='inventario'?[2]:[])}));
   pdf.gap(6);
@@ -286,9 +413,9 @@ function assinaturas(pdf,parte,c,p){
   gente.forEach(g=>{
     pdf.need(46);
     pdf.gap(20);
-    pdf.text('__________________________________',{after:1});
+    pdf.text('__________________________________',{after:1,cor:PDF_COR.secundario});
     pdf.text(g.name||'',{size:9.5,after:0});
-    pdf.text(parte==='senhorios'?(g.gender==='f'?'Senhoria':'Senhorio'):(g.gender==='f'?'Inquilina':'Inquilino'),{size:8.5,after:6});
+    pdf.text(parte==='senhorios'?(g.gender==='f'?'Senhoria':'Senhorio'):(g.gender==='f'?'Inquilina':'Inquilino'),{size:8.5,after:6,cor:PDF_COR.secundario});
   });
 }
 /* o PDF é texto latin-1: converte byte a byte, sem passar por UTF-8
@@ -576,10 +703,27 @@ function pdfEsc(s){
   return out;
 }
 
+/* As cores do contrato em PDF: as do tema claro da app (o papel é claro), em
+   frações de 0 a 1 como o PDF as pede (o operador rg/RG). São os tokens do
+   contrato visual e não hex à mão: tinta #121826 (--ink), secundário #4F586B
+   (--muted), cobalto #2952D9 (--accent) nos títulos das cláusulas e das
+   secções, o texto cobalto #1D3FB0 (--accent-text) sobre o fundo #E9EEFC
+   (--accent-soft) no total a entregar, e o contorno #E2E5EB (--line) nos
+   traços. A letra continua a Helvetica: é uma das 14 fontes que todo o leitor
+   de PDF traz, e a Geist e a Bricolage só entravam embutidas (o ficheiro da
+   fonte dentro do PDF, a partir de um woff2 comprimido em Brotli). */
+const PDF_COR={tinta:[.071,.094,.149],secundario:[.31,.345,.42],cobalto:[.161,.322,.851],cobaltoTexto:[.114,.247,.69],
+  cobaltoSuave:[.914,.933,.988],linha:[.886,.898,.922]};
+/* Uma cor de PDF_COR como operandos do PDF.
+   Recebe: c — [r, g, b] de 0 a 1.
+   Devolve: o texto «r g b». */
+const pdfCor=c=>(c||PDF_COR.tinta).map(x=>Number(x).toFixed(3)).join(' ');
 /* Cria um documento A4 e devolve o escritor: text() escreve parágrafos com quebra
-   de linha calculada e mudança de página automática, line() faz linhas de tabela,
-   photo() coloca um JPEG com legenda, rule()/gap() separam, e build() devolve o
-   ficheiro completo como string latin-1 (um carácter = um byte).
+   de linha calculada e mudança de página automática (com a cor pedida, a tinta
+   por omissão), caixa() escreve um parágrafo sobre um fundo de cor, line() faz
+   linhas de tabela, photo() coloca um JPEG com legenda, rule()/gap() separam, e
+   build() devolve o ficheiro completo como string latin-1 (um carácter = um byte).
+   Recebe: nada.
    Devolve: o objeto escritor, com esses métodos (e image/draw/need/newPage/gap),
    já com a primeira página aberta. */
 function PDF(){
@@ -597,10 +741,8 @@ function PDF(){
   };
   P.space=()=>P.y-P.MB;
   P.need=h=>{if(P.y-h<P.MB)P.newPage()};
-  P.text=(s,o)=>{
-    o=o||{};
-    const size=o.size||10,bold=!!o.bold,lead=o.lead||size*1.42;
-    const x0=P.ML+(o.indent||0),maxW=P.W-P.ML-P.MR-(o.indent||0)-(o.right||0);
+  /* as linhas de um parágrafo partido à largura dada, com as larguras reais dos glifos */
+  P.linhas=(s,size,bold,maxW)=>{
     const words=String(s).split(/\s+/).filter(Boolean);
     const lines=[];let line='';
     words.forEach(w=>{
@@ -608,17 +750,34 @@ function PDF(){
       if(textW(cand,size,bold)>maxW&&line){lines.push(line);line=w}else line=cand;
     });
     if(line)lines.push(line);
-    lines.forEach((ln,i)=>{
+    return lines;
+  };
+  P.text=(s,o)=>{
+    o=o||{};
+    const size=o.size||10,bold=!!o.bold,lead=o.lead||size*1.42;
+    const x0=P.ML+(o.indent||0),maxW=P.W-P.ML-P.MR-(o.indent||0)-(o.right||0);
+    P.linhas(s,size,bold,maxW).forEach(ln=>{
       P.need(lead);
       let x=x0;
       if(o.center)x=(P.W-textW(ln,size,bold))/2;
-      P.cur.push(`BT /${bold?'F2':'F1'} ${size} Tf ${x.toFixed(2)} ${(P.y-size).toFixed(2)} Td (${pdfEsc(ln)}) Tj ET`);
+      P.cur.push(`BT ${pdfCor(o.cor)} rg /${bold?'F2':'F1'} ${size} Tf ${x.toFixed(2)} ${(P.y-size).toFixed(2)} Td (${pdfEsc(ln)}) Tj ET`);
       P.y-=lead;
     });
     if(o.after)P.y-=o.after;
   };
+  /* um parágrafo sobre um fundo de cor, com 10pt de margem à volta, sem partir de página */
+  P.caixa=(s,o)=>{
+    o=o||{};
+    const size=o.size||10,bold=!!o.bold,lead=size*1.42,pad=10,w=P.W-P.ML-P.MR;
+    const lines=P.linhas(s,size,bold,w-pad*2),h=lines.length*lead+pad*2-(lead-size);
+    P.need(h+2);
+    P.cur.push(`q ${pdfCor(o.fundo)} rg ${P.ML.toFixed(2)} ${(P.y-h).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f Q`);
+    let y=P.y-pad;
+    lines.forEach(ln=>{P.cur.push(`BT ${pdfCor(o.cor)} rg /${bold?'F2':'F1'} ${size} Tf ${(P.ML+pad).toFixed(2)} ${(y-size).toFixed(2)} Td (${pdfEsc(ln)}) Tj ET`);y-=lead});
+    P.y-=h+(o.after||0);
+  };
   P.rule=(o)=>{o=o||{};P.need(6);
-    P.cur.push(`0.75 w 0.7 0.7 0.7 RG ${(P.ML+(o.indent||0)).toFixed(2)} ${P.y.toFixed(2)} m ${(P.W-P.MR).toFixed(2)} ${P.y.toFixed(2)} l S`);
+    P.cur.push(`0.75 w ${pdfCor(PDF_COR.linha)} RG ${(P.ML+(o.indent||0)).toFixed(2)} ${P.y.toFixed(2)} m ${(P.W-P.MR).toFixed(2)} ${P.y.toFixed(2)} l S`);
     P.y-=(o.after===undefined?8:o.after);};
   P.gap=h=>{P.y-=h};
   P.line=(cols,widths,o)=>{                        /* linha de tabela */
@@ -630,7 +789,7 @@ function PDF(){
       let s=String(c==null?'':c);
       while(textW(s,size,o.bold)>w-6&&s.length>1)s=s.slice(0,-1);
       const tx=o.right&&o.right.indexOf(i)>-1?x+w-6-textW(s,size,o.bold):x+3;
-      P.cur.push(`BT /${o.bold?'F2':'F1'} ${size} Tf ${tx.toFixed(2)} ${(P.y-size).toFixed(2)} Td (${pdfEsc(s)}) Tj ET`);
+      P.cur.push(`BT ${pdfCor(o.cor)} rg /${o.bold?'F2':'F1'} ${size} Tf ${tx.toFixed(2)} ${(P.y-size).toFixed(2)} Td (${pdfEsc(s)}) Tj ET`);
       x+=w;
     });
     P.y-=lead;

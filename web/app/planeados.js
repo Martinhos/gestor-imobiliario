@@ -563,12 +563,12 @@ function recFicha(id){
   const t=r.tx||{};
   const vem=r.auto?(t.loanId?'Prestação da hipoteca '+esc(loanName(((anyLoan(t.loanId)||{}).l)||null))
     :(t.contractId&&contract(t.contractId)?'Renda do contrato '+esc(ctName(contract(t.contractId)))
-    :(t.propRec?({imi:'IMI',condominio:'Condomínio',seguro:'Seguro'})[t.propRec]+' do imóvel '+esc(propName(t.propertyId))+' — o valor vive na ficha do imóvel; apagar este planeado tira-o de lá.':''))):'';
+    :(t.propRec?({imi:'IMI',condominio:'Condomínio',seguro:'Seguro'})[t.propRec]+' do imóvel '+esc(propName(t.propertyId))+' — o valor vive na ficha do imóvel; apagar este planeado remove-o de lá.':''))):'';
   return ficha([
     {tipo:'nota',valor:esc(motivoRecusa(t.propertyId,'rec.add',r))},
     t.amount?{rotulo:'Montante',valor:euro2(t.amount)}:null,
     {rotulo:'Quando',valor:dPT(r.next||'')+(r.until&&r.until!==r.next?' a '+dPT(r.until):'')+(r.every?' · '+esc(EVERY[r.every]||r.every):'')},
-    {rotulo:'Estado',valor:(recIsLate(r)?'<span class="neg">Em atraso</span> desde '+dPT(r.until||r.next||'')
+    {rotulo:'Estado',valor:(recIsLate(r)?'<span class="perigo">Em atraso</span> desde '+dPT(r.until||r.next||'')
       :(r.next&&r.next<=today()?'Por confirmar':'Em dia'))+(r.muted?' · silenciada':'')},
     {rotulo:'Tipo',valor:esc((KIND[t.kind]||{}).short||'')},
     /* um planeado pode estar num grupo de imóveis, ou em «Todos», em vez de num imóvel */
@@ -647,7 +647,7 @@ function tplView(id){
    edição: guardar altera a recorrência em vez de criar um movimento. Um
    planeado que não posso alterar (alheio, num imóvel onde só colaboro — os
    campos são de quem o criou; ou de um cargo que só vê) abre só de leitura:
-   confirmar e silenciar ficam no toque longo.
+   confirmar e silenciar ficam no ⋯ da ficha (recView).
    Recebe: id — o id da recorrência a editar.
    Devolve: nada — abre o formulário carregado com a recorrência. */
 function editRec(id){
@@ -691,13 +691,147 @@ function delRec(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   const recusa=motivoRecusa((r.tx||{}).propertyId,'rec.add',r,true);if(recusa)return toast(recusa);
   const isLoan=r.auto&&(r.tx||{}).loanId,pr=r.auto?(r.tx||{}).propRec:'';
-  const doImovel=pr?`Este é ${({imi:'o IMI',condominio:'o condomínio',seguro:'o seguro'})[pr]} da ficha do imóvel ${esc(propName(r.tx.propertyId))}. Apagar tira também o valor da ficha${pr==='imi'?' (e as outras prestações)':''}; para voltar, escreve-o de novo no imóvel.`:'';
+  const doImovel=pr?`Este é ${({imi:'o IMI',condominio:'o condomínio',seguro:'o seguro'})[pr]} da ficha do imóvel ${esc(propName(r.tx.propertyId))}. Apagar remove também o valor da ficha${pr==='imi'?' (e as outras prestações)':''}; para voltar, escreve-o de novo no imóvel.`:'';
   confirmModal('Apagar movimento recorrente',r.auto?(isLoan?`Esta é a prestação de uma hipoteca. Apagar deixa de a pedir todos os meses (podes voltar a ligá-la na hipoteca).`:doImovel||`Este é a renda de um contrato. Apagar deixa de a pedir todos os meses (podes voltar a ligá-la guardando o contrato de novo).`):`Deixar de repetir “${esc(r.name)}”? Os movimentos já criados ficam.`,()=>{
-    if(r.auto){const c=contract((r.tx||{}).contractId);if(c)c.autoRec=false;
-      if(isLoan)db.properties.forEach(p=>(p.loans||[]).forEach(l=>{if(l.id===r.tx.loanId)l.autoRec=false}));
-      if(pr){const p=prop(r.tx.propertyId);if(p)p[pr]=0;db.recurring=db.recurring.filter(x=>!(x.auto&&x.tx&&x.tx.propRec===pr&&x.tx.propertyId===r.tx.propertyId))}}
-    db.recurring=db.recurring.filter(x=>x.id!==id);save();closeAllModals();buildNav();render();toast('Movimento recorrente apagado.');
+    recTirar(r);save();closeAllModals();buildNav();render();toast('Movimento recorrente apagado.');
   });
+}
+/* Tira um planeado da base com as regras do apagar — as do delRec, e as da
+   seleção de vários (cloud/selecao-listas.js), que é por isso que vivem
+   aqui uma vez só. Num automático desliga o autoRec no contrato ou na
+   hipoteca de origem (sem isso a sincronização voltava a criá-lo); num da
+   ficha do imóvel (IMI, condomínio, seguro) põe o valor a zero na ficha e
+   leva as prestações irmãs. Não grava nem repinta: quem chama decide.
+   Recebe: r — o planeado (de db.recurring).
+   Devolve: o que é preciso para o repor (recRepor): {recs, cts, loans, props}
+   — as cópias do que saiu e os valores de antes do que mudou. */
+function recTirar(r){
+  const t=r.tx||{},pr=r.auto?t.propRec:'',d={recs:[],cts:[],loans:[],props:[]};
+  if(r.auto){
+    const c=contract(t.contractId);if(c){d.cts.push([c.id,c.autoRec]);c.autoRec=false}
+    if(t.loanId)db.properties.forEach(p=>(p.loans||[]).forEach(l=>{if(l.id===t.loanId){d.loans.push([p.id,l.id,l.autoRec]);l.autoRec=false}}));
+    if(pr){const p=prop(t.propertyId);if(p){d.props.push([p.id,pr,p[pr]]);p[pr]=0}}
+  }
+  const sai=x=>x.id===r.id||!!(pr&&x.auto&&x.tx&&x.tx.propRec===pr&&x.tx.propertyId===t.propertyId);
+  d.recs=JSON.parse(JSON.stringify((db.recurring||[]).filter(sai)));
+  db.recurring=(db.recurring||[]).filter(x=>!sai(x));
+  return d;
+}
+/* O Anular de um recTirar: os planeados voltam (os que entretanto não
+   tenham voltado por outra via), e o contrato, a hipoteca e a ficha do
+   imóvel ficam como estavam. Não grava nem repinta (o comDesfazer fá-lo).
+   Recebe: d — o que o recTirar devolveu.
+   Devolve: nada — mexe no db. */
+function recRepor(d){
+  if(!d)return;
+  const ha={};(db.recurring||[]).forEach(x=>{ha[x.id]=1});
+  db.recurring=(db.recurring||[]).concat((d.recs||[]).filter(x=>!ha[x.id]));
+  (d.cts||[]).forEach(([id,antes])=>{const c=contract(id);if(c)c.autoRec=antes});
+  (d.loans||[]).forEach(([pid,lid,antes])=>{const p=prop(pid);const l=p&&(p.loans||[]).find(y=>y.id===lid);if(l)l.autoRec=antes});
+  (d.props||[]).forEach(([pid,campo,antes])=>{const p=prop(pid);if(p)p[campo]=antes});
+}
+/* ---- vários de uma vez: a seleção de vários dos Planeados ----
+   A camada da seleção (cloud/selecao-listas.js) marca; as regras de cada
+   planeado — quem pode silenciar, quem pode apagar, o que um automático
+   arrasta — são as daqui, as mesmas do skipRec e do delRec. */
+/* Os planeados de uma lista de ids, pela ordem da base; os que já não
+   existem não entram.
+   Recebe: ids — os ids (array).
+   Devolve: os planeados (array). */
+function recsDe(ids){
+  const q={};(ids||[]).forEach(i=>{q[i]=1});
+  return (db.recurring||[]).filter(r=>q[r.id]);
+}
+/* O que a seleção pode fazer ao silêncio: silenciar quando todos avisam,
+   reativar quando todos estão silenciados; misturados, nenhum dos dois —
+   um botão só não diz o que faria a cada um.
+   Recebe: ids — os ids marcados (array).
+   Devolve: 'silenciar', 'reativar', 'misto', ou '' sem nenhum. */
+function recMudoDaSelecao(ids){
+  const rs=recsDe(ids);if(!rs.length)return '';
+  const m=rs.filter(r=>r.muted).length;
+  return m===0?'silenciar':m===rs.length?'reativar':'misto';
+}
+/* Silencia ou reativa vários, com a regra do skipRec: num imóvel onde só
+   colaboro, silenciar pede «Adicionar e confirmar planeados»
+   (motivoRecusa com 'confirmar'). Os que não posso ficam como estão. Não
+   grava nem repinta.
+   Recebe: ids — os ids (array); mudo — true silencia, false reativa.
+   Devolve: {feitos, recusa, antes} — os ids mudados, a frase da primeira
+   recusa ('' sem nenhuma) e quantos ficaram de fora (fora), e o muted de
+   antes de cada um, para o Anular (recMudoRepor). */
+function recMudarVarios(ids,mudo){
+  const out={feitos:[],recusa:'',fora:0,antes:{}};
+  recsDe(ids).forEach(r=>{
+    const m=motivoRecusa((r.tx||{}).propertyId,'rec.add',r,'confirmar');
+    if(m){out.fora++;if(!out.recusa)out.recusa=m;return}
+    out.antes[r.id]=!!r.muted;r.muted=!!mudo;out.feitos.push(r.id);
+  });
+  return out;
+}
+/* O Anular de um recMudarVarios: cada planeado volta ao silêncio que tinha.
+   Recebe: antes — {id: muted} (o antes do recMudarVarios).
+   Devolve: nada — mexe no db. */
+function recMudoRepor(antes){
+  recsDe(Object.keys(antes||{})).forEach(r=>{r.muted=antes[r.id]});
+}
+/* Quais dos marcados posso apagar, com a regra do delRec (motivoRecusa com
+   true: só os meus, ou um alheio que termina ao confirmar).
+   Recebe: ids — os ids marcados (array).
+   Devolve: {ok, recusa, fora} — os planeados que posso apagar, a frase da
+   primeira recusa ('' sem nenhuma) e quantos ficam de fora. */
+function recPodeApagar(ids){
+  const out={ok:[],recusa:'',fora:0};
+  recsDe(ids).forEach(r=>{
+    const m=motivoRecusa((r.tx||{}).propertyId,'rec.add',r,true);
+    if(m){out.fora++;if(!out.recusa)out.recusa=m}else out.ok.push(r);
+  });
+  return out;
+}
+/* A frase da confirmação de apagar vários planeados: o que acontece aos
+   movimentos, o que os automáticos arrastam (as rendas, as prestações, os da
+   ficha do imóvel), como no delRec, e os que ficam de fora por não os
+   poder apagar.
+   Recebe: ids — os ids marcados (array).
+   Devolve: o HTML da frase (texto), com o que vem de fora escapado. */
+function recApagarFrase(ids){
+  const {ok,recusa,fora}=recPodeApagar(ids),n=ok.length,conta=(k,um,uns)=>k+' '+(k===1?um:uns);
+  const ct=ok.filter(r=>r.auto&&!(r.tx||{}).loanId&&!(r.tx||{}).propRec).length;
+  const pr=ok.filter(r=>r.auto&&(r.tx||{}).loanId).length,im=ok.filter(r=>r.auto&&(r.tx||{}).propRec).length;
+  const f=[(n===1?'Deixa':'Deixam')+' de se repetir; os movimentos já criados ficam.'];
+  const volta=k=>(k===1?'volta':'voltam')+' a ligar-se ';
+  if(ct)f.push(conta(ct,'é a renda de um contrato','são rendas de contratos')+': '+volta(ct)+'guardando o contrato de novo.');
+  if(pr)f.push(conta(pr,'é a prestação de uma hipoteca','são prestações de hipotecas')+': '+volta(pr)+'na hipoteca.');
+  if(im)f.push(conta(im,'vem','vêm')+' da ficha do imóvel (IMI, condomínio, seguro): o valor sai também da ficha.');
+  if(fora)f.push(conta(fora,'fica','ficam')+' de fora: '+recusa);
+  return f.map(esc).join('<br>');
+}
+/* Apaga vários planeados com as regras do delRec (recTirar), um a um; os que
+   não posso apagar ficam. Não grava nem repinta.
+   Recebe: ids — os ids (array).
+   Devolve: {feitos, recusa, fora, desfaz} — os ids apagados, a frase da
+   primeira recusa, quantos ficaram de fora, e a lista do que cada recTirar
+   devolveu (para o Anular, recRepor de trás para a frente). */
+function recApagarVarios(ids){
+  const out={feitos:[],recusa:'',fora:0,desfaz:[]};
+  recsDe(ids).forEach(r=>{
+    /* um planeado do IMI leva as irmãs: a seguinte da lista já pode ter saído */
+    if(!(db.recurring||[]).some(x=>x.id===r.id)){out.feitos.push(r.id);return}
+    const m=motivoRecusa((r.tx||{}).propertyId,'rec.add',r,true);
+    if(m){out.fora++;if(!out.recusa)out.recusa=m;return}
+    out.desfaz.push(recTirar(r));out.feitos.push(r.id);
+  });
+  return out;
+}
+/* Apaga vários modelos, como o delTpl a cada um: os movimentos criados a
+   partir deles ficam. Não grava nem repinta.
+   Recebe: ids — os ids dos modelos (array).
+   Devolve: as cópias dos modelos apagados (array), para o Anular. */
+function tplApagarVarios(ids){
+  const q={};(ids||[]).forEach(i=>{q[i]=1});
+  const sai=JSON.parse(JSON.stringify((db.templates||[]).filter(x=>q[x.id])));
+  db.templates=(db.templates||[]).filter(x=>!q[x.id]);
+  return sai;
 }
 // Apaga o modelo, com confirmação; os movimentos criados a partir dele ficam.
 // Recebe: id — o id do modelo a apagar.
@@ -723,12 +857,128 @@ function applyTemplate(x){
 // Recebe: id — o id do modelo em db.templates.
 // Devolve: nada — abre o formulário de movimento novo pré-preenchido.
 function newFromTemplate(id){const x=(db.templates||[]).find(y=>y.id===id);if(!x)return;closeAllModals();txModal({kind:x.tx.kind,propId:x.tx.propertyId,ctId:x.tx.contractId,preset:JSON.parse(JSON.stringify(x.tx))})}
+/* ---- as peças de uma linha de planeado: o valor, quando, o selo, a origem ---- */
+/* O valor de um molde com a cor do dinheiro e o sinal: o que entra a verde
+   (.pos), a prestação a roxo (.prest), o resto do que sai a laranja (.neg)
+   com o − à frente; a transferência sem cor nem sinal. As três diferem também
+   em luminosidade — é a regra das cores do dinheiro (estilos.css:.pos).
+   Recebe: t — o tx do molde ({kind, amount}).
+   Devolve: o HTML do valor (texto); um travessão sem montante. */
+function recValor(t){
+  t=t||{};
+  if(!(Number(t.amount)>0))return '<b class="num plan-num">—</b>';
+  const sai=flowOf(t.kind)==='out',cls=t.kind==='loan'?'prest':isIn(t.kind)?'pos':sai?'neg':'';
+  return `<b class="num plan-num ${cls}">${sai?'−':''}${euro2(t.amount)}</b>`;
+}
+/* Uma data curta para as linhas: dia e mês no ano corrente, a data inteira
+   noutro ano (um planeado anual de 2027 não pode passar por um deste ano).
+   Recebe: iso — a data em AAAA-MM-DD.
+   Devolve: 'dd/mm' ou 'dd/mm/aaaa' (texto); '' sem data. */
+function recDiaCurto(iso){
+  const d=dPT(iso);if(!d)return '';
+  return String(iso).slice(0,4)===today().slice(0,4)?d.slice(0,5):d;
+}
+/* Quando é que um planeado pede confirmação: o dia, ou a janela «entre … e …»
+   quando ela tem dois dias diferentes.
+   Recebe: r — o planeado ({next, until}).
+   Devolve: o texto (sem HTML). */
+function recQuando(r){
+  if(!r||!r.next)return '';
+  return r.until&&r.until!==r.next?'entre '+recDiaCurto(r.next)+' e '+recDiaCurto(r.until):recDiaCurto(r.next);
+}
+/* A periodicidade em palavras, com o dia do mês nos mensais: «mensal, dia 5»
+   ou, com janela, «mensal, 1 – 8».
+   Recebe: r — o planeado ({every, next, until}).
+   Devolve: o texto (sem HTML). */
+function recRepete(r){
+  const p=EVERY[r.every]||r.every||'';
+  if(r.every!=='month'||!r.next)return p;
+  const d1=Number(String(r.next).slice(8,10)),d2=r.until&&r.until!==r.next?Number(String(r.until).slice(8,10)):0;
+  return d2?p+', '+d1+' – '+d2:p+', dia '+d1;
+}
+/* O selo do estado de um planeado: «Silenciado» a cinzento, «Em atraso» a
+   vermelho, «Por confirmar» a cobalto — e nada quando ainda não chegou a data.
+   Recebe: r — o planeado.
+   Devolve: o HTML do selo (texto), ou ''. */
+function recSelo(r){
+  if(!r||!r.next||r.next>today())return r&&r.muted?'<span class="badge grey">Silenciado</span>':'';
+  if(r.muted)return '<span class="badge grey">Silenciado</span>';
+  return recIsLate(r)?'<span class="badge red">Em atraso</span>':'<span class="badge">Por confirmar</span>';
+}
+/* O selo de onde vem um planeado: da hipoteca a roxo, do contrato a cobalto,
+   do imóvel (o IMI, o condomínio e o seguro da ficha) e à mão a cinzento.
+   Recebe: r — o planeado ({auto, tx}).
+   Devolve: o HTML do selo (texto). */
+function recOrigem(r){
+  const t=(r||{}).tx||{};
+  if(!r||!r.auto)return '<span class="badge grey">à mão</span>';
+  if(t.loanId)return '<span class="badge loan">da hipoteca</span>';
+  if(t.propRec)return '<span class="badge grey">do imóvel</span>';
+  return '<span class="badge">do contrato</span>';
+}
 /* cartão dos movimentos em atraso / por confirmar */
 let pendAll=false;
-/* HTML do cartão "Movimentos por confirmar". Com all mostra também as
-   silenciadas (é assim que a página Planeados o usa); sem all, só as que
-   avisam (vista geral). Devolve '' quando não há nada; o aberto/fechado
-   vem de pendShut().
+/* As opções do ⋯ de uma linha por confirmar: silenciar (ou reativar), recusar
+   desta vez e preencher os períodos em falta — as duas últimas são da nuvem
+   (cloud/painel.js:CW.rejectRec, CW.fillMissed) e só entram quando ela as tem.
+   Recusar não destrói nada (avança o planeado sem criar movimento), por isso
+   vive aqui e não num botão vermelho. Preencher cria movimentos: pede o mesmo
+   que confirmar.
+   Recebe: r — o planeado; ok — se posso silenciá-lo e recusá-lo; podeConf —
+   se posso registar o movimento dele.
+   Devolve: a lista de opções do componentes.js:menu (array, vazio sem nenhuma). */
+function pendMenuItens(r,ok,podeConf){
+  const id=jsq(r.id),it=[],nuvem=typeof window!=='undefined'&&window.CW?window.CW:null;
+  if(ok)it.push({label:r.muted?'Reativar avisos':'Silenciar avisos',icon:'clock',toca:'dados',act:`skipRec('${id}')`});
+  if(ok&&nuvem&&typeof nuvem.rejectRec==='function')it.push({label:'Recusar desta vez',icon:'x',toca:'camada',act:`CW.rejectRec('${id}')`});
+  const n=podeConf&&nuvem&&typeof nuvem.fillMissed==='function'?datasEmFalta(r).length:0;
+  if(n>=2)it.push({label:'Preencher '+n+' em falta',icon:'lista',toca:'camada',act:`CW.fillMissed('${id}')`});
+  return it;
+}
+/* Uma linha do cartão dos por confirmar: o nome, de onde é e quando (tocar
+   abre a ficha do planeado — ler primeiro), o valor com a cor do dinheiro e o
+   selo do estado, e as ações: Confirmar (regista já, quickConfirmRec), Rever
+   (abre o formulário, confirmRec) e o ⋯ com o resto (pendMenuItens). Sem a
+   borda colorida à esquerda de antes: o estado diz-se no selo. Cada ação só
+   aparece a quem a pode fazer; uma prestação sem crédito ou de uma hipoteca
+   paga não se confirma às cegas — fica o Rever, que abre o formulário. O
+   texto e o valor vão juntos (.plan-pend-topo): num cartão estreito só as
+   ações descem, e um valor largo («1 250,00 €») já não arrasta o valor e o
+   selo para baixo dos botões.
+   Recebe: r — o planeado por confirmar.
+   Devolve: o HTML da linha (texto). */
+function pendLinha(r){
+  const t=r.tx||{},semCred=recSemCredito(r),pago=!semCred&&recCreditoPago(r);
+  const ok=podeEditar(t.propertyId,'rec.add',r,'confirmar'),recusa=recusaConfirmar(r),conf=!recusa&&!semCred&&!pago;
+  const id=jsq(r.id),onde=imovelDoMolde(t),itens=pendMenuItens(r,ok,!recusa);
+  const acoes=(conf?`<button type="button" class="btn sm primary" data-toca="dados" data-click="quickConfirmRec('${id}')">${ic('check',16)} Confirmar</button>`:'')
+    +(recusa?'':`<button type="button" class="btn sm" data-toca="camada" data-click="confirmRec('${id}')">Rever</button>`)
+    +(itens.length?menu('pend_'+r.id,itens):'');
+  return `<div class="plan-pend-linha" data-fk="rec:${esc(r.id)}">
+    <div class="plan-pend-topo"><div class="plan-txt tap" data-toca="camada" data-click="recView('${id}')">
+      <p class="title">${esc(r.name)}</p>
+      <p class="small num">${[onde?esc(onde):'',esc(recQuando(r))].filter(Boolean).join(' · ')}</p>
+      ${semCred?'<p class="small"><b class="amber">Sem crédito associado — abre para escolher</b></p>':''}
+      ${pago?'<p class="small"><b class="amber">Hipoteca já paga — abre para rever</b></p>':''}</div>
+    <div class="plan-valor">${recValor(t)}${recSelo(r)}</div></div>
+    ${acoes?`<div class="plan-acoes">${acoes}</div>`:''}</div>`;
+}
+/* O total do cabeçalho do cartão «Por confirmar», com o sinal das linhas por
+   baixo (planeados.js:recValor): o que entra soma, o que sai (a prestação
+   incluída) subtrai, a transferência conta zero. Somava os montantes todos
+   como positivos — com uma renda de 425 € e um condomínio de 85 € dizia
+   510 €, e as linhas diziam +425 e −85.
+   Recebe: pend — os planeados por confirmar (array).
+   Devolve: euros com sinal (número, arredondado ao cêntimo). */
+function pendTotal(pend){
+  return r2(sum((pend||[]).map(r=>{const t=r.tx||{},v=Number(t.amount)||0;return isIn(t.kind)?v:isOut(t.kind)?-v:0})));
+}
+/* HTML do cartão «Por confirmar». Com all mostra também as silenciadas (é
+   assim que a página Planeados o usa); sem all, só as que avisam (vista
+   geral). O cabeçalho diz o que é preciso saber — quantas em atraso, o total
+   com sinal (pendTotal: verde quando entra mais do que sai, laranja com o −
+   quando sai mais), quantas esperam — e abre e fecha a lista (pendShut). As
+   em atraso vêm primeiro. Devolve '' quando não há nada.
    Recebe: all (opcional) — verdadeiro inclui também as silenciadas; falso ou omisso
    mostra só as que avisam.
    Devolve: o HTML do cartão (texto), ou '' quando não há nada por confirmar. */
@@ -741,25 +991,17 @@ function pendingCard(all){
   if(!sabemosOEstado())return '';
   const pend=all?recPending():recActive();
   if(!pend.length)return '';
-  const row=(r)=>{const late=recIsLate(r),semCred=recSemCredito(r),pago=!semCred&&recCreditoPago(r);return `<div class="card tap pend ${late?'late':''} u-p-11px-13px" data-fk="rec:${esc(r.id)}" data-toca="camada" data-click="confirmRec('${r.id}')">
-    <div class="row-between u-ai-center">
-      <div class="u-minw-0"><b class="u-d-block u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(r.name)}</b>
-        <span class="small">${dPT(r.next)}${r.until&&r.until!==r.next?' – '+dPT(r.until):''}${EVERY[r.every]?' · '+esc(EVERY[r.every]):''}${r.muted?' · silenciada':late?' · <b class="neg">em atraso</b>':''} · ${(KIND[r.tx.kind]||{}).short}${imovelDoMolde(r.tx)?' · '+esc(imovelDoMolde(r.tx)):''}</span>
-        ${semCred?'<span class="small"><b class="amber">Sem crédito associado — abre para escolher</b></span>':''}
-        ${pago?'<span class="small"><b class="amber">Hipoteca já paga — abre para rever</b></span>':''}</div>
-      <b class="u-fx-0-0-auto">${r.tx.amount?euro2(r.tx.amount):''}</b></div>
-    ${(()=>{const ok=podeEditar((r.tx||{}).propertyId,'rec.add',r,'confirmar'),conf=!recusaConfirmar(r)&&!semCred&&!pago;   /* sem permissão, só a linha */
-      return ok||conf?`<div class="toolbar u-m-9px-0-0">
-        ${conf?`<button class="btn sm primary" data-toca="dados" data-click="event.stopPropagation();quickConfirmRec('${r.id}')">${ic('check',14)} Confirmar</button>`:''}
-        ${ok?`<button class="btn sm" data-toca="dados" data-click="event.stopPropagation();skipRec('${r.id}')">${r.muted?'Reativar':'Silenciar'}</button>`:''}</div>`:''})()}</div>`};
-  const nl=pend.filter(recIsLate).length,open=!pendShut();
-  return `<div class="card u-mb-14px" id="pendCard">
-    <div class="row-between tap u-ai-center u-cur-pointer u-m-n16px u-p-16px" data-toca="vista" data-click="pendToggle()">
-      <div class="u-minw-0"><div class="title">Movimentos por confirmar</div>
-        <div class="small">${pend.length} à espera${nl?' · <b class="neg">'+nl+' em atraso</b>':''} · ${euro(sum(pend.map(r=>r.tx.amount||0)))}${open?'':' · toca para ver'}</div></div>
-      <span class="u-fx-0-0-auto u-d-inline-flex ${open?'u-tf-rotate-90deg':'u-tf-rotate-n90deg'}">${ic('chev',20)}</span></div>
-    ${open?listaViva('pendentes',pend.map(r=>({chave:'pend:'+r.id,html:row(r)})),'','u-g-8px u-mt-12px')
-    +`<div class="hint u-mt-9px">Confirmar regista o movimento e agenda o seguinte. Silenciar deixa-o à espera, sem avisos.</div>`:''}</div>`;
+  const atraso=r=>!r.muted&&recIsLate(r);
+  const nl=pend.filter(atraso).length,open=!pendShut(),total=pendTotal(pend);
+  const ordem=pend.slice().sort((a,b)=>(atraso(b)?1:0)-(atraso(a)?1:0)||String(a.next).localeCompare(String(b.next)));
+  return `<div class="card plan-pend u-mb-14px" id="pendCard">
+    <div class="plan-pend-cab tap" data-toca="vista" data-click="pendToggle()" aria-expanded="${open?'true':'false'}">
+      <div class="plan-pend-tit"><h3>Por confirmar</h3>${nl?`<span class="badge red">${nl} em atraso</span>`:''}</div>
+      <b class="num plan-pend-total ${total<0?'neg':'pos'}">${euro2(total)}</b>
+      <span class="plan-pend-chev${open?' aberto':''}">${ic('chevD',20)}</span>
+      <p class="small plan-pend-sub">${pend.length} à espera${open?'':' · toca para ver'}</p></div>
+    ${open?listaViva('pendentes',ordem.map(r=>({chave:'pend:'+r.id,html:pendLinha(r)})),'plan-pend-linhas')
+    +`<p class="hint plan-pend-dica">Confirmar regista o movimento e agenda o seguinte. Silenciar deixa-o à espera, sem avisos.</p>`:''}</div>`;
 }
 /* Fechado por omissão, e a escolha fica no aparelho.
 
@@ -783,6 +1025,8 @@ function pendToggle(){
   const e=document.getElementById('pendCard');
   if(!e)return render();
   e.outerHTML=pendingCard(pendAll);
+  /* o cartão é outro nó: o cabeçalho e os textos tocáveis voltam a entrar no Tab */
+  tornarFocavel(document.getElementById('pendCard'));
 }
 /* A frase do estado vazio sobre quem cria planeados sozinho: as rendas (dos
    Contratos), as prestações (dos Créditos) e o IMI, o condomínio e o seguro da
@@ -798,49 +1042,165 @@ function recOrigensFrase(){
   const s=listaE(o);
   return ' '+s[0].toUpperCase()+s.slice(1)+' criam um sem tu fazeres nada.';
 }
-/* página das recorrências e modelos
+/* ---- quem vem de trás: os planeados com períodos passados por registar ----
+   Um contrato ou um planeado que começou antes de ser registado deixa meses
+   sem movimento. A nuvem pergunta-o uma vez, numa janela, quando o planeado
+   nasce (cloud/painel.js:offerFill); a página dos Planeados di-lo numa faixa
+   enquanto houver o que registar, com «Registar os N» (a janela do
+   preenchimento, com as datas, o total e o aviso de estimativa:
+   cloud/painel.js:CW.fillMissed) e «Agora não». As prestações ficam de fora,
+   como no offerFill: é ao gravar a hipoteca que se pergunta por elas
+   (creditos.js:perguntarPrestacoesEmFalta). */
+const RETRO_LS='gi_retro_agora_nao';
+/* Os «Agora não» deste aparelho: id do planeado → quantos períodos faltavam
+   quando se disse. A faixa volta se passarem a faltar mais.
+   Devolve: o objeto (vazio se não houver nada ou a leitura falhar). */
+function recRetroVistos(){
+  try{const o=JSON.parse(localStorage.getItem(RETRO_LS)||'{}');return o&&typeof o==='object'&&!Array.isArray(o)?o:{}}catch(e){return {}}
+}
+/* Os planeados que vêm de trás: dois ou mais períodos passados sem movimento
+   (datasEmFalta), que avisam (não silenciados), que não são prestações, que
+   posso confirmar (recusaConfirmar) e por que não se disse «Agora não» com
+   estes mesmos períodos em falta. Nada antes de se saber o estado
+   (espera.js:sabemosOEstado), como o cartão dos por confirmar.
+   Devolve: array de {r, datas} pela ordem da base. */
+function recRetroCandidatos(){
+  if(!sabemosOEstado())return [];
+  const vistos=recRetroVistos();
+  return (db.recurring||[]).filter(r=>!r.muted&&(r.tx||{}).kind!=='loan'&&!(r.tx||{}).loanId&&!recusaConfirmar(r))
+    .map(r=>({r,datas:datasEmFalta(r)}))
+    .filter(x=>x.datas.length>=2&&!(Number(vistos[x.r.id])>=x.datas.length));
+}
+/* Os períodos em falta numa frase: até seis meses do mesmo ano, os nomes
+   («faltam jul, ago e set», e «de 2025» quando não são deste); mais do que
+   isso, a atravessar anos, ou noutro passo, a contagem e as duas pontas.
+   Recebe: datas — as datas em falta (AAAA-MM-DD, por ordem); every — o passo do planeado.
+   Devolve: o texto (sem HTML). */
+function recRetroMeses(datas,every){
+  const n=datas.length,a0=String(datas[0]||'').slice(0,4);
+  if(every==='month'&&n<=6&&datas.every(d=>d.slice(0,4)===a0))
+    return 'faltam '+listaE(datas.map(d=>MES[Number(d.slice(5,7))-1]||''))+(a0!==today().slice(0,4)?' de '+a0:'');
+  const pal=({week:'semanas',quarter:'trimestres',year:'anos'})[every]||'meses';
+  return 'faltam '+n+' '+pal+', de '+dPT(datas[0])+' a '+dPT(datas[n-1]);
+}
+/* A faixa de quem vem de trás, por cima dos por confirmar: um planeado de cada
+   vez (o primeiro dos recRetroCandidatos), a dizer desde quando, o que falta,
+   quanto se regista e com que etiqueta. Só com a nuvem, que é quem regista
+   (CW.fillMissed).
+   Devolve: o HTML da faixa (texto), ou '' sem nada a dizer. */
+function recRetroFaixa(){
+  if(!(typeof window!=='undefined'&&window.CW&&typeof window.CW.fillMissed==='function'))return '';
+  const cs=recRetroCandidatos();if(!cs.length)return '';
+  const {r,datas}=cs[0],n=datas.length,v=Number((r.tx||{}).amount)||0,mais=cs.length-1;
+  return `<section class="plan-retro" aria-labelledby="planRetroTit">
+    <h2 id="planRetroTit">«${esc(r.name)}» vem de trás</h2>
+    <p class="num">Começa a ${dPT(origemDoPlano(r))}: ${esc(recRetroMeses(datas,r.every))}. Registamos ${n} movimentos de ${euro2(v)} (${euro2(r2(v*n))}), com a etiqueta «Estimativa»?</p>
+    ${mais?`<p class="small plan-retro-mais">Há mais ${mais} ${mais===1?'planeado':'planeados'} assim; aparecem a seguir.</p>`:''}
+    <div class="plan-retro-acoes">
+      <button type="button" class="btn sm primary" data-toca="camada" data-click="CW.fillMissed('${jsq(r.id)}')">Registar os ${n}</button>
+      <button type="button" class="btn sm" data-toca="vista" data-click="recRetroAgoraNao('${jsq(r.id)}')">Agora não</button></div></section>`;
+}
+/* «Agora não» na faixa de quem vem de trás: guarda no aparelho quantos
+   períodos faltavam, para a faixa passar ao seguinte e só voltar a este se
+   passarem a faltar mais. Os ids de planeados que já não existem saem.
+   Recebe: id — o id do planeado.
+   Devolve: nada — grava no aparelho e redesenha. */
+function recRetroAgoraNao(id){
+  const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
+  const o=recRetroVistos(),vivos={};
+  (db.recurring||[]).forEach(x=>{vivos[x.id]=1});
+  Object.keys(o).forEach(k=>{if(!vivos[k])delete o[k]});
+  o[id]=datasEmFalta(r).length;
+  try{localStorage.setItem(RETRO_LS,JSON.stringify(o))}catch(e){}
+  render();
+}
+/* Os estados do filtro dos Planeados (o «st» do lf('lrec')): o valor, o que o
+   chip ligado diz e o rótulo da escolha. Primeiro os quatro que eram chips
+   (Todos, Automáticos, Criados à mão, Silenciados), depois os do dia. */
+const REC_ESTADOS=[['','Todos','Todos os estados'],['auto','Automáticos','Automáticos (contratos, hipotecas e imóveis)'],['manual','Criados à mão','Criados à mão'],
+  ['muted','Silenciados','Silenciados'],['pend','Por confirmar','Por confirmar'],['ok','Em dia','Em dia']];
+/* O estado dos Planeados mudou — o chip do estado ou o seletor do painel
+   (vistas.js:lfCabeca), que são o mesmo filtro lf('lrec').st. Um valor que
+   não é um estado limpa o filtro.
+   Recebe: v — '', 'auto', 'manual', 'muted', 'pend' ou 'ok'.
+   Devolve: nada — muda o filtro e redesenha. */
+function recChip(v){
+  lf('lrec').st=REC_ESTADOS.some(x=>x[0]&&x[0]===v)?v:'';
+  render();
+}
+/* Uma linha da lista dos planeados: o nome, a periodicidade e a próxima data
+   (ou, chegada a data, quando pede confirmação), o tipo e o imóvel, o selo da
+   origem e o do estado, e o valor com a cor do dinheiro. Tocar abre a ficha,
+   com as opções no ⋯; o toque longo entra na seleção de vários com ela
+   marcada (cloud/selecao-listas.js:lpLongo).
+   Recebe: r — o planeado.
+   Devolve: o HTML da linha (texto). */
+function recLinha(r){
+  const t=r.tx||{},pend=r.next&&r.next<=today(),onde=imovelDoMolde(t);
+  return `<div class="plan-linha tap" data-lp="rec:${esc(r.id)}" data-fk="recl:${esc(r.id)}" data-toca="camada" data-click="recView('${jsq(r.id)}')">
+    <div class="plan-txt">
+      <p class="title">${esc(r.name)}</p>
+      <p class="small num">${esc(recRepete(r))}${r.next?' · '+(pend?esc(recQuando(r)):'próxima '+recDiaCurto(r.next)):''}${r.end?' · termina '+dPT(r.end):''}</p>
+      <p class="small">${esc((KIND[t.kind]||{}).short||'')}${onde?' · '+esc(onde):''}${t.category?' · '+esc(t.category):''}</p>
+      ${recSemCredito(r)?'<p class="small"><b class="amber">Sem crédito associado — abre para escolher</b></p>':''}
+      <div class="plan-selos">${recOrigem(r)}${recSelo(r)}</div></div>
+    ${recValor(t)}</div>`;
+}
+/* A página dos Planeados (o canvas M-Planeados): a faixa de quem vem de trás,
+   o cartão dos por confirmar e, por cima do que filtram, os filtros dos
+   Movimentos (vistas.js:lfCabeca) — a pesquisa à vista com o funil do painel
+   completo e os chips do estado (Automáticos, Criados à mão, Silenciados, Por
+   confirmar, Em dia, cada um com quantos há: planeados.js:recChip), do tipo e,
+   no ecrã largo, do imóvel —; depois a lista dos planeados num cartão e os
+   modelos em chips com o valor. O «Novo recorrente» vive no cabeçalho
+   (navegacao.js:#hdrAcao) e no +; os vazios têm o seu botão, e com filtros
+   são o vazio dos filtros (vistas.js:vazioFiltro, com «Limpar filtros»). Com
+   um estado que não o «Criados à mão», os Modelos saem: um modelo não tem
+   estado.
    Devolve: o HTML da página (texto). */
 function vRecurring(){
   const K='lrec',s=lf(K);
   const hit=(name,tx)=>lfHit(K,[name,tx.label,tx.category,tx.sub,tx.creditor,propName(tx.propertyId),String(tx.amount||''),(tx.tags||[]).join(' '),tx.notes].join(' '));
   const base=r=>((!s.k||r.tx.kind===s.k)&&(!s.p||r.tx.propertyId===s.p)&&hit(r.name,r.tx));
-  const rc=(db.recurring||[]).filter(r=>{
-    if(!base(r))return false;
-    if(s.st==='pend'&&!(r.next&&r.next<=today()&&!r.muted))return false;
-    if(s.st==='ok'&&!(r.next&&r.next>today()))return false;
-    if(s.st==='muted'&&!r.muted)return false;
-    if(s.st==='auto'&&!r.auto)return false;
-    if(s.st==='manual'&&r.auto)return false;
+  /* um planeado está num estado? (o filtro e as contagens do chip) */
+  const noEstado=(r,st)=>{
+    if(st==='pend')return !!(r.next&&r.next<=today()&&!r.muted);
+    if(st==='ok')return !!(r.next&&r.next>today());
+    if(st==='muted')return !!r.muted;
+    if(st==='auto')return !!r.auto;
+    if(st==='manual')return !r.auto;
     return true;
-  }).sort((a,b)=>String(a.next).localeCompare(String(b.next)));
+  };
+  const daBase=(db.recurring||[]).filter(base);
+  const rc=daBase.filter(r=>noEstado(r,s.st)).sort((a,b)=>String(a.next).localeCompare(String(b.next)));
   const rcS=lfSort(K,rc,{nome:r=>r.name,valor:r=>r.tx.amount||0,data:r=>r.next||''});
   const tp=lfSort(K,(db.templates||[]).filter(x=>(!s.k||x.tx.kind===s.k)&&(!s.p||x.tx.propertyId===s.p)&&(!s.st||s.st==='manual')&&hit(x.name,x.tx)),
     {nome:x=>x.name,valor:x=>x.tx.amount||0,data:()=>0});
   const kinds=[{v:'',label:'Todos os tipos'},{v:'income',label:'Receitas'},{v:'expense',label:'Despesas'},{v:'loan',label:'Pagamentos de crédito'},{v:'owed',label:'Dívidas recebidas'},{v:'repay',label:'Pagamentos de dívida'}];
-  /* o filtro por imóvel só com os Imóveis ligados nesta conta */
-  const head=lfBar(K,[lfSel(K,'k',kinds)].concat(servicoLigado('properties')?[lfSel(K,'p',lfPropOpts())]:[]).concat([
-      lfSel(K,'st',[{v:'',label:'Todos os estados'},{v:'pend',label:'Por confirmar'},{v:'ok',label:'Em dia'},{v:'muted',label:'Silenciados'},{v:'auto',label:'Automáticos (contratos, hipotecas e imóveis)'},{v:'manual',label:'Criados à mão'}])]),
-      rc.length+tp.length,
-      {defLabel:'Ordenar pela próxima data',opts:[{v:'data',label:'Ordenar por data'},{v:'valor',label:'Ordenar por valor'},{v:'nome',label:'Ordenar por nome'}]})
-    +((podeSemImovel()||casasComo('rec.add').length)?fab([{label:'Novo mov. recorrente',icon:'clock',act:'newRec()'},{label:'Novo modelo',icon:'file',act:'newTpl()'}]):'');
-  const adiciona=podeSemImovel()||casasComo('rec.add').length;   /* a condição do FAB, para os vazios */
-  const recs=rcS.length?listaViva('recorrentes',rcS.map(r=>({chave:'rec:'+r.id,html:(r=>{const late=recIsLate(r),pend=r.next<=today();return `<div class="card tap ${pend?'pend':''} ${late?'late':''}" data-lp="rec:${esc(r.id)}" data-fk="recl:${esc(r.id)}" data-toca="camada" data-click="recView('${jsq(r.id)}')">
-      <div class="row-between u-ai-center">
-        <div class="u-minw-0"><div class="title">${esc(r.name)}</div>
-          <div class="small">${r.auto?'<span class="badge grey u-mr-4px">'+((r.tx||{}).loanId?'da hipoteca':(r.tx||{}).propRec?'do imóvel':'do contrato')+'</span>':''}${esc(EVERY[r.every]||r.every)} · ${dPT(r.next)}${r.until&&r.until!==r.next?' – '+dPT(r.until):''} · ${pend?(r.muted?'silenciada · por confirmar':late?'<b class="neg">em atraso</b>':'<b class="amber">por confirmar</b>'):'em dia'}${r.end?' · termina '+dPT(r.end):''}</div>
-          <div class="small">${(KIND[r.tx.kind]||{}).short}${imovelDoMolde(r.tx)?' · '+esc(imovelDoMolde(r.tx)):''}${r.tx.category?' · '+esc(r.tx.category):''}</div>
-          ${recSemCredito(r)?'<div class="small"><b class="amber">Sem crédito associado — abre para escolher</b></div>':''}</div>
-        <div class="u-d-flex u-g-8px u-fx-0-0-auto u-ai-flex-start">
-          <b class="u-fs-16px">${r.tx.amount?euro2(r.tx.amount):'—'}</b>${kebab('rec:'+r.id)}</div></div></div>`})(r)})),'','u-g-8px')
-    :`<div class="empty u-p-24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem movimentos recorrentes'}</b>${lfCount('lrec')?'':'Repete-se sozinho e pede confirmação todos os meses.'+recOrigensFrase()+(adiciona?saida('Novo movimento recorrente','newRec()','camada'):'')}</div>`;
-  const tpls=tp.length?listaViva('modelos',tp.map(x=>({chave:'tpl:'+x.id,html:`<div class="card tap" data-lp="tpl:${esc(x.id)}" data-fk="tpl:${esc(x.id)}" data-toca="camada" data-click="tplView('${jsq(x.id)}')">
-      <div class="row-between u-ai-center">
-        <div class="u-minw-0"><div class="title">${esc(x.name)}</div>
-          <div class="small">${(KIND[x.tx.kind]||{}).short}${imovelDoMolde(x.tx)?' · '+esc(imovelDoMolde(x.tx)):''}${x.tx.category?' · '+esc(x.tx.category):''}</div></div>
-        <div class="u-d-flex u-g-8px u-fx-0-0-auto u-ai-flex-start">
-          <b class="u-fs-16px">${x.tx.amount?euro2(x.tx.amount):'—'}</b>${kebab('tpl:'+x.id)}</div></div></div>`})),'','u-g-8px')
-    :`<div class="empty u-p-24px"><b>${lfCount('lrec')?'Nada neste filtro':'Sem modelos'}</b>${lfCount('lrec')?'':'Um modelo é um movimento guardado para copiar à mão quando precisares.'+(adiciona?saida('Novo modelo','newTpl()','camada'):'')}</div>`;
-  return head+pendingCard(true)+`<div class="section-title">Movimentos recorrentes</div>${recs}<div class="section-title u-mt-18px">Modelos</div>${tpls}`;
+  /* os filtros por cima do que filtram, e só com alguma coisa para filtrar.
+     As escolhas do estado dizem quantos há em cada um pelos olhos dos outros
+     filtros (o tipo, o imóvel e a pesquisa contam; o estado é o próprio
+     campo); o filtro por imóvel só com os Imóveis ligados nesta conta */
+  const head=!(db.recurring||[]).length&&!(db.templates||[]).length?'':lfCabeca(K,{nome:['planeado','planeados'],dos:'dos planeados',n:rc.length+tp.length,
+    campos:[{chave:'st',nome:'Estado',curto:'Todos',rapido:true,aplicar:recChip,rotulo:v=>(REC_ESTADOS.find(x=>x[0]===v)||[])[1]||v,
+        opcoes:REC_ESTADOS.map(([v,,rot])=>({v:v,label:rot,n:v?daBase.filter(r=>noEstado(r,v)).length:daBase.length}))},
+      {chave:'k',nome:'Tipo',curto:'Todos',rapido:true,opcoes:kinds},
+      servicoLigado('properties')?{chave:'p',nome:'Imóvel',curto:'Todos',rapido:'largo',opcoes:lfPropOpts()}:null],
+    ordem:{omissao:'Próxima data',opcoes:[{v:'data',label:'Data'},{v:'valor',label:'Valor'},{v:'nome',label:'Nome'}]}});
+  /* quem pode adicionar: a condição do «Novo recorrente» do cabeçalho, para os vazios e o «Novo modelo» */
+  const adiciona=podeSemImovel()||casasComo('rec.add').length;
+  /* com filtros, o vazio é o dos filtros, com «Limpar filtros» (vistas.js:vazioFiltro) */
+  const filtrado=lfCount('lrec')>0;
+  const recs=rcS.length?`<div class="card plan-lista">${listaViva('recorrentes',rcS.map(r=>({chave:'rec:'+r.id,html:recLinha(r)})),'plan-linhas')}</div>`
+    :filtrado?vazioFiltro():`<div class="empty u-p-24px"><b>Sem movimentos recorrentes</b>Repete-se sozinho e pede confirmação todos os meses.${recOrigensFrase()}${adiciona?saida('Novo movimento recorrente','newRec()','camada'):''}</div>`;
+  /* um modelo não tem data nem origem: com um estado escolhido (Automáticos,
+     Silenciados, Por confirmar, Em dia) a secção sai, em vez de dizer sempre
+     que não há nada; «Criados à mão» deixa-os, que são todos à mão */
+  if(s.st&&s.st!=='manual')return recRetroFaixa()+pendingCard(true)+head+recs;
+  const tpls=tp.length?listaViva('modelos',tp.map(x=>({chave:'tpl:'+x.id,html:`<button type="button" class="chip plan-modelo" data-lp="tpl:${esc(x.id)}" data-fk="tpl:${esc(x.id)}" data-toca="camada" data-click="tplView('${jsq(x.id)}')"><span class="plan-modelo-nome">${esc(x.name)}</span>${Number(x.tx.amount)>0?` <span class="n">${euro2(x.tx.amount)}</span>`:''}</button>`})),'chips-fila plan-modelos')
+    :filtrado?vazioFiltro():`<div class="empty u-p-24px"><b>Sem modelos</b>Um modelo é um movimento guardado para copiar à mão quando precisares.${adiciona?saida('Novo modelo','newTpl()','camada'):''}</div>`;
+  return recRetroFaixa()+pendingCard(true)+head+recs
+    +`<div class="plan-cab"><h2>Modelos</h2>${tp.length&&adiciona?'<button type="button" class="btn sm ghost plan-novo" data-toca="camada" data-click="newTpl()">Novo modelo</button>':''}</div>${tpls}`;
 }
 /* secção do formulário de um planeado: a periodicidade, a janela e o fim — os
    campos do planeado, que vivem no modo do formulário (movimento.js:txModo) e
@@ -867,11 +1227,14 @@ function recCracha(){
   const n=sabemosOEstado()?recActive().length:0;
   return {n:n,aviso:!recLate().length};
 }
-/* O menu de toque longo de um planeado (data-lp "rec:<id>"): com rec.add
-   confirmo e silencio qualquer planeado (o servidor só lhe funde next, until
-   e muted); editar os campos e apagar é só o que eu criei — o alheio que
-   termina ao confirmar apaga-se pelo Confirmar, não por aqui. Os outros
-   serviços acrescentam as suas opções por lpExtras.
+/* A folha das opções de um planeado (data-lp "rec:<id>", pelo lpMenu): com
+   rec.add confirmo e silencio qualquer planeado (o servidor só lhe funde
+   next, until e muted); editar os campos e apagar é só o que eu criei — o
+   alheio que termina ao confirmar apaga-se pelo Confirmar, não por aqui. Os
+   outros serviços acrescentam as suas opções por lpExtras. Com a nuvem, o
+   toque longo já não a abre: entra na seleção de vários
+   (cloud/selecao-listas.js:lpLongo), e as opções de um só vivem no ⋯ da
+   ficha (recView); a folha fica para quem chama o lpMenu.
    Recebe: a — as partes do data-lp (['rec', id]).
    Devolve: nada — abre a folha de opções (ou nada, se o planeado já não existir). */
 function lpPlaneado(a){
@@ -881,9 +1244,13 @@ function lpPlaneado(a){
   if(conf)opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)});
   lpExtrasDe('rec',a).forEach(o=>opts.push(o));
   if(edita)opts.push({label:'Editar',icon:'pen',act:()=>editRec(id)},{label:'Apagar',icon:'trash',act:()=>delRec(id)});
+  /* «Selecionar vários» só a quem pode silenciar ou apagar: a seleção não tem outras ações */
+  if(conf||podeEditar(hid,'rec.add',r,true))lpPortaSelecao('rec',id,opts);
   return lpShow(r.name,opts);
 }
-/* O menu de toque longo de um modelo (data-lp "tpl:<id>").
+/* A folha das opções de um modelo (data-lp "tpl:<id>", pelo lpMenu). Com a
+   nuvem, o toque longo entra na seleção (cloud/selecao-listas.js:lpLongo), e
+   as opções de um só vivem na ficha (tplView).
    Recebe: a — as partes do data-lp (['tpl', id]).
    Devolve: nada — abre a folha de opções (ou nada, se o modelo já não existir). */
 function lpModelo(a){
@@ -891,6 +1258,19 @@ function lpModelo(a){
   const opts=[{label:'Usar modelo',icon:'plus',act:()=>newFromTemplate(id)},{label:'Editar',icon:'pen',act:()=>editTpl(id)}];
   lpExtrasDe('tpl',a).forEach(o=>opts.push(o));
   opts.push({label:'Apagar',icon:'trash',act:()=>delTpl(id)});
+  lpPortaSelecao('tpl',id,opts);
   return lpShow(x.name,opts);
+}
+/* A porta da seleção de vários no fim da folha das opções de um planeado ou
+   de um modelo, como o «Selecionar vários» da folha dos imóveis
+   (cloud/selecao-listas.js): entra na seleção desse tipo com o tocado já
+   marcado. Só na página dos Planeados — a folha abre-se também noutros
+   ecrãs, onde não há seleção — e só com a camada da seleção carregada.
+   Recebe: tipo — 'rec' ou 'tpl'; id — o id do tocado; opts — as opções da
+   folha, a que se acrescenta.
+   Devolve: nada — acrescenta a opção ao opts. */
+function lpPortaSelecao(tipo,id,opts){
+  if(tab!=='recurring'||!(typeof window!=='undefined'&&window.CW&&typeof window.CW.selLEntrar==='function'))return;
+  opts.push({label:'Selecionar vários',icon:'caixaVisto',act:()=>window.CW.selLEntrar(tipo,id)});
 }
 registarServico({id:'recurring',vistas:{recurring:'vRecurring'},lp:{rec:'lpPlaneado',tpl:'lpModelo'},cracha:{recurring:'recCracha'}});

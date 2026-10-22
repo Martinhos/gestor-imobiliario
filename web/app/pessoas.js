@@ -29,80 +29,295 @@ function personApagavel(kind,p){
   if(kind==='tenant')return true;
   return !p._userId&&!(window.CW&&CW.user&&CW.user.id===p.id);
 }
+/* Como partilho com outro proprietário com conta: uma ligação ativa ou um
+   grupo partilhado em comum. É da nuvem (cloud/partilha.js:partilhaComDonoDaNuvem
+   põe-na aqui); sem ela, ninguém partilha.
+   Recebe: id — o id da conta do outro.
+   Devolve: {act} — a ação que abre onde se adicionam e removem as casas
+   partilhadas com ele —, mais {ligacao} — o id da ligação ativa — quando a
+   partilha é por uma; ou null. */
+let partilhaComDono=null;
+/* A partilha com outro proprietário (partilhaComDono), e um erro lá não leva
+   a lista nem a ficha consigo.
+   Recebe: id — o id da conta do outro.
+   Devolve: {act} (com {ligacao} quando há uma ativa), ou null. */
+function comoPartilhoCom(id){
+  if(!partilhaComDono)return null;
+  try{return partilhaComDono(id)||null}catch(e){return null}
+}
+/* Os proprietários da lista: as outras contas Rendorium com quem partilho —
+   uma casa em comum, uma ligação ativa (mesmo sem casas) ou um grupo
+   partilhado. Não estou eu, nem quem só é referido nos movimentos (contas
+   apagadas, ex-comproprietários: ficam no db.owners para o «Pago por» se
+   ler), nem fichas sem conta, que já não se criam. Sem sessão (o caminho
+   sem nuvem, que só os testes e o arranque sem servidor percorrem) não há
+   contas nem «eu»: a lista é a base que está no aparelho.
+   Recebe: nada.
+   Devolve: array de proprietários de db.owners. */
+function donosComPartilha(){
+  const eu=meuId(),todos=db.owners||[];
+  if(!eu)return todos;
+  return todos.filter(o=>o._userId&&o.id!==eu&&(propsOf(o.id).length>0||!!comoPartilhoCom(o.id)));
+}
+/* ---- as peças das pessoas (o canvas M-Pessoas, M-Inquilino e M-Proprietario) ---- */
+
+/* O avatar de uma pessoa: as iniciais num círculo, cobalto suave; cinzento
+   num inquilino sem contrato que conte (o canvas). Lê-se o nome ao lado, por
+   isso o leitor de ecrã salta-o.
+   Recebe: p — a pessoa; grande (opcional) — true para o da ficha (56px);
+   apagado (opcional) — true para o cinzento.
+   Devolve: o HTML do avatar. */
+function pesAvatar(p,grande,apagado){
+  return `<span class="avatar pes-av${grande?' pes-av-g':''}${apagado?' pes-av-sem':''}" aria-hidden="true">${esc(initials(p&&p.name))}</span>`;
+}
+/* Os contratos de um inquilino, arrumados pelo que dizem dele hoje: os em
+   vigor, os por começar e os terminados (o que acabou mais tarde primeiro).
+   Só com os Contratos ligados nesta conta: desligados, tudo vazio — a ficha
+   e a lista não falam de um serviço que a conta não tem.
+   Recebe: t — o inquilino.
+   Devolve: {ativos, futuros, findos} — arrays de contratos. */
+function pesContratos(t){
+  const cs=t&&servicoLigado('contracts')?contractsOfTenant(t.id):[];
+  return {ativos:cs.filter(isActive),futuros:cs.filter(c=>ctEstado(c)==='futuro'),
+    findos:cs.filter(c=>ctEstado(c)==='terminado').sort((a,b)=>String(b.end||'').localeCompare(String(a.end||'')))};
+}
+/* O estado da renda de um contrato em vigor, pelo planeado que a app mantém
+   para ela (planeados.js:ctRecOf): em atraso quando a janela fechou sem
+   confirmação, por confirmar enquanto está aberta, em dia quando a próxima
+   ainda não chegou. Só com os Planeados ligados, só depois de o estado do
+   servidor chegar (espera.js:sabemosOEstado) e só quando o planeado está na
+   base — quem colabora sem os ver não o recebe. Sem isso não se diz nada:
+   «em dia» sobre o que a conta não vê seria inventado. Um planeado
+   silenciado também não fala: foi a pessoa que o mandou calar.
+   Recebe: c — o contrato.
+   Devolve: {cls, txt} para o selo (cls '' é o cobalto), ou null. */
+function pesRenda(c){
+  if(!c||!isActive(c)||!servicoLigado('recurring')||!sabemosOEstado())return null;
+  const r=ctRecOf(c);if(!r||r.muted||!r.next)return null;
+  if(r.next<=today())return recIsLate(r)?{cls:'red',txt:'Renda em atraso'}:{cls:'',txt:'Renda por confirmar'};
+  return {cls:'in',txt:'Renda em dia'};
+}
+/* Uma data curta para os selos e as linhas: sem o ano quando é o deste ano.
+   Recebe: iso — 'AAAA-MM-DD'.
+   Devolve: '12/11' ou '12/11/2027' (texto). */
+function pesDataCurta(iso){const t=dPT(iso);return String(iso||'').slice(0,4)===today().slice(0,4)?t.slice(0,5):t}
+/* O selo do cartão de cidadão que está a caducar, com a janela e as cores dos
+   prazos (prazos.js:PZ_ANTECEDENCIA, prazos.js:pzUrg, prazos.js:pzSelo): só
+   dentro dos dias de aviso, e só de quem o «Pede atenção» avisa — um
+   inquilino com um contrato que ainda não acabou, ou um proprietário.
+   Recebe: p — a pessoa; kind — 'tenant' ou 'owner'.
+   Devolve: o HTML do selo, ou ''. */
+function pesSeloCC(p,kind){
+  if(!p||!p.ccValid)return '';
+  if(kind==='tenant'&&!(db.contracts||[]).some(c=>ctVivo(c)&&(c.tenantIds||[]).indexOf(p.id)>-1))return '';
+  const d=pzDias(p.ccValid);if(!(d<=PZ_ANTECEDENCIA.cc))return '';
+  return `<span class="badge ${pzSelo({urg:pzUrg(d)})}">${d<0?'CC caducou a ':'CC caduca a '}${esc(pesDataCurta(p.ccValid))}</span>`;
+}
+/* A renda que cabe a um proprietário: a dos contratos em vigor dos imóveis
+   que são meus, na quota dele. Só nos meus: o servidor apaga as quotas de uma
+   casa de colaboração, e o sharesOf reparte por igual quando não há
+   percentagens — ali era um número inventado. E só com os Contratos ligados.
+   Recebe: p — o proprietário; casas — os imóveis dele (propsOf).
+   Devolve: euros por mês (número). */
+function pesRendaDoDono(p,casas){
+  if(!servicoLigado('contracts'))return 0;
+  return sum((casas||[]).filter(x=>souDono(x.id)&&pode(x.id,'contract.view')).map(x=>rentOf(x)*shareOf(x,p.id)));
+}
+/* O estado civil escrito para a pessoa: «Solteiro(a)» lê-se «Solteira» ou
+   «Solteiro» quando a ficha diz o género; sem ele fica como está.
+   Recebe: p — a pessoa.
+   Devolve: o texto (por escapar), ou ''. */
+function pesEstadoCivil(p){
+  const m=String((p&&p.marital)||'');
+  return p&&(p.gender==='f'||p.gender==='m')?m.replace(/o\(a\)$/,p.gender==='f'?'a':'o'):m;
+}
+/* Uma linha rótulo/valor de um cartão da ficha (o .kv do canvas). Com uma
+   ligação, a linha inteira toca: o telemóvel liga, o email escreve.
+   Recebe: rotulo — o texto da esquerda; valor — o HTML da direita, já escapado;
+   href (opcional) — a ligação ('tel:…', 'mailto:…').
+   Devolve: o HTML da linha. */
+function pesKv(rotulo,valor,href){
+  if(!valor)return '';
+  return href?`<a class="pes-kv pes-liga" href="${esc(href)}" data-toca="nada"><span>${esc(rotulo)}</span><span>${valor}</span></a>`
+    :`<div class="pes-kv"><span>${esc(rotulo)}</span><span>${valor}</span></div>`;
+}
+/* Um cartão da ficha: o título (h3), o que fica à direita dele (um número) e
+   as linhas. Sem linhas, não há cartão.
+   Recebe: titulo — o texto do título; corpo — o HTML das linhas; extra
+   (opcional) — o HTML à direita do título; cls (opcional) — classes a juntar.
+   Devolve: o HTML do cartão, ou ''. */
+function pesCartao(titulo,corpo,extra,cls){
+  if(!String(corpo||'').trim())return '';
+  return `<section class="card pes-sec${cls?' '+cls:''}"><div class="pes-sec-cab"><h3>${esc(titulo)}</h3>${extra||''}</div>${corpo}</section>`;
+}
+/* As linhas de contacto (tocáveis) e de identificação de uma pessoa, a partir
+   do que a ficha tem — o mesmo para um inquilino e um proprietário.
+   Recebe: p — a pessoa; kind — 'tenant' ou 'owner'.
+   Devolve: {contactos, ident} — o HTML das linhas de cada cartão. */
+function pesLinhasDaPessoa(p,kind){
+  const tel=String(p.phone||'').trim(),mail=String(p.email||'').trim();
+  const contactos=(tel?pesKv('Telemóvel',esc(fmtPhone(tel)),'tel:'+fmtPhone(tel).replace(/\s+/g,'')):'')+
+    (mail?pesKv('Email',esc(mail),/@/.test(mail)?'mailto:'+mail:''):'');
+  /* um NIF que não bate certo diz-se aqui, ao lado do número: é onde se lê
+     antes de ir para o contrato em PDF ou para o Anexo F */
+  const nif=p.nif?esc(fmtNIF(p.nif))+(nifValido(p.nif)===false?'<span class="pes-mau">não bate certo</span>':''):'';
+  /* o número e a validade são campos à parte no formulário: a validade
+     gravada lê-se aqui mesmo sem o número (o selo do topo só a diz nos dias
+     de aviso) */
+  const cc=p.cc||p.ccValid?(p.cc?esc(fmtCC(p.cc)):'')+(p.ccValid?`<span class="small">${pzDias(p.ccValid)<0?'caducou a ':'válido até '}${dPT(p.ccValid)}</span>`:''):'';
+  const ident=pesKv('NIF',nif)+pesKv('Cartão de Cidadão',cc)+
+    pesKv('Data de nascimento',p.birth?dPT(p.birth):'')+pesKv('Estado civil',esc(pesEstadoCivil(p)))+
+    pesKv('Nacionalidade',p.nationality&&p.nationality!=='Portuguesa'?esc(p.nationality):'')+
+    pesKv('País',esc(p.pais||''))+
+    (kind==='tenant'&&p.retem?pesKv('Retenção na fonte','retém IRS ao pagar a renda'):'')+
+    pesKv('Morada fiscal',esc(String(p.taxAddress||'').trim()).replace(/\n/g,'<br>'));
+  return {contactos,ident};
+}
+/* Uma linha de contrato na ficha de um inquilino: onde, desde e até quando,
+   a renda e — num contrato em vigor — o estado da renda. Toca para abrir o
+   contrato, a quem o cargo deixa ver.
+   Recebe: c — o contrato; modo — 'ativo', 'futuro' ou 'findo'.
+   Devolve: o HTML da linha. */
+function pesLinhaContrato(c,modo){
+  const ver=servicoLigado('contracts')&&pode(c.propertyId,'contract.view');
+  const datas=modo==='futuro'?(c.start?'a partir de '+dPT(c.start):''):modo==='findo'?(c.end?'terminou a '+dPT(c.end):''):
+    [c.start?'desde '+dPT(c.start):'',c.end?'até '+dPT(c.end):''].filter(Boolean).join(' · ');
+  const r=modo==='ativo'?pesRenda(c):null;
+  return `<div class="pes-linha-f${ver?' tap':''}"${ver?` data-toca="camada" data-click="ctView('${jsq(c.id)}')"`:''}>
+    <span class="pes-linha-txt"><b>${esc(ctLabel(c))}</b>${datas?`<span class="small num">${datas}</span>`:''}${r?`<span class="badge${r.cls?' '+r.cls:''}">${r.txt}</span>`:''}</span>
+    ${Number(c.rent)>0?`<b class="num pes-renda">${euro2(c.rent)}<span class="small">/mês</span></b>`:''}
+    ${ver?`<span class="seta">${ic('chevR',18)}</span>`:''}</div>`;
+}
 /* O corpo da ficha de uma pessoa: o que se sabe sobre ela, para ler.
 
    Um inquilino e um proprietário partilham o formulário, mas lêem-se por
    razões diferentes: de um inquilino quer-se o contacto, onde mora, desde
    quando e até quando; de um proprietário, a quota-parte e se estamos em dia.
-
-   As guardas dizem o kind ANTES da permissão, e não é estilo: pode(null,perm)
-   devolve sempre true, e num proprietário não há casa nenhuma — uma guarda
-   escrita só como pode(casa,'tenant.view') não guardava nada.
+   Cada uma tem o seu desenho (pesFichaInquilino, pesFichaDono).
    Recebe: kind — 'tenant' ou 'owner'; id — o id da pessoa.
    Devolve: o HTML do corpo, ou vazio se a pessoa já não existir. */
 function personFicha(kind,id){
   const lista=kind==='owner'?db.owners:db.tenants;
   const p=(lista||[]).find(x=>x.id===id);if(!p)return '';
-  const casa=kind==='tenant'?casaDoInquilino(p):null;
-  const verPessoa=kind==='owner'||pode(casa,'tenant.view');
-  /* os contratos de um inquilino e os imóveis de um proprietário só com o
-     serviço que os traz ligado nesta conta: desligado, a ficha fica com a
-     pessoa e mais nada — sem «Mora em» nem «Imóveis e quota-parte» */
-  const cts=kind==='tenant'&&servicoLigado('contracts')?contractsOfTenant(p.id):[];
-  const ativos=cts.filter(isActive),futuros=cts.filter(c=>ctEstado(c)==='futuro'),findos=cts.filter(c=>ctEstado(c)==='terminado');
-  const casas=kind==='owner'&&servicoLigado('properties')?propsOf(p.id):[];
-  /* um NIF que não bate certo diz-se aqui, ao lado do número: é onde se lê antes
-     de ir para o contrato em PDF ou para o Anexo F */
-  const ident=verPessoa?[p.nif?'NIF '+esc(fmtNIF(p.nif))+(nifValido(p.nif)===false?' · não bate certo':''):'',
-    p.cc?'CC '+esc(fmtCC(p.cc))+(p.ccValid?(pzDias(p.ccValid)<0?' · caducou a '+dPT(p.ccValid):' · válido até '+dPT(p.ccValid)):''):'',
-    p.nationality&&p.nationality!=='Portuguesa'?esc(p.nationality):'',
-    p.pais?'País: '+esc(p.pais):''].filter(Boolean).join('<br>'):'';
-  const retem=kind==='tenant'&&verPessoa&&!!p.retem;
-  /* a quota-parte só na minha casa: o servidor apaga as quotas de uma casa de
-     colaboração, e o sharesOf reparte por igual quando não há percentagens —
-     mostrá-la ali era publicar um número inventado */
-  const minhas=casas.filter(x=>souDono(x.id));
-  /* a renda vem dos contratos e o saldo dos movimentos: sem esses serviços
-     ligados não se diz «em dia» nem «0 €» sobre o que a conta não vê */
-  const renda=servicoLigado('contracts')?sum(minhas.filter(x=>pode(x.id,'contract.view')).map(x=>rentOf(x)*shareOf(x,p.id))):0;
-  const saldo=kind==='owner'&&!ownerFilter&&servicoLigado('transactions')?ownerBalances(null)[p.id]:undefined;
-  const vazia=!p.phone&&!p.email&&!ident&&!retem&&!p.taxAddress&&!(p.files||[]).length&&
-    !(kind==='tenant'?cts.length:casas.length);
-  return ficha([
-    kind==='tenant'&&p._sharedFrom?{tipo:'nota',valor:'Ficha de <b>'+esc(p._sharedFrom)+'</b>.'}:null,
-    kind==='tenant'&&!verPessoa?{tipo:'nota',valor:'O teu cargo mostra só o nome desta pessoa.'}:null,
-    verPessoa&&p.phone?{rotulo:'Telemóvel',valor:esc(fmtPhone(p.phone))}:null,
-    verPessoa&&p.email?{rotulo:'Email',valor:esc(p.email)}:null,
-    kind==='tenant'&&ativos.length?{tipo:'bloco',rotulo:'Mora em',
-      valor:ativos.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.start?' · desde '+dPT(c.start):'')+(c.end?' · até '+dPT(c.end):'')).join('<br>')}:null,
-    kind==='owner'&&casas.length?{tipo:'bloco',rotulo:'Imóveis e quota-parte',
-      valor:casas.map(x=>esc(x.name||x.address||'imóvel')+(souDono(x.id)?' · '+pct(shareOf(x,p.id),0):'')).join('<br>')}:null,
-    /* o saldo só sem filtro de proprietário ligado: com ele, o ownerBalances
-       ignora os movimentos sem imóvel e devolvia meia verdade */
-    saldo!==undefined?{rotulo:'Contas entre proprietários',
-      valor:Math.abs(saldo)<0.01?'em dia':(saldo>0?'a receber '+euro2(saldo):'a pagar '+euro2(-saldo))}:null,
-    renda>0?{rotulo:'Renda mensal que lhe toca',valor:euro(renda)}:null,
-    ident?{tipo:'bloco',rotulo:'Identificação',valor:ident}:null,
-    retem?{rotulo:'Retenção na fonte',valor:'retém IRS ao pagar a renda'}:null,
-    verPessoa&&p.taxAddress?{tipo:'bloco',rotulo:'Morada fiscal',valor:esc(p.taxAddress).replace(/\n/g,'<br>')}:null,
-    /* «Vai morar em», e não «Contratos anteriores» a dizer «terminou a
-       2031-01-01» — uma data no futuro dada como o dia em que acabou */
-    kind==='tenant'&&futuros.length?{tipo:'bloco',rotulo:'Vai morar em',
-      valor:futuros.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.start?' · a partir de '+dPT(c.start):'')).join('<br>')}:null,
-    kind==='tenant'&&findos.length?{tipo:'bloco',rotulo:'Contratos anteriores',
-      valor:findos.map(c=>esc(ctLabel(c))+' · '+euro(c.rent)+'/mês'+(c.end?' · terminou a '+dPT(c.end):'')).join('<br>')}:null,
-    /* os anexos de um inquilino pedem tenant.view E file.view no servidor:
-       listar os nomes sem ambas dava linhas que rebentam ao toque */
-    kind==='tenant'&&verPessoa&&pode(casa,'file.view')&&(p.files||[]).length?{tipo:'bloco',rotulo:'Documentos',
-      valor:(p.files||[]).map(f=>`<span role="button" tabindex="0" data-toca="camada" class="u-cur-pointer u-td-underline" data-click="openMeta('${jsq(f.id)}')">${esc(f.name||'ficheiro')}</span>`).join('<br>')}:null,
-    kind==='tenant'&&verPessoa&&String(p.notes||'').trim()?{tipo:'bloco',rotulo:'Notas',valor:rich(p.notes)}:null,
-    /* a frase segue quem MANDA na ficha, e não o tipo: um proprietário sem
-       conta é um registo meu como outro qualquer, e mandá-lo esperar por
-       «quem tem a conta» era mandá-lo esperar por ninguém */
-    vazia?{tipo:'nota',valor:'Esta ficha só tem o nome. '+(personEditavel(kind,p)
-      ?'Toca em «Editar» para juntar contacto e identificação.'
-      :'O perfil é mantido por quem tem a conta.')}:null,
-  ]);
+  return kind==='owner'?pesFichaDono(p):pesFichaInquilino(p);
+}
+/* A ficha de um inquilino (o canvas M-Inquilino): o avatar com o selo do
+   contrato, as ações rápidas, onde mora (e onde vai morar, e onde morou), os
+   contactos que tocam, a identificação, os documentos e as notas.
+
+   A guarda é a do cargo no imóvel do inquilino, e diz-se ANTES de tudo:
+   pode(null,perm) devolve sempre true, e numa ficha só minha não há casa.
+   Recebe: p — o inquilino.
+   Devolve: o HTML do corpo. */
+function pesFichaInquilino(p){
+  const casa=casaDoInquilino(p),ver=pode(casa,'tenant.view'),comCt=servicoLigado('contracts');
+  /* os contratos só com o serviço que os traz ligado nesta conta: desligado,
+     a ficha fica com a pessoa e mais nada — sem «Mora em» */
+  const s=pesContratos(p),vivo=s.ativos[0]||s.futuros[0];
+  const selos=[];
+  if(comCt)selos.push(s.ativos.length?'<span class="badge in">Com contrato em vigor</span>':s.futuros.length?'<span class="badge">Contrato por começar</span>':
+    `<span class="badge grey">${s.findos.length?'Contrato terminado':'Sem contrato'}</span>`);
+  if(s.ativos.some(c=>{const r=pesRenda(c);return r&&r.cls==='red'}))selos.push('<span class="badge red">Renda em atraso</span>');
+  if(ver)selos.push(pesSeloCC(p,'tenant'));
+  /* as ações rápidas, só as que o cargo e os serviços deixam: o contrato que
+     conta (o em vigor, ou o que ainda não começou) e um contrato novo já com
+     esta pessoa lá dentro (o critério de lista-contratos.js:lpExtrasContratosPessoa) */
+  const acoes=[];
+  if(vivo&&pode(vivo.propertyId,'contract.view'))acoes.push({r:'Ver contrato',i:'contract',a:`ctView('${jsq(vivo.id)}')`});
+  if(comCt&&casasComo('contract.add').some(x=>x.use==='investimento'))acoes.push({r:'Novo contrato',i:'plus',a:`ctModal(null,null,'${jsq(p.id)}')`});
+  const L=ver?pesLinhasDaPessoa(p,'tenant'):{contactos:'',ident:''};
+  /* os anexos de um inquilino pedem tenant.view E file.view no servidor:
+     listar os nomes sem ambas dava linhas que rebentam ao toque */
+  const fs=ver&&pode(casa,'file.view')?(p.files||[]):[];
+  const juntar=ver&&podeEditarInquilino(p)&&pode(casa,'file.add');
+  const docs=fs.map(f=>`<div class="pes-linha-f tap" data-toca="camada" data-click="openMeta('${jsq(f.id)}')">
+      <span class="pes-doc-ic">${ic('contract',20)}</span><span class="pes-linha-txt"><b>${esc(f.name||'ficheiro')}</b></span>${f.size?`<span class="small num">${kb(f.size)}</span>`:''}</div>`).join('')
+    +(juntar?`<button type="button" class="pes-mais" data-toca="dados" data-click="pesEscolherDocs('${jsq(p.id)}')">${ic('plus',20)} Adicionar documentos</button>`:'');
+  const notas=ver&&String(p.notes||'').trim()?`<div class="pes-texto rich">${rich(p.notes)}</div>`:'';
+  /* «só tem o nome» só a quem vê a ficha toda: a quem o cargo esconde o resto,
+     a nota do cargo já diz porquê, e a ficha pode ter mais do que se vê */
+  const vazia=ver&&!L.contactos&&!L.ident&&!fs.length&&!notas&&!s.ativos.length&&!s.futuros.length&&!s.findos.length;
+  return `<div class="pes-ficha">
+    <div class="pes-topo">${pesAvatar(p,true,comCt&&!vivo)}<div class="pes-topo-txt"><p class="pes-papel">Inquilino</p>${selos.filter(Boolean).length?`<div class="pes-selos">${selos.join('')}</div>`:''}</div></div>
+    ${p._sharedFrom?`<p class="hint">Ficha de <b>${esc(p._sharedFrom)}</b>.</p>`:''}
+    ${ver?'':'<p class="hint">O teu cargo mostra só o nome desta pessoa.</p>'}
+    ${acoes.length?`<div class="chips-fila pes-acoes" role="group" aria-label="Ações rápidas">${acoes.map(x=>
+      `<button type="button" class="chip" data-toca="camada" data-click="${x.a}">${ic(x.i,16)} ${x.r}</button>`).join('')}</div>`:''}
+    ${pesCartao('Mora em',s.ativos.map(c=>pesLinhaContrato(c,'ativo')).join(''))}
+    ${pesCartao('Vai morar em',s.futuros.map(c=>pesLinhaContrato(c,'futuro')).join(''))}
+    ${pesCartao('Contactos',L.contactos)}
+    ${pesCartao('Identificação',L.ident)}
+    ${pesCartao('Documentos',docs,fs.length?`<span class="small num">${fs.length}</span>`:'')}
+    ${pesCartao('Notas',notas)}
+    ${pesCartao('Contratos anteriores',s.findos.map(c=>pesLinhaContrato(c,'findo')).join(''))}
+    ${vazia?`<p class="hint">Esta ficha só tem o nome. ${podeEditarInquilino(p)?'Toca em «Editar» para juntar contacto e identificação.':'O perfil é mantido por quem tem a conta.'}</p>`:''}
+  </div>`;
+}
+/* A ficha de um proprietário (o canvas M-Proprietario): o avatar com o selo da
+   conta, a nota de quem manda no perfil, as contas entre proprietários com o
+   plano de acerto, os imóveis e a quota-parte com a renda que lhe cabe, e os
+   contactos e a identificação.
+   Recebe: p — o proprietário.
+   Devolve: o HTML do corpo. */
+function pesFichaDono(p){
+  const eu=!!(window.CW&&CW.user&&CW.user.id===p.id),comConta=!!p._userId&&!eu;
+  /* os imóveis só com o serviço que os traz ligado nesta conta */
+  const casas=servicoLigado('properties')?propsOf(p.id):[];
+  const renda=pesRendaDoDono(p,casas);
+  /* o saldo só com os Movimentos ligados: sem eles não se diz «em dia» sobre
+     o que a conta não vê */
+  const bal=servicoLigado('transactions')?ownerBalances(null):null;
+  const saldo=bal?bal[p.id]:undefined;
+  let contas='';
+  if(saldo!==undefined){
+    const z=Math.abs(saldo)<0.01,plano=z?[]:settlePlan(bal).filter(x=>x.from===p.id||x.to===p.id);
+    const ids=[].concat(...plano.map(x=>[x.from,x.to])),nm=id=>esc(nomeCurto(id,ids));
+    contas=`<section class="card pes-contas${z?'':saldo>0?' in':' out'}">
+      <div class="pes-contas-cab num"><p>Contas entre proprietários</p><p class="pes-contas-valor">${z?'Em dia':saldo>0?'A receber '+euro2(saldo):'A pagar '+euro2(-saldo)}</p></div>
+      ${plano.length?`<p class="small num">Plano: ${plano.map(x=>nm(x.from)+' paga '+euro2(x.amount)+' a '+nm(x.to)).join('; ')}.</p>
+      <button type="button" class="btn sm" data-toca="camada" data-click="settleModal(null)">Acertar contas</button>`:''}</section>`;
+  }
+  const verCasa=casas.length>0;   /* os imóveis só vêm com os Imóveis ligados, e a ficha é deles */
+  const linhasCasas=casas.map(x=>`<div class="pes-kv num${verCasa?' tap':''}"${verCasa?` data-toca="camada" data-click="propView('${jsq(x.id)}')"`:''}>
+      <span class="pes-forte">${esc(x.name||x.address||'imóvel')}</span><span>${souDono(x.id)?pct(shareOf(x,p.id),0):''}${verCasa?`<span class="seta">${ic('chevR',18)}</span>`:''}</span></div>`).join('')
+    +(renda>0?`<div class="pes-kv pes-total num"><span>Renda que lhe cabe</span><span><b>${euro2(renda)}</b>/mês</span></div>`:'');
+  const L=pesLinhasDaPessoa(p,'owner'),cc=pesSeloCC(p,'owner');
+  const vazia=!L.contactos&&!L.ident&&!casas.length;
+  return `<div class="pes-ficha">
+    <div class="pes-topo">${pesAvatar(p,true)}<div class="pes-topo-txt"><p class="pes-papel">Proprietário</p>${eu||comConta||cc?`<div class="pes-selos">${eu?'<span class="badge">O teu perfil</span>':comConta?'<span class="badge">Tem conta Rendorium</span>':''}${cc}</div>`:''}</div></div>
+    ${contas}
+    ${pesCartao('Imóveis e quota-parte',linhasCasas,casas.length?`<span class="small num">${casas.length}</span>`:'')}
+    ${pesCartao('Contactos e identificação',L.contactos+L.ident)}
+    ${vazia?`<p class="hint">Esta ficha só tem o nome. ${personEditavel('owner',p)?'Toca em «Editar» para juntar contacto e identificação.':'O perfil é mantido por quem tem a conta.'}</p>`:''}
+  </div>`;
+}
+/* «Adicionar documentos» da ficha de um inquilino: abre o seletor de
+   ficheiros do sistema. O campo nasce aqui, fora da janela, e não dentro da
+   ficha: uma ficha lê-se e não tem campos (testes/ui/invariantes.js).
+   Recebe: id — o id do inquilino.
+   Devolve: nada — abre o seletor; o pesJuntarDocs trata do que vier. */
+function pesEscolherDocs(id){
+  const p=(db.tenants||[]).find(x=>x.id===id);if(!p)return;
+  const recusa=motivoRecusa(casaDoInquilino(p),'tenant.add',p);if(recusa)return toast(recusa);
+  const velho=document.getElementById('pesDocsIn');if(velho)velho.remove();
+  const inp=document.createElement('input');
+  inp.type='file';inp.multiple=true;inp.id='pesDocsIn';inp.className='u-d-none';
+  inp.addEventListener('change',()=>{pesJuntarDocs(id,inp);inp.remove()},{once:true});
+  document.body.appendChild(inp);inp.click();
+}
+/* Junta à ficha de um inquilino os ficheiros escolhidos: o conteúdo vai para o
+   IndexedDB (anexos.js:takeFiles), os metadados para a ficha, e grava — a
+   nuvem sobe-os na sincronização seguinte. A permissão volta a ver-se no
+   momento de gravar.
+   Recebe: id — o id do inquilino; input — o campo de ficheiros.
+   Devolve: nada — grava e repinta (a ficha aberta repinta-se sozinha). */
+function pesJuntarDocs(id,input){
+  takeFiles(input).then(ms=>{
+    const p=(db.tenants||[]).find(x=>x.id===id);if(!p||!ms.length)return;
+    const recusa=motivoRecusa(casaDoInquilino(p),'tenant.add',p);if(recusa)return toast(recusa);
+    p.files=(p.files||[]).concat(ms);save();render();
+    toast(ms.length===1?'Documento adicionado.':ms.length+' documentos adicionados.');
+  });
 }
 /* A ficha de uma pessoa: o que tocar num inquilino ou num proprietário abre.
 
@@ -111,6 +326,13 @@ function personFicha(kind,id){
    sincronização, e só o meu perfil é exportado — editar a ficha de outro
    gravava localmente e desaparecia na sincronização seguinte. No meu próprio
    perfil, o «Editar» vai ao editProfile da nuvem, que é quem sabe guardar.
+   O contrato abre-se no corpo (a ação rápida «Ver contrato» e as linhas de
+   «Mora em»); o ⋯ fica com o que destrói: «Apagar» numa ficha minha, e
+   «Remover ligação» na de outro proprietário ligado a mim
+   (removerLigacaoDaFicha). O ⋯ e o rodapé voltam a ler-se a cada repinte
+   (componentes.js:refrescarFichas): removida a ligação, saem com ela. A
+   ficha de um proprietário leva o id dele (dono), para a nuvem a fechar
+   quando ele sai da lista (cloud/partilha.js:fecharFichaDeQuemSaiu).
    Recebe: kind — 'tenant' ou 'owner'; id — o id da pessoa.
    Devolve: nada — abre a janela. */
 function personView(kind,id){
@@ -119,24 +341,50 @@ function personView(kind,id){
   const euSou=kind==='owner'&&window.CW&&CW.user&&CW.user.id===p.id;
   const ok=personEditavel(kind,p);
   const act=euSou&&window.CW&&CW.editProfile?'CW.editProfile()':`personModal('${jsq(kind)}','${jsq(id)}')`;
-  abrirFicha({
-    titulo:()=>{const x=(kind==='owner'?db.owners:db.tenants||[]).find(y=>y.id===id);return x?x.name:'Ficha'},
+  const atual=()=>((kind==='owner'?db.owners:db.tenants)||[]).find(y=>y.id===id);
+  const o={
+    dono:kind==='owner'?id:null,
+    titulo:()=>{const x=atual();return x?x.name:'Ficha'},
     corpo:()=>personFicha(kind,id),
     menu:()=>{
-      const it=[];
-      /* «Ver contrato» é dos Contratos: desligados nesta conta, não se promete */
-      if(kind==='tenant'&&servicoLigado('contracts')){
-        const c=contractsOfTenant(id).filter(ctVivo)[0];   // o em vigor, ou o que ainda não começou
-        if(c&&pode(c.propertyId,'contract.view'))it.push({label:'Ver contrato',icon:'contract',toca:'camada',act:`ctView('${jsq(c.id)}')`});
-      }
+      const x=atual();if(!x)return '';
       /* apagar um proprietário com conta não é apagar um registo meu: é
          mexer numa pessoa que o servidor volta a mandar no pull seguinte */
-      if(personApagavel(kind,p))it.push({label:kind==='owner'?'Apagar proprietário':'Apagar inquilino',
+      const itens=[];
+      if(personApagavel(kind,x))itens.push({label:kind==='owner'?'Apagar proprietário':'Apagar inquilino',
         icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${jsq(kind)}','${jsq(id)}')`});
-      return it.length?menu('fichaPer',it):'';
+      const lig=removerLigacaoDaFicha(kind,x);if(lig)itens.push(lig);
+      return itens.length?menu('fichaPer',itens):'';
     },
-    editar:ok?{rotulo:'Editar',act:act}:null,
-  });
+  };
+  /* o rodapé lê o editar a cada repinte: sem a ligação, o «Editar casas
+     partilhadas» passa ao grupo em comum, ou sai */
+  Object.defineProperty(o,'editar',{enumerable:true,get:()=>ok?{rotulo:'Editar',act:act}:casasPartilhadasDaFicha(kind,atual()||p)});
+  abrirFicha(o);
+}
+/* O «Remover ligação» do ⋯ da ficha de outro proprietário com conta, ao lado
+   do X: só quando a partilha com ele é por uma ligação ativa (comoPartilhoCom
+   traz o id dela); só por grupo, ou no meu perfil, não há. Chama o CW.delConn
+   da nuvem, que pergunta antes, com as casas que vão junto.
+   Recebe: kind — 'tenant' ou 'owner'; p — a pessoa.
+   Devolve: a opção do menu ({label, icon, danger, toca, risco, act}), ou null. */
+function removerLigacaoDaFicha(kind,p){
+  if(kind!=='owner'||!p||!p._userId||p.id===meuId())return null;
+  const c=comoPartilhoCom(p.id);
+  if(!c||!c.ligacao||!(window.CW&&typeof CW.delConn==='function'))return null;
+  return {label:'Remover ligação',icon:'trash',danger:true,toca:'camada',risco:'destroi',act:`CW.delConn('${jsq(c.ligacao)}')`};
+}
+/* O botão do rodapé da ficha de outro proprietário com conta, no lugar do
+   «Editar» que ele não tem (o perfil é dele): «Editar casas partilhadas»,
+   que abre onde se adicionam e removem as casas — a partilha da ligação ou,
+   sem ligação, o grupo partilhado (comoPartilhoCom). Sem partilha nenhuma,
+   não há botão.
+   Recebe: kind — 'tenant' ou 'owner'; p — a pessoa.
+   Devolve: {rotulo, act} para o abrirFicha, ou null. */
+function casasPartilhadasDaFicha(kind,p){
+  if(kind!=='owner'||!p||!p._userId||p.id===meuId())return null;
+  const c=comoPartilhoCom(p.id);
+  return c&&c.act?{rotulo:'Editar casas partilhadas',act:c.act}:null;
 }
 /* Abre a ficha de pessoa (kind 'owner' ou 'tenant'); sem id cria uma nova.
    after, se vier, é chamado com o id da ficha depois de guardar, em vez do
@@ -159,9 +407,12 @@ function personModal(kind,id,after,houseId){
   }
   foldState={};
   /* Quem não pode alterar a ficha de um inquilino recebe a FICHA de leitura,
-     e não este formulário com os campos apagados. */
+     e não este formulário com os campos apagados. O mesmo no perfil de outro
+     proprietário com conta: só quem tem a conta o edita, e o que se gravasse
+     aqui perdia-se no pull seguinte (personEditavel). */
   const _p=id?((kind==='owner'?db.owners:db.tenants)||[]).find(x=>x.id===id):null;
   if(kind==='tenant'&&_p&&!podeEditarInquilino(_p))return personView(kind,id);
+  if(kind==='owner'&&_p&&!personEditavel('owner',_p))return personView(kind,id);
   perKind=kind;perAfter=after||null;
   const listOf=kind==='owner'?db.owners:db.tenants,orig=id?listOf.find(x=>x.id===id):null;
   perForm=normPerson(orig?JSON.parse(JSON.stringify(orig)):null);
@@ -171,7 +422,7 @@ function personModal(kind,id,after,houseId){
   openModal((id?'Editar ':'Novo ')+word,personBody(),null,m);
   onSave=()=>{
     collectPerson();
-    if(!perForm.name.trim())return toast('Escreve o nome.');
+    if(!perForm.name.trim())return falhaCampo('pe_name','Escreve o nome.');
     if(perKind==='tenant'){const recusa=motivoRecusa(casaDoInquilino(orig||perForm),'tenant.add',orig);if(recusa)return toast(recusa)}
     const list=perKind==='owner'?db.owners:db.tenants;
     const i=list.findIndex(x=>x.id===perForm.id);

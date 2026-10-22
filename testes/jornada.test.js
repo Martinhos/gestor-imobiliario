@@ -1,13 +1,15 @@
 // A jornada na vista geral: enquanto não há movimentos, a vista é o cartão
-// dos primeiros passos — a fita com o atual em destaque e o seu botão — mais
-// o portefólio quando há imóveis, em vez de quatro indicadores a 0 € e dois
-// gráficos vazios (cloud/guia.js:jornadaInicial, painel-geral.js:vDashboard).
-// Com o primeiro movimento os indicadores voltam e o cartão fica no topo,
-// uma vez só. A app inteira, nuvem incluída (carregarTudo), com a sessão
-// simulada em CW.user, como no revisao-cliente.test.js.
+// dos primeiros passos — as boas-vindas e a lista dos passos, com o atual em
+// destaque e os seus botões (o canvas M-PrimeirosPassos) — mais o portefólio
+// quando há imóveis, em vez de quatro indicadores a 0 € e dois gráficos
+// vazios (cloud/guia.js:jornadaInicial, painel-geral.js:vDashboard). Com o
+// primeiro movimento os indicadores voltam e o cartão fica no topo, uma vez
+// só, sem as boas-vindas. A app inteira, nuvem incluída (carregarTudo), com
+// a sessão simulada em CW.user, como no revisao-cliente.test.js.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { carregarTudo, limpar, elementos, igual } from './arnes.js';
 
 /* A app inteira, limpa, com sessão e já depois do primeiro estado (o que
@@ -31,10 +33,11 @@ function semear(app, comImovel) {
   if (comImovel) app.db.properties.push(app.normProp({ id: 'P1', name: 'T2 Arroios', use: 'investimento', value: 200000, purchase: 150000, ownerIds: ['EU'] }));
 }
 
-// os <li> da fita, pela ordem: {classe, atual, circulo, rotulo}
-const fita = (html) => [...html.matchAll(/<li class="jornada-passo([^"]*)"( aria-current="step")?><span class="jornada-n"([^>]*)>([\s\S]*?)<\/span><span class="jornada-l">([^<]*)<\/span><\/li>/g)]
-  .map((m) => ({ classe: m[1].trim(), atual: !!m[2], circulo: m[4], rotulo: m[5], img: m[3] }));
+// os <li> da lista dos passos, pela ordem: {classe, atual, circulo, img, rotulo (o título), resto (o que vem depois do título)}
+const fita = (html) => [...html.matchAll(/<li class="jornada-passo([^"]*)"( aria-current="step")?><span class="jornada-n"([^>]*)>([\s\S]*?)<\/span><span class="jornada-txt"><b class="jornada-l">([^<]*)<\/b>([\s\S]*?)<\/span><\/li>/g)]
+  .map((m) => ({ classe: m[1].trim(), atual: !!m[2], circulo: m[4], rotulo: m[5], img: m[3], resto: m[6] }));
 const vezes = (html, s) => html.split(s).length - 1;
+const PERFIL = 'Preenche o teu perfil', IMOVEIS = 'Adiciona os teus imóveis', CONTRATOS = 'Regista os contratos', MOVS = 'Confirma os primeiros movimentos';
 
 describe('a jornada no lugar da vista geral', () => {
   test('com um imóvel e nenhum movimento: nem indicadores nem gráficos — a jornada, com os imóveis feitos e os contratos como passo atual, e o portefólio', () => {
@@ -45,7 +48,7 @@ describe('a jornada no lugar da vista geral', () => {
     assert.doesNotMatch(html, /class="grid"|Receita|Cashflow|Entradas e saídas|chartbox|donutCard/, 'sem a fila dos indicadores nem os gráficos');
     assert.doesNotMatch(html, /Ainda não há nada registado/);
     const passos = fita(html);
-    igual(passos.map((p) => [p.rotulo, p.classe]), [['Perfil', 'feito'], ['Imóveis', 'feito'], ['Contratos', 'atual'], ['Movimentos', '']]);
+    igual(passos.map((p) => [p.rotulo, p.classe]), [[PERFIL, 'feito'], [IMOVEIS, 'feito'], [CONTRATOS, 'atual'], [MOVS, '']]);
     assert.ok(passos[2].atual, 'o passo atual leva aria-current="step"');
     assert.equal(passos.filter((p) => p.atual).length, 1, 'e só ele');
     // o portefólio reduzido ao que tem números: com o número de imóveis e sem as linhas que seriam zeros
@@ -57,54 +60,72 @@ describe('a jornada no lugar da vista geral', () => {
     assert.equal(vezes(html, 'Primeiros passos'), 1, 'o cartão dos passos uma vez só');
   });
 
-  test('sem imóveis nem movimentos: a jornada substitui o vazio, e o passo atual é o dos imóveis com «Fazer agora» a abrir o formulário do imóvel', () => {
+  test('sem imóveis nem movimentos: a jornada substitui o vazio, e o passo atual é o dos imóveis com «Adicionar imóvel» a abrir o formulário do imóvel', () => {
     const app = montar();
     semear(app, false);
     const html = app.vDashboard();
     assert.match(html, /<!--jornada-->/);
     assert.doesNotMatch(html, /Ainda não há nada registado|class="empty"/, 'o vazio antigo saiu');
     const passos = fita(html);
-    igual(passos.map((p) => [p.rotulo, p.classe]), [['Perfil', 'feito'], ['Imóveis', 'atual'], ['Movimentos', '']]);
-    assert.match(html, /<button class="btn sm primary" data-toca="camada" data-click="propModal\(\)">Fazer agora<\/button>/);
-    assert.match(html, /Passo 2 de 3 · sugestões, não obrigações/);
+    igual(passos.map((p) => [p.rotulo, p.classe]), [[PERFIL, 'feito'], [IMOVEIS, 'atual'], [MOVS, '']]);
+    assert.match(html, /<button type="button" class="btn primary" data-toca="camada" data-click="propModal\(\)"><svg[^>]*>[\s\S]*?<\/svg>Adicionar imóvel<\/button>/);
+    assert.match(html, /<span class="small num">1 de 3 feitos<\/span>/, 'a conta do que está feito');
+    assert.match(html, /role="progressbar" aria-labelledby="ppTitulo" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1"/, 'e a barra diz o mesmo');
+    assert.match(html, /<span data-largura="33\.3"><\/span>/, 'com a largura da parte feita');
     assert.doesNotMatch(html, /Portefólio/, 'sem imóveis não há portefólio');
   });
 
-  test('só o passo atual tem os botões, e o «Como se faz» abre o tutorial dele', () => {
+  test('só o passo atual tem os botões, com o verbo da ação e o tutorial dele («Como se faz · N passos»)', () => {
     const app = montar();
     semear(app, true);
     let html = app.vDashboard();
-    assert.equal(vezes(html, 'Fazer agora'), 1, 'um só «Fazer agora»');
-    assert.match(html, /<b>Regista os contratos<\/b>/, 'o título do passo atual');
-    assert.match(html, /1 imóvel para arrendar ainda sem contrato\./, 'e o porquê');
-    assert.match(html, /data-toca="camada" data-click="ctModal\(\)">Fazer agora/);
-    assert.match(html, /data-toca="ecra" data-click="CW\.guiaAbrir\('contratos'\)">Como se faz</);
+    assert.equal(vezes(html, 'class="jornada-acoes"'), 1, 'um só passo com botões');
+    const passos = fita(html);
+    assert.equal(passos[2].rotulo, CONTRATOS, 'o título do passo atual');
+    assert.match(passos[2].resto, /<span class="jornada-porque">1 imóvel para arrendar ainda sem contrato\.<\/span>/, 'e o porquê');
+    assert.match(passos[2].resto, /data-toca="camada" data-click="ctModal\(\)"><svg[\s\S]*?<\/svg>Adicionar contrato<\/button>/);
+    assert.match(passos[2].resto, /data-toca="ecra" data-click="CW\.guiaAbrir\('contratos'\)">Como se faz · 3 passos</);
     assert.doesNotMatch(html, /guiaAbrir\('(?:perfil|imoveis|movimentos)'\)/, 'os outros passos não têm botões');
+    // os feitos dizem o que já se fez, riscados pelo CSS; os que faltam, o porquê
+    assert.equal(passos[0].resto, '<span class="small">Nome e NIF preenchidos.</span>');
+    assert.equal(passos[1].resto, '<span class="small">1 imóvel adicionado.</span>');
+    assert.equal(passos[3].resto, '<span class="small">É daqui que saem os números da Visão geral.</span>');
     // visto até ao fim, o botão passa a «Rever o tutorial»
     app.localStorage.setItem('gi_guia_feitos', JSON.stringify({ contratos: 1 }));
     html = app.vDashboard();
     assert.match(html, /data-click="CW\.guiaAbrir\('contratos'\)">Rever o tutorial</);
   });
 
-  test('a fita: o rótulo curto em cada passo, o visto nos feitos (anunciado «Feito») e o número nos outros', () => {
+  test('a lista: o título em cada passo, o visto nos feitos (anunciado «Feito») e o número nos outros, e «Dispensar os primeiros passos» por baixo', () => {
     const app = montar();
     semear(app, true);
     const html = app.vDashboard();
     assert.match(html, /<ol class="jornada" role="list">/, 'é uma lista');
     const passos = fita(html);
     assert.equal(passos.length, 4);
-    const visto = app.ic('check', 13);
+    const visto = app.ic('check', 16);
     assert.equal(passos[0].circulo, visto, 'o perfil, feito, leva o visto');
     assert.equal(passos[0].img, ' role="img" aria-label="Feito"');
     assert.equal(passos[1].circulo, visto);
     assert.equal(passos[2].circulo, '3', 'o atual leva o número');
     assert.equal(passos[2].img, '');
     assert.equal(passos[3].circulo, '4');
-    assert.match(html, /Passo 3 de 4 · sugestões, não obrigações/, 'o subtítulo diz o passo atual');
-    assert.match(html, /aria-label="Dispensar" data-toca="vista" data-click="CW\.passosFora\(\)"/, 'o ✕ de dispensar fica');
+    assert.match(html, /<h2 id="ppTitulo">Primeiros passos<\/h2><span class="small num">2 de 4 feitos<\/span>/, 'o título diz quantos estão feitos');
+    assert.match(html, /<\/section><button type="button" class="btn ghost pp-fora" data-toca="vista" data-click="CW\.passosFora\(\)">Dispensar os primeiros passos<\/button><\/div>/, 'o dispensar fica, por baixo do cartão');
   });
 
-  test('com um movimento os indicadores voltam e o cartão dos passos fica por cima, uma vez só', () => {
+  /* O canvas (M-PrimeirosPassos) pinta o círculo do passo atual cheio de
+     cobalto. Na fita de antes ele era transparente, e o traço que ligava os
+     passos passava-lhe por cima: a lista não tem traço, e o círculo do atual
+     tem fundo. */
+  test('o círculo do passo atual é cheio, e já não há traço que lhe passe por cima', () => {
+    const css = fs.readFileSync(new URL('../web/estilos.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.match(css, /\.jornada-passo\.atual \.jornada-n\{background:var\(--accent\);border-color:var\(--accent\);color:var\(--accent-ink\)\}/);
+    assert.match(css, /\.jornada-passo\.feito \.jornada-n\{background:var\(--in-soft\)/, 'o feito, verde suave');
+    assert.doesNotMatch(css, /\.jornada-passo::before/, 'sem o traço da fita');
+  });
+
+  test('com um movimento os indicadores voltam e o cartão dos passos fica por cima, uma vez só e sem as boas-vindas', () => {
     const app = montar();
     semear(app, true);
     app.db.transactions.push(app.normTx({ id: 'X1', kind: 'income', category: 'Rendas', amount: 800, propertyId: 'P1', date: app.YEAR + '-01-05' }));
@@ -114,9 +135,28 @@ describe('a jornada no lugar da vista geral', () => {
     assert.match(html, /Receita/);
     assert.equal(vezes(html, 'Primeiros passos'), 1, 'uma vez só');
     assert.ok(html.indexOf('Primeiros passos') < html.indexOf('class="grid"'), 'e por cima');
+    assert.doesNotMatch(html, /pp-boas|Vamos adicionar/, 'as boas-vindas são só da jornada');
     const passos = fita(html);
-    igual(passos.map((p) => [p.rotulo, p.classe]), [['Perfil', 'feito'], ['Imóveis', 'feito'], ['Contratos', 'atual'], ['Movimentos', 'feito']]);
+    igual(passos.map((p) => [p.rotulo, p.classe]), [[PERFIL, 'feito'], [IMOVEIS, 'feito'], [CONTRATOS, 'atual'], [MOVS, 'feito']]);
+    assert.equal(passos[3].resto, '<span class="small">1 movimento registado.</span>');
     assert.equal(app.jornadaInicial(), '', 'com movimentos a jornada não substitui a vista');
+  });
+
+  test('a jornada abre com as boas-vindas: o olá pelo primeiro nome e por onde se começa — ou se continua', () => {
+    const app = montar();
+    app.CW.user.name = 'Maria Costa';
+    semear(app, false);
+    app.db.owners[0].nif = '';   // nada feito: o perfil é o primeiro
+    let html = app.vDashboard();
+    assert.match(html, /<section class="pp-boas" aria-label="Boas-vindas"><div class="pp-boas-mosaico imv-mosaico imv-t0" aria-hidden="true"><\/div>/);
+    assert.match(html, /<h2>Olá, Maria\. Vamos adicionar as tuas casas à app\.<\/h2>/);
+    assert.match(html, /<p>Os números da Visão geral saem dos movimentos\. Começa pelo teu perfil; o resto vem a seguir\.<\/p>/);
+    app.db.owners[0].nif = '123456789';
+    html = app.vDashboard();
+    assert.match(html, /Continua pelos imóveis; o resto vem a seguir\./);
+    // sem nome, só o olá
+    app.CW.user.name = '';
+    assert.match(app.vDashboard(), /<h2>Olá\. Vamos adicionar/);
   });
 
   test('dispensado (gi_passos_fora) e sem movimentos: nem indicadores a 0 nem gráficos — o vazio que leva aos Movimentos, e o portefólio', () => {
@@ -170,7 +210,8 @@ describe('a jornada no lugar da vista geral', () => {
     const html = app.vDashboard();
     assert.doesNotMatch(html, /<!--jornada-->/);
     assert.ok(html.indexOf('O que podes fazer') > -1 && html.indexOf('Primeiros passos') > html.indexOf('O que podes fazer'), 'os passos vêm a seguir ao «O que podes fazer»');
-    igual(fita(html).map((p) => [p.rotulo, p.classe]), [['Visita', 'atual']]);
+    igual(fita(html).map((p) => [p.rotulo, p.classe]), [['Marca a primeira visita', 'atual']]);
+    assert.doesNotMatch(html, /pp-boas/, 'sem as boas-vindas de dono');
   });
 
   test('sem CW.user a jornada aparece na mesma, sem o passo do perfil, e nada rebenta', () => {
@@ -182,8 +223,9 @@ describe('a jornada no lugar da vista geral', () => {
     const html = app.vDashboard();
     assert.match(html, /<!--jornada-->/);
     assert.doesNotMatch(html, /Perfil|editProfile/);
-    igual(fita(html).map((p) => [p.rotulo, p.classe]), [['Imóveis', 'feito'], ['Contratos', 'atual'], ['Movimentos', '']]);
-    assert.match(html, /Passo 2 de 3/);
+    igual(fita(html).map((p) => [p.rotulo, p.classe]), [[IMOVEIS, 'feito'], [CONTRATOS, 'atual'], [MOVS, '']]);
+    assert.match(html, /1 de 3 feitos/);
+    assert.match(html, /<h2>Olá\. Vamos adicionar as tuas casas à app\.<\/h2>/, 'sem sessão não há nome');
     assert.match(html, /<span>Imóveis<\/span><b>1<\/b>/);
   });
 
@@ -213,7 +255,7 @@ describe('a jornada no lugar da vista geral', () => {
     const html = app.vDashboard();
     assert.doesNotMatch(html, /\sstyle=|\son[a-z]+=/);
     const botoes = html.match(/<button[^>]*>/g) || [];
-    assert.ok(botoes.length >= 3, 'o ✕, o «Fazer agora» e o «Como se faz»: ' + botoes.length);
+    assert.ok(botoes.length >= 3, 'a ação do passo, o «Como se faz» e o «Dispensar»: ' + botoes.length);
     for (const b of botoes) {
       assert.match(b, /data-click="[^"]+"/, b);
       assert.match(b, /data-toca="(?:vista|camada|ecra)"/, b);
@@ -235,10 +277,12 @@ describe('a jornada no lugar da vista geral', () => {
     assert.match(fixos.view.innerHTML, /Personalizar painel/);
   });
 
-  test('jornadaInicial devolve o mesmo cartão que cartaoPassos, e vazio quando não há passos por fazer', () => {
+  test('jornadaInicial devolve o cartão dos passos com as boas-vindas, e vazio quando não há passos por fazer', () => {
     const app = montar();
     semear(app, true);
-    assert.equal(app.jornadaInicial(), app.cartaoPassos());
+    assert.equal(app.jornadaInicial(), app.cartaoPassos(true));
+    assert.ok(app.jornadaInicial().startsWith('<div class="pp-jornada pp-com-boas"><section class="pp-boas"'), 'abre com as boas-vindas');
+    assert.ok(!app.cartaoPassos().includes('pp-boas'), 'o cartão sozinho (o que vai por cima dos indicadores) não as tem');
     assert.notEqual(app.jornadaInicial(), '');
     // tudo feito (um contrato e um movimento): nem o cartão nem a jornada
     app.db.tenants.push(app.normPerson({ id: 'T1', name: 'Tiago' }));
@@ -247,5 +291,45 @@ describe('a jornada no lugar da vista geral', () => {
     assert.equal(app.cartaoPassos(), '');
     assert.equal(app.jornadaInicial(), '');
     assert.doesNotMatch(app.vDashboard(), /Primeiros passos|<!--jornada-->/);
+  });
+});
+
+/* O cartão do tutorial flutua por cima da app (cloud/guia.js:guiaAjustar).
+   Por cima de uma lista tapava o último registo, que nunca saía de trás dele;
+   por cima de uma janela, encostado ao topo, tapava o título, o ✕ e o
+   primeiro campo. Agora o body diz que ele está lá (com-guia; guia-sobre com
+   uma janela aberta) e a altura medida do cartão (--guia-alto), e a folha de
+   estilos guarda-lhe o espaço. */
+describe('o tutorial guarda o seu espaço', () => {
+  test('aberto, o body leva com-guia e a altura do cartão; com uma janela aberta, guia-sobre; fechado, sai tudo', () => {
+    const app = montar();
+    const cls = new Set(), vars = {};
+    app.document.body.classList = {
+      add: (c) => { cls.add(c); }, remove: (c) => { cls.delete(c); }, contains: (c) => cls.has(c),
+      toggle: (c, on) => { if (on) cls.add(c); else cls.delete(c); },
+    };
+    app.document.body.style.setProperty = (k, v) => { vars[k] = v; };
+    app.document.getElementById('cwGuia').offsetHeight = 281.4;
+    let janela = false;
+    app.document.querySelector = (s) => (s === '.modal.open' && janela ? {} : null);
+    app.go = () => {};
+    app.CW.guiaAbrir('imoveis');
+    assert.ok(cls.has('com-guia') && !cls.has('guia-sobre'), [...cls].join(' '));
+    assert.equal(vars['--guia-alto'], '282px', 'a altura do cartão, arredondada para cima');
+    janela = true;
+    app.guiaAjustar();
+    assert.ok(cls.has('guia-sobre'), 'com uma janela aberta');
+    janela = false;
+    app.guiaAjustar();
+    assert.ok(!cls.has('guia-sobre') && cls.has('com-guia'), 'a janela fechou, o tutorial continua');
+    app.CW.guiaFechar();
+    assert.equal(cls.size, 0, 'fechado o tutorial, a página e as janelas deixam de lhe guardar espaço');
+  });
+
+  test('a folha de estilos guarda o espaço no telemóvel e no tablet: o fim da página e a janela abaixo do cartão, com o par vh/dvh', () => {
+    const css = fs.readFileSync(new URL('../web/estilos.css', import.meta.url), 'utf8');
+    assert.match(css, /@media\(max-width:899px\)\{body\.com-guia #view\{padding-bottom:calc\(var\(--guia-alto,300px\) \+ 104px \+ var\(--inset-bottom\)\)\}\}/);
+    assert.match(css, /@media\(max-width:520px\)\{body\.guia-sobre \.sheet\{max-height:calc\(100vh - var\(--guia-alto,300px\) - 24px - var\(--inset-top\)\);max-height:calc\(100dvh - var\(--guia-alto,300px\) - 24px - var\(--inset-top\)\)\}\}/);
+    assert.match(css, /@media\(min-width:521px\) and \(max-width:899px\)\{body\.guia-sobre \.sheet\{top:calc\(50% \+ \(var\(--guia-alto,300px\) \+ 24px \+ var\(--inset-top\)\) \/ 2\)/);
   });
 });

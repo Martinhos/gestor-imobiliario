@@ -269,7 +269,9 @@ let _detailPid=null;
 // Devolve: nada — fecha e reabre o modal quando é ele que está por cima.
 function refreshDetail(){const t=modalTop();if(t&&t.title==='Como se chega aos saldos'){closeModal();balancesDetail(_detailPid)}}
 /* abre o modal "Como se chega aos saldos": cada movimento que conta, o efeito em
-   cêntimos por dono e o saldo acumulado até aí. pid limita a um imóvel (vazio =
+   cêntimos por dono e o saldo acumulado até aí. O mais recente fica no topo e o
+   mais antigo no fundo; o acumulado conta-se na mesma do mais antigo para a
+   frente, e só a lista se mostra ao contrário. pid limita a um imóvel (vazio =
    âmbito atual). Tocar num movimento abre-o para editar; sem movimentos, só avisa.
    Recebe: pid (opcional) — o id de um imóvel; vazio vale o âmbito atual.
    Devolve: nada — abre o modal (ou mostra só um toast se não houver movimentos). */
@@ -279,13 +281,15 @@ function balancesDetail(pid){
   const ids=[];lines.forEach(l=>l.os.forEach(o=>{if(ids.indexOf(o)<0)ids.push(o)}));
   if(!lines.length)return toast('Ainda não há movimentos que contem para as contas.');
   const nm=o=>esc(((owner(o)||{}).name||'?').split(' ')[0]);
+  /* o acumulado de cada linha conta-se por ordem de data; depois mostra-se do mais recente para o mais antigo */
   const run={};ids.forEach(o=>run[o]=0);
+  const ate=lines.map(l=>{ids.forEach(o=>run[o]+=(l.eff[o]||0));return Object.assign({},run)});
   openModal('Como se chega aos saldos',`<div class="form">
     <div class="hint">Quem paga fica a crédito; quem recebe fica a dever a parte dos outros. Positivo: a receber. Negativo: a pagar.</div>
-    <div class="list u-g-7px">${lines.map(l=>{ids.forEach(o=>run[o]+=(l.eff[o]||0));return `<div class="card tap u-p-10px-12px" data-click="txView('${jsq(l.t.id)}')">
+    <div class="list u-g-7px">${lines.map((l,i)=>({l,saldo:ate[i]})).reverse().map(({l,saldo})=>{return `<div class="card tap u-p-10px-12px" data-click="txView('${jsq(l.t.id)}')">
       <div class="row-between"><b class="u-minw-0 u-ov-hidden u-to-ellipsis u-ws-nowrap">${esc(l.t.label)}</b><span class="small u-fx-0-0-auto">${dPT(l.t.date)}</span></div>
       <div class="small">${l.t.kind==='settle'?nm(l.t.paidBy)+' → '+nm(l.t.toId):(KIND[l.t.kind]||{}).short+' · '+(isIn(l.t.kind)?'recebeu ':'pagou ')+nm(l.t.paidBy)+(splitLabel(l.t)?' · '+splitLabel(l.t):' · quotas')}${!pid?' · '+esc(l.p.name):''} · <b>${euro2(l.t.amount)}</b></div>
-      <div class="chips u-mt-6px">${ids.map(o=>`<span class="badge grey">${nm(o)} <b class="${l.eff[o]>0?'pos':l.eff[o]<0?'neg':''}">${l.eff[o]?(l.eff[o]>0?'+':'−')+euro2(Math.abs(l.eff[o])/100):'—'}</b> · saldo ${euro2(run[o]/100)}</span>`).join('')}</div></div>`}).join('')}</div>
+      <div class="chips u-mt-6px">${ids.map(o=>`<span class="badge grey">${nm(o)} <b class="${l.eff[o]>0?'pos':l.eff[o]<0?'neg':''}">${l.eff[o]?(l.eff[o]>0?'+':'−')+euro2(Math.abs(l.eff[o])/100):'—'}</b> · saldo ${euro2(saldo[o]/100)}</span>`).join('')}</div></div>`}).join('')}</div>
     <div class="hint">"Saldo" é o acumulado até esse movimento: positivo a receber, negativo a pagar. Toca num movimento para o editar.</div></div>`,
     `<button class="btn" data-click="closeModal()">Fechar</button>`);
 }

@@ -13,7 +13,7 @@ delPerson = function (kind, id) {
   if (kind === 'owner') {
     if (CW.user && id === CW.user.id) return toast('Este perfil és tu — podes editá-lo, não apagá-lo.');
     var per = (db.owners || []).find(function (x) { return x.id === id; });
-    if (per && per._userId) return toast('Este proprietário é um utilizador ligado — para o remover, desfaz a partilha em Conta e partilha.');
+    if (per && per._userId) return toast('Este proprietário é um utilizador ligado — para o remover, desfaz a partilha em Pessoas → Proprietários.');
   }
   _delPerson(kind, id);
 };
@@ -29,8 +29,14 @@ var DIAL_CODES = [
 
 /* mete um seletor de indicativo de país à frente do campo do telefone no modal de
    perfil, separando o indicativo que já lá estiver escrito do resto do número
-   (mexe no DOM: embrulha campo e seletor numa linha flex). Não faz nada se o campo
-   não existir ou se o seletor já tiver sido injetado.
+   (mexe no DOM: embrulha campo e seletor numa linha, a .cw-tel). O seletor é o
+   menu da app (componentes.js:sel), e não um <select> nativo — a regra da casa,
+   e o nativo ficava fora da linguagem (cantos retos, contorno preto) ao lado
+   do campo. O indicativo escolhido fica no campo escondido cw_cc, de onde o
+   onSave do perfil o lê. Os tamanhos vêm da folha de estilos (estilos.css:.cw-tel),
+   e não do style do JavaScript. O rótulo passa a ser do campo do número (o for),
+   e o menu diz o que é pelo aria-label. Não faz nada se o campo não existir ou
+   se o seletor já tiver sido injetado.
    Devolve: nada — injeta o seletor no DOM do modal do perfil. */
 function injectPhoneCountry() {
   var inp = document.getElementById('pe_phone');
@@ -40,30 +46,24 @@ function injectPhoneCountry() {
   for (var i = 0; i < byLen.length; i++) {
     if (cur.indexOf(byLen[i]) === 0) { code = byLen[i]; rest = cur.slice(byLen[i].length).trim(); break; }
   }
-  var sel = document.createElement('select');
-  sel.id = 'cw_cc';
-  sel.style.cssText = 'flex:0 0 132px;min-width:0';
-  DIAL_CODES.forEach(function (d) {
-    var o = document.createElement('option');
-    o.value = d[0];
-    o.textContent = d[0] + ' ' + d[1];
-    sel.appendChild(o);
-  });
-  sel.value = code;
   var row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:8px';
+  row.className = 'cw-tel';
+  row.innerHTML = sel('cw_cc', code, DIAL_CODES.map(function (d) { return { v: d[0], label: d[0] + ' ' + d[1] }; }), '', 'rascunho');
+  var bot = row.querySelector ? row.querySelector('.selbtn') : null;
+  if (bot) { bot.setAttribute('aria-label', 'Indicativo do país'); bot.setAttribute('aria-describedby', 'lab_cw_cc'); }
   /* o placeholder passa a ser um exemplo do número («Ex: …», como todos os
      exemplos da app): o «opcional» que ele dizia
      sobe para o rótulo, como nos outros campos com exemplo (o rótulo é o texto
      do <label> que embrulha o campo, e fica onde está) */
   var lab = inp.parentNode, txt = lab && lab.firstChild;
   if (txt && txt.nodeType === 3 && txt.nodeValue.indexOf('opcional') < 0) txt.nodeValue = txt.nodeValue.trim() + ' (opcional)';
+  /* dentro do <label> o primeiro controlo passa a ser o botão do menu: o for
+     devolve o rótulo ao campo do número */
+  if (lab && lab.tagName === 'LABEL') lab.htmlFor = 'pe_phone';
   inp.parentNode.insertBefore(row, inp);
-  row.appendChild(sel);
   row.appendChild(inp);
   inp.value = rest;
   inp.placeholder = 'Ex: 912 345 678';
-  inp.style.flex = '1';
 }
 
 /* abre "O meu perfil": a ficha de proprietário do próprio utilizador (criada na hora
@@ -106,23 +106,20 @@ CW.editProfile = function () {
 
 /* ---- divisão de quotas nos imóveis partilhados (com confirmação) ---- */
 
-// substitui a secção editável de proprietários do formulário do imóvel
-var OWN_SECT_RE = /<div><div class="flabel">Proprietários e quota-parte<\/div>[\s\S]*?id="shareHint"[\s\S]*?<\/div><\/div>/;
-var _propBody = propBody;
-propBody = function () {
-  var h = _propBody();
-  try {
-    var blk = cwOwnersBlock();
-    if (OWN_SECT_RE.test(h)) h = h.replace(OWN_SECT_RE, blk);
-  } catch (e) {}
-  return h;
-};
+/* A secção dos proprietários do formulário do imóvel, com contas, entra pelo
+   ponto de extensão que o formulário pede (imovel.js:donosDoFormulario). Era
+   uma expressão regular por cima do HTML do formulário, que deixou de casar
+   sem erro nenhum quando o título da secção mudou. Sem sessão, os
+   proprietários são fichas locais, e fica a secção do formulário.
+   Devolve: o HTML da secção, ou '' sem sessão. */
+donosDoFormulario = function () { return CW.user ? cwOwnersBlock() : ''; };
 
 /* HTML da secção "Proprietários e quota-parte" do formulário do imóvel, na versão
    com contas: quotas atuais e, se houver proposta pendente, as novas percentagens
    com os botões de confirmar/rejeitar (ou cancelar, para quem já confirmou); sem
    proposta, o botão de propor. Com um só dono, apenas explica como partilhar.
-   Lê o imóvel "vivo" da base, não o rascunho do formulário.
+   Lê o imóvel "vivo" da base, não o rascunho do formulário. É um grupo do
+   formulário (.sect, como os outros), com o título no cabeçalho.
    Devolve: o HTML (texto) da secção, pronto a entrar no corpo do formulário. */
 function cwOwnersBlock() {
   var p = pForm;
@@ -134,19 +131,22 @@ function cwOwnersBlock() {
   // o cargo e os colaboradores são do serviço Colaboradores: desligado nesta
   // conta, a secção fala só das quotas e não aponta para um separador que não há
   var colab = servicoLigado('colaboradores');
+  var grupo = function (titulo, dentro) {
+    return '<div class="sect imv-grupo cw-donos"><div class="imv-sec-cab"><h3>' + titulo + '</h3></div>' + dentro + '</div>';
+  };
   if (myId && parts.length && parts.indexOf(myId) < 0) {
-    return '<div><div class="flabel">Proprietários</div><div class="hint">Imóvel de <b>' + esc(live._sharedFrom || '') +
-      '</b> — as quotas são dos comproprietários.' + (colab && live._cargo ? ' Colaboras aqui como <b>' + esc(live._cargo) + '</b>.' : '') + '</div></div>';
+    return grupo('Proprietários', '<div class="hint">Imóvel de <b>' + esc(live._sharedFrom || '') +
+      '</b> — as quotas são dos comproprietários.' + (colab && live._cargo ? ' Colaboras aqui como <b>' + esc(live._cargo) + '</b>.' : '') + '</div>');
   }
   // ao dono, quem colabora neste imóvel (a gestão fica no separador Colaboradores)
   var colabs = colab ? (live._colaboradores || []) : [];
   var colabHtml = colabs.length
-    ? '<div class="hint u-mt-8px">Colaboradores: ' + esc(colabs.map(function (c) { return c.name + (c.roleName ? ' (' + c.roleName + ')' : ''); }).join(', ')) +
-      '. <a href="#" class="u-c-v-accent" data-click="event.preventDefault();closeAllModals();go(\'colaboradores\')">Gerir</a></div>'
+    ? '<div class="hint">Colaboradores: ' + esc(colabs.map(function (c) { return c.name + (c.roleName ? ' (' + c.roleName + ')' : ''); }).join(', ')) +
+      '. <a href="#" class="u-c-v-accent" data-toca="ecra" data-click="event.preventDefault();cwGerirColaboradores()">Gerir</a></div>'
     : '';
   if (parts.length < 2) {
-    return '<div><div class="flabel">Proprietários</div><div class="hint">Este imóvel é só teu (100%). ' +
-      'Para o teres em compropriedade, partilha-o com outro utilizador em <b>Definições → Conta e partilha</b>.</div>' + colabHtml + '</div>';
+    return grupo('Proprietários', '<div class="hint">Este imóvel é só teu (100%). ' +
+      'Para o teres em compropriedade, partilha-o com outro utilizador em <b>Pessoas → Proprietários</b>.</div>' + colabHtml);
   }
   var shares = sharesOf(live);
   var prp = (CW.state.proposals || []).filter(function (x) { return x.houseId === p.id; })[0];
@@ -155,7 +155,7 @@ function cwOwnersBlock() {
     var cur = pct(shares[u] || 0, 0);
     var nxt = prp ? dec(Math.round((Number(prp.shares[u]) || 0) * 100) / 100) + '%' : '';
     return '<div class="stat"><span>' + esc(o.name) + (u === myId ? ' (tu)' : '') + '</span>' +
-      '<b>' + cur + (prp ? ' <span class="u-c-v-warn">→ ' + nxt + '</span>' : '') + '</b></div>';
+      '<b class="num">' + cur + (prp ? ' <span class="u-c-v-warn">→ ' + nxt + '</span>' : '') + '</b></div>';
   }).join('');
   var foot;
   if (prp) {
@@ -163,19 +163,45 @@ function cwOwnersBlock() {
     var waiting = parts.filter(function (u) { return prp.approvals.indexOf(u) < 0; })
       .map(function (u) { return esc((owner(u) || { name: u }).name); });
     if (!meOk) {
-      foot = '<div class="hint u-mt-8px"><b>' + esc(prp.proposedByName) + '</b> propôs esta nova divisão. Só entra em vigor quando todos os comproprietários confirmarem.</div>' +
-        '<div class="toolbar u-mt-8px">' +
-        '<button type="button" class="btn primary sm" data-click="CW.answerProposal(\'' + p.id + '\',1)">Confirmar nova divisão</button>' +
-        '<button type="button" class="btn sm danger" data-click="CW.answerProposal(\'' + p.id + '\',0)">Rejeitar</button></div>';
+      foot = '<div class="hint"><b>' + esc(prp.proposedByName) + '</b> propôs esta nova divisão. Só entra em vigor quando todos os comproprietários confirmarem.</div>' +
+        '<div class="imv-botoes">' +
+        '<button type="button" class="btn primary sm" data-toca="dados" data-click="CW.answerProposal(\'' + p.id + '\',1)">Confirmar nova divisão</button>' +
+        '<button type="button" class="btn sm" data-toca="dados" data-click="CW.answerProposal(\'' + p.id + '\',0)">Rejeitar</button></div>';
     } else {
-      foot = '<div class="hint u-mt-8px">Nova divisão proposta — à espera de: <b>' + waiting.join(', ') + '</b>.</div>' +
-        '<div class="toolbar u-mt-8px"><button type="button" class="btn sm danger" data-click="CW.answerProposal(\'' + p.id + '\',0)">Cancelar proposta</button></div>';
+      foot = '<div class="hint">Nova divisão proposta — à espera de: <b>' + waiting.join(', ') + '</b>.</div>' +
+        '<div class="imv-botoes"><button type="button" class="btn sm" data-toca="dados" data-click="CW.answerProposal(\'' + p.id + '\',0)">Cancelar proposta</button></div>';
     }
   } else {
-    foot = '<div class="toolbar u-mt-8px"><button type="button" class="btn sm" data-click="CW.proposeShares(\'' + p.id + '\')">Propor nova divisão</button></div>' +
-      '<div class="hint u-mt-6px">Mudar as percentagens só entra em vigor depois de todos os comproprietários confirmarem.</div>';
+    foot = '<div class="imv-botoes"><button type="button" class="btn sm" data-toca="camada" data-click="CW.proposeShares(\'' + p.id + '\')">Propor nova divisão</button></div>' +
+      '<div class="hint">Mudar as percentagens só entra em vigor depois de todos os comproprietários confirmarem.</div>';
   }
-  return '<div><div class="flabel">Proprietários e quota-parte</div>' + rows + foot + colabHtml + '</div>';
+  return grupo('Proprietários e quota-parte', '<div class="cw-donos-quotas">' + rows + '</div>' + foot + colabHtml);
+}
+
+/* «Gerir» os colaboradores, a partir do grupo dos proprietários do formulário
+   do imóvel: muda para o separador Colaboradores, que fecha as janelas todas.
+   Fechá-las de uma vez (closeAllModals, sem origem) saltava o «Sair sem
+   guardar?» e deitava fora, sem uma palavra, o que se tinha escrito no
+   formulário. Por isso, com alterações na janela de cima (a mesma conta do
+   componentes.js:closeModal), pergunta primeiro; sem alterações, segue já.
+   Devolve: nada — muda de separador, ou abre a pergunta. */
+function cwGerirColaboradores() {
+  var L = modalTop();
+  var mexido = !!L && L.tocado && L.snap != null && modalSnap(L.el) !== L.snap &&
+    !(typeof navigator !== 'undefined' && navigator.webdriver);
+  if (!mexido) return cwSairParaColaboradores();
+  openModal('Sair sem guardar?',
+    '<div class="hint u-fs-14px">Tens alterações por guardar nesta janela. Se fores agora para os colaboradores, perdes estas alterações.</div>',
+    '<button type="button" class="btn" data-toca="ecra" data-click="cwSairParaColaboradores()">Sair sem guardar</button>' +
+    '<button type="button" class="btn primary" data-toca="camada" data-click="closeModal()">Continuar a editar</button>');
+}
+
+/* A saída para os Colaboradores: fecha as janelas todas, sem perguntar (quem
+   chega aqui já respondeu, ou não tinha nada por guardar), e muda de separador.
+   Devolve: nada — muda de separador. */
+function cwSairParaColaboradores() {
+  closeAllModals();
+  go('colaboradores');
 }
 
 // se o modal do imóvel hid estiver aberto, recolhe o que está escrito e repinta-o —
@@ -250,9 +276,10 @@ CW.proposeShares = function (hid, fromShare) {
    se, sendo o último, a divisão entrou logo em vigor), sem accept rejeita — que
    serve também para quem propôs a cancelar. Fala com a API e atualiza o modal.
    Recebe: hid — o id da casa; accept — 1/verdadeiro confirma, 0/falso rejeita.
-   Devolve: nada — chama a API e depois repinta o modal. */
+   Devolve: a promessa — resolve depois de repintar o modal (o modal das
+   partilhas repinta a seguir o seu bloco: partilha.js:CW.shareResponder). */
 CW.answerProposal = function (hid, accept) {
-  api('POST', '/api/houses/' + hid + '/proposal/' + (accept ? 'accept' : 'reject'))
+  return api('POST', '/api/houses/' + hid + '/proposal/' + (accept ? 'accept' : 'reject'))
     .then(function (r) {
       toast(accept
         ? (r.applied ? 'Confirmado por todos — a nova divisão já está em vigor.' : 'Confirmado — falta a resposta dos outros.')

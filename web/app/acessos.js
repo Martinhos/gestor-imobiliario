@@ -65,6 +65,18 @@ function temPerm(perms,perm){return fechoPerms(perms).has(perm)}
 // O id do utilizador com sessão; vazio sem sessão.
 // Devolve: o id (texto), ou '' sem sessão.
 function meuId(){return (window.CW&&CW.user&&CW.user.id)||''}
+/* O nome de um proprietário onde se escolhe entre vários: com mais do que um
+   à escolha, o meu leva « (eu)» no fim — numa lista de nomes iguais aos da
+   ficha, quem está com sessão não tinha como saber qual era o seu. Sem sessão
+   (meuId vazio) ninguém é «eu», e com um só proprietário não há que distinguir.
+   Serve o formulário do movimento e os grupos de proprietários, por isso vive
+   na base.
+   Recebe: o — o proprietário (ficha com id e name); n — quantos há à escolha.
+   Devolve: o nome (texto, por escapar), com « (eu)» quando é o meu e n > 1. */
+function rotuloDoDono(o,n){
+  const nome=(o&&o.name)||'',eu=meuId();
+  return n>1&&eu&&o&&o.id===eu?nome+' (eu)':nome;
+}
 /* O meu cargo num imóvel. Sem sessão, sem CW.cargos ou num imóvel só local,
    sou o dono (e o criador): é o comportamento de sempre.
    Recebe: pid — o id do imóvel.
@@ -181,6 +193,24 @@ function casaDoInquilino(t){
 // Recebe: t — a ficha.
 // Devolve: true se posso.
 function podeEditarInquilino(t){return podeEditar(casaDoInquilino(t),'tenant.add',t)}
+/* De onde me vem um imóvel, para as três secções das listas (vistas.js:listaPorOrigem):
+   meu (o servidor não lhe pôs dono que não eu — mesmo que eu o partilhe com
+   outras contas), em que colaboro (tem cargo: cloud/nucleo.js:rebuildDb põe o
+   _cargo), ou partilhado comigo (tem outro dono e nenhum cargo: sou
+   comproprietário por uma ligação ou por um grupo). Sem imóvel, ou com um que
+   já não está no db, é meu: é o que a lista tinha antes de haver secções.
+   Recebe: pid — o id do imóvel (ou vazio).
+   Devolve: 'meu', 'partilhado' ou 'colaboro'. */
+function origemDaCasa(pid){
+  const p=pid?prop(pid):null;
+  if(!p||!p._ownerUserId)return 'meu';
+  return p._cargo?'colaboro':'partilhado';
+}
+/* De onde me vem um inquilino: a origem do imóvel dele (acessos.js:casaDoInquilino
+   — o da ficha, ou o do primeiro contrato); sem imóvel, meu.
+   Recebe: t — a ficha do inquilino.
+   Devolve: 'meu', 'partilhado' ou 'colaboro'. */
+function origemDoInquilino(t){return origemDaCasa(casaDoInquilino(t))}
 
 /* O nome de um utilizador pelo id: nos proprietários (utilizadores com acesso),
    depois nas pessoas que o estado trouxe (colaboradores), e por fim o id
@@ -341,10 +371,15 @@ function fraseCurtaPodes(pid){
   const l=podesNoImovel(pid);
   return l.length?'Podes '+listaE(l):'Só podes consultar';
 }
-/* Marca uma visita já com o imóvel escolhido (a ação dos botões de um imóvel).
-   Recebe: pid — o id do imóvel.
+/* Marca uma visita já com o imóvel escolhido (a ação dos botões de um imóvel)
+   e, vinda da linha de um quarto livre (imovel.js:imvQuartos), com esse
+   quarto — o formulário (visitas.js:visitModal) junta o que lhe chega ao
+   rascunho, e o menu do quarto abre nele.
+   Recebe: pid — o id do imóvel; rid (opcional) — o id do quarto.
    Devolve: nada — abre o formulário da visita. */
-function marcarVisitaNoImovel(pid){chamarServico('visits','visitModal',null,{propertyId:pid})}
+function marcarVisitaNoImovel(pid,rid){
+  chamarServico('visits','visitModal',null,rid?{propertyId:pid,roomId:rid}:{propertyId:pid});
+}
 /* Regista um movimento num imóvel: o caminho do FAB dos Movimentos (primeiro
    o tipo), com o imóvel posto. O pagamento de crédito abate capital na ficha
    do imóvel: sem a poder editar, diz-se antes de abrir o formulário.
@@ -374,47 +409,88 @@ function editarFichaDeColaboracao(){
    gramática das ações (os nomes são de serviços: a gramática resolve-os na
    hora, e só se o serviço estiver ligado é que a ação se oferece). */
 const ACOES_DE_ADICIONAR=[
-  {id:'movimento',label:'Movimento',icon:'swap',servico:'transactions',quando:()=>podeSemImovel()||casasComo('tx.add').length>0,act:'newTxPick()'},
+  {id:'movimento',label:'Movimento',icon:'lista',servico:'transactions',quando:()=>podeSemImovel()||casasComo('tx.add').length>0,act:'newTxPick()'},
   {id:'imovel',label:'Imóvel',icon:'building',servico:'properties',quando:()=>!souSoColaborador(),act:'propModal()'},
   {id:'contrato',label:'Contrato',icon:'contract',servico:'contracts',quando:()=>casasComo('contract.add').length>0,act:'ctModal()'},
   {id:'inquilino',label:'Inquilino',icon:'users',servico:'tenants',quando:()=>!souSoColaborador()||casasComo('tenant.add').length>0,act:"personModal('tenant')"},
-  {id:'proprietario',label:'Proprietário',icon:'crown',servico:'owners',quando:()=>!souSoColaborador(),act:"personModal('owner')"},
   {id:'visita',label:'Visita',icon:'door',servico:'visits',quando:()=>casasComo('visit.add').length>0,act:'visitModal()'},
-  {id:'planeado',label:'Movimento recorrente',icon:'clock',servico:'recurring',quando:()=>podeSemImovel()||casasComo('rec.add').length>0,act:'newRec()'},
+  {id:'planeado',label:'Movimento recorrente',icon:'repetir',servico:'recurring',quando:()=>podeSemImovel()||casasComo('rec.add').length>0,act:'newRec()'},
   {id:'modelo',label:'Modelo',icon:'file',servico:'recurring',quando:()=>podeSemImovel()||casasComo('rec.add').length>0,act:'newTpl()'},
-  {id:'hipoteca',label:'Hipoteca',icon:'bank',servico:'credits',quando:()=>casasComo('house.edit').length>0,act:'newMort()'}
+  {id:'hipoteca',label:'Hipoteca',icon:'bank',servico:'credits',quando:()=>casasComo('house.edit').length>0,act:'newMort()'},
+  /* os grupos são filtros de toda a app, da base: sem serviço e sem cargo que
+     os abra (um grupo privado é só meu, e o separador Grupos é de toda a
+     gente — definicoes.js:vGrupos não pergunta nada), por isso a condição é a
+     do botão do vazio do separador: nenhuma */
+  {id:'grupo',label:'Grupo',icon:'layers',servico:'',quando:()=>true,act:'novoGrupoEscolher()'}
 ];
 /* O que esta pessoa pode adicionar agora: as ações de ACOES_DE_ADICIONAR
    cujo serviço está ligado nesta conta e cuja condição se cumpre, pela
-   ordem de lá. O dono tem as nove; um gestor de visitas tem a visita e o
-   inquilino; um cargo que só vê não tem nenhuma — e sem nenhuma a barra de
-   baixo não escreve o + (navegacao.js:buildTabbar).
+   ordem de lá (o grupo, da base, não depende de serviço). O dono tem as
+   nove; um gestor de visitas tem a visita, o inquilino e o grupo; um cargo
+   que só vê tem só o grupo — e sem nenhuma a barra de baixo não escreve o +
+   (navegacao.js:buildTabbar).
    Devolve: array de {id, label, icon, act, toca:'camada'} — vazio sem nada para adicionar. */
 function acoesDeAdicionar(){
-  return ACOES_DE_ADICIONAR.filter(a=>servicoLigado(a.servico)&&a.quando()).map(a=>({id:a.id,label:a.label,icon:a.icon,act:a.act,toca:'camada'}));
+  return ACOES_DE_ADICIONAR.filter(a=>(!a.servico||servicoLigado(a.servico))&&a.quando()).map(a=>({id:a.id,label:a.label,icon:a.icon,act:a.act,toca:'camada'}));
+}
+/* «Grupo» na folha do +: escolhe-se primeiro o tipo, numa janela de escolha
+   que substitui a folha «Criar» (como a hipoteca, creditos.js:newMort) —
+   Imóveis, Proprietários e Contratos, com os ícones do separador
+   (definicoes.js:GKIND), e «Partilhado» quando posso partilhar grupos
+   (definicoes.js:podePartilharGrupos: a nuvem dos grupos, sessão e o serviço
+   Colaboradores). Escolher fecha a escolha e abre a janela do grupo novo
+   desse tipo (definicoes.js:groupModal) ou o nome do partilhado
+   (cloud/grupos.js:CW.grupoNovo). Fica sem o «Novo grupo de» no título: a
+   quarta opção não é um tipo, e «Novo grupo de partilhado» não se diz.
+   Devolve: nada — abre a janela de escolha. */
+function novoGrupoEscolher(){
+  const sub={prop:'Filtra-os e reparte as despesas por eles',owner:'Uma família, um casal',contract:'Filtra-os de uma vez'};
+  const opts=['prop','owner','contract'].map(k=>({v:k,label:GKIND[k].label,sub:sub[k],icon:GKIND[k].icon}));
+  if(podePartilharGrupos())opts.push({v:'partilhado',label:'Partilhado',sub:'Imóveis em comum com outras contas',icon:'users'});
+  pickModal('Novo grupo',opts,o=>{
+    closeAllModals();
+    if(o.v!=='partilhado')return groupModal(o.v);
+    if(typeof CW!=='undefined'&&typeof CW.grupoNovo==='function')CW.grupoNovo();
+  });
+}
+/* A ação natural do ecrã tal como se mostra: a de acaoDoSeparador, se esta
+   pessoa a pode fazer, e no separador Grupos já do tipo à vista
+   (definicoes.js:grpTipo) — «Novo grupo de contratos», que abre direto a
+   janela desse tipo, sem a escolha do «Grupo». É o que a folha do + põe em
+   primeiro, «neste ecrã» (navegacao.js:abrirAdicionar), e o que o cabeçalho
+   do computador mostra (navegacao.js:pintarAcaoDoCabecalho).
+   Recebe: t — o id do separador.
+   Devolve: {id, label, icon, act, toca:'camada'}, ou null sem ação natural ou sem a poder fazer. */
+function acaoNaturalDoEcra(t){
+  const aqui=acaoDoSeparador(t),a=aqui&&acoesDeAdicionar().find(x=>x.id===aqui);
+  if(!a)return null;
+  if(a.id!=='grupo')return a;
+  const k=GKIND[grpTipo]?grpTipo:'prop';
+  return Object.assign({},a,{label:'Novo grupo de '+GKIND[k].label.toLowerCase(),act:`groupModal('${jsq(k)}')`});
 }
 /* A ação natural de cada ecrã — a que a folha do + põe em primeiro e marca
    «neste ecrã»: nos Movimentos e na visão geral o movimento, no Calendário
-   (como nas Visitas) a visita. As Definições, as Projeções, a Avaliação, a
+   (como nas Visitas) a visita, nos Grupos o grupo (do tipo à vista: quem o
+   diz é acaoNaturalDoEcra). As Definições, as Projeções, a Avaliação, a
    Declaração e os Colaboradores não têm: a folha fica pela ordem de sempre.
    Recebe: tab — o id do separador.
    Devolve: o id da ação (um de ACOES_DE_ADICIONAR), ou '' num ecrã sem ação natural. */
 function acaoDoSeparador(tab){
-  return ({dashboard:'movimento',transactions:'movimento',properties:'imovel',contracts:'contrato',tenants:'inquilino',owners:'proprietario',
+  return ({dashboard:'movimento',transactions:'movimento',properties:'imovel',groups:'grupo',contracts:'contrato',tenants:'inquilino',
     visits:'visita',calendar:'visita',recurring:'planeado',credits:'hipoteca'})[tab]||'';
 }
-/* Os destinos da barra de baixo: cada destino escondido dá o lugar ao
-   primeiro visível de visitas, contratos, inquilinos e planeados que ainda
-   não esteja na barra; sem substituto, o lugar some. Quem nada esconde fica
-   com a barra de sempre.
+/* Os destinos da barra de baixo que esta pessoa vê: um separador, se não
+   está escondido; uma área (Casas, Dinheiro — navegacao.js:AREAS), se
+   alguma das portas dela está à vista. Já não há substitutos: as áreas
+   juntam o que antes disputava os quatro lugares (visitas, contratos,
+   inquilinos, planeados), e um destino sem nada à vista some.
    Recebe: ids — os destinos de origem (TABBAR); fora (opcional) — os ids escondidos (separadoresEscondidos).
    Devolve: array de ids, sem repetidos. */
 function barraDeBaixo(ids,fora){
-  const f=fora||[],base=ids||[],out=[];
-  const subs=['visits','contracts','tenants','recurring'].filter(id=>f.indexOf(id)<0&&base.indexOf(id)<0);
-  base.forEach(id=>{
-    const x=f.indexOf(id)<0?id:subs.shift();
-    if(x&&out.indexOf(x)<0)out.push(x);
+  const f=fora||[],out=[];
+  (ids||[]).forEach(id=>{
+    const ve=typeof AREAS!=='undefined'&&AREAS[id]?AREAS[id].ids.some(p=>portaVisivel(p,f)):f.indexOf(id)<0;
+    if(ve&&out.indexOf(id)<0)out.push(id);
   });
   return out;
 }
@@ -431,6 +507,8 @@ function separadoresEscondidos(){
   /* os serviços desligados nesta conta (servicos.js): o separador some do
      menu, e o resto da app pergunta servicoLigado antes de lhes tocar */
   if(typeof servicosDesligados==='function')servicosDesligados().forEach(poe);
+  // e os que ainda não chegaram a este ambiente (a Declaração em produção)
+  if(typeof servicoForaDoAmbiente==='function')SERVICOS.forEach(s=>{if(servicoForaDoAmbiente(s.id))poe(s.id)});
   /* cargos e convites vivem no servidor: sem conta na nuvem o separador não
      tem o que mostrar (a vista explica-o, mas não vale ocupar o menu) */
   if(!(typeof window!=='undefined'&&window.CW&&CW.user))poe('colaboradores');

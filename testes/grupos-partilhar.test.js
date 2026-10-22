@@ -7,7 +7,8 @@
 // entrada com o porquê; com o serviço desligado, a frase do serviço; um
 // grupo vazio, ou só com imóveis de outras pessoas, a janela que o diz e
 // leva à edição do grupo. Com imóveis meus, a confirmação de sempre; e se o
-// servidor recusar a meio, o grupo criado lá apaga-se e o privado fica.
+// servidor recusar a meio, o grupo criado lá apaga-se e o privado fica. E
+// partilhar a avaliação: a cópia recusada pelo browser diz que falhou.
 // A nuvem corre por cima da app do arnês, com a api, o pullNow, o toast, as
 // confirmações, o ecrã de entrada e as janelas trocados por espiões.
 
@@ -114,20 +115,22 @@ describe('o «Partilhar» está sempre à vista', () => {
     const h = app.vGrupos();
     assert.deepEqual(comBotao(h), ['GP', 'GR', 'GV', 'GX']);
     assert.ok(!h.includes("CW.grupoPartilhar('G2')") && !h.includes("CW.grupoPartilhar('GO')"));
-    assert.match(h, /data-click="event\.stopPropagation\(\);CW\.grupoPartilhar\('GR'\)">[\s\S]*? Partilhar<\/button>/, 'trava o toque, para não abrir também a edição');
+    assert.match(h, /data-lp="grp:GR" data-toca="camada" data-click="groupModal\('prop','GR'\)">\s*<div class="grp-cab"><h3>Dos outros<\/h3>[\s\S]*?<div class="grp-acoes" data-sel-inerte><button type="button" class="btn sm" data-toca="camada" data-click="event\.stopPropagation\(\);CW\.grupoPartilhar\('GR'\)">[\s\S]*? Partilhar<\/button><\/div><\/section>/, 'o cartão edita-se ao toque; o «Partilhar» no seu botão, que não sobe ao cartão');
+    assert.ok(!/ Editar<\/button>/.test(h), 'o «Editar» saiu');
+    assert.match(h, /<h3>Apagado<\/h3><span class="badge grey">Privado<\/span><\/div>\s*<p class="small">Sem membros · 1 apagado<\/p>/, 'o imóvel que já não existe diz-se');
   });
 
-  test('sem sessão e com os Colaboradores desligados o botão fica (o cartão dos partilhados é que sai); sem a nuvem não há botão', () => {
+  test('sem sessão e com os Colaboradores desligados o botão fica («Novo grupo partilhado» é que sai); sem a nuvem não há botão', () => {
     const { app } = comEstado();
     app.definirServicosDesligados(['colaboradores']);
     const desligado = app.vGrupos();
     assert.deepEqual(comBotao(desligado), ['GP', 'GR', 'GV', 'GX'], 'serviço desligado');
-    assert.ok(!desligado.includes('Grupos partilhados'), 'sem o cartão');
+    assert.ok(!desligado.includes('CW.grupoNovo()'), 'sem «Novo grupo partilhado»');
     app.definirServicosDesligados([]);
     app.CW.user = null;
     const semSessao = app.vGrupos();
     assert.deepEqual(comBotao(semSessao), ['GP', 'GR', 'GV', 'GX'], 'sem sessão');
-    assert.match(semSessao, /«Partilhar» passa um grupo de imóveis a partilhado/, 'a nota diz o que é');
+    assert.match(semSessao, /Partilhar um grupo é para sempre: não volta a ser privado\./, 'a nota diz o que é');
     const base = carregarApp();
     base.db.groups.push(base.normGroup({ id: 'B1', kind: 'prop', name: 'Lisboa', ids: [] }));
     assert.ok(!base.vGrupos().includes('grupoPartilhar'), 'a base sozinha não tem quem atenda o toque');
@@ -147,20 +150,14 @@ describe('o «Partilhar» está sempre à vista', () => {
     assert.ok(!esp.abertas[3].b.includes('grupoPartilhar') && !esp.abertas[4].b.includes('grupoPartilhar'));
   });
 
-  test('«Partilhar um grupo que já tens» aparece com qualquer grupo de imóveis privado e lista-os todos, a dizer quantos imóveis são meus', () => {
-    const { app, esp } = comEstado();
+  /* «Partilhar um grupo que já tens» (a lista de todos os privados) saiu com
+     o canvas de 2026-10: cada grupo tem o «Partilhar» no próprio cartão, que
+     é a porta que o Martinho procurava. */
+  test('«Partilhar um grupo que já tens» saiu: cada grupo de imóveis privado tem o seu «Partilhar», e um grupo só vazio também', () => {
+    const { app } = comEstado();
+    assert.equal(app.CW.grupoEscolherParaPartilhar, undefined);
     app.db.groups = app.db.groups.filter((g) => g.id === 'GV' || g._partilhado);
-    assert.match(app.gruposCard(), /CW\.grupoEscolherParaPartilhar\(\)/, 'só com o grupo vazio, já aparece');
-    const { app: outra, esp: e2 } = comEstado();
-    outra.CW.grupoEscolherParaPartilhar();
-    const j = e2.abertas[0];
-    assert.equal(j.t, 'Partilhar um grupo que já tens');
-    for (const [nome, sub] of [['Lisboa', '1 imóvel teu · 1 de outra pessoa fica de fora'], ['Dos outros', 'Nenhum imóvel teu · 2 de outras pessoas'],
-      ['Vazio', 'Ainda sem imóveis'], ['Apagado', 'Ainda sem imóveis']]) {
-      assert.match(j.b, new RegExp('<b class="u-d-block u-fs-14px">' + nome + '</b>\\s*<span class="small">' + sub + '</span>'), nome);
-    }
-    assert.ok(!j.b.includes('Família'), 'os partilhados não');
-    assert.deepEqual(esp.toasts, []);
+    assert.deepEqual(comBotao(app.vGrupos()), ['GV'], 'só com o grupo vazio, o botão está lá');
   });
 });
 
@@ -348,9 +345,10 @@ describe('os formulários das Definições e dos grupos', () => {
   test('os promptModal (categoria, subcategoria, etiqueta, grupo partilhado): o campo leva o asterisco e um exemplo com «Ex: »', () => {
     const { app, esp } = comEstado();
     app.addCat('cats'); app.addCat('catsIn'); app.addSub('cats', 'Obras'); app.renameSub('cats', 'Obras', 'Pintura'); app.addTag();
-    app.CW.grupoNovo(); app.CW.grupoRenomear('G2');
+    app.CW.grupoNovo(); app.CW.grupoRenomear('G2'); app.mudarNomeCategoria('cats', 'Seguros');
     const esperado = [['Nova categoria', 'Jardim e piscina'], ['Nova categoria', 'Alojamento local'], ['Nova subcategoria', 'Canalização'],
-      ['Mudar o nome da subcategoria', 'Canalização'], ['Nova etiqueta', 'Obras de 2026'], ['Novo grupo partilhado', 'Casas de Lisboa'], ['Mudar o nome', 'Casas de Lisboa']];
+      ['Mudar o nome da subcategoria', 'Canalização'], ['Nova etiqueta', 'Obras de 2026'], ['Novo grupo partilhado', 'Casas de Lisboa'], ['Mudar o nome', 'Casas de Lisboa'],
+      ['Mudar o nome da categoria', 'Jardim e piscina']];
     assert.equal(esp.abertas.length, esperado.length);
     esp.abertas.forEach((j, i) => {
       assert.equal(j.t, esperado[i][0]);
@@ -359,17 +357,151 @@ describe('os formulários das Definições e dos grupos', () => {
       assert.match(cs[0].rotulo, /^Nome( d[ao] (categoria|subcategoria|etiqueta|grupo))$/, 'o rótulo diz o nome de quê: ' + cs[0].rotulo);
     });
     assert.match(esp.abertas[3].b, /value="Pintura"/, 'mudar o nome traz o atual');
+    assert.match(esp.abertas[7].b, /value="Seguros"/, 'o da categoria também');
   });
 
-  test('tipos de movimento e IRS: o nome de cada categoria diz o que é e mostra um exemplo apagado; o IRS só tem escolhas, sem asterisco', () => {
+  /* O que o falhaCampo escreve no campo: troca o classList do elemento do
+     arnês (que não guarda nada) por um que se lembra das classes.
+     Recebe: app — a app; id — o id do campo.
+     Devolve: o array das classes acrescentadas. */
+  const classesDe = (app, id) => {
+    const el = app.document.getElementById(id), cls = [];
+    el.classList = { add: (c) => cls.push(c), remove() {}, toggle() {}, contains: () => false };
+    return cls;
+  };
+
+  test('um promptModal sem texto não fecha calado: a janela fica aberta, nada se cria, e o erro diz-se no campo', () => {
+    const { app, esp } = comEstado();
+    const criados = [];
+    app.promptModal('Nova etiqueta', 'Nome da etiqueta', null, (v) => criados.push(v), 'Obras de 2026');
+    const cls = classesDe(app, 'pm_v');
+    app.document.getElementById('pm_v').value = '   ';
+    app._pm();
+    assert.equal(app.modalStack.length, 1, 'a janela fica aberta (fechava antes de olhar para o texto)');
+    assert.deepEqual(criados, []);
+    assert.ok(cls.includes('err'), 'o contorno vermelho no campo');
+    assert.deepEqual(esp.toasts, ['Escreve um nome.']);
+    app.document.getElementById('pm_v').value = ' Obras ';
+    app._pm();
+    assert.equal(app.modalStack.length, 0, 'com texto fecha');
+    assert.deepEqual(criados, ['Obras'], 'e entrega o texto aparado');
+  });
+
+  test('o grupo sem nome ou sem membros não grava: o erro diz-se no campo do nome e na caixa dos membros', () => {
+    const { app, esp } = comEstado();
+    app.groupModal('owner');
+    const j = esp.abertas[0];
+    assert.match(j.b, /<div id="g_membros"><div class="tagbox">/, 'os membros numa caixa com id, para o erro');
+    const nome = classesDe(app, 'g_name'), membros = classesDe(app, 'g_membros');
+    const antes = app.db.groups.length;
+    app.document.getElementById('g_name').value = ' ';
+    j.onSave();
+    assert.deepEqual([nome, membros], [['err'], []], 'sem nome, o erro no nome');
+    app.document.getElementById('g_name').value = 'Família';
+    j.onSave();
+    assert.deepEqual(membros, ['err'], 'sem membros, o erro na caixa dos membros');
+    assert.deepEqual(esp.toasts, ['Dá um nome ao grupo.', 'Escolhe pelo menos um membro.'], 'a frase continua no aviso');
+    assert.equal(app.db.groups.length, antes, 'nada gravado');
+    assert.equal(app.modalStack.length, 1, 'a janela fica');
+  });
+
+  test('valores por omissão: gravar ao sair do campo não repinta (o campo seguinte era destruído e o foco caía no body), e o campo mostra o que ficou gravado', () => {
+    const { app } = comEstado();
+    const h = app.vDefaults();
+    assert.ok(!/setSet\(/.test(h), 'o setSet repintava a página');
+    for (const [id, k] of [['def_growth', 'growth'], ['def_inflation', 'inflation'], ['def_years', 'years'], ['def_capTarget', 'capTarget'], ['def_stamp', 'stampPct']]) {
+      assert.match(h, new RegExp('id="' + id + '"[^>]*data-change="gravarValorPorOmissao\\(this,\'' + k + '\'\\)"'), id);
+    }
+    let pinturas = 0, gravacoes = 0;
+    app.render = () => { pinturas++; };
+    app.save = () => { gravacoes++; };
+    const muda = (k, v) => { const campo = { value: v }; app.gravarValorPorOmissao(campo, k); return [app.db.settings[k], campo.value]; };
+    assert.deepEqual(muda('years', ''), [1, '1'], 'o horizonte em branco é 1 ano, e o campo di-lo');
+    assert.deepEqual(muda('years', '45'), [30, '30'], 'no máximo 30');
+    assert.deepEqual(muda('growth', '2,5'), [2.5, '2,5']);
+    assert.deepEqual(muda('inflation', ''), [0, '0']);
+    assert.deepEqual(muda('capTarget', ''), [5, '5'], 'o yield em branco volta aos 5 %, como no capTargetSet');
+    assert.deepEqual(muda('capTarget', '0'), [5, '5']);
+    assert.deepEqual(muda('stampPct', '-3'), [0, '0'], 'o selo não desce de 0');
+    assert.equal(pinturas, 0, 'nada repinta');
+    assert.equal(gravacoes, 7, 'cada mudança grava');
+  });
+
+  test('o tema escolhido no segmentado da raiz devolve o foco ao botão: o setTheme repinta', () => {
+    const { app } = comEstado();
+    assert.match(app.linhaDoTema(), /<button type="button" id="defTema_dark" role="radio"[^>]*data-click="temaEscolher\('dark'\)">Escuro<\/button>/);
+    const focos = [];
+    app.document.getElementById('defTema_dark').focus = () => focos.push('defTema_dark');
+    app.temaEscolher('dark');
+    assert.equal(app.db.settings.theme, 'dark');
+    assert.deepEqual(focos, ['defTema_dark']);
+    app.temaEscolher('roxo');
+    assert.equal(app.db.settings.theme, 'dark', 'um tema que não existe não se grava');
+  });
+
+  test('apagar categoria, subcategoria e etiqueta dizem quantos movimentos, no singular e no plural, sem «(s)»', () => {
+    const { app, esp } = comEstado();
+    app.db.settings.cats = { Obras: ['Pintura'], Seguros: ['Casa'], 'Condomínio': [] };
+    app.db.settings.tags = ['Urgente', 'Rara'];
+    const tx = (id, category, sub, tags) => ({ id, kind: 'expense', category, sub, tags, amount: 1, date: '2026-01-01' });
+    app.db.transactions = [tx('t1', 'Obras', 'Pintura', ['Urgente']), tx('t4', 'Obras', 'Pintura', []), tx('t2', 'Seguros', '', ['Urgente']),
+      tx('t3', 'Seguros', 'Casa', ['Rara']), tx('t5', 'Condomínio', '', [])];
+    app.delSub('cats', 'Obras', 'Pintura');
+    app.delSub('cats', 'Seguros', 'Casa');
+    app.delCat('cats', 'Condomínio');
+    app.delCat('cats', 'Seguros');
+    app.delTag('Urgente');
+    app.delTag('Rara');
+    assert.deepEqual(esp.confirmados.map((c) => c.txt), [
+      '“Pintura” sai de Obras e de 2 movimentos que a usam.',
+      '“Casa” sai de Seguros e de 1 movimento que a usa.',
+      'Apagar “Condomínio”? 1 movimento fica sem categoria.',
+      'Apagar “Seguros”? 2 movimentos ficam sem categoria.',
+      'Apagar “Urgente”? Sai de 2 movimentos.',
+      'Apagar “Rara”? Sai de 1 movimento.']);
+  });
+
+  test('categorias: o «Fora dos totais» é um label com o interruptor (o rótulo também liga), e «Repor as colunas do Anexo F» fica fora do parágrafo da nota', () => {
+    const base = carregarApp();
+    limpar(base);
+    const h = base.vCats('cats');
+    assert.match(h, /<label class="def-cat-fora"><span class="def-so-tel small" aria-hidden="true">Fora dos totais<\/span><button type="button" class="interruptor" role="switch"/);
+    assert.match(h, /mas não somam\.<\/p>\s*<div class="def-repor"><button type="button" class="def-ligacao"[^>]*data-click="resetIrsMapa\(\)">Repor as colunas do Anexo F<\/button><\/div>/);
+    assert.ok(!base.vCats('catsIn').includes('Repor as colunas do Anexo F'), 'só nos pagamentos');
+  });
+
+  /* As categorias deixaram de se renomear no próprio nome (o canvas de
+     2026-10, D-DefCategorias: uma tabela): o nome muda-se no ⋯ da linha, num
+     promptModal com o asterisco e o exemplo (o teste de cima). A página só
+     tem escolhas — a coluna do Anexo F e o «Fora dos totais» —, sem campos de
+     texto, sem asterisco e sem placeholder. */
+  test('categorias, etiquetas e IRS: só escolhas, sem campos de texto nem asterisco; o nome muda-se pelo ⋯, num prompt com exemplo', () => {
     const base = carregarApp();
     limpar(base);
     const h = base.vCats();
-    const cs = conferir('tipos de movimento', h, { obrigatorios: [], deixados: ['catn_'] });
-    assert.ok(cs.length > 4 && cs.every((c) => /^catn_(cats|catsIn)_\d+$/.test(c.id)), 'só os nomes das categorias');
-    assert.ok(cs.every((c) => c.placeholder.startsWith(EX)));
-    assert.equal((h.match(/aria-label="Nome da categoria"/g) || []).length, cs.length);
-    const irs = base.vIrsMapa();
-    assert.ok(!/placeholder=|class="req"/.test(irs));
+    assert.ok(!/<input(?![^>]*type="hidden")|<textarea|placeholder=|class="req"/.test(h), 'nenhum campo de texto');
+    assert.match(h, /closePops\(\);mudarNomeCategoria\('cats','[^']+'\)">/, 'o «Mudar o nome…» de cada categoria');
+    assert.match(h, /role="switch" aria-checked="false" aria-label="Fora dos totais: /);
+    assert.match(h, /<span class="def-oculto">Coluna no Anexo F de /, 'a coluna diz o que é ao leitor de ecrã');
+    const receitas = base.vCats('catsIn');
+    assert.ok(!receitas.includes('irsm_'), 'as receitas não vão ao Anexo F');
+    assert.ok(!/<input(?![^>]*type="hidden")|placeholder=|class="req"/.test(base.vCats('cats')));
+  });
+});
+
+/* Partilhar a avaliação (copias.js:shareReport): sem a folha de partilha, o
+   texto vai para a área de transferência — e quando o browser a recusa, diz-se. */
+describe('partilhar a avaliação', () => {
+  test('a cópia recusada diz que falhou (a promessa rejeitava calada, sem aviso); a aceite diz que copiou', async () => {
+    const { app, esp } = comEstado();
+    app.navigator.clipboard = { writeText: () => Promise.reject(new Error('NotAllowedError')) };
+    await app.shareReport();
+    assert.deepEqual(esp.toasts, ['Não foi possível copiar o relatório.']);
+    esp.toasts.length = 0;
+    const copiado = [];
+    app.navigator.clipboard = { writeText: (t) => { copiado.push(t); return Promise.resolve(); } };
+    await app.shareReport();
+    assert.deepEqual(esp.toasts, ['Relatório copiado.']);
+    assert.equal(copiado.length, 1);
   });
 });
