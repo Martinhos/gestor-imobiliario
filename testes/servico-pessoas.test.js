@@ -315,11 +315,14 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     app.tab = 'tenants';
     assert.doesNotMatch(app.abasDaArea(), /go\('colaboradores'\)/);
     const conta = app.vCloud();
-    assert.match(conta, /A minha conta/);
     assert.match(conta, /Apagar a conta/);
-    assert.match(conta, /O serviço Colaboradores está desligado nesta conta\./);
-    for (const t of ['Ligar a outro utilizador', 'Utilizadores ligados', 'Ainda não estás ligado', 'CW.ligacaoRodar()', 'CW.ligacaoCriar()', 'Pedidos de partilha', 'CW.pedidoAceitar']) {
-      assert.ok(!conta.includes(t), 'Conta e partilha sem ' + t);
+    assert.doesNotMatch(conta, /está desligado nesta conta/, 'a Segurança não fala da partilha: com os Proprietários, ela vive lá');
+    // a frase de quem liga o serviço vai para onde se vem procurar o id: por baixo dos Proprietários
+    const donos = app.vOwners();
+    assert.match(donos, /O serviço Colaboradores está desligado nesta conta\. A partilha entre contas fica disponível quando o suporte o ligar\./);
+    for (const t of ['Ligar a outro utilizador', 'Utilizadores ligados', 'Ainda não estás ligado', 'CW.ligacaoRodar()', 'CW.ligacaoCriar()', 'Pedidos de partilha', 'CW.pedidoAceitar', 'CW.copyId()']) {
+      assert.ok(!conta.includes(t), 'a Segurança sem ' + t);
+      assert.ok(!donos.includes(t), 'os Proprietários sem ' + t);
     }
     const bloco = app.cwOwnersBlock();
     assert.match(bloco, /Este imóvel é só teu/);
@@ -364,9 +367,10 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     app.tab = 'tenants';
     assert.match(app.abasDaArea(), /go\('colaboradores'\)">Colaboradores <span class="n">1<\/span>/, 'ligado e com sessão, os Colaboradores são o terceiro das Pessoas');
     const conta = app.vCloud();
-    assert.ok(conta.includes("go('owners')") && conta.includes('Partilhar com outras contas'), 'Conta e partilha leva aos Proprietários');
+    assert.ok(!conta.includes("go('owners')") && !conta.includes('Partilhar com outras contas'), 'a Segurança é só a segurança');
     assert.ok(donos.includes('Ligar a outro utilizador') && donos.includes('CW.ligacaoRodar()') && donos.includes('Pedidos de partilha'), 'a partilha vive por baixo da lista dos proprietários');
-    assert.ok(!conta.includes('está desligado nesta conta'));
+    assert.ok(donos.includes('O teu id') && donos.includes('CW.copyId()'), 'e o meu id, com «Copiar»');
+    assert.ok(!conta.includes('está desligado nesta conta') && !donos.includes('está desligado nesta conta'));
     const bloco = app.cwOwnersBlock();
     assert.ok(bloco.includes('Maria') && bloco.includes('cwGerirColaboradores()'), 'a ficha do imóvel aponta para o separador');
   });

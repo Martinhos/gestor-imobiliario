@@ -1,11 +1,13 @@
 // As listas dos Imóveis, dos Inquilinos, das Visitas e dos Contratos dividem-se
 // pela origem de cada registo: os meus, os partilhados comigo e aqueles em que
-// colaboro, por esta ordem, cada secção com o título e quantos tem. Uma secção
-// vazia não aparece, e com uma só a lista é a de sempre, sem títulos. As
+// colaboro, por esta ordem, cada secção com o título e quantos tem — sempre,
+// mesmo sendo a única («Os meus imóveis» a quem só tem casas suas). Uma secção
+// vazia não aparece, e sem registos nenhuns fica o vazio de sempre, sem
+// títulos. A secção única guarda os ids de sempre das listas vivas. As
 // Visitas guardam as Próximas e as Passadas dentro de cada secção, um nível
 // abaixo; os Contratos guardam os grupos por imóvel e a tabela do computador.
 // O filtro «Origem» é um chip com quantos cabem em cada escolha, só existe com
-// duas origens e, ligado, deixa só essa secção.
+// duas origens e, ligado, deixa só essa secção, com o título dela.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -85,20 +87,30 @@ describe('a origem de cada registo', () => {
 });
 
 describe('o ajudante das secções (vistas.js:listaPorOrigem)', () => {
-  test('secções vazias não aparecem; com uma só, o pintor recebe tudo sem sufixo e não há invólucro', () => {
+  test('secções vazias não aparecem; com uma só, o título está lá e o pintor recebe tudo sem sufixo', () => {
     const chamadas = [];
     const pintar = (xs, suf, so) => { chamadas.push([xs.join(','), suf, so]); return '<i>' + xs.join(',') + '</i>'; };
     const T = { meu: 'Meus', partilhado: 'Deles', colaboro: 'Ajudo' };
     const so = app.listaPorOrigem('x', ['a', 'b'], () => 'colaboro', T, pintar);
-    assert.equal(so, '<i>a,b</i>', 'o HTML do pintor, tal e qual');
-    assert.deepEqual(JSON.parse(JSON.stringify(chamadas)), [['a,b', '', true]]);
+    assert.equal(so, '<div class="org-seccoes">'
+      + '<section class="org-seccao" aria-labelledby="org_x_colaboro"><div class="org-cab"><h2 class="org-tit" id="org_x_colaboro">Ajudo</h2><span class="small num org-n">2</span></div>'
+      + '<i>a,b</i></section></div>', 'a secção única com o título e quantos tem, e o HTML do pintor por baixo');
+    assert.deepEqual(JSON.parse(JSON.stringify(chamadas)), [['a,b', '', false]], 'sem sufixo (os ids de sempre), e com título');
     chamadas.length = 0;
     const duas = app.listaPorOrigem('x', ['a', 'b', 'c'], (x) => (x === 'b' ? 'meu' : 'colaboro'), T, pintar);
     assert.match(duas, /^<div class="org-seccoes">/);
     assert.doesNotMatch(duas, /Deles/, 'a secção vazia não aparece');
     assert.ok(crescente(posicoes(duas, ['>Meus<', '<i>b</i>', '>Ajudo<', '<i>a,c</i>'])), 'a ordem: os meus, depois em que colaboro');
     assert.deepEqual(JSON.parse(JSON.stringify(chamadas)), [['b', ':meu', false], ['a,c', ':colaboro', false]]);
-    assert.equal(app.listaPorOrigem('x', [], () => 'meu', T, pintar), '<i></i>', 'sem nada, o pintor diz o que diz');
+    chamadas.length = 0;
+    assert.equal(app.listaPorOrigem('x', [], () => 'meu', T, pintar), '<i></i>', 'sem nada, o pintor diz o que diz, sem título');
+    assert.deepEqual(JSON.parse(JSON.stringify(chamadas)), [['', '', true]]);
+  });
+
+  test('uma origem que não se conhece conta nos meus, e o título é o deles', () => {
+    const T = { meu: 'Meus', partilhado: 'Deles', colaboro: 'Ajudo' };
+    const h = app.listaPorOrigem('x', ['a'], () => 'outra', T, (xs) => '<i>' + xs.join(',') + '</i>');
+    assert.match(h, /<h2 class="org-tit" id="org_x_meu">Meus<\/h2><span class="small num org-n">1<\/span><\/div><i>a<\/i>/);
   });
 });
 
@@ -160,25 +172,88 @@ describe('as quatro listas com as três origens', () => {
   });
 });
 
-describe('com uma só origem, a lista é a de sempre', () => {
+describe('com uma só origem, a secção tem o título à mesma', () => {
   beforeEach(() => semear(app, true));
 
-  test('nenhuma das quatro tem títulos de secção nem o campo «Origem», e as listas vivas têm os ids de sempre', () => {
+  test('as quatro têm o título «Os meus …» com quantos tem, e nenhum dos outros nem o campo «Origem»', () => {
+    const vs = [['vProperties', 'imoveis', 'Os meus imóveis', 1], ['vTenants', 'inquilinos', 'Os meus inquilinos', 2],
+      ['vVisits', 'visitas', 'As minhas visitas', 2], ['vContracts', 'contratos', 'Os meus contratos', 1]];
+    for (const [v, lista, txt, n] of vs) {
+      const h = app[v]();
+      assert.match(h, titulo(lista, 'meu', txt, n), v + ': o título e a contagem');
+      assert.equal((h.match(/<section class="org-seccao"/g) || []).length, 1, v + ': uma secção só');
+      assert.doesNotMatch(h, /Partilhad[oa]s comigo|Em que colaboro/, v + ': sem as outras');
+      assert.doesNotMatch(h, /Origem/, v + ': sem o campo');
+    }
+  });
+
+  test('as listas vivas guardam os ids de sempre, dentro da secção, e as visitas descem os grupos a h3', () => {
     const vs = { vProperties: 'data-listaviva="imoveis"', vTenants: 'data-listaviva="inquilinos"', vVisits: 'data-listaviva="visitas:Próximas"', vContracts: 'data-listaviva="contratos"' };
     for (const [v, id] of Object.entries(vs)) {
       const h = app[v]();
-      assert.doesNotMatch(h, /org-seccao|org-cab|org-seccoes/, v + ': sem invólucro');
-      assert.doesNotMatch(h, /Origem/, v + ': sem o campo');
       assert.ok(h.includes(id), v + ': ' + id);
+      assert.ok(h.indexOf('class="org-cab"') < h.indexOf(id), v + ': a lista por baixo do título');
+      assert.doesNotMatch(h, /data-listaviva="[a-z]+:(meu|partilhado|colaboro)/, v + ': sem sufixo');
     }
-    assert.match(app.vVisits(), /<div class="vis-grupos"><section class="vis-grupo"><div class="vis-grupo-cab"><h2>Próximas<\/h2>/, 'as visitas com o h2 de sempre');
-    assert.match(app.vContracts(), /<div class="ct-tabela"><div class="ct-cab"[\s\S]*<div class="list ct-lista" data-listaviva="contratos">/);
+    const vis = app.vVisits();
+    assert.match(vis, /<div class="vis-grupos"><section class="vis-grupo"><div class="vis-grupo-cab"><h3>Próximas<\/h3>/, 'debaixo do h2 da secção, o grupo é um h3');
+    assert.doesNotMatch(vis, /<h2>Próximas<\/h2>|<h2>Passadas<\/h2>/);
+    assert.match(app.vContracts(), /<div class="org-cab">[\s\S]*<div class="ct-tabela"><div class="ct-cab"[\s\S]*<div class="list ct-lista" data-listaviva="contratos">/);
   });
 
-  test('só colaboro (todos os imóveis com cargo): uma origem só, sem títulos', () => {
+  test('só colaboro (todos os imóveis com cargo): uma origem só, com o título «Em que colaboro»', () => {
     Object.assign(app.db.properties[0], { _ownerUserId: 'carla', _cargo: 'Gestor' });
     const h = app.vProperties();
-    assert.doesNotMatch(h, /org-seccao|Origem/);
+    assert.match(h, titulo('imoveis', 'colaboro', 'Em que colaboro', 1));
+    assert.doesNotMatch(h, /Os meus imóveis|Origem/);
+    assert.match(h, /data-listaviva="imoveis"/);
+  });
+
+  test('sem registos nenhuns, o vazio de sempre e nenhum título', () => {
+    const db = limpar(app);
+    for (const k of Object.keys(app.listF)) delete app.listF[k];
+    assert.match(app.vProperties(), /Sem imóveis/);
+    assert.match(app.vTenants(), /Sem inquilinos/);
+    assert.match(app.vVisits(), /Ainda não há visitas/);
+    assert.match(app.vContracts(), /Cria primeiro um imóvel/);
+    for (const v of ['vProperties', 'vTenants', 'vVisits', 'vContracts']) assert.doesNotMatch(app[v](), /org-seccao|org-tit/, v + ': sem título');
+    // um imóvel sem contratos: os Contratos dizem o seu vazio, sem título
+    db.properties.push(app.normProp({ id: 'P1', name: 'T2 Lisboa', use: 'investimento', rentalMode: 'inteiro' }));
+    assert.match(app.vContracts(), /Sem contratos/);
+    assert.doesNotMatch(app.vContracts(), /org-seccao|org-tit/);
+  });
+
+  test('uma pesquisa que não acha nada dá «Nada neste filtro», sem título', () => {
+    for (const [v, k] of [['vProperties', 'lprops'], ['vTenants', 'lten'], ['vVisits', 'lvis'], ['vContracts', 'lcts']]) {
+      app.lf(k).q = 'nada-assim';
+      const h = app[v]();
+      assert.match(h, /Nada neste filtro/, v);
+      assert.doesNotMatch(h, /org-seccao|org-tit/, v + ': sem título');
+    }
+  });
+});
+
+describe('a secção vazia não aparece', () => {
+  beforeEach(() => semear(app));
+
+  test('sem nada partilhado comigo, ficam «Os meus …» e «Em que colaboro», e nenhum «Partilhados comigo»', () => {
+    app.db.properties = app.db.properties.filter((p) => p.id !== 'P2');
+    app.db.tenants = app.db.tenants.filter((t) => t.id !== 't2');
+    app.db.contracts = app.db.contracts.filter((c) => c.propertyId !== 'P2');
+    app.db.visits = app.db.visits.filter((x) => x.propertyId !== 'P2');
+    for (const [v, lista] of [['vProperties', 'imoveis'], ['vTenants', 'inquilinos'], ['vVisits', 'visitas'], ['vContracts', 'contratos']]) {
+      const h = app[v]();
+      assert.equal((h.match(/<section class="org-seccao"/g) || []).length, 2, v + ': duas secções');
+      assert.ok(crescente(posicoes(h, ['id="org_' + lista + '_meu"', 'id="org_' + lista + '_colaboro"'])), v + ': os meus, depois em que colaboro');
+      assert.doesNotMatch(h, /org_[a-z]+_partilhado|Partilhad[oa]s comigo<\/h2>/, v + ': sem a secção vazia');
+    }
+  });
+
+  test('uma pesquisa que deixa uma origem só fica com o título dela, e a lista viva volta ao id de sempre', () => {
+    app.lf('lprops').q = 'Bruno';
+    const h = app.vProperties();
+    assert.match(h, titulo('imoveis', 'partilhado', 'Partilhados comigo', 1));
+    assert.doesNotMatch(h, /org_imoveis_(meu|colaboro)/);
     assert.match(h, /data-listaviva="imoveis"/);
   });
 });
@@ -211,11 +286,13 @@ describe('o filtro «Origem»', () => {
     assert.equal(app._lfCampos.lprops.st.opcoes[0].n, 1, 'todos os estados: só o P2');
   });
 
-  test('ligado, fica só essa secção, sem título; conta no funil e o «Limpar» tira-o', () => {
-    for (const [v, k, id] of [['vProperties', 'lprops', 'imoveis'], ['vTenants', 'lten', 'inquilinos'], ['vVisits', 'lvis', 'visitas:Próximas'], ['vContracts', 'lcts', 'contratos']]) {
+  test('ligado, fica só essa secção, com o título dela; conta no funil e o «Limpar» tira-o', () => {
+    for (const [v, k, id, lista, txt] of [['vProperties', 'lprops', 'imoveis', 'imoveis', 'Partilhados comigo'], ['vTenants', 'lten', 'inquilinos', 'inquilinos', 'Partilhados comigo'],
+      ['vVisits', 'lvis', 'visitas:Próximas', 'visitas', 'Partilhadas comigo'], ['vContracts', 'lcts', 'contratos', 'contratos', 'Partilhados comigo']]) {
       app.lf(k).or = 'partilhado';
       const h = app[v]();
-      assert.doesNotMatch(h, /org-seccao/, v + ': uma secção só, sem título');
+      assert.match(h, titulo(lista, 'partilhado', txt, 1), v + ': a secção com o título');
+      assert.equal((h.match(/<section class="org-seccao"/g) || []).length, 1, v + ': uma secção só');
       assert.ok(h.includes('data-listaviva="' + id + '"'), v + ': a lista de sempre');
       assert.doesNotMatch(h, /data-lp="(prop:P1|prop:P3|per:tenant:t1|per:tenant:t3|vis:v1|vis:v3|ct:c1|ct:c3)"/, v + ': nada das outras origens');
       assert.match(h, /data-lp="(prop:P2|per:tenant:t2|vis:v2|ct:c2)"/, v + ': o partilhado');

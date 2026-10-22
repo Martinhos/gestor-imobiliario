@@ -244,11 +244,12 @@ describe('o resto da base', () => {
   });
 });
 
-/* Os erros de Conta e partilha dizem-se junto do campo, como no Entrar e no
+/* Os erros da Segurança e do campo de ligar (por baixo dos Proprietários)
+   dizem-se junto do campo, como no Entrar e no
    Novo pedido (componentes.js:falhaCampo): o «Ligar» vazio ou recusado pelo
    servidor era só um aviso em baixo, e a palavra-passe nova fraca ou
    desencontrada saía no fundo da janela, longe do campo e sem o marcar. */
-describe('os erros de Conta e partilha junto do campo', () => {
+describe('os erros da Segurança e do campo de ligar junto do campo', () => {
   /* A app com a nuvem e o falhaCampo apanhado.
      Devolve: {a, falhas} — falhas são os [id, frase] marcados, pela ordem. */
   function comFalhas() {

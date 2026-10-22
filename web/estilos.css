@@ -744,7 +744,10 @@ body.sel-on #hdrSec{display:none}
 #abasArea>.segm.abas-area,.abas-saida>.segm.abas-area{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;width:max-content;min-width:100%}
 /* O realce da aba acesa é uma peça que corre por baixo das abas (o
    .segm-polegar do segmentado que desliza, imovel.js:imvSegmentado), com a
-   largura de uma coluna: n2 a n4 dizem quantas são. Assente, a classe i0 a i3
+   largura de uma coluna: n2 a n5 dizem quantas são (as cinco das Casas:
+   Imóveis, Grupos, Contratos, Pessoas, Visitas — navegacao.js:AREAS); a
+   largura é a da fila menos os 4px de cada lado e os 2px de cada intervalo,
+   a dividir pelas abas. Assente, a classe i0 a i4
    põe-no na aba acesa (em múltiplos da largura dele mais os 2px do
    intervalo); a meio de um arrasto o transform vem do dedo
    (navegacao.js:abasPolegarEm). Desliza de uma aba para a outra no --medio e
@@ -754,8 +757,10 @@ body.sel-on #hdrSec{display:none}
    movimento pedido, a regra geral do reduced-motion tira-lhe a transição. */
 .abas-area.n3>.segm-polegar{width:calc((100% - 12px) / 3)}
 .abas-area.n4>.segm-polegar{width:calc((100% - 14px) / 4)}
+.abas-area.n5>.segm-polegar{width:calc((100% - 16px) / 5)}
 .abas-area>.segm-polegar.i2{transform:translateX(calc(200% + 4px))}
 .abas-area>.segm-polegar.i3{transform:translateX(calc(300% + 6px))}
+.abas-area>.segm-polegar.i4{transform:translateX(calc(400% + 8px))}
 .abas-area>.segm-polegar.fora{visibility:hidden}
 .abas-area>.segm-polegar{transition:transform var(--medio) var(--curva-fita)}
 .abas-area.viaja>.segm-polegar{transition-duration:var(--lento)}
@@ -3870,7 +3875,7 @@ button.def-cat-abre:active{background:var(--press)}
    M-PrimeirosPassos, M-Tutorial, M-Partilha, M-ConviteAceitar, M-Entrar,
    M-CriarConta, M-Termos, M-Atualizar, M-Ajuda, M-NovoPedido e M-Novidades.
    Classes novas com prefixo da área: pp- (primeiros passos), guia- (o
-   tutorial), pd- (os pedidos), pt- (conta e partilha), cv- (os convites),
+   tutorial), pd- (os pedidos), pt- (a segurança e a partilha entre contas), cv- (os convites),
    ent- (a entrada), tg- (os termos), upd- (a atualização), aj- (a ajuda),
    tk- (o pedido ao suporte) e nov- (as novidades). */
 
@@ -3970,10 +3975,13 @@ button.def-cat-abre:active{background:var(--press)}
 .pd-linha b{font-weight:600;overflow-wrap:anywhere}
 .pd-botoes{display:flex;flex-wrap:wrap;gap:8px;margin-top:7px}
 
-/* ---- cloud/partilha.js:vCloud — Conta e partilha (M-Partilha) ----
-   Secções com o título por cima e um cartão de linhas por baixo: a conta, os
-   comproprietários (as ligações, o campo de ligar, os pedidos e a ligação de
-   partilha), os grupos e a segurança. */
+/* ---- cloud/partilha.js:vCloud — Segurança, e a partilha entre contas
+   (M-Partilha) ----
+   Secções com o título por cima e um cartão de linhas por baixo: na
+   Segurança, as quatro linhas (a palavra-passe, as sessões, sair e apagar a
+   conta); por baixo dos Proprietários (partilha.js:comproprietariosHtml), o
+   meu id com «Copiar», o campo de ligar, as ligações, os pedidos e a ligação
+   de partilha. */
 .pt-pagina{display:grid;gap:22px;max-width:760px;min-width:0}
 .pt-seccao{display:grid;gap:10px;min-width:0}
 .pt-seccao-cab h2{margin:0;font-size:20px}
@@ -3991,13 +3999,14 @@ button.pt-linha:focus-visible{outline:2px solid var(--accent);outline-offset:-2p
 .pt-id{font-variant-numeric:tabular-nums}
 .pt-acoes{flex:0 0 auto;display:flex;align-items:center;gap:6px;margin-left:auto}
 .pt-av{font-size:12.5px}
-.pt-av-eu{background:var(--accent);color:var(--accent-ink)}
 /* o convite de ligação por responder salta à vista (o canvas M-Partilha): a
    faixa cobalto suave, o avatar branco e o texto cobalto */
 .pt-linha.pt-convite{background:var(--accent-soft)}
 .pt-convite .pt-txt b,.pt-convite .pt-txt .small{color:var(--accent-text)}
 .pt-convite .pt-av{background:var(--card);color:var(--accent-text)}
-.pt-meuid{font-size:16px;font-weight:650;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+/* o meu id (partilha.js:comproprietariosCorpo): um toque longo apanha o código
+   inteiro, para quem o quiser copiar à mão */
+.pt-meuid{font-size:16px;font-weight:650;letter-spacing:.08em;font-variant-numeric:tabular-nums;user-select:all}
 .pt-abre{flex-wrap:nowrap}
 .pt-abre .seta{flex:0 0 auto;color:var(--faint)}
 .pt-perigo b{color:var(--danger)}
@@ -4088,7 +4097,7 @@ div.pt-quota b{text-align:right}
 .ent-msg-erro{margin:0;padding:12px 14px;border-radius:12px;background:var(--danger-soft);color:var(--danger);font-size:14px;font-weight:600}
 .segm.ent-segm>button{min-height:42px;font-size:15px}
 /* no dedo, 44px (contrato §6): o segmentado da entrada (42 no rato, o do
-   canvas) e os botões pequenos de Conta e partilha, dos pedidos e da Ajuda
+   canvas) e os botões pequenos da Segurança e da partilha entre contas, dos pedidos e da Ajuda
    (a base dá 40 ao .btn.sm no dedo) */
 @media(pointer:coarse){.segm.ent-segm>button,.pt-pagina .btn.sm,.pd-botoes .btn.sm,.aj-cab .btn.sm{min-height:44px}}
 .form.ent-form{gap:14px}
@@ -4551,8 +4560,8 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 /* === listas por origem (folha 1.3) === */
 /* As secções «Os meus …», «Partilhados comigo» e «Em que colaboro» das listas
    dos Imóveis, Inquilinos, Visitas e Contratos (vistas.js). */
-/* Só existem com duas ou três secções (vistas.js:listaPorOrigem); com uma, a
-   lista é a de sempre. Cada secção: o título e quantos tem, no feitio do
+/* Cada secção com registos existe sempre, mesmo sendo a única
+   (vistas.js:listaPorOrigem); uma vazia não aparece. Cada secção: o título e quantos tem, no feitio do
    cabeçalho dos grupos das visitas (.vis-grupo-cab), e a lista por baixo.
    O título distingue-se dos grupos de dentro pela cor da FRENTE — o texto e o
    número a cobalto (--accent-text), e o traço por baixo —, e não só pelo

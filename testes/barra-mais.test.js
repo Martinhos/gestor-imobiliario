@@ -191,7 +191,8 @@ describe('buildTabbar', () => {
     assert.equal(app.destinoDe('pessoas', []), 'colaboradores', 'já nos colaboradores: fica');
     assert.equal(app.areaDe('colaboradores'), 'casas', 'os Colaboradores são das Casas');
     app.tab = 'dashboard';
-    assert.equal(app.destinoDe('casas', ['properties', 'contracts']), 'tenants', 'a primeira porta à vista');
+    assert.equal(app.destinoDe('casas', ['properties']), 'groups', 'a primeira porta à vista: os Grupos, a seguir aos Imóveis');
+    assert.equal(app.destinoDe('casas', ['properties', 'groups', 'contracts']), 'tenants', 'e sem eles, a seguinte');
   });
 });
 

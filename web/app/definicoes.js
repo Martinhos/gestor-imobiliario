@@ -91,24 +91,21 @@ function exportarSoMeu(fn){
 }
 
 /* ================= DEFINIÇÕES ================= */
-/* A cabeça de cada subpágina das Definições — e dos Grupos, que vivem
-   nelas. No telemóvel é o Voltar, colado ao topo (nos documentos longos, os
-   termos e a política, a meio de 300 linhas não havia porta de saída à
-   vista); nos Grupos, que são um separador, ele leva às Definições e não à
-   raiz do separador. Os Colaboradores já não a têm: são das Pessoas, com os
-   separadores da área por cima (navegacao.js:abasDaArea). No
-   computador o Voltar some e fica a navegação lateral das Definições
-   (navDasDefinicoes, o canvas de 2026-10: D-DefCategorias, D-DefDados),
-   posta ao lado do conteúdo pela folha
+/* A cabeça de cada subpágina das Definições. No telemóvel é o Voltar, colado
+   ao topo (nos documentos longos, os termos e a política, a meio de 300
+   linhas não havia porta de saída à vista), que sobe à raiz. Os Colaboradores
+   e os Grupos já não a têm: são separadores das Casas, com as abas da área
+   por cima (navegacao.js:abasDaArea). No computador o Voltar some e fica a
+   navegação lateral das Definições (navDasDefinicoes, o canvas de 2026-10:
+   D-DefCategorias, D-DefDados), posta ao lado do conteúdo pela folha
    (estilos.css:.wrap:has(>.def-nav)). A Ajuda tem porta própria na barra
    lateral, e por isso fica sem a navegação das Definições.
-   Recebe: nada (lê tab e setPage).
+   Recebe: nada (lê setPage).
    Devolve: o HTML (texto) do Voltar e da navegação lateral. */
 function cabecaDaSubpagina(){
-  const noSeparador=tab!=='settings';
   const voltar=`<div class="toolbar def-voltar u-pos-sticky u-t-calc-57px-v-inset-top u-z-20 u-bg-v-bg u-p-8px-0 u-m-n6px-0-6px">
-  <button class="btn" data-toca="ecra" data-click="${noSeparador?"go('settings')":"goSet('')"}">${ic('chev',15)} Voltar</button></div>`;
-  if(!noSeparador&&setPage==='ajuda')return voltar;
+  <button class="btn" data-toca="ecra" data-click="goSet('')">${ic('chev',15)} Voltar</button></div>`;
+  if(setPage==='ajuda')return voltar;
   try{return voltar+navDasDefinicoes()}catch(e){return voltar}
 }
 /* backRow: o que cada subpágina põe à cabeça — a da base e as da nuvem
@@ -203,13 +200,6 @@ function vDefaults(){
    categorias, as etiquetas e o IRS eram três linhas e três páginas; são uma
    só (vCats), como no canvas. */
 const DEF_SECCOES=[['conta','Conta'],['dinheiro','Dinheiro e IRS'],['aplicacao','App'],['ajuda','App'],['sobre','App']];
-/* O resumo da linha «Grupos»: quantos há e quantos são partilhados.
-   Recebe: nada.
-   Devolve: o texto. */
-function resumoDosGrupos(){
-  const gs=db.groups||[],n=gs.length,p=gs.filter(g=>g._partilhado).length;
-  return n?n+(n===1?' grupo':' grupos')+(p?' · '+p+(p===1?' partilhado':' partilhados'):''):'Imóveis, proprietários e contratos em conjunto';
-}
 /* O resumo da linha «Categorias, etiquetas e IRS»: as categorias de
    pagamento (as que vão ao Anexo F) e as etiquetas.
    Recebe: nada.
@@ -233,12 +223,10 @@ function resumoDosFiltros(){
   const fs=db.settings.filters||[];
   return fs.length?'«'+fs[0].name+'»'+(fs.length>1?' e mais '+(fs.length-1):''):'Um conjunto de escolhas, aplicado num toque';
 }
+/* A secção Conta é toda da nuvem (o cartão do perfil e a Segurança,
+   cloud/partilha.js): os Grupos viveram aqui, e desde 2026-10-22 são uma aba
+   das Casas (navegacao.js:AREAS), com o crachá deles na aba e na gaveta. */
 const DEF_LINHAS=[
-  /* os Grupos são filtros da app inteira, e vivem aqui desde 2026-10 (o
-     canvas): saíram da barra lateral, e a linha leva ao separador deles
-     (navegacao.js:goSet). O crachá conta os pedidos para entrar nos meus
-     grupos partilhados (servicos.js:crachaDe, o mesmo do separador). */
-  {sec:'conta',ordem:40,page:'groups',label:'Grupos',icon:'layers',sub:resumoDosGrupos,cracha:()=>{const c=crachaDe('groups');return c&&c.n||0}},
   {sec:'dinheiro',ordem:10,page:'cats',label:'Categorias, etiquetas e IRS',icon:'tag',sub:resumoDasCategorias},
   {sec:'dinheiro',ordem:30,page:'defaults',label:'Valores por omissão',icon:'trend',sub:resumoDosValores},
   {sec:'dinheiro',ordem:40,page:'filtros',label:'Filtros comuns',icon:'filter',sub:resumoDosFiltros},
@@ -266,7 +254,7 @@ function linhasDaSeccao(id){
 /* As secções como se veem: as de DEF_SECCOES com o mesmo título seguidas
    juntam-se numa (a «App» do canvas é a aplicação, a ajuda e o sobre — os ids
    ficam, porque a nuvem pendura linhas na 'ajuda' e no 'sobre'), e uma sem
-   linhas não aparece (sem a nuvem, a Conta pode ficar só com os Grupos).
+   linhas não aparece (sem a nuvem, a Conta fica vazia e some).
    Recebe: nada.
    Devolve: array de {titulo, linhas}. */
 function seccoesVisiveis(){
@@ -279,7 +267,7 @@ function seccoesVisiveis(){
   return out;
 }
 /* A ação de uma linha que leva a algum lado: a subpágina (goSet), ou o
-   separador onde a coisa vive (go — os Grupos).
+   separador onde a coisa vive (go).
    Recebe: l — a linha.
    Devolve: o texto da ação (para um data-click). */
 function acaoDaLinha(l){return l.ir?`go('${jsq(l.ir)}')`:`goSet('${jsq(l.page)}')`}
@@ -372,13 +360,12 @@ function raizDasDefinicoes(){
     ?`<button type="button" class="btn def-sair" data-toca="camada" data-click="CW.logout()">Terminar sessão</button>`:'';
   return `<div class="def-raiz">${secs}${sair}</div>`;
 }
-/* A página das Definições aberta, para a navegação lateral a acender: os
-   Grupos pelo separador; o IRS e as etiquetas são a página das categorias;
-   os termos e a política vivem no aviso legal.
-   Recebe: nada (lê tab e setPage).
+/* A página das Definições aberta, para a navegação lateral a acender: o IRS
+   e as etiquetas são a página das categorias; os termos e a política vivem
+   no aviso legal.
+   Recebe: nada (lê setPage).
    Devolve: a chave da página (texto). */
 function paginaDasDefinicoes(){
-  if(tab==='groups')return tab;
   if(setPage==='irs'||setPage==='tags')return 'cats';
   if(setPage==='termos'||setPage==='privacidade')return 'legal';
   return setPage||'';
@@ -445,10 +432,10 @@ Object.assign(SUBPAGE,{
    cloud/novidades.js). O IRS e as etiquetas são a página das categorias
    (vCats) — o 'irs' abre-a nos pagamentos, que é onde está a coluna do
    Anexo F; os caminhos que a app ensina (fisco.js) continuam a abrir. A
-   subpágina antiga dos Grupos já não tem porta (são um separador): quem lá
-   chegar por um caminho velho sem a nuvem — que o leva ao separador
-   (cloud/nucleo.js:goSet, restorePage) — vê na mesma os grupos, em vez da
-   raiz sem explicação.
+   subpágina antiga dos Grupos já não tem porta (são uma aba das Casas, e o
+   goSet('groups') leva lá — navegacao.js:goSet, cloud/nucleo.js:goSet e
+   restorePage): quem lá chegar por outro caminho velho vê na mesma os
+   grupos, com o Voltar das subpáginas, em vez da raiz sem explicação.
    Recebe: nada (lê setPage).
    Devolve: o HTML (texto) da raiz ou da subpágina ativa. */
 function vSettings(){
@@ -456,7 +443,7 @@ function vSettings(){
   if(setPage==='defaults')return backRow+vDefaults();
   if(setPage==='cats'||setPage==='tags')return backRow+vCats();
   if(setPage==='irs')return backRow+vCats('cats');
-  if(setPage==='groups')return vGrupos();
+  if(setPage==='groups')return backRow+vGrupos();
   if(setPage==='filtros')return backRow+vFiltrosComuns();
   if(setPage==='dados')return backRow+vImport();
   return raizDasDefinicoes();
@@ -691,10 +678,10 @@ function vGroups(kind){
     <div><button type="button" class="btn primary" data-toca="camada" data-click="groupModal('${jsq(kind)}')">${ic('plus',18)} Novo grupo de ${nome}</button></div></div>`;
   return `<div class="grp-lista">${cartoes}${pedidos}</div>`;
 }
-/* O separador «Grupos» (navegacao.js:TABS), da base como as Definições — é lá
-   que vive desde o canvas de 2026-10 (M-Grupos): a cabeça das subpáginas
-   (backRow: o Voltar às Definições no telemóvel, a navegação lateral no
-   computador), o que os grupos são, o segmentado dos tipos com quantos há de
+/* O separador «Grupos» (navegacao.js:TABS), da base como as Definições: uma
+   aba das Casas, logo a seguir aos Imóveis (navegacao.js:AREAS — as abas da
+   área por cima põe-nas o render, vistas.js:render). É o canvas M-Grupos: o
+   que os grupos são, o segmentado dos tipos com quantos há de
    cada, «Novo grupo de …» do tipo à vista e, nos imóveis e quando posso
    partilhar, «Novo grupo partilhado» (cloud/grupos.js:CW.grupoNovo); os
    cartões (vGroups) e, nos imóveis com a nuvem, o que partilhar quer dizer.
@@ -711,7 +698,7 @@ function vGrupos(){
      o do vazio — não dois iguais */
   const vazio=!grpsOf(kind).length&&!(kind==='prop'&&podePartilharGrupos()&&typeof pedidosQueFizHtml==='function'&&pedidosQueFizHtml());
   const novo=vazio?'':`<button type="button" class="btn primary" data-toca="camada" data-click="groupModal('${jsq(kind)}')">${ic('plus',18)} Novo grupo de ${nome}</button>`;
-  return backRow+`<p class="def-intro">Servem de filtro em toda a app. Um movimento lançado num grupo de imóveis divide-se por eles.</p>
+  return `<p class="def-intro">Servem de filtro em toda a app. Um movimento lançado num grupo de imóveis divide-se por eles.</p>
   <div class="def-cab"><div class="segm def-abas" role="group" aria-label="Tipo de grupo">${aba('prop')}${aba('owner')}${aba('contract')}</div>
     ${partilhado||novo?`<span class="def-cab-acoes">${partilhado}${novo}</span>`:''}</div>
   ${lista}

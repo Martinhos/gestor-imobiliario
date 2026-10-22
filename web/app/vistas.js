@@ -1473,34 +1473,42 @@ function lfBarraViva(v,molde){
 /* ================= AS LISTAS POR ORIGEM =================
    Os Imóveis, os Inquilinos, as Visitas e os Contratos dividem-se pela origem
    de cada registo (acessos.js:origemDaCasa): os meus, os partilhados comigo e
-   aqueles em que colaboro, por esta ordem. Uma secção vazia não aparece; com
-   uma só com conteúdo não há títulos, e a lista é a de sempre, sem invólucro
+   aqueles em que colaboro, por esta ordem. Cada secção com registos tem
+   sempre o título e quantos tem, mesmo sendo a única — quem só tem casas suas
+   lê «Os meus imóveis» por cima da lista —; uma secção vazia não aparece
    (vistas.js:listaPorOrigem). O filtro «Origem» é um campo do lfCabeca, com
    a chave 'or', que só existe quando a lista tem registos de pelo menos duas
    origens (vistas.js:lfOrigem). */
 const ORIGENS=['meu','partilhado','colaboro'];
-/* As secções de uma lista por origem. Cada secção pinta-se pelo pintor da
-   lista, que recebe o sufixo do id das suas listas vivas: '' quando a secção
-   é a única — o id e o HTML de sempre —, ':meu', ':partilhado' ou
-   ':colaboro' com duas ou três, para cada uma ter a sua lista viva (o motor
-   deita fora o que não é item com chave: o título fica FORA dela, como os
-   das visitas, visitas.js:vVisits). Com duas ou três, cada uma leva um
-   título e quantos registos tem, no feitio do cabeçalho dos grupos das
-   visitas; o título é um h2, e os grupos de dentro (as Próximas e as
-   Passadas, os imóveis dos contratos) ficam um nível abaixo.
+/* As secções de uma lista por origem. Cada secção com registos leva sempre
+   um título e quantos registos tem, no feitio do cabeçalho dos grupos das
+   visitas, mesmo sendo a única: o título é um h2, e os grupos de dentro (as
+   Próximas e as Passadas, os imóveis dos contratos) ficam um nível abaixo.
+   Uma secção vazia não aparece. Cada secção pinta-se pelo pintor da lista,
+   que recebe o sufixo do id das suas listas vivas: '' quando a secção é a
+   única — os ids de sempre ('imoveis', 'visitas:Próximas'), que são os que
+   o refrescarListasVivas encontra no ecrã enquanto a lista não ganha outra
+   origem —, ':meu', ':partilhado' ou ':colaboro' com duas ou três, para
+   cada uma ter a sua lista viva (o motor deita fora o que não é item com
+   chave: o título fica FORA dela, como os das visitas, visitas.js:vVisits).
+   Sem registos nenhuns não há secção nem título: o pintor recebe a lista
+   vazia (quem chama já pôs antes o seu vazio, o vazioFiltro ou o da lista).
    Recebe: nome — o nome curto da lista, para os ids dos títulos ('imoveis');
    itens — os registos já filtrados e ordenados; origemDe — registo =>
    'meu'|'partilhado'|'colaboro'; titulos — {meu, partilhado, colaboro};
-   pintar — (registos, sufixo, sozinha) => o HTML da secção sem o título.
+   pintar — (registos, sufixo, semTitulo) => o HTML da secção sem o título;
+   semTitulo é true só sem registos (então não há h2 por cima, e um grupo de
+   dentro seria o h2), e false em cada secção com o seu título.
    Devolve: o HTML (texto). */
 function listaPorOrigem(nome,itens,origemDe,titulos,pintar){
   const por={meu:[],partilhado:[],colaboro:[]};
   (itens||[]).forEach(x=>{const o=origemDe(x);(por[o]||por.meu).push(x)});
   const cheias=ORIGENS.filter(o=>por[o].length);
-  if(cheias.length<2)return pintar(cheias.length?por[cheias[0]]:[],'',true);
+  if(!cheias.length)return pintar([],'',true);
+  const sufixo=o=>cheias.length<2?'':':'+o;
   return `<div class="org-seccoes">${cheias.map(o=>{const id='org_'+nome+'_'+o,n=por[o].length;
     return `<section class="org-seccao" aria-labelledby="${esc(id)}"><div class="org-cab"><h2 class="org-tit" id="${esc(id)}">${esc(titulos[o])}</h2><span class="small num org-n">${n}</span></div>`
-      +pintar(por[o],':'+o,false)+'</section>'}).join('')}</div>`;
+      +pintar(por[o],sufixo(o),false)+'</section>'}).join('')}</div>`;
 }
 /* O filtro «Origem» de uma lista: que origens há na lista inteira (antes de
    qualquer filtro — o campo não aparece e some a cada tecla da pesquisa) e o

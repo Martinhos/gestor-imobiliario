@@ -1,13 +1,13 @@
 // O separador Grupos e partilhar um grupo que já existe. Os grupos são um
-// separador da base (app/definicoes.js:vGrupos) que vive nas Definições: a
-// linha «Grupos» leva lá, e lá dentro os tipos num segmentado, «Novo grupo
+// separador da base (app/definicoes.js:vGrupos), uma aba das Casas: lá
+// dentro os tipos num segmentado, «Novo grupo
 // de …» e, com sessão e o serviço Colaboradores, «Novo grupo partilhado»;
 // cada grupo é um cartão — os partilhados com a ligação, os pedidos e os
 // membros, os pedidos que fiz à parte —, e cada grupo de imóveis privado tem
 // sempre «Partilhar» à vista (o toque explica o que não dá). A janela de
 // edição do grupo privado tem o botão no corpo. Os caminhos antigos
-// (goSet('groups'), a página guardada) levam ao separador. Conta e partilha
-// fica com uma linha que leva aos Grupos, e o separador tem o crachá dos
+// (goSet('groups'), a página guardada) levam ao separador. As Definições e a
+// página da conta já não têm porta para eles, e o separador tem o crachá dos
 // pedidos por responder, que é do serviço Colaboradores. Como o
 // grupos-cloud.test.js: a nuvem por cima da app do arnês, com a api, o
 // pullNow, o toast, as confirmações e as janelas trocados por espiões.
@@ -101,12 +101,12 @@ function comEstado() {
 }
 
 describe('o separador Grupos', () => {
-  test('a cabeça das subpáginas, o que os grupos são, os tipos num segmentado com quantos há de cada, e os grupos de imóveis em cartões, os partilhados uma vez só', () => {
+  test('sem a cabeça das subpáginas (é uma aba das Casas), o que os grupos são, os tipos num segmentado com quantos há de cada, e os grupos de imóveis em cartões, os partilhados uma vez só', () => {
     const { app } = comEstado();
     const h = app.vGrupos();
-    assert.match(h, /class="toolbar def-voltar[^"]*">\s*<button class="btn" data-toca="ecra" data-click="go\('settings'\)">/, 'o Voltar leva às Definições');
-    assert.match(h, /<nav class="def-nav" aria-label="Definições">/, 'e a navegação lateral, no computador');
-    assert.match(h, /Servem de filtro em toda a app\./);
+    assert.ok(!h.includes('def-voltar'), 'sem o Voltar às Definições');
+    assert.ok(!h.includes('class="def-nav"'), 'nem a navegação lateral delas, no computador');
+    assert.match(h, /^<p class="def-intro">Servem de filtro em toda a app\./, 'a vista começa no que os grupos são');
     assert.match(h, /<div class="segm def-abas" role="group" aria-label="Tipo de grupo"><button type="button" id="grpTipo_prop" class="on" aria-pressed="true" data-toca="vista" data-click="grupoTipoEscolher\('prop'\)">Imóveis <span class="n">4<\/span><\/button><button type="button" id="grpTipo_owner" class="" aria-pressed="false"[^>]*>Proprietários <span class="n">1<\/span><\/button><button type="button" id="grpTipo_contract"[^>]*>Contratos <span class="n">0<\/span><\/button><\/div>/);
     assert.equal((h.match(/CW\.grupoModal\('G1'\)/g) || []).length, 1, 'o grupo do Rui uma vez só');
     assert.equal((h.match(/CW\.grupoModal\('G2'\)/g) || []).length, 1, 'o meu uma vez só');
@@ -214,17 +214,21 @@ describe('o separador Grupos', () => {
 });
 
 describe('os caminhos antigos e as portas', () => {
-  /* Em 2026-10 os Grupos saíram da barra lateral (o canvas da linguagem nova)
-     e voltaram às Definições como porta: a linha leva ao separador, que
-     continua a existir. */
-  test('as Definições têm a porta dos Grupos, que leva ao separador', () => {
+  /* Em 2026-10 os Grupos saíram da barra lateral para as Definições, e a
+     2026-10-22 saíram delas para uma aba das Casas: a raiz já não tem a
+     linha, nem a navegação lateral do computador. */
+  test('as Definições já não têm a porta dos Grupos', () => {
     const { app } = comEstado();
+    app.tab = 'settings';
     app.setPage = '';
     const h = app.vSettings();
-    assert.ok(h.includes("goSet('groups')"), 'com a porta');
-    assert.ok(/<b class="u-d-block">Grupos<\/b><span class="small">5 grupos · 2 partilhados<\/span>/.test(h), 'com o rótulo e o resumo');
-    assert.match(h, /goSet\('groups'\)">[\s\S]*?<span class="badge def-cracha">2<\/span>/, 'e o crachá dos pedidos por responder');
+    assert.ok(!h.includes("goSet('groups')") && !h.includes("go('groups')"), 'sem a porta');
+    assert.ok(!/<b class="u-d-block">Grupos<\/b>/.test(h), 'nem a linha');
     assert.match(h, /goSet\('cats'\)/, 'controlo: as outras linhas ficam');
+    app.setPage = 'cats';
+    const sub = app.vSettings();
+    assert.match(sub, /<nav class="def-nav" aria-label="Definições">/, 'controlo: a navegação lateral está lá');
+    assert.ok(!sub.includes('groups'), 'e não leva aos Grupos');
   });
 
   test('goSet(\'groups\') vai para o separador Grupos, e as outras subpáginas continuam nas Definições', () => {
@@ -253,27 +257,26 @@ describe('os caminhos antigos e as portas', () => {
     assert.equal(app.setPage, 'filtros');
   });
 
-  test('Conta e partilha tem uma linha que leva aos Grupos, com quantos grupos partilhados e quantos pedidos por responder', () => {
+  test('a página da conta já não leva aos Grupos', () => {
     const { app } = comEstado();
-    const c = app.vCloud();
-    assert.match(c, /<div class="card def-lista"><button type="button" class="linha def-linha" data-toca="ecra" data-click="go\('groups'\)">[\s\S]*?<b class="u-d-block">Grupos partilhados<\/b><span class="small">2 grupos partilhados · 2 pedidos por responder<\/span>/);
-    assert.ok(!c.includes('CW.grupoNovo()'), 'o cartão saiu de lá');
-    app.definirServicosDesligados(['colaboradores']);
-    assert.ok(!app.vCloud().includes("go('groups')"), 'com o serviço desligado, sem a porta');
+    assert.ok(!app.vCloud().includes("go('groups')"), 'sem a porta');
+    assert.ok(!app.vCloud().includes('Grupos partilhados'), 'nem a linha «Grupos partilhados»');
+    assert.equal(app.linhaDosGrupos, undefined, 'e a linha saiu da nuvem: não tinha onde viver');
   });
 
-  /* Desde o canvas de 2026-10 os Grupos vivem nas Definições: o caminho que
-     os textos ensinam é «Definições → Grupos», e o cartão «Grupos
-     partilhados» já não existe para ser citado. */
-  test('os textos levam a «Definições → Grupos», e nenhum cita o cartão «Grupos partilhados», que saiu', () => {
+  /* Desde 2026-10-22 os Grupos são uma aba das Casas: o caminho que os
+     textos ensinam é «Casas → Grupos», pelo grupo da gaveta, e o cartão
+     «Grupos partilhados» já não existe para ser citado. */
+  test('os textos levam a «Casas → Grupos», e nenhum cita o cartão «Grupos partilhados», que saiu', () => {
     for (const f of ['web/cloud/grupos.js', 'web/app/definicoes.js']) {
       assert.ok(!/cartão «Grupos partilhados»/.test(le(f)), f);
+      assert.ok(!/Definições → Grupos/.test(le(f)), f + ': o caminho antigo');
     }
     const { app, esp } = comEstado();
     app.desfechoDoGrupo({ pedido: true, name: 'Casas de Faro', ownerName: 'Tó' }, {});
-    assert.match(esp.abertas[0].b, /podes cancelá-lo, em Definições → Grupos\./);
+    assert.match(esp.abertas[0].b, /podes cancelá-lo, em Casas → Grupos\./);
     app.desfechoDoGrupo({ jaEstava: true, name: 'Casas do Porto', ownerName: 'Rui', houses: [] }, {});
-    assert.match(esp.abertas[1].b, /sair quando quiseres, em Definições → Grupos\./);
+    assert.match(esp.abertas[1].b, /sair quando quiseres, em Casas → Grupos\./);
   });
 });
 
@@ -303,11 +306,9 @@ describe('o crachá do separador', () => {
 
   test('a base só chama a nuvem dos grupos com guarda na mesma linha', () => {
     const src = le('web/app/definicoes.js').split('\n');
-    const linhas = src.filter((l) => /(^|[^\w$.'"])(cartaoDoGrupoPartilhado|pedidosQueFizHtml|crachaDosGrupos|linhaDosGrupos)\s*\(/.test(l));
+    const linhas = src.filter((l) => /(^|[^\w$.'"])(cartaoDoGrupoPartilhado|pedidosQueFizHtml|crachaDosGrupos)\s*\(/.test(l));
     // os cartões dos partilhados e os pedidos que fiz (vGroups, vGrupos)
     assert.ok(linhas.length >= 2, 'controlo: a base usa-as ' + linhas.length + ' vezes');
     for (const l of linhas) assert.match(l, /typeof (cartaoDoGrupoPartilhado|pedidosQueFizHtml)==='function'/, l.trim());
-    const partilha = le('web/cloud/partilha.js');
-    assert.match(partilha, /typeof linhaDosGrupos === 'function' \? linhaDosGrupos\(\)/);
   });
 });

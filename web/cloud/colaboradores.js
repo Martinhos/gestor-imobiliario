@@ -1,7 +1,7 @@
 /* Colaboradores com cargos, convites de uso unico e a ligacao de partilha.
    ----------------------------------------------------------------------
-   As ações do separador Colaboradores, da página Conta e partilha (só a
-   ligação de partilha e os pedidos) e da aterragem das ligações: cargos
+   As ações do separador Colaboradores, da partilha dos Proprietários
+   (só a ligação de partilha e os pedidos) e da aterragem das ligações: cargos
    (PUT/DELETE /api/roles/:id), convites (POST/GET/DELETE /api/collab-invites
    e POST /api/convite/:token/aceitar), colaboradores (PUT/DELETE
    /api/collaborators/:id), a ligação permanente (POST/DELETE /api/share-link

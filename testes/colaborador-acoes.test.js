@@ -130,7 +130,9 @@ describe('a barra de baixo', () => {
     igual(app.barraDeBaixo(TB, ['transactions', 'recurring', 'credits']), ['dashboard', 'casas', 'calendar']);
     igual(app.barraDeBaixo(TB, ['tenants']), TB, 'a «Pessoas» segura-se nos proprietários');
     igual(app.barraDeBaixo(TB, ['properties', 'contracts', 'tenants', 'owners', 'visits']), TB, 'os Colaboradores, nas Pessoas, seguram as Casas');
-    igual(app.barraDeBaixo(TB, ['properties', 'contracts', 'tenants', 'owners', 'colaboradores', 'visits']), ['dashboard', 'dinheiro', 'calendar']);
+    // os Grupos são uma aba das Casas (navegacao.js:AREAS): enquanto se virem, seguram as Casas
+    igual(app.barraDeBaixo(TB, ['properties', 'contracts', 'tenants', 'owners', 'colaboradores', 'visits']), TB, 'os Grupos, nas Casas, seguram as Casas');
+    igual(app.barraDeBaixo(TB, ['properties', 'groups', 'contracts', 'tenants', 'owners', 'colaboradores', 'visits']), ['dashboard', 'dinheiro', 'calendar']);
     igual(app.barraDeBaixo(TB, ['calendar']), ['dashboard', 'casas', 'dinheiro']);
   });
 

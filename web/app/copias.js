@@ -145,8 +145,8 @@ function wipe(){
     openModal('Apagar tudo',
       `<div class="hint u-fs-14px">Com sessão iniciada, isto apagava os dados também
        na tua conta e nos outros aparelhos — não só neste.<br><br>
-       · Para limpar só este dispositivo, sai da conta primeiro (Definições → Conta e partilha).<br>
-       · Para apagar a conta e tudo o que lá está, usa Conta e partilha → Apagar conta.</div>`,
+       · Para limpar só este dispositivo, sai da conta primeiro (Definições → Segurança → Terminar sessão).<br>
+       · Para apagar a conta e tudo o que lá está, usa Definições → Segurança → Apagar a conta.</div>`,
       '<button class="btn primary" data-click="closeModal()">Percebi</button>');
     return;
   }

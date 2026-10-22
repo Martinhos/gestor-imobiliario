@@ -39,8 +39,10 @@ describe('a página das visitas', () => {
       app.normVisit({ nomes: 'Bruno', propertyId: 'P1', date: '2001-01-01', estado: 'realizada', resultado: 'interessado' }),
     ];
     const html = app.vVisits();
-    assert.match(html, /<div class="vis-grupo-cab"><h2>Próximas<\/h2><span class="small num">1<\/span><\/div>/, 'cada grupo diz quantas são');
-    assert.match(html, /<div class="vis-grupo-cab"><h2>Passadas<\/h2><span class="small num">1<\/span><\/div>/);
+    // por cima, o título da secção «As minhas visitas» (um h2); os grupos ficam um nível abaixo
+    assert.match(html, /<h2 class="org-tit" id="org_visitas_meu">As minhas visitas<\/h2><span class="small num org-n">2<\/span>/, 'o título da secção, com quantas são');
+    assert.match(html, /<div class="vis-grupo-cab"><h3>Próximas<\/h3><span class="small num">1<\/span><\/div>/, 'cada grupo diz quantas são');
+    assert.match(html, /<div class="vis-grupo-cab"><h3>Passadas<\/h3><span class="small num">1<\/span><\/div>/);
     assert.match(html, /Ana/);
     assert.match(html, /<span class="badge in">Interessado<\/span>/, 'o desfecho aparece nas realizadas, a verde');
     assert.doesNotMatch(html, /class="fab"/, 'sem FAB: o «Marcar visita» está no cabeçalho e no + da barra');

@@ -45,10 +45,9 @@ var AVISOS = [
         titulo: 'Cinco grupos, iguais no telemóvel e no computador',
         afeta: ['app'],
         itens: [
-          'O menu passou a ter cinco grupos: Visão geral, Casas (Imóveis, Contratos, Pessoas, Visitas), Dinheiro (Movimentos, Planeados, Créditos), Análise (Avaliação, Projeções) e Agenda. Em baixo, as Definições, a Ajuda e a tua conta.',
+          'O menu passou a ter cinco grupos: Visão geral, Casas (Imóveis, Grupos, Contratos, Pessoas, Visitas), Dinheiro (Movimentos, Planeados, Créditos), Análise (Avaliação, Projeções) e Agenda. Em baixo, as Definições, a Ajuda e a tua conta.',
           'No telemóvel, a barra de baixo é Início, Casas, «+», Dinheiro e Agenda. Casas e Dinheiro abrem com separadores no topo, e lembram-se de onde ficaste.',
           'As Pessoas juntam os Inquilinos e os Proprietários, com um separador para cada.',
-          'Os Grupos passaram para as Definições.',
         ],
       },
       {
@@ -130,6 +129,9 @@ var AVISOS = [
           'A lista dos Proprietários mostra só as outras contas com quem partilhas — uma casa em comum, uma ligação ou um grupo —, e tu já não apareces nela. Os proprietários deixam de se criar à mão: chegam pela partilha.',
           'Na ficha de outro proprietário, «Editar casas partilhadas» abre onde adicionas e removes as casas que partilhas com ele.',
           'As listas dos Imóveis, Inquilinos, Visitas e Contratos separam o que é teu, o que te partilham e onde colaboras, e o filtro «Origem» mostra só uma dessas partes.',
+          'Os Grupos passaram para as Casas, a seguir aos Imóveis, e saíram das Definições. O cartão da tua conta, no fundo do menu, abre o teu perfil.',
+          '«Conta e partilha» passou a «Segurança», só com a palavra-passe, as sessões e o apagar da conta. O teu id está agora em Pessoas › Proprietários, ao lado do campo para ligar.',
+          'As secções «Os meus…» das listas aparecem sempre com o título, mesmo quando só há casas tuas.',
         ],
       },
     ],

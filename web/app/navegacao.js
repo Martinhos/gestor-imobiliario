@@ -35,9 +35,10 @@ const view=()=>document.getElementById('view');
    «pessoas» não é um separador: é a porta única dos Inquilinos, dos
    Proprietários e dos Colaboradores (PESSOAS), que continuam a ser três
    serviços e três ecrãs, escolhidos lá dentro por um segmentado (abasDaArea).
-   Os Grupos saíram do menu: são arrumação da conta e vivem nas Definições
-   (definicoes.js:DEF_LINHAS). */
-const NAV_GROUPS=[{label:'',ids:['dashboard']},{label:'Casas',ids:['properties','contracts','pessoas','visits']},
+   Os Grupos são uma porta das Casas, logo a seguir aos Imóveis (o pedido de
+   2026-10-22): juntam casas, e procuravam-se ao lado delas antes de se
+   procurarem nas Definições, de onde saíram. */
+const NAV_GROUPS=[{label:'',ids:['dashboard']},{label:'Casas',ids:['properties','groups','contracts','pessoas','visits']},
   {label:'Dinheiro',ids:['transactions','recurring','credits']},{label:'Análise',ids:['reports','projections','fisco']},
   {label:'Agenda',ids:['calendar']},{label:'',ids:['settings']}];
 /* A porta «Pessoas»: os três separadores que junta, pela ordem em que abre.
@@ -49,7 +50,7 @@ const PESSOAS=['tenants','owners','colaboradores'];
 /* As áreas da barra de baixo do telemóvel: cada uma é uma porta para vários
    separadores, que no topo do ecrã se trocam por separadores segmentados
    (abasDaArea). A Visão geral e a Agenda são um separador só cada uma. */
-const AREAS={casas:{label:'Casas',icon:'building',ids:['properties','contracts','pessoas','visits']},
+const AREAS={casas:{label:'Casas',icon:'building',ids:['properties','groups','contracts','pessoas','visits']},
   dinheiro:{label:'Dinheiro',icon:'carteira',ids:['transactions','recurring','credits']}};
 /* o último separador visitado em cada área: voltar a «Casas» na barra de
    baixo volta aos Contratos se era lá que se estava, e não aos Imóveis */
@@ -84,13 +85,13 @@ function destinoDe(id,fora){
   const ids=idsDaPorta(id).filter(x=>f.indexOf(x)<0);
   return ids.indexOf(tab)>-1?tab:(ids[0]||'');
 }
-/* A porta acesa no menu: a do separador atual; a das Definições também nos
-   Grupos, que vivem nelas, e não na Ajuda, que tem porta própria. Os
-   Colaboradores acendem a das Pessoas (PESSOAS), e já não a das Definições.
+/* A porta acesa no menu: a do separador atual; a das Definições não na
+   Ajuda, que tem porta própria. Os Colaboradores acendem a das Pessoas
+   (PESSOAS) e os Grupos a deles, nas Casas — nenhum acende já a das Definições.
    Recebe: id — a porta.
    Devolve: true/false. */
 function portaAtiva(id){
-  if(id==='settings')return (tab==='settings'&&setPage!=='ajuda')||tab==='groups';
+  if(id==='settings')return tab==='settings'&&setPage!=='ajuda';
   return idsDaPorta(id).indexOf(tab)>-1;
 }
 /* O rótulo e o ícone de uma porta: os do separador, menos a «Pessoas».
@@ -205,17 +206,31 @@ function gavetaHtml(fora){
   return criar+grupos;
 }
 /* O fundo da barra lateral, a seguir às Definições: a Ajuda e o cartão da
-   conta (avatar com as iniciais, o nome, «Conta e partilha»). Os dois vivem
-   na nuvem — a Ajuda são os pedidos ao suporte, a conta é a sessão —, e sem
-   sessão não aparecem. São páginas das Definições (definicoes.js), e o toque
-   leva lá direto (abrirDefinicoes).
+   conta (avatar com as iniciais, o nome, «O meu perfil»). Os dois vivem na
+   nuvem — a Ajuda são os pedidos ao suporte, a conta é a sessão —, e sem
+   sessão não aparecem. A Ajuda é uma página das Definições, e o toque leva lá
+   direto (abrirDefinicoes); o cartão abre a janela do perfil
+   (abrirOMeuPerfil), a mesma do cartão do perfil das Definições — o nome e o
+   email que ele mostra são os que lá se mudam.
    Devolve: o HTML (string), ou '' sem sessão. */
 function gavetaFundo(){
   const u=typeof window!=='undefined'&&window.CW&&CW.user;if(!u)return '';
   const ajudaOn=tab==='settings'&&setPage==='ajuda',nome=u.name||u.email||'A minha conta';
   return `<a class="${ajudaOn?'on':''}" tabindex="0" ${ajudaOn?'aria-current="page"':''} role="link" data-toca="ecra" data-click="abrirDefinicoes('ajuda')">${ic('ajuda')}<span class="txt">Ajuda</span></a>`+
-    `<button type="button" class="nav-conta" data-toca="ecra" data-click="abrirDefinicoes('cloud')"><span class="avatar">${esc(initials(nome))}</span>`+
-    `<span class="u-minw-0"><b>${esc(nome)}</b><small>Conta e partilha</small></span></button>`;
+    `<button type="button" class="nav-conta" data-toca="camada" data-click="abrirOMeuPerfil()"><span class="avatar">${esc(initials(nome))}</span>`+
+    `<span class="u-minw-0"><b>${esc(nome)}</b><small>O meu perfil</small></span></button>`;
+}
+/* O toque no cartão da conta, no fundo da gaveta: a janela «O meu perfil»
+   (cloud/utilizadores.js:CW.editProfile). Fecha primeiro a gaveta do
+   telemóvel, como o «Criar» (abrirAdicionar): senão, fechada a janela,
+   voltava-se ao menu aberto por cima do ecrã. A janela é da nuvem, que
+   carrega depois da base; se ainda não chegou, leva à raiz das Definições,
+   onde está o cartão do perfil, em vez de um toque que não faz nada.
+   Devolve: nada — abre a janela do perfil, ou as Definições. */
+function abrirOMeuPerfil(){
+  closeDrawer();
+  if(typeof window!=='undefined'&&window.CW&&typeof CW.editProfile==='function')return void CW.editProfile();
+  abrirDefinicoes('');
 }
 /* Recolhe ou abre uma secção da gaveta. É da família «nada»: muda o DOM que
    já lá está — uma classe na secção, o aria-expanded no título — e não chama
@@ -430,8 +445,8 @@ function go(id){
   return deslizarPainel(pintar,lado,desde);
 }
 /* ---- deslizar entre os separadores de uma área ----
-   No telemóvel, os separadores de uma área (Imóveis, Contratos, Pessoas,
-   Visitas; Movimentos, Planeados, Créditos) são um carrossel: arrastar de
+   No telemóvel, os separadores de uma área (Imóveis, Grupos, Contratos,
+   Pessoas, Visitas; Movimentos, Planeados, Créditos) são um carrossel: arrastar de
    lado na vista leva a página com o dedo, e largar depois de um quarto da
    largura, ou com um sacudir, acaba a viagem até ao vizinho pela fita da
    barra de baixo (continuidade.js:deslizarPainel), a partir de onde o dedo a
@@ -808,11 +823,11 @@ function sepEngolirToque(){
 document.addEventListener('pointerdown',sepArrastar);
 // Navega dentro das Definições: p é a subpágina ('' volta ao menu). Entrar
 // numa subpágina arma o histórico, para o voltar do sistema subir a Definições.
-// Os Grupos são um separador que vive nas Definições: a linha deles na raiz
-// chama goSet('groups'), e daqui vai para o separador (aqui na base e não só
-// no embrulho da nuvem, cloud/nucleo.js). Os Colaboradores viveram lá até
-// 2026-10-20 e são agora das Pessoas: um goSet('colaboradores') que sobre (um
-// atalho, uma ação antiga) leva também ao separador.
+// Os Grupos viveram nas Definições até 2026-10-22 e são agora uma aba das
+// Casas; os Colaboradores viveram lá até 2026-10-20 e são agora das Pessoas.
+// Um goSet('groups') ou goSet('colaboradores') que sobre (um atalho, uma ação
+// antiga) leva ao separador — aqui na base e não só no embrulho da nuvem
+// (cloud/nucleo.js).
 // Refaz também a barra lateral: a Ajuda tem porta própria, e entrar nela (ou
 // sair dela para as Perguntas frequentes) muda a porta acesa sem mudar de
 // separador — o render não toca na barra, e ficava aceso o «Definições». O
@@ -820,14 +835,16 @@ document.addEventListener('pointerdown',sepArrastar);
 // Recebe: p — a subpágina das Definições (uma chave de SUBPAGE; '' volta ao menu).
 // Devolve: nada — redesenha a vista e a barra lateral.
 function goSet(p){if(p==='groups'||p==='colaboradores')return go(p);setPage=p;if(p)pushHist();_entrar=1;buildNav();render();try{window.scrollTo(0,0)}catch(e){}}
-/* Leva a uma página das Definições a partir de qualquer sítio — a Ajuda e a
-   conta, no fundo da barra lateral: muda de separador e abre a página.
-   Recebe: p — a subpágina ('ajuda', 'cloud', …).
+/* Leva a uma página das Definições a partir de qualquer sítio — a Ajuda, no
+   fundo da barra lateral: muda de separador e abre a página.
+   Recebe: p — a subpágina ('ajuda', 'cloud', …; '' a raiz).
    Devolve: nada — redesenha a vista. */
 function abrirDefinicoes(p){if(tab!=='settings')go('settings');if(tab==='settings')goSet(p)}
 /* Os separadores de uma área, no topo do ecrã do telemóvel (o canvas, M-Casas
-   e M-Movimentos): Imóveis/Contratos/Pessoas/Visitas e
-   Movimentos/Planeados/Créditos, num segmentado. No computador escondem-se
+   e M-Movimentos): Imóveis/Grupos/Contratos/Pessoas/Visitas e
+   Movimentos/Planeados/Créditos, num segmentado — com o crachá do separador
+   na aba, quando o serviço dele registou um (o dos Grupos: os pedidos para
+   entrar nos meus grupos partilhados). No computador escondem-se
    (estilos.css:.abas-area) — lá a barra lateral mostra as portas todas. E nas
    Pessoas, em todos os ecrãs, o segundo segmentado: Inquilinos, Proprietários
    ou Colaboradores, com quantos há de cada (contagemDePessoas). Uma área com
@@ -935,7 +952,7 @@ function abasCopiar(de,para){
   });
 }
 /* Põe o realce numa aba, ou a meio caminho entre duas. Numa posição inteira
-   e assente, a classe i0…i3 diz onde (estilos.css, a secção «deslizar entre
+   e assente, a classe i0…i4 diz onde (estilos.css, a secção «deslizar entre
    separadores»), e a transição da folha leva-o lá; a meio de um arrasto, o
    transform segue o dedo, em fração de aba (translateX em múltiplos da
    largura do próprio realce mais o intervalo de 2px, a mesma conta do

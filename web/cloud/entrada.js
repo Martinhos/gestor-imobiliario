@@ -829,7 +829,7 @@ function modalGrupo(token, prev) {
       : '<p class="small">O grupo ainda não tem imóveis — os que os membros adicionarem passam a ser partilhados contigo.</p>') +
     '<p class="small">Ao pedires para entrar, <b>' + dono + '</b> tem de aceitar. Depois passas a comproprietário ' +
     (casas ? 'destes imóveis' : 'dos imóveis do grupo') + ' — vês contratos, movimentos e pessoas. ' +
-    'Os imóveis que adicionares ao grupo ficam partilhados com todos os membros. Podes sair quando quiseres, em Definições → Grupos.</p>' +
+    'Os imóveis que adicionares ao grupo ficam partilhados com todos os membros. Podes sair quando quiseres, em Casas → Grupos.</p>' +
     entrasComo() + '</div>',
     '<button class="btn" data-toca="camada" data-click="CW.chegadaDepois(\'grupo\')">Agora não</button>' +
     '<button class="btn primary" data-toca="dados" data-click="CW.entrarNoGrupo(\'' + jsq(token) + '\')">Pedir para entrar</button>');

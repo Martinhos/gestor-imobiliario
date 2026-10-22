@@ -62,13 +62,15 @@ describe('a porta das Pessoas junta três', () => {
     assert.equal(app.areaComSeparadores([]), 'casas', 'um ecrã de área, com os separadores por cima');
   });
 
-  test('nos Colaboradores acende a porta das Pessoas e não a das Definições; os Grupos continuam a acender as Definições', () => {
+  test('nos Colaboradores acende a porta das Pessoas e não a das Definições; os Grupos acendem a deles, nas Casas', () => {
     const app = montar();
     app.tab = 'colaboradores';
     assert.equal(app.portaAtiva('pessoas'), true);
     assert.equal(app.portaAtiva('settings'), false);
     app.tab = 'groups';
-    assert.equal(app.portaAtiva('settings'), true, 'controlo: os Grupos vivem nas Definições');
+    assert.equal(app.portaAtiva('settings'), false, 'os Grupos já não vivem nas Definições');
+    assert.equal(app.portaAtiva('groups'), true, 'são uma porta das Casas');
+    assert.equal(app.areaDe('groups'), 'casas');
   });
 
   test('a porta leva aos Colaboradores quando é lá que se está, e a barra lateral marca-a acesa', () => {

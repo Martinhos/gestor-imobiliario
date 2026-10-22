@@ -47,6 +47,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-20 · A quinta volta da v40: o carrossel dos separadores, uma seleção só, os Inquilinos e as Visitas selecionáveis, o Anular que se afasta e o Início que não é uma casa
 - 2026-10-22 · Um proprietário é uma conta: a lista das partilhas e o realce que ficava preso
 - 2026-10-22 · O realce que ainda ficava, a ligação repetida e as listas por origem
+- 2026-10-22 · Os Grupos nas Casas, a página Segurança e os títulos das secções sempre
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1955,3 +1956,52 @@ caso de quase toda a gente, e um título que não separa nada é ruído. O chip
 «Origem» decide se aparece pela lista inteira e não pelo que a pesquisa deixa,
 para não aparecer e sumir a cada tecla; um valor guardado que deixou de
 servir sai do estado, para o funil não contar um filtro que não se vê.
+
+## 2026-10-22 · Os Grupos nas Casas, a página Segurança e os títulos das secções sempre
+
+**Os Grupos são uma aba das Casas.** «Os grupos devem ser uma aba em casas»,
+e o Martinho escolheu o lugar: a seguir aos Imóveis (navegacao.js:AREAS,
+navegacao.js:NAV_GROUPS). Os grupos juntam casas e eram procurados ao lado
+delas; nas Definições eram uma porta escondida atrás de um toque a mais. Saíram
+das Definições (definicoes.js:DEF_LINHAS já não tem a linha, e a porta das
+Definições não acende neles), perderam a cabeça das subpáginas — têm as abas
+das Casas por cima, como os outros separadores da área —, e o crachá dos
+pedidos para entrar passou para a aba e para a linha da gaveta. Os textos que
+ensinam o caminho dizem «Casas → Grupos» (web/cloud/grupos.js:desfechoDoGrupo,
+entrada.js:modalGrupo). Os caminhos velhos — o goSet('groups') e a página
+guardada — continuam a levar ao separador, para nenhum atalho antigo dar na
+raiz sem explicação. São da base: nenhum serviço desligado os esconde.
+
+**A página «Conta e partilha» passou a «Segurança».** «O menu Conta e Partilha
+deve mudar o nome para segurança e só deve ter a parte da segurança lá
+dentro», e «No menu Conta e Partilha, o meu codigo de partilha deve migrar
+para os proprietários». A página tem agora só a palavra-passe, as sessões e o
+apagar da conta (partilha.js:vCloud); o perfil está no cartão do topo das
+Definições, e os comproprietários e os grupos deixaram de ter porta lá. O id,
+com «Copiar», está nas Pessoas › Proprietários, logo acima do campo onde se
+escreve o do outro (partilha.js:comproprietariosCorpo), porque é o mesmo
+gesto: dar o meu, escrever o do outro. Sem o separador dos Proprietários nesta
+conta, a partilha entre contas não tinha outra casa, por isso fica na
+Segurança numa secção à parte, «Partilhar com outras contas» — o pedido era
+sobre o caso normal. O aviso do serviço Colaboradores desligado foi para os
+Proprietários (partilha.js:comproprietariosHtml), que é onde agora se vem
+procurar o id. O «Terminar sessão» diz «Entraste como <email>», para se saber
+de que conta se sai. O «Copiar» dizia «copiado» mesmo quando o browser
+recusava a cópia; agora diz o id (partilha.js:CW.copyId). O cartão da conta no
+fundo da gaveta abre a janela «O meu perfil» (navegacao.js:abrirOMeuPerfil):
+mostra o nome e o email, que é o que se muda no perfil, e já não havia a
+página da conta para onde levava. O caminho no aviso legal passou a
+«Definições → Segurança» (legal.js) sem subir a versão dos termos: é o nome
+do menu, não uma mudança dos termos.
+
+**Os títulos das secções por origem aparecem sempre.** «Os nomes das secções
+que tiverem itens devem aparecer sempre. Se uma secção não tem itens, não
+aparece.» Desfaz a escolha da entrada de cima (com uma origem só não havia
+títulos): a lista de quem só tem casas suas passa a dizer de quem são, como
+dirá quando chegar a primeira partilha, e o ecrã não muda de forma quando a
+segunda origem aparece (vistas.js:listaPorOrigem). A secção única mantém os
+ids de sempre das listas vivas («imoveis», «inquilinos», «visitas:Próximas»,
+«contratos»), e não `imoveis:meu`: nada fora da lista muda, e no caso comum a
+pesquisa continua pela via parcial (vistas.js:refrescarListasVivas), com o
+mesmo nó do cartão. A troca de ids só acontece quando a lista passa de uma
+origem a duas, ou o filtro «Origem» se liga, e aí faz-se o render normal.

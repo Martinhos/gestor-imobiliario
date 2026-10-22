@@ -78,9 +78,9 @@ describe('o contrato, em texto', () => {
       'Como dou acesso a um gestor sem o tornar comproprietário?', 'function vColaboradores()']) {
       assert.ok(s.includes(t), 'texto: ' + t);
     }
-    assert.ok(!/function colabRow/.test(s), 'Conta e partilha não tem porta própria para os colaboradores: vivem no menu');
+    assert.ok(!/function colabRow/.test(s), 'a Segurança não tem porta própria para os colaboradores: vivem no menu');
     const sub = /SUBPAGE\.cloud = .*/.exec(s)[0];
-    assert.ok(!/colaborador/i.test(sub), 'o subtítulo de Conta e partilha já não fala em colaboradores: ' + sub);
+    assert.ok(!/colaborador/i.test(sub), 'o subtítulo da Segurança não fala em colaboradores: ' + sub);
   });
 
   test('a guarda de apagar o imóvel saiu de cloud/anexos.js (vive em imovel.js com souCriador)', () => {
@@ -436,20 +436,23 @@ describe('antes do primeiro sync', () => {
   });
 });
 
-describe('a página Conta e partilha', () => {
-  test('vCloud fica com a conta e a linha que leva à partilha, que vive nos Proprietários', () => {
+describe('a página Segurança', () => {
+  test('vCloud fica só com a segurança, e a partilha vive nos Proprietários', () => {
     const app = comEstado();
     const h = app.vCloud();
-    for (const t of ['A minha conta', 'Partilhar com outras contas', "go('owners')", '1 por responder', 'Segurança', 'Apagar a conta']) {
+    for (const t of ['Mudar a palavra-passe', 'Terminar sessão nos outros aparelhos', 'Terminar sessão', 'Apagar a conta']) {
       assert.ok(h.includes(t), 'a página tem: ' + t);
+    }
+    for (const t of ['A minha conta', 'Comproprietários', 'Partilhar com outras contas', "go('owners')", 'CW.copyId()', 'CW.editProfile()']) {
+      assert.ok(!h.includes(t), 'a Segurança já não tem: ' + t);
     }
     const donos = app.vOwners();
     for (const t of ['A minha ligação de partilha', 'Pedidos de partilha', 'Ana quer partilhar T2 Porto contigo',
-      'Ligar a outro utilizador', 'Ainda não estás ligado a ninguém.', 'Pedidos chegados por aqui', 'CW.ligacaoRodar()']) {
+      'Ligar a outro utilizador', 'Ainda não estás ligado a ninguém.', 'Pedidos chegados por aqui', 'CW.ligacaoRodar()', 'O teu id', 'CW.copyId()']) {
       assert.ok(donos.includes(t), 'os Proprietários têm: ' + t);
-      assert.ok(!h.includes(t), 'Conta e partilha já não tem: ' + t);
+      assert.ok(!h.includes(t), 'a Segurança não tem: ' + t);
     }
-    // sem o separador dos Proprietários nesta conta, a partilha fica em Conta e partilha, que é onde se chega
+    // sem o separador dos Proprietários nesta conta, a partilha fica na Segurança, que é onde se chega
     app.definirServicosDesligados(['owners']);
     assert.ok(app.vCloud().includes('Ligar a outro utilizador') && !app.vCloud().includes("go('owners')"));
     app.definirServicosDesligados([]);

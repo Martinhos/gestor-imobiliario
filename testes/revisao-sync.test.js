@@ -267,7 +267,7 @@ describe('a navegação com um separador desligado', () => {
     app.definirServicosDesligados([]);
     app.tab = 'dashboard';
     app.goBarra('casas');
-    assert.equal(app.tab, 'tenants', 'a área lembra-se de onde se ficou');
+    assert.equal(app.tab, 'groups', 'a área lembra-se de onde se ficou');
     assert.ok(esp.deslizes >= 1);
   });
 

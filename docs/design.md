@@ -1123,11 +1123,17 @@ imóvel (acessos.js:origemDaCasa): sem dono de fora é meu — mesmo que eu o
 partilhe —; com cargo é um imóvel em que colaboro; com dono de fora e sem
 cargo é partilhado comigo (a ligação ou o grupo). Sem imóvel, ou com um que
 já não está na base, é meu. O inquilino segue a casa dele
-(acessos.js:origemDoInquilino); a visita e o contrato seguem o imóvel. Uma
-secção vazia não aparece; com uma só com conteúdo não há títulos e a lista é
-a de sempre, com os mesmos ids das listas vivas. Com duas ou três, cada uma é
-uma secção com um h2 e quantos registos tem (estilos.css:.org-cab) e a sua
-lista viva com sufixo; o título distingue-se dos grupos de dentro pela cor da
+(acessos.js:origemDoInquilino); a visita e o contrato seguem o imóvel. Cada
+secção com registos é uma secção com um h2 e quantos registos tem
+(estilos.css:.org-cab), sempre — mesmo sendo a única: quem só tem casas suas
+lê «Os meus imóveis» por cima da lista (vistas.js:listaPorOrigem). Uma secção
+vazia não aparece; sem registos nenhuns não há secção nem título, e fica o
+vazio de sempre (o vazioFiltro, ou o vazio da lista com o seu botão — quem
+chama já o pôs antes). A secção única guarda os ids de sempre das listas
+vivas («imoveis», «inquilinos», «visitas:Próximas», «contratos»), para o
+vistas.js:refrescarListasVivas os achar no ecrã a cada tecla da pesquisa; com
+duas ou três, cada uma tem a sua lista viva com sufixo (`imoveis:meu`). O
+título distingue-se dos grupos de dentro pela cor da
 frente — o texto a --accent-text, com um traço por baixo — e pelo tamanho
 (estilos.css:.org-tit), o que sobrevive ao escurecimento forçado do Samsung.
 Os títulos: «Os meus imóveis», «Os meus inquilinos», «As minhas visitas», «Os
@@ -1135,8 +1141,8 @@ meus contratos»; «Partilhados comigo» («Partilhadas comigo» nas visitas); �
 que colaboro» (lista-imoveis.js:ORIGEM_IMOVEIS,
 lista-pessoas.js:ORIGEM_INQUILINOS, visitas.js:ORIGEM_VISITAS,
 lista-contratos.js:ORIGEM_CONTRATOS). O agrupamento de sempre fica dentro de
-cada secção, um nível abaixo: as Próximas e as Passadas das visitas (h3 dentro
-de uma secção, h2 sozinhas), e os grupos por imóvel dos contratos
+cada secção, um nível abaixo: as Próximas e as Passadas das visitas (h3,
+debaixo do h2 da secção), e os grupos por imóvel dos contratos
 (lista-contratos.js:ctGruposDaLista), cada secção com a sua tabela no
 computador.
 
@@ -1148,7 +1154,8 @@ cabem entre os que passam os outros filtros, e o «Todos» sem número
 filtro, tem registos de pelo menos duas origens — o chip não aparece e some a
 cada tecla da pesquisa —, e só oferece as origens que há; um valor guardado
 que deixou de servir sai do estado, para não cortar nem contar no funil um
-filtro que não se vê. Ligado, fica uma secção só, sem título. O estado dos
+filtro que não se vê. Ligado, fica só a secção dessa origem, com o título
+dela. O estado dos
 imóveis e dos contratos conta com a origem, e a origem com o estado.
 
 Uma lista é um cartão com uma linha por registo, separadas por um traço — os
@@ -2666,7 +2673,7 @@ mudar de área é mudar de página.
 
 ### Deslizar entre os separadores de uma área
 No telemóvel (até 900px), os separadores de uma área são um carrossel:
-Imóveis, Contratos, Pessoas, Visitas nas Casas; Movimentos, Planeados,
+Imóveis, Grupos, Contratos, Pessoas, Visitas nas Casas; Movimentos, Planeados,
 Créditos no Dinheiro. Arrastar de lado na vista leva a página com o dedo, e
 largar depois de um quarto da largura, ou com um sacudir, acaba a viagem até
 ao separador vizinho (navegacao.js:sepArrastar, navegacao.js:sepArrastoFim).
@@ -2754,7 +2761,7 @@ abrir uma janela ou uma seleção a meio do arrasto, a página volta ao sítio e
 o gesto acaba (navegacao.js:sepArrastoMove).
 
 ### As abas da área, fora do #view
-As abas da área (Imóveis, Contratos, Pessoas, Visitas; Movimentos,
+As abas da área (Imóveis, Grupos, Contratos, Pessoas, Visitas; Movimentos,
 Planeados, Créditos) vivem na casa delas, por cima do `#view` e fora dele
 (index.html:#abasArea), para ficarem paradas enquanto o painel desliza. Quem
 pinta continua a escrevê-las à cabeça da vista, como sempre
@@ -2777,15 +2784,18 @@ sempre, e no telemóvel esconde-se (estilos.css:.abas:empty). As Pessoas
 das Pessoas e ficam no `#view`, a correr com ele.
 
 O realce da aba acesa é uma peça à parte, como no segmentado que desliza
-(imovel.js:imvSegmentado): a fila ganha .desliza e .n2 a .n4 (quantas abas)
-e um .segm-polegar, que assenta pela classe .i0 a .i3 (em múltiplos da
+(imovel.js:imvSegmentado): a fila ganha .desliza e .n2 a .n5 (quantas abas)
+e um .segm-polegar, que assenta pela classe .i0 a .i4 (em múltiplos da
 largura dele mais os 2px do intervalo, sem medir nada) e desliza no --medio
 e na --curva-fita num toque numa aba. O contorno cobalto e o fundo suave vão
 no realce; a aba acesa fica com o texto no --accent-text, que é cor da
-frente — o escurecimento forçado do Samsung Internet distingue-a.
+frente — o escurecimento forçado do Samsung Internet distingue-a. A largura
+do realce é a da fila menos os 4px de cada ponta e os 2px de cada intervalo, a
+dividir pelas abas (estilos.css:.abas-area.n5>.segm-polegar), e a última das
+cinco assenta a 400% mais 8px (estilos.css:.abas-area>.segm-polegar.i4).
 
-Quando as abas não cabem (a partir de ~360px com o número dos Planeados), a
-casa rola de lado, sem barra, e o fim da rolagem não puxa o voltar do
+Quando as abas não cabem (a partir de ~360px com o número dos Planeados, e a
+390 e a 375px com as cinco das Casas), a casa rola de lado, sem barra, e o fim da rolagem não puxa o voltar do
 sistema (overscroll-behavior-x:contain). A fila é uma grelha de colunas
 iguais: à largura do ecrã quando cabem, e à largura da aba mais comprida,
 cada uma, quando não cabem (nunca reticências). O realce rola com elas,
@@ -3785,15 +3795,18 @@ página de ninguém (definicoes.js:linhaDefinicoes). Secções seguidas com o
 mesmo título juntam-se numa lista só (definicoes.js:seccoesVisiveis): a «App»
 é a 'aplicacao', a 'ajuda' e o 'sobre', e os ids 'conta', 'ajuda' e 'sobre'
 ficam, porque a nuvem pendura lá as linhas dela (cloud/partilha.js,
-cloud/novidades.js).
+cloud/novidades.js). A secção Conta é toda da nuvem — o cartão do perfil e a
+Segurança (partilha.js:cartaoDoPerfil, partilha.js:vCloud) —, e sem a nuvem
+fica vazia e some.
 
 Uma linha diz a secção, a ordem, o rótulo, o ícone e o resumo (que pode ser
 uma função, lida a cada pintura), e mais: page, a subpágina que abre, ou ir,
-o separador onde a coisa vive (go): uma linha das Definições nunca leva para
-fora delas sem ser a um separador que é arrumação da conta, como os Grupos —
-a situação fiscal vive só na página do IRS · Anexo F, e os Colaboradores nas
-Pessoas; cracha, uma função que devolve o número do crachá (o dos Grupos
-conta os pedidos por responder, servicos.js:crachaDe); se, uma função que diz
+o separador onde a coisa vive (go), que nenhuma das de hoje usa: uma linha
+das Definições não leva para fora delas — a situação fiscal vive só na página
+do IRS · Anexo F, os Colaboradores nas Pessoas e os Grupos nas Casas; cracha,
+uma função que devolve o número do crachá, que a navegação lateral mostra
+(nenhuma das de hoje o usa: o crachá dos pedidos dos Grupos vive na aba
+deles e na linha da gaveta, servicos.js:crachaDe); se, uma função que diz
 se a linha aparece agora (nenhuma das de hoje o usa); e linha, uma linha desenhada à
 parte, dentro da lista — o Tema. Um html continua a ser um cartão inteiro, à
 parte da lista. O Tema está na própria raiz, num segmentado Automático, Claro
@@ -3810,12 +3823,13 @@ tema.js:setTheme.
 A cabeça das subpáginas é o backRow, e não é um texto fixo: é um getter do
 window (definicoes.js:cabecaDaSubpagina), lido na hora por todas as
 subpáginas — as da base e as da nuvem, que continuam a escrever
-backRow+vCloud() sem mudar. No telemóvel é o Voltar, colado ao topo; nos
-Grupos, que são um separador, leva às Definições e não à raiz deles
-(definicoes.js:paginaDasDefinicoes já só trata os Grupos). No computador o Voltar some e fica a navegação lateral das
+backRow+vCloud() sem mudar. É só das Definições: os Grupos e os Colaboradores,
+que são separadores das Casas, não a têm. No telemóvel é o Voltar, colado ao
+topo, que sobe sempre à raiz (goSet('')). No computador o Voltar some e fica a navegação lateral das
 Definições (definicoes.js:navDasDefinicoes, o canvas D-DefCategorias): as
-mesmas secções e linhas da raiz, com a página aberta acesa
-(definicoes.js:paginaDasDefinicoes), posta ao lado do conteúdo pela folha
+mesmas secções e linhas da raiz, com a página aberta acesa — o IRS e as
+etiquetas acendem as categorias, os termos e a política o aviso legal
+(definicoes.js:paginaDasDefinicoes) —, posta ao lado do conteúdo pela folha
 (estilos.css:.wrap:has(>.def-nav)). A Ajuda tem porta própria na barra
 lateral e fica sem ela. O navRow (definicoes.js:navRow) é uma função, com o
 desenho das linhas da raiz num cartão só dela (o aviso legal usa-a), e os
@@ -3885,20 +3899,44 @@ As páginas:
 
 As páginas que a nuvem pendura na raiz vestem o mesmo:
 
-- «Conta e partilha» (partilha.js:vCloud, o canvas M-Partilha) são secções
-  com título e um cartão de linhas cada: a conta — o avatar, o id com
-  «Copiar», o perfil —; os comproprietários, numa linha só que leva às
-  Pessoas › Proprietários, onde a partilha entre contas vive por baixo da
-  lista (partilha.js:comproprietariosHtml) — os convites por responder nos
-  dois sentidos, como linhas com o avatar e as ações certas
-  (partilha.js:connCard), o campo «O id do outro utilizador», os pedidos e a
-  ligação de partilha; as ligações ativas não se repetem lá, que já estão na
-  lista de cima (pessoas.js:donosComPartilha), e o vazio só diz «Ainda não
-  estás ligado a ninguém.» quando não há ligação nenhuma
-  (partilha.js:comproprietariosCorpo); sem o separador dos Proprietários na
-  conta, a partilha inteira fica aqui, com as ativas —; os grupos,
-  numa linha só (ver «Grupos partilhados»); e a segurança, onde «Apagar a conta»
-  é uma linha vermelha que abre a confirmação. Um convite de ligação
+- «Segurança» (partilha.js:vCloud; o nome e o subtítulo — «Palavra-passe,
+  sessões e apagar a conta» — vêm de SUBPAGE.cloud) é só a segurança: a frase
+  da sessão de 30 dias e um cartão com quatro linhas — «Mudar a
+  palavra-passe», «Terminar sessão nos outros aparelhos», «Terminar sessão»
+  (com «Entraste como <email>», para se saber de que conta se sai) e «Apagar
+  a conta», a linha vermelha com data-risco="destroi" que abre a
+  confirmação. Não tem título por dentro (o da página já o diz); a secção tem
+  aria-label="Segurança". A linha da raiz das Definições diz «Segurança», com
+  o cadeado ('lock') e o sub «Palavra-passe, sessões e apagar a conta» (sem
+  sessão, «Inicia sessão»), e não mostra o id. Sem sessão, a página é o
+  cartão «Segurança · Sem sessão iniciada» com «Iniciar sessão». O perfil
+  está no cartão do topo das Definições (partilha.js:cartaoDoPerfil); o id e
+  a partilha entre contas nas Pessoas › Proprietários; os grupos partilhados
+  no separador Grupos. Sem o separador dos Proprietários nesta conta
+  (servicoLigado('owners') falso), a partilha entre contas fica na Segurança,
+  numa secção à parte por baixo («Partilhar com outras contas», o h2
+  #ptPartilhaConta), com o id, as ligações todas, o campo, os pedidos e a
+  ligação de partilha (partilha.js:comproprietariosCorpo, com as ativas) — é
+  o único sítio onde se chega a ela; com o serviço Colaboradores também
+  desligado, fica lá a frase de quem o liga.
+- A partilha entre contas vive por baixo da lista dos Proprietários
+  (partilha.js:comproprietariosHtml, a secção «Partilhar com outras
+  contas»): os convites por responder nos dois sentidos, como linhas com o
+  avatar e as ações certas (partilha.js:connCard); a linha «O teu id» com o
+  código de 8 caracteres e «Copiar» (aria-label «Copiar o teu id»,
+  partilha.js:CW.copyId) logo acima do campo «O id do outro utilizador» —
+  dar o meu e escrever o do outro no mesmo cartão
+  (partilha.js:comproprietariosCorpo); os pedidos e a ligação de partilha. As
+  ligações ativas não se repetem lá, que já estão na lista de cima
+  (pessoas.js:donosComPartilha), e o vazio só diz «Ainda não estás ligado a
+  ninguém.» quando não há ligação nenhuma. Com o serviço Colaboradores
+  desligado nesta conta, no lugar da secção fica a frase «O serviço
+  Colaboradores está desligado nesta conta. A partilha entre contas fica
+  disponível quando o suporte o ligar.» O «Copiar» diz «Id copiado. Dá-o ao
+  outro utilizador para ele te ligar.»; sem clipboard, ou com a cópia
+  recusada, diz «Não deu para copiar. O teu id é <id>: dá-o ao outro
+  utilizador.» — nunca «copiado» sem ter copiado. Um toque longo no código
+  apanha-o inteiro (estilos.css:.pt-meuid, user-select:all). Um convite de ligação
   recebido tem o fundo --accent-soft, o título e a frase em --accent-text e
   o avatar em --card (estilos.css:.pt-linha.pt-convite). Os erros dizem-se
   junto do campo: o «Ligar» vazio e o que o servidor recusa (o próprio id) no
@@ -3914,7 +3952,7 @@ As páginas que a nuvem pendura na raiz vestem o mesmo:
   o botão «Remover» vermelho, que o confirmModal tira da primeira palavra do
   título. No dedo, os .btn.sm desta página e dos pedidos têm 44px.
   «Editar casas partilhadas», na ficha do outro (ou «Casas partilhadas» em
-  cada ligação, em Conta e partilha sem os Proprietários), abre «Partilha com <nome>»
+  cada ligação, na Segurança sem os Proprietários), abre «Partilha com <nome>»
   (partilha.js:CW.sharesModal): as minhas casas com a caixa que as adiciona
   ou remove (a nova traz as quotas ao marcá-la; a que sai diz que o outro
   deixa de a ver), e por baixo as que o outro partilha comigo; cada casa
@@ -3996,13 +4034,29 @@ Grupos ao lado dos privados, cada um no seu cartão
 
 **Onde vivem os grupos.** Os grupos são um separador da base, «Grupos»
 (navegacao.js:TABS; servicos.js:vistaDoSeparador despacha para
-definicoes.js:vGrupos), a que se chega pela linha «Grupos» da secção Conta
-das Definições (definicoes.js:DEF_LINHAS; goSet('groups') leva ao separador,
-navegacao.js:goSet). São filtros de toda a app, por isso não são um serviço;
-só a parte partilhada é do serviço Colaboradores.
+definicoes.js:vGrupos), uma aba das Casas, logo a seguir aos Imóveis:
+AREAS.casas.ids e o grupo «Casas» do NAV_GROUPS são
+`['properties','groups','contracts','pessoas','visits']` (navegacao.js:AREAS,
+navegacao.js:NAV_GROUPS). Valem para as abas da área
+(navegacao.js:abasDaArea), a gaveta (navegacao.js:gavetaHtml), a barra de
+baixo (a porta Casas acende nos Grupos e o _ultimoNaArea lembra-os —
+navegacao.js:areaDe, navegacao.js:destinoDe) e o carrossel
+(navegacao.js:vizinhoNaArea percorre os cinco). O cabeçalho diz «Casas» no
+telemóvel e «Grupos» no computador (navegacao.js:tituloDoEcraHtml), como os
+outros separadores de área. São filtros de toda a app, por isso não são um
+serviço: nenhum serviço desligado os esconde, e com todos os serviços
+desligados a gaveta fica com «Casas» só com os Grupos (e as Definições); só a
+parte partilhada é do serviço Colaboradores. Não estão nas Definições
+(definicoes.js:DEF_LINHAS não tem a linha, e a porta das Definições não acende
+neles, navegacao.js:portaAtiva), mas os caminhos velhos continuam a levar ao
+separador: goSet('groups') na base (navegacao.js:goSet) e na nuvem
+(cloud/nucleo.js:goSet), e a página guardada {tab:'settings', set:'groups'}
+(cloud/nucleo.js:restorePage); um setPage='groups' posto à mão mostra os
+grupos com o Voltar das subpáginas (definicoes.js:vSettings).
 
-O separador é o canvas M-Grupos (definicoes.js:vGrupos): a cabeça das
-subpáginas (ver «As Definições»), o que os grupos são, os tipos num
+O separador é o canvas M-Grupos (definicoes.js:vGrupos): sem a cabeça das
+subpáginas — começa no «Servem de filtro em toda a app», com as abas das
+Casas por cima, que o render põe (vistas.js:render) —, o que os grupos são, os tipos num
 segmentado com quantos há de cada (definicoes.js:grupoTipoEscolher), «Novo
 grupo de …» do tipo à vista e, nos imóveis, quando posso partilhar
 (definicoes.js:podePartilharGrupos — a nuvem dos grupos, sessão e o serviço
@@ -4027,15 +4081,15 @@ que listar do servidor, mas cada grupo de imóveis privado continua com o
 «Partilhar», e o toque diz o que falta. A página guardada antiga leva ao
 separador (web/cloud/nucleo.js:restorePage).
 
-Os textos que ensinam o caminho dizem «Definições → Grupos»
+Os textos que ensinam o caminho dizem «Casas → Grupos», pelo grupo da gaveta
 (web/cloud/grupos.js:desfechoDoGrupo, entrada.js:modalGrupo), e não «em
-Grupos», que já não é um sítio do menu. Conta e partilha tem só uma linha
-que leva aos Grupos, com o desenho das linhas das Definições
-(web/cloud/grupos.js:linhaDosGrupos), quantos grupos partilhados tenho e
-quantos pedidos esperam resposta. O crachá do separador conta os pedidos para
-entrar nos meus grupos (web/cloud/grupos.js:crachaDosGrupos), registado pelo
-serviço Colaboradores (lista-colaboradores.js:vColabTab, no mesmo
-registarServico): com o serviço desligado, não há crachá.
+Grupos» sozinho. O crachá da aba Grupos e da linha da gaveta conta os pedidos
+para entrar nos meus grupos partilhados (web/cloud/grupos.js:crachaDosGrupos),
+registado pelo serviço Colaboradores (lista-colaboradores.js:vColabTab, no
+mesmo registarServico): aparece no `<span class="n">` da aba
+(navegacao.js:abasDaArea) e na linha da gaveta (navegacao.js:crachaHtml),
+pelo caminho que a casca já tinha para os crachás por separador; com o serviço
+desligado, não há crachá.
 
 **Partilhar um grupo que já existe.** Um grupo de imóveis privado partilha-se
 sem ser recriado, por duas portas à vista: «Partilhar» no cartão de cada
@@ -4420,11 +4474,17 @@ Dezasseis separadores em TABS (navegacao.js:TABS), cada um com ícone, rótulo
 e subtítulo — e cada um menos as Definições e os Grupos é um serviço (ver «A
 app em serviços»). A barra lateral arruma-os nos cinco grupos do canvas de
 2026-10 (navegacao.js:NAV_GROUPS), iguais no menu do telemóvel: ao cimo, sem
-título, a Visão geral; Casas (Imóveis, Contratos, Pessoas, Visitas); Dinheiro
+título, a Visão geral; Casas (Imóveis, Grupos, Contratos, Pessoas, Visitas); Dinheiro
 (Movimentos, Planeados, Créditos); Análise (Avaliação, Projeções, IRS · Anexo
 F); Agenda (o Calendário); e ao fundo, sem título, as Definições, a Ajuda e o
 cartão da conta (navegacao.js:gavetaFundo — a Ajuda e a conta só com
-sessão, e levam às páginas das Definições por navegacao.js:abrirDefinicoes).
+sessão). A Ajuda leva à página dela nas Definições
+(navegacao.js:abrirDefinicoes); o cartão da conta, com o avatar, o nome e «O
+meu perfil», abre a janela do perfil (navegacao.js:abrirOMeuPerfil →
+cloud/utilizadores.js:CW.editProfile, data-toca="camada"), a mesma do cartão
+do perfil das Definições: fecha primeiro a gaveta (como o «Criar»), e sem a
+janela da nuvem carregada leva à raiz das Definições, onde está o cartão do
+perfil.
 Ao cimo de tudo, o «Criar» a toda a largura (estilos.css:.nav-criar; ver «A
 fita da barra de baixo»), que o menu do telemóvel não tem — escondido abaixo
 de 900px, porque o + está na barra. Nenhum separador repete o ícone de outro
@@ -4463,11 +4523,10 @@ de linhas do servidor (uma por cargo), e só aparece depois de o servidor
 responder — antes disso o segmento diz só o nome
 (cloud/colaboradores.js:contarColaboradores). Abaixo dos 420px o segmentado
 encolhe o intervalo e a letra para os três caberem aos 375px, e cada um pode
-encolher em vez de rolar de lado. Os Grupos saíram do menu: são arrumação
-da conta, e a porta vive nas Definições (ver «As Definições» e «Grupos
-partilhados»); a porta das Definições fica acesa neles. Um
-goSet('colaboradores') que sobre — um atalho antigo — leva ao separador
-(navegacao.js:goSet). Uma página das
+encolher em vez de rolar de lado. Os Grupos são uma porta das Casas, a
+seguir aos Imóveis, e acendem a deles (ver «Grupos partilhados»). Um
+goSet('groups') ou um goSet('colaboradores') que sobre — um atalho antigo —
+leva ao separador (navegacao.js:goSet). Uma página das
 Definições com porta própria acende a sua, e não a das Definições — a Ajuda
 —, porque o navegacao.js:goSet refaz a barra (navegacao.js:buildNav) antes
 de pintar. O separador fisco
@@ -4891,8 +4950,9 @@ categoria (definicoes.js:delCat) e a de remover uma ligação, que também não
 presume género (partilha.js:fraseRemoverLigacao).
 
 Os textos que ensinam um caminho dizem-no com os nomes da navegação:
-«Dinheiro → Créditos» e «Dinheiro → Planeados», pelo grupo da barra
-lateral, «Definições → Grupos», «Definições → Categorias, etiquetas e IRS».
+«Dinheiro → Créditos», «Dinheiro → Planeados» e «Casas → Grupos», pelo grupo
+da barra lateral, «Definições → Categorias, etiquetas e IRS» e «Definições →
+Segurança».
 
 Frases curtas, com ponto final nos toasts: «Movimento apagado.»
 (movimento.js:delTx), «Anulado.» (componentes.js:comDesfazer).

@@ -1596,7 +1596,7 @@ function rememberPage() {
 }
 var _goSet = goSet;
 /* Navegar dentro das Definições, a lembrar a página. A subpágina antiga dos
-   Grupos passou a separador próprio: goSet('groups') — de um atalho, de uma
+   Grupos é hoje uma aba das Casas: goSet('groups') — de um atalho, de uma
    ação antiga — vai para o separador, e não para uma subpágina sem porta.
    Recebe: p — a subpágina das Definições ('' volta ao menu).
    Devolve: nada — navega e grava a página. */
@@ -1608,7 +1608,7 @@ goSet = function (p) {
 /* No arranque, devolve o utilizador ao separador onde estava; ignora estados
    guardados que já não existem e não faz nada quando era só o painel inicial.
    A página guardada antes de os Grupos serem separador ({tab:'settings',
-   set:'groups'}) abre o separador Grupos.
+   set:'groups'}) abre o separador Grupos, nas Casas.
    Devolve: nada — repõe o separador e repinta (ou não mexe em nada). */
 function restorePage() {
   var s = null;

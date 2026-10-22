@@ -215,7 +215,7 @@ describe('pedidosDashCard', () => {
     assert.equal(f.pedidosDashCard(), '', 'nenhum botão de aceitar a quem não é dono');
   });
 
-  test('o cartão dos pedidos em Conta e partilha e o da ligação usam as mesmas linhas e botões', () => {
+  test('o cartão dos pedidos nos Proprietários e o da ligação usam as mesmas linhas e botões', () => {
     const { app } = comEstado((st) => { PEDIDO(st); CONVITE(st); });
     const dash = app.pedidosDashCard(), conta = app.pedidosCard(), lig = app.connCard(app.CW.state.connections[1]);
     const linha = /<div class="pd-linha"><b class="u-d-block">Ana quer partilhar T2 Porto contigo<\/b>[\s\S]*?<\/div><\/div>/;
@@ -230,7 +230,7 @@ describe('pedidosDashCard', () => {
     const { app } = comEstado((st) => { PEDIDO(st); GRUPO(st); CONVITE(st); });
     const h = app.pedidosDashCard() + app.pedidosCard() + app.connCard(app.CW.state.connections[1]);
     const recusas = h.match(/<button[^>]*>Recusar<\/button>/g) || [];
-    assert.ok(recusas.length >= 5, 'as três do cartão, a do pedido em Conta e partilha e a do convite: ' + recusas.length);
+    assert.ok(recusas.length >= 5, 'as três do cartão, a do pedido nos Proprietários e a do convite: ' + recusas.length);
     for (const b of recusas) {
       assert.match(b, /^<button class="btn sm" data-toca="dados" data-click="CW\.(?:pedidoRecusar|grupoRecusarPedido|delConn)\(/, b);
       assert.doesNotMatch(b, /danger/, b);
@@ -728,8 +728,8 @@ describe('a ligação ativa só na lista de cima, e o «Remover ligação» na f
   test('o vazio do cartão: sem ligação nenhuma diz que não estás ligado; com ativas e sem convites não diz nada; antes do sync diz que ainda não chegaram', () => {
     const { app } = comEstado();
     const comAtiva = app.comproprietariosHtml();
-    assert.ok(!comAtiva.includes('pt-vazio') && !comAtiva.includes('Ainda não estás ligado'), 'o Rui está ligado: o cartão começa no campo');
-    assert.match(comAtiva, /<div class="card pt-cartao"><div class="pt-linha pt-ligar">/);
+    assert.ok(!comAtiva.includes('pt-vazio') && !comAtiva.includes('Ainda não estás ligado'), 'o Rui está ligado: o cartão começa no meu id');
+    assert.match(comAtiva, /<div class="card pt-cartao"><div class="pt-linha pt-meu">[\s\S]*?<\/div><div class="pt-linha pt-ligar">/);
     const { app: sem } = comEstado((st) => { st.connections = []; });
     assert.match(sem.comproprietariosHtml(), /<div class="pt-linha pt-vazio"><span class="small">Ainda não estás ligado a ninguém\.<\/span><\/div>/);
     // só um convite enviado: há uma linha, e o vazio não se diz
@@ -740,7 +740,7 @@ describe('a ligação ativa só na lista de cima, e o «Remover ligação» na f
     assert.match(antes.comproprietariosHtml(), /Ainda não recebemos as ligações deste aparelho/);
   });
 
-  test('sem o separador dos Proprietários não há lista de cima: Conta e partilha leva as ativas no cartão, com «Casas partilhadas» e o ⋯', () => {
+  test('sem o separador dos Proprietários não há lista de cima: a Segurança leva a partilha, com as ativas no cartão, «Casas partilhadas» e o ⋯', () => {
     const { app } = comEstado(CONVITE);
     app.definirServicosDesligados(['owners']);
     const h = app.vCloud();
@@ -748,6 +748,8 @@ describe('a ligação ativa só na lista de cima, e o «Remover ligação» na f
     assert.ok(h.includes("CW.delConn('K1')") && h.includes('Remover ligação'), 'o ⋯ da linha fica');
     assert.ok(h.includes('Zé quer ligar-se a ti'), 'e o convite');
     assert.ok(h.includes('O id do outro utilizador'), 'e o campo');
+    assert.ok(h.indexOf('O teu id') > -1 && h.indexOf('O teu id') < h.indexOf('O id do outro utilizador'), 'e o meu id, por cima do campo');
+    assert.ok(h.indexOf('Apagar a conta') < h.indexOf('Partilhar com outras contas'), 'a segurança primeiro, a partilha numa secção à parte por baixo');
   });
 
   test('o campo diz «O id do outro utilizador», com o asterisco vermelho e o exemplo; a dica e a secção não dizem «dele»', () => {

@@ -578,4 +578,5 @@ CW.acceptLegal = function (full) {
 };
 
 // As ações da conta (sair, palavra-passe, sessões, apagar) e das ligações
-// entre utilizadores vivem em cloud/partilha.js, com a página «Conta e partilha».
+// entre utilizadores vivem em cloud/partilha.js, com a página «Segurança» e a
+// partilha entre contas por baixo dos Proprietários.

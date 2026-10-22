@@ -93,7 +93,7 @@ function emCasas(a, t = 'properties') {
   a.tab = t;
   a.separadoresEscondidos = () => [];
 }
-const CASAS = ['Imóveis', 'Contratos', 'Pessoas', 'Visitas'];
+const CASAS = ['Imóveis', 'Grupos', 'Contratos', 'Pessoas', 'Visitas'];
 
 describe('as abas vão para a casa delas, e ficam o mesmo nó', () => {
   test('a primeira pintura leva a fila para a casa, com o polegar na aba acesa; a moldura fica, vazia', () => {
@@ -106,7 +106,7 @@ describe('as abas vão para a casa delas, e ficam o mesmo nó', () => {
     assert.equal(casa.firstElementChild, nav, 'a fila está na casa');
     const m = v.querySelector(':scope>.abas');
     assert.ok(m && m.children.length === 0, 'e a moldura fica vazia no #view (no computador dá os 14px de sempre)');
-    assert.ok(nav.classList.contains('desliza') && nav.classList.contains('n4'), 'segmentado que desliza, de quatro');
+    assert.ok(nav.classList.contains('desliza') && nav.classList.contains('n5'), 'segmentado que desliza, de cinco');
     const pol = nav.querySelector(':scope>.segm-polegar');
     assert.ok(pol, 'com o polegar');
     assert.equal(pol.className, 'segm-polegar i0');
@@ -115,7 +115,7 @@ describe('as abas vão para a casa delas, e ficam o mesmo nó', () => {
   test('nas Pessoas a fila sai e o segmentado delas fica no #view, a correr com o conteúdo', () => {
     emCasas(app, 'tenants');
     const casa = el('div', [], { id: 'abasArea' });
-    const v = vistaCom(fila('Casas', CASAS, 2), true);
+    const v = vistaCom(fila('Casas', CASAS, 3), true);
     montar(app, { view: v, abasArea: casa });
     app.abasAssentar();
     const m = v.querySelector(':scope>.abas');
@@ -133,8 +133,8 @@ describe('as abas vão para a casa delas, e ficam o mesmo nó', () => {
     const pol = viva.querySelector(':scope>.segm-polegar');
     pol.style.transform = 'translateX(calc(0.4 * (100% + 2px)))';   // um arrasto a meio
     app.tab = 'contracts';
-    const nova = fila('Casas', ['Imóveis', 'Contratos <span class="n">2</span>', 'Pessoas', 'Visitas'], 1,
-      ['properties', 'contracts', 'owners', 'visits']);
+    const nova = fila('Casas', ['Imóveis', 'Grupos', 'Contratos <span class="n">2</span>', 'Pessoas', 'Visitas'], 2,
+      ['properties', 'groups', 'contracts', 'owners', 'visits']);
     const v2 = vistaCom(nova);
     montar(app, { view: v2, abasArea: casa });
     app.abasAssentar();
@@ -143,10 +143,10 @@ describe('as abas vão para a casa delas, e ficam o mesmo nó', () => {
     const as = viva.querySelectorAll(':scope>a');
     assert.equal(as[0].getAttribute('aria-current'), null, 'Imóveis apagou-se');
     assert.ok(!as[0].classList.contains('on'));
-    assert.ok(as[1].classList.contains('on') && as[1].getAttribute('aria-current') === 'page', 'Contratos acendeu');
-    assert.equal(as[1].innerHTML, 'Contratos <span class="n">2</span>', 'com o número');
-    assert.equal(as[2].getAttribute('data-click'), "go('owners')", 'as Pessoas abrem onde se ficou');
-    assert.equal(pol.className, 'segm-polegar i1', 'o polegar vai para Contratos');
+    assert.ok(as[2].classList.contains('on') && as[2].getAttribute('aria-current') === 'page', 'Contratos acendeu');
+    assert.equal(as[2].innerHTML, 'Contratos <span class="n">2</span>', 'com o número');
+    assert.equal(as[3].getAttribute('data-click'), "go('owners')", 'as Pessoas abrem onde se ficou');
+    assert.equal(pol.className, 'segm-polegar i2', 'o polegar vai para Contratos');
     assert.equal(pol.style.transform, '', 'e larga o transform do dedo (a transição da folha leva-o)');
   });
 
@@ -197,6 +197,8 @@ describe('o polegar', () => {
     assert.equal(pol.style.transform, 'translateX(calc(0.373 * (100% + 2px)))');
     app.abasPolegarEm(nav, 2, true);
     assert.equal(pol.className, 'segm-polegar i2');
+    app.abasPolegarEm(nav, 4, true);
+    assert.equal(pol.className, 'segm-polegar i4', 'a quinta aba, a das Visitas');
     assert.equal(pol.style.transform, '');
     app.abasPolegarEm(nav, -1, true);
     assert.equal(pol.className, 'segm-polegar fora');
@@ -211,7 +213,7 @@ function palco(a) {
   v.contains = (x) => { for (let y = x; y; y = y.parentElement) if (y === v) return true; return false; };
   v.parentNode = { classList: { add() {}, remove() {} } };
   v.animate = () => ({ set onfinish(f) { f(); } });
-  const nav = fila('Casas', CASAS, 1);
+  const nav = fila('Casas', CASAS, 2);
   nav.insertAdjacentHTML('afterbegin', '<span class="segm-polegar"></span>');
   a.document.querySelector = (s) => (s === '#abasArea>.abas-area' ? nav : null);
   const criados = [];
@@ -242,11 +244,11 @@ describe('o arrasto', () => {
       'a caixa do vizinho tem as classes do #view, menos o entra (' + (viz && viz.className) + ')');
     assert.equal(viz.style.transform, 'translateX(' + (375 + a.desl) + 'px)', 'colado à borda direita da página');
     assert.equal(viz.getAttribute('inert'), '', 'e não se toca nem se lê');
-    const p = 1 + Math.abs(a.desl) / 375;
+    const p = 2 + Math.abs(a.desl) / 375;
     assert.equal(pol.style.transform, 'translateX(calc(' + Math.round(p * 1000) / 1000 + ' * (100% + 2px)))', 'o polegar entre Contratos e Pessoas');
     // o dedo volta para trás do ponto de partida: o outro vizinho, uma vez
     [260, 320, 360, 380].forEach((x) => anda(app, x));
-    assert.deepEqual([...pintados], ['tenants', 'properties']);
+    assert.deepEqual([...pintados], ['tenants', 'groups'], 'à esquerda dos Contratos, os Grupos');
     [300, 380].forEach((x) => anda(app, x));
     assert.equal(pintados.length, 2, 'voltar a cada lado não pinta outra vez');
     larga(app, 380);
@@ -270,7 +272,7 @@ describe('o arrasto', () => {
     assert.equal(anim.k[1].transform, 'translateX(375px)', 'para fora, à direita');
     assert.equal(anim.k[0].transform, 'translateX(' + (375 + a.desl) + 'px)', 'a partir de onde estava');
     assert.ok(nav.classList.contains('volta') && !nav.classList.contains('arrasta'), 'o polegar volta com a curva do regresso');
-    assert.equal(pol.className, 'segm-polegar i1');
+    assert.equal(pol.className, 'segm-polegar i2');
     assert.equal(pol.style.transform, '');
     assert.equal(a.palco, null, 'o palco saiu no fim do regresso');
   });

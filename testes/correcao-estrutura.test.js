@@ -243,8 +243,8 @@ describe('uma raiz só nas Definições', () => {
     for (const x of ['tema', 'defaults', 'cats', 'filtros', 'dados', 'cloud', 'ajuda', 'faq', 'novidades', 'legal']) {
       assert.ok(p.includes(x), 'a porta de «' + x + '»: ' + p.join(' '));
     }
-    // os Grupos são um separador que vive nas Definições (2026-10): a linha leva ao separador
-    assert.ok(p.includes('groups'), 'a porta dos Grupos nas Definições');
+    // os Grupos são uma aba das Casas (2026-10-22): as Definições já não têm a porta deles
+    assert.ok(!p.includes('groups'), 'sem a porta dos Grupos nas Definições');
     /* as categorias, as etiquetas e o IRS são uma página só (2026-10,
        D-DefCategorias): a raiz tem a porta «cats», e «irs» e «tags» ficam como
        nomes antigos da mesma página, para o que os guarda (goSet, uma página
@@ -262,7 +262,8 @@ describe('uma raiz só nas Definições', () => {
     assert.equal((h.match(/<span>Versão<\/span>/g) || []).length, 1);
     // o que as novidades e o aviso legal mandam procurar em «Definições → …»
     const r = rotulos(h), textos = ler('web/avisos.js') + ler('web/legal.js');
-    for (const x of ['Categorias, etiquetas e IRS', 'Filtros comuns', 'Conta e partilha', 'Perguntas frequentes', 'Ajuda e sugestões', 'Novidades', 'Importar e cópias']) {
+    // a página da conta chama-se «Segurança» desde 2026-10-22 (e o aviso legal manda lá apagar a conta)
+    for (const x of ['Categorias, etiquetas e IRS', 'Filtros comuns', 'Segurança', 'Perguntas frequentes', 'Ajuda e sugestões', 'Novidades', 'Importar e cópias']) {
       assert.ok(textos.includes('Definições → ' + x) || textos.includes('Definições → <b>' + x), 'controlo: a app manda a «' + x + '»');
       assert.ok(r.includes(x), '«Definições → ' + x + '» existe na raiz: ' + r.join(' | '));
     }
@@ -274,7 +275,7 @@ describe('uma raiz só nas Definições', () => {
     app.setPage = '';
     const p = portas(app.vSettings());
     for (const x of ['tema', 'defaults', 'cats', 'filtros', 'dados']) assert.ok(p.includes(x), x);
-    assert.ok(p.includes('groups'), 'a porta dos Grupos é da base: existe sem a nuvem');
+    assert.ok(!p.includes('groups'), 'os Grupos são uma aba das Casas: nem sem a nuvem têm porta aqui');
     assert.ok(!p.includes('cloud'), 'a conta é da nuvem');
     app.setPage = 'tema';
     assert.match(app.vSettings(), /setTheme\('dark'\)/, 'a subpágina do Tema é da base');

@@ -757,7 +757,7 @@ function desfechoDoGrupo(r, prev) {
     openModal('Pedido enviado',
       '<div class="form"><div class="hint u-fs-14px">' + (r.jaPedido ? 'Já tinhas pedido' : 'Pediste') + ' para entrar no grupo <b>«' + esc(nome) + '»</b>. ' +
       '<b>' + esc(dono || 'O dono do grupo') + '</b> tem de aceitar: quando aceitar, os imóveis do grupo aparecem-te e passas a comproprietário deles.</div>' +
-      '<div class="hint">Vês o pedido, e podes cancelá-lo, em Definições → Grupos.</div></div>',
+      '<div class="hint">Vês o pedido, e podes cancelá-lo, em Casas → Grupos.</div></div>',
       '<button class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>');
     return;
   }
@@ -766,7 +766,7 @@ function desfechoDoGrupo(r, prev) {
     '<div class="form"><div class="hint u-fs-14px">Grupo de <b>' + esc(dono) + '</b>. ' +
     (casas ? 'És comproprietário de <b>' + esc(casas) + '</b>: vês e editas contratos, movimentos e pessoas.'
       : 'O grupo ainda não tem imóveis — os que os membros adicionarem passam a ser partilhados contigo.') + '</div>' +
-    '<div class="hint">Podes adicionar ao grupo imóveis teus e sair quando quiseres, em Definições → Grupos.</div></div>',
+    '<div class="hint">Podes adicionar ao grupo imóveis teus e sair quando quiseres, em Casas → Grupos.</div></div>',
     '<button class="btn primary" data-toca="ecra" data-click="closeAllModals();go(\'properties\')">Ver os imóveis</button>');
 }
 
@@ -883,9 +883,10 @@ function pedidosQueFizHtml() {
   }).join('');
 }
 
-/* ---------------- o crachá e a porta em Conta e partilha ---------------- */
+/* ---------------- o crachá do separador ---------------- */
 
-/* O crachá do separador Grupos — e da linha deles nas Definições —, registado
+/* O crachá do separador Grupos — na aba deles, nas Casas, e na linha da
+   gaveta (navegacao.js:abasDaArea, crachaHtml) —, registado
    pelo serviço Colaboradores (app/lista-colaboradores.js): os pedidos para
    entrar nos MEUS grupos que esperam resposta, os mesmos que os cartões
    mostram com «Aceitar» e «Recusar» (pedidosParaEntrar). Com o serviço
@@ -897,19 +898,4 @@ function crachaDosGrupos() {
   var n = 0;
   gruposPartilhados().forEach(function (g) { if (g._meu) n += pedidosParaEntrar(g.id).length; });
   return { n: n };
-}
-
-/* A linha dos grupos na página Conta e partilha (partilha.js:vCloud): uma
-   porta para o separador Grupos, com quantos grupos partilhados tenho e
-   quantos pedidos esperam resposta nos meus — no desenho das linhas das
-   Definições (definicoes.js:linhaDaRaiz). Só com sessão e com o serviço
-   Colaboradores ligado nesta conta.
-   Recebe: nada.
-   Devolve: o HTML da linha (texto), ou ''. */
-function linhaDosGrupos() {
-  if (!CW.user || !servicoLigado('colaboradores')) return '';
-  var n = gruposPartilhados().length, pend = crachaDosGrupos().n;
-  var sub = (n ? n + (n === 1 ? ' grupo partilhado' : ' grupos partilhados') : 'Ainda em nenhum grupo partilhado') +
-    (pend ? ' · ' + pend + (pend === 1 ? ' pedido por responder' : ' pedidos por responder') : '');
-  return '<div class="card def-lista">' + linhaDaRaiz({ ir: 'groups', label: 'Grupos partilhados', sub: sub, icon: 'layers' }) + '</div>';
 }

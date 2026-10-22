@@ -75,11 +75,13 @@ function apanharGo(a) {
 }
 
 describe('o vizinho de cada separador', () => {
-  test('Casas: Imóveis, Contratos, Pessoas, Visitas, pela ordem das abas, sem dar a volta', () => {
+  test('Casas: Imóveis, Grupos, Contratos, Pessoas, Visitas, pela ordem das abas, sem dar a volta', () => {
     em(app, 'properties');
-    assert.deepEqual(lados(app), ['', 'contracts']);
+    assert.deepEqual(lados(app), ['', 'groups']);
+    em(app, 'groups');
+    assert.deepEqual(lados(app), ['properties', 'contracts']);
     em(app, 'contracts');
-    assert.deepEqual(lados(app), ['properties', 'tenants']);
+    assert.deepEqual(lados(app), ['groups', 'tenants']);
     em(app, 'visits');
     assert.deepEqual(lados(app), ['tenants', '']);
   });
@@ -106,7 +108,9 @@ describe('o vizinho de cada separador', () => {
 
   test('um separador escondido (cargo, serviço desligado) sai da fila e os vizinhos fecham o buraco', () => {
     em(app, 'properties', ['contracts']);
-    assert.deepEqual(lados(app), ['', 'tenants']);
+    assert.deepEqual(lados(app), ['', 'groups']);
+    em(app, 'groups', ['contracts']);
+    assert.deepEqual(lados(app), ['properties', 'tenants']);
     em(app, 'transactions', ['recurring']);
     assert.deepEqual(lados(app), ['', 'credits']);
   });
@@ -188,7 +192,7 @@ describe('o gesto', () => {
     const a = gesto(app, no(v), [300, 290, 280, 250, 200, 150]);
     assert.equal(a.ativo, true);
     assert.equal(idas.length, 1);
-    assert.equal(idas[0].id, 'contracts');
+    assert.equal(idas[0].id, 'groups');
     assert.equal(idas[0].lado, 1, 'o novo vem da direita');
     // a folga de decidir (10px) não conta: 150px de dedo, 140 de página
     assert.equal(idas[0].desde, -140);
@@ -203,7 +207,7 @@ describe('o gesto', () => {
     const v = vista(app);
     const idas = apanharGo(app);
     gesto(app, no(v), [100, 112, 140, 220, 260]);
-    assert.deepEqual(idas.map((x) => [x.id, x.lado]), [['properties', -1]]);
+    assert.deepEqual(idas.map((x) => [x.id, x.lado]), [['groups', -1]]);
     idas.length = 0;
     const a = gesto(app, no(v), [200, 188, 180, 175]);
     assert.equal(a.ativo, true, 'passou dos 10px: a página seguiu o dedo');
@@ -307,7 +311,7 @@ describe('o gesto', () => {
     const idas = apanharGo(app);
     gesto(app, no(v), [300, 280, 200, 120]);
     assert.equal(v.style.transform, '');
-    assert.deepEqual(idas.map((x) => [x.id, x.desde]), [['contracts', 0]]);
+    assert.deepEqual(idas.map((x) => [x.id, x.desde]), [['groups', 0]]);
   });
 });
 

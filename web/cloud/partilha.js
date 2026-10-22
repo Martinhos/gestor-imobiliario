@@ -1,9 +1,11 @@
-/* Paginas Conta e partilha (id, ligacoes, seguranca e apagar a conta) e as
-   acoes delas, e Colaboradores (cargos, convites e quem colabora em cada
-   imovel; as acoes destes vivem em colaboradores.js). */
+/* A pagina Seguranca (palavra-passe, sessoes e apagar a conta), a partilha
+   entre contas por baixo dos Proprietarios (o meu id, as ligacoes, os
+   pedidos e a ligacao de partilha) e as acoes delas, e Colaboradores
+   (cargos, convites e quem colabora em cada imovel; as acoes destes vivem em
+   colaboradores.js). */
 'use strict';
 
-/* ---------------- página "Conta e partilha" ---------------- */
+/* ---------------- página "Segurança" ---------------- */
 
 var _vSettings = vSettings;
 vSettings = function () {
@@ -64,13 +66,15 @@ function cartaoDaAppNoTelemovel() {
 }
 
 /* As linhas da nuvem na raiz das Definições, que é uma só e da base
-   (definicoes.js:linhaDefinicoes): o perfil e a conta, a ajuda, as perguntas
-   frequentes, o aviso legal e a app no telemóvel. A nuvem escrevia a raiz
-   inteira por cima da da base, e a dela tinha esquecido «IRS e dedução» e
-   «Filtros comuns». */
+   (definicoes.js:linhaDefinicoes): o perfil e a segurança, a ajuda, as
+   perguntas frequentes, o aviso legal e a app no telemóvel. A nuvem escrevia
+   a raiz inteira por cima da da base, e a dela tinha esquecido «IRS e
+   dedução» e «Filtros comuns». A linha da segurança já não diz o id: ele
+   vive nas Pessoas › Proprietários, ao lado do campo de ligar
+   (comproprietariosCorpo). */
 linhaDefinicoes({ sec: 'conta', ordem: 10, html: cartaoDoPerfil });
-linhaDefinicoes({ sec: 'conta', ordem: 20, page: 'cloud', label: 'Conta e partilha', icon: 'users',
-  sub: function () { return CW.user ? (CW.user.name || CW.user.email) + ' · id ' + CW.user.id : 'Inicia sessão'; } });
+linhaDefinicoes({ sec: 'conta', ordem: 20, page: 'cloud', label: 'Segurança', icon: 'lock',
+  sub: function () { return CW.user ? 'Palavra-passe, sessões e apagar a conta' : 'Inicia sessão'; } });
 linhaDefinicoes({ sec: 'ajuda', ordem: 10, page: 'ajuda', label: 'Ajuda e sugestões', icon: 'ajuda', sub: 'Como se faz, perguntas e pedidos' });
 linhaDefinicoes({ sec: 'sobre', ordem: 10, page: 'faq', label: 'Perguntas frequentes', icon: 'info', sub: 'As dúvidas mais comuns, respondidas' });
 linhaDefinicoes({ sec: 'sobre', ordem: 30, page: 'legal', label: 'Aviso legal', icon: 'contract', sub: 'Termos e privacidade' });
@@ -90,8 +94,8 @@ function botoesConvite(c) {
     '<button class="btn sm" data-toca="dados" data-click="CW.delConn(\'' + jsq(c.id) + '\',1)">Recusar</button>';
 }
 
-/* Uma ligação a outro utilizador, como linha do cartão «Comproprietários»
-   (o canvas M-Partilha): o avatar com as iniciais, o nome, o que se passa e
+/* Uma ligação a outro utilizador, como linha do cartão da partilha entre
+   contas (comproprietariosCorpo; o canvas M-Partilha): o avatar com as iniciais, o nome, o que se passa e
    os botões certos para o estado dela — convite recebido (aceitar/recusar),
    convite enviado (cancelar, que só retira o convite) ou ligação ativa, com a
    contagem de casas partilhadas em cada sentido, «Casas partilhadas» (o
@@ -164,7 +168,7 @@ function ligacaoCard() {
 }
 
 /* Uma linha de pedido (o .it do canvas, na coluna «Pedidos e atividade» da
-   Visão geral e em Conta e partilha): a frase de quem pede o quê, o que
+   Visão geral e na partilha entre contas): a frase de quem pede o quê, o que
    aceitar implica, e os botões. Linhas soltas com um traço por cima, e não
    cartões dentro de um cartão — assim juntam-se a outras linhas (a
    atividade) num cartão só.
@@ -440,16 +444,18 @@ function vColaboradores() {
 
 var FRASE_DA_PARTILHA = 'Partilhar uma casa dá acesso a tudo o que ela tem: contratos, movimentos e pessoas.';
 
-/* O corpo da partilha entre contas: o cartão com as ligações (connCard) e o
-   campo para ligar a outro id, e por baixo os pedidos de partilha e a minha
-   ligação de partilha. Nos Proprietários as ligações ativas já estão na
-   lista de cima (pessoas.js:donosComPartilha), com «Editar casas partilhadas»
-   e «Remover ligação» na ficha de cada um: o cartão fica só com os convites
-   por responder, nos dois sentidos, e uma ligação ativa não aparece duas
-   vezes. Sem o separador dos Proprietários (partilha.js:vCloud) não há lista
-   de cima, e o cartão leva-as todas. O vazio só se diz quando é verdade:
-   sem ligação nenhuma, «Ainda não estás ligado a ninguém.»; com ativas e sem
-   convites, nada (o cartão começa no campo); antes do primeiro sync, uma
+/* O corpo da partilha entre contas: o cartão com as ligações (connCard), o
+   meu id com «Copiar» (CW.copyId) e, logo por baixo, o campo para escrever o
+   do outro — dar o meu e escrever o do outro lado a lado, no mesmo cartão —,
+   e por baixo os pedidos de partilha e a minha ligação de partilha. Nos
+   Proprietários as ligações ativas já estão na lista de cima
+   (pessoas.js:donosComPartilha), com «Editar casas partilhadas» e «Remover
+   ligação» na ficha de cada um: o cartão fica só com os convites por
+   responder, nos dois sentidos, e uma ligação ativa não aparece duas vezes.
+   Sem o separador dos Proprietários (partilha.js:vCloud, a página Segurança)
+   não há lista de cima, e o cartão leva-as todas. O vazio só se diz quando
+   é verdade: sem ligação nenhuma, «Ainda não estás ligado a ninguém.»; com
+   ativas e sem convites, nada (o cartão começa no id); antes do primeiro sync, uma
    lista vazia não quer dizer que não haja ligações: diz-se que ainda não
    chegaram.
    Recebe: comAtivas — true para levar também as ligações ativas (onde não
@@ -463,7 +469,11 @@ function comproprietariosCorpo(comAtivas) {
     : (haAtivas ? '' : 'Ainda não estás ligado a ninguém.');
   var linhas = conns.length ? conns.map(connCard).join('')
     : (vazio ? '<div class="pt-linha pt-vazio"><span class="small">' + vazio + '</span></div>' : '');
-  var add = '<div class="pt-linha pt-ligar"><div class="pt-ligar-campo">' +
+  /* o meu id, para o dar ao outro; o «Copiar» diz ao leitor de ecrã o que copia */
+  var meu = CW.user && CW.user.id ? '<div class="pt-linha pt-meu"><span class="pt-txt"><span class="small">O teu id</span>' +
+    '<b class="u-d-block pt-meuid">' + esc(CW.user.id) + '</b></span>' +
+    '<span class="pt-acoes"><button type="button" class="btn sm" data-toca="nada" aria-label="Copiar o teu id" data-click="CW.copyId()">Copiar</button></span></div>' : '';
+  var add = meu + '<div class="pt-linha pt-ligar"><div class="pt-ligar-campo">' +
     '<label class="u-fx-1 u-minw-0">O id do outro utilizador <span class="req">*</span>' +
     '<input id="cw_peer" class="u-tt-uppercase u-ff-monospace u-ls-2px" placeholder="Ex: A7KQ2MPX" maxlength="8" autocomplete="off"></label>' +
     '<button class="btn primary u-fx-0-0-auto" data-toca="dados" data-click="CW.addConn()">Ligar</button></div>' +
@@ -477,13 +487,20 @@ function comproprietariosCorpo(comAtivas) {
 
 /* A partilha entre contas no separador Proprietários (lista-pessoas.js:
    partilhaDosDonos), por baixo da lista: a secção «Partilhar com outras
-   contas» com o corpo de comproprietariosCorpo, sem as ligações ativas (estão
-   na lista, por cima). Só com sessão e com o serviço Colaboradores, que é o
-   da partilha entre contas.
+   contas» com o corpo de comproprietariosCorpo — o meu id e o campo de
+   ligar —, sem as ligações ativas (estão na lista, por cima). Só com sessão
+   e com o serviço Colaboradores, que é o da partilha entre contas: com ele
+   desligado nesta conta fica, no lugar da secção, a frase que diz porquê e
+   quem o liga (vivia na página da conta, que passou a ser só a Segurança;
+   é aqui que se vem procurar o id).
    Recebe: nada.
-   Devolve: o HTML da secção (texto), ou '' sem sessão ou sem o serviço. */
+   Devolve: o HTML da secção (texto), a nota sem o serviço, ou '' sem sessão. */
 function comproprietariosHtml() {
-  if (!CW.user || !servicoLigado('colaboradores')) return '';
+  if (!CW.user) return '';
+  if (!servicoLigado('colaboradores')) {
+    return '<div class="pt-pagina pes-partilha"><p class="hint pt-nota">' + esc(hintServicoDesligado('colaboradores')) +
+      ' A partilha entre contas fica disponível quando o suporte o ligar.</p></div>';
+  }
   return '<div class="pt-pagina pes-partilha"><section class="pt-seccao" aria-labelledby="ptPartilha"><div class="pt-seccao-cab">' +
     '<h2 id="ptPartilha">Partilhar com outras contas</h2><p class="small">' + FRASE_DA_PARTILHA +
     ' Na ficha de cada um, em «Editar casas partilhadas», adicionas e removes casas e propões as quotas.</p></div>' +
@@ -511,82 +528,69 @@ function partilhaComDonoDaNuvem(id) {
 }
 partilhaComDono = partilhaComDonoDaNuvem;
 
-// O HTML da página "Conta e partilha": a conta e o id para dar a outros, uma
-// linha que leva à partilha entre contas, nas Pessoas › Proprietários (sem
-// esse separador, a partilha inteira: as ligações, o campo para ligar, os
-// pedidos e a ligação de partilha), uma linha que leva ao separador Grupos — os
-// grupos partilhados vivem lá, ao lado dos privados (cloud/grupos.js:
-// linhaDosGrupos, que carrega depois deste ficheiro — daí o typeof) —, a
-// segurança e o apagar da conta. Os colaboradores vivem no menu (Pessoas →
-// Colaboradores) e não têm aqui segunda porta. Sem sessão iniciada, mostra
-// apenas o convite para entrar. A partilha entre contas — a ligação, os
-// pedidos, os utilizadores ligados e os grupos — é do serviço Colaboradores:
-// desligado nesta conta, ficam a conta, a segurança e o apagar, e uma frase
-// a dizer quem o liga.
-// Devolve: string de HTML da página, pronta a inserir com innerHTML.
+/* O HTML da página «Segurança» (a subpágina 'cloud' das Definições; o nome e
+   o subtítulo vêm de SUBPAGE.cloud): só a segurança — mudar a palavra-passe,
+   terminar sessão nos outros aparelhos, terminar sessão (com o email da
+   conta, para se saber de qual se sai) e apagar a conta —, sem título por
+   dentro, que o da página já o diz. O resto que aqui vivia mudou-se: o perfil
+   está no cartão do topo das Definições (cartaoDoPerfil), o id e a partilha
+   entre contas nas Pessoas › Proprietários (comproprietariosHtml), e os
+   grupos partilhados no separador Grupos. Sem o separador dos Proprietários
+   nesta conta (servicoLigado('owners') falso), a partilha entre contas fica
+   aqui, numa secção à parte por baixo da segurança, que é o único sítio onde
+   se chega a ela — com o id, as ligações todas, o campo de ligar, os pedidos
+   e a ligação de partilha (comproprietariosCorpo); e, com o serviço
+   Colaboradores desligado, a frase que diz porquê. Sem sessão iniciada,
+   mostra apenas o convite para entrar.
+   Recebe: nada; lê CW.user e CW.state.
+   Devolve: string de HTML da página, pronta a inserir com innerHTML. */
 function vCloud() {
-  if (!CW.user) return card('Conta', 'Sem sessão iniciada', '<button class="btn primary" data-toca="camada" data-click="CW.showAuth()">Iniciar sessão</button>');
-  var partilha = servicoLigado('colaboradores');
-  var conns = (CW.state.connections || []).slice();
-  var nome = CW.user.name || CW.user.email || '';
-  var meP = (db.owners || []).find(function (o) { return o.id === CW.user.id; });
-  var perfilSub = meP && meP.nif ? (meP.name || nome) + ' · NIF preenchido' : 'Nome, NIF e contactos para os contratos';
-  /* uma secção: o título (h2) e, por baixo, o cartão — a ordem do canvas */
-  var seccao = function (titulo, sub, corpo) {
-    return '<section class="pt-seccao"><div class="pt-seccao-cab"><h2>' + titulo + '</h2>' + (sub ? '<p class="small">' + sub + '</p>' : '') + '</div>' + corpo + '</section>';
-  };
-  /* uma linha que abre alguma coisa (o perfil, a segurança): botão de verdade, com a seta */
-  var linhaQueAbre = function (rotulo, sub, toca, act, extra) {
-    return '<button type="button" class="pt-linha pt-abre' + (extra || '') + '" data-toca="' + toca + '" data-click="' + act + '">' +
+  if (!CW.user) {
+    return card('Segurança', 'Sem sessão iniciada',
+      '<div class="hint">A palavra-passe, as sessões e o apagar da conta precisam de sessão iniciada.</div>' +
+      '<div class="toolbar u-mt-11px"><button class="btn primary" data-toca="camada" data-click="CW.showAuth()">Iniciar sessão</button></div>');
+  }
+  /* uma linha que abre alguma coisa: botão de verdade, com a seta */
+  var linhaQueAbre = function (rotulo, sub, act, extra) {
+    return '<button type="button" class="pt-linha pt-abre' + (extra || '') + '" data-toca="camada"' +
+      (extra ? ' data-risco="destroi"' : '') + ' data-click="' + act + '">' +
       '<span class="pt-txt"><b class="u-d-block">' + rotulo + '</b>' + (sub ? '<span class="small">' + sub + '</span>' : '') + '</span>' +
       '<span class="seta">' + ic('chevR', 20) + '</span></button>';
   };
-  var acc = seccao('A minha conta', 'Sincronizada neste e noutros aparelhos',
+  var conta = CW.user.email ? 'Entraste como ' + esc(CW.user.email) + '. Os dados ficam na conta' : 'Os dados ficam na conta';
+  var seg = '<section class="pt-seccao" aria-label="Segurança"><div class="pt-seccao-cab"><p class="small">' +
+      'A sessão dura 30 dias em cada aparelho. Mudar a palavra-passe ou fechar as outras sessões obriga os outros aparelhos a entrar de novo.</p></div>' +
     '<div class="card pt-cartao">' +
-      '<div class="pt-linha pt-eu"><span class="avatar pt-av pt-av-eu" aria-hidden="true">' + esc(initials(nome)) + '</span>' +
-        '<span class="pt-txt"><b class="u-d-block">' + esc(CW.user.name || '—') + '</b><span class="small">' + esc(CW.user.email) + '</span></span></div>' +
-      '<div class="pt-linha"><span class="pt-txt"><span class="small">O meu id</span><b class="u-d-block pt-meuid">' + esc(CW.user.id) + '</b></span>' +
-        '<span class="pt-acoes"><button class="btn sm" data-toca="nada" data-click="CW.copyId()">Copiar</button></span></div>' +
-      linhaQueAbre('O meu perfil', esc(perfilSub), 'camada', 'CW.editProfile()') +
-    '</div>' +
-    (partilha ? '' : '<p class="hint pt-nota">' + esc(hintServicoDesligado('colaboradores')) + ' A partilha entre contas fica disponível quando o suporte o ligar.</p>'));
-  /* a partilha entre contas vive nas Pessoas › Proprietários (comproprietariosHtml);
-     aqui fica a linha que leva lá. Sem o separador dos Proprietários nesta
-     conta, a secção inteira fica aqui, que é o único sítio onde se chega */
-  var comprop = '';
-  if (partilha && servicoLigado('owners')) {
-    var ativas = conns.filter(function (c) { return c.status !== 'pending'; }).length;
-    var r = pedidosParaResponder();
-    var porResponder = r.inc.length + r.convites.length;   // os pedidos de grupo contam na linha dos Grupos
-    var subComprop = (ativas ? ativas + (ativas === 1 ? ' ligação' : ' ligações') : 'Ainda sem ligações') +
-      (porResponder ? ' · ' + porResponder + ' por responder' : '') + ' · em Pessoas › Proprietários';
-    comprop = seccao('Comproprietários', '', '<div class="card pt-cartao">' +
-      linhaQueAbre('Partilhar com outras contas', esc(subComprop), 'ecra', "go('owners')") + '</div>');
-  } else if (partilha) {
-    comprop = seccao('Comproprietários', FRASE_DA_PARTILHA, comproprietariosCorpo(true));
+      linhaQueAbre('Mudar a palavra-passe', '', 'CW.passwordModal()') +
+      linhaQueAbre('Terminar sessão nos outros aparelhos', '', 'CW.revokeSessions()') +
+      linhaQueAbre('Terminar sessão', conta, 'CW.logout()') +
+      linhaQueAbre('Apagar a conta', 'Apaga a conta e todos os teus dados. Não há volta atrás.', 'CW.deleteAccount()', ' pt-perigo') +
+    '</div></section>';
+  /* sem os Proprietários nesta conta, a partilha entre contas não tem outra casa */
+  var partilha = '';
+  if (!servicoLigado('owners')) {
+    partilha = servicoLigado('colaboradores')
+      ? '<section class="pt-seccao" aria-labelledby="ptPartilhaConta"><div class="pt-seccao-cab"><h2 id="ptPartilhaConta">Partilhar com outras contas</h2>' +
+          '<p class="small">' + FRASE_DA_PARTILHA + '</p></div>' + comproprietariosCorpo(true) + '</section>'
+      : '<p class="hint pt-nota">' + esc(hintServicoDesligado('colaboradores')) + ' A partilha entre contas fica disponível quando o suporte o ligar.</p>';
   }
-  var grupos = partilha && typeof linhaDosGrupos === 'function' ? linhaDosGrupos() : '';
-  var seg = seccao('Segurança', 'A sessão dura 30 dias em cada aparelho. Mudar a palavra-passe ou fechar as outras sessões obriga os outros aparelhos a entrar de novo.',
-    '<div class="card pt-cartao">' +
-      linhaQueAbre('Mudar a palavra-passe', '', 'camada', 'CW.passwordModal()') +
-      linhaQueAbre('Terminar sessão nos outros aparelhos', '', 'camada', 'CW.revokeSessions()') +
-      linhaQueAbre('Terminar sessão', 'Os dados ficam na conta', 'camada', 'CW.logout()') +
-      '<button type="button" class="pt-linha pt-abre pt-perigo" data-toca="camada" data-risco="destroi" data-click="CW.deleteAccount()">' +
-        '<span class="pt-txt"><b class="u-d-block">Apagar a conta</b><span class="small">Apaga a conta e todos os teus dados. Não há volta atrás.</span></span>' +
-        '<span class="seta">' + ic('chevR', 20) + '</span></button>' +
-    '</div>');
-  return '<div class="pt-pagina">' + acc + comprop + (grupos ? seccao('Grupos', '', grupos) : '') + seg + '</div>';
+  return '<div class="pt-pagina">' + seg + partilha + '</div>';
 }
 
-/* ---------------- ações da página "Conta e partilha" ---------------- */
+/* ---------------- ações da Segurança e da partilha entre contas ---------------- */
 
 // Copia o id do utilizador para a área de transferência, para o dar a quem se
-// quer conectar; o toast aparece na mesma quando o clipboard não existe.
+// quer ligar (o «O teu id» por baixo dos Proprietários), e o toast diz o que
+// fazer com ele. Sem clipboard, ou com a cópia recusada pelo browser, não diz
+// que copiou: diz o id, para se dar à mão (dizia «copiado» na mesma).
+// Recebe: nada; lê CW.user.id.
 // Devolve: nada — copia o id e mostra o toast.
 CW.copyId = function () {
-  var done = function () { toast('Id copiado: partilha-o com o outro utilizador.'); };
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(CW.user.id).then(done, done);
-  else done();
+  var id = CW.user.id;
+  var done = function () { toast('Id copiado. Dá-o ao outro utilizador para ele te ligar.'); };
+  var falhou = function () { toast('Não deu para copiar. O teu id é ' + id + ': dá-o ao outro utilizador.'); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(id).then(done, falhou);
+  else falhou();
 };
 
 /* Envia um convite de ligação para o id escrito no campo; fica pendente até
@@ -1097,7 +1101,7 @@ CW.logout = function () {
 
 /* ---------------- aviso legal ---------------- */
 
-SUBPAGE.cloud = { label: 'Conta e partilha', sub: 'O teu id, a segurança e onde se partilha' };
+SUBPAGE.cloud = { label: 'Segurança', sub: 'Palavra-passe, sessões e apagar a conta' };
 SUBPAGE.legal = { label: 'Aviso legal', sub: 'Condições de utilização e privacidade' };
 SUBPAGE.ajuda = { label: 'Ajuda e sugestões', sub: 'Como se faz, perguntas e pedidos' };
 SUBPAGE.termos = { label: 'Termos e Condições', sub: 'O acordo entre ti e quem opera o serviço' };
@@ -1122,7 +1126,7 @@ SUBPAGE.faq = { label: 'Perguntas frequentes', sub: 'As dúvidas mais comuns' };
 var PERGUNTAS_FREQUENTES = [
   { id: 'apagar', destaque: true, pergunta: 'Apaguei uma coisa por engano. Consigo recuperar?', resposta: 'Logo a seguir a apagar aparece um <b>«Anular»</b> no fundo do ecrã, durante seis segundos — repõe tudo, incluindo cascatas (um imóvel com os contratos e movimentos). Passado esse tempo, só repondo uma cópia de segurança que tenhas guardado em <b>Definições → Importar e cópias</b>.' },
   { id: 'renda', destaque: true, pergunta: 'Como faço para a renda aparecer sozinha todos os meses?', resposta: 'Cria o contrato com a renda mensal: a app gera um <b>movimento planeado</b> que aparece todos os meses na Visão geral, no cartão «Por confirmar». Um toque em <b>Confirmar</b> regista a renda — não escreves nada.' },
-  { id: 'partilha', destaque: true, pergunta: 'Como partilho as casas com o comproprietário?', resposta: 'O teu id de 8 caracteres está em <b>Definições → Conta e partilha</b>. A outra pessoa cria conta, e um de vocês escreve o id do outro em <b>Pessoas → Proprietários</b>, por baixo da lista. Depois, em «Casas partilhadas», cada um adiciona e remove as casas que partilha e propõe as quotas — a divisão só muda quando todos confirmarem. Há também a <b>ligação de partilha</b>: quem a abrir escolhe que imóveis partilha contigo, e tu aceitas ou recusas cada pedido.' },
+  { id: 'partilha', destaque: true, pergunta: 'Como partilho as casas com o comproprietário?', resposta: 'A outra pessoa cria conta. Em <b>Pessoas → Proprietários</b>, por baixo da lista, cada um tem o seu id de 8 caracteres, com «Copiar», e logo por baixo o campo para o id do outro: um de vocês escreve lá o id do outro, e o outro aceita. Depois, em «Casas partilhadas», cada um adiciona e remove as casas que partilha e propõe as quotas — a divisão só muda quando todos confirmarem. Há também a <b>ligação de partilha</b>: quem a abrir escolhe que imóveis partilha contigo, e tu aceitas ou recusas cada pedido.' },
   { id: 'colaborador', destaque: true, pergunta: 'Como dou acesso a um gestor sem o tornar comproprietário?', resposta: 'Convida-o como <b>colaborador</b>: em <b>Pessoas → Colaboradores</b>, crias um cargo (o que pode ver e adicionar — movimentos, visitas, contratos, documentos…) e uma ligação de convite com esse cargo e os imóveis. Quem a abrir entra (ou cria conta) e fica logo com o acesso. Não tem quota-parte, não entra nas contas entre proprietários, e só edita o que ele próprio adicionar. Podes mudar-lhe o cargo ou removê-lo quando quiseres.' },
   { id: 'dados', pergunta: 'Os meus dados estão seguros?', resposta: 'Ficam numa base de dados na nuvem com cópias de segurança diárias, e também no teu aparelho. Mesmo assim, mantém as tuas próprias cópias: <b>Definições → Importar e cópias → Guardar cópia</b>. Nenhuma nuvem substitui uma cópia tua.' },
   { id: 'fotos', pergunta: 'As fotografias e documentos sincronizam entre aparelhos?', resposta: 'Sim — desde que tenhas sessão iniciada, os anexos sobem para a nuvem e descem nos outros aparelhos. Se um anexo não subir (por tamanho ou falha), a app avisa e ele fica só nesse aparelho até conseguir.' },
@@ -1131,7 +1135,7 @@ var PERGUNTAS_FREQUENTES = [
   { id: 'pdf', pergunta: 'O contrato em PDF serve para assinar?', resposta: 'É uma <b>minuta genérica</b>, não validada por advogado. Usa-a como ponto de partida e pede revisão profissional antes de assinar — a lei do arrendamento muda e cada caso é um caso.' },
   { id: 'tema', pergunta: 'A app não muda para o modo escuro do telemóvel', resposta: 'Em <b>Definições → Tema</b>, escolhe «Automático». No Samsung Internet, o browser escurece as páginas à força e a app pode aparecer clara: em <b>Samsung Internet → Definições → Labs → Usar o tema escuro do site</b>, o Automático passa a seguir o telemóvel; ou escolhe «Escuro» aqui. A escolha é por aparelho.' },
   { id: 'instalar', pergunta: 'Como instalo a app no telemóvel?', resposta: 'Android: no fim das <b>Definições</b> está o APK, ou usa «Adicionar ao ecrã principal» no browser. iPhone: Safari → Partilhar → <b>Adicionar ao ecrã principal</b>.' },
-  { id: 'conta', pergunta: 'Como apago a minha conta?', resposta: 'Em <b>Definições → Conta e partilha → Apagar a conta</b>. É definitivo: apaga imóveis, contratos, movimentos e ligações. Nas casas partilhadas, o teu nome passa a «[deleted]» para os outros.' },
+  { id: 'conta', pergunta: 'Como apago a minha conta?', resposta: 'Em <b>Definições → Segurança → Apagar a conta</b>. É definitivo: apaga imóveis, contratos, movimentos e ligações. Nas casas partilhadas, o teu nome passa a «[deleted]» para os outros.' },
 ];
 
 var perguntasAbertas = {};   // que perguntas estão abertas (vale enquanto a app está aberta)

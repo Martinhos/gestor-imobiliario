@@ -7,7 +7,7 @@
 // recolher. E os ícones próprios da Avaliação e do IRS
 // (navegacao.js:gavetaHtml, navegacao.js:gavetaAlternar). A «Pessoas» é uma
 // porta que abre os Inquilinos (ou os Proprietários, ou os Colaboradores), e
-// os Grupos já não estão no menu (vivem nas Definições).
+// os Grupos são uma porta das Casas, logo a seguir aos Imóveis.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -105,7 +105,7 @@ describe('as secções com título são botões que recolhem', () => {
     assert.match(s, /^<div class="navsec fechada">/);
     assert.match(titulo(nav(), 'Casas'), /aria-expanded="false"/);
     assert.match(titulo(nav(), 'Dinheiro'), /aria-expanded="true"/, 'as outras não se mexem');
-    assert.deepEqual(idsDe(s), ['properties', 'contracts', 'tenants', 'visits'], 'os itens continuam no DOM (a CSS encolhe-os e tira-os do Tab); a «Pessoas» abre os inquilinos');
+    assert.deepEqual(idsDe(s), ['properties', 'groups', 'contracts', 'tenants', 'visits'], 'os itens continuam no DOM (a CSS encolhe-os e tira-os do Tab); a «Pessoas» abre os inquilinos');
     app.gavetaAlternar('Casas');
     assert.deepEqual(guardadas(), []);
     app.buildNav();
@@ -238,18 +238,23 @@ describe('o crachá no título da secção recolhida', () => {
 });
 
 describe('o que a gaveta mostra', () => {
-  test('as Casas têm a porta «Pessoas»; o Dinheiro, a Análise e a Agenda os seus; os Grupos saíram do menu, e os Colaboradores entram pela «Pessoas»', () => {
+  test('as Casas têm os Grupos a seguir aos Imóveis e a porta «Pessoas»; o Dinheiro, a Análise e a Agenda os seus; os Colaboradores entram pela «Pessoas»', () => {
     app.buildNav();
     const html = nav();
-    assert.deepEqual(idsDe(seccao(html, 'Casas')), ['properties', 'contracts', 'tenants', 'visits']);
+    assert.deepEqual(idsDe(seccao(html, 'Casas')), ['properties', 'groups', 'contracts', 'tenants', 'visits']);
+    assert.match(seccao(html, 'Casas'), /data-click="go\('groups'\)">.*?<span class="txt">Grupos<\/span>/, 'os Grupos, com o ícone e o nome deles');
     assert.match(seccao(html, 'Casas'), /<span class="txt">Pessoas<\/span>/, 'uma porta para os inquilinos e os proprietários');
     assert.doesNotMatch(html, /<span class="txt">(Inquilinos|Proprietários)<\/span>/);
     assert.deepEqual(idsDe(seccao(html, 'Dinheiro')), ['transactions', 'recurring', 'credits']);
     assert.deepEqual(idsDe(seccao(html, 'Análise')), ['reports', 'projections', 'fisco']);
     assert.match(seccao(html, 'Análise'), /<span class="txt">IRS · Anexo F<\/span>/);
     assert.deepEqual(idsDe(seccao(html, 'Agenda')), ['calendar']);
-    assert.doesNotMatch(html, /go\('(groups|colaboradores)'\)/, 'nem os Grupos nem os Colaboradores têm porta própria');
+    assert.doesNotMatch(html, /go\('colaboradores'\)/, 'os Colaboradores não têm porta própria');
     assert.doesNotMatch(html, /<span class="txt">Colaboradores<\/span>/);
+    app.tab = 'groups';
+    app.buildNav();
+    assert.match(seccao(nav(), 'Casas'), /<a class="on"[^>]*aria-current="page"[^>]*data-click="go\('groups'\)"/, 'nos Grupos acende a deles');
+    assert.doesNotMatch(nav(), /<a class="on"[^>]*go\('settings'\)/, 'e não as Definições');
     app.tab = 'owners';
     app.buildNav();
     assert.match(nav(), /<a class="on"[^>]*data-click="go\('owners'\)"[^>]*>[\s\S]*?Pessoas/, 'nos proprietários a porta fica acesa e leva-os');
@@ -345,13 +350,13 @@ describe('o que a gaveta mostra', () => {
     assert.doesNotMatch(html, /gav-analise|Análise/);
     assert.ok(titulo(html, 'Dinheiro'), 'controlo: as outras ficam');
     try {
-      // tudo desligado: não fica título nenhum, só as Definições, que são da base
+      // tudo desligado: ficam as Casas só com os Grupos e as Definições, que são da base
       app.definirServicosDesligados(SERVICOS_FICHEIROS.map((s) => s.id));
       app.buildNav();
       const tudo = nav();
-      assert.deepEqual([...tudo.matchAll(/class="navsec-tit"[^>]*><span class="txt">([^<]+)/g)].map((m) => m[1]), []);
-      assert.deepEqual(idsDe(tudo), ['settings']);
-      assert.doesNotMatch(tudo, /Casas|Dinheiro|Análise|Agenda/);
+      assert.deepEqual([...tudo.matchAll(/class="navsec-tit"[^>]*><span class="txt">([^<]+)/g)].map((m) => m[1]), ['Casas']);
+      assert.deepEqual(idsDe(tudo), ['groups', 'settings']);
+      assert.doesNotMatch(tudo, /Dinheiro|Análise|Agenda/);
     } finally {
       app.definirServicosDesligados([]);
     }
