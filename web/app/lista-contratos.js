@@ -44,7 +44,10 @@ const CT_PRAZOS_DO_CONTRATO=['oposicao','fim','aumento','modelo2','cessacao','fe
    e, no computador, da ordenação —; por baixo, um grupo por imóvel com o nome, o que é (imóvel
    inteiro, por quartos e quantos estão arrendados, vago) e a renda do mês, e
    uma linha por contrato (ctLinha). No computador é uma tabela só, com o
-   cabeçalho das colunas na moldura. O «Novo contrato» é a ação do cabeçalho
+   cabeçalho das colunas na moldura. Com contratos de duas ou três origens
+   (vistas.js:listaPorOrigem), os meus, os partilhados comigo e aqueles em
+   que colaboro são secções, cada uma com os seus grupos por imóvel e, no
+   computador, a sua tabela; e há o chip «Origem» (vistas.js:lfOrigem). O «Novo contrato» é a ação do cabeçalho
    (navegacao.js) e o + da barra de baixo; o vazio continua a ter o seu.
    Recebe: nada.
    Devolve: string com o HTML completo da vista. */
@@ -60,30 +63,54 @@ function vContracts(){
   if(!db.properties.length)return esperaDoServidor()||`<div class="empty"><b>Cria primeiro um imóvel</b>Um contrato liga um imóvel a um ou mais inquilinos.
     ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`;
   if(!db.contracts.length)return `<div class="empty"><b>Sem contratos</b>O contrato é onde vive a renda: podes arrendar o imóvel inteiro, ou um contrato por quarto.${adiciona?saida('Novo contrato','ctModal()','camada'):''}</div>`;
-  /* as contagens do estado: os contratos do âmbito que passam os outros filtros, por estado */
+  /* a origem segue o imóvel do contrato: o filtro e as secções (vistas.js:lfOrigem, vistas.js:listaPorOrigem) */
+  const deOrigem=c=>origemDaCasa(c.propertyId),org=lfOrigem(K,base,deOrigem),noFiltro=org.filtra(base);
+  /* as contagens do estado: os contratos do âmbito que passam os outros filtros (a origem incluída), por estado */
   const semEstado=Object.assign({},s,{st:''}),conta={'':0,on:0,fut:0,off:0};
-  base.forEach(c=>{if(!ctFMatch(c,semEstado))return;conta['']++;const e=ctEstado(c);conta[e==='ativo'?'on':e==='futuro'?'fut':'off']++});
-  const head=ctChipsHtml(conta,s,base.filter(c=>ctFMatch(c,s)).length,cgs);
+  noFiltro.forEach(c=>{if(!ctFMatch(c,semEstado))return;conta['']++;const e=ctEstado(c);conta[e==='ativo'?'on':e==='futuro'?'fut':'off']++});
+  const head=ctChipsHtml(conta,s,noFiltro.filter(c=>ctFMatch(c,s)).length,cgs,org.campo(base.filter(c=>ctFMatch(c,s)),ORIGEM_CONTRATOS.rot));
   const ctx=ctContextoDaLista();
-  const grupos=[];
+  /* os contratos que passam, imóvel a imóvel pela ordem do âmbito e, dentro
+     de cada um, pela ordenação escolhida: é a ordem das linhas em qualquer
+     secção, e cada secção junta-os de novo por imóvel (ctGruposDaLista) */
+  const cs=[];
   visiveis().forEach(p=>{
     if(s.p&&p.id!==s.p)return;
-    const cs=lfSort(K,contractsOf(p.id).filter(c=>ctFMatch(c,s)),{nome:c=>ctName(c),renda:c=>c.rent,inicio:c=>c.start||''});if(!cs.length)return;
-    /* Um grupo é UM elemento: o pecaDe fica com o primeiro filho do html de
-       cada item, e dois irmãos — o cabeçalho e a lista — perdiam o segundo em
-       silêncio. O que o imóvel é (vago, 3/4 quartos) entra na assinatura, e
-       o total do mês sai dela para um span vazio, preenchido depois de
-       reconciliar (pintarRendasDosGrupos). O cabeçalho tem classe própria: o
-       .section-title com um utilitário por cima era uma classe com dois
-       aspetos (docs/design.md, dívida dos cabeçalhos dos grupos). */
-    const desc=ctDescDoImovel(p);
-    grupos.push({chave:'imovel:'+p.id,sig:'imovel|'+p.id+'|'+p.name+'|'+desc,html:`<section class="ct-grupo">
-      <div class="ct-grupo-cab"><h3 class="ct-grupo-nome">${esc(p.name)}</h3><span class="small ct-grupo-desc">${esc(desc)}</span><span class="ctrenda num"></span></div>
-      `+listaViva('cts:'+p.id,cs.map(c=>({chave:'ct:'+c.id,html:ctLinha(c,p,ctx)})),'ct-linhas')+`</section>`});
+    lfSort(K,org.filtra(contractsOf(p.id)).filter(c=>ctFMatch(c,s)),{nome:c=>ctName(c),renda:c=>c.rent,inicio:c=>c.start||''}).forEach(c=>cs.push(c));
   });
   const rodape=ctRodapeDaLista(s);
-  if(!grupos.length)return head+vazioFiltro()+rodape;
-  return head+`<div class="ct-tabela">${ctCabecalhoDaTabela()}${listaViva('contratos',grupos,'ct-lista')}</div>`+rodape;
+  if(!cs.length)return head+vazioFiltro()+rodape;
+  return head+listaPorOrigem('contratos',cs,deOrigem,ORIGEM_CONTRATOS.titulos,
+    (xs,suf)=>`<div class="ct-tabela">${ctCabecalhoDaTabela()}${listaViva('contratos'+suf,ctGruposDaLista(xs,ctx),'ct-lista')}</div>`)+rodape;
+}
+/* Os textos da origem nos contratos: os títulos das secções
+   (vistas.js:listaPorOrigem) e as escolhas do filtro «Origem» (vistas.js:lfOrigem). */
+const ORIGEM_CONTRATOS={titulos:{meu:'Os meus contratos',partilhado:'Partilhados comigo',colaboro:'Em que colaboro'},
+  rot:{todos:'Todos',meu:'Os meus',partilhado:'Partilhados comigo',colaboro:'Em que colaboro'}};
+/* Os grupos por imóvel de uma secção da lista: um item da lista viva por
+   imóvel, com o cabeçalho e as linhas dos contratos dele, pela ordem em que
+   os contratos chegam (a do âmbito e, dentro, a da ordenação). Cada secção
+   da origem tem os seus — um imóvel é só de uma origem, e as chaves não se
+   repetem entre secções.
+   Um grupo é UM elemento: o pecaDe fica com o primeiro filho do html de cada
+   item, e dois irmãos — o cabeçalho e a lista — perdiam o segundo em
+   silêncio. O que o imóvel é (vago, 3/4 quartos) entra na assinatura, e o
+   total do mês sai dela para um span vazio, preenchido depois de reconciliar
+   (pintarRendasDosGrupos). O cabeçalho tem classe própria: o .section-title
+   com um utilitário por cima era uma classe com dois aspetos (docs/design.md,
+   dívida dos cabeçalhos dos grupos).
+   Recebe: cs — os contratos da secção, já filtrados e ordenados; ctx — o ctContextoDaLista.
+   Devolve: [{chave, sig, html}] — os itens da lista viva dos grupos. */
+function ctGruposDaLista(cs,ctx){
+  const ordem=[],por={};
+  (cs||[]).forEach(c=>{const k=c.propertyId;if(!por[k]){por[k]=[];ordem.push(k)}por[k].push(c)});
+  return ordem.map(pid=>{
+    const p=prop(pid);if(!p)return null;
+    const desc=ctDescDoImovel(p);
+    return {chave:'imovel:'+p.id,sig:'imovel|'+p.id+'|'+p.name+'|'+desc,html:`<section class="ct-grupo">
+      <div class="ct-grupo-cab"><h3 class="ct-grupo-nome">${esc(p.name)}</h3><span class="small ct-grupo-desc">${esc(desc)}</span><span class="ctrenda num"></span></div>
+      `+listaViva('cts:'+p.id,por[pid].map(c=>({chave:'ct:'+c.id,html:ctLinha(c,p,ctx)})),'ct-linhas')+`</section>`};
+  }).filter(Boolean);
 }
 /* O que um imóvel é, para o cabeçalho do grupo: imóvel inteiro, por quartos
    com quantos estão arrendados hoje, vago, ou uso próprio.
@@ -272,20 +299,23 @@ function ctCampoEstado(conta){
    a pesquisa com o funil do painel completo e os chips rápidos — o estado
    com quantos há em cada um (ctCampoEstado), o imóvel quando há mais de um com
    contratos e, só no computador, a ordenação. O painel tem também o grupo,
-   quando os há. Tocar filtra logo, sem «Aplicar». A seleção de vários entra
+   quando os há, e a origem (os meus, partilhados comigo, em que colaboro),
+   quando a lista tem contratos de duas origens (vistas.js:lfOrigem), que é
+   também um chip. Tocar filtra logo, sem «Aplicar». A seleção de vários entra
    pelo «Selecionar vários» do cabeçalho (cloud/selecao-listas.js:selLCabecalho).
    Recebe: conta — {'', on, fut, off: quantos}; s — o estado dos filtros
    (lf('lcts')); n — quantos contratos passam os filtros; cgs — os grupos de
-   contratos.
+   contratos; origem (opcional) — o campo «Origem» já montado, ou null.
    Devolve: o HTML da barra, do painel e dos chips. */
-function ctChipsHtml(conta,s,n,cgs){
+function ctChipsHtml(conta,s,n,cgs,origem){
   /* os imóveis do âmbito que têm contratos, e o escolhido mesmo que já não tenha */
   const comContratos=visiveis().filter(p=>contractsOf(p.id).length||p.id===s.p);
   return lfCabeca('lcts',{nome:['contrato','contratos'],dos:'dos contratos',n:n,
     campos:[ctCampoEstado(conta),
       {chave:'p',nome:'Imóvel',curto:'Todos',rapido:comContratos.length>1||!!s.p,
         opcoes:[{v:'',label:'Todos os imóveis'}].concat(comContratos.map(p=>({v:p.id,label:p.name})))},
-      (cgs||[]).length?{chave:'g',nome:'Grupo',curto:'Todos',opcoes:[{v:'',label:'Todos os grupos'}].concat(cgs.map(g=>({v:g.id,label:g.name})))}:null],
+      (cgs||[]).length?{chave:'g',nome:'Grupo',curto:'Todos',opcoes:[{v:'',label:'Todos os grupos'}].concat(cgs.map(g=>({v:g.id,label:g.name})))}:null,
+      origem||null],
     ordem:{opcoes:[{v:'nome',label:'Nome'},{v:'renda',label:'Renda'},{v:'inicio',label:'Início'}],rapido:'largo'}});
 }
 /* O que fica por baixo da lista: com «Em vigor» escolhido, os imóveis de
@@ -297,7 +327,7 @@ function ctChipsHtml(conta,s,n,cgs){
 function ctRodapeDaLista(s){
   let out='';
   if(s.st==='on'&&!s.g&&!String(s.q||'').trim()){
-    const sem=visiveis().filter(p=>(!s.p||p.id===s.p)&&p.use==='investimento'&&!activeContracts(p.id).length);
+    const sem=visiveis().filter(p=>(!s.p||p.id===s.p)&&(!s.or||origemDaCasa(p.id)===s.or)&&p.use==='investimento'&&!activeContracts(p.id).length);
     if(sem.length){
       const term=sem.some(p=>contractsOf(p.id).some(c=>ctEstado(c)==='terminado'));
       out+=`<p class="small ct-sem-vigor">${esc(listaE(sem.map(p=>p.name)))} ${sem.length===1?'não tem':'não têm'} contrato em vigor${term?` · <button type="button" class="ct-ligacao" data-toca="vista" data-click="ctFiltroRapido('off')">ver terminados</button>`:''}</p>`;

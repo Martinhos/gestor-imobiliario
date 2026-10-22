@@ -200,7 +200,7 @@ describe('a folha de estilo do carrossel', () => {
 
   test('as setas têm 44px, o hover só com rato, e no dedo ficam só para o leitor de ecrã', () => {
     assert.match(SECCAO, /\.fc-seta\{[^}]*width:44px;height:44px/);
-    assert.match(SECCAO, /@media\(hover:hover\)\{\.fc-seta:hover/);
+    assert.match(SECCAO, /@media\(hover:hover\) and \(pointer:fine\)\{\.fc-seta:hover/);
     assert.ok(!/(^|\})\s*\.fc-seta:hover/.test(SECCAO.replace(/\/\*[\s\S]*?\*\//g, '')), 'nenhum :hover fora do @media');
     assert.match(SECCAO, /@media\(hover:none\),\(pointer:coarse\)\{\.fc-seta:not\(:focus-visible\)\{[^}]*clip-path:inset\(50%\)/);
     assert.match(SECCAO, /transition:transform var\(--rapido\) var\(--curva\)/, 'o premido com os tokens da casa');

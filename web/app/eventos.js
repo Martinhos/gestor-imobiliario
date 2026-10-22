@@ -89,7 +89,21 @@
      el.click() não passa pelo window, e a ação não corre.
 
    Uma ação que falha rebenta com um Error de mensagem clara, que chega ao
-   window.onerror como chegava o erro de um on…=. */
+   window.onerror como chegava o erro de um on…=.
+
+   O toque não deixa foco (eventos.js:largarFocoDoToque). No telemóvel, um
+   toque num botão ou numa aba dá-lhe o foco, e o foco fica lá depois de a
+   ação correr: o Samsung Internet pinta-o (o realce dele, ou um :hover preso),
+   e a aba tocada ficava acesa depois de deslizar para a vizinha. Por isso um
+   click do dedo ou da caneta (eventos.js:clickDoToque) num elemento com
+   data-click larga o foco que ficou nele, ANTES de a ação correr — assim o
+   openModal não o guarda como gatilho (e não o devolve ao fechar), e quem
+   repinta e devolve o foco ao nó novo (o funil, um segmentado) já não o
+   encontra — e outra vez DEPOIS, se a ação o devolveu ao elemento. O teclado
+   fica como estava (Enter e Espaço dão um click sem ponteiro), os campos
+   nunca perdem o foco por isto, e o foco que a ação mandou para outro sítio
+   (a janela que abriu, um campo) fica onde ela o pôs. Dentro de uma janela,
+   o foco largado vai para a própria janela (.sheet), e não para trás do véu. */
 
 // os tipos de evento que têm atributo, um data-<tipo> cada
 const ACAO_TIPOS = ['click', 'change', 'input', 'keydown', 'pointerdown'];
@@ -119,7 +133,9 @@ const ACAO_PROTOS_DA_APP = [Object.prototype, Array.prototype];
 /* O que a ligação apura ao arrancar: o window, os nomes que o browser já lá
    tinha, as funções nativas que se podem chamar, e os nomes da app (null até
    a lista fechar, no DOMContentLoaded). */
-const ACAO_ESTADO = { janela: null, doBrowser: new Set(), nativas: new Set(), daApp: null };
+const ACAO_ESTADO = { janela: null, doBrowser: new Set(), nativas: new Set(), daApp: null, ponteiro: '' };
+// os campos onde se escreve: um toque nunca lhes tira o foco (é lá que escreve o teclado do telemóvel)
+const ACAO_CAMPOS = /^(INPUT|TEXTAREA|SELECT)$/;
 // o toString das funções, guardado antes de alguém o poder trocar
 const ACAO_TOSTRING = Function.prototype.toString;
 
@@ -617,11 +633,14 @@ function ligarEventosDeclarados(janela) {
       const el = ev.currentTarget;
       const texto = el.getAttribute(atributo);
       if (texto == null) return;
-      correrAcao(texto, el, ev);
+      try { correrAcao(texto, el, ev); } finally { if (tipo === 'click') largarFocoDoToque(ev, [el]); }
     };
     janela.addEventListener(tipo, (ev) => {
       if (datas) datasVaziasDoEvento(ev);
+      // de onde vem o próximo click (eventos.js:clickDoToque)
+      if (tipo === 'pointerdown' && ev) ACAO_ESTADO.ponteiro = typeof ev.pointerType === 'string' ? ev.pointerType : '';
       const caminho = ev && typeof ev.composedPath === 'function' ? ev.composedPath() : [];
+      if (tipo === 'click') largarFocoDoToque(ev, caminho.filter((el) => el && typeof el.hasAttribute === 'function' && el.hasAttribute(atributo)));
       for (const el of caminho) {
         if (!el || typeof el.hasAttribute !== 'function' || ligados.has(el) || !el.hasAttribute(atributo)) continue;
         ligados.add(el);
@@ -655,6 +674,53 @@ function datasVaziasDoEvento(ev) {
   const el = ev && ev.target;
   if (!el || el.tagName !== 'INPUT' || el.type !== 'date') return;
   if (typeof marcarDatasVazias === 'function') marcarDatasVazias(el);
+}
+
+/* De onde veio um click: do dedo ou da caneta, do rato, ou de ponteiro
+   nenhum (o Enter ou o Espaço num elemento focado, um el.click() da app). O
+   click do Chrome traz o pointerType ('' quando vem do teclado); um que não o
+   traga (no Safari o click ainda é um MouseEvent) mas tenha detail > 0 veio
+   de um ponteiro, e vale o do último pointerdown (ACAO_ESTADO.ponteiro). Um
+   click do teclado ou da app tem detail 0, e nunca conta como toque.
+   Recebe: ev — o click.
+   Devolve: true se veio do dedo ou da caneta (pointerType touch ou pen). */
+function clickDoToque(ev) {
+  if (!ev) return false;
+  let tipo = typeof ev.pointerType === 'string' ? ev.pointerType : '';
+  if (!tipo && ev.detail > 0) tipo = ACAO_ESTADO.ponteiro;
+  return tipo === 'touch' || tipo === 'pen';
+}
+
+/* O elemento é um campo onde se escreve (input, textarea, select ou
+   contenteditable)? Esses guardam o foco depois de um toque.
+   Recebe: el — o elemento.
+   Devolve: true se é um campo. */
+function acaoCampo(el) {
+  return !!el && (ACAO_CAMPOS.test(String(el.tagName || '')) || el.isContentEditable === true);
+}
+
+/* Larga o foco que um toque deixou num elemento com ação (o comentário do
+   topo: «O toque não deixa foco»). Só um click do dedo ou da caneta, só se o
+   foco está num dos elementos tocados ou dentro dele, e nunca num campo.
+   Dentro de uma janela aberta o foco vai para a própria janela (o .sheet,
+   como o componentes.js:focarModal), sem rolar; fora dela, sai (blur).
+   Recebe: ev — o click; tocados — os elementos com data-click do caminho
+   (antes da ação), ou o elemento cuja ação acabou de correr (depois).
+   Devolve: nada. */
+function largarFocoDoToque(ev, tocados) {
+  try {
+    if (!clickDoToque(ev) || !tocados || !tocados.length) return;
+    const doc = (ACAO_ESTADO.janela || window).document;
+    const a = doc && doc.activeElement;
+    if (!a || a === doc.body || a === doc.documentElement || acaoCampo(a)) return;
+    if (!tocados.some((el) => el === a || (typeof el.contains === 'function' && el.contains(a)))) return;
+    const janela = typeof a.closest === 'function' ? a.closest('.modal .sheet[tabindex]') : null;
+    if (janela && janela !== a && typeof janela.focus === 'function') {
+      janela.focus({ preventScroll: true });
+      if (doc.activeElement === janela) return;
+    }
+    if (typeof a.blur === 'function') a.blur();
+  } catch (e) { /* largar o foco é um cuidado: nunca trava a ação */ }
 }
 
 /* O botão que volta ao topo (index.html:#toTop). Era um on…= com um objeto

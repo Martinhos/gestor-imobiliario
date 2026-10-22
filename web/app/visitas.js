@@ -58,12 +58,17 @@ function visIntervalo(tipo,k1,k2,rotulo){
    nos intervalos (visitas.js:visChips). O painel tem os mesmos três
    seletores e os intervalos de dia e de hora de início. Por baixo, as
    próximas e as passadas em dois cartões, cada um com o título e quantas
-   são; no computador lado a lado. Sem FAB: o «Marcar visita» está no
+   são; no computador lado a lado. Com visitas de duas ou três origens
+   (vistas.js:listaPorOrigem), as minhas, as partilhadas comigo e aquelas em
+   que colaboro são secções, cada uma com as suas próximas e passadas dentro,
+   e há o chip «Origem» (vistas.js:lfOrigem). Sem FAB: o «Marcar visita» está no
    cabeçalho e no + da barra, e no vazio.
    Devolve: o HTML da página (texto). */
 function vVisits(){
   const K='lvis',s=lf(K);
-  const lista=visOrdenadas().filter(v=>{
+  /* a origem segue o imóvel da visita: o filtro e as secções (vistas.js:lfOrigem, vistas.js:listaPorOrigem) */
+  const deOrigem=v=>origemDaCasa(v.propertyId),org=lfOrigem(K,db.visits||[],deOrigem);
+  const achadas=visOrdenadas().filter(v=>{
     if(s.pr&&v.propertyId!==s.pr)return false;
     if(s.es&&v.estado!==s.es)return false;
     if(s.rs&&v.resultado!==s.rs)return false;
@@ -73,6 +78,7 @@ function vVisits(){
     if(s.h2&&(v.start||'99:99')>s.h2)return false;
     return lfHit(K,[v.nomes,v.contacto,v.notas,propName(v.propertyId)].join(' '));
   });
+  const lista=org.filtra(achadas);
   const marca=casasComo('visit.add').length>0;   /* sem imóvel onde possa marcar, não há botão */
   if(!(db.visits||[]).length)
     return esperaDoServidor()||`<div class="empty"><b>Ainda não há visitas</b>${marca?'Marca a primeira: quem vem, a que imóvel, e quando.':'As visitas aos imóveis onde colaboras aparecem aqui.'}${marca?saida('Marcar visita','visitModal()','camada'):''}</div>`;
@@ -80,15 +86,26 @@ function vVisits(){
      horas, e o desfecho no fim; os chips seguem a ordem dos campos rápidos */
   const head=lfCabeca(K,{nome:['visita','visitas'],dos:'das visitas',n:lista.length,
     campos:[visChipSel('pr','Imóvel'),visChipSel('es','Estado')]
-      .concat(visIntervalo('date','d1','d2','Dia'),visIntervalo('time','h1','h2','Hora de início'),[visChipSel('rs','Desfecho')]),
+      .concat(visIntervalo('date','d1','d2','Dia'),visIntervalo('time','h1','h2','Hora de início'),[visChipSel('rs','Desfecho'),
+        org.campo(achadas,ORIGEM_VISITAS.rot)]),
     chips:visChips(K)});
-  const futuras=lista.filter(v=>!visPassada(v)),passadas=lista.filter(visPassada).reverse();
-  /* o título do grupo fica FORA do contentor: o motor deita fora tudo o que
-     não seja um item com chave */
-  const grupo=(titulo,vs)=>vs.length?`<section class="vis-grupo"><div class="vis-grupo-cab"><h2>${titulo}</h2><span class="small num">${vs.length}</span></div>`
-    +listaViva('visitas:'+titulo,vs.map(v=>({chave:'vis:'+v.id,html:visCard(v)})),'vis-lista')+'</section>':'';
-  return head+(lista.length?`<div class="vis-grupos">${grupo('Próximas',futuras)}${grupo('Passadas',passadas)}</div>`:vazioFiltro());
+  if(!lista.length)return head+vazioFiltro();
+  /* cada secção da origem com as Próximas e as Passadas dentro; o título do
+     grupo fica FORA do contentor: o motor deita fora tudo o que não seja um
+     item com chave. Sozinha, o grupo é um h2, como sempre; dentro de uma
+     secção (que já tem o h2), um h3 */
+  const grupo=(titulo,vs,suf,h)=>vs.length?`<section class="vis-grupo"><div class="vis-grupo-cab"><${h}>${titulo}</${h}><span class="small num">${vs.length}</span></div>`
+    +listaViva('visitas'+suf+':'+titulo,vs.map(v=>({chave:'vis:'+v.id,html:visCard(v)})),'vis-lista')+'</section>':'';
+  return head+listaPorOrigem('visitas',lista,deOrigem,ORIGEM_VISITAS.titulos,(vs,suf,sozinha)=>{
+    const h=sozinha?'h2':'h3',futuras=vs.filter(v=>!visPassada(v)),passadas=vs.filter(visPassada).reverse();
+    return `<div class="vis-grupos">${grupo('Próximas',futuras,suf,h)}${grupo('Passadas',passadas,suf,h)}</div>`;
+  });
 }
+/* Os textos da origem nas visitas: os títulos das secções
+   (vistas.js:listaPorOrigem) e as escolhas do filtro «Origem» (vistas.js:lfOrigem),
+   no feminino. */
+const ORIGEM_VISITAS={titulos:{meu:'As minhas visitas',partilhado:'Partilhadas comigo',colaboro:'Em que colaboro'},
+  rot:{todos:'Todas',meu:'As minhas',partilhado:'Partilhadas comigo',colaboro:'Em que colaboro'}};
 /* As opções de um filtro das visitas, iguais no painel e nos chips.
    Recebe: chave — 'pr' (imóvel), 'es' (estado) ou 'rs' (desfecho).
    Devolve: [{v, label}] com o «todos» à cabeça. */

@@ -34,12 +34,13 @@ function personApagavel(kind,p){
    põe-na aqui); sem ela, ninguém partilha.
    Recebe: id — o id da conta do outro.
    Devolve: {act} — a ação que abre onde se adicionam e removem as casas
-   partilhadas com ele —, ou null. */
+   partilhadas com ele —, mais {ligacao} — o id da ligação ativa — quando a
+   partilha é por uma; ou null. */
 let partilhaComDono=null;
 /* A partilha com outro proprietário (partilhaComDono), e um erro lá não leva
    a lista nem a ficha consigo.
    Recebe: id — o id da conta do outro.
-   Devolve: {act}, ou null. */
+   Devolve: {act} (com {ligacao} quando há uma ativa), ou null. */
 function comoPartilhoCom(id){
   if(!partilhaComDono)return null;
   try{return partilhaComDono(id)||null}catch(e){return null}
@@ -326,7 +327,12 @@ function pesJuntarDocs(id,input){
    gravava localmente e desaparecia na sincronização seguinte. No meu próprio
    perfil, o «Editar» vai ao editProfile da nuvem, que é quem sabe guardar.
    O contrato abre-se no corpo (a ação rápida «Ver contrato» e as linhas de
-   «Mora em»); o ⋯ fica com o que destrói.
+   «Mora em»); o ⋯ fica com o que destrói: «Apagar» numa ficha minha, e
+   «Remover ligação» na de outro proprietário ligado a mim
+   (removerLigacaoDaFicha). O ⋯ e o rodapé voltam a ler-se a cada repinte
+   (componentes.js:refrescarFichas): removida a ligação, saem com ela. A
+   ficha de um proprietário leva o id dele (dono), para a nuvem a fechar
+   quando ele sai da lista (cloud/partilha.js:fecharFichaDeQuemSaiu).
    Recebe: kind — 'tenant' ou 'owner'; id — o id da pessoa.
    Devolve: nada — abre a janela. */
 function personView(kind,id){
@@ -335,18 +341,38 @@ function personView(kind,id){
   const euSou=kind==='owner'&&window.CW&&CW.user&&CW.user.id===p.id;
   const ok=personEditavel(kind,p);
   const act=euSou&&window.CW&&CW.editProfile?'CW.editProfile()':`personModal('${jsq(kind)}','${jsq(id)}')`;
-  abrirFicha({
-    titulo:()=>{const x=(kind==='owner'?db.owners:db.tenants||[]).find(y=>y.id===id);return x?x.name:'Ficha'},
+  const atual=()=>((kind==='owner'?db.owners:db.tenants)||[]).find(y=>y.id===id);
+  const o={
+    dono:kind==='owner'?id:null,
+    titulo:()=>{const x=atual();return x?x.name:'Ficha'},
     corpo:()=>personFicha(kind,id),
     menu:()=>{
-      const x=(kind==='owner'?db.owners:db.tenants||[]).find(y=>y.id===id);
+      const x=atual();if(!x)return '';
       /* apagar um proprietário com conta não é apagar um registo meu: é
          mexer numa pessoa que o servidor volta a mandar no pull seguinte */
-      return x&&personApagavel(kind,x)?menu('fichaPer',[{label:kind==='owner'?'Apagar proprietário':'Apagar inquilino',
-        icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${jsq(kind)}','${jsq(id)}')`}]):'';
+      const itens=[];
+      if(personApagavel(kind,x))itens.push({label:kind==='owner'?'Apagar proprietário':'Apagar inquilino',
+        icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${jsq(kind)}','${jsq(id)}')`});
+      const lig=removerLigacaoDaFicha(kind,x);if(lig)itens.push(lig);
+      return itens.length?menu('fichaPer',itens):'';
     },
-    editar:ok?{rotulo:'Editar',act:act}:casasPartilhadasDaFicha(kind,p),
-  });
+  };
+  /* o rodapé lê o editar a cada repinte: sem a ligação, o «Editar casas
+     partilhadas» passa ao grupo em comum, ou sai */
+  Object.defineProperty(o,'editar',{enumerable:true,get:()=>ok?{rotulo:'Editar',act:act}:casasPartilhadasDaFicha(kind,atual()||p)});
+  abrirFicha(o);
+}
+/* O «Remover ligação» do ⋯ da ficha de outro proprietário com conta, ao lado
+   do X: só quando a partilha com ele é por uma ligação ativa (comoPartilhoCom
+   traz o id dela); só por grupo, ou no meu perfil, não há. Chama o CW.delConn
+   da nuvem, que pergunta antes, com as casas que vão junto.
+   Recebe: kind — 'tenant' ou 'owner'; p — a pessoa.
+   Devolve: a opção do menu ({label, icon, danger, toca, risco, act}), ou null. */
+function removerLigacaoDaFicha(kind,p){
+  if(kind!=='owner'||!p||!p._userId||p.id===meuId())return null;
+  const c=comoPartilhoCom(p.id);
+  if(!c||!c.ligacao||!(window.CW&&typeof CW.delConn==='function'))return null;
+  return {label:'Remover ligação',icon:'trash',danger:true,toca:'camada',risco:'destroi',act:`CW.delConn('${jsq(c.ligacao)}')`};
 }
 /* O botão do rodapé da ficha de outro proprietário com conta, no lugar do
    «Editar» que ele não tem (o perfil é dele): «Editar casas partilhadas»,

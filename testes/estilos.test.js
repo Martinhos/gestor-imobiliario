@@ -356,15 +356,19 @@ describe('movimento', () => {
 
   /* Do uso real (2026-10-22): «quando clico em qualquer botão, até eu clicar
      em mais algum, aquele fica com cor de highlight». No dedo o :hover fica
-     preso depois do toque; só com rato é que passar por cima existe. */
-  test('nenhum :hover fora de um @media(hover:hover)', () => {
+     preso depois do toque; só com rato é que passar por cima existe. E outra
+     vez no mesmo dia, nas abas das Casas e do Dinheiro: alguns Galaxy (a S
+     Pen) respondem (hover:hover) num ecrã de dedo, por isso o rato pede
+     também o (pointer:fine). */
+  test('nenhum :hover fora de um @media(hover:hover) and (pointer:fine)', () => {
     const soltos = [];
     const pilha = [];
     let buf = '';
+    const doRato = (p) => /\(\s*hover\s*:\s*hover\s*\)/.test(p) && /\(\s*pointer\s*:\s*fine\s*\)/.test(p);
     for (const c of cssLimpo) {
       if (c === '{') {
         if (buf.includes(':hover') && !buf.trim().startsWith('@') &&
-          !pilha.some((p) => /\(\s*hover\s*:\s*hover\s*\)/.test(p))) soltos.push(buf.trim());
+          !pilha.some(doRato)) soltos.push(buf.trim());
         pilha.push(buf.trim()); buf = '';
       } else if (c === '}') { pilha.pop(); buf = ''; } else if (c === ';') buf = ''; else buf += c;
     }

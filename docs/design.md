@@ -495,12 +495,28 @@ primário escurece para --accent-press e a gaveta tem paleta própria
 (estilos.css:.btn.primary:active).
 
 O realce de passar por cima só existe com rato: todo o :hover vive num
-estilos.css:@media(hover:hover) — os botões, os cartões tocáveis, as
-opções dos menus e dos seletores, os chips, as etiquetas, os itens da barra
-lateral e da barra de baixo, os dias do calendário (estilos.css:.calday), a
-barra azul-noite da seleção. Fora dele, no dedo, o :hover fica preso depois
-do toque e o botão fica mais claro até se tocar noutro sítio
-(testes/estilos.test.js chumba um :hover solto).
+estilos.css:@media(hover:hover) and (pointer:fine) — os botões, os cartões
+tocáveis, as opções dos menus e dos seletores, os chips, as etiquetas, os
+itens da barra lateral e da barra de baixo, os dias do calendário
+(estilos.css:.calday), a barra azul-noite da seleção. Fora dele, no dedo, o
+:hover fica preso depois do toque e o botão fica mais claro até se tocar
+noutro sítio; e o (pointer:fine) é preciso porque há Galaxy com caneta que
+respondem (hover:hover) num ecrã de dedo (testes/estilos.test.js chumba um
+:hover fora desse portão, e um @media(hover:hover) sem o (pointer:fine)).
+
+O toque não deixa foco. Um click do dedo ou da caneta num elemento com
+data-click (eventos.js:clickDoToque — o pointerType do click, ou o do último
+pointerdown quando o click não o traz e tem detail > 0) larga o foco que
+ficou nesse elemento ou dentro dele (eventos.js:largarFocoDoToque): antes de
+a ação correr, e outra vez depois se a ação lho devolveu. Antes, para o
+openModal não guardar o elemento tocado como gatilho (o closeModal devolvia-
+-lhe o foco) e para quem repinta e devolve o foco ao nó novo
+(vistas.js:lfFocarFunil, vistas.js:lfClear) já não o encontrar no dedo.
+Dentro de uma janela o foco largado vai para o .sheet dela (como o
+componentes.js:focarModal), sem rolar; fora, sai. Ficam como estavam o
+teclado (Enter e Espaço dão um click sem ponteiro e com detail 0), o rato, o
+anel :focus-visible, os campos (input, textarea, select, contenteditable) e
+o foco que a ação mandou para outro sítio.
 
 O foco desenha-se com 2px de --accent e 2px de afastamento, em
 :focus-visible e nunca :focus — quem chega de rato não pode ir deixando
@@ -1099,6 +1115,41 @@ chips com quantos há e o «Aplicam-se ao mexer · N» contam só os registos qu
 passam pelo âmbito, como as linhas (ambito.js:visiveis) — nos Contratos, um contrato de um imóvel
 fora do âmbito, ou sem imóvel, não entra na conta
 (lista-contratos.js:vContracts).
+
+As listas dos Imóveis, dos Inquilinos, das Visitas e dos Contratos dividem-se
+pela origem de cada registo (vistas.js:listaPorOrigem): os meus, os
+partilhados comigo e aqueles em que colaboro, por esta ordem. A origem é a do
+imóvel (acessos.js:origemDaCasa): sem dono de fora é meu — mesmo que eu o
+partilhe —; com cargo é um imóvel em que colaboro; com dono de fora e sem
+cargo é partilhado comigo (a ligação ou o grupo). Sem imóvel, ou com um que
+já não está na base, é meu. O inquilino segue a casa dele
+(acessos.js:origemDoInquilino); a visita e o contrato seguem o imóvel. Uma
+secção vazia não aparece; com uma só com conteúdo não há títulos e a lista é
+a de sempre, com os mesmos ids das listas vivas. Com duas ou três, cada uma é
+uma secção com um h2 e quantos registos tem (estilos.css:.org-cab) e a sua
+lista viva com sufixo; o título distingue-se dos grupos de dentro pela cor da
+frente — o texto a --accent-text, com um traço por baixo — e pelo tamanho
+(estilos.css:.org-tit), o que sobrevive ao escurecimento forçado do Samsung.
+Os títulos: «Os meus imóveis», «Os meus inquilinos», «As minhas visitas», «Os
+meus contratos»; «Partilhados comigo» («Partilhadas comigo» nas visitas); «Em
+que colaboro» (lista-imoveis.js:ORIGEM_IMOVEIS,
+lista-pessoas.js:ORIGEM_INQUILINOS, visitas.js:ORIGEM_VISITAS,
+lista-contratos.js:ORIGEM_CONTRATOS). O agrupamento de sempre fica dentro de
+cada secção, um nível abaixo: as Próximas e as Passadas das visitas (h3 dentro
+de uma secção, h2 sozinhas), e os grupos por imóvel dos contratos
+(lista-contratos.js:ctGruposDaLista), cada secção com a sua tabela no
+computador.
+
+O filtro «Origem» é um campo do lfCabeca com a chave or, chip rápido: Todos /
+Os meus / Partilhados comigo / Em que colaboro (nas visitas, Todas / As
+minhas / Partilhadas comigo / Em que colaboro), cada escolha com quantos lhe
+cabem entre os que passam os outros filtros, e o «Todos» sem número
+(vistas.js:lfOrigem). Só existe quando a lista inteira, antes de qualquer
+filtro, tem registos de pelo menos duas origens — o chip não aparece e some a
+cada tecla da pesquisa —, e só oferece as origens que há; um valor guardado
+que deixou de servir sai do estado, para não cortar nem contar no funil um
+filtro que não se vê. Ligado, fica uma secção só, sem título. O estado dos
+imóveis e dos contratos conta com a origem, e a origem com o estado.
 
 Uma lista é um cartão com uma linha por registo, separadas por um traço — os
 imóveis, que têm capa, vão em cartões soltos. Cada linha tem data-lp: o
@@ -2061,7 +2112,13 @@ conta, que só ele edita, o botão do rodapé é «Editar casas partilhadas»
 (pessoas.js:casasPartilhadasDaFicha): com uma ligação ativa abre as «Casas
 partilhadas» dela, sem ligação os meus imóveis do grupo partilhado em comum
 (cloud/grupos.js:CW.casasDoGrupoCom, com a escolha do grupo quando há mais de
-um), e sem partilha nenhuma não há botão; as contas entre proprietários, laranja suave a
+um), e sem partilha nenhuma não há botão. Com uma ligação ativa, o ⋯ do
+cabeçalho, ao lado do X, tem «Remover ligação» (pessoas.js:removerLigacaoDaFicha,
+pelo gancho pessoas.js:partilhaComDono, que a nuvem preenche com o id da
+ligação), com a confirmação de sempre (partilha.js:CW.delConn); só por grupo,
+num convite por aceitar ou no meu perfil, não há. Removida, a ficha fecha se
+ele saiu da lista (partilha.js:fecharFichaDeQuemSaiu); se fica por um grupo,
+repinta-se sem a opção e o rodapé passa ao do grupo. As contas entre proprietários, laranja suave a
 pagar e verde suave a receber, com o plano de acerto em que ele entra e
 «Acertar contas» (vistas.js:settleModal), com os Movimentos ligados;
 «Imóveis e quota-parte», cada imóvel a abrir a sua ficha, com a renda que
@@ -2935,7 +2992,9 @@ largo. No painel, a grelha tem o imóvel e o estado, os dias («Dia — de»,
 os dois campos de cada intervalo, que contam como um). O rótulo de cada
 campo é o nome inteiro, à vista e para o leitor de ecrã. Por baixo,
 «Próximas» e «Passadas», cada uma com quantas são e as linhas num cartão
-(estilos.css:.vis-lista); no computador, lado a lado (estilos.css:.vis-grupos). Um filtro sem resultados usa o vazio de sempre
+(estilos.css:.vis-lista); no computador, lado a lado (estilos.css:.vis-grupos).
+Com visitas de mais de uma origem, as Próximas e as Passadas vivem dentro de
+cada secção da origem (ver as listas por origem, em «Padrões de página»). Um filtro sem resultados usa o vazio de sempre
 (vistas.js:vazioFiltro).
 
 A linha de uma visita (visitas.js:visCard) começa pelo bloco da data
@@ -3177,7 +3236,8 @@ A partir de 901px é a barra azul-noite das Casas e do canvas, numa linha:
 «Adicionar etiquetas» e «Apagar N» por extenso (estilos.css:.sel-rot-longo);
 o Editar sai, porque os outros dois o repartem. Os botões têm os fundos dos
 véus da barra lateral — --side-hover em repouso, --side-on por baixo do
-rato, este só em @media(hover:hover). A soma não se corta
+rato, este só em @media(min-width:901px) and (hover:hover) and
+(pointer:fine). A soma não se corta
 (estilos.css:.sel-fundo, o .sel-info com flex:1 0 auto): sem lugar, os
 botões descem. A edição em massa abre só a parte que o botão pede
 (CW.selEditar('cat'), CW.selEditar('tags'); o Editar abre as duas), e as
@@ -3829,10 +3889,14 @@ As páginas que a nuvem pendura na raiz vestem o mesmo:
   com título e um cartão de linhas cada: a conta — o avatar, o id com
   «Copiar», o perfil —; os comproprietários, numa linha só que leva às
   Pessoas › Proprietários, onde a partilha entre contas vive por baixo da
-  lista (partilha.js:comproprietariosHtml) — as ligações como linhas, com o
-  avatar e as ações certas para o estado de cada uma (partilha.js:connCard),
-  o campo para ligar, os pedidos e a ligação de partilha; sem o separador
-  dos Proprietários na conta, a partilha inteira fica aqui —; os grupos,
+  lista (partilha.js:comproprietariosHtml) — os convites por responder nos
+  dois sentidos, como linhas com o avatar e as ações certas
+  (partilha.js:connCard), o campo «O id do outro utilizador», os pedidos e a
+  ligação de partilha; as ligações ativas não se repetem lá, que já estão na
+  lista de cima (pessoas.js:donosComPartilha), e o vazio só diz «Ainda não
+  estás ligado a ninguém.» quando não há ligação nenhuma
+  (partilha.js:comproprietariosCorpo); sem o separador dos Proprietários na
+  conta, a partilha inteira fica aqui, com as ativas —; os grupos,
   numa linha só (ver «Grupos partilhados»); e a segurança, onde «Apagar a conta»
   é uma linha vermelha que abre a confirmação. Um convite de ligação
   recebido tem o fundo --accent-soft, o título e a frase em --accent-text e
@@ -3849,7 +3913,8 @@ As páginas que a nuvem pendura na raiz vestem o mesmo:
   quantas das que recebo deixam de aparecer, sem «casa(s)» e sem género —, e
   o botão «Remover» vermelho, que o confirmModal tira da primeira palavra do
   título. No dedo, os .btn.sm desta página e dos pedidos têm 44px.
-  «Casas partilhadas», em cada ligação, abre «Partilha com <nome>»
+  «Editar casas partilhadas», na ficha do outro (ou «Casas partilhadas» em
+  cada ligação, em Conta e partilha sem os Proprietários), abre «Partilha com <nome>»
   (partilha.js:CW.sharesModal): as minhas casas com a caixa que as adiciona
   ou remove (a nova traz as quotas ao marcá-la; a que sai diz que o outro
   deixa de a ver), e por baixo as que o outro partilha comigo; cada casa

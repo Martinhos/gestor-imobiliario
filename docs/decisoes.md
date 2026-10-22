@@ -46,6 +46,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-20 · A quarta volta da v40: o realce que o Samsung escurece, as fotos em carrossel e os quartos a partir do fim
 - 2026-10-20 · A quinta volta da v40: o carrossel dos separadores, uma seleção só, os Inquilinos e as Visitas selecionáveis, o Anular que se afasta e o Início que não é uma casa
 - 2026-10-22 · Um proprietário é uma conta: a lista das partilhas e o realce que ficava preso
+- 2026-10-22 · O realce que ainda ficava, a ligação repetida e as listas por origem
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1908,3 +1909,49 @@ grupo não tem ligação, e aí abre os meus imóveis do grupo
 nada, ou um botão para ligar. A ação vem da nuvem por um gancho
 (pessoas.js:partilhaComDono), porque a base não chama funções de serviço sem
 guarda.
+
+## 2026-10-22 · O realce que ainda ficava, a ligação repetida e as listas por origem
+
+**O realce continua: o foco e a caneta.** «O realce continua. Estou a
+experimentar nas abas dos menus casas e dinheiro», e depois: «Seleciono uma
+aba (contratos, imóveis, etc) e faço scroll para o lado. A aba que selecionei
+permanece com highlight.» Reproduzido com toques a sério (Playwright com
+hasTouch e toques pelo CDP): depois de tocar em «Contratos» e deslizar para
+Pessoas, o <a> de Contratos continuava com :focus e :hover. O Chrome não pinta
+nenhum dos dois; o Samsung Internet do Martinho pinta. Duas causas. O foco: um
+toque dá-o ao elemento, e as abas vivem fora do #view, por isso o foco ficava
+lá depois de o conteúdo deslizar. E o :hover: as abas são um <nav>, e o nav
+a:hover da barra lateral apanha-as; alguns Galaxy com caneta respondem
+(hover:hover) num ecrã de dedo, e o portão da correção de 16d279b não chegava.
+Agora o toque larga o foco (eventos.js:largarFocoDoToque) — antes de a ação
+correr, porque depois era tarde para o gatilho do openModal e para as
+repinturas que devolvem o foco ao nó novo — e o portão do rato pede também
+(pointer:fine), o mesmo que a landing e as páginas legais já usavam. O
+teclado não muda: o click dele não tem ponteiro. Não há Samsung nesta
+máquina: a prova é o reprodutor com toques reais, não o browser dele.
+
+**A ligação aparecia duas vezes.** «A outra conta com que partilho casas
+aparece duas vezes. Na listagem tipo contactos (a 1a lista, e é onde deve
+ficar) e antes de inserir o id de outro user.» O cartão de baixo dos
+Proprietários repetia as ligações ativas que a lista de cima já mostra; ficou
+para o que ainda não é ligação — os convites por responder, o campo, os
+pedidos e a ligação de partilha (partilha.js:comproprietariosCorpo). «Não
+quero que diga "o id dele". Mas "o id do outro utilizador"»: o rótulo, a dica
+e o erro do campo vazio. O «Remover ligação», que vivia no ⋯ da linha que
+saiu, foi para onde o Martinho o pôs: «Fica num kebab no topo da ficha do
+proprietário. Ao lado do x para fechar» (pessoas.js:removerLigacaoDaFicha).
+Removida, a ficha fecha se ele saiu da lista; se continua por um grupo, fica
+aberta e repinta-se — por isso o rodapé da ficha passou a ler-se a cada
+repinte, em vez de ficar a apontar para a ligação que já não existe.
+
+**As listas por origem.** «Quero que as casas na lista de imóveis, os
+inquilinos, as visitas e os contratos, estejam divididos em 3 secções. "Os
+meus ...", "partilhados comigo", "em que colaboro". Deve haver o filtro
+correspondente.» Numa lista misturada, uma casa onde só se tem um cargo
+parecia nossa. A origem lê-se do imóvel (acessos.js:origemDaCasa), e o
+Martinho escolheu: as Próximas/Passadas das visitas e os grupos por imóvel dos
+contratos ficam dentro de cada secção; com uma origem só não há títulos — é o
+caso de quase toda a gente, e um título que não separa nada é ruído. O chip
+«Origem» decide se aparece pela lista inteira e não pelo que a pesquisa deixa,
+para não aparecer e sumir a cada tecla; um valor guardado que deixou de
+servir sai do estado, para o funil não contar um filtro que não se vê.

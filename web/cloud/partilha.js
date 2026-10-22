@@ -151,7 +151,7 @@ function ligacaoCard() {
   return '<section class="card pt-ligacao" aria-labelledby="ptLigacao">' +
     '<div class="pt-ligacao-cab"><h3 id="ptLigacao">A minha ligação de partilha</h3>' +
       (ativa ? '<span class="badge in">Ativa</span>' : '<span class="badge grey">Sem ligação</span>') + '</div>' +
-    '<p class="small">Quem a abre pede-te para seres comproprietário de casas dele. Aceitas ou recusas cada pedido. ' +
+    '<p class="small">Quem a abre pede-te para seres comproprietário das casas que escolher. Aceitas ou recusas cada pedido. ' +
       'Não tem prazo: podes rodá-la ou desativá-la quando quiseres.</p>' +
     (ativa
       ? '<p class="small num">Pedidos chegados por aqui: <b>' + usos + '</b></p>' +
@@ -442,19 +442,32 @@ var FRASE_DA_PARTILHA = 'Partilhar uma casa dá acesso a tudo o que ela tem: con
 
 /* O corpo da partilha entre contas: o cartão com as ligações (connCard) e o
    campo para ligar a outro id, e por baixo os pedidos de partilha e a minha
-   ligação de partilha. Antes do primeiro sync, uma lista vazia não quer dizer
-   que não haja ligações: diz-se que ainda não chegaram.
-   Recebe: nada (lê CW.state).
+   ligação de partilha. Nos Proprietários as ligações ativas já estão na
+   lista de cima (pessoas.js:donosComPartilha), com «Editar casas partilhadas»
+   e «Remover ligação» na ficha de cada um: o cartão fica só com os convites
+   por responder, nos dois sentidos, e uma ligação ativa não aparece duas
+   vezes. Sem o separador dos Proprietários (partilha.js:vCloud) não há lista
+   de cima, e o cartão leva-as todas. O vazio só se diz quando é verdade:
+   sem ligação nenhuma, «Ainda não estás ligado a ninguém.»; com ativas e sem
+   convites, nada (o cartão começa no campo); antes do primeiro sync, uma
+   lista vazia não quer dizer que não haja ligações: diz-se que ainda não
+   chegaram.
+   Recebe: comAtivas — true para levar também as ligações ativas (onde não
+   há a lista dos Proprietários por cima); lê CW.state.
    Devolve: o HTML (texto). */
-function comproprietariosCorpo() {
-  var conns = (CW.state.connections || []).slice();
-  var vazio = CW._pulled ? 'Ainda não estás ligado a ninguém.' : 'Ainda não recebemos as ligações deste aparelho — aparecem quando a app sincronizar.';
-  var linhas = conns.length ? conns.map(connCard).join('') : '<div class="pt-linha pt-vazio"><span class="small">' + vazio + '</span></div>';
+function comproprietariosCorpo(comAtivas) {
+  var todas = CW.state.connections || [];
+  var conns = todas.filter(function (c) { return comAtivas || c.status === 'pending'; });
+  var haAtivas = todas.some(function (c) { return c.status !== 'pending'; });
+  var vazio = !CW._pulled ? 'Ainda não recebemos as ligações deste aparelho — aparecem quando a app sincronizar.'
+    : (haAtivas ? '' : 'Ainda não estás ligado a ninguém.');
+  var linhas = conns.length ? conns.map(connCard).join('')
+    : (vazio ? '<div class="pt-linha pt-vazio"><span class="small">' + vazio + '</span></div>' : '');
   var add = '<div class="pt-linha pt-ligar"><div class="pt-ligar-campo">' +
-    '<label class="u-fx-1 u-minw-0">O id dele <span class="req">*</span>' +
+    '<label class="u-fx-1 u-minw-0">O id do outro utilizador <span class="req">*</span>' +
     '<input id="cw_peer" class="u-tt-uppercase u-ff-monospace u-ls-2px" placeholder="Ex: A7KQ2MPX" maxlength="8" autocomplete="off"></label>' +
     '<button class="btn primary u-fx-0-0-auto" data-toca="dados" data-click="CW.addConn()">Ligar</button></div>' +
-    '<p class="small">Ligar a outro utilizador: escreve o id que ele te deu. Depois de aceite, cada um escolhe que casas partilha.</p></div>';
+    '<p class="small">Ligar a outro utilizador: escreve o id que o outro utilizador te deu. Depois de aceite, cada um escolhe que casas partilha.</p></div>';
   var pedidos = pedidosCard();
   var ligacao = ligacaoCard();
   return '<div class="card pt-cartao">' + linhas + add + '</div>' +
@@ -464,16 +477,17 @@ function comproprietariosCorpo() {
 
 /* A partilha entre contas no separador Proprietários (lista-pessoas.js:
    partilhaDosDonos), por baixo da lista: a secção «Partilhar com outras
-   contas» com o corpo de comproprietariosCorpo. Só com sessão e com o serviço
-   Colaboradores, que é o da partilha entre contas.
+   contas» com o corpo de comproprietariosCorpo, sem as ligações ativas (estão
+   na lista, por cima). Só com sessão e com o serviço Colaboradores, que é o
+   da partilha entre contas.
    Recebe: nada.
    Devolve: o HTML da secção (texto), ou '' sem sessão ou sem o serviço. */
 function comproprietariosHtml() {
   if (!CW.user || !servicoLigado('colaboradores')) return '';
   return '<div class="pt-pagina pes-partilha"><section class="pt-seccao" aria-labelledby="ptPartilha"><div class="pt-seccao-cab">' +
     '<h2 id="ptPartilha">Partilhar com outras contas</h2><p class="small">' + FRASE_DA_PARTILHA +
-    ' Em «Casas partilhadas» adicionas e removes casas e propões as quotas.</p></div>' +
-    comproprietariosCorpo() + '</section></div>';
+    ' Na ficha de cada um, em «Editar casas partilhadas», adicionas e removes casas e propões as quotas.</p></div>' +
+    comproprietariosCorpo(false) + '</section></div>';
 }
 partilhaDosDonos = comproprietariosHtml;
 
@@ -482,13 +496,16 @@ partilhaDosDonos = comproprietariosHtml;
    (CW.sharesModal); sem ligação mas num grupo partilhado com ele, abre os
    meus imóveis do grupo (cloud/grupos.js:CW.casasDoGrupoCom, que carrega
    depois deste ficheiro — daí o typeof). Uma ligação por aceitar ainda não
-   partilha nada. Só com sessão e com o serviço Colaboradores.
+   partilha nada. Com a ligação ativa vai também o id dela, para a ficha ter
+   «Remover ligação» no ⋯ (pessoas.js:removerLigacaoDaFicha, que chama o
+   CW.delConn). Só com sessão e com o serviço Colaboradores.
    Recebe: id — o id da conta do outro.
-   Devolve: {act} (texto para o data-click), ou null. */
+   Devolve: {act} (texto para o data-click), mais {ligacao} — o id da ligação
+   ativa — quando há uma; ou null. */
 function partilhaComDonoDaNuvem(id) {
   if (!CW.user || !servicoLigado('colaboradores') || !id) return null;
   var c = (CW.state.connections || []).find(function (x) { return x.status !== 'pending' && x.peer && x.peer.id === id; });
-  if (c) return { act: "CW.sharesModal('" + jsq(c.id) + "')" };
+  if (c) return { act: "CW.sharesModal('" + jsq(c.id) + "')", ligacao: c.id };
   if (typeof gruposComDono === 'function' && gruposComDono(id).length) return { act: "CW.casasDoGrupoCom('" + jsq(id) + "')" };
   return null;
 }
@@ -546,7 +563,7 @@ function vCloud() {
     comprop = seccao('Comproprietários', '', '<div class="card pt-cartao">' +
       linhaQueAbre('Partilhar com outras contas', esc(subComprop), 'ecra', "go('owners')") + '</div>');
   } else if (partilha) {
-    comprop = seccao('Comproprietários', FRASE_DA_PARTILHA, comproprietariosCorpo());
+    comprop = seccao('Comproprietários', FRASE_DA_PARTILHA, comproprietariosCorpo(true));
   }
   var grupos = partilha && typeof linhaDosGrupos === 'function' ? linhaDosGrupos() : '';
   var seg = seccao('Segurança', 'A sessão dura 30 dias em cada aparelho. Mudar a palavra-passe ou fechar as outras sessões obriga os outros aparelhos a entrar de novo.',
@@ -580,7 +597,7 @@ CW.copyId = function () {
    Devolve: nada — envia o convite à API, sincroniza e repinta. */
 CW.addConn = function () {
   var id = (val('cw_peer') || '').trim().toUpperCase();
-  if (!id) return falhaCampo('cw_peer', 'Escreve o id que o outro te deu.');
+  if (!id) return falhaCampo('cw_peer', 'Escreve o id que o outro utilizador te deu.');
   api('POST', '/api/connections', { peerId: id })
     .then(function () { toast('Convite enviado — falta o outro utilizador aceitar.'); return pullNow(true); })
     .then(function () { render(); })
@@ -616,23 +633,41 @@ function fraseRemoverLigacao(c) {
   return frase.charAt(0).toUpperCase() + frase.slice(1) + '. Os dados de cada um não são apagados.';
 }
 
+/* Depois de remover uma ligação: se a janela de cima é a ficha do outro
+   (pessoas.js:personView marca-a com o id dele) e ele já não está na lista
+   dos Proprietários (pessoas.js:donosComPartilha — sem casa, ligação nem
+   grupo em comum), a ficha fecha: ficava aberta sobre quem já não está na
+   lista. Se ele fica (um grupo partilhado, uma casa em comum), o render já a
+   repintou, sem o «Remover ligação» no ⋯.
+   Recebe: peerId — o id da conta do outro.
+   Devolve: nada. */
+function fecharFichaDeQuemSaiu(peerId) {
+  var top = peerId && typeof modalTop === 'function' ? modalTop() : null;
+  if (!top || !top.ficha || top.ficha.dono !== peerId) return;
+  if (typeof donosComPartilha === 'function' && donosComPartilha().some(function (o) { return o.id === peerId; })) return;
+  closeModal();
+}
+
 /* Remove uma ligação, ou retira um convite (isPending). Convites saem sem
    perguntar; ligações feitas pedem confirmação, com o nome do outro e as
    casas que vão junto (fraseRemoverLigacao) — os dados de cada um não se
    apagam. O nome é «ligação», como no ⋯ e no resto da página («conexão» era
-   o do Brasil).
+   o do Brasil). Removida a partir da ficha do outro (o ⋯ dela,
+   pessoas.js:removerLigacaoDaFicha), a ficha fecha se ele saiu da lista
+   (fecharFichaDeQuemSaiu).
    Recebe: id — o id da ligação ou do convite; isPending — verdadeiro quando
    ainda é só um convite (remove sem confirmar).
    Devolve: nada — remove na API, sincroniza e repinta. */
 CW.delConn = function (id, isPending) {
+  var c = ((CW.state && CW.state.connections) || []).find(function (x) { return x.id === id; });
+  var peerId = c && c.peer ? c.peer.id : '';
   var doDel = function () {
     api('DELETE', '/api/connections/' + id)
       .then(function () { toast(isPending ? 'Convite removido.' : 'Ligação removida.'); return pullNow(true); })
-      .then(function () { render(); })
+      .then(function () { render(); if (!isPending) fecharFichaDeQuemSaiu(peerId); })
       .catch(function (e) { toast(e.message); });
   };
   if (isPending) return doDel();
-  var c = ((CW.state && CW.state.connections) || []).find(function (x) { return x.id === id; });
   /* o confirmModal tira o rótulo do botão da primeira palavra do título:
      «Remover», vermelho cheio */
   if (!c || !c.peer) return confirmModal('Remover a ligação', 'Deixam ambos de ver as casas partilhadas um do outro. Os dados de cada um não são apagados.', doDel);

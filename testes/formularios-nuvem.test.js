@@ -102,7 +102,7 @@ describe('a conta e a ligação a outro utilizador', () => {
     const conta = a.comproprietariosHtml();   // o campo de ligar vive por baixo da lista dos Proprietários
     const cs = conferir('ligar', conta, { obrigatorios: ['cw_peer'], deixados: ['cw_lig_'] });
     assert.equal(cs.find((c) => c.id === 'cw_peer').placeholder, EX + 'A7KQ2MPX');
-    assert.match(conta, /<label class="u-fx-1 u-minw-0">O id dele <span class="req">\*<\/span><input id="cw_peer"/);
+    assert.match(conta, /<label class="u-fx-1 u-minw-0">O id do outro utilizador <span class="req">\*<\/span><input id="cw_peer"/);
     const convite = a.convidarCard();
     conferir('convite', convite, { obrigatorios: [], exemplos: { cw_inv_label: EX + 'Para a Ana, contabilidade' } });
     assert.match(convite, /<label>Cargo <span class="req">\*<\/span>/);
@@ -264,7 +264,7 @@ describe('os erros de Conta e partilha junto do campo', () => {
     a.api = () => { pedidos++; return Promise.resolve({}); };
     a.document.getElementById('cw_peer').value = '   ';
     a.CW.addConn();
-    assert.deepEqual(falhas, [['cw_peer', 'Escreve o id que o outro te deu.']]);
+    assert.deepEqual(falhas, [['cw_peer', 'Escreve o id que o outro utilizador te deu.']]);
     assert.equal(pedidos, 0);
   });
 

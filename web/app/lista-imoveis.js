@@ -13,25 +13,34 @@
    do imóvel), o nome, a morada, o selo do estado, três números e os selos
    do que pede atenção. Tocar no cartão abre a ficha
    (imovel.js:propView), onde estão o Editar, as ações rápidas e o Apagar: o
-   cartão já não tem o ⋮.
+   cartão já não tem o ⋮. Os cartões dividem-se pela origem — os meus
+   imóveis, os partilhados comigo, aqueles em que colaboro
+   (vistas.js:listaPorOrigem) —, e com imóveis de duas origens há o chip
+   «Origem» (vistas.js:lfOrigem).
    Devolve: string com o HTML completo da vista. */
 function vProperties(){
   const K='lprops',s=lf(K);
   /* o estado (arrendado, vago…) lê-se dos contratos: sem o serviço dos Contratos nesta conta, nem o filtro nem o chip têm de que falar */
   const vEstado=servicoLigado('contracts');
-  const resto=visiveis().filter(p=>{
+  /* a origem (os meus, partilhados comigo, em que colaboro): o filtro e as secções (vistas.js:lfOrigem, vistas.js:listaPorOrigem) */
+  const deOrigem=p=>origemDaCasa(p.id),org=lfOrigem(K,visiveis(),deOrigem);
+  const passaSt=p=>!(s.st&&vEstado)||propStatus(p).key===s.st;
+  const todos=visiveis().filter(p=>{
     if(s.md){if(p.use!=='investimento')return false;if((p.rentalMode||'inteiro')!==s.md)return false}
     /* a pesquisa encontra também quem lá mora, onde se pode ver os contratos */
     const quem=vEstado&&pode(p.id,'contract.view')?contractsOf(p.id).filter(ctVivo).map(ctNames).join(' '):'';
     return lfHit(K,[p.name,p.address,p.street,p.doorNumber,p.fraction,p.floor,p.postalCode,p.locality,p.concelho,p.freguesia,p.parish,p.notes,ownerNames(p),
       (p.rooms||[]).map(r=>r.name).join(' '),quem].join(' '));
   });
-  let list=s.st&&vEstado?resto.filter(p=>propStatus(p).key===s.st):resto;
+  /* cada campo conta o que passa os OUTROS filtros: o estado conta com a origem, a origem com o estado */
+  const resto=org.filtra(todos);
+  let list=resto.filter(passaSt);
   /* sem imóveis nenhuns não há o que pesquisar nem filtrar: fica o vazio com o seu botão */
   const head=(!db.properties.length?'':lfCabeca(K,{nome:['imóvel','imóveis'],dos:'dos imóveis',n:list.length,
       campos:[vEstado?imvCampoEstado(resto):null,
         {chave:'md',nome:'Arrendamento',curto:'Todos',rapido:'largo',
-          opcoes:[{v:'',label:'Todos os arrendamentos'},{v:'inteiro',label:'Imóvel inteiro'},{v:'quartos',label:'Por quartos'}]}],
+          opcoes:[{v:'',label:'Todos os arrendamentos'},{v:'inteiro',label:'Imóvel inteiro'},{v:'quartos',label:'Por quartos'}]},
+        org.campo(todos.filter(passaSt),ORIGEM_IMOVEIS.rot)],
       /* a renda e a yield são dos Contratos, a dívida dos Créditos: sem eles, ordenar por elas não ordenava nada */
       ordem:{opcoes:[{v:'nome',label:'Nome'},{v:'valor',label:'Valor'}].concat(vEstado?[{v:'renda',label:'Renda'},{v:'yield',label:'Yield'}]:[])
         .concat(servicoLigado('credits')?[{v:'divida',label:'Dívida'}]:[])}}))
@@ -44,8 +53,13 @@ function vProperties(){
   }
   const dividas=dividasEntreDonos(list);   /* uma passagem pelos movimentos por pintura, e não seis por cartão */
   const pendentes=imvPendentesPorImovel();   /* e uma pelos planeados */
-  return head+listaViva('imoveis',list.map(p=>({chave:'prop:'+p.id,html:imvCartao(p,dividas[p.id]||0,pendentes[p.id]||[])})),'imv-lista');
+  return head+listaPorOrigem('imoveis',list,deOrigem,ORIGEM_IMOVEIS.titulos,
+    (ps,suf)=>listaViva('imoveis'+suf,ps.map(p=>({chave:'prop:'+p.id,html:imvCartao(p,dividas[p.id]||0,pendentes[p.id]||[])})),'imv-lista'));
 }
+/* Os textos da origem nos imóveis: os títulos das secções
+   (vistas.js:listaPorOrigem) e as escolhas do filtro «Origem» (vistas.js:lfOrigem). */
+const ORIGEM_IMOVEIS={titulos:{meu:'Os meus imóveis',partilhado:'Partilhados comigo',colaboro:'Em que colaboro'},
+  rot:{todos:'Todos',meu:'Os meus',partilhado:'Partilhados comigo',colaboro:'Em que colaboro'}};
 /* Os estados do filtro rápido: o valor do filtro (o «st» do lf('lprops')), o
    rótulo curto e o do seletor. */
 const ESTADOS_RAPIDOS=[['','Todos','Todos os estados'],['arrendado','Arrendados','Arrendados'],['parcial','Parciais','Parcialmente arrendados'],

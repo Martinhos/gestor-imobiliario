@@ -93,7 +93,10 @@ function pesFiltroRapido(k,chave,v){lf(k)[chave]=String(v||'');render()}
    chip do contrato — com contrato, por começar, sem contrato —, que é o mesmo
    filtro do seletor do painel; ordenação por nome, nº de contratos ou renda
    (no painel e, no ecrã largo, no chip). Sem inquilinos não há barra: fica o
-   vazio com o seu botão.
+   vazio com o seu botão. As linhas dividem-se pela origem da casa de cada um
+   — os meus inquilinos, os partilhados comigo, aqueles em que colaboro
+   (vistas.js:listaPorOrigem) —, e com inquilinos de duas origens há o chip
+   «Origem» (vistas.js:lfOrigem).
    Devolve: string com o HTML completo da vista. */
 function vTenants(){
   const K='lten',s=lf(K);
@@ -107,19 +110,30 @@ function vTenants(){
      ativo» ao lado de uma linha que mostra o contrato e a data em que
      começa — o ecrã contradizia-se */
   const tem={com:t=>sit[t.id].ativos.length>0,fut:t=>sit[t.id].futuros.length>0,sem:t=>!sit[t.id].ativos.length&&!sit[t.id].futuros.length};
-  let list=tem[ct]?achados.filter(tem[ct]):achados;
+  /* a origem segue a casa do inquilino (acessos.js:origemDoInquilino): o filtro
+     e as secções (vistas.js:lfOrigem, vistas.js:listaPorOrigem); cada campo
+     conta o que passa os OUTROS filtros */
+  const org=lfOrigem(K,db.tenants,origemDoInquilino),doCt=xs=>tem[ct]?xs.filter(tem[ct]):xs;
+  const resto=org.filtra(achados);
+  let list=doCt(resto);
   list=lfSort(K,list,{nome:t=>t.name,contratos:t=>sit[t.id].ativos.length,renda:t=>sum(sit[t.id].ativos.map(c=>c.rent))});
   const adiciona=!souSoColaborador()||casasComo('tenant.add').length;   /* a condição do botão do vazio */
-  const n=k=>achados.filter(tem[k]).length;
+  const n=k=>resto.filter(tem[k]).length;
   /* sem inquilinos nenhuns não há o que pesquisar nem filtrar: fica o vazio com o seu botão */
   if(!db.tenants.length)return esperaDoServidor()||`<div class="empty"><b>Sem inquilinos</b>A ficha guarda só os dados da pessoa. A renda fica no contrato.${adiciona?saida('Adicionar inquilino',"personModal('tenant')",'camada'):''}</div>`;
   const head=lfCabeca(K,{nome:['inquilino','inquilinos'],dos:'dos inquilinos',n:list.length,
     campos:[comCt?pesChips(K,'ct','Contrato',[['','Todos','Todos os inquilinos'],['com','Com contrato','Com contrato ativo',n('com')],
-      ['fut','Por começar','Com contrato por começar',n('fut')],['sem','Sem contrato','Sem contrato',n('sem')]]):null],
+      ['fut','Por começar','Com contrato por começar',n('fut')],['sem','Sem contrato','Sem contrato',n('sem')]]):null,
+      org.campo(doCt(achados),ORIGEM_INQUILINOS.rot)],
     ordem:{opcoes:[{v:'nome',label:'Nome'}].concat(comCt?[{v:'contratos',label:'Nº de contratos'},{v:'renda',label:'Renda'}]:[]),rapido:'largo'}});
   if(!list.length)return head+vazioFiltro();
-  return head+listaViva('inquilinos',list.map(t=>({chave:'ten:'+t.id,html:personCard(t,'tenant',sit[t.id])})),'pes-lista');
+  return head+listaPorOrigem('inquilinos',list,origemDoInquilino,ORIGEM_INQUILINOS.titulos,
+    (ts,suf)=>listaViva('inquilinos'+suf,ts.map(t=>({chave:'ten:'+t.id,html:personCard(t,'tenant',sit[t.id])})),'pes-lista'));
 }
+/* Os textos da origem nos inquilinos: os títulos das secções
+   (vistas.js:listaPorOrigem) e as escolhas do filtro «Origem» (vistas.js:lfOrigem). */
+const ORIGEM_INQUILINOS={titulos:{meu:'Os meus inquilinos',partilhado:'Partilhados comigo',colaboro:'Em que colaboro'},
+  rot:{todos:'Todos',meu:'Os meus',partilhado:'Partilhados comigo',colaboro:'Em que colaboro'}};
 /* A partilha entre contas, por baixo da lista dos proprietários: as
    ligações a outros utilizadores, os pedidos e a ligação de partilha. É da
    nuvem (cloud/partilha.js:comproprietariosHtml põe-na aqui); sem ela, nada.

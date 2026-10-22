@@ -122,11 +122,11 @@ nav a{display:flex;align-items:center;gap:12px;min-height:40px;padding:0 12px;bo
 nav a svg{flex:0 0 20px}
 /* o realce de passar por cima só onde há rato: no telemóvel um toque deixava-o
    preso (a regra da casa) */
-@media(hover:hover){nav a:hover{background:var(--side-hover);color:var(--side-ink)}}
+@media(hover:hover) and (pointer:fine){nav a:hover{background:var(--side-hover);color:var(--side-ink)}}
 nav a.on{background:var(--side-on);color:var(--side-ink);font-weight:600}
 .railfoot{padding:10px 10px calc(10px + var(--inset-bottom));border-top:1px solid rgba(255,255,255,.09)}
 .railbtn{width:100%;display:flex;align-items:center;gap:12px;background:transparent;border:0;color:var(--side-muted);padding:10px 12px;border-radius:11px;cursor:pointer;text-align:left}
-@media(hover:hover){.railbtn:hover{background:var(--side-hover);color:var(--side-ink)}}
+@media(hover:hover) and (pointer:fine){.railbtn:hover{background:var(--side-hover);color:var(--side-ink)}}
 /* O véu acompanha a gaveta em vez de chegar inteiro no primeiro frame: a
    mesma duração e a mesma curva do aside, aqui em cima. O display fica de fora
    de propósito — com opacity:0 e display:block o véu continuava a apanhar os
@@ -178,7 +178,7 @@ header.top .sub{color:var(--muted);font-size:14px;margin-top:4px}
    acento à esquerda saiu com a linguagem de 2026-10 — o que se toca diz-se
    pela seta, pelo hover e pelo premido, e não por uma borda colorida. */
 .card.tap{cursor:pointer;position:relative;overflow:hidden;transition:border-color var(--rapido) var(--curva),transform var(--rapido) var(--curva),background var(--rapido) var(--curva)}
-@media(hover:hover){.card.tap:hover{border-color:var(--line2);background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.card.tap:hover{border-color:var(--line2);background:var(--tint)}}
 /* 1% não se vê: era a queixa de «não reage ao toque, só muda de cor». As
    linhas de lista são a superfície que mais se toca na app. */
 .card.tap:active{transform:scale(.98);background:var(--press)}
@@ -245,14 +245,14 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
    cobalto; o que destrói é VERMELHO CHEIO e nunca igual ao Guardar; o
    fantasma não tem fundo nem contorno. */
 .btn{border:1px solid var(--line2);background:var(--card);color:var(--ink);min-height:44px;padding:0 16px;border-radius:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:600;font-size:15px;line-height:1.2;text-decoration:none}
-@media(hover:hover){.btn:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.btn:hover{background:var(--tint)}}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-@media(hover:hover){.btn.primary:hover{background:var(--accent-press);border-color:var(--accent-press)}}
+@media(hover:hover) and (pointer:fine){.btn.primary:hover{background:var(--accent-press);border-color:var(--accent-press)}}
 .btn.ghost{background:transparent;border-color:transparent;color:var(--ink)}
-@media(hover:hover){.btn.ghost:hover{background:var(--chip)}}
+@media(hover:hover) and (pointer:fine){.btn.ghost:hover{background:var(--chip)}}
 .btn.sm{min-height:36px;padding:0 12px;font-size:14px;border-radius:10px}
 .btn.danger{color:var(--danger-ink);border-color:var(--danger);background:var(--danger)}
-@media(hover:hover){.btn.danger:hover{background:var(--danger-press);border-color:var(--danger-press)}}
+@media(hover:hover) and (pointer:fine){.btn.danger:hover{background:var(--danger-press);border-color:var(--danger-press)}}
 /* o botão só de ícone: um quadrado com o lado do botão (aria-label sempre) */
 .btn.so-icone{width:44px;padding:0}
 .btn.sm.so-icone{width:36px}
@@ -298,7 +298,7 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
 .calday .n{font-size:15px;line-height:1.2;color:inherit;font-variant-numeric:tabular-nums}
 .calday.on{background:var(--accent-soft);color:var(--accent-text);font-weight:700;box-shadow:inset 0 0 0 2px var(--accent)}
 .calday.hoje.on{background:var(--accent);color:var(--accent-ink);box-shadow:none}
-@media(hover:hover){.calday.tap:not(.on):not(.hoje):hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.calday.tap:not(.on):not(.hoje):hover{background:var(--tint)}}
 .calday.tap:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .calday .pts{display:flex;gap:3px;height:6px}
 /* a grelha dos dias arrasta-se para os lados (calendario.js:calArrastar): a
@@ -473,7 +473,7 @@ nav .cnt.u-bg-v-warn{background:#9fb4ff!important;color:#0e1830} /* o azul infor
 .navsec.fechada>.navsec-tit .chev{transform:rotate(-90deg)}
 .navsec-tit .cnt{display:none;background:var(--cnt);color:var(--cnt-ink);font-size:11.5px;font-weight:700;letter-spacing:0;padding:2px 7px;border-radius:999px}
 .navsec.fechada>.navsec-tit .cnt{display:inline-block}
-@media(hover:hover){.navsec-tit:hover{background:var(--side-hover);color:var(--side-ink)}}
+@media(hover:hover) and (pointer:fine){.navsec-tit:hover{background:var(--side-hover);color:var(--side-ink)}}
 .navsec-tit:active{background:var(--side-on);color:var(--side-ink)}
 .navsec-tit:focus-visible{outline:2px solid var(--side-ink);outline-offset:-2px}
 .navsec-corpo{display:grid;grid-template-rows:1fr;transition:grid-template-rows var(--medio) var(--curva-entra)}
@@ -487,7 +487,7 @@ nav .cnt.u-bg-v-warn{background:#9fb4ff!important;color:#0e1830} /* o azul infor
 /* secções que abrem e fecham */
 .sect.fold{padding:0;gap:0}
 .fold-head{display:flex;align-items:center;gap:10px;width:100%;max-width:100%;min-width:0;overflow:hidden;padding:12px 14px;border:0;background:transparent;cursor:pointer;text-align:left;font-size:15px;color:var(--ink);border-radius:14px}
-@media(hover:hover){.fold-head:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.fold-head:hover{background:var(--tint)}}
 .fold-head .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-text);flex:0 0 34px}
 .fold-head b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto;font-weight:600}
 .form>*{min-width:0}.sect{min-width:0}
@@ -517,7 +517,7 @@ nav .cnt.u-bg-v-warn{background:#9fb4ff!important;color:#0e1830} /* o azul infor
 .legend>*{min-width:0}
 .legend .li{display:flex;align-items:center;gap:8px;font-size:13px;min-width:0}
 .legend .li.tap{cursor:pointer;border-radius:8px;margin:0 -4px;padding:2px 4px}
-@media(hover:hover){.legend .li.tap:hover{background:var(--chip)}}
+@media(hover:hover) and (pointer:fine){.legend .li.tap:hover{background:var(--chip)}}
 .legend .dot{width:10px;height:10px;border-radius:3px;flex:0 0 10px}
 .legend .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
 /* Em ecrã de dedo, nada abaixo do mínimo de toque. Só em pointer:coarse:
@@ -569,7 +569,7 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
    barra lateral (nav a.on, nav a:hover, nav a:active) apanhava-a e, no
    escuro, o destino aceso ganhava uma pílula; o premido dela é o --press */
 .tabbar a.on{background:none}
-@media(hover:hover){.tabbar a:hover{background:none;color:var(--accent)}}
+@media(hover:hover) and (pointer:fine){.tabbar a:hover{background:none;color:var(--accent)}}
 .tabbar a:active{color:var(--accent)}
 /* os crachás da barra de baixo e do sino: laranja (--out, o canvas) com a
    tinta das cores cheias (--accent-ink: branca no claro, escura no escuro —
@@ -683,13 +683,13 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
 #nav .navh:empty{padding:0}
 /* o cartão da conta, no fundo */
 .nav-conta{display:flex;align-items:center;gap:10px;width:100%;margin-top:8px;padding:10px 12px;border:0;border-radius:12px;background:var(--side-hover);color:var(--side-ink);text-align:left;cursor:pointer}
-@media(hover:hover){.nav-conta:hover{background:var(--side-on)}}
+@media(hover:hover) and (pointer:fine){.nav-conta:hover{background:var(--side-on)}}
 .nav-conta .avatar{background:#2a3a63;color:#fff;width:34px;height:34px;flex-basis:34px} /* o avatar do canvas na barra azul-noite */
 .nav-conta b{display:block;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nav-conta small{display:block;color:var(--side-text);font-size:12.5px}
 /* o fecho do menu só existe onde ele é uma gaveta */
 aside .fecha-gaveta{display:none;color:var(--side-ink)}
-@media(hover:hover){aside .fecha-gaveta:hover{background:var(--side-hover);color:var(--side-ink)}}
+@media(hover:hover) and (pointer:fine){aside .fecha-gaveta:hover{background:var(--side-hover);color:var(--side-ink)}}
 /* o estado da sincronização, no cabeçalho (cloud/entrada.js:setSyncBadge):
    um selo de 30px com a nuvem e a frase; o «Guardado» recolhe ao ícone.
    «A ligar» é laranja (o --out: o --warn é âmbar acastanhado, e era a cor do
@@ -801,7 +801,7 @@ main.sep-arrasto{overflow-x:clip}
 .criar-outro{display:flex;align-items:center;gap:10px;min-height:52px;padding:6px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:14.5px;font-weight:500;text-align:left;cursor:pointer}
 .criar-outro svg{color:var(--muted);flex:0 0 auto}
 .criar-outro small{display:block;color:var(--accent-text);font-size:12px;font-weight:600}
-@media(hover:hover){.criar-tipo:hover,.criar-outro:hover{border-color:var(--line2);background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.criar-tipo:hover,.criar-outro:hover{border-color:var(--line2);background:var(--tint)}}
 /* o «Pede atenção» (notificacoes.js:notifModal) */
 .atencao{display:flex;flex-direction:column;gap:10px}
 /* uma fila só, que rola de lado: com as duas classes, para ganhar ao
@@ -878,7 +878,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .selbtn{width:100%;display:flex;align-items:center;gap:8px;min-height:46px;padding:0 14px;border:1px solid var(--line2);
   border-radius:12px;background:var(--field);cursor:pointer;text-align:left;font-weight:400}
 .selbtn span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media(hover:hover){.selbtn:hover{border-color:var(--faint)}}
+@media(hover:hover) and (pointer:fine){.selbtn:hover{border-color:var(--faint)}}
 .selbtn svg{color:var(--faint);flex:0 0 auto}
 .selpop{display:none;position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:15;background:var(--card);
   border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;max-height:260px;overflow:auto}
@@ -886,7 +886,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .selopt{width:100%;display:flex;align-items:center;gap:9px;min-height:40px;padding:8px 12px;border:0;background:transparent;
   border-radius:10px;cursor:pointer;text-align:left;font-size:15px}
 .selopt span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media(hover:hover){.selopt:hover{background:var(--chip)}}
+@media(hover:hover) and (pointer:fine){.selopt:hover{background:var(--chip)}}
 .selopt.on{color:var(--accent-text);font-weight:600;background:var(--accent-soft)}
 .sdiv{height:1px;background:var(--line);margin:5px 6px}
 .selopt svg{color:var(--accent);flex:0 0 auto}
@@ -898,7 +898,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .menupop.on{display:block}
 .menupop button{width:100%;display:flex;align-items:center;gap:10px;min-height:42px;padding:8px 12px;border:0;background:transparent;
   border-radius:10px;cursor:pointer;text-align:left;font-size:15px;color:var(--ink)}
-@media(hover:hover){.menupop button:hover{background:var(--chip)}}
+@media(hover:hover) and (pointer:fine){.menupop button:hover{background:var(--chip)}}
 .menupop button.danger{color:var(--danger)}
 .menupop.wide{min-width:250px;padding:12px}
 .menupop.wide label{margin-bottom:9px}
@@ -954,13 +954,13 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .tag{display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:0 6px 0 12px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-size:14px;font-weight:500}
 .tag.grey{background:var(--chip);border-color:var(--line)}
 .tag button{border:0;background:transparent;padding:3px;border-radius:50%;cursor:pointer;color:var(--muted);display:grid;place-items:center}
-@media(hover:hover){.tag button:hover{color:var(--ink);background:var(--chip)}}
+@media(hover:hover) and (pointer:fine){.tag button:hover{color:var(--ink);background:var(--chip)}}
 .tagadd{display:inline-flex;align-items:center;gap:6px;min-height:32px;border:1px dashed var(--line2);background:transparent;color:var(--accent-text);padding:0 12px;border-radius:999px;cursor:pointer;font-size:14px;font-weight:600}
-@media(hover:hover){.tagadd:hover{border-color:var(--accent);background:var(--accent-soft)}}
+@media(hover:hover) and (pointer:fine){.tagadd:hover{border-color:var(--accent);background:var(--accent-soft)}}
 
 .addbox{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:14px 16px;border:1px dashed var(--line2);
   border-radius:14px;background:transparent;cursor:pointer;color:var(--ink)}
-@media(hover:hover){.addbox:hover{border-color:var(--accent);background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.addbox:hover{border-color:var(--accent);background:var(--tint)}}
 .addbox .ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-text);flex:0 0 36px}
 .addbox b{display:block;font-size:15px;font-weight:600}
 .addbox small{display:block;color:var(--muted);font-size:13px;margin-top:2px}
@@ -978,7 +978,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .opt .ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--chip);color:var(--muted)}
 .opt b{font-size:14px;font-weight:600}
 .opt small{font-size:12px;color:var(--muted);line-height:1.3}
-@media(hover:hover){.opt:hover{border-color:var(--faint)}}
+@media(hover:hover) and (pointer:fine){.opt:hover{border-color:var(--faint)}}
 .opt.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-text)}
 .opt.on .ic{background:var(--card);color:var(--accent-text)}
 .roomrow{display:flex;gap:8px;align-items:center}
@@ -1015,7 +1015,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .sheet .foot{padding:14px 20px calc(14px + var(--inset-bottom));border-top:1px solid var(--line);display:flex;gap:10px}
 .sheet .foot .btn{flex:1;justify-content:center;min-height:48px}
 .iconbtn{border:0;background:transparent;padding:7px;border-radius:10px;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;justify-content:center}
-@media(hover:hover){.iconbtn:hover{background:var(--chip);color:var(--ink)}}
+@media(hover:hover) and (pointer:fine){.iconbtn:hover{background:var(--chip);color:var(--ink)}}
 /* A porta das opções de um registo, e é a mesma em toda a app: o kebab das
    listas (vistas.js), o dos movimentos (cloud/selecao.js) e o do menu de ações
    (componentes.js). Eram três desenhos, três tamanhos e três nomes — o mais
@@ -1057,7 +1057,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .toast .toastbtn{margin:0 -6px 0 0;background:var(--toast-btn);border:0;color:var(--toast-ink);font:inherit;font-weight:600;font-size:14px;
   cursor:pointer;padding:0 14px;border-radius:10px;min-height:36px;flex:0 0 auto}
 /* só com rato: num ecrã tátil o :hover ficava agarrado ao botão depois do toque */
-@media(hover:hover){.toast .toastbtn:hover{filter:brightness(1.12)}}
+@media(hover:hover) and (pointer:fine){.toast .toastbtn:hover{filter:brightness(1.12)}}
 
 /* ---- componentes da linguagem de 2026-10 que a casa ainda não tinha ---- */
 /* O chip: filtros e ações rápidas. Pílula de 36px; ligado leva o fundo suave,
@@ -1065,7 +1065,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
    mexer — não há «Aplicar» (vistas.js:lfMudar). O «Limpar» é um chip sem
    contorno, em cobalto. */
 .chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;cursor:pointer;text-decoration:none}
-@media(hover:hover){.chip:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.chip:hover{background:var(--tint)}}
 .chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}
 .chip.limpar{border-color:transparent;background:transparent;color:var(--accent-text);font-weight:600}
 .chip .n{color:var(--muted);font-variant-numeric:tabular-nums}
@@ -1592,7 +1592,7 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
 }
 /* o realce só onde há rato: num ecrã de dedo com 901px ou mais ficava preso
    depois do toque */
-@media(min-width:901px) and (hover:hover){
+@media(min-width:901px) and (hover:hover) and (pointer:fine){
   .sel-fundo .btn:hover{background:var(--side-on)}
   .sel-fundo .btn.danger:hover{border-color:var(--danger-press);background:var(--danger-press)}
 }
@@ -1657,7 +1657,7 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
 #raiz#raiz .tf-recolhida .tf-itens{display:none}
 #raiz#raiz .tf-so-alvo{display:none}
 #raiz#raiz .tf-a-arrastar .tf-so-alvo{display:block}
-@media(hover:hover){#raiz#raiz button.tf-dobra:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){#raiz#raiz button.tf-dobra:hover{background:var(--tint)}}
 #raiz#raiz button.tf-dobra:active{background:var(--press)}
 /* A pega de arrastar (tarefas.js:tfArrastar): à esquerda da caixa, com a
    altura do dedo, e a única coisa da linha com touch-action:none — arrastar
@@ -1668,7 +1668,7 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
 #raiz#raiz .tf-pega{display:grid;place-items:center;width:40px;height:44px;flex:0 0 auto;margin-left:-10px;padding:0;border:0;border-radius:9px;
   background:none;color:var(--faint);cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 #raiz#raiz .tf-pega+.tf-marca{margin-left:-6px}
-@media(hover:hover){#raiz#raiz .tf-pega:hover{color:var(--ink);background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){#raiz#raiz .tf-pega:hover{color:var(--ink);background:var(--tint)}}
 #raiz#raiz .tf-pega:active{color:var(--ink);background:var(--press)}
 #raiz#raiz .tf-dobra:focus-visible,#raiz#raiz .tf-pega:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 #raiz#raiz .tf-a-arrastar{-webkit-user-select:none;user-select:none}
@@ -1717,7 +1717,7 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
 .card:has(.vg-port) .title{font-family:var(--letra-titulo);font-size:16px;font-weight:650;letter-spacing:-.015em}
 /* uma ligação que é um botão: cobalto, sem caixa («Ver todos», «Avaliação») */
 .vg-ligacao{display:inline-flex;align-items:center;min-height:32px;padding:0 4px;margin:0 -4px;border:0;border-radius:8px;background:transparent;color:var(--accent);font:inherit;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
-@media(hover:hover){.vg-ligacao:hover{color:var(--accent-text);text-decoration:underline}}
+@media(hover:hover) and (pointer:fine){.vg-ligacao:hover{color:var(--accent-text);text-decoration:underline}}
 .vg-ligacao:active{opacity:.7}
 .vg-ligacao:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 /* a ação no canto da cabeça de um cartão: depois da .vg-ligacao, que lhe
@@ -1756,7 +1756,7 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
    casa entre linhas (.linha+.linha): volta, só entre linhas — por baixo do
    título não há (o canvas: .ar+.ar) */
 .vg-atencao-linhas .linha+.linha{border-top:1px solid var(--line)}
-@media(hover:hover){.vg-atencao-linhas .linha:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.vg-atencao-linhas .linha:hover{background:var(--tint)}}
 .vg-atencao-linhas .linha:active{background:var(--press)}
 .vg-atencao-linhas .linha:focus-visible{outline-offset:-2px}
 .vg-atencao-linhas .txt>*{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1793,7 +1793,7 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
 .vg-item{display:flex;align-items:center;gap:4px;border-top:1px solid var(--line);min-width:0}
 .vg-item-abrir{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:12px 8px;margin:0 -8px;border:0;border-radius:10px;background:transparent;color:inherit;font:inherit;text-align:left}
 button.vg-item-abrir{cursor:pointer}
-@media(hover:hover){button.vg-item-abrir:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){button.vg-item-abrir:hover{background:var(--tint)}}
 button.vg-item-abrir:active{background:var(--press)}
 .vg-item-abrir:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .vg-item-txt{flex:1;min-width:0;display:flex;flex-direction:column}
@@ -1834,11 +1834,11 @@ button.vg-item-abrir:active{background:var(--press)}
    como no canvas, em vez do verde de quem sobe */
 .vg-kpi.custo .kserie .kvar.pos,.vg-kpi.custo .kserie .kvar.neg{color:var(--muted)}
 /* o passar por cima só com rato: no dedo ficava pintado depois do toque */
-@media(hover:hover){.vg-kpi:hover{border-color:var(--line2);background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.vg-kpi:hover{border-color:var(--line2);background:var(--tint)}}
 .vg-kpi:active{background:var(--press)}
 /* o Cashflow é o cartão azul-noite, com texto claro */
 .vg-kpi.cf{background:var(--side);border-color:var(--side)}
-@media(hover:hover){.vg-kpi.cf:hover{background:var(--side) linear-gradient(var(--side-hover),var(--side-hover));border-color:var(--side)}}
+@media(hover:hover) and (pointer:fine){.vg-kpi.cf:hover{background:var(--side) linear-gradient(var(--side-hover),var(--side-hover));border-color:var(--side)}}
 .vg-kpi.cf:active{background:var(--side) linear-gradient(var(--side-on),var(--side-on))}
 .vg-kpi.cf .label,.vg-kpi.cf .kvar,.vg-kpi.cf .kvsub,.vg-kpi.cf .foot{color:var(--side-text)}
 .vg-kpi.cf .value{color:var(--side-ink)}
@@ -1846,7 +1846,7 @@ button.vg-item-abrir:active{background:var(--press)}
 .vg-kpi.cf .kvar.neg{color:#ff9a62} /* o --out do tema escuro, pela mesma razão */
 .vg-kpi.cf .ksilhueta{color:var(--side-muted)}
 :root.dark .vg-kpi.cf{background:var(--accent-soft);border-color:var(--line2)}
-@media(hover:hover){:root.dark .vg-kpi.cf:hover{background:var(--accent-soft) linear-gradient(var(--side-hover),var(--side-hover));border-color:var(--line2)}}
+@media(hover:hover) and (pointer:fine){:root.dark .vg-kpi.cf:hover{background:var(--accent-soft) linear-gradient(var(--side-hover),var(--side-hover));border-color:var(--line2)}}
 :root.dark .vg-kpi.cf:active{background:var(--accent-soft) linear-gradient(var(--side-on),var(--side-on))}
 :root.dark .vg-kpi.cf .label,:root.dark .vg-kpi.cf .kvsub,:root.dark .vg-kpi.cf .foot{color:var(--accent-text)}
 :root.dark .vg-kpi.cf .ksilhueta{color:var(--accent)}
@@ -1982,7 +1982,7 @@ button.vg-item-abrir:active{background:var(--press)}
    carrega (imovel.js:imvAcoesRapidas): os outros chips são ações, este é o
    caminho que mais se procura */
 .imv-acoes .chip.destaque{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
-@media(hover:hover){.imv-acoes .chip.destaque:hover{background:var(--accent);filter:brightness(1.08)}}
+@media(hover:hover) and (pointer:fine){.imv-acoes .chip.destaque:hover{background:var(--accent);filter:brightness(1.08)}}
 @media(pointer:coarse){.imv-acoes>.chip{min-height:40px}
   .imv-acoes>.chip::after{content:"";position:absolute;left:0;right:0;top:-2px;bottom:-2px}
   .imv-ficha .btn.sm,.imv-form .btn.sm{min-height:44px}
@@ -2018,7 +2018,7 @@ button.vg-item-abrir:active{background:var(--press)}
 @media(min-width:900px){.imv-fcapa{height:240px}}
 .imv-fotos-btn{position:absolute;right:12px;bottom:12px;z-index:1;display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:0;border-radius:999px;
   background:rgba(14,24,48,.82);color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:transform var(--rapido) var(--curva)} /* o véu da etiqueta da foto (.imv-nfotos), mais cheio para ser botão */
-@media(hover:hover){.imv-fotos-btn:hover{background:rgba(14,24,48,.9)}}
+@media(hover:hover) and (pointer:fine){.imv-fotos-btn:hover{background:rgba(14,24,48,.9)}}
 .imv-fotos-btn:active{background:rgba(14,24,48,.97);transform:scale(.97)}
 .imv-fotos-btn:focus-visible{outline:2px solid #fff;outline-offset:2px} /* branco: o anel assenta na fotografia */
 @media(pointer:coarse){.imv-fotos-btn{min-height:44px}}
@@ -2046,7 +2046,7 @@ button.vg-item-abrir:active{background:var(--press)}
    tem o passar por cima, o premido e o anel por dentro. */
 .imv-linha{display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 14px;border-top:1px solid var(--line)}
 .imv-linha.tap,.imv-pend>.imv-linha-txt.tap{cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-@media(hover:hover){.imv-linha.tap:hover,.imv-pend>.imv-linha-txt.tap:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.imv-linha.tap:hover,.imv-pend>.imv-linha-txt.tap:hover{background:var(--tint)}}
 .imv-linha.tap:active,.imv-pend>.imv-linha-txt.tap:active{background:var(--press)}
 .imv-linha.tap:focus-visible,.imv-pend>.imv-linha-txt.tap:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 /* Um por confirmar: o alvo de «rever» é o bloco do texto, que enche a linha
@@ -2084,7 +2084,7 @@ button.vg-item-abrir:active{background:var(--press)}
 /* A galeria das fotos (imovel.js:imvGaleria). */
 .imv-galeria{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
 .imv-gfoto{position:relative;aspect-ratio:4/3;padding:0;border:0;border-radius:12px;overflow:hidden;background:var(--chip);cursor:pointer;transition:transform var(--rapido) var(--curva)}
-@media(hover:hover){.imv-gfoto:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.imv-gfoto:hover{background:var(--tint)}}
 .imv-gfoto:active{background:var(--press);transform:scale(.98)}
 .imv-gfoto:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -2157,7 +2157,7 @@ button.vg-item-abrir:active{background:var(--press)}
    com o véu das janelas; o passar por cima, só com rato, menos. */
 .imv-capa-abre{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;border:0;background:transparent;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .imv-capa-abre::after{content:"";position:absolute;inset:0;background:var(--veu);opacity:0;transition:opacity var(--rapido) var(--curva)}
-@media(hover:hover){.imv-capa-abre:hover::after{opacity:.15}}
+@media(hover:hover) and (pointer:fine){.imv-capa-abre:hover::after{opacity:.15}}
 .imv-capa-abre:active::after{opacity:.3}
 /* o anel por dentro, com uma margem da cor do cartão: assenta em qualquer fotografia */
 .imv-capa-abre:focus-visible{outline:2px solid var(--accent);outline-offset:-6px;box-shadow:inset 0 0 0 4px var(--card)}
@@ -2245,7 +2245,7 @@ button.vg-item-abrir:active{background:var(--press)}
 /* A linha que se toca (a de dentro): 64px no mínimo, o passar por cima, o
    premido e o anel por dentro. */
 .row-between.ct-cols{align-items:center;gap:12px;min-height:64px;padding:12px 14px;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-@media(hover:hover){.ct-cols:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.ct-cols:hover{background:var(--tint)}}
 .ct-cols:active{background:var(--press)}
 .ct-cols:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .ct-cols>.selbox{padding:0}
@@ -2371,7 +2371,7 @@ button.vg-item-abrir:active{background:var(--press)}
 .ct-notas{padding:0 14px 14px;font-size:14px;overflow-wrap:anywhere}
 .ct-minis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .ct-mini{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;min-height:60px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font:inherit;text-align:left;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-@media(hover:hover){.ct-mini:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.ct-mini:hover{background:var(--tint)}}
 .ct-mini:active{background:var(--press)}
 .ct-mini:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ct-mini b{font-weight:600;font-variant-numeric:tabular-nums}
@@ -2391,7 +2391,7 @@ button.vg-item-abrir:active{background:var(--press)}
 .ct-anexo:first-child{border-top:0}
 .ct-anexo>span{flex:1;min-width:0;overflow-wrap:anywhere}
 .ct-anexo>svg{flex:0 0 auto;color:var(--muted)}
-@media(hover:hover){.ct-anexo:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.ct-anexo:hover{background:var(--tint)}}
 .ct-anexo:active{background:var(--press)}
 .ct-anexo:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 
@@ -2516,7 +2516,7 @@ label.ct-sw-linha{display:flex;align-items:center;gap:12px;min-height:44px;font-
    o nome comprido alargava a linha para lá do cartão, e a renda saía cortada */
 .list.pes-lista,.list.vis-lista{grid-template-columns:minmax(0,1fr);gap:0;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
 .linha.pes-linha{gap:12px;min-height:64px;padding:12px 14px}
-@media(hover:hover){.pes-lista>.pes-linha:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.pes-lista>.pes-linha:hover{background:var(--tint)}}
 .pes-lista>.pes-linha:focus-visible{outline-offset:-2px}
 .avatar.pes-av{width:40px;height:40px;flex:0 0 40px;font-size:13px}
 .avatar.pes-av.pes-av-g{width:56px;height:56px;flex:0 0 56px;font-size:18px}
@@ -2550,7 +2550,7 @@ label.ct-sw-linha{display:flex;align-items:center;gap:12px;min-height:44px;font-
 .vis-linha{display:flex;align-items:flex-start;gap:12px;min-width:0;padding:10px 0;color:inherit;cursor:pointer}
 .vis-lista>.vis-linha{padding:12px 14px;transition:background-color var(--rapido) var(--curva),transform var(--rapido) var(--curva)}
 .vis-lista>.vis-linha+.vis-linha{border-top:1px solid var(--line)}
-@media(hover:hover){.vis-lista>.vis-linha:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.vis-lista>.vis-linha:hover{background:var(--tint)}}
 .vis-lista>.vis-linha:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .vis-data{flex:0 0 52px;width:52px;min-height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 0;border-radius:10px;background:var(--chip);color:var(--ink)}
 .vis-data b{font-family:var(--letra-titulo);font-size:18px;font-weight:650;line-height:1.1}
@@ -2587,7 +2587,7 @@ label.ct-sw-linha{display:flex;align-items:center;gap:12px;min-height:44px;font-
 .pes-kv .seta{display:inline-flex;vertical-align:-4px;margin:0 -4px 0 6px;color:var(--faint)}
 a.pes-liga>span:last-child{color:var(--accent-text)}
 a.pes-liga,.pes-kv.tap,.pes-linha-f.tap{cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-@media(hover:hover){a.pes-liga:hover,.pes-kv.tap:hover,.pes-linha-f.tap:hover{background:var(--tint)}a.pes-liga:hover>span:last-child{text-decoration:underline}}
+@media(hover:hover) and (pointer:fine){a.pes-liga:hover,.pes-kv.tap:hover,.pes-linha-f.tap:hover{background:var(--tint)}a.pes-liga:hover>span:last-child{text-decoration:underline}}
 a.pes-liga:active,.pes-kv.tap:active,.pes-linha-f.tap:active{background:var(--press)}
 a.pes-liga:focus-visible,.pes-kv.tap:focus-visible,.pes-linha-f.tap:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 @media(pointer:coarse){a.pes-liga,.pes-kv.tap{min-height:48px;align-items:center}}
@@ -2604,7 +2604,7 @@ a.pes-liga:focus-visible,.pes-kv.tap:focus-visible,.pes-linha-f.tap:focus-visibl
 /* «Adicionar documentos»: a última linha do cartão, a cobalto */
 .pes-mais{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:10px 14px;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent;
   color:var(--accent-text);font:inherit;font-weight:600;text-align:left;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-@media(hover:hover){.pes-mais:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.pes-mais:hover{background:var(--tint)}}
 .pes-mais:active{background:var(--press)}
 .pes-mais:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .pes-texto{padding:2px 14px 14px;font-size:14.5px;overflow-wrap:anywhere;user-select:text;-webkit-user-select:text}
@@ -2660,7 +2660,7 @@ a.pes-liga:focus-visible,.pes-kv.tap:focus-visible,.pes-linha-f.tap:focus-visibl
 .mov-chips{margin:0 0 12px}
 .mov-chip{position:relative;display:inline-flex;align-items:center;max-width:100%;min-height:36px;border:1px solid var(--line2);border-radius:999px;background:var(--card);
   transition:background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva)}
-@media(hover:hover){.mov-chip:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.mov-chip:hover{background:var(--tint)}}
 .mov-chip .sel{position:static;width:auto;min-width:0}
 .mov-chip .selbtn{position:relative;width:auto;min-height:34px;padding:0 10px 0 12px;gap:6px;border:0;border-radius:999px;background:transparent;font-size:14px;font-weight:500;color:var(--ink)}
 .mov-chip .selbtn span{flex:0 1 auto;max-width:220px}
@@ -2670,7 +2670,7 @@ a.pes-liga:focus-visible,.pes-kv.tap:focus-visible,.pes-linha-f.tap:focus-visibl
 .mov-chip.on .selbtn svg{display:none}
 .mov-chip-txt{padding:0 2px 0 12px;font-size:14px;font-weight:500;color:var(--accent-text);white-space:nowrap}
 .mov-chip-x{position:relative;display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;margin-right:2px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--accent-text);cursor:pointer}
-@media(hover:hover){.mov-chip-x:hover{background:var(--card)}}
+@media(hover:hover) and (pointer:fine){.mov-chip-x:hover{background:var(--card)}}
 .mov-chip-x:active{background:var(--press)}
 .mov-chip-x:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 /* no dedo o chip parece o mesmo, mas acerta-se em 44px */
@@ -2710,7 +2710,7 @@ a.pes-liga:focus-visible,.pes-kv.tap:focus-visible,.pes-linha-f.tap:focus-visibl
 .txnet b.neg{color:var(--out)}
 .mov-lista{display:block;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
 .mov-linha{min-height:64px;padding:12px 14px;background:var(--card);transition:background-color var(--rapido) var(--curva)}
-@media(hover:hover){.mov-linha:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.mov-linha:hover{background:var(--tint)}}
 .mov-linha:active{transform:none;background:var(--press)}
 .mov-linha .txcorpo{flex:1;min-width:0}
 .mov-linha .title{font-size:15px}
@@ -2956,7 +2956,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .ct-quartos .chip.ct-espera:not(.on){color:var(--muted);border-style:dashed}
 .ct-quartos .chip.ct-espera:not(.on) .ct-ja-txt{color:var(--accent-text)}
 #c_roomEsc.err>.chip.ct-espera:not(.on){border-color:var(--line2)}
-@media(hover:hover){.ct-quartos .chip.ct-espera:not(.on):hover{border-color:var(--accent)}}
+@media(hover:hover) and (pointer:fine){.ct-quartos .chip.ct-espera:not(.on):hover{border-color:var(--accent)}}
 /* ===== fim: ajustes-v40d 1.3 ===== */
 /* ===== ajustes-v40d: 1.2 — as fotos de um imóvel em carrossel (anexos.js:fotoCarrossel) ===== */
 /* O palco tem um tamanho fixo — quadrado, até 60% da altura do ecrã — e cada
@@ -2986,7 +2986,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .fc-seta-ant{left:10px}
 .fc-seta-seg{right:10px}
 .fc-seta:active{transform:scale(.94);background:var(--press)}
-@media(hover:hover){.fc-seta:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.fc-seta:hover{background:var(--tint)}}
 @media(hover:none),(pointer:coarse){.fc-seta:not(:focus-visible){width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);border:0}}
 /* ===== fim: ajustes-v40d 1.2 ===== */
 /* ===== redesign: 1.3.6 — os Planeados, os Créditos e a Agenda ===== */
@@ -2997,7 +2997,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .plan-pend-cab{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"tit total chev" "sub sub sub";
   align-items:center;gap:2px 10px;padding:16px 18px;border-radius:16px;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
 .plan-pend-cab[aria-expanded="true"]{border-radius:16px 16px 0 0}
-@media(hover:hover){.plan-pend-cab:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.plan-pend-cab:hover{background:var(--tint)}}
 .plan-pend-cab:active{background:var(--press)}
 .plan-pend-tit{grid-area:tit;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0}
 .plan-pend-tit h3{margin:0;font-size:16px}
@@ -3021,7 +3021,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .plan-txt p{margin:0}
 .plan-txt .title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .plan-pend-linha .plan-txt.tap{margin:-6px -8px;padding:6px 8px;border-radius:10px;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-@media(hover:hover){.plan-pend-linha .plan-txt.tap:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.plan-pend-linha .plan-txt.tap:hover{background:var(--tint)}}
 .plan-pend-linha .plan-txt.tap:active{background:var(--press)}
 .plan-valor{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto}
 .plan-num{font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -3057,7 +3057,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .plan-linhas.list{gap:0}
 .plan-linha{display:flex;align-items:center;gap:12px;min-height:60px;padding:12px 14px;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
 .plan-linha+.plan-linha{border-top:1px solid var(--line)}
-@media(hover:hover){.plan-linha:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.plan-linha:hover{background:var(--tint)}}
 .plan-linha:active{background:var(--press)}
 .plan-lista .plan-linha:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .plan-linha>.plan-num{flex:0 0 auto}
@@ -3111,7 +3111,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 /* o cartão de uma hipoteca: a parte de cima lê-se (tocar), os botões por baixo */
 .cred-hp{padding:0;overflow:hidden}
 .cred-hp-corpo{display:flex;flex-direction:column;gap:10px;padding:14px;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-@media(hover:hover){.cred-hp-corpo:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.cred-hp-corpo:hover{background:var(--tint)}}
 .cred-hp-corpo:active{background:var(--press)}
 .cred-hp .cred-hp-corpo:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .cred-hp-corpo p{margin:0}
@@ -3198,7 +3198,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .cal-dia-lista .lbl{margin:0;padding:12px 14px 8px}
 .cal-dia-lista .cal-ev+.lbl{border-top:1px solid var(--line)}
 .cal-ev{display:flex;align-items:center;gap:12px;min-height:60px;padding:12px 14px;border-top:1px solid var(--line);cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-@media(hover:hover){.cal-ev:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.cal-ev:hover{background:var(--tint)}}
 .cal-ev:active{background:var(--press)}
 .cal-dia-lista .cal-ev:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .cal-ev-hora{flex:0 0 52px;width:52px}
@@ -3300,7 +3300,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
   width:100%;min-height:44px;padding:16px 18px;border:0;border-radius:15px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer;
   transition:background-color var(--rapido) var(--curva)}
 .cal-pend:not(.fechado) .cal-pend-cab{border-bottom-left-radius:0;border-bottom-right-radius:0}
-@media(hover:hover){.cal-pend-cab:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.cal-pend-cab:hover{background:var(--tint)}}
 .cal-pend-cab:active{background:var(--press)}
 .cal-pend-cab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .cal-pend-tit{grid-area:tit;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0}
@@ -3368,7 +3368,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .ana .table td{vertical-align:middle}
 .ana .table td .small{font-weight:400}
 .ana .table tr[data-click]{cursor:pointer}
-@media(hover:hover){.ana .table tr[data-click]:hover td{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.ana .table tr[data-click]:hover td{background:var(--tint)}}
 .ana .table tr[data-click]:active td{background:var(--press)}
 .ana .table tr[data-click]:focus-visible td{background:var(--tint)}
 .ana .table .ana-total td{background:var(--chip)}
@@ -3386,7 +3386,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .ava-barra-bloco{display:flex;flex-direction:column;gap:6px;min-width:0;width:100%}
 button.ava-barra-bloco,.ava-pct-btn{margin:-6px;padding:6px;width:calc(100% + 12px);border:0;border-radius:12px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;transition:background var(--rapido) var(--curva)}
 .ava-pct-btn{width:auto;align-self:flex-start}
-@media(hover:hover){button.ava-barra-bloco:hover,.ava-pct-btn:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){button.ava-barra-bloco:hover,.ava-pct-btn:hover{background:var(--tint)}}
 button.ava-barra-bloco:active,.ava-pct-btn:active{background:var(--press)}
 button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ava-barra-lin{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-weight:600;font-variant-numeric:tabular-nums}
@@ -3504,7 +3504,7 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .fis-sit-lbl+.fis-linha{border-top:0}
 /* a linha de um interruptor é o rótulo dele: toca-se inteira */
 .fis-linha-toque{font-size:inherit;font-weight:400;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-@media(hover:hover){.fis-linha-toque:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.fis-linha-toque:hover{background:var(--tint)}}
 .fis-linha-toque:active{background:var(--press)}
 .fis-ab{flex:0 0 auto}
 .fis-ab>button{flex:0 0 44px;width:44px}
@@ -3512,7 +3512,7 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .fis-prazos{gap:10px}
 .fis-pz{display:flex;align-items:center;gap:12px;min-height:48px;padding:10px 0;border-top:1px solid var(--line)}
 .fis-pz.tap{margin:0 -18px;padding:10px 18px;cursor:pointer}
-@media(hover:hover){.fis-pz.tap:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.fis-pz.tap:hover{background:var(--tint)}}
 .fis-pz.tap:active{background:var(--press)}
 .fis-pz>div{flex:1;min-width:0}
 .fis-pz b{display:block;font-weight:600;font-size:14.5px}
@@ -3581,7 +3581,7 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .card.def-lista{padding:0;overflow:hidden;margin-bottom:14px}
 .def-lista>*+*{border-top:1px solid var(--line)}
 .linha.def-linha{width:100%;border:0;border-radius:0;background:transparent;font:inherit;color:inherit;text-align:left}
-@media(hover:hover){.def-linha:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.def-linha:hover{background:var(--tint)}}
 .def-linha .ic{background:var(--chip);color:var(--muted)}
 .def-linha .txt b{font-weight:600}
 .def-linha .txt .small{display:block}
@@ -3605,7 +3605,7 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .def-nav{display:none}
 .def-nav-item{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:var(--muted);font:inherit;font-size:14.5px;text-align:left;cursor:pointer;
   transition:background-color var(--rapido) var(--curva),color var(--rapido) var(--curva)}
-@media(hover:hover){.def-nav-item:hover{background:var(--tint);color:var(--ink)}}
+@media(hover:hover) and (pointer:fine){.def-nav-item:hover{background:var(--tint);color:var(--ink)}}
 .def-nav-item:active{background:var(--press)}
 .def-nav-item.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(16,24,40,.1)}
 @media(min-width:901px){
@@ -3626,7 +3626,7 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .def-abas>button{flex:0 0 auto;padding:0 16px}
 .def-nota{margin:14px 0}
 .def-ligacao{border:0;padding:0;background:transparent;color:var(--accent);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
-@media(hover:hover){.def-ligacao:hover{color:var(--accent-text)}}
+@media(hover:hover) and (pointer:fine){.def-ligacao:hover{color:var(--accent-text)}}
 .def-bloco{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
 .def-bloco h3{margin:0;font-size:17px}
 .def-bloco p{margin:0}
@@ -3666,7 +3666,7 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .def-cat-nome b,.def-cat-nome>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .def-cat-nome b{font-weight:600}
 .def-cat-abre{flex:0 0 32px;width:32px;height:32px;display:inline-grid;place-items:center;padding:0;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer}
-@media(hover:hover){button.def-cat-abre:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){button.def-cat-abre:hover{background:var(--tint)}}
 button.def-cat-abre:active{background:var(--press)}
 .def-cat-abre svg{transition:transform var(--rapido) var(--curva)}
 .def-cat.aberta .def-cat-abre svg{transform:rotate(90deg)}
@@ -3732,7 +3732,7 @@ button.def-cat-abre:active{background:var(--press)}
 .def-etiqueta{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 4px 0 12px;border:1px solid var(--line2);border-radius:999px;background:var(--card);font-size:14px;font-weight:500}
 .def-etiqueta .n{color:var(--muted);font-variant-numeric:tabular-nums}
 .def-etiqueta button{display:inline-grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
-@media(hover:hover){.def-etiqueta button:hover{background:var(--tint);color:var(--danger)}}
+@media(hover:hover) and (pointer:fine){.def-etiqueta button:hover{background:var(--tint);color:var(--danger)}}
 .def-etiqueta button:active{background:var(--press)}
 .def-art41 p{font-size:14px}
 /* Grupos (M-Grupos): um cartão por grupo; os partilhados com a ligação, os
@@ -3771,7 +3771,7 @@ button.def-cat-abre:active{background:var(--press)}
 .colab-cargo>p{margin:0}
 .colab-cargo-cab{display:flex;align-items:center;gap:10px}
 .colab-abre{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 10px 0 6px;border:0;border-radius:10px;background:transparent;color:var(--accent-text);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
-@media(hover:hover){.colab-abre:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.colab-abre:hover{background:var(--tint)}}
 .colab-abre:active{background:var(--press)}
 .colab-abre svg{transition:transform var(--rapido) var(--curva)}
 .colab-abre[aria-expanded="true"] svg{transform:rotate(90deg)}
@@ -3810,7 +3810,7 @@ button.def-cat-abre:active{background:var(--press)}
 .colab-cargos>.btn{align-self:flex-start}
 .colab-cargo-op{display:flex;align-items:flex-start;gap:12px;width:100%;padding:12px 14px;border:1px solid var(--line2);border-radius:12px;background:var(--card);color:var(--ink);font:inherit;text-align:left;cursor:pointer;
   transition:background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva)}
-@media(hover:hover){.colab-cargo-op:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.colab-cargo-op:hover{background:var(--tint)}}
 .colab-cargo-op:active{background:var(--press)}
 .colab-cargo-op.on{border-color:var(--accent);background:var(--accent-soft)}
 .colab-radio{flex:0 0 20px;width:20px;height:20px;margin-top:1px;border:2px solid var(--line2);border-radius:50%;background:var(--card)}
@@ -3823,7 +3823,7 @@ button.def-cat-abre:active{background:var(--press)}
   transition:background-color var(--rapido) var(--curva)}
 .colab-casa+.colab-casa{border-top:1px solid var(--line)}
 .check.colab-casa input{width:22px;height:22px}
-@media(hover:hover){.colab-casa:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.colab-casa:hover{background:var(--tint)}}
 .colab-casa:active{background:var(--press)}
 /* as caixas Ver/Adicionar/Editar da janela do cargo: o rótulo é a área de
    toque (44px no dedo, mais abaixo) */
@@ -3928,7 +3928,7 @@ button.def-cat-abre:active{background:var(--press)}
 .guia-cab{display:flex;align-items:center;gap:10px}
 .guia-conta{flex:1;min-width:0;margin:0;font-size:12.5px;font-weight:600;color:var(--side-text);font-variant-numeric:tabular-nums}
 .guia-fechar{flex:0 0 auto;width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:10px;background:var(--side-hover);color:var(--side-ink);cursor:pointer}
-@media(hover:hover){.guia-fechar:hover{background:var(--side-on)}}
+@media(hover:hover) and (pointer:fine){.guia-fechar:hover{background:var(--side-on)}}
 .guia-fechar:focus-visible{outline:2px solid var(--side-ink);outline-offset:2px}
 .guia-tit{margin:0;font-size:19px;color:var(--side-ink)}
 .guia-txt{margin:0;font-size:14.5px;color:#dce2f0} /* o texto do passo sobre o azul-noite (canvas M-Tutorial), igual nos dois temas */
@@ -3939,9 +3939,9 @@ button.def-cat-abre:active{background:var(--press)}
 .guia-botoes{display:flex;gap:8px}
 .guia-botoes .btn{flex:1}
 .btn.guia-ant{background:transparent;border-color:var(--side-line);color:var(--side-ink)}
-@media(hover:hover){.btn.guia-ant:hover{background:var(--side-hover)}}
+@media(hover:hover) and (pointer:fine){.btn.guia-ant:hover{background:var(--side-hover)}}
 .btn.guia-seg{background:var(--side-ink);border-color:var(--side-ink);color:var(--side)}
-@media(hover:hover){.btn.guia-seg:hover{background:var(--side-text);border-color:var(--side-text)}}
+@media(hover:hover) and (pointer:fine){.btn.guia-seg:hover{background:var(--side-text);border-color:var(--side-text)}}
 /* premido na paleta da barra, mais fundo do que o passar por cima */
 .btn.guia-ant:active{background:var(--side-on)}
 .guia-fechar:active{background:rgba(255,255,255,.2)}
@@ -3982,7 +3982,7 @@ button.def-cat-abre:active{background:var(--press)}
 .pt-linha{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;min-height:60px;padding:12px 14px;width:100%;min-width:0}
 .pt-linha+.pt-linha{border-top:1px solid var(--line)}
 button.pt-linha{border:0;border-radius:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer}
-@media(hover:hover){button.pt-linha:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){button.pt-linha:hover{background:var(--tint)}}
 button.pt-linha:active{background:var(--press)}
 button.pt-linha:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .pt-txt{flex:1 1 150px;min-width:0}
@@ -4096,12 +4096,12 @@ div.pt-quota b{text-align:right}
 .ent-pw{position:relative;display:grid}
 .ent-pw input{padding-right:100px}
 .ent-ver{position:absolute;right:4px;top:30px;min-height:40px;padding:0 12px;border:0;border-radius:9px;background:transparent;color:var(--accent-text);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
-@media(hover:hover){.ent-ver:hover{background:var(--chip)}}
+@media(hover:hover) and (pointer:fine){.ent-ver:hover{background:var(--chip)}}
 .ent-ver:active{background:var(--press)}
 .ent-ver:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(pointer:coarse){.ent-ver{min-height:44px;top:28px}}
 .ent-esqueci{justify-self:end;margin-top:-8px;padding:6px 0;font-size:14px;font-weight:600;color:var(--accent-text);text-decoration:none}
-@media(hover:hover){.ent-esqueci:hover{text-decoration:underline}}
+@media(hover:hover) and (pointer:fine){.ent-esqueci:hover{text-decoration:underline}}
 .ent-reqs{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-top:-6px}
 .ent-req{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
 .ent-req.ok{color:var(--in)}
@@ -4133,7 +4133,7 @@ div.pt-quota b{text-align:right}
 .card.tg-docs{padding:0;overflow:hidden}
 .tg-doc{display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:14px;border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer}
 .tg-doc+.tg-doc{border-top:1px solid var(--line)}
-@media(hover:hover){.tg-doc:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.tg-doc:hover{background:var(--tint)}}
 .tg-doc:active{background:var(--press)}
 .tg-doc:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .tg-doc-txt{flex:1;min-width:0;display:grid;gap:2px}
@@ -4169,7 +4169,7 @@ div.pt-quota b{text-align:right}
 .upd-frase,.upd-nota{margin:0;font-size:15px;color:var(--side-text)}
 .upd-nota{font-size:14px}
 .btn.upd-botao{width:100%;margin-top:auto;background:var(--side-ink);border-color:var(--side-ink);color:var(--side)}
-@media(hover:hover){.btn.upd-botao:hover{background:var(--side-text);border-color:var(--side-text)}}
+@media(hover:hover) and (pointer:fine){.btn.upd-botao:hover{background:var(--side-text);border-color:var(--side-text)}}
 .btn.upd-botao:active{background:var(--side-muted);border-color:var(--side-muted)}
 .btn.upd-botao:focus-visible{outline:2px solid var(--side-ink);outline-offset:2px}
 .upd-passos{list-style:none;margin:0;display:grid;gap:12px;padding:16px;border-radius:16px;background:var(--side-hover);border:1px solid var(--side-line)}
@@ -4199,7 +4199,7 @@ div.pt-quota b{text-align:right}
 .card.nov-secs{padding:0;overflow:hidden}
 .nov-ar{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:10px 14px;border:0;background:transparent;font:inherit;font-size:15px;font-weight:600;color:var(--ink);text-align:left;cursor:pointer}
 .nov-secs>*+.nov-ar{border-top:1px solid var(--line)}
-@media(hover:hover){.nov-ar:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.nov-ar:hover{background:var(--tint)}}
 .nov-ar:active{background:var(--press)}
 .nov-ar:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .nov-ar-tit{flex:1;min-width:0}
@@ -4229,7 +4229,7 @@ div.pt-quota b{text-align:right}
 @media(min-width:901px){.aj-tutoriais{display:grid;grid-template-columns:repeat(auto-fill,minmax(136px,1fr));overflow:visible}}
 .aj-tu{flex:0 0 156px;scroll-snap-align:start;display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:116px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--card);font:inherit;color:inherit;text-align:left;cursor:pointer}
 .aj-tu b{font-weight:600;line-height:1.3}
-@media(hover:hover){.aj-tu:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.aj-tu:hover{background:var(--tint)}}
 .aj-tu:active{background:var(--press)}
 .aj-tu:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .card.aj-perguntas,.card.aj-cartao{padding:0;overflow:hidden}
@@ -4238,7 +4238,7 @@ div.pt-quota b{text-align:right}
 .aj-fq>span{flex:1;min-width:0}
 .aj-fq svg{flex:0 0 auto;color:var(--faint);transition:transform var(--rapido) var(--curva)}
 .aj-fq[aria-expanded="true"] svg{transform:rotate(180deg)}
-@media(hover:hover){.aj-fq:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.aj-fq:hover{background:var(--tint)}}
 .aj-fq:active{background:var(--press)}
 .aj-fq:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .aj-fr{padding:0 14px 14px;font-size:14px;line-height:1.55;color:var(--muted)}
@@ -4547,3 +4547,24 @@ label:has(>.req)>:not(.req){grid-column:1/-1}
    item da grelha do rótulo e o asterisco ficar ao lado dele — e não um
    bocado de texto por linha, com o asterisco no fim. */
 label:has(>.req)>.rotulo-txt{grid-column:1}
+
+/* === listas por origem (folha 1.3) === */
+/* As secções «Os meus …», «Partilhados comigo» e «Em que colaboro» das listas
+   dos Imóveis, Inquilinos, Visitas e Contratos (vistas.js). */
+/* Só existem com duas ou três secções (vistas.js:listaPorOrigem); com uma, a
+   lista é a de sempre. Cada secção: o título e quantos tem, no feitio do
+   cabeçalho dos grupos das visitas (.vis-grupo-cab), e a lista por baixo.
+   O título distingue-se dos grupos de dentro pela cor da FRENTE — o texto e o
+   número a cobalto (--accent-text), e o traço por baixo —, e não só pelo
+   tamanho: o Samsung Internet escurece a página à força e passa o cobalto a
+   um azul claro, e o --ink dos grupos a um quase branco, que continuam a ser
+   dois. Os grupos de dentro (as Próximas e as Passadas, os imóveis dos
+   contratos) ficam um nível abaixo, a --ink e mais pequenos. */
+.org-seccoes{display:flex;flex-direction:column;gap:28px;min-width:0}
+.org-seccao{display:flex;flex-direction:column;gap:12px;min-width:0}
+.org-cab{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0;padding:4px 2px 8px;border-bottom:1px solid var(--line2)}
+.org-tit{margin:0;min-width:0;font-size:19px;color:var(--accent-text);overflow-wrap:anywhere}
+.org-n{flex:0 0 auto;font-weight:600;color:var(--accent-text)}
+/* as Próximas e as Passadas dentro de uma secção: um h3, abaixo do título dela */
+.org-seccao .vis-grupo-cab h3{margin:0;font-size:15px;font-weight:600;letter-spacing:0;color:var(--ink)}
+/* === fim das listas por origem === */

@@ -1470,6 +1470,64 @@ function lfBarraViva(v,molde){
   if(fa&&fb&&fa.outerHTML!==fb.outerHTML)fa.replaceWith(fb);
   return {vivo:vivo,novo:novo};
 }
+/* ================= AS LISTAS POR ORIGEM =================
+   Os Imóveis, os Inquilinos, as Visitas e os Contratos dividem-se pela origem
+   de cada registo (acessos.js:origemDaCasa): os meus, os partilhados comigo e
+   aqueles em que colaboro, por esta ordem. Uma secção vazia não aparece; com
+   uma só com conteúdo não há títulos, e a lista é a de sempre, sem invólucro
+   (vistas.js:listaPorOrigem). O filtro «Origem» é um campo do lfCabeca, com
+   a chave 'or', que só existe quando a lista tem registos de pelo menos duas
+   origens (vistas.js:lfOrigem). */
+const ORIGENS=['meu','partilhado','colaboro'];
+/* As secções de uma lista por origem. Cada secção pinta-se pelo pintor da
+   lista, que recebe o sufixo do id das suas listas vivas: '' quando a secção
+   é a única — o id e o HTML de sempre —, ':meu', ':partilhado' ou
+   ':colaboro' com duas ou três, para cada uma ter a sua lista viva (o motor
+   deita fora o que não é item com chave: o título fica FORA dela, como os
+   das visitas, visitas.js:vVisits). Com duas ou três, cada uma leva um
+   título e quantos registos tem, no feitio do cabeçalho dos grupos das
+   visitas; o título é um h2, e os grupos de dentro (as Próximas e as
+   Passadas, os imóveis dos contratos) ficam um nível abaixo.
+   Recebe: nome — o nome curto da lista, para os ids dos títulos ('imoveis');
+   itens — os registos já filtrados e ordenados; origemDe — registo =>
+   'meu'|'partilhado'|'colaboro'; titulos — {meu, partilhado, colaboro};
+   pintar — (registos, sufixo, sozinha) => o HTML da secção sem o título.
+   Devolve: o HTML (texto). */
+function listaPorOrigem(nome,itens,origemDe,titulos,pintar){
+  const por={meu:[],partilhado:[],colaboro:[]};
+  (itens||[]).forEach(x=>{const o=origemDe(x);(por[o]||por.meu).push(x)});
+  const cheias=ORIGENS.filter(o=>por[o].length);
+  if(cheias.length<2)return pintar(cheias.length?por[cheias[0]]:[],'',true);
+  return `<div class="org-seccoes">${cheias.map(o=>{const id='org_'+nome+'_'+o,n=por[o].length;
+    return `<section class="org-seccao" aria-labelledby="${esc(id)}"><div class="org-cab"><h2 class="org-tit" id="${esc(id)}">${esc(titulos[o])}</h2><span class="small num org-n">${n}</span></div>`
+      +pintar(por[o],':'+o,false)+'</section>'}).join('')}</div>`;
+}
+/* O filtro «Origem» de uma lista: que origens há na lista inteira (antes de
+   qualquer filtro — o campo não aparece e some a cada tecla da pesquisa) e o
+   valor que vale. Com menos de duas origens o campo não existe, e um filtro
+   guardado de antes deixa de cortar e sai do estado (senão o funil contava um
+   filtro que não se vê); o mesmo a um que escolheu uma origem que a lista
+   deixou de ter.
+   Recebe: k — a chave da lista ('lprops', 'lten', 'lvis', 'lcts'); base — os
+   registos todos da lista (no âmbito); origemDe — registo => a origem.
+   Devolve: {v, filtra, campo} — v é a origem escolhida ('' para todas);
+   filtra(registos) devolve os dessa origem; campo(resto, rot) devolve o campo
+   do lfCabeca (ou null sem duas origens), com quantos do resto — os que passam
+   os outros filtros — cabem em cada escolha; rot é {todos, meu, partilhado,
+   colaboro}, os rótulos das escolhas. */
+function lfOrigem(k,base,origemDe){
+  const ha=ORIGENS.filter(o=>(base||[]).some(x=>origemDe(x)===o)),s=lf(k);
+  if(s.or!==undefined&&(ha.length<2||ha.indexOf(s.or)<0))delete s.or;
+  const v=String(s.or||'');
+  return {v:v,
+    filtra:xs=>v?(xs||[]).filter(x=>origemDe(x)===v):(xs||[]),
+    campo:(resto,rot)=>{
+      if(ha.length<2)return null;
+      const n={};(resto||[]).forEach(x=>{const o=origemDe(x);n[o]=(n[o]||0)+1});
+      return {chave:'or',nome:'Origem',curto:rot.todos,rapido:true,rotulo:x=>rot[x]||x,
+        opcoes:[{v:'',label:rot.todos}].concat(ha.map(o=>({v:o,label:rot[o],n:n[o]||0})))};
+    }};
+}
 /* Fecha o leque do botão flutuante (#fabMenu). Era um
    document.getElementById('fabMenu').classList.remove('on') no atributo, e a
    gramática das ações não tem nem o document nem o classList. Quem a chama é

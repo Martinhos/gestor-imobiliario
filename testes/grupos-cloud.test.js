@@ -920,4 +920,32 @@ describe('os Proprietários com sessão: a lista e o «Editar casas partilhadas�
     app.db.groups = app.db.groups.filter((g) => !g._partilhado);
     assert.equal(app.casasPartilhadasDaFicha('owner', app.db.owners.find((o) => o.id === 'RUI')), null);
   });
+
+  test('o ⋯ da ficha: com ligação tem «Remover ligação» com o id dela; só por grupo não tem; removida, quem fica pelo grupo mantém a ficha, repintada sem ele', async () => {
+    const st = ESTADO();
+    st.connections = [{ id: 'L1', status: 'accepted', peer: { id: 'RUI', name: 'Rui' }, myShares: [], peerShares: [] }];
+    const { app, esp } = comEstado(st);
+    assert.deepEqual(cru(app.partilhaComDonoDaNuvem('RUI')), { act: "CW.sharesModal('L1')", ligacao: 'L1' });
+    assert.deepEqual(cru(app.partilhaComDonoDaNuvem('ANA')), { act: "CW.casasDoGrupoCom('ANA')" }, 'só por grupo não há ligação');
+    // a Ana: só por grupo, o ⋯ não tem a opção (nem mais nada, e por isso não se escreve)
+    app.personView('owner', 'ANA');
+    const ana = esp.abertas[esp.abertas.length - 1];
+    assert.ok(!ana.m.includes('Remover ligação') && !ana.m.includes('delConn'), 'sem «Remover ligação»: ' + ana.m);
+    assert.match(ana.f, /data-click="CW\.casasDoGrupoCom\('ANA'\)">Editar casas partilhadas</);
+    // o Rui: com a ligação L1
+    app.personView('owner', 'RUI');
+    const L = app.modalStack[app.modalStack.length - 1];
+    assert.match(L.m, /data-risco="destroi" data-click="closePops\(\);CW\.delConn\('L1'\)">[\s\S]*? Remover ligação</);
+    // remove-se (o confirmModal do montar confirma logo); o servidor deixa de mandar a ligação
+    esp.aoPuxar = () => { app.CW.state.connections = []; };
+    app.CW.delConn('L1');
+    await espera();
+    assert.deepEqual(esp.chamadas(), ['DELETE /api/connections/L1']);
+    assert.equal(esp.confirmados[0].t, 'Remover a ligação a Rui');
+    assert.ok(app.donosComPartilha().some((o) => o.id === 'RUI'), 'controlo: o Rui fica na lista, pelo grupo G1 e pela casa em comum');
+    assert.equal(app.modalStack[app.modalStack.length - 1], L, 'a ficha dele fica aberta');
+    // o que o repinte lê agora: sem «Remover ligação», e o rodapé passa ao grupo
+    assert.ok(!L.ficha.menu().includes('Remover ligação'), 'o ⋯ já não tem a opção');
+    assert.match(app.fichaRodape(L.ficha), /data-click="CW\.casasDoGrupoCom\('RUI'\)">Editar casas partilhadas</);
+  });
 });

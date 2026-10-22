@@ -267,7 +267,7 @@ describe('a dobra no CSS', () => {
     assert.match(sec, /\.cal-pend\.fechado \.cal-pend-dentro\{opacity:0;visibility:hidden;transition:opacity var\(--medio\) var\(--curva-entra\),visibility 0s var\(--medio\)\}/);
     assert.match(sec, /\.cal-pend\.fechado \.cal-pend-dentro,\.cal-pend\.viagem \.cal-pend-dentro\{overflow:hidden\}/);
     assert.doesNotMatch(sec.replace(/\/\*[\s\S]*?\*\//g, ''), /#[0-9a-f]{3,6}\b|cubic-bezier|\d+ms|\.\d+s\b/i, 'só tokens: nem cores nem tempos nem curvas à mão');
-    assert.match(sec, /@media\(hover:hover\)\{\.cal-pend-cab:hover/);
+    assert.match(sec, /@media\(hover:hover\) and \(pointer:fine\)\{\.cal-pend-cab:hover/);
     assert.match(css, /@media\(prefers-reduced-motion:reduce\)\{\*,\*::before,\*::after\{animation:none!important;transition:none!important/, 'sem movimento, a regra geral desliga a dobra');
   });
 });

@@ -181,6 +181,24 @@ function casaDoInquilino(t){
 // Recebe: t — a ficha.
 // Devolve: true se posso.
 function podeEditarInquilino(t){return podeEditar(casaDoInquilino(t),'tenant.add',t)}
+/* De onde me vem um imóvel, para as três secções das listas (vistas.js:listaPorOrigem):
+   meu (o servidor não lhe pôs dono que não eu — mesmo que eu o partilhe com
+   outras contas), em que colaboro (tem cargo: cloud/nucleo.js:rebuildDb põe o
+   _cargo), ou partilhado comigo (tem outro dono e nenhum cargo: sou
+   comproprietário por uma ligação ou por um grupo). Sem imóvel, ou com um que
+   já não está no db, é meu: é o que a lista tinha antes de haver secções.
+   Recebe: pid — o id do imóvel (ou vazio).
+   Devolve: 'meu', 'partilhado' ou 'colaboro'. */
+function origemDaCasa(pid){
+  const p=pid?prop(pid):null;
+  if(!p||!p._ownerUserId)return 'meu';
+  return p._cargo?'colaboro':'partilhado';
+}
+/* De onde me vem um inquilino: a origem do imóvel dele (acessos.js:casaDoInquilino
+   — o da ficha, ou o do primeiro contrato); sem imóvel, meu.
+   Recebe: t — a ficha do inquilino.
+   Devolve: 'meu', 'partilhado' ou 'colaboro'. */
+function origemDoInquilino(t){return origemDaCasa(casaDoInquilino(t))}
 
 /* O nome de um utilizador pelo id: nos proprietários (utilizadores com acesso),
    depois nas pessoas que o estado trouxe (colaboradores), e por fim o id

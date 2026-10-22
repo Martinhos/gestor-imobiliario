@@ -204,7 +204,7 @@ describe('o realce do segmentado vê-se nos dois temas', () => {
   test('a viagem e as saídas têm as regras delas; o passar por cima da capa só com rato', () => {
     assert.match(SECCAO, /\n\.a-crescer\{align-content:start\}/);
     assert.match(SECCAO, /\n\.tem-saidas\{position:relative\}/);
-    assert.match(SECCAO, /@media\(hover:hover\)\{\.imv-capa-abre:hover::after/);
+    assert.match(SECCAO, /@media\(hover:hover\) and \(pointer:fine\)\{\.imv-capa-abre:hover::after/);
     assert.doesNotMatch(SECCAO.replace(/\/\*[\s\S]*?\*\//g, ''), /#[0-9a-f]{3,6}\b/i, 'cores só por tokens');
     assert.doesNotMatch(SECCAO, /transition:all/);
   });

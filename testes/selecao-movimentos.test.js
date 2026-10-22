@@ -259,13 +259,13 @@ describe('a folha da barra', () => {
   });
 
   test('no ecrã largo a barra azul-noite: a soma na mesma linha e sem se cortar, os rótulos por extenso, sem o Editar, e o realce só com rato', () => {
-    const largo = css.slice(css.indexOf('@media(min-width:901px){\n  .sel-fundo{'), css.indexOf('@media(min-width:901px) and (hover:hover){'));
+    const largo = css.slice(css.indexOf('@media(min-width:901px){\n  .sel-fundo{'), css.indexOf('@media(min-width:901px) and (hover:hover) and (pointer:fine){'));
     assert.ok(largo.length > 0, 'o bloco do ecrã largo vem antes do do rato');
-    assert.doesNotMatch(largo, /:hover\{/, 'nenhum :hover fora do @media(hover:hover)');
+    assert.doesNotMatch(largo, /:hover\{/, 'nenhum :hover fora do @media(hover:hover) and (pointer:fine)');
     assert.match(largo, /\.sel-fundo\.mov-sel \.sel-info\{display:block;flex:1 0 auto;white-space:nowrap;text-align:center\}/, 'a soma não se corta: os botões descem');
     assert.match(largo, /\.sel-fundo\.mov-sel #selFundoSoma::before\{content:" · "\}/);
     assert.match(largo, /\.sel-fundo\.mov-sel \.sel-rot-curto,\.sel-fundo\.mov-sel \.sel-estreito\{display:none\}/);
-    assert.match(css, /@media\(min-width:901px\) and \(hover:hover\)\{\s*\.sel-fundo \.btn:hover\{background:var\(--side-on\)\}/);
+    assert.match(css, /@media\(min-width:901px\) and \(hover:hover\) and \(pointer:fine\)\{\s*\.sel-fundo \.btn:hover\{background:var\(--side-on\)\}/);
     assert.match(css, /\.sel-fundo \.btn\{[^}]*background:var\(--side-hover\)/, 'os véus da barra lateral');
   });
 });
