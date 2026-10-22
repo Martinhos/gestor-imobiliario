@@ -383,7 +383,6 @@ const ACOES_DE_ADICIONAR=[
   {id:'imovel',label:'Imóvel',icon:'building',servico:'properties',quando:()=>!souSoColaborador(),act:'propModal()'},
   {id:'contrato',label:'Contrato',icon:'contract',servico:'contracts',quando:()=>casasComo('contract.add').length>0,act:'ctModal()'},
   {id:'inquilino',label:'Inquilino',icon:'users',servico:'tenants',quando:()=>!souSoColaborador()||casasComo('tenant.add').length>0,act:"personModal('tenant')"},
-  {id:'proprietario',label:'Proprietário',icon:'crown',servico:'owners',quando:()=>!souSoColaborador(),act:"personModal('owner')"},
   {id:'visita',label:'Visita',icon:'door',servico:'visits',quando:()=>casasComo('visit.add').length>0,act:'visitModal()'},
   {id:'planeado',label:'Movimento recorrente',icon:'repetir',servico:'recurring',quando:()=>podeSemImovel()||casasComo('rec.add').length>0,act:'newRec()'},
   {id:'modelo',label:'Modelo',icon:'file',servico:'recurring',quando:()=>podeSemImovel()||casasComo('rec.add').length>0,act:'newTpl()'},
@@ -391,7 +390,7 @@ const ACOES_DE_ADICIONAR=[
 ];
 /* O que esta pessoa pode adicionar agora: as ações de ACOES_DE_ADICIONAR
    cujo serviço está ligado nesta conta e cuja condição se cumpre, pela
-   ordem de lá. O dono tem as nove; um gestor de visitas tem a visita e o
+   ordem de lá. O dono tem as oito; um gestor de visitas tem a visita e o
    inquilino; um cargo que só vê não tem nenhuma — e sem nenhuma a barra de
    baixo não escreve o + (navegacao.js:buildTabbar).
    Devolve: array de {id, label, icon, act, toca:'camada'} — vazio sem nada para adicionar. */
@@ -405,7 +404,7 @@ function acoesDeAdicionar(){
    Recebe: tab — o id do separador.
    Devolve: o id da ação (um de ACOES_DE_ADICIONAR), ou '' num ecrã sem ação natural. */
 function acaoDoSeparador(tab){
-  return ({dashboard:'movimento',transactions:'movimento',properties:'imovel',contracts:'contrato',tenants:'inquilino',owners:'proprietario',
+  return ({dashboard:'movimento',transactions:'movimento',properties:'imovel',contracts:'contrato',tenants:'inquilino',
     visits:'visita',calendar:'visita',recurring:'planeado',credits:'hipoteca'})[tab]||'';
 }
 /* Os destinos da barra de baixo que esta pessoa vê: um separador, se não

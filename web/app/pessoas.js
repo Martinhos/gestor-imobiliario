@@ -29,6 +29,35 @@ function personApagavel(kind,p){
   if(kind==='tenant')return true;
   return !p._userId&&!(window.CW&&CW.user&&CW.user.id===p.id);
 }
+/* Como partilho com outro proprietário com conta: uma ligação ativa ou um
+   grupo partilhado em comum. É da nuvem (cloud/partilha.js:partilhaComDonoDaNuvem
+   põe-na aqui); sem ela, ninguém partilha.
+   Recebe: id — o id da conta do outro.
+   Devolve: {act} — a ação que abre onde se adicionam e removem as casas
+   partilhadas com ele —, ou null. */
+let partilhaComDono=null;
+/* A partilha com outro proprietário (partilhaComDono), e um erro lá não leva
+   a lista nem a ficha consigo.
+   Recebe: id — o id da conta do outro.
+   Devolve: {act}, ou null. */
+function comoPartilhoCom(id){
+  if(!partilhaComDono)return null;
+  try{return partilhaComDono(id)||null}catch(e){return null}
+}
+/* Os proprietários da lista: as outras contas Rendorium com quem partilho —
+   uma casa em comum, uma ligação ativa (mesmo sem casas) ou um grupo
+   partilhado. Não estou eu, nem quem só é referido nos movimentos (contas
+   apagadas, ex-comproprietários: ficam no db.owners para o «Pago por» se
+   ler), nem fichas sem conta, que já não se criam. Sem sessão (o caminho
+   sem nuvem, que só os testes e o arranque sem servidor percorrem) não há
+   contas nem «eu»: a lista é a base que está no aparelho.
+   Recebe: nada.
+   Devolve: array de proprietários de db.owners. */
+function donosComPartilha(){
+  const eu=meuId(),todos=db.owners||[];
+  if(!eu)return todos;
+  return todos.filter(o=>o._userId&&o.id!==eu&&(propsOf(o.id).length>0||!!comoPartilhoCom(o.id)));
+}
 /* ---- as peças das pessoas (o canvas M-Pessoas, M-Inquilino e M-Proprietario) ---- */
 
 /* O avatar de uma pessoa: as iniciais num círculo, cobalto suave; cinzento
@@ -255,7 +284,6 @@ function pesFichaDono(p){
   const vazia=!L.contactos&&!L.ident&&!casas.length;
   return `<div class="pes-ficha">
     <div class="pes-topo">${pesAvatar(p,true)}<div class="pes-topo-txt"><p class="pes-papel">Proprietário</p>${eu||comConta||cc?`<div class="pes-selos">${eu?'<span class="badge">O teu perfil</span>':comConta?'<span class="badge">Tem conta Rendorium</span>':''}${cc}</div>`:''}</div></div>
-    ${comConta?`<div class="pes-nota">${ic('lock',20)}<p>Este perfil é de ${esc(p.name||'quem tem a conta')}, que tem conta: só quem tem a conta o edita. Para o remover das casas, desfaz a partilha em Pessoas → Proprietários.</p></div>`:''}
     ${contas}
     ${pesCartao('Imóveis e quota-parte',linhasCasas,casas.length?`<span class="small num">${casas.length}</span>`:'')}
     ${pesCartao('Contactos e identificação',L.contactos+L.ident)}
@@ -317,8 +345,20 @@ function personView(kind,id){
       return x&&personApagavel(kind,x)?menu('fichaPer',[{label:kind==='owner'?'Apagar proprietário':'Apagar inquilino',
         icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delPerson('${jsq(kind)}','${jsq(id)}')`}]):'';
     },
-    editar:ok?{rotulo:'Editar',act:act}:null,
+    editar:ok?{rotulo:'Editar',act:act}:casasPartilhadasDaFicha(kind,p),
   });
+}
+/* O botão do rodapé da ficha de outro proprietário com conta, no lugar do
+   «Editar» que ele não tem (o perfil é dele): «Editar casas partilhadas»,
+   que abre onde se adicionam e removem as casas — a partilha da ligação ou,
+   sem ligação, o grupo partilhado (comoPartilhoCom). Sem partilha nenhuma,
+   não há botão.
+   Recebe: kind — 'tenant' ou 'owner'; p — a pessoa.
+   Devolve: {rotulo, act} para o abrirFicha, ou null. */
+function casasPartilhadasDaFicha(kind,p){
+  if(kind!=='owner'||!p||!p._userId||p.id===meuId())return null;
+  const c=comoPartilhoCom(p.id);
+  return c&&c.act?{rotulo:'Editar casas partilhadas',act:c.act}:null;
 }
 /* Abre a ficha de pessoa (kind 'owner' ou 'tenant'); sem id cria uma nova.
    after, se vier, é chamado com o id da ficha depois de guardar, em vez do

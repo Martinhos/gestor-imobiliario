@@ -41,6 +41,28 @@ function gruposPartilhados() {
   return (db.groups || []).filter(function (g) { return g._partilhado; });
 }
 
+// Os grupos partilhados em que estou com outra conta (membro ou dono).
+// Recebe: uid — o id da conta do outro.
+// Devolve: array de grupos de db.groups (os _partilhado).
+function gruposComDono(uid) {
+  return gruposPartilhados().filter(function (g) {
+    return g._dono === uid || (g._membros || []).some(function (m) { return m.id === uid; });
+  });
+}
+
+/* «Editar casas partilhadas» na ficha de um proprietário com quem só partilho
+   por grupo: abre os meus imóveis do grupo (CW.grupoImoveis); com mais de um
+   grupo em comum, escolhe-se primeiro qual.
+   Recebe: uid — o id da conta do outro.
+   Devolve: nada — abre a janela (ou a escolha do grupo). */
+CW.casasDoGrupoCom = function (uid) {
+  var gs = gruposComDono(uid);
+  if (!gs.length) return;
+  if (gs.length === 1) return CW.grupoImoveis(gs[0].id);
+  pickModal('Que grupo?', gs.map(function (g) { return { v: g.id, label: g.name || 'Grupo partilhado' }; }),
+    function (o) { closeModal(); CW.grupoImoveis(o.v); });
+};
+
 /* A chave, no aparelho, do URL da ligação de um grupo — por grupo e por
    conta, como a da ligação de partilha (colaboradores.js:guardarLigacao):
    num aparelho partilhado, a ligação de uma conta não pode ser a que a

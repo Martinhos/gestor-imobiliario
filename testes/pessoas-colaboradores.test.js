@@ -33,7 +33,7 @@ function montar(o = {}) {
   app.setSyncBadge = () => {};
   const db = limpar(app);
   db.tenants.push(app.normPerson({ id: 't1', name: 'Ana' }), app.normPerson({ id: 't2', name: 'Bruno' }), app.normPerson({ id: 't3', name: 'Carla' }));
-  db.owners.push(app.normPerson({ id: 'o1', name: 'Rui' }));
+  db.owners.push(Object.assign(app.normPerson({ id: 'o1', name: 'Rui' }), { _userId: 'o1' }));
   db.properties.push(app.normProp({ id: 'p1', name: 'T2 Porto', ownerIds: ['o1'] }));
   app.CW.user = o.sessao === false ? null : { id: 'EU', name: 'Eu', email: 'eu@exemplo.pt', token: 't' };
   app.CW._pulled = o.pulled === false ? 0 : 1;

@@ -16,7 +16,7 @@ afterEach(() => repor(app));
 
 const GESTOR = ['visit.view', 'visit.add', 'tenant.view', 'tenant.add'];
 const CONTAB = ['tx.view', 'tx.add', 'rec.view', 'rec.add', 'contract.view', 'loan.view', 'file.view', 'file.add', 'report.view'];
-const NOVE = ['movimento', 'imovel', 'contrato', 'inquilino', 'proprietario', 'visita', 'planeado', 'modelo', 'hipoteca'];
+const OITO = ['movimento', 'imovel', 'contrato', 'inquilino', 'visita', 'planeado', 'modelo', 'hipoteca'];
 const TB = ['dashboard', 'casas', 'dinheiro', 'calendar'];
 
 // três imóveis do Rui; os cargos dizem-se por casa (null é «sou dono»)
@@ -39,14 +39,14 @@ const destinos = (html) => (html.match(/goBarra\('(\w+)'\)/g) || []).map((s) => 
 const BOTAO = /<button type="button" class="tabmais" data-toca="camada" data-click="abrirAdicionar\(\)" aria-label="Criar"/;
 
 describe('acoesDeAdicionar', () => {
-  test('o dono tem as nove, pela ordem, cada uma para uma camada e com a ação da lista respetiva', () => {
+  test('o dono tem as oito (não há proprietário: é uma conta, chega pela partilha), pela ordem, cada uma para uma camada e com a ação da lista respetiva', () => {
     casas(app, [null, null, null]);
     const a = app.acoesDeAdicionar();
-    igual(ids(a), NOVE);
+    igual(ids(a), OITO);
     igual(JSON.parse(JSON.stringify(a.map((x) => x.label))),
-      ['Movimento', 'Imóvel', 'Contrato', 'Inquilino', 'Proprietário', 'Visita', 'Movimento recorrente', 'Modelo', 'Hipoteca']);
+      ['Movimento', 'Imóvel', 'Contrato', 'Inquilino', 'Visita', 'Movimento recorrente', 'Modelo', 'Hipoteca']);
     igual(JSON.parse(JSON.stringify(a.map((x) => x.act))),
-      ['newTxPick()', 'propModal()', 'ctModal()', "personModal('tenant')", "personModal('owner')", 'visitModal()', 'newRec()', 'newTpl()', 'newMort()']);
+      ['newTxPick()', 'propModal()', 'ctModal()', "personModal('tenant')", 'visitModal()', 'newRec()', 'newTpl()', 'newMort()']);
     assert.ok(a.every((x) => x.toca === 'camada' && x.icon), 'todas abrem uma camada e têm ícone');
   });
 
@@ -54,9 +54,9 @@ describe('acoesDeAdicionar', () => {
     limpar(app);
     delete app.window.CW;
     app.db.properties = [app.normProp({ id: 'P1', name: 'T1', ownerIds: [] })];
-    igual(ids(app.acoesDeAdicionar()), NOVE);
+    igual(ids(app.acoesDeAdicionar()), OITO);
     app.db.properties = [];
-    igual(ids(app.acoesDeAdicionar()), ['movimento', 'imovel', 'inquilino', 'proprietario', 'planeado', 'modelo']);
+    igual(ids(app.acoesDeAdicionar()), ['movimento', 'imovel', 'inquilino', 'planeado', 'modelo']);
   });
 
   test('o gestor de visitas tem o inquilino e a visita (pela ordem fixa); o contabilista o movimento e os planeados', () => {
@@ -66,7 +66,7 @@ describe('acoesDeAdicionar', () => {
     igual(ids(app.acoesDeAdicionar()), ['movimento', 'planeado', 'modelo']);
     // um dono que também colabora é dono: tem tudo
     casas(app, [null, GESTOR, CONTAB]);
-    igual(ids(app.acoesDeAdicionar()), NOVE);
+    igual(ids(app.acoesDeAdicionar()), OITO);
   });
 
   test('um cargo que só vê não tem nenhuma', () => {
@@ -77,9 +77,9 @@ describe('acoesDeAdicionar', () => {
   test('um serviço desligado leva as suas ações, e o fecho também (sem Movimentos não há Planeados)', () => {
     casas(app, [null, null, null]);
     app.definirServicosDesligados(['visits', 'credits']);
-    igual(ids(app.acoesDeAdicionar()), ['movimento', 'imovel', 'contrato', 'inquilino', 'proprietario', 'planeado', 'modelo']);
+    igual(ids(app.acoesDeAdicionar()), ['movimento', 'imovel', 'contrato', 'inquilino', 'planeado', 'modelo']);
     app.definirServicosDesligados(['transactions']);
-    igual(ids(app.acoesDeAdicionar()), ['imovel', 'contrato', 'inquilino', 'proprietario', 'visita', 'hipoteca']);
+    igual(ids(app.acoesDeAdicionar()), ['imovel', 'contrato', 'inquilino', 'visita', 'hipoteca']);
     app.definirServicosDesligados(['owners', 'tenants']);
     igual(ids(app.acoesDeAdicionar()), ['movimento', 'imovel', 'visita', 'planeado', 'modelo', 'hipoteca'], 'sem inquilinos não há contratos');
   });
@@ -88,13 +88,13 @@ describe('acoesDeAdicionar', () => {
 describe('acaoDoSeparador', () => {
   test('cada ecrã tem a sua ação natural; os que não têm ficam vazios', () => {
     const esperado = { dashboard: 'movimento', transactions: 'movimento', properties: 'imovel', contracts: 'contrato', tenants: 'inquilino',
-      owners: 'proprietario', visits: 'visita', calendar: 'visita', recurring: 'planeado', credits: 'hipoteca',
+      owners: '', visits: 'visita', calendar: 'visita', recurring: 'planeado', credits: 'hipoteca',
       settings: '', projections: '', reports: '', fisco: '', colaboradores: '' };
     Object.keys(esperado).forEach((t) => assert.equal(app.acaoDoSeparador(t), esperado[t], t));
     assert.equal(app.acaoDoSeparador(''), '');
     assert.equal(app.acaoDoSeparador('xyz'), '');
     // cada ação natural é uma das ações da folha
-    Object.values(esperado).filter(Boolean).forEach((id) => assert.ok(NOVE.includes(id), id));
+    Object.values(esperado).filter(Boolean).forEach((id) => assert.ok(OITO.includes(id), id));
   });
 });
 
@@ -230,9 +230,9 @@ describe('abrirAdicionar', () => {
     assert.equal((aberta.body.match(/class="criar-tipo"/g) || []).length, 5, 'receita, despesa, crédito, dívida, transferência');
     assert.match(aberta.body, /Novo movimento[\s\S]*Outros registos/);
     const outros = [...aberta.body.matchAll(/class="criar-outro"[^>]*data-click="criarEscolha\((\d+)\)"><svg[\s\S]*?<\/svg><span>([^<]+)/g)].map((m) => [Number(m[1]), m[2]]);
-    igual(outros.map((o) => o[1]), ['Imóvel', 'Contrato', 'Inquilino', 'Proprietário', 'Visita', 'Movimento recorrente', 'Modelo', 'Hipoteca'], 'a do ecrã sobe; o resto pela ordem; o movimento está nos tipos');
+    igual(outros.map((o) => o[1]), ['Imóvel', 'Contrato', 'Inquilino', 'Visita', 'Movimento recorrente', 'Modelo', 'Hipoteca'], 'a do ecrã sobe; o resto pela ordem; o movimento está nos tipos');
     assert.equal((aberta.body.match(/neste ecrã/g) || []).length, 1, 'só a do ecrã leva a marca');
-    app.criarEscolha(outros[4][0]);
+    app.criarEscolha(outros[3][0]);
     assert.equal(fechos, 1, 'fecha a folha');
     igual(corridas, ['visitModal()'], 'e corre a ação escolhida pela gramática');
     app.criarEscolha(1);

@@ -872,3 +872,52 @@ describe('o pedido para entrar num grupo', () => {
     assert.equal(cru(app.CW.state.sharedGroupRequests.outgoing).length, 1, 'os de outros grupos ficam');
   });
 });
+
+/* ------------------------------------------------ os Proprietários: só as contas com quem partilho */
+
+describe('os Proprietários com sessão: a lista e o «Editar casas partilhadas»', () => {
+  test('a lista tem as contas com casa em comum, ligação ativa ou grupo; nem eu, nem quem só é referido, nem a ligação por aceitar', () => {
+    const st = ESTADO();
+    st.profiles.push({ userId: 'ZE', name: 'Zé', data: null }, { userId: 'IDA', name: 'Ida', data: null }, { userId: 'VELHO', name: 'Velho', data: null }, { userId: 'PEND', name: 'Pend', data: null });
+    st.connections = [
+      { id: 'L1', status: 'accepted', peer: { id: 'ZE', name: 'Zé' }, myShares: [], peerShares: [] },
+      { id: 'L2', status: 'pending', incoming: false, peer: { id: 'PEND', name: 'Pend' }, myShares: [], peerShares: [] },
+    ];
+    st.records.push({ kind: 'tx', id: 'T9', houseId: 'H1', updatedAt: 1, data: { id: 'T9', kind: 'expense', label: 'Obras', amount: 10, date: '2026-01-01', propertyId: 'H1', paidBy: 'VELHO' } });
+    const { app } = comEstado(st);
+    const ids = cru(app.donosComPartilha().map((o) => o.id)).sort();
+    assert.deepEqual(ids, ['ANA', 'RUI', 'ZE'], 'o Zé entra pela ligação, mesmo sem casas');
+    const html = app.vOwners();
+    assert.ok(!html.includes("personView('owner','EU')"), 'eu não estou');
+    assert.ok(html.includes("personView('owner','ZE')"));
+    assert.equal(app.contagemDePessoas('owners'), 3, 'o segmentado conta os mesmos');
+  });
+
+  test('a ficha: com ligação abre as Casas partilhadas dela; só por grupo abre os meus imóveis do grupo, com a escolha quando há dois', () => {
+    const st = ESTADO();
+    st.connections = [{ id: 'L1', status: 'accepted', peer: { id: 'RUI', name: 'Rui' }, myShares: [], peerShares: [] }];
+    const { app } = comEstado(st);
+    assert.deepEqual(cru(app.casasPartilhadasDaFicha('owner', app.db.owners.find((o) => o.id === 'RUI'))),
+      { rotulo: 'Editar casas partilhadas', act: "CW.sharesModal('L1')" });
+    const ana = app.db.owners.find((o) => o.id === 'ANA');
+    assert.deepEqual(cru(app.casasPartilhadasDaFicha('owner', ana)), { rotulo: 'Editar casas partilhadas', act: "CW.casasDoGrupoCom('ANA')" });
+    assert.equal(app.casasPartilhadasDaFicha('owner', app.db.owners.find((o) => o.id === 'EU')), null, 'no meu perfil não');
+    // a Ana está em G1 e em G2: escolhe-se o grupo, e a escolha abre os meus imóveis dele
+    let escolha = null, abriu = null;
+    app.pickModal = (t, opts, cb) => { escolha = { t, opts: cru(opts) }; cb(opts[1]); };
+    app.CW.grupoImoveis = (id) => { abriu = id; };
+    app.CW.casasDoGrupoCom('ANA');
+    assert.equal(escolha.t, 'Que grupo?');
+    assert.deepEqual(escolha.opts.map((o) => o.v), ['G1', 'G2']);
+    assert.equal(abriu, 'G2');
+    // só um grupo em comum: abre logo
+    escolha = null;
+    app.CW.casasDoGrupoCom('RUI');
+    assert.equal(escolha, null);
+    assert.equal(abriu, 'G1');
+    // sem a ligação e sem grupos, não há botão
+    app.CW.state.connections = [];
+    app.db.groups = app.db.groups.filter((g) => !g._partilhado);
+    assert.equal(app.casasPartilhadasDaFicha('owner', app.db.owners.find((o) => o.id === 'RUI')), null);
+  });
+});

@@ -338,7 +338,8 @@ describe('movimento', () => {
     const fundo = (corpo) => (corpo.match(/background(?:-color)?:\s*([^;]+)/) || [])[1];
     const porEstado = (estado) => {
       const m = {};
-      for (const r of cssLimpo.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      /* sem os @media à volta: o :hover vive dentro do @media(hover:hover) */
+      for (const r of cssLimpo.replace(/@media[^{]*\{/g, '').matchAll(/([^{}]+)\{([^}]*)\}/g)) {
         if (!r[1].includes(estado)) continue;
         const cor = fundo(r[2]);
         if (!cor) continue;
@@ -351,6 +352,23 @@ describe('movimento', () => {
     const passa = porEstado(':hover'), preme = porEstado(':active');
     const iguais = Object.keys(preme).filter((k) => passa[k] && passa[k] === preme[k]);
     assert.deepEqual(iguais, [], 'premido igual a hover: o segundo toque não muda nada');
+  });
+
+  /* Do uso real (2026-10-22): «quando clico em qualquer botão, até eu clicar
+     em mais algum, aquele fica com cor de highlight». No dedo o :hover fica
+     preso depois do toque; só com rato é que passar por cima existe. */
+  test('nenhum :hover fora de um @media(hover:hover)', () => {
+    const soltos = [];
+    const pilha = [];
+    let buf = '';
+    for (const c of cssLimpo) {
+      if (c === '{') {
+        if (buf.includes(':hover') && !buf.trim().startsWith('@') &&
+          !pilha.some((p) => /\(\s*hover\s*:\s*hover\s*\)/.test(p))) soltos.push(buf.trim());
+        pilha.push(buf.trim()); buf = '';
+      } else if (c === '}') { pilha.pop(); buf = ''; } else if (c === ';') buf = ''; else buf += c;
+    }
+    assert.deepEqual(soltos, [], ':hover que fica preso no dedo');
   });
 
   /* Medido no browser: a --curva faz 83% do caminho em 30% do tempo. Num botão

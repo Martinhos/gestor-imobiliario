@@ -289,7 +289,7 @@ describe('desligado: com os outros serviços desligados, a lista, a ficha e os m
     assert.equal(app.db.transactions[0].loanId, null);
   });
 
-  test('desligado: com owners desligado a ficha do imóvel não oferece criar um proprietário, e o atalho avisa sem abrir', () => {
+  test('a ficha do imóvel escolhe entre os proprietários que há e nunca oferece criar um, ligado ou desligado', () => {
     const app = carregarApp();
     semear(app);
     janelasEFichas(app);
@@ -298,21 +298,17 @@ describe('desligado: com os outros serviços desligados, a lista, a ficha e os m
     app.toast = (m) => { msg = m; };
     app.personModal = () => { abriu = true; };
     app.pForm = app.normProp(JSON.parse(JSON.stringify(app.prop('p1'))));
-    // controlo positivo
+    // um proprietário é uma conta Rendorium: chega pela partilha, não se cria aqui
     app.addPropOwner();
-    assert.match(extra, /newOwnerFromProp\(\)/);
-    assert.match(extra, /Criar proprietário novo/);
-    app.newOwnerFromProp();
-    assert.ok(abriu, 'com os Proprietários ligados a ficha de pessoa abre');
-    // os Proprietários desligados
-    abriu = false;
+    assert.equal(extra, undefined, 'sem o botão de criar');
+    assert.equal(typeof app.newOwnerFromProp, 'undefined');
+    assert.equal(typeof app.criarDonoNoImovel, 'undefined');
+    assert.doesNotMatch(app.donosSect(), /Criar novo|criarDonoNoImovel/);
     app.definirServicosDesligados(['owners']);
     app.pForm = app.normProp(JSON.parse(JSON.stringify(app.prop('p1'))));
     app.addPropOwner();
-    assert.equal(extra, '', 'sem o botão de criar');
-    app.newOwnerFromProp();
-    assert.ok(!abriu);
-    assert.equal(msg, 'O serviço Proprietários está desligado nesta conta.');
+    assert.equal(extra, undefined);
+    assert.ok(!abriu && !msg);
     // a lista e a ficha rendem na mesma; os nomes dos donos (são dados do
     // imóvel) estão na ficha — o cartão da lista diz só a morada, como o canvas
     assert.match(app.vProperties(), /Casa da Praia/);

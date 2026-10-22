@@ -314,10 +314,11 @@ describe('um botão em cada vazio', () => {
     assert.ok(!html.includes(botao('newTxPick()')));
   });
 
-  test('Inquilinos e Proprietários: cada vazio abre a ficha da sua pessoa; o filtro não', () => {
+  test('Inquilinos: o vazio abre a ficha; Proprietários: o vazio diz como a lista se enche, sem botão de criar; o filtro não', () => {
     limpar(app);
     assert.ok(app.vTenants().includes(botao("personModal('tenant')")));
-    assert.ok(app.vOwners().includes(botao("personModal('owner')")));
+    assert.ok(!app.vOwners().includes("personModal('owner')"), 'um proprietário é uma conta: não se cria à mão');
+    assert.match(app.vOwners(), /Aqui ficam as outras contas Rendorium com quem partilhas casas/);
     app.db.tenants = [app.normPerson({ id: 'I1', name: 'Ana' })];
     app.db.owners = [app.normPerson({ id: 'O1', name: 'Eu' })];
     app.lf('lten').q = 'zzz'; app.lf('lown').q = 'zzz';

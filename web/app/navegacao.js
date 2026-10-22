@@ -987,7 +987,9 @@ abasVigiar();
    Devolve: o número, ou null quando não se sabe. */
 function contagemDePessoas(id){
   if(id==='colaboradores')return typeof contarColaboradores==='function'?contarColaboradores():null;
-  return ((id==='tenants'?db.tenants:db.owners)||[]).length;
+  if(id==='tenants')return (db.tenants||[]).length;
+  /* os da lista: as contas com quem partilho (pessoas.js, dos Proprietários) */
+  return typeof donosComPartilha==='function'?donosComPartilha().length:(db.owners||[]).length;
 }
 /* Limpa o titular do IRS · Anexo F: o × do chip «… · quota-parte» da barra
    da Declaração (fisco.js:fisBarra). Era o «Limpar» da faixa do âmbito, que
@@ -997,7 +999,7 @@ function contagemDePessoas(id){
 function limparAmbito(){ownerFilter='';buildNav();render()}
 /* o rótulo do botão da ação do ecrã no cabeçalho, pela ação */
 const ROTULO_ACAO={movimento:'Novo movimento',imovel:'Novo imóvel',contrato:'Novo contrato',inquilino:'Novo inquilino',
-  proprietario:'Novo proprietário',visita:'Marcar visita',planeado:'Novo recorrente',hipoteca:'Nova hipoteca'};
+  visita:'Marcar visita',planeado:'Novo recorrente',hipoteca:'Nova hipoteca'};
 /* As ações secundárias do cabeçalho do computador, por separador: só as que o
    canvas desenha no cabeçalho e que a app já tem. Hoje é uma — o «Exportar
    CSV» dos Movimentos (D-Movimentos), a mesma exportação das Definições →

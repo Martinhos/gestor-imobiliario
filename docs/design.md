@@ -494,13 +494,13 @@ há fundo neutro para escurecer: quem está ativo fica com o seu, o
 primário escurece para --accent-press e a gaveta tem paleta própria
 (estilos.css:.btn.primary:active).
 
-O realce de passar por cima só existe com rato: vive num
-estilos.css:@media(hover:hover) — os itens da barra lateral e da barra de
-baixo, a conta, o fecho da gaveta, as opções da folha «Criar», os dias do
-calendário (estilos.css:.calday), a barra azul-noite da seleção. Fora dele,
-num ecrã de dedo com 901px ou mais, o :hover ficava preso depois do toque.
-Onde uma regra de base já pinta o hover (o .iconbtn), o fecho da gaveta
-desfá-lo no dedo.
+O realce de passar por cima só existe com rato: todo o :hover vive num
+estilos.css:@media(hover:hover) — os botões, os cartões tocáveis, as
+opções dos menus e dos seletores, os chips, as etiquetas, os itens da barra
+lateral e da barra de baixo, os dias do calendário (estilos.css:.calday), a
+barra azul-noite da seleção. Fora dele, no dedo, o :hover fica preso depois
+do toque e o botão fica mais claro até se tocar noutro sítio
+(testes/estilos.test.js chumba um :hover solto).
 
 O foco desenha-se com 2px de --accent e 2px de afastamento, em
 :focus-visible e nunca :focus — quem chega de rato não pode ir deixando
@@ -2057,8 +2057,11 @@ ficheiros nasce fora da janela, porque uma ficha não tem campos); as
 
 A do proprietário: o avatar com «Proprietário» e o selo da conta («O teu
 perfil», ou «Tem conta Rendorium» noutro com conta); no perfil de outro com
-conta, a nota do cadeado — só quem tem a conta o edita, e sai das casas
-desfazendo a partilha —; as contas entre proprietários, laranja suave a
+conta, que só ele edita, o botão do rodapé é «Editar casas partilhadas»
+(pessoas.js:casasPartilhadasDaFicha): com uma ligação ativa abre as «Casas
+partilhadas» dela, sem ligação os meus imóveis do grupo partilhado em comum
+(cloud/grupos.js:CW.casasDoGrupoCom, com a escolha do grupo quando há mais de
+um), e sem partilha nenhuma não há botão; as contas entre proprietários, laranja suave a
 pagar e verde suave a receber, com o plano de acerto em que ele entra e
 «Acertar contas» (vistas.js:settleModal), com os Movimentos ligados;
 «Imóveis e quota-parte», cada imóvel a abrir a sua ficha, com a renda que
@@ -2886,8 +2889,12 @@ direita, a renda. Num inquilino, onde mora: «Mora em X» (ou «X · Quarto
 cobalto, «Morou em X até dd/mm/aaaa», ou «Sem contrato»; a renda é a dos
 contratos em vigor (pessoas.js:pesContratos). Num proprietário, os imóveis
 de que é dono e a renda que lhe cabe — só nos imóveis meus, na quota dele
-(pessoas.js:pesRendaDoDono) —, «Tem conta» num outro com conta Rendorium e
-«(eu)» no meu perfil. Sem o serviço que alimenta a linha, ela diz o
+(pessoas.js:pesRendaDoDono). A lista é a das outras contas Rendorium com
+quem partilho (pessoas.js:donosComPartilha): uma casa em comum, uma ligação
+ativa — mesmo sem casas — ou um grupo partilhado. Não estou eu, nem quem só
+é referido nos movimentos (contas apagadas, ex-comproprietários), e não há
+fichas de proprietário feitas à mão: o vazio diz que a lista se enche ao
+ligar-se a outra conta, por baixo, sem botão de criar. Sem o serviço que alimenta a linha, ela diz o
 contacto. No computador a linha é uma grelha com mais uma coluna, o
 contacto (estilos.css:.pes-contacto).
 
@@ -2899,16 +2906,15 @@ ligados e o estado do servidor já chegado), e o cartão de cidadão a caducar
 do «Pede atenção»: um inquilino com contrato que ainda não acabou, ou um
 proprietário.
 
-Não há FAB nem ⋮: o «Novo inquilino» e o «Novo proprietário» estão no
-cabeçalho e no + (navegacao.js:pintarAcaoDoCabecalho), e as opções de uma
+Não há FAB nem ⋮: o «Novo inquilino» está no cabeçalho e no +
+(navegacao.js:pintarAcaoDoCabecalho); os Proprietários não têm ação de criar, e as opções de uma
 pessoa estão no ⋯ da ficha (pessoas.js:personView). O vazio tem o seu botão
 (vistas.js:saida). A ficha está em «Tocar num registo é lê-lo»; o «Acertar
 contas» das contas entre proprietários tem 44px no dedo
 (estilos.css:.pes-contas), como os .btn.sm das fichas do imóvel e do
 contrato.
 
-Os formulários da pessoa (Novo e Editar inquilino, Novo proprietário, O meu
-perfil) e da visita (Marcar e Editar visita) dizem o erro no campo
+Os formulários da pessoa (Novo e Editar inquilino, O meu perfil) e da visita (Marcar e Editar visita) dizem o erro no campo
 (componentes.js:falhaCampo): o nome; quem vem, o imóvel, a data, e o fim
 antes do início. Escolher o imóvel da visita repinta o corpo e larga o erro
 (visitas.js:visPropMudou). O Início e o Fim da visita vão lado a lado também
@@ -4121,9 +4127,9 @@ botões só de ícone das fichas e deste formulário medem 44×44
 O seguro e o mês dele vão numa fila que no telemóvel passa a uma coluna
 (estilos.css:.imv-2col-largo), e as dobras têm o título numa linha e o
 resumo por baixo (estilos.css:.imv-form, o .fold-head) — só neste
-formulário; as dobras dos outros ficam lado a lado. Ao lado de
-«Adicionar proprietário» há «Criar novo», só com os Proprietários ligados
-(imovel.js:criarDonoNoImovel). A secção dos proprietários pede-se a um ponto
+formulário; as dobras dos outros ficam lado a lado. Não há «criar» um
+proprietário: um proprietário é uma conta Rendorium e chega pela partilha
+(imovel.js:addPropOwner só escolhe entre os que já existem). A secção dos proprietários pede-se a um ponto
 de extensão (imovel.js:seccaoDosDonos, imovel.js:donosDoFormulario), que a
 nuvem preenche com as quotas por proposta quando há sessão
 (cloud/utilizadores.js:cwOwnersBlock); sem ela fica a daqui, com as quotas

@@ -477,6 +477,23 @@ function comproprietariosHtml() {
 }
 partilhaDosDonos = comproprietariosHtml;
 
+/* Como partilho com outro proprietário com conta (pessoas.js:partilhaComDono):
+   com uma ligação ativa, a ação abre «Casas partilhadas» dela
+   (CW.sharesModal); sem ligação mas num grupo partilhado com ele, abre os
+   meus imóveis do grupo (cloud/grupos.js:CW.casasDoGrupoCom, que carrega
+   depois deste ficheiro — daí o typeof). Uma ligação por aceitar ainda não
+   partilha nada. Só com sessão e com o serviço Colaboradores.
+   Recebe: id — o id da conta do outro.
+   Devolve: {act} (texto para o data-click), ou null. */
+function partilhaComDonoDaNuvem(id) {
+  if (!CW.user || !servicoLigado('colaboradores') || !id) return null;
+  var c = (CW.state.connections || []).find(function (x) { return x.status !== 'pending' && x.peer && x.peer.id === id; });
+  if (c) return { act: "CW.sharesModal('" + jsq(c.id) + "')" };
+  if (typeof gruposComDono === 'function' && gruposComDono(id).length) return { act: "CW.casasDoGrupoCom('" + jsq(id) + "')" };
+  return null;
+}
+partilhaComDono = partilhaComDonoDaNuvem;
+
 // O HTML da página "Conta e partilha": a conta e o id para dar a outros, uma
 // linha que leva à partilha entre contas, nas Pessoas › Proprietários (sem
 // esse separador, a partilha inteira: as ligações, o campo para ligar, os

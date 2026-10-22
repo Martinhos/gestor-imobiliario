@@ -45,6 +45,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-20 · A terceira volta da v40: sem saltos, por quartos, e sem o filtro de proprietário
 - 2026-10-20 · A quarta volta da v40: o realce que o Samsung escurece, as fotos em carrossel e os quartos a partir do fim
 - 2026-10-20 · A quinta volta da v40: o carrossel dos separadores, uma seleção só, os Inquilinos e as Visitas selecionáveis, o Anular que se afasta e o Início que não é uma casa
+- 2026-10-22 · Um proprietário é uma conta: a lista das partilhas e o realce que ficava preso
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1865,3 +1866,45 @@ necessariamente a mesma cor.» A marca (estilos.css:.marca) voltou a ser a
 casa do ícone da app — o telhado com beirais, as paredes e a porta pequena,
 o `home` do icones.js:ic —, em branco no quadrado cobalto: a forma é a dos
 ícones da PWA e do Android, e a cor fica a da cara nova.
+
+## 2026-10-22 · Um proprietário é uma conta: a lista das partilhas e o realce que ficava preso
+
+**O realce que ficava preso.** «Quando clico em qualquer botão, até eu
+clicar em mais algum, aquele fica com cor de highlight. Uma cor mais clara.»
+A regra já dizia que o realce de passar por cima só existe com rato, mas
+dezassete :hover de base — o .btn e as variantes, o .iconbtn, o .chip, as
+opções dos menus e dos seletores, o .card.tap — tinham ficado fora do
+@media(hover:hover). No Android o :hover cola-se ao último elemento tocado
+até se tocar noutro sítio, e o botão fica com o --tint até lá. Foram todos
+para dentro do portão, e o fecho da gaveta deixou de precisar do desfazer
+no dedo; o testes/estilos.test.js chumba um :hover solto.
+
+**Um proprietário é uma conta.** «O meu nome não deve estar listado. É uma
+lista de proprietários com que tenho casas partilhadas»; e, perguntado o que
+fazer às fichas feitas à mão: «Não é suposto haver fichas criadas à mão. Só
+contas reais.» Com sessão — que em produção é sempre — o db.owners já se
+refazia só dos perfis do servidor (cloud/nucleo.js:rebuildDb), as fichas à
+mão nunca subiam e caíam na leitura seguinte, e as quotas de uma casa
+partilhada já só mudavam por proposta (cloud/utilizadores.js:cwOwnersBlock).
+O que sobrava eram as portas que criavam uma ficha fantasma — o + e o
+cabeçalho, o vazio da lista, o «Criar novo» do formulário do imóvel — e
+saíram. Por isso apagar as fichas que havia não pediu migração: no servidor
+o KINDS_RETIRADOS já as apagava, e no aparelho não sobrevivem a uma leitura.
+
+A lista (pessoas.js:donosComPartilha) é a das outras contas com quem
+partilho: uma casa em comum, uma ligação ativa — o Martinho quis que uma
+ligação sem casas também apareça — ou um grupo partilhado. Ficam de fora eu
+e quem só é referido nos movimentos (contas apagadas, ex-comproprietários),
+que continua no db.owners para o «Pago por» se ler. O selo «Tem conta» saiu
+da linha: na lista todos têm.
+
+**O cadeado deu lugar ao botão.** A nota «só quem tem a conta o edita…
+desfaz a partilha em Pessoas → Proprietários» mandava o utilizador para
+outro sítio fazer o que queria fazer ali. O rodapé da ficha de outro com
+conta leva «Editar casas partilhadas» (pessoas.js:casasPartilhadasDaFicha):
+a ligação abre as «Casas partilhadas» dela; quem só partilha comigo por um
+grupo não tem ligação, e aí abre os meus imóveis do grupo
+(cloud/grupos.js:CW.casasDoGrupoCom) — a escolha do Martinho entre isso,
+nada, ou um botão para ligar. A ação vem da nuvem por um gancho
+(pessoas.js:partilhaComDono), porque a base não chama funções de serviço sem
+guarda.

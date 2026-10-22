@@ -288,6 +288,8 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
       connections: [],
     };
     app.CW._pulled = 1;
+    // o Zé tem conta e partilha comigo o p2; eu (o1) não entro na lista
+    app.db.owners.push(Object.assign(app.normPerson({ id: 'ZE', name: 'Zé Costa' }), { _userId: 'ZE' }));
     const casa = app.db.properties[0];
     casa._colaboradores = [{ id: 'C1', userId: 'MARIA', name: 'Maria', roleId: 'R1', roleName: 'Gestor de visitas' }];
     app.db.properties.push(Object.assign(app.normProp({ id: 'p2', name: 'Do Zé', ownerIds: ['ZE'] }), { _sharedFrom: 'Zé', _cargo: 'Contabilista', _collabId: 'C9' }));
@@ -339,7 +341,8 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     assert.match(lista, /id="pop_lfsel_lten_sb"[^]*?<span>Renda<\/span>/, 'e a ordem por renda');
     assert.ok(lista.includes('id="lfc_lten_ct"'), 'e o chip do filtro rápido');
     const donos = app.vOwners();
-    assert.match(donos, /T2 Porto/);
+    assert.match(donos, /Zé Costa/);
+    assert.ok(!donos.includes("personView('owner','o1')"), 'eu não estou na lista');
     assert.ok(donos.includes('lfsel_lown_p'));
     assert.ok(donos.includes('id="lfc_lown_pr"'));
     assert.match(app.personFicha('tenant', 't1'), /<h3>Mora em<\/h3>/);
@@ -439,8 +442,7 @@ describe('o desenho: as listas e as fichas das pessoas lêem o que a app sabe', 
     assert.match(rui, /<span class="small pes-sub">T2 Porto<\/span>/);
     assert.match(rui, /<span class="num pes-valor">700\s€<\/span>/, 'a renda que lhe cabe (100%)');
     assert.match(linhaDe(html, 'owner', 'o2'), /<span class="small pes-sub">Sem imóveis<\/span>/);
-    assert.match(linhaDe(html, 'owner', 'u9'), /<span class="badge">Tem conta<\/span>/);
-    assert.doesNotMatch(rui, /Tem conta/);
+    assert.doesNotMatch(html, /Tem conta/, 'na lista todos têm conta: o selo não diz nada');
     assert.match(html, /id="pop_lfc_lown_pr"[\s\S]*?<span>Com imóveis · 1<\/span>[\s\S]*?<span>Sem imóveis · 2<\/span>/);
     app.lf('lown').pr = 'com';
     igual([...app.vOwners().matchAll(/data-lp="per:owner:(\w+)"/g)].map((m) => m[1]), ['o1']);
@@ -533,14 +535,20 @@ describe('o desenho: as listas e as fichas das pessoas lêem o que a app sabe', 
     assert.match(f, /<span>Renda que lhe cabe<\/span><span><b>280,00\s€<\/b>\/mês<\/span>/, '700 € na quota de 40%');
     assert.doesNotMatch(f, /pesVerNaQuota|Ver a app na quota/, 'o filtro global de proprietário saiu, e o atalho com ele');
     assert.match(app.personFicha('owner', 'o2'), /<section class="card pes-contas in">[\s\S]*?A receber 400,00\s€/);
-    // outro proprietário com conta: a nota de quem manda no perfil, e sem «Editar»
+    // outro proprietário com conta: sem a nota do cadeado e sem «Editar»; sem partilha, sem botão
     app.db.owners.push(Object.assign(app.normPerson({ id: 'u9', name: 'Pedro Costa', phone: '917330482' }), { _userId: 'u9' }));
     const pedro = app.personFicha('owner', 'u9');
     assert.match(pedro, /<span class="badge">Tem conta Rendorium<\/span>/);
-    assert.match(pedro, /<div class="pes-nota">[\s\S]*?só quem tem a conta o edita\. Para o remover das casas, desfaz a partilha em Pessoas → Proprietários\./);
+    assert.doesNotMatch(pedro, /pes-nota|só quem tem a conta o edita/);
     assert.match(pedro, /<h3>Contactos e identificação<\/h3>/);
     app.personView('owner', 'u9');
     assert.doesNotMatch(ultimo(esp.modais).rodape, /personModal|Editar/);
+    // com partilha (a nuvem diz como), o rodapé leva «Editar casas partilhadas» com a ação dela
+    vm.runInContext("partilhaComDono=function(id){return id==='u9'?{act:\"CW.sharesModal('L1')\"}:null}", app.__ctx);
+    app.personView('owner', 'u9');
+    assert.match(ultimo(esp.modais).rodape, /data-click="CW\.sharesModal\('L1'\)">Editar casas partilhadas<\/button>/);
+    app.personView('owner', 'o2');
+    assert.doesNotMatch(ultimo(esp.modais).rodape, /casas partilhadas/, 'uma ficha sem conta não tem o botão');
   });
 
   test('«Adicionar documentos» junta os ficheiros à ficha do inquilino e grava', async () => {

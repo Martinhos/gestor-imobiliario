@@ -59,7 +59,6 @@ function personCard(pp,kind,sit){
     sub=casas.length?casas.map(x=>esc(x.name||x.address||'imóvel')).join(' · '):'Sem imóveis';
     valor=pesRendaDoDono(pp,casas);
   }
-  if(!inq&&pp._userId&&!eu)selos.push('<span class="badge">Tem conta</span>');
   if(ver)selos.push(pesSeloCC(pp,kind));
   const ss=selos.filter(Boolean).join('');
   return `<div class="linha pes-linha" data-lp="per:${esc(kind)}:${esc(pp.id)}" data-fk="per:${esc(kind)}:${esc(pp.id)}" data-toca="camada" data-click="personView('${jsq(kind)}','${jsq(pp.id)}')">
@@ -146,7 +145,8 @@ function vOwners(){
   /* o filtro e a ordem por imóvel são dos Imóveis: desligados nesta conta,
      os seletores e os chips somem e um filtro guardado de antes deixa de cortar */
   const comProp=servicoLigado('properties'),pr=comProp?s.pr:'',pf=comProp?s.p:'';
-  const achados=db.owners.filter(o=>{
+  const donos=donosComPartilha();
+  const achados=donos.filter(o=>{
     const ps=comProp?propsOf(o.id):[];
     if(pf&&!ps.some(x=>x.id===pf))return false;
     return lfHit(K,[o.name,o.phone,o.email,o.nif,o.notes,ps.map(x=>x.name).join(' ')].join(' '));
@@ -155,8 +155,10 @@ function vOwners(){
   let list=tem[pr]?achados.filter(tem[pr]):achados;
   list=lfSort(K,list,{nome:o=>o.name,imoveis:o=>propsOf(o.id).length});
   const n=k=>achados.filter(tem[k]).length;
-  /* sem proprietários nenhuns não há o que pesquisar nem filtrar: fica o vazio com o seu botão */
-  if(!db.owners.length)return esperaDoServidor()||`<div class="empty"><b>Sem proprietários</b>Um imóvel pode ter vários. Depois podes filtrar a visão geral por proprietário.${saida('Adicionar proprietário',"personModal('owner')",'camada')}</div>`+partilhaNosDonos();
+  /* sem ninguém com quem partilhe não há o que pesquisar nem filtrar: fica o
+     vazio, que diz como a lista se enche — a ligação a outra conta, logo por
+     baixo; não há ficha à mão para criar */
+  if(!donos.length)return esperaDoServidor()||'<div class="empty"><b>Sem proprietários</b>Aqui ficam as outras contas Rendorium com quem partilhas casas. Liga-te a outra conta em «Partilhar com outras contas», aqui por baixo.</div>'+partilhaNosDonos();
   const head=lfCabeca(K,{nome:['proprietário','proprietários'],dos:'dos proprietários',n:list.length,
     campos:comProp?[pesChips(K,'pr','Imóveis',[['','Todos','Todos os proprietários'],['com','Com imóveis','Com imóveis',n('com')],['sem','Sem imóveis','Sem imóveis',n('sem')]]),
       db.properties.length?{chave:'p',nome:'Dono de',curto:'Qualquer imóvel',rapido:'largo',rotulo:v=>'Dono de '+propName(v),

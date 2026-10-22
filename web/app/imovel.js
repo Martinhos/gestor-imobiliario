@@ -478,8 +478,7 @@ function donosSect(){
         <button type="button" class="btn ghost so-icone" aria-label="Remover ${esc(o.name)}" data-toca="rascunho" data-click="delPropOwner('${o.id}')">${ic('x',18)}</button></div>`).join('')}</div>`:''}
     <div class="hint" id="shareHint">${shareHint(owners,custom,sumSh)}</div>
     <div class="imv-botoes">
-      <button type="button" class="btn sm" data-toca="camada" data-click="addPropOwner()">${ic('plus',16)} Adicionar proprietário</button>
-      ${servicoLigado('owners')?`<button type="button" class="btn sm ghost imv-criar" data-toca="camada" data-click="criarDonoNoImovel()">Criar novo</button>`:''}</div>
+      <button type="button" class="btn sm" data-toca="camada" data-click="addPropOwner()">${ic('plus',16)} Adicionar proprietário</button></div>
   </div>`;
 }
 /* Um segmentado de duas escolhas do formulário (o destino, o tipo de
@@ -958,38 +957,20 @@ function photoDragEnd(){
 // Recebe: fid — o id da foto a tirar.
 // Devolve: nada — redesenha a vista.
 function delPropPhoto(fid){collectProp();pForm.photos=(pForm.photos||[]).filter(f=>f.id!==fid);idbDel(fid).catch(()=>{});idbDel('tn_'+fid).catch(()=>{});repaintProp()}
-// Abre a lista dos proprietários ainda não associados para escolher um, com
-// atalho para criar um novo — esse é dos Proprietários, e só aparece com o
-// serviço ligado nesta conta.
+// Abre a lista dos proprietários ainda não associados para escolher um. Não
+// há «criar novo»: um proprietário é uma conta Rendorium, e chega pela
+// partilha (Pessoas › Proprietários), não por uma ficha feita à mão.
 // Devolve: nada — abre a janela de escolha.
 function addPropOwner(){
   collectProp();
   const free=db.owners.filter(o=>(pForm.ownerIds||[]).indexOf(o.id)<0);
   pickModal('Escolher proprietário',free.map(o=>({v:o.id,label:o.name,sub:[o.phone,o.email].filter(Boolean).join(' · '),avatar:true})),
-    o=>{pForm.ownerIds.push(o.v);closeModal();repaintProp()},
-    servicoLigado('owners')?`<button type="button" class="btn u-w-100pc u-jc-center" data-toca="camada" data-click="newOwnerFromProp()">${ic('plus',15)} Criar proprietário novo</button>`:'');
+    o=>{pForm.ownerIds.push(o.v);closeModal();repaintProp()});
 }
 // Desassocia um proprietário do imóvel e esquece a quota-parte dele.
 // Recebe: oid — o id do proprietário a desassociar.
 // Devolve: nada — redesenha a vista.
 function delPropOwner(oid){collectProp();pForm.ownerIds=(pForm.ownerIds||[]).filter(x=>x!==oid);if(pForm.ownerShares)delete pForm.ownerShares[oid];repaintProp()}
-// Cria um proprietário novo a partir da lista de escolha do formulário do
-// imóvel: fecha a lista e segue como o «Criar novo» (criarDonoNoImovel).
-// Devolve: nada — abre a ficha de pessoa.
-function newOwnerFromProp(){
-  closeModal();   /* fecha a lista de escolha; a ficha nova abre por cima do imóvel */
-  criarDonoNoImovel(true);   /* o addPropOwner já recolheu o formulário */
-}
-// «Criar novo» no grupo dos proprietários do formulário do imóvel: abre a
-// ficha de pessoa (dos Proprietários — com o serviço desligado nesta conta
-// avisa e não abre) e, ao gravar, associa-o logo ao imóvel em edição. O que
-// já está escrito no formulário fica (collectProp antes de sair).
-// Recebe: colhido (opcional) — true quando quem chama já recolheu o formulário.
-// Devolve: nada — abre a ficha de pessoa.
-function criarDonoNoImovel(colhido){
-  if(!colhido)collectProp();
-  chamarServico('owners','personModal','owner',null,nid=>{if(pForm.ownerIds.indexOf(nid)<0)pForm.ownerIds.push(nid);closeModal();render();repaintProp();toast('Proprietário criado.')});
-}
 /* Um imóvel apagado leva a parte dele de cada movimento de vários imóveis (um
    lote, movimento.js); as partes que ficam nos outros imóveis passam a ser o
    lote inteiro — menos uma parte, e o total a soma delas —, e uma só que
