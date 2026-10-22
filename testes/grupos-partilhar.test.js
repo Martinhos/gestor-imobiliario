@@ -115,7 +115,8 @@ describe('o «Partilhar» está sempre à vista', () => {
     const h = app.vGrupos();
     assert.deepEqual(comBotao(h), ['GP', 'GR', 'GV', 'GX']);
     assert.ok(!h.includes("CW.grupoPartilhar('G2')") && !h.includes("CW.grupoPartilhar('GO')"));
-    assert.match(h, /<h3>Dos outros<\/h3>[\s\S]*?data-click="groupModal\('prop','GR'\)">[\s\S]*? Editar<\/button>\s*<button type="button" class="btn sm" data-toca="camada" data-click="CW\.grupoPartilhar\('GR'\)">[\s\S]*? Partilhar<\/button>/, 'ao lado de «Editar», cada um no seu botão');
+    assert.match(h, /data-lp="grp:GR" data-toca="camada" data-click="groupModal\('prop','GR'\)">\s*<div class="grp-cab"><h3>Dos outros<\/h3>[\s\S]*?<div class="grp-acoes" data-sel-inerte><button type="button" class="btn sm" data-toca="camada" data-click="event\.stopPropagation\(\);CW\.grupoPartilhar\('GR'\)">[\s\S]*? Partilhar<\/button><\/div><\/section>/, 'o cartão edita-se ao toque; o «Partilhar» no seu botão, que não sobe ao cartão');
+    assert.ok(!/ Editar<\/button>/.test(h), 'o «Editar» saiu');
     assert.match(h, /<h3>Apagado<\/h3><span class="badge grey">Privado<\/span><\/div>\s*<p class="small">Sem membros · 1 apagado<\/p>/, 'o imóvel que já não existe diz-se');
   });
 

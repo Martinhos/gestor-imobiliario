@@ -48,6 +48,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-22 · Um proprietário é uma conta: a lista das partilhas e o realce que ficava preso
 - 2026-10-22 · O realce que ainda ficava, a ligação repetida e as listas por origem
 - 2026-10-22 · Os Grupos nas Casas, a página Segurança e os títulos das secções sempre
+- 2026-10-22 · Os grupos selecionáveis, o novo grupo no + e as folhas que se arrastam para fechar
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2005,3 +2006,51 @@ ids de sempre das listas vivas («imoveis», «inquilinos», «visitas:Próximas
 pesquisa continua pela via parcial (vistas.js:refrescarListasVivas), com o
 mesmo nó do cartão. A troca de ids só acontece quando a lista passa de uma
 origem a duas, ou o filtro «Origem» se liga, e aí faz-se o render normal.
+
+## 2026-10-22 · Os grupos selecionáveis, o novo grupo no + e as folhas que se arrastam para fechar
+
+**Os grupos selecionam-se como as outras listas.** O Martinho: «Os grupos
+devem ser seleccionáveis. Checkbox no canto e long press. Shortpress, abre
+modal de edição. O botão de editar desaparece», e trocar o tipo sai da
+seleção. Decidido com ele: os partilhados comportam-se como os privados (o
+«Abrir o grupo» também sai); a barra só tem o Apagar; num partilhado meu
+apagar é no servidor, e num de outro é sair. Os botões que ficam dentro do
+cartão (Partilhar, Aceitar, Recusar, a ligação) ficam inertes na seleção e
+não escondidos: escondê-los encolhia os cartões ao entrar e o cartão fugia de
+debaixo do dedo; ativos, um toque para marcar podia aceitar um pedido ou
+desativar a ligação. Uma só confirmação para todos, com o que acontece a cada
+lado, e os pedidos ao servidor sem a confirmação de cada um
+(cloud/selecao-listas.js:selLApagarGrupos) — eram N janelas seguidas. O aviso
+do fim espera pelas respostas: um aviso de erro a seguir ao do Anular
+apagava o Anular. Apagar vários limpa agora também os filtros da Visão geral
+e do proprietário que apontavam para eles (definicoes.js:gruposApagarLocal);
+o delGroup antigo só limpava o dos Movimentos. O botão de «Sair de 1 grupo»
+diz «Confirmar», como o «Sair do grupo» de um só: o confirmModal só tira o
+verbo de Apagar/Remover/Eliminar/Terminar, e um «Sair» vermelho ficou por
+decidir.
+
+**Criar um grupo é no +.** «O botão + em baixo deve ter a opção de criar um
+novo grupo (imóveis, proprietários ou contratos). A seleção do tipo de grupo
+deve ser num sub menu de seleção para não encher muito o modal.» Os botões
+«Novo grupo de …» e «Novo grupo partilhado» saíram do cabeçalho do
+separador; o vazio de cada tipo guarda o seu. Por isso o «Grupo» do + está
+para toda a gente que vê o separador, sem serviço nem cargo
+(acessos.js:ACOES_DE_ADICIONAR) — sem ele, quem só colabora e já tem um grupo
+não teria onde criar o segundo; um cargo que só vê passa a ter o +, só com o
+«Grupo». Nos Grupos o destaque «neste ecrã» é o tipo à vista
+(acessos.js:acaoNaturalDoEcra), para criar um grupo de contratos num toque
+quando se está a ver os contratos. O título da escolha é «Novo grupo» e não
+«Novo grupo de…»: a quarta opção, «Partilhado», não é um tipo.
+
+**As folhas arrastam-se para baixo para fechar.** «Todos os modals que têm a
+barra em cima devem ser arrastáveis para baixo para fechar.» A barra estava
+lá desde o redesign a prometer o gesto que o Android e o iPhone ensinam, e
+não o cumpria. Decidido com ele: pelo cabeçalho sempre, pelo corpo só no
+topo do scroll; num formulário mexido, ao largar pergunta «Sair sem
+guardar?» como o X. O arrasto é o do «Anular» (as mesmas contas, os mesmos
+ponteiros, o mesmo sacudir — componentes.js:avisoFechaAoLargar), para os dois
+gestos de puxar para baixo se sentirem iguais. O rodapé não agarra: é onde
+estão Guardar e Cancelar, e um arrasto que começasse num deles era um toque
+falhado a fechar a janela. Um cartão com toque longo no corpo nunca arranca
+o arrasto (componentes.js:FOLHA_NAO_ARRANCA), para o segurar continuar a ser
+segurar.

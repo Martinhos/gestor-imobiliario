@@ -4577,3 +4577,51 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 /* as Próximas e as Passadas dentro de uma secção: um h3, abaixo do título dela */
 .org-seccao .vis-grupo-cab h3{margin:0;font-size:15px;font-weight:600;letter-spacing:0;color:var(--ink)}
 /* === fim das listas por origem === */
+/* === grupos selecionáveis (folha 1.1) === */
+/* Os cartões dos grupos (definicoes.js:cartaoDoGrupo,
+   cloud/grupos.js:cartaoDoGrupoPartilhado) abrem com um toque e selecionam-se
+   ao segurar (cloud/selecao-listas.js, o tipo 'grp'). Reagem como os outros
+   cartões que se tocam (.card.tap): a mão, o premido (o encolher é o do
+   [role="button"]:active) e o realce só onde há rato. */
+#view .grp-cartao[data-click]{cursor:pointer;transition:border-color var(--rapido) var(--curva),transform var(--rapido) var(--curva),background var(--rapido) var(--curva)}
+#view .grp-cartao[data-click]:active:not(:has(button:active)){background:var(--press)}
+/* premir um botão de dentro (Partilhar, Aceitar…) não é premir o cartão: só o botão reage */
+#view .grp-cartao[data-click]:has(button:active){transform:none}
+@media(hover:hover) and (pointer:fine){#view .grp-cartao[data-click]:hover{border-color:var(--line2);background:var(--tint)}}
+/* a caixa no canto de cima, antes do nome, sem a folga das linhas: o alvo é o cartão inteiro */
+#view .grp-cab>[data-selbox]{padding:0;margin-right:0;align-self:center}
+/* Marcado: além do fundo (.sel-on-card), o contorno mais grosso e o nome a
+   cobalto — o Samsung Internet escurece à força e o fundo deixa de contar;
+   o partilhado com um pedido por responder já tem o contorno cobalto
+   (.grp-partilhado:has(.grp-pedido)), e só o fundo não o distinguia. */
+#view .grp-cartao.sel-on-card{box-shadow:0 0 0 2px var(--accent)}
+#view .grp-cartao.sel-on-card h3{color:var(--accent-text)}
+/* em seleção, os botões de dentro (Partilhar, Aceitar, Copiar…) ficam
+   inertes (cloud/selecao-listas.js:selLDecorar põe o inert) e veem-se apagados */
+#view .grp-cartao [inert]{opacity:.45}
+/* o cabeçalho do separador é só o segmentado (definicoes.js:vGrupos) */
+.def-cab.grp-cab-tipos{margin-bottom:16px}
+/* === fim: grupos selecionáveis (folha 1.1) === */
+/* === novo grupo no + (folha 1.2) === */
+/* === fim: novo grupo no + (folha 1.2) === */
+/* === folha arrastável (folha 1.3) === */
+/* A folha de baixo puxa-se para baixo para a fechar (componentes.js:folhaPousar).
+   Só abaixo dos 520px, que é onde há barra. O cabeçalho é a pega: o gesto
+   vertical ali é da app (touch-action:none — não há lá nada que role), e o
+   texto não se seleciona a meio do arrasto. */
+@media(max-width:520px){
+  .sheet .head{touch-action:none}
+  .sheet.arrastar{-webkit-user-select:none;user-select:none}
+  /* uma folha que já se pegou já entrou: a entrada não volta a correr por
+     cima do transform do dedo (nem a do véu, que segue a folha) */
+  .modal.open.arrastou .sheet,.modal.open.arrastou .bg{animation:none}
+  /* puxada para cima, o fundo dela descolava do fundo do ecrã: o cartão
+     continua por baixo dela (componentes.js:folhaElastico, nunca mais de 24px) */
+  .modal.arrastou .sheet{box-shadow:var(--shadow),0 32px 0 var(--card)}
+  /* largada, sai de onde o dedo a deixou, na --curva: continua a velocidade
+     do dedo, e não arranca devagar como a --curva-sai do X */
+  .modal.sai.arrastada .sheet,.modal.sai.arrastada .bg{animation-timing-function:var(--curva)}
+}
+/* sem movimento a folha não segue o dedo: desvanece quando largar já a fecha */
+@media(prefers-reduced-motion:reduce){.sheet.pronto{opacity:.72}}
+/* === fim: folha arrastável (folha 1.3) === */

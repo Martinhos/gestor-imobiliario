@@ -416,25 +416,67 @@ const ACOES_DE_ADICIONAR=[
   {id:'visita',label:'Visita',icon:'door',servico:'visits',quando:()=>casasComo('visit.add').length>0,act:'visitModal()'},
   {id:'planeado',label:'Movimento recorrente',icon:'repetir',servico:'recurring',quando:()=>podeSemImovel()||casasComo('rec.add').length>0,act:'newRec()'},
   {id:'modelo',label:'Modelo',icon:'file',servico:'recurring',quando:()=>podeSemImovel()||casasComo('rec.add').length>0,act:'newTpl()'},
-  {id:'hipoteca',label:'Hipoteca',icon:'bank',servico:'credits',quando:()=>casasComo('house.edit').length>0,act:'newMort()'}
+  {id:'hipoteca',label:'Hipoteca',icon:'bank',servico:'credits',quando:()=>casasComo('house.edit').length>0,act:'newMort()'},
+  /* os grupos são filtros de toda a app, da base: sem serviço e sem cargo que
+     os abra (um grupo privado é só meu, e o separador Grupos é de toda a
+     gente — definicoes.js:vGrupos não pergunta nada), por isso a condição é a
+     do botão do vazio do separador: nenhuma */
+  {id:'grupo',label:'Grupo',icon:'layers',servico:'',quando:()=>true,act:'novoGrupoEscolher()'}
 ];
 /* O que esta pessoa pode adicionar agora: as ações de ACOES_DE_ADICIONAR
    cujo serviço está ligado nesta conta e cuja condição se cumpre, pela
-   ordem de lá. O dono tem as oito; um gestor de visitas tem a visita e o
-   inquilino; um cargo que só vê não tem nenhuma — e sem nenhuma a barra de
-   baixo não escreve o + (navegacao.js:buildTabbar).
+   ordem de lá (o grupo, da base, não depende de serviço). O dono tem as
+   nove; um gestor de visitas tem a visita, o inquilino e o grupo; um cargo
+   que só vê tem só o grupo — e sem nenhuma a barra de baixo não escreve o +
+   (navegacao.js:buildTabbar).
    Devolve: array de {id, label, icon, act, toca:'camada'} — vazio sem nada para adicionar. */
 function acoesDeAdicionar(){
-  return ACOES_DE_ADICIONAR.filter(a=>servicoLigado(a.servico)&&a.quando()).map(a=>({id:a.id,label:a.label,icon:a.icon,act:a.act,toca:'camada'}));
+  return ACOES_DE_ADICIONAR.filter(a=>(!a.servico||servicoLigado(a.servico))&&a.quando()).map(a=>({id:a.id,label:a.label,icon:a.icon,act:a.act,toca:'camada'}));
+}
+/* «Grupo» na folha do +: escolhe-se primeiro o tipo, numa janela de escolha
+   que substitui a folha «Criar» (como a hipoteca, creditos.js:newMort) —
+   Imóveis, Proprietários e Contratos, com os ícones do separador
+   (definicoes.js:GKIND), e «Partilhado» quando posso partilhar grupos
+   (definicoes.js:podePartilharGrupos: a nuvem dos grupos, sessão e o serviço
+   Colaboradores). Escolher fecha a escolha e abre a janela do grupo novo
+   desse tipo (definicoes.js:groupModal) ou o nome do partilhado
+   (cloud/grupos.js:CW.grupoNovo). Fica sem o «Novo grupo de» no título: a
+   quarta opção não é um tipo, e «Novo grupo de partilhado» não se diz.
+   Devolve: nada — abre a janela de escolha. */
+function novoGrupoEscolher(){
+  const sub={prop:'Filtra-os e reparte as despesas por eles',owner:'Uma família, um casal',contract:'Filtra-os de uma vez'};
+  const opts=['prop','owner','contract'].map(k=>({v:k,label:GKIND[k].label,sub:sub[k],icon:GKIND[k].icon}));
+  if(podePartilharGrupos())opts.push({v:'partilhado',label:'Partilhado',sub:'Imóveis em comum com outras contas',icon:'users'});
+  pickModal('Novo grupo',opts,o=>{
+    closeAllModals();
+    if(o.v!=='partilhado')return groupModal(o.v);
+    if(typeof CW!=='undefined'&&typeof CW.grupoNovo==='function')CW.grupoNovo();
+  });
+}
+/* A ação natural do ecrã tal como se mostra: a de acaoDoSeparador, se esta
+   pessoa a pode fazer, e no separador Grupos já do tipo à vista
+   (definicoes.js:grpTipo) — «Novo grupo de contratos», que abre direto a
+   janela desse tipo, sem a escolha do «Grupo». É o que a folha do + põe em
+   primeiro, «neste ecrã» (navegacao.js:abrirAdicionar), e o que o cabeçalho
+   do computador mostra (navegacao.js:pintarAcaoDoCabecalho).
+   Recebe: t — o id do separador.
+   Devolve: {id, label, icon, act, toca:'camada'}, ou null sem ação natural ou sem a poder fazer. */
+function acaoNaturalDoEcra(t){
+  const aqui=acaoDoSeparador(t),a=aqui&&acoesDeAdicionar().find(x=>x.id===aqui);
+  if(!a)return null;
+  if(a.id!=='grupo')return a;
+  const k=GKIND[grpTipo]?grpTipo:'prop';
+  return Object.assign({},a,{label:'Novo grupo de '+GKIND[k].label.toLowerCase(),act:`groupModal('${jsq(k)}')`});
 }
 /* A ação natural de cada ecrã — a que a folha do + põe em primeiro e marca
    «neste ecrã»: nos Movimentos e na visão geral o movimento, no Calendário
-   (como nas Visitas) a visita. As Definições, as Projeções, a Avaliação, a
+   (como nas Visitas) a visita, nos Grupos o grupo (do tipo à vista: quem o
+   diz é acaoNaturalDoEcra). As Definições, as Projeções, a Avaliação, a
    Declaração e os Colaboradores não têm: a folha fica pela ordem de sempre.
    Recebe: tab — o id do separador.
    Devolve: o id da ação (um de ACOES_DE_ADICIONAR), ou '' num ecrã sem ação natural. */
 function acaoDoSeparador(tab){
-  return ({dashboard:'movimento',transactions:'movimento',properties:'imovel',contracts:'contrato',tenants:'inquilino',
+  return ({dashboard:'movimento',transactions:'movimento',properties:'imovel',groups:'grupo',contracts:'contrato',tenants:'inquilino',
     visits:'visita',calendar:'visita',recurring:'planeado',credits:'hipoteca'})[tab]||'';
 }
 /* Os destinos da barra de baixo que esta pessoa vê: um separador, se não

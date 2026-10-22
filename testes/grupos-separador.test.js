@@ -1,8 +1,8 @@
 // O separador Grupos e partilhar um grupo que já existe. Os grupos são um
 // separador da base (app/definicoes.js:vGrupos), uma aba das Casas: lá
-// dentro os tipos num segmentado, «Novo grupo
-// de …» e, com sessão e o serviço Colaboradores, «Novo grupo partilhado»;
-// cada grupo é um cartão — os partilhados com a ligação, os pedidos e os
+// dentro os tipos num segmentado, e só ele no cabeçalho (criar é no + de
+// baixo; o vazio de cada tipo tem o seu botão);
+// cada grupo é um cartão que abre com um toque — os partilhados com a ligação, os pedidos e os
 // membros, os pedidos que fiz à parte —, e cada grupo de imóveis privado tem
 // sempre «Partilhar» à vista (o toque explica o que não dá). A janela de
 // edição do grupo privado tem o botão no corpo. Os caminhos antigos
@@ -110,9 +110,9 @@ describe('o separador Grupos', () => {
     assert.match(h, /<div class="segm def-abas" role="group" aria-label="Tipo de grupo"><button type="button" id="grpTipo_prop" class="on" aria-pressed="true" data-toca="vista" data-click="grupoTipoEscolher\('prop'\)">Imóveis <span class="n">4<\/span><\/button><button type="button" id="grpTipo_owner" class="" aria-pressed="false"[^>]*>Proprietários <span class="n">1<\/span><\/button><button type="button" id="grpTipo_contract"[^>]*>Contratos <span class="n">0<\/span><\/button><\/div>/);
     assert.equal((h.match(/CW\.grupoModal\('G1'\)/g) || []).length, 1, 'o grupo do Rui uma vez só');
     assert.equal((h.match(/CW\.grupoModal\('G2'\)/g) || []).length, 1, 'o meu uma vez só');
-    assert.equal((h.match(/Novo grupo partilhado/g) || []).length, 1, '«Novo grupo partilhado» uma vez, no cimo');
-    assert.match(h, /data-click="groupModal\('prop'\)">[\s\S]*?Novo grupo de imóveis</);
-    assert.match(h, /<h3>Privado<\/h3><span class="badge grey">Privado<\/span>[\s\S]*?data-click="groupModal\('prop','GP'\)">/, 'os privados, com «Editar»');
+    assert.ok(!/Novo grupo partilhado|Novo grupo de imóveis|def-cab-acoes/.test(h), 'o cabeçalho é só o segmentado: criar é no +');
+    assert.match(h, /data-lp="grp:GP" data-toca="camada" data-click="groupModal\('prop','GP'\)">\s*<div class="grp-cab"><h3>Privado<\/h3><span class="badge grey">Privado<\/span>/, 'os privados abrem a edição ao toque');
+    assert.ok(!/ Editar<\/button>/.test(h), 'sem «Editar»');
     assert.ok(!h.includes('Família de donos'), 'os de proprietários estão no outro separador');
     assert.match(h, /À espera de Tó/, 'os pedidos que fiz');
     assert.match(h, /<b>Zé<\/b> quer entrar/, 'e os que esperam resposta nos meus');
@@ -135,11 +135,11 @@ describe('o separador Grupos', () => {
     assert.match(app.vGrupos(), /id="grpTipo_contract" class="on"/, 'um tipo que não existe não mexe');
   });
 
-  test('cada grupo de imóveis privado tem «Partilhar» à vista — também o que só tem imóveis dos outros —, ao lado de «Editar»', () => {
+  test('cada grupo de imóveis privado tem «Partilhar» à vista — também o que só tem imóveis dos outros —, que não abre o cartão', () => {
     const { app } = comEstado();
     const h = app.vGrupos();
     const cartao = h.slice(h.indexOf('<h3>Privado</h3>'), h.indexOf('<h3>Só do Rui</h3>'));
-    assert.match(cartao, /<button type="button" class="btn sm" data-toca="camada" data-click="CW\.grupoPartilhar\('GP'\)">[\s\S]*? Partilhar<\/button>/);
+    assert.match(cartao, /<button type="button" class="btn sm" data-toca="camada" data-click="event\.stopPropagation\(\);CW\.grupoPartilhar\('GP'\)">[\s\S]*? Partilhar<\/button>/);
     assert.equal((h.match(/CW\.grupoPartilhar\(/g) || []).length, 2, 'o GP e o GR: nem os partilhados, nem o de proprietários');
     assert.ok(h.includes("CW.grupoPartilhar('GR')"), 'o GR só tem a Do Rui, e o botão fica: o toque é que explica');
     assert.ok(!h.includes("CW.grupoPartilhar('GO')"));

@@ -402,12 +402,11 @@ dos elementos do eixo, e um :nth-child conta-os a eles também. São seis
 degraus de 30ms e depois pára — com mais, um gráfico de doze barras
 demora mais a desenhar-se do que a ser lido.
 
-Anima-se a entrada, não a saída — com uma exceção, e é a que se vê a
-seguir. Fechar uma janela tira-lhe o nó (componentes.js:closeModal): animar
-a saída obrigava a adiar essa remoção e a mexer na pilha de janelas, e a
-app fecharia mais devagar do que a pessoa quer que feche.
+Fechar uma janela troca-lhe o .open pelo .sai e tira o nó no fim da saída
+(componentes.js:fecharComSaida); largada por um arrasto, a saída parte de
+onde o dedo a deixou (componentes.js:folhaFecha).
 
-A exceção é quando alguma coisa sai de UMA LISTA, e aí a saída é metade do
+Quando alguma coisa sai de UMA LISTA, a saída é metade do
 que se está a dizer. Confirmar um planeado fazia o cartão desaparecer e as
 linhas de baixo aparecerem mais acima — não porque tenham subido, mas
 porque são nós novos que nasceram noutro sítio. Nada se moveu, e por isso
@@ -681,7 +680,7 @@ depois (componentes.js:onSave, a propriedade que aponta sempre para a
 janela de cima); o rodapé por omissão é Cancelar + Guardar
 (componentes.js:fillModal). setModal substitui o conteúdo sem empilhar
 (componentes.js:setModal). Fechar por um caminho de abandono (véu, X,
-Escape, voltar) com alterações por guardar pergunta «Sair sem guardar?»
+Escape, voltar, arrastar a folha para baixo) com alterações por guardar pergunta «Sair sem guardar?»
 (componentes.js:closeModal); Guardar e Cancelar fecham sem perguntar,
 porque são decisões e não acidentes. Só conta como mexido o que vier de um
 dedo ou de um teclado a sério (o isTrusted em componentes.js:openModal): a
@@ -694,7 +693,43 @@ fecha tudo sem perguntar, e por isso não é o caminho dessas ligações — o
 closeModal e só depois sai (cloud/utilizadores.js:cwGerirColaboradores,
 cloud/utilizadores.js:cwSairParaColaboradores). Abaixo de
 520px a janela é uma folha encostada em baixo (estilos.css:.sheet dentro
-de estilos.css:@media(max-width:520px)).
+de estilos.css:@media(max-width:520px)), que se arrasta para baixo para
+fechar.
+
+A barra por cima do cabeçalho (estilos.css:.sheet::before) promete o gesto
+que o sistema ensina: puxar para baixo fecha. A janela de cima da pilha
+arrasta-se com o dedo ou a caneta (componentes.js:folhaPousar,
+componentes.js:folhaArrastoMove, componentes.js:folhaArrastoFim); o rato não
+arrasta (componentes.js:AVISO_PONTEIROS, os mesmos do aviso), e acima dos
+520px nada muda — a condição é a do CSS, lida pelo matchMedia
+(componentes.js:folhaComBarra). Agarra-se pelo cabeçalho (o .head e a
+barra) sempre; pelo corpo só com ele no topo do scroll e o gesto a começar
+para baixo — a subir, ou com o corpo (ou uma caixa dentro dele) já rolado, é
+o scroll de sempre (componentes.js:folhaZona). O rodapé não agarra: é onde
+estão Guardar e Cancelar. Nunca arranca de um campo, de um cartão com toque
+longo, de quem tem o seu próprio gesto (o data-pointerdown das fotos, do
+calendário e do puxador; a leitura dos gráficos; o .pago-por; um slider; as
+listas abertas do sel() e do ⋯) nem do que rola de lado
+(componentes.js:FOLHA_NAO_ARRANCA, navegacao.js:sepRolaDeLado). O eixo
+decide-se aos 10px, como no aviso e nos separadores. A .modal ouve o
+touchmove com passive:false (componentes.js:modalLayer) e trava-o enquanto o
+gesto é dela, senão o browser tomava o gesto e mandava um pointercancel a
+meio (componentes.js:folhaToqueMove); o cabeçalho tem touch-action:none.
+
+A folha segue o dedo e o véu aclara à proporção (componentes.js:folhaVeu);
+para cima resiste (componentes.js:folhaElastico, nunca mais de 24px, com uma
+sombra da cor do cartão para o fundo não descolar do ecrã). Largar passada
+metade da altura, ou com um sacudir para baixo, fecha — a regra do aviso
+(componentes.js:avisoFechaAoLargar). Fecha pelo closeModal('arrasto')
+(componentes.js:folhaFecha): num formulário mexido pergunta «Sair sem
+guardar?», e quem fica tem a folha de volta ao sítio. A saída é a de sempre
+(estilos.css:folhaDesce), a partir do transform que o dedo deixou, com a
+--curva (a .arrastada). Largar antes volta ao sítio
+(componentes.js:folhaVoltaAoSitio: --medio, --curva-entra); um dedo que pega
+na folha a meio do regresso apanha-a onde ela está, e uma janela nova por
+cima a meio do gesto acaba-o. Sem movimento (continuidade.js:semMovimento)
+não segue o dedo: desvanece (.sheet.pronto) quando largar já fecha, e fecha
+sem animar.
 
 confirmModal(title,text,cb) (componentes.js:confirmModal) é para quando
 NÃO há como desfazer. O botão diz o verbo do título e veste-se de perigo
@@ -2617,12 +2652,20 @@ pelos cinco tipos, em três colunas (tipos.js:TX_TYPES,
 estilos.css:.criar-tipos; cada um na cor do seu dinheiro, a dívida âmbar, estilos.css:.ic.amber), «A
 partir de um modelo» em chips (os modelos dos Planeados, só com o serviço
 ligado), e «Outros registos» com tudo o que a pessoa pode adicionar
-(acessos.js:acoesDeAdicionar — e só com o serviço ligado). A ação do
+(acessos.js:acoesDeAdicionar — e só com o serviço ligado; o «Grupo», da
+base, está sempre). O «Grupo» abre a escolha do tipo, «Novo grupo»
+(acessos.js:novoGrupoEscolher): Imóveis, Proprietários e Contratos, com os
+ícones do separador (definicoes.js:GKIND), e «Partilhado» quando posso
+partilhar grupos (definicoes.js:podePartilharGrupos); escolher abre a janela
+do grupo novo (definicoes.js:groupModal) ou o nome do partilhado. A escolha
+substitui a folha, como a da hipoteca, para a folha não crescer. A ação do
 contexto vem primeiro (acessos.js:acaoDoSeparador): na Visão geral e nos
 Movimentos são os tipos; nos outros ecrãs, a linha da ação do ecrã sai do
 resto e sobe para o topo da folha, por cima dos tipos, marcada «neste ecrã».
-Com uma só ação corre-a logo, e sem nenhuma — um cargo que só vê — não há
-botão. Cada opção corre pela gramática das ações (navegacao.js:criarEscolha,
+Nos Grupos é «Novo grupo de <tipo à vista>», direto, sem a escolha
+(acessos.js:acaoNaturalDoEcra), e o «Grupo» fica em baixo para os outros
+tipos. Com uma só ação corre-a logo (um cargo que só vê só tem o «Grupo»,
+e o + abre-lhe a escolha do tipo); sem nenhuma não há botão. Cada opção corre pela gramática das ações (navegacao.js:criarEscolha,
 eventos.js:correrAcao), como as do menu ⋯ dos imóveis; a folha não tem
 rodapé e fecha-se no X (componentes.js:SEM_RODAPE).
 
@@ -3043,7 +3086,8 @@ Casas (cloud/selecao-listas.js:selLCabecalho): a base não pinta lá o funil
 Planeados.
 
 Os tipos da seleção das listas são 'prop', 'ct', 'ten' (inquilinos), 'vis'
-(visitas), 'rec' e 'tpl' (cloud/selecao-listas.js:TABS_SEL). O id de cada
+(visitas), 'rec', 'tpl' e 'grp' (os grupos, no separador Grupos)
+(cloud/selecao-listas.js:TABS_SEL). O id de cada
 cartão lê-se pelo começo do data-lp do tipo
 (cloud/selecao-listas.js:selLPrefixo, cloud/selecao-listas.js:selLIdDe,
 cloud/selecao-listas.js:selLDoLp): os inquilinos usam o data-lp das pessoas,
@@ -4063,17 +4107,44 @@ grupos com o Voltar das subpáginas (definicoes.js:vSettings).
 O separador é o canvas M-Grupos (definicoes.js:vGrupos): sem a cabeça das
 subpáginas — começa no «Servem de filtro em toda a app», com as abas das
 Casas por cima, que o render põe (vistas.js:render) —, o que os grupos são, os tipos num
-segmentado com quantos há de cada (definicoes.js:grupoTipoEscolher), «Novo
-grupo de …» do tipo à vista e, nos imóveis, quando posso partilhar
-(definicoes.js:podePartilharGrupos — a nuvem dos grupos, sessão e o serviço
-ligado), «Novo grupo partilhado». Cada grupo é um cartão
+segmentado com quantos há de cada (definicoes.js:grupoTipoEscolher). O
+cabeçalho é só o segmentado: criar um grupo é no + («Grupo», com a escolha
+do tipo — acessos.js:novoGrupoEscolher). Cada grupo é um cartão
 (definicoes.js:vGroups, que recebe o tipo; sem ele, os de imóveis). O
-privado tem o nome, «Privado», os membros, «Editar» e, nos de imóveis,
-«Partilhar» (definicoes.js:cartaoDoGrupo). O partilhado tem o selo
+privado tem o nome, «Privado», os membros e, nos de imóveis, «Partilhar»
+(definicoes.js:cartaoDoGrupo). O partilhado tem o selo
 «Partilhado · teu» ou «de <dono>», os imóveis e as pessoas; só ao dono, os
 pedidos para entrar, com Aceitar e Recusar, e a ligação de convite, com
-Copiar, Rodar e Desativar; os membros e «Abrir o grupo»
-(web/cloud/grupos.js:cartaoDoGrupoPartilhado). Com um pedido por responder,
+Copiar, Rodar e Desativar; e os membros
+(web/cloud/grupos.js:cartaoDoGrupoPartilhado).
+
+O cartão inteiro é um botão: um toque abre o grupo (o privado na edição,
+definicoes.js:groupModal; o partilhado na janela da nuvem,
+cloud/grupos.js:CW.grupoModal), e segurar entra na seleção de vários pelo
+data-lp «grp:<id>», como nas outras listas das Casas, com a caixa no canto
+de cima, antes do nome (cloud/selecao-listas.js:selLDecorar). Os botões de
+dentro param o toque (event.stopPropagation) para não abrirem o grupo, e o
+contentor deles leva data-sel-inerte: em seleção fica inert e apagado, e o
+toque cai no cartão e marca-o — escondê-los encolhia os cartões e o cartão
+fugia de debaixo do dedo. Marcam-se só os do tipo à vista
+(cloud/selecao-listas.js:selLRecusa), privados e partilhados juntos, e trocar
+o tipo sai da seleção (definicoes.js:grupoTipoEscolher). O marcado
+distingue-se pela frente: contorno de 2px e o nome a --accent-text. Os
+pedidos que fiz para entrar não são grupos e não se marcam.
+
+A barra dos grupos tem só o Apagar, com UMA confirmação
+(cloud/selecao-listas.js:selLApagarGrupos, a frase em
+cloud/selecao-listas.js:selLGruposFrase): o título diz o que vai acontecer
+(«Apagar 2 grupos», «Sair de 1 grupo», «Apagar 1 grupo e sair de 1») e a
+frase o que acontece aos movimentos (definicoes.js:gruposMovimentosFrase),
+que os partilhados meus desaparecem para todos, que dos dos outros saio e que
+o Anular só repõe os privados. Os privados apagam-se na hora
+(definicoes.js:gruposApagarLocal, que limpa os filtros que os tinham) com o
+Anular (definicoes.js:gruposReporLocal); os partilhados meus apagam-se no
+servidor (cloud/grupos.js:grupoApagarNoServidor) e dos dos outros saio
+(cloud/grupos.js:grupoSairNoServidor), sem a confirmação de cada um; um que
+falhe não trava os outros, e o aviso, um só, espera pelas respostas
+(cloud/selecao-listas.js:selLGruposAviso). Com um pedido por responder,
 o cartão leva o contorno cobalto
 (estilos.css:.grp-partilhado:has(.grp-pedido)), e o «Desativar» da ligação tem o texto vermelho (estilos.css:.btn.grp-perigo).
 A janela do grupo privado diz o erro no campo, sempre com o toast: o nome no
@@ -4081,8 +4152,7 @@ A janela do grupo privado diz o erro no campo, sempre com o toast: o nome no
 (definicoes.js:groupBody; estilos.css:#g_membros.err>.tagbox). Os pedidos que
 fiz para entrar no grupo de outra pessoa são um cartão cada, com «Cancelar
 pedido» (web/cloud/grupos.js:pedidosQueFizHtml). Sem grupos de um tipo fica o vazio
-com o botão de criar o primeiro, e o de cima sai, para não haver dois
-iguais. Sem poder partilhar (sem sessão ou com o serviço desligado) não há o
+com o botão de criar o primeiro. Sem poder partilhar (sem sessão ou com o serviço desligado) não há o
 que listar do servidor, mas cada grupo de imóveis privado continua com o
 «Partilhar», e o toque diz o que falta. A página guardada antiga leva ao
 separador (web/cloud/nucleo.js:restorePage).
@@ -4606,7 +4676,8 @@ estilos.css:@media(max-width:900px)). A ação secundária é a de um ecrã que 
 tem — o «Exportar CSV» dos Movimentos (index.html:#hdrSec,
 navegacao.js:ACAO_SECUNDARIA) —, e a principal, só no computador
 (index.html:#hdrAcao, navegacao.js:pintarAcaoDoCabecalho), é «Novo
-movimento», «Novo contrato»… — a mesma que a folha «Criar» marca «neste
+movimento», «Novo contrato»… (nos Grupos, «Novo grupo de <tipo à vista>»,
+acessos.js:acaoNaturalDoEcra) — a mesma que a folha «Criar» marca «neste
 ecrã»; no telemóvel o + faz as vezes dela. Vazias, escondem-se pelo :empty.
 Nos ecrãs de uma área, por cima da vista e só no
 telemóvel, vão os separadores da área num segmentado

@@ -346,9 +346,13 @@ function abrirAdicionar(){
      contrato): num ecrã cuja ação não é o movimento (os Contratos, as
      Visitas…), essa linha sai do resto e sobe para o topo da folha, por
      cima dos tipos, marcada «neste ecrã». As posições dos tipos registam-se
-     primeiro, para criarEscolha(0…4) serem sempre os cinco tipos. */
-  const aqui=acaoDoSeparador(tab),mov=todas.find(a=>a.id==='movimento');
-  const outras=todas.filter(a=>a.id!=='movimento'),destaque=outras.find(a=>a.id===aqui)||null;
+     primeiro, para criarEscolha(0…4) serem sempre os cinco tipos. Nos
+     Grupos a linha de cima é «Novo grupo de <o tipo à vista>», que abre
+     direto esse tipo (acessos.js:acaoNaturalDoEcra), e o «Grupo» fica em
+     baixo, com a escolha dos outros tipos e do partilhado — o cabeçalho do
+     separador já não tem botões de criar. */
+  const nat=acaoNaturalDoEcra(tab),mov=todas.find(a=>a.id==='movimento');
+  const outras=todas.filter(a=>a.id!=='movimento'),destaque=nat&&nat.id!=='movimento'?nat:null;
   _criar=[];
   const regista=act=>{_criar.push(act);return _criar.length-1};
   /* a cor de cada tipo é a do dinheiro dele (o canvas): receita verde, despesa
@@ -360,7 +364,7 @@ function abrirAdicionar(){
   const chips=modelos.map(x=>`<button type="button" class="chip" data-toca="camada" data-click="criarEscolha(${regista(`newFromTemplate('${jsq(x.id)}')`)})">${esc(x.name)}${x.tx&&x.tx.propertyId?' <span class="n">· '+esc(propName(x.tx.propertyId))+'</span>':''}</button>`).join('');
   const linha=a=>`<button type="button" class="criar-outro" data-toca="camada" data-click="criarEscolha(${regista(a.act)})">${ic(a.icon,20)}<span>${esc(a.label)}${a===destaque?'<small>neste ecrã</small>':''}</span></button>`;
   const topo=destaque?`<div class="criar-outros criar-aqui">${linha(destaque)}</div>`:'';
-  const resto=outras.filter(a=>a!==destaque).map(linha).join('');
+  const resto=outras.filter(a=>!destaque||a.id!==destaque.id||a.id==='grupo').map(linha).join('');
   const corpo=topo+(tipos?`<p class="lbl criar-tit">Novo movimento</p><div class="criar-tipos">${tipos}</div>`:'')+
     (chips?`<p class="lbl criar-tit">A partir de um modelo</p><div class="chips-fila">${chips}</div>`:'')+
     (resto?`<p class="lbl criar-tit">Outros registos</p><div class="criar-outros">${resto}</div>`:'');
@@ -1027,10 +1031,11 @@ const ACAO_SECUNDARIA={transactions:{rotulo:'Exportar CSV',act:'exportarSoMeu(do
 /* A ação principal do ecrã, no cabeçalho do computador (o canvas: «Novo
    movimento» na Visão geral, «Novo contrato» nos Contratos), na ponta direita
    (index.html:#hdrAcao, a seguir ao sino e aos filtros). É a mesma da folha
-   «Criar» que fica em primeiro (acessos.js:acaoDoSeparador), só quando esta
-   pessoa a pode fazer; no telemóvel esconde-se, porque o + da barra de baixo
-   já a põe em primeiro. Pinta também a secundária (ACAO_SECUNDARIA), à
-   esquerda da principal.
+   «Criar» que fica em primeiro (acessos.js:acaoNaturalDoEcra), só quando esta
+   pessoa a pode fazer — nos Grupos, «Novo grupo de <o tipo à vista>», que o
+   render repinta quando o tipo muda; no telemóvel esconde-se, porque o + da
+   barra de baixo já a põe em primeiro. Pinta também a secundária
+   (ACAO_SECUNDARIA), à esquerda da principal.
    Devolve: nada — pinta os botões #hdrAcao e #hdrSec (vazios escondem-se, pelo :empty). */
 function pintarAcaoDoCabecalho(){
   const s=document.getElementById('hdrSec'),sec=ACAO_SECUNDARIA[tab];
@@ -1039,7 +1044,7 @@ function pintarAcaoDoCabecalho(){
     else{s.innerHTML='';s.removeAttribute('data-click')}
   }
   const b=document.getElementById('hdrAcao');if(!b)return;
-  const aqui=acaoDoSeparador(tab),a=aqui&&acoesDeAdicionar().find(x=>x.id===aqui);
+  const a=acaoNaturalDoEcra(tab);
   if(!a||(tab==='settings')){b.innerHTML='';b.removeAttribute('data-click');return}
   b.innerHTML=ic('plus',18)+'<span>'+(ROTULO_ACAO[a.id]||a.label)+'</span>';
   b.setAttribute('data-click',a.act);

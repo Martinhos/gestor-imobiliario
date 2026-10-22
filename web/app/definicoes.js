@@ -635,32 +635,37 @@ function podePartilharGrupos(){return nuvemDosGrupos()&&!!CW.user&&servicoLigado
    aberta. */
 let grpTipo='prop';
 /* Troca o tipo de grupo à vista. Muda só o que se vê: repinta, e o foco volta
-   ao segmentado.
+   ao segmentado. Em seleção de vários grupos (cloud/selecao-listas.js), sai
+   dela antes: os marcados eram do tipo que deixou de se ver, e a seleção
+   nunca mistura tipos. O CW.selLSair já repinta.
    Recebe: k — 'prop', 'owner' ou 'contract'.
    Devolve: nada — repinta a vista. */
 function grupoTipoEscolher(k){
   if(!GKIND[k])return;
-  grpTipo=k;render();
+  grpTipo=k;
+  if(typeof window!=='undefined'&&window.CW&&CW.selL&&CW.selL.tipo&&typeof CW.selLSair==='function')CW.selLSair();else render();
   const b=document.getElementById('grpTipo_'+k);if(b)try{b.focus({preventScroll:true})}catch(e){}
 }
 /* O cartão de um grupo privado: o nome, «Privado» nos de imóveis (os únicos
-   que se partilham), os membros por extenso, e os botões — «Editar» (a
-   janela de edição, groupModal) e, num grupo de imóveis, «Partilhar», que
-   está SEMPRE com a nuvem dos grupos carregada: com sessão ou sem ela, com
-   imóveis meus ou sem eles, o toque (cloud/grupos.js:CW.grupoPartilhar) diz
-   o que falta em cada caso. Chegou a esconder-se, e quem só tinha grupos
-   assim não sabia porquê. Sem a nuvem (a base sozinha) não há «Partilhar»:
-   não haveria quem o atendesse.
+   que se partilham), os membros por extenso e, num grupo de imóveis,
+   «Partilhar», que está SEMPRE com a nuvem dos grupos carregada: com sessão
+   ou sem ela, com imóveis meus ou sem eles, o toque
+   (cloud/grupos.js:CW.grupoPartilhar) diz o que falta em cada caso. Chegou a
+   esconder-se, e quem só tinha grupos assim não sabia porquê. Sem a nuvem (a
+   base sozinha) não há «Partilhar»: não haveria quem o atendesse.
+   O cartão inteiro abre a janela de edição (groupModal) — o «Editar» saiu —
+   e o toque longo seleciona vários (data-lp «grp:<id>»,
+   cloud/selecao-listas.js). O «Partilhar» não sobe ao cartão
+   (stopPropagation) e, em seleção, fica inerte (data-sel-inerte).
    Recebe: g — o grupo.
    Devolve: o HTML (texto) do cartão. */
 function cartaoDoGrupo(g){
   const k=g.kind,nomes=(g.ids||[]).map(id=>gMemberName(k,id)).filter(Boolean),n=(g.ids||[]).length;
   const partilhar=k==='prop'&&!g._partilhado&&nuvemDosGrupos();
-  return `<section class="card grp-cartao">
+  return `<section class="card grp-cartao" data-lp="grp:${esc(g.id)}" data-toca="camada" data-click="groupModal('${jsq(k)}','${jsq(g.id)}')">
     <div class="grp-cab"><h3>${esc(g.name)}</h3>${k==='prop'?'<span class="badge grey">Privado</span>':''}</div>
     <p class="small">${nomes.length?esc(nomes.join(' · ')):'Sem membros'}${n>nomes.length?' · '+(n-nomes.length)+(n-nomes.length===1?' apagado':' apagados'):''}</p>
-    <div class="grp-acoes"><button type="button" class="btn sm" data-toca="camada" data-click="groupModal('${jsq(k)}','${jsq(g.id)}')">${ic('pen',16)} Editar</button>
-      ${partilhar?`<button type="button" class="btn sm" data-toca="camada" data-click="CW.grupoPartilhar('${jsq(g.id)}')">${ic('users',16)} Partilhar</button>`:''}</div></section>`;
+    ${partilhar?`<div class="grp-acoes" data-sel-inerte><button type="button" class="btn sm" data-toca="camada" data-click="event.stopPropagation();CW.grupoPartilhar('${jsq(g.id)}')">${ic('users',16)} Partilhar</button></div>`:''}</section>`;
 }
 /* Os cartões dos grupos de um tipo, no separador Grupos: os privados
    (cartaoDoGrupo) e, nos de imóveis, os partilhados com o que o servidor
@@ -682,26 +687,21 @@ function vGroups(kind){
 /* O separador «Grupos» (navegacao.js:TABS), da base como as Definições: uma
    aba das Casas, logo a seguir aos Imóveis (navegacao.js:AREAS — as abas da
    área por cima põe-nas o render, vistas.js:render). É o canvas M-Grupos: o
-   que os grupos são, o segmentado dos tipos com quantos há de
-   cada, «Novo grupo de …» do tipo à vista e, nos imóveis e quando posso
-   partilhar, «Novo grupo partilhado» (cloud/grupos.js:CW.grupoNovo); os
+   que os grupos são, o segmentado dos tipos com quantos há de cada, os
    cartões (vGroups) e, nos imóveis com a nuvem, o que partilhar quer dizer.
-   Os grupos são filtros de toda a app, e só a parte partilhada é do serviço
-   Colaboradores.
+   O cabeçalho é só o segmentado: criar um grupo é no + de baixo
+   (acessos.js, «Grupo»), e o vazio de cada tipo tem o seu botão (vGroups).
+   Os cartões abrem com um toque e selecionam-se ao segurar
+   (cloud/selecao-listas.js, o tipo 'grp'). Os grupos são filtros de toda a
+   app, e só a parte partilhada é do serviço Colaboradores.
    Recebe: nada (lê grpTipo).
    Devolve: o HTML (texto) da vista. */
 function vGrupos(){
-  const kind=GKIND[grpTipo]?grpTipo:'prop',nome=GKIND[kind].label.toLowerCase();
+  const kind=GKIND[grpTipo]?grpTipo:'prop';
   const aba=k=>`<button type="button" id="grpTipo_${k}" class="${kind===k?'on':''}" aria-pressed="${kind===k}" data-toca="vista" data-click="grupoTipoEscolher('${jsq(k)}')">${GKIND[k].label} <span class="n">${grpsOf(k).length}</span></button>`;
-  const partilhado=kind==='prop'&&podePartilharGrupos()?`<button type="button" class="btn" data-toca="camada" data-click="CW.grupoNovo()">${ic('users',18)} Novo grupo partilhado</button>`:'';
   const lista=vGroups(kind);
-  /* sem grupos deste tipo (nem pedidos meus à espera), o «Novo grupo de …» é
-     o do vazio — não dois iguais */
-  const vazio=!grpsOf(kind).length&&!(kind==='prop'&&podePartilharGrupos()&&typeof pedidosQueFizHtml==='function'&&pedidosQueFizHtml());
-  const novo=vazio?'':`<button type="button" class="btn primary" data-toca="camada" data-click="groupModal('${jsq(kind)}')">${ic('plus',18)} Novo grupo de ${nome}</button>`;
   return `<p class="def-intro">Servem de filtro em toda a app. Um movimento lançado num grupo de imóveis divide-se por eles.</p>
-  <div class="def-cab"><div class="segm def-abas" role="group" aria-label="Tipo de grupo">${aba('prop')}${aba('owner')}${aba('contract')}</div>
-    ${partilhado||novo?`<span class="def-cab-acoes">${partilhado}${novo}</span>`:''}</div>
+  <div class="def-cab grp-cab-tipos"><div class="segm def-abas" role="group" aria-label="Tipo de grupo">${aba('prop')}${aba('owner')}${aba('contract')}</div></div>
   ${lista}
   ${kind==='prop'&&nuvemDosGrupos()?'<p class="hint def-nota">Partilhar um grupo é para sempre: não volta a ser privado. Quem entra pela ligação, e tu aceitas, fica comproprietário de todos os imóveis do grupo. Só entram os imóveis teus.</p>':''}`;
 }
@@ -797,17 +797,53 @@ function delGroupMember(id){gForm.name=val('g_name');gForm.ids=gForm.ids.filter(
    Recebe: id — o id do grupo a apagar.
    Devolve: nada — abre a confirmação; só ao confirmar apaga e grava. */
 function delGroup(id){
-  const g=grp(id),used=db.transactions.filter(t=>t.groupId===id).length;
-  const partidos=new Set(db.transactions.filter(t=>t.lote&&t.lote.alvo==='g:'+id).map(t=>t.lote.id)).size;
+  const g=grp(id);
   if(g&&g._partilhado&&nuvemDosGrupos())return g._meu?CW.grupoApagar(id):CW.grupoSair(id);
-  confirmModal('Apagar grupo',`Apagar o grupo “${esc((g||{}).name||'')}”?`+
-    (partidos?` ${partidos===1?'O movimento já registado':'Os '+partidos+' movimentos já registados'} neste grupo ${partidos===1?'fica em cada imóvel, como está':'ficam em cada imóvel, como estão'}.`:'')+
-    (used?` ${used===1?'Um movimento antigo, ainda por dividir pelos imóveis, fica':used+' movimentos antigos, ainda por dividir pelos imóveis, ficam'} sem grupo: passa${used===1?'':'m'} a «Sem imóvel» e conta${used===1?'':'m'} só nos totais.`:''),()=>{
-    db.transactions.forEach(t=>{if(t.groupId===id){t.groupId=null;t.psplit=null}});
-    if(String(txProp).slice(2)===id)txProp='';
-    db.groups=(db.groups||[]).filter(x=>x.id!==id);
+  confirmModal('Apagar grupo',`Apagar o grupo “${esc((g||{}).name||'')}”?`+gruposMovimentosFrase([id]),()=>{
+    gruposApagarLocal([id]);
     save();closeAllModals();render();toast('Grupo apagado.');
   });
+}
+/* O que apagar uns grupos faz aos movimentos, numa frase para a confirmação
+   (delGroup, e a de vários na seleção: cloud/selecao-listas.js:selLApagarGrupos).
+   Os movimentos já partidos por imóvel (o lote com o alvo «g:<id>») ficam
+   como estão; os do formato antigo, ainda por partir, ficam sem grupo —
+   «Sem imóvel», a contar só nos totais —, e diz-se quantos.
+   Recebe: ids — os ids dos grupos (array).
+   Devolve: a frase (texto, a começar por espaço), ou '' sem movimentos ligados. */
+function gruposMovimentosFrase(ids){
+  const alvos=new Set(ids.map(id=>'g:'+id)),um=ids.length===1;
+  const used=db.transactions.filter(t=>t.groupId&&ids.indexOf(t.groupId)>-1).length;
+  const partidos=new Set(db.transactions.filter(t=>t.lote&&alvos.has(t.lote.alvo)).map(t=>t.lote.id)).size;
+  return (partidos?` ${partidos===1?'O movimento já registado':'Os '+partidos+' movimentos já registados'} ${um?'neste grupo':'nestes grupos'} ${partidos===1?'fica em cada imóvel, como está':'ficam em cada imóvel, como estão'}.`:'')+
+    (used?` ${used===1?'Um movimento antigo, ainda por dividir pelos imóveis, fica':used+' movimentos antigos, ainda por dividir pelos imóveis, ficam'} sem grupo: passa${used===1?'':'m'} a «Sem imóvel» e conta${used===1?'':'m'} só nos totais.`:'');
+}
+/* Apaga da base uns grupos privados: os movimentos antigos que apontavam
+   para eles ficam sem grupo (gruposMovimentosFrase), e os filtros que os
+   tinham escolhidos (o imóvel dos Movimentos e da Visão geral, o
+   proprietário) voltam a todos. Não grava nem repinta: quem chama faz isso.
+   Recebe: ids — os ids dos grupos (array).
+   Devolve: a cópia para os repor (gruposReporLocal): {gs, txs}. */
+function gruposApagarLocal(ids){
+  const copia={gs:JSON.parse(JSON.stringify((db.groups||[]).filter(x=>ids.indexOf(x.id)>-1))),txs:[]};
+  db.transactions.forEach(t=>{if(t.groupId&&ids.indexOf(t.groupId)>-1){copia.txs.push({id:t.id,groupId:t.groupId,psplit:t.psplit});t.groupId=null;t.psplit=null}});
+  const era=v=>String(v||'').startsWith('g:')&&ids.indexOf(String(v).slice(2))>-1;
+  if(era(txProp))txProp='';
+  if(era(dashProp))dashProp='';
+  if(era(ownerFilter))ownerFilter='';
+  db.groups=(db.groups||[]).filter(x=>ids.indexOf(x.id)<0);
+  return copia;
+}
+/* Repõe os grupos que o gruposApagarLocal tirou, e o grupo dos movimentos
+   antigos que perderam o seu — o Anular da seleção de vários. Um grupo que
+   entretanto voltou (com o mesmo id) não se duplica; os filtros ficam limpos.
+   Recebe: copia — o que o gruposApagarLocal devolveu.
+   Devolve: nada — mexe em db (quem chama grava e repinta). */
+function gruposReporLocal(copia){
+  db.groups=db.groups||[];
+  const ha=new Set(db.groups.map(x=>x.id));
+  copia.gs.forEach(g=>{if(!ha.has(g.id))db.groups.push(g)});
+  copia.txs.forEach(x=>{const t=db.transactions.find(y=>y.id===x.id);if(t&&!t.groupId&&!t.propertyId){t.groupId=x.groupId;t.psplit=x.psplit}});
 }
 /* O Enter no campo do promptModal vale por Guardar. Era um onkeydown com um
    if, que fica fora da gramática das ações (eventos.js); a ação passa-lhe o

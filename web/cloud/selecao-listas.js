@@ -1,7 +1,7 @@
-/* Selecionar vários — imóveis, contratos, inquilinos, visitas, planeados e modelos.
+/* Selecionar vários — imóveis, contratos, inquilinos, visitas, planeados, modelos e grupos.
    ----------------------------------------
-   Nos imóveis, nos contratos, nos inquilinos, nas visitas, nos planeados e
-   nos modelos o toque longo seleciona vários, como nos movimentos: entra na
+   Nos imóveis, nos contratos, nos inquilinos, nas visitas, nos planeados,
+   nos modelos e nos grupos o toque longo seleciona vários, como nos movimentos: entra na
    seleção com o tocado já marcado (CW.selLEntrar). Apagar em massa faz
    sentido aí — e apagar um imóvel arrasta os contratos e movimentos dele, por
    isso a confirmação diz os números e o Anular repõe tudo. As opções de um só
@@ -22,6 +22,14 @@
    planeados.js (recMudarVarios, recApagarVarios), as mesmas do skipRec e do
    delRec.
 
+   Nos Grupos ('grp', data-lp «grp:<id>») marcam-se só os do tipo à vista
+   (definicoes.js:grpTipo — trocar o tipo sai da seleção), privados e
+   partilhados juntos; os pedidos que fiz para entrar não são grupos e não se
+   marcam. A barra só tem o Apagar: os privados apagam-se como o delGroup, com
+   o Anular; os partilhados meus apagam-se no servidor e dos dos outros saio
+   (selLApagarGrupos). Os botões de dentro dos cartões (Partilhar, Aceitar,
+   Copiar…) ficam inertes em seleção (data-sel-inerte): o toque marca.
+
    A porta à vista é o «Selecionar vários» do cabeçalho, a caixa com o visto
    (ic('caixaVisto'), o ☑), como nos Movimentos (selLCabecalho). Em seleção,
    o toque longo marca, como o toque.
@@ -32,7 +40,7 @@
 'use strict';
 
 // o tipo do cartão → o separador onde há seleção ('ten' são os inquilinos, 'vis' as visitas)
-var TABS_SEL = { prop: 'properties', ct: 'contracts', ten: 'tenants', vis: 'visits', rec: 'recurring', tpl: 'recurring' };
+var TABS_SEL = { prop: 'properties', ct: 'contracts', ten: 'tenants', vis: 'visits', rec: 'recurring', tpl: 'recurring', grp: 'groups' };
 // os tipos dos Planeados: a porta da seleção na própria folha das opções (planeados.js:lpPortaSelecao)
 var SEL_PLAN = { rec: 1, tpl: 1 };
 // os tipos com mais ações na barra que o Apagar: a contagem e a razão por cima, as ações por baixo (selLBarraHtml, estilos.css:.sel-l-duas)
@@ -74,7 +82,8 @@ function selLDoLp(v) {
    apagar (as regras do pessoas.js:delPerson — personApagavel e a permissão
    de adicionar inquilinos na casa dele; e nunca o meu perfil, como o embrulho
    de cloud/utilizadores.js:delPerson); uma visita que não posso alterar nem
-   apagar. Os outros tipos marcam-se todos: as regras de cada um vêm na ação.
+   apagar; um grupo de outro tipo que não o à vista. Os outros tipos
+   marcam-se todos: as regras de cada um vêm na ação.
    Recebe: tipo — o tipo do cartão; id — o id dele.
    Devolve: a frase da recusa (texto), ou '' quando se marca. */
 function selLRecusa(tipo, id) {
@@ -90,6 +99,11 @@ function selLRecusa(tipo, id) {
   if (tipo === 'vis') {
     var v = (db.visits || []).find(function (x) { return x.id === id; });
     return v ? motivoRecusa(v.propertyId, 'visit.add', v, true) || motivoRecusa(v.propertyId, 'visit.add', v) : '';
+  }
+  if (tipo === 'grp') {
+    // só os do tipo à vista: a seleção nunca mistura imóveis, proprietários e contratos
+    var g = (db.groups || []).find(function (x) { return x.id === id; });
+    return g && typeof grpTipo !== 'undefined' && g.kind !== grpTipo ? 'Este grupo é de outro tipo: troca o tipo à vista para o escolheres.' : '';
   }
   return '';
 }
@@ -128,8 +142,8 @@ CW.selLToggle = function (id) {
 function selLN() { return Object.keys(CW.selL.ids).length; }
 
 /* O toque longo, redirecionado de vez: os movimentos, os imóveis, os
-   contratos, os inquilinos, as visitas, os planeados e os modelos entram em
-   seleção com o tocado já marcado — o mesmo gesto em toda a app. Já em
+   contratos, os inquilinos, as visitas, os planeados, os modelos e os grupos
+   entram em seleção com o tocado já marcado — o mesmo gesto em toda a app. Já em
    seleção, marca ou desmarca, como o toque (CW.selLTocar). O resto (os
    proprietários, as visitas da Visão geral) não faz nada — as opções de um só
    vivem no ⋯ da ficha (nos planeados, planeados.js:recView; nos modelos,
@@ -203,7 +217,7 @@ function selLHaCartoes(t) {
    contagens — e 'f' nos femininos («nenhuma visita», «2 selecionadas»,
    «Marcar todas as visitas à vista») */
 var SEL_NOMES = { prop: ['imóvel', 'imóveis'], ct: ['contrato', 'contratos'], ten: ['inquilino', 'inquilinos'], vis: ['visita', 'visitas', 'f'],
-  rec: ['planeado', 'planeados'], tpl: ['modelo', 'modelos'] };
+  rec: ['planeado', 'planeados'], tpl: ['modelo', 'modelos'], grp: ['grupo', 'grupos'] };
 
 /* As palavras das contagens de um tipo, com o género certo.
    Recebe: tipo — o tipo em seleção.
@@ -360,9 +374,13 @@ function selLDecorar() {
       b.className = 'selbox' + (selLEntrou ? ' sel-entra' : '');
       b.setAttribute('data-selbox', id);
       b.setAttribute('aria-hidden', 'true');   // o estado diz-se no cartão (aria-pressed, selLPintar)
-      var alvo = c.querySelector('.row-between') || c;
+      // nos grupos, no canto de cima, antes do nome (a .grp-cab)
+      var alvo = c.querySelector('.row-between') || c.querySelector('.grp-cab') || c;
       alvo.insertBefore(b, alvo.firstChild);
     }
+    // os botões de dentro do cartão que não são da seleção (os dos grupos) ficam
+    // fora do toque, do teclado e do leitor de ecrã: o toque cai no cartão e marca
+    if (c.querySelectorAll) [].slice.call(c.querySelectorAll('[data-sel-inerte]')).forEach(function (x) { x.setAttribute('inert', ''); });
     c.setAttribute('data-toca', 'vista');
     c.setAttribute('data-click', 'CW.selLToggle(\'' + jsqBruto(id) + '\')');
   });
@@ -545,6 +563,7 @@ CW.selLApagar = function () {
   if (tipo === 'tpl') return selLApagarModelos(ids);
   if (tipo === 'ten') return selLApagarInquilinos(ids);
   if (tipo === 'vis') return selLApagarVisitas(ids);
+  if (tipo === 'grp') return selLApagarGrupos(ids);
 
   if (tipo === 'prop') {
     var cts = db.contracts.filter(function (c) { return ids.indexOf(c.propertyId) > -1; });
@@ -725,6 +744,90 @@ function selLApagarVisitas(ids) {
         db.visits = (db.visits || []).concat(copia.filter(function (v) { return !ha[v.id]; }));
       });
     });
+}
+
+/* O que apagar os grupos marcados vai fazer, dito antes, numa confirmação só:
+   o título («Apagar 2 grupos», «Sair de 1 grupo», «Apagar 1 grupo e sair de
+   1») e a frase — os privados saem da lista e os membros ficam; o que acontece
+   aos movimentos (definicoes.js:gruposMovimentosFrase); os partilhados meus
+   desaparecem para todos; dos dos outros saio; e o que o Anular repõe (só os
+   privados — os partilhados mudam no servidor e não se desfazem).
+   Recebe: priv, meus, outros — os grupos (objetos de db.groups) de cada lado.
+   Devolve: {titulo, frase} (texto; a frase é HTML, com os nomes escapados). */
+function selLGruposFrase(priv, meus, outros) {
+  var p = priv.length, m = meus.length, o = outros.length, a = p + m, mix = p && (m || o);
+  var nome = function (g) { return '«' + esc(g.name || 'Sem nome') + '»'; };
+  var grupos = function (n) { return n + (n === 1 ? ' grupo' : ' grupos'); };
+  var titulo = a && o ? 'Apagar ' + grupos(a) + ' e sair de ' + o : a ? 'Apagar ' + grupos(a) : 'Sair de ' + grupos(o);
+  var partes = [];
+  if (p) {
+    var kind = priv[0].kind, membros = (GKIND[kind] || GKIND.prop).label.toLowerCase();
+    partes.push((p === 1 ? 'O grupo' + (mix ? ' privado ' : ' ') + nome(priv[0]) + ' sai' : 'Os ' + p + (mix ? ' grupos privados saem' : ' grupos saem')) +
+      ' da lista; os ' + membros + ' ficam como estão.');
+  }
+  if (m) partes.push((m === 1 ? 'O partilhado teu ' + nome(meus[0]) + ' desaparece' : 'Os ' + m + ' partilhados teus desaparecem') +
+    ' para todos os membros, que deixam de ver os imóveis uns dos outros por ' + (m === 1 ? 'ele' : 'eles') + '. Os imóveis e os registos ficam com quem os criou.');
+  if (o) partes.push('Sais de ' + (o === 1 ? nome(outros[0]) + ', de ' + esc(outros[0]._donoNome || 'outra pessoa') : o + ' partilhados de outras pessoas') +
+    ': deixas de ver os imóveis ' + (o === 1 ? 'dele' : 'deles') + ', e os que lá adicionaste são removidos.');
+  var frase = partes.join(' ') + gruposMovimentosFrase(priv.concat(meus, outros).map(function (g) { return g.id; }));
+  if (mix) frase += ' O Anular só repõe ' + (p === 1 ? 'o privado' : 'os privados') + ': ' + (m + o === 1 ? 'o partilhado não se desfaz.' : 'os partilhados não se desfazem.');
+  else if (m || o) frase += m + o === 1 ? ' Não se desfaz.' : ' Não se desfazem.';
+  return { titulo: titulo, frase: frase };
+}
+
+/* Apagar os grupos marcados, depois de UMA confirmação (selLGruposFrase):
+   os privados como o delGroup (definicoes.js:gruposApagarLocal), na hora e
+   com o Anular; os partilhados meus apagam-se no servidor
+   (grupos.js:grupoApagarNoServidor) e dos dos outros saio
+   (grupos.js:grupoSairNoServidor), sem a confirmação de cada um outra vez.
+   Os pedidos ao servidor vão todos; um que falhe não trava os outros, e o
+   aviso do fim diz o que ficou como estava e porquê. O aviso é um só, depois
+   das respostas: com privados, é o do Anular.
+   Recebe: ids — os ids marcados (array).
+   Devolve: nada — pede confirmação; só depois apaga, sai e avisa. */
+function selLApagarGrupos(ids) {
+  var gs = ids.map(function (id) { return (db.groups || []).find(function (x) { return x.id === id; }); }).filter(Boolean);
+  if (!gs.length) return toast('Não está nada selecionado.');
+  var partilhado = function (g) { return !!g._partilhado && typeof grupoApagarNoServidor === 'function'; };
+  var priv = gs.filter(function (g) { return !partilhado(g); });
+  var meus = gs.filter(function (g) { return partilhado(g) && g._meu; });
+  var outros = gs.filter(function (g) { return partilhado(g) && !g._meu; });
+  var q = selLGruposFrase(priv, meus, outros);
+  confirmModal(q.titulo, q.frase, function () {
+    var copia = priv.length ? gruposApagarLocal(priv.map(function (g) { return g.id; })) : null;
+    save(); CW.selLSair(); buildNav();
+    var nos = meus.concat(outros).map(function (g) {
+      var feito = g._meu ? grupoApagarNoServidor(g.id) : grupoSairNoServidor(g.id);
+      return feito.then(function () { return { g: g, ok: true }; }, function (e) { return { g: g, ok: false, erro: (e && e.message) || 'sem resposta do servidor' }; });
+    });
+    Promise.all(nos).then(function (rs) {
+      var ok = rs.filter(function (r) { return r.ok; }), falhas = rs.filter(function (r) { return !r.ok; });
+      var apagados = priv.length + ok.filter(function (r) { return r.g._meu; }).length, saidas = ok.length - (apagados - priv.length);
+      var msg = selLGruposAviso(apagados, saidas, falhas);
+      if (copia) comDesfazer(msg, function () { gruposReporLocal(copia); });
+      else toast(msg, falhas.length ? { ms: 6000 } : undefined);
+      if (!ok.length) return;
+      return Promise.resolve(pullNow(true)).catch(function () {}).then(function () { render(); });
+    });
+  });
+}
+
+/* O aviso do fim do apagar dos grupos: quantos se apagaram, de quantos saí e,
+   quando o servidor recusou algum, quais ficaram como estavam e porquê (a
+   razão do primeiro).
+   Recebe: apagados — quantos se apagaram; saidas — de quantos saí; falhas —
+   [{g, erro}] dos que o servidor recusou.
+   Devolve: o texto do aviso. */
+function selLGruposAviso(apagados, saidas, falhas) {
+  var partes = [];
+  if (apagados) partes.push(apagados + (apagados === 1 ? ' grupo apagado.' : ' grupos apagados.'));
+  if (saidas) partes.push('Saíste de ' + saidas + (saidas === 1 ? ' grupo.' : ' grupos.'));
+  if (falhas.length) {
+    var nomes = falhas.map(function (f) { return '«' + (f.g.name || 'Sem nome') + '»'; }).join(', ');
+    var porque = String(falhas[0].erro).replace(/\.?\s*$/, '.');
+    partes.push(nomes + (falhas.length === 1 ? ' ficou como estava: ' : ' ficaram como estavam: ') + porque);
+  }
+  return partes.join(' ');
 }
 
 /* Marca as visitas marcadas como realizadas ou como falta, de uma vez, com o

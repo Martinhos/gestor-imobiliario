@@ -544,6 +544,9 @@ function modalLayer(){
     <div class="head"><h2 id="modalTitle"></h2><div class="spacer"></div><span id="modalMenu"></span>
       <button class="iconbtn" data-toca="camada" data-click="closeModal('x')" aria-label="Fechar">${ic('x')}</button></div>
     <div class="body" id="modalBody"></div><div class="foot" id="modalFoot"></div></div>`;
+  /* o arrasto da folha para baixo (folhaPousar) trava o scroll do browser
+     aqui, e não no documento: só os toques numa janela esperam por ele */
+  m.addEventListener('touchmove',folhaToqueMove,{passive:false});
   return m;
 }
 /* O que está escrito na janela, numa string comparável. É o suficiente para
@@ -784,8 +787,8 @@ function setModal(title,body,foot,menuHtml){
   t.tocado=false;
   return t;
 }
-/* Fechar por um caminho de abandono (toque no fundo, X, Escape, voltar)
-   com alterações por guardar pergunta primeiro. Foi um dos achados mais
+/* Fechar por um caminho de abandono (toque no fundo, X, Escape, voltar,
+   arrastar a folha para baixo) com alterações por guardar pergunta primeiro. Foi um dos achados mais
    sérios da auditoria de UX: um dedo mal posto no véu escurecido deitava
    fora um contrato meio-preenchido, sem uma palavra. Guardar e Cancelar
    continuam a fechar sem perguntar — são decisões, não acidentes.
@@ -813,11 +816,13 @@ function fecharComSaida(el){
   setTimeout(fora,(typeof msDoToken==='function'?msDoToken('--medio',200):200)+120);
 }
 /* Fecha a janela de cima. `origem` diz por onde se saiu ('fundo', 'x',
-   'voltar'…): esses caminhos de abandono, com alterações por guardar,
-   abrem primeiro a pergunta "Sair sem guardar?". Sem origem (Guardar,
-   Cancelar), fecha sem perguntar — são decisões, não acidentes.
+   'esc', 'voltar', 'arrasto' — a folha largada em baixo, folhaFecha): esses
+   caminhos de abandono, com alterações por guardar, abrem primeiro a
+   pergunta "Sair sem guardar?". Sem origem (Guardar, Cancelar), fecha sem
+   perguntar — são decisões, não acidentes.
    Recebe: origem (opcional) — string com o caminho de saída ('fundo', 'x',
-   'voltar'…); presente, e havendo alterações, abre primeiro a pergunta.
+   'esc', 'voltar', 'arrasto'); presente, e havendo alterações, abre
+   primeiro a pergunta.
    Devolve: nada — tira a janela da pilha e repõe a de baixo (ou o foco no gatilho). */
 function closeModal(origem){
   closePops();
@@ -1326,3 +1331,237 @@ function avisoAcimaDoRodape(){
 function avisoQuandoAssentar(){
   setTimeout(avisoAcimaDoRodape,msDoToken('--medio',200)+120);
 }
+
+/* ================= A FOLHA ARRASTA-SE PARA BAIXO =================
+   Abaixo dos 520px uma janela é uma folha encostada em baixo, com a barra
+   por cima do cabeçalho (estilos.css:.sheet::before) — e a barra promete o
+   gesto que o sistema ensina: puxar para baixo fecha. Arrasta-se a janela de
+   cima da pilha, com o dedo ou a caneta (AVISO_PONTEIROS: com o rato,
+   arrastar é selecionar texto, e no computador a janela está ao meio do
+   ecrã, sem barra).
+   Agarra-se pelo cabeçalho (o .head, e a barra, que é da própria .sheet)
+   sempre; pelo corpo só com ele no topo do scroll e o gesto a começar para
+   baixo — a subir, ou com o corpo a meio, é o scroll de sempre (folhaZona).
+   Nunca arranca de um campo, de um toque longo, nem de quem já tem o seu
+   gesto (FOLHA_NAO_ARRANCA, e o que rola de lado).
+   A folha segue o dedo e o véu aclara à proporção (folhaVeu); para cima
+   resiste (folhaElastico). Largar passada metade da altura dela, ou com um
+   sacudir para baixo — a regra do aviso, avisoFechaAoLargar —, fecha pelo
+   closeModal('arrasto'): num formulário com alterações pergunta «Sair sem
+   guardar?» como o X, e ficando, a folha volta ao sítio. A saída continua
+   de onde o dedo a deixou (folhaFecha). Sem movimento pedido não segue o
+   dedo: desvanece quando largar já fecha, e fecha sem animar. */
+// a altura (px) que mede a resistência para cima: a folha nunca sobe mais de metade dela
+const FOLHA_RESISTE=48;
+// o que nunca agarra a folha: os campos, o toque longo, quem tem gesto próprio e as listas abertas
+const FOLHA_NAO_ARRANCA='input,textarea,select,[contenteditable]:not([contenteditable="false"]),[data-lp],[data-pointerdown],'+
+  '.chartbox[data-lido],.pago-por,[role="slider"],.selpop,.menupop';
+let _folhaArr=null,_folhaEngole=0;
+/* A janela mostra a barra? A mesma condição do CSS (estilos.css:.sheet::before,
+   dentro de @media(max-width:520px)), lida pelo matchMedia.
+   Devolve: true/false. */
+function folhaComBarra(){
+  try{return !!(window.matchMedia&&window.matchMedia('(max-width:520px)').matches)}catch(e){return false}
+}
+/* Por onde o dedo pegou na folha: pelo cabeçalho (o .head, ou a barra — que
+   é a própria .sheet), ou pelo corpo no topo do scroll. Fora disso — o
+   rodapé, um campo, um toque longo, quem tem gesto próprio, o que rola de
+   lado, ou o corpo (ou uma caixa dentro dele) já rolado — não pega.
+   Recebe: alvo — o elemento onde o dedo pousou; s — a .sheet da janela de cima.
+   Devolve: 'cab', 'corpo' ou '' (não pega). */
+function folhaZona(alvo,s){
+  if(!alvo||!s||typeof alvo.closest!=='function'||typeof s.querySelector!=='function')return '';
+  if(alvo.closest(FOLHA_NAO_ARRANCA))return '';
+  const cab=s.querySelector('.head'),corpo=s.querySelector('.body');
+  const zona=alvo===s||(cab&&cab.contains(alvo))?'cab':(corpo&&corpo.contains(alvo)?'corpo':'');
+  if(!zona)return '';
+  for(let el=alvo;el&&el!==s;el=el.parentElement){
+    if(zona==='corpo'&&el.scrollTop>0)return '';
+    if(typeof sepRolaDeLado==='function'&&sepRolaDeLado(el))return '';
+  }
+  return zona;
+}
+/* Para cima, a folha resiste: anda cada vez menos quanto mais se puxa, e
+   nunca sobe mais de metade de FOLHA_RESISTE (a curva do avisoElastico). Uma
+   folha encostada em baixo que subisse o que o dedo sobe descolava do fundo
+   do ecrã.
+   Recebe: dy — px que o dedo andou (negativo, para cima).
+   Devolve: px a que a folha fica (com o sinal de dy). */
+function folhaElastico(dy){return avisoElastico(dy,FOLHA_RESISTE)}
+/* O véu por trás da folha aclara à medida que ela desce: inteiro no sítio,
+   nada com a folha uma altura dela abaixo. Sem movimento, fica inteiro.
+   Recebe: a — o arrasto ({desl, h, mexe}).
+   Devolve: a opacidade do véu, de 0 a 1. */
+function folhaVeu(a){
+  if(!a||!a.mexe)return 1;
+  return Math.max(0,Math.min(1,1-a.desl/(a.h||1)));
+}
+/* Onde a folha está agora, na vertical, contando com a animação que a
+   estiver a levar (a entrada, ou o regresso ao sítio).
+   Recebe: s — a .sheet.
+   Devolve: px (0 no sítio). */
+function folhaDeslocada(s){
+  try{const m=/matrix\(([^)]*)\)/.exec(getComputedStyle(s).transform||'');
+    return m?(parseFloat(m[1].split(',')[5])||0):0}catch(e){return 0}
+}
+/* Para o regresso da folha (e do véu) onde ele estiver.
+   Recebe: s — a .sheet.
+   Devolve: nada. */
+function folhaPara(s){
+  const an=s._folhaAnim,veu=s._folhaVeuAnim;s._folhaAnim=null;s._folhaVeuAnim=null;
+  try{if(an)an.cancel()}catch(e){}
+  try{if(veu)veu.cancel()}catch(e){}
+}
+/* O dedo pousou: se foi na janela de cima, por onde ela se agarra (folhaZona),
+   e a janela mostra a barra, fica-se à escuta do arrasto. Pegar na folha a
+   meio do regresso apanha-a onde ela está, sem salto.
+   Recebe: e — o PointerEvent do pointerdown (ouvido no documento).
+   Devolve: nada — liga os ouvintes do documento. */
+function folhaPousar(e){
+  if(_folhaArr||!e||e.button>0||e.isPrimary===false||AVISO_PONTEIROS.indexOf(e.pointerType)<0)return;
+  if(!folhaComBarra())return;
+  const L=modalTop(),el=L&&L.el;
+  if(!el||typeof el.querySelector!=='function'||!el.classList.contains('open')||el.classList.contains('under'))return;
+  const s=el.querySelector('.sheet'),alvo=e.target;
+  if(!s||!alvo||typeof s.contains!=='function'||!s.contains(alvo))return;
+  const zona=folhaZona(alvo,s);if(!zona)return;
+  const a={id:e.pointerId,L,el,s,bg:el.querySelector('.bg'),zona,x0:e.clientX,y0:e.clientY,base:0,dy:0,desl:0,vy:0,
+    ya:e.clientY,ta:avisoHora(e),ativo:false,mexe:!semMovimento(),h:1};
+  if(s._folhaAnim){
+    // a meio do regresso: fica onde a animação a tinha
+    a.base=folhaDeslocada(s);folhaPara(s);
+    const r=s.getBoundingClientRect();a.h=(r&&r.height)||s.offsetHeight||1;
+    a.desl=a.dy=a.base;
+    if(a.base){s.style.transform='translateY('+a.base+'px)';if(a.bg)a.bg.style.opacity=String(folhaVeu(a))}
+  }
+  _folhaArr=a;
+  document.addEventListener('pointermove',folhaArrastoMove);
+  document.addEventListener('pointerup',folhaArrastoFim);
+  document.addEventListener('pointercancel',folhaArrastoFim);
+}
+/* O dedo andou: passados os 10px de decidir, na vertical, a folha segue-o;
+   para o lado, ou a subir pelo corpo, o gesto não é dela (é o scroll). A
+   folga de decidir não conta: a folha arranca colada ao dedo, sem salto.
+   Recebe: e — o PointerEvent do pointermove.
+   Devolve: nada — mexe no transform da .sheet e na opacidade do véu. */
+function folhaArrastoMove(e){
+  const a=_folhaArr;if(!a||e.pointerId!==a.id)return;
+  // abriu-se outra janela por cima, ou esta fechou por outro caminho: o gesto acaba aqui
+  if(modalTop()!==a.L)return folhaDesiste(a);
+  let dy=e.clientY-a.y0;const dx=e.clientX-a.x0;
+  if(!a.ativo){
+    if(Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy))return folhaDesiste(a);
+    if(Math.abs(dy)<10)return;
+    if(a.zona==='corpo'&&dy<0)return folhaDesiste(a);
+    a.ativo=true;
+    a.y0+=dy<0?-10:10;dy=e.clientY-a.y0;
+    const r=a.s.getBoundingClientRect();a.h=(r&&r.height)||a.s.offsetHeight||1;
+    // apanhada a meio da entrada: parte de onde a animação a tinha
+    if(!a.base&&a.mexe)a.base=folhaDeslocada(a.s);
+    a.el.classList.add('arrastou');a.s.classList.add('arrastar');
+    try{a.s.setPointerCapture(a.id)}catch(x){}
+    closePops();
+  }
+  const agora=avisoHora(e),dt=agora-a.ta;
+  // a velocidade dos últimos instantes, alisada: é ela que diz se o gesto foi um sacudir
+  if(dt>0)a.vy=.6*((e.clientY-a.ya)/dt)+.4*a.vy;
+  a.ya=e.clientY;a.ta=agora;
+  a.dy=a.base+dy;
+  a.desl=a.dy>=0?a.dy:folhaElastico(a.dy);
+  if(a.mexe){
+    a.s.style.transform='translateY('+a.desl+'px)';
+    if(a.bg)a.bg.style.opacity=String(folhaVeu(a));
+  }
+  a.s.classList.toggle('pronto',avisoFechaAoLargar(a,agora));
+}
+/* O browser não pode rolar o que a folha está a levar: um toque que agarrou
+   pelo cabeçalho, ou pelo corpo a descer, trava o scroll (preventDefault).
+   Sem isto, o browser tomava o gesto para si e mandava um pointercancel a
+   meio. Um gesto a subir pelo corpo não se trava — é o scroll —, nem o de
+   dois dedos.
+   Recebe: e — o TouchEvent do touchmove (ouvido na .modal, modalLayer).
+   Devolve: nada. */
+function folhaToqueMove(e){
+  const a=_folhaArr;if(!a||!e||e.cancelable===false)return;
+  const t=e.touches&&e.touches.length===1?e.touches[0]:null;if(!t)return;
+  if(!a.ativo&&a.zona!=='cab'){
+    const dy=t.clientY-a.y0,dx=t.clientX-a.x0;
+    if(dy<0||dy<Math.abs(dx))return;
+  }
+  e.preventDefault();
+}
+/* Tira os ouvintes do documento e esquece o arrasto.
+   Devolve: nada. */
+function folhaArrastoLargar(){
+  document.removeEventListener('pointermove',folhaArrastoMove);
+  document.removeEventListener('pointerup',folhaArrastoFim);
+  document.removeEventListener('pointercancel',folhaArrastoFim);
+  _folhaArr=null;
+}
+/* O gesto deixou de ser da folha (foi para o lado, subiu pelo corpo, ou a
+   janela deixou de ser a de cima): larga-o e, se a folha tinha saído do
+   sítio e ainda está aberta, devolve-a.
+   Recebe: a — o arrasto.
+   Devolve: nada. */
+function folhaDesiste(a){
+  folhaArrastoLargar();
+  if(modalStack.indexOf(a.L)<0)return;
+  if(a.ativo||a.base)folhaVoltaAoSitio(a);
+}
+/* O dedo saiu: fecha a janela, se o gesto chegou para isso, ou devolve a
+   folha ao sítio. Um pointercancel nunca fecha. Depois de um arrasto, o
+   clique que o browser dispara engole-se (não carrega no X nem no que
+   estiver por baixo).
+   Recebe: e — o PointerEvent do pointerup ou do pointercancel.
+   Devolve: nada. */
+function folhaArrastoFim(e){
+  const a=_folhaArr;if(!a||(e&&e.pointerId!==a.id))return;
+  if(modalTop()!==a.L)return folhaDesiste(a);
+  folhaArrastoLargar();
+  if(!a.ativo){if(a.base)folhaVoltaAoSitio(a);return}
+  _folhaEngole=Date.now()+350;
+  if(e&&e.type!=='pointercancel'&&avisoFechaAoLargar(a,avisoHora(e)))return folhaFecha(a);
+  folhaVoltaAoSitio(a);
+}
+/* Fecha a janela largada em baixo, pelo closeModal('arrasto'). A saída
+   (.sai, fecharComSaida) parte do transform que o dedo deixou — o
+   folhaDesce só declara o fim —, e a .arrastada troca-lhe a curva pela
+   --curva: o largar continua a velocidade do dedo (estilos.css, a região da
+   folha arrastável). Se a janela ficou (a pergunta «Sair sem guardar?»
+   abriu por cima), a folha volta ao sítio, por baixo dela.
+   Recebe: a — o arrasto que acabou.
+   Devolve: nada. */
+function folhaFecha(a){
+  a.s.classList.remove('arrastar');a.s.classList.remove('pronto');
+  if(a.mexe)a.el.classList.add('arrastada');
+  closeModal('arrasto');
+  if(modalStack.indexOf(a.L)<0)return;
+  a.el.classList.remove('arrastada');
+  folhaVoltaAoSitio(a);
+}
+/* A folha volta ao sítio, a partir de onde o dedo a deixou (--medio,
+   --curva-entra, como o aviso), e o véu escurece outra vez com ela. Sem
+   movimento, ou sem deslocação, só assenta.
+   Recebe: a — o arrasto.
+   Devolve: nada. */
+function folhaVoltaAoSitio(a){
+  const s=a.s,bg=a.bg,de='translateY('+a.desl+'px)',veu=folhaVeu(a);
+  s.classList.remove('arrastar');s.classList.remove('pronto');
+  s.style.transform='';if(bg)bg.style.opacity='';
+  if(!a.mexe||!a.desl||typeof s.animate!=='function')return;
+  const dur=msDoToken('--medio',200),curva=tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)');
+  const an=s.animate([{transform:de},{transform:'none'}],{duration:dur,easing:curva});
+  s._folhaAnim=an;
+  if(bg&&typeof bg.animate==='function')s._folhaVeuAnim=bg.animate([{opacity:veu},{opacity:1}],{duration:dur,easing:curva});
+  const fim=()=>{if(s._folhaAnim!==an)return;s._folhaAnim=null;s._folhaVeuAnim=null};
+  an.onfinish=fim;
+  // a rede de sempre: num separador escondido o onfinish não chega
+  setTimeout(fim,dur+120);
+}
+document.addEventListener('pointerdown',folhaPousar);
+// o clique que o browser dá a seguir a um arrasto da folha não é um toque
+document.addEventListener('click',e=>{
+  if(!_folhaEngole)return;
+  const engole=Date.now()<_folhaEngole;_folhaEngole=0;
+  if(engole){e.stopPropagation();e.preventDefault()}
+},true);

@@ -16,7 +16,7 @@ afterEach(() => repor(app));
 
 const GESTOR = ['visit.view', 'visit.add', 'tenant.view', 'tenant.add'];
 const CONTAB = ['tx.view', 'tx.add', 'rec.view', 'rec.add', 'contract.view', 'loan.view', 'file.view', 'file.add', 'report.view'];
-const OITO = ['movimento', 'imovel', 'contrato', 'inquilino', 'visita', 'planeado', 'modelo', 'hipoteca'];
+const NOVE = ['movimento', 'imovel', 'contrato', 'inquilino', 'visita', 'planeado', 'modelo', 'hipoteca', 'grupo'];
 const TB = ['dashboard', 'casas', 'dinheiro', 'calendar'];
 
 // três imóveis do Rui; os cargos dizem-se por casa (null é «sou dono»)
@@ -39,62 +39,65 @@ const destinos = (html) => (html.match(/goBarra\('(\w+)'\)/g) || []).map((s) => 
 const BOTAO = /<button type="button" class="tabmais" data-toca="camada" data-click="abrirAdicionar\(\)" aria-label="Criar"/;
 
 describe('acoesDeAdicionar', () => {
-  test('o dono tem as oito (não há proprietário: é uma conta, chega pela partilha), pela ordem, cada uma para uma camada e com a ação da lista respetiva', () => {
+  test('o dono tem as nove (não há proprietário: é uma conta, chega pela partilha), pela ordem, cada uma para uma camada e com a ação da lista respetiva', () => {
     casas(app, [null, null, null]);
     const a = app.acoesDeAdicionar();
-    igual(ids(a), OITO);
+    igual(ids(a), NOVE);
     igual(JSON.parse(JSON.stringify(a.map((x) => x.label))),
-      ['Movimento', 'Imóvel', 'Contrato', 'Inquilino', 'Visita', 'Movimento recorrente', 'Modelo', 'Hipoteca']);
+      ['Movimento', 'Imóvel', 'Contrato', 'Inquilino', 'Visita', 'Movimento recorrente', 'Modelo', 'Hipoteca', 'Grupo']);
     igual(JSON.parse(JSON.stringify(a.map((x) => x.act))),
-      ['newTxPick()', 'propModal()', 'ctModal()', "personModal('tenant')", 'visitModal()', 'newRec()', 'newTpl()', 'newMort()']);
+      ['newTxPick()', 'propModal()', 'ctModal()', "personModal('tenant')", 'visitModal()', 'newRec()', 'newTpl()', 'newMort()', 'novoGrupoEscolher()']);
     assert.ok(a.every((x) => x.toca === 'camada' && x.icon), 'todas abrem uma camada e têm ícone');
+    assert.equal(a[8].icon, 'layers', 'o grupo tem o ícone do separador Grupos');
   });
 
   test('sem sessão é o dono; sem imóveis ficam de fora o contrato, a visita e a hipoteca — como os FABs', () => {
     limpar(app);
     delete app.window.CW;
     app.db.properties = [app.normProp({ id: 'P1', name: 'T1', ownerIds: [] })];
-    igual(ids(app.acoesDeAdicionar()), OITO);
+    igual(ids(app.acoesDeAdicionar()), NOVE);
     app.db.properties = [];
-    igual(ids(app.acoesDeAdicionar()), ['movimento', 'imovel', 'inquilino', 'planeado', 'modelo']);
+    igual(ids(app.acoesDeAdicionar()), ['movimento', 'imovel', 'inquilino', 'planeado', 'modelo', 'grupo']);
   });
 
-  test('o gestor de visitas tem o inquilino e a visita (pela ordem fixa); o contabilista o movimento e os planeados', () => {
+  test('o gestor de visitas tem o inquilino e a visita (pela ordem fixa); o contabilista o movimento e os planeados; os dois, o grupo', () => {
     casas(app, [GESTOR, GESTOR, GESTOR]);
-    igual(ids(app.acoesDeAdicionar()), ['inquilino', 'visita']);
+    igual(ids(app.acoesDeAdicionar()), ['inquilino', 'visita', 'grupo']);
     casas(app, [CONTAB, CONTAB, CONTAB]);
-    igual(ids(app.acoesDeAdicionar()), ['movimento', 'planeado', 'modelo']);
+    igual(ids(app.acoesDeAdicionar()), ['movimento', 'planeado', 'modelo', 'grupo']);
     // um dono que também colabora é dono: tem tudo
     casas(app, [null, GESTOR, CONTAB]);
-    igual(ids(app.acoesDeAdicionar()), OITO);
+    igual(ids(app.acoesDeAdicionar()), NOVE);
   });
 
-  test('um cargo que só vê não tem nenhuma', () => {
+  test('um cargo que só vê tem só o grupo: os grupos são da base, e o separador Grupos é de toda a gente', () => {
     casas(app, [['visit.view'], ['tx.view', 'report.view'], ['loan.view']]);
-    igual(app.acoesDeAdicionar(), []);
+    igual(ids(app.acoesDeAdicionar()), ['grupo']);
   });
 
-  test('um serviço desligado leva as suas ações, e o fecho também (sem Movimentos não há Planeados)', () => {
+  test('um serviço desligado leva as suas ações, e o fecho também (sem Movimentos não há Planeados); o grupo fica sempre', () => {
     casas(app, [null, null, null]);
     app.definirServicosDesligados(['visits', 'credits']);
-    igual(ids(app.acoesDeAdicionar()), ['movimento', 'imovel', 'contrato', 'inquilino', 'planeado', 'modelo']);
+    igual(ids(app.acoesDeAdicionar()), ['movimento', 'imovel', 'contrato', 'inquilino', 'planeado', 'modelo', 'grupo']);
     app.definirServicosDesligados(['transactions']);
-    igual(ids(app.acoesDeAdicionar()), ['imovel', 'contrato', 'inquilino', 'visita', 'hipoteca']);
+    igual(ids(app.acoesDeAdicionar()), ['imovel', 'contrato', 'inquilino', 'visita', 'hipoteca', 'grupo']);
     app.definirServicosDesligados(['owners', 'tenants']);
-    igual(ids(app.acoesDeAdicionar()), ['movimento', 'imovel', 'visita', 'planeado', 'modelo', 'hipoteca'], 'sem inquilinos não há contratos');
+    igual(ids(app.acoesDeAdicionar()), ['movimento', 'imovel', 'visita', 'planeado', 'modelo', 'hipoteca', 'grupo'], 'sem inquilinos não há contratos');
+    app.definirServicosDesligados(['properties', 'transactions', 'colaboradores']);
+    assert.ok(ids(app.acoesDeAdicionar()).includes('grupo'), 'nenhum serviço desligado leva o grupo');
   });
 });
 
 describe('acaoDoSeparador', () => {
   test('cada ecrã tem a sua ação natural; os que não têm ficam vazios', () => {
-    const esperado = { dashboard: 'movimento', transactions: 'movimento', properties: 'imovel', contracts: 'contrato', tenants: 'inquilino',
+    const esperado = { dashboard: 'movimento', transactions: 'movimento', properties: 'imovel', groups: 'grupo', contracts: 'contrato', tenants: 'inquilino',
       owners: '', visits: 'visita', calendar: 'visita', recurring: 'planeado', credits: 'hipoteca',
       settings: '', projections: '', reports: '', fisco: '', colaboradores: '' };
     Object.keys(esperado).forEach((t) => assert.equal(app.acaoDoSeparador(t), esperado[t], t));
     assert.equal(app.acaoDoSeparador(''), '');
     assert.equal(app.acaoDoSeparador('xyz'), '');
     // cada ação natural é uma das ações da folha
-    Object.values(esperado).filter(Boolean).forEach((id) => assert.ok(OITO.includes(id), id));
+    Object.values(esperado).filter(Boolean).forEach((id) => assert.ok(NOVE.includes(id), id));
   });
 });
 
@@ -138,9 +141,12 @@ describe('buildTabbar', () => {
     assert.match(fixos.tabbar.className, new RegExp('^tabbar mais d' + d.length + '$'));
   });
 
-  test('um cargo que só vê: sem botão e sem a classe', () => {
+  test('um cargo que só vê tem o + para o grupo; sem nada para adicionar, sem botão e sem a classe', () => {
     const fixos = elementos(app);
     casas(app, [['visit.view'], ['visit.view'], ['visit.view']]);
+    app.buildNav();
+    assert.match(fixos.tabbar.innerHTML, BOTAO, 'o grupo é de toda a gente');
+    app.acoesDeAdicionar = () => [];
     app.buildNav();
     const html = fixos.tabbar.innerHTML;
     assert.ok(tags(html).every((t) => t === 'a'), 'só destinos');
@@ -198,18 +204,19 @@ describe('buildTabbar', () => {
 
 describe('abrirAdicionar', () => {
   test('com uma só ação corre-a logo, sem folha', () => {
-    casas(app, [['visit.add'], ['visit.add'], ['visit.add']]);
-    igual(ids(app.acoesDeAdicionar()), ['visita'], 'controlo: uma só');
+    casas(app, [['visit.view'], ['visit.view'], ['visit.view']]);
+    igual(ids(app.acoesDeAdicionar()), ['grupo'], 'controlo: uma só');
     let folha = 0; const corridas = [];
     app.openModal = () => { folha++; };
     app.correrAcao = (t) => { corridas.push(t); };
     app.abrirAdicionar();
-    igual(corridas, ['visitModal()']);
+    igual(corridas, ['novoGrupoEscolher()']);
     assert.equal(folha, 0, 'uma folha com uma opção é um toque a mais');
   });
 
   test('sem nada para adicionar não faz nada', () => {
     casas(app, [['visit.view'], ['visit.view'], ['visit.view']]);
+    app.acoesDeAdicionar = () => [];
     let folha = 0; let corridas = 0;
     app.openModal = () => { folha++; };
     app.correrAcao = () => { corridas++; };
@@ -231,7 +238,7 @@ describe('abrirAdicionar', () => {
     assert.equal((aberta.body.match(/class="criar-tipo"/g) || []).length, 5, 'receita, despesa, crédito, dívida, transferência');
     assert.match(aberta.body, /Novo movimento[\s\S]*Outros registos/);
     const outros = [...aberta.body.matchAll(/class="criar-outro"[^>]*data-click="criarEscolha\((\d+)\)"><svg[\s\S]*?<\/svg><span>([^<]+)/g)].map((m) => [Number(m[1]), m[2]]);
-    igual(outros.map((o) => o[1]), ['Imóvel', 'Contrato', 'Inquilino', 'Visita', 'Movimento recorrente', 'Modelo', 'Hipoteca'], 'a do ecrã sobe; o resto pela ordem; o movimento está nos tipos');
+    igual(outros.map((o) => o[1]), ['Imóvel', 'Contrato', 'Inquilino', 'Visita', 'Movimento recorrente', 'Modelo', 'Hipoteca', 'Grupo'], 'a do ecrã sobe; o resto pela ordem; o movimento está nos tipos');
     assert.equal((aberta.body.match(/neste ecrã/g) || []).length, 1, 'só a do ecrã leva a marca');
     app.criarEscolha(outros[3][0]);
     assert.equal(fechos, 1, 'fecha a folha');
@@ -269,6 +276,155 @@ describe('abrirAdicionar', () => {
     app.tab = 'dashboard';
     app.abrirAdicionar();
     assert.equal(fechos, 1, 'fechada a folha, não se volta ao menu aberto');
+  });
+});
+
+describe('o Grupo no +', () => {
+  // a folha aberta e a janela de escolha que o «Grupo» abre (o pickModal de verdade, com o openModal trocado)
+  function folhas() {
+    const abertas = [];
+    app.openModal = (title, body, foot) => { abertas.push({ title, body, foot }); };
+    return abertas;
+  }
+  // as opções de uma janela do pickModal: [rótulo, linha pequena, ícone] — o ícone pelo desenho do ic()
+  const ICONES = ['building', 'crown', 'contract', 'users', 'layers'];
+  const opcoes = (body) => body.split('data-click="_pick(').slice(1).map((b) => {
+    const m = /<b[^>]*>([^<]+)<\/b>\s*(?:<span class="small">([^<]*)<\/span>)?/.exec(b);
+    return [m[1], m[2] || '', ICONES.find((n) => b.includes(app.ic(n, 18))) || ''];
+  });
+  // com a nuvem dos grupos e sessão: podePartilharGrupos() diz que sim
+  function comNuvem(novos) {
+    app.window.CW = Object.assign(app.window.CW || {}, { user: { id: 'eu' }, grupoModal() {}, grupoNovo() { novos.push(1); } });
+  }
+
+  test('«Grupo» está em «Outros registos», o último, com o ícone dos grupos, e escolhê-lo corre a escolha do tipo', () => {
+    casas(app, [null, null, null]);
+    const abertas = folhas(); const corridas = [];
+    app.correrAcao = (t) => { corridas.push(t); };
+    app.closeModal = () => {};
+    app.tab = 'properties';
+    app.abrirAdicionar();
+    const body = abertas[0].body, i = body.indexOf('Outros registos');
+    const m = /class="criar-outro"[^>]*data-click="criarEscolha\((\d+)\)">(<svg(?:(?!<\/svg>)[\s\S])*<\/svg>)<span>Grupo<\/span>/.exec(body);
+    assert.ok(m, 'a linha do grupo');
+    assert.equal(m[2], app.ic('layers', 20), 'com o ícone do separador Grupos');
+    assert.ok(i > -1 && m.index > i, 'em Outros registos');
+    assert.ok(body.lastIndexOf('class="criar-outro"') === m.index, 'a última da lista');
+    app.criarEscolha(Number(m[1]));
+    igual(corridas, ['novoGrupoEscolher()']);
+  });
+
+  test('a escolha do tipo: «Novo grupo», Imóveis, Proprietários e Contratos com os ícones do GKIND, e sem poder partilhar não há «Partilhado»', () => {
+    limpar(app);
+    delete app.window.CW;
+    const abertas = folhas();
+    app.novoGrupoEscolher();
+    assert.equal(abertas.length, 1);
+    assert.equal(abertas[0].title, 'Novo grupo');
+    const o = opcoes(abertas[0].body);
+    igual(o.map((x) => x[0]), ['Imóveis', 'Proprietários', 'Contratos']);
+    igual(o.map((x) => x[2]), ['building', 'crown', 'contract'], 'os ícones de definicoes.js:GKIND');
+    assert.ok(o.every((x) => x[1]), 'cada tipo diz para que serve');
+    assert.match(abertas[0].foot, /Voltar/, 'o rodapé de sempre do pickModal');
+  });
+
+  test('com a nuvem dos grupos, sessão e o serviço Colaboradores aparece «Partilhado», o último; com o serviço desligado sai', () => {
+    limpar(app);
+    const novos = [];
+    comNuvem(novos);
+    const abertas = folhas();
+    app.novoGrupoEscolher();
+    igual(opcoes(abertas[0].body).map((x) => x[0]), ['Imóveis', 'Proprietários', 'Contratos', 'Partilhado']);
+    assert.equal(opcoes(abertas[0].body)[3][2], 'users');
+    app.definirServicosDesligados(['colaboradores']);
+    app.novoGrupoEscolher();
+    igual(opcoes(abertas[1].body).map((x) => x[0]), ['Imóveis', 'Proprietários', 'Contratos'], 'sem o serviço não se partilha');
+    app.window.CW.user = null;
+    app.definirServicosDesligados([]);
+    app.novoGrupoEscolher();
+    assert.equal(opcoes(abertas[2].body).length, 3, 'sem sessão também não');
+  });
+
+  test('escolher um tipo fecha a escolha e abre a janela do grupo novo desse tipo; «Partilhado» chama o CW.grupoNovo', () => {
+    limpar(app);
+    const novos = [];
+    comNuvem(novos);
+    const abertas = folhas();
+    let fechos = 0;
+    app.closeAllModals = () => { fechos++; };
+    app.novoGrupoEscolher();
+    app._pick(1);
+    assert.equal(fechos, 1, 'a escolha fecha-se antes');
+    assert.equal(abertas[1].title, 'Novo grupo de proprietários');
+    assert.equal(app.gForm.kind, 'owner', 'o formulário é de um grupo de proprietários');
+    app.novoGrupoEscolher();
+    app._pick(2);
+    assert.equal(abertas[3].title, 'Novo grupo de contratos');
+    app.novoGrupoEscolher();
+    app._pick(0);
+    assert.equal(abertas[5].title, 'Novo grupo de imóveis');
+    assert.equal(novos.length, 0);
+    app.novoGrupoEscolher();
+    app._pick(3);
+    assert.equal(novos.length, 1, 'o partilhado pede o nome na janela da nuvem');
+    assert.equal(abertas.length, 7, 'e não abre a janela do grupo privado');
+  });
+
+  test('no separador Grupos o destaque «neste ecrã» é «Novo grupo de <tipo à vista>», abre direto esse tipo, e o «Grupo» fica em baixo', () => {
+    casas(app, [null, null, null]);
+    const abertas = folhas(); const corridas = [];
+    app.correrAcao = (t) => { corridas.push(t); };
+    app.closeModal = () => {};
+    app.tab = 'groups';
+    for (const [k, nome] of [['contract', 'contratos'], ['owner', 'proprietários'], ['prop', 'imóveis']]) {
+      app.grpTipo = k;
+      app.abrirAdicionar();
+      const body = abertas[abertas.length - 1].body;
+      const m = new RegExp('<div class="criar-outros criar-aqui"><button type="button" class="criar-outro" data-toca="camada" data-click="criarEscolha\\((\\d+)\\)">(<svg(?:(?!</svg>)[\\s\\S])*</svg>)<span>Novo grupo de ' + nome + '<small>neste ecrã</small>').exec(body);
+      assert.ok(m, 'o destaque diz o tipo à vista: ' + nome);
+      assert.equal(m[2], app.ic('layers', 20));
+      assert.ok(m.index < body.indexOf('Novo movimento'), 'por cima dos tipos de movimento');
+      assert.equal((body.match(/neste ecrã/g) || []).length, 1);
+      assert.match(body, /Outros registos[\s\S]*<span>Grupo<\/span>/, 'o «Grupo» continua em baixo, com os outros tipos e o partilhado');
+      app.criarEscolha(Number(m[1]));
+      assert.equal(corridas[corridas.length - 1], "groupModal('" + k + "')");
+    }
+  });
+
+  test('acaoNaturalDoEcra: a mesma ação nos outros ecrãs, o tipo à vista nos Grupos, e nada sem ação ou sem a poder fazer', () => {
+    casas(app, [null, null, null]);
+    assert.equal(app.acaoNaturalDoEcra('settings'), null);
+    assert.equal(app.acaoNaturalDoEcra('contracts').act, 'ctModal()');
+    assert.equal(app.acaoNaturalDoEcra('dashboard').id, 'movimento');
+    app.grpTipo = 'owner';
+    const g = app.acaoNaturalDoEcra('groups');
+    igual([g.id, g.label, g.icon, g.act, g.toca], ['grupo', 'Novo grupo de proprietários', 'layers', "groupModal('owner')", 'camada']);
+    app.grpTipo = 'xyz';
+    assert.equal(app.acaoNaturalDoEcra('groups').act, "groupModal('prop')", 'um tipo que não existe vale os imóveis');
+    casas(app, [['visit.view'], ['visit.view'], ['visit.view']]);
+    assert.equal(app.acaoNaturalDoEcra('visits'), null, 'quem só vê visitas não as marca');
+    assert.equal(app.acaoNaturalDoEcra('groups').id, 'grupo', 'mas cria grupos');
+  });
+
+  test('o cabeçalho do computador nos Grupos diz «Novo grupo de <tipo à vista>» e abre esse tipo; troca com o tipo', () => {
+    const fixos = elementos(app);
+    casas(app, [null, null, null]);
+    // o elemento do arnês não guarda atributos: guarda-os aqui
+    const at = {};
+    fixos.hdrAcao.setAttribute = (k, v) => { at[k] = String(v); };
+    fixos.hdrAcao.getAttribute = (k) => (k in at ? at[k] : null);
+    app.tab = 'groups';
+    app.grpTipo = 'contract';
+    app.pintarAcaoDoCabecalho();
+    assert.match(fixos.hdrAcao.innerHTML, /<span>Novo grupo de contratos<\/span>$/);
+    assert.equal(fixos.hdrAcao.getAttribute('data-click'), "groupModal('contract')");
+    app.grpTipo = 'prop';
+    app.pintarAcaoDoCabecalho();
+    assert.match(fixos.hdrAcao.innerHTML, /<span>Novo grupo de imóveis<\/span>$/);
+    assert.equal(fixos.hdrAcao.getAttribute('data-click'), "groupModal('prop')");
+    app.tab = 'contracts';
+    app.pintarAcaoDoCabecalho();
+    assert.match(fixos.hdrAcao.innerHTML, /<span>Novo contrato<\/span>$/, 'os outros ecrãs como antes');
   });
 });
 

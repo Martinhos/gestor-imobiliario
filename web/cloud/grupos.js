@@ -457,9 +457,8 @@ CW.grupoRemoverMembro = function (id, uid) {
 CW.grupoSair = function (id) {
   var g = grupoPartilhado(id), nome = (g && g.name) || 'o grupo';
   confirmModal('Sair do grupo', 'Deixas de ver os imóveis de <b>«' + esc(nome) + '»</b>, e os imóveis que adicionaste são removidos do grupo. Os movimentos já registados ficam em cada imóvel.', function () {
-    api('DELETE', '/api/shared-groups/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(meuId()))
+    grupoSairNoServidor(id)
       .then(function () {
-        desligarGrupoLocal(id);
         closeAllModals();
         toast('Saíste do grupo «' + nome + '».');
         return pullNow(true);
@@ -482,9 +481,8 @@ CW.grupoApagar = function (id) {
   var antigos = (db.transactions || []).filter(function (t) { return t.groupId === id; }).length;
   confirmModal('Apagar grupo', 'O grupo <b>«' + esc(nome) + '»</b> desaparece para todos os membros: deixam de ver os imóveis uns dos outros por ele. Os imóveis e os registos ficam com quem os criou. Os movimentos já registados ficam em cada imóvel.' +
     (antigos ? ' ' + (antigos === 1 ? 'Um movimento antigo, ainda por dividir, fica' : antigos + ' movimentos antigos, ainda por dividir, ficam') + ' sem imóvel.' : ''), function () {
-    api('DELETE', '/api/shared-groups/' + encodeURIComponent(id))
+    grupoApagarNoServidor(id)
       .then(function () {
-        desligarGrupoLocal(id);
         closeAllModals();
         toast('Grupo apagado.');
         return pullNow(true);
@@ -493,6 +491,27 @@ CW.grupoApagar = function (id) {
       .catch(function (e) { toast(e.message, { ms: 6000 }); });
   });
 };
+
+/* Apagar um grupo partilhado meu no servidor, sem perguntar (o CW.grupoApagar
+   pergunta antes; a seleção de vários pergunta uma vez por todos:
+   cloud/selecao-listas.js:selLApagarGrupos). Feito, o grupo sai já da base
+   (desligarGrupoLocal). Não lê o estado nem repinta: quem chama faz isso.
+   Recebe: id — o id do grupo.
+   Devolve: Promise que resolve com o grupo fora da base, ou rejeita com o erro do servidor. */
+function grupoApagarNoServidor(id) {
+  return api('DELETE', '/api/shared-groups/' + encodeURIComponent(id))
+    .then(function () { desligarGrupoLocal(id); });
+}
+
+/* Sair de um grupo partilhado de outra pessoa, sem perguntar (como o
+   grupoApagarNoServidor, para o CW.grupoSair e a seleção de vários): os
+   imóveis que lá pus saem comigo, e o grupo sai já da base.
+   Recebe: id — o id do grupo.
+   Devolve: Promise que resolve com o grupo fora da base, ou rejeita com o erro do servidor. */
+function grupoSairNoServidor(id) {
+  return api('DELETE', '/api/shared-groups/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(meuId()))
+    .then(function () { desligarGrupoLocal(id); });
+}
 
 /* ---------------- a ligação do grupo ---------------- */
 
@@ -823,15 +842,20 @@ function diaEMes(ms) {
    aceitar quer dizer, «Aceitar» e «Recusar») e a ligação de convite —
    «expira a <dd/mm> · usada N vezes» com «Copiar», «Rodar» e «Desativar» (com
    o texto vermelho, grp-perigo: desliga a ligação de quem a tem), ou «Criar
-   ligação»; os membros, com o dono marcado e eu com «(eu)»; e «Abrir o
-   grupo», a janela com os imóveis, o remover, o sair, o mudar o nome e o
-   apagar (CW.grupoModal). Com um pedido por responder, o cartão leva o
-   contorno cobalto (estilos.css:.grp-partilhado:has(.grp-pedido)). O que o
-   servidor recusaria não se escreve.
+   ligação»; e os membros, com o dono marcado e eu com «(eu)». Com um pedido
+   por responder, o cartão leva o contorno cobalto
+   (estilos.css:.grp-partilhado:has(.grp-pedido)). O que o servidor recusaria
+   não se escreve.
+   Como o cartão de um privado (definicoes.js:cartaoDoGrupo): o cartão
+   inteiro abre a janela do grupo — os imóveis, o remover, o sair, o mudar o
+   nome e o apagar (CW.grupoModal); o «Abrir o grupo» saiu — e o toque longo
+   seleciona vários (data-lp «grp:<id>», cloud/selecao-listas.js). Os botões
+   dos pedidos e da ligação não sobem ao cartão (stopPropagation) e, em
+   seleção, ficam inertes (data-sel-inerte): o toque marca o cartão.
    Recebe: g — o grupo (de db.groups, _partilhado).
    Devolve: o HTML (texto) do cartão. */
 function cartaoDoGrupoPartilhado(g) {
-  var dono = !!g._meu, gid = jsq(g.id), eu = meuId();
+  var dono = !!g._meu, gid = jsq(g.id), eu = meuId(), sem = 'event.stopPropagation();';
   var casas = (g.ids || []).map(function (pid) { return (prop(pid) || {}).name; }).filter(Boolean);
   var membros = g._membros || [];
   var selo = '<span class="badge">' + (dono ? 'Partilhado · teu' : 'Partilhado · de ' + esc(g._donoNome || '')) + '</span>';
@@ -840,29 +864,28 @@ function cartaoDoGrupoPartilhado(g) {
     var nome = p.name || nomeUtilizador(p.userId);
     return '<div class="grp-parte grp-pedido"><p><b>' + esc(nome) + '</b> quer entrar</p>' +
       '<p class="small">Se aceitares, passa a comproprietário dos imóveis do grupo.</p>' +
-      '<div class="grp-acoes"><button type="button" class="btn sm primary" data-toca="dados" data-click="CW.grupoAceitarPedido(\'' + gid + '\',\'' + jsq(p.userId) + '\')">Aceitar</button>' +
-      '<button type="button" class="btn sm" data-toca="dados" data-click="CW.grupoRecusarPedido(\'' + gid + '\',\'' + jsq(p.userId) + '\')">Recusar</button></div></div>';
+      '<div class="grp-acoes" data-sel-inerte><button type="button" class="btn sm primary" data-toca="dados" data-click="' + sem + 'CW.grupoAceitarPedido(\'' + gid + '\',\'' + jsq(p.userId) + '\')">Aceitar</button>' +
+      '<button type="button" class="btn sm" data-toca="dados" data-click="' + sem + 'CW.grupoRecusarPedido(\'' + gid + '\',\'' + jsq(p.userId) + '\')">Recusar</button></div></div>';
   }).join('') : '';
   var ligacao = '';
   if (dono) {
     var l = g._ligacao, ativa = !!(l && l.ativo), usos = Number(l && l.uses) || 0, expira = ativa ? diaEMes(l.expiresAt) : '';
     ligacao = '<div class="grp-parte grp-ligacao"><div><p class="lbl">Ligação de convite</p>' +
       '<p class="small">' + (ativa ? (expira ? 'expira a ' + expira + ' · ' : '') + (usos ? 'usada ' + usos + (usos === 1 ? ' vez' : ' vezes') : 'ainda por usar') : 'Sem ligação ativa — cria uma para convidares') + '</p></div>' +
-      '<div class="grp-acoes">' + (ativa
-        ? '<button type="button" class="btn sm" data-toca="nada" data-click="CW.grupoLigacaoCopiar(\'' + gid + '\')">Copiar</button>' +
-          '<button type="button" class="btn sm" data-toca="dados" data-click="CW.grupoLigacaoRodar(\'' + gid + '\')">Rodar</button>' +
-          '<button type="button" class="btn sm grp-perigo" data-toca="dados" data-click="CW.grupoLigacaoDesativar(\'' + gid + '\')">Desativar</button>'
-        : '<button type="button" class="btn sm primary" data-toca="dados" data-click="CW.grupoLigacaoCriar(\'' + gid + '\')">' + ic('plus', 16) + ' Criar ligação</button>') + '</div></div>';
+      '<div class="grp-acoes" data-sel-inerte>' + (ativa
+        ? '<button type="button" class="btn sm" data-toca="nada" data-click="' + sem + 'CW.grupoLigacaoCopiar(\'' + gid + '\')">Copiar</button>' +
+          '<button type="button" class="btn sm" data-toca="dados" data-click="' + sem + 'CW.grupoLigacaoRodar(\'' + gid + '\')">Rodar</button>' +
+          '<button type="button" class="btn sm grp-perigo" data-toca="dados" data-click="' + sem + 'CW.grupoLigacaoDesativar(\'' + gid + '\')">Desativar</button>'
+        : '<button type="button" class="btn sm primary" data-toca="dados" data-click="' + sem + 'CW.grupoLigacaoCriar(\'' + gid + '\')">' + ic('plus', 16) + ' Criar ligação</button>') + '</div></div>';
   }
   var lista = membros.map(function (m) {
     var nome = m.name || nomeUtilizador(m.id);
     return '<li>' + esc(nome) + (m.id === eu ? ' (eu)' : '') + (m.id === g._dono ? ' <span class="small">· dono</span>' : '') + '</li>';
   }).join('');
-  return '<section class="card grp-cartao grp-partilhado">' +
+  return '<section class="card grp-cartao grp-partilhado" data-lp="grp:' + esc(g.id) + '" data-toca="camada" data-click="CW.grupoModal(\'' + gid + '\')">' +
     '<div class="grp-cab"><h3>' + esc(g.name || 'Sem nome') + '</h3>' + selo + '</div>' +
     '<p class="small">' + resumo + '</p>' + pedidos + ligacao +
-    '<div class="grp-parte"><p class="lbl">Membros</p><ul class="grp-membros">' + lista + '</ul></div>' +
-    '<div class="grp-acoes"><button type="button" class="btn sm" data-toca="camada" data-click="CW.grupoModal(\'' + gid + '\')">' + ic('layers', 16) + ' Abrir o grupo</button></div></section>';
+    '<div class="grp-parte"><p class="lbl">Membros</p><ul class="grp-membros">' + lista + '</ul></div></section>';
 }
 
 /* Os pedidos que fiz para entrar no grupo de outra pessoa e ainda esperam

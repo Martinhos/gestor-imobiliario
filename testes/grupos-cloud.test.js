@@ -606,7 +606,7 @@ describe('a janela do grupo (CW.grupoModal)', () => {
 /* ------------------------------------------------ os cartões e o separador Grupos */
 
 describe('os cartões dos grupos partilhados no separador Grupos (o canvas de 2026-10, M-Grupos)', () => {
-  test('o cartão de um grupo meu: o selo «Partilhado · teu», os imóveis e as pessoas, a ligação com «expira a dd/mm · usada N vezes» e Copiar/Rodar/Desativar, os membros com o dono, e «Abrir o grupo»', () => {
+  test('o cartão de um grupo meu: o selo «Partilhado · teu», os imóveis e as pessoas, a ligação com «expira a dd/mm · usada N vezes» e Copiar/Rodar/Desativar, os membros com o dono; o cartão inteiro abre o grupo', () => {
     const { app } = comEstado();
     const g = app.grp('G2');
     const h = app.cartaoDoGrupoPartilhado(g);
@@ -614,45 +614,48 @@ describe('os cartões dos grupos partilhados no separador Grupos (o canvas de 20
     assert.match(h, /<p class="small">Terceira · 2 pessoas<\/p>/);
     const fim = new Date(4102444800000), dois = (x) => String(x).padStart(2, '0');
     assert.ok(h.includes('expira a ' + dois(fim.getDate()) + '/' + dois(fim.getMonth() + 1) + ' · usada 3 vezes'), 'o fim da ligação e os usos');
-    for (const a of ["CW.grupoLigacaoCopiar('G2')", "CW.grupoLigacaoRodar('G2')", "CW.grupoLigacaoDesativar('G2')", "CW.grupoModal('G2')"]) assert.ok(h.includes(a), a);
+    for (const a of ["CW.grupoLigacaoCopiar('G2')", "CW.grupoLigacaoRodar('G2')", "CW.grupoLigacaoDesativar('G2')"]) assert.ok(h.includes('event.stopPropagation();' + a), a + ', sem subir ao cartão');
+    assert.match(h, /^<section class="card grp-cartao grp-partilhado" data-lp="grp:G2" data-toca="camada" data-click="CW\.grupoModal\('G2'\)">/, 'o cartão abre a janela do grupo');
+    assert.ok(!h.includes('Abrir o grupo'), 'o «Abrir o grupo» saiu');
     // «Desativar» com o texto vermelho, como no canvas (desliga a ligação de quem a tem)
-    assert.match(h, /<button type="button" class="btn sm grp-perigo" data-toca="dados" data-click="CW\.grupoLigacaoDesativar\('G2'\)">Desativar<\/button>/);
+    assert.match(h, /<button type="button" class="btn sm grp-perigo" data-toca="dados" data-click="event\.stopPropagation\(\);CW\.grupoLigacaoDesativar\('G2'\)">Desativar<\/button>/);
     assert.match(h, /<li>Eu \(eu\) <span class="small">· dono<\/span><\/li><li>Ana<\/li>/);
     assert.ok(!/\son[a-z]+=|\sstyle=/.test(h), 'nada em linha');
   });
 
-  test('o cartão de um grupo de outra pessoa: «Partilhado · de <dono>», sem a ligação e sem os pedidos, e «Abrir o grupo» (onde se sai)', () => {
+  test('o cartão de um grupo de outra pessoa: «Partilhado · de <dono>», sem a ligação e sem os pedidos; o cartão abre o grupo (onde se sai)', () => {
     const { app } = comEstado();
     const h = app.cartaoDoGrupoPartilhado(app.grp('G1'));
     assert.match(h, /<h3>Casas do Porto<\/h3><span class="badge">Partilhado · de Rui<\/span>/);
     assert.match(h, /Do Rui · Minha · 3 pessoas/);
     assert.ok(!/Ligação de convite|grupoLigacao|grupoAceitarPedido/.test(h), 'o que só o dono faz não se escreve');
-    assert.ok(h.includes("CW.grupoModal('G1')"));
+    assert.match(h, /data-lp="grp:G1" data-toca="camada" data-click="CW\.grupoModal\('G1'\)"/);
   });
 
-  test('o separador dos Imóveis tem os partilhados e o privado, «Novo grupo partilhado» e «Novo grupo de imóveis», e cada grupo uma vez só; a Segurança não fala de grupos', () => {
+  test('o separador dos Imóveis tem os partilhados e o privado, cada grupo uma vez só, e o cabeçalho só o segmentado (criar é no +); a Segurança não fala de grupos', () => {
     const { app } = comEstado();
     const h = app.vGrupos();
     assert.equal((h.match(/CW\.grupoModal\('G1'\)/g) || []).length, 1);
     assert.equal((h.match(/CW\.grupoModal\('G2'\)/g) || []).length, 1);
-    assert.match(h, /data-click="groupModal\('prop','GP'\)">[\s\S]*? Editar<\/button>/, 'o privado edita-se na janela da base');
+    assert.match(h, /data-lp="grp:GP" data-toca="camada" data-click="groupModal\('prop','GP'\)">/, 'o privado edita-se na janela da base, tocando no cartão');
+    assert.ok(!/ Editar<\/button>/.test(h), 'sem «Editar»');
     assert.match(h, /<h3>Privado<\/h3><span class="badge grey">Privado<\/span>/);
     assert.equal((h.match(/CW\.grupoPartilhar\(/g) || []).length, 1, 'só no privado: os partilhados não se partilham outra vez');
-    assert.match(h, /data-toca="camada" data-click="CW\.grupoNovo\(\)">[\s\S]*?Novo grupo partilhado</);
-    assert.match(h, /data-click="groupModal\('prop'\)">[\s\S]*?Novo grupo de imóveis</);
+    assert.ok(!h.includes('CW.grupoNovo()') && !h.includes('Novo grupo partilhado'), 'o «Novo grupo partilhado» saiu do cabeçalho');
+    assert.ok(!h.includes('Novo grupo de imóveis'), 'e o «Novo grupo de imóveis» também');
     assert.match(h, /Partilhar um grupo é para sempre: não volta a ser privado\./);
     // os grupos vivem no separador Grupos, das Casas: a página da conta, que passou a ser só a Segurança, já não tem a linha que levava lá
     const c = app.vCloud();
     assert.ok(c.includes('Apagar a conta'), 'controlo: é a página da Segurança');
     assert.ok(!/Grupos partilhados|go\('groups'\)|CW\.grupoNovo\(\)|CW\.grupoModal\('G1'\)|Ainda em nenhum grupo partilhado/.test(c), 'nada de grupos na Segurança');
-    // com os Colaboradores desligados, sem «Novo grupo partilhado»
+    // com os Colaboradores desligados, os partilhados continuam a ser cartões
     app.definirServicosDesligados(['colaboradores']);
     assert.ok(!app.vGrupos().includes('CW.grupoNovo()'));
     app.definirServicosDesligados([]);
     // sem sessão o «Partilhar» fica à vista: o toque é que diz que é preciso entrar
     app.CW.user = null;
     assert.ok(app.vGrupos().includes("CW.grupoPartilhar('GP')"));
-    assert.ok(!app.vGrupos().includes('CW.grupoNovo()'), 'sem sessão não se cria um partilhado');
+    assert.ok(!app.vGrupos().includes('CW.grupoNovo()'), 'sem sessão também não');
   });
 
   test('groupModal e delGroup delegam para a nuvem num grupo partilhado (apagar ao dono, sair a quem não é)', async () => {
