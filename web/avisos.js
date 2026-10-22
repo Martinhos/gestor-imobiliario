@@ -136,6 +136,7 @@ var AVISOS = [
           'Os grupos selecionam-se como as outras listas: segura um cartão para marcar vários e apagá-los de uma vez. Um toque abre o grupo, e trocar entre Imóveis, Proprietários e Contratos sai da seleção.',
           'Para criar um grupo, usa o + em baixo: «Grupo» deixa-te escolher se é de imóveis, de proprietários, de contratos ou partilhado.',
           'No telemóvel, as janelas fecham-se a puxar para baixo, pela barra ou pelo título. Se tiveres alterações por guardar, a app pergunta primeiro.',
+          'As abas das Casas e do Dinheiro têm cada uma a largura do seu nome, e as cinco das Casas cabem no ecrã sem teres de as arrastar para o lado.',
         ],
       },
     ],

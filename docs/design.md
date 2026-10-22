@@ -893,9 +893,9 @@ Os dois segmentados mais apertados — os cinco tipos do movimento
 (estilos.css:.mov-tipo-segm) e o Por indicar, Declarado, Não declarado do
 contrato (estilos.css:.ct-at-segm) — têm colunas iguais, a letra a 13px e
 menos enchimento (3px e 1px de cada lado); as abas da área ficam com 6px
-(estilos.css:.abas-area), mas não são flex:1 1 0: são as colunas iguais da
-grelha da casa delas, e não perdem o fim — rolam (ver «As abas da área, fora
-do #view», em «A fita da barra de baixo»). A 14px, «Despesa» a 600 não cabe num quinto da
+(estilos.css:.abas-area), mas não são flex:1 1 0: cada uma tem a largura do
+seu texto, e não perdem o fim — apertam-se e, no limite, rolam (ver «As abas
+da área, fora do #view», em «A fita da barra de baixo»). A 14px, «Despesa» a 600 não cabe num quinto da
 linha a 375px e fica «Despes…». Com flex:1 1 0 cada botão recebe a mesma
 largura de texto mais o seu enchimento, por isso o enchimento baixa em todos
 os do grupo. A 375px sobram cerca de 3px a «Despesa» e 4px a «Não
@@ -2827,21 +2827,30 @@ sempre, e no telemóvel esconde-se (estilos.css:.abas:empty). As Pessoas
 das Pessoas e ficam no `#view`, a correr com ele.
 
 O realce da aba acesa é uma peça à parte, como no segmentado que desliza
-(imovel.js:imvSegmentado): a fila ganha .desliza e .n2 a .n5 (quantas abas)
-e um .segm-polegar, que assenta pela classe .i0 a .i4 (em múltiplos da
-largura dele mais os 2px do intervalo, sem medir nada) e desliza no --medio
-e na --curva-fita num toque numa aba. O contorno cobalto e o fundo suave vão
-no realce; a aba acesa fica com o texto no --accent-text, que é cor da
-frente — o escurecimento forçado do Samsung Internet distingue-a. A largura
-do realce é a da fila menos os 4px de cada ponta e os 2px de cada intervalo, a
-dividir pelas abas (estilos.css:.abas-area.n5>.segm-polegar), e a última das
-cinco assenta a 400% mais 8px (estilos.css:.abas-area>.segm-polegar.i4).
+(imovel.js:imvSegmentado): a fila ganha .desliza e um .segm-polegar, que
+desliza no --medio e na --curva-fita num toque numa aba. O contorno cobalto
+e o fundo suave vão no realce; a aba acesa fica com o texto no
+--accent-text, que é cor da frente — o escurecimento forçado do Samsung
+Internet distingue-a. As abas têm larguras diferentes, por isso o realce
+mede a aba acesa (navegacao.js:abasMedida): a esquerda e a largura dela vão
+para o --pol-x e o --pol-w do próprio realce (navegacao.js:abasPolegarEm,
+estilos.css:.abas-area>.segm-polegar), que anima o transform e a largura —
+um elemento absoluto, que só se recalcula a si; o clip-path cortava-lhe o
+contorno. A meio de um arrasto o dedo interpola as duas entre a aba de
+partida e a vizinha. Assente, a classe .i0 a .i4 diz em que aba está. Um
+ResizeObserver volta a medir quando a fila muda de tamanho sem uma pintura
+nova — a fonte que chega, o ecrã que roda, um número que aparece
+(navegacao.js:abasVigiarMedidas).
 
-Quando as abas não cabem (a partir de ~360px com o número dos Planeados, e a
-390 e a 375px com as cinco das Casas), a casa rola de lado, sem barra, e o fim da rolagem não puxa o voltar do
-sistema (overscroll-behavior-x:contain). A fila é uma grelha de colunas
-iguais: à largura do ecrã quando cabem, e à largura da aba mais comprida,
-cada uma, quando não cabem (nunca reticências). O realce rola com elas,
+Cada aba tem a largura do seu texto e a fila enche a linha, com a sobra
+repartida por igual (flex:1 0 auto); colunas iguais tinham todas a largura
+de «Contratos», e as cinco das Casas não cabiam aos 390px. Quando não cabem
+com a letra de sempre — um número numa aba, ou um ecrã mais estreito do que
+375px —, a fila aperta-se: a letra a 13px e 4px de enchimento
+(navegacao.js:abasApertar, estilos.css:.abas-area.aperta), só nesse caso.
+Se nem assim couber (aos 360px com um número), a casa rola de lado, sem
+barra, e o fim da rolagem não puxa o voltar do sistema
+(overscroll-behavior-x:contain); nunca reticências. O realce rola com elas,
 porque vive dentro da fila; a aba acesa, e no arrasto a de destino, entram à
 vista (navegacao.js:abasAVista).
 

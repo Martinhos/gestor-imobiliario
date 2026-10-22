@@ -938,7 +938,9 @@ function abasAssentar(){
     casa.scrollLeft=0;             // a fila de outra área começa no princípio, não onde a outra rolou
   }
   const i=abasIndice(nav);
+  abasApertar(nav);
   abasPolegarEm(nav,i,true);
+  abasVigiarMedidas(nav);
   abasAVista(nav,i,nav===vivo);
 }
 /* Copia para as abas vivas o que mudou nas acabadas de escrever: o aceso
@@ -955,25 +957,58 @@ function abasCopiar(de,para){
     if(a.innerHTML!==b.innerHTML)a.innerHTML=b.innerHTML;
   });
 }
-/* Põe o realce numa aba, ou a meio caminho entre duas. Numa posição inteira
-   e assente, a classe i0…i4 diz onde (estilos.css, a secção «deslizar entre
-   separadores»), e a transição da folha leva-o lá; a meio de um arrasto, o
-   transform segue o dedo, em fração de aba (translateX em múltiplos da
-   largura do próprio realce mais o intervalo de 2px, a mesma conta do
-   .segm-polegar.i1).
+/* Onde está uma aba dentro da fila, para o realce a cobrir: as abas têm a
+   largura do seu texto, e cada uma mede-se.
+   Recebe: a — o <a> da aba (o .segm.abas-area é o offsetParent dele).
+   Devolve: {x, w} — a esquerda e a largura, em px (0 sem medida). */
+function abasMedida(a){
+  return {x:a&&Number(a.offsetLeft)||0,w:a&&Number(a.offsetWidth)||0};
+}
+/* Põe o realce numa aba, ou a meio caminho entre duas. A posição e a largura
+   são as da aba medida (abasMedida), escritas no próprio realce (--pol-x e
+   --pol-w, estilos.css, a secção «deslizar entre separadores»), e a transição
+   leva-o lá. A meio de um arrasto o dedo interpola as duas entre a aba de
+   baixo e a de cima. Assente, a classe i0…i4 diz em que aba está (e fora,
+   sem nenhuma acesa).
    Recebe: nav — o .segm.abas-area; p — a posição (0 na primeira aba; 1.4 é
    40% do caminho entre a segunda e a terceira); assente — true para a
-   pousar na aba p (tira o transform do dedo).
+   pousar na aba p.
    Devolve: nada. */
 function abasPolegarEm(nav,p,assente){
   const pol=nav&&typeof nav.querySelector==='function'&&nav.querySelector(':scope>.segm-polegar');
   if(!pol)return;
-  if(assente){
-    pol.className='segm-polegar'+(p>-1?' i'+p:' fora');
-    pol.style.transform='';
-    return;
-  }
-  pol.style.transform='translateX(calc('+(Math.round(p*1000)/1000)+' * (100% + 2px)))';
+  const as=abasLigacoes(nav);
+  if(assente)pol.className='segm-polegar'+(p>-1?' i'+p:' fora');
+  if(!(p>-1)||!as.length)return;
+  const q=Math.min(Math.max(p,0),as.length-1),i=Math.floor(q),f=q-i;
+  const a=abasMedida(as[i]),b=abasMedida(as[Math.min(i+1,as.length-1)]);
+  const x=a.x+(b.x-a.x)*f,w=a.w+(b.w-a.w)*f;
+  pol.style.setProperty('--pol-x',Math.round(x*100)/100+'px');
+  pol.style.setProperty('--pol-w',Math.round(w*100)/100+'px');
+}
+/* Aperta a fila só quando ela não cabe: com a letra e o enchimento de
+   sempre, as cinco das Casas cabem aos 375px mas não com um número numa aba,
+   nem num ecrã mais estreito. Apertada (estilos.css:.abas-area.aperta), a
+   letra baixa um ponto e o enchimento fica mais curto; se nem assim couber,
+   a casa rola de lado.
+   Recebe: nav — o .segm.abas-area na casa das abas.
+   Devolve: nada — põe ou tira a classe aperta. */
+function abasApertar(nav){
+  const casa=nav&&nav.parentNode;
+  if(!casa||typeof casa.scrollWidth!=='number'||!nav.classList)return;
+  nav.classList.remove('aperta');
+  if(casa.scrollWidth>casa.clientWidth+1)nav.classList.add('aperta');
+}
+/* Volta a medir o realce quando a fila muda de tamanho sem uma pintura nova:
+   a fonte que chega depois, o ecrã que roda, o número que aparece numa aba.
+   A meio de um arrasto (.arrasta) quem manda é o dedo.
+   Recebe: nav — o .segm.abas-area acabado de pôr na casa.
+   Devolve: nada. */
+function abasVigiarMedidas(nav){
+  if(typeof ResizeObserver!=='function'||!nav||nav._medidas)return;
+  const o=new ResizeObserver(()=>{if(!nav.classList.contains('arrasta')){abasApertar(nav);abasPolegarEm(nav,abasIndice(nav),true)}});
+  o.observe(nav);abasLigacoes(nav).forEach(a=>o.observe(a));
+  nav._medidas=o;
 }
 /* Quando as abas não cabem (estilos.css:#abasArea rola de lado), traz uma
    delas à vista, com 16px de folga, sem mexer nas que já se veem.

@@ -2054,3 +2054,15 @@ estão Guardar e Cancelar, e um arrasto que começasse num deles era um toque
 falhado a fechar a janela. Um cartão com toque longo no corpo nunca arranca
 o arrasto (componentes.js:FOLHA_NAO_ARRANCA), para o segurar continuar a ser
 segurar.
+
+**As abas da área com a largura do texto.** «As abas das casas ficaram com a mesma
+largura e agora, com mais um item, tenho de fazer scroll para o lado.» Com os
+Grupos, a fila das Casas passou a cinco colunas iguais, cada uma da largura de
+«Contratos», e não cabia aos 390px. O Martinho escolheu a largura pelo texto, a
+encher a linha, e rolar só como último recurso. Medido: com a letra de sempre as
+cinco ocupam 339px, e há 358 aos 390 e 343 aos 375; com um número numa aba
+passam a 372. Por isso a fila aperta-se (13px, 4px de enchimento) só quando não
+cabe (navegacao.js:abasApertar), e não por uma largura de ecrã: aos 390 sem
+número fica a letra de sempre. O realce deixou de supor colunas iguais e mede a
+aba (navegacao.js:abasPolegarEm); anima o transform e a largura, e não um
+clip-path, que lhe cortava o contorno.

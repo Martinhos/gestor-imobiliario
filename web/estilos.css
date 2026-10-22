@@ -730,9 +730,11 @@ body.sel-on #hdrSec{display:none}
    dentro: 16px aos lados, 4px em cima, e 14px até ao conteúdo (10 daqui e os
    4 do topo do #view). Quando as abas não cabem, a casa rola de lado, sem
    barra, e o polegar rola com elas (vive dentro da fila); o fim da rolagem
-   não puxa o voltar do sistema. A fila é uma grelha de colunas iguais: à
-   largura do ecrã quando cabem, e à largura da aba mais comprida, cada uma,
-   quando não cabem. A .abas-saida é a fila velha a sair numa travessia entre
+   não puxa o voltar do sistema. Cada aba tem a largura do seu texto (e do
+   número) e a fila enche a linha, com a sobra repartida por igual (flex:1 0
+   auto); nunca encolhe abaixo do texto — quando não cabem, rola. Colunas
+   iguais (as de antes) tinham todas a largura de «Contratos», e as cinco das
+   Casas já não cabiam aos 390px. A .abas-saida é a fila velha a sair numa travessia entre
    áreas (continuidade.js:abasNaFita), com o mesmo espaçamento. A moldura
    .abas que fica vazia no #view (navegacao.js:abasTirarDaVista) esconde-se
    no telemóvel; no computador continua a dar os 14px de sempre. */
@@ -741,28 +743,24 @@ body.sel-on #hdrSec{display:none}
 #abasArea,.abas-saida{padding:4px calc(16px + var(--inset-right)) 10px calc(16px + var(--inset-left))}
 #abasArea{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
 #abasArea::-webkit-scrollbar{display:none}
-#abasArea>.segm.abas-area,.abas-saida>.segm.abas-area{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;width:max-content;min-width:100%}
+#abasArea>.segm.abas-area,.abas-saida>.segm.abas-area{display:flex;width:max-content;min-width:100%}
+#abasArea>.segm.abas-area>a,.abas-saida>.segm.abas-area>a{flex:1 0 auto}
+/* apertada só quando não cabe (navegacao.js:abasApertar): um ponto a menos na
+   letra e 4px de enchimento — as cinco das Casas com um número cabem aos 375px */
+.segm.abas-area.aperta>a{font-size:13px;padding-left:4px;padding-right:4px}
 /* O realce da aba acesa é uma peça que corre por baixo das abas (o
-   .segm-polegar do segmentado que desliza, imovel.js:imvSegmentado), com a
-   largura de uma coluna: n2 a n5 dizem quantas são (as cinco das Casas:
-   Imóveis, Grupos, Contratos, Pessoas, Visitas — navegacao.js:AREAS); a
-   largura é a da fila menos os 4px de cada lado e os 2px de cada intervalo,
-   a dividir pelas abas. Assente, a classe i0 a i4
-   põe-no na aba acesa (em múltiplos da largura dele mais os 2px do
-   intervalo); a meio de um arrasto o transform vem do dedo
-   (navegacao.js:abasPolegarEm). Desliza de uma aba para a outra no --medio e
+   .segm-polegar do segmentado que desliza, imovel.js:imvSegmentado). As
+   abas têm larguras diferentes, por isso o realce mede a aba: a posição
+   (--pol-x) e a largura (--pol-w) são as da aba acesa, escritas no próprio
+   realce (navegacao.js:abasPolegarEm), e a meio de um arrasto o dedo
+   interpola-as entre as duas abas vizinhas. Desliza de uma aba para a outra no --medio e
    na --curva-fita, a de quem atravessa em bloco; ao largar um arrasto que
    vira, na duração da fita (.viaja: chega com o painel); ao voltar, na curva
    do regresso da página (.volta); com o dedo, sem transição (.arrasta). Sem
    movimento pedido, a regra geral do reduced-motion tira-lhe a transição. */
-.abas-area.n3>.segm-polegar{width:calc((100% - 12px) / 3)}
-.abas-area.n4>.segm-polegar{width:calc((100% - 14px) / 4)}
-.abas-area.n5>.segm-polegar{width:calc((100% - 16px) / 5)}
-.abas-area>.segm-polegar.i2{transform:translateX(calc(200% + 4px))}
-.abas-area>.segm-polegar.i3{transform:translateX(calc(300% + 6px))}
-.abas-area>.segm-polegar.i4{transform:translateX(calc(400% + 8px))}
+.segm.abas-area>.segm-polegar{left:0;width:var(--pol-w,0px);transform:translateX(var(--pol-x,0px))}
 .abas-area>.segm-polegar.fora{visibility:hidden}
-.abas-area>.segm-polegar{transition:transform var(--medio) var(--curva-fita)}
+.abas-area>.segm-polegar{transition:transform var(--medio) var(--curva-fita),width var(--medio) var(--curva-fita)}
 .abas-area.viaja>.segm-polegar{transition-duration:var(--lento)}
 .abas-area.volta>.segm-polegar{transition-timing-function:var(--curva-entra)}
 .abas-area.arrasta>.segm-polegar{transition:none}

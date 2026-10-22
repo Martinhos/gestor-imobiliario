@@ -2,8 +2,8 @@
 // abas da área, da gaveta e do carrossel (navegacao.js:AREAS, NAV_GROUPS,
 // vizinhoNaArea), a barra de baixo a acender as Casas, o crachá dos pedidos na
 // aba e na gaveta; as Definições sem a linha dos Grupos e sem os acender; o
-// goSet('groups') antigo a levar ao separador; o realce de cinco abas na
-// folha de estilos (.n5, .i4); e o cartão da conta, no fundo da gaveta, a
+// goSet('groups') antigo a levar ao separador; o realce de cinco abas, que
+// mede a aba acesa (navegacao.js:abasPolegarEm); e o cartão da conta, no fundo da gaveta, a
 // abrir «O meu perfil» (navegacao.js:abrirOMeuPerfil).
 
 import { test, describe, afterEach } from 'node:test';
@@ -112,17 +112,15 @@ describe('as Definições sem os Grupos', () => {
 });
 
 describe('o realce de cinco abas', () => {
-  test('o .n5 tem a largura de um quinto da fila e o .i4 põe-no na quinta, na conta das outras', () => {
-    assert.match(css, /\.abas-area\.n5>\.segm-polegar\{width:calc\(\(100% - 16px\) \/ 5\)\}/, '8px das pontas e 4 intervalos de 2px');
-    assert.match(css, /\.abas-area>\.segm-polegar\.i4\{transform:translateX\(calc\(400% \+ 8px\)\)\}/);
-    // a mesma conta das que já havia: nN tira 8px + 2px por intervalo, iK anda K larguras + 2px por cada
-    assert.match(css, /\.abas-area\.n4>\.segm-polegar\{width:calc\(\(100% - 14px\) \/ 4\)\}/);
-    assert.match(css, /\.abas-area>\.segm-polegar\.i3\{transform:translateX\(calc\(300% \+ 6px\)\)\}/);
-    const nav = { querySelector: () => pol };
-    const pol = { className: '', style: { transform: 'x' } };
+  test('o realce mede a quinta aba, a das Visitas, e não supõe colunas iguais', () => {
+    assert.ok(!/\.abas-area\.n5>\.segm-polegar/.test(css) && !/\.abas-area>\.segm-polegar\.i4\{/.test(css), 'sem a conta das colunas iguais');
+    const vars = {};
+    const pol = { className: '', style: { setProperty: (k, v) => { vars[k] = v; } } };
+    const as = [0, 1, 2, 3, 4].map((k) => ({ offsetLeft: 4 + k * 70, offsetWidth: 60 + k }));
+    const nav = { querySelector: () => pol, querySelectorAll: () => as };
     app.abasPolegarEm(nav, 4, true);
     assert.equal(pol.className, 'segm-polegar i4');
-    assert.equal(pol.style.transform, '');
+    assert.deepEqual(vars, { '--pol-x': '284px', '--pol-w': '64px' }, 'a esquerda e a largura das Visitas');
   });
 });
 

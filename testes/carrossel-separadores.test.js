@@ -1,8 +1,9 @@
 // O carrossel dos separadores de uma área: as abas da área saem da cabeça da
 // vista para a casa delas, por cima do #view (navegacao.js:abasAssentar), e
 // ficam o MESMO nó de pintura para pintura — só trocam o aceso, os números e
-// os destinos —; o realce (o polegar) assenta na aba acesa pela classe e
-// segue o dedo em fração de aba (navegacao.js:abasPolegarEm); a meio do
+// os destinos —; o realce (o polegar) mede a aba acesa (as abas têm a
+// largura do texto) e, a meio de um arrasto, interpola a posição e a largura
+// entre as duas vizinhas (navegacao.js:abasPolegarEm); a meio do
 // arrasto o vizinho é pintado uma vez por lado, colado à página que sai
 // (navegacao.js:sepVizinho, vistas.js:pintarVistaAParte), e sai com ela no
 // regresso; largar acaba a viagem com o realce a chegar com o painel; sem
@@ -28,9 +29,16 @@ const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8')
 /* Um elemento mínimo, com o que estas funções usam: classes, atributos (o
    class incluído, como no browser), filhos com pai, os seletores «:scope>…»
    de um nível, o polegar que o insertAdjacentHTML acrescenta, e o estilo. */
+/* o style de um elemento: as propriedades soltas (transform) e as variáveis do setProperty */
+function estilo() {
+  const st = {};
+  Object.defineProperty(st, 'setProperty', { value: (k, v) => { st[k] = v; } });
+  Object.defineProperty(st, 'getPropertyValue', { value: (k) => st[k] || '' });
+  return st;
+}
 function el(tag, classes = [], attrs = {}, texto = '') {
   const n = {
-    tagName: tag.toUpperCase(), children: [], parentNode: null, style: {}, innerHTML: texto, ligado: true,
+    tagName: tag.toUpperCase(), children: [], parentNode: null, style: estilo(), innerHTML: texto, ligado: true,
     _a: new Map(Object.entries(attrs)), _c: new Set(classes),
     classList: {
       add: (...c) => c.forEach((x) => n._c.add(x)), remove: (...c) => c.forEach((x) => n._c.delete(x)),
@@ -63,12 +71,16 @@ function el(tag, classes = [], attrs = {}, texto = '') {
   };
   return n;
 }
+// as larguras das abas das Casas a 390px, cada uma a do seu texto, e onde começa cada uma (4px de margem, 2px entre elas)
+const LARGURAS = [67, 63, 80, 70, 59];
+const ESQUERDAS = LARGURAS.map((w, k) => 4 + LARGURAS.slice(0, k).reduce((t, x) => t + x + 2, 0));
 // uma fila de abas como o abasDaArea a escreve, com a acesa em i
 function fila(rotulo, nomes, i, destinos) {
   const nav = el('nav', ['segm', 'abas-area'], { 'aria-label': rotulo });
   nomes.forEach((nome, k) => {
     const a = el('a', k === i ? ['on'] : [], Object.assign(k === i ? { 'aria-current': 'page' } : {},
       { role: 'link', tabindex: '0', 'data-click': "go('" + (destinos ? destinos[k] : nome) + "')" }), nome);
+    a.offsetLeft = ESQUERDAS[k]; a.offsetWidth = LARGURAS[k];
     nav.appendChild(a);
   });
   return nav;
@@ -94,6 +106,15 @@ function emCasas(a, t = 'properties') {
   a.separadoresEscondidos = () => [];
 }
 const CASAS = ['Imóveis', 'Grupos', 'Contratos', 'Pessoas', 'Visitas'];
+/* onde o realce fica na posição p (0 na primeira aba; 1.4 a 40% entre a segunda e a terceira)
+   Recebe: p — a posição.
+   Devolve: {x, w} — o --pol-x e o --pol-w que o abasPolegarEm escreve. */
+function realceEm(p) {
+  const i = Math.floor(p), f = p - i, j = Math.min(i + 1, LARGURAS.length - 1);
+  const r = (v) => Math.round(v * 100) / 100 + 'px';
+  return { x: r(ESQUERDAS[i] + (ESQUERDAS[j] - ESQUERDAS[i]) * f), w: r(LARGURAS[i] + (LARGURAS[j] - LARGURAS[i]) * f) };
+}
+const realce = (pol) => ({ x: pol.style.getPropertyValue('--pol-x'), w: pol.style.getPropertyValue('--pol-w') });
 
 describe('as abas vão para a casa delas, e ficam o mesmo nó', () => {
   test('a primeira pintura leva a fila para a casa, com o polegar na aba acesa; a moldura fica, vazia', () => {
@@ -131,7 +152,7 @@ describe('as abas vão para a casa delas, e ficam o mesmo nó', () => {
     montar(app, { view: vistaCom(viva), abasArea: casa });
     app.abasAssentar();
     const pol = viva.querySelector(':scope>.segm-polegar');
-    pol.style.transform = 'translateX(calc(0.4 * (100% + 2px)))';   // um arrasto a meio
+    pol.style.setProperty('--pol-x', '40px');   // um arrasto a meio
     app.tab = 'contracts';
     const nova = fila('Casas', ['Imóveis', 'Grupos', 'Contratos <span class="n">2</span>', 'Pessoas', 'Visitas'], 2,
       ['properties', 'groups', 'contracts', 'owners', 'visits']);
@@ -147,7 +168,7 @@ describe('as abas vão para a casa delas, e ficam o mesmo nó', () => {
     assert.equal(as[2].innerHTML, 'Contratos <span class="n">2</span>', 'com o número');
     assert.equal(as[3].getAttribute('data-click'), "go('owners')", 'as Pessoas abrem onde se ficou');
     assert.equal(pol.className, 'segm-polegar i2', 'o polegar vai para Contratos');
-    assert.equal(pol.style.transform, '', 'e larga o transform do dedo (a transição da folha leva-o)');
+    assert.deepEqual(realce(pol), realceEm(2), 'e assenta na medida dos Contratos (a transição da folha leva-o)');
   });
 
   test('outra área troca a fila inteira; fora das áreas a casa esvazia; a meio de uma viagem não se mexe', () => {
@@ -189,19 +210,38 @@ describe('as abas vão para a casa delas, e ficam o mesmo nó', () => {
 });
 
 describe('o polegar', () => {
-  test('a meio de um arrasto vai em fração de aba; assente, pela classe; sem aba acesa, escondido', () => {
+  test('a meio de um arrasto interpola a posição e a largura entre as duas abas; assente, mede a aba e marca a classe; sem aba acesa, escondido', () => {
     const nav = fila('Casas', CASAS, 0);
     nav.insertAdjacentHTML('afterbegin', '<span class="segm-polegar"></span>');
     const pol = nav.querySelector(':scope>.segm-polegar');
     app.abasPolegarEm(nav, 0.3726);
-    assert.equal(pol.style.transform, 'translateX(calc(0.373 * (100% + 2px)))');
+    assert.deepEqual(realce(pol), realceEm(0.3726), 'entre os Imóveis (67px) e os Grupos (63px)');
+    assert.ok(parseFloat(realce(pol).w) < 67 && parseFloat(realce(pol).w) > 63);
     app.abasPolegarEm(nav, 2, true);
     assert.equal(pol.className, 'segm-polegar i2');
     app.abasPolegarEm(nav, 4, true);
     assert.equal(pol.className, 'segm-polegar i4', 'a quinta aba, a das Visitas');
-    assert.equal(pol.style.transform, '');
+    assert.deepEqual(realce(pol), { x: ESQUERDAS[4] + 'px', w: LARGURAS[4] + 'px' }, 'com a medida dela');
+    app.abasPolegarEm(nav, 9);
+    assert.deepEqual(realce(pol), realceEm(4), 'além da última fica na última');
     app.abasPolegarEm(nav, -1, true);
     assert.equal(pol.className, 'segm-polegar fora');
+  });
+
+  test('a fila aperta-se só quando não cabe, e solta-se quando volta a caber', () => {
+    const nav = fila('Casas', CASAS, 0);
+    const casa = el('div', [], { id: 'abasArea' });
+    casa.appendChild(nav);
+    casa.clientWidth = 390;
+    casa.scrollWidth = 390;
+    app.abasApertar(nav);
+    assert.ok(!nav.classList.contains('aperta'), 'cabe: a letra de sempre');
+    casa.scrollWidth = 404;                     // um número numa aba
+    app.abasApertar(nav);
+    assert.ok(nav.classList.contains('aperta'), 'não cabe: aperta');
+    casa.scrollWidth = 390;
+    app.abasApertar(nav);
+    assert.ok(!nav.classList.contains('aperta'), 'volta a caber: solta-se');
   });
 });
 
@@ -245,7 +285,7 @@ describe('o arrasto', () => {
     assert.equal(viz.style.transform, 'translateX(' + (375 + a.desl) + 'px)', 'colado à borda direita da página');
     assert.equal(viz.getAttribute('inert'), '', 'e não se toca nem se lê');
     const p = 2 + Math.abs(a.desl) / 375;
-    assert.equal(pol.style.transform, 'translateX(calc(' + Math.round(p * 1000) / 1000 + ' * (100% + 2px)))', 'o polegar entre Contratos e Pessoas');
+    assert.deepEqual(realce(pol), realceEm(p), 'o polegar entre Contratos e Pessoas, com a largura a passar de uma à outra');
     // o dedo volta para trás do ponto de partida: o outro vizinho, uma vez
     [260, 320, 360, 380].forEach((x) => anda(app, x));
     assert.deepEqual([...pintados], ['tenants', 'groups'], 'à esquerda dos Contratos, os Grupos');
@@ -273,7 +313,7 @@ describe('o arrasto', () => {
     assert.equal(anim.k[0].transform, 'translateX(' + (375 + a.desl) + 'px)', 'a partir de onde estava');
     assert.ok(nav.classList.contains('volta') && !nav.classList.contains('arrasta'), 'o polegar volta com a curva do regresso');
     assert.equal(pol.className, 'segm-polegar i2');
-    assert.equal(pol.style.transform, '');
+    assert.deepEqual(realce(pol), realceEm(2), 'de volta à medida dos Contratos');
     assert.equal(a.palco, null, 'o palco saiu no fim do regresso');
   });
 
@@ -293,7 +333,7 @@ describe('o arrasto', () => {
     assert.deepEqual(removido, ['palco'], 'o vizinho pintado sai no mesmo instante em que a fita põe o verdadeiro');
     assert.ok(estado.viaja, 'o polegar já está na duração da fita quando a repintura o muda');
     assert.equal(estado.desde, -190);
-    assert.equal(pol.style.transform, '', 'e larga o transform do dedo');
+    assert.deepEqual(realce(pol), realceEm(2), 'e assenta na aba acesa (a repintura leva-o à nova)');
   });
 
   test('sem movimento: nada segue o dedo, não se pinta vizinho nenhum, e o nome espreita à beira', () => {
@@ -309,7 +349,7 @@ describe('o arrasto', () => {
     assert.equal(pintados.length, 0, 'sem vizinho pintado');
     assert.ok(!a.palco, 'nem palco');
     assert.equal(v.style.transform || '', '', 'a página fica');
-    assert.equal(pol.style.transform || '', '', 'o polegar fica');
+    assert.deepEqual(realce(pol), { x: '', w: '' }, 'o polegar fica');
     assert.ok(criados.some((n) => n.classList.contains('sep-espreita') && n.classList.contains('on')), 'o nome do vizinho espreita');
     larga(app, 150);
   });
@@ -391,16 +431,16 @@ describe('a casa, na página e na folha', () => {
     assert.match(html, /<\/header>[\s\S]*?<div id="abasArea"><\/div>\s*<div class="wrap" id="view"><\/div>/);
   });
 
-  test('o CSS: a casa escondida vazia e no computador, a rolar de lado, a grelha, o polegar por tokens', () => {
+  test('o CSS: a casa escondida vazia e no computador, a rolar de lado, as abas pelo texto, o polegar medido e por tokens', () => {
     assert.match(css, /#abasArea:empty\{display:none\}/);
     assert.match(css, /@media\(max-width:900px\)\{\.abas:empty\{display:none\}\}/, 'a moldura vazia só se esconde no telemóvel');
     assert.match(css, /@media\(min-width:901px\)\{#abasArea,\.abas>\.abas-area\{display:none\}\}/);
     assert.match(css, /#abasArea\{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none\}/);
-    assert.match(css, /#abasArea>\.segm\.abas-area,\.abas-saida>\.segm\.abas-area\{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;width:max-content;min-width:100%\}/);
-    assert.match(css, /\.abas-area\.n3>\.segm-polegar\{width:calc\(\(100% - 12px\) \/ 3\)\}/);
-    assert.match(css, /\.abas-area\.n4>\.segm-polegar\{width:calc\(\(100% - 14px\) \/ 4\)\}/);
-    assert.match(css, /\.abas-area>\.segm-polegar\.i3\{transform:translateX\(calc\(300% \+ 6px\)\)\}/);
-    assert.match(css, /\.abas-area>\.segm-polegar\{transition:transform var\(--medio\) var\(--curva-fita\)\}/);
+    assert.match(css, /#abasArea>\.segm\.abas-area,\.abas-saida>\.segm\.abas-area\{display:flex;width:max-content;min-width:100%\}/, 'já não são colunas iguais');
+    assert.match(css, /#abasArea>\.segm\.abas-area>a,\.abas-saida>\.segm\.abas-area>a\{flex:1 0 auto\}/, 'cada aba com a largura do texto, a sobra repartida, nunca abaixo do texto');
+    assert.match(css, /\.segm\.abas-area\.aperta>a\{font-size:13px;padding-left:4px;padding-right:4px\}/, 'apertada só quando não cabe');
+    assert.match(css, /\.segm\.abas-area>\.segm-polegar\{left:0;width:var\(--pol-w,0px\);transform:translateX\(var\(--pol-x,0px\)\)\}/, 'o realce pela medida da aba');
+    assert.match(css, /\.abas-area>\.segm-polegar\{transition:transform var\(--medio\) var\(--curva-fita\),width var\(--medio\) var\(--curva-fita\)\}/);
     assert.match(css, /\.abas-area\.viaja>\.segm-polegar\{transition-duration:var\(--lento\)\}/);
     assert.match(css, /\.abas-area\.volta>\.segm-polegar\{transition-timing-function:var\(--curva-entra\)\}/);
     assert.match(css, /\.abas-area\.arrasta>\.segm-polegar\{transition:none\}/);
