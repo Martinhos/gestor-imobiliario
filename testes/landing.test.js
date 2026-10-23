@@ -47,8 +47,9 @@ describe('a página de entrada', () => {
     assert.ok(!/<picture|<img\b/.test(html), 'nenhuma captura na página');
     const maquetes = [...html.matchAll(/<div class="([^"]+)" role="img" aria-label="([^"]+)">/g)]
       .map((m) => ({ classe: m[1], descricao: m[2] }));
-    assert.deepEqual(maquetes.map((m) => m.classe.split(' ')[0]), ['telemovel', 'computador', 'acerto'],
-      'o telemóvel, o computador e as contas entre donos');
+    assert.deepEqual(maquetes.map((m) => m.classe), ['telemovel', 'telemovel imoveis', 'telemovel contratos',
+      'telemovel planeados', 'computador', 'acerto n'],
+      'o hero, os três ecrãs, o computador e as contas entre donos');
     maquetes.forEach((m) => assert.ok(m.descricao.length >= 60, 'uma descrição a sério: ' + m.descricao));
     assert.match(html, /<div class="hero-visual">\s*<div class="tile" aria-hidden="true">/,
       'o mosaico do hero é decoração, escondido dos leitores de ecrã');
@@ -271,9 +272,62 @@ describe('a página de entrada', () => {
     assert.match(entrada, /CW\.showAuthMode = 'register'/, 'e abre no registo');
   });
 
+  /* Quem abre a página percebe em segundos o que ela faz: o chapéu diz o que
+     é, o título diz a vantagem, e cada ecrã que a entrega (Imóveis,
+     Contratos, Planeados) tem a sua secção, com o título e o telemóvel. */
+  test('o valor primeiro, e cada ecrã na sua secção', () => {
+    assert.equal((html.match(/<h1[ >]/g) || []).length, 1, 'um título só');
+    assert.match(html, /<p class="chapeu">Gestão de arrendamento para senhorios<\/p>\s*<h1>Nenhuma renda te passa despercebida\.<\/h1>/);
+    assert.match(html, /<h2>Do imóvel à renda, tudo ligado<\/h2>/);
+    for (const id of ['imoveis', 'contratos', 'planeados']) {
+      const s = new RegExp('<section class="wrap ecra-seccao[^"]*" id="' + id + '" aria-labelledby="t-' + id +
+        '">[\\s\\S]*?<h3 id="t-' + id + '">[\\s\\S]*?<div class="telemovel ' + id + '" role="img"[\\s\\S]*?</section>').exec(html);
+      assert.ok(s, 'a secção ' + id + ', com o título e a maquete');
+    }
+    assert.ok(!/O que faz/.test(html), 'a grelha já não abre a página');
+  });
+
+  /* A Declaração (o IRS) ainda só existe em dev: a montra de produção não
+     pode prometer o que a app de produção não tem. Vale o texto e os
+     metadados. */
+  test('não promete o IRS, que ainda só existe em dev', () => {
+    assert.ok(!/IRS|Anexo F|Modelo 2|\bAT\b|Finanças/.test(html), 'nem no texto nem nos metadados');
+  });
+
+  /* O que o Google mostra sem cortar: o título nos 60 caracteres e a
+     descrição nos 160, com os termos que um senhorio procura. */
+  test('o título e a descrição cabem no que os motores mostram', () => {
+    const titulo = /<title>([^<]+)<\/title>/.exec(html)[1];
+    const desc = /<meta name="description" content="([^"]+)">/.exec(html)[1];
+    assert.ok(titulo.length <= 60, 'título com ' + titulo.length);
+    assert.ok(desc.length >= 110 && desc.length <= 160, 'descrição com ' + desc.length);
+    assert.match(titulo, /gestão de arrendamento/);
+    assert.match(desc, /rendas em atraso/);
+    assert.match(html, new RegExp('<meta property="og:description" content="' + desc + '">'), 'e as redes dizem o mesmo');
+  });
+
+  /* Os três ecrãs contam a história do hero: as rendas em vigor nos Imóveis
+     somam o último mês do gráfico, e o que o hero diz estar por confirmar é
+     o que os Planeados mostram. */
+  test('os ecrãs e o hero contam a mesma história', () => {
+    const sec = (id) => new RegExp('id="' + id + '"[\\s\\S]*?</section>').exec(html)[0];
+    const euros = (t) => Number(t.replace(/\s/g, '').replace(',', '.').replace('−', '-'));
+    const rendas = [...sec('imoveis').matchAll(/<span class="m-sub">Renda<\/span>([^<]+?)\s?€?<\/span>/g)]
+      .map((m) => m[1]).filter((t) => t !== '—').map(euros);
+    assert.equal(rendas.length, 3, 'três imóveis arrendados');
+    // 2 425 € é o último mês de landing.js:RECEITA_MES
+    assert.equal(rendas.reduce((a, b) => a + b, 0), 2425, 'que somam o último mês do gráfico');
+    const [, porConfirmar, emAtraso] = /<strong>(\d+) por confirmar<\/strong><br><span class="m-sub">(\d+) em atraso/.exec(html);
+    const plan = sec('planeados');
+    assert.equal((plan.match(/botao-maquete pequeno">Confirmar/g) || []).length, Number(porConfirmar), 'os por confirmar do hero');
+    assert.equal((plan.match(/m-selo red">Em atraso/g) || []).length, Number(emAtraso), 'e os em atraso');
+  });
+
   test('diz que é grátis e sem planos', () => {
     assert.match(html, /sem planos/i);
-    assert.ok(!/plano (plus|pro)|subscri|mensalidade|€\s*\/\s*m[êe]s/i.test(html),
+    // o «€/mês» das rendas dentro das maquetes é a app a falar, não um preço
+    const texto = html.replace(/role="img"[\s\S]*?<\/section>/g, '');
+    assert.ok(!/plano (plus|pro)|subscri|mensalidade|€\s*\/\s*m[êe]s/i.test(texto),
       'nada que sugira escalões ou pagamentos');
   });
 });

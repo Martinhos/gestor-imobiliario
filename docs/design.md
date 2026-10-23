@@ -4849,14 +4849,28 @@ têm a classe .dark: seguem o sistema de quem lê); as duas letras declaram-se
 com as mesmas @font-face, de /fonts/, com swap e o unicode-range latino, e a
 montra e os documentos pré-carregam-nas. Nada do Google Fonts.
 
-A montra (worker/src/landing.js:paginaLanding) mostra o produto em maquetes
-de HTML e CSS — o telemóvel, o computador, as contas entre donos —, cada uma
-um role="img" com a descrição do que mostra, e não em capturas: seguem os
-tokens e o tema de quem lê e não envelhecem a cada mudança da app. Os números
-das maquetes fecham (landing.js:RECEITA_MES, landing.js:DESPESA_MES,
-landing.js:PRESTACAO_MES), e as alturas das barras são regras :nth-child
-geradas dos dados (landing.js:alturasDasBarras), porque a página não tem
-JavaScript nem atributos de estilo. Das capturas antigas fica só a imagem de
+A montra (worker/src/landing.js:paginaLanding) diz o valor antes de tudo: o
+chapéu diz o que é («Gestão de arrendamento para senhorios»), o título diz a
+vantagem («Nenhuma renda te passa despercebida.»), e logo abaixo de «Do imóvel
+à renda, tudo ligado» cada ecrã que a entrega tem a sua secção — Imóveis,
+Contratos, Planeados (landing.js:ECRAS) —, o texto de um lado e o telemóvel
+do outro, a alternar. Mostra o produto em maquetes de HTML e CSS — o
+telemóvel do hero, os três ecrãs, o computador, as contas entre donos —,
+cada uma um role="img" com a descrição do que mostra, e não em capturas:
+seguem os tokens e o tema de quem lê e não envelhecem a cada mudança da app.
+As maquetes dos ecrãs imitam as peças da app em ponto pequeno, com os mesmos
+rótulos e as mesmas cores (o selo, o cartão do imóvel, a linha do contrato, o
+«Por confirmar»), e as datas contam-se a partir do dia do pedido
+(landing.js:diaDaMontra). Os números das maquetes fecham e contam uma só
+história (landing.js:RECEITA_MES, landing.js:DESPESA_MES,
+landing.js:PRESTACAO_MES, landing.js:CASAS): as rendas dos Imóveis somam o
+último mês do gráfico, e o que o hero diz estar por confirmar é o que os
+Planeados mostram. As alturas das barras são regras :nth-child geradas dos
+dados (landing.js:alturasDasBarras), porque a página não tem JavaScript nem
+atributos de estilo. A montra só promete o que a produção tem: nada do IRS
+enquanto a Declaração só existir em dev. O título e a descrição
+(landing.js:TITULO, landing.js:DESCRICAO) ficam nos 60 e nos 160 caracteres,
+com os termos que um senhorio procura. Das capturas antigas fica só a imagem de
 partilha (og:image), que as redes mostram sem correr CSS, e que o
 scripts/capturas.js tira. Os documentos legais e a entrada de teste
 (worker/src/legal-vista.js, worker/src/teste.js) são da mesma família.
