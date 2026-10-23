@@ -6,8 +6,10 @@
    Bricolage Grotesque nos títulos —: quem clica em «Abrir a app» não pode
    sentir que mudou de produto.
 
-   A página MOSTRA o produto, e já não com capturas: o telemóvel e o
-   computador são maquetes desenhadas em HTML e CSS, com o mosaico da marca
+   O hero diz o valor antes de tudo (nenhuma renda passa despercebida), e a
+   seguir cada ecrã que o entrega tem a sua secção: Imóveis, Contratos,
+   Planeados. A página MOSTRA o produto, e já não com capturas: os telemóveis e
+   o computador são maquetes desenhadas em HTML e CSS, com o mosaico da marca
    por trás. Uma captura envelhecia a cada mudança da app, pesava o dobro por
    vir nos dois temas e era a única coisa que a página descarregava além do
    texto; a maquete segue os tokens, muda de tema com quem lê e não pesa
@@ -93,20 +95,170 @@ function indicadores() {
     `<div class="m-kpi noite"><p>Cashflow</p><p class="tit">${eurosDaMontra(CASHFLOW)}</p></div>`;
 }
 
-// o que a app faz, com o tom do quadrado do ícone (as cores suaves do contrato)
+/* Os imóveis do mesmo portefólio inventado, para as maquetes dos três ecrãs
+   (Imóveis, Contratos, Planeados) contarem a mesma história do hero. As
+   rendas em vigor somam o último mês de RECEITA_MES (2 425 €), e a casa vaga
+   é o que falta para os 3 115 € dos meses de antes. Cada quarto e cada
+   contrato tem a sua renda; a prestação do T3 é a PRESTACAO_MES. */
+const CASAS = [
+  { nome: 'T3 Bonfim', morada: 'Rua do Bonfim, Porto', tom: 't0', valor: 310000, divida: 231800, quartos: 4,
+    contratos: [{ quem: 'Ana Ribeiro', parte: 'Quarto 1', renda: 350, fim: 'ano' },
+      { quem: 'João Matos', parte: 'Quarto 2', renda: 350, fim: 'ano', atraso: true },
+      { quem: 'Inês Costa', parte: 'Quarto 3', renda: 350, fim: 25 }] },
+  { nome: 'T2 Paranhos', morada: 'Rua de Costa Cabral, Porto', tom: 't2', valor: 235000, divida: 0,
+    contratos: [{ quem: 'Rui e Marta Sousa', parte: 'Imóvel inteiro', renda: 950, fim: 'ano2', hoje: true }] },
+  { nome: 'T0 Campanhã', morada: 'Rua do Heroísmo, Porto', tom: 't1', valor: 98000, divida: 0,
+    contratos: [{ quem: 'Tiago Lopes', parte: 'Imóvel inteiro', renda: 425, fim: 'ano', hoje: true }] },
+  { nome: 'T1 Cedofeita', morada: 'Rua de Cedofeita, Porto', tom: 't3', valor: 165000, divida: 0, contratos: [] },
+];
+/* A renda do mês de uma casa: a soma das rendas dos contratos dela.
+   Recebe: c — uma casa de CASAS.
+   Devolve: o valor em euros (0 numa casa vaga). */
+function rendaDaCasa(c) {
+  return c.contratos.reduce((a, k) => a + k.renda, 0);
+}
+// as rendas que estão à espera de confirmação: as em atraso e as de hoje
+const PENDENTES = CASAS.flatMap((c) => c.contratos.filter((k) => k.atraso || k.hoje)
+  .map((k) => ({ casa: c.nome, parte: k.parte, renda: k.renda, atraso: !!k.atraso })));
+
+/* Uma data da maquete, contada a partir do dia do pedido: as datas não
+   envelhecem com a página. Em UTC, porque o worker corre em UTC e só o dia
+   interessa.
+   Recebe: hoje — a Date do pedido; dias — quantos dias somar (negativo para trás).
+   Devolve: a Date desse dia, à meia-noite UTC. */
+function diaDaMontra(hoje, dias) {
+  return new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate() + dias));
+}
+
+/* Uma data como a app a escreve nas listas.
+   Recebe: d — a Date; comAno — verdadeiro para dd/mm/aaaa, falso para dd/mm.
+   Devolve: o texto, ex.: «05/11» ou «31/08/2027». */
+function dataDaMontra(d, comAno) {
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  return dd + '/' + mm + (comAno ? '/' + d.getUTCFullYear() : '');
+}
+
+/* A próxima vez que um dia do mês chega, a partir de amanhã.
+   Recebe: hoje — a Date do pedido; dia — o dia do mês (1 a 28).
+   Devolve: a Date dessa próxima vez. */
+function proximoDia(hoje, dia) {
+  const d = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), dia));
+  return d > hoje ? d : new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() + 1, dia));
+}
+
+/* Um selo da maquete (o .badge da app em ponto pequeno).
+   Recebe: texto — o que diz; tom (opcional) — in, amber, red, grey ou loan;
+   sem tom é o cobalto.
+   Devolve: o HTML do selo. */
+function selo(texto, tom) {
+  return `<span class="m-selo${tom ? ' ' + tom : ''}">${texto}</span>`;
+}
+
+/* As abas da área no topo do ecrã do telemóvel, com a que está aberta.
+   Recebe: abas — os nomes; aberta — o nome da que está aberta.
+   Devolve: o HTML da fila de abas. */
+function abasDaMaquete(abas, aberta) {
+  return `<div class="m-abas">${abas.map((a) => `<span${a === aberta ? ' class="on"' : ''}>${a}</span>`).join('')}</div>`;
+}
+
+/* O ecrã dos Imóveis (web/app/lista-imoveis.js:imvCartao): um cartão por
+   casa, com a capa em mosaico, o estado, a renda, a yield e a dívida, e os
+   selos do que pede atenção.
+   Devolve: o HTML do interior do ecrã. */
+function ecraImoveis() {
+  const cartao = (c) => {
+    const renda = rendaDaCasa(c);
+    const atrasos = PENDENTES.filter((p) => p.casa === c.nome && p.atraso).length;
+    const espera = PENDENTES.filter((p) => p.casa === c.nome && !p.atraso).length;
+    const estado = !renda ? selo('Vago', 'amber')
+      : c.quartos ? selo(c.contratos.length + '/' + c.quartos + ' quartos') : selo('Arrendado', 'in');
+    const nums = renda
+      ? [['Renda', eurosDaMontra(renda)], ['Yield', ((renda * 12) / c.valor * 100).toFixed(1).replace('.', ',') + '%'],
+        ['Dívida', c.divida ? eurosDaMontra(c.divida) : '—']]
+      : [['Renda', '—'], ['Valor', eurosDaMontra(c.valor)], ['Dívida', c.divida ? eurosDaMontra(c.divida) : '—']];
+    const selos = (atrasos ? selo(atrasos === 1 ? '1 renda em atraso' : atrasos + ' rendas em atraso', 'red')
+      : espera ? selo(espera + ' por confirmar') : '') + (c.quartos ? selo('Por quartos', 'grey') : '');
+    return `<div class="m-imv"><span class="tile m-imv-capa ${c.tom}"></span><div class="m-imv-corpo">
+<div class="m-entre"><span><span class="tit m-nome">${c.nome}</span><span class="m-sub m-linha-unica">${c.morada}</span></span>${estado}</div>
+<div class="m-nums n">${nums.map(([r, v]) => `<span><span class="m-sub">${r}</span>${v}</span>`).join('')}</div>
+${selos ? `<div class="m-selos">${selos}</div>` : ''}</div></div>`;
+  };
+  return `<p class="tit ecra-titulo">Casas</p>${abasDaMaquete(['Imóveis', 'Grupos', 'Contratos', 'Pessoas'], 'Imóveis')}
+${CASAS.map(cartao).join('\n')}`;
+}
+
+/* O ecrã dos Contratos (web/app/lista-contratos.js:ctLinha): os contratos em
+   grupos por imóvel, com a renda do mês; a renda em atraso fica pendurada no
+   contrato dela, com o «Confirmar», como na app.
+   Recebe: hoje — a Date do pedido, para os prazos.
+   Devolve: o HTML do interior do ecrã. */
+function ecraContratos(hoje) {
+  const ano = hoje.getUTCFullYear();
+  const fim = (f) => (f === 'ano' ? '31/08/' + (ano + 1) : f === 'ano2' ? '28/02/' + (ano + 2) : dataDaMontra(diaDaMontra(hoje, f), true));
+  const linha = (k) => `<div class="m-ct"><div class="m-entre"><span><b>${k.quem}</b><span class="m-sub">${k.parte} · até ${fim(k.fim)}</span>
+${typeof k.fim === 'number' ? `<span class="m-selos">${selo('Termina a ' + dataDaMontra(diaDaMontra(hoje, k.fim)), 'amber')}</span>` : ''}</span><b class="n">${eurosDaMontra(k.renda, true)}</b></div>
+${k.atraso ? `<div class="m-pend"><p>1 movimento por confirmar</p><div class="m-entre"><span class="m-sub">Renda — ${k.parte} · ${dataDaMontra(diaDaMontra(hoje, -9))}</span>${selo('Em atraso', 'red')}</div><span class="botao-maquete pequeno">Confirmar</span></div>` : ''}</div>`;
+  const grupo = (c) => `<div class="m-ct-grupo"><div class="m-entre"><span><span class="tit m-nome">${c.nome}</span><span class="m-sub">${c.quartos ? 'por quartos · ' + c.contratos.length + '/' + c.quartos : 'imóvel inteiro'}</span></span><b class="n">${eurosDaMontra(rendaDaCasa(c), true)}/mês</b></div>
+<div class="m-cartao m-ct-linhas">${c.contratos.map(linha).join('')}</div></div>`;
+  return `<p class="tit ecra-titulo">Casas</p>${abasDaMaquete(['Imóveis', 'Grupos', 'Contratos', 'Pessoas'], 'Contratos')}
+${CASAS.slice(0, 2).map(grupo).join('\n')}`;
+}
+
+/* O ecrã dos Planeados (web/app/planeados.js:pendingCard e recLinha): o
+   cartão «Por confirmar», com a renda em atraso primeiro, e a seguir o que
+   vem — a prestação, o condomínio e o IMI que o imóvel e o crédito criaram.
+   Recebe: hoje — a Date do pedido, para as datas.
+   Devolve: o HTML do interior do ecrã. */
+function ecraPlaneados(hoje) {
+  const total = PENDENTES.reduce((a, p) => a + p.renda, 0);
+  const atrasos = PENDENTES.filter((p) => p.atraso).length;
+  const pend = PENDENTES.map((p) => `<div class="m-plan"><div class="m-entre"><span><b>Renda — ${p.parte === 'Imóvel inteiro' ? p.casa : p.parte}</b><span class="m-sub">${p.casa} · ${dataDaMontra(diaDaMontra(hoje, p.atraso ? -9 : 0))}</span></span>
+<span class="m-valor"><b class="n pos">${eurosDaMontra(p.renda, true)}</b>${p.atraso ? selo('Em atraso', 'red') : selo('Por confirmar')}</span></div><span class="botao-maquete pequeno">Confirmar</span></div>`).join('');
+  // o IMI de 284 € paga-se em duas prestações: no fim de maio e no fim de novembro
+  const ano = hoje.getUTCFullYear();
+  const imi = [new Date(Date.UTC(ano, 4, 31)), new Date(Date.UTC(ano, 10, 30)), new Date(Date.UTC(ano + 1, 4, 31))].find((d) => d > hoje);
+  const prestacao = proximoDia(hoje, 15);
+  const condominio = proximoDia(hoje, 1);
+  const seguintes = [
+    ['Prestação — T3 Bonfim', 'mensal, dia 15 · próxima ' + dataDaMontra(prestacao), selo('da hipoteca', 'loan'), 'prest', -PRESTACAO_MES, prestacao],
+    ['Condomínio — T3 Bonfim', 'mensal, dia 1 · próxima ' + dataDaMontra(condominio), selo('do imóvel', 'grey'), 'neg', -45, condominio],
+    ['IMI — T2 Paranhos', 'em maio e novembro · próxima ' + dataDaMontra(imi), selo('do imóvel', 'grey'), 'neg', -142, imi],
+  ].sort((a, b) => a[5] - b[5]);
+  return `<p class="tit ecra-titulo">Dinheiro</p>${abasDaMaquete(['Movimentos', 'Planeados', 'Créditos'], 'Planeados')}
+<div class="m-cartao m-pend-cartao"><div class="m-entre"><span class="m-cab"><span class="tit">Por confirmar</span>${atrasos ? selo(atrasos + ' em atraso', 'red') : ''}</span><b class="n pos">${eurosDaMontra(total, true)}</b></div>
+<span class="m-sub">${PENDENTES.length} à espera</span>${pend}</div>
+<div class="m-cartao m-plan-lista">${seguintes.map(([nome, quando, origem, cor, v]) => `<div class="m-plan"><div class="m-entre"><span><b>${nome}</b><span class="m-sub">${quando}</span></span><b class="n ${cor}">${eurosDaMontra(v, true)}</b></div><div class="m-selos">${origem}</div></div>`).join('')}</div>`;
+}
+
+// o resto do que a app faz, com o tom do quadrado do ícone (as cores suaves do contrato)
 const CAPACIDADES = [
-  { titulo: 'Rendas sem esforço', tom: 'in', d: 'M17 2l3 3-3 3M3 11V9a4 4 0 0 1 4-4h13M7 22l-3-3 3-3M21 13v2a4 4 0 0 1-4 4H4',
-    texto: 'O contrato gera o movimento planeado. Todos os meses basta confirmar, e a renda fica registada com a data, o valor e o inquilino certos.' },
-  { titulo: 'Contratos e inquilinos', tom: 'ac', d: 'M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6',
-    texto: 'Fichas, prazos, caução e o contrato em PDF já preenchido com os teus dados e os do inquilino, pronto a rever.' },
-  { titulo: 'Contas entre proprietários', tom: 'out', d: 'M16 3l4 4-4 4M20 7H8M8 21l-4-4 4-4M4 17h12',
-    texto: 'Quotas por imóvel, quem pagou o quê e quanto falta acertar entre vocês.' },
   { titulo: 'Créditos à habitação', tom: 'loan', d: 'M3 10h18M5 10v8M9 10v8M15 10v8M19 10v8M3 21h18M12 3l9 5H3z',
     texto: 'Capital, juros e imposto do selo separados em cada prestação, as amortizações e o plano até ao fim.' },
-  { titulo: 'O Anexo F, linha a linha', tom: 'warn', d: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6',
-    texto: 'O quadro 4.1 por ano e por dono, e os prazos da AT lembrados a tempo: Modelo 2, recibos, 15 de fevereiro, IRS. A app resume, não declara.' },
+  { titulo: 'Contas entre proprietários', tom: 'out', d: 'M16 3l4 4-4 4M20 7H8M8 21l-4-4 4-4M4 17h12',
+    texto: 'Quotas por imóvel, quem pagou o quê e quanto falta acertar entre comproprietários.' },
   { titulo: 'Visitas e prazos', tom: 'ac', d: 'M4 6h16v15H4zM4 10h16M8 3v4M16 3v4',
     texto: 'Quem vem ver que imóvel e quando, e um aviso antes de um contrato acabar.' },
+];
+
+/* Os três ecrãs, cada um na sua secção: o que mostra, porque importa, e o
+   telemóvel com a maquete. O tom é o do mosaico por trás do telemóvel. */
+const ECRAS = [
+  { id: 'imoveis', chapeu: 'Imóveis', tom: 't0', titulo: 'Todos os imóveis num relance',
+    texto: 'Arrendado, por quartos ou vago: a renda, a yield e a dívida de cada imóvel, e quais têm rendas em atraso. A gestão de imóveis arrendados sem folhas de Excel.',
+    pontos: ['Arrendamento do imóvel inteiro ou por quartos.', 'O IMI, o condomínio e o seguro da ficha tornam-se despesas planeadas.', 'O crédito à habitação ligado ao imóvel que o paga.'],
+    rotulo: 'O ecrã dos Imóveis num telemóvel: quatro imóveis no Porto, com o estado, a renda, a yield e a dívida de cada um; o T3 Bonfim tem uma renda em atraso e o T1 Cedofeita está vago.',
+    ecra: ecraImoveis },
+  { id: 'contratos', chapeu: 'Contratos', tom: 't2', titulo: 'Contratos de arrendamento que trabalham por ti',
+    texto: 'Inquilinos, quartos, prazos e quanto falta para cada contrato acabar. Ao criares o contrato, a renda de todos os meses fica planeada, e acompanha as renovações.',
+    pontos: ['Um contrato por quarto, ou um para o imóvel inteiro.', 'Um aviso antes de o contrato acabar.', 'A caução, os inquilinos e o contrato em PDF já preenchido.'],
+    rotulo: 'O ecrã dos Contratos num telemóvel: os contratos agrupados por imóvel com a renda do mês, um contrato que termina daqui a poucas semanas e uma renda em atraso pronta a confirmar.',
+    ecra: ecraContratos },
+  { id: 'planeados', chapeu: 'Planeados', tom: 't1', titulo: 'Nenhum pagamento passa despercebido',
+    texto: 'Cada renda, prestação, IMI, condomínio e seguro chega na data e fica por confirmar. Se um pagamento não chega, passa a em atraso e aparece primeiro: o controlo de rendas faz-se sozinho.',
+    pontos: ['Confirmas num toque, e o seguinte fica agendado.', 'As rendas em atraso à vista, a vermelho, até as resolveres.', 'O sino junta tudo o que pede a tua atenção.'],
+    rotulo: 'O ecrã dos Planeados num telemóvel: três rendas por confirmar, uma delas em atraso, cada uma com o botão Confirmar, e a seguir a prestação do crédito, o condomínio e o IMI que vêm aí.',
+    ecra: ecraPlaneados },
 ];
 
 // o que fica do lado de quem usa a app
@@ -116,6 +268,14 @@ const DADOS = [
   'Funciona sem rede e sincroniza quando ela voltar, em vários aparelhos.',
   'Partilhas o que quiseres: um comproprietário vê as contas do imóvel; um contabilista vê os movimentos e mais nada.',
 ];
+
+/* O que os motores de busca e as redes mostram. Com os termos que um senhorio
+   procura (gestão de arrendamento, controlo de rendas, rendas em atraso), e
+   sem o IRS: a Declaração ainda só existe em dev. O título fica nos 60
+   caracteres e a descrição nos 160, o que o Google mostra sem cortar. */
+const TITULO = 'Rendorium — gestão de arrendamento para senhorios';
+const DESCRICAO = 'App grátis para senhorios: imóveis, contratos e rendas num só sítio. ' +
+  'Controlo de rendas com avisos de rendas em atraso, IMI, condomínio e crédito.';
 
 // os traços dos dois ícones que não são de capacidade: o aviso e o visto
 const AVISO = 'M12 8v5M12 16.5v.5M10.3 3.8L2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z';
@@ -136,9 +296,10 @@ const VISTO = 'M5 12.5l4.5 4.5L19 7';
    Devolve: uma Response HTML com a página completa e uma hora de cache. */
 export function paginaLanding(op) {
   const raiz = !!(op && op.raiz);
+  const hoje = new Date();
   const cabecaRaiz = raiz ? `<meta property="og:type" content="website">
-<meta property="og:title" content="Rendorium — o teu portefólio de arrendamento, arrumado">
-<meta property="og:description" content="Imóveis, contratos, rendas, créditos e o IRS num só sítio. Grátis, sem planos e sem meio de pagamento.">
+<meta property="og:title" content="Rendorium — nenhuma renda te passa despercebida">
+<meta property="og:description" content="${DESCRICAO}">
 <meta property="og:url" content="https://rendorium.com">
 <meta property="og:image" content="https://rendorium.com${IMG}/partilha.webp">
 <meta property="og:image:width" content="1200">
@@ -154,8 +315,8 @@ export function paginaLanding(op) {
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#F2F3F6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0B111E" media="(prefers-color-scheme: dark)">
-<title>Rendorium — o teu portefólio de arrendamento, arrumado</title>
-<meta name="description" content="Imóveis, contratos, rendas, créditos e IRS num só sítio. Grátis, sem planos. Um projeto pessoal para senhorios portugueses.">
+<title>${TITULO}</title>
+<meta name="description" content="${DESCRICAO}">
 ${cabecaRaiz}
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -174,9 +335,10 @@ ${cabecaRaiz}
 
   <section class="wrap hero">
     <div class="hero-texto">
-      <h1>O teu portefólio de arrendamento, arrumado.</h1>
-      <p class="sub">Imóveis, contratos, rendas, créditos e o IRS num só sítio — para quem
-      hoje gere tudo em Excel, papel e memória.</p>
+      <p class="chapeu">Gestão de arrendamento para senhorios</p>
+      <h1>Nenhuma renda te passa despercebida.</h1>
+      <p class="sub">Imóveis, contratos e rendas num só sítio. A Rendorium lembra-te cada
+      pagamento e avisa-te quando falta um.</p>
       <div class="cta">
         <a class="btn primary" href="${APP}/?criar=1">Criar conta grátis</a>
         <a class="btn" href="${APP}">Já tenho conta</a>
@@ -189,7 +351,7 @@ ${cabecaRaiz}
       <div class="telemovel" role="img" aria-label="A Visão geral da Rendorium num telemóvel: receita, despesas, prestações e cashflow do ano, e o que pede atenção.">
         <div class="ecra">
           <p class="tit ecra-titulo">Visão geral</p>
-          <div class="m-cartao m-atencao"><span class="m-icone">${icone(AVISO)}</span><span><strong>3 por confirmar</strong><br><span class="m-sub">1 em atraso</span></span></div>
+          <div class="m-cartao m-atencao"><span class="m-icone">${icone(AVISO)}</span><span><strong>${PENDENTES.length} por confirmar</strong><br><span class="m-sub">${PENDENTES.filter((p) => p.atraso).length} em atraso</span></span></div>
           <div class="m-kpis n">${indicadores()}</div>
           <div class="m-cartao barras-tel">${RECEITA_MES.map(() => '<span></span>').join('')}</div>
           <div class="tile m-capa"></div>
@@ -199,9 +361,36 @@ ${cabecaRaiz}
     </div>
   </section>
 
+  <section class="ligado">
+    <div class="wrap ligado-cab">
+      <h2>Do imóvel à renda, tudo ligado</h2>
+      <p class="sub">O contrato cria a renda planeada, o imóvel cria o IMI e o condomínio, e cada
+      pagamento fica à tua espera para confirmar.</p>
+    </div>
+  </section>
+
+  ${ECRAS.map((e, i) => `<section class="wrap ecra-seccao${i % 2 ? ' inverso' : ''}" id="${e.id}" aria-labelledby="t-${e.id}">
+    <div class="ecra-texto">
+      <p class="chapeu">${e.chapeu}</p>
+      <h3 id="t-${e.id}">${e.titulo}</h3>
+      <p class="sub">${e.texto}</p>
+      <ul class="lista">
+        ${e.pontos.map((t) => `<li>${icone(VISTO, 'ok')}<span>${t}</span></li>`).join('\n        ')}
+      </ul>
+    </div>
+    <div class="ecra-visual">
+      <div class="tile ${e.tom}" aria-hidden="true"></div>
+      <div class="telemovel ${e.id}" role="img" aria-label="${e.rotulo}">
+        <div class="ecra">
+${e.ecra(hoje)}
+        </div>
+      </div>
+    </div>
+  </section>`).join('\n\n  ')}
+
   <section class="faz">
     <div class="wrap">
-      <h2>O que faz</h2>
+      <h2>O resto da gestão, também aqui</h2>
       <div class="grelha">
         ${CAPACIDADES.map((c) => `<div class="cartao"><span class="ic ${c.tom}">${icone(c.d)}</span><h3>${c.titulo}</h3><p>${c.texto}</p></div>`).join('\n        ')}
       </div>
@@ -471,7 +660,91 @@ a.btn:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-ra
 .barras-pc .d{border-radius:3px;background:var(--out)}
 ${alturasDasBarras()}
 
-/* ------------------------------------------------------------- secções */
+/* os três ecrãs (Imóveis, Contratos, Planeados): as peças da app em ponto
+   pequeno — o .badge, as abas da área, o cartão do imóvel, a linha do
+   contrato e a do planeado —, com as mesmas cores por token */
+.m-sub{font-size:10.5px;line-height:1.35}
+.m-abas{display:flex;gap:2px;padding:3px;border-radius:10px;background:var(--tint);border:1px solid var(--line);overflow:hidden}
+.m-abas span{flex:none;padding:5px 8px;border-radius:7px;border:1.5px solid transparent;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
+.m-abas .on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-text)}
+.m-selo{display:inline-flex;align-items:center;min-height:18px;padding:1px 6px;border-radius:5px;font-size:10px;font-weight:600;
+  line-height:1.2;white-space:nowrap;background:var(--accent-soft);color:var(--accent-text)}
+.m-selo.in{background:var(--in-soft);color:var(--in)}
+.m-selo.amber{background:var(--warn-soft);color:var(--warn)}
+.m-selo.red{background:var(--danger-soft);color:var(--danger)}
+.m-selo.grey{background:var(--tint);color:var(--muted)}
+.m-selo.loan{background:var(--loan-soft);color:var(--loan)}
+.m-selos{display:flex;flex-wrap:wrap;gap:4px}
+.m-entre{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.m-entre > span:first-child{min-width:0;display:flex;flex-direction:column;gap:1px}
+.m-entre b{font-size:12px;font-weight:600;white-space:nowrap}
+.m-entre > span:first-child b{white-space:normal}
+.m-nome{font-size:13.5px}
+.m-linha-unica{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pos{color:var(--in)}.neg{color:var(--out)}.prest{color:var(--loan)}
+.botao-maquete.pequeno{min-height:26px;padding:0 10px;border-radius:8px;font-size:11px;align-self:flex-start;
+  background:var(--accent);color:var(--accent-ink)}
+
+/* as capas sem fotografia, nos quatro tons do mosaico da app (.imv-t0…t3) */
+.tile.t1{--mosaico-fundo:#FAE6D2;--mosaico-traco:#B65A16}
+.tile.t2{--mosaico-fundo:#D9EFE5;--mosaico-traco:#1E7A5B}
+.tile.t3{--mosaico-fundo:#E3E6EC;--mosaico-traco:#5B6478}
+/* no escuro, o fundo suave do contrato com o traço do tom claro: o traço
+   escuro do contrato (o --in, o --warn) num mosaico daquele tamanho
+   encandeava, como o cobalto do hero encandearia */
+@media(prefers-color-scheme:dark){
+  .tile.t1{--mosaico-fundo:var(--warn-soft);--mosaico-traco:#B65A16}
+  .tile.t2{--mosaico-fundo:var(--in-soft);--mosaico-traco:#1E7A5B}
+  .tile.t3{--mosaico-fundo:var(--tint);--mosaico-traco:#5B6478}
+}
+.m-imv{display:grid;grid-template-columns:58px 1fr;gap:10px;padding:9px;border-radius:14px;background:var(--card);border:1px solid var(--line)}
+.m-imv-capa{display:block;min-height:76px;border-radius:10px;background-size:20px 20px}
+.m-imv-corpo{min-width:0;display:flex;flex-direction:column;gap:5px}
+.m-nums{display:grid;grid-template-columns:repeat(3,auto);justify-content:space-between;gap:6px;font-size:11px;font-weight:600;white-space:nowrap}
+.m-nums > span{display:flex;flex-direction:column;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.m-nums .m-sub{font-size:9.5px;font-weight:400}
+
+.m-ct-grupo{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.m-ct-linhas{overflow:hidden}
+.m-ct{display:flex;flex-direction:column;gap:6px;padding:9px 10px}
+.m-ct + .m-ct{border-top:1px solid var(--line)}
+.m-ct .m-selos{margin-top:3px}
+.m-pend,.m-plan{display:flex;flex-direction:column;gap:6px}
+.m-pend{padding:8px;border-radius:10px;background:var(--tint)}
+.m-pend > p{font-size:10.5px;font-weight:600}
+
+.m-pend-cartao,.m-plan-lista{padding:10px;display:flex;flex-direction:column;gap:2px}
+.m-entre > span.m-cab:first-child{flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px 6px}
+.m-cab .tit{font-size:14px;white-space:nowrap}
+.m-plan{padding:8px 0}
+.m-plan + .m-plan,.m-pend-cartao > .m-plan{border-top:1px solid var(--line)}
+.m-plan-lista .m-plan:first-child{padding-top:0}
+.m-plan-lista .m-plan:last-child{padding-bottom:0}
+.m-valor{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+
+/* ------------------------------------------------------------- secções
+   o chapéu: a palavra que diz de que se fala, por cima do título */
+.chapeu{font-size:14px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent-text)}
+
+/* «Do imóvel à renda, tudo ligado»: a cabeça, e um ecrã por secção, o
+   texto de um lado e o telemóvel do outro, a alternar; numa coluna, o
+   texto vem sempre antes do telemóvel */
+.ligado{padding-top:clamp(24px,4vw,40px)}
+.ligado-cab{display:flex;flex-direction:column;gap:14px}
+.ligado-cab h2{font-size:clamp(30px,4vw,44px);line-height:1.08}
+.ligado-cab .sub{font-size:19px;color:var(--muted);max-width:680px}
+.ecra-seccao{display:flex;flex-wrap:wrap;align-items:center;gap:40px 64px;
+  padding-top:clamp(48px,7vw,80px);padding-bottom:clamp(48px,7vw,80px)}
+.ecra-seccao + .ecra-seccao{border-top:1px solid var(--line)}
+.ecra-texto{flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:16px}
+.ecra-texto h3{font-size:clamp(28px,3.6vw,40px);line-height:1.1}
+.ecra-texto .sub{font-size:18px;color:var(--muted)}
+.ecra-texto .lista{gap:12px}
+.ecra-visual{flex:1 1 380px;min-width:0;display:flex;justify-content:center;position:relative;padding:32px 0}
+.ecra-visual > .tile{position:absolute;border-radius:32px;inset:72px max(0px,calc(50% - 230px)) 72px max(0px,calc(50% - 230px))}
+.ecra-visual .ecra{min-height:0}
+@media(min-width:900px){.ecra-seccao.inverso .ecra-texto{order:2}}
+
 .faz{background:var(--card);border-top:1px solid var(--line);border-bottom:1px solid var(--line);
   padding:clamp(56px,8vw,80px) 0}
 .faz .wrap{display:flex;flex-direction:column;gap:36px}
@@ -591,6 +864,7 @@ ${alturasDasBarras()}
 /* A entrada do hero, ao chegar: escalonada a 70ms, como a Apple escalona o
    que chega junto — tudo ao mesmo tempo é um bloco, um a um é uma chegada.
    O backwards é o que segura os atrasados invisíveis até à vez deles. */
+.hero .chapeu{animation:sobe var(--entrada) var(--curva-entra) backwards}
 .hero h1{animation:sobe var(--entrada) var(--curva-entra) backwards}
 .hero .sub{animation:sobe var(--entrada) var(--curva-entra) .07s backwards}
 .hero .cta{animation:sobe var(--entrada) var(--curva-entra) .14s backwards}
@@ -604,7 +878,8 @@ ${alturasDasBarras()}
    @supports de propósito: fora dele o estado base fica como sempre esteve,
    visível, e um motor sem view() não esconde conteúdo a ninguém. */
 @supports (animation-timeline: view()){
-  .grelha .cartao,.pc-texto,.computador,.par-texto,.acerto,.lista li,.projeto,.fecho{
+  .ligado-cab,.ecra-texto,.ecra-visual,
+  .grelha .cartao,.pc-texto,.computador,.par-texto,.acerto,.dados-lista .lista li,.projeto,.fecho{
     animation:sobe linear both;animation-timeline:view();
     animation-range:entry 8% entry 42%}
   /* as colunas da grelha entram por degraus, senão a fila chega em bloco —

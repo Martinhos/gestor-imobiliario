@@ -76,7 +76,7 @@ describe('a pré-visualização não compete com a página a sério', () => {
     for (const op of [{ raiz: true }, undefined]) {
       const l = await texto(paginaLanding(op));
       assert.ok(!l.includes('${'), 'landing sem nada por interpolar');
-      assert.match(l, /O teu portefólio de arrendamento/, 'com o título');
+      assert.match(l, /Nenhuma renda te passa despercebida/, 'com o título');
       assert.match(l, /<div class="telemovel" role="img"/, 'e com a maquete do telemóvel');
       const t = await texto(paginaLegal('privacidade', op));
       assert.ok(!t.includes('${'), 'documento sem nada por interpolar');

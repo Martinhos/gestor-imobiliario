@@ -51,6 +51,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-22 · Os grupos selecionáveis, o novo grupo no + e as folhas que se arrastam para fechar
 - 2026-10-22 · Apagar um imóvel que não criei é sair dele
 - 2026-10-22 · Duas escritas na mesma casa não se esmagam
+- 2026-10-23 · A montra diz o valor nos primeiros segundos
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2155,3 +2156,24 @@ deixava passar as duas.
 Aceitar o mesmo convite duas vezes já estava resolvido: o convite gasta-se
 numa só instrução (`UPDATE … WHERE used_at IS NULL`), e só um dos dois
 pedidos o consegue gastar.
+
+## 2026-10-23 · A montra diz o valor nos primeiros segundos
+
+O Martinho quis que quem abre o rendorium.com perceba logo o que a app faz,
+que vantagem tem e como se aplica aos seus imóveis. A montra abria com «O teu
+portefólio de arrendamento, arrumado» e uma grelha de seis cartões, «O que
+faz»: dizia que arruma, não porque é que isso importa. A vantagem que o
+Martinho apontou é a dos planeados: nenhum pagamento, nem a falta dele, passa
+despercebido. Passou a ser o título («Nenhuma renda te passa despercebida»),
+com o chapéu a dizer o que é e o subtítulo a dizer como. «O que faz» deu lugar
+a «Do imóvel à renda, tudo ligado»: o Martinho propôs «Gere o teu portfólio
+de forma integrada», e a frase escolhida mostra o que «integrada» quer dizer
+(o contrato cria a renda, o imóvel cria o IMI). A seguir, cada ecrã que
+entrega a vantagem (Imóveis, Contratos, Planeados) tem a sua secção, com
+um telemóvel a imitar a app (landing.js:ECRAS). Dos seis cartões ficam três,
+os que não têm ecrã. O Anexo F saiu, e com ele o IRS dos metadados: a
+Declaração só existe em dev, e a montra de produção não pode prometer o que a
+produção não tem (testes/landing.test.js guarda-o). O título e a descrição
+levam os termos que um senhorio escreve no Google («gestão de arrendamento»,
+«rendas em atraso», «controlo de rendas»), dentro do que os motores mostram
+sem cortar.
