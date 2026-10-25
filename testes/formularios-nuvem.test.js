@@ -227,7 +227,7 @@ describe('o resto da base', () => {
 
   test('a fotografia, a avaliação e as projeções: nenhum placeholder fora de «Opcional» ou «Ex: »', () => {
     const foto = app.fileBlock('Fotografias', [{ id: 'F1', name: 'IMG_001.jpg', size: 10 }], 'pf', 'x', 'y', { photos: true });
-    assert.match(foto, /id="fn_F1" value="IMG_001\.jpg" placeholder="Ex: Sala de estar" aria-label="Nome da fotografia \(opcional\)"/);
+    assert.match(foto, /<textarea class="pnm" id="fn_F1" rows="1" placeholder="Ex: Sala de estar" aria-label="Nome da fotografia \(opcional\)"[^>]*>IMG_001\.jpg<\/textarea>/);
     limpar(app);
     app.db.properties = [app.normProp({ id: 'P1', name: 'T2 Lisboa' })];
     // os campos das opções vivem na janela da roda dentada

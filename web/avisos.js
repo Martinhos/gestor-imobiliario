@@ -27,6 +27,21 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 42,
+    data: '2026-10-25',
+    titulo: 'Os nomes das fotos inteiros',
+    seccoes: [
+      {
+        titulo: 'Fotos',
+        afeta: ['anexos'],
+        itens: [
+          'O nome de cada foto vê-se inteiro: um nome comprido passa para a linha de baixo, até três linhas.',
+          'A arrastar uma foto para a reordenar, perto do topo ou do fundo do ecrã a janela rola sozinha, para a levares a qualquer lugar da lista.',
+        ],
+      },
+    ],
+  },
+  {
     v: 41,
     data: '2026-10-25',
     titulo: 'Nada se perde numa casa partilhada',

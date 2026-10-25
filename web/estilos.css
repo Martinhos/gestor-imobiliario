@@ -360,10 +360,15 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
 .thumb img{width:100%;height:76px;object-fit:cover;display:block}
 .thumb .nm{font-size:11px;padding:6px 7px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .thumb input.nm{color:var(--ink);font-weight:500;background:var(--field)}
-.prow{display:flex;align-items:center;gap:8px;min-width:0}
+.prow{display:flex;align-items:flex-start;gap:8px;min-width:0}
 .prow .pth{width:64px;height:52px;border-radius:10px;background:var(--chip);overflow:hidden;flex:0 0 64px;cursor:pointer;position:relative}
 .prow .capa{position:absolute;left:4px;bottom:4px;z-index:2;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:1px 6px;border-radius:999px;letter-spacing:.03em}
 .prow .pnm{flex:1;min-width:0}
+/* o nome inteiro, a partir da linha seguinte: cresce até três linhas e
+   depois rola dentro (componentes.js:fotoNomeEscrito mantém-no numa linha só) */
+.prow textarea.pnm{min-height:46px;max-height:calc(4.05em + 24px);resize:none;overflow-y:auto;overflow-wrap:anywhere}
+/* com o nome numa linha, o puxador e o apagar ficam ao meio dela */
+.prow>.pgrab,.prow>.btn{margin-top:3px}
 .pgrab{width:34px;height:40px;border:1px solid var(--line);background:var(--field);border-radius:9px;display:grid;place-items:center;color:var(--muted);cursor:grab;flex:0 0 34px;touch-action:none}
 .prow.drag{position:relative;z-index:5;box-shadow:0 10px 26px rgba(0,0,0,.25);background:var(--card);border-radius:12px}
 .prow{transition:transform var(--rapido) var(--curva)}

@@ -424,7 +424,7 @@ function fileBlock(label,list,inputId,onPick,delFn,opts){
     ${list.length?(photos?
       `<div class="list u-g-8px">${list.map((f,i)=>`<div class="prow">
          <div class="pth pcover" id="th_${esc(f.id)}" data-click="openMeta('${jsq(f.id)}',true)">${i===0?'<span class="capa">capa</span>':''}</div>
-         <input class="pnm" id="fn_${esc(f.id)}" value="${esc(f.name)}" placeholder="Ex: Sala de estar" aria-label="Nome da fotografia (opcional)" autocomplete="off" data-input="livePhotoName('${jsq(f.id)}',this.value)">
+         <textarea class="pnm" id="fn_${esc(f.id)}" rows="1" placeholder="Ex: Sala de estar" aria-label="Nome da fotografia (opcional)" autocomplete="off" enterkeyhint="done" data-keydown="fotoNomeTecla(event)" data-input="fotoNomeEscrito('${jsq(f.id)}',this)">${esc(f.name)}</textarea>
          ${opts.move?`<button type="button" class="pgrab" aria-label="Arrastar para reordenar" data-pointerdown="photoDrag(event,this,${i})">${ic('grip',16)}</button>`:''}
          <button type="button" class="btn sm danger u-fx-0-0-auto u-minw-40px u-minh-40px u-ml-8px" aria-label="Apagar a fotografia" data-click="delFileConfirm('${jsq(delFn)}','${jsq(f.id)}','fotografia')">${ic('trash',14)}</button></div>`).join('')}</div>`
       :`<div class="list u-g-8px u-mb-9px">${list.map(f=>`
@@ -575,7 +575,35 @@ function paintThumbs(list,root){
 // guarda o nome da foto no pForm à medida que se escreve, para não se perder num repinte
 // Recebe: id — o id da foto em pForm.photos; v — o nome tal como está escrito no campo.
 // Devolve: nada — atualiza o name da foto em memória.
-function livePhotoName(id,v){const f=(window.pForm&&pForm.photos||[]).find(x=>x.id===id);if(f)f.name=v}
+function livePhotoName(id,v){
+  // o pForm é um let do imovel.js: não vive no window (o window.pForm de antes era sempre undefined)
+  const pf=typeof pForm!=='undefined'?pForm:null;
+  const f=(pf&&pf.photos||[]).find(x=>x.id===id);if(f)f.name=v;
+}
+/* O nome de uma foto é uma caixa de texto para se ver inteiro (quebra de
+   linha, até três), mas continua a ser uma linha só: o que se cola com
+   quebras fica com espaços, e o cursor fica onde estava.
+   Recebe: id — o id da foto; el — a caixa do nome (.pnm).
+   Devolve: nada — acerta o texto da caixa e guarda o nome (livePhotoName). */
+function fotoNomeEscrito(id,el){
+  if(!el)return;
+  const v=String(el.value||'');
+  if(/[\r\n]/.test(v)){
+    const fim=el.selectionEnd,antes=v.slice(0,fim).replace(/\s*[\r\n]+\s*/g,' ');
+    el.value=v.replace(/\s*[\r\n]+\s*/g,' ');
+    try{el.setSelectionRange(antes.length,antes.length)}catch(e){}
+  }
+  livePhotoName(id,el.value);
+}
+/* O Enter no nome de uma foto não abre uma linha nova: acaba a escrita (o
+   teclado do telemóvel fecha-se, como no «Concluído» dele).
+   Recebe: ev — o evento do teclado.
+   Devolve: nada. */
+function fotoNomeTecla(ev){
+  if(!ev||ev.key!=='Enter'||ev.isComposing)return;
+  ev.preventDefault();
+  try{ev.target.blur()}catch(e){}
+}
 
 /* ================= O TECLADO DO TELEMÓVEL E O CAMPO COM O FOCO =================
    O teclado sobe por cima da página e pode tapar o campo onde se vai

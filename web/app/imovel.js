@@ -907,7 +907,8 @@ function photoDrag(e,h,idx){
   // uma linha que ainda assentava do arrasto de antes fica já no sítio
   rows.forEach(photoAssentaPara);
   const step=(rows.length>1&&rows[1].offsetTop-rows[0].offsetTop)||row.offsetHeight+8||60;
-  _pd={idx,to:idx,row,rows,step,y0:e.clientY,id:e.pointerId};
+  const rol=photoRolante(row);
+  _pd={idx,to:idx,row,rows,step,y0:e.clientY,y:e.clientY,id:e.pointerId,rol,top0:photoRolou(rol),vel:0,raf:0};
   row.classList.add('drag');
   try{h.setPointerCapture(e.pointerId)}catch(x){}
   /* Um ouvinte só, no documento: com o ponteiro capturado o evento chega ao
@@ -928,7 +929,17 @@ function photoDrag(e,h,idx){
 function photoDragMove(e){
   if(!_pd||(e.pointerId!=null&&_pd.id!=null&&e.pointerId!==_pd.id))return;
   e.preventDefault();
-  const dy=e.clientY-_pd.y0;
+  _pd.y=e.clientY;
+  photoDragPintar();
+  photoDragRolagem();
+}
+/* Põe a linha agarrada debaixo do dedo e as outras a abrir o lugar. Conta
+   com o que a janela rolou desde que se pegou nela: a lista subiu com o
+   scroll, e a linha tem de descer outro tanto para ficar no dedo.
+   Devolve: nada — mexe nos transforms das linhas. */
+function photoDragPintar(){
+  if(!_pd)return;
+  const dy=_pd.y-_pd.y0+photoRolou(_pd.rol)-_pd.top0;
   _pd.row.style.transform=`translateY(${dy}px)`;
   const to=Math.max(0,Math.min(_pd.rows.length-1,_pd.idx+Math.round(dy/_pd.step)));
   if(to!==_pd.to){_pd.to=to;
@@ -938,6 +949,48 @@ function photoDragMove(e){
       else if(_pd.idx>to&&i>=to&&i<_pd.idx)sh=_pd.step;
       r.style.transform=sh?`translateY(${sh}px)`:'';});
   }
+}
+/* Quanto rolou a área que rola (0 sem ela).
+   Recebe: rol — o elemento que rola, ou null.
+   Devolve: o scrollTop, em px. */
+function photoRolou(rol){return rol&&typeof rol.scrollTop==='number'?rol.scrollTop:0}
+/* Quem rola por baixo da lista das fotos: a primeira caixa acima dela que
+   tem scroll (o corpo da janela), ou a página.
+   Recebe: el — a linha agarrada.
+   Devolve: o elemento que rola (ou null). */
+function photoRolante(el){
+  for(let p=el&&el.parentElement;p&&p!==document.body;p=p.parentElement){
+    const o=getComputedStyle(p).overflowY;
+    if((o==='auto'||o==='scroll')&&p.scrollHeight>p.clientHeight)return p;
+  }
+  return (el&&el.closest('.body'))||document.scrollingElement||null;
+}
+/* Perto da borda de cima ou de baixo da área que rola, ela rola sozinha,
+   mais depressa quanto mais perto, para a foto poder ir para um lugar que
+   não se vê (como o arrasto das tarefas, tarefas.js:tfArrastoRolagem). O
+   dedo decide: é uma rolagem e não uma animação, e por isso vale também com
+   o movimento reduzido.
+   Devolve: nada — arranca ou pára o passo da auto-rolagem. */
+function photoDragRolagem(){
+  const a=_pd;if(!a||!a.rol||typeof a.rol.getBoundingClientRect!=='function')return;
+  const r=a.rol===document.scrollingElement?{top:0,bottom:window.innerHeight}:a.rol.getBoundingClientRect();
+  const cima=Math.max(r.top,0),baixo=Math.min(r.bottom,window.innerHeight),zona=56;
+  let v=0;
+  if(a.y<cima+zona)v=-Math.ceil(14*(cima+zona-a.y)/zona);
+  else if(a.y>baixo-zona)v=Math.ceil(14*(a.y-(baixo-zona))/zona);
+  a.vel=Math.max(-18,Math.min(18,v));
+  if(a.vel&&!a.raf&&typeof requestAnimationFrame==='function')a.raf=requestAnimationFrame(photoDragPasso);
+}
+/* Um passo da auto-rolagem: rola, volta a pôr a foto debaixo do dedo, e
+   continua enquanto o dedo estiver na zona e houver para onde rolar.
+   Devolve: nada. */
+function photoDragPasso(){
+  const a=_pd;if(!a)return;a.raf=0;
+  if(!a.vel||!a.rol)return;
+  const antes=a.rol.scrollTop;a.rol.scrollTop+=a.vel;
+  if(a.rol.scrollTop===antes)return;
+  photoDragPintar();
+  a.raf=requestAnimationFrame(photoDragPasso);
 }
 /* Largar a foto, sem saltos. As outras linhas já estão, pelo transform, no
    sítio onde a troca as deixa: troca-se a linha no DOM e limpam-se os
@@ -953,6 +1006,7 @@ function photoDragMove(e){
 function photoDragEnd(){
   if(!_pd)return;
   const {idx,to,row,rows}=_pd;
+  if(_pd.raf&&typeof cancelAnimationFrame==='function')cancelAnimationFrame(_pd.raf);   // a auto-rolagem pára ao largar
   _pd=null;
   const list=row.parentNode;
   const de=row.getBoundingClientRect().top;   // onde o dedo a deixou

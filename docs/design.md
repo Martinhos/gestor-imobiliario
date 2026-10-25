@@ -2078,7 +2078,20 @@ mexem; a largada parte de onde o dedo a deixou e assenta no lugar novo no
 --rapido e na --curva-entra (imovel.js:photoAssenta). Um dedo que pega numa
 linha a meio do assentar apanha-a já no sítio (imovel.js:photoAssentaPara).
 Sem movimento, pousa logo. Largar só lê os nomes das fotos
-(imovel.js:photoLerNomes): nada mais mudou no formulário.
+(imovel.js:photoLerNomes): nada mais mudou no formulário. Perto do topo ou
+do fundo da área que rola (56px), ela rola sozinha, mais depressa quanto mais
+perto da borda e no máximo 18px por quadro, como no arrasto das tarefas
+(imovel.js:photoDragRolagem, imovel.js:photoDragPasso): a foto fica debaixo do
+dedo e o lugar onde cai conta com o que rolou (imovel.js:photoDragPintar), e a
+rolagem pára fora da zona, no fim do que há para rolar e ao largar. É o dedo
+que a manda, e por isso vale também com o movimento reduzido.
+
+O nome de cada foto é uma caixa de texto de uma linha que quebra a linha: um
+nome comprido vê-se inteiro, até três linhas, e depois rola dentro dela
+(estilos.css:.pnm). Continua a ser um nome de uma linha: o Enter acaba a
+escrita em vez de abrir uma linha nova (componentes.js:fotoNomeTecla), e o que
+se cola com quebras fica com espaços (componentes.js:fotoNomeEscrito). A
+miniatura e os botões ficam no topo da linha.
 
 O palco tem tamanho fixo — quadrado, até 60% da altura do ecrã — e cada foto
 cabe lá inteira (object-fit:contain), sobre o --tint (estilos.css:.fc-palco):
