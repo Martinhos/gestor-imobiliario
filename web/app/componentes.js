@@ -508,7 +508,9 @@ function pedirMiniatura(id,fazer){
   return p;
 }
 /* Faz a miniatura de 220px de um blob (na fila), guarda-a no IndexedDB como
-   tn_<id> e em memória. Se o browser não a conseguir fazer, só um original
+   tn_<id> e em memória — com sessão, guardar é também subi-la, para os
+   outros aparelhos não descarregarem o original (cloud/anexos.js:
+   subirMiniatura). Se o browser não a conseguir fazer, só um original
    leve (MINIATURA_ORIGINAL_MAX) vai para a caixa.
    Recebe: id — o id da foto; blob — o original.
    Devolve: promessa do object URL guardado, ou null (fica o marcador). */
@@ -525,7 +527,9 @@ function miniaturaDoBlob(id,blob){
    Devolve: promessa do object URL da miniatura, ou null. */
 function fazerMiniatura(id,blob){return pedirMiniatura(id,()=>miniaturaDoBlob(id,blob))}
 /* miniatura pequena de uma foto: usa a que está em memória, a guardada (tn_),
-   ou cria-a uma vez a partir do original (miniaturaDoBlob).
+   ou cria-a uma vez a partir do original (miniaturaDoBlob). Com sessão, o
+   tn_ que falta no aparelho pede-se primeiro ao servidor (cloud/anexos.js:
+   baixarMiniatura), e só sem ele lá se descarrega o original.
    Recebe: id — o id da foto (chave do blob no IndexedDB; a miniatura vive em tn_<id>).
    Devolve: Promise que resolve para um object URL da miniatura, ou null quando
    o blob não existe (ou não dá miniatura e é pesado). */

@@ -115,7 +115,7 @@ async function escreverCasaUmaVez(e, houseId, put, data, base) {
   return { ok: true };
 }
 
-// O JSON de uma casa lido da base, para comparar.
+// O JSON de uma casa (ou de um registo) lido da base, para comparar.
 // Recebe: s — o texto da coluna data.
 // Devolve: o objeto, ou null quando não se lê.
 function lerCasa(s) {
@@ -125,13 +125,15 @@ function lerCasa(s) {
 // Um registo de uma casa. Com o kind num serviço desligado (a frase é a
 // desse serviço), ou sem Imóveis, não entra nem sai — nem se olha para a
 // casa. Depois, a regra única (regraDoRegisto); ao apagar, uma casa
-// inacessível conta como «já não existe». A gravar, o planeado do dono
-// confirmado por um colaborador só muda next/until/muted (planeadoAGravar), e
-// os anexos que a escrita junta têm regra própria (regraDosAnexos).
+// inacessível conta como «já não existe». A gravar, funde com o que está na
+// base como a casa (gravarRegisto), e o planeado do dono confirmado por um
+// colaborador continua a só mudar next/until/muted (planeadoAGravar, por
+// cima da fusão).
 // Recebe: e — o contexto; houseId, kind, rid — a linha; put — true a gravar,
-// false a apagar; data — o registo já limpo (só no put).
+// false a apagar; data — o registo já limpo (só no put); base (opcional) —
+// os campos da versão que o cliente leu que ele mudou, já limpos.
 // Devolve: promessa do resultado da operação.
-async function escreverRegisto(e, houseId, kind, rid, put, data) {
+async function escreverRegisto(e, houseId, kind, rid, put, data, base) {
   const { env, me } = e;
   if (e.kindsOff.has(kind)) return desligado(servicoDoKind(kind));
   if (e.semCasas) return desligado('properties');
@@ -145,50 +147,102 @@ async function escreverRegisto(e, houseId, kind, rid, put, data) {
       .bind(now(), houseId, kind, rid).run();
     return { ok: true };
   }
-  const dados = await planeadoAGravar(env, me, a, houseId, kind, rid, data);
-  const anexos = await regraDosAnexos(env, a, houseId, kind, rid, dados);
-  if (anexos) return { ok: false, status: anexos.status, error: anexos.error };
-  // author é o último a escrever (o sino usa-o); created_by é o criador e
-  // nunca muda — é o que decide «só o que criou»
-  await env.DB.prepare(
-    `INSERT INTO records (house_id, kind, id, data, updated_at, deleted, author, created_by)
-     VALUES (?, ?, ?, ?, ?, 0, ?, ?)
-     ON CONFLICT (house_id, kind, id)
-     DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0,
-       author = excluded.author, created_by = COALESCE(records.created_by, excluded.created_by)`
-  ).bind(houseId, kind, rid, JSON.stringify(dados), now(), me.id, me.id).run();
-  await linkFiles(env, houseId, dados, kind, rid, me.id, !!a.collab);
-  return { ok: true };
+  const chave = [houseId, kind, rid];
+  return gravarRegisto(env, {
+    ler: () => env.DB.prepare('SELECT data, deleted FROM records WHERE house_id = ? AND kind = ? AND id = ?').bind(...chave),
+    // author é o último a escrever (o sino usa-o); created_by é o criador e
+    // nunca muda — é o que decide «só o que criou»
+    atualizar: (texto, t, row) => env.DB.prepare(
+      `UPDATE records SET data = ?, updated_at = ?, deleted = 0, author = ?, created_by = COALESCE(created_by, ?)
+       WHERE house_id = ? AND kind = ? AND id = ? AND data IS ? AND deleted IS ?`
+    ).bind(texto, t, me.id, me.id, ...chave, row.data, row.deleted),
+    inserir: (texto, t) => env.DB.prepare(
+      `INSERT INTO records (house_id, kind, id, data, updated_at, deleted, author, created_by)
+       VALUES (?, ?, ?, ?, ?, 0, ?, ?) ON CONFLICT (house_id, kind, id) DO NOTHING`
+    ).bind(...chave, texto, t, me.id, me.id),
+  }, data, base, async (dados) => {
+    // o planeado de outrem que um colaborador confirma: só next/until/muted
+    // entram, por cima do que a fusão deu
+    dados = await planeadoAGravar(env, me, a, houseId, kind, rid, dados);
+    const anexos = await regraDosAnexos(env, a, houseId, kind, rid, dados);
+    if (anexos) return { recusa: { ok: false, status: anexos.status, error: anexos.error } };
+    return { dados };
+  }, (dados) => linkFiles(env, houseId, dados, kind, rid, me.id, !!a.collab));
+}
+
+/* Grava um registo (de uma casa ou da conta) fundido com o que está na base,
+   como a casa: com a base que o cliente leu, só entra o que ele mudou; sem
+   ela, os campos que chegam ganham e nada sai (permissoes.js:fundirCasaComBase).
+   Um registo apagado (a lápide) ou novo grava-se como chega — criar e
+   ressuscitar não fundem. Uma fusão que deixa o registo como estava não grava
+   (nem muda o autor). A escrita só pega se o registo ainda for o que se leu
+   (o data e o deleted na condição do UPDATE; o INSERT de um novo não pisa um
+   que entretanto apareceu): outra escrita a meio faz repetir a leitura e a
+   fusão, e à terceira desiste com o 409 da casa, sem mexer em nada.
+   Recebe: env; sql — {ler(), atualizar(texto, t, row), inserir(texto, t)}:
+   as instruções preparadas da linha (a leitura do data e do deleted, o
+   UPDATE condicionado ao que se leu, o INSERT que não pisa); data — o que
+   chega; base — os campos da base, ou undefined; ajustar — async (dados) =>
+   {dados} ou {recusa}: o que as regras do âmbito fazem ao fundido; depois —
+   async (dados): o que corre depois de gravar, ou de ver que não havia nada
+   a gravar.
+   Devolve: promessa do resultado da operação. */
+async function gravarRegisto(env, sql, data, base, ajustar, depois) {
+  for (let vez = 1; vez <= 3; vez++) {
+    const row = await sql.ler().first();
+    const vivo = !!row && !row.deleted;
+    const r = await ajustar(vivo ? fundirCasaComBase(row.data, data, base) : data);
+    if (r.recusa) return r.recusa;
+    if (vivo && fusaoIguais(r.dados, lerCasa(row.data))) {
+      await depois(r.dados);
+      return { ok: true };
+    }
+    const texto = JSON.stringify(r.dados), t = now();
+    const feito = await (row ? sql.atualizar(texto, t, row) : sql.inserir(texto, t)).run();
+    if (feito && feito.meta && feito.meta.changes) {
+      await depois(r.dados);
+      return { ok: true };
+    }
+  }
+  return { ok: false, status: 409, error: FRASE_CASA_MUDOU };
 }
 
 // Um dado global do utilizador (user_records): só dele, sem casa; um kind de
-// um serviço desligado não entra nem sai.
+// um serviço desligado não entra nem sai. A gravar, funde como um registo de
+// casa (gravarRegisto): dois aparelhos da mesma conta não se esmagam.
 // Recebe: e — o contexto; kind, id — a linha; put — true a gravar, false a
-// apagar; data — o registo já limpo (só no put).
+// apagar; data — o registo já limpo (só no put); base (opcional) — os campos
+// da versão que o cliente leu que ele mudou, já limpos.
 // Devolve: promessa do resultado da operação.
-async function escreverGlobal(e, kind, id, put, data) {
+async function escreverGlobal(e, kind, id, put, data, base) {
   const { env, me } = e;
   if (e.userKindsOff.has(kind)) return desligado(servicoDoKind(kind, 'user'));
-  if (put) {
-    await env.DB.prepare(
-      `INSERT INTO user_records (user_id, kind, id, data, updated_at, deleted)
-       VALUES (?, ?, ?, ?, ?, 0)
-       ON CONFLICT (user_id, kind, id)
-       DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, deleted = 0`
-    ).bind(me.id, kind, id, JSON.stringify(data), now()).run();
-  } else {
+  if (!put) {
     await env.DB.prepare('UPDATE user_records SET deleted = 1, updated_at = ? WHERE user_id = ? AND kind = ? AND id = ?')
       .bind(now(), me.id, kind, id).run();
+    return { ok: true };
   }
-  return { ok: true };
+  const chave = [me.id, kind, id];
+  return gravarRegisto(env, {
+    ler: () => env.DB.prepare('SELECT data, deleted FROM user_records WHERE user_id = ? AND kind = ? AND id = ?').bind(...chave),
+    atualizar: (texto, t, row) => env.DB.prepare(
+      `UPDATE user_records SET data = ?, updated_at = ?, deleted = 0
+       WHERE user_id = ? AND kind = ? AND id = ? AND data IS ? AND deleted IS ?`
+    ).bind(texto, t, ...chave, row.data, row.deleted),
+    inserir: (texto, t) => env.DB.prepare(
+      `INSERT INTO user_records (user_id, kind, id, data, updated_at, deleted)
+       VALUES (?, ?, ?, ?, ?, 0) ON CONFLICT (user_id, kind, id) DO NOTHING`
+    ).bind(...chave, texto, t),
+  }, data, base, async (dados) => ({ dados }), async () => {});
 }
 
 /* Aplica uma operação { op: 'put'|'del', scope: 'house'|'record'|'user',
    houseId, kind, id, data, base? }: valida-a sozinha (ids pela forma de
    badId, o corpo e a base por cleanData — o id da linha manda — e tooBig) e
-   escreve-a com as regras do seu âmbito. A base só conta numa casa
-   (escreverCasa). Uma exceção sobe: o sync apanha-a por operação, o
-   REST deixa-a chegar ao index.js.
+   escreve-a com as regras do seu âmbito. A base vale nos três âmbitos: a
+   casa (escreverCasa) e os registos (gravarRegisto) fundem com ela. Uma
+   exceção sobe: o sync apanha-a por operação, o REST deixa-a chegar ao
+   index.js.
    Recebe: e — o contexto de prepararEscritas; op — a operação (o data é
    limpo no próprio sítio).
    Devolve: promessa de { ok: true }, { ok: true, gone: true } (apagar o que
@@ -204,16 +258,16 @@ export async function aplicarOp(e, op) {
     if (!op.data) return { ok: false, status: 400 };
     if (tooBig(op.data)) return { ok: false, status: 413 };
   }
-  // a base de uma casa: um objeto (os campos que o cliente mudou, como os
-  // leu), limpo como o data; sem ela, ou com null, a fusão é a de sem base
+  // a base: um objeto (os campos que o cliente mudou, como os leu), limpo
+  // como o data; sem ela, ou com null, a fusão é a de sem base
   let base;
-  if (put && op.scope === 'house' && op.base != null) {
+  if (put && op.base != null) {
     if (!fusaoObjeto(op.base)) return { ok: false, status: 400 };
     base = cleanData(op.base);
     if (tooBig(base)) return { ok: false, status: 413 };
   }
   if (op.scope === 'house') return escreverCasa(e, String(op.houseId), put, op.data, base);
-  if (op.scope === 'record') return escreverRegisto(e, String(op.houseId), String(op.kind), String(op.id), put, op.data);
-  if (op.scope === 'user') return escreverGlobal(e, String(op.kind), String(op.id), put, op.data);
+  if (op.scope === 'record') return escreverRegisto(e, String(op.houseId), String(op.kind), String(op.id), put, op.data, base);
+  if (op.scope === 'user') return escreverGlobal(e, String(op.kind), String(op.id), put, op.data, base);
   return { ok: false, status: 400 };
 }

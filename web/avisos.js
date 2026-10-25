@@ -36,6 +36,7 @@ var AVISOS = [
         afeta: ['partilha', 'imoveis'],
         itens: [
           'Quando duas contas mexem na mesma casa, cada uma só muda o que mudou: as tarefas, as fotos e os campos que a outra adicionou ficam. Se as duas mudarem a mesma coisa, fica a última.',
+          'O mesmo vale para os contratos, os movimentos, os planeados, as visitas e as fichas dos inquilinos: os documentos, as chaves e as tarefas que a outra conta adicionou já não desaparecem.',
           'Esta versão é obrigatória: as anteriores ainda gravavam a casa inteira por cima.',
         ],
       },
@@ -51,6 +52,7 @@ var AVISOS = [
         afeta: ['anexos'],
         itens: [
           'Mudar o nome e a ordem das fotos ficou rápido no telemóvel: o campo já não foge do dedo e a foto largada pousa no lugar sem saltos.',
+          'Noutro telemóvel, as fotos aparecem depressa: descem só as miniaturas, e a foto inteira só quando a abres.',
         ],
       },
     ],

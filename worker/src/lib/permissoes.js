@@ -170,17 +170,20 @@ export function fundirCasa(existenteStr, incoming, perms) {
 }
 
 // <fusao>
-/* A fusão a três da casa. Duas contas (ou dois aparelhos) gravam a mesma
-   casa: cada envio diz que versão do servidor leu (a base), e o que chega
-   funde-se com o que o servidor tem agora, campo a campo e item a item. O que
-   não mudou desde a base fica como o servidor o tem; o que mudou ganha. Uma
-   lista de objetos com id (as tarefas e as secções delas, as fotos, os
-   quartos, as hipotecas e os documentos delas) junta-se pelo id: o que se
-   adicionou de cada lado entra, só sai o que se removeu do lado que envia, e o
-   mesmo campo mudado dos dois lados fica com o último a chegar. Sem base,
-   nada sai de uma lista (só se junta e muda). Este bloco vive igual, letra a
-   letra, em worker/src/lib/permissoes.js e em web/cloud/nucleo.js (o cliente
-   faz a mesma fusão ao ler), e testes/fusao-da-casa.test.js compara-os. */
+/* A fusão a três de uma casa ou de um registo. Duas contas (ou dois
+   aparelhos) gravam o mesmo JSON: cada envio diz que versão do servidor leu
+   (a base), e o que chega funde-se com o que o servidor tem agora, campo a
+   campo e item a item. O que não mudou desde a base fica como o servidor o
+   tem; o que mudou ganha; um campo que a base tinha e não chega foi removido
+   aqui e sai. Uma lista de objetos com id (as tarefas e as secções delas, as
+   fotos, os quartos, as hipotecas e os documentos delas; num contrato também
+   os documentos, o inventário, as chaves e as renovações; numa ficha, os
+   documentos) junta-se pelo id: o que se adicionou de cada lado entra, só sai
+   o que se removeu do lado que envia, e o mesmo campo mudado dos dois lados
+   fica com o último a chegar. Sem base, nada sai (só se junta e muda). Este
+   bloco vive igual, letra a letra, em worker/src/lib/permissoes.js e em
+   web/cloud/nucleo.js (o cliente faz a mesma fusão ao ler), e
+   testes/fusao-da-casa.test.js compara-os. */
 
 // Até onde a fusão desce por objetos e listas; mais fundo, o que chega fica
 // tal e qual (um JSON com milhares de níveis não rebenta a pilha).
@@ -298,7 +301,8 @@ export function fusaoLista(base, chega, atual, n) {
 
 /* Um valor fundido a três. O que não chega, ou chega igual à base, fica como
    o servidor o tem. Uma lista de objetos com id funde-se item a item
-   (fusaoLista); dois objetos, campo a campo; o resto é o que chega.
+   (fusaoLista); dois objetos, campo a campo — e um campo que a base tinha,
+   com valor, e não chega sai: foi removido aqui; o resto é o que chega.
    Recebe: base — o valor que o cliente leu (undefined: sem base); chega — o
    que o cliente manda; atual — o que o servidor tem; n — a profundidade.
    Devolve: o valor fundido (undefined quando não há nada). */
@@ -317,6 +321,10 @@ export function fusaoValor(base, chega, atual, n) {
     var v = fusaoValor(b ? b[k] : undefined, chega[k], atual[k], n + 1);
     if (v === undefined) delete out[k]; else out[k] = v;
   });
+  if (b) Object.keys(b).forEach(function (k) {
+    if (k === '__proto__' || b[k] == null) return;
+    if (!Object.prototype.hasOwnProperty.call(chega, k) || chega[k] === undefined) delete out[k];
+  });
   return out;
 }
 
@@ -329,18 +337,19 @@ export function fundirTres(base, chega, atual) {
 }
 // </fusao>
 
-/* A casa que um envio grava, fundida com a que está na base (fundirTres).
-   A base vem do cliente só com os campos que ele mudou (os outros, iguais ao
-   que manda, não seguem: poupa metade do pedido); um campo que a base tinha
-   vazio vem a null. Sem base (um cliente de antes da fusão, ou um pedido
-   REST), nada sai das listas com ids e os campos que chegam ganham — o envio
-   de uma cópia velha não apaga as fotos nem as tarefas que outra conta
-   adicionou. Um campo que não chega nunca sai (um colaborador não recebe o
-   que o cargo não vê).
-   Recebe: existenteStr — o JSON da casa na base, em texto; chega — o objeto
-   que o cliente mandou (já passado por cleanData); base — os campos da base
-   que mudaram (objeto já limpo), ou undefined.
-   Devolve: um objeto novo com a casa fundida, pronto a gravar. */
+/* A casa — ou o registo, de uma casa ou da conta — que um envio grava,
+   fundida com a que está na base (fundirTres). A base vem do cliente só com
+   os campos que ele mudou (os outros, iguais ao que manda, não seguem: poupa
+   metade do pedido); um campo que a base tinha vazio vem a null, e um que ele
+   removeu vem com o valor que a base lhe dava (e sai). Sem base (um cliente
+   de antes da fusão, ou um pedido REST sem ela), nada sai e os campos que
+   chegam ganham — o envio de uma cópia velha não apaga as fotos, as tarefas
+   ou os documentos que outra conta adicionou. Um campo que não chega e que a
+   base não tinha nunca sai (um colaborador não recebe o que o cargo não vê).
+   Recebe: existenteStr — o JSON guardado, em texto; chega — o objeto que o
+   cliente mandou (já passado por cleanData); base — os campos da base que
+   mudaram (objeto já limpo), ou undefined.
+   Devolve: um objeto novo, fundido, pronto a gravar. */
 export function fundirCasaComBase(existenteStr, chega, base) {
   let atual = {};
   try { const ex = JSON.parse(existenteStr); if (fusaoObjeto(ex)) atual = ex; } catch (e) {}

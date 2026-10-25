@@ -2060,6 +2060,16 @@ não encolhe só vai inteira para a caixa se for leve, até 1 MB
 (componentes.js:miniaturaDoBlob); senão fica o marcador. O carrossel continua
 a mostrar a foto inteira.
 
+As miniaturas também vivem na nuvem. A de 220px que um aparelho faz (guardada como
+tn_<id>) sobe para /api/files/<id>/miniatura depois do original (cloud/anexos.js:
+subirMiniatura), e noutro aparelho o thumbSrc pede-a ao servidor antes de pensar no original
+(cloud/anexos.js:baixarMiniatura, pelo idbGet embrulhado): pintar dez caixas são dez
+pedidos de ~10 KB, não dez fotos de câmara. Sem ela no servidor — uma foto de antes, ou de
+quem não a pôde subir —, cai no original como antes, faz a miniatura e sobe-a, uma vez: o
+aparelho seguinte já não descarrega o original. O carrossel continua a abrir a foto
+inteira. A arrumação do arranque guarda o tn_ de cada anexo que fica
+(web/app/anexos.js:cleanFiles).
+
 Reordenar as fotos no formulário: a linha agarrada segue o dedo e as outras
 abrem o lugar (imovel.js:photoDragMove, ouvido só no documento — uma vez por
 movimento). Ao largar, a linha troca de lugar no DOM e os transforms limpam-se
@@ -3924,44 +3934,79 @@ Ler o estado é uma fusão a três, com o retrato como base
 (nucleo.js:applyState). O que aqui está igual ao retrato passa a ser o que o
 servidor tem, incluindo desaparecer; o que é novo, foi editado ou foi apagado
 aqui fica por cima (nucleo.js:pendentesLocais, nucleo.js:reporPendentes), e o
-push seguinte envia-o. Uma casa não vai inteira por cima: funde-se com a do
-servidor e com a base deste aparelho (nucleo.js:fundirCasaLocal; ver o
-parágrafo a seguir). As marcas (os campos com _), os donos e as quotas são
-sempre do servidor (nucleo.js:fundidoComServidor). Duas exceções: uma base de
-outra conta cede ao servidor inteira, e sem retrato os dados locais só sobem
-se o servidor estiver vazio. Trocar o db pelo do servidor, como se fazia,
-perdia o que se escreveu offline e o que um 429 recusou.
+push seguinte envia-o. Uma casa ou um registo que o servidor também tem não
+vai inteiro por cima: funde-se com o do servidor e com a base deste aparelho
+(nucleo.js:fundirCasaLocal, nucleo.js:fundirRegistoLocal; ver o parágrafo a
+seguir). As marcas (os campos com _), os donos e as quotas são sempre do
+servidor (nucleo.js:fundidoComServidor). Duas exceções: uma base de outra
+conta cede ao servidor inteira, e sem retrato os dados locais só sobem se o
+servidor estiver vazio. Trocar o db pelo do servidor, como se fazia, perdia o
+que se escreveu offline e o que um 429 recusou.
 
-A casa funde-se, não se grava por cima. A casa é um JSON que duas contas (e
-cada aparelho) gravam inteiro. Cada envio dela diz que versão do servidor
-leu: o aparelho guarda, por conta, a base de cada casa — a versão do servidor
-na forma local, refeita a cada estado aplicado e trocada pelo que subiu em
-cada envio aceite (nucleo.js:bases, nucleo.js:loadBases, nucleo.js:saveBases)
-—, e o put leva só os campos que mudaram desde ela, com o valor que ela lhes
-dava (nucleo.js:baseParcial). O servidor funde o que chega com o que tem
-(worker/src/lib/escritas.js:escreverCasa,
+A casa e os registos fundem-se, não se gravam por cima. A casa, um
+contrato, um movimento, uma ficha são JSON que duas contas (e cada aparelho)
+gravam inteiros. Cada envio diz que versão do servidor leu: o aparelho tem,
+por conta, a base de cada casa e de cada registo — a versão do servidor na
+forma local, refeita a cada estado aplicado e trocada pelo que subiu em cada
+envio aceite (nucleo.js:bases) —, e o put leva só os campos que mudaram
+desde ela, com o valor que ela lhes dava, e os que saíram
+(nucleo.js:baseParcial). O que é igual à base não sobe. O servidor funde o
+que chega com o que tem (worker/src/lib/escritas.js:escreverCasa,
+worker/src/lib/escritas.js:gravarRegisto,
 worker/src/lib/permissoes.js:fundirCasaComBase): o que não mudou desde a base
-fica como está; o que mudou ganha; as listas com id (as tarefas e as secções,
-as fotos, os quartos, as hipotecas e os documentos delas) juntam-se item a
-item — o que se adicionou de cada lado entra, só sai o que se removeu do lado
-que envia, e o mesmo campo mudado dos dois lados fica com o último. A ordem é
-a de quem a mudou; o que só um lado tem entra antes do que se lhe seguia, ou
-no fim (worker/src/lib/permissoes.js:fusaoOrdem). Um colaborador passa ainda
-pelo fundirCasa: o que o cargo não vê nem entra nem sai. Uma fusão que deixa a
-casa como estava não grava. O cliente funde da mesma maneira ao ler, com o
-mesmo código: o bloco da fusão vive igual, letra a letra, em
-worker/src/lib/permissoes.js e em web/cloud/nucleo.js, e o
+fica como está; o que mudou ganha; um campo que saiu aqui sai; as listas com
+id (as tarefas e as secções, as fotos, os quartos, as hipotecas e os
+documentos delas; num contrato os documentos, o inventário, as chaves e as
+renovações; numa ficha os documentos) juntam-se item a item — o que se
+adicionou de cada lado entra, só sai o que se removeu do lado que envia, e o
+mesmo campo mudado dos dois lados fica com o último. A ordem é a de quem a
+mudou; o que só um lado tem entra antes do que se lhe seguia, ou no fim
+(worker/src/lib/permissoes.js:fusaoOrdem). As regras de sempre vêm por cima
+do fundido: na casa, o colaborador passa pelo fundirCasa (o que o cargo não
+vê nem entra nem sai); no planeado de outrem que um colaborador confirma, só
+next, until e muted entram (worker/src/lib/acesso.js:planeadoAGravar); os
+anexos que a escrita junta têm a regra deles
+(worker/src/files.js:regraDosAnexos). Uma fusão que deixa o JSON como estava
+não grava (nem muda o autor). A casa grava por cima da revisão que leu; um
+registo, por cima do texto que leu — outra escrita a meio faz repetir a
+fusão, e à terceira é um 409 que não mexeu em nada. O cliente funde da mesma
+maneira ao ler, com o mesmo código: o bloco da fusão vive igual, letra a
+letra, em worker/src/lib/permissoes.js e em web/cloud/nucleo.js, e o
 testes/fusao-da-casa.test.js compara-os.
 
-Um envio sem base — uma versão de antes, um PUT REST sem `base` — não remove
-nada das listas com ids: só junta e muda. A base guardada passa pela
-normalização desta versão ao carregar (nucleo.js:loadBases): a casa local
-também passou, e uma versão nova que acrescenta um campo não faz a casa
-parecer mexida. Era isso que apagava: uma cópia velha que diferia do retrato
-só porque a versão nova a normalizava de outra maneira subia inteira. Na
-primeira sessão com bases, uma casa que o servidor já tem não sobe antes do
-primeiro estado (nucleo.js:pushNow), e ao ler sem base os campos simples são
-os do servidor e as listas juntam-se (nucleo.js:fundirCasaLocal).
+No aparelho guardam-se as bases das casas e as dos registos por enviar
+(nucleo.js:saveBases, nucleo.js:basesPorEnviar — gravadas no começo de cada
+envio, antes do pedido); a de um registo que o retrato diz igual ao do
+servidor é, no arranque, o próprio registo (nucleo.js:loadBases). Guardar
+todas levava outra vez a base duas vezes para o localStorage. Cada base
+guardada passa pela normalização desta versão ao carregar
+(nucleo.js:normalizarDaChave): o objeto local também passou, e uma versão
+nova que acrescenta um campo não faz o objeto parecer mexido. Era isso que
+apagava: uma cópia velha que diferia do retrato só porque a versão nova a
+normalizava de outra maneira subia inteira. Um envio sem base — uma versão de
+antes, um PUT REST sem `base` — não remove nada: só junta e muda. Sem base no
+aparelho (a primeira sessão com bases, uma cópia que esta versão normaliza de
+outra maneira), o que o servidor já tem não sobe antes do primeiro estado
+(nucleo.js:pushNow), e ao ler os campos simples são os do servidor e as
+listas com ids juntam-se (nucleo.js:baseSemListas).
+
+Os anexos sobem à parte dos registos. Guardar um anexo no aparelho é também subi-lo
+(cloud/anexos.js: o idbPut embrulhado → subirAnexo), com a casa a que pertence quando já se
+sabe (cloud/anexos.js:casaDoAnexo); uma foto começa a subir mal é escolhida, ainda sem casa,
+com o nome do ficheiro. Se a gravação do registo chegar ao servidor antes de o upload acabar
+— acontece com quatro em cinco fotos —, o linkFiles dela não encontrou o anexo; quando o
+upload acaba, o cliente pede ao servidor para o prender ao registo da casa que já o refere
+(cloud/anexos.js:prenderAnexo, worker/src/files.js:handlePrender), sem voltar a mandar o
+conteúdo, e o PUT com ?casa= faz o mesmo (worker/src/files.js:prenderAoQueORefere). Depois
+de cada envio aceite sobem os anexos que esta sessão ainda não tratou, vinte de cada vez
+(cloud/anexos.js:subirPendentes) — nunca os mesmos outra vez.
+
+A miniatura de uma foto mora no R2 na chave tn/<id> (worker/src/files.js:chaveDaMiniatura),
+sem linha em files: decide-se tudo pela linha do original (worker/src/files.js:
+handleMiniatura). Vê-a quem vê a foto; escreve-a quem pode apagar a foto (um colaborador só
+nas que ele carregou); não conta para o teto da conta nem para o travão dos uploads (tem o
+seu, tn:); sai com a foto — o DELETE, a varredura e o apagar da conta levam as duas chaves
+(worker/src/files.js:chavesNoR2).
 
 O que o cliente não sabe ler não se apaga: um kind de uma versão mais nova,
 ou um registo que não normaliza, fica congelado e relata-se
@@ -4396,8 +4441,8 @@ vezes já era seguro, porque o convite se gasta numa só instrução. Uma
 correção à mão na consola, que não mexa em `rev`, passa sem verificação; o
 testes/revisao-da-casa.test.js confere que nenhuma escrita do worker foge ao
 gravarCasa. A gravação da ficha pelo cliente funde, dentro da mesma
-repetição, com a casa fresca e com a base que o cliente leu (ver «A casa
-funde-se, não se grava por cima», na sincronização): a revisão protege as
+repetição, com a casa fresca e com a base que o cliente leu (ver «A casa e os
+registos fundem-se, não se gravam por cima», na sincronização): a revisão protege as
 escritas do worker umas das outras, a base protege o que outra conta escreveu
 antes de este cliente ler.
 

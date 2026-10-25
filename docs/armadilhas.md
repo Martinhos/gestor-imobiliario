@@ -307,12 +307,20 @@ o pipe fecha.
 O cliente sobe o que difere do retrato, e o retrato é o resumo do JSON que a
 versão ANTERIOR exportou. Um campo novo no normProp (ou em qualquer norm…)
 faz todas as entidades diferirem do retrato no primeiro arranque da versão
-nova: sobem todas, inteiras. Foi assim que uma conta apagou as fotos e as
-tarefas que outra tinha acabado de pôr numa casa partilhada (a v40 juntou as
-tarefas ao normProp). Na casa, a base guardada passa pela mesma normalização
-ao carregar (nucleo.js:loadBases) e a diferença não conta; nos registos
-(contratos, movimentos) ainda sobe tudo e grava por cima. Um campo novo num
-norm… de um registo partilhado pede cuidado.
+nova. Foi assim que uma conta apagou as fotos e as tarefas que outra tinha
+acabado de pôr numa casa partilhada (a v40 juntou as tarefas ao normProp).
+Hoje cada base guardada passa pela mesma normalização ao carregar
+(nucleo.js:loadBases, nucleo.js:normalizarDaChave), o que é igual à base não
+sobe, e o que não tem base espera pelo primeiro estado. Um norm… novo tem de
+estar no normalizarDaChave (um kind novo também), senão o registo fica sem
+base e lê-se com os campos simples do servidor.
+
+## Um campo removido só sai com base
+A fusão tira um campo que a base tinha e que não chega (nucleo.js:baseParcial
+manda-o com o valor antigo). Um envio sem base nunca remove. E quem
+construir um registo de raiz num formulário, em vez de partir de uma cópia
+do que está guardado, remove sem querer os campos que não conhece — os
+formulários partem de normX(cópia) por isso.
 
 ## O bloco da fusão vive em dois ficheiros
 O `// <fusao>` … `// </fusao>` de worker/src/lib/permissoes.js e o de

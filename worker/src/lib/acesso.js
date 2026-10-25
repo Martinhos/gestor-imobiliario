@@ -550,6 +550,8 @@ async function purgarConta(env, uid) {
          WHERE id = ?`
       ).bind(now(), uid)
     );
-    await apagarDoR2(env, anexos);
+    // e as miniaturas deles (a chave de worker/src/files.js:chavesNoR2, escrita
+    // aqui para não criar o ciclo de importações que o apagarDoR2 evita)
+    await apagarDoR2(env, anexos.flatMap((id) => [id, 'tn/' + id]));
     await env.DB.batch(stmts);
 }

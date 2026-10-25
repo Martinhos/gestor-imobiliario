@@ -53,6 +53,8 @@ confere que cada uma aponta para código que existe.
 - 2026-10-22 · Duas escritas na mesma casa não se esmagam
 - 2026-10-23 · A montra diz o valor nos primeiros segundos
 - 2026-10-25 · A casa partilhada funde em vez de gravar por cima, e as tarefas guardam-se de uma vez
+- 2026-10-25 · Os registos fundem como a casa
+- 2026-10-25 · As miniaturas sobem com as fotos
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2222,3 +2224,46 @@ recarregar (dez fotos, uns 480 MB de imagem para caixas de 64×52), o campo do
 nome andava 27px debaixo do dedo aos 260ms, e o arrasto corria duas vezes por
 movimento e saltava ao largar. Nenhuma destas coisas era a gravação: era o
 trabalho de ecrã.
+
+## 2026-10-25 · Os registos fundem como a casa
+
+A casa partilhada passou a fundir de manhã; os contratos, as fichas e os
+movimentos continuavam a gravar-se inteiros, e corriam o mesmo risco: um
+aparelho com a cópia de antes (ou com uma versão nova que normaliza o
+registo de outra maneira) apagava as tarefas, os documentos e as chaves que
+outra conta tinha juntado a um contrato, e desfazia a nota que ela tinha
+mudado num movimento. O Martinho disse «faz isso tudo».
+
+Cada registo passou a ter a sua base, como a casa, e o servidor funde com o
+mesmo código. A fusão aprendeu a tirar um campo que se removeu: um
+movimento que deixa de ser prestação perde o juro e o capital, e sem isto
+esses campos ficavam no servidor. As bases de todos os registos ficam em
+memória, mas no aparelho só as dos que estão por enviar: as outras são o
+próprio registo, e guardá-las todas era voltar a ter a base duas vezes no
+localStorage, o que já tinha rebentado a quota (foi por isso que o retrato
+passou a resumos). O custo: uma edição de um campo simples que nunca chegou
+a tentar subir (a app morta à força no segundo a seguir) perde-se ao ler; o
+que se adicionou a uma lista nunca. Os registos não têm revisão: a escrita
+só pega se o registo ainda for o texto que se leu, e senão repete a fusão —
+sem migração.
+
+## 2026-10-25 · As miniaturas sobem com as fotos
+
+Noutro telemóvel, as miniaturas obrigavam a descarregar as fotos originais: o thumbSrc só
+tinha o original para as fazer. Medido no 8788: 5 fotos de 2000×1500 eram 6,9 MB a descer
+para pintar cinco caixas de 64×52; agora são 53 KB. A lista de imóveis pinta as fotos de todos
+os imóveis (lista-imoveis.js:propsDepois), por isso num aparelho novo era a conta inteira de
+fotos a descer no primeiro ecrã. A miniatura ficou no R2 sem linha própria para não ser um
+anexo em lado nenhum (teto, linkFiles, regras dos cargos, varredura) e sem migração.
+
+Dois defeitos achados pelo caminho e corrigidos nos meus ficheiros:
+- O `cleanFiles` do arranque deitava fora todos os `tn_` (só guardava os ids dos anexos): cada
+  sessão refazia as miniaturas a partir dos originais (descodificar fotos de 12 MP de cada vez
+  que a app abria).
+- O upload de uma foto começa no takeFiles, sem casa; com a gravação do imóvel a chegar antes
+  (o envio sai 1,2 s depois do Guardar), a foto ficava solta — só quem a carregou a via, o
+  comproprietário recebia 404 — até o imóvel voltar a ser gravado. A prova apanhou-o em 4 e 5
+  das 5 fotos. Agora o fim do upload prende-a (prenderAnexo/handlePrender). E o
+  `subirPendentes` subia os primeiros vinte anexos da conta inteiros a cada envio aceite (dados
+  móveis gastos sempre nos mesmos, e o vigésimo primeiro nunca revisto): agora só o que a
+  sessão ainda não tratou.
