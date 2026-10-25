@@ -52,6 +52,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-22 · Apagar um imóvel que não criei é sair dele
 - 2026-10-22 · Duas escritas na mesma casa não se esmagam
 - 2026-10-23 · A montra diz o valor nos primeiros segundos
+- 2026-10-25 · A casa partilhada funde em vez de gravar por cima, e as tarefas guardam-se de uma vez
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2177,3 +2178,47 @@ produção não tem (testes/landing.test.js guarda-o). O título e a descrição
 levam os termos que um senhorio escreve no Google («gestão de arrendamento»,
 «rendas em atraso», «controlo de rendas»), dentro do que os motores mostram
 sem cortar.
+
+## 2026-10-25 · A casa partilhada funde em vez de gravar por cima, e as tarefas guardam-se de uma vez
+
+O Martinho adicionou tarefas e 16 fotos a uma casa partilhada com outra
+conta; vista da outra conta, não tinha nada, e quando voltou à dele tinha
+perdido tudo. A produção mostrou a casa gravada inteira, sem elas, num envio
+que gravou as duas casas partilhadas no mesmo lote: o aparelho da outra conta
+tinha cópias das duas de antes das fotos, e as duas diferiam do retrato
+porque a v40 passou a acrescentar as tarefas a cada casa ao carregar. Diferir
+do retrato era «mudei aqui», e a casa subia inteira por cima. As fotos
+ficaram no armazenamento e na tabela files, presas à casa; as tarefas não
+ficaram em lado nenhum.
+
+A resposta do Martinho foi «fundir sem perder»: cada envio só muda o que essa
+pessoa mudou, campo a campo, tarefa a tarefa, foto a foto; se as duas mudaram
+a mesma coisa, fica a última; nunca se apaga o que a outra conta adicionou.
+Cada envio da casa passou a dizer que versão leu (a base, guardada no
+aparelho), e o servidor funde a três. A base vai só com os campos que
+mudaram: com a casa inteira duas vezes, o pedido dobrava. A fusão é o mesmo
+código nos dois lados (o cliente funde ao ler), comparado por um teste, em
+vez de duas versões que divergiam com o tempo. Um envio sem base (as versões
+de antes) só junta, e por isso a versão mínima subiu para a 41: essas versões
+continuavam a pôr os campos simples de uma cópia velha por cima. O rev da casa
+(2026-10-22) continua: protege as escritas do worker umas das outras; a base
+protege o que outra conta gravou antes de este cliente ler. Os registos
+(contratos, movimentos) ainda gravam por cima e são o passo seguinte.
+
+As tarefas eram a outra metade. Cada toque na janela gravava, e cada gravação
+era um envio ao servidor: a adicionar tarefas uma a uma, o Martinho bateu no
+limite de 60 envios em 15 minutos (worker/src/rotas/sync.js), e o que não
+subiu ficou só no telemóvel. Havia duas saídas: juntar os envios em toda a app
+(um a cada 20 segundos, sem mudar nada no ecrã), ou a janela das tarefas
+passar a rascunho com um «Guardar». O Martinho escolheu o Guardar: quem
+escreve quinze tarefas seguidas pensa nelas como uma lista, e grava-as de uma
+vez. Por isso a regra «cada toque grava logo» saiu da janela das tarefas, e o
+Cancelar dela pergunta antes de deitar fora, ao contrário do dos outros
+formulários.
+
+As fotos eram lentas a renomear e reordenar no telemóvel. Medido, a
+miniatura de cada foto acabada de adicionar era o original da câmara até
+recarregar (dez fotos, uns 480 MB de imagem para caixas de 64×52), o campo do
+nome andava 27px debaixo do dedo aos 260ms, e o arrasto corria duas vezes por
+movimento e saltava ao largar. Nenhuma destas coisas era a gravação: era o
+trabalho de ecrã.

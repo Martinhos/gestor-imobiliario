@@ -249,6 +249,8 @@ export async function rotasCasas(c) {
       const b = await body(request);
       if (!b) return err(400, 'Corpo inválido.');
       op.data = b.data;
+      // a base que o cliente leu, como no /api/sync (escritas.js:escreverCasa)
+      if (b.base !== undefined) op.base = b.base;
     }
     return respostaREST(op, await aplicarOp(await prepararEscritas(env, me), op));
   }

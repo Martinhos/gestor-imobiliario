@@ -682,7 +682,9 @@ janela de cima); o rodapé por omissão é Cancelar + Guardar
 (componentes.js:setModal). Fechar por um caminho de abandono (véu, X,
 Escape, voltar, arrastar a folha para baixo) com alterações por guardar pergunta «Sair sem guardar?»
 (componentes.js:closeModal); Guardar e Cancelar fecham sem perguntar,
-porque são decisões e não acidentes. Só conta como mexido o que vier de um
+porque são decisões e não acidentes. A exceção é a janela das tarefas, onde o
+Cancelar encosta ao Guardar e deitava fora uma tarde de tarefas: com
+alterações, pergunta (tarefas.js:tfFechar). Só conta como mexido o que vier de um
 dedo ou de um teclado a sério (o isTrusted em componentes.js:openModal): a
 renda sugerida não é trabalho de ninguém. A pergunta veste o tema da app,
 nunca o confirm() do browser (a nota dentro do closeModal). Sair de um
@@ -711,10 +713,25 @@ longo, de quem tem o seu próprio gesto (o data-pointerdown das fotos, do
 calendário e do puxador; a leitura dos gráficos; o .pago-por; um slider; as
 listas abertas do sel() e do ⋯) nem do que rola de lado
 (componentes.js:FOLHA_NAO_ARRANCA, navegacao.js:sepRolaDeLado). O eixo
-decide-se aos 10px, como no aviso e nos separadores. A .modal ouve o
-touchmove com passive:false (componentes.js:modalLayer) e trava-o enquanto o
-gesto é dela, senão o browser tomava o gesto e mandava um pointercancel a
-meio (componentes.js:folhaToqueMove); o cabeçalho tem touch-action:none.
+decide-se aos 10px, como no aviso e nos separadores. A .modal só ouve o
+touchmove com passive:false quando o corpo pode agarrar a folha — com a barra
+e o corpo no topo do scroll (componentes.js:folhaOuvirToque, reavaliado a cada
+scroll do corpo) — e trava-o enquanto o gesto é dela, senão o browser tomava o
+gesto e mandava um pointercancel a meio (componentes.js:folhaToqueMove). No
+resto do tempo os toques na janela não esperam pela thread principal. O
+cabeçalho tem touch-action:none, e a folha touch-action:pinch-zoom: a barra, o
+espaço à volta dela e o rodapé não rolam; o corpo rola como sempre, porque o
+touch-action recomeça em cada caixa que rola.
+
+O teclado do telemóvel: um campo só se mexe quando o teclado (ou a borda do
+corpo da janela) o tapa, medido pela janela visível
+(componentes.js:kbAreaVisivel, visualViewport), e de uma vez, sem scroll suave
+por baixo do dedo (componentes.js:campoAVista) — um campo à vista fica onde
+está, e o toque longo para selecionar texto não o vê fugir. Espera-se o
+teclado assentar: o último resize da janela visível, ou 300ms sem resize
+(componentes.js:campoAVistaQuandoAssentar, chamado pelo focusin do
+arranque.js). A folga do teclado (.sheet.kb, 300px no fundo do corpo) só entra
+quando o corpo não tem para onde rolar sem ela, e sai no focusout.
 
 A folha segue o dedo e o véu aclara à proporção (componentes.js:folhaVeu);
 para cima resiste (componentes.js:folhaElastico, nunca mais de 24px, com uma
@@ -2031,6 +2048,28 @@ estiver. Um imóvel com uma foto só, e os anexos de imagem que não são fotos
 de imóvel (contratos, pessoas, hipotecas), abrem sem carrossel: setas e «1
 de 1» sem para onde ir eram ruído.
 
+As miniaturas em memória são sempre as de 220px (componentes.js:makeThumb),
+nunca o original: uma foto de câmara de 12 MP descodificada são uns 48 MB, e
+dez numa caixa de 64×52 punham o telemóvel a arrastar-se a cada repinte. Ao
+escolher fotos, a miniatura começa logo a partir do ficheiro na mão
+(web/app/anexos.js:takeFiles, componentes.js:fazerMiniatura); até ela chegar, a caixa
+mostra o marcador de sempre (o fundo --chip da .pth). Fazem-se duas de cada
+vez (componentes.js:naFilaDasMiniaturas), e um pedido a caminho serve quem
+pedir a mesma foto (componentes.js:pedirMiniatura). Uma imagem que o browser
+não encolhe só vai inteira para a caixa se for leve, até 1 MB
+(componentes.js:miniaturaDoBlob); senão fica o marcador. O carrossel continua
+a mostrar a foto inteira.
+
+Reordenar as fotos no formulário: a linha agarrada segue o dedo e as outras
+abrem o lugar (imovel.js:photoDragMove, ouvido só no documento — uma vez por
+movimento). Ao largar, a linha troca de lugar no DOM e os transforms limpam-se
+com a transição desligada (estilos.css:.pousar), por isso as vizinhas não se
+mexem; a largada parte de onde o dedo a deixou e assenta no lugar novo no
+--rapido e na --curva-entra (imovel.js:photoAssenta). Um dedo que pega numa
+linha a meio do assentar apanha-a já no sítio (imovel.js:photoAssentaPara).
+Sem movimento, pousa logo. Largar só lê os nomes das fotos
+(imovel.js:photoLerNomes): nada mais mudou no formulário.
+
 O palco tem tamanho fixo — quadrado, até 60% da altura do ecrã — e cada foto
 cabe lá inteira (object-fit:contain), sobre o --tint (estilos.css:.fc-palco):
 com fotos ao alto e ao comprido no mesmo imóvel, uma janela à altura de cada
@@ -2241,16 +2280,45 @@ por cumprir e, se couberem, as cumpridas mais recentes, riscadas, e o
 «Adicionar tarefa» e o «Ver tarefas» (ou «Ver todas»). A caixa de cada
 tarefa é desenhada, e não um campo: marcar é na lista, a um toque. A lista
 abre-se numa janela própria
-(tarefas.js:tfAbrir), sem «Guardar»: cada toque grava logo, pelo mesmo caminho
-(tarefas.js:tfGravar, que reverifica a permissão no momento de gravar). Por
-isso a janela volta a contar como «sem alterações» a cada repintura
-(tarefas.js:tfPintar) — fechar no X depois de pesquisar não pergunta «Sair sem
-guardar?». O botão do rodapé diz «Nova tarefa», que cabe numa linha em meio
-rodapé de telemóvel (tarefas.js:tfRodape). A pesquisa repinta só a lista, e
-o campo não perde o foco; o limpar dela é o ic('x',14). Uma
-tarefa cumprida fica riscada no mesmo sítio, sem saltar para o fim: saltar
-tirava a linha de debaixo do dedo. Remover uma tarefa ou uma secção (que leva
-as tarefas dela) tem Anular (componentes.js:comDesfazer).
+(tarefas.js:tfAbrir), que trabalha sobre um rascunho: uma cópia das tarefas
+do registo tirada ao abrir (tarefas.js:tfRascunho). Marcar, adicionar, mudar,
+remover, mover, as secções e o arrasto mudam só o rascunho e repintam a lista
+(tarefas.js:tfMudar, que reverifica a permissão a cada mudança). Nada chama o
+save() até ao «Guardar» da janela (tarefas.js:tfGuardar), que grava tudo de
+uma vez — um save(), um render(), um envio ao servidor — pela única escrita
+das tarefas (tarefas.js:tfGravar, que reverifica a permissão no momento de
+gravar), fecha a janela e diz «Tarefas guardadas.»; sem nada mudado só fecha.
+Com a permissão perdida a meio, o Guardar recusa com a frase e a janela fica;
+com o registo apagado, avisa e fecha.
+
+O rodapé é o dos formulários: «Fechar» e «Guardar» (tarefas.js:tfRodape). Com
+o rascunho diferente do que se abriu, o botão da esquerda diz «Cancelar» e o
+resumo da lista acaba em «Alterações por guardar», na cor da frente do
+--accent-text (tarefas.js:tfPorGuardarHtml, estilos.css:.tf-por-guardar). Quem
+só lê vê só «Fechar». O «Adicionar tarefa» vive no topo do corpo, preso
+enquanto a lista rola (tarefas.js:tfCorpo, estilos.css:.tf-barra): três
+botões não cabem num rodapé de telemóvel, e quem adiciona quinze tarefas
+seguidas não sobe a lista quinze vezes. A linha adicionada ou mudada vem à
+vista sem animar (tarefas.js:tfMostrar), e por isso não há aviso a cada uma.
+
+Fechar com alterações pergunta «Sair sem guardar?» pelo mecanismo de todos os
+modais (tarefas.js:tfMarcarEstado): com o rascunho diferente, a camada fica
+com um retrato que nenhum campo dá (tarefas.js:TF_POR_GUARDAR) e o «mexido»
+ligado; sem diferenças, o retrato é o de agora — pesquisar, filtrar, ou marcar
+e desmarcar a mesma tarefa não pergunta nada (voltar a marcar uma que já
+estava cumprida devolve-lhe o dia de então). O Cancelar com alterações também
+pergunta (tarefas.js:tfFechar). Fechada a janela por qualquer caminho, o
+rascunho vai-se (tarefas.js:tfEsquecer). A leitura de fundo não corre com uma
+janela aberta (cloud/nucleo.js:pullNow), por isso o rascunho não é pisado.
+
+A pesquisa repinta só a lista, e o campo não perde o foco; o limpar dela é o
+ic('x',14). Uma tarefa cumprida fica riscada no mesmo sítio, sem saltar para
+o fim: saltar tirava a linha de debaixo do dedo. Remover uma tarefa ou uma
+secção (que leva as tarefas dela) muda o rascunho, com um «Anular» de seis
+segundos que devolve só o que se removeu, no lugar onde estava, e só na
+janela onde se removeu (tarefas.js:tfAvisoRemocao) — não é o
+componentes.js:comDesfazer, que grava ao anular; fechada a janela, o aviso
+sai do ecrã.
 
 O formulário de uma tarefa tem sempre o seletor da secção, mesmo sem
 secções: «Sem secção», as secções pela ordem, e no fim «+ Criar secção…»
@@ -2259,10 +2327,12 @@ secções: «Sem secção», as secções pela ordem, e no fim «+ Criar secçã
 (tarefas.js:tfSecMudou) e deixa a secção nova escolhida, sem tocar no nome
 que já se escreveu; um nome que já existe — sem olhar a acentos nem a
 maiúsculas — escolhe essa secção, com um aviso. A secção nova fica no
-formulário (tarefas.js:tfSecNovas) e grava-se com a tarefa
+formulário (tarefas.js:tfSecNovas) e entra no rascunho com a tarefa
 (tarefas.js:tfGuardarTarefa): cancelar a tarefa não deixa uma secção vazia
-para trás, e gravar logo repintava a janela da lista por baixo do
-formulário. Cancelar o nome devolve o seletor à escolha de antes. Uma tarefa
+para trás. O botão do formulário diz o que faz — «Adicionar» numa tarefa
+nova, «Aplicar» numa que existe (tarefas.js:TF_BOTAO_NOVA,
+tarefas.js:TF_BOTAO_EDITAR) — e não «Guardar», porque ainda não grava nada.
+Cancelar o nome devolve o seletor à escolha de antes. Uma tarefa
 nova fica no fim da secção; editar e mudar de secção leva-a para o fim da
 nova. O «Adicionar secção» do ⋯ da janela continua lá.
 
@@ -2305,14 +2375,15 @@ aviso diz para onde foi.
 A ordem é a do array `itens`, e mais nada: não há campo novo
 (tarefas.js:tfMoverEm, uma função pura — a tarefa sai de onde está e entra a
 seguir à tarefa `depois` da secção de destino, ou em 1.º lugar com `depois`
-vazio; um `depois` que já não está lá põe-na no fim). Grava pelo
-tarefas.js:tfGravar, como todas as escritas.
+vazio; um `depois` que já não está lá põe-na no fim). Muda o rascunho pelo
+tarefas.js:tfMudar, como todas as mudanças; só o Guardar grava.
 
 Ao teclado, e para quem não arrasta, a pega é um botão («Mover: <nome>»): o
 Enter — ou um toque sem arrastar — abre o «Mover tarefa»
 (tarefas.js:tfMoverTarefa), com a secção e a posição («Em primeiro lugar»,
 «Depois de «…»») de agora; mudar a secção traz as posições dela, com o fim
-escolhido. Guardar volta à lista com o foco na pega da tarefa movida. O
+escolhido. O botão diz «Mover» e volta à lista com o foco na pega da tarefa
+movida. O
 clique que o browser dispara logo a seguir a um arrasto engole-se
 (tarefas.js:tfPegaClique).
 
@@ -3853,11 +3924,44 @@ Ler o estado é uma fusão a três, com o retrato como base
 (nucleo.js:applyState). O que aqui está igual ao retrato passa a ser o que o
 servidor tem, incluindo desaparecer; o que é novo, foi editado ou foi apagado
 aqui fica por cima (nucleo.js:pendentesLocais, nucleo.js:reporPendentes), e o
-push seguinte envia-o. As marcas (os campos com _), os donos e as quotas são
+push seguinte envia-o. Uma casa não vai inteira por cima: funde-se com a do
+servidor e com a base deste aparelho (nucleo.js:fundirCasaLocal; ver o
+parágrafo a seguir). As marcas (os campos com _), os donos e as quotas são
 sempre do servidor (nucleo.js:fundidoComServidor). Duas exceções: uma base de
 outra conta cede ao servidor inteira, e sem retrato os dados locais só sobem
 se o servidor estiver vazio. Trocar o db pelo do servidor, como se fazia,
 perdia o que se escreveu offline e o que um 429 recusou.
+
+A casa funde-se, não se grava por cima. A casa é um JSON que duas contas (e
+cada aparelho) gravam inteiro. Cada envio dela diz que versão do servidor
+leu: o aparelho guarda, por conta, a base de cada casa — a versão do servidor
+na forma local, refeita a cada estado aplicado e trocada pelo que subiu em
+cada envio aceite (nucleo.js:bases, nucleo.js:loadBases, nucleo.js:saveBases)
+—, e o put leva só os campos que mudaram desde ela, com o valor que ela lhes
+dava (nucleo.js:baseParcial). O servidor funde o que chega com o que tem
+(worker/src/lib/escritas.js:escreverCasa,
+worker/src/lib/permissoes.js:fundirCasaComBase): o que não mudou desde a base
+fica como está; o que mudou ganha; as listas com id (as tarefas e as secções,
+as fotos, os quartos, as hipotecas e os documentos delas) juntam-se item a
+item — o que se adicionou de cada lado entra, só sai o que se removeu do lado
+que envia, e o mesmo campo mudado dos dois lados fica com o último. A ordem é
+a de quem a mudou; o que só um lado tem entra antes do que se lhe seguia, ou
+no fim (worker/src/lib/permissoes.js:fusaoOrdem). Um colaborador passa ainda
+pelo fundirCasa: o que o cargo não vê nem entra nem sai. Uma fusão que deixa a
+casa como estava não grava. O cliente funde da mesma maneira ao ler, com o
+mesmo código: o bloco da fusão vive igual, letra a letra, em
+worker/src/lib/permissoes.js e em web/cloud/nucleo.js, e o
+testes/fusao-da-casa.test.js compara-os.
+
+Um envio sem base — uma versão de antes, um PUT REST sem `base` — não remove
+nada das listas com ids: só junta e muda. A base guardada passa pela
+normalização desta versão ao carregar (nucleo.js:loadBases): a casa local
+também passou, e uma versão nova que acrescenta um campo não faz a casa
+parecer mexida. Era isso que apagava: uma cópia velha que diferia do retrato
+só porque a versão nova a normalizava de outra maneira subia inteira. Na
+primeira sessão com bases, uma casa que o servidor já tem não sobe antes do
+primeiro estado (nucleo.js:pushNow), e ao ler sem base os campos simples são
+os do servidor e as listas juntam-se (nucleo.js:fundirCasaLocal).
 
 O que o cliente não sabe ler não se apaga: um kind de uma versão mais nova,
 ou um registo que não normaliza, fica congelado e relata-se
@@ -4291,7 +4395,11 @@ duas aprovações ao mesmo tempo não se perdem. Aceitar o mesmo convite duas
 vezes já era seguro, porque o convite se gasta numa só instrução. Uma
 correção à mão na consola, que não mexa em `rev`, passa sem verificação; o
 testes/revisao-da-casa.test.js confere que nenhuma escrita do worker foge ao
-gravarCasa.
+gravarCasa. A gravação da ficha pelo cliente funde, dentro da mesma
+repetição, com a casa fresca e com a base que o cliente leu (ver «A casa
+funde-se, não se grava por cima», na sincronização): a revisão protege as
+escritas do worker umas das outras, a base protege o que outra conta escreveu
+antes de este cliente ler.
 
 A saída por grupo (worker/src/lib/acesso.js:SAIU_DA_CASA) entra em todas as
 consultas que dão casas por grupo: a compropriedade e os membros da casa, as

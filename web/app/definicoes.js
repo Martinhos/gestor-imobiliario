@@ -861,12 +861,14 @@ function pmTecla(ev){if(ev.key==='Enter'){ev.preventDefault();_pm()}}
    Recebe: title — o título do modal; label — o rótulo do campo; value — o
    texto inicial (pode vir null); cb — a função chamada com o texto (já com
    trim) quando se guarda com algo escrito; exemplo (opcional) — o texto do
-   exemplo, sem o «Ex: » (ex.: 'Obras'), para o placeholder.
+   exemplo, sem o «Ex: » (ex.: 'Obras'), para o placeholder; botao (opcional)
+   — o texto do botão de confirmar, «Guardar» por omissão (onde ainda não se
+   grava nada, diz o que faz: «Adicionar», «Aplicar»).
    Devolve: nada — abre o modal. */
-function promptModal(title,label,value,cb,exemplo){
+function promptModal(title,label,value,cb,exemplo,botao){
   const ph=exemplo?` placeholder="Ex: ${esc(exemplo)}"`:'';
   openModal(title,`<div class="form"><label>${esc(label)} <span class="req">*</span><input id="pm_v" value="${esc(value||'')}"${ph} autocomplete="off" data-keydown="pmTecla(event)"></label></div>`,
-    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="_pm()">Guardar</button>`);
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="_pm()">${esc(botao||'Guardar')}</button>`);
   _pm=()=>{const v=val('pm_v').trim();if(!v)return falhaCampo('pm_v','Escreve um nome.');closeModal();cb(v)};
   setTimeout(()=>{const e=document.getElementById('pm_v');if(e)e.focus()},50);
 }

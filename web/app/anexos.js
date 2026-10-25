@@ -138,8 +138,10 @@ function takeFiles(input){
     const id=uid();pendingFiles[id]=1;
     return idbPut(id,f).then(()=>new Promise(resolve=>{
       if(!isImg(f.type)){resolve(normFile({id,name:f.name,type:f.type||'',size:f.size,added:today()}));return}
-        guardarMiniatura(id,URL.createObjectURL(f));
-        makeThumb(f).then(tb=>{if(tb)idbPut('tn_'+id,tb).catch(()=>{})}).catch(()=>{});
+      /* a miniatura de 220px começa já, a partir do ficheiro na mão; nunca
+         o original em memória (componentes.js:fazerMiniatura) — até ela
+         chegar, a caixa mostra o marcador */
+      fazerMiniatura(id,f).catch(()=>{});
       resolve(normFile({id,name:f.name,type:f.type||'',size:f.size,added:today()}));
     }));
   }).filter(Boolean));

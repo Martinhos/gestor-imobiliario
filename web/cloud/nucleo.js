@@ -82,6 +82,17 @@ applyLocalTheme();
 var snap = {};
 var snapKey = function () { return 'gi_cloud_snap_' + (CW.user ? CW.user.id : ''); };
 
+/* As bases das casas: id -> a versão do servidor que este aparelho leu por
+   último, na forma local (a da exportação: stripHouse). É o que cada envio de
+   uma casa diz ter lido (pushNow, op.base) e o terceiro termo da fusão ao ler
+   (fundirCasaLocal). Só das casas — a casa é um JSON que duas contas gravam
+   inteiro; os registos são um por linha. Refaz-se a cada estado aplicado e
+   muda a cada envio aceite. Sem ela, uma cópia velha de uma casa (o aparelho
+   que não abria a app há dias, ou uma versão nova que normaliza a casa de
+   outra maneira) subia inteira e apagava o que outra conta tinha adicionado. */
+var bases = {};
+var baseKey = function () { return 'gi_cloud_base_' + (CW.user ? CW.user.id : ''); };
+
 /* O resumo de um texto: 53 bits de mistura (duas somas multiplicativas
    entrelaçadas) mais o comprimento, com um '#' à frente para se distinguir
    do JSON dos retratos antigos. Duas versões diferentes de uma entidade darem
@@ -103,7 +114,8 @@ function resumoDeTexto(s) {
 
 // Carrega do aparelho o retrato do servidor. Um retrato de uma versão anterior
 // (com o JSON inteiro de cada entidade) passa a resumos aqui mesmo: o resumo
-// do JSON guardado é o mesmo que o do JSON atual, se nada mudou.
+// do JSON guardado é o mesmo que o do JSON atual, se nada mudou. As bases das
+// casas vêm com ele (loadBases).
 // Devolve: nada — preenche a variável snap ({} se nada houver ou a leitura falhar).
 function loadSnap() {
   try { snap = JSON.parse(localStorage.getItem(snapKey()) || '{}') || {}; } catch (e) { snap = {}; }
@@ -111,6 +123,35 @@ function loadSnap() {
     var v = snap[k];
     if (typeof v === 'string' && v !== '__obsoleto__' && v.charAt(0) !== '#') snap[k] = resumoDeTexto(v);
   });
+  loadBases();
+}
+
+/* Carrega do aparelho as bases das casas, cada uma pela normalização desta
+   versão (normProp), a mesma por que passou a casa local ao carregar: uma
+   versão nova que acrescenta um campo à casa acrescenta-o às duas, e a
+   diferença não conta como «mudei aqui».
+   Devolve: nada — preenche a variável bases ({} se nada houver ou a leitura falhar). */
+function loadBases() {
+  var lidas = {};
+  try { lidas = JSON.parse(localStorage.getItem(baseKey()) || '{}') || {}; } catch (e) { lidas = {}; }
+  bases = {};
+  Object.keys(lidas).forEach(function (id) {
+    try { if (lidas[id] && typeof lidas[id] === 'object') bases[id] = stripHouse(normProp(lidas[id])); } catch (e) {}
+  });
+}
+
+// Guarda as bases das casas no aparelho, como o saveSnap guarda o retrato
+// (sem sessão não grava; uma recusa do localStorage diz-se uma vez). Sem a
+// base de uma casa, o envio seguinte dela é o de sem base: junta, não remove.
+// Devolve: nada — grava bases no localStorage.
+function saveBases() {
+  if (!CW.user) return;
+  try { localStorage.setItem(baseKey(), JSON.stringify(bases)); } catch (e) {
+    if (saveBases._avisado) return;
+    saveBases._avisado = 1;
+    rastoPoe('bases por gravar: ' + ((e && e.name) || 'erro'));
+    try { if (typeof reportErr === 'function') reportErr('As bases das casas não couberam no aparelho', String((e && e.message) || e)); } catch (x) {}
+  }
 }
 // Guarda o retrato no aparelho. Se o localStorage recusar, a sincronização
 // continua (o retrato vive em memória até ao fecho), mas não se cala: vai uma
@@ -306,12 +347,12 @@ function encerrarSessao(o) {
   pushTimer = null;
   // 'gi_est_asked' é o LS_ASKED de painel.js (os planeados por que já se perguntou)
   var chaves = [LS_USER, LS_PAGE, 'gi_est_asked', chaveDaLigacao()];
-  if (o.apagarDados) chaves.push(LS_OWNER, snapKey());
+  if (o.apagarDados) chaves.push(LS_OWNER, snapKey(), baseKey());
   chaves.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
   if (o.apagarDados) {
     db = JSON.parse(JSON.stringify(blank));
     rawSet(KEY, JSON.stringify(db));
-    snap = {};
+    snap = {}; bases = {};
   }
   CW.user = null;
   CW.tickets = null; CW._ticketsFalhou = false;
@@ -718,7 +759,10 @@ function avisoDoServidor(msg) {
 
 /* Envia ao servidor a diferença entre o estado local e o retrato: 'put' do que
    mudou (casas primeiro, que os registos dependem delas) e 'del' do que
-   desapareceu, em lotes de 200. Atualiza o retrato à medida que o servidor
+   desapareceu, em lotes de 200. O put de uma casa leva a base (os campos que
+   mudaram desde a versão do servidor que este aparelho leu, baseParcial), e o
+   servidor funde em vez de gravar por cima
+   (worker/src/lib/escritas.js:escreverCasa). Atualiza o retrato e as bases à medida que o servidor
    aceita e acerta o selo de sincronização. Reentrante: se já está a enviar, fica marcado um novo
    envio para o fim. Com a app trancada pela versão mínima não envia nada — uma
    versão velha demais para se usar é velha demais para escrever, e este é o
@@ -730,10 +774,22 @@ function pushNow() {
   pushing = true;
   var map = exportEntities();
   var ops = [];
+  var sabeOServidor = !!CW._pulled;
   // casas primeiro (os registos precisam da casa), remoções no fim
   Object.keys(map).forEach(function (k) {
     var rs = resumoDeTexto(JSON.stringify(map[k].data));
-    if (snap[k] !== rs) ops.push(Object.assign({ _key: k, _res: rs, op: 'put' }, map[k]));
+    if (snap[k] === rs) return;
+    var op = Object.assign({ _key: k, _res: rs, op: 'put' }, map[k]);
+    if (op.scope === 'house') {
+      var b = bases[op.houseId];
+      /* uma casa que o servidor já tem (está no retrato) e de que não há base
+         — a primeira sessão depois de a base existir — espera pelo primeiro
+         estado, que a traz: subia sem base, com os campos de uma cópia que
+         pode ser velha por cima dos do servidor */
+      if (!b && (k in snap) && !sabeOServidor) return;
+      if (b) op.base = baseParcial(b, op.data);
+    }
+    ops.push(op);
   });
   ops.sort(function (a, b) {
     var w = function (o) { return o.scope === 'house' ? 0 : 1; };
@@ -751,8 +807,8 @@ function pushNow() {
      para tudo o que a conta tem no servidor — e bastava um save() na janela
      entre entrar e o estado chegar (o notifPartilha grava a marca de leitura
      logo na primeira contagem) para o push partir. Os «put» seguem: o que
-     desapareceu espera pelo applyState, que refaz o retrato por inteiro. */
-  var sabeOServidor = !!CW._pulled;
+     desapareceu espera pelo applyState, que refaz o retrato por inteiro
+     (sabeOServidor, lá em cima). */
   Object.keys(snap).forEach(function (k) {
     if (k in map) return;
     if (!sabeOServidor) return;
@@ -778,17 +834,26 @@ function pushNow() {
       chain = chain.then(function () {
         return api('POST', '/api/sync', {
           ops: chunk.map(function (o) {
-            return { op: o.op, scope: o.scope, houseId: o.houseId, kind: o.kind, id: o.id, data: o.data };
+            var x = { op: o.op, scope: o.scope, houseId: o.houseId, kind: o.kind, id: o.id, data: o.data };
+            if (o.base) x.base = o.base;
+            return x;
           }),
         }).then(function (res) {
           (res.results || []).forEach(function (r, idx) {
             var o = chunk[idx];
             if (!o) return;
             var sid = servicoRecusado(r);
-            if (o.op === 'put' && r.ok) snap[o._key] = o._res;
+            if (o.op === 'put' && r.ok) {
+              snap[o._key] = o._res;
+              // o que subiu passa a ser o que este aparelho sabe que o servidor tem
+              if (o.scope === 'house') bases[o.houseId] = o.data;
+            }
             // um serviço desligado nesta conta: diz-se a razão certa, e não se insiste
             else if (sid) recusaPorServico(o, sid);
-            else if (o.op === 'del' && (r.ok || r.status === 403 || r.status === 404)) delete snap[o._key];
+            else if (o.op === 'del' && (r.ok || r.status === 403 || r.status === 404)) {
+              delete snap[o._key];
+              if (o.scope === 'house') delete bases[o.houseId];
+            }
             // sem permissão num imóvel de colaboração: o registo não fica a fingir que subiu
             else if (o.op === 'put' && o.scope === 'record' && r.status === 403) recusaRegisto(o, r.error);
             else pushNow._recusadas = (pushNow._recusadas || 0) + 1;
@@ -799,7 +864,7 @@ function pushNow() {
   }
   return chain
     .then(function () {
-      saveSnap();
+      saveSnap(); saveBases();
       ligou();
       /* um 200 com operações recusadas lá dentro ficava 'ok' para sempre,
          com o selo verde e os dados sem subir — e «Sem ligação» também não
@@ -836,7 +901,7 @@ function pushNow() {
     })
     .catch(function (e) {
       pushNow._recusadas = 0;
-      saveSnap();   // o que um lote anterior já fez subir fica marcado
+      saveSnap(); saveBases();   // o que um lote anterior já fez subir fica marcado
       if (e && e.status) {
         /* o servidor respondeu e recusou o envio inteiro — 429 («Demasiadas
            gravações seguidas… os dados não se perdem»), 5xx. Não é falta de
@@ -1158,13 +1223,16 @@ function objetoDaChave(d, pk) {
    daqui (a proteção do pushNow contra «Recomeçar» e restauros). E sem nenhum
    registo na base, nenhuma remoção conta: base vazia com retrato cheio não é
    «apaguei tudo» (o travão do pushNow, testes/pre-pull.test.js).
+   As bases das casas vão junto: o estado novo refá-las, e a fusão das casas
+   pendentes (reporPendentes) precisa das que este aparelho tinha.
    Recebe: st — o estado que vai ser aplicado; noServidor — {chave: 1} das
    chaves que ele traz.
-   Devolve: {puts: {chave: cópia do objeto local}, dels: {chave: 1}, n}. */
+   Devolve: {puts: {chave: cópia do objeto local}, dels: {chave: 1}, n, bases}. */
 function pendentesLocais(st, noServidor) {
   var map = exportEntities();
   // os grupos partilhados estão vivos sem estar na exportação (entidadesDosGruposPartilhados)
   var puts = {}, dels = {}, n = 0, registos = 0, vivas = entidadesDosGruposPartilhados(db);
+  var basesAntes = bases;
   Object.keys(map).forEach(function (k) {
     var pk = parseKey(k);
     vivas[entidadeDe(pk)] = 1;
@@ -1174,7 +1242,7 @@ function pendentesLocais(st, noServidor) {
     var obj = objetoDaChave(db, pk);
     if (obj) { puts[k] = JSON.parse(JSON.stringify(obj)); n++; }
   });
-  if (!registos) return { puts: puts, dels: dels, n: n };
+  if (!registos) return { puts: puts, dels: dels, n: n, bases: basesAntes };
   var partilhadas = {};
   (st.houses || []).forEach(function (h) { if (!h.mine) partilhadas[h.id] = 1; });
   Object.keys(snap).forEach(function (k) {
@@ -1184,8 +1252,168 @@ function pendentesLocais(st, noServidor) {
     if (pk.houseId && partilhadas[pk.houseId] && !(('h:' + pk.houseId) in map)) return;
     dels[k] = 1; n++;
   });
-  return { puts: puts, dels: dels, n: n };
+  return { puts: puts, dels: dels, n: n, bases: basesAntes };
 }
+
+// <fusao>
+/* A fusão a três da casa. Duas contas (ou dois aparelhos) gravam a mesma
+   casa: cada envio diz que versão do servidor leu (a base), e o que chega
+   funde-se com o que o servidor tem agora, campo a campo e item a item. O que
+   não mudou desde a base fica como o servidor o tem; o que mudou ganha. Uma
+   lista de objetos com id (as tarefas e as secções delas, as fotos, os
+   quartos, as hipotecas e os documentos delas) junta-se pelo id: o que se
+   adicionou de cada lado entra, só sai o que se removeu do lado que envia, e o
+   mesmo campo mudado dos dois lados fica com o último a chegar. Sem base,
+   nada sai de uma lista (só se junta e muda). Este bloco vive igual, letra a
+   letra, em worker/src/lib/permissoes.js e em web/cloud/nucleo.js (o cliente
+   faz a mesma fusão ao ler), e testes/fusao-da-casa.test.js compara-os. */
+
+// Até onde a fusão desce por objetos e listas; mais fundo, o que chega fica
+// tal e qual (um JSON com milhares de níveis não rebenta a pilha).
+var FUSAO_FUNDO = 16;
+
+/* Um objeto simples: nem nulo, nem lista.
+   Recebe: v — um valor de JSON.
+   Devolve: true quando é um objeto simples. */
+function fusaoObjeto(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/* Dois valores de JSON iguais, sem olhar à ordem das chaves dos objetos. Uma
+   chave com undefined conta como ausente.
+   Recebe: a, b — os valores; n (opcional) — a profundidade a que se vai.
+   Devolve: true quando são iguais (fundo de mais conta como diferentes). */
+function fusaoIguais(a, b, n) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b) || (n || 0) > FUSAO_FUNDO * 2) return false;
+  var m = (n || 0) + 1, i;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (i = 0; i < a.length; i++) if (!fusaoIguais(a[i], b[i], m)) return false;
+    return true;
+  }
+  var ka = Object.keys(a).filter(function (k) { return a[k] !== undefined; });
+  var kb = Object.keys(b).filter(function (k) { return b[k] !== undefined; });
+  if (ka.length !== kb.length) return false;
+  for (i = 0; i < ka.length; i++) {
+    if (!Object.prototype.hasOwnProperty.call(b, ka[i]) || !fusaoIguais(a[ka[i]], b[ka[i]], m)) return false;
+  }
+  return true;
+}
+
+/* A chave de um item de uma lista com ids: o id com um 'k' à frente (assim
+   nenhuma chave é '__proto__'), ou '' quando o item não tem id.
+   Recebe: x — o item.
+   Devolve: a chave (texto). */
+function fusaoChave(x) {
+  if (!fusaoObjeto(x)) return '';
+  var id = x.id;
+  if (typeof id === 'string' && id) return 'k' + id;
+  if (typeof id === 'number' && isFinite(id)) return 'k' + id;
+  return '';
+}
+
+/* O índice de uma lista de objetos com id, se o for: todos os itens com id e
+   nenhum repetido. Uma lista vazia é uma lista com ids.
+   Recebe: l — o valor.
+   Devolve: {chave: item} (sem protótipo), ou null quando não é uma lista com ids. */
+function fusaoIndice(l) {
+  if (!Array.isArray(l)) return null;
+  var out = Object.create(null);
+  for (var i = 0; i < l.length; i++) {
+    var k = fusaoChave(l[i]);
+    if (!k || out[k]) return null;
+    out[k] = l[i];
+  }
+  return out;
+}
+
+/* A ordem da lista fundida: a da primeira lista, e os itens que só a segunda
+   tem encaixados logo antes do que se lhes seguia nela — ou no fim, se nada
+   se lhes seguia (uma tarefa adicionada no fim fica no fim).
+   Recebe: primeira, segunda — as duas listas; fica — {chave: item} dos itens
+   que ficam.
+   Devolve: as chaves, pela ordem final. */
+function fusaoOrdem(primeira, segunda, fica) {
+  var out = [], posto = Object.create(null), seguinte = '';
+  primeira.forEach(function (x) {
+    var k = fusaoChave(x);
+    if (k && fica[k] && !posto[k]) { out.push(k); posto[k] = 1; }
+  });
+  for (var i = segunda.length - 1; i >= 0; i--) {
+    var k = fusaoChave(segunda[i]);
+    if (!k || !fica[k]) continue;
+    if (!posto[k]) { out.splice(seguinte ? out.indexOf(seguinte) : out.length, 0, k); posto[k] = 1; }
+    seguinte = k;
+  }
+  return out;
+}
+
+/* Uma lista de objetos com id, fundida item a item. Um item que só chega é
+   novo daqui (ou o servidor removeu-o: aí só volta se foi mudado aqui); um que
+   a base tinha e não chega foi removido aqui e sai; um que só o servidor tem
+   fica; um que os três têm funde-se campo a campo. A ordem é a do que chega
+   quando o cliente a mudou (ou sem base); senão, a do servidor.
+   Recebe: base — a lista da base, ou null; chega — a que chega (com ids);
+   atual — a do servidor ([] quando não há); n — a profundidade.
+   Devolve: a lista nova. */
+function fusaoLista(base, chega, atual, n) {
+  var B = fusaoIndice(base), A = fusaoIndice(atual) || Object.create(null);
+  var fica = Object.create(null);
+  chega.forEach(function (c) {
+    var k = fusaoChave(c), b = B ? B[k] : undefined, a = A[k];
+    if (a === undefined) {
+      if (b === undefined || !fusaoIguais(c, b)) fica[k] = c;
+      return;
+    }
+    fica[k] = fusaoValor(b, c, a, n);
+  });
+  atual.forEach(function (a) {
+    var k = fusaoChave(a);
+    if (!k || fica[k] || (B && B[k])) return;
+    fica[k] = a;
+  });
+  var C = fusaoIndice(chega);
+  var daBase = B ? base.filter(function (x) { return !!C[fusaoChave(x)]; }).map(fusaoChave) : [];
+  var daqui = B ? chega.filter(function (x) { return !!B[fusaoChave(x)]; }).map(fusaoChave) : [];
+  var mudouAOrdem = !B || !fusaoIguais(daBase, daqui);
+  return fusaoOrdem(mudouAOrdem ? chega : atual, mudouAOrdem ? atual : chega, fica)
+    .map(function (k) { return fica[k]; });
+}
+
+/* Um valor fundido a três. O que não chega, ou chega igual à base, fica como
+   o servidor o tem. Uma lista de objetos com id funde-se item a item
+   (fusaoLista); dois objetos, campo a campo; o resto é o que chega.
+   Recebe: base — o valor que o cliente leu (undefined: sem base); chega — o
+   que o cliente manda; atual — o que o servidor tem; n — a profundidade.
+   Devolve: o valor fundido (undefined quando não há nada). */
+function fusaoValor(base, chega, atual, n) {
+  if (chega === undefined || fusaoIguais(chega, base)) return atual;
+  if (n > FUSAO_FUNDO) return chega;
+  if (Array.isArray(chega)) {
+    if (!fusaoIndice(chega) || (atual != null && !fusaoIndice(atual))) return chega;
+    return fusaoLista(fusaoIndice(base) ? base : null, chega, Array.isArray(atual) ? atual : [], n + 1);
+  }
+  if (!fusaoObjeto(chega) || !fusaoObjeto(atual)) return chega;
+  var b = fusaoObjeto(base) ? base : null, out = {};
+  Object.keys(atual).forEach(function (k) { if (k !== '__proto__') out[k] = atual[k]; });
+  Object.keys(chega).forEach(function (k) {
+    if (k === '__proto__') return;
+    var v = fusaoValor(b ? b[k] : undefined, chega[k], atual[k], n + 1);
+    if (v === undefined) delete out[k]; else out[k] = v;
+  });
+  return out;
+}
+
+/* A fusão a três de uma casa (ou de qualquer valor de JSON): a porta do bloco.
+   Recebe: base — a versão que o cliente leu (undefined: sem base); chega — a
+   que manda; atual — a que o servidor tem.
+   Devolve: o valor fundido. */
+function fundirTres(base, chega, atual) {
+  return fusaoValor(base, chega, atual, 0);
+}
+// </fusao>
 
 /* O objeto local com o que é do servidor: as marcas (os campos com '_' —
    quem escreveu e quando, o cargo, de quem é) e, numa casa, os donos e as
@@ -1201,10 +1429,48 @@ function fundidoComServidor(local, servidor) {
   return c;
 }
 
+/* Os campos de uma casa que mudaram desde a base, com o valor que a base lhes
+   dava (null quando não lhes dava nenhum): é a base que o put de uma casa
+   leva. Os outros não seguem — no servidor, um campo que não vem na base é
+   igual ao que chega (worker/src/lib/permissoes.js:fundirCasaComBase) —, e o
+   pedido não dobra de tamanho (o tecto é de 256 KB por registo e de 2 MB
+   por pedido).
+   Recebe: base — a base da casa (forma local); data — a casa que vai subir.
+   Devolve: {campo: valor da base} só dos campos que mudaram ({} quando nada mudou). */
+function baseParcial(base, data) {
+  var out = {};
+  Object.keys(data || {}).forEach(function (k) {
+    if (!fusaoIguais(data[k], base[k])) out[k] = base[k] === undefined ? null : base[k];
+  });
+  return out;
+}
+
+/* Uma casa que mudou aqui e ainda não subiu, fundida com a que o servidor
+   acabou de mandar e com a base deste aparelho: a mesma fusão a três que o
+   servidor faz ao receber (fundirTres). O que outra conta adicionou (uma
+   foto, uma tarefa) fica, o que se mudou aqui também. Sem base (a primeira
+   leitura depois de a base existir), os campos simples ficam os do servidor —
+   a diferença era quase sempre uma cópia velha, e não uma edição — e as
+   listas juntam-se (nada do que se adicionou aqui se perde). As marcas, os
+   donos e as quotas são do servidor (fundidoComServidor).
+   Recebe: local — a casa deste aparelho; servidor — a da base refeita;
+   base — a base que este aparelho tinha (forma local), ou undefined.
+   Devolve: uma casa nova, normalizada. */
+function fundirCasaLocal(local, servidor, base) {
+  var l = stripHouse(local), s = stripHouse(servidor), b = base;
+  if (!b) {
+    b = {};
+    Object.keys(l).forEach(function (k) { if (!l[k] || typeof l[k] !== 'object') b[k] = l[k]; });
+  }
+  return fundidoComServidor(normProp(fundirTres(b, l, s)), servidor);
+}
+
 /* Volta a pôr por cima da base refeita a partir do servidor o que ainda não
    lhe chegou (pendentesLocais): primeiro as remoções, depois o que é novo ou
    foi mexido aqui — o objeto local, com as marcas do servidor quando ele já o
-   tem.
+   tem. Uma casa que o servidor também tem não vai inteira por cima: funde-se
+   com a dele e com a base (fundirCasaLocal), para não esmagar o que outra
+   conta lhe juntou.
    Recebe: d — a base refeita (rebuildDb); pend — o resultado de pendentesLocais.
    Devolve: nada — mexe em d. */
 function reporPendentes(d, pend) {
@@ -1223,7 +1489,11 @@ function reporPendentes(d, pend) {
     var lista = pk.scope === 'user' && pk.kind === 'profile' ? d.owners : listaDe(pk, d);
     if (!lista) return;
     for (var i = 0; i < lista.length; i++) {
-      if (lista[i] && lista[i].id === local.id) { lista[i] = fundidoComServidor(local, lista[i]); return; }
+      if (!lista[i] || lista[i].id !== local.id) continue;
+      lista[i] = pk.scope === 'house'
+        ? fundirCasaLocal(local, lista[i], (pend.bases || {})[pk.houseId])
+        : fundidoComServidor(local, lista[i]);
+      return;
     }
     lista.push(local);
   });
@@ -1238,7 +1508,10 @@ function reporPendentes(d, pend) {
    registada sem rede na cave do prédio, o que se gravou nos 1,2 s antes de
    fechar a app, ou um envio que falhou com 429 ou 5xx desapareciam no
    arranque (ou na leitura seguinte), com o selo a dizer «Guardado». Numa
-   edição dos dois lados ganha a daqui, que é a última a subir.
+   edição dos dois lados ganha a daqui, que é a última a subir — e numa casa,
+   que duas contas gravam inteira, só o que mudou aqui: funde-se campo a
+   campo e item a item com a do servidor e com a base (fundirCasaLocal), e as
+   bases refazem-se com o que o servidor tem.
    Duas exceções, onde a base local não tem este retrato por base: se é de
    outra conta (LS_OWNER), o servidor manda e nada dela sobe; sem retrato (a
    primeira sessão desta conta no aparelho), os dados locais só sobem se o
@@ -1300,9 +1573,14 @@ function applyState(st, selo, resumoSt) {
   // de um grupo que se partilhou é a chave velha de uma entidade que passou a
   // viver noutra, e fica obsoleta (entidadesDosGruposPartilhados)
   var vivas = entidadesDosGruposPartilhados(db);
+  // e as bases novas: cada casa como o servidor a tem, na forma local, antes
+  // de o que ficou por enviar lhe ir por cima (pendentesLocais guardou as velhas)
+  bases = {};
   Object.keys(map).forEach(function (k) {
     vivas[entidadeDe(parseKey(k))] = 1;
-    if (serverKeys[k]) snap[k] = resumoDeTexto(JSON.stringify(map[k].data));
+    if (!serverKeys[k]) return;
+    snap[k] = resumoDeTexto(JSON.stringify(map[k].data));
+    if (map[k].scope === 'house') bases[map[k].houseId] = map[k].data;
   });
   // o que o servidor tem e o cliente decidiu deixar de exportar fica marcado
   // para o próximo push apagar; o que ele não sabe ler, e o que não sobe por
@@ -1326,7 +1604,7 @@ function applyState(st, selo, resumoSt) {
   acertarCreditos(db);
   seloAplicado = selo || ''; resumoAplicado = resumoSt || '';
   ligou();
-  saveSnap();
+  saveSnap(); saveBases();
   try { localStorage.setItem(LS_OWNER, quem); } catch (e) {}
   rawSet(KEY, JSON.stringify(db));
   /* os lembretes do telemóvel foram agendados no arranque, com o que estava

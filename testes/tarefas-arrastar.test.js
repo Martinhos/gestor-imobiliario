@@ -1,9 +1,10 @@
 // As tarefas de um imóvel ou de um contrato (web/app/tarefas.js): ao adicionar
-// uma tarefa escolhe-se a secção, ou cria-se uma ali mesmo, que se grava com
-// a tarefa; as secções recolhem-se e o que fica recolhido é do aparelho; e as
+// uma tarefa escolhe-se a secção, ou cria-se uma ali mesmo, que entra no
+// rascunho da janela com a tarefa; as secções recolhem-se e o que fica recolhido é do aparelho; e as
 // tarefas mudam de lugar pela ordem do array — para o 1.º lugar de uma
 // secção, entre duas tarefas, entre secções e para «Sem secção» —, pela pega
-// ou pelo «Mover tarefa». Quem não pode alterar não tem pega.
+// ou pelo «Mover tarefa», sempre no rascunho, que só o Guardar grava. Quem
+// não pode alterar não tem pega.
 
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -45,9 +46,9 @@ const LISTA = () => ({
   ],
 });
 
-/* As tarefas do imóvel P1 como «secção:id», pela ordem do array.
+/* As tarefas do rascunho da janela aberta como «secção:id», pela ordem do array.
    Devolve: array de texto. */
-const ordem = () => app.db.properties[0].tarefas.itens.map((x) => (x.seccao || '-') + ':' + x.id);
+const ordem = () => app.tfRascunho.itens.map((x) => (x.seccao || '-') + ':' + x.id);
 /* A mesma leitura sobre uma lista qualquer.
    Recebe: t — as tarefas. Devolve: array de texto. */
 const ordemDe = (t) => t.itens.map((x) => (x.seccao || '-') + ':' + x.id);
@@ -86,7 +87,7 @@ describe('o seletor da secção no formulário', () => {
     assert.match(abertas[abertas.length - 1].b, /<input type="hidden" id="tf_sec" value="">/, 'uma secção que não existe não fica escolhida');
   });
 
-  test('«+ Criar secção…» pede o nome, deixa a secção nova escolhida, e ela grava-se com a tarefa', () => {
+  test('«+ Criar secção…» pede o nome, deixa a secção nova escolhida, e ela entra no rascunho com a tarefa', () => {
     const { abertas, toasts } = abrirP1();
     app.tfNovaTarefa('');
     const el = elementos(app);
@@ -102,15 +103,16 @@ describe('o seletor da secção no formulário', () => {
     const nova = el.tf_sec.value;
     assert.ok(nova && nova !== '__new__', 'a secção nova fica escolhida');
     igual(rotulos('tf_sec'), ['Sem secção', 'Obras', 'Documentos', 'Chaves', '+ Criar secção…']);
-    assert.equal(app.db.properties[0].tarefas.seccoes.length, 2, 'ainda nada gravado');
+    assert.equal(app.tfRascunho.seccoes.length, 2, 'ainda nada no rascunho');
     assert.equal(el.tf_nome.value, 'Mudar a fechadura', 'o nome escrito fica');
     app.tfGuardarTarefa();
-    const t = app.db.properties[0].tarefas;
+    const t = app.tfRascunho;
     igual(t.seccoes.map((s) => s.nome), ['Obras', 'Documentos', 'Chaves']);
     const k = t.itens[t.itens.length - 1];
     assert.equal(k.nome, 'Mudar a fechadura');
     assert.equal(k.seccao, nova);
-    assert.equal(toasts.pop().m, 'Tarefa adicionada.');
+    assert.equal(toasts.length, 0, 'sem aviso: a tarefa aparece na lista');
+    assert.equal(app.db.properties[0].tarefas.seccoes.length, 2, 'e nada gravado até ao Guardar');
   });
 
   test('cancelar o nome devolve a escolha de antes, e cancelar a tarefa não deixa a secção para trás', () => {
@@ -128,7 +130,7 @@ describe('o seletor da secção no formulário', () => {
     app.closeModal();   // o Cancelar da tarefa
     app.tfNovaTarefa('');
     igual(rotulos('tf_sec'), ['Sem secção', 'Obras', 'Documentos', '+ Criar secção…'], 'a secção do formulário cancelado não aparece');
-    assert.equal(app.db.properties[0].tarefas.seccoes.length, 2);
+    assert.equal(app.tfRascunho.seccoes.length, 2);
   });
 
   test('um nome que já existe, sem olhar a acentos nem maiúsculas, escolhe essa secção sem a repetir', () => {
@@ -282,14 +284,14 @@ describe('a pega e o «Mover tarefa»', () => {
   test('o lugar para largar sem secção só existe com secções, sem soltas à vista, e para quem pode', () => {
     abrirP1();
     assert.doesNotMatch(app.tfLista(), /tf-so-alvo/, 'há uma solta: o grupo dela já é o alvo');
-    app.db.properties[0].tarefas.itens = app.db.properties[0].tarefas.itens.filter((x) => x.seccao);
+    app.tfRascunho.itens = app.tfRascunho.itens.filter((x) => x.seccao);
     assert.match(app.tfLista(), /<div class="tf-seccao tf-so-alvo" data-sec=""><div class="tf-cab" data-sec="">[\s\S]*Larga aqui para a tarefa ficar sem secção\./);
-    app.db.properties[0].tarefas.seccoes = [];
-    app.db.properties[0].tarefas.itens = [];
+    app.tfRascunho.seccoes = [];
+    app.tfRascunho.itens = [];
     assert.doesNotMatch(app.tfLista(), /tf-so-alvo/, 'sem secções não há para onde');
   });
 
-  test('o «Mover tarefa» abre com o lugar de agora, a secção nova traz as posições dela, e guardar grava', () => {
+  test('o «Mover tarefa» abre com o lugar de agora, a secção nova traz as posições dela, e «Mover» muda o rascunho', () => {
     const { abertas, toasts } = abrirP1();
     app.tfPegaClique('K5');
     const j = abertas[abertas.length - 1];
@@ -305,7 +307,8 @@ describe('a pega e o «Mover tarefa»', () => {
     el.tf_mpos.value = 'K1';
     app.tfGuardarMover();
     igual(ordem(), ['S1:K1', 'S1:K5', 'S1:K2', 'S2:K3', '-:K4']);
-    assert.equal(toasts.pop().m, 'Tarefa movida.');
+    assert.equal(toasts.length, 0, 'sem aviso: o foco fica na pega da tarefa movida');
+    assert.match(j.f, />Mover<\/button>$/, 'o botão diz o verbo, e não «Guardar»');
   });
 
   test('o toque que o browser dispara logo a seguir a largar não abre o «Mover tarefa»', () => {
@@ -381,7 +384,7 @@ describe('o alvo do arrasto', () => {
     assert.equal(app.tfArrastoAlvo(400).sid, 'S2', 'abaixo de tudo, a secção mais perto');
   });
 
-  test('largar grava a ordem nova, e largar numa secção recolhida diz para onde foi', () => {
+  test('largar muda a ordem no rascunho, e largar numa secção recolhida diz para onde foi', () => {
     const { toasts } = abrirP1();
     const { docs } = ecra();
     const lista = app.tfArr.lista;
@@ -394,6 +397,7 @@ describe('o alvo do arrasto', () => {
     lista.classList = { remove() {} };
     app.tfArrastoFim();
     igual(ordem(), ['S1:K1', 'S1:K2', 'S2:K4', 'S2:K3', 'S2:K5']);
+    igual(app.db.properties[0].tarefas.itens.map((x) => x.id), ['K1', 'K2', 'K3', 'K4', 'K5'], 'o registo só muda no Guardar');
     assert.equal(toasts.pop().m, 'Tarefa movida para «Documentos».');
     assert.equal(app.tfArr, null, 'o arrasto acabou');
     assert.ok(app.tfArrFim > 0, 'o clique a seguir engole-se');

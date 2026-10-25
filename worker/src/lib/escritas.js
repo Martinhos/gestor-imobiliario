@@ -14,7 +14,7 @@ import {
   acessoACasa, regraDoRegisto, planeadoAGravar, apagarCasa, preserveOwnership,
   gravarCasa, comCasaFresca, casaMudou, FRASE_CASA_MUDOU,
 } from './acesso.js';
-import { fundirCasa, fraseRecusa } from './permissoes.js';
+import { fundirCasa, fundirCasaComBase, fusaoIguais, fusaoObjeto, fraseRecusa } from './permissoes.js';
 import {
   servicosDesligados, kindsDesligados, userKindsDesligados, casaDesligada, servicoDoKind, FRASE_DESLIGADO,
 } from './servicos.js';
@@ -54,25 +54,32 @@ function desligado(id) {
   return { ok: false, status: 403, error: FRASE_DESLIGADO(id), servico: id };
 }
 
-// A dona de um imóvel: criar, gravar a ficha (um colaborador só com
-// house.edit, e fundida com o que está na base — o cliente dele não tem
-// hipotecas nem valor, e gravar por cima apagava o que o dono escreveu),
-// ressuscitar (só o dono: é o «desfazer» da app), apagar (só o dono).
+// A dona de um imóvel: criar, gravar a ficha, ressuscitar (só o dono: é o
+// «desfazer» da app), apagar (só o dono). Gravar uma ficha que já existe é
+// sempre uma fusão com o que está na base (permissoes.js:fundirCasaComBase):
+// com a base que o cliente leu, só entra o que ele mudou; sem ela, nada sai
+// das listas com ids. Um colaborador (só com house.edit) passa ainda pelo
+// fundirCasa — o cliente dele não tem hipotecas nem valor, e o que o cargo
+// não vê nem entra nem sai.
 // Recebe: e — o contexto; houseId — o id da casa; put — true a gravar,
-// false a apagar; data — a ficha já limpa (só no put).
+// false a apagar; data — a ficha já limpa (só no put); base (opcional) — os
+// campos da versão que o cliente leu que ele mudou, já limpos.
 // Devolve: promessa do resultado da operação.
-async function escreverCasa(e, houseId, put, data) {
+async function escreverCasa(e, houseId, put, data, base) {
   if (e.semCasas) return desligado('properties');
   // lê e grava por cima da revisão lida (acesso.js:gravarCasa); outra escrita
-  // a meio repete tudo, e à terceira desiste com um 409 que não mexeu em nada
-  try { return await comCasaFresca(() => escreverCasaUmaVez(e, houseId, put, data)); }
+  // a meio repete tudo (a fusão incluída), e à terceira desiste com um 409
+  // que não mexeu em nada
+  try { return await comCasaFresca(() => escreverCasaUmaVez(e, houseId, put, data, base)); }
   catch (erro) { if (casaMudou(erro)) return { ok: false, status: 409, error: FRASE_CASA_MUDOU }; throw erro; }
 }
 
-// Uma passagem de escreverCasa: lê a casa (com a revisão) e grava.
-// Recebe: e, houseId, put, data — os de escreverCasa.
+// Uma passagem de escreverCasa: lê a casa (com a revisão), funde e grava. Uma
+// fusão que deixa a casa como estava não grava (não gasta a escrita nem muda
+// a revisão), mas volta a prender os anexos.
+// Recebe: e, houseId, put, data, base — os de escreverCasa.
 // Devolve: promessa do resultado da operação.
-async function escreverCasaUmaVez(e, houseId, put, data) {
+async function escreverCasaUmaVez(e, houseId, put, data, base) {
   const { env, me } = e;
   const existing = await env.DB.prepare('SELECT owner_id, deleted, data, rev FROM houses WHERE id = ?')
     .bind(houseId).first();
@@ -86,12 +93,13 @@ async function escreverCasaUmaVez(e, houseId, put, data) {
   if (existing && !existing.deleted) {
     const a = await acessoDe(e, houseId);
     if (!a.ok) return { ok: false, status: 403, error: fraseRecusa('acesso') };
-    let dados = data;
-    if (a.collab) {
-      if (!a.collab.perms.has('house.edit')) return { ok: false, status: 403, error: fraseRecusa('casa') };
-      dados = fundirCasa(existing.data, data, a.collab.perms);
+    if (a.collab && !a.collab.perms.has('house.edit')) return { ok: false, status: 403, error: fraseRecusa('casa') };
+    let dados = fundirCasaComBase(existing.data, data, base);
+    if (a.collab) dados = fundirCasa(existing.data, dados, a.collab.perms);
+    dados = preserveOwnership(existing.data, dados);
+    if (!fusaoIguais(dados, lerCasa(existing.data))) {
+      await gravarCasa(env, houseId, existing.rev, { data: JSON.stringify(dados) }, now()).run();
     }
-    await gravarCasa(env, houseId, existing.rev, { data: JSON.stringify(preserveOwnership(existing.data, dados)) }, now()).run();
     await linkFiles(env, houseId, dados, 'house', houseId, me.id, !!a.collab);
     return { ok: true };
   }
@@ -105,6 +113,13 @@ async function escreverCasaUmaVez(e, houseId, put, data) {
   e.acessos.set(houseId, { ok: true, owner: true, coowner: false, collab: null, ownerId: me.id });
   await linkFiles(env, houseId, data, 'house', houseId, me.id);
   return { ok: true };
+}
+
+// O JSON de uma casa lido da base, para comparar.
+// Recebe: s — o texto da coluna data.
+// Devolve: o objeto, ou null quando não se lê.
+function lerCasa(s) {
+  try { return JSON.parse(s); } catch (e) { return null; }
 }
 
 // Um registo de uma casa. Com o kind num serviço desligado (a frase é a
@@ -169,9 +184,10 @@ async function escreverGlobal(e, kind, id, put, data) {
 }
 
 /* Aplica uma operação { op: 'put'|'del', scope: 'house'|'record'|'user',
-   houseId, kind, id, data }: valida-a sozinha (ids pela forma de badId, o
-   corpo por cleanData — o id da linha manda — e tooBig) e escreve-a com as
-   regras do seu âmbito. Uma exceção sobe: o sync apanha-a por operação, o
+   houseId, kind, id, data, base? }: valida-a sozinha (ids pela forma de
+   badId, o corpo e a base por cleanData — o id da linha manda — e tooBig) e
+   escreve-a com as regras do seu âmbito. A base só conta numa casa
+   (escreverCasa). Uma exceção sobe: o sync apanha-a por operação, o
    REST deixa-a chegar ao index.js.
    Recebe: e — o contexto de prepararEscritas; op — a operação (o data é
    limpo no próprio sítio).
@@ -188,7 +204,15 @@ export async function aplicarOp(e, op) {
     if (!op.data) return { ok: false, status: 400 };
     if (tooBig(op.data)) return { ok: false, status: 413 };
   }
-  if (op.scope === 'house') return escreverCasa(e, String(op.houseId), put, op.data);
+  // a base de uma casa: um objeto (os campos que o cliente mudou, como os
+  // leu), limpo como o data; sem ela, ou com null, a fusão é a de sem base
+  let base;
+  if (put && op.scope === 'house' && op.base != null) {
+    if (!fusaoObjeto(op.base)) return { ok: false, status: 400 };
+    base = cleanData(op.base);
+    if (tooBig(base)) return { ok: false, status: 413 };
+  }
+  if (op.scope === 'house') return escreverCasa(e, String(op.houseId), put, op.data, base);
   if (op.scope === 'record') return escreverRegisto(e, String(op.houseId), String(op.kind), String(op.id), put, op.data);
   if (op.scope === 'user') return escreverGlobal(e, String(op.kind), String(op.id), put, op.data);
   return { ok: false, status: 400 };

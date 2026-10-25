@@ -466,23 +466,76 @@ function delFileConfirm(fn,fid,tipo){
 function openMeta(fid,doFormulario){openFileMeta(allFileMetas().concat(pendingMetas()).find(f=>f.id===fid),!!doFormulario)}
 /* mostra as miniaturas depois do HTML entrar no DOM. "root" limita a procura (a lista de imóveis
    e a janela aberta por cima usam os mesmos ids). */
-/* miniatura pequena de uma foto: usa a guardada (tn_), ou cria-a uma vez a partir do original.
+/* As miniaturas em memória são sempre as de 220px (makeThumb), nunca o
+   original: uma foto de câmara de 12 MP descodificada são uns 48 MB, e dez
+   delas em caixas de 64×52 punham o telemóvel a arrastar-se a cada repinte
+   e a cada letra escrita no nome. Até a miniatura existir, a caixa fica com
+   o marcador de sempre (o fundo --chip da .pth, como as que ainda vêm do
+   IndexedDB). Fazem-se no máximo MINIATURAS_A_PAR de cada vez — dez fotos
+   escolhidas juntas eram dez descodificações inteiras ao mesmo tempo —, e um
+   pedido que já está a caminho serve quem pedir a mesma foto entretanto (o
+   takeFiles começa-a, o repaintProp pede-a logo a seguir). */
+const MINIATURAS_A_PAR=2;
+/* Um original que o browser não consegue encolher (um SVG, um formato que o
+   createImageBitmap não lê) só vai para a caixa se for leve; senão fica o
+   marcador. */
+const MINIATURA_ORIGINAL_MAX=1048576;
+const _miniaturaPedida={},_filaMiniaturas=[];
+let _miniaturasAFazer=0;
+/* Corre um trabalho na fila das miniaturas, com no máximo MINIATURAS_A_PAR
+   ao mesmo tempo.
+   Recebe: fazer — função que devolve uma promessa (o makeThumb de um blob).
+   Devolve: promessa do que o trabalho devolver. */
+function naFilaDasMiniaturas(fazer){
+  return new Promise((res,rej)=>{
+    const vez=()=>{
+      _miniaturasAFazer++;
+      let p;try{p=Promise.resolve(fazer())}catch(e){p=Promise.reject(e)}
+      const fim=()=>{_miniaturasAFazer--;const seg=_filaMiniaturas.shift();if(seg)seg()};
+      p.then(v=>{fim();res(v)},e=>{fim();rej(e)});
+    };
+    if(_miniaturasAFazer<MINIATURAS_A_PAR)vez();else _filaMiniaturas.push(vez);
+  });
+}
+/* Uma miniatura pedida uma vez só: quem a pedir enquanto ela se faz recebe a
+   mesma promessa.
+   Recebe: id — o id da foto; fazer — função que devolve a promessa do URL.
+   Devolve: promessa do object URL da miniatura (ou null). */
+function pedirMiniatura(id,fazer){
+  if(_miniaturaPedida[id])return _miniaturaPedida[id];
+  const p=fazer().then(u=>{delete _miniaturaPedida[id];return u},e=>{delete _miniaturaPedida[id];throw e});
+  _miniaturaPedida[id]=p;
+  return p;
+}
+/* Faz a miniatura de 220px de um blob (na fila), guarda-a no IndexedDB como
+   tn_<id> e em memória. Se o browser não a conseguir fazer, só um original
+   leve (MINIATURA_ORIGINAL_MAX) vai para a caixa.
+   Recebe: id — o id da foto; blob — o original.
+   Devolve: promessa do object URL guardado, ou null (fica o marcador). */
+function miniaturaDoBlob(id,blob){
+  return naFilaDasMiniaturas(()=>makeThumb(blob)).then(tb=>{
+    if(!tb)throw new Error('sem miniatura');
+    idbPut('tn_'+id,tb).catch(()=>{});
+    return guardarMiniatura(id,URL.createObjectURL(tb));
+  }).catch(()=>blob&&blob.size<=MINIATURA_ORIGINAL_MAX?guardarMiniatura(id,URL.createObjectURL(blob)):null);
+}
+/* Começa a miniatura de uma foto acabada de escolher (anexos.js:takeFiles),
+   a partir do ficheiro que já está na mão.
+   Recebe: id — o id da foto; blob — o ficheiro escolhido.
+   Devolve: promessa do object URL da miniatura, ou null. */
+function fazerMiniatura(id,blob){return pedirMiniatura(id,()=>miniaturaDoBlob(id,blob))}
+/* miniatura pequena de uma foto: usa a que está em memória, a guardada (tn_),
+   ou cria-a uma vez a partir do original (miniaturaDoBlob).
    Recebe: id — o id da foto (chave do blob no IndexedDB; a miniatura vive em tn_<id>).
-   Devolve: Promise que resolve para um object URL da miniatura (ou do original,
-   se a miniatura não se conseguir criar), ou null quando o blob não existe. */
+   Devolve: Promise que resolve para um object URL da miniatura, ou null quando
+   o blob não existe (ou não dá miniatura e é pesado). */
 function thumbSrc(id){
   /* o thumbCache tem teto (anexos.js:guardarMiniatura): usar uma marca-a como recente */
   if(thumbCache[id]){usarMiniatura(id);return Promise.resolve(thumbCache[id])}
-  return idbGet('tn_'+id).then(tb=>{
+  return pedirMiniatura(id,()=>idbGet('tn_'+id).then(tb=>{
     if(tb)return guardarMiniatura(id,URL.createObjectURL(tb));
-    return idbGet(id).then(b=>{
-      if(!b)return null;
-      return makeThumb(b).then(tb2=>{
-        if(tb2)idbPut('tn_'+id,tb2).catch(()=>{});
-        return guardarMiniatura(id,URL.createObjectURL(tb2||b));
-      }).catch(()=>guardarMiniatura(id,URL.createObjectURL(b)));
-    });
-  });
+    return idbGet(id).then(b=>b?miniaturaDoBlob(id,b):null);
+  }));
 }
 /* Encolhe uma imagem para miniatura (lado maior ≤ 220px) e devolve uma Promise
    com o blob JPEG. Nunca amplia; rejeita se o blob não for imagem legível.
@@ -520,6 +573,81 @@ function paintThumbs(list,root){
 // Devolve: nada — atualiza o name da foto em memória.
 function livePhotoName(id,v){const f=(window.pForm&&pForm.photos||[]).find(x=>x.id===id);if(f)f.name=v}
 
+/* ================= O TECLADO DO TELEMÓVEL E O CAMPO COM O FOCO =================
+   O teclado sobe por cima da página e pode tapar o campo onde se vai
+   escrever. Antes, cada foco num campo punha o .kb na folha (300px de folga
+   no fundo do corpo, o que refazia o layout dela) e, 260ms depois, centrava
+   o campo com scroll suave — mesmo um campo à vista: o nome de uma foto
+   fugia de baixo do dedo a meio do toque longo para selecionar texto.
+   Agora o campo só se mexe se o teclado (ou a borda do corpo da janela) o
+   tapa, medido pela janela visível (visualViewport), e de uma vez, sem
+   scroll suave por baixo do dedo; a folga .kb só entra quando o corpo não
+   tem para onde rolar sem ela. Espera-se o teclado assentar: o resize da
+   janela visível (alisado), ou KB_ESPERA sem resize nenhum (o teclado já
+   estava aberto, ou não há teclado). Vale para todos os campos (o focusin
+   do arranque.js). */
+const KB_ESPERA=300;
+// a folga (px) entre o campo e a borda do que se vê, para não ficar colado ao teclado
+const KB_FOLGA=12;
+let _kbEspera=null;
+/* O retângulo do que se vê de um campo: a janela visível (sem o teclado)
+   e, dentro de uma janela, o corpo dela.
+   Recebe: corpo — o .body da janela (ou null fora de uma janela); vv — o
+   window.visualViewport (ou null).
+   Devolve: {top, bottom} em px do ecrã. */
+function kbAreaVisivel(corpo,vv){
+  let top=vv?(vv.offsetTop||0):0,bottom=vv?top+vv.height:(window.innerHeight||0);
+  if(corpo&&typeof corpo.getBoundingClientRect==='function'){
+    const r=corpo.getBoundingClientRect();
+    top=Math.max(top,r.top);bottom=Math.min(bottom,r.bottom);
+  }
+  return {top,bottom};
+}
+/* O campo está à vista (com a folga), ou o teclado/a borda tapa-o?
+   Recebe: r — o getBoundingClientRect do campo; area — de kbAreaVisivel.
+   Devolve: true se está todo à vista. */
+function kbCampoAVista(r,area){
+  return r.top>=area.top+KB_FOLGA&&r.bottom<=area.bottom-KB_FOLGA;
+}
+/* Traz o campo com o foco para a vista, só se estiver tapado: centra-o no
+   que se vê do corpo da janela, de uma vez; a folga .kb só entra se o
+   corpo não chega lá sem ela. Fora de uma janela, o scrollIntoView de
+   sempre, sem suave.
+   Recebe: t — o campo (já com o foco).
+   Devolve: true se mexeu no scroll, false se o campo já estava à vista (ou
+   perdeu o foco entretanto). */
+function campoAVista(t){
+  if(!t||typeof t.getBoundingClientRect!=='function'||document.activeElement!==t)return false;
+  const vv=window.visualViewport||null;
+  const s=typeof t.closest==='function'?t.closest('.sheet'):null;
+  const corpo=s&&typeof s.querySelector==='function'?s.querySelector('.body'):null;
+  const dentro=!!(corpo&&typeof corpo.contains==='function'&&corpo.contains(t));
+  const area=kbAreaVisivel(dentro?corpo:null,vv),r=t.getBoundingClientRect();
+  if(kbCampoAVista(r,area))return false;
+  if(!dentro){try{t.scrollIntoView({block:'center'})}catch(e){}return true}
+  const quer=Math.round((r.top+r.bottom)/2-(area.top+area.bottom)/2);
+  if(quer>0&&corpo.scrollHeight-corpo.clientHeight-corpo.scrollTop<quer)s.classList.add('kb');
+  corpo.scrollTop+=quer;
+  return true;
+}
+/* O foco entrou num campo de escrever: espera o teclado assentar e traz o
+   campo para a vista se ele o tapar (campoAVista). Um foco novo esquece o
+   anterior; o ouvinte do resize sai ao fim de um segundo e pouco.
+   Recebe: t — o campo que ganhou o foco.
+   Devolve: nada. */
+function campoAVistaQuandoAssentar(t){
+  if(_kbEspera)_kbEspera.parar();
+  const vv=window.visualViewport||null;
+  const e={tm:0,fim:0,parar(){clearTimeout(e.tm);clearTimeout(e.fim);if(vv&&vv.removeEventListener)vv.removeEventListener('resize',mexeu);if(_kbEspera===e)_kbEspera=null}};
+  const ver=()=>{if(_kbEspera===e)campoAVista(t)};
+  // o teclado anima: o resize chega várias vezes, e só o último conta
+  const mexeu=()=>{clearTimeout(e.tm);e.tm=setTimeout(ver,80)};
+  if(vv&&vv.addEventListener)vv.addEventListener('resize',mexeu);
+  e.tm=setTimeout(ver,KB_ESPERA);
+  e.fim=setTimeout(()=>e.parar(),KB_ESPERA+900);
+  _kbEspera=e;
+}
+
 /* ================= MODAL =================
    Janelas empilhadas: abrir uma segunda janela não fecha a primeira — fica por baixo,
    escurecida e inerte, e volta quando a de cima fecha. Só a janela de cima mantém os
@@ -545,8 +673,11 @@ function modalLayer(){
       <button class="iconbtn" data-toca="camada" data-click="closeModal('x')" aria-label="Fechar">${ic('x')}</button></div>
     <div class="body" id="modalBody"></div><div class="foot" id="modalFoot"></div></div>`;
   /* o arrasto da folha para baixo (folhaPousar) trava o scroll do browser
-     aqui, e não no documento: só os toques numa janela esperam por ele */
-  m.addEventListener('touchmove',folhaToqueMove,{passive:false});
+     aqui, e não no documento — e só enquanto a folha se pode agarrar pelo
+     corpo (folhaOuvirToque): no resto do tempo os toques não esperam por ele */
+  const corpo=m.querySelector('.body');
+  if(corpo)corpo.addEventListener('scroll',()=>folhaOuvirToque(m),{passive:true});
+  folhaOuvirToque(m);
   return m;
 }
 /* O que está escrito na janela, numa string comparável. É o suficiente para
@@ -1489,6 +1620,28 @@ function folhaToqueMove(e){
     if(dy<0||dy<Math.abs(dx))return;
   }
   e.preventDefault();
+}
+/* Um touchmove com passive:false faz cada toque na zona dele esperar pela
+   thread principal antes de o browser rolar — e com fotos a descodificar,
+   ou um repinte a meio, selecionar o nome de uma foto ou rolar o formulário
+   ficava preso a isso. Por isso a .modal só o ouve quando a folha se pode
+   agarrar pelo corpo: com a barra (até 520px) e o corpo no topo do scroll.
+   Com o corpo rolado o corpo não agarra (folhaZona), e o cabeçalho e a barra
+   não precisam dele: têm touch-action:none (estilos.css, as regiões da folha
+   arrastável e das fotos rápidas). Corre ao abrir a janela e a cada scroll
+   do corpo, e só mexe no ouvinte quando a resposta muda.
+   Recebe: m — a .modal (do modalLayer).
+   Devolve: true se fica a ouvir, false se não. */
+function folhaOuvirToque(m){
+  if(!m||typeof m.addEventListener!=='function')return false;
+  const corpo=typeof m.querySelector==='function'?m.querySelector('.body'):null;
+  const quer=folhaComBarra()&&!(corpo&&corpo.scrollTop>0);
+  if(quer!==!!m._ouveToque){
+    m._ouveToque=quer;
+    if(quer)m.addEventListener('touchmove',folhaToqueMove,{passive:false});
+    else m.removeEventListener('touchmove',folhaToqueMove,{passive:false});
+  }
+  return quer;
 }
 /* Tira os ouvintes do documento e esquece o arrasto.
    Devolve: nada. */
