@@ -4623,3 +4623,41 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 /* sem movimento a folha não segue o dedo: desvanece quando largar já a fecha */
 @media(prefers-reduced-motion:reduce){.sheet.pronto{opacity:.72}}
 /* === fim: folha arrastável (folha 1.3) === */
+/* === tarefas com Guardar (folha 1.2) === */
+/* O «Adicionar tarefa» da janela das tarefas (tarefas.js:tfCorpo) fica preso
+   ao topo do corpo enquanto a lista rola: a janela é um rascunho e quem
+   adiciona quinze tarefas seguidas não sobe a lista quinze vezes. Cobre o
+   enchimento do corpo (.sheet .body, 18px 20px) com o fundo da folha, para
+   o que rola por baixo não espreitar por cima nem dos lados. */
+#raiz#raiz .tf-barra{position:sticky;top:-18px;z-index:8;margin:-18px -20px 8px;padding:8px 14px 6px;background:var(--card);border-bottom:1px solid var(--line)}
+#raiz#raiz .btn.ghost.tf-nova{width:100%;justify-content:flex-start;padding:0 6px;color:var(--accent-text)}
+@media(hover:hover) and (pointer:fine){#raiz#raiz .btn.ghost.tf-nova:hover{background:var(--tint)}}
+#raiz#raiz .btn.ghost.tf-nova:active{background:var(--press)}
+/* a linha que se leva à vista (tarefas.js:tfMostrar) não fica por baixo da barra */
+#raiz#raiz .tf-item,#raiz#raiz .tf-seccao{scroll-margin-top:64px}
+/* «Alterações por guardar», no fim do resumo (tarefas.js:tfPorGuardarHtml):
+   pela cor da frente, que o escuro forçado do Samsung não apaga */
+#raiz#raiz .tf-por-guardar{font-weight:650;color:var(--accent-text)}
+/* === fim: tarefas com Guardar (folha 1.2) === */
+/* === fotos rápidas (folha 1.3) === */
+/* A folha de baixo não rola por fora do corpo: a barra, o espaço à volta
+   dela e o rodapé não têm nada que rolar, e um gesto vertical ali é o
+   arrastar para fechar (componentes.js:folhaPousar). Sem isto, o browser
+   tomava-o e mandava um pointercancel — e era por isso que a .modal ouvia
+   o touchmove com passive:false o tempo todo. O corpo rola como sempre: o
+   touch-action recomeça em cada caixa que rola (o .body tem overflow:auto).
+   O pinch-zoom fica. A .modal só ouve o touchmove quando o corpo pode
+   agarrar a folha (componentes.js:folhaOuvirToque). */
+@media(max-width:520px){.sheet{touch-action:pinch-zoom}}
+/* a foto que se arrasta vai numa camada sua: o transform do dedo não repinta
+   a lista a cada movimento (imovel.js:photoDragMove) */
+.prow.drag{will-change:transform}
+/* largar: as linhas trocam de lugar no DOM e o transform delas limpa-se no
+   mesmo instante, sem a transição a animar do sítio velho — quem já estava
+   no lugar novo fica onde está (imovel.js:photoDragEnd) */
+.pousar>.prow{transition:none}
+/* === fim: fotos rápidas (folha 1.3) === */
+/* === registos sem perdas (folha 2.1) === */
+/* === fim: registos sem perdas (folha 2.1) === */
+/* === miniaturas na nuvem (folha 2.2) === */
+/* === fim: miniaturas na nuvem (folha 2.2) === */

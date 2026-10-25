@@ -112,6 +112,10 @@ function cleanFiles(){
     r.onsuccess=()=>{
       const keep=Object.assign({},pendingFiles);
       allFileMetas().forEach(f=>keep[f.id]=1);
+      /* e a miniatura de cada um (tn_<id>): sem isto o arranque deitava-as
+         fora todas, e cada sessão voltava a fazê-las do original (ou a
+         pedi-las ao servidor, noutro aparelho) */
+      Object.keys(keep).forEach(k=>{keep['tn_'+k]=1});
       /* e apaga SÓ daqui: o idbDel está embrulhado pela nuvem para mandar um
          DELETE ao servidor, e uma arrumação local nunca deve destruir o
          anexo dos outros aparelhos */
@@ -138,8 +142,10 @@ function takeFiles(input){
     const id=uid();pendingFiles[id]=1;
     return idbPut(id,f).then(()=>new Promise(resolve=>{
       if(!isImg(f.type)){resolve(normFile({id,name:f.name,type:f.type||'',size:f.size,added:today()}));return}
-        guardarMiniatura(id,URL.createObjectURL(f));
-        makeThumb(f).then(tb=>{if(tb)idbPut('tn_'+id,tb).catch(()=>{})}).catch(()=>{});
+      /* a miniatura de 220px começa já, a partir do ficheiro na mão; nunca
+         o original em memória (componentes.js:fazerMiniatura) — até ela
+         chegar, a caixa mostra o marcador */
+      fazerMiniatura(id,f).catch(()=>{});
       resolve(normFile({id,name:f.name,type:f.type||'',size:f.size,added:today()}));
     }));
   }).filter(Boolean));

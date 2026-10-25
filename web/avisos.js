@@ -27,6 +27,37 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 41,
+    data: '2026-10-25',
+    titulo: 'Nada se perde numa casa partilhada',
+    seccoes: [
+      {
+        titulo: 'Duas contas na mesma casa',
+        afeta: ['partilha', 'imoveis'],
+        itens: [
+          'Quando duas contas mexem na mesma casa, cada uma só muda o que mudou: as tarefas, as fotos e os campos que a outra adicionou ficam. Se as duas mudarem a mesma coisa, fica a última.',
+          'O mesmo vale para os contratos, os movimentos, os planeados, as visitas e as fichas dos inquilinos: os documentos, as chaves e as tarefas que a outra conta adicionou já não desaparecem.',
+          'Esta versão é obrigatória: as anteriores ainda gravavam a casa inteira por cima.',
+        ],
+      },
+      {
+        titulo: 'Tarefas',
+        afeta: ['imoveis', 'contratos'],
+        itens: [
+          'A lista de tarefas guarda-se de uma vez: marca, adiciona e arruma à vontade, e só o «Guardar» grava. Fechar com alterações pergunta antes de as deitar fora.',
+        ],
+      },
+      {
+        titulo: 'Fotos',
+        afeta: ['anexos'],
+        itens: [
+          'Mudar o nome e a ordem das fotos ficou rápido no telemóvel: o campo já não foge do dedo e a foto largada pousa no lugar sem saltos.',
+          'Noutro telemóvel, as fotos aparecem depressa: descem só as miniaturas, e a foto inteira só quando a abres.',
+        ],
+      },
+    ],
+  },
+  {
     v: 40,
     data: '2026-10-17',
     titulo: 'Uma cara nova',
@@ -1045,7 +1076,7 @@ var VERSAO = AVISOS[0].v;
 /* Versão mínima aceite. Subir isto obriga toda a gente a atualizar antes de
    continuar a usar a app — é para quando uma versão antiga passa a estar
    errada, não para empurrar novidades. */
-var VERSAO_MINIMA = 0;
+var VERSAO_MINIMA = 41;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { AVISOS: AVISOS, VERSAO: VERSAO, VERSAO_MINIMA: VERSAO_MINIMA, FUNCIONALIDADES: FUNCIONALIDADES };

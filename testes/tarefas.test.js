@@ -1,8 +1,8 @@
 // A lista de tarefas de um imóvel ou de um contrato (web/app/tarefas.js):
 // vive dentro do registo, arruma-se em secções, cada tarefa está cumprida ou
 // por cumprir, e a janela pesquisa pelo nome da tarefa e da secção e filtra
-// pela secção e pelo estado. Cada toque grava logo; quem não pode alterar o
-// registo não altera a lista.
+// pela secção e pelo estado. A janela muda um rascunho, que só o Guardar dela
+// leva ao registo; quem não pode alterar o registo não altera a lista.
 
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -117,9 +117,11 @@ describe('a janela da lista', () => {
     assert.equal(abertas[0].t, 'Tarefas · T2 Lisboa');
     igual(nomesNaLista(), ['Ligar à Ana', 'Pintar a sala', 'Trocar o esquentador', 'Pedir o certificado energético']);
     assert.match(abertas[0].b, /type="search"/);
-    // «Nova tarefa», o título do formulário que abre: «Adicionar tarefa» com o
-    // ícone partia-se em duas linhas em meio rodapé de um telemóvel
-    assert.match(abertas[0].f, /<button type="button" class="btn primary" [^>]*tfNovaTarefa\(''\)">(?:<svg[\s\S]*?<\/svg>)? Nova tarefa<\/button>/);
+    // o rodapé é o dos formulários (Fechar e Guardar); o «Adicionar tarefa»
+    // vive no topo do corpo, preso enquanto a lista rola
+    assert.match(abertas[0].f, /^<button type="button" class="btn" id="tf_fechar" data-toca="camada" data-click="tfFechar\(\)">Fechar<\/button><button type="button" class="btn primary" data-toca="dados" data-click="tfGuardar\(\)">Guardar<\/button>$/);
+    assert.doesNotMatch(abertas[0].f, /Nova tarefa|tfNovaTarefa/);
+    assert.match(abertas[0].b, /^<div class="tf-barra"><button type="button" class="btn ghost tf-nova" id="tf_nova" data-toca="camada" data-click="tfNovaTarefa\(''\)">(?:<svg[\s\S]*?<\/svg>)? Adicionar tarefa<\/button><\/div>/);
     assert.match(abertas[0].m, /Adicionar secção/);
     // o limpar da pesquisa é um ícone de traço, e não o carácter «✕»
     const limparQ = /<button type="button" class="qclear[^"]*"[^>]*aria-label="Limpar a pesquisa">([\s\S]*?)<\/button>/.exec(abertas[0].b);
@@ -178,21 +180,27 @@ describe('a janela da lista', () => {
   });
 });
 
-describe('o que grava', () => {
-  test('marcar uma tarefa grava logo, com o dia; desmarcar tira o dia', () => {
+describe('o rascunho e o Guardar', () => {
+  test('marcar uma tarefa muda o rascunho, com o dia; desmarcar tira o dia; o Guardar leva-o ao registo', () => {
     base();
     app.db.properties[0].tarefas = app.normTarefas(LISTA());
     app.tfAbrir('imovel', 'P1');
+    const k1 = () => app.tfRascunho.itens.find((x) => x.id === 'K1');
+    const gravada = () => app.db.properties[0].tarefas.itens.find((x) => x.id === 'K1');
     app.tfMarcar('K1', true);
-    const k1 = () => app.db.properties[0].tarefas.itens.find((x) => x.id === 'K1');
     assert.equal(k1().feita, true);
     assert.equal(k1().feitaEm, HOJE);
+    assert.equal(gravada().feita, false, 'o registo ainda não mudou');
     app.tfMarcar('K1', false);
     assert.equal(k1().feita, false);
     assert.equal(k1().feitaEm, '');
+    app.tfMarcar('K1', true);
+    app.tfGuardar();
+    assert.equal(gravada().feita, true);
+    assert.equal(gravada().feitaEm, HOJE);
   });
 
-  test('o formulário de uma tarefa nova segue a regra dos formulários, e guardar põe-na na secção escolhida', () => {
+  test('o formulário de uma tarefa nova segue a regra dos formulários, e «Adicionar» põe-na no rascunho, na secção escolhida', () => {
     const { abertas, toasts } = base();
     app.db.contracts[0].tarefas = app.normTarefas(LISTA());
     app.tfAbrir('contrato', 'C1');
@@ -201,32 +209,39 @@ describe('o que grava', () => {
     assert.equal(form.t, 'Nova tarefa');
     conferir('tarefa', form.b, { obrigatorios: ['tf_nome'], exemplos: { tf_nome: EX + 'Trocar o esquentador' } });
     assert.match(form.b, /Tarefa <span class="req">\*<\/span>/);
+    // o botão diz o que faz: leva a tarefa à lista da janela, e não grava
+    assert.match(form.f, /<button type="button" class="btn primary" data-toca="rascunho" data-click="onSave&&onSave\(\)">Adicionar<\/button>$/);
     const el = elementos(app);
     el.tf_nome.value = '   ';
     app.tfGuardarTarefa();
-    assert.equal(app.db.contracts[0].tarefas.itens.length, 4, 'sem nome não se guarda');
+    assert.equal(app.tfRascunho.itens.length, 4, 'sem nome não entra');
     assert.equal(toasts.pop().m, 'Escreve a tarefa.');
     el.tf_nome.value = ' Entregar a caderneta ';
     el.tf_sec.value = 'S2';
     app.tfGuardarTarefa();
-    const nova = app.db.contracts[0].tarefas.itens[4];
+    const nova = app.tfRascunho.itens[4];
     assert.equal(nova.nome, 'Entregar a caderneta');
     assert.equal(nova.seccao, 'S2');
     assert.equal(nova.feita, false);
-    assert.equal(toasts.pop().m, 'Tarefa adicionada.');
+    assert.equal(app.db.contracts[0].tarefas.itens.length, 4, 'o contrato ainda não mudou');
+    assert.equal(toasts.length, 0, 'sem aviso: a linha nova aparece na lista, à vista');
+    app.tfGuardar();
+    assert.equal(app.db.contracts[0].tarefas.itens[4].nome, 'Entregar a caderneta');
+    assert.equal(toasts.pop().m, 'Tarefas guardadas.');
   });
 
-  test('editar muda o nome, a secção e o estado; remover tem Anular', () => {
-    const { toasts } = base();
+  test('editar muda o nome, a secção e o estado; remover tem Anular, que repõe no rascunho', () => {
+    const { abertas, toasts } = base();
     app.db.properties[0].tarefas = app.normTarefas(LISTA());
     app.tfAbrir('imovel', 'P1');
     app.tfEditarTarefa('K4');
+    assert.match(abertas[abertas.length - 1].f, />Aplicar<\/button>$/, 'numa que existe, «Aplicar»');
     const el = elementos(app);
     el.tf_nome.value = 'Ligar à Ana às 18h';
     el.tf_sec.value = 'S2';
     el.tf_feita.checked = true;
     app.tfGuardarTarefa();
-    const k4 = () => app.db.properties[0].tarefas.itens.find((x) => x.id === 'K4');
+    const k4 = () => app.tfRascunho.itens.find((x) => x.id === 'K4');
     assert.equal(k4().nome, 'Ligar à Ana às 18h');
     assert.equal(k4().seccao, 'S2');
     assert.equal(k4().feitaEm, HOJE);
@@ -235,18 +250,21 @@ describe('o que grava', () => {
     assert.equal(k4(), undefined);
     const t = toasts.pop();
     assert.equal(t.m, 'Tarefa removida.');
+    assert.equal(t.op.rotulo, 'Anular');
     t.op.fn();
     assert.equal(k4().nome, 'Ligar à Ana às 18h', 'o Anular repõe-na');
+    igual(app.tfRascunho.itens.map((x) => x.id), ['K1', 'K2', 'K3', 'K4'], 'no lugar onde estava');
+    assert.equal(app.db.properties[0].tarefas.itens.find((x) => x.id === 'K4').nome, 'Ligar à Ana', 'o registo não mudou');
   });
 
-  test('uma secção nova, um nome novo, e remover a secção leva as tarefas dela (com Anular)', () => {
+  test('uma secção nova, um nome novo, e remover a secção leva as tarefas dela (com Anular), tudo no rascunho', () => {
     const { abertas, toasts } = base();
     app.db.properties[0].tarefas = app.normTarefas(LISTA());
     app.tfAbrir('imovel', 'P1');
     app.tfNovaSeccao();
     elementos(app).pm_v.value = 'Mudança';
     app._pm();
-    const t = () => app.db.properties[0].tarefas;
+    const t = () => app.tfRascunho;
     assert.deepEqual(t().seccoes.map((s) => s.nome), ['Obras', 'Documentos', 'Mudança']);
     app.tfMudarNomeSeccao('S1');
     assert.equal(abertas[abertas.length - 1].t, 'Mudar o nome da secção');
@@ -261,6 +279,8 @@ describe('o que grava', () => {
     aviso.op.fn();
     assert.deepEqual(t().itens.map((x) => x.id), ['K1', 'K2', 'K3', 'K4']);
     assert.equal(t().itens[0].seccao, 'S1', 'as tarefas voltam para a secção');
+    assert.equal(t().seccoes[0].nome, 'Obras na cozinha', 'e a secção volta ao lugar, com o nome novo');
+    assert.deepEqual(app.db.properties[0].tarefas.seccoes.map((s) => s.nome), ['Obras', 'Documentos'], 'nada gravado');
   });
 });
 
@@ -272,7 +292,8 @@ describe('quem pode', () => {
     app.window.CW = { user: { id: 'eu' }, cargos: { P1: { dono: false, nome: 'Ver', perms: ['contract.view'] } }, pessoas: {} };
     assert.equal(app.tfPodeAlterar('imovel', 'P1'), false);
     app.tfMarcar('K1', true);
-    assert.equal(app.db.properties[0].tarefas.itens[0].feita, false, 'recusado');
+    assert.equal(app.tfRascunho.itens[0].feita, false, 'recusado, nem no rascunho');
+    assert.equal(app.db.properties[0].tarefas.itens[0].feita, false);
     assert.match(toasts.pop().m, /Não tens permissão/);
     app.db.properties[0].tarefas = app.normTarefas(null);   // o servidor nem as manda
     assert.equal(app.tfLinhaDaFicha('imovel', 'P1'), null);

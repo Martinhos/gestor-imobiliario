@@ -302,3 +302,34 @@ sobre a mesma pasta de estado mata o servidor (SQLITE_IOERR_TRUNCATE); o
 `d1 execute` não. Pára-se o servidor, migra-se, e volta-se a levantar. E um
 `wrangler dev` em fundo com a saída num pipe (`| head`) morre calado quando
 o pipe fecha.
+
+## Uma normalização nova faz uma cópia velha parecer mexida
+O cliente sobe o que difere do retrato, e o retrato é o resumo do JSON que a
+versão ANTERIOR exportou. Um campo novo no normProp (ou em qualquer norm…)
+faz todas as entidades diferirem do retrato no primeiro arranque da versão
+nova. Foi assim que uma conta apagou as fotos e as tarefas que outra tinha
+acabado de pôr numa casa partilhada (a v40 juntou as tarefas ao normProp).
+Hoje cada base guardada passa pela mesma normalização ao carregar
+(nucleo.js:loadBases, nucleo.js:normalizarDaChave), o que é igual à base não
+sobe, e o que não tem base espera pelo primeiro estado. Um norm… novo tem de
+estar no normalizarDaChave (um kind novo também), senão o registo fica sem
+base e lê-se com os campos simples do servidor.
+
+## Um campo removido só sai com base
+A fusão tira um campo que a base tinha e que não chega (nucleo.js:baseParcial
+manda-o com o valor antigo). Um envio sem base nunca remove. E quem
+construir um registo de raiz num formulário, em vez de partir de uma cópia
+do que está guardado, remove sem querer os campos que não conhece — os
+formulários partem de normX(cópia) por isso.
+
+## O bloco da fusão vive em dois ficheiros
+O `// <fusao>` … `// </fusao>` de worker/src/lib/permissoes.js e o de
+web/cloud/nucleo.js são o mesmo texto (o do worker com `export`). Muda-se um,
+copia-se para o outro: o testes/fusao-da-casa.test.js compara-os letra a
+letra e chumba se divergirem.
+
+## Uma miniatura nunca é o original
+Pôr o object URL de uma foto de câmara numa caixa de 64×52 faz o browser
+descodificá-la inteira (uns 48 MB numa de 12 MP), e dez fotos punham o
+formulário do imóvel a arrastar-se. As miniaturas em memória são as de 220px
+(componentes.js:fazerMiniatura).

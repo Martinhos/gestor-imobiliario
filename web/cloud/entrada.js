@@ -370,6 +370,12 @@ function finishLogin(u) {
        o db em branco, o push lia a diferença como «apagou tudo». O travão do
        pushNow chega, mas sem retrato não há sequer o que comparar. */
     try { snap = {}; localStorage.removeItem(snapKey()); } catch (e) {}
+    /* e as bases da sincronização (nucleo.js:bases), as da conta que sai e as
+       que esta tinha cá de outra vez: eram versões de casas e registos que o
+       db em branco já não tem — ocupavam o localStorage, e uma base sem o
+       objeto local não serve a fusão nenhuma */
+    bases = {}; basesPorEnviar = {};
+    [prevOwner, u.id].forEach(function (id) { try { localStorage.removeItem(baseKey(id)); } catch (e) {} });
   }
   /* a base local passa a ser desta conta já agora, e não só quando o primeiro
      estado chegar: o que se registar antes dele (sem rede logo a seguir a

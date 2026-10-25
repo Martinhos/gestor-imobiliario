@@ -85,12 +85,13 @@ function aplicar(app, st) {
 }
 
 /* Fecha a app e abre outra no mesmo aparelho: uma sessão nova, com o que
-   ficou guardado (a base, o retrato e o dono da base).
+   ficou guardado (a base, o retrato, as bases da sincronização e o dono da
+   base).
    Recebe: a — a app que «fecha»; id — o id da conta.
    Devolve: {app, esp} da app nova. */
 function reabrir(a, id = 'EU') {
   const { app: b, esp } = montar();
-  for (const k of [a.KEY, 'gi_cloud_snap_' + id, 'gi_cloud_owner']) {
+  for (const k of [a.KEY, 'gi_cloud_snap_' + id, 'gi_cloud_base_' + id, 'gi_cloud_owner']) {
     const v = a.localStorage.getItem(k);
     if (v !== null) b.localStorage.setItem(k, v);
   }
@@ -174,12 +175,16 @@ async function clienteDe(env, quem) {
 describe('o arranque não perde o que ficou por enviar', () => {
   // achado A.3-1
   test('um registo novo, uma edição e uma remoção feitos sem rede sobrevivem ao arranque seguinte e sobem', async () => {
-    const { app } = montar();
+    const { app, esp: esp0 } = montar();
     aplicar(app, ESTADO());
     app.db.transactions.push(app.normTx({ id: 'T9', propertyId: 'H1', label: 'Canalizador', amount: 80, kind: 'expense', date: '2026-02-03' }));
     app.db.transactions.find((t) => t.id === 'T1').label = 'Renda de janeiro';
     app.db.contracts = app.db.contracts.filter((c) => c.id !== 'C1');
-    app.rawSet(app.KEY, JSON.stringify(app.db));   // o save() grava no aparelho; o push nunca chegou a sair
+    app.rawSet(app.KEY, JSON.stringify(app.db));   // o save() grava no aparelho
+    // e agenda o envio, que sai sem rede: a base do que ficou por enviar fica
+    // no aparelho (nucleo.js:saveBases), e é com ela que a edição se funde
+    esp0.responde = () => new Error('sem rede');
+    await app.pushNow();
     const { app: b, esp } = reabrir(app);
     esp.responde = respondeEstado(ESTADO());
     b.startSync();

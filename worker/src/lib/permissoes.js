@@ -169,6 +169,195 @@ export function fundirCasa(existenteStr, incoming, perms) {
   return out;
 }
 
+// <fusao>
+/* A fusão a três de uma casa ou de um registo. Duas contas (ou dois
+   aparelhos) gravam o mesmo JSON: cada envio diz que versão do servidor leu
+   (a base), e o que chega funde-se com o que o servidor tem agora, campo a
+   campo e item a item. O que não mudou desde a base fica como o servidor o
+   tem; o que mudou ganha; um campo que a base tinha e não chega foi removido
+   aqui e sai. Uma lista de objetos com id (as tarefas e as secções delas, as
+   fotos, os quartos, as hipotecas e os documentos delas; num contrato também
+   os documentos, o inventário, as chaves e as renovações; numa ficha, os
+   documentos) junta-se pelo id: o que se adicionou de cada lado entra, só sai
+   o que se removeu do lado que envia, e o mesmo campo mudado dos dois lados
+   fica com o último a chegar. Sem base, nada sai (só se junta e muda). Este
+   bloco vive igual, letra a letra, em worker/src/lib/permissoes.js e em
+   web/cloud/nucleo.js (o cliente faz a mesma fusão ao ler), e
+   testes/fusao-da-casa.test.js compara-os. */
+
+// Até onde a fusão desce por objetos e listas; mais fundo, o que chega fica
+// tal e qual (um JSON com milhares de níveis não rebenta a pilha).
+var FUSAO_FUNDO = 16;
+
+/* Um objeto simples: nem nulo, nem lista.
+   Recebe: v — um valor de JSON.
+   Devolve: true quando é um objeto simples. */
+export function fusaoObjeto(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/* Dois valores de JSON iguais, sem olhar à ordem das chaves dos objetos. Uma
+   chave com undefined conta como ausente.
+   Recebe: a, b — os valores; n (opcional) — a profundidade a que se vai.
+   Devolve: true quando são iguais (fundo de mais conta como diferentes). */
+export function fusaoIguais(a, b, n) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b) || (n || 0) > FUSAO_FUNDO * 2) return false;
+  var m = (n || 0) + 1, i;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (i = 0; i < a.length; i++) if (!fusaoIguais(a[i], b[i], m)) return false;
+    return true;
+  }
+  var ka = Object.keys(a).filter(function (k) { return a[k] !== undefined; });
+  var kb = Object.keys(b).filter(function (k) { return b[k] !== undefined; });
+  if (ka.length !== kb.length) return false;
+  for (i = 0; i < ka.length; i++) {
+    if (!Object.prototype.hasOwnProperty.call(b, ka[i]) || !fusaoIguais(a[ka[i]], b[ka[i]], m)) return false;
+  }
+  return true;
+}
+
+/* A chave de um item de uma lista com ids: o id com um 'k' à frente (assim
+   nenhuma chave é '__proto__'), ou '' quando o item não tem id.
+   Recebe: x — o item.
+   Devolve: a chave (texto). */
+export function fusaoChave(x) {
+  if (!fusaoObjeto(x)) return '';
+  var id = x.id;
+  if (typeof id === 'string' && id) return 'k' + id;
+  if (typeof id === 'number' && isFinite(id)) return 'k' + id;
+  return '';
+}
+
+/* O índice de uma lista de objetos com id, se o for: todos os itens com id e
+   nenhum repetido. Uma lista vazia é uma lista com ids.
+   Recebe: l — o valor.
+   Devolve: {chave: item} (sem protótipo), ou null quando não é uma lista com ids. */
+export function fusaoIndice(l) {
+  if (!Array.isArray(l)) return null;
+  var out = Object.create(null);
+  for (var i = 0; i < l.length; i++) {
+    var k = fusaoChave(l[i]);
+    if (!k || out[k]) return null;
+    out[k] = l[i];
+  }
+  return out;
+}
+
+/* A ordem da lista fundida: a da primeira lista, e os itens que só a segunda
+   tem encaixados logo antes do que se lhes seguia nela — ou no fim, se nada
+   se lhes seguia (uma tarefa adicionada no fim fica no fim).
+   Recebe: primeira, segunda — as duas listas; fica — {chave: item} dos itens
+   que ficam.
+   Devolve: as chaves, pela ordem final. */
+export function fusaoOrdem(primeira, segunda, fica) {
+  var out = [], posto = Object.create(null), seguinte = '';
+  primeira.forEach(function (x) {
+    var k = fusaoChave(x);
+    if (k && fica[k] && !posto[k]) { out.push(k); posto[k] = 1; }
+  });
+  for (var i = segunda.length - 1; i >= 0; i--) {
+    var k = fusaoChave(segunda[i]);
+    if (!k || !fica[k]) continue;
+    if (!posto[k]) { out.splice(seguinte ? out.indexOf(seguinte) : out.length, 0, k); posto[k] = 1; }
+    seguinte = k;
+  }
+  return out;
+}
+
+/* Uma lista de objetos com id, fundida item a item. Um item que só chega é
+   novo daqui (ou o servidor removeu-o: aí só volta se foi mudado aqui); um que
+   a base tinha e não chega foi removido aqui e sai; um que só o servidor tem
+   fica; um que os três têm funde-se campo a campo. A ordem é a do que chega
+   quando o cliente a mudou (ou sem base); senão, a do servidor.
+   Recebe: base — a lista da base, ou null; chega — a que chega (com ids);
+   atual — a do servidor ([] quando não há); n — a profundidade.
+   Devolve: a lista nova. */
+export function fusaoLista(base, chega, atual, n) {
+  var B = fusaoIndice(base), A = fusaoIndice(atual) || Object.create(null);
+  var fica = Object.create(null);
+  chega.forEach(function (c) {
+    var k = fusaoChave(c), b = B ? B[k] : undefined, a = A[k];
+    if (a === undefined) {
+      if (b === undefined || !fusaoIguais(c, b)) fica[k] = c;
+      return;
+    }
+    fica[k] = fusaoValor(b, c, a, n);
+  });
+  atual.forEach(function (a) {
+    var k = fusaoChave(a);
+    if (!k || fica[k] || (B && B[k])) return;
+    fica[k] = a;
+  });
+  var C = fusaoIndice(chega);
+  var daBase = B ? base.filter(function (x) { return !!C[fusaoChave(x)]; }).map(fusaoChave) : [];
+  var daqui = B ? chega.filter(function (x) { return !!B[fusaoChave(x)]; }).map(fusaoChave) : [];
+  var mudouAOrdem = !B || !fusaoIguais(daBase, daqui);
+  return fusaoOrdem(mudouAOrdem ? chega : atual, mudouAOrdem ? atual : chega, fica)
+    .map(function (k) { return fica[k]; });
+}
+
+/* Um valor fundido a três. O que não chega, ou chega igual à base, fica como
+   o servidor o tem. Uma lista de objetos com id funde-se item a item
+   (fusaoLista); dois objetos, campo a campo — e um campo que a base tinha,
+   com valor, e não chega sai: foi removido aqui; o resto é o que chega.
+   Recebe: base — o valor que o cliente leu (undefined: sem base); chega — o
+   que o cliente manda; atual — o que o servidor tem; n — a profundidade.
+   Devolve: o valor fundido (undefined quando não há nada). */
+export function fusaoValor(base, chega, atual, n) {
+  if (chega === undefined || fusaoIguais(chega, base)) return atual;
+  if (n > FUSAO_FUNDO) return chega;
+  if (Array.isArray(chega)) {
+    if (!fusaoIndice(chega) || (atual != null && !fusaoIndice(atual))) return chega;
+    return fusaoLista(fusaoIndice(base) ? base : null, chega, Array.isArray(atual) ? atual : [], n + 1);
+  }
+  if (!fusaoObjeto(chega) || !fusaoObjeto(atual)) return chega;
+  var b = fusaoObjeto(base) ? base : null, out = {};
+  Object.keys(atual).forEach(function (k) { if (k !== '__proto__') out[k] = atual[k]; });
+  Object.keys(chega).forEach(function (k) {
+    if (k === '__proto__') return;
+    var v = fusaoValor(b ? b[k] : undefined, chega[k], atual[k], n + 1);
+    if (v === undefined) delete out[k]; else out[k] = v;
+  });
+  if (b) Object.keys(b).forEach(function (k) {
+    if (k === '__proto__' || b[k] == null) return;
+    if (!Object.prototype.hasOwnProperty.call(chega, k) || chega[k] === undefined) delete out[k];
+  });
+  return out;
+}
+
+/* A fusão a três de uma casa (ou de qualquer valor de JSON): a porta do bloco.
+   Recebe: base — a versão que o cliente leu (undefined: sem base); chega — a
+   que manda; atual — a que o servidor tem.
+   Devolve: o valor fundido. */
+export function fundirTres(base, chega, atual) {
+  return fusaoValor(base, chega, atual, 0);
+}
+// </fusao>
+
+/* A casa — ou o registo, de uma casa ou da conta — que um envio grava,
+   fundida com a que está na base (fundirTres). A base vem do cliente só com
+   os campos que ele mudou (os outros, iguais ao que manda, não seguem: poupa
+   metade do pedido); um campo que a base tinha vazio vem a null, e um que ele
+   removeu vem com o valor que a base lhe dava (e sai). Sem base (um cliente
+   de antes da fusão, ou um pedido REST sem ela), nada sai e os campos que
+   chegam ganham — o envio de uma cópia velha não apaga as fotos, as tarefas
+   ou os documentos que outra conta adicionou. Um campo que não chega e que a
+   base não tinha nunca sai (um colaborador não recebe o que o cargo não vê).
+   Recebe: existenteStr — o JSON guardado, em texto; chega — o objeto que o
+   cliente mandou (já passado por cleanData); base — os campos da base que
+   mudaram (objeto já limpo), ou undefined.
+   Devolve: um objeto novo, fundido, pronto a gravar. */
+export function fundirCasaComBase(existenteStr, chega, base) {
+  let atual = {};
+  try { const ex = JSON.parse(existenteStr); if (fusaoObjeto(ex)) atual = ex; } catch (e) {}
+  const b = fusaoObjeto(base) ? Object.assign({}, chega, base) : undefined;
+  const out = fundirTres(b, chega, atual);
+  return out === atual ? Object.assign({}, atual) : out;
+}
+
 // Os campos de um planeado que confirmar e silenciar tocam — os únicos que um
 // colaborador com rec.add pode mudar num planeado que não criou.
 const CAMPOS_DE_CONFIRMAR = ['next', 'until', 'muted'];

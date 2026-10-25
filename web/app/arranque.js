@@ -158,14 +158,13 @@ const typing=t=>!!t&&((/^(INPUT|TEXTAREA)$/.test(t.tagName||'')&&!/^(date|month|
 /* o seletor de data é uma janela do sistema: ao escolher, larga o foco para o ecrã voltar ao sítio */
 document.addEventListener('change',e=>{const t=e.target;if(t&&t.tagName==='INPUT'&&/^(date|month|time)$/.test(t.type||'')){try{t.blur()}catch(x){}
   [].slice.call(document.querySelectorAll('.sheet.kb')).forEach(x=>x.classList.remove('kb'))}});
-// a folha (.sheet) da janela que está por cima, ou null se não há nenhuma aberta
-// Devolve: o elemento .sheet dessa janela (nó do DOM), ou null sem janela aberta.
-const topSheet=()=>{const t=modalTop();return t?t.el.querySelector('.sheet'):null};
+/* o campo só se mexe se o teclado o tapar, e de uma vez — um campo à vista
+   fica onde está, para se poder selecionar texto sem ele fugir do dedo
+   (componentes.js:campoAVistaQuandoAssentar) */
 document.addEventListener('focusin',e=>{
   const t=e.target;
   if(!typing(t))return;
-  const s2=topSheet();if(s2)s2.classList.add('kb');
-  setTimeout(()=>{try{t.scrollIntoView({block:'center',behavior:'smooth'})}catch(err){}},260);
+  campoAVistaQuandoAssentar(t);
 });
 /* as caixas de texto crescem ao escrever e ao aparecerem já com texto
    (componentes.js:ajustarCaixas; sem nada a fazer onde o CSS já o faz) */

@@ -641,7 +641,7 @@ function collectProp(){
   if(document.getElementById('p_notes'))p.notes=richVal('p_notes');
   if(has('p_listing'))p.listing=val('p_listing');
   (p.rooms||[]).forEach(r=>{const e=document.getElementById('p_room_'+r.id);if(e)r.name=e.value});
-  (p.photos||[]).forEach(f=>{const e=document.getElementById('fn_'+f.id);if(e)f.name=e.value});
+  photoLerNomes();
   const shr={};(p.ownerIds||[]).forEach(oid=>{const e=document.getElementById('p_share_'+oid);
     if(e&&String(e.value).trim()!==''){const v=numTaxa(e.value);if(v>=0)shr[oid]=v}else if(!e&&p.ownerShares&&p.ownerShares[oid]!=null&&p.ownerShares[oid]>=0)shr[oid]=p.ownerShares[oid]});
   p.ownerShares=shr;
@@ -899,20 +899,24 @@ let _pd=null;
    Devolve: nada — guarda o estado do arrasto em _pd. */
 function photoDrag(e,h,idx){
   e.preventDefault();e.stopPropagation();
+  // um arrasto que ficou a meio (outro dedo, um pointerup que se perdeu) acaba aqui
+  if(_pd&&_pd.largar)_pd.largar();
   const row=h.closest('.prow');if(!row)return;
   const list=row.parentNode,rows=[...list.querySelectorAll('.prow')];
   idx=rows.indexOf(row);
+  // uma linha que ainda assentava do arrasto de antes fica já no sítio
+  rows.forEach(photoAssentaPara);
   const step=(rows.length>1&&rows[1].offsetTop-rows[0].offsetTop)||row.offsetHeight+8||60;
-  _pd={idx,to:idx,row,rows,step,y0:e.clientY};
+  _pd={idx,to:idx,row,rows,step,y0:e.clientY,id:e.pointerId};
   row.classList.add('drag');
   try{h.setPointerCapture(e.pointerId)}catch(x){}
-  /* com o ponteiro capturado, tudo chega ao próprio puxador */
-  h.onpointermove=photoDragMove;
-  const done=()=>{h.onpointermove=h.onpointerup=h.onpointercancel=null;
+  /* Um ouvinte só, no documento: com o ponteiro capturado o evento chega ao
+     puxador e sobe até aqui, e sem captura chega na mesma. Havia também um
+     h.onpointermove, e cada movimento corria duas vezes. */
+  const done=ev=>{if(ev&&_pd&&ev.pointerId!==_pd.id)return;
     document.removeEventListener('pointermove',photoDragMove);document.removeEventListener('pointerup',done);document.removeEventListener('pointercancel',done);
     photoDragEnd()};
-  h.onpointerup=h.onpointercancel=done;
-  /* rede de segurança para ambientes onde a captura não redirige os eventos */
+  _pd.largar=done;
   document.addEventListener('pointermove',photoDragMove);
   document.addEventListener('pointerup',done);
   document.addEventListener('pointercancel',done);
@@ -922,7 +926,7 @@ function photoDrag(e,h,idx){
 // Recebe: e — o PointerEvent do movimento.
 // Devolve: nada — mexe nos transforms das linhas.
 function photoDragMove(e){
-  if(!_pd)return;
+  if(!_pd||(e.pointerId!=null&&_pd.id!=null&&e.pointerId!==_pd.id))return;
   e.preventDefault();
   const dy=e.clientY-_pd.y0;
   _pd.row.style.transform=`translateY(${dy}px)`;
@@ -935,23 +939,72 @@ function photoDragMove(e){
       r.style.transform=sh?`translateY(${sh}px)`:'';});
   }
 }
-// Largar a foto: limpa os transforms e, se a posição mudou, aplica a nova
-// ordem a pForm.photos e ajusta o DOM e a etiqueta de capa à mão.
-// Devolve: nada — atualiza pForm.photos e a lista no DOM.
+/* Largar a foto, sem saltos. As outras linhas já estão, pelo transform, no
+   sítio onde a troca as deixa: troca-se a linha no DOM e limpam-se os
+   transforms todos de uma vez, com a transição desligada (.pousar), e elas
+   não se mexem. A largada estava onde o dedo a deixou: parte de lá e assenta
+   no lugar novo (photoAssenta). Antes, os transforms limpavam-se com a
+   transição ligada e a troca vinha no mesmo instante: as vizinhas saltavam
+   um lugar e voltavam a deslizar.
+   Só os nomes das fotos se leem do formulário (photoLerNomes): nada mais
+   mudou, e o collectProp inteiro refazia as contas das hipotecas a cada
+   largada.
+   Devolve: nada — atualiza pForm.photos e a lista no DOM. */
 function photoDragEnd(){
   if(!_pd)return;
   const {idx,to,row,rows}=_pd;
-  rows.forEach(r=>{r.style.transform='';r.classList.remove('drag')});
   _pd=null;
-  if(to===idx)return;
-  collectProp();
-  const a=pForm.photos,x=a.splice(idx,1)[0];a.splice(to,0,x);
-  /* move só a linha no DOM: repintar tudo recarregava as miniaturas e demorava */
-  const list=row.parentNode,ref=rows[to];
-  if(to>idx)list.insertBefore(row,ref.nextSibling);else list.insertBefore(row,ref);
-  list.querySelectorAll('.capa').forEach(x2=>x2.remove());
-  const first=list.querySelector('.prow .pth');
-  if(first)first.insertAdjacentHTML('afterbegin','<span class="capa">capa</span>');
+  const list=row.parentNode;
+  const de=row.getBoundingClientRect().top;   // onde o dedo a deixou
+  if(list)list.classList.add('pousar');
+  rows.forEach(r=>{r.style.transform='';if(r!==row)r.classList.remove('drag')});
+  if(to!==idx&&list){
+    photoLerNomes();
+    const a=pForm.photos,x=a.splice(idx,1)[0];a.splice(to,0,x);
+    /* move só a linha no DOM: repintar tudo recarregava as miniaturas e demorava */
+    const ref=rows[to];
+    if(to>idx)list.insertBefore(row,ref.nextSibling);else list.insertBefore(row,ref);
+    list.querySelectorAll('.capa').forEach(x2=>x2.remove());
+    const first=list.querySelector('.prow .pth');
+    if(first)first.insertAdjacentHTML('afterbegin','<span class="capa">capa</span>');
+  }
+  // o estilo novo (sem transform) fica assente antes de a transição voltar
+  if(list){void list.offsetHeight;list.classList.remove('pousar')}
+  photoAssenta(row,de-row.getBoundingClientRect().top);
+}
+/* A linha largada desliza do sítio onde o dedo a deixou para o lugar dela
+   (--rapido, --curva-entra: chega e pousa), e só no fim perde a sombra do
+   arrasto. Sem movimento pedido, ou já no sítio, pousa logo.
+   Recebe: row — a linha largada (.prow); desl — px entre onde estava e o
+   lugar novo (positivo: estava abaixo).
+   Devolve: nada. */
+function photoAssenta(row,desl){
+  // só a desta largada: um dedo novo que pegou na linha (photoAssentaPara) já a tirou
+  const pousa=()=>{if(row._assenta!==an)return;row._assenta=null;row.classList.remove('drag')};
+  let an=null;
+  if(!desl||Math.abs(desl)<0.5||semMovimento()||typeof row.animate!=='function'){row.classList.remove('drag');return}
+  an=row.animate([{transform:'translateY('+desl+'px)'},{transform:'none'}],
+    {duration:msDoToken('--rapido',120),easing:tokenTexto('--curva-entra','cubic-bezier(0,0,.2,1)')});
+  row._assenta=an;
+  an.onfinish=pousa;an.oncancel=pousa;
+  // a rede de sempre: num separador escondido o onfinish não chega
+  setTimeout(pousa,msDoToken('--rapido',120)+120);
+}
+/* Uma linha que ainda assenta de um arrasto acabado fica já no sítio (um
+   dedo novo pega nela a meio).
+   Recebe: r — uma linha (.prow).
+   Devolve: nada. */
+function photoAssentaPara(r){
+  const an=r&&r._assenta;if(!an)return;
+  r._assenta=null;
+  try{an.cancel()}catch(e){}
+  r.classList.remove('drag');
+}
+/* Lê do formulário só os nomes das fotos para o pForm (o que o collectProp
+   faz a elas), sem o resto.
+   Devolve: nada. */
+function photoLerNomes(){
+  (pForm&&pForm.photos||[]).forEach(f=>{const e=document.getElementById('fn_'+f.id);if(e)f.name=e.value});
 }
 // Tira uma foto do imóvel e apaga o blob e a miniatura do IndexedDB.
 // Recebe: fid — o id da foto a tirar.

@@ -29,6 +29,31 @@ export const TETO_POR_CONTA = 500 * 1024 * 1024;
    linha, e por isso vale também para os anexos gravados antes disto. */
 const TIPOS_NO_SITIO = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']);
 
+/* A miniatura de uma foto (os 220px que o cliente faz: componentes.js:
+   makeThumb) vive no R2 ao lado do original, na chave derivada do id
+   (chaveDaMiniatura), sem linha própria em files: não aparece como anexo em
+   lado nenhum, não conta para o teto da conta nem para o travão 'up:', e
+   segue as regras do original porque é pela linha DELE que se decide quem a
+   vê, quem a escreve e quando sai. O '/' não cabe num id de anexo (isFileId),
+   por isso nenhuma chave de miniatura colide com a de um anexo. */
+const PREFIXO_MINIATURA = 'tn/';
+// o JPEG de 220px pesa uns 10–20 KB; o teto é folgado e fecha o caminho a usar isto como armazém
+const MAX_MINIATURA = 256 * 1024;
+const TIPOS_MINIATURA = new Set(['image/jpeg', 'image/png', 'image/webp']);
+// um aparelho novo numa conta com muitas fotos antigas sobe as miniaturas que faz: travão próprio, folgado
+const MINIATURAS_POR_HORA = 600;
+
+// A chave da miniatura de um anexo no R2.
+// Recebe: id — o id do anexo (o original).
+// Devolve: a chave, ex.: 'tn/f_123'.
+export const chaveDaMiniatura = (id) => PREFIXO_MINIATURA + id;
+
+// As chaves de R2 de uma lista de anexos: cada original e a sua miniatura —
+// onde um anexo sai, a miniatura sai com ele.
+// Recebe: ids — os ids dos anexos.
+// Devolve: as chaves (o dobro dos ids).
+export const chavesNoR2 = (ids) => ids.flatMap((id) => [id, chaveDaMiniatura(id)]);
+
 /* Quanto esperam os anexos de uma casa apagada antes de a varredura os levar:
    a app deixa desfazer o apagar (web/app/imovel.js, comDesfazer), e o
    desfazer volta a gravar a casa e os registos com os mesmos anexos. */
@@ -60,7 +85,8 @@ const ANEXO_ABANDONADO = `(f.house_id IS NOT NULL AND h.id IS NULL)
     OR (u.deleted_at IS NOT NULL AND (h.id IS NULL OR h.deleted = 1))`;
 
 /* A varredura do cron diário: apaga do R2 e da D1 os anexos abandonados
-   (ANEXO_ABANDONADO), mil de cada vez e até cinco voltas por dia. As chaves
+   (ANEXO_ABANDONADO), e as miniaturas deles, mil de cada vez e até cinco
+   voltas por dia. As chaves
    saem do R2 antes das linhas: se a D1 falhar a meio, a linha fica a apontar
    para nada (o GET dá 404) e a volta seguinte volta a apanhá-la; o contrário
    deixava objetos no R2 que já ninguém sabia que existiam.
@@ -76,7 +102,7 @@ export async function varrerAnexos(env, agora) {
     const ids = (await env.DB.prepare(`SELECT f.id ${de} ORDER BY f.id LIMIT 1000`).bind(limite).all())
       .results.map((r) => r.id);
     if (!ids.length) break;
-    await apagarDoR2(env, ids);
+    await apagarDoR2(env, chavesNoR2(ids));   // e as miniaturas deles
     // os mesmos: a mesma condição, até ao último id desta volta
     await env.DB.prepare(`DELETE FROM files WHERE id IN (SELECT f.id ${de} AND f.id <= ?2)`)
       .bind(limite, ids[ids.length - 1]).run();
@@ -185,6 +211,45 @@ export async function regraDosAnexos(env, acesso, houseId, kind, recordId, data)
   return ids.every((id) => presos.has(id)) ? null : { status: 403, error: fraseRecusa('anexo') };
 }
 
+/* Um anexo que chega DEPOIS do registo que o refere. O cliente começa a subir
+   uma foto mal ela é escolhida (anexos.js:takeFiles), e a gravação do imóvel
+   pode chegar ao servidor antes de o upload acabar: o linkFiles dessa
+   gravação não encontrou a linha, e o anexo ficava solto — só quem o
+   carregou o via, até o registo voltar a ser gravado. Aqui, com a casa
+   dita pelo cliente, procura-se na casa o registo que já o refere (as fotos e
+   as hipotecas da ficha; os registos com o id no JSON) e prende-se a ele
+   pelo próprio linkFiles, com as regras de sempre (o filtro de quem grava, o
+   estrito do colaborador). Só para um anexo ainda sem kind: um que já está
+   preso a um registo não muda daqui.
+   Recebe: env — o ambiente do worker (D1 em env.DB); me — quem carregou;
+   id — o id do anexo; casa — a casa que o cliente diz; estrito — true
+   quando quem carregou é colaborador nessa casa.
+   Devolve: promessa de true quando o prendeu a um registo, false se nada o
+   refere ainda (a gravação que vier prende-o) ou se já estava preso. */
+async function prenderAoQueORefere(env, me, id, casa, estrito) {
+  const linha = await env.DB.prepare('SELECT record_kind FROM files WHERE id = ?').bind(id).first();
+  if (!linha || linha.record_kind) return false;
+  const ler = (txt) => { try { return JSON.parse(txt); } catch (e) { return null; } };
+  const h = await env.DB.prepare('SELECT data FROM houses WHERE id = ? AND deleted = 0').bind(casa).first();
+  const ficha = h && ler(h.data);
+  if (ficha && fileIdsIn({ photos: ficha.photos }).includes(id)) {
+    await linkFiles(env, casa, { photos: [{ id }] }, 'house', casa, me.id, estrito);
+    return true;
+  }
+  if (ficha && fileIdsIn({ loans: ficha.loans }).includes(id)) {
+    await linkFiles(env, casa, { loans: [{ files: [{ id }] }] }, 'house', casa, me.id, estrito);
+    return true;
+  }
+  // o LIKE só estreita (o _ de um id também casa com outra letra): quem decide é o fileIdsIn
+  const rows = (await env.DB.prepare(
+    'SELECT kind, id, data FROM records WHERE house_id = ? AND deleted = 0 AND data LIKE ? LIMIT 20'
+  ).bind(casa, '%"' + id + '"%').all()).results;
+  const r = rows.find((x) => fileIdsIn(ler(x.data)).includes(id));
+  if (!r) return false;
+  await linkFiles(env, casa, { files: [{ id }] }, r.kind, r.id, me.id, estrito);
+  return true;
+}
+
 // A regra de acesso a um anexo: o dono vê sempre; guardado numa casa, vê
 // quem tiver acesso à casa — dono e comproprietário a tudo; um colaborador
 // só com file.view, e ao que o cargo cobre (documentos de hipoteca pedem
@@ -217,7 +282,8 @@ async function acessoAoAnexo(env, me, row) {
    corpo para o R2, com os limites de tamanho, o teto da conta, o travão de
    ritmo e o id preso ao primeiro dono); GET devolve o conteúdo — no sítio só
    imagens e PDF (TIPOS_NO_SITIO), o resto como descarga, e tudo em caixa de
-   areia (CSP_ANEXO); DELETE apaga dos dois lados. O GET responde 404 tanto
+   areia (CSP_ANEXO); DELETE apaga dos dois lados (e a miniatura, se houver:
+   handleMiniatura). O GET responde 404 tanto
    ao que não existe como ao que não se pode ver — não se confirma a
    existência do que é dos outros. Um colaborador carrega para uma casa só
    com file.add, e só apaga o que ele próprio carregou (o DELETE do que não
@@ -237,17 +303,18 @@ export async function handleFiles(request, env, me, seg, method) {
     const url = new URL(request.url);
     const casa = url.searchParams.get('casa') || null;
     if (casa && !isFileId(casa)) return err(400, 'Identificador inválido.');
+    let naCasa = null;
     if (casa) {
-      const a = await acessoACasa(env, me.id, casa);
-      if (!a.ok) return err(403, 'Sem acesso a esta casa.');
-      if (a.collab && !temPerm(a.collab.perms, 'file.add')) return err(403, fraseRecusa('anexo'));
+      naCasa = await acessoACasa(env, me.id, casa);
+      if (!naCasa.ok) return err(403, 'Sem acesso a esta casa.');
+      if (naCasa.collab && !temPerm(naCasa.collab.perms, 'file.add')) return err(403, fraseRecusa('anexo'));
     }
 
     const existe = await env.DB.prepare('SELECT owner_id FROM files WHERE id = ?').bind(id).first();
     if (existe && existe.owner_id !== me.id) return err(409, 'Já existe um anexo com este id.');
     /* o travão conta só anexos novos: o cliente volta a subir os que tem no
-       aparelho depois de cada sincronização (web/cloud/anexos.js:
-       subirPendentes), e isso não pode esgotar a hora de quem só editou */
+       aparelho, uma vez por sessão, depois das sincronizações (web/cloud/
+       anexos.js:subirPendentes), e isso não pode esgotar a hora de quem só editou */
     if (!existe && !(await rateLimit(env, 'up:' + me.id, 60, 3600))) {
       return err(429, 'Demasiados anexos seguidos. Ficam neste aparelho e sobem daqui a pouco.');
     }
@@ -288,6 +355,8 @@ export async function handleFiles(request, env, me, seg, method) {
       }
       throw e;
     }
+    // com a casa dita, o registo que já o refere (gravado antes de o upload acabar) prende-o já
+    if (casa) await prenderAoQueORefere(env, me, id, casa, !!naCasa.collab);
     return json({ ok: true, id });
   }
 
@@ -314,10 +383,102 @@ export async function handleFiles(request, env, me, seg, method) {
 
   if (method === 'DELETE') {
     if (!(await acessoAoAnexo(env, me, row)).apagar) return json({ ok: true });
-    await env.FILES.delete(id);
+    await env.FILES.delete(chavesNoR2([id]));   // o original e a miniatura
     await env.DB.prepare('DELETE FROM files WHERE id = ?').bind(id).run();
     return json({ ok: true });
   }
 
   return err(404, 'Rota desconhecida.');
+}
+
+/* /api/files/:id/miniatura — a miniatura de uma foto, que o aparelho que a
+   fez sobe (web/cloud/anexos.js:subirMiniatura) e os outros pedem antes de
+   descarregarem o original (web/cloud/anexos.js:baixarMiniatura). Decide-se
+   tudo pela linha do ORIGINAL (acessoAoAnexo): vê a miniatura quem vê a foto,
+   e só esse; escreve-a quem pode apagar a foto (o dono dela, o dono e os
+   comproprietários da casa) — um colaborador só a das fotos que ele próprio
+   carregou, para ninguém trocar a cara de uma foto alheia. Não cria linha em
+   files nem gasta o travão 'up:' (tem o seu, 'tn:', MINIATURAS_POR_HORA), e
+   sai com a foto: o DELETE do anexo, a varredura e o apagar da conta levam a
+   chave derivada (chavesNoR2). Uma miniatura que chegue depois de a foto ter
+   saído não fica: confirma-se a linha depois de gravar.
+   Recebe: request — o pedido HTTP; env — o ambiente do worker (R2 em
+   env.FILES, D1 em env.DB); me — o utilizador com sessão; id — o id do
+   anexo (o original); method — 'GET' ou 'PUT'.
+   Devolve: uma Response — a imagem no GET, JSON { ok: true } no PUT; 404 ao
+   que não existe ou não se pode ver (o original, ou a miniatura que ainda
+   não subiu), 403 a quem vê mas não pode escrever, e os limites (400, 413,
+   415, 429). */
+export async function handleMiniatura(request, env, me, id, method) {
+  if (!isFileId(id)) return err(400, 'Identificador inválido.');
+  if (method !== 'GET' && method !== 'PUT') return err(404, 'Rota desconhecida.');
+  const row = await env.DB.prepare('SELECT * FROM files WHERE id = ?').bind(id).first();
+  const acesso = await acessoAoAnexo(env, me, row);
+  if (!acesso.ver) return err(404, 'Anexo não encontrado.');
+
+  if (method === 'GET') {
+    const obj = await env.FILES.get(chaveDaMiniatura(id));
+    if (!obj) return err(404, 'Esta foto ainda não tem miniatura.');
+    const guardado = tipoDoAnexo(obj.httpMetadata && obj.httpMetadata.contentType);
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type': TIPOS_MINIATURA.has(guardado) ? guardado : 'image/jpeg',
+        'Content-Length': String(obj.size || 0),
+        'Cache-Control': 'private, max-age=86400',
+        'Content-Disposition': 'inline',
+        'Content-Security-Policy': CSP_ANEXO,
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  }
+
+  if (!acesso.apagar) return err(403, 'Só quem pode apagar esta foto lhe muda a miniatura.');
+  if (!/^image\//.test(tipoDoAnexo(row.type))) return err(400, 'Só as imagens têm miniatura.');
+  const tipo = tipoDoAnexo(request.headers.get('X-Ficheiro-Tipo'));
+  if (!TIPOS_MINIATURA.has(tipo)) return err(415, 'A miniatura é um JPEG, PNG ou WebP.');
+  if (Number(request.headers.get('Content-Length') || 0) > MAX_MINIATURA) return err(413, 'A miniatura é grande de mais.');
+  const corpo = await request.arrayBuffer();
+  if (!corpo.byteLength) return err(400, 'A miniatura veio vazia.');
+  if (corpo.byteLength > MAX_MINIATURA) return err(413, 'A miniatura é grande de mais.');
+  if (!(await rateLimit(env, 'tn:' + me.id, MINIATURAS_POR_HORA, 3600))) {
+    return err(429, 'Demasiadas miniaturas seguidas. Tentamos daqui a pouco.');
+  }
+  await env.FILES.put(chaveDaMiniatura(id), corpo, { httpMetadata: { contentType: tipo } });
+  // a foto saiu entretanto (um DELETE a meio): a miniatura sai também
+  const ainda = await env.DB.prepare('SELECT 1 AS n FROM files WHERE id = ?').bind(id).first();
+  if (!ainda) {
+    await env.FILES.delete(chaveDaMiniatura(id));
+    return err(404, 'Anexo não encontrado.');
+  }
+  return json({ ok: true, id });
+}
+
+/* POST /api/files/:id/prender?casa=… — o anexo acabou de subir sem casa
+   (começou antes de o registo ser gravado) e o cliente já sabe a que casa
+   pertence: prende-o ao registo dessa casa que já o refere
+   (prenderAoQueORefere), sem voltar a mandar o conteúdo. Só para quem o
+   carregou, com as regras do PUT com ?casa= (acesso à casa; um colaborador
+   com file.add). Traz também o nome que o anexo tem no registo
+   (X-Ficheiro-Nome), que o upload, feito antes, não sabia.
+   Recebe: request — o pedido HTTP; env — o ambiente do worker; me — o
+   utilizador com sessão; id — o id do anexo.
+   Devolve: uma Response — JSON { ok: true, preso } (preso: se ficou preso a
+   um registo), 404 a um anexo que não é dele, 403 sem acesso à casa. */
+export async function handlePrender(request, env, me, id) {
+  if (!isFileId(id)) return err(400, 'Identificador inválido.');
+  const casa = new URL(request.url).searchParams.get('casa') || '';
+  if (!isFileId(casa)) return err(400, 'Identificador inválido.');
+  const row = await env.DB.prepare('SELECT owner_id FROM files WHERE id = ?').bind(id).first();
+  if (!row || row.owner_id !== me.id) return err(404, 'Anexo não encontrado.');
+  const a = await acessoACasa(env, me.id, casa);
+  if (!a.ok) return err(403, 'Sem acesso a esta casa.');
+  if (a.collab && !temPerm(a.collab.perms, 'file.add')) return err(403, fraseRecusa('anexo'));
+  const bruto = String(request.headers.get('X-Ficheiro-Nome') || '');
+  if (bruto) {
+    let nome = bruto;
+    try { nome = decodeURIComponent(bruto); } catch (e) { /* URIError: fica o bruto */ }
+    await env.DB.prepare('UPDATE files SET name = ? WHERE id = ?').bind(nome.slice(0, 200), id).run();
+  }
+  const preso = await prenderAoQueORefere(env, me, id, casa, !!a.collab);
+  return json({ ok: true, preso });
 }

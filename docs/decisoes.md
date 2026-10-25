@@ -52,6 +52,9 @@ confere que cada uma aponta para código que existe.
 - 2026-10-22 · Apagar um imóvel que não criei é sair dele
 - 2026-10-22 · Duas escritas na mesma casa não se esmagam
 - 2026-10-23 · A montra diz o valor nos primeiros segundos
+- 2026-10-25 · A casa partilhada funde em vez de gravar por cima, e as tarefas guardam-se de uma vez
+- 2026-10-25 · Os registos fundem como a casa
+- 2026-10-25 · As miniaturas sobem com as fotos
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2177,3 +2180,90 @@ produção não tem (testes/landing.test.js guarda-o). O título e a descrição
 levam os termos que um senhorio escreve no Google («gestão de arrendamento»,
 «rendas em atraso», «controlo de rendas»), dentro do que os motores mostram
 sem cortar.
+
+## 2026-10-25 · A casa partilhada funde em vez de gravar por cima, e as tarefas guardam-se de uma vez
+
+O Martinho adicionou tarefas e 16 fotos a uma casa partilhada com outra
+conta; vista da outra conta, não tinha nada, e quando voltou à dele tinha
+perdido tudo. A produção mostrou a casa gravada inteira, sem elas, num envio
+que gravou as duas casas partilhadas no mesmo lote: o aparelho da outra conta
+tinha cópias das duas de antes das fotos, e as duas diferiam do retrato
+porque a v40 passou a acrescentar as tarefas a cada casa ao carregar. Diferir
+do retrato era «mudei aqui», e a casa subia inteira por cima. As fotos
+ficaram no armazenamento e na tabela files, presas à casa; as tarefas não
+ficaram em lado nenhum.
+
+A resposta do Martinho foi «fundir sem perder»: cada envio só muda o que essa
+pessoa mudou, campo a campo, tarefa a tarefa, foto a foto; se as duas mudaram
+a mesma coisa, fica a última; nunca se apaga o que a outra conta adicionou.
+Cada envio da casa passou a dizer que versão leu (a base, guardada no
+aparelho), e o servidor funde a três. A base vai só com os campos que
+mudaram: com a casa inteira duas vezes, o pedido dobrava. A fusão é o mesmo
+código nos dois lados (o cliente funde ao ler), comparado por um teste, em
+vez de duas versões que divergiam com o tempo. Um envio sem base (as versões
+de antes) só junta, e por isso a versão mínima subiu para a 41: essas versões
+continuavam a pôr os campos simples de uma cópia velha por cima. O rev da casa
+(2026-10-22) continua: protege as escritas do worker umas das outras; a base
+protege o que outra conta gravou antes de este cliente ler. Os registos
+(contratos, movimentos) ainda gravam por cima e são o passo seguinte.
+
+As tarefas eram a outra metade. Cada toque na janela gravava, e cada gravação
+era um envio ao servidor: a adicionar tarefas uma a uma, o Martinho bateu no
+limite de 60 envios em 15 minutos (worker/src/rotas/sync.js), e o que não
+subiu ficou só no telemóvel. Havia duas saídas: juntar os envios em toda a app
+(um a cada 20 segundos, sem mudar nada no ecrã), ou a janela das tarefas
+passar a rascunho com um «Guardar». O Martinho escolheu o Guardar: quem
+escreve quinze tarefas seguidas pensa nelas como uma lista, e grava-as de uma
+vez. Por isso a regra «cada toque grava logo» saiu da janela das tarefas, e o
+Cancelar dela pergunta antes de deitar fora, ao contrário do dos outros
+formulários.
+
+As fotos eram lentas a renomear e reordenar no telemóvel. Medido, a
+miniatura de cada foto acabada de adicionar era o original da câmara até
+recarregar (dez fotos, uns 480 MB de imagem para caixas de 64×52), o campo do
+nome andava 27px debaixo do dedo aos 260ms, e o arrasto corria duas vezes por
+movimento e saltava ao largar. Nenhuma destas coisas era a gravação: era o
+trabalho de ecrã.
+
+## 2026-10-25 · Os registos fundem como a casa
+
+A casa partilhada passou a fundir de manhã; os contratos, as fichas e os
+movimentos continuavam a gravar-se inteiros, e corriam o mesmo risco: um
+aparelho com a cópia de antes (ou com uma versão nova que normaliza o
+registo de outra maneira) apagava as tarefas, os documentos e as chaves que
+outra conta tinha juntado a um contrato, e desfazia a nota que ela tinha
+mudado num movimento. O Martinho disse «faz isso tudo».
+
+Cada registo passou a ter a sua base, como a casa, e o servidor funde com o
+mesmo código. A fusão aprendeu a tirar um campo que se removeu: um
+movimento que deixa de ser prestação perde o juro e o capital, e sem isto
+esses campos ficavam no servidor. As bases de todos os registos ficam em
+memória, mas no aparelho só as dos que estão por enviar: as outras são o
+próprio registo, e guardá-las todas era voltar a ter a base duas vezes no
+localStorage, o que já tinha rebentado a quota (foi por isso que o retrato
+passou a resumos). O custo: uma edição de um campo simples que nunca chegou
+a tentar subir (a app morta à força no segundo a seguir) perde-se ao ler; o
+que se adicionou a uma lista nunca. Os registos não têm revisão: a escrita
+só pega se o registo ainda for o texto que se leu, e senão repete a fusão —
+sem migração.
+
+## 2026-10-25 · As miniaturas sobem com as fotos
+
+Noutro telemóvel, as miniaturas obrigavam a descarregar as fotos originais: o thumbSrc só
+tinha o original para as fazer. Medido no 8788: 5 fotos de 2000×1500 eram 6,9 MB a descer
+para pintar cinco caixas de 64×52; agora são 53 KB. A lista de imóveis pinta as fotos de todos
+os imóveis (lista-imoveis.js:propsDepois), por isso num aparelho novo era a conta inteira de
+fotos a descer no primeiro ecrã. A miniatura ficou no R2 sem linha própria para não ser um
+anexo em lado nenhum (teto, linkFiles, regras dos cargos, varredura) e sem migração.
+
+Dois defeitos achados pelo caminho e corrigidos nos meus ficheiros:
+- O `cleanFiles` do arranque deitava fora todos os `tn_` (só guardava os ids dos anexos): cada
+  sessão refazia as miniaturas a partir dos originais (descodificar fotos de 12 MP de cada vez
+  que a app abria).
+- O upload de uma foto começa no takeFiles, sem casa; com a gravação do imóvel a chegar antes
+  (o envio sai 1,2 s depois do Guardar), a foto ficava solta — só quem a carregou a via, o
+  comproprietário recebia 404 — até o imóvel voltar a ser gravado. A prova apanhou-o em 4 e 5
+  das 5 fotos. Agora o fim do upload prende-a (prenderAnexo/handlePrender). E o
+  `subirPendentes` subia os primeiros vinte anexos da conta inteiros a cada envio aceite (dados
+  móveis gastos sempre nos mesmos, e o vigésimo primeiro nunca revisto): agora só o que a
+  sessão ainda não tratou.
