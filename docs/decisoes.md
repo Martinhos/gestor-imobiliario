@@ -57,6 +57,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-25 · As miniaturas sobem com as fotos
 - 2026-10-25 · Transferir a propriedade é um pedido que o outro aceita
 - 2026-10-25 · As fotos a descer mostram que estão a chegar
+- 2026-10-25 · Passar o controlo, não a propriedade
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2302,3 +2303,33 @@ há x fotos, mas não vê nenhuma até terminar de descarregar. Quero que haja u
 feedback. Tipo um donut que roda ou assim.» As caixas vazias com o fundo --chip
 pareciam fotos que não existiam; e no carrossel o toque numa foto não fazia nada
 até a foto inteira descer.
+
+## 2026-10-25 · Passar o controlo, não a propriedade
+
+O Martinho corrigiu a transferência (2026-10-25): «A casa continua a ser de
+todos, só o controlo na aplicação passa para outra pessoa». Por isso a ação
+chama-se «Passar o controlo» e não «Transferir propriedade»: a propriedade
+(as quotas) não muda, e o nome antigo dizia o contrário. Só se passa a um
+comproprietário (é a correção dele), e com vários imóveis a quem o é de
+todos — o servidor recusa os outros, e oferecê-los era levar a um erro. A
+frase diz o que fica igual (a minha quota, as quotas, os grupos, os outros
+comproprietários, o cargo dos colaboradores) porque é isso que a pessoa
+precisa de ler para não ter medo de carregar no botão. Continua a ser um
+pedido que o outro aceita (resposta dele: «quem recebe continua a ter de
+aceitar»), porque quem recebe passa a responder pelas partilhas e pelos
+colaboradores.
+
+- O Martinho corrigiu a transferência de e71935f: só se passa a quem já é
+  comproprietário, e só muda quem controla a casa na app; grupos, outros
+  proprietários e quotas ficam. Os colaboradores do criador ficam com o mesmo
+  cargo e passam a ser geridos pelo novo; quem recebe continua a aceitar.
+- Mudar o `owner_id` das partilhas existentes para o novo criador partia o
+  acesso: numa ligação A–C, uma partilha de B daria a casa às duas pontas
+  (B não é nenhuma). Por isso as partilhas ficam com quem as deu, e só se
+  mudam as que se podem mudar sem perder ninguém (a da ligação entre os dois,
+  e as de terceiros também ligados a quem recebe).
+- Mudar as partilhas de terceiros para as ligações de quem recebe, quando as
+  há, é o que deixa o novo criador gerir com quem a casa está partilhada.
+- O `added_by` passa ao novo criador mesmo que não seja membro do grupo:
+  com o de quem pediu, o cliente dele (que só manda as casas dele no
+  conjunto) tirava a casa do grupo ao regravar.

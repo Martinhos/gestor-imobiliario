@@ -6,9 +6,9 @@
    sentido aí — e apagar um imóvel arrasta os contratos e movimentos dele, por
    isso a confirmação diz os números e o Anular repõe tudo. Dos imóveis que
    não criei (colaborados ou partilhados comigo) apagar é sair, no servidor e
-   sem Anular, na mesma confirmação (selLApagarImoveis). Com a transferência
-   disponível, a barra dos imóveis tem também o Transferir, que abre a folha
-   de transferir com os que criei (CW.selLTransferir). As opções de um só
+   sem Anular, na mesma confirmação (selLApagarImoveis). Com passar o
+   controlo disponível, a barra dos imóveis tem também o «Passar o controlo»,
+   que abre a folha com os que criei (CW.selLTransferir). As opções de um só
    ficam no ⋯ da ficha (e na folha do lpMenu, com o «Selecionar vários»).
 
    Os inquilinos apagam-se aos vários com as regras do pessoas.js:delPerson
@@ -421,8 +421,8 @@ function selLDecorar() {
    (a .sel-l-quebra; estilos.css:.sel-l-duas) — numa só não cabiam a 375px.
    Nos planeados, o Silenciar ou o Reativar (#selLMudo, que o selLPintarMudo
    acerta); nas visitas, o Realizada e o Falta (selLPintarVisitas). Nos
-   imóveis, com a transferência disponível (selLComAcoes), o Transferir
-   (#selLTransferir, que o selLPintarTransferir acerta). As ações
+   imóveis, com passar o controlo disponível (selLComAcoes), o «Passar o
+   controlo» (#selLTransferir, que o selLPintarTransferir acerta). As ações
    com data-sel-l-precisa desligam-se sem nada marcado (selLPintar).
    Recebe: tipo — 'prop', 'ct', 'ten', 'vis', 'rec' ou 'tpl'.
    Devolve: o HTML de dentro da barra (texto). */
@@ -433,7 +433,7 @@ function selLBarraHtml(tipo) {
   var acoes = tipo === 'rec'
     ? '<button type="button" class="btn" id="selLMudo" hidden data-toca="dados" data-click="CW.selLMudo()"></button>'
     : tipo === 'prop'
-    ? '<button type="button" class="btn" id="selLTransferir" data-sel-l-precisa data-toca="camada" data-click="CW.selLTransferir()">' + ic('swap', 15) + ' Transferir</button>'
+    ? '<button type="button" class="btn" id="selLTransferir" data-sel-l-precisa data-toca="camada" data-click="CW.selLTransferir()">' + ic('swap', 15) + ' Passar o controlo</button>'
     : '<button type="button" class="btn" id="selLRealizada" data-sel-l-precisa data-toca="dados" data-click="CW.selLVisEstado(\'realizada\')">' + ic('check', 15) + ' Realizada</button>' +
       '<button type="button" class="btn" id="selLFalta" data-sel-l-precisa data-toca="dados" data-click="CW.selLVisEstado(\'faltou\')">' + ic('x', 15) + ' Falta</button>';
   return cancelar +
@@ -476,9 +476,9 @@ function selLPintar() {
 
 /* Se a barra de um tipo tem mais ações do que o Apagar — e por isso a
    contagem com a razão por cima e as ações por baixo (estilos.css:.sel-l-duas):
-   os planeados e as visitas sempre (SEL_ACOES); os imóveis quando a
-   transferência existe aqui (imovel.js:imvTrfDisponivel — com sessão e um
-   servidor que já sabe dela).
+   os planeados e as visitas sempre (SEL_ACOES); os imóveis quando passar o
+   controlo existe aqui (imovel.js:imvTrfDisponivel — com sessão e um
+   servidor que já sabe dele).
    Recebe: tipo — o tipo em seleção.
    Devolve: true ou false. */
 function selLComAcoes(tipo) {
@@ -486,8 +486,9 @@ function selLComAcoes(tipo) {
   return tipo === 'prop' && servicoLigado('properties') && imvTrfDisponivel();
 }
 
-/* Dos imóveis marcados, os que posso transferir (os que criei, sem um
-   pedido pendente — imovel.js:imvPossoTransferir) e quantos ficam de fora.
+/* Dos imóveis marcados, aqueles cujo controlo posso passar (os que criei,
+   com comproprietários e sem um pedido pendente —
+   imovel.js:imvPossoTransferir) e quantos ficam de fora.
    Recebe: ids — os ids marcados (array).
    Devolve: {vao, fora} — arrays de ids. */
 function selLTransferiveis(ids) {
@@ -496,11 +497,10 @@ function selLTransferiveis(ids) {
   return { vao: vao, fora: fora };
 }
 
-/* O Transferir da barra dos imóveis, conforme os marcados
-   (selLTransferiveis): ligado com pelo menos um que posso transferir; a
-   razão dita ao lado da contagem quando algum fica de fora («1 fica de fora
-   da transferência: não o criaste ou já tem um pedido pendente.»), ou
-   quando nenhum vai.
+/* O «Passar o controlo» da barra dos imóveis, conforme os marcados
+   (selLTransferiveis): ligado com pelo menos um cujo controlo posso
+   passar; a razão dita ao lado da contagem quando algum fica de fora
+   («Passar o controlo deixa 1 de fora.»), ou quando nenhum vai.
    Devolve: nada — mexe na barra já posta. */
 function selLPintarTransferir() {
   var b = document.getElementById('selLTransferir'), pq = document.getElementById('selLPorque');
@@ -508,13 +508,14 @@ function selLPintarTransferir() {
   if (b) b.disabled = !r.vao.length;
   if (!pq) return;
   if (!ids.length || !r.fora.length) { pq.textContent = ''; return; }
-  pq.textContent = !r.vao.length ? 'Só transferes os que criaste e não têm um pedido pendente.'
-    : r.fora.length + (r.fora.length === 1 ? ' fica de fora da transferência.' : ' ficam de fora da transferência.');
+  pq.textContent = !r.vao.length ? 'Só passas o controlo dos que criaste, com comproprietários e sem um pedido pendente.'
+    : 'Passar o controlo deixa ' + r.fora.length + ' de fora.';
 }
 
-/* Transferir os imóveis marcados: abre a folha de transferir com eles
-   (imovel.js:imvTransferir, que deixa de fora — e diz — os que não criei e
-   os que já têm um pedido pendente). Com o pedido feito, sai da seleção.
+/* Passar o controlo dos imóveis marcados: abre a folha com eles
+   (imovel.js:imvTransferir, que deixa de fora — e diz — os que não criei,
+   os que já têm um pedido pendente e os que não têm comproprietários). Com
+   o pedido feito, sai da seleção.
    Devolve: nada. */
 CW.selLTransferir = function () {
   var ids = Object.keys(CW.selL.ids);

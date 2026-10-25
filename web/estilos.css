@@ -4667,24 +4667,12 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 /* === miniaturas na nuvem (folha 2.2) === */
 /* === fim: miniaturas na nuvem (folha 2.2) === */
 /* === transferir propriedade (folha 1.2) === */
-/* A folha de transferir (imovel.js:imvTransferir): o interruptor numa linha
-   que se toca toda, como o do contrato (label.ct-sw-linha), e com o mesmo
-   .interruptor (ligado, o botão branco corre para a direita — o estado lê-se
-   pela posição, também no escuro forçado do Samsung); as quotas de cada
-   imóvel com o nome por cima, nas linhas das quotas da partilha
-   (.pt-quotas); e a frase do que acontece num bloco calmo por baixo. */
-label.trf-sw{display:flex;align-items:center;gap:12px;min-height:44px;font-weight:400;cursor:pointer}
-.trf-sw-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.trf-sw-txt>b{font-weight:600}
-.trf-quotas:empty{display:none}
-.trf-casa{display:flex;flex-direction:column;min-width:0}
-.trf-casa>b{overflow-wrap:anywhere}
-.trf-casa+.trf-casa{margin-top:12px}
-.trf-casa .pt-quotas{margin-top:6px}
-.trf-frase{margin:0;padding:12px 14px;border-radius:14px;background:var(--chip);color:var(--ink);font-size:14px;line-height:1.5}
+/* A folha de passar o controlo (imovel.js:imvTransferir): o «Para quem» e,
+   por baixo, a frase do que acontece num bloco calmo (os nomes das casas
+   longos partem-se, sem empurrar a folha para o lado). */
+.trf-frase{margin:0;padding:12px 14px;border-radius:14px;background:var(--chip);color:var(--ink);font-size:14px;line-height:1.5;overflow-wrap:anywhere}
 /* o «Ver» de quem recebe (notificacoes.js:notifTransfVer) */
-.trf-ver p{margin:0}
-.trf-casas{display:flex;flex-direction:column;gap:10px}
+.trf-ver p{margin:0;overflow-wrap:anywhere}
 /* a transferência pendente na ficha do imóvel (imovel.js:imvTrfNaFicha): o
    ícone, o que se passa e o Cancelar (ou o Ver), que desce para baixo do
    texto quando não cabe ao lado */

@@ -29,14 +29,14 @@ var AVISOS = [
   {
     v: 42,
     data: '2026-10-25',
-    titulo: 'Transferir imóveis, e as fotos a chegar',
+    titulo: 'Passar o controlo, e as fotos a chegar',
     seccoes: [
       {
-        titulo: 'Transferir a propriedade',
+        titulo: 'Passar o controlo de um imóvel',
         afeta: ['imoveis', 'partilha'],
         itens: [
-          'Podes transferir um ou vários imóveis que criaste a um proprietário ligado a ti: no ⋯ da ficha, ou selecionando-os nas Casas. Escolhes se sais ou se continuas como comproprietário, e nesse caso com que quotas.',
-          'Quem recebe tem de aceitar, no sino; até lá nada muda e podes cancelar. Os teus colaboradores nesse imóvel perdem o acesso e são avisados.',
+          'Num imóvel que criaste e que tem comproprietários, podes passar o controlo na app a um deles: no ⋯ da ficha, ou selecionando vários nas Casas. Ele passa a gerir as partilhas, os colaboradores e o apagar; tu continuas comproprietário, e nada muda nas quotas, nos grupos nem nos outros comproprietários.',
+          'Quem recebe tem de aceitar, no sino; até lá nada muda e podes cancelar. Os teus colaboradores nesse imóvel ficam com o mesmo cargo e passam a ser geridos por ele.',
         ],
       },
       {

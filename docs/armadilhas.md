@@ -336,7 +336,11 @@ formulário do imóvel a arrastar-se. As miniaturas em memória são as de 220px
 
 ## O criador de uma casa pode mudar
 Antes da 0021, `houses.owner_id` era
-para sempre; agora uma transferência aceite muda-o. Código que guarde o dono
-de uma casa noutra tabela (como `shares.owner_id`, `shared_group_houses.added_by`,
-`files.owner_id`, `collaborators.owner_id`) tem de ser acertado no
-casas.js:aceitarCasaUmaVez, ou fica a apontar para quem já não é dono.
+para sempre; agora um pedido aceite para passar o controlo muda-o. Os
+participantes não mudam com ele: uma partilha dá a casa à ponta da ligação
+que não é o `owner_id` DELA, e por isso uma partilha pode ser de quem já não é
+o criador (herdada) e tem de continuar a valer. Código que apague ou regrave
+partilhas «minhas» numa casa (o PUT das partilhas, sair da casa) não pode
+levar as herdadas; código que leia `shared_group_houses.added_by` ou
+`collaborators.owner_id` como dono tem de ser acertado em
+casas.js:aceitarCasaUmaVez. `files.owner_id` é de quem carregou e não muda.

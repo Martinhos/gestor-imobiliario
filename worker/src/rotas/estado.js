@@ -20,9 +20,13 @@
 // de uma casa que lhe chegava por um grupo (house_exits, migração 0019) não
 // a recebe por esse grupo nem por outro, e sai dos `participants` dela; os
 // avisos de quem saiu das minhas casas vêm em `departures`, junto com os das
-// transferências (migração 0021: pedida, aceite, recusada, cancelada, o
-// dono novo, o acesso perdido). As transferências pendentes, as que me
-// pediram e as que pedi, vêm em `transfers`.
+// transferências do controlo (migração 0021: pedida, aceite, recusada,
+// cancelada, o dono novo aos comproprietários e aos colaboradores). Os pedidos
+// pendentes, os que me fizeram e os que fiz, vêm em `transfers`. Em cada
+// ligação, `myShares` são as MINHAS casas que partilho nela: uma partilha
+// minha de uma casa que já é de outra pessoa (herdada de quando a
+// controlava) não vem — continua a dar a casa ao outro, que a vê em
+// `peerShares`.
 //
 // Por cima disto, os serviços desligados da conta (lib/servicos.js): a lista
 // sai em `servicos.desligados`, os registos dos kinds desligados e os
@@ -222,7 +226,8 @@ export async function rotasEstado(c) {
 
     const shares = (
       await env.DB.prepare(
-        `SELECT s.connection_id, s.owner_id, s.house_id FROM shares s
+        `SELECT s.connection_id, s.owner_id, s.house_id, h.owner_id AS house_owner FROM shares s
+           LEFT JOIN houses h ON h.id = s.house_id AND h.deleted = 0
           WHERE s.connection_id IN (
             SELECT id FROM connections WHERE requester_id = ?1 OR target_id = ?1
           )`
@@ -459,7 +464,8 @@ export async function rotasEstado(c) {
             name: iAmRequester ? c.target_name : c.requester_name,
             email: showEmail ? (iAmRequester ? c.target_email : c.requester_email) : null,
           },
-          myShares: shares.filter((s) => s.connection_id === c.id && s.owner_id === me.id).map((s) => s.house_id),
+          myShares: shares.filter((s) => s.connection_id === c.id && s.owner_id === me.id
+            && (s.house_owner == null || s.house_owner === me.id)).map((s) => s.house_id),
           peerShares: shares.filter((s) => s.connection_id === c.id && s.owner_id !== me.id).map((s) => s.house_id),
         };
       }),

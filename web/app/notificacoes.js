@@ -8,12 +8,13 @@
    autor em cada escrita), e o que for mais novo do que a última leitura
    aparece aqui com nome e apelido. Na mesma atividade, quem saiu de uma
    casa que fica comigo — um colaborador que deixou de colaborar, um
-   comproprietário que deixou de o ser — e o que aconteceu às transferências
-   de propriedade (CW.state.departures, notifSaidas).
+   comproprietário que deixou de o ser — e o que aconteceu aos pedidos para
+   passar o controlo de um imóvel (CW.state.departures, notifSaidas).
 
-   As transferências de propriedade (CW.state.transfers): um pedido que me
-   fizeram é um pedido por responder, com o «Ver» que abre o que recebo e o
-   Aceitar (notifTransfVer); um que fiz espera, com o Cancelar. As ações
+   Os pedidos para passar o controlo de um imóvel a um comproprietário
+   (CW.state.transfers): um que me fizeram é um pedido por responder, com o
+   «Ver» que diz o que muda e o Aceitar (notifTransfVer); um que fiz espera,
+   com o Cancelar. As ações
    delas vivem aqui, na base, porque as chamam o sino, a ficha do imóvel e o
    cartão dos pedidos da nuvem.
 
@@ -36,13 +37,13 @@ function notifNome(uid){
    Colaboradores ligado, os pedidos para entrar num grupo partilhado meu
    (CW.state.sharedGroupRequests.incoming — só chegam ao dono do grupo): cada
    um é alguém que abriu a ligação do grupo e espera que eu aceite. Sem
-   sessão, nenhum. E os pedidos de transferência da propriedade que me
-   fizeram (notifTransfRecebidas): alguém quer que um ou vários imóveis dele
-   passem a ser meus.
+   sessão, nenhum. E os pedidos para passar o controlo que me fizeram
+   (notifTransfRecebidas): um comproprietário quer que eu passe a gerir na
+   app um ou vários imóveis que partilhamos.
    Devolve: lista de {id, titulo, sub} por ordem de chegada — os de partilha,
-   os de transferência e os de grupo; um pedido de grupo leva também tipo
-   'grupo', gid e uid — o que o modal passa ao notifGrupoAceitar/
-   notifGrupoRecusar —, e um de transferência tipo 'transf' e o lote. */
+   os de passar o controlo e os de grupo; um pedido de grupo leva também
+   tipo 'grupo', gid e uid — o que o modal passa ao notifGrupoAceitar/
+   notifGrupoRecusar —, e um de passar o controlo tipo 'transf' e o lote. */
 function notifPedidos(){
   const st=window.CW&&CW.state;
   const partilha=((st&&st.shareRequests&&st.shareRequests.incoming)||[]).map(r=>({id:r.id,
@@ -60,32 +61,32 @@ function notifPedidos(){
   return partilha.concat(transf,grupos);
 }
 
-/* ---- as transferências de propriedade ---- */
+/* ---- passar o controlo de um imóvel a um comproprietário ---- */
 
-/* Os pedidos de transferência pendentes de um lado, do estado do servidor
-   (CW.state.transfers, worker/src/rotas/estado.js). Um servidor de antes não
-   manda o campo, e o estado de antes do primeiro sync também não: aí não há
-   nenhum, sem rebentar.
+/* Os pedidos para passar o controlo pendentes de um lado, do estado do
+   servidor (CW.state.transfers, worker/src/rotas/estado.js). Um servidor de
+   antes não manda o campo, e o estado de antes do primeiro sync também não:
+   aí não há nenhum, sem rebentar.
    Recebe: lado — 'incoming' (os que me fizeram) ou 'outgoing' (os que fiz).
-   Devolve: array de {lote, from|to, houses, ficar, shares, at} — só os que têm lote. */
+   Devolve: array de {lote, from|to, houses, at} — só os que têm lote. */
 function notifTransf(lado){
   const st=window.CW&&CW.state,t=st&&st.transfers;
   const l=t&&typeof t==='object'&&Array.isArray(t[lado])?t[lado]:[];
   return l.filter(x=>x&&x.lote);
 }
-/* Os pedidos de transferência que me fizeram e esperam a minha resposta.
+/* Os pedidos para passar o controlo que me fizeram e esperam a minha
+   resposta.
    Devolve: array (notifTransf('incoming')). */
 function notifTransfRecebidas(){return notifTransf('incoming')}
-/* Os pedidos de transferência que fiz e ainda esperam pelo outro.
+/* Os pedidos para passar o controlo que fiz e ainda esperam pelo outro.
    Devolve: array (notifTransf('outgoing')). */
 function notifTransfEnviadas(){return notifTransf('outgoing')}
-/* O servidor sabe de transferências? Só o que já as tem manda o campo no
-   estado; num de antes (ou antes do primeiro estado) a ação de transferir
-   não se oferece — levava a um 404.
+/* O servidor sabe destes pedidos? Só o que já os tem manda o campo no
+   estado; num de antes (ou antes do primeiro estado) passar o controlo não
+   se oferece — levava a um 404.
    Devolve: true se o estado traz o campo transfers. */
 function notifTransfSabe(){const st=window.CW&&CW.state;return !!(st&&st.transfers&&typeof st.transfers==='object')}
-/* O pedido de transferência pendente de um imóvel, de um lado (só há um
-   pendente por casa).
+/* O pedido pendente de um imóvel, de um lado (só há um pendente por casa).
    Recebe: lado — 'incoming' ou 'outgoing'; hid — o id do imóvel.
    Devolve: o pedido, ou null. */
 function notifTransfDaCasa(lado,hid){
@@ -101,67 +102,67 @@ function notifTransfCasas(t){
    Recebe: p — o {id, name} do pedido.
    Devolve: o nome (texto, por escapar). */
 function notifTransfNome(p){return String((p&&p.name)||'').trim()||(p&&p.id?nomeUtilizador(p.id):'')||'Alguém'}
-/* A frase de um pedido que me fizeram: «Rita quer transferir-te T2 Benfica»
-   ou «Rita quer transferir-te 2 imóveis: T2 Benfica e Loja».
+/* Quem colabora nestes imóveis, pelo nome: os de cada imóvel
+   (p._colaboradores, que a nuvem escreve do estado — o servidor manda-os ao
+   criador e aos comproprietários). São os colaboradores de quem criou o
+   imóvel, e é com ele que passam a quem recebe o controlo, com o mesmo
+   cargo. Com os Colaboradores desligados o servidor não os manda, e a lista
+   fica vazia.
+   Recebe: ids — os ids dos imóveis.
+   Devolve: array de nomes (texto, por escapar), sem repetidos. */
+function notifTransfColaboradores(ids){
+  const out=[];
+  (ids||[]).map(prop).filter(Boolean).forEach(p=>(p._colaboradores||[]).forEach(c=>{
+    const n=String((c&&c.name)||'').trim()||(c&&c.userId?nomeUtilizador(c.userId):'')||'Sem nome';
+    if(out.indexOf(n)<0)out.push(n);
+  }));
+  return out;
+}
+/* A frase de um pedido que me fizeram: «Rita quer passar-te o controlo de
+   T2 Benfica» ou «Rita quer passar-te o controlo de 2 imóveis: T2 Benfica e
+   Loja».
    Recebe: t — o pedido recebido.
    Devolve: o texto (por escapar). */
 function notifTransfTitulo(t){
   const casas=notifTransfCasas(t),quem=notifTransfNome(t&&t.from);
-  return quem+' quer transferir-te '+(casas.length===1?casas[0]:casas.length+' imóveis: '+listaE(casas));
+  return quem+' quer passar-te o controlo de '+(casas.length===1?casas[0]:casas.length+' imóveis: '+listaE(casas));
 }
-/* O que aceitar um pedido de transferência implica, numa linha: os imóveis
-   passam a ser meus e quem pede sai deles, ou fica com uma quota (sem
-   género: a app não sabe o de ninguém).
+/* O que aceitar um pedido para passar o controlo implica, numa linha:
+   passo a gerir os imóveis na app, e as quotas e os comproprietários não
+   mudam.
    Recebe: t — o pedido recebido.
    Devolve: o texto (por escapar). */
 function notifTransfSub(t){
-  const um=((t&&t.houses)||[]).length===1,quem=notifTransfNome(t&&t.from);
-  return 'Se aceitares, '+(um?'o imóvel passa a ser teu':'os imóveis passam a ser teus')+' e '+quem+
-    (t&&t.ficar?(um?' fica com uma quota.':' fica com uma quota em cada um.'):(um?' sai dele.':' sai deles.'));
+  const um=((t&&t.houses)||[]).length===1;
+  return 'Se aceitares, passas a gerir '+(um?'o imóvel':'os imóveis')+' na app. As quotas e os comproprietários não mudam.';
 }
-/* Uma quota de um pedido, como a app as escreve: «50%», «33,33%».
-   Recebe: v — a percentagem (0–100).
-   Devolve: o texto. */
-function notifTransfPct(v){return dec(Math.round((Number(v)||0)*100)/100)+'%'}
-/* As quotas de uma casa num pedido com «continuar como comproprietário»,
-   em linhas só de leitura: quem e quanto (eu, «Tu»).
-   Recebe: t — o pedido; hid — o id da casa.
-   Devolve: o HTML das linhas (.pt-quota), ou '' sem quotas para essa casa. */
-function notifTransfQuotasHtml(t,hid){
-  const q=t&&t.shares&&t.shares[hid];if(!q||typeof q!=='object')return '';
-  const eu=meuId(),de=(t.from&&t.from.id)||'';
-  return Object.keys(q).map(u=>`<div class="pt-quota"><span class="pt-quota-nome">${esc(u===eu?'Tu':u===de?notifTransfNome(t.from):nomeUtilizador(u))}</span><b class="num">${notifTransfPct(q[u])}</b></div>`).join('');
-}
-/* O que recebo num pedido de transferência, antes de aceitar: a folha que o
+/* O que muda se aceitar um pedido para passar o controlo: a folha que o
    «Ver» abre (do sino, do cartão dos pedidos e da ficha do imóvel). Diz as
-   casas; se quem pede sai (a quota dele passa para mim) ou fica com uma
-   quota, e as quotas de cada casa; que passo a gerir as partilhas e os
-   colaboradores; que os colaboradores dele perdem o acesso; que os
-   comproprietários que lá estão ficam se estiverem ligados a mim, e os
-   outros perdem o acesso; que as fotos e os documentos passam
-   a contar no meu espaço; e que nada muda até aceitar. Em baixo, Recusar e
-   Aceitar. Um pedido que já não está pendente (cancelado entretanto) diz-se
-   num aviso, sem janela.
+   casas; que só muda quem as controla na app (passo a gerir as partilhas,
+   os colaboradores e o apagar); que quem pede fica com a quota que tem, eu
+   com a minha, e que nada muda nas quotas, nos grupos nem nos outros
+   comproprietários; os colaboradores dele nesses imóveis, pelo nome
+   (notifTransfColaboradores), que ficam com o mesmo cargo e passam a ser
+   geridos por mim; e que nada muda até aceitar. Em baixo, Recusar e
+   Aceitar. Um pedido que já não está pendente (cancelado entretanto)
+   diz-se num aviso, sem janela.
    Recebe: lote — o id do pedido.
    Devolve: nada — abre a janela por cima do que houver. */
 function notifTransfVer(lote){
   const t=notifTransfRecebidas().find(x=>x.lote===lote);
   if(!t)return toast('Este pedido já não está pendente.');
   const quem=esc(notifTransfNome(t.from)),hs=(t.houses||[]).filter(Boolean),um=hs.length===1;
-  const casas=hs.map(h=>{
-    const nome=esc(String(h.name||'').trim()||propName(h.id)||'Sem nome'),q=t.ficar?notifTransfQuotasHtml(t,h.id):'';
-    return `<div class="trf-casa">${um&&q?'':`<b>${nome}</b>`}${q?`<div class="pt-quotas"><div class="pt-quotas-cab small" aria-hidden="true"><span>Pessoa</span><span>Quota</span></div>${q}</div>`:''}</div>`;
-  }).join('');
   const nomes=listaE(hs.map(h=>'<b>'+esc(String(h.name||'').trim()||propName(h.id)||'Sem nome')+'</b>'));
+  const colabs=notifTransfColaboradores(hs.map(h=>h.id)),onde=um?'neste imóvel':'nestes imóveis',n=listaE(colabs.map(esc));
   const frases=[
-    `${quem} quer transferir-te ${nomes}.`,
-    t.ficar?`${quem} fica com uma quota${um?'':' em cada um'}: ${um?'as quotas passam a ser as que estão em cima':'as quotas de cada imóvel passam a ser as que estão em cima'}.`
-      :`${quem} sai ${um?'dele':'deles'}, e a quota que tinha passa para ti, somada à tua se já tiveres uma.`,
-    `Passas a gerir as partilhas e os colaboradores, e podes apagar ${um?'o imóvel':'os imóveis'}. Os colaboradores de ${quem} ${um?'neste imóvel':'nestes imóveis'} perdem o acesso. Os comproprietários que já lá estão ficam se estiverem ligados a ti; os outros perdem o acesso.`,
-    `As fotos e os documentos passam a contar no teu espaço de armazenamento. Nada muda até aceitares.`];
+    `Só muda quem ${um?'o controla':'os controla'} na app: passas a gerir as partilhas, os colaboradores e o apagar.`,
+    `${quem} fica com a quota que tem, tu ficas com a tua, e nada muda nas quotas, nos grupos nem nos outros comproprietários.`];
+  if(colabs.length)frases.push(colabs.length===1?`O colaborador de ${quem} ${onde}, ${n}, continua com o mesmo cargo e passa a ser gerido por ti.`
+    :`Os colaboradores de ${quem} ${onde}, ${n}, continuam com o mesmo cargo e passam a ser geridos por ti.`);
+  frases.push('Nada muda até aceitares.');
   const l=jsq(lote);
-  const L=openModal('Transferência de '+notifTransfNome(t.from),
-    `<div class="form trf-ver"><p>${frases[0]}</p><div class="trf-casas">${casas}</div>${frases.slice(1).map(f=>`<p class="small">${f}</p>`).join('')}</div>`,
+  const L=openModal('Pedido de '+notifTransfNome(t.from),
+    `<div class="form trf-ver"><p>${quem} quer passar-te o controlo de ${nomes}.</p>${frases.map(f=>`<p class="small">${f}</p>`).join('')}</div>`,
     `<button type="button" class="btn" data-toca="dados" data-click="notifTransfRecusar('${l}')">Recusar</button><button type="button" class="btn primary" data-toca="dados" data-click="notifTransfAceitar('${l}')">Aceitar</button>`);
   if(L)L.trf=lote;
 }
@@ -184,7 +185,7 @@ function notifTransfReler(){
     if(modalTop()&&modalTop().title==='Pede atenção')notifModal(_atencaoFiltro);
   });
 }
-/* Um pedido de transferência ao servidor, com a guarda do toque repetido:
+/* Uma resposta a um pedido para passar o controlo, ao servidor, com a guarda do toque repetido:
    enquanto o do mesmo lote não responde, outro não sai. Sem a nuvem
    carregada, diz-o.
    Recebe: lote — o id do pedido; fn — o nome da função do CW
@@ -198,23 +199,24 @@ function notifTransfPedido(lote,fn){
   const fim=()=>{delete _trfEmCurso[lote]};
   return Promise.resolve(f(lote)).then(r=>{fim();return r},e=>{fim();throw e});
 }
-/* O aviso de aceitar: o que passou a ser meu e o que ficou de fora, e porquê
-   (o servidor diz por casa — a casa mudou entretanto, foi apagada).
+/* O aviso de aceitar: o que passei a gerir e o que ficou de fora, e porquê
+   (o servidor diz por casa — quem pediu já não a controla, eu já não sou
+   comproprietário, foi apagada).
    Recebe: ok — os nomes das casas aceites; falhas — [{nome, erro}].
    Devolve: o texto do aviso. */
 function notifTransfAvisoAceite(ok,falhas){
   const partes=[];
-  if(ok.length===1)partes.push('Aceitaste: '+ok[0]+' passou a ser teu.');
-  else if(ok.length)partes.push('Aceitaste: '+ok.length+' imóveis passaram a ser teus.');
-  else partes.push('Nenhum imóvel passou para ti.');
+  if(ok.length===1)partes.push('Aceitaste: passas a gerir '+ok[0]+'.');
+  else if(ok.length)partes.push('Aceitaste: passas a gerir '+ok.length+' imóveis.');
+  else partes.push('Não passaste a gerir nenhum imóvel.');
   if(falhas.length){
     const nomes=falhas.map(f=>'«'+f.nome+'»').join(', ');
     partes.push(nomes+(falhas.length===1?' ficou de fora: ':' ficaram de fora: ')+String(falhas[0].erro||'o pedido já não valia').replace(/\.?\s*$/,'.'));
   }
   return partes.join(' ');
 }
-/* Aceitar um pedido de transferência (CW.aceitarTransferencia): fecha a
-   folha e o sino, e só com a resposta diz o que passou a ser meu e o que
+/* Aceitar um pedido para passar o controlo (CW.aceitarTransferencia): fecha
+   a folha e o sino, e só com a resposta diz o que passei a gerir e o que
    ficou de fora (notifTransfAvisoAceite); depois relê o estado. Um erro diz
    a frase do servidor e relê na mesma (o pedido pode ter mudado).
    Recebe: lote — o id do pedido.
@@ -229,16 +231,16 @@ function notifTransfAceitar(lote){
     toast(notifTransfAvisoAceite(((r&&r.aceites)||[]).map(nomeDe),falhas),falhas.length?{ms:7000}:undefined);
   },e=>{toast((e&&e.message)||'Não deu para aceitar. Tenta outra vez.')}).then(notifTransfReler);
 }
-/* Recusar um pedido de transferência (CW.recusarTransferencia), sem
+/* Recusar um pedido para passar o controlo (CW.recusarTransferencia), sem
    perguntar — quem pediu pode voltar a pedir, como nos outros pedidos.
    Recebe: lote — o id do pedido.
    Devolve: a promessa (ou nada, quando não saiu). */
 function notifTransfRecusar(lote){
   const p=notifTransfPedido(lote,'recusarTransferencia');if(!p)return;
   notifTransfFechar();
-  return p.then(()=>{toast('Recusaste a transferência.')},e=>{toast((e&&e.message)||'Não deu para recusar. Tenta outra vez.')}).then(notifTransfReler);
+  return p.then(()=>{toast('Recusaste o pedido.')},e=>{toast((e&&e.message)||'Não deu para recusar. Tenta outra vez.')}).then(notifTransfReler);
 }
-/* Cancelar um pedido de transferência que fiz (CW.cancelarTransferencia):
+/* Cancelar um pedido para passar o controlo que fiz (CW.cancelarTransferencia):
    do sino e da ficha do imóvel. Cancela o pedido todo (todas as casas que
    ele leva) e não pergunta: não muda nada, e pode-se voltar a pedir. A
    ficha fica aberta e repinta-se sem o pendente.
@@ -246,7 +248,7 @@ function notifTransfRecusar(lote){
    Devolve: a promessa (ou nada, quando não saiu). */
 function notifTransfCancelar(lote){
   const p=notifTransfPedido(lote,'cancelarTransferencia');if(!p)return;
-  return p.then(()=>{toast('Pedido de transferência cancelado.')},e=>{toast((e&&e.message)||'Não deu para cancelar. Tenta outra vez.')}).then(notifTransfReler);
+  return p.then(()=>{toast('Cancelaste o pedido.')},e=>{toast((e&&e.message)||'Não deu para cancelar. Tenta outra vez.')}).then(notifTransfReler);
 }
 
 /* A atividade dos outros: registos de casas partilhadas escritos por outra
@@ -333,13 +335,12 @@ function notifQuando(at){
    servicoLigado e não um typeof); sem isso a linha não leva a lado nenhum
    (ir vazio).
 
-   Os avisos das transferências de propriedade chegam pelo mesmo caminho e
+   Os avisos dos pedidos para passar o controlo chegam pelo mesmo caminho e
    leem-se da mesma maneira, uma frase que já diz quem (notifFraseDoAviso):
    a quem pediu, que o outro aceitou ou recusou; a quem ia receber, que quem
-   pediu cancelou; aos comproprietários que ficam, quem é o novo dono; ao
-   que perdeu o acesso (não está ligado a quem recebeu), para quem passou; e
-   ao colaborador do dono antigo, que deixou de colaborar porque o imóvel
-   mudou de dono. O pedido em si ('transf.pedido') não é uma linha da atividade:
+   pediu cancelou; aos outros comproprietários, quem passou a gerir o
+   imóvel; e aos colaboradores de quem o geria, quem os passa a gerir, com o
+   mesmo cargo. O pedido em si ('transf.pedido') não é uma linha da atividade:
    enquanto está pendente já é um pedido por responder (notifPedidos), e
    contava duas vezes no crachá; depois disso, o aviso de como acabou diz o
    resto.
@@ -369,16 +370,14 @@ function notifSaidas(desde){
 }
 /* A frase de um aviso das casas (CW.state.departures), já com quem:
    «Rui deixou de colaborar em T2 Benfica.», «Rui deixou de ser
-   comproprietário de T2 Benfica.», «Rui aceitou a transferência de T2
-   Benfica.», «Rui recusou a transferência de …», «Rita cancelou a
-   transferência de …», «Rui é o novo dono de …» (o nome é o de quem a casa
-   tem por dono na base, que é o que conta; sem ela, o do aviso) e
-   «Deixaste de colaborar em T2 Benfica: o imóvel mudou de dono.» e, ao
-   comproprietário que via a casa pela ligação com quem a deu e não está
-   ligado a quem a recebeu, «Deixaste de ter acesso a T2 Benfica: passou
-   para Rui.» ('casa.sem_acesso', o ator é quem recebeu). Um kind
-   que a app não conhece — e o 'transf.pedido', que é um pedido por
-   responder (notifPedidos) — não tem frase.
+   comproprietário de T2 Benfica.», «Rui aceitou o controlo de T2
+   Benfica.», «Rui recusou o controlo de …», «Rita cancelou o pedido para
+   te passar o controlo de …», «Rui passou a gerir … na app.» (aos outros
+   comproprietários) e «Rui passou a gerir …: continuas com o mesmo cargo.»
+   ('colab.novo_dono', aos colaboradores de quem o geria). Nos dois últimos
+   o ator é quem recebeu o controlo. Um kind que a app não conhece — e o
+   'transf.pedido', que é um pedido por responder (notifPedidos) — não tem
+   frase.
    Recebe: d — o aviso ({kind, houseId, houseName, actorId, actorName}).
    Devolve: {titulo, quem} (texto, por escapar; quem dá as iniciais do
    avatar), ou null. */
@@ -388,15 +387,11 @@ function notifFraseDoAviso(d){
   switch(d&&d.kind){
     case 'colab.sair':return {titulo:quem+' deixou de colaborar em '+casa+'.',quem};
     case 'casa.sair':return {titulo:quem+' deixou de ser comproprietário de '+casa+'.',quem};
-    case 'transf.aceite':return {titulo:quem+' aceitou a transferência de '+casa+'.',quem};
-    case 'transf.recusada':return {titulo:quem+' recusou a transferência de '+casa+'.',quem};
-    case 'transf.cancelada':return {titulo:quem+' cancelou a transferência de '+casa+'.',quem};
-    case 'casa.novo_dono':{
-      const p=prop(d.houseId),dono=String((p&&(p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):'')))||'').trim()||quem;
-      return {titulo:dono+' é o novo dono de '+casa+'.',quem:dono};
-    }
-    case 'colab.removido':return {titulo:'Deixaste de colaborar em '+casa+': o imóvel mudou de dono.',quem};
-    case 'casa.sem_acesso':return {titulo:'Deixaste de ter acesso a '+casa+': passou para '+quem+'.',quem};
+    case 'transf.aceite':return {titulo:quem+' aceitou o controlo de '+casa+'.',quem};
+    case 'transf.recusada':return {titulo:quem+' recusou o controlo de '+casa+'.',quem};
+    case 'transf.cancelada':return {titulo:quem+' cancelou o pedido para te passar o controlo de '+casa+'.',quem};
+    case 'casa.novo_dono':return {titulo:quem+' passou a gerir '+casa+' na app.',quem};
+    case 'colab.novo_dono':return {titulo:quem+' passou a gerir '+casa+': continuas com o mesmo cargo.',quem};
   }
   return null;
 }
@@ -492,8 +487,8 @@ let _atencaoFiltro='';
    confirmar (os em atraso primeiro), os prazos legais e fiscais e a atividade
    dos outros nas casas partilhadas. Chips por cima filtram sem «Aplicar»; os
    por confirmar confirmam-se aqui mesmo (ou abrem para rever), os pedidos
-   respondem-se aqui mesmo (os de transferência pelo «Ver», que mostra o que
-   se recebe antes do Aceitar), os de transferência que fiz esperam em «À
+   respondem-se aqui mesmo (os de passar o controlo pelo «Ver», que diz o
+   que muda antes do Aceitar), os de passar o controlo que fiz esperam em «À
    espera de resposta», com o Cancelar, e cada prazo leva ao sítio dele. «Marcar tudo
    como lido» cala a partilha até haver coisas novas (a marca sincroniza).
    Recebe: filtro (opcional) — '', 'confirmar', 'prazos' ou 'pedidos'.
@@ -523,8 +518,8 @@ function atencaoCorpo(){
      janelas, e o cartão ficava lá com os botões a repetir o pedido já
      respondido */
   const pedido=n=>{
-    /* uma transferência não se aceita daqui: o «Ver» abre a folha com o que
-       se recebe, e o Aceitar está lá (notifTransfVer) */
+    /* passar o controlo não se aceita daqui: o «Ver» abre a folha com o que
+       muda, e o Aceitar está lá (notifTransfVer) */
     if(n.tipo==='transf')return `<div class="card atencao-pedido"><p><b>${esc(n.titulo)}</b></p><p class="small">${esc(n.sub)}</p>
       <div class="chips-fila"><button class="btn sm primary" data-toca="camada" data-click="notifTransfVer('${jsq(n.lote)}')">Ver</button>
       <button class="btn sm" data-toca="dados" data-click="notifTransfRecusar('${jsq(n.lote)}')">Recusar</button></div></div>`;
@@ -573,13 +568,13 @@ function atencaoCorpo(){
     const dentro=`<span class="avatar" aria-hidden="true">${esc(initials(notifQuem(n)))}</span><div class="atencao-txt"><p class="title">${esc(n.titulo)}</p><p class="small">${esc(n.sub)}</p></div>`;
     return n.ir?`<button type="button" class="atencao-linha tap" data-toca="${n.toca||'ecra'}" data-click="closeModal();${n.ir}">${dentro}</button>`:`<div class="atencao-linha">${dentro}</div>`;
   };
-  /* um pedido de transferência que fiz e ainda espera: que imóveis, para
-     quem, e o Cancelar (cancela o pedido todo) */
+  /* um pedido para passar o controlo que fiz e ainda espera: que imóveis,
+     para quem, e o Cancelar (cancela o pedido todo) */
   const enviada=t=>{
     const casas=notifTransfCasas(t),quem=notifTransfNome(t.to);
     return `<div class="atencao-linha"><div class="atencao-txt"><p class="title">${esc(listaE(casas))} · à espera de ${esc(quem)}</p>
-      <p class="small">Pediste a transferência${t.ficar?', a continuares comproprietário':''}. Até ${esc(quem)} aceitar, nada muda.</p></div>
-      <button class="btn sm" data-toca="dados" aria-label="Cancelar o pedido de transferência de ${esc(listaE(casas))}" data-click="notifTransfCancelar('${jsq(t.lote)}')">Cancelar</button></div>`;
+      <p class="small">Pediste para passar o controlo. Até ${esc(quem)} aceitar, nada muda.</p></div>
+      <button class="btn sm" data-toca="dados" aria-label="Cancelar o pedido para passar o controlo de ${esc(listaE(casas))}" data-click="notifTransfCancelar('${jsq(t.lote)}')">Cancelar</button></div>`;
   };
   const enviadas=notifTransfEnviadas();
   const total=conf.reduce((s,r)=>s+(Number((r.tx||{}).amount)||0),0),nl=servicoLigado('recurring')?conf.filter(recIsLate).length:0;

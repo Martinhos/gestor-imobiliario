@@ -20,9 +20,13 @@
 // por grupo leva o SAIU_DA_CASA; a linha sai quando o criador volta a
 // partilhar a casa com essa pessoa.
 //
-// O criador muda numa só situação: uma transferência aceite
-// (rotas/casas.js:rotasTransferencias, migração 0021), que grava o owner_id
-// novo pelo gravarCasa como as outras escritas da casa.
+// O criador muda numa só situação: um pedido para passar o controlo a um
+// comproprietário, aceite (rotas/casas.js:rotasTransferencias, migração
+// 0021), que grava o owner_id novo pelo gravarCasa como as outras escritas
+// da casa. Os participantes ficam os mesmos: uma partilha dá a casa à ponta
+// da ligação que não é o owner_id DELA, seja quem for o criador — por isso
+// pode haver partilhas de quem já não é o criador (herdadas), que continuam
+// a dar a casa a quem davam.
 
 import { now } from './http.js';
 import { normalizarPerms, permDoKind, podeAddKind, fraseRecusa, fundirPlaneado, planeadoTermina } from './permissoes.js';
@@ -259,7 +263,7 @@ export async function planeadoAGravar(env, me, acesso, houseId, kind, recordId, 
 }
 
 // Os convites de colaborador por usar de um dono que deixam de incluir uma
-// casa (apagada, ou transferida a outra pessoa): a casa sai da lista, e um
+// casa (apagada, ou cujo controlo passou a outra pessoa): a casa sai da lista, e um
 // convite que ficasse sem casas fica revogado.
 // Recebe: env — o ambiente do worker (a base D1); houseId — a casa; ownerId
 // — o dono dos convites; t — o instante.
@@ -412,58 +416,15 @@ export function redistribuirQuotas(shares, saiId, ficam) {
   return out;
 }
 
-// As quotas pedidas por omissão para «Continuar como comproprietário»: a
-// minha (a de quem transfere) dividida a meias com quem recebe — somada à
-// que ele já tivesse —, e as dos outros como estão. Sem quotas guardadas,
-// parto de partes iguais entre os participantes de agora.
-// Recebe: shares — o ownerShares guardado na casa (pode faltar); deId — quem
-// transfere; paraId — quem recebe; parts — os participantes de agora (o
-// criador primeiro).
-// Devolve: o { id: percentagem } a somar exatamente 100 (2 casas decimais).
-export function quotasAMeias(shares, deId, paraId, parts) {
-  const todos = [...new Set([...(parts || []), deId])];
-  const base = redistribuirQuotas(shares, '', todos)
-    || Object.fromEntries(todos.map((u) => [u, 100 / todos.length]));
-  const minha = Number(base[deId] || 0);
-  const out = { ...base };
-  out[deId] = minha / 2;
-  out[paraId] = Number(out[paraId] || 0) + minha / 2;
-  return redistribuirQuotas(out, '', Object.keys(out)) || { [deId]: 50, [paraId]: 50 };
-}
-
-// As quotas de uma casa quando a transferência é aceite. Sem «ficar», a
-// quota de quem transfere vai para quem recebe (somada à que ele já tinha) e
-// quem transfere sai; com «ficar», valem as do pedido. Em ambos, só ficam os
-// que continuam participantes: a quota de quem perdeu o acesso pelo caminho
-// (um comproprietário que só via a casa pela ligação a quem transferiu) vai
-// para os que ficam, na proporção (redistribuirQuotas).
-// Recebe: shares — o ownerShares guardado na casa (pode faltar); deId — quem
-// transfere; paraId — quem recebe; ficar — se quem transfere fica
-// comproprietário; pedidas — as quotas do pedido (com ficar); ficam — os
-// participantes depois de aceitar.
-// Devolve: o ownerShares novo ({ id: percentagem }) ou null (partes iguais).
-export function quotasDaTransferencia(shares, deId, paraId, ficar, pedidas, ficam) {
-  let base;
-  if (ficar) base = pedidas && typeof pedidas === 'object' && !Array.isArray(pedidas) ? { ...pedidas } : null;
-  else if (shares && typeof shares === 'object' && !Array.isArray(shares)) {
-    base = { ...shares };
-    const minha = Number(base[deId]);
-    const temMinha = base[deId] !== null && base[deId] !== '' && isFinite(minha) && minha >= 0;
-    if (temMinha) base[paraId] = (Number(base[paraId]) || 0) + minha;
-    delete base[deId];
-  }
-  return redistribuirQuotas(base, ficar ? '' : deId, ficam);
-}
-
 // O aviso de que alguém saiu de uma casa, para um destinatário: uma linha de
 // house_events com o nome da casa e o de quem saiu escritos no momento (o
 // aviso lê-se igual depois de mudarem). O /api/state manda-os em departures.
 // As transferências (rotas/casas.js) escrevem por aqui os avisos delas.
 // Recebe: env — o ambiente do worker (a base D1); para — o id do
 // destinatário; kind — 'colab.sair' (vai ao dono), 'casa.sair' (vai a cada
-// participante que fica) ou um dos da transferência ('transf.pedido',
+// participante que fica) ou um dos da passagem do controlo ('transf.pedido',
 // 'transf.aceite', 'transf.recusada', 'transf.cancelada', 'casa.novo_dono',
-// 'casa.sem_acesso', 'colab.removido'); houseId, houseName — a casa, com o
+// 'colab.novo_dono'); houseId, houseName — a casa, com o
 // nome lido ANTES de qualquer escrita; quem — quem age ({ id, name }); t — o instante.
 // Devolve: a instrução preparada, para entrar no lote de quem chama.
 export function avisoDeSaida(env, para, kind, houseId, houseName, quem, t) {
