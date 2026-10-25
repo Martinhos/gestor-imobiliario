@@ -19,7 +19,10 @@
 // não recebe as casas nem o grupo, só o seu pedido em `outgoing`. Quem saiu
 // de uma casa que lhe chegava por um grupo (house_exits, migração 0019) não
 // a recebe por esse grupo nem por outro, e sai dos `participants` dela; os
-// avisos de quem saiu das minhas casas vêm em `departures`.
+// avisos de quem saiu das minhas casas vêm em `departures`, junto com os das
+// transferências (migração 0021: pedida, aceite, recusada, cancelada, o
+// dono novo, o acesso perdido). As transferências pendentes, as que me
+// pediram e as que pedi, vêm em `transfers`.
 //
 // Por cima disto, os serviços desligados da conta (lib/servicos.js): a lista
 // sai em `servicos.desligados`, os registos dos kinds desligados e os
@@ -39,6 +42,7 @@ import {
   listarCargos, listarColaboradores, listarConvites, estadoDaLigacao, pedidosDePartilha,
 } from './colaboradores.js';
 import { listarGrupos, pedidosDeGrupo } from './grupos.js';
+import { listarTransferencias } from './casas.js';
 
 // Quantos dias de avisos de quem saiu (house_events) o estado manda.
 const DIAS_DOS_AVISOS = 90;
@@ -73,7 +77,7 @@ function seloIgual(cabecalho, selo) {
    Devolve: a Response JSON com o estado completo (me, profiles, proposals,
    houses, records, userRecords, connections, people, roles, collaborators,
    invites, shareLink, shareRequests, sharedGroups, sharedGroupRequests,
-   departures, servicos) e o ETag, ou o
+   departures, transfers, servicos) e o ETag, ou o
    304 sem corpo, no GET /api/state; nada (undefined) noutros caminhos. */
 export async function rotasEstado(c) {
   const { env, request, ctx, path, method, me } = c;
@@ -362,9 +366,10 @@ export async function rotasEstado(c) {
         pedidosDeGrupo(env, me.id),
       ]);
 
-    /* quem saiu das casas onde fico (house_events, migração 0019): os meus
-       avisos dos últimos 90 dias, os mais recentes primeiro, até 50. Os de
-       um colaborador que saiu não vêm com os Colaboradores desligados — a
+    /* quem saiu das casas onde fico (house_events, migração 0019) e os
+       avisos das transferências (0021, os mesmos campos): os meus dos
+       últimos 90 dias, os mais recentes primeiro, até 50. Os de um
+       colaborador que saiu não vêm com os Colaboradores desligados — a
        condição vai na consulta, para o limite contar só os que saem */
     const departures = (
       await env.DB.prepare(
@@ -383,6 +388,10 @@ export async function rotasEstado(c) {
       actorName: e.actor_name,
       at: e.created_at,
     }));
+
+    // as transferências pendentes, as que me pediram e as que pedi
+    // (rotas/casas.js:listarTransferencias)
+    const transfers = await listarTransferencias(env, me.id);
 
     const estado = {
       me: { id: me.id, email: me.email, name: me.name },
@@ -429,6 +438,7 @@ export async function rotasEstado(c) {
       sharedGroups,
       sharedGroupRequests,
       departures,
+      transfers,
       userRecords: userRecords.filter((r) => !userKindsOff.has(r.kind)).map((r) => ({
         kind: r.kind,
         id: r.id,

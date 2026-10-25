@@ -29,14 +29,23 @@ var AVISOS = [
   {
     v: 42,
     data: '2026-10-25',
-    titulo: 'Os nomes das fotos inteiros',
+    titulo: 'Transferir imóveis, e as fotos a chegar',
     seccoes: [
+      {
+        titulo: 'Transferir a propriedade',
+        afeta: ['imoveis', 'partilha'],
+        itens: [
+          'Podes transferir um ou vários imóveis que criaste a um proprietário ligado a ti: no ⋯ da ficha, ou selecionando-os nas Casas. Escolhes se sais ou se continuas como comproprietário, e nesse caso com que quotas.',
+          'Quem recebe tem de aceitar, no sino; até lá nada muda e podes cancelar. Os teus colaboradores nesse imóvel perdem o acesso e são avisados.',
+        ],
+      },
       {
         titulo: 'Fotos',
         afeta: ['anexos'],
         itens: [
           'O nome de cada foto vê-se inteiro: um nome comprido passa para a linha de baixo, até três linhas.',
           'A arrastar uma foto para a reordenar, perto do topo ou do fundo do ecrã a janela rola sozinha, para a levares a qualquer lugar da lista.',
+          'Enquanto as fotos descem noutro telemóvel, cada uma mostra um círculo a rodar até aparecer.',
         ],
       },
     ],

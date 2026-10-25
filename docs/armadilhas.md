@@ -333,3 +333,10 @@ Pôr o object URL de uma foto de câmara numa caixa de 64×52 faz o browser
 descodificá-la inteira (uns 48 MB numa de 12 MP), e dez fotos punham o
 formulário do imóvel a arrastar-se. As miniaturas em memória são as de 220px
 (componentes.js:fazerMiniatura).
+
+## O criador de uma casa pode mudar
+Antes da 0021, `houses.owner_id` era
+para sempre; agora uma transferência aceite muda-o. Código que guarde o dono
+de uma casa noutra tabela (como `shares.owner_id`, `shared_group_houses.added_by`,
+`files.owner_id`, `collaborators.owner_id`) tem de ser acertado no
+casas.js:aceitarCasaUmaVez, ou fica a apontar para quem já não é dono.

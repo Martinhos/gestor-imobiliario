@@ -5,7 +5,8 @@ import { connectionForUser, limparSaida } from '../lib/acesso.js';
 import { servicosDesligados, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
 
 /* Rotas das conexões: convidar outro utilizador pelo id curto, aceitar o
-   convite, cortar a ligação (leva as partilhas com ela) e escolher que casas
+   convite, cortar a ligação (leva as partilhas com ela, e as transferências
+   pendentes entre os dois ficam canceladas) e escolher que casas
    minhas ficam partilhadas nessa conexão. Todas escrevem: com os
    Colaboradores desligados nesta conta (lib/servicos.js — o que inclui os
    Imóveis desligados, por fecho) levam 403 com a frase do serviço, à
@@ -64,9 +65,15 @@ export async function rotasConexoes(c) {
   if (seg[1] === 'connections' && seg.length === 3 && method === 'DELETE') {
     const conn = await connectionForUser(env, seg[2], me.id);
     if (!conn) return err(404, 'Conexão não encontrada.');
+    // as transferências pendentes entre os dois caem com a ligação: só se
+    // transfere a quem está ligado (rotas/casas.js:rotasTransferencias)
+    const pares = [conn.requester_id, conn.target_id];
     await env.DB.batch([
       env.DB.prepare('DELETE FROM shares WHERE connection_id = ?').bind(conn.id),
       env.DB.prepare('DELETE FROM connections WHERE id = ?').bind(conn.id),
+      env.DB.prepare(
+        "UPDATE house_transfers SET status = 'cancelled', decided_at = ? WHERE status = 'pending' AND from_user IN (?, ?) AND to_user IN (?, ?)"
+      ).bind(now(), ...pares, ...pares),
     ]);
     return json({ ok: true });
   }

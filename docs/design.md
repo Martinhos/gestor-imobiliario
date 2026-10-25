@@ -1548,6 +1548,35 @@ Um bloco pode dizer a sua chave (o data-bloco, que o cloud/painel.js:dashKey
 lê primeiro): a faixa das despesas sem imóvel guardou a do cartão de antes
 («card:Despesas sem imóvel»), e uma ordem guardada não a perde.
 
+
+Os pedidos de transferência que me fizeram (CW.state.transfers.incoming,
+notificacoes.js:notifTransfRecebidas) são pedidos por responder: contam no
+crachá, têm linha no telemóvel e entram no cartão dos pedidos
+(cloud/partilha.js:pedidoDeTransferenciaHtml) com «Ver» e «Recusar» — o
+Aceitar não está na linha: passar a ser dono de um imóvel lê-se antes. O
+«Ver» (notificacoes.js:notifTransfVer) abre «Transferência de Alice»: as
+casas, se quem pede sai (a quota dele passa para mim) ou fica com uma quota
+(as quotas de cada casa, só de leitura), que passo a gerir as partilhas e os
+colaboradores, que os colaboradores dele perdem o acesso, que os
+comproprietários que lá estão ficam se estiverem ligados a mim, que as fotos
+e os documentos passam a contar no meu espaço, e que nada muda até aceitar;
+o rodapé é Recusar e Aceitar. Aceitar e recusar fecham a folha e o sino
+(notificacoes.js:notifTransfFechar, a regra do notifPedidoAceitar), e o
+aviso de aceitar diz o que passou a ser meu e o que ficou de fora e porquê
+(notificacoes.js:notifTransfAvisoAceite). Os que fiz esperam no sino, em «À
+espera de resposta» (filtros Tudo e Pedidos, sem contar no crachá), com o
+Cancelar. Sem o campo no estado (um servidor de antes), não há nenhum.
+
+Pelo mesmo caminho chegam os avisos das transferências, cada um
+com a sua frase (notificacoes.js:notifFraseDoAviso): «Bruno aceitou a
+transferência de T2 Benfica.» e «… recusou …» (a quem pediu), «Alice
+cancelou a transferência de …» (a quem ia receber), «Bruno é o novo dono de
+…» (aos comproprietários que ficam), «Deixaste de ter acesso a …: passou
+para Bruno.» (ao comproprietário que não estava ligado a quem recebeu) e
+«Deixaste de colaborar em …: o imóvel mudou de dono.» (ao colaborador do
+dono antigo). O pedido ('transf.pedido') não é linha da atividade: enquanto
+está pendente já é um pedido por responder, e contava duas vezes.
+
 ## A jornada da vista geral
 A vista geral existe para se ver o património de relance, e enquanto não há
 movimentos não há nada para ver: quatro indicadores a 0 € e dois gráficos
@@ -2069,6 +2098,42 @@ quem não a pôde subir —, cai no original como antes, faz a miniatura e sobe-
 aparelho seguinte já não descarrega o original. O carrossel continua a abrir a foto
 inteira. A arrumação do arranque guarda o tn_ de cada anexo que fica
 (web/app/anexos.js:cleanFiles).
+
+Uma foto que demora a chegar diz que está a chegar. Enquanto a miniatura de uma
+caixa não chega (as caixas th_<id>: a .pth do formulário, as capas da lista e da
+ficha, a galeria, o registo fotográfico do contrato), a caixa mostra um anel que
+roda, centrado (componentes.js:paintThumbs, componentes.js:anelEnquanto). Só
+aparece se a espera passar de 150 ms (componentes.js:ANEL_ESPERA_MS): o que já
+está no aparelho — o thumbCache, o tn_ do IndexedDB — chega antes disso e não
+pisca; uma que está em memória nem arma o temporizador. O anel vive exatamente o
+que a promessa viver: sai quando a miniatura chega e quando falha (fica o fundo
+de sempre). Enquanto roda, a caixa diz aria-busy="true". Cada caixa ouve só a
+espera mais recente (um lugar do carrossel que passou a outra foto não perde o
+anel quando a de antes chega).
+
+O carrossel abre no toque, sem esperar pela foto inteira
+(web/app/anexos.js:openFileMeta): noutro aparelho ela desce do servidor
+(cloud/anexos.js:baixarAnexo), e esperar antes de abrir era um toque sem
+resposta durante segundos. Cada lugar da fita cuja foto inteira ainda não está
+na janela mostra a miniatura por baixo, esticada (web/app/anexos.js:
+fotoMiniaturaPorBaixo — a do thumbCache, ou a que o thumbSrc já tem a caminho;
+o URL é do thumbCache, não entra no c.urls da janela) e o anel por cima, com o
+mesmo limiar (web/app/anexos.js:fotoPintar). Quando a inteira chega, troca-se o
+src (o browser só larga a miniatura quando a inteira está pronta); se não
+existir, o palco diz «Esta foto não está neste aparelho.», como antes. Um imóvel
+com uma foto só e os anexos de imagem que não são fotos de imóvel continuam a
+abrir depois do blob (ver «Dúvidas»).
+
+O anel é CSS (estilos.css:.a-carregar::after, no bloco «fotos a carregar»): é a
+roda da espera da casa (estilos.css:.roda — o @keyframes roda, a --volta,
+linear), com 22px, o traço no --line2 e o arco no --accent — o estado vê-se pela
+cor da frente (o contorno), que o escuro forçado do Samsung não apaga —, num
+disco do --card com uma auréola de 2px, para se ler em cima do mosaico e de uma
+fotografia. Tamanho fixo, absolute e pointer-events:none: não empurra nada nem
+apanha toques. Entra a desvanecer (veuEntra, --rapido, --curva) e sai de uma
+vez, quando a imagem o tapa. Na .pth de 64×52 do formulário sobe para 6px do
+topo, para não ficar por baixo da etiqueta «capa». Sem movimento
+(prefers-reduced-motion) fica parado.
 
 Reordenar as fotos no formulário: a linha agarrada segue o dedo e as outras
 abrem o lugar (imovel.js:photoDragMove, ouvido só no documento — uma vez por
@@ -4434,8 +4499,9 @@ apaga-o.»); quem não tem acesso leva 404. É o grau que decide o caminho:
   (worker/src/lib/acesso.js:redistribuirQuotas: 2 casas decimais a somar
   exatamente 100, o resto do arredondamento para a maior; sem quotas
   guardadas, `ownerShares` sai e fica em partes iguais). `ownerIds` fica com
-  os que ficam, e a proposta pendente da casa apaga-se. É a única escrita das
-  quotas que não passa por uma proposta aceite.
+  os que ficam, e a proposta pendente da casa apaga-se. Com a transferência
+  aceite (mais abaixo), são as duas escritas das quotas que não passam por
+  uma proposta aceite.
 
 Duas escritas na mesma casa não se esmagam. Toda a escrita da app em
 `houses` passa por worker/src/lib/acesso.js:gravarCasa, que grava com uma
@@ -4476,6 +4542,145 @@ meus dos últimos 90 dias, os mais recentes primeiro, até 50; sem os
 Colaboradores ligados, os `colab.sair` não vêm. O «Deixar de colaborar» do
 próprio também avisa o dono, um aviso por casa. O dono a remover um
 colaborador não avisa ninguém.
+
+**Transferir a propriedade.** O criador de uma ou várias casas pede a
+transferência delas a um proprietário ligado a si
+(worker/src/rotas/casas.js:rotasTransferencias, migração 0021,
+`house_transfers`: uma linha por casa, o `lote` junta as do mesmo pedido).
+Nada muda antes de quem recebe aceitar; até lá, quem pediu cancela e quem
+recebe recusa. Uma casa só tem uma transferência pendente de cada vez (o
+índice único parcial `idx_house_transfers_pendente`), e uma decisão não volta
+atrás (o trigger `house_transfers_decidida` recusa mudar o estado de uma linha
+que já não está pendente — é assim que um aceitar e um cancelar ao mesmo
+tempo não ganham os dois).
+
+- `POST /api/transfers` (casas.js:pedirTransferencia): `{ houseIds, toUserId,
+  ficar, shares? }`. As casas têm de existir e ser minhas (403 «Só quem criou
+  o imóvel o pode transferir.» a um comproprietário; 404 «Casa não
+  encontrada.» a quem não a vê), quem recebe tem de ter uma ligação aceite
+  comigo (400 «Só podes transferir para um proprietário ligado a ti.»), e
+  nenhuma das casas pode ter já um pedido pendente (409 «Este imóvel já tem
+  uma transferência pendente.» — o lote inteiro não entra). Com `ficar`
+  («Continuar como comproprietário»), as quotas de cada casa só com quem fica
+  — eu, quem recebe e os comproprietários de agora —, válidas e a somar 100
+  com meio ponto de folga (casas.js:quotasPedidas; as frases das propostas);
+  uma casa sem quotas no pedido leva as de omissão: a minha a meias com quem
+  recebe, somada à que ele já tivesse (acesso.js:quotasAMeias). Sem `ficar`,
+  `shares` é ignorado. Quem recebe leva um aviso `transf.pedido` por casa.
+  Sem Imóveis nesta conta, 403 do serviço.
+- `DELETE /api/transfers/:lote` (quem pediu) e `POST …/:lote/reject` (quem
+  recebe) fecham as casas ainda pendentes do lote
+  (casas.js:fecharLote): `cancelled`/`rejected`, e um aviso
+  `transf.cancelada` (a quem recebia) / `transf.recusada` (a quem pediu) por
+  casa. Sem nada pendente para mim nesse lote, 404 «Esta transferência já não
+  está pendente.». Passam sempre, mesmo sem Imóveis: desistir não fica preso a
+  um serviço.
+- `POST …/:lote/accept` (quem recebe; sem Imóveis, 403): casa a casa, cada
+  uma no seu lote e na sua repetição (casas.js:aceitarCasa →
+  acesso.js:comCasaFresca). Uma casa que já não vale — apagada, com outro
+  criador, ou sem a ligação entre os dois — fica `cancelled` e vai em
+  `falhadas` com a frase; uma que outra escrita mudou três vezes seguidas
+  fica pendente e vai em `falhadas` com acesso.js:FRASE_CASA_MUDOU. As outras
+  aceitam-se na mesma: `{ ok, aceites: [houseId], falhadas: [{ houseId, error }] }`.
+
+**O que aceitar uma casa faz** (casas.js:aceitarCasaUmaVez), num só lote,
+com a casa à frente (gravarCasa, agora também com `ownerId`) e a decisão logo
+a seguir:
+
+- o criador (`houses.owner_id`) passa a ser quem recebe;
+- as quotas (acesso.js:quotasDaTransferencia): sem `ficar`, a de quem pedia
+  soma-se à de quem recebe e quem pedia sai; com `ficar`, as do pedido; em
+  ambos, só ficam os que continuam participantes (a quota de quem perdeu o
+  acesso vai para os que ficam, na proporção — redistribuirQuotas);
+  `ownerIds` fica com os que ficam, quem recebe primeiro;
+- as partilhas da casa saem todas e voltam as que fazem falta, já com
+  `owner_id` = quem recebe: com `ficar`, a de quem pediu, na ligação entre
+  os dois; e a de cada comproprietário que estiver ligado a quem recebe e
+  via a casa por uma ligação (ou só por um grupo que sai);
+- os grupos partilhados: a casa fica nos grupos de que quem recebe é membro
+  (`added_by` passa a ser ele — regravar o conjunto de quem pediu já não a
+  leva) e sai dos outros;
+- um comproprietário que deixa de chegar à casa por caminho nenhum (nem por
+  um grupo que fica, nem por uma ligação a quem recebe) perde o acesso e
+  recebe um aviso `casa.sem_acesso`;
+- sem `ficar`, quem pediu sai por todos os caminhos: as partilhas já saíram
+  e, se é membro de um grupo que fica, uma linha em `house_exits` (como
+  sair-do-imovel);
+- os cargos de quem pediu nessa casa saem (e as linhas de colaborador dele
+  que fiquem sem casas), cada colaborador afetado recebe um `colab.removido`;
+  os convites por usar de quem pediu deixam de a incluir
+  (acesso.js:convitesSemCasa, o mesmo do apagarCasa); os pedidos de partilha
+  e a proposta de quotas da casa caem;
+- os anexos da casa (`files.house_id`) passam a ser de quem recebe; os
+  registos ficam como estão (o `created_by` não muda);
+- avisos: `transf.aceite` a quem pediu; `casa.novo_dono` a cada
+  comproprietário que fica (menos os dois).
+
+O ator de cada aviso: quem pede em `transf.pedido` e `transf.cancelada`;
+quem recebe em `transf.aceite`, `transf.recusada`, `casa.novo_dono` e
+`casa.sem_acesso`; quem pediu (o dono que o colaborador conhecia) em
+`colab.removido`.
+
+**O estado.** O `GET /api/state` traz `transfers: { incoming, outgoing }`
+(casas.js:listarTransferencias): os pendentes, um por lote, `{ lote, from |
+to: { id, name }, houses: [{ id, name }], ficar, shares, at }` — `shares` é
+`{ houseId: { userId: pct } }` com `ficar` (sempre preenchido: as de omissão
+gravam-se no pedido) e `null` sem ele. Os avisos novos vêm em `departures`
+com os mesmos campos dos de sair-do-imovel.
+
+**As limpezas.** Apagar uma casa cancela a transferência pendente dela
+(acesso.js:apagarCasa); cortar uma ligação cancela as pendentes entre os dois
+(worker/src/rotas/conexoes.js:rotasConexoes); apagar a conta leva as
+transferências que pediu e as que lhe pediram (acesso.js:purgeAccount). Sem
+avisos nestes três.
+
+Quem criou um imóvel pode passá-lo a um proprietário ligado a ele. O ⋯ da
+ficha tem «Transferir propriedade» antes do «Apagar imóvel»
+(imovel.js:imvMenuDaFicha), só a quem o criou, com sessão, com um servidor
+que já sabe de transferências (o estado traz `transfers`:
+notificacoes.js:notifTransfSabe — num de antes a ação não aparece, levava a
+um 404) e sem um pedido pendente dessa casa (imovel.js:imvPossoTransferir).
+Na seleção das Casas, com a transferência disponível, a barra ganha o
+Transferir ao lado do Apagar, na barra de duas linhas
+(cloud/selecao-listas.js:selLComAcoes, CW.selLTransferir); a razão ao lado
+da contagem diz quantos ficam de fora (selLPintarTransferir), e a folha diz
+quais e porquê.
+
+A folha (imovel.js:imvTransferir) chama-se «Transferir propriedade» com um
+imóvel e «Transferir N imóveis» com vários. Vão só os que criei e sem
+pedido pendente; os outros dizem-se no cimo, e sem nenhum que vá é um aviso,
+sem folha. «Para quem» é obrigatório, com os proprietários de Pessoas ›
+Proprietários com quem tenho uma ligação aceite (imovel.js:imvTrfDestinos —
+o servidor só aceita esses); com um só, vem escolhido. Sem nenhum, a folha
+diz como ligar e leva às Pessoas › Proprietários (imovel.js:imvTrfLigar). O
+interruptor «Continuar como comproprietário» (.interruptor, role switch)
+começa desligado; ligado, cada imóvel mostra as quotas de quem fica — eu,
+quem recebe e os comproprietários que lá estão —, com a minha dividida a
+meias com quem recebe (imovel.js:imvTrfQuotasIniciais). Cada quota é maior
+do que 0 e as de um imóvel somam 100; o erro diz-se no campo
+(imovel.js:imvTrfQuotasDe, pelo componentes.js:falhaCampo) — aqui não é o
+aviso do erro de vários campos, porque o campo de cada imóvel é um. Por
+baixo, a frase do que acontece (imovel.js:imvTrfFrase, aria-live), escrita
+de novo a cada mudança: o que passa para quem e que ele passa a gerir as
+partilhas, os colaboradores e o apagar; se saio (a minha quota passa para
+ele; as dos outros não mudam se mantiverem o acesso) ou fico, com as quotas;
+que os comproprietários que não estejam ligados a quem recebe perdem o
+acesso e a quota deles passa para os que ficam (daqui não se sabe quem está
+ligado a quem); os meus colaboradores nesses imóveis pelo nome
+(imovel.js:imvTrfColaboradores), que perdem o acesso e são avisados, e que
+os cargos são meus e não passam; e que o outro tem de aceitar, que até lá
+nada muda e que se cancela na ficha. O rodapé é Cancelar e «Pedir
+transferência» (imovel.js:imvTrfPedir); um segundo toque com o pedido a meio
+não repete. Com a resposta a folha fecha, o aviso diz a quem foi, e o
+estado relê-se. Um erro do servidor sobre quem recebe vai para o «Para
+quem»; os outros, num aviso, com a folha aberta.
+
+A ficha mostra o pedido pendente por baixo dos donos
+(imovel.js:imvTrfNaFicha): «Transferência pendente para Bruno», que até ele
+aceitar nada muda, as outras casas do mesmo pedido (cancelar cancela o
+pedido todo) e o Cancelar (notificacoes.js:notifTransfCancelar, sem
+perguntar: não muda nada e pode-se voltar a pedir). Num imóvel que me
+querem transferir e que já vejo, o mesmo cartão diz quem e tem o «Ver».
 
 ## Os colaboradores
 O separador dos Colaboradores é o terceiro das Pessoas, na área Casas

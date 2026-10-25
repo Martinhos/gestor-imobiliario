@@ -44,7 +44,7 @@ function propModal(id){
 /* O corpo da ficha de um imóvel: o que se sabe sobre ele, para ler, como a
    prancheta M-Imovel — a capa (a primeira foto, ou o mosaico) com quantas
    fotos há, a morada e os selos, os donos com as quotas e quem deve a quem,
-   as ações rápidas, o cartão dos números, os por confirmar, os quartos ou o
+   a transferência pendente (imvTrfNaFicha), as ações rápidas, o cartão dos números, os por confirmar, os quartos ou o
    contrato, as hipotecas, as despesas fixas, as tarefas, os dados registais
    e fiscais e o anúncio. O título é o da janela; o «Editar» é o do rodapé, e
    só existe para quem pode (propView).
@@ -69,6 +69,7 @@ function propFicha(id){
   return `<div class="imv-ficha">
     ${imvCapaDaFicha(p,v.file)}
     ${imvTopoDaFicha(p,v.ct,c)}
+    ${imvTrfNaFicha(p)}
     ${c.dono?'':imvNotaDeColaborador(p,c)}
     ${imvAcoesRapidas(p,c)}
     ${imvNumerosDaFicha(p,v)}
@@ -373,7 +374,10 @@ function verMovimentosDoImovel(pid){
    janela por cima — a lista das tarefas, a galeria, o plano de amortização —,
    e o paintThumbs sem raiz procurava a capa nessa janela, e a ficha ficava
    com o mosaico e «3 fotos». Na primeira pintura, dentro do abrirFicha, a
-   camada ainda não está guardada, mas aí a de cima é a própria ficha.
+   camada ainda não está guardada, mas aí a de cima é a própria ficha. O ⋯
+   da janela é o imvMenuDaFicha (o «Transferir propriedade» e o «Apagar
+   imóvel»), lido de novo a cada repintura: um pedido de transferência
+   pendente tira o «Transferir» até ser cancelado ou respondido.
    Recebe: id — o id do imóvel.
    Devolve: nada — abre a janela. */
 function propView(id){
@@ -382,7 +386,7 @@ function propView(id){
   camada=abrirFicha({
     titulo:()=>{const x=prop(id);return x?x.name:'Imóvel'},
     corpo:()=>propFicha(id),
-    menu:()=>imvPossoApagar(id)?menu('fichaProp',[{label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${jsq(id)}')`}]):'',
+    menu:()=>{const it=imvMenuDaFicha(id);return it.length?menu('fichaProp',it):''},
     editar:pode(id,'house.edit')?{rotulo:'Editar',act:`propModal('${jsq(id)}')`}:null,
     depois:()=>{if(pode(id,'file.view')){const x=prop(id);if(x)paintThumbs(x.photos,camada&&camada.el?camada.el:undefined)}},
   });
@@ -1214,4 +1218,354 @@ function imvSair(id){
       return Promise.resolve(typeof pullNow==='function'?pullNow(true):null).catch(()=>{}).then(()=>render());
     },e=>toast((e&&e.message)||'Não deu para sair deste imóvel. Tenta outra vez.'));
   });
+}
+
+/* ================= TRANSFERIR A PROPRIEDADE =================
+   Quem criou um imóvel pode passá-lo a um proprietário ligado a ele: o outro
+   passa a criador (gere as partilhas, os colaboradores e o apagar) e eu saio,
+   ou continuo como comproprietário com as quotas que escrever. O pedido vai
+   ao servidor (cloud/partilha.js:CW.pedirTransferencia) e nada muda até o
+   outro aceitar; até lá cancelo-o na ficha (imvTrfNaFicha) ou no sino. Os
+   avisos e as respostas vivem em notificacoes.js (notifTransf…). */
+
+/* A folha de transferir aberta: os imóveis que vão (ids), os que ficaram de
+   fora (naoMeus, pend), quem recebe (para), o interruptor (ficar), o que
+   está escrito nas quotas (escrito: {hid: {uid: texto}}), o que corre depois
+   de pedir (aoPedir) e se há um pedido a meio (enviando). null sem folha. */
+let _trf=null;
+
+/* O ⋯ da ficha do imóvel: «Transferir propriedade» a quem o pode
+   transferir (imvPossoTransferir), e «Apagar imóvel» (imvPossoApagar), por
+   esta ordem — o que destrói fica no fim, vermelho.
+   Recebe: id — o id do imóvel.
+   Devolve: os itens do menu() (array; vazio sem nenhum). */
+function imvMenuDaFicha(id){
+  const q=jsq(id),it=[];
+  if(imvPossoTransferir(id))it.push({label:'Transferir propriedade',icon:'swap',toca:'camada',act:`imvTransferir('${q}')`});
+  if(imvPossoApagar(id))it.push({label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${q}')`});
+  return it;
+}
+/* A transferência existe aqui? Com sessão, com a nuvem carregada (o
+   CW.pedirTransferencia de cloud/partilha.js) e com um servidor que já sabe
+   de transferências (notificacoes.js:notifTransfSabe — um de antes não manda
+   o campo, e a ação levava a um 404).
+   Devolve: true se a transferência se pode oferecer. */
+function imvTrfDisponivel(){return !!meuId()&&typeof (window.CW&&CW.pedirTransferencia)==='function'&&notifTransfSabe()}
+/* Posso transferir este imóvel? Só quem o criou (souCriador), com a
+   transferência disponível (imvTrfDisponivel) e sem um pedido pendente dele
+   (um só por casa: o pendente cancela-se primeiro).
+   Recebe: id — o id do imóvel.
+   Devolve: true se sim. */
+function imvPossoTransferir(id){return !!prop(id)&&souCriador(id)&&imvTrfDisponivel()&&!notifTransfDaCasa('outgoing',id)}
+/* Para quem posso transferir: os proprietários de Pessoas › Proprietários
+   (pessoas.js:donosComPartilha) com quem tenho uma ligação aceite — o
+   servidor só aceita esses (um comproprietário só por um grupo não tem
+   ligação, e a transferência era recusada). O nome é o da ligação, ou o da
+   ficha; por ordem alfabética.
+   Devolve: array de {id, nome}. */
+function imvTrfDestinos(){
+  const st=window.CW&&CW.state,eu=meuId(),vistos={},out=[];
+  ((st&&st.connections)||[]).forEach(c=>{
+    const u=c&&c.status!=='pending'&&c.peer&&c.peer.id;
+    if(!u||u===eu||vistos[u])return;
+    vistos[u]=1;
+    out.push({id:u,nome:String(c.peer.name||'').trim()||nomeUtilizador(u)||String(c.peer.email||u)});
+  });
+  return out.sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+}
+/* O nome de alguém na folha de transferir: quem recebe pelo nome da
+   ligação; os outros pelo da ficha.
+   Recebe: u — o id do utilizador.
+   Devolve: o nome (texto, por escapar). */
+function imvTrfNomeDe(u){
+  const d=imvTrfDestinos().find(x=>x.id===u);
+  return d?d.nome:nomeUtilizador(u);
+}
+/* Quem fica num imóvel com «Continuar como comproprietário»: eu, quem
+   recebe e os comproprietários que já lá estão, por esta ordem.
+   Recebe: p — o imóvel; para — o id de quem recebe.
+   Devolve: array de ids. */
+function imvTrfQuem(p,para){
+  const eu=meuId();
+  return [eu,para].concat((p.ownerIds||[]).filter(u=>u&&u!==eu&&u!==para));
+}
+/* As quotas com que a folha abre, em percentagem: a minha dividida a meias
+   com quem recebe (somada à que ele já tenha), e as dos outros como estão.
+   Uma casa sem quotas que se leiam (sem fichas dos donos) conta em partes
+   iguais pelos donos.
+   Recebe: p — o imóvel; para — o id de quem recebe.
+   Devolve: {uid: número} — soma 100. */
+function imvTrfQuotasIniciais(p,para){
+  const eu=meuId(),donos=(p.ownerIds||[]).length?p.ownerIds:[eu];
+  let sh=sharesOf(p);
+  if(!(Object.keys(sh).reduce((s,u)=>s+(Number(sh[u])||0),0)>0.99)){sh={};donos.forEach(u=>{sh[u]=1/donos.length})}
+  const r2=v=>Math.round(v*100)/100,pc=u=>r2((sh[u]||0)*100);
+  const minha=pc(eu),metade=r2(minha/2),out={};
+  imvTrfQuem(p,para).forEach(u=>{out[u]=u===eu?r2(minha-metade):u===para?r2(pc(para)+metade):pc(u)});
+  return out;
+}
+/* Os campos das quotas de cada imóvel, com o interruptor ligado: uma linha
+   por quem fica (imvTrfQuem), o nome e o campo com o %, como as quotas da
+   partilha (estilos.css:.pt-quotas). Começam nas de imvTrfQuotasIniciais, ou
+   no que já lá estava escrito. Sem quem recebe ainda escolhido, diz que as
+   quotas aparecem depois.
+   Devolve: o HTML (texto), ou '' com o interruptor desligado. */
+function imvTrfQuotasHtml(){
+  if(!_trf||!_trf.ficar)return '';
+  if(!_trf.para)return '<p class="hint">Escolhe para quem transferes, e as quotas aparecem aqui.</p>';
+  const eu=meuId();
+  return _trf.ids.map(hid=>{
+    const p=prop(hid);if(!p)return '';
+    const ini=imvTrfQuotasIniciais(p,_trf.para),escrito=_trf.escrito[hid]||{},casa=esc(p.name||'Sem nome');
+    const linhas=imvTrfQuem(p,_trf.para).map(u=>{
+      const nome=esc(u===eu?'Tu':imvTrfNomeDe(u)),v=escrito[u]!=null?escrito[u]:dec(ini[u]);
+      return `<label class="pt-quota"><span class="pt-quota-nome">${nome}</span><input id="trf_q_${esc(hid)}_${esc(u)}" type="text" inputmode="decimal" value="${esc(v)}" aria-label="${nome}, quota em ${casa}, em %" data-toca="rascunho" data-input="imvTrfEscreveu()"><span class="pt-pct" aria-hidden="true">%</span></label>`;
+    }).join('');
+    return `<div class="trf-casa" role="group" aria-label="Quotas em ${casa}"><b>${casa}</b><div class="pt-quotas"><div class="pt-quotas-cab small" aria-hidden="true"><span>Pessoa</span><span>Quota</span></div>${linhas}</div></div>`;
+  }).join('')+`<p class="hint">As quotas de cada imóvel somam 100 e entram quando ${esc(imvTrfNomeDe(_trf.para))} aceitar.</p>`;
+}
+/* Lê o que está escrito nos campos das quotas para a folha (_trf.escrito),
+   para voltar igual depois de uma repintura.
+   Devolve: nada. */
+function imvTrfLer(){
+  if(!_trf||!_trf.ficar||!_trf.para)return;
+  _trf.ids.forEach(hid=>{
+    const p=prop(hid);if(!p)return;
+    const e=_trf.escrito[hid]||(_trf.escrito[hid]={});
+    imvTrfQuem(p,_trf.para).forEach(u=>{const el=document.getElementById('trf_q_'+hid+'_'+u);if(el)e[u]=el.value});
+  });
+}
+/* As quotas escritas de um imóvel, validadas: cada uma maior do que 0 e no
+   máximo 100, e todas a somar 100 (com o arredondamento dos cêntimos de
+   percentagem, que vão para a maior).
+   Recebe: hid — o id do imóvel.
+   Devolve: {q: {uid: número}} ou {campo, msg} com o primeiro erro. */
+function imvTrfQuotasDe(hid){
+  const p=prop(hid);if(!p)return {q:{}};
+  const quem=imvTrfQuem(p,_trf.para),ini=imvTrfQuotasIniciais(p,_trf.para),escrito=_trf.escrito[hid]||{},q={};
+  let total=0;
+  for(const u of quem){
+    const v=escrito[u]!=null?numTaxa(escrito[u]):ini[u];
+    if(!(v>0)||v>100)return {campo:'trf_q_'+hid+'_'+u,msg:'Escreve uma quota maior do que 0 e até 100.'};
+    q[u]=Math.round(v*100)/100;total+=q[u];
+  }
+  total=Math.round(total*100)/100;
+  if(Math.abs(total-100)>0.05)return {campo:'trf_q_'+hid+'_'+quem[0],msg:'As quotas de '+(p.name||'Sem nome')+' têm de somar 100 (agora somam '+dec(total)+').'};
+  const dif=Math.round((100-total)*100)/100;
+  if(dif){const maior=quem.reduce((a,b)=>q[b]>q[a]?b:a);q[maior]=Math.round((q[maior]+dif)*100)/100}
+  return {q};
+}
+/* O que transferir faz, dito antes de pedir, sem esconder nada: o que passa
+   para quem (e que ele passa a gerir as partilhas, os colaboradores e o
+   apagar); se saio — a minha quota passa para ele, as dos outros
+   comproprietários não mudam se mantiverem o acesso — ou se fico, e com que
+   quotas; que os comproprietários que não estejam ligados a quem recebe
+   perdem o acesso (daqui não se sabe quem está ligado a ele); os meus
+   colaboradores nesses imóveis, pelo nome, que perdem o acesso e são
+   avisados (os cargos são meus e não passam); e que o outro tem de aceitar,
+   que até lá nada muda e que posso cancelar. Escreve-se de novo a cada
+   mudança na folha.
+   Devolve: a frase (HTML, nomes escapados), ou '' sem folha. */
+function imvTrfFrase(){
+  if(!_trf)return '';
+  const ps=_trf.ids.map(prop).filter(Boolean),um=ps.length===1,eu=meuId();
+  const nomePara=_trf.para?esc(imvTrfNomeDe(_trf.para)):'';
+  const quem=nomePara?'<b>'+nomePara+'</b>':'quem escolheres';
+  const f=[`${listaE(ps.map(p=>'<b>'+esc(p.name||'Sem nome')+'</b>'))} ${um?'passa':'passam'} para ${quem}, que fica a gerir ${um?'o imóvel':'os imóveis'}: as partilhas, os colaboradores e o apagar.`];
+  if(_trf.ficar){
+    let q=null;
+    if(um&&_trf.para){const r=imvTrfQuotasDe(ps[0].id);if(r.q)q=r.q}
+    f.push(q?`Continuas comproprietário: ${listaE(imvTrfQuem(ps[0],_trf.para).map((u,i)=>(i?esc(imvTrfNomeDe(u))+' com ':'ficas com ')+notifTransfPct(q[u])))}.`
+      :`Continuas comproprietário, com as quotas que escreveres em baixo.`);
+  }else{
+    const minha=um?sharesOf(ps[0])[eu]:null;
+    f.push(`Tu sais ${um?'dele':'deles'}, e ${um?`a tua quota${minha!=null?' ('+imvQuotaTexto(minha)+')':''} passa`:'as tuas quotas passam'} para ${nomePara||'quem o recebe'}.`);
+    const outros=imvTrfOutrosDonos(ps);
+    if(outros.length){const n=listaE(outros.map(u=>esc(nomeUtilizador(u))));f.push(outros.length===1?`A quota de ${n} não muda se mantiver o acesso.`:`As quotas de ${n} não mudam se mantiverem o acesso.`)}
+  }
+  /* quem pede não sabe quem está ligado a quem recebe: um comproprietário
+     que via a casa pela ligação comigo e não está ligado a ele perde-a (o
+     servidor decide e avisa-o, 'casa.sem_acesso') */
+  if(imvTrfOutrosDonos(ps).length)f.push(`Os comproprietários que não estejam ligados a ${nomePara||'quem recebe'} perdem o acesso, e a quota deles passa para os que ficam.`);
+  const colabs=imvTrfColaboradores(_trf.ids);
+  if(colabs.length){
+    const n=listaE(colabs.map(esc)),onde=um?'a este imóvel':'a estes imóveis';
+    f.push((colabs.length===1?`O teu colaborador ${n} perde o acesso ${onde} e é avisado.`:`Os teus colaboradores ${n} perdem o acesso ${onde} e são avisados.`)+' Os cargos são teus e não passam.');
+  }
+  f.push(`${nomePara||'Quem recebe'} tem de aceitar: até lá nada muda, e podes cancelar o pedido na ficha ${um?'do imóvel':'de cada imóvel'}.`);
+  return f.join(' ');
+}
+/* Os outros comproprietários destes imóveis: nem eu, nem quem recebe.
+   Recebe: ps — os imóveis.
+   Devolve: array de ids, sem repetidos. */
+function imvTrfOutrosDonos(ps){
+  const eu=meuId(),out=[];
+  ps.forEach(p=>(p.ownerIds||[]).forEach(u=>{if(u&&u!==eu&&u!==(_trf&&_trf.para)&&out.indexOf(u)<0)out.push(u)}));
+  return out;
+}
+/* Os meus colaboradores nestes imóveis, pelo nome: os do CW.state.collaborators
+   (só o dono os recebe, e são os dele) que têm algum destes imóveis. São os
+   que perdem o acesso quando a transferência for aceite. Com os
+   Colaboradores desligados nesta conta o servidor não os manda, e a lista
+   fica vazia.
+   Recebe: ids — os ids dos imóveis.
+   Devolve: array de nomes (texto, por escapar), sem repetidos. */
+function imvTrfColaboradores(ids){
+  const st=window.CW&&CW.state,out=[];
+  ((st&&st.collaborators)||[]).forEach(c=>{
+    if(!c||!(c.houses||[]).some(h=>h&&ids.indexOf(h.id)>-1))return;
+    const n=String(c.name||'').trim()||(c.userId?nomeUtilizador(c.userId):'')||'Sem nome';
+    if(out.indexOf(n)<0)out.push(n);
+  });
+  return out;
+}
+/* O corpo da folha de transferir: os que ficaram de fora e porquê; «Para
+   quem», obrigatório, com os proprietários ligados (imvTrfDestinos); o
+   interruptor «Continuar como comproprietário», desligado; as quotas, com
+   ele ligado (imvTrfQuotasHtml); e a frase do que acontece (imvTrfFrase),
+   que o leitor de ecrã ouve mudar.
+   Recebe: destinos — a lista de imvTrfDestinos.
+   Devolve: o HTML (texto). */
+function imvTrfCorpo(destinos){
+  const nomes=ids=>listaE(ids.map(id=>'<b>'+esc(propName(id)||'Sem nome')+'</b>'));
+  const fora=[];
+  if(_trf.naoMeus.length)fora.push(nomes(_trf.naoMeus)+(_trf.naoMeus.length===1?' fica de fora: só quem criou um imóvel o pode transferir.':' ficam de fora: só quem criou um imóvel o pode transferir.'));
+  if(_trf.pend.length)fora.push(nomes(_trf.pend)+(_trf.pend.length===1?' fica de fora: já tem uma transferência pendente.':' ficam de fora: já têm transferências pendentes.'));
+  const um=_trf.ids.length===1;
+  const ops=[{v:'',label:'Escolhe um proprietário'}].concat(destinos.map(d=>({v:d.id,label:d.nome})));
+  return `<div class="form trf-form">
+    ${fora.length?`<div class="hint">${fora.join(' ')}</div>`:''}
+    <label>Para quem <span class="req">*</span>${sel('trf_para',_trf.para,ops,'imvTrfMudou','rascunho')}</label>
+    <label class="trf-sw"><span class="trf-sw-txt" id="trfFicarL"><b>Continuar como comproprietário</b><span class="small">Ficas com uma quota ${um?'no imóvel':'em cada imóvel'}. Desligado, sais ${um?'dele':'deles'} e a tua quota passa para quem recebe.</span></span><button type="button" class="interruptor" role="switch" id="trfFicar" aria-checked="${_trf.ficar?'true':'false'}" aria-labelledby="trfFicarL" data-toca="rascunho" data-click="imvTrfFicar()"></button></label>
+    <div id="trfQuotas" class="trf-quotas">${imvTrfQuotasHtml()}</div>
+    <p class="trf-frase" id="trfFrase" aria-live="polite">${imvTrfFrase()}</p>
+  </div>`;
+}
+/* Repinta as partes da folha que dependem das escolhas: as quotas e a frase.
+   O «Para quem» e o interruptor ficam (não perdem o foco).
+   Devolve: nada. */
+function imvTrfPintar(){
+  const q=document.getElementById('trfQuotas');if(q)q.innerHTML=imvTrfQuotasHtml();
+  const f=document.getElementById('trfFrase');if(f)f.innerHTML=imvTrfFrase();
+}
+/* Escolheu-se quem recebe: as quotas recomeçam nas de partida para essa
+   pessoa (as linhas mudam com ela) e a frase diz o nome.
+   Devolve: nada. */
+function imvTrfMudou(){
+  if(!_trf)return;
+  _trf.para=val('trf_para')||'';_trf.escrito={};
+  imvTrfPintar();
+}
+/* O interruptor «Continuar como comproprietário»: liga ou desliga, mostra
+   ou tira as quotas e reescreve a frase. O que estava escrito nas quotas
+   guarda-se para voltar igual.
+   Devolve: nada. */
+function imvTrfFicar(){
+  if(!_trf)return;
+  imvTrfLer();
+  _trf.ficar=!_trf.ficar;
+  const b=document.getElementById('trfFicar');if(b)b.setAttribute('aria-checked',_trf.ficar?'true':'false');
+  imvTrfPintar();
+}
+/* Escreveu-se numa quota: guarda e reescreve só a frase (o campo fica com o
+   foco).
+   Devolve: nada. */
+function imvTrfEscreveu(){
+  if(!_trf)return;
+  imvTrfLer();
+  const f=document.getElementById('trfFrase');if(f)f.innerHTML=imvTrfFrase();
+}
+/* Sem ligação aceite a ninguém, a folha leva às Pessoas › Proprietários,
+   onde se dá o id e se escreve o do outro.
+   Devolve: nada — fecha as janelas e muda de separador. */
+function imvTrfLigar(){closeAllModals();go('owners')}
+/* A folha «Transferir propriedade» (um imóvel) ou «Transferir N imóveis»
+   (da seleção das Casas): o ⋯ da ficha e a barra da seleção abrem-na. Vão
+   só os que criei e que não têm já um pedido pendente; os outros dizem-se
+   no cimo, e se não sobrar nenhum diz-se porquê num aviso, sem folha. Sem
+   nenhum proprietário ligado, a folha diz como ligar e leva às Pessoas ›
+   Proprietários. O rodapé é Cancelar e «Pedir transferência»
+   (imvTrfPedir).
+   Recebe: ids — o id de um imóvel, ou um array deles; aoPedir (opcional) —
+   função chamada depois de o pedido seguir (a seleção sai da seleção).
+   Devolve: nada — abre a folha (ou avisa). */
+function imvTransferir(ids,aoPedir){
+  const ps=(Array.isArray(ids)?ids:[ids]).map(prop).filter(Boolean);
+  if(!ps.length)return;
+  if(!imvTrfDisponivel())return toast('A transferência precisa de sessão e do servidor. Tenta outra vez daqui a pouco.');
+  const naoMeus=ps.filter(p=>!souCriador(p.id)),pend=ps.filter(p=>souCriador(p.id)&&notifTransfDaCasa('outgoing',p.id));
+  const vao=ps.filter(p=>naoMeus.indexOf(p)<0&&pend.indexOf(p)<0);
+  if(!vao.length)return toast(naoMeus.length?(ps.length===1?'Só quem criou o imóvel o pode transferir.':'Só quem criou um imóvel o pode transferir.')
+    :(pend.length===1?'Este imóvel já tem uma transferência pendente.':'Estes imóveis já têm transferências pendentes.'));
+  const destinos=imvTrfDestinos();
+  _trf={ids:vao.map(p=>p.id),naoMeus:naoMeus.map(p=>p.id),pend:pend.map(p=>p.id),para:destinos.length===1?destinos[0].id:'',
+    ficar:false,escrito:{},aoPedir:typeof aoPedir==='function'?aoPedir:null,enviando:false};
+  const titulo=vao.length===1?'Transferir propriedade':'Transferir '+vao.length+' imóveis';
+  const cancelar='<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button>';
+  let L;
+  if(!destinos.length){
+    const onde=servicoLigado('owners')?'Em Pessoas › Proprietários':'Na página Segurança das Definições';
+    L=openModal(titulo,`<div class="form trf-form"><p>Só podes transferir para um proprietário ligado a ti, e ainda não tens nenhuma ligação aceite.</p>
+      <p class="hint">${onde}, dá o teu id ao outro ou escreve o dele. Quando a ligação for aceite, volta aqui.</p></div>`,
+      cancelar+(servicoLigado('owners')?'<button type="button" class="btn primary" data-toca="ecra" data-click="imvTrfLigar()">Ir para os proprietários</button>':''));
+  }else{
+    L=openModal(titulo,imvTrfCorpo(destinos),cancelar+'<button type="button" class="btn primary" data-toca="dados" data-click="imvTrfPedir()">Pedir transferência</button>');
+  }
+  if(L){L.trfFolha=true;L.aoFechar=()=>{_trf=null}}
+}
+/* «Pedir transferência»: valida — quem recebe (o erro no «Para quem») e,
+   com o interruptor ligado, as quotas de cada imóvel (o erro no campo:
+   imvTrfQuotasDe) — e pede ao servidor (CW.pedirTransferencia). Com a
+   resposta, a folha fecha, o aviso diz a quem foi e que até aceitar se
+   cancela na ficha, e o estado relê-se: a ficha passa a mostrar o pendente.
+   Um erro do servidor diz-se junto do «Para quem» quando é sobre ele, ou num
+   aviso, e a folha fica. Um segundo toque com o pedido a meio não repete.
+   Devolve: nada. */
+function imvTrfPedir(){
+  if(!_trf||_trf.enviando)return;
+  if(!_trf.para)return falhaCampo('selb_trf_para','Escolhe para quem transferes.');
+  const t=_trf,shares={};
+  if(t.ficar){
+    imvTrfLer();
+    for(const hid of t.ids){const r=imvTrfQuotasDe(hid);if(r.campo)return falhaCampo(r.campo,r.msg);shares[hid]=r.q}
+  }
+  const f=window.CW&&CW.pedirTransferencia;
+  if(typeof f!=='function')return toast('A transferência precisa de sessão e do servidor. Tenta outra vez daqui a pouco.');
+  const nome=imvTrfNomeDe(t.para),um=t.ids.length===1;
+  t.enviando=true;
+  Promise.resolve(f({houseIds:t.ids.slice(),toUserId:t.para,ficar:t.ficar,shares:t.ficar?shares:undefined})).then(()=>{
+    t.enviando=false;
+    if(modalTop()&&modalTop().trfFolha)closeModal();
+    toast('Pedido enviado a '+nome+'. Até aceitar, nada muda: podes cancelá-lo na ficha '+(um?'do imóvel.':'de cada imóvel.'),{ms:5000});
+    if(t.aoPedir)try{t.aoPedir()}catch(e){}
+    return Promise.resolve(typeof pullNow==='function'?pullNow(true):null).catch(()=>{}).then(()=>render());
+  },e=>{
+    t.enviando=false;
+    const msg=(e&&e.message)||'Não deu para pedir a transferência. Tenta outra vez.';
+    if(/ligado a ti/.test(msg))return falhaCampo('selb_trf_para',msg);
+    toast(msg);
+  });
+}
+/* A transferência pendente na ficha do imóvel: a quem fiz o pedido, que até
+   ele aceitar nada muda, as outras casas do mesmo pedido (cancelar cancela o
+   pedido todo) e o Cancelar (notificacoes.js:notifTransfCancelar). Num
+   imóvel que me querem transferir (e que já vejo, como comproprietário), o
+   pedido com o «Ver» (notificacoes.js:notifTransfVer).
+   Recebe: p — o imóvel.
+   Devolve: o HTML do cartão, ou ''. */
+function imvTrfNaFicha(p){
+  if(!p||!meuId())return '';
+  const nomes=(t,fora)=>(t.houses||[]).filter(h=>h&&h.id!==fora).map(h=>esc(String(h.name||'').trim()||propName(h.id)||'Sem nome'));
+  const cartao=(titulo,sub,botao)=>`<div class="card imv-trf"><span class="imv-trf-ic" aria-hidden="true">${ic('swap',18)}</span><div class="imv-trf-txt"><b>${titulo}</b><span class="small">${sub}</span></div>${botao}</div>`;
+  const env=notifTransfDaCasa('outgoing',p.id);
+  if(env){
+    const quem=esc(notifTransfNome(env.to)),outras=nomes(env,p.id);
+    return cartao('Transferência pendente para '+quem,
+      (env.ficar?'Continuas comproprietário quando aceitar. ':'')+'Até '+quem+' aceitar, nada muda.'+(outras.length?' O pedido leva também '+listaE(outras)+': cancelar cancela o pedido todo.':''),
+      `<button type="button" class="btn sm" data-toca="dados" aria-label="Cancelar o pedido de transferência" data-click="notifTransfCancelar('${jsq(env.lote)}')">Cancelar</button>`);
+  }
+  const rec=notifTransfDaCasa('incoming',p.id);
+  if(rec)return cartao(esc(notifTransfNome(rec.from))+' quer transferir-te este imóvel',esc(notifTransfSub(rec)),
+    `<button type="button" class="btn sm primary" data-toca="camada" data-click="notifTransfVer('${jsq(rec.lote)}')">Ver</button>`);
+  return '';
 }

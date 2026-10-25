@@ -9,7 +9,9 @@
 // permissões) numa lista de casas do dono, que veem e fazem só o que o cargo
 // deixa e nunca entram nas quotas (rotas/colaboradores.js). E há grupos
 // partilhados: um conjunto de casas com membros, em que cada membro é
-// comproprietário de todas as casas do grupo (rotas/grupos.js).
+// comproprietário de todas as casas do grupo (rotas/grupos.js). O criador
+// de uma casa pode transferi-la a um proprietário ligado a si, que aceita ou
+// recusa (rotas/casas.js:rotasTransferencias).
 //
 // Este ficheiro é só o encaminhador: monta o contexto, corre as rotas por
 // ordem e devolve a primeira resposta. Cada área vive no seu módulo, em
@@ -26,7 +28,7 @@ import { rotasEstado } from './rotas/estado.js';
 import { rotasSync } from './rotas/sync.js';
 import { rotasTickets } from './rotas/tickets.js';
 import { rotasAnexos } from './rotas/anexos.js';
-import { rotasCasas } from './rotas/casas.js';
+import { rotasCasas, rotasTransferencias } from './rotas/casas.js';
 import { rotasConexoes } from './rotas/conexoes.js';
 import { rotasColaboradores, rotasPreVisualizacao } from './rotas/colaboradores.js';
 import { rotasGrupos, rotasPreVisualizacaoGrupo } from './rotas/grupos.js';
@@ -45,6 +47,7 @@ const COM_SESSAO = [
   rotasColaboradores,
   rotasGrupos,
   rotasCasas,
+  rotasTransferencias,
   rotasConexoes,
 ];
 

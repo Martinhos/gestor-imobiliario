@@ -55,6 +55,8 @@ confere que cada uma aponta para código que existe.
 - 2026-10-25 · A casa partilhada funde em vez de gravar por cima, e as tarefas guardam-se de uma vez
 - 2026-10-25 · Os registos fundem como a casa
 - 2026-10-25 · As miniaturas sobem com as fotos
+- 2026-10-25 · Transferir a propriedade é um pedido que o outro aceita
+- 2026-10-25 · As fotos a descer mostram que estão a chegar
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2267,3 +2269,36 @@ Dois defeitos achados pelo caminho e corrigidos nos meus ficheiros:
   `subirPendentes` subia os primeiros vinte anexos da conta inteiros a cada envio aceite (dados
   móveis gastos sempre nos mesmos, e o vigésimo primeiro nunca revisto): agora só o que a
   sessão ainda não tratou.
+
+## 2026-10-25 · Transferir a propriedade é um pedido que o outro aceita
+
+O Martinho pediu para transferir a propriedade de uma ou várias casas a outra pessoa, e respondeu: em cada transferência escolhe se sai ou continua como comproprietário (e então as quotas vão no pedido); quem recebe tem de aceitar; só para quem já está ligado; os colaboradores do dono antigo saem dessa casa.
+
+A transferência é um pedido e não uma ação: muda o dono, as quotas, quem tem
+acesso e para onde contam os anexos de outra pessoa, e por isso precisa do
+sim dela, e até lá não muda nada (o Martinho: «quem recebe tem de aceitar»).
+O Aceitar vive na folha do «Ver», e não na linha do sino como o dos pedidos
+de partilha, porque aceitar um imóvel é ficar responsável por ele — lê-se
+antes. Só aparecem as ligações aceites porque o servidor só aceita essas (um
+comproprietário só por um grupo não tem ligação). Cancelar não pergunta:
+não destrói nada e pode-se pedir outra vez.
+
+- O acesso de um comproprietário por ligação é uma partilha do criador
+  nessa ligação (`shares.owner_id` = o criador, a outra ponta vê). Uma
+  partilha numa ligação A–C não pode dizer «o B partilha com o C»: com o B
+  como criador, o C só continua pela ligação B–C. Sem ela, o C perde o acesso
+  e é avisado — deixar a partilha velha com `owner_id` = A dava ao A, que já
+  não é o dono, uma partilha que o PUT das partilhas dele recusa com 403.
+- Os grupos: num grupo partilhado cada membro só põe casas suas; uma casa de
+  quem não é membro não fica lá.
+- A decisão faz parte do lote do aceitar, e o trigger recusa uma linha já
+  decidida: um cancelar que chegue entre a leitura e a escrita desfaz o
+  aceitar dessa casa, e vice-versa.
+
+## 2026-10-25 · As fotos a descer mostram que estão a chegar
+
+O pedido do Martinho (2026-10-25): «Quando adiciono fotos, a outra pessoa vê que
+há x fotos, mas não vê nenhuma até terminar de descarregar. Quero que haja um
+feedback. Tipo um donut que roda ou assim.» As caixas vazias com o fundo --chip
+pareciam fotos que não existiam; e no carrossel o toque numa foto não fazia nada
+até a foto inteira descer.

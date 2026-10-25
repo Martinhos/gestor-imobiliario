@@ -152,7 +152,11 @@ function takeFiles(input){
 }
 // Abre um anexo a partir dos metadados: imagens em modal com botão de guardar,
 // o resto descarrega logo. Avisa por toast quando o blob não está no aparelho.
-// Uma foto de um imóvel com outras ao lado abre em carrossel (fotoCarrossel).
+// Uma foto de um imóvel com outras ao lado abre em carrossel (fotoCarrossel),
+// e abre logo, sem esperar pelo blob: noutro aparelho a foto inteira desce do
+// servidor, e esperar por ela antes de abrir era um toque sem resposta
+// nenhuma durante segundos. O palco mostra a miniatura e o anel até ela
+// chegar (fotoPintar); uma que não está em lado nenhum diz-o no palco.
 // O object URL da imagem vive o que a janela viver: revoga-se quando ela fecha
 // (o aoFechar da camada, que o closeModal corre).
 // Recebe: meta — os metadados do anexo ({id,name,type,size,added});
@@ -161,10 +165,10 @@ function takeFiles(input){
 // Devolve: nada — abre o modal ou dispara a descarga.
 function openFileMeta(meta,doFormulario){
   if(!meta)return toast('Anexo não encontrado.');
+  const fotos=isImg(meta.type)?fotosDoImovel(meta.id,doFormulario):null;
+  if(fotos&&fotos.lista.length>1)return fotoCarrossel(fotos,meta.id);
   idbGet(meta.id).then(blob=>{
     if(!blob)return toast('Anexo não encontrado no dispositivo.');
-    const fotos=isImg(meta.type)?fotosDoImovel(meta.id,doFormulario):null;
-    if(fotos&&fotos.lista.length>1)return fotoCarrossel(fotos,meta.id,blob);
     if(isImg(meta.type)){
       const url=URL.createObjectURL(blob);
       const L=openModal(meta.name||'Imagem',`<div class="form"><img src="${url}" alt="" class="u-w-100pc u-br-12px">
@@ -240,9 +244,10 @@ function fotoNome(f,i){return (f&&f.name)||('Foto '+(i+1))}
 
 /* Abre a janela do carrossel numa foto. Os object URLs ficam na camada e
    soltam-se quando ela fecha; enquanto está aberta, só ficam presos os das
-   três fotos da fita (fotoPintar).
+   três fotos da fita (fotoPintar). Sem o blob, a foto de abertura começa
+   logo a ser pedida (fotoUrl), com ou sem palco à vista.
    Recebe: fotos — {lista, nome}, de fotosDoImovel; fid — a foto onde abre;
-   blob — o blob dela, já lido.
+   blob (opcional) — o blob dela, se já estiver lido.
    Devolve: nada — abre a janela. */
 function fotoCarrossel(fotos,fid,blob){
   const lista=fotos.lista,i=Math.max(0,lista.findIndex(f=>f.id===fid));
@@ -256,7 +261,7 @@ function fotoCarrossel(fotos,fid,blob){
     `<button class="btn" data-click="closeModal()">Voltar</button><button class="btn primary" data-click="fotoGuardar()">Guardar</button>`);
   if(!L)return;
   const c={lista,i,L,urls:{},pedidos:{},anim:null,fimAnim:null,animD:0,animW:0,fechado:false};
-  c.urls[lista[i].id]=URL.createObjectURL(blob);
+  if(blob)c.urls[lista[i].id]=URL.createObjectURL(blob);else fotoUrl(c,lista[i]);
   L.fotos=c;
   L.aoFechar=()=>{
     c.fechado=true;
@@ -297,10 +302,29 @@ function fotoUrl(c,f){
   return c.pedidos[f.id];
 }
 
+/* Enquanto a foto inteira desce, o lugar mostra a miniatura dela, se já a
+   houver em memória ou a caminho (componentes.js:thumbSrc, o mesmo pedido que
+   as caixas fizeram): esticada é desfocada, mas diz que foto vem aí. O URL é
+   do thumbCache, não da janela — não entra no c.urls nem se revoga ao fechar.
+   Quando a inteira chega, troca-se o src; o browser só larga a miniatura
+   quando a inteira está pronta a mostrar.
+   Recebe: img — o .fc-img do lugar; id — o id da foto.
+   Devolve: nada. */
+function fotoMiniaturaPorBaixo(img,id){
+  const vale=()=>img.getAttribute('data-id')===id&&!img.getAttribute('data-inteira');
+  const ja=typeof thumbCache!=='undefined'&&thumbCache[id];
+  if(ja){img.src=ja;return}
+  if(typeof thumbSrc!=='function')return;
+  thumbSrc(id).then(u=>{if(u&&vale())img.src=u}).catch(()=>{});
+}
+
 /* Pinta a fita pelo lugar de agora: a anterior, a de agora e a seguinte (com
    duas fotos, as vizinhas são a mesma), o título, o «3 de 8» e o tamanho.
    Um lugar que já mostra a foto certa fica como está — é o que deixa rodar a
    fita sem a foto piscar. Os URLs das fotos que saíram da fita soltam-se.
+   Um lugar cuja foto inteira ainda não está na janela mostra a miniatura
+   (fotoMiniaturaPorBaixo) e, se a espera passar do limiar, o anel que roda
+   (componentes.js:anelEnquanto) — sai quando ela chega ou quando falha.
    Recebe: c — o estado do carrossel.
    Devolve: nada. */
 function fotoPintar(c){
@@ -312,10 +336,16 @@ function fotoPintar(c){
     const img=s.querySelector('img');if(!img)return;
     img.alt=k?'':fotoNome(f,j);
     if(img.getAttribute('data-id')===f.id)return;
-    img.setAttribute('data-id',f.id);img.removeAttribute('src');s.classList.remove('fc-sem');
-    fotoUrl(c,f).then(u=>{
+    img.setAttribute('data-id',f.id);img.removeAttribute('src');img.removeAttribute('data-inteira');s.classList.remove('fc-sem');
+    const ja=!!c.urls[f.id],p=fotoUrl(c,f);
+    if(!ja){
+      // enquanto a inteira desce, a miniatura por baixo (se a houver) e o anel por cima
+      fotoMiniaturaPorBaixo(img,f.id);
+      if(typeof anelEnquanto==='function')anelEnquanto(s,p);
+    }
+    p.then(u=>{
       if(img.getAttribute('data-id')!==f.id)return;
-      if(u)img.src=u;else s.classList.add('fc-sem');
+      if(u){img.src=u;img.setAttribute('data-inteira','1')}else s.classList.add('fc-sem');
     });
   });
   const f=c.lista[c.i];
