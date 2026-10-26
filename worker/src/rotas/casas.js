@@ -71,7 +71,8 @@ async function sairComoColaborador(env, me, houseId, ownerId, houseName) {
    no grupo, e as outras casas do grupo continuam dele); um cargo que tivesse
    nela por baixo (sem isto, a precedência devolvia-lhe a casa como
    colaborador); e um pedido pendente para ele passar a controlá-la, que cai
-   (já não é comproprietário). A quota dele vai para os que ficam, na proporção das deles
+   (já não é comproprietário). Um pedido para outro passar a controlá-la que
+   só esperava pelo sim dele passa logo a seguir (passarSeTodosAceitaram). A quota dele vai para os que ficam, na proporção das deles
    (redistribuirQuotas), ownerIds fica com os que ficam, a proposta pendente
    apaga-se (já não bate com os participantes), e cada um dos que ficam
    recebe um aviso 'casa.sair'. Os saldos e o IRS seguem as quotas novas.
@@ -91,6 +92,8 @@ async function sairComoComproprietario(env, me, houseId, ownerId) {
   catch (e) { if (casaMudou(e)) return err(409, FRASE_CASA_MUDOU); throw e; }
   await auditar(env, quemSou(me), 'casa.sair', houseId,
     ownerId + (r.porGrupo ? ' · grupo' : '') + ' · ' + (r.quotas ? JSON.stringify(r.quotas) : 'partes iguais'));
+  // um pedido para passar o controlo desta casa que só esperava por mim passa já
+  await passarSeTodosAceitaram(env, [houseId]);
   return json({ ok: true, como: 'comproprietario', ownerShares: r.quotas });
 }
 
@@ -346,13 +349,18 @@ export async function rotasCasas(c) {
 /* ===================== Passar o controlo de uma casa =====================
    O criador de uma ou várias casas pede para passar o controlo delas a um
    comproprietário (migração 0021, house_transfers: uma linha por casa, o
-   lote junta as do mesmo pedido). A casa continua a ser de todos: aceitar
-   muda só quem a controla na app (houses.owner_id) e o que for preciso para
-   que os participantes, as quotas, os grupos, os anexos e o acesso de cada
-   um fiquem iguais — quem pediu passa a comproprietário, quem recebe a
-   criador. Nada muda antes de quem recebe aceitar; até lá, quem pediu
-   cancela e quem recebe recusa. As colunas ficar e shares da 0021 ficam sem
-   uso (grava-se ficar = 0 e shares = NULL). */
+   lote junta as do mesmo pedido). A casa continua a ser de todos, e por isso
+   todos os comproprietários dela aceitam (migração 0022, approvals): os
+   participantes de agora menos quem pediu — quem recebe incluído, quem
+   entrou depois do pedido também, quem saiu já não. Cada casa passa quando
+   todos os DELA aceitarem; uma recusa faz cair essa casa; até lá, quem
+   pediu cancela. Passar muda só quem a controla na app (houses.owner_id) e
+   o que for preciso para que os participantes, as quotas, os grupos, os
+   anexos e o acesso de cada um fiquem iguais — quem pediu passa a
+   comproprietário, quem recebe a criador. Quem aceita e lhe chega por uma
+   partilha sem estar ligado a quem recebe fica ligado a ele ao aceitar (a
+   decisão do Martinho, 2026-10-26). As colunas ficar e shares da 0021 ficam
+   sem uso (grava-se ficar = 0 e shares = NULL). */
 
 const FRASE_SO_CRIADOR = 'Só quem criou o imóvel o pode transferir.';
 const FRASE_CASA = 'Casa não encontrada.';
@@ -362,8 +370,22 @@ const FRASE_NAO_PENDENTE = 'Esta transferência já não está pendente.';
 const FRASE_CORPO_TRANSF = 'Corpo inválido — envia { houseIds: [...], toUserId }.';
 const FRASE_JA_NAO_E_DONO = 'Quem pediu já não é o dono deste imóvel.';
 const FRASE_JA_NAO_COMPROPRIETARIO = 'Já não és comproprietário deste imóvel.';
+const FRASE_QUEM_RECEBE_SAIU = 'Quem ia receber já não é comproprietário deste imóvel.';
 const FRASE_SEM_CAMINHO = 'Não foi possível manter quem pediu como comproprietário deste imóvel.';
 const FRASE_FALHOU = 'Não foi possível aceitar este imóvel. Tenta outra vez.';
+
+// As casas de que um utilizador (?1) é comproprietário sem as ter criado:
+// por uma partilha numa ligação aceite, ou por um grupo partilhado vivo de
+// que não saiu (a mesma pergunta de acesso.js:COMPROPRIETARIO_SQL, em lista).
+const CASAS_EM_QUE_ESTOU = `
+  SELECT s.house_id FROM shares s
+    JOIN connections c ON c.id = s.connection_id
+   WHERE c.status = 'accepted' AND (c.requester_id = ?1 OR c.target_id = ?1) AND s.owner_id <> ?1
+  UNION
+  SELECT gh.house_id FROM shared_group_houses gh
+    JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
+    JOIN shared_group_members m ON m.group_id = gh.group_id
+   WHERE m.user_id = ?1 AND ${SAIU_DA_CASA}`;
 
 // Se um erro é a recusa do trigger house_transfers_decidida: a linha já não
 // estava pendente (outro pedido decidiu-a entretanto).
@@ -388,9 +410,10 @@ async function ligacoesDe(env, userId) {
    ligação e que não estão ligados a quem vai receber o controlo. Uma partilha
    pertence à ligação onde está: sem a ligação de quem recebe a cada um, ele
    não a podia gerir (nem remover), e quem pediu, ao cortar a ligação, tirava
-   a casa à pessoa sem ninguém dar por isso. Por isso passar o controlo pede
-   essas ligações primeiro (a decisão do Martinho, 2026-10-26). Quem chega só
-   por um grupo não conta: o grupo não muda.
+   a casa à pessoa sem ninguém dar por isso. Por isso cada um destes fica
+   ligado a quem recebe ao aceitar (aceitarCasaUmaVez), e o POST
+   /api/transfers/check devolve-os para a folha o dizer antes de pedir. Quem
+   chega só por um grupo não conta: o grupo não muda ao passar.
    Recebe: env — o ambiente do worker; hid — a casa; A — quem pede; B — quem
    recebe.
    Devolve: promessa dos ids, sem repetidos. */
@@ -422,16 +445,6 @@ async function nomesDe(env, ids) {
   return out;
 }
 
-/* A frase de quem pede quando faltam ligações: «Para passares o controlo a
-   Bruno, falta a ligação de Bruno a Carlos. …». Sem género (a app não o sabe).
-   Recebe: b — o nome de quem recebe; nomes — os de quem falta.
-   Devolve: a frase. */
-function fraseSemLigacao(b, nomes) {
-  const lista = nomes.length > 1 ? nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1] : nomes[0];
-  return 'Para passares o controlo a ' + b + ', ' + (nomes.length > 1 ? 'faltam as ligações' : 'falta a ligação') +
-    ' de ' + b + ' a ' + lista + '. Têm de se ligar primeiro, em Pessoas › Proprietários.';
-}
-
 // O nome de uma casa a partir do JSON guardado (estragado dá '').
 // Recebe: texto — o houses.data.
 // Devolve: o nome.
@@ -439,16 +452,52 @@ function nomeDoJSON(texto) {
   try { const d = JSON.parse(texto); return d && typeof d === 'object' ? String(d.name || '') : ''; } catch (e) { return ''; }
 }
 
+// Os sins de uma linha de house_transfers (o approvals da 0022), como lista
+// de ids; estragado ou vazio dá [].
+// Recebe: texto — o approvals guardado.
+// Devolve: os ids, pela ordem em que aceitaram.
+function sinsDe(texto) {
+  let a = null;
+  try { a = JSON.parse(texto); } catch (e) {}
+  return Array.isArray(a) ? a.filter((x) => typeof x === 'string') : [];
+}
+
+/* Quem tem de aceitar uma casa e quem já aceitou, contado no momento: os
+   participantes menos quem pediu (quem recebe incluído; quem entrou depois
+   do pedido também, quem saiu já não). Um sim de quem chega à casa por uma
+   partilha só vale enquanto estiver ligado a quem recebe: aceitar ligou-os,
+   e quem cortou essa ligação depois volta a faltar (aceitar outra vez
+   liga-os de novo).
+   Recebe: env — o ambiente do worker; row — a linha de house_transfers
+   (house_id, from_user, to_user, approvals); parts — os participantes de
+   agora (acesso.js:participantsOf).
+   Devolve: promessa de { precisam, aceitaram, faltam, semLigacao } — listas
+   de ids; aceitaram pela ordem em que aceitaram, faltam pela dos
+   participantes. */
+async function progressoDaCasa(env, row, parts) {
+  const sins = sinsDe(row.approvals);
+  const semLigacao = await semLigacaoAQuemRecebe(env, row.house_id, row.from_user, row.to_user);
+  const precisam = parts.filter((u) => u !== row.from_user);
+  const vale = (u) => sins.includes(u) && !semLigacao.includes(u);
+  return {
+    precisam,
+    aceitaram: sins.filter((u) => precisam.includes(u) && vale(u)),
+    faltam: precisam.filter((u) => !vale(u)),
+    semLigacao,
+  };
+}
+
 /* Pedir para passar o controlo (POST /api/transfers): as casas têm de
    existir e ser minhas, quem recebe tem de ser comproprietário de todas
    (acesso.js:participantsOf, e não eu), e nenhuma pode ter outro pedido
    pendente. Uma linha por casa num lote, e um aviso 'transf.pedido' por casa
-   para quem recebe — tudo num lote só. ficar e shares, se vierem, ignoram-se.
-   Os comproprietários que chegam à casa por uma partilha têm de estar
-   ligados a quem recebe (semLigacaoAQuemRecebe): senão 400 com a frase e a
-   lista em `semLigacao`. Com soVerificar (POST /api/transfers/check, a folha
-   pergunta ao escolher quem recebe), as mesmas recusas e, sem nenhuma,
-   { ok, semLigacao } sem pedir nada.
+   a cada comproprietário dela (menos eu) — todos têm de aceitar —, tudo num
+   lote só. ficar e shares, se vierem, ignoram-se. Não estar ligado a quem
+   recebe já não impede o pedido: quem chega por uma partilha fica ligado ao
+   aceitar. Com soVerificar (POST /api/transfers/check, a folha pergunta ao
+   escolher quem recebe), as mesmas recusas e, sem nenhuma, { ok,
+   semLigacao } — quem ficará ligado a quem recebe ao aceitar
+   (semLigacaoAQuemRecebe) — sem pedir nada.
    Recebe: env — o ambiente do worker; me — quem pede (da sessão); b — o
    corpo { houseIds, toUserId }; soVerificar (opcional) — true para só
    verificar.
@@ -478,21 +527,20 @@ async function pedirTransferencia(env, me, b, soVerificar) {
 
   // quem recebe já é comproprietário de cada uma (pela ligação ou por um grupo)
   if (toUserId === me.id) return err(400, FRASE_NAO_COMPROPRIETARIO);
+  const partsDe = new Map();
   for (const hid of houseIds) {
     const parts = (await participantsOf(env, hid)) || [];
     if (!parts.includes(toUserId)) return err(400, FRASE_NAO_COMPROPRIETARIO);
+    partsDe.set(hid, parts);
   }
 
-  // os comproprietários por partilha têm de estar ligados a quem recebe
-  const faltam = [];
-  for (const hid of houseIds) {
-    (await semLigacaoAQuemRecebe(env, hid, me.id, toUserId)).forEach((u) => { if (!faltam.includes(u)) faltam.push(u); });
-  }
-  const semLigacao = await nomesDe(env, faltam);
-  if (soVerificar) return json({ ok: true, semLigacao });
-  if (semLigacao.length) {
-    const [b] = await nomesDe(env, [toUserId]);
-    return json({ error: fraseSemLigacao(b.name, semLigacao.map((x) => x.name)), semLigacao }, 400);
+  if (soVerificar) {
+    // quem ficará ligado a quem recebe ao aceitar, de todas as casas
+    const faltam = [];
+    for (const hid of houseIds) {
+      (await semLigacaoAQuemRecebe(env, hid, me.id, toUserId)).forEach((u) => { if (!faltam.includes(u)) faltam.push(u); });
+    }
+    return json({ ok: true, semLigacao: await nomesDe(env, faltam) });
   }
 
   const pendentes = [];
@@ -509,13 +557,12 @@ async function pedirTransferencia(env, me, b, soVerificar) {
   const t = now();
   const stmts = [];
   houseIds.forEach((hid) => {
-    stmts.push(
-      env.DB.prepare(
-        `INSERT INTO house_transfers (id, lote, house_id, from_user, to_user, ficar, shares, status, created_at)
-         VALUES (?, ?, ?, ?, ?, 0, NULL, 'pending', ?)`
-      ).bind(crypto.randomUUID(), lote, hid, me.id, toUserId, t),
-      avisoDeSaida(env, toUserId, 'transf.pedido', hid, nomeDoJSON(casas.get(hid).data), me, t),
-    );
+    stmts.push(env.DB.prepare(
+      `INSERT INTO house_transfers (id, lote, house_id, from_user, to_user, ficar, shares, status, created_at)
+       VALUES (?, ?, ?, ?, ?, 0, NULL, 'pending', ?)`
+    ).bind(crypto.randomUUID(), lote, hid, me.id, toUserId, t));
+    const nome = nomeDoJSON(casas.get(hid).data);
+    partsDe.get(hid).filter((u) => u !== me.id).forEach((u) => stmts.push(avisoDeSaida(env, u, 'transf.pedido', hid, nome, me, t)));
   });
   // dois pedidos ao mesmo tempo para a mesma casa: o índice único parcial
   // deixa passar só o primeiro, e o lote do segundo desfaz-se inteiro
@@ -525,33 +572,50 @@ async function pedirTransferencia(env, me, b, soVerificar) {
   return json({ ok: true, lote });
 }
 
-/* Cancelar (quem pediu) ou recusar (quem recebe) as casas ainda pendentes
-   de um lote: cada uma fica decidida e o outro lado recebe um aviso por
-   casa. Tudo num lote; se uma casa foi decidida entretanto (o trigger
+/* Cancelar (quem pediu) ou recusar (um comproprietário) as casas ainda
+   pendentes de um lote. Quem pediu cancela todas, e cada comproprietário de
+   cada uma — os que ainda não tinham respondido e os que já tinham aceitado
+   — recebe um aviso 'transf.cancelada'. Um comproprietário recusa as casas
+   do lote de que é comproprietário (rejected, com rejected_by): cada uma cai
+   e quem pediu e os outros comproprietários dela recebem um
+   'transf.recusada'; as outras casas do lote continuam. Quem recebe recusa
+   as que ainda são dele, mesmo que já não seja comproprietário. Tudo num
+   lote; se uma casa foi decidida entretanto (o trigger
    house_transfers_decidida desfaz o lote), relê e tenta outra vez.
    Recebe: env — o ambiente do worker; me — quem decide (da sessão); lote —
-   o lote; lado — 'from_user' (cancelar) ou 'to_user' (recusar).
-   Devolve: promessa da Response { ok } ou do 404 sem nada pendente. */
-async function fecharLote(env, me, lote, lado) {
-  const cancelar = lado === 'from_user';
+   o lote; cancelar — true para cancelar (quem pediu), false para recusar.
+   Devolve: promessa da Response { ok } ou do 404 sem nada pendente para mim. */
+async function fecharLote(env, me, lote, cancelar) {
   const status = cancelar ? 'cancelled' : 'rejected';
   const kind = cancelar ? 'transf.cancelada' : 'transf.recusada';
   for (let vez = 1; ; vez++) {
     const rows = (await env.DB.prepare(
       `SELECT t.id, t.house_id, t.from_user, t.to_user, h.data FROM house_transfers t
          LEFT JOIN houses h ON h.id = t.house_id
-        WHERE t.lote = ? AND t.${lado} = ? AND t.status = 'pending'`
-    ).bind(lote, me.id).all()).results;
-    if (!rows.length) return err(404, FRASE_NAO_PENDENTE);
+        WHERE t.lote = ? AND t.status = 'pending'
+        ORDER BY t.created_at, t.house_id`
+    ).bind(lote).all()).results;
+    const minhas = [];
+    for (const r of rows) {
+      const parts = (await participantsOf(env, r.house_id)) || [];
+      const minha = cancelar ? r.from_user === me.id
+        : r.from_user !== me.id && (r.to_user === me.id || parts.includes(me.id));
+      if (!minha) continue;
+      // os avisados: os comproprietários de agora, quem pediu e quem recebe, menos eu
+      const para = [...new Set([r.from_user, r.to_user, ...parts])].filter((u) => u !== me.id);
+      minhas.push({ ...r, para });
+    }
+    if (!minhas.length) return err(404, FRASE_NAO_PENDENTE);
     const t = now();
     const stmts = [];
-    rows.forEach((r) => stmts.push(
-      env.DB.prepare('UPDATE house_transfers SET status = ?, decided_at = ? WHERE id = ?').bind(status, t, r.id),
-      avisoDeSaida(env, cancelar ? r.to_user : r.from_user, kind, r.house_id, nomeDoJSON(r.data), me, t),
-    ));
+    minhas.forEach((r) => {
+      stmts.push(env.DB.prepare('UPDATE house_transfers SET status = ?, rejected_by = ?, decided_at = ? WHERE id = ?')
+        .bind(status, cancelar ? null : me.id, t, r.id));
+      r.para.forEach((u) => stmts.push(avisoDeSaida(env, u, kind, r.house_id, nomeDoJSON(r.data), me, t)));
+    });
     try { await env.DB.batch(stmts); }
     catch (e) { if (transfDecidida(e) && vez < 3) continue; if (transfDecidida(e)) return err(409, FRASE_NAO_PENDENTE); throw e; }
-    await auditar(env, quemSou(me), cancelar ? 'transf.cancelar' : 'transf.recusar', lote, rows.map((r) => r.house_id).join(','));
+    await auditar(env, quemSou(me), cancelar ? 'transf.cancelar' : 'transf.recusar', lote, minhas.map((r) => r.house_id).join(','));
     return json({ ok: true });
   }
 }
@@ -563,24 +627,27 @@ async function fecharLote(env, me, lote, lado) {
    - a partilha que dava a casa a B na ligação A–B passa a ser de B: agora
      dá-a a A (e B pode deixar de a partilhar com A, nas partilhas dele);
    - a partilha que dava a casa a um terceiro X fora de uma ligação de B
-     muda-se para a ligação B–X, se a houver, já de B: X chega pelo mesmo
-     grau e B passa a geri-la; sem ligação B–X, fica onde está, de quem a
-     deu (a ligação dessa pessoa a X continua a dar-lha — PUT das partilhas
-     em conexoes.js já não a apaga);
+     muda-se para a ligação B–X — a que já havia, ou a que nasce no mesmo
+     lote porque X aceitou agora (novas) —, já de B: X chega pelo mesmo grau
+     e B passa a geri-la; sem ligação B–X (uma herdada de um criador
+     anterior), fica onde está, de quem a deu (a ligação dessa pessoa a X
+     continua a dar-lha — PUT das partilhas em conexoes.js já não a apaga);
    - se A não chegar à casa por caminho nenhum (sem grupo e sem partilha que
      lha dê), ganha uma: na ligação A–B, de B; sem ela, numa ligação de A a
      outro participante que ainda não tenha esta casa. Sem nenhuma, null.
    Recebe: env — o ambiente do worker; hid — a casa; A — quem pediu; B —
-   quem recebe; parts — os participantes de agora.
+   quem recebe; parts — os participantes de agora; novas (opcional) — Map
+   id do outro → id da ligação a B que entra no mesmo lote, antes destas.
    Devolve: promessa da lista de instruções preparadas, ou de null quando A
    ficaria sem caminho. */
-async function partilhasDoNovoCriador(env, hid, A, B, parts) {
+async function partilhasDoNovoCriador(env, hid, A, B, parts, novas) {
   const rows = (await env.DB.prepare(
     `SELECT s.connection_id, s.owner_id, c.requester_id, c.target_id FROM shares s
        JOIN connections c ON c.id = s.connection_id
       WHERE c.status = 'accepted' AND s.house_id = ?`
   ).bind(hid).all()).results;
   const deB = await ligacoesDe(env, B);
+  if (novas) novas.forEach((cid, quem) => deB.set(quem, cid));
   const stmts = [];
   const ocupadas = new Set(rows.map((r) => r.connection_id));  // ligações onde a casa já tem a sua linha
   let aChega = false;
@@ -690,16 +757,55 @@ async function colaboradoresDoNovoCriador(env, hid, A, B, t) {
   return { stmts, movidos };
 }
 
+/* A ligação aceite entre quem aceita e quem recebe, que nasce ao aceitar:
+   se já houver uma entre os dois (um convite por aceitar, de qualquer
+   lado), passa a aceite — como o aceitar de conexoes.js —; senão, nasce uma
+   já aceite, com quem aceita no lugar de quem convida. Com guarda, só se
+   grava se o sim dessa casa ficou mesmo gravado no mesmo lote (o approvals
+   da linha é o novo): um sim recusado por outro que chegou primeiro não
+   deixa a ligação para trás.
+   Recebe: env — o ambiente do worker; eu — quem aceita; outro — quem
+   recebe; t — o instante; guarda (opcional) — { id, approvals }: a linha e
+   o approvals que o lote lhe grava.
+   Devolve: promessa de { id, stmts } — o id da ligação e as instruções, que
+   entram no lote antes das partilhas que a usem. */
+async function ligacaoAoAceitar(env, eu, outro, t, guarda) {
+  const ja = await env.DB.prepare(
+    'SELECT id FROM connections WHERE (requester_id = ?1 AND target_id = ?2) OR (requester_id = ?2 AND target_id = ?1)'
+  ).bind(eu, outro).first();
+  const se = guarda ? " AND EXISTS (SELECT 1 FROM house_transfers WHERE id = ? AND status = 'pending' AND approvals = ?)" : '';
+  const args = guarda ? [guarda.id, guarda.approvals] : [];
+  if (ja) {
+    return { id: ja.id, stmts: [env.DB.prepare("UPDATE connections SET status = 'accepted' WHERE id = ?" + se).bind(ja.id, ...args)] };
+  }
+  const id = crypto.randomUUID();
+  return {
+    id,
+    stmts: [env.DB.prepare(
+      "INSERT INTO connections (id, requester_id, target_id, status, created_at) SELECT ?, ?, ?, 'accepted', ? WHERE 1" + se
+    ).bind(id, eu, outro, t, ...args)],
+  };
+}
+
 /* Uma passagem do aceitar de UMA casa (aceitarCasa repete-a quando outra
-   escrita mudou a casa). Se o pedido já não vale — a casa foi apagada, quem
-   pediu já não a criou, ou eu já não sou comproprietário — a linha fica
-   cancelada e diz-se porquê. Senão, num lote só, com a casa à frente
-   (gravarCasa por cima da revisão lida, só com o ownerId: o JSON — as
-   quotas, ownerIds — fica como está) e a decisão logo a seguir (o trigger
-   recusa uma linha já decidida):
+   escrita passou à frente): relê a linha, a casa e os participantes, junta
+   o meu sim e, com o de todos (progressoDaCasa), passa a casa. Se o pedido
+   já não vale — a casa foi apagada, quem pediu já não a criou, ou quem
+   recebe já não é comproprietário — a linha fica cancelada e diz-se porquê.
+   Se me chega por uma partilha e não estou ligado a quem recebe, a ligação
+   aceite entre os dois entra no mesmo lote (ligacaoAoAceitar); quem chega
+   só por um grupo não ganha ligação.
+   Sem o sim de todos, grava-se só o meu, por cima do approvals lido (como
+   as aprovações das propostas de quotas): se outro sim chegou entretanto, a
+   recusa 'casa-mudou' faz reler e juntar — dois sins ao mesmo tempo não se
+   perdem.
+   Com o de todos, num lote só, com a casa à frente (gravarCasa por cima da
+   revisão lida, só com o ownerId: o JSON — as quotas, ownerIds — fica como
+   está) e a decisão logo a seguir (o trigger recusa uma linha já decidida:
+   a casa não passa duas vezes):
    - o criador passa a ser quem recebe;
-   - as partilhas acertam-se para todos continuarem a chegar à casa
-     (partilhasDoNovoCriador);
+   - a ligação nova (se a houver) e as partilhas acertadas para todos
+     continuarem a chegar à casa (partilhasDoNovoCriador);
    - os grupos ficam com a casa e com os mesmos membros; added_by passa a
      ser quem recebe (o dono da casa: regravar o conjunto de quem pediu, ou
      ele sair do grupo, já não a leva);
@@ -710,58 +816,100 @@ async function colaboradoresDoNovoCriador(env, hid, A, B, t) {
      deixam de a incluir e os pedidos de partilha dele com ela caem;
    - ficam como estão: as quotas e ownerIds, a proposta de quotas pendente,
      os anexos (files.owner_id), os registos e as saídas (house_exits);
-   - avisos: 'transf.aceite' a quem pediu, 'casa.novo_dono' a cada
-     participante (menos os dois).
-   Recebe: env — o ambiente do worker; me — quem recebe (da sessão); row — a
-   linha de house_transfers (pendente quando se leu).
-   Devolve: promessa de { ok: true, movidos } ou de { error }. */
-async function aceitarCasaUmaVez(env, me, row) {
-  const A = row.from_user, B = me.id, hid = row.house_id;
+   - avisos, com quem recebe como autor: 'transf.aceite' a quem pediu,
+     'casa.novo_dono' a cada participante (menos os dois).
+   Recebe: env — o ambiente do worker; me — quem aceita (da sessão), ou null
+   para só passar a casa se já tiver o sim de todos (alguém deixou de ser
+   comproprietário — passarSeTodosAceitaram); id — a linha de
+   house_transfers.
+   Devolve: promessa de { passou: true, movidos }, de { faltam } (ids; com
+   semMudar quando não havia nada a gravar) ou de { error }. */
+async function aceitarCasaUmaVez(env, me, id) {
+  const row = await env.DB.prepare('SELECT * FROM house_transfers WHERE id = ?').bind(id).first();
+  if (!row || row.status !== 'pending') return { error: FRASE_NAO_PENDENTE };
+  const A = row.from_user, B = row.to_user, hid = row.house_id;
   const invalido = async (error) => {
-    await env.DB.prepare("UPDATE house_transfers SET status = 'cancelled', decided_at = ? WHERE id = ?").bind(now(), row.id).run();
+    await env.DB.prepare("UPDATE house_transfers SET status = 'cancelled', decided_at = ? WHERE id = ? AND status = 'pending'")
+      .bind(now(), id).run();
     return { error };
   };
   const h = await env.DB.prepare('SELECT owner_id, data, rev, deleted FROM houses WHERE id = ?').bind(hid).first();
   if (!h || h.deleted) return invalido(FRASE_CASA);
   if (h.owner_id !== A) return invalido(FRASE_JA_NAO_E_DONO);
   const parts = (await participantsOf(env, hid)) || [A];
-  if (!parts.includes(B)) return invalido(FRASE_JA_NAO_COMPROPRIETARIO);
-  // uma ligação cortada entretanto: o pedido deixa de valer
-  const faltam = await nomesDe(env, await semLigacaoAQuemRecebe(env, hid, A, B));
+  if (!parts.includes(B)) return invalido(me && me.id === B ? FRASE_JA_NAO_COMPROPRIETARIO : FRASE_QUEM_RECEBE_SAIU);
+
+  const prog = await progressoDaCasa(env, row, parts);
+  const eu = me && prog.precisam.includes(me.id) ? me.id : null;
+  const lidos = sinsDe(row.approvals);
+  const sins = eu && !lidos.includes(eu) ? [...lidos, eu] : lidos;
+  const approvals = JSON.stringify(sins);
+  const faltam = prog.faltam.filter((u) => u !== eu);
+  const t = now();
+  const precisaLigar = !!eu && prog.semLigacao.includes(eu);
+
+  // ainda falta alguém: só o meu sim (e a minha ligação a quem recebe)
   if (faltam.length) {
-    const lista = faltam.map((x) => x.name);
-    return invalido('Falta a tua ligação a ' + (lista.length > 1 ? lista.slice(0, -1).join(', ') + ' e ' + lista[lista.length - 1] : lista[0]) +
-      ': liguem-se primeiro, em Pessoas › Proprietários.');
+    if (!eu || (!precisaLigar && lidos.includes(eu))) return { faltam, semMudar: true };   // nada a gravar
+    const lig = precisaLigar ? await ligacaoAoAceitar(env, eu, B, t, { id, approvals }) : null;
+    const r = await lotePorCimaDoLido(env, [
+      env.DB.prepare("UPDATE house_transfers SET approvals = ? WHERE id = ? AND status = 'pending' AND approvals = ?")
+        .bind(approvals, id, row.approvals),
+      ...(lig ? lig.stmts : []),
+    ]);
+    // outro sim (ou uma decisão) chegou entre ler e gravar: relê
+    if (!r[0].meta || !r[0].meta.changes) throw new Error('casa-mudou: o pedido mudou entretanto');
+    return { faltam };
   }
 
-  const partilhas = await partilhasDoNovoCriador(env, hid, A, B, parts);
+  // o sim de todos: passa
+  const lig = precisaLigar ? await ligacaoAoAceitar(env, eu, B, t) : null;
+  const partilhas = await partilhasDoNovoCriador(env, hid, A, B, parts, lig ? new Map([[eu, lig.id]]) : null);
   if (!partilhas) return invalido(FRASE_SEM_CAMINHO);
-  const t = now();
   const colabs = await colaboradoresDoNovoCriador(env, hid, A, B, t);
   const nome = nomeDoJSON(h.data);
+  const [quemRecebe] = await nomesDe(env, [B]);
 
   const stmts = [
     gravarCasa(env, hid, h.rev, { ownerId: B }, t),
-    env.DB.prepare("UPDATE house_transfers SET status = 'accepted', decided_at = ? WHERE id = ?").bind(t, row.id),
+    env.DB.prepare("UPDATE house_transfers SET status = 'accepted', approvals = ?, decided_at = ? WHERE id = ?").bind(approvals, t, id),
+    ...(lig ? lig.stmts : []),
     ...partilhas,
     env.DB.prepare('UPDATE shared_group_houses SET added_by = ? WHERE house_id = ?').bind(B, hid),
     ...colabs.stmts,
     ...(await convitesSemCasa(env, hid, A, t)),
     env.DB.prepare("DELETE FROM share_requests WHERE house_id = ? AND from_user = ? AND status = 'pending'").bind(hid, A),
-    avisoDeSaida(env, A, 'transf.aceite', hid, nome, me, t),
+    avisoDeSaida(env, A, 'transf.aceite', hid, nome, quemRecebe, t),
   ];
-  parts.filter((u) => u !== A && u !== B).forEach((u) => stmts.push(avisoDeSaida(env, u, 'casa.novo_dono', hid, nome, me, t)));
-  colabs.movidos.filter((u) => !parts.includes(u)).forEach((u) => stmts.push(avisoDeSaida(env, u, 'colab.novo_dono', hid, nome, me, t)));
-  await env.DB.batch(stmts);
-  return { ok: true, movidos: colabs.movidos };
+  parts.filter((u) => u !== A && u !== B).forEach((u) => stmts.push(avisoDeSaida(env, u, 'casa.novo_dono', hid, nome, quemRecebe, t)));
+  colabs.movidos.filter((u) => !parts.includes(u)).forEach((u) => stmts.push(avisoDeSaida(env, u, 'colab.novo_dono', hid, nome, quemRecebe, t)));
+  await lotePorCimaDoLido(env, stmts);
+  return { passou: true, movidos: colabs.movidos };
+}
+
+/* Um lote do aceitar: uma ligação nova que choca com outra criada ao mesmo
+   tempo entre as mesmas duas pessoas (o UNIQUE de connections) conta como
+   outra escrita que passou à frente — relê-se e a ligação já existe.
+   Recebe: env — o ambiente do worker; stmts — as instruções.
+   Devolve: promessa dos resultados do lote. */
+async function lotePorCimaDoLido(env, stmts) {
+  try { return await env.DB.batch(stmts); }
+  catch (e) {
+    if (/UNIQUE/i.test(String(e && e.message)) && /connections/i.test(String(e && e.message))) {
+      throw new Error('casa-mudou: a ligação nasceu entretanto');
+    }
+    throw e;
+  }
 }
 
 /* Aceitar UMA casa de um lote, com as repetições e as falhas contadas: uma
    casa que falhe não desfaz as outras (cada uma tem o seu lote).
-   Recebe: env — o ambiente do worker; me — quem recebe; row — a linha.
-   Devolve: promessa de { ok: true, ... } ou de { error } com a frase. */
+   Recebe: env — o ambiente do worker; me — quem aceita, ou null (só passar
+   se já tiver o sim de todos); row — a linha.
+   Devolve: promessa de { passou, movidos }, de { faltam } ou de { error }
+   com a frase. */
 async function aceitarCasa(env, me, row) {
-  try { return await comCasaFresca(() => aceitarCasaUmaVez(env, me, row)); }
+  try { return await comCasaFresca(() => aceitarCasaUmaVez(env, me, row.id)); }
   catch (e) {
     if (casaMudou(e)) return { error: FRASE_CASA_MUDOU };
     if (transfDecidida(e)) return { error: FRASE_NAO_PENDENTE };
@@ -770,54 +918,103 @@ async function aceitarCasa(env, me, row) {
   }
 }
 
-/* Os pedidos pendentes de um utilizador, para o /api/state: os que lhe
-   fizeram (incoming) e os que ele fez (outgoing), uma entrada por lote, com
-   as casas (id e nome). ficar é sempre false e shares sempre null (o
-   contrato mantém os campos).
+/* Depois de alguém deixar de ser comproprietário de casas (saiu delas, a
+   ligação foi cortada, a partilha removida), um pedido pendente dessas
+   casas pode ter ficado com o sim de todos os que restam — passa já, como se
+   o último sim tivesse chegado agora (aceitarCasaUmaVez sem quem aceita);
+   um que deixou de valer (quem recebe já não é comproprietário) cai, sem
+   aviso, como as outras limpezas. Os outros ficam à espera.
+   Recebe: env — o ambiente do worker; casas — os ids das casas.
+   Devolve: promessa de nada — o efeito são as linhas decididas. */
+export async function passarSeTodosAceitaram(env, casas) {
+  for (let i = 0; i < casas.length; i += 50) {
+    const parte = casas.slice(i, i + 50);
+    const rows = (await env.DB.prepare(
+      `SELECT * FROM house_transfers WHERE status = 'pending' AND house_id IN (${parte.map(() => '?').join(',')})`
+    ).bind(...parte).all()).results;
+    for (const row of rows) {
+      const r = await aceitarCasa(env, null, row);
+      if (r.passou) {
+        await auditar(env, { discordId: row.to_user, nome: '', papeis: ['utilizador'] }, 'transf.aceitar', row.house_id,
+          row.from_user + ' · sem quem faltava');
+      }
+    }
+  }
+}
+
+/* Os pedidos pendentes de um utilizador, para o /api/state, uma entrada por
+   lote. incoming: os lotes de outra pessoa em que sou comproprietário de
+   pelo menos uma casa (quem recebe incluído), só com essas casas — cada uma
+   com quem já aceitou, quem falta e se eu já aceitei —, e porResponder
+   quando há uma sem o meu sim (ou uma que já tem o de todos e ficou por
+   passar: aceitar passa-a). outgoing: os que eu pedi, com o progresso de
+   cada casa. Os nomes são os de agora.
    Recebe: env — o ambiente do worker; userId — o utilizador.
-   Devolve: promessa de { incoming: [...], outgoing: [...] }. */
+   Devolve: promessa de { incoming: [{ lote, from, to, houses: [{ id, name,
+   aceitaram, faltam, euAceitei }], porResponder, at }], outgoing: [{ lote,
+   to, houses: [{ id, name, aceitaram, faltam }], at }] } — pessoas em
+   { id, name }. */
 export async function listarTransferencias(env, userId) {
   const rows = (await env.DB.prepare(
-    `SELECT t.lote, t.house_id, t.from_user, t.to_user, t.created_at,
-            uf.name AS from_name, ut.name AS to_name, h.data
+    `SELECT t.*, uf.name AS from_name, ut.name AS to_name, h.data
        FROM house_transfers t
        JOIN users uf ON uf.id = t.from_user
        JOIN users ut ON ut.id = t.to_user
        LEFT JOIN houses h ON h.id = t.house_id
-      WHERE t.status = 'pending' AND (t.from_user = ?1 OR t.to_user = ?1)
+      WHERE t.status = 'pending' AND (t.from_user = ?1 OR t.to_user = ?1 OR t.house_id IN (${CASAS_EM_QUE_ESTOU}))
       ORDER BY t.created_at, t.house_id`
   ).bind(userId).all()).results;
+  const nomes = new Map();
+  const pessoas = async (ids) => {
+    const novos = ids.filter((u) => !nomes.has(u));
+    (await nomesDe(env, novos)).forEach((p) => nomes.set(p.id, p));
+    return ids.map((u) => nomes.get(u));
+  };
   const lotes = new Map();
-  rows.forEach((r) => {
+  for (const r of rows) {
+    const parts = await participantsOf(env, r.house_id);
+    const pedi = r.from_user === userId;
+    if (!parts || (!pedi && !parts.includes(userId))) continue;
+    const prog = await progressoDaCasa(env, r, parts);
     let l = lotes.get(r.lote);
     if (!l) {
-      const recebo = r.to_user === userId;
-      l = { lote: r.lote, houses: [], ficar: false, shares: null, at: r.created_at };
-      if (recebo) l.from = { id: r.from_user, name: r.from_name };
-      else l.to = { id: r.to_user, name: r.to_name };
-      l.recebo = recebo;
+      l = { lote: r.lote, pedi, houses: [], at: r.created_at };
+      if (!pedi) l.from = { id: r.from_user, name: r.from_name };
+      l.to = { id: r.to_user, name: r.to_name };
       lotes.set(r.lote, l);
     }
-    l.houses.push({ id: r.house_id, name: nomeDoJSON(r.data) });
-  });
+    const casa = { id: r.house_id, name: nomeDoJSON(r.data), aceitaram: await pessoas(prog.aceitaram), faltam: await pessoas(prog.faltam) };
+    if (!pedi) {
+      casa.euAceitei = prog.aceitaram.includes(userId);
+      if (!casa.euAceitei || !prog.faltam.length) l.porResponder = true;
+    }
+    l.houses.push(casa);
+  }
   const out = { incoming: [], outgoing: [] };
   lotes.forEach((l) => {
-    const { recebo, ...resto } = l;
-    (recebo ? out.incoming : out.outgoing).push(resto);
+    if (l.pedi) out.outgoing.push({ lote: l.lote, to: l.to, houses: l.houses, at: l.at });
+    else out.incoming.push({ lote: l.lote, from: l.from, to: l.to, houses: l.houses, porResponder: !!l.porResponder, at: l.at });
   });
   return out;
 }
 
-/* Rotas da passagem do controlo: pedir (POST /api/transfers), cancelar
-   (DELETE /api/transfers/:lote, quem pediu), recusar e aceitar
-   (POST …/:lote/reject e …/:lote/accept, quem recebe). Pedir e aceitar são
-   dos Imóveis: sem eles nesta conta, o 403 do serviço; cancelar e recusar
-   passam sempre (desistir não fica preso a um serviço). Todas gastam o
-   contador das escritas.
+/* Rotas da passagem do controlo: pedir (POST /api/transfers), verificar
+   (POST /api/transfers/check), cancelar (DELETE /api/transfers/:lote, quem
+   pediu), recusar e aceitar (POST …/:lote/reject e …/:lote/accept, cada
+   comproprietário das casas do lote, menos quem pediu). Pedir e aceitar
+   são dos Imóveis: sem eles nesta conta, o 403 do serviço; cancelar e
+   recusar passam sempre (desistir não fica preso a um serviço). Todas menos
+   o verificar gastam o contador das escritas.
+   Aceitar trata, pela ordem do pedido, as casas do lote de que sou
+   comproprietário (e as que eram para mim, para dizer porque falham): o meu
+   sim em cada uma, e as que ficam com o de todos passam. Sem nenhuma por
+   responder minha (nem nenhuma que já tenha o sim de todos), 404.
    Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
    method, seg e o utilizador em c.me).
-   Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
-   para o encaminhador tentar a seguinte. */
+   Devolve: a Response da rota que casar com o pedido — o aceitar com { ok,
+   aceites: [houseId], aguardam: [{ houseId, faltam: [{ id, name }] }],
+   falhadas: [{ houseId, error }] } —, ou nada (undefined) para o
+   encaminhador tentar a seguinte. */
 export async function rotasTransferencias(c) {
   const { env, request, method, seg, me } = c;
   if (seg[1] !== 'transfers') return;
@@ -835,22 +1032,37 @@ export async function rotasTransferencias(c) {
     return pedirTransferencia(env, me, await body(request));
   }
   const lote = seg[2];
-  if (cancelar) return fecharLote(env, me, lote, 'from_user');
-  if (seg[3] === 'reject') return fecharLote(env, me, lote, 'to_user');
+  if (cancelar) return fecharLote(env, me, lote, true);
+  if (seg[3] === 'reject') return fecharLote(env, me, lote, false);
 
-  // aceitar: casa a casa, pela ordem do pedido
+  // aceitar: as casas do lote que são minhas para responder, pela ordem do pedido
   const rows = (await env.DB.prepare(
-    "SELECT * FROM house_transfers WHERE lote = ? AND to_user = ? AND status = 'pending' ORDER BY created_at, house_id"
+    "SELECT * FROM house_transfers WHERE lote = ? AND status = 'pending' AND from_user <> ? ORDER BY created_at, house_id"
   ).bind(lote, me.id).all()).results;
-  if (!rows.length) return err(404, FRASE_NAO_PENDENTE);
-  if (casaDesligada(await servicosDesligados(env, me.id))) return err(403, FRASE_DESLIGADO('properties'));
-  const aceites = [], falhadas = [];
+  const minhas = [];
+  let porResponder = false;
   for (const row of rows) {
+    const parts = await participantsOf(env, row.house_id);
+    const souParte = !!parts && parts.includes(me.id);
+    if (!souParte && row.to_user !== me.id) continue;
+    minhas.push(row);
+    const prog = souParte ? await progressoDaCasa(env, row, parts) : null;
+    if (!prog || !prog.aceitaram.includes(me.id) || !prog.faltam.length) porResponder = true;
+  }
+  if (!porResponder) return err(404, FRASE_NAO_PENDENTE);
+  if (casaDesligada(await servicosDesligados(env, me.id))) return err(403, FRASE_DESLIGADO('properties'));
+  const aceites = [], aguardam = [], falhadas = [];
+  for (const row of minhas) {
     const r = await aceitarCasa(env, me, row);
     if (r.error) { falhadas.push({ houseId: row.house_id, error: r.error }); continue; }
+    if (r.faltam) {
+      aguardam.push({ houseId: row.house_id, faltam: await nomesDe(env, r.faltam) });
+      if (!r.semMudar) await auditar(env, quemSou(me), 'transf.aceitar', row.house_id, row.from_user + ' → ' + row.to_user + ' · faltam ' + r.faltam.length);
+      continue;
+    }
     aceites.push(row.house_id);
     await auditar(env, quemSou(me), 'transf.aceitar', row.house_id,
-      row.from_user + (r.movidos.length ? ' · colaboradores ' + r.movidos.join(',') : ''));
+      row.from_user + ' → ' + row.to_user + ' · passou' + (r.movidos.length ? ' · colaboradores ' + r.movidos.join(',') : ''));
   }
-  return json({ ok: true, aceites, falhadas });
+  return json({ ok: true, aceites, aguardam, falhadas });
 }

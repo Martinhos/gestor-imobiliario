@@ -36,8 +36,8 @@ var AVISOS = [
         afeta: ['imoveis', 'partilha'],
         itens: [
           'Num imóvel que criaste e que tem comproprietários, podes passar o controlo na app a um deles: no ⋯ da ficha, ou selecionando vários nas Casas. Ele passa a gerir as partilhas, os colaboradores e o apagar; tu continuas comproprietário, e nada muda nas quotas, nos grupos nem nos outros comproprietários.',
-          'Quem recebe tem de aceitar, no sino; até lá nada muda e podes cancelar. Os teus colaboradores nesse imóvel ficam com o mesmo cargo e passam a ser geridos por ele.',
-          'Os outros comproprietários têm de estar ligados a quem recebe, para ele poder gerir as partilhas: se faltar alguma ligação, a folha diz qual antes de enviares.',
+          'Todos os comproprietários têm de aceitar, no sino: o imóvel só passa quando todos aceitarem, e uma recusa faz cair o pedido. Até lá nada muda e podes cancelar. Os teus colaboradores nesse imóvel ficam com o mesmo cargo e passam a ser geridos por quem recebe.',
+          'Quem ainda não estiver ligado a quem recebe fica ligado a ele ao aceitar.',
         ],
       },
       {

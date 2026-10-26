@@ -21,8 +21,9 @@
 // partilhar a casa com essa pessoa.
 //
 // O criador muda numa só situação: um pedido para passar o controlo a um
-// comproprietário, aceite (rotas/casas.js:rotasTransferencias, migração
-// 0021), que grava o owner_id novo pelo gravarCasa como as outras escritas
+// comproprietário, aceite por todos os comproprietários da casa
+// (rotas/casas.js:rotasTransferencias, migrações 0021 e 0022), que grava o
+// owner_id novo pelo gravarCasa como as outras escritas
 // da casa. Os participantes ficam os mesmos: uma partilha dá a casa à ponta
 // da ligação que não é o owner_id DELA, seja quem for o criador — por isso
 // pode haver partilhas de quem já não é o criador (herdadas), que continuam

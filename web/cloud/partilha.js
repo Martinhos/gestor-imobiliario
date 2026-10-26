@@ -209,27 +209,32 @@ function pedidoDeGrupoHtml(p) {
     '<button class="btn sm" data-toca="dados" data-click="CW.grupoRecusarPedido(\'' + gid + '\',\'' + uid + '\')">Recusar</button>');
 }
 
-/* A linha de um pedido para passar o controlo que me fizeram: que
-   comproprietário me quer passar o controlo de que imóveis, o que aceitar
-   implica (notificacoes.js:notifTransfTitulo e notifTransfSub), e os
-   botões. Aceitar não está na linha: passar a gerir um imóvel lê-se antes,
-   e o «Ver» abre a folha com o que muda e o Aceitar
+/* A linha de um pedido para passar o controlo a que me falta responder (a
+   todos os comproprietários, e não só a quem recebe): quem quer passar o
+   controlo de que imóveis a quem («… a Bruno» ou «… a ti»), o que aceitar
+   implica e, com um imóvel, quem já aceitou e quem falta
+   (notificacoes.js:notifTransfTitulo e notifTransfSub), e os botões.
+   Aceitar não está na linha: passar o controlo lê-se antes, e o «Ver» abre
+   a folha com o que muda, o progresso e o Aceitar
    (notificacoes.js:notifTransfVer). Recusar é o secundário, como nos outros
-   pedidos: quem pediu pode voltar a pedir.
-   Recebe: t — o pedido do CW.state.transfers.incoming ({lote, from, houses}).
+   pedidos: quem pediu pode voltar a pedir; não está quando já aceitei e só
+   falta concluir (notificacoes.js:notifTransfSoConcluir).
+   Recebe: t — o pedido do CW.state.transfers.incoming ({lote, from, to,
+   houses, porResponder}).
    Devolve: o HTML da linha (texto). */
 function pedidoDeTransferenciaHtml(t) {
   var l = jsq(t.lote);
   return linhaDePedido(esc(notifTransfTitulo(t)), esc(notifTransfSub(t)),
     '<button class="btn primary sm" data-toca="camada" data-click="notifTransfVer(\'' + l + '\')">Ver</button>' +
-    '<button class="btn sm" data-toca="dados" data-click="notifTransfRecusar(\'' + l + '\')">Recusar</button>');
+    (notifTransfSoConcluir(t) ? '' : '<button class="btn sm" data-toca="dados" data-click="notifTransfRecusar(\'' + l + '\')">Recusar</button>'));
 }
 
 /* O que está por responder, por tipo: os pedidos de partilha recebidos e os
    pedidos para entrar num grupo meu (os dois do serviço Colaboradores), os
-   pedidos para passar o controlo que me fizeram (da base: CW.state.transfers, que
-   um servidor de antes não manda — notificacoes.js:notifTransfRecebidas
-   aguenta a falta) e os convites de ligação recebidos (da partilha entre
+   pedidos para passar o controlo a que me falta responder (da base:
+   CW.state.transfers, que um servidor de antes não manda —
+   notificacoes.js:notifTransfPorResponder aguenta a falta; os que já aceitei
+   esperam no sino, não aqui) e os convites de ligação recebidos (da partilha entre
    contas, sempre). Os que enviei ficam de fora — não são para responder.
    Recebe: nada (lê CW.state e os serviços ligados).
    Devolve: {inc, grupos, transf, convites, n} — as quatro listas e quantos são ao todo. */
@@ -245,7 +250,7 @@ function pedidosParaResponder() {
     return p && p.groupId && p.userId && !(g && g._partilhado && !g._meu);
   });
   var convites = (st.connections || []).filter(function (c) { return c.status === 'pending' && c.incoming; });
-  var transf = notifTransfRecebidas();
+  var transf = notifTransfPorResponder();
   return { inc: inc, grupos: grupos, transf: transf, convites: convites, n: inc.length + grupos.length + transf.length + convites.length };
 }
 
@@ -712,7 +717,7 @@ CW.sairDaCasa = function (houseId) {
 
 /* Pedir para passar o controlo de uma ou várias casas que criei a um
    comproprietário delas (POST /api/transfers): só muda quem as gere na app,
-   e nada muda até ele aceitar. Não pergunta nem sincroniza: a folha
+   e nada muda até todos os comproprietários aceitarem. Não pergunta nem sincroniza: a folha
    (imovel.js:imvTransferir) valida, e o pullNow é de quem chama.
    Recebe: o — {houseIds: [...], toUserId}.
    Devolve: a promessa da resposta ({ok, lote}); rejeita com o erro do servidor. */
@@ -721,10 +726,12 @@ CW.pedirTransferencia = function (o) {
   return api('POST', '/api/transfers', { houseIds: (o.houseIds || []).slice(), toUserId: o.toUserId });
 };
 
-/* Pergunta ao servidor, sem pedir nada, se o controlo destas casas pode
-   passar para esta pessoa (POST /api/transfers/check): os comproprietários
-   que chegam às casas por uma partilha têm de estar ligados a ela. A folha
-   (imovel.js:imvTrfVerificar) pergunta ao escolher quem recebe.
+/* Pergunta ao servidor, sem pedir nada, quem fica ligado a esta pessoa se
+   lhe passar o controlo destas casas (POST /api/transfers/check): os
+   comproprietários que chegam às casas por uma partilha e ainda não estão
+   ligados a ela ficam ligados quando aceitarem. A folha
+   (imovel.js:imvTrfVerificar) pergunta ao escolher quem recebe, e di-lo
+   numa linha informativa.
    Recebe: o — {houseIds: [...], toUserId}.
    Devolve: a promessa de {ok, semLigacao: [{id, name}]}; rejeita com o erro do servidor. */
 CW.verificarTransferencia = function (o) {
@@ -740,21 +747,25 @@ CW.cancelarTransferencia = function (lote) {
   return api('DELETE', '/api/transfers/' + encodeURIComponent(lote));
 };
 
-/* Recusar um pedido para passar o controlo que me fizeram
-   (POST /api/transfers/:lote/reject). Não pergunta nem sincroniza.
+/* Recusar um pedido para passar o controlo que me chegou
+   (POST /api/transfers/:lote/reject; qualquer comproprietário): o pedido
+   cai nas casas de que sou comproprietário, e o servidor avisa quem pediu e
+   os outros. Não pergunta nem sincroniza.
    Recebe: lote — o id do lote.
    Devolve: a promessa da resposta ({ok}); rejeita com o erro do servidor. */
 CW.recusarTransferencia = function (lote) {
   return api('POST', '/api/transfers/' + encodeURIComponent(lote) + '/reject');
 };
 
-/* Aceitar um pedido para passar o controlo que me fizeram
-   (POST /api/transfers/:lote/accept): passo a gerir cada casa do lote, se o
-   pedido ainda valer; a que já não vale vem em falhadas. Não pergunta
-   nem sincroniza.
+/* Aceitar um pedido para passar o controlo que me chegou
+   (POST /api/transfers/:lote/accept; qualquer comproprietário): regista o
+   meu sim nas casas do lote de que sou comproprietário; cada casa com o sim
+   de todos passa (aceites), as outras esperam por quem falta (aguardam), e
+   a que já não vale vem em falhadas. Não pergunta nem sincroniza.
    Recebe: lote — o id do lote.
-   Devolve: a promessa da resposta ({ok, aceites: [houseId], falhadas:
-   [{houseId, error}]}); rejeita com o erro do servidor. */
+   Devolve: a promessa da resposta ({ok, aceites: [houseId], aguardam:
+   [{houseId, faltam: [{id, name}]}], falhadas: [{houseId, error}]});
+   rejeita com o erro do servidor. */
 CW.aceitarTransferencia = function (lote) {
   return api('POST', '/api/transfers/' + encodeURIComponent(lote) + '/accept');
 };

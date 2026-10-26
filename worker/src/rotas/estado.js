@@ -22,7 +22,9 @@
 // avisos de quem saiu das minhas casas vêm em `departures`, junto com os das
 // transferências do controlo (migração 0021: pedida, aceite, recusada,
 // cancelada, o dono novo aos comproprietários e aos colaboradores). Os pedidos
-// pendentes, os que me fizeram e os que fiz, vêm em `transfers`. Em cada
+// pendentes vêm em `transfers`: os lotes em que sou comproprietário de uma
+// casa (todos os comproprietários aceitam, migração 0022), com quem já aceitou
+// e quem falta, e os que fiz, com o mesmo progresso. Em cada
 // ligação, `myShares` são as MINHAS casas que partilho nela: uma partilha
 // minha de uma casa que já é de outra pessoa (herdada de quando a
 // controlava) não vem — continua a dar a casa ao outro, que a vê em
@@ -394,8 +396,8 @@ export async function rotasEstado(c) {
       at: e.created_at,
     }));
 
-    // as transferências pendentes, as que me pediram e as que pedi
-    // (rotas/casas.js:listarTransferencias)
+    // as transferências pendentes, as que tenho de aceitar (sou
+    // comproprietário) e as que pedi (rotas/casas.js:listarTransferencias)
     const transfers = await listarTransferencias(env, me.id);
 
     const estado = {

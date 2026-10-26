@@ -64,6 +64,16 @@ import { recordReport } from '../lib/relatos.js';
 import { json, err, body, now, badId, clientIp, idsDeCasas } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
 import { servicosDesligados, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
+import { passarSeTodosAceitaram } from './casas.js';
+
+/* As casas de um grupo, agora (para os pedidos de passar o controlo que
+   esperavam por quem as perde: casas.js:passarSeTodosAceitaram).
+   Recebe: env — o ambiente do worker; id — o grupo.
+   Devolve: promessa dos ids das casas. */
+async function idsDasCasasDoGrupo(env, id) {
+  return (await env.DB.prepare('SELECT house_id FROM shared_group_houses WHERE group_id = ?').bind(id).all())
+    .results.map((r) => r.house_id);
+}
 
 // Os primeiros segmentos dos caminhos deste ficheiro (o resto passa adiante
 // sem se ler nada).
@@ -439,6 +449,7 @@ export async function rotasGrupos(c) {
   // as casas em si ficam
   if (seg.length === 3 && method === 'DELETE') {
     if (!g || g.deleted || g.owner_id !== me.id) return err(404, ERRO_GRUPO);
+    const perdidas = await idsDasCasasDoGrupo(env, id);
     await env.DB.batch([
       env.DB.prepare('UPDATE shared_groups SET deleted = 1, updated_at = ? WHERE id = ?').bind(now(), id),
       env.DB.prepare('DELETE FROM shared_group_members WHERE group_id = ?').bind(id),
@@ -447,6 +458,8 @@ export async function rotasGrupos(c) {
       env.DB.prepare('DELETE FROM shared_group_requests WHERE group_id = ?').bind(id),
     ]);
     await auditar(env, eu, 'grupo.apagar', id, g.name);
+    // quem via casas só por este grupo deixou de ser comproprietário delas
+    await passarSeTodosAceitaram(env, perdidas);
     return json({ ok: true });
   }
 
@@ -632,6 +645,7 @@ export async function rotasGrupos(c) {
     }
     await env.DB.batch(stmts);
     await auditar(env, eu, 'grupo.imoveis', id, houseIds.join(','));
+    await passarSeTodosAceitaram(env, [...antes.keys()].filter((h) => !houseIds.includes(h)));
     return json({ ok: true });
   }
 
@@ -651,6 +665,7 @@ export async function rotasGrupos(c) {
     if (!dono && !donoDaCasa) return err(403, 'Só o dono do grupo ou o dono do imóvel o podem remover.');
     await env.DB.prepare('DELETE FROM shared_group_houses WHERE group_id = ? AND house_id = ?').bind(id, hid).run();
     await auditar(env, eu, 'grupo.remover-imovel', id, hid);
+    await passarSeTodosAceitaram(env, [hid]);
     return json({ ok: true });
   }
 
@@ -664,12 +679,14 @@ export async function rotasGrupos(c) {
     if (!sair && !dono) return err(403, 'Só o dono do grupo remove membros.');
     if (!sair && !(await souMembro(env, id, uid))) return err(404, 'Essa pessoa não está no grupo.');
     // sair ou ser removido leva as casas que essa pessoa pôs
+    const perdidas = await idsDasCasasDoGrupo(env, id);
     await env.DB.batch([
       env.DB.prepare('DELETE FROM shared_group_members WHERE group_id = ? AND user_id = ?').bind(id, uid),
       env.DB.prepare('DELETE FROM shared_group_houses WHERE group_id = ? AND added_by = ?').bind(id, uid),
     ]);
     if (sair) await auditar(env, eu, 'grupo.sair', id, g.owner_id);
     else await auditar(env, eu, 'grupo.remover', uid, id);
+    await passarSeTodosAceitaram(env, perdidas);
     return json({ ok: true });
   }
 }

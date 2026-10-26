@@ -1,38 +1,30 @@
 // Ligações entre utilizadores e escolha das casas partilhadas.
 import { json, err, body, now, idsDeCasas } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
-import { connectionForUser, limparSaida, participantsOf } from '../lib/acesso.js';
+import { connectionForUser, limparSaida } from '../lib/acesso.js';
 import { servicosDesligados, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
+import { passarSeTodosAceitaram } from './casas.js';
 
-/* Os pedidos pendentes para passar o controlo de uma destas casas a uma
-   destas pessoas que deixaram de valer porque quem recebe já não é
-   comproprietário (cortar uma ligação leva as partilhas dela): ficam
-   cancelados, sem aviso. Os que ainda valem — quem recebe chega à casa por
-   outra ligação ou por um grupo — ficam.
+/* Os pedidos pendentes para passar o controlo de uma destas casas depois de
+   alguém deixar de ser comproprietário delas (cortar uma ligação leva as
+   partilhas dela; deixar de partilhar uma casa numa ligação também): os que
+   deixaram de valer porque quem recebe já não é comproprietário ficam
+   cancelados, sem aviso; os que ficaram com o sim de todos os que restam
+   passam já; os outros — quem recebe chega à casa por outra ligação ou por
+   um grupo, e ainda falta alguém — ficam (rotas/casas.js:passarSeTodosAceitaram).
    Recebe: env — o ambiente do worker; casas — os ids das casas que tinham
-   partilha na ligação; pessoas — as duas pontas dela.
-   Devolve: promessa de nada — o efeito são as linhas canceladas. */
-async function pedidosSemComproprietario(env, casas, pessoas) {
-  for (let i = 0; i < casas.length; i += 50) {
-    const parte = casas.slice(i, i + 50);
-    const rows = (await env.DB.prepare(
-      `SELECT id, house_id, to_user FROM house_transfers
-        WHERE status = 'pending' AND to_user IN (?, ?) AND house_id IN (${parte.map(() => '?').join(',')})`
-    ).bind(...pessoas, ...parte).all()).results;
-    for (const r of rows) {
-      const parts = await participantsOf(env, r.house_id);
-      if (parts && parts.includes(r.to_user)) continue;
-      await env.DB.prepare("UPDATE house_transfers SET status = 'cancelled', decided_at = ? WHERE id = ? AND status = 'pending'")
-        .bind(now(), r.id).run();
-    }
-  }
+   partilha na ligação.
+   Devolve: promessa de nada — o efeito são as linhas decididas. */
+async function pedidosSemComproprietario(env, casas) {
+  if (casas.length) await passarSeTodosAceitaram(env, casas);
 }
 
 /* Rotas das conexões: convidar outro utilizador pelo id curto, aceitar o
-   convite, cortar a ligação (leva as partilhas com ela, e os pedidos
-   pendentes para passar o controlo de uma casa a quem por ela deixou de ser
-   comproprietário ficam cancelados) e escolher que casas
-   minhas ficam partilhadas nessa conexão. Todas escrevem: com os
+   convite, cortar a ligação (leva as partilhas com ela; os pedidos
+   pendentes para passar o controlo dessas casas acertam-se:
+   pedidosSemComproprietario) e escolher que casas minhas ficam
+   partilhadas nessa conexão (as que deixam de estar acertam-se da mesma
+   maneira). Todas escrevem: com os
    Colaboradores desligados nesta conta (lib/servicos.js — o que inclui os
    Imóveis desligados, por fecho) levam 403 com a frase do serviço, à
    entrada. Devolve a Response da rota que casar com o pedido, ou nada.
@@ -90,16 +82,17 @@ export async function rotasConexoes(c) {
   if (seg[1] === 'connections' && seg.length === 3 && method === 'DELETE') {
     const conn = await connectionForUser(env, seg[2], me.id);
     if (!conn) return err(404, 'Conexão não encontrada.');
-    // um pedido para passar o controlo de uma casa só cai se quem recebe
-    // deixar de ser comproprietário dela (rotas/casas.js:rotasTransferencias):
-    // as casas com partilha nesta ligação leem-se antes de ela sair
+    // um pedido para passar o controlo de uma casa cai se quem recebe deixar
+    // de ser comproprietário dela, e passa se só faltava o sim de quem saiu
+    // (rotas/casas.js:rotasTransferencias): as casas com partilha nesta
+    // ligação leem-se antes de ela sair
     const casas = (await env.DB.prepare('SELECT house_id FROM shares WHERE connection_id = ?').bind(conn.id).all())
       .results.map((r) => r.house_id);
     await env.DB.batch([
       env.DB.prepare('DELETE FROM shares WHERE connection_id = ?').bind(conn.id),
       env.DB.prepare('DELETE FROM connections WHERE id = ?').bind(conn.id),
     ]);
-    await pedidosSemComproprietario(env, casas, [conn.requester_id, conn.target_id]);
+    await pedidosSemComproprietario(env, casas);
     return json({ ok: true });
   }
 
@@ -133,6 +126,9 @@ export async function rotasConexoes(c) {
     }
     const alheia = houseIds.find((h) => !minhas.has(h));
     if (alheia) return err(403, `A casa ${alheia} não é tua.`);
+    // as minhas casas partilhadas aqui antes: as que saírem acertam os pedidos de as passar
+    const antes = (await env.DB.prepare('SELECT house_id FROM shares WHERE connection_id = ? AND owner_id = ?')
+      .bind(conn.id, me.id).all()).results.map((r) => r.house_id).filter((h) => !herdadas.has(h));
     // as minhas partilhas nesta ligação regravam-se, e as herdadas voltam
     // tal e qual no mesmo lote
     const stmts = [
@@ -156,6 +152,7 @@ export async function rotasConexoes(c) {
       );
     }
     await env.DB.batch(stmts);
+    await pedidosSemComproprietario(env, antes.filter((h) => !houseIds.includes(h)));
     return json({ ok: true });
   }
 }

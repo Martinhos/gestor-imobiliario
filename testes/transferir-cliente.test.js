@@ -7,11 +7,16 @@
 // o imóvel na app, que continuo comproprietário com a minha quota, que nada
 // muda nas quotas, nos grupos nem nos outros comproprietários, que os meus
 // colaboradores ficam com o mesmo cargo e passam a ser geridos por quem
-// recebe, e que precisa de ser aceite. «Enviar pedido» chama POST
+// recebe, e que todos os comproprietários têm de aceitar, pelo nome; quem
+// ainda não está ligado a quem recebe diz-se numa linha informativa (fica
+// ligado ao aceitar), e isso não trava o pedido. «Enviar pedido» chama POST
 // /api/transfers só com as casas e quem recebe, e a ficha passa a mostrar o
-// pendente com o Cancelar. Quem recebe vê o pedido no sino com «Ver» e
-// «Recusar», e a folha do «Ver» diz o mesmo do lado dele e tem o Aceitar.
-// Os avisos têm frase (o colab.novo_dono incluído), e um estado sem
+// pendente com quem já aceitou e quem falta, e o Cancelar. Todos os
+// comproprietários veem o pedido no sino («… a Bruno» ou «… a ti») com
+// «Ver» e «Recusar»; o «Ver» diz quem aceitou e quem falta, com Recusar e
+// Aceitar só enquanto me falta responder; aceitar a meio diz quem falta e
+// passa o pedido para «À espera dos outros», aceitar o último diz que
+// passou. Os avisos têm frase (o colab.novo_dono incluído), e um estado sem
 // transfers (um servidor de antes) não parte nada.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
@@ -167,15 +172,22 @@ describe('pedir para passar o controlo', () => {
       'Bruno tem de aceitar: até lá nada muda, e podes cancelar o pedido na ficha do imóvel.');
   });
 
-  test('com dois comproprietários, nenhum vem escolhido: a frase diz «quem escolheres», e escolher reescreve-a', () => {
+  test('com dois comproprietários, nenhum vem escolhido: a frase diz «quem escolheres» e que todos têm de aceitar; escolher reescreve-a com quem recebe à cabeça', () => {
     app.imvTransferir('H6');
     assert.equal(app._trf.para, '');
     assert.match(app.imvTrfFrase(), /^Só muda quem controla <b>Loja<\/b> na app: quem escolheres passa a gerir/);
-    assert.match(app.imvTrfFrase(), /passa a ser gerido por quem receber; é avisado\. Quem receber tem de aceitar/);
-    app.document.getElementById('trf_para').value = 'ANA';
+    assert.match(app.imvTrfFrase(), /passa a ser gerido por quem receber; é avisado\. Todos os comproprietários têm de aceitar \(Ana e Bruno\): até lá nada muda, e podes cancelar o pedido na ficha do imóvel\.$/);
+    app.document.getElementById('trf_para').value = 'BRUNO';
     app.imvTrfMudou();
-    assert.equal(app._trf.para, 'ANA');
-    assert.match(app.document.getElementById('trfFrase').innerHTML, /<b>Ana<\/b> passa a gerir[\s\S]*Ana tem de aceitar/);
+    assert.equal(app._trf.para, 'BRUNO');
+    assert.match(app.document.getElementById('trfFrase').innerHTML, /<b>Bruno<\/b> passa a gerir[\s\S]*Todos os comproprietários têm de aceitar \(Bruno e Ana\)/);
+  });
+
+  test('quem tem de aceitar: os comproprietários de todos os imóveis juntos, sem mim, quem recebe primeiro', () => {
+    assert.deepEqual(simples(app.imvTrfQuemAceita(['H6'], 'BRUNO')), ['Bruno', 'Ana']);
+    assert.deepEqual(simples(app.imvTrfQuemAceita(['H6'], '')), ['Ana', 'Bruno'], 'sem quem recebe, por ordem alfabética');
+    assert.deepEqual(simples(app.imvTrfQuemAceita(['H1', 'H8'], 'ANA')), ['Ana', 'Bruno'], 'de todos os imóveis, sem repetir');
+    assert.deepEqual(simples(app.imvTrfQuemAceita(['H7'], '')), [], 'sem comproprietários');
   });
 
   test('enviar sem quem recebe diz o erro no «Para quem», e nada vai ao servidor', () => {
@@ -201,45 +213,47 @@ describe('pedir para passar o controlo', () => {
     assert.equal(app._trf, null);
   });
 
-test('escolher quem recebe pergunta ao servidor; quem falta ligar diz-se por baixo, e o pedido não segue', async () => {
-    const falta = { classList: { u: true, toggle(c, on) { this.u = on; } }, textContent: '' };
-    const getEl = app.document.getElementById;
-    app.document.getElementById = (id) => (id === 'trfFalta' ? falta : getEl.call(app.document, id));
+  test('escolher quem recebe pergunta ao servidor; quem fica ligado ao aceitar diz-se numa linha informativa, e o pedido segue na mesma', async () => {
+    const liga = app.document.getElementById('trfLiga'), txt = app.document.getElementById('trfLigaTxt');
+    liga.classList = { u: true, toggle(c, on) { this.u = on; } };
     esp.resposta = { ok: true, semLigacao: [{ id: 'CARLA', name: 'Carla' }, { id: 'DUARTE', name: 'Duarte' }] };
     app.imvTransferir('H1');
+    const L = esp.modais[0];
+    assert.match(L.corpo, /<p class="trf-liga u-d-none" id="trfLiga" role="status"><span class="trf-liga-ic" aria-hidden="true">/, 'escondida até o servidor responder');
+    assert.doesNotMatch(L.corpo, /trf-falta|danger/, 'não é uma linha de erro');
     await espera();
     const chk = esp.api.filter((x) => x.m === 'POST /api/transfers/check');
     assert.equal(chk.length, 1, 'com o Bruno já escolhido, pergunta logo');
     assert.deepEqual(simples(chk[0].corpo), { houseIds: ['H1'], toUserId: 'BRUNO' });
-    const frase = 'Para passares o controlo a Bruno, faltam as ligações de Bruno a Carla e Duarte. Têm de se ligar primeiro, em Pessoas › Proprietários.';
-    assert.equal(falta.textContent, frase);
-    assert.equal(falta.classList.u, false, 'à vista');
+    assert.equal(txt.textContent, 'Carla e Duarte ainda não têm ligação a Bruno: a ligação fica feita quando aceitarem.');
+    assert.equal(liga.classList.u, false, 'à vista');
     app.imvTrfPedir();
     await espera();
-    assert.deepEqual(esp.falhas, [{ id: 'selb_trf_para', msg: frase }]);
-    assert.equal(esp.api.filter((x) => x.m === 'POST /api/transfers').length, 0, 'o pedido não foi');
-    // ligados entretanto: perguntar outra vez (o que escolher faz, imvTrfMudou) limpa o aviso e o pedido segue
-    esp.resposta = { ok: true, semLigacao: [] };
-    app.imvTrfVerificar();
-    await espera();
-    assert.equal(falta.textContent, '');
-    assert.equal(falta.classList.u, true);
-    app.imvTrfPedir();
-    await espera();
-    assert.equal(esp.api.filter((x) => x.m === 'POST /api/transfers').length, 1);
+    assert.deepEqual(esp.falhas, [], 'nada trava o pedido');
+    assert.equal(esp.api.filter((x) => x.m === 'POST /api/transfers').length, 1, 'o pedido foi');
   });
 
-  test('uma ligação só com uma pessoa diz-se no singular, e o erro do servidor sobre a ligação vai para o «Para quem»', async () => {
-    assert.equal(app.imvTrfFraseFalta('Bruno', ['Carla']),
-      'Para passares o controlo a Bruno, falta a ligação de Bruno a Carla. Têm de se ligar primeiro, em Pessoas › Proprietários.');
-    assert.equal(app.imvTrfFraseFalta('Bruno', []), '');
-    app.imvTransferir('H1');
-    await espera();
-    const msg = 'Para passares o controlo a Bruno, falta a ligação de Bruno a Carla. Têm de se ligar primeiro, em Pessoas › Proprietários.';
-    esp.falha = { caminho: '/api/transfers', msg };
-    app.imvTrfPedir();
-    await espera();
-    assert.deepEqual(esp.falhas.at(-1), { id: 'selb_trf_para', msg });
+  test('a linha de quem fica ligado no singular, vazia sem ninguém, e uma resposta de uma escolha que já mudou não conta', async () => {
+    assert.equal(app.imvTrfFraseLiga('Bruno', ['Carla']), 'Carla ainda não tem ligação a Bruno: a ligação fica feita quando aceitar.');
+    assert.equal(app.imvTrfFraseLiga('Bruno', []), '');
+    const txt = app.document.getElementById('trfLigaTxt');
+    const antes = app.CW.verificarTransferencia;
+    let solta;
+    app.CW.verificarTransferencia = () => new Promise((r) => { solta = r; });
+    try {
+      app.imvTransferir('H6');
+      app.document.getElementById('trf_para').value = 'ANA';
+      app.imvTrfMudou();
+      const daAna = solta;
+      app.document.getElementById('trf_para').value = 'BRUNO';
+      app.imvTrfMudou();
+      daAna({ ok: true, semLigacao: [{ id: 'X', name: 'Xavier' }] });
+      await espera();
+      assert.equal(txt.textContent, '', 'a resposta sobre a Ana chegou tarde: o Bruno é que está escolhido');
+      solta({ ok: true, semLigacao: [{ id: 'X', name: 'Xavier' }] });
+      await espera();
+      assert.equal(txt.textContent, 'Xavier ainda não tem ligação a Bruno: a ligação fica feita quando aceitar.');
+    } finally { app.CW.verificarTransferencia = antes; }
   });
 
   test('o erro do servidor sobre quem recebe vai para o «Para quem»; outro vai num aviso, e a folha fica', async () => {
@@ -267,7 +281,17 @@ test('escolher quem recebe pergunta ao servidor; quem falta ligar diz-se por bai
     assert.match(f, /^Só muda quem controla <b>T2 Benfica<\/b> e <b>Loja<\/b> na app: <b>Bruno<\/b> passa a gerir/);
     assert.match(f, /Continuas comproprietário com as tuas quotas, e nada muda/);
     assert.match(f, /Os teus colaboradores Rita Colab e Tó Colab continuam nestes imóveis com o mesmo cargo e passam a ser geridos por Bruno; são avisados\./);
-    assert.match(f, /podes cancelar o pedido na ficha de cada imóvel\.$/);
+    assert.match(f, /Cada imóvel passa quando todos os comproprietários dele aceitarem \(Bruno e Ana\): até lá nada muda nele, e podes cancelar o pedido na ficha de cada imóvel\.$/);
+  });
+
+  test('enviar com vários comproprietários: o aviso diz a quem foi o pedido e que até os dois aceitarem nada muda', async () => {
+    app.imvTransferir('H6');
+    app.document.getElementById('trf_para').value = 'BRUNO';
+    app.imvTrfMudou();
+    app.imvTrfPedir();
+    await espera();
+    assert.deepEqual(simples(esp.api.filter((x) => x.m === 'POST /api/transfers')[0].corpo), { houseIds: ['H6'], toUserId: 'BRUNO' });
+    assert.equal(esp.toasts.at(-1), 'Pedido enviado a Bruno e Ana. Até os dois aceitarem, nada muda: podes cancelá-lo na ficha do imóvel.');
   });
 
   test('sem nenhum que vá, um aviso com a razão e sem folha', () => {
@@ -293,20 +317,35 @@ test('escolher quem recebe pergunta ao servidor; quem falta ligar diz-se por bai
 
 describe('o pendente e a resposta', () => {
   let esp;
-  const PEDIDO = () => ({ lote: 'LT1', from: { id: 'RUI', name: 'Rui' }, houses: [{ id: 'H2', name: 'Partilhada' }, { id: 'HZ', name: 'Casa Z' }], at: 5 });
+  const p = (id, name) => ({ id, name });
+  /* um pedido do Rui para me passar o controlo da Partilhada (a Ana já
+     aceitou, falto eu) e da Casa Z (faltamos eu e o Zé) */
+  const PEDIDO = () => ({ lote: 'LT1', from: p('RUI', 'Rui'), to: p('EU', 'Eu'), porResponder: true, at: 5,
+    houses: [{ id: 'H2', name: 'Partilhada', aceitaram: [p('ANA', 'Ana')], faltam: [p('EU', 'Eu')], euAceitei: false },
+      { id: 'HZ', name: 'Casa Z', aceitaram: [], faltam: [p('EU', 'Eu'), p('ZE', 'Zé')], euAceitei: false }] });
+  /* um pedido do Rui para passar o controlo da Partilhada ao Bruno: sou
+     comproprietário, e faltamos o Bruno e eu */
+  const AO_BRUNO = (mexe) => Object.assign({ lote: 'LT2', from: p('RUI', 'Rui'), to: p('BRUNO', 'Bruno'), porResponder: true, at: 6,
+    houses: [{ id: 'H2', name: 'Partilhada', aceitaram: [], faltam: [p('BRUNO', 'Bruno'), p('EU', 'Eu')], euAceitei: false }] }, mexe);
+  /* o que pedi: a T2 Benfica (só o Bruno tem de aceitar) e a Loja (a Ana já aceitou, falta o Bruno) */
+  const ENVIADO = () => ({ lote: 'LT9', to: p('BRUNO', 'Bruno'), at: 4,
+    houses: [{ id: 'H1', name: 'T2 Benfica', aceitaram: [], faltam: [p('BRUNO', 'Bruno')] },
+      { id: 'H6', name: 'Loja', aceitaram: [p('ANA', 'Ana')], faltam: [p('BRUNO', 'Bruno')] }] });
   beforeEach(() => {
     esp = montar((st) => {
-      st.transfers = {
-        incoming: [PEDIDO()],
-        outgoing: [{ lote: 'LT9', to: { id: 'BRUNO', name: 'Bruno' }, houses: [{ id: 'H1', name: 'T2 Benfica' }, { id: 'H6', name: 'Loja' }], at: 4 }],
-      };
+      st.houses.find((h) => h.id === 'H2').participants.push('ANA', 'BRUNO');
+      st.transfers = { incoming: [PEDIDO()], outgoing: [ENVIADO()] };
     });
   });
+  // troca os pedidos que me chegaram, como um estado novo do servidor
+  const recebidos = (...l) => { app.CW.state.transfers.incoming = l; };
 
-  test('a ficha mostra o pendente com o Cancelar, que cancela o pedido todo e relê o estado', async () => {
+  test('a ficha mostra o pendente com quem já aceitou e quem falta, e o Cancelar, que cancela o pedido todo e relê o estado', async () => {
+    const loja = app.imvTrfNaFicha(app.prop('H6'));
+    assert.match(loja, /<b>Pediste para passar o controlo a Bruno<\/b>/);
+    assert.match(loja, /Já aceitou: Ana\. Falta responder: Bruno\. Até todos aceitarem, nada muda\. O pedido leva também T2 Benfica: cancelar cancela o pedido todo\./);
     const c = app.imvTrfNaFicha(app.prop('H1'));
-    assert.match(c, /<b>Pediste para passar o controlo a Bruno<\/b>/);
-    assert.match(c, /Até Bruno aceitar, nada muda\. O pedido leva também Loja: cancelar cancela o pedido todo\./);
+    assert.match(c, /Até Bruno aceitar, nada muda\. O pedido leva também Loja: cancelar cancela o pedido todo\./, 'só quem recebe tem de aceitar: sem lista');
     assert.deepEqual(acoes(c), ["notifTransfCancelar('LT9')"]);
     assert.match(c, /aria-label="Cancelar o pedido para passar o controlo"/);
     assert.match(app.propFicha('H1'), /imv-trf/, 'na ficha');
@@ -316,66 +355,153 @@ describe('o pendente e a resposta', () => {
     assert.equal(esp.pulls, 1);
   });
 
-  test('quem recebe: o pedido conta no sino, com «Ver» e «Recusar» e sem Aceitar à vista; o que eu pedi espera', () => {
+  test('quem recebe: o pedido conta no sino («… a ti»), com «Ver» e «Recusar» e sem Aceitar à vista; o que eu pedi espera com quem falta', () => {
     const ped = app.notifPedidos();
     assert.equal(ped.length, 1);
     assert.equal(ped[0].tipo, 'transf');
-    assert.equal(ped[0].titulo, 'Rui quer passar-te o controlo de 2 imóveis: Partilhada e Casa Z');
-    assert.equal(ped[0].sub, 'Se aceitares, passas a gerir os imóveis na app. As quotas e os comproprietários não mudam.');
+    assert.equal(ped[0].titulo, 'Rui quer passar o controlo de 2 imóveis a ti: Partilhada e Casa Z');
+    assert.equal(ped[0].sub, 'Se todos aceitarem, passas a gerir os imóveis na app. As quotas e os comproprietários não mudam.');
     assert.equal(app.notifConta(), 1);
     const c = app.atencaoCorpo().corpo;
     assert.ok(acoes(c).includes("notifTransfVer('LT1')") && acoes(c).includes("notifTransfRecusar('LT1')"), acoes(c).join(' | '));
     assert.ok(!acoes(c).some((a) => /Aceitar/.test(a)), 'aceitar só depois de ver');
     assert.match(c, /<h3>À espera de resposta<\/h3>/);
-    assert.match(c, /T2 Benfica e Loja · à espera de Bruno<\/p>\s*<p class="small">Pediste para passar o controlo\. Até Bruno aceitar, nada muda\.<\/p>/);
+    assert.match(c, /T2 Benfica e Loja · para Bruno<\/p>\s*<p class="small">Pediste para passar o controlo\. T2 Benfica — Falta responder: Bruno\. Loja — Já aceitou: Ana\. Falta responder: Bruno\. Até todos aceitarem, nada muda\.<\/p>/);
     assert.ok(acoes(c).includes("notifTransfCancelar('LT9')"));
-    assert.match(app.linhasDosPedidos(), /Rui quer passar-te o controlo de 2 imóveis: Partilhada e Casa Z[\s\S]*notifTransfVer\('LT1'\)">Ver<\/button>/);
+    assert.match(app.linhasDosPedidos(), /Rui quer passar o controlo de 2 imóveis a ti: Partilhada e Casa Z[\s\S]*notifTransfVer\('LT1'\)">Ver<\/button>/);
   });
 
-  test('o «Ver» diz o mesmo do lado de quem recebe: só muda o controlo, as quotas ficam, os colaboradores dele pelo nome, e Recusar e Aceitar', () => {
+  test('um comproprietário que não recebe também tem o pedido no sino: «Rui quer passar o controlo de Partilhada a Bruno», com quem falta', () => {
+    recebidos(AO_BRUNO());
+    const ped = app.notifPedidos();
+    assert.equal(ped.length, 1);
+    assert.equal(ped[0].titulo, 'Rui quer passar o controlo de Partilhada a Bruno');
+    assert.equal(ped[0].sub, 'Se todos aceitarem, Bruno passa a gerir o imóvel na app. As quotas e os comproprietários não mudam. Falta responder: Bruno e tu.');
+    assert.equal(app.notifConta(), 1, 'conta no crachá');
+    assert.match(app.linhasDosPedidos(), /Rui quer passar o controlo de Partilhada a Bruno[\s\S]*notifTransfVer\('LT2'\)">Ver<\/button>[\s\S]*notifTransfRecusar\('LT2'\)">Recusar<\/button>/);
+    const ficha = app.imvTrfNaFicha(app.prop('H2'));
+    assert.match(ficha, /<b>Rui quer passar o controlo deste imóvel a Bruno<\/b><span class="small">Falta responder: Bruno e tu\.<\/span>/);
+    assert.match(ficha, /class="btn sm primary"[^>]*data-click="notifTransfVer\('LT2'\)"/, 'falta-me responder: o Ver é o primário');
+  });
+
+  test('o «Ver» de quem recebe: só muda o controlo, as quotas ficam, os colaboradores dele pelo nome, quem aceitou e quem falta casa a casa, e Recusar e Aceitar', () => {
     app.notifTransfVer('LT1');
     const L = esp.modais[0];
     assert.equal(L.title, 'Pedido de Rui');
-    assert.match(L.corpo, /<p>Rui quer passar-te o controlo de <b>Partilhada<\/b> e <b>Casa Z<\/b>\.<\/p>/);
+    assert.match(L.corpo, /<p>Rui quer passar o controlo de <b>Partilhada<\/b> e <b>Casa Z<\/b> a ti\.<\/p>/);
     assert.match(L.corpo, /Só muda quem os controla na app: passas a gerir as partilhas, os colaboradores e o apagar\./);
     assert.match(L.corpo, /Rui fica com a quota que tem, tu ficas com a tua, e nada muda nas quotas, nos grupos nem nos outros comproprietários\./);
     assert.match(L.corpo, /O colaborador de Rui nestes imóveis, Tiago, continua com o mesmo cargo e passa a ser gerido por ti\./);
-    assert.match(L.corpo, /Nada muda até aceitares\./);
-    assert.doesNotMatch(L.corpo, /pt-quota|espaço de armazenamento|perdem o acesso/);
+    assert.match(L.corpo, /Cada imóvel passa quando todos os comproprietários dele aceitarem; se alguém recusar, o pedido cai nesse imóvel\./);
+    assert.match(L.corpo, /<ul class="trf-prog"><li><b>Partilhada<\/b> Já aceitou: Ana\. Falta a tua resposta\.<\/li><li><b>Casa Z<\/b> Falta responder: Zé e tu\.<\/li><\/ul>/);
+    assert.match(L.corpo, /Nada muda até todos aceitarem\./);
+    assert.doesNotMatch(L.corpo, /pt-quota|espaço de armazenamento|perdem o acesso|ligação/);
     assert.deepEqual(acoes(L.pe), ["notifTransfRecusar('LT1')", "notifTransfAceitar('LT1')"]);
     app.closeModal();
     app.notifTransfVer('NAO-HA');
     assert.equal(esp.toasts.at(-1), 'Este pedido já não está pendente.');
   });
 
-  test('aceitar fecha a folha e o sino, diz o que passei a gerir e o que ficou de fora, e relê', async () => {
+  test('o «Ver» de um comproprietário que não recebe: quem passa a gerir, que aceitar o liga a quem recebe, e o progresso', () => {
+    recebidos(AO_BRUNO());
+    // o Rui partilha a Partilhada comigo pela ligação entre nós; ao Bruno não estou ligado
+    app.CW.state.connections = [{ id: 'L9', status: 'accepted', peer: { id: 'RUI', name: 'Rui' }, myShares: [], peerShares: ['H2'] }];
+    app.notifTransfVer('LT2');
+    let L = esp.modais.at(-1);
+    assert.match(L.corpo, /<p>Rui quer passar o controlo de <b>Partilhada<\/b> a Bruno\.<\/p>/);
+    assert.match(L.corpo, /Só muda quem o controla na app: Bruno passa a gerir as partilhas, os colaboradores e o apagar\./);
+    assert.match(L.corpo, /O colaborador de Rui neste imóvel, Tiago, continua com o mesmo cargo e passa a ser gerido por Bruno\./);
+    assert.match(L.corpo, /Ainda não tens ligação a Bruno: a ligação fica feita quando aceitares\./);
+    assert.match(L.corpo, /Todos os comproprietários têm de aceitar; se alguém recusar, o pedido cai\.<\/p><p class="small trf-prog-um">Falta responder: Bruno e tu\.<\/p>/);
+    assert.deepEqual(acoes(L.pe), ["notifTransfRecusar('LT2')", "notifTransfAceitar('LT2')"]);
+    // já ligado ao Bruno: não há ligação a fazer
+    app.closeModal();
+    app.CW.state.connections.push({ id: 'L8', status: 'accepted', peer: { id: 'BRUNO', name: 'Bruno' }, myShares: [], peerShares: [] });
+    app.notifTransfVer('LT2');
+    L = esp.modais.at(-1);
+    assert.doesNotMatch(L.corpo, /ligação/);
+  });
+
+  test('depois de aceitar, o pedido espera pelos outros: fora dos pedidos por responder, em «À espera dos outros» com quem falta, e o «Ver» só com o Fechar', () => {
+    recebidos(AO_BRUNO({ porResponder: false,
+      houses: [{ id: 'H2', name: 'Partilhada', aceitaram: [p('EU', 'Eu')], faltam: [p('BRUNO', 'Bruno')], euAceitei: true }] }));
+    assert.equal(app.notifPedidos().length, 0, 'já respondi');
+    assert.equal(app.notifConta(), 0, 'não conta no crachá');
+    assert.equal(app.linhasDosPedidos(), '', 'nem no cartão dos pedidos');
+    const c = app.atencaoCorpo().corpo;
+    assert.match(c, /<h3>À espera dos outros<\/h3>/);
+    assert.match(c, /Rui quer passar o controlo de Partilhada a Bruno<\/p>\s*<p class="small">Já aceitaste\. Falta responder: Bruno\. Até todos aceitarem, nada muda\.<\/p>/);
+    assert.ok(acoes(c).includes("notifTransfVer('LT2')"));
+    assert.ok(!acoes(c).includes("notifTransfRecusar('LT2')"), 'já respondi: sem Recusar');
+    assert.match(app.atencaoCorpo().corpo, /À espera dos outros/);
+    app._atencaoFiltro = 'confirmar';
+    assert.doesNotMatch(app.atencaoCorpo().corpo, /À espera dos outros/, 'só nos filtros Tudo e Pedidos');
+    app._atencaoFiltro = '';
+    app.notifTransfVer('LT2');
+    const L = esp.modais.at(-1);
+    assert.match(L.corpo, /<p class="small trf-prog-um">Já aceitaste\. Falta responder: Bruno\.<\/p><p class="small">Nada muda até os outros aceitarem\.<\/p>/);
+    assert.deepEqual(acoes(L.pe), ['closeModal()']);
+    assert.match(L.pe, />Fechar<\/button>$/);
+    const ficha = app.imvTrfNaFicha(app.prop('H2'));
+    assert.match(ficha, /Já aceitaste\. Falta responder: Bruno\. Até os outros aceitarem, nada muda\./);
+    assert.match(ficha, /class="btn sm" data-toca="camada"[^>]*data-click="notifTransfVer\('LT2'\)"/, 'o Ver deixa de ser o primário');
+  });
+
+  test('todos aceitaram e a casa ficou por passar (quem faltava saiu): o pedido pede o Aceitar que conclui, sem Recusar', () => {
+    recebidos(AO_BRUNO({ houses: [{ id: 'H2', name: 'Partilhada', aceitaram: [p('BRUNO', 'Bruno'), p('EU', 'Eu')], faltam: [], euAceitei: true }] }));
+    assert.equal(app.notifTransfSoConcluir(app.CW.state.transfers.incoming[0]), true);
+    const ped = app.notifPedidos();
+    assert.equal(ped.length, 1, 'continua por responder');
+    assert.match(ped[0].sub, /Todos aceitaram; falta concluir\.$/);
+    const c = app.atencaoCorpo().corpo;
+    assert.ok(acoes(c).includes("notifTransfVer('LT2')") && !acoes(c).includes("notifTransfRecusar('LT2')"), acoes(c).join(' | '));
+    assert.doesNotMatch(app.linhasDosPedidos(), /notifTransfRecusar\('LT2'\)/);
+    app.notifTransfVer('LT2');
+    const L = esp.modais.at(-1);
+    assert.match(L.corpo, /<p class="small trf-prog-um">Todos aceitaram; falta concluir\.<\/p><p class="small">Todos aceitaram: aceita para concluir\.<\/p>/);
+    assert.deepEqual(acoes(L.pe), ['closeModal()', "notifTransfAceitar('LT2')"]);
+    assert.match(app.imvTrfNaFicha(app.prop('H2')), /<span class="small">Todos aceitaram; falta concluir\.<\/span>/);
+  });
+
+  test('aceitar a meio: fecha a folha e o sino, diz quem falta em cada casa, e relê', async () => {
     app.openModal('Pede atenção', '', '');
     app.notifTransfVer('LT1');
-    esp.resposta = { ok: true, aceites: ['H2'], falhadas: [{ houseId: 'HZ', error: 'Já não és comproprietário deste imóvel.' }] };
-    const p = app.notifTransfAceitar('LT1');
+    esp.resposta = { ok: true, aceites: [], aguardam: [{ houseId: 'H2', faltam: [p('BRUNO', 'Bruno')] }, { houseId: 'HZ', faltam: [p('ZE', 'Zé'), p('ANA', 'Ana')] }], falhadas: [] };
+    const pr = app.notifTransfAceitar('LT1');
     assert.equal(app.notifTransfAceitar('LT1'), undefined, 'o segundo toque não repete');
     assert.equal(app.modalStack.length, 0, 'a folha e o sino fecharam');
-    await p;
+    await pr;
     assert.deepEqual(esp.api.map((x) => x.m), ['POST /api/transfers/LT1/accept']);
-    assert.equal(esp.toasts.at(-1), 'Aceitaste: passas a gerir Partilhada. «Casa Z» ficou de fora: Já não és comproprietário deste imóvel.');
+    assert.equal(esp.toasts.at(-1), 'Aceitaste. Partilhada fica à espera de Bruno; Casa Z, de Zé e Ana.');
     assert.equal(esp.pulls, 1);
+  });
+
+  test('aceitar o último: diz que passou — a mim, ou a quem recebe — e o que ficou de fora', async () => {
+    esp.resposta = { ok: true, aceites: ['H2'], aguardam: [], falhadas: [{ houseId: 'HZ', error: 'Já não és comproprietário deste imóvel.' }] };
+    await app.notifTransfAceitar('LT1');
+    assert.equal(esp.toasts.at(-1), 'Aceitaste: passas a gerir Partilhada. «Casa Z» ficou de fora: Já não és comproprietário deste imóvel.');
+    recebidos(AO_BRUNO());
+    esp.resposta = { ok: true, aceites: ['H2'], aguardam: [], falhadas: [] };
+    await app.notifTransfAceitar('LT2');
+    assert.equal(esp.toasts.at(-1), 'Aceitaste: Bruno passou a gerir Partilhada.');
     assert.equal(app.notifTransfAvisoAceite(['A', 'B'], []), 'Aceitaste: passas a gerir 2 imóveis.');
+    assert.equal(app.notifTransfAvisoAceite(['A'], [], 'Bruno', [{ nome: 'B', faltam: ['Ana'] }]), 'Aceitaste: Bruno passou a gerir A. B fica à espera de Ana.');
     assert.equal(app.notifTransfAvisoAceite([], [{ nome: 'A', erro: '' }]), 'Não passaste a gerir nenhum imóvel. «A» ficou de fora: o pedido já não valia.');
   });
 
-  test('recusar não pergunta: vai ao servidor, avisa e relê; um erro diz a frase do servidor', async () => {
+  test('recusar não pergunta: vai ao servidor, diz que quem pediu e os outros são avisados, e relê; um erro diz a frase do servidor', async () => {
     await app.notifTransfRecusar('LT1');
     assert.deepEqual(esp.api.map((x) => x.m), ['POST /api/transfers/LT1/reject']);
-    assert.equal(esp.toasts.at(-1), 'Recusaste o pedido.');
+    assert.equal(esp.toasts.at(-1), 'Recusaste o pedido: nada muda. Quem pediu e os outros comproprietários são avisados.');
+    assert.equal(esp.pulls, 1);
     esp.falha = { caminho: '/reject', msg: 'Este pedido já não está pendente.' };
     await app.notifTransfRecusar('LT1');
     assert.equal(esp.toasts.at(-1), 'Este pedido já não está pendente.');
   });
 
-  test('na ficha de um imóvel cujo controlo me querem passar, o pedido com o «Ver»', () => {
+  test('na ficha de um imóvel cujo controlo me querem passar, o pedido («… a ti»), quem falta e o «Ver»', () => {
     const c = app.imvTrfNaFicha(app.prop('H2'));
-    assert.match(c, /<b>Rui quer passar-te o controlo deste imóvel<\/b>/);
-    assert.match(c, /Se aceitares, passas a gerir os imóveis na app\./);
+    assert.match(c, /<b>Rui quer passar o controlo deste imóvel a ti<\/b><span class="small">Já aceitou: Ana\. Falta a tua resposta\.<\/span>/);
     assert.deepEqual(acoes(c), ["notifTransfVer('LT1')"]);
   });
 });
@@ -393,8 +519,8 @@ describe('os avisos e o servidor de antes', () => {
       d('9', 'casa.sem_acesso', 1500), d('10', 'colab.removido', 1400), d('7', 'transf.aceite', 500), d('8', 'coisa.nova', 7000)];
     const l = app.notifSaidas();
     assert.deepEqual([...l].map((x) => x.titulo), [
-      'Bruno aceitou o controlo de T2 Benfica.', 'Bruno recusou o controlo de T2 Benfica.',
-      'Bruno cancelou o pedido para te passar o controlo de T2 Benfica.',
+      'Todos aceitaram: Bruno passou a gerir T2 Benfica.', 'Bruno recusou o pedido para passar o controlo de T2 Benfica.',
+      'Bruno cancelou o pedido para passar o controlo de T2 Benfica.',
       'Bruno passou a gerir Partilhada na app.', 'Bruno passou a gerir Casa X: continuas com o mesmo cargo.']);
     assert.equal(l[0].ir, "propView('H1')", 'o imóvel ainda está na base: abre a ficha');
     assert.equal(l[4].ir, '', 'o imóvel já não está na base: a linha não leva a lado nenhum');
@@ -414,6 +540,20 @@ describe('os avisos e o servidor de antes', () => {
     app.CW.state.transfers = { incoming: 'lixo', outgoing: null };
     assert.equal(app.notifTransfEnviadas().length, 0);
     assert.equal(app.pedidosParaResponder().transf.length, 0);
+  });
+
+  test('um pedido de um servidor sem os aceites (sem to, aceitaram, faltam nem porResponder) lê-se como antes: é para mim, e só eu aceito', () => {
+    app.CW.state.transfers = { incoming: [{ lote: 'LV', from: { id: 'RUI', name: 'Rui' }, houses: [{ id: 'H2', name: 'Partilhada' }], at: 1 }],
+      outgoing: [{ lote: 'LW', to: { id: 'BRUNO', name: 'Bruno' }, houses: [{ id: 'H1', name: 'T2 Benfica' }], at: 1 }] };
+    const ped = app.notifPedidos();
+    assert.equal(ped[0].titulo, 'Rui quer passar o controlo de Partilhada a ti');
+    assert.equal(ped[0].sub, 'Se aceitares, passas a gerir o imóvel na app. As quotas e os comproprietários não mudam.');
+    app.notifTransfVer('LV');
+    assert.match(esp.modais[0].corpo, /<p class="small">Nada muda até aceitares\.<\/p><\/div>$/);
+    assert.doesNotMatch(esp.modais[0].corpo, /trf-prog|Todos os comproprietários/);
+    assert.deepEqual(acoes(esp.modais[0].pe), ["notifTransfRecusar('LV')", "notifTransfAceitar('LV')"]);
+    assert.match(app.imvTrfNaFicha(app.prop('H1')), /Até Bruno aceitar, nada muda\./);
+    assert.match(app.atencaoCorpo().corpo, /T2 Benfica · para Bruno<\/p>\s*<p class="small">Pediste para passar o controlo\. Até Bruno aceitar, nada muda\.<\/p>/);
   });
 
   test('na seleção das Casas, o «Passar o controlo» só com algum que posso passar; abre a folha com os marcados', () => {
