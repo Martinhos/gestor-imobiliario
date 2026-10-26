@@ -44,7 +44,7 @@ function propModal(id){
 /* O corpo da ficha de um imóvel: o que se sabe sobre ele, para ler, como a
    prancheta M-Imovel — a capa (a primeira foto, ou o mosaico) com quantas
    fotos há, a morada e os selos, os donos com as quotas e quem deve a quem,
-   as ações rápidas, o cartão dos números, os por confirmar, os quartos ou o
+   o pedido pendente para passar o controlo (imvTrfNaFicha), as ações rápidas, o cartão dos números, os por confirmar, os quartos ou o
    contrato, as hipotecas, as despesas fixas, as tarefas, os dados registais
    e fiscais e o anúncio. O título é o da janela; o «Editar» é o do rodapé, e
    só existe para quem pode (propView).
@@ -69,6 +69,7 @@ function propFicha(id){
   return `<div class="imv-ficha">
     ${imvCapaDaFicha(p,v.file)}
     ${imvTopoDaFicha(p,v.ct,c)}
+    ${imvTrfNaFicha(p)}
     ${c.dono?'':imvNotaDeColaborador(p,c)}
     ${imvAcoesRapidas(p,c)}
     ${imvNumerosDaFicha(p,v)}
@@ -373,7 +374,10 @@ function verMovimentosDoImovel(pid){
    janela por cima — a lista das tarefas, a galeria, o plano de amortização —,
    e o paintThumbs sem raiz procurava a capa nessa janela, e a ficha ficava
    com o mosaico e «3 fotos». Na primeira pintura, dentro do abrirFicha, a
-   camada ainda não está guardada, mas aí a de cima é a própria ficha.
+   camada ainda não está guardada, mas aí a de cima é a própria ficha. O ⋯
+   da janela é o imvMenuDaFicha (o «Passar o controlo» e o «Apagar
+   imóvel»), lido de novo a cada repintura: um pedido para passar o controlo
+   pendente tira o «Passar o controlo» até ser cancelado ou respondido.
    Recebe: id — o id do imóvel.
    Devolve: nada — abre a janela. */
 function propView(id){
@@ -382,7 +386,7 @@ function propView(id){
   camada=abrirFicha({
     titulo:()=>{const x=prop(id);return x?x.name:'Imóvel'},
     corpo:()=>propFicha(id),
-    menu:()=>imvPossoApagar(id)?menu('fichaProp',[{label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${jsq(id)}')`}]):'',
+    menu:()=>{const it=imvMenuDaFicha(id);return it.length?menu('fichaProp',it):''},
     editar:pode(id,'house.edit')?{rotulo:'Editar',act:`propModal('${jsq(id)}')`}:null,
     depois:()=>{if(pode(id,'file.view')){const x=prop(id);if(x)paintThumbs(x.photos,camada&&camada.el?camada.el:undefined)}},
   });
@@ -907,7 +911,8 @@ function photoDrag(e,h,idx){
   // uma linha que ainda assentava do arrasto de antes fica já no sítio
   rows.forEach(photoAssentaPara);
   const step=(rows.length>1&&rows[1].offsetTop-rows[0].offsetTop)||row.offsetHeight+8||60;
-  _pd={idx,to:idx,row,rows,step,y0:e.clientY,id:e.pointerId};
+  const rol=photoRolante(row);
+  _pd={idx,to:idx,row,rows,step,y0:e.clientY,y:e.clientY,id:e.pointerId,rol,top0:photoRolou(rol),vel:0,raf:0};
   row.classList.add('drag');
   try{h.setPointerCapture(e.pointerId)}catch(x){}
   /* Um ouvinte só, no documento: com o ponteiro capturado o evento chega ao
@@ -928,7 +933,17 @@ function photoDrag(e,h,idx){
 function photoDragMove(e){
   if(!_pd||(e.pointerId!=null&&_pd.id!=null&&e.pointerId!==_pd.id))return;
   e.preventDefault();
-  const dy=e.clientY-_pd.y0;
+  _pd.y=e.clientY;
+  photoDragPintar();
+  photoDragRolagem();
+}
+/* Põe a linha agarrada debaixo do dedo e as outras a abrir o lugar. Conta
+   com o que a janela rolou desde que se pegou nela: a lista subiu com o
+   scroll, e a linha tem de descer outro tanto para ficar no dedo.
+   Devolve: nada — mexe nos transforms das linhas. */
+function photoDragPintar(){
+  if(!_pd)return;
+  const dy=_pd.y-_pd.y0+photoRolou(_pd.rol)-_pd.top0;
   _pd.row.style.transform=`translateY(${dy}px)`;
   const to=Math.max(0,Math.min(_pd.rows.length-1,_pd.idx+Math.round(dy/_pd.step)));
   if(to!==_pd.to){_pd.to=to;
@@ -938,6 +953,48 @@ function photoDragMove(e){
       else if(_pd.idx>to&&i>=to&&i<_pd.idx)sh=_pd.step;
       r.style.transform=sh?`translateY(${sh}px)`:'';});
   }
+}
+/* Quanto rolou a área que rola (0 sem ela).
+   Recebe: rol — o elemento que rola, ou null.
+   Devolve: o scrollTop, em px. */
+function photoRolou(rol){return rol&&typeof rol.scrollTop==='number'?rol.scrollTop:0}
+/* Quem rola por baixo da lista das fotos: a primeira caixa acima dela que
+   tem scroll (o corpo da janela), ou a página.
+   Recebe: el — a linha agarrada.
+   Devolve: o elemento que rola (ou null). */
+function photoRolante(el){
+  for(let p=el&&el.parentElement;p&&p!==document.body;p=p.parentElement){
+    const o=getComputedStyle(p).overflowY;
+    if((o==='auto'||o==='scroll')&&p.scrollHeight>p.clientHeight)return p;
+  }
+  return (el&&el.closest('.body'))||document.scrollingElement||null;
+}
+/* Perto da borda de cima ou de baixo da área que rola, ela rola sozinha,
+   mais depressa quanto mais perto, para a foto poder ir para um lugar que
+   não se vê (como o arrasto das tarefas, tarefas.js:tfArrastoRolagem). O
+   dedo decide: é uma rolagem e não uma animação, e por isso vale também com
+   o movimento reduzido.
+   Devolve: nada — arranca ou pára o passo da auto-rolagem. */
+function photoDragRolagem(){
+  const a=_pd;if(!a||!a.rol||typeof a.rol.getBoundingClientRect!=='function')return;
+  const r=a.rol===document.scrollingElement?{top:0,bottom:window.innerHeight}:a.rol.getBoundingClientRect();
+  const cima=Math.max(r.top,0),baixo=Math.min(r.bottom,window.innerHeight),zona=56;
+  let v=0;
+  if(a.y<cima+zona)v=-Math.ceil(14*(cima+zona-a.y)/zona);
+  else if(a.y>baixo-zona)v=Math.ceil(14*(a.y-(baixo-zona))/zona);
+  a.vel=Math.max(-18,Math.min(18,v));
+  if(a.vel&&!a.raf&&typeof requestAnimationFrame==='function')a.raf=requestAnimationFrame(photoDragPasso);
+}
+/* Um passo da auto-rolagem: rola, volta a pôr a foto debaixo do dedo, e
+   continua enquanto o dedo estiver na zona e houver para onde rolar.
+   Devolve: nada. */
+function photoDragPasso(){
+  const a=_pd;if(!a)return;a.raf=0;
+  if(!a.vel||!a.rol)return;
+  const antes=a.rol.scrollTop;a.rol.scrollTop+=a.vel;
+  if(a.rol.scrollTop===antes)return;
+  photoDragPintar();
+  a.raf=requestAnimationFrame(photoDragPasso);
 }
 /* Largar a foto, sem saltos. As outras linhas já estão, pelo transform, no
    sítio onde a troca as deixa: troca-se a linha no DOM e limpam-se os
@@ -953,6 +1010,7 @@ function photoDragMove(e){
 function photoDragEnd(){
   if(!_pd)return;
   const {idx,to,row,rows}=_pd;
+  if(_pd.raf&&typeof cancelAnimationFrame==='function')cancelAnimationFrame(_pd.raf);   // a auto-rolagem pára ao largar
   _pd=null;
   const list=row.parentNode;
   const de=row.getBoundingClientRect().top;   // onde o dedo a deixou
@@ -1160,4 +1218,286 @@ function imvSair(id){
       return Promise.resolve(typeof pullNow==='function'?pullNow(true):null).catch(()=>{}).then(()=>render());
     },e=>toast((e&&e.message)||'Não deu para sair deste imóvel. Tenta outra vez.'));
   });
+}
+
+/* ================= PASSAR O CONTROLO =================
+   Um imóvel em compropriedade é de todos os donos, e um só o controla na
+   app: quem o criou, que gere as partilhas, os colaboradores e o apagar.
+   Quem o criou pode passar esse controlo a um dos comproprietários, e só
+   isso muda: quem pediu continua comproprietário com a quota que tem, as
+   quotas, os grupos e os outros comproprietários ficam como estão, e os
+   colaboradores dele nesse imóvel ficam com o mesmo cargo e passam a ser
+   geridos por quem recebe. O pedido vai ao servidor
+   (cloud/partilha.js:CW.pedirTransferencia) e chega a todos os
+   comproprietários, que têm todos de aceitar (quem recebe incluído); cada
+   casa passa quando todos os dela aceitarem, e nada muda até lá; até lá
+   cancelo-o na ficha (imvTrfNaFicha) ou no sino. Os avisos e as respostas
+   vivem em notificacoes.js (notifTransf…). */
+
+/* A folha de passar o controlo aberta: os imóveis que vão (ids), quem
+   recebe (para), o que corre depois de pedir (aoPedir) e se há um pedido a
+   meio (enviando). null sem folha. */
+let _trf=null;
+
+/* O ⋯ da ficha do imóvel: «Passar o controlo» a quem o pode passar
+   (imvPossoTransferir), e «Apagar imóvel» (imvPossoApagar), por esta
+   ordem — o que destrói fica no fim, vermelho.
+   Recebe: id — o id do imóvel.
+   Devolve: os itens do menu() (array; vazio sem nenhum). */
+function imvMenuDaFicha(id){
+  const q=jsq(id),it=[];
+  if(imvPossoTransferir(id))it.push({label:'Passar o controlo',icon:'swap',toca:'camada',act:`imvTransferir('${q}')`});
+  if(imvPossoApagar(id))it.push({label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${q}')`});
+  return it;
+}
+/* Passar o controlo existe aqui? Com sessão, com a nuvem carregada (o
+   CW.pedirTransferencia de cloud/partilha.js) e com um servidor que já sabe
+   destes pedidos (notificacoes.js:notifTransfSabe — um de antes não manda
+   o campo, e a ação levava a um 404).
+   Devolve: true se a ação se pode oferecer. */
+function imvTrfDisponivel(){return !!meuId()&&typeof (window.CW&&CW.pedirTransferencia)==='function'&&notifTransfSabe()}
+/* Posso passar o controlo deste imóvel? Só quem o criou (souCriador), com a
+   ação disponível (imvTrfDisponivel), sem um pedido pendente dele (um só por
+   casa: o pendente cancela-se primeiro) e com pelo menos um comproprietário
+   a quem o passar (imvTrfDestinos).
+   Recebe: id — o id do imóvel.
+   Devolve: true se sim. */
+function imvPossoTransferir(id){return !!prop(id)&&souCriador(id)&&imvTrfDisponivel()&&!notifTransfDaCasa('outgoing',id)&&imvTrfDestinos([id]).length>0}
+/* A quem posso passar o controlo destes imóveis: aos comproprietários deles
+   — os participantes que o servidor manda (p.ownerIds: por uma partilha
+   numa ligação ou por um grupo; nunca um colaborador) menos eu —, e com
+   vários imóveis só aos que são comproprietários de todos (o servidor
+   recusa os outros). Pelo nome da ficha (nomeUtilizador), por ordem
+   alfabética.
+   Recebe: ids — os ids dos imóveis (array).
+   Devolve: array de {id, nome}. */
+function imvTrfDestinos(ids){
+  const eu=meuId(),ps=(ids||[]).map(prop).filter(Boolean);
+  if(!ps.length)return [];
+  const deCada=ps.map(p=>(p.ownerIds||[]).filter(u=>u&&u!==eu));
+  return deCada[0].filter((u,i,l)=>l.indexOf(u)===i&&deCada.every(d=>d.indexOf(u)>-1))
+    .map(u=>({id:u,nome:nomeUtilizador(u)})).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+}
+/* O que passar o controlo faz, dito antes de pedir: que só muda quem
+   controla o imóvel na app (quem recebe passa a gerir as partilhas, os
+   colaboradores e o apagar); que continuo comproprietário com a minha quota
+   (dita, com um imóvel só) e que nada muda nas quotas, nos grupos nem nos
+   outros comproprietários; os meus colaboradores nesses imóveis, pelo nome
+   (notificacoes.js:notifTransfColaboradores), que ficam com o mesmo cargo,
+   passam a ser geridos por quem recebe e são avisados; e que todos os
+   comproprietários têm de aceitar, pelo nome (imvTrfQuemAceita; com vários
+   imóveis, casa a casa), que até lá nada muda e que posso cancelar. Com um
+   só comproprietário, «Bruno tem de aceitar». Escreve-se de novo quando
+   muda quem recebe.
+   Devolve: a frase (HTML, nomes escapados), ou '' sem folha. */
+function imvTrfFrase(){
+  if(!_trf)return '';
+  const ps=_trf.ids.map(prop).filter(Boolean),um=ps.length===1,eu=meuId();
+  const nome=_trf.para?esc(nomeUtilizador(_trf.para)):'',quem=nome?'<b>'+nome+'</b>':'quem escolheres';
+  const minha=um?sharesOf(ps[0])[eu]:null;
+  const f=[`Só muda quem controla ${listaE(ps.map(p=>'<b>'+esc(p.name||'Sem nome')+'</b>'))} na app: ${quem} passa a gerir as partilhas, os colaboradores e o apagar.`,
+    `Continuas comproprietário com ${um?'a tua quota'+(minha!=null?' ('+imvQuotaTexto(minha)+')':''):'as tuas quotas'}, e nada muda nas quotas, nos grupos nem nos outros comproprietários.`];
+  const colabs=notifTransfColaboradores(_trf.ids);
+  if(colabs.length){
+    const n=listaE(colabs.map(esc)),onde=um?'neste imóvel':'nestes imóveis',por=nome||'quem receber';
+    f.push(colabs.length===1?`O teu colaborador ${n} continua ${onde} com o mesmo cargo e passa a ser gerido por ${por}; é avisado.`
+      :`Os teus colaboradores ${n} continuam ${onde} com o mesmo cargo e passam a ser geridos por ${por}; são avisados.`);
+  }
+  const todos=imvTrfQuemAceita(_trf.ids,_trf.para).map(esc),cancela=`podes cancelar o pedido na ficha ${um?'do imóvel':'de cada imóvel'}.`;
+  if(todos.length<2)f.push(`${todos[0]||nome||'Quem receber'} tem de aceitar: até lá nada muda, e ${cancela}`);
+  else if(um)f.push(`Todos os comproprietários têm de aceitar (${listaE(todos)}): até lá nada muda, e ${cancela}`);
+  else f.push(`Cada imóvel passa quando todos os comproprietários dele aceitarem (${listaE(todos)}): até lá nada muda nele, e ${cancela}`);
+  return f.join(' ');
+}
+/* Quem tem de aceitar o pedido: os comproprietários destes imóveis — os
+   participantes que o servidor manda (p.ownerIds) menos eu, de todos os
+   imóveis juntos —, quem recebe primeiro e os outros por ordem alfabética.
+   Recebe: ids — os ids dos imóveis (array); para — o id de quem recebe
+   ('' antes de escolher).
+   Devolve: array de nomes (texto, por escapar). */
+function imvTrfQuemAceita(ids,para){
+  const eu=meuId(),us=[];
+  (ids||[]).map(prop).filter(Boolean).forEach(p=>(p.ownerIds||[]).forEach(u=>{if(u&&u!==eu&&us.indexOf(u)<0)us.push(u)}));
+  const outros=us.filter(u=>u!==para).map(nomeUtilizador).sort((a,b)=>a.localeCompare(b,'pt'));
+  return (para&&us.indexOf(para)>-1?[nomeUtilizador(para)]:[]).concat(outros);
+}
+/* Os imóveis que ficam de fora de passar o controlo, e porquê, uma frase
+   por razão: os que não criei, os que já têm um pedido pendente e os que
+   não têm comproprietários.
+   Recebe: fora — {naoMeus, pend, semComp} (arrays de ids); nome — função
+   que escreve o nome de um imóvel (a negrito na folha, simples num aviso).
+   Devolve: array de frases. */
+function imvTrfFora(fora,nome){
+  const lista=ids=>listaE(ids.map(id=>nome(propName(id)||'Sem nome')));
+  const frase=(ids,um,varios)=>ids.length?[lista(ids)+(ids.length===1?um:varios)]:[];
+  return frase(fora.naoMeus,' fica de fora: só quem criou um imóvel lhe passa o controlo.',' ficam de fora: só quem criou um imóvel lhe passa o controlo.')
+    .concat(frase(fora.pend,' fica de fora: já tem um pedido pendente.',' ficam de fora: já têm pedidos pendentes.'),
+      frase(fora.semComp,' fica de fora: não tem comproprietários.',' ficam de fora: não têm comproprietários.'));
+}
+/* O corpo da folha de passar o controlo: os que ficaram de fora e porquê
+   (imvTrfFora); «Para quem», obrigatório, com os comproprietários
+   (imvTrfDestinos); por baixo, escondida até o servidor responder, a linha
+   de quem fica ligado a quem recebe ao aceitar (imvTrfVerificar); e a frase
+   do que acontece (imvTrfFrase), que o leitor de ecrã ouve mudar.
+   Recebe: destinos — a lista de imvTrfDestinos; fora — as frases de
+   imvTrfFora (HTML).
+   Devolve: o HTML (texto). */
+function imvTrfCorpo(destinos,fora){
+  const um=_trf.ids.length===1;
+  const ops=[{v:'',label:'Escolhe um comproprietário'}].concat(destinos.map(d=>({v:d.id,label:d.nome})));
+  return `<div class="form trf-form">
+    ${fora.length?`<div class="hint">${fora.join(' ')}</div>`:''}
+    <label>Para quem <span class="req">*</span>${sel('trf_para',_trf.para,ops,'imvTrfMudou','rascunho')}</label>
+    <p class="hint">Só podes passar o controlo a um comproprietário ${um?'deste imóvel':'de todos estes imóveis'}.</p>
+    <p class="trf-liga u-d-none" id="trfLiga" role="status"><span class="trf-liga-ic" aria-hidden="true">${ic('users',16)}</span><span id="trfLigaTxt"></span></p>
+    <p class="trf-frase" id="trfFrase" aria-live="polite">${imvTrfFrase()}</p>
+  </div>`;
+}
+/* Escolheu-se quem recebe: a frase diz o nome (o «Para quem» fica, não
+   perde o foco).
+   Devolve: nada. */
+function imvTrfMudou(){
+  if(!_trf)return;
+  _trf.para=val('trf_para')||'';
+  const f=document.getElementById('trfFrase');if(f)f.innerHTML=imvTrfFrase();
+  imvTrfVerificar();
+}
+/* A frase de quem fica ligado a quem recebe ao aceitar: «Carlos ainda não
+   tem ligação a Bruno: a ligação fica feita quando aceitar.» (ou «Carlos e
+   Duarte ainda não têm …, quando aceitarem.»).
+   Recebe: para — o nome de quem recebe; nomes — os de quem ainda não está
+   ligado.
+   Devolve: a frase (texto), ou '' sem ninguém. */
+function imvTrfFraseLiga(para,nomes){
+  if(!nomes.length)return '';
+  const um=nomes.length===1;
+  return listaE(nomes)+(um?' ainda não tem':' ainda não têm')+' ligação a '+para+': a ligação fica feita quando '+(um?'aceitar.':'aceitarem.');
+}
+/* Pergunta ao servidor quem, dos comproprietários que chegam às casas por
+   uma partilha, ainda não está ligado a quem foi escolhido
+   (cloud/partilha.js:CW.verificarTransferencia): ao aceitar, fica ligado.
+   Di-lo por baixo do «Para quem» numa linha informativa, que não trava o
+   pedido (imvTrfFraseLiga). Uma resposta de uma escolha que já mudou não
+   conta; sem rede, não se diz nada.
+   Devolve: nada. */
+function imvTrfVerificar(){
+  const t=_trf;
+  const mostra=txt=>{
+    const e=document.getElementById('trfLiga'),s=document.getElementById('trfLigaTxt');if(!e||!s)return;
+    s.textContent=txt;e.classList.toggle('u-d-none',!txt);
+  };
+  if(!t)return;
+  t.semLigacao=[];mostra('');
+  const f=window.CW&&CW.verificarTransferencia;
+  if(!t.para||typeof f!=='function')return;
+  const para=t.para;
+  Promise.resolve(f({houseIds:t.ids.slice(),toUserId:para})).then(r=>{
+    if(_trf!==t||t.para!==para)return;
+    t.semLigacao=(r&&Array.isArray(r.semLigacao))?r.semLigacao:[];
+    mostra(imvTrfFraseLiga(nomeUtilizador(para),t.semLigacao.map(x=>String(x&&x.name||'').trim()||'Sem nome')));
+  },()=>{});
+}
+/* Sem ninguém que seja comproprietário de todos os imóveis escolhidos, a
+   folha leva às Pessoas › Proprietários, onde se partilham as casas.
+   Devolve: nada — fecha as janelas e muda de separador. */
+function imvTrfLigar(){closeAllModals();go('owners')}
+/* A folha «Passar o controlo» (um imóvel) ou «Passar o controlo de N
+   imóveis» (da seleção das Casas): o ⋯ da ficha e a barra da seleção
+   abrem-na. Vão só os que criei, sem um pedido pendente e com
+   comproprietários; os outros dizem-se no cimo (imvTrfFora), e se não
+   sobrar nenhum diz-se porquê num aviso, sem folha. Com vários e ninguém
+   que seja comproprietário de todos, a folha diz que só se passa a um
+   comproprietário e como partilhar. O rodapé é Cancelar e «Enviar pedido»
+   (imvTrfPedir).
+   Recebe: ids — o id de um imóvel, ou um array deles; aoPedir (opcional) —
+   função chamada depois de o pedido seguir (a seleção sai da seleção).
+   Devolve: nada — abre a folha (ou avisa). */
+function imvTransferir(ids,aoPedir){
+  const ps=(Array.isArray(ids)?ids:[ids]).map(prop).filter(Boolean);
+  if(!ps.length)return;
+  if(!imvTrfDisponivel())return toast('Passar o controlo precisa de sessão e do servidor. Tenta outra vez daqui a pouco.');
+  const meus=ps.filter(p=>souCriador(p.id)),pend=meus.filter(p=>notifTransfDaCasa('outgoing',p.id));
+  const semComp=meus.filter(p=>pend.indexOf(p)<0&&!imvTrfDestinos([p.id]).length);
+  const vao=meus.filter(p=>pend.indexOf(p)<0&&semComp.indexOf(p)<0);
+  const id=l=>l.map(p=>p.id),fora={naoMeus:id(ps.filter(p=>meus.indexOf(p)<0)),pend:id(pend),semComp:id(semComp)};
+  const partilhar=servicoLigado('owners')?' em Pessoas › Proprietários':'';
+  if(!vao.length){
+    if(ps.length>1)return toast(imvTrfFora(fora,n=>n).join(' '),{ms:6000});
+    return toast(fora.naoMeus.length?'Só quem criou o imóvel lhe passa o controlo.':fora.pend.length?'Este imóvel já tem um pedido pendente.'
+      :'Só passas o controlo a um comproprietário, e este imóvel ainda não tem nenhum. Partilha-o primeiro'+partilhar+'.',{ms:6000});
+  }
+  const destinos=imvTrfDestinos(id(vao));
+  _trf={ids:id(vao),para:destinos.length===1?destinos[0].id:'',aoPedir:typeof aoPedir==='function'?aoPedir:null,enviando:false};
+  const titulo=vao.length===1?'Passar o controlo':'Passar o controlo de '+vao.length+' imóveis';
+  const cancelar='<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button>';
+  let L;
+  if(!destinos.length){
+    L=openModal(titulo,`<div class="form trf-form"><p>Só passas o controlo a um comproprietário, e ninguém é comproprietário de todos estes imóveis.</p>
+      <p class="hint">Escolhe só imóveis que partilhas com a mesma pessoa, ou partilha-os com ela primeiro${partilhar}.</p></div>`,
+      cancelar+(partilhar?'<button type="button" class="btn primary" data-toca="ecra" data-click="imvTrfLigar()">Ir para os proprietários</button>':''));
+  }else{
+    L=openModal(titulo,imvTrfCorpo(destinos,imvTrfFora(fora,n=>'<b>'+esc(n)+'</b>')),cancelar+'<button type="button" class="btn primary" data-toca="dados" data-click="imvTrfPedir()">Enviar pedido</button>');
+  }
+  if(L){L.trfFolha=true;L.aoFechar=()=>{_trf=null}}
+  if(_trf&&_trf.para)imvTrfVerificar();   // com um só comproprietário, vem escolhido: pergunta já
+}
+/* «Enviar pedido»: valida quem recebe (o erro no «Para quem») e pede ao
+   servidor (CW.pedirTransferencia) — sem esperar por ligações: quem não
+   estiver ligado a quem recebe fica ligado ao aceitar. Com a resposta, a
+   folha fecha, o aviso diz a quem foi o pedido (todos os comproprietários)
+   e que até todos aceitarem se cancela na ficha, e o estado relê-se: a
+   ficha passa a mostrar o pendente. Um erro do servidor diz-se junto do
+   «Para quem» quando é sobre ele (já não é comproprietário), ou num aviso,
+   e a folha fica. Um segundo toque com o pedido a meio não repete.
+   Devolve: nada. */
+function imvTrfPedir(){
+  if(!_trf||_trf.enviando)return;
+  if(!_trf.para)return falhaCampo('selb_trf_para','Escolhe a quem passas o controlo.');
+  const f=window.CW&&CW.pedirTransferencia;
+  if(typeof f!=='function')return toast('Passar o controlo precisa de sessão e do servidor. Tenta outra vez daqui a pouco.');
+  const t=_trf,todos=imvTrfQuemAceita(t.ids,t.para),um=t.ids.length===1;
+  const ate=todos.length<2?'Até aceitar':todos.length===2?'Até os dois aceitarem':'Até todos aceitarem';
+  t.enviando=true;
+  Promise.resolve(f({houseIds:t.ids.slice(),toUserId:t.para})).then(()=>{
+    t.enviando=false;
+    if(modalTop()&&modalTop().trfFolha)closeModal();
+    toast('Pedido enviado a '+listaE(todos.length?todos:[nomeUtilizador(t.para)])+'. '+ate+', nada muda: podes cancelá-lo na ficha '+(um?'do imóvel.':'de cada imóvel.'),{ms:5000});
+    if(t.aoPedir)try{t.aoPedir()}catch(e){}
+    return Promise.resolve(typeof pullNow==='function'?pullNow(true):null).catch(()=>{}).then(()=>render());
+  },e=>{
+    t.enviando=false;
+    const msg=(e&&e.message)||'Não deu para enviar o pedido. Tenta outra vez.';
+    if(/comproprietário/.test(msg))return falhaCampo('selb_trf_para',msg);
+    toast(msg);
+  });
+}
+/* O pedido pendente na ficha do imóvel: a quem pedi para passar o
+   controlo, quem já aceitou e quem falta neste imóvel
+   (notificacoes.js:notifTransfProgresso), que até todos aceitarem nada
+   muda, as outras casas do mesmo pedido (cancelar cancela o pedido todo) e
+   o Cancelar (notificacoes.js:notifTransfCancelar). Num imóvel de que sou
+   comproprietário com um pedido que me chegou (o controlo vai para mim ou
+   para outro), o pedido, o progresso e o «Ver»
+   (notificacoes.js:notifTransfVer) — primário enquanto me falta responder.
+   Recebe: p — o imóvel.
+   Devolve: o HTML do cartão, ou ''. */
+function imvTrfNaFicha(p){
+  if(!p||!meuId())return '';
+  const nomes=(t,fora)=>(t.houses||[]).filter(h=>h&&h.id!==fora).map(h=>esc(String(h.name||'').trim()||propName(h.id)||'Sem nome'));
+  const daCasa=t=>(t.houses||[]).find(h=>h&&h.id===p.id)||null;
+  const cartao=(titulo,sub,botao)=>`<div class="card imv-trf"><span class="imv-trf-ic" aria-hidden="true">${ic('swap',18)}</span><div class="imv-trf-txt"><b>${titulo}</b><span class="small">${sub}</span></div>${botao}</div>`;
+  const env=notifTransfDaCasa('outgoing',p.id);
+  if(env){
+    const quem=esc(notifTransfNome(env.to)),outras=nomes(env,p.id),h=daCasa(env),varios=notifTransfVarios(h);
+    const prog=varios?esc(notifTransfProgresso(h))+' ':'';
+    return cartao('Pediste para passar o controlo a '+quem,
+      prog+(varios?'Até todos aceitarem, nada muda.':'Até '+quem+' aceitar, nada muda.')+(outras.length?' O pedido leva também '+listaE(outras)+': cancelar cancela o pedido todo.':''),
+      `<button type="button" class="btn sm" data-toca="dados" aria-label="Cancelar o pedido para passar o controlo" data-click="notifTransfCancelar('${jsq(env.lote)}')">Cancelar</button>`);
+  }
+  const rec=notifTransfDaCasa('incoming',p.id);
+  if(!rec)return '';
+  const h=daCasa(rec),responder=rec.porResponder!==false;
+  const sub=notifTransfVarios(h)?notifTransfProgresso(h)+(responder?'':' Até os outros aceitarem, nada muda.'):notifTransfSub(rec);
+  return cartao(esc(notifTransfNome(rec.from))+' quer passar o controlo deste imóvel '+esc(notifTransfAQuem(rec)),esc(sub),
+    `<button type="button" class="btn sm${responder?' primary':''}" data-toca="camada" aria-label="Ver o pedido para passar o controlo" data-click="notifTransfVer('${jsq(rec.lote)}')">Ver</button>`);
 }

@@ -55,6 +55,11 @@ confere que cada uma aponta para código que existe.
 - 2026-10-25 · A casa partilhada funde em vez de gravar por cima, e as tarefas guardam-se de uma vez
 - 2026-10-25 · Os registos fundem como a casa
 - 2026-10-25 · As miniaturas sobem com as fotos
+- 2026-10-25 · Transferir a propriedade é um pedido que o outro aceita
+- 2026-10-25 · As fotos a descer mostram que estão a chegar
+- 2026-10-25 · Passar o controlo, não a propriedade
+- 2026-10-26 · Passar o controlo pede a ligação a todos os comproprietários
+- 2026-10-26 · Passar o controlo precisa do sim de todos os comproprietários
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2267,3 +2272,100 @@ Dois defeitos achados pelo caminho e corrigidos nos meus ficheiros:
   `subirPendentes` subia os primeiros vinte anexos da conta inteiros a cada envio aceite (dados
   móveis gastos sempre nos mesmos, e o vigésimo primeiro nunca revisto): agora só o que a
   sessão ainda não tratou.
+
+## 2026-10-25 · Transferir a propriedade é um pedido que o outro aceita
+
+O Martinho pediu para transferir a propriedade de uma ou várias casas a outra pessoa, e respondeu: em cada transferência escolhe se sai ou continua como comproprietário (e então as quotas vão no pedido); quem recebe tem de aceitar; só para quem já está ligado; os colaboradores do dono antigo saem dessa casa.
+
+A transferência é um pedido e não uma ação: muda o dono, as quotas, quem tem
+acesso e para onde contam os anexos de outra pessoa, e por isso precisa do
+sim dela, e até lá não muda nada (o Martinho: «quem recebe tem de aceitar»).
+O Aceitar vive na folha do «Ver», e não na linha do sino como o dos pedidos
+de partilha, porque aceitar um imóvel é ficar responsável por ele — lê-se
+antes. Só aparecem as ligações aceites porque o servidor só aceita essas (um
+comproprietário só por um grupo não tem ligação). Cancelar não pergunta:
+não destrói nada e pode-se pedir outra vez.
+
+- O acesso de um comproprietário por ligação é uma partilha do criador
+  nessa ligação (`shares.owner_id` = o criador, a outra ponta vê). Uma
+  partilha numa ligação A–C não pode dizer «o B partilha com o C»: com o B
+  como criador, o C só continua pela ligação B–C. Sem ela, o C perde o acesso
+  e é avisado — deixar a partilha velha com `owner_id` = A dava ao A, que já
+  não é o dono, uma partilha que o PUT das partilhas dele recusa com 403.
+- Os grupos: num grupo partilhado cada membro só põe casas suas; uma casa de
+  quem não é membro não fica lá.
+- A decisão faz parte do lote do aceitar, e o trigger recusa uma linha já
+  decidida: um cancelar que chegue entre a leitura e a escrita desfaz o
+  aceitar dessa casa, e vice-versa.
+
+## 2026-10-25 · As fotos a descer mostram que estão a chegar
+
+O pedido do Martinho (2026-10-25): «Quando adiciono fotos, a outra pessoa vê que
+há x fotos, mas não vê nenhuma até terminar de descarregar. Quero que haja um
+feedback. Tipo um donut que roda ou assim.» As caixas vazias com o fundo --chip
+pareciam fotos que não existiam; e no carrossel o toque numa foto não fazia nada
+até a foto inteira descer.
+
+## 2026-10-25 · Passar o controlo, não a propriedade
+
+O Martinho corrigiu a transferência (2026-10-25): «A casa continua a ser de
+todos, só o controlo na aplicação passa para outra pessoa». Por isso a ação
+chama-se «Passar o controlo» e não «Transferir propriedade»: a propriedade
+(as quotas) não muda, e o nome antigo dizia o contrário. Só se passa a um
+comproprietário (é a correção dele), e com vários imóveis a quem o é de
+todos — o servidor recusa os outros, e oferecê-los era levar a um erro. A
+frase diz o que fica igual (a minha quota, as quotas, os grupos, os outros
+comproprietários, o cargo dos colaboradores) porque é isso que a pessoa
+precisa de ler para não ter medo de carregar no botão. Continua a ser um
+pedido que o outro aceita (resposta dele: «quem recebe continua a ter de
+aceitar»), porque quem recebe passa a responder pelas partilhas e pelos
+colaboradores.
+
+- O Martinho corrigiu a transferência de e71935f: só se passa a quem já é
+  comproprietário, e só muda quem controla a casa na app; grupos, outros
+  proprietários e quotas ficam. Os colaboradores do criador ficam com o mesmo
+  cargo e passam a ser geridos pelo novo; quem recebe continua a aceitar.
+- Mudar o `owner_id` das partilhas existentes para o novo criador partia o
+  acesso: numa ligação A–C, uma partilha de B daria a casa às duas pontas
+  (B não é nenhuma). Por isso as partilhas ficam com quem as deu, e só se
+  mudam as que se podem mudar sem perder ninguém (a da ligação entre os dois,
+  e as de terceiros também ligados a quem recebe).
+- Mudar as partilhas de terceiros para as ligações de quem recebe, quando as
+  há, é o que deixa o novo criador gerir com quem a casa está partilhada.
+- O `added_by` passa ao novo criador mesmo que não seja membro do grupo:
+  com o de quem pediu, o cliente dele (que só manda as casas dele no
+  conjunto) tirava a casa do grupo ao regravar.
+
+## 2026-10-26 · Passar o controlo pede a ligação a todos os comproprietários
+
+Uma partilha pertence à ligação onde está. Quando a Alice passava o controlo de uma casa ao Bruno, o Carlos — comproprietário pela ligação Alice–Carlos, sem ligação ao Bruno — continuava a ver a casa por uma partilha que já não era de quem a geria: o Bruno não a podia gerir nem remover, a Alice também não, e se a Alice cortasse a ligação ao Carlos ele perdia a casa sem ninguém dar por isso, com a quota a ficar nas contas. Havia três saídas: pedir as ligações primeiro, criá-las sozinho ao aceitar (uma ligação que ninguém pediu), ou desligar a compropriedade das ligações (a mais limpa e a maior: muda a partilha em toda a app). O Martinho escolheu pedir as ligações primeiro: só se passa o controlo se todos os comproprietários que chegam por uma partilha estiverem ligados a quem recebe, e a folha diz quem falta antes de se enviar. Assim as partilhas mudam-se todas para as ligações de quem recebe, e ele gere-as como as outras.
+
+## 2026-10-26 · Passar o controlo precisa do sim de todos os comproprietários
+
+A casa é de todos: mudar quem a gere na app mexe com todos os que a têm (quem
+lhes gere a partilha, os colaboradores). O Martinho quis que todos os
+comproprietários aceitem, e não só quem recebe, e trocou a regra da ligação
+pedida antes: aceitar liga a quem recebe quem lhe chegava por uma partilha
+sem estar ligado, e a partilha dessa pessoa muda-se para essa ligação ao
+passar. Uma recusa faz cair a casa (e avisa quem pediu e os outros); num lote
+com várias casas, cada casa passa quando os DELA aceitarem. Os sins guardam-se
+por cima do que se leu, como os das propostas de quotas, para dois
+comproprietários a aceitar ao mesmo tempo não perderem um sim nem passarem a
+casa duas vezes (a passagem continua presa à revisão da casa e ao trigger da
+0021). Quem chega só por um grupo não ganha ligação: o grupo não muda ao
+passar, e uma ligação que ninguém pediu só se cria onde é precisa para gerir
+a partilha.
+
+O Martinho (2026-10-26): «Melhor, quero que todos os comproprietarios
+aceitem a transferência». Passar o controlo muda quem gere as partilhas, os
+colaboradores e o apagar de uma casa que é de todos, por isso todos dizem
+sim — e uma recusa faz cair o pedido nessa casa. A folha diz os nomes de
+quem tem de aceitar porque é o que a pessoa precisa de saber antes de
+enviar (quem vai receber o pedido no sino). A falta de ligações deixou de
+travar o pedido (resposta dele: «Aceitar liga-os»): quem não está ligado a
+quem recebe fica ligado ao aceitar; por isso a linha que o diz é
+informativa, não um erro — não há nada a corrigir antes de enviar. O pedido
+diz a quem vai («… a Bruno» / «… a ti») porque agora chega a quem não
+recebe. Depois de aceitar o pedido sai dos pedidos por responder (já não
+pede nada) e fica à espera dos outros, com quem falta, para quem aceitou
+saber porque ainda não passou.

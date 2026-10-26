@@ -360,10 +360,15 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
 .thumb img{width:100%;height:76px;object-fit:cover;display:block}
 .thumb .nm{font-size:11px;padding:6px 7px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .thumb input.nm{color:var(--ink);font-weight:500;background:var(--field)}
-.prow{display:flex;align-items:center;gap:8px;min-width:0}
+.prow{display:flex;align-items:flex-start;gap:8px;min-width:0}
 .prow .pth{width:64px;height:52px;border-radius:10px;background:var(--chip);overflow:hidden;flex:0 0 64px;cursor:pointer;position:relative}
 .prow .capa{position:absolute;left:4px;bottom:4px;z-index:2;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:1px 6px;border-radius:999px;letter-spacing:.03em}
 .prow .pnm{flex:1;min-width:0}
+/* o nome inteiro, a partir da linha seguinte: cresce até três linhas e
+   depois rola dentro (componentes.js:fotoNomeEscrito mantém-no numa linha só) */
+.prow textarea.pnm{min-height:46px;max-height:calc(4.05em + 24px);resize:none;overflow-y:auto;overflow-wrap:anywhere}
+/* com o nome numa linha, o puxador e o apagar ficam ao meio dela */
+.prow>.pgrab,.prow>.btn{margin-top:3px}
 .pgrab{width:34px;height:40px;border:1px solid var(--line);background:var(--field);border-radius:9px;display:grid;place-items:center;color:var(--muted);cursor:grab;flex:0 0 34px;touch-action:none}
 .prow.drag{position:relative;z-index:5;box-shadow:0 10px 26px rgba(0,0,0,.25);background:var(--card);border-radius:12px}
 .prow{transition:transform var(--rapido) var(--curva)}
@@ -4661,3 +4666,54 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 /* === fim: registos sem perdas (folha 2.1) === */
 /* === miniaturas na nuvem (folha 2.2) === */
 /* === fim: miniaturas na nuvem (folha 2.2) === */
+/* === transferir propriedade (folha 1.2) === */
+/* A folha de passar o controlo (imovel.js:imvTransferir): o «Para quem» e,
+   por baixo, a frase do que acontece num bloco calmo (os nomes das casas
+   longos partem-se, sem empurrar a folha para o lado). */
+.trf-frase{margin:0;padding:12px 14px;border-radius:14px;background:var(--chip);color:var(--ink);font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+/* o «Ver» de quem recebe (notificacoes.js:notifTransfVer) */
+.trf-ver p{margin:0;overflow-wrap:anywhere}
+/* a transferência pendente na ficha do imóvel (imovel.js:imvTrfNaFicha): o
+   ícone, o que se passa e o Cancelar (ou o Ver), que desce para baixo do
+   texto quando não cabe ao lado */
+.imv-trf{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;padding:12px 14px}
+.imv-trf-ic{flex:0 0 auto;display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--accent-soft);color:var(--accent-text)}
+.imv-trf-txt{flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.imv-trf-txt b{font-weight:600;overflow-wrap:anywhere}
+@media(pointer:coarse){.imv-trf .btn.sm{min-height:44px}}
+/* quem fica ligado a quem recebe o controlo ao aceitar
+   (imovel.js:imvTrfVerificar): uma linha informativa por baixo do «Para
+   quem», com o ícone das pessoas na cor de destaque — não trava o pedido,
+   por isso não tem a cor dos erros */
+.trf-liga{display:flex;align-items:flex-start;gap:8px;margin:0;color:var(--muted);font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+.trf-liga-ic{flex:0 0 auto;display:grid;place-items:center;margin-top:1px;color:var(--accent-text)}
+.trf-liga > span:last-child{min-width:0}
+/* quem já aceitou e quem falta, casa a casa, no «Ver»
+   (notificacoes.js:notifTransfVer) */
+.trf-prog{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.trf-prog li{margin:0;padding:8px 12px;border-radius:12px;background:var(--chip);color:var(--ink);font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+.trf-prog li b{font-weight:600;margin-right:4px}
+.trf-ver .trf-prog-um{padding:8px 12px;border-radius:12px;background:var(--chip);color:var(--ink)}
+/* === fim: transferir propriedade (folha 1.2) === */
+/* === fotos a carregar (folha 1.3) === */
+/* O anel que roda enquanto uma foto desce (componentes.js:anelEnquanto põe
+   a classe a-carregar só depois de 150 ms de espera, e tira-a quando a foto
+   chega ou falha): nas caixas das miniaturas (th_<id>: a .pth do formulário,
+   as capas, a galeria, o registo do contrato) e nos lugares do carrossel
+   (.fc-slide, por cima da miniatura esticada). É a roda da espera da casa
+   (.roda: o @keyframes roda, a --volta, linear — movimento constante), com o
+   traço no --line2 e o arco no --accent: o estado vê-se pela cor da FRENTE
+   (o contorno), que o escuro forçado do Samsung não apaga. Assenta num disco
+   do --card com uma auréola de 2px, para se ler em cima do mosaico e de uma
+   fotografia. Tamanho fixo e fora do fluxo (absolute): não empurra nada.
+   Entra a desvanecer (veuEntra, --rapido, --curva) e sai de uma vez, quando a
+   imagem o tapa. Sem movimento fica parado — a regra geral do
+   prefers-reduced-motion apaga a animação, e esta repete-o aqui. */
+[id^="th_"].a-carregar{position:relative}
+.a-carregar::after{content:"";position:absolute;inset:0;z-index:1;width:22px;height:22px;margin:auto;box-sizing:border-box;border-radius:50%;
+  border:2.5px solid var(--line2);border-top-color:var(--accent);background:var(--card);box-shadow:0 0 0 2px var(--card);pointer-events:none;
+  animation:roda var(--volta) linear infinite,veuEntra var(--rapido) var(--curva)}
+/* na caixa de 64×52 do formulário o anel sobe, para não ficar por baixo da etiqueta «capa» */
+.prow .pth.a-carregar::after{margin-top:6px}
+@media(prefers-reduced-motion:reduce){.a-carregar::after{animation:none}}
+/* === fim: fotos a carregar (folha 1.3) === */

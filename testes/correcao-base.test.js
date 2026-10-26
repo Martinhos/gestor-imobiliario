@@ -338,7 +338,8 @@ describe('os ids que entram de fora', () => {
     const com = (nome, i, v) => chamadas.some((c) => c.nome === nome && c.args[i] === v);
     assert.ok(com('openMeta', 0, MAU) && com('openMeta', 0, MAU2));
     assert.ok(com('delFileConfirm', 1, MAU) && com('delFileConfirm', 1, MAU2));
-    assert.ok(com('livePhotoName', 0, MAU2));
+    // o nome da foto é uma caixa de texto: o input chama o fotoNomeEscrito com o id
+    assert.ok(com('fotoNomeEscrito', 0, MAU2));
     /* o onPick deixou de ser o nome interpolado no atributo e passa como TEXTO
        ao escolherFicheirosDoBloco, que o resolve pelo funcaoDaApp: prende-se o
        nome e o argumento extra, que antes só se via depois de resolvido */

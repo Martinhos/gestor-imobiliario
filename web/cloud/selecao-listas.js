@@ -6,7 +6,9 @@
    sentido aí — e apagar um imóvel arrasta os contratos e movimentos dele, por
    isso a confirmação diz os números e o Anular repõe tudo. Dos imóveis que
    não criei (colaborados ou partilhados comigo) apagar é sair, no servidor e
-   sem Anular, na mesma confirmação (selLApagarImoveis). As opções de um só
+   sem Anular, na mesma confirmação (selLApagarImoveis). Com passar o
+   controlo disponível, a barra dos imóveis tem também o «Passar o controlo»,
+   que abre a folha com os que criei (CW.selLTransferir). As opções de um só
    ficam no ⋯ da ficha (e na folha do lpMenu, com o «Selecionar vários»).
 
    Os inquilinos apagam-se aos vários com as regras do pessoas.js:delPerson
@@ -400,7 +402,7 @@ function selLDecorar() {
   if (f && f.getAttribute('data-sel-tipo') !== tipo) { f.remove(); f = null; }
   if (!f) {
     f = document.createElement('div');
-    f.className = 'sel-fundo' + (SEL_ACOES[tipo] ? ' sel-l-duas' : '');
+    f.className = 'sel-fundo' + (selLComAcoes(tipo) ? ' sel-l-duas' : '');
     f.setAttribute('data-sel-tipo', tipo);
     // a mesma barra dos movimentos (estilos.css:.sel-fundo): no ecrã largo, azul-noite a flutuar no fundo
     f.setAttribute('role', 'toolbar');
@@ -418,16 +420,20 @@ function selLDecorar() {
    o leitor de ecrã ouve), e as ações vão para uma segunda linha no telemóvel
    (a .sel-l-quebra; estilos.css:.sel-l-duas) — numa só não cabiam a 375px.
    Nos planeados, o Silenciar ou o Reativar (#selLMudo, que o selLPintarMudo
-   acerta); nas visitas, o Realizada e o Falta (selLPintarVisitas). As ações
+   acerta); nas visitas, o Realizada e o Falta (selLPintarVisitas). Nos
+   imóveis, com passar o controlo disponível (selLComAcoes), o «Passar o
+   controlo» (#selLTransferir, que o selLPintarTransferir acerta). As ações
    com data-sel-l-precisa desligam-se sem nada marcado (selLPintar).
    Recebe: tipo — 'prop', 'ct', 'ten', 'vis', 'rec' ou 'tpl'.
    Devolve: o HTML de dentro da barra (texto). */
 function selLBarraHtml(tipo) {
   var cancelar = '<button type="button" class="btn" data-toca="modo" data-click="CW.selLSair()">' + ic('x', 15) + ' Cancelar</button>';
   var apagar = '<button type="button" class="btn danger" data-sel-l-precisa data-toca="dados" data-risco="destroi" data-click="CW.selLApagar()">' + ic('trash', 15) + ' Apagar</button>';
-  if (!SEL_ACOES[tipo]) return cancelar + '<b id="selLConta" class="u-fx-1 u-ta-center"></b>' + apagar;
+  if (!selLComAcoes(tipo)) return cancelar + '<b id="selLConta" class="u-fx-1 u-ta-center"></b>' + apagar;
   var acoes = tipo === 'rec'
     ? '<button type="button" class="btn" id="selLMudo" hidden data-toca="dados" data-click="CW.selLMudo()"></button>'
+    : tipo === 'prop'
+    ? '<button type="button" class="btn" id="selLTransferir" data-sel-l-precisa data-toca="camada" data-click="CW.selLTransferir()">' + ic('swap', 15) + ' Passar o controlo</button>'
     : '<button type="button" class="btn" id="selLRealizada" data-sel-l-precisa data-toca="dados" data-click="CW.selLVisEstado(\'realizada\')">' + ic('check', 15) + ' Realizada</button>' +
       '<button type="button" class="btn" id="selLFalta" data-sel-l-precisa data-toca="dados" data-click="CW.selLVisEstado(\'faltou\')">' + ic('x', 15) + ' Falta</button>';
   return cancelar +
@@ -465,7 +471,57 @@ function selLPintar() {
   [].slice.call(document.querySelectorAll('.sel-fundo [data-sel-l-precisa]')).forEach(function (b) { b.disabled = !n; });
   if (CW.selL.tipo === 'rec') selLPintarMudo();
   if (CW.selL.tipo === 'vis') selLPintarVisitas();
+  if (CW.selL.tipo === 'prop') selLPintarTransferir();
 }
+
+/* Se a barra de um tipo tem mais ações do que o Apagar — e por isso a
+   contagem com a razão por cima e as ações por baixo (estilos.css:.sel-l-duas):
+   os planeados e as visitas sempre (SEL_ACOES); os imóveis quando passar o
+   controlo existe aqui (imovel.js:imvTrfDisponivel — com sessão e um
+   servidor que já sabe dele).
+   Recebe: tipo — o tipo em seleção.
+   Devolve: true ou false. */
+function selLComAcoes(tipo) {
+  if (SEL_ACOES[tipo]) return true;
+  return tipo === 'prop' && servicoLigado('properties') && imvTrfDisponivel();
+}
+
+/* Dos imóveis marcados, aqueles cujo controlo posso passar (os que criei,
+   com comproprietários e sem um pedido pendente —
+   imovel.js:imvPossoTransferir) e quantos ficam de fora.
+   Recebe: ids — os ids marcados (array).
+   Devolve: {vao, fora} — arrays de ids. */
+function selLTransferiveis(ids) {
+  var vao = [], fora = [];
+  ids.forEach(function (id) { (servicoLigado('properties') && imvPossoTransferir(id) ? vao : fora).push(id); });
+  return { vao: vao, fora: fora };
+}
+
+/* O «Passar o controlo» da barra dos imóveis, conforme os marcados
+   (selLTransferiveis): ligado com pelo menos um cujo controlo posso
+   passar; a razão dita ao lado da contagem quando algum fica de fora
+   («Passar o controlo deixa 1 de fora.»), ou quando nenhum vai.
+   Devolve: nada — mexe na barra já posta. */
+function selLPintarTransferir() {
+  var b = document.getElementById('selLTransferir'), pq = document.getElementById('selLPorque');
+  var ids = Object.keys(CW.selL.ids), r = selLTransferiveis(ids);
+  if (b) b.disabled = !r.vao.length;
+  if (!pq) return;
+  if (!ids.length || !r.fora.length) { pq.textContent = ''; return; }
+  pq.textContent = !r.vao.length ? 'Só passas o controlo dos que criaste, com comproprietários e sem um pedido pendente.'
+    : 'Passar o controlo deixa ' + r.fora.length + ' de fora.';
+}
+
+/* Passar o controlo dos imóveis marcados: abre a folha com eles
+   (imovel.js:imvTransferir, que deixa de fora — e diz — os que não criei,
+   os que já têm um pedido pendente e os que não têm comproprietários). Com
+   o pedido feito, sai da seleção.
+   Devolve: nada. */
+CW.selLTransferir = function () {
+  var ids = Object.keys(CW.selL.ids);
+  if (!ids.length) return toast('Não está nada selecionado.');
+  if (servicoLigado('properties')) imvTransferir(ids, function () { CW.selLSair(); });
+};
 
 /* Se as visitas marcadas se podem marcar como realizadas ou como falta: só
    quando são todas agendadas e as posso alterar (as regras do

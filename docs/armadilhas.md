@@ -333,3 +333,25 @@ Pôr o object URL de uma foto de câmara numa caixa de 64×52 faz o browser
 descodificá-la inteira (uns 48 MB numa de 12 MP), e dez fotos punham o
 formulário do imóvel a arrastar-se. As miniaturas em memória são as de 220px
 (componentes.js:fazerMiniatura).
+
+## O criador de uma casa pode mudar
+Antes da 0021, `houses.owner_id` era
+para sempre; agora um pedido aceite para passar o controlo muda-o. Os
+participantes não mudam com ele: uma partilha dá a casa à ponta da ligação
+que não é o `owner_id` DELA, e por isso uma partilha pode ser de quem já não é
+o criador (herdada) e tem de continuar a valer. Código que apague ou regrave
+partilhas «minhas» numa casa (o PUT das partilhas, sair da casa) não pode
+levar as herdadas; código que leia `shared_group_houses.added_by` ou
+`collaborators.owner_id` como dono tem de ser acertado em
+casas.js:aceitarCasaUmaVez. `files.owner_id` é de quem carregou e não muda.
+
+## Um pedido para passar o controlo pode ficar com o sim de todos e por passar
+Quem tem de aceitar conta-se no momento (os participantes menos
+quem pediu), e só passa quando alguém aceita. Se o último que faltava deixa
+de ser comproprietário por um caminho que não chama
+casas.js:passarSeTodosAceitaram (hoje: os grupos e o apagar a conta), o
+pedido fica pendente sem ninguém por responder — o /api/state acende o
+`porResponder` desses e o aceitar passa-o, mas um caminho novo que tire
+alguém de uma casa deve chamar passarSeTodosAceitaram com as casas dela. E um
+sim de quem chega por partilha só vale com a ligação a quem recebe
+(casas.js:progressoDaCasa): não contes os `approvals` à mão.

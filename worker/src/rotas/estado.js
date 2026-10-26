@@ -19,7 +19,16 @@
 // não recebe as casas nem o grupo, só o seu pedido em `outgoing`. Quem saiu
 // de uma casa que lhe chegava por um grupo (house_exits, migração 0019) não
 // a recebe por esse grupo nem por outro, e sai dos `participants` dela; os
-// avisos de quem saiu das minhas casas vêm em `departures`.
+// avisos de quem saiu das minhas casas vêm em `departures`, junto com os das
+// transferências do controlo (migração 0021: pedida, aceite, recusada,
+// cancelada, o dono novo aos comproprietários e aos colaboradores). Os pedidos
+// pendentes vêm em `transfers`: os lotes em que sou comproprietário de uma
+// casa (todos os comproprietários aceitam, migração 0022), com quem já aceitou
+// e quem falta, e os que fiz, com o mesmo progresso. Em cada
+// ligação, `myShares` são as MINHAS casas que partilho nela: uma partilha
+// minha de uma casa que já é de outra pessoa (herdada de quando a
+// controlava) não vem — continua a dar a casa ao outro, que a vê em
+// `peerShares`.
 //
 // Por cima disto, os serviços desligados da conta (lib/servicos.js): a lista
 // sai em `servicos.desligados`, os registos dos kinds desligados e os
@@ -39,6 +48,7 @@ import {
   listarCargos, listarColaboradores, listarConvites, estadoDaLigacao, pedidosDePartilha,
 } from './colaboradores.js';
 import { listarGrupos, pedidosDeGrupo } from './grupos.js';
+import { listarTransferencias } from './casas.js';
 
 // Quantos dias de avisos de quem saiu (house_events) o estado manda.
 const DIAS_DOS_AVISOS = 90;
@@ -73,7 +83,7 @@ function seloIgual(cabecalho, selo) {
    Devolve: a Response JSON com o estado completo (me, profiles, proposals,
    houses, records, userRecords, connections, people, roles, collaborators,
    invites, shareLink, shareRequests, sharedGroups, sharedGroupRequests,
-   departures, servicos) e o ETag, ou o
+   departures, transfers, servicos) e o ETag, ou o
    304 sem corpo, no GET /api/state; nada (undefined) noutros caminhos. */
 export async function rotasEstado(c) {
   const { env, request, ctx, path, method, me } = c;
@@ -218,7 +228,8 @@ export async function rotasEstado(c) {
 
     const shares = (
       await env.DB.prepare(
-        `SELECT s.connection_id, s.owner_id, s.house_id FROM shares s
+        `SELECT s.connection_id, s.owner_id, s.house_id, h.owner_id AS house_owner FROM shares s
+           LEFT JOIN houses h ON h.id = s.house_id AND h.deleted = 0
           WHERE s.connection_id IN (
             SELECT id FROM connections WHERE requester_id = ?1 OR target_id = ?1
           )`
@@ -362,9 +373,10 @@ export async function rotasEstado(c) {
         pedidosDeGrupo(env, me.id),
       ]);
 
-    /* quem saiu das casas onde fico (house_events, migração 0019): os meus
-       avisos dos últimos 90 dias, os mais recentes primeiro, até 50. Os de
-       um colaborador que saiu não vêm com os Colaboradores desligados — a
+    /* quem saiu das casas onde fico (house_events, migração 0019) e os
+       avisos das transferências (0021, os mesmos campos): os meus dos
+       últimos 90 dias, os mais recentes primeiro, até 50. Os de um
+       colaborador que saiu não vêm com os Colaboradores desligados — a
        condição vai na consulta, para o limite contar só os que saem */
     const departures = (
       await env.DB.prepare(
@@ -383,6 +395,10 @@ export async function rotasEstado(c) {
       actorName: e.actor_name,
       at: e.created_at,
     }));
+
+    // as transferências pendentes, as que tenho de aceitar (sou
+    // comproprietário) e as que pedi (rotas/casas.js:listarTransferencias)
+    const transfers = await listarTransferencias(env, me.id);
 
     const estado = {
       me: { id: me.id, email: me.email, name: me.name },
@@ -429,6 +445,7 @@ export async function rotasEstado(c) {
       sharedGroups,
       sharedGroupRequests,
       departures,
+      transfers,
       userRecords: userRecords.filter((r) => !userKindsOff.has(r.kind)).map((r) => ({
         kind: r.kind,
         id: r.id,
@@ -449,7 +466,8 @@ export async function rotasEstado(c) {
             name: iAmRequester ? c.target_name : c.requester_name,
             email: showEmail ? (iAmRequester ? c.target_email : c.requester_email) : null,
           },
-          myShares: shares.filter((s) => s.connection_id === c.id && s.owner_id === me.id).map((s) => s.house_id),
+          myShares: shares.filter((s) => s.connection_id === c.id && s.owner_id === me.id
+            && (s.house_owner == null || s.house_owner === me.id)).map((s) => s.house_id),
           peerShares: shares.filter((s) => s.connection_id === c.id && s.owner_id !== me.id).map((s) => s.house_id),
         };
       }),

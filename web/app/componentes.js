@@ -424,7 +424,7 @@ function fileBlock(label,list,inputId,onPick,delFn,opts){
     ${list.length?(photos?
       `<div class="list u-g-8px">${list.map((f,i)=>`<div class="prow">
          <div class="pth pcover" id="th_${esc(f.id)}" data-click="openMeta('${jsq(f.id)}',true)">${i===0?'<span class="capa">capa</span>':''}</div>
-         <input class="pnm" id="fn_${esc(f.id)}" value="${esc(f.name)}" placeholder="Ex: Sala de estar" aria-label="Nome da fotografia (opcional)" autocomplete="off" data-input="livePhotoName('${jsq(f.id)}',this.value)">
+         <textarea class="pnm" id="fn_${esc(f.id)}" rows="1" placeholder="Ex: Sala de estar" aria-label="Nome da fotografia (opcional)" autocomplete="off" enterkeyhint="done" data-keydown="fotoNomeTecla(event)" data-input="fotoNomeEscrito('${jsq(f.id)}',this)">${esc(f.name)}</textarea>
          ${opts.move?`<button type="button" class="pgrab" aria-label="Arrastar para reordenar" data-pointerdown="photoDrag(event,this,${i})">${ic('grip',16)}</button>`:''}
          <button type="button" class="btn sm danger u-fx-0-0-auto u-minw-40px u-minh-40px u-ml-8px" aria-label="Apagar a fotografia" data-click="delFileConfirm('${jsq(delFn)}','${jsq(f.id)}','fotografia')">${ic('trash',14)}</button></div>`).join('')}</div>`
       :`<div class="list u-g-8px u-mb-9px">${list.map(f=>`
@@ -471,7 +471,8 @@ function openMeta(fid,doFormulario){openFileMeta(allFileMetas().concat(pendingMe
    delas em caixas de 64×52 punham o telemóvel a arrastar-se a cada repinte
    e a cada letra escrita no nome. Até a miniatura existir, a caixa fica com
    o marcador de sempre (o fundo --chip da .pth, como as que ainda vêm do
-   IndexedDB). Fazem-se no máximo MINIATURAS_A_PAR de cada vez — dez fotos
+   IndexedDB); se a espera passar de ANEL_ESPERA_MS, o marcador ganha o anel
+   que roda (anelEnquanto). Fazem-se no máximo MINIATURAS_A_PAR de cada vez — dez fotos
    escolhidas juntas eram dez descodificações inteiras ao mesmo tempo —, e um
    pedido que já está a caminho serve quem pedir a mesma foto entretanto (o
    takeFiles começa-a, o repaintProp pede-a logo a seguir). */
@@ -563,19 +564,99 @@ function makeThumb(blob){
    Recebe: list — lista de metadados {id,…} das fotos a pintar (pode vir vazia ou
    null); root (opcional) — o elemento onde procurar as caixas th_<id> (por
    omissão, a janela de cima; sem janela, o documento).
-   Devolve: nada — insere os <img> nas caixas à medida que as miniaturas chegam. */
+   Devolve: nada — insere os <img> nas caixas à medida que as miniaturas
+   chegam; a caixa de uma que demora mostra o anel até lá (anelEnquanto). */
 function paintThumbs(list,root){
   root=root||(modalTop()?modalTop().el:document);
   (list||[]).forEach(f=>{
     const box=root.querySelector('[id="th_'+f.id+'"]');if(!box)return;
-    thumbSrc(f.id)
-      .then(src=>{if(src&&box){const o=box.querySelector('img');if(o)o.remove();box.insertAdjacentHTML('afterbegin',`<img src="${src}" alt="">`)}}).catch(()=>{});
+    // a que já está em memória entra já: nem temporizador, nem anel
+    const ja=!!thumbCache[f.id],p=thumbSrc(f.id);
+    if(!ja){
+      /* um repinte a meio da espera (a sincronização, o nome escrito) troca a
+         caixa por uma nova: a espera conta desde o primeiro pedido, e a caixa
+         nova já com o limiar passado ganha o anel logo, sem o apagar 150 ms */
+      if(!_anelDesde[f.id]){const id=f.id,limpa=()=>{delete _anelDesde[id]};_anelDesde[id]=Date.now();p.then(limpa,limpa)}
+      anelEnquanto(box,p,_anelDesde[f.id]);
+    }
+    p.then(src=>{if(src&&box){const o=box.querySelector('img');if(o)o.remove();box.insertAdjacentHTML('afterbegin',`<img src="${src}" alt="">`)}}).catch(()=>{});
   });
+}
+/* A espera que se vê. Uma miniatura que já está no aparelho (o thumbCache,
+   o tn_ do IndexedDB) chega em poucos milissegundos; uma que desce do
+   servidor (cloud/anexos.js:baixarMiniatura) — ou uma foto inteira, no
+   carrossel (anexos.js:fotoPintar) — pode levar segundos, e a caixa ficava
+   vazia sem dizer nada. Só passados ANEL_ESPERA_MS sem ela é que a caixa
+   ganha a classe a-carregar, que desenha o anel que roda
+   (estilos.css:.a-carregar::after): o que vem do aparelho não pisca. O anel
+   vive exatamente o que a promessa viver — sai quando ela se cumpre e
+   quando falha (fica o fundo de sempre). Não é um tempo de animação, é o
+   limiar a partir do qual uma espera se nota. */
+const ANEL_ESPERA_MS=150;
+/* id da foto -> quando o paintThumbs a viu pela primeira vez à espera (sai
+   quando a espera acaba) */
+const _anelDesde={};
+/* Mostra o anel numa caixa enquanto uma promessa não se cumpre, se ela
+   demorar mais de ANEL_ESPERA_MS. Cada caixa só ouve a espera mais recente:
+   um lugar do carrossel que passou a outra foto não perde o anel quando a
+   foto de antes chega. Enquanto roda, a caixa diz aria-busy (o leitor de
+   ecrã sabe que o conteúdo está a chegar).
+   Recebe: el — a caixa (th_<id>, ou um .fc-slide do carrossel); sem
+   classList, não faz nada; p — a promessa da espera; desde (opcional) — o
+   Date.now() de quando a espera começou (por omissão, agora): com o limiar
+   já passado, o anel entra logo.
+   Devolve: a mesma promessa p. */
+function anelEnquanto(el,p,desde){
+  if(!el||!el.classList||!p||typeof p.then!=='function')return p;
+  const vez={};el._anel=vez;
+  const liga=()=>{
+    if(el._anel!==vez)return;
+    el.classList.add('a-carregar');
+    if(el.setAttribute)el.setAttribute('aria-busy','true');
+  };
+  const falta=ANEL_ESPERA_MS-(desde?Date.now()-desde:0);
+  const t=falta>0?setTimeout(liga,falta):(liga(),0);
+  const fim=()=>{
+    clearTimeout(t);
+    if(el._anel!==vez)return;
+    el._anel=null;el.classList.remove('a-carregar');
+    if(el.removeAttribute)el.removeAttribute('aria-busy');
+  };
+  p.then(fim,fim);
+  return p;
 }
 // guarda o nome da foto no pForm à medida que se escreve, para não se perder num repinte
 // Recebe: id — o id da foto em pForm.photos; v — o nome tal como está escrito no campo.
 // Devolve: nada — atualiza o name da foto em memória.
-function livePhotoName(id,v){const f=(window.pForm&&pForm.photos||[]).find(x=>x.id===id);if(f)f.name=v}
+function livePhotoName(id,v){
+  // o pForm é um let do imovel.js: não vive no window (o window.pForm de antes era sempre undefined)
+  const pf=typeof pForm!=='undefined'?pForm:null;
+  const f=(pf&&pf.photos||[]).find(x=>x.id===id);if(f)f.name=v;
+}
+/* O nome de uma foto é uma caixa de texto para se ver inteiro (quebra de
+   linha, até três), mas continua a ser uma linha só: o que se cola com
+   quebras fica com espaços, e o cursor fica onde estava.
+   Recebe: id — o id da foto; el — a caixa do nome (.pnm).
+   Devolve: nada — acerta o texto da caixa e guarda o nome (livePhotoName). */
+function fotoNomeEscrito(id,el){
+  if(!el)return;
+  const v=String(el.value||'');
+  if(/[\r\n]/.test(v)){
+    const fim=el.selectionEnd,antes=v.slice(0,fim).replace(/\s*[\r\n]+\s*/g,' ');
+    el.value=v.replace(/\s*[\r\n]+\s*/g,' ');
+    try{el.setSelectionRange(antes.length,antes.length)}catch(e){}
+  }
+  livePhotoName(id,el.value);
+}
+/* O Enter no nome de uma foto não abre uma linha nova: acaba a escrita (o
+   teclado do telemóvel fecha-se, como no «Concluído» dele).
+   Recebe: ev — o evento do teclado.
+   Devolve: nada. */
+function fotoNomeTecla(ev){
+  if(!ev||ev.key!=='Enter'||ev.isComposing)return;
+  ev.preventDefault();
+  try{ev.target.blur()}catch(e){}
+}
 
 /* ================= O TECLADO DO TELEMÓVEL E O CAMPO COM O FOCO =================
    O teclado sobe por cima da página e pode tapar o campo onde se vai

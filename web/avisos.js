@@ -27,6 +27,31 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 42,
+    data: '2026-10-25',
+    titulo: 'Passar o controlo, e as fotos a chegar',
+    seccoes: [
+      {
+        titulo: 'Passar o controlo de um imóvel',
+        afeta: ['imoveis', 'partilha'],
+        itens: [
+          'Num imóvel que criaste e que tem comproprietários, podes passar o controlo na app a um deles: no ⋯ da ficha, ou selecionando vários nas Casas. Ele passa a gerir as partilhas, os colaboradores e o apagar; tu continuas comproprietário, e nada muda nas quotas, nos grupos nem nos outros comproprietários.',
+          'Todos os comproprietários têm de aceitar, no sino: o imóvel só passa quando todos aceitarem, e uma recusa faz cair o pedido. Até lá nada muda e podes cancelar. Os teus colaboradores nesse imóvel ficam com o mesmo cargo e passam a ser geridos por quem recebe.',
+          'Quem ainda não estiver ligado a quem recebe fica ligado a ele ao aceitar.',
+        ],
+      },
+      {
+        titulo: 'Fotos',
+        afeta: ['anexos'],
+        itens: [
+          'O nome de cada foto vê-se inteiro: um nome comprido passa para a linha de baixo, até três linhas.',
+          'A arrastar uma foto para a reordenar, perto do topo ou do fundo do ecrã a janela rola sozinha, para a levares a qualquer lugar da lista.',
+          'Enquanto as fotos descem noutro telemóvel, cada uma mostra um círculo a rodar até aparecer.',
+        ],
+      },
+    ],
+  },
+  {
     v: 41,
     data: '2026-10-25',
     titulo: 'Nada se perde numa casa partilhada',
