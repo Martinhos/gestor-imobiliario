@@ -191,14 +191,55 @@ describe('pedir para passar o controlo', () => {
     app.imvTrfPedir();
     app.imvTrfPedir();
     await espera();
-    assert.equal(esp.api.length, 1);
-    assert.equal(esp.api[0].m, 'POST /api/transfers');
-    assert.deepEqual(simples(esp.api[0].corpo), { houseIds: ['H1'], toUserId: 'BRUNO' });
+    const pedidos = esp.api.filter((x) => x.m === 'POST /api/transfers');
+    assert.equal(pedidos.length, 1);
+    assert.deepEqual(simples(pedidos[0].corpo), { houseIds: ['H1'], toUserId: 'BRUNO' });
     assert.equal(app.modalStack.length, 0, 'a folha fechou');
     assert.equal(esp.toasts.at(-1), 'Pedido enviado a Bruno. Até aceitar, nada muda: podes cancelá-lo na ficha do imóvel.');
     assert.equal(esp.pulls, 1);
     assert.equal(depois, 1, 'o que corre depois de pedir (a seleção sai)');
     assert.equal(app._trf, null);
+  });
+
+test('escolher quem recebe pergunta ao servidor; quem falta ligar diz-se por baixo, e o pedido não segue', async () => {
+    const falta = { classList: { u: true, toggle(c, on) { this.u = on; } }, textContent: '' };
+    const getEl = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'trfFalta' ? falta : getEl.call(app.document, id));
+    esp.resposta = { ok: true, semLigacao: [{ id: 'CARLA', name: 'Carla' }, { id: 'DUARTE', name: 'Duarte' }] };
+    app.imvTransferir('H1');
+    await espera();
+    const chk = esp.api.filter((x) => x.m === 'POST /api/transfers/check');
+    assert.equal(chk.length, 1, 'com o Bruno já escolhido, pergunta logo');
+    assert.deepEqual(simples(chk[0].corpo), { houseIds: ['H1'], toUserId: 'BRUNO' });
+    const frase = 'Para passares o controlo a Bruno, faltam as ligações de Bruno a Carla e Duarte. Têm de se ligar primeiro, em Pessoas › Proprietários.';
+    assert.equal(falta.textContent, frase);
+    assert.equal(falta.classList.u, false, 'à vista');
+    app.imvTrfPedir();
+    await espera();
+    assert.deepEqual(esp.falhas, [{ id: 'selb_trf_para', msg: frase }]);
+    assert.equal(esp.api.filter((x) => x.m === 'POST /api/transfers').length, 0, 'o pedido não foi');
+    // ligados entretanto: perguntar outra vez (o que escolher faz, imvTrfMudou) limpa o aviso e o pedido segue
+    esp.resposta = { ok: true, semLigacao: [] };
+    app.imvTrfVerificar();
+    await espera();
+    assert.equal(falta.textContent, '');
+    assert.equal(falta.classList.u, true);
+    app.imvTrfPedir();
+    await espera();
+    assert.equal(esp.api.filter((x) => x.m === 'POST /api/transfers').length, 1);
+  });
+
+  test('uma ligação só com uma pessoa diz-se no singular, e o erro do servidor sobre a ligação vai para o «Para quem»', async () => {
+    assert.equal(app.imvTrfFraseFalta('Bruno', ['Carla']),
+      'Para passares o controlo a Bruno, falta a ligação de Bruno a Carla. Têm de se ligar primeiro, em Pessoas › Proprietários.');
+    assert.equal(app.imvTrfFraseFalta('Bruno', []), '');
+    app.imvTransferir('H1');
+    await espera();
+    const msg = 'Para passares o controlo a Bruno, falta a ligação de Bruno a Carla. Têm de se ligar primeiro, em Pessoas › Proprietários.';
+    esp.falha = { caminho: '/api/transfers', msg };
+    app.imvTrfPedir();
+    await espera();
+    assert.deepEqual(esp.falhas.at(-1), { id: 'selb_trf_para', msg });
   });
 
   test('o erro do servidor sobre quem recebe vai para o «Para quem»; outro vai num aviso, e a folha fica', async () => {

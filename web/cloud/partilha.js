@@ -721,6 +721,17 @@ CW.pedirTransferencia = function (o) {
   return api('POST', '/api/transfers', { houseIds: (o.houseIds || []).slice(), toUserId: o.toUserId });
 };
 
+/* Pergunta ao servidor, sem pedir nada, se o controlo destas casas pode
+   passar para esta pessoa (POST /api/transfers/check): os comproprietários
+   que chegam às casas por uma partilha têm de estar ligados a ela. A folha
+   (imovel.js:imvTrfVerificar) pergunta ao escolher quem recebe.
+   Recebe: o — {houseIds: [...], toUserId}.
+   Devolve: a promessa de {ok, semLigacao: [{id, name}]}; rejeita com o erro do servidor. */
+CW.verificarTransferencia = function (o) {
+  o = o || {};
+  return api('POST', '/api/transfers/check', { houseIds: (o.houseIds || []).slice(), toUserId: o.toUserId });
+};
+
 /* Cancelar um pedido para passar o controlo que fiz (DELETE /api/transfers/:lote):
    saem todos os pendentes do lote. Não pergunta nem sincroniza.
    Recebe: lote — o id do lote (o pedido).

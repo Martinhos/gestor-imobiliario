@@ -58,6 +58,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-25 · Transferir a propriedade é um pedido que o outro aceita
 - 2026-10-25 · As fotos a descer mostram que estão a chegar
 - 2026-10-25 · Passar o controlo, não a propriedade
+- 2026-10-26 · Passar o controlo pede a ligação a todos os comproprietários
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2333,3 +2334,7 @@ colaboradores.
 - O `added_by` passa ao novo criador mesmo que não seja membro do grupo:
   com o de quem pediu, o cliente dele (que só manda as casas dele no
   conjunto) tirava a casa do grupo ao regravar.
+
+## 2026-10-26 · Passar o controlo pede a ligação a todos os comproprietários
+
+Uma partilha pertence à ligação onde está. Quando a Alice passava o controlo de uma casa ao Bruno, o Carlos — comproprietário pela ligação Alice–Carlos, sem ligação ao Bruno — continuava a ver a casa por uma partilha que já não era de quem a geria: o Bruno não a podia gerir nem remover, a Alice também não, e se a Alice cortasse a ligação ao Carlos ele perdia a casa sem ninguém dar por isso, com a quota a ficar nas contas. Havia três saídas: pedir as ligações primeiro, criá-las sozinho ao aceitar (uma ligação que ninguém pediu), ou desligar a compropriedade das ligações (a mais limpa e a maior: muda a partilha em toda a app). O Martinho escolheu pedir as ligações primeiro: só se passa o controlo se todos os comproprietários que chegam por uma partilha estiverem ligados a quem recebe, e a folha diz quem falta antes de se enviar. Assim as partilhas mudam-se todas para as ligações de quem recebe, e ele gere-as como as outras.

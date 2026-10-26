@@ -218,6 +218,7 @@ describe('pedir para passar o controlo', () => {
     const C = await conta(env, 'Carla');
     await partilhar(env, cAB, A, 'H1');
     await comproprietario(env, A, C, ['H1', 'H2']);
+    await ligar(env, B, C);
     assert.equal((await pedirT(env, A, { houseIds: ['H1'], toUserId: B.id })).status, 200);
     assert.deepEqual(await pedirT(env, A, { houseIds: ['H2', 'H1'], toUserId: C.id }),
       { status: 409, error: 'Este imóvel já tem uma transferência pendente.' });
@@ -268,7 +269,8 @@ describe('aceitar muda só o criador', () => {
     const D = await conta(env, 'Duarte');
     const R = await conta(env, 'Rui');
     await partilhar(env, cAB, A, 'H1');
-    const cAC = await comproprietario(env, A, C, ['H1']);
+    await comproprietario(env, A, C, ['H1']);
+    const cBC = await ligar(env, B, C);
     await grupo(env, 'G1', D, [A], [['H1', A]]);
     await cargo(env, A, 'Contabilista', ['tx.add', 'rec.view'], 'R_A');
     await darCargo(env, A, R, 'R_A', ['H1']);
@@ -281,9 +283,9 @@ describe('aceitar muda só o criador', () => {
     assert.equal((await daBase(env, 'H1')).owner, B.id);
     assert.deepEqual(await retrato(env, 'H1', [A, B, C, D, R]), trocado(antes, A, B));
     assert.deepEqual((await daBase(env, 'H1')).data, dadosAntes, 'quotas, ownerIds e o resto do JSON iguais');
-    // a partilha da ligação A–B passou a ser do Bruno (dá a casa à Alice); a da Carla fica onde estava
+    // a partilha da ligação A–B passou a ser do Bruno (dá a casa à Alice); a da Carla mudou-se para a ligação B–C
     assert.deepEqual(await linhas(env, "SELECT connection_id, owner_id FROM shares WHERE house_id = 'H1' ORDER BY connection_id"),
-      [{ connection_id: cAB, owner_id: B.id }, { connection_id: cAC, owner_id: A.id }].sort((x, y) => x.connection_id.localeCompare(y.connection_id)));
+      [{ connection_id: cAB, owner_id: B.id }, { connection_id: cBC, owner_id: B.id }].sort((x, y) => x.connection_id.localeCompare(y.connection_id)));
     assert.equal((await env.DB.prepare('SELECT status FROM house_transfers').first()).status, 'accepted');
     // avisos: aceite a quem pediu, o dono novo aos outros participantes e ao colaborador
     assert.deepEqual(await avisosDe(env, A), [['transf.aceite', 'H1', B.id]]);
@@ -297,6 +299,7 @@ describe('aceitar muda só o criador', () => {
     const { env, A, B } = await base(false);
     const C = await conta(env, 'Carla');
     await comproprietario(env, A, C, ['H1']);
+    await ligar(env, B, C);
     await grupo(env, 'G1', A, [B], [['H1', A]]);
     const antes = await retrato(env, 'H1', [A, B, C]);
     assert.deepEqual((await passar(env, A, B, ['H1'])).aceites, ['H1']);
@@ -337,26 +340,45 @@ describe('aceitar muda só o criador', () => {
     assert.ok((await acessoACasa(env, A.id, 'H1')).coowner);
   });
 
-  test('C só ligado à Alice: a partilha herdada fica e o PUT das partilhas dela já não a apaga', async () => {
+  test('C só ligado à Alice: o pedido é recusado com a ligação que falta, e o check di-lo antes; ligados, passa', async () => {
+    const { env, A, B, cAB } = await base();
+    const C = await conta(env, 'Carla');
+    const D = await conta(env, 'Duarte');
+    await partilhar(env, cAB, A, 'H1');
+    await comproprietario(env, A, C, ['H1']);
+    await comproprietario(env, A, D, ['H1']);
+    const frase = 'Para passares o controlo a Bruno, faltam as ligações de Bruno a Carla e Duarte. Têm de se ligar primeiro, em Pessoas › Proprietários.';
+    assert.deepEqual(await pedirT(env, A, { houseIds: ['H1'], toUserId: B.id }),
+      { status: 400, error: frase, semLigacao: [{ id: C.id, name: 'Carla' }, { id: D.id, name: 'Duarte' }] });
+    assert.equal((await linhas(env, 'SELECT * FROM house_transfers')).length, 0, 'nada fica escrito');
+    const chk = (await resp(pedir(env, A, '/api/transfers/check', 'POST', { houseIds: ['H1'], toUserId: B.id })));
+    assert.deepEqual(chk, { status: 200, ok: true, semLigacao: [{ id: C.id, name: 'Carla' }, { id: D.id, name: 'Duarte' }] });
+    assert.equal((await resp(pedir(env, A, '/api/transfers/check', 'POST', { houseIds: ['H1'], toUserId: 'NAO' }))).status, 400, 'o check recusa como o pedido');
+    await ligar(env, B, C);
+    assert.deepEqual((await pedirT(env, A, { houseIds: ['H1'], toUserId: B.id })).semLigacao, [{ id: D.id, name: 'Duarte' }]);
+    assert.equal((await pedirT(env, A, { houseIds: ['H1'], toUserId: B.id })).error,
+      'Para passares o controlo a Bruno, falta a ligação de Bruno a Duarte. Têm de se ligar primeiro, em Pessoas › Proprietários.');
+    // quem chega só por um grupo não conta
+    await env.DB.prepare('DELETE FROM shares WHERE house_id = ?1 AND connection_id IN (SELECT id FROM connections WHERE requester_id = ?2 OR target_id = ?2)').bind('H1', D.id).run();
+    await grupo(env, 'G1', A, [D], [['H1', A]]);
+    assert.deepEqual((await resp(pedir(env, A, '/api/transfers/check', 'POST', { houseIds: ['H1'], toUserId: B.id }))).semLigacao, []);
+    const antes = await retrato(env, 'H1', [A, B, C, D]);
+    assert.deepEqual((await passar(env, A, B, ['H1'])).aceites, ['H1']);
+    assert.deepEqual(await retrato(env, 'H1', [A, B, C, D]), trocado(antes, A, B));
+  });
+
+  test('uma ligação cortada depois do pedido: aceitar falha essa casa com a ligação que falta', async () => {
     const { env, A, B, cAB } = await base();
     const C = await conta(env, 'Carla');
     await partilhar(env, cAB, A, 'H1');
-    const cAC = await comproprietario(env, A, C, ['H1', 'H2']);
-    const antes = await retrato(env, 'H1', [A, B, C]);
-    assert.deepEqual((await passar(env, A, B, ['H1'])).aceites, ['H1']);
-    assert.deepEqual(await retrato(env, 'H1', [A, B, C]), trocado(antes, A, B));
-    const ka = (await estado(env, A)).connections.find((c) => c.id === cAC);
-    assert.deepEqual(ka.myShares, ['H2'], 'a herdada não vem nas minhas partilhas');
-    const kc = (await estado(env, C)).connections.find((c) => c.id === cAC);
-    assert.deepEqual(kc.peerShares.slice().sort(), ['H1', 'H2']);
-    // a Alice regrava as partilhas com a Carla só com as casas dela (como o cliente faz)
-    assert.equal((await resp(pedir(env, A, '/api/connections/' + cAC + '/shares', 'PUT', { houseIds: [] }))).status, 200);
-    assert.equal((await acessoACasa(env, C.id, 'H2')).ok, false, 'a H2 deixou de estar partilhada');
-    assert.ok((await acessoACasa(env, C.id, 'H1')).coowner, 'a H1, do Bruno, continua');
-    // e a Alice a sair da H1 não a tira à Carla
-    assert.equal((await resp(pedir(env, A, '/api/houses/H1/participacao', 'DELETE'))).status, 200);
-    assert.equal((await acessoACasa(env, A.id, 'H1')).ok, false);
-    assert.ok((await acessoACasa(env, C.id, 'H1')).coowner);
+    await comproprietario(env, A, C, ['H1']);
+    const cBC = await ligar(env, B, C);
+    const { lote } = await pedirT(env, A, { houseIds: ['H1'], toUserId: B.id });
+    await env.DB.prepare('DELETE FROM connections WHERE id = ?').bind(cBC).run();
+    const r = await aceitarT(env, B, lote);
+    assert.deepEqual(r.aceites, []);
+    assert.deepEqual(r.falhadas, [{ houseId: 'H1', error: 'Falta a tua ligação a Carla: liguem-se primeiro, em Pessoas › Proprietários.' }]);
+    assert.equal((await daBase(env, 'H1')).owner, A.id, 'nada mudou');
   });
 
   test('passar duas vezes: quem pediu sem caminho próprio ganha a partilha na ligação a quem recebe', async () => {
@@ -374,6 +396,7 @@ describe('aceitar muda só o criador', () => {
     assert.deepEqual(r1, trocado(r0, X, A));
     // a Alice não é do grupo e não tem partilha que lhe dê a casa: ao passar ao Bruno, ganha uma na ligação aos dois
     const cAB = await ligar(env, A, B);
+    await ligar(env, B, X);   // o Xavier chega pela partilha da Alice: tem de estar ligado a quem recebe
     assert.deepEqual((await passar(env, A, B, ['H'])).aceites, ['H']);
     assert.deepEqual(await retrato(env, 'H', [X, A, B]), trocado(r1, A, B));
     assert.deepEqual(await linhas(env, "SELECT owner_id FROM shares WHERE house_id = 'H' AND connection_id = ?", cAB), [{ owner_id: B.id }]);
@@ -412,6 +435,7 @@ describe('aceitar muda só o criador', () => {
     const C = await conta(env, 'Carla');
     await partilhar(env, cAB, A, 'H1');
     await comproprietario(env, A, C, ['H1']);
+    await ligar(env, B, C);
     assert.equal((await resp(pedir(env, C, '/api/houses/H1/proposal', 'POST',
       { shares: { [A.id]: 50, [B.id]: 30, [C.id]: 20 } }))).status, 201);
     for (const [id, dono, hid] of [['F1', A, 'H1'], ['F2', C, 'H1'], ['F3', A, 'H2']]) {
@@ -499,6 +523,7 @@ describe('os colaboradores de quem pediu', () => {
     const C = await conta(env, 'Carla');
     await partilhar(env, cAB, A, 'H1');
     await comproprietario(env, A, C, ['H1']);
+    await ligar(env, B, C);
     await cargo(env, A, 'Contabilista', ['tx.add'], 'R_A');
     await darCargo(env, A, B, 'R_A', ['H1', 'H2']);
     await darCargo(env, A, C, 'R_A', ['H1']);
@@ -585,6 +610,7 @@ describe('o /api/state depois de aceitar', () => {
     const C = await conta(env, 'Carla');
     await partilhar(env, cAB, A, 'H1');
     await comproprietario(env, A, C, ['H1']);
+    await ligar(env, B, C);
     const pAntes = (await estado(env, A)).houses.find((x) => x.id === 'H1').participants.slice().sort();
     assert.deepEqual((await passar(env, A, B, ['H1'])).aceites, ['H1']);
     const sb = await estado(env, B);

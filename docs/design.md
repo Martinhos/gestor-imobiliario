@@ -4568,8 +4568,20 @@ sem uso: grava-se `ficar = 0` e `shares = NULL`.
   o imóvel a um comproprietário dele.»; um colaborador ou um ligado sem a
   casa também é 400) —, e nenhuma das casas pode ter já um pedido pendente
   (409 «Este imóvel já tem uma transferência pendente.» — o lote inteiro não
-  entra). Quem recebe leva um aviso `transf.pedido` por casa. Sem Imóveis
-  nesta conta, 403 do serviço.
+  entra). Os comproprietários que chegam a uma das casas por uma partilha
+  numa ligação têm de estar ligados a quem recebe
+  (casas.js:semLigacaoAQuemRecebe): uma partilha pertence à ligação onde
+  está, e sem a ligação de quem recebe a cada um ele não a podia gerir nem
+  remover — e quem pediu, ao cortar a ligação, tirava a casa à pessoa sem
+  ninguém dar por isso. Sem elas, 400 com a frase de quem falta
+  (casas.js:fraseSemLigacao: «Para passares o controlo a Bruno, falta a
+  ligação de Bruno a Carlos. Têm de se ligar primeiro, em Pessoas ›
+  Proprietários.») e a lista em `semLigacao`; quem chega só por um grupo
+  não conta. `POST /api/transfers/check`, com o mesmo corpo, faz as mesmas
+  verificações sem pedir nada e devolve `{ ok, semLigacao }`. Ao aceitar,
+  verifica-se outra vez: uma ligação cortada entretanto falha essa casa.
+  Quem recebe leva um aviso `transf.pedido` por casa. Sem Imóveis nesta
+  conta, 403 do serviço.
 - `DELETE /api/transfers/:lote` (quem pediu) e `POST …/:lote/reject` (quem
   recebe) fecham as casas ainda pendentes do lote (casas.js:fecharLote):
   `cancelled`/`rejected`, e um aviso `transf.cancelada` (a quem recebia) /
@@ -4713,8 +4725,14 @@ Cancelar e «Enviar pedido» (imovel.js:imvTrfPedir), que manda só as casas e
 quem recebe (cloud/partilha.js:CW.pedirTransferencia); um segundo toque com
 o pedido a meio não repete. Com a resposta a folha fecha, o aviso diz a
 quem foi, e o estado relê-se. Um erro do servidor sobre quem recebe (já não
-é comproprietário) vai para o «Para quem»; os outros, num aviso, com a folha
-aberta.
+é comproprietário, ou falta uma ligação) vai para o «Para quem»; os outros,
+num aviso, com a folha aberta. Ao escolher quem recebe (e logo ao abrir,
+quando vem escolhido), a folha pergunta ao servidor quem falta ligar
+(imovel.js:imvTrfVerificar, cloud/partilha.js:CW.verificarTransferencia) e
+di-lo por baixo do «Para quem», na cor dos erros (estilos.css:.trf-falta);
+enquanto faltar alguém, «Enviar pedido» diz o mesmo junto do campo e não
+manda nada. Daqui não se pode ligar duas outras pessoas: são elas que se
+ligam.
 
 A ficha mostra o pedido pendente por baixo dos donos
 (imovel.js:imvTrfNaFicha): «Pediste para passar o controlo a Bruno», que

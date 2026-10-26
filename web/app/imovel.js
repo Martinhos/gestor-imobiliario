@@ -1329,6 +1329,7 @@ function imvTrfCorpo(destinos,fora){
     ${fora.length?`<div class="hint">${fora.join(' ')}</div>`:''}
     <label>Para quem <span class="req">*</span>${sel('trf_para',_trf.para,ops,'imvTrfMudou','rascunho')}</label>
     <p class="hint">Só podes passar o controlo a um comproprietário ${um?'deste imóvel':'de todos estes imóveis'}.</p>
+    <p class="trf-falta u-d-none" id="trfFalta" role="status"></p>
     <p class="trf-frase" id="trfFrase" aria-live="polite">${imvTrfFrase()}</p>
   </div>`;
 }
@@ -1339,6 +1340,37 @@ function imvTrfMudou(){
   if(!_trf)return;
   _trf.para=val('trf_para')||'';
   const f=document.getElementById('trfFrase');if(f)f.innerHTML=imvTrfFrase();
+  imvTrfVerificar();
+}
+/* A frase de quem falta ligar a quem recebe: «Para passares o controlo a
+   Bruno, falta a ligação de Bruno a Carlos. …» (a mesma do servidor).
+   Recebe: para — o nome de quem recebe; nomes — os de quem falta.
+   Devolve: a frase (texto), ou '' sem ninguém. */
+function imvTrfFraseFalta(para,nomes){
+  if(!nomes.length)return '';
+  return 'Para passares o controlo a '+para+', '+(nomes.length>1?'faltam as ligações':'falta a ligação')+' de '+para+' a '+listaE(nomes)
+    +'. Têm de se ligar primeiro, em Pessoas › Proprietários.';
+}
+/* Pergunta ao servidor se quem foi escolhido está ligado a todos os
+   comproprietários que chegam às casas por uma partilha
+   (cloud/partilha.js:CW.verificarTransferencia). Os que faltam dizem-se por
+   baixo do «Para quem», e o «Enviar pedido» não segue até estarem ligados
+   (imvTrfPedir). Uma resposta de uma escolha que já mudou não conta; sem
+   rede, não se diz nada (o servidor recusa na mesma, com a frase).
+   Devolve: nada. */
+function imvTrfVerificar(){
+  const t=_trf,el=()=>document.getElementById('trfFalta');
+  const mostra=txt=>{const e=el();if(!e)return;e.textContent=txt;e.classList.toggle('u-d-none',!txt)};
+  if(!t)return;
+  t.semLigacao=[];mostra('');
+  const f=window.CW&&CW.verificarTransferencia;
+  if(!t.para||typeof f!=='function')return;
+  const para=t.para;
+  Promise.resolve(f({houseIds:t.ids.slice(),toUserId:para})).then(r=>{
+    if(_trf!==t||t.para!==para)return;
+    t.semLigacao=(r&&Array.isArray(r.semLigacao))?r.semLigacao:[];
+    mostra(imvTrfFraseFalta(nomeUtilizador(para),t.semLigacao.map(x=>String(x&&x.name||'').trim()||'Sem nome')));
+  },()=>{});
 }
 /* Sem ninguém que seja comproprietário de todos os imóveis escolhidos, a
    folha leva às Pessoas › Proprietários, onde se partilham as casas.
@@ -1382,6 +1414,7 @@ function imvTransferir(ids,aoPedir){
     L=openModal(titulo,imvTrfCorpo(destinos,imvTrfFora(fora,n=>'<b>'+esc(n)+'</b>')),cancelar+'<button type="button" class="btn primary" data-toca="dados" data-click="imvTrfPedir()">Enviar pedido</button>');
   }
   if(L){L.trfFolha=true;L.aoFechar=()=>{_trf=null}}
+  if(_trf&&_trf.para)imvTrfVerificar();   // com um só comproprietário, vem escolhido: pergunta já
 }
 /* «Enviar pedido»: valida quem recebe (o erro no «Para quem») e pede ao
    servidor (CW.pedirTransferencia). Com a resposta, a folha fecha, o aviso
@@ -1393,6 +1426,9 @@ function imvTransferir(ids,aoPedir){
 function imvTrfPedir(){
   if(!_trf||_trf.enviando)return;
   if(!_trf.para)return falhaCampo('selb_trf_para','Escolhe a quem passas o controlo.');
+  if(_trf.semLigacao&&_trf.semLigacao.length){
+    return falhaCampo('selb_trf_para',imvTrfFraseFalta(nomeUtilizador(_trf.para),_trf.semLigacao.map(x=>String(x&&x.name||'').trim()||'Sem nome')));
+  }
   const f=window.CW&&CW.pedirTransferencia;
   if(typeof f!=='function')return toast('Passar o controlo precisa de sessão e do servidor. Tenta outra vez daqui a pouco.');
   const t=_trf,nome=nomeUtilizador(t.para),um=t.ids.length===1;
@@ -1406,7 +1442,7 @@ function imvTrfPedir(){
   },e=>{
     t.enviando=false;
     const msg=(e&&e.message)||'Não deu para enviar o pedido. Tenta outra vez.';
-    if(/comproprietário/.test(msg))return falhaCampo('selb_trf_para',msg);
+    if(/comproprietário|ligaç/.test(msg))return falhaCampo('selb_trf_para',msg);
     toast(msg);
   });
 }

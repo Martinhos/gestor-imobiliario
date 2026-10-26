@@ -384,6 +384,54 @@ async function ligacoesDe(env, userId) {
   return out;
 }
 
+/* Os comproprietários de uma casa que lhe chegam por uma partilha numa
+   ligação e que não estão ligados a quem vai receber o controlo. Uma partilha
+   pertence à ligação onde está: sem a ligação de quem recebe a cada um, ele
+   não a podia gerir (nem remover), e quem pediu, ao cortar a ligação, tirava
+   a casa à pessoa sem ninguém dar por isso. Por isso passar o controlo pede
+   essas ligações primeiro (a decisão do Martinho, 2026-10-26). Quem chega só
+   por um grupo não conta: o grupo não muda.
+   Recebe: env — o ambiente do worker; hid — a casa; A — quem pede; B — quem
+   recebe.
+   Devolve: promessa dos ids, sem repetidos. */
+async function semLigacaoAQuemRecebe(env, hid, A, B) {
+  const rows = (await env.DB.prepare(
+    `SELECT s.owner_id, c.requester_id, c.target_id FROM shares s
+       JOIN connections c ON c.id = s.connection_id
+      WHERE c.status = 'accepted' AND s.house_id = ?`
+  ).bind(hid).all()).results;
+  const deB = await ligacoesDe(env, B);
+  const out = [];
+  rows.forEach((r) => {
+    const da = r.requester_id === r.owner_id ? r.target_id : r.requester_id;
+    if (da === A || da === B || deB.has(da) || out.includes(da)) return;
+    out.push(da);
+  });
+  return out;
+}
+
+/* Os nomes de algumas contas, pela ordem dada.
+   Recebe: env — o ambiente do worker; ids — os ids.
+   Devolve: promessa de [{ id, name }]. */
+async function nomesDe(env, ids) {
+  const out = [];
+  for (const id of ids) {
+    const u = await env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(id).first();
+    out.push({ id, name: (u && u.name) || '' });
+  }
+  return out;
+}
+
+/* A frase de quem pede quando faltam ligações: «Para passares o controlo a
+   Bruno, falta a ligação de Bruno a Carlos. …». Sem género (a app não o sabe).
+   Recebe: b — o nome de quem recebe; nomes — os de quem falta.
+   Devolve: a frase. */
+function fraseSemLigacao(b, nomes) {
+  const lista = nomes.length > 1 ? nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1] : nomes[0];
+  return 'Para passares o controlo a ' + b + ', ' + (nomes.length > 1 ? 'faltam as ligações' : 'falta a ligação') +
+    ' de ' + b + ' a ' + lista + '. Têm de se ligar primeiro, em Pessoas › Proprietários.';
+}
+
 // O nome de uma casa a partir do JSON guardado (estragado dá '').
 // Recebe: texto — o houses.data.
 // Devolve: o nome.
@@ -396,10 +444,16 @@ function nomeDoJSON(texto) {
    (acesso.js:participantsOf, e não eu), e nenhuma pode ter outro pedido
    pendente. Uma linha por casa num lote, e um aviso 'transf.pedido' por casa
    para quem recebe — tudo num lote só. ficar e shares, se vierem, ignoram-se.
+   Os comproprietários que chegam à casa por uma partilha têm de estar
+   ligados a quem recebe (semLigacaoAQuemRecebe): senão 400 com a frase e a
+   lista em `semLigacao`. Com soVerificar (POST /api/transfers/check, a folha
+   pergunta ao escolher quem recebe), as mesmas recusas e, sem nenhuma,
+   { ok, semLigacao } sem pedir nada.
    Recebe: env — o ambiente do worker; me — quem pede (da sessão); b — o
-   corpo { houseIds, toUserId }.
-   Devolve: promessa da Response { ok, lote } ou do erro do contrato. */
-async function pedirTransferencia(env, me, b) {
+   corpo { houseIds, toUserId }; soVerificar (opcional) — true para só
+   verificar.
+   Devolve: promessa da Response { ok, lote } (ou { ok, semLigacao }) ou do erro do contrato. */
+async function pedirTransferencia(env, me, b, soVerificar) {
   const houseIds = b && typeof b === 'object' ? idsDeCasas(b.houseIds) : null;
   const toUserId = b && typeof b.toUserId === 'string' ? b.toUserId : '';
   if (!houseIds || badId(toUserId)) return err(400, FRASE_CORPO_TRANSF);
@@ -427,6 +481,18 @@ async function pedirTransferencia(env, me, b) {
   for (const hid of houseIds) {
     const parts = (await participantsOf(env, hid)) || [];
     if (!parts.includes(toUserId)) return err(400, FRASE_NAO_COMPROPRIETARIO);
+  }
+
+  // os comproprietários por partilha têm de estar ligados a quem recebe
+  const faltam = [];
+  for (const hid of houseIds) {
+    (await semLigacaoAQuemRecebe(env, hid, me.id, toUserId)).forEach((u) => { if (!faltam.includes(u)) faltam.push(u); });
+  }
+  const semLigacao = await nomesDe(env, faltam);
+  if (soVerificar) return json({ ok: true, semLigacao });
+  if (semLigacao.length) {
+    const [b] = await nomesDe(env, [toUserId]);
+    return json({ error: fraseSemLigacao(b.name, semLigacao.map((x) => x.name)), semLigacao }, 400);
   }
 
   const pendentes = [];
@@ -660,6 +726,13 @@ async function aceitarCasaUmaVez(env, me, row) {
   if (h.owner_id !== A) return invalido(FRASE_JA_NAO_E_DONO);
   const parts = (await participantsOf(env, hid)) || [A];
   if (!parts.includes(B)) return invalido(FRASE_JA_NAO_COMPROPRIETARIO);
+  // uma ligação cortada entretanto: o pedido deixa de valer
+  const faltam = await nomesDe(env, await semLigacaoAQuemRecebe(env, hid, A, B));
+  if (faltam.length) {
+    const lista = faltam.map((x) => x.name);
+    return invalido('Falta a tua ligação a ' + (lista.length > 1 ? lista.slice(0, -1).join(', ') + ' e ' + lista[lista.length - 1] : lista[0]) +
+      ': liguem-se primeiro, em Pessoas › Proprietários.');
+  }
 
   const partilhas = await partilhasDoNovoCriador(env, hid, A, B, parts);
   if (!partilhas) return invalido(FRASE_SEM_CAMINHO);
@@ -749,9 +822,11 @@ export async function rotasTransferencias(c) {
   const { env, request, method, seg, me } = c;
   if (seg[1] !== 'transfers') return;
   const pedir = seg.length === 2 && method === 'POST';
+  const verificar = seg.length === 3 && method === 'POST' && seg[2] === 'check';
   const cancelar = seg.length === 3 && method === 'DELETE';
   const decidir = seg.length === 4 && method === 'POST' && (seg[3] === 'accept' || seg[3] === 'reject');
-  if (!pedir && !cancelar && !decidir) return;
+  if (!pedir && !verificar && !cancelar && !decidir) return;
+  if (verificar) return pedirTransferencia(env, me, await body(request), true);   // só lê: não gasta o contador
   if (!pedir && badId(seg[2])) return err(400, 'Identificador inválido.');
   if (!(await rateLimit(env, 'w:' + me.id, 60, 900))) return err(429, FRASE_RITMO);
 
