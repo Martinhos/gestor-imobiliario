@@ -1128,7 +1128,13 @@ function verOperacao() {
       '<button type="button" class="btn sm"' + comAcao('sessaoTeste', ['extra-dados']) + '>Extra com dados</button>' +
       '<button type="button" class="btn sm"' + comAcao('sessaoTeste', ['extra']) + '>Extra</button>' +
       '<button type="button" class="btn sm texto-perigo"' + comAcao('sessaoTeste', ['limpar']) + '>Limpar</button></div>' +
-      '<div id="ligTeste"></div></section>';
+      '<div id="ligTeste"></div></section>' +
+      /* e as sessões de teste abertas, de quem e onde, para as terminar ou
+         apagar as contas (chegam à parte, por verSessoesTeste) */
+      '<section class="card" aria-labelledby="titSessoesTeste"><div class="card-cab"><div class="card-cab-txt">' +
+      '<h2 id="titSessoesTeste" class="card-tit">Sessões de teste abertas</h2>' +
+      '<p class="sub">Cada browser onde uma ligação de teste foi aberta e ainda tem sessão, por quem a pediu no Discord. Terminar faz sair (a conta e os dados ficam); apagar leva a conta e os dados.</p></div></div>' +
+      '<div id="sessoesTeste">' + esperaHtml('A ler as sessões.') + '</div></section>';
 
     var vistos = {};
     (d.crons || []).forEach(function (c) { vistos[c.op] = c; });
@@ -1160,6 +1166,7 @@ function verOperacao() {
 
     el('conteudo').innerHTML = cab + teste + tarefas + consumo + cartaoCopias(d) + cartaoEnderecos();
     verEnderecos();
+    if (d.teste) verSessoesTeste();
   }).catch(falha);
 }
 
@@ -1355,6 +1362,102 @@ function pedirSessaoTeste(comDados, manter, limpar) {
   }).catch(function (e) { el('ligTeste').innerHTML = ''; avisar(e.message, 'erro'); });
 }
 
+// a última lista das sessões de teste (para as perguntas dizerem de quem)
+var sessoesTesteUltimas = null;
+
+/* Quem pediu as contas de teste, como se diz: o nome no Discord, o id quando
+   a ligação não trouxe o nome, ou «Sem dono» nas contas de ligações antigas.
+   Recebe: dono — {id, nome} da lista das sessões.
+   Devolve: o texto (simples, por escapar). */
+function nomeDoDono(dono) {
+  if (!dono || !dono.id) return 'Sem dono';
+  return dono.nome ? dono.nome + ' (Discord)' : 'Discord ' + dono.id;
+}
+
+/* Lê as sessões de teste abertas e pinta-as no cartão da Operação: o total,
+   os botões para todas, e um bloco por quem as pediu no Discord, com uma
+   linha por sessão (a conta, quando abriu, quando expira, o browser) e as
+   contas sem sessão aberta, para se poderem apagar.
+   Devolve: nada — escreve o cartão sessoesTeste (ou o erro nele). */
+function verSessoesTeste() {
+  pedir('/api/equipa/operacao/sessoes-teste').then(function (d) {
+    sessoesTesteUltimas = d;
+    var caixa = el('sessoesTeste');
+    if (!caixa) return;
+    if (!d.contas) { caixa.innerHTML = '<div class="card-pe">' + vazioHtml('Não há contas de teste.', 'Uma ligação do /test cria a primeira.') + '</div>'; return; }
+    var resumo = (d.sessoes === 1 ? '1 sessão aberta' : d.sessoes + ' sessões abertas') + ' em ' +
+      (d.contas === 1 ? '1 conta de teste' : d.contas + ' contas de teste');
+    var topo = '<div class="card-pe"><p class="sub n">' + resumo + '</p><div class="chips op-teste-botoes">' +
+      '<button type="button" class="btn sm"' + comAcao('sessoesTeste', ['terminar', 'todas', '']) + '>Terminar todas</button>' +
+      '<button type="button" class="btn sm texto-perigo"' + comAcao('sessoesTeste', ['apagar', 'todas', '']) + '>Apagar todas as contas</button></div></div>';
+    var blocos = (d.donos || []).map(function (dono) {
+      var n = dono.contas.reduce(function (s, c) { return s + c.sessoes.length; }, 0);
+      var linhas = [];
+      dono.contas.forEach(function (c) {
+        var conta = '<span class="forte">' + esc(String(c.email || '').replace('@teste.rendorium.com', '')) + '</span>';
+        var apagar = '<button type="button" class="btn sm texto-perigo"' + comAcao('sessoesTeste', ['apagar', 'conta', c.id]) + '>Apagar a conta</button>';
+        if (!c.sessoes.length) {
+          linhas.push('<tr><td class="quebra" data-rot="Conta">' + conta + '</td><td data-rot="Sessão" colspan="3"><span class="sub">Sem sessão aberta</span></td>' +
+            '<td data-rot="Ações">' + apagar + '</td></tr>');
+          return;
+        }
+        c.sessoes.forEach(function (s, i) {
+          linhas.push('<tr><td class="quebra" data-rot="Conta">' + conta + '</td>' +
+            '<td class="n" data-rot="Abriu">' + (s.criada ? idade(s.criada) : '—') + '</td>' +
+            '<td class="n" data-rot="Expira">' + (s.expira ? dia(s.expira) : '—') + '</td>' +
+            '<td class="quebra" data-rot="Browser">' + esc(s.agente || '—') + '</td>' +
+            '<td data-rot="Ações"><div class="chips"><button type="button" class="btn sm"' + comAcao('sessoesTeste', ['terminar', 'sessao', s.id]) + '>Terminar</button>' +
+            (i === 0 ? apagar : '') + '</div></td></tr>');
+        });
+      });
+      var cabeca = '<div class="card-pe"><p class="forte">' + esc(nomeDoDono(dono)) + ' <span class="sub n">· ' +
+        (n === 1 ? '1 sessão' : n + ' sessões') + ' em ' + (dono.contas.length === 1 ? '1 conta' : dono.contas.length + ' contas') + '</span></p>' +
+        (dono.id ? '<div class="chips op-teste-botoes"><button type="button" class="btn sm"' + comAcao('sessoesTeste', ['terminar', 'dono', dono.id]) + '>Terminar as sessões</button>' +
+          '<button type="button" class="btn sm texto-perigo"' + comAcao('sessoesTeste', ['apagar', 'dono', dono.id]) + '>Apagar as contas</button></div>' : '') + '</div>';
+      return cabeca + '<div class="tb-rola"><table class="tb empilha"><thead><tr><th>Conta</th><th>Abriu</th><th>Expira</th><th>Browser</th><th><span class="so-leitor">Ações</span></th></tr></thead><tbody>' +
+        linhas.join('') + '</tbody></table></div>';
+    }).join('');
+    caixa.innerHTML = topo + blocos;
+  }).catch(function (e) {
+    var caixa = el('sessoesTeste');
+    if (caixa) caixa.innerHTML = '<div class="card-pe"><p class="sub">Não deu para ler as sessões: ' + esc(e.message) + '</p></div>';
+  });
+}
+
+/* Termina sessões de teste ou apaga contas de teste. Terminar uma sessão faz
+   logo; o resto (as de uma pessoa, todas, e qualquer apagar) pergunta antes,
+   na janela, a dizer o que fica e o que se perde.
+   Recebe: acao — 'terminar' ou 'apagar'; alvo — 'sessao', 'conta', 'dono'
+   ou 'todas'; id — o da sessão, da conta ou do dono (vazio em 'todas').
+   Devolve: nada — faz o pedido, avisa e volta a ler a lista. */
+function sessoesTeste(acao, alvo, id) {
+  var fazer = function () {
+    return enviar('/api/equipa/operacao/sessoes-teste', { acao: acao, alvo: alvo, id: id }).then(function (r) {
+      var n = r.n || 0;
+      avisar(acao === 'apagar' ? (n === 1 ? 'Conta de teste apagada.' : n + ' contas de teste apagadas.')
+        : alvo === 'sessao' ? 'Sessão terminada.' : 'Sessões terminadas em ' + (n === 1 ? '1 conta.' : n + ' contas.'), 'feito');
+      verSessoesTeste();
+    }).catch(function (e) { avisar(e.message, 'erro'); verSessoesTeste(); });
+  };
+  if (acao === 'terminar' && alvo === 'sessao') { fazer(); return; }
+  var dono = null;
+  ((sessoesTesteUltimas && sessoesTesteUltimas.donos) || []).forEach(function (x) { if (alvo === 'dono' && x.id === id) dono = x; });
+  var quem = alvo === 'dono' ? '<b>' + esc(nomeDoDono(dono || { id: id })) + '</b>' : '';
+  var titulo, texto, botao;
+  if (acao === 'terminar') {
+    titulo = alvo === 'todas' ? 'Terminar todas as sessões de teste?' : 'Terminar as sessões desta pessoa?';
+    texto = (alvo === 'todas' ? 'Toda a gente sai das contas de teste.' : 'Todas as sessões das contas de teste de ' + quem + ' terminam.') +
+      ' As contas e os dados ficam, e o próximo /test retoma-as.';
+    botao = 'Terminar';
+  } else {
+    titulo = alvo === 'todas' ? 'Apagar todas as contas de teste?' : alvo === 'dono' ? 'Apagar as contas de teste desta pessoa?' : 'Apagar esta conta de teste?';
+    texto = (alvo === 'todas' ? 'Apaga <b>todas</b> as contas de teste do dev' : alvo === 'dono' ? 'Apaga as contas de teste de ' + quem : 'Apaga a conta de teste') +
+      ' e o que têm dentro, e as sessões delas terminam. Não se desfaz.';
+    botao = 'Apagar';
+  }
+  formulario(titulo, [], fazer, { texto: texto, botao: botao, perigo: acao === 'apagar' });
+}
+
 // abre a janela de fazer uma cópia manual da base para o R2; feita, diz as
 // linhas e o tamanho no aviso e recarrega o painel
 // Devolve: nada — abre a janela; ao confirmar, faz a cópia no servidor.
@@ -1461,6 +1564,7 @@ var ACOES = {
     var m = Object.prototype.hasOwnProperty.call(MODOS_TESTE, d.arg) ? MODOS_TESTE[d.arg] : null;
     if (m) sessaoTeste(m[0], m[1], m[2]);
   },
+  sessoesTeste: function (d) { sessoesTeste(d.arg, d.arg2, d.arg3); },
   criarEndereco: function () { criarEndereco(); },
   procurarRasto: function (d, alvo) { ir('rasto', String(alvo.value || '').trim()); },
   confirmarFormulario: function () { confirmarFormulario(); },

@@ -18,6 +18,7 @@ import { now, TERMS_VERSION, CSP_ESTRITA } from './lib/http.js';
 import { purgeAccount } from './lib/acesso.js';
 import { newUserId, createSession, sessionCookie } from './auth.js';
 import { auditar } from './lib/auditoria.js';
+import { navegador } from './rotas/relatos.js';
 
 const DOMINIO_TESTE = '@teste.rendorium.com';
 const VALIDADE_MIN = 10;
@@ -26,6 +27,11 @@ const VALIDADE_MIN = 10;
 // Recebe: email — o email da conta (texto; null e undefined contam como vazio).
 // Devolve: true quando o email acaba nesse domínio.
 export const eContaDeTeste = (email) => String(email || '').endsWith(DOMINIO_TESTE);
+
+// O browser e o sistema de quem abre uma sessão de teste, curtos, para a lista do back office (sessoes-teste.js).
+// Recebe: request — o pedido HTTP (pode faltar).
+// Devolve: o resumo ('Chrome 128 · Android 14'), ou '' sem user-agent.
+export const agenteDe = (request) => navegador(request && request.headers ? request.headers.get('user-agent') : '');
 
 /* O segredo das ligações de teste. Com os bots de dev e produção separados,
    o token do bot deixou de ser partilhado — a TESTE_CHAVE (a mesma nos dois
@@ -323,7 +329,7 @@ export async function rotaTeste(c) {
   }
   if (!conta) conta = Object.assign({ sess_epoch: 0 }, await criarContaDeTeste(env, quem));
 
-  const token = await createSession(env, conta.id, conta.sess_epoch || 0);
+  const token = await createSession(env, conta.id, conta.sess_epoch || 0, agenteDe(c.request));
   await auditar(env, { discordId: quem || 'sistema', nome: '/test', papeis: ['bot'] },
     'teste.sessao', conta.id,
     retomada ? 'conta retomada, dados intactos'
@@ -348,10 +354,11 @@ export async function rotaTeste(c) {
    Quem testa o "apagar conta" não pode aterrar no ecrã de login de um
    ambiente onde nem sequer há formulário que lhe valha.
    Recebe: env — o ambiente do worker; dono — o id do dev cujas contas se
-   procuram.
+   procuram; agente (opcional) — o browser de quem apagou (agenteDe), para a
+   sessão nova levar o mesmo.
    Devolve: promessa de { id, email, name, token } — a conta seguinte, já com
    sessão criada. */
-export async function proximaContaDeTeste(env, dono) {
+export async function proximaContaDeTeste(env, dono, agente) {
   let conta = await env.DB.prepare(
     "SELECT id, email, name, sess_epoch FROM users WHERE test_owner = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1"
   ).bind(dono).first();
@@ -359,7 +366,7 @@ export async function proximaContaDeTeste(env, dono) {
     const nova = await criarContaDeTeste(env, dono);
     conta = { id: nova.id, email: nova.email, name: 'Conta de teste', sess_epoch: 0 };
   }
-  const token = await createSession(env, conta.id, conta.sess_epoch || 0);
+  const token = await createSession(env, conta.id, conta.sess_epoch || 0, agente || '');
   return { id: conta.id, email: conta.email, name: conta.name || 'Conta de teste', token };
 }
 
@@ -393,7 +400,7 @@ export async function rotasContasDeTeste(c) {
       'SELECT id, email, name, sess_epoch FROM users WHERE id = ? AND test_owner = ? AND deleted_at IS NULL'
     ).bind(String((b && b.para) || ''), dono).first();
     if (!alvo) return err(404, 'Essa conta não é tua ou já não existe.');
-    const token = await createSession(env, alvo.id, alvo.sess_epoch || 0);
+    const token = await createSession(env, alvo.id, alvo.sess_epoch || 0, agenteDe(request));
     return json({ token, id: alvo.id, email: alvo.email, name: alvo.name }, 200, {
       'Set-Cookie': sessionCookie(token),
     });
@@ -401,7 +408,7 @@ export async function rotasContasDeTeste(c) {
 
   if (path === '/api/teste/nova' && method === 'POST') {
     const conta = await criarContaDeTeste(env, dono);
-    const token = await createSession(env, conta.id, 0);
+    const token = await createSession(env, conta.id, 0, agenteDe(request));
     await auditar(env, { discordId: dono, nome: 'seletor de teste', papeis: ['dev'] },
       'teste.sessao', conta.id, 'conta extra pelo seletor');
     return json({ token, id: conta.id, email: conta.email, name: 'Conta de teste' }, 200, {

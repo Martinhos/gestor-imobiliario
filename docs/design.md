@@ -5516,6 +5516,21 @@ abre a janela de confirmação, o resultado diz-se no aviso de baixo, e
 desligar um serviço pergunta numa faixa âmbar do próprio cartão, com os
 dependentes que caem junto (equipa-guiao.js:mostrarAvisoDesligar).
 
+Fora de produção, a Operação do back office (master e admin) mostra as
+sessões de teste abertas (equipa-guiao.js:verSessoesTeste): cada browser onde
+uma ligação do /test foi aberta e ainda tem sessão, agrupado pela conta do
+Discord que a pediu, com a conta, quando abriu, quando expira e o browser.
+Lêem-se das chaves sess: do KV, só as das contas de teste vivas com a época
+certa (sessoes-teste.js:sessoesDeTeste); as sessões trazem a conta, a época,
+a hora e o browser nos metadados da chave (worker/src/auth.js:createSession), e o token
+nunca sai do servidor — o back office vê um id tirado dele
+(sessoes-teste.js:idDaSessao). Terminar uma sessão apaga-a e não pergunta
+(sessoes-teste.js:terminarSessao); terminar as de uma pessoa ou todas sobe o
+sess_epoch das contas, que ficam com os dados (sessoes-teste.js:terminarSessoesDe);
+apagar leva as contas como o /test limpar (sessoes-teste.js:apagarContasDe).
+Tudo o que não é terminar uma sessão pergunta antes
+(equipa-guiao.js:sessoesTeste), e cada ação fica no rasto.
+
 ## A app em serviços
 Cada separador da barra lateral é um serviço com manifesto próprio, e as
 Definições são a base. O catálogo vive em servicos.js:SERVICOS — por

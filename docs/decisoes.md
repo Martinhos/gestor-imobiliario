@@ -63,6 +63,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-27 · A app apresenta-se, e o ícone passa a cobalto
 - 2026-10-28 · «Transferir o controlo», «Descarregar» e as frases sem género
 - 2026-10-28 · Os tickets de QA
+- 2026-10-28 · As sessões de teste no back office
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2512,3 +2513,26 @@ worker ainda sem esta versão (o bot de produção, até à promoção) continua
 valer; essas aparecem como «Discord <id>». O ticket copia o id e o nome ao
 ser criado (worker/src/rotas/qa.js:discordDoAutor), para o autor sobreviver à
 conta de teste.
+
+## 2026-10-28 · As sessões de teste no back office
+
+O Martinho pediu para ver no back office quantas sessões de teste existem, quem
+as tem, e poder revogá-las. Escolheu: uma linha por sessão aberta (cada browser
+onde uma ligação do /test foi aberta), agrupadas por quem as pediu no Discord;
+revogar com as duas saídas, terminar a sessão ou apagar a conta; as duas também
+para todas as de uma pessoa e para todas; e na Operação, para o master e o
+admin, que já a veem (o dev não vê a Operação).
+
+As sessões vivem no KV sem índice por conta, e não se criou um: lê-se a lista
+das chaves sess: e fica-se com as das contas de teste. No dev há poucas, e um
+índice à parte ficava desencontrado do KV a cada saída ou expiração. Para não
+ter de abrir cada valor, as sessões novas guardam a conta, a época, a hora e o
+browser nos metadados da chave (worker/src/auth.js:createSession); as de antes
+leem-se pelo valor, e a hora de abertura tira-se da validade.
+
+Terminar as de uma pessoa ou todas sobe o sess_epoch, o que a suspensão já
+fazia: mata as sessões todas de uma vez, incluindo as de antes dos metadados, e
+deixa as contas e os dados para o próximo /test. Terminar uma sessão só apaga
+essa chave e não pergunta, porque basta abrir outra ligação; o resto pergunta.
+O token nunca chega ao back office: cada sessão vai com os primeiros 16
+caracteres do sha-256 dele (worker/src/sessoes-teste.js:idDaSessao).

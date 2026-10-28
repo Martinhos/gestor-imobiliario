@@ -79,7 +79,7 @@ const MAPA = [
     ficheiros: ['worker/src/equipa.js', 'worker/src/equipa-api.js', 'worker/src/equipa-vista.js',
       'worker/src/equipa-guiao.js', 'worker/src/docs-vista.js'] },
   { id: 'teste', titulo: 'Ambiente de teste (/test)',
-    ficheiros: ['worker/src/teste.js'] },
+    ficheiros: ['worker/src/teste.js', 'worker/src/sessoes-teste.js'] },
   { id: 'limites', titulo: 'Travões contra abuso',
     ficheiros: ['worker/src/lib/limites.js'] },
   { id: 'anexos', titulo: 'Anexos e ficheiros',

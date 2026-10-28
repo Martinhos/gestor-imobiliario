@@ -651,6 +651,32 @@ export async function rotasEquipaApi(c) {
       return json({ ligacao: await ligacaoTeste(env, url.origin, !!(b && b.dados), !!(b && b.manter), eu.discordId, !!(b && b.limpar), b && b.email, eu.nome) });
     }
 
+    /* As sessões de teste abertas, por quem as pediu no Discord, e o que se
+       lhes faz: terminar (a conta e os dados ficam) ou apagar a conta — uma
+       sessão, uma conta, as de uma pessoa, ou todas (sessoes-teste.js). Só
+       fora de produção, como a ligação de teste. */
+    if (path === '/api/equipa/operacao/sessoes-teste') {
+      if (!env.ENV_NAME) return err(404, 'Produção não tem ambiente de teste.');
+      const st = await import('./sessoes-teste.js');
+      if (method === 'GET') return json(await st.sessoesDeTeste(env));
+      if (method === 'POST') {
+        const b = (await body(request)) || {};
+        const acao = b.acao, alvo = b.alvo, id = String(b.id || '');
+        let n = 0;
+        if (acao === 'terminar' && alvo === 'sessao') n = await st.terminarSessao(env, id);
+        else if (acao === 'terminar' && ['conta', 'dono', 'todas'].includes(alvo)) n = await st.terminarSessoesDe(env, alvo, id);
+        else if (acao === 'apagar' && ['conta', 'dono', 'todas'].includes(alvo)) n = await st.apagarContasDe(env, alvo, id);
+        else return err(400, 'Ação desconhecida.');
+        if (!n) return err(404, alvo === 'sessao' ? 'Essa sessão já não está aberta.' : 'Não há contas de teste aí.');
+        await auditar(env, eu, 'teste.' + acao, alvo === 'todas' ? null : id,
+          (acao === 'terminar' ? (alvo === 'sessao' ? 'sessão de teste terminada' : 'sessões terminadas em ' + n + (n === 1 ? ' conta' : ' contas'))
+            : (n === 1 ? '1 conta de teste apagada' : n + ' contas de teste apagadas')) +
+          (alvo === 'dono' ? ' (as de ' + id + ')' : alvo === 'todas' ? ' (todas)' : ''));
+        return json({ ok: true, n });
+      }
+      return err(405, 'Método não suportado.');
+    }
+
     if (path === '/api/equipa/operacao/copiar' && method === 'POST') {
       const { copiar } = await import('./salvaguarda.js');
       await auditar(env, eu, 'operacao.copiar', null, 'cópia manual');
