@@ -3896,7 +3896,10 @@ quanto e com que etiqueta. «Registar os N» abre a janela do preenchimento
 estimativa; «Agora não» guarda no aparelho quantos faltavam
 (planeados.js:recRetroAgoraNao; a chave gi_retro_agora_nao é
 planeados.js:RETRO_LS), e a faixa só volta a esse planeado se passarem a
-faltar mais.
+faltar mais. Gravar um contrato antigo abre a mesma janela sozinha, uma vez
+por planeado novo (cloud/painel.js:offerFill); os planeados dos dados de
+exemplo nascem conhecidos (cloud/painel.js:refreshKnown, a seguir ao
+arranque.js:seed), e não a abrem para rendas de contratos inventados.
 
 Os Créditos (creditos.js:vCredits, os canvas M-Creditos e D-Creditos) abrem
 com o resumo (creditos.js:credResumo): no telemóvel o cartão azul-noite

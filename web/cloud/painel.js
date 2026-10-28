@@ -356,6 +356,21 @@ function refreshKnown() {
   (db.recurring || []).forEach(function (r) { knownRecs[r.id] = 1; });
 }
 
+/* Os dados de exemplo (arranque.js:seed) não são contratos antigos acabados
+   de gravar: os planeados que eles criam ficam logo conhecidos, e o offerFill
+   (700 ms depois do save) não abre o «Preencher N períodos» para rendas de
+   contratos inventados — abria sozinho por cima dos Imóveis assim que o
+   exemplo tinha dois meses em falta, e o percurso da interface media-o a
+   meio da entrada. */
+if (typeof seed === 'function') {
+  var seedDeAntes = seed;
+  seed = function () {
+    var r = seedDeAntes.apply(this, arguments);
+    refreshKnown();
+    return r;
+  };
+}
+
 /* Corre pouco depois de cada save(): se entretanto apareceu um plano novo de
    contrato com 2 ou mais períodos em atraso, abre-lhe logo o modal de
    preenchimento — uma única vez por plano; nunca por cima de outro modal
