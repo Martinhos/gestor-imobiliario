@@ -48,6 +48,13 @@ public class MainActivity extends Activity {
     private static final String HOST = BuildConfig.HOST;
     private static final String START_URL = "https://" + HOST + "/";
 
+    // As ligações do /test do Discord (https://<HOST>/t/entrar?…) são a única
+    // porta do dev sem sessão: abri-las no WebView deixa nele o cookie da conta
+    // de teste. Só o flavor dev as declara (src/dev/AndroidManifest.xml); a
+    // produção não as declara, e o /t/entrar de lá nem existe.
+    private static final String CAMINHO_TESTE = "/t/entrar";
+    private static final String KEY_LIGACAO_ABERTA = "ligacaoAberta";
+
     private static final int REQ_PICK_FORM = 11;   // <input type="file"> da pagina
     private static final int REQ_CREATE_DOC = 12;  // guardar copia (Drive, Ficheiros, ...)
     private static final int REQ_OPEN_DOC = 13;    // abrir copia
@@ -56,6 +63,8 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> formCallback;
     private byte[] pendingBytes;
     private String insetsJs;
+    private boolean ligacaoAberta;    // esta activity ja abriu a ligacao do intent com que nasceu
+    private boolean limparHistorico;  // a pagina a seguir a ligacao apaga o historico de antes
 
     @Override
     protected void onCreate(Bundle state) {
@@ -160,6 +169,13 @@ public class MainActivity extends Activity {
                 v.evaluateJavascript(DOWNLOAD_SHIM, null);
                 if (insetsJs != null) v.evaluateJavascript(insetsJs, null);  // a pagina recarregou
                 CookieManager.getInstance().flush();  // sessao sobrevive a fechar a app
+                // Depois de uma ligacao do /test, o "voltar" nao regressa as
+                // paginas da sessao de antes: o historico comeca na pagina a que
+                // a ligacao levou (o /t/entrar redireciona para "/").
+                if (limparHistorico && url != null && !CAMINHO_TESTE.equals(Uri.parse(url).getPath())) {
+                    v.clearHistory();
+                    limparHistorico = false;
+                }
             }
         });
 
@@ -175,8 +191,64 @@ public class MainActivity extends Activity {
             }
         });
 
-        boolean restored = state != null && web.restoreState(state) != null;
-        if (!restored) web.loadUrl(START_URL);
+        // Quem abre uma ligacao do /test quer essa: ganha ao estado guardado e
+        // ao inicio. Mas uma vez so: se a activity se recria (o sistema matou o
+        // processo, mudou o tema), o intent e o mesmo e a ligacao ja foi gasta.
+        ligacaoAberta = state != null && state.getBoolean(KEY_LIGACAO_ABERTA, false);
+        String ligacao = ligacaoAberta ? null : ligacaoDoIntent(getIntent());
+        if (ligacao != null) {
+            abrirLigacao(ligacao);
+        } else {
+            boolean restored = state != null && web.restoreState(state) != null;
+            if (!restored) web.loadUrl(START_URL);
+        }
+    }
+
+    // singleTask: com a app aberta, a ligacao seguinte chega aqui e nao ao onCreate.
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String ligacao = ligacaoDoIntent(intent);
+        if (ligacao != null && web != null) abrirLigacao(ligacao);
+    }
+
+    /**
+     * E uma ligacao do /test deste dominio? So https, o host igual ao do flavor
+     * (um host que so comeca pelo nosso nao e igual), sem utilizador@ nem porta, e o
+     * caminho exatamente /t/entrar (a unica rota que o servidor tem). Funcao
+     * pura: nao le nada da activity.
+     */
+    static boolean eLigacaoDoTeste(Uri u, String host) {
+        if (u == null || host == null) return false;
+        return "https".equals(u.getScheme())
+                && host.equals(u.getHost())
+                && u.getUserInfo() == null
+                && u.getPort() == -1
+                && CAMINHO_TESTE.equals(u.getPath());
+    }
+
+    /**
+     * A ligacao do /test que o intent traz, pronta a carregar, ou null. So conta
+     * um ACTION_VIEW (o do browser ou do Discord), e nao quem volta pelos
+     * recentes: esse traz o intent antigo, com a ligacao ja gasta. O URL
+     * refaz-se a partir do HOST e do caminho, com a query tal como veio (a
+     * assinatura tem de chegar intacta): o WebView nunca carrega o texto que
+     * outra app escreveu, so o nosso dominio.
+     */
+    private static String ligacaoDoIntent(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return null;
+        if ((intent.getFlags() & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return null;
+        Uri u = intent.getData();
+        if (!eLigacaoDoTeste(u, HOST)) return null;
+        String q = u.getEncodedQuery();
+        return "https://" + HOST + CAMINHO_TESTE + (q == null ? "" : "?" + q);
+    }
+
+    private void abrirLigacao(String url) {
+        ligacaoAberta = true;
+        limparHistorico = true;
+        web.loadUrl(url);
     }
 
     /**
@@ -335,6 +407,7 @@ public class MainActivity extends Activity {
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
         web.saveState(out);
+        out.putBoolean(KEY_LIGACAO_ABERTA, ligacaoAberta);
     }
 
     @Override

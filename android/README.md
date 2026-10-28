@@ -3,8 +3,9 @@
 Concha nativa (WebView) que carrega a **versão web** publicada em
 `https://app.rendorium.com` (o `HOST` do flavor `producao` em `app/build.gradle`,
 que a `MainActivity.java` lê de `BuildConfig.HOST`; a app de dev carrega
-`https://dev.rendorium.com`) — multi-utilizador, com sincronização e partilha de
-casas. A app atualiza-se sem reinstalar: ao
+`https://dev.rendorium.com`, onde só se entra por uma ligação do /test — ver
+[Ligações do /test](#ligações-do-test-só-no-dev)) — multi-utilizador, com
+sincronização e partilha de casas. A app atualiza-se sem reinstalar: ao
 abrir, pergunta ao `/versao.json` que versão está publicada e, havendo uma mais
 nova, recarrega-se com ela. Por isso uma publicação da web só chega ao telemóvel
 quando sobe a versão (a primeira entrada de `web/avisos.js`) — a cache offline
@@ -44,6 +45,37 @@ O ícone é adaptativo (`mipmap-anydpi-v26`): o fundo é a cor
 `web/estilos.css`), o primeiro plano e o monocromático são a casa de
 `drawable/ic_launcher_foreground.xml`. Os ícones da PWA saem do mesmo desenho
 em `scripts/make-icons.js` (`npm run icons`): mudar um é mudar o outro.
+
+## Ligações do /test (só no dev)
+
+O `dev.rendorium.com` só abre a quem traz a sessão de uma conta de teste, e
+essa sessão nasce ao abrir uma ligação do /test do Discord,
+`https://dev.rendorium.com/t/entrar?…` (vale 10 minutos; a resposta deixa o
+cookie e leva a «/»). A app de dev abre essas ligações: tocar numa no Discord
+ou no browser abre a Rendorium DEV, que a carrega no WebView — e o cookie fica
+lá, como o de um login.
+
+- **Quem as declara:** só o flavor dev, em `app/src/dev/AndroidManifest.xml`
+  (um intent-filter `VIEW` + `BROWSABLE` para `https`, `dev.rendorium.com`,
+  caminho `/t/entrar`), que o *manifest merger* junta à `MainActivity` de main.
+  A app de produção não declara nada disto.
+- **O que a `MainActivity` faz:** se o intent for uma destas ligações (`https`,
+  o host igual ao `HOST` do flavor, sem porta nem utilizador, o caminho
+  exatamente `/t/entrar`), carrega-a em vez do início; com a app já aberta
+  (é `singleTask`) a ligação chega ao `onNewIntent` e carrega-se por cima.
+  Abre-se uma vez só: recriar a activity ou voltar pelos recentes não a repete,
+  e o «voltar» depois dela sai da app em vez de regressar à sessão de antes.
+  Qualquer outro URI é ignorado e a app abre como sempre.
+- **A verificação:** o intent-filter tem `android:autoVerify="true"`, e o
+  Android confirma-o ao instalar contra
+  `https://dev.rendorium.com/.well-known/assetlinks.json`, que o deploy do dev
+  escreve com o pacote `pt.gestorimobiliario.app.dev` e a impressão SHA-256 do
+  certificado do APK de dev. Verificada, a ligação abre a app sem perguntar.
+  Sem a verificação (o ficheiro em falta ou com outra impressão — por exemplo
+  um APK assinado com outra chave): no **Android 12+** a ligação abre no
+  browser, e só abre a app se se ligar à mão em *Definições › Apps › Rendorium
+  DEV › Abrir por predefinição › Adicionar ligação*; no **Android 10 e 11** o
+  sistema pergunta com que app abrir.
 
 ## Compilar
 

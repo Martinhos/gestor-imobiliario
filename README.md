@@ -122,7 +122,11 @@ R2 e não no repositório (ver **Deploy (uma vez)**, ponto 3).
    publicado, **nunca se muda nem se apaga**: as palavras-passe guardadas com ele deixavam de entrar.
    A chave de assinatura do APK vive nos segredos `ANDROID_KEYSTORE_B64` e `ANDROID_KEYSTORE_PASS`;
    a do APK de dev, opcional, em `ANDROID_KEYSTORE_DEV_B64` e `ANDROID_KEYSTORE_DEV_PASS` — sem ela o
-   dev assina com a mesma ([`android/README.md`](android/README.md)).
+   dev assina com a mesma ([`android/README.md`](android/README.md)). O deploy do dev tira a impressão
+   SHA-256 do APK de dev que compila e publica-a em `https://dev.rendorium.com/.well-known/assetlinks.json`:
+   é o que deixa a APK de dev abrir as ligações do `/test` direto na app. Trocar a chave de dev muda a
+   impressão — o deploy seguinte publica a nova sozinho, mas quem já tem a APK instalada tem de a
+   reinstalar (outra chave não instala por cima) para o Android voltar a verificar as ligações.
 3. O estado do Terraform vive num balde R2 só dele, e **não** no repositório — este é público, e um
    estado acaba sempre por apanhar atributos sensíveis. Uma vez, a partir de uma cópia local:
 
@@ -154,6 +158,12 @@ falha e avisa, sem recuar — confirma o `ENV_NAME` e a `PORTA_DEV` no `[env.dev
   no portátil; com o token de deploy à mão, é `npx wrangler rollback` (mais `--env dev` no dev).
 - **Voltar a publicar o mesmo conteúdo** (um deploy que falhou a meio): Actions → Deploy → Run
   workflow, no ramo `main`.
+- **A APK de dev abre as ligações do `/test` no browser:** vê o resumo do deploy do dev. O passo
+  «Escrever o assetlinks do APK de dev» diz a impressão que publicou, ou avisa que não a conseguiu
+  tirar (nem o `keytool` nem o `apksigner` a deram) — nesse caso o
+  `https://dev.rendorium.com/.well-known/assetlinks.json` dá 404 e a app web saiu na mesma. No
+  telemóvel, `adb shell pm verify-app-links --re-verify pt.gestorimobiliario.app.dev` e
+  `adb shell pm get-app-links pt.gestorimobiliario.app.dev` refazem e mostram a verificação.
 
 O que o recuo não desfaz:
 

@@ -5691,13 +5691,39 @@ testes, sem cache, com os cabeçalhos de segurança de sempre. A entrada e o
 criar conta não existem lá; uma conta normal do dev também leva o 404. Passam
 sem sessão a própria ligação (/t/entrar) e o que a página dela pede quando a
 ligação está mal (o CSS, as duas letras e o ícone — teste.js:SEM_SESSAO), as
-interações do Discord, o /versao.json que o deploy confirma, e o back office,
-com a entrada da equipa pelo Discord, como sempre. Fecha-se com o ENV_NAME
+interações do Discord, o /versao.json que o deploy confirma, o
+/.well-known/assetlinks.json que o Android lê (abaixo), e o back office, com a
+entrada da equipa pelo Discord, como sempre. Fecha-se com o ENV_NAME
 «dev» e a PORTA_DEV «fechada» juntos (o [env.dev.vars] do wrangler.toml): a
 produção e o percurso ficam abertos. Para os ficheiros da app também ficarem
 atrás da porta, no dev todos passam pelo worker (o run_worker_first do
 [env.dev.assets]), ao preço de uma invocação por ficheiro; a conferência da
 sessão fica lembrada 30 segundos por isolado (teste.js:temSessaoDeTeste).
+
+A APK de dev abre as ligações do /test direto na app, e não no browser: sem
+elas o WebView dela nunca teria a sessão e via só o 404. O intent-filter (VIEW
+e BROWSABLE, https, dev.rendorium.com, o caminho exato /t/entrar, com
+autoVerify) vive só no flavor dev (android/app/src/dev/AndroidManifest.xml, que
+o manifest merger junta à MainActivity de main); a app de produção não declara
+nada. A MainActivity carrega a ligação em vez do início (onCreate) ou por cima
+do que estiver aberto (onNewIntent, por ser singleTask), mas só um ACTION_VIEW
+https do HOST do flavor, sem porta nem utilizador e com o caminho exatamente
+/t/entrar, e refaz o URL a partir do HOST com a query tal como veio. Abre-se
+uma vez só: recriar a activity não a repete, voltar pelos recentes também não,
+e o histórico do WebView limpa-se na página a que a ligação leva, para o
+«voltar» sair da app em vez de regressar à sessão de antes. O Android 12+ só
+entrega a ligação à app depois de ler, sem cookies, o
+/.well-known/assetlinks.json do domínio e encontrar lá o pacote
+(pt.gestorimobiliario.app.dev) e a impressão SHA-256 do certificado que assina o
+APK; sem isso abre-a no browser, e o 10 e o 11 perguntam com que app. Quem tira a
+impressão é o deploy do dev, do APK acabado de compilar (o keytool, que só vê a
+assinatura v1, e o apksigner do SDK do runner, que vê as v2/v3 — com minSdk 29
+o AGP já não põe a v1), e escreve-a em web/assetlinks-dev.json, fora do git. O
+worker serve esse ficheiro no caminho que o Android pede, só no dev
+(worker/src/teste.js:assetLinksDoDev), como application/json e com cinco
+minutos de cache; sem ele, o 404 seco da porta, sem cache, para o Android não
+guardar a falta. Uma falha a tirar a impressão não impede a app de sair: o
+deploy avisa no resumo e o caminho fica em 404 até ao deploy seguinte.
 
 ## A app em serviços
 Cada separador da barra lateral é um serviço com manifesto próprio, e as

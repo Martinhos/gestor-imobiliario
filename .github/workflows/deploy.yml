@@ -164,6 +164,87 @@ jobs:
             cp app/build/outputs/apk/dev/release/app-dev-release.apk ../web/gestor-imobiliario.apk
           fi
 
+      # A APK de dev abre as ligações do /test (https://dev.rendorium.com/t/entrar…)
+      # direto na app, com android:autoVerify: o Android 12+ só o faz depois de
+      # ler o /.well-known/assetlinks.json do domínio e lá encontrar o pacote e a
+      # impressão SHA-256 do certificado que assina o APK. O worker serve esse
+      # caminho a partir do web/assetlinks-dev.json (teste.js:assetLinksDoDev),
+      # que é este passo que escreve, com a impressão tirada do APK acabado de
+      # compilar — que é pública, não precisa da chave nem de segredos.
+      #
+      # Duas ferramentas, porque nenhuma chega sozinha: o keytool (do JDK do
+      # setup-java) só lê a assinatura v1, a dos JAR, que o AGP deixa de pôr
+      # com minSdk 24+ — aí diz «Not a signed jar file» e sai com 0; o
+      # apksigner do SDK do runner lê as v2/v3. As duas saídas vão para o
+      # pedaço em Node (o heredoc JS, provado em testes/assetlinks-dev.test.js),
+      # que tira as impressões e escreve o JSON.
+      #
+      # Isto não pode impedir a app web de sair: sem impressão, fica um aviso
+      # no resumo, o ficheiro não vai, e o caminho dá 404 até ao próximo deploy
+      # (a APK de dev abre as ligações no browser, como antes). Daí o set +e
+      # (o GitHub corre o bash com -e) e o continue-on-error.
+      - name: Escrever o assetlinks do APK de dev
+        if: ${{ !env.IS_PROD }}
+        continue-on-error: true
+        run: |
+          set +e
+          APK=web/gestor-imobiliario.apk
+          PACOTE=pt.gestorimobiliario.app.dev
+          SAIDA="$RUNNER_TEMP/certificados.txt"
+          : > "$SAIDA"
+          cat > "$RUNNER_TEMP/assetlinks.js" <<'JS'
+          // Lê da entrada a saída do keytool (-printcert -jarfile) e/ou do
+          // apksigner (verify --print-certs) e escreve o assetlinks.json do
+          // pacote do argumento, com as impressões em maiúsculas e dois pontos.
+          // Do keytool, o primeiro certificado de cada assinante (os outros são
+          // a cadeia); do apksigner, as linhas dos assinantes (não a do carimbo
+          // de origem, que é de outro certificado). Sem impressão nenhuma, ou
+          // sem pacote, sai com 1 e não escreve nada.
+          const texto = require('fs').readFileSync(0, 'utf8').replace(/\r/g, '');
+          const pacote = process.argv[2];
+          const impressoes = [];
+          const juntar = (hex) => {
+            const f = hex.replace(/:/g, '').toUpperCase().match(/../g).join(':');
+            if (impressoes.indexOf(f) < 0) impressoes.push(f);
+          };
+          const doKeytool = /^[ \t]*SHA-?256:[ \t]*((?:[0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2})[ \t]*$/m;
+          const blocos = texto.split(/^Signer #\d+:[ \t]*$/m);
+          for (const bloco of blocos.length > 1 ? blocos.slice(1) : blocos) {
+            const m = doKeytool.exec(bloco);
+            if (m) juntar(m[1]);
+          }
+          for (const m of texto.matchAll(/^Signer\b[^\n]* certificate SHA-256 digest:[ \t]*([0-9A-Fa-f]{64})[ \t]*$/gm)) juntar(m[1]);
+          if (!pacote || !impressoes.length) {
+            console.error('Sem impressão SHA-256 na saída do keytool nem na do apksigner.');
+            process.exit(1);
+          }
+          process.stdout.write(JSON.stringify([{
+            relation: ['delegate_permission/common.handle_all_urls'],
+            target: { namespace: 'android_app', package_name: pacote, sha256_cert_fingerprints: impressoes },
+          }]) + '\n');
+          JS
+          if command -v keytool > /dev/null; then
+            keytool -printcert -jarfile "$APK" >> "$SAIDA" 2>&1
+          fi
+          APKSIGNER=
+          for f in "${ANDROID_HOME:-$ANDROID_SDK_ROOT}"/build-tools/*/apksigner; do
+            if [ -x "$f" ]; then APKSIGNER="$f"; fi
+          done
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs "$APK" >> "$SAIDA" 2>&1
+          fi
+          if node "$RUNNER_TEMP/assetlinks.js" "$PACOTE" < "$SAIDA" > "$RUNNER_TEMP/assetlinks-dev.json" \
+            && cp "$RUNNER_TEMP/assetlinks-dev.json" web/assetlinks-dev.json; then
+            echo "O dev.rendorium.com/.well-known/assetlinks.json vai com: \`$(cat web/assetlinks-dev.json)\`" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            rm -f web/assetlinks-dev.json
+            AVISO="Sem o assetlinks do dev: não se tirou a impressão SHA-256 do APK (nem o keytool nem o apksigner a deram). O dev.rendorium.com/.well-known/assetlinks.json fica em 404 e a APK de dev abre as ligações do /test no browser, até a um deploy que a tire."
+            echo "::warning::$AVISO"
+            echo "$AVISO" >> "$GITHUB_STEP_SUMMARY"
+            cat "$SAIDA"
+          fi
+          exit 0
+
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: false

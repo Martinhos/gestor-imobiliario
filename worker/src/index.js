@@ -12,7 +12,7 @@ import { dailyReport, watchLimits } from './notify.js';
 import { copiar } from './salvaguarda.js';
 import { recursoDePagina } from './paginas-recursos.js';
 import { CAMINHOS_DE_IDENTIDADE, identidadeDeDev } from './lib/identidade.js';
-import { portaDoDev } from './teste.js';
+import { assetLinksDoDev, portaDoDev } from './teste.js';
 
 /* Os dois scripts em linha do web/index.html — a armadilha de erros e a cura
    do arranque — têm de correr antes de qualquer ficheiro, e por isso não podem
@@ -182,6 +182,14 @@ export default {
        Fora do dev (produção, percurso) devolve null sem ler nada. */
     const fechada = await portaDoDev(env, request, url);
     if (fechada) return harden(fechada);
+
+    /* O /.well-known/assetlinks.json do dev (teste.js:assetLinksDoDev), que
+       o Android lê sem cookies para a APK de dev abrir as ligações do /test.
+       Logo DEPOIS da porta, e não antes: a porta continua a ser a primeira
+       coisa de todas, e o que ela deixa passar sem sessão fica dito num sítio
+       só (teste.js:SEM_SESSAO), onde o caminho está. Fora do dev, null. */
+    const ligacoes = await assetLinksDoDev(env, request, url);
+    if (ligacoes) return harden(ligacoes);
 
     const caminho = url.pathname.replace(/^\/|\/$/g, '');
     const naRaiz = url.hostname === 'rendorium.com' || url.hostname === 'www.rendorium.com';

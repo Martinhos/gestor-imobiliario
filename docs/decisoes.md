@@ -72,6 +72,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-28 · A hipoteca que começa no futuro
 - 2026-10-28 · O dev só abre pela ligação do /test
 - 2026-10-28 · A terceira ronda de tickets de QA
+- 2026-10-28 · A APK de dev abre as ligações do /test
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2729,3 +2730,15 @@ uma data inventada, que os reenviava todos ao servidor. E um toque durante o
 arranque (o relato «LFK is not defined», ao abrir a gaveta antes de o
 vistas.js carregar) deixou de correr a ação com meia app: engole-se, em vez
 de se guardar para depois.
+
+## 2026-10-28 · A APK de dev abre as ligações do /test
+
+Com o dev fechado a quem não vem do /test, a APK de dev via só o 404: o
+WebView dela nunca tinha a sessão. O Martinho pediu que ela abrisse as
+ligações do /test. O intent-filter vive só no flavor dev, com o caminho exato
+que a MainActivity aceita, e com autoVerify: sem a verificação, o Android 12+
+abre a ligação no browser, onde a sessão fica, e não na app. A verificação
+pede o /.well-known/assetlinks.json com a impressão do certificado da APK de
+dev, e quem a tira é o deploy, do APK que acabou de compilar — é pública, não
+precisa da chave nem de segredos, e assim muda sozinha se a chave de dev
+mudar. Uma falha a tirá-la não trava a publicação da app web: avisa e segue.
