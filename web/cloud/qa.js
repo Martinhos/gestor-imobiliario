@@ -6,8 +6,13 @@
    pílula (CW.ambiente === 'producao') nem as rotas (404 sem ENV_NAME). */
 'use strict';
 
-/* O desenho (a opção C que o Martinho escolheu, 2026-10-28): a pega de pontos,
-   o ícone, «QA» e o número de abertos, num roxo (--loan) que não se confunde
+/* Um ticket tem três estados: novo (status 'aberto', como nasce e como volta
+   ao reabrir), em resolução ('em_resolucao', que só o scripts/qa.mjs comecar
+   marca, quando se pega nele) e resolvido. «Por resolver» são os novos e os
+   em resolução: é esse o número da pílula.
+
+   O desenho (a opção C que o Martinho escolheu, 2026-10-28): a pega de pontos,
+   o ícone, «QA» e o número por resolver, num roxo (--loan) que não se confunde
    com o cobalto das ações da app. A pega fica do lado da borda onde a pílula
    encostou (o data-lado que o qaPor escreve; a troca é da folha), e só muda
    ao largar, nunca a meio do arrasto. Na primeira vez, ao lado, a
@@ -61,9 +66,9 @@ var QA_GRAVIDADES = [
 ];
 // as secções da lista que se tocaram neste aparelho: {chave: true (aberta) ou false (recolhida)}
 var QA_LS_DOBRAS = 'gi_qa_dobras';
-// as secções da lista que abrem e fecham: os abertos, os resolvidos e cada grupo de gravidade dos abertos
-var QA_DOBRAS = ['abertos', 'resolvidos'].concat(QA_GRAVIDADES.map(function (g) { return 'g-' + g.v; }), ['g-sem']);
-// as que nascem recolhidas enquanto ninguém lhes tocou: só os resolvidos (os abertos são o que se vem ver)
+// as secções da lista que abrem e fecham: os novos, os em resolução, os resolvidos e cada grupo de gravidade dos novos
+var QA_DOBRAS = ['novos', 'em-resolucao', 'resolvidos'].concat(QA_GRAVIDADES.map(function (g) { return 'g-' + g.v; }), ['g-sem']);
+// as que nascem recolhidas enquanto ninguém lhes tocou: só os resolvidos (os por resolver são o que se vem ver)
 var QA_DOBRAS_FECHADAS = ['resolvidos'];
 
 var qaPil = null;            // o elemento da pílula (#qaPilula); null fora do dev ou sem sessão
@@ -76,7 +81,7 @@ var qaArrastouAqui = false;  // o mesmo que QA_LS_ARRASTOU, para quando o armaze
 var qaPonteiro = '';         // o ponteiro do último toque na pílula: 'touch', 'mouse', 'pen' ou 'teclado'
 var qaContextoGuardado = null;   // o ecrã no momento em que se abriu o menu
 var qaLista = { tickets: null, falhou: false, aPedir: null };   // tickets: null quer dizer «ainda não se sabe»
-var qaAbertos = null;        // quantos tickets abertos; null enquanto não se sabe
+var qaAbertos = null;        // quantos tickets por resolver (novos e em resolução); null enquanto não se sabe
 var qaRascunho = null;       // o ticket a ser escrito: {gravidade, imagem, url, id, aEnviar, contexto, camada}
 var qaCamadaLista = null;    // a camada da janela «Tickets de QA», enquanto aberta
 var qaCamadaTicket = null;   // a camada da janela de um ticket, enquanto aberta
@@ -152,7 +157,7 @@ function qaBotao() {
    e a etiqueta da primeira vez. O data-menu="acoes" diz ao percurso que é um
    menu de ações com nome próprio, e não a porta das opções de um registo
    (testes/ui/invariantes.js, «a porta das opções é sempre a mesma»).
-   Recebe: n — quantos tickets abertos (null se ainda não se sabe);
+   Recebe: n — quantos tickets por resolver (null se ainda não se sabe);
    comEtiqueta — true para mostrar «Arrasta para mudar de sítio».
    Devolve: o HTML (texto). */
 function qaHtmlPilula(n, comEtiqueta) {
@@ -171,7 +176,7 @@ function qaHtmlPilula(n, comEtiqueta) {
 }
 
 /* As duas opções do menu da pílula.
-   Recebe: n — quantos tickets abertos (null se ainda não se sabe).
+   Recebe: n — quantos tickets por resolver (null se ainda não se sabe).
    Devolve: o HTML (texto). */
 function qaHtmlMenu(n) {
   return '<button type="button" data-toca="camada" data-click="closePops();qaNovoTicket()">' + ic('plus', 17) + ' Novo ticket</button>' +
@@ -179,7 +184,7 @@ function qaHtmlMenu(n) {
 }
 
 /* O número da pílula, curto: 99+ a partir de cem.
-   Recebe: n — quantos tickets abertos.
+   Recebe: n — quantos tickets por resolver.
    Devolve: o texto ('' sem número). */
 function qaNumeroCurto(n) {
   if (!(n > 0)) return '';
@@ -187,22 +192,22 @@ function qaNumeroCurto(n) {
 }
 
 /* O nome do botão para o leitor de ecrã, com o número dito por extenso.
-   Recebe: n — quantos tickets abertos (null se ainda não se sabe).
+   Recebe: n — quantos tickets por resolver (null se ainda não se sabe).
    Devolve: o texto. */
 function qaRotuloDoBotao(n) {
   if (n == null) return 'Tickets de QA';
-  if (n === 0) return 'Tickets de QA, nenhum aberto';
-  return 'Tickets de QA, ' + n + (n === 1 ? ' aberto' : ' abertos');
+  if (n === 0) return 'Tickets de QA, nenhum por resolver';
+  return 'Tickets de QA, ' + n + ' por resolver';
 }
 
-/* O rótulo da segunda opção do menu: «Ver tickets (N)», com N os abertos.
-   Recebe: n — quantos tickets abertos (null se ainda não se sabe).
+/* O rótulo da segunda opção do menu: «Ver tickets (N)», com N os por resolver.
+   Recebe: n — quantos tickets por resolver (null se ainda não se sabe).
    Devolve: o texto. */
 function qaRotuloVer(n) {
   return n == null ? 'Ver tickets' : 'Ver tickets (' + n + ')';
 }
 
-/* Escreve o número de abertos na pílula e no menu, sem a refazer (o menu
+/* Escreve o número por resolver na pílula e no menu, sem a refazer (o menu
    pode estar aberto). A largura muda com o número, e à direita isso muda o
    x: reencaixa.
    Devolve: nada. */
@@ -541,7 +546,7 @@ function qaAoMudarTamanho() {
 
 /* Depois do menuOpen: se o menu ficou aberto, guarda o ecrã de agora (o que
    vai com um ticket novo), marca para o CSS quando o menu se virou para cima
-   (a origem da entrada), e pede o número de abertos.
+   (a origem da entrada), e pede o número por resolver.
    Recebe: e — o evento do clique (detail 0 quando veio do teclado).
    Devolve: nada. */
 function qaMenuAbriu(e) {
@@ -917,7 +922,7 @@ function qaBotaoEnviar(ocupado) {
    gravidade e o contexto num POST, e depois a captura num PUT. Se o ticket
    ficou guardado e só a imagem falhou, a janela fica aberta, a dizê-lo, e
    «Enviar a imagem» tenta outra vez só a imagem (nunca um ticket repetido).
-   Com tudo certo fecha e avisa, e o número de abertos atualiza-se.
+   Com tudo certo fecha e avisa, e o número por resolver atualiza-se.
    Devolve: Promise com true se o ticket ficou enviado por inteiro. */
 function qaEnviar() {
   var r = qaRascunho;
@@ -987,7 +992,7 @@ function qaSubirImagem(id, blob) {
 /* ------------------------------------------------------------- a lista */
 
 /* Vai buscar os tickets (GET /api/qa), um pedido de cada vez, e com eles o
-   número de abertos; repinta a pílula, a lista e o ticket aberto. Corre ao
+   número por resolver; repinta a pílula, a lista e o ticket aberto. Corre ao
    aparecer a pílula, ao abrir o menu, ao abrir a lista, depois de criar,
    remover, repor e reabrir, e ao voltar à app — nunca em ciclo. A falha não
    é uma lista vazia: diz-se, com «Tentar de novo».
@@ -1029,22 +1034,25 @@ function qaOrdemGravidade(g) {
   return QA_GRAVIDADES.length;
 }
 
-/* Os tickets arrumados: os abertos agrupados por gravidade (bloqueia,
-   incomoda, detalhe, sem gravidade) e em cada grupo do mais recente para o
-   mais antigo, e os resolvidos, do resolvido há menos tempo para o resolvido
-   há mais.
+/* Os tickets arrumados pelos três estados: os novos e os em resolução, cada
+   parte por gravidade (bloqueia, incomoda, detalhe, sem gravidade) e em cada
+   gravidade do mais recente para o mais antigo, e os resolvidos, do
+   resolvido há menos tempo para o resolvido há mais. Um estado que não se
+   conhece fica com os novos: por resolver, e à vista.
    Recebe: ts — os tickets da API.
-   Devolve: {abertos, resolvidos} (arrays novos). */
+   Devolve: {novos, emResolucao, resolvidos, abertos} (arrays novos;
+   abertos são os por resolver — os novos e depois os em resolução). */
 function qaSeccoes(ts) {
   var lista = Array.isArray(ts) ? ts : [];
-  var abertos = lista.filter(function (t) { return t.status !== 'resolvido'; })
-    .sort(function (a, b) {
-      return qaOrdemGravidade(a.severity) - qaOrdemGravidade(b.severity) ||
-        (Number(b.created_at) || 0) - (Number(a.created_at) || 0);
-    });
+  var porGravidade = function (a, b) {
+    return qaOrdemGravidade(a.severity) - qaOrdemGravidade(b.severity) ||
+      (Number(b.created_at) || 0) - (Number(a.created_at) || 0);
+  };
+  var novos = lista.filter(function (t) { return t.status !== 'resolvido' && t.status !== 'em_resolucao'; }).sort(porGravidade);
+  var emResolucao = lista.filter(function (t) { return t.status === 'em_resolucao'; }).sort(porGravidade);
   var resolvidos = lista.filter(function (t) { return t.status === 'resolvido'; })
     .sort(function (a, b) { return (Number(b.resolved_at || b.updated_at) || 0) - (Number(a.resolved_at || a.updated_at) || 0); });
-  return { abertos: abertos, resolvidos: resolvidos };
+  return { novos: novos, emResolucao: emResolucao, resolvidos: resolvidos, abertos: novos.concat(emResolucao) };
 }
 
 /* Abre a janela «Tickets de QA»: logo com o que já se sabe (ou a espera), e
@@ -1061,7 +1069,8 @@ function qaVerTickets() {
 }
 
 /* O corpo da lista: a espera, a falha com «Tentar de novo», o vazio, ou os
-   abertos e, a seguir, os «Resolvidos», cada um uma secção que abre e fecha
+   «Novos» (em grupos por gravidade), os «Em resolução» e os «Resolvidos»
+   (estas duas só quando os há), cada um uma secção que abre e fecha
    (qaHtmlDobra; por nascença os resolvidos recolhidos). Com tickets já mostrados e uma
    atualização falhada, diz que é o que havia.
    Devolve: o HTML (texto). */
@@ -1079,21 +1088,23 @@ function qaHtmlLista() {
     return aviso + '<div class="empty"><b>Ainda não há tickets.</b>Quando vires alguma coisa que não está bem, toca em QA e depois em Novo ticket.</div>';
   }
   return '<div class="qa-lista">' + aviso +
-    qaHtmlDobra('abertos', 'h3', '<span class="qa-dobra-nome">Abertos</span><span class="qa-sec-n">' + s.abertos.length + '</span>',
-      s.abertos.length ? qaHtmlGrupos(s.abertos) : '<p class="hint">Nenhum ticket aberto.</p>') +
+    qaHtmlDobra('novos', 'h3', '<span class="qa-dobra-nome">Novos</span><span class="qa-sec-n">' + s.novos.length + '</span>',
+      s.novos.length ? qaHtmlGrupos(s.novos) : '<p class="hint">Nenhum ticket novo.</p>') +
+    (s.emResolucao.length ? qaHtmlDobra('em-resolucao', 'h3', '<span class="qa-dobra-nome">Em resolução</span><span class="qa-sec-n">' + s.emResolucao.length + '</span>',
+      '<div class="qa-linhas">' + s.emResolucao.map(qaHtmlLinha).join('') + '</div>') : '') +
     (s.resolvidos.length ? qaHtmlDobra('resolvidos', 'h3', '<span class="qa-dobra-nome">Resolvidos</span><span class="qa-sec-n">' + s.resolvidos.length + '</span>',
       '<div class="qa-linhas">' + s.resolvidos.map(qaHtmlLinha).join('') + '</div>') : '') +
     '</div>';
 }
 
-/* Os abertos em grupos por gravidade, cada um com o título e quantos tem,
+/* Os novos em grupos por gravidade, cada um com o título e quantos tem,
    e cada um uma secção que abre e fecha (qaHtmlDobra; os tickets já vêm
    arrumados por qaSeccoes).
-   Recebe: abertos — os tickets abertos, pela ordem de qaSeccoes.
+   Recebe: novos — os tickets novos, pela ordem de qaSeccoes.
    Devolve: o HTML (texto). */
-function qaHtmlGrupos(abertos) {
+function qaHtmlGrupos(novos) {
   var grupos = [];
-  abertos.forEach(function (t) {
+  novos.forEach(function (t) {
     var o = qaOrdemGravidade(t.severity);
     if (!grupos.length || grupos[grupos.length - 1].o !== o) grupos.push({ o: o, ts: [] });
     grupos[grupos.length - 1].ts.push(t);
@@ -1113,8 +1124,8 @@ function qaHtmlGrupos(abertos) {
    corpo fica sempre no HTML e é a folha que o recolhe (estilos.css, bloco
    «tickets de QA»: .qa-dobra.fechada). Nasce como está guardado neste
    aparelho (qaDobraAberta).
-   Recebe: chave — uma de QA_DOBRAS; nivel — 'h3' (os abertos e os
-   resolvidos) ou 'h4' (os grupos de gravidade); cabeca — o HTML do nome e do
+   Recebe: chave — uma de QA_DOBRAS; nivel — 'h3' (os novos, os em
+   resolução e os resolvidos) ou 'h4' (os grupos de gravidade); cabeca — o HTML do nome e do
    número; corpo — o HTML de dentro.
    Devolve: o HTML (texto). */
 function qaHtmlDobra(chave, nivel, cabeca, corpo) {
@@ -1291,7 +1302,7 @@ function qaAbrirTicket(id) {
 function qaHtmlTicket(t) {
   var resolvido = t.status === 'resolvido';
   return '<div class="form qa-ver">' +
-    '<div class="qa-ver-cab">' + (resolvido ? '<span class="badge in">Resolvido</span>' : '<span class="badge">Aberto</span>') + qaSelo(t.severity) + '</div>' +
+    '<div class="qa-ver-cab">' + qaSeloEstado(t.status) + qaSelo(t.severity) + '</div>' +
     '<p class="small qa-quem">' + esc(qaAutor(t, true)) + ' · ' + esc(qaQuando(t.created_at)) + '</p>' +
     '<p class="qa-ver-txt">' + esc(t.body) + '</p>' +
     (t.imagem ? '<div class="qa-ver-img a-carregar" aria-busy="true"><span class="qa-so-leitor">A carregar a captura</span></div>' : '') +
@@ -1301,8 +1312,19 @@ function qaHtmlTicket(t) {
     '</div>';
 }
 
+/* O selo do estado de um ticket: «Novo», «Em resolução» (no roxo do QA) ou
+   «Resolvido» (verde). Um estado que não se conhece diz «Novo», como na lista.
+   Recebe: status — o do ticket.
+   Devolve: o HTML (texto). */
+function qaSeloEstado(status) {
+  if (status === 'resolvido') return '<span class="badge in">Resolvido</span>';
+  if (status === 'em_resolucao') return '<span class="badge loan">Em resolução</span>';
+  return '<span class="badge">Novo</span>';
+}
+
 /* O rodapé da janela de um ticket: «Remover» sempre (com Anular, por isso
-   sem pergunta), e «Reabrir» num resolvido ou «Fechar» num aberto.
+   sem pergunta), e «Reabrir» num resolvido ou «Fechar» num novo ou em
+   resolução (passar a em resolução é só do scripts/qa.mjs comecar).
    Recebe: t — o ticket.
    Devolve: o HTML (texto). */
 function qaRodapeTicket(t) {
@@ -1416,7 +1438,7 @@ function qaRepor(id) {
   });
 }
 
-/* Reabre um ticket resolvido (POST /api/qa/:id/reabrir): volta aos abertos,
+/* Reabre um ticket resolvido (POST /api/qa/:id/reabrir): volta aos novos,
    e a resolução fica, a dizer «Resolução anterior».
    Recebe: id — o id do ticket.
    Devolve: Promise com true se ficou reaberto. */
@@ -1491,7 +1513,7 @@ document.addEventListener('click', qaEngoleClique, true);
 // rodar o telemóvel ou mudar a janela de tamanho reencaixa a pílula
 window.addEventListener('resize', qaAoMudarTamanho);
 window.addEventListener('orientationchange', qaAoMudarTamanho);
-// voltar à app atualiza o número de abertos (sem sondar em ciclo)
+// voltar à app atualiza o número por resolver (sem sondar em ciclo)
 document.addEventListener('visibilitychange', function () {
   if (document.visibilityState === 'visible' && qaPil) qaCarregar();
 });

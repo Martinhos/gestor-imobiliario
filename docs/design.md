@@ -5751,15 +5751,18 @@ ordem de carregamento.
 
 Fora de produção há uma pílula «QA» que quem testa arrasta para onde estorvar
 menos e que abre «Novo ticket» e «Ver tickets». Os tickets ficam na D1 do
-ambiente e quem programa lê-os e fecha-os com scripts/qa.mjs. Em produção nada
+ambiente e quem programa lê-os e fecha-os com scripts/qa.mjs. Um ticket tem
+três estados: novo (o status 'aberto', como nasce e como volta ao reabrir),
+em resolução ('em_resolucao', que só o scripts/qa.mjs comecar marca, logo que
+quem programa pega nele) e resolvido. Em produção nada
 disto existe: nem a pílula (cloud/qa.js:qaDeveExistir pede um CW.ambiente que
 não seja 'producao', e sessão) nem as rotas (worker/src/rotas/qa.js:rotasQa
 responde 404 sem env.ENV_NAME, antes de ler o corpo).
 
 A pílula vive no body, fora do #view, e aparece no render que traz o ambiente
 do servidor (cloud/qa.js:qaSincronizar). É a pega de pontos, o inseto
-(icones.js:ic, 'inseto'), «QA» e o número de abertos
-(cloud/qa.js:qaHtmlPilula), em --loan para não se confundir com o cobalto das
+(icones.js:ic, 'inseto'), «QA» e o número por resolver — os novos e os em
+resolução (cloud/qa.js:qaHtmlPilula, cloud/qa.js:qaRotuloDoBotao) —, em --loan para não se confundir com o cobalto das
 ações, com o contorno na cor da frente para o escurecimento forçado. A pega
 fica do lado da borda onde a pílula encostou: à esquerda à esquerda, e à
 direita depois do número, com o enchimento curto do lado dela (o order de
@@ -5805,12 +5808,15 @@ escolhida ou colada com Ctrl+V e encolhida no cliente
 (cloud/qa.js:qaEncolherImagem). Enviar é o POST e depois o PUT da captura; se
 só a captura falha, a janela fica aberta e o botão passa a «Enviar a imagem»,
 sem repetir o ticket (cloud/qa.js:qaEnviar). A lista (cloud/qa.js:qaVerTickets)
-tem os abertos, em grupos por gravidade (bloqueia, incomoda, detalhe, sem
+tem os «Novos», em grupos por gravidade (bloqueia, incomoda, detalhe, sem
 gravidade) e em cada grupo do mais recente para o mais antigo
 (cloud/qa.js:qaSeccoes, qaHtmlGrupos; a API e o scripts/qa.mjs dão a mesma
-ordem), e depois «Resolvidos»; tocar abre o ticket para ler, com a
-captura, o contexto e a resolução (ou a «Resolução anterior» de um reaberto).
-Os abertos, os resolvidos e cada grupo de gravidade dos abertos abrem e
+ordem), depois os «Em resolução», pela mesma ordem mas numa lista só, e no fim
+os «Resolvidos»; as duas últimas só aparecem quando há. Tocar abre o ticket
+para ler, com o selo do estado (cloud/qa.js:qaSeloEstado: «Novo», «Em
+resolução» em --loan, «Resolvido» em --in), a captura, o contexto e a
+resolução (ou a «Resolução anterior» de um reaberto). Os novos, os em
+resolução, os resolvidos e cada grupo de gravidade dos novos abrem e
 fecham como as secções da gaveta (cloud/qa.js:qaHtmlDobra, cloud/qa.js:qaDobrar):
 o título é um botão da largura toda, de 44px, com o nome, quantos tem e a
 seta, aria-expanded e aria-controls; tocar troca a classe .fechada no nó vivo,
@@ -5823,7 +5829,8 @@ cloud/qa.js:qaDobraAberta). Com o armazenamento vedado, o toque vale nesta
 sessão (cloud/qa.js:qaDobrasAqui). A lista que o servidor repinta
 (cloud/qa.js:qaPintarLista) nasce já no estado guardado, sem transição.
 «Remover» não pergunta: o aviso traz o Anular (cloud/qa.js:qaRemover).
-«Reabrir» devolve um resolvido aos abertos (cloud/qa.js:qaReabrir).
+«Reabrir» devolve um resolvido aos novos (cloud/qa.js:qaReabrir); um novo ou
+em resolução tem «Fechar», porque passar a em resolução é só do script.
 
 Quem escreveu um ticket numa conta de teste é a conta do Discord que pediu a
 ligação do /test, e não a conta de teste: a ligação leva o nome do Discord
@@ -5854,15 +5861,17 @@ qa/<id>, e só PNG, JPEG ou WebP pelos próprios bytes
 30 tickets por hora por pessoa. Remover é brando
 (worker/src/rotas/qa.js:removerTicket), para o Anular; passadas 24 h a linha
 apaga-se de vez com a captura, de passagem nas rotas
-(worker/src/rotas/qa.js:limparRemovidos). Reabrir guarda a resolução.
+(worker/src/rotas/qa.js:limparRemovidos). Reabrir guarda a resolução. A
+ordem do GET é a dos três estados (worker/src/rotas/qa.js:listarTickets).
 
 Quem programa lê e fecha os tickets com `node scripts/qa.mjs listar | imagem |
-resolver | reabrir` (o uso está na cabeça do ficheiro), e a skill qa
+comecar | resolver | reabrir` (o uso está na cabeça do ficheiro), e a skill qa
 (.claude/skills/qa, na pasta acima do repositório) ensina o fluxo inteiro. O
 script só fala com a base e o bucket do dev, ou com a base isolada do 8788
 (--local), e recusa qualquer outro alvo antes de chamar o wrangler; corre o
 wrangler sem shell e escapa o SQL, porque as notas trazem texto livre. Só
-escreve com resolver (a nota e uma linha «Commit: <sha>») e reabrir. Remover
+escreve com comecar (os novos passam a em resolução; recusa um resolvido),
+resolver (a nota e uma linha «Commit: <sha>») e reabrir. Remover
 não existe no script: é de quem testa, na app.
 
 ## A CSP sem «unsafe-inline»

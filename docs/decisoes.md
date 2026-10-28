@@ -67,6 +67,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-28 · Quem fecha uma apresentação a meio é perguntado, uma vez
 - 2026-10-28 · Trinta sessões numa conta de teste
 - 2026-10-28 · A segunda ronda de tickets de QA: o ano inteiro, os donos no seletor, os grupos nos filtros
+- 2026-10-28 · Os tickets de QA com três estados: novos, em resolução, resolvidos
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2632,3 +2633,20 @@ Os outros: na Ajuda, «Marcar todas como vistas» (f6e09ead) e rever uma até à
 vermelho (61234ca0); na pílula QA, as secções da lista dobram, com os
 resolvidos recolhidos por omissão (a2787d04), e a pega vira-se para a borda
 onde a pílula encostou, só ao largar (89811267).
+
+## 2026-10-28 · Os tickets de QA com três estados: novos, em resolução, resolvidos
+
+Um ticket de QA do Martinho (1ca648f5): quer ver, na app, que um ticket já está
+a ser tratado. As escolhas dele: três estados, Novos, Em resolução e
+Resolvidos; só quem resolve (o Claude, pelo scripts/qa.mjs comecar) passa um
+ticket a em resolução, logo que pega nele, e a app só mostra; reabrir devolve
+aos novos; o número da pílula conta os novos e os em resolução, tudo o que
+ainda não está resolvido.
+
+Na base o novo continua a chamar-se 'aberto' e o em resolução é
+'em_resolucao': o status é texto sem CHECK, por isso não houve migração, e os
+tickets que já existiam ficaram novos sem se lhes mexer. A rota não ganhou
+nenhum caminho para marcar em resolução: seria um botão a mais na app para uma
+coisa que é de quem programa. O comecar confere todos os ids antes de mexer em
+algum, e recusa um resolvido (esse reabre-se primeiro), para nunca tirar um
+ticket dos resolvidos sem se ver.

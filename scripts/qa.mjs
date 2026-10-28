@@ -6,17 +6,24 @@
 //
 //   node scripts/qa.mjs listar [--local] [--todos] [--json]
 //   node scripts/qa.mjs imagem <id> [--local] [--para <pasta>]
+//   node scripts/qa.mjs comecar <id> [<id>…] [--local]
 //   node scripts/qa.mjs resolver <id> --nota "o que se fez" [--commit <sha>] [--local]
 //   node scripts/qa.mjs reabrir <id> [--local]
 //
-// listar mostra os abertos (com --todos, também os resolvidos), cada um com
+// Um ticket tem três estados: novo (status 'aberto', como nasce e como volta
+// ao reabrir), em resolução ('em_resolucao', marcado com comecar logo que se
+// pega nele) e resolvido. A app mostra-os nesta ordem, e o listar também.
+//
+// listar mostra os por resolver — os novos e os em resolução (com --todos,
+// também os resolvidos) —, cada um com
 // tudo o que é preciso para o resolver sem abrir a app: a descrição inteira,
 // a gravidade, quem e quando, o contexto do ecrã e se tem imagem. --json dá o
 // mesmo na forma do GET /api/qa, para máquinas.
 // imagem descarrega a captura para os.tmpdir()/rendorium-qa (ou --para) e
 // diz o caminho, com a extensão do tipo verdadeiro (png, jpg ou webp).
-// resolver marca resolvido, com a nota (e o commit) como resolução; reabrir
-// devolve-o aos abertos e guarda a resolução, como a rota da app.
+// comecar passa os tickets dados a em resolução (recusa um resolvido: esse
+// reabre-se primeiro). resolver marca resolvido, com a nota (e o commit) como
+// resolução; reabrir devolve-o aos novos e guarda a resolução, como a rota da app.
 // Remover não existe aqui de propósito: é do Martinho, na app.
 //
 // Sem --local, a base é a do dev na Cloudflare (gestor-imobiliario-dev, e o
@@ -45,7 +52,7 @@ const WRANGLER = path.join(RAIZ, 'node_modules', 'wrangler', 'bin', 'wrangler.js
 const PERSIST = path.join(RAIZ, '.wrangler', 'state-revisao');
 const PASTA_TEMP = path.join(os.tmpdir(), 'rendorium-qa');
 
-export const COMANDOS = ['listar', 'imagem', 'resolver', 'reabrir'];
+export const COMANDOS = ['listar', 'imagem', 'comecar', 'resolver', 'reabrir'];
 // os dois sítios onde o script pode ir, e só estes: o dev na Cloudflare e a base isolada
 export const ALVOS = {
   remoto: { local: false, base: 'gestor-imobiliario-dev', bucket: 'gestor-imobiliario-dev' },
@@ -58,6 +65,7 @@ export const USO = [
   'Uso:',
   '  node scripts/qa.mjs listar [--local] [--todos] [--json]',
   '  node scripts/qa.mjs imagem <id> [--local] [--para <pasta>]',
+  '  node scripts/qa.mjs comecar <id> [<id>…] [--local]',
   '  node scripts/qa.mjs resolver <id> --nota "o que se fez" [--commit <sha>] [--local]',
   '  node scripts/qa.mjs reabrir <id> [--local]',
   '',
@@ -81,6 +89,7 @@ export class ErroQa extends Error {
 const OPCOES = {
   listar: { sinais: ['--local', '--todos', '--json'], valores: [] },
   imagem: { sinais: ['--local'], valores: ['--para'] },
+  comecar: { sinais: ['--local'], valores: [] },
   resolver: { sinais: ['--local'], valores: ['--nota', '--commit'] },
   reabrir: { sinais: ['--local'], valores: [] },
 };
@@ -89,7 +98,8 @@ const OPCOES = {
    aceitando «--nota texto» e «--nota=texto». Recusa o que não conhece em vez
    de o ignorar: uma opção mal escrita (--loca) ia ao dev em vez da base local.
    Recebe: argv — os argumentos depois do script (array de texto).
-   Devolve: { comando, id, local, todos, json, para, nota, commit }; lança
+   Devolve: { comando, id, ids, local, todos, json, para, nota, commit } —
+   ids só no comecar, que aceita vários (id é o primeiro); lança
    ErroQa (código 2) com a razão e o uso. */
 export function lerArgumentos(argv) {
   const lista = Array.isArray(argv) ? argv.slice() : [];
@@ -98,7 +108,7 @@ export function lerArgumentos(argv) {
   if (!comando) falha('Falta o comando.');
   if (!COMANDOS.includes(comando)) falha('Não conheço o comando «' + comando + '».');
   const { sinais, valores } = OPCOES[comando];
-  const r = { comando, id: null, local: false, todos: false, json: false, para: null, nota: null, commit: null };
+  const r = { comando, id: null, ids: null, local: false, todos: false, json: false, para: null, nota: null, commit: null };
   const soltos = [];
   for (let i = 0; i < lista.length; i++) {
     const a = String(lista[i]);
@@ -122,6 +132,9 @@ export function lerArgumentos(argv) {
   if (pedeId) {
     if (!soltos.length) falha('Falta o id do ticket (vê-se no listar).');
     r.id = confereId(soltos.shift());
+  }
+  if (comando === 'comecar') {
+    r.ids = [r.id].concat(soltos.splice(0).map(confereId)).filter((id, i, todos) => todos.indexOf(id) === i);
   }
   if (soltos.length) falha('Não sei o que fazer com «' + soltos.join(' ') + '».');
   if (comando === 'resolver') {
@@ -212,21 +225,21 @@ export function cita(v) {
 }
 
 /* O SELECT do listar: os tickets não removidos, com o nome e o email de quem
-   os escreveu, na ordem do GET /api/qa (abertos agrupados por gravidade —
-   bloqueia, incomoda, detalhe, sem gravidade — e em cada grupo do mais
-   recente para o mais antigo, depois os resolvidos pela data da resolução),
-   teto de 200.
+   os escreveu, na ordem do GET /api/qa (os novos e depois os em resolução,
+   cada parte agrupada por gravidade — bloqueia, incomoda, detalhe, sem
+   gravidade — e em cada grupo do mais recente para o mais antigo, e no fim
+   os resolvidos pela data da resolução), teto de 200.
    Recebe: todos — true para juntar os resolvidos.
    Devolve: o SQL (texto, uma linha). */
 export function sqlListar(todos) {
   return 'SELECT q.id, q.user_id, q.discord_id, q.discord_nome, q.body, q.severity, q.context, q.image_key, q.status, q.resolution,'
     + ' q.resolved_at, q.created_at, q.updated_at, u.name AS autor_nome, u.email AS autor_email'
     + ' FROM qa_tickets q LEFT JOIN users u ON u.id = q.user_id'
-    + ' WHERE q.removed_at IS NULL' + (todos ? '' : " AND q.status = 'aberto'")
-    + " ORDER BY CASE q.status WHEN 'aberto' THEN 0 ELSE 1 END,"
-    + " CASE WHEN q.status <> 'aberto' THEN 0 WHEN q.severity = 'bloqueia' THEN 0 WHEN q.severity = 'incomoda' THEN 1"
+    + ' WHERE q.removed_at IS NULL' + (todos ? '' : " AND q.status <> 'resolvido'")
+    + " ORDER BY CASE q.status WHEN 'aberto' THEN 0 WHEN 'em_resolucao' THEN 1 ELSE 2 END,"
+    + " CASE WHEN q.status = 'resolvido' THEN 0 WHEN q.severity = 'bloqueia' THEN 0 WHEN q.severity = 'incomoda' THEN 1"
     + " WHEN q.severity = 'detalhe' THEN 2 ELSE 3 END,"
-    + " CASE q.status WHEN 'aberto' THEN q.created_at ELSE COALESCE(q.resolved_at, q.updated_at) END DESC,"
+    + " CASE q.status WHEN 'resolvido' THEN COALESCE(q.resolved_at, q.updated_at) ELSE q.created_at END DESC,"
     + ' q.created_at DESC LIMIT 200';
 }
 
@@ -258,7 +271,16 @@ export function sqlResolver(id, resolucao, agora) {
     + ' WHERE id = ' + cita(id) + ' AND removed_at IS NULL';
 }
 
-/* O UPDATE do reabrir: volta a aberto e larga o resolved_at; a resolução
+/* O UPDATE do comecar: um ticket novo passa a em resolução. Só os novos
+   (status 'aberto') e não removidos: um resolvido não volta por aqui.
+   Recebe: id — o id conferido; agora — o instante em ms.
+   Devolve: o SQL (texto). */
+export function sqlComecar(id, agora) {
+  return "UPDATE qa_tickets SET status = 'em_resolucao', updated_at = " + cita(agora)
+    + ' WHERE id = ' + cita(id) + " AND status = 'aberto' AND removed_at IS NULL";
+}
+
+/* O UPDATE do reabrir: volta a novo (status 'aberto') e larga o resolved_at; a resolução
    fica (o próximo a pegar no ticket vê o que já se tentou — o contrato da rota).
    Recebe: id — o id conferido; agora — o instante em ms.
    Devolve: o SQL (texto). */
@@ -386,6 +408,13 @@ function indenta(t, margem) {
   return String(t).replace(/\r\n/g, '\n').split('\n').map((l) => margem + l).join('\n');
 }
 
+/* O estado de um ticket como se diz: novo, em resolução ou resolvido.
+   Recebe: status — o da base ('aberto', 'em_resolucao', 'resolvido').
+   Devolve: o texto (um estado que não conhece sai tal e qual). */
+export function estadoLegivel(status) {
+  return { aberto: 'novo', em_resolucao: 'em resolução', resolvido: 'resolvido' }[status] || String(status);
+}
+
 /* Um ticket por extenso, como o listar o escreve: tudo o que é preciso para
    o resolver sem abrir a app.
    Recebe: t — o ticket (ticketDaLinha); local — true se veio da base isolada
@@ -394,7 +423,7 @@ function indenta(t, margem) {
 export function textoDoTicket(t, local) {
   const linhas = [];
   const grav = t.severity ? t.severity.toUpperCase() : 'sem gravidade';
-  linhas.push('== ' + t.id + ' · ' + grav + ' · ' + t.status);
+  linhas.push('== ' + t.id + ' · ' + grav + ' · ' + estadoLegivel(t.status));
   // numa conta de teste, o autor é a conta do Discord que pediu o /test
   const d = t.autor && t.autor.discord;
   const quem = d
@@ -420,35 +449,40 @@ export function textoDoTicket(t, local) {
 }
 
 /* O texto inteiro do listar: o cabeçalho com a base e as contagens, os
-   abertos em grupos por gravidade e (com --todos) os resolvidos, por extenso.
+   novos e os em resolução, cada parte em grupos por gravidade, e (com
+   --todos) os resolvidos, por extenso.
    Recebe: tickets — os tickets (ticketDaLinha), na ordem da base;
    opcoes — { local, todos }.
    Devolve: o texto. */
 export function textoDaLista(tickets, opcoes = {}) {
   const onde = opcoes.local ? 'na base isolada (--local)' : 'no dev (gestor-imobiliario-dev)';
-  const abertos = tickets.filter((t) => t.status !== 'resolvido');
   const resolvidos = tickets.filter((t) => t.status === 'resolvido');
+  const emResolucao = tickets.filter((t) => t.status === 'em_resolucao');
+  // um estado que não se conhece fica com os novos: por resolver, e à vista
+  const novos = tickets.filter((t) => t.status !== 'resolvido' && t.status !== 'em_resolucao');
   const partes = [];
   if (!tickets.length) {
-    return 'Não há tickets de QA ' + (opcoes.todos ? '' : 'abertos ') + onde + '.';
+    return 'Não há tickets de QA ' + (opcoes.todos ? '' : 'por resolver ') + onde + '.';
   }
-  partes.push('Tickets de QA ' + onde + ': ' + conta(abertos.length, 'aberto', 'abertos')
+  partes.push('Tickets de QA ' + onde + ': ' + conta(novos.length, 'novo', 'novos')
+    + ', ' + emResolucao.length + ' em resolução'
     + (opcoes.todos ? ', ' + conta(resolvidos.length, 'resolvido', 'resolvidos') : '') + '.'
     + (tickets.length >= 200 ? ' (Só os primeiros 200.)' : ''));
-  if (abertos.length) {
-    partes.push('\n#### Abertos (' + abertos.length + ')');
+  [['Novos', novos], ['Em resolução', emResolucao]].forEach(([titulo, ts]) => {
+    if (!ts.length) return;
+    partes.push('\n#### ' + titulo + ' (' + ts.length + ')');
     // em grupos por gravidade, pela ordem em que a base os deu (sqlListar)
     let grupo;
-    abertos.forEach((t) => {
+    ts.forEach((t) => {
       const g = t.severity || null;
       if (g !== grupo) {
         grupo = g;
-        const n = abertos.filter((x) => (x.severity || null) === g).length;
+        const n = ts.filter((x) => (x.severity || null) === g).length;
         partes.push('\n##### ' + (g ? g.charAt(0).toUpperCase() + g.slice(1) : 'Sem gravidade') + ' (' + n + ')');
       }
       partes.push('\n' + textoDoTicket(t, opcoes.local));
     });
-  }
+  });
   if (opcoes.todos && resolvidos.length) {
     partes.push('\n#### Resolvidos (' + resolvidos.length + ')');
     resolvidos.forEach((t) => partes.push('\n' + textoDoTicket(t, opcoes.local)));
@@ -637,6 +671,27 @@ function cmdImagem(o) {
     + (tipo ? '' : ' Os primeiros bytes não são de png, jpg nem webp.');
 }
 
+/* comecar: passa a em resolução os tickets dados, logo que se pega neles —
+   o Martinho vê-os na app em «Em resolução». Confere todos antes de mexer
+   em algum: um resolvido (reabre-se primeiro) ou um removido param tudo. Um
+   que já estava em resolução fica como está, e diz-se.
+   Recebe: o — as opções lidas (o.ids, um ou mais).
+   Devolve: o texto com o que ficou em cada um. */
+function cmdComecar(o) {
+  const a = alvoDe(o.local);
+  const antes = o.ids.map((id) => umTicket(a, id));
+  const resolvido = antes.find((l) => l.status === 'resolvido');
+  if (resolvido) throw new ErroQa('O ticket ' + resolvido.id + ' está resolvido: reabre-o primeiro (node scripts/qa.mjs reabrir ' + resolvido.id + (a.local ? ' --local' : '') + '). Não mexi em nenhum.');
+  const onde = a.local ? ' na base isolada' : ' no dev';
+  return antes.map((l) => {
+    if (l.status === 'em_resolucao') return 'O ticket ' + l.id + ' já estava em resolução.';
+    executar(a, sqlComecar(l.id, Date.now()));
+    const depois = umTicket(a, l.id);
+    if (depois.status !== 'em_resolucao') throw new ErroQa('O ticket ' + l.id + ' não ficou em resolução (está ' + estadoLegivel(depois.status) + ').');
+    return 'Ticket ' + l.id + ' em resolução' + onde + '.';
+  }).join('\n');
+}
+
 /* resolver: marca resolvido com a nota (e o commit) e confirma o que ficou.
    Recebe: o — as opções lidas.
    Devolve: o texto com o novo estado. */
@@ -646,21 +701,21 @@ function cmdResolver(o) {
   const resolucao = notaDaResolucao(o.nota, o.commit);
   executar(a, sqlResolver(o.id, resolucao, Date.now()));
   const depois = umTicket(a, o.id);
-  if (depois.status !== 'resolvido') throw new ErroQa('O ticket ' + o.id + ' não ficou resolvido (está ' + depois.status + ').');
+  if (depois.status !== 'resolvido') throw new ErroQa('O ticket ' + o.id + ' não ficou resolvido (está ' + estadoLegivel(depois.status) + ').');
   return 'Ticket ' + o.id + ' resolvido' + (a.local ? ' na base isolada' : ' no dev') + ' a ' + quando(depois.resolved_at) + '. Resolução:\n' + indenta(depois.resolution, '  ');
 }
 
-/* reabrir: devolve o ticket aos abertos, com a resolução guardada.
+/* reabrir: devolve o ticket aos novos, com a resolução guardada.
    Recebe: o — as opções lidas.
    Devolve: o texto com o novo estado. */
 function cmdReabrir(o) {
   const a = alvoDe(o.local);
   const antes = umTicket(a, o.id);
-  if (antes.status === 'aberto') return 'O ticket ' + o.id + ' já está aberto.';
+  if (antes.status === 'aberto') return 'O ticket ' + o.id + ' já está nos novos.';
   executar(a, sqlReabrir(o.id, Date.now()));
   const depois = umTicket(a, o.id);
-  if (depois.status !== 'aberto') throw new ErroQa('O ticket ' + o.id + ' não ficou aberto (está ' + depois.status + ').');
-  return 'Ticket ' + o.id + ' reaberto' + (a.local ? ' na base isolada' : ' no dev') + '.' + (depois.resolution ? ' A resolução anterior fica à vista.' : '');
+  if (depois.status !== 'aberto') throw new ErroQa('O ticket ' + o.id + ' não voltou aos novos (está ' + estadoLegivel(depois.status) + ').');
+  return 'Ticket ' + o.id + (antes.status === 'resolvido' ? ' reaberto' : ' de volta aos novos') + (a.local ? ' na base isolada' : ' no dev') + '.' + (depois.resolution ? ' A resolução anterior fica à vista.' : '');
 }
 
 /* Corre a linha de comandos e devolve o código de saída; os erros conhecidos
@@ -670,7 +725,7 @@ function cmdReabrir(o) {
 export function principal(argv) {
   try {
     const o = lerArgumentos(argv);
-    const fazer = { listar: cmdListar, imagem: cmdImagem, resolver: cmdResolver, reabrir: cmdReabrir }[o.comando];
+    const fazer = { listar: cmdListar, imagem: cmdImagem, comecar: cmdComecar, resolver: cmdResolver, reabrir: cmdReabrir }[o.comando];
     process.stdout.write(fazer(o) + '\n');
     return 0;
   } catch (e) {

@@ -41,7 +41,7 @@ function naoExiste() {
    env.ENV_NAME respondem 404 antes de lerem o corpo, como se não existissem.
    POST /api/qa cria; GET /api/qa lista; DELETE /api/qa/:id remove (brando,
    para o Anular); POST …/repor desfaz a remoção; POST …/reabrir volta a pôr
-   um resolvido nos abertos; PUT e GET …/imagem gravam e servem a captura.
+   um resolvido nos novos; PUT e GET …/imagem gravam e servem a captura.
    Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
    ctx, path, method, seg e o utilizador em c.me).
    Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
@@ -190,10 +190,12 @@ function bytes(s) {
   return new TextEncoder().encode(s).length;
 }
 
-/* GET /api/qa: os tickets de toda a gente, sem os removidos — os abertos
-   primeiro, agrupados por gravidade (bloqueia, incomoda, detalhe, sem
-   gravidade) e em cada grupo os mais recentes à frente, depois os resolvidos
-   (os resolvidos há menos tempo à frente), até 200. Cada um com o contexto
+/* GET /api/qa: os tickets de toda a gente, sem os removidos — os novos
+   (status 'aberto') primeiro, depois os em resolução ('em_resolucao', que só
+   o scripts/qa.mjs comecar marca), cada parte agrupada por gravidade
+   (bloqueia, incomoda, detalhe, sem gravidade) e em cada grupo os mais
+   recentes à frente, e no fim os resolvidos (os resolvidos há menos tempo à
+   frente), até 200. Cada um com o contexto
    já como objeto, imagem como sim/não e o autor (id, nome e email). Leva de
    passagem os removidos há mais de 24 h, e põe o nome do Discord nos que
    ficaram só com o id (nomesEmFalta).
@@ -207,11 +209,11 @@ async function listarTickets(env) {
               q.resolved_at, q.created_at, q.updated_at, q.user_id, q.discord_id, q.discord_nome, u.name, u.email
          FROM qa_tickets q LEFT JOIN users u ON u.id = q.user_id
         WHERE q.removed_at IS NULL
-        ORDER BY CASE WHEN q.status = 'aberto' THEN 0 ELSE 1 END,
-                 CASE WHEN q.status <> 'aberto' THEN 0
+        ORDER BY CASE q.status WHEN 'aberto' THEN 0 WHEN 'em_resolucao' THEN 1 ELSE 2 END,
+                 CASE WHEN q.status = 'resolvido' THEN 0
                       WHEN q.severity = 'bloqueia' THEN 0 WHEN q.severity = 'incomoda' THEN 1
                       WHEN q.severity = 'detalhe' THEN 2 ELSE 3 END,
-                 CASE WHEN q.status = 'aberto' THEN q.created_at ELSE COALESCE(q.resolved_at, q.updated_at) END DESC,
+                 CASE WHEN q.status = 'resolvido' THEN COALESCE(q.resolved_at, q.updated_at) ELSE q.created_at END DESC,
                  q.created_at DESC
         LIMIT ?`
     ).bind(TETO_LISTA).all()
@@ -331,7 +333,8 @@ async function reporTicket(env, id) {
   return json({ ok: true });
 }
 
-/* POST /api/qa/:id/reabrir: um resolvido volta aos abertos. A resolution
+/* POST /api/qa/:id/reabrir: um resolvido volta aos novos (status 'aberto';
+   passa a em resolução quando alguém pegar outra vez nele). A resolution
    fica — o próximo a pegar no ticket vê o que já se tentou (a app mostra-a
    como «Resolução anterior»); só o resolved_at sai.
    Recebe: env — o ambiente do worker (D1 em env.DB); id — o id do ticket.

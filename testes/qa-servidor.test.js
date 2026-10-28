@@ -244,6 +244,24 @@ describe('listar os tickets', () => {
     assert.deepEqual(lista.map((x) => x.body), ['bloqueiaNovo', 'bloqueiaVelho', 'incomoda', 'detalhe', 'semNovo', 'semVelho', 'resolvidoBloqueia']);
   });
 
+  test('três estados: os novos, depois os em resolução (cada parte por gravidade), depois os resolvidos', async () => {
+    const env = ambiente();
+    const a = await conta(env, 'Ana');
+    const t = Date.now();
+    const casos = [['novoSem', null, 'aberto', 1], ['emDetalhe', 'detalhe', 'em_resolucao', 1], ['resolvido', 'bloqueia', 'resolvido', 1],
+      ['emBloqueia', 'bloqueia', 'em_resolucao', 5], ['novoBloqueia', 'bloqueia', 'aberto', 9], ['emBloqueiaNovo', 'bloqueia', 'em_resolucao', 2]];
+    for (const [nome, grav, status, horas] of casos) {
+      const id = (await criar(env, a, { body: nome, severity: grav || undefined })).id;
+      // o resolvido e o em resolução de detalhe mexidos há menos tempo: a ordem não pode vir do updated_at
+      await mexer(env, id, status === 'resolvido'
+        ? { created_at: t - horas * HORA, status, resolution: 'feito', resolved_at: t + HORA }
+        : { created_at: t - horas * HORA, status, updated_at: nome === 'emDetalhe' ? t : t - 10 * HORA });
+    }
+    const lista = await listar(env, a);
+    assert.deepEqual(lista.map((x) => x.body), ['novoBloqueia', 'novoSem', 'emBloqueiaNovo', 'emBloqueia', 'emDetalhe', 'resolvido']);
+    assert.equal(lista.find((x) => x.body === 'emDetalhe').status, 'em_resolucao');
+  });
+
   test('cada ticket traz o autor com nome e email, a imagem como sim/não e o contexto como objeto', async () => {
     const env = ambiente();
     const a = await conta(env, 'Ana Lopes');

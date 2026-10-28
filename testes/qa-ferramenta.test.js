@@ -2,8 +2,9 @@
 // os tickets do dev: lê os argumentos e recusa os que não conhece, só aceita a
 // base do dev ou a isolada (nunca a produção), escapa o texto que entra no SQL
 // (corrido contra o esquema verdadeiro, em SQLite), escreve o listar com tudo
-// o que é preciso para resolver um ticket sem abrir a app, e monta a nota do
-// resolver com e sem commit.
+// o que é preciso para resolver um ticket sem abrir a app (os novos, os em
+// resolução e os resolvidos), passa os novos a em resolução (comecar), e monta
+// a nota do resolver com e sem commit.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { baseDeTeste } from './lib/bd.js';
 import {
-  lerArgumentos, confereAlvo, alvoDe, ALVOS, configDoDev, cita, sqlListar, sqlUm, sqlResolver, sqlReabrir,
+  lerArgumentos, confereAlvo, alvoDe, ALVOS, configDoDev, cita, sqlListar, sqlUm, sqlResolver, sqlReabrir, sqlComecar, estadoLegivel,
   notaDaResolucao, contextoLegivel, ticketDaLinha, textoDoTicket, textoDaLista, tipoDaImagem, erroDoWrangler,
   lerJsonDoWrangler, mensagemPorMigrar, ErroQa,
 } from '../scripts/qa.mjs';
@@ -26,8 +27,8 @@ function recusa(argv) {
 }
 
 describe('os argumentos', () => {
-  test('listar: por omissão o dev, só os abertos e em texto', () => {
-    assert.deepEqual(lerArgumentos(['listar']), { comando: 'listar', id: null, local: false, todos: false, json: false, para: null, nota: null, commit: null });
+  test('listar: por omissão o dev, só os por resolver e em texto', () => {
+    assert.deepEqual(lerArgumentos(['listar']), { comando: 'listar', id: null, ids: null, local: false, todos: false, json: false, para: null, nota: null, commit: null });
     const o = lerArgumentos(['listar', '--local', '--todos', '--json']);
     assert.equal(o.local && o.todos && o.json, true);
   });
@@ -48,10 +49,17 @@ describe('os argumentos', () => {
     assert.equal(lerArgumentos(['reabrir', 'x1']).id, 'x1');
   });
 
+  test('comecar leva um ou mais ids, sem repetidos, e o --local', () => {
+    const um = lerArgumentos(['comecar', 'x1']);
+    assert.deepEqual([um.id, um.ids, um.local], ['x1', ['x1'], false]);
+    const varios = lerArgumentos(['comecar', 'x1', 'x2', '--local', 'x1', 'x3']);
+    assert.deepEqual([varios.id, varios.ids, varios.local], ['x1', ['x1', 'x2', 'x3'], true]);
+  });
+
   test('recusa o que não conhece, com o código 2 e o uso', () => {
     for (const argv of [[], ['apagar', 'x'], ['remover', 'x'], ['listar', '--loca'], ['listar', 'a mais'], ['imagem'],
       ['resolver', 'x'], ['resolver', 'x', '--nota', '   '], ['resolver', 'x', '--nota'], ['resolver', 'x', '--nota', 'n', '--commit', 'nao-e-sha'],
-      ['reabrir', 'x', '--todos'], ['listar', '--json=sim'], ['imagem', "x' OR 1=1 --"], ['resolver', 'x', '--nota', 'a'.repeat(4001)]]) {
+      ['reabrir', 'x', '--todos'], ['comecar'], ['comecar', 'x', '--nota', 'n'], ['comecar', 'x', "y' --"], ['listar', '--json=sim'], ['imagem', "x' OR 1=1 --"], ['resolver', 'x', '--nota', 'a'.repeat(4001)]]) {
       const e = recusa(argv);
       assert.equal(e.codigo, 2, JSON.stringify(argv));
       assert.match(e.message, /Uso:|id|sha|caracteres/);
@@ -169,6 +177,34 @@ describe('o SQL, corrido contra o esquema verdadeiro', () => {
     assert.equal(db.prepare(sqlUm('t-fora')).get().status, 'aberto');
   });
 
+  test('três estados: os novos, depois os em resolução (cada parte por gravidade), e só com --todos os resolvidos', () => {
+    const db = base();
+    db.exec(`INSERT INTO qa_tickets (id, user_id, body, severity, status, created_at, updated_at) VALUES
+      ('t-ed', 'U1', 'em detalhe', 'detalhe', 'em_resolucao', 950, 990), ('t-eb', 'U1', 'em bloqueia', 'bloqueia', 'em_resolucao', 20, 20);`);
+    assert.deepEqual(db.prepare(sqlListar(false)).all().map((l) => l.id), ['t-novo', 't-velho', 't-eb', 't-ed']);
+    assert.deepEqual(db.prepare(sqlListar(true)).all().map((l) => l.id), ['t-novo', 't-velho', 't-eb', 't-ed', 't-r2', 't-r1']);
+  });
+
+  test('comecar passa um novo a em resolução, e só os novos que não foram removidos', () => {
+    const db = base();
+    db.exec(sqlComecar('t-velho', 700));
+    assert.equal(db.prepare(sqlUm('t-velho')).get().status, 'em_resolucao');
+    assert.equal(db.prepare("SELECT updated_at FROM qa_tickets WHERE id = 't-velho'").get().updated_at, 700);
+    db.exec(sqlComecar('t-r1', 700));
+    assert.equal(db.prepare(sqlUm('t-r1')).get().status, 'resolvido', 'um resolvido não volta por aqui');
+    db.exec(sqlComecar('t-fora', 700));
+    assert.equal(db.prepare(sqlUm('t-fora')).get().status, 'aberto', 'nem um removido');
+    db.exec(sqlComecar("x' OR '1'='1", 700));
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM qa_tickets WHERE status = 'em_resolucao'").get().n, 1);
+  });
+
+  test('reabrir tira um em resolução de volta aos novos', () => {
+    const db = base();
+    db.exec(sqlComecar('t-novo', 700));
+    db.exec(sqlReabrir('t-novo', 800));
+    assert.equal(db.prepare(sqlUm('t-novo')).get().status, 'aberto');
+  });
+
   test('reabrir volta a aberto, larga o resolved_at e guarda a resolução', () => {
     const db = base();
     db.exec(sqlReabrir('t-r1', 999));
@@ -226,7 +262,9 @@ describe('o texto do listar', () => {
 
   test('um ticket por extenso: id, gravidade, quem, quando, imagem, a descrição inteira', () => {
     const t = textoDoTicket(ticketDaLinha(LINHA), true);
-    assert.match(t, /^== aaaa-1111 · BLOQUEIA · aberto$/m);
+    assert.match(t, /^== aaaa-1111 · BLOQUEIA · novo$/m);
+    assert.match(textoDoTicket(ticketDaLinha(Object.assign({}, LINHA, { status: 'em_resolucao' }))), /^== aaaa-1111 · BLOQUEIA · em resolução$/m);
+    assert.deepEqual(['aberto', 'em_resolucao', 'resolvido', 'outro'].map(estadoLegivel), ['novo', 'em resolução', 'resolvido', 'outro']);
     assert.match(t, /^Quem: Maria Costa <maria@x\.pt>$/m);
     assert.match(t, /^Quando: 28\/10\/2026, 13:05$/m);
     assert.match(t, /^Imagem: sim — node scripts\/qa\.mjs imagem aaaa-1111 --local$/m);
@@ -252,19 +290,25 @@ describe('o texto do listar', () => {
   });
 
   test('a lista: contagens com o plural certo, secções e o vazio', () => {
+    const g0 = (id, status) => ticketDaLinha(Object.assign({}, LINHA, { id, status }));
     const abertos = [ticketDaLinha(LINHA)];
     const r = ticketDaLinha(Object.assign({}, LINHA, { id: 'bbbb', status: 'resolvido', resolution: 'ok', resolved_at: 1 }));
-    assert.match(textoDaLista(abertos, {}), /^Tickets de QA no dev \(gestor-imobiliario-dev\): 1 aberto\./);
-    const todos = textoDaLista(abertos.concat(r, r), { todos: true, local: true });
-    assert.match(todos, /^Tickets de QA na base isolada \(--local\): 1 aberto, 2 resolvidos\./);
-    assert.ok(todos.indexOf('#### Abertos (1)') < todos.indexOf('#### Resolvidos (2)'));
+    const em = ticketDaLinha(Object.assign({}, LINHA, { id: 'cccc', status: 'em_resolucao' }));
+    assert.match(textoDaLista(abertos, {}), /^Tickets de QA no dev \(gestor-imobiliario-dev\): 1 novo, 0 em resolução\./);
+    const todos = textoDaLista(abertos.concat(em, r, r), { todos: true, local: true });
+    assert.match(todos, /^Tickets de QA na base isolada \(--local\): 1 novo, 1 em resolução, 2 resolvidos\./);
+    assert.ok(todos.indexOf('#### Novos (1)') > -1);
+    assert.ok(todos.indexOf('#### Novos (1)') < todos.indexOf('#### Em resolução (1)'));
+    assert.ok(todos.indexOf('#### Em resolução (1)') < todos.indexOf('== cccc'));
+    assert.ok(todos.indexOf('== cccc') < todos.indexOf('#### Resolvidos (2)'));
+    assert.match(textoDaLista([g0('n1', 'aberto'), g0('n2', 'aberto')], {}), /: 2 novos, 0 em resolução\./);
     // os abertos em grupos por gravidade, com quantos tem cada um
     const g = (id, severity) => ticketDaLinha(Object.assign({}, LINHA, { id, severity }));
     const grupos = textoDaLista([g('b1', 'bloqueia'), g('b2', 'bloqueia'), g('d1', 'detalhe'), g('s1', null)], {});
     const marcas = ['##### Bloqueia (2)', '== b1', '== b2', '##### Detalhe (1)', '== d1', '##### Sem gravidade (1)', '== s1'].map((x) => grupos.indexOf(x));
     assert.ok(marcas.every((v, i) => v > -1 && (i === 0 || v > marcas[i - 1])), 'pela ordem: ' + marcas.join(', '));
     assert.doesNotMatch(grupos, /##### Incomoda/, 'um grupo vazio não aparece');
-    assert.equal(textoDaLista([], {}), 'Não há tickets de QA abertos no dev (gestor-imobiliario-dev).');
+    assert.equal(textoDaLista([], {}), 'Não há tickets de QA por resolver no dev (gestor-imobiliario-dev).');
     assert.equal(textoDaLista([], { todos: true, local: true }), 'Não há tickets de QA na base isolada (--local).');
   });
 });

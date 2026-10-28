@@ -397,17 +397,47 @@ describe('a lista', () => {
     igual(app.qaSeccoes(app.qaLista.tickets).abertos.map((t) => t.id), ['A2', 'A1']);
     igual(app.qaSeccoes(app.qaLista.tickets).resolvidos.map((t) => t.id), ['R2', 'R1']);
     const h = app.qaHtmlLista();
-    const ordem = ['Abertos', "qaAbrirTicket('A2')", "qaAbrirTicket('A1')", 'Resolvidos', "qaAbrirTicket('R2')", "qaAbrirTicket('R1')"].map((x) => h.indexOf(x));
+    const ordem = ['Novos', "qaAbrirTicket('A2')", "qaAbrirTicket('A1')", 'Resolvidos', "qaAbrirTicket('R2')", "qaAbrirTicket('R1')"].map((x) => h.indexOf(x));
     assert.ok(ordem.every((v, i) => v > -1 && (i === 0 || v > ordem[i - 1])), 'pela ordem: ' + ordem.join(', '));
     assert.match(h, /<span class="badge red">Bloqueia<\/span>/, 'o selo da gravidade');
     assert.match(h, /Com captura/, 'o sinal de que traz imagem');
     assert.match(h, /Rui Lopes · /, 'quem o escreveu');
-    assert.equal(app.qaRotuloDoBotao(app.qaAbertos), 'Tickets de QA, 2 abertos');
-    assert.equal(app.qaRotuloDoBotao(1), 'Tickets de QA, 1 aberto');
+    assert.equal(app.qaRotuloDoBotao(app.qaAbertos), 'Tickets de QA, 2 por resolver');
+    assert.equal(app.qaRotuloDoBotao(1), 'Tickets de QA, 1 por resolver');
+    assert.equal(app.qaRotuloDoBotao(0), 'Tickets de QA, nenhum por resolver');
     assert.equal(app.qaRotuloVer(2), 'Ver tickets (2)');
   });
 
-  test('os abertos em grupos por gravidade, cada um com o título e quantos tem, e em cada grupo o mais recente à frente', () => {
+  test('três estados: «Novos», «Em resolução» e «Resolvidos»; o número conta os novos e os em resolução', async () => {
+    apiFalsa({ 'GET /api/qa': { tickets: [
+      T('E1', { status: 'em_resolucao', severity: 'detalhe', created_at: 900 }), T('N1', { created_at: 100 }),
+      T('E2', { status: 'em_resolucao', severity: 'bloqueia', created_at: 50 }), T('R1', { status: 'resolvido', resolved_at: 300 }),
+      T('X1', { status: 'esquisito', created_at: 80 }),
+    ] } });
+    noDev();
+    app.qaSincronizar();
+    await app.qaLista.aPedir;
+    const s = app.qaSeccoes(app.qaLista.tickets);
+    igual(s.novos.map((t) => t.id), ['N1', 'X1'], 'um estado que não se conhece fica com os novos');
+    igual(s.emResolucao.map((t) => t.id), ['E2', 'E1'], 'por gravidade, como os novos');
+    igual(s.abertos.map((t) => t.id), ['N1', 'X1', 'E2', 'E1']);
+    assert.equal(app.qaAbertos, 4);
+    const h = app.qaHtmlLista();
+    const ordem = ['>Novos<', "qaAbrirTicket('N1')", '>Em resolução<', "qaAbrirTicket('E2')", "qaAbrirTicket('E1')", '>Resolvidos<', "qaAbrirTicket('R1')"].map((x) => h.indexOf(x));
+    assert.ok(ordem.every((v, i) => v > -1 && (i === 0 || v > ordem[i - 1])), 'pela ordem: ' + ordem.join(', '));
+    assert.match(h, /<span class="qa-dobra-nome">Em resolução<\/span><span class="qa-sec-n">2<\/span>/);
+    const e2 = app.qaLista.tickets.find((t) => t.id === 'E2');
+    assert.match(app.qaHtmlTicket(e2), /<span class="badge loan">Em resolução<\/span>/);
+    assert.match(app.qaHtmlTicket(app.qaLista.tickets.find((t) => t.id === 'N1')), /<span class="badge">Novo<\/span>/);
+    assert.doesNotMatch(app.qaRodapeTicket(e2), /Reabrir/, 'um em resolução não se reabre: fecha-se');
+    // sem nenhum em resolução, a secção não aparece; sem novos, diz-se
+    app.qaLista.tickets = [T('R9', { status: 'resolvido', resolved_at: 1 })];
+    const so = app.qaHtmlLista();
+    assert.doesNotMatch(so, /Em resolução/);
+    assert.match(so, /Nenhum ticket novo./);
+  });
+
+  test('os novos em grupos por gravidade, cada um com o título e quantos tem, e em cada grupo o mais recente à frente', () => {
     const ts = [
       T('S1', { created_at: 900 }), T('D1', { severity: 'detalhe', created_at: 500 }), T('B1', { severity: 'bloqueia', created_at: 100 }),
       T('I1', { severity: 'incomoda', created_at: 300 }), T('B2', { severity: 'bloqueia', created_at: 200 }), T('S2', { created_at: 50 }),
@@ -451,7 +481,7 @@ describe('a lista', () => {
     assert.ok(pedidos.some((p) => p[0] === 'POST' && p[1] === '/api/qa/A1/repor'), 'o Anular repõe');
   });
 
-  test('reabrir: o POST, volta aos abertos, e a resolução fica como «Resolução anterior»', async () => {
+  test('reabrir: o POST, volta aos novos, e a resolução fica como «Resolução anterior»', async () => {
     let reaberto = false;
     const pedidos = apiFalsa({
       'GET /api/qa': () => ({ tickets: [T('R1', reaberto ? { resolution: 'Corrigido em abc123', updated_at: 7 }
@@ -470,7 +500,8 @@ describe('a lista', () => {
     assert.equal(agora.status, 'aberto');
     assert.equal(app.qaAbertos, 1);
     assert.match(app.qaHtmlTicket(agora), /<b>Resolução anterior<\/b>/);
-    assert.doesNotMatch(app.qaRodapeTicket(agora), /Reabrir/, 'um aberto não se reabre');
+    assert.doesNotMatch(app.qaRodapeTicket(agora), /Reabrir/, 'um novo não se reabre');
+    assert.match(app.qaHtmlTicket(agora), /<span class="badge">Novo<\/span>/);
   });
 });
 
@@ -491,10 +522,10 @@ describe('as secções da lista abrem e fecham', () => {
     return r;
   }
 
-  test('por nascença os abertos e os grupos de gravidade abertos, os resolvidos recolhidos; cada título é um botão que dobra', () => {
+  test('por nascença os novos e os grupos de gravidade abertos, os resolvidos recolhidos; cada título é um botão que dobra', () => {
     app.qaLista.tickets = LISTA;
     const h = app.qaHtmlLista();
-    igual(estados(h), { abertos: true, 'g-bloqueia': true, 'g-detalhe': true, 'g-sem': true, resolvidos: false });
+    igual(estados(h), { novos: true, 'g-bloqueia': true, 'g-detalhe': true, 'g-sem': true, resolvidos: false });
     assert.match(h, /<h3 class="qa-sec"><button type="button" class="qa-dobra-cab" id="qaCab-resolvidos" data-toca="nada" data-click="qaDobrar\('resolvidos'\)"/);
     assert.match(h, /<span class="qa-dobra-nome">Resolvidos<\/span><span class="qa-sec-n">1<\/span>/, 'quantos tem vê-se com ela recolhida');
     assert.match(h, /id="qaDobra-resolvidos"><div class="qa-dobra-itens"><div class="qa-dobra-dentro"><div class="qa-linhas"><button type="button" class="qa-linha"[^>]*qaAbrirTicket\('R1'\)/,
@@ -513,9 +544,9 @@ describe('as secções da lista abrem e fecham', () => {
     igual(attrs, { 'aria-expanded': 'true' });
     assert.equal(app.qaDobrar('g-detalhe'), false, 'um grupo recolhe-se');
     igual(JSON.parse(app.localStorage.getItem('gi_qa_dobras')), { resolvidos: true, 'g-detalhe': false });
-    igual(estados(app.qaHtmlLista()), { abertos: true, 'g-bloqueia': true, 'g-detalhe': false, 'g-sem': true, resolvidos: true });
-    assert.equal(app.qaDobrar('abertos'), false);
-    assert.equal(estados(app.qaHtmlLista()).abertos, false, 'os abertos também se recolhem');
+    igual(estados(app.qaHtmlLista()), { novos: true, 'g-bloqueia': true, 'g-detalhe': false, 'g-sem': true, resolvidos: true });
+    assert.equal(app.qaDobrar('novos'), false);
+    assert.equal(estados(app.qaHtmlLista()).novos, false, 'os novos também se recolhem');
     assert.equal(app.qaDobrar('lixo'), null, 'uma chave que não existe não mexe em nada');
     assert.ok(!('lixo' in JSON.parse(app.localStorage.getItem('gi_qa_dobras'))));
   });
@@ -524,8 +555,8 @@ describe('as secções da lista abrem e fecham', () => {
     app.qaLista.tickets = LISTA;
     app.localStorage.setItem('gi_qa_dobras', '{isto não é json');
     igual(estados(app.qaHtmlLista()).resolvidos, false);
-    app.localStorage.setItem('gi_qa_dobras', JSON.stringify({ resolvidos: 'sim', abertos: false, outra: true }));
-    igual(app.qaLerDobras(), { abertos: false }, 'só as chaves que existem e com true ou false');
+    app.localStorage.setItem('gi_qa_dobras', JSON.stringify({ resolvidos: 'sim', novos: false, abertos: false, outra: true }));
+    igual(app.qaLerDobras(), { novos: false }, 'só as chaves que existem e com true ou false');
     app.localStorage.clear();
     const real = app.localStorage;
     app.localStorage = { getItem() { throw new Error('vedado'); }, setItem() { throw new Error('vedado'); } };
