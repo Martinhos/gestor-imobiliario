@@ -2514,6 +2514,16 @@ valer; essas aparecem como «Discord <id>». O ticket copia o id e o nome ao
 ser criado (worker/src/rotas/qa.js:discordDoAutor), para o autor sobreviver à
 conta de teste.
 
+A seguir, o Martinho quis ver o nome logo, e não «Discord <id>» até à
+promoção. O dev já tem o token do bot, por isso o nome que falta pergunta-se
+ao Discord (GET /users/{id}: o nome de exibição, ou o de utilizador) e
+guarda-se por 30 dias na mesma chave do KV (worker/src/teste.js:nomeDoDevNoDiscord).
+O nome da ligação continua a ganhar, porque escreve por cima e sem prazo. O
+GET /api/qa põe o nome nos tickets que ficaram só com o id, até cinco devs
+por pedido, para o scripts/qa.mjs, que lê a base, também o ver. Pediu também
+os abertos agrupados por gravidade e, em cada grupo, por data, do mais recente
+para o mais antigo. É assim na API, na app e no listar.
+
 ## 2026-10-28 · As sessões de teste no back office
 
 O Martinho pediu para ver no back office quantas sessões de teste existem, quem

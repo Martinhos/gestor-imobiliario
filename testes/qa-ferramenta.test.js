@@ -142,6 +142,15 @@ describe('o SQL, corrido contra o esquema verdadeiro', () => {
     assert.equal(db.prepare(sqlUm('t-fora')).get().removed_at, 500);
   });
 
+  test('listar: os abertos por gravidade (bloqueia, incomoda, detalhe, sem) e em cada uma o mais recente primeiro', () => {
+    const db = base();
+    db.exec(`INSERT INTO qa_tickets (id, user_id, body, severity, status, created_at, updated_at) VALUES
+      ('t-bv', 'U1', 'b velho', 'bloqueia', 'aberto', 10, 10), ('t-i', 'U1', 'i', 'incomoda', 'aberto', 20, 20),
+      ('t-sn', 'U1', 's novo', NULL, 'aberto', 900, 900), ('t-sv', 'U1', 's velho', NULL, 'aberto', 5, 5);`);
+    assert.deepEqual(db.prepare(sqlListar(false)).all().map((l) => l.id), ['t-novo', 't-bv', 't-i', 't-velho', 't-sn', 't-sv']);
+    assert.deepEqual(db.prepare(sqlListar(true)).all().map((l) => l.id).slice(6), ['t-r2', 't-r1'], 'os resolvidos continuam pela resolução');
+  });
+
   test('resolver guarda a nota hostil tal e qual, sem partir a instrução', () => {
     const db = base();
     const nota = notaDaResolucao(HOSTIL, 'abc1234');
@@ -249,6 +258,12 @@ describe('o texto do listar', () => {
     const todos = textoDaLista(abertos.concat(r, r), { todos: true, local: true });
     assert.match(todos, /^Tickets de QA na base isolada \(--local\): 1 aberto, 2 resolvidos\./);
     assert.ok(todos.indexOf('#### Abertos (1)') < todos.indexOf('#### Resolvidos (2)'));
+    // os abertos em grupos por gravidade, com quantos tem cada um
+    const g = (id, severity) => ticketDaLinha(Object.assign({}, LINHA, { id, severity }));
+    const grupos = textoDaLista([g('b1', 'bloqueia'), g('b2', 'bloqueia'), g('d1', 'detalhe'), g('s1', null)], {});
+    const marcas = ['##### Bloqueia (2)', '== b1', '== b2', '##### Detalhe (1)', '== d1', '##### Sem gravidade (1)', '== s1'].map((x) => grupos.indexOf(x));
+    assert.ok(marcas.every((v, i) => v > -1 && (i === 0 || v > marcas[i - 1])), 'pela ordem: ' + marcas.join(', '));
+    assert.doesNotMatch(grupos, /##### Incomoda/, 'um grupo vazio não aparece');
     assert.equal(textoDaLista([], {}), 'Não há tickets de QA abertos no dev (gestor-imobiliario-dev).');
     assert.equal(textoDaLista([], { todos: true, local: true }), 'Não há tickets de QA na base isolada (--local).');
   });

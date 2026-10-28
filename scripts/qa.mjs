@@ -212,8 +212,10 @@ export function cita(v) {
 }
 
 /* O SELECT do listar: os tickets não removidos, com o nome e o email de quem
-   os escreveu, na ordem do GET /api/qa (abertos do mais recente para o mais
-   antigo, depois os resolvidos pela data da resolução), teto de 200.
+   os escreveu, na ordem do GET /api/qa (abertos agrupados por gravidade —
+   bloqueia, incomoda, detalhe, sem gravidade — e em cada grupo do mais
+   recente para o mais antigo, depois os resolvidos pela data da resolução),
+   teto de 200.
    Recebe: todos — true para juntar os resolvidos.
    Devolve: o SQL (texto, uma linha). */
 export function sqlListar(todos) {
@@ -222,6 +224,8 @@ export function sqlListar(todos) {
     + ' FROM qa_tickets q LEFT JOIN users u ON u.id = q.user_id'
     + ' WHERE q.removed_at IS NULL' + (todos ? '' : " AND q.status = 'aberto'")
     + " ORDER BY CASE q.status WHEN 'aberto' THEN 0 ELSE 1 END,"
+    + " CASE WHEN q.status <> 'aberto' THEN 0 WHEN q.severity = 'bloqueia' THEN 0 WHEN q.severity = 'incomoda' THEN 1"
+    + " WHEN q.severity = 'detalhe' THEN 2 ELSE 3 END,"
     + " CASE q.status WHEN 'aberto' THEN q.created_at ELSE COALESCE(q.resolved_at, q.updated_at) END DESC,"
     + ' q.created_at DESC LIMIT 200';
 }
@@ -416,7 +420,7 @@ export function textoDoTicket(t, local) {
 }
 
 /* O texto inteiro do listar: o cabeçalho com a base e as contagens, os
-   abertos e (com --todos) os resolvidos, por extenso.
+   abertos em grupos por gravidade e (com --todos) os resolvidos, por extenso.
    Recebe: tickets — os tickets (ticketDaLinha), na ordem da base;
    opcoes — { local, todos }.
    Devolve: o texto. */
@@ -433,7 +437,17 @@ export function textoDaLista(tickets, opcoes = {}) {
     + (tickets.length >= 200 ? ' (Só os primeiros 200.)' : ''));
   if (abertos.length) {
     partes.push('\n#### Abertos (' + abertos.length + ')');
-    abertos.forEach((t) => partes.push('\n' + textoDoTicket(t, opcoes.local)));
+    // em grupos por gravidade, pela ordem em que a base os deu (sqlListar)
+    let grupo;
+    abertos.forEach((t) => {
+      const g = t.severity || null;
+      if (g !== grupo) {
+        grupo = g;
+        const n = abertos.filter((x) => (x.severity || null) === g).length;
+        partes.push('\n##### ' + (g ? g.charAt(0).toUpperCase() + g.slice(1) : 'Sem gravidade') + ' (' + n + ')');
+      }
+      partes.push('\n' + textoDoTicket(t, opcoes.local));
+    });
   }
   if (opcoes.todos && resolvidos.length) {
     partes.push('\n#### Resolvidos (' + resolvidos.length + ')');

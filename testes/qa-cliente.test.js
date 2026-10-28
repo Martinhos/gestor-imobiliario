@@ -404,6 +404,24 @@ describe('a lista', () => {
     assert.equal(app.qaRotuloVer(2), 'Ver tickets (2)');
   });
 
+  test('os abertos em grupos por gravidade, cada um com o título e quantos tem, e em cada grupo o mais recente à frente', () => {
+    const ts = [
+      T('S1', { created_at: 900 }), T('D1', { severity: 'detalhe', created_at: 500 }), T('B1', { severity: 'bloqueia', created_at: 100 }),
+      T('I1', { severity: 'incomoda', created_at: 300 }), T('B2', { severity: 'bloqueia', created_at: 200 }), T('S2', { created_at: 50 }),
+      T('R1', { status: 'resolvido', severity: 'bloqueia', resolved_at: 10 }),
+    ];
+    const s = app.qaSeccoes(ts);
+    igual(s.abertos.map((t) => t.id), ['B2', 'B1', 'I1', 'D1', 'S1', 'S2']);
+    igual(s.resolvidos.map((t) => t.id), ['R1']);
+    const h = app.qaHtmlGrupos(s.abertos);
+    const titulos = [...h.matchAll(/<h4 class="qa-grupo">([^<]+) <span class="qa-grupo-n">(\d+)<\/span><\/h4>/g)].map((m) => m[1] + ' ' + m[2]);
+    igual(titulos, ['Bloqueia 2', 'Incomoda 1', 'Detalhe 1', 'Sem gravidade 2']);
+    const ordem = ["qaAbrirTicket('B2')", "qaAbrirTicket('B1')", 'Incomoda', "qaAbrirTicket('I1')", 'Sem gravidade', "qaAbrirTicket('S2')"].map((x) => h.indexOf(x));
+    assert.ok(ordem.every((v, i) => v > -1 && (i === 0 || v > ordem[i - 1])), 'pela ordem: ' + ordem.join(', '));
+    // só uma gravidade: um grupo só
+    assert.equal((app.qaHtmlGrupos(app.qaSeccoes([T('X', { severity: 'detalhe' })]).abertos).match(/qa-grupo"/g) || []).length, 1);
+  });
+
   test('a espera, a falha com «Tentar de novo» e o vazio dizem cada um o que é', async () => {
     assert.match(app.qaHtmlLista(), /À espera do servidor/);
     apiFalsa({ 'GET /api/qa': new Error('sem rede') });

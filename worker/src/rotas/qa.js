@@ -102,20 +102,21 @@ async function criarTicket(env, request, me) {
 
 /* A conta do Discord por trás de uma conta de teste: quem pediu a ligação
    do /test (users.test_owner, o id de Discord) e o nome que essa ligação
-   trouxe (no KV, teste.js:chaveNomeDev). É ela o autor do ticket, e não a
-   conta de teste, que o /test limpar apaga. Uma conta normal não tem.
+   trouxe ou, sem ele, o que o bot diz (teste.js:nomeDoDevNoDiscord). É ela
+   o autor do ticket, e não a conta de teste, que o /test limpar apaga. Uma
+   conta normal não tem.
    Recebe: env — o ambiente do worker (D1 em env.DB, KV em env.SESSIONS);
    me — o utilizador com sessão.
    Devolve: promessa de {id, nome} — os dois null numa conta que não é de
-   teste; o nome null quando a ligação não o trouxe. */
+   teste; o nome null quando não se soube. */
 async function discordDoAutor(env, me) {
   const r = await env.DB.prepare('SELECT test_owner FROM users WHERE id = ?').bind(me.id).first();
   const id = r && r.test_owner ? String(r.test_owner) : null;
   if (!id) return { id: null, nome: null };
   let nome = null;
   try {
-    const { chaveNomeDev } = await import('../teste.js');
-    nome = (await env.SESSIONS.get(chaveNomeDev(id))) || null;
+    const { nomeDoDevNoDiscord } = await import('../teste.js');
+    nome = (await nomeDoDevNoDiscord(env, id)) || null;
   } catch (e) { nome = null; }
   return { id, nome };
 }
@@ -190,10 +191,12 @@ function bytes(s) {
 }
 
 /* GET /api/qa: os tickets de toda a gente, sem os removidos — os abertos
-   primeiro (os mais recentes à frente), depois os resolvidos (os resolvidos
-   há menos tempo à frente), até 200. Cada um com o contexto já como objeto,
-   imagem como sim/não e o autor (id, nome e email). Leva de passagem os
-   removidos há mais de 24 h.
+   primeiro, agrupados por gravidade (bloqueia, incomoda, detalhe, sem
+   gravidade) e em cada grupo os mais recentes à frente, depois os resolvidos
+   (os resolvidos há menos tempo à frente), até 200. Cada um com o contexto
+   já como objeto, imagem como sim/não e o autor (id, nome e email). Leva de
+   passagem os removidos há mais de 24 h, e põe o nome do Discord nos que
+   ficaram só com o id (nomesEmFalta).
    Recebe: env — o ambiente do worker (D1 em env.DB, R2 em env.FILES).
    Devolve: promessa da Response {tickets: [...]}. */
 async function listarTickets(env) {
@@ -205,12 +208,41 @@ async function listarTickets(env) {
          FROM qa_tickets q LEFT JOIN users u ON u.id = q.user_id
         WHERE q.removed_at IS NULL
         ORDER BY CASE WHEN q.status = 'aberto' THEN 0 ELSE 1 END,
+                 CASE WHEN q.status <> 'aberto' THEN 0
+                      WHEN q.severity = 'bloqueia' THEN 0 WHEN q.severity = 'incomoda' THEN 1
+                      WHEN q.severity = 'detalhe' THEN 2 ELSE 3 END,
                  CASE WHEN q.status = 'aberto' THEN q.created_at ELSE COALESCE(q.resolved_at, q.updated_at) END DESC,
                  q.created_at DESC
         LIMIT ?`
     ).bind(TETO_LISTA).all()
   ).results;
+  await nomesEmFalta(env, rows);
   return json({ tickets: rows.map(ticketParaFora) });
+}
+
+// quantos devs sem nome se perguntam ao bot num pedido só
+const TETO_NOMES = 5;
+
+/* Os tickets de contas de teste que ficaram só com o id do Discord (a
+   ligação não trouxe o nome e o bot não respondeu quando foram criados):
+   pergunta o nome (teste.js:nomeDoDevNoDiscord, até TETO_NOMES devs por
+   pedido) e grava-o na linha, para o scripts/qa.mjs, que lê a base, também
+   o ver. Uma falha deixa o id, como estava.
+   Recebe: env — o ambiente do worker; rows — as linhas do SELECT (mudam-se
+   no sítio: discord_nome).
+   Devolve: promessa de nada. */
+async function nomesEmFalta(env, rows) {
+  const ids = [...new Set(rows.filter((r) => r.discord_id && !r.discord_nome).map((r) => String(r.discord_id)))].slice(0, TETO_NOMES);
+  if (!ids.length) return;
+  try {
+    const { nomeDoDevNoDiscord } = await import('../teste.js');
+    for (const id of ids) {
+      const nome = await nomeDoDevNoDiscord(env, id);
+      if (!nome) continue;
+      await env.DB.prepare('UPDATE qa_tickets SET discord_nome = ? WHERE discord_id = ? AND discord_nome IS NULL').bind(nome, id).run();
+      for (const r of rows) if (String(r.discord_id) === id && !r.discord_nome) r.discord_nome = nome;
+    }
+  } catch (e) {}
 }
 
 /* Uma linha de qa_tickets (com o nome e o email do autor) na forma que a

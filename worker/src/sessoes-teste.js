@@ -18,7 +18,7 @@
 
 import { purgeAccount } from './lib/acesso.js';
 import { sha256hex, SESSION_TTL } from './auth.js';
-import { chaveNomeDev } from './teste.js';
+import { nomeDoDevNoDiscord } from './teste.js';
 
 const DOMINIO_TESTE = '@teste.rendorium.com';
 // quantas chaves do KV se leem, no máximo, numa listagem (o dev tem poucas)
@@ -102,7 +102,7 @@ export async function sessoesDeTeste(env) {
   }
   for (const d of donos.values()) {
     if (d.id) {
-      try { d.nome = (await env.SESSIONS.get(chaveNomeDev(d.id))) || ''; } catch (e) { d.nome = ''; }
+      d.nome = await nomeDoDevNoDiscord(env, d.id);   // o da ligação, ou o que o bot diz
     }
     d.contas.sort((a, z) => z.sessoes.length - a.sessoes.length || (z.criada || 0) - (a.criada || 0));
   }

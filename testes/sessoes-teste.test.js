@@ -67,6 +67,30 @@ describe('a lista das sessões de teste', () => {
     assert.ok(!JSON.stringify(d).includes(normal.id), 'a conta normal não aparece');
   });
 
+  test('quem não tem o nome da ligação fica com o nome que o bot diz, guardado para a próxima', async () => {
+    const fetchReal = globalThis.fetch;
+    let pedidos = 0;
+    globalThis.fetch = async (url) => {
+      pedidos++;
+      return String(url) === 'https://discord.com/api/v10/users/222'
+        ? new Response(JSON.stringify({ id: '222', username: 'rui', global_name: 'Rui Matos' }))
+        : new Response('{}', { status: 404 });
+    };
+    try {
+      const { env } = await cenario();
+      assert.equal((await sessoesDeTeste(env)).donos[1].nome, '', 'sem token fica o id');
+      assert.equal(pedidos, 0);
+      env.DISCORD_BOT_TOKEN = 'tok';
+      const d = await sessoesDeTeste(env);
+      assert.deepEqual(d.donos.map((x) => [x.id, x.nome]), [['111', 'Ana'], ['222', 'Rui Matos']], 'o da ligação ganha; o outro vem do bot');
+      assert.equal(pedidos, 1, 'só se pergunta por quem falta');
+      await sessoesDeTeste(env);
+      assert.equal(pedidos, 1, 'e fica guardado');
+    } finally {
+      globalThis.fetch = fetchReal;
+    }
+  });
+
   test('uma sessão com a época velha não conta, e uma conta sem sessão aparece vazia', async () => {
     const { env, rui } = await cenario();
     await env.DB.prepare('UPDATE users SET sess_epoch = 1 WHERE id = ?').bind(rui).run();

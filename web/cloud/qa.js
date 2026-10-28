@@ -1006,14 +1006,28 @@ function qaCarregarDeNovo() {
   qaCarregar();
 }
 
-/* Os tickets arrumados: os abertos, do mais recente para o mais antigo, e
-   os resolvidos, do resolvido há menos tempo para o resolvido há mais.
+/* A posição de uma gravidade na lista: bloqueia, incomoda, detalhe e, no
+   fim, sem gravidade.
+   Recebe: g — a gravidade do ticket.
+   Devolve: o número (0 a 3). */
+function qaOrdemGravidade(g) {
+  for (var i = 0; i < QA_GRAVIDADES.length; i++) if (QA_GRAVIDADES[i].v === g) return i;
+  return QA_GRAVIDADES.length;
+}
+
+/* Os tickets arrumados: os abertos agrupados por gravidade (bloqueia,
+   incomoda, detalhe, sem gravidade) e em cada grupo do mais recente para o
+   mais antigo, e os resolvidos, do resolvido há menos tempo para o resolvido
+   há mais.
    Recebe: ts — os tickets da API.
    Devolve: {abertos, resolvidos} (arrays novos). */
 function qaSeccoes(ts) {
   var lista = Array.isArray(ts) ? ts : [];
   var abertos = lista.filter(function (t) { return t.status !== 'resolvido'; })
-    .sort(function (a, b) { return (Number(b.created_at) || 0) - (Number(a.created_at) || 0); });
+    .sort(function (a, b) {
+      return qaOrdemGravidade(a.severity) - qaOrdemGravidade(b.severity) ||
+        (Number(b.created_at) || 0) - (Number(a.created_at) || 0);
+    });
   var resolvidos = lista.filter(function (t) { return t.status === 'resolvido'; })
     .sort(function (a, b) { return (Number(b.resolved_at || b.updated_at) || 0) - (Number(a.resolved_at || a.updated_at) || 0); });
   return { abertos: abertos, resolvidos: resolvidos };
@@ -1051,10 +1065,28 @@ function qaHtmlLista() {
   }
   return '<div class="qa-lista">' + aviso +
     '<h3 class="qa-sec">Abertos <span class="qa-sec-n">' + s.abertos.length + '</span></h3>' +
-    (s.abertos.length ? '<div class="qa-linhas">' + s.abertos.map(qaHtmlLinha).join('') + '</div>' : '<p class="hint">Nenhum ticket aberto.</p>') +
+    (s.abertos.length ? qaHtmlGrupos(s.abertos) : '<p class="hint">Nenhum ticket aberto.</p>') +
     (s.resolvidos.length ? '<h3 class="qa-sec">Resolvidos <span class="qa-sec-n">' + s.resolvidos.length + '</span></h3>' +
       '<div class="qa-linhas">' + s.resolvidos.map(qaHtmlLinha).join('') + '</div>' : '') +
     '</div>';
+}
+
+/* Os abertos em grupos por gravidade, cada um com o título e quantos tem
+   (os tickets já vêm arrumados por qaSeccoes).
+   Recebe: abertos — os tickets abertos, pela ordem de qaSeccoes.
+   Devolve: o HTML (texto). */
+function qaHtmlGrupos(abertos) {
+  var grupos = [];
+  abertos.forEach(function (t) {
+    var o = qaOrdemGravidade(t.severity);
+    if (!grupos.length || grupos[grupos.length - 1].o !== o) grupos.push({ o: o, ts: [] });
+    grupos[grupos.length - 1].ts.push(t);
+  });
+  return grupos.map(function (g) {
+    var nome = g.o < QA_GRAVIDADES.length ? QA_GRAVIDADES[g.o].rotulo : 'Sem gravidade';
+    return '<h4 class="qa-grupo">' + nome + ' <span class="qa-grupo-n">' + g.ts.length + '</span></h4>' +
+      '<div class="qa-linhas">' + g.ts.map(qaHtmlLinha).join('') + '</div>';
+  }).join('');
 }
 
 /* Uma linha da lista: o selo da gravidade, quem e quando, o sinal de que

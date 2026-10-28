@@ -228,6 +228,22 @@ describe('listar os tickets', () => {
     assert.deepEqual(lista.map((x) => x.body), ['abertoNovo', 'abertoVelho', 'resolvidoTarde', 'resolvidoCedo']);
   });
 
+  test('os abertos agrupados por gravidade (bloqueia, incomoda, detalhe, sem), e em cada grupo o mais recente à frente', async () => {
+    const env = ambiente();
+    const a = await conta(env, 'Ana');
+    const t = Date.now();
+    const casos = [['semNovo', null, 1], ['detalhe', 'detalhe', 2], ['bloqueiaVelho', 'bloqueia', 9], ['incomoda', 'incomoda', 3],
+      ['bloqueiaNovo', 'bloqueia', 4], ['semVelho', null, 8], ['resolvidoBloqueia', 'bloqueia', 1]];
+    for (const [nome, grav, horas] of casos) {
+      const id = (await criar(env, a, { body: nome, severity: grav || undefined })).id;
+      await mexer(env, id, nome.startsWith('resolvido')
+        ? { created_at: t - horas * HORA, status: 'resolvido', resolution: 'feito', resolved_at: t }
+        : { created_at: t - horas * HORA });
+    }
+    const lista = await listar(env, a);
+    assert.deepEqual(lista.map((x) => x.body), ['bloqueiaNovo', 'bloqueiaVelho', 'incomoda', 'detalhe', 'semNovo', 'semVelho', 'resolvidoBloqueia']);
+  });
+
   test('cada ticket traz o autor com nome e email, a imagem como sim/não e o contexto como objeto', async () => {
     const env = ambiente();
     const a = await conta(env, 'Ana Lopes');
@@ -265,6 +281,42 @@ describe('listar os tickets', () => {
     assert.deepEqual(lista.find((x) => x.id === id1).autor.discord, { id: '4242', nome: 'Martinho' }, 'o nome guardou-se ao criar');
     assert.deepEqual(lista.find((x) => x.id === id2).autor.discord, { id: '4242', nome: '' }, 'sem nome, fica o id');
     assert.equal(lista.find((x) => x.id === id1).autor.nome, '', 'a conta de teste já saiu, o Discord fica');
+  });
+
+  test('sem o nome da ligação, o nome vem do bot: ao criar, e nos tickets que ficaram só com o id', async () => {
+    const fetchReal = globalThis.fetch;
+    const pedidos = [];
+    globalThis.fetch = async (url, opts) => {
+      pedidos.push({ url: String(url), auth: opts && opts.headers && opts.headers.Authorization });
+      if (String(url) === 'https://discord.com/api/v10/users/4242') return new Response(JSON.stringify({ id: '4242', username: 'martinho', global_name: 'Martinho Santos' }));
+      if (String(url) === 'https://discord.com/api/v10/users/5151') return new Response(JSON.stringify({ id: '5151', username: 'rui_qa', global_name: null }));
+      return new Response('{}', { status: 404 });
+    };
+    try {
+      const env = ambiente();
+      const t1 = await conta(env, 'Conta de teste');
+      const t2 = await conta(env, 'Conta de teste');
+      await env.DB.prepare('UPDATE users SET test_owner = ? WHERE id = ?').bind('4242', t1.id).run();
+      await env.DB.prepare('UPDATE users SET test_owner = ? WHERE id = ?').bind('5151', t2.id).run();
+      // sem token, fica só o id (como num ticket criado antes desta versão)
+      const antigo = (await criar(env, t2, { body: 'antes do bot' })).id;
+      assert.equal((await daBase(env, antigo)).discord_nome, null);
+      assert.equal(pedidos.length, 0, 'sem token não se pergunta nada');
+      env.DISCORD_BOT_TOKEN = 'tok';
+      const novo = (await criar(env, t1, { body: 'com o bot' })).id;
+      assert.equal((await daBase(env, novo)).discord_nome, 'Martinho Santos', 'o nome de exibição');
+      assert.equal(await env.SESSIONS.get('teste:nome:4242'), 'Martinho Santos', 'guardado no KV');
+      assert.equal(pedidos[0].auth, 'Bot tok');
+      const lista = await listar(env, t1);
+      assert.deepEqual(lista.find((x) => x.id === antigo).autor.discord, { id: '5151', nome: 'rui_qa' }, 'sem nome de exibição, o de utilizador');
+      assert.equal((await daBase(env, antigo)).discord_nome, 'rui_qa', 'e fica gravado na linha, para o qa.mjs');
+      const n = pedidos.length;
+      await listar(env, t1);
+      await criar(env, t1, { body: 'outra vez' });
+      assert.equal(pedidos.length, n, 'depois de saber, não pergunta outra vez');
+    } finally {
+      globalThis.fetch = fetchReal;
+    }
   });
 
   test('todas as contas veem e mexem em todos os tickets', async () => {

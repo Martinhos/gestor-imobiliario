@@ -64,3 +64,32 @@ export async function cargosDoMembro(env, guildId, userId) {
     if (prazo) clearTimeout(prazo);
   }
 }
+
+/* O nome de uma pessoa no Discord, perguntado com o token do bot: o nome de
+   exibição (global_name) ou, sem ele, o nome de utilizador. Serve para o
+   autor dos tickets de QA e para o back office quando a ligação do /test não
+   trouxe o nome (as do bot de produção, antes de este o saber pôr). Com
+   prazo, como os cargos: quem espera é um pedido.
+   Recebe: env — as variáveis de ambiente (usa DISCORD_BOT_TOKEN); userId — o
+   id de Discord da pessoa.
+   Devolve: promessa do nome (texto), ou null quando não deu para perguntar
+   (sem token, id estranho, sem rede, ou o Discord não a conhece). */
+export async function nomeNoDiscord(env, userId) {
+  if (!env.DISCORD_BOT_TOKEN || !/^\d{1,20}$/.test(String(userId || ''))) return null;
+  const corta = typeof AbortController === 'function' ? new AbortController() : null;
+  const prazo = corta ? setTimeout(() => { try { corta.abort(); } catch (e) {} }, 3000) : null;
+  try {
+    const r = await fetch('https://discord.com/api/v10/users/' + userId, {
+      headers: { Authorization: 'Bot ' + env.DISCORD_BOT_TOKEN },
+      signal: corta ? corta.signal : undefined,
+    });
+    if (!r.ok) return null;
+    const u = await r.json();
+    const nome = String((u && (u.global_name || u.username)) || '').trim();
+    return nome || null;
+  } catch (e) {
+    return null;
+  } finally {
+    if (prazo) clearTimeout(prazo);
+  }
+}

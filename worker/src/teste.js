@@ -19,6 +19,7 @@ import { purgeAccount } from './lib/acesso.js';
 import { newUserId, createSession, sessionCookie } from './auth.js';
 import { auditar } from './lib/auditoria.js';
 import { navegador } from './rotas/relatos.js';
+import { nomeNoDiscord } from './lib/bot.js';
 
 const DOMINIO_TESTE = '@teste.rendorium.com';
 const VALIDADE_MIN = 10;
@@ -138,6 +139,28 @@ export const chaveEmailDev = (quem) => 'teste:email:' + quem;
 // Recebe: quem — o id de Discord do dev (o test_owner das contas dele).
 // Devolve: a chave no KV (SESSIONS) onde fica o nome dele (texto).
 export const chaveNomeDev = (quem) => 'teste:nome:' + quem;
+
+// quanto tempo fica guardado um nome perguntado ao bot (o da ligação fica sem prazo)
+const VALIDADE_NOME_BOT = 30 * 86400;
+
+/* O nome de um dev no Discord: o que a ligação do /test gravou e, quando não
+   gravou (as ligações do bot de produção antes de saberem pôr o nome), o que
+   o bot responde, guardado no mesmo sítio por 30 dias para não perguntar a
+   cada pedido. Uma ligação nova com o nome escreve por cima.
+   Recebe: env — o ambiente do worker (KV em env.SESSIONS; DISCORD_BOT_TOKEN);
+   quem — o id de Discord do dev.
+   Devolve: promessa do nome (texto), ou '' quando não se sabe. */
+export async function nomeDoDevNoDiscord(env, quem) {
+  if (!quem) return '';
+  let nome = '';
+  try { nome = (await env.SESSIONS.get(chaveNomeDev(quem))) || ''; } catch (e) { nome = ''; }
+  if (nome) return nome;
+  nome = nomeDoDev(await nomeNoDiscord(env, quem));
+  if (nome) {
+    try { await env.SESSIONS.put(chaveNomeDev(quem), nome, { expirationTtl: VALIDADE_NOME_BOT }); } catch (e) {}
+  }
+  return nome;
+}
 
 /* A conta de teste em si: email no subdomínio, palavra-passe impossível,
    termos aceites, e o dono (o dev que a pediu) gravado para o seletor.

@@ -5558,6 +5558,9 @@ body:has(.modal.open.qa-janela) .qa-pilula{z-index:60}
 .qa-sec-n{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 7px;border-radius:11px;
   background:var(--chip);color:var(--muted);font-family:var(--letra);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
 .qa-linhas{display:grid;gap:8px}
+/* os grupos dos abertos por gravidade: um título pequeno, mais baixo que o da secção */
+.qa-grupo{display:flex;align-items:center;gap:6px;margin:4px 0 -2px;color:var(--muted);font-size:13px;font-weight:600}
+.qa-grupo-n{font-variant-numeric:tabular-nums;font-weight:500}
 .qa-linha{display:grid;gap:6px;width:100%;min-height:44px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card);
   color:var(--ink);text-align:left;cursor:pointer;font:inherit;transition:transform var(--rapido) var(--curva)}
 .qa-linha:active{transform:scale(.99);background:var(--press)}

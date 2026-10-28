@@ -5699,7 +5699,10 @@ escolhida ou colada com Ctrl+V e encolhida no cliente
 (cloud/qa.js:qaEncolherImagem). Enviar é o POST e depois o PUT da captura; se
 só a captura falha, a janela fica aberta e o botão passa a «Enviar a imagem»,
 sem repetir o ticket (cloud/qa.js:qaEnviar). A lista (cloud/qa.js:qaVerTickets)
-tem os abertos e depois «Resolvidos»; tocar abre o ticket para ler, com a
+tem os abertos, em grupos por gravidade (bloqueia, incomoda, detalhe, sem
+gravidade) e em cada grupo do mais recente para o mais antigo
+(cloud/qa.js:qaSeccoes, qaHtmlGrupos; a API e o scripts/qa.mjs dão a mesma
+ordem), e depois «Resolvidos»; tocar abre o ticket para ler, com a
 captura, o contexto e a resolução (ou a «Resolução anterior» de um reaberto).
 «Remover» não pergunta: o aviso traz o Anular (cloud/qa.js:qaRemover).
 «Reabrir» devolve um resolvido aos abertos (cloud/qa.js:qaReabrir).
@@ -5711,8 +5714,13 @@ quando vem, por isso as ligações de um worker sem esta versão continuam a
 valer), abri-la guarda-o no KV (teste.js:chaveNomeDev), e criar o ticket
 copia o id (users.test_owner) e o nome para o próprio ticket
 (worker/src/rotas/qa.js:discordDoAutor), porque o /test limpar apaga as
-contas de teste. A app mostra «Nome (Discord)», ou «Discord <id>» quando a
-ligação não trouxe o nome (cloud/qa.js:qaAutor). Numa conta normal é o nome
+contas de teste. Quando a ligação não trouxe o nome (as do bot de produção
+antes de o saberem pôr), pergunta-se ao Discord com o token do bot e guarda-se
+no mesmo sítio por 30 dias (teste.js:nomeDoDevNoDiscord, lib/bot.js:nomeNoDiscord);
+o GET /api/qa ainda põe o nome nos tickets que ficaram só com o id
+(worker/src/rotas/qa.js:nomesEmFalta), e o back office das sessões de teste
+usa o mesmo. A app mostra «Nome (Discord)», e «Discord <id>» só quando nem o
+bot soube responder (cloud/qa.js:qaAutor). Numa conta normal é o nome
 da conta, e uma conta normal apagada aparece como «Conta apagada».
 
 No servidor, os tickets vivem na tabela qa_tickets
