@@ -1695,7 +1695,19 @@ as imagens dele.
 A janela é um openModal (apresentacao.js:aprAbrir): o ✕ da cabeça, o Esc, o
 voltar e o arrasto da folha fecham-na como a qualquer outra, e é o aoFechar da
 camada que a marca como vista, por qualquer caminho
-(apresentacao.js:aprAoFechar). No corpo, o palco com as imagens lado a lado
+(apresentacao.js:aprAoFechar). Quem a fecha por um desses caminhos antes da
+última imagem pode estar a dizer que não quer nenhuma: a app pergunta-lhe,
+uma vez por conta, «Não queres ver as apresentações?»
+(apresentacao.js:aprPerguntar), nas boas-vindas e nos separadores, e a marca
+espera pela resposta. Três botões em coluna, o primário em baixo
+(estilos.css:.apr-pergunta): «Voltar à apresentação» reabre-a na imagem onde
+estava e não gasta a pergunta; «Não mostrar mais» marca-a vista e nenhuma
+volta a abrir sozinha (a chave nenhuma); «Continuar a mostrar» marca-a vista
+e as outras abrem na primeira visita (apresentacao.js:aprResponder). As duas
+últimas guardam a resposta (a chave perguntou), e fechar a pergunta sem
+escolher é o fecho de sempre, que pergunta outra vez da próxima. O «Percebi»,
+a última imagem e a Ajuda nunca perguntam. Não há interruptor para as voltar
+a ligar: a Ajuda reabre cada uma. No corpo, o palco com as imagens lado a lado
 numa fita — cada uma é a maquete e, por baixo, o título e o texto, e viajam
 juntas —, os pontos e a frase do leitor de ecrã (apresentacao.js:aprCorpo); a
 imagem tem altura fixa (estilos.css:.apr-imagem) e a fita estica as folhas à

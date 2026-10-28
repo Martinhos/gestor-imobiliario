@@ -173,6 +173,16 @@ function aprVistas() {
    Devolve: true/false. */
 function aprVista(id) { return !!aprVistas()[id]; }
 
+/* A resposta à pergunta de quem fecha antes do fim (aprPerguntar), na mesma
+   chave das vistas e com a mesma forma: perguntou — a conta já respondeu, e
+   não se pergunta outra vez; nenhuma — «Não mostrar mais»: nenhuma abre
+   sozinha (a Ajuda continua a reabri-las). Nenhum separador tem estes ids. */
+var APR_PERGUNTOU = 'perguntou', APR_NENHUMA = 'nenhuma';
+
+/* Esta conta disse «Não mostrar mais»?
+   Devolve: true/false. */
+function aprNenhuma() { return aprVista(APR_NENHUMA); }
+
 /* Marca apresentações como vistas e grava (sobem com as definições).
    Recebe: ids — um id ou uma lista deles.
    Devolve: nada. */
@@ -216,10 +226,10 @@ function aprSinalDeContaNova() {
    viu — aqui ou noutro aparelho, que as definições trazem — e há o sinal de
    conta nova neste aparelho ou a marca «por ver» que ele deixou nas
    definições (aprGuardarPorVer), para quem fechou a app antes de as ver e
-   volta noutro aparelho.
+   volta noutro aparelho. Com o «Não mostrar mais», nunca.
    Devolve: true/false. */
 function aprBoasVindasPorVer() {
-  if (!APRESENTACOES['boas-vindas'] || aprVista('boas-vindas')) return false;
+  if (!APRESENTACOES['boas-vindas'] || aprVista('boas-vindas') || aprNenhuma()) return false;
   return aprSinalDeContaNova() || aprVistas()['boas-vindas'] === 0;
 }
 
@@ -328,9 +338,10 @@ function aprAdiarOEcra() { _aprAdiado = aprIdDoEcra(); _aprUltimoEcra = _aprAdia
 /* O que abrir agora, se o ecrã estivesse livre: as boas-vindas, se estão por
    ver; senão a do separador onde se está, se tem apresentação registada,
    com imagens para esta conta, ainda não foi vista, e não ficou para a
-   próxima chegada (_aprAdiado).
+   próxima chegada (_aprAdiado). Com o «Não mostrar mais», nada.
    Devolve: o id, ou '' sem nada para abrir. */
 function aprQueAbrir() {
+  if (aprNenhuma()) return '';
   if (aprBoasVindasPorVer()) return 'boas-vindas';
   var id = aprIdDoEcra();
   if (!id || id === 'boas-vindas' || id === _aprAdiado || !APRESENTACOES[id] || aprVista(id)) return '';
@@ -389,7 +400,9 @@ function aprOcupaOEcra() {
 
 /* A janela é um openModal: o ✕ da cabeça, o Esc, o voltar do sistema e o
    arrasto da folha fecham-na como a qualquer outra, e é o aoFechar da camada
-   que marca a apresentação como vista — por qualquer caminho. No corpo, o
+   que marca a apresentação como vista — por qualquer caminho. Quem a fecha
+   por um desses caminhos antes da última imagem ouve, uma vez por conta, se
+   quer continuar a vê-las (aprPerguntar), e a marca espera pela resposta. No corpo, o
    palco com as imagens lado a lado numa fita (cada imagem é a maquete e,
    por baixo, o título e o texto: as duas viajam juntas), a fita dos pontos e
    o texto para o leitor de ecrã; no rodapé, Anterior (sem ele na primeira) e
@@ -411,11 +424,12 @@ function aprOcupaOEcra() {
    uma vez. */
 var _aprArrasto;   // o arrasto em curso: {c, palco, fita, id, x0, y0, base, desl, ativo, mexe, w, vx, xa, ta}, ou null
 
-/* Abre a janela de uma apresentação na primeira imagem.
-   Recebe: id — o id da apresentação; o (opcional) — {marcar}: verdade para
-   a marcar como vista ao fechar (a abertura sozinha). A Ajuda abre sem
-   marcar, e aí o fim é sempre o «Percebi»: quem revê fica na Ajuda, e não é
-   levado para outro ecrã (onde a apresentação dele abriria logo a seguir).
+/* Abre a janela de uma apresentação na primeira imagem (ou na que se pede).
+   Recebe: id — o id da apresentação; o (opcional) — {marcar, i}: marcar,
+   verdade para a marcar como vista ao fechar (a abertura sozinha) — a Ajuda
+   abre sem marcar, e aí o fim é sempre o «Percebi»: quem revê fica na Ajuda,
+   e não é levado para outro ecrã (onde a apresentação dele abriria logo a
+   seguir); i, a imagem onde abre (o «Voltar à apresentação» da pergunta).
    Devolve: a camada aberta (com L.apr, o estado do carrossel), ou null sem
    apresentação nem imagens. */
 function aprAbrir(id, o) {
@@ -436,30 +450,116 @@ function aprAbrir(id, o) {
     // qual é, para quem a procura de fora (as provas, o percurso)
     if (typeof L.el.setAttribute === 'function') L.el.setAttribute('data-apr', id);
   }
-  L.aoFechar = function () { aprAoFechar(c); };
+  L.aoFechar = function (origem) { aprAoFechar(c, origem); };
+  var i = Math.floor(Number(o && o.i) || 0);
+  if (i > 0) { c.i = Math.min(i, imagens.length - 1); aprPousar(c); }
   aprPintar(c);
   return L;
 }
 
 /* O que acontece quando a janela sai, por qualquer caminho (o aoFechar da
    camada, que o closeModal corre): larga o gesto e a viagem; aberta
-   sozinha, marca-a como vista — e as que ela também marca —, e, sendo as
-   boas-vindas, larga o sinal de conta nova; e dá a vez às novidades, que
-   esperaram por ela (novidades.js:ecraLivre). Só marca na conta que a viu
-   abrir: sair da sessão com ela aberta não escreve nas definições de outra.
-   Recebe: c — o estado do carrossel.
+   sozinha, marca-a como vista (aprMarcarFecho) — ou, fechada a meio por um
+   caminho de abandono, pergunta primeiro (aprPerguntar), e a marca fica
+   para a resposta —; e dá a vez às novidades, que esperaram por ela
+   (novidades.js:ecraLivre). Só marca na conta que a viu abrir: sair da
+   sessão com ela aberta não escreve nas definições de outra.
+   Recebe: c — o estado do carrossel; origem — o caminho do fecho
+   (componentes.js:closeModal: 'x', 'fundo', 'esc', 'voltar', 'arrasto', ou
+   '' para uma decisão, como o «Percebi»).
    Devolve: nada. */
-function aprAoFechar(c) {
+function aprAoFechar(c, origem) {
   if (!c || c.fechado) return;
   c.fechado = true;
   if (_aprArrasto && _aprArrasto.c === c) aprArrastoLargar();
   if (c.anim) { var an = c.anim; c.anim = null; try { an.cancel(); } catch (e) {} }
   if (c.marcar && window.CW && CW.user && CW.user.id === c.uid) {
-    var def = APRESENTACOES[c.id] || {};
-    aprMarcarVista([c.id].concat(Array.isArray(def.marcaTambem) ? def.marcaTambem : []));
-    if (c.id === 'boas-vindas') { aprLargarContaNova(); aprAdiarOEcra(); }
+    if (aprPerguntaAoFechar(c, origem)) { aprPerguntar(c); return; }
+    aprMarcarFecho(c);
   }
+  aprDarAVezAsNovidades();
+}
+
+/* Dá a vez às novidades, que esperaram pela apresentação, daqui a pouco
+   (o ecrã já assente).
+   Devolve: nada. */
+function aprDarAVezAsNovidades() {
   aprTimer(function () { if (window.CW && typeof CW.talvezNovidades === 'function') CW.talvezNovidades(); }, 80);
+}
+
+/* Marca como vista a apresentação que fechou — e as que ela também marca —,
+   mais as chaves da resposta à pergunta, se as houver, numa só gravação; e,
+   sendo as boas-vindas, larga o sinal de conta nova e deixa a apresentação
+   do ecrã para a chegada seguinte.
+   Recebe: c — o estado do carrossel; mais (opcional) — ids a marcar também
+   (APR_PERGUNTOU, APR_NENHUMA).
+   Devolve: nada. */
+function aprMarcarFecho(c, mais) {
+  var def = APRESENTACOES[c.id] || {};
+  aprMarcarVista([c.id].concat(Array.isArray(def.marcaTambem) ? def.marcaTambem : [], mais || []));
+  if (c.id === 'boas-vindas') { aprLargarContaNova(); aprAdiarOEcra(); }
+}
+
+/* Os caminhos de fecho que são abandono, e não decisão
+   (componentes.js:closeModal). */
+var APR_ABANDONO = { x: 1, fundo: 1, esc: 1, voltar: 1, arrasto: 1 };
+
+/* Quem fechou agora a apresentação pode estar a dizer que não quer nenhuma:
+   saiu por um caminho de abandono antes da última imagem, numa abertura
+   sozinha, e a conta ainda não respondeu à pergunta.
+   Recebe: c — o estado do carrossel; origem — o caminho do fecho.
+   Devolve: true/false. */
+function aprPerguntaAoFechar(c, origem) {
+  return !!(c && c.marcar && APR_ABANDONO[origem] && c.i < c.imagens.length - 1 &&
+    !aprVista(APR_PERGUNTOU) && !aprNenhuma());
+}
+
+/* A pergunta a quem fechou uma apresentação antes do fim: se quer continuar
+   a vê-las. Abre logo, no lugar da que fechou (a pilha já a largou). Três
+   respostas (aprResponder): «Voltar à apresentação» reabre-a onde estava,
+   para um ✕ por engano, e não gasta a pergunta; «Não mostrar mais» marca-a
+   vista e nenhuma abre sozinha; «Continuar a mostrar», o primário — o
+   caminho seguro —, marca-a vista e as outras abrem na primeira visita. As
+   duas últimas guardam a resposta, e a pergunta não volta. Fechar a pergunta
+   sem responder é o fecho de sempre: a apresentação fica vista, e pergunta-se
+   da próxima vez. Os botões vão em coluna (estilos.css:.apr-pergunta).
+   Recebe: c — o estado do carrossel da que fechou.
+   Devolve: nada. */
+function aprPerguntar(c) {
+  var p = { c: c, feito: false };
+  var L = openModal('Não queres ver as apresentações?',
+    '<div class="hint u-fs-14px">Cada separador explica-se numa janela como esta na primeira vez que lá chegas. ' +
+      'Se preferires, a app deixa de as mostrar, e revês cada uma quando quiseres em <b>Ajuda → Apresentações</b>.</div>',
+    '<button type="button" class="btn" data-toca="vista" data-click="aprResponder(\'voltar\')">Voltar à apresentação</button>' +
+    '<button type="button" class="btn" data-toca="camada" data-click="aprResponder(\'nenhuma\')">Não mostrar mais</button>' +
+    '<button type="button" class="btn primary" data-toca="camada" data-click="aprResponder(\'mostrar\')">Continuar a mostrar</button>');
+  if (!L) { aprMarcarFecho(c); aprDarAVezAsNovidades(); return; }
+  L.aprPergunta = p;
+  if (L.el && L.el.classList) L.el.classList.add('apr-pergunta');
+  L.aoFechar = function () {
+    if (!p.feito) {
+      p.feito = true;
+      if (window.CW && CW.user && CW.user.id === c.uid) aprMarcarFecho(c);
+    }
+    aprDarAVezAsNovidades();
+  };
+}
+
+/* A resposta à pergunta de cima (aprPerguntar).
+   Recebe: r — 'voltar', 'nenhuma' ou 'mostrar'.
+   Devolve: nada. */
+function aprResponder(r) {
+  var t = typeof modalTop === 'function' ? modalTop() : null, p = t && t.aprPergunta;
+  if (!p || p.feito) return;
+  p.feito = true;
+  var c = p.c, mesma = !!(window.CW && CW.user && CW.user.id === c.uid);
+  if (r === 'voltar') {
+    closeModal();
+    if (mesma) aprAbrir(c.id, { marcar: true, i: c.i });
+    return;
+  }
+  if (mesma) aprMarcarFecho(c, r === 'nenhuma' ? [APR_PERGUNTOU, APR_NENHUMA] : [APR_PERGUNTOU]);
+  closeModal();
 }
 
 /* O corpo da janela: o palco com as imagens numa fita (só a primeira à

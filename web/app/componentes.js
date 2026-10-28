@@ -966,7 +966,7 @@ window.addEventListener('popstate',()=>{
    menu do cabeçalho.
    Devolve: a camada criada ({el,title,onSave,snap,tocado,gatilho}), com onSave
    a null — quem chama define-o, e pode pôr-lhe um aoFechar, que o closeModal
-   corre quando ela sai. */
+   corre quando ela sai, com a origem do fecho ('' sem ela). */
 function openModal(title,body,foot,menuHtml){
   closePops();
   const top=modalTop();if(top)demote(top.el);
@@ -1058,7 +1058,7 @@ function closeModal(origem){
   const M=modalStack.pop();lockPage();if(!M)return;
   /* o que a camada prendeu enquanto esteve aberta (o object URL de uma imagem,
      anexos.js:openFileMeta) solta-se com ela */
-  if(typeof M.aoFechar==='function')try{M.aoFechar()}catch(e){}
+  if(typeof M.aoFechar==='function')try{M.aoFechar(typeof origem==='string'?origem:'')}catch(e){}
   /* sem janela nenhuma não há formulário: os anexos pendentes deixam de ser
      poupados (anexos.js:esquecerPendentes) */
   if(!modalStack.length)esquecerPendentes();

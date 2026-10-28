@@ -36,7 +36,7 @@ var AVISOS = [
         afeta: ['app'],
         itens: [
           'Quem cria conta é recebido com uma apresentação do essencial: como se adicionam um imóvel, um inquilino e um contrato, o que são os planeados e de onde vêm, e o que poupam os modelos.',
-          'Cada separador explica-se uma vez, na primeira visita depois desta versão: um carrossel curto com o que mostra, como está arrumado e onde se toca. Fecha-se no ✕ ou no «Percebi», e não volta.',
+          'Cada separador explica-se uma vez, na primeira visita depois desta versão: um carrossel curto com o que mostra, como está arrumado e onde se toca. Fecha-se no ✕ ou no «Percebi», e não volta. Se fechares uma antes do fim, a app pergunta se queres continuar a vê-las.',
           'Reveem-se todas na Ajuda, em «Apresentações».',
         ],
       },

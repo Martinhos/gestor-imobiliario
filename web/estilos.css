@@ -4727,6 +4727,11 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
    o horizontal ao carrossel. A fita estica as imagens à altura da maior, e a
    imagem tem altura fixa: a janela não salta de tamanho entre elas. */
 @media(min-width:521px){.apr-janela .sheet{width:min(620px,calc(100vw - 28px))}}
+/* a pergunta a quem fecha uma antes do fim (cloud/apresentacao.js:aprPerguntar):
+   três respostas de frase inteira, que lado a lado não cabem — em coluna,
+   com o primário em baixo, à mão do polegar */
+.apr-pergunta .sheet .foot{flex-direction:column}
+.apr-pergunta .sheet .foot .btn{flex:0 0 auto}
 .apr{display:flex;flex-direction:column;gap:14px}
 .apr-palco{--apr-folga:24px;position:relative;overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .apr-palco.arrasta{cursor:grabbing}

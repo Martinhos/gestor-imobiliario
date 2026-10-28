@@ -64,6 +64,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-28 · «Transferir o controlo», «Descarregar» e as frases sem género
 - 2026-10-28 · Os tickets de QA
 - 2026-10-28 · As sessões de teste no back office
+- 2026-10-28 · Quem fecha uma apresentação a meio é perguntado, uma vez
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2546,3 +2547,23 @@ deixa as contas e os dados para o próximo /test. Terminar uma sessão só apaga
 essa chave e não pergunta, porque basta abrir outra ligação; o resto pergunta.
 O token nunca chega ao back office: cada sessão vai com os primeiros 16
 caracteres do sha-256 dele (worker/src/sessoes-teste.js:idDaSessao).
+
+## 2026-10-28 · Quem fecha uma apresentação a meio é perguntado, uma vez
+
+Um ticket de QA do Martinho (61dee982): fechar as apresentações no ✕ ou fora
+da janela pode querer dizer que a pessoa não quer ver nenhuma, e a app seguia
+a abrir uma por separador. Agora, quem fecha uma por um caminho de abandono
+antes da última imagem ouve «Não queres ver as apresentações?»
+(cloud/apresentacao.js:aprPerguntar). As decisões foram dele: só antes do fim
+(quem chegou ao «Percebi» viu tudo, e não está a recusar nada), só uma vez por
+conta (perguntar a cada separador seria a mesma insistência de que o ticket se
+queixa), também nas boas-vindas, e sem interruptor novo para as religar, porque
+a Ajuda já reabre cada uma. A terceira resposta, «Voltar à apresentação», é
+para o ✕ tocado por engano: reabre na mesma imagem e não gasta a pergunta.
+
+A origem do fecho já existia (componentes.js:closeModal, para o «Sair sem
+guardar?») e só não chegava ao aoFechar; passa a chegar. A resposta vai na
+mesma chave das vistas, db.settings.apresentacoes, como mais duas marcas
+(perguntou e nenhuma), para viajar entre aparelhos e passar pela fusão a três
+como as outras. «Continuar a mostrar» é o primário: é o caminho que não muda
+nada do que a app faz.

@@ -72,7 +72,7 @@ function camada(corpo, rodape) {
 
 /* As janelas numa pilha observável: o openModal empilha uma camada com o
    título, o corpo e o rodapé; o closeModal e o closeAllModals tiram-nas e
-   correm o aoFechar, como o verdadeiro. O save fica calado (grava no
+   correm o aoFechar, com a origem do fecho, como o verdadeiro. O save fica calado (grava no
    aparelho, e o que interessa é o db).
    Devolve: as camadas abertas, pela ordem. */
 function janelas() {
@@ -83,7 +83,7 @@ function janelas() {
     app.modalStack.push(L); abertas.push(L);
     return L;
   };
-  const fecha = () => { const L = app.modalStack.pop(); if (L && typeof L.aoFechar === 'function') L.aoFechar(); };
+  const fecha = (origem) => { const L = app.modalStack.pop(); if (L && typeof L.aoFechar === 'function') L.aoFechar(typeof origem === 'string' ? origem : ''); };
   app.closeModal = fecha;
   app.closeAllModals = () => { while (app.modalStack.length) fecha(); };
   app.save = () => {};
@@ -94,7 +94,9 @@ function janelas() {
 /* A app limpa, com sessão e já depois do primeiro estado, sem janelas, sem
    o sinal de conta nova e sem apresentações dos separadores registadas
    (ficam só as boas-vindas, que são deste ficheiro).
-   Recebe: opcoes (opcional) — {nome}: o nome da conta.
+   Recebe: opcoes (opcional) — {nome, respondida}: o nome da conta, e
+   respondida para uma conta que já respondeu à pergunta de quem fecha a
+   meio (aprPerguntar), e que fecha por qualquer caminho sem a ouvir.
    Devolve: as janelas (janelas()). */
 function montar(opcoes = {}) {
   limpar(app);
@@ -109,6 +111,7 @@ function montar(opcoes = {}) {
   app.localStorage.removeItem('gi_apr_nova');
   for (const id of Object.keys(app.APRESENTACOES)) if (id !== 'boas-vindas') delete app.APRESENTACOES[id];
   app.tab = 'dashboard'; app.setPage = '';
+  if (opcoes.respondida) { app.db.settings = app.db.settings || {}; app.db.settings.apresentacoes = { perguntou: 1 }; }
   consulta({});
   return janelas();
 }
@@ -275,7 +278,7 @@ describe('a janela', () => {
 
 describe('as boas-vindas', () => {
   test('só com o sinal de conta nova, e da conta que tem a sessão; vistas uma vez, não voltam', () => {
-    montar();
+    montar({ respondida: true });
     assert.equal(app.aprQueAbrir(), '', 'uma conta de antes não as vê');
     app.aprContaNova('OUTRA');
     assert.equal(app.aprQueAbrir(), '', 'o sinal de outra conta não vale para esta');
@@ -295,7 +298,7 @@ describe('as boas-vindas', () => {
   });
 
   test('por ver viajam nas definições: quem fecha a app antes de as ver vê-as noutro aparelho, e vistas já não', () => {
-    montar();
+    montar({ respondida: true });
     app.CW._pulled = 0;
     app.aprContaNova('EU');
     app.aprGuardarPorVer();
@@ -480,7 +483,7 @@ describe('quando abre', () => {
   });
 
   test('a primeira visita a um separador abre a apresentação dele, e a segunda não; sem apresentação registada não faz nada', () => {
-    montar();
+    montar({ respondida: true });
     app.tab = 'contracts';
     app.aprTentar();
     assert.equal(app.modalStack.length, 0, 'sem apresentação registada, nada');
@@ -532,7 +535,7 @@ describe('quando abre', () => {
   });
 
   test('fechar as boas-vindas num separador com apresentação por ver deixa-a para a chegada seguinte: nada de duas janelas seguidas', () => {
-    montar();
+    montar({ respondida: true });
     registarDeBrincar('transactions');
     const pintar = app.aprRenderDeAntes;
     app.aprRenderDeAntes = () => {};
@@ -579,6 +582,142 @@ describe('quando abre', () => {
     assert.equal(app.modalStack.length, 0);
     assert.equal(app.tab, 'dashboard', 'não mudou de separador');
     assert.equal(app.localStorage.getItem('gi_apr_nova'), 'EU', 'nem larga o sinal das boas-vindas');
+  });
+});
+
+/* A pergunta de cima, se for a de quem fecha a meio (aprPerguntar).
+   Devolve: a camada, ou null. */
+const pergunta = () => {
+  const L = app.modalStack[app.modalStack.length - 1];
+  return L && L.aprPergunta ? L : null;
+};
+
+describe('a pergunta a quem fecha antes do fim (ticket de QA 61dee982)', () => {
+  test('o ✕ antes da última imagem pergunta, e a marca espera; «Continuar a mostrar» marca esta e a resposta, e as outras abrem sem voltar a perguntar', () => {
+    montar();
+    registarDeBrincar('contracts', 3);
+    app.tab = 'contracts';
+    app.aprTentar();
+    app.closeModal('x');
+    const P = pergunta();
+    assert.ok(P, 'fechada a meio, pergunta');
+    assert.equal(P.t, 'Não queres ver as apresentações?');
+    assert.ok(P.classes.has('apr-pergunta'), 'com os botões em coluna');
+    assert.match(P.b, /<b>Ajuda → Apresentações<\/b>/, 'diz onde se reveem');
+    const botoes = [...P.f.matchAll(/<button[^>]*class="([^"]*)"[^>]*data-click="aprResponder\('(\w+)'\)">([^<]*)</g)].map((m) => [m[3], m[2], /primary/.test(m[1])]);
+    igual(botoes, [['Voltar à apresentação', 'voltar', false], ['Não mostrar mais', 'nenhuma', false], ['Continuar a mostrar', 'mostrar', true]]);
+    igual(vistas(), {}, 'ainda nada marcado');
+    app.aprTentar();
+    assert.equal(app.modalStack.length, 1, 'com a pergunta aberta, nada abre por cima');
+    app.aprResponder('mostrar');
+    assert.equal(app.modalStack.length, 0);
+    igual(vistas(), { contracts: 1, perguntou: 1 });
+    registarDeBrincar('transactions', 3);
+    app.tab = 'transactions';
+    app.aprTentar();
+    assert.equal(app.modalStack.length, 1, 'as outras abrem na primeira visita');
+    app.closeModal('fundo');
+    assert.equal(app.modalStack.length, 0, 'e já não pergunta');
+    assert.ok(vistas().transactions);
+  });
+
+  test('«Não mostrar mais»: nenhuma abre sozinha, nem as boas-vindas, e a Ajuda continua a reabri-las', () => {
+    montar();
+    registarDeBrincar('contracts', 2);
+    registarDeBrincar('transactions', 2);
+    app.tab = 'contracts';
+    app.aprTentar();
+    app.closeModal('arrasto');
+    app.aprResponder('nenhuma');
+    igual(vistas(), { contracts: 1, perguntou: 1, nenhuma: 1 });
+    app.tab = 'transactions';
+    assert.equal(app.aprQueAbrir(), '', 'o separador seguinte não abre');
+    app.aprContaNova('EU');
+    assert.equal(app.aprQueAbrir(), '', 'nem as boas-vindas');
+    assert.equal(app.aprOcupaOEcra(), false, 'nem prendem as novidades');
+    app.aprRever('transactions');
+    assert.equal(app.modalStack.length, 1, 'a Ajuda reabre');
+    app.closeModal('x');
+    assert.equal(app.modalStack.length, 0, 'e rever não pergunta');
+  });
+
+  test('«Voltar à apresentação» reabre na mesma imagem, sem marcar nem gastar a pergunta', () => {
+    montar();
+    registarDeBrincar('contracts', 4);
+    app.tab = 'contracts';
+    app.aprTentar();
+    app.aprSeguinte();
+    app.closeModal('esc');
+    app.aprResponder('voltar');
+    assert.equal(app.modalStack.length, 1);
+    const L = app.modalStack[0];
+    assert.ok(L.apr && L.apr.marcar, 'a mesma apresentação, ainda a marcar');
+    assert.equal(L.apr.i, 1, 'na imagem onde estava');
+    assert.equal(L.pecas.folhas[1].getAttribute('aria-hidden'), null, 'essa à vista');
+    assert.ok(!L.pecas.ant.classList.contains('u-d-none'), 'com o Anterior');
+    igual(vistas(), {}, 'nada marcado');
+    app.closeModal('voltar');
+    assert.ok(pergunta(), 'fechada a meio outra vez, pergunta outra vez');
+  });
+
+  test('fechar a pergunta sem escolher é o fecho de sempre: esta fica vista, e pergunta-se da próxima vez', () => {
+    montar();
+    registarDeBrincar('contracts', 2);
+    registarDeBrincar('transactions', 2);
+    app.tab = 'contracts';
+    app.aprTentar();
+    app.closeModal('x');
+    app.closeModal('x');
+    igual(vistas(), { contracts: 1 });
+    app.tab = 'transactions';
+    app.aprTentar();
+    app.closeModal('x');
+    assert.ok(pergunta(), 'sem resposta, pergunta na seguinte');
+  });
+
+  test('não pergunta: na última imagem, no «Percebi», num fecho sem origem, ao rever na Ajuda, nem a outra conta', () => {
+    montar();
+    registarDeBrincar('contracts', 2);
+    let L = app.aprAbrir('contracts', { marcar: true });
+    app.aprIr(L.apr, 1);
+    app.closeModal('x');
+    assert.equal(app.modalStack.length, 0, 'na última imagem viu tudo');
+    registarDeBrincar('transactions', 2);
+    L = app.aprAbrir('transactions', { marcar: true });
+    app.aprIr(L.apr, 1);
+    app.aprSeguinte();
+    assert.equal(app.modalStack.length, 0, 'o «Percebi» é uma decisão');
+    registarDeBrincar('recurring', 3);
+    app.aprAbrir('recurring', { marcar: true });
+    app.closeAllModals();
+    assert.equal(app.modalStack.length, 0, 'despejar a pilha não pergunta');
+    registarDeBrincar('tenants', 3);
+    app.aprRever('tenants');
+    app.closeModal('x');
+    assert.equal(app.modalStack.length, 0, 'rever não pergunta');
+    registarDeBrincar('visits', 3);
+    app.aprAbrir('visits', { marcar: true });
+    app.CW.user = { id: 'OUTRA' };
+    app.closeModal('x');
+    assert.equal(app.modalStack.length, 0, 'outra sessão não ouve a pergunta de quem saiu');
+    assert.ok(!vistas().visits);
+  });
+
+  test('as boas-vindas também perguntam; «Continuar a mostrar» marca-as com a Visão geral e os Imóveis e larga o sinal', () => {
+    montar();
+    app.aprContaNova('EU');
+    app.aprTentar();
+    app.closeModal('x');
+    assert.ok(pergunta(), 'as boas-vindas fechadas na primeira imagem perguntam');
+    assert.equal(app.localStorage.getItem('gi_apr_nova'), 'EU', 'o sinal espera pela resposta');
+    app.aprResponder('mostrar');
+    igual(Object.keys(vistas()).sort(), ['boas-vindas', 'dashboard', 'perguntou', 'properties']);
+    assert.equal(app.localStorage.getItem('gi_apr_nova'), null);
+  });
+
+  test('o closeModal a sério passa a origem do fecho ao aoFechar', () => {
+    const fonte = ler('web/app/componentes.js');
+    assert.match(fonte, /M\.aoFechar\(typeof origem==='string'\?origem:''\)/);
   });
 });
 
@@ -637,7 +776,7 @@ describe('o servidor', () => {
 
 describe('as novidades e a apresentação esperam uma pela outra', () => {
   test('o ecraLivre das novidades conta com a janela aberta e com as boas-vindas por ver; a apresentação só abre sem janela nenhuma', () => {
-    montar();
+    montar({ respondida: true });
     const gid = app.document.getElementById;
     app.document.getElementById = () => null;
     try {
