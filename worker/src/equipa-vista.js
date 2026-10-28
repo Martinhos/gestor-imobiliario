@@ -499,6 +499,21 @@ dialog.janela::backdrop{background:var(--veu)}
 .op-resumo{margin:0 18px 16px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .op-resumo-cab{padding:12px 16px;display:flex;flex-direction:column;gap:2px;background:var(--chip)}
 .op-teste-botoes{padding-top:2px}
+/* as contas de teste na lista das sessões (equipa-guiao.js:contaDeTesteHtml):
+   uma secção que abre e fecha por conta, fechada à partida; a seta vira
+   quando abre */
+.st-contas{border-top:1px solid var(--line)}
+.st-contas+.card-pe{border-top:1px solid var(--line);padding-top:16px}
+.st-conta+.st-conta{border-top:1px solid var(--line)}
+.st-conta>summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;min-height:48px;padding:13px 18px;cursor:pointer;list-style:none}
+.st-conta>summary::-webkit-details-marker{display:none}
+.st-conta>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media(hover:hover){.st-conta>summary:hover{background:var(--tint)}}
+.st-seta{display:inline-flex;align-self:center;color:var(--muted);transform:rotate(-90deg)}
+.st-conta[open]>summary .st-seta{transform:none}
+.st-corpo{padding:0 0 8px}
+.st-acoes{padding:0 18px 10px}
+@media(max-width:899px){.st-conta>summary{padding:13px 14px}.st-acoes{padding:0 14px 10px}}
 .end-form{padding:14px 18px 18px;border-top:1px solid var(--line);background:var(--chip);display:flex;flex-direction:column;gap:10px}
 .end-campos{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
 .end-campos .campo-bloco{flex:1 1 200px}

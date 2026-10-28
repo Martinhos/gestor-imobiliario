@@ -1133,7 +1133,7 @@ function verOperacao() {
          apagar as contas (chegam à parte, por verSessoesTeste) */
       '<section class="card" aria-labelledby="titSessoesTeste"><div class="card-cab"><div class="card-cab-txt">' +
       '<h2 id="titSessoesTeste" class="card-tit">Sessões de teste abertas</h2>' +
-      '<p class="sub">Cada browser onde uma ligação de teste foi aberta e ainda tem sessão, por quem a pediu no Discord. Terminar faz sair (a conta e os dados ficam); apagar leva a conta e os dados.</p></div></div>' +
+      '<p class="sub">Cada browser onde uma ligação de teste foi aberta e ainda tem sessão, por quem a pediu no Discord e por conta. Terminar faz sair (a conta e os dados ficam); apagar leva a conta e os dados.</p></div></div>' +
       '<div id="sessoesTeste">' + esperaHtml('A ler as sessões.') + '</div></section>';
 
     var vistos = {};
@@ -1374,16 +1374,49 @@ function nomeDoDono(dono) {
   return dono.nome ? dono.nome + ' (Discord)' : 'Discord ' + dono.id;
 }
 
+/* Uma conta de teste na lista das sessões: uma secção que abre e fecha
+   (fechada à partida), com a conta, quantas sessões tem e quando abriu a
+   mais recente; aberta, «Terminar as sessões» e «Apagar a conta», e uma
+   linha por sessão (quando abriu, quando expira, o browser, Terminar). Os
+   botões vivem dentro, e não no summary: um botão dentro dele também abria
+   e fechava a secção.
+   Recebe: c — a conta ({id, email, sessoes}); aberta — se estava aberta
+   antes de a lista se voltar a pintar.
+   Devolve: o HTML (texto). */
+function contaDeTesteHtml(c, aberta) {
+  var n = c.sessoes.length;
+  var conta = esc(String(c.email || '').replace('@teste.rendorium.com', ''));
+  var resumo = n ? (n === 1 ? '1 sessão' : n + ' sessões') + (c.sessoes[0].criada ? ' · a mais recente ' + idade(c.sessoes[0].criada) : '') : 'Sem sessão aberta';
+  var botoes = '<div class="chips st-acoes">' +
+    (n ? '<button type="button" class="btn sm"' + comAcao('sessoesTeste', ['terminar', 'conta', c.id]) + '>' + (n === 1 ? 'Terminar a sessão' : 'Terminar as sessões') + '</button>' : '') +
+    '<button type="button" class="btn sm texto-perigo"' + comAcao('sessoesTeste', ['apagar', 'conta', c.id]) + '>Apagar a conta</button></div>';
+  var linhas = c.sessoes.map(function (s) {
+    return '<tr><td class="n" data-rot="Abriu">' + (s.criada ? idade(s.criada) : '—') + '</td>' +
+      '<td class="n" data-rot="Expira">' + (s.expira ? dia(s.expira) : '—') + '</td>' +
+      '<td class="quebra" data-rot="Browser">' + esc(s.agente || '—') + '</td>' +
+      '<td class="acoes" data-rot="Ações"><button type="button" class="btn sm"' + comAcao('sessoesTeste', ['terminar', 'sessao', s.id]) + '>Terminar</button></td></tr>';
+  }).join('');
+  return '<details class="st-conta" data-conta="' + esc(c.id) + '"' + (aberta ? ' open' : '') + '>' +
+    '<summary><span class="st-seta" aria-hidden="true">' + ic('baixo', 'i-sm') + '</span>' +
+      '<span class="forte quebra">' + conta + '</span><span class="sub n">' + resumo + '</span></summary>' +
+    '<div class="st-corpo">' + botoes +
+      (n ? '<div class="tb-rola"><table class="tb empilha"><thead><tr><th>Abriu</th><th>Expira</th><th>Browser</th><th><span class="so-leitor">Ações</span></th></tr></thead><tbody>' +
+        linhas + '</tbody></table></div>' : '') +
+    '</div></details>';
+}
+
 /* Lê as sessões de teste abertas e pinta-as no cartão da Operação: o total,
    os botões para todas, e um bloco por quem as pediu no Discord, com uma
-   linha por sessão (a conta, quando abriu, quando expira, o browser) e as
-   contas sem sessão aberta, para se poderem apagar.
+   secção por conta (contaDeTesteHtml) — as que estavam abertas continuam
+   abertas quando a lista se volta a pintar (depois de terminar ou apagar).
    Devolve: nada — escreve o cartão sessoesTeste (ou o erro nele). */
 function verSessoesTeste() {
   pedir('/api/equipa/operacao/sessoes-teste').then(function (d) {
     sessoesTesteUltimas = d;
     var caixa = el('sessoesTeste');
     if (!caixa) return;
+    var abertas = {};
+    [].slice.call(caixa.querySelectorAll('details.st-conta[open]')).forEach(function (x) { abertas[x.getAttribute('data-conta')] = 1; });
     if (!d.contas) { caixa.innerHTML = '<div class="card-pe">' + vazioHtml('Não há contas de teste.', 'Uma ligação do /test cria a primeira.') + '</div>'; return; }
     var resumo = (d.sessoes === 1 ? '1 sessão aberta' : d.sessoes + ' sessões abertas') + ' em ' +
       (d.contas === 1 ? '1 conta de teste' : d.contas + ' contas de teste');
@@ -1392,30 +1425,11 @@ function verSessoesTeste() {
       '<button type="button" class="btn sm texto-perigo"' + comAcao('sessoesTeste', ['apagar', 'todas', '']) + '>Apagar todas as contas</button></div></div>';
     var blocos = (d.donos || []).map(function (dono) {
       var n = dono.contas.reduce(function (s, c) { return s + c.sessoes.length; }, 0);
-      var linhas = [];
-      dono.contas.forEach(function (c) {
-        var conta = '<span class="forte">' + esc(String(c.email || '').replace('@teste.rendorium.com', '')) + '</span>';
-        var apagar = '<button type="button" class="btn sm texto-perigo"' + comAcao('sessoesTeste', ['apagar', 'conta', c.id]) + '>Apagar a conta</button>';
-        if (!c.sessoes.length) {
-          linhas.push('<tr><td class="quebra" data-rot="Conta">' + conta + '</td><td data-rot="Sessão" colspan="3"><span class="sub">Sem sessão aberta</span></td>' +
-            '<td data-rot="Ações">' + apagar + '</td></tr>');
-          return;
-        }
-        c.sessoes.forEach(function (s, i) {
-          linhas.push('<tr><td class="quebra" data-rot="Conta">' + conta + '</td>' +
-            '<td class="n" data-rot="Abriu">' + (s.criada ? idade(s.criada) : '—') + '</td>' +
-            '<td class="n" data-rot="Expira">' + (s.expira ? dia(s.expira) : '—') + '</td>' +
-            '<td class="quebra" data-rot="Browser">' + esc(s.agente || '—') + '</td>' +
-            '<td data-rot="Ações"><div class="chips"><button type="button" class="btn sm"' + comAcao('sessoesTeste', ['terminar', 'sessao', s.id]) + '>Terminar</button>' +
-            (i === 0 ? apagar : '') + '</div></td></tr>');
-        });
-      });
       var cabeca = '<div class="card-pe"><p class="forte">' + esc(nomeDoDono(dono)) + ' <span class="sub n">· ' +
         (n === 1 ? '1 sessão' : n + ' sessões') + ' em ' + (dono.contas.length === 1 ? '1 conta' : dono.contas.length + ' contas') + '</span></p>' +
         (dono.id ? '<div class="chips op-teste-botoes"><button type="button" class="btn sm"' + comAcao('sessoesTeste', ['terminar', 'dono', dono.id]) + '>Terminar as sessões</button>' +
           '<button type="button" class="btn sm texto-perigo"' + comAcao('sessoesTeste', ['apagar', 'dono', dono.id]) + '>Apagar as contas</button></div>' : '') + '</div>';
-      return cabeca + '<div class="tb-rola"><table class="tb empilha"><thead><tr><th>Conta</th><th>Abriu</th><th>Expira</th><th>Browser</th><th><span class="so-leitor">Ações</span></th></tr></thead><tbody>' +
-        linhas.join('') + '</tbody></table></div>';
+      return cabeca + '<div class="st-contas">' + dono.contas.map(function (c) { return contaDeTesteHtml(c, abertas[c.id]); }).join('') + '</div>';
     }).join('');
     caixa.innerHTML = topo + blocos;
   }).catch(function (e) {
@@ -1445,8 +1459,9 @@ function sessoesTeste(acao, alvo, id) {
   var quem = alvo === 'dono' ? '<b>' + esc(nomeDoDono(dono || { id: id })) + '</b>' : '';
   var titulo, texto, botao;
   if (acao === 'terminar') {
-    titulo = alvo === 'todas' ? 'Terminar todas as sessões de teste?' : 'Terminar as sessões desta pessoa?';
-    texto = (alvo === 'todas' ? 'Toda a gente sai das contas de teste.' : 'Todas as sessões das contas de teste de ' + quem + ' terminam.') +
+    titulo = alvo === 'todas' ? 'Terminar todas as sessões de teste?' : alvo === 'conta' ? 'Terminar as sessões desta conta?' : 'Terminar as sessões desta pessoa?';
+    texto = (alvo === 'todas' ? 'Toda a gente sai das contas de teste.' : alvo === 'conta' ? 'Todos os browsers com esta conta de teste saem dela.'
+      : 'Todas as sessões das contas de teste de ' + quem + ' terminam.') +
       ' As contas e os dados ficam, e o próximo /test retoma-as.';
     botao = 'Terminar';
   } else {

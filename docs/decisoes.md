@@ -65,6 +65,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-28 · Os tickets de QA
 - 2026-10-28 · As sessões de teste no back office
 - 2026-10-28 · Quem fecha uma apresentação a meio é perguntado, uma vez
+- 2026-10-28 · Trinta sessões numa conta de teste
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2567,3 +2568,25 @@ mesma chave das vistas, db.settings.apresentacoes, como mais duas marcas
 (perguntou e nenhuma), para viajar entre aparelhos e passar pela fusão a três
 como as outras. «Continuar a mostrar» é o primário: é o caminho que não muda
 nada do que a app faz.
+
+## 2026-10-28 · Trinta sessões numa conta de teste
+
+O Martinho via no back office perto de trinta sessões abertas numa só conta de
+teste, sem saber de onde vinham. O KV do dev tinha 62 sessões das contas de
+teste e de outras: 19 na A972W2R4, 18 na FJXT22R3, todas abertas entre 28/09 e
+hoje. Cada entrada criava uma sessão nova de 30 dias e deixava a anterior viva:
+a ligação do /test (mesmo a retomar a mesma conta), cada troca no seletor das
+contas, cada conta extra e o apagar com passagem à seguinte. Os grupos de três
+e quatro no mesmo minuto em duas contas (26/10, 07:55) são trocas seguidas no
+seletor. As de antes de hoje não têm o browser nos metadados, por isso não se
+sabe de que aparelhos foram.
+
+A app guarda uma sessão só por browser, por isso a que a nova substitui já não
+servia a ninguém: passa a terminar no servidor
+(worker/src/teste.js:largarSessoesDoBrowser, com os tokens do Bearer e do cookie),
+e as dos outros aparelhos ficam. Pelo caminho, as pré-visualizações de ligações
+deixam de entrar (worker/src/teste.js:eRoboDeLigacoes): um robô que abrisse a ligação
+criava uma sessão que nenhum browser guardava, e numa ligação de limpar apagava
+as contas. As 62 que já existem não se tocam: terminam-se no back office ou
+expiram. A lista passou a ter uma secção que abre e fecha por conta, dentro do
+bloco de quem as pediu no Discord, escolha do Martinho.

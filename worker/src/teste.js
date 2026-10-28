@@ -16,7 +16,7 @@
 
 import { now, TERMS_VERSION, CSP_ESTRITA } from './lib/http.js';
 import { purgeAccount } from './lib/acesso.js';
-import { newUserId, createSession, sessionCookie } from './auth.js';
+import { newUserId, createSession, destroySession, sessionCookie, tokensDoPedido } from './auth.js';
 import { auditar } from './lib/auditoria.js';
 import { navegador } from './rotas/relatos.js';
 import { nomeNoDiscord } from './lib/bot.js';
@@ -33,6 +33,38 @@ export const eContaDeTeste = (email) => String(email || '').endsWith(DOMINIO_TES
 // Recebe: request — o pedido HTTP (pode faltar).
 // Devolve: o resumo ('Chrome 128 · Android 14'), ou '' sem user-agent.
 export const agenteDe = (request) => navegador(request && request.headers ? request.headers.get('user-agent') : '');
+
+/* Termina as sessões que o browser trazia, quando recebe uma nova: a app
+   guarda uma sessão só (o cookie e o token do aparelho), e a que a nova
+   substitui ficava no KV os 30 dias da validade — cada ligação do /test,
+   cada troca no seletor e cada conta extra deixava uma para trás, e o back
+   office chegou a ter trinta numa conta. As de outros aparelhos ficam.
+   Recebe: env — o ambiente do worker (KV SESSIONS); request — o pedido, de
+   onde saem os tokens (auth.js:tokensDoPedido: o Bearer e o cookie);
+   nova — o token da sessão acabada de criar, que fica.
+   Devolve: promessa de quantas terminou. */
+export async function largarSessoesDoBrowser(env, request, nova) {
+  let n = 0;
+  for (const t of request ? tokensDoPedido(request) : []) {
+    if (t === nova) continue;
+    try { await destroySession(env, t); n++; } catch (e) { /* uma que falhe não trava a entrada */ }
+  }
+  return n;
+}
+
+/* Quem abre uma ligação do /test sem ser uma pessoa: as pré-visualizações
+   de ligações (o Discord, o Slack, o WhatsApp, o Telegram, as redes) e os
+   motores de busca. Cada pedido destes criava uma sessão que nenhum browser
+   guardava. */
+const ROBOS_DE_LIGACOES = /discordbot|slackbot|slack-imgproxy|whatsapp|telegrambot|twitterbot|facebookexternalhit|linkedinbot|skypeuripreview|embedly|googlebot|bingbot|bot\/|crawler|spider/i;
+
+/* O pedido é de um robô que segue ligações (ROBOS_DE_LIGACOES)?
+   Recebe: request — o pedido HTTP (pode faltar).
+   Devolve: true/false. */
+export function eRoboDeLigacoes(request) {
+  const ua = request && request.headers ? request.headers.get('user-agent') || '' : '';
+  return ROBOS_DE_LIGACOES.test(ua);
+}
 
 /* O segredo das ligações de teste. Com os bots de dev e produção separados,
    o token do bot deixou de ser partilhado — a TESTE_CHAVE (a mesma nos dois
@@ -276,6 +308,10 @@ export async function rotaTeste(c) {
     return pagina(503, 'Ambiente de teste sem chave',
       'Falta a TESTE_CHAVE neste ambiente — sem ela ninguém consegue assinar uma ligação que valha. Adiciona o segredo e corre o deploy do dev.');
   }
+  // a pré-visualização de uma ligação não entra, não cria nem limpa nada
+  if (eRoboDeLigacoes(c.request)) {
+    return pagina(200, 'Ligação de teste', 'Abre esta ligação num browser para entrares no ambiente de desenvolvimento.');
+  }
 
   const exp = url.searchParams.get('exp') || '';
   const dados = url.searchParams.get('dados') === '1' ? '1' : '0';
@@ -353,6 +389,7 @@ export async function rotaTeste(c) {
   if (!conta) conta = Object.assign({ sess_epoch: 0 }, await criarContaDeTeste(env, quem));
 
   const token = await createSession(env, conta.id, conta.sess_epoch || 0, agenteDe(c.request));
+  await largarSessoesDoBrowser(env, c.request, token);
   await auditar(env, { discordId: quem || 'sistema', nome: '/test', papeis: ['bot'] },
     'teste.sessao', conta.id,
     retomada ? 'conta retomada, dados intactos'
@@ -424,6 +461,7 @@ export async function rotasContasDeTeste(c) {
     ).bind(String((b && b.para) || ''), dono).first();
     if (!alvo) return err(404, 'Essa conta não é tua ou já não existe.');
     const token = await createSession(env, alvo.id, alvo.sess_epoch || 0, agenteDe(request));
+    await largarSessoesDoBrowser(env, request, token);
     return json({ token, id: alvo.id, email: alvo.email, name: alvo.name }, 200, {
       'Set-Cookie': sessionCookie(token),
     });
@@ -432,6 +470,7 @@ export async function rotasContasDeTeste(c) {
   if (path === '/api/teste/nova' && method === 'POST') {
     const conta = await criarContaDeTeste(env, dono);
     const token = await createSession(env, conta.id, 0, agenteDe(request));
+    await largarSessoesDoBrowser(env, request, token);
     await auditar(env, { discordId: dono, nome: 'seletor de teste', papeis: ['dev'] },
       'teste.sessao', conta.id, 'conta extra pelo seletor');
     return json({ token, id: conta.id, email: conta.email, name: 'Conta de teste' }, 200, {

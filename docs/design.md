@@ -5531,7 +5531,16 @@ dependentes que caem junto (equipa-guiao.js:mostrarAvisoDesligar).
 Fora de produção, a Operação do back office (master e admin) mostra as
 sessões de teste abertas (equipa-guiao.js:verSessoesTeste): cada browser onde
 uma ligação do /test foi aberta e ainda tem sessão, agrupado pela conta do
-Discord que a pediu, com a conta, quando abriu, quando expira e o browser.
+Discord que a pediu e, dentro dela, por conta de teste: uma secção que abre e
+fecha por conta, fechada à partida, com quantas sessões tem e quando abriu a
+mais recente, e aberta com «Terminar as sessões», «Apagar a conta» e uma
+linha por sessão (quando abriu, quando expira, o browser), que fica aberta
+quando a lista se volta a pintar (equipa-guiao.js:contaDeTesteHtml). Cada
+browser fica com uma sessão só: a ligação do /test, a troca no seletor, a
+conta extra e o apagar com passagem à seguinte terminam a sessão que o browser
+trazia (teste.js:largarSessoesDoBrowser), e as pré-visualizações de ligações
+(o Discord, o WhatsApp, os motores de busca) não entram nem limpam nada
+(teste.js:eRoboDeLigacoes).
 Lêem-se das chaves sess: do KV, só as das contas de teste vivas com a época
 certa (sessoes-teste.js:sessoesDeTeste); as sessões trazem a conta, a época,
 a hora e o browser nos metadados da chave (worker/src/auth.js:createSession), e o token
