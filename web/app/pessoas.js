@@ -430,7 +430,11 @@ function personModal(kind,id,after,houseId){
     save();
     const cb=perAfter,nid=perForm.id;perAfter=null;
     if(cb){cb(nid);return}
-    closeModal();render();toast('Ficha guardada.');
+    closeModal();render();
+    if(i>-1)return toast('Ficha guardada.');
+    /* nova: o aviso diz quem se adicionou e leva o «Ver» para a ficha */
+    const k=perKind;
+    avisoComVer(k==='owner'?'Proprietário adicionado.':'Inquilino adicionado.',k==='owner'?'owners':'tenants',()=>personView(k,nid));
   };
 }
 // HTML do formulário da ficha, montado a partir de perForm. Proprietários

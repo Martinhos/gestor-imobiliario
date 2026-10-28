@@ -501,7 +501,8 @@ jobs:
 
       # O que se acabou de publicar tem de estar a responder: o /versao.json
       # do ambiente igual ao que o versao.js gerou neste deploy, e a raiz (que
-      # passa pelo worker, run_worker_first) com 200. Doze tentativas, dez
+      # passa pelo worker, run_worker_first) com 200 — no dev, com o 404 da
+      # porta (worker/src/teste.js:portaDoDev). Doze tentativas, dez
       # segundos entre elas. O veredicto vai para o passo seguinte.
       - name: Confirmar que a publicação responde
         id: confirmar

@@ -821,6 +821,32 @@ toast(m,op) (componentes.js:toast) é para o que aconteceu: 2,8 segundos,
 frase curta com ponto final. Tem role=status e aria-live
 (index.html:#toast).
 
+avisoComVer(m,separador,abrir) (componentes.js:avisoComVer) é para um
+registo acabado de adicionar: o aviso diz o que se adicionou («Imóvel
+adicionado.», «Visita adicionada.») e leva «Ver» seis segundos, como o
+«Anular» — e, como ele, afasta-se com o dedo. Tocar em «Ver» vai ao separador
+do registo (navegacao.js:go) e abre a ficha dele: o imóvel, o contrato, o
+movimento (de vários imóveis, a primeira parte, que a ficha lê como o lote
+inteiro — movimento.js:txFicha), o que nasce de confirmar um planeado
+(«Movimento confirmado.», no formulário e no Confirmar da linha —
+planeados.js:quickConfirmRec), o planeado, o modelo, a visita, o inquilino,
+o proprietário e a hipoteca. A ficha vem de quem adiciona, em `abrir`: a
+base não chama funções de serviço, e as de outro serviço passam pelo
+chamarServico. O «Ver» só aparece quando cabe: com o separador ligado nesta
+conta e só fichas abertas. Por cima de um formulário, ou de uma pergunta que
+a app abre logo a seguir a gravar (as prestações em falta de uma hipoteca —
+creditos.js:perguntarPrestacoesEmFalta; por isso o imóvel e a hipoteca dão o
+aviso depois dela), o aviso é o de sempre, sem botão; e se um formulário se
+abriu entretanto, tocar em «Ver» não navega por baixo dele. Mudar de
+separador fecha primeiro as fichas abertas (são de leitura, não há nada por
+guardar); no mesmo separador a ficha nova abre por cima. Uma edição fica com
+o aviso de sempre («Imóvel atualizado.», «Contrato guardado.», «Ficha
+guardada.»), sem botão: quem editou já estava a ver o registo. A ficha de
+pessoa criada a partir de um contrato volta ao contrato e não dá aviso. Um
+contrato com movimentos fora das datas mostra o aviso deles, com o «Ver»
+para a lista (contrato.js:ctGravar, contrato.js:verMovimentosFora) — esse
+vem primeiro.
+
 falhaCampo(id,msg) (componentes.js:falhaCampo) é para o que falta num
 formulário: o campo aponta (estilos.css:.err) e diz o que fazer numa frase
 por baixo dele (estilos.css:.erro-campo, com aria-describedby), vai ao ecrã,
@@ -2107,14 +2133,17 @@ E vive no cabeçalho ao lado do título, nunca em cima de outra peça dele:
 esteve no canto superior direito, que é onde o sino mora, e ninguém tinha
 dado por isso porque nenhuma cena do percurso o mostrava — só aparecia
 quando a ligação caía. Há uma cena por estado e uma regra que guarda o sítio
-(testes/ui/invariantes.js). No telemóvel o selo é o ícone, e as frases que
-ficam — «por enviar» e «sem ligação» — descem para uma faixa fina por baixo
-do cabeçalho, a toda a largura, e o cabeçalho cresce o que ela ocupa (ver
-«Navegação»). O «A ligar» da abertura é só o ícone: a faixa a entrar e a
-sair em cada abertura fazia o cabeçalho saltar duas vezes por nada. Mas uma
-nova tentativa depois de uma falha herda a faixa que lá está, agora laranja
-(a classe .tenta, estilos.css:header.top) — sem isso o cabeçalho encolhia e
-crescia de 30 em 30 segundos enquanto a rede não voltasse.
+(testes/ui/invariantes.js). No telemóvel o selo é o ícone, com a frase no
+aria-label e no title, e só o «Sem ligação» desce para uma faixa fina por
+baixo do cabeçalho, a toda a largura, com o cabeçalho a crescer o que ela
+ocupa (ver «Navegação»). O «N alterações por enviar» fica o ícone cobalto: a
+cada gravação o selo passa por ele e logo a seguir pelo «Guardado», e a faixa
+a entrar e a sair fazia o cabeçalho saltar a cada gravação. O «A ligar» da
+abertura também é só o ícone, pela mesma razão, a cada abertura. Mas uma nova
+tentativa depois de uma falha herda a faixa que lá está, agora laranja (a
+classe .tenta, estilos.css:header.top) — sem isso o cabeçalho encolhia e
+crescia de 30 em 30 segundos enquanto a rede não voltasse. A .tenta só nasce
+do «Sem ligação» ou de outra tentativa, nunca do «por enviar».
 
 ## Uma porta, e nenhum beco
 As opções de um registo — editar, duplicar, apagar, selecionar vários —
@@ -3618,6 +3647,25 @@ de cada mês num cartão só, separadas por um traço (estilos.css:.mov-lista).
 O título do mês é o mesmo dentro e fora da seleção, sem caixa (ver «Entrar na
 seleção é como nas Casas»).
 
+A ordem da lista é a da data, e no mesmo dia a da hora a que cada movimento
+foi adicionado (dados.js:txPorDataECriacao): do mais recente para o mais
+antigo, o adicionado depois fica em cima — o último que se registou num dia
+é o primeiro desse dia. A hora é o campo criado do movimento (ms, o
+Date.now() de então), que o normTx dá a um movimento novo — um objeto sem id:
+o formulário, um planeado confirmado, as partes de um lote, as estimativas,
+o Splitwise, o liquidar — e guarda quando já vem. Um movimento de antes do
+carimbo fica sem o campo, e não com uma data inventada, que o fazia mudar e
+subir ao servidor; no comparador conta como 0, por isso fica abaixo dos
+novos do mesmo dia e dois antigos empatam como sempre empataram. Editar
+mantém-no (o formulário parte de uma cópia com id, e aplicar um modelo a um
+movimento guardado também o guarda: planeados.js:applyTemplate), e a fusão a
+três trata-o como qualquer campo. Os modelos e os planeados não o levam (não
+está no TX_TPL_KEYS): cada movimento que deles nasce tem o seu. Pelo valor, o
+empate vai pela data e pelo criado, sempre ascendente. A lista de um
+indicador (cloud/painel.js:kpiTxs) e a dos movimentos de um contrato
+(contrato.js:ctVerMovimentos) usam o mesmo comparador, do mais recente para o mais
+antigo.
+
 Por cima da lista, os totais são o kpi da casa, compacto
 (estilos.css:.mov-tot): Receitas, Despesas, Prestações (roxo, a classe
 .prest), as dívidas a terceiros em cobalto (estilos.css:.mov-div) e o Saldo
@@ -3967,7 +4015,11 @@ a primeira linha leva as prestações do mês da primeira até dezembro — a
 primeira é a próxima por
 confirmar com os Planeados ligados, senão hoje (creditos.js:credPrimeiraData,
 que é também o «Prestação de …» do painel) —, as seguintes doze cada, e cada
-linha tem o seu ano. As barras do resumo e o gráfico de «Todas as hipotecas»
+linha tem o seu ano. Nenhuma prestação vem antes do início: numa hipoteca que
+começa no futuro, a primeira é a do mês do início, no dia dele (máx. 28,
+credito.js:primeiraPrestacao), e é aí que nasce o planeado da prestação; mudar
+o início para depois da próxima por confirmar leva-a com ele
+(planeados.js:syncLoanRec). As barras do resumo e o gráfico de «Todas as hipotecas»
 somam pelo ano de cada linha (creditos.js:credDividaPorAno): antes do
 primeiro ano do seu plano uma hipoteca ainda deve o capital de agora, depois
 do último já não deve nada; a barra acesa é a do ano corrente. A ficha da
@@ -5495,12 +5547,11 @@ cloud/colaboradores.js:resumoDosColaboradores). A sincronização
 servidor…», com um relógio, enquanto tenta ligar; verde «Guardado», que
 recolhe ao ícone ao fim de dois segundos — um recibo, não um letreiro —;
 cobalto «N alterações por enviar»; e vermelho «Sem ligação ao servidor», com
-uma cruz; no telemóvel o «Guardado» e o «A ligar» da abertura são só o
-ícone, e «por enviar», «sem ligação» e a nova tentativa depois de uma falha
-descem para uma faixa fina por baixo do cabeçalho, a toda a largura, com o
-ícone a ficar e o cabeçalho a crescer o
-que ela ocupa (estilos.css:header.top, o .sync dentro de
-estilos.css:@media(max-width:900px)). A ação secundária é a de um ecrã que a
+uma cruz; no telemóvel o «Guardado», o «N alterações por enviar» e o «A
+ligar» da abertura são só o ícone, e «sem ligação» e a nova tentativa depois
+de uma falha descem para uma faixa fina por baixo do cabeçalho, a toda a
+largura, com o ícone a ficar e o cabeçalho a crescer o que ela ocupa
+(estilos.css:header.top, o .sync dentro de estilos.css:@media(max-width:900px)). A ação secundária é a de um ecrã que a
 tem — o «Exportar CSV» dos Movimentos (index.html:#hdrSec,
 navegacao.js:ACAO_SECUNDARIA) —, e a principal, só no computador
 (index.html:#hdrAcao, navegacao.js:pintarAcaoDoCabecalho), é «Novo
@@ -5631,6 +5682,22 @@ sess_epoch das contas, que ficam com os dados (sessoes-teste.js:terminarSessoesD
 apagar leva as contas como o /test limpar (sessoes-teste.js:apagarContasDe).
 Tudo o que não é terminar uma sessão pergunta antes
 (equipa-guiao.js:sessoesTeste), e cada ação fica no rasto.
+
+O dev.rendorium.com não tem página pública nenhuma (worker/src/teste.js:portaDoDev).
+Sem a sessão de uma conta de teste — a que uma ligação do /test deixa no
+browser —, qualquer caminho responde um 404 seco (worker/src/teste.js:naoEncontrado):
+«Não encontrado» em texto simples, sem marca, sem dizer que é o ambiente de
+testes, sem cache, com os cabeçalhos de segurança de sempre. A entrada e o
+criar conta não existem lá; uma conta normal do dev também leva o 404. Passam
+sem sessão a própria ligação (/t/entrar) e o que a página dela pede quando a
+ligação está mal (o CSS, as duas letras e o ícone — teste.js:SEM_SESSAO), as
+interações do Discord, o /versao.json que o deploy confirma, e o back office,
+com a entrada da equipa pelo Discord, como sempre. Fecha-se com o ENV_NAME
+«dev» e a PORTA_DEV «fechada» juntos (o [env.dev.vars] do wrangler.toml): a
+produção e o percurso ficam abertos. Para os ficheiros da app também ficarem
+atrás da porta, no dev todos passam pelo worker (o run_worker_first do
+[env.dev.assets]), ao preço de uma invocação por ficheiro; a conferência da
+sessão fica lembrada 30 segundos por isolado (teste.js:temSessaoDeTeste).
 
 ## A app em serviços
 Cada separador da barra lateral é um serviço com manifesto próprio, e as
@@ -5986,6 +6053,28 @@ um `addEventListener` que a app ponha antes do primeiro evento corre ANTES da
 ação (com o `on…=` corria depois); e um elemento fora do documento não recebe o
 clique que o código lhe dá, porque o evento não chega ao `window`.
 
+Um gesto a meio do arranque não corre (eventos.js:gestoAntesDoArranque). Os
+scripts do index.html correm por ordem, sem `defer`, e o eventos.js é o
+primeiro: os ouvintes estão postos antes de os outros chegarem, e o cabeçalho
+(o botão da gaveta, o sino, os filtros) já está no HTML. Um toque enquanto o
+browser ainda lê os ficheiros seguintes corria a ação com meia app — num
+Samsung, o openDrawer com o navegacao.js e sem o vistas.js deu «LFK is not
+defined», e a rede de segurança do arranque (index.html) leu esse «is not
+defined» como uma app partida: limpou a cache, largou o service worker e
+recarregou. Por isso, enquanto o documento está a carregar (`readyState`
+`'loading'`), a ação de um evento do browser (`isTrusted`) engole-se, nos cinco
+tipos: não corre nem fica guardada para depois — um toque que se cumpre
+segundos depois, com a app já pintada por cima, surpreende mais do que um
+toque que não pegou. O resto do ouvinte continua a fazer o que fazia (o foco do
+toque larga-se, o `pointerdown` conta o ponteiro), e a partir do
+`DOMContentLoaded`, com os scripts todos corridos, tudo como antes. Um
+`el.click()` da própria app (`isTrusted` false) corre sempre, e sem página a
+carregar (os testes, o verificador) também. As funções que um botão do HTML
+chama de início protegem-se na mesma do que vem depois delas
+(navegacao.js:closeFilterPanels sem o `LFK`, navegacao.js:openDrawer sem o
+`lockPage`): uma guarda barata, para o dia em que um gesto chegue por outro
+caminho.
+
 O escape continua a ser a primeira defesa: um valor entre plicas numa ação vai
 por formato.js:jsq, e por formato.js:jsqBruto quando a ação é escrita com
 `setAttribute` em vez de ir dentro de HTML. E as funções que recebem HTML —
@@ -6040,6 +6129,11 @@ contrato.», «Vão junto 2 contratos e 5 movimentos.»
 (cloud/selecao-listas.js:selLVaoJunto), as confirmações de apagar uma
 categoria (definicoes.js:delCat) e a de remover uma ligação, que também não
 presume género (partilha.js:fraseRemoverLigacao).
+
+O aviso de um registo novo diz «adicionado/adicionada» («Movimento
+recorrente adicionado.», «Modelo adicionado e movimento registado.»), e não
+«criado» nem «guardado»: «guardado» é o de uma edição. Confirmar um planeado
+diz «Movimento confirmado.».
 
 Os textos que ensinam um caminho dizem-no com os nomes da navegação:
 «Dinheiro → Créditos», «Dinheiro → Planeados» e «Casas → Grupos», pelo grupo

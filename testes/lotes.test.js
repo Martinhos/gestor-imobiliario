@@ -222,7 +222,7 @@ describe('guardar: o movimento parte-se por imóvel', () => {
     tresCasas();
     const { toasts } = ecra();
     registar({ valor: 'g:G', label: 'Seguro', amount: 300, paga: 'eu' });
-    assert.equal(toasts.pop().m, 'Movimento guardado.');
+    assert.equal(toasts.pop().m, 'Movimento adicionado.');
     const ts = app.db.transactions;
     assert.equal(ts.length, 3);
     assert.ok(ts.every((t) => t.propertyId && !t.groupId && !t.todos && t.psplit === null), 'cada parte é um movimento normal do seu imóvel');
@@ -502,7 +502,7 @@ describe('planeados e modelos: o molde guarda o grupo, e parte-se ao registar', 
     app.collectTx = () => {};
     Object.assign(app.tForm, { label: 'Contabilidade', amount: 60, date: '2026-04-01', todos: true, propertyId: null, psplit: { mode: 'equal', parts: {} } });
     app.onSave();
-    assert.equal(toasts.pop().m, 'Modelo criado e movimento registado.');
+    assert.equal(toasts.pop().m, 'Modelo adicionado e movimento registado.');
     const x = app.db.templates[0];
     assert.equal(x.tx.todos, true);
     assert.equal(x.tx.propertyId, null);

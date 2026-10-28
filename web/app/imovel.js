@@ -2,7 +2,8 @@
 let pForm={};
 /* Abre o modal de criar/editar imóvel. Com id, trabalha sobre uma cópia
    profunda do imóvel (nada muda na base até Guardar); sem id, começa um novo.
-   Ao guardar valida o nome, escreve em db.properties e repinta a app.
+   Ao guardar valida o nome, escreve em db.properties e repinta a app; o
+   novo diz «Imóvel adicionado.» com o «Ver» para a ficha (componentes.js:avisoComVer).
    Recebe: id (opcional) — o id do imóvel a editar; sem id, cria um imóvel novo.
    Devolve: nada — abre o modal e deixa a gravação pendurada em onSave. */
 function propModal(id){
@@ -37,8 +38,13 @@ function propModal(id){
     if(i<0)db.properties.push(pForm);else db.properties[i]=pForm;
     /* os planeados da ficha (IMI, condomínio, seguro) e os das hipotecas são dos Planeados */
     if(servicoLigado('recurring')){syncPropRecs(pForm);syncAllLoanRecs()}
-    save();closeModal();render();toast(id?'Imóvel atualizado.':'Imóvel adicionado.');
-    if(historia)perguntarPrestacoesEmFalta(pForm,antes);
+    save();closeModal();render();
+    const casa=pForm;
+    if(historia)perguntarPrestacoesEmFalta(casa,antes);
+    /* o aviso vem depois da pergunta das prestações: aberta, ele não leva
+       «Ver» por cima dela (componentes.js:avisoComVer) */
+    if(id)toast('Imóvel atualizado.');
+    else avisoComVer('Imóvel adicionado.','properties',()=>propView(casa.id));
   };
 }
 /* O corpo da ficha de um imóvel: o que se sabe sobre ele, para ler, como a

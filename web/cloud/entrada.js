@@ -27,7 +27,8 @@
    página a disputar o canto com o sino. É um ícone de nuvem com a frase ao
    lado: laranja com um relógio «A ligar», verde «Guardado», cobalto «N por
    enviar», vermelho com uma cruz «Sem ligação». No telemóvel fica só o
-   ícone (a frase vai no aria-label e no title); no computador a frase do
+   ícone (a frase vai no aria-label e no title), menos o «Sem ligação», que
+   desce para uma faixa por baixo do cabeçalho; no computador a frase do
    «Guardado» recolhe ao fim de dois segundos (a classe .recibo) e o ícone
    fica — o recibo lê-se e sai, o estado vê-se. A nova tentativa depois de
    uma falha (a classe .tenta) e o leitor de ecrã têm regras próprias, ditas
@@ -56,13 +57,15 @@ function setSyncBadge(state, n) {
     : state === 'pend' ? ['pend', 'nuvemSobe', q === 1 ? '1 alteração por enviar' : q + ' alterações por enviar']
     : ['ok', 'nuvemOk', 'Guardado'];
   /* Uma tentativa depois de uma falha (o selo estava em «Sem ligação», ou
-     numa tentativa anterior que ainda não acabou) leva a classe .tenta. No
-     telemóvel o «por enviar» e o «sem ligação» descem para uma faixa por
-     baixo do cabeçalho; o «A ligar» da abertura é só o ícone — a faixa a
-     entrar e a sair em cada abertura fazia o cabeçalho saltar duas vezes
-     por nada —, mas a nova tentativa herda a faixa que lá está, agora
-     laranja: sem ela, o cabeçalho encolhia e crescia de 30 em 30 segundos
-     enquanto a rede não voltasse (estilos.css:header.top .sync.tenta). */
+     numa tentativa anterior que ainda não acabou) leva a classe .tenta; só
+     o 'liga' a leva, e só vindo de .fora ou de .tenta — nunca do 'pend'. No
+     telemóvel só o «Sem ligação» desce para a faixa por baixo do cabeçalho;
+     o «por enviar», o «Guardado» e o «A ligar» da abertura são só o ícone,
+     porque passam por ali a cada gravação ou a cada abertura e a faixa a
+     entrar e a sair fazia o cabeçalho saltar. A nova tentativa herda a
+     faixa que lá está, agora laranja: sem ela, o cabeçalho encolhia e
+     crescia de 30 em 30 segundos enquanto a rede não voltasse
+     (estilos.css:header.top .sync.tenta). */
   var tenta = state === 'liga' && /\s(fora|tenta)\s/.test(antes);
   var classe = 'sync ' + e[0] + (tenta ? ' tenta' : '');
   // o mesmo selo outra vez (a abertura e o startSync dizem ambos «A ligar»): não se refaz nem se anuncia

@@ -102,18 +102,39 @@ function mesmaVersao(a, b) {
   return Number(a.versao) === Number(b.versao) && Number(a.minima) === Number(b.minima) && a.data === b.data;
 }
 
+/* O ambiente em <base> tem a porta do dev (worker/src/teste.js)? Lá, a
+   raiz sem sessão de teste é um 404 seco — e é esse 404 que prova que o
+   worker novo correu. Diz-se pelo endereço: o dev.rendorium.com (o APP_URL do
+   deploy do dev) e o endereço workers.dev do worker de dev.
+   Recebe: base — o endereço do ambiente (texto).
+   Devolve: true no dev; false em produção, no servidor local ou num endereço que não se lê. */
+function raizFechada(base) {
+  let hn = '';
+  try { hn = new URL(base).hostname.toLowerCase(); } catch (e) { return false; }
+  return hn === 'dev.rendorium.com' || /(^|-)gestor-imobiliario-dev\./.test(hn);
+}
+
 /* O que diz uma tentativa de ler a publicação. A raiz passa pelo worker
    (run_worker_first no wrangler.toml), por isso um 5xx lá é o código novo
    partido; o /versao.json é um ficheiro estático e diz que versão está servida.
+   No dev a porta está fechada a quem não traz sessão de teste (e o deploy não
+   traz): a raiz tem de dar o 404 da porta, e um 200 lá é a porta aberta — o
+   dev à vista de qualquer pessoa, que se diz em vez de passar por bom. O
+   /versao.json passa a porta, por isso continua a dizer a versão.
    Recebe: t — {versaoStatus, versao (objeto ou null), raizStatus}, com 0 quando
-   não houve resposta; esperado — o objeto do web/versao.json gerado neste deploy.
+   não houve resposta; esperado — o objeto do web/versao.json gerado neste
+   deploy; fechada (opcional) — true no dev (raizFechada).
    Devolve: 'ok' | 'avaria' (5xx) | 'outra-versao' (responde, mas a antiga) |
-   'sem-resposta' (nada, ou um estado que não diz nada sobre o worker, como 403). */
-function classificar(t, esperado) {
+   'porta-aberta' (o dev responde à raiz sem sessão) | 'sem-resposta' (nada,
+   ou um estado que não diz nada sobre o worker, como 403). */
+function classificar(t, esperado, fechada) {
   if (t.versaoStatus >= 500 || t.raizStatus >= 500) return 'avaria';
   if (t.versaoStatus === 200 && t.versao) {
     if (!mesmaVersao(t.versao, esperado)) return 'outra-versao';
-    if (t.raizStatus === 200) return 'ok';
+    if (fechada) {
+      if (t.raizStatus === 404) return 'ok';
+      if (t.raizStatus === 200) return 'porta-aberta';
+    } else if (t.raizStatus === 200) return 'ok';
   }
   return 'sem-resposta';
 }
@@ -138,7 +159,8 @@ async function pedirHttp(url) {
    segundos, não à primeira.
    Recebe: o — {base: o endereço do ambiente, sem barra no fim; esperado: o
    objeto do web/versao.json; pedir: (url) => Promise de {status, texto};
-   dormir: (ms) => Promise; intervalo: ms; tentativas: número; escrever: (texto) => void}.
+   dormir: (ms) => Promise; intervalo: ms; tentativas: número; escrever: (texto) => void;
+   raizFechada (opcional): true quando a raiz tem de dar o 404 da porta do dev}.
    Devolve: Promise de {veredicto, detalhe} — o veredicto é o da última tentativa
    (ver classificar), ou 'ok' à primeira que confirme. */
 async function confirmarPublicacao(o) {
@@ -149,7 +171,7 @@ async function confirmarPublicacao(o) {
     const r = await o.pedir(o.base + '/');
     let versao = null;
     try { versao = JSON.parse(v.texto); } catch (e) { versao = null; }
-    veredicto = classificar({ versaoStatus: v.status, versao, raizStatus: r.status }, o.esperado);
+    veredicto = classificar({ versaoStatus: v.status, versao, raizStatus: r.status }, o.esperado, !!o.raizFechada);
     detalhe = '/versao.json → ' + (v.status || 'sem resposta') +
       (versao && versao.versao !== undefined ? ' (versão ' + versao.versao + ')' : '') +
       ', / → ' + (r.status || 'sem resposta');
@@ -235,6 +257,7 @@ async function comandoPublicacao(base, ritmo) {
   const r = await confirmarPublicacao({
     base: base.replace(/\/+$/, ''),
     esperado,
+    raizFechada: raizFechada(base),
     pedir: pedirHttp,
     dormir: (ms) => new Promise((ok) => setTimeout(ok, ms)),
     intervalo: (ritmo && ritmo.intervalo) || 10000,
@@ -249,6 +272,8 @@ async function comandoPublicacao(base, ritmo) {
   const porque = {
     avaria: 'o worker novo responde com erro — o passo seguinte volta à versão anterior.',
     'outra-versao': 'responde, mas com outra versão — a nova não chegou. Não se recua sozinho: a que responde já é a anterior.',
+    'porta-aberta': 'a versão nova responde, mas a raiz abre sem sessão de teste — a porta do dev (worker/src/teste.js) não fechou: ' +
+      'confirma o ENV_NAME e a PORTA_DEV no [env.dev.vars] do wrangler.toml. Não se recua sozinho: o worker não está partido.',
     'sem-resposta': 'não responde, ou responde com algo que não diz nada sobre o worker (um 403 de uma regra da zona, por exemplo). Não se recua sozinho.',
   }[r.veredicto];
   console.error('NÃO CONFIRMADO: ' + base + ' — ' + porque + '\núltima tentativa: ' + r.detalhe);
@@ -272,6 +297,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-  estadoDosTestes, esperarTestes, analisarPlano, mesmaVersao, classificar, pedirHttp, confirmarPublicacao,
+  estadoDosTestes, esperarTestes, analisarPlano, mesmaVersao, raizFechada, classificar, pedirHttp, confirmarPublicacao,
   comandoTestes, comandoPlano, comandoPublicacao,
 };

@@ -69,6 +69,9 @@ confere que cada uma aponta para código que existe.
 - 2026-10-28 · A segunda ronda de tickets de QA: o ano inteiro, os donos no seletor, os grupos nos filtros
 - 2026-10-28 · Os tickets de QA com três estados: novos, em resolução, resolvidos
 - 2026-10-28 · A pílula do QA no back office, com o qa.js da app
+- 2026-10-28 · A hipoteca que começa no futuro
+- 2026-10-28 · O dev só abre pela ligação do /test
+- 2026-10-28 · A terceira ronda de tickets de QA
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2675,3 +2678,54 @@ API de quem usa a app. O autor é a pessoa da equipa pelo Discord, nos campos
 que os tickets das contas de teste já tinham. Qualquer cargo vê a pílula: o
 QA é de quem testa, e não depende do que o cargo vê no back office.
 
+
+## 2026-10-28 · A hipoteca que começa no futuro
+
+Um ticket de QA (234da7c3): uma hipoteca com início a 1 de janeiro de 2027
+tinha o plano de pagamento a começar hoje. O planeado da prestação nascia
+sempre no mês de hoje, e o plano parte da próxima por confirmar. A primeira
+prestação passou a ser a do mês do início quando o início ainda não chegou, no
+mesmo dia em que a app já contava as prestações em falta desde o início (a do
+próprio dia do início, preso aos 28). Um planeado que já existia e fica antes
+do início novo anda para lá; as hipotecas que já começaram não mudam.
+
+## 2026-10-28 · O dev só abre pela ligação do /test
+
+Um ticket de QA (23899645) pedia a pílula do QA também na entrada e no criar
+conta. Sem sessão, o servidor não aceita tickets, e perguntado como devia
+ser, o Martinho decidiu outra coisa: «O dev.rendorium.com deixe de ser
+acessível diretamente sem ser com link do discord. [...] Assim sei que só
+quem está identificado tem acesso.» Nas respostas seguintes: só as sessões
+das contas de teste (as que o /test cria) passam, e uma conta normal do dev
+também não; a ligação continua como era (10 minutos para ser aberta); o back
+office fica com a entrada dele; e o erro é um 404 seco, sem dizer que é o
+ambiente de testes. A pílula na entrada deixou de fazer sentido: no dev já
+não há entrada.
+
+A porta fecha-se com duas variáveis juntas, o ENV_NAME «dev» e a PORTA_DEV
+«fechada», porque o percurso corre com outro ENV_NAME e cria contas pela
+entrada, e os testes da identidade de dev montam o worker com o ENV_NAME
+«dev» sem a porta. Para fechar também os ficheiros da app, todos passam pelo
+worker no dev: custa uma invocação por ficheiro, que no plano gratuito soma
+aos pedidos da produção, e por isso a conferência da sessão fica lembrada 30
+segundos por isolado. O deploy do dev confirma-se pelo /versao.json, que
+passa a porta, e pelo 404 da raiz: um 200 lá quer dizer porta aberta, e o
+deploy falha. A APK de dev abre o dev sem sessão e passa a ver o 404.
+
+## 2026-10-28 · A terceira ronda de tickets de QA
+
+Quatro tickets do Martinho (28/10, num Samsung) e um relato no chat. O aviso
+de um registo adicionado leva «Ver» (cda8e547): vai ao separador e abre a
+ficha, só nos novos — quem editou já estava a ver o registo —, e só quando o
+que está aberto são fichas, para não navegar por baixo de um formulário ou da
+pergunta das prestações em falta. Os avisos dos novos passaram a dizer
+«adicionado». No telemóvel o «N alterações por enviar» ficou só o ícone
+(47da849d): cada gravação passa por ele e pelo «Guardado», e a faixa fazia o
+cabeçalho saltar a cada gravação; afasta-se do contrato do redesign («uma
+faixa quando há algo por enviar») por pedido do ticket. Os movimentos do
+mesmo dia ordenam-se pela hora a que foram adicionados (15f6d530): o
+movimento novo guarda quando nasceu, e os antigos ficam sem o campo em vez de
+uma data inventada, que os reenviava todos ao servidor. E um toque durante o
+arranque (o relato «LFK is not defined», ao abrir a gaveta antes de o
+vistas.js carregar) deixou de correr a ação com meia app: engole-se, em vez
+de se guardar para depois.

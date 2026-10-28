@@ -12,11 +12,15 @@
    emitir ligações para o dev sem os dois falarem um com o outro.
 
    Nada disto existe em produção: sem ENV_NAME, a rota é um 404 e ponto —
-   produção nunca cria contas de teste, venha a assinatura de onde vier. */
+   produção nunca cria contas de teste, venha a assinatura de onde vier.
+
+   E no dev.rendorium.com a ligação é a única entrada: a porta do dev
+   (portaDoDev, no fim deste ficheiro) dá um 404 seco a quem não traz a
+   sessão de uma conta de teste. */
 
 import { now, TERMS_VERSION, CSP_ESTRITA } from './lib/http.js';
 import { purgeAccount } from './lib/acesso.js';
-import { newUserId, createSession, destroySession, sessionCookie, tokensDoPedido } from './auth.js';
+import { newUserId, createSession, destroySession, sessionCookie, tokensDoPedido, getSessionUser } from './auth.js';
 import { auditar } from './lib/auditoria.js';
 import { navegador } from './rotas/relatos.js';
 import { nomeNoDiscord } from './lib/bot.js';
@@ -223,6 +227,9 @@ const FRASCO = 'M9 3h6M10 3v6l-5.6 9.4A1.7 1.7 0 0 0 5.9 21h12.2a1.7 1.7 0 0 0 1
    ambiente que falha.
    Recebe: status — o código HTTP da resposta; titulo — o título, no
    separador e na página; texto — a explicação por baixo (HTML simples).
+   O que ela pede ao servidor (o /paginas/teste.css, as duas letras e o
+   /icon-192.png) está nas exceções da porta do dev (SEM_SESSAO): quem a vê
+   ainda não tem sessão.
    Devolve: uma Response HTML completa, sem cache e fora dos motores de busca. */
 function pagina(status, titulo, texto) {
   const tom = status >= 500 ? ' perigo' : status === 404 ? '' : ' aviso';
@@ -478,4 +485,130 @@ export async function rotasContasDeTeste(c) {
     });
   }
   return null;
+}
+
+/* -------- a porta do dev.rendorium.com ----------------------------------
+   Decisão do Martinho (2026-10-28): o ambiente de desenvolvimento só se abre
+   a quem entrou por uma ligação do /test no Discord — «assim sei que só quem
+   está identificado tem acesso». Lá dentro, um pedido sem a sessão de uma
+   conta de teste (eContaDeTeste, o email @teste.rendorium.com),
+   venha a sessão do cookie ou do Bearer, recebe um 404 seco: sem marca, sem
+   dizer que é o ambiente de testes, sem cache. Uma conta normal do dev conta
+   como sem sessão — a entrada e o criar conta deixam de existir lá.
+
+   Passam sem sessão só:
+   · a própria ligação (GET /t/entrar), que é o que cria a sessão;
+   · as interações do bot do Discord (POST /api/discord), que se provam pela
+     assinatura Ed25519;
+   · o back office (/equipa, /equipa/…, /api/equipa/…), com a entrada da
+     equipa pelo Discord, como sempre;
+   · o que as páginas de erro do /t/entrar pedem (o CSS, as duas letras e o
+     ícone) — o back office pede o CSS dele debaixo de /equipa/;
+   · o /versao.json, que o deploy lê para confirmar a publicação
+     (scripts/entrega.js). Diz a versão e a data, e nada de quem é.
+
+   Fecha-se só com ENV_NAME 'dev' E a PORTA_DEV a 'fechada' (as duas no
+   [env.dev.vars] do wrangler.toml): a produção não tem ENV_NAME, o percurso
+   corre com ENV_NAME 'percurso' e precisa de criar contas pela entrada, e os
+   testes que montam o worker com ENV_NAME 'dev' (a identidade de dev) não
+   trazem a variável. Uma PORTA_DEV posta por engano na produção não fecha
+   nada — falta-lhe o ENV_NAME.
+
+   Para fechar os ficheiros da app também, eles têm de passar pelo worker: o
+   run_worker_first do [env.dev.assets] apanha todos os de web/ (um teste
+   confere-o contra a pasta). Cada pedido custa então uma invocação do worker
+   e, com sessão, uma leitura do KV e uma da D1 — a conferência fica lembrada
+   uns segundos por isolado (LEMBRAR_MS), para um carregamento da app (perto
+   de cem ficheiros) não pagar uma leitura por ficheiro. */
+
+// o corpo do 404: curto e sem nada de quem responde
+const CORPO_404 = 'Não encontrado';
+
+// os caminhos exatos que passam sem sessão, e com que métodos
+const SEM_SESSAO = {
+  '/t/entrar': ['GET'],
+  '/api/discord': ['POST'],
+  '/versao.json': ['GET', 'HEAD'],
+  '/paginas/teste.css': ['GET', 'HEAD'],
+  '/fonts/geist.woff2': ['GET', 'HEAD'],
+  '/fonts/bricolage-grotesque.woff2': ['GET', 'HEAD'],
+  '/icon-192.png': ['GET', 'HEAD'],
+};
+
+/* Quanto tempo uma conferência de sessão fica lembrada, e quantas no máximo.
+   Uma sessão terminada pode ainda abrir os ficheiros estáticos durante este
+   tempo, no mesmo isolado; a API não, que confere a sessão por sua conta
+   (api.js) e responde 401. */
+const LEMBRAR_MS = 30000;
+const LEMBRAR_MAX = 500;
+const lembradas = new WeakMap();   // env → Map(tokens → {teste, ate})
+
+/* O caminho passa sem sessão? É uma das exceções da porta (o back office por
+   inteiro, ou um dos caminhos exatos de SEM_SESSAO com o método certo).
+   Recebe: caminho — o pathname do pedido (já normalizado pelo URL);
+   metodo — o método HTTP.
+   Devolve: true/false. */
+export function passaSemSessao(caminho, metodo) {
+  if (caminho === '/equipa' || caminho.startsWith('/equipa/') || caminho.startsWith('/api/equipa/')) return true;
+  const metodos = Object.prototype.hasOwnProperty.call(SEM_SESSAO, caminho) ? SEM_SESSAO[caminho] : null;
+  return !!metodos && metodos.indexOf(metodo) > -1;
+}
+
+/* A regra inteira, sem rede nem base: o pedido passa a porta?
+   Recebe: o — {caminho, metodo, envName (o ENV_NAME), porta (a PORTA_DEV),
+   sessaoDeTeste (true quando o pedido traz a sessão de uma conta de teste)}.
+   Devolve: true quando passa; false quando leva o 404. */
+export function passaNaPorta(o) {
+  if (o.envName !== 'dev' || o.porta !== 'fechada') return true;
+  if (o.sessaoDeTeste) return true;
+  return passaSemSessao(o.caminho, o.metodo);
+}
+
+/* O 404 seco da porta. Sem cache em lado nenhum: um 404 guardado pelo
+   caminho servia-se depois a quem tem sessão.
+   Devolve: a Response (ainda por vestir com o harden do index.js). */
+export function naoEncontrado() {
+  return new Response(CORPO_404, {
+    status: 404,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
+/* O pedido traz a sessão de uma conta de teste? A mesma conta que a API
+   encontraria (auth.js:getSessionUser: o Bearer e, se já não servir, o
+   cookie), e é de teste pelo email. Lembrada LEMBRAR_MS por isolado; uma
+   falha do KV ou da D1 conta como sem sessão — a porta fecha-se, não abre.
+   Recebe: env — o ambiente do worker; request — o pedido.
+   Devolve: promessa de true/false. */
+export async function temSessaoDeTeste(env, request) {
+  const tokens = tokensDoPedido(request);
+  if (!tokens.length) return false;
+  const chave = tokens.join(' ');
+  let memoria = lembradas.get(env);
+  if (!memoria) { memoria = new Map(); lembradas.set(env, memoria); }
+  const agora = Date.now();
+  const lembrada = memoria.get(chave);
+  if (lembrada && lembrada.ate > agora) return lembrada.teste;
+  let teste = false;
+  try {
+    const u = await getSessionUser(env, request);
+    teste = !!u && eContaDeTeste(u.email);
+  } catch (e) {
+    console.error('porta do dev', e && e.message);
+    return false;   // sem lembrar: a próxima volta a tentar
+  }
+  if (memoria.size >= LEMBRAR_MAX) memoria.clear();
+  memoria.set(chave, { teste, ate: agora + LEMBRAR_MS });
+  return teste;
+}
+
+/* A porta à entrada do fetch: null quando o pedido segue (fora do dev
+   fechado, numa exceção, ou com sessão de teste), ou o 404 seco.
+   Recebe: env — o ambiente do worker; request — o pedido; url — o URL dele.
+   Devolve: promessa de null ou da Response do 404. */
+export async function portaDoDev(env, request, url) {
+  const o = { caminho: url.pathname, metodo: request.method, envName: env.ENV_NAME, porta: env.PORTA_DEV, sessaoDeTeste: false };
+  if (passaNaPorta(o)) return null;
+  o.sessaoDeTeste = await temSessaoDeTeste(env, request);
+  return passaNaPorta(o) ? null : naoEncontrado();
 }

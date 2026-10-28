@@ -167,13 +167,15 @@ function syncLoanRec(p,l){
   if(!want){if(r)db.recurring=db.recurring.filter(x=>x.id!==r.id);return}
   const day=(()=>{const d=l.start?Number(l.start.slice(8,10)):0;return Math.max(1,Math.min(28,d||1))})();
   const tx=loanRecTx(p,l),name=tx.label;
+  /* um início que passou para o futuro leva a próxima com ele: não há
+     prestação antes de o crédito começar (credito.js:primeiraPrestacao) */
+  const chao=l.start&&l.start>today()?primeiraPrestacao(l,today()):'';
   if(r){aplicaPlanoNaRec(r,tx,name);
     if(r.next){const d=new Date(r.next+'T00:00:00');r.next=dayInMonth(d.getFullYear(),d.getMonth(),day)}
+    if(chao&&(!r.next||r.next<chao))r.next=chao;
     return}
-  const t=new Date(today()+'T00:00:00');let y=t.getFullYear(),m=t.getMonth();
-  if(today()>dayInMonth(y,m,day)){m++;if(m>11){m=0;y++}}
   db.recurring=db.recurring||[];
-  db.recurring.push(normRec({auto:true,name,autoName:name,every:'month',next:dayInMonth(y,m,day),tx}));
+  db.recurring.push(normRec({auto:true,name,autoName:name,every:'month',next:primeiraPrestacao(l,today()),tx}));
 }
 /* Passa para um planeado automático que já existe só o que é do plano — tipo,
    montante, imóvel e a origem (hipoteca ou contrato) — mais a categoria
@@ -504,7 +506,9 @@ function quickConfirmRec(id){
      (um grupo sem imóveis) não avança o planeado */
   const reg=registarMolde(recTx(r));if(reg.erro)return toast(reg.erro);
   reg.partes.forEach(t=>{if(t.kind==='loan')applyLoan(t);db.transactions.push(t)});
-  recAdvance(r);save();buildNav();render();toast('Movimento confirmado.');
+  /* o movimento nasce aqui: o «Ver» abre a ficha dele (de vários imóveis, a primeira parte, que a ficha lê como o lote) */
+  const nid=reg.partes[0].id;
+  recAdvance(r);save();buildNav();render();avisoComVer('Movimento confirmado.','transactions',()=>chamarServico('transactions','txView',nid));
 }
 // Silencia ou reativa a recorrência: silenciada fica em Planeados à espera de
 // confirmação, mas sem avisos nem contagem no menu. Grava e redesenha.
@@ -848,7 +852,9 @@ function delTpl(id){
    Devolve: nada — substitui tForm e redesenha o modal. */
 function applyTemplate(x){
   if(!x)return;
+  /* o criado também fica: um movimento já guardado não salta para o topo do dia só por lhe aplicar um modelo */
   const keep={id:tForm.id,date:tForm.date,_edit:tForm._edit};
+  if(tForm.criado)keep.criado=tForm.criado;
   tForm=normTx(Object.assign({},JSON.parse(JSON.stringify(x.tx))));Object.assign(tForm,keep);
   if(tForm.amount)tForm._aA=tForm.amount;
   repaintTx();toast('Modelo aplicado.');

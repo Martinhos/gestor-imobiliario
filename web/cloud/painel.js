@@ -24,7 +24,8 @@ evoMoney = function (field, pid, fmt) {
 // 'op', 'loan' ou 'cf'), pid o id do imóvel a que se limita (ou null para todos)
 // e year o ano por que a data do movimento tem de começar.
 // Devolve: array de {t, v} — t o movimento e v o valor ponderado em euros —,
-// ordenado do mais recente para o mais antigo.
+// ordenado do mais recente para o mais antigo (no mesmo dia, o adicionado
+// depois primeiro: dados.js:txPorDataECriacao).
 function kpiTxs(q) {
   var kinds = KPI_KINDS[q.field] || [];
   return (db.transactions || [])
@@ -36,7 +37,7 @@ function kpiTxs(q) {
       return txWeight(t, q.pid, true) !== 0;
     })
     .map(function (t) { return { t: t, v: t.amount * txWeight(t, q.pid, true) }; })
-    .sort(function (a, b) { return String(b.t.date).localeCompare(String(a.t.date)); });
+    .sort(function (a, b) { return -txPorDataECriacao(a.t, b.t); });
 }
 
 var _kpiModal = kpiModal;

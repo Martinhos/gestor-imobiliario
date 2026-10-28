@@ -12,6 +12,7 @@ import { dailyReport, watchLimits } from './notify.js';
 import { copiar } from './salvaguarda.js';
 import { recursoDePagina } from './paginas-recursos.js';
 import { CAMINHOS_DE_IDENTIDADE, identidadeDeDev } from './lib/identidade.js';
+import { portaDoDev } from './teste.js';
 
 /* Os dois scripts em linha do web/index.html — a armadilha de erros e a cura
    do arranque — têm de correr antes de qualquer ficheiro, e por isso não podem
@@ -169,8 +170,18 @@ export default {
     await message.forward(destino);
   },
 
+  // Recebe: request — o pedido; env — as bindings do worker; ctx — o contexto (waitUntil).
+  // Devolve: promessa da Response, já vestida pelo harden.
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    /* A porta do dev (teste.js:portaDoDev): no dev.rendorium.com, sem a sessão de
+       uma conta de teste — a de uma ligação do /test —, tudo é um 404 seco,
+       tirando a ligação, o Discord, o back office e o /versao.json do deploy.
+       Antes de tudo o resto, para nenhuma rota abaixo responder primeiro.
+       Fora do dev (produção, percurso) devolve null sem ler nada. */
+    const fechada = await portaDoDev(env, request, url);
+    if (fechada) return harden(fechada);
 
     const caminho = url.pathname.replace(/^\/|\/$/g, '');
     const naRaiz = url.hostname === 'rendorium.com' || url.hostname === 'www.rendorium.com';

@@ -477,7 +477,8 @@ function mortModal(pid,lid){
    mortModal tratam disso primeiro). Liga o repaint ao mortBody, põe o menu de
    apagar quando é edição, e define o onSave: sem capital em dívida (nova ou
    editada) recusa e aponta o campo; senão grava o imóvel inteiro na db, sincroniza os
-   movimentos planeados das prestações e fecha.
+   movimentos planeados das prestações e fecha. A nova diz «Hipoteca
+   adicionada.» com o «Ver» para a ficha dela (componentes.js:avisoComVer).
    Recebe: lid — o id da hipoteca dentro de pForm; isNew — verdadeiro quando
    acabou de ser criada pelo newMort.
    Devolve: nada — abre o modal e deixa o onSave armado. */
@@ -504,8 +505,13 @@ function mortOpen(lid,isNew){
     const i=db.properties.findIndex(x=>x.id===pForm.id);
     if(i>-1)db.properties[i]=pForm;
     if(servicoLigado('recurring'))syncAllLoanRecs();
-    save();closeModal();render();toast('Hipoteca guardada.');
-    if(historia)perguntarPrestacoesEmFalta(pForm,antes)};
+    save();closeModal();render();
+    const casa=pForm;
+    if(historia)perguntarPrestacoesEmFalta(casa,antes);
+    /* o aviso vem depois da pergunta das prestações: aberta, ele não leva
+       «Ver» por cima dela (componentes.js:avisoComVer) */
+    if(!isNew)toast('Hipoteca guardada.');
+    else avisoComVer('Hipoteca adicionada.','credits',()=>mortView(casa.id,lid))};
 }
 // O corpo do modal: o formulário da hipoteca `lid` dentro de pForm — o mesmo
 // loanSect da ficha do imóvel. É também a função de repaint do modal.
@@ -620,15 +626,19 @@ function inserirPrestacoesEmFalta(p,l,lista){
    É informação da hipoteca, e não toca em movimentos: vive nos Créditos, e
    abre com os Movimentos desligados. */
 /* O dia da primeira prestação do plano — a primeira linha da amortização: a
-   próxima por confirmar, quando os Planeados a têm; senão, hoje. É o relógio
+   próxima por confirmar, quando os Planeados a têm; senão, hoje. Nunca antes
+   do início: uma hipoteca que começa no futuro tem o plano a partir da
+   primeira prestação dela (credito.js:primeiraPrestacao). É o relógio
    do painel (creditos.js:credDetalhe, «Prestação de …») e o das linhas por ano
    (creditos.js:yearRows). A amortização abre com os Planeados desligados, daí
    a guarda.
    Recebe: l — a hipoteca.
    Devolve: a data em 'AAAA-MM-DD' (texto). */
 function credPrimeiraData(l){
-  const r0=servicoLigado('recurring')?loanRecOf(l):null,d=String((r0&&r0.next)||'');
-  return /^\d{4}-\d{2}-\d{2}$/.test(d)?d:today();
+  const r0=servicoLigado('recurring')?loanRecOf(l):null,d=String((r0&&r0.next)||''),hoje=today();
+  const chao=l&&l.start&&l.start>hoje?primeiraPrestacao(l,hoje):'';
+  const x=/^\d{4}-\d{2}-\d{2}$/.test(d)?d:hoje;
+  return chao&&x<chao?chao:x;
 }
 /* Agrega o plano de amortização da hipoteca em linhas por ano civil (capital,
    juros, selo, taxa e dívida no fim do ano) e devolve também os totais de

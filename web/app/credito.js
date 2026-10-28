@@ -29,6 +29,22 @@ function loanMes(l){
   const ofs=Number((l||{})._paidOfs)||0;
   return Math.max(0,loanPaidN(l)+ofs);
 }
+/* A primeira prestação de uma hipoteca a contar de um dia: a deste mês no dia
+   do início (máx. 28), ou a do mês seguinte se esse dia já passou — mas nunca
+   antes do início. Uma hipoteca que começa em 2027 não tem prestação em
+   outubro de 2026: a primeira é a do mês do início, no dia dele, como em
+   loanPrestacoesEmFalta. É a data onde nasce o planeado da prestação
+   (planeados.js:syncLoanRec) e o chão do plano (creditos.js:credPrimeiraData).
+   Recebe: l — a hipoteca (start em 'AAAA-MM-DD', ou vazio); hoje — 'AAAA-MM-DD'.
+   Devolve: a data em 'AAAA-MM-DD'. */
+function primeiraPrestacao(l,hoje){
+  const s=/^\d{4}-\d{2}-\d{2}$/.test((l&&l.start)||'')?l.start:'';
+  const day=Math.max(1,Math.min(28,Number(s.slice(8,10))||1));
+  const de=s&&s>hoje?s:hoje;
+  let y=Number(de.slice(0,4)),m=Number(de.slice(5,7))-1;
+  if(de===hoje&&hoje>dayInMonth(y,m,day)){m++;if(m>11){m=0;y++}}
+  return dayInMonth(y,m,day);
+}
 /* Prestações que faltam entre o início do crédito e o primeiro movimento já
    registado nele (ou hoje): uma por mês, no dia do início (máx. 28), com a
    distribuição do plano simulada para a frente a partir do capital da data de

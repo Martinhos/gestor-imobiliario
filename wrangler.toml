@@ -120,7 +120,19 @@ routes = [
 [env.dev.assets]
 directory = "web"
 binding = "ASSETS"
-run_worker_first = ["/", "/manifest.webmanifest"]
+# No dev passam TODOS os ficheiros pelo worker, e não só o «/» e o manifesto:
+# é a porta do dev (worker/src/teste.js) que decide quem os vê — só quem
+# traz a sessão de uma conta de teste, a da ligação do /test. Um ficheiro que
+# não passasse por aqui era servido a qualquer pessoa. Um "/*" (ou o true)
+# fazia o mesmo, mas o "/" e o manifesto ficam ditos como na produção
+# (testes/app-dev-web.test.js) e o wrangler recusa um "/*" ao lado deles
+# (torna-os redundantes). Daí os padrões: "/*/*" apanha tudo o que está
+# numa pasta, as extensões apanham o que está na raiz de web/, e o "/index"
+# é a forma sem extensão que os assets também servem. Um ficheiro novo na raiz com outra extensão tem de
+# entrar aqui — o testes/porta-dev.test.js confere a lista contra a pasta e
+# contra o que o deploy lá escreve (o APK, /gestor-imobiliario.apk).
+# O custo: cada ficheiro pedido no dev é uma invocação do worker.
+run_worker_first = ["/", "/manifest.webmanifest", "/index", "/*/*", "/*.html", "/*.js", "/*.css", "/*.png", "/*.json", "/*.webp", "/*.svg", "/*.ico", "/*.txt", "/*.xml", "/*.woff2", "/*.apk"]
 
 [[env.dev.d1_databases]]
 binding = "DB"
@@ -156,3 +168,8 @@ invocation_logs = false
 GOOGLE_CLIENT_ID = "34372660209-our5uhdtk77vnfo34nf64u1m9o2c3erl.apps.googleusercontent.com"
 MAX_USERS = "50"
 ENV_NAME = "dev"
+# A porta do dev (worker/src/teste.js): com ENV_NAME "dev" e isto, só as
+# sessões das contas de teste (as ligações do /test) veem o ambiente; o resto
+# é um 404 seco. Fora daqui não existe: a produção não tem ENV_NAME e o
+# percurso corre com ENV_NAME "percurso", sem esta variável.
+PORTA_DEV = "fechada"

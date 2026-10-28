@@ -646,17 +646,17 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
   header.top #hdrFilt.primary{background:var(--accent-soft);color:var(--accent-text)}
   header.top .sync{background:transparent!important;width:44px;height:44px;padding:0;justify-content:center}
   header.top .sync span{display:none}
-  /* com algo por enviar ou sem ligação, a frase desce para uma faixa fina por
-     baixo do cabeçalho, a toda a largura (o contrato: «uma faixa quando há
-     algo por enviar»); o ícone fica. O cabeçalho cresce o que ela ocupa, e
-     ela pinta-se no fundo dele (o header é pegajoso: é ele a caixa dela). O
-     «Guardado» fica só o ícone, e o «A ligar» da abertura também — a faixa a
-     entrar e a sair em cada abertura fazia o cabeçalho saltar; a nova
+  /* sem ligação, a frase desce para uma faixa fina por baixo do cabeçalho, a
+     toda a largura; o ícone fica. O cabeçalho cresce o que ela ocupa, e ela
+     pinta-se no fundo dele (o header é pegajoso: é ele a caixa dela). A nova
      tentativa depois de uma falha (.liga.tenta) fica com a faixa que lá
-     estava, agora laranja, e o cabeçalho não mexe de 30 em 30 segundos. */
-  header.top:has(>.sync.pend),header.top:has(>.sync.fora),header.top:has(>.sync.tenta){padding-bottom:40px}
-  header.top .sync.pend span,header.top .sync.fora span,header.top .sync.tenta span{display:flex;align-items:center;position:absolute;left:0;right:0;bottom:0;min-height:34px;padding:0 calc(16px + var(--inset-right)) 0 calc(16px + var(--inset-left));font-size:13px;font-weight:600;white-space:normal;line-height:1.25}
-  header.top .sync.pend span{background:var(--accent-soft);color:var(--accent-text)}
+     está, agora laranja, e o cabeçalho não mexe de 30 em 30 segundos. Os
+     outros estados são só o ícone, com a frase no aria-label e no title: o
+     «N alterações por enviar» (cobalto) e o «Guardado» passam por ali a cada
+     gravação, e o «A ligar» da abertura a cada abertura — com faixa, o
+     cabeçalho crescia e encolhia de cada vez. */
+  header.top:has(>.sync.fora),header.top:has(>.sync.tenta){padding-bottom:40px}
+  header.top .sync.fora span,header.top .sync.tenta span{display:flex;align-items:center;position:absolute;left:0;right:0;bottom:0;min-height:34px;padding:0 calc(16px + var(--inset-right)) 0 calc(16px + var(--inset-left));font-size:13px;font-weight:600;white-space:normal;line-height:1.25}
   header.top .sync.fora span{background:var(--danger-soft);color:var(--danger)}
   header.top .sync.tenta span{background:var(--out-soft);color:var(--out)}
   /* no telemóvel o título é o da área (Casas, Dinheiro): os separadores logo

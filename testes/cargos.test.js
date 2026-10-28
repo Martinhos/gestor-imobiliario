@@ -768,7 +768,7 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     assert.deepEqual(opcoes(), ['Sem imóvel', 'T1 Meu', 'T2 Rui']);
     Object.assign(app.tForm, { label: 'Seguro', amount: 30, propertyId: 'P2' });
     app.onSave();
-    assert.equal(msg, 'Movimento recorrente criado.');
+    assert.equal(msg, 'Movimento recorrente adicionado.');
     assert.equal(app.db.recurring.length, 3);
     assert.equal(app.db.recurring[2].tx.propertyId, 'P2');
     assert.equal(app.db.recurring[2].name, 'Seguro');

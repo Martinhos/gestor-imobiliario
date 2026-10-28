@@ -61,8 +61,12 @@ var AVISOS = [
       },
       {
         titulo: 'Pequenas correções',
-        afeta: ['app', 'anexos', 'creditos', 'colaboradores'],
+        afeta: ['app', 'anexos', 'creditos', 'colaboradores', 'movimentos', 'imoveis', 'contratos'],
         itens: [
+          'Quando adicionas um imóvel, um contrato, um movimento, uma visita, uma pessoa, uma hipoteca, um planeado ou um modelo, o aviso traz «Ver»: leva-te ao separador e abre o que acabaste de adicionar.',
+          'Uma hipoteca que começa no futuro tem o plano de pagamento e a prestação planeada a começar no mês do início, e não hoje.',
+          'Os movimentos do mesmo dia ficam pela ordem em que os adicionaste: o mais recente em cima.',
+          'No telemóvel, as alterações por enviar mostram-se só no ícone da nuvem, e o cabeçalho deixa de saltar a cada gravação.',
           'Na janela de uma foto, o botão que a leva para o aparelho chama-se «Descarregar».',
           'A taxa de uma hipoteca variável ou mista mostra a soma arredondada: «2,15% + 0,95% = 3,1%», sem casas a mais.',
           'As frases que falam contigo já não presumem o género: «Colaboras com Maria em 3 imóveis», «Tens dispensa dos recibos de renda eletrónicos».',

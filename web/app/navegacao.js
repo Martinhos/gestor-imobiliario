@@ -1127,9 +1127,11 @@ function subtituloDoEcra(meta){
   return 'Ano de '+ano+' · '+(ultimo>hoje?'com movimentos até '+dPT(ultimo):'até hoje, '+dPT(hoje));
 }
 /* Abre a gaveta de navegação: fecha primeiro os painéis de filtros, arma o
-   histórico (o voltar do sistema fecha-a) e trava o scroll do fundo.
+   histórico (o voltar do sistema fecha-a) e trava o scroll do fundo. Antes
+   de o vistas.js correr não há o lockPage que trava o fundo (um toque no
+   arranque, que o eventos.js:gestoAntesDoArranque já engole): não abre.
    Devolve: nada — abre a gaveta e passa o foco para dentro dela. */
-function openDrawer(){if(document.body.classList.contains('open'))return;
+function openDrawer(){if(document.body.classList.contains('open')||typeof lockPage!=='function')return;
   /* Sem gaveta não há nada para abrir. Acima de 900px o aside é uma coluna do
      ecrã, e o body.open não lhe mexe — mas o lockPage tranca a página na
      mesma. Dava um toque que não fazia nada e deixava o ecrã preso.
@@ -1152,9 +1154,14 @@ function openDrawer(){if(document.body.classList.contains('open'))return;
    dos movimentos e os de análise, só no estado); eram duas funções com dois
    nomes a fazer metade cada uma. Aqui só se decide se há que repintar: quando
    o deste separador estava aberto, que é o que se vê.
+   Antes de o vistas.js correr (um toque no arranque, que o
+   eventos.js:gestoAntesDoArranque já engole) não há painel nenhum aberto, nem
+   o LFK e o fecharFiltros que os fecham: sai sem fazer nada, em vez de
+   rebentar com «LFK is not defined».
    Devolve: nada — fecha os painéis e repinta quando o do separador atual estava aberto. */
 function closeFilterPanels(){
-  const a=analiseDe(tab);
+  if(typeof LFK==='undefined'||typeof fecharFiltros!=='function')return;
+  const a=typeof analiseDe==='function'?analiseDe(tab):null;
   const was=!!((LFK[tab]&&lf(LFK[tab])._open)||anaOpen[tab]||(a&&a.aberto&&a.aberto()));
   fecharFiltros();
   if(was){closePops();render()}

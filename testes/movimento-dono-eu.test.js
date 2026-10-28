@@ -242,7 +242,7 @@ describe('a opção «Sem imóvel»', () => {
     app.collectTx = () => {};
     Object.assign(app.tForm, { label: 'Seguro da atividade', amount: 120, date: '2026-03-01', propertyId: null, groupId: null, paidBy: 'eu' });
     app.onSave();
-    assert.equal(msg, 'Movimento guardado.');
+    assert.equal(msg, 'Movimento adicionado.');
     assert.equal(app.db.transactions.length, 1);
     const t = app.db.transactions[0];
     assert.equal(t.propertyId, null);

@@ -208,7 +208,7 @@ function ctRendaPlaneada(rec){
    Devolve: nada — abre a lista de escolha. */
 function ctVerMovimentos(id){
   const c=contract(id);if(!c)return;
-  const movs=(db.transactions||[]).filter(t=>t.contractId===c.id).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const movs=(db.transactions||[]).filter(t=>t.contractId===c.id).sort((a,b)=>-txPorDataECriacao(a,b));   /* o mais recente em cima, e no mesmo dia o adicionado depois */
   if(!movs.length)return;
   pickModal('Movimentos do contrato',movs.map(t=>({v:t.id,label:(t.label||'Movimento')+' · '+euro2(t.amount),sub:dPT(t.date),icon:'swap'})),
     o=>{closeModal();chamarServico('transactions','txView',o.v)});
@@ -520,10 +520,12 @@ function ctJuntaRenovacao(c,inicio,fim){
 }
 /* Grava o contrato do formulário (cForm, já validado): insere-o ou substitui-o
    em db.contracts, sincroniza o movimento recorrente da renda, persiste,
-   fecha o formulário e aponta os movimentos que ficaram fora das datas.
+   fecha o formulário e aponta os movimentos que ficaram fora das datas. Um
+   contrato novo diz «Contrato adicionado.» com o «Ver» para a ficha dele
+   (componentes.js:avisoComVer); o dos movimentos fora vem primeiro.
    Devolve: nada. */
 function ctGravar(){
-  const i=db.contracts.findIndex(x=>x.id===cForm.id);
+  const i=db.contracts.findIndex(x=>x.id===cForm.id),cid=cForm.id;
   if(i<0)db.contracts.push(cForm);else db.contracts[i]=cForm;
   /* a renda planeada é dos Planeados: desligados nesta conta, o servidor nem
      aceitava o registo — o contrato guarda-se na mesma, sem ela */
@@ -537,7 +539,8 @@ function ctGravar(){
   if(fora.length)return toast(fora.length===1?'1 movimento deste contrato está fora das datas dele.'
     :fora.length+' movimentos deste contrato estão fora das datas dele.',
     {rotulo:'Ver',ms:9000,fn:()=>verMovimentosFora(cForm.id)});
-  toast('Contrato guardado.');
+  if(i>-1)return toast('Contrato guardado.');
+  avisoComVer('Contrato adicionado.','contracts',()=>ctView(cid));
 }
 /* HTML do formulário do contrato, montado a partir de cForm, como a prancheta
    M-NovoContrato: os campos em grupos (.sect) — o que se arrenda (o imóvel, o

@@ -1155,6 +1155,33 @@ function comDesfazer(msg,restaurar,aoExpirar){
   eu.h=setTimeout(vence,6400);
 }
 
+/* O aviso de um registo acabado de adicionar leva «Ver» (o ticket de QA
+   cda8e547): seis segundos, como o «Anular», e tocar nele vai ao separador
+   do registo e abre a ficha dele. A base não chama funções de serviço: quem
+   adiciona passa a ficha em `abrir` (o txView, o ctView…), e esse é o
+   próprio serviço. O «Ver» só aparece quando cabe: o separador está ligado
+   nesta conta, e o que está aberto são só fichas (de leitura) — por cima de
+   um formulário, ou de uma pergunta que a app acabou de abrir (as prestações
+   em falta de uma hipoteca), o aviso é o de sempre, sem botão. O mesmo ao
+   tocar: se entretanto se abriu um formulário, o «Ver» não navega por baixo
+   dele. Mudar de separador fecha primeiro as fichas abertas (são do ecrã de
+   onde se sai, e não têm nada por guardar); no mesmo separador, a ficha nova
+   abre por cima. Um go recusado (navegacao.js:go, o separador de um serviço
+   desligado) fica onde está, e a ficha não abre.
+   Recebe: m — a frase do aviso («Imóvel adicionado.»); separador — o id do
+   separador do registo (navegacao.js:TABS); abrir — função sem argumentos
+   que abre a ficha do registo.
+   Devolve: nada — mostra o aviso, com ou sem «Ver». */
+function avisoComVer(m,separador,abrir){
+  const cabe=()=>(typeof separadorLigado!=='function'||separadorLigado(separador))&&modalStack.every(L=>!!(L&&L.ficha));
+  if(typeof abrir!=='function'||!cabe())return toast(m);
+  toast(m,{rotulo:'Ver',ms:6000,fn(){
+    if(!cabe())return;
+    if(tab!==separador){closeAllModals();go(separador);if(tab!==separador)return}
+    abrir();
+  }});
+}
+
 /* O erro diz-se no próprio campo: o contorno vermelho e, por baixo dele, a
    frase que diz o que fazer (o canvas de 2026-10 — só o aviso em baixo
    obrigava a procurar qual era o campo). O toast continua: é ele que o leitor
