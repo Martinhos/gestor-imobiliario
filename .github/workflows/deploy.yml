@@ -213,7 +213,8 @@ jobs:
             const m = doKeytool.exec(bloco);
             if (m) juntar(m[1]);
           }
-          for (const m of texto.matchAll(/^Signer\b[^\n]* certificate SHA-256 digest:[ \t]*([0-9A-Fa-f]{64})[ \t]*$/gm)) juntar(m[1]);
+          // «Signer #1 certificate …» ou «V2 Signer: certificate …» (o do runner), nunca o «Source Stamp Signer»
+          for (const m of texto.matchAll(/^(?:V\d+ )?Signer\b[^\n]* certificate SHA-256 digest:[ \t]*([0-9A-Fa-f]{64})[ \t]*$/gm)) juntar(m[1]);
           if (!pacote || !impressoes.length) {
             console.error('Sem impressão SHA-256 na saída do keytool nem na do apksigner.');
             process.exit(1);

@@ -275,6 +275,20 @@ describe('o passo do deploy que escreve o web/assetlinks-dev.json', () => {
     }
   });
 
+  test('o apksigner do runner do GitHub escreve «V2 Signer:» (a saída real de um deploy do dev), e a impressão tira-se na mesma', () => {
+    const doRunner = 'Not a signed jar file\n' +
+      'V2 Signer: certificate DN: CN=Rendorium, O=Rendorium, L=Lisboa, C=PT\n' +
+      'V2 Signer: certificate SHA-256 digest: ' + semPontos(IMPRESSAO).toLowerCase() + '\n' +
+      'V2 Signer: certificate SHA-1 digest: 9f0652984bf833d58fc015a7c57f83e9941f9069\n' +
+      'V2 Signer: certificate MD5 digest: 7f3a24ff2a96c52ad0c1eb7a2e622cdc\n' +
+      'Source Stamp Signer: certificate SHA-256 digest: ' + semPontos(OUTRA) + '\n';
+    const r = transformar(doRunner);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout)[0].target.sha256_cert_fingerprints, [IMPRESSAO], 'a do V2, e não a do carimbo de origem');
+    const v3 = doRunner.replace(/V2 Signer/g, 'V3 Signer');
+    assert.deepEqual(JSON.parse(transformar(v3).stdout)[0].target.sha256_cert_fingerprints, [IMPRESSAO], 'e a do V3');
+  });
+
   test('com dois assinantes, as duas; de uma cadeia, só o certificado de quem assina (o primeiro)', () => {
     const dois = KEYTOOL + '\nSigner #2:\n\nCertificate #1:\nOwner: CN=Outra\nCertificate fingerprints:\n\t SHA256: ' + OUTRA + '\n';
     assert.deepEqual(JSON.parse(transformar(dois).stdout)[0].target.sha256_cert_fingerprints, [IMPRESSAO, OUTRA]);
