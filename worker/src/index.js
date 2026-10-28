@@ -22,7 +22,7 @@ import { CAMINHOS_DE_IDENTIDADE, identidadeDeDev } from './lib/identidade.js';
    O testes/csp.test.js confere que estes hashes continuam a bater com o
    ficheiro, aqui e no web/_headers, que tem de ficar igual. */
 const HASHES_EM_LINHA = "'sha256-c4UA1V+48Fe1JESBNvW0EoXCeYe6ELM2ka4toVHOtm4=' " +
-  "'sha256-HsQ4A4fIQS7EeV+dfqOKU842TDuuei/KuayNVOc3C4o='";
+  "'sha256-dOWyPmDWCNjOauaFadEMzAWiQMAhldb2MQT5bP86V3A='";
 // A app não carrega nada de fora, tirando o botão de entrada com Google.
 const CSP = [
   "default-src 'self'",

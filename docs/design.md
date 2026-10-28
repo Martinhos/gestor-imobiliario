@@ -4220,7 +4220,10 @@ A rede de segurança do arranque (em linha no index.html, antes de todos os
 <script>) apaga as caches e recarrega quando um ficheiro não carrega — mas
 nunca sem rede (o navigator.onLine === false é o único valor de confiança),
 no máximo uma vez em cada dez minutos, e levando antes o erro que a fez
-disparar (index.html:levarAntesDeRecarregar). O ecrã que tranca uma versão
+disparar (index.html:levarAntesDeRecarregar). Só os ficheiros da casa a
+fazem disparar (index.html:deFora): o beacon das estatísticas que o Cloudflare
+injeta é recusado pela CSP (e pelos bloqueadores de anúncios), e curava a app
+de dez em dez minutos por nada. O ecrã que tranca uma versão
 velha demais fica acima do de entrada e tranca também as escritas
 (novidades.js:gateAtualizar, e o CW.trancado que a api() respeita): velha
 demais para se usar é velha demais para escrever.
