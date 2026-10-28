@@ -21,12 +21,15 @@ import { CAMINHOS_DOS_RECURSOS, recursoDePagina } from '../worker/src/paginas-re
 import { ambiente, conta } from './lib/api.js';
 
 const TOKEN_EQUIPA = 'e'.repeat(64);
+// o guião e o CSS da pílula do QA no back office do dev: servem-se à parte (equipa-qa.js:recursoDoQa)
+const QA_DO_BACK_OFFICE = ['/equipa/qa.js', '/equipa/qa.css'];
 
 /* O ambiente do worker com uma sessão de equipa de master no KV, como a
    deixa o POST /equipa/entrar.
+   Recebe: envDado (opcional) — o ambiente a usar (por omissão, um novo do dev).
    Devolve: o env. */
-async function comSessaoDeEquipa() {
-  const env = ambiente();
+async function comSessaoDeEquipa(envDado) {
+  const env = envDado || ambiente();
   const agora = Date.now();
   await env.SESSIONS.put('equipa:' + TOKEN_EQUIPA, JSON.stringify({
     discordId: 'm1', nome: 'Mestre', papel: 'master', papeis: ['master'], desde: agora, guildId: null, verificadoEm: agora,
@@ -148,7 +151,8 @@ describe('as páginas do worker, com a CSP sem unsafe-inline', () => {
       // o que substitui o que estava em linha existe mesmo
       for (const t of etiquetas(html)) {
         const m = /^<(?:script|link)\b[^>]*\s(?:src|href)="(\/(?:paginas|equipa)\/[^"]+\.(?:js|css))"/.exec(t);
-        if (m) assert.ok(CAMINHOS_DOS_RECURSOS.includes(m[1]), m[1] + ' é servido pelo worker');
+        // os da pílula do QA no back office do dev servem-se à parte (equipa-qa.js:recursoDoQa)
+        if (m) assert.ok(CAMINHOS_DOS_RECURSOS.includes(m[1]) || QA_DO_BACK_OFFICE.includes(m[1]), m[1] + ' é servido pelo worker');
       }
     });
   }
@@ -175,8 +179,13 @@ describe('as páginas do worker, com a CSP sem unsafe-inline', () => {
   test('o back office leva os dados da sessão num script que não corre, e o guião à parte', async () => {
     const html = await (await pedirAoWorker(await comSessaoDeEquipa(), '/equipa', { equipa: true })).text();
     const scripts = etiquetas(html).filter((t) => /^<script\b/.test(t));
-    assert.deepEqual(scripts, ['<script type="application/json" id="dados-equipa">', '<script src="/equipa/guiao.js">']);
+    // no dev (o ambiente dos testes tem ENV_NAME) junta-se a pílula do QA, também com os dados num script que não corre
+    assert.deepEqual(scripts, ['<script type="application/json" id="dados-equipa">', '<script src="/equipa/guiao.js">',
+      '<script type="application/json" id="dados-qa">', '<script src="/equipa/qa.js">']);
     assert.match(html, /data-acao="sair"/, 'o Sair vai pela delegação');
+    const prod = await (await pedirAoWorker(await comSessaoDeEquipa(ambiente({ ENV_NAME: undefined })), '/equipa', { equipa: true })).text();
+    assert.deepEqual(etiquetas(prod).filter((t) => /^<script\b/.test(t)), ['<script type="application/json" id="dados-equipa">', '<script src="/equipa/guiao.js">'],
+      'em produção, sem a pílula');
   });
 
   test('a página de produção do /t/entrar também', async () => {

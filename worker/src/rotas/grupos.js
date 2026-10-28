@@ -66,7 +66,7 @@ import { rateLimit } from '../lib/limites.js';
 import { servicosDesligados, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
 import { passarSeTodosAceitaram } from './casas.js';
 
-/* As casas de um grupo, agora (para os pedidos de passar o controlo que
+/* As casas de um grupo, agora (para os pedidos de transferir o controlo que
    esperavam por quem as perde: casas.js:passarSeTodosAceitaram).
    Recebe: env — o ambiente do worker; id — o grupo.
    Devolve: promessa dos ids das casas. */

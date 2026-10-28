@@ -242,8 +242,10 @@ function vCredits(){
   const rows=[];
   scope().forEach(p=>loansOf(p).forEach(l=>rows.push({p,l})));
   const live=rows.filter(x=>Number(x.l.outstanding)>0);
-  /* a pesquisa e o imóvel; o estado à parte, para as contagens do chip */
-  const passa=({p,l})=>(!s.p||p.id===s.p)&&lfHit(K,[loanName(l),l.name,l.bank,p.name,RATE[l.type],String(l.outstanding)].join(' '));
+  /* a pesquisa e o imóvel (um grupo de imóveis, 'g:ID', são os imóveis dele
+     no âmbito: registos.js:pidProps); o estado à parte, para as contagens do chip */
+  const doImovel=s.p?new Set(pidProps(s.p).map(p=>p.id)):null;
+  const passa=({p,l})=>(!doImovel||doImovel.has(p.id))&&lfHit(K,[loanName(l),l.name,l.bank,p.name,RATE[l.type],String(l.outstanding)].join(' '));
   const viva=x=>Number(x.l.outstanding)>0;
   const semEstado=rows.filter(passa);
   const shown=lfSort(K,semEstado.filter(x=>s.st==='on'?viva(x):s.st==='off'?!viva(x):true),
@@ -265,7 +267,7 @@ function vCredits(){
     campos:[{chave:'st',nome:'Estado',curto:'Todas',rapido:true,aplicar:credVerPagas,
         opcoes:[{v:'',label:'Ativas e liquidadas'},{v:'on',label:'Ativas',n:nAtivas},{v:'off',label:'Liquidadas',n:semEstado.length-nAtivas}]},
       {chave:'p',nome:'Imóvel',curto:'Todos',rapido:comHipotecas.length>1||!!s.p,
-        opcoes:[{v:'',label:'Todos os imóveis'}].concat(comHipotecas.map(p=>({v:p.id,label:p.name})))}],
+        opcoes:imoveisEGruposOpts(comHipotecas,s.p)}],
     ordem:{opcoes:[{v:'divida',label:'Dívida'},{v:'prestacao',label:'Prestação'},{v:'nome',label:'Nome'},{v:'imovel',label:'Imóvel'}],rapido:'largo'}});
   const resumo=credResumo(live);
   if(!shown.length)return resumo+head+vazioFiltro();
@@ -387,7 +389,7 @@ function newMort(){
   if(!db.properties.length)return toast('Cria primeiro um imóvel.');
   const casas=casasComo('house.edit');
   if(!casas.length)return toast(fraseSemPerm('house.edit'));
-  pickModal('Hipoteca de que imóvel?',casas.map(p=>({v:p.id,label:p.name,sub:loansOf(p).length?loansOf(p).length+' hipoteca(s)':'sem hipotecas',icon:'building'})),
+  pickModal('Hipoteca de que imóvel?',casas.map(p=>({v:p.id,label:p.name,sub:loansOf(p).length?loansOf(p).length+(loansOf(p).length===1?' hipoteca':' hipotecas'):'sem hipotecas',icon:'building'})),
     o=>{closeAllModals();
       pForm=normProp(JSON.parse(JSON.stringify(prop(o.v))));
       const l=normLoan({name:pForm.loans.length?'':'Aquisição'});
@@ -475,7 +477,8 @@ function mortModal(pid,lid){
    mortModal tratam disso primeiro). Liga o repaint ao mortBody, põe o menu de
    apagar quando é edição, e define o onSave: sem capital em dívida (nova ou
    editada) recusa e aponta o campo; senão grava o imóvel inteiro na db, sincroniza os
-   movimentos planeados das prestações e fecha.
+   movimentos planeados das prestações e fecha. A nova diz «Hipoteca
+   adicionada.» com o «Ver» para a ficha dela (componentes.js:avisoComVer).
    Recebe: lid — o id da hipoteca dentro de pForm; isNew — verdadeiro quando
    acabou de ser criada pelo newMort.
    Devolve: nada — abre o modal e deixa o onSave armado. */
@@ -502,8 +505,13 @@ function mortOpen(lid,isNew){
     const i=db.properties.findIndex(x=>x.id===pForm.id);
     if(i>-1)db.properties[i]=pForm;
     if(servicoLigado('recurring'))syncAllLoanRecs();
-    save();closeModal();render();toast('Hipoteca guardada.');
-    if(historia)perguntarPrestacoesEmFalta(pForm,antes)};
+    save();closeModal();render();
+    const casa=pForm;
+    if(historia)perguntarPrestacoesEmFalta(casa,antes);
+    /* o aviso vem depois da pergunta das prestações: aberta, ele não leva
+       «Ver» por cima dela (componentes.js:avisoComVer) */
+    if(!isNew)toast('Hipoteca guardada.');
+    else avisoComVer('Hipoteca adicionada.','credits',()=>mortView(casa.id,lid))};
 }
 // O corpo do modal: o formulário da hipoteca `lid` dentro de pForm — o mesmo
 // loanSect da ficha do imóvel. É também a função de repaint do modal.
@@ -618,15 +626,19 @@ function inserirPrestacoesEmFalta(p,l,lista){
    É informação da hipoteca, e não toca em movimentos: vive nos Créditos, e
    abre com os Movimentos desligados. */
 /* O dia da primeira prestação do plano — a primeira linha da amortização: a
-   próxima por confirmar, quando os Planeados a têm; senão, hoje. É o relógio
+   próxima por confirmar, quando os Planeados a têm; senão, hoje. Nunca antes
+   do início: uma hipoteca que começa no futuro tem o plano a partir da
+   primeira prestação dela (credito.js:primeiraPrestacao). É o relógio
    do painel (creditos.js:credDetalhe, «Prestação de …») e o das linhas por ano
    (creditos.js:yearRows). A amortização abre com os Planeados desligados, daí
    a guarda.
    Recebe: l — a hipoteca.
    Devolve: a data em 'AAAA-MM-DD' (texto). */
 function credPrimeiraData(l){
-  const r0=servicoLigado('recurring')?loanRecOf(l):null,d=String((r0&&r0.next)||'');
-  return /^\d{4}-\d{2}-\d{2}$/.test(d)?d:today();
+  const r0=servicoLigado('recurring')?loanRecOf(l):null,d=String((r0&&r0.next)||''),hoje=today();
+  const chao=l&&l.start&&l.start>hoje?primeiraPrestacao(l,hoje):'';
+  const x=/^\d{4}-\d{2}-\d{2}$/.test(d)?d:hoje;
+  return chao&&x<chao?chao:x;
 }
 /* Agrega o plano de amortização da hipoteca em linhas por ano civil (capital,
    juros, selo, taxa e dívida no fim do ano) e devolve também os totais de

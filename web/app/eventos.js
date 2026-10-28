@@ -91,6 +91,26 @@
    Uma ação que falha rebenta com um Error de mensagem clara, que chega ao
    window.onerror como chegava o erro de um on…=.
 
+   Um gesto a meio do arranque não corre (eventos.js:gestoAntesDoArranque).
+   Os scripts do index.html correm por ordem, sem defer, e este é o primeiro:
+   os ouvintes estão postos antes de os outros chegarem, e o cabeçalho (o
+   botão da gaveta, o sino, os filtros) já está no HTML. Um toque enquanto o
+   browser ainda lê os ficheiros seguintes corria a ação com meia app — o
+   openDrawer com o navegacao.js e sem o vistas.js dava «LFK is not defined»,
+   e a rede de segurança do arranque (index.html) lia esse «is not defined»
+   como uma app partida: limpava a cache, largava o service worker e
+   recarregava. Por isso, enquanto o documento está a carregar (readyState
+   'loading'), a ação de um evento do browser (isTrusted) engole-se, nos cinco
+   tipos: não corre, nem fica guardada para depois — um toque que se cumpre
+   segundos depois, com a app já pintada por cima, surpreende mais do que um
+   toque que não pegou. O resto do ouvinte faz o que fazia (o foco do toque
+   larga-se, o pointerdown conta o ponteiro, as datas vazias marcam-se), e o
+   default do browser também, que os data-click do HTML são todos botões e
+   divs. A partir do DOMContentLoaded (readyState 'interactive', com os
+   scripts todos corridos), tudo como antes. Um el.click() da própria app
+   (isTrusted false) corre sempre: é a app a pedi-lo, quando ela já tem o que
+   precisa.
+
    O toque não deixa foco (eventos.js:largarFocoDoToque). No telemóvel, um
    toque num botão ou numa aba dá-lhe o foco, e o foco fica lá depois de a
    ação correr: o Samsung Internet pinta-o (o realce dele, ou um :hover preso),
@@ -633,7 +653,7 @@ function ligarEventosDeclarados(janela) {
       const el = ev.currentTarget;
       const texto = el.getAttribute(atributo);
       if (texto == null) return;
-      try { correrAcao(texto, el, ev); } finally { if (tipo === 'click') largarFocoDoToque(ev, [el]); }
+      try { if (!gestoAntesDoArranque(ev)) correrAcao(texto, el, ev); } finally { if (tipo === 'click') largarFocoDoToque(ev, [el]); }
     };
     janela.addEventListener(tipo, (ev) => {
       if (datas) datasVaziasDoEvento(ev);
@@ -674,6 +694,21 @@ function datasVaziasDoEvento(ev) {
   const el = ev && ev.target;
   if (!el || el.tagName !== 'INPUT' || el.type !== 'date') return;
   if (typeof marcarDatasVazias === 'function') marcarDatasVazias(el);
+}
+
+/* Um gesto de quem usa a app chegou antes de ela acabar de carregar (o
+   comentário do topo: «Um gesto a meio do arranque não corre»)? É um evento
+   do browser (isTrusted: um toque, um clique, uma tecla, o Enter ou o Espaço
+   num botão) com o documento ainda a carregar — readyState 'loading', o que
+   quer dizer que há scripts do index.html por correr. Um el.click() da própria
+   app tem isTrusted false e corre como sempre; sem página a carregar (os
+   testes e o verificador, onde o readyState falta) também.
+   Recebe: ev — o evento.
+   Devolve: true se a ação deste evento se engole. */
+function gestoAntesDoArranque(ev) {
+  if (!ev || ev.isTrusted !== true) return false;
+  const doc = (ACAO_ESTADO.janela || window).document;
+  return !!doc && doc.readyState === 'loading';
 }
 
 /* De onde veio um click: do dedo ou da caneta, do rato, ou de ponteiro

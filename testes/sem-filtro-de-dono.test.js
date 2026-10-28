@@ -2,10 +2,12 @@
 // «Proprietário em foco», o topo não tem a faixa do âmbito, e nenhum painel de
 // filtros (Imóveis, Movimentos, Visão geral, Projeções, Avaliação, as outras
 // listas) tem o campo «Proprietário» — o «Pago ou recebido por» dos Movimentos
-// fica. O ownerFilter é sempre '' fora do IRS · Anexo F, onde é o titular da
-// declaração: um valor de antes larga-se no render e ao mudar de separador, e
-// um filtro comum guardado com proprietário aplica o resto e ignora essa
-// parte. O botão do cabeçalho: a camada do painel só despe o «Concluir» que
+// fica, e o seletor do imóvel da Visão geral lista também os proprietários,
+// cada um como os imóveis de que é comproprietário (não é o filtro global, e
+// as Projeções e a Avaliação não os têm). O ownerFilter é sempre '' fora do
+// IRS · Anexo F, onde é o titular da declaração: um valor de antes larga-se
+// no render e ao mudar de separador, e um filtro comum guardado com
+// proprietário aplica o resto e ignora essa parte. O botão do cabeçalho: a camada do painel só despe o «Concluir» que
 // vestiu, e a roda dentada fica com o nome dela.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
@@ -143,7 +145,13 @@ describe('nenhum painel de filtros tem «Proprietário»', () => {
     assert.doesNotMatch(bar, /ownerSel/);
     assert.match(bar, /id="sel_fcAplicar"/);
     assert.match(bar, /id="sel_dashPropSel"/);
+    // os proprietários vão no seletor do imóvel, como os imóveis de cada um, e só aqui
+    assert.match(bar, /<span>Proprietário · Bruno Dono<\/span>/);
+    assert.doesNotMatch(app.anaChips({ id: 'projSel', valor: '', aplicar: 'onProjProp', limpar: 'x()', dos: 'da projeção' }), /Proprietário ·/);
     app.tab = 'dashboard';
+    app.dashProp = 'g:o:o2';
+    assert.equal(app.dashAnaN(), 1, 'um proprietário no seletor conta como o imóvel em foco');
+    assert.equal(app.ownerFilter, '', 'e não liga o filtro global');
     app.dashProp = 'p1';
     assert.equal(app.dashAnaN(), 1);
     app.ownerFilter = 'o1';

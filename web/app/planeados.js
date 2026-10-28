@@ -167,13 +167,15 @@ function syncLoanRec(p,l){
   if(!want){if(r)db.recurring=db.recurring.filter(x=>x.id!==r.id);return}
   const day=(()=>{const d=l.start?Number(l.start.slice(8,10)):0;return Math.max(1,Math.min(28,d||1))})();
   const tx=loanRecTx(p,l),name=tx.label;
+  /* um início que passou para o futuro leva a próxima com ele: não há
+     prestação antes de o crédito começar (credito.js:primeiraPrestacao) */
+  const chao=l.start&&l.start>today()?primeiraPrestacao(l,today()):'';
   if(r){aplicaPlanoNaRec(r,tx,name);
     if(r.next){const d=new Date(r.next+'T00:00:00');r.next=dayInMonth(d.getFullYear(),d.getMonth(),day)}
+    if(chao&&(!r.next||r.next<chao))r.next=chao;
     return}
-  const t=new Date(today()+'T00:00:00');let y=t.getFullYear(),m=t.getMonth();
-  if(today()>dayInMonth(y,m,day)){m++;if(m>11){m=0;y++}}
   db.recurring=db.recurring||[];
-  db.recurring.push(normRec({auto:true,name,autoName:name,every:'month',next:dayInMonth(y,m,day),tx}));
+  db.recurring.push(normRec({auto:true,name,autoName:name,every:'month',next:primeiraPrestacao(l,today()),tx}));
 }
 /* Passa para um planeado automático que já existe só o que é do plano — tipo,
    montante, imóvel e a origem (hipoteca ou contrato) — mais a categoria
@@ -504,7 +506,9 @@ function quickConfirmRec(id){
      (um grupo sem imóveis) não avança o planeado */
   const reg=registarMolde(recTx(r));if(reg.erro)return toast(reg.erro);
   reg.partes.forEach(t=>{if(t.kind==='loan')applyLoan(t);db.transactions.push(t)});
-  recAdvance(r);save();buildNav();render();toast('Movimento confirmado.');
+  /* o movimento nasce aqui: o «Ver» abre a ficha dele (de vários imóveis, a primeira parte, que a ficha lê como o lote) */
+  const nid=reg.partes[0].id;
+  recAdvance(r);save();buildNav();render();avisoComVer('Movimento confirmado.','transactions',()=>chamarServico('transactions','txView',nid));
 }
 // Silencia ou reativa a recorrência: silenciada fica em Planeados à espera de
 // confirmação, mas sem avisos nem contagem no menu. Grava e redesenha.
@@ -848,7 +852,9 @@ function delTpl(id){
    Devolve: nada — substitui tForm e redesenha o modal. */
 function applyTemplate(x){
   if(!x)return;
+  /* o criado também fica: um movimento já guardado não salta para o topo do dia só por lhe aplicar um modelo */
   const keep={id:tForm.id,date:tForm.date,_edit:tForm._edit};
+  if(tForm.criado)keep.criado=tForm.criado;
   tForm=normTx(Object.assign({},JSON.parse(JSON.stringify(x.tx))));Object.assign(tForm,keep);
   if(tForm.amount)tForm._aA=tForm.amount;
   repaintTx();toast('Modelo aplicado.');
@@ -1146,6 +1152,29 @@ function recLinha(r){
       <div class="plan-selos">${recOrigem(r)}${recSelo(r)}</div></div>
     ${recValor(t)}</div>`;
 }
+/* Um planeado (ou um modelo) passa no filtro «Imóvel» da lista? Vazio, todos;
+   um id, esse imóvel; 'g:ID' (um grupo de imóveis,
+   componentes.js:imoveisEGruposOpts), os dos imóveis do grupo e os que são do
+   próprio grupo (o tx.groupId).
+   Recebe: t — o movimento do planeado ou do modelo (o tx); v — o valor do
+   filtro (lf('lrec').p).
+   Devolve: true/false. */
+function recNoImovel(t,v){
+  if(!v)return true;
+  if(String(v).startsWith('g:')){
+    const gid=String(v).slice(2),g=grp(gid);
+    return t.groupId===gid||(!!g&&!!t.propertyId&&(g.ids||[]).indexOf(t.propertyId)>-1);
+  }
+  return t.propertyId===v;
+}
+/* Um grupo de imóveis tem planeados ou modelos? O que decide se entra no
+   filtro «Imóvel» dos Planeados (componentes.js:imoveisEGruposOpts): um
+   planeado ou um modelo num dos imóveis dele, ou do próprio grupo.
+   Recebe: g — o grupo.
+   Devolve: true/false. */
+function recGrupoTemPlaneados(g){
+  return (db.recurring||[]).concat(db.templates||[]).some(x=>recNoImovel(x.tx||{},'g:'+g.id));
+}
 /* A página dos Planeados (o canvas M-Planeados): a faixa de quem vem de trás,
    o cartão dos por confirmar e, por cima do que filtram, os filtros dos
    Movimentos (vistas.js:lfCabeca) — a pesquisa à vista com o funil do painel
@@ -1161,7 +1190,7 @@ function recLinha(r){
 function vRecurring(){
   const K='lrec',s=lf(K);
   const hit=(name,tx)=>lfHit(K,[name,tx.label,tx.category,tx.sub,tx.creditor,propName(tx.propertyId),String(tx.amount||''),(tx.tags||[]).join(' '),tx.notes].join(' '));
-  const base=r=>((!s.k||r.tx.kind===s.k)&&(!s.p||r.tx.propertyId===s.p)&&hit(r.name,r.tx));
+  const base=r=>((!s.k||r.tx.kind===s.k)&&recNoImovel(r.tx,s.p)&&hit(r.name,r.tx));
   /* um planeado está num estado? (o filtro e as contagens do chip) */
   const noEstado=(r,st)=>{
     if(st==='pend')return !!(r.next&&r.next<=today()&&!r.muted);
@@ -1174,7 +1203,7 @@ function vRecurring(){
   const daBase=(db.recurring||[]).filter(base);
   const rc=daBase.filter(r=>noEstado(r,s.st)).sort((a,b)=>String(a.next).localeCompare(String(b.next)));
   const rcS=lfSort(K,rc,{nome:r=>r.name,valor:r=>r.tx.amount||0,data:r=>r.next||''});
-  const tp=lfSort(K,(db.templates||[]).filter(x=>(!s.k||x.tx.kind===s.k)&&(!s.p||x.tx.propertyId===s.p)&&(!s.st||s.st==='manual')&&hit(x.name,x.tx)),
+  const tp=lfSort(K,(db.templates||[]).filter(x=>(!s.k||x.tx.kind===s.k)&&recNoImovel(x.tx,s.p)&&(!s.st||s.st==='manual')&&hit(x.name,x.tx)),
     {nome:x=>x.name,valor:x=>x.tx.amount||0,data:()=>0});
   const kinds=[{v:'',label:'Todos os tipos'},{v:'income',label:'Receitas'},{v:'expense',label:'Despesas'},{v:'loan',label:'Pagamentos de crédito'},{v:'owed',label:'Dívidas recebidas'},{v:'repay',label:'Pagamentos de dívida'}];
   /* os filtros por cima do que filtram, e só com alguma coisa para filtrar.
@@ -1185,7 +1214,7 @@ function vRecurring(){
     campos:[{chave:'st',nome:'Estado',curto:'Todos',rapido:true,aplicar:recChip,rotulo:v=>(REC_ESTADOS.find(x=>x[0]===v)||[])[1]||v,
         opcoes:REC_ESTADOS.map(([v,,rot])=>({v:v,label:rot,n:v?daBase.filter(r=>noEstado(r,v)).length:daBase.length}))},
       {chave:'k',nome:'Tipo',curto:'Todos',rapido:true,opcoes:kinds},
-      servicoLigado('properties')?{chave:'p',nome:'Imóvel',curto:'Todos',rapido:'largo',opcoes:lfPropOpts()}:null],
+      servicoLigado('properties')?{chave:'p',nome:'Imóvel',curto:'Todos',rapido:'largo',opcoes:imoveisEGruposOpts(db.properties,s.p,recGrupoTemPlaneados)}:null],
     ordem:{omissao:'Próxima data',opcoes:[{v:'data',label:'Data'},{v:'valor',label:'Valor'},{v:'nome',label:'Nome'}]}});
   /* quem pode adicionar: a condição do «Novo recorrente» do cabeçalho, para os vazios e o «Novo modelo» */
   const adiciona=podeSemImovel()||casasComo('rec.add').length;

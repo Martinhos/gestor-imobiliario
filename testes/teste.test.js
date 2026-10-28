@@ -202,6 +202,32 @@ describe('o email do dev viaja assinado na ligação', () => {
   });
 });
 
+describe('o nome do dev no Discord viaja assinado na ligação', () => {
+  test('abrir a ligação grava o nome no KV; mexer no nome rebenta a assinatura; sem dono não vai', async () => {
+    const env = ambienteDoTeste();
+    const lig = await ligacaoTeste(env, 'https://dev.x.pt', false, false, 'alice', false, '', '  Alice\u0007 Abreu ');
+    assert.match(lig, /&n=Alice%20Abreu&/, 'limpo dos caracteres de controlo e aparado');
+    const r = await rotaTeste({ env, url: new URL(lig), request: new Request(lig) });
+    assert.equal(r.status, 302);
+    assert.equal(await env.SESSIONS.get('teste:nome:alice'), 'Alice Abreu');
+
+    const trocado = await rotaTeste({ env, url: new URL(lig.replace('n=Alice', 'n=Outra')), request: new Request(lig) });
+    assert.equal(trocado.status, 403, 'o nome não se troca sem assinar');
+
+    const semDono = await ligacaoTeste(env, 'https://dev.x.pt', false, false, '', false, '', 'Alice');
+    assert.doesNotMatch(semDono, /&n=/, 'sem dono o nome não serve para nada e não vai');
+  });
+
+  test('uma ligação sem nome assina-se como antes: as de um worker sem esta versão continuam a valer', async () => {
+    const env = ambienteDoTeste();
+    const lig = await ligacaoTeste(env, 'https://dev.x.pt', false, false, 'bruno', false, 'bruno@rendorium.test');
+    assert.doesNotMatch(lig, /&n=/);
+    const r = await rotaTeste({ env, url: new URL(lig), request: new Request(lig) });
+    assert.equal(r.status, 302);
+    assert.equal(await env.SESSIONS.get('teste:nome:bruno'), null, 'sem nome, nada no KV');
+  });
+});
+
 describe('cada dev tem as suas contas', () => {
   test('o dono fica gravado, e a lavagem de um não toca nas do outro', async () => {
     const env = ambienteDoTeste();
@@ -257,13 +283,44 @@ describe('cada dev tem as suas contas', () => {
 
     const nova = await (await chama(tAlice, '/api/teste/nova', 'POST', {})).json();
     assert.ok(nova.token, 'a extra vem com sessão');
-    const lista2 = await (await chama(tAlice, '/api/teste/contas')).json();
+    assert.equal((await chama(tAlice, '/api/teste/contas')).status, 401, 'e a sessão que o browser trazia terminou');
+    const lista2 = await (await chama(nova.token, '/api/teste/contas')).json();
     assert.equal(lista2.contas.length, 2, 'a alice passou a ter duas');
 
-    const troca = await (await chama(tAlice, '/api/teste/trocar', 'POST', { para: nova.id })).json();
+    const primeira = lista2.contas.find((x) => !x.atual).id;
+    const troca = await (await chama(nova.token, '/api/teste/trocar', 'POST', { para: primeira })).json();
     assert.ok(troca.token);
+    assert.equal((await chama(nova.token, '/api/me')).status, 401, 'trocar também termina a de antes');
     const eu = await (await chama(troca.token, '/api/me')).json();
-    assert.equal(eu.id, nova.id, 'o token da troca entra mesmo na outra conta');
+    assert.equal(eu.id, primeira, 'o token da troca entra mesmo na outra conta');
+  });
+
+  test('o browser fica com uma sessão só: a ligação termina a do cookie, e as de outros aparelhos ficam', async () => {
+    const env = ambienteDoTeste();
+    const noTelemovel = tokenDe(await abrir(env, false, null, false, 'alice'));
+    const noComputador = tokenDe(await abrir(env, false, null, false, 'alice'));
+    // a ligação seguinte, aberta no telemóvel: o browser traz o cookie dele
+    const lig = await ligacaoTeste(env, 'https://dev.x.pt', false, false, 'alice');
+    const r = await rotaTeste({ env, url: new URL(lig), request: new Request(lig, { headers: { Cookie: 'gi_session=' + noTelemovel } }) });
+    assert.equal(r.status, 302);
+    assert.equal(await env.SESSIONS.get('sess:' + noTelemovel), null, 'a sessão que o telemóvel tinha terminou');
+    assert.ok(await env.SESSIONS.get('sess:' + tokenDe(r)), 'a nova está lá');
+    assert.ok(await env.SESSIONS.get('sess:' + noComputador), 'a do computador fica');
+  });
+
+  test('a pré-visualização de uma ligação (o Discord, o WhatsApp…) não entra, não cria e não limpa', async () => {
+    const env = ambienteDoTeste();
+    tokenDe(await abrir(env, false, null, false, 'alice'));
+    for (const ua of ['Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)', 'WhatsApp/2.23.20.0 A', 'Slackbot-LinkExpanding 1.0']) {
+      const lig = await ligacaoTeste(env, 'https://dev.x.pt', true, true, 'alice', true);
+      const r = await rotaTeste({ env, url: new URL(lig), request: new Request(lig, { headers: { 'User-Agent': ua } }) });
+      assert.equal(r.status, 200, ua);
+      assert.equal(r.headers.get('Set-Cookie'), null, 'sem sessão: ' + ua);
+    }
+    const vivas = (await contas(env)).filter((u) => !u.deleted_at);
+    assert.equal(vivas.length, 1, 'nem criou nem limpou');
+    const sessoes = (await env.SESSIONS.list({ prefix: 'sess:' })).keys.length;
+    assert.equal(sessoes, 1, 'só a sessão do browser');
   });
 
   test('em produção o seletor nem existe; e uma conta normal não lhe toca', async () => {
@@ -319,6 +376,21 @@ describe('apagar uma conta de teste entrega logo a próxima', () => {
       headers: { Authorization: 'Bearer ' + r2.proxima.token },
     }), env, { waitUntil() {} })).json();
     assert.equal(eu.id, r2.proxima.id, 'o token da próxima entra mesmo');
+  });
+
+  test('apagar termina também a sessão do cookie, se o browser trouxer outra', async () => {
+    const env = ambienteDoTeste();
+    tokenDe(await abrir(env, false, null, false, 'alice'));
+    const tB = tokenDe(await abrir(env, false, null, true, 'alice'));
+    const doCookie = tokenDe(await abrir(env, false, null, true, 'alice'));
+    const r = await (await handleApi(new Request('https://dev.x.pt/api/me', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tB, Cookie: 'gi_session=' + doCookie },
+      body: JSON.stringify({ confirm: 'APAGAR' }),
+    }), env, { waitUntil() {} })).json();
+    assert.ok(r.proxima && r.proxima.token);
+    assert.equal(await env.SESSIONS.get('sess:' + doCookie), null, 'a do cookie terminou');
+    assert.ok(await env.SESSIONS.get('sess:' + r.proxima.token), 'e a próxima está lá');
   });
 
   test('uma conta normal continua a exigir a palavra-passe para se apagar', async () => {

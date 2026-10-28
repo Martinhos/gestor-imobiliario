@@ -24,7 +24,8 @@ evoMoney = function (field, pid, fmt) {
 // 'op', 'loan' ou 'cf'), pid o id do imóvel a que se limita (ou null para todos)
 // e year o ano por que a data do movimento tem de começar.
 // Devolve: array de {t, v} — t o movimento e v o valor ponderado em euros —,
-// ordenado do mais recente para o mais antigo.
+// ordenado do mais recente para o mais antigo (no mesmo dia, o adicionado
+// depois primeiro: dados.js:txPorDataECriacao).
 function kpiTxs(q) {
   var kinds = KPI_KINDS[q.field] || [];
   return (db.transactions || [])
@@ -36,7 +37,7 @@ function kpiTxs(q) {
       return txWeight(t, q.pid, true) !== 0;
     })
     .map(function (t) { return { t: t, v: t.amount * txWeight(t, q.pid, true) }; })
-    .sort(function (a, b) { return String(b.t.date).localeCompare(String(a.t.date)); });
+    .sort(function (a, b) { return -txPorDataECriacao(a.t, b.t); });
 }
 
 var _kpiModal = kpiModal;
@@ -354,6 +355,21 @@ var knownRecs = null;
 function refreshKnown() {
   knownRecs = {};
   (db.recurring || []).forEach(function (r) { knownRecs[r.id] = 1; });
+}
+
+/* Os dados de exemplo (arranque.js:seed) não são contratos antigos acabados
+   de gravar: os planeados que eles criam ficam logo conhecidos, e o offerFill
+   (700 ms depois do save) não abre o «Preencher N períodos» para rendas de
+   contratos inventados — abria sozinho por cima dos Imóveis assim que o
+   exemplo tinha dois meses em falta, e o percurso da interface media-o a
+   meio da entrada. */
+if (typeof seed === 'function') {
+  var seedDeAntes = seed;
+  seed = function () {
+    var r = seedDeAntes.apply(this, arguments);
+    refreshKnown();
+    return r;
+  };
 }
 
 /* Corre pouco depois de cada save(): se entretanto apareceu um plano novo de

@@ -129,7 +129,7 @@ describe('posso X nesta casa?', () => {
     app.confirmModal = (t, txt) => { pergunta = { t, txt }; };
     app.delProp('P1');
     assert.equal(pergunta.t, 'Apagar «T1 Meu»');
-    assert.match(pergunta.txt, /^Deixas de ser comproprietário de <b>T1 Meu<\/b>/);
+    assert.match(pergunta.txt, /^Sais da compropriedade de <b>T1 Meu<\/b>/);
     assert.equal(app.db.properties.length, 3, 'nada foi apagado');
   });
 
@@ -280,7 +280,7 @@ describe('o âmbito financeiro', () => {
     tresCasas();
     app.db.settings.notifLidoAte = 1;
     const html = app.vDashboard();
-    assert.match(html, /Inclui 1 imóvel onde és colaborador \(valores por inteiro\)/);
+    assert.match(html, /Inclui 1 imóvel onde colaboras \(valores por inteiro\)/);
   });
 
   test('quem só colabora sem finanças vê o vazio com o botão para os imóveis', () => {
@@ -289,9 +289,9 @@ describe('o âmbito financeiro', () => {
     app.window.CW.cargos.P2 = { dono: false, nome: 'Gestor de visitas', perms: GESTOR };
     app.db.properties[0]._sharedFrom = 'Rui';
     const html = app.vDashboard();
-    assert.match(html, /És colaborador de Rui em 3 imóveis como Gestor de visitas\./);
+    assert.match(html, /Colaboras com Rui em 3 imóveis como Gestor de visitas\./);
     assert.match(html, /Ver os imóveis/);
-    assert.equal(app.fraseColaborador(), 'És colaborador de Rui em 3 imóveis como Gestor de visitas.');
+    assert.equal(app.fraseColaborador(), 'Colaboras com Rui em 3 imóveis como Gestor de visitas.');
   });
 
   test('o resumo junta donos e cargos sem repetir', () => {
@@ -450,7 +450,7 @@ describe('o que se esconde', () => {
     app.paintThumbs = () => {};
     app.propModal('P2');
     assert.equal(aberto.t, 'T2 Rui');
-    assert.match(aberto.b, /És colaborador como <b>Contabilista<\/b>/);
+    assert.match(aberto.b, /Colaboras como <b>Contabilista<\/b>/);
     assert.match(aberto.b, /Valor de mercado/, 'o contabilista vê valores');
     assert.doesNotMatch(aberto.b, /p_name/, 'não é o formulário');
     assert.match(aberto.f, /Fechar/);
@@ -768,7 +768,7 @@ describe('o que um colaborador faz — e o ecrã não desmente', () => {
     assert.deepEqual(opcoes(), ['Sem imóvel', 'T1 Meu', 'T2 Rui']);
     Object.assign(app.tForm, { label: 'Seguro', amount: 30, propertyId: 'P2' });
     app.onSave();
-    assert.equal(msg, 'Movimento recorrente criado.');
+    assert.equal(msg, 'Movimento recorrente adicionado.');
     assert.equal(app.db.recurring.length, 3);
     assert.equal(app.db.recurring[2].tx.propertyId, 'P2');
     assert.equal(app.db.recurring[2].name, 'Seguro');

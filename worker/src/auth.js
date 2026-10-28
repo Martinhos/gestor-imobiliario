@@ -1,7 +1,7 @@
 // Autenticação: hash de palavras-passe (PBKDF2 via WebCrypto, com pimenta
 // opcional) e sessões em KV.
 
-const SESSION_TTL = 60 * 60 * 24 * 30; // 30 dias
+export const SESSION_TTL = 60 * 60 * 24 * 30; // 30 dias
 
 /* 100 mil iterações é o máximo que o PBKDF2 dos Workers aceita (o valor que
    a documentação da Cloudflare dá para o Web Crypto): acima disso o workerd
@@ -165,11 +165,17 @@ export function newUserId() {
 // Cria uma sessão em KV (expira ao fim de 30 dias) e devolve o token. O epoch
 // gravado é o que permite revogar todas as sessões do utilizador de uma vez.
 // Recebe: env — as bindings do worker (KV SESSIONS); userId — o id do dono da
-// sessão; epoch (opcional) — o sess_epoch atual do utilizador (0 por omissão).
+// sessão; epoch (opcional) — o sess_epoch atual do utilizador (0 por omissão);
+// agente (opcional) — o browser e o sistema, curtos, para a lista das
+// sessões de teste do back office (sessoes-teste.js).
+// Os metadados da chave (u, e, t, a: a conta, a época, a hora e o browser)
+// deixam essa lista ler as sessões sem abrir cada valor.
 // Devolve: promessa do token da sessão — string de 64 caracteres hexadecimais.
-export async function createSession(env, userId, epoch = 0) {
+export async function createSession(env, userId, epoch = 0, agente = '') {
   const token = randomToken();
-  await env.SESSIONS.put(`sess:${token}`, JSON.stringify({ userId, epoch }), { expirationTtl: SESSION_TTL });
+  const metadata = { u: userId, e: epoch, t: Date.now() };
+  if (agente) metadata.a = String(agente).slice(0, 80);
+  await env.SESSIONS.put(`sess:${token}`, JSON.stringify({ userId, epoch }), { expirationTtl: SESSION_TTL, metadata });
   return token;
 }
 

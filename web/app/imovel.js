@@ -2,7 +2,8 @@
 let pForm={};
 /* Abre o modal de criar/editar imóvel. Com id, trabalha sobre uma cópia
    profunda do imóvel (nada muda na base até Guardar); sem id, começa um novo.
-   Ao guardar valida o nome, escreve em db.properties e repinta a app.
+   Ao guardar valida o nome, escreve em db.properties e repinta a app; o
+   novo diz «Imóvel adicionado.» com o «Ver» para a ficha (componentes.js:avisoComVer).
    Recebe: id (opcional) — o id do imóvel a editar; sem id, cria um imóvel novo.
    Devolve: nada — abre o modal e deixa a gravação pendurada em onSave. */
 function propModal(id){
@@ -37,14 +38,19 @@ function propModal(id){
     if(i<0)db.properties.push(pForm);else db.properties[i]=pForm;
     /* os planeados da ficha (IMI, condomínio, seguro) e os das hipotecas são dos Planeados */
     if(servicoLigado('recurring')){syncPropRecs(pForm);syncAllLoanRecs()}
-    save();closeModal();render();toast(id?'Imóvel atualizado.':'Imóvel adicionado.');
-    if(historia)perguntarPrestacoesEmFalta(pForm,antes);
+    save();closeModal();render();
+    const casa=pForm;
+    if(historia)perguntarPrestacoesEmFalta(casa,antes);
+    /* o aviso vem depois da pergunta das prestações: aberta, ele não leva
+       «Ver» por cima dela (componentes.js:avisoComVer) */
+    if(id)toast('Imóvel atualizado.');
+    else avisoComVer('Imóvel adicionado.','properties',()=>propView(casa.id));
   };
 }
 /* O corpo da ficha de um imóvel: o que se sabe sobre ele, para ler, como a
    prancheta M-Imovel — a capa (a primeira foto, ou o mosaico) com quantas
    fotos há, a morada e os selos, os donos com as quotas e quem deve a quem,
-   o pedido pendente para passar o controlo (imvTrfNaFicha), as ações rápidas, o cartão dos números, os por confirmar, os quartos ou o
+   o pedido pendente para transferir o controlo (imvTrfNaFicha), as ações rápidas, o cartão dos números, os por confirmar, os quartos ou o
    contrato, as hipotecas, as despesas fixas, as tarefas, os dados registais
    e fiscais e o anúncio. O título é o da janela; o «Editar» é o do rodapé, e
    só existe para quem pode (propView).
@@ -128,7 +134,7 @@ function imvTopoDaFicha(p,vCt,c){
 function imvNotaDeColaborador(p,c){
   const id=p.id,dono=p._sharedFrom||(p._ownerUserId?nomeUtilizador(p._ownerUserId):'');
   const podes=frasePodesNoImovel(id),acoes=acoesNoImovel(id).filter(a=>a.perm!=='house.edit');
-  return `<div class="hint imv-nota">${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}És colaborador${c.nome?' como <b>'+esc(c.nome)+'</b>':''}${pode(id,'house.edit')?'.':acoes.length?' — os dados do imóvel são só de leitura.':' — a ficha é só de leitura.'}`
+  return `<div class="hint imv-nota">${dono?'Imóvel de <b>'+esc(dono)+'</b>. ':''}Colaboras${c.nome?' como <b>'+esc(c.nome)+'</b>':' neste imóvel'}${pode(id,'house.edit')?'.':acoes.length?' — os dados do imóvel são só de leitura.':' — a ficha é só de leitura.'}`
     +(podes?`<span class="imv-nota-podes">${esc(podes)}</span>`:'')+'</div>';
 }
 /* As ações rápidas da ficha, em chips, só as que o cargo e os serviços
@@ -375,9 +381,9 @@ function verMovimentosDoImovel(pid){
    e o paintThumbs sem raiz procurava a capa nessa janela, e a ficha ficava
    com o mosaico e «3 fotos». Na primeira pintura, dentro do abrirFicha, a
    camada ainda não está guardada, mas aí a de cima é a própria ficha. O ⋯
-   da janela é o imvMenuDaFicha (o «Passar o controlo» e o «Apagar
-   imóvel»), lido de novo a cada repintura: um pedido para passar o controlo
-   pendente tira o «Passar o controlo» até ser cancelado ou respondido.
+   da janela é o imvMenuDaFicha (o «Transferir o controlo» e o «Apagar
+   imóvel»), lido de novo a cada repintura: um pedido para transferir o controlo
+   pendente tira o «Transferir o controlo» até ser cancelado ou respondido.
    Recebe: id — o id do imóvel.
    Devolve: nada — abre a janela. */
 function propView(id){
@@ -1195,7 +1201,7 @@ function imvFraseSaida(p){
   if(imvComoSaio(p.id)==='colaborador')
     return `Deixas de colaborar em ${nome}: as tuas permissões neste imóvel são retiradas e ele sai da tua lista. O que registaste fica com ${dono||'o dono'}. Não se desfaz: para voltares a ter acesso, pede ${dono?'a '+dono:'ao dono'} um convite novo.`;
   const quota=imvFraseDaQuota(p);
-  return `Deixas de ser comproprietário de ${nome}: as tuas permissões são retiradas e ele sai da tua lista.${quota?' '+quota:''} Os saldos e o IRS do imóvel passam a contar com as quotas novas, também nos movimentos já registados. O que registaste fica. Não se desfaz: para voltares, ${dono||'quem o criou'} tem de voltar a partilhá-lo contigo.`;
+  return `Sais da compropriedade de ${nome}: as tuas permissões são retiradas e ele sai da tua lista.${quota?' '+quota:''} Os saldos e o IRS do imóvel passam a contar com as quotas novas, também nos movimentos já registados. O que registaste fica. Não se desfaz: para voltares, ${dono||'quem o criou'} tem de voltar a partilhá-lo contigo.`;
 }
 /* Sair de um imóvel que não criei — o «Apagar imóvel» do ⋯ da ficha, do
    formulário e do toque longo de quem não o criou (delProp encaminha para
@@ -1234,36 +1240,36 @@ function imvSair(id){
    cancelo-o na ficha (imvTrfNaFicha) ou no sino. Os avisos e as respostas
    vivem em notificacoes.js (notifTransf…). */
 
-/* A folha de passar o controlo aberta: os imóveis que vão (ids), quem
+/* A folha de transferir o controlo aberta: os imóveis que vão (ids), quem
    recebe (para), o que corre depois de pedir (aoPedir) e se há um pedido a
    meio (enviando). null sem folha. */
 let _trf=null;
 
-/* O ⋯ da ficha do imóvel: «Passar o controlo» a quem o pode passar
+/* O ⋯ da ficha do imóvel: «Transferir o controlo» a quem o pode passar
    (imvPossoTransferir), e «Apagar imóvel» (imvPossoApagar), por esta
    ordem — o que destrói fica no fim, vermelho.
    Recebe: id — o id do imóvel.
    Devolve: os itens do menu() (array; vazio sem nenhum). */
 function imvMenuDaFicha(id){
   const q=jsq(id),it=[];
-  if(imvPossoTransferir(id))it.push({label:'Passar o controlo',icon:'swap',toca:'camada',act:`imvTransferir('${q}')`});
+  if(imvPossoTransferir(id))it.push({label:'Transferir o controlo',icon:'swap',toca:'camada',act:`imvTransferir('${q}')`});
   if(imvPossoApagar(id))it.push({label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${q}')`});
   return it;
 }
-/* Passar o controlo existe aqui? Com sessão, com a nuvem carregada (o
+/* Transferir o controlo existe aqui? Com sessão, com a nuvem carregada (o
    CW.pedirTransferencia de cloud/partilha.js) e com um servidor que já sabe
    destes pedidos (notificacoes.js:notifTransfSabe — um de antes não manda
    o campo, e a ação levava a um 404).
    Devolve: true se a ação se pode oferecer. */
 function imvTrfDisponivel(){return !!meuId()&&typeof (window.CW&&CW.pedirTransferencia)==='function'&&notifTransfSabe()}
-/* Posso passar o controlo deste imóvel? Só quem o criou (souCriador), com a
+/* Posso transferir o controlo deste imóvel? Só quem o criou (souCriador), com a
    ação disponível (imvTrfDisponivel), sem um pedido pendente dele (um só por
    casa: o pendente cancela-se primeiro) e com pelo menos um comproprietário
    a quem o passar (imvTrfDestinos).
    Recebe: id — o id do imóvel.
    Devolve: true se sim. */
 function imvPossoTransferir(id){return !!prop(id)&&souCriador(id)&&imvTrfDisponivel()&&!notifTransfDaCasa('outgoing',id)&&imvTrfDestinos([id]).length>0}
-/* A quem posso passar o controlo destes imóveis: aos comproprietários deles
+/* A quem posso transferir o controlo destes imóveis: aos comproprietários deles
    — os participantes que o servidor manda (p.ownerIds: por uma partilha
    numa ligação ou por um grupo; nunca um colaborador) menos eu —, e com
    vários imóveis só aos que são comproprietários de todos (o servidor
@@ -1278,7 +1284,7 @@ function imvTrfDestinos(ids){
   return deCada[0].filter((u,i,l)=>l.indexOf(u)===i&&deCada.every(d=>d.indexOf(u)>-1))
     .map(u=>({id:u,nome:nomeUtilizador(u)})).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
 }
-/* O que passar o controlo faz, dito antes de pedir: que só muda quem
+/* O que transferir o controlo faz, dito antes de pedir: que só muda quem
    controla o imóvel na app (quem recebe passa a gerir as partilhas, os
    colaboradores e o apagar); que continuo comproprietário com a minha quota
    (dita, com um imóvel só) e que nada muda nas quotas, nos grupos nem nos
@@ -1321,7 +1327,7 @@ function imvTrfQuemAceita(ids,para){
   const outros=us.filter(u=>u!==para).map(nomeUtilizador).sort((a,b)=>a.localeCompare(b,'pt'));
   return (para&&us.indexOf(para)>-1?[nomeUtilizador(para)]:[]).concat(outros);
 }
-/* Os imóveis que ficam de fora de passar o controlo, e porquê, uma frase
+/* Os imóveis que ficam de fora de transferir o controlo, e porquê, uma frase
    por razão: os que não criei, os que já têm um pedido pendente e os que
    não têm comproprietários.
    Recebe: fora — {naoMeus, pend, semComp} (arrays de ids); nome — função
@@ -1330,11 +1336,11 @@ function imvTrfQuemAceita(ids,para){
 function imvTrfFora(fora,nome){
   const lista=ids=>listaE(ids.map(id=>nome(propName(id)||'Sem nome')));
   const frase=(ids,um,varios)=>ids.length?[lista(ids)+(ids.length===1?um:varios)]:[];
-  return frase(fora.naoMeus,' fica de fora: só quem criou um imóvel lhe passa o controlo.',' ficam de fora: só quem criou um imóvel lhe passa o controlo.')
+  return frase(fora.naoMeus,' fica de fora: só quem criou um imóvel lhe transfere o controlo.',' ficam de fora: só quem criou um imóvel lhe transfere o controlo.')
     .concat(frase(fora.pend,' fica de fora: já tem um pedido pendente.',' ficam de fora: já têm pedidos pendentes.'),
       frase(fora.semComp,' fica de fora: não tem comproprietários.',' ficam de fora: não têm comproprietários.'));
 }
-/* O corpo da folha de passar o controlo: os que ficaram de fora e porquê
+/* O corpo da folha de transferir o controlo: os que ficaram de fora e porquê
    (imvTrfFora); «Para quem», obrigatório, com os comproprietários
    (imvTrfDestinos); por baixo, escondida até o servidor responder, a linha
    de quem fica ligado a quem recebe ao aceitar (imvTrfVerificar); e a frase
@@ -1348,7 +1354,7 @@ function imvTrfCorpo(destinos,fora){
   return `<div class="form trf-form">
     ${fora.length?`<div class="hint">${fora.join(' ')}</div>`:''}
     <label>Para quem <span class="req">*</span>${sel('trf_para',_trf.para,ops,'imvTrfMudou','rascunho')}</label>
-    <p class="hint">Só podes passar o controlo a um comproprietário ${um?'deste imóvel':'de todos estes imóveis'}.</p>
+    <p class="hint">Só podes transferir o controlo a um comproprietário ${um?'deste imóvel':'de todos estes imóveis'}.</p>
     <p class="trf-liga u-d-none" id="trfLiga" role="status"><span class="trf-liga-ic" aria-hidden="true">${ic('users',16)}</span><span id="trfLigaTxt"></span></p>
     <p class="trf-frase" id="trfFrase" aria-live="polite">${imvTrfFrase()}</p>
   </div>`;
@@ -1401,7 +1407,7 @@ function imvTrfVerificar(){
    folha leva às Pessoas › Proprietários, onde se partilham as casas.
    Devolve: nada — fecha as janelas e muda de separador. */
 function imvTrfLigar(){closeAllModals();go('owners')}
-/* A folha «Passar o controlo» (um imóvel) ou «Passar o controlo de N
+/* A folha «Transferir o controlo» (um imóvel) ou «Transferir o controlo de N
    imóveis» (da seleção das Casas): o ⋯ da ficha e a barra da seleção
    abrem-na. Vão só os que criei, sem um pedido pendente e com
    comproprietários; os outros dizem-se no cimo (imvTrfFora), e se não
@@ -1415,7 +1421,7 @@ function imvTrfLigar(){closeAllModals();go('owners')}
 function imvTransferir(ids,aoPedir){
   const ps=(Array.isArray(ids)?ids:[ids]).map(prop).filter(Boolean);
   if(!ps.length)return;
-  if(!imvTrfDisponivel())return toast('Passar o controlo precisa de sessão e do servidor. Tenta outra vez daqui a pouco.');
+  if(!imvTrfDisponivel())return toast('Transferir o controlo precisa de sessão e do servidor. Tenta outra vez daqui a pouco.');
   const meus=ps.filter(p=>souCriador(p.id)),pend=meus.filter(p=>notifTransfDaCasa('outgoing',p.id));
   const semComp=meus.filter(p=>pend.indexOf(p)<0&&!imvTrfDestinos([p.id]).length);
   const vao=meus.filter(p=>pend.indexOf(p)<0&&semComp.indexOf(p)<0);
@@ -1423,16 +1429,16 @@ function imvTransferir(ids,aoPedir){
   const partilhar=servicoLigado('owners')?' em Pessoas › Proprietários':'';
   if(!vao.length){
     if(ps.length>1)return toast(imvTrfFora(fora,n=>n).join(' '),{ms:6000});
-    return toast(fora.naoMeus.length?'Só quem criou o imóvel lhe passa o controlo.':fora.pend.length?'Este imóvel já tem um pedido pendente.'
-      :'Só passas o controlo a um comproprietário, e este imóvel ainda não tem nenhum. Partilha-o primeiro'+partilhar+'.',{ms:6000});
+    return toast(fora.naoMeus.length?'Só quem criou o imóvel lhe transfere o controlo.':fora.pend.length?'Este imóvel já tem um pedido pendente.'
+      :'Só transferes o controlo a um comproprietário, e este imóvel ainda não tem nenhum. Partilha-o primeiro'+partilhar+'.',{ms:6000});
   }
   const destinos=imvTrfDestinos(id(vao));
   _trf={ids:id(vao),para:destinos.length===1?destinos[0].id:'',aoPedir:typeof aoPedir==='function'?aoPedir:null,enviando:false};
-  const titulo=vao.length===1?'Passar o controlo':'Passar o controlo de '+vao.length+' imóveis';
+  const titulo=vao.length===1?'Transferir o controlo':'Transferir o controlo de '+vao.length+' imóveis';
   const cancelar='<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button>';
   let L;
   if(!destinos.length){
-    L=openModal(titulo,`<div class="form trf-form"><p>Só passas o controlo a um comproprietário, e ninguém é comproprietário de todos estes imóveis.</p>
+    L=openModal(titulo,`<div class="form trf-form"><p>Só transferes o controlo a um comproprietário, e ninguém é comproprietário de todos estes imóveis.</p>
       <p class="hint">Escolhe só imóveis que partilhas com a mesma pessoa, ou partilha-os com ela primeiro${partilhar}.</p></div>`,
       cancelar+(partilhar?'<button type="button" class="btn primary" data-toca="ecra" data-click="imvTrfLigar()">Ir para os proprietários</button>':''));
   }else{
@@ -1452,9 +1458,9 @@ function imvTransferir(ids,aoPedir){
    Devolve: nada. */
 function imvTrfPedir(){
   if(!_trf||_trf.enviando)return;
-  if(!_trf.para)return falhaCampo('selb_trf_para','Escolhe a quem passas o controlo.');
+  if(!_trf.para)return falhaCampo('selb_trf_para','Escolhe a quem transferes o controlo.');
   const f=window.CW&&CW.pedirTransferencia;
-  if(typeof f!=='function')return toast('Passar o controlo precisa de sessão e do servidor. Tenta outra vez daqui a pouco.');
+  if(typeof f!=='function')return toast('Transferir o controlo precisa de sessão e do servidor. Tenta outra vez daqui a pouco.');
   const t=_trf,todos=imvTrfQuemAceita(t.ids,t.para),um=t.ids.length===1;
   const ate=todos.length<2?'Até aceitar':todos.length===2?'Até os dois aceitarem':'Até todos aceitarem';
   t.enviando=true;
@@ -1490,14 +1496,14 @@ function imvTrfNaFicha(p){
   if(env){
     const quem=esc(notifTransfNome(env.to)),outras=nomes(env,p.id),h=daCasa(env),varios=notifTransfVarios(h);
     const prog=varios?esc(notifTransfProgresso(h))+' ':'';
-    return cartao('Pediste para passar o controlo a '+quem,
+    return cartao('Pediste para transferir o controlo a '+quem,
       prog+(varios?'Até todos aceitarem, nada muda.':'Até '+quem+' aceitar, nada muda.')+(outras.length?' O pedido leva também '+listaE(outras)+': cancelar cancela o pedido todo.':''),
-      `<button type="button" class="btn sm" data-toca="dados" aria-label="Cancelar o pedido para passar o controlo" data-click="notifTransfCancelar('${jsq(env.lote)}')">Cancelar</button>`);
+      `<button type="button" class="btn sm" data-toca="dados" aria-label="Cancelar o pedido para transferir o controlo" data-click="notifTransfCancelar('${jsq(env.lote)}')">Cancelar</button>`);
   }
   const rec=notifTransfDaCasa('incoming',p.id);
   if(!rec)return '';
   const h=daCasa(rec),responder=rec.porResponder!==false;
   const sub=notifTransfVarios(h)?notifTransfProgresso(h)+(responder?'':' Até os outros aceitarem, nada muda.'):notifTransfSub(rec);
-  return cartao(esc(notifTransfNome(rec.from))+' quer passar o controlo deste imóvel '+esc(notifTransfAQuem(rec)),esc(sub),
-    `<button type="button" class="btn sm${responder?' primary':''}" data-toca="camada" aria-label="Ver o pedido para passar o controlo" data-click="notifTransfVer('${jsq(rec.lote)}')">Ver</button>`);
+  return cartao(esc(notifTransfNome(rec.from))+' quer transferir o controlo deste imóvel '+esc(notifTransfAQuem(rec)),esc(sub),
+    `<button type="button" class="btn sm${responder?' primary':''}" data-toca="camada" aria-label="Ver o pedido para transferir o controlo" data-click="notifTransfVer('${jsq(rec.lote)}')">Ver</button>`);
 }

@@ -27,15 +27,63 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
-    v: 42,
-    data: '2026-10-25',
-    titulo: 'Passar o controlo, e as fotos a chegar',
+    v: 43,
+    data: '2026-10-27',
+    titulo: 'A app apresenta-se, e o ícone fica cobalto',
     seccoes: [
       {
-        titulo: 'Passar o controlo de um imóvel',
+        titulo: 'Boas-vindas e apresentações',
+        afeta: ['app'],
+        itens: [
+          'Quem cria conta é recebido com uma apresentação do essencial: como se adicionam um imóvel, um inquilino e um contrato, o que são os planeados e de onde vêm, e o que poupam os modelos.',
+          'Cada separador explica-se uma vez, na primeira visita depois desta versão: um carrossel curto com o que mostra, como está arrumado e onde se toca. Fecha-se no ✕ ou no «Percebi», e não volta. Se fechares uma antes do fim, a app pergunta se queres continuar a vê-las.',
+          'Reveem-se todas na Ajuda, em «Apresentações», onde também as podes marcar todas como vistas. Rever uma até ao fim conta como vista.',
+        ],
+      },
+      {
+        titulo: 'Visão geral e filtros',
+        afeta: ['app', 'imoveis', 'contratos', 'movimentos', 'creditos', 'partilha'],
+        itens: [
+          'As entradas e saídas da Visão geral mostram o ano inteiro: os meses que faltam trazem, esbatido, o que os planeados preveem.',
+          'O seletor da Visão geral filtra também por proprietário: os teus imóveis, ou os de cada pessoa com quem partilhas.',
+          'Nos Contratos, nos Planeados e nos Créditos, o filtro do imóvel tem também os grupos de imóveis, depois dos imóveis.',
+          'Tocar num aviso das casas partilhadas abre o imóvel e marca esse aviso como lido.',
+          'Nas categorias, o «Fora dos totais» ligado fica a vermelho.',
+        ],
+      },
+      {
+        titulo: 'O ícone',
+        afeta: ['app'],
+        itens: [
+          'O ícone da app passou a cobalto, a cor da marca.',
+          'No iPhone, para o ver no ecrã principal, remove a app de lá e adiciona-a de novo. Na app Android, descarrega o APK nas Definições e instala por cima.',
+        ],
+      },
+      {
+        titulo: 'Pequenas correções',
+        afeta: ['app', 'anexos', 'creditos', 'colaboradores', 'movimentos', 'imoveis', 'contratos'],
+        itens: [
+          'Quando adicionas um imóvel, um contrato, um movimento, uma visita, uma pessoa, uma hipoteca, um planeado ou um modelo, o aviso traz «Ver»: leva-te ao separador e abre o que acabaste de adicionar.',
+          'Uma hipoteca que começa no futuro tem o plano de pagamento e a prestação planeada a começar no mês do início, e não hoje.',
+          'Os movimentos do mesmo dia ficam pela ordem em que os adicionaste: o mais recente em cima.',
+          'No telemóvel, as alterações por enviar mostram-se só no ícone da nuvem, e o cabeçalho deixa de saltar a cada gravação.',
+          'Na janela de uma foto, o botão que a leva para o aparelho chama-se «Descarregar».',
+          'A taxa de uma hipoteca variável ou mista mostra a soma arredondada: «2,15% + 0,95% = 3,1%», sem casas a mais.',
+          'As frases que falam contigo já não presumem o género: «Colaboras com Maria em 3 imóveis», «Tens dispensa dos recibos de renda eletrónicos».',
+        ],
+      },
+    ],
+  },
+  {
+    v: 42,
+    data: '2026-10-25',
+    titulo: 'Transferir o controlo, e as fotos a chegar',
+    seccoes: [
+      {
+        titulo: 'Transferir o controlo de um imóvel',
         afeta: ['imoveis', 'partilha'],
         itens: [
-          'Num imóvel que criaste e que tem comproprietários, podes passar o controlo na app a um deles: no ⋯ da ficha, ou selecionando vários nas Casas. Ele passa a gerir as partilhas, os colaboradores e o apagar; tu continuas comproprietário, e nada muda nas quotas, nos grupos nem nos outros comproprietários.',
+          'Num imóvel que criaste e que tem comproprietários, podes transferir o controlo na app a um deles: no ⋯ da ficha, ou selecionando vários nas Casas. Quem recebe passa a gerir as partilhas, os colaboradores e o apagar; tu continuas comproprietário, e nada muda nas quotas, nos grupos nem nos outros comproprietários.',
           'Todos os comproprietários têm de aceitar, no sino: o imóvel só passa quando todos aceitarem, e uma recusa faz cair o pedido. Até lá nada muda e podes cancelar. Os teus colaboradores nesse imóvel ficam com o mesmo cargo e passam a ser geridos por quem recebe.',
           'Quem ainda não estiver ligado a quem recebe fica ligado a ele ao aceitar.',
         ],
@@ -246,7 +294,7 @@ var AVISOS = [
         titulo: 'A Declaração sabe a tua situação',
         afeta: ['contratos', 'movimentos'],
         itens: [
-          'Diz no cartão «A tua situação» se entregas em conjunto (e quem é o titular A ou B) e se estás dispensado dos recibos: cada linha mostra o titular, e as Obrigações ganham o Modelo 44.',
+          'Diz no cartão «A tua situação» se entregas em conjunto (e quem é o titular A ou B) e se tens dispensa dos recibos: cada linha mostra o titular, e as Obrigações ganham o Modelo 44.',
           'Os quadros 4.2B, 4.2C, 6D e 9 (AIMI) aparecem quando se aplicam, e o 4.2A diz contrato a contrato se a comunicação de fevereiro foi feita.',
           'Escreve os outros rendimentos do agregado e a página simula se compensa englobar as rendas.',
         ],
@@ -754,10 +802,10 @@ var AVISOS = [
         ],
       },
       {
-        titulo: 'Se és colaborador',
+        titulo: 'Se colaboras',
         afeta: ['colaboradores'],
         itens: [
-          'Ao entrar, a app diz de quem és colaborador, em que imóveis e com que cargo. Os cartões desses imóveis levam o selo «de Maria · Contabilista», e a vista geral avisa que os inclui, por inteiro.',
+          'Ao entrar, a app diz com quem colaboras, em que imóveis e com que cargo. Os cartões desses imóveis levam o selo «de Maria · Contabilista», e a vista geral avisa que os inclui, por inteiro.',
         ],
       },
     ],

@@ -1,4 +1,4 @@
-// Passar o controlo de casas a um comproprietário — o servidor, contra o SQL
+// Transferir o controlo de casas a um comproprietário — o servidor, contra o SQL
 // a sério (testes/lib/bd.js) com as migrações 0021 e 0022. Prova o pedido (só
 // a quem já é comproprietário de todas as casas, pela ligação ou por um
 // grupo; as recusas: não-criador, ligado mas não comproprietário, pendente
@@ -142,7 +142,7 @@ async function retrato(env, hid, pessoas) {
   return { parts, grau };
 }
 
-/* O retrato esperado depois de passar o controlo: o mesmo, com o dono e o
+/* O retrato esperado depois de transferir o controlo: o mesmo, com o dono e o
    comproprietário trocados entre quem pediu e quem recebe.
    Recebe: r — o retrato de antes; A, B — as contas.
    Devolve: o retrato esperado. */
@@ -168,7 +168,7 @@ async function base(ligado = true) {
 
 /* ------------------------------- pedir --------------------------------- */
 
-describe('pedir para passar o controlo', () => {
+describe('pedir para transferir o controlo', () => {
   test('a um comproprietário pela ligação: a linha pendente, o aviso a cada comproprietário e o /api/state de todos', async () => {
     const { env, A, B, cAB } = await base();
     const C = await conta(env, 'Carla');
@@ -923,7 +923,7 @@ describe('o que já não vale ao aceitar', () => {
     assert.deepEqual(r.falhadas.sort((x, y) => x.houseId.localeCompare(y.houseId)), [
       { houseId: 'H2', error: 'Casa não encontrada.' },
       { houseId: 'H3', error: 'Quem pediu já não é o dono deste imóvel.' },
-      { houseId: 'H4', error: 'Já não és comproprietário deste imóvel.' },
+      { houseId: 'H4', error: 'Já não és parte da compropriedade deste imóvel.' },
     ]);
     assert.equal((await daBase(env, 'H1')).owner, B.id);
     assert.equal((await daBase(env, 'H4')).owner, A.id);

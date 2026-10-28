@@ -282,12 +282,12 @@ function resumoColaborador(){
 // Recebe: xs — os nomes (array de textos).
 // Devolve: a lista escrita (texto).
 function listaE(xs){return xs.length<2?(xs[0]||''):xs.slice(0,-1).join(', ')+' e '+xs[xs.length-1]}
-/* «És colaborador de Maria em 3 imóveis como Contabilista.» — o vazio da
+/* «Colaboras com Maria em 3 imóveis como Contabilista.» — o vazio da
    vista geral de quem só colabora.
    Devolve: a frase (texto, já escapada), ou '' sem imóveis de colaboração. */
 function fraseColaborador(){
   const r=resumoColaborador();if(!r.n)return '';
-  return 'És colaborador'+(r.donos.length?' de '+esc(listaE(r.donos)):'')+' em '+r.n+(r.n===1?' imóvel':' imóveis')+(r.cargos.length?' como '+esc(listaE(r.cargos)):'')+'.';
+  return 'Colaboras'+(r.donos.length?' com '+esc(listaE(r.donos)):'')+' em '+r.n+(r.n===1?' imóvel':' imóveis')+(r.cargos.length?' como '+esc(listaE(r.cargos)):'')+'.';
 }
 /* O selo do cartão de um imóvel de colaboração: «de <dono> · <cargo>». Leva a
    classe cw-shared para a nuvem não pendurar por cima o «de <nome>» dela.

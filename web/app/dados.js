@@ -351,11 +351,19 @@ function normLote(l){
    vários imóveis (normLote) e só existe com imóvel, numa receita ou despesa.
    Os ids — o do movimento e os que ele refere, e as chaves das divisões — passam
    pelo idSeguro.
+   criado é quando o movimento foi adicionado (ms, o Date.now() de então): é o
+   que ordena os do mesmo dia (txPorDataECriacao). Um que já venha, número
+   positivo, fica; um objeto sem id é um movimento novo e nasce com ele; os
+   outros (os de antes do carimbo) ficam SEM o campo — nada de 0 nem de uma
+   data inventada, que os fazia mudar e subir todos ao servidor.
    Recebe: t — o movimento em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos do movimento preenchidos. */
-const normTx=t=>{const o=Object.assign({id:uid(),kind:'expense',label:'',amount:0,date:'',propertyId:null,contractId:null,
+const normTx=t=>{const novo=!t||t.id==null||t.id==='';
+  const o=Object.assign({id:uid(),kind:'expense',label:'',amount:0,date:'',propertyId:null,contractId:null,
   loanId:null,payType:'prestacao',paidBy:null,toId:null,creditor:'',category:'',sub:'',tags:[],notes:'',split:null,groupId:null,psplit:null,
   todos:false,lote:null,retencao:0,periodo:'',recibo:false,irsCol:''},t||{});
+  const criado=typeof o.criado==='number'||typeof o.criado==='string'?Number(o.criado):NaN;
+  if(isFinite(criado)&&criado>0)o.criado=criado;else if(novo)o.criado=Date.now();else delete o.criado;
   o.retencao=Math.max(0,Number(o.retencao)||0);
   o.periodo=/^\d{4}-\d{2}$/.test(String(o.periodo||''))?String(o.periodo):'';
   o.recibo=!!o.recibo;
@@ -372,6 +380,17 @@ const normTx=t=>{const o=Object.assign({id:uid(),kind:'expense',label:'',amount:
   if(o.psplit){o.psplit={mode:o.psplit.mode,parts:chavesSeguras(o.psplit.parts)}}  // e estas por imóvel
   o.lote=o.propertyId&&deLote?normLote(o.lote):null;
   return o};
+/* A ordem dos movimentos: pela data, e no mesmo dia pela hora a que foram
+   adicionados (o criado do normTx) — assim, do mais recente para o mais
+   antigo, o adicionado depois fica em cima. Um sem criado (de antes do
+   carimbo) conta como 0: fica abaixo dos novos do mesmo dia, e dois deles
+   empatam, como sempre empataram. É ascendente; quem quer do mais recente
+   para o mais antigo multiplica por -1.
+   Recebe: a, b — dois movimentos (ou qualquer objeto com date e criado).
+   Devolve: número negativo quando a vem antes de b, positivo depois, 0 no empate. */
+function txPorDataECriacao(a,b){
+  return String(a.date).localeCompare(String(b.date))||((Number(a.criado)||0)-(Number(b.criado)||0));
+}
 /* as liquidações antigas (lista própria) passam a movimentos do tipo "acerto"
    Recebe: d — a base de dados (usa d.settlements e d.transactions).
    Devolve: nada — acrescenta os acertos a d.transactions e esvazia d.settlements. */

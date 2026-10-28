@@ -59,6 +59,21 @@ const gdiv=arr=>arr.length?[{div:true}].concat(arr):[];
    Recebe: kind — o tipo dos grupos ('prop', 'owner'…).
    Devolve: array de {v, label}. */
 const gOpts=kind=>grpsOf(kind).map(g=>({v:'g:'+g.id,label:'Grupo · '+g.name}));
+/* As opções do filtro «Imóvel» de uma lista (Contratos, Planeados, Créditos):
+   «Todos os imóveis», os imóveis um a um, a linha e os grupos de imóveis
+   (gOpts('prop'), valor 'g:ID') que tenham coisas nessa lista — um grupo sem
+   contratos não aparece nos Contratos. O grupo escolhido fica, mesmo que já
+   não tenha, como o imóvel escolhido nas listas.
+   Recebe: ps — os imóveis a mostrar (array); atual (opcional) — o valor
+   escolhido no filtro; temCoisas (opcional) — função (grupo) → true quando o
+   grupo tem coisas na lista; sem ela, entra o grupo com um dos imóveis de ps.
+   Devolve: array de {v, label} para o sel(). */
+function imoveisEGruposOpts(ps,atual,temCoisas){
+  const ids=new Set((ps||[]).map(p=>p.id));
+  const tem=temCoisas||(g=>(g.ids||[]).some(id=>ids.has(id)));
+  const gs=gOpts('prop').filter(o=>{const g=grp(o.v.slice(2));return o.v===atual||(!!g&&tem(g))});
+  return [{v:'',label:'Todos os imóveis'}].concat((ps||[]).map(p=>({v:p.id,label:p.name}))).concat(gdiv(gs));
+}
 /* fecha os menus abertos, excepto os que contêm "keep" (um menu de escolha dentro do menu de filtros
    não pode fechar o menu que o contém)
    Recebe: keep (opcional) — um elemento do DOM; os menus que o contenham ficam abertos.
@@ -966,7 +981,7 @@ window.addEventListener('popstate',()=>{
    menu do cabeçalho.
    Devolve: a camada criada ({el,title,onSave,snap,tocado,gatilho}), com onSave
    a null — quem chama define-o, e pode pôr-lhe um aoFechar, que o closeModal
-   corre quando ela sai. */
+   corre quando ela sai, com a origem do fecho ('' sem ela). */
 function openModal(title,body,foot,menuHtml){
   closePops();
   const top=modalTop();if(top)demote(top.el);
@@ -1058,7 +1073,7 @@ function closeModal(origem){
   const M=modalStack.pop();lockPage();if(!M)return;
   /* o que a camada prendeu enquanto esteve aberta (o object URL de uma imagem,
      anexos.js:openFileMeta) solta-se com ela */
-  if(typeof M.aoFechar==='function')try{M.aoFechar()}catch(e){}
+  if(typeof M.aoFechar==='function')try{M.aoFechar(typeof origem==='string'?origem:'')}catch(e){}
   /* sem janela nenhuma não há formulário: os anexos pendentes deixam de ser
      poupados (anexos.js:esquecerPendentes) */
   if(!modalStack.length)esquecerPendentes();
@@ -1138,6 +1153,33 @@ function comDesfazer(msg,restaurar,aoExpirar){
     eu.preso=false;eu.fim+=mais||0;clearTimeout(eu.h);vence();
   }});
   eu.h=setTimeout(vence,6400);
+}
+
+/* O aviso de um registo acabado de adicionar leva «Ver» (o ticket de QA
+   cda8e547): seis segundos, como o «Anular», e tocar nele vai ao separador
+   do registo e abre a ficha dele. A base não chama funções de serviço: quem
+   adiciona passa a ficha em `abrir` (o txView, o ctView…), e esse é o
+   próprio serviço. O «Ver» só aparece quando cabe: o separador está ligado
+   nesta conta, e o que está aberto são só fichas (de leitura) — por cima de
+   um formulário, ou de uma pergunta que a app acabou de abrir (as prestações
+   em falta de uma hipoteca), o aviso é o de sempre, sem botão. O mesmo ao
+   tocar: se entretanto se abriu um formulário, o «Ver» não navega por baixo
+   dele. Mudar de separador fecha primeiro as fichas abertas (são do ecrã de
+   onde se sai, e não têm nada por guardar); no mesmo separador, a ficha nova
+   abre por cima. Um go recusado (navegacao.js:go, o separador de um serviço
+   desligado) fica onde está, e a ficha não abre.
+   Recebe: m — a frase do aviso («Imóvel adicionado.»); separador — o id do
+   separador do registo (navegacao.js:TABS); abrir — função sem argumentos
+   que abre a ficha do registo.
+   Devolve: nada — mostra o aviso, com ou sem «Ver». */
+function avisoComVer(m,separador,abrir){
+  const cabe=()=>(typeof separadorLigado!=='function'||separadorLigado(separador))&&modalStack.every(L=>!!(L&&L.ficha));
+  if(typeof abrir!=='function'||!cabe())return toast(m);
+  toast(m,{rotulo:'Ver',ms:6000,fn(){
+    if(!cabe())return;
+    if(tab!==separador){closeAllModals();go(separador);if(tab!==separador)return}
+    abrir();
+  }});
 }
 
 /* O erro diz-se no próprio campo: o contorno vermelho e, por baixo dele, a

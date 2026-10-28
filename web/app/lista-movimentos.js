@@ -562,9 +562,12 @@ function vTransactions(){
   const head=txBarraHtml()+txFilterPainel()+txChipsHtml()+fabHtml;
   const partes=db.transactions.filter(txMatch),list=linhasDaLista(partes),vv={};   /* o valor na vista uma vez por linha: o comparador pede-o vezes sem conta */
   if(txSort==='amount')list.forEach(t=>{vv[t.id]=valorNaVista(t)});   /* a linha de um lote vale a soma das partes */
+  /* pela data, e no mesmo dia pela hora a que foram adicionados (txPorDataECriacao):
+     em desc o adicionado depois fica em cima; pelo valor, o empate vai pela data e
+     pelo criado, sempre ascendente, como já ia */
   list.sort((a,b)=>{const d=txDir==='desc'?-1:1;
-    if(txSort==='amount')return d*(vv[a.id]-vv[b.id])||String(a.date).localeCompare(String(b.date));
-    return d*String(a.date).localeCompare(String(b.date))});
+    if(txSort==='amount')return d*(vv[a.id]-vv[b.id])||txPorDataECriacao(a,b);
+    return d*txPorDataECriacao(a,b)});
   if(!list.length)return head+vazioFiltro()
     +balancesCard(txProp||null);   /* pode não haver movimentos e haver contas por acertar */
   txLinhasPintadas=list.length;

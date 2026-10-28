@@ -1,8 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#F7F8FA</color>
+    <!-- As cores da janela (themes.xml e values-night/themes.xml): o fundo
+         antes de o WebView pintar a pagina (no Android 12+ tambem o do ecra
+         de arranque) e a barra de navegacao. Sao as variaveis bg e card do
+         web/estilos.css, no claro (:root) e no escuro (:root.dark). Num
+         comentario de XML nao pode haver dois hifens seguidos, por isso os
+         nomes vao sem eles. -->
+    <color name="bg">#F2F3F6</color>
     <color name="surface">#FFFFFF</color>
-    <color name="bg_night">#0E1512</color>
-    <color name="surface_night">#161F1B</color>
-    <color name="ic_launcher_background">#244C3B</color>
+    <color name="bg_night">#0B111E</color>
+    <color name="surface_night">#141C2C</color>
+    <!-- O fundo do icone adaptativo, cobalto liso: a variavel marca do
+         web/estilos.css, o mesmo fundo dos icones da PWA
+         (scripts/make-icons.js). Os mipmaps citam esta cor pelo nome, e e
+         assim que o flavor dev a troca pelo ambar
+         (src/dev/res/values/colors.xml). -->
+    <color name="ic_launcher_background">#2952D9</color>
 </resources>

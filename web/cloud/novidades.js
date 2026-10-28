@@ -159,6 +159,9 @@ CW.verNovidades = function (avisos, aoFechar) {
 // Fecha o modal, marca as novidades como vistas e corre o combinado ao fechar.
 // Devolve: nada — fecha os modais e grava a versão vista.
 CW.novFechar = function () {
+  /* quem acabou de ler o que mudou não leva logo com a apresentação do ecrã
+     onde está: fica para a chegada seguinte (apresentacao.js:aprAdiarOEcra) */
+  if (typeof aprAdiarOEcra === 'function') aprAdiarOEcra();
   closeAllModals();
   marcarVisto(VERSAO);
   var f = CW._novFecho;
@@ -556,12 +559,17 @@ linhaDefinicoes({ sec: 'sobre', ordem: 20, page: 'novidades', label: 'Novidades'
 /* As novidades entram na fila atrás dos avisos que já existem: primeiro o
    aviso inicial, depois os termos, e só com o ecrã livre é que se
    conta o que mudou. Três janelas empilhadas seriam pior do que nenhuma.
+   A apresentação também conta (apresentacao.js:aprOcupaOEcra): com a janela
+   dela aberta, ou com as boas-vindas de uma conta nova por ver, as novidades
+   esperam — e é ela que as chama quando fecha. E ela espera por estas: só
+   abre sem janela nenhuma no ecrã.
    Devolve: true se há sessão e nenhum desses avisos está no ecrã. */
 function ecraLivre() {
   return !!CW.user &&
     !document.getElementById('cwLegal') &&
     !document.getElementById('cwTerms') &&
-    !document.getElementById('cwUpd');
+    !document.getElementById('cwUpd') &&
+    !(typeof aprOcupaOEcra === 'function' && aprOcupaOEcra());
 }
 
 // Mostra as novidades por ver, mas só com o ecrã livre de avisos mais

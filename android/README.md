@@ -31,13 +31,19 @@ uma carrega o seu domínio. O que as distingue é o *product flavor* (dimensão
 |---|---|---|
 | `applicationId` | `pt.gestorimobiliario.app` | `pt.gestorimobiliario.app.dev` (`applicationIdSuffix`) |
 | Nome | Rendorium | Rendorium DEV |
-| Ícone | casa a branco sobre verde | casa a branco sobre âmbar, com «DEV» por baixo |
+| Ícone | casa a branco sobre cobalto liso (`#2952D9`, a cor da marca) | casa a branco sobre âmbar, com «DEV» por baixo |
 | `HOST` (`BuildConfig.HOST`) | `app.rendorium.com` | `dev.rendorium.com` |
 | `versionName` | `23.0` | `23.0-dev` (`versionNameSuffix`) |
 | Recursos | `app/src/main/res` | `app/src/dev/res` sobrepõe-se a main pelo nome (`app_name`, `ic_launcher_background`, `ic_launcher_foreground`) |
 
 O Android distingue apps pelo `applicationId`, e é só por isso que as duas
 coexistem — não pela chave de assinatura.
+
+O ícone é adaptativo (`mipmap-anydpi-v26`): o fundo é a cor
+`ic_launcher_background` de `values/colors.xml` (o `--marca` do
+`web/estilos.css`), o primeiro plano e o monocromático são a casa de
+`drawable/ic_launcher_foreground.xml`. Os ícones da PWA saem do mesmo desenho
+em `scripts/make-icons.js` (`npm run icons`): mudar um é mudar o outro.
 
 ## Compilar
 

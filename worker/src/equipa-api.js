@@ -232,11 +232,17 @@ const ACOES_DE_CONTA = {
    verificado; tudo o que devolve passa primeiro pelo filtro das categorias
    do papel, e as ações sensíveis pelo eMaster. Devolve a Response, ou null
    quando a rota não é daqui.
+   Os tickets de QA (/api/equipa/qa…, só no dev) vêm antes das categorias:
+   a pílula do QA é de toda a equipa, seja qual for o cargo.
    Recebe: c — o contexto do pedido ({ env, request, path, method, url, eu, ctx }),
    com a sessão de equipa em eu já verificada.
    Devolve: promessa da Response da rota, ou de null quando o caminho não é daqui. */
 export async function rotasEquipaApi(c) {
   const { env, request, path, method, url, eu, ctx } = c;
+  if (path === '/api/equipa/qa' || path.startsWith('/api/equipa/qa/')) {
+    const { rotasQaDaEquipa } = await import('./rotas/qa.js');
+    return (await rotasQaDaEquipa(c)) || err(404, 'Rota desconhecida.');
+  }
   const cats = categoriasDe(eu);
   if (!cats.length) return err(403, 'O teu papel não vê pedidos.');
 
@@ -648,7 +654,33 @@ export async function rotasEquipaApi(c) {
       await auditar(env, eu, 'operacao.teste', null,
         'ligação de teste emitida' + (b && b.limpar ? ' (limpar tudo)' : b && b.manter ? ' (extra)' : ' (retomar)') +
         (b && b.dados ? ' (com dados de exemplo)' : ''));
-      return json({ ligacao: await ligacaoTeste(env, url.origin, !!(b && b.dados), !!(b && b.manter), eu.discordId, !!(b && b.limpar), b && b.email) });
+      return json({ ligacao: await ligacaoTeste(env, url.origin, !!(b && b.dados), !!(b && b.manter), eu.discordId, !!(b && b.limpar), b && b.email, eu.nome) });
+    }
+
+    /* As sessões de teste abertas, por quem as pediu no Discord, e o que se
+       lhes faz: terminar (a conta e os dados ficam) ou apagar a conta — uma
+       sessão, uma conta, as de uma pessoa, ou todas (sessoes-teste.js). Só
+       fora de produção, como a ligação de teste. */
+    if (path === '/api/equipa/operacao/sessoes-teste') {
+      if (!env.ENV_NAME) return err(404, 'Produção não tem ambiente de teste.');
+      const st = await import('./sessoes-teste.js');
+      if (method === 'GET') return json(await st.sessoesDeTeste(env));
+      if (method === 'POST') {
+        const b = (await body(request)) || {};
+        const acao = b.acao, alvo = b.alvo, id = String(b.id || '');
+        let n = 0;
+        if (acao === 'terminar' && alvo === 'sessao') n = await st.terminarSessao(env, id);
+        else if (acao === 'terminar' && ['conta', 'dono', 'todas'].includes(alvo)) n = await st.terminarSessoesDe(env, alvo, id);
+        else if (acao === 'apagar' && ['conta', 'dono', 'todas'].includes(alvo)) n = await st.apagarContasDe(env, alvo, id);
+        else return err(400, 'Ação desconhecida.');
+        if (!n) return err(404, alvo === 'sessao' ? 'Essa sessão já não está aberta.' : 'Não há contas de teste aí.');
+        await auditar(env, eu, 'teste.' + acao, alvo === 'todas' ? null : id,
+          (acao === 'terminar' ? (alvo === 'sessao' ? 'sessão de teste terminada' : 'sessões terminadas em ' + n + (n === 1 ? ' conta' : ' contas'))
+            : (n === 1 ? '1 conta de teste apagada' : n + ' contas de teste apagadas')) +
+          (alvo === 'dono' ? ' (as de ' + id + ')' : alvo === 'todas' ? ' (todas)' : ''));
+        return json({ ok: true, n });
+      }
+      return err(405, 'Método não suportado.');
     }
 
     if (path === '/api/equipa/operacao/copiar' && method === 'POST') {

@@ -16,7 +16,7 @@ import { recordReport } from '../lib/relatos.js';
    partido no browser da Samsung".
    Recebe: ua — a string User-Agent tal como o browser a envia (pode faltar).
    Devolve: um resumo curto 'browser versão · sistema' (ex.: 'Chrome 128 · Android 14'), ou '' sem user-agent. */
-function navegador(ua) {
+export function navegador(ua) {
   const t = String(ua || '');
   if (!t) return '';
   const browser =

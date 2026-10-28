@@ -2,7 +2,10 @@
 // flavors do build.gradle (applicationId, nome, ícone, HOST e assinatura
 // próprios do dev), a MainActivity a ler o HOST do BuildConfig, os recursos do
 // flavor em src/dev/res, o deploy a compilar o flavor do ambiente nos dois
-// ramos, e o README do Android a dizer tudo isto.
+// ramos, e o README do Android a dizer tudo isto. E o ícone de produção e as
+// cores da janela na paleta da web: o fundo do ícone é o --marca, liso, e o
+// fundo e a barra da janela são o --bg e o --card do claro e do escuro, com
+// os XML dos recursos legíveis para o aapt.
 //
 // Sem SDK Android nesta máquina o Gradle só corre no CI: aqui leem-se os
 // ficheiros como quem os vai compilar. O bash do passo da chave corre-se
@@ -10,7 +13,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -293,6 +296,112 @@ describe('os recursos do flavor dev (src/dev/res)', () => {
         assert.ok(pt[1] > 25.75 + 1.9 * sy / 2, 'e abaixo da casa');
       }
     }
+  });
+});
+
+/* Os ficheiros .xml de uma pasta de recursos, a descer pelas subpastas.
+   Recebe: rel — a pasta, relativa à raiz do repositório, sem «/» no fim.
+   Devolve: array dos caminhos relativos à raiz, separados por «/». */
+function xmlsDe(rel) {
+  const achados = [];
+  for (const e of readdirSync(new URL(rel + '/', RAIZ), { withFileTypes: true })) {
+    const p = rel + '/' + e.name;
+    if (e.isDirectory()) achados.push(...xmlsDe(p));
+    else if (e.name.endsWith('.xml')) achados.push(p);
+  }
+  return achados;
+}
+
+/* As cores de um colors.xml do Android.
+   Recebe: xml — o texto do ficheiro.
+   Devolve: objeto nome → «#RRGGBB», em maiúsculas. */
+const coresDe = (xml) => Object.fromEntries([...xml.matchAll(/<color name="(\w+)">(#[0-9A-Fa-f]{6})<\/color>/g)].map((m) => [m[1], m[2].toUpperCase()]));
+
+/* As variáveis de cor de um bloco do topo do estilos.css, até à chaveta que o fecha.
+   Recebe: css — o texto do estilos.css; seletor — ':root' ou ':root.dark'.
+   Devolve: objeto nome (sem os dois hífens) → «#RRGGBB», em maiúsculas. */
+function tokensDe(css, seletor) {
+  const texto = '\n' + css;
+  const ini = texto.indexOf('\n' + seletor + '{');
+  assert.ok(ini >= 0, 'o bloco ' + seletor + ' existe no estilos.css');
+  const corpo = texto.slice(ini, texto.indexOf('\n}', ini));
+  return Object.fromEntries([...corpo.matchAll(/--([\w-]+):\s*(#[0-9a-fA-F]{6})\b/g)].map((m) => [m[1], m[2].toUpperCase()]));
+}
+
+/* A luminância relativa de uma cor, a da WCAG.
+   Recebe: hex — «#RRGGBB».
+   Devolve: número de 0 (preto) a 1 (branco). */
+function luminancia(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+describe('o ícone e as cores da janela (src/main/res)', () => {
+  const CSS = ler('web/estilos.css');
+  const CORES = coresDe(ler('android/app/src/main/res/values/colors.xml'));
+
+  test('o fundo do ícone adaptativo é o cobalto liso da marca, e o verde antigo não sobra em nenhum recurso', () => {
+    const marca = tokensDe(CSS, ':root').marca;
+    assert.equal(marca, '#2952D9', 'o --marca é o cobalto');
+    assert.equal(tokensDe(CSS, ':root.dark').marca, undefined, 'e o escuro não o muda: o ícone é um só nos dois temas');
+    assert.equal(CORES.ic_launcher_background, marca, 'o fundo do ícone é o --marca');
+    for (const f of xmlsDe('android/app/src/main/res')) {
+      assert.doesNotMatch(ler(f), /#(?:FF)?(?:2F7D5B|16382B|244C3B)\b/i, f + ' sem o verde antigo');
+    }
+    assert.ok(!existsSync(new URL('android/app/src/main/res/drawable/ic_launcher_background.xml', RAIZ)), 'o degradê verde, que nenhum recurso citava, saiu');
+    for (const f of ['ic_launcher.xml', 'ic_launcher_round.xml']) {
+      const mip = ler('android/app/src/main/res/mipmap-anydpi-v26/' + f);
+      assert.match(mip, /<monochrome android:drawable="@drawable\/ic_launcher_foreground" \/>/, f + ': o monocromático (ícones temáticos do Android 13+) é a casa');
+    }
+  });
+
+  test('as cores da janela são as da paleta: o --bg e o --card do estilos.css, no claro e no escuro, e os themes acendem as barras certas', () => {
+    const claro = tokensDe(CSS, ':root'), escuro = tokensDe(CSS, ':root.dark');
+    assert.equal(CORES.bg, claro.bg, 'bg = o --bg do claro');
+    assert.equal(CORES.surface, claro.card, 'surface = o --card do claro');
+    assert.equal(CORES.bg_night, escuro.bg, 'bg_night = o --bg do escuro');
+    assert.equal(CORES.surface_night, escuro.card, 'surface_night = o --card do escuro');
+
+    for (const [f, sufixo, claroTema] of [['values/themes.xml', '', true], ['values-night/themes.xml', '_night', false]]) {
+      const xml = ler('android/app/src/main/res/' + f);
+      // Recebe: nome — o atributo do tema, sem «android:». Devolve: o valor do <item>, ou undefined.
+      const item = (nome) => (xml.match(new RegExp('<item name="android:' + nome + '">([^<]+)</item>')) || [])[1];
+      assert.match(xml, claroTema ? /parent="@android:style\/Theme\.DeviceDefault\.Light\.NoActionBar"/ : /parent="@android:style\/Theme\.DeviceDefault\.NoActionBar"/, f + ': o tema de base certo');
+      assert.equal(item('windowBackground'), '@color/bg' + sufixo, f);
+      assert.equal(item('statusBarColor'), '@color/bg' + sufixo, f);
+      assert.equal(item('navigationBarColor'), '@color/surface' + sufixo, f);
+      for (const nome of ['windowLightStatusBar', 'windowLightNavigationBar', 'isLightTheme']) assert.equal(item(nome), String(claroTema), f + ': ' + nome);
+      // os ícones escuros das barras só sobre um fundo claro, e os brancos só sobre um escuro
+      for (const c of ['bg' + sufixo, 'surface' + sufixo]) {
+        assert.ok(CORES[c], c + ' existe no colors.xml');
+        assert.equal(luminancia(CORES[c]) > 0.5, claroTema, c + ' (' + CORES[c] + ') ' + (claroTema ? 'é claro' : 'é escuro'));
+      }
+    }
+  });
+
+  test('os XML dos recursos leem-se como o aapt os lê: sem dois hífens dentro de um comentário, e cada @color/, @drawable/, @mipmap/, @string/ e @style/ citado existe', () => {
+    const xmls = [...xmlsDe('android/app/src/main/res'), ...xmlsDe('android/app/src/dev/res'), 'android/app/src/main/AndroidManifest.xml'];
+    const nomes = { color: new Set(), drawable: new Set(), mipmap: new Set(), string: new Set(), style: new Set() };
+    for (const f of xmls) {
+      const xml = ler(f);
+      assert.match(xml, /^<\?xml version="1\.0" encoding="utf-8"\?>\n/, f + ' começa pela declaração');
+      const comentarios = [...xml.matchAll(/<!--([\s\S]*?)-->/g)];
+      assert.equal(comentarios.length, (xml.match(/<!--/g) || []).length, f + ': cada comentário fecha');
+      for (const c of comentarios) assert.ok(!c[1].includes('--'), f + ': «--» dentro de um comentário parte o XML (' + c[1].trim().slice(0, 40) + '…)');
+      const pasta = f.split('/').slice(-2, -1)[0], base = f.split('/').pop().replace(/\.xml$/, '');
+      if (/^drawable/.test(pasta)) nomes.drawable.add(base);
+      if (/^mipmap/.test(pasta)) nomes.mipmap.add(base);
+      for (const m of xml.matchAll(/<(color|string|style) name="(\w+)"/g)) nomes[m[1]].add(m[2]);
+    }
+    let citados = 0;
+    for (const f of xmls) {
+      for (const m of ler(f).matchAll(/@(color|drawable|mipmap|string|style)\/(\w+)/g)) {
+        citados++;
+        assert.ok(nomes[m[1]].has(m[2]), f + ' cita @' + m[1] + '/' + m[2] + ', que tem de existir');
+      }
+    }
+    assert.ok(citados >= 10, 'leram-se as citações (' + citados + ')');
   });
 });
 

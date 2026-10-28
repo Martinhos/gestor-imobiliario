@@ -354,7 +354,10 @@ function visitModal(id,extra){
     db.visits=db.visits||[];
     const i=db.visits.findIndex(x=>x.id===visForm.id);
     if(i<0)db.visits.push(visForm);else db.visits[i]=visForm;
-    save();closeModal();render();toast('Visita guardada.');
+    save();closeModal();render();
+    if(i>-1)return toast('Visita guardada.');
+    const vid=visForm.id;
+    avisoComVer('Visita adicionada.','visits',()=>visView(vid));
   };
 }
 

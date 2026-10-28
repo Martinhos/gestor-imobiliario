@@ -106,10 +106,11 @@ export async function rotasConta(c) {
       try {
         const eu2 = await env.DB.prepare('SELECT test_owner FROM users WHERE id = ?').bind(me.id).first();
         if (eu2 && eu2.test_owner) {
-          const { proximaContaDeTeste } = await import('../teste.js');
+          const { proximaContaDeTeste, agenteDe, largarSessoesDoBrowser } = await import('../teste.js');
           await purgeAccount(env, me.id);
           await destroySession(env, me.token);
-          proxima = await proximaContaDeTeste(env, eu2.test_owner);
+          proxima = await proximaContaDeTeste(env, eu2.test_owner, agenteDe(request));
+          await largarSessoesDoBrowser(env, request, proxima.token);   // e a do cookie, se for outra
           return json({ ok: true, proxima }, 200, { 'Set-Cookie': sessionCookie(proxima.token) });
         }
       } catch (e) { /* sem próxima, segue o caminho normal */ }

@@ -2,7 +2,8 @@
 // manifesto e a página «/» com «Rendorium DEV» e os ícones âmbar
 // (worker/src/lib/identidade.js); em produção não muda um byte. Os ícones de
 // dev existem, são o que o scripts/make-icons.js desenha, e diferem dos de
-// produção. O cartão das Definições diz, em dev, que o APK é o de
+// produção, que têm o fundo liso na cor da marca (o --marca, o mesmo do ícone
+// do Android). O cartão das Definições diz, em dev, que o APK é o de
 // desenvolvimento. É isto que deixa ter as duas apps instaladas ao lado uma
 // da outra sem as confundir.
 
@@ -273,23 +274,29 @@ function medidasDoPng(buf) {
   return [buf.readUInt32BE(16), buf.readUInt32BE(20)];
 }
 
-/* O RGB do pixel (0, 0) de um PNG como o make-icons os escreve: um IHDR e um
-   só IDAT, RGBA de 8 bits, filtro None em cada linha.
-   Recebe: buf — os bytes do ficheiro.
-   Devolve: [r, g, b] do primeiro pixel. */
-function pixelDeCima(buf) {
+/* O RGB de um pixel de um PNG como o make-icons os escreve: um IHDR e um só
+   IDAT, RGBA de 8 bits, filtro None em cada linha.
+   Recebe: buf — os bytes do ficheiro; x, y — o pixel (por omissão o (0, 0), o canto de cima).
+   Devolve: [r, g, b] desse pixel. */
+function pixelEm(buf, x = 0, y = 0) {
+  const [largura] = medidasDoPng(buf);
   let pos = 8;
   while (pos < buf.length) {
     const len = buf.readUInt32BE(pos), tipo = buf.toString('latin1', pos + 4, pos + 8);
     if (tipo === 'IDAT') {
       const cru = inflateSync(buf.subarray(pos + 8, pos + 8 + len));
-      assert.equal(cru[0], 0, 'a primeira linha tem o filtro None');
-      return [cru[1], cru[2], cru[3]];
+      const linha = y * (largura * 4 + 1);
+      assert.equal(cru[linha], 0, 'a linha ' + y + ' tem o filtro None');
+      const i = linha + 1 + x * 4;
+      return [cru[i], cru[i + 1], cru[i + 2]];
     }
     pos += 12 + len;
   }
   throw new Error('sem IDAT');
 }
+
+// Recebe: hex — uma cor «#rrggbb». Devolve: [r, g, b], de 0 a 255.
+const rgbDe = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 
 describe('os ícones de dev', () => {
   test('os seis ficheiros do make-icons existem em web/, com as medidas certas, e são o que o desenho dá hoje', () => {
@@ -309,9 +316,25 @@ describe('os ícones de dev', () => {
     assert.ok(!bytes('web/apple-touch-icon.png').equals(bytes('web/apple-touch-icon-dev.png')));
   });
 
-  test('a variante de dev tem fundo âmbar e a de produção verde — medido no pixel do canto de cima', () => {
-    assert.deepEqual(pixelDeCima(bytes('web/icon-192-dev.png')), [0xd9, 0x77, 0x06], 'dev: o âmbar claro do make-icons');
-    assert.deepEqual(pixelDeCima(bytes('web/icon-192.png')), [0x2f, 0x7d, 0x5b], 'produção: o verde claro do ic_launcher_background.xml');
+  test('a variante de dev tem fundo âmbar e a de produção cobalto — medido no pixel do canto de cima', () => {
+    assert.deepEqual(pixelEm(bytes('web/icon-192-dev.png')), [0xd9, 0x77, 0x06], 'dev: o âmbar claro do make-icons');
+    assert.deepEqual(pixelEm(bytes('web/icon-192.png')), [0x29, 0x52, 0xd9], 'produção: o cobalto da marca, #2952d9');
+  });
+
+  test('o fundo de produção é liso e é a cor da marca: o --marca do estilos.css e o ic_launcher_background do Android', () => {
+    const marca = (ler('web/estilos.css').match(/--marca:\s*(#[0-9a-fA-F]{6})\b/) || [])[1];
+    assert.ok(marca, 'o --marca existe no estilos.css');
+    const android = (ler('android/app/src/main/res/values/colors.xml').match(/<color name="ic_launcher_background">(#[0-9A-Fa-f]{6})<\/color>/) || [])[1];
+    assert.equal((android || '').toLowerCase(), marca.toLowerCase(), 'o fundo do ícone adaptativo é o --marca');
+    for (const i of ICONES.filter((c) => !c.dev)) {
+      const png = bytes('web/' + i.nome), s = i.size, m = Math.floor(s / 2);
+      // os quatro cantos e o meio das quatro bordas: num degradê, o de baixo não seria o de cima
+      for (const [x, y] of [[0, 0], [s - 1, 0], [0, s - 1], [s - 1, s - 1], [m, 0], [0, m], [s - 1, m], [m, s - 1]]) {
+        assert.deepEqual(pixelEm(png, x, y), rgbDe(marca), i.nome + ' em (' + x + ', ' + y + ')');
+      }
+    }
+    // o de dev continua em degradê: o canto de baixo é outro
+    assert.notDeepEqual(pixelEm(bytes('web/icon-192-dev.png'), 191, 191), pixelEm(bytes('web/icon-192-dev.png')), 'o âmbar desce na diagonal');
   });
 
   test('a página de dev aponta só para ícones que existem', () => {

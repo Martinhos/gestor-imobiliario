@@ -60,6 +60,18 @@ confere que cada uma aponta para código que existe.
 - 2026-10-25 · Passar o controlo, não a propriedade
 - 2026-10-26 · Passar o controlo pede a ligação a todos os comproprietários
 - 2026-10-26 · Passar o controlo precisa do sim de todos os comproprietários
+- 2026-10-27 · A app apresenta-se, e o ícone passa a cobalto
+- 2026-10-28 · «Transferir o controlo», «Descarregar» e as frases sem género
+- 2026-10-28 · Os tickets de QA
+- 2026-10-28 · As sessões de teste no back office
+- 2026-10-28 · Quem fecha uma apresentação a meio é perguntado, uma vez
+- 2026-10-28 · Trinta sessões numa conta de teste
+- 2026-10-28 · A segunda ronda de tickets de QA: o ano inteiro, os donos no seletor, os grupos nos filtros
+- 2026-10-28 · Os tickets de QA com três estados: novos, em resolução, resolvidos
+- 2026-10-28 · A pílula do QA no back office, com o qa.js da app
+- 2026-10-28 · A hipoteca que começa no futuro
+- 2026-10-28 · O dev só abre pela ligação do /test
+- 2026-10-28 · A terceira ronda de tickets de QA
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2369,3 +2381,351 @@ diz a quem vai («… a Bruno» / «… a ti») porque agora chega a quem não
 recebe. Depois de aceitar o pedido sai dos pedidos por responder (já não
 pede nada) e fica à espera dos outros, com quem falta, para quem aceitou
 saber porque ainda não passou.
+
+## 2026-10-27 · A app apresenta-se, e o ícone passa a cobalto
+O pedido: «Quero que utilizadores novos tenham um onboarding simples»: uma
+janela com um ✕ e um carrossel de imagens depois de criar a conta (os
+parabéns, como se cria um imóvel, um inquilino e um contrato, o que são os
+movimentos recorrentes e de onde vêm, o que são os modelos, e no fim o
+primeiro imóvel com um botão para os Imóveis); «por cada menu que o
+utilizador vê pela primeira vez, há um ecrã destes» (os separadores); e «o
+icon da aplicação» ainda verde.
+
+O Martinho decidiu: as imagens são maquetes da app em HTML com os tokens, e
+não capturas (envelhecem a cada desenho e pesam na cache) nem ilustrações
+abstratas (não mostram onde se toca); a primeira frase é «Parabéns, <nome>. A
+partir de hoje, nenhuma renda te passa despercebida.», a da montra; os
+separadores explicam-se a todas as contas, as antigas também, e as
+boas-vindas são só das novas; quem chega por convite também as vê, com o fim
+adaptado — e a quem só colabora o título é «Os imóveis já estão à tua
+espera», sem «teus», porque não são dele; cada separador é um carrossel curto
+que acaba no «Percebi»; fechar as boas-vindas conta a Visão geral e os
+Imóveis como vistos, para não abrirem duas janelas seguidas; revê-se tudo pela
+Ajuda; o ícone é o cobalto liso do --marca, com a casa de sempre; e as
+novidades dizem como o ver no iPhone e no Android, que não o trocam sozinhos.
+
+O que se decidiu a fazer: a janela é um openModal e o carrossel copia o gesto
+das fotos (o padrão; o código das fotos está preso a elas). O «visto» vive nas
+definições, num objeto {id: 1}, porque a fusão a três o junta chave a chave e
+dois aparelhos não se esmagam; o sinal de conta nova nasce no aparelho, porque
+chega antes do servidor, e só depois de o servidor responder passa para as
+definições como «por ver» — escrito antes, num aparelho sem base, a fusão
+desfazia-o. A janela só decide com o estado do servidor na mão (a regra «A app
+não afirma nem decide antes de saber»). Quem chega por convite vê primeiro o
+convite e a confirmação, e só depois as boas-vindas, já com o cargo. Fechar as
+boas-vindas fora da Visão geral, ou as novidades, deixa a apresentação desse
+ecrã para a chegada seguinte. As apresentações dos separadores são verdade para
+o código de hoje e para a conta: os textos de criar mudam com o ecrã (no
+computador não há barra de baixo), quem só vê não lê como se cria, um serviço
+desligado leva as imagens dele, e a da Visão geral mostra a cara que a conta
+tem — eram duas no pedido, são cinco no código (a jornada, o vazio sem imóveis,
+o vazio com eles, os números, e quem só colabora sem finanças). Os números das
+maquetes fecham entre si e saem das contas da app (a amortização, a taxa do
+IRS de cada ano); na projeção, os contratos do exemplo contam-se renovados,
+porque as datas de fim do exemplo são fixas e a imagem envelhecia a mostrar um
+portefólio sem rendas. O percurso do CI fecha as boas-vindas pelo ✕, marca os
+separadores como vistos e prova uma apresentação por ecrã.
+
+O ícone: o degradê verde na diagonal da PWA (make-icons.js:corDoFundo) e o
+verde liso do APK (o ic_launcher_background do
+android/app/src/main/res/values/colors.xml) passam ao cobalto liso; a casa é a
+mesma, píxel a píxel. As cores da janela do Android, que ainda eram as
+esverdeadas da paleta antiga, passam ao --bg e ao --card. O drawable
+ic_launcher_background.xml, um degradê verde que nenhum recurso citava, saiu:
+os mipmaps citam a cor pelo nome, é por esse nome que o flavor dev a troca
+pelo âmbar, e uma segunda cópia da cor era o que deixava a PWA e o APK com
+verdes diferentes. O dev continua âmbar. O versionCode não sobe: o Android
+instala por cima com o mesmo número, como quando o nome passou a Rendorium.
+
+## 2026-10-28 · «Transferir o controlo», «Descarregar» e as frases sem género
+
+O Martinho pediu (2026-10-28) que o botão de passar o controlo dissesse
+«Transferir controlo». Ficou «Transferir o controlo», com o artigo, como as
+outras ações da app, e o verbo mudou em todo o lado onde a app o diz: o ⋯ da
+ficha, a barra da seleção, a folha, o sino, a ficha com o pedido pendente e as
+novidades da v42 (ainda não publicadas). O porquê de 2026-10-25 continua: o
+que se transfere é o controlo na app, não a propriedade, e por isso não é
+«Transferir propriedade». As rotas, as tabelas e os nomes no código já eram
+transfer/transferir e não mudaram.
+
+Na janela de uma foto, o «Guardar» passou a «Descarregar»
+(web/app/anexos.js:fotoDescarregar), também pedido dele: na app, «Guardar» é
+gravar um formulário, e ali o botão leva a foto para o aparelho.
+
+As frases que falavam com quem lê no masculino passaram a neutras, pela regra
+de não presumir o género: «És colaborador de Rui…» → «Colaboras com Rui…»
+(web/app/acessos.js:fraseColaborador, web/app/imovel.js:imvNotaDeColaborador),
+«Agora és colaborador de…» → «Agora colaboras com…», «Deixas de ser
+comproprietário de…» → «Sais da compropriedade de…», «És comproprietário
+de…» → «Tens … em compropriedade», «Já não és comproprietário deste imóvel»
+→ «Já não és parte da compropriedade deste imóvel», «Ainda não estás ligado
+a ninguém» → «Ainda não tens ligações», e «Estou dispensado dos recibos…» →
+«Tenho dispensa dos recibos…». Falar de terceiros («um comproprietário»)
+fica como estava.
+
+A taxa de uma hipoteca variável ou mista escrevia a soma crua
+(«3,0999999999999996%»); agora arredonda às milésimas
+(web/app/credito.js:taxa3), como a ficha da hipoteca já fazia. As datas dos
+contratos das maquetes das apresentações contam-se a partir deste mês
+(web/cloud/apresentacao.js:aprMes), para não ficarem no passado.
+
+## 2026-10-28 · Os tickets de QA
+
+O Martinho pediu um botão no dev para escrever tickets de QA no momento em que
+vê o problema, e que o Claude os fosse buscar quando lhe pedisse para os
+resolver. As escolhas dele: guardar na D1 do dev, numa tabela nova; o ticket
+leva o texto, a gravidade, o contexto automático e uma captura de ecrã; todas
+as contas do dev veem a lista inteira; um resolvido fica numa secção
+«Resolvidos» e pode reabrir-se; a pílula com a pega, «QA» e o número de
+abertos, com a etiqueta na primeira vez; ao largar, cola à borda mais perto e
+lembra-se do sítio. Depois de ver a primeira versão: a pílula sobe acima das
+janelas abertas, o ícone é um inseto, e os tickets sobrevivem à limpeza do dev
+e à conta de quem os escreveu.
+
+Uma tabela própria, e não a dos pedidos de ajuda: um ticket de QA é trabalho
+de quem programa, escrito por quem testa; um pedido de ajuda é suporte, vai ao
+Discord, manda email e aparece no back office. Misturá-los enchia a fila do
+suporte de notas de teste.
+
+As rotas dão 404 em produção antes de lerem o corpo: não dizem que a
+funcionalidade existe e nada de um pedido de produção chega à base. Remover é
+brando por 24 h para o Anular da app poder desfazer sem a app guardar o
+ticket; a limpeza corre de passagem nas rotas e apaga primeiro a captura,
+para nunca ficar um objeto órfão no R2. Reabrir guarda a resolução, para quem
+pega outra vez no ticket ver o que já se tentou. O tipo da captura lê-se dos
+bytes, e não só do Content-Type, porque a imagem é escrita por uma conta e
+aberta por todas na mesma origem (worker/src/rotas/qa.js:tipoDaImagem).
+
+O user_id não tem chave estrangeira para users. Com ela, o DELETE FROM users da
+limpeza do dev falhava, ou os tickets tinham de sair primeiro, e o Martinho
+quer que fiquem. A app mostra «Conta apagada» quando o autor já não existe ou
+foi anonimizado (web/cloud/qa.js:qaAutor).
+
+A pílula sobe acima das janelas para se poder reportar a janela que está
+aberta, que é muitas vezes onde está o problema, e o contexto passa a trazer o
+título dela. Enquanto uma janela do próprio QA está aberta, a pílula volta para
+baixo, para não tapar o formulário (web/cloud/qa.js:qaMarcarJanela).
+
+O Claude lê os tickets com um script direto na D1 e no R2 do dev, e não pelas
+rotas: as rotas pedem a sessão de uma conta da app, e o Claude não tem conta
+nem deve guardar um token. O script só escreve com resolver e reabrir; remover
+é do Martinho, na app.
+
+Depois, no mesmo dia, o Martinho pediu que o autor de um ticket escrito numa
+conta de teste fosse a conta do Discord que criou a ligação do /test, e não a
+conta de teste (que se chama sempre «Conta de teste» e que o /test limpar
+apaga). O id do Discord já estava em users.test_owner; o nome não chegava ao
+dev, por isso passou a viajar assinado na ligação (worker/src/teste.js:ligacaoTeste).
+A assinatura só conta o nome quando ele vem, para as ligações emitidas por um
+worker ainda sem esta versão (o bot de produção, até à promoção) continuarem a
+valer; essas aparecem como «Discord <id>». O ticket copia o id e o nome ao
+ser criado (worker/src/rotas/qa.js:discordDoAutor), para o autor sobreviver à
+conta de teste.
+
+A seguir, o Martinho quis ver o nome logo, e não «Discord <id>» até à
+promoção. O dev já tem o token do bot, por isso o nome que falta pergunta-se
+ao Discord (GET /users/{id}: o nome de exibição, ou o de utilizador) e
+guarda-se por 30 dias na mesma chave do KV (worker/src/teste.js:nomeDoDevNoDiscord).
+O nome da ligação continua a ganhar, porque escreve por cima e sem prazo. O
+GET /api/qa põe o nome nos tickets que ficaram só com o id, até cinco devs
+por pedido, para o scripts/qa.mjs, que lê a base, também o ver. Pediu também
+os abertos agrupados por gravidade e, em cada grupo, por data, do mais recente
+para o mais antigo. É assim na API, na app e no listar.
+
+## 2026-10-28 · As sessões de teste no back office
+
+O Martinho pediu para ver no back office quantas sessões de teste existem, quem
+as tem, e poder revogá-las. Escolheu: uma linha por sessão aberta (cada browser
+onde uma ligação do /test foi aberta), agrupadas por quem as pediu no Discord;
+revogar com as duas saídas, terminar a sessão ou apagar a conta; as duas também
+para todas as de uma pessoa e para todas; e na Operação, para o master e o
+admin, que já a veem (o dev não vê a Operação).
+
+As sessões vivem no KV sem índice por conta, e não se criou um: lê-se a lista
+das chaves sess: e fica-se com as das contas de teste. No dev há poucas, e um
+índice à parte ficava desencontrado do KV a cada saída ou expiração. Para não
+ter de abrir cada valor, as sessões novas guardam a conta, a época, a hora e o
+browser nos metadados da chave (worker/src/auth.js:createSession); as de antes
+leem-se pelo valor, e a hora de abertura tira-se da validade.
+
+Terminar as de uma pessoa ou todas sobe o sess_epoch, o que a suspensão já
+fazia: mata as sessões todas de uma vez, incluindo as de antes dos metadados, e
+deixa as contas e os dados para o próximo /test. Terminar uma sessão só apaga
+essa chave e não pergunta, porque basta abrir outra ligação; o resto pergunta.
+O token nunca chega ao back office: cada sessão vai com os primeiros 16
+caracteres do sha-256 dele (worker/src/sessoes-teste.js:idDaSessao).
+
+## 2026-10-28 · Quem fecha uma apresentação a meio é perguntado, uma vez
+
+Um ticket de QA do Martinho (61dee982): fechar as apresentações no ✕ ou fora
+da janela pode querer dizer que a pessoa não quer ver nenhuma, e a app seguia
+a abrir uma por separador. Agora, quem fecha uma por um caminho de abandono
+antes da última imagem ouve «Não queres ver as apresentações?»
+(cloud/apresentacao.js:aprPerguntar). As decisões foram dele: só antes do fim
+(quem chegou ao «Percebi» viu tudo, e não está a recusar nada), só uma vez por
+conta (perguntar a cada separador seria a mesma insistência de que o ticket se
+queixa), também nas boas-vindas, e sem interruptor novo para as religar, porque
+a Ajuda já reabre cada uma. A terceira resposta, «Voltar à apresentação», é
+para o ✕ tocado por engano: reabre na mesma imagem e não gasta a pergunta.
+
+A origem do fecho já existia (componentes.js:closeModal, para o «Sair sem
+guardar?») e só não chegava ao aoFechar; passa a chegar. A resposta vai na
+mesma chave das vistas, db.settings.apresentacoes, como mais duas marcas
+(perguntou e nenhuma), para viajar entre aparelhos e passar pela fusão a três
+como as outras. «Continuar a mostrar» é o primário: é o caminho que não muda
+nada do que a app faz.
+
+## 2026-10-28 · Trinta sessões numa conta de teste
+
+O Martinho via no back office perto de trinta sessões abertas numa só conta de
+teste, sem saber de onde vinham. O KV do dev tinha 62 sessões das contas de
+teste e de outras: 19 na A972W2R4, 18 na FJXT22R3, todas abertas entre 28/09 e
+hoje. Cada entrada criava uma sessão nova de 30 dias e deixava a anterior viva:
+a ligação do /test (mesmo a retomar a mesma conta), cada troca no seletor das
+contas, cada conta extra e o apagar com passagem à seguinte. Os grupos de três
+e quatro no mesmo minuto em duas contas (26/10, 07:55) são trocas seguidas no
+seletor. As de antes de hoje não têm o browser nos metadados, por isso não se
+sabe de que aparelhos foram.
+
+A app guarda uma sessão só por browser, por isso a que a nova substitui já não
+servia a ninguém: passa a terminar no servidor
+(worker/src/teste.js:largarSessoesDoBrowser, com os tokens do Bearer e do cookie),
+e as dos outros aparelhos ficam. Pelo caminho, as pré-visualizações de ligações
+deixam de entrar (worker/src/teste.js:eRoboDeLigacoes): um robô que abrisse a ligação
+criava uma sessão que nenhum browser guardava, e numa ligação de limpar apagava
+as contas. As 62 que já existem não se tocam: terminam-se no back office ou
+expiram. A lista passou a ter uma secção que abre e fecha por conta, dentro do
+bloco de quem as pediu no Discord, escolha do Martinho.
+
+## 2026-10-28 · A segunda ronda de tickets de QA: o ano inteiro, os donos no seletor, os grupos nos filtros
+
+Nove tickets do Martinho, todos de hoje, com decisões dele onde mudavam o que
+estava decidido.
+
+O gráfico «Entradas e saídas» da Visão geral acabava no mês corrente de
+propósito (o canvas, e uma linha a seguir por novembro ao nível de hoje lia-se
+como valor registado). Ele quis o ano inteiro com o que os planeados preveem
+(07d39786): os meses seguintes saem das ocorrências da Agenda
+(calendario.js:calPlaneados), com o valor que a confirmação registaria, em
+barras esbatidas com «previsto» na legenda e na leitura. O cashflow acumulado
+e os quatro indicadores ficam sem previsões, porque são o que aconteceu. Sem o
+Calendário ligado não há previsão: o idioma de guarda entre serviços é o
+servicoLigado, e a função vive no Calendário.
+
+O filtro global de proprietário saiu na v40 (13c9769), e ele pediu-o de volta,
+mas só na Visão geral (a0faa42e): «Os meus» e cada proprietário com quem
+partilha, no seletor do que está em foco, depois dos grupos. Um proprietário
+em foco é um 'g:o:UID' (registos.js:pidDono), um grupo que não existe na
+base: todo o código que pergunta «um imóvel ou vários?» já trata o prefixo
+g:, e um prefixo novo obrigava a mexer no peso dos movimentos, nas contas
+entre proprietários e no «Novo movimento». Só entram proprietários com algum
+imóvel no âmbito, para nenhuma opção dar uma vista vazia.
+
+O filtro «Imóvel» dos Contratos, dos Planeados e dos Créditos passou a ter os
+grupos depois de uma linha, como os Movimentos (b8bf3127), só os grupos com
+coisas nessa lista (componentes.js:imoveisEGruposOpts); apagar o grupo
+escolhido volta a todos (definicoes.js:gruposApagarLocal).
+
+O aviso «Todos aceitaram: … passou a gerir …» abria a ficha e ficava por ler
+(f48a5371), porque a leitura era só a marca temporal do «Marcar tudo como
+lido». Os avisos das casas passam a ler-se um a um ao toque
+(notificacoes.js:notifLerAviso), num objeto {id: 1} nas definições pela mesma
+razão das apresentações: a fusão a três junta-o chave a chave.
+
+Os outros: na Ajuda, «Marcar todas como vistas» (f6e09ead) e rever uma até à
+última imagem conta como vista (ea801987); o «Fora dos totais» ligado fica
+vermelho (61234ca0); na pílula QA, as secções da lista dobram, com os
+resolvidos recolhidos por omissão (a2787d04), e a pega vira-se para a borda
+onde a pílula encostou, só ao largar (89811267).
+
+## 2026-10-28 · Os tickets de QA com três estados: novos, em resolução, resolvidos
+
+Um ticket de QA do Martinho (1ca648f5): quer ver, na app, que um ticket já está
+a ser tratado. As escolhas dele: três estados, Novos, Em resolução e
+Resolvidos; só quem resolve (o Claude, pelo scripts/qa.mjs comecar) passa um
+ticket a em resolução, logo que pega nele, e a app só mostra; reabrir devolve
+aos novos; o número da pílula conta os novos e os em resolução, tudo o que
+ainda não está resolvido.
+
+Na base o novo continua a chamar-se 'aberto' e o em resolução é
+'em_resolucao': o status é texto sem CHECK, por isso não houve migração, e os
+tickets que já existiam ficaram novos sem se lhes mexer. A rota não ganhou
+nenhum caminho para marcar em resolução: seria um botão a mais na app para uma
+coisa que é de quem programa. O comecar confere todos os ids antes de mexer em
+algum, e recusa um resolvido (esse reabre-se primeiro), para nunca tirar um
+ticket dos resolvidos sem se ver.
+
+## 2026-10-28 · A pílula do QA no back office, com o qa.js da app
+
+Um ticket de QA do Martinho (fb92f4ba): o back office do dev deve ter a mesma
+pílula de QA, com as mesmas funções. Perguntado entre uma versão própria do
+back office e reaproveitar o qa.js da app, escolheu reaproveitar.
+
+O back office não carrega a app, de propósito (equipa-vista.js), e o guião
+dele tem um esc e um ic globais com outras assinaturas que os da app. Por isso
+o qa.js não entra solto ao lado do guião: o worker embrulha-o numa função com
+uma camada que faz de app (worker/src/equipa-qa.js), e os nomes não se tocam.
+O qa.js, o icones.js e o formato.js vão tal e qual, lidos dos assets a cada
+pedido, para a pílula do back office nunca ficar para trás da da app; o CSS
+do QA corta-se do estilos.css pelos marcadores do bloco, e o teste falha se
+eles mudarem. As ações data-click não correm pelo eventos.js da app (que
+carregaria mais app); a camada lê a mesma gramática curta e só chama a tabela
+das funções do QA.
+
+As rotas são as mesmas, por um caminho da equipa (/api/equipa/qa), porque a
+sessão é outra (o cookie da equipa) e uma sessão de equipa não deve abrir a
+API de quem usa a app. O autor é a pessoa da equipa pelo Discord, nos campos
+que os tickets das contas de teste já tinham. Qualquer cargo vê a pílula: o
+QA é de quem testa, e não depende do que o cargo vê no back office.
+
+
+## 2026-10-28 · A hipoteca que começa no futuro
+
+Um ticket de QA (234da7c3): uma hipoteca com início a 1 de janeiro de 2027
+tinha o plano de pagamento a começar hoje. O planeado da prestação nascia
+sempre no mês de hoje, e o plano parte da próxima por confirmar. A primeira
+prestação passou a ser a do mês do início quando o início ainda não chegou, no
+mesmo dia em que a app já contava as prestações em falta desde o início (a do
+próprio dia do início, preso aos 28). Um planeado que já existia e fica antes
+do início novo anda para lá; as hipotecas que já começaram não mudam.
+
+## 2026-10-28 · O dev só abre pela ligação do /test
+
+Um ticket de QA (23899645) pedia a pílula do QA também na entrada e no criar
+conta. Sem sessão, o servidor não aceita tickets, e perguntado como devia
+ser, o Martinho decidiu outra coisa: «O dev.rendorium.com deixe de ser
+acessível diretamente sem ser com link do discord. [...] Assim sei que só
+quem está identificado tem acesso.» Nas respostas seguintes: só as sessões
+das contas de teste (as que o /test cria) passam, e uma conta normal do dev
+também não; a ligação continua como era (10 minutos para ser aberta); o back
+office fica com a entrada dele; e o erro é um 404 seco, sem dizer que é o
+ambiente de testes. A pílula na entrada deixou de fazer sentido: no dev já
+não há entrada.
+
+A porta fecha-se com duas variáveis juntas, o ENV_NAME «dev» e a PORTA_DEV
+«fechada», porque o percurso corre com outro ENV_NAME e cria contas pela
+entrada, e os testes da identidade de dev montam o worker com o ENV_NAME
+«dev» sem a porta. Para fechar também os ficheiros da app, todos passam pelo
+worker no dev: custa uma invocação por ficheiro, que no plano gratuito soma
+aos pedidos da produção, e por isso a conferência da sessão fica lembrada 30
+segundos por isolado. O deploy do dev confirma-se pelo /versao.json, que
+passa a porta, e pelo 404 da raiz: um 200 lá quer dizer porta aberta, e o
+deploy falha. A APK de dev abre o dev sem sessão e passa a ver o 404.
+
+## 2026-10-28 · A terceira ronda de tickets de QA
+
+Quatro tickets do Martinho (28/10, num Samsung) e um relato no chat. O aviso
+de um registo adicionado leva «Ver» (cda8e547): vai ao separador e abre a
+ficha, só nos novos — quem editou já estava a ver o registo —, e só quando o
+que está aberto são fichas, para não navegar por baixo de um formulário ou da
+pergunta das prestações em falta. Os avisos dos novos passaram a dizer
+«adicionado». No telemóvel o «N alterações por enviar» ficou só o ícone
+(47da849d): cada gravação passa por ele e pelo «Guardado», e a faixa fazia o
+cabeçalho saltar a cada gravação; afasta-se do contrato do redesign («uma
+faixa quando há algo por enviar») por pedido do ticket. Os movimentos do
+mesmo dia ordenam-se pela hora a que foram adicionados (15f6d530): o
+movimento novo guarda quando nasceu, e os antigos ficam sem o campo em vez de
+uma data inventada, que os reenviava todos ao servidor. E um toque durante o
+arranque (o relato «LFK is not defined», ao abrir a gaveta antes de o
+vistas.js carregar) deixou de correr a ação com meia app: engole-se, em vez
+de se guardar para depois.

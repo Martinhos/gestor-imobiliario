@@ -12,6 +12,7 @@ import { dailyReport, watchLimits } from './notify.js';
 import { copiar } from './salvaguarda.js';
 import { recursoDePagina } from './paginas-recursos.js';
 import { CAMINHOS_DE_IDENTIDADE, identidadeDeDev } from './lib/identidade.js';
+import { portaDoDev } from './teste.js';
 
 /* Os dois scripts em linha do web/index.html — a armadilha de erros e a cura
    do arranque — têm de correr antes de qualquer ficheiro, e por isso não podem
@@ -22,11 +23,15 @@ import { CAMINHOS_DE_IDENTIDADE, identidadeDeDev } from './lib/identidade.js';
    O testes/csp.test.js confere que estes hashes continuam a bater com o
    ficheiro, aqui e no web/_headers, que tem de ficar igual. */
 const HASHES_EM_LINHA = "'sha256-c4UA1V+48Fe1JESBNvW0EoXCeYe6ELM2ka4toVHOtm4=' " +
-  "'sha256-HsQ4A4fIQS7EeV+dfqOKU842TDuuei/KuayNVOc3C4o='";
-// A app não carrega nada de fora, tirando o botão de entrada com Google.
+  "'sha256-dOWyPmDWCNjOauaFadEMzAWiQMAhldb2MQT5bP86V3A='";
+/* A app não carrega nada de fora, tirando o botão de entrada com Google e as
+   estatísticas do Cloudflare Web Analytics: o Cloudflare injeta em cada página
+   o beacon.min.js (static.cloudflareinsights.com), que manda as visitas para
+   cloudflareinsights.com. Sem cookies; recusado aqui, não registava nada e
+   ainda disparava a cura do arranque (index.html:deFora). */
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' " + HASHES_EM_LINHA + " https://accounts.google.com/gsi/client",
+  "script-src 'self' " + HASHES_EM_LINHA + " https://accounts.google.com/gsi/client https://static.cloudflareinsights.com",
   /* O sha256 não é nosso: é da folha que o botão de entrada com Google injeta
      na página (accounts.google.com/gsi/client). Sem ele, o browser recusa-a e
      o botão passa de 72px para 357px de altura — medido —, que é mudar o que a
@@ -37,7 +42,7 @@ const CSP = [
      não seja das duas conhecidas (testes/ui/percorrer.js:RUIDO_DE_FORA). */
   "style-src 'self' 'sha256-RU4sU0AaS8IBGZx8XrGt/pa9A5SLA3dQszGeqT5L3Kw=' https://accounts.google.com",
   "img-src 'self' data: blob: https://*.googleusercontent.com",
-  "connect-src 'self' https://accounts.google.com",
+  "connect-src 'self' https://accounts.google.com https://cloudflareinsights.com",
   "frame-src https://accounts.google.com",
   "font-src 'self'",
   "object-src 'none'",
@@ -165,8 +170,18 @@ export default {
     await message.forward(destino);
   },
 
+  // Recebe: request — o pedido; env — as bindings do worker; ctx — o contexto (waitUntil).
+  // Devolve: promessa da Response, já vestida pelo harden.
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    /* A porta do dev (teste.js:portaDoDev): no dev.rendorium.com, sem a sessão de
+       uma conta de teste — a de uma ligação do /test —, tudo é um 404 seco,
+       tirando a ligação, o Discord, o back office e o /versao.json do deploy.
+       Antes de tudo o resto, para nenhuma rota abaixo responder primeiro.
+       Fora do dev (produção, percurso) devolve null sem ler nada. */
+    const fechada = await portaDoDev(env, request, url);
+    if (fechada) return harden(fechada);
 
     const caminho = url.pathname.replace(/^\/|\/$/g, '');
     const naRaiz = url.hostname === 'rendorium.com' || url.hostname === 'www.rendorium.com';
@@ -240,12 +255,17 @@ export default {
       const { rotasEquipa, getEquipa } = await import('./equipa.js');
       const c = { env, request, ctx, url, path: url.pathname.replace(/\/+$/, ''), method: request.method };
       try {
+        // a pílula do QA no back office do dev (equipa-qa.js): o guião e o CSS dela
+        if (url.pathname === '/equipa/qa.js' || url.pathname === '/equipa/qa.css') {
+          const { recursoDoQa } = await import('./equipa-qa.js');
+          return harden(await recursoDoQa(env, url, request.method, await getEquipa(env, request)));
+        }
         const r = await rotasEquipa(c);
         if (r) { r.headers.set('Cache-Control', 'no-store'); return harden(r); }
         if (url.pathname === '/equipa' || url.pathname === '/equipa/') {
           const { paginaEquipa } = await import('./equipa-vista.js');
           const eu = await getEquipa(env, request);
-          return harden(paginaEquipa(eu));
+          return harden(paginaEquipa(eu, { qa: env.ENV_NAME || '' }));
         }
         // a documentação da casa: gerada do código no deploy, para a equipa
         if (url.pathname === '/equipa/docs') {

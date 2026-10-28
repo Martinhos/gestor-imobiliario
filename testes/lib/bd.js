@@ -58,14 +58,26 @@ export function baseDeTeste() {
   };
 }
 
-// KV de faz-de-conta, o mesmo de sempre.
+// KV de faz-de-conta, o mesmo de sempre — e, como o verdadeiro, guarda os
+// metadados e a validade de cada chave e lista-as por prefixo (com cursor).
 export function kvFalso() {
-  const m = new Map();
+  const m = new Map(), extra = new Map();
   return {
     m,
-    async put(k, v) { m.set(k, v); },
+    async put(k, v, o) {
+      m.set(k, v);
+      const e = o && o.expirationTtl ? Math.floor(Date.now() / 1000) + o.expirationTtl : undefined;
+      extra.set(k, { expiration: e, metadata: o && o.metadata });
+    },
     async get(k) { return m.has(k) ? m.get(k) : null; },
-    async delete(k) { m.delete(k); },
+    async delete(k) { m.delete(k); extra.delete(k); },
+    async list(o) {
+      const prefixo = (o && o.prefix) || '', limite = (o && o.limit) || 1000, desde = Number((o && o.cursor) || 0);
+      const todas = [...m.keys()].filter((k) => k.startsWith(prefixo)).sort();
+      const pagina = todas.slice(desde, desde + limite).map((k) => Object.assign({ name: k }, extra.get(k) || {}));
+      const fim = desde + limite >= todas.length;
+      return { keys: pagina, list_complete: fim, cursor: fim ? undefined : String(desde + limite) };
+    },
   };
 }
 

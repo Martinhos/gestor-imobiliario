@@ -67,7 +67,8 @@ conferirBase();
    propósito: a nuvem embrulha o save, o render e o go por reatribuição, e os
    testes de lógica que já existem contam com as versões sem nuvem. */
 export const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'grupos', 'ajuda', 'painel',
-  'filtros', 'entrada', 'novidades', 'selecao', 'selecao-listas', 'guia'];
+  'filtros', 'entrada', 'novidades', 'selecao', 'selecao-listas', 'guia',
+  'apresentacao', 'apresentacao-casas', 'apresentacao-dinheiro', 'apresentacao-analise', 'qa'];
 
 /* Tudo o que o index.html carrega, pela ordem dele, como caminhos relativos a
    web/. É esta a lista que interessa a quem procura colisões de nomes: dois

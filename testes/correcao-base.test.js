@@ -144,7 +144,7 @@ function arranqueDeFazDeConta({ online = true } = {}) {
     },
     caches: { keys: () => Promise.resolve(['gi-shell-v38']), delete: (k) => { feito.push('apaga ' + k); return Promise.resolve(true); } },
     sessionStorage: { getItem: (k) => (sessao.has(k) ? sessao.get(k) : null), setItem: (k, v) => sessao.set(k, String(v)) },
-    location: { reload: () => feito.push('recarrega') },
+    location: { host: 'app', reload: () => feito.push('recarrega') },
     document: { readyState: 'loading' },
     fetch: (url, o) => { feito.push({ url, o, corpo: JSON.parse(o.body) }); return Promise.resolve({ ok: true }); },
     setTimeout: (f, ms) => { relogios.push({ f, ms }); return relogios.length; },
@@ -194,6 +194,20 @@ describe('a rede de segurança do arranque', () => {
     assert.ok(a.feito.indexOf(envios[0]) < a.feito.indexOf('recarrega'), 'antes da recarga');
     assert.equal(envios[0].o.keepalive, true);
     assert.match(envios[0].corpo.message + envios[0].corpo.detail, /app\/vistas\.js/);
+  });
+
+  test('um script de fora que não carrega (o beacon do Cloudflare, bloqueado) não cura nada', async () => {
+    const a = arranqueDeFazDeConta();
+    a.disparar({ target: { tagName: 'SCRIPT', src: 'https://static.cloudflareinsights.com/beacon.min.js/vce70' } }, true);
+    a.disparar({ message: "Cannot read properties of undefined (reading 'x')", filename: 'https://static.cloudflareinsights.com/beacon.min.js', target: a.janela }, false);
+    await assenta(); await assenta();
+    assert.ok(!a.feito.includes('recarrega'), 'não recarrega');
+    assert.ok(!a.feito.some((x) => typeof x === 'string' && x.startsWith('apaga')), 'nem apaga a cache');
+    assert.ok(!a.sessao.has('gi_arranque_curado'), 'nem gasta a tentativa');
+    // e um nosso, com o endereço por inteiro, continua a curar
+    a.disparar({ target: { tagName: 'SCRIPT', src: 'https://app/app/vistas.js' } }, true);
+    await assenta(); await assenta();
+    assert.ok(a.feito.includes('recarrega'));
   });
 
   // achado A.1-2

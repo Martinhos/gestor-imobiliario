@@ -77,6 +77,7 @@ sai de `node scripts/gerar-docs.js`, e o `wrangler dev` não arranca sem ele. O 
 | Landing | rendorium.com e www — servida pelo worker (worker/src/landing.js) | — |
 | Base de dados | `gestor-imobiliario` | `gestor-imobiliario-dev` |
 | Contas | até 2000 | até 50 |
+| Quem entra | qualquer pessoa, com conta | só quem abre uma ligação do `/test` no Discord (vale 10 minutos; aberta, a sessão fica no browser). Sem ela, tudo é um 404 — a página, os ficheiros, a API, a montra. O back office (`/equipa`) entra como sempre, pelo Discord |
 | Entrada com Google | sim | não (o endereço não está autorizado na Google) |
 | Avisos no Discord | erros e pedidos, mais o resumo diário | erros e pedidos, marcados com `[dev]` |
 
@@ -98,8 +99,11 @@ git checkout main && git merge dev && git push
 
 O deploy de produção espera pelo «Testes» desse commit e só publica se ele ficar verde.
 
-Os dados de exemplo criam-se dentro da própria app: entra na app de dev com
-uma conta de teste e usa **Visão geral → Carregar exemplo**.
+Os dados de exemplo criam-se dentro da própria app: entra no dev com uma
+ligação do `/test` e usa **Visão geral → Carregar exemplo** (ou pede a
+ligação já com os dados de exemplo). Quem corre o dev local com `--env dev`
+fica com a porta fechada também; `npm run dev` e o percurso
+(`--var ENV_NAME:percurso`) ficam abertos.
 
 Nota: a infraestrutura dos dois ambientes é criada pelo Terraform a partir do
 `main`. Um deploy de `dev` só lê os ids que já existem no estado, por isso o
@@ -137,7 +141,9 @@ R2 e não no repositório (ver **Deploy (uma vez)**, ponto 3).
 ## Se uma publicação correu mal
 
 Depois do `wrangler deploy`, o deploy confirma que o endereço do ambiente responde o `/versao.json`
-acabado de gerar e a raiz com 200 (passo «Confirmar que a publicação responde»).
+acabado de gerar e a raiz — com 200 em produção e com o 404 da porta no dev (passo «Confirmar
+que a publicação responde»). No dev, uma raiz com 200 é a porta aberta (`porta-aberta`): o deploy
+falha e avisa, sem recuar — confirma o `ENV_NAME` e a `PORTA_DEV` no `[env.dev.vars]` do wrangler.toml.
 
 - **O worker novo responde com erro (5xx):** o próprio deploy volta à versão anterior
   (`wrangler rollback`) e avisa no canal de quem programa. Resta corrigir.

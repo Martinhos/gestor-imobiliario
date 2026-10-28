@@ -75,7 +75,7 @@ function cartaoDaAppNoTelemovel() {
 linhaDefinicoes({ sec: 'conta', ordem: 10, html: cartaoDoPerfil });
 linhaDefinicoes({ sec: 'conta', ordem: 20, page: 'cloud', label: 'Segurança', icon: 'lock',
   sub: function () { return CW.user ? 'Palavra-passe, sessões e apagar a conta' : 'Inicia sessão'; } });
-linhaDefinicoes({ sec: 'ajuda', ordem: 10, page: 'ajuda', label: 'Ajuda e sugestões', icon: 'ajuda', sub: 'Como se faz, perguntas e pedidos' });
+linhaDefinicoes({ sec: 'ajuda', ordem: 10, page: 'ajuda', label: 'Ajuda e sugestões', icon: 'ajuda', sub: 'Como se faz, apresentações e pedidos' });
 linhaDefinicoes({ sec: 'sobre', ordem: 10, page: 'faq', label: 'Perguntas frequentes', icon: 'info', sub: 'As dúvidas mais comuns, respondidas' });
 linhaDefinicoes({ sec: 'sobre', ordem: 30, page: 'legal', label: 'Aviso legal', icon: 'contract', sub: 'Termos e privacidade' });
 linhaDefinicoes({ sec: 'sobre', ordem: 60, html: cartaoDaAppNoTelemovel });
@@ -209,12 +209,12 @@ function pedidoDeGrupoHtml(p) {
     '<button class="btn sm" data-toca="dados" data-click="CW.grupoRecusarPedido(\'' + gid + '\',\'' + uid + '\')">Recusar</button>');
 }
 
-/* A linha de um pedido para passar o controlo a que me falta responder (a
+/* A linha de um pedido para transferir o controlo a que me falta responder (a
    todos os comproprietários, e não só a quem recebe): quem quer passar o
    controlo de que imóveis a quem («… a Bruno» ou «… a ti»), o que aceitar
    implica e, com um imóvel, quem já aceitou e quem falta
    (notificacoes.js:notifTransfTitulo e notifTransfSub), e os botões.
-   Aceitar não está na linha: passar o controlo lê-se antes, e o «Ver» abre
+   Aceitar não está na linha: transferir o controlo lê-se antes, e o «Ver» abre
    a folha com o que muda, o progresso e o Aceitar
    (notificacoes.js:notifTransfVer). Recusar é o secundário, como nos outros
    pedidos: quem pediu pode voltar a pedir; não está quando já aceitei e só
@@ -231,7 +231,7 @@ function pedidoDeTransferenciaHtml(t) {
 
 /* O que está por responder, por tipo: os pedidos de partilha recebidos e os
    pedidos para entrar num grupo meu (os dois do serviço Colaboradores), os
-   pedidos para passar o controlo a que me falta responder (da base:
+   pedidos para transferir o controlo a que me falta responder (da base:
    CW.state.transfers, que um servidor de antes não manda —
    notificacoes.js:notifTransfPorResponder aguenta a falta; os que já aceitei
    esperam no sino, não aqui) e os convites de ligação recebidos (da partilha entre
@@ -255,7 +255,7 @@ function pedidosParaResponder() {
 }
 
 /* Só as LINHAS dos pedidos por responder, sem cartão nem contentor: as de
-   partilha, as de passar o controlo (com Ver e Recusar), as de grupo e os
+   partilha, as de transferir o controlo (com Ver e Recusar), as de grupo e os
    convites de ligação, por esta ordem, cada uma uma .pd-linha com os botões
    dela. É o que o cartão «Pedidos por
    responder» leva por dentro (pedidosDashCard), e o que a Visão geral pode
@@ -479,7 +479,7 @@ var FRASE_DA_PARTILHA = 'Partilhar uma casa dá acesso a tudo o que ela tem: con
    responder, nos dois sentidos, e uma ligação ativa não aparece duas vezes.
    Sem o separador dos Proprietários (partilha.js:vCloud, a página Segurança)
    não há lista de cima, e o cartão leva-as todas. O vazio só se diz quando
-   é verdade: sem ligação nenhuma, «Ainda não estás ligado a ninguém.»; com
+   é verdade: sem ligação nenhuma, «Ainda não tens ligações.»; com
    ativas e sem convites, nada (o cartão começa no id); antes do primeiro sync, uma
    lista vazia não quer dizer que não haja ligações: diz-se que ainda não
    chegaram.
@@ -491,7 +491,7 @@ function comproprietariosCorpo(comAtivas) {
   var conns = todas.filter(function (c) { return comAtivas || c.status === 'pending'; });
   var haAtivas = todas.some(function (c) { return c.status !== 'pending'; });
   var vazio = !CW._pulled ? 'Ainda não recebemos as ligações deste aparelho — aparecem quando a app sincronizar.'
-    : (haAtivas ? '' : 'Ainda não estás ligado a ninguém.');
+    : (haAtivas ? '' : 'Ainda não tens ligações.');
   var linhas = conns.length ? conns.map(connCard).join('')
     : (vazio ? '<div class="pt-linha pt-vazio"><span class="small">' + vazio + '</span></div>' : '');
   /* o meu id, para o dar ao outro; o «Copiar» diz ao leitor de ecrã o que copia */
@@ -715,7 +715,7 @@ CW.sairDaCasa = function (houseId) {
   return api('DELETE', '/api/houses/' + encodeURIComponent(houseId) + '/participacao');
 };
 
-/* Pedir para passar o controlo de uma ou várias casas que criei a um
+/* Pedir para transferir o controlo de uma ou várias casas que criei a um
    comproprietário delas (POST /api/transfers): só muda quem as gere na app,
    e nada muda até todos os comproprietários aceitarem. Não pergunta nem sincroniza: a folha
    (imovel.js:imvTransferir) valida, e o pullNow é de quem chama.
@@ -727,7 +727,7 @@ CW.pedirTransferencia = function (o) {
 };
 
 /* Pergunta ao servidor, sem pedir nada, quem fica ligado a esta pessoa se
-   lhe passar o controlo destas casas (POST /api/transfers/check): os
+   lhe transferir o controlo destas casas (POST /api/transfers/check): os
    comproprietários que chegam às casas por uma partilha e ainda não estão
    ligados a ela ficam ligados quando aceitarem. A folha
    (imovel.js:imvTrfVerificar) pergunta ao escolher quem recebe, e di-lo
@@ -739,7 +739,7 @@ CW.verificarTransferencia = function (o) {
   return api('POST', '/api/transfers/check', { houseIds: (o.houseIds || []).slice(), toUserId: o.toUserId });
 };
 
-/* Cancelar um pedido para passar o controlo que fiz (DELETE /api/transfers/:lote):
+/* Cancelar um pedido para transferir o controlo que fiz (DELETE /api/transfers/:lote):
    saem todos os pendentes do lote. Não pergunta nem sincroniza.
    Recebe: lote — o id do lote (o pedido).
    Devolve: a promessa da resposta ({ok}); rejeita com o erro do servidor. */
@@ -747,7 +747,7 @@ CW.cancelarTransferencia = function (lote) {
   return api('DELETE', '/api/transfers/' + encodeURIComponent(lote));
 };
 
-/* Recusar um pedido para passar o controlo que me chegou
+/* Recusar um pedido para transferir o controlo que me chegou
    (POST /api/transfers/:lote/reject; qualquer comproprietário): o pedido
    cai nas casas de que sou comproprietário, e o servidor avisa quem pediu e
    os outros. Não pergunta nem sincroniza.
@@ -757,7 +757,7 @@ CW.recusarTransferencia = function (lote) {
   return api('POST', '/api/transfers/' + encodeURIComponent(lote) + '/reject');
 };
 
-/* Aceitar um pedido para passar o controlo que me chegou
+/* Aceitar um pedido para transferir o controlo que me chegou
    (POST /api/transfers/:lote/accept; qualquer comproprietário): regista o
    meu sim nas casas do lote de que sou comproprietário; cada casa com o sim
    de todos passa (aceites), as outras esperam por quem falta (aguardam), e
@@ -1195,7 +1195,7 @@ CW.logout = function () {
 
 SUBPAGE.cloud = { label: 'Segurança', sub: 'Palavra-passe, sessões e apagar a conta' };
 SUBPAGE.legal = { label: 'Aviso legal', sub: 'Condições de utilização e privacidade' };
-SUBPAGE.ajuda = { label: 'Ajuda e sugestões', sub: 'Como se faz, perguntas e pedidos' };
+SUBPAGE.ajuda = { label: 'Ajuda e sugestões', sub: 'Como se faz, apresentações e pedidos' };
 SUBPAGE.termos = { label: 'Termos e Condições', sub: 'O acordo entre ti e quem opera o serviço' };
 SUBPAGE.privacidade = { label: 'Política de Privacidade', sub: 'Que dados tratamos, porquê e por quanto tempo' };
 

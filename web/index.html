@@ -212,16 +212,27 @@
     setTimeout(recarrega, 4000);   // se alguma das promessas ficar pendurada
   }
 
+  /* Só se cura o que é nosso. O Cloudflare mete na página o script das
+     estatísticas (static.cloudflareinsights.com/beacon.min.js), que a nossa
+     CSP recusa (e os bloqueadores de anúncios também): a app apagava a cache
+     e recarregava por um ficheiro que não é dela, e de dez em dez minutos
+     outra vez, que ele falha sempre. Um
+     endereço sem esquema (ou vazio, num script em linha) é da casa. */
+  function deFora(url) {
+    var m = /^[a-z][a-z0-9+.-]*:\/\/([^\/?#]+)/i.exec(String(url || ''));
+    return !!m && m[1] !== location.host;
+  }
+
   // um <script> que não chega a carregar: o erro é do elemento e não sobe,
   // por isso ouve-se na descida
   window.addEventListener('error', function (e) {
     var alvo = e && e.target;
-    if (alvo && alvo !== window && alvo.tagName === 'SCRIPT') curar('script: ' + (alvo.src || ''));
+    if (alvo && alvo !== window && alvo.tagName === 'SCRIPT' && !deFora(alvo.src)) curar('script: ' + (alvo.src || ''));
   }, true);
 
   // e um que carrega mas rebenta por lhe faltar o que outro ficheiro devia ter
   window.addEventListener('error', function (e) {
-    if (e && e.message && PARTIU.test(String(e.message))) curar(String(e.message));
+    if (e && e.message && PARTIU.test(String(e.message)) && !deFora(e.filename)) curar(String(e.message));
   });
 })();
 </script>
@@ -289,7 +300,11 @@
      go, vDashboard, vTransactions, lpMenu, selOpen…). A conta, a sincronização
      e o que fala com o servidor são nucleo, anexos, utilizadores, partilha,
      colaboradores, grupos, ajuda, entrada e novidades; painel, filtros, selecao,
-     selecao-listas e guia estão aqui pela ordem de carregamento. De que serviço
+     selecao-listas e guia estão aqui pela ordem de carregamento; apresentacao
+     (a janela das boas-vindas e dos separadores) carrega a seguir, e depois dela
+     as apresentações que regista: apresentacao-casas, apresentacao-dinheiro e
+     apresentacao-analise; qa (o botão dos tickets de QA, só fora de produção)
+     fecha a lista. De que serviço
      é cada um di-lo o catálogo (app/servicos.js), e o arnês dos testes
      carrega-os com a nuvem (testes/arnes.js:NUVEM), à parte dos módulos de
      app/, cujos testes contam com as versões por embrulhar. -->
@@ -307,5 +322,10 @@
 <script src="cloud/selecao.js"></script>
 <script src="cloud/selecao-listas.js"></script>
 <script src="cloud/guia.js"></script>
+<script src="cloud/apresentacao.js"></script>
+<script src="cloud/apresentacao-casas.js"></script>
+<script src="cloud/apresentacao-dinheiro.js"></script>
+<script src="cloud/apresentacao-analise.js"></script>
+<script src="cloud/qa.js"></script>
 </body>
 </html>

@@ -108,12 +108,12 @@ registarAnoIrs({
     solidariedade:[{acima:80000,taxa:2.5},{acima:250000,taxa:5}]},
   novidades:[
     'O Anexo F é o mesmo dos rendimentos de 2024: nenhum quadro, coluna ou código mudou.',
-    'Quem está dispensado do recibo de renda eletrónico (65 anos ou mais, ou sem caixa postal eletrónica e com poucas rendas) entrega a declaração anual das rendas até ao fim de fevereiro — era até ao fim de janeiro.',
+    'Quem tem dispensa do recibo de renda eletrónico (65 anos ou mais, ou sem caixa postal eletrónica e com poucas rendas) entrega a declaração anual das rendas até ao fim de fevereiro — era até ao fim de janeiro.',
     'Desde julho de 2025 o inquilino com contabilidade organizada não retém quando a retenção seria inferior a 25 €; e o limite abaixo do qual o senhorio pode dispensar a retenção (com a menção no recibo) sobe para 15 000 € de rendas no ano.',
     'Desde agosto de 2025 o inquilino pode comunicar o contrato às Finanças se o senhorio não o fizer — a obrigação continua a ser do senhorio.'],
   passos:[
     {titulo:'Antes de abrir o Portal',
-      texto:'Confirma nesta página que não falta nada: cada contrato com o número que a AT lhe deu, cada imóvel com o código da freguesia, o tipo e o artigo, cada inquilino com NIF ou país. O que falta está em «Obrigações», e cada ponto abre o sítio onde se trata.'},
+      texto:'Confirma nesta página que não falta nada: cada contrato com o número que a AT lhe deu, cada imóvel com o código da freguesia, o tipo e o artigo, cada inquilino com NIF ou país. O que falta está em «A tratar antes de entregar», e cada ponto abre o sítio onde se trata.'},
     {titulo:'O rosto da declaração',
       texto:'No Portal das Finanças, IRS › Entregar declaração, ano {ano}. Confirma o estado civil e se vais em tributação conjunta ou separada: é isso que decide o titular de cada linha do Anexo F — A és tu, B o cônjuge (só em conjunta). Com rendas não há IRS Automático.'},
     {titulo:'Quadros 4.1 e 4.2: uma linha por contrato',

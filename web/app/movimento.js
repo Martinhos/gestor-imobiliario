@@ -139,10 +139,16 @@ function txMontanteOpcional(){return txModo.modo==='tpl'&&!txModo.alsoTx}
 function txGuardarPlaneado(){
   const m=txModo,every=m.every||'month',recEnd=m.recEnd||'';
   let until=m.until||'';if(until&&until<tForm.date)until='';
-  if(!m.recId){db.recurring=db.recurring||[];db.recurring.push(normRec({name:tForm.label,every,next:tForm.date,until,end:recEnd,tx:txSnapshot(tForm)}))}
+  let novo=null;
+  if(!m.recId){db.recurring=db.recurring||[];novo=normRec({name:tForm.label,every,next:tForm.date,until,end:recEnd,tx:txSnapshot(tForm)});db.recurring.push(novo)}
   else{const r=(db.recurring||[]).find(x=>x.id===m.recId);if(r){r.tx=txSnapshot(tForm);r.name=tForm.label;r.every=every;r.next=tForm.date;r.until=until;r.end=recEnd;
     if(r.tx.loanId)delete r.loanOff}}   /* escolheu a hipoteca à mão: a marca do delMort deixa de fazer sentido */
-  save();closeModal();buildNav();render();toast(m.recId?'Movimento recorrente atualizado.':'Movimento recorrente criado.');
+  save();closeModal();buildNav();render();
+  if(!novo)return toast('Movimento recorrente atualizado.');
+  /* a ficha do planeado é dos Planeados: o chamarServico guarda-a, e o avisoComVer
+     nem mostra o «Ver» com o separador deles desligado */
+  const rid=novo.id;
+  avisoComVer('Movimento recorrente adicionado.','recurring',()=>chamarServico('recurring','recView',rid));
 }
 /* Guardar no modo 'tpl': o modelo muda (ou nasce) e, com alsoTx, regista-se
    também o movimento — o de um grupo ou de «Todos os imóveis» partido por
@@ -156,10 +162,15 @@ function txGuardarModelo(){
   let novos=null;
   if(m.alsoTx){const tx=normTx(txSnapshot(tForm));tx.date=tForm.date||today();
     const r=registarMolde(tx);if(r.erro)return toast(r.erro);novos=r.partes}
-  if(!m.tplId){db.templates=db.templates||[];db.templates.push(normTpl({name,tx:txSnapshot(tForm)}))}
+  let novo=null;
+  if(!m.tplId){db.templates=db.templates||[];novo=normTpl({name,tx:txSnapshot(tForm)});db.templates.push(novo)}
   else{const x=(db.templates||[]).find(y=>y.id===m.tplId);if(x){x.name=name;x.tx=txSnapshot(tForm)}}
   if(novos)novos.forEach(tx=>{if(tx.kind==='loan')applyLoan(tx);db.transactions.push(tx)});
-  save();closeModal();buildNav();render();toast(!m.tplId?(m.alsoTx?'Modelo criado e movimento registado.':'Modelo criado.'):'Modelo atualizado.');
+  save();closeModal();buildNav();render();
+  if(!novo)return toast('Modelo atualizado.');
+  /* o «Ver» abre o modelo, que é o que se criou; os modelos vivem nos Planeados */
+  const tid=novo.id;
+  avisoComVer(m.alsoTx?'Modelo adicionado e movimento registado.':'Modelo adicionado.','recurring',()=>chamarServico('recurring','tplView',tid));
 }
 /* Guardar nos modos 'tx' e 'confirmar': o movimento entra (ou substitui o que
    se editou) e, confirmando um planeado, este avança. Um pagamento de crédito
@@ -173,7 +184,8 @@ function txGuardarModelo(){
    lote que passa a um imóvel só, ou a «Sem imóvel», fica um movimento normal
    com esse id, e um normal que passa a grupo fica o lote dele. O que só se
    sabe ao partir (um grupo sem imóveis, um imóvel onde não posso) recusa
-   antes de mexer na base.
+   antes de mexer na base. O novo (também o que nasce de confirmar um
+   planeado) leva o «Ver» no aviso (componentes.js:avisoComVer).
    Recebe: id — o id do movimento em edição (null num novo; numa parte de um
    lote, o dessa parte).
    Devolve: nada — grava, fecha e redesenha. */
@@ -182,6 +194,8 @@ function txGuardarMovimento(id){
   const old=id?db.transactions.find(x=>x.id===id):null;
   const velhas=partesDoLote(tForm.id),recusa=velhas.length?recusaDoLote(velhas[0]):'';
   if(recusa)return toast(recusa);
+  /* novo: nem o que se editou, nem um lote que se refaz — leva o «Ver» no aviso */
+  const novo=!old&&!velhas.length;
   let novos=null;
   if(ehDeVariosImoveis(tForm)){const r=partirMovimento(tForm);if(r.erro)return toast(r.erro);novos=r.partes}
   /* as hipotecas tocadas ficam com o capital do início gravado ANTES de os movimentos mudarem */
@@ -194,7 +208,11 @@ function txGuardarMovimento(id){
     if(i<0)db.transactions.push(tForm);else db.transactions[i]=tForm}
   tocadas.forEach(lid=>{const x=anyLoan(lid);if(x)acertarCapital(x.l)});
   if(recId&&servicoLigado('recurring')){const r=(db.recurring||[]).find(x=>x.id===recId);if(r)recAdvance(r)}
-  save();closeModal();buildNav();render();refreshDetail();toast(recId?'Movimento confirmado.':'Movimento guardado.');
+  save();closeModal();buildNav();render();refreshDetail();
+  if(!novo)return toast('Movimento guardado.');
+  /* de vários imóveis, a ficha da primeira parte é a do lote inteiro (txFicha) */
+  const alvo=novos&&novos.length?novos[0].id:tForm.id;
+  avisoComVer(recId?'Movimento confirmado.':'Movimento adicionado.','transactions',()=>txView(alvo));
 }
 /* Afina o tForm depois de mudar o imóvel ou o tipo: limpa quem paga/recebe se já não for dono,
    escolhe a hipoteca viva por defeito e, se o montante ainda estiver vazio, sugere valor e

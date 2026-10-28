@@ -20,7 +20,7 @@
 // por grupo leva o SAIU_DA_CASA; a linha sai quando o criador volta a
 // partilhar a casa com essa pessoa.
 //
-// O criador muda numa só situação: um pedido para passar o controlo a um
+// O criador muda numa só situação: um pedido para transferir o controlo a um
 // comproprietário, aceite por todos os comproprietários da casa
 // (rotas/casas.js:rotasTransferencias, migrações 0021 e 0022), que grava o
 // owner_id novo pelo gravarCasa como as outras escritas

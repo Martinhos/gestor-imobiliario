@@ -336,7 +336,7 @@ formulário do imóvel a arrastar-se. As miniaturas em memória são as de 220px
 
 ## O criador de uma casa pode mudar
 Antes da 0021, `houses.owner_id` era
-para sempre; agora um pedido aceite para passar o controlo muda-o. Os
+para sempre; agora um pedido aceite para transferir o controlo muda-o. Os
 participantes não mudam com ele: uma partilha dá a casa à ponta da ligação
 que não é o `owner_id` DELA, e por isso uma partilha pode ser de quem já não é
 o criador (herdada) e tem de continuar a valer. Código que apague ou regrave
@@ -345,7 +345,7 @@ levar as herdadas; código que leia `shared_group_houses.added_by` ou
 `collaborators.owner_id` como dono tem de ser acertado em
 casas.js:aceitarCasaUmaVez. `files.owner_id` é de quem carregou e não muda.
 
-## Um pedido para passar o controlo pode ficar com o sim de todos e por passar
+## Um pedido para transferir o controlo pode ficar com o sim de todos e por passar
 Quem tem de aceitar conta-se no momento (os participantes menos
 quem pediu), e só passa quando alguém aceita. Se o último que faltava deixa
 de ser comproprietário por um caminho que não chama
@@ -355,3 +355,31 @@ pedido fica pendente sem ninguém por responder — o /api/state acende o
 alguém de uma casa deve chamar passarSeTodosAceitaram com as casas dela. E um
 sim de quem chega por partilha só vale com a ligação a quem recebe
 (casas.js:progressoDaCasa): não contes os `approvals` à mão.
+
+## Dois hífens num comentário de XML partem o APK
+Num recurso do Android, `--` dentro de `<!-- … -->` não é XML válido e o
+aapt recusa o ficheiro — mas só no CI, porque nesta máquina não há SDK. Por
+isso um token do estilos.css não se cita com os hífens num colors.xml
+(android/app/src/main/res/values/colors.xml diz «a variavel marca»). O
+testes/app-dev-android.test.js lê os XML como o aapt e apanha-o aqui.
+
+## Um ícone instalado não muda com a publicação
+Os ficheiros mudam (o sw.js guarda-os na SHELL e só os renova com a versão
+nova), mas o ícone que já está no ecrã inicial é outra coisa: no iPhone o
+apple-touch-icon fica o do dia em que se adicionou a app, e só muda
+removendo-a do ecrã principal e adicionando-a de novo; no Android, o Chrome
+atualiza a app instalada quando volta a ler o manifesto, ao seu ritmo, e o
+APK só muda reinstalando o das Definições. Mudar o ícone pede uma linha nas
+novidades a dizer como o ver.
+
+## O wrangler r2 object get deixa um ficheiro vazio quando falha
+Com uma chave que não existe escreve «The specified key does not exist.»,
+sai com 1, e o --file fica criado com 0 bytes (wrangler 4.148, local e
+remoto). Quem só confirma que o ficheiro existe dá por boa uma imagem vazia:
+o scripts/qa.mjs olha para o código de saída e para o tamanho.
+
+## O npx no Windows passa pelo cmd, e o cmd come o texto
+O Node não lança um .cmd sem shell, e com shell os argumentos passam pelo cmd
+(aspas, %, ^, quebras de linha). Para texto livre, como as notas do
+scripts/qa.mjs, lança-se o node_modules/wrangler/bin/wrangler.js com o
+process.execPath e os argumentos em lista, sem shell.

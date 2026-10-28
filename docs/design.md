@@ -34,6 +34,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Padrões de página
 - A Visão geral
 - A jornada da vista geral
+- A apresentação
 - Um gráfico lê-se com o dedo
 - Uma tabela só quando diz o que o gráfico não diz
 - Uma comparação diz de que números fala
@@ -73,6 +74,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Navegação
 - Fora da app: a montra, os emails e o back office
 - A app em serviços
+- Os tickets de QA
 - A CSP sem «unsafe-inline»
 - Os eventos declaram-se, e uma ação é uma gramática
 - Os estilos vivem na folha, e nunca no HTML
@@ -126,7 +128,11 @@ lia-se como um erro.
 com --side-ink (o ativo, branco), --side-text (os itens), --side-muted (os
 títulos dos grupos), --side-hover, --side-on e --side-line só para ela;
 --cnt e --cnt-ink são o crachá quente da barra. --marca (estilos.css:--marca)
-é o cobalto da marca, igual nos dois temas. --toast, --toast-ink e
+é o cobalto da marca, igual nos dois temas, e é também o fundo dos ícones da
+app; as cores da janela do Android (bg, surface, bg_night e surface_night do
+android/app/src/main/res/values/colors.xml) são o --bg e o --card do claro e
+do escuro, e o testes/app-dev-android.test.js lê-as do estilos.css: mudar a
+paleta parte o teste até o Android a seguir. --toast, --toast-ink e
 --toast-btn são o aviso de baixo (estilos.css:--toast), escuro no claro e
 claro no escuro, para se destacar do fundo nos dois. --veu (estilos.css:--veu)
 é o véu da gaveta e das janelas. --blur é o fundo translúcido do cabeçalho e
@@ -613,7 +619,16 @@ entrada.js:cwTrocaConta). O valor fica num input escondido que val(id) lê
 função (o nome resolve-se pelo eventos.js:funcaoDaApp, que nunca chega a uma
 nativa). {div:true} é
 uma linha separadora; os grupos vão no fim com gdiv e gOpts
-(componentes.js:gdiv, componentes.js:gOpts). O menu vira-se para cima ou
+(componentes.js:gdiv, componentes.js:gOpts). O filtro «Imóvel» das listas é
+o mesmo em todas: «Todos os imóveis», os imóveis um a um, a linha e os grupos
+de imóveis, com o valor 'g:ID' e o rótulo «Grupo · Nome». Os Movimentos
+montam-no à sua maneira, com o «Sem imóvel atribuído»
+(lista-movimentos.js:txOpcoesImovel); os Contratos, os Planeados e os
+Créditos pelo componentes.js:imoveisEGruposOpts. Só entram os grupos com
+coisas nessa lista — um grupo sem contratos não aparece nos Contratos —, e o
+escolhido fica no menu mesmo que já não tenha. Escolher um grupo filtra pelos
+imóveis dele, e tudo o que a lista conta segue a escolha; apagar o grupo
+escolhido volta a todos (definicoes.js:gruposApagarLocal). O menu vira-se para cima ou
 encolhe para caber no primeiro antepassado que corta
 (componentes.js:posicaoPop, componentes.js:ajustarPop). Nunca cresce até
 ao espaço disponível: um menu de 16 categorias tomava 488px do ecrã (a
@@ -805,6 +820,32 @@ transform sem transição durante o arrasto).
 toast(m,op) (componentes.js:toast) é para o que aconteceu: 2,8 segundos,
 frase curta com ponto final. Tem role=status e aria-live
 (index.html:#toast).
+
+avisoComVer(m,separador,abrir) (componentes.js:avisoComVer) é para um
+registo acabado de adicionar: o aviso diz o que se adicionou («Imóvel
+adicionado.», «Visita adicionada.») e leva «Ver» seis segundos, como o
+«Anular» — e, como ele, afasta-se com o dedo. Tocar em «Ver» vai ao separador
+do registo (navegacao.js:go) e abre a ficha dele: o imóvel, o contrato, o
+movimento (de vários imóveis, a primeira parte, que a ficha lê como o lote
+inteiro — movimento.js:txFicha), o que nasce de confirmar um planeado
+(«Movimento confirmado.», no formulário e no Confirmar da linha —
+planeados.js:quickConfirmRec), o planeado, o modelo, a visita, o inquilino,
+o proprietário e a hipoteca. A ficha vem de quem adiciona, em `abrir`: a
+base não chama funções de serviço, e as de outro serviço passam pelo
+chamarServico. O «Ver» só aparece quando cabe: com o separador ligado nesta
+conta e só fichas abertas. Por cima de um formulário, ou de uma pergunta que
+a app abre logo a seguir a gravar (as prestações em falta de uma hipoteca —
+creditos.js:perguntarPrestacoesEmFalta; por isso o imóvel e a hipoteca dão o
+aviso depois dela), o aviso é o de sempre, sem botão; e se um formulário se
+abriu entretanto, tocar em «Ver» não navega por baixo dele. Mudar de
+separador fecha primeiro as fichas abertas (são de leitura, não há nada por
+guardar); no mesmo separador a ficha nova abre por cima. Uma edição fica com
+o aviso de sempre («Imóvel atualizado.», «Contrato guardado.», «Ficha
+guardada.»), sem botão: quem editou já estava a ver o registo. A ficha de
+pessoa criada a partir de um contrato volta ao contrato e não dá aviso. Um
+contrato com movimentos fora das datas mostra o aviso deles, com o «Ver»
+para a lista (contrato.js:ctGravar, contrato.js:verMovimentosFora) — esse
+vem primeiro.
 
 falhaCampo(id,msg) (componentes.js:falhaCampo) é para o que falta num
 formulário: o campo aponta (estilos.css:.err) e diz o que fazer numa frase
@@ -1419,9 +1460,31 @@ terços (.cw-terco), um sozinho atravessa (.cw-full), e a faixa âmbar
 atravessa sempre (.vg-cheia). A grelha tem doze colunas
 (estilos.css:.cw-dash) e responde à largura da vista, não à do ecrã: abaixo
 de 560px tudo atravessa, e os terços só começam nos 900px. Os valores são
-por inteiro: não há filtro de proprietário (ver «Navegação»). O painel dos
-filtros tem o imóvel (ou grupo) em foco e, quando os há, o seletor dos
-filtros comuns, que aqui aplicam o imóvel (vistas.js:anaPanelPadrao).
+por inteiro, e não há filtro global de proprietário (ver «Navegação»). O
+painel dos filtros tem o seletor do que está em foco e, quando os há, o
+seletor dos filtros comuns, que aqui aplicam o imóvel (painel-geral.js:dashBar).
+O seletor tem as opções das análises (vistas.js:anaOpcoesImovel: todos, cada
+imóvel do âmbito e, depois de uma linha, os grupos) e, depois de outra linha,
+os proprietários (painel-geral.js:dashOpcoesImovel): «Os meus» (os imóveis de
+que sou dono ou comproprietário, acessos.js:souDono) e «Proprietário · Ana
+Costa» por cada proprietário com quem partilho (pessoas.js:donosComPartilha,
+com os Proprietários ligados), que filtra os imóveis de que essa pessoa é
+comproprietária. Só entra quem tem algum imóvel no âmbito — um proprietário
+com quem só tenho uma ligação dava uma vista vazia — e, sem ninguém assim, não
+há a secção, nem «Os meus». O título do cartão do Portefólio diz o que está
+em foco (painel-geral.js:dashNomeDoFoco): o imóvel, «Grupo · Família»,
+«Proprietário · Ana Costa» ou «Os meus imóveis». As Projeções e a Avaliação
+escolhem do vistas.js:anaOpcoesImovel, sem proprietários. Um proprietário em
+foco é um grupo que não está na base: 'g:o:UID', e 'g:o:*' para «Os meus»
+(registos.js:DONO_EU, registos.js:pidDono). Fica com o prefixo dos grupos de
+propósito: o registos.js:pidProps dá-lhe os imóveis, e tudo o que pergunta «é
+um imóvel ou são vários?» — o peso dos movimentos (saldos.js:txW), as contas
+entre proprietários (vistas.js:contasCard), o «Novo movimento»
+(navegacao.js:criarMovimento), o cashflow por imóvel — já o trata como
+vários. Um proprietário sem imóveis no âmbito larga-se, como um imóvel que
+saiu (painel-geral.js:vDashboard). A
+apresentação do separador segue as mesmas caras — a jornada, o vazio, os
+números e o «O que podes fazer» (apresentacao-analise.js:aprACaraDoPainel).
 
 O «Pede atenção» (painel-geral.js:pedeAtencao) é só o que muda decisões. No
 computador são cartões lado a lado (estilos.css:.vg-atencao-grade): os por
@@ -1449,7 +1512,19 @@ juntam-se pela hora (notificacoes.js:notifAtividade) — é o que o crachá cont
 sino e o cartão do painel —, com a mesma marca de leitura: o «Marcar tudo
 como lido» cala-as também. Tocar numa saída abre a ficha do imóvel quando ele
 ainda está na base e os Imóveis estão ligados; sem isso a linha não é um
-botão. Com os Colaboradores desligados, as saídas de colaboradores não
+botão. Tocar num aviso das casas (uma linha de CW.state.departures: quem saiu,
+«Todos aceitaram: … passou a gerir …», recusou, cancelou) lê esse aviso só,
+antes de abrir a ficha, no sino e no cartão da atividade (o ir dele,
+notificacoes.js:notifSaidas): sai das novas e do crachá, e os outros novos
+continuam novos. A marca temporal (db.settings.notifLidoAte) não mexe — pô-la
+até ao aviso tocado calava os mais novos que ainda ninguém viu. O id vai para
+db.settings.notifLidos, um objeto {id: 1} (notificacoes.js:notifLidos), que
+sobe com as definições e se funde chave a chave entre aparelhos, pela razão
+das apresentações (cloud/apresentacao.js:APR_CHAVE); guarda só os ids que o
+servidor ainda manda (os 90 dias de worker/src/rotas/estado.js:DIAS_DOS_AVISOS),
+e os outros saem a cada toque (notificacoes.js:notifLerAviso). A atividade
+dos registos (um movimento, uma visita de outra pessoa) não tem id de aviso e
+lê-se só pela marca temporal. Com os Colaboradores desligados, as saídas de colaboradores não
 entram. Na linha do telemóvel, uma saída vai sozinha, sem o «Nome · » à
 frente, porque já começa por quem saiu.
 
@@ -1496,10 +1571,23 @@ passam o formatador à faixa (o fmtValor da série, painel-geral.js:vDashboard),
 para ela poder conferir o texto (ver «Uma comparação diz de que números
 fala»).
 
-Os gráficos mensais do ano acabam no mês corrente, ou no último com algum
-valor quando há movimentos de data futura (vistas.js:mesesAMostrar): a app
-aceita-os, e o fim da linha do acumulado tem de bater com o Cashflow. Uma
-linha a seguir por novembro e dezembro ao nível de hoje lia «dez −6 358 €».
+As entradas e saídas vão de janeiro a dezembro. O mês corrente e os passados
+são o registado; os seguintes somam ao que já estiver registado (os
+movimentos de data futura, que contam como sempre) o que os planeados preveem
+(painel-geral.js:previstoPorMes): as ocorrências de cada planeado nesses
+meses, as da Agenda (calendario.js:calPlaneados — sem os silenciados), cada
+uma com o movimento que a confirmação registaria (planeados.js:recTx), pesada
+pelo que está em foco como as métricas (metricas.js:txWeight). Uma ocorrência
+que já tem o seu movimento (planeados.js:jaRegistado) não conta duas vezes, e
+os que não contam nos totais e as amortizações antecipadas ficam de fora. Sem
+os Planeados ou sem o Calendário nesta conta não há previsões. Os meses
+previstos desenham-se esbatidos — cada coluna num <g> (estilos.css:.gprevista),
+para as barras ficarem com a classe de sempre —, com «previsto» na legenda e
+na leitura. O cashflow acumulado acaba no mês corrente, ou no último com algum
+valor quando há movimentos de data futura (vistas.js:mesesAMostrar): o fim da
+linha tem de bater com o Cashflow, e uma linha a seguir por novembro e
+dezembro ao nível de hoje lia «dez −6 358 €». Os quatro indicadores e os
+totais não levam previsões.
 Nas entradas e saídas as prestações, que são constantes, descem junto ao
 eixo, e as despesas, que variam, no fundo, como o canvas (o desceAoContrario
 do graficos.js:cBars, que só inverte a pilha dos negativos, sem mexer na
@@ -1549,14 +1637,14 @@ lê primeiro): a faixa das despesas sem imóvel guardou a do cartão de antes
 («card:Despesas sem imóvel»), e uma ordem guardada não a perde.
 
 
-Os pedidos para passar o controlo chegam a todos os comproprietários das
+Os pedidos para transferir o controlo chegam a todos os comproprietários das
 casas (CW.state.transfers.incoming, notificacoes.js:notifTransfRecebidas),
 não só a quem recebe. Enquanto me falta responder (porResponder,
 notificacoes.js:notifTransfPorResponder) são pedidos por responder: contam no
 crachá, têm linha no telemóvel e entram no cartão dos pedidos
 (cloud/partilha.js:pedidoDeTransferenciaHtml) com «Ver» e «Recusar» — o
-Aceitar não está na linha: passar o controlo lê-se antes. A linha diz quem
-pede, de quê e a quem: «Alice quer passar o controlo de T2 Benfica a Bruno»
+Aceitar não está na linha: transferir o controlo lê-se antes. A linha diz quem
+pede, de quê e a quem: «Alice quer transferir o controlo de T2 Benfica a Bruno»
 ou «… a ti» (notificacoes.js:notifTransfTitulo), e por baixo quem passa a
 gerir se todos aceitarem e, com um imóvel, quem já aceitou e quem falta
 (notificacoes.js:notifTransfSub). O «Ver» (notificacoes.js:notifTransfVer)
@@ -1593,12 +1681,12 @@ crachá. Sem o campo no estado (um servidor de antes), não há nenhum; um
 pedido sem `to`, `aceitaram`, `faltam` nem `porResponder` lê-se como dantes
 (é para mim, e só eu aceito).
 
-Pelo mesmo caminho chegam os avisos dos pedidos para passar o controlo,
+Pelo mesmo caminho chegam os avisos dos pedidos para transferir o controlo,
 cada um com a sua frase (notificacoes.js:notifFraseDoAviso): «Todos
 aceitaram: Bruno passou a gerir T2 Benfica.» (a quem pediu, quando o último
 aceita; o ator é quem recebeu o controlo), «Carlos recusou o pedido para
-passar o controlo de …» (a quem pediu e aos outros comproprietários dessa
-casa: o pedido caiu nela), «Alice cancelou o pedido para passar o controlo
+transferir o controlo de …» (a quem pediu e aos outros comproprietários dessa
+casa: o pedido caiu nela), «Alice cancelou o pedido para transferir o controlo
 de …» (aos comproprietários, recebam ou não), «Bruno passou a gerir … na
 app.» (aos outros comproprietários, 'casa.novo_dono') e «Bruno passou a
 gerir …: continuas com o mesmo cargo.» (aos colaboradores de quem o geria,
@@ -1664,6 +1752,157 @@ folha de baixo encolhe e, no tablet, a janela centra-se no que sobra, com o
 par vh e dvh (estilos.css:body.com-guia, estilos.css:body.guia-sobre). O
 texto do passo não se esconde: é quando ele faz falta.
 
+As boas-vindas deste cartão (guia.js:boasVindas, o olá pelo nome) são da
+vista; as da janela que recebe quem cria conta são outra coisa, e vivem em
+«A apresentação».
+
+## A apresentação
+Quem cria conta é recebido pelas boas-vindas, e cada separador explica-se na
+primeira vez que uma conta lá chega: a mesma janela, com um carrossel de
+imagens (cloud/apresentacao.js). As imagens são a app em miniatura, desenhada
+em HTML com os tokens — seguem o claro, o escuro e o escurecimento do Samsung
+— sobre o mosaico da marca: o kit (apresentacao.js:aprCena,
+apresentacao.js:aprTela e as peças a seguir) e um portefólio inventado, o da
+montra, com números que fecham entre si (apresentacao.js:APR_EXEMPLO). Cada
+separador regista a sua (apresentacao.js:registarApresentacao) num dos
+cloud/apresentacao-casas.js, cloud/apresentacao-dinheiro.js e
+cloud/apresentacao-analise.js; as boas-vindas vivem no apresentacao.js. Uma
+imagem que só serve a algumas contas leva um `quando`, e um texto que só muda
+numa parte é uma função: quem só colabora não lê como se cria o que o cargo
+não deixa (apresentacao.js:aprPodeCriar), e um serviço desligado leva consigo
+as imagens dele.
+
+A janela é um openModal (apresentacao.js:aprAbrir): o ✕ da cabeça, o Esc, o
+voltar e o arrasto da folha fecham-na como a qualquer outra, e é o aoFechar da
+camada que a marca como vista, por qualquer caminho
+(apresentacao.js:aprAoFechar). Quem a fecha por um desses caminhos antes da
+última imagem pode estar a dizer que não quer nenhuma: a app pergunta-lhe,
+uma vez por conta, «Não queres ver as apresentações?»
+(apresentacao.js:aprPerguntar), nas boas-vindas e nos separadores, e a marca
+espera pela resposta. Três botões em coluna, o primário em baixo
+(estilos.css:.apr-pergunta): «Voltar à apresentação» reabre-a na imagem onde
+estava e não gasta a pergunta; «Não mostrar mais» marca-a vista e nenhuma
+volta a abrir sozinha (a chave nenhuma); «Continuar a mostrar» marca-a vista
+e as outras abrem na primeira visita (apresentacao.js:aprResponder). As duas
+últimas guardam a resposta (a chave perguntou), e fechar a pergunta sem
+escolher é o fecho de sempre, que pergunta outra vez da próxima. O «Percebi»,
+a última imagem e a Ajuda nunca perguntam. Não há interruptor para as voltar
+a ligar: a Ajuda reabre cada uma. No corpo, o palco com as imagens lado a lado
+numa fita — cada uma é a maquete e, por baixo, o título e o texto, e viajam
+juntas —, os pontos e a frase do leitor de ecrã (apresentacao.js:aprCorpo); a
+imagem tem altura fixa (estilos.css:.apr-imagem) e a fita estica as folhas à
+altura da maior, por isso a janela não salta de tamanho entre elas. No rodapé,
+Anterior (sem ele na primeira) e Seguinte, primário; na última, o botão do
+fim — «Percebi» nos separadores, «Ir para os imóveis» nas boas-vindas
+(apresentacao.js:aprPintar, apresentacao.js:aprFimDe). O palco é uma região
+com nome, cada imagem um grupo «N de M», as de fora inertes, e a cada
+passagem o leitor de ecrã ouve «Imagem 2 de 7» e o título. Os pontos são só
+desenho, e o de agora é mais comprido: a forma diz qual é, também com o
+escurecimento forçado (estilos.css:.apr-pontos). No computador a janela tem
+620px e as peças crescem com ela (estilos.css:.apr-cena).
+
+O gesto é o das fotos (web/app/anexos.js:fotoArrastar, o padrão copiado e não
+chamado): o eixo decide-se aos 10px (apresentacao.js:aprEixo), largar depois
+de um quarto da largura ou com um sacudir passa à vizinha
+(apresentacao.js:aprDecide), nas pontas a fita resiste
+(navegacao.js:sepElastico) e não dá a volta, um gesto vertical é do corpo da
+janela, e o clique a seguir a um arrasto engole-se. Os botões correm a fita
+parada no --lento e na --curva-fita; largada por um dedo, já vem a andar e
+acaba no --medio e na --curva-entra (apresentacao.js:aprCorrer); um toque ou
+um dedo a meio apanham-na onde ela vai. As setas do teclado passam sem fita
+(apresentacao.js:aprTecla), e sem movimento a troca é de uma vez. Nas
+boas-vindas, a janela mais rara da app, as peças da primeira imagem entram
+umas a seguir às outras (estilos.css:aprSurge, a escada do
+apresentacao.js:aprSurge); nas dos separadores, não.
+
+Quando abre (apresentacao.js:aprTentar): a de um separador, na primeira
+chegada a ele por qualquer caminho — quem repara é o render, embrulhado no fim
+do ficheiro, e nunca o do vizinho que o carrossel dos separadores pinta às
+escondidas (vistas.js:_pintarAParte) —; nas Definições só a raiz. Só depois de
+o servidor responder (CW._pulled: num aparelho novo as definições chegam
+vazias até lá) e só com o ecrã livre (apresentacao.js:aprEcraOcupado: sem a
+entrada, sem portão, sem janela aberta, sem a ligação de um convite por abrir,
+sem uma leitura do estado a meio, sem o tutorial, a gaveta ou um modo). Se a
+pessoa sair do separador antes, fica para a próxima chegada. O que sai sem
+avisar (os termos aceites no servidor, o convite, a leitura) fá-la tentar de
+novo de 800 em 800ms; o resto avisa quando sai, pelos embrulhos do
+closeModal, do closeDrawer, do CW.acceptLegal, do CW.acceptTerms, do
+CW.guiaFechar e do pullNow.
+
+As boas-vindas são de quem cria conta: o registo por email
+(entrada.js:CW.submitAuth) e a primeira entrada com o Google, que o servidor
+marca com novo:true (worker/src/rotas/auth.js, entrada.js:socialLogin), dão o
+sinal de conta nova (apresentacao.js:aprContaNova). Ele nasce no aparelho,
+porque chega antes do servidor, e depois de o servidor responder passa para as
+definições como «por ver» (apresentacao.js:aprGuardarPorVer): quem fecha a app
+antes de as ver vê-as noutro aparelho. Passam à frente de qualquer separador,
+esperam pelo aviso inicial e pela janela de um convite (a marca
+CW._chegadaPorAbrir do entrada.js:CW.resgatarChegada), e fechá-las conta
+também a Visão geral e os Imóveis como vistos. Fechadas fora da Visão geral,
+ou depois de fechar as novidades, a apresentação do ecrã onde se está fica
+para a chegada seguinte: nada de duas janelas seguidas
+(apresentacao.js:aprAdiarOEcra, novidades.js:CW.novFechar). São sete imagens:
+os parabéns, com o primeiro nome da conta («Parabéns, Maria. A partir de
+hoje, nenhuma renda te passa despercebida.»), o imóvel, o inquilino, o
+contrato, os planeados e as quatro origens deles (planeados.js:recOrigem), os
+modelos, e o fim. O fim adapta-se (apresentacao.js:aprBVFimTexto): «Cria o
+teu primeiro imóvel» sem imóveis, «Os teus imóveis já estão à tua espera» com
+eles, e «Os imóveis já estão à tua espera», com quem deu acesso e o cargo, a
+quem só colabora.
+
+O estado é da conta e viaja entre aparelhos: db.settings.apresentacoes, um
+objeto {id: 1} numa chave sem «_» (apresentacao.js:aprMarcarVista). É um
+objeto e não uma lista porque a fusão a três o junta chave a chave, no cliente
+e no servidor: dois aparelhos que marcam separadores diferentes ficam com as
+duas marcas. As novidades e a apresentação esperam uma pela outra: as
+novidades não abrem com a janela aberta nem com as boas-vindas por ver
+(novidades.js:ecraLivre, apresentacao.js:aprOcupaOEcra), e a apresentação não
+abre por cima de janela nenhuma. A Ajuda reabre-as, na secção «Apresentações»
+a seguir a «Como se faz», com as boas-vindas e cada separador que a conta vê,
+pela ordem da navegação e com o selo «Vista» (ajuda.js:apresentacoesNaAjuda,
+apresentacao.js:aprDaConta); rever acaba sempre no «Percebi» e não pergunta
+nada (apresentacao.js:aprRever), e só mexe no estado quando se chega à última
+imagem: aí, feche-se no «Percebi» ou no ✕, fica vista — só ela — e a Ajuda
+repinta-se com o selo (apresentacao.js:aprMarcarRevista). Enquanto houver
+alguma por ver, por baixo dos mosaicos, «Marcar todas como vistas» marca-as
+todas numa gravação e nenhuma abre sozinha (apresentacao.js:aprMarcarTodasVistas).
+
+As das Casas (cloud/apresentacao-casas.js) dizem, separador a separador, o que
+se vê na lista, o que um toque abre, o ⋮ da ficha (o icones.js:dots, que é o
+que se vê), o segurar que seleciona vários — só onde o há
+(cloud/selecao-listas.js:TABS_SEL) —, por onde se cria e os filtros, e deixam
+uma dica. O caminho de criar muda com o ecrã: o + da barra de baixo no
+telemóvel, o botão do cabeçalho no computador (apresentacao-casas.js:aprCLargo,
+apresentacao-casas.js:aprCNovo). O portefólio delas continua o do kit
+(apresentacao-casas.js:aprCExemplo).
+
+As do Dinheiro e da Agenda (cloud/apresentacao-dinheiro.js) ensinam um assunto
+por imagem: os Movimentos a lista, os filtros, o tocar e o segurar e o Criar;
+os Planeados o «Por confirmar» com o Rever, a faixa do que vem de trás, as
+origens e os modelos; os Créditos o capital que se deriva; o Calendário o mês,
+o dia e o crachá da Agenda. Os números da hipoteca saem da conta da própria app
+(credito.js:amort), e as datas contam-se a partir de hoje, a mostrar só o que a
+app mostraria nesse dia: um planeado já confirmado não deixa ponto no dia dele
+(apresentacao-dinheiro.js:aprDProxima,
+apresentacao-dinheiro.js:aprDPlaneadosDoMes; o exemplo próprio,
+apresentacao-dinheiro.js:aprDExemplo).
+
+As da Visão geral, da Análise e das Definições (cloud/apresentacao-analise.js)
+fazem as contas com as regras da app: o ano soma os meses do exemplo
+(apresentacao-analise.js:aprAAno), a Avaliação reparte-o pelos imóveis
+(apresentacao-analise.js:aprAPorImovel), as Projeções levam-no para a frente
+com a taxa de cada ano (irs.js:irsRate), e o IRS estima o englobamento pelos
+escalões do ano (fisco.js:fiscoColeta). A da Visão geral mostra a cara que a
+conta tem, pela ordem do painel-geral.js:vDashboard
+(apresentacao-analise.js:aprACaraDoPainel): a jornada, o vazio sem imóveis, o
+vazio com eles, os números, e o «O que podes fazer» de quem só colabora sem
+finanças; o «Personalizar painel» só a quem pode registar movimentos
+(painel-geral.js:dashDepois). Como as boas-vindas a marcam como vista, ela é
+sobretudo das contas de antes e de quem a revê pela Ajuda. A do IRS · Anexo F
+só existe fora de produção, como o separador (apresentacao-analise.js:aprAFiscoAqui),
+e diz o que a página faz e mais nada: quem declara é a pessoa, no Portal das
+Finanças.
+
 ## Um gráfico lê-se com o dedo
 Tocar numa barra cuspia um balão que aparecia DEBAIXO DO DEDO e ia-se
 embora ao fim de 2,2 segundos. Três coisas mal, e todas se veem a usar: a
@@ -1725,7 +1964,11 @@ no mês corrente — ou no último antes dele com movimento, que no dia 1 o mês
 ainda está vazio —, como o canvas («out 2026 · Receita …»), e o cashflow
 acumulado acende o mês corrente. O cBars aceita ainda desceAoContrario: os
 segmentos negativos empilham pela ordem inversa, e a legenda e a leitura
-ficam como estavam. Os dois gráficos mensais têm 150 de altura
+ficam como estavam. E aceita previstoDe, o índice da primeira coluna prevista
+(graficos.js:cBars): dessa coluna em diante as barras esbatem, a legenda ganha
+a entrada «previsto» (graficos.js:legend, com cls e a bolinha sem cor de
+série) e a leitura, as dicas e a descrição dizem «nov · previsto»; o eixo fica
+«nov». Os dois gráficos mensais têm 150 de altura
 no desenho (painel-geral.js:GRAF_ALTURA): ~150px no telemóvel, ~235px em
 meio ecrã de computador.
 
@@ -1890,14 +2133,17 @@ E vive no cabeçalho ao lado do título, nunca em cima de outra peça dele:
 esteve no canto superior direito, que é onde o sino mora, e ninguém tinha
 dado por isso porque nenhuma cena do percurso o mostrava — só aparecia
 quando a ligação caía. Há uma cena por estado e uma regra que guarda o sítio
-(testes/ui/invariantes.js). No telemóvel o selo é o ícone, e as frases que
-ficam — «por enviar» e «sem ligação» — descem para uma faixa fina por baixo
-do cabeçalho, a toda a largura, e o cabeçalho cresce o que ela ocupa (ver
-«Navegação»). O «A ligar» da abertura é só o ícone: a faixa a entrar e a
-sair em cada abertura fazia o cabeçalho saltar duas vezes por nada. Mas uma
-nova tentativa depois de uma falha herda a faixa que lá está, agora laranja
-(a classe .tenta, estilos.css:header.top) — sem isso o cabeçalho encolhia e
-crescia de 30 em 30 segundos enquanto a rede não voltasse.
+(testes/ui/invariantes.js). No telemóvel o selo é o ícone, com a frase no
+aria-label e no title, e só o «Sem ligação» desce para uma faixa fina por
+baixo do cabeçalho, a toda a largura, com o cabeçalho a crescer o que ela
+ocupa (ver «Navegação»). O «N alterações por enviar» fica o ícone cobalto: a
+cada gravação o selo passa por ele e logo a seguir pelo «Guardado», e a faixa
+a entrar e a sair fazia o cabeçalho saltar a cada gravação. O «A ligar» da
+abertura também é só o ícone, pela mesma razão, a cada abertura. Mas uma nova
+tentativa depois de uma falha herda a faixa que lá está, agora laranja (a
+classe .tenta, estilos.css:header.top) — sem isso o cabeçalho encolhia e
+crescia de 30 em 30 segundos enquanto a rede não voltasse. A .tenta só nasce
+do «Sem ligação» ou de outra tentativa, nunca do «por enviar».
 
 ## Uma porta, e nenhum beco
 As opções de um registo — editar, duplicar, apagar, selecionar vários —
@@ -2097,8 +2343,9 @@ lado passa à seguinte ou à anterior das fotos desse imóvel, com volta:
 depois da última vem a primeira, e antes da primeira a última
 (web/app/anexos.js:fotoCarrossel, web/app/anexos.js:fotoVolta). O «3 de 8»
 fica por baixo da foto, antes do tamanho e da data, e o título da janela é o
-nome da foto de agora («Foto 3» sem nome); o «Guardar» guarda a que está à
-vista (web/app/anexos.js:fotoGuardar). Entram as fotos do imóvel a que a foto
+nome da foto de agora («Foto 3» sem nome); o «Descarregar» descarrega para o
+aparelho a que está à vista (web/app/anexos.js:fotoDescarregar) — não se diz
+«Guardar», que na app é gravar um formulário. Entram as fotos do imóvel a que a foto
 pertence, só as imagens, pela ordem dele — a primeira é a capa
 (web/app/anexos.js:fotosDoImovel); vinda do formulário do imóvel (as
 miniaturas do componentes.js:fileBlock, que chamam `openMeta(id,true)`), a
@@ -3162,7 +3409,12 @@ Por cima da lista, a pesquisa à vista com o funil e os chips
 Em vigor, Por começar, Terminados, cada um com quantos há nos imóveis do
 âmbito (ver «Padrões de página»; lista-contratos.js:ctCampoEstado, aplicado
 pelo lista-contratos.js:ctFiltroRapido) —, o imóvel quando há mais de um com
-contratos, e a ordenação só no ecrã largo. O grupo está no painel. A porta
+contratos — os imóveis com contratos, a linha e os grupos de imóveis com
+algum deles (componentes.js:imoveisEGruposOpts) —, e a ordenação só no ecrã
+largo. Um grupo de imóveis escolhido filtra pelos imóveis dele
+(lista-contratos.js:ctNoImovel): as linhas, as contagens do estado e o rodapé
+dos imóveis sem contrato em vigor (lista-contratos.js:ctRodapeDaLista). O
+«Grupo» do painel é outro filtro, o dos grupos de contratos. A porta
 da seleção de vários é o «Selecionar vários» do cabeçalho, e a dica do
 computador diz-o. Sem imóveis ou sem contratos não há barra. Por baixo
 (lista-contratos.js:ctRodapeDaLista): com
@@ -3395,6 +3647,25 @@ de cada mês num cartão só, separadas por um traço (estilos.css:.mov-lista).
 O título do mês é o mesmo dentro e fora da seleção, sem caixa (ver «Entrar na
 seleção é como nas Casas»).
 
+A ordem da lista é a da data, e no mesmo dia a da hora a que cada movimento
+foi adicionado (dados.js:txPorDataECriacao): do mais recente para o mais
+antigo, o adicionado depois fica em cima — o último que se registou num dia
+é o primeiro desse dia. A hora é o campo criado do movimento (ms, o
+Date.now() de então), que o normTx dá a um movimento novo — um objeto sem id:
+o formulário, um planeado confirmado, as partes de um lote, as estimativas,
+o Splitwise, o liquidar — e guarda quando já vem. Um movimento de antes do
+carimbo fica sem o campo, e não com uma data inventada, que o fazia mudar e
+subir ao servidor; no comparador conta como 0, por isso fica abaixo dos
+novos do mesmo dia e dois antigos empatam como sempre empataram. Editar
+mantém-no (o formulário parte de uma cópia com id, e aplicar um modelo a um
+movimento guardado também o guarda: planeados.js:applyTemplate), e a fusão a
+três trata-o como qualquer campo. Os modelos e os planeados não o levam (não
+está no TX_TPL_KEYS): cada movimento que deles nasce tem o seu. Pelo valor, o
+empate vai pela data e pelo criado, sempre ascendente. A lista de um
+indicador (cloud/painel.js:kpiTxs) e a dos movimentos de um contrato
+(contrato.js:ctVerMovimentos) usam o mesmo comparador, do mais recente para o mais
+antigo.
+
 Por cima da lista, os totais são o kpi da casa, compacto
 (estilos.css:.mov-tot): Receitas, Despesas, Prestações (roxo, a classe
 .prest), as dívidas a terceiros em cobalto (estilos.css:.mov-div) e o Saldo
@@ -3615,7 +3886,13 @@ Os Planeados (planeados.js:vRecurring, o canvas M-Planeados) são, por esta
 ordem: a faixa de quem vem de trás, o cartão «Por confirmar», a pesquisa à
 vista com o funil e os chips (vistas.js:lfCabeca), a lista num cartão e os
 Modelos em chips, com o valor quando o têm. Os chips são o estado, o tipo e,
-no ecrã largo, o imóvel. O estado (planeados.js:REC_ESTADOS, aplicado pelo
+no ecrã largo, o imóvel. O imóvel tem todos os imóveis, a linha e os grupos
+de imóveis com planeados ou modelos (planeados.js:recGrupoTemPlaneados); um
+grupo escolhido mostra os planeados e os modelos dos imóveis dele e os do
+próprio grupo (planeados.js:recNoImovel), e as contagens seguem-no. Nos
+Créditos, o imóvel tem os imóveis com hipotecas, a linha e os grupos com
+hipotecas, e um grupo escolhido mostra as hipotecas dos imóveis dele
+(creditos.js:vCredits). O estado (planeados.js:REC_ESTADOS, aplicado pelo
 planeados.js:recChip — o mesmo lf('lrec').st do seletor do painel) tem
 Automáticos, Criados à mão, Silenciados, Por confirmar e Em dia, cada um com
 quantos há pelos olhos dos outros filtros; ligado diz o rótulo curto. A
@@ -3667,7 +3944,10 @@ quanto e com que etiqueta. «Registar os N» abre a janela do preenchimento
 estimativa; «Agora não» guarda no aparelho quantos faltavam
 (planeados.js:recRetroAgoraNao; a chave gi_retro_agora_nao é
 planeados.js:RETRO_LS), e a faixa só volta a esse planeado se passarem a
-faltar mais.
+faltar mais. Gravar um contrato antigo abre a mesma janela sozinha, uma vez
+por planeado novo (cloud/painel.js:offerFill); os planeados dos dados de
+exemplo nascem conhecidos (cloud/painel.js:refreshKnown, a seguir ao
+arranque.js:seed), e não a abrem para rendas de contratos inventados.
 
 Os Créditos (creditos.js:vCredits, os canvas M-Creditos e D-Creditos) abrem
 com o resumo (creditos.js:credResumo): no telemóvel o cartão azul-noite
@@ -3735,7 +4015,11 @@ a primeira linha leva as prestações do mês da primeira até dezembro — a
 primeira é a próxima por
 confirmar com os Planeados ligados, senão hoje (creditos.js:credPrimeiraData,
 que é também o «Prestação de …» do painel) —, as seguintes doze cada, e cada
-linha tem o seu ano. As barras do resumo e o gráfico de «Todas as hipotecas»
+linha tem o seu ano. Nenhuma prestação vem antes do início: numa hipoteca que
+começa no futuro, a primeira é a do mês do início, no dia dele (máx. 28,
+credito.js:primeiraPrestacao), e é aí que nasce o planeado da prestação; mudar
+o início para depois da próxima por confirmar leva-a com ele
+(planeados.js:syncLoanRec). As barras do resumo e o gráfico de «Todas as hipotecas»
 somam pelo ano de cada linha (creditos.js:credDividaPorAno): antes do
 primeiro ano do seu plano uma hipoteca ainda deve o capital de agora, depois
 do último já não deve nada; a barra acesa é a do ano corrente. A ficha da
@@ -3988,7 +4272,10 @@ A rede de segurança do arranque (em linha no index.html, antes de todos os
 <script>) apaga as caches e recarrega quando um ficheiro não carrega — mas
 nunca sem rede (o navigator.onLine === false é o único valor de confiança),
 no máximo uma vez em cada dez minutos, e levando antes o erro que a fez
-disparar (index.html:levarAntesDeRecarregar). O ecrã que tranca uma versão
+disparar (index.html:levarAntesDeRecarregar). Só os ficheiros da casa a
+fazem disparar (index.html:deFora): o beacon das estatísticas que o Cloudflare
+injeta é recusado pela CSP (e pelos bloqueadores de anúncios), e curava a app
+de dez em dez minutos por nada. O ecrã que tranca uma versão
 velha demais fica acima do de entrada e tranca também as escritas
 (novidades.js:gateAtualizar, e o CW.trancado que a api() respeita): velha
 demais para se usar é velha demais para escrever.
@@ -4222,7 +4509,8 @@ As páginas:
   até à borda do cartão (100cqi), larga, até 340px. O «Fora dos totais» de
   cada linha é um <label> com o interruptor (definicoes.js:tabelaDeCategorias,
   estilos.css:.def-cat-fora): o toque no rótulo liga, e a área chega aos
-  44px. «Repor as colunas do Anexo F» vive numa linha só dela, por baixo da
+  44px; ligado é vermelho (--danger) e não o cobalto dos outros
+  interruptores, porque tira a categoria das contas. «Repor as colunas do Anexo F» vive numa linha só dela, por baixo da
   nota (estilos.css:.def-repor). As confirmações de apagar uma categoria, uma
   subcategoria ou uma etiqueta dizem quantos movimentos no singular ou no
   plural (definicoes.js:delCat, definicoes.js:delSub, definicoes.js:delTag).
@@ -4290,8 +4578,8 @@ As páginas que a nuvem pendura na raiz vestem o mesmo:
   dar o meu e escrever o do outro no mesmo cartão
   (partilha.js:comproprietariosCorpo); os pedidos e a ligação de partilha. As
   ligações ativas não se repetem lá, que já estão na lista de cima
-  (pessoas.js:donosComPartilha), e o vazio só diz «Ainda não estás ligado a
-  ninguém.» quando não há ligação nenhuma. Com o serviço Colaboradores
+  (pessoas.js:donosComPartilha), e o vazio só diz «Ainda não tens
+  ligações.» quando não há ligação nenhuma. Com o serviço Colaboradores
   desligado nesta conta, no lugar da secção fica a frase «O serviço
   Colaboradores está desligado nesta conta. A partilha entre contas fica
   disponível quando o suporte o ligar.» O «Copiar» diz «Id copiado. Dá-o ao
@@ -4322,7 +4610,9 @@ As páginas que a nuvem pendura na raiz vestem o mesmo:
   rejeitar ou cancelar ali mesmo) e «Propor nova divisão», que abre os
   campos com a divisão atual (partilha.js:quotasDaCasaHtml).
 - «Ajuda e sugestões» (ajuda.js:vAjuda, M-Ajuda): «Como se faz», os
-  tutoriais num carrossel (ajuda.js:tutoriaisNaAjuda); as perguntas de
+  tutoriais num carrossel (ajuda.js:tutoriaisNaAjuda); as «Apresentações» —
+  as boas-vindas e a de cada separador —, no mesmo carrossel
+  (ajuda.js:apresentacoesNaAjuda; ver «A apresentação»); as perguntas de
   destaque, com a porta para as outras; «Os teus pedidos» com «Novo
   pedido», cada um com o selo do estado — Recebido cobalto, Em resolução
   âmbar, Concluído verde — e a resposta da equipa numa caixa --accent-soft
@@ -4578,7 +4868,7 @@ O bloco «O que aceitar uma casa faz» (:4600-4656) fica quase igual: muda o
 título, entra a ligação nova e o autor dos avisos (abaixo, em «O que passar
 uma casa faz»). «O que cada um gere a seguir» (:4658-4672) fica como está.
 
-**Passar o controlo de um imóvel.** A casa é de todos os comproprietários; o
+**Transferir o controlo de um imóvel.** A casa é de todos os comproprietários; o
 criador (`houses.owner_id`) é só quem a controla na app — apaga-a, partilha-a
 nas ligações dele, põe-na nos grupos, gere os colaboradores dela. O criador
 de uma ou várias casas pede para passar esse controlo a quem já é
@@ -4637,7 +4927,7 @@ volta a faltar, e aceitar outra vez liga-os de novo.
   (`UPDATE … WHERE approvals = <o lido>`), como as aprovações das propostas
   de quotas: dois sins ao mesmo tempo não se perdem — o segundo relê e
   junta-se. Uma casa que já não vale — apagada, com outro criador, ou quem
-  recebe já não é comproprietário dela («Já não és comproprietário deste
+  recebe já não é comproprietário dela («Já não és parte da compropriedade deste
   imóvel.» a quem recebe; «Quem ia receber já não é comproprietário deste
   imóvel.» aos outros) — fica `cancelled` e vai em `falhadas` com a frase; uma
   que outra escrita mudou três vezes seguidas fica como estava e vai em
@@ -4708,7 +4998,7 @@ com as casas que se perderam). Apagar a conta de um comproprietário que
 faltava não passa logo: o aceitar trata-o (a casa falha com a frase, ou
 passa — o `porResponder` acende-se para quem a vê com o sim de todos).
 
-Quem criou um imóvel em compropriedade pode passar o controlo dele na app a
+Quem criou um imóvel em compropriedade pode transferir o controlo dele na app a
 um dos comproprietários; só isso muda (a casa continua a ser de todos), e
 todos os comproprietários têm de aceitar. O ⋯ da ficha tem «Passar o
 controlo» antes do «Apagar imóvel» (imovel.js:imvMenuDaFicha), só a quem o
@@ -4716,13 +5006,13 @@ criou, com sessão, com um servidor que já sabe destes pedidos (o estado traz
 `transfers`: notificacoes.js:notifTransfSabe — num de antes a ação não
 aparece, levava a um 404), sem um pedido pendente dessa casa e com pelo menos
 um comproprietário a quem o passar (imovel.js:imvPossoTransferir). Na seleção
-das Casas, com a ação disponível, a barra ganha o «Passar o controlo» ao lado
+das Casas, com a ação disponível, a barra ganha o «Transferir o controlo» ao lado
 do Apagar, na barra de duas linhas (cloud/selecao-listas.js:selLComAcoes,
 CW.selLTransferir); a razão ao lado da contagem diz quantos ficam de fora
 (selLPintarTransferir), e a folha diz quais e porquê.
 
-A folha (imovel.js:imvTransferir) chama-se «Passar o controlo» com um imóvel
-e «Passar o controlo de N imóveis» com vários. Vão só os que criei, sem
+A folha (imovel.js:imvTransferir) chama-se «Transferir o controlo» com um imóvel
+e «Transferir o controlo de N imóveis» com vários. Vão só os que criei, sem
 pedido pendente e com comproprietários; os outros dizem-se no cimo, uma frase
 por razão (imovel.js:imvTrfFora), e sem nenhum que vá é um aviso, sem folha.
 «Para quem» é obrigatório, com os comproprietários do imóvel — os
@@ -4762,7 +5052,7 @@ quem recebe (já não é comproprietário) vai para o «Para quem»; os outros,
 num aviso, com a folha aberta.
 
 A ficha mostra o pedido pendente por baixo dos donos
-(imovel.js:imvTrfNaFicha): «Pediste para passar o controlo a Bruno», quem já
+(imovel.js:imvTrfNaFicha): «Pediste para transferir o controlo a Bruno», quem já
 aceitou e quem falta nesse imóvel (notificacoes.js:notifTransfProgresso:
 «Já aceitou: Ana. Falta responder: Bruno.»), que até todos aceitarem nada
 muda, as outras casas do mesmo pedido (cancelar cancela o pedido todo) e o
@@ -4770,12 +5060,12 @@ Cancelar (notificacoes.js:notifTransfCancelar, sem perguntar: não muda nada
 e pode-se voltar a pedir). Quando só quem recebe tem de aceitar, sem lista:
 «Até Bruno aceitar, nada muda.». Num imóvel de que sou comproprietário com
 um pedido que me chegou, o mesmo cartão diz quem pede e a quem vai («Rui quer
-passar o controlo deste imóvel a Bruno», ou «… a ti»), quem já aceitou e
+transferir o controlo deste imóvel a Bruno», ou «… a ti»), quem já aceitou e
 quem falta (eu sou «tu»), e tem o «Ver» — primário enquanto me falta
 responder, secundário depois de aceitar.
 
 A ficha mostra o pedido pendente por baixo dos donos
-(imovel.js:imvTrfNaFicha): «Pediste para passar o controlo a Bruno», que
+(imovel.js:imvTrfNaFicha): «Pediste para transferir o controlo a Bruno», que
 até ele aceitar nada muda, as outras casas do mesmo pedido (cancelar
 cancela o pedido todo) e o Cancelar (notificacoes.js:notifTransfCancelar,
 sem perguntar: não muda nada e pode-se voltar a pedir). Num imóvel cujo
@@ -5158,7 +5448,11 @@ A marca, no topo da gaveta e da barra lateral (index.html, a .brand) e no
 ecrã de entrada (cloud/entrada.js), é a casa do ícone da app — o telhado com
 beirais, as paredes e a porta pequena, o `home` do icones.js:ic — em branco
 num quadrado cobalto de 30px com raio 8 (estilos.css:.marca). É a mesma forma
-dos ícones da PWA e do Android, que nunca a deixaram.
+e a mesma cor dos ícones da PWA e do Android: o fundo deles é o --marca, liso
+(make-icons.js:COBALTO; o ic_launcher_background de
+android/app/src/main/res/values/colors.xml), e o testes/app-dev-web.test.js
+confere que os três dizem o mesmo. O ícone de dev continua âmbar, em degradê,
+com «DEV» por baixo da casa (make-icons.js:corDoFundo).
 
 A barra lateral é uma coluna (estilos.css:#nav, em flex), e o fundo — as
 Definições, a Ajuda e a conta — vive numa caixa própria pegada ao fundo, com
@@ -5253,12 +5547,11 @@ cloud/colaboradores.js:resumoDosColaboradores). A sincronização
 servidor…», com um relógio, enquanto tenta ligar; verde «Guardado», que
 recolhe ao ícone ao fim de dois segundos — um recibo, não um letreiro —;
 cobalto «N alterações por enviar»; e vermelho «Sem ligação ao servidor», com
-uma cruz; no telemóvel o «Guardado» e o «A ligar» da abertura são só o
-ícone, e «por enviar», «sem ligação» e a nova tentativa depois de uma falha
-descem para uma faixa fina por baixo do cabeçalho, a toda a largura, com o
-ícone a ficar e o cabeçalho a crescer o
-que ela ocupa (estilos.css:header.top, o .sync dentro de
-estilos.css:@media(max-width:900px)). A ação secundária é a de um ecrã que a
+uma cruz; no telemóvel o «Guardado», o «N alterações por enviar» e o «A
+ligar» da abertura são só o ícone, e «sem ligação» e a nova tentativa depois
+de uma falha descem para uma faixa fina por baixo do cabeçalho, a toda a
+largura, com o ícone a ficar e o cabeçalho a crescer o que ela ocupa
+(estilos.css:header.top, o .sync dentro de estilos.css:@media(max-width:900px)). A ação secundária é a de um ecrã que a
 tem — o «Exportar CSV» dos Movimentos (index.html:#hdrSec,
 navegacao.js:ACAO_SECUNDARIA) —, e a principal, só no computador
 (index.html:#hdrAcao, navegacao.js:pintarAcaoDoCabecalho), é «Novo
@@ -5365,6 +5658,46 @@ alert(), prompt(), confirm() nem <select>: o que pede valores ou um motivo
 abre a janela de confirmação, o resultado diz-se no aviso de baixo, e
 desligar um serviço pergunta numa faixa âmbar do próprio cartão, com os
 dependentes que caem junto (equipa-guiao.js:mostrarAvisoDesligar).
+
+Fora de produção, a Operação do back office (master e admin) mostra as
+sessões de teste abertas (equipa-guiao.js:verSessoesTeste): cada browser onde
+uma ligação do /test foi aberta e ainda tem sessão, agrupado pela conta do
+Discord que a pediu e, dentro dela, por conta de teste: uma secção que abre e
+fecha por conta, fechada à partida, com quantas sessões tem e quando abriu a
+mais recente, e aberta com «Terminar as sessões», «Apagar a conta» e uma
+linha por sessão (quando abriu, quando expira, o browser), que fica aberta
+quando a lista se volta a pintar (equipa-guiao.js:contaDeTesteHtml). Cada
+browser fica com uma sessão só: a ligação do /test, a troca no seletor, a
+conta extra e o apagar com passagem à seguinte terminam a sessão que o browser
+trazia (teste.js:largarSessoesDoBrowser), e as pré-visualizações de ligações
+(o Discord, o WhatsApp, os motores de busca) não entram nem limpam nada
+(teste.js:eRoboDeLigacoes).
+Lêem-se das chaves sess: do KV, só as das contas de teste vivas com a época
+certa (sessoes-teste.js:sessoesDeTeste); as sessões trazem a conta, a época,
+a hora e o browser nos metadados da chave (worker/src/auth.js:createSession), e o token
+nunca sai do servidor — o back office vê um id tirado dele
+(sessoes-teste.js:idDaSessao). Terminar uma sessão apaga-a e não pergunta
+(sessoes-teste.js:terminarSessao); terminar as de uma pessoa ou todas sobe o
+sess_epoch das contas, que ficam com os dados (sessoes-teste.js:terminarSessoesDe);
+apagar leva as contas como o /test limpar (sessoes-teste.js:apagarContasDe).
+Tudo o que não é terminar uma sessão pergunta antes
+(equipa-guiao.js:sessoesTeste), e cada ação fica no rasto.
+
+O dev.rendorium.com não tem página pública nenhuma (worker/src/teste.js:portaDoDev).
+Sem a sessão de uma conta de teste — a que uma ligação do /test deixa no
+browser —, qualquer caminho responde um 404 seco (worker/src/teste.js:naoEncontrado):
+«Não encontrado» em texto simples, sem marca, sem dizer que é o ambiente de
+testes, sem cache, com os cabeçalhos de segurança de sempre. A entrada e o
+criar conta não existem lá; uma conta normal do dev também leva o 404. Passam
+sem sessão a própria ligação (/t/entrar) e o que a página dela pede quando a
+ligação está mal (o CSS, as duas letras e o ícone — teste.js:SEM_SESSAO), as
+interações do Discord, o /versao.json que o deploy confirma, e o back office,
+com a entrada da equipa pelo Discord, como sempre. Fecha-se com o ENV_NAME
+«dev» e a PORTA_DEV «fechada» juntos (o [env.dev.vars] do wrangler.toml): a
+produção e o percurso ficam abertos. Para os ficheiros da app também ficarem
+atrás da porta, no dev todos passam pelo worker (o run_worker_first do
+[env.dev.assets]), ao preço de uma invocação por ficheiro; a conferência da
+sessão fica lembrada 30 segundos por isolado (teste.js:temSessaoDeTeste).
 
 ## A app em serviços
 Cada separador da barra lateral é um serviço com manifesto próprio, e as
@@ -5484,6 +5817,154 @@ o servidor (nucleo, anexos, utilizadores, partilha, colaboradores, ajuda,
 entrada, novidades); o painel, os filtros, a seleção e o guia estão lá pela
 ordem de carregamento.
 
+## Os tickets de QA
+
+Fora de produção há uma pílula «QA» que quem testa arrasta para onde estorvar
+menos e que abre «Novo ticket» e «Ver tickets». Os tickets ficam na D1 do
+ambiente e quem programa lê-os e fecha-os com scripts/qa.mjs. Um ticket tem
+três estados: novo (o status 'aberto', como nasce e como volta ao reabrir),
+em resolução ('em_resolucao', que só o scripts/qa.mjs comecar marca, logo que
+quem programa pega nele) e resolvido. Em produção nada
+disto existe: nem a pílula (cloud/qa.js:qaDeveExistir pede um CW.ambiente que
+não seja 'producao', e sessão) nem as rotas (worker/src/rotas/qa.js:rotasQa
+responde 404 sem env.ENV_NAME, antes de ler o corpo).
+
+A pílula vive no body, fora do #view, e aparece no render que traz o ambiente
+do servidor (cloud/qa.js:qaSincronizar). É a pega de pontos, o inseto
+(icones.js:ic, 'inseto'), «QA» e o número por resolver — os novos e os em
+resolução (cloud/qa.js:qaHtmlPilula, cloud/qa.js:qaRotuloDoBotao) —, em --loan para não se confundir com o cobalto das
+ações, com o contorno na cor da frente para o escurecimento forçado. A pega
+fica do lado da borda onde a pílula encostou: à esquerda à esquerda, e à
+direita depois do número, com o enchimento curto do lado dela (o order de
+.qa-pilula[data-lado="dir"] .qa-pega; no HTML continua primeiro). O data-lado
+só muda ao largar (cloud/qa.js:qaArrastoFim), nas setas (cloud/qa.js:qaTecla)
+e no reencaixe (cloud/qa.js:qaPor): a meio do arrasto a pega não foge de
+debaixo do dedo. A troca é de uma vez, no primeiro fotograma do encaixe que já
+leva a pílula (cloud/qa.js:qaDeslizar), sem movimento próprio: o olho segue a
+pílula a andar. Na
+primeira vez, a etiqueta «Arrasta para mudar de sítio» fica ao lado até ao
+primeiro arrasto ou à primeira seta neste aparelho
+(cloud/qa.js:qaMarcarArrastado). Fica por cima do conteúdo, da barra de baixo
+e do tutorial (z 60); com uma janela aberta sobe acima dela (z 71), para se
+escrever um ticket sobre o que está à frente, e fica acima do rodapé dela,
+para nunca tapar os botões (cloud/qa.js:qaLimites, e qaJanelaMudou reencaixa
+quando uma janela abre ou fecha); volta para baixo enquanto uma janela do
+próprio QA está aberta (cloud/qa.js:qaMarcarJanela, a classe .qa-janela). O
+aviso fica sempre por cima.
+
+Arrasta-se com o rato, o dedo e a caneta (cloud/qa.js:qaPousar). Até 10px é um
+toque e o clique abre o menu; daí em diante é um arrasto, e o clique a seguir
+engole-se (cloud/qa.js:qaEngoleClique). Ao largar cola à borda esquerda ou
+direita mais perto, à altura do largar, presa a uma altura útil que acaba
+acima da barra de baixo e da barra da seleção e que, no computador, começa à
+esquerda a seguir à barra lateral (cloud/qa.js:qaEncaixe, qaLimites). Guarda-se
+no aparelho como lado e fração da altura útil (cloud/qa.js:qaGuardarPosicao),
+o que a mantém no sítio ao rodar o telemóvel ou encolher a janela. As setas
+fazem o mesmo sem rato (cloud/qa.js:qaTecla). O arrasto não anima (é
+manipulação direta); o encaixe anima o transform no --medio, ou no --lento
+quando atravessa o ecrã, e de uma vez sem movimento (cloud/qa.js:qaDeslizar).
+
+O menu é o menu de ações da casa (data-menu="acoes"). Abri-lo guarda o ecrã
+de agora (cloud/qa.js:qaMenuAbriu): o contexto do ticket é o de quando se
+tocou na pílula. O contexto (cloud/qa.js:qaContexto) leva o separador, a
+página, a ficha aberta, o título da janela de cima, o endereço, a versão, o
+ambiente, o tamanho do ecrã, o tema, o browser, o ponteiro, o fim do rasto e
+a hora; o que não se sabe fica de fora. Lê-se escrito para pessoas em «O que
+vai junto» e no ticket aberto (cloud/qa.js:qaHtmlContexto).
+
+O novo ticket (cloud/qa.js:qaNovoTicket) pede a descrição (obrigatória), a
+gravidade (bloqueia, incomoda, detalhe, ou nenhuma) e uma captura de ecrã,
+escolhida ou colada com Ctrl+V e encolhida no cliente
+(cloud/qa.js:qaEncolherImagem). Enviar é o POST e depois o PUT da captura; se
+só a captura falha, a janela fica aberta e o botão passa a «Enviar a imagem»,
+sem repetir o ticket (cloud/qa.js:qaEnviar). A lista (cloud/qa.js:qaVerTickets)
+tem os «Novos», em grupos por gravidade (bloqueia, incomoda, detalhe, sem
+gravidade) e em cada grupo do mais recente para o mais antigo
+(cloud/qa.js:qaSeccoes, qaHtmlGrupos; a API e o scripts/qa.mjs dão a mesma
+ordem), depois os «Em resolução», pela mesma ordem mas numa lista só, e no fim
+os «Resolvidos»; as duas últimas só aparecem quando há. Tocar abre o ticket
+para ler, com o selo do estado (cloud/qa.js:qaSeloEstado: «Novo», «Em
+resolução» em --loan, «Resolvido» em --in), a captura, o contexto e a
+resolução (ou a «Resolução anterior» de um reaberto). Os novos, os em
+resolução, os resolvidos e cada grupo de gravidade dos novos abrem e
+fecham como as secções da gaveta (cloud/qa.js:qaHtmlDobra, cloud/qa.js:qaDobrar):
+o título é um botão da largura toda, de 44px, com o nome, quantos tem e a
+seta, aria-expanded e aria-controls; tocar troca a classe .fechada no nó vivo,
+sem repintar, e a altura anda por grid-template-rows de 1fr a 0fr
+(estilos.css:.qa-dobra-corpo), com o visibility a tirar as linhas do Tab só
+no fim do fecho. O estado é do aparelho (cloud/qa.js:QA_LS_DOBRAS), só com as
+secções que se tocaram; sem nada guardado, ou estragado, os abertos e os
+grupos abrem e os resolvidos nascem recolhidos (cloud/qa.js:QA_DOBRAS_FECHADAS,
+cloud/qa.js:qaDobraAberta). Com o armazenamento vedado, o toque vale nesta
+sessão (cloud/qa.js:qaDobrasAqui). A lista que o servidor repinta
+(cloud/qa.js:qaPintarLista) nasce já no estado guardado, sem transição.
+«Remover» não pergunta: o aviso traz o Anular (cloud/qa.js:qaRemover).
+«Reabrir» devolve um resolvido aos novos (cloud/qa.js:qaReabrir); um novo ou
+em resolução tem «Fechar», porque passar a em resolução é só do script.
+
+Quem escreveu um ticket numa conta de teste é a conta do Discord que pediu a
+ligação do /test, e não a conta de teste: a ligação leva o nome do Discord
+assinado (teste.js:ligacaoTeste, o parâmetro n; a assinatura só o conta
+quando vem, por isso as ligações de um worker sem esta versão continuam a
+valer), abri-la guarda-o no KV (teste.js:chaveNomeDev), e criar o ticket
+copia o id (users.test_owner) e o nome para o próprio ticket
+(worker/src/rotas/qa.js:discordDoAutor), porque o /test limpar apaga as
+contas de teste. Quando a ligação não trouxe o nome (as do bot de produção
+antes de o saberem pôr), pergunta-se ao Discord com o token do bot e guarda-se
+no mesmo sítio por 30 dias (teste.js:nomeDoDevNoDiscord, lib/bot.js:nomeNoDiscord);
+o GET /api/qa ainda põe o nome nos tickets que ficaram só com o id
+(worker/src/rotas/qa.js:nomesEmFalta), e o back office das sessões de teste
+usa o mesmo. A app mostra «Nome (Discord)», e «Discord <id>» só quando nem o
+bot soube responder (cloud/qa.js:qaAutor). Numa conta normal é o nome
+da conta, e uma conta normal apagada aparece como «Conta apagada».
+
+No servidor, os tickets vivem na tabela qa_tickets
+(migrations/0023_qa_tickets.sql), à parte dos pedidos de ajuda: não são
+suporte, não vão ao Discord nem ao back office. Todas as contas do ambiente
+veem e mexem em todos; o user_id é só quem escreveu, sem chave estrangeira,
+para o ticket sobreviver à conta e à limpeza do dev (os qa_tickets ficam em
+.github/workflows/limpar-dev.yml). A descrição vai até 4000 caracteres; o
+contexto até 16 KB, cortado pelo rasto mais antigo
+(worker/src/rotas/qa.js:contextoParaGuardar); a captura até 3 MB, no R2 em
+qa/<id>, e só PNG, JPEG ou WebP pelos próprios bytes
+(worker/src/rotas/qa.js:tipoDaImagem), servida com a CSP dos anexos. Trava aos
+30 tickets por hora por pessoa. Remover é brando
+(worker/src/rotas/qa.js:removerTicket), para o Anular; passadas 24 h a linha
+apaga-se de vez com a captura, de passagem nas rotas
+(worker/src/rotas/qa.js:limparRemovidos). Reabrir guarda a resolução. A
+ordem do GET é a dos três estados (worker/src/rotas/qa.js:listarTickets).
+
+No back office do dev (/equipa) há a mesma pílula, com as mesmas funções, e é o
+próprio cloud/qa.js que corre lá: o worker serve um /equipa/qa.js que junta,
+numa função só, a camada do worker/src/equipa-qa.js (CAMADA_QA: as janelas,
+o aviso com o Anular, o menu, a dobra, o api() e o despacho das ações
+data-click), o app/icones.js, o app/formato.js e o cloud/qa.js, lidos dos
+assets tal e qual (worker/src/equipa-qa.js:montarGuiaoDoQa). Os nomes ficam
+dentro da função — o guião do back office tem um esc e um ic com outras
+assinaturas — e para o window só vai o CW. As ações correm por uma gramática
+pequena, sem eval, e só chamam as funções da tabela QA_ACOES (as qa… do
+qa.js e as da camada). O /equipa/qa.css junta os tokens que faltam ao back
+office, os componentes da camada (CSS_QA_EQUIPA, presos às classes do QA) e o
+bloco do QA do estilos.css, cortado pelos marcadores
+(worker/src/equipa-qa.js:cortarCssDoQa); mudar o desenho da pílula na app
+muda-o nos dois sítios. Os pedidos vão às /api/equipa/qa
+(worker/src/rotas/qa.js:rotasQaDaEquipa), de toda a equipa seja qual for o
+cargo, e o autor é a pessoa da equipa pelo Discord (user_id 'equipa:<id>',
+worker/src/rotas/qa.js:autorDaEquipa). O contexto diz a secção do back office
+(«Back office › Erros») no lugar do separador. Só no dev: em produção a
+página não leva nada disto (worker/src/equipa-vista.js:htmlDoQa) e os dois
+recursos e as rotas respondem 404.
+
+Quem programa lê e fecha os tickets com `node scripts/qa.mjs listar | imagem |
+comecar | resolver | reabrir` (o uso está na cabeça do ficheiro), e a skill qa
+(.claude/skills/qa, na pasta acima do repositório) ensina o fluxo inteiro. O
+script só fala com a base e o bucket do dev, ou com a base isolada do 8788
+(--local), e recusa qualquer outro alvo antes de chamar o wrangler; corre o
+wrangler sem shell e escapa o SQL, porque as notas trazem texto livre. Só
+escreve com comecar (os novos passam a em resolução; recusa um resolvido),
+resolver (a nota e uma linha «Commit: <sha>») e reabrir. Remover
+não existe no script: é de quem testa, na app.
+
 ## A CSP sem «unsafe-inline»
 A política da app não deixa correr nada que esteja escrito dentro do HTML.
 Vive em dois sítios que dizem o mesmo: a constante CSP do
@@ -5572,6 +6053,28 @@ um `addEventListener` que a app ponha antes do primeiro evento corre ANTES da
 ação (com o `on…=` corria depois); e um elemento fora do documento não recebe o
 clique que o código lhe dá, porque o evento não chega ao `window`.
 
+Um gesto a meio do arranque não corre (eventos.js:gestoAntesDoArranque). Os
+scripts do index.html correm por ordem, sem `defer`, e o eventos.js é o
+primeiro: os ouvintes estão postos antes de os outros chegarem, e o cabeçalho
+(o botão da gaveta, o sino, os filtros) já está no HTML. Um toque enquanto o
+browser ainda lê os ficheiros seguintes corria a ação com meia app — num
+Samsung, o openDrawer com o navegacao.js e sem o vistas.js deu «LFK is not
+defined», e a rede de segurança do arranque (index.html) leu esse «is not
+defined» como uma app partida: limpou a cache, largou o service worker e
+recarregou. Por isso, enquanto o documento está a carregar (`readyState`
+`'loading'`), a ação de um evento do browser (`isTrusted`) engole-se, nos cinco
+tipos: não corre nem fica guardada para depois — um toque que se cumpre
+segundos depois, com a app já pintada por cima, surpreende mais do que um
+toque que não pegou. O resto do ouvinte continua a fazer o que fazia (o foco do
+toque larga-se, o `pointerdown` conta o ponteiro), e a partir do
+`DOMContentLoaded`, com os scripts todos corridos, tudo como antes. Um
+`el.click()` da própria app (`isTrusted` false) corre sempre, e sem página a
+carregar (os testes, o verificador) também. As funções que um botão do HTML
+chama de início protegem-se na mesma do que vem depois delas
+(navegacao.js:closeFilterPanels sem o `LFK`, navegacao.js:openDrawer sem o
+`lockPage`): uma guarda barata, para o dia em que um gesto chegue por outro
+caminho.
+
 O escape continua a ser a primeira defesa: um valor entre plicas numa ação vai
 por formato.js:jsq, e por formato.js:jsqBruto quando a ação é escrita com
 `setAttribute` em vez de ir dentro de HTML. E as funções que recebem HTML —
@@ -5626,6 +6129,11 @@ contrato.», «Vão junto 2 contratos e 5 movimentos.»
 (cloud/selecao-listas.js:selLVaoJunto), as confirmações de apagar uma
 categoria (definicoes.js:delCat) e a de remover uma ligação, que também não
 presume género (partilha.js:fraseRemoverLigacao).
+
+O aviso de um registo novo diz «adicionado/adicionada» («Movimento
+recorrente adicionado.», «Modelo adicionado e movimento registado.»), e não
+«criado» nem «guardado»: «guardado» é o de uma edição. Confirmar um planeado
+diz «Movimento confirmado.».
 
 Os textos que ensinam um caminho dizem-no com os nomes da navegação:
 «Dinheiro → Créditos», «Dinheiro → Planeados» e «Casas → Grupos», pelo grupo

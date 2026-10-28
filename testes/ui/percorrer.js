@@ -15,6 +15,12 @@
       para o avaliar.js os dar a ler a um modelo. A qualidade de um interface
       não cabe numa asserção; o que cabe é a estabilidade.
 
+   E prova as apresentações (cloud/apresentacao.js) como uma pessoa as vê: a
+   conta criada agora pelo formulário fecha as boas-vindas pelo ✕
+   (fecharBoasVindas), e cada ecrã passa pela de um separador, da primeira
+   visita ao «Percebi» (provarApresentacao). As outras ficam vistas, para
+   nenhuma janela abrir por cima do que se mede (apresentacoesVistas).
+
    Precisa da app a correr. Em CI é o workflow que a levanta. Lido por um
    require (os testes), não arranca: expõe as regras e mais nada. */
 
@@ -116,6 +122,28 @@ const CENAS = [
        e e esta a que faltava: a janela abre com um aviso ja no ecra. */
     nome: 'aviso-sobre-janela',
     fazer: () => { toast('Guardado.', { rotulo: 'Anular', fn() {}, ms: 60000 }); propModal(); },
+  },
+  {
+    /* A pilula dos tickets de QA (cloud/qa.js): o percurso corre com
+       ENV_NAME, por isso ela esta em todas as cenas, por cima do conteudo.
+       Aqui prova-se que existe, que o menu dela abre, e as duas janelas
+       dela; e com uma ficha aberta, que ela sobe acima da janela. */
+    nome: 'qa-menu-da-pilula',
+    fazer: () => {
+      const b = document.querySelector('#qaPilula .qa-botao');
+      if (!b) throw new Error('sem a pilula de QA fora de producao');
+      b.click();
+    },
+  },
+  { nome: 'qa-novo-ticket', fazer: () => { qaNovoTicket(); } },
+  { nome: 'qa-ver-tickets', fazer: () => { qaVerTickets(); } },
+  {
+    nome: 'qa-pilula-sobre-uma-ficha',
+    fazer: () => {
+      propView(db.properties[0].id);
+      const p = document.getElementById('qaPilula');
+      if (!p || getComputedStyle(p).zIndex !== '71') throw new Error('a pilula de QA nao subiu acima da ficha');
+    },
   },
   {
     nome: 'primeiros-passos',
@@ -428,6 +456,8 @@ async function entrar(pagina, anotar) {
   await pagina.waitForFunction(() => !!(window.CW && window.CW.user) || !!document.getElementById('cwa_email'),
     null, { timeout: 20000 }).catch(() => {});
 
+  // a conta nasceu agora, pelo formulário: é a que tem de ver as boas-vindas
+  let criada = false;
   if (!(await pagina.evaluate(() => !!(window.CW && window.CW.user)))) {
     const temForm = await pagina.$('#cwa_email');
     if (!temForm) throw new Error('sem sessão e sem formulário de entrada');
@@ -452,7 +482,8 @@ async function entrar(pagina, anotar) {
       await pagina.fill('#cwa_pass', SENHA);
       await pagina.fill('#cwa_pass2', SENHA);
       await pagina.check('#cwa_terms');
-      await submeter(pagina, '/api/auth/register');
+      const r2 = await submeter(pagina, '/api/auth/register');
+      criada = r2.ok();
     }
   }
 
@@ -475,8 +506,96 @@ async function entrar(pagina, anotar) {
 
   // fechar os avisos de primeira abertura, que não são o objeto deste percurso
   await pagina.evaluate(() => { try { CW.acceptLegal && CW.acceptLegal(); } catch (e) {} });
+  if (criada) await fecharBoasVindas(pagina);
   await repouso(pagina);
   await preparar(pagina);
+}
+
+/* A conta acabou de nascer pelo formulário: as boas-vindas abrem sozinhas,
+   com o ecrã livre e o estado do servidor já conhecido
+   (cloud/apresentacao.js), e fecham-se como uma pessoa as fecha — pelo ✕ da
+   cabeça. Fechadas antes do fim, perguntam se se quer continuar a ver as
+   apresentações (cloud/apresentacao.js:aprPerguntar), e responde-se
+   «Continuar a mostrar», o caminho que não muda nada. Não abrirem, a
+   pergunta não vir, ou o ✕ não as dar por vistas, é uma falha: é a única
+   vez que o percurso passa por uma conta nova. Uma conta que já existia (o
+   percurso corrido outra vez, cá fora) não as vê, e não passa por aqui.
+   Recebe: pagina — a página, com sessão.
+   Devolve: nada — ou rebenta a dizer o que faltou. */
+async function fecharBoasVindas(pagina) {
+  const abriu = await pagina.waitForSelector('.modal.open.apr-boas-vindas', { timeout: 25000 }).catch(() => null);
+  if (!abriu) throw new Error('a conta nova não viu as boas-vindas (cloud/apresentacao.js:aprTentar)');
+  await repouso(pagina);
+  await pagina.click('.modal.open.apr-boas-vindas .head .iconbtn');
+  await pagina.waitForFunction(() => !document.querySelector('.modal.open.apr-janela'), null, { timeout: 5000 });
+  const pergunta = await pagina.waitForSelector('.modal.open.apr-pergunta', { timeout: 5000 }).catch(() => null);
+  if (!pergunta) throw new Error('fechadas a meio, as boas-vindas não perguntaram (cloud/apresentacao.js:aprPerguntar)');
+  await repouso(pagina);
+  await pagina.click('.modal.open.apr-pergunta .foot .btn.primary');
+  await pagina.waitForFunction(() => !document.querySelector('.modal.open'), null, { timeout: 5000 });
+  // a chave nasce com 0 («por ver», apresentacao.js:aprGuardarPorVer): vista é o 1
+  const vistas = await pagina.evaluate(() => (db.settings || {}).apresentacoes || {});
+  if (vistas['boas-vindas'] !== 1) throw new Error('o ✕ fechou as boas-vindas sem as dar por vistas: ' + JSON.stringify(vistas));
+}
+
+/* As apresentações dos separadores não são o objeto das vistas nem das
+   cenas: ficam todas vistas, para nenhuma janela abrir por cima do que se
+   está a medir. A cena delas (provarApresentacao) esquece uma de propósito.
+   Recebe: pagina — a página, com sessão e com o estado do servidor.
+   Devolve: nada. */
+async function apresentacoesVistas(pagina) {
+  await pagina.evaluate(() => { if (window.aprMarcarVista && window.APRESENTACOES) window.aprMarcarVista(Object.keys(window.APRESENTACOES)); });
+}
+
+/* A apresentação de um separador, uma vez por ecrã: na primeira visita
+   abre sozinha, avança-se até ao fim pelo Seguinte (com o ponto aceso a
+   acompanhar), o «Percebi» fecha, e a segunda visita já não a abre. É a de
+   um separador que a app tem registado; sem nenhum (as folhas que as
+   escrevem ainda por chegar), regista-se uma de duas imagens com o kit, só
+   para esta cena, e tira-se no fim. O estado com a janela aberta mede-se como
+   os outros.
+   Recebe: pagina; ecra — o nome do ecrã; esperas — onde guardar o repouso.
+   Devolve: o resultado da medição ({estado, ecra, falhas, medidas}). */
+async function provarApresentacao(pagina, ecra, esperas) {
+  await limpar(pagina);
+  const prep = await pagina.evaluate(() => {
+    const fora = ['boas-vindas', 'dashboard', 'settings'];
+    let id = (window.aprDaConta ? window.aprDaConta() : []).filter((x) => fora.indexOf(x) < 0)[0];
+    let temporaria = false;
+    if (!id) {
+      id = 'contracts'; temporaria = true;
+      window.registarApresentacao(id, { nome: 'Contratos', imagens: [
+        { titulo: 'A primeira', texto: 'O texto da primeira.', maquete: () => window.aprCena(window.aprSelo('1')) },
+        { titulo: 'A segunda', texto: 'O texto da segunda.', maquete: () => window.aprCena(window.aprSelo('2')) }] });
+    }
+    if (db.settings.apresentacoes) delete db.settings.apresentacoes[id];
+    window.save();
+    go('dashboard'); render();
+    return { id, temporaria };
+  });
+  try {
+    await pagina.evaluate((id) => { go(id); render(); }, prep.id);
+    const abriu = await pagina.waitForSelector('.modal.open.apr-janela', { timeout: 8000 }).catch(() => null);
+    if (!abriu) throw new Error('a primeira visita a ' + prep.id + ' não abriu a apresentação');
+    const medida = await verificar(pagina, 'apresentacao-' + prep.id, ecra, esperas);
+    const n = await pagina.evaluate(() => document.querySelectorAll('.modal.open.apr-janela .apr-folha').length);
+    for (let k = 1; k < n; k++) {
+      await pagina.click('.modal.open.apr-janela .apr-seg');
+      await pagina.waitForFunction((i) => !!document.querySelector('.modal.open.apr-janela .apr-pontos span:nth-child(' + (i + 1) + ').on'),
+        k, { timeout: 4000 });
+    }
+    const rotulo = (await pagina.textContent('.modal.open.apr-janela .apr-seg') || '').trim();
+    if (rotulo !== 'Percebi') throw new Error('a última imagem de ' + prep.id + ' diz «' + rotulo + '» e não «Percebi»');
+    await pagina.click('.modal.open.apr-janela .apr-seg');
+    await pagina.waitForFunction(() => !document.querySelector('.modal.open.apr-janela'), null, { timeout: 4000 });
+    await pagina.evaluate((id) => { go('dashboard'); render(); go(id); render(); }, prep.id);
+    await pagina.waitForTimeout(900);
+    if (await pagina.$('.modal.open.apr-janela')) throw new Error('a apresentação de ' + prep.id + ' voltou a abrir na segunda visita');
+    return medida;
+  } finally {
+    if (prep.temporaria) await pagina.evaluate((id) => { delete window.APRESENTACOES[id]; }, prep.id);
+    await limpar(pagina);
+  }
 }
 
 /* Dados de exemplo: sem eles as vistas estão vazias e não há nada que medir.
@@ -501,6 +620,7 @@ async function preparar(pagina) {
   }
   const IMOVEIS = () => ((typeof db !== 'undefined' && db.properties) ? db.properties.length : 0);
   await pagina.waitForFunction(() => !!(window.CW && window.CW._pulled), null, { timeout: 20000 }).catch(() => {});
+  await apresentacoesVistas(pagina);
   for (let i = 0; i < 6; i++) {
     if (await pagina.evaluate(IMOVEIS) > 0) break;
     await pagina.evaluate(() => { try { seed(); } catch (e) {} });
@@ -593,6 +713,13 @@ async function correr() {
       onde = 'vista-' + v;
       await pagina.evaluate((vista) => { go(vista); render(); }, v);
       resultados.push(await verificar(pagina, onde, ecra.nome, esperas));
+    }
+
+    // a apresentação de um separador: abre na primeira visita, anda até ao fim, fecha, e não volta
+    onde = 'apresentacao';
+    try { resultados.push(await provarApresentacao(pagina, ecra.nome, esperas)); } catch (e) {
+      erros.push({ ecra: ecra.nome, onde, cena: 'apresentacao',
+        erro: String(e.message).replace(/^page\.\w+: /, '').split('\n')[0].slice(0, 300) });
     }
 
     for (const c of CENAS) {

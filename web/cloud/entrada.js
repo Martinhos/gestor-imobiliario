@@ -27,7 +27,8 @@
    página a disputar o canto com o sino. É um ícone de nuvem com a frase ao
    lado: laranja com um relógio «A ligar», verde «Guardado», cobalto «N por
    enviar», vermelho com uma cruz «Sem ligação». No telemóvel fica só o
-   ícone (a frase vai no aria-label e no title); no computador a frase do
+   ícone (a frase vai no aria-label e no title), menos o «Sem ligação», que
+   desce para uma faixa por baixo do cabeçalho; no computador a frase do
    «Guardado» recolhe ao fim de dois segundos (a classe .recibo) e o ícone
    fica — o recibo lê-se e sai, o estado vê-se. A nova tentativa depois de
    uma falha (a classe .tenta) e o leitor de ecrã têm regras próprias, ditas
@@ -56,13 +57,15 @@ function setSyncBadge(state, n) {
     : state === 'pend' ? ['pend', 'nuvemSobe', q === 1 ? '1 alteração por enviar' : q + ' alterações por enviar']
     : ['ok', 'nuvemOk', 'Guardado'];
   /* Uma tentativa depois de uma falha (o selo estava em «Sem ligação», ou
-     numa tentativa anterior que ainda não acabou) leva a classe .tenta. No
-     telemóvel o «por enviar» e o «sem ligação» descem para uma faixa por
-     baixo do cabeçalho; o «A ligar» da abertura é só o ícone — a faixa a
-     entrar e a sair em cada abertura fazia o cabeçalho saltar duas vezes
-     por nada —, mas a nova tentativa herda a faixa que lá está, agora
-     laranja: sem ela, o cabeçalho encolhia e crescia de 30 em 30 segundos
-     enquanto a rede não voltasse (estilos.css:header.top .sync.tenta). */
+     numa tentativa anterior que ainda não acabou) leva a classe .tenta; só
+     o 'liga' a leva, e só vindo de .fora ou de .tenta — nunca do 'pend'. No
+     telemóvel só o «Sem ligação» desce para a faixa por baixo do cabeçalho;
+     o «por enviar», o «Guardado» e o «A ligar» da abertura são só o ícone,
+     porque passam por ali a cada gravação ou a cada abertura e a faixa a
+     entrar e a sair fazia o cabeçalho saltar. A nova tentativa herda a
+     faixa que lá está, agora laranja: sem ela, o cabeçalho encolhia e
+     crescia de 30 em 30 segundos enquanto a rede não voltasse
+     (estilos.css:header.top .sync.tenta). */
   var tenta = state === 'liga' && /\s(fora|tenta)\s/.test(antes);
   var classe = 'sync ' + e[0] + (tenta ? ' tenta' : '');
   // o mesmo selo outra vez (a abertura e o startSync dizem ambos «A ligar»): não se refaz nem se anuncia
@@ -440,7 +443,13 @@ CW.submitAuth = function () {
   if (b) { b.disabled = true; b._rotulo = b.textContent; b.textContent = login ? 'A entrar…' : 'A criar a conta…'; }
   var repor = function () { if (b) { b.disabled = false; b.textContent = b._rotulo; } };
   api('POST', login ? '/api/auth/login' : '/api/auth/register', payload)
-    .then(finishLogin)
+    .then(function (u) {
+      /* este é o único sítio que sabe que a conta acabou de nascer: as
+         boas-vindas ficam por ver neste aparelho (apresentacao.js:aprContaNova),
+         antes de o finishLogin pintar a app */
+      if (!login && u && typeof aprContaNova === 'function') aprContaNova(u.id);
+      finishLogin(u);
+    })
     .catch(function (e) { repor(); errEl.textContent = e.message || 'Não foi possível entrar.'; });
 };
 
@@ -778,7 +787,7 @@ function modalConvite(token, prev) {
     '<div class="cv">' +
     '<p class="disp cv-tit">' + esc(prev.ownerName || 'Alguém') + ' convida-te para ajudar a gerir ' +
       (n === 1 ? '1 imóvel' : n ? n + ' imóveis' : 'os seus imóveis') + '.</p>' +
-    '<p class="small">Com o cargo <b>' + esc(prev.roleName || 'colaborador') + '</b>. Não ficas comproprietário: não entras nas quotas nem nas contas entre donos.</p>' +
+    '<p class="small">Com o cargo <b>' + esc(prev.roleName || 'colaborador') + '</b>. Não entras na compropriedade: nem nas quotas nem nas contas entre donos.</p>' +
     casasDaChegada(prev.houses) +
     (pode.length
       ? '<section class="cv-pode" aria-labelledby="cvPode"><p class="lbl" id="cvPode">O que vais poder fazer</p><ul>' +
@@ -842,34 +851,48 @@ function modalGrupo(token, prev) {
 }
 
 /* Resgata a ligação guardada, com sessão: espera que os avisos de entrada
-   (aviso inicial, termos, atualização) saiam do ecrã, pede a pré-visualização
-   e abre o modal certo. Uma ligação que já não serve diz-o e esquece-se.
+   (aviso inicial, termos, atualização) e a janela de uma apresentação saiam
+   do ecrã, pede a pré-visualização e abre o modal certo. Uma ligação que já
+   não serve diz-o e esquece-se. Enquanto a janela da ligação não abre, a
+   marca CW._chegadaPorAbrir diz às boas-vindas que esperem por ela
+   (apresentacao.js:aprEcraOcupado): quem chega por um convite vê primeiro o
+   convite, e as boas-vindas a seguir, já com o cargo que ele deu.
    Devolve: nada — abre o modal quando puder (ou não faz nada sem ligação). */
 CW.resgatarChegada = function () {
   var ch = chegadaGuardada();
-  if (!ch || !CW.user) return;
+  if (!ch || !CW.user) { CW._chegadaPorAbrir = false; return; }
+  CW._chegadaPorAbrir = true;
+  // a janela da ligação abriu, ou deixou de haver por que esperar: a apresentação já pode tentar
+  var largar = function () {
+    CW._chegadaPorAbrir = false;
+    if (typeof aprAgendar === 'function') aprAgendar();
+  };
   var ocupado = function () {
     return document.getElementById('cwLegal') || document.getElementById('cwTerms') ||
-      document.getElementById('cwUpd') || (authEl && authEl.style.display !== 'none');
+      document.getElementById('cwUpd') || (authEl && authEl.style.display !== 'none') ||
+      (typeof aprAberta === 'function' && aprAberta());
   };
   var tentativas = 0;
   var tentar = function () {
-    if (!CW.user) return;
-    if (ocupado()) { if (tentativas++ < 120) setTimeout(tentar, 800); return; }
+    // sem sessão, ou já respondida (ou esquecida) noutro sítio: não há janela a abrir
+    if (!CW.user || chegadaGuardada() === null) return largar();
+    if (ocupado()) { if (tentativas++ < 120) setTimeout(tentar, 800); else largar(); return; }
     if (CW._chegadaEmCurso) return;
     CW._chegadaEmCurso = true;
     preverChegada(ch).then(function (prev) {
       CW._chegadaEmCurso = false;
-      if (chegadaGuardada() === null) return;   // entretanto respondida noutro sítio
+      if (chegadaGuardada() === null) return largar();   // entretanto respondida noutro sítio
       if (ch.tipo === 'ligar') modalLigar(ch.token, prev || {});
       else if (ch.tipo === 'grupo') modalGrupo(ch.token, prev || {});
       else modalConvite(ch.token, prev || {});
+      largar();
     }).catch(function (e) {
       CW._chegadaEmCurso = false;
       esquecerChegada(ch.tipo);
       openModal(ch.tipo === 'convite' ? 'Este convite já não vale' : 'Esta ligação não serve',
         '<div class="hint u-fs-14px">' + esc(e.message || 'Essa ligação não serve.') + '</div>',
         '<button class="btn primary" data-click="closeModal()">Fechar</button>');
+      largar();
     });
   };
   setTimeout(tentar, 400);
@@ -945,14 +968,20 @@ function loadSocial() {
   });
 }
 
-// troca a credencial do fornecedor (ex.: Google) por uma sessão nossa e acaba como um login normal
+// troca a credencial do fornecedor (ex.: Google) por uma sessão nossa e acaba como um login normal.
+// O servidor responde igual a quem já tinha conta e a quem a criou neste
+// pedido, menos o novo:true deste (worker/src/rotas/auth.js): é o sinal das
+// boas-vindas (apresentacao.js:aprContaNova).
 // Recebe: provider — o nome do fornecedor no caminho da API (ex.: 'google');
 // body — o corpo a enviar a /api/auth/<provider> (ex.: {credential} do Google).
 // Devolve: nada — o sucesso acaba em finishLogin; o erro fica escrito no ecrã.
 function socialLogin(provider, body) {
   var errEl = document.getElementById('cwa_err');
   api('POST', '/api/auth/' + provider, body)
-    .then(finishLogin)
+    .then(function (u) {
+      if (u && u.novo === true && typeof aprContaNova === 'function') aprContaNova(u.id);
+      finishLogin(u);
+    })
     .catch(function (e) { if (errEl) errEl.textContent = e.message || 'Não foi possível entrar.'; });
 }
 
@@ -991,6 +1020,9 @@ if ('serviceWorker' in navigator &&
 
 if (CW.user) {
   // sessão em cache: volta à página onde estava e sincroniza em fundo
+  /* uma ligação de convite à espera passa à frente das apresentações desde
+     já: o estado pode chegar antes do /api/me, que é quem a resgata */
+  if (chegadaGuardada()) CW._chegadaPorAbrir = true;
   try { restorePage(); } catch (e) {}
   showLegalGate();
   /* desde a abertura, a nuvem diz que está a tentar: laranja, com o relógio,
@@ -1035,6 +1067,8 @@ if (CW.user) {
     startSync(pEstado);
     CW.resgatarChegada();   // uma ligação de convite ou de partilha à espera
   }).catch(function (e) {
+    // sem o /api/me não há resgate da ligação: as apresentações deixam de esperar por ele
+    CW._chegadaPorAbrir = false;
     if (e && e.status === 401) sessionLost();
     // offline: continua local — e com a MESMA leitura já disparada, senão
     // este caminho abria um segundo /api/state, sem nada que trave dois

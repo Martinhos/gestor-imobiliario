@@ -87,7 +87,7 @@ describe('modelo com montante opcional', () => {
     preencher(app, { t_prop: 'P1', t_label: 'Água', t_amount: '', t_tplName: 'Água do T2' });
     app.txGuardar(null);
     assert.deepEqual(falhas, [], 'nenhum campo em falta');
-    assert.deepEqual(toasts, ['Modelo criado.']);
+    assert.deepEqual(toasts, ['Modelo adicionado.']);
     assert.equal(app.db.templates.length, 2);
     const novo = copia(app.db.templates[1]);
     assert.equal(novo.name, 'Água do T2');
@@ -137,7 +137,7 @@ describe('modelo com montante opcional', () => {
     preencher(app, { t_prop: 'P1', t_loan: 'L1', t_label: 'Prestação', t_amount: '' });
     app.txGuardar(null);
     assert.deepEqual(falhas, []);
-    assert.deepEqual(toasts, ['Modelo criado.'], 'e não «Juros e selo ultrapassam o montante»');
+    assert.deepEqual(toasts, ['Modelo adicionado.'], 'e não «Juros e selo ultrapassam o montante»');
     const tx = copia(app.db.templates[1].tx);
     assert.equal(tx.amount, 0);
     assert.equal(tx.loanId, 'L1');
@@ -172,9 +172,9 @@ describe('modelo com montante opcional', () => {
       app.txGuardar(null);
       return toasts.at(-1);
     };
-    assert.equal(guardar({ t_split: 'amount', t_sp_O1: '30', t_sp_O2: '20' }), 'Modelo criado.', 'valores sem total');
+    assert.equal(guardar({ t_split: 'amount', t_sp_O1: '30', t_sp_O2: '20' }), 'Modelo adicionado.', 'valores sem total');
     assert.deepEqual(copia(app.db.templates.at(-1).tx.split), { mode: 'amount', parts: { O1: 30, O2: 20 } });
-    assert.equal(guardar({ t_split: 'adjust', t_sp_O1: '10', t_sp_O2: '0' }), 'Modelo criado.', 'ajustes sem total');
+    assert.equal(guardar({ t_split: 'adjust', t_sp_O1: '10', t_sp_O2: '0' }), 'Modelo adicionado.', 'ajustes sem total');
     assert.equal(guardar({ t_split: 'adjust', t_sp_O1: '-5', t_sp_O2: '0' }), 'Os ajustes não podem ser negativos: um ajuste é sempre um extra.');
     assert.equal(guardar({ t_split: 'percent', t_sp_O1: '60', t_sp_O2: '30' }), 'As percentagens têm de somar 100 (somam 90).');
     assert.match(guardar({ t_split: 'amount', t_sp_O1: '30', t_sp_O2: '20', t_amount: '100' }), /^Os valores da divisão têm de somar 100,00\s€\.$/, 'com montante, como sempre');
@@ -190,7 +190,7 @@ describe('modelo com montante opcional', () => {
       app.txGuardar(null);
       return toasts.at(-1);
     };
-    assert.equal(guardar({ t_psplit: 'amount', t_pp_P1: '70', t_pp_P2: '30' }), 'Modelo criado.');
+    assert.equal(guardar({ t_psplit: 'amount', t_pp_P1: '70', t_pp_P2: '30' }), 'Modelo adicionado.');
     const tx = copia(app.db.templates.at(-1).tx);
     assert.equal(tx.todos, true);
     assert.equal(tx.amount, 0);
@@ -232,7 +232,7 @@ describe('modelo com montante opcional', () => {
     assert.equal(app.db.transactions.length, 1);
     preencher(app, { t_amount: '37,5' });
     app.txGuardar(null);
-    assert.equal(toasts.at(-1), 'Movimento guardado.');
+    assert.equal(toasts.at(-1), 'Movimento adicionado.');
     assert.equal(app.db.transactions.length, 2);
     assert.equal(app.db.transactions[1].amount, 37.5);
     assert.equal(app.db.transactions[1].label, 'Água');

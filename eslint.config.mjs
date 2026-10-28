@@ -290,7 +290,7 @@ const NA_PAGINA = {
      'unsafe-eval'). Os nomes que essas cenas chamam entram todos aqui. */
   'testes/ui/*.js': {
     app: ['selIds', 'AVISOS', 'CW', 'calNav', 'closeAllModals', 'closePops', 'ctModal', 'ctView',
-      'db', 'go', 'personModal', 'personView', 'pickModal', 'propModal', 'propView', 'recView',
+      'db', 'go', 'personModal', 'personView', 'pickModal', 'propModal', 'propView', 'qaNovoTicket', 'qaVerTickets', 'recView',
       'refrescarMovimentos', 'render', 'seed', 'setSyncBadge', 'tab', 'toast', 'txDir', 'txModal',
       'txSearch', 'txView'],
     browser: ['document', 'window', 'getComputedStyle', 'innerHeight', 'innerWidth', 'matchMedia',

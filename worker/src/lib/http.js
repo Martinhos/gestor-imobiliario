@@ -38,10 +38,10 @@ export const CSP_ANEXO = "default-src 'none'; img-src 'self' data: blob:; style-
    afrouxá-la. */
 export const CSP_ESTRITA = [
   "default-src 'self'",
-  "script-src 'self' https://accounts.google.com/gsi/client",
+  "script-src 'self' https://accounts.google.com/gsi/client https://static.cloudflareinsights.com",
   "style-src 'self' https://accounts.google.com",
   "img-src 'self' data: blob: https://*.googleusercontent.com",
-  "connect-src 'self' https://accounts.google.com",
+  "connect-src 'self' https://accounts.google.com https://cloudflareinsights.com",
   "frame-src https://accounts.google.com",
   "font-src 'self'",
   "object-src 'none'",

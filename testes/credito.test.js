@@ -223,3 +223,17 @@ describe('comissão de amortização antecipada', () => {
     perto(app.amortFeeRate(app.normLoan({ type: 'variavel' }), '2026-01-01'), 0.005);
   });
 });
+
+describe('a taxa em palavras (rateLabel)', () => {
+  test('a soma da Euribor com o spread arredonda: 2,15% + 0,95% é 3,1%, sem os restos da vírgula flutuante', () => {
+    const v = app.normLoan({ type: 'variavel', index: '6m', euribor: 2.15, spread: 0.95 });
+    assert.equal(app.rateLabel(v), 'Euribor 6m 2,15% + 0,95% = 3,1%');
+    const m = app.normLoan({ type: 'mista', rate: 2.5, fixedYears: 5, euribor: 2.15, spread: 0.95 });
+    assert.equal(app.rateLabel(m), '2,5% durante 5 anos, depois 3,1%');
+  });
+
+  test('as três casas de uma taxa ficam: 2,125% + 1% é 3,125%', () => {
+    const v = app.normLoan({ type: 'variavel', index: '12m', euribor: 2.125, spread: 1 });
+    assert.equal(app.rateLabel(v), 'Euribor 12m 2,125% + 1% = 3,125%');
+  });
+});

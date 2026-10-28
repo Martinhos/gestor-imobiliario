@@ -12,12 +12,18 @@
    emitir ligações para o dev sem os dois falarem um com o outro.
 
    Nada disto existe em produção: sem ENV_NAME, a rota é um 404 e ponto —
-   produção nunca cria contas de teste, venha a assinatura de onde vier. */
+   produção nunca cria contas de teste, venha a assinatura de onde vier.
+
+   E no dev.rendorium.com a ligação é a única entrada: a porta do dev
+   (portaDoDev, no fim deste ficheiro) dá um 404 seco a quem não traz a
+   sessão de uma conta de teste. */
 
 import { now, TERMS_VERSION, CSP_ESTRITA } from './lib/http.js';
 import { purgeAccount } from './lib/acesso.js';
-import { newUserId, createSession, sessionCookie } from './auth.js';
+import { newUserId, createSession, destroySession, sessionCookie, tokensDoPedido, getSessionUser } from './auth.js';
 import { auditar } from './lib/auditoria.js';
+import { navegador } from './rotas/relatos.js';
+import { nomeNoDiscord } from './lib/bot.js';
 
 const DOMINIO_TESTE = '@teste.rendorium.com';
 const VALIDADE_MIN = 10;
@@ -26,6 +32,43 @@ const VALIDADE_MIN = 10;
 // Recebe: email — o email da conta (texto; null e undefined contam como vazio).
 // Devolve: true quando o email acaba nesse domínio.
 export const eContaDeTeste = (email) => String(email || '').endsWith(DOMINIO_TESTE);
+
+// O browser e o sistema de quem abre uma sessão de teste, curtos, para a lista do back office (sessoes-teste.js).
+// Recebe: request — o pedido HTTP (pode faltar).
+// Devolve: o resumo ('Chrome 128 · Android 14'), ou '' sem user-agent.
+export const agenteDe = (request) => navegador(request && request.headers ? request.headers.get('user-agent') : '');
+
+/* Termina as sessões que o browser trazia, quando recebe uma nova: a app
+   guarda uma sessão só (o cookie e o token do aparelho), e a que a nova
+   substitui ficava no KV os 30 dias da validade — cada ligação do /test,
+   cada troca no seletor e cada conta extra deixava uma para trás, e o back
+   office chegou a ter trinta numa conta. As de outros aparelhos ficam.
+   Recebe: env — o ambiente do worker (KV SESSIONS); request — o pedido, de
+   onde saem os tokens (auth.js:tokensDoPedido: o Bearer e o cookie);
+   nova — o token da sessão acabada de criar, que fica.
+   Devolve: promessa de quantas terminou. */
+export async function largarSessoesDoBrowser(env, request, nova) {
+  let n = 0;
+  for (const t of request ? tokensDoPedido(request) : []) {
+    if (t === nova) continue;
+    try { await destroySession(env, t); n++; } catch (e) { /* uma que falhe não trava a entrada */ }
+  }
+  return n;
+}
+
+/* Quem abre uma ligação do /test sem ser uma pessoa: as pré-visualizações
+   de ligações (o Discord, o Slack, o WhatsApp, o Telegram, as redes) e os
+   motores de busca. Cada pedido destes criava uma sessão que nenhum browser
+   guardava. */
+const ROBOS_DE_LIGACOES = /discordbot|slackbot|slack-imgproxy|whatsapp|telegrambot|twitterbot|facebookexternalhit|linkedinbot|skypeuripreview|embedly|googlebot|bingbot|bot\/|crawler|spider/i;
+
+/* O pedido é de um robô que segue ligações (ROBOS_DE_LIGACOES)?
+   Recebe: request — o pedido HTTP (pode faltar).
+   Devolve: true/false. */
+export function eRoboDeLigacoes(request) {
+  const ua = request && request.headers ? request.headers.get('user-agent') || '' : '';
+  return ROBOS_DE_LIGACOES.test(ua);
+}
 
 /* O segredo das ligações de teste. Com os bots de dev e produção separados,
    o token do bot deixou de ser partilhado — a TESTE_CHAVE (a mesma nos dois
@@ -70,13 +113,25 @@ async function chave(env) {
 // milissegundos de época como texto; dados — '1' com dados de exemplo, '0'
 // sem; manter (opcional) — '1' para conta extra; quem (opcional) — o id do
 // dev dono; limpar (opcional) — '1' para lavar as contas do dono; email
-// (opcional) — o email do dev para o correio das contas de teste.
+// (opcional) — o email do dev para o correio das contas de teste; nome
+// (opcional) — o nome do dev no Discord. O nome só entra na assinatura
+// quando vem: uma ligação sem nome assina-se como antes dele existir, e as
+// ligações de um worker ainda sem esta versão continuam a valer.
 // Devolve: promessa da assinatura em hexadecimal (64 caracteres).
-export async function assinarTeste(env, exp, dados, manter, quem, limpar, email) {
+export async function assinarTeste(env, exp, dados, manter, quem, limpar, email, nome) {
   const sig = await crypto.subtle.sign('HMAC', await chave(env),
     new TextEncoder().encode(exp + ':' + dados + ':' + (manter || '0') + ':' + (quem || '') +
-      ':' + (limpar || '0') + ':' + (email || '')));
+      ':' + (limpar || '0') + ':' + (email || '') + (nome ? ':' + nome : '')));
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/* O nome do dev no Discord como viaja na ligação: sem caracteres de
+   controlo, aparado, até 64 caracteres. É só para mostrar (o autor de um
+   ticket de QA): a afinidade das contas continua a ser o id (quem).
+   Recebe: v — o nome (texto; null e undefined contam como vazio).
+   Devolve: o nome limpo, ou '' quando não sobra nada. */
+export function nomeDoDev(v) {
+  return String(v || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 64);
 }
 
 /* A ligação completa, para o bot e para o back office. `base` é o worker de
@@ -93,10 +148,11 @@ export async function assinarTeste(env, exp, dados, manter, quem, limpar, email)
    exemplo; manter (opcional) — verdadeiro para uma conta extra; quem
    (opcional) — o id do dev dono; limpar (opcional) — verdadeiro para apagar
    as contas do dono; email (opcional) — o email do dev (ignorado se não
-   parecer um email).
+   parecer um email); nome (opcional) — o nome do dev no Discord, que fica
+   como autor dos tickets de QA das contas dele (só vai com um dono).
    Devolve: promessa do URL de /t/entrar, assinado e válido 10 minutos;
    rejeita com SEM_CHAVE quando o worker não tem com que assinar. */
-export async function ligacaoTeste(env, base, comExemplo, manter, quem, limpar, email) {
+export async function ligacaoTeste(env, base, comExemplo, manter, quem, limpar, email, nome) {
   const exp = String(now() + VALIDADE_MIN * 60000);
   const dados = comExemplo ? '1' : '0';
   const m = manter ? '1' : '0';
@@ -104,15 +160,43 @@ export async function ligacaoTeste(env, base, comExemplo, manter, quem, limpar, 
   const q = String(quem || '').replace(/[^\w.-]/g, '').slice(0, 32);
   let e = String(email || '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 254) e = '';
-  const sig = await assinarTeste(env, exp, dados, m, q, l, e);
+  const n = q ? nomeDoDev(nome) : '';
+  const sig = await assinarTeste(env, exp, dados, m, q, l, e, n);
   return base + '/t/entrar?exp=' + exp + '&dados=' + dados + '&m=' + m + '&l=' + l + '&q=' + q +
-    (e ? '&e=' + encodeURIComponent(e) : '') + '&sig=' + sig;
+    (e ? '&e=' + encodeURIComponent(e) : '') + (n ? '&n=' + encodeURIComponent(n) : '') + '&sig=' + sig;
 }
 
 // o correio das contas deste dev vai para aqui (gravado pela ligação)
 // Recebe: quem — o dev que pediu a ligação (o identificador que ela traz assinado).
 // Devolve: a chave no KV (SESSIONS) onde fica o email dele (texto).
 export const chaveEmailDev = (quem) => 'teste:email:' + quem;
+
+// o nome do dev no Discord (gravado pela ligação), para o autor dos tickets de QA
+// Recebe: quem — o id de Discord do dev (o test_owner das contas dele).
+// Devolve: a chave no KV (SESSIONS) onde fica o nome dele (texto).
+export const chaveNomeDev = (quem) => 'teste:nome:' + quem;
+
+// quanto tempo fica guardado um nome perguntado ao bot (o da ligação fica sem prazo)
+const VALIDADE_NOME_BOT = 30 * 86400;
+
+/* O nome de um dev no Discord: o que a ligação do /test gravou e, quando não
+   gravou (as ligações do bot de produção antes de saberem pôr o nome), o que
+   o bot responde, guardado no mesmo sítio por 30 dias para não perguntar a
+   cada pedido. Uma ligação nova com o nome escreve por cima.
+   Recebe: env — o ambiente do worker (KV em env.SESSIONS; DISCORD_BOT_TOKEN);
+   quem — o id de Discord do dev.
+   Devolve: promessa do nome (texto), ou '' quando não se sabe. */
+export async function nomeDoDevNoDiscord(env, quem) {
+  if (!quem) return '';
+  let nome = '';
+  try { nome = (await env.SESSIONS.get(chaveNomeDev(quem))) || ''; } catch (e) { nome = ''; }
+  if (nome) return nome;
+  nome = nomeDoDev(await nomeNoDiscord(env, quem));
+  if (nome) {
+    try { await env.SESSIONS.put(chaveNomeDev(quem), nome, { expirationTtl: VALIDADE_NOME_BOT }); } catch (e) {}
+  }
+  return nome;
+}
 
 /* A conta de teste em si: email no subdomínio, palavra-passe impossível,
    termos aceites, e o dono (o dev que a pediu) gravado para o seletor.
@@ -143,6 +227,9 @@ const FRASCO = 'M9 3h6M10 3v6l-5.6 9.4A1.7 1.7 0 0 0 5.9 21h12.2a1.7 1.7 0 0 0 1
    ambiente que falha.
    Recebe: status — o código HTTP da resposta; titulo — o título, no
    separador e na página; texto — a explicação por baixo (HTML simples).
+   O que ela pede ao servidor (o /paginas/teste.css, as duas letras e o
+   /icon-192.png) está nas exceções da porta do dev (SEM_SESSAO): quem a vê
+   ainda não tem sessão.
    Devolve: uma Response HTML completa, sem cache e fora dos motores de busca. */
 function pagina(status, titulo, texto) {
   const tom = status >= 500 ? ' perigo' : status === 404 ? '' : ' aviso';
@@ -228,6 +315,10 @@ export async function rotaTeste(c) {
     return pagina(503, 'Ambiente de teste sem chave',
       'Falta a TESTE_CHAVE neste ambiente — sem ela ninguém consegue assinar uma ligação que valha. Adiciona o segredo e corre o deploy do dev.');
   }
+  // a pré-visualização de uma ligação não entra, não cria nem limpa nada
+  if (eRoboDeLigacoes(c.request)) {
+    return pagina(200, 'Ligação de teste', 'Abre esta ligação num browser para entrares no ambiente de desenvolvimento.');
+  }
 
   const exp = url.searchParams.get('exp') || '';
   const dados = url.searchParams.get('dados') === '1' ? '1' : '0';
@@ -235,6 +326,7 @@ export async function rotaTeste(c) {
   const limpar = url.searchParams.get('l') === '1' ? '1' : '0';
   const quem = String(url.searchParams.get('q') || '').replace(/[^\w.-]/g, '').slice(0, 32);
   const emailDev = String(url.searchParams.get('e') || '').trim().toLowerCase().slice(0, 254);
+  const nomeDev = quem ? nomeDoDev(url.searchParams.get('n')) : '';
   const sig = url.searchParams.get('sig') || '';
   if (!/^\d{10,16}$/.test(exp) || !/^[a-f0-9]{64}$/.test(sig)) {
     return pagina(400, 'Ligação inválida', 'Falta-lhe um pedaço. Pede uma nova com /test no Discord.');
@@ -242,7 +334,7 @@ export async function rotaTeste(c) {
   if (Number(exp) < now()) {
     return pagina(410, 'Esta ligação expirou', 'Valem ' + VALIDADE_MIN + ' minutos. Corre /test outra vez e usa a nova.');
   }
-  const esperada = await assinarTeste(env, exp, dados, manter, quem, limpar, emailDev);
+  const esperada = await assinarTeste(env, exp, dados, manter, quem, limpar, emailDev, nomeDev);
   /* transição: a produção ainda assina à moda antiga (só exp:dados). Uma
      ligação antiga só vale como "retomar sem dono" — a mesma chave, os
      mesmos campos. Tirar este ramo quando a produção souber assinar o resto. */
@@ -258,6 +350,10 @@ export async function rotaTeste(c) {
   // produção, mas o correio das contas de teste decide-se aqui
   if (quem && emailDev) {
     try { await env.SESSIONS.put(chaveEmailDev(quem), emailDev); } catch (e) {}
+  }
+  // e o nome dele no Discord, que os tickets de QA das contas dele levam como autor
+  if (quem && nomeDev) {
+    try { await env.SESSIONS.put(chaveNomeDev(quem), nomeDev); } catch (e) {}
   }
 
   /* limpar é a única coisa que apaga — e é por dono: cada dev limpa as SUAS
@@ -299,7 +395,8 @@ export async function rotaTeste(c) {
   }
   if (!conta) conta = Object.assign({ sess_epoch: 0 }, await criarContaDeTeste(env, quem));
 
-  const token = await createSession(env, conta.id, conta.sess_epoch || 0);
+  const token = await createSession(env, conta.id, conta.sess_epoch || 0, agenteDe(c.request));
+  await largarSessoesDoBrowser(env, c.request, token);
   await auditar(env, { discordId: quem || 'sistema', nome: '/test', papeis: ['bot'] },
     'teste.sessao', conta.id,
     retomada ? 'conta retomada, dados intactos'
@@ -324,10 +421,11 @@ export async function rotaTeste(c) {
    Quem testa o "apagar conta" não pode aterrar no ecrã de login de um
    ambiente onde nem sequer há formulário que lhe valha.
    Recebe: env — o ambiente do worker; dono — o id do dev cujas contas se
-   procuram.
+   procuram; agente (opcional) — o browser de quem apagou (agenteDe), para a
+   sessão nova levar o mesmo.
    Devolve: promessa de { id, email, name, token } — a conta seguinte, já com
    sessão criada. */
-export async function proximaContaDeTeste(env, dono) {
+export async function proximaContaDeTeste(env, dono, agente) {
   let conta = await env.DB.prepare(
     "SELECT id, email, name, sess_epoch FROM users WHERE test_owner = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1"
   ).bind(dono).first();
@@ -335,7 +433,7 @@ export async function proximaContaDeTeste(env, dono) {
     const nova = await criarContaDeTeste(env, dono);
     conta = { id: nova.id, email: nova.email, name: 'Conta de teste', sess_epoch: 0 };
   }
-  const token = await createSession(env, conta.id, conta.sess_epoch || 0);
+  const token = await createSession(env, conta.id, conta.sess_epoch || 0, agente || '');
   return { id: conta.id, email: conta.email, name: conta.name || 'Conta de teste', token };
 }
 
@@ -369,7 +467,8 @@ export async function rotasContasDeTeste(c) {
       'SELECT id, email, name, sess_epoch FROM users WHERE id = ? AND test_owner = ? AND deleted_at IS NULL'
     ).bind(String((b && b.para) || ''), dono).first();
     if (!alvo) return err(404, 'Essa conta não é tua ou já não existe.');
-    const token = await createSession(env, alvo.id, alvo.sess_epoch || 0);
+    const token = await createSession(env, alvo.id, alvo.sess_epoch || 0, agenteDe(request));
+    await largarSessoesDoBrowser(env, request, token);
     return json({ token, id: alvo.id, email: alvo.email, name: alvo.name }, 200, {
       'Set-Cookie': sessionCookie(token),
     });
@@ -377,7 +476,8 @@ export async function rotasContasDeTeste(c) {
 
   if (path === '/api/teste/nova' && method === 'POST') {
     const conta = await criarContaDeTeste(env, dono);
-    const token = await createSession(env, conta.id, 0);
+    const token = await createSession(env, conta.id, 0, agenteDe(request));
+    await largarSessoesDoBrowser(env, request, token);
     await auditar(env, { discordId: dono, nome: 'seletor de teste', papeis: ['dev'] },
       'teste.sessao', conta.id, 'conta extra pelo seletor');
     return json({ token, id: conta.id, email: conta.email, name: 'Conta de teste' }, 200, {
@@ -385,4 +485,130 @@ export async function rotasContasDeTeste(c) {
     });
   }
   return null;
+}
+
+/* -------- a porta do dev.rendorium.com ----------------------------------
+   Decisão do Martinho (2026-10-28): o ambiente de desenvolvimento só se abre
+   a quem entrou por uma ligação do /test no Discord — «assim sei que só quem
+   está identificado tem acesso». Lá dentro, um pedido sem a sessão de uma
+   conta de teste (eContaDeTeste, o email @teste.rendorium.com),
+   venha a sessão do cookie ou do Bearer, recebe um 404 seco: sem marca, sem
+   dizer que é o ambiente de testes, sem cache. Uma conta normal do dev conta
+   como sem sessão — a entrada e o criar conta deixam de existir lá.
+
+   Passam sem sessão só:
+   · a própria ligação (GET /t/entrar), que é o que cria a sessão;
+   · as interações do bot do Discord (POST /api/discord), que se provam pela
+     assinatura Ed25519;
+   · o back office (/equipa, /equipa/…, /api/equipa/…), com a entrada da
+     equipa pelo Discord, como sempre;
+   · o que as páginas de erro do /t/entrar pedem (o CSS, as duas letras e o
+     ícone) — o back office pede o CSS dele debaixo de /equipa/;
+   · o /versao.json, que o deploy lê para confirmar a publicação
+     (scripts/entrega.js). Diz a versão e a data, e nada de quem é.
+
+   Fecha-se só com ENV_NAME 'dev' E a PORTA_DEV a 'fechada' (as duas no
+   [env.dev.vars] do wrangler.toml): a produção não tem ENV_NAME, o percurso
+   corre com ENV_NAME 'percurso' e precisa de criar contas pela entrada, e os
+   testes que montam o worker com ENV_NAME 'dev' (a identidade de dev) não
+   trazem a variável. Uma PORTA_DEV posta por engano na produção não fecha
+   nada — falta-lhe o ENV_NAME.
+
+   Para fechar os ficheiros da app também, eles têm de passar pelo worker: o
+   run_worker_first do [env.dev.assets] apanha todos os de web/ (um teste
+   confere-o contra a pasta). Cada pedido custa então uma invocação do worker
+   e, com sessão, uma leitura do KV e uma da D1 — a conferência fica lembrada
+   uns segundos por isolado (LEMBRAR_MS), para um carregamento da app (perto
+   de cem ficheiros) não pagar uma leitura por ficheiro. */
+
+// o corpo do 404: curto e sem nada de quem responde
+const CORPO_404 = 'Não encontrado';
+
+// os caminhos exatos que passam sem sessão, e com que métodos
+const SEM_SESSAO = {
+  '/t/entrar': ['GET'],
+  '/api/discord': ['POST'],
+  '/versao.json': ['GET', 'HEAD'],
+  '/paginas/teste.css': ['GET', 'HEAD'],
+  '/fonts/geist.woff2': ['GET', 'HEAD'],
+  '/fonts/bricolage-grotesque.woff2': ['GET', 'HEAD'],
+  '/icon-192.png': ['GET', 'HEAD'],
+};
+
+/* Quanto tempo uma conferência de sessão fica lembrada, e quantas no máximo.
+   Uma sessão terminada pode ainda abrir os ficheiros estáticos durante este
+   tempo, no mesmo isolado; a API não, que confere a sessão por sua conta
+   (api.js) e responde 401. */
+const LEMBRAR_MS = 30000;
+const LEMBRAR_MAX = 500;
+const lembradas = new WeakMap();   // env → Map(tokens → {teste, ate})
+
+/* O caminho passa sem sessão? É uma das exceções da porta (o back office por
+   inteiro, ou um dos caminhos exatos de SEM_SESSAO com o método certo).
+   Recebe: caminho — o pathname do pedido (já normalizado pelo URL);
+   metodo — o método HTTP.
+   Devolve: true/false. */
+export function passaSemSessao(caminho, metodo) {
+  if (caminho === '/equipa' || caminho.startsWith('/equipa/') || caminho.startsWith('/api/equipa/')) return true;
+  const metodos = Object.prototype.hasOwnProperty.call(SEM_SESSAO, caminho) ? SEM_SESSAO[caminho] : null;
+  return !!metodos && metodos.indexOf(metodo) > -1;
+}
+
+/* A regra inteira, sem rede nem base: o pedido passa a porta?
+   Recebe: o — {caminho, metodo, envName (o ENV_NAME), porta (a PORTA_DEV),
+   sessaoDeTeste (true quando o pedido traz a sessão de uma conta de teste)}.
+   Devolve: true quando passa; false quando leva o 404. */
+export function passaNaPorta(o) {
+  if (o.envName !== 'dev' || o.porta !== 'fechada') return true;
+  if (o.sessaoDeTeste) return true;
+  return passaSemSessao(o.caminho, o.metodo);
+}
+
+/* O 404 seco da porta. Sem cache em lado nenhum: um 404 guardado pelo
+   caminho servia-se depois a quem tem sessão.
+   Devolve: a Response (ainda por vestir com o harden do index.js). */
+export function naoEncontrado() {
+  return new Response(CORPO_404, {
+    status: 404,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
+/* O pedido traz a sessão de uma conta de teste? A mesma conta que a API
+   encontraria (auth.js:getSessionUser: o Bearer e, se já não servir, o
+   cookie), e é de teste pelo email. Lembrada LEMBRAR_MS por isolado; uma
+   falha do KV ou da D1 conta como sem sessão — a porta fecha-se, não abre.
+   Recebe: env — o ambiente do worker; request — o pedido.
+   Devolve: promessa de true/false. */
+export async function temSessaoDeTeste(env, request) {
+  const tokens = tokensDoPedido(request);
+  if (!tokens.length) return false;
+  const chave = tokens.join(' ');
+  let memoria = lembradas.get(env);
+  if (!memoria) { memoria = new Map(); lembradas.set(env, memoria); }
+  const agora = Date.now();
+  const lembrada = memoria.get(chave);
+  if (lembrada && lembrada.ate > agora) return lembrada.teste;
+  let teste = false;
+  try {
+    const u = await getSessionUser(env, request);
+    teste = !!u && eContaDeTeste(u.email);
+  } catch (e) {
+    console.error('porta do dev', e && e.message);
+    return false;   // sem lembrar: a próxima volta a tentar
+  }
+  if (memoria.size >= LEMBRAR_MAX) memoria.clear();
+  memoria.set(chave, { teste, ate: agora + LEMBRAR_MS });
+  return teste;
+}
+
+/* A porta à entrada do fetch: null quando o pedido segue (fora do dev
+   fechado, numa exceção, ou com sessão de teste), ou o 404 seco.
+   Recebe: env — o ambiente do worker; request — o pedido; url — o URL dele.
+   Devolve: promessa de null ou da Response do 404. */
+export async function portaDoDev(env, request, url) {
+  const o = { caminho: url.pathname, metodo: request.method, envName: env.ENV_NAME, porta: env.PORTA_DEV, sessaoDeTeste: false };
+  if (passaNaPorta(o)) return null;
+  o.sessaoDeTeste = await temSessaoDeTeste(env, request);
+  return passaNaPorta(o) ? null : naoEncontrado();
 }

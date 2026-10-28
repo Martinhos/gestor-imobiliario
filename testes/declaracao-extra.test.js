@@ -142,7 +142,7 @@ describe('as linhas da situação fiscal e o foco depois de gravar', () => {
   test('a linha de cada interruptor é o rótulo dele: toca-se inteira', () => {
     const html = app.vFisco();
     assert.ok(html.includes('<label class="fis-linha fis-linha-toque"><span class="fis-linha-txt"><b>Tributação conjunta</b><span class="small">Casados ou unidos de facto</span></span><button type="button" class="interruptor" role="switch" id="fiscoConjunta"'));
-    assert.match(html, /<label class="fis-linha fis-linha-toque"><span class="fis-linha-txt"><b>Estou dispensado dos recibos de renda eletrónicos<\/b><\/span><button type="button" class="interruptor" role="switch" id="fiscoDispensa"/);
+    assert.match(html, /<label class="fis-linha fis-linha-toque"><span class="fis-linha-txt"><b>Tenho dispensa dos recibos de renda eletrónicos<\/b><\/span><button type="button" class="interruptor" role="switch" id="fiscoDispensa"/);
     const rotulos = html.match(/<label class="fis-linha[\s\S]*?<\/label>/g) || [];
     assert.equal(rotulos.length, 2);
     rotulos.forEach((r) => {
@@ -387,7 +387,7 @@ describe('a dispensa dos recibos e o Modelo 44', () => {
     const m44 = av.find((a) => /Modelo 44/.test(a.texto));
     assert.ok(m44, 'a linha do Modelo 44');
     assert.match(m44.texto, /até 28\/02\/2026/);
-    assert.match(app.vFisco(), /Modelo 44: estás dispensado/);
+    assert.match(app.vFisco(), /Modelo 44: tens dispensa/);
     assert.equal(app.fiscoPrazoModelo44(2024), '2025-01-31', 'até às rendas de 2024 era o fim de janeiro');
     assert.equal(app.fiscoPrazoModelo44(2027), '2028-02-29', 'ano bissexto');
   });

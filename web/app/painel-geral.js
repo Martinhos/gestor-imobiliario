@@ -4,9 +4,72 @@
    Veio de vistas.js quando a app passou a serviços; regista-se no fim
    (servicos.js:registarServico). As regras de aspeto vivem na secção
    «redesign: 1.3.1» do web/estilos.css (classes .vg-…). */
-/* visão geral: o imóvel (ou grupo) em foco, e o filtro comum quando os há
-   Devolve: string HTML do painel de análise (vistas.js:anaPanelPadrao). */
-function dashBar(){return anaPanelPadrao('dashPropSel',dashProp,'onDashProp')}
+/* visão geral: o imóvel (ou grupo, ou proprietário) em foco, e o filtro comum
+   quando os há — o painel do vistas.js:anaPanelPadrao, com as opções da Visão
+   geral (dashOpcoesImovel), que são as únicas com proprietários.
+   Devolve: string HTML do painel de análise (vistas.js:anaPanel). */
+function dashBar(){return anaPanel(`<div class="u-w-100pc">${sel('dashPropSel',dashProp,dashOpcoesImovel(),'onDashProp','vista')}</div>`,true)}
+/* As opções do seletor da Visão geral: as das análises (vistas.js:anaOpcoesImovel
+   — todos, cada imóvel do âmbito e, depois de uma linha, os grupos) e, depois de
+   outra linha, os proprietários: «Os meus» (os imóveis de que sou dono ou
+   comproprietário) e cada proprietário com quem partilho
+   (pessoas.js:donosComPartilha), que filtram os imóveis de que essa pessoa é
+   comproprietária (registos.js:pidProps, 'g:o:UID'). Entra só quem tem algum
+   imóvel no âmbito: um proprietário com quem só tenho uma ligação dava uma
+   vista vazia, que o vDashboard larga — uma porta para lado nenhum. Sem
+   ninguém assim, não há secção, e «Os meus» também não. As Projeções e a
+   Avaliação escolhem do anaOpcoesImovel, sem proprietários.
+   Recebe: nada.
+   Devolve: array de {v, label} (com os {div:true} antes dos grupos e dos proprietários). */
+function dashOpcoesImovel(){
+  const ops=anaOpcoesImovel();
+  const outros=(servicoLigado('owners')?donosComPartilha():[]).filter(o=>pidProps('g:o:'+o.id).length);
+  if(!outros.length)return ops;
+  const meus=pidProps('g:o:'+DONO_EU).length?[{v:'g:o:'+DONO_EU,label:'Os meus'}]:[];
+  return ops.concat([{div:true}],meus,outros.map(o=>({v:'g:o:'+o.id,label:'Proprietário · '+o.name})));
+}
+/* O nome do que está em foco na Visão geral, para o título do cartão do
+   Portefólio: o imóvel, «Grupo · Família», «Proprietário · Ana Costa» ou «Os
+   meus imóveis».
+   Recebe: pid — o valor do seletor (um imóvel, 'g:ID' ou 'g:o:UID'; vazio para todos).
+   Devolve: o nome (texto, por escapar); '' sem nada em foco. */
+function dashNomeDoFoco(pid){
+  if(!pid)return '';
+  const dono=pidDono(pid);
+  if(dono)return dono===DONO_EU?'Os meus imóveis':'Proprietário · '+((owner(dono)||{}).name||'');
+  if(String(pid).startsWith('g:'))return 'Grupo · '+((grp(String(pid).slice(2))||{}).name||'');
+  return propName(pid);
+}
+/* O que os planeados preveem para os meses do ano DEPOIS do corrente, por tipo:
+   as ocorrências de cada planeado nesses meses (calendario.js:calPlaneados, as
+   da Agenda — sem os silenciados, até ao fim de cada um), cada uma com o
+   movimento que a confirmação registaria (planeados.js:recTx: o valor do
+   molde, a renda por inteiro como a app a lança) e pesada como as métricas
+   (metricas.js:txWeight, o imóvel, o grupo ou o proprietário em foco). Uma
+   ocorrência que já tem o seu movimento registado (planeados.js:jaRegistado: a
+   renda desse mês lançada antes do tempo) não conta duas vezes — esse
+   movimento já está nos valores do mês. Os que não contam nos totais
+   (tipos.js:countsInTotals) e as amortizações antecipadas, que as barras não
+   mostram, ficam de fora. O mês corrente e os passados ficam a zero: esses
+   são o que está registado. Sem os Planeados nesta conta, tudo a zero; e sem
+   o Calendário também, porque as ocorrências são as dele (servicoLigado, o
+   idioma de guarda entre serviços — o arnês nem carrega um desligado).
+   Recebe: pid — o imóvel, 'g:ID' ou 'g:o:UID' em foco; vazio/null para o âmbito todo.
+   Devolve: {income, expense, loan} — cada um 12 valores (jan–dez), em euros. */
+function previstoPorMes(pid){
+  const z=()=>[...Array(12)].map(()=>0),out={income:z(),expense:z(),loan:z()};
+  const agora=new Date().getMonth();
+  if(agora>=11||!servicoLigado('recurring')||!servicoLigado('calendar'))return out;
+  const de=YEAR+'-'+String(agora+2).padStart(2,'0')+'-01';
+  calPlaneados(de,YEAR+'-12-31').forEach(({date,rec})=>{
+    if(jaRegistado(rec,date))return;
+    const t=recTx(rec,date);
+    if(!countsInTotals(t)||isAmort(t)||!out[t.kind])return;
+    const w=txWeight(t,pid,true);if(!(w>0))return;
+    out[t.kind][Number(String(date).slice(5,7))-1]+=(Number(t.amount)||0)*w;
+  });
+  return out;
+}
 // muda o imóvel (ou grupo) em foco na visão geral
 // Devolve: nada — redesenha a vista.
 function onDashProp(){dashProp=val('dashPropSel')||'';render()}
@@ -18,14 +81,14 @@ function onDashProp(){dashProp=val('dashPropSel')||'';render()}
    Cada fila é um .cols: a nuvem parte-as em blocos arrumáveis e dá a cada
    cartão a largura da fila — metade com dois, um terço com três
    (cloud/painel.js). Os rácios de rentabilidade vivem na Avaliação. Respeita o
-   imóvel/grupo em foco; não há filtro de proprietário (ambito.js), e os
-   valores são por inteiro.
+   imóvel, o grupo ou o proprietário em foco (dashOpcoesImovel: um proprietário
+   é o conjunto dos imóveis de que é comproprietário, e não o filtro global de
+   antes, que saiu — ambito.js), e os valores são por inteiro.
    Devolve: string com o HTML completo da vista. */
 function vDashboard(){
   if(dashProp&&!pidProps(dashProp).length)dashProp='';
   const pid=dashProp||null,m=metrics(YEAR,pid,{share:true});
-  const dp=pid&&!String(pid).startsWith('g:')?prop(pid):null;
-  const dpName=pid?(dp?dp.name:'Grupo · '+((grp(String(pid).slice(2))||{}).name||'')):'';
+  const dpName=dashNomeDoFoco(pid);
   /* Sem movimentos, a vista é a jornada (cloud/guia.js:jornadaInicial): os
      passos com o atual em destaque, mais o portefólio quando há imóveis — em
      vez de quatro indicadores a 0 € e dois gráficos vazios, que não dizem
@@ -50,7 +113,7 @@ function vDashboard(){
   const podes=cartaoPodes();
   if(souSoColaborador()&&!scope().length)return podes+proximasVisitasColab();
   const nColab=scope().filter(p=>!souDono(p.id)).length;
-  const colabHint=nColab?`<div class="hint u-m-n4px-0-12px">Inclui ${nColab} ${nColab===1?'imóvel':'imóveis'} onde és colaborador (valores por inteiro).</div>`:'';
+  const colabHint=nColab?`<div class="hint u-m-n4px-0-12px">Inclui ${nColab} ${nColab===1?'imóvel':'imóveis'} onde colaboras (valores por inteiro).</div>`:'';
   /* com imóveis e sem movimentos, quando a jornada não é a vista (dispensada,
      ou sem passos por fazer): um vazio que diz porque não há números e leva
      aos Movimentos, mais o portefólio — e não quatro indicadores a 0 € e dois
@@ -62,20 +125,27 @@ function vDashboard(){
       ${servicoLigado('transactions')?saida('Ir para os movimentos',"go('transactions')",'ecra'):vazioServicoDesligado('transactions')}</div>`+portefolioInicial(m);
   const inc=monthly(YEAR,pid,'income',true),exp=monthly(YEAR,pid,'expense',true),ln=monthly(YEAR,pid,'loan',true),am=monthly(YEAR,pid,'amort',true);
   let acc=0;const cum=inc.map((v,i)=>acc+=v-exp[i]-ln[i]-am[i]);
-  /* Prestações junto ao eixo e despesas por baixo (o canvas): é a ordem dos
+  /* As entradas e saídas vão de janeiro a dezembro (decisão do Martinho,
+     2026-10-28): o mês corrente e os passados são o registado; os seguintes
+     somam ao que já lá estiver registado (as datas futuras, que a app aceita e
+     que contam como sempre) o que os planeados preveem (previstoPorMes), e
+     desenham-se esbatidos, com «previsto» na legenda e na leitura
+     (graficos.js:cBars, previstoDe). Os quatro indicadores, os totais e o
+     acumulado não levam previsões.
+     Prestações junto ao eixo e despesas por baixo (o canvas): é a ordem dos
      segmentos que faz a legenda e a leitura, e por isso a descida inverte-se
      no cBars (desceAoContrario), não aqui. */
-  const groups=inc.map((v,i)=>[{label:'Receita',value:v,color:COR_SERIE.receita},{label:'Despesas',value:-exp[i],color:COR_SERIE.despesa},{label:'Prestações',value:-ln[i],color:COR_SERIE.prestacao}]);
-  /* Os dois gráficos mensais acabam no mês corrente (o canvas: «jan · mai ·
-     out»), ou no último com movimento quando há datas futuras, que a app
-     aceita — o fim da linha do acumulado tem de bater com o Cashflow. Até
-     dezembro, a linha seguia por nov e dez ao nível de hoje e a leitura dizia
-     «dez −6 358 €», como se fosse um valor registado. */
+  const agora=new Date().getMonth(),prev=previstoPorMes(pid),fut=(arr,i)=>i>agora?arr[i]:0;
+  const groups=inc.map((v,i)=>[{label:'Receita',value:v+fut(prev.income,i),color:COR_SERIE.receita},{label:'Despesas',value:-(exp[i]+fut(prev.expense,i)),color:COR_SERIE.despesa},{label:'Prestações',value:-(ln[i]+fut(prev.loan,i)),color:COR_SERIE.prestacao}]);
+  /* O cashflow acumulado acaba no mês corrente (o canvas: «jan · mai · out»),
+     ou no último com movimento quando há datas futuras, que a app aceita — o
+     fim da linha tem de bater com o Cashflow. Até dezembro, a linha seguia por
+     nov e dez ao nível de hoje e a leitura dizia «dez −6 358 €», como se fosse
+     um valor registado. */
   const ate=mesesAMostrar([inc,exp,ln,am]),mesesVistos=MES.slice(0,ate);
   /* o mês que a leitura dos gráficos mostra antes de alguém tocar (o canvas:
      «out 2026 · Receita … · Despesas … · Prestações …»): o corrente, ou o
      último antes dele com algum movimento — no dia 1 o mês ainda está vazio */
-  const agora=new Date().getMonth();
   let mesLer=agora;while(mesLer>0&&!inc[mesLer]&&!exp[mesLer]&&!ln[mesLer])mesLer--;
   if(!inc[mesLer]&&!exp[mesLer]&&!ln[mesLer])mesLer=agora;
   const amortizacoes=am.map((v,i)=>v>0.005?'Em '+MES[i]+': amortização de '+euro2(v):'').filter(Boolean);
@@ -130,7 +200,7 @@ function vDashboard(){
     ${kpi('Cashflow',euro2(m.cf),'','Receita − despesas − prestações − amortizações.',WHY.cashflow,E('cf'),null,kp('cf',COR_SERIE_ESCURO.cashflow,'',COR_SERIE.cashflow))}</div>
   ${pid?'':orphanCard()}
   <div class="cols">
-    ${vgCard('Entradas e saídas','mês a mês em '+YEAR,cBars(groups.slice(0,ate),mesesVistos,{h:GRAF_ALTURA,destaque:mesLer,ler:mesLer,fmt:euro2,desceAoContrario:true})+DICA_DEDO)}
+    ${vgCard('Entradas e saídas','mês a mês em '+YEAR,cBars(groups,MES,{h:GRAF_ALTURA,destaque:mesLer,ler:mesLer,fmt:euro2,desceAoContrario:true,previstoDe:agora+1})+DICA_DEDO)}
     ${vgCard('Cashflow acumulado',esc(amortizacoes.join(' · ')),cLine([{name:'Acumulado',values:cum.slice(0,ate),color:COR_SERIE.cashflow}],mesesVistos,{h:GRAF_ALTURA,ler:agora,titulo:'Cashflow acumulado',lerFmt:euro2}))}</div>
   <div class="cols">
     ${donutCard()}

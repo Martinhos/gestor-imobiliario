@@ -25,6 +25,7 @@
 
 import { catsDe } from './lib/papeis.js';
 import { CSP_ESTRITA } from './lib/http.js';
+import { autorDaEquipa } from './rotas/qa.js';
 
 const ESTADOS = { criado: 'Recebido', resolucao: 'Em resolução', concluido: 'Concluído' };
 const CATS = {
@@ -39,9 +40,10 @@ const ICONE_DOCS = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path 
    e os estilos da ferramenta inteira. Todas as páginas da equipa — a própria
    ferramenta, o ecrã de entrada — passam por aqui.
    Recebe: corpo — o HTML do miolo da página (string, vai dentro de <body>);
-   titulo — o título da janela (string, aparece como "titulo · Rendorium Equipa").
+   titulo — o título da janela (string, aparece como "titulo · Rendorium Equipa");
+   comQa (opcional) — true para juntar o CSS da pílula do QA (o back office do dev).
    Devolve: string com o documento HTML completo, pronta a ir numa Response. */
-function pagina(corpo, titulo) {
+function pagina(corpo, titulo, comQa) {
   return `<!doctype html>
 <html lang="pt-PT"><head>
 <meta charset="utf-8">
@@ -50,7 +52,7 @@ function pagina(corpo, titulo) {
 <meta name="theme-color" content="#161A23">
 <meta name="robots" content="noindex,nofollow">
 <title>${titulo} · Rendorium Equipa</title>
-<link rel="stylesheet" href="/equipa/estilos.css">
+<link rel="stylesheet" href="/equipa/estilos.css">${comQa ? '\n<link rel="stylesheet" href="/equipa/qa.css">' : ''}
 </head><body>${corpo}</body></html>`;
 }
 
@@ -499,6 +501,21 @@ dialog.janela::backdrop{background:var(--veu)}
 .op-resumo{margin:0 18px 16px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .op-resumo-cab{padding:12px 16px;display:flex;flex-direction:column;gap:2px;background:var(--chip)}
 .op-teste-botoes{padding-top:2px}
+/* as contas de teste na lista das sessões (equipa-guiao.js:contaDeTesteHtml):
+   uma secção que abre e fecha por conta, fechada à partida; a seta vira
+   quando abre */
+.st-contas{border-top:1px solid var(--line)}
+.st-contas+.card-pe{border-top:1px solid var(--line);padding-top:16px}
+.st-conta+.st-conta{border-top:1px solid var(--line)}
+.st-conta>summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;min-height:48px;padding:13px 18px;cursor:pointer;list-style:none}
+.st-conta>summary::-webkit-details-marker{display:none}
+.st-conta>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media(hover:hover){.st-conta>summary:hover{background:var(--tint)}}
+.st-seta{display:inline-flex;align-self:center;color:var(--muted);transform:rotate(-90deg)}
+.st-conta[open]>summary .st-seta{transform:none}
+.st-corpo{padding:0 0 8px}
+.st-acoes{padding:0 18px 10px}
+@media(max-width:899px){.st-conta>summary{padding:13px 14px}.st-acoes{padding:0 14px 10px}}
 .end-form{padding:14px 18px 18px;border-top:1px solid var(--line);background:var(--chip);display:flex;flex-direction:column;gap:10px}
 .end-campos{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
 .end-campos .campo-bloco{flex:1 1 200px}
@@ -527,12 +544,26 @@ function cartaoDeEntrada(titulo, corpo) {
   </div></main>`;
 }
 
+/* A pílula do QA no back office do dev: os dados dela (o ambiente e quem
+   está, com o id de autor dos tickets — rotas/qa.js:autorDaEquipa) e o
+   /equipa/qa.js, depois do guião (equipa-qa.js).
+   Recebe: eu — a sessão de equipa; ambiente — o env.ENV_NAME ('' ou nada em produção).
+   Devolve: o HTML (texto, vazio sem ambiente). */
+function htmlDoQa(eu, ambiente) {
+  if (!ambiente) return '';
+  const dados = { ambiente: String(ambiente), id: autorDaEquipa(eu), nome: eu.nome || '' };
+  return `\n<script type="application/json" id="dados-qa">${paraScript(dados)}</script>
+<script src="/equipa/qa.js"></script>`;
+}
+
 // Quem não tem sessão não vê a ferramenta, nem sabe o que lá está.
 // Recebe: eu — a sessão de equipa (objeto com nome, discordId e papeis/papel),
-// ou nada quando não há sessão válida.
+// ou nada quando não há sessão válida; opcoes (opcional) — {qa: o
+// env.ENV_NAME do dev, '' em produção}: com ele a página leva a pílula do QA
+// (equipa-qa.js), o seu CSS e os dados dela.
 // Devolve: Response HTML — a ferramenta inteira com sessão; sem ela, o ecrã
 // que manda ir ao /entrar do Discord (401).
-export function paginaEquipa(eu) {
+export function paginaEquipa(eu, opcoes) {
   if (!eu) {
     return new Response(pagina(cartaoDeEntrada('Ferramenta de equipa', `
       <p class="sub">Entra-se a partir do Discord. A ligação que o bot dá vale cinco minutos e uma só utilização.</p>
@@ -576,9 +607,9 @@ export function paginaEquipa(eu) {
   <div class="eq-toast" id="aviso" role="status" aria-live="polite"></div>
   <dialog class="janela" id="dialogo" aria-labelledby="janelaTit"></dialog>
 <script type="application/json" id="dados-equipa">${paraScript({ eu: dados, ESTADOS, CATS })}</script>
-<script src="/equipa/guiao.js"></script>`;
+<script src="/equipa/guiao.js"></script>${htmlDoQa(eu, opcoes && opcoes.qa)}`;
 
-  return new Response(pagina(corpo, 'Equipa'), {
+  return new Response(pagina(corpo, 'Equipa', !!(opcoes && opcoes.qa)), {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': CSP_ESTRITA },
   });
 }

@@ -126,12 +126,32 @@ const grp=id=>(db.groups||[]).find(g=>g.id===id);
 const grpsOf=kind=>(db.groups||[]).filter(g=>g.kind===kind);
 /* imóveis de um filtro: id de imóvel, 'g:ID' de grupo, ou vazio = âmbito atual. Num grupo
    só entram os imóveis do âmbito: com um proprietário filtrado, os dos outros ficam de fora.
-   Recebe: pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio para o âmbito atual.
+   O seletor da Visão geral junta os proprietários (painel-geral.js:dashOpcoesImovel), e
+   cada um é um grupo que não está na base: 'g:o:UID' são os imóveis do âmbito de que essa
+   conta é comproprietária, e 'g:o:*' (DONO_EU) os meus, os que sou dono ou comproprietário
+   (acessos.js:souDono). Ficam com o prefixo dos grupos de propósito: tudo o que pergunta
+   «é um imóvel ou são vários?» (o peso dos movimentos, saldos.js:txW; as contas entre
+   proprietários, vistas.js:contasCard; o «Novo movimento», navegacao.js:criarMovimento)
+   já os trata como vários, e quem lê o nome do grupo pelo grp() fica sem nenhum.
+   Recebe: pid — o id de um imóvel, 'g:ID' de um grupo, 'g:o:UID' de um proprietário,
+   ou vazio para o âmbito atual.
    Devolve: os imóveis abrangidos pelo filtro (array de objetos). */
 function pidProps(pid){
   if(!pid)return scope();
+  const dono=pidDono(pid);
+  if(dono)return scope().filter(p=>dono===DONO_EU?souDono(p.id):(p.ownerIds||[]).indexOf(dono)>-1);
   if(String(pid).startsWith('g:')){const g=grp(String(pid).slice(2));return g?g.ids.map(prop).filter(p=>p&&inScope(p.id)):[]}
   const p=prop(pid);return p?[p]:[];
+}
+/* O «UID» de «Os meus» num filtro de proprietário ('g:o:*'): um asterisco não é o
+   id de conta nenhuma. */
+const DONO_EU='*';
+/* O proprietário de um filtro de proprietário ('g:o:UID', ver pidProps).
+   Recebe: pid — o valor do filtro (texto, aguenta null).
+   Devolve: o UID (DONO_EU para «Os meus»), ou '' quando o filtro não é de proprietário. */
+function pidDono(pid){
+  const v=String(pid||'');
+  return v.indexOf('g:o:')===0?v.slice(4):'';
 }
 /* O nome de uma hipoteca nas listas: «nome · banco», só um dos dois, ou «Hipoteca».
    Recebe: l — a hipoteca (aguenta null).

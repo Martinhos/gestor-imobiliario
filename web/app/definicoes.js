@@ -820,8 +820,8 @@ function gruposMovimentosFrase(ids){
 }
 /* Apaga da base uns grupos privados: os movimentos antigos que apontavam
    para eles ficam sem grupo (gruposMovimentosFrase), e os filtros que os
-   tinham escolhidos (o imóvel dos Movimentos e da Visão geral, o
-   proprietário) voltam a todos. Não grava nem repinta: quem chama faz isso.
+   tinham escolhidos (o imóvel dos Movimentos, da Visão geral, dos
+   Contratos, dos Planeados e dos Créditos, o proprietário) voltam a todos. Não grava nem repinta: quem chama faz isso.
    Recebe: ids — os ids dos grupos (array).
    Devolve: a cópia para os repor (gruposReporLocal): {gs, txs}. */
 function gruposApagarLocal(ids){
@@ -831,6 +831,8 @@ function gruposApagarLocal(ids){
   if(era(txProp))txProp='';
   if(era(dashProp))dashProp='';
   if(era(ownerFilter))ownerFilter='';
+  // e o «Imóvel» das listas que também escolhem grupos (componentes.js:imoveisEGruposOpts)
+  ['lcts','lrec','lcred'].forEach(k=>{if(era(lf(k).p))lf(k).p=''});
   db.groups=(db.groups||[]).filter(x=>ids.indexOf(x.id)<0);
   return copia;
 }

@@ -591,7 +591,8 @@ async function cmdTest(env, i, opts, request) {
   const u = (i.member && i.member.user) || i.user || {};
   let lig;
   try {
-    lig = await ligacaoTeste(env, base, !!opts.dados, !!opts.extra, u.id, !!opts.limpar, opts.email);
+    // o nome no Discord vai com a ligação: é o autor dos tickets de QA das contas de teste
+    lig = await ligacaoTeste(env, base, !!opts.dados, !!opts.extra, u.id, !!opts.limpar, opts.email, u.global_name || u.username);
   } catch (e) {
     // sem chave de teste não se assina nada: diz-se o que falta, e não uma ligação que não vale
     return reply('🧪 ' + cut((e && e.message) || e, 300));

@@ -371,11 +371,12 @@ describe('a Visão geral', () => {
     assert.equal(app.falaDoMesmo(cartao('17 000,00 €'), s, ano), false, 'um número de outro período cala a faixa');
   });
 
-  /* Os gráficos mensais acabam no mês corrente (o canvas: «jan · mai · out»):
-     a linha do acumulado não segue por meses que ainda não chegaram ao nível
-     de hoje, e a janela de um indicador não os desenha a 0 €. Com um movimento
-     de data futura, vão até ele. */
-  test('os gráficos mensais e a janela de um indicador acabam no mês corrente', () => {
+  /* O acumulado acaba no mês corrente (o canvas: «jan · mai · out»): a linha
+     não segue por meses que ainda não chegaram ao nível de hoje, e a janela de
+     um indicador não os desenha a 0 €. Com um movimento de data futura, vão
+     até ele. As barras das entradas e saídas vão até dezembro, com os meses
+     seguintes previstos pelos planeados. */
+  test('o acumulado e a janela de um indicador acabam no mês corrente; as entradas e saídas vão até dezembro', () => {
     const lidoDe = (html) => JSON.parse(/data-lido="([^"]*)"/.exec(html)[1].replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&'));
     const rotulos = (html, titulo) => {
       const i = html.indexOf('>' + titulo + '</h3>');
@@ -385,7 +386,7 @@ describe('a Visão geral', () => {
     let html = vista();
     const ateHoje = [...app.MES.slice(0, MES)];
     igual(rotulos(html, 'Cashflow acumulado'), ateHoje, 'o acumulado acaba no mês corrente');
-    igual(rotulos(html, 'Entradas e saídas'), ateHoje, 'e as entradas e saídas também');
+    igual(rotulos(html, 'Entradas e saídas'), [...app.MES].map((m, i) => (i < MES ? m : m + ' · previsto')), 'as entradas e saídas vão até dezembro, com os meses seguintes previstos');
     const abertas = janelasFalsas(app, 'render', 'toast');
     app.kpiModal(/id="(k\d+)"/.exec(html)[1]);
     igual(lidoDe(abertas[0].b).rot, ateHoje, 'o «Mês a mês» da janela também');
