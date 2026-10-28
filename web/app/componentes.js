@@ -59,6 +59,21 @@ const gdiv=arr=>arr.length?[{div:true}].concat(arr):[];
    Recebe: kind — o tipo dos grupos ('prop', 'owner'…).
    Devolve: array de {v, label}. */
 const gOpts=kind=>grpsOf(kind).map(g=>({v:'g:'+g.id,label:'Grupo · '+g.name}));
+/* As opções do filtro «Imóvel» de uma lista (Contratos, Planeados, Créditos):
+   «Todos os imóveis», os imóveis um a um, a linha e os grupos de imóveis
+   (gOpts('prop'), valor 'g:ID') que tenham coisas nessa lista — um grupo sem
+   contratos não aparece nos Contratos. O grupo escolhido fica, mesmo que já
+   não tenha, como o imóvel escolhido nas listas.
+   Recebe: ps — os imóveis a mostrar (array); atual (opcional) — o valor
+   escolhido no filtro; temCoisas (opcional) — função (grupo) → true quando o
+   grupo tem coisas na lista; sem ela, entra o grupo com um dos imóveis de ps.
+   Devolve: array de {v, label} para o sel(). */
+function imoveisEGruposOpts(ps,atual,temCoisas){
+  const ids=new Set((ps||[]).map(p=>p.id));
+  const tem=temCoisas||(g=>(g.ids||[]).some(id=>ids.has(id)));
+  const gs=gOpts('prop').filter(o=>{const g=grp(o.v.slice(2));return o.v===atual||(!!g&&tem(g))});
+  return [{v:'',label:'Todos os imóveis'}].concat((ps||[]).map(p=>({v:p.id,label:p.name}))).concat(gdiv(gs));
+}
 /* fecha os menus abertos, excepto os que contêm "keep" (um menu de escolha dentro do menu de filtros
    não pode fechar o menu que o contém)
    Recebe: keep (opcional) — um elemento do DOM; os menus que o contenham ficam abertos.

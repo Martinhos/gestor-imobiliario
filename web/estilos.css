@@ -3686,6 +3686,8 @@ button.def-cat-abre:active{background:var(--press)}
 /* o «Fora dos totais» é um <label> com o interruptor: o rótulo também liga */
 .def-cat-fora{display:flex;align-items:center;justify-content:center;justify-self:center;gap:8px;font-weight:400;cursor:pointer}
 .def-cat-fora:has(:disabled){cursor:not-allowed}
+/* «Fora dos totais» ligado tira a categoria das contas: vermelho de perigo, e não o cobalto de «ligado» */
+.def-cat-fora .interruptor[aria-checked="true"]{background:var(--danger)}
 .def-cat-menu{display:flex;justify-content:flex-end}
 .def-sub{background:var(--chip)}
 .def-sub .def-cat-nome{padding-left:38px}
@@ -4234,6 +4236,9 @@ div.pt-quota b{text-align:right}
 .aj-pagina>.aj-cab:first-child{margin-top:0}
 .aj-cab h2{margin:0;font-size:20px}
 .aj-cab .small{white-space:nowrap}
+/* «Marcar todas como vistas», por baixo dos mosaicos das apresentações (cloud/ajuda.js:apresentacoesNaAjuda) */
+.aj-apr-pe{margin-top:10px}
+@media(pointer:coarse){.aj-apr-pe .btn.sm{min-height:44px}}
 .aj-tutoriais{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:2px}
 .aj-tutoriais::-webkit-scrollbar{display:none}
 @media(max-width:900px){.aj-tutoriais{margin:0 calc(-16px - var(--inset-right)) 0 calc(-16px - var(--inset-left));padding-left:calc(16px + var(--inset-left));padding-right:calc(16px + var(--inset-right));scroll-padding:0 16px}}
@@ -5517,6 +5522,13 @@ body:has(.modal.open.qa-janela) .qa-pilula{z-index:60}
 .qa-n{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;
   background:var(--loan);color:var(--card);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
 .qa-n[hidden]{display:none}
+/* A pega fica do lado da borda onde a pílula encostou: à direita, depois do
+   número, com o enchimento curto do lado dela. O data-lado só muda ao largar
+   (qa.js:qaPor, qaArrastoFim), nunca a meio do arrasto — a pega não foge de
+   debaixo do dedo —, e a troca é de uma vez, no primeiro fotograma do
+   encaixe que já leva a pílula (qa.js:qaDeslizar): sem movimento próprio. */
+.qa-pilula[data-lado="dir"] .qa-botao{padding:0 6px 0 12px}
+.qa-pilula[data-lado="dir"] .qa-pega{order:1}
 .qa-botao:active{transform:scale(.97)}
 .qa-botao:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* a pílula a ser arrastada levanta-se um pouco: diz «estás a segurá-la» */
@@ -5558,14 +5570,41 @@ body:has(.modal.open.qa-janela) .qa-pilula{z-index:60}
 /* A lista: os abertos e os resolvidos, cada linha um botão com o selo, quem
    e quando, o sinal da captura e duas linhas do texto */
 .qa-lista{display:grid;gap:10px}
-.qa-sec{display:flex;align-items:center;gap:8px;margin:10px 0 0;font-size:16px}
-.qa-lista>.qa-sec:first-child,.qa-desatual+.qa-sec{margin-top:0}
+.qa-sec{margin:0;font-size:16px}
 .qa-sec-n{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 7px;border-radius:11px;
   background:var(--chip);color:var(--muted);font-family:var(--letra);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
 .qa-linhas{display:grid;gap:8px}
 /* os grupos dos abertos por gravidade: um título pequeno, mais baixo que o da secção */
-.qa-grupo{display:flex;align-items:center;gap:6px;margin:4px 0 -2px;color:var(--muted);font-size:13px;font-weight:600}
+.qa-grupo{margin:0;color:var(--muted);font-size:13px;font-weight:600}
 .qa-grupo-n{font-variant-numeric:tabular-nums;font-weight:500}
+/* As secções abrem e fecham (qa.js:qaHtmlDobra, qa.js:qaDobrar), como as da
+   gaveta (.navsec): o título leva um botão da largura toda, com 44px de alto,
+   e a seta roda para o lado quando a secção está recolhida. A altura anima
+   por grid-template-rows de 1fr a 0fr com os dois valores escritos, num nó
+   vivo (a lista que o servidor repinta nasce já no estado guardado, sem
+   transição). O overflow:hidden que isto pede fica no .qa-dobra-itens,
+   alargado 4px para cada lado (o botão do título também), e o anel de foco
+   das linhas passa para dentro. Recolhida, o visibility tira as linhas do Tab
+   e do leitor de ecrã só no FIM do fecho, e põe-nas logo no início da
+   abertura; não se declara visible na aberta, para um grupo dentro dos
+   abertos recolhidos herdar o hidden. Sem movimento, a regra geral desliga
+   as transições e tudo acontece de uma vez. */
+.qa-dobra{display:grid;min-width:0}
+.qa-dobra-cab{display:flex;align-items:center;gap:8px;width:calc(100% + 8px);min-height:44px;margin:0 -4px;padding:0 4px;border:0;border-radius:10px;
+  background:transparent;color:inherit;font:inherit;letter-spacing:inherit;text-align:left;cursor:pointer;
+  transition:background-color var(--rapido) var(--curva)}
+.qa-dobra-nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qa-dobra-seta{display:flex;margin-left:auto;color:var(--muted);transition:transform var(--medio) var(--curva)}
+.qa-dobra.fechada>:first-child .qa-dobra-seta{transform:rotate(-90deg)}
+@media(hover:hover) and (pointer:fine){.qa-dobra-cab:hover{background:var(--tint)}}
+.qa-dobra-cab:active{background:var(--press)}
+.qa-dobra-cab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.qa-dobra-corpo{display:grid;grid-template-rows:1fr;transition:grid-template-rows var(--medio) var(--curva-entra)}
+.qa-dobra.fechada>.qa-dobra-corpo{grid-template-rows:0fr;transition-timing-function:var(--curva-sai)}
+.qa-dobra-itens{min-height:0;overflow:hidden;margin:0 -4px;padding:0 4px;transition:visibility 0s}
+.qa-dobra.fechada>.qa-dobra-corpo>.qa-dobra-itens{visibility:hidden;transition:visibility 0s var(--medio)}
+.qa-dobra-dentro{display:grid;gap:4px;padding-bottom:6px}
+.qa-dobra-itens .qa-linha:focus-visible{outline-offset:-2px}
 .qa-linha{display:grid;gap:6px;width:100%;min-height:44px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card);
   color:var(--ink);text-align:left;cursor:pointer;font:inherit;transition:transform var(--rapido) var(--curva)}
 .qa-linha:active{transform:scale(.99);background:var(--press)}
@@ -5591,3 +5630,14 @@ p.qa-quem{margin:0}
 .qa-resolucao p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .btn.qa-remover{color:var(--danger)}
 /* === fim: tickets de QA === */
+/* === qa-ronda2: visão geral === */
+/* Os meses previstos das entradas e saídas (graficos.js:cBars, previstoDe): a
+   mesma cor da série, esbatida — o que ainda não aconteceu não se lê como
+   registado. A coluna vai num <g>, e é ele que esbate: as barras ficam com a
+   classe de sempre e a entrada no ecrã (#view.entra .gbar) não muda. A
+   bolinha «previsto» da legenda é neutra e esbatida da mesma maneira. Pela
+   opacidade e não por uma cor mais clara: o Samsung Internet escurece à força
+   as cores, e a opacidade passa intacta nos dois temas. */
+.gprevista{opacity:.38}
+.legend .li.prevista .dot{background:var(--muted);opacity:.38}
+/* === fim: qa-ronda2: visão geral === */

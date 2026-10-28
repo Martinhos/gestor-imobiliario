@@ -242,8 +242,10 @@ function vCredits(){
   const rows=[];
   scope().forEach(p=>loansOf(p).forEach(l=>rows.push({p,l})));
   const live=rows.filter(x=>Number(x.l.outstanding)>0);
-  /* a pesquisa e o imóvel; o estado à parte, para as contagens do chip */
-  const passa=({p,l})=>(!s.p||p.id===s.p)&&lfHit(K,[loanName(l),l.name,l.bank,p.name,RATE[l.type],String(l.outstanding)].join(' '));
+  /* a pesquisa e o imóvel (um grupo de imóveis, 'g:ID', são os imóveis dele
+     no âmbito: registos.js:pidProps); o estado à parte, para as contagens do chip */
+  const doImovel=s.p?new Set(pidProps(s.p).map(p=>p.id)):null;
+  const passa=({p,l})=>(!doImovel||doImovel.has(p.id))&&lfHit(K,[loanName(l),l.name,l.bank,p.name,RATE[l.type],String(l.outstanding)].join(' '));
   const viva=x=>Number(x.l.outstanding)>0;
   const semEstado=rows.filter(passa);
   const shown=lfSort(K,semEstado.filter(x=>s.st==='on'?viva(x):s.st==='off'?!viva(x):true),
@@ -265,7 +267,7 @@ function vCredits(){
     campos:[{chave:'st',nome:'Estado',curto:'Todas',rapido:true,aplicar:credVerPagas,
         opcoes:[{v:'',label:'Ativas e liquidadas'},{v:'on',label:'Ativas',n:nAtivas},{v:'off',label:'Liquidadas',n:semEstado.length-nAtivas}]},
       {chave:'p',nome:'Imóvel',curto:'Todos',rapido:comHipotecas.length>1||!!s.p,
-        opcoes:[{v:'',label:'Todos os imóveis'}].concat(comHipotecas.map(p=>({v:p.id,label:p.name})))}],
+        opcoes:imoveisEGruposOpts(comHipotecas,s.p)}],
     ordem:{opcoes:[{v:'divida',label:'Dívida'},{v:'prestacao',label:'Prestação'},{v:'nome',label:'Nome'},{v:'imovel',label:'Imóvel'}],rapido:'largo'}});
   const resumo=credResumo(live);
   if(!shown.length)return resumo+head+vazioFiltro();

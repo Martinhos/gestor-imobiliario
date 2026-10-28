@@ -66,6 +66,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-28 · As sessões de teste no back office
 - 2026-10-28 · Quem fecha uma apresentação a meio é perguntado, uma vez
 - 2026-10-28 · Trinta sessões numa conta de teste
+- 2026-10-28 · A segunda ronda de tickets de QA: o ano inteiro, os donos no seletor, os grupos nos filtros
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2590,3 +2591,44 @@ criava uma sessão que nenhum browser guardava, e numa ligação de limpar apaga
 as contas. As 62 que já existem não se tocam: terminam-se no back office ou
 expiram. A lista passou a ter uma secção que abre e fecha por conta, dentro do
 bloco de quem as pediu no Discord, escolha do Martinho.
+
+## 2026-10-28 · A segunda ronda de tickets de QA: o ano inteiro, os donos no seletor, os grupos nos filtros
+
+Nove tickets do Martinho, todos de hoje, com decisões dele onde mudavam o que
+estava decidido.
+
+O gráfico «Entradas e saídas» da Visão geral acabava no mês corrente de
+propósito (o canvas, e uma linha a seguir por novembro ao nível de hoje lia-se
+como valor registado). Ele quis o ano inteiro com o que os planeados preveem
+(07d39786): os meses seguintes saem das ocorrências da Agenda
+(calendario.js:calPlaneados), com o valor que a confirmação registaria, em
+barras esbatidas com «previsto» na legenda e na leitura. O cashflow acumulado
+e os quatro indicadores ficam sem previsões, porque são o que aconteceu. Sem o
+Calendário ligado não há previsão: o idioma de guarda entre serviços é o
+servicoLigado, e a função vive no Calendário.
+
+O filtro global de proprietário saiu na v40 (13c9769), e ele pediu-o de volta,
+mas só na Visão geral (a0faa42e): «Os meus» e cada proprietário com quem
+partilha, no seletor do que está em foco, depois dos grupos. Um proprietário
+em foco é um 'g:o:UID' (registos.js:pidDono), um grupo que não existe na
+base: todo o código que pergunta «um imóvel ou vários?» já trata o prefixo
+g:, e um prefixo novo obrigava a mexer no peso dos movimentos, nas contas
+entre proprietários e no «Novo movimento». Só entram proprietários com algum
+imóvel no âmbito, para nenhuma opção dar uma vista vazia.
+
+O filtro «Imóvel» dos Contratos, dos Planeados e dos Créditos passou a ter os
+grupos depois de uma linha, como os Movimentos (b8bf3127), só os grupos com
+coisas nessa lista (componentes.js:imoveisEGruposOpts); apagar o grupo
+escolhido volta a todos (definicoes.js:gruposApagarLocal).
+
+O aviso «Todos aceitaram: … passou a gerir …» abria a ficha e ficava por ler
+(f48a5371), porque a leitura era só a marca temporal do «Marcar tudo como
+lido». Os avisos das casas passam a ler-se um a um ao toque
+(notificacoes.js:notifLerAviso), num objeto {id: 1} nas definições pela mesma
+razão das apresentações: a fusão a três junta-o chave a chave.
+
+Os outros: na Ajuda, «Marcar todas como vistas» (f6e09ead) e rever uma até à
+última imagem conta como vista (ea801987); o «Fora dos totais» ligado fica
+vermelho (61234ca0); na pílula QA, as secções da lista dobram, com os
+resolvidos recolhidos por omissão (a2787d04), e a pega vira-se para a borda
+onde a pílula encostou, só ao largar (89811267).

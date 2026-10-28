@@ -6,9 +6,11 @@
    pílula (CW.ambiente === 'producao') nem as rotas (404 sem ENV_NAME). */
 'use strict';
 
-/* O desenho (a opção C que o Martinho escolheu, 2026-10-28): a pega de pontos
-   à esquerda, o ícone, «QA» e o número de abertos, num roxo (--loan) que não
-   se confunde com o cobalto das ações da app. Na primeira vez, ao lado, a
+/* O desenho (a opção C que o Martinho escolheu, 2026-10-28): a pega de pontos,
+   o ícone, «QA» e o número de abertos, num roxo (--loan) que não se confunde
+   com o cobalto das ações da app. A pega fica do lado da borda onde a pílula
+   encostou (o data-lado que o qaPor escreve; a troca é da folha), e só muda
+   ao largar, nunca a meio do arrasto. Na primeira vez, ao lado, a
    etiqueta «Arrasta para mudar de sítio», até ao primeiro arrasto.
 
    Arrasta-se com o rato, o dedo e a caneta (pointer events; o touch-action da
@@ -57,6 +59,12 @@ var QA_GRAVIDADES = [
   { v: 'incomoda', rotulo: 'Incomoda', cor: 'amber' },
   { v: 'detalhe', rotulo: 'Detalhe', cor: 'grey' },
 ];
+// as secções da lista que se tocaram neste aparelho: {chave: true (aberta) ou false (recolhida)}
+var QA_LS_DOBRAS = 'gi_qa_dobras';
+// as secções da lista que abrem e fecham: os abertos, os resolvidos e cada grupo de gravidade dos abertos
+var QA_DOBRAS = ['abertos', 'resolvidos'].concat(QA_GRAVIDADES.map(function (g) { return 'g-' + g.v; }), ['g-sem']);
+// as que nascem recolhidas enquanto ninguém lhes tocou: só os resolvidos (os abertos são o que se vem ver)
+var QA_DOBRAS_FECHADAS = ['resolvidos'];
 
 var qaPil = null;            // o elemento da pílula (#qaPilula); null fora do dev ou sem sessão
 var qaSonda = null;          // a sonda das margens seguras (#qaSonda)
@@ -74,6 +82,7 @@ var qaCamadaLista = null;    // a camada da janela «Tickets de QA», enquanto a
 var qaCamadaTicket = null;   // a camada da janela de um ticket, enquanto aberta
 var qaOcupado = {};          // id → 1: um pedido de remover ou reabrir esse ticket a caminho
 var qaTamanhoPedido = 0;     // o requestAnimationFrame do reencaixe ao mudar de tamanho
+var qaDobrasAqui = {};       // o mesmo que QA_LS_DOBRAS, para quando o armazenamento está vedado
 
 /* ------------------------------------------------------ existir ou não */
 
@@ -324,7 +333,9 @@ function qaGuardarPosicao(pos) {
 /* Põe a pílula num sítio, sem animar: o transform do elemento (a CSP não
    deixa style= no HTML; o JavaScript escreve o transform direto).
    Recebe: xy — {x, y} em px; lado (opcional) — 'esq' ou 'dir', para a
-   etiqueta e o menu abrirem para dentro do ecrã.
+   etiqueta e o menu abrirem para dentro do ecrã e a pega ficar virada para
+   a borda (estilos.css, bloco «tickets de QA»). O arrasto não o passa: o
+   lado só muda ao largar (qaArrastoFim), as setas e o reencaixe.
    Devolve: nada. */
 function qaPor(xy, lado) {
   if (!qaPil) return;
@@ -378,6 +389,9 @@ function qaPararAnim() {
    gesto, e pode ser apanhada a meio (qaPousar). Só o transform; o --medio na
    --curva-entra, que é a curva de quem atravessa distância, e o --lento
    quando atravessa o ecrã (mais de QA_LONGE). Sem movimento, fica logo lá.
+   A pega troca de lado no primeiro fotograma deste deslizar, sem movimento
+   próprio: o olho segue a pílula a andar, e uma segunda animação dentro
+   dela só competiria com a do encaixe.
    Recebe: de — {x, y} onde a pílula está; para — {x, y} onde fica; lado — 'esq' ou 'dir'.
    Devolve: nada. */
 function qaDeslizar(de, para, lado) {
@@ -1047,7 +1061,8 @@ function qaVerTickets() {
 }
 
 /* O corpo da lista: a espera, a falha com «Tentar de novo», o vazio, ou os
-   abertos e, a seguir, os «Resolvidos». Com tickets já mostrados e uma
+   abertos e, a seguir, os «Resolvidos», cada um uma secção que abre e fecha
+   (qaHtmlDobra; por nascença os resolvidos recolhidos). Com tickets já mostrados e uma
    atualização falhada, diz que é o que havia.
    Devolve: o HTML (texto). */
 function qaHtmlLista() {
@@ -1064,15 +1079,16 @@ function qaHtmlLista() {
     return aviso + '<div class="empty"><b>Ainda não há tickets.</b>Quando vires alguma coisa que não está bem, toca em QA e depois em Novo ticket.</div>';
   }
   return '<div class="qa-lista">' + aviso +
-    '<h3 class="qa-sec">Abertos <span class="qa-sec-n">' + s.abertos.length + '</span></h3>' +
-    (s.abertos.length ? qaHtmlGrupos(s.abertos) : '<p class="hint">Nenhum ticket aberto.</p>') +
-    (s.resolvidos.length ? '<h3 class="qa-sec">Resolvidos <span class="qa-sec-n">' + s.resolvidos.length + '</span></h3>' +
-      '<div class="qa-linhas">' + s.resolvidos.map(qaHtmlLinha).join('') + '</div>' : '') +
+    qaHtmlDobra('abertos', 'h3', '<span class="qa-dobra-nome">Abertos</span><span class="qa-sec-n">' + s.abertos.length + '</span>',
+      s.abertos.length ? qaHtmlGrupos(s.abertos) : '<p class="hint">Nenhum ticket aberto.</p>') +
+    (s.resolvidos.length ? qaHtmlDobra('resolvidos', 'h3', '<span class="qa-dobra-nome">Resolvidos</span><span class="qa-sec-n">' + s.resolvidos.length + '</span>',
+      '<div class="qa-linhas">' + s.resolvidos.map(qaHtmlLinha).join('') + '</div>') : '') +
     '</div>';
 }
 
-/* Os abertos em grupos por gravidade, cada um com o título e quantos tem
-   (os tickets já vêm arrumados por qaSeccoes).
+/* Os abertos em grupos por gravidade, cada um com o título e quantos tem,
+   e cada um uma secção que abre e fecha (qaHtmlDobra; os tickets já vêm
+   arrumados por qaSeccoes).
    Recebe: abertos — os tickets abertos, pela ordem de qaSeccoes.
    Devolve: o HTML (texto). */
 function qaHtmlGrupos(abertos) {
@@ -1083,10 +1099,76 @@ function qaHtmlGrupos(abertos) {
     grupos[grupos.length - 1].ts.push(t);
   });
   return grupos.map(function (g) {
-    var nome = g.o < QA_GRAVIDADES.length ? QA_GRAVIDADES[g.o].rotulo : 'Sem gravidade';
-    return '<h4 class="qa-grupo">' + nome + ' <span class="qa-grupo-n">' + g.ts.length + '</span></h4>' +
-      '<div class="qa-linhas">' + g.ts.map(qaHtmlLinha).join('') + '</div>';
+    var conhecida = g.o < QA_GRAVIDADES.length;
+    var nome = conhecida ? QA_GRAVIDADES[g.o].rotulo : 'Sem gravidade';
+    return qaHtmlDobra('g-' + (conhecida ? QA_GRAVIDADES[g.o].v : 'sem'), 'h4',
+      '<span class="qa-dobra-nome">' + nome + '</span><span class="qa-grupo-n">' + g.ts.length + '</span>',
+      '<div class="qa-linhas">' + g.ts.map(qaHtmlLinha).join('') + '</div>');
   }).join('');
+}
+
+/* Uma secção da lista que abre e fecha, como as da gaveta
+   (navegacao.js:gavetaHtml): o título com um botão da largura toda — o nome,
+   quantos tem e a seta —, com aria-expanded e aria-controls para o corpo; o
+   corpo fica sempre no HTML e é a folha que o recolhe (estilos.css, bloco
+   «tickets de QA»: .qa-dobra.fechada). Nasce como está guardado neste
+   aparelho (qaDobraAberta).
+   Recebe: chave — uma de QA_DOBRAS; nivel — 'h3' (os abertos e os
+   resolvidos) ou 'h4' (os grupos de gravidade); cabeca — o HTML do nome e do
+   número; corpo — o HTML de dentro.
+   Devolve: o HTML (texto). */
+function qaHtmlDobra(chave, nivel, cabeca, corpo) {
+  var aberta = qaDobraAberta(chave), corpoId = 'qaDobra-' + chave;
+  return '<div class="qa-dobra' + (aberta ? '' : ' fechada') + '" id="qaSec-' + chave + '">' +
+    '<' + nivel + ' class="' + (nivel === 'h3' ? 'qa-sec' : 'qa-grupo') + '">' +
+      '<button type="button" class="qa-dobra-cab" id="qaCab-' + chave + '" data-toca="nada" data-click="qaDobrar(\'' + jsq(chave) + '\')" ' +
+        'aria-expanded="' + (aberta ? 'true' : 'false') + '" aria-controls="' + corpoId + '">' +
+        cabeca + '<span class="qa-dobra-seta" aria-hidden="true">' + ic('chevD', 16) + '</span></button>' +
+    '</' + nivel + '>' +
+    '<div class="qa-dobra-corpo" id="' + corpoId + '"><div class="qa-dobra-itens"><div class="qa-dobra-dentro">' + corpo + '</div></div></div>' +
+  '</div>';
+}
+
+/* As secções que se tocaram neste aparelho, só com as chaves que existem e
+   os valores que são true ou false; com o armazenamento vedado, as desta
+   sessão (qaDobrasAqui); estragado, nenhuma.
+   Devolve: {chave: true (aberta) ou false (recolhida)} (um objeto novo). */
+function qaLerDobras() {
+  var bruto = null, d = null, limpo = {};
+  try { bruto = localStorage.getItem(QA_LS_DOBRAS); } catch (e) { d = qaDobrasAqui; }
+  if (!d) { try { d = JSON.parse(bruto || '{}'); } catch (e) { d = null; } }
+  if (d && typeof d === 'object' && !Array.isArray(d)) {
+    QA_DOBRAS.forEach(function (k) { if (typeof d[k] === 'boolean') limpo[k] = d[k]; });
+  }
+  return limpo;
+}
+
+/* A secção está aberta? A escolha guardada neste aparelho; sem nenhuma, a
+   de nascença: os resolvidos recolhidos (QA_DOBRAS_FECHADAS), o resto aberto.
+   Recebe: chave — uma de QA_DOBRAS.
+   Devolve: true (aberta) ou false (recolhida). */
+function qaDobraAberta(chave) {
+  var d = qaLerDobras();
+  return chave in d ? d[chave] : QA_DOBRAS_FECHADAS.indexOf(chave) < 0;
+}
+
+/* Abre ou recolhe uma secção da lista. É da família «nada», como a gaveta
+   (navegacao.js:gavetaAlternar): troca a classe da secção e o aria-expanded
+   do botão no nó vivo, sem repintar — a transição da altura só corre num nó
+   vivo, e o foco fica no botão. Guarda neste aparelho (com o armazenamento
+   vedado, só nesta sessão), e a lista que o servidor repintar nasce igual.
+   Recebe: chave — uma de QA_DOBRAS.
+   Devolve: true se ficou aberta, false se ficou recolhida, null para uma chave que não existe. */
+function qaDobrar(chave) {
+  if (QA_DOBRAS.indexOf(chave) < 0) return null;
+  var aberta = !qaDobraAberta(chave), d = qaLerDobras();
+  d[chave] = aberta;
+  qaDobrasAqui = d;
+  try { localStorage.setItem(QA_LS_DOBRAS, JSON.stringify(d)); } catch (e) {}
+  var sec = document.getElementById('qaSec-' + chave), cab = document.getElementById('qaCab-' + chave);
+  if (sec && sec.classList) sec.classList.toggle('fechada', !aberta);
+  if (cab) cab.setAttribute('aria-expanded', aberta ? 'true' : 'false');
+  return aberta;
 }
 
 /* Uma linha da lista: o selo da gravidade, quem e quando, o sinal de que

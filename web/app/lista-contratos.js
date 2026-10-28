@@ -75,7 +75,7 @@ function vContracts(){
      secção, e cada secção junta-os de novo por imóvel (ctGruposDaLista) */
   const cs=[];
   visiveis().forEach(p=>{
-    if(s.p&&p.id!==s.p)return;
+    if(!ctNoImovel(p.id,s.p))return;
     lfSort(K,org.filtra(contractsOf(p.id)).filter(c=>ctFMatch(c,s)),{nome:c=>ctName(c),renda:c=>c.rent,inicio:c=>c.start||''}).forEach(c=>cs.push(c));
   });
   const rodape=ctRodapeDaLista(s);
@@ -298,7 +298,9 @@ function ctCampoEstado(conta){
 /* Os filtros por cima da lista, no feitio dos Movimentos (vistas.js:lfCabeca):
    a pesquisa com o funil do painel completo e os chips rápidos — o estado
    com quantos há em cada um (ctCampoEstado), o imóvel quando há mais de um com
-   contratos e, só no computador, a ordenação. O painel tem também o grupo,
+   contratos (os imóveis com contratos, a linha e os grupos de imóveis com
+   algum deles: componentes.js:imoveisEGruposOpts) e, só no computador, a
+   ordenação. O painel tem também o grupo de contratos,
    quando os há, e a origem (os meus, partilhados comigo, em que colaboro),
    quando a lista tem contratos de duas origens (vistas.js:lfOrigem), que é
    também um chip. Tocar filtra logo, sem «Aplicar». A seleção de vários entra
@@ -313,7 +315,7 @@ function ctChipsHtml(conta,s,n,cgs,origem){
   return lfCabeca('lcts',{nome:['contrato','contratos'],dos:'dos contratos',n:n,
     campos:[ctCampoEstado(conta),
       {chave:'p',nome:'Imóvel',curto:'Todos',rapido:comContratos.length>1||!!s.p,
-        opcoes:[{v:'',label:'Todos os imóveis'}].concat(comContratos.map(p=>({v:p.id,label:p.name})))},
+        opcoes:imoveisEGruposOpts(comContratos,s.p)},
       (cgs||[]).length?{chave:'g',nome:'Grupo',curto:'Todos',opcoes:[{v:'',label:'Todos os grupos'}].concat(cgs.map(g=>({v:g.id,label:g.name})))}:null,
       origem||null],
     ordem:{opcoes:[{v:'nome',label:'Nome'},{v:'renda',label:'Renda'},{v:'inicio',label:'Início'}],rapido:'largo'}});
@@ -327,7 +329,7 @@ function ctChipsHtml(conta,s,n,cgs,origem){
 function ctRodapeDaLista(s){
   let out='';
   if(s.st==='on'&&!s.g&&!String(s.q||'').trim()){
-    const sem=visiveis().filter(p=>(!s.p||p.id===s.p)&&(!s.or||origemDaCasa(p.id)===s.or)&&p.use==='investimento'&&!activeContracts(p.id).length);
+    const sem=visiveis().filter(p=>ctNoImovel(p.id,s.p)&&(!s.or||origemDaCasa(p.id)===s.or)&&p.use==='investimento'&&!activeContracts(p.id).length);
     if(sem.length){
       const term=sem.some(p=>contractsOf(p.id).some(c=>ctEstado(c)==='terminado'));
       out+=`<p class="small ct-sem-vigor">${esc(listaE(sem.map(p=>p.name)))} ${sem.length===1?'não tem':'não têm'} contrato em vigor${term?` · <button type="button" class="ct-ligacao" data-toca="vista" data-click="ctFiltroRapido('off')">ver terminados</button>`:''}</p>`;
@@ -342,11 +344,21 @@ function ctRodapeDaLista(s){
    Recebe: v — '' (todos), 'on', 'fut' ou 'off'.
    Devolve: nada — repinta a vista. */
 function ctFiltroRapido(v){lf('lcts').st=String(v||'');render()}
-// um contrato passa nos filtros da lista? imóvel, estado, grupo e pesquisa por texto (nome, inquilinos, IBAN, notas…)
+/* Um imóvel passa no filtro «Imóvel» da lista? Vazio, todos; um id, esse
+   imóvel; 'g:ID' (um grupo de imóveis, componentes.js:imoveisEGruposOpts), os
+   imóveis do grupo. A lista já só tem os imóveis do âmbito (ambito.js:visiveis).
+   Recebe: pid — o id do imóvel; v — o valor do filtro (lf('lcts').p).
+   Devolve: true/false. */
+function ctNoImovel(pid,v){
+  if(!v)return true;
+  if(String(v).startsWith('g:')){const g=grp(String(v).slice(2));return !!g&&(g.ids||[]).indexOf(pid)>-1}
+  return pid===v;
+}
+// um contrato passa nos filtros da lista? imóvel (ou grupo de imóveis), estado, grupo e pesquisa por texto (nome, inquilinos, IBAN, notas…)
 // Recebe: c — o contrato (objeto); s — o estado dos filtros da lista (lf('lcts'): campos p, st, g e a pesquisa).
 // Devolve: true se o contrato passa em todos os filtros, false caso contrário.
 function ctFMatch(c,s){
-  if(s.p&&c.propertyId!==s.p)return false;
+  if(!ctNoImovel(c.propertyId,s.p))return false;
   /* três ramos e não a negação de um booleano: com dois, um contrato que
      ainda não começou caía em «Terminados», que é o separador errado com o
      rótulo errado */

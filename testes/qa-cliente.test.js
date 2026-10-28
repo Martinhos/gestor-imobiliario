@@ -6,7 +6,10 @@
 // mudam a pílula de sítio; o contexto que vai com o ticket (sem inventar, com
 // o rasto cortado); a descrição obrigatória; o envio (POST e depois o PUT da
 // captura, e só a captura outra vez quando é ela que falha); a lista (abertos
-// e resolvidos, pela ordem certa, e o número de abertos); remover com Anular;
+// e resolvidos, pela ordem certa, e o número de abertos); as secções da lista
+// que abrem e fecham (os resolvidos recolhidos por nascença, o estado
+// guardado no aparelho); a pega do lado da borda, trocada só ao largar;
+// remover com Anular;
 // reabrir; o HTML gerado sem style= nem on…=, com o texto escapado; o autor
 // de uma conta apagada como «Conta apagada»; e a pílula acima das janelas,
 // menos das do próprio QA. A app
@@ -30,7 +33,7 @@ afterEach(() => zerar());
 function zerar() {
   vm.runInContext('qaRemoverPilula();qaLista={tickets:null,falhou:false,aPedir:null};qaAbertos=null;qaRascunho=null;' +
     'qaCamadaLista=null;qaCamadaTicket=null;qaOcupado={};qaEngoleAte=0;qaArrastouAqui=false;qaContextoGuardado=null;' +
-    'qaPonteiro="";localStorage.clear();modalStack.length=0;CW.ambiente="producao";CW.user=null;CW._rasto=[];', app.__ctx);
+    'qaPonteiro="";qaDobrasAqui={};localStorage.clear();modalStack.length=0;CW.ambiente="producao";CW.user=null;CW._rasto=[];', app.__ctx);
 }
 
 /* A sessão de uma conta no ambiente de desenvolvimento.
@@ -414,7 +417,7 @@ describe('a lista', () => {
     igual(s.abertos.map((t) => t.id), ['B2', 'B1', 'I1', 'D1', 'S1', 'S2']);
     igual(s.resolvidos.map((t) => t.id), ['R1']);
     const h = app.qaHtmlGrupos(s.abertos);
-    const titulos = [...h.matchAll(/<h4 class="qa-grupo">([^<]+) <span class="qa-grupo-n">(\d+)<\/span><\/h4>/g)].map((m) => m[1] + ' ' + m[2]);
+    const titulos = [...h.matchAll(/<h4 class="qa-grupo"><button [^>]*><span class="qa-dobra-nome">([^<]+)<\/span><span class="qa-grupo-n">(\d+)<\/span>/g)].map((m) => m[1] + ' ' + m[2]);
     igual(titulos, ['Bloqueia 2', 'Incomoda 1', 'Detalhe 1', 'Sem gravidade 2']);
     const ordem = ["qaAbrirTicket('B2')", "qaAbrirTicket('B1')", 'Incomoda', "qaAbrirTicket('I1')", 'Sem gravidade', "qaAbrirTicket('S2')"].map((x) => h.indexOf(x));
     assert.ok(ordem.every((v, i) => v > -1 && (i === 0 || v > ordem[i - 1])), 'pela ordem: ' + ordem.join(', '));
@@ -471,6 +474,111 @@ describe('a lista', () => {
   });
 });
 
+describe('as secções da lista abrem e fecham', () => {
+  const LISTA = [T('B1', { severity: 'bloqueia' }), T('D1', { severity: 'detalhe' }), T('S1'), T('R1', { status: 'resolvido', resolved_at: 5 })];
+
+  /* O estado de cada secção no HTML da lista: a chave e se está aberta, pela
+     classe e pelo aria-expanded (que têm de concordar).
+     Recebe: h — o HTML da lista.
+     Devolve: {chave: true (aberta) ou false}. */
+  function estados(h) {
+    const r = {};
+    for (const m of h.matchAll(/<div class="qa-dobra( fechada)?" id="qaSec-([\w-]+)">[\s\S]*?aria-expanded="(true|false)" aria-controls="qaDobra-([\w-]+)"/g)) {
+      assert.equal(m[2], m[4], 'o botão controla o corpo da sua secção');
+      assert.equal(!m[1], m[3] === 'true', 'a classe e o aria-expanded de ' + m[2] + ' concordam');
+      r[m[2]] = !m[1];
+    }
+    return r;
+  }
+
+  test('por nascença os abertos e os grupos de gravidade abertos, os resolvidos recolhidos; cada título é um botão que dobra', () => {
+    app.qaLista.tickets = LISTA;
+    const h = app.qaHtmlLista();
+    igual(estados(h), { abertos: true, 'g-bloqueia': true, 'g-detalhe': true, 'g-sem': true, resolvidos: false });
+    assert.match(h, /<h3 class="qa-sec"><button type="button" class="qa-dobra-cab" id="qaCab-resolvidos" data-toca="nada" data-click="qaDobrar\('resolvidos'\)"/);
+    assert.match(h, /<span class="qa-dobra-nome">Resolvidos<\/span><span class="qa-sec-n">1<\/span>/, 'quantos tem vê-se com ela recolhida');
+    assert.match(h, /id="qaDobra-resolvidos"><div class="qa-dobra-itens"><div class="qa-dobra-dentro"><div class="qa-linhas"><button type="button" class="qa-linha"[^>]*qaAbrirTicket\('R1'\)/,
+      'recolhida, as linhas continuam no HTML (é a folha que as esconde)');
+    assert.doesNotMatch(h, SEM_EM_LINHA);
+  });
+
+  test('tocar no título troca a secção no nó vivo, guarda no aparelho, e a lista repintada nasce igual', () => {
+    app.qaLista.tickets = LISTA;
+    const sec = app.document.getElementById('qaSec-resolvidos'), cab = app.document.getElementById('qaCab-resolvidos');
+    const classes = [], attrs = {};
+    sec.classList = { toggle(c, on) { classes.push([c, on]); } };
+    cab.setAttribute = (k, v) => { attrs[k] = v; };
+    assert.equal(app.qaDobrar('resolvidos'), true, 'os resolvidos abrem');
+    igual(classes, [['fechada', false]]);
+    igual(attrs, { 'aria-expanded': 'true' });
+    assert.equal(app.qaDobrar('g-detalhe'), false, 'um grupo recolhe-se');
+    igual(JSON.parse(app.localStorage.getItem('gi_qa_dobras')), { resolvidos: true, 'g-detalhe': false });
+    igual(estados(app.qaHtmlLista()), { abertos: true, 'g-bloqueia': true, 'g-detalhe': false, 'g-sem': true, resolvidos: true });
+    assert.equal(app.qaDobrar('abertos'), false);
+    assert.equal(estados(app.qaHtmlLista()).abertos, false, 'os abertos também se recolhem');
+    assert.equal(app.qaDobrar('lixo'), null, 'uma chave que não existe não mexe em nada');
+    assert.ok(!('lixo' in JSON.parse(app.localStorage.getItem('gi_qa_dobras'))));
+  });
+
+  test('guardado estragado vale a nascença; com o armazenamento vedado, o toque vale nesta sessão', () => {
+    app.qaLista.tickets = LISTA;
+    app.localStorage.setItem('gi_qa_dobras', '{isto não é json');
+    igual(estados(app.qaHtmlLista()).resolvidos, false);
+    app.localStorage.setItem('gi_qa_dobras', JSON.stringify({ resolvidos: 'sim', abertos: false, outra: true }));
+    igual(app.qaLerDobras(), { abertos: false }, 'só as chaves que existem e com true ou false');
+    app.localStorage.clear();
+    const real = app.localStorage;
+    app.localStorage = { getItem() { throw new Error('vedado'); }, setItem() { throw new Error('vedado'); } };
+    try {
+      assert.equal(app.qaDobraAberta('resolvidos'), false);
+      assert.equal(app.qaDobrar('resolvidos'), true);
+      assert.equal(app.qaDobraAberta('resolvidos'), true, 'fica em memória');
+      assert.equal(estados(app.qaHtmlLista()).resolvidos, true);
+    } finally {
+      app.localStorage = real;
+    }
+  });
+
+  test('a folha recolhe pela altura num nó vivo, tira as linhas do Tab só no fim, e o hover só com rato', () => {
+    const css = seccaoQa();
+    assert.ok(css.includes('.qa-dobra-corpo{display:grid;grid-template-rows:1fr;transition:grid-template-rows var(--medio) var(--curva-entra)}'));
+    assert.ok(css.includes('.qa-dobra.fechada>.qa-dobra-corpo{grid-template-rows:0fr;'));
+    assert.ok(css.includes('.qa-dobra.fechada>.qa-dobra-corpo>.qa-dobra-itens{visibility:hidden;transition:visibility 0s var(--medio)}'));
+    assert.match(css, /\.qa-dobra-cab\{[^}]*min-height:44px/, 'o alvo do dedo');
+    assert.ok(css.includes('@media(hover:hover) and (pointer:fine){.qa-dobra-cab:hover{'));
+    assert.doesNotMatch(css.replace(/@media\(hover:hover\)[^{]*\{[^{}]*\{[^}]*\}\}/g, ''), /:hover/, 'nenhum :hover fora do portão');
+  });
+});
+
+describe('a pega do lado da borda', () => {
+  test('a pega vira-se para a borda: à direita vai para o fim, com o enchimento curto do lado dela', () => {
+    const css = seccaoQa();
+    assert.ok(css.includes('.qa-pilula[data-lado="dir"] .qa-pega{order:1}'), 'à direita, a pega depois do número');
+    assert.ok(css.includes('.qa-pilula[data-lado="dir"] .qa-botao{padding:0 6px 0 12px}'), 'e o enchimento espelhado');
+    assert.match(css, /\.qa-botao\{[^}]*padding:0 12px 0 6px/, 'à esquerda, como nasceu');
+    assert.ok(app.qaHtmlPilula(1, false).indexOf('qa-pega') < app.qaHtmlPilula(1, false).indexOf('qa-ic'),
+      'no HTML a pega vem primeiro (a ordem de leitura não muda; é a folha que a leva)');
+  });
+
+  test('o lado só muda ao largar: a meio do arrasto, do outro lado do ecrã, a pega fica onde estava', () => {
+    apiFalsa();
+    noDev();
+    app.qaSincronizar();
+    const lados = [];
+    app.qaPil.setAttribute = (k, v) => { if (k === 'data-lado') lados.push(v); };
+    app.qaReencaixar();
+    igual(lados, ['dir'], 'nasce à direita');
+    app.qaPousar(ponteiro(1100, 700, { type: 'pointerdown' }));
+    app.qaArrastoMove(ponteiro(600, 600));
+    app.qaArrastoMove(ponteiro(100, 500));
+    igual(lados, ['dir'], 'atravessou o meio a arrastar e o lado não mudou');
+    app.qaArrastoFim(ponteiro(100, 500, { type: 'pointerup' }));
+    igual(lados, ['dir', 'esq'], 'ao largar à esquerda, a pega passa para a esquerda');
+    app.qaTecla({ key: 'ArrowRight', preventDefault() {} });
+    igual(lados, ['dir', 'esq', 'dir'], 'e as setas também a trocam');
+  });
+});
+
 describe('o HTML gerado', () => {
   test('sem style= nem on…=, em todos os pedaços; o texto de quem escreve vai escapado', () => {
     const t = T('X1', { body: 'Linha 1\nLinha 2', severity: 'detalhe', imagem: true, status: 'resolvido', resolution: 'Feito', resolved_at: 9,
@@ -522,6 +630,15 @@ describe('o ticket sobrevive à conta e a pílula às janelas', () => {
    Devolve: o texto do web/estilos.css. */
 function lerFolha() {
   return readFileSync(new URL('../web/estilos.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+}
+
+/* O bloco do QA na folha de estilos, entre os dois marcadores.
+   Devolve: o texto do bloco. */
+function seccaoQa() {
+  const css = lerFolha();
+  const ini = css.indexOf('/* === tickets de QA:'), fim = css.indexOf('/* === fim: tickets de QA === */');
+  assert.ok(ini > -1 && fim > ini, 'os marcadores do bloco do QA');
+  return css.slice(ini, fim);
 }
 
 /* A base da app (o db do contexto).

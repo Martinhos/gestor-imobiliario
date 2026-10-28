@@ -21,7 +21,11 @@
    cartão dos pedidos da nuvem.
 
    «Marcar tudo como lido» guarda a marca temporal nas definições — que
-   sincronizam, por isso ler num aparelho limpa o sino nos outros. */
+   sincronizam, por isso ler num aparelho limpa o sino nos outros. Tocar num
+   aviso das casas (um de CW.state.departures, que leva à ficha do imóvel)
+   lê esse aviso só: o id dele vai para db.settings.notifLidos ({id: 1},
+   notifLerAviso), que sincroniza da mesma maneira — a marca temporal, posta
+   até ao aviso tocado, calava os mais novos que ainda ninguém viu. */
 
 /* O nome de quem fez uma alteração, a partir do id de utilizador: delega em
    nomeUtilizador (proprietários, depois as pessoas do estado, depois o id
@@ -447,6 +451,39 @@ function notifMarca(desde){
   return Number((db.settings||{}).notifLidoAte||0);
 }
 
+/* Os avisos das casas lidos um a um (notifLerAviso): {id: 1} em
+   db.settings.notifLidos. É um objeto e não uma lista pela razão das
+   apresentações (cloud/apresentacao.js:APR_CHAVE): a fusão a três das
+   definições junta-o chave a chave (nucleo.js:fundirTres), e dois aparelhos
+   que leem avisos diferentes ficam com os dois — numa lista, o último a
+   chegar levava a sua.
+   Devolve: o objeto (vazio sem nenhum, ou com um valor que não é objeto). */
+function notifLidos(){
+  const v=db.settings&&db.settings.notifLidos;
+  return v&&typeof v==='object'&&!Array.isArray(v)?v:{};
+}
+
+/* Lê um aviso das casas só, ao tocá-lo no sino: o id dele vai para
+   db.settings.notifLidos e sincroniza com as definições. Não mexe na marca
+   temporal (notifLidoAte): pô-la até este aviso calava os mais novos que
+   ainda não se viram. A chave guarda só os ids dos avisos que o servidor
+   ainda manda (CW.state.departures, os dos últimos 90 dias): os outros já
+   não aparecem, e sem a poda a chave crescia para sempre. Sem a lista do
+   servidor, não poda. Depois repinta (o sino e o cartão da atividade).
+   Recebe: id — o id do aviso (o de CW.state.departures).
+   Devolve: nada. */
+function notifLerAviso(id){
+  const k=id==null?'':String(id);if(!k)return;
+  const st=window.CW&&CW.state,lista=st&&Array.isArray(st.departures)?st.departures:null;
+  const v=Object.assign({},notifLidos());v[k]=1;
+  if(lista){
+    const ha={};lista.forEach(d=>{if(d&&d.id!=null)ha[String(d.id)]=1});
+    Object.keys(v).forEach(x=>{if(!ha[x]&&x!==k)delete v[x]});
+  }
+  db.settings.notifLidos=v;
+  save();render();
+}
+
 /* A hora de uma linha do sino, como as da atividade: «22/10, 14:30».
    Recebe: at — marca temporal em ms.
    Devolve: o texto da data e da hora. */
@@ -467,7 +504,9 @@ function notifQuando(at){
    a ficha do imóvel se ele ainda estiver na base e os Imóveis ligados (o
    propView é desse serviço; a app carrega-o sempre, e por isso a guarda é o
    servicoLigado e não um typeof); sem isso a linha não leva a lado nenhum
-   (ir vazio).
+   (ir vazio). Um aviso que já se tocou (notifLerAviso, o id em
+   db.settings.notifLidos) está lido e não entra, mesmo mais novo do que a
+   marca.
 
    Os avisos dos pedidos para transferir o controlo chegam pelo mesmo caminho e
    leem-se da mesma maneira, uma frase que já diz quem (notifFraseDoAviso):
@@ -489,17 +528,19 @@ function notifSaidas(desde){
   if(!lista.length)return [];
   const meu=(CW.user&&CW.user.id)||'';
   const marca=notifMarca(desde);
-  const colab=servicoLigado('colaboradores');
+  const colab=servicoLigado('colaboradores'),lidos=notifLidos();
   const out=[];
   lista.forEach(d=>{
     if(!d||(d.kind==='colab.sair'&&!colab))return;
     if(meu&&d.actorId===meu)return;   // a minha própria saída não é aviso para mim
     const at=typeof d.at==='number'?d.at:(Number(d.at)||Date.parse(d.at)||0);
     if(!(at>marca))return;
+    if(d.id!=null&&lidos[String(d.id)])return;   // já tocado: lido só este
     const f=notifFraseDoAviso(d);if(!f)return;
     const abre=!!d.houseId&&servicoLigado('properties')&&!!prop(d.houseId);
     out.push({tipo:'saida',id:String(d.id||''),kind:d.kind,titulo:f.titulo,sub:notifQuando(at),quem:f.quem,at,
-      ir:abre?`propView('${jsq(d.houseId)}')`:'',toca:'camada'});
+      // o toque lê o aviso antes de abrir a ficha, no sino e no cartão da Visão geral (painel-geral.js:atividadeCard)
+      ir:abre?(d.id!=null?`notifLerAviso('${jsq(String(d.id))}');`:'')+`propView('${jsq(d.houseId)}')`:'',toca:'camada'});
   });
   return out.sort((a,b)=>b.at-a.at);
 }
@@ -702,7 +743,9 @@ function atencaoCorpo(){
   /* uma linha da atividade: as iniciais de quem, o que fez e quando; leva ao
      sítio dela (o separador, ou a ficha do imóvel de onde alguém saiu). Uma
      saída de um imóvel que já não está na base não leva a lado nenhum, e por
-     isso é uma linha e não um botão, como o prazo sem destino */
+     isso é uma linha e não um botão, como o prazo sem destino. Tocar num
+     aviso das casas lê-o (o notifLerAviso vai no ir dele, notifSaidas)
+     antes de abrir a ficha */
   const atividade=n=>{
     const dentro=`<span class="avatar" aria-hidden="true">${esc(initials(notifQuem(n)))}</span><div class="atencao-txt"><p class="title">${esc(n.titulo)}</p><p class="small">${esc(n.sub)}</p></div>`;
     return n.ir?`<button type="button" class="atencao-linha tap" data-toca="${n.toca||'ecra'}" data-click="closeModal();${n.ir}">${dentro}</button>`:`<div class="atencao-linha">${dentro}</div>`;

@@ -471,12 +471,20 @@ function cLine(series,labels,o){
    eixo fica curto, kfmt) e desceAoContrario empilha os negativos pela ordem
    inversa — a Visão geral põe as prestações (constantes) junto ao eixo e as
    despesas (as que variam) no fundo, como o canvas, sem trocar a ordem da
-   legenda nem da leitura.
+   legenda nem da leitura. previstoDe=i diz que as colunas de i em diante são
+   previstas e não registadas (a Visão geral: os meses depois do corrente, com
+   o que os planeados preveem): as barras delas esbatem (.gprevista), a
+   legenda ganha a entrada «previsto» e a leitura, a descrição e as dicas
+   dizem «nov · previsto» — o eixo fica «nov».
    Devolve: HTML — a cabeça: a legenda (junta-se a partir das etiquetas que
    aparecem nos segmentos) à esquerda e o lugar da leitura no canto superior
    direito (graficos.js:cabecaDaLeitura); e, por baixo, o desenho. */
 function cBars(groups,labels,o){
   o=o||{};const h=o.h||190,x0=44,x1=W-6,y0=10,y1=h-8;
+  const pv=Number.isInteger(o.previstoDe)&&o.previstoDe>=0&&o.previstoDe<groups.length?o.previstoDe:-1;
+  const prevista=i=>pv>-1&&i>=pv;
+  /* o que a leitura (e a dica e a descrição) diz de cada coluna */
+  const rot=labels.map((l,i)=>prevista(i)?l+' · previsto':l);
   const tops=groups.map(g=>sum(g.filter(v=>v.value>0).map(v=>v.value)));
   const bots=groups.map(g=>sum(g.filter(v=>v.value<0).map(v=>v.value)));
   const max=Math.max(1,...tops),min=Math.min(0,...bots);
@@ -500,12 +508,15 @@ function cBars(groups,labels,o){
        sobem juntas, senão a barra empilhada crescia aos bocados */
     const atraso=grp.some(s=>s.value)?atrasoEntrada(col++,colunas):'';
     const segs=o.desceAoContrario?grp.filter(s=>s.value>=0).concat(grp.filter(s=>s.value<0).reverse()):grp;
+    /* a coluna prevista vai num <g> que a esbate inteira (estilos.css:.gprevista) */
+    const emGrupo=prevista(i)&&grp.some(s=>s.value);
+    if(emGrupo)g+='<g class="gprevista">';
     segs.forEach(seg=>{
       if(!seg.value)return;
       const a=seg.value>0?up:dn,b=a+seg.value;
       if(seg.value>0)up=b;else dn=b;
       const ya=Y(Math.max(a,b)),yb=Y(Math.min(a,b));
-      const tip=`${labels[i]} · ${seg.label}: ${(o.fmt||euro)(Math.abs(seg.value))}`;
+      const tip=`${rot[i]} · ${seg.label}: ${(o.fmt||euro)(Math.abs(seg.value))}`;
       /* «desce» = está abaixo da linha do zero, e por isso cresce a partir do
          TOPO. Sem isto crescia a partir do fundo do gráfico para cima, solta
          do eixo, e só assentava no fim (index.html:.gbar.desce). */
@@ -513,6 +524,7 @@ function cBars(groups,labels,o){
          forma com um toque proprio era mais uma paragem do Tab sem destino */
       g+=`<rect class="gbar${seg.value<0?' desce':''}" x="${(cx-w/2).toFixed(1)}" y="${ya.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1,yb-ya).toFixed(1)}" rx="2" fill="${seg.color}"${atraso?` data-atraso="${atraso}"`:''}><title>${esc(tip)}</title></rect>`;
     });
+    if(emGrupo)g+='</g>';
   });
   const names=[];groups.forEach(g2=>g2.forEach(s=>{if(!names.some(n=>n.label===s.label))names.push({label:s.label,color:s.color})}));
   thinLabels(labels).forEach((l,i)=>{
@@ -521,8 +533,11 @@ function cBars(groups,labels,o){
   });
   const ler=names.map(nm=>({nome:nm.label,cor:nm.color,
     vals:groups.map(gr=>sum(gr.filter(x=>x.label===nm.label).map(x=>x.value)))}));
-  return cabecaDaLeitura(`<div class="chartbox"${dadosParaLer(labels,ler,groups.map((_,i)=>x0+bw*i+bw/2),o.fmt)}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico(o.titulo||'Entradas e saídas',labels)}>${g}</svg></div>`,
-    labels,ler,o.fmt,legend(names,false),o.ler);
+  /* a entrada «previsto» da legenda: sem cor de série, a bolinha esbatida
+     como as barras (estilos.css:.legend .li.prevista) */
+  const leg=names.concat(pv>-1?[{label:'previsto',color:'',cls:'prevista'}]:[]);
+  return cabecaDaLeitura(`<div class="chartbox"${dadosParaLer(rot,ler,groups.map((_,i)=>x0+bw*i+bw/2),o.fmt)}><svg viewBox="0 0 ${W} ${h+13}" role="img"${descricaoDoGrafico((o.titulo||'Entradas e saídas')+(pv>-1?' (previsto de '+labels[pv]+' em diante)':''),labels)}>${g}</svg></div>`,
+    rot,ler,o.fmt,legend(leg,false),o.ler);
 }
 /* Anel de proporções com o total ao centro. items=[{label,value,color}] — valores ≤ 0
    ficam de fora. o: center substitui o texto central, sub é a linha pequena por baixo,
@@ -581,10 +596,11 @@ function cHBars(items,o){
 }
 // Legenda com bolinha de cor. withVal acrescenta valor e percentagem; itens com "act" ficam clicáveis.
 // Recebe: items — array de {label, color} e, conforme o caso, value (texto já
-// formatado), extra (a percentagem) e act (o código a correr ao tocar);
+// formatado), extra (a percentagem), act (o código a correr ao tocar) e cls (uma
+// classe a mais na linha; com color '', a bolinha fica com a cor que o CSS lhe der);
 // withVal — verdadeiro para mostrar value e extra.
 // Devolve: HTML (string) da legenda.
 function legend(items,withVal){
-  return `<div class="legend">${items.map(i=>`<div class="li ${i.act?'tap':''}" ${i.act?`data-toca="vista" data-click="${i.act}"`:''}><span class="dot" data-fundo="${i.color}"></span>
+  return `<div class="legend">${items.map(i=>`<div class="li ${i.act?'tap':''}${i.cls?' '+i.cls:''}" ${i.act?`data-toca="vista" data-click="${i.act}"`:''}><span class="dot"${i.color!==''?` data-fundo="${i.color}"`:''}></span>
     <span class="nm">${esc(i.label)}</span>${withVal?`<span class="vl">${i.value||''}</span>${i.extra?`<span class="small u-minw-38px u-ta-right">${i.extra}</span>`:''}`:''}</div>`).join('')}</div>`;
 }

@@ -37,7 +37,18 @@ var AVISOS = [
         itens: [
           'Quem cria conta é recebido com uma apresentação do essencial: como se adicionam um imóvel, um inquilino e um contrato, o que são os planeados e de onde vêm, e o que poupam os modelos.',
           'Cada separador explica-se uma vez, na primeira visita depois desta versão: um carrossel curto com o que mostra, como está arrumado e onde se toca. Fecha-se no ✕ ou no «Percebi», e não volta. Se fechares uma antes do fim, a app pergunta se queres continuar a vê-las.',
-          'Reveem-se todas na Ajuda, em «Apresentações».',
+          'Reveem-se todas na Ajuda, em «Apresentações», onde também as podes marcar todas como vistas. Rever uma até ao fim conta como vista.',
+        ],
+      },
+      {
+        titulo: 'Visão geral e filtros',
+        afeta: ['app', 'imoveis', 'contratos', 'movimentos', 'creditos', 'partilha'],
+        itens: [
+          'As entradas e saídas da Visão geral mostram o ano inteiro: os meses que faltam trazem, esbatido, o que os planeados preveem.',
+          'O seletor da Visão geral filtra também por proprietário: os teus imóveis, ou os de cada pessoa com quem partilhas.',
+          'Nos Contratos, nos Planeados e nos Créditos, o filtro do imóvel tem também os grupos de imóveis, depois dos imóveis.',
+          'Tocar num aviso das casas partilhadas abre o imóvel e marca esse aviso como lido.',
+          'Nas categorias, o «Fora dos totais» ligado fica a vermelho.',
         ],
       },
       {

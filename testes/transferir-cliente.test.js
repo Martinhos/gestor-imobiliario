@@ -522,7 +522,7 @@ describe('os avisos e o servidor de antes', () => {
       'Todos aceitaram: Bruno passou a gerir T2 Benfica.', 'Bruno recusou o pedido para transferir o controlo de T2 Benfica.',
       'Bruno cancelou o pedido para transferir o controlo de T2 Benfica.',
       'Bruno passou a gerir Partilhada na app.', 'Bruno passou a gerir Casa X: continuas com o mesmo cargo.']);
-    assert.equal(l[0].ir, "propView('H1')", 'o imóvel ainda está na base: abre a ficha');
+    assert.equal(l[0].ir, "notifLerAviso('1');propView('H1')", 'o imóvel ainda está na base: lê o aviso e abre a ficha');
     assert.equal(l[4].ir, '', 'o imóvel já não está na base: a linha não leva a lado nenhum');
     assert.equal(l[4].quem, 'Bruno', 'as iniciais de quem passou a gerir');
     assert.equal(app.notifConta(), 5);

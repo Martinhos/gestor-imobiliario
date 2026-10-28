@@ -566,13 +566,13 @@ describe('quando abre', () => {
     assert.equal(app.aprQueAbrir(), 'settings');
   });
 
-  test('a Ajuda reabre sem mudar o estado', () => {
+  test('a Ajuda reabre sem mudar o estado, a não ser que se chegue à última imagem', () => {
     montar();
     registarDeBrincar('contracts');
     app.aprRever('contracts');
     assert.equal(app.modalStack.length, 1);
     app.closeModal('x');
-    igual(vistas(), {}, 'rever não marca');
+    igual(vistas(), {}, 'rever e fechar a meio não marca');
     app.aprContaNova('EU');
     app.aprRever('boas-vindas');
     const L = app.modalStack[0];
@@ -581,7 +581,39 @@ describe('quando abre', () => {
     app.aprSeguinte();
     assert.equal(app.modalStack.length, 0);
     assert.equal(app.tab, 'dashboard', 'não mudou de separador');
-    assert.equal(app.localStorage.getItem('gi_apr_nova'), 'EU', 'nem larga o sinal das boas-vindas');
+    igual(vistas(), { 'boas-vindas': 1 }, 'chegar ao fim e carregar no «Percebi» marca só essa');
+    assert.equal(app.localStorage.getItem('gi_apr_nova'), null, 'e larga o sinal das boas-vindas');
+  });
+
+  test('rever na Ajuda até à última imagem e fechar no ✕ também conta como vista (ticket de QA ea801987)', () => {
+    montar();
+    registarDeBrincar('contracts', 3);
+    app.aprRever('contracts');
+    app.aprIr(app.modalStack[0].apr, 2);
+    app.closeModal('x');
+    assert.equal(app.modalStack.length, 0, 'sem pergunta: rever nunca pergunta');
+    igual(vistas(), { contracts: 1 });
+    app.CW.user = { id: 'EU' };
+    registarDeBrincar('transactions', 2);
+    app.aprRever('transactions');
+    app.CW.user = { id: 'OUTRA' };
+    app.aprIr(app.modalStack[0].apr, 1);
+    app.closeModal('x');
+    assert.ok(!vistas().transactions, 'noutra sessão não marca');
+  });
+
+  test('«Marcar todas como vistas» na Ajuda: todas as da conta ficam vistas e o botão sai (ticket de QA f6e09ead)', () => {
+    montar();
+    registarDeBrincar('contracts');
+    registarDeBrincar('properties');
+    app.aprContaNova('EU');
+    const antes = app.apresentacoesNaAjuda();
+    assert.match(antes, /data-click="aprMarcarTodasVistas\(\)">Marcar todas como vistas</, 'com alguma por ver, o botão está lá');
+    app.aprMarcarTodasVistas();
+    for (const id of app.aprDaConta()) assert.ok(vistas()[id], id + ' vista');
+    assert.equal(app.aprQueAbrir(), '', 'nenhuma abre sozinha');
+    assert.equal(app.localStorage.getItem('gi_apr_nova'), null, 'o sinal das boas-vindas sai');
+    assert.doesNotMatch(app.apresentacoesNaAjuda(), /Marcar todas como vistas/, 'todas vistas, o botão sai');
   });
 });
 

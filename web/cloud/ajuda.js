@@ -135,8 +135,9 @@ function tutoriaisNaAjuda() {
    de cada separador que esta conta vê (apresentacao.js:aprDaConta), pela
    ordem da navegação, no mesmo carrossel de mosaicos — quantas imagens tem,
    o nome e o selo «Vista» ou o resumo. Abrir uma daqui é rever: a janela é a
-   mesma, e o estado não muda (apresentacao.js:aprRever). No cabeçalho,
-   quantas já viu.
+   mesma, e o estado só muda se se chegar à última imagem (apresentacao.js:aprRever).
+   No cabeçalho, quantas já viu; por baixo dos mosaicos, enquanto houver
+   alguma por ver, «Marcar todas como vistas» (apresentacao.js:aprMarcarTodasVistas).
    Recebe: nada.
    Devolve: o HTML da secção, como string — vazia sem apresentações. */
 function apresentacoesNaAjuda() {
@@ -155,7 +156,9 @@ function apresentacoesNaAjuda() {
         '<b>' + esc(aprTexto(def.nome)) + '</b>' +
         (aprVista(id) ? '<span class="badge in">Vista</span>' : '<span class="small">' + esc(resumo) + '</span>') +
         '</button>';
-    }).join('') + '</div>';
+    }).join('') + '</div>' +
+    (vistas < ids.length && typeof aprMarcarTodasVistas === 'function'
+      ? '<div class="aj-apr-pe"><button type="button" class="btn sm" data-toca="dados" data-click="aprMarcarTodasVistas()">Marcar todas como vistas</button></div>' : '');
 }
 
 /* Os textos do pedido que mudam com o tipo: o exemplo do assunto, o rótulo e

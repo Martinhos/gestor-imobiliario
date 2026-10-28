@@ -17,6 +17,7 @@ function monta() {
   app.db.tenants = []; app.db.visits = []; app.db.recurring = [];
   app.db.transactions = [];
   app.db.settings.notifLidoAte = 1000;   // marca posta: nada de inundacao
+  delete app.db.settings.notifLidos;     // e nenhum aviso lido um a um
 }
 
 describe('a atividade partilhada', () => {
@@ -459,20 +460,22 @@ describe('quem saiu, no sino e no painel', () => {
     assert.match(corpo, /<h3>Atividade nas casas partilhadas<\/h3>/);
     assert.match(corpo, /Rui deixou de colaborar em T2 Benfica\./);
     assert.match(corpo, /Rui Costa deixou de ser comproprietário de T2 Benfica\./);
-    assert.match(corpo, /<button type="button" class="atencao-linha tap" data-toca="camada" data-click="closeModal\(\);propView\('P1'\)"><span class="avatar" aria-hidden="true">RC<\/span>/);
+    assert.match(corpo, /<button type="button" class="atencao-linha tap" data-toca="camada" data-click="closeModal\(\);notifLerAviso\('e2'\);propView\('P1'\)"><span class="avatar" aria-hidden="true">RC<\/span>/);
     assert.ok(!/\son[a-z]+=|style=/.test(corpo), 'sem style= nem on…=');
     assert.match(pe, /Marcar tudo como lido/, 'há o que marcar como lido');
   });
 
   test('o toque: com a casa na base abre a ficha (propView); sem ela, ou com os Imóveis desligados, a linha não é um botão', () => {
     comSaidas([saida('e1', 'colab.sair', 5000)]);
-    assert.equal(app.notifSaidas()[0].ir, "propView('P1')");
+    assert.equal(app.notifSaidas()[0].ir, "notifLerAviso('e1');propView('P1')", 'lê o aviso e abre a ficha');
     let abriu = '';
     const viewReal = app.propView;
     app.propView = (id) => { abriu = id; };
     try { app.correrAcao(app.notifSaidas()[0].ir, null, null); } finally { app.propView = viewReal; }
     assert.equal(abriu, 'P1', 'a ação abre a ficha da casa');
+    assert.equal(app.notifSaidas().length, 0, 'e lê o aviso');
 
+    delete app.db.settings.notifLidos;
     app.db.properties = [];
     assert.equal(app.notifSaidas()[0].ir, '', 'a casa já não está na base');
     const { corpo } = corpoDoSino();
@@ -495,7 +498,7 @@ describe('quem saiu, no sino e no painel', () => {
     const h = app.pedeAtencao();
     assert.match(h, /<b>1 novidade nas casas partilhadas<\/b><span class="small">Rui deixou de colaborar em T2 Benfica\.<\/span>/, 'a frase vai sozinha, sem o nome repetido');
     assert.match(h, /<h3 class="title vg-tit">Atividade nas casas partilhadas<\/h3>/);
-    assert.match(h, /<button type="button" class="vg-item-abrir" data-toca="camada" data-click="propView\('P1'\)"><span class="avatar" aria-hidden="true">R<\/span><span class="vg-item-txt"><b>Rui deixou de colaborar em T2 Benfica\.<\/b>/);
+    assert.match(h, /<button type="button" class="vg-item-abrir" data-toca="camada" data-click="notifLerAviso\('e1'\);propView\('P1'\)"><span class="avatar" aria-hidden="true">R<\/span><span class="vg-item-txt"><b>Rui deixou de colaborar em T2 Benfica\.<\/b>/);
     assert.ok(!/\son[a-z]+=|style=/.test(h), 'sem style= nem on…=');
     app.db.properties = [];
     assert.match(app.atividadeCard(app.notifAtividade()), /<div class="vg-item"><div class="vg-item-abrir"><span class="avatar"/, 'sem a casa, uma linha e não um botão');

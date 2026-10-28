@@ -619,7 +619,16 @@ entrada.js:cwTrocaConta). O valor fica num input escondido que val(id) lê
 função (o nome resolve-se pelo eventos.js:funcaoDaApp, que nunca chega a uma
 nativa). {div:true} é
 uma linha separadora; os grupos vão no fim com gdiv e gOpts
-(componentes.js:gdiv, componentes.js:gOpts). O menu vira-se para cima ou
+(componentes.js:gdiv, componentes.js:gOpts). O filtro «Imóvel» das listas é
+o mesmo em todas: «Todos os imóveis», os imóveis um a um, a linha e os grupos
+de imóveis, com o valor 'g:ID' e o rótulo «Grupo · Nome». Os Movimentos
+montam-no à sua maneira, com o «Sem imóvel atribuído»
+(lista-movimentos.js:txOpcoesImovel); os Contratos, os Planeados e os
+Créditos pelo componentes.js:imoveisEGruposOpts. Só entram os grupos com
+coisas nessa lista — um grupo sem contratos não aparece nos Contratos —, e o
+escolhido fica no menu mesmo que já não tenha. Escolher um grupo filtra pelos
+imóveis dele, e tudo o que a lista conta segue a escolha; apagar o grupo
+escolhido volta a todos (definicoes.js:gruposApagarLocal). O menu vira-se para cima ou
 encolhe para caber no primeiro antepassado que corta
 (componentes.js:posicaoPop, componentes.js:ajustarPop). Nunca cresce até
 ao espaço disponível: um menu de 16 categorias tomava 488px do ecrã (a
@@ -1425,9 +1434,29 @@ terços (.cw-terco), um sozinho atravessa (.cw-full), e a faixa âmbar
 atravessa sempre (.vg-cheia). A grelha tem doze colunas
 (estilos.css:.cw-dash) e responde à largura da vista, não à do ecrã: abaixo
 de 560px tudo atravessa, e os terços só começam nos 900px. Os valores são
-por inteiro: não há filtro de proprietário (ver «Navegação»). O painel dos
-filtros tem o imóvel (ou grupo) em foco e, quando os há, o seletor dos
-filtros comuns, que aqui aplicam o imóvel (vistas.js:anaPanelPadrao). A
+por inteiro, e não há filtro global de proprietário (ver «Navegação»). O
+painel dos filtros tem o seletor do que está em foco e, quando os há, o
+seletor dos filtros comuns, que aqui aplicam o imóvel (painel-geral.js:dashBar).
+O seletor tem as opções das análises (vistas.js:anaOpcoesImovel: todos, cada
+imóvel do âmbito e, depois de uma linha, os grupos) e, depois de outra linha,
+os proprietários (painel-geral.js:dashOpcoesImovel): «Os meus» (os imóveis de
+que sou dono ou comproprietário, acessos.js:souDono) e «Proprietário · Ana
+Costa» por cada proprietário com quem partilho (pessoas.js:donosComPartilha,
+com os Proprietários ligados), que filtra os imóveis de que essa pessoa é
+comproprietária. Só entra quem tem algum imóvel no âmbito — um proprietário
+com quem só tenho uma ligação dava uma vista vazia — e, sem ninguém assim, não
+há a secção, nem «Os meus». O título do cartão do Portefólio diz o que está
+em foco (painel-geral.js:dashNomeDoFoco): o imóvel, «Grupo · Família»,
+«Proprietário · Ana Costa» ou «Os meus imóveis». As Projeções e a Avaliação
+escolhem do vistas.js:anaOpcoesImovel, sem proprietários. Um proprietário em
+foco é um grupo que não está na base: 'g:o:UID', e 'g:o:*' para «Os meus»
+(registos.js:DONO_EU, registos.js:pidDono). Fica com o prefixo dos grupos de
+propósito: o registos.js:pidProps dá-lhe os imóveis, e tudo o que pergunta «é
+um imóvel ou são vários?» — o peso dos movimentos (saldos.js:txW), as contas
+entre proprietários (vistas.js:contasCard), o «Novo movimento»
+(navegacao.js:criarMovimento), o cashflow por imóvel — já o trata como
+vários. Um proprietário sem imóveis no âmbito larga-se, como um imóvel que
+saiu (painel-geral.js:vDashboard). A
 apresentação do separador segue as mesmas caras — a jornada, o vazio, os
 números e o «O que podes fazer» (apresentacao-analise.js:aprACaraDoPainel).
 
@@ -1457,7 +1486,19 @@ juntam-se pela hora (notificacoes.js:notifAtividade) — é o que o crachá cont
 sino e o cartão do painel —, com a mesma marca de leitura: o «Marcar tudo
 como lido» cala-as também. Tocar numa saída abre a ficha do imóvel quando ele
 ainda está na base e os Imóveis estão ligados; sem isso a linha não é um
-botão. Com os Colaboradores desligados, as saídas de colaboradores não
+botão. Tocar num aviso das casas (uma linha de CW.state.departures: quem saiu,
+«Todos aceitaram: … passou a gerir …», recusou, cancelou) lê esse aviso só,
+antes de abrir a ficha, no sino e no cartão da atividade (o ir dele,
+notificacoes.js:notifSaidas): sai das novas e do crachá, e os outros novos
+continuam novos. A marca temporal (db.settings.notifLidoAte) não mexe — pô-la
+até ao aviso tocado calava os mais novos que ainda ninguém viu. O id vai para
+db.settings.notifLidos, um objeto {id: 1} (notificacoes.js:notifLidos), que
+sobe com as definições e se funde chave a chave entre aparelhos, pela razão
+das apresentações (cloud/apresentacao.js:APR_CHAVE); guarda só os ids que o
+servidor ainda manda (os 90 dias de worker/src/rotas/estado.js:DIAS_DOS_AVISOS),
+e os outros saem a cada toque (notificacoes.js:notifLerAviso). A atividade
+dos registos (um movimento, uma visita de outra pessoa) não tem id de aviso e
+lê-se só pela marca temporal. Com os Colaboradores desligados, as saídas de colaboradores não
 entram. Na linha do telemóvel, uma saída vai sozinha, sem o «Nome · » à
 frente, porque já começa por quem saiu.
 
@@ -1504,10 +1545,23 @@ passam o formatador à faixa (o fmtValor da série, painel-geral.js:vDashboard),
 para ela poder conferir o texto (ver «Uma comparação diz de que números
 fala»).
 
-Os gráficos mensais do ano acabam no mês corrente, ou no último com algum
-valor quando há movimentos de data futura (vistas.js:mesesAMostrar): a app
-aceita-os, e o fim da linha do acumulado tem de bater com o Cashflow. Uma
-linha a seguir por novembro e dezembro ao nível de hoje lia «dez −6 358 €».
+As entradas e saídas vão de janeiro a dezembro. O mês corrente e os passados
+são o registado; os seguintes somam ao que já estiver registado (os
+movimentos de data futura, que contam como sempre) o que os planeados preveem
+(painel-geral.js:previstoPorMes): as ocorrências de cada planeado nesses
+meses, as da Agenda (calendario.js:calPlaneados — sem os silenciados), cada
+uma com o movimento que a confirmação registaria (planeados.js:recTx), pesada
+pelo que está em foco como as métricas (metricas.js:txWeight). Uma ocorrência
+que já tem o seu movimento (planeados.js:jaRegistado) não conta duas vezes, e
+os que não contam nos totais e as amortizações antecipadas ficam de fora. Sem
+os Planeados ou sem o Calendário nesta conta não há previsões. Os meses
+previstos desenham-se esbatidos — cada coluna num <g> (estilos.css:.gprevista),
+para as barras ficarem com a classe de sempre —, com «previsto» na legenda e
+na leitura. O cashflow acumulado acaba no mês corrente, ou no último com algum
+valor quando há movimentos de data futura (vistas.js:mesesAMostrar): o fim da
+linha tem de bater com o Cashflow, e uma linha a seguir por novembro e
+dezembro ao nível de hoje lia «dez −6 358 €». Os quatro indicadores e os
+totais não levam previsões.
 Nas entradas e saídas as prestações, que são constantes, descem junto ao
 eixo, e as despesas, que variam, no fundo, como o canvas (o desceAoContrario
 do graficos.js:cBars, que só inverte a pilha dos negativos, sem mexer na
@@ -1780,8 +1834,12 @@ novidades não abrem com a janela aberta nem com as boas-vindas por ver
 abre por cima de janela nenhuma. A Ajuda reabre-as, na secção «Apresentações»
 a seguir a «Como se faz», com as boas-vindas e cada separador que a conta vê,
 pela ordem da navegação e com o selo «Vista» (ajuda.js:apresentacoesNaAjuda,
-apresentacao.js:aprDaConta); rever não mexe no estado e acaba sempre no
-«Percebi» (apresentacao.js:aprRever).
+apresentacao.js:aprDaConta); rever acaba sempre no «Percebi» e não pergunta
+nada (apresentacao.js:aprRever), e só mexe no estado quando se chega à última
+imagem: aí, feche-se no «Percebi» ou no ✕, fica vista — só ela — e a Ajuda
+repinta-se com o selo (apresentacao.js:aprMarcarRevista). Enquanto houver
+alguma por ver, por baixo dos mosaicos, «Marcar todas como vistas» marca-as
+todas numa gravação e nenhuma abre sozinha (apresentacao.js:aprMarcarTodasVistas).
 
 As das Casas (cloud/apresentacao-casas.js) dizem, separador a separador, o que
 se vê na lista, o que um toque abre, o ⋮ da ficha (o icones.js:dots, que é o
@@ -1880,7 +1938,11 @@ no mês corrente — ou no último antes dele com movimento, que no dia 1 o mês
 ainda está vazio —, como o canvas («out 2026 · Receita …»), e o cashflow
 acumulado acende o mês corrente. O cBars aceita ainda desceAoContrario: os
 segmentos negativos empilham pela ordem inversa, e a legenda e a leitura
-ficam como estavam. Os dois gráficos mensais têm 150 de altura
+ficam como estavam. E aceita previstoDe, o índice da primeira coluna prevista
+(graficos.js:cBars): dessa coluna em diante as barras esbatem, a legenda ganha
+a entrada «previsto» (graficos.js:legend, com cls e a bolinha sem cor de
+série) e a leitura, as dicas e a descrição dizem «nov · previsto»; o eixo fica
+«nov». Os dois gráficos mensais têm 150 de altura
 no desenho (painel-geral.js:GRAF_ALTURA): ~150px no telemóvel, ~235px em
 meio ecrã de computador.
 
@@ -3318,7 +3380,12 @@ Por cima da lista, a pesquisa à vista com o funil e os chips
 Em vigor, Por começar, Terminados, cada um com quantos há nos imóveis do
 âmbito (ver «Padrões de página»; lista-contratos.js:ctCampoEstado, aplicado
 pelo lista-contratos.js:ctFiltroRapido) —, o imóvel quando há mais de um com
-contratos, e a ordenação só no ecrã largo. O grupo está no painel. A porta
+contratos — os imóveis com contratos, a linha e os grupos de imóveis com
+algum deles (componentes.js:imoveisEGruposOpts) —, e a ordenação só no ecrã
+largo. Um grupo de imóveis escolhido filtra pelos imóveis dele
+(lista-contratos.js:ctNoImovel): as linhas, as contagens do estado e o rodapé
+dos imóveis sem contrato em vigor (lista-contratos.js:ctRodapeDaLista). O
+«Grupo» do painel é outro filtro, o dos grupos de contratos. A porta
 da seleção de vários é o «Selecionar vários» do cabeçalho, e a dica do
 computador diz-o. Sem imóveis ou sem contratos não há barra. Por baixo
 (lista-contratos.js:ctRodapeDaLista): com
@@ -3771,7 +3838,13 @@ Os Planeados (planeados.js:vRecurring, o canvas M-Planeados) são, por esta
 ordem: a faixa de quem vem de trás, o cartão «Por confirmar», a pesquisa à
 vista com o funil e os chips (vistas.js:lfCabeca), a lista num cartão e os
 Modelos em chips, com o valor quando o têm. Os chips são o estado, o tipo e,
-no ecrã largo, o imóvel. O estado (planeados.js:REC_ESTADOS, aplicado pelo
+no ecrã largo, o imóvel. O imóvel tem todos os imóveis, a linha e os grupos
+de imóveis com planeados ou modelos (planeados.js:recGrupoTemPlaneados); um
+grupo escolhido mostra os planeados e os modelos dos imóveis dele e os do
+próprio grupo (planeados.js:recNoImovel), e as contagens seguem-no. Nos
+Créditos, o imóvel tem os imóveis com hipotecas, a linha e os grupos com
+hipotecas, e um grupo escolhido mostra as hipotecas dos imóveis dele
+(creditos.js:vCredits). O estado (planeados.js:REC_ESTADOS, aplicado pelo
 planeados.js:recChip — o mesmo lf('lrec').st do seletor do painel) tem
 Automáticos, Criados à mão, Silenciados, Por confirmar e Em dia, cada um com
 quantos há pelos olhos dos outros filtros; ligado diz o rótulo curto. A
@@ -4378,7 +4451,8 @@ As páginas:
   até à borda do cartão (100cqi), larga, até 340px. O «Fora dos totais» de
   cada linha é um <label> com o interruptor (definicoes.js:tabelaDeCategorias,
   estilos.css:.def-cat-fora): o toque no rótulo liga, e a área chega aos
-  44px. «Repor as colunas do Anexo F» vive numa linha só dela, por baixo da
+  44px; ligado é vermelho (--danger) e não o cobalto dos outros
+  interruptores, porque tira a categoria das contas. «Repor as colunas do Anexo F» vive numa linha só dela, por baixo da
   nota (estilos.css:.def-repor). As confirmações de apagar uma categoria, uma
   subcategoria ou uma etiqueta dizem quantos movimentos no singular ou no
   plural (definicoes.js:delCat, definicoes.js:delSub, definicoes.js:delTag).
@@ -5683,7 +5757,15 @@ A pílula vive no body, fora do #view, e aparece no render que traz o ambiente
 do servidor (cloud/qa.js:qaSincronizar). É a pega de pontos, o inseto
 (icones.js:ic, 'inseto'), «QA» e o número de abertos
 (cloud/qa.js:qaHtmlPilula), em --loan para não se confundir com o cobalto das
-ações, com o contorno na cor da frente para o escurecimento forçado. Na
+ações, com o contorno na cor da frente para o escurecimento forçado. A pega
+fica do lado da borda onde a pílula encostou: à esquerda à esquerda, e à
+direita depois do número, com o enchimento curto do lado dela (o order de
+.qa-pilula[data-lado="dir"] .qa-pega; no HTML continua primeiro). O data-lado
+só muda ao largar (cloud/qa.js:qaArrastoFim), nas setas (cloud/qa.js:qaTecla)
+e no reencaixe (cloud/qa.js:qaPor): a meio do arrasto a pega não foge de
+debaixo do dedo. A troca é de uma vez, no primeiro fotograma do encaixe que já
+leva a pílula (cloud/qa.js:qaDeslizar), sem movimento próprio: o olho segue a
+pílula a andar. Na
 primeira vez, a etiqueta «Arrasta para mudar de sítio» fica ao lado até ao
 primeiro arrasto ou à primeira seta neste aparelho
 (cloud/qa.js:qaMarcarArrastado). Fica por cima do conteúdo, da barra de baixo
@@ -5725,6 +5807,18 @@ gravidade) e em cada grupo do mais recente para o mais antigo
 (cloud/qa.js:qaSeccoes, qaHtmlGrupos; a API e o scripts/qa.mjs dão a mesma
 ordem), e depois «Resolvidos»; tocar abre o ticket para ler, com a
 captura, o contexto e a resolução (ou a «Resolução anterior» de um reaberto).
+Os abertos, os resolvidos e cada grupo de gravidade dos abertos abrem e
+fecham como as secções da gaveta (cloud/qa.js:qaHtmlDobra, cloud/qa.js:qaDobrar):
+o título é um botão da largura toda, de 44px, com o nome, quantos tem e a
+seta, aria-expanded e aria-controls; tocar troca a classe .fechada no nó vivo,
+sem repintar, e a altura anda por grid-template-rows de 1fr a 0fr
+(estilos.css:.qa-dobra-corpo), com o visibility a tirar as linhas do Tab só
+no fim do fecho. O estado é do aparelho (cloud/qa.js:QA_LS_DOBRAS), só com as
+secções que se tocaram; sem nada guardado, ou estragado, os abertos e os
+grupos abrem e os resolvidos nascem recolhidos (cloud/qa.js:QA_DOBRAS_FECHADAS,
+cloud/qa.js:qaDobraAberta). Com o armazenamento vedado, o toque vale nesta
+sessão (cloud/qa.js:qaDobrasAqui). A lista que o servidor repinta
+(cloud/qa.js:qaPintarLista) nasce já no estado guardado, sem transição.
 «Remover» não pergunta: o aviso traz o Anular (cloud/qa.js:qaRemover).
 «Reabrir» devolve um resolvido aos abertos (cloud/qa.js:qaReabrir).
 

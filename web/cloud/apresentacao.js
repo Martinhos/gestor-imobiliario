@@ -473,11 +473,45 @@ function aprAoFechar(c, origem) {
   c.fechado = true;
   if (_aprArrasto && _aprArrasto.c === c) aprArrastoLargar();
   if (c.anim) { var an = c.anim; c.anim = null; try { an.cancel(); } catch (e) {} }
-  if (c.marcar && window.CW && CW.user && CW.user.id === c.uid) {
+  var mesma = !!(window.CW && CW.user && CW.user.id === c.uid);
+  if (c.marcar && mesma) {
     if (aprPerguntaAoFechar(c, origem)) { aprPerguntar(c); return; }
     aprMarcarFecho(c);
+  } else if (mesma && c.i >= c.imagens.length - 1 && !aprVista(c.id)) {
+    aprMarcarRevista(c.id);
   }
   aprDarAVezAsNovidades();
+}
+
+/* Uma apresentação revista na Ajuda até à última imagem conta como vista,
+   feche-se no «Percebi» ou no ✕: marca-a (só ela — as que as boas-vindas
+   também marcam são para não abrirem duas janelas seguidas, e na Ajuda não
+   abrem), larga o sinal de conta nova se forem as boas-vindas, e repinta a
+   Ajuda, para o selo «Vista» aparecer.
+   Recebe: id — o id da apresentação.
+   Devolve: nada. */
+function aprMarcarRevista(id) {
+  aprMarcarVista([id]);
+  if (id === 'boas-vindas') aprLargarContaNova();
+  aprRepintarAjuda();
+}
+
+/* Repinta a página da Ajuda, se é ela que está à vista (a secção
+   «Apresentações» diz quantas foram vistas).
+   Devolve: nada. */
+function aprRepintarAjuda() {
+  if (typeof tab !== 'undefined' && tab === 'settings' && typeof setPage !== 'undefined' && setPage === 'ajuda' && typeof render === 'function') render();
+}
+
+/* «Marcar todas como vistas», na Ajuda (cloud/ajuda.js:apresentacoesNaAjuda):
+   todas as que esta conta vê (aprDaConta, as boas-vindas incluídas) ficam
+   vistas, numa só gravação, e nenhuma abre sozinha; a Ajuda continua a
+   reabri-las.
+   Devolve: nada. */
+function aprMarcarTodasVistas() {
+  aprMarcarVista(aprDaConta());
+  aprLargarContaNova();
+  aprRepintarAjuda();
 }
 
 /* Dá a vez às novidades, que esperaram pela apresentação, daqui a pouco
@@ -876,7 +910,9 @@ function aprArrastoFim(e) {
 }
 
 /* Reabre uma apresentação a partir da Ajuda: a mesma janela, sem marcar
-   nada (cloud/ajuda.js:apresentacoesNaAjuda).
+   nada — a não ser que se chegue à última imagem, e aí fica vista
+   (aprMarcarRevista) — e sem a pergunta de quem fecha a meio
+   (cloud/ajuda.js:apresentacoesNaAjuda).
    Recebe: id — o id da apresentação.
    Devolve: nada. */
 function aprRever(id) {
