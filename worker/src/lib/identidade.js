@@ -1,9 +1,10 @@
 /* A identidade da app fora de produção: «Rendorium DEV», com ícones âmbar.
    -----------------------------------------------------------------------
    Os ficheiros de web/ são os mesmos nos dois ambientes — o manifesto diz
-   «Rendorium» e a página aponta para os ícones verdes. Instalada a PWA de
-   dev.rendorium.com ao lado da de app.rendorium.com, ficavam dois ícones
-   iguais com o mesmo nome no ecrã inicial, e ninguém sabia qual era qual.
+   «Rendorium» e a página aponta para os ícones de produção, em cobalto.
+   Instalada a PWA de dev.rendorium.com ao lado da de app.rendorium.com,
+   ficavam dois ícones iguais com o mesmo nome no ecrã inicial, e ninguém
+   sabia qual era qual.
 
    Fora de produção (env.ENV_NAME) o worker reescreve, ao passar, o
    /manifest.webmanifest e a página «/»: o nome, o título, o nome debaixo do
@@ -69,11 +70,11 @@ function comSufixoDev(src) {
    põem também: um browser que tivesse o manifesto em cache de antes desta
    reescrita — ou o de produção, que é o mesmo ficheiro — trazia essa etiqueta,
    os assets respondiam 304 «não mudou», e não havia corpo nenhum para
-   reescrever. A PWA de dev instalava-se «Rendorium», com os ícones verdes, e
-   nunca saía disso, porque o ficheiro do manifesto não muda de uma publicação
-   para a outra. Foi o que aconteceu. Agora a resposta de dev leva a sua
-   própria etiqueta — a do ficheiro, com «-dev» — e o 304 dá-se aqui, contra
-   essa: quem já tem o de dev continua a revalidar de graça.
+   reescrever. A PWA de dev instalava-se «Rendorium», com os ícones de
+   produção, e nunca saía disso, porque o ficheiro do manifesto não muda de
+   uma publicação para a outra. Foi o que aconteceu. Agora a resposta de dev
+   leva a sua própria etiqueta — a do ficheiro, com «-dev» — e o 304 dá-se
+   aqui, contra essa: quem já tem o de dev continua a revalidar de graça.
    Recebe: assets — o binding ASSETS (tem fetch); request — o pedido tal como
    chegou ao worker.
    Devolve: promessa da Response: a de dev (200 com o corpo reescrito, ou 304

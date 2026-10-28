@@ -210,6 +210,11 @@ export async function rotasAuth(c) {
       user = await env.DB.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').bind(email).first();
       if (user) await env.DB.prepare(`UPDATE users SET ${col} = ? WHERE id = ?`).bind(payload.sub, user.id).run();
     }
+    /* a conta nasce neste pedido? É o que a app precisa de saber para abrir as
+       boas-vindas (web/cloud/entrada.js:socialLogin), e só o servidor o sabe:
+       a resposta é a mesma para quem já tinha conta, mais o novo:true de quem
+       a acabou de criar */
+    let nova = false;
     if (!user) {
       if (!email) return err(400, 'O fornecedor não devolveu um email.');
       const name = String((b && b.name) || payload.name || '').trim();
@@ -221,12 +226,13 @@ export async function rotasAuth(c) {
         .bind(id, email, name, now(), payload.sub)
         .run();
       user = { id, email, name };
+      nova = true;
     }
     if (user.suspended_at) {
       return err(403, 'Esta conta está suspensa.');
     }
     const token2 = await createSession(env, user.id, user.sess_epoch || 0);
-    return json({ id: user.id, email: user.email, name: user.name, ...tokenNoCorpo(env, request, token2) }, 200, {
+    return json({ id: user.id, email: user.email, name: user.name, ...(nova ? { novo: true } : {}), ...tokenNoCorpo(env, request, token2) }, 200, {
       'Set-Cookie': sessionCookie(token2),
     });
   }

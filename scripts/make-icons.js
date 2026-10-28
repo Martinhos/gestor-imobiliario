@@ -2,10 +2,14 @@
 //
 //   node scripts/make-icons.js
 //
-// O desenho é o mesmo que o Android usa em res/drawable/ic_launcher_*.xml:
-// um gradiente diagonal verde e a casa a traço branco, a mesma do menu
-// lateral. Antes a PWA tinha uma casa cheia sobre verde liso — parecia outra
-// app no ecrã inicial de quem tinha as duas.
+// O desenho é o mesmo que o Android usa no ícone adaptativo: o fundo é a cor
+// ic_launcher_background de res/values/colors.xml, cobalto liso, e a casa a
+// traço branco é a de res/drawable/ic_launcher_foreground.xml, a mesma do
+// menu lateral. O cobalto é o --marca do web/estilos.css: o ícone no ecrã
+// inicial é o mesmo quadrado da marca na barra lateral (estilos.css:.marca).
+// Até à v42 o fundo era um degradê verde na diagonal, da paleta antiga; antes
+// disso a PWA tinha uma casa cheia sobre verde liso — parecia outra app no
+// ecrã inicial de quem tinha as duas.
 //
 // E a variante de DEV (icon-*-dev.png): fundo âmbar, a casa mais pequena e
 // as letras «DEV» a traço por baixo — a mesma geometria do
@@ -77,10 +81,12 @@ function png(width, height, rgba) {
 
 /* ------------------------------------------------------------ o desenho */
 
-// Cores e traços copiados de ic_launcher_background.xml e _foreground.xml.
-const VERDE_CLARO = [0x2f, 0x7d, 0x5b];
-const VERDE_ESCURO = [0x16, 0x38, 0x2b];
-// As de dev: âmbar, do src/dev/res/values/colors.xml (#B45309) até um castanho.
+// O fundo de produção, liso: o --marca do web/estilos.css (#2952d9), o mesmo
+// do ic_launcher_background de res/values/colors.xml. Os traços são os do
+// ic_launcher_foreground.xml.
+const COBALTO = [0x29, 0x52, 0xd9];
+// As de dev, em degradê na diagonal: âmbar, à volta do src/dev/res/values/colors.xml
+// (#B45309), até um castanho. Não mudam com a marca: o âmbar é o que separa as duas apps.
 const AMBAR_CLARO = [0xd9, 0x77, 0x06];
 const AMBAR_ESCURO = [0x7c, 0x2d, 0x12];
 const TRACO = 1.9;          // na escala de 24 do vetor original
@@ -154,7 +160,18 @@ function dentroDeAlguma(figuras, x, y) {
 const FIGURAS_PROD = [{ linhas: LINHAS, traco: TRACO }];
 const FIGURAS_DEV = [{ linhas: CASA_DEV, traco: TRACO * ESCALA_DEV }, { linhas: LETRAS_DEV, traco: TRACO_LETRAS }];
 
-/* Desenha o ícone pixel a pixel: o gradiente diagonal de fundo e a figura a traço
+/* A cor do fundo num pixel: a de produção é lisa, o cobalto em todo o lado; a
+   de dev desce em degradê na diagonal, do âmbar claro no canto de cima ao
+   castanho no de baixo.
+   Recebe: px, py — o pixel; size — o lado do ícone; dev — true para a variante de dev.
+   Devolve: [r, g, b] do fundo nesse pixel. */
+function corDoFundo(px, py, size, dev) {
+  if (!dev) return COBALTO;
+  const t = Math.min(1, (px + py) / (2 * (size - 1)));
+  return [0, 1, 2].map((i) => Math.round(AMBAR_CLARO[i] + (AMBAR_ESCURO[i] - AMBAR_CLARO[i]) * t));
+}
+
+/* Desenha o ícone pixel a pixel: o fundo (corDoFundo) e a figura a traço
    branco, com 3×3 amostras por pixel para o contorno não sair serrado.
    Devolve o PNG como Buffer, no tamanho pedido.
    Recebe: size — o lado do ícone, em pixels; dev (opcional) — true para a
@@ -163,15 +180,11 @@ const FIGURAS_DEV = [{ linhas: CASA_DEV, traco: TRACO * ESCALA_DEV }, { linhas: 
 function makeIcon(size, dev) {
   const img = Buffer.alloc(size * size * 4);
   const AMOSTRAS = 3;   // 3×3 por pixel: chega para o traço não ficar serrado
-  const claro = dev ? AMBAR_CLARO : VERDE_CLARO;
-  const escuro = dev ? AMBAR_ESCURO : VERDE_ESCURO;
   const figuras = dev ? FIGURAS_DEV : FIGURAS_PROD;
 
   for (let py = 0; py < size; py++) {
     for (let px = 0; px < size; px++) {
-      // fundo: gradiente na diagonal, como o do Android
-      const t = Math.min(1, (px + py) / (2 * (size - 1)));
-      const fundo = [0, 1, 2].map((i) => Math.round(claro[i] + (escuro[i] - claro[i]) * t));
+      const fundo = corDoFundo(px, py, size, dev);
 
       // figura: quanto do pixel cai dentro do traço
       let dentro = 0;

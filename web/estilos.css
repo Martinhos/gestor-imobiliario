@@ -4717,3 +4717,767 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 .prow .pth.a-carregar::after{margin-top:6px}
 @media(prefers-reduced-motion:reduce){.a-carregar::after{animation:none}}
 /* === fim: fotos a carregar (folha 1.3) === */
+
+/* === apresentação: a janela, o carrossel e o kit das maquetes (folha 1.2) === */
+/* A janela das apresentações (cloud/apresentacao.js:aprAbrir): o openModal de
+   sempre — a folha de baixo no telemóvel, ao meio no computador, um pouco
+   mais larga para a maquete respirar. O palco recorta a fita das imagens,
+   todas lado a lado com a largura dele e a folga --apr-folga entre elas; o
+   touch-action:pan-y deixa o gesto vertical ao corpo da janela, que rola, e
+   o horizontal ao carrossel. A fita estica as imagens à altura da maior, e a
+   imagem tem altura fixa: a janela não salta de tamanho entre elas. */
+@media(min-width:521px){.apr-janela .sheet{width:min(620px,calc(100vw - 28px))}}
+.apr{display:flex;flex-direction:column;gap:14px}
+.apr-palco{--apr-folga:24px;position:relative;overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.apr-palco.arrasta{cursor:grabbing}
+.apr-fita{display:flex;gap:var(--apr-folga)}
+.apr-folha{flex:0 0 100%;min-width:0;display:flex;flex-direction:column;gap:16px}
+.apr-imagem{position:relative;height:clamp(220px,36vh,300px);height:clamp(220px,36dvh,300px);border-radius:16px;overflow:hidden;border:1px solid var(--line);background:var(--chip);isolation:isolate}
+.apr-texto{padding:0 2px}
+.apr-tit{margin:0;font-family:var(--letra-titulo);font-size:21px;font-weight:650;letter-spacing:-.015em;line-height:1.2;color:var(--ink)}
+/* os parabéns são a frase da abertura: maiores */
+.apr-boas-vindas .apr-folha:first-child .apr-tit{font-size:25px;line-height:1.15}
+.apr-txt{margin:6px 0 0;font-size:15px;line-height:1.45;color:var(--muted)}
+.apr-txt b{font-weight:600;color:var(--ink)}
+@media(max-width:520px){.apr-tit{font-size:19px}.apr-boas-vindas .apr-folha:first-child .apr-tit{font-size:22px}.apr-txt{font-size:14.5px}}
+/* os pontos: um por imagem, só desenho (o leitor de ecrã ouve «Imagem 2 de
+   7»). O de agora é mais comprido, além de cobalto: a forma diz qual é, e
+   sobrevive ao escurecimento forçado do Samsung, que apaga diferenças de luz */
+.apr-pontos{display:flex;justify-content:center;gap:6px}
+.apr-pontos span{width:8px;height:4px;border-radius:2px;background:var(--line2)}
+.apr-pontos span.on{width:22px;background:var(--accent)}
+.apr-so-leitor{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+
+/* --- o kit das maquetes: a app em miniatura, só com tokens ---
+   A cena é a imagem inteira: a superfície 2 e, atrás das peças, o mosaico da
+   marca (estilos.css:.imv-mosaico, nas quatro cores das capas, que no escuro
+   saem dos tokens) — ou o azul-noite de ponta a ponta. As peças são as da
+   app em ponto pequeno; o que sobe leva a --shadow, e o que a imagem ensina
+   a tocar leva o contorno cobalto (.apr-alvo), que é da frente e o
+   escurecimento forçado não apaga. Nada aqui se toca: a janela esconde a
+   imagem do leitor de ecrã (aria-hidden) e o texto por baixo diz o que ela
+   mostra. */
+.apr-cena{position:absolute;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:16px;background:var(--chip);color:var(--ink);font-size:11.5px;line-height:1.3;text-align:left;overflow:hidden}
+/* ao meio na vertical quando cabe, e encostado ao topo quando não cabe (as
+   margens automáticas nunca ficam negativas): o que se corta é o fundo */
+.apr-cena>*{position:relative;margin-top:auto;margin-bottom:auto}
+/* no computador a imagem tem mais largura que o telemóvel: as peças crescem
+   com ela (o zoom refaz a disposição, e o recorte continua certo) */
+@media(min-width:521px){
+  .apr-imagem{height:clamp(220px,38vh,340px);height:clamp(220px,38dvh,340px)}
+  .apr-cena>:not(.apr-fundo){zoom:1.2}
+}
+.apr-cena>.apr-fundo{position:absolute;inset:20px 13%;border-radius:26px;opacity:.75}
+.apr-cena-tela>.apr-fundo{inset:34px 3% -30px}
+.apr-cena-noite{background:var(--side);color:var(--side-ink)}
+.apr-cena-noite>.apr-fundo{inset:0;border-radius:0;opacity:.4}
+/* duas peças sobrepostas (cloud/apresentacao.js:aprPar): o antes atrás, em
+   cima à esquerda; o depois à frente, em baixo à direita */
+.apr-par{width:min(340px,100%);height:100%}
+.apr-atras{position:absolute;left:0;top:0;width:78%}
+.apr-frente{position:absolute;right:0;bottom:0;width:68%}
+.apr-coluna{width:min(300px,100%);display:flex;flex-direction:column;align-items:stretch;gap:6px}
+/* o ecrã do telemóvel (aprTela): sai pelo fundo da imagem, e o que passa do
+   fundo desvanece no --bg antes da barra de baixo */
+.apr-cena>.apr-tela{position:absolute;top:16px;bottom:0;left:0;right:0;margin:0 auto;width:min(296px,calc(100% - 28px));display:flex;flex-direction:column;gap:7px;padding:10px 10px 0;background:var(--bg);border:1px solid var(--line);border-bottom:0;border-radius:18px 18px 0 0;box-shadow:var(--shadow);overflow:hidden}
+.apr-tela::after{content:"";position:absolute;z-index:1;left:0;right:0;bottom:0;height:34px;background:linear-gradient(to bottom,transparent,var(--bg));pointer-events:none}
+.apr-tela.com-barra::after{bottom:44px}
+.apr-tela>*,.apr-tela-corpo>*,.apr-coluna>*{flex-shrink:0}
+.apr-tela-corpo{display:flex;flex-direction:column;gap:7px;min-height:0}
+.apr-m-cab{display:flex;align-items:center;gap:7px;padding:1px 2px 2px}
+.apr-m-cab b{font-family:var(--letra-titulo);font-size:15px;font-weight:650}
+.apr-m-cab-menu{display:flex;color:var(--ink)}
+.apr-m-cab-dir{margin-left:auto;display:flex;gap:9px;color:var(--ink)}
+.apr-m-abas{display:flex;gap:2px;padding:3px;border-radius:10px;background:var(--card);border:1px solid var(--line);overflow:hidden}
+.apr-m-abas span{flex:1 0 auto;text-align:center;padding:4px 5px;border-radius:7px;border:1.5px solid transparent;font-size:10px;font-weight:600;color:var(--muted);white-space:nowrap}
+.apr-m-abas .on,.apr-m-seg .on,.apr-m-chip.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-text)}
+.apr-m-barra{position:absolute;z-index:2;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(5,1fr);align-items:center;padding:5px 4px 7px;background:var(--card);border-top:1px solid var(--line)}
+.apr-m-barra-i{display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--faint);font-size:8.5px;font-weight:600}
+.apr-m-barra-i.on{color:var(--accent)}
+.apr-m-barra>.apr-m-mais{justify-self:center}
+.apr-m-mais{display:grid;place-items:center;width:30px;height:30px;border-radius:10px;background:var(--accent);color:var(--accent-ink)}
+.apr-m-pesq{display:flex;gap:6px}
+.apr-m-pesq-campo{flex:1;display:flex;align-items:center;min-height:26px;padding:0 9px;border:1px solid var(--line2);border-radius:8px;background:var(--field);font-size:10.5px}
+.apr-m-pesq-campo.vazio{color:var(--faint)}
+.apr-m-funil{display:grid;place-items:center;width:28px;border:1px solid var(--line2);border-radius:8px;background:var(--card)}
+.apr-m-chips{display:flex;flex-wrap:wrap;gap:4px}
+.apr-m-chip{display:inline-flex;align-items:center;min-height:22px;padding:0 9px;border:1px solid var(--line2);border-radius:999px;background:var(--card);font-size:10px;font-weight:500;white-space:nowrap}
+.apr-m-secao{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:2px 2px 0}
+.apr-m-secao b{font-family:var(--letra-titulo);font-size:13px;font-weight:650;color:var(--accent-text)}
+.apr-m-secao span{font-size:10px;font-weight:600;color:var(--accent-text)}
+.apr-m-cartao,.apr-m-folha,.apr-m-imv,.apr-m-aviso{background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--ink)}
+.apr-m-cartao{display:flex;flex-direction:column;padding:6px 10px}
+.apr-m-cartao-cab{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:3px 0 4px}
+.apr-m-cartao-cab b{font-family:var(--letra-titulo);font-size:12.5px;font-weight:650}
+.apr-flutua{box-shadow:var(--shadow)}
+.apr-alvo{outline:2px solid var(--accent);outline-offset:2px}
+.apr-m-sub{display:block;color:var(--muted);font-size:10px;line-height:1.3;font-weight:400}
+.apr-m-folha{overflow:hidden}
+.apr-m-folha-cab{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line)}
+.apr-m-folha-cab b{font-family:var(--letra-titulo);font-size:13px;font-weight:650}
+.apr-m-folha-cab svg{color:var(--muted)}
+.apr-m-folha-corpo{display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px}
+.apr-m-campo{display:flex;flex-direction:column;gap:3px}
+.apr-m-rot{font-size:10px;font-weight:600;color:var(--ink)}
+.apr-m-maiusc{text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.apr-m-cartao>.apr-m-rot{padding:2px 0 6px}
+.apr-m-req{margin-left:3px;color:var(--danger)}
+.apr-m-caixa{display:block;min-height:24px;padding:5px 8px;border:1px solid var(--line2);border-radius:7px;background:var(--field);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apr-m-caixa.vazio{color:var(--faint)}
+.apr-m-seg{display:flex;gap:2px;padding:2px;border-radius:8px;background:var(--chip);border:1px solid var(--line)}
+.apr-m-seg span{flex:1;text-align:center;padding:4px 6px;border-radius:6px;border:1.5px solid transparent;font-size:10.5px;font-weight:600;color:var(--muted);white-space:nowrap}
+.apr-m-linha{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:6px 0;min-width:0}
+.apr-m-cartao>.apr-m-linha+.apr-m-linha,.apr-m-folha-corpo>.apr-m-linha+.apr-m-linha{border-top:1px solid var(--line)}
+.apr-m-linha.apr-alvo{border-radius:8px;outline-offset:1px}
+.apr-m-linha-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.apr-m-linha-txt b{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apr-m-linha-txt .apr-m-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apr-m-linha-dir{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.apr-m-valor{flex:none;font-size:11px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+.apr-m-valor.pos{color:var(--in)}
+.apr-m-valor.neg{color:var(--out)}
+.apr-m-valor.prest{color:var(--loan)}
+.apr-m-seta{display:flex;color:var(--faint)}
+.apr-m-selos{display:flex;flex-wrap:wrap;gap:3px;margin-top:2px}
+.apr-m-selo{display:inline-flex;align-items:center;min-height:15px;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;white-space:nowrap;background:var(--accent-soft);color:var(--accent-text)}
+.apr-m-selo.in,.apr-m-ico.in{background:var(--in-soft);color:var(--in)}
+.apr-m-selo.out,.apr-m-ico.out{background:var(--out-soft);color:var(--out)}
+.apr-m-selo.loan,.apr-m-ico.loan{background:var(--loan-soft);color:var(--loan)}
+.apr-m-selo.amber,.apr-m-ico.amber{background:var(--warn-soft);color:var(--warn)}
+.apr-m-selo.red,.apr-m-ico.red{background:var(--danger-soft);color:var(--danger)}
+.apr-m-selo.grey,.apr-m-ico.grey{background:var(--chip);color:var(--muted)}
+.apr-m-botao{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:28px;padding:0 12px;border-radius:8px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-size:11px;font-weight:600;white-space:nowrap}
+.apr-m-botao.primario{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.apr-m-botao.pequeno{min-height:24px;padding:0 9px;font-size:10.5px}
+.apr-m-avatar,.apr-m-ico{flex:none;display:grid;place-items:center;width:24px;height:24px;background:var(--accent-soft);color:var(--accent-text)}
+.apr-m-avatar{border-radius:50%;font-size:9px;font-weight:700}
+.apr-m-ico{border-radius:7px}
+/* a capa em miniatura: o mosaico desenhado ao dobro e encolhido a metade,
+   para os arcos ficarem à escala da peça (o .imv-mosaico tem 28px por quadrado) */
+.apr-m-capa{flex:none;position:relative;display:block;width:24px;height:24px;border-radius:6px;overflow:hidden}
+.apr-m-capa>i{position:absolute;left:0;top:0;width:200%;height:200%;transform:scale(.5);transform-origin:0 0}
+.apr-m-imv{display:grid;grid-template-columns:44px 1fr;gap:9px;padding:8px}
+.apr-m-imv>.apr-m-capa{width:44px;height:auto;min-height:56px;border-radius:8px}
+.apr-m-imv-corpo{min-width:0;display:flex;flex-direction:column;gap:5px}
+.apr-m-imv-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
+.apr-m-imv-topo>span:first-child{min-width:0;display:flex;flex-direction:column}
+.apr-m-imv-topo b{font-family:var(--letra-titulo);font-size:12.5px;font-weight:650}
+.apr-m-imv-topo .apr-m-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apr-m-nums{display:grid;grid-template-columns:repeat(3,auto);justify-content:space-between;gap:6px;font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.apr-m-nums>span{display:flex;flex-direction:column}
+.apr-m-nums .apr-m-sub{font-size:9px}
+.apr-m-barras{display:flex;align-items:flex-end;gap:3px;height:48px}
+.apr-m-barras>span{flex:1;min-width:3px;border-radius:2px 2px 0 0;background:var(--accent);opacity:.45}
+.apr-m-barras>span.on{opacity:1}
+.apr-m-barras.in>span{background:var(--in)}
+.apr-m-barras.out>span{background:var(--out)}
+.apr-m-barras.loan>span{background:var(--loan)}
+.apr-a0{height:0}.apr-a1{height:10%}.apr-a2{height:20%}.apr-a3{height:30%}.apr-a4{height:40%}.apr-a5{height:50%}
+.apr-a6{height:60%}.apr-a7{height:70%}.apr-a8{height:80%}.apr-a9{height:90%}.apr-a10{height:100%}
+.apr-m-prog{display:block;height:5px;border-radius:3px;background:var(--chip);overflow:hidden}
+.apr-m-prog>i{display:block;height:100%;border-radius:3px;background:var(--accent)}
+.apr-m-prog.in>i{background:var(--in)}
+.apr-m-prog.out>i{background:var(--out)}
+.apr-m-prog.loan>i{background:var(--loan)}
+.apr-m-aviso{display:flex;align-items:center;gap:8px;padding:7px 11px 7px 7px;box-shadow:var(--shadow);min-width:0}
+.apr-m-aviso>span:last-child{min-width:0;display:flex;flex-direction:column}
+.apr-m-aviso b,.apr-m-aviso .apr-m-sub{white-space:nowrap}
+.apr-m-aviso b{font-size:11px;font-weight:600}
+.apr-m-vazio{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card);text-align:center}
+.apr-m-vazio b{font-size:12px;font-weight:650}
+.apr-m-vazio .apr-m-botao{margin-top:4px}
+.apr-m-ficha{display:flex;align-items:center;gap:8px;padding-bottom:2px}
+.apr-m-ficha b{display:block;font-size:12px;font-weight:650}
+.apr-m-opcoes{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.apr-m-opcoes .apr-m-linha{padding:4px 7px;border:1px solid var(--line);border-radius:8px}
+.apr-m-junta{display:flex;align-items:center;gap:6px}
+.apr-m-junta>.apr-m-cartao{flex:1;min-width:0;padding:2px 8px}
+.apr-m-mais-sinal,.apr-m-desce{flex:none;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--card);border:1px solid var(--line2);color:var(--muted)}
+.apr-m-desce{align-self:center}
+.apr-m-grelha{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.apr-m-grelha>.apr-m-campo:first-child{grid-column:1/-1}
+/* os parabéns: a casa do ícone ao meio e o que a app lembra a descer em
+   cascata, alternando os lados */
+.apr-heroi{width:min(310px,100%);display:flex;flex-direction:column;align-items:stretch;gap:7px}
+.apr-heroi-marca{align-self:center;margin-bottom:5px}
+.apr-heroi-a{align-self:flex-start}
+.apr-heroi-b{align-self:flex-end}
+.apr-heroi-c{align-self:flex-start;margin-left:8%}
+.apr-marca{display:grid;place-items:center;width:54px;height:54px;border-radius:16px;background:var(--marca);color:var(--side-ink);box-shadow:0 0 0 7px color-mix(in srgb,var(--marca) 28%,transparent),var(--shadow)}
+/* A estreia: quando a janela abre, as peças da primeira imagem sobem e
+   aparecem, umas a seguir às outras (o data-atraso de cada uma, a escada do
+   aprSurge). É a abertura de uma janela rara — uma vez por conta —, e por
+   isso pode ter entrada própria; passar de imagem já é movimento, e não
+   repete. Começa do .97 e não do zero (nada aparece do nada). Sem movimento
+   pedido, a regra geral desliga-a e as peças já lá estão. */
+@keyframes aprSurge{from{opacity:0;transform:translateY(10px) scale(.97)}}
+.apr-janela.open .apr-estreia .apr-surge{animation:aprSurge var(--lento) var(--curva-entra) backwards}
+/* === fim: apresentação: a janela, o carrossel e o kit das maquetes (folha 1.2) === */
+
+/* === apresentação: as Casas (folha 1.3) === */
+/* As peças próprias das maquetes das Casas (cloud/apresentacao-casas.js), por
+   cima do kit da 1.2: só tokens, nada que se toque, e o que a imagem ensina a
+   tocar com o contorno cobalto (.apr-alvo). Os estados dizem-se pela frente —
+   a caixa cheia e o contorno da seleção, o traço por baixo da aba das
+   Pessoas, o visto da escolha de um menu —, que o escurecimento forçado do
+   Samsung não come. */
+.apr-c-intro{margin:0;padding:0 2px;font-size:10px;line-height:1.35}
+.apr-c-titulo{display:block;padding:4px 2px 0;font-family:var(--letra-titulo);font-size:13px;font-weight:650}
+.apr-c-chips .apr-m-chip{gap:4px}
+.apr-c-chip svg{color:var(--accent-text)}
+.apr-c-botoes{display:flex;flex-wrap:wrap;gap:5px;padding-top:5px}
+.apr-c-largo{display:flex}
+.apr-c-largo>.apr-m-botao{flex:1}
+/* o segundo segmentado das Pessoas (navegacao.js:abasDaArea): o de agora com
+   o traço cobalto por baixo e a tinta forte */
+.apr-c-pessoas{display:flex;gap:12px;padding:0 2px;border-bottom:1px solid var(--line)}
+.apr-c-pessoas span{padding:2px 0 5px;margin-bottom:-1px;border-bottom:2px solid transparent;font-size:10px;font-weight:500;color:var(--muted);white-space:nowrap}
+.apr-c-pessoas span.on{border-bottom-color:var(--accent);color:var(--ink);font-weight:700}
+.apr-c-pessoas i{font-style:normal;font-weight:500;margin-left:3px;color:var(--muted)}
+/* o menu aberto de um chip: a escolha de agora com o visto e a tinta cobalto */
+.apr-c-menu{align-self:flex-start;display:flex;flex-direction:column;min-width:62%;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.apr-c-menu-op{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;font-size:10.5px;white-space:nowrap}
+.apr-c-menu-op>i{width:10px}
+.apr-c-menu-op.on{background:var(--accent-soft);color:var(--accent-text);font-weight:650}
+/* a caixa da seleção (cloud/selecao.js:caixa): vazia, cheia com o visto, ou a
+   meio (a caixa de tudo do cabeçalho, com o traço) */
+.apr-c-caixa{flex:none;display:grid;place-items:center;width:14px;height:14px;border-radius:4px;border:1.5px solid var(--line2);background:var(--card);color:var(--accent-ink)}
+.apr-c-caixa.on{border-color:var(--accent);background:var(--accent)}
+.apr-c-caixa.meio{border-color:var(--accent)}
+.apr-c-caixa.meio::after{content:"";width:7px;height:2px;border-radius:1px;background:var(--accent)}
+/* o ecrã em seleção: a contagem no lugar do título, e a barra da seleção no
+   lugar da de baixo (estilos.css:.sel-fundo) — com mais ações que o Apagar,
+   numa segunda linha, e o desvanecer por cima dela */
+.apr-c-selcab{gap:8px}
+.apr-c-selcab b{font-family:var(--letra);font-size:11.5px;font-weight:700}
+.apr-c-selcab-txt{display:flex;flex-direction:column}
+.apr-c-selbarra{position:absolute;z-index:2;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:5px;padding:6px 8px 8px;background:var(--card);border-top:1px solid var(--line)}
+.apr-c-selbarra>span{display:flex;align-items:center;gap:6px}
+.apr-c-selbarra b{flex:1;text-align:center;font-size:10.5px;font-weight:700}
+.apr-c-selbarra-baixo>.apr-m-botao{flex:1;padding:0 6px}
+.apr-tela.apr-c-tela-sel::after{bottom:41px}
+.apr-tela.apr-c-tela-sel.duas::after{bottom:70px}
+.apr-m-botao.apr-c-perigo{border-color:var(--danger);background:var(--danger);color:var(--danger-ink)}
+.apr-m-botao.apr-c-perigo-txt{color:var(--danger)}
+/* um cartão de imóvel marcado: a caixa à cabeça do nome, por cima da capa */
+.apr-c-marca{position:relative}
+.apr-c-marca>.apr-c-caixa{position:absolute;z-index:1;left:61px;top:9px}
+.apr-c-marca .apr-m-imv-topo>span:first-child{padding-left:20px}
+.apr-c-marca.on>.apr-m-imv{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+/* uma linha marcada (as pessoas, as visitas): o fundo suave e o filete
+   cobalto à esquerda, como a app (estilos.css:.pes-lista>.pes-linha.sel-on-card) */
+.apr-m-linha.apr-c-marcada{margin:0 -10px;padding-left:10px;padding-right:10px;background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent)}
+.apr-m-avatar.apr-c-apagado{background:var(--chip);color:var(--muted)}
+/* a ficha em miniatura (componentes.js:abrirFicha): o ⋮ e o ✕ na cabeça, e o
+   rodapé com o Fechar e o botão da direita */
+.apr-c-ficha{width:min(300px,100%)}
+.apr-c-ficha .apr-m-folha-corpo{gap:7px}
+.apr-c-ficha-ic{display:flex;align-items:center;gap:12px}
+.apr-c-rodape{display:flex;gap:6px;padding:7px 10px 9px;border-top:1px solid var(--line)}
+.apr-c-rodape>.apr-m-botao{flex:1;min-width:0}
+.apr-c-acoes{display:flex;gap:5px;overflow:hidden}
+.apr-m-chip.apr-c-chip-acao{flex:none;gap:4px}
+.apr-m-chip.apr-c-chip-acao.aceso{border-color:var(--accent);background:var(--accent);color:var(--accent-ink);font-weight:650}
+.apr-c-fcapa{position:relative;display:block;height:40px;border-radius:8px;overflow:hidden}
+.apr-c-fcapa>i{position:absolute;left:0;top:0;width:200%;height:200%;transform:scale(.5);transform-origin:0 0}
+.apr-c-nfotos{position:absolute;right:6px;bottom:5px;display:flex;align-items:center;gap:3px;padding:2px 6px;border-radius:999px;background:var(--card);color:var(--ink);font-size:9px;font-weight:600}
+.apr-c-nums{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;padding:7px 9px;border:1px solid var(--line);border-radius:9px}
+.apr-c-nums>span{display:flex;flex-direction:column;gap:1px;min-width:0}
+.apr-c-nums b{font-family:var(--letra-titulo);font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.apr-c-nums .apr-m-sub{font-size:9px}
+.apr-c-kv{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:5px 0;font-size:10.5px;color:var(--muted)}
+.apr-c-kv+.apr-c-kv{border-top:1px solid var(--line)}
+.apr-c-kv b{min-width:0;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apr-c-kv b.liga{color:var(--accent-text)}
+.apr-c-nota{display:flex;flex-direction:column;gap:2px;padding:7px 9px;border-radius:9px;background:var(--accent-soft);color:var(--ink);font-size:10px;line-height:1.35}
+.apr-c-onde{font-size:11.5px;font-weight:650}
+.apr-c-prazo{display:flex;justify-content:space-between;gap:6px;font-size:10px;font-variant-numeric:tabular-nums}
+.apr-c-contas{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0;font-size:11px}
+.apr-c-frase{font-size:10.5px;line-height:1.35}
+/* a folha «Criar» do + (navegacao.js:abrirAdicionar), no ecrã do telemóvel */
+.apr-tela.apr-c-criar{padding:0;gap:0}
+.apr-c-criar>.apr-m-folha-cab{padding:9px 12px}
+.apr-c-criar>.apr-tela-corpo{gap:6px;padding:9px 12px 0}
+.apr-c-criar-aqui{display:flex;align-items:center;gap:9px;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink);outline-offset:1px}
+.apr-c-criar-aqui b{display:block;font-size:11.5px;font-weight:600}
+.apr-c-neste{display:block;font-size:9px;font-weight:600;color:var(--accent-text)}
+.apr-c-criar-tipos{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.apr-c-criar-tipo{display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:7px;border:1px solid var(--line);border-radius:9px;background:var(--card)}
+.apr-c-criar-tipo b{font-size:10px;font-weight:600;line-height:1.2}
+.apr-c-criar-outros{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.apr-c-criar-outros>span{display:flex;align-items:center;gap:7px;padding:7px 9px;border:1px solid var(--line);border-radius:9px;background:var(--card)}
+.apr-c-criar-outros b{font-size:10.5px;font-weight:600}
+/* o cabeçalho do computador: o título e o subtítulo, o «Selecionar vários» e
+   a ação principal */
+.apr-c-cabeca-larga{flex-direction:row;align-items:center;gap:8px;padding:8px 10px}
+.apr-c-cabeca-tit{flex:1;min-width:0;display:flex;flex-direction:column}
+.apr-c-cabeca-tit b{font-family:var(--letra-titulo);font-size:14px;font-weight:650}
+.apr-c-cabeca-tit .apr-m-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apr-c-cabeca-ic{display:grid;place-items:center;width:24px;height:24px;border:1px solid var(--line2);border-radius:7px;color:var(--ink)}
+.apr-c-grelha-par>.apr-m-campo:first-child{grid-column:auto}
+/* os grupos: o nome com o selo, as etiquetas dos membros, e as partes do
+   cartão de um partilhado (o pedido, a ligação) */
+.apr-c-grupo-cab{justify-content:flex-start}
+.apr-c-etiquetas{display:flex;flex-wrap:wrap;gap:4px;padding:5px;border:1px solid var(--line2);border-radius:8px;background:var(--field)}
+.apr-c-etiquetas>span{display:inline-flex;align-items:center;gap:4px;min-height:20px;padding:0 7px;border:1px solid var(--line2);border-radius:999px;background:var(--card);font-size:10px;white-space:nowrap}
+.apr-c-etiquetas>span svg{color:var(--muted)}
+.apr-c-etiquetas>.apr-c-etiqueta-mais{border-style:dashed;color:var(--accent-text);font-weight:600}
+.apr-c-parte{display:flex;flex-direction:column;gap:2px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}
+.apr-c-pedido{margin:6px -10px 0;padding:6px 10px;border-top:0;background:var(--accent-soft)}
+.apr-c-pedido>b{font-size:11px;font-weight:650}
+/* os contratos: o cabeçalho de cada imóvel e o bloco dos por confirmar */
+.apr-c-ctgrupo{display:flex;align-items:baseline;gap:5px;padding:0 2px}
+.apr-c-ctgrupo b{font-family:var(--letra-titulo);font-size:12px;font-weight:650;white-space:nowrap}
+.apr-c-ctgrupo .apr-m-sub{white-space:nowrap}
+.apr-c-ctrenda{margin-left:auto;font-size:10px;font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+.apr-c-pend{display:flex;flex-direction:column;gap:3px;margin-bottom:6px;padding:6px 8px;border-radius:9px;background:var(--chip)}
+.apr-c-pend-tit{font-size:10px;font-weight:650}
+.apr-c-pend-linha{display:flex;align-items:center;gap:8px}
+.apr-c-pend .apr-c-botoes{justify-content:flex-end;padding-top:2px}
+/* a partilha entre contas: o meu id com o Copiar, e o campo do outro com o Ligar */
+.apr-c-meuid{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0 7px;border-bottom:1px solid var(--line)}
+.apr-c-meuid>span{display:flex;flex-direction:column}
+.apr-c-meuid b{font-size:13px;font-weight:700;letter-spacing:.08em}
+.apr-c-ligar{display:flex;align-items:flex-end;gap:6px;padding:7px 0 5px}
+.apr-c-ligar>.apr-m-campo{flex:1;min-width:0}
+.apr-c-ligar .apr-m-caixa{letter-spacing:.06em}
+/* os colaboradores: o cargo, a tabela das permissões, as escolhas do convite */
+.apr-c-cargo{display:flex;align-items:center;gap:8px;padding:5px 0 6px}
+.apr-c-perms{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.apr-c-perm{display:grid;grid-template-columns:1fr 52px 64px;align-items:center;padding:4px 9px;font-size:10px}
+.apr-c-perm+.apr-c-perm{border-top:1px solid var(--line)}
+.apr-c-perm-tit{background:var(--chip);color:var(--muted);font-size:8.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.apr-c-perm>span:not(:first-child){display:flex;justify-content:center}
+.apr-c-perm .sim{color:var(--in)}
+.apr-c-perm .nao>i{display:block;width:9px;height:2px;border-radius:1px;background:var(--line2)}
+.apr-c-opcao{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--line);border-radius:9px;background:var(--card)}
+.apr-c-opcao.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.apr-c-radio{flex:none;width:12px;height:12px;border-radius:50%;border:1.5px solid var(--line2)}
+.apr-c-opcao.on .apr-c-radio{border:3.5px solid var(--accent)}
+.apr-c-casas{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.apr-c-casa{display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:10.5px}
+.apr-c-casa+.apr-c-casa{border-top:1px solid var(--line)}
+.apr-c-casa b{font-weight:600}
+.apr-c-colab-cab{width:100%}
+.apr-c-colab-cab>.apr-m-selo{margin-left:auto}
+.apr-c-colab-cab .apr-m-sub{font-size:9px}
+.apr-c-colab-imv{display:flex;align-items:flex-start;gap:9px;padding:4px 0}
+.apr-c-colab-imv>.apr-m-capa{width:34px;height:42px;border-radius:7px}
+/* as visitas: o bloco do dia (hoje a cheio), os grupos Próximas e Passadas,
+   e a ficha */
+.apr-c-dia{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;width:30px;height:32px;border-radius:7px;background:var(--chip);color:var(--ink);line-height:1.05}
+.apr-c-dia b{font-family:var(--letra-titulo);font-size:13px;font-weight:700}
+.apr-c-dia span{font-size:8px;font-weight:600;color:var(--muted)}
+.apr-c-dia.hoje{background:var(--accent);color:var(--accent-ink)}
+.apr-c-dia.hoje span{color:var(--accent-ink)}
+/* a hora, o imóvel e o «daqui a N dias» partem em duas linhas, como na lista */
+.apr-c-visita .apr-m-linha-txt .apr-m-sub{white-space:normal}
+.apr-c-selos-dir{flex:none;align-self:flex-start;margin-top:0}
+.apr-c-subsecao{display:flex;justify-content:space-between;padding:2px 2px 0;font-size:10.5px}
+.apr-c-subsecao b{font-weight:650}
+.apr-c-subsecao span{color:var(--muted)}
+.apr-c-quando{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.apr-c-converte{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:8px 9px;border:1px solid var(--accent);border-radius:9px;background:var(--accent-soft)}
+.apr-c-converte>b{font-size:11px;font-weight:650;color:var(--accent-text)}
+.apr-c-converte>.apr-m-botao{margin-top:2px}
+/* o mês da Agenda (calendario.js:vCalendar): hoje a cheio, e um ponto nos
+   dias com alguma coisa */
+.apr-c-mes{display:grid;grid-template-columns:repeat(7,1fr);gap:2px 0;padding-bottom:4px;text-align:center;font-size:9.5px;font-variant-numeric:tabular-nums}
+.apr-c-mes>span{position:relative;justify-self:center;display:grid;place-items:center;width:18px;height:16px;border-radius:5px}
+.apr-c-mes>.apr-c-mes-sem{width:auto;color:var(--muted);font-size:8px;font-weight:600}
+.apr-c-mes>.ponto::after{content:"";position:absolute;left:50%;bottom:-1px;width:3px;height:3px;margin-left:-1.5px;border-radius:50%;background:var(--accent)}
+.apr-c-mes>.hoje{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.apr-c-mes>.hoje.ponto::after{background:var(--accent-ink)}
+.apr-c-mes-setas{display:flex;gap:10px;color:var(--muted)}
+.apr-m-linha.apr-c-ev{gap:8px;padding-left:6px;padding-right:6px}
+.apr-c-ev-hora{flex:none;display:flex;flex-direction:column;width:30px;font-size:10.5px;font-variant-numeric:tabular-nums}
+.apr-c-ev-hora b{font-weight:650}
+/* === fim: apresentação: as Casas (folha 1.3) === */
+
+/* === apresentação: o Dinheiro e a Agenda (folha 1.4) === */
+/* As peças das apresentações dos Movimentos, dos Planeados, dos Créditos e
+   do Calendário (cloud/apresentacao-dinheiro.js), em cima do kit da 1.2:
+   a app em ponto pequeno, só com tokens. O que diz um estado — o chip
+   ligado, a linha marcada, o dia de hoje — diz-se também pela frente (o
+   contorno, a caixa cheia com o visto, o número a cheio), que o
+   escurecimento forçado do Samsung não apaga. Nada aqui se mexe. */
+/* os totais dos Movimentos: a fila corre de lado no telemóvel, e corta no fim */
+.apr-d-kpis{display:flex;gap:6px;margin-right:-10px;overflow:hidden}
+.apr-d-kpi{flex:0 0 37%;min-width:0;display:flex;flex-direction:column;gap:1px;padding:5px 8px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.apr-d-kpi span{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apr-d-kpi b{font-family:var(--letra-titulo);font-size:13px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+.apr-d-kpi b.pos{color:var(--in)}
+.apr-d-kpi b.neg{color:var(--out)}
+.apr-d-kpi b.prest{color:var(--loan)}
+/* o título de um mês da lista, com o saldo à direita */
+.apr-d-mes{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:3px 2px 0}
+.apr-d-mes>b{font-family:var(--letra-titulo);font-size:12.5px;font-weight:650}
+.apr-d-mes>span{font-size:9.5px;color:var(--muted);white-space:nowrap}
+.apr-d-mes .apr-m-valor{font-size:9.5px}
+/* o funil com quantos filtros estão ligados, e o × de um chip ligado */
+.apr-d-funil{position:relative}
+.apr-d-funil-n{position:absolute;top:-5px;right:-5px;display:grid;place-items:center;min-width:14px;height:14px;padding:0 3px;border-radius:99px;background:var(--accent);color:var(--accent-ink);font-size:8px;font-weight:700}
+.apr-d-chip-x{display:inline-flex;margin:0 -3px 0 4px}
+/* uma fila de chips numa linha só, que corta no fim (no telemóvel corre de lado) */
+.apr-d-fila{flex-wrap:nowrap;overflow:hidden}
+.apr-d-fila>.apr-m-chip{flex:none}
+.apr-tela-corpo>.apr-d-fila{margin-right:-10px}
+.apr-d-n2{margin-left:4px;color:var(--muted);font-weight:400}
+/* a ficha em miniatura: os três pontos ao lado do ✕, e o rodapé com os botões */
+.apr-d-folha-ic{flex:none;display:flex;align-items:center;gap:9px}
+.apr-d-folha-pe{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:7px 10px 9px;border-top:1px solid var(--line)}
+.apr-d-folha-pe>.apr-m-botao:only-child{grid-column:1/-1}
+/* a seleção dos Movimentos: as linhas marcadas (o fundo suave, o contorno e
+   a caixa cheia com o visto) e a barra das ações */
+.apr-d-sel-lista{display:flex;flex-direction:column;gap:3px;margin-bottom:4px}
+.apr-d-marcada{display:flex;align-items:center;gap:7px;padding:0 7px;border-radius:10px;background:var(--accent-soft);border:1.5px solid var(--accent);box-shadow:var(--shadow)}
+.apr-d-marcada>.apr-m-linha{flex:1;min-width:0;padding:3px 0}
+.apr-d-caixa{flex:none;display:grid;place-items:center;width:15px;height:15px;border-radius:4px;background:var(--accent);color:var(--accent-ink)}
+/* duas peças uma por cima da outra, a de baixo à direita a tocar só na ponta (aprDDuo) */
+.apr-d-duo{width:min(340px,100%);display:flex;flex-direction:column}
+.apr-d-duo>:first-child{width:80%}
+.apr-d-duo>:last-child{position:relative;align-self:flex-end;width:74%;margin-top:-12px}
+.apr-d-sel{display:flex;flex-direction:column;gap:5px;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.apr-d-sel-topo{display:flex;align-items:center;gap:8px}
+.apr-d-sel-n{min-width:0;display:flex;flex-direction:column}
+.apr-d-sel-n b{font-size:11px;font-weight:650}
+.apr-d-sel-acoes{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.apr-d-sel-b{display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 3px;border:1px solid var(--line2);border-radius:8px;background:var(--card);color:var(--ink);font-size:9.5px;font-weight:600;white-space:nowrap}
+.apr-d-sel-b.perigo{background:var(--danger);border-color:var(--danger);color:var(--danger-ink)}
+/* a folha «Criar»: os cinco tipos de movimento em mosaicos, a transferência com duas colunas */
+.apr-d-tipos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.apr-d-tipo{display:flex;align-items:center;gap:5px;padding:4px 5px;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+.apr-d-tipo>.apr-m-ico{width:20px;height:20px}
+.apr-d-tipo b{font-size:9.5px;font-weight:600;line-height:1.2}
+.apr-d-tipo:last-child{grid-column:span 2}
+.apr-d-tipos+.apr-m-rot{margin-top:4px}
+/* o cartão «Por confirmar»: a cabeça (aberta, a seta para cima), as linhas com as ações por baixo */
+.apr-d-pend-cab{display:flex;align-items:center;gap:6px;padding:3px 0 0}
+.apr-d-pend-cab>b:first-child{font-family:var(--letra-titulo);font-size:12.5px;font-weight:650}
+.apr-d-pend-cab>b:nth-of-type(2){margin-left:auto}
+.apr-d-pend-cab>svg{flex:none;color:var(--faint)}
+.apr-d-pend-cab.aberto>svg{transform:rotate(180deg)}
+.apr-d-pend-sub{padding-bottom:4px}
+.apr-d-pend-n{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:var(--out);color:var(--accent-ink);font-size:10px;font-weight:700}
+.apr-d-pend{border-top:1px solid var(--line)}
+.apr-d-acoes{display:flex;justify-content:flex-end;align-items:center;gap:5px;padding:0 0 7px}
+.apr-d-pontos{display:grid;place-items:center;width:20px;color:var(--muted)}
+/* a faixa de quem vem de trás (estilos.css:.plan-retro) */
+.apr-d-retro{display:flex;flex-direction:column;gap:5px;padding:9px 10px;border-radius:12px;background:var(--accent-soft);color:var(--accent-text);border:1px solid var(--line2);border-color:color-mix(in srgb,var(--accent) 24%,transparent);box-shadow:var(--shadow)}
+.apr-d-retro>b{font-family:var(--letra-titulo);font-size:12px;font-weight:650}
+.apr-d-retro>span{font-size:10px;line-height:1.35}
+.apr-d-retro-acoes{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px}
+/* o cabeçalho de uma secção com o botão de texto (o «Novo modelo», o «Nova hipoteca») */
+.apr-d-cab{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 0 5px}
+.apr-d-cab b{font-family:var(--letra-titulo);font-size:13px;font-weight:650}
+.apr-d-fantasma{border-color:transparent;background:transparent;color:var(--accent-text)}
+.apr-d-ativas{padding:8px}
+.apr-d-ativas>.apr-d-cab{padding:0 2px 6px}
+/* o resumo dos Créditos: o cartão azul-noite, com as barras da dívida no fim de cada ano */
+.apr-d-cred{display:flex;flex-direction:column;gap:3px;padding:10px 11px;border-radius:12px;background:var(--side);color:var(--side-ink);border:1px solid transparent;box-shadow:var(--shadow)}
+:root.dark .apr-d-cred{border-color:var(--line)}
+.apr-d-cred-rot{display:block;font-size:9.5px;color:var(--side-text)}
+.apr-d-cred-v{font-family:var(--letra-titulo);font-size:22px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.apr-d-cred-par{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.apr-d-cred-par b{font-size:11.5px;font-weight:650;font-variant-numeric:tabular-nums}
+.apr-d-cred b small,.apr-d-hp b small{font-size:9px;font-weight:500;color:inherit;opacity:.8}
+.apr-d-cred-leitura{align-self:flex-end;display:flex;gap:5px;margin-top:3px;padding:2px 7px;border-radius:7px;background:var(--side-on);font-size:9.5px;font-weight:650;font-variant-numeric:tabular-nums}
+.apr-d-cred .apr-m-barras{height:38px;gap:2px}
+.apr-d-cred .apr-m-barras>span{min-width:2px;background:var(--side-text);opacity:.6}
+.apr-d-cred .apr-m-barras>span.on{background:var(--side-ink);opacity:1}
+.apr-d-cred-eixo{display:flex;justify-content:space-between;gap:6px;font-size:8.5px;color:var(--side-text)}
+/* o cartão de uma hipoteca */
+.apr-d-hp{gap:4px;padding:8px 10px}
+.apr-d-hp-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
+.apr-d-hp-cab b{display:block;font-family:var(--letra-titulo);font-size:12.5px;font-weight:650}
+.apr-d-hp-nums{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:3px 0}
+.apr-d-hp-nums b{display:block;font-size:12px;font-weight:650;font-variant-numeric:tabular-nums}
+.apr-d-hp-acoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:6px;padding-top:4px}
+.apr-d-desce{display:flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
+.apr-d-desce s{font-size:10.5px;color:var(--muted)}
+.apr-d-desce b{font-family:var(--letra-titulo);font-size:15px;font-weight:700;color:var(--ink)}
+.apr-d-desce svg{color:var(--loan)}
+/* o mês do Calendário: as setas e o nome, os dias da semana, a grelha (hoje a
+   cheio, com o número na cor de dentro) e a legenda */
+.apr-d-cal-cena{width:min(300px,100%)}
+.apr-d-cal{gap:4px;padding:7px 8px 8px}
+.apr-d-cal-nav{display:flex;align-items:center;gap:6px;color:var(--ink)}
+.apr-d-cal-nav>span:not(.apr-m-botao){flex:1;min-width:0;display:flex;flex-direction:column;align-items:center}
+.apr-d-cal-nav b{font-family:var(--letra-titulo);font-size:12.5px;font-weight:650}
+.apr-d-cal-sem,.apr-d-cal-dias{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;text-align:center}
+.apr-d-cal-sem span{font-size:8.5px;font-weight:600;color:var(--muted)}
+.apr-d-dia{display:flex;flex-direction:column;align-items:center;gap:1px;padding:2px 0 3px;border-radius:6px;font-size:10px;font-variant-numeric:tabular-nums}
+.apr-d-dia b{font-weight:500}
+.apr-d-dia.fora{color:var(--faint)}
+.apr-d-dia.hoje{background:var(--accent);color:var(--accent-ink)}
+.apr-d-dia.hoje b{font-weight:700}
+.apr-d-pts{display:flex;justify-content:center;gap:2px;height:4px}
+.apr-d-pt{display:inline-block;width:4px;height:4px;border-radius:50%}
+.apr-d-pt.vis{background:var(--accent)}
+.apr-d-pt.pla{background:var(--out)}
+.apr-d-dia.hoje .apr-d-pt.vis{background:var(--accent-ink)}
+.apr-d-dia.hoje .apr-d-pt.pla{background:var(--cnt)}
+.apr-d-cal-leg{display:flex;justify-content:center;gap:12px;font-size:9px;color:var(--muted)}
+.apr-d-cal-leg>span{display:inline-flex;align-items:center;gap:4px}
+.apr-d-cal-leg .apr-d-pt{width:6px;height:6px}
+/* o painel de um dia: o título, as visitas (com a hora) e os planeados, e os dois botões */
+.apr-d-dia-tit{display:block;font-family:var(--letra-titulo);font-size:13px;font-weight:650;padding:2px 2px 0}
+.apr-d-dia-cartao>.apr-m-rot{padding:5px 0 1px}
+.apr-d-hora{flex:none;width:30px;display:flex;flex-direction:column;font-size:10.5px;font-variant-numeric:tabular-nums}
+.apr-d-hora b{font-weight:650}
+.apr-d-nada{padding:6px 0}
+.apr-d-dia-acoes{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.apr-d-dia-acoes.um{grid-template-columns:1fr}
+.apr-d-dia-acoes>.apr-m-botao{background:var(--card)}
+/* o crachá de um destino da barra de baixo (estilos.css:.tabbar a .cnt) */
+.apr-d-barra .apr-m-barra-i{position:relative}
+.apr-d-cracha{position:absolute;top:-4px;left:calc(50% + 4px);display:grid;place-items:center;min-width:13px;height:13px;padding:0 3px;border-radius:99px;background:var(--out);color:var(--accent-ink);font-size:8px;font-weight:700}
+/* === fim: apresentação: o Dinheiro e a Agenda (folha 1.4) === */
+
+/* === apresentação: a Visão geral, a Análise e as Definições (folha 1.5) === */
+/* As peças das apresentações da Visão geral, da Avaliação, das Projeções, do
+   IRS · Anexo F e das Definições (cloud/apresentacao-analise.js), por cima do
+   kit da 1.2: só tokens, nada que se toque, e cada estado dito pela frente —
+   o contorno, a forma, a cor do texto —, que o escurecimento forçado do
+   Samsung não apaga. */
+/* os indicadores (aprAKpi): o rótulo com a bolinha da série, o valor na letra
+   dos títulos; o escuro é o cartão azul-noite do Cashflow e do imposto
+   (estilos.css:.vg-kpi.cf), --side no claro e --accent-soft no escuro */
+.apr-a-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+.apr-a-kpis.tres{grid-template-columns:repeat(3,minmax(0,1fr))}
+.apr-a-kpi{display:flex;flex-direction:column;gap:1px;min-width:0;padding:6px 8px;background:var(--card);border:1px solid var(--line);border-radius:10px;color:var(--ink)}
+.apr-a-kpi-rot{display:flex;align-items:center;gap:4px;min-width:0;font-size:9.5px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apr-a-kpi-val{font-family:var(--letra-titulo);font-size:14px;font-weight:650;letter-spacing:-.01em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.apr-a-kpis.tres .apr-a-kpi-val{font-size:12.5px}
+/* em três colunas o rótulo e a nota partem em duas linhas, como no cartão da app */
+.apr-a-kpis.tres .apr-a-kpi-rot,.apr-a-kpis.tres .apr-a-kpi>.apr-m-sub{white-space:normal;line-height:1.2}
+.apr-a-kpi-val.pos{color:var(--in)}
+.apr-a-kpi-val.neg{color:var(--out)}
+.apr-a-kpi>.apr-m-sub{font-size:8.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apr-a-kpi.escuro{background:var(--side);border-color:var(--side);color:var(--side-ink)}
+.apr-a-kpi.escuro .apr-a-kpi-rot,.apr-a-kpi.escuro>.apr-m-sub{color:var(--side-text)}
+.apr-a-kpi.escuro .apr-a-bola{background:var(--accent-soft)}
+:root.dark .apr-a-kpi.escuro{background:var(--accent-soft);border-color:var(--line2);color:var(--ink)}
+:root.dark .apr-a-kpi.escuro .apr-a-kpi-rot,:root.dark .apr-a-kpi.escuro>.apr-m-sub{color:var(--accent-text)}
+:root.dark .apr-a-kpi.escuro .apr-a-bola{background:var(--accent)}
+.apr-a-bola{flex:none;display:inline-block;width:6px;height:6px;border-radius:2px;background:var(--accent)}
+.apr-a-bola.in{background:var(--in)}
+.apr-a-bola.out{background:var(--out)}
+.apr-a-bola.loan{background:var(--loan)}
+.apr-a-bola.irs{background:var(--warn)}
+.apr-a-cartao-kpis{gap:6px;padding:8px}
+/* as colunas que sobem e descem (aprAColunas): o que entra por cima do eixo,
+   o que sai empilhado por baixo, à mesma escala; a altura de cada parte em
+   vigésimos da caixa dela (.apr-a-h0 a .apr-a-h20), que a CSP não deixa
+   escrever no HTML. A coluna lida tem a faixa suave e o rótulo a cobalto. */
+.apr-a-colunas{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px}
+.apr-a-coluna{position:relative;display:flex;flex-direction:column;border-radius:4px}
+.apr-a-coluna.on{background:var(--accent-soft)}
+.apr-a-cima,.apr-a-baixo{display:flex;flex-direction:column;height:40px;padding:0 2px}
+.apr-a-cima{justify-content:flex-end}
+.apr-a-baixo{justify-content:flex-start;border-top:1px solid var(--line2)}
+.apr-a-cima>i,.apr-a-baixo>i{display:block;flex:none}
+.apr-a-cima>i{border-radius:2px 2px 0 0}
+.apr-a-baixo>i:last-child{border-radius:0 0 2px 2px}
+.apr-a-in{background:var(--in)}
+.apr-a-out{background:var(--out)}
+.apr-a-loan{background:var(--loan)}
+.apr-a-irs{background:var(--warn)}
+.apr-a-rot{padding:2px 0 1px;text-align:center;font-size:7.5px;color:var(--faint);white-space:nowrap}
+.apr-a-coluna.on .apr-a-rot{color:var(--accent-text);font-weight:700}
+.apr-a-rot>b{display:block;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.apr-a-dedo{position:absolute;left:50%;top:30%;width:18px;height:18px;margin-left:-9px;border-radius:50%;border:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 22%,transparent)}
+.apr-a-h0{height:0}.apr-a-h1{height:5%}.apr-a-h2{height:10%}.apr-a-h3{height:15%}.apr-a-h4{height:20%}.apr-a-h5{height:25%}.apr-a-h6{height:30%}
+.apr-a-h7{height:35%}.apr-a-h8{height:40%}.apr-a-h9{height:45%}.apr-a-h10{height:50%}.apr-a-h11{height:55%}.apr-a-h12{height:60%}.apr-a-h13{height:65%}
+.apr-a-h14{height:70%}.apr-a-h15{height:75%}.apr-a-h16{height:80%}.apr-a-h17{height:85%}.apr-a-h18{height:90%}.apr-a-h19{height:95%}.apr-a-h20{height:100%}
+/* a legenda e a leitura no canto (aprALegenda, aprALeitura): a leitura fica
+   por cima do desenho, onde a mão não está (graficos.js:mostrarColuna) */
+.apr-a-graf-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:5px}
+.apr-a-legenda{display:flex;flex-direction:column;gap:2px;font-size:9px;color:var(--muted)}
+.apr-a-legenda>span,.apr-a-leitura>span{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.apr-a-leitura{display:grid;grid-template-columns:auto auto;align-items:center;gap:1px 8px;padding:4px 7px;border-radius:7px;background:var(--chip);font-size:8.5px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.apr-a-leitura>b{text-align:right;color:var(--ink);font-weight:650}
+.apr-a-leitura>b:first-child{grid-column:1/-1;text-align:left}
+/* o traço de um gráfico de linha (aprATraco), com a área por baixo */
+.apr-a-traco{display:block;width:100%;height:42px;margin:2px 0 3px;overflow:visible}
+.apr-a-traco polygon{fill:var(--accent-soft);stroke:none}
+.apr-a-traco polyline{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.apr-a-traco.in polygon{fill:var(--in-soft)}
+.apr-a-traco.in polyline{stroke:var(--in)}
+.apr-a-traco.loan polygon{fill:var(--loan-soft)}
+.apr-a-traco.loan polyline{stroke:var(--loan)}
+/* o donut (aprADonut): os arcos de um círculo só, pela ordem da paleta
+   categórica (tema.js:PAL), e o total ao meio */
+.apr-a-donut{display:flex;align-items:center;gap:10px;padding:2px 0 4px}
+.apr-a-roda{position:relative;flex:none;width:64px;height:64px}
+.apr-a-roda>svg{display:block;width:100%;height:100%;transform:rotate(-90deg)}
+.apr-a-roda circle{fill:none;stroke-width:6}
+.apr-a-centro{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
+.apr-a-centro>b{font-size:10px;font-variant-numeric:tabular-nums}
+.apr-a-centro>.apr-m-sub{font-size:7.5px}
+.apr-a-leg{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:9px}
+.apr-a-leg>span{display:flex;align-items:center;gap:5px}
+.apr-a-leg i{flex:none;width:6px;height:6px;border-radius:2px}
+.apr-a-leg-nome{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.apr-a-leg b{font-weight:600;font-variant-numeric:tabular-nums}
+.apr-a-f0{stroke:var(--accent)}.apr-a-f1{stroke:var(--out)}.apr-a-f2{stroke:var(--in)}.apr-a-f3{stroke:var(--loan)}.apr-a-f4{stroke:var(--warn)}.apr-a-f5{stroke:var(--faint)}
+.apr-a-q0{background:var(--accent)}.apr-a-q1{background:var(--out)}.apr-a-q2{background:var(--in)}.apr-a-q3{background:var(--loan)}.apr-a-q4{background:var(--warn)}.apr-a-q5{background:var(--faint)}
+/* uma tabela em miniatura (aprATabela): cada linha é uma grelha com as
+   colunas da tabela — numa <tr> o contorno do destaque não se desenha */
+.apr-a-tabela{display:flex;flex-direction:column;font-size:9.5px;font-variant-numeric:tabular-nums}
+.apr-a-tl{display:grid;align-items:center;gap:5px;padding:5px 3px;border-top:1px solid var(--line)}
+.apr-a-tl>span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
+.apr-a-tl>span:first-child{text-align:left}
+.apr-a-tcab{border-top:0;padding-top:1px;font-size:7.5px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--muted)}
+.apr-a-tcab>span{white-space:normal;line-height:1.15}
+.apr-a-tl.apr-alvo{border-radius:6px;outline-offset:1px}
+.apr-a-tabela.c2 .apr-a-tl{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}
+.apr-a-tabela.c2 .apr-a-tl>span{text-align:left}
+.apr-a-tabela.c4 .apr-a-tl{grid-template-columns:minmax(0,1.25fr) auto minmax(0,1fr) minmax(0,.9fr)}
+.apr-a-tabela.c4 .apr-a-tl>span:nth-child(2){text-align:left}
+.apr-a-tabela.c5 .apr-a-tl{grid-template-columns:26px repeat(4,minmax(0,1fr))}
+.apr-a-tabela.c6 .apr-a-tl{grid-template-columns:26px repeat(5,minmax(0,1fr))}
+.apr-a-tabela.q4 .apr-a-tl{grid-template-columns:38px minmax(0,1fr) auto auto}
+.apr-a-tabela .apr-m-valor{font-size:inherit}
+.apr-a-col-anexo.nao{color:var(--out);font-weight:600}
+/* o herói da Avaliação (aprAHeroi): as duas barras à mesma escala, o
+   mercado no cinzento e o rendimento no cobalto, e a diferença em grande */
+.apr-a-heroi{display:flex;flex-direction:column;gap:4px;min-width:0}
+.apr-a-barra-lin{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:9.5px;font-weight:600;color:var(--muted)}
+.apr-a-barra-lin>b{font-family:var(--letra-titulo);font-size:12.5px;font-weight:650;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.apr-a-rend>b{color:var(--accent-text)}
+.apr-a-heroi .apr-m-prog{height:7px;border-radius:4px}
+.apr-a-mercado .apr-m-prog>i{background:var(--faint)}
+.apr-a-dif{margin-top:3px;font-family:var(--letra-titulo);font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+.apr-a-dif.neg{color:var(--out)}
+.apr-a-dif.pos{color:var(--in)}
+.apr-a-frase{font-size:10.5px;line-height:1.3}
+.apr-a-cartao-heroi{padding:9px 11px}
+/* a jornada em miniatura (guia.js:boasVindas e guia.js:cartaoPassos): o olá
+   no azul-noite com a faixa do mosaico, e os passos — o feito riscado, o de
+   agora com o círculo cheio de cobalto, os outros com o número */
+.apr-a-ola{position:relative;display:block;overflow:hidden;padding:24px 11px 9px;border-radius:12px;background:var(--side);color:var(--side-ink)}
+.apr-a-ola>i{position:absolute;left:0;right:0;top:0;height:15px}
+.apr-a-ola>b{position:relative;display:block;font-family:var(--letra-titulo);font-size:12.5px;font-weight:650;line-height:1.2}
+.apr-a-jornada{padding:7px 0 0}
+.apr-a-jornada>.apr-m-cartao-cab{padding:0 10px 5px}
+.apr-a-jornada>.apr-m-prog{margin:0 10px 6px}
+.apr-a-passos{display:flex;flex-direction:column}
+.apr-a-passo{display:flex;align-items:flex-start;gap:7px;padding:6px 10px;border-top:1px solid var(--line)}
+.apr-a-passo.atual{background:var(--accent-soft)}
+.apr-a-n{flex:none;display:grid;place-items:center;width:17px;height:17px;border-radius:50%;border:1px solid var(--line2);background:var(--card);font-size:8.5px;font-weight:700;color:var(--muted)}
+.apr-a-passo.atual .apr-a-n{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.apr-a-passo.feito .apr-a-n{background:var(--in-soft);border-color:var(--in-soft);color:var(--in)}
+.apr-a-passo-txt{min-width:0;display:flex;flex-direction:column;gap:1px}
+.apr-a-passo-txt>b{font-size:10.5px;font-weight:600}
+.apr-a-passo.feito .apr-a-passo-txt>b{text-decoration:line-through;color:var(--muted)}
+.apr-a-passo.atual .apr-a-passo-txt>b{font-size:11.5px}
+.apr-a-passo.atual .apr-a-passo-txt>.apr-m-sub{color:var(--accent-text)}
+.apr-a-passo-acoes{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.apr-a-fim-passos{padding:0}
+.apr-a-fim-passos .apr-a-passo{border-top:0}
+.apr-a-fantasma{align-self:center;display:inline-flex;align-items:center;min-height:24px;padding:0 11px;border-radius:8px;background:var(--bg);font-size:10.5px;font-weight:600;color:var(--accent-text)}
+.apr-a-tutoriais{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:2px 0 4px}
+.apr-a-tutorial{display:flex;flex-direction:column;gap:2px;min-width:0;padding:6px 7px;border:1px solid var(--line);border-radius:9px;background:var(--chip)}
+.apr-a-tutorial>b{font-size:9.5px;line-height:1.2}
+.apr-a-tutorial>.apr-m-sub{font-size:8px}
+.apr-a-tutorial>.apr-m-selo{align-self:flex-start}
+/* o «Personalizar painel» em miniatura (cloud/painel.js:editBar): a barra
+   da edição, os cartões com a pega e o tracejado, e o que vai na mão com o
+   contorno cheio a cobalto; e o painel do funil, com o imóvel em foco */
+.apr-a-cartao-edicao{gap:6px;padding:7px}
+.apr-a-edicao{display:flex;flex-wrap:wrap;align-items:center;gap:4px 5px}
+.apr-a-edicao>.apr-m-sub{flex:1 1 100%}
+.apr-a-arrumar{display:flex;flex-direction:column;gap:6px}
+.apr-a-arrumar>.apr-m-cartao{border-style:dashed;border-color:var(--line2)}
+.apr-a-arrumar>.apr-a-levado{border-style:solid;border-color:var(--accent);transform:rotate(-1.5deg)}
+.apr-a-pega{display:flex;color:var(--faint)}
+.apr-a-painel-filtro{gap:6px;padding:8px}
+.apr-m-caixa.apr-a-sel{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.apr-a-sel>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.apr-a-sel>svg{flex:none;color:var(--muted)}
+.apr-a-opcoes{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.apr-a-opcoes>span{padding:4px 8px;font-size:10px;border-top:1px solid var(--line)}
+.apr-a-opcoes>span:first-child{border-top:0}
+.apr-a-pe{display:flex;gap:6px}
+.apr-a-pe>.apr-m-botao{flex:1}
+/* o chip «Imóvel» das análises (vistas.js:anaChips), a fila do topo e o
+   botão de partilha da Avaliação */
+.apr-m-chip.apr-a-chip{gap:4px;align-self:flex-start}
+.apr-a-chip>svg{flex:none}
+.apr-a-topo{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.apr-a-icobotao{display:grid;place-items:center;width:24px;height:24px;border:1px solid var(--line2);border-radius:8px;background:var(--card);color:var(--ink)}
+/* as linhas das janelas de opções (vistas.js:anaLinhaOpcao) e da conta de
+   exploração (avaliacao.js:contaCard), com o NOI numa faixa */
+.apr-a-opcao{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--line)}
+.apr-a-opcao:first-child{border-top:0}
+.apr-a-opcao>span:first-child{min-width:0;display:flex;flex-direction:column;gap:1px}
+.apr-a-opcao b{font-size:10.5px;font-weight:600}
+.apr-m-caixa.apr-a-valor{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;min-width:54px;font-variant-numeric:tabular-nums}
+.apr-a-valor>.apr-m-sub{font-size:9.5px}
+.apr-a-ce{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid var(--line);font-size:10px}
+.apr-a-ce>b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.apr-a-ce.noi{margin:0 -10px;padding:4px 10px;background:var(--chip);font-weight:600}
+.apr-a-ce.cf{font-weight:650}
+.apr-a-menu{padding:2px 9px}
+.apr-a-folha-kpi .apr-m-linha{padding-bottom:0}
+.apr-a-folha-kpi .apr-a-traco{height:34px}
+/* o aviso das renovações (projecoes.js:prjRenovacoes) e o cartão das rendas */
+.apr-a-cartao-aviso{gap:7px;padding:9px 10px}
+.apr-a-aviso{display:flex;gap:7px;font-size:10px;line-height:1.35}
+.apr-a-aviso>svg{flex:none;margin-top:1px;color:var(--warn)}
+.apr-a-cartao-aviso>.apr-m-botao{align-self:flex-start}
+.apr-a-so-rendas .apr-a-baixo{display:none}
+.apr-a-so-rendas .apr-a-cima{height:46px}
+.apr-a-cartao-prj{gap:4px;padding:7px 9px}
+.apr-a-cartao-prj .apr-a-legenda{flex-direction:row;flex-wrap:wrap;gap:2px 8px}
+.apr-a-cartao-prj .apr-a-cima,.apr-a-cartao-prj .apr-a-baixo{height:28px}
+.apr-a-cartao-foco{gap:6px;padding:8px}
+/* o IRS · Anexo F em miniatura (fisco.js): o ano em chips com o titular, a
+   faixa das regras do ano, os pontos de «A tratar antes de entregar», os
+   interruptores da situação fiscal (a bola do lado ligado diz o estado pela
+   forma) e o veredito do englobamento */
+.apr-a-anos{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.apr-a-anos>.apr-m-chips{flex-wrap:nowrap}
+.apr-a-faixa{display:flex;flex-wrap:wrap;align-items:center;gap:3px 6px;padding:7px 9px;border-radius:10px;background:var(--accent-soft)}
+.apr-a-faixa>b{font-family:var(--letra-titulo);font-size:12px;color:var(--ink)}
+.apr-a-faixa>.apr-m-sub{flex:1 1 100%;color:var(--accent-text)}
+.apr-a-ponto{display:flex;align-items:center;gap:7px;padding:6px 0;border-top:1px solid var(--line)}
+.apr-a-ponto>.apr-m-selo{flex:none;min-width:16px;justify-content:center}
+.apr-a-ponto-txt{flex:1;min-width:0;font-size:10px;line-height:1.3}
+.apr-a-ponto>.apr-m-botao{flex:none}
+.apr-a-nota{padding-top:6px;border-top:1px solid var(--line)}
+.apr-a-sit{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line)}
+.apr-a-sit>span:first-child{min-width:0;display:flex;flex-direction:column}
+.apr-a-sit b{font-size:10.5px;font-weight:600}
+.apr-a-int{flex:none;position:relative;width:26px;height:15px;border-radius:8px;background:var(--line2)}
+.apr-a-int::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:var(--card)}
+.apr-a-int.on{background:var(--accent)}
+.apr-a-int.on::after{left:13px}
+.apr-a-veredito{display:flex;align-items:center;gap:5px;padding:5px 7px;border-radius:7px;background:var(--in-soft);color:var(--in);font-size:9.5px;font-weight:600}
+.apr-a-veredito>svg{flex:none}
+.apr-a-titular{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
+.apr-a-cartao-titular{gap:9px;padding:9px 10px}
+.apr-a-cartao-quadros{gap:2px;padding:6px 9px 4px}
+.apr-a-dobra{display:flex;align-items:center;gap:6px;font-size:10.5px}
+.apr-a-dobra>b{flex:1;min-width:0;font-weight:600}
+.apr-a-dobra>svg{flex:none;color:var(--muted)}
+/* as Definições em miniatura: os rótulos das secções, o fundo do menu com o
+   cartão da conta (navegacao.js:gavetaFundo) no azul-noite da gaveta — o
+   destaque, aí, no branco da gaveta —, e os campos do perfil lado a lado */
+.apr-a-rotulo{display:block;padding:3px 2px 0}
+.apr-a-gaveta{display:flex;flex-direction:column;gap:2px;padding:8px;border-radius:14px;background:var(--side);color:var(--side-text);box-shadow:var(--shadow)}
+.apr-a-gav-i{display:flex;align-items:center;gap:8px;padding:6px 7px;font-size:11px;font-weight:600}
+.apr-a-conta{display:flex;align-items:center;gap:8px;margin-top:4px;padding:7px;border-radius:10px;background:var(--side-on);color:var(--side-ink)}
+.apr-a-gaveta .apr-alvo{outline-color:var(--side-ink)}
+.apr-a-conta>.apr-m-avatar{background:var(--side-line);color:var(--side-ink)}
+.apr-a-conta>span:last-child{min-width:0;display:flex;flex-direction:column}
+.apr-a-conta b{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apr-a-conta>span:last-child>span{font-size:9.5px;color:var(--side-muted)}
+.apr-m-grelha.apr-a-grelha-2>.apr-m-campo:first-child{grid-column:auto}
+/* quem só colabora: o «O que podes fazer» e a frase das contas */
+.apr-a-botoes{display:flex;flex-wrap:wrap;gap:5px;margin:7px 0 3px}
+.apr-a-semcontas{gap:8px;padding:9px 10px}
+.apr-a-semcontas>.apr-m-sub{font-size:10px;line-height:1.35}
+.apr-a-semcontas>.apr-m-botao{align-self:flex-start}
+/* === fim: apresentação: a Visão geral, a Análise e as Definições (folha 1.5) === */

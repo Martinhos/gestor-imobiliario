@@ -355,3 +355,19 @@ pedido fica pendente sem ninguém por responder — o /api/state acende o
 alguém de uma casa deve chamar passarSeTodosAceitaram com as casas dela. E um
 sim de quem chega por partilha só vale com a ligação a quem recebe
 (casas.js:progressoDaCasa): não contes os `approvals` à mão.
+
+## Dois hífens num comentário de XML partem o APK
+Num recurso do Android, `--` dentro de `<!-- … -->` não é XML válido e o
+aapt recusa o ficheiro — mas só no CI, porque nesta máquina não há SDK. Por
+isso um token do estilos.css não se cita com os hífens num colors.xml
+(android/app/src/main/res/values/colors.xml diz «a variavel marca»). O
+testes/app-dev-android.test.js lê os XML como o aapt e apanha-o aqui.
+
+## Um ícone instalado não muda com a publicação
+Os ficheiros mudam (o sw.js guarda-os na SHELL e só os renova com a versão
+nova), mas o ícone que já está no ecrã inicial é outra coisa: no iPhone o
+apple-touch-icon fica o do dia em que se adicionou a app, e só muda
+removendo-a do ecrã principal e adicionando-a de novo; no Android, o Chrome
+atualiza a app instalada quando volta a ler o manifesto, ao seu ritmo, e o
+APK só muda reinstalando o das Definições. Mudar o ícone pede uma linha nas
+novidades a dizer como o ver.

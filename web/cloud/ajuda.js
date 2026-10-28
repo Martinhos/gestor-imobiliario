@@ -96,6 +96,7 @@ function vAjuda() {
     : '';
   return '<div class="aj-pagina">' +
     tutoriaisNaAjuda() +
+    apresentacoesNaAjuda() +
     perguntas +
     cabecaDaAjuda('Os teus pedidos', '<button type="button" class="btn sm primary" data-toca="camada" data-click="CW.newTicket(\'problema\')">' + ic('plus', 16) + 'Novo pedido</button>') +
     pedidos +
@@ -126,6 +127,33 @@ function tutoriaisNaAjuda() {
         '<span class="small num">' + t.passos + ' passos</span>' +
         '<b>' + esc(t.titulo) + '</b>' +
         (t.visto ? '<span class="badge in">Visto</span>' : '<span class="small">' + esc(t.resumo) + '</span>') +
+        '</button>';
+    }).join('') + '</div>';
+}
+
+/* «Apresentações», ao lado de «Como se faz»: as boas-vindas e a apresentação
+   de cada separador que esta conta vê (apresentacao.js:aprDaConta), pela
+   ordem da navegação, no mesmo carrossel de mosaicos — quantas imagens tem,
+   o nome e o selo «Vista» ou o resumo. Abrir uma daqui é rever: a janela é a
+   mesma, e o estado não muda (apresentacao.js:aprRever). No cabeçalho,
+   quantas já viu.
+   Recebe: nada.
+   Devolve: o HTML da secção, como string — vazia sem apresentações. */
+function apresentacoesNaAjuda() {
+  if (typeof aprDaConta !== 'function' || typeof APRESENTACOES === 'undefined') return '';
+  var ids = aprDaConta();
+  if (!ids.length) return '';
+  var tabs = typeof TABS !== 'undefined' ? TABS : [];
+  var vistas = ids.filter(function (id) { return aprVista(id); }).length;
+  return cabecaDaAjuda('Apresentações', '<span class="small num">' + vistas + ' de ' + ids.length + (ids.length === 1 ? ' vista' : ' vistas') + '</span>') +
+    '<div class="aj-tutoriais aj-apresentacoes">' + ids.map(function (id) {
+      var def = APRESENTACOES[id], n = aprImagensVisiveis(id).length;
+      var t = tabs.filter(function (x) { return x.id === id; })[0];
+      var resumo = def.resumo || (t && t.sub) || '';
+      return '<button type="button" class="aj-tu" data-toca="camada" data-click="aprRever(\'' + jsq(id) + '\')">' +
+        '<span class="small num">' + n + (n === 1 ? ' imagem' : ' imagens') + '</span>' +
+        '<b>' + esc(aprTexto(def.nome)) + '</b>' +
+        (aprVista(id) ? '<span class="badge in">Vista</span>' : '<span class="small">' + esc(resumo) + '</span>') +
         '</button>';
     }).join('') + '</div>';
 }

@@ -60,6 +60,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-25 · Passar o controlo, não a propriedade
 - 2026-10-26 · Passar o controlo pede a ligação a todos os comproprietários
 - 2026-10-26 · Passar o controlo precisa do sim de todos os comproprietários
+- 2026-10-27 · A app apresenta-se, e o ícone passa a cobalto
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2369,3 +2370,58 @@ diz a quem vai («… a Bruno» / «… a ti») porque agora chega a quem não
 recebe. Depois de aceitar o pedido sai dos pedidos por responder (já não
 pede nada) e fica à espera dos outros, com quem falta, para quem aceitou
 saber porque ainda não passou.
+
+## 2026-10-27 · A app apresenta-se, e o ícone passa a cobalto
+O pedido: «Quero que utilizadores novos tenham um onboarding simples»: uma
+janela com um ✕ e um carrossel de imagens depois de criar a conta (os
+parabéns, como se cria um imóvel, um inquilino e um contrato, o que são os
+movimentos recorrentes e de onde vêm, o que são os modelos, e no fim o
+primeiro imóvel com um botão para os Imóveis); «por cada menu que o
+utilizador vê pela primeira vez, há um ecrã destes» (os separadores); e «o
+icon da aplicação» ainda verde.
+
+O Martinho decidiu: as imagens são maquetes da app em HTML com os tokens, e
+não capturas (envelhecem a cada desenho e pesam na cache) nem ilustrações
+abstratas (não mostram onde se toca); a primeira frase é «Parabéns, <nome>. A
+partir de hoje, nenhuma renda te passa despercebida.», a da montra; os
+separadores explicam-se a todas as contas, as antigas também, e as
+boas-vindas são só das novas; quem chega por convite também as vê, com o fim
+adaptado — e a quem só colabora o título é «Os imóveis já estão à tua
+espera», sem «teus», porque não são dele; cada separador é um carrossel curto
+que acaba no «Percebi»; fechar as boas-vindas conta a Visão geral e os
+Imóveis como vistos, para não abrirem duas janelas seguidas; revê-se tudo pela
+Ajuda; o ícone é o cobalto liso do --marca, com a casa de sempre; e as
+novidades dizem como o ver no iPhone e no Android, que não o trocam sozinhos.
+
+O que se decidiu a fazer: a janela é um openModal e o carrossel copia o gesto
+das fotos (o padrão; o código das fotos está preso a elas). O «visto» vive nas
+definições, num objeto {id: 1}, porque a fusão a três o junta chave a chave e
+dois aparelhos não se esmagam; o sinal de conta nova nasce no aparelho, porque
+chega antes do servidor, e só depois de o servidor responder passa para as
+definições como «por ver» — escrito antes, num aparelho sem base, a fusão
+desfazia-o. A janela só decide com o estado do servidor na mão (a regra «A app
+não afirma nem decide antes de saber»). Quem chega por convite vê primeiro o
+convite e a confirmação, e só depois as boas-vindas, já com o cargo. Fechar as
+boas-vindas fora da Visão geral, ou as novidades, deixa a apresentação desse
+ecrã para a chegada seguinte. As apresentações dos separadores são verdade para
+o código de hoje e para a conta: os textos de criar mudam com o ecrã (no
+computador não há barra de baixo), quem só vê não lê como se cria, um serviço
+desligado leva as imagens dele, e a da Visão geral mostra a cara que a conta
+tem — eram duas no pedido, são cinco no código (a jornada, o vazio sem imóveis,
+o vazio com eles, os números, e quem só colabora sem finanças). Os números das
+maquetes fecham entre si e saem das contas da app (a amortização, a taxa do
+IRS de cada ano); na projeção, os contratos do exemplo contam-se renovados,
+porque as datas de fim do exemplo são fixas e a imagem envelhecia a mostrar um
+portefólio sem rendas. O percurso do CI fecha as boas-vindas pelo ✕, marca os
+separadores como vistos e prova uma apresentação por ecrã.
+
+O ícone: o degradê verde na diagonal da PWA (make-icons.js:corDoFundo) e o
+verde liso do APK (o ic_launcher_background do
+android/app/src/main/res/values/colors.xml) passam ao cobalto liso; a casa é a
+mesma, píxel a píxel. As cores da janela do Android, que ainda eram as
+esverdeadas da paleta antiga, passam ao --bg e ao --card. O drawable
+ic_launcher_background.xml, um degradê verde que nenhum recurso citava, saiu:
+os mipmaps citam a cor pelo nome, é por esse nome que o flavor dev a troca
+pelo âmbar, e uma segunda cópia da cor era o que deixava a PWA e o APK com
+verdes diferentes. O dev continua âmbar. O versionCode não sobe: o Android
+instala por cima com o mesmo número, como quando o nome passou a Rendorium.

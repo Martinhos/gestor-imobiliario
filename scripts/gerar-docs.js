@@ -62,6 +62,8 @@ const MAPA = [
   { id: 'ui', titulo: 'Componentes e navegação',
     ficheiros: ['web/app/componentes.js', 'web/app/navegacao.js', 'web/app/formato.js', 'web/app/icones.js', 'web/app/tema.js',
       'web/app/definicoes.js', 'web/cloud/guia.js', 'web/cloud/novidades.js',
+      'web/cloud/apresentacao.js', 'web/cloud/apresentacao-casas.js', 'web/cloud/apresentacao-dinheiro.js',
+      'web/cloud/apresentacao-analise.js',
       'web/avisos.js', 'web/legal.js', 'web/app/eventos.js', 'web/app/estilos-calculados.js'] },
   { id: 'pedidos', titulo: 'Pedidos de ajuda e erros',
     ficheiros: ['worker/src/rotas/tickets.js', 'worker/src/rotas/relatos.js',

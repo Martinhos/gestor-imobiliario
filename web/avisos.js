@@ -27,6 +27,30 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 43,
+    data: '2026-10-27',
+    titulo: 'A app apresenta-se, e o ícone fica cobalto',
+    seccoes: [
+      {
+        titulo: 'Boas-vindas e apresentações',
+        afeta: ['app'],
+        itens: [
+          'Quem cria conta é recebido com uma apresentação do essencial: como se adicionam um imóvel, um inquilino e um contrato, o que são os planeados e de onde vêm, e o que poupam os modelos.',
+          'Cada separador explica-se uma vez, na primeira visita depois desta versão: um carrossel curto com o que mostra, como está arrumado e onde se toca. Fecha-se no ✕ ou no «Percebi», e não volta.',
+          'Reveem-se todas na Ajuda, em «Apresentações».',
+        ],
+      },
+      {
+        titulo: 'O ícone',
+        afeta: ['app'],
+        itens: [
+          'O ícone da app passou a cobalto, a cor da marca.',
+          'No iPhone, para o ver no ecrã principal, remove a app de lá e adiciona-a de novo. Na app Android, descarrega o APK nas Definições e instala por cima.',
+        ],
+      },
+    ],
+  },
+  {
     v: 42,
     data: '2026-10-25',
     titulo: 'Passar o controlo, e as fotos a chegar',

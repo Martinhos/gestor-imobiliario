@@ -34,6 +34,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Padrões de página
 - A Visão geral
 - A jornada da vista geral
+- A apresentação
 - Um gráfico lê-se com o dedo
 - Uma tabela só quando diz o que o gráfico não diz
 - Uma comparação diz de que números fala
@@ -126,7 +127,11 @@ lia-se como um erro.
 com --side-ink (o ativo, branco), --side-text (os itens), --side-muted (os
 títulos dos grupos), --side-hover, --side-on e --side-line só para ela;
 --cnt e --cnt-ink são o crachá quente da barra. --marca (estilos.css:--marca)
-é o cobalto da marca, igual nos dois temas. --toast, --toast-ink e
+é o cobalto da marca, igual nos dois temas, e é também o fundo dos ícones da
+app; as cores da janela do Android (bg, surface, bg_night e surface_night do
+android/app/src/main/res/values/colors.xml) são o --bg e o --card do claro e
+do escuro, e o testes/app-dev-android.test.js lê-as do estilos.css: mudar a
+paleta parte o teste até o Android a seguir. --toast, --toast-ink e
 --toast-btn são o aviso de baixo (estilos.css:--toast), escuro no claro e
 claro no escuro, para se destacar do fundo nos dois. --veu (estilos.css:--veu)
 é o véu da gaveta e das janelas. --blur é o fundo translúcido do cabeçalho e
@@ -1421,7 +1426,9 @@ atravessa sempre (.vg-cheia). A grelha tem doze colunas
 de 560px tudo atravessa, e os terços só começam nos 900px. Os valores são
 por inteiro: não há filtro de proprietário (ver «Navegação»). O painel dos
 filtros tem o imóvel (ou grupo) em foco e, quando os há, o seletor dos
-filtros comuns, que aqui aplicam o imóvel (vistas.js:anaPanelPadrao).
+filtros comuns, que aqui aplicam o imóvel (vistas.js:anaPanelPadrao). A
+apresentação do separador segue as mesmas caras — a jornada, o vazio, os
+números e o «O que podes fazer» (apresentacao-analise.js:aprACaraDoPainel).
 
 O «Pede atenção» (painel-geral.js:pedeAtencao) é só o que muda decisões. No
 computador são cartões lado a lado (estilos.css:.vg-atencao-grade): os por
@@ -1663,6 +1670,141 @@ registo sair de trás do cartão, e a janela aberta começa abaixo dele: a
 folha de baixo encolhe e, no tablet, a janela centra-se no que sobra, com o
 par vh e dvh (estilos.css:body.com-guia, estilos.css:body.guia-sobre). O
 texto do passo não se esconde: é quando ele faz falta.
+
+As boas-vindas deste cartão (guia.js:boasVindas, o olá pelo nome) são da
+vista; as da janela que recebe quem cria conta são outra coisa, e vivem em
+«A apresentação».
+
+## A apresentação
+Quem cria conta é recebido pelas boas-vindas, e cada separador explica-se na
+primeira vez que uma conta lá chega: a mesma janela, com um carrossel de
+imagens (cloud/apresentacao.js). As imagens são a app em miniatura, desenhada
+em HTML com os tokens — seguem o claro, o escuro e o escurecimento do Samsung
+— sobre o mosaico da marca: o kit (apresentacao.js:aprCena,
+apresentacao.js:aprTela e as peças a seguir) e um portefólio inventado, o da
+montra, com números que fecham entre si (apresentacao.js:APR_EXEMPLO). Cada
+separador regista a sua (apresentacao.js:registarApresentacao) num dos
+cloud/apresentacao-casas.js, cloud/apresentacao-dinheiro.js e
+cloud/apresentacao-analise.js; as boas-vindas vivem no apresentacao.js. Uma
+imagem que só serve a algumas contas leva um `quando`, e um texto que só muda
+numa parte é uma função: quem só colabora não lê como se cria o que o cargo
+não deixa (apresentacao.js:aprPodeCriar), e um serviço desligado leva consigo
+as imagens dele.
+
+A janela é um openModal (apresentacao.js:aprAbrir): o ✕ da cabeça, o Esc, o
+voltar e o arrasto da folha fecham-na como a qualquer outra, e é o aoFechar da
+camada que a marca como vista, por qualquer caminho
+(apresentacao.js:aprAoFechar). No corpo, o palco com as imagens lado a lado
+numa fita — cada uma é a maquete e, por baixo, o título e o texto, e viajam
+juntas —, os pontos e a frase do leitor de ecrã (apresentacao.js:aprCorpo); a
+imagem tem altura fixa (estilos.css:.apr-imagem) e a fita estica as folhas à
+altura da maior, por isso a janela não salta de tamanho entre elas. No rodapé,
+Anterior (sem ele na primeira) e Seguinte, primário; na última, o botão do
+fim — «Percebi» nos separadores, «Ir para os imóveis» nas boas-vindas
+(apresentacao.js:aprPintar, apresentacao.js:aprFimDe). O palco é uma região
+com nome, cada imagem um grupo «N de M», as de fora inertes, e a cada
+passagem o leitor de ecrã ouve «Imagem 2 de 7» e o título. Os pontos são só
+desenho, e o de agora é mais comprido: a forma diz qual é, também com o
+escurecimento forçado (estilos.css:.apr-pontos). No computador a janela tem
+620px e as peças crescem com ela (estilos.css:.apr-cena).
+
+O gesto é o das fotos (web/app/anexos.js:fotoArrastar, o padrão copiado e não
+chamado): o eixo decide-se aos 10px (apresentacao.js:aprEixo), largar depois
+de um quarto da largura ou com um sacudir passa à vizinha
+(apresentacao.js:aprDecide), nas pontas a fita resiste
+(navegacao.js:sepElastico) e não dá a volta, um gesto vertical é do corpo da
+janela, e o clique a seguir a um arrasto engole-se. Os botões correm a fita
+parada no --lento e na --curva-fita; largada por um dedo, já vem a andar e
+acaba no --medio e na --curva-entra (apresentacao.js:aprCorrer); um toque ou
+um dedo a meio apanham-na onde ela vai. As setas do teclado passam sem fita
+(apresentacao.js:aprTecla), e sem movimento a troca é de uma vez. Nas
+boas-vindas, a janela mais rara da app, as peças da primeira imagem entram
+umas a seguir às outras (estilos.css:aprSurge, a escada do
+apresentacao.js:aprSurge); nas dos separadores, não.
+
+Quando abre (apresentacao.js:aprTentar): a de um separador, na primeira
+chegada a ele por qualquer caminho — quem repara é o render, embrulhado no fim
+do ficheiro, e nunca o do vizinho que o carrossel dos separadores pinta às
+escondidas (vistas.js:_pintarAParte) —; nas Definições só a raiz. Só depois de
+o servidor responder (CW._pulled: num aparelho novo as definições chegam
+vazias até lá) e só com o ecrã livre (apresentacao.js:aprEcraOcupado: sem a
+entrada, sem portão, sem janela aberta, sem a ligação de um convite por abrir,
+sem uma leitura do estado a meio, sem o tutorial, a gaveta ou um modo). Se a
+pessoa sair do separador antes, fica para a próxima chegada. O que sai sem
+avisar (os termos aceites no servidor, o convite, a leitura) fá-la tentar de
+novo de 800 em 800ms; o resto avisa quando sai, pelos embrulhos do
+closeModal, do closeDrawer, do CW.acceptLegal, do CW.acceptTerms, do
+CW.guiaFechar e do pullNow.
+
+As boas-vindas são de quem cria conta: o registo por email
+(entrada.js:CW.submitAuth) e a primeira entrada com o Google, que o servidor
+marca com novo:true (worker/src/rotas/auth.js, entrada.js:socialLogin), dão o
+sinal de conta nova (apresentacao.js:aprContaNova). Ele nasce no aparelho,
+porque chega antes do servidor, e depois de o servidor responder passa para as
+definições como «por ver» (apresentacao.js:aprGuardarPorVer): quem fecha a app
+antes de as ver vê-as noutro aparelho. Passam à frente de qualquer separador,
+esperam pelo aviso inicial e pela janela de um convite (a marca
+CW._chegadaPorAbrir do entrada.js:CW.resgatarChegada), e fechá-las conta
+também a Visão geral e os Imóveis como vistos. Fechadas fora da Visão geral,
+ou depois de fechar as novidades, a apresentação do ecrã onde se está fica
+para a chegada seguinte: nada de duas janelas seguidas
+(apresentacao.js:aprAdiarOEcra, novidades.js:CW.novFechar). São sete imagens:
+os parabéns, com o primeiro nome da conta («Parabéns, Maria. A partir de
+hoje, nenhuma renda te passa despercebida.»), o imóvel, o inquilino, o
+contrato, os planeados e as quatro origens deles (planeados.js:recOrigem), os
+modelos, e o fim. O fim adapta-se (apresentacao.js:aprBVFimTexto): «Cria o
+teu primeiro imóvel» sem imóveis, «Os teus imóveis já estão à tua espera» com
+eles, e «Os imóveis já estão à tua espera», com quem deu acesso e o cargo, a
+quem só colabora.
+
+O estado é da conta e viaja entre aparelhos: db.settings.apresentacoes, um
+objeto {id: 1} numa chave sem «_» (apresentacao.js:aprMarcarVista). É um
+objeto e não uma lista porque a fusão a três o junta chave a chave, no cliente
+e no servidor: dois aparelhos que marcam separadores diferentes ficam com as
+duas marcas. As novidades e a apresentação esperam uma pela outra: as
+novidades não abrem com a janela aberta nem com as boas-vindas por ver
+(novidades.js:ecraLivre, apresentacao.js:aprOcupaOEcra), e a apresentação não
+abre por cima de janela nenhuma. A Ajuda reabre-as, na secção «Apresentações»
+a seguir a «Como se faz», com as boas-vindas e cada separador que a conta vê,
+pela ordem da navegação e com o selo «Vista» (ajuda.js:apresentacoesNaAjuda,
+apresentacao.js:aprDaConta); rever não mexe no estado e acaba sempre no
+«Percebi» (apresentacao.js:aprRever).
+
+As das Casas (cloud/apresentacao-casas.js) dizem, separador a separador, o que
+se vê na lista, o que um toque abre, o ⋮ da ficha (o icones.js:dots, que é o
+que se vê), o segurar que seleciona vários — só onde o há
+(cloud/selecao-listas.js:TABS_SEL) —, por onde se cria e os filtros, e deixam
+uma dica. O caminho de criar muda com o ecrã: o + da barra de baixo no
+telemóvel, o botão do cabeçalho no computador (apresentacao-casas.js:aprCLargo,
+apresentacao-casas.js:aprCNovo). O portefólio delas continua o do kit
+(apresentacao-casas.js:aprCExemplo).
+
+As do Dinheiro e da Agenda (cloud/apresentacao-dinheiro.js) ensinam um assunto
+por imagem: os Movimentos a lista, os filtros, o tocar e o segurar e o Criar;
+os Planeados o «Por confirmar» com o Rever, a faixa do que vem de trás, as
+origens e os modelos; os Créditos o capital que se deriva; o Calendário o mês,
+o dia e o crachá da Agenda. Os números da hipoteca saem da conta da própria app
+(credito.js:amort), e as datas contam-se a partir de hoje, a mostrar só o que a
+app mostraria nesse dia: um planeado já confirmado não deixa ponto no dia dele
+(apresentacao-dinheiro.js:aprDProxima,
+apresentacao-dinheiro.js:aprDPlaneadosDoMes; o exemplo próprio,
+apresentacao-dinheiro.js:aprDExemplo).
+
+As da Visão geral, da Análise e das Definições (cloud/apresentacao-analise.js)
+fazem as contas com as regras da app: o ano soma os meses do exemplo
+(apresentacao-analise.js:aprAAno), a Avaliação reparte-o pelos imóveis
+(apresentacao-analise.js:aprAPorImovel), as Projeções levam-no para a frente
+com a taxa de cada ano (irs.js:irsRate), e o IRS estima o englobamento pelos
+escalões do ano (fisco.js:fiscoColeta). A da Visão geral mostra a cara que a
+conta tem, pela ordem do painel-geral.js:vDashboard
+(apresentacao-analise.js:aprACaraDoPainel): a jornada, o vazio sem imóveis, o
+vazio com eles, os números, e o «O que podes fazer» de quem só colabora sem
+finanças; o «Personalizar painel» só a quem pode registar movimentos
+(painel-geral.js:dashDepois). Como as boas-vindas a marcam como vista, ela é
+sobretudo das contas de antes e de quem a revê pela Ajuda. A do IRS · Anexo F
+só existe fora de produção, como o separador (apresentacao-analise.js:aprAFiscoAqui),
+e diz o que a página faz e mais nada: quem declara é a pessoa, no Portal das
+Finanças.
 
 ## Um gráfico lê-se com o dedo
 Tocar numa barra cuspia um balão que aparecia DEBAIXO DO DEDO e ia-se
@@ -4322,7 +4464,9 @@ As páginas que a nuvem pendura na raiz vestem o mesmo:
   rejeitar ou cancelar ali mesmo) e «Propor nova divisão», que abre os
   campos com a divisão atual (partilha.js:quotasDaCasaHtml).
 - «Ajuda e sugestões» (ajuda.js:vAjuda, M-Ajuda): «Como se faz», os
-  tutoriais num carrossel (ajuda.js:tutoriaisNaAjuda); as perguntas de
+  tutoriais num carrossel (ajuda.js:tutoriaisNaAjuda); as «Apresentações» —
+  as boas-vindas e a de cada separador —, no mesmo carrossel
+  (ajuda.js:apresentacoesNaAjuda; ver «A apresentação»); as perguntas de
   destaque, com a porta para as outras; «Os teus pedidos» com «Novo
   pedido», cada um com o selo do estado — Recebido cobalto, Em resolução
   âmbar, Concluído verde — e a resposta da equipa numa caixa --accent-soft
@@ -5158,7 +5302,11 @@ A marca, no topo da gaveta e da barra lateral (index.html, a .brand) e no
 ecrã de entrada (cloud/entrada.js), é a casa do ícone da app — o telhado com
 beirais, as paredes e a porta pequena, o `home` do icones.js:ic — em branco
 num quadrado cobalto de 30px com raio 8 (estilos.css:.marca). É a mesma forma
-dos ícones da PWA e do Android, que nunca a deixaram.
+e a mesma cor dos ícones da PWA e do Android: o fundo deles é o --marca, liso
+(make-icons.js:COBALTO; o ic_launcher_background de
+android/app/src/main/res/values/colors.xml), e o testes/app-dev-web.test.js
+confere que os três dizem o mesmo. O ícone de dev continua âmbar, em degradê,
+com «DEV» por baixo da casa (make-icons.js:corDoFundo).
 
 A barra lateral é uma coluna (estilos.css:#nav, em flex), e o fundo — as
 Definições, a Ajuda e a conta — vive numa caixa própria pegada ao fundo, com

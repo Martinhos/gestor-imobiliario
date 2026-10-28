@@ -289,7 +289,10 @@
      go, vDashboard, vTransactions, lpMenu, selOpen…). A conta, a sincronização
      e o que fala com o servidor são nucleo, anexos, utilizadores, partilha,
      colaboradores, grupos, ajuda, entrada e novidades; painel, filtros, selecao,
-     selecao-listas e guia estão aqui pela ordem de carregamento. De que serviço
+     selecao-listas e guia estão aqui pela ordem de carregamento; apresentacao
+     (a janela das boas-vindas e dos separadores) carrega a seguir, e depois dela
+     as apresentações que regista: apresentacao-casas, apresentacao-dinheiro e
+     apresentacao-analise. De que serviço
      é cada um di-lo o catálogo (app/servicos.js), e o arnês dos testes
      carrega-os com a nuvem (testes/arnes.js:NUVEM), à parte dos módulos de
      app/, cujos testes contam com as versões por embrulhar. -->
@@ -307,5 +310,9 @@
 <script src="cloud/selecao.js"></script>
 <script src="cloud/selecao-listas.js"></script>
 <script src="cloud/guia.js"></script>
+<script src="cloud/apresentacao.js"></script>
+<script src="cloud/apresentacao-casas.js"></script>
+<script src="cloud/apresentacao-dinheiro.js"></script>
+<script src="cloud/apresentacao-analise.js"></script>
 </body>
 </html>
